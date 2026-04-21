@@ -236,8 +236,23 @@ func processTemplatesInSection(atmosConfig *schema.AtmosConfiguration, section m
 	return result, nil
 }
 
+// currentFileSections carries the sections (locals, vars, settings, env) that were
+// actually extracted and resolved from the CURRENT file's raw YAML in
+// extractAndAddLocalsToContext. It is distinct from the inherited template context,
+// which may contain values propagated from parent files during import processing.
+// Callers use this to safely update the current file's stackConfigMap without
+// polluting it with parent-file values.
+type currentFileSections struct {
+	hasLocals bool
+	locals    map[string]any
+	vars      map[string]any
+	settings  map[string]any
+	env       map[string]any
+}
+
 // extractAndAddLocalsToContext extracts locals from YAML and adds them to the template context.
-// Returns the updated context and any error encountered during locals extraction.
+// Returns the updated context, the sections resolved from the CURRENT file (for safe
+// stackConfigMap updates), and any error encountered during locals extraction.
 // Note: The "locals" key in context is reserved for file-scoped locals and will override
 // any user-provided "locals" key in the import context.
 // Settings, vars, and env sections are also added to the context so templates can reference them.
@@ -250,14 +265,24 @@ func extractAndAddLocalsToContext(
 	filePath string,
 	relativeFilePath string,
 	context map[string]any,
-) (map[string]any, error) {
+) (map[string]any, *currentFileSections, error) {
 	defer perf.Track(atmosConfig, "exec.extractAndAddLocalsToContext")()
 
-	// Enforce file-scoped locals: clear any inherited locals from parent context.
-	// Locals are file-scoped and should NOT inherit across file boundaries.
-	// This ensures that each file only has access to its own locals.
-	if context != nil {
-		delete(context, cfg.LocalsSectionName)
+	// Do not mutate the caller's map.
+	//
+	// The same `context` map is handed to multiple import goroutines in
+	// processYAMLConfigFileWithContextInternal (see the `mergedContext` shared
+	// across the per-import goroutines). Writing through the input map would
+	// race with sibling goroutines reading or mutating it. Work on a shallow
+	// copy, enforce file-scoped locals on that copy, and return it as the new
+	// context — the caller reassigns its local variable from the return value.
+	localCtx := make(map[string]any, len(context))
+	for k, v := range context {
+		if k == cfg.LocalsSectionName {
+			// Locals are file-scoped and must not inherit across file boundaries.
+			continue
+		}
+		localCtx[k] = v
 	}
 
 	extractResult, localsErr := extractLocalsFromRawYAML(atmosConfig, yamlContent, filePath)
@@ -267,12 +292,12 @@ func extractAndAddLocalsToContext(
 		// Log the error and continue without locals - template processing will happen next.
 		if strings.HasSuffix(filePath, u.TemplateExtension) {
 			log.Trace("Skipping locals extraction for template file with invalid YAML", "file", relativeFilePath, "error", localsErr)
-			return context, nil
+			return localCtx, nil, nil
 		}
 		// Circular dependencies in locals are a stack misconfiguration error.
 		// Return a helpful error with hints on how to fix it.
 		if stderrors.Is(localsErr, errUtils.ErrLocalsCircularDep) {
-			return context, errUtils.Build(errUtils.ErrLocalsCircularDep).
+			return localCtx, nil, errUtils.Build(errUtils.ErrLocalsCircularDep).
 				WithCause(localsErr).
 				WithContext("file", relativeFilePath).
 				WithHintf("Fix the circular dependency in '%s'", relativeFilePath).
@@ -281,7 +306,7 @@ func extractAndAddLocalsToContext(
 				WithExitCode(1).
 				Err()
 		}
-		return context, localsErr
+		return localCtx, nil, localsErr
 	}
 
 	// Only modify context if a locals section exists in the file.
@@ -290,13 +315,15 @@ func extractAndAddLocalsToContext(
 	// We check hasLocals instead of len(locals) to support empty locals: {} sections,
 	// which should still enable template context.
 	if !extractResult.hasLocals {
-		return context, nil
+		return localCtx, nil, nil
 	}
 
-	// Initialize context if nil.
-	if context == nil {
-		context = make(map[string]any)
-	}
+	// Track which sections came from the CURRENT file so the caller can update
+	// stackConfigMap without overwriting it with inherited parent values.
+	sections := &currentFileSections{hasLocals: true, locals: extractResult.locals}
+
+	// From here on, work exclusively on the local copy.
+	context = localCtx
 
 	// Add resolved locals to the template context first.
 	// This allows settings/vars/env templates to reference locals.
@@ -331,8 +358,10 @@ func extractAndAddLocalsToContext(
 			log.Debug("Failed to process templates in settings section", "file", relativeFilePath, "error", err)
 			// Fall back to raw settings on error.
 			context[cfg.SettingsSectionName] = extractResult.settings
+			sections.settings = extractResult.settings
 		} else {
 			context[cfg.SettingsSectionName] = processedSettings
+			sections.settings = processedSettings
 		}
 	}
 	if extractResult.vars != nil {
@@ -349,8 +378,10 @@ func extractAndAddLocalsToContext(
 			log.Debug("Failed to process templates in vars section", "file", relativeFilePath, "error", err)
 			// Fall back to raw vars on error.
 			context[cfg.VarsSectionName] = extractResult.vars
+			sections.vars = extractResult.vars
 		} else {
 			context[cfg.VarsSectionName] = processedVars
+			sections.vars = processedVars
 		}
 	}
 	if extractResult.env != nil {
@@ -370,12 +401,14 @@ func extractAndAddLocalsToContext(
 			log.Debug("Failed to process templates in env section", "file", relativeFilePath, "error", err)
 			// Fall back to raw env on error.
 			context[cfg.EnvSectionName] = extractResult.env
+			sections.env = extractResult.env
 		} else {
 			context[cfg.EnvSectionName] = processedEnv
+			sections.env = processedEnv
 		}
 	}
 
-	return context, nil
+	return context, sections, nil
 }
 
 // stackProcessResult holds the result of processing a single stack in parallel.
@@ -791,9 +824,10 @@ func processYAMLConfigFileWithContextInternal(
 	//       myapp:
 	//         vars:
 	//           name: "{{ .locals.name_prefix }}"
+	var currentFileResolved *currentFileSections
 	if !skipTemplatesProcessingInImports {
 		var localsErr error
-		context, localsErr = extractAndAddLocalsToContext(atmosConfig, stackYamlConfig, filePath, relativeFilePath, context)
+		context, currentFileResolved, localsErr = extractAndAddLocalsToContext(atmosConfig, stackYamlConfig, filePath, relativeFilePath, context)
 		if localsErr != nil {
 			if mergeContext != nil {
 				return nil, nil, nil, nil, nil, nil, nil, nil, mergeContext.FormatError(localsErr, fmt.Sprintf("stack manifest '%s'", relativeFilePath))
@@ -854,21 +888,24 @@ func processYAMLConfigFileWithContextInternal(
 	}
 
 	// Store resolved file-level sections in stackConfigMap so they're available during describe_stacks.
-	// The context contains resolved values from extractAndAddLocalsToContext, but the YAML content
-	// (and thus stackConfigMap) may still have unresolved template expressions.
-	// By updating stackConfigMap with resolved values, we ensure templates like {{ .locals.X }}
-	// and {{ .vars.X }} can be resolved correctly.
-	if resolvedLocals, ok := context[cfg.LocalsSectionName].(map[string]any); ok && len(resolvedLocals) > 0 {
-		stackConfigMap[cfg.LocalsSectionName] = resolvedLocals
-	}
-	if resolvedVars, ok := context[cfg.VarsSectionName].(map[string]any); ok && len(resolvedVars) > 0 {
-		stackConfigMap[cfg.VarsSectionName] = resolvedVars
-	}
-	if resolvedSettings, ok := context[cfg.SettingsSectionName].(map[string]any); ok && len(resolvedSettings) > 0 {
-		stackConfigMap[cfg.SettingsSectionName] = resolvedSettings
-	}
-	if resolvedEnv, ok := context[cfg.EnvSectionName].(map[string]any); ok && len(resolvedEnv) > 0 {
-		stackConfigMap[cfg.EnvSectionName] = resolvedEnv
+	// Only write back sections that were actually extracted from THIS file's raw YAML
+	// (tracked in currentFileResolved). Using the shared template context here would leak
+	// parent-file values into the current file and clobber its own sections when imports
+	// inherit a context populated by a downstream leaf file — e.g., ancestor `_defaults.yaml`
+	// losing its `namespace` because the importing leaf's vars were propagated into `context`.
+	if currentFileResolved != nil {
+		if currentFileResolved.hasLocals && len(currentFileResolved.locals) > 0 {
+			stackConfigMap[cfg.LocalsSectionName] = currentFileResolved.locals
+		}
+		if len(currentFileResolved.vars) > 0 {
+			stackConfigMap[cfg.VarsSectionName] = currentFileResolved.vars
+		}
+		if len(currentFileResolved.settings) > 0 {
+			stackConfigMap[cfg.SettingsSectionName] = currentFileResolved.settings
+		}
+		if len(currentFileResolved.env) > 0 {
+			stackConfigMap[cfg.EnvSectionName] = currentFileResolved.env
+		}
 	}
 
 	// Enable provenance tracking in merge context if tracking is enabled

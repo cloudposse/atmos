@@ -1403,3 +1403,68 @@ func TestLocalsGoTemplateConditionalWithEnvEmpty(t *testing.T) {
 	assert.Equal(t, "", vars["pr_number"],
 		"pr_number should be empty when env var is not set")
 }
+
+// TestLocalsHierarchicalVarsStackListing is a regression test for GitHub issue #2343:
+// locals in a leaf stack file must not corrupt vars merged from parent `_defaults` imports.
+//
+// Before the fix, extractAndAddLocalsToContext propagated the leaf file's own `vars` through
+// the template context, which was then written back onto every imported file's stackConfigMap —
+// overwriting the parent's `vars` (e.g. the `_defaults.yaml` `namespace: acme`).
+// As a result, `name_template` rendered as `-prod` instead of `acme-prod`, and the real stack
+// disappeared from `atmos list stacks` / `atmos describe component`.
+func TestLocalsHierarchicalVarsStackListing(t *testing.T) {
+	t.Chdir("./fixtures/scenarios/locals-hierarchical-vars")
+
+	atmosConfig, err := config.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
+	require.NoError(t, err)
+
+	result, err := exec.ExecuteDescribeStacks(
+		&atmosConfig,
+		"",    // filterByStack
+		nil,   // components
+		nil,   // componentTypes
+		nil,   // sections
+		true,  // ignoreMissingFiles
+		true,  // processTemplates
+		true,  // processYamlFunctions
+		false, // includeEmptyStacks
+		nil,   // skip
+		nil,   // authManager
+	)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	// The derived stack name must come from the merged (import + leaf) vars —
+	// "acme-prod", not "-prod" or "acme-" from a single-file view.
+	stack, ok := result["acme-prod"].(map[string]any)
+	require.True(t, ok, "expected stack 'acme-prod' in describe stacks output, got keys: %v", stackKeys(result))
+
+	components, ok := stack["components"].(map[string]any)
+	require.True(t, ok, "components section should exist")
+	terraform, ok := components["terraform"].(map[string]any)
+	require.True(t, ok, "terraform section should exist")
+	vpc, ok := terraform["vpc"].(map[string]any)
+	require.True(t, ok, "vpc component should exist")
+
+	vars, ok := vpc["vars"].(map[string]any)
+	require.True(t, ok, "vpc vars should be a map")
+
+	// Both import-provided and leaf-provided vars must be present after deep-merge.
+	assert.Equal(t, "acme", vars["namespace"],
+		"namespace from _defaults.yaml must survive locals processing")
+	assert.Equal(t, "prod", vars["stage"],
+		"stage from leaf stack must be present")
+
+	// Component var referencing a file-scoped local must still resolve correctly
+	// alongside the imported vars.
+	assert.Equal(t, "bucket-state", vars["name"],
+		"component var referencing a local should resolve to 'bucket-state'")
+}
+
+func stackKeys(m map[string]any) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	return keys
+}

@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -2855,7 +2856,7 @@ locals:
 settings:
   label: '{{ .locals.stage }}-config'
 `
-		ctx, err := extractAndAddLocalsToContext(atmosConfig, yamlContent, "test.yaml", "test.yaml", nil)
+		ctx, _, err := extractAndAddLocalsToContext(atmosConfig, yamlContent, "test.yaml", "test.yaml", nil)
 		require.NoError(t, err)
 		settings, ok := ctx["settings"].(map[string]any)
 		require.True(t, ok, "settings should exist in context")
@@ -2871,7 +2872,7 @@ settings:
 vars:
   deploy_env: '{{ .locals.env }}'
 `
-		ctx, err := extractAndAddLocalsToContext(atmosConfig, yamlContent, "test.yaml", "test.yaml", nil)
+		ctx, _, err := extractAndAddLocalsToContext(atmosConfig, yamlContent, "test.yaml", "test.yaml", nil)
 		require.NoError(t, err)
 		vars, ok := ctx["vars"].(map[string]any)
 		require.True(t, ok, "vars should exist in context")
@@ -2885,7 +2886,7 @@ locals:
 env:
   APP_NAME: '{{ .locals.app }}'
 `
-		ctx, err := extractAndAddLocalsToContext(atmosConfig, yamlContent, "test.yaml", "test.yaml", nil)
+		ctx, _, err := extractAndAddLocalsToContext(atmosConfig, yamlContent, "test.yaml", "test.yaml", nil)
 		require.NoError(t, err)
 		env, ok := ctx["env"].(map[string]any)
 		require.True(t, ok, "env should exist in context")
@@ -2902,7 +2903,7 @@ settings:
   component: '{{ .atmos_component }}'
   static: plain-value
 `
-		ctx, err := extractAndAddLocalsToContext(atmosConfig, yamlContent, "test.yaml", "test.yaml", nil)
+		ctx, _, err := extractAndAddLocalsToContext(atmosConfig, yamlContent, "test.yaml", "test.yaml", nil)
 		require.NoError(t, err)
 		settings, ok := ctx["settings"].(map[string]any)
 		require.True(t, ok, "settings should exist in context (raw fallback)")
@@ -2918,7 +2919,7 @@ locals:
 vars:
   stack: '{{ .atmos_stack }}'
 `
-		ctx, err := extractAndAddLocalsToContext(atmosConfig, yamlContent, "test.yaml", "test.yaml", nil)
+		ctx, _, err := extractAndAddLocalsToContext(atmosConfig, yamlContent, "test.yaml", "test.yaml", nil)
 		require.NoError(t, err)
 		vars, ok := ctx["vars"].(map[string]any)
 		require.True(t, ok, "vars should exist in context (raw fallback)")
@@ -2932,7 +2933,7 @@ locals:
 env:
   COMPONENT: '{{ .atmos_component }}'
 `
-		ctx, err := extractAndAddLocalsToContext(atmosConfig, yamlContent, "test.yaml", "test.yaml", nil)
+		ctx, _, err := extractAndAddLocalsToContext(atmosConfig, yamlContent, "test.yaml", "test.yaml", nil)
 		require.NoError(t, err)
 		env, ok := ctx["env"].(map[string]any)
 		require.True(t, ok, "env should exist in context (raw fallback)")
@@ -2947,7 +2948,7 @@ locals:
 		parentContext := map[string]any{
 			"locals": map[string]any{"inherited": "should-be-cleared"},
 		}
-		ctx, err := extractAndAddLocalsToContext(atmosConfig, yamlContent, "test.yaml", "test.yaml", parentContext)
+		ctx, _, err := extractAndAddLocalsToContext(atmosConfig, yamlContent, "test.yaml", "test.yaml", parentContext)
 		require.NoError(t, err)
 		locals, ok := ctx["locals"].(map[string]any)
 		require.True(t, ok)
@@ -2969,7 +2970,7 @@ vars:
 env:
   NAMESPACE: '{{ .locals.ns }}'
 `
-		ctx, err := extractAndAddLocalsToContext(atmosConfig, yamlContent, "test.yaml", "test.yaml", nil)
+		ctx, _, err := extractAndAddLocalsToContext(atmosConfig, yamlContent, "test.yaml", "test.yaml", nil)
 		require.NoError(t, err)
 
 		settings, ok := ctx["settings"].(map[string]any)
@@ -3008,7 +3009,7 @@ settings:
   label: '{{ .locals.stage }}-{{ .tenant }}'
 `
 		externalCtx := map[string]any{"tenant": "acme"}
-		ctx, err := extractAndAddLocalsToContext(atmosConfig, yamlContent, "test.yaml", "test.yaml", externalCtx)
+		ctx, _, err := extractAndAddLocalsToContext(atmosConfig, yamlContent, "test.yaml", "test.yaml", externalCtx)
 		require.NoError(t, err)
 		settings, ok := ctx["settings"].(map[string]any)
 		require.True(t, ok, "settings should exist in context")
@@ -3026,7 +3027,7 @@ vars:
   full_label: '{{ .settings.env_label }}'
 `
 		externalCtx := map[string]any{"region": "us-east-1"}
-		ctx, err := extractAndAddLocalsToContext(atmosConfig, yamlContent, "test.yaml", "test.yaml", externalCtx)
+		ctx, _, err := extractAndAddLocalsToContext(atmosConfig, yamlContent, "test.yaml", "test.yaml", externalCtx)
 		require.NoError(t, err)
 		settings, ok := ctx["settings"].(map[string]any)
 		require.True(t, ok)
@@ -3046,7 +3047,7 @@ settings:
   label: '{{ .locals.stage }}-{{ .missing_var }}'
 `
 		externalCtx := map[string]any{"tenant": "acme"}
-		ctx, err := extractAndAddLocalsToContext(atmosConfig, yamlContent, "test.yaml", "test.yaml", externalCtx)
+		ctx, _, err := extractAndAddLocalsToContext(atmosConfig, yamlContent, "test.yaml", "test.yaml", externalCtx)
 		require.NoError(t, err)
 		settings, ok := ctx["settings"].(map[string]any)
 		require.True(t, ok, "settings should exist (raw fallback)")
@@ -3265,7 +3266,7 @@ settings:
 vars:
   from_settings: '{{ .settings.resolved_stage }}'
 `
-	ctx, err := extractAndAddLocalsToContext(atmosConfig, yamlContent, "test.yaml", "test.yaml", nil)
+	ctx, _, err := extractAndAddLocalsToContext(atmosConfig, yamlContent, "test.yaml", "test.yaml", nil)
 	require.NoError(t, err)
 
 	// Settings should have resolved {{ .locals.stage }} → "dev".
@@ -3301,7 +3302,7 @@ env:
   APP: '{{ .locals.ns }}'
   REGION: '{{ .settings.region }}'
 `
-	ctx, err := extractAndAddLocalsToContext(atmosConfig, yamlContent, "test.yaml", "test.yaml", nil)
+	ctx, _, err := extractAndAddLocalsToContext(atmosConfig, yamlContent, "test.yaml", "test.yaml", nil)
 	require.NoError(t, err)
 
 	env, ok := ctx["env"].(map[string]any)
@@ -3710,4 +3711,125 @@ locals:
 	require.NoError(t, err)
 	require.NotNil(t, result)
 	assert.Equal(t, "vpc-shared-01", result.locals["vpc_id"])
+}
+
+// TestExtractAndAddLocalsToContext_DoesNotMutateInput documents the invariant that
+// extractAndAddLocalsToContext must not mutate its input context map, because
+// processYAMLConfigFileWithContextInternal hands the same `mergedContext` to many
+// import goroutines in parallel. Before the fix, the function mutated the caller's
+// map (delete "locals", then assign "locals"/"settings"/"vars"/"env") — which races
+// with sibling goroutines. This test catches that regression under `go test -race`.
+func TestExtractAndAddLocalsToContext_DoesNotMutateInput(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{
+		Templates: schema.Templates{
+			Settings: schema.TemplatesSettings{Enabled: true},
+		},
+	}
+
+	t.Run("file with locals: input map stays untouched", func(t *testing.T) {
+		yamlContent := `
+locals:
+  stage: dev
+vars:
+  name: '{{ .locals.stage }}-app'
+`
+		input := map[string]any{
+			"locals":   map[string]any{"inherited": "from-parent"},
+			"vars":     map[string]any{"region": "us-east-1"},
+			"settings": map[string]any{"foo": "bar"},
+		}
+
+		// Snapshot the input before the call so we can compare after.
+		snapshot := map[string]any{
+			"locals":   map[string]any{"inherited": "from-parent"},
+			"vars":     map[string]any{"region": "us-east-1"},
+			"settings": map[string]any{"foo": "bar"},
+		}
+
+		ctx, sections, err := extractAndAddLocalsToContext(atmosConfig, yamlContent, "test.yaml", "test.yaml", input)
+		require.NoError(t, err)
+		require.NotNil(t, sections)
+		require.NotNil(t, ctx)
+
+		// Input contents must be unchanged after the call — no added/removed keys,
+		// no overwrites of nested values.
+		assert.Equal(t, snapshot, input, "input map contents must not be mutated")
+		// In particular, the caller's "locals" key must still be present
+		// (the file-scoping delete happens on the returned copy only).
+		assert.Contains(t, input, "locals", "caller's 'locals' key must not be removed")
+
+		// Returned context reflects file-scoped processing.
+		returnedLocals, _ := ctx["locals"].(map[string]any)
+		assert.Equal(t, "dev", returnedLocals["stage"], "returned context should contain file-scoped locals")
+		_, inheritedPresent := returnedLocals["inherited"]
+		assert.False(t, inheritedPresent, "parent locals must not be inherited into returned context")
+	})
+
+	t.Run("file without locals: input map stays untouched, returned context mirrors input minus locals", func(t *testing.T) {
+		yamlContent := `
+vars:
+  stage: prod
+`
+		input := map[string]any{
+			"locals": map[string]any{"inherited": "from-parent"},
+			"vars":   map[string]any{"namespace": "acme"},
+		}
+
+		ctx, sections, err := extractAndAddLocalsToContext(atmosConfig, yamlContent, "test.yaml", "test.yaml", input)
+		require.NoError(t, err)
+		assert.Nil(t, sections, "no locals in file → no currentFileSections")
+
+		// Caller's map is untouched, including its "locals" key.
+		assert.Contains(t, input, "locals", "caller's 'locals' key must not be removed")
+
+		// Returned context enforces file-scoping (no "locals" key from parent) but
+		// preserves other inherited values like vars/namespace so downstream template
+		// processing can still reference them.
+		_, ctxHasLocals := ctx["locals"]
+		assert.False(t, ctxHasLocals, "returned context must drop inherited 'locals' key")
+		assert.Equal(t, input["vars"], ctx["vars"], "non-locals keys should still be available in returned context")
+	})
+}
+
+// TestExtractAndAddLocalsToContext_ConcurrentSafe exercises parallel invocations of
+// extractAndAddLocalsToContext against the same input map, mirroring the access
+// pattern in processYAMLConfigFileWithContextInternal's per-import goroutines.
+// Under `go test -race`, a regression that reintroduces input mutation would fire here.
+func TestExtractAndAddLocalsToContext_ConcurrentSafe(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{
+		Templates: schema.Templates{
+			Settings: schema.TemplatesSettings{Enabled: true},
+		},
+	}
+
+	sharedCtx := map[string]any{
+		"vars":     map[string]any{"namespace": "acme"},
+		"settings": map[string]any{"team": "platform"},
+	}
+
+	yamlContent := `
+locals:
+  stage: dev
+vars:
+  label: '{{ .locals.stage }}-{{ .vars.namespace }}'
+`
+
+	const goroutines = 8
+	var wg sync.WaitGroup
+	for i := 0; i < goroutines; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			_, _, err := extractAndAddLocalsToContext(atmosConfig, yamlContent, "test.yaml", "test.yaml", sharedCtx)
+			require.NoError(t, err)
+		}()
+	}
+	wg.Wait()
+
+	// sharedCtx must still be intact after all goroutines finish.
+	assert.NotContains(t, sharedCtx, "locals", "shared input must not gain a 'locals' key")
+	assert.Equal(t, map[string]any{"namespace": "acme"}, sharedCtx["vars"],
+		"shared input 'vars' must not be overwritten")
+	assert.Equal(t, map[string]any{"team": "platform"}, sharedCtx["settings"],
+		"shared input 'settings' must not be overwritten")
 }
