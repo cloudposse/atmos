@@ -1902,12 +1902,69 @@ func TestSetDescribeAffectedFlagValueInCliArgs_RepoPathSkipsCIAutoDetect(t *test
 		},
 	}
 	SetDescribeAffectedFlagValueInCliArgs(flagsNoRepoPath, describeNoRepoPath)
-	assert.Equal(t, "refs/remotes/origin/main", describeNoRepoPath.Ref,
-		"sanity: auto-detect should run in the same env when --repo-path is NOT set")
+	// The exact field (Ref vs SHA) and its value depend on whether
+	// merge-base(HEAD, origin/main) succeeds in the test git environment —
+	// the GitHub provider tries merge-base first (returns a SHA) and falls
+	// back to GITHUB_BASE_REF (returns a ref). Either is a valid
+	// auto-detect result; what matters is that *something* was populated.
+	assert.True(t, describeNoRepoPath.Ref != "" || describeNoRepoPath.SHA != "",
+		"sanity: auto-detect should populate Ref or SHA in the same env when --repo-path is NOT set")
+}
+
+// TestSetDescribeAffectedFlagValueInCliArgs_RepoPathUploadPopulatesMetadata
+// verifies that `--repo-path + --upload` in CI still populates upload
+// correlation metadata (HeadSHAOverride, CIEventType) even though base
+// auto-detection (Ref/SHA) is suppressed. Without this, Atmos Pro uploads
+// would correlate against the merge-commit SHA rather than the PR head SHA
+// indexed by the webhook.
+func TestSetDescribeAffectedFlagValueInCliArgs_RepoPathUploadPopulatesMetadata(t *testing.T) {
+	resetCIViperKey(t)
+	setupGitHubActionsPREnv(t)
+
+	flags := newDescribeAffectedFlagSet()
+	require.NoError(t, flags.Set("repo-path", "/tmp/other-clone"))
+	require.NoError(t, flags.Set("upload", "true"))
+
+	describe := &DescribeAffectedCmdArgs{
+		CLIConfig: &schema.AtmosConfiguration{
+			CI: schema.CIConfig{Enabled: true},
+		},
+	}
+	SetDescribeAffectedFlagValueInCliArgs(flags, describe)
+
+	// --repo-path still suppresses base selection.
+	assert.Equal(t, "/tmp/other-clone", describe.RepoPath,
+		"--repo-path should be preserved")
+	assert.Empty(t, describe.Ref,
+		"Ref must stay empty with --repo-path, even with --upload")
+	assert.Empty(t, describe.SHA,
+		"SHA must stay empty with --repo-path, even with --upload")
+
+	// --upload recovers the fields that matter for Atmos Pro correlation.
+	assert.Equal(t, "headsha123456789012345678901234567890ab", describe.HeadSHAOverride,
+		"--upload should populate HeadSHAOverride from the PR event payload")
+	assert.Equal(t, "pull_request", describe.CIEventType,
+		"--upload should populate CIEventType for PR-event validation in uploadableQuery")
+
+	// Negative-path sanity: dropping --upload restores the original
+	// repo-path-skips-everything behavior. Guarantees the metadata
+	// population is gated on --upload, not just --repo-path.
+	flagsNoUpload := newDescribeAffectedFlagSet()
+	require.NoError(t, flagsNoUpload.Set("repo-path", "/tmp/other-clone"))
+	describeNoUpload := &DescribeAffectedCmdArgs{
+		CLIConfig: &schema.AtmosConfiguration{
+			CI: schema.CIConfig{Enabled: true},
+		},
+	}
+	SetDescribeAffectedFlagValueInCliArgs(flagsNoUpload, describeNoUpload)
+	assert.Empty(t, describeNoUpload.HeadSHAOverride,
+		"without --upload, metadata population must not fire")
+	assert.Empty(t, describeNoUpload.CIEventType,
+		"without --upload, CIEventType must stay empty")
 }
 
 // TestSetDescribeAffectedFlagValueInCliArgs_CIFlagOverrides verifies that the
-// --ci flag / ATMOS_CI_ENABLED env var override ci.enabled from atmos.yaml
+// --ci flag / ATMOS_CI env var override ci.enabled from atmos.yaml
 // per invocation. Exercises the precedence rule: CLI flag > env var > config.
 func TestSetDescribeAffectedFlagValueInCliArgs_CIFlagOverrides(t *testing.T) {
 	t.Run("ATMOS_CI=false disables auto-detect when ci.enabled=true", func(t *testing.T) {
@@ -1950,8 +2007,13 @@ func TestSetDescribeAffectedFlagValueInCliArgs_CIFlagOverrides(t *testing.T) {
 		}
 		SetDescribeAffectedFlagValueInCliArgs(flags, describe)
 
-		assert.Equal(t, "refs/remotes/origin/main", describe.Ref,
-			"ATMOS_CI=true should force auto-detect even when ci.enabled=false")
+		// Under pull_request event, the GitHub provider tries merge-base first
+		// (returns a SHA) and falls back to GITHUB_BASE_REF (returns a ref).
+		// Either is a valid auto-detect result — assert that *something* was
+		// populated rather than pinning a specific resolution path (which
+		// depends on the test git environment).
+		assert.True(t, describe.Ref != "" || describe.SHA != "",
+			"ATMOS_CI=true should force auto-detect (Ref or SHA populated) even when ci.enabled=false")
 	})
 
 	t.Run("no override falls back to ci.enabled=true in atmos.yaml", func(t *testing.T) {
@@ -1966,8 +2028,8 @@ func TestSetDescribeAffectedFlagValueInCliArgs_CIFlagOverrides(t *testing.T) {
 		}
 		SetDescribeAffectedFlagValueInCliArgs(flags, describe)
 
-		assert.Equal(t, "refs/remotes/origin/main", describe.Ref,
-			"ci.enabled=true should keep auto-detect active when no override is set")
+		assert.True(t, describe.Ref != "" || describe.SHA != "",
+			"ci.enabled=true should keep auto-detect active (Ref or SHA populated) when no override is set")
 	})
 
 	t.Run("no override respects ci.enabled=false default", func(t *testing.T) {
@@ -1984,6 +2046,32 @@ func TestSetDescribeAffectedFlagValueInCliArgs_CIFlagOverrides(t *testing.T) {
 
 		assert.Empty(t, describe.Ref,
 			"ci.enabled=false and no override must not auto-detect")
+	})
+
+	t.Run("CI=true alone enables auto-detect when ci.enabled=false (zero-config CI)", func(t *testing.T) {
+		// Documents the implicit behavior: on any CI runner (where CI=true
+		// is set by the runner), describe affected auto-detects the base
+		// commit even when ci.enabled is NOT opted into in atmos.yaml. This
+		// matches the "zero-config CI base detection" spirit of PR #2241
+		// and the env-var binding used across terraform plan/apply/deploy.
+		// Users who want to opt OUT set ATMOS_CI=false or --ci=false.
+		resetCIViperKey(t)
+		setupGitHubActionsPREnv(t)
+
+		require.NoError(t, viper.BindEnv("ci", "ATMOS_CI", "CI"))
+
+		t.Setenv("CI", "true")
+
+		flags := newDescribeAffectedFlagSet()
+		describe := &DescribeAffectedCmdArgs{
+			CLIConfig: &schema.AtmosConfiguration{
+				CI: schema.CIConfig{Enabled: false},
+			},
+		}
+		SetDescribeAffectedFlagValueInCliArgs(flags, describe)
+
+		assert.True(t, describe.Ref != "" || describe.SHA != "",
+			"CI=true alone should trigger auto-detect (zero-config CI behavior) even when ci.enabled=false")
 	})
 }
 

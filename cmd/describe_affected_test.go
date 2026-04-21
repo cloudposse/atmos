@@ -53,6 +53,19 @@ func TestDescribeAffected(t *testing.T) {
 func TestSetFlagValueInCliArgs(t *testing.T) {
 	_ = NewTestKit(t)
 
+	// Isolate from the ambient CI environment. On CI runners GITHUB_ACTIONS=true,
+	// GITHUB_BASE_REF=main, and CI=true are all set, which would make
+	// SetDescribeAffectedFlagValueInCliArgs auto-detect a base from the CI
+	// provider and populate Ref/HeadSHAOverride/CIEventType — breaking the
+	// "empty by default" assertions below. Clear the relevant env vars and
+	// reset viper so `isCIEnabledForDescribeAffected` reads only the explicit
+	// per-case config passed into the helper.
+	viper.Reset()
+	t.Cleanup(viper.Reset)
+	for _, k := range []string{"ATMOS_CI", "CI", "GITHUB_ACTIONS", "GITHUB_BASE_REF", "GITHUB_EVENT_NAME", "GITHUB_EVENT_PATH"} {
+		t.Setenv(k, "")
+	}
+
 	// Initialize test cases
 	tests := []struct {
 		name          string

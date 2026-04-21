@@ -134,26 +134,82 @@ if describe.Ref == "" && describe.SHA == "" &&
 New code:
 
 ```go
-// Auto-detect base from CI environment when ci.enabled is true,
-// no explicit base provided, AND --repo-path is not set.
+// Auto-detect CI metadata when CI is enabled and no explicit base
+// provided.
 //
-// --repo-path is mutually exclusive with --base/--ref/--sha (see
-// ErrRepoPathConflict). Auto-injecting those fields from CI env
-// would trigger the conflict validator and break every
-// describe-affected call that passes --repo-path (e.g. the
-// cloudposse/github-action-atmos-affected-trigger-spacelift
-// action).
+// Two cases:
+//   - Normal (no --repo-path): populate Ref/SHA + HeadSHAOverride/
+//     CIEventType from the CI provider.
+//   - --repo-path: skip base detection (--repo-path is mutually
+//     exclusive with --base/--ref/--sha per ErrRepoPathConflict —
+//     auto-injecting from CI env would break every call that uses
+//     --repo-path, e.g. the cloudposse/github-action-atmos-
+//     affected-trigger-spacelift action). When --upload is also
+//     set, still populate HeadSHAOverride + CIEventType so Atmos
+//     Pro can match the uploaded affected list to the PR webhook
+//     SHA — the current checkout is typically a merge commit,
+//     whose SHA does not match what the webhook indexed.
 if describe.Ref == "" && describe.SHA == "" &&
-    describe.RepoPath == "" &&
-    describe.CLIConfig != nil && ciEnabledForDescribe(describe) {
-    resolveBaseFromCI(describe)
+    isCIEnabledForDescribeAffected(describe) {
+    switch {
+    case describe.RepoPath == "":
+        resolveBaseFromCI(describe)
+    case describe.Upload:
+        resolveCIUploadMetadataFromCI(describe)
+    }
 }
 ```
 
 Impact on `ErrRepoPathConflict`: the validator on line 169 is
 unchanged. Users who explicitly pass `--repo-path` *and* `--base`
-still get the same error. Only auto-detected values are
+still get the same error. Only auto-detected `Ref`/`SHA` are
 suppressed.
+
+### Fix 1b — Partial CI resolver for `--repo-path + --upload`
+
+`--repo-path + --upload` on a CI PR event previously errored out
+with `ErrRepoPathConflict`. With Fix 1 alone, the combination
+succeeds but the upload uses the current checkout's local HEAD
+as the correlation SHA — which on GitHub Actions default
+`actions/checkout@v4` is a merge-commit SHA, not the PR head
+SHA indexed by the webhook. Atmos Pro would then fail to
+correlate the upload with the PR.
+
+A new sibling of `resolveBaseFromCI` populates **only** the
+upload metadata (HeadSHAOverride, CIEventType), leaving
+`Ref`/`SHA` untouched so `ErrRepoPathConflict` does not fire:
+
+```go
+// resolveCIUploadMetadataFromCI populates the upload correlation
+// metadata (HeadSHAOverride, CIEventType) from the CI provider
+// WITHOUT populating Ref or SHA.
+//
+// Used in the --repo-path + --upload + CI code path. Base
+// auto-detection is skipped there to avoid ErrRepoPathConflict,
+// but Atmos Pro still needs the PR head SHA and event type to
+// correlate the uploaded affected list with the PR webhook —
+// the current checkout is typically a GitHub pull_request merge
+// commit, whose SHA does not match what the webhook indexed.
+func resolveCIUploadMetadataFromCI(describe *DescribeAffectedCmdArgs) {
+    defer perf.Track(nil, "exec.resolveCIUploadMetadataFromCI")()
+
+    p := ci.Detect()
+    if p == nil {
+        return
+    }
+    resolution, err := p.ResolveBase()
+    if err != nil || resolution == nil {
+        return
+    }
+
+    describe.HeadSHAOverride = resolution.HeadSHA
+    describe.CIEventType = resolution.EventType
+}
+```
+
+The helper intentionally reuses `p.ResolveBase()` — provider
+detection and event-payload parsing are identical to the base
+case; only the fields copied to `describe` differ.
 
 ### Fix 2 — `--ci` flag on `describe affected` (env-bound to `ATMOS_CI`, `CI`)
 
@@ -179,18 +235,21 @@ The env-var bindings deliberately reuse the existing `ATMOS_CI` /
 consistent knob across every CI-aware command.
 
 File: `internal/exec/describe_affected.go` — introduce a helper
-`ciEnabledForDescribe` that applies the precedence CLI flag > env
-var > `ci.enabled` in config > `false`:
+`isCIEnabledForDescribeAffected` that applies the precedence
+CLI flag > `ATMOS_CI` env var > `CI` env var >
+`ci.enabled` in config > `false`:
 
 ```go
-// ciEnabledForDescribe returns whether CI auto-base-detection
-// should run. Precedence (highest to lowest):
+// isCIEnabledForDescribeAffected returns whether CI
+// auto-base-detection should run. Precedence (highest to lowest):
 //   1. --ci CLI flag on this invocation.
-//   2. ATMOS_CI env var.
+//   2. ATMOS_CI / CI env vars (bound to the `ci` viper key via
+//      flags.WithEnvVars in cmd/describe_affected.go — ATMOS_CI
+//      wins if both are set).
 //   3. ci.enabled in atmos.yaml.
 //   4. false (default).
-func ciEnabledForDescribe(describe *DescribeAffectedCmdArgs) bool {
-    // viper reads the --ci flag bound via WithEnvVars (see
+func isCIEnabledForDescribeAffected(describe *DescribeAffectedCmdArgs) bool {
+    // Viper reads the --ci flag bound via WithEnvVars (see
     // cmd/describe_affected.go). When the flag or any of the
     // env vars is explicitly set, IsSet returns true and
     // GetBool returns the resolved value.
@@ -205,7 +264,7 @@ func ciEnabledForDescribe(describe *DescribeAffectedCmdArgs) bool {
 ```
 
 Note: the `flags.WithEnvVars` registration already handles the
-CLI > env-var precedence inside viper; `ciEnabledForDescribe`
+CLI > env-var precedence inside viper; `isCIEnabledForDescribeAffected`
 only needs to check `IsSet` to distinguish "user supplied a
 value" from "fall back to config".
 
@@ -334,6 +393,11 @@ behavior.
 - [x] Fix 1: skip `resolveBaseFromCI` when `describe.RepoPath != ""`
   (`internal/exec/describe_affected.go`,
   `SetDescribeAffectedFlagValueInCliArgs`).
+- [x] Fix 1b: new `resolveCIUploadMetadataFromCI` helper that
+  populates only `HeadSHAOverride` + `CIEventType` on the
+  `--repo-path + --upload + CI` path, so Atmos Pro retains PR
+  webhook correlation even though `--base` auto-detection is
+  skipped (`internal/exec/describe_affected.go`).
 - [x] Fix 2a: `--ci` flag on `describe affected`
   (`cmd/describe_affected.go`, `describeAffectedCIParser`).
 - [x] Fix 2b: env binding via
@@ -348,6 +412,10 @@ behavior.
 - [x] Unit tests:
   `TestSetDescribeAffectedFlagValueInCliArgs_RepoPathSkipsCIAutoDetect`
   (includes inline negative-path sanity assertion),
+  `TestSetDescribeAffectedFlagValueInCliArgs_RepoPathUploadPopulatesMetadata`
+  (asserts `HeadSHAOverride` + `CIEventType` populated from event
+  payload while `Ref`/`SHA` stay empty; plus a negative-path
+  assertion that dropping `--upload` keeps metadata empty),
   `TestSetDescribeAffectedFlagValueInCliArgs_CIFlagOverrides`
   (4 sub-tests),
   `TestIsCIEnabledForDescribeAffected_Precedence`
@@ -384,7 +452,7 @@ behavior.
   `internal/exec/ci_exit_codes.go:23`,
   `pkg/list/list_instances.go:596`, and `cmd/ci/status.go:61`.
   Each site reads `atmosConfig.CI.Enabled` directly today; a
-  shared helper (same semantics as `ciEnabledForDescribe`) would
+  shared helper (same semantics as `isCIEnabledForDescribeAffected`) would
   centralize the precedence rule. Deferred to a separate PR so
   each call site can be reviewed individually — the semantics of
   "disable CI features mid-workflow" differ per consumer.

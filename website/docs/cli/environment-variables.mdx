@@ -597,9 +597,11 @@ These variables control Atmos' native CI integration — GitHub Check Runs, `$GI
 
   <dt>`CI`</dt>
   <dd>
-    Generic CI indicator set by all major CI runners (GitHub Actions, GitLab CI, CircleCI, etc.). Atmos reads it to implicitly activate `--ci` on every CI run.
+    Generic CI indicator set by all major CI runners (GitHub Actions, GitLab CI, CircleCI, etc.). You do not normally set `CI` yourself — the runner sets it. Atmos treats `CI=true` as an implicit `--ci=true` at the lowest-priority tier of the precedence chain.
 
-    You do not normally set `CI` yourself — the runner sets it. It is safe because `ci.enabled` in `atmos.yaml` remains the authority for CI hooks (checks, summaries, outputs); the generic `CI` signal alone does not enable those features unless `ci.enabled: true` or `ATMOS_CI=true` / `--ci` is also set.
+    **For `describe affected`:** `CI=true` on a CI runner enables base auto-detection from the CI event payload unless explicitly overridden with `ATMOS_CI=false` or `--ci=false`. Precedence: `--ci` flag &gt; `ATMOS_CI` &gt; `CI` &gt; `ci.enabled` in `atmos.yaml` &gt; `false`. This matches the "zero-config CI base detection" behavior introduced in [cloudposse/atmos#2241](https://github.com/cloudposse/atmos/pull/2241).
+
+    **For `terraform plan` / `apply` / `deploy`:** `CI=true` activates `--ci=true` for output-capture purposes (writing CI job summaries, outputs, and check runs). The hard authority for whether CI hooks actually fire is `ci.enabled` in `atmos.yaml` — setting `CI=true` alone does not enable hooks unless `ci.enabled: true` is also set.
   </dd>
 </dl>
 

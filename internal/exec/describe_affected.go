@@ -28,6 +28,11 @@ import (
 
 var ErrRepoPathConflict = errors.New("if the '--repo-path' flag is specified, the '--base', '--ref', '--sha', '--ssh-key' and '--ssh-key-password' flags can't be used")
 
+// logKeyProvider is the structured-log key used for the CI provider name
+// in auto-detect log lines. Extracted to satisfy the revive `add-constant`
+// linter (the literal appears in four log calls across the CI helpers).
+const logKeyProvider = "provider"
+
 type DescribeAffectedExecCreator func(atmosConfig *schema.AtmosConfiguration) DescribeAffectedExec
 
 type DescribeAffectedCmdArgs struct {
@@ -264,16 +269,26 @@ func SetDescribeAffectedFlagValueInCliArgs(flags *pflag.FlagSet, describe *Descr
 		}
 	}
 
-	// Auto-detect base from CI environment when CI is enabled, no explicit base
-	// provided, AND --repo-path is not set.
+	// Auto-detect CI metadata when CI is enabled and no explicit base is provided.
 	//
-	// --repo-path is mutually exclusive with --base/--ref/--sha (see
-	// ErrRepoPathConflict). Auto-injecting those fields from CI env would
-	// trigger the conflict validator and break every describe-affected call
-	// that passes --repo-path (e.g. the cloudposse
-	// github-action-atmos-affected-trigger-spacelift action).
-	if describe.Ref == "" && describe.SHA == "" && describe.RepoPath == "" && isCIEnabledForDescribeAffected(describe) {
-		resolveBaseFromCI(describe)
+	// Two cases:
+	//   - Normal (no --repo-path): populate Ref/SHA + HeadSHAOverride/CIEventType
+	//     from the CI provider.
+	//   - --repo-path: skip base detection (--repo-path is mutually exclusive with
+	//     --base/--ref/--sha per ErrRepoPathConflict — auto-injecting them from
+	//     CI env would break every describe-affected call that passes --repo-path,
+	//     e.g. the cloudposse/github-action-atmos-affected-trigger-spacelift
+	//     action). When --upload is also set, still populate the upload correlation
+	//     metadata (HeadSHAOverride, CIEventType) so Atmos Pro can match the
+	//     uploaded affected list to the PR webhook SHA even though this checkout
+	//     is at a merge commit.
+	if describe.Ref == "" && describe.SHA == "" && isCIEnabledForDescribeAffected(describe) {
+		switch {
+		case describe.RepoPath == "":
+			resolveBaseFromCI(describe)
+		case describe.Upload:
+			resolveCIUploadMetadataFromCI(describe)
+		}
 	}
 
 	// When uploading, always include dependents and settings for all affected components.
@@ -297,7 +312,7 @@ func resolveBaseFromCI(describe *DescribeAffectedCmdArgs) {
 
 	resolution, err := p.ResolveBase()
 	if err != nil {
-		log.Warn("Failed to auto-detect CI base", "provider", p.Name(), "error", err)
+		log.Warn("Failed to auto-detect CI base", logKeyProvider, p.Name(), "error", err)
 		return
 	}
 	if resolution == nil {
@@ -314,10 +329,46 @@ func resolveBaseFromCI(describe *DescribeAffectedCmdArgs) {
 		base = resolution.Ref
 	}
 	log.Info("Auto-detected CI base",
-		"provider", p.Name(),
+		logKeyProvider, p.Name(),
 		"event", resolution.EventType,
 		"base", base,
 		"source", resolution.Source)
+}
+
+// resolveCIUploadMetadataFromCI populates the upload correlation metadata
+// (HeadSHAOverride, CIEventType) from the CI provider WITHOUT populating
+// Ref or SHA.
+//
+// Used in the `--repo-path` + `--upload` + CI code path. Base auto-detection
+// is skipped there to avoid ErrRepoPathConflict, but Atmos Pro still needs
+// the PR head SHA and event type to correlate the uploaded affected list
+// with the PR webhook — the current checkout is typically a GitHub
+// pull_request merge commit, whose SHA does not match what the webhook
+// indexed.
+func resolveCIUploadMetadataFromCI(describe *DescribeAffectedCmdArgs) {
+	defer perf.Track(nil, "exec.resolveCIUploadMetadataFromCI")()
+
+	p := ci.Detect()
+	if p == nil {
+		return
+	}
+
+	resolution, err := p.ResolveBase()
+	if err != nil {
+		log.Warn("Failed to auto-detect CI upload metadata", logKeyProvider, p.Name(), "error", err)
+		return
+	}
+	if resolution == nil {
+		return
+	}
+
+	describe.HeadSHAOverride = resolution.HeadSHA
+	describe.CIEventType = resolution.EventType
+
+	log.Debug("Auto-detected CI upload metadata (base auto-detect skipped due to --repo-path)",
+		logKeyProvider, p.Name(),
+		"event", resolution.EventType,
+		"headSHA", resolution.HeadSHA)
 }
 
 // Execute executes `describe affected` command.

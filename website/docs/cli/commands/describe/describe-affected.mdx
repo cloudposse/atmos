@@ -131,12 +131,20 @@ Precedence (highest to lowest):
 5. `false` (default).
 
 **Interaction with `--repo-path`:** When `--repo-path` is supplied,
-auto-detection is always skipped — even when CI is enabled. The two
-flags are mutually exclusive, so auto-injecting `--base` / `--ref` /
-`--sha` from CI env would produce a spurious flag-conflict error.
-This makes `describe affected --repo-path=…` safe to call from
-GitHub Actions workflows that already have `ci.enabled: true` in
-`atmos.yaml` for the Atmos Pro features.
+`--base` auto-detection is always skipped — even when CI is
+enabled. The two flags are mutually exclusive, so auto-injecting
+`--base` / `--ref` / `--sha` from CI env would produce a spurious
+flag-conflict error. This makes `describe affected --repo-path=…`
+safe to call from GitHub Actions workflows that already have
+`ci.enabled: true` in `atmos.yaml` for the Atmos Pro features.
+
+When `--repo-path` is combined with `--upload`, Atmos still reads
+the CI provider's event payload to populate the **upload
+correlation metadata** (PR head SHA and event type) — without
+touching `--base` / `--ref` / `--sha`. This keeps
+`--repo-path --upload` compatible with Atmos Pro's PR webhook
+correlation even though the current checkout is typically a merge
+commit rather than the PR head.
 
 ## Usage
 
@@ -328,7 +336,7 @@ Affected components and stacks:
     <dd>
         Path to the already cloned target repository with which to compare the current branch. Conflicts with `--base`, `--ref`, `--sha`, `--ssh-key` and `--ssh-key-password`.
 
-        When supplied, CI base auto-detection is **always skipped**, regardless of the `--ci` / `ATMOS_CI_ENABLED` / `ci.enabled` values. This makes `--repo-path` safe to call from CI workflows that have `ci.enabled: true` in `atmos.yaml` for other features (e.g., Atmos Pro Check Runs).
+        When supplied, CI base auto-detection is **always skipped**, regardless of the `--ci` / `ATMOS_CI` / `ci.enabled` values. This makes `--repo-path` safe to call from CI workflows that have `ci.enabled: true` in `atmos.yaml` for other features (e.g., Atmos Pro Check Runs).
     </dd>
 
     <dt>`--ci` <em>(optional)</em></dt>
