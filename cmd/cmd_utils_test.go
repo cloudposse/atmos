@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/reexec"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -621,7 +622,9 @@ func TestListStacksForComponentEmptyComponent(t *testing.T) {
 	assert.NotEmpty(t, stacks, "Empty component filter returns all stacks")
 }
 
-// TestFilterChdirArgs tests the filterChdirArgs function.
+// TestFilterChdirArgs verifies the chdir-strip behavior used by alias re-exec.
+// The implementation now lives in pkg/reexec.StripChdirArgs; this test
+// remains as an integration guard for the alias path.
 func TestFilterChdirArgs(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -712,8 +715,8 @@ func TestFilterChdirArgs(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := filterChdirArgs(tt.input)
-			assert.Equal(t, tt.expected, result, "filterChdirArgs should correctly filter chdir arguments")
+			result := reexec.StripChdirArgs(tt.input)
+			assert.Equal(t, tt.expected, result, "reexec.StripChdirArgs should correctly filter chdir arguments")
 		})
 	}
 }
@@ -1579,7 +1582,9 @@ func TestProcessCommandAliases_NonTopLevel(t *testing.T) {
 	assert.False(t, hasAliases, "Non-top-level aliases should not be added")
 }
 
-// TestFilterChdirEnv tests the filterChdirEnv function.
+// TestFilterChdirEnv verifies the ATMOS_CHDIR env-filter behavior used by
+// alias re-exec. The implementation now lives in pkg/reexec.FilterChdirEnv;
+// this test remains as an integration guard for the alias path.
 func TestFilterChdirEnv(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -1635,7 +1640,7 @@ func TestFilterChdirEnv(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := filterChdirEnv(tt.input)
+			result := reexec.FilterChdirEnv(tt.input)
 			assert.Equal(t, tt.expected, result)
 		})
 	}

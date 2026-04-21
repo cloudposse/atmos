@@ -4,21 +4,19 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
-	"syscall"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/reexec"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/toolchain"
 	"github.com/cloudposse/atmos/pkg/ui"
 )
 
 const (
-	// ReexecGuardEnvVar prevents infinite re-exec loops.
-	ReexecGuardEnvVar = "ATMOS_REEXEC_GUARD"
-
 	// VersionEnvVar is the environment variable for specifying the Atmos version to use.
 	// This is a convenience alias that matches common conventions (e.g., tfenv, goenv).
 	VersionEnvVar = "ATMOS_VERSION"
@@ -46,7 +44,10 @@ type VersionInstaller interface {
 }
 
 // ExecFunc is the function signature for syscall.Exec.
-type ExecFunc func(argv0 string, argv []string, envv []string) error
+//
+// Deprecated: use reexec.ExecFunc. Kept here for source compatibility with
+// callers that still reference this alias.
+type ExecFunc = reexec.ExecFunc
 
 // PRCacheChecker checks PR cache status.
 type PRCacheChecker func(prNumber int) (toolchain.PRCacheStatus, string)
@@ -89,7 +90,7 @@ func DefaultReexecConfig() *ReexecConfig {
 	return &ReexecConfig{
 		Finder:         installer,
 		Installer:      &defaultInstaller{},
-		ExecFn:         syscall.Exec,
+		ExecFn:         reexec.Exec,
 		GetEnv:         getEnvWrapper,
 		SetEnv:         os.Setenv,
 		Args:           os.Args,
@@ -161,11 +162,11 @@ func resolveRequestedVersion(atmosConfig *schema.AtmosConfiguration, cfg *Reexec
 
 // shouldSkipReexec checks if re-exec should be skipped due to guard or version match.
 func shouldSkipReexec(requestedVersion string, cfg *ReexecConfig) bool {
-	// Check re-exec guard to prevent infinite loops.
-	if cfg.GetEnv(ReexecGuardEnvVar) == requestedVersion {
-		log.Debug("Re-exec guard active, skipping version switch",
+	// Depth guard — already inside a re-exec'd child, don't loop.
+	if reexec.Depth(cfg.GetEnv(reexec.DepthEnvVar)) > 0 {
+		log.Debug("Re-exec depth > 0, skipping version switch",
 			"requested_version", requestedVersion,
-			"guard_value", cfg.GetEnv(ReexecGuardEnvVar))
+			"depth", cfg.GetEnv(reexec.DepthEnvVar))
 		return true
 	}
 
@@ -238,9 +239,11 @@ func executeVersionSwitch(requestedVersion string, cfg *ReexecConfig) bool {
 		return false
 	}
 
-	// Set re-exec guard to prevent loops.
-	if err := cfg.SetEnv(ReexecGuardEnvVar, requestedVersion); err != nil {
-		log.Warn("Failed to set re-exec guard", "error", err)
+	// Increment re-exec depth so the child knows it's inside a re-exec and
+	// must not attempt another version switch.
+	nextDepth := reexec.Depth(cfg.GetEnv(reexec.DepthEnvVar)) + 1
+	if err := cfg.SetEnv(reexec.DepthEnvVar, strconv.Itoa(nextDepth)); err != nil {
+		log.Warn("Failed to set re-exec depth", "error", err)
 		return false
 	}
 
@@ -248,7 +251,11 @@ func executeVersionSwitch(requestedVersion string, cfg *ReexecConfig) bool {
 	ui.Successf("Switching to Atmos version `%s`", requestedVersion)
 
 	// Strip flags that shouldn't be passed to the target version.
-	args := stripChdirFlags(cfg.Args)
+	// --chdir was already applied by the parent; leaving it in argv would
+	// cause the child to re-apply a relative path against the already-changed
+	// cwd. --use-version is dropped so older target binaries don't see an
+	// unknown flag.
+	args := reexec.StripChdirArgs(cfg.Args)
 	args = stripUseVersionFlags(args)
 
 	if err := cfg.ExecFn(binaryPath, args, cfg.Environ()); err != nil {
@@ -398,40 +405,6 @@ func findOrInstallSHAVersionWithConfig(sha string, cfg *ReexecConfig) (string, e
 	}
 
 	return binaryPath, nil
-}
-
-// stripChdirFlags removes --chdir, -C flags and their values from args.
-// This prevents double directory changes when re-exec'ing after chdir has already been applied.
-func stripChdirFlags(args []string) []string {
-	defer perf.Track(nil, "version.stripChdirFlags")()
-
-	result := make([]string, 0, len(args))
-	skipNext := false
-
-	for i, arg := range args {
-		if skipNext {
-			skipNext = false
-			continue
-		}
-
-		// Handle --chdir=value or -C=value (combined form).
-		if strings.HasPrefix(arg, "--chdir=") || strings.HasPrefix(arg, "-C=") {
-			continue
-		}
-
-		// Handle --chdir value or -C value (separate form).
-		if arg == "--chdir" || arg == "-C" {
-			// Skip this arg and the next one (the value).
-			if i+1 < len(args) {
-				skipNext = true
-			}
-			continue
-		}
-
-		result = append(result, arg)
-	}
-
-	return result
 }
 
 // stripUseVersionFlags removes --use-version flags and their values from args.

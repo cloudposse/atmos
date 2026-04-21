@@ -1682,6 +1682,12 @@ func init() {
 	if err := viper.BindEnv("mask", "ATMOS_MASK"); err != nil {
 		log.Error("Failed to bind ATMOS_MASK environment variable", "error", err)
 	}
+	// Bind interactive flag to Viper so viper.GetBool("interactive") reads the
+	// flag value. Without this, --interactive=false is silently ignored by code
+	// that reads the global viper (e.g. pkg/auth's isInteractive guard).
+	if err := viper.BindPFlag("interactive", RootCmd.PersistentFlags().Lookup("interactive")); err != nil {
+		log.Error("Failed to bind interactive flag to Viper", "error", err)
+	}
 	// Bind verbose flag to environment variable.
 	if err := viper.BindEnv(verboseFlagName, "ATMOS_VERBOSE"); err != nil {
 		log.Error("Failed to bind ATMOS_VERBOSE environment variable", "error", err)

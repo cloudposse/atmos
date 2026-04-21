@@ -30,6 +30,7 @@ import (
 	l "github.com/cloudposse/atmos/pkg/list"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/reexec"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -119,58 +120,6 @@ func processCustomCommands(
 	return nil
 }
 
-// filterChdirEnv removes ATMOS_CHDIR from environ and optionally adds an empty
-// ATMOS_CHDIR= entry to override any parent value when spawning child processes.
-// This prevents child processes from re-applying the parent's chdir directive.
-func filterChdirEnv(environ []string) []string {
-	filtered := make([]string, 0, len(environ))
-	foundAtmosChdir := false
-	for _, env := range environ {
-		if strings.HasPrefix(env, "ATMOS_CHDIR=") {
-			foundAtmosChdir = true
-			continue
-		}
-		filtered = append(filtered, env)
-	}
-	// Add empty ATMOS_CHDIR to override parent's value in merged environment.
-	if foundAtmosChdir {
-		filtered = append(filtered, "ATMOS_CHDIR=")
-	}
-	return filtered
-}
-
-// filterChdirArgs returns a copy of args with any chdir flags and their values removed.
-// It removes `--chdir`, `--chdir=<value>`, `-C`, `-C=<value>`, and concatenated `-C<value>` forms, preserving the order of all other arguments.
-func filterChdirArgs(args []string) []string {
-	filtered := make([]string, 0, len(args))
-	skipNext := false
-
-	for _, arg := range args {
-		if skipNext {
-			skipNext = false
-			continue
-		}
-
-		// Skip --chdir=value, -C=value, -C<value> (concatenated).
-		if strings.HasPrefix(arg, "--chdir=") ||
-			strings.HasPrefix(arg, "-C=") ||
-			(strings.HasPrefix(arg, "-C") && len(arg) > 2) {
-			continue
-		}
-
-		// Skip --chdir value or -C value (next arg is the value).
-		if arg == "--chdir" || arg == "-C" {
-			skipNext = true
-			continue
-		}
-
-		// Keep all other args.
-		filtered = append(filtered, arg)
-	}
-
-	return filtered
-}
-
 // processCommandAliases registers command aliases from the provided configuration as subcommands of
 // parentCommand. When topLevel is true, aliases that would shadow existing top-level commands are
 // skipped. Each created alias executes the target command in a separate process using the current
@@ -217,11 +166,11 @@ func processCommandAliases(
 					// The chdir has already been processed by the parent atmos invocation, and passing
 					// it again would cause the new process to try to chdir to a relative path that's
 					// now invalid (since we already changed directories).
-					filteredArgs := filterChdirArgs(args)
+					filteredArgs := reexec.StripChdirArgs(args)
 
 					// Filter out ATMOS_CHDIR from environment variables to prevent the child process
 					// from re-applying the parent's chdir directive.
-					filteredEnv := filterChdirEnv(os.Environ())
+					filteredEnv := reexec.FilterChdirEnv(os.Environ())
 
 					// Build command arguments: split aliasCmd into parts and append filteredArgs.
 					// Use direct process execution instead of shell to avoid path escaping

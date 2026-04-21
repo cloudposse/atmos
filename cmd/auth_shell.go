@@ -16,7 +16,6 @@ import (
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
-	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 const (
@@ -59,7 +58,7 @@ func executeAuthShellCommandCore(cmd *cobra.Command, args []string) error {
 	identityValue, shellValue, shellArgs := extractAuthShellFlags(args)
 
 	// Load atmos configuration (processStacks=false since auth commands don't require stack manifests)
-	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+	atmosConfig, err := cfg.InitCliConfig(newAuthConfigAndStacksInfo(cmd), false)
 	if err != nil {
 		return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrFailedToInitializeAtmosConfig, err)
 	}
@@ -88,17 +87,18 @@ func executeAuthShellCommandCore(cmd *cobra.Command, args []string) error {
 	// Check if user wants to interactively select identity.
 	forceSelect := identityName == IdentityFlagSelectValue
 
+	ctx := context.Background()
 	if identityName == "" || forceSelect {
 		defaultIdentity, err := authManager.GetDefaultIdentity(forceSelect)
 		if err != nil {
-			return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrNoDefaultIdentity, err)
+			wrapped := fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrNoDefaultIdentity, err)
+			return maybeOfferProfileFallbackOnAuthConfigError(ctx, authManager, wrapped)
 		}
 		identityName = defaultIdentity
 	}
 
 	// Try to use cached credentials first (passive check, no prompts).
 	// Only authenticate if cached credentials are not available or expired.
-	ctx := context.Background()
 	_, err = authManager.GetCachedCredentials(ctx, identityName)
 	if err != nil {
 		log.Debug("No valid cached credentials found, authenticating", "identity", identityName, "error", err)

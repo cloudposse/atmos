@@ -815,6 +815,10 @@ func (m *mockAuthManagerForProvider) ResolveProviderConfig(identityName string) 
 	return nil, false
 }
 
+func (m *mockAuthManagerForProvider) MaybeOfferAnyProfileFallback(_ context.Context) error {
+	return nil
+}
+
 func (m *mockAuthManagerForProvider) GetRealm() realm.RealmInfo {
 	return realm.RealmInfo{}
 }
@@ -932,6 +936,10 @@ func (m *mockAuthManagerForIdentity) ResolvePrincipalSetting(identityName, key s
 
 func (m *mockAuthManagerForIdentity) ResolveProviderConfig(identityName string) (*schema.Provider, bool) {
 	return nil, false
+}
+
+func (m *mockAuthManagerForIdentity) MaybeOfferAnyProfileFallback(_ context.Context) error {
+	return nil
 }
 
 func (m *mockAuthManagerForIdentity) GetRealm() realm.RealmInfo {

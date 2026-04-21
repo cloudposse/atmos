@@ -1567,6 +1567,10 @@ func (m *mockResolveAuthManager) ResolveProviderConfig(identityName string) (*sc
 	return nil, false
 }
 
+func (m *mockResolveAuthManager) MaybeOfferAnyProfileFallback(_ context.Context) error {
+	return nil
+}
+
 // Implement other AuthManager methods as no-ops for the mock.
 func (m *mockResolveAuthManager) GetProviderForIdentity(_ string) string { return "" }
 

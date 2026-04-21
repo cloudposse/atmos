@@ -132,6 +132,10 @@ func (s *stubAuthManager) ResolveProviderConfig(identityName string) (*schema.Pr
 	return nil, false
 }
 
+func (s *stubAuthManager) MaybeOfferAnyProfileFallback(_ context.Context) error {
+	return nil
+}
+
 func (s *stubAuthManager) GetRealm() realm.RealmInfo {
 	return realm.RealmInfo{}
 }
