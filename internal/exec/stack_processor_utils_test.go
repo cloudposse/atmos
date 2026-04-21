@@ -3711,3 +3711,98 @@ locals:
 	require.NotNil(t, result)
 	assert.Equal(t, "vpc-shared-01", result.locals["vpc_id"])
 }
+
+// TestExtractLocalsFromRawYAML_CachesTerraformStateCalls verifies that repeated calls
+// to extractLocalsFromRawYAML for the same (atmosConfig, filePath, content) trigger
+// `!terraform.state` exactly once. This is the regression test for GitHub issue #2344,
+// where `atmos list stacks` re-evaluated locals hundreds of times per file.
+func TestExtractLocalsFromRawYAML_CachesTerraformStateCalls(t *testing.T) {
+	ClearLocalsExtractCache()
+	defer ClearLocalsExtractCache()
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockStateGetterObj := NewMockTerraformStateGetter(ctrl)
+	originalGetter := stateGetter
+	stateGetter = mockStateGetterObj
+	defer func() { stateGetter = originalGetter }()
+
+	atmosConfig := &schema.AtmosConfiguration{}
+
+	// The mock expects exactly one GetState call — subsequent extractLocalsFromRawYAML
+	// invocations for the same file must be served from the cache. gomock's default
+	// .Times(1) enforces this: a second call would fail the test with an unexpected-call error.
+	mockStateGetterObj.EXPECT().
+		GetState(atmosConfig, gomock.Any(), "shared", "vpc", ".vpc_id", false, gomock.Any(), gomock.Any()).
+		Return("vpc-shared-01", nil).
+		Times(1)
+
+	yamlContent := `
+locals:
+  vpc_id: !terraform.state vpc shared .vpc_id
+`
+	for i := 0; i < 10; i++ {
+		result, err := extractLocalsFromRawYAML(atmosConfig, yamlContent, "test.yaml")
+		require.NoError(t, err)
+		require.NotNil(t, result)
+		assert.Equal(t, "vpc-shared-01", result.locals["vpc_id"], "call %d returned unexpected value", i)
+	}
+}
+
+// TestExtractLocalsFromRawYAML_CacheReturnsDeepCopy verifies that mutating the result
+// of one call does not affect subsequent cached calls. The cache must return deep copies
+// so that callers cannot poison each other through shared map references.
+func TestExtractLocalsFromRawYAML_CacheReturnsDeepCopy(t *testing.T) {
+	ClearLocalsExtractCache()
+	defer ClearLocalsExtractCache()
+
+	atmosConfig := &schema.AtmosConfiguration{}
+	yamlContent := `
+locals:
+  namespace: "acme"
+  environment: "dev"
+vars:
+  stage: "prod"
+`
+	first, err := extractLocalsFromRawYAML(atmosConfig, yamlContent, "cache-isolation-test.yaml")
+	require.NoError(t, err)
+	require.NotNil(t, first)
+
+	// Mutate the first result's maps. A leaky cache would propagate these mutations.
+	first.locals["namespace"] = "mutated"
+	first.vars["stage"] = "mutated"
+
+	second, err := extractLocalsFromRawYAML(atmosConfig, yamlContent, "cache-isolation-test.yaml")
+	require.NoError(t, err)
+	require.NotNil(t, second)
+
+	assert.Equal(t, "acme", second.locals["namespace"], "cache returned a reference to a mutated map")
+	assert.Equal(t, "prod", second.vars["stage"], "cache returned a reference to a mutated map")
+}
+
+// TestExtractLocalsFromRawYAML_CacheIsolatedByContent verifies that different yamlContent
+// at the same filePath produces distinct cached entries. The cache key must include a
+// content component so that test fixtures reusing the same filePath don't collide.
+func TestExtractLocalsFromRawYAML_CacheIsolatedByContent(t *testing.T) {
+	ClearLocalsExtractCache()
+	defer ClearLocalsExtractCache()
+
+	atmosConfig := &schema.AtmosConfiguration{}
+
+	contentA := `
+locals:
+  namespace: "acme"
+`
+	contentB := `
+locals:
+  namespace: "beta"
+`
+	resultA, err := extractLocalsFromRawYAML(atmosConfig, contentA, "shared.yaml")
+	require.NoError(t, err)
+	assert.Equal(t, "acme", resultA.locals["namespace"])
+
+	resultB, err := extractLocalsFromRawYAML(atmosConfig, contentB, "shared.yaml")
+	require.NoError(t, err)
+	assert.Equal(t, "beta", resultB.locals["namespace"])
+}

@@ -1,6 +1,8 @@
 package exec
 
 import (
+	"fmt"
+	"hash/fnv"
 	"os"
 	"sync"
 
@@ -27,6 +29,16 @@ var (
 	// No cache invalidation needed - schemas are immutable per command execution.
 	jsonSchemaCache   = make(map[string]*jsonschema.Schema)
 	jsonSchemaCacheMu sync.RWMutex
+
+	// localsExtractCache memoizes resolved locals per stack file for the lifetime of a
+	// single Atmos command. Locals resolution can trigger expensive YAML functions like
+	// `!terraform.state` and `!terraform.output` that hit remote backends (GCS/S3). During
+	// operations that visit every stack file (e.g. `atmos list stacks`), the same file's
+	// locals were previously re-resolved dozens or hundreds of times per command, causing
+	// multi-second hangs. Cache key is composed of the atmosConfig pointer, filePath, and
+	// a content hash so that the cache is safe across tests that reuse file paths with
+	// differing content or configuration. See GitHub issue #2344.
+	localsExtractCache sync.Map // map[string]*extractLocalsResult
 )
 
 // deepCopyBaseComponentConfigMaps deep copies all map fields from src to dst.
@@ -174,6 +186,54 @@ func ClearJsonSchemaCache() {
 	jsonSchemaCacheMu.Lock()
 	defer jsonSchemaCacheMu.Unlock()
 	jsonSchemaCache = make(map[string]*jsonschema.Schema)
+}
+
+// ClearLocalsExtractCache clears the locals extraction cache.
+// This should be called between independent operations (like tests) to ensure fresh processing.
+func ClearLocalsExtractCache() {
+	defer perf.Track(nil, "exec.ClearLocalsExtractCache")()
+
+	localsExtractCache.Range(func(key, value interface{}) bool {
+		localsExtractCache.Delete(key)
+		return true
+	})
+}
+
+// localsExtractCacheKey builds a cache key for locals extraction keyed on the
+// atmosConfig identity, absolute file path, and content hash.
+// Including the atmosConfig pointer prevents cross-test pollution when tests
+// reuse the same file path under different configurations; including the
+// content hash is a safety net in case the same path is ever reused with
+// different content in the same process.
+func localsExtractCacheKey(atmosConfig *schema.AtmosConfiguration, filePath, yamlContent string) string {
+	h := fnv.New64a()
+	_, _ = h.Write([]byte(yamlContent))
+	return fmt.Sprintf("%p|%s|%x", atmosConfig, filePath, h.Sum64())
+}
+
+// deepCopyExtractLocalsResult returns a deep copy of an extractLocalsResult so that
+// callers who mutate the returned maps cannot corrupt the cached entry. Returns
+// (nil, err) if any deep copy fails; the caller should treat this as a cache miss
+// and fall through to full recomputation.
+func deepCopyExtractLocalsResult(src *extractLocalsResult) (*extractLocalsResult, error) {
+	if src == nil {
+		return nil, nil
+	}
+	dst := &extractLocalsResult{hasLocals: src.hasLocals}
+	var err error
+	if dst.locals, err = m.DeepCopyMap(src.locals); err != nil {
+		return nil, err
+	}
+	if dst.settings, err = m.DeepCopyMap(src.settings); err != nil {
+		return nil, err
+	}
+	if dst.vars, err = m.DeepCopyMap(src.vars); err != nil {
+		return nil, err
+	}
+	if dst.env, err = m.DeepCopyMap(src.env); err != nil {
+		return nil, err
+	}
+	return dst, nil
 }
 
 // ClearFileContentCache clears the file content cache.
