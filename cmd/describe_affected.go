@@ -4,11 +4,20 @@ import (
 	"os"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 
 	"github.com/cloudposse/atmos/internal/exec"
+	"github.com/cloudposse/atmos/pkg/flags"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
+
+// describeAffectedCIParser handles the --ci flag for `describe affected`.
+// The flag is wired via the unified flag parser so env-var bindings
+// (ATMOS_CI, CI) stay inside pkg/flags/ and do not trip the forbidigo ban
+// on viper.BindEnv/BindPFlag outside that package. This mirrors the flag
+// registration pattern used by `atmos terraform plan`/`apply`/`deploy`.
+var describeAffectedCIParser *flags.StandardParser
 
 // describeAffectedCmd produces a list of the affected Atmos components and stacks given two Git commits.
 var describeAffectedCmd = &cobra.Command{
@@ -51,6 +60,26 @@ func init() {
 	describeAffectedCmd.PersistentFlags().Bool("verbose", false, "Deprecated. Alias for `--logs-level=Debug`")
 	describeAffectedCmd.PersistentFlags().Bool("exclude-locked", false, "Exclude the locked components (`metadata.locked: true`) from the output")
 
+	// --ci flag with env-var bindings, wired through the unified flag parser.
+	// Overrides `ci.enabled` from atmos.yaml for this invocation. Primary use
+	// case: set --ci=false (or ATMOS_CI=false) to suppress CI base
+	// auto-detection when `describe affected --repo-path=...` is called from
+	// CI workflows that already supply their own base reference.
+	//
+	// Env-var bindings match the terraform plan/apply/deploy pattern so users
+	// have a single, consistent knob across all CI-aware commands.
+	describeAffectedCIParser = flags.NewStandardParser(
+		flags.WithBoolFlag("ci", "", false,
+			"Enable CI mode for `describe affected`. Overrides ci.enabled in atmos.yaml for this invocation. "+
+				"Controls auto-detection of --base from the CI provider's environment (e.g., GITHUB_BASE_REF). "+
+				"Set to false to suppress auto-detection; set to true to force it on even when ci.enabled is unset."),
+		flags.WithEnvVars("ci", "ATMOS_CI", "CI"),
+	)
+	describeAffectedCIParser.RegisterFlags(describeAffectedCmd)
+	if err := describeAffectedCIParser.BindToViper(viper.GetViper()); err != nil {
+		log.Error("Failed to bind --ci flag to Viper for `describe affected`", "error", err)
+	}
+
 	describeCmd.AddCommand(describeAffectedCmd)
 }
 
@@ -63,6 +92,16 @@ func getRunnableDescribeAffectedCmd(
 	return func(cmd *cobra.Command, args []string) error {
 		// Check Atmos configuration
 		checkAtmosConfig()
+
+		// Bind the --ci flag to Viper at runtime so viper.IsSet("ci") picks up
+		// the CLI flag value (env-var bindings were registered in init()).
+		// isCIEnabledForDescribeAffected relies on this precedence:
+		// CLI flag > env var > ci.enabled in atmos.yaml > false.
+		if describeAffectedCIParser != nil {
+			if bindErr := describeAffectedCIParser.BindFlagsToViper(cmd, viper.GetViper()); bindErr != nil {
+				log.Error("Failed to bind --ci flag to Viper for `describe affected`", "error", bindErr)
+			}
+		}
 
 		props, err := parseDescribeAffectedCliArgs(cmd, args)
 		if err != nil {

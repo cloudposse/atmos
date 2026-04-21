@@ -114,8 +114,29 @@ resolution logic.
 
 1. `--base` flag (explicit)
 2. `--ref` / `--sha` flags (deprecated, backward compatible)
-3. CI auto-detection (when `ci.enabled` is `true`)
+3. CI auto-detection (when CI is enabled — see next section)
 4. `refs/remotes/origin/HEAD` (default)
+
+### Overriding CI auto-detection per invocation
+
+CI auto-detection fires only when CI features are enabled. The
+`--ci` flag and the `ATMOS_CI` / `CI` environment variables
+override `ci.enabled` from `atmos.yaml` for this invocation.
+Precedence (highest to lowest):
+
+1. `--ci` CLI flag (e.g., `--ci=false` to suppress auto-detection).
+2. `ATMOS_CI` env var.
+3. `CI` env var (set by all major CI runners).
+4. `ci.enabled` in `atmos.yaml`.
+5. `false` (default).
+
+**Interaction with `--repo-path`:** When `--repo-path` is supplied,
+auto-detection is always skipped — even when CI is enabled. The two
+flags are mutually exclusive, so auto-injecting `--base` / `--ref` /
+`--sha` from CI env would produce a spurious flag-conflict error.
+This makes `describe affected --repo-path=…` safe to call from
+GitHub Actions workflows that already have `ci.enabled: true` in
+`atmos.yaml` for the Atmos Pro features.
 
 ## Usage
 
@@ -305,7 +326,29 @@ Affected components and stacks:
 
     <dt>`--repo-path` <em>(optional)</em></dt>
     <dd>
-        Path to the already cloned target repository with which to compare the current branch. Conflicts with `--base`, `--ref`, `--sha`, `--ssh-key` and `--ssh-key-password`
+        Path to the already cloned target repository with which to compare the current branch. Conflicts with `--base`, `--ref`, `--sha`, `--ssh-key` and `--ssh-key-password`.
+
+        When supplied, CI base auto-detection is **always skipped**, regardless of the `--ci` / `ATMOS_CI_ENABLED` / `ci.enabled` values. This makes `--repo-path` safe to call from CI workflows that have `ci.enabled: true` in `atmos.yaml` for other features (e.g., Atmos Pro Check Runs).
+    </dd>
+
+    <dt>`--ci` <em>(optional)</em></dt>
+    <dd>
+        Enable or disable CI features for this invocation. Overrides `ci.enabled` in `atmos.yaml`.
+
+        Controls the CI base auto-detection path: when CI is enabled, `describe affected` resolves `--base` from the CI provider's environment (e.g., `GITHUB_BASE_REF`).
+
+        **Environment variables:** `ATMOS_CI`, `CI`.
+
+        **Precedence:** `--ci` flag &gt; `ATMOS_CI` &gt; `CI` &gt; `ci.enabled` in `atmos.yaml` &gt; `false`.
+
+        ```bash
+        # Suppress CI auto-detection for one invocation
+        atmos describe affected --ci=false --repo-path=/tmp/other-clone
+        ATMOS_CI=false atmos describe affected --repo-path=/tmp/other-clone
+
+        # Force CI mode on even when ci.enabled is not set
+        atmos describe affected --ci=true
+        ```
     </dd>
 
     <dt>`--verbose` <em>(optional)</em></dt>

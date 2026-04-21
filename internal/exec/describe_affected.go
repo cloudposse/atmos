@@ -8,6 +8,7 @@ import (
 	giturl "github.com/kubescape/go-git-url"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
+	"github.com/spf13/viper"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/internal/tui/templates/term"
@@ -167,10 +168,40 @@ func ParseDescribeAffectedCliArgs(cmd *cobra.Command, args []string) (DescribeAf
 		return DescribeAffectedCmdArgs{}, ErrInvalidFormat
 	}
 	if result.RepoPath != "" && (result.Base != "" || result.Ref != "" || result.SHA != "" || result.SSHKeyPath != "" || result.SSHKeyPassword != "") {
-		return DescribeAffectedCmdArgs{}, ErrRepoPathConflict
+		return DescribeAffectedCmdArgs{}, errUtils.Build(ErrRepoPathConflict).
+			WithHint("Pass only one of --repo-path OR (--base | --ref | --sha). --repo-path is intended for comparing against an already-cloned sibling repository.").
+			WithHint("If --base was auto-injected from CI, pass --ci=false (or set ATMOS_CI=false) for this invocation, or unset ci.enabled in atmos.yaml.").
+			Err()
 	}
 
 	return result, nil
+}
+
+// isCIEnabledForDescribeAffected resolves whether CI features (specifically,
+// --base auto-detection from the CI provider's environment) should run for
+// this invocation of `describe affected`.
+//
+// Precedence (highest to lowest):
+//  1. --ci CLI flag on this invocation.
+//  2. ATMOS_CI / CI env vars (bound to the `ci` viper key via
+//     flags.WithEnvVars in cmd/describe_affected.go). This matches the
+//     env-var bindings already used by `terraform plan`/`apply`/`deploy`.
+//  3. ci.enabled in atmos.yaml.
+//  4. false (default).
+//
+// The --ci flag and its env-var bindings are registered once at init() time
+// via the StandardParser. Viper IsSet reports true when either the CLI flag
+// was explicitly passed or any bound env var is set to a non-empty value.
+func isCIEnabledForDescribeAffected(describe *DescribeAffectedCmdArgs) bool {
+	defer perf.Track(nil, "exec.isCIEnabledForDescribeAffected")()
+
+	if viper.IsSet("ci") {
+		return viper.GetBool("ci")
+	}
+	if describe.CLIConfig == nil {
+		return false
+	}
+	return describe.CLIConfig.CI.Enabled
 }
 
 // SetDescribeAffectedFlagValueInCliArgs sets the flag values in CLI arguments.
@@ -233,8 +264,15 @@ func SetDescribeAffectedFlagValueInCliArgs(flags *pflag.FlagSet, describe *Descr
 		}
 	}
 
-	// Auto-detect base from CI environment when ci.enabled is true and no explicit base provided.
-	if describe.Ref == "" && describe.SHA == "" && describe.CLIConfig != nil && describe.CLIConfig.CI.Enabled {
+	// Auto-detect base from CI environment when CI is enabled, no explicit base
+	// provided, AND --repo-path is not set.
+	//
+	// --repo-path is mutually exclusive with --base/--ref/--sha (see
+	// ErrRepoPathConflict). Auto-injecting those fields from CI env would
+	// trigger the conflict validator and break every describe-affected call
+	// that passes --repo-path (e.g. the cloudposse
+	// github-action-atmos-affected-trigger-spacelift action).
+	if describe.Ref == "" && describe.SHA == "" && describe.RepoPath == "" && isCIEnabledForDescribeAffected(describe) {
 		resolveBaseFromCI(describe)
 	}
 

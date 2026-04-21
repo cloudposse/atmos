@@ -13,6 +13,7 @@ import (
 	"github.com/go-git/go-git/v5/plumbing"
 	cp "github.com/otiai10/copy"
 	"github.com/spf13/pflag"
+	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
@@ -1822,6 +1823,227 @@ func TestSetDescribeAffectedFlagValueInCliArgs_BaseResolution(t *testing.T) {
 
 		assert.Equal(t, "refs/remotes/origin/main", describe.Ref)
 	})
+}
+
+// setupGitHubActionsPREnv wires GITHUB_* env vars and writes a pull_request
+// event payload for tests that exercise CI base auto-detection.
+func setupGitHubActionsPREnv(t *testing.T) {
+	t.Helper()
+
+	ci.Reset()
+	t.Cleanup(ci.Reset)
+	ci.Register(githubCI.NewProvider())
+
+	t.Setenv("GITHUB_ACTIONS", "true")
+	t.Setenv("GITHUB_EVENT_NAME", "pull_request")
+	t.Setenv("GITHUB_BASE_REF", "main")
+
+	eventPayload := `{
+		"action": "synchronize",
+		"pull_request": {
+			"head": {"sha": "headsha123456789012345678901234567890ab"},
+			"base": {"ref": "main"}
+		}
+	}`
+	eventPath := filepath.Join(t.TempDir(), "event.json")
+	err := os.WriteFile(eventPath, []byte(eventPayload), 0o644)
+	require.NoError(t, err)
+	t.Setenv("GITHUB_EVENT_PATH", eventPath)
+}
+
+// resetCIViperKey resets the `ci` viper key before and after a test so that
+// CI-related viper state from other tests (or env vars on the host) does not
+// leak in. Using t.Setenv with empty strings also clears any host-exported vars.
+func resetCIViperKey(t *testing.T) {
+	t.Helper()
+
+	viper.Reset()
+	t.Setenv("ATMOS_CI", "")
+	t.Setenv("CI", "")
+	t.Cleanup(viper.Reset)
+}
+
+// TestSetDescribeAffectedFlagValueInCliArgs_RepoPathSkipsCIAutoDetect verifies
+// that --repo-path short-circuits the CI auto-detect path, even when
+// ci.enabled is true. This is the regression fix for 1898andCo/infra#2964.
+func TestSetDescribeAffectedFlagValueInCliArgs_RepoPathSkipsCIAutoDetect(t *testing.T) {
+	resetCIViperKey(t)
+	setupGitHubActionsPREnv(t)
+
+	flags := newDescribeAffectedFlagSet()
+	err := flags.Set("repo-path", "/tmp/other-clone")
+	require.NoError(t, err)
+
+	describe := &DescribeAffectedCmdArgs{
+		CLIConfig: &schema.AtmosConfiguration{
+			CI: schema.CIConfig{Enabled: true},
+		},
+	}
+	SetDescribeAffectedFlagValueInCliArgs(flags, describe)
+
+	assert.Equal(t, "/tmp/other-clone", describe.RepoPath,
+		"--repo-path should be preserved")
+	assert.Empty(t, describe.Ref,
+		"auto-detect must not populate Ref when --repo-path is set")
+	assert.Empty(t, describe.SHA,
+		"auto-detect must not populate SHA when --repo-path is set")
+	assert.Empty(t, describe.HeadSHAOverride,
+		"auto-detect must not populate HeadSHAOverride when --repo-path is set")
+	assert.Empty(t, describe.CIEventType,
+		"auto-detect must not populate CIEventType when --repo-path is set")
+
+	// Negative-path sanity: if the exact same config runs WITHOUT --repo-path,
+	// auto-detect still fires. Guarantees we're testing the guard, not the
+	// absence of a CI provider.
+	flagsNoRepoPath := newDescribeAffectedFlagSet()
+	describeNoRepoPath := &DescribeAffectedCmdArgs{
+		CLIConfig: &schema.AtmosConfiguration{
+			CI: schema.CIConfig{Enabled: true},
+		},
+	}
+	SetDescribeAffectedFlagValueInCliArgs(flagsNoRepoPath, describeNoRepoPath)
+	assert.Equal(t, "refs/remotes/origin/main", describeNoRepoPath.Ref,
+		"sanity: auto-detect should run in the same env when --repo-path is NOT set")
+}
+
+// TestSetDescribeAffectedFlagValueInCliArgs_CIFlagOverrides verifies that the
+// --ci flag / ATMOS_CI_ENABLED env var override ci.enabled from atmos.yaml
+// per invocation. Exercises the precedence rule: CLI flag > env var > config.
+func TestSetDescribeAffectedFlagValueInCliArgs_CIFlagOverrides(t *testing.T) {
+	t.Run("ATMOS_CI=false disables auto-detect when ci.enabled=true", func(t *testing.T) {
+		resetCIViperKey(t)
+		setupGitHubActionsPREnv(t)
+
+		// Register the `ci` viper key with the same env-var bindings that
+		// cmd/describe_affected.go init() sets up via the StandardParser.
+		require.NoError(t, viper.BindEnv("ci", "ATMOS_CI", "CI"))
+
+		t.Setenv("ATMOS_CI", "false")
+
+		flags := newDescribeAffectedFlagSet()
+		describe := &DescribeAffectedCmdArgs{
+			CLIConfig: &schema.AtmosConfiguration{
+				CI: schema.CIConfig{Enabled: true},
+			},
+		}
+		SetDescribeAffectedFlagValueInCliArgs(flags, describe)
+
+		assert.Empty(t, describe.Ref,
+			"ATMOS_CI=false should override ci.enabled=true")
+		assert.Empty(t, describe.SHA,
+			"ATMOS_CI=false should suppress SHA auto-detection")
+	})
+
+	t.Run("ATMOS_CI=true forces auto-detect when ci.enabled=false", func(t *testing.T) {
+		resetCIViperKey(t)
+		setupGitHubActionsPREnv(t)
+
+		require.NoError(t, viper.BindEnv("ci", "ATMOS_CI", "CI"))
+
+		t.Setenv("ATMOS_CI", "true")
+
+		flags := newDescribeAffectedFlagSet()
+		describe := &DescribeAffectedCmdArgs{
+			CLIConfig: &schema.AtmosConfiguration{
+				CI: schema.CIConfig{Enabled: false},
+			},
+		}
+		SetDescribeAffectedFlagValueInCliArgs(flags, describe)
+
+		assert.Equal(t, "refs/remotes/origin/main", describe.Ref,
+			"ATMOS_CI=true should force auto-detect even when ci.enabled=false")
+	})
+
+	t.Run("no override falls back to ci.enabled=true in atmos.yaml", func(t *testing.T) {
+		resetCIViperKey(t)
+		setupGitHubActionsPREnv(t)
+
+		flags := newDescribeAffectedFlagSet()
+		describe := &DescribeAffectedCmdArgs{
+			CLIConfig: &schema.AtmosConfiguration{
+				CI: schema.CIConfig{Enabled: true},
+			},
+		}
+		SetDescribeAffectedFlagValueInCliArgs(flags, describe)
+
+		assert.Equal(t, "refs/remotes/origin/main", describe.Ref,
+			"ci.enabled=true should keep auto-detect active when no override is set")
+	})
+
+	t.Run("no override respects ci.enabled=false default", func(t *testing.T) {
+		resetCIViperKey(t)
+		setupGitHubActionsPREnv(t)
+
+		flags := newDescribeAffectedFlagSet()
+		describe := &DescribeAffectedCmdArgs{
+			CLIConfig: &schema.AtmosConfiguration{
+				CI: schema.CIConfig{Enabled: false},
+			},
+		}
+		SetDescribeAffectedFlagValueInCliArgs(flags, describe)
+
+		assert.Empty(t, describe.Ref,
+			"ci.enabled=false and no override must not auto-detect")
+	})
+}
+
+// TestIsCIEnabledForDescribeAffected_Precedence exercises the precedence
+// resolver directly — CLI flag (viper) > env var (viper) > config > false.
+func TestIsCIEnabledForDescribeAffected_Precedence(t *testing.T) {
+	cases := []struct {
+		name       string
+		viperSet   bool // simulates --ci flag or env var having been bound/set.
+		viperValue bool // value if viperSet is true.
+		configCI   bool // ci.enabled value.
+		nilCLI     bool // if true, describe.CLIConfig is nil.
+		want       bool
+		why        string
+	}{
+		{
+			name:     "viper set true wins over config false",
+			viperSet: true, viperValue: true, configCI: false,
+			want: true, why: "flag/env=true should override ci.enabled=false",
+		},
+		{
+			name:     "viper set false wins over config true",
+			viperSet: true, viperValue: false, configCI: true,
+			want: false, why: "flag/env=false should override ci.enabled=true",
+		},
+		{
+			name:     "viper unset falls through to config true",
+			viperSet: false, configCI: true,
+			want: true, why: "ci.enabled=true in atmos.yaml applies when no override",
+		},
+		{
+			name:     "viper unset falls through to config false",
+			viperSet: false, configCI: false,
+			want: false, why: "default (no override, ci.enabled=false) is disabled",
+		},
+		{
+			name:     "nil CLIConfig defaults to false",
+			viperSet: false, nilCLI: true,
+			want: false, why: "safety: missing config must not enable auto-detect",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			resetCIViperKey(t)
+			if tc.viperSet {
+				viper.Set("ci", tc.viperValue)
+			}
+
+			describe := &DescribeAffectedCmdArgs{}
+			if !tc.nilCLI {
+				describe.CLIConfig = &schema.AtmosConfiguration{
+					CI: schema.CIConfig{Enabled: tc.configCI},
+				}
+			}
+
+			got := isCIEnabledForDescribeAffected(describe)
+			assert.Equal(t, tc.want, got, tc.why)
+		})
+	}
 }
 
 // TestExecute_MatrixFormat tests the matrix format code path through Execute.

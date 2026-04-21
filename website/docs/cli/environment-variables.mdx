@@ -574,6 +574,35 @@ These environment variables configure Atmos behavior and can override settings i
   </dd>
 </dl>
 
+## CI Integration
+
+These variables control Atmos' native CI integration — GitHub Check Runs, `$GITHUB_OUTPUT` exports, `$GITHUB_STEP_SUMMARY` rendering, and `describe affected` base auto-detection from the CI provider's environment. See [CI configuration](/cli/configuration/ci) for the full reference.
+
+<dl>
+  <dt>`ATMOS_CI`</dt>
+  <dd>
+    Override `ci.enabled` from `atmos.yaml` at runtime. Accepts `true` or `false`. Bound to the `--ci` flag on `atmos terraform plan`, `apply`, `deploy`, and `describe affected`.
+
+    - **Set to `true`** to force CI mode on — useful when running locally against a workflow that expects CI behaviors.
+    - **Set to `false`** to disable CI-gated behaviors for a single invocation without editing `atmos.yaml`. Most common use case: suppress `describe affected` CI base auto-detection when calling the command with `--repo-path`, since the two are mutually exclusive.
+
+    ```bash
+    # Suppress CI base auto-detection for one invocation
+    ATMOS_CI=false atmos describe affected --repo-path=/tmp/other-clone
+    ```
+
+    - **YAML Path:** `ci.enabled`
+    - **Precedence:** `--ci` flag &gt; `ATMOS_CI` &gt; `CI` &gt; `ci.enabled` in `atmos.yaml` &gt; `false`.
+  </dd>
+
+  <dt>`CI`</dt>
+  <dd>
+    Generic CI indicator set by all major CI runners (GitHub Actions, GitLab CI, CircleCI, etc.). Atmos reads it to implicitly activate `--ci` on every CI run.
+
+    You do not normally set `CI` yourself — the runner sets it. It is safe because `ci.enabled` in `atmos.yaml` remains the authority for CI hooks (checks, summaries, outputs); the generic `CI` signal alone does not enable those features unless `ci.enabled: true` or `ATMOS_CI=true` / `--ci` is also set.
+  </dd>
+</dl>
+
 ## Atmos Pro
 
 <dl>

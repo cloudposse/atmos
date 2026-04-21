@@ -112,7 +112,7 @@ Override with the `--ci` flag or `ci.enabled` configuration.
 
 | Variable | Description |
 |----------|-------------|
-| `ATMOS_CI` | Explicitly enable CI mode (`true`/`false`) |
+| `ATMOS_CI` | Override `ci.enabled` from `atmos.yaml` (`true`/`false`). Bound to the `--ci` flag on CI-aware commands. Use to disable CI features per-invocation without editing config (e.g., `ATMOS_CI=false atmos describe affected --repo-path=...`) |
 | `ATMOS_CI_COMMENTS_ENABLED` | Override `ci.comments.enabled` (`true`/`false`) |
 | `CI` | Standard CI environment variable (set by most CI providers) |
 | `GITHUB_ACTIONS` | Set by GitHub Actions runner |
