@@ -78,6 +78,7 @@ var commonFlags = []string{
 	cfg.InitPassVars,
 	cfg.PlanSkipPlanfile,
 	cfg.IdentityFlag,
+	"-i",
 	cfg.ClusterNameFlag,
 	cfg.ProfilerEnabledFlag,
 	cfg.ProfilerHostFlag,
@@ -103,6 +104,7 @@ func ProcessCommandLineArgs(
 	log.Debug("ProcessCommandLineArgs input", "componentType", componentType, "args", args)
 
 	cmd.DisableFlagParsing = false
+	preParsedIdentityValue, preParsedIdentitySet := getExplicitIdentityFlagValue(cmd)
 
 	err := cmd.ParseFlags(args)
 	if err != nil && !errors.Is(err, pflag.ErrHelp) {
@@ -187,7 +189,14 @@ func ProcessCommandLineArgs(
 	configAndStacksInfo.LogsFile = argsAndFlagsInfo.LogsFile
 	configAndStacksInfo.SettingsListMergeStrategy = argsAndFlagsInfo.SettingsListMergeStrategy
 	configAndStacksInfo.Query = argsAndFlagsInfo.Query
-	configAndStacksInfo.Identity = argsAndFlagsInfo.Identity
+	postParsedIdentityValue, postParsedIdentitySet := getExplicitIdentityFlagValue(cmd)
+	configAndStacksInfo.Identity = resolveIdentityValue(
+		argsAndFlagsInfo.Identity,
+		preParsedIdentityValue,
+		preParsedIdentitySet,
+		postParsedIdentityValue,
+		postParsedIdentitySet,
+	)
 	configAndStacksInfo.ClusterName = argsAndFlagsInfo.ClusterName
 	configAndStacksInfo.NeedsPathResolution = argsAndFlagsInfo.NeedsPathResolution
 
@@ -213,6 +222,61 @@ func ProcessCommandLineArgs(
 	}
 
 	return configAndStacksInfo, nil
+}
+
+// getExplicitIdentityFlagValue returns the normalized identity value if the identity flag
+// was explicitly set on the Cobra command.
+func getExplicitIdentityFlagValue(cmd *cobra.Command) (string, bool) {
+	if cmd == nil {
+		return "", false
+	}
+
+	flag := cmd.Flag("identity")
+	if flag == nil || !flag.Changed {
+		return "", false
+	}
+
+	value, err := cmd.Flags().GetString("identity")
+	if err != nil {
+		return "", false
+	}
+
+	return cfg.NormalizeIdentityValue(value), true
+}
+
+// resolveIdentityValue determines the effective identity with precedence:
+// 1. The currently parsed Cobra flag state.
+// 2. Any identity already parsed on the command before ProcessCommandLineArgs was called.
+// 3. The legacy raw-args parser output.
+//
+// The raw-args value is still needed to recover the explicit value when Cobra reports the
+// NoOptDefVal sentinel for space-separated syntax (`--identity value` / `-i value`).
+func resolveIdentityValue(
+	argsIdentity string,
+	preParsedIdentityValue string,
+	preParsedIdentitySet bool,
+	postParsedIdentityValue string,
+	postParsedIdentitySet bool,
+) string {
+	if postParsedIdentitySet {
+		return preferArgsIdentityOverSelectValue(postParsedIdentityValue, argsIdentity)
+	}
+	if preParsedIdentitySet {
+		return preferArgsIdentityOverSelectValue(preParsedIdentityValue, argsIdentity)
+	}
+	if argsIdentity == "" {
+		return ""
+	}
+	return cfg.NormalizeIdentityValue(argsIdentity)
+}
+
+func preferArgsIdentityOverSelectValue(flagValue string, argsIdentity string) string {
+	if flagValue == cfg.IdentityFlagSelectValue &&
+		argsIdentity != "" &&
+		argsIdentity != cfg.IdentityFlagSelectValue {
+		return cfg.NormalizeIdentityValue(argsIdentity)
+	}
+	return flagValue
 }
 
 // compoundSubcommandResult holds the result of parsing a compound terraform subcommand
@@ -442,6 +506,8 @@ var valueTakingCommonFlags = func() map[string]bool {
 	set["-s"] = true
 	// --global-options takes a string value in space form.
 	set[cfg.GlobalOptionsFlag] = true
+	// -i is the shorthand form of --identity.
+	set["-i"] = true
 	// --kubeconfig-path takes a path value.
 	set[cfg.KubeConfigConfigFlag] = true
 	// Profiler string flags.
@@ -480,17 +546,17 @@ func parseFlagValue(flag, arg string, args []string, index int) (string, bool, e
 	return "", false, nil
 }
 
-// parseIdentityFlag handles --identity which supports optional and empty values.
+// parseIdentityFlag handles --identity / -i which support optional and empty values.
 //
-//   - --identity         → __SELECT__ (interactive selection).
-//   - --identity value   → use value.
-//   - --identity=value   → use value.
-//   - --identity=        → __SELECT__ (interactive selection).
+//   - --identity / -i         → __SELECT__ (interactive selection).
+//   - --identity value / -i value   → use value.
+//   - --identity=value / -i=value   → use value.
+//   - --identity= / -i=            → __SELECT__ (interactive selection).
 //
 // SplitN(arg, "=", 2) is used so that identity values containing "=" (e.g., ARN-like
 // strings with key=value parameters) are handled correctly.
 func parseIdentityFlag(info *schema.ArgsAndFlagsInfo, arg string, args []string, index int) {
-	if arg == cfg.IdentityFlag {
+	if arg == cfg.IdentityFlag || arg == "-i" {
 		// Has value: --identity <value> (next arg exists and is not another flag).
 		if len(args) > index+1 && !strings.HasPrefix(args[index+1], "-") {
 			info.Identity = args[index+1]
@@ -500,7 +566,12 @@ func parseIdentityFlag(info *schema.ArgsAndFlagsInfo, arg string, args []string,
 		}
 		return
 	}
-	if strings.HasPrefix(arg, cfg.IdentityFlag+"=") {
+
+	for _, prefix := range []string{cfg.IdentityFlag + "=", "-i="} {
+		if !strings.HasPrefix(arg, prefix) {
+			continue
+		}
+
 		// SplitN(..., 2) keeps any additional "=" in the value intact.
 		parts := strings.SplitN(arg, "=", 2)
 		if parts[1] == "" {
@@ -509,6 +580,7 @@ func parseIdentityFlag(info *schema.ArgsAndFlagsInfo, arg string, args []string,
 		} else {
 			info.Identity = parts[1]
 		}
+		return
 	}
 }
 

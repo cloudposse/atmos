@@ -579,8 +579,8 @@ func TestProcessCommandLineArgs_IdentityFromEnvironmentVariable(t *testing.T) {
 
 			// Create a test command with global flags registered via flag registry.
 			cmd := newTestCommandWithGlobalFlags("terraform")
-			cmd.Flags().String("stack", "", "stack name")
-			cmd.Flags().String("identity", "", "identity name")
+			cmd.Flags().StringP("stack", "s", "", "stack name")
+			cmd.Flags().StringP("identity", "i", "", "identity name")
 
 			// Process the command-line arguments.
 			result, err := ProcessCommandLineArgs("terraform", cmd, tt.args, []string{})
@@ -620,14 +620,24 @@ func TestProcessCommandLineArgs_IdentityFlagParsing(t *testing.T) {
 			args:           []string{"--identity", "early-identity", "plan", "component", "--stack", "stack"},
 			expectedResult: "early-identity",
 		},
+		{
+			name:           "identity shorthand with space separator",
+			args:           []string{"plan", "component", "--stack", "stack", "-i", "my-identity"},
+			expectedResult: "my-identity",
+		},
+		{
+			name:           "identity shorthand with equals syntax",
+			args:           []string{"plan", "component", "--stack", "stack", "-i=my-identity"},
+			expectedResult: "my-identity",
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Create a test command with global flags registered via flag registry.
 			cmd := newTestCommandWithGlobalFlags("terraform")
-			cmd.Flags().String("stack", "", "stack name")
-			cmd.Flags().String("identity", "", "identity name")
+			cmd.Flags().StringP("stack", "s", "", "stack name")
+			cmd.Flags().StringP("identity", "i", "", "identity name")
 
 			// Process the command-line arguments.
 			result, err := ProcessCommandLineArgs("terraform", cmd, tt.args, []string{})
@@ -635,6 +645,43 @@ func TestProcessCommandLineArgs_IdentityFlagParsing(t *testing.T) {
 			// Verify results.
 			require.NoError(t, err, "ProcessCommandLineArgs should not return error")
 			assert.Equal(t, tt.expectedResult, result.Identity, "Identity should match expected value")
+		})
+	}
+}
+
+func TestProcessCommandLineArgs_UsesParsedIdentityFlagStateWhenArgsOmitFlags(t *testing.T) {
+	tests := []struct {
+		name           string
+		flagArgs       []string
+		expectedResult string
+	}{
+		{
+			name:           "long-form identity survives reconstructed terraform args",
+			flagArgs:       []string{"--identity=flag-identity", "--stack", "stack"},
+			expectedResult: "flag-identity",
+		},
+		{
+			name:           "short-form identity survives reconstructed terraform args",
+			flagArgs:       []string{"-i", "flag-identity", "--stack", "stack"},
+			expectedResult: "flag-identity",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cmd := newTestCommandWithGlobalFlags("terraform")
+			cmd.Flags().StringP("stack", "s", "", "stack name")
+			cmd.Flags().StringP("identity", "i", "", "identity name")
+
+			require.NoError(t, cmd.ParseFlags(tt.flagArgs))
+
+			// Mimic the real terraform RunE path: Cobra has already parsed flags, and
+			// ProcessCommandLineArgs is called later with only positional arguments.
+			result, err := ProcessCommandLineArgs("terraform", cmd, []string{"plan", "component"}, []string{})
+
+			require.NoError(t, err)
+			assert.Equal(t, tt.expectedResult, result.Identity)
+			assert.Equal(t, "stack", result.Stack)
 		})
 	}
 }

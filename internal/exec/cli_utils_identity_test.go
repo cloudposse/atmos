@@ -41,11 +41,32 @@ func TestProcessArgsAndFlags_IdentityFlag(t *testing.T) {
 			description:      "Explicit identity with = syntax",
 		},
 		{
+			name:             "-i with space-separated value should use that value",
+			args:             []string{"plan", "vpc", "--stack", "test-stack", "-i", "test-identity"},
+			expectedIdentity: "test-identity",
+			expectError:      false,
+			description:      "Explicit identity specified with shorthand",
+		},
+		{
+			name:             "-i=value should use that value",
+			args:             []string{"plan", "vpc", "--stack", "test-stack", "-i=test-identity"},
+			expectedIdentity: "test-identity",
+			expectError:      false,
+			description:      "Explicit identity with shorthand equals syntax",
+		},
+		{
 			name:             "--identity= should set to __SELECT__",
 			args:             []string{"plan", "vpc", "--stack", "test-stack", "--identity="},
 			expectedIdentity: cfg.IdentityFlagSelectValue,
 			expectError:      false,
 			description:      "Empty value means interactive selection",
+		},
+		{
+			name:             "-i= should set to __SELECT__",
+			args:             []string{"plan", "vpc", "--stack", "test-stack", "-i="},
+			expectedIdentity: cfg.IdentityFlagSelectValue,
+			expectError:      false,
+			description:      "Empty shorthand value means interactive selection",
 		},
 		{
 			name:             "no --identity flag should have empty identity",
@@ -60,6 +81,13 @@ func TestProcessArgsAndFlags_IdentityFlag(t *testing.T) {
 			expectedIdentity: cfg.IdentityFlagSelectValue,
 			expectError:      false,
 			description:      "--identity without value, next arg is another flag",
+		},
+		{
+			name:             "-i followed by another flag",
+			args:             []string{"plan", "vpc", "-i", "--stack", "test-stack"},
+			expectedIdentity: cfg.IdentityFlagSelectValue,
+			expectError:      false,
+			description:      "-i without value, next arg is another flag",
 		},
 	}
 
