@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/charmbracelet/huh"
 	cockroachErrors "github.com/cockroachdb/errors"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
@@ -16,6 +17,25 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/reexec"
 )
+
+// stubRunForm replaces runForm for a single test with a function that returns
+// the given error. Auto-restores on cleanup.
+func stubRunForm(t *testing.T, returnErr error) {
+	t.Helper()
+	original := runForm
+	runForm = func(_ *huh.Form) error { return returnErr }
+	t.Cleanup(func() { runForm = original })
+}
+
+// stubRunFormWithAction replaces runForm with an arbitrary function, typically
+// used to mutate the bound value before returning nil so the caller observes a
+// "user made a selection" outcome.
+func stubRunFormWithAction(t *testing.T, action func(*huh.Form) error) {
+	t.Helper()
+	original := runForm
+	runForm = action
+	t.Cleanup(func() { runForm = original })
+}
 
 // hintsContain reports whether any hint in err contains the given substring.
 func hintsContain(err error, substr string) bool {
@@ -528,10 +548,337 @@ func TestBuildFallbackAtmosConfig_PopulatesPaths(t *testing.T) {
 	resetGlobalProfileState(t)
 	viper.Set("profiles.base_path", "custom-profiles-dir")
 
-	m := newFallbackManager("/some/cli/config/path")
+	// Use a platform-neutral path (backslash-safe on Windows) for the
+	// round-trip assertion. The value is opaque to buildFallbackAtmosConfig
+	// — it only echoes the manager's cliConfigPath back — so we just need
+	// any string. filepath.Join avoids hardcoding a Unix separator.
+	cliPath := filepath.Join("some", "cli", "config", "path")
+	m := newFallbackManager(cliPath)
 	cfg := m.buildFallbackAtmosConfig()
 
 	require.NotNil(t, cfg)
-	assert.Equal(t, "/some/cli/config/path", cfg.CliConfigPath)
+	assert.Equal(t, cliPath, cfg.CliConfigPath)
 	assert.Equal(t, "custom-profiles-dir", cfg.Profiles.BasePath)
 }
+
+// Empty candidate list must short-circuit with ErrNoIdentitiesAvailable
+// before any form is constructed — the prompt function has nothing to offer.
+func TestPromptForProfileSelection_EmptyList(t *testing.T) {
+	m := newFallbackManager("")
+	_, err := m.promptForProfileSelection("root-admin", nil)
+	assert.ErrorIs(t, err, errUtils.ErrNoIdentitiesAvailable,
+		"empty candidate list must return ErrNoIdentitiesAvailable without running any form")
+}
+
+// Exactly-one candidate takes the confirm-single fast path. We stub the form
+// to simulate user pressing Yes (no error) — confirm returns the profile.
+// Note: the Confirm's bound bool defaults to false, so stubRunForm with nil
+// leaves `confirmed=false` and results in ErrUserAborted; to test the Yes
+// path we need to mutate the bound value, which is non-trivial without
+// reflection. Instead, cover the No-path (nil error → confirmed==false →
+// ErrUserAborted) which also exercises the function's return path.
+func TestPromptForProfileSelection_SingleCandidateConfirmedNo(t *testing.T) {
+	stubRunForm(t, nil) // form.Run returns nil, bound `confirmed` stays false.
+
+	m := newFallbackManager("")
+	_, err := m.promptForProfileSelection("root-admin", []string{"alpha"})
+	assert.ErrorIs(t, err, errUtils.ErrUserAborted,
+		"single-candidate confirm: false bound value must be treated as abort")
+}
+
+// User hits Ctrl+C / Esc during the confirm → huh returns ErrUserAborted →
+// we translate to errUtils.ErrUserAborted.
+func TestPromptForProfileSelection_SingleCandidateUserAborted(t *testing.T) {
+	stubRunForm(t, huh.ErrUserAborted)
+
+	m := newFallbackManager("")
+	_, err := m.promptForProfileSelection("root-admin", []string{"alpha"})
+	assert.ErrorIs(t, err, errUtils.ErrUserAborted)
+}
+
+// Any other huh error is wrapped with ErrUnsupportedInputType.
+func TestPromptForProfileSelection_SingleCandidateOtherError(t *testing.T) {
+	sentinel := errors.New("tty write failed")
+	stubRunForm(t, sentinel)
+
+	m := newFallbackManager("")
+	_, err := m.promptForProfileSelection("root-admin", []string{"alpha"})
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrUnsupportedInputType,
+		"non-abort huh errors must be wrapped with ErrUnsupportedInputType")
+}
+
+// Multi-candidate path: user aborts → ErrUserAborted.
+func TestPromptForProfileSelection_MultiCandidateUserAborted(t *testing.T) {
+	stubRunForm(t, huh.ErrUserAborted)
+
+	m := newFallbackManager("")
+	_, err := m.promptForProfileSelection("root-admin", []string{"alpha", "beta"})
+	assert.ErrorIs(t, err, errUtils.ErrUserAborted)
+}
+
+// Multi-candidate path: form fails with a non-abort error → wrapped.
+func TestPromptForProfileSelection_MultiCandidateOtherError(t *testing.T) {
+	sentinel := errors.New("form broke")
+	stubRunForm(t, sentinel)
+
+	m := newFallbackManager("")
+	_, err := m.promptForProfileSelection("root-admin", []string{"alpha", "beta"})
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrUnsupportedInputType)
+}
+
+// Multi-candidate path: user made a valid selection. We stub the form to
+// return nil; huh.Select defaults the bound value to the first option at
+// form construction, so the returned profile will be the first sorted
+// candidate. Exercises the happy-path return of the multi-candidate branch.
+func TestPromptForProfileSelection_MultiCandidateSelected(t *testing.T) {
+	stubRunForm(t, nil)
+
+	m := newFallbackManager("")
+	picked, err := m.promptForProfileSelection("root-admin", []string{"beta", "alpha"})
+	require.NoError(t, err, "nil form error is a successful submission")
+	// Candidates are sorted before being passed to huh.NewSelect, and huh
+	// defaults the bound value to the first option → "alpha".
+	assert.Equal(t, "alpha", picked,
+		"bound value defaults to first (sorted) option; this pins that contract")
+}
+
+// confirmSingleProfileSelection: Yes returns (profile, nil). We can't easily
+// mutate the bound bool from the stub, so this asserts the No-path (default
+// bound value → ErrUserAborted) to cover the function's final branch.
+func TestConfirmSingleProfileSelection_DefaultNoIsAbort(t *testing.T) {
+	stubRunForm(t, nil)
+
+	m := newFallbackManager("")
+	_, err := m.confirmSingleProfileSelection("root-admin", "alpha")
+	assert.ErrorIs(t, err, errUtils.ErrUserAborted,
+		"confirm default (false) must be treated as abort")
+}
+
+// confirmSingleProfileSelection: user aborts.
+func TestConfirmSingleProfileSelection_UserAborted(t *testing.T) {
+	stubRunForm(t, huh.ErrUserAborted)
+
+	m := newFallbackManager("")
+	_, err := m.confirmSingleProfileSelection("root-admin", "alpha")
+	assert.ErrorIs(t, err, errUtils.ErrUserAborted)
+}
+
+// confirmSingleProfileSelection: form errors with non-abort.
+func TestConfirmSingleProfileSelection_OtherError(t *testing.T) {
+	stubRunForm(t, errors.New("oops"))
+
+	m := newFallbackManager("")
+	_, err := m.confirmSingleProfileSelection("root-admin", "alpha")
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrUnsupportedInputType)
+}
+
+// promptForAnyProfileSelection — same matrix as promptForProfileSelection
+// but for the identity-agnostic sibling.
+func TestPromptForAnyProfileSelection_EmptyList(t *testing.T) {
+	m := newFallbackManager("")
+	_, err := m.promptForAnyProfileSelection(nil)
+	assert.ErrorIs(t, err, errUtils.ErrNoIdentitiesAvailable)
+}
+
+func TestPromptForAnyProfileSelection_SingleCandidateDelegates(t *testing.T) {
+	stubRunForm(t, huh.ErrUserAborted)
+
+	m := newFallbackManager("")
+	_, err := m.promptForAnyProfileSelection([]string{"solo"})
+	assert.ErrorIs(t, err, errUtils.ErrUserAborted,
+		"single candidate must delegate to confirmSingleAnyProfileSelection")
+}
+
+func TestPromptForAnyProfileSelection_MultiCandidateUserAborted(t *testing.T) {
+	stubRunForm(t, huh.ErrUserAborted)
+
+	m := newFallbackManager("")
+	_, err := m.promptForAnyProfileSelection([]string{"alpha", "beta"})
+	assert.ErrorIs(t, err, errUtils.ErrUserAborted)
+}
+
+func TestPromptForAnyProfileSelection_MultiCandidateOtherError(t *testing.T) {
+	stubRunForm(t, errors.New("form broke"))
+
+	m := newFallbackManager("")
+	_, err := m.promptForAnyProfileSelection([]string{"alpha", "beta"})
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrUnsupportedInputType)
+}
+
+func TestPromptForAnyProfileSelection_MultiCandidateSelected(t *testing.T) {
+	stubRunForm(t, nil)
+
+	m := newFallbackManager("")
+	_, err := m.promptForAnyProfileSelection([]string{"alpha", "beta"})
+	require.NoError(t, err)
+}
+
+// confirmSingleAnyProfileSelection — mirrors confirmSingleProfileSelection.
+func TestConfirmSingleAnyProfileSelection_DefaultNoIsAbort(t *testing.T) {
+	stubRunForm(t, nil)
+
+	m := newFallbackManager("")
+	_, err := m.confirmSingleAnyProfileSelection("alpha")
+	assert.ErrorIs(t, err, errUtils.ErrUserAborted)
+}
+
+func TestConfirmSingleAnyProfileSelection_UserAborted(t *testing.T) {
+	stubRunForm(t, huh.ErrUserAborted)
+
+	m := newFallbackManager("")
+	_, err := m.confirmSingleAnyProfileSelection("alpha")
+	assert.ErrorIs(t, err, errUtils.ErrUserAborted)
+}
+
+func TestConfirmSingleAnyProfileSelection_OtherError(t *testing.T) {
+	stubRunForm(t, errors.New("oops"))
+
+	m := newFallbackManager("")
+	_, err := m.confirmSingleAnyProfileSelection("alpha")
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrUnsupportedInputType)
+}
+
+// stubInteractiveTrue forces interactiveCheck to report interactive mode
+// for the duration of a single test. Auto-restores on cleanup.
+//
+// Tests only ever need the "force true" direction — the default
+// isInteractive() already returns false in a headless test env, so
+// there's no reason to take a bool parameter and trip unparam.
+func stubInteractiveTrue(t *testing.T) {
+	t.Helper()
+	original := interactiveCheck
+	interactiveCheck = func() bool { return true }
+	t.Cleanup(func() { interactiveCheck = original })
+}
+
+// Interactive branch + user aborts the single-candidate confirm →
+// maybeOfferProfileFallback returns ErrUserAborted (not the enriched
+// identity-not-found error). Exercises the full interactive path:
+// ProfilesWithIdentity → prompt → confirm → huh abort → translation.
+func TestMaybeOfferProfileFallback_InteractiveUserAborted(t *testing.T) {
+	resetGlobalProfileState(t)
+	stubInteractiveTrue(t)
+	stubRunForm(t, huh.ErrUserAborted)
+
+	tmpDir := profileFallbackFixture(t)
+
+	m := newFallbackManager(tmpDir)
+	err := m.maybeOfferProfileFallback(context.Background(), "root-admin")
+	assert.ErrorIs(t, err, errUtils.ErrUserAborted,
+		"interactive + user aborts → whole fallback must return ErrUserAborted")
+}
+
+// Interactive branch + prompt errors (non-abort) → error propagates
+// wrapped as ErrUnsupportedInputType.
+func TestMaybeOfferProfileFallback_InteractivePromptError(t *testing.T) {
+	resetGlobalProfileState(t)
+	stubInteractiveTrue(t)
+	stubRunForm(t, errors.New("form broke"))
+
+	tmpDir := profileFallbackFixture(t)
+
+	m := newFallbackManager(tmpDir)
+	err := m.maybeOfferProfileFallback(context.Background(), "root-admin")
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrUnsupportedInputType)
+}
+
+// Interactive branch + user confirms + reexec.Exec errors →
+// "failed to re-exec" returned. We swap reexec.Exec to a mock returning
+// sentinel so reExecWithProfile does not replace the test process.
+func TestMaybeOfferProfileFallback_InteractiveReExecFails(t *testing.T) {
+	resetGlobalProfileState(t)
+	stubInteractiveTrue(t)
+
+	// Pre-mutate the bound bool via a custom stub so confirm returns "Yes".
+	stubRunFormWithAction(t, func(f *huh.Form) error {
+		// Drive the confirm into the affirmative path: the form has a
+		// single *bool field; huh doesn't expose setters, but the field
+		// will already be false. We rely on Single-candidate → confirm
+		// → bound=false → ErrUserAborted path staying false, so this
+		// path only reaches re-exec on MULTI-candidate fixture.
+		return nil
+	})
+
+	// Add a second profile so the multi-candidate branch fires (bypasses
+	// confirmSingleProfileSelection).
+	tmpDir := t.TempDir()
+	for _, name := range []string{"alpha", "gamma"} {
+		dir := filepath.Join(tmpDir, "profiles", name)
+		require.NoError(t, os.MkdirAll(dir, 0o755))
+		yaml := `auth:
+  identities:
+    shared-id:
+      kind: aws/user
+`
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "atmos.yaml"), []byte(yaml), 0o644))
+	}
+
+	// Stub reexec.Exec to return a sentinel so the "failed to re-exec"
+	// branch fires.
+	t.Cleanup(func() { reexec.Exec = originalExecFunc })
+	reexec.Exec = func(_ string, _ []string, _ []string) error {
+		return errors.New("exec blew up")
+	}
+
+	m := newFallbackManager(tmpDir)
+	err := m.maybeOfferProfileFallback(context.Background(), "shared-id")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to re-exec",
+		"re-exec failure must propagate through the interactive branch")
+}
+
+// Same three cases for the identity-agnostic fallback — interactive user
+// aborted, prompt error, re-exec error.
+func TestMaybeOfferAnyProfileFallback_InteractiveUserAborted(t *testing.T) {
+	resetGlobalProfileState(t)
+	stubInteractiveTrue(t)
+	stubRunForm(t, huh.ErrUserAborted)
+
+	tmpDir := anyProfileFallbackFixture(t)
+
+	m := newFallbackManager(tmpDir)
+	err := m.maybeOfferAnyProfileFallback(context.Background())
+	assert.ErrorIs(t, err, errUtils.ErrUserAborted)
+}
+
+func TestMaybeOfferAnyProfileFallback_InteractivePromptError(t *testing.T) {
+	resetGlobalProfileState(t)
+	stubInteractiveTrue(t)
+	stubRunForm(t, errors.New("form broke"))
+
+	tmpDir := anyProfileFallbackFixture(t)
+
+	m := newFallbackManager(tmpDir)
+	err := m.maybeOfferAnyProfileFallback(context.Background())
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrUnsupportedInputType)
+}
+
+func TestMaybeOfferAnyProfileFallback_InteractiveReExecFails(t *testing.T) {
+	resetGlobalProfileState(t)
+	stubInteractiveTrue(t)
+	stubRunForm(t, nil) // Select form's bound value defaults to first option.
+
+	tmpDir := anyProfileFallbackFixture(t)
+
+	t.Cleanup(func() { reexec.Exec = originalExecFunc })
+	reexec.Exec = func(_ string, _ []string, _ []string) error {
+		return errors.New("exec blew up")
+	}
+
+	m := newFallbackManager(tmpDir)
+	err := m.maybeOfferAnyProfileFallback(context.Background())
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to re-exec")
+}
+
+// stubRunFormWithAction is referenced only by tests that need to mutate
+// the form-bound value before returning. Keep a compile sentinel so the
+// helper isn't dead-code-eliminated if all its callers move away.
+var _ = stubRunFormWithAction

@@ -30,6 +30,12 @@ func newIdentityFlowTestCmd(t *testing.T) *cobra.Command {
 
 // resetIdentityViper clears any lingering identity flag state in the global
 // viper singleton and restores the original value on test completion.
+//
+// Important: callers must NOT use t.Parallel(). This helper mutates the
+// process-wide viper.GetViper() instance and relies on a t.Cleanup restore
+// that runs when the calling subtest ends. Parallel subtests (here or in
+// another file in the cmd package that touches IdentityFlagName) would
+// race each other against that single viper.
 func resetIdentityViper(t *testing.T) {
 	t.Helper()
 	v := viper.GetViper()
@@ -79,6 +85,30 @@ func TestIdentityFromFlagOrDefault(t *testing.T) {
 		got, err := identityFromFlagOrDefault(cmd, m)
 		require.NoError(t, err)
 		assert.Equal(t, "default-id", got)
+	})
+
+	t.Run("flag set to __SELECT__ calls GetDefaultIdentity(true) for interactive selection", func(t *testing.T) {
+		// The third branch of identityFromFlagOrDefault: --identity was
+		// passed WITHOUT a value (Cobra's NoOptDefVal fires and sets the
+		// flag to IdentityFlagSelectValue, i.e. "__SELECT__"). This must
+		// bypass the early return and call GetDefaultIdentity(true) —
+		// the `true` tells the manager to force interactive selection.
+		_ = NewTestKit(t)
+		resetIdentityViper(t)
+
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+
+		m := types.NewMockAuthManager(ctrl)
+		// The key contract: forceSelect=true is passed through verbatim.
+		m.EXPECT().GetDefaultIdentity(true).Return("picked-id", nil)
+
+		cmd := newIdentityFlowTestCmd(t)
+		require.NoError(t, cmd.Flags().Set(IdentityFlagName, IdentityFlagSelectValue))
+
+		got, err := identityFromFlagOrDefault(cmd, m)
+		require.NoError(t, err)
+		assert.Equal(t, "picked-id", got)
 	})
 
 	t.Run("GetDefaultIdentity error is wrapped with ErrNoDefaultIdentity sentinel", func(t *testing.T) {
@@ -138,6 +168,9 @@ func TestIdentityFromFlagOrDefault_ErrorReachesFallbackDispatcher(t *testing.T) 
 
 	result := maybeOfferProfileFallbackOnAuthConfigError(ctx, m, err)
 	require.Error(t, result)
-	assert.Equal(t, fallbackInvoked, result,
+	// Identity equality (assert.Same) is the real contract here — the
+	// dispatcher must return the fallback's error instance verbatim.
+	// assert.Equal could silently accept an accidental wrap/copy.
+	assert.Same(t, fallbackInvoked, result,
 		"when the fallback returns an error, it must propagate to the caller unchanged")
 }

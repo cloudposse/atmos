@@ -30,6 +30,19 @@ const (
 	profileFallbackCancelHint = "Press ctrl+c or esc to cancel"
 )
 
+// runForm executes a huh form and returns its error. Exposed as a package
+// variable so tests can stub it — a real huh form requires an interactive
+// TTY, which unit tests cannot reliably provide, and huh has no exported
+// headless mode. Production code never reassigns this.
+var runForm = func(f *huh.Form) error { return f.Run() }
+
+// interactiveCheck is the profile-fallback-local handle on isInteractive().
+// Profile fallback needs to flip interactivity from tests without affecting
+// the five other call sites of isInteractive() in the auth package, so we
+// keep this indirection narrow to this file. Production code never
+// reassigns this.
+var interactiveCheck = isInteractive
+
 // newProfileFallbackKeyMap builds the shared huh keymap used by every profile
 // fallback prompt so Ctrl+C / Esc cleanly abort the form.
 func newProfileFallbackKeyMap() *huh.KeyMap {
@@ -110,7 +123,7 @@ func (m *manager) maybeOfferProfileFallback(ctx context.Context, identityName st
 
 	// Non-interactive: we cannot prompt, but we can enrich the error with a
 	// concrete command the user can run (PRD scenarios 4 and 9).
-	if !isInteractive() {
+	if !interactiveCheck() {
 		return buildProfileSuggestionError(identityName, candidates)
 	}
 
@@ -205,7 +218,7 @@ func (m *manager) promptForProfileSelection(identityName string, profiles []stri
 		),
 	).WithKeyMap(keyMap).WithTheme(uiutils.NewAtmosHuhTheme())
 
-	if err := form.Run(); err != nil {
+	if err := runForm(form); err != nil {
 		if errors.Is(err, huh.ErrUserAborted) {
 			return "", errUtils.ErrUserAborted
 		}
@@ -234,7 +247,7 @@ func (m *manager) confirmSingleProfileSelection(identityName, profile string) (s
 		),
 	).WithKeyMap(keyMap).WithTheme(uiutils.NewAtmosHuhTheme())
 
-	if err := form.Run(); err != nil {
+	if err := runForm(form); err != nil {
 		if errors.Is(err, huh.ErrUserAborted) {
 			return "", errUtils.ErrUserAborted
 		}
@@ -287,7 +300,7 @@ func (m *manager) maybeOfferAnyProfileFallback(ctx context.Context) error {
 	}
 
 	// Non-interactive: enrich the caller's error with a concrete command.
-	if !isInteractive() {
+	if !interactiveCheck() {
 		return buildAnyProfileSuggestionError(candidates)
 	}
 
@@ -373,7 +386,7 @@ func (m *manager) promptForAnyProfileSelection(profiles []string) (string, error
 		),
 	).WithKeyMap(keyMap).WithTheme(uiutils.NewAtmosHuhTheme())
 
-	if err := form.Run(); err != nil {
+	if err := runForm(form); err != nil {
 		if errors.Is(err, huh.ErrUserAborted) {
 			return "", errUtils.ErrUserAborted
 		}
@@ -402,7 +415,7 @@ func (m *manager) confirmSingleAnyProfileSelection(profile string) (string, erro
 		),
 	).WithKeyMap(keyMap).WithTheme(uiutils.NewAtmosHuhTheme())
 
-	if err := form.Run(); err != nil {
+	if err := runForm(form); err != nil {
 		if errors.Is(err, huh.ErrUserAborted) {
 			return "", errUtils.ErrUserAborted
 		}

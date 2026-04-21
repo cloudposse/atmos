@@ -54,24 +54,39 @@ func TestMaybeOfferProfileFallbackOnAuthConfigError(t *testing.T) {
 	unrelated := errors.New("unrelated")
 	fallbackSentinel := errors.New("fallback sentinel")
 	wrappedNoIdentity := fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrNoDefaultIdentity, errors.New("x"))
+	// Kept as a single instance so the pass-through assertion can verify
+	// identity equality rather than format-equivalent equality.
+	wrappedNoIdentitiesAvailable := fmt.Errorf("wrap: %w", errUtils.ErrNoIdentitiesAvailable)
+
+	// assertMode expresses what the test expects from the returned error
+	// without conflating "same instance passed through" and "fallback
+	// sentinel produced".
+	type assertMode int
+	const (
+		expectNil            assertMode = iota // got == nil
+		expectPassthrough                      // got is the SAME instance as err (no wrap, no replace)
+		expectFallbackReturn                   // got is the SAME instance as fallback sentinel
+	)
 
 	tests := []struct {
 		name       string
 		err        error
 		setupMocks func(*types.MockAuthManager)
-		wantErr    error
+		mode       assertMode
+		// wantFallback is only consulted when mode == expectFallbackReturn.
+		wantFallback error
 	}{
 		{
 			name:       "nil error is passed through without invoking fallback",
 			err:        nil,
 			setupMocks: func(m *types.MockAuthManager) {},
-			wantErr:    nil,
+			mode:       expectNil,
 		},
 		{
 			name:       "unrelated error is passed through without invoking fallback",
 			err:        unrelated,
 			setupMocks: func(m *types.MockAuthManager) {},
-			wantErr:    unrelated,
+			mode:       expectPassthrough,
 		},
 		{
 			name: "auth-config error triggers fallback; fallback error propagates",
@@ -79,7 +94,8 @@ func TestMaybeOfferProfileFallbackOnAuthConfigError(t *testing.T) {
 			setupMocks: func(m *types.MockAuthManager) {
 				m.EXPECT().MaybeOfferAnyProfileFallback(ctx).Return(fallbackSentinel)
 			},
-			wantErr: fallbackSentinel,
+			mode:         expectFallbackReturn,
+			wantFallback: fallbackSentinel,
 		},
 		{
 			name: "auth-config error with nil fallback result returns original error",
@@ -87,7 +103,7 @@ func TestMaybeOfferProfileFallbackOnAuthConfigError(t *testing.T) {
 			setupMocks: func(m *types.MockAuthManager) {
 				m.EXPECT().MaybeOfferAnyProfileFallback(ctx).Return(nil)
 			},
-			wantErr: wrappedNoIdentity,
+			mode: expectPassthrough,
 		},
 		{
 			name: "ErrNoProvidersAvailable triggers fallback",
@@ -95,15 +111,16 @@ func TestMaybeOfferProfileFallbackOnAuthConfigError(t *testing.T) {
 			setupMocks: func(m *types.MockAuthManager) {
 				m.EXPECT().MaybeOfferAnyProfileFallback(ctx).Return(fallbackSentinel)
 			},
-			wantErr: fallbackSentinel,
+			mode:         expectFallbackReturn,
+			wantFallback: fallbackSentinel,
 		},
 		{
-			name: "ErrNoIdentitiesAvailable triggers fallback",
-			err:  fmt.Errorf("wrap: %w", errUtils.ErrNoIdentitiesAvailable),
+			name: "ErrNoIdentitiesAvailable triggers fallback; nil fallback → original err",
+			err:  wrappedNoIdentitiesAvailable,
 			setupMocks: func(m *types.MockAuthManager) {
 				m.EXPECT().MaybeOfferAnyProfileFallback(ctx).Return(nil)
 			},
-			wantErr: fmt.Errorf("wrap: %w", errUtils.ErrNoIdentitiesAvailable),
+			mode: expectPassthrough,
 		},
 	}
 
@@ -117,12 +134,35 @@ func TestMaybeOfferProfileFallbackOnAuthConfigError(t *testing.T) {
 
 			got := maybeOfferProfileFallbackOnAuthConfigError(ctx, m, tt.err)
 
-			if tt.wantErr == nil {
+			switch tt.mode {
+			case expectNil:
 				require.NoError(t, got)
-				return
+			case expectPassthrough:
+				require.Error(t, got)
+				// Identity equality — the dispatcher must return the
+				// caller's err instance verbatim (no wrap, no copy).
+				// A silent regression that re-wrapped the error would
+				// pass a .Error()-string check but fail this one.
+				assert.Same(t, tt.err, got,
+					"passthrough cases must return the exact same error instance")
+				// Also pin the ErrNoAuth* sentinels via errors.Is where
+				// applicable — guards against a future refactor that
+				// erases the sentinel while keeping the text identical.
+				if errors.Is(tt.err, errUtils.ErrNoIdentitiesAvailable) {
+					assert.ErrorIs(t, got, errUtils.ErrNoIdentitiesAvailable)
+				}
+				if errors.Is(tt.err, errUtils.ErrNoProvidersAvailable) {
+					assert.ErrorIs(t, got, errUtils.ErrNoProvidersAvailable)
+				}
+				if errors.Is(tt.err, errUtils.ErrNoDefaultIdentity) {
+					assert.ErrorIs(t, got, errUtils.ErrNoDefaultIdentity)
+				}
+			case expectFallbackReturn:
+				require.Error(t, got)
+				// The fallback's error instance must propagate unchanged.
+				assert.Same(t, tt.wantFallback, got,
+					"fallback-return cases must propagate the fallback's error instance unchanged")
 			}
-			require.Error(t, got)
-			assert.Equal(t, tt.wantErr.Error(), got.Error())
 		})
 	}
 }
