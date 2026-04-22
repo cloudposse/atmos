@@ -239,19 +239,25 @@ CLI flag > `ATMOS_CI` env var > `CI` env var >
 ```go
 // isCIEnabledForDescribeAffected returns whether CI
 // auto-base-detection should run. Precedence (highest to lowest):
-//   1. --ci CLI flag on this invocation.
-//   2. ATMOS_CI / CI env vars (bound to the `ci` viper key via
-//      flags.WithEnvVars in cmd/describe_affected.go — ATMOS_CI
-//      wins if both are set).
-//   3. ci.enabled in atmos.yaml.
-//   4. false (default).
-func isCIEnabledForDescribeAffected(describe *DescribeAffectedCmdArgs) bool {
-    // Viper reads the --ci flag bound via WithEnvVars (see
-    // cmd/describe_affected.go). When the flag or any of the
-    // env vars is explicitly set, IsSet returns true and
-    // GetBool returns the resolved value.
-    if viper.IsSet("ci") {
-        return viper.GetBool("ci")
+//   1. --ci CLI flag on this invocation (pflag.Changed).
+//   2. ATMOS_CI env var (os.LookupEnv).
+//   3. CI env var (os.LookupEnv).
+//   4. ci.enabled in atmos.yaml.
+//   5. false (default).
+func isCIEnabledForDescribeAffected(flags *pflag.FlagSet, describe *DescribeAffectedCmdArgs) bool {
+    if flags != nil {
+        if f := flags.Lookup("ci"); f != nil && f.Changed {
+            if val, err := flags.GetBool("ci"); err == nil {
+                return val
+            }
+        }
+    }
+    for _, name := range []string{"ATMOS_CI", "CI"} {
+        if val, ok := os.LookupEnv(name); ok && val != "" {
+            if parsed, err := strconv.ParseBool(val); err == nil {
+                return parsed
+            }
+        }
     }
     if describe.CLIConfig == nil {
         return false
@@ -260,10 +266,18 @@ func isCIEnabledForDescribeAffected(describe *DescribeAffectedCmdArgs) bool {
 }
 ```
 
-Note: the `flags.WithEnvVars` registration already handles the
-CLI > env-var precedence inside viper; `isCIEnabledForDescribeAffected`
-only needs to check `IsSet` to distinguish "user supplied a
-value" from "fall back to config".
+**Why not `viper.IsSet("ci")`?** `StandardParser.BindFlagsToViper`
+(see `pkg/flags/standard.go`) calls `v.SetDefault("ci", false)` as
+part of the registration flow. After `SetDefault`, `viper.IsSet("ci")`
+returns `true` on every invocation — regardless of whether the user
+passed `--ci` or set an env var. An earlier draft of this helper
+trusted `viper.IsSet` and silently masked `ci.enabled: true` from
+`atmos.yaml` with the pflag default (`false`). The regression was
+caught by the `TestIsCIEnabledForDescribeAffected_RealBinding` test,
+which stands up the exact production binding chain
+(`SetDefault` + `BindEnv` + `BindPFlag`). Checking `pflag.Changed`
+plus `os.LookupEnv` directly is the only reliable way to distinguish
+explicit user overrides from the parser's default.
 
 ### Error-message hint
 
@@ -415,8 +429,12 @@ behavior.
   `flags.WithEnvVars("ci", "ATMOS_CI", "CI")` (reuses the existing
   env-var pair — no new env var added).
 - [x] Fix 2c: `isCIEnabledForDescribeAffected` helper with
-  documented precedence (flag/env via `viper.IsSet("ci")` >
-  `ci.enabled` in config > `false`).
+  documented precedence (`--ci` via `pflag.Changed` > `ATMOS_CI` /
+  `CI` via `os.LookupEnv` > `ci.enabled` in config > `false`).
+  Intentionally does NOT use `viper.IsSet("ci")` — after
+  `StandardParser.BindFlagsToViper` calls `SetDefault`, `IsSet`
+  returns `true` on every invocation and would mask the config
+  fallback.
 - [x] Fix 3: `ErrRepoPathConflict` error wrapped with
   `errUtils.Build(...).WithHint(...).Err()` explaining the
   mutually exclusive flag groups (no longer points at `--ci=false` /

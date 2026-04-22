@@ -216,12 +216,28 @@ func isCIEnabledForDescribeAffected(flags *pflag.FlagSet, describe *DescribeAffe
 	}
 	// 2. Explicit env var. Order mirrors flags.WithEnvVars("ci", "ATMOS_CI",
 	//    "CI"): ATMOS_CI checked first so it wins over CI when both set.
+	//
+	// When an env var is set but strconv.ParseBool rejects the value
+	// (e.g. ATMOS_CI=yes / on / enabled), we log a warning and BREAK out
+	// of the env-var loop without falling through to the next env var.
+	// Rationale: the user's explicit ATMOS_CI was an override attempt —
+	// silently falling through to the ambient CI=true (set by every
+	// runner) would be the opposite of their intent. We still fall
+	// through to ci.enabled in atmos.yaml (tier 3), which preserves
+	// declared intent from committed config while surfacing the typo
+	// via the warning.
 	for _, name := range []string{"ATMOS_CI", "CI"} {
-		if val, ok := os.LookupEnv(name); ok && val != "" {
-			if parsed, err := strconv.ParseBool(val); err == nil {
-				return parsed
-			}
+		val, ok := os.LookupEnv(name)
+		if !ok || val == "" {
+			continue
 		}
+		parsed, err := strconv.ParseBool(val)
+		if err != nil {
+			log.Warn("Ignoring unparseable CI env var; falling through to ci.enabled in atmos.yaml",
+				"name", name, "value", val, "error", err)
+			break
+		}
+		return parsed
 	}
 	// 3. ci.enabled in atmos.yaml (primary fallback for the common case:
 	//    user committed `ci.enabled: true` and is running locally without

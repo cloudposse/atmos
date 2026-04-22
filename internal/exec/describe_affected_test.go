@@ -2214,6 +2214,16 @@ func TestIsCIEnabledForDescribeAffected_Precedence(t *testing.T) {
 			want: false, why: "ATMOS_CI precedes CI in the env var order",
 		},
 		{
+			name: "unparseable ATMOS_CI suppresses CI fallthrough and falls through to config",
+			ovr:  override{atmosCI: "yes", ci: "true"}, configCI: false,
+			want: false, why: "user tried to override with an unparseable value; ambient CI=true must NOT override their explicit intent — fall through to ci.enabled (false here), after logging a warning",
+		},
+		{
+			name: "unparseable ATMOS_CI honors ci.enabled=true via config fallthrough",
+			ovr:  override{atmosCI: "on", ci: "true"}, configCI: true,
+			want: true, why: "unparseable ATMOS_CI falls through to atmos.yaml (tier 3), so ci.enabled=true still enables the feature even though the env var was malformed",
+		},
+		{
 			name:     "no override falls through to config true",
 			configCI: true,
 			want:     true, why: "ci.enabled=true in atmos.yaml applies when no flag/env override — the previously-regressing path",
