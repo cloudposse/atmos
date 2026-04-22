@@ -3,12 +3,13 @@ package exec
 import (
 	"errors"
 	"fmt"
+	"os"
+	"strconv"
 
 	"github.com/go-git/go-git/v5/plumbing"
 	giturl "github.com/kubescape/go-git-url"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
-	"github.com/spf13/viper"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/internal/tui/templates/term"
@@ -187,22 +188,44 @@ func ParseDescribeAffectedCliArgs(cmd *cobra.Command, args []string) (DescribeAf
 // this invocation of `describe affected`.
 //
 // Precedence (highest to lowest):
-//  1. --ci CLI flag on this invocation.
-//  2. ATMOS_CI / CI env vars (bound to the `ci` viper key via
-//     flags.WithEnvVars in cmd/describe_affected.go). This matches the
-//     env-var bindings already used by `terraform plan`/`apply`/`deploy`.
+//  1. --ci CLI flag on this invocation (checked via pflag.Flag.Changed).
+//  2. ATMOS_CI / CI env vars (checked via os.LookupEnv). ATMOS_CI wins
+//     if both are set.
 //  3. ci.enabled in atmos.yaml.
 //  4. false (default).
 //
-// The --ci flag and its env-var bindings are registered once at init() time
-// via the StandardParser. Viper IsSet reports true when either the CLI flag
-// was explicitly passed or any bound env var is set to a non-empty value.
-func isCIEnabledForDescribeAffected(describe *DescribeAffectedCmdArgs) bool {
+// Why not viper.IsSet("ci")? The StandardParser.BindFlagsToViper helper
+// (pkg/flags/standard.go:455) calls v.SetDefault("ci", false) for the
+// flag's default, which flips viper.IsSet("ci") to true for every
+// invocation — masking ci.enabled from atmos.yaml. Checking pflag.Changed
+// + os.LookupEnv directly is the only way to distinguish explicit
+// user overrides from the parser's default, so config fall-through
+// works when the user has opted in via atmos.yaml but not via flag/env.
+// See TestIsCIEnabledForDescribeAffected_RealBinding for the regression
+// this avoids.
+func isCIEnabledForDescribeAffected(flags *pflag.FlagSet, describe *DescribeAffectedCmdArgs) bool {
 	defer perf.Track(nil, "exec.isCIEnabledForDescribeAffected")()
 
-	if viper.IsSet("ci") {
-		return viper.GetBool("ci")
+	// 1. Explicit --ci CLI flag.
+	if flags != nil {
+		if f := flags.Lookup("ci"); f != nil && f.Changed {
+			if val, err := flags.GetBool("ci"); err == nil {
+				return val
+			}
+		}
 	}
+	// 2. Explicit env var. Order mirrors flags.WithEnvVars("ci", "ATMOS_CI",
+	//    "CI"): ATMOS_CI checked first so it wins over CI when both set.
+	for _, name := range []string{"ATMOS_CI", "CI"} {
+		if val, ok := os.LookupEnv(name); ok && val != "" {
+			if parsed, err := strconv.ParseBool(val); err == nil {
+				return parsed
+			}
+		}
+	}
+	// 3. ci.enabled in atmos.yaml (primary fallback for the common case:
+	//    user committed `ci.enabled: true` and is running locally without
+	//    env overrides).
 	if describe.CLIConfig == nil {
 		return false
 	}
@@ -282,7 +305,7 @@ func SetDescribeAffectedFlagValueInCliArgs(flags *pflag.FlagSet, describe *Descr
 	//     metadata (HeadSHAOverride, CIEventType) so Atmos Pro can match the
 	//     uploaded affected list to the PR webhook SHA even though this checkout
 	//     is at a merge commit.
-	if describe.Ref == "" && describe.SHA == "" && isCIEnabledForDescribeAffected(describe) {
+	if describe.Ref == "" && describe.SHA == "" && isCIEnabledForDescribeAffected(flags, describe) {
 		switch {
 		case describe.RepoPath == "":
 			resolveBaseFromCI(describe)

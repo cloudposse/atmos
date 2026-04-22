@@ -201,7 +201,7 @@ func TestDescribeAffectedCmd_Error(t *testing.T) {
 
 // TestDescribeAffectedCmd_RepoPathConflictHints verifies that supplying both
 // --repo-path and --base returns ErrRepoPathConflict wrapped with actionable
-// hints pointing the user at --ci=false / ATMOS_CI=false. Covers the
+// hints explaining the mutually exclusive flag groups. Covers the
 // errUtils.Build(...).WithHint(...).Err() branch in ParseDescribeAffectedCliArgs.
 func TestDescribeAffectedCmd_RepoPathConflictHints(t *testing.T) {
 	_ = NewTestKit(t)
@@ -224,11 +224,26 @@ func TestDescribeAffectedCmd_RepoPathConflictHints(t *testing.T) {
 	// Set both --repo-path and --base on the command. These flag values
 	// leak across tests via the shared describeAffectedCmd singleton, so we
 	// reset them on cleanup to keep neighbors deterministic.
+	//
+	// pflag.Flag.Set() always stamps Changed=true — including the cleanup
+	// Set("") calls below — so after resetting the value we also clear the
+	// Changed bit directly. Without this, later tests calling
+	// SetDescribeAffectedFlagValueInCliArgs (which gates reads on
+	// flags.Changed(k) at internal/exec/describe_affected.go:247) would see
+	// these flags as "user-provided empty strings" and overwrite their
+	// describe struct fields with "". Writing flag.Changed directly is the
+	// established pflag test-cleanup idiom.
 	require.NoError(t, describeAffectedCmd.PersistentFlags().Set("repo-path", "/tmp/some-clone"))
 	require.NoError(t, describeAffectedCmd.PersistentFlags().Set("base", "main"))
 	t.Cleanup(func() {
 		_ = describeAffectedCmd.PersistentFlags().Set("repo-path", "")
 		_ = describeAffectedCmd.PersistentFlags().Set("base", "")
+		if f := describeAffectedCmd.PersistentFlags().Lookup("repo-path"); f != nil {
+			f.Changed = false
+		}
+		if f := describeAffectedCmd.PersistentFlags().Lookup("base"); f != nil {
+			f.Changed = false
+		}
 	})
 
 	err := describeAffectedCmd.RunE(describeAffectedCmd, []string{})

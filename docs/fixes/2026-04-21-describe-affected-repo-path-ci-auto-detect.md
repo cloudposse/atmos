@@ -267,10 +267,11 @@ value" from "fall back to config".
 
 ### Error-message hint
 
-When `ErrRepoPathConflict` fires for an **explicit** (non-auto)
-conflict, we extend the message with a hint pointing users at the
-new env override so they don't hit the same failure mode from
-a different angle:
+After Fix 1, `ErrRepoPathConflict` only fires when a user
+**explicitly** passes both `--repo-path` and one of
+`--base` / `--ref` / `--sha` / `--ssh-key` / `--ssh-key-password`
+— auto-detected values no longer trigger the validator. The
+sentinel stays as-is:
 
 ```go
 var ErrRepoPathConflict = errors.New(
@@ -279,23 +280,30 @@ var ErrRepoPathConflict = errors.New(
     "flags can't be used")
 ```
 
-We wrap it in the builder pattern per `errors/errors.go`:
+…and we wrap it in the builder pattern per `errors/errors.go`
+with two hints that explain the mutually exclusive flag groups
+and guide the user toward the right flag for their intent:
 
 ```go
 return errUtils.Build(ErrRepoPathConflict).
-    WithHint("If --base was auto-injected from CI, set " +
-        "ATMOS_CI=false or pass --ci=false for this " +
-        "invocation, or unset ci.enabled in atmos.yaml.").
-    WithHint("--repo-path is intended for already-cloned " +
-        "sibling repositories. Pass only one of " +
-        "--repo-path OR (--base | --ref | --sha).").
+    WithHint("Pass only one of: --repo-path OR (--base | " +
+        "--ref | --sha | --ssh-key | --ssh-key-password). " +
+        "--repo-path points at an already-cloned sibling " +
+        "repository to diff against; the others clone or " +
+        "check out a target ref.").
+    WithHint("To compare against a specific ref or SHA, use " +
+        "--base without --repo-path. To compare against an " +
+        "already-cloned repo, use --repo-path without --base " +
+        "/ --ref / --sha.").
     Err()
 ```
 
-After Fix 1, this hint is only seen by users who **explicitly**
-pass both flags — auto-detected values no longer trigger the
-validator. The hint still helps by explaining the new override
-for anyone who hits the conflict via a different path.
+The hints deliberately do NOT suggest pairing `--ci=false` /
+`ATMOS_CI=false` with `--repo-path` — Fix 1 already suppresses
+auto-detect when `--repo-path` is set, so that pairing is
+unnecessary. The `--ci` / `ATMOS_CI` overrides (Fix 2) exist for
+the independent case of toggling CI-gated behavior on
+invocations that do not use `--repo-path`.
 
 ## Testing
 
@@ -410,8 +418,10 @@ behavior.
   documented precedence (flag/env via `viper.IsSet("ci")` >
   `ci.enabled` in config > `false`).
 - [x] Fix 3: `ErrRepoPathConflict` error wrapped with
-  `errUtils.Build(...).WithHint(...).Err()` pointing at the new
-  override.
+  `errUtils.Build(...).WithHint(...).Err()` explaining the
+  mutually exclusive flag groups (no longer points at `--ci=false` /
+  `ATMOS_CI=false`, which Fix 1 makes unnecessary for the
+  `--repo-path` case).
 - [x] Unit tests:
   `TestSetDescribeAffectedFlagValueInCliArgs_RepoPathSkipsCIAutoDetect`
   (includes inline negative-path sanity assertion),

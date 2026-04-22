@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -2162,49 +2163,85 @@ func TestSetDescribeAffectedFlagValueInCliArgs_CIFlagOverrides(t *testing.T) {
 }
 
 // TestIsCIEnabledForDescribeAffected_Precedence exercises the precedence
-// resolver directly — CLI flag (viper) > env var (viper) > config > false.
+// resolver directly — CLI flag (pflag.Changed) > env var (os.LookupEnv) >
+// config > false. Each case drives exactly one override source to verify
+// its tier in the precedence chain, independently of viper.
 func TestIsCIEnabledForDescribeAffected_Precedence(t *testing.T) {
+	// override is a tagged union of the three override sources we support.
+	// At most one field is set per test case.
+	type override struct {
+		flagValue *bool  // non-nil → simulate --ci=<value> on the command line (flag.Changed=true).
+		atmosCI   string // non-empty → ATMOS_CI env var set to this value.
+		ci        string // non-empty → CI env var set to this value.
+	}
+
 	cases := []struct {
-		name       string
-		viperSet   bool // simulates --ci flag or env var having been bound/set.
-		viperValue bool // value if viperSet is true.
-		configCI   bool // ci.enabled value.
-		nilCLI     bool // if true, describe.CLIConfig is nil.
-		want       bool
-		why        string
+		name     string
+		ovr      override
+		configCI bool
+		nilCLI   bool
+		want     bool
+		why      string
 	}{
 		{
-			name:     "viper set true wins over config false",
-			viperSet: true, viperValue: true, configCI: false,
-			want: true, why: "flag/env=true should override ci.enabled=false",
+			name: "--ci=true flag wins over config false",
+			ovr:  override{flagValue: boolPtr(true)},
+			want: true, why: "explicit --ci=true is the top-priority override",
 		},
 		{
-			name:     "viper set false wins over config true",
-			viperSet: true, viperValue: false, configCI: true,
-			want: false, why: "flag/env=false should override ci.enabled=true",
+			name: "--ci=false flag wins over config true",
+			ovr:  override{flagValue: boolPtr(false)}, configCI: true,
+			want: false, why: "explicit --ci=false disables even with ci.enabled=true",
 		},
 		{
-			name:     "viper unset falls through to config true",
-			viperSet: false, configCI: true,
-			want: true, why: "ci.enabled=true in atmos.yaml applies when no override",
+			name: "ATMOS_CI=true env wins over config false",
+			ovr:  override{atmosCI: "true"},
+			want: true, why: "ATMOS_CI=true overrides absent ci.enabled",
 		},
 		{
-			name:     "viper unset falls through to config false",
-			viperSet: false, configCI: false,
-			want: false, why: "default (no override, ci.enabled=false) is disabled",
+			name: "ATMOS_CI=false env wins over config true",
+			ovr:  override{atmosCI: "false"}, configCI: true,
+			want: false, why: "ATMOS_CI=false disables even with ci.enabled=true",
 		},
 		{
-			name:     "nil CLIConfig defaults to false",
-			viperSet: false, nilCLI: true,
-			want: false, why: "safety: missing config must not enable auto-detect",
+			name: "CI=true env enables auto-detect (zero-config CI)",
+			ovr:  override{ci: "true"},
+			want: true, why: "runner-set CI=true is the zero-config signal",
+		},
+		{
+			name: "ATMOS_CI=false beats CI=true (ATMOS_CI has higher priority)",
+			ovr:  override{atmosCI: "false", ci: "true"},
+			want: false, why: "ATMOS_CI precedes CI in the env var order",
+		},
+		{
+			name:     "no override falls through to config true",
+			configCI: true,
+			want:     true, why: "ci.enabled=true in atmos.yaml applies when no flag/env override — the previously-regressing path",
+		},
+		{
+			name:     "no override falls through to config false",
+			configCI: false,
+			want:     false, why: "default (no override, ci.enabled=false) is disabled",
+		},
+		{
+			name:   "nil CLIConfig defaults to false",
+			nilCLI: true,
+			want:   false, why: "safety: missing config must not enable auto-detect",
 		},
 	}
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			resetCIViperKey(t)
-			if tc.viperSet {
-				viper.Set("ci", tc.viperValue)
+			// Isolate env vars: clear both, then set what the case wants.
+			t.Setenv("ATMOS_CI", tc.ovr.atmosCI)
+			t.Setenv("CI", tc.ovr.ci)
+
+			// Build a pflag.FlagSet with `--ci` registered. If the case
+			// specifies a flag value, Set it so flag.Changed becomes true.
+			fs := pflag.NewFlagSet("test", pflag.ContinueOnError)
+			fs.Bool("ci", false, "")
+			if tc.ovr.flagValue != nil {
+				require.NoError(t, fs.Set("ci", strconv.FormatBool(*tc.ovr.flagValue)))
 			}
 
 			describe := &DescribeAffectedCmdArgs{}
@@ -2214,10 +2251,51 @@ func TestIsCIEnabledForDescribeAffected_Precedence(t *testing.T) {
 				}
 			}
 
-			got := isCIEnabledForDescribeAffected(describe)
+			got := isCIEnabledForDescribeAffected(fs, describe)
 			assert.Equal(t, tc.want, got, tc.why)
 		})
 	}
+}
+
+// TestIsCIEnabledForDescribeAffected_RealBinding is the regression guard for
+// the bug where StandardParser.BindFlagsToViper's SetDefault on the `ci`
+// key made viper.IsSet("ci") always true, which masked ci.enabled=true from
+// atmos.yaml with the pflag default (false).
+//
+// This test sets up the EXACT viper+flag binding chain the cmd layer uses
+// in production (BindEnv + BindPFlag + SetDefault), then verifies that
+// isCIEnabledForDescribeAffected still falls through to CLIConfig.CI.Enabled
+// when no CLI flag or env var was provided.
+func TestIsCIEnabledForDescribeAffected_RealBinding(t *testing.T) {
+	// Clear ambient env + fresh viper to reproduce a local-dev invocation.
+	t.Setenv("ATMOS_CI", "")
+	t.Setenv("CI", "")
+	viper.Reset()
+	t.Cleanup(viper.Reset)
+
+	v := viper.GetViper()
+
+	// Mimic StandardParser binding: SetDefault + BindEnv + BindPFlag.
+	fs := pflag.NewFlagSet("test", pflag.ContinueOnError)
+	fs.Bool("ci", false, "")
+	v.SetDefault("ci", false)
+	require.NoError(t, v.BindEnv("ci", "ATMOS_CI", "CI"))
+	require.NoError(t, v.BindPFlag("ci", fs.Lookup("ci")))
+
+	// Sanity: after the binding, viper.IsSet returns true — the exact
+	// misleading signal that caused the bug. We don't trust it in the
+	// production helper, and this assertion documents why.
+	require.True(t, v.IsSet("ci"),
+		"viper.IsSet(\"ci\") is true after SetDefault — relying on it in the helper would be wrong")
+
+	describe := &DescribeAffectedCmdArgs{
+		CLIConfig: &schema.AtmosConfiguration{
+			CI: schema.CIConfig{Enabled: true},
+		},
+	}
+	got := isCIEnabledForDescribeAffected(fs, describe)
+	assert.True(t, got,
+		"ci.enabled=true from atmos.yaml must still be honored under the production binding chain (flag not Changed, no env vars set)")
 }
 
 // TestExecute_MatrixFormat tests the matrix format code path through Execute.
