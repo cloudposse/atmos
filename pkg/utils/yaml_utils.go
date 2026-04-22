@@ -753,8 +753,10 @@ func escapeLiteralValue(value, leftDelim, rightDelim string) string {
 	result = strings.ReplaceAll(result, rightDelim, rightSentinel)
 
 	// Step 2: replace sentinels with Go-template string-literal escapes.
-	// leftDelim + `"` + leftDelim + `"` + rightDelim evaluates to leftDelim when
-	// processed by the Go template engine (e.g., {{"{{"}} → {{).
+	// For the default delimiters ({{ and }}):
+	//   escapedLeft  = {{ + " + {{ + " + }} = {{"{{" }}  → renders as {{ after template execution
+	//   escapedRight = {{ + " + }} + " + }} = {{"}}"}}  → renders as }} after template execution
+	// The same formula generalises to any custom left/right delimiter pair.
 	escapedLeft := leftDelim + `"` + leftDelim + `"` + rightDelim
 	escapedRight := leftDelim + `"` + rightDelim + `"` + rightDelim
 

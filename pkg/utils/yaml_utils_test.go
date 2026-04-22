@@ -1180,7 +1180,7 @@ func TestEscapeLiteralValue(t *testing.T) {
 			name:  "multiline jinja-like template",
 			input: "{%- if x is defined -%}\n  {{ x }}\n{%- else -%}\n  default\n{%- endif -%}",
 			// Only {{ and }} are escaped; {% %} are not Go template delimiters.
-			expected: "{%- if x is defined -%}\n  {{\"{{\"}} x {{\"}}\"}}\n{%- else -%}\n  default\n{%- endif -%}",
+			expected: "{%- if x is defined -%}\n  " + `{{"{{"}}` + " x " + `{{"}}"}}` + "\n{%- else -%}\n  default\n{%- endif -%}",
 		},
 		{
 			name:     "terraform-like syntax preserved unchanged",
