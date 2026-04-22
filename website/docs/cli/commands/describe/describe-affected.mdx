@@ -362,6 +362,8 @@ Affected components and stacks:
         # for reproducing CI behavior locally.
         atmos describe affected --ci=true
         ```
+
+        **Accepted env values:** `ATMOS_CI` / `CI` accept `true`, `false`, `1`, `0`, `t`, `f` (Go `strconv.ParseBool`). An unparseable `ATMOS_CI` (e.g. `yes`, `on`, `enabled`) logs a warning and is ignored — Atmos then falls through to `ci.enabled` in `atmos.yaml`, deliberately skipping the `CI` env var tier so the runner's ambient `CI=true` cannot silently contradict your explicit-but-malformed override.
     </dd>
 
     <dt>`--verbose` <em>(optional)</em></dt>

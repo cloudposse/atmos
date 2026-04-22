@@ -74,6 +74,16 @@ func init() {
 	//
 	// Env-var bindings match the terraform plan/apply/deploy pattern so
 	// users have a single, consistent knob across all CI-aware commands.
+	//
+	// The Viper bind below registers env-var mappings (ATMOS_CI, CI → "ci")
+	// for any tooling that inspects Viper's merged view of the flag — e.g.
+	// `atmos describe config`. It is NOT what the runtime gate reads:
+	// `isCIEnabledForDescribeAffected` reads `pflag.Changed` + `os.LookupEnv`
+	// directly to avoid the `SetDefault`-induced `viper.IsSet("ci") == true`
+	// trap (see that helper's doc comment and
+	// TestIsCIEnabledForDescribeAffected_RealBinding). No runtime
+	// BindFlagsToViper is needed — the helper has all the state it needs
+	// from the raw `pflag.FlagSet` Cobra already supplies.
 	describeAffectedCIParser = flags.NewStandardParser(
 		flags.WithBoolFlag("ci", "", false,
 			"Enable CI mode for `describe affected`. Overrides ci.enabled in atmos.yaml for this invocation. "+
@@ -98,16 +108,6 @@ func getRunnableDescribeAffectedCmd(
 	return func(cmd *cobra.Command, args []string) error {
 		// Check Atmos configuration
 		checkAtmosConfig()
-
-		// Bind the --ci flag to Viper at runtime so viper.IsSet("ci") picks up
-		// the CLI flag value (env-var bindings were registered in init()).
-		// isCIEnabledForDescribeAffected relies on this precedence:
-		// CLI flag > env var > ci.enabled in atmos.yaml > false.
-		if describeAffectedCIParser != nil {
-			if bindErr := describeAffectedCIParser.BindFlagsToViper(cmd, viper.GetViper()); bindErr != nil {
-				log.Error("Failed to bind --ci flag to Viper for `describe affected`", "error", bindErr)
-			}
-		}
 
 		props, err := parseDescribeAffectedCliArgs(cmd, args)
 		if err != nil {

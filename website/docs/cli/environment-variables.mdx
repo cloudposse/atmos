@@ -594,6 +594,8 @@ These variables control Atmos' native CI integration — GitHub Check Runs, `$GI
     ATMOS_CI=false atmos describe affected --base main
     ```
 
+    **Accepted values:** `true`, `false`, `1`, `0`, `t`, `f` (anything Go's `strconv.ParseBool` accepts). An unparseable value (e.g. `yes`, `on`, `enabled`) logs a warning and is ignored: Atmos then falls through directly to `ci.enabled` in `atmos.yaml` — the `CI` env var is **not** consulted in this case. Rationale: your explicit `ATMOS_CI` was an override attempt; silently falling through to the ambient `CI=true` set by every runner would be the opposite of your intent. Fix the value and re-run.
+
     - **YAML Path:** `ci.enabled`
     - **Precedence:** `--ci` flag &gt; `ATMOS_CI` &gt; `CI` &gt; `ci.enabled` in `atmos.yaml` &gt; `false`.
   </dd>

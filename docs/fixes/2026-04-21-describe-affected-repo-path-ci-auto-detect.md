@@ -110,6 +110,74 @@ base and then the validator rejected the result.
   `internal/exec/ci_exit_codes.go` is tracked as a follow-up so
   each call site can be reviewed individually.
 
+## Behavior notes
+
+### `CI=true` alone now enables base auto-detect
+
+Pre-fix, the auto-detect gate was a single config read:
+
+```go
+if describe.CLIConfig != nil && describe.CLIConfig.CI.Enabled {
+    resolveBaseFromCI(describe)
+}
+```
+
+Post-fix, the gate is the precedence chain in
+`isCIEnabledForDescribeAffected` — with `CI` env at tier 3, above
+`ci.enabled` in `atmos.yaml`. Every major CI runner exports
+`CI=true`, so a user who did NOT set `ci.enabled: true` in
+`atmos.yaml` (either explicitly `false` or left unset) will now
+get base auto-detection on those runners where previously they
+would not have.
+
+Design rationale: the `--ci` flag / `ATMOS_CI` / `CI` env chain
+already exists on `terraform plan`/`apply`/`deploy` (PR #2079) —
+on those commands, `CI=true` enables the `--ci` flag via
+`StandardParser.WithEnvVars`. Extending the same precedence to
+`describe affected` makes the CI-aware commands behave uniformly,
+and `CI=true` triggering base detection is consistent with the
+"zero-config CI" framing of #2241.
+
+Opt-out paths for users who want the pre-fix behavior:
+
+- Set `ATMOS_CI=false` at the workflow level.
+- Pass `--ci=false` on the specific `describe affected` invocation.
+- Scope CI features to a subset of workflows via an Atmos profile —
+  put `ci.enabled: false` in the profile that's loaded on the paths
+  that should opt out (typically the ones that pass `--repo-path`
+  via the spacelift-trigger action). Profile merge is layered on
+  top of the root `atmos.yaml` (`pkg/config/load.go` `loadProfiles`
+  → `mergeConfigFile` → `viper.MergeConfig`), so a profile-level
+  `ci.enabled: false` overrides the root setting whenever
+  `ATMOS_PROFILE` selects that profile. This is the recommended
+  scoping mechanism post-#2942 and avoids any runtime config
+  patching.
+
+This behavior change is worth calling out in the release notes
+for the version that ships this fix.
+
+### Unparseable env values fall through to config, not to `CI`
+
+When `ATMOS_CI` is set but `strconv.ParseBool` rejects the value
+(e.g., `ATMOS_CI=yes` / `on` / `enabled`), the helper logs a
+warning and breaks out of the env-var loop **without** consulting
+`CI`. Fall-through goes directly to tier 4 (`ci.enabled` in
+`atmos.yaml`). Rationale: the user's explicit `ATMOS_CI` was an
+override attempt; silently falling through to the ambient `CI=true`
+set by every runner would be the opposite of their intent. The
+warning surfaces the typo so it can be fixed.
+
+The same accepted-value set applies to the `CI` env var when it
+falls back from `ATMOS_CI` being absent — but tier 3 is typically
+set by the runner to the literal string `true`, so this edge case
+is rare there.
+
+User-facing documentation for both of these is in
+`website/docs/cli/environment-variables.mdx` (the `ATMOS_CI`
+"Accepted values" paragraph) and
+`website/docs/cli/commands/describe/describe-affected.mdx`
+(the `--ci` flag "Accepted env values" paragraph).
+
 ## Implementation
 
 ### Fix 1 — Skip CI base auto-detect when `--repo-path` is set
@@ -147,7 +215,7 @@ New code:
 //     SHA — the current checkout is typically a merge commit,
 //     whose SHA does not match what the webhook indexed.
 if describe.Ref == "" && describe.SHA == "" &&
-    isCIEnabledForDescribeAffected(describe) {
+    isCIEnabledForDescribeAffected(flags, describe) {
     switch {
     case describe.RepoPath == "":
         resolveBaseFromCI(describe)
@@ -222,7 +290,9 @@ describeAffectedCIParser = flags.NewStandardParser(
     flags.WithEnvVars("ci", "ATMOS_CI", "CI"),
 )
 describeAffectedCIParser.RegisterFlags(describeAffectedCmd)
-_ = describeAffectedCIParser.BindToViper(viper.GetViper())
+if err := describeAffectedCIParser.BindToViper(viper.GetViper()); err != nil {
+    log.Error("Failed to bind --ci flag to Viper for `describe affected`", "error", err)
+}
 ```
 
 The env-var bindings deliberately reuse the existing `ATMOS_CI` /
@@ -230,6 +300,19 @@ The env-var bindings deliberately reuse the existing `ATMOS_CI` /
 (PR #2079, March 2026) bound to the `--ci` flag on
 `terraform plan`/`apply`/`deploy`. Reusing it gives users a single,
 consistent knob across every CI-aware command.
+
+**No runtime `BindFlagsToViper`.** Unlike `terraform plan/apply/deploy`
+— which rebind the `--ci` pflag into Viper at `RunE` time because
+`ParseTerraformRunOptions(v)` reads the value back out of Viper —
+`describe affected`'s runtime gate (`isCIEnabledForDescribeAffected`)
+reads `pflag.Changed` + `os.LookupEnv` directly. The runtime bind
+would therefore be dead code. It was present in an earlier draft and
+its removal is intentional: keeping it made the behavior harder to
+reason about (the in-code comment was claiming `viper.IsSet("ci")`
+would pick up the flag, which the helper deliberately ignores).
+The init-time `BindToViper` above is kept for symmetry with the
+other CI-aware commands and for any Viper-based tooling (e.g.
+`atmos describe config`) that inspects the merged configuration.
 
 File: `internal/exec/describe_affected.go` — introduce a helper
 `isCIEnabledForDescribeAffected` that applies the precedence
@@ -435,6 +518,13 @@ behavior.
   `StandardParser.BindFlagsToViper` calls `SetDefault`, `IsSet`
   returns `true` on every invocation and would mask the config
   fallback.
+- [x] Fix 2d: removed the runtime `BindFlagsToViper` call in
+  `cmd/describe_affected.go` `getRunnableDescribeAffectedCmd`. The
+  helper reads pflag + env directly, so the runtime bind was dead
+  code; its comment also lied by claiming `viper.IsSet("ci")` would
+  pick up the flag. Init-time `BindToViper` is kept for parity with
+  `terraform plan/apply/deploy` and for Viper-based tooling (e.g.
+  `atmos describe config`) that inspects the merged flag view.
 - [x] Fix 3: `ErrRepoPathConflict` error wrapped with
   `errUtils.Build(...).WithHint(...).Err()` explaining the
   mutually exclusive flag groups (no longer points at `--ci=false` /
@@ -461,7 +551,14 @@ behavior.
 - [x] Documentation:
   `website/docs/cli/environment-variables.mdx` — new
   "CI Integration" section covering `ATMOS_CI` (extended to gate
-  describe-affected CI auto-detection) and `CI`.
+  describe-affected CI auto-detection) and `CI`. Includes the
+  "Accepted values" paragraph documenting `strconv.ParseBool`
+  semantics and the unparseable-`ATMOS_CI` fall-through behavior.
+- [x] Documentation:
+  `website/docs/cli/commands/describe/describe-affected.mdx` —
+  `--ci` flag section now includes the "Accepted env values"
+  paragraph describing the unparseable-`ATMOS_CI` fall-through
+  (warn → ignore → fall through to `ci.enabled`, skipping `CI`).
 - [ ] Blog post: `website/blog/2026-04-21-describe-affected-repo-path-ci-fix.mdx`
   (labeled `bugfix`).
 - [ ] Roadmap update: add milestone under the `native-ci`
@@ -526,6 +623,10 @@ behavior.
 - User-reported failure in a downstream consumer repo where a
   workflow had to apply a `yq '.ci.enabled = false'` patch inline
   to unblock the spacelift-trigger PR check — the workaround that
-  motivated this fix.
+  motivated this fix. The recommended downstream resolution
+  (independent of this PR) is to retire the yq-patch in favor of a
+  profile-scoped `ci.enabled: false` in the Spacelift auth profile.
+  Profiles are already the supported per-workflow scoping mechanism
+  post-#2942 and work on atmos 1.216+ without any upstream change.
 - cloudposse/atmos#2241 — the PR that introduced CI base
   auto-detection.
