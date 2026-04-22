@@ -101,7 +101,12 @@ func TestExecutor_Regression_Issue2356_BackendFileUnchangedInSkipInitPath(t *tes
 		"rds_properties": {Value: []byte(`{"endpoint":"db.example.com","port":5432}`)},
 	}, nil)
 
+	// Capture the workdir the executor asks for; we assert on it below to
+	// guard against a path-resolution change that would make the file-compare
+	// vacuously pass (writes landing in a different directory than backendPath).
+	var capturedWorkdir string
 	customFactory := func(workdir, executable string) (TerraformRunner, error) {
+		capturedWorkdir = workdir
 		return mockRunner, nil
 	}
 
@@ -147,6 +152,14 @@ func TestExecutor_Regression_Issue2356_BackendFileUnchangedInSkipInitPath(t *tes
 		&OutputOptions{SkipInit: true},
 	)
 	require.NoError(t, err)
+
+	// Defensive: ensure the executor actually targeted the directory we wrote
+	// the backend file to. If path resolution ever changes upstream (e.g. a
+	// new suffix on utils.GetComponentPath), this catches the misalignment
+	// instead of letting the byte-compare pass vacuously against an untouched
+	// file while the real generator writes elsewhere.
+	require.Equal(t, componentDir, capturedWorkdir,
+		"regression test must exercise the same workdir as the backend file under assertion")
 
 	// Assert both files on disk are byte-identical.
 	afterBackend, err := os.ReadFile(backendPath)
