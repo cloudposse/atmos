@@ -663,9 +663,16 @@ func processCustomTags(atmosConfig *schema.AtmosConfiguration, node *yaml.Node, 
 		// This is processed early (like !include) so the value is never sent through
 		// Go template or Gomplate evaluation.
 		if tag == AtmosYamlFuncLiteral {
-			// Just clear the tag and keep the value unchanged.
-			// The value will pass through without any template processing.
 			n.Tag = ""
+			// When Go templates are enabled, the component section is later serialized to YAML
+			// and processed by the Go template engine. Without escaping, {{ ... }} expressions
+			// inside !literal values would be evaluated by the template engine and cause errors
+			// (e.g., "function 'alertDef' not defined"). We escape the delimiters here so the
+			// template engine renders them back to {{ and }} without evaluating the content.
+			if atmosConfig != nil && atmosConfig.Templates.Settings.Enabled {
+				leftDelim, rightDelim := getLiteralTemplateDelimiters(atmosConfig)
+				n.Value = escapeLiteralValue(n.Value, leftDelim, rightDelim)
+			}
 			continue
 		}
 
@@ -708,6 +715,53 @@ func getValueWithTag(n *yaml.Node) string {
 	tag := strings.TrimSpace(n.Tag)
 	val := strings.TrimSpace(n.Value)
 	return strings.TrimSpace(tag + " " + val)
+}
+
+// getLiteralTemplateDelimiters returns the effective template delimiters from the config,
+// falling back to the Go template defaults {{ and }}.
+func getLiteralTemplateDelimiters(atmosConfig *schema.AtmosConfiguration) (string, string) {
+	leftDelim := "{{"
+	rightDelim := "}}"
+	if atmosConfig != nil &&
+		len(atmosConfig.Templates.Settings.Delimiters) == 2 &&
+		atmosConfig.Templates.Settings.Delimiters[0] != "" &&
+		atmosConfig.Templates.Settings.Delimiters[1] != "" {
+		leftDelim = atmosConfig.Templates.Settings.Delimiters[0]
+		rightDelim = atmosConfig.Templates.Settings.Delimiters[1]
+	}
+	return leftDelim, rightDelim
+}
+
+// escapeLiteralValue escapes template delimiters inside a !literal value so the string
+// survives Go template processing unchanged. For example, with the default delimiters:
+//
+//	{{ foo }}  →  {{"{{"}}foo{{"}}"}}
+//
+// When Go templates later process the escaped form, {{"{{"}} renders as {{ and
+// {{"}}"}} renders as }}, restoring the original content.
+//
+// A two-step sentinel approach is used to prevent double-escaping: if we naively
+// replaced {{ first, the newly inserted }} characters would be wrongly replaced when
+// we subsequently escaped }}.
+func escapeLiteralValue(value, leftDelim, rightDelim string) string {
+	// Sentinel strings that cannot appear in normal YAML content.
+	const leftSentinel = "\x00ATMOS_LITERAL_LEFT\x00"
+	const rightSentinel = "\x00ATMOS_LITERAL_RIGHT\x00"
+
+	// Step 1: swap both delimiters for sentinels in one pass each.
+	result := strings.ReplaceAll(value, leftDelim, leftSentinel)
+	result = strings.ReplaceAll(result, rightDelim, rightSentinel)
+
+	// Step 2: replace sentinels with Go-template string-literal escapes.
+	// leftDelim + `"` + leftDelim + `"` + rightDelim evaluates to leftDelim when
+	// processed by the Go template engine (e.g., {{"{{"}} → {{).
+	escapedLeft := leftDelim + `"` + leftDelim + `"` + rightDelim
+	escapedRight := leftDelim + `"` + rightDelim + `"` + rightDelim
+
+	result = strings.ReplaceAll(result, leftSentinel, escapedLeft)
+	result = strings.ReplaceAll(result, rightSentinel, escapedRight)
+
+	return result
 }
 
 // hasCustomTags performs a fast scan to check if a node or any of its children contain custom Atmos tags.

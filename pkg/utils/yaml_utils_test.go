@@ -1152,6 +1152,154 @@ db_users: [!literal "{{external.email}}", !literal "{{external.admin}}", regular
 	assert.Equal(t, "regular_user", users[2])
 }
 
+// TestEscapeLiteralValue tests the escapeLiteralValue helper with the default delimiters.
+func TestEscapeLiteralValue(t *testing.T) {
+	left, right := "{{", "}}"
+
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{
+			name:     "no delimiters",
+			input:    "plain string with ${VAR} and {%- jinja -%}",
+			expected: "plain string with ${VAR} and {%- jinja -%}",
+		},
+		{
+			name:     "single expression",
+			input:    "{{foo.bar}}",
+			expected: `{{"{{"}}foo.bar{{"}}"}}`,
+		},
+		{
+			name:     "expression with spaces",
+			input:    "{{ alertDef.entityLabels.channel }}",
+			expected: `{{"{{"}} alertDef.entityLabels.channel {{"}}"}}`,
+		},
+		{
+			name:  "multiline jinja-like template",
+			input: "{%- if x is defined -%}\n  {{ x }}\n{%- else -%}\n  default\n{%- endif -%}",
+			// Only {{ and }} are escaped; {% %} are not Go template delimiters.
+			expected: "{%- if x is defined -%}\n  {{\"{{\"}} x {{\"}}\"}}\n{%- else -%}\n  default\n{%- endif -%}",
+		},
+		{
+			name:     "terraform-like syntax preserved unchanged",
+			input:    "${var.hostname}",
+			expected: "${var.hostname}",
+		},
+		{
+			name:     "empty string",
+			input:    "",
+			expected: "",
+		},
+		{
+			name:     "multiple expressions",
+			input:    "{{a}} and {{b}}",
+			expected: `{{"{{"}}a{{"}}"}} and {{"{{"}}b{{"}}"}}`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := escapeLiteralValue(tt.input, left, right)
+			assert.Equal(t, tt.expected, got)
+		})
+	}
+}
+
+// TestEscapeLiteralValue_CustomDelimiters tests escapeLiteralValue with non-default delimiters.
+func TestEscapeLiteralValue_CustomDelimiters(t *testing.T) {
+	got := escapeLiteralValue("[[foo.bar]]", "[[", "]]")
+	// [["[["]] renders as [[ when processed by a template engine using [[ ]] delimiters.
+	assert.Equal(t, `[["[["]]foo.bar[["]]"]]`, got)
+}
+
+// TestLiteralTag_TemplatesEnabled_EscapesDelimiters verifies that, when Go templating is
+// enabled, !literal values have their template delimiters escaped at parse time so they
+// survive subsequent Go template processing.
+func TestLiteralTag_TemplatesEnabled_EscapesDelimiters(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{
+		Templates: schema.Templates{
+			Settings: schema.TemplatesSettings{
+				Enabled: true,
+			},
+		},
+	}
+
+	input := `
+email: !literal "{{external.email}}"
+config: !literal "{{ .Values.ingress.class }}"
+`
+
+	result, _, err := UnmarshalYAMLFromFileWithPositions[map[string]any](atmosConfig, input, "test-literal-enabled.yaml")
+	require.NoError(t, err)
+
+	// When templates are enabled the values are stored in escaped form so they survive
+	// a subsequent Go template evaluation pass. After that pass, {{"{{"}} → {{ and
+	// {{"}}"}} → }}, restoring the original content.
+	assert.Equal(t, `{{"{{"}}external.email{{"}}"}}`, result["email"])
+	assert.Equal(t, `{{"{{"}} .Values.ingress.class {{"}}"}}`, result["config"])
+}
+
+// TestLiteralTag_TemplatesEnabled_Multiline verifies that multiline !literal values are
+// correctly escaped when Go templates are enabled.
+func TestLiteralTag_TemplatesEnabled_Multiline(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{
+		Templates: schema.Templates{
+			Settings: schema.TemplatesSettings{
+				Enabled: true,
+			},
+		},
+	}
+
+	input := `
+field_template: !literal |
+  {%- if alertDef.entityLabels.channel is defined -%}
+    {{ alertDef.entityLabels.channel }}
+  {%- else -%}
+    _sandbox
+  {%- endif -%}
+`
+
+	result, _, err := UnmarshalYAMLFromFileWithPositions[map[string]any](atmosConfig, input, "test-literal-multiline-enabled.yaml")
+	require.NoError(t, err)
+
+	val, ok := result["field_template"].(string)
+	require.True(t, ok, "field_template should be a string")
+
+	// Jinja-style delimiters {%- -%} are untouched; only {{ and }} are escaped.
+	assert.Contains(t, val, "{%- if alertDef.entityLabels.channel is defined -%}")
+	assert.Contains(t, val, `{{"{{"}} alertDef.entityLabels.channel {{"}}"}}`)
+	assert.Contains(t, val, "{%- else -%}")
+	assert.Contains(t, val, "_sandbox")
+	assert.Contains(t, val, "{%- endif -%}")
+	// The original {{ }} must NOT appear unescaped.
+	assert.NotContains(t, val, "{{ alertDef.entityLabels.channel }}")
+}
+
+// TestLiteralTag_TemplatesDisabled_NoEscaping verifies that !literal values are NOT
+// escaped when templates are disabled, preserving the original {{ }} syntax for callers
+// that never run a Go template pass.
+func TestLiteralTag_TemplatesDisabled_NoEscaping(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{
+		Templates: schema.Templates{
+			Settings: schema.TemplatesSettings{
+				Enabled: false,
+			},
+		},
+	}
+
+	input := `
+email: !literal "{{external.email}}"
+`
+
+	result, _, err := UnmarshalYAMLFromFileWithPositions[map[string]any](atmosConfig, input, "test-literal-disabled.yaml")
+	require.NoError(t, err)
+
+	// Templates disabled → value stored as-is, no escaping applied.
+	assert.Equal(t, "{{external.email}}", result["email"])
+}
+
 // TestGetUserHomeDir tests that GetUserHomeDir returns a valid home directory.
 func TestGetUserHomeDir(t *testing.T) {
 	homeDir := GetUserHomeDir()
