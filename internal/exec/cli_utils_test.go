@@ -592,6 +592,47 @@ func TestProcessCommandLineArgs_IdentityFromEnvironmentVariable(t *testing.T) {
 	}
 }
 
+// TestProcessCommandLineArgs_EmptyIdentityFlagIsExplicitSelect verifies that passing
+// `--identity=` explicitly (empty value via Cobra) is treated as the interactive-selection
+// sentinel rather than an unset flag. In particular, an explicit empty flag must not
+// be silently overridden by the ATMOS_IDENTITY environment variable.
+func TestProcessCommandLineArgs_EmptyIdentityFlagIsExplicitSelect(t *testing.T) {
+	tests := []struct {
+		name     string
+		envValue string
+		args     []string
+	}{
+		{
+			name:     "--identity= with no env var",
+			envValue: "",
+			args:     []string{"plan", "component", "--stack", "stack", "--identity="},
+		},
+		{
+			name:     "--identity= with ATMOS_IDENTITY set",
+			envValue: "should-be-ignored",
+			args:     []string{"plan", "component", "--stack", "stack", "--identity="},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.envValue != "" {
+				t.Setenv("ATMOS_IDENTITY", tt.envValue)
+			}
+
+			cmd := newTestCommandWithGlobalFlags("terraform")
+			cmd.Flags().StringP("stack", "s", "", "stack name")
+			cmd.Flags().StringP("identity", "i", "", "identity name")
+
+			result, err := ProcessCommandLineArgs("terraform", cmd, tt.args, []string{})
+
+			require.NoError(t, err)
+			assert.Equal(t, cfg.IdentityFlagSelectValue, result.Identity,
+				"explicit empty --identity= must map to the interactive-selection sentinel and must not be overridden by ATMOS_IDENTITY")
+		})
+	}
+}
+
 // TestProcessCommandLineArgs_IdentityFlagParsing verifies that the --identity flag
 // is correctly parsed in both space-separated and equals syntax formats.
 func TestProcessCommandLineArgs_IdentityFlagParsing(t *testing.T) {

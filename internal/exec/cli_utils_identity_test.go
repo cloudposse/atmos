@@ -110,6 +110,42 @@ func TestProcessArgsAndFlags_IdentityFlag(t *testing.T) {
 	}
 }
 
+// TestProcessArgsAndFlags_IdentityFlagShortStripping verifies that the "-i" flag is
+// treated as an optional-value flag during pass-through stripping. In particular, a
+// trailing native flag like "-lock=false" after "-i" must NOT be consumed as the
+// identity value. This guards against regressions in valueTakingCommonFlags and the
+// optional-value branch in processArgsAndFlags.
+func TestProcessArgsAndFlags_IdentityFlagShortStripping(t *testing.T) {
+	tests := []struct {
+		name             string
+		args             []string
+		expectedIdentity string
+		expectedPassThru []string
+	}{
+		{
+			name:             "-i followed by native flag preserves native flag in pass-through",
+			args:             []string{"plan", "vpc", "--stack", "test-stack", "-i", "-lock=false"},
+			expectedIdentity: cfg.IdentityFlagSelectValue,
+			expectedPassThru: []string{"-lock=false"},
+		},
+		{
+			name:             "-i with explicit identity still strips the value",
+			args:             []string{"plan", "vpc", "--stack", "test-stack", "-i", "foo", "-lock=false"},
+			expectedIdentity: "foo",
+			expectedPassThru: []string{"-lock=false"},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			info, err := processArgsAndFlags("terraform", tc.args)
+			require.NoError(t, err)
+			assert.Equal(t, tc.expectedIdentity, info.Identity)
+			assert.Equal(t, tc.expectedPassThru, info.AdditionalArgsAndFlags)
+		})
+	}
+}
+
 // TestProcessArgsAndFlags_IdentityFlagHelmfile tests identity flag parsing for helmfile commands.
 func TestProcessArgsAndFlags_IdentityFlagHelmfile(t *testing.T) {
 	tests := []struct {

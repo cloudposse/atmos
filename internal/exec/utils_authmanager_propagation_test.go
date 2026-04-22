@@ -16,8 +16,11 @@ func TestProcessComponentConfig_PropagatesAuthManager(t *testing.T) {
 	defer ctrl.Finish()
 
 	mockAuthManager := types.NewMockAuthManager(ctrl)
+	// AuthContext is a container of cloud-provider-specific credential records; the
+	// concrete values do not matter for this propagation test, only that the same
+	// pointer arrives in info.AuthContext.
 	expectedAuthContext := &schema.AuthContext{
-		Identity: "terraform",
+		AWS: &schema.AWSAuthContext{Profile: "terraform"},
 	}
 	mockAuthManager.EXPECT().
 		GetStackInfo().
