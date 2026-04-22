@@ -1366,6 +1366,54 @@ func TestExecutor_GetAllOutputs_SkipInit_WithAuthManager_ProcessesYamlFunctions(
 	assert.Equal(t, "vpc-auth", outputs["vpc_id"])
 }
 
+// TestExecutor_Execute_SkipsArtifactRegen_WhenYamlFunctionsNotProcessed verifies
+// the fix for issue #2356: when YAML functions were not evaluated upstream
+// (e.g. after-apply hook with no authManager), execute() must NOT regenerate
+// backend.tf.json or providers_override.tf.json from the un-rendered sections,
+// because doing so would overwrite correctly-rendered files with literal
+// "!terraform.state ..." strings.
+func TestExecutor_Execute_SkipsArtifactRegen_WhenYamlFunctionsNotProcessed(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockDescriber := NewMockComponentDescriber(ctrl)
+	mockRunner := NewMockTerraformRunner(ctrl)
+	mockBackendGen := NewMockBackendGenerator(ctrl)
+
+	customFactory := func(workdir, executable string) (TerraformRunner, error) {
+		return mockRunner, nil
+	}
+
+	exec := NewExecutor(
+		mockDescriber,
+		WithRunnerFactory(customFactory),
+		WithBackendGenerator(mockBackendGen),
+	)
+	atmosConfig := validAtmosConfig()
+	sections := validSections()
+
+	// Runner setup: output call succeeds, no init or workspace calls.
+	mockRunner.EXPECT().SetStdout(gomock.Any()).AnyTimes()
+	mockRunner.EXPECT().SetStderr(gomock.Any()).AnyTimes()
+	mockRunner.EXPECT().SetEnv(gomock.Any()).Return(nil).AnyTimes()
+	mockRunner.EXPECT().Output(gomock.Any()).Return(map[string]tfexec.OutputMeta{
+		"result": {Value: []byte(`"ok"`)},
+	}, nil)
+
+	// CRITICAL: the backend generator must NOT be called when processYamlFunctions=false.
+	// gomock fails the test if these methods are called at all (no EXPECT() registered
+	// for them, so any call is treated as unexpected).
+
+	ctx := context.Background()
+	outputs, err := exec.execute(
+		ctx, atmosConfig, "comp", "stack", sections, nil,
+		&OutputOptions{QuietMode: true, SkipInit: true},
+		false, // processYamlFunctions=false — sections may contain literal "!terraform.state ..."
+	)
+	require.NoError(t, err)
+	assert.Equal(t, "ok", outputs["result"])
+}
+
 // TestExecutor_Execute_SkipInit_DirectCall verifies SkipInit behavior at the execute() level.
 func TestExecutor_Execute_SkipInit_DirectCall(t *testing.T) {
 	ctrl := gomock.NewController(t)

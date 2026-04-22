@@ -502,15 +502,20 @@ func (e *Executor) execute(
 	}
 	config.Executable = tenv.Resolve(config.Executable)
 
-	// Step 4: Generate backend file if needed.
-	backendGen := e.backendGenerator
-	if err := backendGen.GenerateBackendIfNeeded(config, component, stack, authContext); err != nil {
-		return nil, err
-	}
-
-	// Step 5: Generate provider overrides if needed.
-	if err := backendGen.GenerateProvidersIfNeeded(config, authContext); err != nil {
-		return nil, err
+	// Steps 4 and 5: regenerate backend.tf.json and providers_override.tf.json,
+	// but ONLY if YAML functions were actually evaluated upstream. If evaluation
+	// was skipped (e.g. after-apply hook with no authManager), config.Backend
+	// and config.Providers still contain literal "!terraform.state ..." strings
+	// and writing them to disk would corrupt an already-correct file produced by
+	// the init/apply phase. See issue #2356.
+	if processYamlFunctions {
+		backendGen := e.backendGenerator
+		if err := backendGen.GenerateBackendIfNeeded(config, component, stack, authContext); err != nil {
+			return nil, err
+		}
+		if err := backendGen.GenerateProvidersIfNeeded(config, authContext); err != nil {
+			return nil, err
+		}
 	}
 
 	// Step 6: Create terraform runner.
