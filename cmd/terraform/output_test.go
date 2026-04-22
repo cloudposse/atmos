@@ -10,8 +10,21 @@ import (
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/data"
+	iolib "github.com/cloudposse/atmos/pkg/io"
+	"github.com/cloudposse/atmos/pkg/schema"
 	tfoutput "github.com/cloudposse/atmos/pkg/terraform/output"
+	"github.com/cloudposse/atmos/pkg/ui"
 )
+
+func initOutputTestIO(t *testing.T) {
+	t.Helper()
+	ioCtx, err := iolib.NewContext()
+	require.NoError(t, err)
+	data.InitWriter(ioCtx)
+	ui.InitFormatter(ioCtx)
+	t.Cleanup(data.Reset)
+}
 
 // TestOutputCommandSetup verifies that the output command is properly configured.
 func TestOutputCommandSetup(t *testing.T) {
@@ -313,6 +326,51 @@ func TestFormatSingleOutput(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestExecuteOutputWithFormat_PassesAuthManager(t *testing.T) {
+	initOutputTestIO(t)
+	v := viper.GetViper()
+	origOutputFile := v.GetString("output-file")
+	v.Set("output-file", filepath.Join(t.TempDir(), "output.json"))
+	t.Cleanup(func() {
+		v.Set("output-file", origOutputFile)
+	})
+
+	orig := outputGetComponentOutputs
+	t.Cleanup(func() {
+		outputGetComponentOutputs = orig
+	})
+
+	sentinelAuthManager := "sentinel-auth-manager"
+	var receivedAuthManager any
+
+	outputGetComponentOutputs = func(
+		_ *schema.AtmosConfiguration,
+		component string,
+		stack string,
+		skipInit bool,
+		authManager any,
+	) (map[string]any, error) {
+		assert.Equal(t, "test-component", component)
+		assert.Equal(t, "test-stack", stack)
+		assert.False(t, skipInit)
+		receivedAuthManager = authManager
+		return map[string]any{"foo": "bar"}, nil
+	}
+
+	err := executeOutputWithFormat(
+		&schema.AtmosConfiguration{},
+		&schema.ConfigAndStacksInfo{
+			ComponentFromArg: "test-component",
+			Stack:            "test-stack",
+			AuthManager:      sentinelAuthManager,
+		},
+		"json",
+	)
+
+	require.NoError(t, err)
+	assert.Equal(t, sentinelAuthManager, receivedAuthManager)
 }
 
 // TestOutputFlagShortcuts verifies that flags have the correct shortcuts.

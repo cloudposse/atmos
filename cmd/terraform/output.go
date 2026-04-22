@@ -25,6 +25,9 @@ import (
 // outputParser handles flag parsing for output command.
 var outputParser *flags.StandardParser
 
+var outputSetupTerraformAuth = exec.SetupTerraformAuthForCLI
+var outputGetComponentOutputs = tfoutput.GetComponentOutputs
+
 // outputCmd represents the terraform output command.
 var outputCmd = &cobra.Command{
 	Use:   "output",
@@ -106,6 +109,9 @@ func prepareOutputContext(cmd *cobra.Command, args []string) (*schema.ConfigAndS
 	if err != nil {
 		return nil, nil, errUtils.Build(errUtils.ErrInitializeCLIConfig).WithCause(err).Err()
 	}
+	if _, err := outputSetupTerraformAuth(&atmosConfig, &info); err != nil {
+		return nil, nil, err
+	}
 	return &info, &atmosConfig, nil
 }
 
@@ -117,7 +123,7 @@ func executeOutputWithFormat(atmosConfig *schema.AtmosConfiguration, info *schem
 	uppercase := v.GetBool("uppercase")
 	flatten := v.GetBool("flatten")
 
-	outputs, err := tfoutput.GetComponentOutputs(atmosConfig, info.ComponentFromArg, info.Stack, skipInit, nil)
+	outputs, err := outputGetComponentOutputs(atmosConfig, info.ComponentFromArg, info.Stack, skipInit, info.AuthManager)
 	if err != nil {
 		return errUtils.Build(errUtils.ErrTerraformOutputFailed).
 			WithCause(err).

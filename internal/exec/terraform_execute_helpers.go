@@ -129,6 +129,12 @@ func setupTerraformAuth(atmosConfig *schema.AtmosConfiguration, info *schema.Con
 	return authManager, nil
 }
 
+// SetupTerraformAuthForCLI exposes terraform auth setup to command-layer callers
+// that need the same merged-auth and explicit-identity behavior as ExecuteTerraform.
+func SetupTerraformAuthForCLI(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) (any, error) {
+	return setupTerraformAuth(atmosConfig, info)
+}
+
 // resolveAndProvisionComponentPath resolves the filesystem path for a terraform component,
 // optionally auto-generates files, performs JIT source provisioning, and validates
 // that the resulting directory actually exists.
