@@ -1380,6 +1380,11 @@ func TestExecutor_GetAllOutputs_SkipInit_WithAuthManager_ProcessesYamlFunctions(
 // backend.tf.json or providers_override.tf.json from the un-rendered sections,
 // because doing so would overwrite correctly-rendered files with literal
 // "!terraform.state ..." strings.
+//
+//nolint:dupl // structurally similar to TestExecutor_Execute_SkipInit_DirectCall
+// by design — the two tests contrast the processYamlFunctions=true vs =false
+// invariants at the same execute() call site, so sharing scaffolding via a
+// helper would obscure the side-by-side comparison.
 func TestExecutor_Execute_SkipsArtifactRegen_WhenYamlFunctionsNotProcessed(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
