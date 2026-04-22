@@ -1,6 +1,6 @@
 package output
 
-//go:generate go run go.uber.org/mock/mockgen@latest -destination=mock_executor_test.go -package=output github.com/cloudposse/atmos/pkg/terraform/output TerraformRunner,WorkdirProvisioner,ComponentDescriber,StaticRemoteStateGetter
+//go:generate go run go.uber.org/mock/mockgen@latest -destination=mock_executor_test.go -package=output github.com/cloudposse/atmos/pkg/terraform/output TerraformRunner,WorkdirProvisioner,ComponentDescriber,StaticRemoteStateGetter,BackendGenerator
 
 import (
 	"context"
@@ -91,6 +91,7 @@ type Executor struct {
 	componentDescriber      ComponentDescriber
 	staticRemoteStateGetter StaticRemoteStateGetter
 	workdirProvisioner      WorkdirProvisioner
+	backendGenerator        BackendGenerator
 }
 
 // ExecutorOption configures the Executor.
@@ -123,6 +124,15 @@ func WithWorkdirProvisioner(p WorkdirProvisioner) ExecutorOption {
 	}
 }
 
+// WithBackendGenerator sets a custom backend generator (for testing).
+func WithBackendGenerator(g BackendGenerator) ExecutorOption {
+	defer perf.Track(nil, "output.WithBackendGenerator")()
+
+	return func(e *Executor) {
+		e.backendGenerator = g
+	}
+}
+
 // NewExecutor creates an Executor with the required ComponentDescriber and optional configurations.
 func NewExecutor(describer ComponentDescriber, opts ...ExecutorOption) *Executor {
 	defer perf.Track(nil, "output.NewExecutor")()
@@ -131,6 +141,7 @@ func NewExecutor(describer ComponentDescriber, opts ...ExecutorOption) *Executor
 		runnerFactory:      defaultRunnerFactory,
 		componentDescriber: describer,
 		workdirProvisioner: &defaultWorkdirProvisioner{},
+		backendGenerator:   &defaultBackendGenerator{},
 	}
 	for _, opt := range opts {
 		opt(e)
@@ -242,7 +253,7 @@ func (e *Executor) GetOutput(
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute*5)
 	defer cancel()
 
-	outputs, err := e.execute(ctx, atmosConfig, component, stack, sections, authContext, nil)
+	outputs, err := e.execute(ctx, atmosConfig, component, stack, sections, authContext, nil, true)
 	if err != nil {
 		ui.ClearLine()
 		ui.Error(message)
@@ -348,7 +359,7 @@ func (e *Executor) GetOutputWithOptions(
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute*5)
 	defer cancel()
 
-	outputs, err := e.execute(ctx, atmosConfig, component, stack, sections, authContext, opts)
+	outputs, err := e.execute(ctx, atmosConfig, component, stack, sections, authContext, opts, processYamlFunctions)
 	if err != nil {
 		ui.ClearLine()
 		ui.Error(message)
@@ -386,7 +397,7 @@ func (e *Executor) ExecuteWithSections(
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute*5)
 	defer cancel()
 
-	return e.execute(ctx, atmosConfig, component, stack, sections, authContext, nil)
+	return e.execute(ctx, atmosConfig, component, stack, sections, authContext, nil, true)
 }
 
 // fetchAndCacheOutputs retrieves outputs and stores them in cache.
@@ -433,7 +444,7 @@ func (e *Executor) fetchAndCacheOutputs(
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute*5)
 	defer cancel()
 
-	outputs, err := e.execute(ctx, atmosConfig, component, stack, sections, authContext, opts)
+	outputs, err := e.execute(ctx, atmosConfig, component, stack, sections, authContext, opts, processYamlFunctions)
 	if err != nil {
 		return nil, errUtils.Build(errUtils.ErrTerraformOutputFailed).
 			WithCause(err).
@@ -456,6 +467,7 @@ func (e *Executor) execute(
 	sections map[string]any,
 	authContext *schema.AuthContext,
 	opts *OutputOptions,
+	processYamlFunctions bool,
 ) (map[string]any, error) {
 	defer perf.Track(atmosConfig, "output.Executor.execute")()
 
@@ -491,7 +503,7 @@ func (e *Executor) execute(
 	config.Executable = tenv.Resolve(config.Executable)
 
 	// Step 4: Generate backend file if needed.
-	backendGen := &defaultBackendGenerator{}
+	backendGen := e.backendGenerator
 	if err := backendGen.GenerateBackendIfNeeded(config, component, stack, authContext); err != nil {
 		return nil, err
 	}

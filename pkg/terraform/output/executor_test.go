@@ -629,7 +629,7 @@ func TestExecutor_ExecuteWithSections_QuietMode(t *testing.T) {
 
 	// Execute with quiet mode via internal execute call.
 	ctx := context.Background()
-	outputs, err := exec.execute(ctx, atmosConfig, "test-component", "test-stack", sections, nil, &OutputOptions{QuietMode: true})
+	outputs, err := exec.execute(ctx, atmosConfig, "test-component", "test-stack", sections, nil, &OutputOptions{QuietMode: true}, true)
 	require.NoError(t, err)
 	assert.Equal(t, "quiet_success", outputs["result"])
 }
@@ -1391,7 +1391,7 @@ func TestExecutor_Execute_SkipInit_DirectCall(t *testing.T) {
 	}, nil)
 
 	ctx := context.Background()
-	outputs, err := exec.execute(ctx, atmosConfig, "comp", "stack", sections, nil, &OutputOptions{QuietMode: true, SkipInit: true})
+	outputs, err := exec.execute(ctx, atmosConfig, "comp", "stack", sections, nil, &OutputOptions{QuietMode: true, SkipInit: true}, true)
 	require.NoError(t, err)
 	assert.Equal(t, "skip_init_direct", outputs["result"])
 }
