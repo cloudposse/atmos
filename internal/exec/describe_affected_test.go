@@ -1950,7 +1950,8 @@ func resetCIViperKey(t *testing.T) {
 
 // TestSetDescribeAffectedFlagValueInCliArgs_RepoPathSkipsCIAutoDetect verifies
 // that --repo-path short-circuits the CI auto-detect path, even when
-// ci.enabled is true. This is the regression fix for 1898andCo/infra#2964.
+// ci.enabled is true. This is the regression fix for the user-reported
+// describe affected --repo-path failure under ci.enabled: true.
 func TestSetDescribeAffectedFlagValueInCliArgs_RepoPathSkipsCIAutoDetect(t *testing.T) {
 	resetCIViperKey(t)
 	setupGitHubActionsPREnv(t)

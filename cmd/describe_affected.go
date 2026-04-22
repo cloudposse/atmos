@@ -61,13 +61,19 @@ func init() {
 	describeAffectedCmd.PersistentFlags().Bool("exclude-locked", false, "Exclude the locked components (`metadata.locked: true`) from the output")
 
 	// --ci flag with env-var bindings, wired through the unified flag parser.
-	// Overrides `ci.enabled` from atmos.yaml for this invocation. Primary use
-	// case: set --ci=false (or ATMOS_CI=false) to suppress CI base
-	// auto-detection when `describe affected --repo-path=...` is called from
-	// CI workflows that already supply their own base reference.
+	// Overrides `ci.enabled` from atmos.yaml for this invocation.
 	//
-	// Env-var bindings match the terraform plan/apply/deploy pattern so users
-	// have a single, consistent knob across all CI-aware commands.
+	// NOTE: --repo-path already suppresses CI base auto-detection on its
+	// own — users do NOT need to pair it with --ci=false. The --ci flag
+	// exists for the INDEPENDENT case where the caller wants to toggle
+	// CI-gated behavior without touching --repo-path: e.g., force CI mode
+	// on locally for debugging (--ci=true / ATMOS_CI=true), or opt a
+	// specific non-repo-path invocation out of auto-detect (--ci=false /
+	// ATMOS_CI=false) in a workflow that leaves `ci.enabled: true` in
+	// atmos.yaml for other features (Atmos Pro checks/summaries).
+	//
+	// Env-var bindings match the terraform plan/apply/deploy pattern so
+	// users have a single, consistent knob across all CI-aware commands.
 	describeAffectedCIParser = flags.NewStandardParser(
 		flags.WithBoolFlag("ci", "", false,
 			"Enable CI mode for `describe affected`. Overrides ci.enabled in atmos.yaml for this invocation. "+

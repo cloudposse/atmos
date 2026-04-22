@@ -42,8 +42,8 @@
   from `atmos.yaml`, and the only CLI escape hatch (`--ci`) only
   forces CI mode on — it cannot turn it off. Users cannot scope
   `ci.enabled: true` to specific workflows without editing
-  `atmos.yaml` inline (the yq-patch workaround in
-  1898andCo/infra#2964).
+  `atmos.yaml` inline (the yq-patch workaround reported in a
+  downstream repository).
 
 **User-visible failure:**
 
@@ -60,9 +60,8 @@ base and then the validator rejected the result.
 
 ## Status
 
-**Implemented.** Targets release 1.217.0. All code changes and
-unit tests landed in branch `aknysh/fix-atmos-ci-2`; user-facing
-documentation updated.
+**Implemented.** All code changes and unit tests landed in branch
+`aknysh/fix-atmos-ci-2`; user-facing documentation updated.
 
 ## Goals
 
@@ -100,12 +99,10 @@ documentation updated.
   `--sha`.** These remain mutually exclusive — the user's explicit
   flags still produce `ErrRepoPathConflict`. Only the
   auto-detection is suppressed.
-- **Fixing the upstream GitHub Action.** A parallel follow-up will
-  be filed against
-  `cloudposse/github-action-atmos-affected-stacks` to pass `--ci=false`
-  (or an equivalent suppression flag) when it itself supplies
-  `--repo-path`. Atmos' fix is independent and does not depend on
-  the action being updated.
+- **Changing the upstream GitHub Action.** Not needed. `--repo-path`
+  alone already suppresses auto-detect after Fix 1, so the existing
+  `cloudposse/github-action-atmos-affected-trigger-spacelift`
+  (and `-stacks`) actions work as-is once callers upgrade Atmos.
 - **Making every CI consumer honor `ATMOS_CI=false`.** This fix
   scopes the flag/env override to `describe affected` so the blast
   radius is narrow. Extending the same override semantics to
@@ -338,7 +335,7 @@ Add to `TestSetDescribeAffectedFlagValueInCliArgs_BaseResolution`:
 
 ### Integration / manual verification
 
-Reproduce the 1898andCo/infra PR #2964 failure locally:
+Reproduce the user-reported failure locally:
 
 ```bash
 # Fresh checkout with ci.enabled: true in atmos.yaml
@@ -367,14 +364,20 @@ JSON
 atmos describe affected --repo-path=/tmp/other-clone
 ```
 
-Then verify the new overrides:
+Then verify the new overrides. Note: `--repo-path` alone already
+suppresses auto-detection (Fix 1), so `--ci=false` is **not** needed
+for the `--repo-path` case. The `--ci` / `ATMOS_CI` overrides are
+for the independent case of toggling CI-gated behavior on
+invocations that do *not* use `--repo-path`:
 
 ```bash
-# Explicitly disable CI features for this invocation.
-ATMOS_CI=false atmos describe affected --repo-path=/tmp/other-clone
-atmos describe affected --repo-path=/tmp/other-clone --ci=false
+# Opt one non-repo-path invocation out of CI auto-detect while
+# leaving ci.enabled: true in atmos.yaml for other features.
+ATMOS_CI=false atmos describe affected --base main
+atmos describe affected --base main --ci=false
 
-# Explicitly force CI mode even with ci.enabled: false in config.
+# Explicitly force CI mode even with ci.enabled: false in config —
+# e.g., reproducing CI behavior locally.
 unset ATMOS_CI
 # Edit atmos.yaml to set ci.enabled: false, then:
 atmos describe affected --ci=true  # should auto-detect base
@@ -440,13 +443,12 @@ behavior.
 
 ## Follow-ups
 
-- **Upstream GitHub Action fix.** File an issue against
-  `cloudposse/github-action-atmos-affected-stacks` (and
-  `-trigger-spacelift`) to pass `--ci=false` whenever the action
-  itself supplies `--repo-path`. Users upgrading to Atmos 1.217.0
-  will get the fix regardless, but belt-and-suspenders: the
-  action should never rely on a CLI behavior it can suppress
-  itself.
+- **No upstream GitHub Action change required.** `--repo-path`
+  alone suppresses CI base auto-detection after Fix 1, so the
+  existing `cloudposse/github-action-atmos-affected-stacks` and
+  `-trigger-spacelift` actions work as-is once callers upgrade
+  Atmos. Any downstream yq-patch workaround in a consumer repo
+  can be reverted on upgrade.
 - **Make every CI consumer honor `ATMOS_CI=false`.** Extend the
   same env override to `pkg/hooks/hooks.go:136`,
   `internal/exec/ci_exit_codes.go:23`,
@@ -493,7 +495,9 @@ behavior.
   (`Build(err).WithHint(...).Err()`).
 - `pkg/flags/` — `WithEnvVars` flag-to-env-var binding
   (`pkg/flags/global_builder.go`).
-- 1898andCo/infra#2964 — user-reported failure and the yq-patch
-  workaround that motivated this fix.
+- User-reported failure in a downstream consumer repo where a
+  workflow had to apply a `yq '.ci.enabled = false'` patch inline
+  to unblock the spacelift-trigger PR check — the workaround that
+  motivated this fix.
 - cloudposse/atmos#2241 — the PR that introduced CI base
-  auto-detection in 1.216.0.
+  auto-detection.

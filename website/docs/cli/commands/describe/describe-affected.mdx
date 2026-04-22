@@ -349,12 +349,17 @@ Affected components and stacks:
 
         **Precedence:** `--ci` flag &gt; `ATMOS_CI` &gt; `CI` &gt; `ci.enabled` in `atmos.yaml` &gt; `false`.
 
-        ```bash
-        # Suppress CI auto-detection for one invocation
-        atmos describe affected --ci=false --repo-path=/tmp/other-clone
-        ATMOS_CI=false atmos describe affected --repo-path=/tmp/other-clone
+        > **Note:** `--repo-path` already suppresses CI base auto-detection on its own. You do **not** need to pair it with `--ci=false`. Reserve `--ci=false` / `ATMOS_CI=false` for invocations that do *not* use `--repo-path`.
 
-        # Force CI mode on even when ci.enabled is not set
+        ```bash
+        # Opt one non-repo-path invocation out of CI auto-detect while
+        # leaving ci.enabled: true in atmos.yaml for other features
+        # (e.g., Atmos Pro Check Runs on other steps).
+        atmos describe affected --ci=false --base main
+        ATMOS_CI=false atmos describe affected --base main
+
+        # Force CI mode on even when ci.enabled is not set — useful
+        # for reproducing CI behavior locally.
         atmos describe affected --ci=true
         ```
     </dd>

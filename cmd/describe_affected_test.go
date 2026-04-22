@@ -241,21 +241,23 @@ func TestDescribeAffectedCmd_RepoPathConflictHints(t *testing.T) {
 	// Hints are attached via cockroachdb/errors.WithHint — use the package's
 	// helper to extract them rather than substring-matching err.Error().
 	hints := cockroachErrors.GetAllHints(err)
-	require.NotEmpty(t, hints, "error builder must attach at least one hint")
+	require.GreaterOrEqual(t, len(hints), 2,
+		"error builder must attach at least two hints (flag-group exclusivity + which-flag-to-use guidance)")
 
-	var sawRepoPathHint, sawCIOverrideHint bool
+	// Both hints explain the mutual exclusivity; each should mention
+	// --repo-path so users understand which flag group they violated.
+	// Match independently so future wording tweaks don't break the test.
+	var sawExclusivityHint, sawGuidanceHint bool
 	for _, h := range hints {
 		if assert.NotEmpty(t, h) {
-			// Two hints come from the error builder; match each independently
-			// so future wording tweaks don't break the test.
-			if strings.Contains(h, "--repo-path") {
-				sawRepoPathHint = true
+			if strings.Contains(h, "--repo-path") && strings.Contains(h, "--base") {
+				sawExclusivityHint = true
 			}
-			if strings.Contains(h, "--ci=false") || strings.Contains(h, "ATMOS_CI=false") {
-				sawCIOverrideHint = true
+			if strings.Contains(h, "To compare") || strings.Contains(h, "without --repo-path") {
+				sawGuidanceHint = true
 			}
 		}
 	}
-	assert.True(t, sawRepoPathHint, "expected a hint explaining the --repo-path flag-group boundary")
-	assert.True(t, sawCIOverrideHint, "expected a hint pointing at --ci=false / ATMOS_CI=false")
+	assert.True(t, sawExclusivityHint, "expected a hint listing both --repo-path and --base to name the conflicting flag groups")
+	assert.True(t, sawGuidanceHint, "expected a hint guiding the user toward the right flag for their intent")
 }

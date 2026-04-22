@@ -174,8 +174,8 @@ func ParseDescribeAffectedCliArgs(cmd *cobra.Command, args []string) (DescribeAf
 	}
 	if result.RepoPath != "" && (result.Base != "" || result.Ref != "" || result.SHA != "" || result.SSHKeyPath != "" || result.SSHKeyPassword != "") {
 		return DescribeAffectedCmdArgs{}, errUtils.Build(ErrRepoPathConflict).
-			WithHint("Pass only one of --repo-path OR (--base | --ref | --sha). --repo-path is intended for comparing against an already-cloned sibling repository.").
-			WithHint("If --base was auto-injected from CI, pass --ci=false (or set ATMOS_CI=false) for this invocation, or unset ci.enabled in atmos.yaml.").
+			WithHint("Pass only one of: --repo-path OR (--base | --ref | --sha | --ssh-key | --ssh-key-password). --repo-path points at an already-cloned sibling repository to diff against; the others clone or check out a target ref.").
+			WithHint("To compare against a specific ref or SHA, use --base without --repo-path. To compare against an already-cloned repo, use --repo-path without --base / --ref / --sha.").
 			Err()
 	}
 

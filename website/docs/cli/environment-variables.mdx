@@ -584,11 +584,14 @@ These variables control Atmos' native CI integration — GitHub Check Runs, `$GI
     Override `ci.enabled` from `atmos.yaml` at runtime. Accepts `true` or `false`. Bound to the `--ci` flag on `atmos terraform plan`, `apply`, `deploy`, and `describe affected`.
 
     - **Set to `true`** to force CI mode on — useful when running locally against a workflow that expects CI behaviors.
-    - **Set to `false`** to disable CI-gated behaviors for a single invocation without editing `atmos.yaml`. Most common use case: suppress `describe affected` CI base auto-detection when calling the command with `--repo-path`, since the two are mutually exclusive.
+    - **Set to `false`** to disable CI-gated behaviors for a single invocation without editing `atmos.yaml`. Example: a workflow with `ci.enabled: true` in atmos.yaml (for Atmos Pro Check Runs) wants one specific `describe affected` step to skip CI base auto-detection and use an explicitly-passed `--base` instead.
+
+    > **Note:** `--repo-path` already suppresses CI base auto-detection on its own — you do **not** need to pair `ATMOS_CI=false` with `--repo-path`. Reserve `ATMOS_CI=false` for invocations that do *not* use `--repo-path`.
 
     ```bash
-    # Suppress CI base auto-detection for one invocation
-    ATMOS_CI=false atmos describe affected --repo-path=/tmp/other-clone
+    # Opt one non-repo-path invocation out of CI auto-detect while leaving
+    # ci.enabled: true in atmos.yaml for other features.
+    ATMOS_CI=false atmos describe affected --base main
     ```
 
     - **YAML Path:** `ci.enabled`
