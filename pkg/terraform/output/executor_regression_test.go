@@ -57,8 +57,26 @@ func TestExecutor_Regression_Issue2356_BackendFileUnchangedInSkipInitPath(t *tes
 }`)
 	require.NoError(t, os.WriteFile(backendPath, renderedBackend, 0o644))
 
+	// Same story for providers_override.tf.json — if
+	// GenerateProvidersIfNeeded ever leaks out of the guard, it would clobber
+	// the rendered file with literal YAML-function strings too.
+	providersPath := filepath.Join(componentDir, "providers_override.tf.json")
+	renderedProviders := []byte(`{
+  "provider": {
+    "aws": {
+      "region": "us-east-1",
+      "assume_role": {
+        "role_arn": "arn:aws:iam::123456789012:role/atmos-dev"
+      }
+    }
+  }
+}`)
+	require.NoError(t, os.WriteFile(providersPath, renderedProviders, 0o644))
+
 	// Capture the bytes before the SkipInit path runs.
-	before, err := os.ReadFile(backendPath)
+	beforeBackend, err := os.ReadFile(backendPath)
+	require.NoError(t, err)
+	beforeProviders, err := os.ReadFile(providersPath)
 	require.NoError(t, err)
 
 	// Build a sections map whose backend config contains LITERAL
@@ -130,13 +148,19 @@ func TestExecutor_Regression_Issue2356_BackendFileUnchangedInSkipInitPath(t *tes
 	)
 	require.NoError(t, err)
 
-	// Assert the file on disk is byte-identical.
-	after, err := os.ReadFile(backendPath)
+	// Assert both files on disk are byte-identical.
+	afterBackend, err := os.ReadFile(backendPath)
 	require.NoError(t, err)
-	assert.Equal(t, string(before), string(after),
+	assert.Equal(t, string(beforeBackend), string(afterBackend),
 		"backend.tf.json was rewritten during SkipInit path — this is the issue #2356 regression")
 	// Also assert raw bytes match (defense in depth against any encoding drift).
-	assert.Equal(t, before, after, "backend.tf.json bytes changed during SkipInit path")
+	assert.Equal(t, beforeBackend, afterBackend, "backend.tf.json bytes changed during SkipInit path")
+
+	afterProviders, err := os.ReadFile(providersPath)
+	require.NoError(t, err)
+	assert.Equal(t, string(beforeProviders), string(afterProviders),
+		"providers_override.tf.json was rewritten during SkipInit path — GenerateProvidersIfNeeded escaped the guard")
+	assert.Equal(t, beforeProviders, afterProviders, "providers_override.tf.json bytes changed during SkipInit path")
 }
 
 // regressionSectionsWithLiteralYamlFunctions returns a sections map whose
@@ -167,6 +191,18 @@ func regressionSectionsWithLiteralYamlFunctions() map[string]any {
 			"dynamodb_table": "!terraform.state tfstate-backend dev dynamodb_table_name",
 			"key":            "terraform.tfstate",
 			"region":         "us-east-1",
+		},
+		// Providers section with literal YAML-function strings. When
+		// ProcessYamlFunctions=false, DescribeComponent returns these verbatim;
+		// without the guard in execute(), GenerateProvidersIfNeeded would
+		// serialize them into providers_override.tf.json.
+		cfg.ProvidersSectionName: map[string]any{
+			"aws": map[string]any{
+				"region": "us-east-1",
+				"assume_role": map[string]any{
+					"role_arn": "!terraform.state iam-roles dev atmos_dev_role_arn",
+				},
+			},
 		},
 	}
 }
