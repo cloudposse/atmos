@@ -3,6 +3,7 @@ package flags
 import (
 	"testing"
 
+	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -133,6 +134,50 @@ func TestPackerFlags(t *testing.T) {
 
 	// Should NOT include global flags
 	assert.False(t, registry.Has("identity"), "identity should be inherited from RootCmd")
+}
+
+func TestFlagRegistry_SetCompletionFunc_StringFlag(t *testing.T) {
+	registry := NewFlagRegistry()
+	registry.Register(&StringFlag{Name: "stack"})
+
+	completionFunc := func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+		return []string{"dev", "staging"}, cobra.ShellCompDirectiveNoFileComp
+	}
+	registry.SetCompletionFunc("stack", completionFunc)
+
+	flag := registry.Get("stack").(*StringFlag)
+	assert.NotNil(t, flag.CompletionFunc)
+
+	values, directive := flag.CompletionFunc(nil, nil, "")
+	assert.Equal(t, []string{"dev", "staging"}, values)
+	assert.Equal(t, cobra.ShellCompDirectiveNoFileComp, directive)
+}
+
+func TestFlagRegistry_SetCompletionFunc_StringSliceFlag(t *testing.T) {
+	registry := NewFlagRegistry()
+	registry.Register(&StringSliceFlag{Name: "profile"})
+
+	completionFunc := func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+		return []string{"dev", "production"}, cobra.ShellCompDirectiveNoFileComp
+	}
+	registry.SetCompletionFunc("profile", completionFunc)
+
+	flag := registry.Get("profile").(*StringSliceFlag)
+	assert.NotNil(t, flag.CompletionFunc)
+
+	values, directive := flag.CompletionFunc(nil, nil, "")
+	assert.Equal(t, []string{"dev", "production"}, values)
+	assert.Equal(t, cobra.ShellCompDirectiveNoFileComp, directive)
+}
+
+func TestFlagRegistry_SetCompletionFunc_NonexistentFlag(t *testing.T) {
+	registry := NewFlagRegistry()
+
+	// Should not panic when setting completion on a non-existent flag.
+	completionFunc := func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+		return nil, cobra.ShellCompDirectiveNoFileComp
+	}
+	registry.SetCompletionFunc("nonexistent", completionFunc)
 }
 
 func TestFlagRegistry_Validate(t *testing.T) {

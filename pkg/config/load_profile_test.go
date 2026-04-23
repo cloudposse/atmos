@@ -99,7 +99,7 @@ func TestParseProfilesFromArgs(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := parseProfilesFromOsArgs(tt.args)
+			result := ParseProfilesFromOsArgs(tt.args)
 			assert.Equal(t, tt.expected, result)
 		})
 	}
@@ -261,7 +261,7 @@ func TestParseViperProfilesFromEnv_Quirks(t *testing.T) {
 	}
 }
 
-// TestParseProfilesFromEnvString_Delimiters tests the parseProfilesFromEnvString function
+// TestParseProfilesFromEnvString_Delimiters tests the ParseProfilesFromEnvString function
 // with various delimiter patterns.
 func TestParseProfilesFromEnvString_Delimiters(t *testing.T) {
 	tests := []struct {
@@ -303,7 +303,7 @@ func TestParseProfilesFromEnvString_Delimiters(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := parseProfilesFromEnvString(tt.input)
+			result := ParseProfilesFromEnvString(tt.input)
 			assert.Equal(t, tt.expected, result)
 		})
 	}

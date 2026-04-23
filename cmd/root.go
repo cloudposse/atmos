@@ -44,6 +44,7 @@ import (
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/pager"
 	"github.com/cloudposse/atmos/pkg/perf"
+	atmosprofile "github.com/cloudposse/atmos/pkg/profile"
 	"github.com/cloudposse/atmos/pkg/profiler"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/telemetry"
@@ -92,6 +93,8 @@ const (
 	verboseFlagName = "verbose"
 	// AnsiEscapePrefix is the ANSI escape sequence prefix.
 	ansiEscapePrefix = "\x1b["
+	// ProfileFlagName is the name of the profile flag.
+	profileFlagName = "profile"
 )
 
 // atmosConfig This is initialized before everything in the Execute function. So we can directly use this.
@@ -1410,12 +1413,40 @@ func Execute() error {
 		return err
 	}
 
+	// Parse config-selection flags from os.Args before Cobra parses (same pattern as --chdir).
+	// This ensures --base-path, --config, --config-path, and --profile are all applied
+	// during the initial config load, so custom commands get the correct config.
+	profilesFromArg := cfg.ParseProfilesFromOsArgs(os.Args[1:])
+	if len(profilesFromArg) == 0 {
+		//nolint:forbidigo // Must use os.Getenv: profile is processed before Viper configuration loads.
+		if envProfiles := os.Getenv("ATMOS_PROFILE"); envProfiles != "" {
+			profilesFromArg = cfg.ParseProfilesFromEnvString(envProfiles)
+		}
+	}
+
+	configSel := cfg.ParseConfigSelectionFromOsArgs(os.Args[1:])
+	envSel := cfg.ConfigSelectionFromEnv()
+	if configSel.BasePath == "" {
+		configSel.BasePath = envSel.BasePath
+	}
+	if len(configSel.Config) == 0 {
+		configSel.Config = envSel.Config
+	}
+	if len(configSel.ConfigPath) == 0 {
+		configSel.ConfigPath = envSel.ConfigPath
+	}
+
 	// InitCliConfig finds and merges CLI configurations in the following order:
 	// system dir, home dir, current dir, ENV vars, command-line arguments
 	// Here we need the custom commands from the config.
 	// Note: --version flag is now handled in main.go before calling Execute().
 	var initErr error
-	atmosConfig, initErr = cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+	atmosConfig, initErr = cfg.InitCliConfig(schema.ConfigAndStacksInfo{
+		ProfilesFromArg:         profilesFromArg,
+		AtmosBasePath:           configSel.BasePath,
+		AtmosConfigFilesFromArg: configSel.Config,
+		AtmosConfigDirsFromArg:  configSel.ConfigPath,
+	}, false)
 
 	// Set atmosConfig for commands that need access to config.
 	version.SetAtmosConfig(&atmosConfig)
@@ -1638,6 +1669,12 @@ func init() {
 	//   - Consistent with other command builders
 	//   - Testable flag precedence
 	globalParser := flags.NewGlobalOptionsBuilder().Build()
+
+	// Set profile completion function on the flag registry to avoid import cycle.
+	// This must be done before RegisterPersistentFlags() so the completion
+	// function is registered when the flag is registered.
+	globalParser.Registry().SetCompletionFunc(profileFlagName, profileFlagCompletion)
+
 	globalParser.RegisterPersistentFlags(RootCmd)
 	if err := globalParser.BindToViper(viper.GetViper()); err != nil {
 		log.Error("Failed to bind global flags to viper", "error", err)
@@ -1854,6 +1891,39 @@ func initCobraConfig() {
 
 		CheckForAtmosUpdateAndPrintMessage(atmosConfig)
 	})
+}
+
+// profileFlagCompletion provides shell completion for the global --profile flag.
+func profileFlagCompletion(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+	defer perf.Track(nil, "cmd.profileFlagCompletion")()
+
+	// Parse global flags to honor config selection flags.
+	v := viper.GetViper()
+	globalFlags := flags.ParseGlobalFlags(cmd, v)
+	configAndStacksInfo := schema.ConfigAndStacksInfo{
+		AtmosBasePath:           globalFlags.BasePath,
+		AtmosConfigFilesFromArg: globalFlags.Config,
+		AtmosConfigDirsFromArg:  globalFlags.ConfigPath,
+		ProfilesFromArg:         globalFlags.Profile,
+	}
+
+	atmosCfg, err := cfg.InitCliConfig(configAndStacksInfo, false)
+	if err != nil {
+		return nil, cobra.ShellCompDirectiveNoFileComp
+	}
+
+	manager := atmosprofile.NewProfileManager()
+	profiles, err := manager.ListProfiles(&atmosCfg)
+	if err != nil {
+		return nil, cobra.ShellCompDirectiveNoFileComp
+	}
+
+	var names []string
+	for _, p := range profiles {
+		names = append(names, p.Name)
+	}
+
+	return names, cobra.ShellCompDirectiveNoFileComp
 }
 
 // https://www.sobyte.net/post/2021-12/create-cli-app-with-cobra/

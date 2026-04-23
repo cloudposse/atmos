@@ -1712,7 +1712,7 @@ func TestParseProfilesFromOsArgs(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := parseProfilesFromOsArgs(tt.args)
+			result := ParseProfilesFromOsArgs(tt.args)
 			assert.Equal(t, tt.expected, result)
 		})
 	}
@@ -1819,7 +1819,7 @@ func TestParseProfilesFromEnvString(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := parseProfilesFromEnvString(tt.envValue)
+			result := ParseProfilesFromEnvString(tt.envValue)
 			assert.Equal(t, tt.expected, result)
 		})
 	}
