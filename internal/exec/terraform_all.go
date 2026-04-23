@@ -10,6 +10,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/dependency"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/store/authbridge"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -32,6 +33,18 @@ func ExecuteTerraformAll(info *schema.ConfigAndStacksInfo) error {
 		return fmt.Errorf(errWrapFmt, errUtils.ErrInitializeCLIConfig, err)
 	}
 
+	// Create auth manager for YAML function processing during stack description.
+	// Matches ExecuteTerraformQuery so !terraform.state and identity-aware stores work.
+	authManager, err := createQueryAuthManager(info, &atmosConfig)
+	if err != nil {
+		return err
+	}
+
+	if authManager != nil {
+		resolver := authbridge.NewResolver(authManager, info)
+		atmosConfig.Stores.SetAuthContextResolver(resolver)
+	}
+
 	log.Debug("Executing terraform command for all components in dependency order", "command", info.SubCommand)
 
 	// Get all stacks with terraform components.
@@ -46,7 +59,7 @@ func ExecuteTerraformAll(info *schema.ConfigAndStacksInfo) error {
 		info.ProcessFunctions,
 		false,
 		info.Skip,
-		nil, // authManager
+		authManager,
 	)
 	if err != nil {
 		return fmt.Errorf(errWrapFmt, errUtils.ErrExecuteDescribeStacks, err)
