@@ -182,6 +182,15 @@ These environment variables configure Atmos behavior and can override settings i
     - **YAML Path:** `components.terraform.plugin_cache_dir`
   </dd>
 
+  <dt>`ATMOS_COMPONENTS_TERRAFORM_AUTO_PROVISION_WORKDIR_FOR_OUTPUTS`</dt>
+  <dd>
+    If set to `false`, disable automatic JIT workdir provisioning before
+    `terraform init` during `!terraform.output` / `atmos.Component` evaluation.
+
+    - **YAML Path:** `components.terraform.auto_provision_workdir_for_outputs`
+    - **Default:** `true`
+  </dd>
+
   <dt>`ATMOS_COMPONENTS_HELMFILE_COMMAND`</dt>
   <dd>
     The executable to be called by `atmos` when running Helmfile commands.

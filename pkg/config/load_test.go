@@ -1824,3 +1824,16 @@ func TestParseProfilesFromEnvString(t *testing.T) {
 		})
 	}
 }
+
+func TestAutoProvisionWorkdirForOutputsEnvVarBinding(t *testing.T) {
+	t.Setenv("ATMOS_COMPONENTS_TERRAFORM_AUTO_PROVISION_WORKDIR_FOR_OUTPUTS", "false")
+	tempDir := t.TempDir()
+	configPath := createTestConfig(t, tempDir, "base_path: .")
+	configInfo := &schema.ConfigAndStacksInfo{
+		AtmosConfigFilesFromArg: []string{configPath},
+	}
+	cfg, err := LoadConfig(configInfo)
+	require.NoError(t, err)
+	assert.False(t, cfg.Components.Terraform.AutoProvisionWorkdirForOutputs,
+		"ATMOS_COMPONENTS_TERRAFORM_AUTO_PROVISION_WORKDIR_FOR_OUTPUTS=false should override default true")
+}

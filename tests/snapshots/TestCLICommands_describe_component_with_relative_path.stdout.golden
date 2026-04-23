@@ -18,6 +18,7 @@ atmos_cli_config:
       plan:
         skip_planfile: false
       plugin_cache: true
+      auto_provision_workdir_for_outputs: true
     helmfile:
       base_path: components/helmfile
       use_eks: true

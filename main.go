@@ -10,6 +10,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	ioLayer "github.com/cloudposse/atmos/pkg/io"
 	log "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/panics"
 )
 
 func main() {
@@ -39,7 +40,15 @@ func main() {
 
 // run executes the main application logic and returns an exit code.
 // This separation allows proper cleanup via defer before os.Exit in main().
-func run() int {
+func run() (exitCode int) {
+	// Install the global panic handler first so any subsequent panic
+	// (including inside cmd.Cleanup via the defer below) is turned
+	// into a friendly message + crash report. Order matters: the
+	// panic handler must be deferred BEFORE cmd.Cleanup so Go unwinds
+	// defers in LIFO order — Cleanup runs first, then Recover catches
+	// anything that escapes either Cleanup or the main call chain.
+	defer panics.Recover(&exitCode)
+
 	// Ensure cleanup happens on normal exit.
 	defer cmd.Cleanup()
 

@@ -1,0 +1,137 @@
+---
+slug: interactive-profile-suggestion
+title: "Interactive Profile Suggestion for Missing Identities"
+authors: [osterman]
+tags: [feature, dx]
+date: 2026-04-16T00:00:00.000Z
+---
+
+When an `--identity` can't be resolved in the currently loaded Atmos config, Atmos now checks whether the identity is defined in another profile — and either prompts you to switch or hints at the exact command to re-run. The same release also adds `profiles.default` so you can pin a default profile in `atmos.yaml`.
+
+<!--truncate-->
+
+## What Changed
+
+Two small features that work together.
+
+### `profiles.default` in `atmos.yaml`
+
+You can now declare a default profile in your base config:
+
+```yaml
+profiles:
+  base_path: profiles
+  default: dev
+```
+
+When neither the `--profile` flag nor the `ATMOS_PROFILE` env var is set, Atmos loads the `dev` profile automatically. The precedence is now:
+
+1. `--profile` flag
+2. `ATMOS_PROFILE` env var
+3. `profiles.default` in `atmos.yaml` *(new)*
+4. No profile
+
+A default-from-config only applies to the base `atmos.yaml`; a default profile's own `profiles.default` is ignored (no recursion, no cycles).
+
+### Interactive suggestion when an identity is missing
+
+Previously, running `atmos --identity root-admin terraform plan` when `root-admin` wasn't defined in the loaded config produced a flat `identity 'root-admin' not found` error — even if `root-admin` lived in a profile you hadn't selected. Now Atmos looks.
+
+**Interactive terminal:**
+
+```
+$ atmos --identity root-admin terraform plan
+
+? Identity `root-admin` is defined in profile `alpha`.
+  Re-run atmos with this profile?
+  > Yes, use this profile
+    No, cancel
+```
+
+Picking "Yes" re-executes Atmos with `--profile alpha` prepended to your original arguments. Picking "No" falls through to the normal not-found error.
+
+When multiple profiles define the same identity, you get a select list:
+
+```
+? Identity `shared-id` is defined in multiple profiles. Select one:
+  > alpha
+    bravo
+    charlie
+```
+
+**Non-interactive terminal (CI, scripts):**
+
+The error is enriched with actionable hints instead of prompting:
+
+```
+Error: identity not found
+  Hint: Identity `root-admin` is defined in profile `alpha`
+  Hint: Re-run with `--profile alpha` to use it
+```
+
+## Why This Matters
+
+Profiles and identities are two different things — profiles select a config preset, identities select an entry under `auth.identities`. It's easy to forget which profile a particular identity lives in, and the old error message gave no clue. You'd error, grep the repo for the identity name, find the profile, re-run. Now the first error contains the answer.
+
+The `profiles.default` setting removes a second papercut: teams that always use the same profile for local development no longer need to set `ATMOS_PROFILE` in their shell RC or remember to pass `--profile` every time.
+
+## Guardrails
+
+- **Explicit wins.** If you passed `--profile A` or set `ATMOS_PROFILE=A`, Atmos never suggests swapping to a different profile — even if the identity exists somewhere else. Your choice is respected.
+- **Default doesn't count as explicit.** If the only reason a profile loaded is `profiles.default`, the suggestion still fires. The suggestion is about helping you find the right profile when you haven't actively chosen one.
+- **Loop guard.** The re-exec sets `ATMOS_PROFILE_FALLBACK=1` so the second invocation never re-enters the fallback — even if the selected profile also fails to resolve the identity.
+
+### Generic fallback for all auth commands
+
+The identity-specific suggestion above needs a name to search on. That misses a more common case: you run `atmos auth login` (no `--identity`, no `--profile`) in a repo whose entire auth config lives in profiles. The base `atmos.yaml` has neither `auth.identities` nor `auth.providers`, and the old behavior was a flat `no providers available` — with no hint that the answer lived one flag away.
+
+Now every identity-dependent auth command (`auth login`, `auth exec`, `auth shell`, `auth env`, `auth console`, `auth whoami`) checks for profiles with auth config when it hits "no identities / no providers / no default" and offers the same switch:
+
+```
+$ atmos auth login
+
+? No identities available. Select a profile:
+  > dev
+    prod
+    staging
+```
+
+Pick one and Atmos re-executes `atmos auth login --profile <picked>`. In CI the error names every candidate:
+
+```
+Error: no identities available
+  Hint: Profile `dev` defines auth configuration
+  Hint: Profile `prod` defines auth configuration
+  Hint: Re-run with `--profile <name>` to use one of them
+```
+
+Same gating as the identity-specific suggestion: an explicit `--profile` or `ATMOS_PROFILE` is always respected, and the `ATMOS_PROFILE_FALLBACK=1` loop guard prevents prompt cycles.
+
+## How to Use It
+
+Set a default profile once:
+
+```yaml
+# atmos.yaml
+profiles:
+  base_path: profiles
+  default: dev
+```
+
+Organize identities into profiles that make sense for your team:
+
+```
+profiles/
+├── alpha/
+│   └── atmos.yaml      # auth.identities.root-admin
+├── beta/
+│   └── atmos.yaml      # auth.identities.dev-user
+└── prod/
+    └── atmos.yaml      # auth.identities.prod-deployer
+```
+
+When someone runs `atmos --identity prod-deployer terraform plan` without selecting a profile, they'll get prompted to switch to `prod` — or, in CI, the error will name the profile to pass.
+
+## Get Involved
+
+Found an issue or have a feature request? Open an issue on [GitHub](https://github.com/cloudposse/atmos/issues).

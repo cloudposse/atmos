@@ -14,7 +14,6 @@ import (
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/github/actions"
 	log "github.com/cloudposse/atmos/pkg/logger"
-	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 // authEnvParser handles flag parsing with Viper precedence for the auth env command.
@@ -45,7 +44,7 @@ var authEnvCmd = &cobra.Command{
 		login := v.GetBool("login")
 
 		// Load atmos configuration (processStacks=false since auth commands don't require stack manifests).
-		atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+		atmosConfig, err := cfg.InitCliConfig(newAuthConfigAndStacksInfo(cmd), false)
 		if err != nil {
 			return fmt.Errorf("failed to load atmos config: %w", err)
 		}
@@ -66,7 +65,8 @@ var authEnvCmd = &cobra.Command{
 		if identityName == "" || forceSelect {
 			defaultIdentity, err := authManager.GetDefaultIdentity(forceSelect)
 			if err != nil {
-				return fmt.Errorf("no default identity configured and no identity specified: %w", err)
+				wrapped := fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrNoDefaultIdentity, err)
+				return maybeOfferProfileFallbackOnAuthConfigError(cmd.Context(), authManager, wrapped)
 			}
 			identityName = defaultIdentity
 		}
