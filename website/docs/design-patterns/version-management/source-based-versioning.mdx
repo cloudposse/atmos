@@ -61,7 +61,7 @@ For simple cases, specify a go-getter-compatible URI:
 components:
   terraform:
     vpc:
-      source: "github.com/cloudposse/terraform-aws-components//modules/vpc?ref=1.450.0"
+      source: "github.com/cloudposse-terraform-components/aws-vpc.git//src?ref=v1.539.0"
       vars:
         cidr_block: "10.0.0.0/16"
 ```
@@ -77,8 +77,8 @@ components:
   terraform:
     vpc:
       source:
-        uri: github.com/cloudposse/terraform-aws-components//modules/vpc
-        version: 1.450.0
+        uri: github.com/cloudposse-terraform-components/aws-vpc.git//src
+        version: v1.539.0
         included_paths:
           - "*.tf"
           - "modules/**"
@@ -100,8 +100,8 @@ components:
   terraform:
     vpc:
       source:
-        uri: github.com/cloudposse/terraform-aws-components//modules/vpc
-        version: 1.450.0
+        uri: github.com/cloudposse-terraform-components/aws-vpc.git//src
+        version: v1.539.0
         retry:
           max_attempts: 5
           initial_delay: 2s
@@ -175,8 +175,8 @@ components:
       metadata:
         type: abstract
       source:
-        uri: github.com/cloudposse/terraform-aws-components//modules/vpc
-        version: 1.450.0  # Default version
+        uri: github.com/cloudposse-terraform-components/aws-vpc.git//src
+        version: v1.539.0  # Default version
         included_paths:
           - "*.tf"
           - "modules/**"
@@ -196,7 +196,7 @@ components:
       metadata:
         inherits: [vpc/defaults]
       source:
-        version: 1.451.0  # Latest version in dev
+        version: v1.539.1  # Latest version in dev
       vars:
         cidr_block: "10.0.0.0/16"
 ```
@@ -215,7 +215,7 @@ components:
       metadata:
         inherits: [vpc/defaults]
       source:
-        version: 1.450.0  # Stable version in prod
+        version: v1.539.0  # Stable version in prod
       vars:
         cidr_block: "10.2.0.0/16"
 ```
@@ -277,11 +277,11 @@ Rolling back is simple—change the version in your stack configuration:
 ```yaml
 # Before: problematic version
 source:
-  version: 1.451.0
+  version: v1.539.1
 
 # After: rollback to stable version
 source:
-  version: 1.450.0
+  version: v1.539.0
 ```
 
 Then apply:

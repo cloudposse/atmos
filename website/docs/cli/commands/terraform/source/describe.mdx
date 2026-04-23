@@ -54,8 +54,8 @@ components:
   terraform:
     vpc:
       source:
-        uri: github.com/cloudposse/terraform-aws-components//modules/vpc
-        version: 1.450.0
+        uri: github.com/cloudposse-terraform-components/aws-vpc.git//src
+        version: v1.539.0
         included_paths:
           - "*.tf"
           - "modules/**"
@@ -78,7 +78,7 @@ components:
   terraform:
     eks:
       source:
-        uri: github.com/cloudposse/terraform-aws-components//modules/eks?ref=1.450.0
+        uri: github.com/cloudposse-terraform-components/aws-eks-cluster.git//src?ref=v1.539.0
 ```
 
 ## Arguments

@@ -95,8 +95,8 @@ To vendor remote artifacts, create a `vendor.yaml` file similar to the example b
           - test
           - networking
       - component: "vpc-flow-logs-bucket"
-        source: "github.com/cloudposse-terraform-components/aws-vpc-flow-logs-bucket.git?ref={{.Version}}"
-        version: "1.323.0"
+        source: "github.com/cloudposse-terraform-components/aws-vpc-flow-logs-bucket.git//src?ref={{.Version}}"
+        version: "v1.537.0"
         targets:
           - "components/terraform/infra/{{.Component}}/{{.Version}}"
         excluded_paths:

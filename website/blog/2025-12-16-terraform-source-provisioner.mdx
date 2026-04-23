@@ -18,8 +18,8 @@ components:
   terraform:
     vpc:
       source:
-        uri: github.com/cloudposse/terraform-aws-components//modules/vpc
-        version: 1.450.0
+        uri: github.com/cloudposse-terraform-components/aws-vpc.git//src
+        version: v1.539.0
         included_paths:
           - "*.tf"
         excluded_paths:
@@ -107,8 +107,8 @@ components:
   terraform:
     vpc:
       source:
-        uri: github.com/cloudposse/terraform-aws-components//modules/vpc
-        version: 1.450.0
+        uri: github.com/cloudposse-terraform-components/aws-vpc.git//src
+        version: v1.539.0
       vars:
         cidr_block: "10.0.0.0/16"
 ```
@@ -140,8 +140,8 @@ components:
   terraform:
     vpc/defaults:
       source:
-        uri: github.com/cloudposse/terraform-aws-components//modules/vpc
-        version: 1.450.0
+        uri: github.com/cloudposse-terraform-components/aws-vpc.git//src
+        version: v1.539.0
 
 # stacks/dev.yaml - use latest
 components:
@@ -150,7 +150,7 @@ components:
       metadata:
         inherits: [vpc/defaults]
       source:
-        version: 1.451.0  # Override for dev
+        version: v1.539.1  # Override for dev
 
 # stacks/prod.yaml - pin to stable
 components:
@@ -158,7 +158,7 @@ components:
     vpc:
       metadata:
         inherits: [vpc/defaults]
-      # Uses inherited version 1.450.0
+      # Uses inherited version v1.539.0
 ```
 
 ### Supported Source Types
@@ -195,8 +195,8 @@ components:
   terraform:
     vpc:
       source:
-        uri: github.com/cloudposse/terraform-aws-components//modules/vpc
-        version: 1.450.0
+        uri: github.com/cloudposse-terraform-components/aws-vpc.git//src
+        version: v1.539.0
       provision:
         workdir:
           enabled: true

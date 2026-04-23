@@ -95,8 +95,8 @@ components:
   terraform:
     vpc:
       source:
-        uri: github.com/cloudposse/terraform-aws-components//modules/vpc
-        version: 1.450.0
+        uri: github.com/cloudposse-terraform-components/aws-vpc.git//src
+        version: v1.539.0
         included_paths:
           - "*.tf"
         excluded_paths:
@@ -109,7 +109,7 @@ components:
 On success:
 ```
 Vendoring component 'vpc' from source...
-Downloading from github.com/cloudposse/terraform-aws-components//modules/vpc?ref=1.450.0
+Downloading from github.com/cloudposse-terraform-components/aws-vpc.git//src?ref=v1.539.0
 ✓ Successfully vendored component to components/terraform/vpc
 ```
 

@@ -18,8 +18,8 @@ components:
   terraform:
     vpc:
       source:
-        uri: github.com/cloudposse/terraform-aws-components//modules/vpc
-        version: 1.450.0
+        uri: github.com/cloudposse-terraform-components/aws-vpc.git//src
+        version: v1.539.0
         retry:
           max_attempts: 5
           initial_delay: 2s
@@ -63,8 +63,8 @@ components:
   terraform:
     vpc:
       source:
-        uri: github.com/cloudposse/terraform-aws-components//modules/vpc
-        version: 1.450.0
+        uri: github.com/cloudposse-terraform-components/aws-vpc.git//src
+        version: v1.539.0
         retry:
           max_attempts: 5
           initial_delay: 2s
@@ -80,7 +80,7 @@ Add `retry` to your vendor source specifications:
 spec:
   sources:
     - component: vpc
-      source: github.com/cloudposse/terraform-aws-components//modules/vpc?ref=1.450.0
+      source: github.com/cloudposse-terraform-components/aws-vpc.git//src?ref=v1.539.0
       retry:
         max_attempts: 5
         initial_delay: 2s

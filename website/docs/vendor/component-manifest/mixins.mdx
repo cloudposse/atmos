@@ -17,8 +17,8 @@ spec:
   mixins:
     - uri: https://raw.githubusercontent.com/cloudposse/terraform-null-label/0.25.0/exports/context.tf
       filename: context.tf
-    - uri: https://raw.githubusercontent.com/cloudposse/terraform-aws-components/{{.Version}}/modules/datadog-agent/introspection.mixin.tf
-      version: 1.398.0
+    - uri: https://raw.githubusercontent.com/cloudposse-terraform-components/mixins/{{.Version}}/src/mixins/introspection.mixin.tf
+      version: v0.3.2
       filename: introspection.mixin.tf
 ```
 
@@ -66,8 +66,8 @@ metadata:
   description: Source and mixins config for vendoring of 'vpc-flow-logs-bucket' component
 spec:
   source:
-    uri: github.com/cloudposse/terraform-aws-components.git//modules/vpc-flow-logs-bucket?ref={{.Version}}
-    version: 1.398.0
+    uri: github.com/cloudposse-terraform-components/aws-vpc-flow-logs-bucket.git//src?ref={{.Version}}
+    version: v1.537.0
     included_paths:
       - "**/*.tf"
       - "**/*.tfvars"
@@ -89,8 +89,8 @@ You can add multiple mixin files to a component:
 ```yaml
 spec:
   source:
-    uri: github.com/cloudposse/terraform-aws-components.git//modules/vpc?ref={{.Version}}
-    version: 1.398.0
+    uri: github.com/cloudposse-terraform-components/aws-vpc.git//src?ref={{.Version}}
+    version: v1.537.0
 
   mixins:
     # Add context.tf
@@ -98,8 +98,8 @@ spec:
       filename: context.tf
 
     # Add an introspection mixin from another component
-    - uri: https://raw.githubusercontent.com/cloudposse/terraform-aws-components/{{.Version}}/modules/datadog-agent/introspection.mixin.tf
-      version: 1.398.0
+    - uri: https://raw.githubusercontent.com/cloudposse-terraform-components/mixins/{{.Version}}/src/mixins/introspection.mixin.tf
+      version: v0.3.2
       filename: introspection.mixin.tf
 
     # Add a custom providers configuration

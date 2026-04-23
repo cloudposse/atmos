@@ -52,10 +52,10 @@ atmos terraform source list
 Output:
 ```
 STACK              COMPONENT    URI                                                           VERSION
-plat-ue2-dev       eks          github.com/cloudposse/terraform-aws-components//modules/eks   1.450.0
-plat-ue2-dev       vpc          github.com/cloudposse/terraform-aws-components//modules/vpc   1.450.0
-plat-ue2-prod      eks          github.com/cloudposse/terraform-aws-components//modules/eks   1.451.0
-plat-ue2-prod      vpc          github.com/cloudposse/terraform-aws-components//modules/vpc   1.451.0
+plat-ue2-dev       eks          github.com/cloudposse-terraform-components/aws-eks-cluster.git//src   v1.539.0
+plat-ue2-dev       vpc          github.com/cloudposse-terraform-components/aws-vpc.git//src   v1.539.0
+plat-ue2-prod      eks          github.com/cloudposse-terraform-components/aws-eks-cluster.git//src   v1.539.1
+plat-ue2-prod      vpc          github.com/cloudposse-terraform-components/aws-vpc.git//src   v1.539.1
 ```
 
 ### List Sources in a Specific Stack
@@ -67,8 +67,8 @@ atmos terraform source list --stack plat-ue2-dev
 When filtering by stack, the Stack column is omitted:
 ```
 COMPONENT    URI                                                           VERSION
-eks          github.com/cloudposse/terraform-aws-components//modules/eks   1.450.0
-vpc          github.com/cloudposse/terraform-aws-components//modules/vpc   1.450.0
+eks          github.com/cloudposse-terraform-components/aws-eks-cluster.git//src   v1.539.0
+vpc          github.com/cloudposse-terraform-components/aws-vpc.git//src   v1.539.0
 ```
 
 ### List Sources for a Specific Component
@@ -80,8 +80,8 @@ atmos terraform source list vpc
 Shows the component across all stacks:
 ```
 STACK              COMPONENT    URI                                                           VERSION
-plat-ue2-dev       vpc          github.com/cloudposse/terraform-aws-components//modules/vpc   1.450.0
-plat-ue2-prod      vpc          github.com/cloudposse/terraform-aws-components//modules/vpc   1.451.0
+plat-ue2-dev       vpc          github.com/cloudposse-terraform-components/aws-vpc.git//src   v1.539.0
+plat-ue2-prod      vpc          github.com/cloudposse-terraform-components/aws-vpc.git//src   v1.539.1
 ```
 
 ### Output in Different Formats

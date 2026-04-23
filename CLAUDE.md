@@ -256,6 +256,47 @@ git diff tests/snapshots/
 
 ## Common Development Tasks
 
+### Terraform Component References (MANDATORY)
+
+The `github.com/cloudposse/terraform-aws-components` monorepo is **archived/deprecated**. Always use the modern per-component repositories under the `cloudposse-terraform-components` org.
+
+**Modern vendor source format:**
+```yaml
+# component.yaml (ComponentVendorConfig)
+spec:
+  source:
+    uri: github.com/cloudposse-terraform-components/aws-<component>.git//src?ref={{.Version}}
+    version: v1.539.0
+
+# vendor.yaml (AtmosVendorConfig)
+spec:
+  sources:
+    - component: "vpc"
+      source: "github.com/cloudposse-terraform-components/aws-vpc.git//src?ref={{.Version}}"
+      version: "v1.539.0"
+```
+
+**Key rules:**
+- Org: `cloudposse-terraform-components` (NOT `cloudposse/terraform-aws-components`)
+- Repo: `aws-<component>` (e.g., `aws-vpc`, `aws-eks-cluster`, `aws-vpc-flow-logs-bucket`)
+- Path: always include `//src` subdirectory (Terraform files live in `src/`)
+- Version: use `v`-prefixed semver tags (e.g., `v1.539.0`)
+
+**Module mapping:**
+
+| Old monorepo path | New repository |
+|---|---|
+| `modules/vpc` | `cloudposse-terraform-components/aws-vpc` |
+| `modules/vpc-flow-logs-bucket` | `cloudposse-terraform-components/aws-vpc-flow-logs-bucket` |
+| `modules/eks` or `modules/eks/cluster` | `cloudposse-terraform-components/aws-eks-cluster` |
+| `modules/rds` | `cloudposse-terraform-components/aws-rds` |
+| `modules/ecr` | `cloudposse-terraform-components/aws-ecr` |
+| `modules/s3-bucket` | `cloudposse-terraform-components/aws-s3-bucket` |
+| `modules/tfstate-backend` | `cloudposse-terraform-components/aws-tfstate-backend` |
+| `modules/spacelift/worker-pool` | `cloudposse-terraform-components/aws-spacelift-worker-pool-asg` |
+| `modules/spacelift/admin-stack` | `cloudposse-terraform-components/aws-spacelift-admin-stack` |
+| `modules/datadog-agent/introspection.mixin.tf` | `cloudposse-terraform-components/mixins` (`//src/mixins/`) |
+
 ### Adding New CLI Command
 
 1. Create `cmd/[command]/` with CommandProvider interface
