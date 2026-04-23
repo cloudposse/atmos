@@ -1476,10 +1476,12 @@ func TestExecutor_Execute_PropagatesProvidersGenError(t *testing.T) {
 // because doing so would overwrite correctly-rendered files with literal
 // "!terraform.state ..." strings.
 //
-//nolint:dupl // structurally similar to TestExecutor_Execute_SkipInit_DirectCall
-// by design — the two tests contrast the processYamlFunctions=true vs =false
+// The structural similarity to TestExecutor_Execute_SkipInit_DirectCall is by
+// design — the two tests contrast the processYamlFunctions=true vs =false
 // invariants at the same execute() call site, so sharing scaffolding via a
 // helper would obscure the side-by-side comparison.
+//
+//nolint:dupl // see comment above — intentional duplication to keep the contrast readable.
 func TestExecutor_Execute_SkipsArtifactRegen_WhenYamlFunctionsNotProcessed(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
