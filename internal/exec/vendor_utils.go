@@ -578,15 +578,3 @@ func determineSourceType(uri *string, vendorConfigFilePath string) (bool, bool, 
 func generateSkipFunction(tempDir string, s *schema.AtmosVendorSource) func(os.FileInfo, string, string) (bool, error) {
 	return vendor.CreateSkipFunc(tempDir, s.IncludedPaths, s.ExcludedPaths)
 }
-
-// shouldExcludeFile checks if the file matches any of the excluded patterns.
-// Delegates to pkg/vendor for the shared implementation.
-func shouldExcludeFile(src string, excludedPaths []string, trimmedSrc string) (bool, error) {
-	return vendor.ShouldExcludeFile(excludedPaths, trimmedSrc)
-}
-
-// shouldIncludeFile checks if the file matches any of the included patterns.
-// Delegates to pkg/vendor for the shared implementation.
-func shouldIncludeFile(src string, includedPaths []string, trimmedSrc string) (bool, error) {
-	return vendor.ShouldIncludeFile(includedPaths, trimmedSrc)
-}

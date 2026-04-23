@@ -343,6 +343,10 @@ func TestShouldExcludeFile(t *testing.T) {
 		{name: "single star no nested match", patterns: []string{"*.tf"}, path: "modules/vpc/main.tf", skip: false},
 		{name: "empty patterns", patterns: []string{}, path: "main.tf", skip: false},
 		{name: "invalid pattern", patterns: []string{"[invalid"}, path: "main.tf", skip: false, hasErr: true},
+		// Mixed valid+invalid: the invalid pattern is encountered first and returns an error.
+		{name: "mixed valid and invalid patterns - error on first", patterns: []string{"[invalid", "*.md"}, path: "README.md", skip: false, hasErr: true},
+		// Invalid pattern in second position: first pattern matches, so short-circuit returns before reaching invalid pattern.
+		{name: "mixed valid and invalid patterns - valid matches before invalid", patterns: []string{"*.md", "[invalid"}, path: "README.md", skip: true, hasErr: false},
 	}
 
 	for _, tt := range tests {
@@ -373,7 +377,13 @@ func TestShouldIncludeFile(t *testing.T) {
 		{name: "multiple patterns first matches", patterns: []string{"*.tf", "*.md"}, path: "main.tf", skip: false},
 		{name: "multiple patterns second matches", patterns: []string{"*.tf", "*.md"}, path: "README.md", skip: false},
 		{name: "multiple patterns none match", patterns: []string{"*.tf", "*.md"}, path: "main.go", skip: true},
-		{name: "invalid pattern", patterns: []string{"[invalid"}, path: "main.tf", skip: true, hasErr: true},
+		{name: "invalid pattern", patterns: []string{"[invalid"}, path: "main.tf", skip: false, hasErr: true},
+		// Empty patterns: the loop never executes, so no pattern matched → skip=true.
+		{name: "empty patterns", patterns: []string{}, path: "main.tf", skip: true},
+		// Mixed valid+invalid: the invalid pattern is encountered first and returns an error.
+		{name: "mixed valid and invalid patterns - error on first", patterns: []string{"[invalid", "*.tf"}, path: "main.tf", skip: false, hasErr: true},
+		// Invalid pattern in second position: first pattern matches (returns early), so error is never reached.
+		{name: "mixed valid and invalid patterns - valid matches before invalid", patterns: []string{"*.tf", "[invalid"}, path: "main.tf", skip: false, hasErr: false},
 	}
 
 	for _, tt := range tests {
@@ -387,4 +397,62 @@ func TestShouldIncludeFile(t *testing.T) {
 			assert.Equal(t, tt.skip, skip)
 		})
 	}
+}
+
+// TestCopyToTarget_InvalidIncludedPattern verifies that CopyToTarget returns an error
+// when IncludedPaths contains an invalid glob pattern, and does not copy any files.
+func TestCopyToTarget_InvalidIncludedPattern(t *testing.T) {
+	srcDir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(srcDir, "main.tf"), []byte("# main"), 0o644))
+
+	targetDir := filepath.Join(t.TempDir(), "target")
+	err := CopyToTarget(srcDir, targetDir, CopyOptions{
+		IncludedPaths: []string{"[invalid"},
+	})
+	require.Error(t, err, "CopyToTarget with an invalid IncludedPaths pattern should return an error")
+
+	// No file should have been copied to the target directory.
+	_, statErr := os.Stat(filepath.Join(targetDir, "main.tf"))
+	assert.True(t, os.IsNotExist(statErr), "no files should be copied when IncludedPaths is invalid")
+}
+
+// TestCopyToTarget_InvalidExcludedPattern verifies that CopyToTarget returns an error
+// when ExcludedPaths contains an invalid glob pattern, and does not copy any files.
+func TestCopyToTarget_InvalidExcludedPattern(t *testing.T) {
+	srcDir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(srcDir, "main.tf"), []byte("# main"), 0o644))
+
+	targetDir := filepath.Join(t.TempDir(), "target")
+	err := CopyToTarget(srcDir, targetDir, CopyOptions{
+		ExcludedPaths: []string{"[invalid"},
+	})
+	require.Error(t, err, "CopyToTarget with an invalid ExcludedPaths pattern should return an error")
+}
+
+// TestCopyToTarget_SymlinkWithIncludedPaths verifies that symlinks are filtered by IncludedPaths.
+// A symlink whose resolved target does not match the include patterns should be skipped.
+func TestCopyToTarget_SymlinkWithIncludedPaths(t *testing.T) {
+	srcDir := t.TempDir()
+
+	// Create a .tf file and a .md file; the symlink points to the .md file.
+	require.NoError(t, os.WriteFile(filepath.Join(srcDir, "main.tf"), []byte("# main"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(srcDir, "README.md"), []byte("# readme"), 0o644))
+	// Symlink to a .md file — should be skipped when includedPaths is ["*.tf"].
+	trySymlink(t, filepath.Join(srcDir, "README.md"), filepath.Join(srcDir, "link-to-readme.md"))
+
+	targetDir := filepath.Join(t.TempDir(), "target")
+	err := CopyToTarget(srcDir, targetDir, CopyOptions{
+		IncludedPaths: []string{"*.tf"},
+	})
+	require.NoError(t, err)
+
+	// .tf file should be copied.
+	_, err = os.Stat(filepath.Join(targetDir, "main.tf"))
+	assert.NoError(t, err, "main.tf should be copied")
+
+	// .md file and the symlink pointing to it should NOT be copied.
+	_, err = os.Stat(filepath.Join(targetDir, "README.md"))
+	assert.True(t, os.IsNotExist(err), "README.md does not match include pattern and should be skipped")
+	_, err = os.Stat(filepath.Join(targetDir, "link-to-readme.md"))
+	assert.True(t, os.IsNotExist(err), "symlink to .md file should be skipped by include pattern")
 }

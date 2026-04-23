@@ -339,6 +339,22 @@ func TestPatternMatching_InvalidPattern(t *testing.T) {
 	assert.False(t, skip, "Invalid pattern should not cause file to be skipped")
 }
 
+// TestPatternMatching_InvalidPattern_Include tests that ShouldIncludeFile returns an error
+// and skip=false (don't exclude) when an invalid glob pattern is provided.
+// This mirrors the ShouldExcludeFile test above and is required because the PR changed
+// ShouldIncludeFile's error return from (true, err) to (false, err).
+func TestPatternMatching_InvalidPattern_Include(t *testing.T) {
+	// Invalid pattern with unclosed bracket.
+	invalidPattern := "[invalid"
+	skip, err := vendor.ShouldIncludeFile([]string{invalidPattern}, "main.tf")
+	// Should return an error for invalid patterns.
+	assert.Error(t, err, "Invalid include pattern should return an error")
+	// Should not skip (exclude) the file when the include pattern is invalid.
+	// This is consistent with ShouldExcludeFile: don't accidentally exclude files
+	// due to a bad pattern; propagate the error to abort the copy instead.
+	assert.False(t, skip, "Invalid include pattern should not cause file to be skipped")
+}
+
 // TestCopyToTarget tests copying files from source to target directory.
 func TestCopyToTarget(t *testing.T) {
 	// Create source directory with files.
