@@ -1171,6 +1171,9 @@ func TestProcessYAMLConfigFile_InvalidTemplateInImportPath(t *testing.T) {
 	)
 
 	require.Error(t, err)
+	// The error propagates from IsGolangTemplate which calls text/template.Parse on the
+	// import string — the error message contains the template name and parse failure.
+	assert.Contains(t, err.Error(), "unclosed")
 }
 
 func TestProcessYAMLConfigFileEmptyManifest(t *testing.T) {
