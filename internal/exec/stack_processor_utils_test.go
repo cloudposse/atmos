@@ -1092,6 +1092,87 @@ func TestProcessYAMLConfigFileMissingFilesReturnError(t *testing.T) {
 	assert.Error(t, err)
 }
 
+// TestProcessYAMLConfigFile_ImportNotFound_ErrorPath exercises the branch where
+// GetGlobMatches returns an error (both retries fail) and the import is not a Go
+// template, so ProcessYAMLConfigFile returns an error with the missing-file message.
+// This covers the `if err != nil` branch inside processStackConfigImports (lines 1098-1104).
+func TestProcessYAMLConfigFile_ImportNotFound_ErrorPath(t *testing.T) {
+	stacksBasePath := "../../tests/fixtures/scenarios/invalid-stacks/stacks"
+	// missing-import.yaml imports "catalog/this-file-does-not-exist-at-all" which has no
+	// matching files on disk — GetGlobMatches returns ErrFailedToFindImport.
+	filePath := "../../tests/fixtures/scenarios/invalid-stacks/stacks/orgs/acme/platform/missing-import.yaml"
+
+	atmosConfig := schema.AtmosConfiguration{
+		Templates: schema.Templates{
+			Settings: schema.TemplatesSettings{
+				Enabled: true,
+				Sprig: schema.TemplatesSettingsSprig{
+					Enabled: true,
+				},
+				Gomplate: schema.TemplatesSettingsGomplate{
+					Enabled: true,
+				},
+			},
+		},
+	}
+
+	_, _, _, _, _, _, _, err := ProcessYAMLConfigFile(
+		&atmosConfig,
+		stacksBasePath,
+		filePath,
+		map[string]map[string]any{},
+		nil,
+		false,
+		false,
+		true,
+		false,
+		nil,
+		nil,
+		nil,
+		nil,
+		"",
+	)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "no matches found for the import")
+}
+
+// TestProcessYAMLConfigFile_InvalidTemplateInImportPath exercises the branch where
+// IsGolangTemplate itself returns an error because the import path contains invalid
+// Go template syntax — covering line 1093 inside processStackConfigImports.
+// Templates must be disabled so that the raw `{{ unclosed` string is preserved as
+// the import path and reaches IsGolangTemplate rather than failing during YAML
+// template pre-processing.
+func TestProcessYAMLConfigFile_InvalidTemplateInImportPath(t *testing.T) {
+	stacksBasePath := "../../tests/fixtures/scenarios/invalid-stacks/stacks"
+	// invalid-template-import-path.yaml imports `{{ unclosed` which is syntactically
+	// invalid as a Go template; IsGolangTemplate returns (false, err).
+	filePath := "../../tests/fixtures/scenarios/invalid-stacks/stacks/orgs/acme/platform/invalid-template-import-path.yaml"
+
+	// Disable template pre-processing so the raw `{{ unclosed` string is passed
+	// through YAML parsing unchanged and eventually reaches IsGolangTemplate.
+	atmosConfig := schema.AtmosConfiguration{}
+
+	_, _, _, _, _, _, _, err := ProcessYAMLConfigFile(
+		&atmosConfig,
+		stacksBasePath,
+		filePath,
+		map[string]map[string]any{},
+		nil,
+		false,
+		false,
+		true,
+		false,
+		nil,
+		nil,
+		nil,
+		nil,
+		"",
+	)
+
+	require.Error(t, err)
+}
+
 func TestProcessYAMLConfigFileEmptyManifest(t *testing.T) {
 	stacksBasePath := "../../tests/fixtures/scenarios/invalid-stacks/stacks"
 	filePath := "../../tests/fixtures/scenarios/invalid-stacks/stacks/orgs/acme/platform/empty.yaml"
