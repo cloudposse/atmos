@@ -9,8 +9,10 @@ See [Conventional Commits](https://www.conventionalcommits.org/) for commit mess
 
 ### Changed
 
-- **`pkg/filesystem.GetGlobMatches`**: always returns a non-nil `[]string{}` (never `nil`).
-  Callers must use `len(result) == 0` to detect no matches instead of `result == nil`.
+- **`pkg/filesystem.GetGlobMatches`**: on a successful call (`err == nil`) always returns a
+  non-nil `[]string` — an empty `[]string{}` when no files match, never `nil`.
+  Callers must check `err != nil` first; only use the returned slice when `err` is `nil`.
+  Use `len(result) == 0` to detect no matches.
   The cache is now bounded and configurable via three environment variables:
   - `ATMOS_FS_GLOB_CACHE_MAX_ENTRIES` (default `1024`, minimum `16`) — maximum number of cached glob patterns.
   - `ATMOS_FS_GLOB_CACHE_TTL` (default `5m`, minimum `1s`) — time-to-live for each cache entry.

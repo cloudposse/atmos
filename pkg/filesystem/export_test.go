@@ -52,8 +52,7 @@ func GlobCacheContains(pattern string) bool {
 	normalizedPattern := filepath.ToSlash(pattern)
 	globMatchesLRUMu.RLock()
 	defer globMatchesLRUMu.RUnlock()
-	_, ok := globMatchesLRU.Get(normalizedPattern)
-	return ok
+	return globMatchesLRU.Contains(normalizedPattern)
 }
 
 // GlobCacheEvictions returns the total number of LRU evictions since the last cache reset.

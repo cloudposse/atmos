@@ -1093,9 +1093,9 @@ func TestProcessYAMLConfigFileMissingFilesReturnError(t *testing.T) {
 }
 
 // TestProcessYAMLConfigFile_ImportNotFound_ErrorPath exercises the branch where
-// GetGlobMatches returns an error (both retries fail) and the import is not a Go
-// template, so ProcessYAMLConfigFile returns an error with the missing-file message.
-// This covers the `if err != nil` branch inside processStackConfigImports (lines 1098-1104).
+// GetGlobMatches returns an error (the import directory does not exist) and the
+// import is not a Go template, so processStackConfigImports propagates the
+// error back to ProcessYAMLConfigFile with the missing-file message.
 func TestProcessYAMLConfigFile_ImportNotFound_ErrorPath(t *testing.T) {
 	stacksBasePath := "../../tests/fixtures/scenarios/invalid-stacks/stacks"
 	// missing-import.yaml imports "catalog/this-file-does-not-exist-at-all" which has no

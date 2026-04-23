@@ -901,14 +901,25 @@ func TestStandardOptionsBuilder_WithSSHKey(t *testing.T) {
 	flag := cmd.Flags().Lookup("ssh-key")
 	require.NotNil(t, flag, "ssh-key flag should be registered")
 
-	// Verify that the parsed value is propagated correctly.
-	v := viper.New()
-	require.NoError(t, parser.BindToViper(v))
+	t.Run("default value", func(t *testing.T) {
+		v := viper.New()
+		require.NoError(t, parser.BindToViper(v))
 
-	explicitPath := filepath.Join(t.TempDir(), ".ssh", "id_ed25519")
-	opts, err := parser.Parse(context.Background(), []string{"--ssh-key", explicitPath})
-	require.NoError(t, err)
-	assert.Equal(t, explicitPath, opts.SSHKey)
+		opts, err := parser.Parse(context.Background(), []string{})
+		require.NoError(t, err)
+		assert.Equal(t, sshKeyPath, opts.SSHKey, "default ssh-key should match what was passed to WithSSHKey")
+	})
+
+	t.Run("explicit override", func(t *testing.T) {
+		// Verify that the parsed value is propagated correctly.
+		v := viper.New()
+		require.NoError(t, parser.BindToViper(v))
+
+		explicitPath := filepath.Join(t.TempDir(), ".ssh", "id_ed25519")
+		opts, err := parser.Parse(context.Background(), []string{"--ssh-key", explicitPath})
+		require.NoError(t, err)
+		assert.Equal(t, explicitPath, opts.SSHKey)
+	})
 }
 
 func TestStandardOptionsBuilder_WithSSHKeyPassword(t *testing.T) {

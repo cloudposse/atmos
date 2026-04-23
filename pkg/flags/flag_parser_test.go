@@ -605,10 +605,10 @@ func TestParsedConfig_GetArgsForTool(t *testing.T) {
 			want:           []string{},
 		},
 		{
-			name:           "positional and separated concatenated without separator",
-			positionalArgs: []string{"plan", "vpc"},
-			separatedArgs:  []string{"-var", "region=us-east-1"},
-			want:           []string{"plan", "vpc", "-var", "region=us-east-1"},
+			name:           "nil slices treated as empty",
+			positionalArgs: nil,
+			separatedArgs:  nil,
+			want:           []string{},
 		},
 	}
 

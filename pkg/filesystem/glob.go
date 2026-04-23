@@ -58,9 +58,9 @@ var (
 	// but we still need the mutex for atomic load+check+store sequences in our TTL logic).
 	globMatchesLRU       *lru.Cache[string, globCacheEntry]
 	globMatchesLRUMu     sync.RWMutex
-	globMatchesEvictions int64 // incremented atomically by the LRU eviction callback
-	globMatchesHits      int64 // incremented atomically on each cache hit
-	globMatchesMisses    int64 // incremented atomically on each cache miss
+	globMatchesEvictions int64 // incremented atomically by the LRU eviction callback.
+	globMatchesHits      int64 // incremented atomically on each cache hit.
+	globMatchesMisses    int64 // incremented atomically on each cache miss.
 
 	// globCacheTTL is the active TTL, configurable via ATMOS_FS_GLOB_CACHE_TTL.
 	globCacheTTL = defaultGlobCacheTTL
