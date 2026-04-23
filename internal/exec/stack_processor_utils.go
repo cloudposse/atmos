@@ -1897,8 +1897,13 @@ func processBaseComponentConfigInternal(
 		// Base component source (when source inheritance is enabled).
 		if atmosConfig.Stacks.Inherit.IsSourceInheritanceEnabled() {
 			if i, ok2 := baseComponentMap[cfg.SourceSectionName]; ok2 {
-				baseComponentSourceSection, ok = i.(map[string]any)
-				if !ok {
+				switch v := i.(type) {
+				case map[string]any:
+					baseComponentSourceSection = v
+				case string:
+					// String form: "github.com/org/repo//path?ref=v1.0.0" — normalize to map form.
+					baseComponentSourceSection = map[string]any{"uri": v}
+				default:
 					return fmt.Errorf("%w '%s.source' in the stack '%s'", errUtils.ErrInvalidComponentSource, baseComponent, stack)
 				}
 			}

@@ -395,6 +395,7 @@ func TestExtractComponentSections(t *testing.T) {
 		expectedProviders map[string]any
 		expectedHooks     map[string]any
 		expectedBackend   map[string]any
+		expectedSource    map[string]any
 	}{
 		{
 			name: "extract all sections for terraform component",
@@ -514,6 +515,56 @@ func TestExtractComponentSections(t *testing.T) {
 			},
 			expectedError: "invalid component auth section",
 		},
+		{
+			name: "terraform component with string form source",
+			opts: ComponentProcessorOptions{
+				ComponentType: cfg.TerraformComponentType,
+				Component:     "vpc",
+				Stack:         "test-stack",
+				StackName:     "test-stack",
+				ComponentMap: map[string]any{
+					cfg.SourceSectionName: "github.com/cloudposse/terraform-aws-components//modules/vpc?ref=1.450.0",
+				},
+				AtmosConfig: &schema.AtmosConfiguration{},
+			},
+			expectedSource: map[string]any{
+				"uri": "github.com/cloudposse/terraform-aws-components//modules/vpc?ref=1.450.0",
+			},
+		},
+		{
+			name: "terraform component with map form source",
+			opts: ComponentProcessorOptions{
+				ComponentType: cfg.TerraformComponentType,
+				Component:     "vpc",
+				Stack:         "test-stack",
+				StackName:     "test-stack",
+				ComponentMap: map[string]any{
+					cfg.SourceSectionName: map[string]any{
+						"uri":     "github.com/cloudposse/terraform-aws-components//modules/vpc",
+						"version": "1.450.0",
+					},
+				},
+				AtmosConfig: &schema.AtmosConfiguration{},
+			},
+			expectedSource: map[string]any{
+				"uri":     "github.com/cloudposse/terraform-aws-components//modules/vpc",
+				"version": "1.450.0",
+			},
+		},
+		{
+			name: "terraform component with invalid source type",
+			opts: ComponentProcessorOptions{
+				ComponentType: cfg.TerraformComponentType,
+				Component:     "vpc",
+				Stack:         "test-stack",
+				StackName:     "test-stack",
+				ComponentMap: map[string]any{
+					cfg.SourceSectionName: 42,
+				},
+				AtmosConfig: &schema.AtmosConfiguration{},
+			},
+			expectedError: "invalid component source section",
+		},
 	}
 
 	for _, tt := range tests {
@@ -560,6 +611,10 @@ func TestExtractComponentSections(t *testing.T) {
 
 			if tt.expectedBackend != nil {
 				assert.Equal(t, tt.expectedBackend, result.ComponentBackendSection)
+			}
+
+			if tt.expectedSource != nil {
+				assert.Equal(t, tt.expectedSource, result.ComponentSourceSection)
 			}
 		})
 	}

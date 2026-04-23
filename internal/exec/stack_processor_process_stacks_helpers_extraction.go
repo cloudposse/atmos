@@ -177,11 +177,15 @@ func extractComponentSections(opts *ComponentProcessorOptions, result *Component
 		opts.ComponentType == cfg.HelmfileComponentType ||
 		opts.ComponentType == cfg.PackerComponentType {
 		if i, ok := opts.ComponentMap[cfg.SourceSectionName]; ok {
-			componentSourceSection, ok := i.(map[string]any)
-			if !ok {
+			switch v := i.(type) {
+			case map[string]any:
+				result.ComponentSourceSection = v
+			case string:
+				// String form: "github.com/org/repo//path?ref=v1.0.0" — normalize to map form.
+				result.ComponentSourceSection = map[string]any{"uri": v}
+			default:
 				return fmt.Errorf("%w: 'components.%s.%s.source' in the file '%s'", errUtils.ErrInvalidComponentSource, opts.ComponentType, opts.Component, opts.StackName)
 			}
-			result.ComponentSourceSection = componentSourceSection
 		} else {
 			result.ComponentSourceSection = make(map[string]any, componentSmallMapCapacity)
 		}
