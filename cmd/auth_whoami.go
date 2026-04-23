@@ -19,7 +19,6 @@ import (
 	"github.com/cloudposse/atmos/pkg/config/homedir"
 	"github.com/cloudposse/atmos/pkg/data"
 	log "github.com/cloudposse/atmos/pkg/logger"
-	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
@@ -42,19 +41,20 @@ func executeAuthWhoamiCommand(cmd *cobra.Command, args []string) error {
 	handleHelpRequest(cmd, args)
 
 	// Load atmos config and auth manager.
-	authManager, err := loadAuthManager()
+	authManager, err := loadAuthManager(cmd)
 	if err != nil {
 		return err
 	}
+
+	ctx := context.Background()
 
 	// Determine identity.
 	identityName, err := identityFromFlagOrDefault(cmd, authManager)
 	if err != nil {
-		return err
+		return maybeOfferProfileFallbackOnAuthConfigError(ctx, authManager, err)
 	}
 
 	// Query whoami.
-	ctx := context.Background()
 	whoami, err := authManager.Whoami(ctx, identityName)
 	if err != nil {
 		errUtils.CheckErrorPrintAndExit(addGCPReauthExplanation(err), "", "")
@@ -140,8 +140,8 @@ func populateWhoamiFromValidation(whoami *authTypes.WhoamiInfo, validationInfo *
 	}
 }
 
-func loadAuthManager() (authTypes.AuthManager, error) {
-	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+func loadAuthManager(cmd *cobra.Command) (authTypes.AuthManager, error) {
+	atmosConfig, err := cfg.InitCliConfig(newAuthConfigAndStacksInfo(cmd), false)
 	if err != nil {
 		return nil, fmt.Errorf("%w: failed to load atmos config: %v", errUtils.ErrInvalidAuthConfig, err)
 	}
@@ -166,7 +166,7 @@ func identityFromFlagOrDefault(cmd *cobra.Command, authManager authTypes.AuthMan
 
 	defaultIdentity, err := authManager.GetDefaultIdentity(forceSelect)
 	if err != nil {
-		return "", fmt.Errorf("%w: no default identity configured and no identity specified: %v", errUtils.ErrInvalidAuthConfig, err)
+		return "", fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrNoDefaultIdentity, err)
 	}
 	return defaultIdentity, nil
 }

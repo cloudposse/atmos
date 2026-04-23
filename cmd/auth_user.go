@@ -12,7 +12,6 @@ import (
 	"github.com/cloudposse/atmos/pkg/auth/realm"
 	"github.com/cloudposse/atmos/pkg/auth/types"
 	cfg "github.com/cloudposse/atmos/pkg/config"
-	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 // authUserCmd groups user-related auth commands.
@@ -31,7 +30,7 @@ var authUserConfigureCmd = &cobra.Command{
 	Long:  `Configure static AWS user credentials (stored securely in keyring)`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		// Load atmos config
-		atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+		atmosConfig, err := cfg.InitCliConfig(newAuthConfigAndStacksInfo(cmd), false)
 		if err != nil {
 			return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrInvalidAuthConfig, err)
 		}

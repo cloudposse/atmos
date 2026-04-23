@@ -54,12 +54,29 @@ func VendorSource(
 	// Normalize the URI for go-getter using the same logic as regular vendoring.
 	uri = vendor.NormalizeURI(uri)
 
-	// Create temp directory for download.
+	// Generate a unique temp path for the download staging area.
+	//
+	// We use os.MkdirTemp to reserve a unique name, then immediately remove the
+	// directory before passing the path to go-getter. This is necessary for
+	// file:// URIs: go-getter's FileGetter.Get creates a symlink at dst (rather
+	// than copying files), which requires dst to not already exist. If dst is
+	// a pre-created real directory, FileGetter returns "destination exists and is
+	// not a symlink". Removing the empty directory before the fetch lets FileGetter
+	// create the symlink; the subsequent vendor.CopyToTarget then copies through it.
+	// For remote sources, go-getter creates the directory itself when needed.
 	tempDir, err := os.MkdirTemp("", "atmos-source-*")
 	if err != nil {
 		return errUtils.Build(errUtils.ErrCreateTempDir).
 			WithCause(err).
 			WithExplanation("Failed to create temporary directory for download").
+			Err()
+	}
+	// Remove the empty directory so go-getter can create it as a symlink (for
+	// file:// URIs) or recreate it as a real directory (for remote URIs).
+	if removeErr := os.Remove(tempDir); removeErr != nil && !os.IsNotExist(removeErr) {
+		return errUtils.Build(errUtils.ErrCreateTempDir).
+			WithCause(removeErr).
+			WithExplanation("Failed to prepare temporary directory for download").
 			Err()
 	}
 	defer os.RemoveAll(tempDir)

@@ -43,6 +43,8 @@ func (r *OsArgsInTestRule) Check(pass *analysis.Pass, file *ast.File) error {
 	// - Testing heatmap flag detection (enableHeatmapIfRequested scans os.Args)
 	// - Testing Execute() function which reads os.Args
 	// - Testing getProfilesFromFlagsOrEnv which parses os.Args directly
+	// - Testing HasExplicitProfile and the profile fallback path (both read
+	//   os.Args directly to detect --profile for commands with DisableFlagParsing)
 	// All these use proper save/restore pattern for test isolation.
 	if strings.HasSuffix(normalized, "cmd/cmd_utils_test.go") ||
 		strings.HasSuffix(normalized, "cmd/terraform_test.go") ||
@@ -52,7 +54,9 @@ func (r *OsArgsInTestRule) Check(pass *analysis.Pass, file *ast.File) error {
 		strings.HasSuffix(normalized, "cmd/root_ai_test.go") ||
 		strings.HasSuffix(normalized, "errors/error_funcs_test.go") ||
 		strings.HasSuffix(normalized, "pkg/config/config_test.go") ||
-		strings.HasSuffix(normalized, "pkg/config/load_flags_test.go") {
+		strings.HasSuffix(normalized, "pkg/config/load_flags_test.go") ||
+		strings.HasSuffix(normalized, "pkg/config/profiles_identity_helpers_test.go") ||
+		strings.HasSuffix(normalized, "pkg/auth/profile_fallback_test.go") {
 		return nil
 	}
 

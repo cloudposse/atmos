@@ -760,6 +760,20 @@ func (mr *MockAuthManagerMockRecorder) LogoutProvider(ctx, providerName, deleteK
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "LogoutProvider", reflect.TypeOf((*MockAuthManager)(nil).LogoutProvider), ctx, providerName, deleteKeychain)
 }
 
+// MaybeOfferAnyProfileFallback mocks base method.
+func (m *MockAuthManager) MaybeOfferAnyProfileFallback(ctx context.Context) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "MaybeOfferAnyProfileFallback", ctx)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// MaybeOfferAnyProfileFallback indicates an expected call of MaybeOfferAnyProfileFallback.
+func (mr *MockAuthManagerMockRecorder) MaybeOfferAnyProfileFallback(ctx any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MaybeOfferAnyProfileFallback", reflect.TypeOf((*MockAuthManager)(nil).MaybeOfferAnyProfileFallback), ctx)
+}
+
 // PrepareShellEnvironment mocks base method.
 func (m *MockAuthManager) PrepareShellEnvironment(ctx context.Context, identityName string, currentEnv []string) ([]string, error) {
 	m.ctrl.T.Helper()
