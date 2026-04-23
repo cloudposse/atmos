@@ -629,7 +629,7 @@ func TestExecutor_ExecuteWithSections_QuietMode(t *testing.T) {
 
 	// Execute with quiet mode via internal execute call.
 	ctx := context.Background()
-	outputs, err := exec.execute(ctx, atmosConfig, "test-component", "test-stack", sections, nil, &OutputOptions{QuietMode: true})
+	outputs, err := exec.execute(ctx, atmosConfig, "test-component", "test-stack", sections, nil, &OutputOptions{QuietMode: true}, true)
 	require.NoError(t, err)
 	assert.Equal(t, "quiet_success", outputs["result"])
 }
@@ -1219,12 +1219,15 @@ func TestExecutor_GetAllOutputs_SkipInit_SkipsInitAndWorkspace(t *testing.T) {
 
 	mockDescriber := NewMockComponentDescriber(ctrl)
 	mockRunner := NewMockTerraformRunner(ctrl)
+	// Backend generator must NOT be called when processYamlFunctions=false.
+	// Any unexpected method call on this mock will fail the test (no EXPECTs registered).
+	mockBackendGen := NewMockBackendGenerator(ctrl)
 
 	customFactory := func(workdir, executable string) (TerraformRunner, error) {
 		return mockRunner, nil
 	}
 
-	exec := NewExecutor(mockDescriber, WithRunnerFactory(customFactory))
+	exec := NewExecutor(mockDescriber, WithRunnerFactory(customFactory), WithBackendGenerator(mockBackendGen))
 
 	// Clear cache.
 	stackSlug := stackComponentKey("skipinit-stack", "skipinit-component")
@@ -1320,12 +1323,17 @@ func TestExecutor_GetAllOutputs_SkipInit_WithAuthManager_ProcessesYamlFunctions(
 
 	mockDescriber := NewMockComponentDescriber(ctrl)
 	mockRunner := NewMockTerraformRunner(ctrl)
+	// Backend generator MUST be called exactly once per method when processYamlFunctions=true.
+	// This locks in the inverse invariant: auth present -> artifact regeneration still happens.
+	mockBackendGen := NewMockBackendGenerator(ctrl)
+	mockBackendGen.EXPECT().GenerateBackendIfNeeded(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).Times(1)
+	mockBackendGen.EXPECT().GenerateProvidersIfNeeded(gomock.Any(), gomock.Any()).Return(nil).Times(1)
 
 	customFactory := func(workdir, executable string) (TerraformRunner, error) {
 		return mockRunner, nil
 	}
 
-	exec := NewExecutor(mockDescriber, WithRunnerFactory(customFactory))
+	exec := NewExecutor(mockDescriber, WithRunnerFactory(customFactory), WithBackendGenerator(mockBackendGen))
 
 	// Clear cache.
 	stackSlug := stackComponentKey("skipauth-stack", "skipauth-component")
@@ -1366,19 +1374,175 @@ func TestExecutor_GetAllOutputs_SkipInit_WithAuthManager_ProcessesYamlFunctions(
 	assert.Equal(t, "vpc-auth", outputs["vpc_id"])
 }
 
+// TestExecutor_Execute_PropagatesBackendGenError verifies that errors from
+// GenerateBackendIfNeeded propagate out of execute() when processYamlFunctions
+// is true (auth-present path). Locks in the only newly-reachable error branch
+// introduced by the issue #2356 guard — without it, a future refactor that
+// swallowed the error would go unnoticed.
+func TestExecutor_Execute_PropagatesBackendGenError(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	sentinel := errors.New("backend generator: simulated failure")
+
+	mockDescriber := NewMockComponentDescriber(ctrl)
+	mockRunner := NewMockTerraformRunner(ctrl)
+	mockBackendGen := NewMockBackendGenerator(ctrl)
+	mockBackendGen.EXPECT().
+		GenerateBackendIfNeeded(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+		Return(sentinel).
+		Times(1)
+	// GenerateProvidersIfNeeded must not be called — execute() returns on the
+	// first error, so we register no EXPECTs for it (gomock fails on unexpected calls).
+
+	customFactory := func(workdir, executable string) (TerraformRunner, error) {
+		return mockRunner, nil
+	}
+
+	exec := NewExecutor(
+		mockDescriber,
+		WithRunnerFactory(customFactory),
+		WithBackendGenerator(mockBackendGen),
+	)
+	atmosConfig := validAtmosConfig()
+	sections := validSections()
+
+	// Runner setup: Output must not be reached when backend gen fails.
+	mockRunner.EXPECT().SetStdout(gomock.Any()).AnyTimes()
+	mockRunner.EXPECT().SetStderr(gomock.Any()).AnyTimes()
+	mockRunner.EXPECT().SetEnv(gomock.Any()).Return(nil).AnyTimes()
+
+	ctx := context.Background()
+	_, err := exec.execute(
+		ctx, atmosConfig, "comp", "stack", sections, nil,
+		&OutputOptions{QuietMode: true},
+		true, // processYamlFunctions=true — guarded block runs, backend gen fires
+	)
+	require.Error(t, err)
+	require.ErrorIs(t, err, sentinel, "backend generator error must propagate unchanged")
+}
+
+// TestExecutor_Execute_PropagatesProvidersGenError is the symmetric coverage for
+// GenerateProvidersIfNeeded — asserts its error also propagates out of execute().
+func TestExecutor_Execute_PropagatesProvidersGenError(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	sentinel := errors.New("providers generator: simulated failure")
+
+	mockDescriber := NewMockComponentDescriber(ctrl)
+	mockRunner := NewMockTerraformRunner(ctrl)
+	mockBackendGen := NewMockBackendGenerator(ctrl)
+	// Backend gen succeeds, providers gen fails.
+	mockBackendGen.EXPECT().
+		GenerateBackendIfNeeded(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+		Return(nil).
+		Times(1)
+	mockBackendGen.EXPECT().
+		GenerateProvidersIfNeeded(gomock.Any(), gomock.Any()).
+		Return(sentinel).
+		Times(1)
+
+	customFactory := func(workdir, executable string) (TerraformRunner, error) {
+		return mockRunner, nil
+	}
+
+	exec := NewExecutor(
+		mockDescriber,
+		WithRunnerFactory(customFactory),
+		WithBackendGenerator(mockBackendGen),
+	)
+	atmosConfig := validAtmosConfig()
+	sections := validSections()
+
+	mockRunner.EXPECT().SetStdout(gomock.Any()).AnyTimes()
+	mockRunner.EXPECT().SetStderr(gomock.Any()).AnyTimes()
+	mockRunner.EXPECT().SetEnv(gomock.Any()).Return(nil).AnyTimes()
+
+	ctx := context.Background()
+	_, err := exec.execute(
+		ctx, atmosConfig, "comp", "stack", sections, nil,
+		&OutputOptions{QuietMode: true},
+		true,
+	)
+	require.Error(t, err)
+	require.ErrorIs(t, err, sentinel, "providers generator error must propagate unchanged")
+}
+
+// TestExecutor_Execute_SkipsArtifactRegen_WhenYamlFunctionsNotProcessed verifies
+// the fix for issue #2356: when YAML functions were not evaluated upstream
+// (e.g. after-apply hook with no authManager), execute() must NOT regenerate
+// backend.tf.json or providers_override.tf.json from the un-rendered sections,
+// because doing so would overwrite correctly-rendered files with literal
+// "!terraform.state ..." strings.
+//
+// The structural similarity to TestExecutor_Execute_SkipInit_DirectCall is by
+// design — the two tests contrast the processYamlFunctions=true vs =false
+// invariants at the same execute() call site, so sharing scaffolding via a
+// helper would obscure the side-by-side comparison.
+//
+//nolint:dupl // see comment above — intentional duplication to keep the contrast readable.
+func TestExecutor_Execute_SkipsArtifactRegen_WhenYamlFunctionsNotProcessed(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockDescriber := NewMockComponentDescriber(ctrl)
+	mockRunner := NewMockTerraformRunner(ctrl)
+	mockBackendGen := NewMockBackendGenerator(ctrl)
+
+	customFactory := func(workdir, executable string) (TerraformRunner, error) {
+		return mockRunner, nil
+	}
+
+	exec := NewExecutor(
+		mockDescriber,
+		WithRunnerFactory(customFactory),
+		WithBackendGenerator(mockBackendGen),
+	)
+	atmosConfig := validAtmosConfig()
+	sections := validSections()
+
+	// Runner setup: output call succeeds, no init or workspace calls.
+	mockRunner.EXPECT().SetStdout(gomock.Any()).AnyTimes()
+	mockRunner.EXPECT().SetStderr(gomock.Any()).AnyTimes()
+	mockRunner.EXPECT().SetEnv(gomock.Any()).Return(nil).AnyTimes()
+	mockRunner.EXPECT().Output(gomock.Any()).Return(map[string]tfexec.OutputMeta{
+		"result": {Value: []byte(`"ok"`)},
+	}, nil)
+
+	// CRITICAL: the backend generator must NOT be called when processYamlFunctions=false.
+	// gomock fails the test if these methods are called at all (no EXPECT() registered
+	// for them, so any call is treated as unexpected).
+
+	ctx := context.Background()
+	outputs, err := exec.execute(
+		ctx, atmosConfig, "comp", "stack", sections, nil,
+		&OutputOptions{QuietMode: true, SkipInit: true},
+		false, // processYamlFunctions=false — sections may contain literal "!terraform.state ..."
+	)
+	require.NoError(t, err)
+	assert.Equal(t, "ok", outputs["result"])
+}
+
 // TestExecutor_Execute_SkipInit_DirectCall verifies SkipInit behavior at the execute() level.
+// Also asserts that when processYamlFunctions=false, the backend generator is NOT invoked,
+// locking in the #2356 fix: un-rendered sections must not be used to regenerate
+// backend.tf.json or providers_override.tf.json.
 func TestExecutor_Execute_SkipInit_DirectCall(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
 	mockDescriber := NewMockComponentDescriber(ctrl)
 	mockRunner := NewMockTerraformRunner(ctrl)
+	// Backend generator must NOT be called when processYamlFunctions=false.
+	// Any unexpected method call on this mock will fail the test (no EXPECTs registered).
+	mockBackendGen := NewMockBackendGenerator(ctrl)
 
 	customFactory := func(workdir, executable string) (TerraformRunner, error) {
 		return mockRunner, nil
 	}
 
-	exec := NewExecutor(mockDescriber, WithRunnerFactory(customFactory))
+	exec := NewExecutor(mockDescriber, WithRunnerFactory(customFactory), WithBackendGenerator(mockBackendGen))
 	atmosConfig := validAtmosConfig()
 	sections := validSections()
 
@@ -1391,7 +1555,7 @@ func TestExecutor_Execute_SkipInit_DirectCall(t *testing.T) {
 	}, nil)
 
 	ctx := context.Background()
-	outputs, err := exec.execute(ctx, atmosConfig, "comp", "stack", sections, nil, &OutputOptions{QuietMode: true, SkipInit: true})
+	outputs, err := exec.execute(ctx, atmosConfig, "comp", "stack", sections, nil, &OutputOptions{QuietMode: true, SkipInit: true}, false)
 	require.NoError(t, err)
 	assert.Equal(t, "skip_init_direct", outputs["result"])
 }
@@ -1510,12 +1674,16 @@ func TestExecutor_GetOutputWithOptions_SkipInit(t *testing.T) {
 
 	mockDescriber := NewMockComponentDescriber(ctrl)
 	mockRunner := NewMockTerraformRunner(ctrl)
+	// Backend generator must NOT be called when processYamlFunctions=false
+	// (SkipInit=true + authManager=nil drives that internally).
+	// Any unexpected method call on this mock will fail the test (no EXPECTs registered).
+	mockBackendGen := NewMockBackendGenerator(ctrl)
 
 	customFactory := func(workdir, executable string) (TerraformRunner, error) {
 		return mockRunner, nil
 	}
 
-	exec := NewExecutor(mockDescriber, WithRunnerFactory(customFactory))
+	exec := NewExecutor(mockDescriber, WithRunnerFactory(customFactory), WithBackendGenerator(mockBackendGen))
 
 	stackSlug := stackComponentKey("skip-init-stack", "skip-init-component")
 	terraformOutputsCache.Delete(stackSlug)
