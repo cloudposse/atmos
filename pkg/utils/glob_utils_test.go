@@ -628,21 +628,21 @@ func TestGetGlobMatches_NonExistentBaseDirError(t *testing.T) {
 // value is stored in the glob matches sync map, GetGlobMatches invalidates the entry and
 // recomputes the result from the filesystem rather than panicking or returning wrong data.
 func TestGetGlobMatches_UnexpectedCacheType(t *testing.T) {
-ResetGlobMatchesCache()
-t.Cleanup(ResetGlobMatchesCache)
+	ResetGlobMatchesCache()
+	t.Cleanup(ResetGlobMatchesCache)
 
-tmpDir := t.TempDir()
-require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "a.yaml"), []byte(""), 0o644))
+	tmpDir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "a.yaml"), []byte(""), 0o644))
 
-// Normalize the pattern as GetGlobMatches does before the sync.Map lookup.
-pattern := filepath.Join(tmpDir, "*.yaml")
-normalizedPattern := filepath.ToSlash(pattern)
+	// Normalize the pattern as GetGlobMatches does before the sync.Map lookup.
+	pattern := filepath.Join(tmpDir, "*.yaml")
+	normalizedPattern := filepath.ToSlash(pattern)
 
-// Inject an integer (not []string) to simulate an unexpected cache-type scenario.
-// GetGlobMatches must detect the wrong type, delete the entry, and recompute.
-StoreGlobCacheSentinel(normalizedPattern, 42)
+	// Inject an integer (not []string) to simulate an unexpected cache-type scenario.
+	// GetGlobMatches must detect the wrong type, delete the entry, and recompute.
+	StoreGlobCacheSentinel(normalizedPattern, 42)
 
-matches, err := GetGlobMatches(pattern)
-require.NoError(t, err, "unexpected cache type should be invalidated and result recomputed")
-require.NotEmpty(t, matches, "should find the yaml file after cache invalidation")
+	matches, err := GetGlobMatches(pattern)
+	require.NoError(t, err, "unexpected cache type should be invalidated and result recomputed")
+	require.NotEmpty(t, matches, "should find the yaml file after cache invalidation")
 }
