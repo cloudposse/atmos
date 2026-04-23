@@ -239,7 +239,7 @@ func processEnvTag(strFunc, nodeValue string) (any, error) {
 
 // processExecTag processes the !exec tag.
 func processExecTag(strFunc, nodeValue string) (any, error) {
-	execValue, err := u.ProcessTagExec(strFunc)
+	execValue, err := u.ProcessTagExec(strFunc, nil)
 	if err != nil {
 		log.Debug(failedToProcess, functionKey, strFunc, "error", err)
 		return nil, fmt.Errorf(errorFormat, ErrExecuteYamlFunctions, u.AtmosYamlFuncExec, nodeValue, err)
@@ -368,7 +368,7 @@ func handleEnv(node *yaml.Node, v *viper.Viper, currentPath string) error {
 // handleExec Process the !exec tag and set the value in Viper , returns an error if the processing fails, warns if the value is empty.
 func handleExec(node *yaml.Node, v *viper.Viper, currentPath string) error {
 	strFunc := fmt.Sprintf(tagValueFormat, node.Tag, node.Value)
-	execValue, err := u.ProcessTagExec(strFunc)
+	execValue, err := u.ProcessTagExec(strFunc, nil)
 	if err != nil {
 		log.Debug(failedToProcess, functionKey, strFunc, "error", err)
 		return fmt.Errorf(errorFormat, ErrExecuteYamlFunctions, u.AtmosYamlFuncExec, node.Value, err)

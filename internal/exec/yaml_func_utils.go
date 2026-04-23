@@ -163,7 +163,7 @@ func processSimpleTags(
 		return processTagTemplate(input), true, nil
 	}
 	if matchesPrefix(input, u.AtmosYamlFuncExec, skip) {
-		res, err := u.ProcessTagExec(input)
+		res, err := u.ProcessTagExec(input, atmosConfig)
 		if err != nil {
 			return nil, true, err
 		}
