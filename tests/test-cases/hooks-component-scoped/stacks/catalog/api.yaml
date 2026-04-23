@@ -1,0 +1,23 @@
+# API component catalog entry - uses !template in hook name to test YAML function processing.
+components:
+  terraform:
+    api:
+      metadata:
+        component: api
+      vars:
+        name: "api"
+        stage: "test"
+        store_prefix: "prod"
+      settings:
+        # context used by the !template function in the hook
+        store_suffix: "ssm"
+      hooks:
+        api-store-outputs:
+          events:
+            - after-terraform-apply
+          command: store
+          # !template should be processed during GetHooks so name resolves to "prod/ssm"
+          name: !template "{{ .vars.store_prefix }}/{{ .settings.store_suffix }}"
+          outputs:
+            api_endpoint: .api_endpoint
+            api_arn: .api_arn
