@@ -31,10 +31,12 @@ See [Conventional Commits](https://www.conventionalcommits.org/) for commit mess
   2. `GITHUB_API_URL` — GHES hostname added to allowlist when set.
   3. Built-in allowlist — `api.github.com`, `raw.githubusercontent.com`, `uploads.github.com`.
   Authorization is only injected over HTTPS and stripped on cross-host redirects
-  (301 / 302 / 303 / 307 / 308) to prevent token leakage.
+  or HTTPS-to-HTTP scheme downgrades (301 / 302 / 303 / 307 / 308) to prevent
+  token leakage.
 
 ### Security
 
-- Cross-host HTTP redirects (all five status codes: 301, 302, 303, 307, 308) no longer
-  forward the `Authorization` header to the redirect target, preventing accidental token
-  leakage via open redirects.
+- Cross-host HTTP redirects and HTTPS-to-HTTP redirect downgrades (all five status
+  codes: 301, 302, 303, 307, 308) no longer forward the `Authorization` header to
+  the redirect target, preventing accidental token leakage via open redirects or
+  plaintext downgrade.

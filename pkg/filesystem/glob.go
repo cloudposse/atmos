@@ -58,7 +58,6 @@ var (
 	// but we still need the mutex for atomic load+check+store sequences in our TTL logic).
 	globMatchesLRU       *lru.Cache[string, globCacheEntry]
 	globMatchesLRUMu     sync.RWMutex
-	globMatchesLRUErr    error // non-nil only if lru.New fails (should never happen at runtime)
 	globMatchesEvictions int64 // incremented atomically by the LRU eviction callback
 	globMatchesHits      int64 // incremented atomically on each cache hit
 	globMatchesMisses    int64 // incremented atomically on each cache miss
@@ -132,8 +131,11 @@ func applyGlobCacheConfig() {
 	)
 
 	globMatchesLRUMu.Lock()
-	globMatchesLRU = newLRU
-	globMatchesLRUErr = err
+	if err != nil {
+		log.Error("glob LRU cache initialization failed; cache will be disabled", "error", err)
+	} else {
+		globMatchesLRU = newLRU
+	}
 	globCacheTTL = ttl
 	globCacheMaxEntries = maxEntries
 	globCacheEmptyEnabled = emptyEnabled

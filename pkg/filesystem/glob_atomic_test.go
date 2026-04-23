@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 
@@ -306,7 +307,7 @@ func TestGetGlobMatches_LRU_Eviction(t *testing.T) {
 		// Use fmt.Sprintf to guarantee unique filenames for all i values (i > 26 would
 		// cycle single-character names and produce duplicates).
 		name := filepath.Join(tmpDir, fmt.Sprintf("file_evict_%d.yaml", i))
-		_ = os.WriteFile(name, []byte(""), 0o644)
+		require.NoError(t, os.WriteFile(name, []byte(""), 0o644))
 		_, err := GetGlobMatches(name)
 		require.NoError(t, err)
 	}
@@ -459,11 +460,12 @@ func TestGetGlobMatches_RaceStress(t *testing.T) {
 	const numGoroutines = 32
 	const callsPerGoroutine = 50
 
-	done := make(chan struct{})
+	var wg sync.WaitGroup
+	wg.Add(numGoroutines)
 	for g := range numGoroutines {
 		g := g
 		go func() {
-			defer func() { done <- struct{}{} }()
+			defer wg.Done()
 			for i := range callsPerGoroutine {
 				// Use a mix of unique and shared patterns to exercise both cache hits
 				// and cache misses concurrently.
@@ -478,9 +480,7 @@ func TestGetGlobMatches_RaceStress(t *testing.T) {
 		}()
 	}
 
-	for range numGoroutines {
-		<-done
-	}
+	wg.Wait()
 }
 
 // TestGetGlobMatches_EnvTTL verifies that ATMOS_FS_GLOB_CACHE_TTL is honoured.
@@ -488,6 +488,9 @@ func TestGetGlobMatches_RaceStress(t *testing.T) {
 func TestGetGlobMatches_EnvTTL(t *testing.T) {
 	// Register cleanup BEFORE t.Setenv so it runs after env is restored (LIFO).
 	t.Cleanup(ResetGlobMatchesCache)
+	// 1ns is below minGlobCacheTTL (1s) and will be clamped up by applyGlobCacheConfig;
+	// the effective TTL is 1s.  Expiry is forced deterministically via
+	// SetGlobCacheEntryExpired below rather than relying on the TTL.
 	t.Setenv("ATMOS_FS_GLOB_CACHE_TTL", "1ns")
 	ApplyGlobCacheConfigForTest()
 
@@ -499,7 +502,8 @@ func TestGetGlobMatches_EnvTTL(t *testing.T) {
 	_, err := GetGlobMatches(pattern)
 	require.NoError(t, err)
 
-	// With 1ns TTL the entry will already be stale.  Force it expired just to be safe.
+	// Force the entry expired via the helper (the effective TTL is 1s, not 1ns,
+	// due to clamping — see above).  This makes the test deterministic.
 	SetGlobCacheEntryExpired(pattern)
 
 	// Add a second file to prove the second call re-reads the filesystem.

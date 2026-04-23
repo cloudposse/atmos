@@ -74,8 +74,6 @@ exclude = [
   "regex101\\.com",
   # Test data placeholder URLs (intentional)
   "github\\.com/test/",
-  # Taskfile.dev homepage (intermittent connection resets from CI runner IP ranges)
-  "taskfile\\.dev/?$",
   # Planned documentation paths (not yet published)
   "file://.*/ai/skills",
   "file://.*/ai/skill-marketplace",

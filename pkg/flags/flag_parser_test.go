@@ -604,6 +604,12 @@ func TestParsedConfig_GetArgsForTool(t *testing.T) {
 			separatedArgs:  []string{},
 			want:           []string{},
 		},
+		{
+			name:           "positional and separated concatenated without separator",
+			positionalArgs: []string{"plan", "vpc"},
+			separatedArgs:  []string{"-var", "region=us-east-1"},
+			want:           []string{"plan", "vpc", "-var", "region=us-east-1"},
+		},
 	}
 
 	for _, tt := range tests {

@@ -890,7 +890,8 @@ func TestStandardOptionsBuilder_WithRepoPath(t *testing.T) {
 }
 
 func TestStandardOptionsBuilder_WithSSHKey(t *testing.T) {
-	builder := NewStandardOptionsBuilder().WithSSHKey(filepath.Join(t.TempDir(), ".ssh", "id_rsa"))
+	sshKeyPath := filepath.Join(t.TempDir(), ".ssh", "id_rsa")
+	builder := NewStandardOptionsBuilder().WithSSHKey(sshKeyPath)
 	parser := builder.Build()
 	require.NotNil(t, parser)
 
@@ -899,6 +900,15 @@ func TestStandardOptionsBuilder_WithSSHKey(t *testing.T) {
 
 	flag := cmd.Flags().Lookup("ssh-key")
 	require.NotNil(t, flag, "ssh-key flag should be registered")
+
+	// Verify that the parsed value is propagated correctly.
+	v := viper.New()
+	require.NoError(t, parser.BindToViper(v))
+
+	explicitPath := filepath.Join(t.TempDir(), ".ssh", "id_ed25519")
+	opts, err := parser.Parse(context.Background(), []string{"--ssh-key", explicitPath})
+	require.NoError(t, err)
+	assert.Equal(t, explicitPath, opts.SSHKey)
 }
 
 func TestStandardOptionsBuilder_WithSSHKeyPassword(t *testing.T) {

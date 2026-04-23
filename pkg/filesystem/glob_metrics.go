@@ -17,7 +17,7 @@ var globExpvarOnce sync.Once
 //
 // Call this once at program startup to expose cache performance metrics:
 //
-//	import _ "net/http/pprof" // enable /debug/vars
+//	import _ "expvar" // enable /debug/vars
 //	filesystem.RegisterGlobCacheExpvars()
 //
 // The following variables are published:

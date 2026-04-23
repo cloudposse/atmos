@@ -14,7 +14,7 @@
 //
 //   - ATMOS_FS_GLOB_CACHE_MAX_ENTRIES – maximum number of cached patterns
 //     (default: 1024, minimum: 16).  Positive values below 16 are clamped up
-//     to 16 (see applyGlobCacheConfig).  Zero, negative, or unparseable values
+//     to 16.  Zero, negative, or unparseable values
 //     fall back to the default (1024).
 //   - ATMOS_FS_GLOB_CACHE_TTL – TTL per entry as a Go duration string, e.g.
 //     "10m" (default: 5m, minimum: 1s).  Positive durations below 1s are
