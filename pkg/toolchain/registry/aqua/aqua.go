@@ -697,15 +697,11 @@ func buildAssetTemplateData(tool *registry.Tool, releaseVersion, semVer string) 
 }
 
 // assetTemplateFuncs returns the template function map for asset URL templates.
-// Uses Sprig v3 text functions as the base (matching Aqua upstream), with Aqua-specific overrides.
+// Uses Sprig v3 hermetic text functions as the base (matching Aqua upstream), with Aqua-specific overrides.
+// HermeticTxtFuncMap excludes env, expandenv, and getHostByName, preventing remote registry
+// templates from reading process environment variables or performing DNS lookups (CWE-526).
 func assetTemplateFuncs() template.FuncMap {
-	funcs := sprig.TxtFuncMap()
-
-	// Security: remove OS/network helpers that could leak secrets from remote registry templates.
-	// Matches Helm and Argo CD which also remove these from Sprig.
-	delete(funcs, "env")
-	delete(funcs, "expandenv")
-	delete(funcs, "getHostByName")
+	funcs := sprig.HermeticTxtFuncMap()
 
 	// Override with Aqua-specific functions that have different argument order
 	// or behavior than Sprig equivalents.
