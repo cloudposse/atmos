@@ -1,0 +1,63 @@
+.deprecated-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  margin-bottom: 1.5rem;
+  border-radius: 8px;
+  background-color: rgba(220, 38, 38, 0.15);
+  border: 1px solid rgba(220, 38, 38, 0.4);
+  font-size: 0.9rem;
+  cursor: pointer;
+  text-decoration: none;
+  transition: background-color 0.2s ease, border-color 0.2s ease;
+}
+
+.deprecated-badge:hover {
+  background-color: rgba(220, 38, 38, 0.25);
+  border-color: rgba(220, 38, 38, 0.6);
+  text-decoration: none;
+}
+
+.deprecated-badge:focus-visible {
+  outline: 2px solid #dc2626;
+  outline-offset: 2px;
+}
+
+.deprecated-icon {
+  font-size: 1.2rem;
+  color: #dc2626;
+}
+
+.deprecated-text {
+  font-weight: 600;
+  color: #991b1b;
+}
+
+.deprecated-since {
+  font-weight: 400;
+  font-size: 0.85rem;
+  opacity: 0.8;
+}
+
+[data-theme='dark'] .deprecated-badge {
+  background-color: rgba(239, 68, 68, 0.2);
+  border-color: rgba(239, 68, 68, 0.5);
+}
+
+[data-theme='dark'] .deprecated-badge:hover {
+  background-color: rgba(239, 68, 68, 0.3);
+  border-color: rgba(239, 68, 68, 0.7);
+}
+
+[data-theme='dark'] .deprecated-badge:focus-visible {
+  outline: 2px solid #ef4444;
+}
+
+[data-theme='dark'] .deprecated-icon {
+  color: #ef4444;
+}
+
+[data-theme='dark'] .deprecated-text {
+  color: #fca5a5;
+}

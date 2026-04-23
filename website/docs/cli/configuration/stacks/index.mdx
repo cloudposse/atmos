@@ -10,6 +10,7 @@ import Terminal from '@site/src/components/Terminal'
 import File from '@site/src/components/File'
 import Intro from '@site/src/components/Intro'
 import DocCardList from '@theme/DocCardList'
+import Deprecated from '@site/src/components/Deprecated'
 
 <Intro>
 The `stacks` section of the `atmos.yaml` defines how Atmos locates and manages your stack configurations. Think of it as the bootstrapping configuration. Here you can define the stack name pattern or template used to build the "slugs" and specify where to find stack files.
@@ -96,7 +97,9 @@ stacks:
 
   <dt>`name_pattern`</dt>
   <dd>
-    Defines the naming convention using predefined context tokens. Consider using `name_template` instead for more flexibility.
+    <Deprecated feature="name_pattern" />
+
+    Use `name_template` instead for more flexibility and reliability. `name_pattern` uses predefined tokens mapped to fixed variable names and may cause errors in certain contexts.
 
     **Environment variable:** `ATMOS_STACKS_NAME_PATTERN`
 
@@ -184,14 +187,40 @@ stacks:
 
 Commands: `atmos terraform apply vpc -s <division-account-region>`
 
+### Compact Join Pattern (Recommended)
+
+For most use cases, the simplest and most reliable approach uses Sprig's `list`, `compact`, and `join` functions to skip empty values automatically:
+
+```yaml title="atmos.yaml"
+stacks:
+  name_template: '{{ list .vars.namespace .vars.tenant .vars.environment .vars.stage | compact | join "-" }}'
+```
+
+This template:
+- Automatically skips variables that are empty strings
+- Produces clean hyphen-separated names from whatever variables are set
+- Works reliably with both `atmos list stacks` and `atmos terraform plan`
+- For variables `namespace: acme`, `tenant: plat`, `environment: ue2`, `stage: prod`, outputs `acme-plat-ue2-prod`
+- For variables `tenant: plat`, `environment: ue2`, `stage: prod` (no namespace), outputs `plat-ue2-prod`
+
 ### Advanced Template with Validation
 
-`name_template` supports complex logic with template expressions and functions:
+For cases where you need stricter validation, `name_template` supports complex logic with template expressions and functions.
+
+:::caution Important: Template Whitespace Rules for Multi-line Templates
+When using multi-line `name_template` with YAML block scalars (`|-`), follow these rules:
+
+- **First template action**: Use `{{` (no leading dash). A leading `{{-` on the very first line can cause unexpected behavior with `atmos terraform` commands.
+- **Last output action**: Use `}}` (no trailing dash). A trailing `-}}` on the final output line may cause the output to be stripped.
+- **Intermediate actions**: Can use `{{- ... -}}` (both dashes) to suppress whitespace between lines — this is correct and expected.
+
+In the example below: the first line uses `{{` (not `{{-`), intermediate assignment lines use `{{- ... -}}`, and the final output uses `{{- $stack_name }}` (leading dash to trim preceding whitespace, but no trailing dash).
+:::
 
 <File title="atmos.yaml">
 ```yaml
 name_template: |-
-  {{- $ns := .vars.namespace -}}
+  {{ $ns := .vars.namespace -}}
   {{- $tenant := .vars.tenant -}}
   {{- $env := .vars.environment -}}
   {{- $stage := .vars.stage -}}
@@ -225,7 +254,7 @@ name_template: |-
   {{- $stack_name = printf "%s-%s" $stack_name $stage -}}
   {{- end -}}
 
-  {{- $stack_name -}}
+  {{- $stack_name }}
 ```
 </File>
 
