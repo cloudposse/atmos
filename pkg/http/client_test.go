@@ -1296,3 +1296,73 @@ func TestGitHubAuthenticatedTransport_AllRedirectStatusCodes(t *testing.T) {
 		})
 	}
 }
+
+// TestStripAuthOnCrossHostRedirect_RedirectLimitExceeded verifies that CheckRedirect
+// returns ErrRedirectLimitExceeded when a redirect chain reaches 10 hops.
+func TestStripAuthOnCrossHostRedirect_RedirectLimitExceeded(t *testing.T) {
+// Build a server that always redirects back to itself (infinite loop).
+// After 10 hops our CheckRedirect (stripAuthOnCrossHostRedirect) returns
+// ErrRedirectLimitExceeded and the http.Client propagates the error.
+var server *httptest.Server
+server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+http.Redirect(w, r, server.URL+"/loop", http.StatusFound)
+}))
+defer server.Close()
+
+client := NewDefaultClient(WithGitHubToken("test-token"))
+req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, server.URL, nil)
+require.NoError(t, err)
+
+resp, err := client.Do(req)
+if resp != nil {
+defer resp.Body.Close()
+}
+require.Error(t, err)
+assert.True(t, errors.Is(err, errUtils.ErrRedirectLimitExceeded),
+"redirect chain >= 10 must return ErrRedirectLimitExceeded, got: %v", err)
+}
+
+// TestGitHubAuthenticatedTransport_RoundTripError verifies that an error returned by
+// the base transport is wrapped with the "GitHub transport roundtrip" prefix.
+func TestGitHubAuthenticatedTransport_RoundTripError(t *testing.T) {
+baseErr := fmt.Errorf("connection refused")
+failTransport := roundTripperFunc(func(req *http.Request) (*http.Response, error) {
+return nil, baseErr
+})
+
+transport := &GitHubAuthenticatedTransport{
+Base:        failTransport,
+GitHubToken: "token",
+}
+
+req, err := http.NewRequest(http.MethodGet, "https://api.github.com/repos", nil)
+require.NoError(t, err)
+
+_, err = transport.RoundTrip(req)
+require.Error(t, err)
+assert.Contains(t, err.Error(), "GitHub transport roundtrip",
+"transport error must be wrapped with the 'GitHub transport roundtrip' prefix")
+}
+
+// TestGet_ErrorBodyReadFails verifies that when reading a non-2xx response body fails,
+// the error is wrapped with ErrHTTPRequestFailed and mentions "failed to read error body".
+func TestGet_ErrorBodyReadFails(t *testing.T) {
+mockClient := &mockHTTPClient{
+doFunc: func(req *http.Request) (*http.Response, error) {
+return &http.Response{
+StatusCode: http.StatusInternalServerError,
+Body:       io.NopCloser(&errorReader{}),
+Header:     http.Header{},
+}, nil
+},
+}
+
+ctx := context.Background()
+_, err := Get(ctx, "http://example.com", mockClient)
+
+require.Error(t, err)
+assert.True(t, errors.Is(err, errUtils.ErrHTTPRequestFailed),
+"error must wrap ErrHTTPRequestFailed")
+assert.Contains(t, err.Error(), "failed to read error body",
+"error must describe the read failure")
+}

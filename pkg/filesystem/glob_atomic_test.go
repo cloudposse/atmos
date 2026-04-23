@@ -551,6 +551,11 @@ func TestRegisterGlobCacheExpvars(t *testing.T) {
 	lenVar := expvar.Get("atmos_glob_cache_len")
 	require.NotNil(t, lenVar)
 	assert.Equal(t, "1", lenVar.String(), "cache len must be 1 after one unique pattern")
+
+	// Verify the evictions expvar is registered and its value is readable (covers lambda body).
+	evictionsVar := expvar.Get("atmos_glob_cache_evictions")
+	require.NotNil(t, evictionsVar, "atmos_glob_cache_evictions expvar must be registered")
+	assert.Equal(t, "0", evictionsVar.String(), "no evictions in this test")
 }
 
 // TestApplyGlobCacheConfig_InvalidInputsClamped verifies that invalid or out-of-range
@@ -680,4 +685,68 @@ func TestApplyGlobCacheConfig_InvalidInputsClamped(t *testing.T) {
 			assert.Equal(t, tc.wantMaxEntries, GlobCacheMaxEntries(), "MaxEntries mismatch for env MAX=%q", tc.maxEntriesEnv)
 		})
 	}
+}
+
+// TestGetGlobMatches_EmptyEnabled_True verifies that ATMOS_FS_GLOB_CACHE_EMPTY=1 and
+// ATMOS_FS_GLOB_CACHE_EMPTY=true both enable empty-result caching (the explicit "true" branch).
+func TestGetGlobMatches_EmptyEnabled_True(t *testing.T) {
+for _, val := range []string{"1", "true"} {
+t.Run(val, func(t *testing.T) {
+// Register cleanup BEFORE t.Setenv so it runs after env is restored (LIFO).
+t.Cleanup(func() {
+ApplyGlobCacheConfigForTest()
+ResetGlobMatchesCache()
+})
+t.Setenv("ATMOS_FS_GLOB_CACHE_EMPTY", val)
+ApplyGlobCacheConfigForTest()
+
+assert.True(t, GlobCacheEmptyEnabled(),
+"empty caching must be enabled when ATMOS_FS_GLOB_CACHE_EMPTY=%q", val)
+})
+}
+}
+
+// TestGetGlobMatches_GlobPatternError verifies that an invalid glob pattern (e.g. an
+// unclosed bracket expression) causes GetGlobMatches to return an error from the
+// underlying doublestar.Glob call rather than silently succeeding.
+func TestGetGlobMatches_GlobPatternError(t *testing.T) {
+ResetGlobMatchesCache()
+t.Cleanup(ResetGlobMatchesCache)
+
+tmpDir := t.TempDir()
+// "[invalid" is an unclosed bracket expression — doublestar.Glob returns a syntax error.
+// doublestar.SplitPattern splits the prefix (tmpDir) from the glob component ("[invalid"),
+// so the base directory exists and the stat check passes; the error comes from Glob itself.
+pattern := filepath.Join(tmpDir, "[invalid")
+
+_, err := GetGlobMatches(pattern)
+require.Error(t, err, "invalid glob pattern should return error from doublestar.Glob")
+}
+
+// TestGetGlobMatches_StatPermissionError verifies that a non-IsNotExist error from
+// os.Stat (e.g. EACCES / permission denied) is propagated as-is rather than being
+// wrapped as ErrFailedToFindImport.
+func TestGetGlobMatches_StatPermissionError(t *testing.T) {
+if os.Getuid() == 0 {
+t.Skip("cannot test permission errors when running as root")
+}
+ResetGlobMatchesCache()
+t.Cleanup(ResetGlobMatchesCache)
+
+tmpDir := t.TempDir()
+// Create a directory with no permissions — any stat of a path inside it will
+// fail with EACCES (permission denied), which is NOT caught by os.IsNotExist.
+restrictedDir := filepath.Join(tmpDir, "restricted")
+require.NoError(t, os.Mkdir(restrictedDir, 0o000))
+t.Cleanup(func() { _ = os.Chmod(restrictedDir, 0o755) })
+
+// Pattern whose base directory is a sub-path inside the restricted directory.
+// SplitPattern will set base = restrictedDir/sub (inaccessible) and cleanPattern = "*.yaml".
+pattern := filepath.Join(restrictedDir, "sub", "*.yaml")
+
+_, err := GetGlobMatches(pattern)
+require.Error(t, err, "permission-denied stat must return an error")
+// The error must NOT be wrapped as ErrFailedToFindImport (which is reserved for ENOENT).
+assert.False(t, errors.Is(err, errUtils.ErrFailedToFindImport),
+"permission error must not be reported as ErrFailedToFindImport")
 }
