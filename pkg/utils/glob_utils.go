@@ -3,7 +3,6 @@ package utils
 import (
 	"os"
 	"path/filepath"
-	"strings"
 	"sync"
 
 	"github.com/bmatcuk/doublestar/v4"
@@ -32,15 +31,38 @@ var (
 
 // GetGlobMatches tries to read and return the Glob matches content from the sync map if it exists in the map,
 // otherwise it finds and returns all files matching the pattern, stores the files in the map and returns the files.
+//
+// Note: unlike pkg/filesystem.GetGlobMatches, this function returns an error when no files match the pattern
+// (consistent with its use as an import-path resolver). The returned slice may be nil when an error is returned.
+// See pkg/filesystem.GetGlobMatches for the variant that returns ([]string{}, nil) instead of an error
+// when no files match.
+//
+// Caching contract: only non-empty result sets are cached. The cache stores []string directly (not a
+// comma-joined string) so that paths containing commas are preserved correctly on cache hits.
+// Cached slices are cloned before being returned, so callers may safely mutate the returned slice without
+// affecting the cache.
 func GetGlobMatches(pattern string) ([]string, error) {
 	defer perf.Track(nil, "utils.GetGlobMatches")()
 
+	// Normalize pattern before cache lookup so that Windows backslash paths and
+	// forward-slash paths resolve to the same cache key (mirrors pkg/filesystem behavior).
+	pattern = filepath.ToSlash(pattern)
+
 	existingMatches, found := getGlobMatchesSyncMap.Load(pattern)
 	if found && existingMatches != nil {
-		return strings.Split(existingMatches.(string), ","), nil
+		// Cache stores []string directly to avoid the comma-splitting bug:
+		// paths containing commas would be split incorrectly if stored as a
+		// comma-joined string and then re-split on read.
+		if cached, ok := existingMatches.([]string); ok {
+			// Return a clone so callers cannot mutate the cached slice.
+			result := make([]string, len(cached))
+			copy(result, cached)
+			return result, nil
+		}
+		// Unexpected cache type: invalidate and recompute.
+		getGlobMatchesSyncMap.Delete(pattern)
 	}
 
-	pattern = filepath.ToSlash(pattern)
 	base, cleanPattern := doublestar.SplitPattern(pattern)
 	f := os.DirFS(base)
 
@@ -62,7 +84,17 @@ func GetGlobMatches(pattern string) ([]string, error) {
 		fullMatches = append(fullMatches, filepath.Join(filepath.FromSlash(base), match))
 	}
 
-	getGlobMatchesSyncMap.Store(pattern, strings.Join(fullMatches, ","))
+	// Only cache non-empty results. Empty results are not cached because
+	// pkg/utils.GetGlobMatches treats "no matches" as an error, so there is
+	// nothing useful to cache (the error is re-computed on every call).
+	// Storing []string directly avoids the comma-splitting bug: paths that
+	// contain commas would be mangled if stored/read as a joined string.
+	if len(fullMatches) > 0 {
+		// Store a clone so callers cannot mutate cached data.
+		cached := make([]string, len(fullMatches))
+		copy(cached, fullMatches)
+		getGlobMatchesSyncMap.Store(pattern, cached)
+	}
 
 	return fullMatches, nil
 }

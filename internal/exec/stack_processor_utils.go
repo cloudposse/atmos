@@ -1093,21 +1093,31 @@ func processYAMLConfigFileWithContextInternal(
 					return nil, nil, nil, nil, nil, nil, nil, nil, err2
 				}
 
-				// If the import is not a Go template and SkipIfMissing is false, return the error
+				// If the import is not a Go template and SkipIfMissing is false, return the error.
 				if !isGolangTemplate && !importStruct.SkipIfMissing {
 					if err != nil {
-						errorMessage := fmt.Sprintf("no matches found for the import '%s' in the file '%s'\nError: %s",
+						// Preserve the sentinel error chain (ErrFailedToFindImport) via %w so callers
+						// can match with errors.Is (see describe_affected_utils.go).
+						return nil, nil, nil, nil, nil, nil, nil, nil, fmt.Errorf(
+							"no matches found for the import '%s' in the file '%s'\nError: %w",
 							imp,
 							relativeFilePath,
 							err,
 						)
-						return nil, nil, nil, nil, nil, nil, nil, nil, errors.New(errorMessage)
-					} else if importMatches == nil {
-						errorMessage := fmt.Sprintf("no matches found for the import '%s' in the file '%s'",
+					} else {
+						// err == nil but importMatches is empty: this is a defensive guard for
+						// unexpected empty/nil results from u.GetGlobMatches (pkg/utils). Note
+						// that pkg/utils.GetGlobMatches treats no matches as an error and may
+						// return a nil slice alongside that error; unlike pkg/filesystem.GetGlobMatches
+						// which returns ([]string{}, nil) for no matches. This check protects
+						// against any unexpected empty result that slips through without an error.
+						// Wrap the sentinel so callers can still match with errors.Is.
+						return nil, nil, nil, nil, nil, nil, nil, nil, fmt.Errorf(
+							"no matches found for the import '%s' in the file '%s': %w",
 							imp,
 							relativeFilePath,
+							errUtils.ErrFailedToFindImport,
 						)
-						return nil, nil, nil, nil, nil, nil, nil, nil, errors.New(errorMessage)
 					}
 				}
 			}
