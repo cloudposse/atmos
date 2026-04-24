@@ -24,6 +24,11 @@ ci:
   checks:
     enabled: true
     context_prefix: "atmos"
+    statuses:
+      component: true
+      add: true
+      change: true
+      destroy: true
 ```
 </File>
 
@@ -44,6 +49,43 @@ ci:
 
     **Default:** `atmos`
   </dd>
+
+  <dt>`ci.statuses.component`</dt>
+  <dd>
+    Post commit status check summary operation on a component.
+
+    **Requires:** `checks: write` permission (GitHub) or API token with commit status scope (GitLab)
+
+    **Default:** `true`
+  </dd>
+
+  <dt>`ci.statuses.add`</dt>
+  <dd>
+    Post commit status check if a resource creation is involved.
+
+    **Requires:** `checks: write` permission (GitHub) or API token with commit status scope (GitLab)
+
+    **Default:** `true`
+  </dd>
+
+  <dt>`ci.statuses.change`</dt>
+  <dd>
+    Post commit status check if a resource update is involved.
+
+    **Requires:** `checks: write` permission (GitHub) or API token with commit status scope (GitLab)
+
+    **Default:** `true`
+  </dd>
+
+  <dt>`ci.statuses.destroy`</dt>
+  <dd>
+    Post commit status check if a resource delete is involved.
+
+    **Requires:** `checks: write` permission (GitHub) or API token with commit status scope (GitLab)
+
+    **Default:** `true`
+  </dd>
+
 </dl>
 
 ## How It Works
