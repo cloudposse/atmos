@@ -575,7 +575,7 @@ APACHE 2.0 LICENSED DEPENDENCIES
 
   - gopkg.in/yaml.v2
     License: Apache-2.0
-    URL: https://github.com/go-yaml/yaml/blob/v2.4.0/LICENSE
+    URL: Unknown
 
   - k8s.io/apimachinery/pkg
     License: Apache-2.0
@@ -896,7 +896,7 @@ BSD LICENSED DEPENDENCIES
 
   - gopkg.in/inf.v0
     License: BSD-3-Clause
-    URL: https://github.com/go-inf/inf/blob/v0.9.1/LICENSE
+    URL: Unknown
 
   - gopkg.in/warnings.v0
     License: BSD-2-Clause
