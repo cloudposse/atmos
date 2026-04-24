@@ -156,16 +156,47 @@ The comment above the block was updated to name both consumers
 
 ### Where the fix lands
 
-Single file, single guard, plus a comment refresh:
+Single file in `internal/exec/describe_stacks_component_processor.go`:
 
-- `internal/exec/describe_stacks_component_processor.go`
-  - `if p.processYamlFunctions` → `if p.processYamlFunctions || p.processTemplates`
-  - Comment updated to list both consumers.
+1. **Widen the guard** — `if p.processYamlFunctions` becomes
+   `if p.processYamlFunctions || p.processTemplates`.
+2. **Extract the decision** into a named helper,
+   `shouldResolvePerComponentAuth(processTemplates, processYamlFunctions)`,
+   so the widened condition is self-documenting and directly
+   unit-testable.
+3. **Extract the per-component resolution** out of the inline
+   `processStackFile` body into a method on the processor,
+   `resolveComponentAuthManager(componentSection, componentName,
+   stackName) auth.AuthManager`. The method owns the full decision
+   tree (guard check → auth-section presence check → default-identity
+   check → resolver call → nil-and-error fallback) in one place.
+4. **Add an injectable resolver field** to `describeStacksProcessor`:
 
-Nothing else changes. `createComponentAuthManager`, `propagateAuth`,
-and the downstream `atmos.Component(...)` → `ExecuteWithSections` path
-are unchanged — we are only widening the condition that schedules the
-per-component auth.
+   ```go
+   // componentAuthManagerResolver mirrors the signature of
+   // createComponentAuthManager so tests can supply a spy.
+   type componentAuthManagerResolver func(
+       atmosConfig *schema.AtmosConfiguration,
+       componentConfig map[string]any,
+       component string,
+       stack string,
+       parentAuthManager auth.AuthManager,
+   ) (auth.AuthManager, error)
+   ```
+
+   Defaults to the real `createComponentAuthManager` in
+   `newDescribeStacksProcessor`. Tests override the field directly
+   on the struct to avoid running actual OIDC/STS.
+5. **Comment refresh** above the guard names both consumers
+   (YAML functions *and* the `atmos.Component(...)` template path)
+   and cross-links this fix doc so future readers understand why the
+   predicate is intentionally looser than "YAML functions only".
+
+`createComponentAuthManager`, `propagateAuth`, and the downstream
+`atmos.Component(...)` → `ExecuteWithSections` path are unchanged.
+The only behavior change is that more components have their auth
+resolved up front when the processor is invoked with
+`processTemplates=true, processYamlFunctions=false`.
 
 ### Why widening the guard is safe
 
@@ -205,28 +236,38 @@ and is necessary for the command to succeed at all.
 
 ## Testing
 
-### Regression test
+### Regression tests
 
-`internal/exec/describe_stacks_component_processor_auth_test.go` —
-`TestPerComponentAuthRunsForTemplatesOnlyPath`. Exercises the
-previously broken path in isolation using mocks so it runs in any
-environment without cloud credentials:
+`internal/exec/describe_stacks_component_processor_auth_test.go`
+covers the fix in three layers. All tests use a spy resolver so they
+run in any environment without cloud credentials:
 
-- Constructs a `describeStacksProcessor` via `newDescribeStacksProcessor`
-  with `processTemplates=true, processYamlFunctions=false` (the
-  `list instances` shape).
-- Synthesizes a component section whose `auth:` subsection declares a
-  default identity.
-- Calls the per-component branch that contains the widened guard.
-- Asserts, via a spy on the component-auth resolver, that the
-  component-auth path **was** entered. A companion subtest with
-  `processTemplates=false, processYamlFunctions=false` asserts the
-  guard stays off — so the change does not widen the condition into
-  the "neither templates nor YAML functions" quadrant.
-- A second companion subtest verifies that a component **without** an
-  `auth:` section never enters the per-component resolver even when
-  `processTemplates=true` — guarding against accidentally running auth
-  for components that never opted in.
+1. `TestShouldResolvePerComponentAuth` — four-quadrant truth table
+   for the new `shouldResolvePerComponentAuth(processTemplates,
+   processYamlFunctions)` helper. Names the
+   `(templates=true, yaml=false)` case as the regression subject so
+   a future refactor that reintroduces the `yaml`-only guard fails
+   loudly.
+2. `TestResolveComponentAuthManager` — six-row table that exercises
+   the full `describeStacksProcessor.resolveComponentAuthManager`
+   method with a spy `componentAuthResolver`:
+   - All four `(templates, yaml)` quadrants against a component
+     whose `auth:` subsection declares a default identity. Asserts
+     the spy was called exactly once when expected and never when
+     disabled, and that the returned manager is the component-
+     specific one (when the spy runs) or the parent manager (when
+     it does not).
+   - Two "component did not opt in" rows:
+     `(templates=true, yaml=false)` with **no** `auth:` section on
+     the component, and `(templates=true, yaml=false)` with an
+     `auth:` section that has no `default: true` identity. Both
+     must skip the resolver — guarding against accidentally running
+     per-component auth for components that never opted in.
+3. `TestResolveComponentAuthManager_ResolverErrorFallsBackToParent`
+   — when the component-auth resolver returns an error, the method
+   must silently fall back to the parent manager. This preserves
+   the original swallow-on-error behavior of the inline code that
+   was refactored.
 
 ### Existing coverage that continues to pass
 
@@ -259,23 +300,76 @@ the integration-shaped verification.
 - [x] Update the comment above the guard to mention template
   consumers (`atmos.Component(...)`) in addition to YAML functions.
 - [x] Regression test
-  `TestPerComponentAuthRunsForTemplatesOnlyPath` with companion
-  subtests for the "off" quadrants.
+  `TestShouldResolvePerComponentAuth` +
+  `TestResolveComponentAuthManager` (six-quadrant table with spy
+  resolver) +
+  `TestResolveComponentAuthManager_ResolverErrorFallsBackToParent`.
 - [x] Existing tests continue to pass:
   `TestAuthManagerPropagationToDescribeStacks`,
   `TestAuthManagerPropagationToDescribeComponent`,
   `describe_affected_authmanager_test.go` suite.
+- [x] Clarify the `processYamlFunctions=false` contract in
+  `pkg/list/list_instances.go` — the old comment conflated the
+  YAML-function flag with Go-template functions like
+  `atmos.Component(...)`. Replaced with an accurate description.
+- [x] Add `--process-templates` / `--process-functions` flags
+  (plus `ATMOS_PROCESS_TEMPLATES` / `ATMOS_PROCESS_FUNCTIONS` env
+  var bindings) to every `atmos list` subcommand that processes
+  stack configurations, matching the flag surface of
+  `atmos describe affected` / `atmos describe stacks` /
+  `atmos describe component`. Commands updated:
+  - `atmos list instances`
+  - `atmos list components`
+  - `atmos list metadata`
+  - `atmos list sources`
+  - `atmos list stacks`
 
-## Follow-ups
+  Already exposed these flags: `list affected`, `list settings`,
+  `list values` (and its `list vars` alias). Skipped: `list aliases`,
+  `list themes`, `list vendor`, `list workflows` — these either do
+  not call `ExecuteDescribeStacks` at all or call it only for
+  internal enumeration where the flags would be no-ops.
+- [x] Thread the two flags through `InstancesCommandOptions` and
+  `MetadataOptions` in `pkg/list/`, and through the matrix-format
+  and tree-format branches of `list_instances.go`, so every output
+  path of the same invocation honors the same flag values.
+- [x] Update the `list instances` documentation page with the two
+  new flags.
 
-- **Clarify the `processYamlFunctions=false` contract in
-  `pkg/list/list_instances.go`.** The comment there says YAML
-  functions like `atmos.Component()` are disabled; that wording
-  conflates the YAML-function flag with Go-template functions.
-  Separate, doc-only cleanup.
-- **Consider a `--process-functions` flag for `list instances`** if
-  users want the parity-with-describe-affected explicit control. Not
-  blocking this fix.
+## Companion flag work (later commit)
+
+While the core bug is fixed by widening the per-component auth
+guard (above), a follow-up commit added user-facing control so that
+callers who intentionally want to disable templates or YAML
+functions can do so without touching env vars or source code. Key
+properties of that work, captured here because this fix document is
+the single source of truth for the `list instances` hang:
+
+1. **Default behavior unchanged for working invocations.** Both
+   flags default to `true` at the CLI — the same default as
+   `describe affected` / `describe stacks` / `describe component`.
+   Commands that previously ran with `processTemplates=true,
+   processYamlFunctions=false` hardcoded (the `list instances` /
+   `list metadata` shape) now default to
+   `processTemplates=true, processYamlFunctions=true`. The
+   Category B per-component auth fix above is what makes this safe
+   in CI; without that fix, flipping `processYamlFunctions` to
+   `true` by default would have re-introduced the original hang.
+2. **Escape hatch for environments without `tofu` / `terraform` on
+   `$PATH`.** Users who want the old hardcoded behavior can pass
+   `--process-functions=false` or set
+   `ATMOS_PROCESS_FUNCTIONS=false`. This is the documented fallback
+   for the original PR #2170 rationale ("don't require `tofu` in
+   `$PATH` for `list instances`").
+3. **Flag descriptions disambiguate the two axes.** The reworded
+   help strings make it explicit that Go template functions like
+   `atmos.Component(...)` are controlled by `--process-templates`
+   and YAML functions like `!terraform.state` / `!terraform.output`
+   / `!store` / `!aws.*` are controlled by `--process-functions`.
+   The original wrapper help text referred to "template function
+   processing" for the YAML-functions flag, which conflated the two
+   and contributed to the user-side confusion that opened this
+   issue.
 
 ---
 
