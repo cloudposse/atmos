@@ -1118,3 +1118,52 @@ func TestRenderComponents_TypeFilter(t *testing.T) {
 // TestInitAndExtractComponents is documented in integration tests.
 // Unit testing with nil command is not meaningful as ProcessCommandLineArgs requires a valid command context.
 // See tests/cli_list_commands_test.go for integration tests that exercise the full command flow.
+
+// TestComponentsProcessTemplatesAndFunctionsFlags verifies that
+// --process-templates and --process-functions are registered on the real
+// `components` cobra command with the documented defaults (both true).
+func TestComponentsProcessTemplatesAndFunctionsFlags(t *testing.T) {
+	processTemplatesFlag := componentsCmd.Flags().Lookup("process-templates")
+	if processTemplatesFlag == nil {
+		processTemplatesFlag = componentsCmd.PersistentFlags().Lookup("process-templates")
+	}
+	assert.NotNil(t, processTemplatesFlag, "process-templates flag should be registered on components command")
+	if processTemplatesFlag != nil {
+		assert.Equal(t, "true", processTemplatesFlag.DefValue)
+	}
+
+	processFunctionsFlag := componentsCmd.Flags().Lookup("process-functions")
+	if processFunctionsFlag == nil {
+		processFunctionsFlag = componentsCmd.PersistentFlags().Lookup("process-functions")
+	}
+	assert.NotNil(t, processFunctionsFlag, "process-functions flag should be registered on components command")
+	if processFunctionsFlag != nil {
+		assert.Equal(t, "true", processFunctionsFlag.DefValue)
+	}
+}
+
+// TestComponentsOptions_ProcessTemplatesAndFunctions verifies the
+// ComponentsOptions struct carries the two flag values across all four
+// combinations.
+func TestComponentsOptions_ProcessTemplatesAndFunctions(t *testing.T) {
+	tests := []struct {
+		name             string
+		processTemplates bool
+		processFunctions bool
+	}{
+		{"both_on", true, true},
+		{"templates_on_functions_off", true, false},
+		{"templates_off_functions_on", false, true},
+		{"both_off", false, false},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			opts := &ComponentsOptions{
+				ProcessTemplates: tc.processTemplates,
+				ProcessFunctions: tc.processFunctions,
+			}
+			assert.Equal(t, tc.processTemplates, opts.ProcessTemplates)
+			assert.Equal(t, tc.processFunctions, opts.ProcessFunctions)
+		})
+	}
+}

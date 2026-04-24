@@ -297,3 +297,57 @@ func TestInstancesOutputFileFlag(t *testing.T) {
 		assert.Equal(t, "", outputFileFlag.DefValue, "output-file flag default should be empty")
 	}
 }
+
+// TestInstancesProcessTemplatesAndFunctionsFlags verifies that --process-templates
+// and --process-functions are registered on the real `instances` cobra command
+// with the documented defaults (both true). Regression guard:
+// docs/fixes/2026-04-24-list-instances-per-component-auth.md added these flags
+// for parity with `describe affected` / `describe stacks`; if the parser wiring
+// is ever removed the upload path will silently stop processing templates and
+// YAML functions.
+func TestInstancesProcessTemplatesAndFunctionsFlags(t *testing.T) {
+	processTemplatesFlag := instancesCmd.Flags().Lookup("process-templates")
+	if processTemplatesFlag == nil {
+		processTemplatesFlag = instancesCmd.PersistentFlags().Lookup("process-templates")
+	}
+	assert.NotNil(t, processTemplatesFlag, "process-templates flag should be registered on instances command")
+	if processTemplatesFlag != nil {
+		assert.Equal(t, "true", processTemplatesFlag.DefValue, "process-templates default should be true for parity with describe affected")
+	}
+
+	processFunctionsFlag := instancesCmd.Flags().Lookup("process-functions")
+	if processFunctionsFlag == nil {
+		processFunctionsFlag = instancesCmd.PersistentFlags().Lookup("process-functions")
+	}
+	assert.NotNil(t, processFunctionsFlag, "process-functions flag should be registered on instances command")
+	if processFunctionsFlag != nil {
+		assert.Equal(t, "true", processFunctionsFlag.DefValue, "process-functions default should be true for parity with describe affected")
+	}
+}
+
+// TestInstancesOptions_ProcessTemplatesAndFunctions verifies the
+// InstancesOptions struct carries the two flag values across all four
+// combinations. This guards against the struct fields being removed or
+// reordered out from under the viper.GetBool calls in RunE.
+func TestInstancesOptions_ProcessTemplatesAndFunctions(t *testing.T) {
+	tests := []struct {
+		name             string
+		processTemplates bool
+		processFunctions bool
+	}{
+		{"both_on", true, true},
+		{"templates_on_functions_off", true, false},
+		{"templates_off_functions_on", false, true},
+		{"both_off", false, false},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			opts := &InstancesOptions{
+				ProcessTemplates: tc.processTemplates,
+				ProcessFunctions: tc.processFunctions,
+			}
+			assert.Equal(t, tc.processTemplates, opts.ProcessTemplates)
+			assert.Equal(t, tc.processFunctions, opts.ProcessFunctions)
+		})
+	}
+}

@@ -842,3 +842,51 @@ func TestWrapSourcesConfigError(t *testing.T) {
 		})
 	}
 }
+
+// TestSourcesProcessTemplatesAndFunctionsFlags verifies that --process-templates
+// and --process-functions are registered on the real `sources` cobra command
+// with the documented defaults (both true).
+func TestSourcesProcessTemplatesAndFunctionsFlags(t *testing.T) {
+	processTemplatesFlag := sourcesCmd.Flags().Lookup("process-templates")
+	if processTemplatesFlag == nil {
+		processTemplatesFlag = sourcesCmd.PersistentFlags().Lookup("process-templates")
+	}
+	assert.NotNil(t, processTemplatesFlag, "process-templates flag should be registered on sources command")
+	if processTemplatesFlag != nil {
+		assert.Equal(t, "true", processTemplatesFlag.DefValue)
+	}
+
+	processFunctionsFlag := sourcesCmd.Flags().Lookup("process-functions")
+	if processFunctionsFlag == nil {
+		processFunctionsFlag = sourcesCmd.PersistentFlags().Lookup("process-functions")
+	}
+	assert.NotNil(t, processFunctionsFlag, "process-functions flag should be registered on sources command")
+	if processFunctionsFlag != nil {
+		assert.Equal(t, "true", processFunctionsFlag.DefValue)
+	}
+}
+
+// TestSourcesOptions_ProcessTemplatesAndFunctions verifies the SourcesOptions
+// struct carries the two flag values across all four combinations.
+func TestSourcesOptions_ProcessTemplatesAndFunctions(t *testing.T) {
+	tests := []struct {
+		name             string
+		processTemplates bool
+		processFunctions bool
+	}{
+		{"both_on", true, true},
+		{"templates_on_functions_off", true, false},
+		{"templates_off_functions_on", false, true},
+		{"both_off", false, false},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			opts := &SourcesOptions{
+				ProcessTemplates: tc.processTemplates,
+				ProcessFunctions: tc.processFunctions,
+			}
+			assert.Equal(t, tc.processTemplates, opts.ProcessTemplates)
+			assert.Equal(t, tc.processFunctions, opts.ProcessFunctions)
+		})
+	}
+}

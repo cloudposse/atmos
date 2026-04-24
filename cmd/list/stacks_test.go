@@ -415,3 +415,51 @@ func TestListStacksWithOptions_ProvenanceValidation(t *testing.T) {
 		})
 	}
 }
+
+// TestStacksProcessTemplatesAndFunctionsFlags verifies that --process-templates
+// and --process-functions are registered on the real `stacks` cobra command
+// with the documented defaults (both true).
+func TestStacksProcessTemplatesAndFunctionsFlags(t *testing.T) {
+	processTemplatesFlag := stacksCmd.Flags().Lookup("process-templates")
+	if processTemplatesFlag == nil {
+		processTemplatesFlag = stacksCmd.PersistentFlags().Lookup("process-templates")
+	}
+	assert.NotNil(t, processTemplatesFlag, "process-templates flag should be registered on stacks command")
+	if processTemplatesFlag != nil {
+		assert.Equal(t, "true", processTemplatesFlag.DefValue)
+	}
+
+	processFunctionsFlag := stacksCmd.Flags().Lookup("process-functions")
+	if processFunctionsFlag == nil {
+		processFunctionsFlag = stacksCmd.PersistentFlags().Lookup("process-functions")
+	}
+	assert.NotNil(t, processFunctionsFlag, "process-functions flag should be registered on stacks command")
+	if processFunctionsFlag != nil {
+		assert.Equal(t, "true", processFunctionsFlag.DefValue)
+	}
+}
+
+// TestStacksOptions_ProcessTemplatesAndFunctions verifies the StacksOptions
+// struct carries the two flag values across all four combinations.
+func TestStacksOptions_ProcessTemplatesAndFunctions(t *testing.T) {
+	tests := []struct {
+		name             string
+		processTemplates bool
+		processFunctions bool
+	}{
+		{"both_on", true, true},
+		{"templates_on_functions_off", true, false},
+		{"templates_off_functions_on", false, true},
+		{"both_off", false, false},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			opts := &StacksOptions{
+				ProcessTemplates: tc.processTemplates,
+				ProcessFunctions: tc.processFunctions,
+			}
+			assert.Equal(t, tc.processTemplates, opts.ProcessTemplates)
+			assert.Equal(t, tc.processFunctions, opts.ProcessFunctions)
+		})
+	}
+}

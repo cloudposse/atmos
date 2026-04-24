@@ -333,12 +333,14 @@ func TestDefaultMetadataColumns(t *testing.T) {
 func TestMetadataOptionsStruct(t *testing.T) {
 	// Test that MetadataOptions struct can be properly constructed.
 	opts := MetadataOptions{
-		Format:    "json",
-		Columns:   []string{"Stack={{ .stack }}"},
-		Sort:      "-Stack",
-		Filter:    "stack=dev*",
-		Stack:     "dev",
-		Delimiter: ",",
+		Format:           "json",
+		Columns:          []string{"Stack={{ .stack }}"},
+		Sort:             "-Stack",
+		Filter:           "stack=dev*",
+		Stack:            "dev",
+		Delimiter:        ",",
+		ProcessTemplates: true,
+		ProcessFunctions: false,
 	}
 
 	assert.Equal(t, "json", opts.Format)
@@ -347,4 +349,58 @@ func TestMetadataOptionsStruct(t *testing.T) {
 	assert.Equal(t, "stack=dev*", opts.Filter)
 	assert.Equal(t, "dev", opts.Stack)
 	assert.Equal(t, ",", opts.Delimiter)
+	assert.True(t, opts.ProcessTemplates)
+	assert.False(t, opts.ProcessFunctions)
+}
+
+// TestMetadataOptions_ProcessTemplatesAndFunctionsAllCombinations verifies
+// the MetadataOptions struct carries the template/function flags across all
+// four combinations.
+func TestMetadataOptions_ProcessTemplatesAndFunctionsAllCombinations(t *testing.T) {
+	tests := []struct {
+		name             string
+		processTemplates bool
+		processFunctions bool
+	}{
+		{"both_on", true, true},
+		{"templates_on_functions_off", true, false},
+		{"templates_off_functions_on", false, true},
+		{"both_off", false, false},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			opts := MetadataOptions{
+				ProcessTemplates: tc.processTemplates,
+				ProcessFunctions: tc.processFunctions,
+			}
+			assert.Equal(t, tc.processTemplates, opts.ProcessTemplates)
+			assert.Equal(t, tc.processFunctions, opts.ProcessFunctions)
+		})
+	}
+}
+
+// TestInstancesCommandOptions_ProcessTemplatesAndFunctions verifies the
+// InstancesCommandOptions struct carries the template/function flags across
+// all four combinations.
+func TestInstancesCommandOptions_ProcessTemplatesAndFunctions(t *testing.T) {
+	tests := []struct {
+		name             string
+		processTemplates bool
+		processFunctions bool
+	}{
+		{"both_on", true, true},
+		{"templates_on_functions_off", true, false},
+		{"templates_off_functions_on", false, true},
+		{"both_off", false, false},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			opts := InstancesCommandOptions{
+				ProcessTemplates: tc.processTemplates,
+				ProcessFunctions: tc.processFunctions,
+			}
+			assert.Equal(t, tc.processTemplates, opts.ProcessTemplates)
+			assert.Equal(t, tc.processFunctions, opts.ProcessFunctions)
+		})
+	}
 }
