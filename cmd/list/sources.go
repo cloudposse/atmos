@@ -45,11 +45,13 @@ var sourcesParser *flags.StandardParser
 // SourcesOptions contains parsed flags for the sources command.
 type SourcesOptions struct {
 	global.Flags
-	Format      string
-	Stack       string
-	Component   string // From positional arg.
-	AtmosConfig *schema.AtmosConfiguration
-	AuthManager auth.AuthManager
+	Format           string
+	Stack            string
+	Component        string // From positional arg.
+	AtmosConfig      *schema.AtmosConfiguration
+	AuthManager      auth.AuthManager
+	ProcessTemplates bool
+	ProcessFunctions bool
 }
 
 // sourcesCmd lists components with source configuration.
@@ -87,6 +89,8 @@ func init() {
 	sourcesParser = NewListParser(
 		WithFormatFlag,
 		WithStackFlag,
+		WithProcessTemplatesFlag,
+		WithProcessFunctionsFlag,
 	)
 
 	// Register flags for sources command.
@@ -139,9 +143,11 @@ func initSourcesCommand(cmd *cobra.Command, args []string) (*SourcesOptions, err
 	}
 
 	opts := &SourcesOptions{
-		Flags:  flags.ParseGlobalFlags(cmd, v),
-		Format: v.GetString("format"),
-		Stack:  v.GetString("stack"),
+		Flags:            flags.ParseGlobalFlags(cmd, v),
+		Format:           v.GetString("format"),
+		Stack:            v.GetString("stack"),
+		ProcessTemplates: v.GetBool("process-templates"),
+		ProcessFunctions: v.GetBool("process-functions"),
 	}
 
 	if len(args) > 0 {
@@ -171,8 +177,12 @@ func fetchAndFilterSources(opts *SourcesOptions) ([]map[string]any, error) {
 		opts.AtmosConfig,
 		opts.Stack,
 		nil, nil, nil,
-		false, false, false, false,
-		nil, opts.AuthManager,
+		false, // ignoreMissingFiles
+		opts.ProcessTemplates,
+		opts.ProcessFunctions,
+		false, // includeEmptyStacks
+		nil,   // skip
+		opts.AuthManager,
 	)
 	if err != nil {
 		return nil, errUtils.Build(errUtils.ErrExecuteDescribeStacks).

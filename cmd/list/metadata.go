@@ -16,11 +16,13 @@ var metadataParser *flags.StandardParser
 // MetadataOptions contains parsed flags for the metadata command.
 type MetadataOptions struct {
 	global.Flags
-	Format  string
-	Stack   string
-	Columns []string
-	Sort    string
-	Filter  string
+	Format           string
+	Stack            string
+	Columns          []string
+	Sort             string
+	Filter           string
+	ProcessTemplates bool
+	ProcessFunctions bool
 }
 
 // metadataCmd lists metadata across stacks.
@@ -50,12 +52,14 @@ var metadataCmd = &cobra.Command{
 		}
 
 		opts := &MetadataOptions{
-			Flags:   flags.ParseGlobalFlags(cmd, v),
-			Format:  v.GetString("format"),
-			Stack:   v.GetString("stack"),
-			Columns: v.GetStringSlice("columns"),
-			Sort:    v.GetString("sort"),
-			Filter:  v.GetString("filter"),
+			Flags:            flags.ParseGlobalFlags(cmd, v),
+			Format:           v.GetString("format"),
+			Stack:            v.GetString("stack"),
+			Columns:          v.GetStringSlice("columns"),
+			Sort:             v.GetString("sort"),
+			Filter:           v.GetString("filter"),
+			ProcessTemplates: v.GetBool("process-templates"),
+			ProcessFunctions: v.GetBool("process-functions"),
 		}
 
 		return executeListMetadataCmd(cmd, args, opts)
@@ -97,6 +101,8 @@ func init() {
 		WithMetadataColumnsFlag,
 		WithSortFlag,
 		WithFilterFlag,
+		WithProcessTemplatesFlag,
+		WithProcessFunctionsFlag,
 	)
 
 	// Register flags.
@@ -136,12 +142,14 @@ func executeListMetadataCmd(cmd *cobra.Command, args []string, opts *MetadataOpt
 
 	// Convert cmd-level options to pkg-level options.
 	pkgOpts := &list.MetadataOptions{
-		Format:      opts.Format,
-		Columns:     opts.Columns,
-		Sort:        opts.Sort,
-		Filter:      opts.Filter,
-		Stack:       opts.Stack,
-		AuthManager: authManager,
+		Format:           opts.Format,
+		Columns:          opts.Columns,
+		Sort:             opts.Sort,
+		Filter:           opts.Filter,
+		Stack:            opts.Stack,
+		AuthManager:      authManager,
+		ProcessTemplates: opts.ProcessTemplates,
+		ProcessFunctions: opts.ProcessFunctions,
 	}
 
 	return list.ExecuteListMetadataCmd(&configAndStacksInfo, cmd, args, pkgOpts)

@@ -28,14 +28,16 @@ var componentsParser *flags.StandardParser
 // ComponentsOptions contains parsed flags for the components command.
 type ComponentsOptions struct {
 	global.Flags
-	Stack    string
-	Type     string
-	Enabled  *bool
-	Locked   *bool
-	Format   string
-	Columns  []string
-	Sort     string
-	Abstract bool
+	Stack            string
+	Type             string
+	Enabled          *bool
+	Locked           *bool
+	Format           string
+	Columns          []string
+	Sort             string
+	Abstract         bool
+	ProcessTemplates bool
+	ProcessFunctions bool
 }
 
 // componentsCmd lists atmos components.
@@ -75,15 +77,17 @@ var componentsCmd = &cobra.Command{
 		}
 
 		opts := &ComponentsOptions{
-			Flags:    flags.ParseGlobalFlags(cmd, v),
-			Stack:    v.GetString("stack"),
-			Type:     v.GetString("type"),
-			Enabled:  enabledPtr,
-			Locked:   lockedPtr,
-			Format:   v.GetString("format"),
-			Columns:  v.GetStringSlice("columns"),
-			Sort:     v.GetString("sort"),
-			Abstract: v.GetBool("abstract"),
+			Flags:            flags.ParseGlobalFlags(cmd, v),
+			Stack:            v.GetString("stack"),
+			Type:             v.GetString("type"),
+			Enabled:          enabledPtr,
+			Locked:           lockedPtr,
+			Format:           v.GetString("format"),
+			Columns:          v.GetStringSlice("columns"),
+			Sort:             v.GetString("sort"),
+			Abstract:         v.GetBool("abstract"),
+			ProcessTemplates: v.GetBool("process-templates"),
+			ProcessFunctions: v.GetBool("process-functions"),
 		}
 
 		return listComponentsWithOptions(cmd, args, opts)
@@ -130,6 +134,8 @@ func init() {
 		WithEnabledFlag,
 		WithLockedFlag,
 		WithAbstractFlag,
+		WithProcessTemplatesFlag,
+		WithProcessFunctionsFlag,
 	)
 
 	// Register flags.
@@ -190,7 +196,15 @@ func initAndExtractComponents(cmd *cobra.Command, args []string, opts *Component
 		return nil, nil, err
 	}
 
-	stacksMap, err := e.ExecuteDescribeStacks(&atmosConfig, "", nil, nil, nil, false, false, false, false, nil, authManager)
+	stacksMap, err := e.ExecuteDescribeStacks(
+		&atmosConfig, "", nil, nil, nil,
+		false, // ignoreMissingFiles
+		opts.ProcessTemplates,
+		opts.ProcessFunctions,
+		false, // includeEmptyStacks
+		nil,   // skip
+		authManager,
+	)
 	if err != nil {
 		return nil, nil, fmt.Errorf("%w: %w", errUtils.ErrExecuteDescribeStacks, err)
 	}

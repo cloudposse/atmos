@@ -51,6 +51,18 @@ type InstancesCommandOptions struct {
 	Query       string
 	AuthManager auth.AuthManager
 	OutputFile  string
+	// ProcessTemplates toggles Go template processing of stack manifests
+	// (controls the `processTemplates` parameter of `ExecuteDescribeStacks`).
+	// Default true for parity with `describe affected` / `describe stacks`.
+	// Go template functions include `atmos.Component(...)`.
+	ProcessTemplates bool
+	// ProcessFunctions toggles YAML function evaluation in stack manifests
+	// (controls the `processYamlFunctions` parameter of `ExecuteDescribeStacks`).
+	// YAML functions include `!terraform.state`, `!terraform.output`, `!store`,
+	// `!aws.*`, etc. Default true for parity with `describe affected`; set to
+	// false to avoid requiring `tofu` / `terraform` on $PATH when the only
+	// YAML functions in the manifests are terraform-output-shaped.
+	ProcessFunctions bool
 }
 
 // parseColumnsFlag parses column specifications from CLI flag.
@@ -368,16 +380,30 @@ func uploadInstances(instances []schema.Instance) error {
 
 // processInstancesWithDeps collects, filters, and sorts instances using injected dependencies.
 // This function is testable via mocks. Use processInstances() for production code.
+//
+// Template processing (`processTemplates`) controls Go-template evaluation,
+// which includes the `atmos.Component(...)` template function — NOT the YAML
+// functions like `!terraform.state` / `!terraform.output`. Those are
+// controlled by `processYamlFunctions`. The two are independent: enabling
+// templates while disabling YAML functions is a valid combination and is the
+// default shape for `atmos list instances` callers that want stack names /
+// metadata computed by templates but do not want to shell out to `terraform`
+// for backend output reads.
 func processInstancesWithDeps(
 	atmosConfig *schema.AtmosConfiguration,
 	stacksProcessor e.StacksProcessor,
 	authManager auth.AuthManager,
+	processTemplates, processYamlFunctions bool,
 ) ([]schema.Instance, error) {
-	// Get all stacks with template processing but without YAML functions.
-	// Templates are needed because they can create additional stacks and components.
-	// YAML functions (e.g., !terraform.output, atmos.Component()) are disabled to avoid
-	// requiring external binaries like tofu/terraform in $PATH.
-	stacksMap, err := stacksProcessor.ExecuteDescribeStacks(atmosConfig, "", nil, nil, nil, false, true, false, false, nil, authManager)
+	stacksMap, err := stacksProcessor.ExecuteDescribeStacks(
+		atmosConfig, "", nil, nil, nil,
+		false, // ignoreMissingFiles
+		processTemplates,
+		processYamlFunctions,
+		false, // includeEmptyStacks
+		nil,   // skip
+		authManager,
+	)
 	if err != nil {
 		log.Error(errUtils.ErrExecuteDescribeStacks.Error(), "error", err)
 		return nil, errors.Join(errUtils.ErrExecuteDescribeStacks, err)
@@ -394,8 +420,12 @@ func processInstancesWithDeps(
 
 // processInstances collects, filters, and sorts instances.
 // This is a convenience wrapper around processInstancesWithDeps() for production use.
-func processInstances(atmosConfig *schema.AtmosConfiguration, authManager auth.AuthManager) ([]schema.Instance, error) {
-	return processInstancesWithDeps(atmosConfig, &e.DefaultStacksProcessor{}, authManager)
+func processInstances(
+	atmosConfig *schema.AtmosConfiguration,
+	authManager auth.AuthManager,
+	processTemplates, processYamlFunctions bool,
+) ([]schema.Instance, error) {
+	return processInstancesWithDeps(atmosConfig, &e.DefaultStacksProcessor{}, authManager, processTemplates, processYamlFunctions)
 }
 
 // ExecuteListInstancesCmd executes the list instances command.
@@ -473,7 +503,7 @@ func ExecuteListInstancesCmd(opts *InstancesCommandOptions) error {
 	}
 
 	// For non-tree formats, process instances normally.
-	instances, err := processInstances(&atmosConfig, opts.AuthManager)
+	instances, err := processInstances(&atmosConfig, opts.AuthManager, opts.ProcessTemplates, opts.ProcessFunctions)
 	if err != nil {
 		log.Error(errUtils.ErrProcessInstances.Error(), "error", err)
 		return errors.Join(errUtils.ErrProcessInstances, err)
@@ -582,8 +612,18 @@ func sanitizeForJSON(v any) any {
 func executeMatrixFormat(atmosConfig *schema.AtmosConfiguration, opts *InstancesCommandOptions) error {
 	defer perf.Track(nil, "list.executeMatrixFormat")()
 
-	// Get stacksMap to extract component_path from component_info.
-	stacksMap, err := e.ExecuteDescribeStacks(atmosConfig, "", nil, nil, nil, false, true, false, false, nil, opts.AuthManager)
+	// Get stacksMap to extract component_path from component_info. Honor the
+	// caller-supplied template/function flags so matrix output stays consistent
+	// with non-matrix runs of the same command invocation.
+	stacksMap, err := e.ExecuteDescribeStacks(
+		atmosConfig, "", nil, nil, nil,
+		false, // ignoreMissingFiles
+		opts.ProcessTemplates,
+		opts.ProcessFunctions,
+		false, // includeEmptyStacks
+		nil,   // skip
+		opts.AuthManager,
+	)
 	if err != nil {
 		log.Error(errUtils.ErrExecuteDescribeStacks.Error(), "error", err)
 		return errors.Join(errUtils.ErrExecuteDescribeStacks, err)

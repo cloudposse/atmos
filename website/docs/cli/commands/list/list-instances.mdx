@@ -61,6 +61,12 @@ The `atmos list instances` command displays all component instances defined acro
 
   <dt>`--output-file` / `-o`</dt>
   <dd>Write output to file in `key=value` format (for `$GITHUB_OUTPUT`). Only supported with `--format=matrix`.</dd>
+
+  <dt>`--process-templates`</dt>
+  <dd>Enable/disable Go template processing in Atmos stack manifests (default `true`). Go template functions include `atmos.Component(...)`. Can also be set via `ATMOS_PROCESS_TEMPLATES`.</dd>
+
+  <dt>`--process-functions`</dt>
+  <dd>Enable/disable YAML functions processing in Atmos stack manifests (default `true`). YAML functions include `!terraform.state`, `!terraform.output`, `!store`, `!aws.*`, etc. This is distinct from Go template functions like `atmos.Component(...)`, which are controlled by `--process-templates`. Can also be set via `ATMOS_PROCESS_FUNCTIONS`.</dd>
 </dl>
 
 ## Examples
