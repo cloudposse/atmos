@@ -61,19 +61,26 @@ var stacksCmd = &cobra.Command{
 			return err
 		}
 
-		opts := &StacksOptions{
-			Flags:            flags.ParseGlobalFlags(cmd, v),
-			Component:        v.GetString("component"),
-			Format:           v.GetString("format"),
-			Columns:          v.GetStringSlice("columns"),
-			Sort:             v.GetString("sort"),
-			Provenance:       v.GetBool("provenance"),
-			ProcessTemplates: v.GetBool("process-templates"),
-			ProcessFunctions: v.GetBool("process-functions"),
-		}
+		opts := parseStacksOptions(cmd, v)
 
 		return listStacksWithOptions(cmd, args, opts)
 	},
+}
+
+// parseStacksOptions maps viper state into a StacksOptions struct.
+// Extracted from the RunE closure so the viper→options mapping can be
+// unit-tested without driving the whole cobra command.
+func parseStacksOptions(cmd *cobra.Command, v *viper.Viper) *StacksOptions {
+	return &StacksOptions{
+		Flags:            flags.ParseGlobalFlags(cmd, v),
+		Component:        v.GetString("component"),
+		Format:           v.GetString("format"),
+		Columns:          v.GetStringSlice("columns"),
+		Sort:             v.GetString("sort"),
+		Provenance:       v.GetBool("provenance"),
+		ProcessTemplates: v.GetBool("process-templates"),
+		ProcessFunctions: v.GetBool("process-functions"),
+	}
 }
 
 // columnsCompletionForStacks provides dynamic tab completion for --columns flag.

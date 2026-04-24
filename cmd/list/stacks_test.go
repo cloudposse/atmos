@@ -438,28 +438,3 @@ func TestStacksProcessTemplatesAndFunctionsFlags(t *testing.T) {
 		assert.Equal(t, "true", processFunctionsFlag.DefValue)
 	}
 }
-
-// TestStacksOptions_ProcessTemplatesAndFunctions verifies the StacksOptions
-// struct carries the two flag values across all four combinations.
-func TestStacksOptions_ProcessTemplatesAndFunctions(t *testing.T) {
-	tests := []struct {
-		name             string
-		processTemplates bool
-		processFunctions bool
-	}{
-		{"both_on", true, true},
-		{"templates_on_functions_off", true, false},
-		{"templates_off_functions_on", false, true},
-		{"both_off", false, false},
-	}
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			opts := &StacksOptions{
-				ProcessTemplates: tc.processTemplates,
-				ProcessFunctions: tc.processFunctions,
-			}
-			assert.Equal(t, tc.processTemplates, opts.ProcessTemplates)
-			assert.Equal(t, tc.processFunctions, opts.ProcessFunctions)
-		})
-	}
-}

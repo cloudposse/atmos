@@ -118,39 +118,22 @@ The comment above the block was updated to name both consumers
 1. `atmos list instances --upload` works end-to-end in CI for stacks
    whose component sections call `atmos.Component(...)` inside Go
    templates.
-2. No changes to the public CLI surface. No new flag, no change to
-   default behavior visible to users who were not affected.
-3. Category A callers (`atmos terraform *`, `atmos helmfile *`,
+2. Category A callers (`atmos terraform *`, `atmos helmfile *`,
    `atmos describe component`, nested-auth flows) are untouched —
    they already pass `processYamlFunctions=true`, so they always
    took the old path and continue to take the new one.
-4. Category B callers that set `processYamlFunctions=true`
+3. Category B callers that set `processYamlFunctions=true`
    (`describe affected`, `describe stacks`, `describe dependents`,
    `list affected`, `aws security`, `aws compliance`, workflows)
    are unchanged in observable behavior — the guard condition was
    already true for them.
-5. Category B callers that set `processTemplates=true,
+4. Category B callers that set `processTemplates=true,
    processYamlFunctions=false` (`list instances`, the
    provenance-aware tree branch) start running per-component auth.
    This is the intended behavior change.
-
-## Non-goals
-
-- **Making `atmos.Component(...)` errors non-fatal during
-  `list instances`.** That was considered as an alternative — skip the
-  template call entirely and render a placeholder — but it hides a
-  real misconfiguration class and diverges behavior from describe
-  affected, which successfully resolves the same template. The
-  proper answer is "run auth", not "suppress errors".
-- **Adding a `--process-functions` flag to `list instances`.** The
-  flag never existed there; a user workflow was relying on a flag
-  that had never been shipped. The reporting user removed that flag
-  from their workflow before opening the issue. Re-adding it would
-  break the "no new flags" goal and would not fix the underlying
-  credential propagation.
-- **Changing `pkg/list/list_instances.go`.** The disable-YAML-functions
-  choice there (to avoid requiring `tofu` on `$PATH`) is correct. The
-  bug was strictly inside the describe-stacks processor.
+5. Users get `--process-templates` and `--process-functions` on
+   every `atmos list` subcommand that processes stack manifests,
+   matching the flag surface of the `describe` command family.
 
 ## Implementation
 
@@ -288,9 +271,7 @@ run in any environment without cloud credentials:
 Not applicable for this repository — exercising the real bug requires
 a GitHub Actions runner with an OIDC identity provider and an AWS
 backend. The regression test reproduces the decision the processor
-makes, which is the actual fix point. The follow-up PR that wires the
-fix into the `atmos-pro` release-workflow fixtures (if any) will carry
-the integration-shaped verification.
+makes, which is the actual fix point.
 
 ## Progress checklist
 
@@ -336,40 +317,34 @@ the integration-shaped verification.
 - [x] Update the `list instances` documentation page with the two
   new flags.
 
-## Companion flag work (later commit)
+## Flag surface
 
-While the core bug is fixed by widening the per-component auth
-guard (above), a follow-up commit added user-facing control so that
-callers who intentionally want to disable templates or YAML
-functions can do so without touching env vars or source code. Key
-properties of that work, captured here because this fix document is
-the single source of truth for the `list instances` hang:
+The fix ships alongside `--process-templates` and
+`--process-functions` (and their `ATMOS_PROCESS_TEMPLATES` /
+`ATMOS_PROCESS_FUNCTIONS` env var bindings) on every `atmos list`
+subcommand that processes stack manifests: `list instances`,
+`list components`, `list metadata`, `list sources`, `list stacks`.
+Defaults are `true`, matching `describe affected` / `describe stacks`
+/ `describe component`. The auth-guard widening above is what makes
+defaulting both to `true` safe; without it, the `list instances`
+path would hang in CI as described in the Issue section.
 
-1. **Default behavior unchanged for working invocations.** Both
-   flags default to `true` at the CLI — the same default as
-   `describe affected` / `describe stacks` / `describe component`.
-   Commands that previously ran with `processTemplates=true,
-   processYamlFunctions=false` hardcoded (the `list instances` /
-   `list metadata` shape) now default to
-   `processTemplates=true, processYamlFunctions=true`. The
-   Category B per-component auth fix above is what makes this safe
-   in CI; without that fix, flipping `processYamlFunctions` to
-   `true` by default would have re-introduced the original hang.
+1. **Default behavior matches the describe command family.** Both
+   flags default to `true`. Commands that previously ran with
+   `processTemplates=true, processYamlFunctions=false` hardcoded
+   (the `list instances` / `list metadata` shape) now default to
+   `processTemplates=true, processYamlFunctions=true`.
 2. **Escape hatch for environments without `tofu` / `terraform` on
    `$PATH`.** Users who want the old hardcoded behavior can pass
    `--process-functions=false` or set
    `ATMOS_PROCESS_FUNCTIONS=false`. This is the documented fallback
    for the original PR #2170 rationale ("don't require `tofu` in
    `$PATH` for `list instances`").
-3. **Flag descriptions disambiguate the two axes.** The reworded
-   help strings make it explicit that Go template functions like
-   `atmos.Component(...)` are controlled by `--process-templates`
-   and YAML functions like `!terraform.state` / `!terraform.output`
-   / `!store` / `!aws.*` are controlled by `--process-functions`.
-   The original wrapper help text referred to "template function
-   processing" for the YAML-functions flag, which conflated the two
-   and contributed to the user-side confusion that opened this
-   issue.
+3. **Flag descriptions disambiguate the two axes.** Go template
+   functions like `atmos.Component(...)` are controlled by
+   `--process-templates`; YAML functions like `!terraform.state`,
+   `!terraform.output`, `!store`, `!aws.*` are controlled by
+   `--process-functions`.
 
 ---
 

@@ -51,19 +51,26 @@ var metadataCmd = &cobra.Command{
 			return err
 		}
 
-		opts := &MetadataOptions{
-			Flags:            flags.ParseGlobalFlags(cmd, v),
-			Format:           v.GetString("format"),
-			Stack:            v.GetString("stack"),
-			Columns:          v.GetStringSlice("columns"),
-			Sort:             v.GetString("sort"),
-			Filter:           v.GetString("filter"),
-			ProcessTemplates: v.GetBool("process-templates"),
-			ProcessFunctions: v.GetBool("process-functions"),
-		}
+		opts := parseMetadataOptions(cmd, v)
 
 		return executeListMetadataCmd(cmd, args, opts)
 	},
+}
+
+// parseMetadataOptions maps viper state into a MetadataOptions struct.
+// Extracted from the RunE closure so the viper→options mapping can be
+// unit-tested without driving the whole cobra command.
+func parseMetadataOptions(cmd *cobra.Command, v *viper.Viper) *MetadataOptions {
+	return &MetadataOptions{
+		Flags:            flags.ParseGlobalFlags(cmd, v),
+		Format:           v.GetString("format"),
+		Stack:            v.GetString("stack"),
+		Columns:          v.GetStringSlice("columns"),
+		Sort:             v.GetString("sort"),
+		Filter:           v.GetString("filter"),
+		ProcessTemplates: v.GetBool("process-templates"),
+		ProcessFunctions: v.GetBool("process-functions"),
+	}
 }
 
 // columnsCompletionForMetadata provides dynamic tab completion for --columns flag.

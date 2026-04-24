@@ -105,6 +105,24 @@ func init() {
 	}
 }
 
+// parseSourcesOptions maps viper state into a SourcesOptions struct.
+// Extracted from initSourcesCommand so the viper→options mapping can be
+// unit-tested without driving the whole cobra command. `args[0]`, when
+// present, is used as the positional component filter.
+func parseSourcesOptions(cmd *cobra.Command, v *viper.Viper, args []string) *SourcesOptions {
+	opts := &SourcesOptions{
+		Flags:            flags.ParseGlobalFlags(cmd, v),
+		Format:           v.GetString("format"),
+		Stack:            v.GetString("stack"),
+		ProcessTemplates: v.GetBool("process-templates"),
+		ProcessFunctions: v.GetBool("process-functions"),
+	}
+	if len(args) > 0 {
+		opts.Component = args[0]
+	}
+	return opts
+}
+
 func executeListSources(cmd *cobra.Command, args []string) error {
 	defer perf.Track(nil, "list.sources.RunE")()
 
@@ -142,17 +160,7 @@ func initSourcesCommand(cmd *cobra.Command, args []string) (*SourcesOptions, err
 			Err()
 	}
 
-	opts := &SourcesOptions{
-		Flags:            flags.ParseGlobalFlags(cmd, v),
-		Format:           v.GetString("format"),
-		Stack:            v.GetString("stack"),
-		ProcessTemplates: v.GetBool("process-templates"),
-		ProcessFunctions: v.GetBool("process-functions"),
-	}
-
-	if len(args) > 0 {
-		opts.Component = args[0]
-	}
+	opts := parseSourcesOptions(cmd, v, args)
 
 	configInfo := buildConfigAndStacksInfo(&opts.Flags)
 	configInfo.Stack = opts.Stack

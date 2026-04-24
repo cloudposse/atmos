@@ -325,29 +325,47 @@ func TestInstancesProcessTemplatesAndFunctionsFlags(t *testing.T) {
 	}
 }
 
-// TestInstancesOptions_ProcessTemplatesAndFunctions verifies the
-// InstancesOptions struct carries the two flag values across all four
-// combinations. This guards against the struct fields being removed or
-// reordered out from under the viper.GetBool calls in RunE.
-func TestInstancesOptions_ProcessTemplatesAndFunctions(t *testing.T) {
-	tests := []struct {
-		name             string
-		processTemplates bool
-		processFunctions bool
-	}{
-		{"both_on", true, true},
-		{"templates_on_functions_off", true, false},
-		{"templates_off_functions_on", false, true},
-		{"both_off", false, false},
+// TestParseInstancesOptions verifies the viper→options mapping extracted
+// from the RunE closure. Uses an isolated viper.Viper (via bindFlagsToViper
+// in parse_options_test.go) and a synthesized cobra command with the same
+// flags the real parser registers, so the test exercises the actual
+// `v.GetString` / `v.GetBool` calls without a full cobra execution context.
+func TestParseInstancesOptions(t *testing.T) {
+	buildCmd := func() *cobra.Command {
+		cmd := &cobra.Command{Use: "instances"}
+		instancesParser.RegisterFlags(cmd)
+		return cmd
 	}
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			opts := &InstancesOptions{
-				ProcessTemplates: tc.processTemplates,
-				ProcessFunctions: tc.processFunctions,
-			}
-			assert.Equal(t, tc.processTemplates, opts.ProcessTemplates)
-			assert.Equal(t, tc.processFunctions, opts.ProcessFunctions)
-		})
-	}
+
+	t.Run("defaults", func(t *testing.T) {
+		cmd := buildCmd()
+		v := bindFlagsToViper(t, cmd)
+
+		opts := parseInstancesOptions(cmd, v)
+
+		assert.Equal(t, "", opts.Format)
+		assert.False(t, opts.Upload)
+		assert.False(t, opts.Provenance)
+		// Both process-* flags default to true per parity-with-describe.
+		assert.True(t, opts.ProcessTemplates)
+		assert.True(t, opts.ProcessFunctions)
+	})
+
+	t.Run("explicit_flags", func(t *testing.T) {
+		cmd := buildCmd()
+		setFlag(t, cmd, "format", "json")
+		setFlag(t, cmd, "stack", "prod-*")
+		setFlag(t, cmd, "upload", "true")
+		setFlag(t, cmd, "process-templates", "false")
+		setFlag(t, cmd, "process-functions", "false")
+		v := bindFlagsToViper(t, cmd)
+
+		opts := parseInstancesOptions(cmd, v)
+
+		assert.Equal(t, "json", opts.Format)
+		assert.Equal(t, "prod-*", opts.Stack)
+		assert.True(t, opts.Upload)
+		assert.False(t, opts.ProcessTemplates)
+		assert.False(t, opts.ProcessFunctions)
+	})
 }

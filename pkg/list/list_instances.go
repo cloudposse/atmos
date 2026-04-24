@@ -384,11 +384,14 @@ func uploadInstances(instances []schema.Instance) error {
 // Template processing (`processTemplates`) controls Go-template evaluation,
 // which includes the `atmos.Component(...)` template function — NOT the YAML
 // functions like `!terraform.state` / `!terraform.output`. Those are
-// controlled by `processYamlFunctions`. The two are independent: enabling
-// templates while disabling YAML functions is a valid combination and is the
-// default shape for `atmos list instances` callers that want stack names /
-// metadata computed by templates but do not want to shell out to `terraform`
-// for backend output reads.
+// controlled by `processYamlFunctions`. The two are independent.
+//
+// The CLI defaults both flags to `true` via `--process-templates` /
+// `--process-functions` (env: `ATMOS_PROCESS_TEMPLATES` /
+// `ATMOS_PROCESS_FUNCTIONS`), matching the describe command family. Callers
+// running without `tofu` / `terraform` on `$PATH` should pass
+// `--process-functions=false` to skip YAML-function evaluation while still
+// letting templates expand stack names and metadata.
 func processInstancesWithDeps(
 	atmosConfig *schema.AtmosConfiguration,
 	stacksProcessor e.StacksProcessor,

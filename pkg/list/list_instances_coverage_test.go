@@ -40,24 +40,6 @@ func TestUploadInstances(t *testing.T) {
 	_ = err
 }
 
-// TestProcessInstances tests the processInstances() wrapper function.
-func TestProcessInstances(t *testing.T) {
-	// This wrapper calls processInstancesWithDeps which is already tested at 100%.
-	// We just need to execute it to achieve coverage of the wrapper itself.
-	// The underlying processInstancesWithDeps() is already tested at 100% with mocks.
-	atmosConfig := &schema.AtmosConfiguration{
-		BasePath: "/nonexistent",
-	}
-
-	// Call the wrapper - it may return empty list or error depending on config.
-	instances, err := processInstances(atmosConfig, nil, true, false)
-
-	// Either result is acceptable - key is the function executes without panic.
-	// The function behavior is fully tested via processInstancesWithDeps tests.
-	_ = instances
-	_ = err
-}
-
 // TestExecuteListInstancesCmd tests the main command entry point with real fixtures.
 func TestExecuteListInstancesCmd(t *testing.T) {
 	// Initialize I/O and UI contexts for testing.

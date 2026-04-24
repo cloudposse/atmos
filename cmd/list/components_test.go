@@ -1141,29 +1141,3 @@ func TestComponentsProcessTemplatesAndFunctionsFlags(t *testing.T) {
 		assert.Equal(t, "true", processFunctionsFlag.DefValue)
 	}
 }
-
-// TestComponentsOptions_ProcessTemplatesAndFunctions verifies the
-// ComponentsOptions struct carries the two flag values across all four
-// combinations.
-func TestComponentsOptions_ProcessTemplatesAndFunctions(t *testing.T) {
-	tests := []struct {
-		name             string
-		processTemplates bool
-		processFunctions bool
-	}{
-		{"both_on", true, true},
-		{"templates_on_functions_off", true, false},
-		{"templates_off_functions_on", false, true},
-		{"both_off", false, false},
-	}
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			opts := &ComponentsOptions{
-				ProcessTemplates: tc.processTemplates,
-				ProcessFunctions: tc.processFunctions,
-			}
-			assert.Equal(t, tc.processTemplates, opts.ProcessTemplates)
-			assert.Equal(t, tc.processFunctions, opts.ProcessFunctions)
-		})
-	}
-}

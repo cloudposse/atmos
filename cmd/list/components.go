@@ -60,38 +60,46 @@ var componentsCmd = &cobra.Command{
 			return err
 		}
 
-		// Parse enabled/locked flags as tri-state (*bool).
-		// nil = unset (show all), true = filter for true, false = filter for false.
-		// Use cmd.Flags().Changed() instead of v.IsSet() because IsSet returns true
-		// when a default value is registered, but we only want to filter when
-		// the user explicitly provided the flag.
-		var enabledPtr *bool
-		if cmd.Flags().Changed("enabled") {
-			val := v.GetBool("enabled")
-			enabledPtr = &val
-		}
-		var lockedPtr *bool
-		if cmd.Flags().Changed("locked") {
-			val := v.GetBool("locked")
-			lockedPtr = &val
-		}
-
-		opts := &ComponentsOptions{
-			Flags:            flags.ParseGlobalFlags(cmd, v),
-			Stack:            v.GetString("stack"),
-			Type:             v.GetString("type"),
-			Enabled:          enabledPtr,
-			Locked:           lockedPtr,
-			Format:           v.GetString("format"),
-			Columns:          v.GetStringSlice("columns"),
-			Sort:             v.GetString("sort"),
-			Abstract:         v.GetBool("abstract"),
-			ProcessTemplates: v.GetBool("process-templates"),
-			ProcessFunctions: v.GetBool("process-functions"),
-		}
+		opts := parseComponentsOptions(cmd, v)
 
 		return listComponentsWithOptions(cmd, args, opts)
 	},
+}
+
+// parseComponentsOptions maps viper state into a ComponentsOptions struct.
+// Extracted from the RunE closure so the viper→options mapping can be
+// unit-tested without driving the whole cobra command.
+//
+// Enabled/Locked are tri-state (*bool): nil when the flag was not
+// explicitly set by the user (so the caller shows all components); true/
+// false otherwise. `cmd.Flags().Changed()` is used instead of
+// `v.IsSet()` because the latter returns true when a default value is
+// registered — we only want to filter when the user actually passed the
+// flag.
+func parseComponentsOptions(cmd *cobra.Command, v *viper.Viper) *ComponentsOptions {
+	var enabledPtr *bool
+	if cmd.Flags().Changed("enabled") {
+		val := v.GetBool("enabled")
+		enabledPtr = &val
+	}
+	var lockedPtr *bool
+	if cmd.Flags().Changed("locked") {
+		val := v.GetBool("locked")
+		lockedPtr = &val
+	}
+	return &ComponentsOptions{
+		Flags:            flags.ParseGlobalFlags(cmd, v),
+		Stack:            v.GetString("stack"),
+		Type:             v.GetString("type"),
+		Enabled:          enabledPtr,
+		Locked:           lockedPtr,
+		Format:           v.GetString("format"),
+		Columns:          v.GetStringSlice("columns"),
+		Sort:             v.GetString("sort"),
+		Abstract:         v.GetBool("abstract"),
+		ProcessTemplates: v.GetBool("process-templates"),
+		ProcessFunctions: v.GetBool("process-functions"),
+	}
 }
 
 // columnsCompletionForComponents provides dynamic tab completion for --columns flag.

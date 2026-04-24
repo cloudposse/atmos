@@ -35,28 +35,3 @@ func TestMetadataProcessTemplatesAndFunctionsFlags(t *testing.T) {
 		assert.Equal(t, "true", processFunctionsFlag.DefValue)
 	}
 }
-
-// TestMetadataOptions_ProcessTemplatesAndFunctions verifies the MetadataOptions
-// struct carries the two flag values across all four combinations.
-func TestMetadataOptions_ProcessTemplatesAndFunctions(t *testing.T) {
-	tests := []struct {
-		name             string
-		processTemplates bool
-		processFunctions bool
-	}{
-		{"both_on", true, true},
-		{"templates_on_functions_off", true, false},
-		{"templates_off_functions_on", false, true},
-		{"both_off", false, false},
-	}
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			opts := &MetadataOptions{
-				ProcessTemplates: tc.processTemplates,
-				ProcessFunctions: tc.processFunctions,
-			}
-			assert.Equal(t, tc.processTemplates, opts.ProcessTemplates)
-			assert.Equal(t, tc.processFunctions, opts.ProcessFunctions)
-		})
-	}
-}
