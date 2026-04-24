@@ -30,6 +30,11 @@ const (
 
 	// DefaultTimeoutSeconds is the default HTTP client timeout.
 	defaultTimeoutSeconds = 30
+
+	// Maximum redirect hops (maxRedirectHops) before stripAuthOnCrossHostRedirect returns
+	// ErrRedirectLimitExceeded.  Mirrors the default limit enforced by net/http.Client
+	// when no CheckRedirect callback is provided.
+	maxRedirectHops = 10
 )
 
 // Client defines the interface for making HTTP requests.
@@ -99,7 +104,7 @@ func WithGitHubToken(token string) ClientOption {
 // header drops; non-default ports (e.g. :8443) are preserved and still treated as
 // distinct origins.
 func stripAuthOnCrossHostRedirect(req *http.Request, via []*http.Request) error {
-	if len(via) >= 10 {
+	if len(via) >= maxRedirectHops {
 		return errUtils.ErrRedirectLimitExceeded
 	}
 	if len(via) > 0 {
@@ -139,12 +144,12 @@ func WithGitHubHostMatcher(matcher func(string) bool) ClientOption {
 		// auth layers are always contiguous at the outermost position in the chain.
 		t := c.client.Transport
 		for t != nil {
-			if authTransport, ok := t.(*GitHubAuthenticatedTransport); ok {
-				authTransport.hostMatcher = matcher
-				t = authTransport.Base
-			} else {
+			authTransport, ok := t.(*GitHubAuthenticatedTransport)
+			if !ok {
 				break
 			}
+			authTransport.hostMatcher = matcher
+			t = authTransport.Base
 		}
 	}
 }
@@ -208,8 +213,8 @@ type GitHubAuthenticatedTransport struct {
 // default HTTP/HTTPS ports (:80 and :443) so that "api.github.com:443" is
 // treated identically to "api.github.com".
 //
-// net.SplitHostPort is used to handle IPv6 literals safely (e.g., "[::1]:443"
-// is split to "::1" and "443", and the brackets are dropped for comparison).
+// IPv6 literals (e.g., "[::1]:443") are split via net.SplitHostPort to "::1"
+// and "443", with the brackets dropped for comparison.
 // Non-default ports (e.g., :8443) are preserved unchanged.
 //
 // Note: in the hot path, callers pass url.URL.Hostname() which already strips

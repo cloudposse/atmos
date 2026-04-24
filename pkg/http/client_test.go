@@ -1338,7 +1338,10 @@ func TestGitHubAuthenticatedTransport_RoundTripError(t *testing.T) {
 	req, err := http.NewRequest(http.MethodGet, "https://api.github.com/repos", nil)
 	require.NoError(t, err)
 
-	_, err = transport.RoundTrip(req)
+	resp, err := transport.RoundTrip(req)
+	if resp != nil {
+		defer resp.Body.Close()
+	}
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "GitHub transport roundtrip",
 		"transport error must be wrapped with the 'GitHub transport roundtrip' prefix")

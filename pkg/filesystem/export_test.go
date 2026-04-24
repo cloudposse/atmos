@@ -28,10 +28,12 @@ func ResetPathMatchCache() {
 
 // SetGlobCacheEntryExpired forcibly marks a cache entry as expired for testing TTL eviction.
 // It re-adds the entry with an expiry in the past, simulating TTL expiry.
+// Uses Peek (not Get) so this helper does not promote the entry to MRU before the Add,
+// keeping the test-only "force expire" semantics side-effect free for recency.
 func SetGlobCacheEntryExpired(pattern string) {
 	normalizedPattern := filepath.ToSlash(pattern)
 	globMatchesLRUMu.Lock()
-	if entry, ok := globMatchesLRU.Get(normalizedPattern); ok {
+	if entry, ok := globMatchesLRU.Peek(normalizedPattern); ok {
 		entry.expiry = time.Time{} // zero time is in the past.
 		globMatchesLRU.Add(normalizedPattern, entry)
 	}

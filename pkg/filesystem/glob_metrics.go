@@ -7,7 +7,7 @@ import (
 )
 
 // globExpvarOnce ensures expvar variables are registered at most once.
-// expvar.Publish panics on duplicate registration, so callers that call
+// Because expvar.Publish panics on duplicate registration, callers that call
 // RegisterGlobCacheExpvars multiple times (e.g., in tests) are protected.
 var globExpvarOnce sync.Once
 

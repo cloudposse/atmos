@@ -18,20 +18,20 @@ import (
 )
 
 const (
-	// defaultGlobCacheMaxEntries is the default maximum number of entries in the glob LRU cache.
+	// Default maximum number of entries in the glob LRU cache (defaultGlobCacheMaxEntries).
 	// Override at startup with ATMOS_FS_GLOB_CACHE_MAX_ENTRIES.
 	defaultGlobCacheMaxEntries = 1024
 
-	// defaultGlobCacheTTL is the default time-to-live for each cache entry.
+	// Default time-to-live for each cache entry (defaultGlobCacheTTL).
 	// Override at startup with ATMOS_FS_GLOB_CACHE_TTL (e.g. "10m", "30s").
 	defaultGlobCacheTTL = 5 * time.Minute
 
-	// minGlobCacheTTL is the minimum accepted TTL value.  Values parsed from
+	// Minimum accepted TTL value (minGlobCacheTTL).  Values parsed from
 	// ATMOS_FS_GLOB_CACHE_TTL that are positive but below this floor are clamped up.
 	// A sub-second TTL would make the cache nearly useless and cause excessive I/O.
 	minGlobCacheTTL = time.Second
 
-	// minGlobCacheMaxEntries is the minimum accepted LRU capacity.  Values parsed
+	// Minimum accepted LRU capacity (minGlobCacheMaxEntries).  Values parsed
 	// from ATMOS_FS_GLOB_CACHE_MAX_ENTRIES that are positive but below this floor
 	// are clamped up to prevent near-empty caches that evict on nearly every call.
 	minGlobCacheMaxEntries = 16
@@ -51,24 +51,24 @@ type pathMatchKey struct {
 }
 
 var (
-	// globMatchesLRU is a bounded LRU cache for GetGlobMatches results.
-	// It replaces the unbounded sync.Map to prevent unbounded memory growth.
+	// Bounded LRU cache for GetGlobMatches results (globMatchesLRU).
+	// Replaces the unbounded sync.Map to prevent unbounded memory growth.
 	// Access is mediated by a mutex so that the LRU's internal state is not
 	// corrupted under concurrent use (hashicorp/golang-lru/v2 is thread-safe,
 	// but we still need the mutex for atomic load+check+store sequences in our TTL logic).
 	globMatchesLRU       *lru.Cache[string, globCacheEntry]
 	globMatchesLRUMu     sync.RWMutex
-	globMatchesEvictions int64 // incremented atomically by the LRU eviction callback.
-	globMatchesHits      int64 // incremented atomically on each cache hit.
-	globMatchesMisses    int64 // incremented atomically on each cache miss.
+	globMatchesEvictions int64 // Incremented atomically by the LRU eviction callback.
+	globMatchesHits      int64 // Incremented atomically on each cache hit.
+	globMatchesMisses    int64 // Incremented atomically on each cache miss.
 
-	// globCacheTTL is the active TTL, configurable via ATMOS_FS_GLOB_CACHE_TTL.
+	// Active TTL (globCacheTTL), configurable via ATMOS_FS_GLOB_CACHE_TTL.
 	globCacheTTL = defaultGlobCacheTTL
 
-	// globCacheMaxEntries is the active LRU capacity, configurable via ATMOS_FS_GLOB_CACHE_MAX_ENTRIES.
+	// Active LRU capacity (globCacheMaxEntries), configurable via ATMOS_FS_GLOB_CACHE_MAX_ENTRIES.
 	globCacheMaxEntries = defaultGlobCacheMaxEntries
 
-	// globCacheEmptyEnabled controls whether empty-result sets are stored in the cache.
+	// Controls whether empty-result sets are stored in the cache (globCacheEmptyEnabled).
 	// Default true. Set ATMOS_FS_GLOB_CACHE_EMPTY=0 to disable.
 	globCacheEmptyEnabled = true
 
@@ -80,48 +80,74 @@ var (
 	pathMatchCacheMu sync.RWMutex
 )
 
+// resolveGlobCacheMaxEntries reads ATMOS_FS_GLOB_CACHE_MAX_ENTRIES and returns
+// the resolved capacity, clamping up to minGlobCacheMaxEntries when a positive
+// value below the floor is supplied.
+func resolveGlobCacheMaxEntries() int {
+	maxEntries := defaultGlobCacheMaxEntries
+	//nolint:forbidigo // Direct env lookup required for cache configuration.
+	v := os.Getenv("ATMOS_FS_GLOB_CACHE_MAX_ENTRIES")
+	if v == "" {
+		return maxEntries
+	}
+	n, err := strconv.Atoi(v)
+	if err != nil || n <= 0 {
+		return maxEntries
+	}
+	if n < minGlobCacheMaxEntries {
+		log.Warn("ATMOS_FS_GLOB_CACHE_MAX_ENTRIES below minimum, clamping up",
+			"requested", n, "minimum", minGlobCacheMaxEntries)
+		n = minGlobCacheMaxEntries
+	}
+	return n
+}
+
+// resolveGlobCacheTTL reads ATMOS_FS_GLOB_CACHE_TTL and returns the resolved
+// duration, clamping up to minGlobCacheTTL when a positive value below the
+// floor is supplied.
+func resolveGlobCacheTTL() time.Duration {
+	ttl := defaultGlobCacheTTL
+	//nolint:forbidigo // Direct env lookup required for cache configuration.
+	v := os.Getenv("ATMOS_FS_GLOB_CACHE_TTL")
+	if v == "" {
+		return ttl
+	}
+	d, err := time.ParseDuration(v)
+	if err != nil || d <= 0 {
+		return ttl
+	}
+	if d < minGlobCacheTTL {
+		log.Warn("ATMOS_FS_GLOB_CACHE_TTL below minimum, clamping up",
+			"requested", d, "minimum", minGlobCacheTTL)
+		d = minGlobCacheTTL
+	}
+	return d
+}
+
+// resolveGlobCacheEmptyEnabled reads ATMOS_FS_GLOB_CACHE_EMPTY and returns
+// whether empty-result caching is enabled.  Only "1" or "true" explicitly
+// enables; any other non-empty value disables.
+func resolveGlobCacheEmptyEnabled() bool {
+	//nolint:forbidigo // Direct env lookup required for cache configuration.
+	v := os.Getenv("ATMOS_FS_GLOB_CACHE_EMPTY")
+	if v == "" {
+		return true
+	}
+	switch v {
+	case "1", "true":
+		return true
+	default:
+		return false
+	}
+}
+
 // applyGlobCacheConfig reads ATMOS_FS_GLOB_CACHE_* environment variables and
 // (re-)initializes the glob LRU cache accordingly.  It is called once from
 // init() and may be called again from tests to pick up env changes.
 func applyGlobCacheConfig() {
-	maxEntries := defaultGlobCacheMaxEntries
-	//nolint:forbidigo // Direct env lookup required for cache configuration.
-	if v := os.Getenv("ATMOS_FS_GLOB_CACHE_MAX_ENTRIES"); v != "" {
-		if n, err := strconv.Atoi(v); err == nil && n > 0 {
-			if n < minGlobCacheMaxEntries {
-				log.Warn("ATMOS_FS_GLOB_CACHE_MAX_ENTRIES below minimum, clamping up",
-					"requested", n, "minimum", minGlobCacheMaxEntries)
-				n = minGlobCacheMaxEntries
-			}
-			maxEntries = n
-		}
-	}
-
-	ttl := defaultGlobCacheTTL
-	//nolint:forbidigo // Direct env lookup required for cache configuration.
-	if v := os.Getenv("ATMOS_FS_GLOB_CACHE_TTL"); v != "" {
-		if d, err := time.ParseDuration(v); err == nil && d > 0 {
-			if d < minGlobCacheTTL {
-				log.Warn("ATMOS_FS_GLOB_CACHE_TTL below minimum, clamping up",
-					"requested", d, "minimum", minGlobCacheTTL)
-				d = minGlobCacheTTL
-			}
-			ttl = d
-		}
-	}
-
-	emptyEnabled := true
-	//nolint:forbidigo // Direct env lookup required for cache configuration.
-	if v := os.Getenv("ATMOS_FS_GLOB_CACHE_EMPTY"); v != "" {
-		// Only "1" or "true" explicitly enables; "0" or "false" disables.
-		// Any other value is treated as disabled for safety.
-		switch v {
-		case "1", "true":
-			emptyEnabled = true
-		default:
-			emptyEnabled = false
-		}
-	}
+	maxEntries := resolveGlobCacheMaxEntries()
+	ttl := resolveGlobCacheTTL()
+	emptyEnabled := resolveGlobCacheEmptyEnabled()
 
 	newLRU, err := lru.NewWithEvict[string, globCacheEntry](
 		maxEntries,

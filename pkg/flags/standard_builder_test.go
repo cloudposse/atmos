@@ -640,6 +640,7 @@ func TestStandardOptionsBuilder_WithModulePaths(t *testing.T) {
 	require.NotNil(t, parser)
 }
 
+//nolint:dupl // Structurally parallel to TestStandardOptionsBuilder_WithRef but tests int vs string flag semantics; keeping them separate aids readability.
 func TestStandardOptionsBuilder_WithTimeout(t *testing.T) {
 	t.Run("flag registration", func(t *testing.T) {
 		builder := NewStandardOptionsBuilder().WithTimeout(30)
@@ -814,6 +815,7 @@ func TestStandardOptionsBuilder_WithEverything(t *testing.T) {
 	assert.True(t, opts.Everything)
 }
 
+//nolint:dupl // Structurally parallel to TestStandardOptionsBuilder_WithTimeout but tests string vs int flag semantics; keeping them separate aids readability.
 func TestStandardOptionsBuilder_WithRef(t *testing.T) {
 	t.Run("flag registration with default", func(t *testing.T) {
 		builder := NewStandardOptionsBuilder().WithRef("main")

@@ -1116,7 +1116,7 @@ func TestProcessYAMLConfigFile_ImportNotFound_ErrorPath(t *testing.T) {
 		},
 	}
 
-	_, _, _, _, _, _, _, err := ProcessYAMLConfigFile(
+	_, _, _, _, _, _, _, err := ProcessYAMLConfigFile( //nolint:dogsled
 		&atmosConfig,
 		stacksBasePath,
 		filePath,
@@ -1134,7 +1134,7 @@ func TestProcessYAMLConfigFile_ImportNotFound_ErrorPath(t *testing.T) {
 	)
 
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "no matches found for the import")
+	assert.ErrorIs(t, err, errUtils.ErrFailedToFindImport)
 }
 
 // TestProcessYAMLConfigFile_InvalidTemplateInImportPath exercises the branch where
@@ -1153,7 +1153,7 @@ func TestProcessYAMLConfigFile_InvalidTemplateInImportPath(t *testing.T) {
 	// through YAML parsing unchanged and eventually reaches IsGolangTemplate.
 	atmosConfig := schema.AtmosConfiguration{}
 
-	_, _, _, _, _, _, _, err := ProcessYAMLConfigFile(
+	_, _, _, _, _, _, _, err := ProcessYAMLConfigFile( //nolint:dogsled
 		&atmosConfig,
 		stacksBasePath,
 		filePath,
