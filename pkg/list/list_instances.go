@@ -484,7 +484,18 @@ func ExecuteListInstancesCmd(opts *InstancesCommandOptions) error {
 		e.ClearFindStacksMapCache()
 
 		// Get all stacks for provenance-based import resolution (single call).
-		stacksMap, err := e.ExecuteDescribeStacks(&atmosConfig, "", nil, nil, nil, false, false, false, false, nil, opts.AuthManager)
+		// Honor the caller-supplied template/function flags so tree output is
+		// consistent with non-tree runs of the same command invocation, matching
+		// the behavior of `list stacks --format=tree`.
+		stacksMap, err := e.ExecuteDescribeStacks(
+			&atmosConfig, "", nil, nil, nil,
+			false, // ignoreMissingFiles
+			opts.ProcessTemplates,
+			opts.ProcessFunctions,
+			false, // includeEmptyStacks
+			nil,   // skip
+			opts.AuthManager,
+		)
 		if err != nil {
 			log.Error(errUtils.ErrExecuteDescribeStacks.Error(), "error", err)
 			return errors.Join(errUtils.ErrExecuteDescribeStacks, err)
