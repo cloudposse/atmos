@@ -327,7 +327,8 @@ subcommand that processes stack manifests: `list instances`,
 Defaults are `true`, matching `describe affected` / `describe stacks`
 / `describe component`. The auth-guard widening above is what makes
 defaulting both to `true` safe; without it, the `list instances`
-path would hang in CI as described in the Issue section.
+path would fail in CI with the `No valid credential sources found`
+error described in the Issue section.
 
 1. **Default behavior matches the describe command family.** Both
    flags default to `true`. Commands that previously ran with

@@ -4,10 +4,11 @@ import (
 	"testing"
 
 	"github.com/spf13/cobra"
-	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/cloudposse/atmos/pkg/flags"
 )
 
 // setFlag sets a cobra flag and fails the test if the flag cannot be set.
@@ -16,15 +17,18 @@ func setFlag(t *testing.T, cmd *cobra.Command, name, value string) {
 	require.NoError(t, cmd.Flags().Set(name, value), "setting %s", name)
 }
 
-// bindFlagsToViper mirrors the production BindPFlag loop so the parse*
-// helpers see viper values that match the cobra flag values. Returns a
-// fresh viper.Viper each call to isolate tests from global viper state.
-func bindFlagsToViper(t *testing.T, cmd *cobra.Command) *viper.Viper {
+// bindFlagsToViper returns a fresh viper.Viper bound to `cmd`'s flags via
+// the same `parser.BindFlagsToViper` helper production RunE closures use,
+// so the parse* helpers see the real binding semantics (env-var aliases,
+// prefix handling, etc.) and tests are isolated from global viper state.
+//
+// Calling `parser.BindFlagsToViper` directly also respects the repo rule
+// that commands never touch `viper.BindPFlag` directly outside of
+// `pkg/flags/`.
+func bindFlagsToViper(t *testing.T, cmd *cobra.Command, parser *flags.StandardParser) *viper.Viper {
 	t.Helper()
 	v := viper.New()
-	cmd.Flags().VisitAll(func(f *pflag.Flag) {
-		require.NoError(t, v.BindPFlag(f.Name, cmd.Flags().Lookup(f.Name)))
-	})
+	require.NoError(t, parser.BindFlagsToViper(cmd, v), "binding flags to viper")
 	return v
 }
 
@@ -40,7 +44,7 @@ func TestParseComponentsOptions(t *testing.T) {
 
 	t.Run("defaults", func(t *testing.T) {
 		cmd := buildCmd()
-		v := bindFlagsToViper(t, cmd)
+		v := bindFlagsToViper(t, cmd, componentsParser)
 
 		opts := parseComponentsOptions(cmd, v)
 
@@ -60,7 +64,7 @@ func TestParseComponentsOptions(t *testing.T) {
 		setFlag(t, cmd, "locked", "false")
 		setFlag(t, cmd, "process-templates", "false")
 		setFlag(t, cmd, "process-functions", "false")
-		v := bindFlagsToViper(t, cmd)
+		v := bindFlagsToViper(t, cmd, componentsParser)
 
 		opts := parseComponentsOptions(cmd, v)
 
@@ -86,7 +90,7 @@ func TestParseMetadataOptions(t *testing.T) {
 
 	t.Run("defaults", func(t *testing.T) {
 		cmd := buildCmd()
-		v := bindFlagsToViper(t, cmd)
+		v := bindFlagsToViper(t, cmd, metadataParser)
 
 		opts := parseMetadataOptions(cmd, v)
 
@@ -101,7 +105,7 @@ func TestParseMetadataOptions(t *testing.T) {
 		setFlag(t, cmd, "stack", "dev-*")
 		setFlag(t, cmd, "process-templates", "false")
 		setFlag(t, cmd, "process-functions", "true")
-		v := bindFlagsToViper(t, cmd)
+		v := bindFlagsToViper(t, cmd, metadataParser)
 
 		opts := parseMetadataOptions(cmd, v)
 
@@ -123,7 +127,7 @@ func TestParseSourcesOptions(t *testing.T) {
 
 	t.Run("defaults_no_args", func(t *testing.T) {
 		cmd := buildCmd()
-		v := bindFlagsToViper(t, cmd)
+		v := bindFlagsToViper(t, cmd, sourcesParser)
 
 		opts := parseSourcesOptions(cmd, v, nil)
 
@@ -135,7 +139,7 @@ func TestParseSourcesOptions(t *testing.T) {
 
 	t.Run("component_filter_from_args", func(t *testing.T) {
 		cmd := buildCmd()
-		v := bindFlagsToViper(t, cmd)
+		v := bindFlagsToViper(t, cmd, sourcesParser)
 
 		opts := parseSourcesOptions(cmd, v, []string{"vpc"})
 
@@ -147,7 +151,7 @@ func TestParseSourcesOptions(t *testing.T) {
 		setFlag(t, cmd, "format", "json")
 		setFlag(t, cmd, "stack", "prod-us-east-1")
 		setFlag(t, cmd, "process-functions", "false")
-		v := bindFlagsToViper(t, cmd)
+		v := bindFlagsToViper(t, cmd, sourcesParser)
 
 		opts := parseSourcesOptions(cmd, v, nil)
 
@@ -169,7 +173,7 @@ func TestParseStacksOptions(t *testing.T) {
 
 	t.Run("defaults", func(t *testing.T) {
 		cmd := buildCmd()
-		v := bindFlagsToViper(t, cmd)
+		v := bindFlagsToViper(t, cmd, stacksParser)
 
 		opts := parseStacksOptions(cmd, v)
 
@@ -186,7 +190,7 @@ func TestParseStacksOptions(t *testing.T) {
 		setFlag(t, cmd, "component", "vpc")
 		setFlag(t, cmd, "process-templates", "false")
 		setFlag(t, cmd, "process-functions", "false")
-		v := bindFlagsToViper(t, cmd)
+		v := bindFlagsToViper(t, cmd, stacksParser)
 
 		opts := parseStacksOptions(cmd, v)
 

@@ -339,7 +339,7 @@ func TestParseInstancesOptions(t *testing.T) {
 
 	t.Run("defaults", func(t *testing.T) {
 		cmd := buildCmd()
-		v := bindFlagsToViper(t, cmd)
+		v := bindFlagsToViper(t, cmd, instancesParser)
 
 		opts := parseInstancesOptions(cmd, v)
 
@@ -358,7 +358,7 @@ func TestParseInstancesOptions(t *testing.T) {
 		setFlag(t, cmd, "upload", "true")
 		setFlag(t, cmd, "process-templates", "false")
 		setFlag(t, cmd, "process-functions", "false")
-		v := bindFlagsToViper(t, cmd)
+		v := bindFlagsToViper(t, cmd, instancesParser)
 
 		opts := parseInstancesOptions(cmd, v)
 

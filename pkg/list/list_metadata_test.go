@@ -4,13 +4,18 @@ package list
 import (
 	"testing"
 
+	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/data"
+	iolib "github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/pkg/list/column"
 	listSort "github.com/cloudposse/atmos/pkg/list/sort"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui"
+	"github.com/cloudposse/atmos/tests"
 )
 
 func TestParseMetadataColumnsFlag(t *testing.T) {
@@ -351,4 +356,49 @@ func TestMetadataOptionsStruct(t *testing.T) {
 	assert.Equal(t, ",", opts.Delimiter)
 	assert.True(t, opts.ProcessTemplates)
 	assert.False(t, opts.ProcessFunctions)
+}
+
+// TestExecuteListMetadataCmd exercises the main pkg-level metadata entry
+// point against the `complete` fixture. Mirrors TestExecuteListInstancesCmd
+// so the executor's flag-forwarding and render pipeline are covered at the
+// pkg layer (cross-package coverage from cmd/list tests is not counted by
+// Codecov for this package).
+func TestExecuteListMetadataCmd(t *testing.T) {
+	ioCtx, err := iolib.NewContext()
+	require.NoError(t, err, "failed to initialize I/O context")
+	ui.InitFormatter(ioCtx)
+	data.InitWriter(ioCtx)
+
+	fixturePath := "../../tests/fixtures/scenarios/complete"
+	tests.RequireFilePath(t, fixturePath, "test fixture directory")
+
+	cmd := &cobra.Command{}
+	cmd.Flags().String("format", "json", "Output format")
+
+	info := &schema.ConfigAndStacksInfo{
+		BasePath: fixturePath,
+	}
+
+	err = ExecuteListMetadataCmd(info, cmd, []string{}, &MetadataOptions{
+		Format:           "json",
+		ProcessTemplates: true,
+		ProcessFunctions: false,
+	})
+	require.NoError(t, err, "complete fixture should list metadata cleanly")
+}
+
+// TestExecuteListMetadataCmd_InvalidConfig verifies the metadata executor
+// surfaces config-init errors from InitCliConfig.
+func TestExecuteListMetadataCmd_InvalidConfig(t *testing.T) {
+	cmd := &cobra.Command{}
+	cmd.Flags().String("format", "json", "Output format")
+
+	info := &schema.ConfigAndStacksInfo{
+		BasePath: "/nonexistent/path",
+	}
+
+	err := ExecuteListMetadataCmd(info, cmd, []string{}, &MetadataOptions{
+		Format: "json",
+	})
+	require.Error(t, err, "invalid base path should fail config init")
 }

@@ -35,7 +35,7 @@ The two flags control two different things, and the distinction finally matches 
 Before this release, the flag descriptions and docs conflated the two. If you wanted to run `atmos list instances --upload`
 in CI against a repo where component sections call `atmos.Component(...)` inside Go templates,
 you had no user-facing dial — the combination was pinned to `processTemplates=true, processYamlFunctions=false`,
-and the upload path would hang on missing AWS credentials.
+and the upload path would fail with `No valid credential sources found` when Terraform tried to read a remote backend.
 
 Now you can mix and match:
 
