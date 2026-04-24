@@ -52,6 +52,21 @@ type extractLocalsResult struct {
 func extractLocalsFromRawYAML(atmosConfig *schema.AtmosConfiguration, yamlContent string, filePath string) (*extractLocalsResult, error) {
 	defer perf.Track(atmosConfig, "exec.extractLocalsFromRawYAML")()
 
+	// Memoize by (atmosConfig, filePath, contentHash). Locals resolution is deterministic
+	// for a given input and may trigger expensive YAML functions like !terraform.state that
+	// hit remote backends — without this cache, `atmos list stacks` re-resolves the same
+	// file hundreds of times. Return a deep copy so that callers that treat the result
+	// maps as mutable cannot corrupt future cache hits. See GitHub issue #2344.
+	cacheKey := localsExtractCacheKey(atmosConfig, filePath, yamlContent)
+	if cached, ok := localsExtractCache.Load(cacheKey); ok {
+		if cachedResult, ok := cached.(*extractLocalsResult); ok {
+			if copied, err := deepCopyExtractLocalsResult(cachedResult); err == nil {
+				return copied, nil
+			}
+			// Deep copy failed — fall through and recompute rather than return a shared reference.
+		}
+	}
+
 	// Parse raw YAML to extract the structure.
 	// YAML treats template expressions like {{ .locals.X }} as plain strings,
 	// so parsing succeeds even with unresolved templates.
@@ -75,7 +90,9 @@ func extractLocalsFromRawYAML(atmosConfig *schema.AtmosConfiguration, yamlConten
 	}
 
 	if rawConfig == nil {
-		return &extractLocalsResult{}, nil
+		emptyResult := &extractLocalsResult{}
+		localsExtractCache.Store(cacheKey, emptyResult)
+		return emptyResult, nil
 	}
 
 	// Derive the stack name from the file path so that YAML functions like
@@ -89,7 +106,18 @@ func extractLocalsFromRawYAML(atmosConfig *schema.AtmosConfiguration, yamlConten
 		return nil, fmt.Errorf("%w: failed to process stack locals: %w", errUtils.ErrInvalidStackManifest, err)
 	}
 
-	return buildLocalsResult(rawConfig, localsCtx), nil
+	result := buildLocalsResult(rawConfig, localsCtx)
+
+	// Store a deep copy in the cache so that callers' mutations cannot poison subsequent
+	// cache hits. Then return a second deep copy to the caller (also isolated from the
+	// cached entry). On copy failure, return the freshly built result directly and skip
+	// the cache store for this call — correctness is preserved at the cost of missing
+	// the memoization benefit for this file.
+	if cachedCopy, copyErr := deepCopyExtractLocalsResult(result); copyErr == nil {
+		localsExtractCache.Store(cacheKey, cachedCopy)
+	}
+
+	return result, nil
 }
 
 // deriveStackNameForLocals derives the stack name from the file path and raw config
