@@ -32,7 +32,7 @@ func SetGlobCacheEntryExpired(pattern string) {
 	normalizedPattern := filepath.ToSlash(pattern)
 	globMatchesLRUMu.Lock()
 	if entry, ok := globMatchesLRU.Get(normalizedPattern); ok {
-		entry.expiry = time.Time{} // zero time is in the past
+		entry.expiry = time.Time{} // zero time is in the past.
 		globMatchesLRU.Add(normalizedPattern, entry)
 	}
 	globMatchesLRUMu.Unlock()

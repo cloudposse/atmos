@@ -1097,10 +1097,10 @@ func TestProcessYAMLConfigFileMissingFilesReturnError(t *testing.T) {
 // import is not a Go template, so processStackConfigImports propagates the
 // error back to ProcessYAMLConfigFile with the missing-file message.
 func TestProcessYAMLConfigFile_ImportNotFound_ErrorPath(t *testing.T) {
-	stacksBasePath := "../../tests/fixtures/scenarios/invalid-stacks/stacks"
+	stacksBasePath := filepath.Join("..", "..", "tests", "fixtures", "scenarios", "invalid-stacks", "stacks")
 	// missing-import.yaml imports "catalog/this-file-does-not-exist-at-all" which has no
 	// matching files on disk — GetGlobMatches returns ErrFailedToFindImport.
-	filePath := "../../tests/fixtures/scenarios/invalid-stacks/stacks/orgs/acme/platform/missing-import.yaml"
+	filePath := filepath.Join("..", "..", "tests", "fixtures", "scenarios", "invalid-stacks", "stacks", "orgs", "acme", "platform", "missing-import.yaml")
 
 	atmosConfig := schema.AtmosConfiguration{
 		Templates: schema.Templates{
@@ -1144,10 +1144,10 @@ func TestProcessYAMLConfigFile_ImportNotFound_ErrorPath(t *testing.T) {
 // the import path and reaches IsGolangTemplate rather than failing during YAML
 // template pre-processing.
 func TestProcessYAMLConfigFile_InvalidTemplateInImportPath(t *testing.T) {
-	stacksBasePath := "../../tests/fixtures/scenarios/invalid-stacks/stacks"
+	stacksBasePath := filepath.Join("..", "..", "tests", "fixtures", "scenarios", "invalid-stacks", "stacks")
 	// invalid-template-import-path.yaml imports `{{ unclosed` which is syntactically
 	// invalid as a Go template; IsGolangTemplate returns (false, err).
-	filePath := "../../tests/fixtures/scenarios/invalid-stacks/stacks/orgs/acme/platform/invalid-template-import-path.yaml"
+	filePath := filepath.Join("..", "..", "tests", "fixtures", "scenarios", "invalid-stacks", "stacks", "orgs", "acme", "platform", "invalid-template-import-path.yaml")
 
 	// Disable template pre-processing so the raw `{{ unclosed` string is passed
 	// through YAML parsing unchanged and eventually reaches IsGolangTemplate.
