@@ -2,6 +2,7 @@
 package list
 
 import (
+	"path/filepath"
 	"testing"
 
 	"github.com/spf13/cobra"
@@ -369,7 +370,7 @@ func TestExecuteListMetadataCmd(t *testing.T) {
 	ui.InitFormatter(ioCtx)
 	data.InitWriter(ioCtx)
 
-	fixturePath := "../../tests/fixtures/scenarios/complete"
+	fixturePath := filepath.Join("..", "..", "tests", "fixtures", "scenarios", "complete")
 	tests.RequireFilePath(t, fixturePath, "test fixture directory")
 
 	cmd := &cobra.Command{}
@@ -388,17 +389,23 @@ func TestExecuteListMetadataCmd(t *testing.T) {
 }
 
 // TestExecuteListMetadataCmd_InvalidConfig verifies the metadata executor
-// surfaces config-init errors from InitCliConfig.
+// surfaces config-init errors from InitCliConfig as the
+// `ErrFailedToInitConfig` sentinel — guards against future changes that
+// might swallow the init error and surface a render-time error instead.
 func TestExecuteListMetadataCmd_InvalidConfig(t *testing.T) {
 	cmd := &cobra.Command{}
 	cmd.Flags().String("format", "json", "Output format")
 
+	// Build a path that's guaranteed not to exist using t.TempDir() so the
+	// test is portable across OSes and never collides with a real path.
 	info := &schema.ConfigAndStacksInfo{
-		BasePath: "/nonexistent/path",
+		BasePath: filepath.Join(t.TempDir(), "does-not-exist"),
 	}
 
 	err := ExecuteListMetadataCmd(info, cmd, []string{}, &MetadataOptions{
 		Format: "json",
 	})
 	require.Error(t, err, "invalid base path should fail config init")
+	assert.ErrorIs(t, err, errUtils.ErrFailedToInitConfig,
+		"invalid base path should surface ErrFailedToInitConfig from InitCliConfig")
 }
