@@ -318,7 +318,7 @@ func TestRenderProfileListOutput(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			output, err := renderProfileListOutput(atmosConfig, profiles, tt.format)
+			output, err := renderProfileListOutput(atmosConfig, profiles, nil, tt.format)
 
 			if tt.expectError {
 				assert.Error(t, err)
@@ -384,7 +384,7 @@ func TestRenderProfileListOutput_EmptyProfiles(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			output, err := renderProfileListOutput(atmosConfig, profiles, tt.format)
+			output, err := renderProfileListOutput(atmosConfig, profiles, nil, tt.format)
 
 			require.NoError(t, err)
 			require.NotEmpty(t, output)
@@ -465,7 +465,7 @@ func TestRenderProfileListOutput_WithComplexProfiles(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			output, err := renderProfileListOutput(atmosConfig, profiles, tt.format)
+			output, err := renderProfileListOutput(atmosConfig, profiles, nil, tt.format)
 
 			require.NoError(t, err)
 			assert.NotEmpty(t, output)

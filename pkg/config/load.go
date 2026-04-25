@@ -373,6 +373,17 @@ func LoadConfig(configAndStacksInfo *schema.ConfigAndStacksInfo) (schema.AtmosCo
 		// Don't fail config loading if this step fails, just log it.
 	}
 
+	// Sync profiles.base_path from the loaded atmos.yaml into the global viper.
+	// LoadConfig uses a local viper instance, so values read from atmos.yaml
+	// are not automatically reachable via viper.GetViper(). The auth profile
+	// fallback (pkg/auth/profile_fallback.go) reads profiles.base_path from
+	// the global viper when searching for candidate profiles; without this
+	// sync, custom profile locations configured in atmos.yaml are invisible
+	// to the fallback and no candidates are found.
+	if atmosConfig.Profiles.BasePath != "" {
+		viper.GetViper().Set("profiles.base_path", atmosConfig.Profiles.BasePath)
+	}
+
 	return atmosConfig, nil
 }
 

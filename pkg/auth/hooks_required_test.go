@@ -31,7 +31,7 @@ func TestResolveTargetIdentityName_DefaultWinsOverRequired(t *testing.T) {
 	stack := &schema.ConfigAndStacksInfo{}
 	mgr := &stubAuthManager{defaultIdentity: "some-default"}
 
-	name, err := resolveTargetIdentityName(stack, mgr)
+	name, err := resolveTargetIdentityName(context.Background(), stack, mgr)
 	assert.NoError(t, err)
 	assert.Equal(t, "some-default", name, "default identity should be primary even when required identities exist")
 }
@@ -46,7 +46,7 @@ func TestResolveTargetIdentityName_NoDefaultErrorsEvenWithRequired(t *testing.T)
 		},
 	}
 
-	_, err := resolveTargetIdentityName(stack, mgr)
+	_, err := resolveTargetIdentityName(context.Background(), stack, mgr)
 	assert.ErrorIs(t, err, errUtils.ErrNoDefaultIdentity, "should error when no default, even if required identities exist")
 }
 
@@ -54,7 +54,7 @@ func TestResolveTargetIdentityName_CliOverridesDefault(t *testing.T) {
 	stack := &schema.ConfigAndStacksInfo{Identity: "override-identity"}
 	mgr := &stubAuthManager{defaultIdentity: "some-default"}
 
-	name, err := resolveTargetIdentityName(stack, mgr)
+	name, err := resolveTargetIdentityName(context.Background(), stack, mgr)
 	assert.NoError(t, err)
 	assert.Equal(t, "override-identity", name, "CLI --identity flag should take precedence")
 }
@@ -63,7 +63,7 @@ func TestResolveTargetIdentityName_NoDefaultNoRequired(t *testing.T) {
 	stack := &schema.ConfigAndStacksInfo{}
 	mgr := &stubAuthManager{defaultIdentity: ""}
 
-	_, err := resolveTargetIdentityName(stack, mgr)
+	_, err := resolveTargetIdentityName(context.Background(), stack, mgr)
 	assert.ErrorIs(t, err, errUtils.ErrNoDefaultIdentity, "should error when no default and no required")
 }
 
