@@ -39,7 +39,7 @@ func TestInitializeAIToolsAndExecutor_ToolsEnabled(t *testing.T) {
 			Tools: schema.AIToolSettings{
 				Enabled:             true,
 				AllowedTools:        []string{"read_file"},
-				RestrictedTools:     []string{"execute_bash_command"},
+				RestrictedTools:     []string{"execute_direct_command"},
 				BlockedTools:        []string{"dangerous_tool"},
 				YOLOMode:            false,
 				RequireConfirmation: boolPtr(true),
@@ -95,7 +95,7 @@ func TestInitializeAIToolsAndExecutor_WithToolLists(t *testing.T) {
 			name: "with restricted tools only",
 			toolConfig: schema.AIToolSettings{
 				Enabled:         true,
-				RestrictedTools: []string{"execute_bash_command"},
+				RestrictedTools: []string{"execute_direct_command"},
 			},
 			shouldError: false,
 		},

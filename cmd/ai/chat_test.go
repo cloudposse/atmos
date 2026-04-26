@@ -1144,7 +1144,7 @@ func TestChatCmd_ToolsConfig(t *testing.T) {
 					YOLOMode:            false,
 					RequireConfirmation: boolPtr(true),
 					AllowedTools:        []string{"read_file", "list_files"},
-					RestrictedTools:     []string{"execute_bash_command"},
+					RestrictedTools:     []string{"execute_direct_command"},
 					BlockedTools:        []string{"dangerous_tool"},
 				},
 			},
@@ -1153,7 +1153,7 @@ func TestChatCmd_ToolsConfig(t *testing.T) {
 		assert.False(t, atmosConfig.AI.Tools.YOLOMode)
 		assert.True(t, *atmosConfig.AI.Tools.RequireConfirmation)
 		assert.Equal(t, []string{"read_file", "list_files"}, atmosConfig.AI.Tools.AllowedTools)
-		assert.Equal(t, []string{"execute_bash_command"}, atmosConfig.AI.Tools.RestrictedTools)
+		assert.Equal(t, []string{"execute_direct_command"}, atmosConfig.AI.Tools.RestrictedTools)
 		assert.Equal(t, []string{"dangerous_tool"}, atmosConfig.AI.Tools.BlockedTools)
 	})
 }
