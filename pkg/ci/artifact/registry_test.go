@@ -135,6 +135,8 @@ func (stubResolver) ResolveGCPAuthContext(_ context.Context, _ string) (*store.G
 	return nil, nil
 }
 
+// TestNewStore_InjectsResolverIntoIdentityAwareBackend verifies the registry
+// calls SetAuthContext on identity-aware backends with the supplied resolver.
 func TestNewStore_InjectsResolverIntoIdentityAwareBackend(t *testing.T) {
 	registryMu.Lock()
 	oldFactories := factories
@@ -164,6 +166,8 @@ func TestNewStore_InjectsResolverIntoIdentityAwareBackend(t *testing.T) {
 	assert.NotNil(t, recorder.receivedResolver, "resolver must propagate to backend")
 }
 
+// TestNewStore_NoInjectionWhenResolverNil verifies SetAuthContext is not
+// called when the caller supplies no resolver.
 func TestNewStore_NoInjectionWhenResolverNil(t *testing.T) {
 	registryMu.Lock()
 	oldFactories := factories
@@ -190,6 +194,8 @@ func TestNewStore_NoInjectionWhenResolverNil(t *testing.T) {
 	assert.Equal(t, 0, recorder.calls, "SetAuthContext must not be called without a resolver")
 }
 
+// TestNewStore_IgnoresResolverOnNonIdentityAwareBackend verifies backends
+// that do not implement IdentityAwareBackend are returned unchanged.
 func TestNewStore_IgnoresResolverOnNonIdentityAwareBackend(t *testing.T) {
 	registryMu.Lock()
 	oldFactories := factories

@@ -259,6 +259,8 @@ func TestNewStore_EagerInitWithoutIdentity(t *testing.T) {
 	assert.Empty(t, s.identityName)
 }
 
+// TestStore_SetAuthContext verifies the resolver is captured and a non-empty
+// identity name overrides the one supplied at construction.
 func TestStore_SetAuthContext(t *testing.T) {
 	t.Run("captures resolver, preserves identity when override is empty", func(t *testing.T) {
 		s := &Store{identityName: "ci-deployer"}
@@ -280,6 +282,8 @@ func TestStore_SetAuthContext(t *testing.T) {
 	})
 }
 
+// TestStore_BuildAuthConfigOpts verifies AWS SDK option construction from a
+// resolved AWS auth context.
 func TestStore_BuildAuthConfigOpts(t *testing.T) {
 	tests := []struct {
 		name            string
@@ -398,6 +402,8 @@ func TestStore_EnsureClient_CallsResolverOnceAcrossOperations(t *testing.T) {
 	assert.NotNil(t, s.client, "client should be populated after first ensureClient call")
 }
 
+// TestStore_ImplementsIdentityAwareBackend verifies the runtime type
+// assertion the artifact registry relies on to inject the resolver.
 func TestStore_ImplementsIdentityAwareBackend(t *testing.T) {
 	var _ artifact.IdentityAwareBackend = (*Store)(nil) //nolint:gosimple // compile-time assertion
 	s := &Store{}
