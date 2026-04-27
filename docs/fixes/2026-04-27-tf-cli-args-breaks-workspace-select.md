@@ -9,7 +9,7 @@ Actions workflow level (so OpenTofu would wait on remote state
 locks instead of failing immediately) hit a hard failure on every
 `atmos terraform plan` run:
 
-```
+```text
 Error parsing command-line flags: flag provided but not defined: -lock-timeout
 ```
 

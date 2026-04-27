@@ -158,15 +158,18 @@ func ExecuteShellCommand(
 	if cfg.processEnv != nil {
 		baseEnv = cfg.processEnv
 	}
+	cmdEnv := envpkg.MergeGlobalEnv(baseEnv, atmosConfig.Env)
+	cmdEnv = append(cmdEnv, env...)
 	// When the caller requested terraform-setup-env sanitization (atmos-internal
 	// `tofu workspace select` / `tofu workspace new` / auto-`tofu init` pre-step),
 	// filter out env vars that would cause OpenTofu to inject flags those
-	// subcommands do not accept.
+	// subcommands do not accept.  Applied AFTER the merge so blocked vars cannot
+	// be reintroduced by atmosConfig.Env (atmos.yaml top-level env:) or by the
+	// per-command env slice (info.ComponentEnvList → stack env: + auth hooks).
+	// Applied BEFORE the ATMOS_SHLVL append so we don't strip our own bookkeeping.
 	if cfg.sanitizeTerraformSetupEnv {
-		baseEnv = sanitizeTerraformWorkspaceEnv(baseEnv)
+		cmdEnv = sanitizeTerraformWorkspaceEnv(cmdEnv)
 	}
-	cmdEnv := envpkg.MergeGlobalEnv(baseEnv, atmosConfig.Env)
-	cmdEnv = append(cmdEnv, env...)
 	cmdEnv = append(cmdEnv, fmt.Sprintf("ATMOS_SHLVL=%d", newShellLevel))
 
 	// Propagate TTY state to subprocess.

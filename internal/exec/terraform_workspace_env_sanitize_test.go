@@ -67,8 +67,41 @@ func readSubprocessEnv(t *testing.T, path string) map[string]string {
 // reproduced).  After the fix: TF_CLI_ARGS is stripped; subcommand-scoped
 // variants like TF_CLI_ARGS_plan are preserved.
 func TestRunWorkspaceSetup_StripsTfCliArgs(t *testing.T) {
+	// Defensive: clear ambient TF_WORKSPACE so shouldSkipWorkspaceSetup
+	// (terraform_execute_helpers_exec.go:176) does not short-circuit
+	// runWorkspaceSetup before the subprocess can spawn.  Without this, a
+	// developer with TF_WORKSPACE exported in their shell would see a
+	// confusing "env dump file must exist" failure.
+	t.Setenv("TF_WORKSPACE", "")
+
 	exePath, err := os.Executable()
 	require.NoError(t, err, "os.Executable() must succeed")
+
+	// Prerequisite sub-test: confirm ComponentEnvList actually reaches the
+	// subprocess (per CLAUDE.md "Add prerequisite sub-tests for subprocess
+	// behavior").  Guards against a future refactor that drops the
+	// preserved-entries assertions below and turns the main test into a
+	// vacuous "TF_CLI_ARGS not in env → pass" — if env propagation breaks,
+	// this sub-test fails first with a clear cause.
+	t.Run("prerequisite: ComponentEnvList reaches the subprocess", func(t *testing.T) {
+		preDumpFile := filepath.Join(t.TempDir(), "pre.env.dump")
+		preInfo := schema.ConfigAndStacksInfo{
+			Command:              exePath,
+			SubCommand:           "plan",
+			TerraformWorkspace:   "precheck-ws",
+			ComponentBackendType: "",
+			ComponentEnvList: []string{
+				"_ATMOS_TEST_ENV_DUMP_FILE=" + preDumpFile,
+				"_ATMOS_TEST_PREREQ=ok",
+			},
+		}
+		require.NoError(t, runWorkspaceSetup(&schema.AtmosConfiguration{}, &preInfo, t.TempDir()),
+			"prerequisite: runWorkspaceSetup must succeed (subprocess exits 0)")
+		preEnv := readSubprocessEnv(t, preDumpFile)
+		assert.Equal(t, "ok", preEnv["_ATMOS_TEST_PREREQ"],
+			"prerequisite: ComponentEnvList must propagate to the subprocess; "+
+				"otherwise the main TF_CLI_ARGS assertions below are vacuous")
+	})
 
 	dumpFile := filepath.Join(t.TempDir(), "env.dump")
 
@@ -245,4 +278,85 @@ func TestExecuteTerraformInitPhase_StripsTfCliArgs(t *testing.T) {
 	// Unrelated env vars pass through.
 	assert.Equal(t, "us-east-1", subprocessEnv["TF_VAR_region"],
 		"TF_VAR_* must pass through; not a CLI args flag")
+}
+
+// TestExecuteShellCommand_SanitizeAfterMerge verifies that the sanitization
+// runs AFTER the env merge step in `ExecuteShellCommand`, so blocked vars
+// cannot be reintroduced by either of the two later sources:
+//
+//   - `atmosConfig.Env` — populated from `atmos.yaml`'s top-level `env:` section.
+//     A user who puts `TF_CLI_ARGS=-lock-timeout=10m` there to apply it
+//     globally to terraform calls would otherwise still hit the bug.
+//   - the `env` parameter — `info.ComponentEnvList`, which is built by
+//     `assembleComponentEnvVars` from `info.ComponentEnvSection` (auth hooks +
+//     stack-config `env:` section).  Same theoretical leak path.
+//
+// Without the merge-order fix, an earlier pre-merge sanitization could be
+// silently bypassed. This test pins the post-merge behavior.
+func TestExecuteShellCommand_SanitizeAfterMerge(t *testing.T) {
+	exePath, err := os.Executable()
+	require.NoError(t, err, "os.Executable() must succeed")
+
+	dumpFile := filepath.Join(t.TempDir(), "env.dump")
+
+	// Parent-process env is clean — the leak is intentionally NOT from os.Environ()
+	// in this test.  We're testing that the OTHER two env sources are also sanitized.
+	// (t.Setenv to "" makes sure no ambient TF_CLI_ARGS interferes.)
+	t.Setenv("TF_CLI_ARGS", "")
+	t.Setenv("TF_CLI_ARGS_workspace", "")
+
+	// Source 1: atmosConfig.Env (atmos.yaml top-level env: section).
+	atmosConfig := schema.AtmosConfiguration{
+		Env: map[string]string{
+			"TF_CLI_ARGS":           "-lock-timeout=10m",
+			"TF_CLI_ARGS_workspace": "-no-color",
+			// Per-subcommand variants must still pass through.
+			"TF_CLI_ARGS_plan": "-lock-timeout=10m",
+		},
+	}
+
+	// Source 2: env param (= info.ComponentEnvList for the workspace call).
+	componentEnv := []string{
+		"_ATMOS_TEST_ENV_DUMP_FILE=" + dumpFile,
+		"TF_CLI_ARGS=-parallelism=4",          // would-be leak via the env param.
+		"TF_CLI_ARGS_workspace=-input=false",  // ditto.
+		"TF_CLI_ARGS_apply=-lock-timeout=10m", // per-subcommand variant — preserved.
+	}
+
+	// Call ExecuteShellCommand directly with WithSanitizedTerraformSetupEnv()
+	// so we exercise the full merge → sanitize → ATMOS_SHLVL pipeline.
+	shellErr := ExecuteShellCommand(
+		atmosConfig,
+		exePath,
+		[]string{"workspace", "select", "test-ws"},
+		t.TempDir(),
+		componentEnv,
+		false,
+		"",
+		WithSanitizedTerraformSetupEnv(),
+	)
+	require.NoError(t, shellErr, "subprocess (test binary) must exit 0 via _ATMOS_TEST_ENV_DUMP_FILE handler")
+
+	subprocessEnv := readSubprocessEnv(t, dumpFile)
+
+	// The whole point of this test: TF_CLI_ARGS / TF_CLI_ARGS_workspace must be
+	// stripped no matter which of the three sources contributed them.
+	_, hasUnscoped := subprocessEnv["TF_CLI_ARGS"]
+	assert.False(t, hasUnscoped,
+		"TF_CLI_ARGS must NOT survive merge from atmosConfig.Env or the env param. "+
+			"Got value: %q", subprocessEnv["TF_CLI_ARGS"])
+	_, hasWorkspaceVariant := subprocessEnv["TF_CLI_ARGS_workspace"]
+	assert.False(t, hasWorkspaceVariant,
+		"TF_CLI_ARGS_workspace must NOT survive merge from atmosConfig.Env or the env param. "+
+			"Got value: %q", subprocessEnv["TF_CLI_ARGS_workspace"])
+
+	// Per-subcommand variants from BOTH sources must pass through unchanged.
+	assert.Equal(t, "-lock-timeout=10m", subprocessEnv["TF_CLI_ARGS_plan"],
+		"TF_CLI_ARGS_plan from atmosConfig.Env must be preserved")
+	assert.Equal(t, "-lock-timeout=10m", subprocessEnv["TF_CLI_ARGS_apply"],
+		"TF_CLI_ARGS_apply from the env param must be preserved")
+
+	// ATMOS_SHLVL is appended AFTER sanitization, so the helper must not strip it.
+	assert.NotEmpty(t, subprocessEnv["ATMOS_SHLVL"],
+		"ATMOS_SHLVL must reach the subprocess; sanitization must not run after this append")
 }
