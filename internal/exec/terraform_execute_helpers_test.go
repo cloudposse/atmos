@@ -6,6 +6,7 @@ import (
 	"os"
 	osexec "os/exec"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -717,7 +718,7 @@ func TestResolveWorkdirComponentPath_ExistingDir(t *testing.T) {
 	componentName := "null-label-exports"
 	subpath := "exports"
 
-	expectedRoot := filepath.Join(basePath, ".workdir", cfg.TerraformComponentType, stack+"-"+componentName)
+	expectedRoot := filepath.Join(basePath, provWorkdir.WorkdirPath, cfg.TerraformComponentType, stack+"-"+componentName)
 	expectedCandidate := filepath.Join(expectedRoot, subpath)
 	require.NoError(t, os.MkdirAll(expectedCandidate, 0o755))
 
@@ -758,6 +759,9 @@ func TestResolveWorkdirComponentPath_NonExistentDir(t *testing.T) {
 // failures (e.g. EACCES) surface as wrapped ErrWorkdirProvision instead of a
 // silent fallback that masks the real failure.
 func TestResolveWorkdirComponentPath_StatErrorPropagates(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("os.Chmod cannot deny directory traversal on Windows, and os.Getuid is not meaningful there")
+	}
 	if os.Getuid() == 0 {
 		t.Skip("test relies on POSIX permission denial; root bypasses chmod")
 	}
@@ -768,7 +772,7 @@ func TestResolveWorkdirComponentPath_StatErrorPropagates(t *testing.T) {
 
 	// Create the workdir root, then chmod the parent so the candidate stat
 	// fails with EACCES rather than ENOENT.
-	expectedRoot := filepath.Join(basePath, ".workdir", cfg.TerraformComponentType, stack+"-"+componentName)
+	expectedRoot := filepath.Join(basePath, provWorkdir.WorkdirPath, cfg.TerraformComponentType, stack+"-"+componentName)
 	require.NoError(t, os.MkdirAll(expectedRoot, 0o755))
 	require.NoError(t, os.Chmod(expectedRoot, 0o000))
 	t.Cleanup(func() { _ = os.Chmod(expectedRoot, 0o755) })
