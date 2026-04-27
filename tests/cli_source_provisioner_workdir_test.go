@@ -108,6 +108,11 @@ func TestSourceWorkdir_DeleteMissingForce(t *testing.T) {
 // The metadata.component: exports setting tells atmos the Terraform module lives at exports/.
 // The fix in provisionComponentSource updates WorkdirPathKey to <workdir>/exports/.
 func TestJITSource_MetadataComponentSubpath(t *testing.T) {
+	// JIT source provisioning clones a remote git repo, so this test needs
+	// network access to GitHub and the git binary.
+	RequireExecutable(t, "git", "JIT source provisioning clones a remote repo")
+	RequireGitHubAccess(t)
+
 	t.Chdir("./fixtures/scenarios/source-provisioner-workdir")
 
 	t.Cleanup(func() {

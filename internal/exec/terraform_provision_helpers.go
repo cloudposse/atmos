@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"time"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	provSource "github.com/cloudposse/atmos/pkg/provisioner/source"
 	provWorkdir "github.com/cloudposse/atmos/pkg/provisioner/workdir"
@@ -18,18 +19,27 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
-// applyMetadataComponentSubpath joins baseComponentPath onto workdirPath for JIT
-// source components whose metadata.component specifies a subdirectory within the
-// cloned repo (e.g. metadata.component: modules/iam-policy means the TF module is
-// at <workdir>/modules/iam-policy/). When baseComponentPath is empty (no
-// metadata.component, or metadata.component equals the component instance name),
-// workdirPath is returned unchanged. ".." is resolved naturally by filepath.Join —
-// intentional escape hatch.
-func applyMetadataComponentSubpath(baseComponentPath, workdirPath string) string {
-	if baseComponentPath == "" {
+// applyMetadataComponentSubpath joins metadataComponentSubpath onto workdirPath for
+// JIT source components whose metadata.component points at a subdirectory within
+// the cloned repo (e.g. metadata.component: modules/iam-policy means the Terraform
+// module is at <workdir>/modules/iam-policy/). When metadataComponentSubpath is
+// empty (no metadata.component, or metadata.component equals the component
+// instance name), workdirPath is returned unchanged.
+//
+// ".." in metadataComponentSubpath is resolved naturally by filepath.Join. This
+// is intentional: many upstream Terraform modules reference shared files via
+// relative parent paths (e.g. ../../shared-vars.tf) and need the full repo on
+// disk with the working directory pointed at a subdirectory. Restricting to
+// strict subpaths would break those layouts. Atmos's threat model assumes a
+// trusted operator running atmos against their own stack configs — the
+// metadata.component value is YAML-author-controlled, on par with !exec,
+// !template, and !terraform.state, all of which can read or invoke arbitrary
+// host resources. See GitHub issue #2364 for the original report.
+func applyMetadataComponentSubpath(metadataComponentSubpath, workdirPath string) string {
+	if metadataComponentSubpath == "" {
 		return workdirPath
 	}
-	return filepath.Join(workdirPath, baseComponentPath)
+	return filepath.Join(workdirPath, metadataComponentSubpath)
 }
 
 // provisionComponentSource performs JIT source provisioning when configured, then
@@ -63,7 +73,7 @@ func provisionComponentSource(
 		}
 		exists, errDir := u.IsDirectory(workdirPath)
 		if errDir != nil && !errors.Is(errDir, os.ErrNotExist) {
-			return "", false, fmt.Errorf("workdir path %q is not accessible: %w", workdirPath, errDir)
+			return "", false, errors.Join(errUtils.ErrWorkdirProvision, fmt.Errorf("workdir path %q: %w", workdirPath, errDir))
 		}
 		return workdirPath, exists, nil
 	}
