@@ -1,8 +1,5 @@
 package exec
 
-// terraform_provision_helpers.go contains JIT source provisioning helpers
-// extracted from terraform_execute_helpers.go to keep that file under 600 lines.
-
 import (
 	"context"
 	"errors"

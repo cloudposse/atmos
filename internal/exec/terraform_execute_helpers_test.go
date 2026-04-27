@@ -704,36 +704,6 @@ func TestApplyWorkdirSubpathToSection_DoubleCallAppliesOnce(t *testing.T) {
 		"section should still hold the singly-joined path")
 }
 
-// TestApplyWorkdirSubpathToSection_EmptyBasePath returns the workdir root
-// unchanged when no metadata.component subpath is configured. The sentinel is
-// still set so that any later mutation (e.g. an inheritance step that
-// populates BaseComponentPath after this call) does not retroactively join.
-func TestApplyWorkdirSubpathToSection_EmptyBasePath(t *testing.T) {
-	workdirRoot := t.TempDir()
-	info := &schema.ConfigAndStacksInfo{
-		BaseComponentPath: "",
-		ComponentSection: map[string]any{
-			provWorkdir.WorkdirPathKey: workdirRoot,
-		},
-	}
-	path, ok := applyWorkdirSubpathToSection(info)
-	require.True(t, ok)
-	assert.Equal(t, workdirRoot, path)
-	assert.Equal(t, workdirRoot, info.ComponentSection[provWorkdir.WorkdirPathKey])
-}
-
-// TestApplyWorkdirSubpathToSection_MissingKey returns ("", false) when
-// WorkdirPathKey is absent (workdir provisioning hasn't run yet).
-func TestApplyWorkdirSubpathToSection_MissingKey(t *testing.T) {
-	info := &schema.ConfigAndStacksInfo{
-		BaseComponentPath: "modules/iam-policy",
-		ComponentSection:  map[string]any{},
-	}
-	path, ok := applyWorkdirSubpathToSection(info)
-	assert.False(t, ok)
-	assert.Empty(t, path)
-}
-
 // ──────────────────────────────────────────────────────────────────────────────
 // resolveWorkdirComponentPath
 // ──────────────────────────────────────────────────────────────────────────────

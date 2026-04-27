@@ -100,13 +100,17 @@ func TestSourceWorkdir_DeleteMissingForce(t *testing.T) {
 		"Expected error about missing --force flag or non-interactive mode")
 }
 
-// TestJITSource_MetadataComponentSubpath verifies that a JIT source component with
-// metadata.component: exports provisions the full repo into the workdir and that the
-// exports/ subdirectory is accessible within it. Regression test for GitHub issue #2364.
+// TestJITSource_MetadataComponentSubpath is an end-to-end smoke test for the
+// JIT source-provisioning pipeline against a stack that sets metadata.component
+// on a component with a remote source. It runs `atmos terraform plan --dry-run`
+// against the full terraform-null-label repo (no //subpath in URI) with
+// metadata.component: exports, and confirms the source provisioner clones the
+// repo and the configured subdirectory is reachable within the workdir.
 //
-// The component uses the full terraform-null-label repo (no //subpath in URI).
-// The metadata.component: exports setting tells atmos the Terraform module lives at exports/.
-// The fix in provisionComponentSource updates WorkdirPathKey to <workdir>/exports/.
+// The load-bearing assertion that WorkdirPathKey is rewritten to <workdir>/exports/
+// (the actual fix for issue #2364) lives in the unit tests on
+// applyWorkdirSubpathToSection in internal/exec/terraform_execute_helpers_test.go;
+// those would fail on reverted code, this test would not.
 func TestJITSource_MetadataComponentSubpath(t *testing.T) {
 	// JIT source provisioning clones a remote git repo, so this test needs
 	// network access to GitHub and the git binary.
