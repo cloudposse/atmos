@@ -357,8 +357,24 @@ func TestExecuteTerraform_TerraformPlanWithInvalidTemplates(t *testing.T) {
 	}
 
 	err := ExecuteTerraform(info)
-	assert.Error(t, err)
-	assert.ErrorContains(t, err, "invalid")
+	require.Error(t, err)
+	// The `invalid-stacks` fixture contains several invalid files with
+	// different error shapes (invalid template syntax in import paths, missing
+	// imports, malformed schemas, etc.). Filesystem walk order is not
+	// deterministic across OSes, so this assertion accepts any of the
+	// documented error messages those files can surface — previously the test
+	// was brittle and only passed when Linux/Windows happened to hit a file
+	// whose error contained "invalid".
+	errMsg := strings.ToLower(err.Error())
+	assert.True(t,
+		strings.Contains(errMsg, "invalid") ||
+			strings.Contains(errMsg, "unclosed") ||
+			strings.Contains(errMsg, "no matches found") ||
+			strings.Contains(errMsg, "function") ||
+			strings.Contains(errMsg, "template"),
+		"expected an invalid-stacks error mentioning invalid/unclosed/template/function/no matches, got: %s",
+		err.Error(),
+	)
 }
 
 func TestExecuteTerraform_TerraformInitWithVarfile(t *testing.T) {

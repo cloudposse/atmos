@@ -415,3 +415,26 @@ func TestListStacksWithOptions_ProvenanceValidation(t *testing.T) {
 		})
 	}
 }
+
+// TestStacksProcessTemplatesAndFunctionsFlags verifies that --process-templates
+// and --process-functions are registered on the real `stacks` cobra command
+// with the documented defaults (both true).
+func TestStacksProcessTemplatesAndFunctionsFlags(t *testing.T) {
+	processTemplatesFlag := stacksCmd.Flags().Lookup("process-templates")
+	if processTemplatesFlag == nil {
+		processTemplatesFlag = stacksCmd.PersistentFlags().Lookup("process-templates")
+	}
+	assert.NotNil(t, processTemplatesFlag, "process-templates flag should be registered on stacks command")
+	if processTemplatesFlag != nil {
+		assert.Equal(t, "true", processTemplatesFlag.DefValue)
+	}
+
+	processFunctionsFlag := stacksCmd.Flags().Lookup("process-functions")
+	if processFunctionsFlag == nil {
+		processFunctionsFlag = stacksCmd.PersistentFlags().Lookup("process-functions")
+	}
+	assert.NotNil(t, processFunctionsFlag, "process-functions flag should be registered on stacks command")
+	if processFunctionsFlag != nil {
+		assert.Equal(t, "true", processFunctionsFlag.DefValue)
+	}
+}
