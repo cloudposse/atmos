@@ -144,7 +144,7 @@ func testSaveAndClearRegistry() func() {
 	return SwapRegistryForTest()
 }
 
-// TestRestoreRegistry restores the provider registry from a previous snapshot.
+// testRestoreRegistry restores the provider registry from a previous snapshot.
 func testRestoreRegistry(restore func()) {
 	restore()
 }
