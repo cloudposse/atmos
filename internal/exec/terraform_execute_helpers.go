@@ -181,6 +181,19 @@ func autoGenerateComponentFiles(atmosConfig *schema.AtmosConfiguration, info *sc
 	return GenerateFilesForComponent(atmosConfig, info, componentPath)
 }
 
+// applyMetadataComponentSubpath joins info.BaseComponentPath onto workdirPath for JIT
+// source components whose metadata.component specifies a subdirectory within the cloned
+// repo (e.g. metadata.component: modules/iam-policy means the TF module is at
+// <workdir>/modules/iam-policy/). When BaseComponentPath is empty (no metadata.component,
+// or metadata.component equals the component instance name), workdirPath is returned
+// unchanged. ".." is resolved naturally by filepath.Join — intentional escape hatch.
+func applyMetadataComponentSubpath(info *schema.ConfigAndStacksInfo, workdirPath string) string {
+	if info.BaseComponentPath == "" {
+		return workdirPath
+	}
+	return filepath.Join(workdirPath, info.BaseComponentPath)
+}
+
 // provisionComponentSource performs JIT source provisioning when configured, then
 // checks whether the component directory exists. Returns the (possibly updated)
 // component path, existence flag, and any error.
@@ -202,7 +215,10 @@ func provisionComponentSource(
 	}
 
 	if workdirPath, ok := info.ComponentSection[provWorkdir.WorkdirPathKey].(string); ok && workdirPath != "" {
-		return workdirPath, true, nil
+		workdirPath = applyMetadataComponentSubpath(info, workdirPath)
+		info.ComponentSection[provWorkdir.WorkdirPathKey] = workdirPath
+		exists, _ := u.IsDirectory(workdirPath)
+		return workdirPath, exists, nil
 	}
 
 	// Re-check existence after provisioning.

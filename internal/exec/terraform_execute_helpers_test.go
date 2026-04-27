@@ -612,3 +612,45 @@ func TestAddRegionEnvVarForImport_SkipsForNonImportSubcommands(t *testing.T) {
 		})
 	}
 }
+
+// ──────────────────────────────────────────────────────────────────────────────
+// applyMetadataComponentSubpath
+// ──────────────────────────────────────────────────────────────────────────────
+
+// TestApplyMetadataComponentSubpath_WithSubpath verifies that a non-empty BaseComponentPath
+// is joined onto the workdir path (the core fix for issue #2364).
+func TestApplyMetadataComponentSubpath_WithSubpath(t *testing.T) {
+	workdir := t.TempDir()
+	info := &schema.ConfigAndStacksInfo{BaseComponentPath: "modules/iam-policy"}
+	result := applyMetadataComponentSubpath(info, workdir)
+	assert.Equal(t, filepath.Join(workdir, "modules", "iam-policy"), result)
+}
+
+// TestApplyMetadataComponentSubpath_EmptySubpath is the regression guard:
+// when metadata.component is absent (BaseComponentPath == ""), the workdir root
+// must be returned unchanged.
+func TestApplyMetadataComponentSubpath_EmptySubpath(t *testing.T) {
+	workdir := t.TempDir()
+	info := &schema.ConfigAndStacksInfo{BaseComponentPath: ""}
+	result := applyMetadataComponentSubpath(info, workdir)
+	assert.Equal(t, workdir, result)
+}
+
+// TestApplyMetadataComponentSubpath_DotDotEscapeHatch verifies that ".." in
+// BaseComponentPath resolves naturally via filepath.Join — intentional escape hatch.
+func TestApplyMetadataComponentSubpath_DotDotEscapeHatch(t *testing.T) {
+	workdir := t.TempDir()
+	info := &schema.ConfigAndStacksInfo{BaseComponentPath: "../sibling-module"}
+	result := applyMetadataComponentSubpath(info, workdir)
+	// filepath.Join resolves ".." cleanly — intentional escape hatch.
+	assert.Equal(t, filepath.Join(workdir, "..", "sibling-module"), result)
+	assert.Equal(t, filepath.Join(filepath.Dir(workdir), "sibling-module"), result)
+}
+
+// TestApplyMetadataComponentSubpath_SingleSegment verifies a single-segment subpath.
+func TestApplyMetadataComponentSubpath_SingleSegment(t *testing.T) {
+	workdir := t.TempDir()
+	info := &schema.ConfigAndStacksInfo{BaseComponentPath: "exports"}
+	result := applyMetadataComponentSubpath(info, workdir)
+	assert.Equal(t, filepath.Join(workdir, "exports"), result)
+}
