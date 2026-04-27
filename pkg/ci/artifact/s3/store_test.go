@@ -5,6 +5,7 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/s3/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -239,20 +240,22 @@ func TestNewStore_DeferredInitWhenIdentitySet(t *testing.T) {
 }
 
 // TestNewStore_EagerInitWithoutIdentity verifies the client is initialized
-// at construction time when no identity is configured.
+// at construction time when no identity is configured. Pin AWS env vars so
+// LoadDefaultConfig takes the success path regardless of host credentials.
 func TestNewStore_EagerInitWithoutIdentity(t *testing.T) {
-	// LoadDefaultConfig may succeed or fail depending on host env; either
-	// outcome proves init was attempted (i.e. not deferred).
+	t.Setenv("AWS_REGION", "us-east-1")
+	t.Setenv("AWS_ACCESS_KEY_ID", "")
+	t.Setenv("AWS_SECRET_ACCESS_KEY", "")
+	t.Setenv("AWS_SESSION_TOKEN", "")
+
 	backend, err := NewStore(artifact.StoreOptions{
 		Options: map[string]any{
 			"bucket": "test-bucket",
 			"region": "us-east-1",
 		},
 	})
-	if err != nil {
-		assert.ErrorIs(t, err, errUtils.ErrAWSConfigLoadFailed)
-		return
-	}
+	require.NoError(t, err)
+
 	s, ok := backend.(*Store)
 	require.True(t, ok)
 	assert.NotNil(t, s.client, "client should be eagerly initialized when no identity is set")
@@ -283,19 +286,21 @@ func TestStore_SetAuthContext(t *testing.T) {
 }
 
 // TestStore_BuildAuthConfigOpts verifies AWS SDK option construction from a
-// resolved AWS auth context.
+// resolved AWS auth context. Each case applies the returned opts to a fresh
+// LoadOptions and asserts the resolved fields, so content/order regressions
+// (e.g. switching from WithSharedConfigProfile to WithRegion) are caught.
 func TestStore_BuildAuthConfigOpts(t *testing.T) {
 	tests := []struct {
-		name            string
-		storeRegion     string
-		authContext     *artifact.AWSAuthConfig
-		expectedOptsLen int
+		name        string
+		storeRegion string
+		authContext *artifact.AWSAuthConfig
+		want        config.LoadOptions
 	}{
 		{
-			name:            "nil auth context",
-			storeRegion:     "",
-			authContext:     nil,
-			expectedOptsLen: 0,
+			name:        "nil auth context",
+			storeRegion: "",
+			authContext: nil,
+			want:        config.LoadOptions{},
 		},
 		{
 			name:        "credentials file only",
@@ -303,7 +308,9 @@ func TestStore_BuildAuthConfigOpts(t *testing.T) {
 			authContext: &artifact.AWSAuthConfig{
 				CredentialsFile: "/tmp/creds",
 			},
-			expectedOptsLen: 1,
+			want: config.LoadOptions{
+				SharedCredentialsFiles: []string{"/tmp/creds"},
+			},
 		},
 		{
 			name:        "all fields populated, store region overrides identity region",
@@ -314,7 +321,12 @@ func TestStore_BuildAuthConfigOpts(t *testing.T) {
 				Profile:         "deploy",
 				Region:          "us-west-2", // ignored — store-level region wins
 			},
-			expectedOptsLen: 4, // creds + config + profile + region
+			want: config.LoadOptions{
+				SharedCredentialsFiles: []string{"/tmp/creds"},
+				SharedConfigFiles:      []string{"/tmp/config"},
+				SharedConfigProfile:    "deploy",
+				Region:                 "us-east-1",
+			},
 		},
 		{
 			name:        "identity region used when store region empty",
@@ -323,13 +335,16 @@ func TestStore_BuildAuthConfigOpts(t *testing.T) {
 				Profile: "deploy",
 				Region:  "eu-west-1",
 			},
-			expectedOptsLen: 2, // profile + region
+			want: config.LoadOptions{
+				SharedConfigProfile: "deploy",
+				Region:              "eu-west-1",
+			},
 		},
 		{
-			name:            "empty auth context produces no opts",
-			storeRegion:     "",
-			authContext:     &artifact.AWSAuthConfig{},
-			expectedOptsLen: 0,
+			name:        "empty auth context produces no opts",
+			storeRegion: "",
+			authContext: &artifact.AWSAuthConfig{},
+			want:        config.LoadOptions{},
 		},
 	}
 
@@ -337,7 +352,16 @@ func TestStore_BuildAuthConfigOpts(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			s := &Store{region: tt.storeRegion}
 			got := s.buildAuthConfigOpts(tt.authContext)
-			assert.Len(t, got, tt.expectedOptsLen)
+
+			var lo config.LoadOptions
+			for _, opt := range got {
+				require.NoError(t, opt(&lo))
+			}
+
+			assert.Equal(t, tt.want.Region, lo.Region)
+			assert.Equal(t, tt.want.SharedConfigProfile, lo.SharedConfigProfile)
+			assert.Equal(t, tt.want.SharedCredentialsFiles, lo.SharedCredentialsFiles)
+			assert.Equal(t, tt.want.SharedConfigFiles, lo.SharedConfigFiles)
 		})
 	}
 }
@@ -400,15 +424,6 @@ func TestStore_EnsureClient_CallsResolverOnceAcrossOperations(t *testing.T) {
 
 	assert.Equal(t, 1, resolver.calls, "resolver must only be invoked once")
 	assert.NotNil(t, s.client, "client should be populated after first ensureClient call")
-}
-
-// TestStore_ImplementsIdentityAwareBackend verifies the runtime type
-// assertion the artifact registry relies on to inject the resolver.
-func TestStore_ImplementsIdentityAwareBackend(t *testing.T) {
-	var _ artifact.IdentityAwareBackend = (*Store)(nil) //nolint:gosimple // compile-time assertion
-	s := &Store{}
-	_, ok := any(s).(artifact.IdentityAwareBackend)
-	assert.True(t, ok)
 }
 
 func TestStore_QueryToPrefix(t *testing.T) {
