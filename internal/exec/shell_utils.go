@@ -45,6 +45,14 @@ type shellCommandConfig struct {
 	// When set, ExecuteShellCommand uses this instead of re-reading os.Environ().
 	// This is used when auth has already sanitized the environment (e.g., removed IRSA vars).
 	processEnv []string
+	// sanitizeTerraformSetupEnv, when true, filters the base process environment
+	// through sanitizeTerraformWorkspaceEnv before merging.  This strips env
+	// vars (TF_CLI_ARGS, TF_CLI_ARGS_workspace) that would cause OpenTofu to
+	// inject flags into atmos-internal terraform/tofu setup subprocesses
+	// (`workspace select`, `workspace new`, the auto-`init` pre-step) that
+	// those subcommands do not accept.
+	// See docs/fixes/2026-04-27-tf-cli-args-breaks-workspace-select.md.
+	sanitizeTerraformSetupEnv bool
 }
 
 // WithStdoutCapture returns a ShellCommandOption that tees stdout to the provided writer.
@@ -83,6 +91,41 @@ func WithEnvironment(env []string) ShellCommandOption {
 	}
 }
 
+// WithSanitizedTerraformSetupEnv returns a ShellCommandOption that strips env
+// vars known to break atmos-internal terraform/tofu setup subprocesses.
+// Specifically: `TF_CLI_ARGS` and `TF_CLI_ARGS_workspace`.
+//
+// Atmos invokes several terraform/tofu subcommands as setup steps that the
+// user did not write:
+//   - `tofu workspace select` / `tofu workspace new` (workspace setup before
+//     plan/apply).
+//   - `tofu init` as an auto-init pre-step before plan/apply (when
+//     SubCommand ≠ "init" and --skip-init is not set).
+//
+// OpenTofu prepends `TF_CLI_ARGS` to the argv of every subcommand. Users
+// commonly put plan/apply-only flags in `TF_CLI_ARGS` (e.g.
+// `-lock-timeout=10m` for CI lock retries, `-parallelism=4` for performance,
+// `-refresh=false` for plan workflows). When Atmos's setup subcommands
+// inherit those flags, they crash with "flag provided but not defined: …"
+// before the user's target subcommand can run.
+//
+// This option only affects atmos-invoked SETUP subprocesses; the user's
+// primary subcommand (`plan`, `apply`, `init` when invoked as the target,
+// `version`, …) continues to receive `TF_CLI_ARGS` unchanged so that
+// intentional configuration still reaches its target command. Per-subcommand
+// variants (`TF_CLI_ARGS_plan`, `TF_CLI_ARGS_apply`, `TF_CLI_ARGS_init`, …)
+// are always preserved — OpenTofu only applies them to their named
+// subcommand by design, so they cannot interfere with setup commands.
+//
+// See docs/fixes/2026-04-27-tf-cli-args-breaks-workspace-select.md.
+func WithSanitizedTerraformSetupEnv() ShellCommandOption {
+	defer perf.Track(nil, "exec.WithSanitizedTerraformSetupEnv")()
+
+	return func(c *shellCommandConfig) {
+		c.sanitizeTerraformSetupEnv = true
+	}
+}
+
 // ExecuteShellCommand prints and executes the provided command with args and flags.
 func ExecuteShellCommand(
 	atmosConfig schema.AtmosConfiguration,
@@ -114,6 +157,13 @@ func ExecuteShellCommand(
 	baseEnv := os.Environ()
 	if cfg.processEnv != nil {
 		baseEnv = cfg.processEnv
+	}
+	// When the caller requested terraform-setup-env sanitization (atmos-internal
+	// `tofu workspace select` / `tofu workspace new` / auto-`tofu init` pre-step),
+	// filter out env vars that would cause OpenTofu to inject flags those
+	// subcommands do not accept.
+	if cfg.sanitizeTerraformSetupEnv {
+		baseEnv = sanitizeTerraformWorkspaceEnv(baseEnv)
 	}
 	cmdEnv := envpkg.MergeGlobalEnv(baseEnv, atmosConfig.Env)
 	cmdEnv = append(cmdEnv, env...)

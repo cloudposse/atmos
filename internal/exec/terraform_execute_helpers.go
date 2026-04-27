@@ -525,6 +525,17 @@ func prepareInitExecution(atmosConfig *schema.AtmosConfiguration, info *schema.C
 // buildInitSubcommandArgs in terraform_execute_helpers_args.go handles the provisioner
 // invocation via prepareInitExecution.  These two code paths must never both execute
 // in the same command invocation or provisioners will run twice.
+//
+// TF_CLI_ARGS sanitization: because this function only runs as a SETUP pre-step
+// (never as the user's target subcommand), it strips TF_CLI_ARGS /
+// TF_CLI_ARGS_workspace from the subprocess env via
+// WithSanitizedTerraformSetupEnv().  Otherwise a parent-process value like
+// `TF_CLI_ARGS=-parallelism=4` (commonly set in CI for plan/apply) would crash
+// the auto-init step with "flag provided but not defined: -parallelism" before
+// the user's plan/apply could run.  When the user invokes `atmos terraform init`
+// directly, this function is bypassed and the user's TF_CLI_ARGS reaches their
+// init invocation unchanged.
+// See docs/fixes/2026-04-27-tf-cli-args-breaks-workspace-select.md.
 func executeTerraformInitPhase(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, componentPath, varFile string, opts ...ShellCommandOption) (string, error) {
 	newPath, err := prepareInitExecution(atmosConfig, info, componentPath)
 	if err != nil {
@@ -532,6 +543,8 @@ func executeTerraformInitPhase(atmosConfig *schema.AtmosConfiguration, info *sch
 	}
 
 	initArgs := buildInitArgs(atmosConfig, info, varFile)
+	initOpts := append([]ShellCommandOption{}, opts...)
+	initOpts = append(initOpts, WithSanitizedTerraformSetupEnv())
 	if err = ExecuteShellCommand(
 		*atmosConfig,
 		info.Command,
@@ -540,7 +553,7 @@ func executeTerraformInitPhase(atmosConfig *schema.AtmosConfiguration, info *sch
 		info.ComponentEnvList,
 		info.DryRun,
 		info.RedirectStdErr,
-		opts...,
+		initOpts...,
 	); err != nil {
 		return newPath, err
 	}

@@ -192,7 +192,12 @@ func runWorkspaceSetup(atmosConfig *schema.AtmosConfiguration, info *schema.Conf
 	// For data-producing subcommands redirect "Switched to workspace…" to stderr
 	// so it doesn't pollute captured stdout in $() substitutions.
 	// Merge caller-provided opts (e.g., WithEnvironment) with workspace-specific opts.
+	// WithSanitizedTerraformSetupEnv strips TF_CLI_ARGS / TF_CLI_ARGS_workspace from
+	// the subprocess env so a parent-process `TF_CLI_ARGS=-lock-timeout=10m` does
+	// not crash `tofu workspace select` (which does not accept `-lock-timeout`).
+	// See docs/fixes/2026-04-27-tf-cli-args-breaks-workspace-select.md.
 	wsOpts := append([]ShellCommandOption{}, opts...)
+	wsOpts = append(wsOpts, WithSanitizedTerraformSetupEnv())
 	if info.SubCommand == "output" || info.SubCommand == "show" {
 		wsOpts = append(wsOpts, WithStdoutOverride(os.Stderr))
 	}
@@ -224,6 +229,13 @@ func runWorkspaceSetup(atmosConfig *schema.AtmosConfiguration, info *schema.Conf
 // If workspace creation also fails with exit code 1 and the workspace is already
 // active (stale .terraform/environment file), it proceeds with a warning.
 func createWorkspaceFallback(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, componentPath string, opts ...ShellCommandOption) error {
+	// WithSanitizedTerraformSetupEnv strips TF_CLI_ARGS / TF_CLI_ARGS_workspace —
+	// same rationale as in runWorkspaceSetup: `tofu workspace new` rejects
+	// unknown flags injected via TF_CLI_ARGS the same way `workspace select`
+	// does.  See docs/fixes/2026-04-27-tf-cli-args-breaks-workspace-select.md.
+	wsOpts := append([]ShellCommandOption{}, opts...)
+	wsOpts = append(wsOpts, WithSanitizedTerraformSetupEnv())
+
 	newErr := ExecuteShellCommand(
 		*atmosConfig,
 		info.Command,
@@ -232,7 +244,7 @@ func createWorkspaceFallback(atmosConfig *schema.AtmosConfiguration, info *schem
 		info.ComponentEnvList,
 		info.DryRun,
 		info.RedirectStdErr,
-		opts...,
+		wsOpts...,
 	)
 	if newErr == nil {
 		return nil
