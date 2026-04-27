@@ -217,6 +217,9 @@ func TestPathMatch_AtmosStackPatterns(t *testing.T) {
 // TestPathMatch_ConsistentResults tests that multiple calls with same inputs return consistent results.
 // This indirectly validates that caching doesn't break behavior.
 func TestPathMatch_ConsistentResults(t *testing.T) {
+	ResetPathMatchCache()
+	t.Cleanup(ResetPathMatchCache)
+
 	pattern := "stacks/**/*.yaml"
 	path := "stacks/catalog/vpc.yaml"
 
@@ -340,15 +343,37 @@ func TestPathMatch_CaseSensitivity(t *testing.T) {
 
 // TestGetGlobMatches_Basic tests basic glob matching functionality.
 func TestGetGlobMatches_Basic(t *testing.T) {
-	// This test requires actual files to exist, so we'll test with a pattern that should work.
-	// In the Atmos repository structure.
+	ResetGlobMatchesCache()
+	t.Cleanup(ResetGlobMatchesCache)
+
+	// "*.go" matches all Go source files in the current package directory.
+	// go test sets the working directory to the package under test, so this
+	// returns the .go files of pkg/utils itself.
 	pattern := "*.go"
 
 	matches, err := GetGlobMatches(pattern)
 	require.NoError(t, err)
-	assert.NotNil(t, matches)
-	// We can't assert exact matches since it depends on the directory contents.
-	// But we can verify the function completes without error.
+	// pkg/utils.GetGlobMatches returns non-nil only when matches are found.
+	require.NotEmpty(t, matches, "expected at least one .go file in pkg/utils")
+
+	// Every returned element must end with ".go".
+	for _, m := range matches {
+		assert.True(t, strings.HasSuffix(m, ".go"),
+			"expected every match to end with .go, got %q", m)
+	}
+
+	// The test file itself must always be present.
+	assert.Contains(t, matches, "glob_utils_test.go",
+		"expected glob_utils_test.go to be in the matches")
+
+	// Verify sort order is deterministic: assert first and last element by
+	// their known alphabetical position within pkg/utils.
+	// "component_path_absolute_test.go" sorts before all other .go files in
+	// this package; "yq_utils_test.go" sorts after all others.
+	assert.Equal(t, "component_path_absolute_test.go", matches[0],
+		"first element should be component_path_absolute_test.go (alphabetically first)")
+	assert.Equal(t, "yq_utils_test.go", matches[len(matches)-1],
+		"last element should be yq_utils_test.go (alphabetically last)")
 }
 
 // TestGetGlobMatches_ConsistentResults tests that multiple calls return consistent results.
@@ -445,6 +470,9 @@ func TestGetGlobMatches_WindowsAbsolutePath(t *testing.T) {
 // Before the fix, pattern="a|b" + name="c" and pattern="a" + name="b|c" would collide
 // because both produced cache key "a|b|c" when using string concatenation.
 func TestPathMatch_PipeCharacterNoCollision(t *testing.T) {
+	ResetPathMatchCache()
+	t.Cleanup(ResetPathMatchCache)
+
 	tests := []struct {
 		name     string
 		pattern  string
@@ -511,4 +539,110 @@ func TestPathMatch_PipeCharacterNoCollision(t *testing.T) {
 		// These should remain independent even after caching
 		assert.Equal(t, match1, match2, "Both should have same result (false)")
 	}
+}
+
+// TestGetGlobMatches_EmptyResultCachingBug is a regression test for the phantom-path bug.
+// When doublestar.Glob returns a non-nil but empty slice, the original code stored
+// strings.Join([]string{}, ",") == "" in the cache. A subsequent call (cache hit) would
+// return strings.Split("", ",") == []string{""} — a single empty-string "phantom path".
+// The fix: only cache non-empty result sets; return and guard against empty cached entries.
+//
+// Note: this test relies on doublestar.Glob returning nil (not []string{}) for no matches —
+// documented behavior per the doublestar library: "returns nil, nil when no matches are found".
+// If that library contract changes, this test will return (nil, nil) rather than an error.
+func TestGetGlobMatches_EmptyResultCachingBug(t *testing.T) {
+	// Reset cache before and after to avoid inter-test pollution.
+	ResetGlobMatchesCache()
+	t.Cleanup(ResetGlobMatchesCache)
+
+	// Use a pattern that legitimately matches no files in the tmp directory.
+	tmpDir := t.TempDir()
+	pattern := filepath.Join(tmpDir, "no-such-file-*.xyz")
+
+	// First call — no matches, should return an error (pkg/utils contract).
+	result1, err1 := GetGlobMatches(pattern)
+	assert.Error(t, err1, "first call with no matches should return an error")
+	assert.Nil(t, result1)
+
+	// Second call — should not return a phantom empty-string entry from a cached "".
+	// Expected: same error as first call (no-op cache miss — nothing was cached for empty results).
+	result2, err2 := GetGlobMatches(pattern)
+	assert.Error(t, err2, "second call (potential cache hit) should still return an error")
+	// Must return nil, not []string{""} (the phantom path from the original bug).
+	assert.Nil(t, result2, "second call must not return a phantom empty-string path from cache")
+}
+
+// TestGetGlobMatches_CommaSafeCache verifies that filenames containing commas are
+// preserved correctly through a cache round-trip. Before the fix, the cache stored
+// paths as a comma-joined string; a path like "stack,env.yaml" would be split into
+// ["stack", "env.yaml"] on a cache hit, producing two wrong entries.
+func TestGetGlobMatches_CommaSafeCache(t *testing.T) {
+	ResetGlobMatchesCache()
+	t.Cleanup(ResetGlobMatchesCache)
+
+	tmpDir := t.TempDir()
+
+	// Create a file whose name contains a comma.
+	commaFile := filepath.Join(tmpDir, "stack,env.yaml")
+	require.NoError(t, os.WriteFile(commaFile, []byte(""), 0o644))
+
+	pattern := filepath.Join(tmpDir, "*.yaml")
+
+	// First call (cache miss): verify we get the correct single result.
+	first, err := GetGlobMatches(pattern)
+	require.NoError(t, err)
+	require.Len(t, first, 1, "expected exactly one file matching *.yaml")
+	assert.True(t, strings.HasSuffix(filepath.ToSlash(first[0]), "stack,env.yaml"),
+		"returned path must contain the full filename with comma, got: %s", first[0])
+
+	// Second call (cache hit): verify the comma-containing filename survived round-trip.
+	second, err := GetGlobMatches(pattern)
+	require.NoError(t, err)
+	require.Len(t, second, 1, "cache hit must return exactly one entry, not split on comma")
+	assert.Equal(t, first[0], second[0], "cached filename must be identical to original")
+}
+
+// TestGetGlobMatches_NonExistentBaseDirError verifies that a pattern whose base directory
+// does not exist returns an error regardless of doublestar.Glob's nil-vs-empty semantics.
+// This is the "library-contract-independent" companion to TestGetGlobMatches_EmptyResultCachingBug:
+// it proves the error path without relying on doublestar returning nil for no matches.
+func TestGetGlobMatches_NonExistentBaseDirError(t *testing.T) {
+	ResetGlobMatchesCache()
+	t.Cleanup(ResetGlobMatchesCache)
+
+	// Use a base dir that cannot exist — a path inside a temp dir that was never created.
+	pattern := filepath.Join(t.TempDir(), "subdir-that-does-not-exist", "*.yaml")
+
+	// First call: the base dir doesn't exist; doublestar.Glob will fail to open it.
+	result1, err1 := GetGlobMatches(pattern)
+	assert.Error(t, err1, "pattern with non-existent base dir must return an error")
+	assert.Nil(t, result1, "error path must not return a non-nil slice")
+
+	// Second call: nothing was cached (empty results are not stored), so same error.
+	result2, err2 := GetGlobMatches(pattern)
+	assert.Error(t, err2, "second call must also return an error — nothing was cached")
+	assert.Nil(t, result2, "second call must also return nil slice")
+}
+
+// TestGetGlobMatches_UnexpectedCacheType verifies that when an unexpected (non-[]string)
+// value is stored in the glob matches sync map, GetGlobMatches invalidates the entry and
+// recomputes the result from the filesystem rather than panicking or returning wrong data.
+func TestGetGlobMatches_UnexpectedCacheType(t *testing.T) {
+	ResetGlobMatchesCache()
+	t.Cleanup(ResetGlobMatchesCache)
+
+	tmpDir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "a.yaml"), []byte(""), 0o644))
+
+	// Normalize the pattern as GetGlobMatches does before the sync.Map lookup.
+	pattern := filepath.Join(tmpDir, "*.yaml")
+	normalizedPattern := filepath.ToSlash(pattern)
+
+	// Inject an integer (not []string) to simulate an unexpected cache-type scenario.
+	// GetGlobMatches must detect the wrong type, delete the entry, and recompute.
+	StoreGlobCacheSentinel(normalizedPattern, 42)
+
+	matches, err := GetGlobMatches(pattern)
+	require.NoError(t, err, "unexpected cache type should be invalidated and result recomputed")
+	require.NotEmpty(t, matches, "should find the yaml file after cache invalidation")
 }

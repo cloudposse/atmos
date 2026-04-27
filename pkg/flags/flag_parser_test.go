@@ -531,3 +531,96 @@ func TestFlagParser_NoOptDefVal(t *testing.T) {
 		})
 	}
 }
+
+// TestFlagParser_Reset verifies that Reset clears registered command flag state
+// so parsers can be reused cleanly between test runs.
+func TestFlagParser_Reset(t *testing.T) {
+	cmd := &cobra.Command{Use: "test"}
+	cmd.Flags().String("stack", "", "Stack name")
+
+	v := viper.New()
+	translator := compat.NewCompatibilityFlagTranslator(nil)
+	registry := NewFlagRegistry()
+	parser := NewAtmosFlagParser(cmd, v, translator, registry)
+
+	// Parse once to populate flags.
+	_, err := parser.Parse([]string{"--stack", "dev"})
+	require.NoError(t, err)
+	assert.Equal(t, "dev", v.GetString("stack"))
+
+	// Verify the flag is marked as Changed after the first parse.
+	flag := cmd.Flags().Lookup("stack")
+	require.NotNil(t, flag)
+	assert.True(t, flag.Changed, "flag should be Changed after first parse")
+	assert.Equal(t, "dev", flag.Value.String())
+
+	// Reset should not panic and must clear the Changed state and restore defaults.
+	assert.NotPanics(t, func() {
+		parser.Reset()
+	})
+
+	// After Reset, the flag's Changed state must be cleared and value back to default.
+	assert.False(t, flag.Changed, "flag Changed state must be false after Reset")
+	assert.Equal(t, "", flag.Value.String(), "flag value must be reset to default after Reset")
+	// Resetting the pflag clears the viper value bound via BindPFlags.
+	assert.Equal(t, "", v.GetString("stack"), "viper value must also be cleared after Reset")
+
+	// A second parse with no flags should not see the value from the first parse.
+	result, err := parser.Parse([]string{})
+	require.NoError(t, err)
+	assert.Equal(t, "", GetString(result.Flags, "stack"), "second parse must not inherit value from first parse")
+}
+
+// TestParsedConfig_GetArgsForTool verifies that GetArgsForTool combines positional
+// and separated args into the expected subprocess argument array.
+func TestParsedConfig_GetArgsForTool(t *testing.T) {
+	tests := []struct {
+		name           string
+		positionalArgs []string
+		separatedArgs  []string
+		want           []string
+	}{
+		{
+			name:           "positional only",
+			positionalArgs: []string{"plan", "vpc"},
+			separatedArgs:  []string{},
+			want:           []string{"plan", "vpc"},
+		},
+		{
+			name:           "separated only",
+			positionalArgs: []string{},
+			separatedArgs:  []string{"-var", "region=us-east-1"},
+			want:           []string{"-var", "region=us-east-1"},
+		},
+		{
+			name:           "both positional and separated",
+			positionalArgs: []string{"plan", "vpc"},
+			separatedArgs:  []string{"-var", "region=us-east-1", "-var-file", "prod.tfvars"},
+			want:           []string{"plan", "vpc", "-var", "region=us-east-1", "-var-file", "prod.tfvars"},
+		},
+		{
+			name:           "empty both",
+			positionalArgs: []string{},
+			separatedArgs:  []string{},
+			want:           []string{},
+		},
+		{
+			name:           "nil slices treated as empty",
+			positionalArgs: nil,
+			separatedArgs:  nil,
+			want:           []string{},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			pc := &ParsedConfig{
+				PositionalArgs: tt.positionalArgs,
+				SeparatedArgs:  tt.separatedArgs,
+			}
+
+			got := pc.GetArgsForTool()
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
