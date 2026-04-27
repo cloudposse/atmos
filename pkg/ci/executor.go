@@ -1,6 +1,7 @@
 package ci
 
 import (
+	"fmt"
 	"os"
 	"strings"
 
@@ -241,6 +242,8 @@ func attachIdentity(artOpts *artifact.StoreOptions, info *schema.ConfigAndStacks
 	}
 	authManager, ok := info.AuthManager.(authtypes.AuthManager)
 	if !ok {
+		log.Debug("Planfile store auth manager has unexpected type, falling back to default credential chain",
+			"identity", info.Identity, "type", fmt.Sprintf("%T", info.AuthManager))
 		return
 	}
 	artOpts.Resolver = defaultResolverFactory(authManager, info)
