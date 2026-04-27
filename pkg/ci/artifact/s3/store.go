@@ -76,6 +76,13 @@ func NewStore(opts artifact.StoreOptions) (artifact.Backend, error) {
 
 // SetAuthContext implements artifact.IdentityAwareBackend.
 // A non-empty identityName overrides the identity supplied at construction.
+//
+// Must be called before the first Store operation. SetAuthContext writes
+// authResolver and identityName without synchronization; ensureClient reads
+// them inside initOnce.Do, so calling SetAuthContext concurrently with (or
+// after) operations that may trigger ensureClient is unsafe. The artifact
+// registry honors this contract by calling SetAuthContext synchronously
+// before returning the backend.
 func (s *Store) SetAuthContext(resolver artifact.AuthContextResolver, identityName string) {
 	s.authResolver = resolver
 	if identityName != "" {
