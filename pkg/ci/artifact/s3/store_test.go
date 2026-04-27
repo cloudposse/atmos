@@ -1,14 +1,17 @@
 package s3
 
 import (
+	"context"
 	"errors"
 	"testing"
 
 	"github.com/aws/aws-sdk-go-v2/service/s3/types"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/ci/artifact"
+	"github.com/cloudposse/atmos/pkg/store"
 )
 
 func TestStore_Name(t *testing.T) {
@@ -191,6 +194,215 @@ func TestStore_MetadataSuffix(t *testing.T) {
 func TestStore_StoreName(t *testing.T) {
 	// Verify the store name constant is correct.
 	assert.Equal(t, "aws/s3", storeName)
+}
+
+// fakeAuthContextResolver is a test double for artifact.AuthContextResolver.
+type fakeAuthContextResolver struct {
+	awsResult       *artifact.AWSAuthConfig
+	awsErr          error
+	calls           int
+	requestedIDName string
+}
+
+func (f *fakeAuthContextResolver) ResolveAWSAuthContext(_ context.Context, identityName string) (*store.AWSAuthConfig, error) {
+	f.calls++
+	f.requestedIDName = identityName
+	return f.awsResult, f.awsErr
+}
+
+func (f *fakeAuthContextResolver) ResolveAzureAuthContext(_ context.Context, _ string) (*store.AzureAuthConfig, error) {
+	return nil, errors.New("not implemented in fake")
+}
+
+func (f *fakeAuthContextResolver) ResolveGCPAuthContext(_ context.Context, _ string) (*store.GCPAuthConfig, error) {
+	return nil, errors.New("not implemented in fake")
+}
+
+// TestNewStore_DeferredInitWhenIdentitySet verifies the client is not
+// initialized at construction time when an identity is configured.
+func TestNewStore_DeferredInitWhenIdentitySet(t *testing.T) {
+	backend, err := NewStore(artifact.StoreOptions{
+		Identity: "deploy",
+		Options: map[string]any{
+			"bucket": "test-bucket",
+			"region": "us-east-1",
+		},
+	})
+	require.NoError(t, err)
+
+	s, ok := backend.(*Store)
+	require.True(t, ok, "expected *Store concrete type")
+	assert.Nil(t, s.client, "client should not be initialized when identity is set")
+	assert.Equal(t, "deploy", s.identityName)
+	assert.Equal(t, "test-bucket", s.bucket)
+	assert.Equal(t, "us-east-1", s.region)
+}
+
+// TestNewStore_EagerInitWithoutIdentity verifies the client is initialized
+// at construction time when no identity is configured.
+func TestNewStore_EagerInitWithoutIdentity(t *testing.T) {
+	// LoadDefaultConfig may succeed or fail depending on host env; either
+	// outcome proves init was attempted (i.e. not deferred).
+	backend, err := NewStore(artifact.StoreOptions{
+		Options: map[string]any{
+			"bucket": "test-bucket",
+			"region": "us-east-1",
+		},
+	})
+	if err != nil {
+		assert.ErrorIs(t, err, errUtils.ErrAWSConfigLoadFailed)
+		return
+	}
+	s, ok := backend.(*Store)
+	require.True(t, ok)
+	assert.NotNil(t, s.client, "client should be eagerly initialized when no identity is set")
+	assert.Empty(t, s.identityName)
+}
+
+func TestStore_SetAuthContext(t *testing.T) {
+	t.Run("captures resolver, preserves identity when override is empty", func(t *testing.T) {
+		s := &Store{identityName: "ci-deployer"}
+		resolver := &fakeAuthContextResolver{}
+
+		s.SetAuthContext(resolver, "")
+
+		assert.Same(t, resolver, s.authResolver)
+		assert.Equal(t, "ci-deployer", s.identityName, "empty override must not erase existing identity")
+	})
+
+	t.Run("non-empty identity overrides existing", func(t *testing.T) {
+		s := &Store{identityName: "old-identity"}
+		resolver := &fakeAuthContextResolver{}
+
+		s.SetAuthContext(resolver, "new-identity")
+
+		assert.Equal(t, "new-identity", s.identityName)
+	})
+}
+
+func TestStore_BuildAuthConfigOpts(t *testing.T) {
+	tests := []struct {
+		name            string
+		storeRegion     string
+		authContext     *artifact.AWSAuthConfig
+		expectedOptsLen int
+	}{
+		{
+			name:            "nil auth context",
+			storeRegion:     "",
+			authContext:     nil,
+			expectedOptsLen: 0,
+		},
+		{
+			name:        "credentials file only",
+			storeRegion: "",
+			authContext: &artifact.AWSAuthConfig{
+				CredentialsFile: "/tmp/creds",
+			},
+			expectedOptsLen: 1,
+		},
+		{
+			name:        "all fields populated, store region overrides identity region",
+			storeRegion: "us-east-1",
+			authContext: &artifact.AWSAuthConfig{
+				CredentialsFile: "/tmp/creds",
+				ConfigFile:      "/tmp/config",
+				Profile:         "deploy",
+				Region:          "us-west-2", // ignored — store-level region wins
+			},
+			expectedOptsLen: 4, // creds + config + profile + region
+		},
+		{
+			name:        "identity region used when store region empty",
+			storeRegion: "",
+			authContext: &artifact.AWSAuthConfig{
+				Profile: "deploy",
+				Region:  "eu-west-1",
+			},
+			expectedOptsLen: 2, // profile + region
+		},
+		{
+			name:            "empty auth context produces no opts",
+			storeRegion:     "",
+			authContext:     &artifact.AWSAuthConfig{},
+			expectedOptsLen: 0,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			s := &Store{region: tt.storeRegion}
+			got := s.buildAuthConfigOpts(tt.authContext)
+			assert.Len(t, got, tt.expectedOptsLen)
+		})
+	}
+}
+
+// TestStore_InitIdentityClient_FallsBackWhenNoResolver verifies that an
+// identity-configured backend without an injected resolver falls back to
+// the default credential chain rather than failing.
+func TestStore_InitIdentityClient_FallsBackWhenNoResolver(t *testing.T) {
+	s := &Store{
+		bucket:       "test-bucket",
+		region:       "us-east-1",
+		identityName: "deploy",
+	}
+
+	err := s.initIdentityClient(context.Background())
+	require.NoError(t, err)
+	assert.NotNil(t, s.client)
+}
+
+// TestStore_InitIdentityClient_PropagatesResolverError verifies resolver
+// errors surface through ensureClient with the expected error sentinel.
+func TestStore_InitIdentityClient_PropagatesResolverError(t *testing.T) {
+	resolver := &fakeAuthContextResolver{
+		awsErr: errors.New("identity chain failed"),
+	}
+	s := &Store{
+		bucket:       "test-bucket",
+		region:       "us-east-1",
+		identityName: "deploy",
+		authResolver: resolver,
+	}
+
+	err := s.ensureClient(context.Background())
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrAWSConfigLoadFailed)
+	assert.Contains(t, err.Error(), "deploy", "error must name the identity for diagnosability")
+	assert.Equal(t, 1, resolver.calls)
+	assert.Equal(t, "deploy", resolver.requestedIDName)
+}
+
+// TestStore_EnsureClient_CallsResolverOnceAcrossOperations verifies the
+// sync.Once gate: the resolver is invoked once per backend instance.
+func TestStore_EnsureClient_CallsResolverOnceAcrossOperations(t *testing.T) {
+	resolver := &fakeAuthContextResolver{
+		awsResult: &artifact.AWSAuthConfig{
+			Region: "us-east-1",
+		},
+	}
+	s := &Store{
+		bucket:       "test-bucket",
+		region:       "us-east-1",
+		identityName: "deploy",
+		authResolver: resolver,
+	}
+
+	for range 5 {
+		err := s.ensureClient(context.Background())
+		require.NoError(t, err)
+	}
+
+	assert.Equal(t, 1, resolver.calls, "resolver must only be invoked once")
+	assert.NotNil(t, s.client, "client should be populated after first ensureClient call")
+}
+
+func TestStore_ImplementsIdentityAwareBackend(t *testing.T) {
+	var _ artifact.IdentityAwareBackend = (*Store)(nil) //nolint:gosimple // compile-time assertion
+	s := &Store{}
+	_, ok := any(s).(artifact.IdentityAwareBackend)
+	assert.True(t, ok)
 }
 
 func TestStore_QueryToPrefix(t *testing.T) {

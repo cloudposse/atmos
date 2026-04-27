@@ -5,6 +5,7 @@ import (
 	"io"
 
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/store"
 )
 
 //go:generate mockgen -package artifact -destination mock_store.go github.com/cloudposse/atmos/pkg/ci/artifact Store
@@ -68,6 +69,28 @@ type StoreOptions struct {
 
 	// AtmosConfig is the Atmos configuration.
 	AtmosConfig *schema.AtmosConfiguration
+
+	// Identity is the Atmos auth identity name. When non-empty, identity-aware
+	// backends defer client initialization until Resolver supplies credentials.
+	Identity string
+
+	// Resolver supplies cloud-specific auth credentials for Identity.
+	Resolver store.AuthContextResolver
+}
+
+// AuthContextResolver is re-exported so backends import a single package.
+type AuthContextResolver = store.AuthContextResolver
+
+// AWSAuthConfig is re-exported so backends import a single package.
+type AWSAuthConfig = store.AWSAuthConfig
+
+// IdentityAwareBackend is implemented by backends that authenticate via an
+// Atmos auth identity. The registry calls SetAuthContext after construction.
+type IdentityAwareBackend interface {
+	Backend
+	// SetAuthContext injects the resolver and identity name. An empty
+	// identityName preserves the identity supplied at construction.
+	SetAuthContext(resolver AuthContextResolver, identityName string)
 }
 
 // StoreFactory is a function that creates a Store from options.
