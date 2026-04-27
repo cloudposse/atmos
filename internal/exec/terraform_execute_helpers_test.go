@@ -652,3 +652,167 @@ func TestApplyMetadataComponentSubpath_SingleSegment(t *testing.T) {
 	result := applyMetadataComponentSubpath("exports", workdir)
 	assert.Equal(t, filepath.Join(workdir, "exports"), result)
 }
+
+// ──────────────────────────────────────────────────────────────────────────────
+// applyWorkdirSubpathToSection
+// ──────────────────────────────────────────────────────────────────────────────
+
+// TestApplyWorkdirSubpathToSection_JoinsSubpath verifies that the helper joins
+// metadata.component onto WorkdirPathKey, mutates the component section in
+// place, and sets the sentinel. This is the load-bearing fix for issue #2364:
+// downstream consumers of WorkdirPathKey see the corrected path.
+func TestApplyWorkdirSubpathToSection_JoinsSubpath(t *testing.T) {
+	workdirRoot := t.TempDir()
+	info := &schema.ConfigAndStacksInfo{
+		BaseComponentPath: "modules/iam-policy",
+		ComponentSection: map[string]any{
+			provWorkdir.WorkdirPathKey: workdirRoot,
+		},
+	}
+	path, ok := applyWorkdirSubpathToSection(info)
+	require.True(t, ok, "helper should report success when WorkdirPathKey is set")
+
+	expected := filepath.Join(workdirRoot, "modules", "iam-policy")
+	assert.Equal(t, expected, path, "returned path should be the joined subpath")
+	assert.Equal(t, expected, info.ComponentSection[provWorkdir.WorkdirPathKey],
+		"WorkdirPathKey should be mutated in place to the joined subpath")
+	_, applied := info.ComponentSection[provWorkdir.WorkdirSubpathAppliedKey]
+	assert.True(t, applied, "sentinel WorkdirSubpathAppliedKey should be set")
+}
+
+// TestApplyWorkdirSubpathToSection_DoubleCallAppliesOnce proves the sentinel
+// prevents double-joining when applyWorkdirSubpathToSection is invoked twice
+// for the same component section (the terraform-init-then-terraform-plan
+// scenario). Without the sentinel, the second call would produce
+// <workdir>/<subpath>/<subpath>/.
+func TestApplyWorkdirSubpathToSection_DoubleCallAppliesOnce(t *testing.T) {
+	workdirRoot := t.TempDir()
+	info := &schema.ConfigAndStacksInfo{
+		BaseComponentPath: "exports",
+		ComponentSection: map[string]any{
+			provWorkdir.WorkdirPathKey: workdirRoot,
+		},
+	}
+	expected := filepath.Join(workdirRoot, "exports")
+
+	first, _ := applyWorkdirSubpathToSection(info)
+	assert.Equal(t, expected, first)
+
+	second, _ := applyWorkdirSubpathToSection(info)
+	assert.Equal(t, expected, second, "second call must not re-join the subpath")
+	assert.Equal(t, expected, info.ComponentSection[provWorkdir.WorkdirPathKey],
+		"section should still hold the singly-joined path")
+}
+
+// TestApplyWorkdirSubpathToSection_EmptyBasePath returns the workdir root
+// unchanged when no metadata.component subpath is configured. The sentinel is
+// still set so that any later mutation (e.g. an inheritance step that
+// populates BaseComponentPath after this call) does not retroactively join.
+func TestApplyWorkdirSubpathToSection_EmptyBasePath(t *testing.T) {
+	workdirRoot := t.TempDir()
+	info := &schema.ConfigAndStacksInfo{
+		BaseComponentPath: "",
+		ComponentSection: map[string]any{
+			provWorkdir.WorkdirPathKey: workdirRoot,
+		},
+	}
+	path, ok := applyWorkdirSubpathToSection(info)
+	require.True(t, ok)
+	assert.Equal(t, workdirRoot, path)
+	assert.Equal(t, workdirRoot, info.ComponentSection[provWorkdir.WorkdirPathKey])
+}
+
+// TestApplyWorkdirSubpathToSection_MissingKey returns ("", false) when
+// WorkdirPathKey is absent (workdir provisioning hasn't run yet).
+func TestApplyWorkdirSubpathToSection_MissingKey(t *testing.T) {
+	info := &schema.ConfigAndStacksInfo{
+		BaseComponentPath: "modules/iam-policy",
+		ComponentSection:  map[string]any{},
+	}
+	path, ok := applyWorkdirSubpathToSection(info)
+	assert.False(t, ok)
+	assert.Empty(t, path)
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// resolveWorkdirComponentPath
+// ──────────────────────────────────────────────────────────────────────────────
+
+// TestResolveWorkdirComponentPath_ExistingDir returns exists=true and the
+// joined path when both the workdir root and the metadata.component subpath
+// exist on disk.
+func TestResolveWorkdirComponentPath_ExistingDir(t *testing.T) {
+	basePath := t.TempDir()
+	stack := "dev"
+	componentName := "null-label-exports"
+	subpath := "exports"
+
+	expectedRoot := filepath.Join(basePath, ".workdir", cfg.TerraformComponentType, stack+"-"+componentName)
+	expectedCandidate := filepath.Join(expectedRoot, subpath)
+	require.NoError(t, os.MkdirAll(expectedCandidate, 0o755))
+
+	atmosConfig := &schema.AtmosConfiguration{BasePath: basePath}
+	info := &schema.ConfigAndStacksInfo{
+		FinalComponent:    componentName,
+		Stack:             stack,
+		BaseComponentPath: subpath,
+		ComponentSection:  map[string]any{},
+	}
+
+	candidate, exists, err := resolveWorkdirComponentPath(atmosConfig, info)
+	require.NoError(t, err)
+	assert.True(t, exists)
+	assert.Equal(t, expectedCandidate, candidate)
+}
+
+// TestResolveWorkdirComponentPath_NonExistentDir returns exists=false and no
+// error when the candidate path does not yet exist (workdir not provisioned).
+// This lets callers retain their fallback path without surfacing a misleading
+// error.
+func TestResolveWorkdirComponentPath_NonExistentDir(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{BasePath: t.TempDir()}
+	info := &schema.ConfigAndStacksInfo{
+		FinalComponent:    "missing-component",
+		Stack:             "dev",
+		BaseComponentPath: "exports",
+		ComponentSection:  map[string]any{},
+	}
+
+	candidate, exists, err := resolveWorkdirComponentPath(atmosConfig, info)
+	require.NoError(t, err)
+	assert.False(t, exists)
+	assert.NotEmpty(t, candidate)
+}
+
+// TestResolveWorkdirComponentPath_StatErrorPropagates ensures non-ENOENT stat
+// failures (e.g. EACCES) surface as wrapped ErrWorkdirProvision instead of a
+// silent fallback that masks the real failure.
+func TestResolveWorkdirComponentPath_StatErrorPropagates(t *testing.T) {
+	if os.Getuid() == 0 {
+		t.Skip("test relies on POSIX permission denial; root bypasses chmod")
+	}
+	basePath := t.TempDir()
+	stack := "dev"
+	componentName := "guarded"
+	subpath := "exports"
+
+	// Create the workdir root, then chmod the parent so the candidate stat
+	// fails with EACCES rather than ENOENT.
+	expectedRoot := filepath.Join(basePath, ".workdir", cfg.TerraformComponentType, stack+"-"+componentName)
+	require.NoError(t, os.MkdirAll(expectedRoot, 0o755))
+	require.NoError(t, os.Chmod(expectedRoot, 0o000))
+	t.Cleanup(func() { _ = os.Chmod(expectedRoot, 0o755) })
+
+	atmosConfig := &schema.AtmosConfiguration{BasePath: basePath}
+	info := &schema.ConfigAndStacksInfo{
+		FinalComponent:    componentName,
+		Stack:             stack,
+		BaseComponentPath: subpath,
+		ComponentSection:  map[string]any{},
+	}
+
+	_, _, err := resolveWorkdirComponentPath(atmosConfig, info)
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, errUtils.ErrWorkdirProvision),
+		"non-ENOENT stat failures must wrap ErrWorkdirProvision")
+}
