@@ -131,7 +131,7 @@ func executeOutputWithFormat(atmosConfig *schema.AtmosConfiguration, info *schem
 	uppercase := v.GetBool("uppercase")
 	flatten := v.GetBool("flatten")
 
-	outputs, err := outputGetComponentOutputs(atmosConfig, info.ComponentFromArg, info.Stack, skipInit, authManager)
+	outputs, err := outputGetComponentOutputs(atmosConfig, info.ComponentFromArg, info.Stack, skipInit, info.AuthContext, authManager)
 	if err != nil {
 		return errUtils.Build(errUtils.ErrTerraformOutputFailed).
 			WithCause(err).

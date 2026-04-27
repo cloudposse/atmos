@@ -357,18 +357,24 @@ func TestExecuteOutputWithFormat_PassesAuthManager(t *testing.T) {
 	})
 
 	sentinelAuthManager := "sentinel-auth-manager"
+	sentinelAuthContext := &schema.AuthContext{
+		AWS: &schema.AWSAuthContext{Profile: "sentinel-profile"},
+	}
 	var receivedAuthManager any
+	var receivedAuthContext *schema.AuthContext
 
 	outputGetComponentOutputs = func(
 		_ *schema.AtmosConfiguration,
 		component string,
 		stack string,
 		skipInit bool,
+		authContext *schema.AuthContext,
 		authManager any,
 	) (map[string]any, error) {
 		assert.Equal(t, "test-component", component)
 		assert.Equal(t, "test-stack", stack)
 		assert.False(t, skipInit)
+		receivedAuthContext = authContext
 		receivedAuthManager = authManager
 		return map[string]any{"foo": "bar"}, nil
 	}
@@ -378,12 +384,14 @@ func TestExecuteOutputWithFormat_PassesAuthManager(t *testing.T) {
 		&schema.ConfigAndStacksInfo{
 			ComponentFromArg: "test-component",
 			Stack:            "test-stack",
+			AuthContext:      sentinelAuthContext,
 		},
 		sentinelAuthManager,
 		"json",
 	)
 
 	require.NoError(t, err)
+	assert.Equal(t, sentinelAuthContext, receivedAuthContext)
 	assert.Equal(t, sentinelAuthManager, receivedAuthManager)
 }
 

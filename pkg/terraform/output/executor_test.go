@@ -861,10 +861,79 @@ func TestExecutor_GetAllOutputs_Success(t *testing.T) {
 		"enabled": {Value: []byte(`true`)},
 	}, nil)
 
-	outputs, err := exec.GetAllOutputs(atmosConfig, "all-outputs-component", "all-outputs-stack", false, nil)
+	outputs, err := exec.GetAllOutputs(atmosConfig, "all-outputs-component", "all-outputs-stack", false, nil, nil)
 	require.NoError(t, err)
 	assert.Equal(t, "vpc-all", outputs["vpc_id"])
 	assert.Equal(t, true, outputs["enabled"])
+}
+
+func TestExecutor_GetAllOutputs_PropagatesAuthContext(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockDescriber := NewMockComponentDescriber(ctrl)
+	mockRunner := NewMockTerraformRunner(ctrl)
+	mockBackendGen := NewMockBackendGenerator(ctrl)
+
+	customFactory := func(workdir, executable string) (TerraformRunner, error) {
+		return mockRunner, nil
+	}
+
+	exec := NewExecutor(
+		mockDescriber,
+		WithRunnerFactory(customFactory),
+		WithBackendGenerator(mockBackendGen),
+	)
+
+	stackSlug := stackComponentKey("auth-stack", "auth-component")
+	terraformOutputsCache.Delete(stackSlug)
+	defer terraformOutputsCache.Delete(stackSlug)
+
+	atmosConfig := validAtmosConfig()
+	atmosConfig.Logs.Level = "debug"
+	sections := validSections()
+	authContext := &schema.AuthContext{
+		AWS: &schema.AWSAuthContext{
+			Profile:         "auth-profile",
+			CredentialsFile: "/tmp/auth-credentials",
+			ConfigFile:      "/tmp/auth-config",
+			Region:          "us-west-2",
+		},
+	}
+	authManager := "auth-manager"
+
+	mockDescriber.EXPECT().DescribeComponent(gomock.Any()).DoAndReturn(
+		func(params *DescribeComponentParams) (map[string]any, error) {
+			assert.True(t, params.ProcessYamlFunctions)
+			assert.Equal(t, authManager, params.AuthManager)
+			return sections, nil
+		},
+	)
+	mockBackendGen.EXPECT().
+		GenerateBackendIfNeeded(gomock.Any(), "auth-component", "auth-stack", authContext).
+		Return(nil)
+	mockBackendGen.EXPECT().
+		GenerateProvidersIfNeeded(gomock.Any(), authContext).
+		Return(nil)
+
+	mockRunner.EXPECT().SetStdout(gomock.Any()).AnyTimes()
+	mockRunner.EXPECT().SetStderr(gomock.Any()).AnyTimes()
+	mockRunner.EXPECT().SetEnv(gomock.Any()).DoAndReturn(func(env map[string]string) error {
+		assert.Equal(t, "auth-profile", env["AWS_PROFILE"])
+		assert.Equal(t, "/tmp/auth-credentials", env["AWS_SHARED_CREDENTIALS_FILE"])
+		assert.Equal(t, "/tmp/auth-config", env["AWS_CONFIG_FILE"])
+		assert.Equal(t, "us-west-2", env["AWS_REGION"])
+		return nil
+	})
+	mockRunner.EXPECT().Init(gomock.Any(), gomock.Any()).Return(nil)
+	mockRunner.EXPECT().WorkspaceSelect(gomock.Any(), "test-workspace").Return(nil)
+	mockRunner.EXPECT().Output(gomock.Any()).Return(map[string]tfexec.OutputMeta{
+		"vpc_id": {Value: []byte(`"vpc-auth"`)},
+	}, nil)
+
+	outputs, err := exec.GetAllOutputs(atmosConfig, "auth-component", "auth-stack", false, authContext, authManager)
+	require.NoError(t, err)
+	assert.Equal(t, "vpc-auth", outputs["vpc_id"])
 }
 
 // TestExecutor_GetAllOutputs_CacheHit tests that GetAllOutputs returns cached values.
@@ -884,7 +953,7 @@ func TestExecutor_GetAllOutputs_CacheHit(t *testing.T) {
 	atmosConfig := validAtmosConfig()
 
 	// No DescribeComponent call expected.
-	outputs, err := exec.GetAllOutputs(atmosConfig, "cache-hit-component", "cache-hit-stack", false, nil)
+	outputs, err := exec.GetAllOutputs(atmosConfig, "cache-hit-component", "cache-hit-stack", false, nil, nil)
 	require.NoError(t, err)
 	assert.Equal(t, cachedOutputs, outputs)
 }
@@ -908,7 +977,7 @@ func TestExecutor_GetAllOutputs_Error(t *testing.T) {
 	// Setup expectations - DescribeComponent returns error.
 	mockDescriber.EXPECT().DescribeComponent(gomock.Any()).Return(nil, errors.New("describe failed"))
 
-	outputs, err := exec.GetAllOutputs(atmosConfig, "error-component", "error-stack", false, nil)
+	outputs, err := exec.GetAllOutputs(atmosConfig, "error-component", "error-stack", false, nil, nil)
 	require.Error(t, err)
 	assert.Nil(t, outputs)
 }
@@ -962,7 +1031,7 @@ func TestExecutor_GetAllOutputs_StaticRemoteState(t *testing.T) {
 	mockDescriber.EXPECT().DescribeComponent(gomock.Any()).Return(sections, nil)
 	mockGetter.EXPECT().GetStaticRemoteStateOutputs(gomock.Any()).Return(staticOutputs)
 
-	outputs, err := exec.GetAllOutputs(atmosConfig, "static-component", "static-stack", false, nil)
+	outputs, err := exec.GetAllOutputs(atmosConfig, "static-component", "static-stack", false, nil, nil)
 	require.NoError(t, err)
 	assert.Equal(t, staticOutputs, outputs)
 }
@@ -1261,7 +1330,7 @@ func TestExecutor_GetAllOutputs_SkipInit_SkipsInitAndWorkspace(t *testing.T) {
 		"vpc_id": {Value: []byte(`"vpc-skipinit"`)},
 	}, nil)
 
-	outputs, err := exec.GetAllOutputs(atmosConfig, "skipinit-component", "skipinit-stack", true, nil)
+	outputs, err := exec.GetAllOutputs(atmosConfig, "skipinit-component", "skipinit-stack", true, nil, nil)
 	require.NoError(t, err)
 	assert.Equal(t, "vpc-skipinit", outputs["vpc_id"])
 }
@@ -1310,7 +1379,7 @@ func TestExecutor_GetAllOutputs_SkipInit_False_RunsInitAndWorkspace(t *testing.T
 		"vpc_id": {Value: []byte(`"vpc-noskip"`)},
 	}, nil)
 
-	outputs, err := exec.GetAllOutputs(atmosConfig, "noskip-component", "noskip-stack", false, nil)
+	outputs, err := exec.GetAllOutputs(atmosConfig, "noskip-component", "noskip-stack", false, nil, nil)
 	require.NoError(t, err)
 	assert.Equal(t, "vpc-noskip", outputs["vpc_id"])
 }
@@ -1369,7 +1438,7 @@ func TestExecutor_GetAllOutputs_SkipInit_WithAuthManager_ProcessesYamlFunctions(
 		"vpc_id": {Value: []byte(`"vpc-auth"`)},
 	}, nil)
 
-	outputs, err := exec.GetAllOutputs(atmosConfig, "skipauth-component", "skipauth-stack", true, fakeAuthManager)
+	outputs, err := exec.GetAllOutputs(atmosConfig, "skipauth-component", "skipauth-stack", true, nil, fakeAuthManager)
 	require.NoError(t, err)
 	assert.Equal(t, "vpc-auth", outputs["vpc_id"])
 }
