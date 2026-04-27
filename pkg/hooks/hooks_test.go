@@ -10,9 +10,24 @@ import (
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/ci"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/store"
 )
+
+// testSaveAndClearRegistry snapshots the CI provider registry, replaces it with
+// an empty one, and returns the restore function. Tests that call RunCIHooks
+// must use this to avoid depending on the host environment's CI detection
+// (e.g., GITHUB_ACTIONS=true on CI runners would make ci.IsCI() return true).
+func testSaveAndClearRegistry() func() {
+	return ci.SwapRegistryForTest()
+}
+
+// testRestoreRegistry restores the CI provider registry from the snapshot
+// returned by testSaveAndClearRegistry.
+func testRestoreRegistry(restore func()) {
+	restore()
+}
 
 func TestHasHooks(t *testing.T) {
 	tests := []struct {
@@ -506,6 +521,15 @@ func TestRunCIHooks_CIEnabledIsHardKillSwitch(t *testing.T) {
 // TestRunCIHooks_LocalRunSkipsExperimentalGate verifies that local runs do not
 // hit the experimental CI gate unless CI mode is explicitly forced.
 func TestRunCIHooks_LocalRunSkipsExperimentalGate(t *testing.T) {
+	// Disable all registered CI providers for the duration of this test so the
+	// first subtest's ci.IsCI() check returns false regardless of the host
+	// environment (e.g., when this suite runs under GitHub Actions itself).
+	// Without this isolation, the github provider's Detect() would see
+	// GITHUB_ACTIONS=true and cause the non-force branch to fall through to
+	// the experimental gate, failing the test.
+	backup := testSaveAndClearRegistry()
+	defer testRestoreRegistry(backup)
+
 	config := &schema.AtmosConfiguration{
 		CI: schema.CIConfig{Enabled: true},
 		Settings: schema.AtmosSettings{

@@ -241,6 +241,13 @@ func getExplicitIdentityFlagValue(cmd *cobra.Command) (string, bool) {
 		return "", false
 	}
 
+	// When the user explicitly passes an empty flag value (e.g., `--identity=`), Cobra reports
+	// the flag as Changed with an empty string. Treat this as an explicit request for the
+	// interactive-selection sentinel so the ATMOS_IDENTITY env var fallback cannot override it.
+	if value == "" {
+		return cfg.IdentityFlagSelectValue, true
+	}
+
 	return cfg.NormalizeIdentityValue(value), true
 }
 
@@ -506,8 +513,11 @@ var valueTakingCommonFlags = func() map[string]bool {
 	set["-s"] = true
 	// --global-options takes a string value in space form.
 	set[cfg.GlobalOptionsFlag] = true
-	// -i is the shorthand form of --identity.
-	set["-i"] = true
+	// Note: "-i" (shorthand for --identity) is intentionally NOT added here.
+	// It is an optional-value flag and is handled alongside cfg.IdentityFlag in the
+	// stripping branch below so that a trailing flag (e.g., "-i -lock=false") is not
+	// erroneously consumed as the identity value. This matches parseIdentityFlag's
+	// behavior, which only treats the next token as a value when it does not start with '-'.
 	// --kubeconfig-path takes a path value.
 	set[cfg.KubeConfigConfigFlag] = true
 	// Profiler string flags.
@@ -688,9 +698,12 @@ func processArgsAndFlags(
 		for _, f := range commonFlags {
 			if arg == f {
 				indexesToRemove = append(indexesToRemove, i)
-				// Optional-value flags (--from-plan, --identity): only strip i+1 when the next
-				// arg was actually consumed as the value (i.e., it exists and does not start with '-').
-				if f == cfg.FromPlanFlag || f == cfg.IdentityFlag {
+				// Optional-value flags (--from-plan, --identity, -i): only strip i+1 when the
+				// next arg was actually consumed as the value (i.e., it exists and does not start
+				// with '-'). This matches parseIdentityFlag / parseFromPlanFlag behavior and
+				// preserves native flags like "-i -lock=false" when the user does not pass an
+				// identity value.
+				if f == cfg.FromPlanFlag || f == cfg.IdentityFlag || f == "-i" {
 					if i+1 < len(inputArgsAndFlags) && !strings.HasPrefix(inputArgsAndFlags[i+1], "-") {
 						indexesToRemove = append(indexesToRemove, i+1)
 					}

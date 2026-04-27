@@ -330,11 +330,24 @@ func TestFormatSingleOutput(t *testing.T) {
 
 func TestExecuteOutputWithFormat_PassesAuthManager(t *testing.T) {
 	initOutputTestIO(t)
+	// executeOutputWithFormat reads "output-file", "skip-init", "uppercase", and "flatten"
+	// from the shared viper.GetViper() singleton. Snapshot every key we touch (or that the
+	// function under test reads) and restore the originals via t.Cleanup so this test
+	// cannot leak Viper state to — or inherit it from — sibling tests.
 	v := viper.GetViper()
-	origOutputFile := v.GetString("output-file")
+	origOutputFile := v.Get("output-file")
+	origSkipInit := v.Get("skip-init")
+	origUppercase := v.Get("uppercase")
+	origFlatten := v.Get("flatten")
 	v.Set("output-file", filepath.Join(t.TempDir(), "output.json"))
+	v.Set("skip-init", false)
+	v.Set("uppercase", false)
+	v.Set("flatten", false)
 	t.Cleanup(func() {
 		v.Set("output-file", origOutputFile)
+		v.Set("skip-init", origSkipInit)
+		v.Set("uppercase", origUppercase)
+		v.Set("flatten", origFlatten)
 	})
 
 	orig := outputGetComponentOutputs
@@ -364,8 +377,8 @@ func TestExecuteOutputWithFormat_PassesAuthManager(t *testing.T) {
 		&schema.ConfigAndStacksInfo{
 			ComponentFromArg: "test-component",
 			Stack:            "test-stack",
-			AuthManager:      sentinelAuthManager,
 		},
+		sentinelAuthManager,
 		"json",
 	)
 

@@ -18,6 +18,7 @@ import (
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/dependencies"
 	log "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/provisioner"
 	_ "github.com/cloudposse/atmos/pkg/provisioner/source" // register source provisioner
 	provSource "github.com/cloudposse/atmos/pkg/provisioner/source"
@@ -132,6 +133,8 @@ func setupTerraformAuth(atmosConfig *schema.AtmosConfiguration, info *schema.Con
 // SetupTerraformAuthForCLI exposes terraform auth setup to command-layer callers
 // that need the same merged-auth and explicit-identity behavior as ExecuteTerraform.
 func SetupTerraformAuthForCLI(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) (any, error) {
+	defer perf.Track(atmosConfig, "exec.SetupTerraformAuthForCLI")()
+
 	return setupTerraformAuth(atmosConfig, info)
 }
 

@@ -91,6 +91,27 @@ func Reset() {
 	providers = make(map[string]provider.Provider)
 }
 
+// SwapRegistryForTest clears the provider registry and returns a restore function
+// that puts the previous registry back in place when invoked. Intended for use in
+// tests (including tests in other packages) that need to isolate themselves from
+// the set of CI providers that are auto-registered via init() in the hosting
+// binary — for example, tests asserting that ci.IsCI() returns false even when
+// running under GitHub Actions.
+func SwapRegistryForTest() func() {
+	defer perf.Track(nil, "ci.SwapRegistryForTest")()
+
+	providersMu.Lock()
+	prev := providers
+	providers = make(map[string]provider.Provider)
+	providersMu.Unlock()
+
+	return func() {
+		providersMu.Lock()
+		providers = prev
+		providersMu.Unlock()
+	}
+}
+
 // IsCI returns true if any CI provider is detected.
 func IsCI() bool {
 	defer perf.Track(nil, "provider.IsCI")()
