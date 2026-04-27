@@ -139,19 +139,12 @@ func TestIsCI(t *testing.T) {
 	assert.True(t, IsCI())
 }
 
-// testSaveAndClearRegistry clears the provider registry and returns the previous
-// map. For use in tests only. Restore with testRestoreRegistry.
-func testSaveAndClearRegistry() map[string]provider.Provider {
-	providersMu.Lock()
-	defer providersMu.Unlock()
-	prev := providers
-	providers = make(map[string]provider.Provider)
-	return prev
+// testSaveAndClearRegistry clears the provider registry and returns a restore function.
+func testSaveAndClearRegistry() func() {
+	return SwapRegistryForTest()
 }
 
 // TestRestoreRegistry restores the provider registry from a previous snapshot.
-func testRestoreRegistry(m map[string]provider.Provider) {
-	providersMu.Lock()
-	defer providersMu.Unlock()
-	providers = m
+func testRestoreRegistry(restore func()) {
+	restore()
 }

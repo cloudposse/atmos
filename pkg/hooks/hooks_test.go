@@ -222,6 +222,17 @@ logs:
 `),
 		0o644,
 	))
+	require.NoError(t, os.WriteFile(
+		filepath.Join(tempDir, "stacks", "orgs", "acme", "acme-dev-test.yaml"),
+		[]byte(`import:
+  - orgs/acme/_defaults
+vars:
+  tenant: acme
+  environment: dev
+  stage: test
+`),
+		0o644,
+	))
 
 	t.Chdir(tempDir)
 
@@ -237,6 +248,7 @@ logs:
 	require.NotNil(t, hooks.items)
 	assert.Contains(t, hooks.items, "static-hook")
 	assert.Equal(t, "store", hooks.items["static-hook"].Command)
+	assert.Equal(t, "{{", hooks.items["static-hook"].Outputs["broken"])
 }
 
 func TestRunAll(t *testing.T) {

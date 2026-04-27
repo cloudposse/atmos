@@ -78,7 +78,7 @@ var commonFlags = []string{
 	cfg.InitPassVars,
 	cfg.PlanSkipPlanfile,
 	cfg.IdentityFlag,
-	"-i",
+	cfg.IdentityFlagShort,
 	cfg.ClusterNameFlag,
 	cfg.ProfilerEnabledFlag,
 	cfg.ProfilerHostFlag,
@@ -277,6 +277,10 @@ func resolveIdentityValue(
 	return cfg.NormalizeIdentityValue(argsIdentity)
 }
 
+// preferArgsIdentityOverSelectValue complements resolveIdentityValue for optional-value
+// identity flags. If Cobra reports cfg.IdentityFlagSelectValue but the raw CLI args
+// contain a non-empty, non-sentinel identity, use the normalized raw-args value;
+// otherwise keep the flag value selected by resolveIdentityValue.
 func preferArgsIdentityOverSelectValue(flagValue string, argsIdentity string) string {
 	if flagValue == cfg.IdentityFlagSelectValue &&
 		argsIdentity != "" &&
@@ -513,7 +517,7 @@ var valueTakingCommonFlags = func() map[string]bool {
 	set["-s"] = true
 	// --global-options takes a string value in space form.
 	set[cfg.GlobalOptionsFlag] = true
-	// Note: "-i" (shorthand for --identity) is intentionally NOT added here.
+	// Note: cfg.IdentityFlagShort (shorthand for --identity) is intentionally NOT added here.
 	// It is an optional-value flag and is handled alongside cfg.IdentityFlag in the
 	// stripping branch below so that a trailing flag (e.g., "-i -lock=false") is not
 	// erroneously consumed as the identity value. This matches parseIdentityFlag's
@@ -566,7 +570,7 @@ func parseFlagValue(flag, arg string, args []string, index int) (string, bool, e
 // SplitN(arg, "=", 2) is used so that identity values containing "=" (e.g., ARN-like
 // strings with key=value parameters) are handled correctly.
 func parseIdentityFlag(info *schema.ArgsAndFlagsInfo, arg string, args []string, index int) {
-	if arg == cfg.IdentityFlag || arg == "-i" {
+	if arg == cfg.IdentityFlag || arg == cfg.IdentityFlagShort {
 		// Has value: --identity <value> (next arg exists and is not another flag).
 		if len(args) > index+1 && !strings.HasPrefix(args[index+1], "-") {
 			info.Identity = args[index+1]
@@ -703,7 +707,7 @@ func processArgsAndFlags(
 				// with '-'). This matches parseIdentityFlag / parseFromPlanFlag behavior and
 				// preserves native flags like "-i -lock=false" when the user does not pass an
 				// identity value.
-				if f == cfg.FromPlanFlag || f == cfg.IdentityFlag || f == "-i" {
+				if f == cfg.FromPlanFlag || f == cfg.IdentityFlag || f == cfg.IdentityFlagShort {
 					if i+1 < len(inputArgsAndFlags) && !strings.HasPrefix(inputArgsAndFlags[i+1], "-") {
 						indexesToRemove = append(indexesToRemove, i+1)
 					}

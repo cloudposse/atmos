@@ -13,7 +13,6 @@ import (
 
 func TestProcessComponentConfig_PropagatesAuthManager(t *testing.T) {
 	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
 
 	mockAuthManager := types.NewMockAuthManager(ctrl)
 	// AuthContext is a container of cloud-provider-specific credential records; the
@@ -54,4 +53,79 @@ func TestProcessComponentConfig_PropagatesAuthManager(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, mockAuthManager, info.AuthManager)
 	assert.Equal(t, expectedAuthContext, info.AuthContext)
+}
+
+func TestProcessComponentConfig_AuthManagerGuardBranches(t *testing.T) {
+	stacksMap := map[string]any{
+		"tenant-dev-test": map[string]any{
+			"components": map[string]any{
+				"terraform": map[string]any{
+					"vpc": map[string]any{
+						"vars": map[string]any{
+							"name": "vpc",
+						},
+					},
+				},
+			},
+		},
+	}
+
+	t.Run("nil auth manager leaves auth fields unset", func(t *testing.T) {
+		info := &schema.ConfigAndStacksInfo{}
+		err := ProcessComponentConfig(
+			&schema.AtmosConfiguration{},
+			info,
+			"tenant-dev-test",
+			stacksMap,
+			"terraform",
+			"vpc",
+			nil,
+		)
+		require.NoError(t, err)
+		assert.Nil(t, info.AuthManager)
+		assert.Nil(t, info.AuthContext)
+	})
+
+	t.Run("nil stack info keeps manager and leaves auth context unset", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		mockAuthManager := types.NewMockAuthManager(ctrl)
+		mockAuthManager.EXPECT().GetStackInfo().Return(nil).Times(1)
+
+		info := &schema.ConfigAndStacksInfo{}
+		err := ProcessComponentConfig(
+			&schema.AtmosConfiguration{},
+			info,
+			"tenant-dev-test",
+			stacksMap,
+			"terraform",
+			"vpc",
+			mockAuthManager,
+		)
+		require.NoError(t, err)
+		assert.Equal(t, mockAuthManager, info.AuthManager)
+		assert.Nil(t, info.AuthContext)
+	})
+
+	t.Run("nil auth context keeps manager and leaves auth context unset", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		mockAuthManager := types.NewMockAuthManager(ctrl)
+		mockAuthManager.EXPECT().
+			GetStackInfo().
+			Return(&schema.ConfigAndStacksInfo{AuthContext: nil}).
+			Times(1)
+
+		info := &schema.ConfigAndStacksInfo{}
+		err := ProcessComponentConfig(
+			&schema.AtmosConfiguration{},
+			info,
+			"tenant-dev-test",
+			stacksMap,
+			"terraform",
+			"vpc",
+			mockAuthManager,
+		)
+		require.NoError(t, err)
+		assert.Equal(t, mockAuthManager, info.AuthManager)
+		assert.Nil(t, info.AuthContext)
+	})
 }

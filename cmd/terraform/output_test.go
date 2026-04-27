@@ -24,6 +24,7 @@ func initOutputTestIO(t *testing.T) {
 	data.InitWriter(ioCtx)
 	ui.InitFormatter(ioCtx)
 	t.Cleanup(data.Reset)
+	t.Cleanup(ui.Reset)
 }
 
 // TestOutputCommandSetup verifies that the output command is properly configured.

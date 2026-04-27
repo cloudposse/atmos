@@ -1,6 +1,7 @@
 package terraform
 
 import (
+	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
@@ -21,12 +22,12 @@ func TerraformFlags() *flags.FlagRegistry {
 // registerIdentityFlags adds identity and authentication related flags.
 func registerIdentityFlags(registry *flags.FlagRegistry) {
 	registry.Register(&flags.StringFlag{
-		Name:        "identity",
-		Shorthand:   "i",
+		Name:        cfg.IdentityFlagName,
+		Shorthand:   cfg.IdentityFlagShortName,
 		Default:     "",
 		Description: "Specify the identity to authenticate to before running Terraform commands. Use without value to interactively select.",
 		EnvVars:     []string{"ATMOS_IDENTITY", "IDENTITY"},
-		NoOptDefVal: "__SELECT__",
+		NoOptDefVal: cfg.IdentityFlagSelectValue,
 	})
 }
 
