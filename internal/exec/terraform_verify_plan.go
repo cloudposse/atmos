@@ -43,9 +43,22 @@ func VerifyPlanfile(info *schema.ConfigAndStacksInfo, storedPlanFile string) err
 	// Resolve the component path.
 	componentPath := filepath.Join(atmosConfig.TerraformDirAbsolutePath, processedInfo.ComponentFolderPrefix, processedInfo.FinalComponent)
 
-	// Check if workdir is enabled (source + workdir or workdir only).
-	if workdirPath, ok := processedInfo.ComponentSection[provWorkdir.WorkdirPathKey].(string); ok && workdirPath != "" {
-		componentPath = workdirPath
+	// For workdir-enabled components, compute the workdir path from first principles.
+	// ProcessStacks builds a fresh ComponentSection that does not include WorkdirPathKey
+	// (only set by AutoProvisionSource at execution time), so we derive the path directly.
+	// applyMetadataComponentSubpath handles the metadata.component subdir within the workdir.
+	if provWorkdir.IsWorkdirEnabled(processedInfo.ComponentSection) {
+		workdirRoot := provWorkdir.BuildPath(
+			atmosConfig.BasePath,
+			cfg.TerraformComponentType,
+			processedInfo.FinalComponent,
+			processedInfo.Stack,
+			processedInfo.ComponentSection,
+		)
+		candidate := applyMetadataComponentSubpath(processedInfo.BaseComponentPath, workdirRoot)
+		if fi, err := os.Stat(candidate); err == nil && fi.IsDir() {
+			componentPath = candidate
+		}
 	}
 
 	// Get JSON representation of the stored plan.

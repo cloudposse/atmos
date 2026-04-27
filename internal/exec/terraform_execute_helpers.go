@@ -20,7 +20,6 @@ import (
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/provisioner"
 	_ "github.com/cloudposse/atmos/pkg/provisioner/source" // register source provisioner
-	provSource "github.com/cloudposse/atmos/pkg/provisioner/source"
 	provWorkdir "github.com/cloudposse/atmos/pkg/provisioner/workdir"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/store/authbridge"
@@ -179,51 +178,6 @@ func autoGenerateComponentFiles(atmosConfig *schema.AtmosConfiguration, info *sc
 		return errors.Join(errUtils.ErrCreateDirectory, fmt.Errorf("auto-generation: %w", mkdirErr))
 	}
 	return GenerateFilesForComponent(atmosConfig, info, componentPath)
-}
-
-// applyMetadataComponentSubpath joins info.BaseComponentPath onto workdirPath for JIT
-// source components whose metadata.component specifies a subdirectory within the cloned
-// repo (e.g. metadata.component: modules/iam-policy means the TF module is at
-// <workdir>/modules/iam-policy/). When BaseComponentPath is empty (no metadata.component,
-// or metadata.component equals the component instance name), workdirPath is returned
-// unchanged. ".." is resolved naturally by filepath.Join — intentional escape hatch.
-func applyMetadataComponentSubpath(info *schema.ConfigAndStacksInfo, workdirPath string) string {
-	if info.BaseComponentPath == "" {
-		return workdirPath
-	}
-	return filepath.Join(workdirPath, info.BaseComponentPath)
-}
-
-// provisionComponentSource performs JIT source provisioning when configured, then
-// checks whether the component directory exists. Returns the (possibly updated)
-// component path, existence flag, and any error.
-func provisionComponentSource(
-	atmosConfig *schema.AtmosConfiguration,
-	info *schema.ConfigAndStacksInfo,
-	componentPath string,
-) (string, bool, error) {
-	exists, err := u.IsDirectory(componentPath)
-
-	if !provSource.HasSource(info.ComponentSection) {
-		return componentPath, exists, err
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
-	defer cancel()
-	if autoErr := provSource.AutoProvisionSource(ctx, atmosConfig, cfg.TerraformComponentType, info.ComponentSection, info.AuthContext); autoErr != nil {
-		return "", false, fmt.Errorf("failed to auto-provision component source: %w", autoErr)
-	}
-
-	if workdirPath, ok := info.ComponentSection[provWorkdir.WorkdirPathKey].(string); ok && workdirPath != "" {
-		workdirPath = applyMetadataComponentSubpath(info, workdirPath)
-		info.ComponentSection[provWorkdir.WorkdirPathKey] = workdirPath
-		exists, _ := u.IsDirectory(workdirPath)
-		return workdirPath, exists, nil
-	}
-
-	// Re-check existence after provisioning.
-	exists, err = u.IsDirectory(componentPath)
-	return componentPath, exists, err
 }
 
 // checkComponentRestrictions returns an error when the requested subcommand is not

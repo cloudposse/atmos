@@ -12,6 +12,7 @@ import (
 	"github.com/pkg/errors"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/data"
 	"github.com/cloudposse/atmos/pkg/perf"
 	provWorkdir "github.com/cloudposse/atmos/pkg/provisioner/workdir"
@@ -61,10 +62,22 @@ func TerraformPlanDiff(atmosConfig *schema.AtmosConfiguration, info *schema.Conf
 	// Get the component path using the resolved FinalComponent from ProcessStacks.
 	componentPath := filepath.Join(atmosConfig.TerraformDirAbsolutePath, processedInfo.ComponentFolderPrefix, processedInfo.FinalComponent)
 
-	// Check if workdir is enabled (source + workdir or workdir only).
-	// When workdir is enabled, the planfile will be in the workdir path, not the base component path.
-	if workdirPath, ok := processedInfo.ComponentSection[provWorkdir.WorkdirPathKey].(string); ok && workdirPath != "" {
-		componentPath = workdirPath
+	// For workdir-enabled components, compute the workdir path from first principles.
+	// ProcessStacks builds a fresh ComponentSection that does not include WorkdirPathKey
+	// (only set by AutoProvisionSource at execution time), so we derive the path directly.
+	// applyMetadataComponentSubpath handles the metadata.component subdir within the workdir.
+	if provWorkdir.IsWorkdirEnabled(processedInfo.ComponentSection) {
+		workdirRoot := provWorkdir.BuildPath(
+			atmosConfig.BasePath,
+			cfg.TerraformComponentType,
+			processedInfo.FinalComponent,
+			processedInfo.Stack,
+			processedInfo.ComponentSection,
+		)
+		candidate := applyMetadataComponentSubpath(processedInfo.BaseComponentPath, workdirRoot)
+		if fi, err := os.Stat(candidate); err == nil && fi.IsDir() {
+			componentPath = candidate
+		}
 	}
 
 	// Ensure original plan file exists and is absolute
