@@ -739,7 +739,8 @@ func TestResolveWorkdirComponentPath_ExistingDir(t *testing.T) {
 // TestResolveWorkdirComponentPath_NonExistentDir returns exists=false and no
 // error when the candidate path does not yet exist (workdir not provisioned).
 // This lets callers retain their fallback path without surfacing a misleading
-// error.
+// error. Asserts the exact constructed path so a regression in
+// BuildPath/applyMetadataComponentSubpath wiring fails this test.
 func TestResolveWorkdirComponentPath_NonExistentDir(t *testing.T) {
 	atmosConfig := &schema.AtmosConfiguration{BasePath: t.TempDir()}
 	info := &schema.ConfigAndStacksInfo{
@@ -748,11 +749,18 @@ func TestResolveWorkdirComponentPath_NonExistentDir(t *testing.T) {
 		BaseComponentPath: "exports",
 		ComponentSection:  map[string]any{},
 	}
+	expectedCandidate := filepath.Join(
+		atmosConfig.BasePath,
+		provWorkdir.WorkdirPath,
+		cfg.TerraformComponentType,
+		info.Stack+"-"+info.FinalComponent,
+		info.BaseComponentPath,
+	)
 
 	candidate, exists, err := resolveWorkdirComponentPath(atmosConfig, info)
 	require.NoError(t, err)
 	assert.False(t, exists)
-	assert.NotEmpty(t, candidate)
+	assert.Equal(t, expectedCandidate, candidate)
 }
 
 // TestResolveWorkdirComponentPath_StatErrorPropagates ensures non-ENOENT stat
