@@ -2,6 +2,7 @@ package tests
 
 import (
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -97,4 +98,48 @@ func TestSourceWorkdir_DeleteMissingForce(t *testing.T) {
 	assert.True(t, strings.Contains(err.Error(), "force") || strings.Contains(err.Error(), "--force") ||
 		strings.Contains(err.Error(), "interactive"),
 		"Expected error about missing --force flag or non-interactive mode")
+}
+
+// TestJITSource_MetadataComponentSubpath verifies that a JIT source component with
+// metadata.component: exports provisions the full repo into the workdir and that the
+// exports/ subdirectory is accessible within it. Regression test for GitHub issue #2364.
+//
+// The component uses the full terraform-null-label repo (no //subpath in URI).
+// The metadata.component: exports setting tells atmos the Terraform module lives at exports/.
+// The fix in provisionComponentSource updates WorkdirPathKey to <workdir>/exports/.
+func TestJITSource_MetadataComponentSubpath(t *testing.T) {
+	t.Chdir("./fixtures/scenarios/source-provisioner-workdir")
+
+	t.Cleanup(func() {
+		_ = os.RemoveAll(".workdir")
+	})
+
+	// --dry-run triggers provisionComponentSource (applying the fix) without
+	// requiring tofu to be installed or cloud credentials.
+	resetViperState()
+	cmd.RootCmd.SetArgs([]string{
+		"terraform", "plan", "null-label-exports",
+		"--stack", "dev",
+		"--dry-run",
+	})
+	_ = cmd.Execute() // error expected (no terraform binary needed); provisioning still runs
+
+	// Verify the workdir root was created — the full repo was cloned here.
+	workdirRoot := filepath.Join(".workdir", "terraform", "dev-null-label-exports")
+	info, statErr := os.Stat(workdirRoot)
+	require.NoError(t, statErr, "workdir root should exist at %s after provisioning", workdirRoot)
+	require.True(t, info.IsDir(), "workdir root should be a directory")
+
+	// Verify exports/ subdir exists within the workdir.
+	// terraform-null-label@0.25.0 has exports/exports.tf at the repo root.
+	// Its presence confirms the full repo was cloned (not just the subdir).
+	exportsDir := filepath.Join(workdirRoot, "exports")
+	exportsInfo, statErr := os.Stat(exportsDir)
+	require.NoError(t, statErr, "exports/ subdir should exist within workdir at %s", exportsDir)
+	require.True(t, exportsInfo.IsDir(), "exports/ should be a directory")
+
+	// Confirm exports/ contains a .tf file — proving it's the correct TF module subdir.
+	exportsTfPath := filepath.Join(exportsDir, "exports.tf")
+	_, statErr = os.Stat(exportsTfPath)
+	require.NoError(t, statErr, "exports/exports.tf should exist (confirming correct module subdir)")
 }
