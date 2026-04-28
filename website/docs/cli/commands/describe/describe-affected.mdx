@@ -82,9 +82,8 @@ The command performs the following:
 Since Atmos first checks the component folders for changes, if it finds any affected files, it will mark all related
 components and stacks as affected. Atmos will then skip evaluating the stacks for differences since it already
 knows that they are affected.
-:::tip Use our GitHub Action
-Our [affected stacks](/integrations/github-actions/affected-stacks) GitHub Action provides a ready-to-go way to run
-`describe affected` and produce a GitHub matrix.
+:::tip Use in GitHub Actions
+Run `atmos describe affected --format=matrix --output-file=$GITHUB_OUTPUT` directly in your workflow to fan out across affected components. See the [matrix workflow example](/ci#advanced-multi-component-matrix) for the full pattern.
 :::
 
 ## CI Auto-Detection
@@ -513,7 +512,7 @@ where:
     <dd>
         The `settings` section of the component in the stack. It will be included only if the
         command-line flag `--include-settings=true` is passed. The `settings` sections is a free-form map used to pass
-        configuration information to [integrations](/integrations/github-actions).
+        configuration information to [integrations](/cli/configuration/integrations).
     </dd>
 
     <dt>`deleted`</dt>

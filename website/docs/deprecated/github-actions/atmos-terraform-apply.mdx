@@ -1,5 +1,5 @@
 ---
-title: Atmos Terraform Apply
+title: Atmos Terraform Apply (Deprecated)
 sidebar_position: 50
 sidebar_label: Terraform Apply
 description: Run a `terraform apply` to provision changes
@@ -7,13 +7,17 @@ description: Run a `terraform apply` to provision changes
 import Intro from '@site/src/components/Intro'
 import RemoteFile from '@site/src/components/RemoteFile'
 
+:::warning Deprecated
+This GitHub Action is deprecated. New projects should use [native CI integration](/ci) — `atmos terraform apply` (or `atmos terraform deploy`, which adds drift verification) handles planfile retrieval, semantic diff, and CI artifacts directly without a wrapper action.
+:::
+
 <Intro>
 Simplify provisioning Terraform entirely from within GitHub Action workflows. This action makes it very easy to apply that changes from a `terraform plan` from directly within the GitHub UI. Use this action in your workflows to apply changes to your infrastructure.
 </Intro>
 
 Given any component and stack in an Atmos supported infrastructure environment, [`github-action-atmos-terraform-apply`](https://github.com/cloudposse/github-action-atmos-terraform-apply) will retrieve an existing Terraform [planfile](https://developer.hashicorp.com/terraform/tutorials/automation/automate-terraform) from a given S3 bucket using metadata stored inside a DynamoDB table, run `atmos terraform apply` with that planfile, and format the Terraform Apply result as part of a [GitHub Workflow Job Summary](https://github.blog/2022-05-09-supercharging-github-actions-with-job-summaries/).
 
-This action is intended to be used together with [Atmos Terraform Plan](/integrations/github-actions/atmos-terraform-plan), as well as integrated into drift detection with [Atmos Terraform Detection and Remediation](/integrations/github-actions/atmos-terraform-drift-detection) GitHub Actions.
+This action is intended to be used together with [Atmos Terraform Plan](/deprecated/github-actions/atmos-terraform-plan), as well as integrated into drift detection with [Atmos Terraform Detection and Remediation](/deprecated/github-actions/atmos-terraform-drift-detection) GitHub Actions.
 
 ## Features
 
@@ -37,7 +41,7 @@ In this example, the action is triggered when certain events occur, such as a ma
 
 :::tip Passing Affected Stacks
 
-We recommend combining this action with the [`affected-stacks`](/integrations/github-actions/affected-stacks) GitHub Action inside a matrix to plan all affected stacks in parallel.
+We recommend combining this action with the [`affected-stacks`](/deprecated/github-actions/affected-stacks) GitHub Action inside a matrix to plan all affected stacks in parallel.
 
 :::
 
@@ -47,7 +51,7 @@ We recommend combining this action with the [`affected-stacks`](/integrations/gi
 
 GitHub Actions support 256 matrix jobs in a single workflow at most! When planning all stacks in an Atmos environment, we frequently plan more than 256 component in the stacks at a time. In order to work around this limitation by GitHub, we can add an additional layer of abstraction using reusable workflows.
 
-[256 Matrix Limitation](/integrations/github-actions/atmos-terraform-drift-detection#256-matrix-limitation)
+[256 Matrix Limitation](/deprecated/github-actions/atmos-terraform-drift-detection#256-matrix-limitation)
 
 :::
 
@@ -55,4 +59,4 @@ GitHub Actions support 256 matrix jobs in a single workflow at most! When planni
 
 ## Requirements
 
-This action has the requirements as [Github Actions](/integrations/github-actions/). Use the same S3 Bucket, DynamoDB table, IAM Roles and config described there.
+This action has the requirements as [Github Actions](/deprecated/github-actions/). Use the same S3 Bucket, DynamoDB table, IAM Roles and config described there.
