@@ -1018,6 +1018,7 @@ var (
 	ErrAICommandEmpty               = errors.New("command cannot be empty")
 	ErrAICommandBlacklisted         = errors.New("command is blacklisted for security reasons")
 	ErrAICommandRmNotAllowed        = errors.New("rm with recursive or force flags is not allowed")
+	ErrAICommandDestructive         = errors.New("command modifies state and is not permitted in the current permission mode; use ModePrompt with explicit user confirmation")
 	ErrAILSPNotEnabled              = errors.New("LSP is not enabled")
 	ErrAIFileDoesNotExist           = errors.New("file does not exist")
 	ErrAIConfigNil                  = errors.New("cannot switch provider: atmosConfig is nil")
