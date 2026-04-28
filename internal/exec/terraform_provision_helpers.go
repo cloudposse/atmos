@@ -16,26 +16,18 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
-// applyMetadataComponentSubpath joins metadataComponentSubpath onto workdirPath for
-// JIT source components whose metadata.component points at a subdirectory within
-// the cloned repo (e.g. metadata.component: modules/iam-policy means the Terraform
-// module is at <workdir>/modules/iam-policy/). When metadataComponentSubpath is
-// empty (no metadata.component, or metadata.component equals the component
-// instance name), workdirPath is returned unchanged.
-//
-// ".." in metadataComponentSubpath is resolved naturally by filepath.Join. This
-// is intentional: many upstream Terraform modules reference shared files via
-// relative parent paths (e.g. ../../shared-vars.tf) and need the full repo on
-// disk with the working directory pointed at a subdirectory. Restricting to
-// strict subpaths would break those layouts. Atmos's threat model assumes a
-// trusted operator running atmos against their own stack configs — the
-// metadata.component value is YAML-author-controlled, on par with !exec,
-// !template, and !terraform.state, all of which can read or invoke arbitrary
-// host resources. See GitHub issue #2364 for the original report.
-//
-// Absolute paths in metadataComponentSubpath are rooted under workdirPath per
-// filepath.Join semantics (the leading separator is stripped). Callers should
-// not rely on absolute paths to escape the workdir.
+// workdirSubpathAppliedMarker is the sentinel value stored under
+// WorkdirSubpathAppliedKey. It is a private type so YAML-derived values
+// (strings, bools, maps) cannot impersonate it via a type assertion.
+type workdirSubpathAppliedMarker struct{}
+
+// applyMetadataComponentSubpath joins metadata.component onto a JIT workdir
+// path so the Terraform module subdirectory inside a cloned repo (e.g.
+// metadata.component: modules/iam-policy) becomes the working directory.
+// ".." is intentionally permitted: upstream modules often reference shared
+// files via relative parent paths, and metadata.component is YAML-author
+// controlled (same trust class as !exec / !template / !terraform.state).
+// See issue #2364.
 func applyMetadataComponentSubpath(metadataComponentSubpath, workdirPath string) string {
 	if metadataComponentSubpath == "" {
 		return workdirPath
@@ -44,38 +36,34 @@ func applyMetadataComponentSubpath(metadataComponentSubpath, workdirPath string)
 }
 
 // applyWorkdirSubpathToSection joins metadata.component onto WorkdirPathKey in
-// info.ComponentSection (if not already applied), mutates the section to hold
-// the joined path, and returns it. Returns ("", false) when WorkdirPathKey is
-// absent or empty.
-//
-// The mutation is idempotent across repeated calls on the same section: the
-// WorkdirSubpathAppliedKey sentinel prevents double-joining when this function
-// is invoked twice within the same command lifecycle (e.g. terraform init then
-// terraform plan), where AutoProvisionSource short-circuits via its own
-// invocationDoneKey but WorkdirPathKey still carries the already-joined value
-// from the first call.
-func applyWorkdirSubpathToSection(info *schema.ConfigAndStacksInfo) (string, bool) {
+// info.ComponentSection and returns the joined path, or "" when WorkdirPathKey
+// is absent or empty. The mutation is idempotent: a private-typed sentinel
+// under WorkdirSubpathAppliedKey prevents double-joining across repeat calls
+// (e.g. terraform init then terraform plan within one command lifecycle).
+func applyWorkdirSubpathToSection(info *schema.ConfigAndStacksInfo) string {
 	workdirPath, ok := info.ComponentSection[provWorkdir.WorkdirPathKey].(string)
 	if !ok || workdirPath == "" {
-		return "", false
+		return ""
 	}
-	if _, applied := info.ComponentSection[provWorkdir.WorkdirSubpathAppliedKey]; !applied {
-		workdirPath = applyMetadataComponentSubpath(info.BaseComponentPath, workdirPath)
-		info.ComponentSection[provWorkdir.WorkdirPathKey] = workdirPath
-		info.ComponentSection[provWorkdir.WorkdirSubpathAppliedKey] = struct{}{}
+	if _, applied := info.ComponentSection[provWorkdir.WorkdirSubpathAppliedKey].(workdirSubpathAppliedMarker); applied {
+		return workdirPath
 	}
-	return workdirPath, true
+	workdirPath = applyMetadataComponentSubpath(info.BaseComponentPath, workdirPath)
+	info.ComponentSection[provWorkdir.WorkdirPathKey] = workdirPath
+	info.ComponentSection[provWorkdir.WorkdirSubpathAppliedKey] = workdirSubpathAppliedMarker{}
+	return workdirPath
 }
 
-// resolveWorkdirComponentPath computes the effective Terraform working directory
-// for a workdir-enabled component by deriving the workdir root from
-// provWorkdir.BuildPath and joining the metadata.component subpath onto it.
+// resolveWorkdirComponentPath computes the effective Terraform working
+// directory for a workdir-enabled component by deriving the workdir root from
+// provWorkdir.BuildPath and joining metadata.component onto it.
 //
-// It is used by code paths that run after ProcessStacks has rebuilt
-// ComponentSection (which does not carry WorkdirPathKey). It returns the
-// candidate path, an existence flag, and any non-ENOENT stat error so callers
-// can distinguish "workdir not provisioned yet" (exists=false, no error) from
-// "stat failed for another reason" (e.g. EACCES) which surfaces as an error.
+// Used by code paths that run after ProcessStacks has rebuilt ComponentSection
+// (which does not carry WorkdirPathKey). Returns the candidate path, an
+// existence flag, and any non-ENOENT stat error so callers can distinguish
+// "workdir not provisioned yet" (exists=false, no error) from "stat failed for
+// another reason" (e.g. EACCES) which surfaces as an error. A non-directory at
+// the candidate path also surfaces as an error so corrupt state is not masked.
 func resolveWorkdirComponentPath(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) (string, bool, error) {
 	workdirRoot := provWorkdir.BuildPath(
 		atmosConfig.BasePath,
@@ -93,7 +81,10 @@ func resolveWorkdirComponentPath(atmosConfig *schema.AtmosConfiguration, info *s
 		}
 		return "", false, errors.Join(errUtils.ErrWorkdirProvision, fmt.Errorf("stat workdir component path %q: %w", candidate, err))
 	}
-	return candidate, fi.IsDir(), nil
+	if !fi.IsDir() {
+		return "", false, errors.Join(errUtils.ErrWorkdirProvision, fmt.Errorf("workdir component path %q exists but is not a directory", candidate))
+	}
+	return candidate, true, nil
 }
 
 // provisionComponentSource performs JIT source provisioning when configured, then
@@ -116,7 +107,7 @@ func provisionComponentSource(
 		return "", false, errors.Join(errUtils.ErrWorkdirProvision, fmt.Errorf("auto-provision component source: %w", autoErr))
 	}
 
-	if workdirPath, ok := applyWorkdirSubpathToSection(info); ok {
+	if workdirPath := applyWorkdirSubpathToSection(info); workdirPath != "" {
 		exists, errDir := u.IsDirectory(workdirPath)
 		if errDir != nil && !errors.Is(errDir, os.ErrNotExist) {
 			return "", false, errors.Join(errUtils.ErrWorkdirProvision, fmt.Errorf("workdir path %q: %w", workdirPath, errDir))

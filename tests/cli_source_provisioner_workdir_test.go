@@ -100,20 +100,17 @@ func TestSourceWorkdir_DeleteMissingForce(t *testing.T) {
 		"Expected error about missing --force flag or non-interactive mode")
 }
 
-// TestJITSource_MetadataComponentSubpath is an end-to-end smoke test for the
-// JIT source-provisioning pipeline against a stack that sets metadata.component
-// on a component with a remote source. It runs `atmos terraform plan --dry-run`
-// against the full terraform-null-label repo (no //subpath in URI) with
-// metadata.component: exports, and confirms the source provisioner clones the
-// repo and the configured subdirectory is reachable within the workdir.
+// TestJITSource_MetadataComponentSubpath is the end-to-end regression guard
+// for issue #2364. It runs `atmos terraform plan --dry-run` against the full
+// terraform-null-label repo (no //subpath in URI) with metadata.component:
+// exports, and verifies the generated varfile lands at <workdir>/exports/
+// rather than the workdir root.
 //
-// The load-bearing assertion that WorkdirPathKey is rewritten to <workdir>/exports/
-// (the actual fix for issue #2364) lives in the unit tests on
-// applyWorkdirSubpathToSection in internal/exec/terraform_execute_helpers_test.go;
-// those would fail on reverted code, this test would not.
+// The varfile location is driven by ComponentSection[WorkdirPathKey]: with
+// the fix, that key holds <workdir>/exports/; without it, the workdir root.
+// Reverting the fix moves the varfile to the wrong location and fails this
+// test — see TestApplyWorkdirSubpathToSection_* for the unit-level guards.
 func TestJITSource_MetadataComponentSubpath(t *testing.T) {
-	// JIT source provisioning clones a remote git repo, so this test needs
-	// network access to GitHub and the git binary.
 	RequireExecutable(t, "git", "JIT source provisioning clones a remote repo")
 	RequireGitHubAccess(t)
 
@@ -123,32 +120,35 @@ func TestJITSource_MetadataComponentSubpath(t *testing.T) {
 		_ = os.RemoveAll(".workdir")
 	})
 
-	// --dry-run triggers provisionComponentSource (applying the fix) without
-	// requiring tofu to be installed or cloud credentials.
+	// --dry-run skips the tofu invocation but still runs provisioning and
+	// varfile generation — exactly the path that exercises the fix.
 	resetViperState()
 	cmd.RootCmd.SetArgs([]string{
 		"terraform", "plan", "null-label-exports",
 		"--stack", "dev",
 		"--dry-run",
 	})
-	_ = cmd.Execute() // error expected (no terraform binary needed); provisioning still runs
+	_ = cmd.Execute() // dry-run may return non-nil; provisioning still runs
 
-	// Verify the workdir root was created — the full repo was cloned here.
 	workdirRoot := filepath.Join(".workdir", "terraform", "dev-null-label-exports")
-	info, statErr := os.Stat(workdirRoot)
+	rootInfo, statErr := os.Stat(workdirRoot)
 	require.NoError(t, statErr, "workdir root should exist at %s after provisioning", workdirRoot)
-	require.True(t, info.IsDir(), "workdir root should be a directory")
+	require.True(t, rootInfo.IsDir(), "workdir root should be a directory")
 
-	// Verify exports/ subdir exists within the workdir.
-	// terraform-null-label@0.25.0 has exports/exports.tf at the repo root.
-	// Its presence confirms the full repo was cloned (not just the subdir).
 	exportsDir := filepath.Join(workdirRoot, "exports")
 	exportsInfo, statErr := os.Stat(exportsDir)
 	require.NoError(t, statErr, "exports/ subdir should exist within workdir at %s", exportsDir)
 	require.True(t, exportsInfo.IsDir(), "exports/ should be a directory")
 
-	// Confirm exports/ contains a .tf file — proving it's the correct TF module subdir.
-	exportsTfPath := filepath.Join(exportsDir, "exports.tf")
-	_, statErr = os.Stat(exportsTfPath)
-	require.NoError(t, statErr, "exports/exports.tf should exist (confirming correct module subdir)")
+	// Load-bearing regression assertion: the generated varfile must land in
+	// the metadata.component subpath, not the workdir root.
+	varfilesAtRoot, err := filepath.Glob(filepath.Join(workdirRoot, "*.terraform.tfvars.json"))
+	require.NoError(t, err)
+	assert.Empty(t, varfilesAtRoot,
+		"metadata.component subpath ignored — varfile generated at workdir root: %v", varfilesAtRoot)
+
+	varfilesInSubpath, err := filepath.Glob(filepath.Join(exportsDir, "*.terraform.tfvars.json"))
+	require.NoError(t, err)
+	assert.NotEmpty(t, varfilesInSubpath,
+		"varfile must be generated inside %s when metadata.component is honored", exportsDir)
 }

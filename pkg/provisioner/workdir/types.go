@@ -110,14 +110,9 @@ const (
 	// and -reconfigure causes a spurious "migrate all workspaces?" prompt.
 	WorkdirReprovisionedKey = "_workdir_reprovisioned"
 
-	// WorkdirSubpathAppliedKey is set in componentConfig after the metadata.component
-	// subpath has been joined onto WorkdirPathKey. It prevents double-joining when
-	// provisionComponentSource is called more than once for the same component
-	// section (e.g. terraform init then terraform plan in a single command
-	// lifecycle): the source provisioner short-circuits via its own
-	// invocationDoneKey on the second call, but WorkdirPathKey still carries the
-	// already-joined value from the first call, so a fresh join would produce
-	// <workdir>/<subpath>/<subpath>/. This sentinel breaks that loop.
+	// WorkdirSubpathAppliedKey marks that the metadata.component subpath has
+	// already been joined onto WorkdirPathKey. The value is an internal sentinel
+	// type that user YAML cannot forge.
 	WorkdirSubpathAppliedKey = "_workdir_subpath_applied"
 )
 
