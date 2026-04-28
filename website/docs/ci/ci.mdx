@@ -138,7 +138,7 @@ jobs:
 ```
 </File>
 
-`atmos terraform deploy` retrieves the planfile uploaded during the PR run, generates a fresh plan, performs a semantic comparison to detect drift, and applies. See [Planfile Storage](/ci/planfile-storage) for details.
+`atmos terraform deploy` retrieves the planfile uploaded during the PR run and applies it. Pass `--verify-plan` (or set `ATMOS_TERRAFORM_VERIFY_PLAN=true`) to additionally generate a fresh plan and perform a semantic comparison against the stored plan before applying — this opt-in verification is experimental. See [Planfile Storage](/ci/planfile-storage) for details.
 
 ### Deploy Affected
 
