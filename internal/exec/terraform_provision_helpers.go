@@ -128,6 +128,19 @@ func resolveWorkdirComponentPath(atmosConfig *schema.AtmosConfiguration, info *s
 	return resolved, true, nil
 }
 
+// componentDirExists wraps u.IsDirectory: ENOENT is reported as exists=false
+// with a nil error (the boolean carries that signal to callers), while any
+// other stat failure is wrapped with errUtils.ErrWorkdirProvision so upstream
+// can classify it. The contextLabel identifies the call site in the wrapped
+// message.
+func componentDirExists(componentPath, contextLabel string) (bool, error) {
+	exists, err := u.IsDirectory(componentPath)
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		return false, errors.Join(errUtils.ErrWorkdirProvision, fmt.Errorf("%s %q: %w", contextLabel, componentPath, err))
+	}
+	return exists, nil
+}
+
 // provisionComponentSource performs JIT source provisioning when configured, then
 // checks whether the component directory exists. Returns the (possibly updated)
 // component path, existence flag, and any error.
@@ -136,10 +149,13 @@ func provisionComponentSource(
 	info *schema.ConfigAndStacksInfo,
 	componentPath string,
 ) (string, bool, error) {
-	exists, err := u.IsDirectory(componentPath)
+	exists, err := componentDirExists(componentPath, "check component path")
+	if err != nil {
+		return "", false, err
+	}
 
 	if !provSource.HasSource(info.ComponentSection) {
-		return componentPath, exists, err
+		return componentPath, exists, nil
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
@@ -153,14 +169,14 @@ func provisionComponentSource(
 		return "", false, subpathErr
 	}
 	if workdirPath != "" {
-		exists, errDir := u.IsDirectory(workdirPath)
-		if errDir != nil && !errors.Is(errDir, os.ErrNotExist) {
-			return "", false, errors.Join(errUtils.ErrWorkdirProvision, fmt.Errorf("workdir path %q: %w", workdirPath, errDir))
+		exists, err := componentDirExists(workdirPath, "workdir path")
+		if err != nil {
+			return "", false, err
 		}
 		return workdirPath, exists, nil
 	}
 
 	// Re-check existence after provisioning.
-	exists, err = u.IsDirectory(componentPath)
+	exists, err = componentDirExists(componentPath, "re-check component path after provisioning")
 	return componentPath, exists, err
 }
