@@ -83,7 +83,7 @@ Since Atmos first checks the component folders for changes, if it finds any affe
 components and stacks as affected. Atmos will then skip evaluating the stacks for differences since it already
 knows that they are affected.
 :::tip Use in GitHub Actions
-Run `atmos describe affected --format=matrix --output-file=$GITHUB_OUTPUT` directly in your workflow to fan out across affected components. See the [matrix workflow example](/ci#advanced-multi-component-matrix) for the full pattern.
+Run `atmos describe affected --format=matrix --output-file=$GITHUB_OUTPUT` directly in your workflow to fan out across affected components. See the [matrix workflow example](/ci#multi-component-matrix) for the full pattern.
 :::
 
 ## CI Auto-Detection

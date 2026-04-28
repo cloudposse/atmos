@@ -64,148 +64,73 @@ ci:
 
 ## GitHub Actions Workflows
 
-The fastest way to learn the patterns is from working examples. We maintain two reference repositories:
+Running Atmos in GitHub Actions reduces to two steps: **check out the repository, then run an `atmos` command.** Atmos detects the CI environment automatically and produces job summaries, output variables, status checks, and stored planfiles without any wrapper actions.
 
-<dl>
-  <dt>[`cloudposse-examples/atmos-native-ci`](https://github.com/cloudposse-examples/atmos-native-ci)</dt>
-  <dd>Single-component ECS deploy. PR preview, deploy on `main`, promote on release.</dd>
+### Plan on Pull Request
 
-  <dt>[`cloudposse-examples/atmos-native-ci-advanced`](https://github.com/cloudposse-examples/atmos-native-ci-advanced)</dt>
-  <dd>Multi-component fan-out using `atmos describe affected --format=matrix`. Use this when your repo has many components.</dd>
-</dl>
-
-The pattern across all examples: the `atmos` Docker image runs the job, `atmos auth login` exchanges GitHub's OIDC token for cloud credentials, then a single `atmos terraform deploy` produces the full set of native CI artifacts (job summary, output variables, status checks, stored planfile with drift verification).
-
-### Deploy on Pull Request
-
-A PR labeled `deploy` builds the image and provisions a preview environment. From [`atmos-native-ci/.github/workflows/feature-branch.yml`](https://github.com/cloudposse-examples/atmos-native-ci/blob/main/.github/workflows/feature-branch.yml):
-
-<File title=".github/workflows/feature-branch.yml">
+<File title=".github/workflows/plan.yml">
 ```yaml
-name: Feature Branch
+name: Plan
 on:
   pull_request:
-    branches: ["main"]
-    types: [opened, synchronize, reopened, labeled]
 
 permissions:
   id-token: write
   contents: read
+  pull-requests: write
   statuses: write
 
-env:
-  ATMOS_PROFILE: github
-
 jobs:
-  deploy:
-    needs: [test, build]
-    runs-on: ["ubuntu-latest"]
+  plan:
+    runs-on: ubuntu-latest
     container:
-      image: ghcr.io/cloudposse/atmos:${{ vars.ATMOS_VERSION }}
-    if: ${{ contains(github.event.pull_request.labels.*.name, 'deploy') }}
-    environment:
-      name: preview
-      url: ${{ steps.deploy.outputs.output_url }}
+      image: ghcr.io/cloudposse/atmos:latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v6
+      - uses: actions/checkout@v6
 
-      - name: Deploy ECS Service
-        id: deploy
-        env:
-          APP_IMAGE: "${{ needs.build.outputs.image }}:${{ needs.build.outputs.tag }}"
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: atmos terraform deploy app -s preview
+      - run: atmos terraform plan vpc -s prod
 ```
 </File>
 
-### Deploy on Merge
+### Apply on Merge
 
-When the PR merges, the same component deploys to `dev`. From [`atmos-native-ci/.github/workflows/main-branch.yaml`](https://github.com/cloudposse-examples/atmos-native-ci/blob/main/.github/workflows/main-branch.yaml):
-
-<File title=".github/workflows/main-branch.yaml">
+<File title=".github/workflows/apply.yml">
 ```yaml
-name: Main Branch
+name: Apply
 on:
   push:
     branches: [main]
 
 permissions:
   id-token: write
-  contents: write
+  contents: read
   statuses: write
 
-env:
-  ATMOS_PROFILE: github
-
 jobs:
-  deploy:
-    needs: [test, build]
-    runs-on: ["ubuntu-latest"]
+  apply:
+    runs-on: ubuntu-latest
     container:
-      image: ghcr.io/cloudposse/atmos:${{ vars.ATMOS_VERSION }}
-    environment:
-      name: dev
-      url: ${{ steps.deploy.outputs.output_url }}
+      image: ghcr.io/cloudposse/atmos:latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v6
+      - uses: actions/checkout@v6
 
-      - name: Deploy ECS Service
-        id: deploy
-        env:
-          APP_IMAGE: "${{ needs.build.outputs.image }}:${{ needs.build.outputs.tag }}"
-        run: atmos terraform deploy app -s dev
+      - run: atmos terraform deploy vpc -s prod
 ```
 </File>
 
-`atmos terraform deploy` retrieves the planfile uploaded during the PR run, generates a fresh plan, performs a semantic comparison to detect drift, and applies — see [Planfile Storage](/ci/planfile-storage) for the full mechanics. The example repo also wires a `release.yaml` that promotes the image and runs `atmos terraform deploy app -s staging` then `prod` on a published GitHub release.
+`atmos terraform deploy` retrieves the planfile uploaded during the PR run, generates a fresh plan, performs a semantic comparison to detect drift, and applies. See [Planfile Storage](/ci/planfile-storage) for details.
 
-### Cleanup on PR Close
+### Multi-Component Matrix
 
-When the PR closes (or the `deploy` label is removed), tear down the preview. From [`atmos-native-ci/.github/workflows/preview-cleanup.yml`](https://github.com/cloudposse-examples/atmos-native-ci/blob/main/.github/workflows/preview-cleanup.yml):
+For repos with many components, fan out across only the affected ones using `atmos describe affected --format=matrix`:
 
-<File title=".github/workflows/preview-cleanup.yml">
-```yaml
-name: Preview Cleanup
-on:
-  pull_request:
-    branches: ["main"]
-    types: [closed, unlabeled]
-
-permissions:
-  id-token: write
-  contents: read
-
-jobs:
-  cleanup:
-    runs-on: ["ubuntu-latest"]
-    container:
-      image: ghcr.io/cloudposse/atmos:${{ vars.ATMOS_VERSION }}
-    if: ${{ github.event.pull_request.state == 'closed' || !contains(github.event.pull_request.labels.*.name, 'deploy') }}
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v6
-
-      - name: Destroy ECS Service
-        env:
-          ATMOS_PROFILE: github
-        run: atmos terraform destroy app -s preview -auto-approve
-```
-</File>
-
-### Advanced: Multi-Component Matrix
-
-For repos with many components, fan out across only the affected ones using `atmos describe affected --format=matrix`. From [`atmos-native-ci-advanced/.github/workflows/main-branch.yaml`](https://github.com/cloudposse-examples/atmos-native-ci-advanced/blob/main/.github/workflows/main-branch.yaml):
-
-<File title=".github/workflows/main-branch.yaml">
+<File title=".github/workflows/affected.yml">
 ```yaml
 jobs:
   affected:
-    runs-on: ["ubuntu-latest"]
+    runs-on: ubuntu-latest
     container:
-      image: ghcr.io/cloudposse/atmos:${{ vars.ATMOS_VERSION }}
+      image: ghcr.io/cloudposse/atmos:latest
     outputs:
       matrix: ${{ steps.affected.outputs.matrix }}
     steps:
@@ -213,42 +138,44 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Trust Workspace
-        run: git config --global --add safe.directory $GITHUB_WORKSPACE
-
-      - name: Describe Affected
-        id: affected
+      - id: affected
         run: atmos describe affected --format=matrix --output-file=$GITHUB_OUTPUT
 
   deploy:
-    needs: [affected, build]
+    needs: affected
     if: ${{ needs.affected.outputs.matrix != '' }}
-    runs-on: ["ubuntu-latest"]
+    runs-on: ubuntu-latest
     container:
-      image: ghcr.io/cloudposse/atmos:${{ vars.ATMOS_VERSION }}
+      image: ghcr.io/cloudposse/atmos:latest
     strategy:
       matrix: ${{ fromJson(needs.affected.outputs.matrix) }}
       fail-fast: false
-    environment:
-      name: dev
     steps:
       - uses: actions/checkout@v6
 
-      - name: Deploy
-        env:
-          APP_IMAGE: "${{ needs.build.outputs.image }}:${{ needs.build.outputs.tag }}"
-        run: atmos terraform deploy ${{ matrix.component }} -s ${{ matrix.stack }}
+      - run: atmos terraform deploy ${{ matrix.component }} -s ${{ matrix.stack }}
 ```
 </File>
 
-The `affected` job emits a matrix of `{component, stack}` pairs; the `deploy` job spreads across them in parallel. This is the canonical replacement for the legacy `cloudposse/github-action-atmos-affected-stacks` action.
+The `affected` job emits a matrix of `{component, stack}` pairs; the `deploy` job spreads across them in parallel.
 
-<ActionCard title="Use the Examples">
-    Both example repositories are designed to be cloned and adapted. They include `atmos.yaml`, stack configuration, supporting Terraform components, and the GitHub Actions workflows shown above.
+### Authentication
+
+Most workflows need cloud credentials. If you use [`atmos auth`](/stacks/auth), run `atmos auth login` before the terraform step:
+
+```yaml
+- run: atmos auth login --identity my-identity
+- run: atmos terraform deploy vpc -s prod
+```
+
+Otherwise, configure credentials however you normally would (e.g. `aws-actions/configure-aws-credentials` for OIDC).
+
+<ActionCard title="Working Examples">
+    Two reference repositories you can clone and adapt — both include `atmos.yaml`, stack configuration, components, and full workflows. They build on the patterns above with use-case-specific design patterns (preview environments, image promotion, label gating).
     <div>
       <PrimaryCTA to="https://github.com/cloudposse-examples/atmos-native-ci">Basic Example</PrimaryCTA>
       &nbsp;
-      <PrimaryCTA to="https://github.com/cloudposse-examples/atmos-native-ci-advanced">Advanced Matrix Example</PrimaryCTA>
+      <PrimaryCTA to="https://github.com/cloudposse-examples/atmos-native-ci-advanced">Matrix Example</PrimaryCTA>
     </div>
 </ActionCard>
 
