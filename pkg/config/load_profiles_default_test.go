@@ -182,3 +182,65 @@ func TestLoadConfig_DoesNotOverwriteGlobalProfilesBasePathWhenUnset(t *testing.T
 		"LoadConfig must not overwrite a pre-existing global viper value "+
 			"when atmos.yaml does not set profiles.base_path")
 }
+
+// TestLoadConfig_ParsesProfileFromArgsWhenViperIsSetButEmpty is a regression
+// guard for the profile-fallback re-exec path on DisableFlagParsing commands
+// (terraform, helmfile, packer, auth exec).
+//
+// Production symptom: when the profile-fallback re-exec runs
+// `atmos --profile managers auth exec ...`, the child's leaf command has
+// DisableFlagParsing=true, so Cobra does not parse --profile. Something
+// upstream (an earlier binding, a default, or a prior Set call) causes
+// `viper.IsSet("profile")` to report true while `GetStringSlice("profile")`
+// returns an empty slice. The previous short-circuit in
+// `getProfilesFromFlagsOrEnv` trusted `IsSet` and never reached the
+// os.Args fallback, so the picked profile from the fallback re-exec was
+// silently ignored and the child produced "no default identity configured:
+// no identities available".
+//
+// This test reproduces that state directly by calling
+// viper.Set(profileKey, []string{}) — which is the simplest way to force
+// the "IsSet=true, GetStringSlice=[]" divergence that broke the fallback.
+// It then sets os.Args to contain `--profile production` and asserts that
+// LoadConfig falls back to os.Args parsing and loads the production profile.
+func TestLoadConfig_ParsesProfileFromArgsWhenViperIsSetButEmpty(t *testing.T) {
+	fixturePath := filepath.Join("..", "..", "tests", "fixtures", "scenarios", "config-profiles-default")
+	absFixture, err := filepath.Abs(fixturePath)
+	require.NoError(t, err)
+
+	require.DirExists(t, absFixture, "required scenario fixture is missing")
+
+	t.Chdir(absFixture)
+
+	viper.Reset()
+	t.Cleanup(viper.Reset)
+	t.Setenv("ATMOS_PROFILE", "")
+
+	// Reproduce the production viper state: IsSet=true (key was touched by
+	// an upstream Set call) but GetStringSlice=[] (no real value was stored).
+	// This is the exact divergence that caused the old `if !IsSet { fallback }`
+	// gate to skip the os.Args fallback and drop the picked profile.
+	viper.GetViper().Set(profileKey, []string{})
+
+	require.True(t, viper.GetViper().IsSet(profileKey),
+		"precondition: viper.Set with empty slice must make IsSet=true")
+	require.Empty(t, viper.GetViper().GetStringSlice(profileKey),
+		"precondition: IsSet=true can coexist with GetStringSlice=[]")
+
+	// Swap os.Args to mimic the re-exec'd child: argv contains --profile
+	// production even though cobra never parsed it.
+	origArgs := os.Args
+	t.Cleanup(func() { os.Args = origArgs })
+	os.Args = []string{"atmos", "--profile", "production", "auth", "exec", "--", "echo", "hi"}
+
+	configAndStacksInfo := schema.ConfigAndStacksInfo{}
+	atmosConfig, err := LoadConfig(&configAndStacksInfo)
+	require.NoError(t, err)
+
+	assert.Equal(t, "Error", atmosConfig.Logs.Level,
+		"LoadConfig must fall back to os.Args parsing when viper has "+
+			"IsSet=true but GetStringSlice=[] — otherwise the profile-fallback "+
+			"re-exec path silently drops the picked profile")
+	assert.Equal(t, []string{"production"}, configAndStacksInfo.ProfilesFromArg,
+		"picked profile must be populated from os.Args fallback")
+}
