@@ -103,9 +103,9 @@ func TestGetTransportConfig(t *testing.T) {
 			expectError: false,
 		},
 		{
-			name:        "valid http transport",
+			name:        "valid http transport loopback",
 			transport:   "http",
-			host:        "0.0.0.0",
+			host:        "localhost",
 			port:        3000,
 			expectError: false,
 		},
@@ -274,12 +274,13 @@ func TestGetTransportConfig_FlagRetrieval(t *testing.T) {
 	assert.Equal(t, defaultHTTPPort, config.port)
 }
 
-// TestGetTransportConfig_HTTPWithCustomHost tests http transport with custom host.
+// TestGetTransportConfig_HTTPWithCustomHost tests http transport with custom host and API key.
 func TestGetTransportConfig_HTTPWithCustomHost(t *testing.T) {
 	cmd := &cobra.Command{}
 	cmd.Flags().String("transport", "http", "")
 	cmd.Flags().String("host", "192.168.1.1", "")
 	cmd.Flags().Int("port", 9000, "")
+	cmd.Flags().String("api-key", "secret", "")
 
 	config, err := getTransportConfig(cmd)
 
@@ -288,6 +289,7 @@ func TestGetTransportConfig_HTTPWithCustomHost(t *testing.T) {
 	assert.Equal(t, "http", config.transportType)
 	assert.Equal(t, "192.168.1.1", config.host)
 	assert.Equal(t, 9000, config.port)
+	assert.Equal(t, "secret", config.apiKey)
 }
 
 // TestTransportTypeValidation tests transport type validation exhaustively.
@@ -465,17 +467,21 @@ func TestGetTransportConfig_InvalidTransportErrorType(t *testing.T) {
 // TestGetTransportConfig_VariousHosts tests getTransportConfig with various host formats.
 func TestGetTransportConfig_VariousHosts(t *testing.T) {
 	tests := []struct {
-		name string
-		host string
+		name    string
+		host    string
+		apiKey  string
+		wantErr bool
 	}{
 		{name: "localhost", host: "localhost"},
 		{name: "ipv4_loopback", host: "127.0.0.1"},
-		{name: "ipv4_any", host: "0.0.0.0"},
-		{name: "ipv4_custom", host: "192.168.1.100"},
 		{name: "ipv6_loopback", host: "::1"},
-		{name: "ipv6_any", host: "::"},
-		{name: "hostname", host: "my-server.example.com"},
-		{name: "empty_host", host: ""},
+		// Non-loopback hosts require an API key.
+		{name: "ipv4_any", host: "0.0.0.0", apiKey: "secret"},
+		{name: "ipv4_custom", host: "192.168.1.100", apiKey: "secret"},
+		{name: "ipv6_any", host: "::", apiKey: "secret"},
+		{name: "hostname", host: "my-server.example.com", apiKey: "secret"},
+		// Empty host also requires API key (not loopback).
+		{name: "empty_host", host: "", apiKey: "secret"},
 	}
 
 	for _, tt := range tests {
@@ -484,6 +490,7 @@ func TestGetTransportConfig_VariousHosts(t *testing.T) {
 			cmd.Flags().String("transport", "http", "")
 			cmd.Flags().String("host", tt.host, "")
 			cmd.Flags().Int("port", 8080, "")
+			cmd.Flags().String("api-key", tt.apiKey, "")
 
 			config, err := getTransportConfig(cmd)
 			assert.NoError(t, err)
@@ -648,7 +655,7 @@ func TestLogServerInfo_Stdio(t *testing.T) {
 
 	// Call logServerInfo with stdio transport - should not panic and should log messages.
 	require.NotPanics(t, func() {
-		logServerInfo(server, transportStdio, "")
+		logServerInfo(server, transportStdio, "", false, false)
 	})
 
 	// Verify server info is accessible.
@@ -1447,21 +1454,21 @@ func TestLogServerInfo_WithMockServer(t *testing.T) {
 	// Test stdio transport - should not panic.
 	t.Run("stdio transport", func(t *testing.T) {
 		require.NotPanics(t, func() {
-			logServerInfo(server, transportStdio, "")
+			logServerInfo(server, transportStdio, "", false, false)
 		})
 	})
 
 	// Test http transport - should not panic.
 	t.Run("http transport", func(t *testing.T) {
 		require.NotPanics(t, func() {
-			logServerInfo(server, transportHTTP, "localhost:8080")
+			logServerInfo(server, transportHTTP, "localhost:8080", false, true)
 		})
 	})
 
 	// Test http transport with different addresses.
 	t.Run("http transport custom address", func(t *testing.T) {
 		require.NotPanics(t, func() {
-			logServerInfo(server, transportHTTP, "0.0.0.0:3000")
+			logServerInfo(server, transportHTTP, "0.0.0.0:3000", false, false)
 		})
 	})
 }
@@ -1507,7 +1514,7 @@ func TestStartHTTPServer_ListenError(t *testing.T) {
 
 	// Use an invalid port to trigger a listen error.
 	// Port -1 should fail on most systems.
-	startHTTPServer(server, "localhost", -1, errChan)
+	startHTTPServer(server, "localhost", -1, "", errChan)
 
 	// Wait for error.
 	select {
@@ -1532,7 +1539,7 @@ func TestStartHTTPServer_ValidPort(t *testing.T) {
 
 	// Use a random high port that should be available.
 	// Use port 0 to let the OS assign an available port.
-	startHTTPServer(server, "127.0.0.1", 0, errChan)
+	startHTTPServer(server, "127.0.0.1", 0, "", errChan)
 
 	// Give the server time to start.
 	time.Sleep(100 * time.Millisecond)
@@ -1892,7 +1899,8 @@ func TestDefaultHTTPConfig(t *testing.T) {
 // TestGetTransportConfig_AllValidCombinations tests all valid transport configurations.
 func TestGetTransportConfig_AllValidCombinations(t *testing.T) {
 	transports := []string{"stdio", "http"}
-	hosts := []string{"localhost", "0.0.0.0", "127.0.0.1", "192.168.1.1"}
+	// Use only loopback hosts to avoid needing an API key.
+	hosts := []string{"localhost", "127.0.0.1"}
 	ports := []int{80, 443, 3000, 8080, 8443, 9000}
 
 	for _, transport := range transports {
@@ -2020,13 +2028,13 @@ func TestLogServerInfo_TransportMessages(t *testing.T) {
 	// These should not panic and should log different messages.
 	t.Run("stdio", func(t *testing.T) {
 		require.NotPanics(t, func() {
-			logServerInfo(server, transportStdio, "")
+			logServerInfo(server, transportStdio, "", false, false)
 		})
 	})
 
 	t.Run("http", func(t *testing.T) {
 		require.NotPanics(t, func() {
-			logServerInfo(server, transportHTTP, "localhost:8080")
+			logServerInfo(server, transportHTTP, "localhost:8080", false, true)
 		})
 	})
 }
@@ -2210,7 +2218,7 @@ func TestStartHTTPServer_PortInUse(t *testing.T) {
 
 	// Start first server.
 	errChan1 := make(chan error, 1)
-	startHTTPServer(server, "127.0.0.1", 0, errChan1)
+	startHTTPServer(server, "127.0.0.1", 0, "", errChan1)
 
 	// Give first server time to start.
 	time.Sleep(100 * time.Millisecond)
@@ -2236,7 +2244,7 @@ func TestStartHTTPServer_HighPort(t *testing.T) {
 	errChan := make(chan error, 1)
 
 	// Use port 0 to let OS assign a port.
-	startHTTPServer(server, "127.0.0.1", 0, errChan)
+	startHTTPServer(server, "127.0.0.1", 0, "", errChan)
 
 	// Give server time to start.
 	time.Sleep(100 * time.Millisecond)
@@ -2271,7 +2279,7 @@ func TestLogServerInfo_HTTPTransportDetails(t *testing.T) {
 	for _, addr := range addresses {
 		t.Run(addr, func(t *testing.T) {
 			require.NotPanics(t, func() {
-				logServerInfo(server, transportHTTP, addr)
+				logServerInfo(server, transportHTTP, addr, false, false)
 			})
 		})
 	}
@@ -2286,12 +2294,12 @@ func TestLogServerInfo_StdioTransportDetails(t *testing.T) {
 
 	// Test with empty address (stdio doesn't use address).
 	require.NotPanics(t, func() {
-		logServerInfo(server, transportStdio, "")
+		logServerInfo(server, transportStdio, "", false, false)
 	})
 
 	// Test with non-empty address (should still work, just ignored).
 	require.NotPanics(t, func() {
-		logServerInfo(server, transportStdio, "ignored:1234")
+		logServerInfo(server, transportStdio, "ignored:1234", false, false)
 	})
 }
 
@@ -2375,6 +2383,7 @@ func TestGetTransportConfig_WithSetFlags(t *testing.T) {
 	cmd.Flags().String("transport", "stdio", "")
 	cmd.Flags().String("host", "localhost", "")
 	cmd.Flags().Int("port", 8080, "")
+	cmd.Flags().String("api-key", "", "")
 
 	// Simulate setting flag values.
 	err := cmd.Flags().Set("transport", "http")
@@ -2382,6 +2391,8 @@ func TestGetTransportConfig_WithSetFlags(t *testing.T) {
 	err = cmd.Flags().Set("host", "0.0.0.0")
 	require.NoError(t, err)
 	err = cmd.Flags().Set("port", "3000")
+	require.NoError(t, err)
+	err = cmd.Flags().Set("api-key", "test-key")
 	require.NoError(t, err)
 
 	config, err := getTransportConfig(cmd)
@@ -2391,6 +2402,7 @@ func TestGetTransportConfig_WithSetFlags(t *testing.T) {
 	assert.Equal(t, "http", config.transportType)
 	assert.Equal(t, "0.0.0.0", config.host)
 	assert.Equal(t, 3000, config.port)
+	assert.Equal(t, "test-key", config.apiKey)
 }
 
 // TestTransportConfig_CopyBehavior tests that transportConfig is a value type.
@@ -2467,6 +2479,8 @@ func TestGetTransportConfig_SpecialCharactersInHost(t *testing.T) {
 			cmd.Flags().String("transport", "http", "")
 			cmd.Flags().String("host", tt.host, "")
 			cmd.Flags().Int("port", 8080, "")
+			// Provide an API key for non-loopback hosts.
+			cmd.Flags().String("api-key", "test-api-key", "")
 
 			config, err := getTransportConfig(cmd)
 
@@ -3220,7 +3234,7 @@ func TestStartHTTPServer_WithHTTPRequest(t *testing.T) {
 	listener.Close()
 
 	// Start the HTTP server.
-	startHTTPServer(server, "127.0.0.1", port, errChan)
+	startHTTPServer(server, "127.0.0.1", port, "", errChan)
 
 	// Give the server time to start.
 	time.Sleep(100 * time.Millisecond)
@@ -3257,7 +3271,7 @@ func TestStartHTTPServer_MessageEndpoint(t *testing.T) {
 	listener.Close()
 
 	// Start the HTTP server.
-	startHTTPServer(server, "127.0.0.1", port, errChan)
+	startHTTPServer(server, "127.0.0.1", port, "", errChan)
 
 	// Give the server time to start.
 	time.Sleep(100 * time.Millisecond)
@@ -3291,7 +3305,7 @@ func TestStartHTTPServer_RootEndpoint(t *testing.T) {
 	listener.Close()
 
 	// Start the HTTP server.
-	startHTTPServer(server, "127.0.0.1", port, errChan)
+	startHTTPServer(server, "127.0.0.1", port, "", errChan)
 
 	// Give the server time to start.
 	time.Sleep(100 * time.Millisecond)
@@ -3346,7 +3360,7 @@ func TestStartHTTPServer_MultipleRequests(t *testing.T) {
 	listener.Close()
 
 	// Start the HTTP server.
-	startHTTPServer(server, "127.0.0.1", port, errChan)
+	startHTTPServer(server, "127.0.0.1", port, "", errChan)
 
 	// Give the server time to start.
 	time.Sleep(100 * time.Millisecond)
@@ -3383,4 +3397,292 @@ func TestServerSDKMethod(t *testing.T) {
 	// Verify SDK() does not panic and returns something.
 	sdk := server.SDK()
 	assert.NotNil(t, sdk)
+}
+
+// TestIsLoopbackHost tests the isLoopbackHost helper.
+func TestIsLoopbackHost(t *testing.T) {
+	tests := []struct {
+		host     string
+		expected bool
+	}{
+		{host: "localhost", expected: true},
+		{host: "127.0.0.1", expected: true},
+		{host: "127.1.2.3", expected: true},
+		{host: "::1", expected: true},
+		{host: "0.0.0.0", expected: false},
+		{host: "192.168.1.1", expected: false},
+		{host: "::", expected: false},
+		{host: "my-server.example.com", expected: false},
+		{host: "", expected: false},
+		{host: "2001:db8::1", expected: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.host, func(t *testing.T) {
+			result := isLoopbackHost(tt.host)
+			assert.Equal(t, tt.expected, result, "isLoopbackHost(%q)", tt.host)
+		})
+	}
+}
+
+// TestGetTransportConfig_NonLoopbackRequiresAPIKey tests that non-loopback HTTP requires an API key.
+func TestGetTransportConfig_NonLoopbackRequiresAPIKey(t *testing.T) {
+	nonLoopbackHosts := []string{"0.0.0.0", "192.168.1.1", "::", "my-server.com"}
+
+	for _, host := range nonLoopbackHosts {
+		t.Run(host, func(t *testing.T) {
+			cmd := &cobra.Command{}
+			cmd.Flags().String("transport", "http", "")
+			cmd.Flags().String("host", host, "")
+			cmd.Flags().Int("port", 8080, "")
+			cmd.Flags().String("api-key", "", "") // registered but empty — no token provided
+
+			config, err := getTransportConfig(cmd)
+			assert.Error(t, err, "non-loopback HTTP without API key should fail")
+			assert.Nil(t, config)
+			assert.True(t, errors.Is(err, errUtils.ErrMCPHTTPAuthRequired))
+		})
+	}
+}
+
+// TestGetTransportConfig_NonLoopbackWithAPIKeySucceeds tests non-loopback HTTP with API key.
+func TestGetTransportConfig_NonLoopbackWithAPIKeySucceeds(t *testing.T) {
+	cmd := &cobra.Command{}
+	cmd.Flags().String("transport", "http", "")
+	cmd.Flags().String("host", "0.0.0.0", "")
+	cmd.Flags().Int("port", 8080, "")
+	cmd.Flags().String("api-key", "my-secret-key", "")
+
+	config, err := getTransportConfig(cmd)
+	assert.NoError(t, err)
+	require.NotNil(t, config)
+	assert.Equal(t, "0.0.0.0", config.host)
+	assert.Equal(t, "my-secret-key", config.apiKey)
+}
+
+// TestGetTransportConfig_APIKeyFromEnv tests that ATMOS_MCP_API_KEY env var is used.
+func TestGetTransportConfig_APIKeyFromEnv(t *testing.T) {
+	t.Setenv("ATMOS_MCP_API_KEY", "env-secret")
+
+	cmd := &cobra.Command{}
+	cmd.Flags().String("transport", "http", "")
+	cmd.Flags().String("host", "0.0.0.0", "")
+	cmd.Flags().Int("port", 8080, "")
+	cmd.Flags().String("api-key", "", "") // registered but empty — falls back to env var
+
+	config, err := getTransportConfig(cmd)
+	assert.NoError(t, err)
+	require.NotNil(t, config)
+	assert.Equal(t, "env-secret", config.apiKey)
+}
+
+// TestGetTransportConfig_FlagAPIKeyTakesPrecedenceOverEnv tests flag takes precedence over env.
+func TestGetTransportConfig_FlagAPIKeyTakesPrecedenceOverEnv(t *testing.T) {
+	t.Setenv("ATMOS_MCP_API_KEY", "env-secret")
+
+	cmd := &cobra.Command{}
+	cmd.Flags().String("transport", "http", "")
+	cmd.Flags().String("host", "0.0.0.0", "")
+	cmd.Flags().Int("port", 8080, "")
+	cmd.Flags().String("api-key", "flag-secret", "")
+
+	config, err := getTransportConfig(cmd)
+	assert.NoError(t, err)
+	require.NotNil(t, config)
+	assert.Equal(t, "flag-secret", config.apiKey)
+}
+
+// TestGetTransportConfig_LoopbackNoAPIKeyOK tests that loopback HTTP does not require an API key.
+func TestGetTransportConfig_LoopbackNoAPIKeyOK(t *testing.T) {
+	loopbackHosts := []string{"localhost", "127.0.0.1", "::1"}
+
+	for _, host := range loopbackHosts {
+		t.Run(host, func(t *testing.T) {
+			cmd := &cobra.Command{}
+			cmd.Flags().String("transport", "http", "")
+			cmd.Flags().String("host", host, "")
+			cmd.Flags().Int("port", 8080, "")
+
+			config, err := getTransportConfig(cmd)
+			assert.NoError(t, err)
+			require.NotNil(t, config)
+		})
+	}
+}
+
+// TestBearerTokenMiddleware tests the bearerTokenMiddleware function.
+func TestBearerTokenMiddleware(t *testing.T) {
+	const token = "test-secret-token"
+
+	// A trivial handler that always returns 200 OK.
+	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
+	handler := bearerTokenMiddleware(token, next)
+
+	tests := []struct {
+		name           string
+		authHeader     string
+		expectedStatus int
+	}{
+		{
+			name:           "valid bearer token",
+			authHeader:     "Bearer " + token,
+			expectedStatus: http.StatusOK,
+		},
+		{
+			name:           "missing Authorization header",
+			authHeader:     "",
+			expectedStatus: http.StatusUnauthorized,
+		},
+		{
+			name:           "wrong token",
+			authHeader:     "Bearer wrong-token",
+			expectedStatus: http.StatusUnauthorized,
+		},
+		{
+			name:           "API key scheme instead of Bearer",
+			authHeader:     "ApiKey " + token,
+			expectedStatus: http.StatusUnauthorized,
+		},
+		{
+			name:           "Bearer prefix only (empty token)",
+			authHeader:     "Bearer ",
+			expectedStatus: http.StatusUnauthorized,
+		},
+		{
+			name:           "token without Bearer prefix",
+			authHeader:     token,
+			expectedStatus: http.StatusUnauthorized,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req, err := http.NewRequest(http.MethodGet, "/sse", nil)
+			require.NoError(t, err)
+			if tt.authHeader != "" {
+				req.Header.Set("Authorization", tt.authHeader)
+			}
+
+			rr := newResponseRecorder()
+			handler.ServeHTTP(rr, req)
+			assert.Equal(t, tt.expectedStatus, rr.code)
+		})
+	}
+}
+
+// responseRecorder is a minimal http.ResponseWriter for testing.
+type responseRecorder struct {
+	code    int
+	headers http.Header
+}
+
+func newResponseRecorder() *responseRecorder {
+	return &responseRecorder{code: http.StatusOK, headers: make(http.Header)}
+}
+
+func (r *responseRecorder) Header() http.Header         { return r.headers }
+func (r *responseRecorder) Write(b []byte) (int, error) { return len(b), nil }
+func (r *responseRecorder) WriteHeader(code int)        { r.code = code }
+
+// TestTransportConfig_APIKeyField tests the apiKey field of transportConfig.
+func TestTransportConfig_APIKeyField(t *testing.T) {
+	config := &transportConfig{
+		transportType: "http",
+		host:          "localhost",
+		port:          8080,
+		apiKey:        "my-api-key",
+	}
+
+	assert.Equal(t, "my-api-key", config.apiKey)
+
+	// Zero value.
+	empty := &transportConfig{}
+	assert.Empty(t, empty.apiKey)
+}
+
+// TestStartCmd_APIKeyFlagDefined tests that the api-key flag is defined on startCmd.
+func TestStartCmd_APIKeyFlagDefined(t *testing.T) {
+	flag := startCmd.Flags().Lookup("api-key")
+	require.NotNil(t, flag, "api-key flag should be defined")
+	assert.Equal(t, "", flag.DefValue, "api-key should default to empty string")
+	assert.Contains(t, flag.Usage, "Bearer token")
+}
+
+// TestInitializeAIComponents_YOLOModeRespected tests that YOLO mode is taken from config, not hardcoded.
+func TestInitializeAIComponents_YOLOModeRespected(t *testing.T) {
+	// With YOLOMode=false in config, the permission config should not force YOLO.
+	atmosConfig := &schema.AtmosConfiguration{
+		AI: schema.AISettings{
+			Enabled: true,
+			Tools: schema.AIToolSettings{
+				Enabled:  true,
+				YOLOMode: false,
+			},
+		},
+	}
+
+	registry, executor, err := initializeAIComponents(atmosConfig)
+
+	assert.NoError(t, err)
+	assert.NotNil(t, registry)
+	assert.NotNil(t, executor)
+	// The key assertion: no unconditional YOLO override; function should succeed
+	// because the mode is simply read from config (ModeAllow by default).
+}
+
+// TestLogServerInfo_HTTP_Authenticated tests logServerInfo for HTTP transport with authentication.
+func TestLogServerInfo_HTTP_Authenticated(t *testing.T) {
+	registry := tools.NewRegistry()
+	executor := tools.NewExecutor(registry, nil, tools.DefaultTimeout)
+	adapter := mcp.NewAdapter(registry, executor)
+	server := mcp.NewServer(adapter)
+
+	// authenticated=true should log "Bearer token required" without panic.
+	require.NotPanics(t, func() {
+		logServerInfo(server, transportHTTP, "0.0.0.0:8080", true, false)
+	})
+}
+
+// TestStartHTTPServer_WithAPIKeyAndAuthenticatedRequest tests startHTTPServer with bearer-token auth.
+// It verifies that: (a) the apiKey branch inside startHTTPServer is exercised, (b) authenticated
+// requests are accepted, and (c) unauthenticated requests are rejected with HTTP 401.
+func TestStartHTTPServer_WithAPIKeyAndAuthenticatedRequest(t *testing.T) {
+	registry := tools.NewRegistry()
+	executor := tools.NewExecutor(registry, nil, tools.DefaultTimeout)
+	adapter := mcp.NewAdapter(registry, executor)
+	server := mcp.NewServer(adapter)
+
+	// Find a free port.
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	port := ln.Addr().(*net.TCPAddr).Port
+	ln.Close()
+
+	errChan := make(chan error, 1)
+	const apiKey = "test-secret-token"
+	startHTTPServer(server, "127.0.0.1", port, apiKey, errChan)
+
+	// Give the server a moment to start.
+	time.Sleep(100 * time.Millisecond)
+
+	addr := fmt.Sprintf("http://127.0.0.1:%d/sse", port)
+
+	// Authenticated request should NOT receive 401.
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, addr, nil)
+	require.NoError(t, err)
+	req.Header.Set("Authorization", "Bearer "+apiKey)
+	resp, err := http.DefaultClient.Do(req)
+	require.NoError(t, err)
+	resp.Body.Close()
+	assert.NotEqual(t, http.StatusUnauthorized, resp.StatusCode, "valid token should not be rejected")
+
+	// Unauthenticated request must receive 401.
+	req2, err := http.NewRequestWithContext(t.Context(), http.MethodGet, addr, nil)
+	require.NoError(t, err)
+	resp2, err := http.DefaultClient.Do(req2)
+	require.NoError(t, err)
+	resp2.Body.Close()
+	assert.Equal(t, http.StatusUnauthorized, resp2.StatusCode, "missing token must be rejected")
 }

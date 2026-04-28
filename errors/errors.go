@@ -1080,6 +1080,7 @@ var (
 	ErrMCPConfigPermsFailed     = errors.New("failed to set MCP config file permissions")
 	ErrMCPConfigMarshalFailed   = errors.New("failed to marshal MCP config")
 	ErrMCPServerAuthUnavailable = errors.New("MCP server requires identity but auth manager is not available")
+	ErrMCPHTTPAuthRequired      = errors.New("MCP HTTP transport authentication required")
 	ErrLSPInvalidTransport      = errors.New("invalid LSP transport type")
 	ErrLSPConfigNil             = errors.New("LSP config is nil")
 	ErrLSPNoServerForFile       = errors.New("no LSP server found for file")
