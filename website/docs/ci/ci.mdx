@@ -66,6 +66,8 @@ ci:
 
 Running Atmos in GitHub Actions reduces to two steps: **check out the repository, then run an `atmos` command.** Atmos detects the CI environment automatically and produces job summaries, output variables, status checks, and stored planfiles without any wrapper actions.
 
+The examples below pin the Atmos version via a [repository variable](https://docs.github.com/en/actions/learn-github-actions/variables) named `ATMOS_VERSION` (e.g. set to `1.200.0`). We don't publish a `latest` tag, so always pin to a specific release.
+
 ### Plan on Pull Request
 
 <File title=".github/workflows/plan.yml">
@@ -84,7 +86,7 @@ jobs:
   plan:
     runs-on: ubuntu-latest
     container:
-      image: ghcr.io/cloudposse/atmos:latest
+      image: ghcr.io/cloudposse/atmos:${{ vars.ATMOS_VERSION }}
     steps:
       - uses: actions/checkout@v6
 
@@ -110,7 +112,7 @@ jobs:
   apply:
     runs-on: ubuntu-latest
     container:
-      image: ghcr.io/cloudposse/atmos:latest
+      image: ghcr.io/cloudposse/atmos:${{ vars.ATMOS_VERSION }}
     steps:
       - uses: actions/checkout@v6
 
@@ -130,7 +132,7 @@ jobs:
   affected:
     runs-on: ubuntu-latest
     container:
-      image: ghcr.io/cloudposse/atmos:latest
+      image: ghcr.io/cloudposse/atmos:${{ vars.ATMOS_VERSION }}
     outputs:
       matrix: ${{ steps.affected.outputs.matrix }}
     steps:
@@ -146,7 +148,7 @@ jobs:
     if: ${{ needs.affected.outputs.matrix != '' }}
     runs-on: ubuntu-latest
     container:
-      image: ghcr.io/cloudposse/atmos:latest
+      image: ghcr.io/cloudposse/atmos:${{ vars.ATMOS_VERSION }}
     strategy:
       matrix: ${{ fromJson(needs.affected.outputs.matrix) }}
       fail-fast: false
