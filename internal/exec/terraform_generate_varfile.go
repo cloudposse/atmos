@@ -85,9 +85,13 @@ func tryJITProvision(atmosConfig *schema.AtmosConfiguration, info *schema.Config
 
 	// Honor metadata.component as a module subpath inside the cloned workdir
 	// (issue #2364). AutoProvisionSource sets WorkdirPathKey to the bare
-	// workdir root; this joins the subpath onto it so the varfile lands in
-	// the configured submodule rather than the repo root.
-	applyWorkdirSubpathToSection(info)
+	// workdir root; this joins the subpath onto it (only when the subdirectory
+	// exists in the cloned repo) so the varfile lands in the configured
+	// submodule. When metadata.component is used as an inheritance pointer
+	// rather than a real subpath, the helper leaves WorkdirPathKey at the root.
+	if _, err := applyWorkdirSubpathToSection(info); err != nil {
+		return errors.Join(errUtils.ErrInvalidTerraformComponent, err)
+	}
 
 	return nil
 }

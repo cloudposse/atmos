@@ -10,6 +10,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	provSource "github.com/cloudposse/atmos/pkg/provisioner/source"
 	provWorkdir "github.com/cloudposse/atmos/pkg/provisioner/workdir"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -35,35 +36,72 @@ func applyMetadataComponentSubpath(metadataComponentSubpath, workdirPath string)
 	return filepath.Join(workdirPath, metadataComponentSubpath)
 }
 
-// applyWorkdirSubpathToSection joins metadata.component onto WorkdirPathKey in
-// info.ComponentSection and returns the joined path, or "" when WorkdirPathKey
-// is absent or empty. The mutation is idempotent: a private-typed sentinel
-// under WorkdirSubpathAppliedKey prevents double-joining across repeat calls
-// (e.g. terraform init then terraform plan within one command lifecycle).
-func applyWorkdirSubpathToSection(info *schema.ConfigAndStacksInfo) string {
+// resolveWorkdirSubpath returns workdirRoot joined with metadata.component if
+// the joined directory exists on disk, otherwise workdirRoot unchanged.
+//
+// The metadata.component field has two valid uses for JIT components: (1) a
+// real subdirectory inside the cloned repo where the Terraform module lives
+// (e.g. `modules/iam-policy` for terraform-aws-iam-style repos — issue #2364),
+// and (2) an inheritance/identity pointer naming an abstract base component
+// when the cloned repo's `.tf` files live at its root. Disambiguating by
+// string shape alone is unreliable, so we disambiguate by filesystem
+// existence: after the source provisioner has cloned, either the joined
+// directory exists (case 1) or it doesn't (case 2). Stat failures other than
+// ENOENT surface as errors so corrupt state isn't masked.
+func resolveWorkdirSubpath(metadataComponentSubpath, workdirRoot string) (string, error) {
+	if metadataComponentSubpath == "" {
+		return workdirRoot, nil
+	}
+	candidate := filepath.Join(workdirRoot, metadataComponentSubpath)
+	fi, err := os.Stat(candidate)
+	if err == nil {
+		if fi.IsDir() {
+			return candidate, nil
+		}
+		return "", errors.Join(errUtils.ErrWorkdirProvision, fmt.Errorf("workdir component path %q exists but is not a directory", candidate))
+	}
+	if !errors.Is(err, os.ErrNotExist) {
+		return "", errors.Join(errUtils.ErrWorkdirProvision, fmt.Errorf("stat workdir component path %q: %w", candidate, err))
+	}
+	log.Debug("metadata.component subpath not found in workdir; using workdir root",
+		"subpath", metadataComponentSubpath, "workdirRoot", workdirRoot)
+	return workdirRoot, nil
+}
+
+// applyWorkdirSubpathToSection resolves WorkdirPathKey in info.ComponentSection
+// against metadata.component (joining the subpath only when it exists on disk;
+// see resolveWorkdirSubpath) and returns the resolved path, or "" when
+// WorkdirPathKey is absent or empty. Stat errors propagate as a non-nil error.
+//
+// The mutation is idempotent: a private-typed sentinel under
+// WorkdirSubpathAppliedKey prevents re-resolving across repeat calls (e.g.
+// terraform init then terraform plan within one command lifecycle).
+func applyWorkdirSubpathToSection(info *schema.ConfigAndStacksInfo) (string, error) {
 	workdirPath, ok := info.ComponentSection[provWorkdir.WorkdirPathKey].(string)
 	if !ok || workdirPath == "" {
-		return ""
+		return "", nil
 	}
 	if _, applied := info.ComponentSection[provWorkdir.WorkdirSubpathAppliedKey].(workdirSubpathAppliedMarker); applied {
-		return workdirPath
+		return workdirPath, nil
 	}
-	workdirPath = applyMetadataComponentSubpath(info.BaseComponentPath, workdirPath)
-	info.ComponentSection[provWorkdir.WorkdirPathKey] = workdirPath
+	resolved, err := resolveWorkdirSubpath(info.BaseComponentPath, workdirPath)
+	if err != nil {
+		return "", err
+	}
+	info.ComponentSection[provWorkdir.WorkdirPathKey] = resolved
 	info.ComponentSection[provWorkdir.WorkdirSubpathAppliedKey] = workdirSubpathAppliedMarker{}
-	return workdirPath
+	return resolved, nil
 }
 
 // resolveWorkdirComponentPath computes the effective Terraform working
 // directory for a workdir-enabled component by deriving the workdir root from
-// provWorkdir.BuildPath and joining metadata.component onto it.
+// provWorkdir.BuildPath and joining metadata.component onto it (only when the
+// subpath actually exists on disk; see resolveWorkdirSubpath).
 //
 // Used by code paths that run after ProcessStacks has rebuilt ComponentSection
-// (which does not carry WorkdirPathKey). Returns the candidate path, an
-// existence flag, and any non-ENOENT stat error so callers can distinguish
-// "workdir not provisioned yet" (exists=false, no error) from "stat failed for
-// another reason" (e.g. EACCES) which surfaces as an error. A non-directory at
-// the candidate path also surfaces as an error so corrupt state is not masked.
+// (which does not carry WorkdirPathKey). Returns the resolved path, an
+// existence flag (true when the resolved directory exists on disk), and any
+// non-ENOENT stat error.
 func resolveWorkdirComponentPath(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) (string, bool, error) {
 	workdirRoot := provWorkdir.BuildPath(
 		atmosConfig.BasePath,
@@ -72,19 +110,22 @@ func resolveWorkdirComponentPath(atmosConfig *schema.AtmosConfiguration, info *s
 		info.Stack,
 		info.ComponentSection,
 	)
-	candidate := applyMetadataComponentSubpath(info.BaseComponentPath, workdirRoot)
-
-	fi, err := os.Stat(candidate)
+	resolved, err := resolveWorkdirSubpath(info.BaseComponentPath, workdirRoot)
 	if err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			return candidate, false, nil
+		return "", false, err
+	}
+
+	fi, statErr := os.Stat(resolved)
+	if statErr != nil {
+		if errors.Is(statErr, os.ErrNotExist) {
+			return resolved, false, nil
 		}
-		return "", false, errors.Join(errUtils.ErrWorkdirProvision, fmt.Errorf("stat workdir component path %q: %w", candidate, err))
+		return "", false, errors.Join(errUtils.ErrWorkdirProvision, fmt.Errorf("stat workdir component path %q: %w", resolved, statErr))
 	}
 	if !fi.IsDir() {
-		return "", false, errors.Join(errUtils.ErrWorkdirProvision, fmt.Errorf("workdir component path %q exists but is not a directory", candidate))
+		return "", false, errors.Join(errUtils.ErrWorkdirProvision, fmt.Errorf("workdir component path %q exists but is not a directory", resolved))
 	}
-	return candidate, true, nil
+	return resolved, true, nil
 }
 
 // provisionComponentSource performs JIT source provisioning when configured, then
@@ -107,7 +148,11 @@ func provisionComponentSource(
 		return "", false, errors.Join(errUtils.ErrWorkdirProvision, fmt.Errorf("auto-provision component source: %w", autoErr))
 	}
 
-	if workdirPath := applyWorkdirSubpathToSection(info); workdirPath != "" {
+	workdirPath, subpathErr := applyWorkdirSubpathToSection(info)
+	if subpathErr != nil {
+		return "", false, subpathErr
+	}
+	if workdirPath != "" {
 		exists, errDir := u.IsDirectory(workdirPath)
 		if errDir != nil && !errors.Is(errDir, os.ErrNotExist) {
 			return "", false, errors.Join(errUtils.ErrWorkdirProvision, fmt.Errorf("workdir path %q: %w", workdirPath, errDir))
