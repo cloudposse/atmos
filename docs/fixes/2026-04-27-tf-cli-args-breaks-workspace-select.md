@@ -84,10 +84,16 @@ Four files:
 2. **`internal/exec/shell_utils.go`** — adds
    `WithSanitizedTerraformSetupEnv()` `ShellCommandOption` and a
    `sanitizeTerraformSetupEnv` flag on `shellCommandConfig`. When
-   set, `ExecuteShellCommand` filters its `baseEnv` through
-   `sanitizeTerraformWorkspaceEnv` after the existing `processEnv`
-   override (so it composes cleanly with auth-sanitized envs) and
-   before merging in the global env and command-specific env.
+   set, `ExecuteShellCommand` filters the **fully merged** subprocess
+   env (base process env + `atmosConfig.Env` + per-command `env`
+   slice) through `sanitizeTerraformWorkspaceEnv` *after* the merge,
+   so blocked vars cannot be reintroduced by `atmosConfig.Env`
+   (atmos.yaml top-level `env:`) or by the per-command env slice
+   (`info.ComponentEnvList` → stack `env:` + auth hooks). The filter
+   runs *before* the `ATMOS_SHLVL` append so atmos's own bookkeeping
+   isn't stripped, and it composes cleanly with auth-sanitized envs
+   passed via `WithEnvironment` because `processEnv` is applied
+   before the merge.
 
 3. **`internal/exec/terraform_execute_helpers_exec.go`** —
    `runWorkspaceSetup` and `createWorkspaceFallback` each append

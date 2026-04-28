@@ -45,12 +45,14 @@ type shellCommandConfig struct {
 	// When set, ExecuteShellCommand uses this instead of re-reading os.Environ().
 	// This is used when auth has already sanitized the environment (e.g., removed IRSA vars).
 	processEnv []string
-	// sanitizeTerraformSetupEnv, when true, filters the base process environment
-	// through sanitizeTerraformWorkspaceEnv before merging.  This strips env
-	// vars (TF_CLI_ARGS, TF_CLI_ARGS_workspace) that would cause OpenTofu to
-	// inject flags into atmos-internal terraform/tofu setup subprocesses
+	// sanitizeTerraformSetupEnv, when true, filters the fully merged subprocess
+	// environment (base env + atmosConfig.Env + per-command env) through
+	// sanitizeTerraformWorkspaceEnv AFTER the merge.  This strips env vars
+	// (TF_CLI_ARGS, TF_CLI_ARGS_workspace) that would cause OpenTofu to inject
+	// flags into atmos-internal terraform/tofu setup subprocesses
 	// (`workspace select`, `workspace new`, the auto-`init` pre-step) that
-	// those subcommands do not accept.
+	// those subcommands do not accept.  Filtering after the merge prevents
+	// reintroduction from atmosConfig.Env or the per-command env slice.
 	// See docs/fixes/2026-04-27-tf-cli-args-breaks-workspace-select.md.
 	sanitizeTerraformSetupEnv bool
 }
