@@ -151,7 +151,7 @@ Sites intentionally **not** sanitized:
 - `executeMainTerraformCommand` — the user's primary subcommand.
 - `handleVersionSubcommand` — `atmos terraform version` is
   user-invoked.
-- `isTerraformCurrentWorkspace` — file read only, no subprocess.
+- `isTerraformCurrentWorkspace` — read-only file access, no subprocess.
 - `pkg/terraform/output/` — already strips `TF_CLI_ARGS` /
   `TF_CLI_ARGS_*` via its own prohibited-vars list.
 
