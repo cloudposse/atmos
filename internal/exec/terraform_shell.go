@@ -116,6 +116,12 @@ func ExecuteTerraformShell(opts *ShellOptions, atmosConfig *schema.AtmosConfigur
 			Err()
 	}
 
+	// Honor metadata.component as a module subpath inside the cloned workdir
+	// (issue #2364). ExecuteProvisioners sets WorkdirPathKey to the bare workdir
+	// root; this joins the subpath onto it so the shell, working directory, and
+	// varfile all land in the configured submodule.
+	applyWorkdirSubpathToSection(&info)
+
 	// Check if workdir provisioner set a workdir path - if so, use it instead of the component path.
 	componentPath = resolveWorkdirPath(info.ComponentSection, componentPath)
 

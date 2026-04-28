@@ -83,6 +83,12 @@ func tryJITProvision(atmosConfig *schema.AtmosConfiguration, info *schema.Config
 		return errors.Join(errUtils.ErrInvalidTerraformComponent, fmt.Errorf("failed to auto-provision component source: %w", err))
 	}
 
+	// Honor metadata.component as a module subpath inside the cloned workdir
+	// (issue #2364). AutoProvisionSource sets WorkdirPathKey to the bare
+	// workdir root; this joins the subpath onto it so the varfile lands in
+	// the configured submodule rather than the repo root.
+	applyWorkdirSubpathToSection(info)
+
 	return nil
 }
 
