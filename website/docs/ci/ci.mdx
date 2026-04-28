@@ -155,7 +155,10 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - run: atmos terraform deploy ${{ matrix.component }} -s ${{ matrix.stack }}
+      - env:
+          COMPONENT: ${{ matrix.component }}
+          STACK: ${{ matrix.stack }}
+        run: atmos terraform deploy "$COMPONENT" -s "$STACK"
 ```
 </File>
 
