@@ -27,21 +27,21 @@ runs three classes of `tofu` subprocesses for one `atmos terraform
 plan`:
 
 1. **Setup** the user did not write — `tofu workspace select`
-   (`runWorkspaceSetup` at
-   `internal/exec/terraform_execute_helpers_exec.go:181`), the
-   `tofu workspace new` fallback (`createWorkspaceFallback`,
-   line 226), and the auto-`tofu init` pre-step
-   (`executeTerraformInitPhase` at
-   `internal/exec/terraform_execute_helpers.go:528`, only fires
-   when SubCommand ≠ "init" and `--skip-init` is not set).
+   (`runWorkspaceSetup` in
+   `internal/exec/terraform_execute_helpers_exec.go`), the
+   `tofu workspace new` fallback (`createWorkspaceFallback` in the
+   same file), and the auto-`tofu init` pre-step
+   (`executeTerraformInitPhase` in
+   `internal/exec/terraform_execute_helpers.go`, only fires when
+   SubCommand ≠ "init" and `--skip-init` is not set).
 2. **The user's primary subcommand** —
    `executeMainTerraformCommand` (e.g. `tofu plan`).
 3. **Data fetches** for `!terraform.output` /
    `atmos.Component(...)` template calls — handled separately
    in `pkg/terraform/output/`.
 
-All three classes go through `ExecuteShellCommand` at
-`internal/exec/shell_utils.go:96`, which builds the subprocess
+All three classes go through `ExecuteShellCommand` in
+`internal/exec/shell_utils.go`, which builds the subprocess
 environment from `os.Environ()`. That inherits whatever
 `TF_CLI_ARGS` the parent process exported. OpenTofu's documented
 behavior is to **prepend `TF_CLI_ARGS` to every subcommand's
@@ -58,8 +58,9 @@ reason. The bug class covers every Atmos-internal setup
 subprocess, not just `workspace select`.
 
 The third class (data fetches) was already correct:
-`pkg/terraform/output/environment.go:23-42` strips `TF_CLI_ARGS`
-and `TF_CLI_ARGS_*` from the env before invoking terraform-exec.
+`prohibitedEnvVars` / `prohibitedEnvVarPrefixes` in
+`pkg/terraform/output/environment.go` strip `TF_CLI_ARGS` and
+`TF_CLI_ARGS_*` from the env before invoking terraform-exec.
 The regular plan/apply flow simply did not apply the same hygiene
 to its own setup subprocesses.
 
@@ -156,9 +157,9 @@ Sites intentionally **not** sanitized:
 
 Open items (separate PRs):
 
-- Update the `warnOnConflictingEnvVars` log message at
-  `internal/exec/terraform_execute_helpers.go:341` to acknowledge
-  the new setup-step hygiene.
+- Update the `warnOnConflictingEnvVars` log message in
+  `internal/exec/terraform_execute_helpers.go` to acknowledge the
+  new setup-step hygiene.
 - Add a `TF_CLI_ARGS` vs `TF_CLI_ARGS_<subcommand>` paragraph to
   `website/docs/cli/configuration/terraform.mdx`.
 - Blog post under `website/blog/` (PR is `bugfix`-labeled, so the
