@@ -83,7 +83,7 @@ Since Atmos first checks the component folders for changes, if it finds any affe
 components and stacks as affected. Atmos will then skip evaluating the stacks for differences since it already
 knows that they are affected.
 :::tip Use in GitHub Actions
-Run `atmos describe affected --format=matrix --output-file=$GITHUB_OUTPUT` directly in your workflow to fan out across affected components. See the [matrix workflow example](/ci#multi-component-matrix) for the full pattern.
+Run `atmos describe affected --format=matrix` directly in your workflow to fan out across affected components. When `ci.enabled` is `true` in `atmos.yaml`, the matrix is automatically written to `$GITHUB_OUTPUT`. See the [Deploy Affected workflow](/ci#deploy-affected) for the full pattern.
 :::
 
 ## CI Auto-Detection
@@ -106,8 +106,10 @@ resolution logic.
 
 ```yaml
 - name: Describe affected
-  run: atmos describe affected --format=matrix --output-file=$GITHUB_OUTPUT
+  run: atmos describe affected --format=matrix
 ```
+
+When `ci.enabled` is `true` in `atmos.yaml` and `GITHUB_OUTPUT` is available (e.g. on GitHub Actions), the matrix output is written there automatically. Outside of GitHub Actions, or when `GITHUB_OUTPUT` is unset, output falls back to stdout.
 
 ### Flag Precedence
 

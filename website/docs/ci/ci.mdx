@@ -68,6 +68,22 @@ Running Atmos in GitHub Actions reduces to two steps: **check out the repository
 
 The examples below pin the Atmos version via a [repository variable](https://docs.github.com/en/actions/learn-github-actions/variables) named `ATMOS_VERSION` (e.g. set to `1.200.0`). We don't publish a `latest` tag, so always pin to a specific release.
 
+### Permissions
+
+Atmos's native CI features rely on the standard GitHub Actions permission scopes — grant only what each workflow's triggers require:
+
+| Feature | Permission |
+| --- | --- |
+| Job summaries (`$GITHUB_STEP_SUMMARY`) | none required |
+| Output variables (`$GITHUB_OUTPUT`) | none required |
+| Commit [status checks](/cli/configuration/ci/checks) | `statuses: write` |
+| Check runs (modern Checks API) | `checks: write` |
+| PR comments | `pull-requests: write` |
+| Checkout | `contents: read` |
+| OIDC token issuance | `id-token: write` |
+
+There is no `comments: write` scope — PR comment writes use `pull-requests: write` (PR comments are issue comments under the hood). If you disable a feature in `atmos.yaml` (e.g. `ci.checks.enabled: false`), you can drop the matching permission.
+
 ### Plan on Pull Request
 
 <File title=".github/workflows/plan.yml">
@@ -79,8 +95,9 @@ on:
 permissions:
   id-token: write
   contents: read
-  pull-requests: write
   statuses: write
+  checks: write
+  pull-requests: write
 
 jobs:
   plan:
@@ -107,6 +124,7 @@ permissions:
   id-token: write
   contents: read
   statuses: write
+  checks: write
 
 jobs:
   apply:
@@ -122,12 +140,22 @@ jobs:
 
 `atmos terraform deploy` retrieves the planfile uploaded during the PR run, generates a fresh plan, performs a semantic comparison to detect drift, and applies. See [Planfile Storage](/ci/planfile-storage) for details.
 
-### Multi-Component Matrix
+### Deploy Affected
 
-For repos with many components, fan out across only the affected ones using `atmos describe affected --format=matrix`:
+Fan out across only the components that changed in the PR using `atmos describe affected --format=matrix`. When `ci.enabled: true` is set in `atmos.yaml`, the matrix is automatically written to `$GITHUB_OUTPUT` — no `--output-file` flag needed.
 
-<File title=".github/workflows/affected.yml">
+<File title=".github/workflows/deploy-affected.yml">
 ```yaml
+on:
+  pull_request:
+
+permissions:
+  id-token: write
+  contents: read
+  statuses: write
+  checks: write
+  pull-requests: write
+
 jobs:
   affected:
     runs-on: ubuntu-latest
@@ -141,7 +169,7 @@ jobs:
           fetch-depth: 0
 
       - id: affected
-        run: atmos describe affected --format=matrix --output-file=$GITHUB_OUTPUT
+        run: atmos describe affected --format=matrix
 
   deploy:
     needs: affected
@@ -164,16 +192,147 @@ jobs:
 
 The `affected` job emits a matrix of `{component, stack}` pairs; the `deploy` job spreads across them in parallel.
 
+### Deploy All
+
+Fan out across **every** instance defined in your stacks using `atmos list instances --format=matrix`. Use this for full deploys, drift sweeps across the whole estate, or initial bootstraps. Like `describe affected`, it auto-routes to `$GITHUB_OUTPUT` when CI is enabled.
+
+<File title=".github/workflows/deploy-all.yml">
+```yaml
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 6 * * *'   # Daily drift sweep
+
+permissions:
+  id-token: write
+  contents: read
+  statuses: write
+  checks: write
+
+jobs:
+  inventory:
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/cloudposse/atmos:${{ vars.ATMOS_VERSION }}
+    outputs:
+      matrix: ${{ steps.list.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - id: list
+        run: atmos list instances --format=matrix
+
+  deploy:
+    needs: inventory
+    if: ${{ needs.inventory.outputs.matrix != '' }}
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/cloudposse/atmos:${{ vars.ATMOS_VERSION }}
+    strategy:
+      matrix: ${{ fromJson(needs.inventory.outputs.matrix) }}
+      fail-fast: false
+    steps:
+      - uses: actions/checkout@v6
+
+      - env:
+          COMPONENT: ${{ matrix.component }}
+          STACK: ${{ matrix.stack }}
+        run: atmos terraform deploy "$COMPONENT" -s "$STACK"
+```
+</File>
+
 ### Authentication
 
-Most workflows need cloud credentials. If you use [`atmos auth`](/stacks/auth), run `atmos auth login` before the terraform step:
+The shape of the story: **define a CI profile in `atmos.yaml`, point the workflow at it, done.** Atmos exchanges the GitHub OIDC token for cloud credentials transparently — there is no `atmos auth login` step in CI.
 
+**1. Define a `github` profile.** The profile name is arbitrary; we use `github` to match the [example repos](https://github.com/cloudposse-examples/atmos-native-ci). It holds the `github/oidc` provider plus the identity CI should use:
+
+<File title="atmos.yaml">
 ```yaml
-- run: atmos auth login --identity my-identity
-- run: atmos terraform deploy vpc -s prod
+auth:
+  providers:
+    github-oidc:
+      kind: github/oidc
+      region: us-east-1
+  identities:
+    plat-dev/terraform:
+      provider: github-oidc
+      role_arn: arn:aws:iam::111122223333:role/atmos-terraform
+      default: true   # Use this identity unless a component overrides it
 ```
+</File>
 
-Otherwise, configure credentials however you normally would (e.g. `aws-actions/configure-aws-credentials` for OIDC).
+The IAM role's trust policy must allow GitHub's OIDC issuer for your repo — see [Configuring OpenID Connect in AWS](https://docs.github.com/en/actions/deployment/security-hardening-your-deployments/configuring-openid-connect-in-amazon-web-services) for the trust-policy template. Other clouds work the same way: see [`azure/oidc`](/cli/configuration/auth/providers) and [`gcp/workload-identity-federation`](/cli/configuration/auth/providers).
+
+**2. Pick how identities are selected.** All three work under the same profile:
+
+<dl>
+  <dt>One identity for everything</dt>
+  <dd>Mark one identity `default: true` (as above), or set the `ATMOS_IDENTITY` env var. Simplest setup — works when CI talks to one cloud account/role.</dd>
+
+  <dt>Per-component identity</dt>
+  <dd>Set `settings.identity` on a component or stack to pick a different identity for that scope. Useful when prod components need a different role than dev.</dd>
+
+  <dt>Inheritance</dt>
+  <dd>Identities flow through the [stack inheritance](/stacks) chain like everything else, so you can set the identity on a base stack and let descendants inherit (or override) it.</dd>
+</dl>
+
+**3. Wire the workflow.** Two pieces: the `id-token: write` permission, and `ATMOS_PROFILE` set to the profile name.
+
+<File title=".github/workflows/apply.yml">
+```yaml
+permissions:
+  id-token: write    # Required for GitHub to mint the OIDC token
+  contents: read
+  statuses: write
+  checks: write
+
+env:
+  ATMOS_PROFILE: github
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/cloudposse/atmos:${{ vars.ATMOS_VERSION }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - run: atmos terraform deploy vpc -s prod
+```
+</File>
+
+`id-token: write` lets GitHub issue the OIDC JWT; `ATMOS_PROFILE: github` activates the profile defined above. **No `atmos auth login` step is needed** — Atmos exchanges the OIDC token for cloud credentials when it runs the terraform command. (`atmos auth login` exists for interactive/local use; in CI it's redundant.)
+
+### Gating Production with Environments
+
+GitHub Actions [environments](https://docs.github.com/en/actions/deployment/targeting-different-environments/using-environments-for-deployment) buy you three things: per-environment secrets and variables, required manual approvals before the job runs, and deployment history visible in the GitHub UI. Wire one in by adding `environment:` to the deploy job:
+
+<File title=".github/workflows/apply.yml">
+```yaml
+jobs:
+  deploy-prod:
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/cloudposse/atmos:${{ vars.ATMOS_VERSION }}
+    environment: prod    # Requires approval if configured in repo settings
+    permissions:
+      id-token: write
+      contents: read
+      statuses: write
+      checks: write
+    env:
+      ATMOS_PROFILE: github
+    steps:
+      - uses: actions/checkout@v6
+
+      - run: atmos terraform deploy vpc -s prod
+```
+</File>
+
+The **GitHub environment** (`prod`) and the **Atmos stack** (`-s prod`) are independent concepts — one gates the workflow run, the other selects the stack configuration. Many teams happen to name them the same; nothing requires it.
+
+For deeper auth reference: [Profiles](/cli/configuration/profiles), [Auth concepts](/stacks/auth), [Providers](/cli/configuration/auth/providers), [Identities](/cli/configuration/auth/identities).
 
 <ActionCard title="Working Examples">
     Two reference repositories you can clone and adapt — both include `atmos.yaml`, stack configuration, components, and full workflows. They build on the patterns above with use-case-specific design patterns (preview environments, image promotion, label gating).

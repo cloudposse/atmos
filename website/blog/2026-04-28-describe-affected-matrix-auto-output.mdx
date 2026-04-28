@@ -1,0 +1,87 @@
+---
+slug: describe-affected-matrix-auto-output
+title: "describe affected --format=matrix auto-routes to GITHUB_OUTPUT"
+authors: [osterman]
+tags: [enhancement]
+---
+
+`atmos describe affected --format=matrix` now writes to `$GITHUB_OUTPUT` automatically when CI is enabled, matching the behavior already shipped for `atmos list instances --format=matrix`. No more `--output-file=$GITHUB_OUTPUT` boilerplate in workflow YAML.
+
+<!--truncate-->
+
+## What Changed
+
+When `ci.enabled: true` is set in `atmos.yaml` and `$GITHUB_OUTPUT` is present in the environment (i.e. you're running on GitHub Actions), the matrix JSON is written there automatically. The explicit `--output-file=$GITHUB_OUTPUT` flag is no longer required.
+
+Before:
+
+```yaml
+- id: affected
+  run: atmos describe affected --format=matrix --output-file=$GITHUB_OUTPUT
+```
+
+After:
+
+```yaml
+- id: affected
+  run: atmos describe affected --format=matrix
+```
+
+The same goes for `atmos list instances --format=matrix`, which already had this behavior. Both commands now resolve their output destination the same way: explicit `--output-file` flag wins; otherwise, fall back to `$GITHUB_OUTPUT` when CI is enabled; otherwise, write JSON to stdout.
+
+## Why This Matters
+
+Before this change, the two `--format=matrix` commands behaved differently — `list instances` auto-detected, `describe affected` didn't. Workflow authors had to remember which one needed the explicit flag. With this change the two commands are symmetric, the docs are simpler, and copy-pasted workflows from one command to the other don't silently break.
+
+It's also one fewer thing to type. The matrix output is the canonical pattern for fan-out workflows in GitHub Actions, and the explicit redirect was always boilerplate.
+
+## How to Use It
+
+Set `ci.enabled: true` in your `atmos.yaml`:
+
+```yaml
+ci:
+  enabled: true
+```
+
+Then use the matrix command without the `--output-file` flag in your workflow:
+
+```yaml
+jobs:
+  affected:
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/cloudposse/atmos:${{ vars.ATMOS_VERSION }}
+    outputs:
+      matrix: ${{ steps.affected.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - id: affected
+        run: atmos describe affected --format=matrix
+
+  deploy:
+    needs: affected
+    if: ${{ needs.affected.outputs.matrix != '' }}
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/cloudposse/atmos:${{ vars.ATMOS_VERSION }}
+    strategy:
+      matrix: ${{ fromJson(needs.affected.outputs.matrix) }}
+      fail-fast: false
+    steps:
+      - uses: actions/checkout@v6
+
+      - env:
+          COMPONENT: ${{ matrix.component }}
+          STACK: ${{ matrix.stack }}
+        run: atmos terraform deploy "$COMPONENT" -s "$STACK"
+```
+
+The explicit `--output-file` flag still works if you need it (writing to an arbitrary path, non-GitHub CI providers, etc.) — explicit always wins over auto-detection.
+
+## Get Involved
+
+See the full CI workflow patterns at [Native CI](/ci), including the new "Deploy Affected" and "Deploy All" examples. The two reference repos — [`cloudposse-examples/atmos-native-ci`](https://github.com/cloudposse-examples/atmos-native-ci) and [`atmos-native-ci-advanced`](https://github.com/cloudposse-examples/atmos-native-ci-advanced) — show end-to-end working pipelines you can clone and adapt.
