@@ -45,11 +45,13 @@ var sourcesParser *flags.StandardParser
 // SourcesOptions contains parsed flags for the sources command.
 type SourcesOptions struct {
 	global.Flags
-	Format      string
-	Stack       string
-	Component   string // From positional arg.
-	AtmosConfig *schema.AtmosConfiguration
-	AuthManager auth.AuthManager
+	Format           string
+	Stack            string
+	Component        string // From positional arg.
+	AtmosConfig      *schema.AtmosConfiguration
+	AuthManager      auth.AuthManager
+	ProcessTemplates bool
+	ProcessFunctions bool
 }
 
 // sourcesCmd lists components with source configuration.
@@ -87,6 +89,8 @@ func init() {
 	sourcesParser = NewListParser(
 		WithFormatFlag,
 		WithStackFlag,
+		WithProcessTemplatesFlag,
+		WithProcessFunctionsFlag,
 	)
 
 	// Register flags for sources command.
@@ -99,6 +103,24 @@ func init() {
 	if err := sourcesParser.BindToViper(viper.GetViper()); err != nil {
 		panic(err)
 	}
+}
+
+// parseSourcesOptions maps viper state into a SourcesOptions struct.
+// Extracted from initSourcesCommand so the viper→options mapping can be
+// unit-tested without driving the whole cobra command. `args[0]`, when
+// present, is used as the positional component filter.
+func parseSourcesOptions(cmd *cobra.Command, v *viper.Viper, args []string) *SourcesOptions {
+	opts := &SourcesOptions{
+		Flags:            flags.ParseGlobalFlags(cmd, v),
+		Format:           v.GetString("format"),
+		Stack:            v.GetString("stack"),
+		ProcessTemplates: v.GetBool("process-templates"),
+		ProcessFunctions: v.GetBool("process-functions"),
+	}
+	if len(args) > 0 {
+		opts.Component = args[0]
+	}
+	return opts
 }
 
 func executeListSources(cmd *cobra.Command, args []string) error {
@@ -138,15 +160,7 @@ func initSourcesCommand(cmd *cobra.Command, args []string) (*SourcesOptions, err
 			Err()
 	}
 
-	opts := &SourcesOptions{
-		Flags:  flags.ParseGlobalFlags(cmd, v),
-		Format: v.GetString("format"),
-		Stack:  v.GetString("stack"),
-	}
-
-	if len(args) > 0 {
-		opts.Component = args[0]
-	}
+	opts := parseSourcesOptions(cmd, v, args)
 
 	configInfo := buildConfigAndStacksInfo(&opts.Flags)
 	configInfo.Stack = opts.Stack
@@ -171,8 +185,12 @@ func fetchAndFilterSources(opts *SourcesOptions) ([]map[string]any, error) {
 		opts.AtmosConfig,
 		opts.Stack,
 		nil, nil, nil,
-		false, false, false, false,
-		nil, opts.AuthManager,
+		false, // ignoreMissingFiles
+		opts.ProcessTemplates,
+		opts.ProcessFunctions,
+		false, // includeEmptyStacks
+		nil,   // skip
+		opts.AuthManager,
 	)
 	if err != nil {
 		return nil, errUtils.Build(errUtils.ErrExecuteDescribeStacks).

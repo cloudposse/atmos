@@ -32,11 +32,13 @@ var stacksParser *flags.StandardParser
 // StacksOptions contains parsed flags for the stacks command.
 type StacksOptions struct {
 	global.Flags
-	Component  string
-	Format     string
-	Columns    []string
-	Sort       string
-	Provenance bool
+	Component        string
+	Format           string
+	Columns          []string
+	Sort             string
+	Provenance       bool
+	ProcessTemplates bool
+	ProcessFunctions bool
 }
 
 // stacksCmd lists atmos stacks.
@@ -59,17 +61,26 @@ var stacksCmd = &cobra.Command{
 			return err
 		}
 
-		opts := &StacksOptions{
-			Flags:      flags.ParseGlobalFlags(cmd, v),
-			Component:  v.GetString("component"),
-			Format:     v.GetString("format"),
-			Columns:    v.GetStringSlice("columns"),
-			Sort:       v.GetString("sort"),
-			Provenance: v.GetBool("provenance"),
-		}
+		opts := parseStacksOptions(cmd, v)
 
 		return listStacksWithOptions(cmd, args, opts)
 	},
+}
+
+// parseStacksOptions maps viper state into a StacksOptions struct.
+// Extracted from the RunE closure so the viper→options mapping can be
+// unit-tested without driving the whole cobra command.
+func parseStacksOptions(cmd *cobra.Command, v *viper.Viper) *StacksOptions {
+	return &StacksOptions{
+		Flags:            flags.ParseGlobalFlags(cmd, v),
+		Component:        v.GetString("component"),
+		Format:           v.GetString("format"),
+		Columns:          v.GetStringSlice("columns"),
+		Sort:             v.GetString("sort"),
+		Provenance:       v.GetBool("provenance"),
+		ProcessTemplates: v.GetBool("process-templates"),
+		ProcessFunctions: v.GetBool("process-functions"),
+	}
 }
 
 // columnsCompletionForStacks provides dynamic tab completion for --columns flag.
@@ -109,6 +120,8 @@ func init() {
 		WithSortFlag,
 		WithComponentFlag,
 		WithProvenanceFlag,
+		WithProcessTemplatesFlag,
+		WithProcessFunctionsFlag,
 	)
 
 	// Register flags.
@@ -151,7 +164,7 @@ func listStacksWithOptions(cmd *cobra.Command, args []string, opts *StacksOption
 
 	// Handle tree format specially - it shows import hierarchies.
 	if opts.Format == string(format.FormatTree) {
-		return renderStacksTreeFormat(&atmosConfig, stacks, opts.Provenance, authManager)
+		return renderStacksTreeFormat(&atmosConfig, stacks, opts, authManager)
 	}
 	_ = stacksMap // Unused in non-tree format.
 
@@ -211,7 +224,15 @@ func executeAndExtractStacks(
 ) ([]map[string]any, map[string]any, error) {
 	defer perf.Track(nil, "list.stacks.executeAndExtractStacks")()
 
-	stacksMap, err := e.ExecuteDescribeStacks(atmosConfig, "", nil, nil, nil, false, false, false, false, nil, authManager)
+	stacksMap, err := e.ExecuteDescribeStacks(
+		atmosConfig, "", nil, nil, nil,
+		false, // ignoreMissingFiles
+		opts.ProcessTemplates,
+		opts.ProcessFunctions,
+		false, // includeEmptyStacks
+		nil,   // skip
+		authManager,
+	)
 	if err != nil {
 		return nil, nil, fmt.Errorf("%w: %w", errUtils.ErrExecuteDescribeStacks, err)
 	}
@@ -303,7 +324,7 @@ func getStackColumns(atmosConfig *schema.AtmosConfiguration, columnsFlag []strin
 func renderStacksTreeFormat(
 	atmosConfig *schema.AtmosConfiguration,
 	stacks []map[string]any,
-	showProvenance bool,
+	opts *StacksOptions,
 	authManager auth.AuthManager,
 ) error {
 	defer perf.Track(nil, "list.stacks.renderStacksTreeFormat")()
@@ -316,8 +337,18 @@ func renderStacksTreeFormat(
 	e.ClearFindStacksMapCache()
 	log.Trace("Caches cleared, re-processing with provenance")
 
-	// Re-process stacks with provenance tracking enabled.
-	stacksMap, err := e.ExecuteDescribeStacks(atmosConfig, "", nil, nil, nil, false, false, false, false, nil, authManager)
+	// Re-process stacks with provenance tracking enabled. Honor the
+	// caller-supplied template/function flags so tree output is consistent with
+	// non-tree runs of the same command invocation.
+	stacksMap, err := e.ExecuteDescribeStacks(
+		atmosConfig, "", nil, nil, nil,
+		false, // ignoreMissingFiles
+		opts.ProcessTemplates,
+		opts.ProcessFunctions,
+		false, // includeEmptyStacks
+		nil,   // skip
+		authManager,
+	)
 	if err != nil {
 		return fmt.Errorf("error re-processing stacks with provenance: %w", err)
 	}
@@ -329,7 +360,7 @@ func renderStacksTreeFormat(
 	}
 
 	// Render and output the tree.
-	output := format.RenderStacksTree(importTrees, showProvenance)
+	output := format.RenderStacksTree(importTrees, opts.Provenance)
 	_ = data.Writeln(output)
 	return nil
 }

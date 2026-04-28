@@ -28,14 +28,16 @@ var componentsParser *flags.StandardParser
 // ComponentsOptions contains parsed flags for the components command.
 type ComponentsOptions struct {
 	global.Flags
-	Stack    string
-	Type     string
-	Enabled  *bool
-	Locked   *bool
-	Format   string
-	Columns  []string
-	Sort     string
-	Abstract bool
+	Stack            string
+	Type             string
+	Enabled          *bool
+	Locked           *bool
+	Format           string
+	Columns          []string
+	Sort             string
+	Abstract         bool
+	ProcessTemplates bool
+	ProcessFunctions bool
 }
 
 // componentsCmd lists atmos components.
@@ -58,36 +60,46 @@ var componentsCmd = &cobra.Command{
 			return err
 		}
 
-		// Parse enabled/locked flags as tri-state (*bool).
-		// nil = unset (show all), true = filter for true, false = filter for false.
-		// Use cmd.Flags().Changed() instead of v.IsSet() because IsSet returns true
-		// when a default value is registered, but we only want to filter when
-		// the user explicitly provided the flag.
-		var enabledPtr *bool
-		if cmd.Flags().Changed("enabled") {
-			val := v.GetBool("enabled")
-			enabledPtr = &val
-		}
-		var lockedPtr *bool
-		if cmd.Flags().Changed("locked") {
-			val := v.GetBool("locked")
-			lockedPtr = &val
-		}
-
-		opts := &ComponentsOptions{
-			Flags:    flags.ParseGlobalFlags(cmd, v),
-			Stack:    v.GetString("stack"),
-			Type:     v.GetString("type"),
-			Enabled:  enabledPtr,
-			Locked:   lockedPtr,
-			Format:   v.GetString("format"),
-			Columns:  v.GetStringSlice("columns"),
-			Sort:     v.GetString("sort"),
-			Abstract: v.GetBool("abstract"),
-		}
+		opts := parseComponentsOptions(cmd, v)
 
 		return listComponentsWithOptions(cmd, args, opts)
 	},
+}
+
+// parseComponentsOptions maps viper state into a ComponentsOptions struct.
+// Extracted from the RunE closure so the viper→options mapping can be
+// unit-tested without driving the whole cobra command.
+//
+// Enabled/Locked are tri-state (*bool): nil when the flag was not
+// explicitly set by the user (so the caller shows all components); true/
+// false otherwise. `cmd.Flags().Changed()` is used instead of
+// `v.IsSet()` because the latter returns true when a default value is
+// registered — we only want to filter when the user actually passed the
+// flag.
+func parseComponentsOptions(cmd *cobra.Command, v *viper.Viper) *ComponentsOptions {
+	var enabledPtr *bool
+	if cmd.Flags().Changed("enabled") {
+		val := v.GetBool("enabled")
+		enabledPtr = &val
+	}
+	var lockedPtr *bool
+	if cmd.Flags().Changed("locked") {
+		val := v.GetBool("locked")
+		lockedPtr = &val
+	}
+	return &ComponentsOptions{
+		Flags:            flags.ParseGlobalFlags(cmd, v),
+		Stack:            v.GetString("stack"),
+		Type:             v.GetString("type"),
+		Enabled:          enabledPtr,
+		Locked:           lockedPtr,
+		Format:           v.GetString("format"),
+		Columns:          v.GetStringSlice("columns"),
+		Sort:             v.GetString("sort"),
+		Abstract:         v.GetBool("abstract"),
+		ProcessTemplates: v.GetBool("process-templates"),
+		ProcessFunctions: v.GetBool("process-functions"),
+	}
 }
 
 // columnsCompletionForComponents provides dynamic tab completion for --columns flag.
@@ -130,6 +142,8 @@ func init() {
 		WithEnabledFlag,
 		WithLockedFlag,
 		WithAbstractFlag,
+		WithProcessTemplatesFlag,
+		WithProcessFunctionsFlag,
 	)
 
 	// Register flags.
@@ -190,7 +204,15 @@ func initAndExtractComponents(cmd *cobra.Command, args []string, opts *Component
 		return nil, nil, err
 	}
 
-	stacksMap, err := e.ExecuteDescribeStacks(&atmosConfig, "", nil, nil, nil, false, false, false, false, nil, authManager)
+	stacksMap, err := e.ExecuteDescribeStacks(
+		&atmosConfig, "", nil, nil, nil,
+		false, // ignoreMissingFiles
+		opts.ProcessTemplates,
+		opts.ProcessFunctions,
+		false, // includeEmptyStacks
+		nil,   // skip
+		authManager,
+	)
 	if err != nil {
 		return nil, nil, fmt.Errorf("%w: %w", errUtils.ErrExecuteDescribeStacks, err)
 	}
