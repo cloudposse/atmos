@@ -1880,6 +1880,73 @@ func TestExecute_MatrixFormat(t *testing.T) {
 		assert.Contains(t, string(content), "matrix=")
 		assert.Contains(t, string(content), "count=1")
 	})
+
+	t.Run("matrix auto-detects GITHUB_OUTPUT when CI is enabled", func(t *testing.T) {
+		// When ci.enabled=true and no explicit --output-file is given,
+		// the matrix output should be written to $GITHUB_OUTPUT automatically.
+		autoFile := filepath.Join(t.TempDir(), "auto_output")
+		t.Setenv("GITHUB_OUTPUT", autoFile)
+
+		dCI := d
+		dCI.atmosConfig = &schema.AtmosConfiguration{CI: schema.CIConfig{Enabled: true}}
+
+		err := dCI.Execute(&DescribeAffectedCmdArgs{
+			Format:    "matrix",
+			CLIConfig: &schema.AtmosConfiguration{CI: schema.CIConfig{Enabled: true}},
+		})
+		require.NoError(t, err)
+
+		content, err := os.ReadFile(autoFile)
+		require.NoError(t, err)
+		assert.Contains(t, string(content), "matrix=")
+		assert.Contains(t, string(content), "count=1")
+	})
+
+	t.Run("explicit --output-file wins over CI auto-detect", func(t *testing.T) {
+		// When both --output-file and CI auto-detect would apply, the explicit
+		// flag must win. The GITHUB_OUTPUT path should be left untouched.
+		explicitFile := filepath.Join(t.TempDir(), "explicit_output")
+		ghOutputFile := filepath.Join(t.TempDir(), "github_output")
+		t.Setenv("GITHUB_OUTPUT", ghOutputFile)
+
+		dCI := d
+		dCI.atmosConfig = &schema.AtmosConfiguration{CI: schema.CIConfig{Enabled: true}}
+
+		err := dCI.Execute(&DescribeAffectedCmdArgs{
+			Format:           "matrix",
+			GithubOutputFile: explicitFile,
+			CLIConfig:        &schema.AtmosConfiguration{CI: schema.CIConfig{Enabled: true}},
+		})
+		require.NoError(t, err)
+
+		content, err := os.ReadFile(explicitFile)
+		require.NoError(t, err)
+		assert.Contains(t, string(content), "matrix=")
+
+		// The GITHUB_OUTPUT path must NOT have been written to.
+		_, err = os.Stat(ghOutputFile)
+		assert.True(t, os.IsNotExist(err), "GITHUB_OUTPUT file should not exist when --output-file is set explicitly")
+	})
+
+	t.Run("no auto-detect when CI is disabled", func(t *testing.T) {
+		// When ci.enabled=false, GITHUB_OUTPUT should be ignored even if it's
+		// set in the environment. Output goes to stdout (unverifiable here, but
+		// we assert the GITHUB_OUTPUT file remains untouched).
+		ghOutputFile := filepath.Join(t.TempDir(), "github_output")
+		t.Setenv("GITHUB_OUTPUT", ghOutputFile)
+
+		dNoCI := d
+		dNoCI.atmosConfig = &schema.AtmosConfiguration{CI: schema.CIConfig{Enabled: false}}
+
+		err := dNoCI.Execute(&DescribeAffectedCmdArgs{
+			Format:    "matrix",
+			CLIConfig: &schema.AtmosConfiguration{CI: schema.CIConfig{Enabled: false}},
+		})
+		require.NoError(t, err)
+
+		_, err = os.Stat(ghOutputFile)
+		assert.True(t, os.IsNotExist(err), "GITHUB_OUTPUT file should not exist when CI is disabled")
+	})
 }
 
 // TestView_OutputFileRejectsNonMatrix tests that --output-file is rejected for non-matrix formats.
