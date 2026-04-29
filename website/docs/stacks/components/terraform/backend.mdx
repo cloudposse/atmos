@@ -15,6 +15,14 @@ where Terraform stores state for your components. Settings defined here become d
 for all Terraform components in the stack.
 </Intro>
 
+:::tip Don't confuse `backend:` with `provision.backend:`
+The `backend:` block on this page describes *where* state is stored (bucket, region, key).
+The separate `provision.backend:` block tells Atmos to *automatically create that location*
+if it doesn't exist. See [Component Provisioning](/stacks/components/provision) for the
+full schema, or [Backend Provisioning](/components/terraform/backend-provisioning) for the
+conceptual treatment.
+:::
+
 ## Setting Defaults for Terraform Components
 
 When you define backend configuration under the `terraform:` section, it applies to
