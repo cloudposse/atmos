@@ -179,7 +179,7 @@ func extractAuthShellFlags(args []string) (identityValue, shellValue string, she
 		}
 
 		// Check for --identity or -i flag.
-		if arg == "--identity" || arg == "-i" {
+		if arg == cfg.IdentityFlag || arg == cfg.IdentityFlagShort {
 			identityFlagSeen = true
 			// Check if next arg exists and is not a flag or "--".
 			if i+1 < len(args) && !strings.HasPrefix(args[i+1], "-") && args[i+1] != "--" {

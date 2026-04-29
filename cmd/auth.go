@@ -26,7 +26,7 @@ var authCmd = &cobra.Command{
 func init() {
 	// Avoid adding "stack" at the group level unless subcommands require it.
 	// AddStackCompletion(authCmd)
-	authCmd.PersistentFlags().StringP(IdentityFlagName, "i", "", "Specify the target identity to assume. Use without value to interactively select.")
+	authCmd.PersistentFlags().StringP(IdentityFlagName, cfg.IdentityFlagShortName, "", "Specify the target identity to assume. Use without value to interactively select.")
 
 	// Set NoOptDefVal to enable optional flag value.
 	// When --identity is used without a value, it will receive IdentityFlagSelectValue.

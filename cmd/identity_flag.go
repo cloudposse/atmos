@@ -90,8 +90,8 @@ func extractIdentityFromArgs(args []string) string {
 		}
 
 		// Handle -i=value format (short flag).
-		if strings.HasPrefix(arg, "-i=") {
-			value := strings.TrimPrefix(arg, "-i=")
+		if strings.HasPrefix(arg, cfg.IdentityFlagShort+"=") {
+			value := strings.TrimPrefix(arg, cfg.IdentityFlagShort+"=")
 			if value == "" {
 				// -i= (empty value) -> interactive selection.
 				return cfg.IdentityFlagSelectValue
@@ -100,7 +100,7 @@ func extractIdentityFromArgs(args []string) string {
 		}
 
 		// Handle --identity value format (space-separated).
-		if arg == cfg.IdentityFlag || arg == "-i" {
+		if arg == cfg.IdentityFlag || arg == cfg.IdentityFlagShort {
 			// Check if next arg exists and is not another flag.
 			if i+1 < len(args) && !strings.HasPrefix(args[i+1], "-") {
 				// Has value: --identity <value>.

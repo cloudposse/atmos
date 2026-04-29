@@ -194,6 +194,7 @@ func ProcessComponentConfig(
 
 	// Populate AuthContext from AuthManager if provided (from --identity flag).
 	if authManager != nil {
+		configAndStacksInfo.AuthManager = authManager
 		managerStackInfo := authManager.GetStackInfo()
 		if managerStackInfo != nil && managerStackInfo.AuthContext != nil {
 			configAndStacksInfo.AuthContext = managerStackInfo.AuthContext

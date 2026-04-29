@@ -579,8 +579,8 @@ func TestProcessCommandLineArgs_IdentityFromEnvironmentVariable(t *testing.T) {
 
 			// Create a test command with global flags registered via flag registry.
 			cmd := newTestCommandWithGlobalFlags("terraform")
-			cmd.Flags().String("stack", "", "stack name")
-			cmd.Flags().String("identity", "", "identity name")
+			cmd.Flags().StringP("stack", "s", "", "stack name")
+			cmd.Flags().StringP("identity", "i", "", "identity name")
 
 			// Process the command-line arguments.
 			result, err := ProcessCommandLineArgs("terraform", cmd, tt.args, []string{})
@@ -588,6 +588,47 @@ func TestProcessCommandLineArgs_IdentityFromEnvironmentVariable(t *testing.T) {
 			// Verify results.
 			require.NoError(t, err, "ProcessCommandLineArgs should not return error")
 			assert.Equal(t, tt.expectedResult, result.Identity, tt.description)
+		})
+	}
+}
+
+// TestProcessCommandLineArgs_EmptyIdentityFlagIsExplicitSelect verifies that passing
+// `--identity=` explicitly (empty value via Cobra) is treated as the interactive-selection
+// sentinel rather than an unset flag. In particular, an explicit empty flag must not
+// be silently overridden by the ATMOS_IDENTITY environment variable.
+func TestProcessCommandLineArgs_EmptyIdentityFlagIsExplicitSelect(t *testing.T) {
+	tests := []struct {
+		name     string
+		envValue string
+		args     []string
+	}{
+		{
+			name:     "--identity= with no env var",
+			envValue: "",
+			args:     []string{"plan", "component", "--stack", "stack", "--identity="},
+		},
+		{
+			name:     "--identity= with ATMOS_IDENTITY set",
+			envValue: "should-be-ignored",
+			args:     []string{"plan", "component", "--stack", "stack", "--identity="},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.envValue != "" {
+				t.Setenv("ATMOS_IDENTITY", tt.envValue)
+			}
+
+			cmd := newTestCommandWithGlobalFlags("terraform")
+			cmd.Flags().StringP("stack", "s", "", "stack name")
+			cmd.Flags().StringP("identity", "i", "", "identity name")
+
+			result, err := ProcessCommandLineArgs("terraform", cmd, tt.args, []string{})
+
+			require.NoError(t, err)
+			assert.Equal(t, cfg.IdentityFlagSelectValue, result.Identity,
+				"explicit empty --identity= must map to the interactive-selection sentinel and must not be overridden by ATMOS_IDENTITY")
 		})
 	}
 }
@@ -620,14 +661,24 @@ func TestProcessCommandLineArgs_IdentityFlagParsing(t *testing.T) {
 			args:           []string{"--identity", "early-identity", "plan", "component", "--stack", "stack"},
 			expectedResult: "early-identity",
 		},
+		{
+			name:           "identity shorthand with space separator",
+			args:           []string{"plan", "component", "--stack", "stack", "-i", "my-identity"},
+			expectedResult: "my-identity",
+		},
+		{
+			name:           "identity shorthand with equals syntax",
+			args:           []string{"plan", "component", "--stack", "stack", "-i=my-identity"},
+			expectedResult: "my-identity",
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Create a test command with global flags registered via flag registry.
 			cmd := newTestCommandWithGlobalFlags("terraform")
-			cmd.Flags().String("stack", "", "stack name")
-			cmd.Flags().String("identity", "", "identity name")
+			cmd.Flags().StringP("stack", "s", "", "stack name")
+			cmd.Flags().StringP("identity", "i", "", "identity name")
 
 			// Process the command-line arguments.
 			result, err := ProcessCommandLineArgs("terraform", cmd, tt.args, []string{})
@@ -635,6 +686,43 @@ func TestProcessCommandLineArgs_IdentityFlagParsing(t *testing.T) {
 			// Verify results.
 			require.NoError(t, err, "ProcessCommandLineArgs should not return error")
 			assert.Equal(t, tt.expectedResult, result.Identity, "Identity should match expected value")
+		})
+	}
+}
+
+func TestProcessCommandLineArgs_UsesParsedIdentityFlagStateWhenArgsOmitFlags(t *testing.T) {
+	tests := []struct {
+		name           string
+		flagArgs       []string
+		expectedResult string
+	}{
+		{
+			name:           "long-form identity survives reconstructed terraform args",
+			flagArgs:       []string{"--identity=flag-identity", "--stack", "stack"},
+			expectedResult: "flag-identity",
+		},
+		{
+			name:           "short-form identity survives reconstructed terraform args",
+			flagArgs:       []string{"-i", "flag-identity", "--stack", "stack"},
+			expectedResult: "flag-identity",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cmd := newTestCommandWithGlobalFlags("terraform")
+			cmd.Flags().StringP("stack", "s", "", "stack name")
+			cmd.Flags().StringP("identity", "i", "", "identity name")
+
+			require.NoError(t, cmd.ParseFlags(tt.flagArgs))
+
+			// Mimic the real terraform RunE path: Cobra has already parsed flags, and
+			// ProcessCommandLineArgs is called later with only positional arguments.
+			result, err := ProcessCommandLineArgs("terraform", cmd, []string{"plan", "component"}, []string{})
+
+			require.NoError(t, err)
+			assert.Equal(t, tt.expectedResult, result.Identity)
+			assert.Equal(t, "stack", result.Stack)
 		})
 	}
 }

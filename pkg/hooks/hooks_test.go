@@ -2,6 +2,7 @@ package hooks
 
 import (
 	"errors"
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -9,9 +10,24 @@ import (
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/ci"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/store"
 )
+
+// testSaveAndClearRegistry snapshots the CI provider registry, replaces it with
+// an empty one, and returns the restore function. Tests that call RunCIHooks
+// must use this to avoid depending on the host environment's CI detection
+// (e.g., GITHUB_ACTIONS=true on CI runners would make ci.IsCI() return true).
+func testSaveAndClearRegistry() func() {
+	return ci.SwapRegistryForTest()
+}
+
+// testRestoreRegistry restores the CI provider registry from the snapshot
+// returned by testSaveAndClearRegistry.
+func testRestoreRegistry(restore func()) {
+	restore()
+}
 
 func TestHasHooks(t *testing.T) {
 	tests := []struct {
@@ -153,6 +169,86 @@ func TestGetHooks_WithRealComponent(t *testing.T) {
 	assert.NotNil(t, hooks.items)
 	assert.Contains(t, hooks.items, "vpc-store-outputs")
 	assert.Equal(t, "store", hooks.items["vpc-store-outputs"].Command)
+}
+
+func TestGetHooks_DoesNotProcessTemplates(t *testing.T) {
+	tempDir := t.TempDir()
+
+	require.NoError(t, os.MkdirAll(filepath.Join(tempDir, "stacks", "orgs", "acme"), 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(tempDir, "stacks", "catalog"), 0o755))
+
+	require.NoError(t, os.WriteFile(
+		filepath.Join(tempDir, "atmos.yaml"),
+		[]byte(`base_path: "./"
+components:
+  terraform:
+    base_path: "components/terraform"
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "**/*"
+  excluded_paths:
+    - "catalog/**"
+  name_pattern: "{tenant}-{environment}-{stage}"
+schemas: {}
+logs:
+  level: Info
+`),
+		0o644,
+	))
+
+	// The invalid template would fail if ProcessTemplates=true in GetHooks.
+	require.NoError(t, os.WriteFile(
+		filepath.Join(tempDir, "stacks", "catalog", "vpc.yaml"),
+		[]byte(`components:
+  terraform:
+    vpc:
+      hooks:
+        static-hook:
+          events:
+            - after-terraform-apply
+          command: store
+          name: prod/ssm
+          outputs:
+            broken: "{{"
+`),
+		0o644,
+	))
+
+	require.NoError(t, os.WriteFile(
+		filepath.Join(tempDir, "stacks", "orgs", "acme", "_defaults.yaml"),
+		[]byte(`import:
+  - catalog/vpc
+`),
+		0o644,
+	))
+	require.NoError(t, os.WriteFile(
+		filepath.Join(tempDir, "stacks", "orgs", "acme", "acme-dev-test.yaml"),
+		[]byte(`import:
+  - orgs/acme/_defaults
+vars:
+  tenant: acme
+  environment: dev
+  stage: test
+`),
+		0o644,
+	))
+
+	t.Chdir(tempDir)
+
+	atmosConfig := &schema.AtmosConfiguration{}
+	info := &schema.ConfigAndStacksInfo{
+		ComponentFromArg: "vpc",
+		Stack:            "acme-dev-test",
+	}
+
+	hooks, err := GetHooks(atmosConfig, info)
+	require.NoError(t, err)
+	require.NotNil(t, hooks)
+	require.NotNil(t, hooks.items)
+	assert.Contains(t, hooks.items, "static-hook")
+	assert.Equal(t, "store", hooks.items["static-hook"].Command)
+	assert.Equal(t, "{{", hooks.items["static-hook"].Outputs["broken"])
 }
 
 func TestRunAll(t *testing.T) {
@@ -432,6 +528,41 @@ func TestRunCIHooks_CIEnabledIsHardKillSwitch(t *testing.T) {
 			assert.NoError(t, err)
 		})
 	}
+}
+
+// TestRunCIHooks_LocalRunSkipsExperimentalGate verifies that local runs do not
+// hit the experimental CI gate unless CI mode is explicitly forced.
+func TestRunCIHooks_LocalRunSkipsExperimentalGate(t *testing.T) {
+	// Disable all registered CI providers for the duration of this test so the
+	// first subtest's ci.IsCI() check returns false regardless of the host
+	// environment (e.g., when this suite runs under GitHub Actions itself).
+	// Without this isolation, the github provider's Detect() would see
+	// GITHUB_ACTIONS=true and cause the non-force branch to fall through to
+	// the experimental gate, failing the test.
+	backup := testSaveAndClearRegistry()
+	defer testRestoreRegistry(backup)
+
+	config := &schema.AtmosConfiguration{
+		CI: schema.CIConfig{Enabled: true},
+		Settings: schema.AtmosSettings{
+			Experimental: "disable",
+		},
+	}
+	info := &schema.ConfigAndStacksInfo{
+		Stack:            "test-stack",
+		ComponentFromArg: "test-component",
+	}
+
+	t.Run("local run without force skips CI hooks before experimental gate", func(t *testing.T) {
+		err := RunCIHooks("before.terraform.plan", config, info, "", false, nil)
+		assert.NoError(t, err)
+	})
+
+	t.Run("forced CI mode still evaluates the experimental gate", func(t *testing.T) {
+		err := RunCIHooks("before.terraform.plan", config, info, "", true, nil)
+		assert.Error(t, err)
+		assert.True(t, errors.Is(err, errUtils.ErrExperimentalDisabled), "expected %v, got %v", errUtils.ErrExperimentalDisabled, err)
+	})
 }
 
 // TestCheckExperimental verifies that checkExperimental gates CI hooks
