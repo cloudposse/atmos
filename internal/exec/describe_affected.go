@@ -14,6 +14,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/auth"
 	"github.com/cloudposse/atmos/pkg/ci"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	ghactions "github.com/cloudposse/atmos/pkg/github/actions"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/matrix"
 	"github.com/cloudposse/atmos/pkg/pager"
@@ -361,7 +362,13 @@ func (d *describeAffectedExec) view(a *DescribeAffectedCmdArgs, repoUrl string, 
 	// Handle matrix format specially - it bypasses the normal view flow.
 	if a.Format == "matrix" {
 		entries := convertAffectedToMatrix(affected)
-		return matrix.WriteOutput(entries, a.GithubOutputFile)
+
+		// Resolve output file: explicit flag > CI auto-detect > stdout.
+		outputFile := a.GithubOutputFile
+		if outputFile == "" && d.atmosConfig.CI.Enabled {
+			outputFile = ghactions.GetOutputPath()
+		}
+		return matrix.WriteOutput(entries, outputFile)
 	}
 
 	// Reject --output-file for non-matrix formats — it would be silently ignored.

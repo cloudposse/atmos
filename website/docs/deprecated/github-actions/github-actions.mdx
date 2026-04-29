@@ -1,33 +1,40 @@
 ---
-title: GitHub Actions
+title: GitHub Actions (Deprecated)
 sidebar_position: 1
-sidebar_label: GitHub Actions 🚀
-description: Use GitHub Actions with Atmos
+sidebar_label: GitHub Actions
+description: Legacy Cloud Posse GitHub Actions for Atmos Terraform — deprecated in favor of native CI
 id: github-actions
-slug: /integrations/github-actions
+slug: /deprecated/github-actions
 ---
 import File from '@site/src/components/File'
 import DocCardList from '@theme/DocCardList'
 import Intro from '@site/src/components/Intro'
 import PrimaryCTA from '@site/src/components/PrimaryCTA'
 
-<Intro>
-GitHub Actions are a powerful way to automate your workflows with Atmos. Use these actions to plan, apply, and manage your Terraform infrastructure with Atmos.
-</Intro>
+:::warning Deprecated
+These community-maintained GitHub Actions predate Atmos's [native CI integration](/ci). New projects should run `atmos terraform plan/apply/deploy` directly in their workflows — Atmos itself produces job summaries, output variables, status checks, and stored planfiles without a wrapper action.
 
-:::tip Native CI Integration Available
-Atmos now includes **native CI integration** that provides job summaries, status checks, and CI output variables without requiring separate GitHub Actions. Just run `atmos terraform plan` in your workflow and get rich CI artifacts automatically.
+The action-based docs below are kept here for reference for teams still running them, but they are no longer the recommended approach.
 
-**[Learn more about Native CI Integration](/cli/configuration/ci)**
-
-The GitHub Actions listed below remain fully supported for teams that prefer the action-based approach or need features like DynamoDB-backed planfile storage.
+**[Get started with Native CI →](/ci)**
 :::
 
-This collection of GitHub Actions is designed to work specifically with Atmos in an opinionated manner, enabling you to implement a modern change management system entirely within the native GitHub UI. These Actions use the standard [`atmos.yaml` configuration](/cli/configuration/integrations) and [some backing services](#requirements) designed to properly manage Terraform plan files, including their invalidation.
+<Intro>
+This collection of GitHub Actions was designed to work specifically with Atmos in an opinionated manner, enabling change management entirely within the GitHub UI. They depend on a stack of supporting infrastructure (S3 + DynamoDB for planfile storage, IAM roles for OIDC) that native CI replaces with built-in Atmos features.
+</Intro>
 
-These GitHub Actions strive to be cloud-agnostic; however, most of our instructions focus on AWS, where we predominantly use them. None of these actions require hardcoded credentials, and all work using GitHub OIDC and GitHub Apps managed by your organization. These Actions do not require any subscriptions and are based entirely on open source.
+## Native CI Equivalents
 
-## GitHub Actions for Atmos
+| Capability | Legacy action | Native CI replacement |
+| --- | --- | --- |
+| Plan with job summary | `cloudposse/github-action-atmos-terraform-plan` | `atmos terraform plan` (writes to `$GITHUB_STEP_SUMMARY`) |
+| Apply stored planfile | `cloudposse/github-action-atmos-terraform-apply` | `atmos terraform apply` / `atmos terraform deploy` |
+| Affected stacks matrix | `cloudposse/github-action-atmos-affected-stacks` | `atmos describe affected --format=matrix` |
+| Drift detection | `cloudposse/github-action-atmos-terraform-drift-detection` | Scheduled workflow running `atmos terraform plan` |
+| Drift remediation | `cloudposse/github-action-atmos-terraform-drift-remediation` | `atmos terraform deploy` triggered from an issue |
+| Planfile storage | S3 + DynamoDB managed by the action | Built-in [planfile storage](/ci/planfile-storage) (S3, GitHub Artifacts, or local) |
+
+## Deprecated Actions
 
 <DocCardList/>
 
