@@ -16,6 +16,19 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
+// Compile-time guards: if any of these field names are renamed, the build
+// breaks immediately and the test author knows to update all assertions.
+var _ = schema.ConfigAndStacksInfo{
+	BaseComponentPath: "",
+	FinalComponent:    "",
+	Stack:             "",
+	ComponentSection:  map[string]any{},
+}
+
+var _ = schema.AtmosConfiguration{
+	BasePath: "",
+}
+
 // applyMetadataComponentSubpath ─────────────────────────────────────────────.
 
 func TestApplyMetadataComponentSubpath_JoinsSubpath(t *testing.T) {
