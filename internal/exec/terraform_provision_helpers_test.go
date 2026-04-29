@@ -85,6 +85,46 @@ func TestResolveWorkdirSubpath_EmptySubpathReturnsRoot(t *testing.T) {
 	assert.Equal(t, workdir, got)
 }
 
+// TestResolveWorkdirSubpath_RejectsAbsolutePath verifies that an absolute
+// metadata.component value fails fast rather than being silently coerced
+// into a child of workdirRoot by filepath.Join (metadata.component is
+// contractually a relative subpath inside the provisioned workdir).
+func TestResolveWorkdirSubpath_RejectsAbsolutePath(t *testing.T) {
+	workdir := t.TempDir()
+
+	absSubpath := filepath.Join(workdir, "modules", "iam-policy")
+	require.True(t, filepath.IsAbs(absSubpath), "test prerequisite: subpath must be absolute")
+
+	_, err := resolveWorkdirSubpath(absSubpath, workdir)
+
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, errUtils.ErrWorkdirProvision),
+		"absolute subpath must wrap ErrWorkdirProvision")
+	assert.Contains(t, err.Error(), "must be relative",
+		"error message must explain the contract violation")
+}
+
+// TestResolveWorkdirSubpath_RejectsAbsolutePathOutsideWorkdir is the
+// adversarial counterpart: an absolute path pointing outside the workdir
+// must also be rejected (not silently joined into a child of workdirRoot).
+func TestResolveWorkdirSubpath_RejectsAbsolutePathOutsideWorkdir(t *testing.T) {
+	workdir := t.TempDir()
+
+	// Use a path guaranteed to be absolute on both Unix and Windows.
+	var absOutside string
+	if runtime.GOOS == "windows" {
+		absOutside = `C:\Windows\System32`
+	} else {
+		absOutside = "/etc/passwd"
+	}
+
+	_, err := resolveWorkdirSubpath(absOutside, workdir)
+
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, errUtils.ErrWorkdirProvision),
+		"absolute subpath outside workdir must wrap ErrWorkdirProvision")
+}
+
 func TestResolveWorkdirSubpath_RegularFileAtCandidate(t *testing.T) {
 	workdir := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(workdir, "exports"), []byte("not a dir"), 0o644))

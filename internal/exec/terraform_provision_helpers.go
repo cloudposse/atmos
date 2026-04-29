@@ -52,6 +52,14 @@ func resolveWorkdirSubpath(metadataComponentSubpath, workdirRoot string) (string
 	if metadataComponentSubpath == "" {
 		return workdirRoot, nil
 	}
+	// metadata.component must be a relative subpath inside the provisioned
+	// workdir. Reject absolute paths up front: filepath.Join cleans them into
+	// a child of workdirRoot on Unix (so the join is non-escaping) and handles
+	// drive letters specially on Windows, but in either case an absolute value
+	// is nonsensical input and silently coercing it would mask author error.
+	if filepath.IsAbs(metadataComponentSubpath) {
+		return "", errors.Join(errUtils.ErrWorkdirProvision, fmt.Errorf("workdir component subpath %q must be relative", metadataComponentSubpath))
+	}
 	candidate := filepath.Join(workdirRoot, metadataComponentSubpath)
 	fi, err := os.Stat(candidate)
 	if err == nil {
