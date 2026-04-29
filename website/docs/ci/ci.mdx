@@ -245,7 +245,7 @@ jobs:
 
 The shape of the story: **define a CI profile in `atmos.yaml`, point the workflow at it, done.** Atmos exchanges the GitHub OIDC token for cloud credentials transparently — there is no `atmos auth login` step in CI.
 
-**1. Define a `github` profile.** The profile name is arbitrary; we use `github` to match the [example repos](https://github.com/cloudposse-examples/atmos-native-ci). It holds the `github/oidc` provider plus the identity CI should use:
+**1. Define a `github` [profile](/cli/configuration/profiles).** The profile name is arbitrary; we use `github` to match the [example repos](https://github.com/cloudposse-examples/atmos-native-ci). It holds the `github/oidc` provider plus the identity CI should use:
 
 <File title="atmos.yaml">
 ```yaml
