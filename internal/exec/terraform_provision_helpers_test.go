@@ -29,28 +29,6 @@ var _ = schema.AtmosConfiguration{
 	BasePath: "",
 }
 
-// applyMetadataComponentSubpath ─────────────────────────────────────────────.
-
-func TestApplyMetadataComponentSubpath_JoinsSubpath(t *testing.T) {
-	workdir := t.TempDir()
-	result := applyMetadataComponentSubpath("modules/iam-policy", workdir)
-	assert.Equal(t, filepath.Join(workdir, "modules", "iam-policy"), result)
-}
-
-func TestApplyMetadataComponentSubpath_EmptySubpathReturnsRoot(t *testing.T) {
-	workdir := t.TempDir()
-	assert.Equal(t, workdir, applyMetadataComponentSubpath("", workdir))
-}
-
-// TestApplyMetadataComponentSubpath_AllowsParentEscape codifies the design
-// decision that ".." is permitted (issue #2364): some upstream Terraform
-// modules reference shared files via relative parent paths.
-func TestApplyMetadataComponentSubpath_AllowsParentEscape(t *testing.T) {
-	workdir := t.TempDir()
-	result := applyMetadataComponentSubpath("../sibling-module", workdir)
-	assert.Equal(t, filepath.Join(filepath.Dir(workdir), "sibling-module"), result)
-}
-
 // resolveWorkdirSubpath ─────────────────────────────────────────────────────.
 
 func TestResolveWorkdirSubpath_JoinedPathExists(t *testing.T) {
@@ -83,6 +61,26 @@ func TestResolveWorkdirSubpath_EmptySubpathReturnsRoot(t *testing.T) {
 	got, err := resolveWorkdirSubpath("", workdir)
 	require.NoError(t, err)
 	assert.Equal(t, workdir, got)
+}
+
+// TestResolveWorkdirSubpath_AllowsParentSegment codifies the design decision
+// that ".." segments are permitted in metadata.component (issue #2364):
+// some upstream Terraform modules reference shared files via relative parent
+// paths, and metadata.component is YAML-author controlled (same trust class
+// as !exec / !template / !terraform.state). The joined sibling directory
+// must exist on disk for the resolver to use it.
+func TestResolveWorkdirSubpath_AllowsParentSegment(t *testing.T) {
+	parent := t.TempDir()
+	workdir := filepath.Join(parent, "primary-module")
+	require.NoError(t, os.Mkdir(workdir, 0o755))
+	sibling := filepath.Join(parent, "sibling-module")
+	require.NoError(t, os.Mkdir(sibling, 0o755))
+
+	got, err := resolveWorkdirSubpath("../sibling-module", workdir)
+
+	require.NoError(t, err)
+	assert.Equal(t, sibling, got,
+		"\"..\" segment must resolve to the sibling directory when it exists on disk")
 }
 
 // TestResolveWorkdirSubpath_RejectsAbsolutePath verifies that an absolute

@@ -22,20 +22,6 @@ import (
 // (strings, bools, maps) cannot impersonate it via a type assertion.
 type workdirSubpathAppliedMarker struct{}
 
-// applyMetadataComponentSubpath joins metadata.component onto a JIT workdir
-// path so the Terraform module subdirectory inside a cloned repo (e.g.
-// metadata.component: modules/iam-policy) becomes the working directory.
-// ".." is intentionally permitted: upstream modules often reference shared
-// files via relative parent paths, and metadata.component is YAML-author
-// controlled (same trust class as !exec / !template / !terraform.state).
-// See issue #2364.
-func applyMetadataComponentSubpath(metadataComponentSubpath, workdirPath string) string {
-	if metadataComponentSubpath == "" {
-		return workdirPath
-	}
-	return filepath.Join(workdirPath, metadataComponentSubpath)
-}
-
 // resolveWorkdirSubpath returns workdirRoot joined with metadata.component if
 // the joined directory exists on disk, otherwise workdirRoot unchanged.
 //
@@ -48,6 +34,12 @@ func applyMetadataComponentSubpath(metadataComponentSubpath, workdirPath string)
 // existence: after the source provisioner has cloned, either the joined
 // directory exists (case 1) or it doesn't (case 2). Stat failures other than
 // ENOENT surface as errors so corrupt state isn't masked.
+//
+// ".." segments in the subpath are intentionally permitted: upstream modules
+// often reference shared files via relative parent paths, and
+// metadata.component is YAML-author controlled (same trust class as
+// !exec / !template / !terraform.state). Absolute subpaths are rejected
+// because they violate the documented contract.
 func resolveWorkdirSubpath(metadataComponentSubpath, workdirRoot string) (string, error) {
 	if metadataComponentSubpath == "" {
 		return workdirRoot, nil
