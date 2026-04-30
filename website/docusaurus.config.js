@@ -89,6 +89,10 @@ const config = {
                         from: '/core-concepts/components/terraform/remote-state',
                         to: '/components/terraform/remote-state'
                     },
+                    {
+                        from: '/components/terraform/backend-provisioning',
+                        to: '/stacks/components/provision/backend'
+                    },
                     // Component Catalog redirects for reorganization
                     {
                         from: '/design-patterns/component-catalog-with-mixins',
@@ -329,7 +333,7 @@ const config = {
                     // Broken URLs referenced by LLMs — screenshot-confirmed 404s
                     {from: '/core-concepts/components/vendoring', to: '/vendor/'},
                     {from: '/core-concepts/vendor/component-management', to: '/vendor/vendor-config'},
-                    {from: '/core-concepts/stacks/provisioning', to: '/components/terraform/backend-provisioning'},
+                    {from: '/core-concepts/stacks/provisioning', to: '/stacks/components/provision/backend'},
                     {from: '/reference/schemas', to: '/cli/configuration/schemas'},
                     // Projects section moved to /projects/ and /cli/configuration/
                     {from: '/core-concepts/projects', to: '/projects/layout'},
