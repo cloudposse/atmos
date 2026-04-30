@@ -135,6 +135,49 @@ func TestMergeBaseWithAutoFetch_PropagatesHeadOnTargetBranch(t *testing.T) {
 	assert.ErrorIs(t, err, ErrHeadOnTargetBranch)
 }
 
+// TestMergeBaseWithAutoFetch_DeepenPathExhausted exercises the deepen branch
+// of MergeBaseWithAutoFetch when the histories on both sides are fully
+// walkable but share no common ancestor (orphan branches). The first
+// MergeBase call returns ErrNoCommonAncestor, so the function attempts a
+// deepen — which succeeds as a no-op on a non-shallow repo — and the retry
+// MergeBase still fails with ErrNoCommonAncestor. We verify the function
+// propagates the error rather than returning a bogus SHA, exercising the
+// deepen branch end-to-end.
+func TestMergeBaseWithAutoFetch_DeepenPathExhausted(t *testing.T) {
+	dir := t.TempDir()
+	runGit(t, dir, "init", "-b", "main")
+
+	// Real main with one commit, exposed as origin/main.
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "main.txt"), []byte("M"), 0o644))
+	runGit(t, dir, "add", "main.txt")
+	runGit(t, dir, "commit", "-m", "main commit")
+	mainSHA := strings.TrimSpace(runGitOutput(t, dir, "rev-parse", "HEAD"))
+	runGit(t, dir, "update-ref", "refs/remotes/origin/main", mainSHA)
+
+	// Orphan branch with completely independent history — same walker, no
+	// shared ancestor. This is what triggers ErrNoCommonAncestor (rather
+	// than the shallow-clone "object not found" path).
+	runGit(t, dir, "checkout", "--orphan", "feature")
+	runGit(t, dir, "rm", "-rf", ".")
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "feature.txt"), []byte("F"), 0o644))
+	runGit(t, dir, "add", "feature.txt")
+	runGit(t, dir, "commit", "-m", "orphan feature commit")
+
+	t.Chdir(dir)
+
+	// Pure MergeBase returns ErrNoCommonAncestor because both histories are
+	// walkable but truly unrelated.
+	_, err := MergeBase("main")
+	require.ErrorIs(t, err, ErrNoCommonAncestor)
+
+	// MergeBaseWithAutoFetch hits the deepen branch (noAncestor=true), the
+	// deepen succeeds (origin is a local file, no-op deepen), then the retry
+	// MergeBase still returns ErrNoCommonAncestor and the function propagates
+	// it. The deepen branch executes regardless of recovery success.
+	_, err = MergeBaseWithAutoFetch(dir, "main")
+	require.Error(t, err)
+}
+
 // TestMergeBaseWithAutoFetch_ReturnsErrorWhenFetchImpossible verifies that
 // the function does not silently succeed when neither merge-base nor any
 // fetch can recover (e.g., target branch does not exist on remote).

@@ -1,6 +1,7 @@
 package git
 
 import (
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -140,6 +141,36 @@ func TestDeepenFetch_NonexistentBranch(t *testing.T) {
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrDeepenOrigin)
 	assert.Contains(t, err.Error(), "origin/nonexistent-branch")
+}
+
+// TestDeepenFetch_Unshallow exercises the depth <= 0 branch of DeepenFetch,
+// which appends --unshallow instead of --deepen. We create a shallow clone
+// (depth=1), then call DeepenFetch with depth=0 to fetch the full history.
+func TestDeepenFetch_Unshallow(t *testing.T) {
+	// Origin with multiple commits on main.
+	originDir := t.TempDir()
+	runGit(t, originDir, "init", "-b", "main")
+	for i := 1; i <= 3; i++ {
+		fname := filepath.Join(originDir, fmt.Sprintf("file%d.txt", i))
+		require.NoError(t, os.WriteFile(fname, []byte("x"), 0o644))
+		runGit(t, originDir, "add", fmt.Sprintf("file%d.txt", i))
+		runGit(t, originDir, "commit", "-m", fmt.Sprintf("commit %d", i))
+	}
+
+	// Shallow clone (depth=1) so the local repo only has the most recent commit.
+	cloneDir := t.TempDir()
+	runGit(t, cloneDir, "clone", "--depth=1", "file://"+originDir, ".")
+
+	// Confirm the clone is shallow.
+	require.FileExists(t, filepath.Join(cloneDir, ".git", "shallow"))
+
+	// Unshallow via DeepenFetch with depth <= 0.
+	err := DeepenFetch(cloneDir, "main", 0)
+	require.NoError(t, err)
+
+	// After unshallow, the .git/shallow marker should be gone.
+	_, statErr := os.Stat(filepath.Join(cloneDir, ".git", "shallow"))
+	assert.True(t, os.IsNotExist(statErr), "expected .git/shallow to be removed after --unshallow, got: %v", statErr)
 }
 
 // runGit runs a git command in the given directory, failing the test on error.
