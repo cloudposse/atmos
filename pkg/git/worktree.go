@@ -1,6 +1,7 @@
 package git
 
 import (
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -52,6 +53,36 @@ func CreateWorktree(repoDir, targetCommit string) (string, error) {
 	log.Debug("Created git worktree", "dir", worktreePath, "target", targetCommit)
 
 	return worktreePath, nil
+}
+
+// CreateWorktreeWithFetchRecovery creates a worktree at targetCommit, with a
+// one-shot self-heal: if the initial CreateWorktree call fails AND a non-empty
+// targetBranch is provided, the function performs a targeted
+// `git fetch origin <targetBranch>` and retries.
+//
+// This is the common shallow-clone CI scenario: actions/checkout@v4 with the
+// default fetch-depth=1 only pulls the PR head, so a base SHA resolved from
+// the GitHub event payload (event.pull_request.base.sha) often is not in the
+// local object DB. A targeted fetch of the target branch is enough to make
+// the SHA available without paying for a full unshallow.
+//
+// On final failure, the original CreateWorktree error is preserved (joined
+// with the fetch error if the fetch also failed) so the caller can still
+// surface its hints to the user.
+func CreateWorktreeWithFetchRecovery(repoDir, targetCommit, targetBranch string) (string, error) {
+	defer perf.Track(nil, "git.CreateWorktreeWithFetchRecovery")()
+
+	worktreePath, err := CreateWorktree(repoDir, targetCommit)
+	if err == nil || targetBranch == "" {
+		return worktreePath, err
+	}
+
+	log.Info("Target commit not available locally, fetching base branch", "branch", targetBranch)
+	if fetchErr := FetchRef(repoDir, targetBranch); fetchErr != nil {
+		log.Debug("Auto-fetch failed during worktree creation", "branch", targetBranch, "error", fetchErr)
+		return "", errors.Join(err, fetchErr)
+	}
+	return CreateWorktree(repoDir, targetCommit)
 }
 
 // RemoveWorktree removes a git worktree using `git worktree remove`.

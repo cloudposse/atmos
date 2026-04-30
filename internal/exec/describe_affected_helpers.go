@@ -232,21 +232,10 @@ func ExecuteDescribeAffectedWithTargetRefCheckout(
 		log.Debug("Creating worktree at", refString, ref)
 	}
 
-	// Create an isolated worktree for the target ref. If the target commit
-	// isn't in the local object DB and we know the target branch (from CI
-	// auto-detection), do a targeted fetch and retry once. This recovers
-	// from the common shallow-clone case where the resolved base SHA was
-	// pulled from the event payload but never fetched locally.
-	worktreePath, err := g.CreateWorktree(localRepoInfo.LocalWorktreePath, targetCommit)
-	if err != nil && targetBranch != "" {
-		log.Info("Target commit not available locally, fetching base branch", "branch", targetBranch)
-		if fetchErr := g.FetchRef(localRepoInfo.LocalWorktreePath, targetBranch); fetchErr == nil {
-			worktreePath, err = g.CreateWorktree(localRepoInfo.LocalWorktreePath, targetCommit)
-		} else {
-			log.Debug("Auto-fetch failed during worktree creation", "branch", targetBranch, "error", fetchErr)
-			err = errors.Join(err, fetchErr)
-		}
-	}
+	// Create an isolated worktree for the target ref, with a one-shot
+	// self-heal that fetches the target branch if the commit is missing
+	// from the local object DB (common in CI shallow checkouts).
+	worktreePath, err := g.CreateWorktreeWithFetchRecovery(localRepoInfo.LocalWorktreePath, targetCommit, targetBranch)
 	if err != nil {
 		return nil, nil, nil, "", err
 	}

@@ -1,6 +1,7 @@
 package git
 
 import (
+	"net/url"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -287,4 +288,101 @@ func TestWorktreeSubdirConstant(t *testing.T) {
 	t.Run("worktreeSubdir has expected value", func(t *testing.T) {
 		assert.Equal(t, "worktree", worktreeSubdir)
 	})
+}
+
+// TestCreateWorktreeWithFetchRecovery_SuccessNoFetchNeeded verifies that
+// when CreateWorktree succeeds on the first attempt, the helper returns
+// without performing any fetch — even if a targetBranch is supplied.
+func TestCreateWorktreeWithFetchRecovery_SuccessNoFetchNeeded(t *testing.T) {
+	tests.RequireGitCommitConfig(t)
+
+	repoDir := t.TempDir()
+	runGit(t, repoDir, "init", "-b", "main")
+	require.NoError(t, os.WriteFile(filepath.Join(repoDir, "f.txt"), []byte("x"), 0o644))
+	runGit(t, repoDir, "add", "f.txt")
+	runGit(t, repoDir, "commit", "-m", "initial")
+
+	commitSHA := strings.TrimSpace(runGitOutput(t, repoDir, "rev-parse", "HEAD"))
+
+	// Pass a non-empty targetBranch — but since the first CreateWorktree
+	// call succeeds, the fetch path must not run.
+	worktreePath, err := CreateWorktreeWithFetchRecovery(repoDir, commitSHA, "main")
+	require.NoError(t, err)
+	require.NotEmpty(t, worktreePath)
+
+	// Cleanup.
+	parentDir := GetWorktreeParentDir(worktreePath)
+	RemoveWorktree(repoDir, worktreePath)
+	require.NoError(t, os.RemoveAll(parentDir))
+}
+
+// TestCreateWorktreeWithFetchRecovery_SuccessAfterFetch is the customer-bug
+// scenario: the worktree's target SHA exists on origin's <targetBranch>
+// but the clone hasn't fetched it yet (e.g., the PR's base SHA from the
+// event payload is newer than the local origin/<target> tracking ref).
+// The helper must fetch origin/<targetBranch> and retry, succeeding on
+// the second attempt.
+func TestCreateWorktreeWithFetchRecovery_SuccessAfterFetch(t *testing.T) {
+	tests.RequireGitCommitConfig(t)
+
+	originDir := t.TempDir()
+	runGit(t, originDir, "init", "-b", "main")
+	require.NoError(t, os.WriteFile(filepath.Join(originDir, "f1.txt"), []byte("x"), 0o644))
+	runGit(t, originDir, "add", "f1.txt")
+	runGit(t, originDir, "commit", "-m", "main commit 1")
+
+	// Clone origin BEFORE the second commit lands. The clone tracks
+	// commit 1 as origin/main; commit 2 will be added after the clone
+	// and is what we'll try to check out as the worktree target.
+	cloneDir := t.TempDir()
+	originURL := (&url.URL{Scheme: "file", Path: filepath.ToSlash(originDir)}).String()
+	runGit(t, cloneDir, "clone", originURL, ".")
+
+	// New commit on origin/main — this SHA exists on the remote but is
+	// NOT in the clone's local object DB until we fetch.
+	require.NoError(t, os.WriteFile(filepath.Join(originDir, "f2.txt"), []byte("y"), 0o644))
+	runGit(t, originDir, "add", "f2.txt")
+	runGit(t, originDir, "commit", "-m", "main commit 2 (post-clone)")
+	missingSHA := strings.TrimSpace(runGitOutput(t, originDir, "rev-parse", "HEAD"))
+
+	// First attempt without a targetBranch: helper has no recovery option
+	// and must propagate the worktree-creation error.
+	_, err := CreateWorktreeWithFetchRecovery(cloneDir, missingSHA, "")
+	require.Error(t, err, "expected error when commit is missing and no targetBranch supplied")
+
+	// Second attempt with targetBranch: the helper fetches origin/main
+	// (pulls in missingSHA) and the retry succeeds.
+	worktreePath, err := CreateWorktreeWithFetchRecovery(cloneDir, missingSHA, "main")
+	require.NoError(t, err, "auto-fetch should pull in missingSHA and the retry should succeed")
+	require.NotEmpty(t, worktreePath)
+
+	// Cleanup.
+	parentDir := GetWorktreeParentDir(worktreePath)
+	RemoveWorktree(cloneDir, worktreePath)
+	require.NoError(t, os.RemoveAll(parentDir))
+}
+
+// TestCreateWorktreeWithFetchRecovery_FailsWhenFetchFails verifies that
+// if the helper attempts a fetch and the fetch itself fails (e.g., the
+// targetBranch does not exist on the remote), both the original
+// CreateWorktree error and the fetch error are joined and returned.
+func TestCreateWorktreeWithFetchRecovery_FailsWhenFetchFails(t *testing.T) {
+	tests.RequireGitCommitConfig(t)
+
+	originDir := t.TempDir()
+	runGit(t, originDir, "init", "-b", "main")
+	require.NoError(t, os.WriteFile(filepath.Join(originDir, "f.txt"), []byte("x"), 0o644))
+	runGit(t, originDir, "add", "f.txt")
+	runGit(t, originDir, "commit", "-m", "initial")
+
+	cloneDir := t.TempDir()
+	runGit(t, cloneDir, "clone", originDir, ".")
+
+	// Fake SHA that doesn't exist anywhere; targetBranch also doesn't exist.
+	bogusSHA := "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef"
+	_, err := CreateWorktreeWithFetchRecovery(cloneDir, bogusSHA, "no-such-branch-on-origin")
+	require.Error(t, err)
+	// Both the worktree creation and the fetch failures should be in the
+	// joined error chain — verify the fetch sentinel is reachable.
+	assert.ErrorIs(t, err, errUtils.ErrFetchOrigin)
 }
