@@ -38,19 +38,15 @@ var ErrNoParentCommit = fmt.Errorf("HEAD has no parents (initial commit)")
 // ResolveBase returns the base commit for affected detection in GitHub Actions.
 // It reads GitHub Actions environment variables and event payloads to determine
 // the appropriate base commit for the current event type.
+//
+// Callers running in container jobs should ensure git's safe.directory is
+// configured for $GITHUB_WORKSPACE *before* invoking ResolveBase — without
+// it, the merge-base auto-fetch and HEAD~1 lookups will fail with
+// "dubious ownership in repository". The cmd-layer wrapper
+// `internal/exec.resolveBaseFromCI` does this via
+// `git.EnsureGitSafeDirectory()` and is gated by `ci.enabled`.
 func (p *Provider) ResolveBase() (*provider.BaseResolution, error) {
 	defer perf.Track(nil, "github.Provider.ResolveBase")()
-
-	// Trust the GitHub Actions workspace before any git command. In container
-	// jobs the repo owner (the runner user) often differs from the running
-	// user, and git refuses to operate on the repo until the path is added
-	// to safe.directory. EnsureGitSafeDirectory is a no-op outside GitHub
-	// Actions, so this is safe to call unconditionally.
-	if err := git.EnsureGitSafeDirectory(); err != nil {
-		// Non-fatal: subsequent git commands will surface a clearer error
-		// if this actually matters. We log so the cause is visible.
-		log.Warn("Failed to configure git safe.directory for GitHub Actions workspace", "error", err)
-	}
 
 	eventName := os.Getenv("GITHUB_EVENT_NAME")
 
