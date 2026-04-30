@@ -122,6 +122,26 @@ func TestDeepenFetch_InvalidBranchName(t *testing.T) {
 	assert.ErrorIs(t, err, ErrInvalidBranchName)
 }
 
+func TestDeepenFetch_NonexistentBranch(t *testing.T) {
+	// Create a repo with an initial commit to act as origin.
+	originDir := t.TempDir()
+	runGit(t, originDir, "init")
+	testFile := filepath.Join(originDir, "file.txt")
+	require.NoError(t, os.WriteFile(testFile, []byte("content"), 0o644))
+	runGit(t, originDir, "add", "file.txt")
+	runGit(t, originDir, "commit", "-m", "initial")
+
+	// Clone it.
+	workDir := t.TempDir()
+	runGit(t, workDir, "clone", originDir, ".")
+
+	// Deepen-fetch a branch that doesn't exist on origin.
+	err := DeepenFetch(workDir, "nonexistent-branch", 50)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrDeepenOrigin)
+	assert.Contains(t, err.Error(), "origin/nonexistent-branch")
+}
+
 // runGit runs a git command in the given directory, failing the test on error.
 func runGit(t *testing.T, dir string, args ...string) {
 	t.Helper()
