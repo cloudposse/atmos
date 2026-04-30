@@ -21,7 +21,7 @@ The `settings.provision` block sets global defaults for component provisioning. 
 - Set `provision.workdir.enabled` once at the global level instead of per-component
 - Configure a default TTL for `atmos terraform workdir clean --expired`
 - Toolchain and component overrides still take precedence
-- For per-component configuration, see the [component `provision:` block](/stacks/components/provision)
+- For per-component configuration, see [Workdir Provisioning](/stacks/components/provision/workdir)
 </KeyPoints>
 
 ## Configuration
@@ -69,12 +69,13 @@ Provisioning settings are deep-merged across three levels (lower overrides highe
 3. Component — `components.<type>.<name>.provision`
 
 <Note>
-There is no global `settings.provision.backend` today. Backend provisioning is opted in per component (or per toolchain) because it has stronger side effects (creating cloud resources). See the [component `provision:` block](/stacks/components/provision) for backend provisioning details.
+There is no global `settings.provision.backend` today. Backend provisioning is opted in per component (or per toolchain) because it has stronger side effects (creating cloud resources). See [Backend Provisioning](/stacks/components/provision/backend) for backend provisioning details.
 </Note>
 
 ## See Also
 
-- [Component `provision:` block](/stacks/components/provision) — Per-component configuration and full conceptual treatment
+- [Workdir Provisioning](/stacks/components/provision/workdir) — Per-component workdir configuration and conceptual treatment
+- [Backend Provisioning](/stacks/components/provision/backend) — Per-component backend provisioning
 - [Backend Provisioning](/components/terraform/backend-provisioning) — Automatic Terraform state backend creation
 - [`atmos terraform workdir`](/cli/commands/terraform/workdir) — CLI commands for managing workdirs
 - [Settings](/cli/configuration/settings) — Overview of all settings

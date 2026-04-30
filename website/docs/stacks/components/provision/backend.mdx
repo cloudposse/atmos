@@ -1,0 +1,106 @@
+---
+title: Backend Provisioning
+sidebar_position: 2
+sidebar_label: Backend
+sidebar_class_name: command
+description: Stack configuration for automatic Terraform state backend provisioning.
+slug: /stacks/components/provision/backend
+id: component-provision-backend
+---
+import File from '@site/src/components/File'
+import Intro from '@site/src/components/Intro'
+import Experimental from '@site/src/components/Experimental'
+import Note from '@site/src/components/Note'
+
+<Intro>
+`provision.backend` automatically creates the Terraform state backend (S3 bucket, lockfile resource) before the first run of a component. The `backend:` block describes *where* state lives; `provision.backend.enabled` tells Atmos to *create that location* if it doesn't exist. Use this to eliminate the chicken-and-egg bootstrap problem of needing a state backend before you can deploy the component that creates it.
+</Intro>
+
+<Experimental />
+
+## Schema
+
+<dl>
+  <dt>`provision.backend.enabled`</dt>
+  <dd>
+    Automatically provision the Terraform state backend before the first run.
+    Currently supports S3 backends with optional native S3 locking (Terraform 1.10+).
+
+    - **Type:** `boolean`
+    - **Default:** `false`
+    - **Applies to:** Terraform components only
+  </dd>
+</dl>
+
+## Configuration
+
+Enable automatic backend creation alongside the existing `backend:` configuration.
+
+<File title="stacks/catalog/vpc.yaml">
+```yaml
+components:
+  terraform:
+    vpc:
+      backend_type: s3
+      backend:
+        bucket: acme-ue1-dev-tfstate
+        key: vpc/terraform.tfstate
+        region: us-east-1
+        use_lockfile: true  # Native S3 locking (Terraform 1.10+)
+
+      provision:
+        backend:
+          enabled: true  # Auto-create the bucket if missing
+```
+</File>
+
+When enabled, before running any Terraform command Atmos will:
+
+1. Check whether the configured backend already exists.
+2. If it doesn't, provision it using secure defaults (versioning, encryption, access blocking).
+3. Continue with `terraform init` and execution.
+
+## Toolchain-Level Defaults
+
+Apply backend provisioning to every Terraform component in a stack by setting it under the toolchain key:
+
+<File title="stacks/orgs/acme/plat/dev/_defaults.yaml">
+```yaml
+terraform:
+  provision:
+    backend:
+      enabled: true   # Every Terraform component in this stack gets backend provisioning
+```
+</File>
+
+Toolchain-level defaults flow down to every Terraform component in the stack and can be overridden per component.
+
+## Component-Level Overrides
+
+Opt a single component out of a toolchain default by setting `enabled: false`:
+
+<File title="stacks/orgs/acme/plat/dev/us-east-1.yaml">
+```yaml
+components:
+  terraform:
+    legacy-vpc:
+      provision:
+        backend:
+          enabled: false   # Use a manually-bootstrapped backend
+```
+</File>
+
+## Global Defaults
+
+There is no `settings.provision.backend` in `atmos.yaml` today. Backend provisioning is opted in per component or per toolchain because it has stronger side effects (creating cloud resources). For workdir defaults, see [Settings: Provision Defaults](/cli/configuration/settings/provision).
+
+## Conceptual Deep Dive
+
+For the full conceptual treatment — what gets provisioned, secure defaults, importing existing backends, IAM requirements, and troubleshooting — see [Automatic Backend Provisioning](/components/terraform/backend-provisioning).
+
+## Related
+
+- [Automatic Backend Provisioning](/components/terraform/backend-provisioning) — Conceptual deep dive
+- [Terraform Backend Configuration](/stacks/components/terraform/backend) — The separate `backend:` block describing where state lives
+- [Workdir Provisioning](/stacks/components/provision/workdir) — The other half of the `provision:` block
+- [`atmos terraform backend`](/cli/commands/terraform/terraform-backend) — CLI commands for backend management
