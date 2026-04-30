@@ -146,8 +146,8 @@ Push events are rejected when `--upload` is set, since Atmos Pro only processes 
 
 ### Validation
 
-- PR open/sync: merge-base resolves to the fork-point SHA; falls back to `refs/remotes/origin/main` in shallow checkout.
-- PR closed/merged: merge-base resolves to the fork-point SHA; falls back to HEAD~1, then `GITHUB_BASE_REF`.
+- PR open/sync: `MergeBaseWithAutoFetch(HEAD, origin/<target>)` resolves to the fork-point SHA (self-healing fetch on shallow clones); falls back to `event.pull_request.base.sha`, then `refs/remotes/origin/<target>` ref (warn).
+- PR closed/merged: `MergeBaseWithAutoFetch(HEAD, origin/<target>)` resolves to the fork-point SHA; falls back to `HEAD~1`, then `event.pull_request.base.sha`, then `refs/remotes/origin/<target>` ref (warn).
 - Push: resolves to `before` SHA from event payload.
 - Force-push: falls back to `HEAD~1` when `forced=true`.
 - Missing `$GITHUB_EVENT_PATH`: returns error (file should always exist in GitHub Actions).

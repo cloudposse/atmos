@@ -53,7 +53,7 @@ in `internal/exec/describe_affected_helpers.go`,
 the **current tip** of the target branch and ran a tree-to-tree diff
 against the PR head:
 
-```
+```text
 Latest main:    A — B — C — D — E      (origin/main HEAD)
                       \
 PR branch:             F — G            (PR HEAD; fork point is B)

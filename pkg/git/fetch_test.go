@@ -9,6 +9,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	errUtils "github.com/cloudposse/atmos/errors"
 )
 
 func TestFetchRef_InvalidBranchName(t *testing.T) {
@@ -110,7 +112,8 @@ func TestFetchRef_NonexistentBranch(t *testing.T) {
 	// Fetch a branch that doesn't exist.
 	err := FetchRef(workDir, "nonexistent-branch")
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "fetching origin/nonexistent-branch")
+	assert.ErrorIs(t, err, errUtils.ErrFetchOrigin)
+	assert.Contains(t, err.Error(), "origin/nonexistent-branch")
 }
 
 func TestDeepenFetch_InvalidBranchName(t *testing.T) {

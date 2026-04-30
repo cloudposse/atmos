@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os/exec"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
@@ -46,7 +47,7 @@ func FetchRef(repoDir, branch string) error {
 	cmd.Dir = repoDir
 	output, err := cmd.CombinedOutput()
 	if err != nil {
-		return fmt.Errorf("fetching origin/%s: %w\n%s", branch, err, string(output))
+		return fmt.Errorf("%w: origin/%s: %w\n%s", errUtils.ErrFetchOrigin, branch, err, string(output))
 	}
 
 	log.Debug("Fetched remote branch", "branch", branch)
@@ -81,7 +82,7 @@ func DeepenFetch(repoDir, branch string, depth int) error {
 	cmd.Dir = repoDir
 	output, err := cmd.CombinedOutput()
 	if err != nil {
-		return fmt.Errorf("deepening origin/%s: %w\n%s", branch, err, string(output))
+		return fmt.Errorf("%w: origin/%s: %w\n%s", errUtils.ErrDeepenOrigin, branch, err, string(output))
 	}
 
 	log.Debug("Deepened remote branch", "branch", branch, "depth", depth)
