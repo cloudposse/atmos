@@ -125,11 +125,14 @@ func TestResolveAWSAuthContext_PointerMismatch(t *testing.T) {
 
 	// managerStackInfo simulates the auth manager's own internal allocation, which is
 	// what PostAuthenticate populates after a successful Authenticate call.
+	expectedCredsFile := filepath.Join("tmp", "aws-creds")
+	expectedConfigFile := filepath.Join("tmp", "aws-config")
+
 	managerStackInfo := &schema.ConfigAndStacksInfo{
 		AuthContext: &schema.AuthContext{
 			AWS: &schema.AWSAuthContext{
-				CredentialsFile: "/tmp/aws-creds",
-				ConfigFile:      "/tmp/aws-config",
+				CredentialsFile: expectedCredsFile,
+				ConfigFile:      expectedConfigFile,
 				Profile:         "dev-admin",
 				Region:          "us-west-2",
 			},
@@ -149,7 +152,7 @@ func TestResolveAWSAuthContext_PointerMismatch(t *testing.T) {
 	authConfig, err := resolver.ResolveAWSAuthContext(context.Background(), "dev-admin")
 	assert.NoError(t, err)
 	assert.NotNil(t, authConfig)
-	assert.Equal(t, "/tmp/aws-creds", authConfig.CredentialsFile)
+	assert.Equal(t, expectedCredsFile, authConfig.CredentialsFile)
 	assert.Equal(t, "dev-admin", authConfig.Profile)
 
 	// Confirm the resolver's own stackInfo was never populated (proving the fix reads from the manager).
