@@ -2,6 +2,7 @@ package git
 
 import (
 	"fmt"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -158,8 +159,11 @@ func TestDeepenFetch_Unshallow(t *testing.T) {
 	}
 
 	// Shallow clone (depth=1) so the local repo only has the most recent commit.
+	// Build the file:// URL via net/url so it's well-formed on Windows
+	// (drive-letter paths) as well as POSIX systems.
 	cloneDir := t.TempDir()
-	runGit(t, cloneDir, "clone", "--depth=1", "file://"+originDir, ".")
+	originURL := (&url.URL{Scheme: "file", Path: filepath.ToSlash(originDir)}).String()
+	runGit(t, cloneDir, "clone", "--depth=1", originURL, ".")
 
 	// Confirm the clone is shallow.
 	require.FileExists(t, filepath.Join(cloneDir, ".git", "shallow"))

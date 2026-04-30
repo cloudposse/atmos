@@ -45,11 +45,9 @@ func TestMergeBase_FindsForkPoint(t *testing.T) {
 	require.NoError(t, err)
 	commitFile(t, repo, repoDir, "feature-change.txt", "feature content", "feature commit")
 
-	// Change to the repo directory so MergeBase can find it.
-	t.Chdir(repoDir)
-
-	// MergeBase should return the fork point.
-	sha, err := MergeBase("main")
+	// MergeBase should return the fork point — using repoDir directly,
+	// without chdir, to verify the function honors its repoDir argument.
+	sha, err := MergeBase(repoDir, "main")
 	require.NoError(t, err)
 	assert.Equal(t, forkPointHash.String(), sha)
 }
@@ -61,11 +59,9 @@ func TestMergeBase_ErrorWhenTargetRefMissing(t *testing.T) {
 	repo := initTestRepo(t, repoDir)
 	commitFile(t, repo, repoDir, "initial.txt", "content", "initial commit")
 
-	t.Chdir(repoDir)
-
-	_, err := MergeBase("nonexistent-branch")
+	_, err := MergeBase(repoDir, "nonexistent-branch")
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "resolving")
+	assert.ErrorIs(t, err, plumbing.ErrReferenceNotFound)
 }
 
 // TestMergeBaseWithAutoFetch_RecoversFromMissingRef verifies that
@@ -104,11 +100,10 @@ func TestMergeBaseWithAutoFetch_RecoversFromMissingRef(t *testing.T) {
 	// did not fetch the target branch.
 	runGit(t, cloneDir, "update-ref", "-d", "refs/remotes/origin/main")
 
-	t.Chdir(cloneDir)
-
-	// Pure MergeBase fails with "ref not found".
-	_, err := MergeBase("main")
-	require.Error(t, err)
+	// Pure MergeBase fails with "ref not found" when called with the
+	// explicit repoDir (no chdir — this verifies repoDir is honored).
+	_, err := MergeBase(cloneDir, "main")
+	require.ErrorIs(t, err, plumbing.ErrReferenceNotFound)
 
 	// MergeBaseWithAutoFetch self-heals by fetching origin/main and retrying.
 	sha, err := MergeBaseWithAutoFetch(cloneDir, "main")
@@ -128,8 +123,6 @@ func TestMergeBaseWithAutoFetch_PropagatesHeadOnTargetBranch(t *testing.T) {
 	require.NoError(t, err)
 	err = repo.Storer.SetReference(plumbing.NewHashReference("refs/remotes/origin/main", head.Hash()))
 	require.NoError(t, err)
-
-	t.Chdir(repoDir)
 
 	_, err = MergeBaseWithAutoFetch(repoDir, "main")
 	assert.ErrorIs(t, err, ErrHeadOnTargetBranch)
@@ -163,11 +156,9 @@ func TestMergeBaseWithAutoFetch_DeepenPathExhausted(t *testing.T) {
 	runGit(t, dir, "add", "feature.txt")
 	runGit(t, dir, "commit", "-m", "orphan feature commit")
 
-	t.Chdir(dir)
-
 	// Pure MergeBase returns ErrNoCommonAncestor because both histories are
 	// walkable but truly unrelated.
-	_, err := MergeBase("main")
+	_, err := MergeBase(dir, "main")
 	require.ErrorIs(t, err, ErrNoCommonAncestor)
 
 	// MergeBaseWithAutoFetch hits the deepen branch (noAncestor=true), the
@@ -175,7 +166,7 @@ func TestMergeBaseWithAutoFetch_DeepenPathExhausted(t *testing.T) {
 	// MergeBase still returns ErrNoCommonAncestor and the function propagates
 	// it. The deepen branch executes regardless of recovery success.
 	_, err = MergeBaseWithAutoFetch(dir, "main")
-	require.Error(t, err)
+	require.ErrorIs(t, err, ErrNoCommonAncestor)
 }
 
 // TestMergeBaseWithAutoFetch_ReturnsErrorWhenFetchImpossible verifies that
@@ -192,11 +183,11 @@ func TestMergeBaseWithAutoFetch_ReturnsErrorWhenFetchImpossible(t *testing.T) {
 	cloneDir := t.TempDir()
 	runGit(t, cloneDir, "clone", originDir, ".")
 
-	t.Chdir(cloneDir)
-
-	// "release" branch does not exist on origin; fetch will fail.
+	// "release" branch does not exist on origin; fetch will fail and the
+	// function must propagate the original ref-not-found error so callers
+	// can fall through to their own fallback chain.
 	_, err := MergeBaseWithAutoFetch(cloneDir, "release")
-	assert.Error(t, err)
+	assert.ErrorIs(t, err, plumbing.ErrReferenceNotFound)
 }
 
 // runGitOutput runs a git command and returns its stdout as a string.
@@ -228,9 +219,7 @@ func TestMergeBase_ErrorWhenHeadOnTargetBranch(t *testing.T) {
 	err = repo.Storer.SetReference(plumbing.NewHashReference("refs/remotes/origin/main", head.Hash()))
 	require.NoError(t, err)
 
-	t.Chdir(repoDir)
-
-	_, err = MergeBase("main")
+	_, err = MergeBase(repoDir, "main")
 	assert.ErrorIs(t, err, ErrHeadOnTargetBranch)
 }
 

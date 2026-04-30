@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 
+	gogit "github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
 
 	log "github.com/cloudposse/atmos/pkg/logger"
@@ -26,9 +27,14 @@ const deepenStep = 200
 // logKeyBranch is the structured-log key used for branch names in this file.
 const logKeyBranch = "branch"
 
-// MergeBase computes the common ancestor between HEAD and origin/<targetBranch>.
-// This is the gold standard for determining the fork point of a PR branch,
-// regardless of what commit is checked out or which merge strategy was used.
+// MergeBase computes the common ancestor between HEAD and origin/<targetBranch>
+// inside the repository at repoDir. This is the gold standard for determining
+// the fork point of a PR branch, regardless of what commit is checked out or
+// which merge strategy was used.
+//
+// The repoDir argument is a path inside the target repository (the .git
+// directory is auto-detected upward from this path). Use "." for the
+// current working directory.
 //
 // Returns an error if:
 //   - the local repo cannot be opened
@@ -40,8 +46,11 @@ const logKeyBranch = "branch"
 // database. Callers running in CI shallow checkouts should prefer
 // MergeBaseWithAutoFetch, which transparently fetches the target branch
 // and deepens history when needed.
-func MergeBase(targetBranch string) (string, error) {
-	repo, err := GetLocalRepo()
+func MergeBase(repoDir, targetBranch string) (string, error) {
+	repo, err := gogit.PlainOpenWithOptions(repoDir, &gogit.PlainOpenOptions{
+		DetectDotGit:          true,
+		EnableDotGitCommonDir: true,
+	})
 	if err != nil {
 		return "", fmt.Errorf("opening local repo: %w", err)
 	}
@@ -107,7 +116,7 @@ func MergeBase(targetBranch string) (string, error) {
 func MergeBaseWithAutoFetch(repoDir, targetBranch string) (string, error) {
 	defer perf.Track(nil, "git.MergeBaseWithAutoFetch")()
 
-	sha, err := MergeBase(targetBranch)
+	sha, err := MergeBase(repoDir, targetBranch)
 	if err == nil {
 		return sha, nil
 	}
@@ -128,7 +137,7 @@ func MergeBaseWithAutoFetch(repoDir, targetBranch string) (string, error) {
 			log.Debug("merge-base auto-fetch failed", logKeyBranch, targetBranch, "error", fetchErr)
 			return "", err
 		}
-		sha, err = MergeBase(targetBranch)
+		sha, err = MergeBase(repoDir, targetBranch)
 		if err == nil {
 			return sha, nil
 		}
@@ -144,7 +153,7 @@ func MergeBaseWithAutoFetch(repoDir, targetBranch string) (string, error) {
 			log.Debug("merge-base auto-deepen failed", logKeyBranch, targetBranch, "error", deepenErr)
 			return "", err
 		}
-		sha, err = MergeBase(targetBranch)
+		sha, err = MergeBase(repoDir, targetBranch)
 		if err == nil {
 			return sha, nil
 		}
