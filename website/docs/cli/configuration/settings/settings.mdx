@@ -88,6 +88,7 @@ For each VCS provider, two pieces of configuration are involved:
 
     - **Type:** `boolean`
     - **Default:** `true`
+    - **Environment Variable:** `ATMOS_INJECT_GITHUB_TOKEN`
   </dd>
 
   <dt>`settings.atmos_github_token`</dt>
@@ -147,6 +148,7 @@ For each VCS provider, two pieces of configuration are involved:
 
     - **Type:** `boolean`
     - **Default:** `false`
+    - **Environment Variable:** `ATMOS_INJECT_GITLAB_TOKEN`
   </dd>
 
   <dt>`settings.atmos_gitlab_token`</dt>
@@ -175,6 +177,7 @@ For each VCS provider, two pieces of configuration are involved:
 
     - **Type:** `boolean`
     - **Default:** `false`
+    - **Environment Variable:** `ATMOS_INJECT_BITBUCKET_TOKEN`
   </dd>
 
   <dt>`settings.atmos_bitbucket_token`</dt>
@@ -199,7 +202,7 @@ For each VCS provider, two pieces of configuration are involved:
 
     - **Type:** `string`
     - **Default:** `x-token-auth`
-    - **Environment Variable:** `ATMOS_BITBUCKET_USERNAME`
+    - **Environment Variable:** `BITBUCKET_USERNAME`
   </dd>
 </dl>
 
@@ -228,6 +231,9 @@ For each VCS provider, two pieces of configuration are involved:
   <dt>`ATMOS_SETTINGS_LIST_MERGE_STRATEGY`</dt>
   <dd>List merge strategy: `replace`, `append`, `merge`. Maps to `settings.list_merge_strategy`.</dd>
 
+  <dt>`ATMOS_INJECT_GITHUB_TOKEN`</dt>
+  <dd>Enable or disable automatic GitHub token injection (`true`/`false`). Maps to `settings.inject_github_token`.</dd>
+
   <dt>`ATMOS_GITHUB_TOKEN`</dt>
   <dd>Atmos-specific GitHub token. Tried before `GITHUB_TOKEN`. Maps to `settings.atmos_github_token`.</dd>
 
@@ -237,11 +243,17 @@ For each VCS provider, two pieces of configuration are involved:
   <dt>`ATMOS_GITHUB_USERNAME`</dt>
   <dd>GitHub username for GHCR authentication. Maps to `settings.github_username`.</dd>
 
+  <dt>`ATMOS_INJECT_GITLAB_TOKEN`</dt>
+  <dd>Enable or disable automatic GitLab token injection (`true`/`false`). Maps to `settings.inject_gitlab_token`.</dd>
+
   <dt>`ATMOS_GITLAB_TOKEN`</dt>
   <dd>Atmos-specific GitLab token. Tried before `GITLAB_TOKEN`. Maps to `settings.atmos_gitlab_token`.</dd>
 
   <dt>`GITLAB_TOKEN`</dt>
   <dd>Standard GitLab token, used as a fallback. Maps to `settings.gitlab_token`.</dd>
+
+  <dt>`ATMOS_INJECT_BITBUCKET_TOKEN`</dt>
+  <dd>Enable or disable automatic Bitbucket token injection (`true`/`false`). Maps to `settings.inject_bitbucket_token`.</dd>
 
   <dt>`ATMOS_BITBUCKET_TOKEN`</dt>
   <dd>Atmos-specific Bitbucket token. Tried before `BITBUCKET_TOKEN`. Maps to `settings.atmos_bitbucket_token`.</dd>
@@ -249,7 +261,7 @@ For each VCS provider, two pieces of configuration are involved:
   <dt>`BITBUCKET_TOKEN`</dt>
   <dd>Standard Bitbucket token, used as a fallback. Maps to `settings.bitbucket_token`.</dd>
 
-  <dt>`ATMOS_BITBUCKET_USERNAME`</dt>
+  <dt>`BITBUCKET_USERNAME`</dt>
   <dd>Bitbucket username for authentication. Maps to `settings.bitbucket_username`.</dd>
 </dl>
 
