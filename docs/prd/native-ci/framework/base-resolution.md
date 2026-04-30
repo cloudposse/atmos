@@ -91,7 +91,11 @@ The purpose of base resolution is to answer: "what is the fork point — the com
 - **Number of commits** — single or multi-commit PRs are handled identically.
 - **Target branch movement** — if other PRs merged into the target, merge-base still finds the true fork point.
 
-**Limitation**: merge-base requires the target branch ref (`origin/<target>`) to be available locally. In shallow CI checkouts, this may not be fetched. The fallback chain handles this gracefully.
+**Shallow CI checkouts**: merge-base requires the target branch ref (`origin/<target>`) to be available locally. `actions/checkout@v4` with the default `fetch-depth: 1` does not fetch other branches. The implementation handles this transparently:
+
+- `pkg/git/merge_base.go` exposes `MergeBaseWithAutoFetch`, which detects a missing `origin/<target>` ref (or an out-of-reach common ancestor) and runs a targeted `git fetch origin <target>` (and, if needed, one `--deepen=200` fetch) before retrying.
+- The CI provider calls the auto-fetch variant, so shallow checkouts are recovered without any change to the user's workflow.
+- Only when even the auto-fetch path fails does the fallback chain proceed to `event.pull_request.base.sha` (frozen at last PR sync, never the current tip of `<target>`).
 
 **Edge case**: if the workflow checks out the merge commit, HEAD is *on* the target branch, so `merge-base(HEAD, origin/main) == HEAD`. This is detected (merge-base == HEAD hash) and falls through to the next strategy.
 
@@ -103,9 +107,10 @@ The merge-base computation itself is provider-agnostic and lives in `pkg/git/` a
 
 Each strategy is tried in order; the first success is used:
 
-1. **`git merge-base(HEAD, origin/<target>)`** — gold standard. Target branch extracted from `event.pull_request.base.ref` (payload) or `GITHUB_BASE_REF` (env var). Skipped if merge-base equals HEAD (merge commit checkout).
-2. **`HEAD~1`** — fallback for closed/merged PRs when merge-base fails (e.g., shallow checkout without target branch). Correct when the merge commit is checked out with merge/squash strategy.
-3. **`GITHUB_BASE_REF` ref** — last resort. Returns the ref directly for downstream tree-to-tree comparison.
+1. **`git merge-base(HEAD, origin/<target>)`** via `MergeBaseWithAutoFetch` — gold standard. Target branch extracted from `event.pull_request.base.ref` (payload) or `GITHUB_BASE_REF` (env var). Self-heals from shallow checkouts by fetching the target branch (and deepening once) before retrying. Skipped if merge-base equals HEAD (merge commit checkout).
+2. **`HEAD~1`** — fallback for closed/merged PRs when merge-base fails. Correct when the merge commit is checked out with merge/squash strategy.
+3. **`event.pull_request.base.sha`** — payload SHA fallback. Frozen at the last PR sync event, so it is never the current tip of `<target>`. Slightly stale on out-of-date PRs but cannot produce the "every component is affected" false positives that returning a *ref* to the current target tip does.
+4. **`GITHUB_BASE_REF` ref** — last resort, only reached when the payload has no `base.sha` (hand-crafted or legacy events). Logs `Warn` because this path compares against the current tip and may include unrelated commits from `<target>`.
 
 ### Atmos Pro upload correlation
 
@@ -117,9 +122,9 @@ Push events are rejected when `--upload` is set, since Atmos Pro only processes 
 
 | Event | Action | Primary Strategy | Fallback | Type | Source |
 |-------|--------|-----------------|----------|------|--------|
-| `pull_request` | opened / synchronize | `merge-base(HEAD, origin/<target>)` | `GITHUB_BASE_REF` ref | SHA or ref | `event.pull_request.base.ref` → `git merge-base` |
-| `pull_request` | closed (merged) | `merge-base(HEAD, origin/<target>)` | `HEAD~1` → `GITHUB_BASE_REF` ref | SHA or ref | `event.pull_request.base.ref` → `git merge-base` |
-| `pull_request_target` | any | `merge-base(HEAD, origin/<target>)` | `GITHUB_BASE_REF` ref | SHA or ref | `event.pull_request.base.ref` → `git merge-base` |
+| `pull_request` | opened / synchronize | `MergeBaseWithAutoFetch(HEAD, origin/<target>)` | `event.pull_request.base.sha` → `GITHUB_BASE_REF` ref (warn) | SHA or ref | `event.pull_request.base.ref` → `git merge-base` |
+| `pull_request` | closed (merged) | `MergeBaseWithAutoFetch(HEAD, origin/<target>)` | `HEAD~1` → `event.pull_request.base.sha` → `GITHUB_BASE_REF` ref (warn) | SHA or ref | `event.pull_request.base.ref` → `git merge-base` |
+| `pull_request_target` | any | `MergeBaseWithAutoFetch(HEAD, origin/<target>)` | `event.pull_request.base.sha` → `GITHUB_BASE_REF` ref (warn) | SHA or ref | `event.pull_request.base.ref` → `git merge-base` |
 | `push` | normal | `event.before` | — | SHA | `$GITHUB_EVENT_PATH` |
 | `push` | force-push (`event.forced`) | `HEAD~1` | `origin/HEAD` ref | SHA or ref | git resolution |
 | `merge_group` | any | `refs/remotes/origin/$GITHUB_BASE_REF` | — | ref | `GITHUB_BASE_REF` |

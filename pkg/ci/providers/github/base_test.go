@@ -22,6 +22,7 @@ func TestResolveBase_PullRequest_OpenSync(t *testing.T) {
 			},
 			"base": map[string]any{
 				"ref": "main",
+				"sha": "basesha123456789012345678901234567890ab",
 			},
 		},
 	}
@@ -34,13 +35,90 @@ func TestResolveBase_PullRequest_OpenSync(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, res)
 	// merge-base may or may not succeed depending on git state in test env.
-	// Either way, we get a valid resolution.
+	// Either way, we MUST end up with a SHA — never the origin/<target> tip
+	// ref, which is the path that produces false positives for out-of-date PRs.
 	assert.Equal(t, "pull_request", res.EventType)
 	assert.Equal(t, "headsha123456789012345678901234567890ab", res.HeadSHA)
-	// If merge-base failed, falls back to GITHUB_BASE_REF.
-	if res.SHA == "" {
-		assert.Equal(t, "refs/remotes/origin/main", res.Ref)
+	assert.Equal(t, "main", res.TargetBranch)
+	assert.NotEmpty(t, res.SHA, "must populate a SHA — payload base.sha is the worst-case fallback")
+	assert.Empty(t, res.Ref, "must not fall back to refs/remotes/origin/<target> (compares to current tip and causes false positives for out-of-date PRs)")
+}
+
+// TestResolveBase_PullRequest_OutOfDate_FallsBackToPayloadSHA covers the
+// customer-reported scenario: merge-base fails (no origin/main locally,
+// shallow clone) and the PR is out of date with main. The fix must NOT
+// fall back to refs/remotes/origin/main (which compares to current tip
+// and includes every commit on main since the fork point as a "diff").
+// Instead we use event.pull_request.base.sha, which is at worst stale by
+// however many main commits have landed since the last PR sync.
+func TestResolveBase_PullRequest_OutOfDate_FallsBackToPayloadSHA(t *testing.T) {
+	t.Setenv("GITHUB_EVENT_NAME", "pull_request")
+	t.Setenv("GITHUB_BASE_REF", "main")
+
+	// Event payload simulating a PR that was last synced when main was at
+	// "stalebasesha..." and is now out of date. base.sha is the frozen tip
+	// of main as of the last synchronize event.
+	eventPayload := map[string]any{
+		"action": "synchronize",
+		"pull_request": map[string]any{
+			"head": map[string]any{
+				"sha": "headsha123456789012345678901234567890ab",
+			},
+			"base": map[string]any{
+				"ref": "main",
+				"sha": "stalebasesha789012345678901234567890abcd",
+			},
+		},
 	}
+	eventPath := writeEventPayload(t, eventPayload)
+	t.Setenv("GITHUB_EVENT_PATH", eventPath)
+
+	p := NewProvider()
+	res, err := p.ResolveBase()
+
+	require.NoError(t, err)
+	require.NotNil(t, res)
+	assert.NotEmpty(t, res.SHA)
+	assert.Empty(t, res.Ref, "must not return a ref to current tip of target branch — that path causes false positives")
+	// In the test env merge-base never succeeds, so we fall through to
+	// the payload-base.sha branch.
+	assert.Equal(t, "stalebasesha789012345678901234567890abcd", res.SHA)
+	assert.Equal(t, "event.pull_request.base.sha", res.Source)
+	assert.Equal(t, "main", res.TargetBranch)
+}
+
+// TestResolveBase_PullRequest_NoPayloadBaseSHA_LastResortRef confirms the
+// last-resort branch still works when the event payload has no base.sha
+// (degenerate or hand-crafted payloads). We do still log a warning, but
+// the resolution is non-empty so callers can proceed.
+func TestResolveBase_PullRequest_NoPayloadBaseSHA_LastResortRef(t *testing.T) {
+	t.Setenv("GITHUB_EVENT_NAME", "pull_request")
+	t.Setenv("GITHUB_BASE_REF", "main")
+
+	eventPayload := map[string]any{
+		"action": "synchronize",
+		"pull_request": map[string]any{
+			"head": map[string]any{
+				"sha": "headsha123456789012345678901234567890ab",
+			},
+			"base": map[string]any{
+				"ref": "main",
+				// NOTE: no "sha" field — degenerate payload.
+			},
+		},
+	}
+	eventPath := writeEventPayload(t, eventPayload)
+	t.Setenv("GITHUB_EVENT_PATH", eventPath)
+
+	p := NewProvider()
+	res, err := p.ResolveBase()
+
+	require.NoError(t, err)
+	require.NotNil(t, res)
+	// Last-resort path: ref to current tip. Caller has been warned.
+	assert.Equal(t, "refs/remotes/origin/main", res.Ref)
+	assert.Empty(t, res.SHA)
+	assert.Equal(t, "main", res.TargetBranch)
 }
 
 func TestResolveBase_PullRequest_Opened(t *testing.T) {

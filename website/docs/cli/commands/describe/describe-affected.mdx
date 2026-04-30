@@ -32,7 +32,7 @@ The deprecated `--ref` and `--sha` flags are still supported for backward compat
 
 :::tip Zero-Config CI
 When `ci.enabled` is `true` in `atmos.yaml`, the base commit is automatically resolved from the CI environment:
-- **Pull requests**: Compares against the PR target branch (`GITHUB_BASE_REF`)
+- **Pull requests**: Compares against the **fork point** of the PR branch (`git merge-base HEAD origin/<target>`). This works correctly even when the PR is out of date with the target branch — only commits the PR introduced are reported as affected, never commits that landed on `<target>` after the PR was forked. In shallow CI checkouts (`actions/checkout@v4` defaults to `fetch-depth: 1`), Atmos transparently fetches the target branch on demand.
 - **Push events**: Compares against the previous commit
 - **Merge groups**: Compares against the merge queue base
 
@@ -96,11 +96,13 @@ resolution logic.
 
 | Event | Base Resolution |
 |-------|----------------|
-| `pull_request` (opened/synchronize) | Target branch (`GITHUB_BASE_REF`) |
-| `pull_request` (closed/merged) | PR base commit SHA from event payload |
+| `pull_request` (opened/synchronize) | `git merge-base(HEAD, origin/<target>)` — fork point. Falls back to `event.pull_request.base.sha` if merge-base is unavailable. |
+| `pull_request` (closed/merged) | `git merge-base`, then `HEAD~1` for merge-commit checkouts |
 | `push` | Previous HEAD from event payload (`before`) |
 | `push` (force-push) | Parent of current commit (`HEAD~1`) |
 | `merge_group` | Target branch (`GITHUB_BASE_REF`) |
+
+The `pull_request` strategy uses `git merge-base` as the gold standard. When the local repository is a shallow checkout (the default for `actions/checkout@v4`), Atmos automatically runs a targeted `git fetch origin <target>` and retries — you do not need to set `fetch-depth: 0` on your checkout step. If even the auto-fetch fails (offline runner, deeply orphaned history), Atmos falls back to `event.pull_request.base.sha` from the event payload, which is at worst stale by however many commits have landed on `<target>` since the PR was last synced.
 
 **Example workflow** — no `--ref` or `--sha` needed:
 

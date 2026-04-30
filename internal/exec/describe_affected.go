@@ -56,6 +56,7 @@ type DescribeAffectedCmdArgs struct {
 	AuthManager                 auth.AuthManager // Optional: Auth manager for credential management (from --identity flag).
 	HeadSHAOverride             string           // PR head SHA from CI event payload, used for upload correlation with Atmos Pro.
 	CIEventType                 string           // CI event type (e.g., "pull_request", "push") for upload validation.
+	TargetBranch                string           // PR target branch (e.g., "main") used to auto-fetch when refs are missing locally.
 }
 
 //go:generate go run go.uber.org/mock/mockgen@v0.6.0 -source=$GOFILE -destination=mock_$GOFILE -package=$GOPACKAGE
@@ -96,6 +97,7 @@ type describeAffectedExec struct {
 		atmosConfig *schema.AtmosConfiguration,
 		ref string,
 		sha string,
+		targetBranch string,
 		includeSpaceliftAdminStacks bool,
 		includeSettings bool,
 		stack string,
@@ -271,6 +273,7 @@ func resolveBaseFromCI(describe *DescribeAffectedCmdArgs) {
 	describe.SHA = resolution.SHA
 	describe.HeadSHAOverride = resolution.HeadSHA
 	describe.CIEventType = resolution.EventType
+	describe.TargetBranch = resolution.TargetBranch
 
 	base := resolution.SHA
 	if base == "" {
@@ -327,6 +330,7 @@ func (d *describeAffectedExec) Execute(a *DescribeAffectedCmdArgs) error {
 			a.CLIConfig,
 			a.Ref,
 			a.SHA,
+			a.TargetBranch,
 			a.IncludeSpaceliftAdminStacks,
 			a.IncludeSettings,
 			a.Stack,

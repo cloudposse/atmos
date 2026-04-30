@@ -187,10 +187,16 @@ func ExecuteDescribeAffectedWithTargetRefClone(
 // processes stack configs, and returns a list of the affected Atmos components and stacks given two Git commits.
 // This approach uses `git worktree add` to create an isolated worktree that shares the repository's
 // object database but has its own HEAD, allowing checkout operations without affecting the main worktree.
+//
+// TargetBranch, when non-empty, enables a one-shot self-heal: if the worktree
+// cannot be created because the target commit is not in the local object DB
+// (the common case in CI shallow checkouts), Atmos runs a targeted
+// `git fetch origin <targetBranch>` and retries. Empty disables the fetch.
 func ExecuteDescribeAffectedWithTargetRefCheckout(
 	atmosConfig *schema.AtmosConfiguration,
 	ref string,
 	sha string,
+	targetBranch string,
 	includeSpaceliftAdminStacks bool,
 	includeSettings bool,
 	stack string,
@@ -226,8 +232,21 @@ func ExecuteDescribeAffectedWithTargetRefCheckout(
 		log.Debug("Creating worktree at", refString, ref)
 	}
 
-	// Create an isolated worktree for the target ref.
+	// Create an isolated worktree for the target ref. If the target commit
+	// isn't in the local object DB and we know the target branch (from CI
+	// auto-detection), do a targeted fetch and retry once. This recovers
+	// from the common shallow-clone case where the resolved base SHA was
+	// pulled from the event payload but never fetched locally.
 	worktreePath, err := g.CreateWorktree(localRepoInfo.LocalWorktreePath, targetCommit)
+	if err != nil && targetBranch != "" {
+		log.Info("Target commit not available locally, fetching base branch", "branch", targetBranch)
+		if fetchErr := g.FetchRef(localRepoInfo.LocalWorktreePath, targetBranch); fetchErr == nil {
+			worktreePath, err = g.CreateWorktree(localRepoInfo.LocalWorktreePath, targetCommit)
+		} else {
+			log.Debug("Auto-fetch failed during worktree creation", "branch", targetBranch, "error", fetchErr)
+			err = errors.Join(err, fetchErr)
+		}
+	}
 	if err != nil {
 		return nil, nil, nil, "", err
 	}

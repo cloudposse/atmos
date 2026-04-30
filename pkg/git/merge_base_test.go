@@ -2,7 +2,9 @@ package git
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -44,11 +46,7 @@ func TestMergeBase_FindsForkPoint(t *testing.T) {
 	commitFile(t, repo, repoDir, "feature-change.txt", "feature content", "feature commit")
 
 	// Change to the repo directory so MergeBase can find it.
-	origDir, err := os.Getwd()
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = os.Chdir(origDir) })
-	err = os.Chdir(repoDir)
-	require.NoError(t, err)
+	t.Chdir(repoDir)
 
 	// MergeBase should return the fork point.
 	sha, err := MergeBase("main")
@@ -63,15 +61,115 @@ func TestMergeBase_ErrorWhenTargetRefMissing(t *testing.T) {
 	repo := initTestRepo(t, repoDir)
 	commitFile(t, repo, repoDir, "initial.txt", "content", "initial commit")
 
-	origDir, err := os.Getwd()
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = os.Chdir(origDir) })
-	err = os.Chdir(repoDir)
-	require.NoError(t, err)
+	t.Chdir(repoDir)
 
-	_, err = MergeBase("nonexistent-branch")
+	_, err := MergeBase("nonexistent-branch")
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "resolving")
+}
+
+// TestMergeBaseWithAutoFetch_RecoversFromMissingRef verifies that
+// MergeBaseWithAutoFetch fetches the target branch and retries when
+// origin/<target> is missing from the local repo (the common shallow-clone
+// case that produced the customer-reported false-positives bug).
+func TestMergeBaseWithAutoFetch_RecoversFromMissingRef(t *testing.T) {
+	// Origin repo with main + feature branch diverging from a fork point.
+	originDir := t.TempDir()
+	runGit(t, originDir, "init", "-b", "main")
+	require.NoError(t, os.WriteFile(filepath.Join(originDir, "initial.txt"), []byte("initial"), 0o644))
+	runGit(t, originDir, "add", "initial.txt")
+	runGit(t, originDir, "commit", "-m", "fork point")
+	// Capture the fork point SHA after commit.
+	forkPointSHA := strings.TrimSpace(runGitOutput(t, originDir, "rev-parse", "HEAD"))
+
+	// Branch off feature, add a commit.
+	runGit(t, originDir, "checkout", "-b", "feature")
+	require.NoError(t, os.WriteFile(filepath.Join(originDir, "feature.txt"), []byte("feature"), 0o644))
+	runGit(t, originDir, "add", "feature.txt")
+	runGit(t, originDir, "commit", "-m", "feature commit")
+
+	// Advance main with another commit (simulates main moving forward
+	// after the PR branch was created).
+	runGit(t, originDir, "checkout", "main")
+	require.NoError(t, os.WriteFile(filepath.Join(originDir, "main.txt"), []byte("main"), 0o644))
+	runGit(t, originDir, "add", "main.txt")
+	runGit(t, originDir, "commit", "-m", "main moved forward")
+
+	// Clone and check out feature, simulating the PR-branch checkout.
+	cloneDir := t.TempDir()
+	runGit(t, cloneDir, "clone", originDir, ".")
+	runGit(t, cloneDir, "checkout", "-b", "feature", "origin/feature")
+
+	// Remove origin/main locally to simulate a shallow CI checkout that
+	// did not fetch the target branch.
+	runGit(t, cloneDir, "update-ref", "-d", "refs/remotes/origin/main")
+
+	t.Chdir(cloneDir)
+
+	// Pure MergeBase fails with "ref not found".
+	_, err := MergeBase("main")
+	require.Error(t, err)
+
+	// MergeBaseWithAutoFetch self-heals by fetching origin/main and retrying.
+	sha, err := MergeBaseWithAutoFetch(cloneDir, "main")
+	require.NoError(t, err, "auto-fetch should recover from missing origin/main")
+	assert.Equal(t, forkPointSHA, sha, "merge-base after fetch should be the fork point, not main HEAD")
+}
+
+// TestMergeBaseWithAutoFetch_PropagatesHeadOnTargetBranch verifies that
+// ErrHeadOnTargetBranch is returned without attempting any fetch — fetching
+// cannot help that case.
+func TestMergeBaseWithAutoFetch_PropagatesHeadOnTargetBranch(t *testing.T) {
+	repoDir := t.TempDir()
+	repo := initTestRepo(t, repoDir)
+	commitFile(t, repo, repoDir, "initial.txt", "content", "initial commit")
+
+	head, err := repo.Head()
+	require.NoError(t, err)
+	err = repo.Storer.SetReference(plumbing.NewHashReference("refs/remotes/origin/main", head.Hash()))
+	require.NoError(t, err)
+
+	t.Chdir(repoDir)
+
+	_, err = MergeBaseWithAutoFetch(repoDir, "main")
+	assert.ErrorIs(t, err, ErrHeadOnTargetBranch)
+}
+
+// TestMergeBaseWithAutoFetch_ReturnsErrorWhenFetchImpossible verifies that
+// the function does not silently succeed when neither merge-base nor any
+// fetch can recover (e.g., target branch does not exist on remote).
+// The original MergeBase error is propagated so the caller can fall through.
+func TestMergeBaseWithAutoFetch_ReturnsErrorWhenFetchImpossible(t *testing.T) {
+	originDir := t.TempDir()
+	runGit(t, originDir, "init", "-b", "main")
+	require.NoError(t, os.WriteFile(filepath.Join(originDir, "f.txt"), []byte("x"), 0o644))
+	runGit(t, originDir, "add", "f.txt")
+	runGit(t, originDir, "commit", "-m", "initial")
+
+	cloneDir := t.TempDir()
+	runGit(t, cloneDir, "clone", originDir, ".")
+
+	t.Chdir(cloneDir)
+
+	// "release" branch does not exist on origin; fetch will fail.
+	_, err := MergeBaseWithAutoFetch(cloneDir, "release")
+	assert.Error(t, err)
+}
+
+// runGitOutput runs a git command and returns its stdout as a string.
+func runGitOutput(t *testing.T, dir string, args ...string) string {
+	t.Helper()
+	cmd := exec.Command("git", args...)
+	cmd.Dir = dir
+	cmd.Env = append(os.Environ(),
+		"GIT_AUTHOR_NAME=Test",
+		"GIT_AUTHOR_EMAIL=test@test.com",
+		"GIT_COMMITTER_NAME=Test",
+		"GIT_COMMITTER_EMAIL=test@test.com",
+	)
+	out, err := cmd.Output()
+	require.NoError(t, err, "git %v failed", args)
+	return string(out)
 }
 
 // TestMergeBase_ErrorWhenHeadOnTargetBranch verifies that MergeBase returns
@@ -87,11 +185,7 @@ func TestMergeBase_ErrorWhenHeadOnTargetBranch(t *testing.T) {
 	err = repo.Storer.SetReference(plumbing.NewHashReference("refs/remotes/origin/main", head.Hash()))
 	require.NoError(t, err)
 
-	origDir, err := os.Getwd()
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = os.Chdir(origDir) })
-	err = os.Chdir(repoDir)
-	require.NoError(t, err)
+	t.Chdir(repoDir)
 
 	_, err = MergeBase("main")
 	assert.ErrorIs(t, err, ErrHeadOnTargetBranch)

@@ -17,12 +17,16 @@ const (
 	defaultRef = "refs/remotes/origin/HEAD"
 	// EventPush is the GitHub Actions push event name.
 	eventPush = "push"
+	// PayloadKeyPullRequest is the top-level key in the event payload for PR events.
+	payloadKeyPullRequest = "pull_request"
 	// EnvGitHubBaseRef is the environment variable for the PR target branch.
 	envGitHubBaseRef = "GITHUB_BASE_REF"
 	// SourceDefault is the source label for default fallback resolution.
 	sourceDefault = "default"
 	// SourceGitHubBaseRef is the source label when resolving from GITHUB_BASE_REF.
 	sourceGitHubBaseRef = "GITHUB_BASE_REF"
+	// SourcePayloadBaseSHA is the source label when falling back to event.pull_request.base.sha.
+	sourcePayloadBaseSHA = "event.pull_request.base.sha"
 )
 
 // ErrEventPathNotSet is returned when $GITHUB_EVENT_PATH is not set.
@@ -56,7 +60,22 @@ func (p *Provider) ResolveBase() (*provider.BaseResolution, error) {
 }
 
 // resolvePRBase resolves the base commit for pull request events.
-// Uses a fallback chain: merge-base → HEAD~1 (closed PRs) → GITHUB_BASE_REF.
+//
+// Strategy chain (first success wins):
+//  1. merge-base(HEAD, origin/<target>) — gold standard. Self-heals from
+//     shallow CI checkouts via MergeBaseWithAutoFetch (fetches the target
+//     branch and deepens history when needed).
+//  2. HEAD~1 — only for closed/merged PRs when merge-base is unavailable.
+//     Correct when the merge commit is checked out with merge/squash
+//     strategy.
+//  3. event.pull_request.base.sha — payload SHA. Slightly stale (frozen at
+//     last sync event) but never compares to the current tip of main, so it
+//     can never produce the "PR is out of date with main" false positives
+//     that returning the origin/<target> ref directly does.
+//  4. refs/remotes/origin/<target> ref — last resort, with a Warn log.
+//     Compares to current tip of target; will produce false positives for
+//     out-of-date PRs.
+//
 // Also extracts the PR head SHA for Atmos Pro upload correlation.
 func resolvePRBase(eventName string) (*provider.BaseResolution, error) {
 	payload, err := readEventPayload()
@@ -68,46 +87,72 @@ func resolvePRBase(eventName string) (*provider.BaseResolution, error) {
 	targetBranch := extractTargetBranch(payload)
 	action, _ := payload["action"].(string)
 
-	// Try merge-base first — the gold standard. Works regardless of what's
+	// 1) merge-base — the gold standard. Works regardless of what's
 	// checked out, merge strategy, or number of commits on the PR.
 	if targetBranch != "" {
-		if sha, mbErr := git.MergeBase(targetBranch); mbErr == nil {
+		if sha, mbErr := git.MergeBaseWithAutoFetch(".", targetBranch); mbErr == nil {
 			return &provider.BaseResolution{
-				SHA:       sha,
-				HeadSHA:   headSHA,
-				Source:    "merge-base(HEAD, origin/" + targetBranch + ")",
-				EventType: eventName,
+				SHA:          sha,
+				HeadSHA:      headSHA,
+				TargetBranch: targetBranch,
+				Source:       "merge-base(HEAD, origin/" + targetBranch + ")",
+				EventType:    eventName,
 			}, nil
 		} else {
 			log.Debug("merge-base failed, trying fallbacks", "target", targetBranch, "error", mbErr)
 		}
 	}
 
-	// Fallback for closed/merged PRs: HEAD~1.
+	// 2) Closed/merged PRs: HEAD~1.
 	// Correct when the merge commit is checked out (merge/squash strategies).
 	if action == "closed" {
 		if sha, parentErr := resolveParentCommit(); parentErr == nil {
 			return &provider.BaseResolution{
-				SHA:       sha,
-				HeadSHA:   headSHA,
-				Source:    "HEAD~1 (merged PR, merge-base unavailable)",
-				EventType: eventName,
+				SHA:          sha,
+				HeadSHA:      headSHA,
+				TargetBranch: targetBranch,
+				Source:       "HEAD~1 (merged PR, merge-base unavailable)",
+				EventType:    eventName,
 			}, nil
 		} else {
 			log.Debug("HEAD~1 failed for merged PR", "error", parentErr)
 		}
 	}
 
-	// Final fallback: GITHUB_BASE_REF ref.
+	// 3) event.pull_request.base.sha — payload SHA fallback.
+	// This SHA is at worst stale by however many main commits have landed
+	// since the PR was last synced. Crucially, it is not the *current tip*
+	// of main, so it will not silently turn a stale-but-untouched PR into
+	// "every component is affected".
+	if baseSHA := extractBaseSHA(payload); baseSHA != "" {
+		return &provider.BaseResolution{
+			SHA:          baseSHA,
+			HeadSHA:      headSHA,
+			TargetBranch: targetBranch,
+			Source:       sourcePayloadBaseSHA,
+			EventType:    eventName,
+		}, nil
+	}
+
+	// 4) Last-resort: ref to current tip of target branch. Logs Warn
+	// because this is the path that produces false positives for
+	// out-of-date PRs (every commit on main since the fork point shows
+	// up as a tree difference).
 	res := resolveFromBaseRef(eventName)
 	res.HeadSHA = headSHA
+	res.TargetBranch = targetBranch
+	log.Warn(
+		"Falling back to current tip of target branch for PR base — affected detection may include unrelated commits from the target branch.",
+		"target", targetBranch,
+		"hint", "ensure the workflow checks out enough history (fetch-depth >= 2 or fetch-depth: 0) and that origin/"+targetBranch+" is fetchable",
+	)
 	return res, nil
 }
 
 // extractTargetBranch extracts the target branch name from the PR event payload.
 // Falls back to GITHUB_BASE_REF environment variable if not found in the payload.
 func extractTargetBranch(payload map[string]any) string {
-	pr, _ := payload["pull_request"].(map[string]any)
+	pr, _ := payload[payloadKeyPullRequest].(map[string]any)
 	if pr == nil {
 		return os.Getenv(envGitHubBaseRef)
 	}
@@ -128,7 +173,7 @@ func extractTargetBranch(payload map[string]any) string {
 // extractPRHeadSHA extracts the head commit SHA from a pull request event payload.
 // This SHA is used for upload correlation with Atmos Pro, which indexes by head.sha.
 func extractPRHeadSHA(payload map[string]any) string {
-	pr, _ := payload["pull_request"].(map[string]any)
+	pr, _ := payload[payloadKeyPullRequest].(map[string]any)
 	if pr == nil {
 		return ""
 	}
@@ -139,6 +184,25 @@ func extractPRHeadSHA(payload map[string]any) string {
 	}
 
 	sha, _ := head["sha"].(string)
+	return sha
+}
+
+// extractBaseSHA extracts the base commit SHA from a pull request event payload.
+// This is the SHA of the target branch tip at the time of the PR event (open
+// or last sync), and is used as the payload-base fallback when merge-base
+// cannot resolve.
+func extractBaseSHA(payload map[string]any) string {
+	pr, _ := payload[payloadKeyPullRequest].(map[string]any)
+	if pr == nil {
+		return ""
+	}
+
+	base, _ := pr["base"].(map[string]any)
+	if base == nil {
+		return ""
+	}
+
+	sha, _ := base["sha"].(string)
 	return sha
 }
 
