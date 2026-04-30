@@ -41,6 +41,17 @@ var ErrNoParentCommit = fmt.Errorf("HEAD has no parents (initial commit)")
 func (p *Provider) ResolveBase() (*provider.BaseResolution, error) {
 	defer perf.Track(nil, "github.Provider.ResolveBase")()
 
+	// Trust the GitHub Actions workspace before any git command. In container
+	// jobs the repo owner (the runner user) often differs from the running
+	// user, and git refuses to operate on the repo until the path is added
+	// to safe.directory. EnsureGitSafeDirectory is a no-op outside GitHub
+	// Actions, so this is safe to call unconditionally.
+	if err := git.EnsureGitSafeDirectory(); err != nil {
+		// Non-fatal: subsequent git commands will surface a clearer error
+		// if this actually matters. We log so the cause is visible.
+		log.Warn("Failed to configure git safe.directory for GitHub Actions workspace", "error", err)
+	}
+
 	eventName := os.Getenv("GITHUB_EVENT_NAME")
 
 	switch eventName {
