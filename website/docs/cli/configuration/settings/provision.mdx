@@ -1,0 +1,80 @@
+---
+title: Provision Defaults
+sidebar_position: 7
+sidebar_label: provision
+sidebar_class_name: command
+description: Configure global defaults for component workdir provisioning
+id: provision
+slug: /cli/configuration/settings/provision
+---
+
+import Intro from '@site/src/components/Intro';
+import KeyPoints from '@site/src/components/KeyPoints';
+import File from '@site/src/components/File';
+import Note from '@site/src/components/Note';
+
+<Intro>
+The `settings.provision` block sets global defaults for component provisioning. Today this controls the default workdir behavior — whether workdirs are created automatically, and how long unused workdirs persist before they become candidates for cleanup. Settings here apply to every component unless overridden at the toolchain or component level.
+</Intro>
+
+<KeyPoints>
+- Set `provision.workdir.enabled` once at the global level instead of per-component
+- Configure a default TTL for `atmos terraform workdir clean --expired`
+- Toolchain and component overrides still take precedence
+- For per-component configuration, see the [component `provision:` block](/stacks/components/provision)
+</KeyPoints>
+
+## Configuration
+
+<File title="atmos.yaml">
+```yaml
+settings:
+  provision:
+    workdir:
+      # Enable workdir provisioning for every component by default.
+      enabled: true
+      # Default time-to-live for workdirs (e.g., "7d", "24h", "weekly").
+      ttl: "7d"
+```
+</File>
+
+## Configuration Reference
+
+<dl>
+  <dt>`settings.provision.workdir.enabled`</dt>
+  <dd>
+    Global default for whether components run inside an isolated workdir under `.workdir/<componentType>/<stack>-<componentName>/`. When enabled, every component instance gets its own working directory, allowing concurrent runs without conflicts on `.terraform/`, lockfiles, or generated varfiles.
+
+    Component-level and toolchain-level settings override this default; a component can opt out with `provision.workdir.enabled: false`.
+
+    - **Type:** `boolean`
+    - **Default:** `false`
+  </dd>
+
+  <dt>`settings.provision.workdir.ttl`</dt>
+  <dd>
+    Default time-to-live for workdirs. Workdirs not accessed within this duration become candidates for cleanup by [`atmos terraform workdir clean --expired`](/cli/commands/terraform/workdir). Accepts duration strings like `"7d"`, `"24h"`, or named windows like `"weekly"`.
+
+    - **Type:** `string`
+    - **Default:** (none — TTL must be supplied via `--ttl` flag if not configured)
+  </dd>
+</dl>
+
+## Precedence
+
+Provisioning settings are deep-merged across three levels (lower overrides higher):
+
+1. Global — `settings.provision` (this page)
+2. Toolchain — `terraform.provision`, `helmfile.provision`, `packer.provision`, `ansible.provision`
+3. Component — `components.<type>.<name>.provision`
+
+<Note>
+There is no global `settings.provision.backend` today. Backend provisioning is opted in per component (or per toolchain) because it has stronger side effects (creating cloud resources). See the [component `provision:` block](/stacks/components/provision) for backend provisioning details.
+</Note>
+
+## See Also
+
+- [Component `provision:` block](/stacks/components/provision) — Per-component configuration and full conceptual treatment
+- [Backend Provisioning](/components/terraform/backend-provisioning) — Automatic Terraform state backend creation
+- [`atmos terraform workdir`](/cli/commands/terraform/workdir) — CLI commands for managing workdirs
+- [Settings](/cli/configuration/settings) — Overview of all settings
