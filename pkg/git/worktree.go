@@ -56,7 +56,8 @@ func CreateWorktree(repoDir, targetCommit string) (string, error) {
 }
 
 // CreateWorktreeWithFetchRecovery creates a worktree at targetCommit, with a
-// one-shot self-heal: if the initial CreateWorktree call fails AND a non-empty
+// one-shot self-heal: if the initial CreateWorktree call fails because the
+// target commit is missing from the local object DB AND a non-empty
 // targetBranch is provided, the function performs a targeted
 // `git fetch origin <targetBranch>` and retries.
 //
@@ -66,6 +67,11 @@ func CreateWorktree(repoDir, targetCommit string) (string, error) {
 // local object DB. A targeted fetch of the target branch is enough to make
 // the SHA available without paying for a full unshallow.
 //
+// Recovery is gated to ErrGitRefNotFound so that unrelated failures (temp
+// directory creation, repo state corruption, permissions, etc.) propagate
+// directly instead of being misdiagnosed as "target commit not available
+// locally" and noisily attempting an unrelated fetch.
+//
 // On final failure, the original CreateWorktree error is preserved (joined
 // with the fetch error if the fetch also failed) so the caller can still
 // surface its hints to the user.
@@ -73,7 +79,7 @@ func CreateWorktreeWithFetchRecovery(repoDir, targetCommit, targetBranch string)
 	defer perf.Track(nil, "git.CreateWorktreeWithFetchRecovery")()
 
 	worktreePath, err := CreateWorktree(repoDir, targetCommit)
-	if err == nil || targetBranch == "" {
+	if err == nil || targetBranch == "" || !errors.Is(err, errUtils.ErrGitRefNotFound) {
 		return worktreePath, err
 	}
 

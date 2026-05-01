@@ -116,6 +116,15 @@ func TestFetchRef_NonexistentBranch(t *testing.T) {
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrFetchOrigin)
 	assert.Contains(t, err.Error(), "origin/nonexistent-branch")
+
+	// Pin the underlying exec exit-status contract: the wrapped error
+	// chain must still expose *exec.ExitError so the non-zero git exit
+	// code is recoverable. (FetchRef uses raw exec.Command, not the
+	// workflow ShellRunner — so the equivalent of ShellRunner's
+	// errUtils.ExitCodeError contract here is *exec.ExitError.)
+	var exitErr *exec.ExitError
+	require.ErrorAs(t, err, &exitErr, "underlying exec.ExitError must be reachable via errors.As")
+	assert.NotZero(t, exitErr.ExitCode(), "git fetch must have exited non-zero for this case")
 }
 
 func TestDeepenFetch_InvalidBranchName(t *testing.T) {
@@ -142,6 +151,11 @@ func TestDeepenFetch_NonexistentBranch(t *testing.T) {
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrDeepenOrigin)
 	assert.Contains(t, err.Error(), "origin/nonexistent-branch")
+
+	// Same exit-status contract as TestFetchRef_NonexistentBranch.
+	var exitErr *exec.ExitError
+	require.ErrorAs(t, err, &exitErr, "underlying exec.ExitError must be reachable via errors.As")
+	assert.NotZero(t, exitErr.ExitCode(), "git fetch must have exited non-zero for this case")
 }
 
 // TestDeepenFetch_Unshallow exercises the depth <= 0 branch of DeepenFetch,

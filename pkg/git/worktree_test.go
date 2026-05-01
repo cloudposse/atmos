@@ -386,3 +386,39 @@ func TestCreateWorktreeWithFetchRecovery_FailsWhenFetchFails(t *testing.T) {
 	// joined error chain — verify the fetch sentinel is reachable.
 	assert.ErrorIs(t, err, errUtils.ErrFetchOrigin)
 }
+
+// TestCreateWorktreeWithFetchRecovery_GateSkipsNonRefNotFoundError is the
+// negative counterpart to the recovery tests: when CreateWorktree fails with
+// an error that is NOT ErrGitRefNotFound (e.g., temp-dir creation failure
+// from a missing TMPDIR), the helper must propagate the original error
+// directly without attempting any fetch.
+//
+// We force os.MkdirTemp to fail by pointing TMPDIR / TEMP / TMP at a
+// non-existent path. The infrastructure failure travels back un-wrapped
+// (CreateWorktree returns the raw fs error before reaching the git step),
+// so neither ErrGitRefNotFound nor ErrFetchOrigin should appear in the
+// returned chain.
+func TestCreateWorktreeWithFetchRecovery_GateSkipsNonRefNotFoundError(t *testing.T) {
+	// Pre-compute a real temp dir path so t.TempDir / require.NoError
+	// machinery still works, then poison the env for the call under test.
+	bogusTmp := filepath.Join(t.TempDir(), "this-subdir-does-not-exist")
+	// Sanity: this directory must NOT exist for MkdirTemp to fail.
+	_, statErr := os.Stat(bogusTmp)
+	require.True(t, os.IsNotExist(statErr), "test setup: bogusTmp must not exist")
+
+	t.Setenv("TMPDIR", bogusTmp)
+	t.Setenv("TEMP", bogusTmp)
+	t.Setenv("TMP", bogusTmp)
+
+	// Any non-empty values — they don't matter because CreateWorktree
+	// fails at MkdirTemp before any git operation.
+	_, err := CreateWorktreeWithFetchRecovery(t.TempDir(), "deadbeef", "main")
+	require.Error(t, err)
+
+	// Gate guarantee: the fetch path must NOT have run. If it had, the
+	// joined chain would expose ErrFetchOrigin (since "main" cannot be
+	// fetched from a non-repo). Both gate-disqualifying sentinels must
+	// be absent from the returned chain.
+	assert.NotErrorIs(t, err, errUtils.ErrFetchOrigin, "gate should skip fetch path for non-ErrGitRefNotFound errors")
+	assert.NotErrorIs(t, err, errUtils.ErrGitRefNotFound, "this is an infrastructure failure, not a missing-ref failure")
+}
