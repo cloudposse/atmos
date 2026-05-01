@@ -19,7 +19,7 @@ The `settings.provision` block sets global defaults for component provisioning. 
 
 <KeyPoints>
 - Set `provision.workdir.enabled` once at the global level instead of per-component
-- Configure a default TTL for `atmos terraform workdir clean --expired`
+- Document the intended TTL for workdir cleanup (note: `atmos terraform workdir clean --expired` currently requires explicit `--ttl` flag)
 - Toolchain and component overrides still take precedence
 - For per-component configuration, see [Workdir Provisioning](/stacks/components/provision/workdir)
 </KeyPoints>
@@ -53,10 +53,17 @@ settings:
 
   <dt>`settings.provision.workdir.ttl`</dt>
   <dd>
-    Default time-to-live for workdirs. Workdirs not accessed within this duration become candidates for cleanup by [`atmos terraform workdir clean --expired`](/cli/commands/terraform/workdir). Accepts duration strings like `"7d"`, `"24h"`, or named windows like `"weekly"`.
+    Documents the intended time-to-live for workdirs. This setting expresses how long workdirs should persist before becoming candidates for cleanup. Currently, the `atmos terraform workdir clean --expired` command still requires an explicit `--ttl` flag to operate, regardless of whether this setting is configured.
+
+    Usage example:
+    ```bash
+    # Even with settings.provision.workdir.ttl configured in atmos.yaml,
+    # the CLI currently requires --ttl:
+    atmos terraform workdir clean --expired --ttl 7d
+    ```
 
     - **Type:** `string`
-    - **Default:** (none — TTL must be supplied via `--ttl` flag if not configured)
+    - **Default:** (none — `atmos terraform workdir clean --expired` currently requires the `--ttl` flag)
   </dd>
 </dl>
 
