@@ -14,6 +14,54 @@ import (
 
 const worktreeSubdir = "worktree"
 
+// gitRefNotFoundPatterns are case-insensitive substrings in `git worktree add`
+// stderr that indicate the failure was caused by the target ref/SHA not being
+// present in the local object DB (as opposed to other failures like path
+// conflicts, permission errors, or corrupted repo state). Keeping this list
+// narrow lets CreateWorktreeWithFetchRecovery gate its self-heal path on
+// only true missing-ref failures.
+var gitRefNotFoundPatterns = []string{
+	"invalid reference",
+	"unknown revision",
+	"not a commit",
+	"not a valid object name",
+	"ambiguous argument",
+}
+
+// isGitRefNotFound returns true if git's stderr indicates the target ref/SHA
+// is unknown to the local object DB.
+func isGitRefNotFound(output string) bool {
+	lower := strings.ToLower(output)
+	for _, p := range gitRefNotFoundPatterns {
+		if strings.Contains(lower, p) {
+			return true
+		}
+	}
+	return false
+}
+
+// classifyWorktreeAddError wraps a `git worktree add` failure with the
+// appropriate sentinel: ErrGitRefNotFound only for true missing-ref cases
+// (so the recovery path can target them), ErrGitWorktreeAdd for everything
+// else. The "make sure the ref is correct" hint is bound to the missing-ref
+// case so it doesn't mislead users hitting unrelated failures.
+func classifyWorktreeAddError(cause error, ref, output string) error {
+	if isGitRefNotFound(output) {
+		return errUtils.Build(errUtils.ErrGitRefNotFound).
+			WithCause(cause).
+			WithContext("ref", ref).
+			WithContext("output", output).
+			WithHint("Make sure the ref is correct and was cloned by Git from the remote, or use the '--clone-target-ref=true' flag to clone it.").
+			WithHint("Refer to https://atmos.tools/cli/commands/describe/affected for more details.").
+			Err()
+	}
+	return errUtils.Build(errUtils.ErrGitWorktreeAdd).
+		WithCause(cause).
+		WithContext("ref", ref).
+		WithContext("output", output).
+		Err()
+}
+
 // CreateWorktree creates a new git worktree at the specified path, checked out to the given target ref or SHA.
 // This uses `git worktree add --detach` to create an isolated worktree that shares the repository's
 // object database but has its own HEAD, allowing checkout operations without affecting the main worktree.
@@ -41,13 +89,7 @@ func CreateWorktree(repoDir, targetCommit string) (string, error) {
 	if err != nil {
 		// Clean up the temp parent directory on error.
 		os.RemoveAll(tempParentDir)
-		return "", errUtils.Build(errUtils.ErrGitRefNotFound).
-			WithCause(err).
-			WithContext("ref", targetCommit).
-			WithContext("output", string(output)).
-			WithHint("Make sure the ref is correct and was cloned by Git from the remote, or use the '--clone-target-ref=true' flag to clone it.").
-			WithHint("Refer to https://atmos.tools/cli/commands/describe/affected for more details.").
-			Err()
+		return "", classifyWorktreeAddError(err, targetCommit, string(output))
 	}
 
 	log.Debug("Created git worktree", "dir", worktreePath, "target", targetCommit)

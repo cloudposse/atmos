@@ -213,6 +213,21 @@ func TestCreateWorktree(t *testing.T) {
 		assert.Error(t, err)
 		assert.ErrorIs(t, err, errUtils.ErrGitRefNotFound)
 	})
+
+	t.Run("returns ErrGitWorktreeAdd for non-ref worktree-add failures", func(t *testing.T) {
+		// Point repoDir at a directory that is NOT a git repository. Git
+		// emits "fatal: not a git repository" — a non-ref failure that must
+		// be classified as ErrGitWorktreeAdd, not ErrGitRefNotFound, so that
+		// CreateWorktreeWithFetchRecovery's gate correctly skips the fetch
+		// retry path.
+		nonRepoDir := t.TempDir()
+
+		_, err := CreateWorktree(nonRepoDir, "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef")
+		assert.Error(t, err)
+		assert.ErrorIs(t, err, errUtils.ErrGitWorktreeAdd)
+		assert.NotErrorIs(t, err, errUtils.ErrGitRefNotFound,
+			"non-ref worktree-add failures must not be classified as missing-ref")
+	})
 }
 
 func TestRemoveWorktree(t *testing.T) {
@@ -383,8 +398,11 @@ func TestCreateWorktreeWithFetchRecovery_FailsWhenFetchFails(t *testing.T) {
 	_, err := CreateWorktreeWithFetchRecovery(cloneDir, bogusSHA, "no-such-branch-on-origin")
 	require.Error(t, err)
 	// Both the worktree creation and the fetch failures should be in the
-	// joined error chain — verify the fetch sentinel is reachable.
+	// joined error chain — verify both sentinels are reachable so the
+	// preserved hints surface to callers regardless of which leg they
+	// inspect first.
 	assert.ErrorIs(t, err, errUtils.ErrFetchOrigin)
+	assert.ErrorIs(t, err, errUtils.ErrGitRefNotFound)
 }
 
 // TestCreateWorktreeWithFetchRecovery_GateSkipsNonRefNotFoundError is the
@@ -421,4 +439,25 @@ func TestCreateWorktreeWithFetchRecovery_GateSkipsNonRefNotFoundError(t *testing
 	// be absent from the returned chain.
 	assert.NotErrorIs(t, err, errUtils.ErrFetchOrigin, "gate should skip fetch path for non-ErrGitRefNotFound errors")
 	assert.NotErrorIs(t, err, errUtils.ErrGitRefNotFound, "this is an infrastructure failure, not a missing-ref failure")
+}
+
+// TestCreateWorktreeWithFetchRecovery_GateSkipsWorktreeAddError covers the
+// other side of the gate: when CreateWorktree fails with ErrGitWorktreeAdd
+// (a non-ref worktree-add failure such as "not a git repository"), the
+// recovery helper must propagate that error directly without attempting a
+// fetch. Otherwise the gate-narrowing in CreateWorktree is meaningless —
+// non-ref failures would still trigger fetch retries.
+func TestCreateWorktreeWithFetchRecovery_GateSkipsWorktreeAddError(t *testing.T) {
+	tests.RequireGitCommitConfig(t)
+
+	// Use a non-repo directory so `git worktree add` fails with
+	// "fatal: not a git repository", which classifies as ErrGitWorktreeAdd.
+	nonRepoDir := t.TempDir()
+
+	_, err := CreateWorktreeWithFetchRecovery(nonRepoDir, "deadbeef", "main")
+	require.Error(t, err)
+
+	assert.ErrorIs(t, err, errUtils.ErrGitWorktreeAdd, "non-ref worktree-add failure must surface its sentinel")
+	assert.NotErrorIs(t, err, errUtils.ErrGitRefNotFound, "non-ref failure must not be misclassified as missing-ref")
+	assert.NotErrorIs(t, err, errUtils.ErrFetchOrigin, "gate must skip fetch path for ErrGitWorktreeAdd")
 }
