@@ -37,6 +37,16 @@ type HookContext struct {
 	// CommandError is the error from the command execution, if any.
 	CommandError error
 
+	// ExitCode is the exit code from the command execution. This is the
+	// authoritative signal for success/failure and (for `terraform plan` with
+	// -detailed-exitcode) for change detection:
+	//   - apply/deploy: 0 = success; non-zero = error.
+	//   - plan: 0 = no changes; 1 = error; 2 = changes detected.
+	// Plugins should prefer this over text parsing of Output, which is
+	// fragile against terraform/OpenTofu output drift and against errors
+	// that occur before terraform itself runs (e.g., authentication failures).
+	ExitCode int
+
 	// Provider is the detected CI platform provider.
 	Provider provider.Provider
 

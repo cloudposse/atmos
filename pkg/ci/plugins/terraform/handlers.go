@@ -249,19 +249,62 @@ func (p *Plugin) downloadPlanfileForVerification(ctx *plugin.HookContext) error 
 	return nil
 }
 
-// parseOutputWithError parses command output and enriches with command error info.
+// parseOutputWithError reconciles parsed command output with the authoritative
+// exit code and command error from the hook context. The exit code is the
+// source of truth for success/failure (and, for `terraform plan` with
+// -detailed-exitcode, for change detection); text parsing supplements with
+// resource counts, output values, and error message bodies.
+//
+// Semantics by command:
+//   - apply/deploy: HasErrors = (exitCode != 0).
+//   - plan: HasErrors = (exitCode == 1); exitCode == 2 implies HasChanges.
+//   - other commands: HasErrors = (exitCode != 0).
+//
+// This makes the hook robust against errors that occur before terraform
+// itself runs (e.g., authentication failures), which leave no parseable
+// "Error:" line in the captured output.
 func (p *Plugin) parseOutputWithError(ctx *plugin.HookContext) *plugin.OutputResult {
 	result := ParseOutput(ctx.Output, ctx.Command)
+	result.ExitCode = ctx.ExitCode
 
-	// If the command had an error, ensure the result reflects that.
+	// Derive HasErrors from exit code semantics. `terraform plan` uses
+	// -detailed-exitcode (0 = no change, 1 = error, 2 = change); apply/deploy
+	// and other commands treat any non-zero code as failure.
+	hasErrors := false
+	switch ctx.Command {
+	case "plan":
+		hasErrors = ctx.ExitCode == 1
+		if ctx.ExitCode == 2 {
+			// Belt-and-suspenders for plan with -detailed-exitcode: even if
+			// text parsing missed the change markers (e.g., empty/captured
+			// output), the exit code tells us changes exist.
+			result.HasChanges = true
+		}
+	default:
+		hasErrors = ctx.ExitCode != 0
+	}
+
+	// Defensive: a non-nil CommandError always indicates failure, even if
+	// the exit code is unset or zero (callers should set both, but treat
+	// either signal as authoritative for failure).
 	if ctx.CommandError != nil {
-		result.HasErrors = true
+		hasErrors = true
 		if result.ExitCode == 0 {
 			result.ExitCode = 1
 		}
-		if len(result.Errors) == 0 {
+	}
+
+	// Exit code is authoritative both ways: when it says success, discard any
+	// spurious "Error:" lines that text parsing may have matched (warnings,
+	// recovered errors, log noise). When it says failure, prefer text-parsed
+	// error bodies but fall back to the CommandError message.
+	result.HasErrors = hasErrors
+	if hasErrors {
+		if len(result.Errors) == 0 && ctx.CommandError != nil {
 			result.Errors = []string{ctx.CommandError.Error()}
 		}
+	} else {
+		result.Errors = nil
 	}
 
 	return result

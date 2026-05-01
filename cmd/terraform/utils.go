@@ -57,7 +57,18 @@ func runHooksOnErrorWithOutput(event h.HookEvent, cmd_ *cobra.Command, args []st
 		forceCIMode = viper.GetBool("ci")
 	}
 
-	if err := h.RunCIHooks(event, &atmosConfig, &info, output, forceCIMode, cmdErr); err != nil {
+	// Extract the exit code from the command error. errUtils.GetExitCode unwraps
+	// the error chain (exec.ExitError, ExecError, exitCoder, etc.) and returns 1
+	// by default for non-nil errors with no attached code (e.g., auth failures).
+	if err := h.RunCIHooks(&h.RunCIHooksOptions{
+		Event:        event,
+		AtmosConfig:  &atmosConfig,
+		Info:         &info,
+		Output:       output,
+		ForceCIMode:  forceCIMode,
+		CommandError: cmdErr,
+		ExitCode:     errUtils.GetExitCode(cmdErr),
+	}); err != nil {
 		log.Warn("CI hook execution failed", "error", err)
 	}
 }
@@ -129,7 +140,14 @@ func runHooksWithOutput(event h.HookEvent, cmd_ *cobra.Command, args []string, o
 
 	// Run CI hooks based on component provider bindings.
 	// This is separate from user-defined hooks and runs automatically when CI is enabled.
-	if err := h.RunCIHooks(event, &atmosConfig, &info, output, forceCIMode, nil); err != nil {
+	// Success path: cmdErr is nil and exit code is 0.
+	if err := h.RunCIHooks(&h.RunCIHooksOptions{
+		Event:       event,
+		AtmosConfig: &atmosConfig,
+		Info:        &info,
+		Output:      output,
+		ForceCIMode: forceCIMode,
+	}); err != nil {
 		log.Warn("CI hook execution failed", "error", err)
 		// Don't fail the command on CI hook errors.
 	}
@@ -153,7 +171,15 @@ func runCIHooksForDeploy(event h.HookEvent, cmd_ *cobra.Command, _ []string, inf
 		forceCIMode = viper.GetBool("ci")
 	}
 
-	if err := h.RunCIHooks(event, &atmosConfig, info, output, forceCIMode, nil); err != nil {
+	// Before-event hook (e.g., before.terraform.deploy): no command has run yet,
+	// so there is no exit code or error to report.
+	if err := h.RunCIHooks(&h.RunCIHooksOptions{
+		Event:       event,
+		AtmosConfig: &atmosConfig,
+		Info:        info,
+		Output:      output,
+		ForceCIMode: forceCIMode,
+	}); err != nil {
 		log.Warn("CI hook execution failed", "error", err)
 	}
 }

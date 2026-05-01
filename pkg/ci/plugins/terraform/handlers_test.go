@@ -271,17 +271,76 @@ func TestFormatResourceCount(t *testing.T) {
 func TestParseOutputWithError(t *testing.T) {
 	p := &Plugin{}
 
-	t.Run("no command error", func(t *testing.T) {
+	t.Run("plan exit 0 with text changes - text-detected changes preserved", func(t *testing.T) {
+		// Plan WITHOUT -detailed-exitcode: terraform always returns 0 even for
+		// changes; text parsing is the only HasChanges signal. Exit code is 0
+		// so HasErrors must remain false.
 		ctx := &plugin.HookContext{
-			Output:  "Plan: 1 to add, 0 to change, 0 to destroy.",
-			Command: "plan",
+			Output:   "Plan: 1 to add, 0 to change, 0 to destroy.",
+			Command:  "plan",
+			ExitCode: 0,
 		}
 		result := p.parseOutputWithError(ctx)
 		assert.True(t, result.HasChanges)
 		assert.False(t, result.HasErrors)
 	})
 
-	t.Run("with command error", func(t *testing.T) {
+	t.Run("plan exit 1 with empty output - HasErrors from exit code only", func(t *testing.T) {
+		// Auth failure: terraform never ran, no parseable "Error:" line, but
+		// exit code 1 must still flip HasErrors=true.
+		ctx := &plugin.HookContext{
+			Output:   "",
+			Command:  "plan",
+			ExitCode: 1,
+		}
+		result := p.parseOutputWithError(ctx)
+		assert.True(t, result.HasErrors, "exit code 1 must mark plan as errored")
+		assert.Equal(t, 1, result.ExitCode)
+	})
+
+	t.Run("plan exit 2 with empty output - HasChanges from exit code only", func(t *testing.T) {
+		// Plan with -detailed-exitcode and changes: exit 2 is authoritative
+		// even when text parsing finds no "Plan: X to add" markers.
+		ctx := &plugin.HookContext{
+			Output:   "",
+			Command:  "plan",
+			ExitCode: 2,
+		}
+		result := p.parseOutputWithError(ctx)
+		assert.True(t, result.HasChanges, "exit code 2 must mark plan as having changes")
+		assert.False(t, result.HasErrors, "exit code 2 is success, not error")
+	})
+
+	t.Run("apply exit 1 with empty output - HasErrors from exit code only", func(t *testing.T) {
+		// Auth failure on `terraform deploy/apply`: same fix as the plan
+		// equivalent above.
+		ctx := &plugin.HookContext{
+			Output:   "",
+			Command:  "apply",
+			ExitCode: 1,
+		}
+		result := p.parseOutputWithError(ctx)
+		assert.True(t, result.HasErrors, "non-zero exit must mark apply as errored")
+		assert.Equal(t, 1, result.ExitCode)
+	})
+
+	t.Run("apply exit 0 with stray Error in output - exit code wins", func(t *testing.T) {
+		// Exit code is authoritative: if terraform exited 0, the apply
+		// succeeded, even if the captured output contains a stray "Error:"
+		// line (e.g., from a pre-condition warning that did not block).
+		ctx := &plugin.HookContext{
+			Output:   "Error: stray noise that should not flip status\n\nApply complete! Resources: 1 added, 0 changed, 0 destroyed.",
+			Command:  "apply",
+			ExitCode: 0,
+		}
+		result := p.parseOutputWithError(ctx)
+		assert.False(t, result.HasErrors, "apply with exit 0 must be success regardless of stray Error: text")
+	})
+
+	t.Run("with command error - defensive fallback when exit code unset", func(t *testing.T) {
+		// Defensive: if a caller forgets to set ExitCode but does pass
+		// CommandError, the result still reports failure with a default
+		// exit code of 1 and the error message.
 		ctx := &plugin.HookContext{
 			Output:       "",
 			Command:      "plan",
@@ -291,6 +350,21 @@ func TestParseOutputWithError(t *testing.T) {
 		assert.True(t, result.HasErrors)
 		assert.Equal(t, 1, result.ExitCode)
 		assert.Equal(t, []string{"terraform plan failed"}, result.Errors)
+	})
+
+	t.Run("exit 1 surfaces command error message", func(t *testing.T) {
+		// Production path: cmd/terraform/utils.go sets both CommandError and
+		// ExitCode. Confirm the error message is surfaced for the template.
+		ctx := &plugin.HookContext{
+			Output:       "",
+			Command:      "apply",
+			CommandError: fmt.Errorf("authentication failed"),
+			ExitCode:     1,
+		}
+		result := p.parseOutputWithError(ctx)
+		assert.True(t, result.HasErrors)
+		assert.Equal(t, 1, result.ExitCode)
+		assert.Equal(t, []string{"authentication failed"}, result.Errors)
 	})
 }
 
@@ -1181,9 +1255,11 @@ func TestIsPlanfileStorageEnabled(t *testing.T) {
 }
 
 // newFailureSummaryHookContext builds a HookContext suited for verifying that
-// summary rendering reflects ctx.CommandError. Output is intentionally empty
-// because the bug under test is auth (or other pre-terraform) failures where
-// no terraform output exists yet.
+// summary rendering reflects an exit-code failure. Output is intentionally
+// empty because the bug under test is auth (or other pre-terraform) failures
+// where no terraform output exists yet. Both ExitCode and CommandError are set
+// to mirror production: cmd/terraform/utils.go computes ExitCode from CmdErr
+// via errUtils.GetExitCode and passes both into RunCIHooks.
 func newFailureSummaryHookContext(command string, cmdErr error) *plugin.HookContext {
 	return &plugin.HookContext{
 		Config: &schema.AtmosConfiguration{
@@ -1197,6 +1273,7 @@ func newFailureSummaryHookContext(command string, cmdErr error) *plugin.HookCont
 		TemplateLoader: templates.NewLoader(&schema.AtmosConfiguration{}),
 		Command:        command,
 		CommandError:   cmdErr,
+		ExitCode:       1,
 		Output:         "",
 		Info: &schema.ConfigAndStacksInfo{
 			Stack:            "dev",
@@ -1239,6 +1316,26 @@ func TestOnAfterApply_WithCommandError_RendersFailureSummary(t *testing.T) {
 	assert.Contains(t, rendered, "identity failed: assume role denied", "should surface the command error")
 	assert.NotContains(t, rendered, "No Changes Applied for", "must not fall through to no-changes branch")
 	assert.NotContains(t, rendered, "NO_CHANGE-inactive", "must not use the no-change badge")
+}
+
+// TestOnAfterApply_WithExitCodeOnly_RendersFailureSummary verifies that the
+// summary reflects failure even when only the exit code is set (no
+// CommandError). This documents the contract: exit code is authoritative;
+// callers do not need to also pass an error to trigger failure rendering.
+func TestOnAfterApply_WithExitCodeOnly_RendersFailureSummary(t *testing.T) {
+	p := &Plugin{}
+	ctx := newFailureSummaryHookContext("apply", nil)
+	ctx.ExitCode = 1
+	mp := ctx.Provider.(*mockProvider)
+
+	err := p.onAfterApply(ctx)
+	require.NoError(t, err)
+
+	require.Len(t, mp.writer.summaries, 1)
+	rendered := mp.writer.summaries[0]
+	assert.Contains(t, rendered, "Apply Failed for")
+	assert.Contains(t, rendered, "APPLY-FAILED-ff0000")
+	assert.NotContains(t, rendered, "No Changes Applied for")
 }
 
 // TestOnAfterDeploy_WithCommandError_RendersFailureSummary covers the original

@@ -428,7 +428,12 @@ func TestRunCIHooks_CIEnabledIsHardKillSwitch(t *testing.T) {
 			// If it did reach ci.Execute with a bogus event, the event would not
 			// match any binding and ci.Execute returns nil anyway — but the key
 			// assertion is that RunCIHooks itself short-circuits.
-			err := RunCIHooks("before.terraform.plan", config, info, "", tc.forceCIMode, nil)
+			err := RunCIHooks(&RunCIHooksOptions{
+				Event:       "before.terraform.plan",
+				AtmosConfig: config,
+				Info:        info,
+				ForceCIMode: tc.forceCIMode,
+			})
 			assert.NoError(t, err)
 		})
 	}
