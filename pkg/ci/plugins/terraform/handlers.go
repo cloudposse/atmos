@@ -284,10 +284,16 @@ func (p *Plugin) parseOutputWithError(ctx *plugin.HookContext) *plugin.OutputRes
 		hasErrors = ctx.ExitCode != 0
 	}
 
-	// Defensive: a non-nil CommandError always indicates failure, even if
-	// the exit code is unset or zero (callers should set both, but treat
-	// either signal as authoritative for failure).
-	if ctx.CommandError != nil {
+	// Defensive: a non-nil CommandError indicates failure unless the exit
+	// code has command-specific success semantics. Specifically, `terraform
+	// plan -detailed-exitcode` returns 2 to signal "changes detected", and
+	// ExecuteShellCommand wraps that non-zero exit in an ExitCodeError —
+	// so CommandError is non-nil for the success case. Skip the override in
+	// that scenario; otherwise, treat CommandError as authoritative for
+	// failure even if the exit code is unset or zero (callers should set
+	// both).
+	planChangesDetected := ctx.Command == "plan" && ctx.ExitCode == 2
+	if ctx.CommandError != nil && !planChangesDetected {
 		hasErrors = true
 		if result.ExitCode == 0 {
 			result.ExitCode = 1
@@ -804,8 +810,15 @@ func filterVariables(vars map[string]string, allowed []string) map[string]string
 }
 
 // resolveCheckResult determines the check run status and conclusion from the hook context.
+// Exit code is authoritative: any non-zero code (or non-nil CommandError) signals failure,
+// except for `terraform plan -detailed-exitcode` exit code 2 which means "changes detected".
+// This mirrors the summary-rendering logic in parseOutputWithError so the check run and
+// summary cannot disagree.
 func resolveCheckResult(ctx *plugin.HookContext) (provider.CheckRunState, string) {
-	if ctx.CommandError != nil {
+	if ctx.Command == "plan" && ctx.ExitCode == 2 {
+		return provider.CheckRunStateSuccess, "success"
+	}
+	if ctx.CommandError != nil || ctx.ExitCode != 0 {
 		return provider.CheckRunStateFailure, "failure"
 	}
 	return provider.CheckRunStateSuccess, "success"

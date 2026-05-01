@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/ci/internal/plugin"
 	"github.com/cloudposse/atmos/pkg/ci/internal/provider"
 	"github.com/cloudposse/atmos/pkg/ci/templates"
@@ -197,6 +198,32 @@ func TestResolveCheckResult(t *testing.T) {
 		assert.Equal(t, provider.CheckRunStateFailure, status)
 		assert.Equal(t, "failure", conclusion)
 	})
+
+	t.Run("failure when only ExitCode is non-zero", func(t *testing.T) {
+		// Exit code is authoritative: a non-zero code must produce a failure
+		// check run even if CommandError is nil. Without this, a check run
+		// could disagree with the summary (which already treats ExitCode as
+		// authoritative).
+		ctx := &plugin.HookContext{ExitCode: 1}
+		status, conclusion := resolveCheckResult(ctx)
+		assert.Equal(t, provider.CheckRunStateFailure, status)
+		assert.Equal(t, "failure", conclusion)
+	})
+
+	t.Run("success for plan exit 2 even when CommandError is set", func(t *testing.T) {
+		// `terraform plan -detailed-exitcode` returns 2 to mean "changes
+		// detected"; ExecuteShellCommand wraps that in an ExitCodeError, so
+		// CommandError is non-nil for this success case. The check run must
+		// still report success.
+		ctx := &plugin.HookContext{
+			Command:      "plan",
+			ExitCode:     2,
+			CommandError: errUtils.ExitCodeError{Code: 2},
+		}
+		status, conclusion := resolveCheckResult(ctx)
+		assert.Equal(t, provider.CheckRunStateSuccess, status)
+		assert.Equal(t, "success", conclusion)
+	})
 }
 
 func TestBuildStatusDescription(t *testing.T) {
@@ -309,6 +336,26 @@ func TestParseOutputWithError(t *testing.T) {
 		result := p.parseOutputWithError(ctx)
 		assert.True(t, result.HasChanges, "exit code 2 must mark plan as having changes")
 		assert.False(t, result.HasErrors, "exit code 2 is success, not error")
+	})
+
+	t.Run("plan exit 2 with wrapped ExitCodeError - changes detected preserved", func(t *testing.T) {
+		// Production scenario for `terraform plan -detailed-exitcode` with
+		// changes: ExecuteShellCommand wraps the non-zero exit in an
+		// ExitCodeError, so cmd/terraform/utils.go forwards both ExitCode=2
+		// AND a non-nil CommandError into the hook. The CommandError-based
+		// fallback must NOT flip this case to "failure" — that would regress
+		// the summary from "Changes detected" to "Plan Failed".
+		ctx := &plugin.HookContext{
+			Output:       "",
+			Command:      "plan",
+			CommandError: errUtils.ExitCodeError{Code: 2},
+			ExitCode:     2,
+		}
+		result := p.parseOutputWithError(ctx)
+		assert.False(t, result.HasErrors, "plan exit 2 with wrapped error must remain 'changes detected'")
+		assert.True(t, result.HasChanges, "exit code 2 must mark plan as having changes")
+		assert.Equal(t, 2, result.ExitCode, "exit code 2 must be preserved")
+		assert.Empty(t, result.Errors, "no error body should be injected for plan/2")
 	})
 
 	t.Run("apply exit 1 with empty output - HasErrors from exit code only", func(t *testing.T) {
@@ -1320,12 +1367,16 @@ func TestOnAfterApply_WithCommandError_RendersFailureSummary(t *testing.T) {
 
 // TestOnAfterApply_WithExitCodeOnly_RendersFailureSummary verifies that the
 // summary reflects failure even when only the exit code is set (no
-// CommandError). This documents the contract: exit code is authoritative;
-// callers do not need to also pass an error to trigger failure rendering.
+// CommandError). Checks are enabled here so the test also catches the
+// production mismatch where the summary said "failure" but the check run
+// said "success" — both must agree that ExitCode is authoritative.
 func TestOnAfterApply_WithExitCodeOnly_RendersFailureSummary(t *testing.T) {
 	p := &Plugin{}
 	ctx := newFailureSummaryHookContext("apply", nil)
 	ctx.ExitCode = 1
+	// Enable checks so updateCheckRun runs and we can assert the recorded
+	// check update is "failure".
+	ctx.Config.CI.Checks.Enabled = boolPtr(true)
 	mp := ctx.Provider.(*mockProvider)
 
 	err := p.onAfterApply(ctx)
@@ -1336,6 +1387,10 @@ func TestOnAfterApply_WithExitCodeOnly_RendersFailureSummary(t *testing.T) {
 	assert.Contains(t, rendered, "Apply Failed for")
 	assert.Contains(t, rendered, "APPLY-FAILED-ff0000")
 	assert.NotContains(t, rendered, "No Changes Applied for")
+
+	require.Len(t, mp.updateRunCalls, 1, "check run should be updated when checks are enabled")
+	assert.Equal(t, provider.CheckRunStateFailure, mp.updateRunCalls[0].Status,
+		"exit code is authoritative — non-zero ExitCode must produce a failure check run")
 }
 
 // TestOnAfterDeploy_WithCommandError_RendersFailureSummary covers the original
