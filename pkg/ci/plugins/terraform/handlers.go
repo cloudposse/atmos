@@ -268,7 +268,10 @@ func (p *Plugin) parseOutputWithError(ctx *plugin.HookContext) *plugin.OutputRes
 }
 
 // writeSummary renders and writes the CI job summary.
-func (p *Plugin) writeSummary(ctx *plugin.HookContext, _ *plugin.OutputResult) (string, error) {
+// The result parameter must be the enriched result from parseOutputWithError so
+// that command errors (e.g., auth failures before terraform runs) propagate into
+// the template's .Result.HasErrors branch instead of being lost in a re-parse.
+func (p *Plugin) writeSummary(ctx *plugin.HookContext, result *plugin.OutputResult) (string, error) {
 	defer perf.Track(ctx.Config, "terraform.Plugin.writeSummary")()
 
 	// Get template name - prefer config override, fall back to command name.
@@ -288,7 +291,7 @@ func (p *Plugin) writeSummary(ctx *plugin.HookContext, _ *plugin.OutputResult) (
 	}
 
 	// Build template context.
-	tmplCtx, err := p.buildTemplateContext(ctx.Info, ctx.CICtx, ctx.Output, ctx.Command)
+	tmplCtx, err := p.buildTemplateContext(ctx.Info, ctx.CICtx, ctx.Output, ctx.Command, result)
 	if err != nil {
 		return "", errUtils.Build(errUtils.ErrTemplateEvaluation).
 			WithCause(err).

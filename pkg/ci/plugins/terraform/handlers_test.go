@@ -10,6 +10,7 @@ import (
 
 	"github.com/cloudposse/atmos/pkg/ci/internal/plugin"
 	"github.com/cloudposse/atmos/pkg/ci/internal/provider"
+	"github.com/cloudposse/atmos/pkg/ci/templates"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -1177,4 +1178,88 @@ func TestIsPlanfileStorageEnabled(t *testing.T) {
 		cfg.Components.Terraform.Planfiles.Priority = []string{}
 		assert.False(t, isPlanfileStorageEnabled(cfg))
 	})
+}
+
+// newFailureSummaryHookContext builds a HookContext suited for verifying that
+// summary rendering reflects ctx.CommandError. Output is intentionally empty
+// because the bug under test is auth (or other pre-terraform) failures where
+// no terraform output exists yet.
+func newFailureSummaryHookContext(command string, cmdErr error) *plugin.HookContext {
+	return &plugin.HookContext{
+		Config: &schema.AtmosConfiguration{
+			CI: schema.CIConfig{
+				Summary: schema.CISummaryConfig{Enabled: boolPtr(true)},
+				Output:  schema.CIOutputConfig{Enabled: boolPtr(false)},
+				Checks:  schema.CIChecksConfig{Enabled: boolPtr(false)},
+			},
+		},
+		Provider:       newMockProvider(),
+		TemplateLoader: templates.NewLoader(&schema.AtmosConfiguration{}),
+		Command:        command,
+		CommandError:   cmdErr,
+		Output:         "",
+		Info: &schema.ConfigAndStacksInfo{
+			Stack:            "dev",
+			ComponentFromArg: "vpc",
+		},
+	}
+}
+
+func TestOnAfterPlan_WithCommandError_RendersFailureSummary(t *testing.T) {
+	p := &Plugin{}
+	ctx := newFailureSummaryHookContext("plan", fmt.Errorf("identity failed: assume role denied"))
+	mp := ctx.Provider.(*mockProvider)
+
+	err := p.onAfterPlan(ctx)
+	require.NoError(t, err)
+
+	require.Len(t, mp.writer.summaries, 1, "summary should have been rendered")
+	rendered := mp.writer.summaries[0]
+
+	assert.Contains(t, rendered, "Plan Failed for", "should use the failure header")
+	assert.Contains(t, rendered, "PLAN-FAILED-ff0000", "should use the FAILED badge")
+	assert.Contains(t, rendered, "identity failed: assume role denied", "should surface the command error")
+	assert.NotContains(t, rendered, "No Changes for", "must not fall through to no-changes branch")
+	assert.NotContains(t, rendered, "NO_CHANGE-inactive", "must not use the no-change badge")
+}
+
+func TestOnAfterApply_WithCommandError_RendersFailureSummary(t *testing.T) {
+	p := &Plugin{}
+	ctx := newFailureSummaryHookContext("apply", fmt.Errorf("identity failed: assume role denied"))
+	mp := ctx.Provider.(*mockProvider)
+
+	err := p.onAfterApply(ctx)
+	require.NoError(t, err)
+
+	require.Len(t, mp.writer.summaries, 1, "summary should have been rendered")
+	rendered := mp.writer.summaries[0]
+
+	assert.Contains(t, rendered, "Apply Failed for", "should use the failure header")
+	assert.Contains(t, rendered, "APPLY-FAILED-ff0000", "should use the FAILED badge")
+	assert.Contains(t, rendered, "identity failed: assume role denied", "should surface the command error")
+	assert.NotContains(t, rendered, "No Changes Applied for", "must not fall through to no-changes branch")
+	assert.NotContains(t, rendered, "NO_CHANGE-inactive", "must not use the no-change badge")
+}
+
+// TestOnAfterDeploy_WithCommandError_RendersFailureSummary covers the original
+// reported bug: `atmos terraform deploy ... --upload-status` failing at auth
+// before terraform runs must produce an "Apply Failed" summary, not "No Changes
+// Applied". Deploy uses the apply template internally (handlers.go onAfterDeploy
+// overrides ctx.Command to "apply" for templating).
+func TestOnAfterDeploy_WithCommandError_RendersFailureSummary(t *testing.T) {
+	p := &Plugin{}
+	ctx := newFailureSummaryHookContext("deploy", fmt.Errorf("identity failed: assume role denied"))
+	mp := ctx.Provider.(*mockProvider)
+
+	err := p.onAfterDeploy(ctx)
+	require.NoError(t, err)
+
+	require.Len(t, mp.writer.summaries, 1, "summary should have been rendered")
+	rendered := mp.writer.summaries[0]
+
+	assert.Contains(t, rendered, "Apply Failed for", "deploy must render via the apply template's failure branch")
+	assert.Contains(t, rendered, "APPLY-FAILED-ff0000", "should use the FAILED badge")
+	assert.Contains(t, rendered, "identity failed: assume role denied", "should surface the command error")
+	assert.NotContains(t, rendered, "No Changes Applied for", "must not fall through to no-changes branch")
+	assert.NotContains(t, rendered, "NO_CHANGE-inactive", "must not use the no-change badge")
 }
