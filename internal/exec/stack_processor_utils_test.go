@@ -3908,6 +3908,44 @@ locals:
 	}
 }
 
+// TestClearExtractLocalsCache verifies that the test-only cache reset
+// drops cached entries, forcing the next call to re-run the resolver.
+func TestClearExtractLocalsCache(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockStateGetterObj := NewMockTerraformStateGetter(ctrl)
+	originalGetter := stateGetter
+	stateGetter = mockStateGetterObj
+	defer func() { stateGetter = originalGetter }()
+
+	atmosConfig := &schema.AtmosConfiguration{}
+	// Two calls expected: one before clear, one after.
+	mockStateGetterObj.EXPECT().
+		GetState(atmosConfig, gomock.Any(), "shared", "vpc", ".vpc_id", false, gomock.Any(), gomock.Any()).
+		Return("vpc-1", nil).
+		Times(2)
+
+	tmpDir := t.TempDir()
+	stackFile := filepath.Join(tmpDir, "clear.yaml")
+	yamlContent := `
+locals:
+  v: !terraform.state vpc shared .vpc_id
+`
+
+	r1, err := extractLocalsFromRawYAML(atmosConfig, yamlContent, stackFile)
+	require.NoError(t, err)
+	assert.Equal(t, "vpc-1", r1.locals["v"])
+
+	// Without clear, the second call would be served from cache and
+	// the mock's Times(2) would fail with "missing call".
+	ClearExtractLocalsCache()
+
+	r2, err := extractLocalsFromRawYAML(atmosConfig, yamlContent, stackFile)
+	require.NoError(t, err)
+	assert.Equal(t, "vpc-1", r2.locals["v"])
+}
+
 // TestExtractLocalsFromRawYAML_MemoizeInvalidatesOnContentChange verifies
 // that the memoization cache is keyed on file content (not just path),
 // so editing a file mid-command produces a fresh evaluation.

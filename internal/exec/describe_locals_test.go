@@ -176,6 +176,250 @@ func TestDeriveStackName_MergesImportedSettings(t *testing.T) {
 	assert.Equal(t, "cloudlabs-plat-prod", got, "name_template must include settings and merge from imports")
 }
 
+// TestDeriveStackNameSections_NilInputs covers the early-return guards
+// in deriveStackNameSections (nil atmosConfig and nil rawConfig).
+func TestDeriveStackNameSections_NilInputs(t *testing.T) {
+	t.Run("nil atmosConfig returns nil maps", func(t *testing.T) {
+		v, s, e := deriveStackNameSections(nil, map[string]any{}, "leaf.yaml")
+		assert.Nil(t, v)
+		assert.Nil(t, s)
+		assert.Nil(t, e)
+	})
+
+	t.Run("nil rawConfig returns nil maps", func(t *testing.T) {
+		ac := &schema.AtmosConfiguration{}
+		v, s, e := deriveStackNameSections(ac, nil, "leaf.yaml")
+		assert.Nil(t, v)
+		assert.Nil(t, s)
+		assert.Nil(t, e)
+	})
+}
+
+// TestDeriveStackNameSectionsInto_NilRawConfig covers the recursive
+// helper's nil-rawConfig guard.
+func TestDeriveStackNameSectionsInto_NilRawConfig(t *testing.T) {
+	ac := &schema.AtmosConfiguration{}
+	v, s, e := deriveStackNameSectionsInto(ac, nil, "leaf.yaml", map[string]bool{})
+	assert.Nil(t, v)
+	assert.Nil(t, s)
+	assert.Nil(t, e)
+}
+
+// TestDeriveStackNameSections_VisitedCycleBreak verifies that an import
+// loop (a→b→a) doesn't cause infinite recursion -- the visited set
+// prevents reprocessing a path that was already loaded.
+func TestDeriveStackNameSections_VisitedCycleBreak(t *testing.T) {
+	tmpDir := t.TempDir()
+	stacksDir := filepath.Join(tmpDir, "stacks")
+	require.NoError(t, os.MkdirAll(stacksDir, 0o755))
+
+	// a.yaml imports b, b.yaml imports a (cycle).
+	require.NoError(t, os.WriteFile(filepath.Join(stacksDir, "a.yaml"),
+		[]byte("import:\n  - ./b\nvars:\n  from_a: true\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(stacksDir, "b.yaml"),
+		[]byte("import:\n  - ./a\nvars:\n  from_b: true\n"), 0o644))
+
+	ac := &schema.AtmosConfiguration{
+		BasePath: tmpDir,
+		Stacks:   schema.Stacks{BasePath: "stacks"},
+	}
+
+	rawA := map[string]any{
+		"import": []any{"./b"},
+		"vars":   map[string]any{"from_a": true},
+	}
+
+	v, _, _ := deriveStackNameSections(ac, rawA, filepath.Join(stacksDir, "a.yaml"))
+	// Both vars should be present; cycle must not cause infinite recursion.
+	assert.Equal(t, true, v["from_a"])
+	assert.Equal(t, true, v["from_b"])
+}
+
+// TestDeriveStackNameSections_BadImportSection covers the
+// ProcessImportSection error path -- when the import section is
+// malformed, we silently fall back to leaf-only sections.
+func TestDeriveStackNameSections_BadImportSection(t *testing.T) {
+	ac := &schema.AtmosConfiguration{
+		BasePath: t.TempDir(),
+		Stacks:   schema.Stacks{BasePath: "stacks"},
+	}
+	// Import is a string instead of a list -> ProcessImportSection errors.
+	rawConfig := map[string]any{
+		"import": "not-a-list",
+		"vars":   map[string]any{"stage": "prod"},
+	}
+
+	v, _, _ := deriveStackNameSections(ac, rawConfig, "leaf.yaml")
+	// Leaf vars survive; no panic.
+	assert.Equal(t, "prod", v["stage"])
+}
+
+// TestDeriveStackNameSections_UnresolvableImport covers the case where
+// an import path can't be resolved to a real file. The helper must
+// silently skip and continue with leaf-only sections.
+func TestDeriveStackNameSections_UnresolvableImport(t *testing.T) {
+	ac := &schema.AtmosConfiguration{
+		BasePath: t.TempDir(),
+		Stacks:   schema.Stacks{BasePath: "stacks"},
+	}
+	rawConfig := map[string]any{
+		"import": []any{"does/not/exist"},
+		"vars":   map[string]any{"stage": "dev"},
+	}
+
+	v, _, _ := deriveStackNameSections(ac, rawConfig, "leaf.yaml")
+	assert.Equal(t, "dev", v["stage"])
+}
+
+// TestLoadAndMergeStackNameImport_BadYAML covers the YAML-parse-error
+// branch -- a .yaml file with non-YAML content must be silently skipped.
+func TestLoadAndMergeStackNameImport_BadYAML(t *testing.T) {
+	tmpDir := t.TempDir()
+	badFile := filepath.Join(tmpDir, "bad.yaml")
+	// Write content that fails YAML parse.
+	require.NoError(t, os.WriteFile(badFile, []byte(":\n:\n: invalid"), 0o644))
+
+	ac := &schema.AtmosConfiguration{}
+	dest := stackNameSectionMaps{
+		vars:     map[string]any{},
+		settings: map[string]any{},
+		env:      map[string]any{},
+	}
+	visited := map[string]bool{}
+	loadAndMergeStackNameImport(ac, badFile, visited, dest)
+
+	// Nothing merged in; visited still records the path so we don't
+	// retry on subsequent calls.
+	assert.Empty(t, dest.vars)
+	assert.Empty(t, dest.settings)
+	assert.Empty(t, dest.env)
+	abs, _ := filepath.Abs(badFile)
+	assert.True(t, visited[abs], "even after a bad-YAML skip, the path is marked visited")
+}
+
+// TestLoadAndMergeStackNameImport_AlreadyVisited covers the visited-gate
+// short-circuit.
+func TestLoadAndMergeStackNameImport_AlreadyVisited(t *testing.T) {
+	tmpDir := t.TempDir()
+	f := filepath.Join(tmpDir, "x.yaml")
+	require.NoError(t, os.WriteFile(f, []byte("vars:\n  k: v\n"), 0o644))
+
+	ac := &schema.AtmosConfiguration{}
+	dest := stackNameSectionMaps{
+		vars:     map[string]any{"existing": "preserved"},
+		settings: map[string]any{},
+		env:      map[string]any{},
+	}
+	abs, _ := filepath.Abs(f)
+	visited := map[string]bool{abs: true}
+	loadAndMergeStackNameImport(ac, f, visited, dest)
+
+	// Pre-visited path is a no-op: the file's vars must NOT be merged.
+	_, gotK := dest.vars["k"]
+	assert.False(t, gotK, "already-visited path must not be re-merged")
+	assert.Equal(t, "preserved", dest.vars["existing"])
+}
+
+// TestLoadAndMergeStackNameImport_FileReadError covers the missing-file
+// branch.
+func TestLoadAndMergeStackNameImport_FileReadError(t *testing.T) {
+	ac := &schema.AtmosConfiguration{}
+	dest := stackNameSectionMaps{
+		vars:     map[string]any{},
+		settings: map[string]any{},
+		env:      map[string]any{},
+	}
+	loadAndMergeStackNameImport(ac, "/nonexistent/path/that/does/not/exist.yaml", map[string]bool{}, dest)
+	assert.Empty(t, dest.vars)
+}
+
+// TestResolveImportFilePathsForStackName covers the four resolution
+// branches: empty input, direct hit (path with .yaml ext exists),
+// extension-append hit, and glob fallback.
+func TestResolveImportFilePathsForStackName(t *testing.T) {
+	tmpDir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "exact.yaml"), []byte("k: v"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "noext.yaml"), []byte("k: v"), 0o644))
+
+	t.Run("empty path returns nil", func(t *testing.T) {
+		assert.Nil(t, resolveImportFilePathsForStackName(tmpDir, ""))
+	})
+
+	t.Run("direct hit when path already has .yaml", func(t *testing.T) {
+		got := resolveImportFilePathsForStackName(tmpDir, "exact.yaml")
+		require.Len(t, got, 1)
+		assert.Contains(t, got[0], "exact.yaml")
+	})
+
+	t.Run("ext-append hit when path has no extension", func(t *testing.T) {
+		got := resolveImportFilePathsForStackName(tmpDir, "noext")
+		require.Len(t, got, 1)
+		assert.Contains(t, got[0], "noext.yaml")
+	})
+
+	t.Run("absolute path with .yaml uses direct hit", func(t *testing.T) {
+		got := resolveImportFilePathsForStackName("/ignored", filepath.Join(tmpDir, "exact.yaml"))
+		require.Len(t, got, 1)
+	})
+
+	t.Run("unresolvable path returns nil", func(t *testing.T) {
+		got := resolveImportFilePathsForStackName(tmpDir, "missing-completely")
+		assert.Nil(t, got)
+	})
+}
+
+// TestHasYAMLExt directly covers the extension predicate.
+func TestHasYAMLExt(t *testing.T) {
+	cases := map[string]bool{
+		"foo.yaml":      true,
+		"foo.yml":       true,
+		"foo/bar.yaml":  true,
+		"foo.YAML":      false, // case-sensitive (matches Atmos's existing handling)
+		"foo.tmpl":      false,
+		"foo.yaml.tmpl": false,
+		"foo":           false,
+		"":              false,
+	}
+	for path, want := range cases {
+		t.Run(path, func(t *testing.T) {
+			assert.Equal(t, want, hasYAMLExt(path))
+		})
+	}
+}
+
+// TestFindFirstExistingWithExt covers ordering (.yaml beats .yml when
+// both exist) and the all-missing return.
+func TestFindFirstExistingWithExt(t *testing.T) {
+	tmpDir := t.TempDir()
+	yamlPath := filepath.Join(tmpDir, "both.yaml")
+	ymlPath := filepath.Join(tmpDir, "both.yml")
+	require.NoError(t, os.WriteFile(yamlPath, []byte("k: v"), 0o644))
+	require.NoError(t, os.WriteFile(ymlPath, []byte("k: v"), 0o644))
+
+	got := findFirstExistingWithExt(filepath.Join(tmpDir, "both"), stackNameImportYAMLExts)
+	assert.Equal(t, yamlPath, got, ".yaml comes first in the ext list")
+
+	missing := findFirstExistingWithExt(filepath.Join(tmpDir, "absent"), stackNameImportYAMLExts)
+	assert.Empty(t, missing)
+}
+
+// TestMergeMapShallow covers the trivial top-level merge helper used by
+// the stack-name section walkers.
+func TestMergeMapShallow(t *testing.T) {
+	t.Run("nil src is a no-op", func(t *testing.T) {
+		dst := map[string]any{"a": 1}
+		mergeMapShallow(dst, nil)
+		assert.Equal(t, map[string]any{"a": 1}, dst)
+	})
+
+	t.Run("src overrides dst at top level", func(t *testing.T) {
+		dst := map[string]any{"a": 1, "b": 2}
+		src := map[string]any{"b": 99, "c": 3}
+		mergeMapShallow(dst, src)
+		assert.Equal(t, map[string]any{"a": 1, "b": 99, "c": 3}, dst)
+	})
+}
+
 // TestDeriveStackName_NoValueRejected verifies the malformed-name guard:
 // when a name_template references a key that's defined nowhere (not in
 // the leaf, not in any import), the rendered "<no value>" must NOT be
