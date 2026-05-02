@@ -142,8 +142,11 @@ func TestAssumeRoleIdentity_Authenticate_WebIdentity_PreservesSDKError(t *testin
 			httpStatus:   http.StatusForbidden,
 			errorCode:    "AccessDenied",
 			errorMessage: "Not authorized to perform sts:AssumeRoleWithWebIdentity",
-			// JWT shape doesn't matter — the test server doesn't validate it.
-			oidcToken: "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ0ZXN0In0.sig",
+			// Token shape doesn't matter — the test server doesn't validate
+			// it and the SDK doesn't parse it client-side. Use an obviously
+			// synthetic placeholder so secret scanners (GitGuardian,
+			// Trufflehog, etc.) don't false-positive on JWT-shaped strings.
+			oidcToken: "header.payload.signature",
 			// Operation name in the substring list pins both the SDK code
 			// AND the rendered operation context to the chained error.
 			expectSubstrings: []string{"AccessDenied", "AssumeRoleWithWebIdentity"},
