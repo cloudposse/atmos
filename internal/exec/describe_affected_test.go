@@ -136,7 +136,7 @@ func TestDescribeAffected(t *testing.T) {
 		return []schema.Affected{}, nil, nil, "", nil
 	}
 
-	d.executeDescribeAffectedWithTargetRefCheckout = func(atmosConfig *schema.AtmosConfiguration, ref, sha string, includeSpaceliftAdminStacks, includeSettings bool, stack string, processTemplates, processYamlFunctions bool, skip []string, excludeLocked bool, authManager auth.AuthManager) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, string, error) {
+	d.executeDescribeAffectedWithTargetRefCheckout = func(atmosConfig *schema.AtmosConfiguration, ref, sha, targetBranch string, includeSpaceliftAdminStacks, includeSettings bool, stack string, processTemplates, processYamlFunctions bool, skip []string, excludeLocked bool, authManager auth.AuthManager) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, string, error) {
 		return []schema.Affected{
 			{
 				Stack: "test-stack",
@@ -1657,7 +1657,8 @@ func TestResolveBaseFromCI(t *testing.T) {
 					"sha": "headsha123456789012345678901234567890ab"
 				},
 				"base": {
-					"ref": "main"
+					"ref": "main",
+					"sha": "abc123def456789012345678901234567890abcd"
 				}
 			}
 		}`
@@ -1672,11 +1673,12 @@ func TestResolveBaseFromCI(t *testing.T) {
 		resolveBaseFromCI(describe)
 		assert.Equal(t, "pull_request", describe.CIEventType)
 		assert.Equal(t, "headsha123456789012345678901234567890ab", describe.HeadSHAOverride)
-		if describe.SHA == "" {
-			assert.Equal(t, "refs/remotes/origin/main", describe.Ref)
-		} else {
-			assert.NotEmpty(t, describe.SHA)
-		}
+		assert.Equal(t, "main", describe.TargetBranch)
+		// merge-base may or may not succeed depending on the test repo state.
+		// Either way we MUST end up with a SHA — never the origin/<target> tip ref,
+		// which is the path that produces false positives for out-of-date PRs.
+		assert.NotEmpty(t, describe.SHA, "auto-detect must populate SHA, never just a ref to current target tip")
+		assert.Empty(t, describe.Ref, "auto-detect must not fall back to refs/remotes/origin/<target> (causes false positives)")
 	})
 
 	t.Run("GitHub Actions push event with before SHA", func(t *testing.T) {
@@ -1836,7 +1838,7 @@ func TestExecute_MatrixFormat(t *testing.T) {
 	}
 	d.executeDescribeAffectedWithTargetRefCheckout = func(
 		atmosConfig *schema.AtmosConfiguration,
-		ref, sha string,
+		ref, sha, targetBranch string,
 		includeSpaceliftAdminStacks, includeSettings bool,
 		stack string, processTemplates, processYamlFunctions bool,
 		skip []string, excludeLocked bool,

@@ -258,6 +258,7 @@ func executeAffectedLogic(atmosConfig *schema.AtmosConfiguration, opts *Affected
 			atmosConfig,
 			opts.Ref,
 			opts.SHA,
+			"",    // targetBranch — list affected does not yet plumb CI auto-detection.
 			false, // includeSpaceliftAdminStacks
 			includeSettings,
 			opts.Stack,

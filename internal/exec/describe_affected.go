@@ -14,6 +14,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/auth"
 	"github.com/cloudposse/atmos/pkg/ci"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	atmosgit "github.com/cloudposse/atmos/pkg/git"
 	ghactions "github.com/cloudposse/atmos/pkg/github/actions"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/matrix"
@@ -56,6 +57,7 @@ type DescribeAffectedCmdArgs struct {
 	AuthManager                 auth.AuthManager // Optional: Auth manager for credential management (from --identity flag).
 	HeadSHAOverride             string           // PR head SHA from CI event payload, used for upload correlation with Atmos Pro.
 	CIEventType                 string           // CI event type (e.g., "pull_request", "push") for upload validation.
+	TargetBranch                string           // PR target branch (e.g., "main") used to auto-fetch when refs are missing locally.
 }
 
 //go:generate go run go.uber.org/mock/mockgen@v0.6.0 -source=$GOFILE -destination=mock_$GOFILE -package=$GOPACKAGE
@@ -96,6 +98,7 @@ type describeAffectedExec struct {
 		atmosConfig *schema.AtmosConfiguration,
 		ref string,
 		sha string,
+		targetBranch string,
 		includeSpaceliftAdminStacks bool,
 		includeSettings bool,
 		stack string,
@@ -250,12 +253,29 @@ func SetDescribeAffectedFlagValueInCliArgs(flags *pflag.FlagSet, describe *Descr
 }
 
 // resolveBaseFromCI attempts to auto-detect the base commit from the CI provider.
+//
+// This function is only invoked when `ci.enabled: true` in atmos.yaml and no
+// explicit base flag was provided (see the call site above). Because the user
+// has opted into CI auto-detect, it is appropriate to mutate the runner's git
+// config (via `EnsureGitSafeDirectory`) so that downstream git commands —
+// `merge-base`, the targeted `git fetch` for shallow clones, and the
+// `HEAD~1` lookup for closed PRs — do not fail with "dubious ownership in
+// repository" inside GitHub Actions container jobs. The helper is a no-op
+// outside GitHub Actions, so it does nothing when running locally.
 func resolveBaseFromCI(describe *DescribeAffectedCmdArgs) {
 	defer perf.Track(nil, "exec.resolveBaseFromCI")()
 
 	p := ci.Detect()
 	if p == nil {
 		return
+	}
+
+	// Trust the GitHub Actions workspace before any git operation the
+	// provider is about to run. Gated by `ci.enabled` via the call site.
+	if err := atmosgit.EnsureGitSafeDirectory(); err != nil {
+		// Non-fatal: subsequent git commands will surface a clearer error
+		// if this actually matters. We log so the cause is visible.
+		log.Warn("Failed to configure git safe.directory for GitHub Actions workspace", "error", err)
 	}
 
 	resolution, err := p.ResolveBase()
@@ -271,6 +291,7 @@ func resolveBaseFromCI(describe *DescribeAffectedCmdArgs) {
 	describe.SHA = resolution.SHA
 	describe.HeadSHAOverride = resolution.HeadSHA
 	describe.CIEventType = resolution.EventType
+	describe.TargetBranch = resolution.TargetBranch
 
 	base := resolution.SHA
 	if base == "" {
@@ -327,6 +348,7 @@ func (d *describeAffectedExec) Execute(a *DescribeAffectedCmdArgs) error {
 			a.CLIConfig,
 			a.Ref,
 			a.SHA,
+			a.TargetBranch,
 			a.IncludeSpaceliftAdminStacks,
 			a.IncludeSettings,
 			a.Stack,
