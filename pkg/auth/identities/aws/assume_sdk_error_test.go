@@ -37,11 +37,13 @@ func stsErrorServer(t *testing.T, httpStatus int, errorCode, errorMessage string
   </Error>
   <RequestId>test-request-id-fixed</RequestId>
 </ErrorResponse>`, errorCode, errorMessage)
-	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "text/xml")
 		w.WriteHeader(httpStatus)
 		_, _ = w.Write([]byte(body))
 	}))
+	t.Cleanup(srv.Close)
+	return srv
 }
 
 // resolverCredentials returns a Credentials map that points the AWS SDK
@@ -69,7 +71,6 @@ func resolverCredentials(url string) map[string]interface{} {
 func TestAssumeRoleIdentity_Authenticate_StandardAssumeRole_PreservesSDKError(t *testing.T) {
 	server := stsErrorServer(t, http.StatusForbidden, "AccessDenied",
 		"User: arn:aws:iam::111111111111:user/test is not authorized to perform: sts:AssumeRole on resource: arn:aws:iam::222222222222:role/MismatchedTrust")
-	defer server.Close()
 
 	identity := &assumeRoleIdentity{
 		name: "test-role",
@@ -108,9 +109,8 @@ func TestAssumeRoleIdentity_Authenticate_StandardAssumeRole_PreservesSDKError(t 
 
 	// The smithy.APIError interface should also be reachable through the chain.
 	var apiErr smithy.APIError
-	assert.True(t, errors.As(err, &apiErr),
-		"underlying smithy.APIError must be reachable via errors.As")
-	if apiErr != nil {
+	if assert.True(t, errors.As(err, &apiErr),
+		"underlying smithy.APIError must be reachable via errors.As") {
 		assert.Equal(t, "AccessDenied", apiErr.ErrorCode())
 	}
 }
@@ -161,7 +161,6 @@ func TestAssumeRoleIdentity_Authenticate_WebIdentity_PreservesSDKError(t *testin
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			server := stsErrorServer(t, tc.httpStatus, tc.errorCode, tc.errorMessage)
-			defer server.Close()
 
 			identity := &assumeRoleIdentity{
 				name: "github-role",
@@ -215,7 +214,6 @@ func TestAssumeRoleIdentity_Authenticate_WebIdentity_PreservesSDKError(t *testin
 func TestAssumeRootIdentity_Authenticate_PreservesSDKError(t *testing.T) {
 	server := stsErrorServer(t, http.StatusForbidden, "AccessDenied",
 		"User: arn:aws:sts::111111111111:assumed-role/PermSet/test is not authorized to perform: sts:AssumeRoot on resource: arn:aws:iam::222222222222:root")
-	defer server.Close()
 
 	identity := &assumeRootIdentity{
 		name: "root-access",
@@ -252,9 +250,8 @@ func TestAssumeRootIdentity_Authenticate_PreservesSDKError(t *testing.T) {
 		"AWS error message detail must be preserved in the error chain")
 
 	var apiErr smithy.APIError
-	assert.True(t, errors.As(err, &apiErr),
-		"underlying smithy.APIError must be reachable via errors.As")
-	if apiErr != nil {
+	if assert.True(t, errors.As(err, &apiErr),
+		"underlying smithy.APIError must be reachable via errors.As") {
 		assert.Equal(t, "AccessDenied", apiErr.ErrorCode())
 	}
 }
