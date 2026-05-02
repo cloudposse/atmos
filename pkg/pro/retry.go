@@ -93,7 +93,7 @@ func doWithRetry(operation string, fn func() error, refresher tokenRefresher, cf
 				logKeyMaxRetries, cfg.maxRetries,
 				"error", err,
 			)
-			return errors.Join(errUtils.ErrUploadRetryExhausted, err)
+			return wrapErr(errUtils.ErrUploadRetryExhausted, err)
 		}
 	}
 
