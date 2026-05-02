@@ -117,97 +117,96 @@ func TestAssumeRoleIdentity_Authenticate_StandardAssumeRole_PreservesSDKError(t 
 
 // TestAssumeRoleIdentity_Authenticate_WebIdentity_PreservesSDKError verifies
 // the same property on the AssumeRoleWithWebIdentity path used by OIDC-based
-// CI flows (GitHub Actions, GitLab CI, etc.).
+// CI flows (GitHub Actions, GitLab CI, etc.). Each subtest exercises a
+// different STS error code to confirm the chain isn't hard-coded to one —
+// any code the SDK surfaces should pass through.
 func TestAssumeRoleIdentity_Authenticate_WebIdentity_PreservesSDKError(t *testing.T) {
 	// Strip ambient AWS env so the SDK must use the (anonymous) credentials
-	// path that AssumeRoleWithWebIdentity sets up internally.
+	// path that AssumeRoleWithWebIdentity sets up internally. Hoisted to the
+	// parent so the cleanup runs once after all subtests; subtests are
+	// sequential, so this is safe.
 	t.Setenv("AWS_ACCESS_KEY_ID", "")
 	t.Setenv("AWS_SECRET_ACCESS_KEY", "")
 	t.Setenv("AWS_SESSION_TOKEN", "")
 
-	server := stsErrorServer(t, http.StatusForbidden, "AccessDenied",
-		"Not authorized to perform sts:AssumeRoleWithWebIdentity")
-	defer server.Close()
-
-	identity := &assumeRoleIdentity{
-		name: "github-role",
-		config: &schema.Identity{
-			Kind: "aws/assume-role",
-			Via:  &schema.IdentityVia{Provider: "github-oidc"},
-			Principal: map[string]interface{}{
-				"assume_role": "arn:aws:iam::111111111111:role/GitHubActionsRole",
-				"region":      "us-east-1",
-			},
-			Credentials: resolverCredentials(server.URL),
+	tests := []struct {
+		name             string
+		httpStatus       int
+		errorCode        string
+		errorMessage     string
+		oidcToken        string
+		expectSubstrings []string
+	}{
+		{
+			name:         "AccessDenied",
+			httpStatus:   http.StatusForbidden,
+			errorCode:    "AccessDenied",
+			errorMessage: "Not authorized to perform sts:AssumeRoleWithWebIdentity",
+			// JWT shape doesn't matter — the test server doesn't validate it.
+			oidcToken: "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ0ZXN0In0.sig",
+			// Operation name in the substring list pins both the SDK code
+			// AND the rendered operation context to the chained error.
+			expectSubstrings: []string{"AccessDenied", "AssumeRoleWithWebIdentity"},
+		},
+		{
+			name:             "InvalidIdentityToken",
+			httpStatus:       http.StatusBadRequest,
+			errorCode:        "InvalidIdentityToken",
+			errorMessage:     "The web identity token that was passed could not be validated",
+			oidcToken:        "garbage.token.value",
+			expectSubstrings: []string{"InvalidIdentityToken"},
 		},
 	}
-	require.NoError(t, identity.Validate())
 
-	oidcCreds := &types.OIDCCredentials{
-		// JWT shape doesn't matter here — the test server doesn't validate it.
-		Token:    "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ0ZXN0In0.sig",
-		Provider: "github",
-		Audience: "sts.amazonaws.com",
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			server := stsErrorServer(t, tc.httpStatus, tc.errorCode, tc.errorMessage)
+			defer server.Close()
+
+			identity := &assumeRoleIdentity{
+				name: "github-role",
+				config: &schema.Identity{
+					Kind: "aws/assume-role",
+					Via:  &schema.IdentityVia{Provider: "github-oidc"},
+					Principal: map[string]interface{}{
+						"assume_role": "arn:aws:iam::111111111111:role/GitHubActionsRole",
+						"region":      "us-east-1",
+					},
+					Credentials: resolverCredentials(server.URL),
+				},
+			}
+			require.NoError(t, identity.Validate())
+
+			oidcCreds := &types.OIDCCredentials{
+				Token:    tc.oidcToken,
+				Provider: "github",
+				Audience: "sts.amazonaws.com",
+			}
+
+			_, err := identity.Authenticate(context.Background(), oidcCreds)
+			require.Error(t, err)
+
+			// Sentinel must still match — WithCause preserves it.
+			assert.ErrorIs(t, err, errUtils.ErrAuthenticationFailed,
+				"sentinel ErrAuthenticationFailed must remain reachable via errors.Is")
+
+			// Every expected substring (SDK code, operation name, ...) must
+			// surface in the rendered error.
+			errMsg := err.Error()
+			for _, s := range tc.expectSubstrings {
+				assert.Contains(t, errMsg, s,
+					"SDK error substring %q must be preserved in the error chain", s)
+			}
+
+			// The smithy.APIError interface should be reachable through the
+			// chain, and its ErrorCode must equal the SDK code we returned.
+			var apiErr smithy.APIError
+			if assert.True(t, errors.As(err, &apiErr),
+				"underlying smithy.APIError must be reachable via errors.As") {
+				assert.Equal(t, tc.errorCode, apiErr.ErrorCode())
+			}
+		})
 	}
-
-	_, err := identity.Authenticate(context.Background(), oidcCreds)
-	require.Error(t, err)
-
-	assert.ErrorIs(t, err, errUtils.ErrAuthenticationFailed,
-		"sentinel ErrAuthenticationFailed must remain reachable via errors.Is")
-
-	errMsg := err.Error()
-	assert.Contains(t, errMsg, "AccessDenied",
-		"AWS error code must be preserved in the error chain")
-	assert.Contains(t, errMsg, "AssumeRoleWithWebIdentity",
-		"AWS error message detail must be preserved in the error chain")
-
-	var apiErr smithy.APIError
-	assert.True(t, errors.As(err, &apiErr),
-		"underlying smithy.APIError must be reachable via errors.As")
-	if apiErr != nil {
-		assert.Equal(t, "AccessDenied", apiErr.ErrorCode())
-	}
-}
-
-// TestAssumeRoleIdentity_Authenticate_WebIdentity_PreservesInvalidIdentityToken
-// covers a different STS error code to confirm the chain isn't hard-coded
-// to AccessDenied — any code the SDK surfaces should pass through.
-func TestAssumeRoleIdentity_Authenticate_WebIdentity_PreservesInvalidIdentityToken(t *testing.T) {
-	t.Setenv("AWS_ACCESS_KEY_ID", "")
-	t.Setenv("AWS_SECRET_ACCESS_KEY", "")
-	t.Setenv("AWS_SESSION_TOKEN", "")
-
-	server := stsErrorServer(t, http.StatusBadRequest, "InvalidIdentityToken",
-		"The web identity token that was passed could not be validated")
-	defer server.Close()
-
-	identity := &assumeRoleIdentity{
-		name: "github-role",
-		config: &schema.Identity{
-			Kind: "aws/assume-role",
-			Via:  &schema.IdentityVia{Provider: "github-oidc"},
-			Principal: map[string]interface{}{
-				"assume_role": "arn:aws:iam::111111111111:role/GitHubActionsRole",
-				"region":      "us-east-1",
-			},
-			Credentials: resolverCredentials(server.URL),
-		},
-	}
-	require.NoError(t, identity.Validate())
-
-	oidcCreds := &types.OIDCCredentials{
-		Token:    "garbage.token.value",
-		Provider: "github",
-		Audience: "sts.amazonaws.com",
-	}
-
-	_, err := identity.Authenticate(context.Background(), oidcCreds)
-	require.Error(t, err)
-
-	assert.ErrorIs(t, err, errUtils.ErrAuthenticationFailed)
-	assert.Contains(t, err.Error(), "InvalidIdentityToken",
-		"distinct STS error codes must each surface in the error chain")
 }
 
 // TestAssumeRootIdentity_Authenticate_PreservesSDKError mirrors the assume-role

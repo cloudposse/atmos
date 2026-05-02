@@ -73,17 +73,26 @@ Error: authentication failed: identity=my-role step=1: authentication failed:
 
 ### Progress checklist
 
-- [x] Reproduce: existing `TestAssumeRoleIdentity_Authenticate_ErrorCases`
-  exercises the validation error path; added a sibling case that
-  drives a real STS failure through a stub client and asserts the
-  returned error chains through to the SDK message via
-  `errors.Is(err, &smithy.GenericAPIError{Code: "AccessDenied"})`
-  (or simpler — `assert.ErrorContains(err, "AccessDenied: <reason>")`).
+- [x] Reproduce: added a new file
+  `pkg/auth/identities/aws/assume_sdk_error_test.go` that drives a
+  real STS failure end-to-end by pointing the SDK at a local
+  `httptest.Server` returning an AWS-style XML error envelope
+  (routed via the existing `aws.resolver.url` mechanism in
+  `identity.Credentials`). The smithy XML decoder turns the response
+  into a `*smithy.GenericAPIError`. Each test asserts the resulting
+  error chain via `errors.As(err, &apiErr)` plus
+  `apiErr.ErrorCode()`, and substring-matches the rendered error for
+  the AWS code/operation. (`errors.Is` against a struct literal
+  wouldn't work — `*smithy.GenericAPIError` has no `Is` method, so
+  `errors.As` is the right idiom for this interface.)
 - [x] Apply fix: insert `WithCause(err)` as the first builder call
   in all three error sites.
-- [x] Confirm: new test passes; the existing
+- [x] Confirm: new tests pass; the existing
   `errors.Is(err, errUtils.ErrAuthenticationFailed)` assertions
   continue to pass (the sentinel is preserved by `WithCause`).
+  Verified the new tests catch the bug by reverting the three
+  `WithCause(err)` lines — all three regression tests fail without
+  the fix and pass with it.
 - [x] Regression: `go test ./pkg/auth/... -count=1` green;
   `go vet ./pkg/auth/...` clean; `go build ./...` succeeds.
 
@@ -306,37 +315,56 @@ verifies this property; the new tests added in this fix lean on it.
 
 ## Tests
 
-### Unit — error path on `AssumeRoleWithWebIdentity`
+All three regression tests live in
+`pkg/auth/identities/aws/assume_sdk_error_test.go` (new file). They
+share two helpers at the top of the file:
 
-`pkg/auth/identities/aws/assume_role_test.go::TestAssumeRoleIdentity_Authenticate_OIDC_ChainsSDKError`
+- `stsErrorServer(t, httpStatus, errorCode, errorMessage)` — returns
+  an `httptest.NewServer` that responds to every request with an
+  AWS-style XML `ErrorResponse` envelope. The SDK's smithy XML
+  decoder turns this into a `*smithy.GenericAPIError` carrying the
+  supplied code and message.
+- `resolverCredentials(url)` — returns the `Credentials` map shape
+  that the existing `aws.resolver.url` mechanism in
+  `pkg/auth/cloud/aws/resolver.go` consumes, routing all AWS SDK
+  calls through the test server (rather than real STS).
 
-1. Construct an `assumeRoleIdentity` with a stub STS client whose
-   `AssumeRoleWithWebIdentity` returns
-   `&smithy.GenericAPIError{Code: "AccessDenied", Message: "Not
-   authorized to perform sts:AssumeRoleWithWebIdentity on resource
-   arn:aws:iam::111111111111:role/role-with-mismatched-trust"}`.
-2. Call `identity.Authenticate(ctx, oidcCreds)`.
-3. Assert:
-  - `errors.Is(err, errUtils.ErrAuthenticationFailed)` — sentinel
-    preserved.
-  - `assert.ErrorContains(err, "AccessDenied")` — SDK code threaded
-    through.
-  - `assert.ErrorContains(err, "Not authorized to perform sts:AssumeRoleWithWebIdentity")`
-    — SDK message threaded through.
+Each test:
 
-### Unit — error path on standard `AssumeRole`
+1. Stands up an `stsErrorServer` returning a specific
+   `(status, code, message)` triple.
+2. Constructs the identity with `Credentials: resolverCredentials(server.URL)`
+   so the SDK's STS client targets the local server.
+3. Calls `identity.Authenticate(ctx, baseCreds)` with the
+   appropriate credential type (AWS for `AssumeRole`/`AssumeRoot`,
+   OIDC for `AssumeRoleWithWebIdentity`).
+4. Asserts:
+   - `errors.Is(err, errUtils.ErrAuthenticationFailed)` — sentinel
+     preserved through the `WithCause` wrap.
+   - `Contains(err.Error(), <substr>)` for each expected substring
+     (SDK code, operation name, ...) — the rendered error string
+     surfaces the AWS-side detail.
+   - `errors.As(err, &apiErr)` succeeds and `apiErr.ErrorCode()`
+     equals the SDK code returned by the test server — the typed
+     SDK error is reachable through the chain.
 
-`pkg/auth/identities/aws/assume_role_test.go::TestAssumeRoleIdentity_Authenticate_StandardAssume_ChainsSDKError`
+   `errors.As` is the right idiom for `smithy.APIError` (an
+   interface). `errors.Is` against a `&smithy.GenericAPIError{...}`
+   struct literal would not match — that type has no custom `Is`
+   method, so `errors.Is` falls back to pointer equality.
 
-Same structure but the stub returns `&smithy.GenericAPIError{Code:
-"NoSuchEntity", Message: "Role with name X does not exist"}` and
-the test drives the AWS-credentials branch (line 164-200).
+### Test functions
 
-### Unit — error path on `AssumeRoot`
+| Test                                                                              | Path under test            | STS code(s)                            |
+|-----------------------------------------------------------------------------------|----------------------------|----------------------------------------|
+| `TestAssumeRoleIdentity_Authenticate_StandardAssumeRole_PreservesSDKError`        | `AssumeRole` (AWS creds)   | `AccessDenied`                         |
+| `TestAssumeRoleIdentity_Authenticate_WebIdentity_PreservesSDKError` (table-driven) | `AssumeRoleWithWebIdentity` (OIDC creds) | `AccessDenied`, `InvalidIdentityToken` |
+| `TestAssumeRootIdentity_Authenticate_PreservesSDKError`                           | `AssumeRoot` (perm-set creds) | `AccessDenied`                      |
 
-`pkg/auth/identities/aws/assume_root_test.go::TestAssumeRootIdentity_Authenticate_ChainsSDKError`
-
-Mirrors the above against `AssumeRoot`.
+The `_WebIdentity_` test runs as two subtests over a `tests` table —
+the second case (`InvalidIdentityToken`) confirms the chain isn't
+hard-coded to `AccessDenied`; any code the SDK surfaces should pass
+through.
 
 ### Regression — existing assertions
 
