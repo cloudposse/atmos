@@ -396,7 +396,8 @@ func ExecuteAtlantisGenerateRepoConfig(
 
 				switch {
 				case stackNameTemplate != "":
-					stackSlug, err = ProcessTmpl(atmosConfig, "atlantis-stack-name-template", stackNameTemplate, configAndStacksInfo.ComponentSection, false)
+					// Honor templates.settings.ignore_missing_template_values (GitHub #2345).
+					stackSlug, err = ProcessTmpl(atmosConfig, "atlantis-stack-name-template", stackNameTemplate, configAndStacksInfo.ComponentSection, atmosConfig.Templates.Settings.IgnoreMissingTemplateValues)
 					if err != nil {
 						return err
 					}

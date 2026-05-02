@@ -49,7 +49,7 @@ settings:
   list_merge_strategy: ""
   terminal:
     max_width: 0
-    pager: cat
+    pager: "false"
     unicode: false
     syntax_highlighting:
       enabled: false
@@ -62,7 +62,6 @@ settings:
     no_color: false
   experimental: warn
   inject_github_token: true
-  github_token: <MASKED>
   inject_bitbucket_token: true
   inject_gitlab_token: true
   pro:

@@ -31,7 +31,8 @@ func BuildTerraformWorkspace(atmosConfig *schema.AtmosConfiguration, configAndSt
 	case configAndStacksInfo.StackManifestName != "":
 		contextPrefix = configAndStacksInfo.StackManifestName
 	case atmosConfig.Stacks.NameTemplate != "":
-		tmpl, err = ProcessTmpl(atmosConfig, "terraform-workspace-stacks-name-template", atmosConfig.Stacks.NameTemplate, configAndStacksInfo.ComponentSection, false)
+		// Honor templates.settings.ignore_missing_template_values (GitHub #2345).
+		tmpl, err = ProcessTmpl(atmosConfig, "terraform-workspace-stacks-name-template", atmosConfig.Stacks.NameTemplate, configAndStacksInfo.ComponentSection, atmosConfig.Templates.Settings.IgnoreMissingTemplateValues)
 		if err != nil {
 			return "", err
 		}

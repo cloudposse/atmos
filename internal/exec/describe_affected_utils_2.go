@@ -425,7 +425,8 @@ func addAffectedSpaceliftAdminStack(
 	var adminStackContextPrefix string
 
 	if atmosConfig.Stacks.NameTemplate != "" {
-		adminStackContextPrefix, err = ProcessTmpl(atmosConfig, "spacelift-admin-stack-name-template", atmosConfig.Stacks.NameTemplate, configAndStacksInfo.ComponentSection, false)
+		// Honor templates.settings.ignore_missing_template_values (GitHub #2345).
+		adminStackContextPrefix, err = ProcessTmpl(atmosConfig, "spacelift-admin-stack-name-template", atmosConfig.Stacks.NameTemplate, configAndStacksInfo.ComponentSection, atmosConfig.Templates.Settings.IgnoreMissingTemplateValues)
 		if err != nil {
 			return nil, err
 		}
@@ -464,7 +465,8 @@ func addAffectedSpaceliftAdminStack(
 							var contextPrefix string
 
 							if atmosConfig.Stacks.NameTemplate != "" {
-								contextPrefix, err = ProcessTmpl(atmosConfig, "spacelift-stack-name-template", atmosConfig.Stacks.NameTemplate, configAndStacksInfo.ComponentSection, false)
+								// Honor templates.settings.ignore_missing_template_values (GitHub #2345).
+								contextPrefix, err = ProcessTmpl(atmosConfig, "spacelift-stack-name-template", atmosConfig.Stacks.NameTemplate, configAndStacksInfo.ComponentSection, atmosConfig.Templates.Settings.IgnoreMissingTemplateValues)
 								if err != nil {
 									return nil, err
 								}

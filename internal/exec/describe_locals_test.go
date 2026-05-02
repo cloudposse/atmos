@@ -110,6 +110,100 @@ func TestDeriveStackName(t *testing.T) {
 	}
 }
 
+// TestDeriveStackName_MergesImportedVars is a regression test for GitHub
+// issue #2343. Before the fix, name_template was rendered against the
+// leaf file's vars only; vars defined in `_defaults.yaml` parent imports
+// were invisible. This test stands up a real two-file fixture (parent
+// + leaf) and asserts the derived name uses values from both files.
+func TestDeriveStackName_MergesImportedVars(t *testing.T) {
+	tmpDir := t.TempDir()
+	stacksDir := filepath.Join(tmpDir, "stacks", "orgs")
+	require.NoError(t, os.MkdirAll(stacksDir, 0o755))
+
+	// Parent: defines `vars.namespace`.
+	parentPath := filepath.Join(stacksDir, "_defaults.yaml")
+	require.NoError(t, os.WriteFile(parentPath, []byte("vars:\n  namespace: acme\n"), 0o644))
+
+	// Leaf: imports parent, defines `vars.stage`. Both name_template
+	// inputs come from different files.
+	leafPath := filepath.Join(stacksDir, "prod.yaml")
+	rawConfig := map[string]any{
+		"import": []any{"./_defaults"},
+		"vars":   map[string]any{"stage": "prod"},
+	}
+
+	atmosConfig := &schema.AtmosConfiguration{
+		BasePath: tmpDir,
+		Stacks: schema.Stacks{
+			BasePath:     "stacks",
+			NameTemplate: "{{ .vars.namespace }}-{{ .vars.stage }}",
+		},
+	}
+
+	// Pass leaf-only vars as the third arg (mirroring the live caller).
+	leafVars := rawConfig["vars"].(map[string]any)
+	got := deriveStackName(atmosConfig, leafPath, leafVars, rawConfig)
+	assert.Equal(t, "acme-prod", got, "name_template must merge vars from imports")
+}
+
+// TestDeriveStackName_MergesImportedSettings is a regression test for GitHub
+// issue #2374. Same shape as the vars test above, but `name_template`
+// references `.settings.*`. Two defects had to be fixed together: include
+// `settings` in templateData, AND merge settings from imports.
+func TestDeriveStackName_MergesImportedSettings(t *testing.T) {
+	tmpDir := t.TempDir()
+	stacksDir := filepath.Join(tmpDir, "stacks", "orgs")
+	require.NoError(t, os.MkdirAll(stacksDir, 0o755))
+
+	parentPath := filepath.Join(stacksDir, "_defaults.yaml")
+	require.NoError(t, os.WriteFile(parentPath, []byte("settings:\n  namespace: cloudlabs\n  tenant: plat\n"), 0o644))
+
+	leafPath := filepath.Join(stacksDir, "prod.yaml")
+	rawConfig := map[string]any{
+		"import":   []any{"./_defaults"},
+		"settings": map[string]any{"stage": "prod"},
+	}
+
+	atmosConfig := &schema.AtmosConfiguration{
+		BasePath: tmpDir,
+		Stacks: schema.Stacks{
+			BasePath:     "stacks",
+			NameTemplate: "{{ .settings.namespace }}-{{ .settings.tenant }}-{{ .settings.stage }}",
+		},
+	}
+
+	got := deriveStackName(atmosConfig, leafPath, nil, rawConfig)
+	assert.Equal(t, "cloudlabs-plat-prod", got, "name_template must include settings and merge from imports")
+}
+
+// TestDeriveStackName_NoValueRejected verifies the malformed-name guard:
+// when a name_template references a key that's defined nowhere (not in
+// the leaf, not in any import), the rendered "<no value>" must NOT be
+// returned as a stack identifier; we fall back to the filename.
+func TestDeriveStackName_NoValueRejected(t *testing.T) {
+	tmpDir := t.TempDir()
+	stacksDir := filepath.Join(tmpDir, "stacks", "orgs")
+	require.NoError(t, os.MkdirAll(stacksDir, 0o755))
+
+	leafPath := filepath.Join(stacksDir, "leaf.yaml")
+	rawConfig := map[string]any{
+		"vars": map[string]any{"stage": "prod"},
+	}
+
+	atmosConfig := &schema.AtmosConfiguration{
+		BasePath: tmpDir,
+		Stacks: schema.Stacks{
+			BasePath:     "stacks",
+			NameTemplate: "{{ .vars.never_defined }}-{{ .vars.stage }}",
+		},
+	}
+
+	got := deriveStackName(atmosConfig, leafPath, rawConfig["vars"].(map[string]any), rawConfig)
+	// Should NOT be "<no value>-prod"; fall back to filename or pattern.
+	assert.NotContains(t, got, "<no value>", "<no value> in rendered name must trigger fallback")
+	assert.NotEqual(t, "-prod", got, "empty leading segment in rendered name must trigger fallback")
+}
+
 // mockAtmosConfig is a helper for creating test configurations.
 type mockAtmosConfig struct {
 	stacksBaseAbsolutePath string

@@ -160,7 +160,7 @@
       "link_text": {}
     },
     "InjectGithubToken": true,
-    "GithubToken": "<MASKED>",
+    "GithubToken": "",
     "AtmosGithubToken": "",
     "GithubUsername": "",
     "InjectBitbucketToken": true,
