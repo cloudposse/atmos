@@ -185,6 +185,7 @@ func (i *assumeRoleIdentity) Authenticate(ctx context.Context, baseCreds types.I
 	result, err := stsClient.AssumeRole(ctx, assumeRoleInput)
 	if err != nil {
 		return nil, errUtils.Build(errUtils.ErrAuthenticationFailed).
+			WithCause(err).
 			WithExplanationf("Failed to assume IAM role '%s'", i.roleArn).
 			WithHint("Verify the role ARN is correct in your atmos.yaml configuration").
 			WithHint("Ensure your AWS account has permissions to assume this role").
@@ -266,6 +267,7 @@ func (i *assumeRoleIdentity) assumeRoleWithWebIdentity(ctx context.Context, oidc
 	result, err := stsClient.AssumeRoleWithWebIdentity(ctx, input)
 	if err != nil {
 		return nil, errUtils.Build(errUtils.ErrAuthenticationFailed).
+			WithCause(err).
 			WithExplanationf("Failed to assume IAM role '%s' using web identity (OIDC)", i.roleArn).
 			WithHint("Verify the role ARN is correct in your atmos.yaml configuration").
 			WithHint("Ensure the OIDC token is valid and not expired").
