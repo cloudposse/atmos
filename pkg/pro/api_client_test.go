@@ -910,6 +910,17 @@ func TestRenderValidationErrors(t *testing.T) {
 	}
 }
 
+// TestRenderValidationErrors_Dedupe verifies that duplicate or whitespace-only
+// validation errors are collapsed into a single bullet so the user-facing
+// list isn't noisy.
+func TestRenderValidationErrors_Dedupe(t *testing.T) {
+	got := renderValidationErrors("Validation failed", []string{"A", "A", "  ", "", " A ", "B"})
+
+	assert.Equal(t, 2, strings.Count(got, "\n  - "), "duplicate bullets must be collapsed")
+	assert.Contains(t, got, "\n  - A")
+	assert.Contains(t, got, "\n  - B")
+}
+
 // TestIsDriftDetectionError covers both the structured tag path and the
 // fallback substring matcher.
 func TestIsDriftDetectionError(t *testing.T) {

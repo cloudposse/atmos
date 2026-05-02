@@ -105,7 +105,16 @@ func renderValidationErrors(message string, validationErrors []string) string {
 
 	var b strings.Builder
 	b.WriteString(headline)
+	seen := make(map[string]struct{}, len(validationErrors))
 	for _, ve := range validationErrors {
+		ve = strings.TrimSpace(ve)
+		if ve == "" {
+			continue
+		}
+		if _, ok := seen[ve]; ok {
+			continue
+		}
+		seen[ve] = struct{}{}
 		b.WriteString("\n  - ")
 		b.WriteString(ve)
 	}

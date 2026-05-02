@@ -92,6 +92,11 @@ func (c *AtmosProAPIClient) sendInstancesRequest(endpoint string, dto *dtos.Inst
 
 		resp, doErr := client.Do(req) //nolint:gosec // URL constructed from trusted config, not user input.
 		if doErr != nil {
+			// http.Client.Do can return a non-nil response alongside an error
+			// (e.g., on redirect failures); close it to avoid leaking the connection.
+			if resp != nil && resp.Body != nil {
+				_ = resp.Body.Close()
+			}
 			return wrapErr(errUtils.ErrFailedToMakeRequest, doErr)
 		}
 		defer resp.Body.Close()
