@@ -19,6 +19,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/ci/artifact"
+	ciGitHub "github.com/cloudposse/atmos/pkg/ci/providers/github"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
@@ -126,7 +127,7 @@ type Store struct {
 func NewStore(opts artifact.StoreOptions) (artifact.Backend, error) {
 	defer perf.Track(opts.AtmosConfig, "github.NewStore")()
 
-	token := getGitHubToken()
+	token := ciGitHub.GetCIGitHubToken()
 	if token == "" {
 		return nil, errUtils.ErrGitHubTokenNotFound
 	}
@@ -160,19 +161,6 @@ func NewStore(opts artifact.StoreOptions) (artifact.Backend, error) {
 		prefix:        prefix,
 		retentionDays: retentionDays,
 	}, nil
-}
-
-// getGitHubToken returns the GitHub token from environment variables.
-// Token precedence: ATMOS_CI_GITHUB_TOKEN > GITHUB_TOKEN > GH_TOKEN.
-func getGitHubToken() string {
-	token := os.Getenv("ATMOS_CI_GITHUB_TOKEN")
-	if token == "" {
-		token = os.Getenv("GITHUB_TOKEN")
-	}
-	if token == "" {
-		token = os.Getenv("GH_TOKEN")
-	}
-	return token
 }
 
 // getRepoInfo extracts owner and repo from options or environment.

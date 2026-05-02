@@ -921,6 +921,8 @@ var (
 	ErrIdentityCredentialsNone = errors.New("credentials not available for identity")
 
 	// CI-related errors.
+	ErrCIOptionsRequired       = errors.New("CI execute options are required")
+	ErrCIStoreNotFound         = errors.New("configured planfile store not found")
 	ErrCIDisabled              = errors.New("CI server is disabled")
 	ErrCIProviderNotDetected   = errors.New("CI provider not detected")
 	ErrCIProviderNotFound      = errors.New("CI provider not found")
@@ -930,6 +932,7 @@ var (
 	ErrCIStatusFetchFailed     = errors.New("failed to fetch CI status")
 	ErrCIOutputWriteFailed     = errors.New("failed to write CI output")
 	ErrCISummaryWriteFailed    = errors.New("failed to write CI summary")
+	ErrCIExecutorNotWired      = errors.New("no CI executor wired: ensure pkg/ci/executor is imported")
 	ErrGitHubTokenNotFound     = errors.New("GitHub token not found")
 
 	// Planfile storage errors.

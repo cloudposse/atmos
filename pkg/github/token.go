@@ -27,7 +27,8 @@ var ErrGitHubTokenRequired = errors.New("GitHub token required")
 //  1. --github-token CLI flag (via viper, for toolchain commands)
 //  2. ATMOS_GITHUB_TOKEN environment variable
 //  3. GITHUB_TOKEN environment variable
-//  4. `gh auth token` command output (if GitHub CLI is installed)
+//  4. GH_TOKEN environment variable (GitHub CLI convention)
+//  5. `gh auth token` command output (if GitHub CLI is installed)
 //
 // Returns the token if found, or an empty string if no token is available.
 // Use GetGitHubTokenOrError if you need to require authentication.

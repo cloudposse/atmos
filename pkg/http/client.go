@@ -331,7 +331,13 @@ func GetGitHubTokenFromEnv(v ...*viper.Viper) string {
 	}
 
 	//nolint:forbidigo // Direct env lookup required for non-toolchain commands.
-	return os.Getenv("GITHUB_TOKEN")
+	if token := os.Getenv("GITHUB_TOKEN"); token != "" {
+		return token
+	}
+
+	// Check GH_TOKEN (GitHub CLI convention) as final env var fallback.
+	//nolint:forbidigo // Direct env lookup required for non-toolchain commands.
+	return os.Getenv("GH_TOKEN")
 }
 
 // Do implements Client.Do.

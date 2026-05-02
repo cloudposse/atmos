@@ -4,12 +4,10 @@ package github
 import (
 	"context"
 	"net/http"
-	"os"
 
 	"github.com/google/go-github/v59/github"
 	"golang.org/x/oauth2"
 
-	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
@@ -18,23 +16,14 @@ type Client struct {
 	client *github.Client
 }
 
-// NewClient creates a new GitHub API client.
-// Token precedence: ATMOS_CI_GITHUB_TOKEN > GITHUB_TOKEN > GH_TOKEN.
-// ATMOS_CI_GITHUB_TOKEN allows using a separate token for CI operations
-// (e.g., commit statuses) while GITHUB_TOKEN is used by Terraform.
+// NewClient creates a new GitHub API client using the CI token resolution chain.
+// See GetCIGitHubToken for the full detection order.
 func NewClient() (*Client, error) {
 	defer perf.Track(nil, "github.NewClient")()
 
-	token := os.Getenv("ATMOS_CI_GITHUB_TOKEN")
-	if token == "" {
-		token = os.Getenv("GITHUB_TOKEN")
-	}
-	if token == "" {
-		// Also check GH_TOKEN (used by gh CLI).
-		token = os.Getenv("GH_TOKEN")
-	}
-	if token == "" {
-		return nil, errUtils.ErrGitHubTokenNotFound
+	token, err := GetCIGitHubTokenOrError()
+	if err != nil {
+		return nil, err
 	}
 
 	return NewClientWithToken(token), nil
