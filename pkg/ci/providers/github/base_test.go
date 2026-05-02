@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -176,10 +177,34 @@ func TestResolveBase_PullRequest_Closed(t *testing.T) {
 	require.NotNil(t, res)
 	assert.Equal(t, "pull_request", res.EventType)
 	assert.Equal(t, "headsha123456789012345678901234567890ab", res.HeadSHA)
-	// In test env, merge-base and HEAD~1 may or may not work.
-	// Either way we get a valid resolution through the fallback chain.
+	// In test env, merge-base and HEAD~1 may or may not work; any of the
+	// three documented fallbacks produces a valid resolution. Whichever
+	// branch fires depends on the CI runner's checkout depth and whether
+	// origin/<base> has been fetched: PR runs typically reach merge-base
+	// or HEAD~1, but post-merge runs on main commonly hit the payload-SHA
+	// fallback, where Source = "event.pull_request.base.sha".
+	//
+	// Bug history: the original assertion was
+	//   assert.Contains(t, res.Source, "merge-base", "HEAD~1")
+	// which testify treats as a single Contains check with "HEAD~1" as
+	// the failure-message argument -- it never matched the payload-SHA
+	// path. Symptom: green on the PR (HEAD~1 reachable), red on main
+	// (only the payload SHA is available).
 	if res.SHA != "" {
-		assert.Contains(t, res.Source, "merge-base", "HEAD~1")
+		validSources := []string{
+			"merge-base",
+			"HEAD~1",
+			"event.pull_request.base.sha",
+		}
+		matched := false
+		for _, want := range validSources {
+			if strings.Contains(res.Source, want) {
+				matched = true
+				break
+			}
+		}
+		assert.True(t, matched,
+			"Source %q must contain one of %v", res.Source, validSources)
 	} else {
 		assert.Equal(t, "refs/remotes/origin/main", res.Ref)
 	}
