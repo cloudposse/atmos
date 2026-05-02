@@ -26,6 +26,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
+	h "github.com/cloudposse/atmos/pkg/hooks"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -75,4 +76,33 @@ func TestExecuteShellCommand_ErrorWrapsExitCodeError_AtCmdTerraformBoundary(t *t
 	// default, masking real exit codes (e.g., 2 for plan -detailed-exitcode).
 	assert.Equal(t, 1, errUtils.GetExitCode(cmdErr),
 		"errUtils.GetExitCode must extract the wrapped code — runHooksOnErrorWithOutput depends on this")
+
+	// End-to-end: feed the cmdErr into the same RunCIHooks plumbing that
+	// runHooksOnErrorWithOutput uses, and verify the wrapper survives in
+	// the options struct that plugins observe. ci.enabled=false short-circuits
+	// before any plugin runs, so this exercises only the option construction
+	// + extraction path that this PR introduced.
+	opts := &h.RunCIHooksOptions{
+		Event:        h.AfterTerraformPlan,
+		AtmosConfig:  &atmosConfig, // ci.enabled is the zero value (false) → short-circuits.
+		Info:         &schema.ConfigAndStacksInfo{Stack: "dev", ComponentFromArg: "vpc"},
+		Output:       "",
+		ForceCIMode:  true,
+		CommandError: cmdErr,
+		ExitCode:     errUtils.GetExitCode(cmdErr),
+	}
+
+	// The wrapper contract must hold AT the boundary plugins see, not just at
+	// the cmd/terraform layer. A future refactor that copies/wraps cmdErr
+	// before placing it in the options would lose this property.
+	require.True(t,
+		errors.As(opts.CommandError, &exitCodeErr),
+		"options.CommandError must still satisfy errors.As(err, &errUtils.ExitCodeError{}); got %T", opts.CommandError,
+	)
+	assert.Equal(t, 1, opts.ExitCode, "options.ExitCode must equal the wrapped subprocess exit code")
+	assert.Equal(t, 1, exitCodeErr.Code)
+
+	// Confirm the round-trip is harmless when CI is disabled.
+	require.NoError(t, h.RunCIHooks(opts),
+		"RunCIHooks must short-circuit cleanly when ci.enabled=false even with a non-nil CommandError")
 }

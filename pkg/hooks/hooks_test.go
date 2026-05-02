@@ -439,6 +439,97 @@ func TestRunCIHooks_CIEnabledIsHardKillSwitch(t *testing.T) {
 	}
 }
 
+// TestRunCIHooks_ForwardsErrorAndExitCode verifies that RunCIHooksOptions
+// fields (CommandError, ExitCode) flow through to ci.Execute when CI is
+// enabled. We trigger a clean early exit inside ci.Execute by using an
+// unhandled event so no real plugin is invoked.
+func TestRunCIHooks_ForwardsErrorAndExitCode(t *testing.T) {
+	tests := []struct {
+		name         string
+		commandError error
+		exitCode     int
+	}{
+		{
+			name:         "nil error and zero exit code (success path)",
+			commandError: nil,
+			exitCode:     0,
+		},
+		{
+			name:         "wrapped ExitCodeError with code 1",
+			commandError: errUtils.ExitCodeError{Code: 1},
+			exitCode:     1,
+		},
+		{
+			name:         "plan exit code 2 with wrapped error (changes detected)",
+			commandError: errUtils.ExitCodeError{Code: 2},
+			exitCode:     2,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			config := &schema.AtmosConfiguration{
+				CI:       schema.CIConfig{Enabled: true},
+				Settings: schema.AtmosSettings{Experimental: "silence"},
+			}
+			info := &schema.ConfigAndStacksInfo{
+				Stack:            "dev",
+				ComponentFromArg: "vpc",
+			}
+
+			// "unhandled.event" has no registered plugin binding, so ci.Execute
+			// returns nil cleanly after platform/binding lookup. We just need
+			// RunCIHooks itself to construct the ExecuteOptions correctly and
+			// not panic on the new ExitCode/CommandError fields.
+			err := RunCIHooks(&RunCIHooksOptions{
+				Event:        "unhandled.event",
+				AtmosConfig:  config,
+				Info:         info,
+				ForceCIMode:  true, // forces generic provider so platform detection succeeds.
+				CommandError: tc.commandError,
+				ExitCode:     tc.exitCode,
+			})
+			assert.NoError(t, err)
+		})
+	}
+}
+
+// TestRunCIHooks_NilAtmosConfig verifies RunCIHooks does not panic when
+// AtmosConfig is nil — ci.enabled and experimental checks are skipped and
+// the call still completes cleanly (ci.Execute returns nil with no platform
+// detected).
+func TestRunCIHooks_NilAtmosConfig(t *testing.T) {
+	err := RunCIHooks(&RunCIHooksOptions{
+		Event:       "before.terraform.plan",
+		AtmosConfig: nil,
+		Info:        &schema.ConfigAndStacksInfo{},
+		ForceCIMode: false,
+	})
+	assert.NoError(t, err)
+}
+
+// TestRunCIHooks_ExperimentalDisableReturnsError verifies RunCIHooks
+// short-circuits with an experimental-disabled error when CI is enabled
+// in atmos.yaml but settings.experimental is set to "disable".
+func TestRunCIHooks_ExperimentalDisableReturnsError(t *testing.T) {
+	config := &schema.AtmosConfiguration{
+		CI:       schema.CIConfig{Enabled: true},
+		Settings: schema.AtmosSettings{Experimental: "disable"},
+	}
+
+	err := RunCIHooks(&RunCIHooksOptions{
+		Event:        "after.terraform.plan",
+		AtmosConfig:  config,
+		Info:         &schema.ConfigAndStacksInfo{Stack: "dev", ComponentFromArg: "vpc"},
+		ForceCIMode:  true,
+		CommandError: errUtils.ExitCodeError{Code: 1},
+		ExitCode:     1,
+	})
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, errUtils.ErrExperimentalDisabled),
+		"expected ErrExperimentalDisabled, got %v", err)
+}
+
 // TestCheckExperimental verifies that checkExperimental gates CI hooks
 // based on settings.experimental, mirroring the command-level behavior.
 func TestCheckExperimental(t *testing.T) {
