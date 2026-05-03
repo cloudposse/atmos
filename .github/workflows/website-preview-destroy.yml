@@ -58,7 +58,7 @@ jobs:
           status: success
 
       - name: Inactivate deployment
-        uses: chrnorm/deployment-status@9a72af4586197112e0491ea843682b5dc280d806 # v2.0.3
+        uses: chrnorm/deployment-status@6df8d036fd2fee9eb82936733953da1f8382b41e # v2.0.4
         if: ${{ steps.deployment.outputs.id != '' }}
         with:
           state: inactive
