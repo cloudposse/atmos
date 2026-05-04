@@ -41,7 +41,7 @@ jobs:
             target: macos
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: runs-on/action@v1
+      - uses: runs-on/action@v2
         if: matrix.target == 'linux'
 
       - name: Build
