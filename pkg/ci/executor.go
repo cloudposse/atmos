@@ -43,6 +43,11 @@ type ExecuteOptions struct {
 	// CommandError is the error from the command execution, if any.
 	// When set, check runs are updated with failure status.
 	CommandError error
+
+	// ExitCode is the exit code from the command execution. See HookContext.ExitCode
+	// for semantics. Required for accurate success/failure reporting on commands
+	// that fail before producing parseable terraform output (e.g., auth errors).
+	ExitCode int
 }
 
 // Execute runs all CI actions for a hook event.
@@ -153,6 +158,7 @@ func buildHookContext(opts ExecuteOptions, platform provider.Provider) *plugin.H
 		Info:           opts.Info,
 		Output:         opts.Output,
 		CommandError:   opts.CommandError,
+		ExitCode:       opts.ExitCode,
 		Provider:       platform,
 		CICtx:          ciCtx,
 		TemplateLoader: loader,

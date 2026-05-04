@@ -192,6 +192,9 @@ var (
 	ErrFailedToGetRepoInfo  = errors.New("failed to get repository info")
 	ErrLocalRepoFetch       = errors.New("local repo unavailable")
 	ErrGitRefNotFound       = errors.New("git reference not found on local filesystem")
+	ErrGitWorktreeAdd       = errors.New("failed to create git worktree")
+	ErrFetchOrigin          = errors.New("failed to fetch from origin")
+	ErrDeepenOrigin         = errors.New("failed to deepen fetch from origin")
 
 	// I/O and output errors.
 	ErrBuildIOConfig  = errors.New("failed to build I/O config")

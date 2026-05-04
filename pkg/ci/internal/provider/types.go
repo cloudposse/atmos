@@ -16,6 +16,12 @@ type BaseResolution struct {
 	// Empty for non-PR events (push, merge_group, etc.).
 	HeadSHA string
 
+	// TargetBranch is the PR target branch name (e.g., "main") when known.
+	// Used by callers to recover from missing local refs by running a
+	// targeted git fetch. Empty when the event has no notion of a target
+	// branch (e.g., push events on the default branch).
+	TargetBranch string
+
 	// Source describes where the base was resolved from (for logging).
 	Source string
 
