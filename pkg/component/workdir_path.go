@@ -13,7 +13,6 @@ import (
 	provSource "github.com/cloudposse/atmos/pkg/provisioner/source"
 	provWorkdir "github.com/cloudposse/atmos/pkg/provisioner/workdir"
 	"github.com/cloudposse/atmos/pkg/schema"
-	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 // workdirSubpathAppliedKey marks that the metadata.component subpath has
@@ -61,8 +60,12 @@ func ResolveWorkdirSubpath(metadataSubpath, workdirRoot string) (string, error) 
 	// a child of workdirRoot on Unix (so the join is non-escaping) and handles
 	// drive letters specially on Windows, but in either case an absolute value
 	// is nonsensical input and silently coercing it would mask author error.
-	if filepath.IsAbs(metadataSubpath) {
-		return "", errors.Join(errUtils.ErrWorkdirProvision, fmt.Errorf("workdir component subpath %q must be relative", metadataSubpath))
+	// On Windows, filepath.IsAbs returns false for volume-qualified relative
+	// paths like "C:modules\iam-policy" (a drive-relative path interpreted
+	// against the drive's current directory), so VolumeName is checked
+	// separately to reject them as well.
+	if filepath.IsAbs(metadataSubpath) || filepath.VolumeName(metadataSubpath) != "" {
+		return "", errors.Join(errUtils.ErrWorkdirProvision, fmt.Errorf("workdir component subpath %q must be relative and must not include a volume prefix", metadataSubpath))
 	}
 	candidate := filepath.Join(workdirRoot, metadataSubpath)
 	fi, err := os.Stat(candidate)
@@ -157,18 +160,29 @@ func BuildAndResolveWorkdirPath(
 	return resolved, true, nil
 }
 
-// componentDirExists wraps u.IsDirectory: ENOENT is reported as exists=false
-// with a nil error (the boolean carries that signal to callers), while any
-// other stat failure is wrapped with the provided sentinel so upstream can
-// classify it (ErrWorkdirProvision for workdir-path failures,
-// ErrInvalidComponent for the local component-dir fallback). The contextLabel
-// identifies the call site in the wrapped message.
+// componentDirExists stats componentPath and reports whether it is an
+// existing directory. ENOENT yields exists=false with a nil error (the
+// boolean carries that signal to callers). An existing non-directory (e.g.
+// a regular file at the expected directory location) is surfaced as an
+// error rather than silently reported as missing — this mirrors the
+// !fi.IsDir() guards in ResolveWorkdirSubpath and BuildAndResolveWorkdirPath
+// so all three helpers reject the same invalid filesystem state. Other
+// stat failures are wrapped with the provided sentinel so upstream can
+// classify them (ErrWorkdirProvision for workdir-path failures,
+// ErrInvalidComponent for the local component-dir fallback). The
+// contextLabel identifies the call site in the wrapped message.
 func componentDirExists(componentPath, contextLabel string, sentinel error) (bool, error) {
-	exists, err := u.IsDirectory(componentPath)
-	if err != nil && !errors.Is(err, os.ErrNotExist) {
+	fi, err := os.Stat(componentPath)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return false, nil
+		}
 		return false, errors.Join(sentinel, fmt.Errorf("%s %q: %w", contextLabel, componentPath, err))
 	}
-	return exists, nil
+	if !fi.IsDir() {
+		return false, fmt.Errorf("%w: %s %q exists but is not a directory", sentinel, contextLabel, componentPath)
+	}
+	return true, nil
 }
 
 // ProvisionAndResolveComponentPath performs JIT source provisioning when the

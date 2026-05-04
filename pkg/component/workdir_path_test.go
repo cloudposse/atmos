@@ -103,6 +103,27 @@ func TestResolveWorkdirSubpath_RejectsAbsolutePath(t *testing.T) {
 		"error message must explain the contract violation")
 }
 
+// TestResolveWorkdirSubpath_RejectsWindowsVolumeQualified guards against
+// Windows volume-qualified relative paths like "C:modules\iam-policy".
+// Filepath.IsAbs returns false for such inputs on Windows (they are "drive
+// relative", interpreted against the drive's current directory), so
+// VolumeName is checked alongside IsAbs to reject them. On non-Windows
+// builds filepath.VolumeName always returns "" so this test is skipped.
+func TestResolveWorkdirSubpath_RejectsWindowsVolumeQualified(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("filepath.VolumeName is OS-specific; meaningful only on Windows")
+	}
+	workdir := t.TempDir()
+
+	_, err := ResolveWorkdirSubpath(`C:modules\iam-policy`, workdir)
+
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, errUtils.ErrWorkdirProvision),
+		"volume-qualified relative subpath must wrap ErrWorkdirProvision")
+	assert.Contains(t, err.Error(), "must be relative",
+		"error message must explain the contract violation")
+}
+
 // TestResolveWorkdirSubpath_RejectsAbsolutePathOutsideWorkdir is the
 // adversarial counterpart: an absolute path pointing outside the workdir
 // must also be rejected (not silently joined into a child of workdirRoot).
@@ -525,6 +546,36 @@ func TestProvisionAndResolveComponentPath_NoSourceReturnsFallback(t *testing.T) 
 	require.NoError(t, err)
 	assert.True(t, exists, "fallback dir exists on disk → exists=true")
 	assert.Equal(t, componentDir, got, "no source declared → return fallback verbatim")
+}
+
+// TestProvisionAndResolveComponentPath_NoSourceFallbackIsRegularFile verifies
+// the no-source path surfaces an explicit error (rather than silently
+// reporting exists=false) when the fallback path exists on disk but is a
+// regular file instead of a directory. The previous u.IsDirectory-based
+// implementation collapsed this case into ENOENT, hiding corrupt/wrong-type
+// state from callers.
+func TestProvisionAndResolveComponentPath_NoSourceFallbackIsRegularFile(t *testing.T) {
+	tempDir := t.TempDir()
+	regularFile := filepath.Join(tempDir, "components-as-a-file")
+	require.NoError(t, os.WriteFile(regularFile, []byte("not a directory"), 0o644))
+
+	atmosConfig := &schema.AtmosConfiguration{BasePath: tempDir}
+	info := &schema.ConfigAndStacksInfo{
+		FinalComponent:   "regular-file-fallback",
+		Stack:            "dev",
+		ComponentSection: map[string]any{},
+	}
+
+	_, exists, err := ProvisionAndResolveComponentPath(
+		context.Background(), atmosConfig, info, cfg.TerraformComponentType, regularFile,
+	)
+
+	require.Error(t, err)
+	assert.False(t, exists)
+	assert.True(t, errors.Is(err, errUtils.ErrInvalidComponent),
+		"non-directory fallback must wrap ErrInvalidComponent (matches the pattern in cmd/describe_component.go)")
+	assert.Contains(t, err.Error(), "exists but is not a directory",
+		"error message must distinguish 'exists but not a dir' from ENOENT")
 }
 
 // TestProvisionAndResolveComponentPath_NoSourceMissingDir verifies the
