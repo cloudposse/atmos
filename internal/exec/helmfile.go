@@ -178,6 +178,12 @@ func ExecuteHelmfile(info schema.ConfigAndStacksInfo) error {
 	}
 	info.ComponentEnvList = append(info.ComponentEnvList, tenv.EnvVars()...)
 
+	// Convert ComponentEnvSection to ComponentEnvList BEFORE the EKS block.
+	// ComponentEnvSection is populated by auth hooks and stack config env sections.
+	// This ensures auth-derived vars (e.g., AWS_SHARED_CREDENTIALS_FILE, AWS_CONFIG_FILE)
+	// are available when running aws eks update-kubeconfig.
+	ConvertComponentEnvSectionToList(&info)
+
 	// Print component variables.
 	log.Debug("Variables for component in stack", "component", info.ComponentFromArg, "stack", info.Stack, "variables", info.ComponentVarsSection)
 
@@ -290,9 +296,10 @@ func ExecuteHelmfile(info schema.ConfigAndStacksInfo) error {
 			tenv.Resolve("aws"),
 			awsArgs,
 			componentPath,
-			tenv.EnvVars(),
+			info.ComponentEnvList,
 			info.DryRun,
 			info.RedirectStdErr,
+			WithEnvironment(info.SanitizedEnv),
 		)
 		if err != nil {
 			return err
@@ -341,12 +348,6 @@ func ExecuteHelmfile(info schema.ConfigAndStacksInfo) error {
 	}
 	allArgsAndFlags = append(allArgsAndFlags, info.SubCommand)
 	allArgsAndFlags = append(allArgsAndFlags, info.AdditionalArgsAndFlags...)
-
-	// Convert ComponentEnvSection to ComponentEnvList.
-	// ComponentEnvSection is populated by auth hooks and stack config env sections.
-	for k, v := range info.ComponentEnvSection {
-		info.ComponentEnvList = append(info.ComponentEnvList, fmt.Sprintf("%s=%v", k, v))
-	}
 
 	// Prepare ENV vars.
 	envVars := append(info.ComponentEnvList, []string{
