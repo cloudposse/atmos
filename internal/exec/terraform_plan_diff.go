@@ -12,6 +12,8 @@ import (
 	"github.com/pkg/errors"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/component"
+	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/data"
 	"github.com/cloudposse/atmos/pkg/perf"
 	provWorkdir "github.com/cloudposse/atmos/pkg/provisioner/workdir"
@@ -61,10 +63,17 @@ func TerraformPlanDiff(atmosConfig *schema.AtmosConfiguration, info *schema.Conf
 	// Get the component path using the resolved FinalComponent from ProcessStacks.
 	componentPath := filepath.Join(atmosConfig.TerraformDirAbsolutePath, processedInfo.ComponentFolderPrefix, processedInfo.FinalComponent)
 
-	// Check if workdir is enabled (source + workdir or workdir only).
-	// When workdir is enabled, the planfile will be in the workdir path, not the base component path.
-	if workdirPath, ok := processedInfo.ComponentSection[provWorkdir.WorkdirPathKey].(string); ok && workdirPath != "" {
-		componentPath = workdirPath
+	// For workdir-enabled components, compute the workdir path from first principles
+	// because ProcessStacks builds a fresh ComponentSection that does not include
+	// WorkdirPathKey (only set by AutoProvisionSource at execution time).
+	if provWorkdir.IsWorkdirEnabled(processedInfo.ComponentSection) {
+		candidate, exists, resolveErr := component.BuildAndResolveWorkdirPath(atmosConfig, &processedInfo, cfg.TerraformComponentType)
+		if resolveErr != nil {
+			return resolveErr
+		}
+		if exists {
+			componentPath = candidate
+		}
 	}
 
 	// Ensure original plan file exists and is absolute
