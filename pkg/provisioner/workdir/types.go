@@ -109,11 +109,6 @@ const (
 	// no .terraform/ cache, so -reconfigure is safe; a preserved workdir has a valid cache
 	// and -reconfigure causes a spurious "migrate all workspaces?" prompt.
 	WorkdirReprovisionedKey = "_workdir_reprovisioned"
-
-	// WorkdirSubpathAppliedKey marks that the metadata.component subpath has
-	// already been joined onto WorkdirPathKey. The value is an internal sentinel
-	// type that user YAML cannot forge.
-	WorkdirSubpathAppliedKey = "_workdir_subpath_applied"
 )
 
 // BuildPath constructs the canonical workdir path for a component instance.

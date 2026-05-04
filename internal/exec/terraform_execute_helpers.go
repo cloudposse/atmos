@@ -15,6 +15,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	auth "github.com/cloudposse/atmos/pkg/auth"
+	"github.com/cloudposse/atmos/pkg/component"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/dependencies"
 	log "github.com/cloudposse/atmos/pkg/logger"
@@ -55,7 +56,8 @@ func handleVersionSubcommand(atmosConfig *schema.AtmosConfiguration, info *schem
 		"",
 		tenv.EnvVars(),
 		false,
-		info.RedirectStdErr)
+		info.RedirectStdErr,
+	)
 }
 
 // setupTerraformAuth builds the merged auth config (global + component-specific via
@@ -104,7 +106,8 @@ func setupTerraformAuth(atmosConfig *schema.AtmosConfiguration, info *schema.Con
 	// Create and authenticate the AuthManager using the same injectable creator as
 	// createAndAuthenticateAuthManagerWithDeps to keep injection points unified.
 	authManager, err := defaultAuthManagerCreator(
-		info.Identity, mergedAuthConfig, cfg.IdentityFlagSelectValue, atmosConfig)
+		info.Identity, mergedAuthConfig, cfg.IdentityFlagSelectValue, atmosConfig,
+	)
 	if err != nil {
 		if errors.Is(err, errUtils.ErrUserAborted) {
 			errUtils.Exit(errUtils.ExitCodeSIGINT)
@@ -139,9 +142,13 @@ func resolveAndProvisionComponentPath(atmosConfig *schema.AtmosConfiguration, in
 
 	// Provision source BEFORE generating files so that generated files are written to
 	// the correct (possibly JIT workdir) path. When provision.workdir.enabled is true,
-	// provisionComponentSource returns the workdir path; autoGenerateComponentFiles must
-	// write to that path, not the base component directory.
-	componentPath, componentPathExists, err := provisionComponentSource(atmosConfig, info, componentPath)
+	// ProvisionAndResolveComponentPath returns the workdir path; autoGenerateComponentFiles
+	// must write to that path, not the base component directory.
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	defer cancel()
+	componentPath, componentPathExists, err := component.ProvisionAndResolveComponentPath(
+		ctx, atmosConfig, info, cfg.TerraformComponentType, componentPath,
+	)
 	if err != nil {
 		return "", err
 	}
@@ -549,7 +556,8 @@ func logTerraformContext(info *schema.ConfigAndStacksInfo, workingDir string) {
 		inheritance = info.ComponentFromArg + " -> " + strings.Join(info.ComponentInheritanceChain, " -> ")
 	}
 
-	log.Debug("Terraform context",
+	log.Debug(
+		"Terraform context",
 		"executable", info.Command,
 		"command", command,
 		logFieldComponent, info.ComponentFromArg,

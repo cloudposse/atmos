@@ -170,6 +170,11 @@ func TestJITSource_MetadataComponentSubpath_TerraformShell(t *testing.T) {
 	})
 
 	// Capture stderr (where ui.Writeln output goes) for the dry-run banner.
+	// Drain the pipe in a goroutine that starts BEFORE cmd.Execute so the OS
+	// pipe buffer (~64KB) cannot fill while Execute writes — that would
+	// deadlock the writer goroutine inside Execute and never return. The
+	// process-global os.Stderr swap is restored by t.Cleanup; this test must
+	// not call t.Parallel().
 	oldStderr := os.Stderr
 	r, w, err := os.Pipe()
 	require.NoError(t, err)
@@ -177,6 +182,16 @@ func TestJITSource_MetadataComponentSubpath_TerraformShell(t *testing.T) {
 	t.Cleanup(func() {
 		os.Stderr = oldStderr
 	})
+
+	var (
+		buf     bytes.Buffer
+		copyErr error
+		drained = make(chan struct{})
+	)
+	go func() {
+		defer close(drained)
+		_, copyErr = io.Copy(&buf, r)
+	}()
 
 	resetViperState()
 	cmd.RootCmd.SetArgs([]string{
@@ -186,10 +201,11 @@ func TestJITSource_MetadataComponentSubpath_TerraformShell(t *testing.T) {
 	})
 	execErr := cmd.Execute()
 
-	// Close the writer so the reader returns EOF, then drain it.
+	// Close the writer so the drain goroutine reaches EOF, wait for it, then
+	// close the reader. Order matters: closing r first while the drainer is
+	// still active would race with io.Copy.
 	require.NoError(t, w.Close())
-	var buf bytes.Buffer
-	_, copyErr := io.Copy(&buf, r)
+	<-drained
 	require.NoError(t, copyErr)
 	require.NoError(t, r.Close())
 
@@ -199,10 +215,20 @@ func TestJITSource_MetadataComponentSubpath_TerraformShell(t *testing.T) {
 
 	// Both fields are driven by ComponentSection[WorkdirPathKey]; with the fix,
 	// that key holds <workdir>/exports/ — without it, the bare workdir root.
+	// Anchor the suffix assertion to the specific "Working directory:" line so
+	// a regression that prints the suffix on a different line (e.g. only on
+	// "Component path:") does not silently pass.
 	expectedSuffix := filepath.Join("dev-null-label-exports", "exports")
-	assert.Contains(t, output, "Working directory: ",
-		"dry-run should print working directory; got: %s", output)
-	assert.Contains(t, output, expectedSuffix,
-		"working directory and component path must include metadata.component subpath %q; got: %s",
-		expectedSuffix, output)
+	var workingDirLine string
+	for _, line := range strings.Split(output, "\n") {
+		if strings.Contains(line, "Working directory:") {
+			workingDirLine = line
+			break
+		}
+	}
+	require.NotEmpty(t, workingDirLine,
+		"dry-run should print a 'Working directory:' line; got: %s", output)
+	assert.Contains(t, workingDirLine, expectedSuffix,
+		"'Working directory:' line must include metadata.component subpath %q; got line: %s",
+		expectedSuffix, workingDirLine)
 }

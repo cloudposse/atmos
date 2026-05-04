@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/component"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -47,7 +48,7 @@ func VerifyPlanfile(info *schema.ConfigAndStacksInfo, storedPlanFile string) err
 	// because ProcessStacks builds a fresh ComponentSection that does not include
 	// WorkdirPathKey (only set by AutoProvisionSource at execution time).
 	if provWorkdir.IsWorkdirEnabled(processedInfo.ComponentSection) {
-		candidate, exists, resolveErr := resolveWorkdirComponentPath(&atmosConfig, &processedInfo)
+		candidate, exists, resolveErr := component.BuildAndResolveWorkdirPath(&atmosConfig, &processedInfo, cfg.TerraformComponentType)
 		if resolveErr != nil {
 			return resolveErr
 		}

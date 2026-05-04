@@ -12,6 +12,8 @@ import (
 	"github.com/pkg/errors"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/component"
+	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/data"
 	"github.com/cloudposse/atmos/pkg/perf"
 	provWorkdir "github.com/cloudposse/atmos/pkg/provisioner/workdir"
@@ -65,7 +67,7 @@ func TerraformPlanDiff(atmosConfig *schema.AtmosConfiguration, info *schema.Conf
 	// because ProcessStacks builds a fresh ComponentSection that does not include
 	// WorkdirPathKey (only set by AutoProvisionSource at execution time).
 	if provWorkdir.IsWorkdirEnabled(processedInfo.ComponentSection) {
-		candidate, exists, resolveErr := resolveWorkdirComponentPath(atmosConfig, &processedInfo)
+		candidate, exists, resolveErr := component.BuildAndResolveWorkdirPath(atmosConfig, &processedInfo, cfg.TerraformComponentType)
 		if resolveErr != nil {
 			return resolveErr
 		}

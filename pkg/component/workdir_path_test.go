@@ -1,6 +1,7 @@
-package exec
+package component
 
 import (
+	"context"
 	"errors"
 	"os"
 	"path/filepath"
@@ -29,13 +30,13 @@ var _ = schema.AtmosConfiguration{
 	BasePath: "",
 }
 
-// resolveWorkdirSubpath ─────────────────────────────────────────────────────.
+// ResolveWorkdirSubpath ─────────────────────────────────────────────────────.
 
 func TestResolveWorkdirSubpath_JoinedPathExists(t *testing.T) {
 	workdir := t.TempDir()
 	require.NoError(t, os.MkdirAll(filepath.Join(workdir, "modules", "iam-policy"), 0o755))
 
-	got, err := resolveWorkdirSubpath("modules/iam-policy", workdir)
+	got, err := ResolveWorkdirSubpath("modules/iam-policy", workdir)
 
 	require.NoError(t, err)
 	assert.Equal(t, filepath.Join(workdir, "modules", "iam-policy"), got,
@@ -44,12 +45,12 @@ func TestResolveWorkdirSubpath_JoinedPathExists(t *testing.T) {
 
 // TestResolveWorkdirSubpath_JoinedPathMissingFallsBack covers the
 // inheritance-pointer scenario: metadata.component names an abstract base
-// component, the cloned repo has its .tf files at the workdir root, no such
+// component, the cloned repo has its files at the workdir root, no such
 // subdirectory exists. Pre-existing behavior must be preserved.
 func TestResolveWorkdirSubpath_JoinedPathMissingFallsBack(t *testing.T) {
 	workdir := t.TempDir()
 
-	got, err := resolveWorkdirSubpath("demo-cluster-codepipeline", workdir)
+	got, err := ResolveWorkdirSubpath("demo-cluster-codepipeline", workdir)
 
 	require.NoError(t, err)
 	assert.Equal(t, workdir, got,
@@ -58,17 +59,17 @@ func TestResolveWorkdirSubpath_JoinedPathMissingFallsBack(t *testing.T) {
 
 func TestResolveWorkdirSubpath_EmptySubpathReturnsRoot(t *testing.T) {
 	workdir := t.TempDir()
-	got, err := resolveWorkdirSubpath("", workdir)
+	got, err := ResolveWorkdirSubpath("", workdir)
 	require.NoError(t, err)
 	assert.Equal(t, workdir, got)
 }
 
 // TestResolveWorkdirSubpath_AllowsParentSegment codifies the design decision
 // that ".." segments are permitted in metadata.component (issue #2364):
-// some upstream Terraform modules reference shared files via relative parent
-// paths, and metadata.component is YAML-author controlled (same trust class
-// as !exec / !template / !terraform.state). The joined sibling directory
-// must exist on disk for the resolver to use it.
+// some upstream modules reference shared files via relative parent paths,
+// and metadata.component is YAML-author controlled (same trust class as
+// !exec / !template / !terraform.state). The joined sibling directory must
+// exist on disk for the resolver to use it.
 func TestResolveWorkdirSubpath_AllowsParentSegment(t *testing.T) {
 	parent := t.TempDir()
 	workdir := filepath.Join(parent, "primary-module")
@@ -76,7 +77,7 @@ func TestResolveWorkdirSubpath_AllowsParentSegment(t *testing.T) {
 	sibling := filepath.Join(parent, "sibling-module")
 	require.NoError(t, os.Mkdir(sibling, 0o755))
 
-	got, err := resolveWorkdirSubpath("../sibling-module", workdir)
+	got, err := ResolveWorkdirSubpath("../sibling-module", workdir)
 
 	require.NoError(t, err)
 	assert.Equal(t, sibling, got,
@@ -93,7 +94,7 @@ func TestResolveWorkdirSubpath_RejectsAbsolutePath(t *testing.T) {
 	absSubpath := filepath.Join(workdir, "modules", "iam-policy")
 	require.True(t, filepath.IsAbs(absSubpath), "test prerequisite: subpath must be absolute")
 
-	_, err := resolveWorkdirSubpath(absSubpath, workdir)
+	_, err := ResolveWorkdirSubpath(absSubpath, workdir)
 
 	require.Error(t, err)
 	assert.True(t, errors.Is(err, errUtils.ErrWorkdirProvision),
@@ -116,7 +117,7 @@ func TestResolveWorkdirSubpath_RejectsAbsolutePathOutsideWorkdir(t *testing.T) {
 		absOutside = "/etc/passwd"
 	}
 
-	_, err := resolveWorkdirSubpath(absOutside, workdir)
+	_, err := ResolveWorkdirSubpath(absOutside, workdir)
 
 	require.Error(t, err)
 	assert.True(t, errors.Is(err, errUtils.ErrWorkdirProvision),
@@ -127,13 +128,13 @@ func TestResolveWorkdirSubpath_RegularFileAtCandidate(t *testing.T) {
 	workdir := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(workdir, "exports"), []byte("not a dir"), 0o644))
 
-	_, err := resolveWorkdirSubpath("exports", workdir)
+	_, err := ResolveWorkdirSubpath("exports", workdir)
 	require.Error(t, err)
 	assert.True(t, errors.Is(err, errUtils.ErrWorkdirProvision),
 		"non-directory at candidate must wrap ErrWorkdirProvision")
 }
 
-// applyWorkdirSubpathToSection ──────────────────────────────────────────────.
+// ApplyWorkdirSubpathToSection ──────────────────────────────────────────────.
 
 func TestApplyWorkdirSubpathToSection_JoinsSubpath(t *testing.T) {
 	workdirRoot := t.TempDir()
@@ -145,21 +146,21 @@ func TestApplyWorkdirSubpathToSection_JoinsSubpath(t *testing.T) {
 		},
 	}
 
-	got, err := applyWorkdirSubpathToSection(info)
+	got, err := ApplyWorkdirSubpathToSection(info)
 	require.NoError(t, err)
 
 	expected := filepath.Join(workdirRoot, "modules", "iam-policy")
 	assert.Equal(t, expected, got)
 	assert.Equal(t, expected, info.ComponentSection[provWorkdir.WorkdirPathKey],
 		"WorkdirPathKey should be mutated in place to the joined subpath")
-	_, applied := info.ComponentSection[provWorkdir.WorkdirSubpathAppliedKey].(workdirSubpathAppliedMarker)
+	_, applied := info.ComponentSection[workdirSubpathAppliedKey].(subpathAppliedMarker)
 	assert.True(t, applied, "sentinel marker should be set")
 }
 
 // TestApplyWorkdirSubpathToSection_InheritancePointerPreservesRoot is the
 // regression guard for the case where metadata.component is used as an
 // inheritance/identity pointer (an abstract base component name) rather than
-// as a real subdirectory. The cloned repo has .tf files at its root and no
+// as a real subdirectory. The cloned repo has files at its root and no
 // matching subdirectory; WorkdirPathKey must stay at the workdir root.
 func TestApplyWorkdirSubpathToSection_InheritancePointerPreservesRoot(t *testing.T) {
 	workdirRoot := t.TempDir()
@@ -171,13 +172,13 @@ func TestApplyWorkdirSubpathToSection_InheritancePointerPreservesRoot(t *testing
 		},
 	}
 
-	got, err := applyWorkdirSubpathToSection(info)
+	got, err := ApplyWorkdirSubpathToSection(info)
 	require.NoError(t, err)
 
 	assert.Equal(t, workdirRoot, got, "missing subpath must fall back to workdir root")
 	assert.Equal(t, workdirRoot, info.ComponentSection[provWorkdir.WorkdirPathKey],
 		"WorkdirPathKey should remain at the workdir root for inheritance-pointer use")
-	_, applied := info.ComponentSection[provWorkdir.WorkdirSubpathAppliedKey].(workdirSubpathAppliedMarker)
+	_, applied := info.ComponentSection[workdirSubpathAppliedKey].(subpathAppliedMarker)
 	assert.True(t, applied, "sentinel marker is set even when no join happens, so repeat calls are no-ops")
 }
 
@@ -187,13 +188,13 @@ func TestApplyWorkdirSubpathToSection_NoWorkdirPathKey(t *testing.T) {
 		ComponentSection:  map[string]any{},
 	}
 
-	got, err := applyWorkdirSubpathToSection(info)
+	got, err := ApplyWorkdirSubpathToSection(info)
 	require.NoError(t, err)
 
 	assert.Empty(t, got)
 	_, mutated := info.ComponentSection[provWorkdir.WorkdirPathKey]
 	assert.False(t, mutated, "must not introduce WorkdirPathKey when it was absent")
-	_, applied := info.ComponentSection[provWorkdir.WorkdirSubpathAppliedKey]
+	_, applied := info.ComponentSection[workdirSubpathAppliedKey]
 	assert.False(t, applied, "must not set the sentinel when nothing was joined")
 }
 
@@ -205,7 +206,7 @@ func TestApplyWorkdirSubpathToSection_EmptyWorkdirPath(t *testing.T) {
 		},
 	}
 
-	got, err := applyWorkdirSubpathToSection(info)
+	got, err := ApplyWorkdirSubpathToSection(info)
 	require.NoError(t, err)
 
 	assert.Empty(t, got)
@@ -225,11 +226,11 @@ func TestApplyWorkdirSubpathToSection_DoubleCallAppliesOnce(t *testing.T) {
 	}
 	expected := filepath.Join(workdirRoot, "exports")
 
-	first, err := applyWorkdirSubpathToSection(info)
+	first, err := ApplyWorkdirSubpathToSection(info)
 	require.NoError(t, err)
 	assert.Equal(t, expected, first)
 
-	second, err := applyWorkdirSubpathToSection(info)
+	second, err := ApplyWorkdirSubpathToSection(info)
 	require.NoError(t, err)
 	assert.Equal(t, expected, second)
 	assert.Equal(t, expected, info.ComponentSection[provWorkdir.WorkdirPathKey])
@@ -251,13 +252,13 @@ func TestApplyWorkdirSubpathToSection_SentinelGatesDoubleJoin(t *testing.T) {
 		},
 	}
 
-	first, err := applyWorkdirSubpathToSection(info)
+	first, err := ApplyWorkdirSubpathToSection(info)
 	require.NoError(t, err)
 	require.Equal(t, filepath.Join(workdirRoot, "exports"), first)
 
-	delete(info.ComponentSection, provWorkdir.WorkdirSubpathAppliedKey)
+	delete(info.ComponentSection, workdirSubpathAppliedKey)
 
-	second, err := applyWorkdirSubpathToSection(info)
+	second, err := ApplyWorkdirSubpathToSection(info)
 	require.NoError(t, err)
 	assert.Equal(t, filepath.Join(workdirRoot, "exports", "exports"), second,
 		"with the sentinel removed the second call must re-join, proving the sentinel is the gate")
@@ -274,12 +275,12 @@ func TestApplyWorkdirSubpathToSection_UserYAMLCannotForgeSentinel(t *testing.T) 
 		info := &schema.ConfigAndStacksInfo{
 			BaseComponentPath: "exports",
 			ComponentSection: map[string]any{
-				provWorkdir.WorkdirPathKey:           workdirRoot,
-				provWorkdir.WorkdirSubpathAppliedKey: forged,
+				provWorkdir.WorkdirPathKey: workdirRoot,
+				workdirSubpathAppliedKey:   forged,
 			},
 		}
 
-		got, err := applyWorkdirSubpathToSection(info)
+		got, err := ApplyWorkdirSubpathToSection(info)
 		require.NoError(t, err)
 
 		assert.Equal(t, filepath.Join(workdirRoot, "exports"), got,
@@ -287,9 +288,9 @@ func TestApplyWorkdirSubpathToSection_UserYAMLCannotForgeSentinel(t *testing.T) 
 	}
 }
 
-// resolveWorkdirComponentPath ───────────────────────────────────────────────.
+// BuildAndResolveWorkdirPath ────────────────────────────────────────────────.
 
-func TestResolveWorkdirComponentPath_ExistingDir(t *testing.T) {
+func TestBuildAndResolveWorkdirPath_ExistingDir(t *testing.T) {
 	basePath := t.TempDir()
 	stack := "dev"
 	componentName := "null-label-exports"
@@ -307,18 +308,95 @@ func TestResolveWorkdirComponentPath_ExistingDir(t *testing.T) {
 		ComponentSection:  map[string]any{},
 	}
 
-	candidate, exists, err := resolveWorkdirComponentPath(atmosConfig, info)
+	candidate, exists, err := BuildAndResolveWorkdirPath(atmosConfig, info, cfg.TerraformComponentType)
 	require.NoError(t, err)
 	assert.True(t, exists)
 	assert.Equal(t, expectedCandidate, candidate)
 }
 
-// TestResolveWorkdirComponentPath_InheritancePointerFallsBack covers the
+// TestBuildAndResolveWorkdirPath_AllComponentTypes verifies the componentType
+// parameter is honored across all four executors: each must resolve under
+// .workdir/<componentType>/, not curve-fitted to terraform. This is the
+// component-type parity check osterman called for in PR #2371.
+func TestBuildAndResolveWorkdirPath_AllComponentTypes(t *testing.T) {
+	for _, componentType := range []string{
+		cfg.TerraformComponentType,
+		cfg.HelmfileComponentType,
+		cfg.PackerComponentType,
+		cfg.AnsibleComponentType,
+	} {
+		t.Run(componentType, func(t *testing.T) {
+			basePath := t.TempDir()
+			stack := "dev"
+			componentName := "my-component"
+
+			expectedRoot := filepath.Join(basePath, provWorkdir.WorkdirPath, componentType, stack+"-"+componentName)
+			require.NoError(t, os.MkdirAll(expectedRoot, 0o755))
+
+			atmosConfig := &schema.AtmosConfiguration{BasePath: basePath}
+			info := &schema.ConfigAndStacksInfo{
+				FinalComponent:   componentName,
+				Stack:            stack,
+				ComponentSection: map[string]any{},
+			}
+
+			candidate, exists, err := BuildAndResolveWorkdirPath(atmosConfig, info, componentType)
+			require.NoError(t, err)
+			assert.True(t, exists)
+			assert.Equal(t, expectedRoot, candidate,
+				"%s component must resolve under .workdir/%s/", componentType, componentType)
+			assert.Contains(t, candidate, string(filepath.Separator)+componentType+string(filepath.Separator),
+				"resolved path must include the %s subdirectory", componentType)
+		})
+	}
+}
+
+// TestBuildAndResolveWorkdirPath_AllComponentTypesWithSubpath verifies
+// metadata.component subpath join works uniformly across all four executors —
+// not curve-fitted to terraform.
+func TestBuildAndResolveWorkdirPath_AllComponentTypesWithSubpath(t *testing.T) {
+	for _, componentType := range []string{
+		cfg.TerraformComponentType,
+		cfg.HelmfileComponentType,
+		cfg.PackerComponentType,
+		cfg.AnsibleComponentType,
+	} {
+		t.Run(componentType, func(t *testing.T) {
+			basePath := t.TempDir()
+			stack := "dev"
+			componentName := "my-component"
+			// Production input mirrors a YAML-derived metadata.component value
+			// ("modules/foo"); compose the expected on-disk path with split
+			// segments so we never feed forward slashes into filepath.Join.
+			subpathYAML := "modules/foo"
+
+			workdirRoot := filepath.Join(basePath, provWorkdir.WorkdirPath, componentType, stack+"-"+componentName)
+			expectedCandidate := filepath.Join(workdirRoot, "modules", "foo")
+			require.NoError(t, os.MkdirAll(expectedCandidate, 0o755))
+
+			atmosConfig := &schema.AtmosConfiguration{BasePath: basePath}
+			info := &schema.ConfigAndStacksInfo{
+				FinalComponent:    componentName,
+				Stack:             stack,
+				BaseComponentPath: subpathYAML,
+				ComponentSection:  map[string]any{},
+			}
+
+			candidate, exists, err := BuildAndResolveWorkdirPath(atmosConfig, info, componentType)
+			require.NoError(t, err)
+			assert.True(t, exists)
+			assert.Equal(t, expectedCandidate, candidate,
+				"%s must honor metadata.component subpath %q (issue #2364)", componentType, subpathYAML)
+		})
+	}
+}
+
+// TestBuildAndResolveWorkdirPath_InheritancePointerFallsBack covers the
 // case where metadata.component is an inheritance pointer: the workdir root
 // exists (provisioned earlier) but the named subdirectory does not. The
 // resolver returns the workdir root with exists=true so plan-diff and
 // verify-plan can still locate the planfile.
-func TestResolveWorkdirComponentPath_InheritancePointerFallsBack(t *testing.T) {
+func TestBuildAndResolveWorkdirPath_InheritancePointerFallsBack(t *testing.T) {
 	basePath := t.TempDir()
 	stack := "dev"
 	componentName := "demo-cluster-codepipeline-iac"
@@ -334,15 +412,15 @@ func TestResolveWorkdirComponentPath_InheritancePointerFallsBack(t *testing.T) {
 		ComponentSection:  map[string]any{},
 	}
 
-	candidate, exists, err := resolveWorkdirComponentPath(atmosConfig, info)
+	candidate, exists, err := BuildAndResolveWorkdirPath(atmosConfig, info, cfg.TerraformComponentType)
 	require.NoError(t, err)
 	assert.True(t, exists, "workdir root exists; resolver must return exists=true")
 	assert.Equal(t, root, candidate, "inheritance-pointer subpath missing → fall back to workdir root")
 }
 
-// TestResolveWorkdirComponentPath_NonExistentDir returns exists=false, no
+// TestBuildAndResolveWorkdirPath_NonExistentDir returns exists=false, no
 // error so callers retain their fallback path. Workdir not provisioned yet.
-func TestResolveWorkdirComponentPath_NonExistentDir(t *testing.T) {
+func TestBuildAndResolveWorkdirPath_NonExistentDir(t *testing.T) {
 	atmosConfig := &schema.AtmosConfiguration{BasePath: t.TempDir()}
 	info := &schema.ConfigAndStacksInfo{
 		FinalComponent:    "missing-component",
@@ -357,17 +435,17 @@ func TestResolveWorkdirComponentPath_NonExistentDir(t *testing.T) {
 		info.Stack+"-"+info.FinalComponent,
 	)
 
-	candidate, exists, err := resolveWorkdirComponentPath(atmosConfig, info)
+	candidate, exists, err := BuildAndResolveWorkdirPath(atmosConfig, info, cfg.TerraformComponentType)
 	require.NoError(t, err)
 	assert.False(t, exists)
 	assert.Equal(t, expectedRoot, candidate,
-		"workdir not provisioned → resolveWorkdirSubpath falls back to root and stat returns ENOENT")
+		"workdir not provisioned → ResolveWorkdirSubpath falls back to root and stat returns ENOENT")
 }
 
-// TestResolveWorkdirComponentPath_RegularFileAtCandidate surfaces a
+// TestBuildAndResolveWorkdirPath_RegularFileAtCandidate surfaces a
 // non-directory at the candidate path as a wrapped error rather than a silent
 // exists=false, so corrupt state is not masked.
-func TestResolveWorkdirComponentPath_RegularFileAtCandidate(t *testing.T) {
+func TestBuildAndResolveWorkdirPath_RegularFileAtCandidate(t *testing.T) {
 	basePath := t.TempDir()
 	stack := "dev"
 	componentName := "corrupt"
@@ -386,14 +464,14 @@ func TestResolveWorkdirComponentPath_RegularFileAtCandidate(t *testing.T) {
 		ComponentSection:  map[string]any{},
 	}
 
-	_, exists, err := resolveWorkdirComponentPath(atmosConfig, info)
+	_, exists, err := BuildAndResolveWorkdirPath(atmosConfig, info, cfg.TerraformComponentType)
 	require.Error(t, err)
 	assert.False(t, exists)
 	assert.True(t, errors.Is(err, errUtils.ErrWorkdirProvision),
 		"non-directory at candidate must wrap ErrWorkdirProvision")
 }
 
-func TestResolveWorkdirComponentPath_StatErrorPropagates(t *testing.T) {
+func TestBuildAndResolveWorkdirPath_StatErrorPropagates(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("os.Chmod cannot deny directory traversal on Windows, and os.Getuid is not meaningful there")
 	}
@@ -420,8 +498,52 @@ func TestResolveWorkdirComponentPath_StatErrorPropagates(t *testing.T) {
 		ComponentSection:  map[string]any{},
 	}
 
-	_, _, err := resolveWorkdirComponentPath(atmosConfig, info)
+	_, _, err := BuildAndResolveWorkdirPath(atmosConfig, info, cfg.TerraformComponentType)
 	require.Error(t, err)
 	assert.True(t, errors.Is(err, errUtils.ErrWorkdirProvision),
 		"non-ENOENT stat failures must wrap ErrWorkdirProvision")
+}
+
+// ProvisionAndResolveComponentPath ──────────────────────────────────────────.
+
+// TestProvisionAndResolveComponentPath_NoSourceReturnsFallback verifies the
+// short-circuit when no source is configured: the orchestrator must skip
+// AutoProvisionSource entirely and report whether the fallback exists.
+func TestProvisionAndResolveComponentPath_NoSourceReturnsFallback(t *testing.T) {
+	componentDir := t.TempDir()
+	atmosConfig := &schema.AtmosConfiguration{BasePath: componentDir}
+	info := &schema.ConfigAndStacksInfo{
+		FinalComponent:   "no-source-component",
+		Stack:            "dev",
+		ComponentSection: map[string]any{},
+	}
+
+	got, exists, err := ProvisionAndResolveComponentPath(
+		context.Background(), atmosConfig, info, cfg.TerraformComponentType, componentDir,
+	)
+
+	require.NoError(t, err)
+	assert.True(t, exists, "fallback dir exists on disk → exists=true")
+	assert.Equal(t, componentDir, got, "no source declared → return fallback verbatim")
+}
+
+// TestProvisionAndResolveComponentPath_NoSourceMissingDir verifies the
+// no-source path correctly reports exists=false when the fallback directory
+// has not been created.
+func TestProvisionAndResolveComponentPath_NoSourceMissingDir(t *testing.T) {
+	missingDir := filepath.Join(t.TempDir(), "does-not-exist")
+	atmosConfig := &schema.AtmosConfiguration{BasePath: t.TempDir()}
+	info := &schema.ConfigAndStacksInfo{
+		FinalComponent:   "missing",
+		Stack:            "dev",
+		ComponentSection: map[string]any{},
+	}
+
+	got, exists, err := ProvisionAndResolveComponentPath(
+		context.Background(), atmosConfig, info, cfg.TerraformComponentType, missingDir,
+	)
+
+	require.NoError(t, err, "missing dir is not an error — caller decides what to do")
+	assert.False(t, exists)
+	assert.Equal(t, missingDir, got)
 }

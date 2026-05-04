@@ -14,8 +14,10 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-// TestEnsureTerraformComponentExists_DirectoryCheckError tests the error propagation
-// when checkDirectoryExists returns a real filesystem error (e.g., permission denied).
+// TestEnsureTerraformComponentExists_DirectoryCheckError tests that
+// non-ENOENT stat failures (e.g. EACCES) on the component path are propagated
+// from the orchestrator (via component.componentDirExists) and wrapped with
+// ErrInvalidTerraformComponent at the executor boundary.
 func TestEnsureTerraformComponentExists_DirectoryCheckError(t *testing.T) {
 	if os.Getuid() == 0 {
 		t.Skip("Skipping permission test when running as root")
@@ -51,33 +53,6 @@ func TestEnsureTerraformComponentExists_DirectoryCheckError(t *testing.T) {
 	}
 
 	err := ensureTerraformComponentExists(atmosConfig, info)
-	assert.Error(t, err, "should propagate filesystem error from checkDirectoryExists")
-	assert.ErrorIs(t, err, errUtils.ErrInvalidTerraformComponent)
-}
-
-// TestCheckDirectoryExists_PermissionError tests the real filesystem error branch.
-func TestCheckDirectoryExists_PermissionError(t *testing.T) {
-	if os.Getuid() == 0 {
-		t.Skip("Skipping permission test when running as root")
-	}
-
-	tempDir := t.TempDir()
-	restrictedDir := filepath.Join(tempDir, "restricted")
-	require.NoError(t, os.MkdirAll(restrictedDir, 0o755))
-
-	targetDir := filepath.Join(restrictedDir, "inner")
-	require.NoError(t, os.MkdirAll(targetDir, 0o755))
-
-	// Remove read+execute permission on parent to cause a real filesystem error.
-	require.NoError(t, os.Chmod(restrictedDir, 0o000))
-	t.Cleanup(func() {
-		// Restore permissions so cleanup can succeed.
-		os.Chmod(restrictedDir, 0o755)
-	})
-
-	// Attempting to stat the inner directory should trigger a permission error.
-	exists, err := checkDirectoryExists(targetDir)
-	assert.Error(t, err, "should return error for permission denied")
-	assert.False(t, exists)
+	assert.Error(t, err, "should propagate filesystem error from the orchestrator")
 	assert.ErrorIs(t, err, errUtils.ErrInvalidTerraformComponent)
 }
