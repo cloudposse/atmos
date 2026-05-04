@@ -37,7 +37,7 @@ type subpathAppliedMarker struct{}
 //
 // The metadata.component field has two valid uses for JIT components: (1) a
 // real subdirectory inside the cloned repo where the module lives (e.g.
-// `modules/iam-policy` for terraform-aws-iam-style repos — issue #2364), and
+// `modules/iam-policy` for repos that organize modules under `modules/`), and
 // (2) an inheritance/identity pointer naming an abstract base component when
 // the cloned repo's files live at its root. Disambiguating by string shape
 // alone is unreliable, so we disambiguate by filesystem existence: after the

@@ -380,11 +380,6 @@ func resolveComponentPath(
 ) (string, error) {
 	defer perf.Track(atmosConfig, "ansible.resolveComponentPath")()
 
-	// Resolve the component path: existence check + JIT source provisioning +
-	// metadata.component subpath join (issue #2364), all via the shared
-	// orchestrator so ansible honors metadata.component the same way terraform
-	// does. AutoProvisionSource failures wrap errUtils.ErrProvisionerFailed
-	// (preserved from the previous ansible-specific implementation).
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
 	componentPath, componentPathExists, err := component.ProvisionAndResolveComponentPath(

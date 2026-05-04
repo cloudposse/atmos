@@ -16,12 +16,9 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
-// ensureTerraformComponentExists checks if a terraform component exists and provisions it via JIT if needed.
-// Delegates the existence check + JIT source provisioning + metadata.component
-// subpath join (issue #2364) to the shared component-path orchestrator so this
-// command stays in lockstep with helmfile/packer/ansible/terraform-execute.
-// Returns an error wrapped with ErrInvalidTerraformComponent if the component
-// cannot be found or provisioned.
+// ensureTerraformComponentExists checks if a terraform component exists and
+// provisions it via JIT when source.uri is configured. Errors are wrapped
+// with ErrInvalidTerraformComponent.
 func ensureTerraformComponentExists(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) error {
 	componentPath, err := u.GetComponentPath(atmosConfig, cfg.TerraformComponentType, info.ComponentFolderPrefix, info.FinalComponent)
 	if err != nil {

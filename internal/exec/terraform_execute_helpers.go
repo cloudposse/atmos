@@ -140,10 +140,9 @@ func resolveAndProvisionComponentPath(atmosConfig *schema.AtmosConfiguration, in
 		return "", fmt.Errorf("failed to resolve component path: %w", err)
 	}
 
-	// Provision source BEFORE generating files so that generated files are written to
-	// the correct (possibly JIT workdir) path. When provision.workdir.enabled is true,
-	// ProvisionAndResolveComponentPath returns the workdir path; autoGenerateComponentFiles
-	// must write to that path, not the base component directory.
+	// Provision source before generating files: when provision.workdir.enabled
+	// is true the resolved path is the workdir, and generated files must land
+	// there rather than in the base component directory.
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
 	componentPath, componentPathExists, err := component.ProvisionAndResolveComponentPath(

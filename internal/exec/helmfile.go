@@ -117,10 +117,6 @@ func ExecuteHelmfile(info schema.ConfigAndStacksInfo) error {
 		}
 	}
 
-	// Resolve the component path: existence check + JIT source provisioning +
-	// metadata.component subpath join (issue #2364), all via the shared
-	// orchestrator so helmfile honors metadata.component the same way
-	// terraform does.
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
 	componentPath, componentPathExists, err := component.ProvisionAndResolveComponentPath(
