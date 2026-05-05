@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"path"
+	"sync"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -32,9 +33,20 @@ type Store struct {
 	client *s3.Client
 	bucket string
 	prefix string
+	region string
+
+	// Identity-based authentication fields. When identityName is non-empty,
+	// initialization is deferred until ensureClient is called.
+	identityName string
+	authResolver artifact.AuthContextResolver
+	initOnce     sync.Once
+	initErr      error
 }
 
 // NewStore creates a new S3 backend.
+// If opts.Identity is empty, the AWS client is initialized eagerly using the
+// default credential chain. If non-empty, initialization is deferred until
+// first use so the artifact registry can inject an AuthContextResolver.
 func NewStore(opts artifact.StoreOptions) (artifact.Backend, error) {
 	defer perf.Track(opts.AtmosConfig, "s3.NewStore")()
 
@@ -46,24 +58,122 @@ func NewStore(opts artifact.StoreOptions) (artifact.Backend, error) {
 	prefix, _ := opts.Options["prefix"].(string)
 	region, _ := opts.Options["region"].(string)
 
-	// Load AWS config.
+	store := &Store{
+		bucket:       bucket,
+		prefix:       prefix,
+		region:       region,
+		identityName: opts.Identity,
+	}
+
+	if opts.Identity == "" {
+		if err := store.initDefaultClient(context.Background()); err != nil {
+			return nil, err
+		}
+	}
+
+	return store, nil
+}
+
+// SetAuthContext implements artifact.IdentityAwareBackend.
+// A non-empty identityName overrides the identity supplied at construction.
+//
+// Must be called before the first Store operation. SetAuthContext writes
+// authResolver and identityName without synchronization; ensureClient reads
+// them inside initOnce.Do, so calling SetAuthContext concurrently with (or
+// after) operations that may trigger ensureClient is unsafe. The artifact
+// registry honors this contract by calling SetAuthContext synchronously
+// before returning the backend.
+func (s *Store) SetAuthContext(resolver artifact.AuthContextResolver, identityName string) {
+	s.authResolver = resolver
+	if identityName != "" {
+		s.identityName = identityName
+	}
+}
+
+// initDefaultClient initializes the AWS client using the default credential chain.
+func (s *Store) initDefaultClient(ctx context.Context) error {
 	var awsOpts []func(*config.LoadOptions) error
-	if region != "" {
-		awsOpts = append(awsOpts, config.WithRegion(region))
+	if s.region != "" {
+		awsOpts = append(awsOpts, config.WithRegion(s.region))
 	}
 
-	cfg, err := config.LoadDefaultConfig(context.Background(), awsOpts...)
+	cfg, err := config.LoadDefaultConfig(ctx, awsOpts...)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %w", errUtils.ErrAWSConfigLoadFailed, err)
+		return fmt.Errorf("%w: %w", errUtils.ErrAWSConfigLoadFailed, err)
 	}
 
-	client := s3.NewFromConfig(cfg)
+	s.client = s3.NewFromConfig(cfg)
+	return nil
+}
 
-	return &Store{
-		client: client,
-		bucket: bucket,
-		prefix: prefix,
-	}, nil
+// initIdentityClient initializes the AWS client using identity-based credentials
+// resolved through the injected AuthContextResolver.
+func (s *Store) initIdentityClient(ctx context.Context) error {
+	if s.authResolver == nil {
+		// No resolver was injected; fall back to the default chain.
+		return s.initDefaultClient(ctx)
+	}
+
+	authContext, err := s.authResolver.ResolveAWSAuthContext(ctx, s.identityName)
+	if err != nil {
+		return fmt.Errorf("%w: failed to resolve AWS auth context for identity %q: %w",
+			errUtils.ErrAWSConfigLoadFailed, s.identityName, err)
+	}
+
+	cfgOpts := s.buildAuthConfigOpts(authContext)
+	cfg, err := config.LoadDefaultConfig(ctx, cfgOpts...)
+	if err != nil {
+		return fmt.Errorf("%w: %w", errUtils.ErrAWSConfigLoadFailed, err)
+	}
+
+	s.client = s3.NewFromConfig(cfg)
+	return nil
+}
+
+// buildAuthConfigOpts constructs AWS SDK config options from the auth context.
+func (s *Store) buildAuthConfigOpts(authContext *artifact.AWSAuthConfig) []func(*config.LoadOptions) error {
+	var cfgOpts []func(*config.LoadOptions) error
+	if authContext == nil {
+		return cfgOpts
+	}
+	if authContext.CredentialsFile != "" {
+		cfgOpts = append(cfgOpts, config.WithSharedCredentialsFiles([]string{authContext.CredentialsFile}))
+	}
+	if authContext.ConfigFile != "" {
+		cfgOpts = append(cfgOpts, config.WithSharedConfigFiles([]string{authContext.ConfigFile}))
+	}
+	if authContext.Profile != "" {
+		cfgOpts = append(cfgOpts, config.WithSharedConfigProfile(authContext.Profile))
+	}
+
+	// Use region from auth context if the store doesn't specify one.
+	region := s.region
+	if region == "" && authContext.Region != "" {
+		region = authContext.Region
+	}
+	if region != "" {
+		cfgOpts = append(cfgOpts, config.WithRegion(region))
+	}
+
+	return cfgOpts
+}
+
+// ensureClient lazily initializes the AWS client on first operation.
+// The client-nil check sits inside initOnce.Do to avoid a data race between
+// the unsynchronized read and a write that happens inside Do on another goroutine.
+func (s *Store) ensureClient(ctx context.Context) error {
+	s.initOnce.Do(func() {
+		if s.client != nil {
+			return // Already initialized (eager init path).
+		}
+		if s.identityName == "" {
+			s.initErr = s.initDefaultClient(ctx)
+		} else {
+			s.initErr = s.initIdentityClient(ctx)
+		}
+	})
+
+	return s.initErr
 }
 
 // Name returns the store type name.
@@ -85,6 +195,10 @@ func (s *Store) fullKey(key string) string {
 // Upload uploads a single data stream to S3 with a metadata sidecar.
 func (s *Store) Upload(ctx context.Context, key string, data io.Reader, size int64, metadata *artifact.Metadata) error {
 	defer perf.Track(nil, "s3.Upload")()
+
+	if err := s.ensureClient(ctx); err != nil {
+		return fmt.Errorf("%w: %w", errUtils.ErrArtifactUploadFailed, err)
+	}
 
 	fullKey := s.fullKey(key)
 
@@ -133,6 +247,10 @@ func (s *Store) Upload(ctx context.Context, key string, data io.Reader, size int
 func (s *Store) Download(ctx context.Context, key string) (io.ReadCloser, *artifact.Metadata, error) {
 	defer perf.Track(nil, "s3.Download")()
 
+	if err := s.ensureClient(ctx); err != nil {
+		return nil, nil, fmt.Errorf("%w: %w", errUtils.ErrArtifactDownloadFailed, err)
+	}
+
 	fullKey := s.fullKey(key)
 
 	// Download the data.
@@ -157,6 +275,10 @@ func (s *Store) Download(ctx context.Context, key string) (io.ReadCloser, *artif
 func (s *Store) Delete(ctx context.Context, key string) error {
 	defer perf.Track(nil, "s3.Delete")()
 
+	if err := s.ensureClient(ctx); err != nil {
+		return fmt.Errorf("%w: %w", errUtils.ErrArtifactDeleteFailed, err)
+	}
+
 	fullKey := s.fullKey(key)
 
 	// Delete the artifact.
@@ -180,6 +302,10 @@ func (s *Store) Delete(ctx context.Context, key string) error {
 // List lists artifacts matching the given query.
 func (s *Store) List(ctx context.Context, query artifact.Query) ([]artifact.ArtifactInfo, error) {
 	defer perf.Track(nil, "s3.List")()
+
+	if err := s.ensureClient(ctx); err != nil {
+		return nil, fmt.Errorf("%w: %w", errUtils.ErrArtifactListFailed, err)
+	}
 
 	// Convert query to prefix-based S3 listing.
 	prefix := s.queryToPrefix(query)
@@ -235,6 +361,10 @@ func (s *Store) List(ctx context.Context, query artifact.Query) ([]artifact.Arti
 func (s *Store) Exists(ctx context.Context, key string) (bool, error) {
 	defer perf.Track(nil, "s3.Exists")()
 
+	if err := s.ensureClient(ctx); err != nil {
+		return false, fmt.Errorf("%w: %w", errUtils.ErrArtifactListFailed, err)
+	}
+
 	fullKey := s.fullKey(key)
 
 	_, err := s.client.HeadObject(ctx, &s3.HeadObjectInput{
@@ -254,6 +384,10 @@ func (s *Store) Exists(ctx context.Context, key string) (bool, error) {
 // GetMetadata retrieves metadata for an artifact without downloading the content.
 func (s *Store) GetMetadata(ctx context.Context, key string) (*artifact.Metadata, error) {
 	defer perf.Track(nil, "s3.GetMetadata")()
+
+	if err := s.ensureClient(ctx); err != nil {
+		return nil, fmt.Errorf("%w: %w", errUtils.ErrArtifactMetadataFailed, err)
+	}
 
 	fullKey := s.fullKey(key)
 
@@ -336,5 +470,8 @@ func init() {
 	artifact.Register(storeName, NewStore)
 }
 
-// Ensure Store implements artifact.Backend.
-var _ artifact.Backend = (*Store)(nil)
+// Ensure Store implements artifact.Backend and artifact.IdentityAwareBackend.
+var (
+	_ artifact.Backend              = (*Store)(nil)
+	_ artifact.IdentityAwareBackend = (*Store)(nil)
+)

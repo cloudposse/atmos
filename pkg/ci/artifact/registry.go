@@ -32,6 +32,9 @@ func Register(storeType string, factory BackendFactory) {
 
 // NewStore creates a new store from the given options.
 // It creates a Backend via the registered factory and wraps it in a BundledStore.
+// If the backend implements IdentityAwareBackend and opts.Resolver is set,
+// the resolver and identity are injected so the backend can lazily resolve
+// credentials on first use.
 func NewStore(opts StoreOptions) (Store, error) {
 	defer perf.Track(opts.AtmosConfig, "artifact.NewStore")()
 
@@ -46,6 +49,12 @@ func NewStore(opts StoreOptions) (Store, error) {
 	backend, err := factory(opts)
 	if err != nil {
 		return nil, err
+	}
+
+	if opts.Resolver != nil {
+		if ias, ok := backend.(IdentityAwareBackend); ok {
+			ias.SetAuthContext(opts.Resolver, opts.Identity)
+		}
 	}
 
 	return NewBundledStore(backend), nil
