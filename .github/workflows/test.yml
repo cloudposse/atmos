@@ -5,6 +5,9 @@ on:
     paths-ignore:
       - "README.md"
 
+  merge_group:
+    types: [checks_requested]
+
   push:
     branches:
       - main
