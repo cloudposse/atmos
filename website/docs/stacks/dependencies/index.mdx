@@ -11,7 +11,7 @@ import Intro from '@site/src/components/Intro'
 import Note from '@site/src/components/Note'
 
 <Intro>
-The `dependencies` section declares two kinds of relationships: required tool versions (`dependencies.tools`) and component dependencies (`dependencies.components`). Tool dependencies pin CLI versions like Terraform, kubectl, or helm; component dependencies define ordering and watch-paths used by `atmos describe affected` and CI/CD integrations.
+The `dependencies` section has four sibling keys: `tools` (required CLI versions), `components` (other Atmos components this one depends on), `files` (file paths whose changes affect this component), and `folders` (folder paths whose changes affect this component). Tool dependencies pin CLI versions like Terraform, kubectl, or helm; the other three define ordering and watch-paths used by `atmos describe affected` and CI/CD integrations.
 </Intro>
 
 ## Use Cases
@@ -219,9 +219,9 @@ components:
 
 ## Component Dependencies
 
-The `dependencies.components` section declares relationships between Atmos components, files, and folders. These dependencies are used by `atmos describe affected` to determine which components are impacted by a change, by `atmos describe dependents` to find downstream consumers, and by CI/CD integrations (such as Spacelift) to apply components in the correct order.
+The `dependencies.components` section declares ordering relationships between Atmos components. Use it to express that one component must be applied before another. These dependencies are used by `atmos describe dependents` to find downstream consumers, by `atmos describe affected` to propagate impact through the dependency graph, and by CI/CD integrations (such as Spacelift) to apply components in the correct order.
 
-For full reference — cross-stack dependencies, file/folder watching, cross-type (`kind`) dependencies, merge behavior, and migration from `settings.depends_on` — see the dedicated [Component Dependencies](/stacks/dependencies/components) page.
+For the full reference — cross-stack dependencies, cross-type (`kind`) dependencies, merge behavior, and migration from `settings.depends_on` — see the dedicated [Component Dependencies](/stacks/dependencies/components) page.
 
 ### Quick Example
 
@@ -236,11 +236,34 @@ components:
     subnet:
       dependencies:
         components:
-          - component: vpc     # subnet depends on vpc
+          - name: vpc          # subnet depends on vpc
       vars:
         vpc_id: !terraform.output vpc.vpc_id
 ```
 </File>
+
+## File and Folder Dependencies
+
+The `dependencies.files` and `dependencies.folders` sibling keys declare path-based dependencies. When `atmos describe affected` detects a change to one of these paths, the declaring component is marked as affected — even when no component code or stack configuration changed.
+
+Use this to wire components to external assets like Lambda source code, configuration files, or schema definitions that live outside the component directory.
+
+<File title="stacks/catalog/lambda.yaml">
+```yaml
+components:
+  terraform:
+    lambda-function:
+      dependencies:
+        files:
+          - configs/lambda-settings.json
+        folders:
+          - src/lambda/my-function
+```
+</File>
+
+:::info Legacy inline shape
+The `kind: file` / `kind: folder` entries inside `dependencies.components[]` (shipped in v1.210.0) still parse and behave identically. New configurations should prefer the `dependencies.files` and `dependencies.folders` sibling keys for clarity.
+:::
 
 ## Best Practices
 

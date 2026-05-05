@@ -1525,7 +1525,7 @@
     },
     "dependencies": {
       "title": "dependencies",
-      "description": "Dependencies section. Declares required tool versions (`tools`) and component dependencies (`components`) used by `atmos describe affected`, `atmos describe dependents`, and CI/CD integrations.",
+      "description": "Dependencies section. Declares required tool versions (`tools`), component-to-component dependencies (`components`), and path-based dependencies (`files`, `folders`) used by `atmos describe affected`, `atmos describe dependents`, and CI/CD integrations.",
       "oneOf": [
         {
           "type": "string",
@@ -1540,6 +1540,12 @@
             },
             "components": {
               "$ref": "#/definitions/dependencies_components"
+            },
+            "files": {
+              "$ref": "#/definitions/dependencies_files"
+            },
+            "folders": {
+              "$ref": "#/definitions/dependencies_folders"
             }
           },
           "required": []
@@ -1548,7 +1554,7 @@
     },
     "dependencies_components": {
       "title": "dependencies_components",
-      "description": "List of component dependencies. Each entry declares a dependency on another component (by `component` and optional `stack`), or a path-based dependency (`kind: file` or `kind: folder` with `path`).",
+      "description": "List of component-to-component dependencies. Each entry declares a dependency on another component using `name` (preferred) or `component` (legacy alias), with optional `stack` and `kind`. Path-based dependencies should use the sibling `files` / `folders` keys; the legacy `kind: file` / `kind: folder` entries inside this list still parse but are discouraged.",
       "oneOf": [
         {
           "type": "string",
@@ -1562,14 +1568,52 @@
         }
       ]
     },
+    "dependencies_files": {
+      "title": "dependencies_files",
+      "description": "List of file paths whose changes mark the declaring component as affected by `atmos describe affected`. Each entry is a file path string. Replaces the legacy `kind: file` entries inside `dependencies.components`.",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "description": "File path (relative to the repository root). Changes to this file mark the declaring component as affected."
+          }
+        }
+      ]
+    },
+    "dependencies_folders": {
+      "title": "dependencies_folders",
+      "description": "List of folder paths whose contents (recursive) mark the declaring component as affected by `atmos describe affected`. Each entry is a folder path string. Replaces the legacy `kind: folder` entries inside `dependencies.components`.",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "description": "Folder path (relative to the repository root). Changes to any file under this folder mark the declaring component as affected."
+          }
+        }
+      ]
+    },
     "dependencies_component_entry": {
       "title": "dependencies_component_entry",
-      "description": "A single component dependency entry. Use `component` (with optional `stack`) for component-to-component dependencies, or `kind: file` / `kind: folder` with `path` for path-based dependencies.",
+      "description": "A single component-to-component dependency entry. Use `name` (preferred) or `component` (legacy alias) to identify the target component. The legacy `kind: file` / `kind: folder` shape with `path:` still parses for backward compatibility, but new configurations should use the sibling `dependencies.files` / `dependencies.folders` keys instead.",
       "type": "object",
       "properties": {
+        "name": {
+          "type": "string",
+          "description": "Component instance name (e.g., `vpc`, `tgw/hub`). Preferred over `component` in new configurations. This is the name under `components.<kind>.<name>`, not the Terraform module path."
+        },
         "component": {
           "type": "string",
-          "description": "Component instance name (e.g., `vpc`, `tgw/hub`). Required for component dependencies. This is the name under `components.<kind>.<name>`, not the Terraform module path."
+          "description": "Legacy alias for `name`. Component instance name (e.g., `vpc`, `tgw/hub`). New configurations should use `name` instead."
         },
         "stack": {
           "type": "string",
@@ -1577,14 +1621,17 @@
         },
         "kind": {
           "type": "string",
-          "description": "Dependency type. Use `terraform`, `helmfile`, `packer`, or another registered component type for component dependencies (defaults to the declaring component's type). Use `file` or `folder` for path-based dependencies."
+          "description": "Dependency type. Use `terraform`, `helmfile`, `packer`, or another registered component type for component dependencies (defaults to the declaring component's type). The legacy values `file` and `folder` (with `path:`) still parse but are discouraged — use `dependencies.files` / `dependencies.folders` instead."
         },
         "path": {
           "type": "string",
-          "description": "File or folder path for path-based dependencies. Required when `kind` is `file` or `folder`. Changes to files at this path mark the declaring component as affected."
+          "description": "File or folder path for legacy inline path-based dependencies. Required when `kind` is `file` or `folder`. New configurations should use the sibling `dependencies.files` / `dependencies.folders` keys instead."
         }
       },
       "anyOf": [
+        {
+          "required": ["name"]
+        },
         {
           "required": ["component"]
         },

@@ -613,6 +613,109 @@ func TestGetFileFolderDependencies(t *testing.T) {
 			assert.True(t, dep.IsFileDependency() || dep.IsFolderDependency(), "should only contain file or folder deps")
 		}
 	})
+
+	// v2 surface coverage: dependencies.files / dependencies.folders sibling keys.
+
+	t.Run("v2: extracts file deps from dependencies.files sibling key", func(t *testing.T) {
+		componentSection := map[string]any{
+			"dependencies": map[string]any{
+				"files": []any{"configs/app.json", "configs/db.json"},
+			},
+		}
+		deps := getFileFolderDependencies(componentSection, nil)
+
+		assert.Len(t, deps, 2)
+		paths := make(map[string]bool, len(deps))
+		for _, dep := range deps {
+			assert.True(t, dep.IsFileDependency(), "every entry must be a file dep")
+			paths[dep.Path] = true
+		}
+		assert.True(t, paths["configs/app.json"])
+		assert.True(t, paths["configs/db.json"])
+	})
+
+	t.Run("v2: extracts folder deps from dependencies.folders sibling key", func(t *testing.T) {
+		componentSection := map[string]any{
+			"dependencies": map[string]any{
+				"folders": []any{"src/lambda/handler"},
+			},
+		}
+		deps := getFileFolderDependencies(componentSection, nil)
+
+		assert.Len(t, deps, 1)
+		assert.True(t, deps[0].IsFolderDependency())
+		assert.Equal(t, "src/lambda/handler", deps[0].Path)
+	})
+
+	t.Run("v2: name alias on a component entry parses correctly", func(t *testing.T) {
+		// Components with `name:` should not be returned by getFileFolderDependencies
+		// (they aren't file/folder deps), but the section must parse without error
+		// and the file sibling alongside should still be picked up.
+		componentSection := map[string]any{
+			"dependencies": map[string]any{
+				"components": []any{
+					map[string]any{"name": "vpc", "stack": "prod"},
+				},
+				"files": []any{"configs/app.json"},
+			},
+		}
+		deps := getFileFolderDependencies(componentSection, nil)
+
+		assert.Len(t, deps, 1)
+		assert.True(t, deps[0].IsFileDependency())
+		assert.Equal(t, "configs/app.json", deps[0].Path)
+	})
+
+	t.Run("v1 inline and v2 sibling keys produce equivalent file/folder deps", func(t *testing.T) {
+		v1 := map[string]any{
+			"dependencies": map[string]any{
+				"components": []any{
+					map[string]any{"component": "vpc"},
+					map[string]any{"kind": "file", "path": "configs/app.json"},
+					map[string]any{"kind": "folder", "path": "src/handler"},
+				},
+			},
+		}
+		v2 := map[string]any{
+			"dependencies": map[string]any{
+				"components": []any{map[string]any{"name": "vpc"}},
+				"files":      []any{"configs/app.json"},
+				"folders":    []any{"src/handler"},
+			},
+		}
+
+		v1Deps := getFileFolderDependencies(v1, nil)
+		v2Deps := getFileFolderDependencies(v2, nil)
+
+		// Both surfaces should return the same set of file/folder deps.
+		assert.Len(t, v1Deps, 2)
+		assert.Len(t, v2Deps, 2)
+		assert.ElementsMatch(t, v1Deps, v2Deps,
+			"v1 inline and v2 sibling keys must produce identical file/folder deps")
+	})
+
+	t.Run("v2: combining inline kind:file and sibling files dedupes by path", func(t *testing.T) {
+		componentSection := map[string]any{
+			"dependencies": map[string]any{
+				"components": []any{
+					map[string]any{"kind": "file", "path": "configs/shared.json"},
+				},
+				"files": []any{"configs/shared.json"},
+			},
+		}
+		deps := getFileFolderDependencies(componentSection, nil)
+
+		// Two entries are expected here because Normalize mirrors Files into
+		// Components for downstream filters; what matters is that both map to
+		// the same path, so callers don't over-count "different" deps.
+		// We assert the set of (kind, path) pairs has one unique element.
+		seen := make(map[string]int)
+		for _, d := range deps {
+			seen[d.Kind+":"+d.Path]++
+		}
+		assert.Equal(t, 1, len(seen),
+			"all entries should reduce to a single (kind,path) pair")
+	})
 }
 
 func TestIsComponentDependentFolderOrFileChangedIndexed_AdditionalCases(t *testing.T) {

@@ -700,7 +700,7 @@ where:
             <dd>
                 An external file on the local filesystem that the Atmos component depends on was changed.
 
-                Dependencies on external files (not in the component's folder) are declared in the [`dependencies.components`](/stacks/dependencies/components) list using `kind: file` and a `path`.
+                Dependencies on external files (not in the component's folder) are declared with the [`dependencies.files`](/stacks/dependencies/components) sibling key.
 
 
                 For example:
@@ -712,17 +712,20 @@ where:
                       metadata:
                         component: "top-level-component1"
                       dependencies:
-                        components:
-                          - kind: file
-                            path: "tests/fixtures/scenarios/complete/components/terraform/mixins/introspection.mixin.tf"
+                        files:
+                          - "tests/fixtures/scenarios/complete/components/terraform/mixins/introspection.mixin.tf"
                 ```
 
                 In the configuration above, we specify that the Atmos component `top-level-component3` depends on the file
                 `tests/fixtures/scenarios/complete/components/terraform/mixins/introspection.mixin.tf` (which is not in the component's folder). If the file gets modified,
                 the component `top-level-component3` will be included in the `atmos describe affected` command output.
 
-                :::note Legacy format
-                The deprecated [`settings.depends_on`](/stacks/settings/depends_on) map (with numeric keys and a `file:` attribute) is still recognized for backward compatibility, but new configurations should use `dependencies.components`.
+                :::note Legacy formats
+                Two older shapes still parse for backward compatibility:
+                - The inline form `dependencies.components: [{ kind: file, path: ... }]` (shipped in v1.210.0).
+                - The much older [`settings.depends_on`](/stacks/settings/depends_on) map with numeric keys and a `file:` attribute.
+
+                New configurations should use `dependencies.files` instead.
                 :::
 
 
@@ -751,7 +754,7 @@ where:
             <dd>
                 Any file in an external folder that the Atmos component depends on was changed.
 
-                Dependencies on external folders are declared in the [`dependencies.components`](/stacks/dependencies/components) list using `kind: folder` and a `path`. You can mix `file` and `folder` entries in the same list.
+                Dependencies on external folders are declared with the [`dependencies.folders`](/stacks/dependencies/components) sibling key. You can mix `files` and `folders` keys in the same `dependencies` block.
 
 
                 For example:
@@ -763,19 +766,22 @@ where:
                       metadata:
                         component: "top-level-component1"
                       dependencies:
-                        components:
-                          - kind: file
-                            path: "tests/fixtures/scenarios/complete/components/terraform/mixins/introspection.mixin.tf"
-                          - kind: folder
-                            path: "tests/fixtures/scenarios/complete/components/helmfile/infra/infra-server"
+                        files:
+                          - "tests/fixtures/scenarios/complete/components/terraform/mixins/introspection.mixin.tf"
+                        folders:
+                          - "tests/fixtures/scenarios/complete/components/helmfile/infra/infra-server"
                 ```
 
                 In the configuration above, we specify that the Atmos component `top-level-component3` depends on the folder
                 `tests/fixtures/scenarios/complete/components/helmfile/infra/infra-server`. If any file in the folder gets modified,
                 the component `top-level-component3` will be included in the `atmos describe affected` command output.
 
-                :::note Legacy format
-                The deprecated [`settings.depends_on`](/stacks/settings/depends_on) map (with numeric keys and a `folder:` attribute) is still recognized for backward compatibility, but new configurations should use `dependencies.components`.
+                :::note Legacy formats
+                Two older shapes still parse for backward compatibility:
+                - The inline form `dependencies.components: [{ kind: folder, path: ... }]` (shipped in v1.210.0).
+                - The much older [`settings.depends_on`](/stacks/settings/depends_on) map with numeric keys and a `folder:` attribute.
+
+                New configurations should use `dependencies.folders` instead.
                 :::
 
 
@@ -1091,7 +1097,7 @@ For example, suppose that we have the following configuration for the Atmos comp
           vars: {}
           dependencies:
             components:
-              - component: "component-1"
+              - name: "component-1"
 
         component-3:
           metadata:
@@ -1099,7 +1105,7 @@ For example, suppose that we have the following configuration for the Atmos comp
           vars: {}
           dependencies:
             components:
-              - component: "component-2"
+              - name: "component-2"
   ```
 </File>
 
