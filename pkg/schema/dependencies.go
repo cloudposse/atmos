@@ -159,18 +159,39 @@ func (d *Dependencies) normalizeComponentEntries() error {
 
 // mirrorSiblingsIntoComponents appends synthetic ComponentDependency entries
 // for every Files/Folders sibling-key entry so downstream code that filters
-// Components[] by Kind keeps working unchanged.
+// Components[] by Kind keeps working unchanged. Entries whose (kind, path)
+// pair is already present in Components are skipped, which makes Normalize
+// idempotent and prevents duplicates when a path is declared in both the
+// inline `kind: file/folder` shape and the sibling `files`/`folders` keys.
 func (d *Dependencies) mirrorSiblingsIntoComponents() {
+	existingFiles := make(map[string]struct{})
+	existingFolders := make(map[string]struct{})
+	for i := range d.Components {
+		switch {
+		case d.Components[i].IsFileDependency():
+			existingFiles[d.Components[i].Path] = struct{}{}
+		case d.Components[i].IsFolderDependency():
+			existingFolders[d.Components[i].Path] = struct{}{}
+		}
+	}
 	for _, p := range d.Files {
 		if p == "" {
 			continue
 		}
+		if _, ok := existingFiles[p]; ok {
+			continue
+		}
+		existingFiles[p] = struct{}{}
 		d.Components = append(d.Components, ComponentDependency{Kind: dependencyKindFile, Path: p})
 	}
 	for _, p := range d.Folders {
 		if p == "" {
 			continue
 		}
+		if _, ok := existingFolders[p]; ok {
+			continue
+		}
+		existingFolders[p] = struct{}{}
 		d.Components = append(d.Components, ComponentDependency{Kind: dependencyKindFolder, Path: p})
 	}
 }

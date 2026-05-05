@@ -219,7 +219,7 @@ settings:
 With that set, child `dependencies.components` lists extend the parent's list — in the example above, `vpc` would depend on both `account-settings` and `network-baseline`.
 
 :::tip
-Other valid `list_merge_strategy` values are `replace` (default) and `merge`. See the [`settings` reference](/cli/configuration/settings) for full semantics.
+Other valid `list_merge_strategy` values are `replace` (default), `append`, and `merge`. See the [`settings` reference](/cli/configuration/settings) for full semantics.
 :::
 
 ## Integration with `atmos describe affected`

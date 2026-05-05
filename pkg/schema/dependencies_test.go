@@ -291,6 +291,18 @@ func TestDependencies_Normalize_FilesFoldersSiblings(t *testing.T) {
 		var d *Dependencies
 		assert.NoError(t, d.Normalize())
 	})
+
+	t.Run("is idempotent — calling twice produces the same result", func(t *testing.T) {
+		d := &Dependencies{
+			Components: []ComponentDependency{{Component: "vpc"}},
+			Files:      []string{"configs/lambda.json"},
+			Folders:    []string{"src/handler"},
+		}
+		require.NoError(t, d.Normalize())
+		first := append([]ComponentDependency(nil), d.Components...)
+		require.NoError(t, d.Normalize())
+		assert.Equal(t, first, d.Components, "second Normalize must not append duplicates")
+	})
 }
 
 // Helpers for the equivalence assertion.

@@ -471,7 +471,7 @@ func getComponentDependencies(componentMap map[string]any) ([]schema.ComponentDe
 			var deps schema.Dependencies
 			if err := mapstructure.Decode(depsSection, &deps); err == nil {
 				if normErr := deps.Normalize(); normErr != nil {
-					log.Debug("failed to normalize dependencies section", "error", normErr)
+					log.Warn("invalid dependencies section; entries may be silently ignored", "error", normErr)
 				}
 				if len(deps.Components) > 0 {
 					return deps.Components, settingsSection, dependencySourceDependenciesComponents

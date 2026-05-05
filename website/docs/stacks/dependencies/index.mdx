@@ -11,7 +11,7 @@ import Intro from '@site/src/components/Intro'
 import Note from '@site/src/components/Note'
 
 <Intro>
-The `dependencies` section has four sibling keys: `tools` (required CLI versions), `components` (other Atmos components this one depends on), `files` (file paths whose changes affect this component), and `folders` (folder paths whose changes affect this component). Tool dependencies pin CLI versions like Terraform, kubectl, or helm; the other three define ordering and watch-paths used by `atmos describe affected` and CI/CD integrations.
+The `dependencies` section has four sibling keys: `tools` (required CLI versions), `components` (other Atmos components this one depends on), `files` (file paths whose changes affect this component), and `folders` (folder paths whose changes affect this component). Tool dependencies pin CLI versions like Terraform, kubectl, or helm; `components` defines execution ordering between Atmos components, and `files`/`folders` declare watch-paths used by `atmos describe affected` and CI/CD integrations.
 </Intro>
 
 ## Use Cases

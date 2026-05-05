@@ -542,10 +542,7 @@ func getFileFolderDependenciesFromNewFormat(componentSection map[string]any) []s
 	}
 
 	// Fast path: nothing to read if none of the entry-bearing keys are present.
-	_, hasComponents := depsSection["components"]
-	_, hasFiles := depsSection["files"]
-	_, hasFolders := depsSection["folders"]
-	if !hasComponents && !hasFiles && !hasFolders {
+	if !hasDependencyEntries(depsSection) {
 		return nil
 	}
 
@@ -554,7 +551,7 @@ func getFileFolderDependenciesFromNewFormat(componentSection map[string]any) []s
 		return nil
 	}
 	if err := deps.Normalize(); err != nil {
-		log.Debug("failed to normalize dependencies section", "error", err)
+		log.Warn("invalid dependencies section; file/folder deps may be silently ignored", "error", err)
 		return nil
 	}
 	if len(deps.Components) == 0 {

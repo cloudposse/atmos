@@ -705,16 +705,11 @@ func TestGetFileFolderDependencies(t *testing.T) {
 		}
 		deps := getFileFolderDependencies(componentSection, nil)
 
-		// Two entries are expected here because Normalize mirrors Files into
-		// Components for downstream filters; what matters is that both map to
-		// the same path, so callers don't over-count "different" deps.
-		// We assert the set of (kind, path) pairs has one unique element.
-		seen := make(map[string]int)
-		for _, d := range deps {
-			seen[d.Kind+":"+d.Path]++
-		}
-		assert.Equal(t, 1, len(seen),
-			"all entries should reduce to a single (kind,path) pair")
+		// Normalize dedupes the (kind, path) pair, so the same path declared
+		// inline and via the sibling key collapses to a single entry.
+		require.Len(t, deps, 1, "duplicate (kind,path) pair should be deduped to one entry")
+		assert.Equal(t, "file", deps[0].Kind)
+		assert.Equal(t, "configs/shared.json", deps[0].Path)
 	})
 }
 
