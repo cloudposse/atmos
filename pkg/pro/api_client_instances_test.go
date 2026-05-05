@@ -194,3 +194,42 @@ func TestUploadInstances_400_NotRetried(t *testing.T) {
 	assert.Contains(t, allHints, "settings.pro")
 	assert.Contains(t, allHints, "atmos-pro.com/docs/configure/drift-detection")
 }
+
+// TestUploadInstances_RedirectErrorClosesBody triggers the rare
+// "non-nil response with non-nil error" return path of http.Client.Do via
+// CheckRedirect, exercising the defensive resp.Body.Close() guard inside
+// the doWithRetry closure.
+func TestUploadInstances_RedirectErrorClosesBody(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, r.URL.Path+"/loop", http.StatusFound)
+	}))
+	defer server.Close()
+
+	httpClient := &http.Client{
+		CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
+			return errRedirectBlocked
+		},
+	}
+
+	apiClient := &AtmosProAPIClient{
+		BaseURL:         server.URL,
+		BaseAPIEndpoint: "api",
+		APIToken:        "test-token",
+		HTTPClient:      httpClient,
+	}
+
+	dto := dtos.InstancesUploadRequest{
+		RepoURL:   "https://github.com/org/repo",
+		RepoName:  "repo",
+		RepoOwner: "org",
+		RepoHost:  "github.com",
+		Instances: []dtos.UploadInstance{
+			{Component: "vpc", Stack: "tenant1-ue2-dev", ComponentType: "terraform"},
+		},
+	}
+
+	err := apiClient.UploadInstances(&dto)
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, errUtils.ErrFailedToUploadInstances))
+	assert.True(t, errors.Is(err, errUtils.ErrFailedToMakeRequest))
+}

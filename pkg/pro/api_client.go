@@ -78,9 +78,10 @@ func logAndReturnProAPIError(operation string, apiResponse dtos.AtmosApiResponse
 	}
 
 	// Always include trace_id when present — support uses it to correlate
-	// requests on the server side, regardless of 4xx vs 5xx.
+	// requests on the server side, regardless of 4xx vs 5xx. Put it on its
+	// own line so it doesn't get mistaken for the last validation bullet.
 	if traceID != "" {
-		errorMsg = fmt.Sprintf("%s (trace_id: %s)", errorMsg, traceID)
+		errorMsg = fmt.Sprintf("%s\ntrace_id: %s", errorMsg, traceID)
 	}
 
 	return errorMsg
@@ -91,20 +92,11 @@ func logAndReturnProAPIError(operation string, apiResponse dtos.AtmosApiResponse
 // errors after a trailing ": " separator, the trailing portion is stripped so
 // the bullets aren't shown twice.
 func renderValidationErrors(message string, validationErrors []string) string {
-	headline := message
-
-	// Best-effort dedupe: detect a trailing concatenation produced by the
-	// server (e.g. "Validation failed: A; B" or "Validation failed: A. B.")
-	// and strip it so we don't render the errors both inline and as bullets.
-	if idx := strings.Index(headline, ": "); idx != -1 {
-		tail := headline[idx+len(": "):]
-		if containsAllValidationErrors(tail, validationErrors) {
-			headline = headline[:idx]
-		}
-	}
-
-	var b strings.Builder
-	b.WriteString(headline)
+	// Normalize once: trim whitespace, drop empties, dedupe while preserving
+	// first-occurrence order. Both the tail-match below and the bullet
+	// rendering operate off the same cleaned set so behavior stays consistent
+	// for inputs like ["A", " A ", ""].
+	normalized := make([]string, 0, len(validationErrors))
 	seen := make(map[string]struct{}, len(validationErrors))
 	for _, ve := range validationErrors {
 		ve = strings.TrimSpace(ve)
@@ -115,6 +107,24 @@ func renderValidationErrors(message string, validationErrors []string) string {
 			continue
 		}
 		seen[ve] = struct{}{}
+		normalized = append(normalized, ve)
+	}
+
+	headline := message
+
+	// Best-effort dedupe: detect a trailing concatenation produced by the
+	// server (e.g. "Validation failed: A; B" or "Validation failed: A. B.")
+	// and strip it so we don't render the errors both inline and as bullets.
+	if idx := strings.Index(headline, ": "); idx != -1 {
+		tail := headline[idx+len(": "):]
+		if containsAllValidationErrors(tail, normalized) {
+			headline = headline[:idx]
+		}
+	}
+
+	var b strings.Builder
+	b.WriteString(headline)
+	for _, ve := range normalized {
 		b.WriteString("\n  - ")
 		b.WriteString(ve)
 	}

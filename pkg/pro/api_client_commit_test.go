@@ -156,6 +156,43 @@ func TestCreateCommit_NetworkError(t *testing.T) {
 	assert.ErrorIs(t, err, errUtils.ErrFailedToCreateCommit)
 }
 
+// TestSendCommitRequest_RedirectErrorClosesBody triggers the rare
+// "non-nil response with non-nil error" return path of http.Client.Do by
+// using a CheckRedirect that returns an error. This exercises the defensive
+// resp.Body.Close() guard added to avoid leaking connections.
+func TestSendCommitRequest_RedirectErrorClosesBody(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, r.URL.Path+"/loop", http.StatusFound)
+	}))
+	defer server.Close()
+
+	httpClient := &http.Client{
+		CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
+			return errRedirectBlocked
+		},
+	}
+
+	client := &AtmosProAPIClient{
+		BaseURL:         server.URL,
+		BaseAPIEndpoint: "api",
+		APIToken:        "test-token",
+		HTTPClient:      httpClient,
+	}
+
+	var resp dtos.CommitResponse
+	err := client.sendCommitRequest(server.URL+"/api/git/commit", []byte(`{}`), &resp)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrFailedToMakeRequest)
+}
+
+// errRedirectBlocked is used by tests that need CheckRedirect to fail so
+// http.Client.Do returns a non-nil response together with the error.
+var errRedirectBlocked = errSentinel("redirect blocked")
+
+type errSentinel string
+
+func (e errSentinel) Error() string { return string(e) }
+
 func TestSendCommitRequest_NilHTTPClient(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
