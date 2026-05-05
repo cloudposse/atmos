@@ -236,7 +236,7 @@ components:
     subnet:
       dependencies:
         components:
-          - name: vpc          # subnet depends on vpc
+          - component: vpc     # subnet depends on vpc
       vars:
         vpc_id: !terraform.output vpc.vpc_id
 ```
