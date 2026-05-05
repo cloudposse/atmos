@@ -1584,6 +1584,17 @@
           "description": "File or folder path for path-based dependencies. Required when `kind` is `file` or `folder`. Changes to files at this path mark the declaring component as affected."
         }
       },
+      "anyOf": [
+        {
+          "required": ["component"]
+        },
+        {
+          "required": ["kind", "path"],
+          "properties": {
+            "kind": { "enum": ["file", "folder"] }
+          }
+        }
+      ],
       "additionalProperties": false
     },
     "dependencies_tools": {
