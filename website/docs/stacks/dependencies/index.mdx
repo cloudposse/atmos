@@ -11,7 +11,7 @@ import Intro from '@site/src/components/Intro'
 import Note from '@site/src/components/Note'
 
 <Intro>
-The `dependencies` section defines tool version requirements. Tool dependencies ensure your components use the correct versions of CLI tools like Terraform, kubectl, or helm.
+The `dependencies` section declares two kinds of relationships: required tool versions (`dependencies.tools`) and component dependencies (`dependencies.components`). Tool dependencies pin CLI versions like Terraform, kubectl, or helm; component dependencies define ordering and watch-paths used by `atmos describe affected` and CI/CD integrations.
 </Intro>
 
 ## Use Cases
@@ -19,6 +19,8 @@ The `dependencies` section defines tool version requirements. Tool dependencies 
 - **Tool Version Requirements:** Ensure components use specific Terraform, kubectl, or helm versions
 - **Team Consistency:** Version-control tool requirements for reproducible deployments
 - **CI/CD Reliability:** Guarantee correct tool versions in automated pipelines
+- **Execution Order:** Deploy dependent components in the correct sequence
+- **Impact Analysis:** Let `atmos describe affected` find components impacted by changes to other components, files, or folders
 
 ## Tool Dependencies
 
@@ -217,15 +219,9 @@ components:
 
 ## Component Dependencies
 
-The `dependencies` section also supports component dependencies for commands and integrations that honor dependency metadata. In those flows, this helps components run in the correct sequence.
+The `dependencies.components` section declares relationships between Atmos components, files, and folders. These dependencies are used by `atmos describe affected` to determine which components are impacted by a change, by `atmos describe dependents` to find downstream consumers, and by CI/CD integrations (such as Spacelift) to apply components in the correct order.
 
-For detailed documentation on component dependencies including:
-- Cross-stack dependencies
-- File and folder dependencies
-- Integration with `atmos describe affected`
-- Merge behavior
-
-See the dedicated [Component Dependencies](/stacks/dependencies/components) page.
+For full reference — cross-stack dependencies, file/folder watching, cross-type (`kind`) dependencies, merge behavior, and migration from `settings.depends_on` — see the dedicated [Component Dependencies](/stacks/dependencies/components) page.
 
 ### Quick Example
 
@@ -259,5 +255,6 @@ components:
 - [Component Dependencies](/stacks/dependencies/components) - Detailed component dependency configuration
 - [Toolchain Management](/cli/commands/toolchain/usage) - Installing and managing CLI tools
 - [Toolchain Configuration](/cli/configuration/toolchain/) - Configuring toolchain behavior
-- [Component Dependencies](/stacks/settings/depends_on) - Configure dependencies between components
+- [Legacy `settings.depends_on`](/stacks/settings/depends_on) - Deprecated dependency format (kept for reference)
 - [YAML Functions](/functions/yaml) - Using `!terraform.output` and other functions for cross-component dependencies
+- [`atmos describe affected`](/cli/commands/describe/affected) - Detect components affected by changes

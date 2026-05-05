@@ -33,7 +33,7 @@ The `dependencies.components` section is a list of dependency objects.
   <dd>The component instance name as defined in the stack (e.g., `vpc`, `subnet`, `tgw/hub`). This is the name under `components.<kind>.<name>`, not the Terraform module path. Required for component dependencies.</dd>
 
   <dt>stack <em>(optional)</em></dt>
-  <dd>The Atmos stack name where the component is provisioned (e.g., `tenant1-ue2-prod`). If omitted, the component is assumed to be in the same stack. Use templates to construct stack names dynamically.</dd>
+  <dd>The Atmos stack name where the component is provisioned (e.g., `tenant1-ue2-prod`). If omitted, the component is assumed to be in the same stack. Use Go templates to construct stack names dynamically.</dd>
 
   <dt>kind <em>(optional)</em></dt>
   <dd>The dependency type: `terraform`, `helmfile`, `packer`, `file`, `folder`, or a registered plugin type. Defaults to the declaring component's type for component dependencies. Use `file` or `folder` for path-based dependencies.</dd>
@@ -44,6 +44,10 @@ The `dependencies.components` section is a list of dependency objects.
 
 :::info
 For component dependencies, `component` is required. For path dependencies (`kind: file` or `kind: folder`), `path` is required.
+:::
+
+:::info Migrating from `settings.depends_on`?
+The legacy `namespace`, `tenant`, `environment`, and `stage` fields are **not supported** in `dependencies.components`. Use the `stack` field with a Go template instead — for example, `stack: "{{ .vars.tenant }}-{{ .vars.environment }}-prod"`.
 :::
 
 ## Examples
@@ -153,14 +157,19 @@ components:
 
 ## Merge Behavior
 
-`dependencies.components` uses **append merge** behavior: child stacks add their dependencies to parent dependencies.
+By default, `dependencies.components` uses **replace merge** behavior during stack inheritance: a child stack's list of dependencies replaces (does not extend) the parent's list. To opt into append-merge behavior across imports, set `settings.list_merge_strategy: append` in `atmos.yaml`.
+
+### Default (replace)
 
 <File title="stacks/catalog/base.yaml">
 ```yaml
 # Parent stack defines base dependencies
-dependencies:
-  components:
-    - component: account-settings
+components:
+  terraform:
+    vpc:
+      dependencies:
+        components:
+          - component: account-settings
 ```
 </File>
 
@@ -174,12 +183,30 @@ components:
     vpc:
       dependencies:
         components:
-          # This is APPENDED to the parent's dependencies
+          # This REPLACES the parent's list
           - component: network-baseline
 
-# Result: vpc depends on both account-settings AND network-baseline
+# Result: vpc depends on network-baseline only.
+# `account-settings` from the parent is NOT inherited.
 ```
 </File>
+
+### Opt-in append
+
+Configure list-merge once globally in `atmos.yaml`:
+
+<File title="atmos.yaml">
+```yaml
+settings:
+  list_merge_strategy: append
+```
+</File>
+
+With that set, child `dependencies.components` lists extend the parent's list — in the example above, `vpc` would depend on both `account-settings` and `network-baseline`.
+
+:::tip
+Other valid `list_merge_strategy` values are `replace` (default) and `merge`. See the [`settings` reference](/cli/configuration/settings) for full semantics.
+:::
 
 ## Integration with `atmos describe affected`
 

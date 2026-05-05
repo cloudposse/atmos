@@ -1525,7 +1525,7 @@
     },
     "dependencies": {
       "title": "dependencies",
-      "description": "Dependencies section for declaring tool dependencies. Tools specified here will be automatically installed and made available when the component is provisioned.",
+      "description": "Dependencies section. Declares required tool versions (`tools`) and component dependencies (`components`) used by `atmos describe affected`, `atmos describe dependents`, and CI/CD integrations.",
       "oneOf": [
         {
           "type": "string",
@@ -1537,11 +1537,54 @@
           "properties": {
             "tools": {
               "$ref": "#/definitions/dependencies_tools"
+            },
+            "components": {
+              "$ref": "#/definitions/dependencies_components"
             }
           },
           "required": []
         }
       ]
+    },
+    "dependencies_components": {
+      "title": "dependencies_components",
+      "description": "List of component dependencies. Each entry declares a dependency on another component (by `component` and optional `stack`), or a path-based dependency (`kind: file` or `kind: folder` with `path`).",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/dependencies_component_entry"
+          }
+        }
+      ]
+    },
+    "dependencies_component_entry": {
+      "title": "dependencies_component_entry",
+      "description": "A single component dependency entry. Use `component` (with optional `stack`) for component-to-component dependencies, or `kind: file` / `kind: folder` with `path` for path-based dependencies.",
+      "type": "object",
+      "properties": {
+        "component": {
+          "type": "string",
+          "description": "Component instance name (e.g., `vpc`, `tgw/hub`). Required for component dependencies. This is the name under `components.<kind>.<name>`, not the Terraform module path."
+        },
+        "stack": {
+          "type": "string",
+          "description": "Atmos stack name where the component is provisioned (e.g., `tenant1-ue2-prod`). If omitted, the dependency is resolved in the current stack. Supports Go templates."
+        },
+        "kind": {
+          "type": "string",
+          "description": "Dependency type. Use `terraform`, `helmfile`, `packer`, or another registered component type for component dependencies (defaults to the declaring component's type). Use `file` or `folder` for path-based dependencies."
+        },
+        "path": {
+          "type": "string",
+          "description": "File or folder path for path-based dependencies. Required when `kind` is `file` or `folder`. Changes to files at this path mark the declaring component as affected."
+        }
+      },
+      "additionalProperties": false
     },
     "dependencies_tools": {
       "title": "dependencies_tools",

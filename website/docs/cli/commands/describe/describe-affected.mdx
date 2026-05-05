@@ -700,7 +700,7 @@ where:
             <dd>
                 An external file on the local filesystem that the Atmos component depends on was changed.
 
-                Dependencies on external files (not in the component's folder) are defined using the `file` attribute in the `settings.depends_on` map.
+                Dependencies on external files (not in the component's folder) are declared in the [`dependencies.components`](/stacks/dependencies/components) list using `kind: file` and a `path`.
 
 
                 For example:
@@ -711,15 +711,19 @@ where:
                     top-level-component3:
                       metadata:
                         component: "top-level-component1"
-                      settings:
-                        depends_on:
-                          1:
-                            file: "tests/fixtures/scenarios/complete/components/terraform/mixins/introspection.mixin.tf"
+                      dependencies:
+                        components:
+                          - kind: file
+                            path: "tests/fixtures/scenarios/complete/components/terraform/mixins/introspection.mixin.tf"
                 ```
 
                 In the configuration above, we specify that the Atmos component `top-level-component3` depends on the file
                 `tests/fixtures/scenarios/complete/components/terraform/mixins/introspection.mixin.tf` (which is not in the component's folder). If the file gets modified,
                 the component `top-level-component3` will be included in the `atmos describe affected` command output.
+
+                :::note Legacy format
+                The deprecated [`settings.depends_on`](/stacks/settings/depends_on) map (with numeric keys and a `file:` attribute) is still recognized for backward compatibility, but new configurations should use `dependencies.components`.
+                :::
 
 
                 For example:
@@ -747,7 +751,7 @@ where:
             <dd>
                 Any file in an external folder that the Atmos component depends on was changed.
 
-                Dependencies on external folders are defined using the `folder` attribute in the `settings.depends_on` map.
+                Dependencies on external folders are declared in the [`dependencies.components`](/stacks/dependencies/components) list using `kind: folder` and a `path`. You can mix `file` and `folder` entries in the same list.
 
 
                 For example:
@@ -758,17 +762,21 @@ where:
                     top-level-component3:
                       metadata:
                         component: "top-level-component1"
-                      settings:
-                        depends_on:
-                          1:
-                            file: "tests/fixtures/scenarios/complete/components/terraform/mixins/introspection.mixin.tf"
-                          2:
-                            folder: "tests/fixtures/scenarios/complete/components/helmfile/infra/infra-server"
+                      dependencies:
+                        components:
+                          - kind: file
+                            path: "tests/fixtures/scenarios/complete/components/terraform/mixins/introspection.mixin.tf"
+                          - kind: folder
+                            path: "tests/fixtures/scenarios/complete/components/helmfile/infra/infra-server"
                 ```
 
                 In the configuration above, we specify that the Atmos component `top-level-component3` depends on the folder
                 `tests/fixtures/scenarios/complete/components/helmfile/infra/infra-server`. If any file in the folder gets modified,
                 the component `top-level-component3` will be included in the `atmos describe affected` command output.
+
+                :::note Legacy format
+                The deprecated [`settings.depends_on`](/stacks/settings/depends_on) map (with numeric keys and a `folder:` attribute) is still recognized for backward compatibility, but new configurations should use `dependencies.components`.
+                :::
 
 
                 For example:
@@ -1081,19 +1089,17 @@ For example, suppose that we have the following configuration for the Atmos comp
           metadata:
             component: "terraform-component-2"
           vars: {}
-          settings:
-            depends_on:
-              1:
-                component: "component-1"
+          dependencies:
+            components:
+              - component: "component-1"
 
         component-3:
           metadata:
             component: "terraform-component-3"
           vars: {}
-          settings:
-            depends_on:
-              1:
-                component: "component-2"
+          dependencies:
+            components:
+              - component: "component-2"
   ```
 </File>
 
