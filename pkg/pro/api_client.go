@@ -117,10 +117,16 @@ func renderValidationErrors(message string, validationErrors []string) string {
 	// Best-effort dedupe: detect a trailing concatenation produced by the
 	// server (e.g. "Validation failed: A; B" or "Validation failed: A. B.")
 	// and strip it so we don't render the errors both inline and as bullets.
-	if idx := strings.Index(headline, ": "); idx != -1 {
-		tail := headline[idx+len(": "):]
-		if containsAllValidationErrors(tail, normalized) {
-			headline = headline[:idx]
+	// Skip when normalization produced no errors — otherwise containsAll would
+	// vacuously return true and we'd drop the headline tail despite rendering
+	// no bullets. Use LastIndex so colon-delimited context earlier in the
+	// headline (e.g. "Component vpc: validation failed: A; B") is preserved.
+	if len(normalized) > 0 {
+		if idx := strings.LastIndex(headline, ": "); idx != -1 {
+			tail := headline[idx+len(": "):]
+			if containsAllValidationErrors(tail, normalized) {
+				headline = headline[:idx]
+			}
 		}
 	}
 

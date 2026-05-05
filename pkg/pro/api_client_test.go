@@ -895,6 +895,20 @@ func TestRenderValidationErrors(t *testing.T) {
 			errors:   []string{"completely unrelated"},
 			contains: []string{"Some other message", "- completely unrelated"},
 		},
+		{
+			name:     "preserves headline when normalization removes every error",
+			message:  "Validation failed: details elided",
+			errors:   []string{"", "  ", "\t"},
+			contains: []string{"Validation failed: details elided"},
+			excludes: []string{"\n  - "},
+		},
+		{
+			name:     "preserves earlier colon-delimited context via LastIndex",
+			message:  "Component vpc: validation failed: A; B",
+			errors:   []string{"A", "B"},
+			contains: []string{"Component vpc: validation failed", "- A", "- B"},
+			excludes: []string{"failed: A; B"},
+		},
 	}
 
 	for _, tt := range tests {
