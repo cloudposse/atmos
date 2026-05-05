@@ -73,7 +73,8 @@ func (c *AtmosProAPIClient) sendInstancesRequest(endpoint string, dto *dtos.Inst
 
 	// Log safe metadata instead of full payload to prevent secret leakage.
 	hash := sha256.Sum256(data)
-	log.Debug("Uploading instances DTO.",
+	log.Debug(
+		"Uploading instances DTO.",
 		"repo_owner", dto.RepoOwner,
 		"repo_name", dto.RepoName,
 		"instances_count", len(dto.Instances),

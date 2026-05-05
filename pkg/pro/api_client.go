@@ -43,7 +43,8 @@ const (
 var oidcHTTPClientOverride *http.Client //nolint:gochecknoglobals
 
 func logProAPIResponse(operation string, apiResponse dtos.AtmosApiResponse) {
-	log.Debug("Pro API Response",
+	log.Debug(
+		"Pro API Response",
 		logKeyOperation, operation,
 		logKeyRequest, apiResponse.Request,
 		logKeyStatus, apiResponse.Status,
@@ -57,7 +58,8 @@ func logAndReturnProAPIError(operation string, apiResponse dtos.AtmosApiResponse
 	errorMsg := apiResponse.EffectiveErrorMessage()
 	traceID := apiResponse.TraceID
 
-	log.Error("Pro API Error",
+	log.Error(
+		"Pro API Error",
 		logKeyOperation, operation,
 		logKeyRequest, apiResponse.Request,
 		logKeyStatus, apiResponse.Status,
