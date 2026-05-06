@@ -489,12 +489,12 @@ func TestUninstallCmd_SuccessfulUninstall(t *testing.T) {
 
 	// Reset homedir cache to pick up new HOME.
 	homedir.Reset()
-	homedir.DisableCache = true
+	homedir.SetDisableCache(true)
 
 	// Restore cache settings after test.
 	t.Cleanup(func() {
 		homedir.Reset()
-		homedir.DisableCache = false
+		homedir.SetDisableCache(false)
 	})
 
 	// Create the skills directory and a mock skill.
@@ -587,12 +587,12 @@ func TestUninstallCmd_SuccessfulUninstall_VerifiesRegistryUpdate(t *testing.T) {
 
 	// Reset homedir cache to pick up new HOME.
 	homedir.Reset()
-	homedir.DisableCache = true
+	homedir.SetDisableCache(true)
 
 	// Restore cache settings after test.
 	t.Cleanup(func() {
 		homedir.Reset()
-		homedir.DisableCache = false
+		homedir.SetDisableCache(false)
 	})
 
 	// Create the skills directory and a mock skill.
@@ -710,10 +710,10 @@ func TestUninstallCmd_RunE_InstallerInitFailure(t *testing.T) {
 
 		// Reset homedir cache to pick up new HOME.
 		homedir.Reset()
-		homedir.DisableCache = true
+		homedir.SetDisableCache(true)
 		t.Cleanup(func() {
 			homedir.Reset()
-			homedir.DisableCache = false
+			homedir.SetDisableCache(false)
 		})
 
 		// Capture stdout.
@@ -804,10 +804,10 @@ func TestUninstallCmd_RunE_MultipleSkills(t *testing.T) {
 
 	// Reset homedir cache to pick up new HOME.
 	homedir.Reset()
-	homedir.DisableCache = true
+	homedir.SetDisableCache(true)
 	t.Cleanup(func() {
 		homedir.Reset()
-		homedir.DisableCache = false
+		homedir.SetDisableCache(false)
 	})
 
 	// Create the skills directory and multiple mock skills.
