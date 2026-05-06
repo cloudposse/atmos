@@ -287,7 +287,7 @@ export const roadmapConfig = {
       tagline: 'Truly extensible architecture',
       description:
         'Modern infrastructure spans Terraform, Kubernetes, serverless, and custom tooling. A single orchestration layer should manage all of it consistently, not just a subset.',
-      progress: 86,
+      progress: 84,
       status: 'in-progress',
       milestones: [
         { label: 'Custom commands support interactive step types', status: 'shipped', quarter: 'q3-2025', docs: '/cli/configuration/commands', description: 'Define your own command types beyond Terraform and Helmfile—shell scripts, Ansible, Pulumi, and more.', category: 'featured', priority: 'high', benefits: 'Extend Atmos to orchestrate any tool. Your entire toolchain speaks the same language.' },
@@ -313,6 +313,7 @@ export const roadmapConfig = {
         { label: 'Added `!unset` YAML function', status: 'planned', quarter: 'q1-2026', pr: 1521, description: 'Delete keys from inherited configuration for clean overrides.', codeExample: 'deprecated_setting: !unset', benefits: 'Remove inherited values without workarounds. Clean up configuration by exception.' },
         { label: 'Added `!append` YAML function', status: 'planned', quarter: 'q1-2026', pr: 1513, description: 'Append items to inherited lists instead of replacing them.', codeExample: 'extra_tags: !append [new-tag]', benefits: 'Add to inherited lists without copying the full list. Simpler inheritance for array values.' },
         { label: 'Structured component dependencies (`dependencies.components`)', status: 'shipped', quarter: 'q4-2025', docs: '/stacks/dependencies/components', changelog: 'dependencies-components', description: 'New dependencies.components format with kind field for cross-type dependencies, file/folder path dependencies, and inheritance with append merge.', benefits: 'Explicit dependency declarations with support for terraform, helmfile, packer, and file/folder dependencies.' },
+        { label: 'File and folder dependency sibling keys', status: 'shipped', quarter: 'q2-2026', pr: 2391, docs: '/stacks/dependencies', changelog: 'dependencies-files-folders', description: 'New dependencies.files and dependencies.folders sibling keys declare path-based dependencies without mixing watch paths into dependencies.components.', benefits: 'Stack manifests are easier to scan. Component ordering stays separate from file and folder watch rules used by describe affected.' },
         { label: 'Automatic dependency detection from YAML functions', status: 'planned', quarter: 'q1-2026', description: 'Automatically detect component dependencies from !terraform.output and !terraform.state YAML functions. No explicit dependencies.components configuration needed for cross-component data flows.', benefits: 'Dependencies are inferred from actual usage. No manual maintenance of dependency lists.' },
       ],
       issues: [],
