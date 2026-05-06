@@ -1,6 +1,7 @@
 package list
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -42,7 +43,7 @@ func TestRenderTable(t *testing.T) {
 				"LOCATION",
 				"PATH",
 				"FILES",
-				// Note: Table rows don't appear in View() without focus.
+				"dev",
 			},
 			expectedCount: 1,
 		},
@@ -74,7 +75,12 @@ func TestRenderTable(t *testing.T) {
 				"LOCATION",
 				"PATH",
 				"FILES",
-				// Note: Profile data appears in table rows which are tested separately.
+				// Every profile name must appear in the rendered table. This guards
+				// against a table-height off-by-one that previously hid all rows
+				// past the first.
+				"production",
+				"staging",
+				"dev",
 			},
 			expectedCount: 3,
 		},
@@ -108,7 +114,9 @@ func TestRenderTable(t *testing.T) {
 			expectedContains: []string{
 				"PROFILES",
 				"NAME",
-				// Note: File counts are tested in buildProfileRows tests.
+				"no-files",
+				"one-file",
+				"many-files",
 			},
 			expectedCount: 3,
 		},
@@ -116,7 +124,7 @@ func TestRenderTable(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			output, err := RenderTable(tt.profiles)
+			output, err := RenderTable(tt.profiles, nil)
 
 			require.NoError(t, err)
 			require.NotEmpty(t, output)
@@ -126,10 +134,6 @@ func TestRenderTable(t *testing.T) {
 				assert.Contains(t, output, expected,
 					"Output should contain: %s", expected)
 			}
-
-			// Note: Profile names in table rows may not appear in View() output
-			// due to table library rendering behavior. We validate row building
-			// separately in buildProfileRows tests.
 		})
 	}
 }
@@ -154,10 +158,10 @@ func TestCreateProfilesTable(t *testing.T) {
 			},
 			expectedRows: 1,
 			validateTable: func(t *testing.T, output string) {
-				// Table View() only shows headers without focus.
 				assert.Contains(t, output, "NAME")
 				assert.Contains(t, output, "LOCATION")
 				assert.Contains(t, output, "PATH")
+				assert.Contains(t, output, "test")
 			},
 		},
 		{
@@ -169,16 +173,24 @@ func TestCreateProfilesTable(t *testing.T) {
 			},
 			expectedRows: 3,
 			validateTable: func(t *testing.T, output string) {
-				// Table rows are tested in buildProfileRows tests.
-				// Here we just verify the table was created.
 				assert.Contains(t, output, "NAME")
+				// All three profile names must be visible — not just the first.
+				assert.Contains(t, output, "alpha")
+				assert.Contains(t, output, "mike")
+				assert.Contains(t, output, "zulu")
+				// Sort order: alpha must precede mike must precede zulu.
+				alphaIdx := strings.Index(output, "alpha")
+				mikeIdx := strings.Index(output, "mike")
+				zuluIdx := strings.Index(output, "zulu")
+				assert.Less(t, alphaIdx, mikeIdx, "alpha should render before mike")
+				assert.Less(t, mikeIdx, zuluIdx, "mike should render before zulu")
 			},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			table, err := createProfilesTable(tt.profiles)
+			table, err := createProfilesTable(tt.profiles, nil)
 
 			require.NoError(t, err)
 			output := table.View()
@@ -211,10 +223,12 @@ func TestBuildProfileRows(t *testing.T) {
 			},
 			validateRows: func(t *testing.T, rows [][]string) {
 				require.Len(t, rows, 1)
-				assert.Equal(t, "dev", rows[0][0])
-				assert.Equal(t, "project", rows[0][1])
-				assert.Contains(t, rows[0][2], "/path/to/dev")
-				assert.NotEmpty(t, rows[0][3]) // File count.
+				// Columns: [0]=indicator, [1]=name, [2]=location, [3]=path, [4]=files.
+				assert.Equal(t, " ", rows[0][0]) // No active set → blank indicator.
+				assert.Equal(t, "dev", rows[0][1])
+				assert.Equal(t, "project", rows[0][2])
+				assert.Contains(t, rows[0][3], "/path/to/dev")
+				assert.NotEmpty(t, rows[0][4]) // File count.
 			},
 		},
 		{
@@ -229,7 +243,7 @@ func TestBuildProfileRows(t *testing.T) {
 			},
 			validateRows: func(t *testing.T, rows [][]string) {
 				require.Len(t, rows, 1)
-				path := rows[0][2]
+				path := rows[0][3]
 				assert.LessOrEqual(t, len(path), pathWidth,
 					"Path should be truncated to fit column width")
 			},
@@ -273,23 +287,24 @@ func TestBuildProfileRows(t *testing.T) {
 				require.Len(t, rows, 4)
 
 				// Sort rows by name to have predictable order.
-				names := []string{rows[0][0], rows[1][0], rows[2][0], rows[3][0]}
+				// Columns: [0]=indicator, [1]=name, [2]=location, [3]=path, [4]=files.
+				names := []string{rows[0][1], rows[1][1], rows[2][1], rows[3][1]}
 
 				// Find each profile by name and verify file count.
 				for i, name := range names {
 					switch name {
 					case "zero":
-						assert.Equal(t, "0", rows[i][3], "Profile with no files should show 0")
+						assert.Equal(t, "0", rows[i][4], "Profile with no files should show 0")
 					case "one":
 						// The implementation uses: string(rune('0' + len(p.Files)))
 						// For 1 file: '0' + 1 = '1'
-						assert.Equal(t, "1", rows[i][3], "Profile with one file should show 1")
+						assert.Equal(t, "1", rows[i][4], "Profile with one file should show 1")
 					case "nine":
 						// For 9 files: '0' + 9 = '9'
-						assert.Equal(t, "9", rows[i][3], "Profile with nine files should show 9")
+						assert.Equal(t, "9", rows[i][4], "Profile with nine files should show 9")
 					case "ten-plus":
 						// For 10+ files, should show "10+".
-						assert.Equal(t, "10+", rows[i][3], "Profile with 11 files should show 10+")
+						assert.Equal(t, "10+", rows[i][4], "Profile with 11 files should show 10+")
 					}
 				}
 			},
@@ -303,9 +318,10 @@ func TestBuildProfileRows(t *testing.T) {
 			},
 			validateRows: func(t *testing.T, rows [][]string) {
 				require.Len(t, rows, 3)
-				assert.Equal(t, "alpha", rows[0][0])
-				assert.Equal(t, "bravo", rows[1][0])
-				assert.Equal(t, "charlie", rows[2][0])
+				// Column 1 is the name column (0 is the active-indicator).
+				assert.Equal(t, "alpha", rows[0][1])
+				assert.Equal(t, "bravo", rows[1][1])
+				assert.Equal(t, "charlie", rows[2][1])
 			},
 		},
 		{
@@ -320,9 +336,10 @@ func TestBuildProfileRows(t *testing.T) {
 				require.Len(t, rows, 4)
 
 				// Find each profile and verify location type.
+				// Columns: [0]=indicator, [1]=name, [2]=location.
 				locationTypes := make(map[string]string)
 				for _, row := range rows {
-					locationTypes[row[0]] = row[1]
+					locationTypes[row[1]] = row[2]
 				}
 
 				assert.Equal(t, "configurable", locationTypes["config"])
@@ -335,7 +352,7 @@ func TestBuildProfileRows(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			rows := buildProfileRows(tt.profiles)
+			rows := buildProfileRows(tt.profiles, nil)
 
 			require.NotNil(t, rows)
 
@@ -377,7 +394,8 @@ func TestBuildProfileRows_EdgeCases(t *testing.T) {
 			},
 			validate: func(t *testing.T, rows [][]string) {
 				require.Len(t, rows, 1)
-				assert.Equal(t, "profile-with-dashes_and_underscores", rows[0][0])
+				// Column 1 is the name column (0 is the active-indicator).
+				assert.Equal(t, "profile-with-dashes_and_underscores", rows[0][1])
 			},
 		},
 		{
@@ -392,7 +410,7 @@ func TestBuildProfileRows_EdgeCases(t *testing.T) {
 			},
 			validate: func(t *testing.T, rows [][]string) {
 				require.Len(t, rows, 1)
-				assert.Contains(t, rows[0][0], "émoji")
+				assert.Contains(t, rows[0][1], "émoji")
 			},
 		},
 		{
@@ -417,7 +435,7 @@ func TestBuildProfileRows_EdgeCases(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			rows := buildProfileRows(tt.profiles)
+			rows := buildProfileRows(tt.profiles, nil)
 
 			// Convert to string slices for validation.
 			stringRows := make([][]string, len(rows))
@@ -441,18 +459,16 @@ func TestApplyTableStyles(t *testing.T) {
 		},
 	}
 
-	table, err := createProfilesTable(profiles)
+	table, err := createProfilesTable(profiles, nil)
 	require.NoError(t, err)
 
 	// Verify table was created successfully and styles were applied.
 	view := table.View()
 	assert.NotEmpty(t, view)
 
-	// Basic validation that table contains expected header.
+	// Basic validation that table contains expected header and the single row.
 	assert.Contains(t, view, "NAME")
-
-	// Note: Table rows may not appear in View() without focus/interaction.
-	// The actual rendering is tested via RenderTable which includes full output.
+	assert.Contains(t, view, "test")
 }
 
 // TestRenderTable_OutputFormat tests the overall output format.
@@ -476,7 +492,8 @@ func TestRenderTable_OutputFormat(t *testing.T) {
 		},
 	}
 
-	output, err := RenderTable(profiles)
+	// Mark "production" as the active profile so we can assert the indicator renders.
+	output, err := RenderTable(profiles, map[string]bool{"production": true})
 	require.NoError(t, err)
 
 	// Verify structure.
@@ -488,8 +505,10 @@ func TestRenderTable_OutputFormat(t *testing.T) {
 	assert.Contains(t, output, "PATH")
 	assert.Contains(t, output, "FILES")
 
-	// Note: The actual profile data may not appear in the table View() output
-	// because the table library only renders headers without focus/interaction.
-	// The important part is that the table structure is correct.
-	// Testing profile data is covered in buildProfileRows tests.
+	// Both profiles must be visible in the rendered table.
+	assert.Contains(t, output, "production")
+	assert.Contains(t, output, "dev")
+
+	// The active profile gets a green dot indicator; inactive profiles do not.
+	assert.Contains(t, output, "●", "active profile should have a dot indicator")
 }

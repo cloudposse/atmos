@@ -179,16 +179,18 @@ func getProfilesFromFallbacks() ([]string, string) {
 // NOTE: This function reads from Viper's global singleton, which has flag values synced
 // by syncGlobalFlagsToViper() in cmd/root.go PersistentPreRun before InitCliConfig is called.
 //
-// IMPORTANT: For commands with DisableFlagParsing=true (terraform, helmfile, packer),
-// Cobra never parses flags, so we fall back to parseProfilesFromOsArgs() to manually
-// parse the --profile flag from os.Args. This ensures profiles work for all commands.
+// IMPORTANT: For commands with DisableFlagParsing=true (terraform, helmfile, packer,
+// auth exec), Cobra never parses flags, so we fall back to parseProfilesFromOsArgs()
+// to manually parse the --profile flag from os.Args. This ensures profiles work for
+// all commands — including the profile-fallback re-exec path, which inserts
+// `--profile <picked>` into argv but cannot rely on Cobra to parse it.
+//
+// We cannot use viper.IsSet(profileKey) to gate this logic: pflag's BindPFlag marks
+// the key as "set" even when no value was actually parsed (the default empty slice
+// counts as "set"). Instead, we check whether GetStringSlice returns a non-empty
+// value and always fall back to os.Args / env var parsing when it does not.
 func getProfilesFromFlagsOrEnv() ([]string, string) {
 	globalViper := viper.GetViper()
-
-	// Check if profile is set in Viper (from either flag or env var).
-	if !globalViper.IsSet(profileKey) {
-		return getProfilesFromFallbacks()
-	}
 
 	profiles := globalViper.GetStringSlice(profileKey)
 	_, envSet := os.LookupEnv("ATMOS_PROFILE")
@@ -199,15 +201,16 @@ func getProfilesFromFlagsOrEnv() ([]string, string) {
 		if len(parsed) > 0 {
 			return parsed, "env"
 		}
-		return nil, ""
 	}
 
-	// CLI flag path - already parsed correctly by pflag/Cobra.
-	if len(profiles) > 0 {
+	// CLI flag path - already parsed correctly by pflag/Cobra (when parsing happened).
+	if len(profiles) > 0 && !envSet {
 		return profiles, "flag"
 	}
 
-	return nil, ""
+	// Viper did not yield a usable value. Fall back to manual os.Args / env parsing,
+	// which handles the DisableFlagParsing case (terraform, helmfile, packer, auth exec).
+	return getProfilesFromFallbacks()
 }
 
 // LoadConfig loads the Atmos configuration from multiple sources in order of precedence:
@@ -371,6 +374,17 @@ func LoadConfig(configAndStacksInfo *schema.ConfigAndStacksInfo) (schema.AtmosCo
 	if err := applyGitRootBasePath(&atmosConfig); err != nil {
 		log.Debug("Failed to apply git root base path", "error", err)
 		// Don't fail config loading if this step fails, just log it.
+	}
+
+	// Sync profiles.base_path from the loaded atmos.yaml into the global viper.
+	// LoadConfig uses a local viper instance, so values read from atmos.yaml
+	// are not automatically reachable via viper.GetViper(). The auth profile
+	// fallback (pkg/auth/profile_fallback.go) reads profiles.base_path from
+	// the global viper when searching for candidate profiles; without this
+	// sync, custom profile locations configured in atmos.yaml are invisible
+	// to the fallback and no candidates are found.
+	if atmosConfig.Profiles.BasePath != "" {
+		viper.GetViper().Set("profiles.base_path", atmosConfig.Profiles.BasePath)
 	}
 
 	return atmosConfig, nil

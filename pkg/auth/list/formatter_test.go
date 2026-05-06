@@ -82,6 +82,70 @@ func TestCreateProvidersTable_Empty(t *testing.T) {
 	assert.NotNil(t, table)
 }
 
+// TestCreateProvidersTable_MultipleRowsVisible guards against a
+// table-height off-by-one that previously hid all rows past the first.
+func TestCreateProvidersTable_MultipleRowsVisible(t *testing.T) {
+	providers := map[string]schema.Provider{
+		"aws-sso": {
+			Kind:     "aws/iam-identity-center",
+			Region:   "us-east-1",
+			StartURL: "https://d-abc123.awsapps.com/start",
+			Default:  true,
+		},
+		"okta": {
+			Kind:   "aws/saml",
+			Region: "us-west-2",
+			URL:    "https://company.okta.com/app",
+		},
+		"google": {
+			Kind:   "aws/saml",
+			Region: "us-east-2",
+			URL:    "https://google.example/app",
+		},
+	}
+
+	table, err := createProvidersTable(providers)
+	require.NoError(t, err)
+
+	view := table.View()
+	require.NotEmpty(t, view)
+
+	// Every provider name must appear in the rendered table.
+	assert.Contains(t, view, "aws-sso")
+	assert.Contains(t, view, "okta")
+	assert.Contains(t, view, "google")
+}
+
+// TestCreateIdentitiesTable_MultipleRowsVisible guards against a
+// table-height off-by-one that previously hid all rows past the first.
+func TestCreateIdentitiesTable_MultipleRowsVisible(t *testing.T) {
+	identities := map[string]schema.Identity{
+		"admin": {
+			Kind:    "aws/permission-set",
+			Default: true,
+			Via:     &schema.IdentityVia{Provider: "aws-sso"},
+		},
+		"readonly": {
+			Kind: "aws/permission-set",
+			Via:  &schema.IdentityVia{Provider: "aws-sso"},
+		},
+		"ci": {
+			Kind: "aws/user",
+		},
+	}
+
+	table, err := createIdentitiesTable(nil, identities)
+	require.NoError(t, err)
+
+	view := table.View()
+	require.NotEmpty(t, view)
+
+	// Every identity name must appear in the rendered table.
+	assert.Contains(t, view, "admin")
+	assert.Contains(t, view, "readonly")
+	assert.Contains(t, view, "ci")
+}
+
 func TestCreateIdentitiesTable(t *testing.T) {
 	identities := map[string]schema.Identity{
 		"admin": {
