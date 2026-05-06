@@ -5,7 +5,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"net/http"
 	"time"
@@ -27,10 +26,8 @@ const (
 // the OIDC token on 401 errors before each retry.
 func (c *AtmosProAPIClient) UploadInstances(dto *dtos.InstancesUploadRequest) error {
 	if dto == nil {
-		return errors.Join(
-			errUtils.ErrFailedToUploadInstances,
-			fmt.Errorf("UploadInstances: %w", errUtils.ErrNilRequestDTO),
-		)
+		return wrapErr(errUtils.ErrFailedToUploadInstances,
+			fmt.Errorf("UploadInstances: %w", errUtils.ErrNilRequestDTO))
 	}
 	endpoint := fmt.Sprintf("%s/%s/instances", c.BaseURL, c.BaseAPIEndpoint)
 
@@ -71,12 +68,13 @@ func (c *AtmosProAPIClient) sendInstancesRequest(endpoint string, dto *dtos.Inst
 
 	data, err := json.Marshal(dto)
 	if err != nil {
-		return errors.Join(errUtils.ErrFailedToMarshalPayload, err)
+		return wrapErr(errUtils.ErrFailedToMarshalPayload, err)
 	}
 
 	// Log safe metadata instead of full payload to prevent secret leakage.
 	hash := sha256.Sum256(data)
-	log.Debug("Uploading instances DTO.",
+	log.Debug(
+		"Uploading instances DTO.",
 		"repo_owner", dto.RepoOwner,
 		"repo_name", dto.RepoName,
 		"instances_count", len(dto.Instances),
@@ -90,19 +88,24 @@ func (c *AtmosProAPIClient) sendInstancesRequest(endpoint string, dto *dtos.Inst
 	err = doWithRetry("UploadInstances", func() error {
 		req, reqErr := getAuthenticatedRequest(c, "POST", endpoint, bytes.NewReader(data))
 		if reqErr != nil {
-			return errors.Join(errUtils.ErrFailedToCreateAuthRequest, reqErr)
+			return wrapErr(errUtils.ErrFailedToCreateAuthRequest, reqErr)
 		}
 
 		resp, doErr := client.Do(req) //nolint:gosec // URL constructed from trusted config, not user input.
 		if doErr != nil {
-			return errors.Join(errUtils.ErrFailedToMakeRequest, doErr)
+			// http.Client.Do can return a non-nil response alongside an error
+			// (e.g., on redirect failures); close it to avoid leaking the connection.
+			if resp != nil && resp.Body != nil {
+				_ = resp.Body.Close()
+			}
+			return wrapErr(errUtils.ErrFailedToMakeRequest, doErr)
 		}
 		defer resp.Body.Close()
 
 		return handleAPIResponse(resp, "UploadInstances")
 	}, c, defaultRetryConfig())
 	if err != nil {
-		return errors.Join(errUtils.ErrFailedToUploadInstances, err)
+		return wrapErr(errUtils.ErrFailedToUploadInstances, err)
 	}
 
 	log.Debug("Uploaded instances.", "endpoint", endpoint)

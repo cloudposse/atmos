@@ -3,13 +3,13 @@ package pro
 import (
 	"bytes"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"net"
 	"net/http"
 	"net/url"
 	"runtime"
+	"strings"
 	"time"
 
 	log "github.com/cloudposse/atmos/pkg/logger"
@@ -43,7 +43,8 @@ const (
 var oidcHTTPClientOverride *http.Client //nolint:gochecknoglobals
 
 func logProAPIResponse(operation string, apiResponse dtos.AtmosApiResponse) {
-	log.Debug("Pro API Response",
+	log.Debug(
+		"Pro API Response",
 		logKeyOperation, operation,
 		logKeyRequest, apiResponse.Request,
 		logKeyStatus, apiResponse.Status,
@@ -54,10 +55,11 @@ func logProAPIResponse(operation string, apiResponse dtos.AtmosApiResponse) {
 }
 
 func logAndReturnProAPIError(operation string, apiResponse dtos.AtmosApiResponse) string {
-	errorMsg := apiResponse.ErrorMessage
+	errorMsg := apiResponse.EffectiveErrorMessage()
 	traceID := apiResponse.TraceID
 
-	log.Error("Pro API Error",
+	log.Error(
+		"Pro API Error",
 		logKeyOperation, operation,
 		logKeyRequest, apiResponse.Request,
 		logKeyStatus, apiResponse.Status,
@@ -71,11 +73,81 @@ func logAndReturnProAPIError(operation string, apiResponse dtos.AtmosApiResponse
 		errorMsg = fmt.Sprintf("API request failed with status %d", apiResponse.Status)
 	}
 
+	// Render data.validationErrors as a bullet list so the user can see each
+	// failure individually instead of one long concatenated sentence.
+	if apiResponse.Data != nil && len(apiResponse.Data.ValidationErrors) > 0 {
+		errorMsg = renderValidationErrors(errorMsg, apiResponse.Data.ValidationErrors)
+	}
+
+	// Always include trace_id when present — support uses it to correlate
+	// requests on the server side, regardless of 4xx vs 5xx. Put it on its
+	// own line so it doesn't get mistaken for the last validation bullet.
 	if traceID != "" {
-		errorMsg = fmt.Sprintf("%s (trace_id: %s)", errorMsg, traceID)
+		errorMsg = fmt.Sprintf("%s\ntrace_id: %s", errorMsg, traceID)
 	}
 
 	return errorMsg
+}
+
+// renderValidationErrors formats a server-side message together with a list of
+// granular validation errors. When the message already concatenates the same
+// errors after a trailing ": " separator, the trailing portion is stripped so
+// the bullets aren't shown twice.
+func renderValidationErrors(message string, validationErrors []string) string {
+	// Normalize once: trim whitespace, drop empties, dedupe while preserving
+	// first-occurrence order. Both the tail-match below and the bullet
+	// rendering operate off the same cleaned set so behavior stays consistent
+	// for inputs like ["A", " A ", ""].
+	normalized := make([]string, 0, len(validationErrors))
+	seen := make(map[string]struct{}, len(validationErrors))
+	for _, ve := range validationErrors {
+		ve = strings.TrimSpace(ve)
+		if ve == "" {
+			continue
+		}
+		if _, ok := seen[ve]; ok {
+			continue
+		}
+		seen[ve] = struct{}{}
+		normalized = append(normalized, ve)
+	}
+
+	headline := message
+
+	// Best-effort dedupe: detect a trailing concatenation produced by the
+	// server (e.g. "Validation failed: A; B" or "Validation failed: A. B.")
+	// and strip it so we don't render the errors both inline and as bullets.
+	// Skip when normalization produced no errors — otherwise containsAll would
+	// vacuously return true and we'd drop the headline tail despite rendering
+	// no bullets. Use LastIndex so colon-delimited context earlier in the
+	// headline (e.g. "Component vpc: validation failed: A; B") is preserved.
+	if len(normalized) > 0 {
+		if idx := strings.LastIndex(headline, ": "); idx != -1 {
+			tail := headline[idx+len(": "):]
+			if containsAllValidationErrors(tail, normalized) {
+				headline = headline[:idx]
+			}
+		}
+	}
+
+	var b strings.Builder
+	b.WriteString(headline)
+	for _, ve := range normalized {
+		b.WriteString("\n  - ")
+		b.WriteString(ve)
+	}
+	return b.String()
+}
+
+// containsAllValidationErrors reports whether every validation error appears
+// somewhere in the given text. Used to detect a server-rendered concatenation.
+func containsAllValidationErrors(text string, validationErrors []string) bool {
+	for _, ve := range validationErrors {
+		if ve == "" || !strings.Contains(text, ve) {
+			return false
+		}
+	}
+	return true
 }
 
 // AtmosProAPIClientInterface defines the interface for the AtmosProAPIClient.
@@ -141,7 +213,7 @@ func NewAtmosProAPIClientFromEnv(atmosConfig *schema.AtmosConfiguration) (*Atmos
 	oidcToken, err := getGitHubOIDCToken(atmosConfig.Settings.Pro.GithubOIDC)
 	if err != nil {
 		log.Debug("Error while getting GitHub OIDC token.", "error", err)
-		return nil, errors.Join(errUtils.ErrFailedToGetGitHubOIDCToken, err)
+		return nil, wrapErr(errUtils.ErrFailedToGetGitHubOIDCToken, err)
 	}
 
 	// Get workspace ID from environment
@@ -153,7 +225,7 @@ func NewAtmosProAPIClientFromEnv(atmosConfig *schema.AtmosConfiguration) (*Atmos
 	// Exchange OIDC token for Atmos token.
 	apiToken, err = exchangeOIDCTokenForAtmosToken(baseURL, baseAPIEndpoint, oidcToken, workspaceID)
 	if err != nil {
-		return nil, errors.Join(errUtils.ErrOIDCTokenExchangeFailed, err)
+		return nil, wrapErr(errUtils.ErrOIDCTokenExchangeFailed, err)
 	}
 
 	client := NewAtmosProAPIClient(baseURL, baseAPIEndpoint, apiToken)
@@ -172,7 +244,7 @@ func userAgent() string {
 func getAuthenticatedRequest(c *AtmosProAPIClient, method, url string, body io.Reader) (*http.Request, error) {
 	req, err := http.NewRequest(method, url, body)
 	if err != nil {
-		return nil, errors.Join(errUtils.ErrFailedToCreateRequest, err)
+		return nil, wrapErr(errUtils.ErrFailedToCreateRequest, err)
 	}
 
 	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", c.APIToken))
@@ -194,13 +266,13 @@ func (c *AtmosProAPIClient) RefreshToken() error {
 
 	oidcToken, err := getGitHubOIDCToken(c.atmosConfig.Settings.Pro.GithubOIDC)
 	if err != nil {
-		return errors.Join(errUtils.ErrTokenRefreshFailed, err)
+		return wrapErr(errUtils.ErrTokenRefreshFailed, err)
 	}
 
 	workspaceID := c.atmosConfig.Settings.Pro.WorkspaceID
 	newToken, err := exchangeOIDCTokenForAtmosToken(c.BaseURL, c.BaseAPIEndpoint, oidcToken, workspaceID)
 	if err != nil {
-		return errors.Join(errUtils.ErrTokenRefreshFailed, err)
+		return wrapErr(errUtils.ErrTokenRefreshFailed, err)
 	}
 
 	c.APIToken = newToken
@@ -251,7 +323,7 @@ func (c *AtmosProAPIClient) UploadAffectedStacks(dto *dtos.UploadAffectedStacksR
 func (c *AtmosProAPIClient) sendAffectedStacksRequest(url string, dto *dtos.UploadAffectedStacksRequest) error {
 	data, err := json.Marshal(dto)
 	if err != nil {
-		return errors.Join(errUtils.ErrFailedToMarshalPayload, err)
+		return wrapErr(errUtils.ErrFailedToMarshalPayload, err)
 	}
 
 	log.Debug("Uploading affected components and stacks.", logKeyURL, url)
@@ -260,19 +332,19 @@ func (c *AtmosProAPIClient) sendAffectedStacksRequest(url string, dto *dtos.Uplo
 	err = doWithRetry("UploadAffectedStacks", func() error {
 		req, reqErr := getAuthenticatedRequest(c, "POST", url, bytes.NewBuffer(data))
 		if reqErr != nil {
-			return errors.Join(errUtils.ErrFailedToCreateAuthRequest, reqErr)
+			return wrapErr(errUtils.ErrFailedToCreateAuthRequest, reqErr)
 		}
 
 		resp, doErr := c.HTTPClient.Do(req) //nolint:gosec // URL constructed from trusted config, not user input.
 		if doErr != nil {
-			return errors.Join(errUtils.ErrFailedToMakeRequest, doErr)
+			return wrapErr(errUtils.ErrFailedToMakeRequest, doErr)
 		}
 		defer resp.Body.Close()
 
 		return handleAPIResponse(resp, "UploadAffectedStacks")
 	}, c, defaultRetryConfig())
 	if err != nil {
-		return errors.Join(errUtils.ErrFailedToUploadStacks, err)
+		return wrapErr(errUtils.ErrFailedToUploadStacks, err)
 	}
 
 	log.Debug("Uploaded affected components and stacks.", logKeyURL, url)
@@ -284,23 +356,23 @@ func (c *AtmosProAPIClient) sendAffectedStacksRequest(url string, dto *dtos.Uplo
 func (c *AtmosProAPIClient) doStackLockAction(params *schema.StackLockActionParams) error {
 	data, err := json.Marshal(params.Body)
 	if err != nil {
-		return errors.Join(errUtils.ErrFailedToMarshalPayload, err)
+		return wrapErr(errUtils.ErrFailedToMarshalPayload, err)
 	}
 
 	req, err := getAuthenticatedRequest(c, params.Method, params.URL, bytes.NewBuffer(data))
 	if err != nil {
-		return errors.Join(errUtils.ErrFailedToCreateAuthRequest, err)
+		return wrapErr(errUtils.ErrFailedToCreateAuthRequest, err)
 	}
 
 	resp, err := c.HTTPClient.Do(req)
 	if err != nil {
-		return errors.Join(errUtils.ErrFailedToMakeRequest, err)
+		return wrapErr(errUtils.ErrFailedToMakeRequest, err)
 	}
 	defer resp.Body.Close()
 
 	b, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return errors.Join(errUtils.ErrFailedToReadResponseBody, err)
+		return wrapErr(errUtils.ErrFailedToReadResponseBody, err)
 	}
 
 	if err := json.Unmarshal(b, params.Out); err != nil {
@@ -312,9 +384,9 @@ func (c *AtmosProAPIClient) doStackLockAction(params *schema.StackLockActionPara
 				WithContext("operation", params.Op).
 				WithHint("The API returned an unexpected response format. See troubleshooting: https://atmos-pro.com/docs/learn/troubleshooting").
 				Err()
-			return errors.Join(params.WrapErr, enrichedErr)
+			return wrapErr(params.WrapErr, enrichedErr)
 		}
-		return errors.Join(errUtils.ErrFailedToUnmarshalAPIResponse, err)
+		return wrapErr(errUtils.ErrFailedToUnmarshalAPIResponse, err)
 	}
 
 	// Log the structured response for debugging and check success.
@@ -323,13 +395,13 @@ func (c *AtmosProAPIClient) doStackLockAction(params *schema.StackLockActionPara
 	case *dtos.LockStackResponse:
 		logProAPIResponse(params.Op, responseData.AtmosApiResponse)
 		if !responseData.Success {
-			return errors.Join(params.WrapErr,
+			return wrapErr(params.WrapErr,
 				buildProAPIError(params.Op, resp.StatusCode, responseData.AtmosApiResponse))
 		}
 	case *dtos.UnlockStackResponse:
 		logProAPIResponse(params.Op, responseData.AtmosApiResponse)
 		if !responseData.Success {
-			return errors.Join(params.WrapErr,
+			return wrapErr(params.WrapErr,
 				buildProAPIError(params.Op, resp.StatusCode, responseData.AtmosApiResponse))
 		}
 	}
@@ -386,7 +458,7 @@ func handleAPIResponse(resp *http.Response, operation string) error {
 	// Read the response body.
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return errors.Join(errUtils.ErrFailedToReadResponseBody, err)
+		return wrapErr(errUtils.ErrFailedToReadResponseBody, err)
 	}
 
 	var apiResponse dtos.AtmosApiResponse
@@ -454,6 +526,13 @@ func buildProAPIError(operation string, statusCode int, apiResponse dtos.AtmosAp
 	// Add status-specific hints with targeted documentation links.
 	// Each hint is self-contained (each renders with its own lightbulb icon).
 	switch statusCode {
+	case http.StatusBadRequest:
+		builder = builder.
+			WithHint("This looks like a configuration error in your stack settings. Check the `settings.pro.*` block (drift_detection workflows, etc.). See: https://atmos-pro.com/docs/configure/atmos")
+		if isDriftDetectionError(&apiResponse) {
+			builder = builder.
+				WithHint("Drift detection requires `detect` and `remediate` workflows under `settings.pro.drift_detection`. See: https://atmos-pro.com/docs/configure/drift-detection")
+		}
 	case http.StatusForbidden:
 		builder = builder.
 			WithHint("Permissions are configured per-repository in Atmos Pro. Check that this repo has the required permissions: https://atmos-pro.com/docs/learn/permissions").
@@ -473,6 +552,22 @@ func buildProAPIError(operation string, statusCode int, apiResponse dtos.AtmosAp
 	}
 
 	return builder.Err()
+}
+
+// isDriftDetectionError reports whether the API response describes a
+// drift-detection configuration validation failure. Prefers the structured
+// errorTag when present; falls back to a substring match on the message.
+func isDriftDetectionError(apiResponse *dtos.AtmosApiResponse) bool {
+	if apiResponse.ErrorTag == "DriftDetectionValidationError" {
+		return true
+	}
+	msg := strings.ToLower(apiResponse.EffectiveErrorMessage())
+	if msg == "" {
+		return false
+	}
+	return strings.Contains(msg, "drift detection") ||
+		strings.Contains(msg, "remediate workflow") ||
+		strings.Contains(msg, "detect workflow")
 }
 
 // getGitHubOIDCToken retrieves an OIDC token from GitHub Actions.
@@ -508,7 +603,7 @@ func getGitHubOIDCToken(githubOIDCSettings schema.GithubOIDCSettings, clients ..
 
 	req, err := http.NewRequest("GET", requestOIDCTokenURL, nil)
 	if err != nil {
-		return "", errors.Join(errUtils.ErrFailedToCreateRequest, err)
+		return "", wrapErr(errUtils.ErrFailedToCreateRequest, err)
 	}
 
 	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", requestToken))
@@ -524,13 +619,13 @@ func getGitHubOIDCToken(githubOIDCSettings schema.GithubOIDCSettings, clients ..
 	resp, err := client.Do(req)
 	if err != nil {
 		log.Debug("getGitHubOIDCToken", "error", err)
-		return "", errors.Join(errUtils.ErrFailedToGetOIDCToken, err)
+		return "", wrapErr(errUtils.ErrFailedToGetOIDCToken, err)
 	}
 	defer resp.Body.Close()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return "", errors.Join(errUtils.ErrFailedToReadResponseBody, err)
+		return "", wrapErr(errUtils.ErrFailedToReadResponseBody, err)
 	}
 
 	if resp.StatusCode != http.StatusOK {
@@ -540,7 +635,7 @@ func getGitHubOIDCToken(githubOIDCSettings schema.GithubOIDCSettings, clients ..
 
 	var tokenResp dtos.GetGitHubOIDCResponse
 	if err := json.Unmarshal(body, &tokenResp); err != nil {
-		return "", errors.Join(errUtils.ErrFailedToDecodeOIDCResponse, err)
+		return "", wrapErr(errUtils.ErrFailedToDecodeOIDCResponse, err)
 	}
 
 	return tokenResp.Value, nil
@@ -572,12 +667,12 @@ func exchangeOIDCTokenForAtmosToken(baseURL, baseAPIEndpoint, oidcToken, workspa
 
 	data, err := json.Marshal(reqBody)
 	if err != nil {
-		return "", errors.Join(errUtils.ErrFailedToMarshalPayload, err)
+		return "", wrapErr(errUtils.ErrFailedToMarshalPayload, err)
 	}
 
 	req, err := http.NewRequest("POST", url, bytes.NewBuffer(data))
 	if err != nil {
-		return "", errors.Join(errUtils.ErrFailedToCreateRequest, err)
+		return "", wrapErr(errUtils.ErrFailedToCreateRequest, err)
 	}
 
 	req.Header.Set("Content-Type", "application/json")
@@ -586,13 +681,13 @@ func exchangeOIDCTokenForAtmosToken(baseURL, baseAPIEndpoint, oidcToken, workspa
 	client := getHTTPClientWithTimeout()
 	resp, err := client.Do(req)
 	if err != nil {
-		return "", errors.Join(errUtils.ErrFailedToExchangeOIDCToken, err)
+		return "", wrapErr(errUtils.ErrFailedToExchangeOIDCToken, err)
 	}
 	defer resp.Body.Close()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return "", errors.Join(errUtils.ErrFailedToReadResponseBody, err)
+		return "", wrapErr(errUtils.ErrFailedToReadResponseBody, err)
 	}
 
 	// Try to parse the response to get trace ID from the response body
@@ -611,13 +706,13 @@ func exchangeOIDCTokenForAtmosToken(baseURL, baseAPIEndpoint, oidcToken, workspa
 				WithContext("operation", "ExchangeOIDCToken").
 				WithHint("The API returned an unexpected response format. See troubleshooting: https://atmos-pro.com/docs/learn/troubleshooting").
 				Err()
-			return "", errors.Join(errUtils.ErrFailedToExchangeOIDCToken, enrichedErr)
+			return "", wrapErr(errUtils.ErrFailedToExchangeOIDCToken, enrichedErr)
 		}
-		return "", errors.Join(errUtils.ErrFailedToDecodeTokenResponse, err)
+		return "", wrapErr(errUtils.ErrFailedToDecodeTokenResponse, err)
 	}
 
 	if !tokenResp.Success {
-		return "", errors.Join(errUtils.ErrFailedToExchangeOIDCToken,
+		return "", wrapErr(errUtils.ErrFailedToExchangeOIDCToken,
 			buildProAPIError("ExchangeOIDCToken", resp.StatusCode, tokenResp.AtmosApiResponse))
 	}
 

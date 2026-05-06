@@ -88,12 +88,13 @@ func doWithRetry(operation string, fn func() error, refresher tokenRefresher, cf
 		// Wrap "max attempts exceeded" from the generic retry package with our
 		// domain-specific sentinel so callers can errors.Is for it.
 		if attempt > cfg.maxRetries {
-			log.Error("Upload failed after all retries.",
+			log.Error(
+				"Upload failed after all retries.",
 				logKeyOperation, operation,
 				logKeyMaxRetries, cfg.maxRetries,
 				"error", err,
 			)
-			return errors.Join(errUtils.ErrUploadRetryExhausted, err)
+			return wrapErr(errUtils.ErrUploadRetryExhausted, err)
 		}
 	}
 
@@ -111,7 +112,8 @@ func classifyError(operation string, lastErr error, attempt int, cfg retryConfig
 		}
 
 		// Remaining non-API errors are likely transient network issues — retry.
-		log.Warn("Upload failed with network error, retrying.",
+		log.Warn(
+			"Upload failed with network error, retrying.",
 			logKeyOperation, operation,
 			logKeyAttempt, attempt,
 			logKeyMaxRetries, cfg.maxRetries,
@@ -126,14 +128,16 @@ func classifyError(operation string, lastErr error, attempt int, cfg retryConfig
 	}
 
 	if apiErr.IsAuthError() {
-		log.Warn("Upload received 401, refreshing token before retry.",
+		log.Warn(
+			"Upload received 401, refreshing token before retry.",
 			logKeyOperation, operation,
 			logKeyAttempt, attempt,
 			logKeyMaxRetries, cfg.maxRetries,
 		)
 
 		if refreshErr := refresher.RefreshToken(); refreshErr != nil {
-			log.Error("Token refresh failed, aborting retries.",
+			log.Error(
+				"Token refresh failed, aborting retries.",
 				logKeyOperation, operation,
 				"error", refreshErr,
 			)
@@ -143,7 +147,8 @@ func classifyError(operation string, lastErr error, attempt int, cfg retryConfig
 	}
 
 	// 5xx — retry without token refresh.
-	log.Warn("Upload received server error, retrying.",
+	log.Warn(
+		"Upload received server error, retrying.",
 		logKeyOperation, operation,
 		logKeyAttempt, attempt,
 		logKeyMaxRetries, cfg.maxRetries,
