@@ -4,11 +4,20 @@ import (
 	"os"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 
 	"github.com/cloudposse/atmos/internal/exec"
+	"github.com/cloudposse/atmos/pkg/flags"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
+
+// describeAffectedCIParser handles the --ci flag for `describe affected`.
+// The flag is wired via the unified flag parser so env-var bindings
+// (ATMOS_CI, CI) stay inside pkg/flags/ and do not trip the forbidigo ban
+// on viper.BindEnv/BindPFlag outside that package. This mirrors the flag
+// registration pattern used by `atmos terraform plan`/`apply`/`deploy`.
+var describeAffectedCIParser *flags.StandardParser
 
 // describeAffectedCmd produces a list of the affected Atmos components and stacks given two Git commits.
 var describeAffectedCmd = &cobra.Command{
@@ -50,6 +59,42 @@ func init() {
 	describeAffectedCmd.PersistentFlags().StringSlice("skip", nil, "Skip executing a YAML function when processing Atmos stack manifests")
 	describeAffectedCmd.PersistentFlags().Bool("verbose", false, "Deprecated. Alias for `--logs-level=Debug`")
 	describeAffectedCmd.PersistentFlags().Bool("exclude-locked", false, "Exclude the locked components (`metadata.locked: true`) from the output")
+
+	// --ci flag with env-var bindings, wired through the unified flag parser.
+	// Overrides `ci.enabled` from atmos.yaml for this invocation.
+	//
+	// NOTE: --repo-path already suppresses CI base auto-detection on its
+	// own — users do NOT need to pair it with --ci=false. The --ci flag
+	// exists for the INDEPENDENT case where the caller wants to toggle
+	// CI-gated behavior without touching --repo-path: e.g., force CI mode
+	// on locally for debugging (--ci=true / ATMOS_CI=true), or opt a
+	// specific non-repo-path invocation out of auto-detect (--ci=false /
+	// ATMOS_CI=false) in a workflow that leaves `ci.enabled: true` in
+	// atmos.yaml for other features (Atmos Pro checks/summaries).
+	//
+	// Env-var bindings match the terraform plan/apply/deploy pattern so
+	// users have a single, consistent knob across all CI-aware commands.
+	//
+	// The Viper bind below registers env-var mappings (ATMOS_CI, CI → "ci")
+	// for any tooling that inspects Viper's merged view of the flag — e.g.
+	// `atmos describe config`. It is NOT what the runtime gate reads:
+	// `isCIEnabledForDescribeAffected` reads `pflag.Changed` + `os.LookupEnv`
+	// directly to avoid the `SetDefault`-induced `viper.IsSet("ci") == true`
+	// trap (see that helper's doc comment and
+	// TestIsCIEnabledForDescribeAffected_RealBinding). No runtime
+	// BindFlagsToViper is needed — the helper has all the state it needs
+	// from the raw `pflag.FlagSet` Cobra already supplies.
+	describeAffectedCIParser = flags.NewStandardParser(
+		flags.WithBoolFlag("ci", "", false,
+			"Enable CI mode for `describe affected`. Overrides ci.enabled in atmos.yaml for this invocation. "+
+				"Controls auto-detection of --base from the CI provider's environment (e.g., GITHUB_BASE_REF). "+
+				"Set to false to suppress auto-detection; set to true to force it on even when ci.enabled is unset."),
+		flags.WithEnvVars("ci", "ATMOS_CI", "CI"),
+	)
+	describeAffectedCIParser.RegisterFlags(describeAffectedCmd)
+	if err := describeAffectedCIParser.BindToViper(viper.GetViper()); err != nil {
+		log.Error("Failed to bind --ci flag to Viper for `describe affected`", "error", err)
+	}
 
 	describeCmd.AddCommand(describeAffectedCmd)
 }

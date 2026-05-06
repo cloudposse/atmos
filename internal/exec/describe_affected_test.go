@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -13,6 +14,7 @@ import (
 	"github.com/go-git/go-git/v5/plumbing"
 	cp "github.com/otiai10/copy"
 	"github.com/spf13/pflag"
+	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
@@ -1742,6 +1744,91 @@ func TestResolveBaseFromCI(t *testing.T) {
 	})
 }
 
+// TestResolveCIUploadMetadataFromCI exercises the partial CI resolver used on
+// the --repo-path + --upload path. Mirrors TestResolveBaseFromCI for the
+// sibling helper, but asserts the sibling's contract: populate
+// HeadSHAOverride + CIEventType WITHOUT populating Ref or SHA.
+func TestResolveCIUploadMetadataFromCI(t *testing.T) {
+	t.Run("no CI provider detected", func(t *testing.T) {
+		ci.Reset()
+		t.Cleanup(ci.Reset)
+
+		t.Setenv("GITHUB_ACTIONS", "")
+		t.Setenv("CI", "")
+
+		describe := &DescribeAffectedCmdArgs{
+			CLIConfig: &schema.AtmosConfiguration{},
+		}
+		resolveCIUploadMetadataFromCI(describe)
+
+		// All four auto-populated fields stay empty — no provider, no change.
+		assert.Empty(t, describe.Ref)
+		assert.Empty(t, describe.SHA)
+		assert.Empty(t, describe.HeadSHAOverride)
+		assert.Empty(t, describe.CIEventType)
+	})
+
+	t.Run("ResolveBase returns error logs warning and leaves fields empty", func(t *testing.T) {
+		ci.Reset()
+		t.Cleanup(ci.Reset)
+		ci.Register(githubCI.NewProvider())
+
+		t.Setenv("GITHUB_ACTIONS", "true")
+		t.Setenv("GITHUB_EVENT_NAME", "push")
+		// Missing GITHUB_EVENT_PATH causes ResolveBase to error for push events.
+		t.Setenv("GITHUB_EVENT_PATH", "")
+
+		describe := &DescribeAffectedCmdArgs{
+			CLIConfig: &schema.AtmosConfiguration{},
+		}
+		resolveCIUploadMetadataFromCI(describe)
+
+		// Error path: warning logged, fields stay empty, no panic.
+		assert.Empty(t, describe.Ref, "error path must not populate Ref")
+		assert.Empty(t, describe.SHA, "error path must not populate SHA")
+		assert.Empty(t, describe.HeadSHAOverride, "error path must not populate HeadSHAOverride")
+		assert.Empty(t, describe.CIEventType, "error path must not populate CIEventType")
+	})
+
+	t.Run("GitHub Actions PR event populates only upload metadata", func(t *testing.T) {
+		ci.Reset()
+		t.Cleanup(ci.Reset)
+		ci.Register(githubCI.NewProvider())
+
+		t.Setenv("GITHUB_ACTIONS", "true")
+		t.Setenv("GITHUB_EVENT_NAME", "pull_request")
+		t.Setenv("GITHUB_BASE_REF", "main")
+
+		eventPayload := `{
+			"action": "synchronize",
+			"pull_request": {
+				"head": {"sha": "headsha123456789012345678901234567890ab"},
+				"base": {"ref": "main"}
+			}
+		}`
+		eventPath := filepath.Join(t.TempDir(), "event.json")
+		require.NoError(t, os.WriteFile(eventPath, []byte(eventPayload), 0o644))
+		t.Setenv("GITHUB_EVENT_PATH", eventPath)
+
+		describe := &DescribeAffectedCmdArgs{
+			CLIConfig: &schema.AtmosConfiguration{},
+		}
+		resolveCIUploadMetadataFromCI(describe)
+
+		// Upload metadata populated from the event payload…
+		assert.Equal(t, "headsha123456789012345678901234567890ab", describe.HeadSHAOverride,
+			"HeadSHAOverride must be populated from pull_request.head.sha")
+		assert.Equal(t, "pull_request", describe.CIEventType,
+			"CIEventType must be populated from GITHUB_EVENT_NAME")
+
+		// …but base fields (Ref/SHA) stay empty — this is the entire point of
+		// the partial resolver. If these become non-empty, downstream
+		// ErrRepoPathConflict would fire and the fix regresses.
+		assert.Empty(t, describe.Ref, "partial resolver must NOT populate Ref")
+		assert.Empty(t, describe.SHA, "partial resolver must NOT populate SHA")
+	})
+}
+
 // newDescribeAffectedFlagSet creates a pflag.FlagSet with all flags used by SetDescribeAffectedFlagValueInCliArgs.
 func newDescribeAffectedFlagSet() *pflag.FlagSet {
 	flags := pflag.NewFlagSet("test", pflag.ContinueOnError)
@@ -1824,6 +1911,403 @@ func TestSetDescribeAffectedFlagValueInCliArgs_BaseResolution(t *testing.T) {
 
 		assert.Equal(t, "refs/remotes/origin/main", describe.Ref)
 	})
+}
+
+// setupGitHubActionsPREnv wires GITHUB_* env vars and writes a pull_request
+// event payload for tests that exercise CI base auto-detection.
+func setupGitHubActionsPREnv(t *testing.T) {
+	t.Helper()
+
+	ci.Reset()
+	t.Cleanup(ci.Reset)
+	ci.Register(githubCI.NewProvider())
+
+	t.Setenv("GITHUB_ACTIONS", "true")
+	t.Setenv("GITHUB_EVENT_NAME", "pull_request")
+	t.Setenv("GITHUB_BASE_REF", "main")
+
+	eventPayload := `{
+		"action": "synchronize",
+		"pull_request": {
+			"head": {"sha": "headsha123456789012345678901234567890ab"},
+			"base": {"ref": "main"}
+		}
+	}`
+	eventPath := filepath.Join(t.TempDir(), "event.json")
+	err := os.WriteFile(eventPath, []byte(eventPayload), 0o644)
+	require.NoError(t, err)
+	t.Setenv("GITHUB_EVENT_PATH", eventPath)
+}
+
+// resetCIViperKey resets the `ci` viper key before and after a test so that
+// CI-related viper state from other tests (or env vars on the host) does not
+// leak in. Using t.Setenv with empty strings also clears any host-exported vars.
+func resetCIViperKey(t *testing.T) {
+	t.Helper()
+
+	viper.Reset()
+	t.Setenv("ATMOS_CI", "")
+	t.Setenv("CI", "")
+	t.Cleanup(viper.Reset)
+}
+
+// TestSetDescribeAffectedFlagValueInCliArgs_RepoPathSkipsCIAutoDetect verifies
+// that --repo-path short-circuits the CI auto-detect path, even when
+// ci.enabled is true. This is the regression fix for the user-reported
+// describe affected --repo-path failure under ci.enabled: true.
+func TestSetDescribeAffectedFlagValueInCliArgs_RepoPathSkipsCIAutoDetect(t *testing.T) {
+	resetCIViperKey(t)
+	setupGitHubActionsPREnv(t)
+
+	flags := newDescribeAffectedFlagSet()
+	err := flags.Set("repo-path", "/tmp/other-clone")
+	require.NoError(t, err)
+
+	describe := &DescribeAffectedCmdArgs{
+		CLIConfig: &schema.AtmosConfiguration{
+			CI: schema.CIConfig{Enabled: true},
+		},
+	}
+	SetDescribeAffectedFlagValueInCliArgs(flags, describe)
+
+	assert.Equal(t, "/tmp/other-clone", describe.RepoPath,
+		"--repo-path should be preserved")
+	assert.Empty(t, describe.Ref,
+		"auto-detect must not populate Ref when --repo-path is set")
+	assert.Empty(t, describe.SHA,
+		"auto-detect must not populate SHA when --repo-path is set")
+	assert.Empty(t, describe.HeadSHAOverride,
+		"auto-detect must not populate HeadSHAOverride when --repo-path is set")
+	assert.Empty(t, describe.CIEventType,
+		"auto-detect must not populate CIEventType when --repo-path is set")
+
+	// Negative-path sanity: if the exact same config runs WITHOUT --repo-path,
+	// auto-detect still fires. Guarantees we're testing the guard, not the
+	// absence of a CI provider.
+	flagsNoRepoPath := newDescribeAffectedFlagSet()
+	describeNoRepoPath := &DescribeAffectedCmdArgs{
+		CLIConfig: &schema.AtmosConfiguration{
+			CI: schema.CIConfig{Enabled: true},
+		},
+	}
+	SetDescribeAffectedFlagValueInCliArgs(flagsNoRepoPath, describeNoRepoPath)
+	// The exact field (Ref vs SHA) and its value depend on whether
+	// merge-base(HEAD, origin/main) succeeds in the test git environment —
+	// the GitHub provider tries merge-base first (returns a SHA) and falls
+	// back to GITHUB_BASE_REF (returns a ref). Either is a valid
+	// auto-detect result; what matters is that *something* was populated.
+	assert.True(t, describeNoRepoPath.Ref != "" || describeNoRepoPath.SHA != "",
+		"sanity: auto-detect should populate Ref or SHA in the same env when --repo-path is NOT set")
+}
+
+// TestSetDescribeAffectedFlagValueInCliArgs_RepoPathUploadPopulatesMetadata
+// verifies that `--repo-path + --upload` in CI still populates upload
+// correlation metadata (HeadSHAOverride, CIEventType) even though base
+// auto-detection (Ref/SHA) is suppressed. Without this, Atmos Pro uploads
+// would correlate against the merge-commit SHA rather than the PR head SHA
+// indexed by the webhook.
+func TestSetDescribeAffectedFlagValueInCliArgs_RepoPathUploadPopulatesMetadata(t *testing.T) {
+	resetCIViperKey(t)
+	setupGitHubActionsPREnv(t)
+
+	flags := newDescribeAffectedFlagSet()
+	require.NoError(t, flags.Set("repo-path", "/tmp/other-clone"))
+	require.NoError(t, flags.Set("upload", "true"))
+
+	describe := &DescribeAffectedCmdArgs{
+		CLIConfig: &schema.AtmosConfiguration{
+			CI: schema.CIConfig{Enabled: true},
+		},
+	}
+	SetDescribeAffectedFlagValueInCliArgs(flags, describe)
+
+	// --repo-path still suppresses base selection.
+	assert.Equal(t, "/tmp/other-clone", describe.RepoPath,
+		"--repo-path should be preserved")
+	assert.Empty(t, describe.Ref,
+		"Ref must stay empty with --repo-path, even with --upload")
+	assert.Empty(t, describe.SHA,
+		"SHA must stay empty with --repo-path, even with --upload")
+
+	// --upload recovers the fields that matter for Atmos Pro correlation.
+	assert.Equal(t, "headsha123456789012345678901234567890ab", describe.HeadSHAOverride,
+		"--upload should populate HeadSHAOverride from the PR event payload")
+	assert.Equal(t, "pull_request", describe.CIEventType,
+		"--upload should populate CIEventType for PR-event validation in uploadableQuery")
+
+	// Negative-path sanity: dropping --upload restores the original
+	// repo-path-skips-everything behavior. Guarantees the metadata
+	// population is gated on --upload, not just --repo-path.
+	flagsNoUpload := newDescribeAffectedFlagSet()
+	require.NoError(t, flagsNoUpload.Set("repo-path", "/tmp/other-clone"))
+	describeNoUpload := &DescribeAffectedCmdArgs{
+		CLIConfig: &schema.AtmosConfiguration{
+			CI: schema.CIConfig{Enabled: true},
+		},
+	}
+	SetDescribeAffectedFlagValueInCliArgs(flagsNoUpload, describeNoUpload)
+	assert.Empty(t, describeNoUpload.HeadSHAOverride,
+		"without --upload, metadata population must not fire")
+	assert.Empty(t, describeNoUpload.CIEventType,
+		"without --upload, CIEventType must stay empty")
+}
+
+// TestSetDescribeAffectedFlagValueInCliArgs_CIFlagOverrides verifies that the
+// --ci flag / ATMOS_CI env var override ci.enabled from atmos.yaml
+// per invocation. Exercises the precedence rule: CLI flag > env var > config.
+func TestSetDescribeAffectedFlagValueInCliArgs_CIFlagOverrides(t *testing.T) {
+	t.Run("ATMOS_CI=false disables auto-detect when ci.enabled=true", func(t *testing.T) {
+		resetCIViperKey(t)
+		setupGitHubActionsPREnv(t)
+
+		// Register the `ci` viper key with the same env-var bindings that
+		// cmd/describe_affected.go init() sets up via the StandardParser.
+		require.NoError(t, viper.BindEnv("ci", "ATMOS_CI", "CI"))
+
+		t.Setenv("ATMOS_CI", "false")
+
+		flags := newDescribeAffectedFlagSet()
+		describe := &DescribeAffectedCmdArgs{
+			CLIConfig: &schema.AtmosConfiguration{
+				CI: schema.CIConfig{Enabled: true},
+			},
+		}
+		SetDescribeAffectedFlagValueInCliArgs(flags, describe)
+
+		assert.Empty(t, describe.Ref,
+			"ATMOS_CI=false should override ci.enabled=true")
+		assert.Empty(t, describe.SHA,
+			"ATMOS_CI=false should suppress SHA auto-detection")
+	})
+
+	t.Run("ATMOS_CI=true forces auto-detect when ci.enabled=false", func(t *testing.T) {
+		resetCIViperKey(t)
+		setupGitHubActionsPREnv(t)
+
+		require.NoError(t, viper.BindEnv("ci", "ATMOS_CI", "CI"))
+
+		t.Setenv("ATMOS_CI", "true")
+
+		flags := newDescribeAffectedFlagSet()
+		describe := &DescribeAffectedCmdArgs{
+			CLIConfig: &schema.AtmosConfiguration{
+				CI: schema.CIConfig{Enabled: false},
+			},
+		}
+		SetDescribeAffectedFlagValueInCliArgs(flags, describe)
+
+		// Under pull_request event, the GitHub provider tries merge-base first
+		// (returns a SHA) and falls back to GITHUB_BASE_REF (returns a ref).
+		// Either is a valid auto-detect result — assert that *something* was
+		// populated rather than pinning a specific resolution path (which
+		// depends on the test git environment).
+		assert.True(t, describe.Ref != "" || describe.SHA != "",
+			"ATMOS_CI=true should force auto-detect (Ref or SHA populated) even when ci.enabled=false")
+	})
+
+	t.Run("no override falls back to ci.enabled=true in atmos.yaml", func(t *testing.T) {
+		resetCIViperKey(t)
+		setupGitHubActionsPREnv(t)
+
+		flags := newDescribeAffectedFlagSet()
+		describe := &DescribeAffectedCmdArgs{
+			CLIConfig: &schema.AtmosConfiguration{
+				CI: schema.CIConfig{Enabled: true},
+			},
+		}
+		SetDescribeAffectedFlagValueInCliArgs(flags, describe)
+
+		assert.True(t, describe.Ref != "" || describe.SHA != "",
+			"ci.enabled=true should keep auto-detect active (Ref or SHA populated) when no override is set")
+	})
+
+	t.Run("no override respects ci.enabled=false default", func(t *testing.T) {
+		resetCIViperKey(t)
+		setupGitHubActionsPREnv(t)
+
+		flags := newDescribeAffectedFlagSet()
+		describe := &DescribeAffectedCmdArgs{
+			CLIConfig: &schema.AtmosConfiguration{
+				CI: schema.CIConfig{Enabled: false},
+			},
+		}
+		SetDescribeAffectedFlagValueInCliArgs(flags, describe)
+
+		assert.Empty(t, describe.Ref,
+			"ci.enabled=false and no override must not auto-detect")
+	})
+
+	t.Run("CI=true alone enables auto-detect when ci.enabled=false (zero-config CI)", func(t *testing.T) {
+		// Documents the implicit behavior: on any CI runner (where CI=true
+		// is set by the runner), describe affected auto-detects the base
+		// commit even when ci.enabled is NOT opted into in atmos.yaml. This
+		// matches the "zero-config CI base detection" spirit of PR #2241
+		// and the env-var binding used across terraform plan/apply/deploy.
+		// Users who want to opt OUT set ATMOS_CI=false or --ci=false.
+		resetCIViperKey(t)
+		setupGitHubActionsPREnv(t)
+
+		require.NoError(t, viper.BindEnv("ci", "ATMOS_CI", "CI"))
+
+		t.Setenv("CI", "true")
+
+		flags := newDescribeAffectedFlagSet()
+		describe := &DescribeAffectedCmdArgs{
+			CLIConfig: &schema.AtmosConfiguration{
+				CI: schema.CIConfig{Enabled: false},
+			},
+		}
+		SetDescribeAffectedFlagValueInCliArgs(flags, describe)
+
+		assert.True(t, describe.Ref != "" || describe.SHA != "",
+			"CI=true alone should trigger auto-detect (zero-config CI behavior) even when ci.enabled=false")
+	})
+}
+
+// TestIsCIEnabledForDescribeAffected_Precedence exercises the precedence
+// resolver directly — CLI flag (pflag.Changed) > env var (os.LookupEnv) >
+// config > false. Each case drives exactly one override source to verify
+// its tier in the precedence chain, independently of viper.
+func TestIsCIEnabledForDescribeAffected_Precedence(t *testing.T) {
+	// override is a tagged union of the three override sources we support.
+	// At most one field is set per test case.
+	type override struct {
+		flagValue *bool  // non-nil → simulate --ci=<value> on the command line (flag.Changed=true).
+		atmosCI   string // non-empty → ATMOS_CI env var set to this value.
+		ci        string // non-empty → CI env var set to this value.
+	}
+
+	cases := []struct {
+		name     string
+		ovr      override
+		configCI bool
+		nilCLI   bool
+		want     bool
+		why      string
+	}{
+		{
+			name: "--ci=true flag wins over config false",
+			ovr:  override{flagValue: boolPtr(true)},
+			want: true, why: "explicit --ci=true is the top-priority override",
+		},
+		{
+			name: "--ci=false flag wins over config true",
+			ovr:  override{flagValue: boolPtr(false)}, configCI: true,
+			want: false, why: "explicit --ci=false disables even with ci.enabled=true",
+		},
+		{
+			name: "ATMOS_CI=true env wins over config false",
+			ovr:  override{atmosCI: "true"},
+			want: true, why: "ATMOS_CI=true overrides absent ci.enabled",
+		},
+		{
+			name: "ATMOS_CI=false env wins over config true",
+			ovr:  override{atmosCI: "false"}, configCI: true,
+			want: false, why: "ATMOS_CI=false disables even with ci.enabled=true",
+		},
+		{
+			name: "CI=true env enables auto-detect (zero-config CI)",
+			ovr:  override{ci: "true"},
+			want: true, why: "runner-set CI=true is the zero-config signal",
+		},
+		{
+			name: "ATMOS_CI=false beats CI=true (ATMOS_CI has higher priority)",
+			ovr:  override{atmosCI: "false", ci: "true"},
+			want: false, why: "ATMOS_CI precedes CI in the env var order",
+		},
+		{
+			name: "unparseable ATMOS_CI suppresses CI fallthrough and falls through to config",
+			ovr:  override{atmosCI: "yes", ci: "true"}, configCI: false,
+			want: false, why: "user tried to override with an unparseable value; ambient CI=true must NOT override their explicit intent — fall through to ci.enabled (false here), after logging a warning",
+		},
+		{
+			name: "unparseable ATMOS_CI honors ci.enabled=true via config fallthrough",
+			ovr:  override{atmosCI: "on", ci: "true"}, configCI: true,
+			want: true, why: "unparseable ATMOS_CI falls through to atmos.yaml (tier 3), so ci.enabled=true still enables the feature even though the env var was malformed",
+		},
+		{
+			name:     "no override falls through to config true",
+			configCI: true,
+			want:     true, why: "ci.enabled=true in atmos.yaml applies when no flag/env override — the previously-regressing path",
+		},
+		{
+			name:     "no override falls through to config false",
+			configCI: false,
+			want:     false, why: "default (no override, ci.enabled=false) is disabled",
+		},
+		{
+			name:   "nil CLIConfig defaults to false",
+			nilCLI: true,
+			want:   false, why: "safety: missing config must not enable auto-detect",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			// Isolate env vars: clear both, then set what the case wants.
+			t.Setenv("ATMOS_CI", tc.ovr.atmosCI)
+			t.Setenv("CI", tc.ovr.ci)
+
+			// Build a pflag.FlagSet with `--ci` registered. If the case
+			// specifies a flag value, Set it so flag.Changed becomes true.
+			fs := pflag.NewFlagSet("test", pflag.ContinueOnError)
+			fs.Bool("ci", false, "")
+			if tc.ovr.flagValue != nil {
+				require.NoError(t, fs.Set("ci", strconv.FormatBool(*tc.ovr.flagValue)))
+			}
+
+			describe := &DescribeAffectedCmdArgs{}
+			if !tc.nilCLI {
+				describe.CLIConfig = &schema.AtmosConfiguration{
+					CI: schema.CIConfig{Enabled: tc.configCI},
+				}
+			}
+
+			got := isCIEnabledForDescribeAffected(fs, describe)
+			assert.Equal(t, tc.want, got, tc.why)
+		})
+	}
+}
+
+// TestIsCIEnabledForDescribeAffected_RealBinding is the regression guard for
+// the bug where StandardParser.BindFlagsToViper's SetDefault on the `ci`
+// key made viper.IsSet("ci") always true, which masked ci.enabled=true from
+// atmos.yaml with the pflag default (false).
+//
+// This test sets up the EXACT viper+flag binding chain the cmd layer uses
+// in production (BindEnv + BindPFlag + SetDefault), then verifies that
+// isCIEnabledForDescribeAffected still falls through to CLIConfig.CI.Enabled
+// when no CLI flag or env var was provided.
+func TestIsCIEnabledForDescribeAffected_RealBinding(t *testing.T) {
+	// Clear ambient env + fresh viper to reproduce a local-dev invocation.
+	t.Setenv("ATMOS_CI", "")
+	t.Setenv("CI", "")
+	viper.Reset()
+	t.Cleanup(viper.Reset)
+
+	v := viper.GetViper()
+
+	// Mimic StandardParser binding: SetDefault + BindEnv + BindPFlag.
+	fs := pflag.NewFlagSet("test", pflag.ContinueOnError)
+	fs.Bool("ci", false, "")
+	v.SetDefault("ci", false)
+	require.NoError(t, v.BindEnv("ci", "ATMOS_CI", "CI"))
+	require.NoError(t, v.BindPFlag("ci", fs.Lookup("ci")))
+
+	// Sanity: after the binding, viper.IsSet returns true — the exact
+	// misleading signal that caused the bug. We don't trust it in the
+	// production helper, and this assertion documents why.
+	require.True(t, v.IsSet("ci"),
+		"viper.IsSet(\"ci\") is true after SetDefault — relying on it in the helper would be wrong")
+
+	describe := &DescribeAffectedCmdArgs{
+		CLIConfig: &schema.AtmosConfiguration{
+			CI: schema.CIConfig{Enabled: true},
+		},
+	}
+	got := isCIEnabledForDescribeAffected(fs, describe)
+	assert.True(t, got,
+		"ci.enabled=true from atmos.yaml must still be honored under the production binding chain (flag not Changed, no env vars set)")
 }
 
 // TestExecute_MatrixFormat tests the matrix format code path through Execute.

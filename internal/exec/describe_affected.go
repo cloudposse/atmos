@@ -3,6 +3,8 @@ package exec
 import (
 	"errors"
 	"fmt"
+	"os"
+	"strconv"
 
 	"github.com/go-git/go-git/v5/plumbing"
 	giturl "github.com/kubescape/go-git-url"
@@ -28,6 +30,11 @@ import (
 )
 
 var ErrRepoPathConflict = errors.New("if the '--repo-path' flag is specified, the '--base', '--ref', '--sha', '--ssh-key' and '--ssh-key-password' flags can't be used")
+
+// logKeyProvider is the structured-log key used for the CI provider name
+// in auto-detect log lines. Extracted to satisfy the revive `add-constant`
+// linter (the literal appears in four log calls across the CI helpers).
+const logKeyProvider = "provider"
 
 type DescribeAffectedExecCreator func(atmosConfig *schema.AtmosConfiguration) DescribeAffectedExec
 
@@ -171,10 +178,78 @@ func ParseDescribeAffectedCliArgs(cmd *cobra.Command, args []string) (DescribeAf
 		return DescribeAffectedCmdArgs{}, ErrInvalidFormat
 	}
 	if result.RepoPath != "" && (result.Base != "" || result.Ref != "" || result.SHA != "" || result.SSHKeyPath != "" || result.SSHKeyPassword != "") {
-		return DescribeAffectedCmdArgs{}, ErrRepoPathConflict
+		return DescribeAffectedCmdArgs{}, errUtils.Build(ErrRepoPathConflict).
+			WithHint("Pass only one of: --repo-path OR (--base | --ref | --sha | --ssh-key | --ssh-key-password). --repo-path points at an already-cloned sibling repository to diff against; the others clone or check out a target ref.").
+			WithHint("To compare against a specific ref or SHA, use --base without --repo-path. To compare against an already-cloned repo, use --repo-path without --base / --ref / --sha.").
+			Err()
 	}
 
 	return result, nil
+}
+
+// isCIEnabledForDescribeAffected resolves whether CI features (specifically,
+// --base auto-detection from the CI provider's environment) should run for
+// this invocation of `describe affected`.
+//
+// Precedence (highest to lowest):
+//  1. --ci CLI flag on this invocation (checked via pflag.Flag.Changed).
+//  2. ATMOS_CI / CI env vars (checked via os.LookupEnv). ATMOS_CI wins
+//     if both are set.
+//  3. ci.enabled in atmos.yaml.
+//  4. false (default).
+//
+// Why not viper.IsSet("ci")? The StandardParser.BindFlagsToViper helper
+// (pkg/flags/standard.go:455) calls v.SetDefault("ci", false) for the
+// flag's default, which flips viper.IsSet("ci") to true for every
+// invocation — masking ci.enabled from atmos.yaml. Checking pflag.Changed
+// + os.LookupEnv directly is the only way to distinguish explicit
+// user overrides from the parser's default, so config fall-through
+// works when the user has opted in via atmos.yaml but not via flag/env.
+// See TestIsCIEnabledForDescribeAffected_RealBinding for the regression
+// this avoids.
+func isCIEnabledForDescribeAffected(flags *pflag.FlagSet, describe *DescribeAffectedCmdArgs) bool {
+	defer perf.Track(nil, "exec.isCIEnabledForDescribeAffected")()
+
+	// 1. Explicit --ci CLI flag.
+	if flags != nil {
+		if f := flags.Lookup("ci"); f != nil && f.Changed {
+			if val, err := flags.GetBool("ci"); err == nil {
+				return val
+			}
+		}
+	}
+	// 2. Explicit env var. Order mirrors flags.WithEnvVars("ci", "ATMOS_CI",
+	//    "CI"): ATMOS_CI checked first so it wins over CI when both set.
+	//
+	// When an env var is set but strconv.ParseBool rejects the value
+	// (e.g. ATMOS_CI=yes / on / enabled), we log a warning and BREAK out
+	// of the env-var loop without falling through to the next env var.
+	// Rationale: the user's explicit ATMOS_CI was an override attempt —
+	// silently falling through to the ambient CI=true (set by every
+	// runner) would be the opposite of their intent. We still fall
+	// through to ci.enabled in atmos.yaml (tier 3), which preserves
+	// declared intent from committed config while surfacing the typo
+	// via the warning.
+	for _, name := range []string{"ATMOS_CI", "CI"} {
+		val, ok := os.LookupEnv(name)
+		if !ok || val == "" {
+			continue
+		}
+		parsed, err := strconv.ParseBool(val)
+		if err != nil {
+			log.Warn("Ignoring unparseable CI env var; falling through to ci.enabled in atmos.yaml",
+				"name", name, "value", val, "error", err)
+			break
+		}
+		return parsed
+	}
+	// 3. ci.enabled in atmos.yaml (primary fallback for the common case:
+	//    user committed `ci.enabled: true` and is running locally without
+	//    env overrides).
+	if describe.CLIConfig == nil {
+		return false
+	}
+	return describe.CLIConfig.CI.Enabled
 }
 
 // SetDescribeAffectedFlagValueInCliArgs sets the flag values in CLI arguments.
@@ -237,9 +312,26 @@ func SetDescribeAffectedFlagValueInCliArgs(flags *pflag.FlagSet, describe *Descr
 		}
 	}
 
-	// Auto-detect base from CI environment when ci.enabled is true and no explicit base provided.
-	if describe.Ref == "" && describe.SHA == "" && describe.CLIConfig != nil && describe.CLIConfig.CI.Enabled {
-		resolveBaseFromCI(describe)
+	// Auto-detect CI metadata when CI is enabled and no explicit base is provided.
+	//
+	// Two cases:
+	//   - Normal (no --repo-path): populate Ref/SHA + HeadSHAOverride/CIEventType
+	//     from the CI provider.
+	//   - --repo-path: skip base detection (--repo-path is mutually exclusive with
+	//     --base/--ref/--sha per ErrRepoPathConflict — auto-injecting them from
+	//     CI env would break every describe-affected call that passes --repo-path,
+	//     e.g. the cloudposse/github-action-atmos-affected-trigger-spacelift
+	//     action). When --upload is also set, still populate the upload correlation
+	//     metadata (HeadSHAOverride, CIEventType) so Atmos Pro can match the
+	//     uploaded affected list to the PR webhook SHA even though this checkout
+	//     is at a merge commit.
+	if describe.Ref == "" && describe.SHA == "" && isCIEnabledForDescribeAffected(flags, describe) {
+		switch {
+		case describe.RepoPath == "":
+			resolveBaseFromCI(describe)
+		case describe.Upload:
+			resolveCIUploadMetadataFromCI(describe)
+		}
 	}
 
 	// When uploading, always include dependents and settings for all affected components.
@@ -280,7 +372,7 @@ func resolveBaseFromCI(describe *DescribeAffectedCmdArgs) {
 
 	resolution, err := p.ResolveBase()
 	if err != nil {
-		log.Warn("Failed to auto-detect CI base", "provider", p.Name(), "error", err)
+		log.Warn("Failed to auto-detect CI base", logKeyProvider, p.Name(), "error", err)
 		return
 	}
 	if resolution == nil {
@@ -298,10 +390,46 @@ func resolveBaseFromCI(describe *DescribeAffectedCmdArgs) {
 		base = resolution.Ref
 	}
 	log.Info("Auto-detected CI base",
-		"provider", p.Name(),
+		logKeyProvider, p.Name(),
 		"event", resolution.EventType,
 		"base", base,
 		"source", resolution.Source)
+}
+
+// resolveCIUploadMetadataFromCI populates the upload correlation metadata
+// (HeadSHAOverride, CIEventType) from the CI provider WITHOUT populating
+// Ref or SHA.
+//
+// Used in the `--repo-path` + `--upload` + CI code path. Base auto-detection
+// is skipped there to avoid ErrRepoPathConflict, but Atmos Pro still needs
+// the PR head SHA and event type to correlate the uploaded affected list
+// with the PR webhook — the current checkout is typically a GitHub
+// pull_request merge commit, whose SHA does not match what the webhook
+// indexed.
+func resolveCIUploadMetadataFromCI(describe *DescribeAffectedCmdArgs) {
+	defer perf.Track(nil, "exec.resolveCIUploadMetadataFromCI")()
+
+	p := ci.Detect()
+	if p == nil {
+		return
+	}
+
+	resolution, err := p.ResolveBase()
+	if err != nil {
+		log.Warn("Failed to auto-detect CI upload metadata", logKeyProvider, p.Name(), "error", err)
+		return
+	}
+	if resolution == nil {
+		return
+	}
+
+	describe.HeadSHAOverride = resolution.HeadSHA
+	describe.CIEventType = resolution.EventType
+
+	log.Debug("Auto-detected CI upload metadata (base auto-detect skipped due to --repo-path)",
+		logKeyProvider, p.Name(),
+		"event", resolution.EventType,
+		"headSHA", resolution.HeadSHA)
 }
 
 // Execute executes `describe affected` command.

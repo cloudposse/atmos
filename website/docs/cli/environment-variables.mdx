@@ -574,6 +574,42 @@ These environment variables configure Atmos behavior and can override settings i
   </dd>
 </dl>
 
+## CI Integration
+
+These variables control Atmos' native CI integration — GitHub Check Runs, `$GITHUB_OUTPUT` exports, `$GITHUB_STEP_SUMMARY` rendering, and `describe affected` base auto-detection from the CI provider's environment. See [CI configuration](/cli/configuration/ci) for the full reference.
+
+<dl>
+  <dt>`ATMOS_CI`</dt>
+  <dd>
+    Override `ci.enabled` from `atmos.yaml` at runtime. Accepts `true` or `false`. Bound to the `--ci` flag on `atmos terraform plan`, `apply`, `deploy`, and `describe affected`.
+
+    - **Set to `true`** to force CI mode on — useful when running locally against a workflow that expects CI behaviors.
+    - **Set to `false`** to disable CI-gated behaviors for a single invocation without editing `atmos.yaml`. Example: a workflow with `ci.enabled: true` in atmos.yaml (for Atmos Pro Check Runs) wants one specific `describe affected` step to skip CI base auto-detection and use an explicitly-passed `--base` instead.
+
+    > **Note:** `--repo-path` already suppresses CI base auto-detection on its own — you do **not** need to pair `ATMOS_CI=false` with `--repo-path`. Reserve `ATMOS_CI=false` for invocations that do *not* use `--repo-path`.
+
+    ```bash
+    # Opt one non-repo-path invocation out of CI auto-detect while leaving
+    # ci.enabled: true in atmos.yaml for other features.
+    ATMOS_CI=false atmos describe affected --base main
+    ```
+
+    **Accepted values:** `true`, `false`, `1`, `0`, `t`, `f` (anything Go's `strconv.ParseBool` accepts). An unparseable value (e.g. `yes`, `on`, `enabled`) logs a warning and is ignored: Atmos then falls through directly to `ci.enabled` in `atmos.yaml` — the `CI` env var is **not** consulted in this case. Rationale: your explicit `ATMOS_CI` was an override attempt; silently falling through to the ambient `CI=true` set by every runner would be the opposite of your intent. Fix the value and re-run.
+
+    - **YAML Path:** `ci.enabled`
+    - **Precedence:** `--ci` flag &gt; `ATMOS_CI` &gt; `CI` &gt; `ci.enabled` in `atmos.yaml` &gt; `false`.
+  </dd>
+
+  <dt>`CI`</dt>
+  <dd>
+    Generic CI indicator set by all major CI runners (GitHub Actions, GitLab CI, CircleCI, etc.). You do not normally set `CI` yourself — the runner sets it. Atmos treats `CI=true` as an implicit `--ci=true` at the lowest-priority tier of the precedence chain.
+
+    **For `describe affected`:** `CI=true` on a CI runner enables base auto-detection from the CI event payload unless explicitly overridden with `ATMOS_CI=false` or `--ci=false`. Precedence: `--ci` flag &gt; `ATMOS_CI` &gt; `CI` &gt; `ci.enabled` in `atmos.yaml` &gt; `false`. This matches the "zero-config CI base detection" behavior introduced in [cloudposse/atmos#2241](https://github.com/cloudposse/atmos/pull/2241).
+
+    **For `terraform plan` / `apply` / `deploy`:** `CI=true` activates `--ci=true` for output-capture purposes (writing CI job summaries, outputs, and check runs). The hard authority for whether CI hooks actually fire is `ci.enabled` in `atmos.yaml` — setting `CI=true` alone does not enable hooks unless `ci.enabled: true` is also set.
+  </dd>
+</dl>
+
 ## Atmos Pro
 
 <dl>

@@ -1,12 +1,16 @@
 package cmd
 
 import (
+	stderrors "errors"
 	"fmt"
+	"strings"
 	"testing"
 
+	cockroachErrors "github.com/cockroachdb/errors"
 	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
 	"github.com/cloudposse/atmos/internal/exec"
@@ -52,6 +56,19 @@ func TestDescribeAffected(t *testing.T) {
 
 func TestSetFlagValueInCliArgs(t *testing.T) {
 	_ = NewTestKit(t)
+
+	// Isolate from the ambient CI environment. On CI runners GITHUB_ACTIONS=true,
+	// GITHUB_BASE_REF=main, and CI=true are all set, which would make
+	// SetDescribeAffectedFlagValueInCliArgs auto-detect a base from the CI
+	// provider and populate Ref/HeadSHAOverride/CIEventType — breaking the
+	// "empty by default" assertions below. Clear the relevant env vars and
+	// reset viper so `isCIEnabledForDescribeAffected` reads only the explicit
+	// per-case config passed into the helper.
+	viper.Reset()
+	t.Cleanup(viper.Reset)
+	for _, k := range []string{"ATMOS_CI", "CI", "GITHUB_ACTIONS", "GITHUB_BASE_REF", "GITHUB_EVENT_NAME", "GITHUB_EVENT_PATH"} {
+		t.Setenv(k, "")
+	}
 
 	// Initialize test cases
 	tests := []struct {
@@ -180,4 +197,82 @@ func TestDescribeAffectedCmd_Error(t *testing.T) {
 
 	err := describeAffectedCmd.RunE(describeAffectedCmd, []string{"--invalid-flag"})
 	assert.Error(t, err, "describe affected command should return an error when called with invalid flags")
+}
+
+// TestDescribeAffectedCmd_RepoPathConflictHints verifies that supplying both
+// --repo-path and --base returns ErrRepoPathConflict wrapped with actionable
+// hints explaining the mutually exclusive flag groups. Covers the
+// errUtils.Build(...).WithHint(...).Err() branch in ParseDescribeAffectedCliArgs.
+func TestDescribeAffectedCmd_RepoPathConflictHints(t *testing.T) {
+	_ = NewTestKit(t)
+
+	// Reset viper and clear ambient CI env so the validator sees only the
+	// flags we set below. Without this, viper-bound CI state from an earlier
+	// test (or the host runner) could cause ParseDescribeAffectedCliArgs to
+	// take a different error branch before reaching the conflict validator.
+	viper.Reset()
+	t.Cleanup(viper.Reset)
+	for _, k := range []string{"ATMOS_CI", "CI", "GITHUB_ACTIONS", "GITHUB_BASE_REF", "GITHUB_EVENT_NAME", "GITHUB_EVENT_PATH", "ATMOS_IDENTITY", "IDENTITY"} {
+		t.Setenv(k, "")
+	}
+
+	stacksPath := "../tests/fixtures/scenarios/basic"
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
+	t.Setenv("ATMOS_BASE_PATH", stacksPath)
+	viper.Set("identity", "false")
+
+	// Set both --repo-path and --base on the command. These flag values
+	// leak across tests via the shared describeAffectedCmd singleton, so we
+	// reset them on cleanup to keep neighbors deterministic.
+	//
+	// pflag.Flag.Set() always stamps Changed=true — including the cleanup
+	// Set("") calls below — so after resetting the value we also clear the
+	// Changed bit directly. Without this, later tests calling
+	// SetDescribeAffectedFlagValueInCliArgs (which gates reads on
+	// flags.Changed(k) at internal/exec/describe_affected.go:247) would see
+	// these flags as "user-provided empty strings" and overwrite their
+	// describe struct fields with "". Writing flag.Changed directly is the
+	// established pflag test-cleanup idiom.
+	require.NoError(t, describeAffectedCmd.PersistentFlags().Set("repo-path", "/tmp/some-clone"))
+	require.NoError(t, describeAffectedCmd.PersistentFlags().Set("base", "main"))
+	t.Cleanup(func() {
+		_ = describeAffectedCmd.PersistentFlags().Set("repo-path", "")
+		_ = describeAffectedCmd.PersistentFlags().Set("base", "")
+		if f := describeAffectedCmd.PersistentFlags().Lookup("repo-path"); f != nil {
+			f.Changed = false
+		}
+		if f := describeAffectedCmd.PersistentFlags().Lookup("base"); f != nil {
+			f.Changed = false
+		}
+	})
+
+	err := describeAffectedCmd.RunE(describeAffectedCmd, []string{})
+
+	require.Error(t, err, "--repo-path + --base should return ErrRepoPathConflict")
+	assert.True(t,
+		stderrors.Is(err, exec.ErrRepoPathConflict),
+		"errors.Is must recognize the wrapped error as ErrRepoPathConflict; got %v", err)
+
+	// Hints are attached via cockroachdb/errors.WithHint — use the package's
+	// helper to extract them rather than substring-matching err.Error().
+	hints := cockroachErrors.GetAllHints(err)
+	require.GreaterOrEqual(t, len(hints), 2,
+		"error builder must attach at least two hints (flag-group exclusivity + which-flag-to-use guidance)")
+
+	// Both hints explain the mutual exclusivity; each should mention
+	// --repo-path so users understand which flag group they violated.
+	// Match independently so future wording tweaks don't break the test.
+	var sawExclusivityHint, sawGuidanceHint bool
+	for _, h := range hints {
+		if assert.NotEmpty(t, h) {
+			if strings.Contains(h, "--repo-path") && strings.Contains(h, "--base") {
+				sawExclusivityHint = true
+			}
+			if strings.Contains(h, "To compare") || strings.Contains(h, "without --repo-path") {
+				sawGuidanceHint = true
+			}
+		}
+	}
+	assert.True(t, sawExclusivityHint, "expected a hint listing both --repo-path and --base to name the conflicting flag groups")
+	assert.True(t, sawGuidanceHint, "expected a hint guiding the user toward the right flag for their intent")
 }
