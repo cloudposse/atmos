@@ -1,0 +1,110 @@
+---
+title: atmos pro install
+sidebar_label: install
+sidebar_class_name: command
+id: install
+description: Use this command to scaffold Atmos Pro workflows, auth profiles, and configuration into your repository.
+---
+
+import Screengrab from "@site/src/components/Screengrab";
+import Intro from '@site/src/components/Intro'
+import Experimental from '@site/src/components/Experimental'
+
+<Intro>
+Use this command to scaffold [Atmos Pro](https://atmos-pro.com) workflows, auth profiles, and drop-in configuration
+into your repository. One command generates everything needed to connect your repository to Atmos Pro's CI/CD
+orchestration platform.
+</Intro>
+
+<Experimental />
+
+<Screengrab title="atmos pro install" slug="atmos-pro-install" />
+
+## Usage
+
+```shell
+atmos pro install [flags]
+```
+
+## Description
+
+The `atmos pro install` command generates the complete set of files needed to integrate your repository with Atmos Pro:
+
+- **Root configuration** (`atmos.yaml`) created if missing, as an anchor for drop-in configs
+- **GitHub Actions workflows** for terraform plan, apply, affected stacks detection, and instance listing
+- **Authentication profiles** with GitHub OIDC for separate plan (read-only) and apply (admin) roles
+- **Stack mixin** that configures Atmos Pro workflow triggers for PRs, merges, and drift detection
+- **Drop-in configuration** (`.atmos.d/`) that enables native CI/CD support and Atmos Pro API settings
+
+The command respects your configured `stacks.base_path` from `atmos.yaml` when placing the stack mixin. If no `atmos.yaml` exists, a minimal one is created.
+
+:::tip
+Run `atmos pro install --dry-run` to preview what files would be created without writing anything.
+:::
+
+## Examples
+
+```shell
+# Interactive installation with confirmation prompts
+atmos pro install
+
+# Preview what would be created
+atmos pro install --dry-run
+
+# Skip confirmation prompts
+atmos pro install --yes
+
+# Overwrite existing files without prompting
+atmos pro install --force
+```
+
+## Flags
+
+<dl>
+  <dt>`--yes` <em>(alias `-y`)</em></dt>
+  <dd>Skip confirmation prompts and proceed with installation.</dd>
+
+  <dt>`--force` <em>(alias `-f`)</em></dt>
+  <dd>Force overwrite of existing files without prompting.</dd>
+
+  <dt>`--dry-run`</dt>
+  <dd>Simulate the installation and show what files would be created, updated, or skipped — without writing anything to disk.</dd>
+</dl>
+
+## Files Created
+
+### GitHub Actions Workflows
+
+| File | Purpose |
+|------|---------|
+| `.github/workflows/atmos-pro-terraform-plan.yaml` | Runs `terraform plan` for affected components |
+| `.github/workflows/atmos-pro-terraform-apply.yaml` | Runs `terraform deploy` on merge |
+| `.github/workflows/atmos-pro-affected-stacks.yaml` | Detects affected stacks on pull requests |
+| `.github/workflows/atmos-pro-list-instances.yaml` | Syncs instance list to Atmos Pro |
+
+### Auth Profiles
+
+| File | Purpose |
+|------|---------|
+| `profiles/github-plan/atmos.yaml` | GitHub OIDC with read-only planner roles |
+| `profiles/github-apply/atmos.yaml` | GitHub OIDC with full terraform roles |
+| `profiles/README.md` | Guide for adding AWS account identities |
+
+### Stack Configuration
+
+| File | Purpose |
+|------|---------|
+| `<stacks>/mixins/atmos-pro.yaml` | Workflow trigger settings for PRs, merges, and drift |
+
+### Root Configuration
+
+| File | Purpose |
+|------|---------|
+| `atmos.yaml` | Minimal Atmos configuration (created only if missing) |
+
+### Drop-in Configuration
+
+| File | Purpose |
+|------|---------|
+| `.atmos.d/ci.yaml` | Enables native CI/CD support |
+| `.atmos.d/atmos-pro.yaml` | Atmos Pro API settings |

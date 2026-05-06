@@ -161,6 +161,16 @@ func (b *StandardOptionsBuilder) WithDryRun() *StandardOptionsBuilder {
 	return b
 }
 
+// WithForce adds the force flag.
+// Maps to StandardOptions.Force field.
+func (b *StandardOptionsBuilder) WithForce() *StandardOptionsBuilder {
+	defer perf.Track(nil, "flags.StandardOptionsBuilder.WithForce")()
+
+	b.options = append(b.options, WithBoolFlag("force", "", false, "Force operation without confirmation"))
+	b.options = append(b.options, WithEnvVars("force", "ATMOS_FORCE"))
+	return b
+}
+
 // WithQuery adds the query flag for JQ/JMESPath queries.
 // Maps to StandardOptions.Query field.
 func (b *StandardOptionsBuilder) WithQuery() *StandardOptionsBuilder {

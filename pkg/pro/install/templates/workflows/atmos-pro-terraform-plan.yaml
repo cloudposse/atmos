@@ -1,0 +1,57 @@
+# Atmos Pro - Terraform Plan workflow.
+# Dispatched by Atmos Pro when a pull request is opened or updated.
+#
+# Prerequisites:
+#   - Set the ATMOS_PRO_WORKSPACE_ID repository variable
+#   - Set the ATMOS_VERSION repository variable
+#   - Configure profiles/github-plan/atmos.yaml with your AWS account identities
+#
+# See: https://atmos.tools/pro/
+name: "Atmos Pro - Terraform Plan"
+
+on:
+  workflow_dispatch:
+    inputs:
+      sha:
+        description: "Commit SHA"
+        type: string
+      component:
+        description: "Atmos component"
+        required: true
+        type: string
+      stack:
+        description: "Atmos stack"
+        required: true
+        type: string
+
+concurrency:
+  group: "${{ inputs.stack }}-${{ inputs.component }}"
+  cancel-in-progress: true
+
+permissions:
+  id-token: write
+  contents: read
+  checks: write
+  statuses: write
+
+jobs:
+  atmos-plan:
+    name: ${{ inputs.component }}-${{ inputs.stack }}
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/cloudposse/atmos:${{ vars.ATMOS_VERSION }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.sha || github.sha }}
+
+      - name: Plan Atmos Component
+        env:
+          ATMOS_PRO_WORKSPACE_ID: ${{ vars.ATMOS_PRO_WORKSPACE_ID }}
+          ATMOS_PROFILE: github-plan
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_SHA: ${{ inputs.sha }}
+          COMPONENT: ${{ inputs.component }}
+          STACK: ${{ inputs.stack }}
+        run: atmos terraform plan "${COMPONENT}" -s "${STACK}" --upload-status

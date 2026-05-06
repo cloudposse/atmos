@@ -1,0 +1,10 @@
+# Atmos Pro configuration.
+# This configuration is automatically loaded from .atmos.d/ at startup.
+#
+# Uncomment and set your workspace ID, or set the ATMOS_PRO_WORKSPACE_ID
+# environment variable as a GitHub repository variable.
+#
+# See: https://atmos.tools/cli/configuration/settings/pro#configuration-reference
+settings:
+  pro:
+    # workspace_id: !env ATMOS_PRO_WORKSPACE_ID

@@ -219,6 +219,7 @@ func (p *StandardParser) buildStandardOptions(parsedConfig *ParsedConfig, compon
 		ProcessYamlFunctions:        GetBool(parsedConfig.Flags, "process-functions"),
 		Skip:                        GetStringSlice(parsedConfig.Flags, "skip"),
 		DryRun:                      GetBool(parsedConfig.Flags, "dry-run"),
+		Force:                       GetBool(parsedConfig.Flags, "force"),
 		Query:                       GetString(parsedConfig.Flags, "query"),
 		Provenance:                  GetBool(parsedConfig.Flags, "provenance"),
 		Abstract:                    GetBool(parsedConfig.Flags, "abstract"),
