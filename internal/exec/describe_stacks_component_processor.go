@@ -503,8 +503,13 @@ func resolveStackName(
 		return stackManifestName, schema.Context{}, nil
 
 	case atmosConfig.Stacks.NameTemplate != "":
+		// Honor the global `templates.settings.ignore_missing_template_values`
+		// flag (GitHub #2345). Hardcoding `false` here bypassed the user's
+		// opt-in and surfaced "map has no entry for key" errors instead of
+		// the documented zero-substitution behavior.
 		name, err := ProcessTmpl(atmosConfig, "describe-stacks-name-template",
-			atmosConfig.Stacks.NameTemplate, info.ComponentSection, false)
+			atmosConfig.Stacks.NameTemplate, info.ComponentSection,
+			atmosConfig.Templates.Settings.IgnoreMissingTemplateValues)
 		if err != nil {
 			return "", schema.Context{}, err
 		}

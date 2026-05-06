@@ -194,7 +194,8 @@ func ExecuteAwsEksUpdateKubeconfig(kubeconfigContext schema.AwsEksUpdateKubeconf
 			if atmosConfig.Components.Helmfile.ClusterName != "" {
 				clusterName = atmosConfig.Components.Helmfile.ClusterName
 			} else if atmosConfig.Components.Helmfile.ClusterNameTemplate != "" {
-				clusterName, err = ProcessTmpl(&atmosConfig, "cluster_name_template", atmosConfig.Components.Helmfile.ClusterNameTemplate, configAndStacksInfo.ComponentSection, false)
+				// Honor templates.settings.ignore_missing_template_values (GitHub #2345).
+				clusterName, err = ProcessTmpl(&atmosConfig, "cluster_name_template", atmosConfig.Components.Helmfile.ClusterNameTemplate, configAndStacksInfo.ComponentSection, atmosConfig.Templates.Settings.IgnoreMissingTemplateValues)
 				if err != nil {
 					return fmt.Errorf("failed to process cluster_name_template: %w", err)
 				}

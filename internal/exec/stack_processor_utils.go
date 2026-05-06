@@ -1,6 +1,8 @@
 package exec
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	stderrors "errors"
 	"fmt"
@@ -28,6 +30,38 @@ import (
 // Mutex to serialize writes to importsConfig maps during parallel import processing.
 var importsConfigLock = &sync.Mutex{}
 
+// extractLocalsCache memoizes extractLocalsFromRawYAML results across calls
+// for the lifetime of a single Atmos command invocation. The same stack file
+// can be visited many times during `list stacks` / `describe stacks` (once
+// per top-level walk plus once per file that imports it), and re-running the
+// resolver -- which may invoke `!terraform.state`, `!env`, `!exec`, or other
+// YAML functions inside `locals:` -- on every visit is the perf bug
+// reported in GitHub issue #2344. Reporter measured 1362 state-getter calls
+// for 7 refs across 20 stacks (~195x per ref) on v1.216.0.
+//
+// Cache keys are `(absFilePath || \x00 || sha256(yamlContent))` so an in-process
+// edit of the file invalidates the entry. The cache is process-local: each
+// `atmos` invocation starts a fresh process, so there is no cross-command
+// staleness risk.
+//
+// The entry stores either the result or the error so cache misses don't
+// masquerade as no-ops. We deliberately memoize errors as well as successes
+// -- a misconfigured locals block would otherwise re-error N times for the
+// same content.
+type extractLocalsCacheEntry struct {
+	result *extractLocalsResult
+	err    error
+}
+
+var extractLocalsCache sync.Map // map[string]extractLocalsCacheEntry
+
+// ClearExtractLocalsCache resets the per-file locals cache. Test-only.
+func ClearExtractLocalsCache() {
+	defer perf.Track(nil, "exec.ClearExtractLocalsCache")()
+
+	extractLocalsCache = sync.Map{}
+}
+
 // extractLocalsResult holds the results of parsing raw YAML and extracting locals.
 type extractLocalsResult struct {
 	locals    map[string]any // Resolved locals.
@@ -37,7 +71,35 @@ type extractLocalsResult struct {
 	hasLocals bool           // Whether any locals section exists in the file (including empty locals).
 }
 
-// extractLocalsFromRawYAML parses raw YAML content and extracts/resolves file-scoped locals.
+// extractLocalsFromRawYAML is the cached entry point for parsing raw YAML
+// content and extracting/resolving file-scoped locals. It memoizes
+// uncachedExtractLocalsFromRawYAML results per `(absFilePath, contentHash)`
+// for the lifetime of a single Atmos command (see extractLocalsCache for
+// rationale; regression: GitHub #2344).
+func extractLocalsFromRawYAML(atmosConfig *schema.AtmosConfiguration, yamlContent string, filePath string) (*extractLocalsResult, error) {
+	defer perf.Track(atmosConfig, "exec.extractLocalsFromRawYAML")()
+
+	abs, err := filepath.Abs(filePath)
+	if err != nil {
+		// Fall through to the uncached path if abs path can't be computed --
+		// caching by relative path would risk collisions across CWDs.
+		return uncachedExtractLocalsFromRawYAML(atmosConfig, yamlContent, filePath)
+	}
+
+	sum := sha256.Sum256([]byte(yamlContent))
+	cacheKey := abs + "\x00" + hex.EncodeToString(sum[:])
+
+	if cached, ok := extractLocalsCache.Load(cacheKey); ok {
+		entry := cached.(extractLocalsCacheEntry)
+		return entry.result, entry.err
+	}
+
+	result, resErr := uncachedExtractLocalsFromRawYAML(atmosConfig, yamlContent, filePath)
+	extractLocalsCache.Store(cacheKey, extractLocalsCacheEntry{result: result, err: resErr})
+	return result, resErr
+}
+
+// uncachedExtractLocalsFromRawYAML parses raw YAML content and extracts/resolves file-scoped locals.
 // This function is called BEFORE template processing to make locals available during template execution.
 // The raw YAML may contain unresolved templates like {{ .locals.X }}, which YAML treats as strings.
 // The locals resolver handles resolving self-references between locals.
@@ -49,8 +111,8 @@ type extractLocalsResult struct {
 //
 // Section-specific locals inherit from and can override global locals.
 // All resolved locals are flattened into a single map for template processing.
-func extractLocalsFromRawYAML(atmosConfig *schema.AtmosConfiguration, yamlContent string, filePath string) (*extractLocalsResult, error) {
-	defer perf.Track(atmosConfig, "exec.extractLocalsFromRawYAML")()
+func uncachedExtractLocalsFromRawYAML(atmosConfig *schema.AtmosConfiguration, yamlContent string, filePath string) (*extractLocalsResult, error) {
+	defer perf.Track(atmosConfig, "exec.uncachedExtractLocalsFromRawYAML")()
 
 	// Parse raw YAML to extract the structure.
 	// YAML treats template expressions like {{ .locals.X }} as plain strings,
@@ -244,13 +306,38 @@ func processTemplatesInSection(atmosConfig *schema.AtmosConfiguration, section m
 // For template files (.tmpl), YAML parse errors are logged and the function continues
 // without locals, since template files may contain Go template syntax that isn't valid YAML
 // until after template processing.
+
+// localsContextResult is returned by extractAndAddLocalsToContext to tell
+// the caller which sections (locals, vars, settings, env) were set on the
+// context BY THE CURRENT FILE -- as opposed to inherited from the parent.
+//
+// This distinction matters because processYAMLConfigFileWithContextInternal
+// is called recursively for imports, and `context` carries the leaf file's
+// resolved values down through the import chain. Without these flags, the
+// downstream logic that overwrites stackConfigMap with context values
+// could not tell whose values it was applying, and the parent's vars would
+// silently clobber the import's vars (regression: GitHub #2343, #2374).
+type localsContextResult struct {
+	// SetLocals indicates the current file set context["locals"] (always
+	// false unless the current file had a locals: section, since we
+	// explicitly delete the inherited locals at function entry).
+	SetLocals bool
+	// SetVars indicates the current file set context["vars"] from its
+	// own resolved-locals processing path.
+	SetVars bool
+	// SetSettings indicates the current file set context["settings"].
+	SetSettings bool
+	// SetEnv indicates the current file set context["env"].
+	SetEnv bool
+}
+
 func extractAndAddLocalsToContext(
 	atmosConfig *schema.AtmosConfiguration,
 	yamlContent string,
 	filePath string,
 	relativeFilePath string,
 	context map[string]any,
-) (map[string]any, error) {
+) (map[string]any, localsContextResult, error) {
 	defer perf.Track(atmosConfig, "exec.extractAndAddLocalsToContext")()
 
 	// Enforce file-scoped locals: clear any inherited locals from parent context.
@@ -260,6 +347,8 @@ func extractAndAddLocalsToContext(
 		delete(context, cfg.LocalsSectionName)
 	}
 
+	var setBy localsContextResult
+
 	extractResult, localsErr := extractLocalsFromRawYAML(atmosConfig, yamlContent, filePath)
 	if localsErr != nil {
 		// For template files (.tmpl), YAML parse errors are expected since the raw content
@@ -267,12 +356,12 @@ func extractAndAddLocalsToContext(
 		// Log the error and continue without locals - template processing will happen next.
 		if strings.HasSuffix(filePath, u.TemplateExtension) {
 			log.Trace("Skipping locals extraction for template file with invalid YAML", "file", relativeFilePath, "error", localsErr)
-			return context, nil
+			return context, setBy, nil
 		}
 		// Circular dependencies in locals are a stack misconfiguration error.
 		// Return a helpful error with hints on how to fix it.
 		if stderrors.Is(localsErr, errUtils.ErrLocalsCircularDep) {
-			return context, errUtils.Build(errUtils.ErrLocalsCircularDep).
+			return context, setBy, errUtils.Build(errUtils.ErrLocalsCircularDep).
 				WithCause(localsErr).
 				WithContext("file", relativeFilePath).
 				WithHintf("Fix the circular dependency in '%s'", relativeFilePath).
@@ -281,7 +370,7 @@ func extractAndAddLocalsToContext(
 				WithExitCode(1).
 				Err()
 		}
-		return context, localsErr
+		return context, setBy, localsErr
 	}
 
 	// Only modify context if a locals section exists in the file.
@@ -290,7 +379,7 @@ func extractAndAddLocalsToContext(
 	// We check hasLocals instead of len(locals) to support empty locals: {} sections,
 	// which should still enable template context.
 	if !extractResult.hasLocals {
-		return context, nil
+		return context, setBy, nil
 	}
 
 	// Initialize context if nil.
@@ -301,6 +390,7 @@ func extractAndAddLocalsToContext(
 	// Add resolved locals to the template context first.
 	// This allows settings/vars/env templates to reference locals.
 	context[cfg.LocalsSectionName] = extractResult.locals
+	setBy.SetLocals = true
 	log.Trace("Extracted and resolved locals", "file", relativeFilePath, "count", len(extractResult.locals))
 
 	// Process templates in settings, vars, env sections using the resolved locals.
@@ -334,6 +424,7 @@ func extractAndAddLocalsToContext(
 		} else {
 			context[cfg.SettingsSectionName] = processedSettings
 		}
+		setBy.SetSettings = true
 	}
 	if extractResult.vars != nil {
 		// For vars, we need locals, external context, and processed settings available.
@@ -352,6 +443,7 @@ func extractAndAddLocalsToContext(
 		} else {
 			context[cfg.VarsSectionName] = processedVars
 		}
+		setBy.SetVars = true
 	}
 	if extractResult.env != nil {
 		// For env, we need locals, external context, processed settings, and processed vars.
@@ -373,9 +465,10 @@ func extractAndAddLocalsToContext(
 		} else {
 			context[cfg.EnvSectionName] = processedEnv
 		}
+		setBy.SetEnv = true
 	}
 
-	return context, nil
+	return context, setBy, nil
 }
 
 // stackProcessResult holds the result of processing a single stack in parallel.
@@ -791,9 +884,16 @@ func processYAMLConfigFileWithContextInternal(
 	//       myapp:
 	//         vars:
 	//           name: "{{ .locals.name_prefix }}"
+	// localsSetByThisFile records which sections were populated on `context`
+	// by THIS file's locals processing (not inherited from a parent
+	// recursion frame). It gates the stackConfigMap overwrite below so that
+	// when this function recurses for an imported file, the parent's
+	// `context.vars` doesn't silently clobber the import's own vars
+	// (regression: GitHub #2343, #2374).
+	var localsSetByThisFile localsContextResult
 	if !skipTemplatesProcessingInImports {
 		var localsErr error
-		context, localsErr = extractAndAddLocalsToContext(atmosConfig, stackYamlConfig, filePath, relativeFilePath, context)
+		context, localsSetByThisFile, localsErr = extractAndAddLocalsToContext(atmosConfig, stackYamlConfig, filePath, relativeFilePath, context)
 		if localsErr != nil {
 			if mergeContext != nil {
 				return nil, nil, nil, nil, nil, nil, nil, nil, mergeContext.FormatError(localsErr, fmt.Sprintf("stack manifest '%s'", relativeFilePath))
@@ -858,17 +958,37 @@ func processYAMLConfigFileWithContextInternal(
 	// (and thus stackConfigMap) may still have unresolved template expressions.
 	// By updating stackConfigMap with resolved values, we ensure templates like {{ .locals.X }}
 	// and {{ .vars.X }} can be resolved correctly.
-	if resolvedLocals, ok := context[cfg.LocalsSectionName].(map[string]any); ok && len(resolvedLocals) > 0 {
-		stackConfigMap[cfg.LocalsSectionName] = resolvedLocals
+	//
+	// CRITICAL: Each overwrite is gated on `localsSetByThisFile.Set*` so that
+	// when this function recurses for an imported file, we DO NOT clobber the
+	// import's own vars/settings/env with values inherited from the parent
+	// recursion frame's `context`. The parent's resolved values must be
+	// available for template processing inside the import (line 814 above)
+	// but must not propagate into the import's stackConfigMap, because the
+	// downstream deep-merge (line ~1333) would then incorrectly overwrite
+	// the import's vars (the very vars callers expect to inherit) with the
+	// leaf file's vars. This was the root cause of GitHub #2343 and #2374:
+	// adding any `locals:` block to a leaf file made identifying vars/
+	// settings defined in `_defaults.yaml` invisible downstream.
+	if localsSetByThisFile.SetLocals {
+		if resolvedLocals, ok := context[cfg.LocalsSectionName].(map[string]any); ok && len(resolvedLocals) > 0 {
+			stackConfigMap[cfg.LocalsSectionName] = resolvedLocals
+		}
 	}
-	if resolvedVars, ok := context[cfg.VarsSectionName].(map[string]any); ok && len(resolvedVars) > 0 {
-		stackConfigMap[cfg.VarsSectionName] = resolvedVars
+	if localsSetByThisFile.SetVars {
+		if resolvedVars, ok := context[cfg.VarsSectionName].(map[string]any); ok && len(resolvedVars) > 0 {
+			stackConfigMap[cfg.VarsSectionName] = resolvedVars
+		}
 	}
-	if resolvedSettings, ok := context[cfg.SettingsSectionName].(map[string]any); ok && len(resolvedSettings) > 0 {
-		stackConfigMap[cfg.SettingsSectionName] = resolvedSettings
+	if localsSetByThisFile.SetSettings {
+		if resolvedSettings, ok := context[cfg.SettingsSectionName].(map[string]any); ok && len(resolvedSettings) > 0 {
+			stackConfigMap[cfg.SettingsSectionName] = resolvedSettings
+		}
 	}
-	if resolvedEnv, ok := context[cfg.EnvSectionName].(map[string]any); ok && len(resolvedEnv) > 0 {
-		stackConfigMap[cfg.EnvSectionName] = resolvedEnv
+	if localsSetByThisFile.SetEnv {
+		if resolvedEnv, ok := context[cfg.EnvSectionName].(map[string]any); ok && len(resolvedEnv) > 0 {
+			stackConfigMap[cfg.EnvSectionName] = resolvedEnv
+		}
 	}
 
 	// Enable provenance tracking in merge context if tracking is enabled

@@ -208,6 +208,65 @@ func TestResolveStackName_NameTemplateError(t *testing.T) {
 	require.Error(t, err)
 }
 
+// TestResolveStackName_NameTemplate_HonorsIgnoreMissingTemplateValues is a
+// regression test for GitHub issue #2345. When the user sets the global
+// `templates.settings.ignore_missing_template_values: true` flag, the
+// `describe-stacks-name-template` site must honor it -- previously it
+// passed a hardcoded `false`, causing `map has no entry for key "..."`
+// errors despite the user's opt-in.
+func TestResolveStackName_NameTemplate_HonorsIgnoreMissingTemplateValues(t *testing.T) {
+	// name_template references vars.namespace which is missing from the
+	// component section. With the flag set to true, the missing key should
+	// render as empty (no error). With false, it should error out.
+	template := "{{ .vars.namespace }}-prod"
+
+	t.Run("flag=true must not error", func(t *testing.T) {
+		ac := &schema.AtmosConfiguration{
+			Stacks: schema.Stacks{NameTemplate: template},
+			Templates: schema.Templates{Settings: schema.TemplatesSettings{
+				IgnoreMissingTemplateValues: true,
+			}},
+		}
+		info := schema.ConfigAndStacksInfo{
+			ComponentSection: map[string]any{
+				"vars": map[string]any{
+					// namespace deliberately missing.
+					"stage": "prod",
+				},
+			},
+		}
+
+		name, _, err := resolveStackName(ac, "stacks/prod.yaml", "", info, nil)
+
+		// The contract for ignore_missing_template_values=true is
+		// `missingkey=default` (Go template stdlib) which renders
+		// missing keys as the literal "<no value>". The contract is
+		// "don't error"; downstream code is responsible for treating
+		// "<no value>" as a sentinel (e.g. deriveStackNameFromTemplate
+		// rejects it; pattern-based fallback kicks in).
+		require.NoError(t, err, "with ignore_missing_template_values=true the missing key must not error")
+		assert.NotEmpty(t, name, "rendered name must be non-empty even with missing keys")
+	})
+
+	t.Run("flag=false errors as before", func(t *testing.T) {
+		ac := &schema.AtmosConfiguration{
+			Stacks: schema.Stacks{NameTemplate: template},
+			Templates: schema.Templates{Settings: schema.TemplatesSettings{
+				IgnoreMissingTemplateValues: false,
+			}},
+		}
+		info := schema.ConfigAndStacksInfo{
+			ComponentSection: map[string]any{
+				"vars": map[string]any{"stage": "prod"},
+			},
+		}
+
+		_, _, err := resolveStackName(ac, "stacks/prod.yaml", "", info, nil)
+		require.Error(t, err, "with the flag false, missing keys still error -- contract unchanged")
+		assert.Contains(t, err.Error(), "namespace")
+	})
+}
+
 func TestResolveStackName_PatternValidationFallback(t *testing.T) {
 	// When the pattern doesn't match the filename, it falls back to the filename.
 	ac := &schema.AtmosConfiguration{
