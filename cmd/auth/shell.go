@@ -107,7 +107,7 @@ func executeAuthShellCommand(cmd *cobra.Command, args []string) error {
 	// Get identity from flag or use default.
 	identityName, err := resolveIdentityNameForShell(cmd, v, authManager)
 	if err != nil {
-		return err
+		return maybeOfferProfileFallbackOnAuthConfigError(context.Background(), authManager, err)
 	}
 
 	// Authenticate and prepare shell environment.

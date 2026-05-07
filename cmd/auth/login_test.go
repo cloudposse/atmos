@@ -18,10 +18,11 @@ func TestAuthenticateIdentity(t *testing.T) {
 	defer ctrl.Finish()
 
 	tests := []struct {
-		name          string
-		setupMock     func(*authTypes.MockAuthManager)
-		expectedError error
-		expectedIdent string
+		name             string
+		setupMock        func(*authTypes.MockAuthManager)
+		expectedError    error
+		expectedIdent    string
+		expectedFallback bool
 	}{
 		{
 			name: "successful authentication with default identity",
@@ -44,11 +45,20 @@ func TestAuthenticateIdentity(t *testing.T) {
 			expectedError: errUtils.ErrAuthenticationFailed,
 		},
 		{
-			name: "no default identity",
+			name: "no default identity triggers provider fallback",
 			setupMock: func(m *authTypes.MockAuthManager) {
 				m.EXPECT().GetDefaultIdentity(false).Return("", errUtils.ErrNoDefaultIdentity)
 			},
-			expectedError: errUtils.ErrDefaultIdentity,
+			expectedError:    nil,
+			expectedFallback: true,
+		},
+		{
+			name: "no identities available triggers provider fallback",
+			setupMock: func(m *authTypes.MockAuthManager) {
+				m.EXPECT().GetDefaultIdentity(false).Return("", errUtils.ErrNoIdentitiesAvailable)
+			},
+			expectedError:    nil,
+			expectedFallback: true,
 		},
 	}
 
@@ -65,13 +75,16 @@ func TestAuthenticateIdentity(t *testing.T) {
 			ctx := context.Background()
 
 			// We need to cast to the interface the function expects.
-			whoami, err := authenticateIdentity(ctx, cmd, auth.AuthManager(mockAuthManager))
+			whoami, needsFallback, err := authenticateIdentity(ctx, cmd, auth.AuthManager(mockAuthManager))
 
 			if tt.expectedError != nil {
 				assert.Error(t, err)
 				assert.ErrorIs(t, err, tt.expectedError)
-			} else {
-				assert.NoError(t, err)
+				return
+			}
+			assert.NoError(t, err)
+			assert.Equal(t, tt.expectedFallback, needsFallback)
+			if !tt.expectedFallback {
 				assert.NotNil(t, whoami)
 				assert.Equal(t, tt.expectedIdent, whoami.Identity)
 			}
@@ -115,7 +128,7 @@ func TestAuthenticateIdentity_WithForceSelect(t *testing.T) {
 	}, nil)
 
 	ctx := context.Background()
-	whoami, err := authenticateIdentity(ctx, cmd, auth.AuthManager(mockAuthManager))
+	whoami, _, err := authenticateIdentity(ctx, cmd, auth.AuthManager(mockAuthManager))
 
 	assert.NoError(t, err)
 	assert.NotNil(t, whoami)

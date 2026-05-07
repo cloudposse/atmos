@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -11,6 +12,8 @@ import (
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/cloudposse/atmos/pkg/env"
 )
 
 func TestOutputEnvAsExport(t *testing.T) {
@@ -255,11 +258,13 @@ func TestAuthEnvCommand_Structure(t *testing.T) {
 }
 
 func TestSupportedFormats(t *testing.T) {
-	// Verify the supported formats constant.
+	// Verify the supported formats constant includes all formats supported by env.Output().
 	assert.Contains(t, SupportedFormats, "json")
 	assert.Contains(t, SupportedFormats, "bash")
 	assert.Contains(t, SupportedFormats, "dotenv")
-	assert.Len(t, SupportedFormats, 3)
+	assert.Contains(t, SupportedFormats, "env")
+	assert.Contains(t, SupportedFormats, "github")
+	assert.Len(t, SupportedFormats, 5)
 }
 
 func TestFormatFlagName(t *testing.T) {
@@ -318,5 +323,65 @@ func TestBuildConfigAndStacksInfo_WithEnvCommand(t *testing.T) {
 	// This shouldn't panic.
 	assert.NotPanics(t, func() {
 		_ = BuildConfigAndStacksInfo(cmd, v)
+	})
+}
+
+// TestGitHubEnvAutoDetect verifies the GitHub Actions format reads $GITHUB_ENV
+// when no --output-file is provided, and produces correct heredoc framing for
+// multiline values. Ported from main's auth_env_test.go (PR #1984).
+func TestGitHubEnvAutoDetect(t *testing.T) {
+	t.Run("auto-detects GITHUB_ENV and appends", func(t *testing.T) {
+		tempDir := t.TempDir()
+		githubEnvFile := filepath.Join(tempDir, "github_env")
+
+		// Write initial content to simulate existing GitHub Actions env vars.
+		err := os.WriteFile(githubEnvFile, []byte("EXISTING=value\n"), 0o644)
+		require.NoError(t, err)
+
+		// Set GITHUB_ENV environment variable.
+		t.Setenv("GITHUB_ENV", githubEnvFile)
+
+		envVars := map[string]string{
+			"NEW_VAR": "new-value",
+		}
+
+		// Simulate what the command does when --format=github and no --output-file.
+		output := os.Getenv("GITHUB_ENV")
+		require.NotEmpty(t, output, "GITHUB_ENV should be set")
+
+		// Use unified env.Output() which handles format and file writing.
+		err = env.Output(envVars, "github", output, env.WithFileMode(env.CredentialFileMode))
+		require.NoError(t, err)
+
+		content, err := os.ReadFile(githubEnvFile)
+		require.NoError(t, err)
+
+		// Verify it appended (not overwrote) and used correct format.
+		assert.Equal(t, "EXISTING=value\nNEW_VAR=new-value\n", string(content))
+	})
+
+	t.Run("auto-detect with multiline values", func(t *testing.T) {
+		tempDir := t.TempDir()
+		githubEnvFile := filepath.Join(tempDir, "github_env")
+
+		t.Setenv("GITHUB_ENV", githubEnvFile)
+
+		envVars := map[string]string{
+			"CERT": "-----BEGIN CERT-----\ndata\n-----END CERT-----",
+		}
+
+		output := os.Getenv("GITHUB_ENV")
+
+		// Use unified env.Output() which handles format and file writing.
+		err := env.Output(envVars, "github", output, env.WithFileMode(env.CredentialFileMode))
+		require.NoError(t, err)
+
+		content, err := os.ReadFile(githubEnvFile)
+		require.NoError(t, err)
+
+		// Verify heredoc format for multiline.
+		assert.Contains(t, string(content), "CERT<<ATMOS_EOF_CERT")
+		assert.Contains(t, string(content), "-----BEGIN CERT-----\ndata\n-----END CERT-----\n")
+		assert.Contains(t, string(content), "ATMOS_EOF_CERT\n")
 	})
 }

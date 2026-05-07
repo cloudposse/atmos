@@ -112,15 +112,16 @@ func prepareAuthenticatedEnv(cmd *cobra.Command, v *viper.Viper) (map[string]str
 		return nil, fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrFailedToInitializeAuthManager, err)
 	}
 
-	// Get identity from flag or use default.
-	identityName, err := resolveIdentityNameForExec(cmd, v, authManager)
-	if err != nil {
-		return nil, err
-	}
-
 	// Try to use cached credentials first (passive check, no prompts).
 	// Only authenticate if cached credentials are not available or expired.
 	ctx := context.Background()
+
+	// Get identity from flag or use default.
+	identityName, err := resolveIdentityNameForExec(cmd, v, authManager)
+	if err != nil {
+		return nil, maybeOfferProfileFallbackOnAuthConfigError(ctx, authManager, err)
+	}
+
 	_, err = authManager.GetCachedCredentials(ctx, identityName)
 	if err != nil {
 		log.Debug("No valid cached credentials found, authenticating", "identity", identityName, "error", err)
