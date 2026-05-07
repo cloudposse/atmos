@@ -65,7 +65,7 @@ export default function File({ title, className, type, icon, size = '1x', childr
         <div className={className}>
             <div className="file">
                 <div className="tab">
-                    <h1><FontAwesomeIcon icon={selectedIcon} size={size} /><span>{title}</span></h1>
+                    <div className="file-title"><FontAwesomeIcon icon={selectedIcon} size={size} /><span>{title}</span></div>
                 </div>
                 <div className="viewport">{children}</div>
             </div>

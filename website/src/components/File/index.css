@@ -41,7 +41,7 @@
     transform-origin: bottom;
 }
 
-.file div.tab > h1 {
+.file div.tab > .file-title {
     font-size: 0.98em;
     line-height: 1.2em;
     margin-top: 5px;
@@ -54,11 +54,11 @@
     transform-style: preserve-3d;
     transform: perspective(0.6em) rotateX(-1deg);
 }
-.file div.tab > h1 svg.svg-inline--fa {
+.file div.tab > .file-title svg.svg-inline--fa {
     margin-right: 0.5em;
 }
 
-html[data-theme='dark'] .file div.tab > h1 {
+html[data-theme='dark'] .file div.tab > .file-title {
     color: var(--ifm-heading-color);
 }
 
