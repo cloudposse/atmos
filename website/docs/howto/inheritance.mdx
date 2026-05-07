@@ -48,7 +48,7 @@ The concept of inheritance in Atmos is implemented through deep merging. Deep me
 
 Base component vars (from `metadata.inherits`) sit between global-level vars and component-level vars — the current component's values always override inherited values.
 
-## What Gets Inherited
+### What Gets Inherited
 
 When a component inherits from a base component, the following sections are deep-merged:
 
@@ -79,7 +79,7 @@ stacks:
 ```
 :::
 
-## Single Inheritance
+### Single Inheritance
 
 <PillBox>Easy</PillBox>
 
@@ -118,7 +118,7 @@ classDiagram
       }
 ```
 
-### Single Inheritance Example
+#### Single Inheritance Example
 
 Let's say we want to provision two VPCs with different settings into the same AWS account.
 
@@ -248,7 +248,7 @@ As we can see, using the principles of **Component-Oriented Programming (COP)**,
 different settings, and provision them into the same (or different) environment (account/region) using the same Terraform code (which is
 environment-agnostic). And the configurations are extremely DRY and reusable.
 
-## Multiple Inheritance
+### Multiple Inheritance
 
 <PillBox>Advanced</PillBox>
 
@@ -322,7 +322,7 @@ All the base components/mixins referenced by `metadata.inherits` must be already
 statement or by explicitly defining them in the Stack configuration. The `metadata.inherits` statement does not imply that we are importing anything.
 :::
 
-### Multiple Inheritance Example
+#### Multiple Inheritance Example
 
 Here is a concrete example:
 
@@ -389,7 +389,7 @@ Inheritance: test/test-component-override-3 -> mixin/test-2 -> mixin/test-1 ->
 The `Inheritance` output shows the multiple inheritance steps that Atmos performed and deep-merged into the final configuration, including
 the variables which are sent to the Terraform component `test/test-component` that is being provisioned.
 
-### Multilevel Inheritance
+#### Multilevel Inheritance
 
 <PillBox>Advanced</PillBox>
 
@@ -433,7 +433,7 @@ classDiagram
       }
 ```
 
-### Hierarchical Inheritance
+#### Hierarchical Inheritance
 
 <PillBox>Advanced</PillBox>
 
@@ -555,7 +555,7 @@ For `ComponentG`:
 
 - And finally, `ComponentG` is processed, and it overrides `ComponentC`, `ComponentA` and `ComponentI`
 
-#### Hierarchical Inheritance Example
+##### Hierarchical Inheritance Example
 
 Let's consider the following configuration for Atmos components `base-component-1`, `base-component-2`, `derived-component-1`
 and `derived-component-2`:
