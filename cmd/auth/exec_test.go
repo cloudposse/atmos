@@ -138,3 +138,53 @@ func TestExecuteCommandWithEnv_WithValidCommand(t *testing.T) {
 	// "go version" command should succeed.
 	assert.NoError(t, err)
 }
+
+// TestAuthExec_ProfileFlagAppliedToConfig is a regression test for issue #1973
+// (`--profile` global flag not applied for `auth exec` and `auth shell` commands).
+//
+// Before the cmd/auth/* refactor, executeAuthExecCommandCore loaded the atmos
+// config from an empty schema.ConfigAndStacksInfo{} which silently dropped the
+// --profile flag. The new flow runs through BuildConfigAndStacksInfo(cmd, v)
+// which honours --profile, --base-path, --config and --config-path.
+//
+// This test asserts that the helper used by `auth exec` actually surfaces the
+// --profile flag value into the ConfigAndStacksInfo used to InitCliConfig.
+func TestAuthExec_ProfileFlagAppliedToConfig(t *testing.T) {
+	tests := []struct {
+		name             string
+		profiles         []string
+		expectedProfiles []string
+	}{
+		{
+			name:             "single profile via --profile flag",
+			profiles:         []string{"devops"},
+			expectedProfiles: []string{"devops"},
+		},
+		{
+			name:             "multiple profiles",
+			profiles:         []string{"devops", "platform"},
+			expectedProfiles: []string{"devops", "platform"},
+		},
+		{
+			name:             "no profile",
+			profiles:         nil,
+			expectedProfiles: nil,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cmd := newTestCommandWithGlobalFlags("exec")
+
+			v := viper.New()
+			if tt.profiles != nil {
+				v.Set("profile", tt.profiles)
+			}
+
+			info := BuildConfigAndStacksInfo(cmd, v)
+
+			assert.Equal(t, tt.expectedProfiles, info.ProfilesFromArg,
+				"--profile flag must reach ConfigAndStacksInfo for `auth exec` (issue #1973)")
+		})
+	}
+}
