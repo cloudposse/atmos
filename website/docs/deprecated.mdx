@@ -1,0 +1,112 @@
+---
+title: Deprecated Features
+sidebar_label: Deprecated Features
+sidebar_position: 1001
+description: Learn about deprecated features in Atmos and their recommended alternatives.
+id: deprecated
+slug: /deprecated
+---
+import Intro from '@site/src/components/Intro'
+
+# Deprecated Features
+
+<Intro>
+Deprecated features in Atmos are being phased out in favor of better alternatives. While they continue to work for backward compatibility, they may be removed in a future major version. We recommend migrating to the suggested alternatives.
+</Intro>
+
+## What "Deprecated" Means
+
+Features marked as deprecated:
+
+- **Still work** - The feature continues to function as documented for backward compatibility
+- **Have better alternatives** - A newer, more flexible, or more reliable approach is available
+- **May be removed** - The feature may be removed in a future major version release
+- **Should not be used in new projects** - Use the recommended alternative for new implementations
+- **Have migration paths** - Documentation includes guidance on how to migrate to the alternative
+
+## Current Deprecated Features
+
+### `name_pattern`
+
+**Status:** Deprecated in favor of `name_template`
+
+**Location:** `stacks.name_pattern` in `atmos.yaml`
+
+**Why deprecated:**
+- Uses fixed token-based replacement (`{tenant}`, `{environment}`, etc.) that only works with predefined variable names
+- Less flexible than template-based approach
+- Cannot use custom variable names or complex logic
+- May cause errors in certain contexts during template processing
+
+**Alternative:** Use `stacks.name_template` with Go templates
+
+**Migration:**
+
+Replace this:
+```yaml
+stacks:
+  name_pattern: "{tenant}-{environment}-{stage}"
+```
+
+With this:
+```yaml
+stacks:
+  name_template: "{{.vars.tenant}}-{{.vars.environment}}-{{.vars.stage}}"
+```
+
+Or use the more flexible compact join pattern:
+```yaml
+stacks:
+  name_template: '{{ list .vars.tenant .vars.environment .vars.stage | compact | join "-" }}'
+```
+
+**Learn more:** [Stack Naming Configuration](/cli/configuration/stacks#stack-naming-with-name_template-recommended)
+
+### `cluster_name_pattern` (Helmfile)
+
+**Status:** Deprecated in favor of `cluster_name_template`
+
+**Location:** `components.helmfile.cluster_name_pattern` in `atmos.yaml`
+
+**Why deprecated:**
+- Uses fixed token-based replacement similar to `name_pattern`
+- Less flexible than template-based approach
+
+**Alternative:** Use `components.helmfile.cluster_name_template` with Go templates
+
+**Migration:**
+
+Replace this:
+```yaml
+components:
+  helmfile:
+    cluster_name_pattern: "{namespace}-{environment}-{stage}-eks"
+```
+
+With this:
+```yaml
+components:
+  helmfile:
+    cluster_name_template: "{{ .vars.namespace }}-{{ .vars.environment }}-{{ .vars.stage }}-eks"
+```
+
+**Learn more:** [Helmfile Configuration](/cli/configuration/components/helmfile)
+
+## Providing Feedback
+
+If you're using a deprecated feature and have questions about migration or concerns about the deprecation:
+
+- Open a [GitHub Discussion](https://github.com/cloudposse/atmos/discussions) to ask questions
+- File an [issue](https://github.com/cloudposse/atmos/issues) if you encounter problems during migration
+- Join our [Slack community](https://slack.cloudposse.com) for real-time help
+
+## Deprecation Timeline
+
+Deprecated features typically follow this timeline:
+
+1. **Announcement** - Feature is marked as deprecated with alternatives documented
+2. **Grace Period** - Feature continues to work (usually multiple major versions)
+3. **Removal Warning** - Advance notice given before removal in release notes
+4. **Removal** - Feature removed in a future major version (following semantic versioning)
+
+We aim to provide ample time and clear migration paths before removing any deprecated features.
