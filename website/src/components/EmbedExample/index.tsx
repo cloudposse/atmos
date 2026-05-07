@@ -76,13 +76,13 @@ function stripFrontmatter(content: string): string {
  * hierarchy extraction.
  */
 const markdownComponents = {
-  h1: ({ children, ...props }: { children?: React.ReactNode }) => (
+  h1: ({ children, node, ...props }: { children?: React.ReactNode; node?: unknown }) => (
     <h2 {...props} className={styles.embeddedH1}>{children}</h2>
   ),
-  h2: ({ children, ...props }: { children?: React.ReactNode }) => <h3 {...props}>{children}</h3>,
-  h3: ({ children, ...props }: { children?: React.ReactNode }) => <h4 {...props}>{children}</h4>,
-  h4: ({ children, ...props }: { children?: React.ReactNode }) => <h5 {...props}>{children}</h5>,
-  h5: ({ children, ...props }: { children?: React.ReactNode }) => <h6 {...props}>{children}</h6>,
+  h2: ({ children, node, ...props }: { children?: React.ReactNode; node?: unknown }) => <h3 {...props}>{children}</h3>,
+  h3: ({ children, node, ...props }: { children?: React.ReactNode; node?: unknown }) => <h4 {...props}>{children}</h4>,
+  h4: ({ children, node, ...props }: { children?: React.ReactNode; node?: unknown }) => <h5 {...props}>{children}</h5>,
+  h5: ({ children, node, ...props }: { children?: React.ReactNode; node?: unknown }) => <h6 {...props}>{children}</h6>,
   code({ className, children, ...props }: { className?: string; children?: React.ReactNode }) {
     const match = /language-(\w+)/.exec(className || '');
     const isInline = !match;
