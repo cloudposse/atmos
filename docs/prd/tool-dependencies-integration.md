@@ -59,11 +59,43 @@ Additionally, for workflows and custom commands:
 ### Schema Structure
 
 ```go
-// Dependencies declares required tools and their versions.
+// Dependencies declares required tools and component dependencies.
 type Dependencies struct {
+    // Tools maps tool names to version constraints (e.g., "terraform": "1.5.0" or "latest").
     Tools map[string]string `yaml:"tools,omitempty" json:"tools,omitempty" mapstructure:"tools"`
+    // Components lists component dependencies that must be applied before this component.
+    // This is the recommended location for component dependencies (replaces settings.depends_on).
+    // Uses list format with append merge behavior (child lists extend parent lists).
+    Components []ComponentDependency `yaml:"components,omitempty" json:"components,omitempty" mapstructure:"components"`
 }
 ```
+
+### Component Dependencies
+
+In addition to tool dependencies, the `dependencies` section also supports component dependencies
+(previously `settings.depends_on`):
+
+```yaml
+dependencies:
+  tools:
+    terraform: "1.9.8"
+  components:
+    - component: vpc
+    - component: rds
+      stack: tenant1-ue1-prod
+```
+
+Component dependencies define execution order and are used by:
+- `atmos describe dependents` - Find components that depend on a given component
+- `atmos describe affected` - Find components affected by changes
+- CI/CD integrations (Spacelift, Atlantis, etc.)
+
+**Key differences from `settings.depends_on`:**
+- Uses list format (not map with numeric keys)
+- Uses append merge behavior (child lists extend parent lists)
+- Located under `dependencies` alongside tool dependencies
+
+See the Component Dependencies documentation (`website/docs/stacks/dependencies/components.mdx`) for detailed usage.
 
 **Usage in Stack Configuration:**
 
@@ -165,9 +197,10 @@ Before execution:
 ```go
 package schema
 
-// Dependencies declares required tools and their versions.
+// Dependencies declares required tools and component dependencies.
 type Dependencies struct {
-	Tools map[string]string `yaml:"tools,omitempty" json:"tools,omitempty" mapstructure:"tools"`
+	Tools      map[string]string     `yaml:"tools,omitempty" json:"tools,omitempty" mapstructure:"tools"`
+	Components []ComponentDependency `yaml:"components,omitempty" json:"components,omitempty" mapstructure:"components"`
 }
 ```
 

@@ -88,6 +88,34 @@ func ExecuteWithSections(
 	return defaultExecutor.ExecuteWithSections(atmosConfig, component, stack, sections, authContext)
 }
 
+// GetOutputSkipInit retrieves a specific terraform output without running terraform init.
+// Use this when the component has just been applied and the workdir is already initialised.
+// Calling terraform init after an apply can trigger state-migration prompts when stdin is
+// closed (non-interactive), causing the operation to fail. This is the correct getter for
+// after-terraform-apply hooks.
+//
+//nolint:revive // argument-limit: matches GetOutput signature for drop-in use.
+func GetOutputSkipInit(
+	atmosConfig *schema.AtmosConfiguration,
+	stack string,
+	component string,
+	output string,
+	skipCache bool,
+	authContext *schema.AuthContext,
+	authManager any,
+) (any, bool, error) {
+	defer perf.Track(atmosConfig, "output.GetOutputSkipInit")()
+
+	if defaultExecutor == nil {
+		panic("output.SetDefaultExecutor must be called before GetOutputSkipInit")
+	}
+
+	return defaultExecutor.GetOutputWithOptions(
+		atmosConfig, stack, component, output, skipCache, authContext, authManager,
+		&OutputOptions{SkipInit: true},
+	)
+}
+
 // GetOutput retrieves a specific terraform output for a component in a stack.
 // This is the main entry point for getting individual outputs, used by YAML functions
 // like !terraform.output.

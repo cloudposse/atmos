@@ -111,6 +111,15 @@ html[data-theme="dark"] .terminal h1 {
     background: transparent !important;
 }
 
+.terminal .language-bash.theme-code-block,
+.terminal pre.prism-code.language-bash,
+.terminal .language-sh.theme-code-block,
+.terminal pre.prism-code.language-sh {
+    --prism-background-color: transparent !important;
+
+    background-color: transparent !important;
+}
+
 .terminal .viewport {
     max-height: 450px;
     overflow: auto;

@@ -244,7 +244,7 @@ func TestWithProcessFunctionsFlag(t *testing.T) {
 	flag := cmd.Flags().Lookup("process-functions")
 	require.NotNil(t, flag, "process-functions flag should be registered")
 	assert.Equal(t, "true", flag.DefValue)
-	assert.Contains(t, flag.Usage, "template function processing")
+	assert.Contains(t, flag.Usage, "YAML functions processing")
 }
 
 // TestWithUploadFlag verifies upload flag registration.

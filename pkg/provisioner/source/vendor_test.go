@@ -13,6 +13,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/vendor"
 )
 
 func TestResolveSourceURI(t *testing.T) {
@@ -106,15 +107,20 @@ func TestNormalizeURI(t *testing.T) {
 			expected: "",
 		},
 		{
-			name:     "multiple triple slashes (only first replaced)",
+			// Six slashes: go-getter's SourceDirSubdir splits on first // yielding
+			// source="github.com/cloudposse/terraform-aws-vpc" subdir="///".
+			// NormalizeURI then reassembles as source + "//" + subdir = ".../////" (5 slashes).
+			// This is a pathological edge case; real URIs use at most ///.
+			name:     "multiple triple slashes",
 			uri:      "github.com/cloudposse/terraform-aws-vpc//////",
-			expected: "github.com/cloudposse/terraform-aws-vpc//.///",
+			expected: "github.com/cloudposse/terraform-aws-vpc/////",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := normalizeURI(tt.uri)
+			// Uses the same shared code path as regular vendoring.
+			result := vendor.NormalizeURI(tt.uri)
 			assert.Equal(t, tt.expected, result)
 		})
 	}
@@ -122,35 +128,27 @@ func TestNormalizeURI(t *testing.T) {
 
 func TestCreateSkipFunc(t *testing.T) {
 	tests := []struct {
-		name       string
-		sourceSpec *schema.VendorComponentSource
-		fileName   string
-		isDir      bool
-		expected   bool
+		name          string
+		includedPaths []string
+		excludedPaths []string
+		fileName      string
+		isDir         bool
+		expected      bool
 	}{
 		{
-			name: "skip .git directory",
-			sourceSpec: &schema.VendorComponentSource{
-				Uri: "github.com/example/repo",
-			},
+			name:     "skip .git directory",
 			fileName: ".git",
 			isDir:    true,
 			expected: true,
 		},
 		{
-			name: "no patterns - don't skip regular file",
-			sourceSpec: &schema.VendorComponentSource{
-				Uri: "github.com/example/repo",
-			},
+			name:     "no patterns - don't skip regular file",
 			fileName: "main.tf",
 			isDir:    false,
 			expected: false,
 		},
 		{
-			name: "no patterns - don't skip regular directory",
-			sourceSpec: &schema.VendorComponentSource{
-				Uri: "github.com/example/repo",
-			},
+			name:     "no patterns - don't skip regular directory",
 			fileName: "modules",
 			isDir:    true,
 			expected: false,
@@ -165,7 +163,7 @@ func TestCreateSkipFunc(t *testing.T) {
 				isDir: tt.isDir,
 			}
 
-			skipFunc := createSkipFunc("/tmp/src", tt.sourceSpec)
+			skipFunc := vendor.CreateSkipFunc("/tmp/src", tt.includedPaths, tt.excludedPaths)
 			result, err := skipFunc(info, "/tmp/src/"+tt.fileName, "/tmp/dst/"+tt.fileName)
 
 			assert.NoError(t, err)
@@ -190,95 +188,155 @@ func (m *mockFileInfo) ModTime() time.Time { return time.Time{} }
 func (m *mockFileInfo) IsDir() bool        { return m.isDir }
 func (m *mockFileInfo) Sys() any           { return nil }
 
-// TestMatchesPatterns tests glob pattern matching against file paths.
-func TestMatchesPatterns(t *testing.T) {
+// TestPatternMatching tests glob pattern matching using the shared vendor code.
+func TestPatternMatching(t *testing.T) {
 	tests := []struct {
-		name        string
-		relPath     string
-		patterns    []string
-		patternType string
-		expected    bool
+		name     string
+		relPath  string
+		patterns []string
+		testType string // "include" or "exclude"
+		expected bool   // true = pattern matches the file
 	}{
 		{
-			name:        "exact match",
-			relPath:     "main.tf",
-			patterns:    []string{"main.tf"},
-			patternType: "included_paths",
-			expected:    true,
+			name:     "exact match",
+			relPath:  "main.tf",
+			patterns: []string{"main.tf"},
+			testType: "include",
+			expected: true,
 		},
 		{
-			name:        "wildcard match",
-			relPath:     "main.tf",
-			patterns:    []string{"*.tf"},
-			patternType: "included_paths",
-			expected:    true,
+			name:     "wildcard match",
+			relPath:  "main.tf",
+			patterns: []string{"*.tf"},
+			testType: "include",
+			expected: true,
 		},
 		{
-			name:        "no match",
-			relPath:     "main.go",
-			patterns:    []string{"*.tf"},
-			patternType: "included_paths",
-			expected:    false,
+			name:     "no match",
+			relPath:  "main.go",
+			patterns: []string{"*.tf"},
+			testType: "include",
+			expected: false,
 		},
 		{
-			name:        "nested path match by basename",
-			relPath:     "modules/vpc/main.tf",
-			patterns:    []string{"*.tf"},
-			patternType: "included_paths",
-			expected:    true,
+			name:     "single star does not match nested path",
+			relPath:  "modules/vpc/main.tf",
+			patterns: []string{"*.tf"},
+			testType: "include",
+			expected: false,
 		},
 		{
-			name:        "empty patterns",
-			relPath:     "main.tf",
-			patterns:    []string{},
-			patternType: "included_paths",
-			expected:    false,
+			name:     "doublestar matches nested path",
+			relPath:  "modules/vpc/main.tf",
+			patterns: []string{"**/*.tf"},
+			testType: "include",
+			expected: true,
 		},
 		{
-			name:        "multiple patterns - first matches",
-			relPath:     "main.tf",
-			patterns:    []string{"*.tf", "*.go"},
-			patternType: "included_paths",
-			expected:    true,
+			name:     "empty patterns",
+			relPath:  "main.tf",
+			patterns: []string{},
+			testType: "include",
+			expected: false,
 		},
 		{
-			name:        "multiple patterns - second matches",
-			relPath:     "main.go",
-			patterns:    []string{"*.tf", "*.go"},
-			patternType: "included_paths",
-			expected:    true,
+			name:     "multiple patterns - first matches",
+			relPath:  "main.tf",
+			patterns: []string{"*.tf", "*.go"},
+			testType: "include",
+			expected: true,
 		},
 		{
-			name:        "multiple patterns - none match",
-			relPath:     "main.py",
-			patterns:    []string{"*.tf", "*.go"},
-			patternType: "included_paths",
-			expected:    false,
+			name:     "multiple patterns - second matches",
+			relPath:  "main.go",
+			patterns: []string{"*.tf", "*.go"},
+			testType: "include",
+			expected: true,
 		},
 		{
-			name:        "pattern with directory component",
-			relPath:     "modules/vpc",
-			patterns:    []string{"modules/*"},
-			patternType: "excluded_paths",
-			expected:    true,
+			name:     "multiple patterns - none match",
+			relPath:  "main.py",
+			patterns: []string{"*.tf", "*.go"},
+			testType: "include",
+			expected: false,
+		},
+		{
+			name:     "pattern with directory component",
+			relPath:  "modules/vpc",
+			patterns: []string{"modules/*"},
+			testType: "exclude",
+			expected: true,
+		},
+		{
+			name:     "doublestar pattern matches root-level file",
+			relPath:  "providers.tf",
+			patterns: []string{"**/providers.tf"},
+			testType: "exclude",
+			expected: true,
+		},
+		{
+			name:     "doublestar pattern matches nested file",
+			relPath:  "modules/vpc/providers.tf",
+			patterns: []string{"**/providers.tf"},
+			testType: "exclude",
+			expected: true,
+		},
+		{
+			name:     "doublestar pattern matches deeply nested file",
+			relPath:  "a/b/c/providers.tf",
+			patterns: []string{"**/providers.tf"},
+			testType: "exclude",
+			expected: true,
+		},
+		{
+			name:     "doublestar wildcard matches any extension at any depth",
+			relPath:  "docs/guide.md",
+			patterns: []string{"**/*.md"},
+			testType: "exclude",
+			expected: true,
+		},
+		{
+			name:     "doublestar wildcard matches root-level extension",
+			relPath:  "README.md",
+			patterns: []string{"**/*.md"},
+			testType: "exclude",
+			expected: true,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := matchesPatterns(tt.relPath, tt.patterns, tt.patternType)
+			var result bool
+			if tt.testType == "include" {
+				if len(tt.patterns) == 0 {
+					result = false
+				} else {
+					// ShouldIncludeFile returns (true=skip, nil) when file doesn't match.
+					// So matches = !skip.
+					skip, err := vendor.ShouldIncludeFile(tt.patterns, tt.relPath)
+					assert.NoError(t, err)
+					result = !skip
+				}
+			} else {
+				// ShouldExcludeFile returns (true=skip, nil) when file matches an exclude pattern.
+				skip, err := vendor.ShouldExcludeFile(tt.patterns, tt.relPath)
+				assert.NoError(t, err)
+				result = skip
+			}
 			assert.Equal(t, tt.expected, result)
 		})
 	}
 }
 
-// TestMatchesPatterns_InvalidPattern tests handling of invalid glob patterns.
-func TestMatchesPatterns_InvalidPattern(t *testing.T) {
+// TestPatternMatching_InvalidPattern tests handling of invalid glob patterns.
+func TestPatternMatching_InvalidPattern(t *testing.T) {
 	// Invalid pattern with unclosed bracket.
 	invalidPattern := "[invalid"
-	result := matchesPatterns("main.tf", []string{invalidPattern}, "test_patterns")
-	// Should return false (no match) and not panic.
-	assert.False(t, result, "Invalid pattern should not match")
+	skip, err := vendor.ShouldExcludeFile([]string{invalidPattern}, "main.tf")
+	// Should return an error for invalid patterns.
+	assert.Error(t, err, "Invalid pattern should return an error")
+	// Should not skip (exclude) the file when pattern is invalid.
+	assert.False(t, skip, "Invalid pattern should not cause file to be skipped")
 }
 
 // TestCopyToTarget tests copying files from source to target directory.
@@ -422,12 +480,7 @@ func TestCopyToTarget_OverwritesExisting(t *testing.T) {
 
 // TestCreateSkipFunc_IncludedPaths tests skip function with included_paths patterns.
 func TestCreateSkipFunc_IncludedPaths(t *testing.T) {
-	sourceSpec := &schema.VendorComponentSource{
-		Uri:           "github.com/example/repo",
-		IncludedPaths: []string{"*.tf"},
-	}
-
-	skipFunc := createSkipFunc("/tmp/src", sourceSpec)
+	skipFunc := vendor.CreateSkipFunc("/tmp/src", []string{"*.tf"}, nil)
 
 	// .tf file should NOT be skipped (matches included pattern).
 	info := &mockFileInfo{name: "main.tf", isDir: false}
@@ -450,12 +503,7 @@ func TestCreateSkipFunc_IncludedPaths(t *testing.T) {
 
 // TestCreateSkipFunc_ExcludedPaths tests skip function with excluded_paths patterns.
 func TestCreateSkipFunc_ExcludedPaths(t *testing.T) {
-	sourceSpec := &schema.VendorComponentSource{
-		Uri:           "github.com/example/repo",
-		ExcludedPaths: []string{"*.md", "*.txt"},
-	}
-
-	skipFunc := createSkipFunc("/tmp/src", sourceSpec)
+	skipFunc := vendor.CreateSkipFunc("/tmp/src", nil, []string{"*.md", "*.txt"})
 
 	// .tf file should NOT be skipped (not in excluded patterns).
 	info := &mockFileInfo{name: "main.tf", isDir: false}
@@ -543,13 +591,7 @@ func TestCopyToTarget_WithIncludedPaths(t *testing.T) {
 
 // TestCreateSkipFunc_CombinedPatterns tests skip function with both included and excluded paths.
 func TestCreateSkipFunc_CombinedPatterns(t *testing.T) {
-	sourceSpec := &schema.VendorComponentSource{
-		Uri:           "github.com/example/repo",
-		IncludedPaths: []string{"*.tf", "*.md"},
-		ExcludedPaths: []string{"README.md"},
-	}
-
-	skipFunc := createSkipFunc("/tmp/src", sourceSpec)
+	skipFunc := vendor.CreateSkipFunc("/tmp/src", []string{"*.tf", "*.md"}, []string{"README.md"})
 
 	// main.tf should NOT be skipped (matches included, not in excluded).
 	info := &mockFileInfo{name: "main.tf", isDir: false}
@@ -574,6 +616,49 @@ func TestCreateSkipFunc_CombinedPatterns(t *testing.T) {
 	skip, err = skipFunc(info, "/tmp/src/main.go", "/tmp/dst/main.go")
 	assert.NoError(t, err)
 	assert.True(t, skip, "main.go should be skipped (not in included)")
+}
+
+// TestCopyToTarget_WithDoublestarExcludedPaths tests that ** patterns work for excluded_paths.
+func TestCopyToTarget_WithDoublestarExcludedPaths(t *testing.T) {
+	// Create source directory with providers.tf at multiple levels.
+	srcDir := t.TempDir()
+	err := os.WriteFile(filepath.Join(srcDir, "main.tf"), []byte("# main"), 0o644)
+	require.NoError(t, err)
+	err = os.WriteFile(filepath.Join(srcDir, "providers.tf"), []byte("# root providers"), 0o644)
+	require.NoError(t, err)
+
+	// Create nested directory with providers.tf.
+	modulesDir := filepath.Join(srcDir, "modules", "vpc")
+	err = os.MkdirAll(modulesDir, 0o755)
+	require.NoError(t, err)
+	err = os.WriteFile(filepath.Join(modulesDir, "main.tf"), []byte("# vpc module"), 0o644)
+	require.NoError(t, err)
+	err = os.WriteFile(filepath.Join(modulesDir, "providers.tf"), []byte("# vpc providers"), 0o644)
+	require.NoError(t, err)
+
+	targetDir := filepath.Join(t.TempDir(), "target")
+
+	sourceSpec := &schema.VendorComponentSource{
+		Uri:           "github.com/example/repo",
+		ExcludedPaths: []string{"**/providers.tf"},
+	}
+
+	err = copyToTarget(srcDir, targetDir, sourceSpec)
+	require.NoError(t, err)
+
+	// main.tf files should be copied.
+	_, err = os.Stat(filepath.Join(targetDir, "main.tf"))
+	assert.NoError(t, err, "root main.tf should be copied")
+
+	_, err = os.Stat(filepath.Join(targetDir, "modules", "vpc", "main.tf"))
+	assert.NoError(t, err, "nested main.tf should be copied")
+
+	// providers.tf should NOT be copied at any level.
+	_, err = os.Stat(filepath.Join(targetDir, "providers.tf"))
+	assert.True(t, os.IsNotExist(err), "root providers.tf should be excluded")
+
+	_, err = os.Stat(filepath.Join(targetDir, "modules", "vpc", "providers.tf"))
+	assert.True(t, os.IsNotExist(err), "nested providers.tf should be excluded")
 }
 
 // TestCopyToTarget_WithCombinedPatterns tests copying with both include and exclude patterns.

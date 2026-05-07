@@ -5,6 +5,22 @@ const (
 	CliConfigFileName    = "atmos"
 	DotCliConfigFileName = ".atmos"
 
+	// AtmosEnvVarNamespace is the canonical Viper environment-variable
+	// namespace for Atmos. This is the value passed to viper.SetEnvPrefix and
+	// is the single source of truth for "what counts as an Atmos environment
+	// variable" anywhere in the codebase.
+	//
+	// Use AtmosEnvVarPrefix when you need the namespace as an env-var key
+	// prefix (i.e., the namespace followed by an underscore).
+	AtmosEnvVarNamespace = "ATMOS"
+
+	// AtmosEnvVarPrefix is the prefix used to identify Atmos-controlled
+	// environment variables (ATMOS_PROFILE, ATMOS_CLI_CONFIG_PATH,
+	// ATMOS_BASE_PATH, etc.). Always equal to AtmosEnvVarNamespace + "_"
+	// — see TestAtmosEnvVarPrefixMatchesNamespace for the build-time
+	// invariant.
+	AtmosEnvVarPrefix = AtmosEnvVarNamespace + "_"
+
 	SystemDirConfigFilePath = "/usr/local/etc/atmos"
 	WindowsAppDataEnvVar    = "LOCALAPPDATA"
 

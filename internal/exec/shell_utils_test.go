@@ -463,9 +463,7 @@ func TestExecAuthShellCommand_ExitCodePropagation(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			envVars := map[string]string{
-				"TEST_VAR": "test_value",
-			}
+			envVars := []string{"TEST_VAR=test_value"}
 			atmosConfig := &schema.AtmosConfiguration{}
 
 			err := ExecAuthShellCommand(atmosConfig, "test-identity", "test-provider", envVars, "/bin/sh", tt.shellArgs)

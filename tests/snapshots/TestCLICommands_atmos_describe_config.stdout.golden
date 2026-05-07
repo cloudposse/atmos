@@ -19,7 +19,13 @@
       "plan": {
         "skip_planfile": false
       },
-      "plugin_cache": true
+      "planfiles": {
+        "default": ""
+      },
+      "plugin_cache": true,
+      "auto_provision_workdir_for_outputs": true,
+      "ci": {},
+      "workspace": {}
     },
     "helmfile": {
       "base_path": "",
@@ -154,7 +160,7 @@
       "link_text": {}
     },
     "InjectGithubToken": true,
-    "GithubToken": "",
+    "GithubToken": "<MASKED>",
     "AtmosGithubToken": "",
     "GithubUsername": "",
     "InjectBitbucketToken": true,
@@ -263,6 +269,15 @@
       "columns": null
     }
   },
+  "ci": {
+    "output": {},
+    "summary": {},
+    "checks": {
+      "statuses": {}
+    },
+    "comments": {},
+    "templates": {}
+  },
   "ai": {
     "sessions": {
       "auto_compact": {}
@@ -272,6 +287,14 @@
     "web_search": {},
     "context": {}
   },
-  "mcp": {},
+  "aws": {
+    "security": {
+      "sources": {},
+      "tag_mapping": {}
+    }
+  },
+  "mcp": {
+    "routing": {}
+  },
   "lsp": {}
 }

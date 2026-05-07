@@ -306,7 +306,7 @@ html[data-theme="dark"] .hero__link:hover {
   padding: 0 0 4rem 0;
   width: 100%;
   max-width: 1600px;
-  margin: -20vh auto 0 auto;
+  margin: 0 auto;
   position: relative;
   z-index: 1;
 }

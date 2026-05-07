@@ -2170,9 +2170,9 @@ func TestChatCmd_RunE_OllamaToolsInitWarn(t *testing.T) {
 	assert.Contains(t, err.Error(), "chat session failed")
 }
 
-// TestChatCommand_StandardParserIntegration tests that the chat command uses StandardParser
+// TestChatCommand_StandardParserServer tests that the chat command uses StandardParser
 // with proper Viper binding for flag precedence (CLI > ENV > defaults).
-func TestChatCommand_StandardParserIntegration(t *testing.T) {
+func TestChatCommand_StandardParserServer(t *testing.T) {
 	t.Run("chatParser is initialized", func(t *testing.T) {
 		require.NotNil(t, chatParser, "chatParser should be initialized by init()")
 	})

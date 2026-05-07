@@ -4,6 +4,8 @@ tests:
     snapshot: true
     description: "Test validation of invalid log level in atmos.yaml config file"
     workdir: "fixtures/scenarios/invalid-log-level"
+    env:
+      NO_COLOR: "1"
     command: "atmos"
     args:
       - terraform
@@ -33,6 +35,7 @@ tests:
     env:
       ATMOS_LOGS_LEVEL: XTrace
       CI: "true"
+      NO_COLOR: "1"
     expect:
       stderr:
         - "XTrace"
@@ -48,6 +51,7 @@ tests:
     env:
       ATMOS_VERSION_CHECK_ENABLED: "false"
       CI: "true"
+      NO_COLOR: "1"
     command: "atmos"
     args:
       - version
@@ -70,6 +74,7 @@ tests:
       ATMOS_VERSION_CHECK_ENABLED: "false"
       ATMOS_LOGS_LEVEL: Debug
       CI: "true"
+      NO_COLOR: "1"
     command: "atmos"
     args:
       - version
@@ -90,6 +95,7 @@ tests:
     env:
       ATMOS_VERSION_CHECK_ENABLED: "false"
       CI: "true"
+      NO_COLOR: "1"
     command: "atmos"
     args:
       - --logs-level
@@ -112,6 +118,7 @@ tests:
       ATMOS_VERSION_CHECK_ENABLED: "false"
       ATMOS_LOGS_LEVEL: "Debug"
       CI: "true"
+      NO_COLOR: "1"
     command: "atmos"
     args:
       - version
@@ -136,6 +143,7 @@ tests:
       ATMOS_VERSION_CHECK_ENABLED: "false"
       ATMOS_LOGS_LEVEL: "Info"
       CI: "true"
+      NO_COLOR: "1"
     expect:
       diff:
         - '👽 Atmos (\d+\.\d+\.\d+|test) on [a-z]+/[a-z0-9]+'
@@ -157,6 +165,7 @@ tests:
       ATMOS_VERSION_CHECK_ENABLED: "false"
       ATMOS_LOGS_FILE: "/dev/stdout"
       CI: "true"
+      NO_COLOR: "1"
     expect:
       diff:
         - '👽 Atmos (\d+\.\d+\.\d+|test) on [a-z]+/[a-z0-9]+'
@@ -180,6 +189,7 @@ tests:
       ATMOS_VERSION_CHECK_ENABLED: "false"
       ATMOS_LOGS_FILE: "/dev/stderr"
       CI: "true"
+      NO_COLOR: "1"
     expect:
       diff:
         - '👽 Atmos (\d+\.\d+\.\d+|test) on [a-z]+/[a-z0-9]+'

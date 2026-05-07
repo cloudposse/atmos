@@ -32,6 +32,17 @@ The `atmos ai skill` command lets you:
 - List all installed skills and their status
 - Remove skills you no longer need
 
+:::tip Global `--skill` Flag
+You can use installed skills with any Atmos command via the global `--skill` flag (requires `--ai`).
+The skill's system prompt is sent to the AI provider for domain-specific analysis.
+
+```shell
+atmos terraform plan vpc -s ue1-prod --ai --skill atmos-terraform
+```
+
+See [Global Flags](/cli/global-flags) for details.
+:::
+
 ## Usage
 
 ```shell

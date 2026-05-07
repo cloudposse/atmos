@@ -8,6 +8,7 @@ import (
 	"github.com/go-git/go-git/v5/plumbing"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/auth"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -27,6 +28,7 @@ func executeDescribeAffected(
 	processYamlFunctions bool,
 	skip []string,
 	excludeLocked bool,
+	authManager auth.AuthManager,
 ) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, error) {
 	localRepoHead, err := localRepo.Head()
 	if err != nil {
@@ -52,7 +54,7 @@ func executeDescribeAffected(
 		processYamlFunctions,
 		false,
 		skip,
-		nil, // AuthManager passed from describe affected command layer
+		authManager,
 	)
 	if err != nil {
 		return nil, nil, nil, err
@@ -132,11 +134,15 @@ func executeDescribeAffected(
 	if err != nil {
 		// Propagate unexpected errors (permission issues, invalid paths, etc.) to avoid silently
 		// producing incorrect results.
-		if !errors.Is(err, errUtils.ErrNoStackManifestsFound) {
+		if !errors.Is(err, errUtils.ErrNoStackManifestsFound) && !errors.Is(err, errUtils.ErrFailedToFindImport) {
 			return nil, nil, nil, err
 		}
-		// No stack manifests found in BASE means all stacks were deleted in HEAD.
-		log.Debug("No stack manifests found in BASE, using empty list", "error", err)
+		// No stack manifests found in BASE (e.g. greenfield branch introducing Atmos for the first time,
+		// or BASE branch uses a different stack structure). Treat BASE as empty: all HEAD stacks are new.
+		log.Warn("No Atmos stack manifests found in BASE; treating BASE as empty (all HEAD components will be reported as affected)",
+			"hint", "This is expected for greenfield branches or when the base branch does not yet use Atmos",
+			"error", err,
+		)
 		remoteStackConfigFilesAbsolutePaths = []string{}
 	}
 	atmosConfig.StackConfigFilesAbsolutePaths = remoteStackConfigFilesAbsolutePaths
@@ -152,10 +158,21 @@ func executeDescribeAffected(
 		processYamlFunctions,
 		false,
 		skip,
-		nil, // AuthManager passed from describe affected command layer
+		authManager,
 	)
 	if err != nil {
-		return nil, nil, nil, err
+		// If the BASE cannot be processed (e.g. greenfield: no atmos.yaml or stack configs in BASE,
+		// or BASE uses a different/incompatible stack structure), treat it as empty so that all HEAD
+		// components are reported as affected.  This is correct: everything is "new" relative to BASE.
+		if errors.Is(err, errUtils.ErrFailedToFindImport) || errors.Is(err, errUtils.ErrNoStackManifestsFound) {
+			log.Warn("Could not process BASE stack configuration; treating BASE as empty (all HEAD components will be reported as affected)",
+				"hint", "This is expected for greenfield branches or when the base branch does not yet use Atmos",
+				"error", err,
+			)
+			remoteStacks = map[string]any{}
+		} else {
+			return nil, nil, nil, err
+		}
 	}
 
 	// Restore atmosConfig.

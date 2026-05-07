@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	cockroachErrors "github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -701,11 +702,14 @@ func TestManager_findFirstValidCachedCredentials(t *testing.T) {
 	expiredExp := now.Add(-1 * time.Hour) // Expired: expired 1 hour ago.
 	m := &manager{credentialStore: s, chain: []string{"prov", "id1", "id2"}}
 
-	// Both id1 and id2 have valid credentials -> should return id2 (last in chain).
+	// Both id1 and id2 have valid credentials -> should return id1 (second-to-last).
+	// The target identity (last in chain) is always skipped to force re-authentication
+	// via its Authenticate() method, preventing stale cached credentials from being
+	// returned without performing the actual API call (e.g., AssumeRole).
 	s.data["id2"] = &testCreds{exp: &validExp}
 	s.data["id1"] = &testCreds{exp: &validExp}
 	idx := m.findFirstValidCachedCredentials()
-	require.Equal(t, 2, idx)
+	require.Equal(t, 1, idx)
 
 	// id2 expired, id1 still valid -> should pick id1.
 	s.data["id2"] = &testCreds{exp: &expiredExp}
@@ -2146,6 +2150,79 @@ func TestManager_ResolveProviderConfig(t *testing.T) {
 			assert.Equal(t, tt.expectedFound, found)
 			if found {
 				assert.Equal(t, tt.expectedRegion, provider.Region)
+			}
+		})
+	}
+}
+
+func TestInitializeIdentities(t *testing.T) {
+	tests := []struct {
+		name             string
+		identities       map[string]schema.Identity
+		stackInfo        *schema.ConfigAndStacksInfo
+		expectError      bool
+		expectedSentinel error
+		expectedDetails  []string
+		expectedCount    int
+	}{
+		{
+			name:       "empty kind with profile suggests profile mismatch",
+			identities: map[string]schema.Identity{"core-root/terraform": {Kind: ""}},
+			stackInfo: &schema.ConfigAndStacksInfo{
+				ProfilesFromArg: []string{"marketplace"},
+			},
+			expectError:      true,
+			expectedSentinel: errUtils.ErrInvalidIdentityConfig,
+			expectedDetails:  []string{"core-root/terraform", "is not configured in the", "marketplace"},
+		},
+		{
+			name:             "empty kind without profile suggests specifying one",
+			identities:       map[string]schema.Identity{"core-root/terraform": {Kind: ""}},
+			stackInfo:        &schema.ConfigAndStacksInfo{},
+			expectError:      true,
+			expectedSentinel: errUtils.ErrInvalidIdentityConfig,
+			expectedDetails:  []string{"core-root/terraform", "is not configured", "Did you forget to specify a profile?"},
+		},
+		{
+			name:             "empty kind with nil stackInfo suggests specifying profile",
+			identities:       map[string]schema.Identity{"core-root/terraform": {Kind: ""}},
+			stackInfo:        nil,
+			expectError:      true,
+			expectedSentinel: errUtils.ErrInvalidIdentityConfig,
+			expectedDetails:  []string{"Did you forget to specify a profile?"},
+		},
+		{
+			name:          "valid kind succeeds",
+			identities:    map[string]schema.Identity{"mock-identity": {Kind: "mock"}},
+			stackInfo:     &schema.ConfigAndStacksInfo{},
+			expectError:   false,
+			expectedCount: 1,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := &manager{
+				config: &schema.AuthConfig{
+					Identities: tt.identities,
+				},
+				identities: make(map[string]types.Identity),
+				stackInfo:  tt.stackInfo,
+			}
+
+			err := m.initializeIdentities()
+
+			if tt.expectError {
+				assert.Error(t, err)
+				assert.ErrorIs(t, err, tt.expectedSentinel)
+				details := cockroachErrors.GetAllDetails(err)
+				require.NotEmpty(t, details)
+				for _, expected := range tt.expectedDetails {
+					assert.Contains(t, details[0], expected)
+				}
+			} else {
+				assert.NoError(t, err)
+				assert.Len(t, m.identities, tt.expectedCount)
 			}
 		})
 	}

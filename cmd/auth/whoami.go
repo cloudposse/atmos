@@ -90,14 +90,15 @@ func executeAuthWhoamiCommand(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
+	ctx := context.Background()
+
 	// Determine identity.
 	identityName, err := identityFromFlagOrDefault(cmd, authManager)
 	if err != nil {
-		return err
+		return maybeOfferProfileFallbackOnAuthConfigError(ctx, authManager, err)
 	}
 
 	// Query whoami.
-	ctx := context.Background()
 	whoami, err := authManager.Whoami(ctx, identityName)
 	if err != nil {
 		errUtils.CheckErrorPrintAndExit(addGCPReauthExplanation(err), "", "")
@@ -225,7 +226,7 @@ func identityFromFlagOrDefault(cmd *cobra.Command, authManager authTypes.AuthMan
 
 	defaultIdentity, err := authManager.GetDefaultIdentity(forceSelect)
 	if err != nil {
-		return "", fmt.Errorf("%w: no default identity configured and no identity specified: %v", errUtils.ErrInvalidAuthConfig, err)
+		return "", fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrNoDefaultIdentity, err)
 	}
 	return defaultIdentity, nil
 }

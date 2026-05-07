@@ -181,14 +181,19 @@ func normalizeIdentityValue(value string) string {
 
 // createAuthManagerForList creates an AuthManager for list commands.
 // It uses the identity from --identity flag or ATMOS_IDENTITY env var.
-// If no identity is specified, it loads stack configs for default identity.
+// If no identity is specified, it loads stack configs for default identity via the SCAN variant.
 // Returns nil AuthManager if no auth is configured (which is valid for many use cases).
+//
+// Category B: list commands operate across multiple stacks/components without a single target
+// (component, stack) pair, so they use the SCAN variant to discover stack-level defaults
+// (including defaults declared in imported _defaults.yaml). See
+// docs/fixes/2026-04-08-atmos-auth-identity-resolution-fixes.md.
 func createAuthManagerForList(cmd *cobra.Command, atmosConfig *schema.AtmosConfiguration) (auth.AuthManager, error) {
 	identityName := getIdentityFromCommand(cmd)
 
-	// Create AuthManager with stack-level default identity loading.
-	// When identityName is empty, this loads stack configs for auth.identities.*.default: true.
-	authManager, err := auth.CreateAndAuthenticateManagerWithAtmosConfig(
+	// Scan variant: follows import: chains, discards conflicting defaults, isolates the scan
+	// into a copy of the auth config (no mutation of atmosConfig.Auth).
+	authManager, err := auth.CreateAndAuthenticateManagerWithStackScan(
 		identityName,
 		&atmosConfig.Auth,
 		cfg.IdentityFlagSelectValue,

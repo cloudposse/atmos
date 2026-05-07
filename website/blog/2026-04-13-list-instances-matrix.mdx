@@ -1,0 +1,71 @@
+---
+slug: list-instances-matrix
+title: "Matrix Output for List Instances"
+authors: [atmos]
+tags: [feature]
+date: 2026-04-13T00:00:00.000Z
+---
+
+`atmos list instances` now supports `--format=matrix`, producing GitHub Actions-compatible JSON for driving parallel CI/CD jobs — the same format already available in `atmos describe affected`.
+
+<!--truncate-->
+
+## What Changed
+
+A new `matrix` output format generates a `{"include":[...]}` JSON structure that plugs directly into GitHub Actions `strategy.matrix`:
+
+```bash
+atmos list instances --format=matrix
+```
+
+```json
+{"include":[{"stack":"ue1-dev","component":"vpc","component_path":"components/terraform/vpc","component_type":"terraform"},{"stack":"ue1-dev","component":"eks","component_path":"components/terraform/eks","component_type":"terraform"}]}
+```
+
+Each entry contains four fields: `stack`, `component`, `component_path`, and `component_type`.
+
+The `--output-file` flag writes results in `key=value` format for `$GITHUB_OUTPUT`:
+
+```bash
+atmos list instances --format=matrix --output-file=$GITHUB_OUTPUT
+```
+
+This writes:
+
+```
+matrix={"include":[...]}
+count=42
+```
+
+## Why This Matters
+
+`atmos describe affected` generates a matrix of *changed* components for targeted CI. But some workflows need a matrix of *all* instances — for example, scheduled drift detection, compliance scans, or full-fleet operations. Previously, you had to script your own extraction from `atmos list instances --format=json`. Now it's a single flag.
+
+## How to Use It
+
+### GitHub Actions Example
+
+```yaml
+jobs:
+  enumerate:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.instances.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: List all instances
+        id: instances
+        run: atmos list instances --format=matrix --output-file=$GITHUB_OUTPUT
+
+  deploy:
+    needs: enumerate
+    runs-on: ubuntu-latest
+    strategy:
+      matrix: ${{ fromJson(needs.enumerate.outputs.matrix) }}
+    steps:
+      - run: echo "Deploying ${{ matrix.component }} to ${{ matrix.stack }}"
+```
+
+## Get Involved
+
+Found an issue or have a feature request? Open an issue on [GitHub](https://github.com/cloudposse/atmos/issues).

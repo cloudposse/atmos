@@ -77,10 +77,10 @@ Atmos can create backend infrastructure automatically. Currently supports S3 (AW
 - **Secure Defaults**: Versioning, encryption, public access blocked
 - **Cross-Account Support**: Use nested `assume_role.role_arn` to provision backends in different AWS accounts
 
-See [Backend Provisioning](/components/terraform/backend-provisioning) for details.
+See [Backend Provisioning](/stacks/components/provision/backend) for details.
 
 :::note Backend Configuration vs. Provisioning
-The examples below show **backend configuration** using root-level `role_arn`—this is the role Terraform assumes to *access* state. For **backend provisioning** (creating the bucket), use the nested `assume_role.role_arn` format shown in [Backend Provisioning](/components/terraform/backend-provisioning#cross-account-provisioning).
+The examples below show **backend configuration** using root-level `role_arn`—this is the role Terraform assumes to *access* state. For **backend provisioning** (creating the bucket), use the nested `assume_role.role_arn` format shown in [Backend Provisioning](/stacks/components/provision/backend#cross-account-provisioning).
 :::
 
 ## Backend Inheritance
@@ -195,6 +195,6 @@ For more patterns on multiple component instances, see [Multiple Component Insta
 
 - [Backend Configuration](/stacks/backend) - Detailed configuration reference
 - [Terraform Backend Configuration](/stacks/components/terraform/backend) - Component-level backend defaults
-- [Backend Provisioning](/components/terraform/backend-provisioning) - Automatic backend creation
+- [Backend Provisioning](/stacks/components/provision/backend) - Automatic backend creation
 - [Remote State](/components/terraform/remote-state) - Read other components' state
 - [Terraform Workspaces](/components/terraform/workspaces)

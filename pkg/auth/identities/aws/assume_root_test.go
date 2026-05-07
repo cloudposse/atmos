@@ -1501,6 +1501,10 @@ func (m *mockAuthManager) ResolveProviderConfig(_ string) (*schema.Provider, boo
 	return nil, false
 }
 
+func (m *mockAuthManager) MaybeOfferAnyProfileFallback(_ context.Context) error {
+	return nil
+}
+
 func (m *mockAuthManager) GetRealm() realm.RealmInfo {
 	return realm.RealmInfo{}
 }

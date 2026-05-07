@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"strings"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -113,12 +112,12 @@ func executeAuthShellCommand(cmd *cobra.Command, args []string) error {
 
 	// Authenticate and prepare shell environment.
 	shell := v.GetString(shellFlagName)
-	envMap, providerName, err := prepareShellEnvironment(authManager, identityName, atmosConfigPtr)
+	envList, providerName, err := prepareShellEnvironment(authManager, identityName, atmosConfigPtr)
 	if err != nil {
 		return err
 	}
 
-	return exec.ExecAuthShellCommand(atmosConfigPtr, identityName, providerName, envMap, shell, shellArgs)
+	return exec.ExecAuthShellCommand(atmosConfigPtr, identityName, providerName, envList, shell, shellArgs)
 }
 
 // resolveIdentityNameForShell resolves the identity name from flags, viper, or prompts for selection.
@@ -148,7 +147,9 @@ func resolveIdentityNameForShell(cmd *cobra.Command, v *viper.Viper, authManager
 }
 
 // prepareShellEnvironment authenticates and prepares the shell environment.
-func prepareShellEnvironment(authManager auth.AuthManager, identityName string, atmosConfig *schema.AtmosConfiguration) (map[string]string, string, error) {
+// Returns the sanitized environment list (os.Environ + global env + auth vars,
+// with credential leaks removed) for use by ExecAuthShellCommand directly.
+func prepareShellEnvironment(authManager auth.AuthManager, identityName string, atmosConfig *schema.AtmosConfiguration) ([]string, string, error) {
 	defer perf.Track(nil, "auth.shell.prepareShellEnvironment")()
 
 	// Try to use cached credentials first (passive check, no prompts).
@@ -170,6 +171,7 @@ func prepareShellEnvironment(authManager auth.AuthManager, identityName string, 
 
 	// Prepare shell environment with file-based credentials.
 	// Start with current OS environment + global env from atmos.yaml (consistent with exec.go).
+	// PrepareShellEnvironment sanitizes the env (removes IRSA/credential vars) and adds auth vars.
 	baseEnv := envpkg.MergeGlobalEnv(os.Environ(), atmosConfig.Env)
 	envList, err := authManager.PrepareShellEnvironment(ctx, identityName, baseEnv)
 	if err != nil {
@@ -179,17 +181,7 @@ func prepareShellEnvironment(authManager auth.AuthManager, identityName string, 
 	// Get provider name from the identity to display in shell messages.
 	providerName := authManager.GetProviderForIdentity(identityName)
 
-	// Convert environment list to map.
-	envMap := make(map[string]string)
-	for _, envVar := range envList {
-		if idx := strings.IndexByte(envVar, '='); idx >= 0 {
-			key := envVar[:idx]
-			value := envVar[idx+1:]
-			envMap[key] = value
-		}
-	}
-
-	return envMap, providerName, nil
+	return envList, providerName, nil
 }
 
 // getSeparatedArgs returns args after "--" separator.

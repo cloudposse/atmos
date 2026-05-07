@@ -4,21 +4,14 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/cloudposse/atmos/cmd/internal"
+	"github.com/cloudposse/atmos/cmd/mcp/mcpcmd"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/flags/compat"
+
+	// Register MCP server and client subcommands.
+	_ "github.com/cloudposse/atmos/cmd/mcp/client"
+	_ "github.com/cloudposse/atmos/cmd/mcp/server"
 )
-
-// mcpCmd represents the mcp command.
-var mcpCmd = &cobra.Command{
-	Use:   "mcp",
-	Short: "Manage Model Context Protocol (MCP) server",
-	Long: `Manage the Atmos MCP (Model Context Protocol) server.
-
-The MCP server allows AI assistants (Claude Desktop, Claude Code, VSCode, etc.) to access
-Atmos infrastructure management capabilities through a standardized protocol.
-
-Use 'atmos mcp start' to start the server.`,
-}
 
 // init registers the mcp command provider with the internal registry.
 func init() {
@@ -30,7 +23,7 @@ type MCPCommandProvider struct{}
 
 // GetCommand returns the mcp command.
 func (m *MCPCommandProvider) GetCommand() *cobra.Command {
-	return mcpCmd
+	return mcpcmd.McpCmd
 }
 
 // GetName returns the command name.

@@ -267,7 +267,7 @@ auth:
 atmos auth login dev-admin
 
 # Explicitly login to legacy ECR when needed
-atmos auth ecr-login dev/ecr/legacy
+atmos aws ecr login dev/ecr/legacy
 ```
 
 ## Standalone ECR Login
@@ -277,7 +277,7 @@ You can trigger ECR login independently of identity authentication:
 ### By Integration Name
 
 ```bash
-atmos auth ecr-login dev/ecr
+atmos aws ecr login dev/ecr
 ```
 
 ### By Identity
@@ -285,7 +285,7 @@ atmos auth ecr-login dev/ecr
 Trigger all integrations linked to an identity:
 
 ```bash
-atmos auth ecr-login --identity dev-admin
+atmos aws ecr login --identity dev-admin
 ```
 
 ### By Explicit Registry URL
@@ -294,10 +294,10 @@ Use current AWS credentials from the environment:
 
 ```bash
 # Single registry
-atmos auth ecr-login --registry 123456789012.dkr.ecr.us-east-2.amazonaws.com
+atmos aws ecr login --registry 123456789012.dkr.ecr.us-east-2.amazonaws.com
 
 # Multiple registries
-atmos auth ecr-login \
+atmos aws ecr login \
   --registry 123456789012.dkr.ecr.us-east-2.amazonaws.com \
   --registry 987654321098.dkr.ecr.us-west-2.amazonaws.com
 ```
@@ -333,7 +333,7 @@ jobs:
           atmos auth login ci-deployer
 
           # Option B: Explicit integration
-          # atmos auth ecr-login ci/ecr
+          # atmos aws ecr login ci/ecr
 
       - name: Build and Push
         run: |
@@ -399,11 +399,11 @@ ECR credentials are stored in `~/.docker/config.json` by default. This is the st
 - Credentials are merged with existing Docker config entries
 - Has restricted permissions (0600)
 
-If you need to use a custom location, set the `DOCKER_CONFIG` environment variable before running `atmos auth ecr-login`:
+If you need to use a custom location, set the `DOCKER_CONFIG` environment variable before running `atmos aws ecr login`:
 
 ```bash
 export DOCKER_CONFIG=/custom/path
-atmos auth ecr-login dev/ecr
+atmos aws ecr login dev/ecr
 ```
 
 ## Troubleshooting
@@ -415,7 +415,7 @@ ECR tokens expire after approximately 12 hours. Re-authenticate to refresh:
 ```bash
 atmos auth login dev-admin
 # or
-atmos auth ecr-login dev/ecr
+atmos aws ecr login dev/ecr
 ```
 
 ### Permission Denied
@@ -451,5 +451,5 @@ Verify the registry URL format:
 ## Next Steps
 
 - [Auth Login Command](/cli/commands/auth/login) - Full login command reference
-- [ECR Login Command](/cli/commands/auth/ecr-login) - ECR-specific command reference
+- [ECR Login Command](/cli/commands/aws/ecr-login) - ECR-specific command reference
 - [Auth Configuration](/cli/configuration/auth) - Complete configuration reference

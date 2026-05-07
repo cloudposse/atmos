@@ -40,6 +40,7 @@ func NewGlobalOptionsBuilder() *GlobalOptionsBuilder {
 	builder.registerAuthenticationFlags(&defaults)
 	builder.registerProfilingFlags(&defaults)
 	builder.registerPerformanceFlags(&defaults)
+	builder.registerAIFlags(&defaults)
 	builder.registerSystemFlags(&defaults)
 
 	return builder
@@ -165,6 +166,22 @@ func (b *GlobalOptionsBuilder) registerPerformanceFlags(defaults *global.Flags) 
 
 	b.options = append(b.options, WithStringFlag("heatmap-mode", "", defaults.HeatmapMode, "Heatmap visualization mode: bar, sparkline, table (press 1-3 to switch in TUI)"))
 	b.options = append(b.options, WithEnvVars("heatmap-mode", "ATMOS_HEATMAP_MODE"))
+}
+
+// registerAIFlags registers AI integration flags.
+func (b *GlobalOptionsBuilder) registerAIFlags(defaults *global.Flags) {
+	defer perf.Track(nil, "flags.GlobalOptionsBuilder.registerAIFlags")()
+
+	b.options = append(b.options, WithBoolFlag("ai", "", defaults.AI, "Enable AI-powered analysis of command output"))
+	b.options = append(b.options, WithEnvVars("ai", "ATMOS_AI"))
+	b.options = append(b.options, func(cfg *parserConfig) {
+		cfg.registry.Register(&StringSliceFlag{
+			Name:        "skill",
+			Default:     defaults.Skill,
+			Description: "Specify skills for AI analysis context (comma-separated or repeated flag, requires --ai)",
+			EnvVars:     []string{"ATMOS_SKILL"},
+		})
+	})
 }
 
 // registerSystemFlags registers system configuration flags.

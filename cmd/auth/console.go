@@ -2,9 +2,12 @@ package auth
 
 import (
 	"context"
+	"crypto/sha256"
 	_ "embed"
+	"encoding/hex"
 	"errors"
 	"fmt"
+	"path/filepath"
 	"time"
 
 	"github.com/charmbracelet/lipgloss"
@@ -16,15 +19,17 @@ import (
 	azureAuth "github.com/cloudposse/atmos/pkg/auth/cloud/azure"
 	"github.com/cloudposse/atmos/pkg/auth/credentials"
 	"github.com/cloudposse/atmos/pkg/auth/types"
+	"github.com/cloudposse/atmos/pkg/browser"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/data"
 	"github.com/cloudposse/atmos/pkg/flags"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/telemetry"
 	"github.com/cloudposse/atmos/pkg/ui"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
-	u "github.com/cloudposse/atmos/pkg/utils"
+	"github.com/cloudposse/atmos/pkg/xdg"
 )
 
 const (
@@ -64,6 +69,7 @@ func init() {
 		flags.WithStringFlag("issuer", "", "atmos", "Issuer identifier for the console session (AWS only)"),
 		flags.WithBoolFlag("print-only", "", false, "Print the console URL to stdout without opening browser"),
 		flags.WithBoolFlag("no-open", "", false, "Generate URL but don't open browser automatically"),
+		flags.WithBoolFlag("isolated", "", false, "Open console in an isolated browser session (requires Chrome/Chromium). Enables multiple simultaneous console sessions."),
 	)
 
 	// Register flags with the command.
@@ -111,20 +117,21 @@ func executeAuthConsoleCommand(cmd *cobra.Command, args []string) error {
 	}
 
 	// Initialize auth manager.
-	authManager, err := initializeAuthManager(cmd, v)
+	authManager, atmosConfig, err := initializeAuthManager(cmd, v)
 	if err != nil {
 		return err
 	}
+
+	ctx := context.Background()
 
 	// Get identity name.
 	identityName, err := resolveIdentityName(cmd, v, authManager)
 	if err != nil {
-		return err
+		return maybeOfferProfileFallbackOnAuthConfigError(ctx, authManager, err)
 	}
 
 	// Try to use cached credentials first (passive check, no prompts).
 	// Only authenticate if cached credentials are not available or expired.
-	ctx := context.Background()
 	whoami, err := authManager.GetCachedCredentials(ctx, identityName)
 	if err != nil {
 		log.Debug("No valid cached credentials found, authenticating", "identity", identityName, "error", err)
@@ -176,20 +183,39 @@ func executeAuthConsoleCommand(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 
-	// Print formatted output and handle browser opening.
+	// Print formatted output.
 	printConsoleInfo(whoami, consoleDuration, false, "")
-	handleBrowserOpen(consoleURL, skipOpen)
+
+	// Only build browser opener when we will actually open the browser.
+	var opener browser.Opener
+	if !skipOpen && !telemetry.IsCI() {
+		// Resolve isolated session mode: flag > config > default (false).
+		isolated := resolveConsoleIsolated(cmd, v, atmosConfig)
+
+		// Build browser opener.
+		var opts []browser.Option
+		if isolated {
+			sessionDir, sessionErr := consoleSessionDir(atmosConfig.Auth.Realm, identityName)
+			if sessionErr != nil {
+				return fmt.Errorf("%w: failed to create isolated session directory: %w", errUtils.ErrAuthConsole, sessionErr)
+			}
+			opts = append(opts, browser.WithIsolatedSession(sessionDir))
+		}
+		opener = browser.New(opts...)
+	}
+
+	handleBrowserOpen(consoleURL, skipOpen, opener)
 
 	return nil
 }
 
 // handleBrowserOpen handles opening the console URL in the browser or displaying it.
-func handleBrowserOpen(consoleURL string, skipOpen bool) {
+func handleBrowserOpen(consoleURL string, skipOpen bool, opener browser.Opener) {
 	defer perf.Track(nil, "auth.handleBrowserOpen")()
 
-	if !skipOpen && !telemetry.IsCI() {
+	if !skipOpen && !telemetry.IsCI() && opener != nil {
 		ui.Writeln("")
-		if err := u.OpenUrl(consoleURL); err != nil {
+		if err := opener.Open(consoleURL); err != nil {
 			// Show URL on error so user can manually open it.
 			printConsoleURL(consoleURL)
 			ui.Warningf("Failed to open browser: %v", err)
@@ -274,7 +300,8 @@ func getConsoleProvider(authManager types.AuthManager, identityName string) (typ
 }
 
 // initializeAuthManager loads config and creates the auth manager.
-func initializeAuthManager(cmd *cobra.Command, v *viper.Viper) (types.AuthManager, error) {
+// Returns the auth manager and the full atmos config (needed for realm and console settings).
+func initializeAuthManager(cmd *cobra.Command, v *viper.Viper) (types.AuthManager, *schema.AtmosConfiguration, error) {
 	defer perf.Track(nil, "auth.initializeAuthManager")()
 
 	// Parse global flags and build ConfigAndStacksInfo to honor --base-path, --config, --config-path, --profile.
@@ -282,15 +309,15 @@ func initializeAuthManager(cmd *cobra.Command, v *viper.Viper) (types.AuthManage
 
 	atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, false)
 	if err != nil {
-		return nil, fmt.Errorf("%w: failed to load atmos config: %w", errUtils.ErrAuthConsole, err)
+		return nil, nil, fmt.Errorf("%w: failed to load atmos config: %w", errUtils.ErrAuthConsole, err)
 	}
 
 	authManager, err := CreateAuthManager(&atmosConfig.Auth, atmosConfig.CliConfigPath)
 	if err != nil {
-		return nil, fmt.Errorf("%w: failed to create auth manager: %w", errUtils.ErrAuthConsole, err)
+		return nil, nil, fmt.Errorf("%w: failed to create auth manager: %w", errUtils.ErrAuthConsole, err)
 	}
 
-	return authManager, nil
+	return authManager, &atmosConfig, nil
 }
 
 // resolveIdentityName gets identity from flag or uses default.
@@ -375,6 +402,36 @@ func resolveConsoleDuration(cmd *cobra.Command, authManager types.AuthManager, p
 	}
 
 	return duration, nil
+}
+
+// consoleSessionDir returns an XDG data directory for an isolated browser session.
+// The directory is deterministic based on realm+identity, so the same identity
+// reuses its browser profile across invocations.
+func consoleSessionDir(realm, identityName string) (string, error) {
+	defer perf.Track(nil, "auth.consoleSessionDir")()
+
+	h := sha256.Sum256([]byte(realm + "/" + identityName))
+	dirName := hex.EncodeToString(h[:8])
+	return xdg.GetXDGDataDir(filepath.Join("console", "sessions", dirName), xdg.DefaultCacheDirPerm)
+}
+
+// resolveConsoleIsolated resolves whether to use isolated browser sessions.
+// Flag takes precedence over auth.console.isolated config.
+func resolveConsoleIsolated(cmd *cobra.Command, v *viper.Viper, atmosConfig *schema.AtmosConfiguration) bool {
+	defer perf.Track(nil, "auth.resolveConsoleIsolated")()
+
+	// Flag explicitly set by user takes precedence.
+	if cmd.Flags().Changed("isolated") {
+		return v.GetBool("isolated")
+	}
+
+	// Check auth.console config.
+	if atmosConfig.Auth.Console != nil && atmosConfig.Auth.Console.Isolated != nil {
+		return *atmosConfig.Auth.Console.Isolated
+	}
+
+	// Default: no isolation (backward-compatible).
+	return false
 }
 
 // destinationFlagCompletion provides shell completion for the --destination flag.

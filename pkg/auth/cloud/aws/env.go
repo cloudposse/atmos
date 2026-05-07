@@ -35,6 +35,14 @@ var problematicAWSEnvVars = []string{
 	"AWS_CONFIG_FILE",
 	"AWS_SHARED_CREDENTIALS_FILE",
 
+	// Web identity / IRSA (EKS pod-injected variables).
+	// On EKS pods with IRSA, these are injected by the pod identity webhook.
+	// They must be cleared during Atmos auth to prevent the AWS SDK from using
+	// pod credentials instead of Atmos-managed credentials.
+	"AWS_WEB_IDENTITY_TOKEN_FILE",
+	"AWS_ROLE_ARN",
+	"AWS_ROLE_SESSION_NAME",
+
 	// Note: AWS_REGION is intentionally NOT in this list as it's safe to inherit.
 }
 
@@ -109,7 +117,9 @@ func LoadIsolatedAWSConfig(ctx context.Context, optFns ...func(*config.LoadOptio
 	// config.WithSharedCredentialsFiles([]string{}) prevents loading from ~/.aws/credentials (or AWS_SHARED_CREDENTIALS_FILE).
 	// Note: config.WithSharedConfigProfile("") is NOT sufficient - it means "use the default profile",
 	// which still loads from ~/.aws/config and can conflict with user's [default] profile settings.
-	isolatedOptFns := make([]func(*config.LoadOptions) error, 0, len(optFns)+2)
+	// The +2 capacity hint is omitted to eliminate the theoretical integer overflow risk flagged by
+	// CodeQL (would only occur if len(optFns) ≈ math.MaxInt); append grows the slice as needed.
+	isolatedOptFns := make([]func(*config.LoadOptions) error, 0, len(optFns))
 	isolatedOptFns = append(isolatedOptFns, config.WithSharedConfigFiles([]string{}))
 	isolatedOptFns = append(isolatedOptFns, config.WithSharedCredentialsFiles([]string{}))
 	isolatedOptFns = append(isolatedOptFns, optFns...)
@@ -234,7 +244,9 @@ func PrepareEnvironment(environ map[string]string, profile, credentialsFile, con
 	)
 
 	// Create a copy to avoid mutating the input.
-	result := make(map[string]string, len(environ)+6)
+	// The +6 capacity hint is omitted to eliminate the theoretical integer overflow risk
+	// flagged by CodeQL (would only occur if len(environ) ≈ math.MaxInt); Go maps grow dynamically.
+	result := make(map[string]string, len(environ))
 	for k, v := range environ {
 		result[k] = v
 	}
@@ -242,6 +254,11 @@ func PrepareEnvironment(environ map[string]string, profile, credentialsFile, con
 	// Clear problematic credential environment variables.
 	// When using profile-based authentication, these variables would override
 	// the credentials from AWS_SHARED_CREDENTIALS_FILE, causing auth to fail.
+	//
+	// This deletes keys from the map. Callers that pass os.Environ() as input will
+	// get a sanitized result with IRSA/credential vars removed. The sanitized env
+	// should be passed to subprocess execution via WithEnvironment to avoid re-reading
+	// os.Environ() (which would reintroduce the problematic vars).
 	for _, key := range environmentVarsToClear {
 		if _, exists := result[key]; exists {
 			log.Debug("Clearing AWS credential environment variable", "key", key)

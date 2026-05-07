@@ -433,6 +433,7 @@ func TestProvision_ForceOverwritesExisting(t *testing.T) {
 	err = os.WriteFile(filepath.Join(targetDir, "main.tf"), []byte("# old content"), 0o644)
 	require.NoError(t, err)
 
+	// Use a URI that will definitely fail to download (non-existent repo).
 	params := &ProvisionParams{
 		AtmosConfig: &schema.AtmosConfiguration{
 			Components: schema.Components{
@@ -446,17 +447,17 @@ func TestProvision_ForceOverwritesExisting(t *testing.T) {
 		Stack:         "dev",
 		ComponentConfig: map[string]any{
 			"source": map[string]any{
-				"uri": "github.com/cloudposse/terraform-aws-vpc",
+				"uri": "github.com/cloudposse/nonexistent-repo-that-does-not-exist-12345",
 			},
 		},
 		Force: true, // Force re-vendor even if target exists.
 	}
 
-	// Provision will attempt to download (which will fail in tests without network).
+	// Provision will attempt to download (which will fail because repo doesn't exist).
 	// The key validation is that it doesn't skip due to existing directory.
 	err = Provision(ctx, params)
 
-	// We expect an error because go-getter can't actually download in unit tests.
+	// We expect an error because the repo doesn't exist.
 	// But the error should be a download error, not a "skipped" situation.
 	// This confirms Force=true triggers the download path instead of skipping.
 	require.Error(t, err, "Expected error from download attempt, not skip")

@@ -1,0 +1,100 @@
+# yaml-language-server: $schema=schema.json
+# Tests for the native-terraform example demonstrating migration from native Terraform.
+# See examples/native-terraform/ for the example code.
+tests:
+  # Test 1: List stacks shows canonical names
+  - name: atmos list stacks (native-terraform example)
+    enabled: true
+    snapshot: true
+    description: "List stacks shows 'dev' (filename) and 'production' (explicit name)"
+    workdir: "../examples/native-terraform"
+    env:
+      ATMOS_CLI_CONFIG_PATH: "."
+    command: "atmos"
+    args:
+      - "list"
+      - "stacks"
+    expect:
+      stdout:
+        - "dev"
+        - "production"
+        - !not "^prod$"
+      exit_code: 0
+
+  # Test 2: Dev stack uses !include to import legacy .tfvars
+  - name: atmos describe component vpc -s dev (native-terraform example)
+    enabled: true
+    snapshot: true
+    description: "Dev stack loads vars from legacy .tfvars via !include"
+    workdir: "../examples/native-terraform"
+    env:
+      ATMOS_CLI_CONFIG_PATH: "."
+    command: "atmos"
+    args:
+      - "describe"
+      - "component"
+      - "vpc"
+      - "-s"
+      - "dev"
+      - "--format"
+      - "json"
+    expect:
+      valid:
+        - "json"
+      stdout:
+        - '"atmos_stack": "dev"'
+        - '"cidr_block": "10.0.0.0/16"'
+        - '"environment": "dev"'
+        - '"enable_dns_hostnames": true'
+      exit_code: 0
+
+  # Test 3: Prod stack uses native YAML vars and explicit stack name
+  - name: atmos describe component vpc -s production (native-terraform example)
+    enabled: true
+    snapshot: true
+    description: "Prod stack uses native YAML vars and explicit name 'production'"
+    workdir: "../examples/native-terraform"
+    env:
+      ATMOS_CLI_CONFIG_PATH: "."
+    command: "atmos"
+    args:
+      - "describe"
+      - "component"
+      - "vpc"
+      - "-s"
+      - "production"
+      - "--format"
+      - "json"
+    expect:
+      valid:
+        - "json"
+      stdout:
+        - '"atmos_stack": "production"'
+        - '"atmos_stack_file": "prod"'
+        - '"cidr_block": "10.1.0.0/16"'
+        - '"environment": "prod"'
+        - '"enable_dns_hostnames": true'
+      exit_code: 0
+
+  # Test 4: Using filename when explicit name exists fails with helpful error
+  - name: atmos describe component vpc -s prod (invalid - native-terraform example)
+    enabled: true
+    snapshot: true
+    description: "Using filename 'prod' fails when stack has explicit name 'production', suggests correct name"
+    workdir: "../examples/native-terraform"
+    env:
+      ATMOS_CLI_CONFIG_PATH: "."
+    command: "atmos"
+    args:
+      - "describe"
+      - "component"
+      - "vpc"
+      - "-s"
+      - "prod"
+    expect:
+      stderr:
+        - "invalid stack"
+        - "prod"
+        - "production"
+        - "atmos list stacks"
+      exit_code: 1

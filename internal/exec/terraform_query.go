@@ -70,7 +70,7 @@ func ExecuteTerraformQuery(info *schema.ConfigAndStacksInfo) error {
 	processedCount := 0
 
 	err = walkTerraformComponents(stacks, func(stackName, componentName string, componentSection map[string]any) error {
-		processed, err := processTerraformComponent(&atmosConfig, info, stackName, componentName, componentSection, logFunc)
+		processed, err := processTerraformComponent(&atmosConfig, info, stackName, componentName, componentSection, logFunc, ExecuteTerraform)
 		if processed {
 			processedCount++
 		}

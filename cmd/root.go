@@ -60,10 +60,12 @@ import (
 	// The init() function in each package registers the command with the registry.
 	_ "github.com/cloudposse/atmos/cmd/about"
 	_ "github.com/cloudposse/atmos/cmd/ai"
+	aisetup "github.com/cloudposse/atmos/cmd/ai/setup"
 	_ "github.com/cloudposse/atmos/cmd/ai/skill"
 	_ "github.com/cloudposse/atmos/cmd/ansible"
 	_ "github.com/cloudposse/atmos/cmd/auth"
 	_ "github.com/cloudposse/atmos/cmd/aws"
+	_ "github.com/cloudposse/atmos/cmd/ci"
 	"github.com/cloudposse/atmos/cmd/devcontainer"
 	_ "github.com/cloudposse/atmos/cmd/env"
 	_ "github.com/cloudposse/atmos/cmd/helmfile"
@@ -887,8 +889,11 @@ func isCompletionCommand(cmd *cobra.Command) bool {
 func findExperimentalParent(cmd *cobra.Command) string {
 	// First pass: Look for registry-based experimental commands.
 	// These are top-level commands like devcontainer, toolchain.
+	// Only match commands that are direct children of the root command,
+	// so custom commands that happen to share a name (e.g., "atmos utils ai")
+	// are not mistakenly flagged as experimental.
 	for c := cmd; c != nil; c = c.Parent() {
-		if internal.IsCommandExperimental(c.Name()) {
+		if internal.IsCommandExperimental(c.Name()) && isTopLevelCommand(c) {
 			return c.Name()
 		}
 	}
@@ -902,6 +907,15 @@ func findExperimentalParent(cmd *cobra.Command) string {
 	}
 
 	return ""
+}
+
+// isTopLevelCommand returns true if cmd is a direct child of the root command.
+// This is used to distinguish built-in registered commands (e.g., "atmos ai")
+// from custom commands that share the same name (e.g., "atmos utils ai").
+func isTopLevelCommand(cmd *cobra.Command) bool {
+	parent := cmd.Parent()
+	// A top-level command's parent is root (whose own parent is nil).
+	return parent != nil && parent.Parent() == nil
 }
 
 // flagStyles holds the lipgloss styles for flag rendering.
@@ -1445,7 +1459,7 @@ func Execute() error {
 	// Skip processing for version command to ensure it always works, even if aliases
 	// reference commands that don't exist in this version of Atmos.
 	if initErr == nil && !isVersionCommand() {
-		err = processCustomCommands(atmosConfig, atmosConfig.Commands, RootCmd, true)
+		err = processCustomCommands(atmosConfig, atmosConfig.Commands, RootCmd)
 		if err != nil {
 			return err
 		}
@@ -1463,11 +1477,24 @@ func Execute() error {
 	// This orchestrates multiple preprocessing steps in the correct order.
 	preprocessArgs()
 
+	// Set up AI output capture if --ai flag is present (flag parsing in cmd/ai,
+	// orchestration in pkg/ai/analyze, skill loading in pkg/ai/skills).
+	aiCtx, aiErr := aisetup.InitAI(&atmosConfig)
+	if aiErr != nil {
+		return aiErr
+	}
+	defer aiCtx.Cleanup()
+
 	// Cobra for some reason handles root command in such a way that custom usage and help command don't work as per expectations.
 	RootCmd.SilenceErrors = true
 	cmd, err := internal.Execute(RootCmd)
 
 	telemetry.CaptureCmd(cmd, err)
+
+	// Run AI analysis on captured output unless this is an "atmos ai" subcommand.
+	if !aisetup.IsAISubcommand(cmd) && aiCtx.RunAnalysis(err) {
+		return nil
+	}
 
 	// Handle sentinel errors with errors.Is().
 	if err != nil {
@@ -1476,6 +1503,7 @@ func Execute() error {
 			showUsageAndExit(RootCmd, []string{command})
 		}
 	}
+
 	return err
 }
 
@@ -1689,7 +1717,7 @@ func init() {
 	}
 	// Configure viper for automatic environment variable binding.
 	// This must happen before setupColorProfileFromEnv() uses viper.GetBool("FORCE_COLOR").
-	viper.SetEnvPrefix("ATMOS")
+	viper.SetEnvPrefix(cfg.AtmosEnvVarNamespace)
 	viper.AutomaticEnv()
 
 	// Bind both ATMOS_FORCE_COLOR and CLICOLOR_FORCE to the same viper key (they are equivalent).
@@ -1703,6 +1731,12 @@ func init() {
 	// Bind mask flag to environment variable.
 	if err := viper.BindEnv("mask", "ATMOS_MASK"); err != nil {
 		log.Error("Failed to bind ATMOS_MASK environment variable", "error", err)
+	}
+	// Bind interactive flag to Viper so viper.GetBool("interactive") reads the
+	// flag value. Without this, --interactive=false is silently ignored by code
+	// that reads the global viper (e.g. pkg/auth's isInteractive guard).
+	if err := viper.BindPFlag("interactive", RootCmd.PersistentFlags().Lookup("interactive")); err != nil {
+		log.Error("Failed to bind interactive flag to Viper", "error", err)
 	}
 	// Bind verbose flag to environment variable.
 	if err := viper.BindEnv(verboseFlagName, "ATMOS_VERBOSE"); err != nil {

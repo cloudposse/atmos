@@ -1,7 +1,10 @@
 package tests
 
 import (
+	"bytes"
+	"io"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -97,4 +100,135 @@ func TestSourceWorkdir_DeleteMissingForce(t *testing.T) {
 	assert.True(t, strings.Contains(err.Error(), "force") || strings.Contains(err.Error(), "--force") ||
 		strings.Contains(err.Error(), "interactive"),
 		"Expected error about missing --force flag or non-interactive mode")
+}
+
+// TestJITSource_MetadataComponentSubpath is the end-to-end regression guard
+// for issue #2364 on the `terraform generate varfile` path (which calls
+// AutoProvisionSource via tryJITProvision, separate from ExecuteTerraform's
+// provisionComponentSource). Runs the command against the full
+// terraform-null-label repo with metadata.component: exports and asserts the
+// generated *.terraform.tfvars.json lands at <workdir>/exports/, not the
+// workdir root. Reverting the fix in tryJITProvision moves the varfile to
+// the wrong location and fails this test.
+func TestJITSource_MetadataComponentSubpath(t *testing.T) {
+	RequireExecutable(t, "git", "JIT source provisioning clones a remote repo")
+	RequireGitHubAccess(t)
+
+	t.Chdir("./fixtures/scenarios/source-provisioner-workdir")
+
+	t.Cleanup(func() {
+		_ = os.RemoveAll(".workdir")
+	})
+
+	resetViperState()
+	cmd.RootCmd.SetArgs([]string{
+		"terraform", "generate", "varfile", "null-label-exports",
+		"--stack", "dev",
+	})
+	require.NoError(t, cmd.Execute(), "terraform generate varfile should succeed")
+
+	workdirRoot := filepath.Join(".workdir", "terraform", "dev-null-label-exports")
+	rootInfo, statErr := os.Stat(workdirRoot)
+	require.NoError(t, statErr, "workdir root should exist at %s after provisioning", workdirRoot)
+	require.True(t, rootInfo.IsDir(), "workdir root should be a directory")
+
+	exportsDir := filepath.Join(workdirRoot, "exports")
+	exportsInfo, statErr := os.Stat(exportsDir)
+	require.NoError(t, statErr, "exports/ subdir should exist within workdir at %s", exportsDir)
+	require.True(t, exportsInfo.IsDir(), "exports/ should be a directory")
+
+	// Load-bearing regression assertion: the generated varfile must land in
+	// the metadata.component subpath, not the workdir root.
+	varfilesAtRoot, err := filepath.Glob(filepath.Join(workdirRoot, "*.terraform.tfvars.json"))
+	require.NoError(t, err)
+	assert.Empty(t, varfilesAtRoot,
+		"metadata.component subpath ignored — varfile generated at workdir root: %v", varfilesAtRoot)
+
+	varfilesInSubpath, err := filepath.Glob(filepath.Join(exportsDir, "*.terraform.tfvars.json"))
+	require.NoError(t, err)
+	assert.NotEmpty(t, varfilesInSubpath,
+		"varfile must be generated inside %s when metadata.component is honored", exportsDir)
+}
+
+// TestJITSource_MetadataComponentSubpath_TerraformShell guards the sibling
+// code path: `atmos terraform shell` runs ExecuteProvisioners directly
+// (instead of going through provisionComponentSource), so without the
+// applyWorkdirSubpathToSection call wired into ExecuteTerraformShell the
+// shell would land in the workdir root, ignoring metadata.component.
+//
+// Asserts via dry-run output that both the working directory and component
+// path printed by printShellDryRunInfo include the metadata.component
+// subpath. Reverting the fix in terraform_shell.go fails these assertions.
+func TestJITSource_MetadataComponentSubpath_TerraformShell(t *testing.T) {
+	RequireExecutable(t, "git", "JIT source provisioning clones a remote repo")
+	RequireGitHubAccess(t)
+
+	t.Chdir("./fixtures/scenarios/source-provisioner-workdir")
+
+	t.Cleanup(func() {
+		_ = os.RemoveAll(".workdir")
+	})
+
+	// Capture stderr (where ui.Writeln output goes) for the dry-run banner.
+	// Drain the pipe in a goroutine that starts BEFORE cmd.Execute so the OS
+	// pipe buffer (~64KB) cannot fill while Execute writes — that would
+	// deadlock the writer goroutine inside Execute and never return. The
+	// process-global os.Stderr swap is restored by t.Cleanup; this test must
+	// not call t.Parallel().
+	oldStderr := os.Stderr
+	r, w, err := os.Pipe()
+	require.NoError(t, err)
+	os.Stderr = w
+	t.Cleanup(func() {
+		os.Stderr = oldStderr
+	})
+
+	var (
+		buf     bytes.Buffer
+		copyErr error
+		drained = make(chan struct{})
+	)
+	go func() {
+		defer close(drained)
+		_, copyErr = io.Copy(&buf, r)
+	}()
+
+	resetViperState()
+	cmd.RootCmd.SetArgs([]string{
+		"terraform", "shell", "null-label-exports",
+		"--stack", "dev",
+		"--dry-run",
+	})
+	execErr := cmd.Execute()
+
+	// Close the writer so the drain goroutine reaches EOF, wait for it, then
+	// close the reader. Order matters: closing r first while the drainer is
+	// still active would race with io.Copy.
+	require.NoError(t, w.Close())
+	<-drained
+	require.NoError(t, copyErr)
+	require.NoError(t, r.Close())
+
+	require.NoError(t, execErr, "terraform shell --dry-run should succeed; output: %s", buf.String())
+
+	output := buf.String()
+
+	// Both fields are driven by ComponentSection[WorkdirPathKey]; with the fix,
+	// that key holds <workdir>/exports/ — without it, the bare workdir root.
+	// Anchor the suffix assertion to the specific "Working directory:" line so
+	// a regression that prints the suffix on a different line (e.g. only on
+	// "Component path:") does not silently pass.
+	expectedSuffix := filepath.Join("dev-null-label-exports", "exports")
+	var workingDirLine string
+	for _, line := range strings.Split(output, "\n") {
+		if strings.Contains(line, "Working directory:") {
+			workingDirLine = line
+			break
+		}
+	}
+	require.NotEmpty(t, workingDirLine,
+		"dry-run should print a 'Working directory:' line; got: %s", output)
+	assert.Contains(t, workingDirLine, expectedSuffix,
+		"'Working directory:' line must include metadata.component subpath %q; got line: %s",
+		expectedSuffix, workingDirLine)
 }

@@ -10,9 +10,9 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-// TestIntegration_ComponentLevelSentryConfig demonstrates the full integration
+// TestServer_ComponentLevelSentryConfig demonstrates the full server
 // of component-level Sentry configuration with stack settings.
-func TestIntegration_ComponentLevelSentryConfig(t *testing.T) {
+func TestServer_ComponentLevelSentryConfig(t *testing.T) {
 	// Simulate global atmos.yaml configuration.
 	globalConfig := &schema.ErrorsConfig{
 		Sentry: schema.SentryConfig{
@@ -201,8 +201,8 @@ func TestIntegration_ComponentLevelSentryConfig(t *testing.T) {
 	}
 }
 
-// TestIntegration_StackLevelSentryConfig demonstrates stack-level settings inheritance.
-func TestIntegration_StackLevelSentryConfig(t *testing.T) {
+// TestServer_StackLevelSentryConfig demonstrates stack-level settings inheritance.
+func TestServer_StackLevelSentryConfig(t *testing.T) {
 	// This test demonstrates how settings can be defined at the stack level
 	// and inherited by all components in that stack.
 
@@ -291,9 +291,9 @@ func TestIntegration_StackLevelSentryConfig(t *testing.T) {
 	}, final2.Sentry.Tags)
 }
 
-// TestIntegration_RealWorldExample demonstrates a real-world scenario with
+// TestServer_RealWorldExample demonstrates a real-world scenario with
 // multiple components and different error configurations.
-func TestIntegration_RealWorldExample(t *testing.T) {
+func TestServer_RealWorldExample(t *testing.T) {
 	// Global configuration.
 	globalConfig := &schema.ErrorsConfig{
 		Sentry: schema.SentryConfig{

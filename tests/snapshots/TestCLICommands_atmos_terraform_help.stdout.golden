@@ -48,6 +48,7 @@ AVAILABLE COMMANDS
       output                            Show output values from your root module
       plan                              Show changes required by the current configuration
       plan-diff                         Compare two Terraform plans and show the differences
+      planfile [command]                Manage Terraform plan files
       providers [command]               Show the providers required for this configuration
       refresh                           Update the state to match remote systems
       shell                             Configure an environment for an Atmos component and start a new shell
@@ -110,6 +111,8 @@ FLAGS
 
 GLOBAL FLAGS
 
+      --ai                      Enable AI-powered analysis of command output
+
       --base-path string        Base path for Atmos project
 
   -C, --chdir string            Change working directory before executing the command (run as if Atmos started in this
@@ -163,6 +166,8 @@ GLOBAL FLAGS
 
       --redirect-stderr string  File descriptor to redirect stderr to. Errors can be redirected to any file or any
                                 standard file descriptor (including '/dev/null')
+
+      --skill strings           Specify skills for AI analysis context (comma-separated or repeated flag, requires --ai)
 
       --use-version string      Use a specific version of Atmos (e.g., --use-version=1.160.0)
 

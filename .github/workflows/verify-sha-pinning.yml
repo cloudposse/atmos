@@ -1,0 +1,24 @@
+---
+name: Verify SHA Pinning
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/**'
+      - '.github/actions/verify-sha-pinning/**'
+  schedule:
+    # Weekly Monday 9am UTC — catch upstream tag mutations
+    - cron: '0 9 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./.github/actions/verify-sha-pinning
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}

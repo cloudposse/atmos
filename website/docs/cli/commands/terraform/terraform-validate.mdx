@@ -242,7 +242,7 @@ Add validation to your pre-commit hooks:
 
 ### 3. Combine with Other Checks
 
-Use validation alongside other quality checks. For security scanning with tools like `tfsec`, `checkov`, or `terrascan`, use JSON planfiles generated with `atmos terraform generate planfile` for more accurate analysis.
+Use validation alongside other quality checks. For security scanning with tools like `tfsec`, `checkov`, or `terrascan`, use JSON planfiles generated with `atmos terraform plan` for more accurate analysis.
 
 This integration is best implemented using [Atmos custom commands](/cli/configuration/commands) with embedded shell scripts:
 
@@ -254,8 +254,7 @@ commands:
     steps:
       - atmos terraform fmt {component} -s {stack} -check
       - atmos terraform validate {component} -s {stack}
-      - atmos terraform generate planfile {component} -s {stack}
-      - checkov -f ./{component}-{stack}.planfile.json
+      - atmos terraform plan {component} -s {stack}
 ```
 
 ### 4. Parse JSON Output

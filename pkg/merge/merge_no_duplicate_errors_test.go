@@ -27,9 +27,9 @@ func TestNoDuplicateErrorPrinting(t *testing.T) {
 		stderrChan <- buf.String()
 	}()
 
-	// Create a scenario that would trigger an error in mergo
-	// Note: With current mergo behavior, type mismatches don't always error,
-	// but we're testing that IF an error occurs, it's not printed directly
+	// Create a scenario that would trigger a validation error (invalid strategy).
+	// We verify that if an error occurs, it's not printed directly to stderr
+	// but returned to the caller.
 	atmosConfig := &schema.AtmosConfiguration{
 		Settings: schema.AtmosSettings{
 			ListMergeStrategy: "invalid-strategy", // This will cause an error
@@ -56,31 +56,21 @@ func TestNoDuplicateErrorPrinting(t *testing.T) {
 	assert.Empty(t, stderrOutput, "No output should be printed to stderr directly from merge.go")
 }
 
-// TestMergeErrorsAreWrappedNotPrinted ensures that when mergo returns an error,
-// we wrap it and return it rather than printing it..
-func TestMergeErrorsAreWrappedNotPrinted(t *testing.T) {
-	// This test verifies that our code properly wraps errors
-	// without printing them directly
-
+// TestMergeTypeOverride_SucceedsWithoutPrinting verifies that type overrides
+// (e.g., list→scalar) succeed silently — no error returned, nothing printed.
+// This is the WithOverride contract: src always wins regardless of type.
+func TestMergeTypeOverride_SucceedsWithoutPrinting(t *testing.T) {
 	atmosConfig := &schema.AtmosConfiguration{
 		Settings: schema.AtmosSettings{
 			ListMergeStrategy: "replace",
 		},
 	}
 
-	// Create maps that are valid (mergo won't error on these)
-	map1 := map[string]any{
-		"config": map[string]any{
-			"value": []string{"a", "b"},
-		},
-	}
-	map2 := map[string]any{
-		"config": map[string]any{
-			"value": "string", // Different type, but mergo will just replace
-		},
-	}
+	// src overrides a []any with a scalar string — this must succeed (WithOverride).
+	map1 := map[string]any{"subnets": []any{"10.0.1.0/24"}}
+	map2 := map[string]any{"subnets": "not-a-slice"}
 
-	// Capture any direct prints to stderr
+	// Capture any direct prints to stderr.
 	oldStderr := os.Stderr
 	r, w, _ := os.Pipe()
 	os.Stderr = w
@@ -92,19 +82,20 @@ func TestMergeErrorsAreWrappedNotPrinted(t *testing.T) {
 		stderrChan <- buf.String()
 	}()
 
-	// Perform the merge
+	// Perform the merge — must succeed.
 	result, err := Merge(atmosConfig, []map[string]any{map1, map2})
 
-	// Close and restore stderr
+	// Close and restore stderr.
 	w.Close()
 	os.Stderr = oldStderr
 	stderrOutput := <-stderrChan
 
-	// With replace strategy, this should succeed (no error)
-	assert.Nil(t, err)
-	assert.NotNil(t, result)
+	// Type overrides are allowed: src scalar replaces dst slice.
+	assert.NoError(t, err, "type override (list→scalar) must not error")
+	assert.Equal(t, "not-a-slice", result["subnets"],
+		"src scalar must override dst slice")
 
-	// Verify nothing was printed to stderr
+	// Nothing should be printed to stderr.
 	assert.Empty(t, stderrOutput, "Merge should not print to stderr")
 }
 

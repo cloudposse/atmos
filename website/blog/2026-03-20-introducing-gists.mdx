@@ -1,0 +1,55 @@
+---
+slug: introducing-gists
+title: "Introducing Gists: Community Recipes for Atmos"
+authors: [osterman]
+tags: [feature]
+---
+
+Atmos now has a dedicated space for community-contributed recipes called **Gists** — creative patterns showing how to combine Atmos features in ways that go beyond standard documentation.
+
+<!--truncate-->
+
+## What Are Gists?
+
+Gists are shared as-is by community contributors. Unlike maintained [examples](/examples), gists may need adaptation for your version of Atmos. They serve as inspiration and starting points for building your own workflows.
+
+| | Examples | Gists |
+|---|---|---|
+| **Maintained** | Yes, tested with each release | No, shared as-is |
+| **Scope** | Single feature demonstration | Combining multiple features |
+| **Style** | Minimal config files | Rich README + config files |
+
+## First Gist: FinOps with AWS MCP Servers
+
+Our inaugural gist is a masterclass in combining [Custom Commands](/cli/configuration/commands), [Auth](/stacks/auth), and [Toolchain](/cli/configuration/toolchain) to give AI assistants direct access to AWS cost data.
+
+Ask Claude questions like "What did we spend on EC2 last month?" and get real answers from your actual AWS account — all authenticated automatically through Atmos.
+
+```bash
+# Install all AWS MCP server packages
+atmos mcp aws install all
+
+# Start a cost server with automatic AWS auth
+atmos mcp aws start cost-explorer
+
+# Test that auth is working
+atmos mcp aws test all
+```
+
+The gist configures 21 AWS MCP servers including Billing, Cost Explorer, Pricing, CloudWatch, IAM, and more — all using a single authentication pattern powered by `atmos auth exec`.
+
+[Browse the gist](/gists/mcp-with-aws)
+
+## Contributing a Gist
+
+Have a creative Atmos recipe? We welcome contributions.
+
+1. Create a directory in `gists/` with your config files and a comprehensive README
+2. Submit a pull request
+3. Your gist will automatically appear on the [Gists page](/gists)
+
+## Get Involved
+
+- Browse the [Gists collection](/gists)
+- [Join us on Slack](/community/slack)
+- [Attend Office Hours](/community/office-hours)

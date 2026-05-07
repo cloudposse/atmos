@@ -10,6 +10,7 @@ import ScrollFadeIn from '@site/src/components/ScrollFadeIn'
 import { RiLockLine, RiBox3Line, RiFlashlightLine, RiStackLine } from 'react-icons/ri';
 import { SiAmazonwebservices, SiGooglecloud } from 'react-icons/si';
 import { VscAzure } from 'react-icons/vsc';
+import AISection from '@site/src/components/AISection'
 import '../css/landing-page.css';
 
 function Home() {
@@ -54,6 +55,7 @@ function Home() {
             </div>
           </div>
         </header>
+        <AISection />
         <section className="hero-demo">
           <motion.div
             className="hero-demo-intro"

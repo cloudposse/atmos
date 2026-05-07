@@ -299,12 +299,12 @@ type AuthManager interface {
 
 	// ExecuteIntegration executes a named integration.
 	// This authenticates the integration's linked identity first, then executes the integration.
-	// Use this for explicit integration execution via `atmos auth ecr-login <integration>`.
+	// Use this for explicit integration execution via `atmos aws ecr login <integration>`.
 	ExecuteIntegration(ctx context.Context, integrationName string) error
 
 	// ExecuteIdentityIntegrations executes all linked integrations for an identity.
 	// This authenticates the identity first, then executes all its linked integrations.
-	// Use this for `atmos auth ecr-login --identity <identity>`.
+	// Use this for `atmos aws ecr login --identity <identity>`.
 	ExecuteIdentityIntegrations(ctx context.Context, identityName string) error
 
 	// GetIntegration returns the integration config by name.
@@ -323,6 +323,23 @@ type AuthManager interface {
 	// the specific provider name.
 	// Returns the provider config and true if found, nil and false otherwise.
 	ResolveProviderConfig(identityName string) (*schema.Provider, bool)
+
+	// MaybeOfferAnyProfileFallback offers to switch profiles when the base
+	// configuration has no usable identities or providers. Called by auth
+	// commands (login, exec, shell, env, console, whoami) before returning
+	// their terminal "no identity/provider" error.
+	//
+	// Behavior:
+	//   - Returns nil when no fallback was triggered — caller surfaces the original error.
+	//   - Returns an enriched error (wrapping ErrNoIdentitiesAvailable) when
+	//     non-interactive and at least one profile defines auth config.
+	//   - On successful interactive re-exec, never returns (process is replaced).
+	//
+	// The fallback is suppressed when:
+	//   - ATMOS_REEXEC_DEPTH > 0 (already inside a re-exec'd child).
+	//   - The user has explicitly set --profile or ATMOS_PROFILE.
+	//   - No profile defines auth config.
+	MaybeOfferAnyProfileFallback(ctx context.Context) error
 }
 
 // CredentialStore defines the interface for storing and retrieving credentials.

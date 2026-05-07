@@ -1,0 +1,203 @@
+---
+title: Version Pinning
+sidebar_position: 0
+sidebar_label: use
+sidebar_class_name: command
+description: Pin your project to a specific Atmos version with automatic installation and re-execution.
+id: use
+slug: /cli/configuration/version/use
+---
+import Intro from '@site/src/components/Intro'
+import File from '@site/src/components/File'
+
+<Intro>
+Pin your project to a specific Atmos version using `version.use` in `atmos.yaml`. When configured, Atmos automatically downloads the specified version (if not already installed) and re-executes itself, ensuring everyone on your team uses the same version.
+</Intro>
+
+## Configuration
+
+<File title="atmos.yaml">
+```yaml
+version:
+  use: "1.199.0"
+```
+</File>
+
+When any `atmos` command runs, it will:
+1. Check if the requested version is already installed
+2. Download and install it automatically if needed
+3. Re-execute the command with the correct version
+
+Versions are cached in `~/.atmos/bin/cloudposse/atmos/{version}/`.
+
+## Supported Version Formats
+
+<dl>
+  <dt>Exact semver</dt>
+  <dd>
+    A specific release version (e.g., `1.199.0`). This is the recommended format for production use.
+
+    ```yaml
+    version:
+      use: "1.199.0"
+    ```
+  </dd>
+
+  <dt>`latest`</dt>
+  <dd>
+    Resolves to the latest available release from GitHub.
+
+    ```yaml
+    version:
+      use: "latest"
+    ```
+  </dd>
+
+  <dt>`pr:<number>`</dt>
+  <dd>
+    Install from a pull request's build artifacts. Useful for testing changes before they are released.
+
+    ```yaml
+    version:
+      use: "pr:1234"
+    ```
+  </dd>
+
+  <dt>`sha:<hash>`</dt>
+  <dd>
+    Install from a specific commit's build artifacts.
+
+    ```yaml
+    version:
+      use: "sha:ceb7526"
+    ```
+  </dd>
+</dl>
+
+## Command-Line Override
+
+Override the configured version for a single command using the `--use-version` flag:
+
+```bash
+atmos --use-version 1.201.0 terraform plan -s mystack
+```
+
+## Precedence
+
+Version sources are evaluated in this order (highest to lowest priority):
+
+| Priority | Source | Example |
+|----------|--------|---------|
+| 1 | `--use-version` flag | `atmos --use-version 1.201.0 terraform plan` |
+| 2 | `ATMOS_VERSION_USE` env var | `ATMOS_VERSION_USE=1.201.0 atmos terraform plan` |
+| 3 | `ATMOS_VERSION` env var | `ATMOS_VERSION=1.201.0 atmos terraform plan` |
+| 4 | `version.use` in `atmos.yaml` | `version: use: "1.199.0"` |
+
+The `--use-version` flag and `ATMOS_USE_VERSION` env var both set `ATMOS_VERSION_USE` internally,
+so they share the same priority level.
+
+## Environment Variables
+
+<dl>
+  <dt>`ATMOS_USE_VERSION`</dt>
+  <dd>
+    Specify which version of Atmos to use. This is the env var equivalent of the `--use-version` flag.
+    Internally, it feeds the flag value which sets `ATMOS_VERSION_USE`.
+
+    ```bash
+    ATMOS_USE_VERSION=1.199.0 atmos terraform plan -s mystack
+    ```
+  </dd>
+
+  <dt>`ATMOS_VERSION_USE`</dt>
+  <dd>
+    The internal env var checked directly by the version resolution logic. Set automatically by the
+    `--use-version` flag and `ATMOS_USE_VERSION`. Can also be set directly for highest precedence.
+
+    ```bash
+    ATMOS_VERSION_USE=1.199.0 atmos terraform plan -s mystack
+    ```
+  </dd>
+
+  <dt>`ATMOS_VERSION`</dt>
+  <dd>
+    Convenience alias matching conventions used by tools like `tfenv` and `goenv`.
+    Lower precedence than `ATMOS_VERSION_USE`.
+
+    ```bash
+    export ATMOS_VERSION=1.199.0
+    ```
+  </dd>
+</dl>
+
+## Examples
+
+### Pin Project to a Specific Version
+
+<File title="atmos.yaml">
+```yaml
+version:
+  use: "1.199.0"
+```
+</File>
+
+### Environment-Specific Versions with Profiles
+
+Use [profiles](/cli/configuration/profiles) to specify different versions per environment:
+
+```yaml title="profiles/dev/atmos.yaml"
+version:
+  use: "1.201.0"  # Latest version for development
+```
+
+```yaml title="profiles/prod/atmos.yaml"
+version:
+  use: "1.199.0"  # Stable version for production
+```
+
+Activate a profile:
+
+```bash
+atmos --profile dev terraform plan -s mystack
+
+# Or via environment variable
+ATMOS_PROFILE=prod atmos terraform apply -s mystack
+```
+
+### CI/CD Pipelines
+
+Pin the version in your CI environment:
+
+```yaml title=".github/workflows/deploy.yml"
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      ATMOS_VERSION: "1.199.0"
+    steps:
+      - uses: actions/checkout@v4
+      - name: Deploy
+        run: atmos terraform apply -s production/mystack --auto-approve
+```
+
+### Combined with Version Constraints
+
+Use `version.use` to pin the version and `version.constraint` to enforce a minimum across the team:
+
+<File title="atmos.yaml">
+```yaml
+version:
+  use: "1.199.0"
+  constraint:
+    require: ">=1.100.0"
+    enforcement: fatal
+```
+</File>
+
+## See Also
+
+- [Version Configuration](/cli/configuration/version) — Overview of all version settings
+- [Version Check](/cli/configuration/version/check) — Automatic update checking
+- [Version Constraints](/cli/configuration/version/constraint) — Enforce version requirements
+- [Atmos Version Management](/howto/atmos-version-management) — How-to guide with profiles
+- [Toolchain Commands](/cli/commands/toolchain/usage) — Manage installed tool versions

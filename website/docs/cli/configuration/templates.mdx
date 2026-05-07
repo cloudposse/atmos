@@ -74,6 +74,24 @@ templates:
   <dd>
     Timeout in seconds to execute [Gomplate Datasources](https://docs.gomplate.ca/datasources).
   </dd>
+
+  <dt>`templates.settings.ignore_missing_template_values`</dt>
+  <dd>
+    A boolean flag to globally ignore missing template values across all stack manifest imports. Defaults to `false`.
+    When set to `true`, Atmos will not fail if a Go template variable is missing in any imported stack manifest —
+    the missing variable will render as an empty string instead of producing an error.
+    This is equivalent to setting `ignore_missing_template_values: true` on every individual import, but applied globally.
+    The per-import `ignore_missing_template_values` setting takes precedence and can be used to override the global default.
+
+    This is especially useful when importing catalog manifests that use Go templates for external systems (e.g. Datadog)
+    where not all template variables need to be provided by Atmos.
+
+    ```yaml title="atmos.yaml"
+    templates:
+      settings:
+        ignore_missing_template_values: true
+    ```
+  </dd>
 </dl>
 
 ## Datasources

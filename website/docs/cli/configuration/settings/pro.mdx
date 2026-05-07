@@ -11,6 +11,8 @@ slug: /cli/configuration/settings/pro
 import DocCardList from '@theme/DocCardList'
 import Intro from '@site/src/components/Intro'
 import File from '@site/src/components/File'
+import Tabs from '@theme/Tabs'
+import TabItem from '@theme/TabItem'
 
 <Intro>
 Configure Atmos Pro integration for stack locking, status reporting, and workspace management across your organization.
@@ -26,7 +28,23 @@ Atmos Pro provides centralized management capabilities for teams using Atmos at 
 
 ## Configuration
 
-Configure Atmos Pro in your `atmos.yaml`:
+The only required setting is your `workspace_id`. All other settings have sensible defaults and can be left unset.
+
+<Tabs>
+<TabItem value="minimal" label="Minimal" default>
+
+<File title="atmos.yaml">
+```yaml
+settings:
+  pro:
+    workspace_id: "your-workspace-id"
+```
+</File>
+
+</TabItem>
+<TabItem value="advanced" label="Advanced">
+
+Override defaults only if needed. All fields shown below are optional except `workspace_id`.
 
 <File title="atmos.yaml">
 ```yaml
@@ -34,13 +52,16 @@ settings:
   pro:
     base_url: "https://app.cloudposse.com"
     endpoint: "api/v1"
-    token: ""
-    workspace_id: ""
+    workspace_id: "your-workspace-id"
+    max_payload_bytes: 4194304
     github_oidc:
       request_url: ""
       request_token: ""
 ```
 </File>
+
+</TabItem>
+</Tabs>
 
 ## Configuration Reference
 
@@ -63,22 +84,30 @@ settings:
     - **Environment Variable:** `ATMOS_PRO_ENDPOINT`
   </dd>
 
+  <dt>`settings.pro.workspace_id`</dt>
+  <dd>
+    Atmos Pro workspace identifier. Required for authentication. This value is not a secret and is safe to commit to version control.
+
+    - **Type:** `string`
+    - **Default:** (none)
+    - **Environment Variable:** `ATMOS_PRO_WORKSPACE_ID`
+  </dd>
+
   <dt>`settings.pro.token`</dt>
   <dd>
-    API authentication token for Atmos Pro. Required for authentication when not using GitHub OIDC.
+    Bearer token for Atmos Pro API authentication. Atmos Pro does not issue API keys or personal access tokens — the only way to obtain a bearer token is by performing an OIDC token exchange against the Atmos Pro API. This is intended for advanced integrations outside of GitHub Actions.
 
     - **Type:** `string`
     - **Default:** (none)
     - **Environment Variable:** `ATMOS_PRO_TOKEN`
   </dd>
 
-  <dt>`settings.pro.workspace_id`</dt>
+  <dt>`settings.pro.max_payload_bytes`</dt>
   <dd>
-    Atmos Pro workspace identifier. Required when using GitHub OIDC authentication.
+    Maximum payload size (in bytes) before Atmos automatically chunks upload requests to Atmos Pro. When `atmos describe affected --upload` or `atmos list instances --upload` produces a payload larger than this threshold, it is split into multiple smaller requests with batch metadata for server-side reassembly.
 
-    - **Type:** `string`
-    - **Default:** (none)
-    - **Environment Variable:** `ATMOS_PRO_WORKSPACE_ID`
+    - **Type:** `integer`
+    - **Default:** `4194304` (4 MB)
   </dd>
 
   <dt>`settings.pro.github_oidc.request_url`</dt>
@@ -105,42 +134,21 @@ settings:
   <dt>`ATMOS_PRO_ENDPOINT`</dt>
   <dd>Override the API endpoint path. Maps to `settings.pro.endpoint`.</dd>
 
-  <dt>`ATMOS_PRO_TOKEN`</dt>
-  <dd>API authentication token. Maps to `settings.pro.token`.</dd>
-
   <dt>`ATMOS_PRO_WORKSPACE_ID`</dt>
-  <dd>Workspace identifier for OIDC authentication. Maps to `settings.pro.workspace_id`.</dd>
+  <dd>Workspace identifier for authentication. Not a secret. Maps to `settings.pro.workspace_id`.</dd>
+
+  <dt>`ATMOS_PRO_TOKEN`</dt>
+  <dd>Bearer token obtained via OIDC token exchange (advanced). Maps to `settings.pro.token`.</dd>
 
   <dt>`ATMOS_PRO_RUN_ID`</dt>
   <dd>CI/CD run identifier. Set automatically in CI environments for tracking.</dd>
 </dl>
 
-## Authentication Methods
-
-Atmos Pro supports two authentication methods:
-
-### Direct API Token
-
-Use an API token for authentication in any environment:
-
-<File title="atmos.yaml">
-```yaml
-settings:
-  pro:
-    token: !env ATMOS_PRO_TOKEN
-```
-</File>
-
-Store your token securely and pass it via environment variable:
-
-```bash
-export ATMOS_PRO_TOKEN="your-api-token"
-atmos pro lock vpc -s prod/us-east-1
-```
+## Authentication
 
 ### GitHub OIDC Token Exchange
 
-For GitHub Actions workflows, use OIDC token exchange for secure, token-less authentication:
+For GitHub Actions workflows, use OIDC token exchange for secure, token-less authentication. This is the recommended approach.
 
 <File title="atmos.yaml">
 ```yaml
@@ -175,6 +183,30 @@ jobs:
           atmos terraform apply vpc -s prod/us-east-1
           atmos pro unlock vpc -s prod/us-east-1
 ```
+
+<details>
+<summary>Advanced: Bearer Token Authentication</summary>
+
+Atmos Pro does not issue API keys or personal access tokens. The only way to obtain a bearer token is by
+performing your own OIDC token exchange against the Atmos Pro API. This is intended for advanced integrations
+outside of GitHub Actions, such as custom CI/CD pipelines that handle OIDC flows independently.
+
+<File title="atmos.yaml">
+```yaml
+settings:
+  pro:
+    token: !env ATMOS_PRO_TOKEN
+```
+</File>
+
+Pass the bearer token via environment variable:
+
+```bash
+export ATMOS_PRO_TOKEN="<bearer-token-from-oidc-exchange>"
+atmos pro lock vpc -s prod/us-east-1
+```
+
+</details>
 
 ## Related Commands
 

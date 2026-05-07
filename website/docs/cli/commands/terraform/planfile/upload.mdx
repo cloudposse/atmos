@@ -1,0 +1,70 @@
+---
+title: atmos terraform planfile upload
+sidebar_label: upload
+sidebar_class_name: command
+sidebar_position: 2
+id: upload
+description: Upload a Terraform plan file to the configured storage backend.
+---
+import Intro from '@site/src/components/Intro'
+import Experimental from '@site/src/components/Experimental'
+
+<Intro>
+Upload a Terraform plan file to the configured storage backend. The component is specified as a positional argument and the stack via `-s`/`--stack`. The storage backend is configured in `atmos.yaml` under `terraform.planfiles`. Supported backends: `local/dir`, `aws/s3`, `github/artifacts`. When `--planfile` is omitted, the planfile path is derived from component and stack.
+</Intro>
+
+<Experimental/>
+
+## Usage
+
+```shell
+atmos terraform planfile upload <component> [flags]
+```
+
+## Arguments
+
+<dl>
+  <dt>`<component>`</dt>
+  <dd>Component name to upload the planfile for (required).</dd>
+</dl>
+
+## Flags
+
+<dl>
+  <dt>`--planfile`</dt>
+  <dd>Path to the planfile to upload. When omitted, derived from component/stack.</dd>
+
+  <dt>`--lockfile`</dt>
+  <dd>Path to `.terraform.lock.hcl`. Default: auto-detected from planfile path.</dd>
+
+  <dt>`--sha`</dt>
+  <dd>Git SHA for metadata. Default: current HEAD.</dd>
+
+  <dt>`--store`</dt>
+  <dd>Storage backend to use (default from config).</dd>
+</dl>
+
+## Examples
+
+```shell
+# Upload with auto-detected planfile path
+atmos terraform planfile upload vpc -s dev-us-east-1
+
+# Upload with explicit planfile path
+atmos terraform planfile upload vpc -s dev-us-east-1 --planfile vpc.planfile
+
+# Upload with explicit lockfile
+atmos terraform planfile upload vpc -s dev-us-east-1 --lockfile .terraform.lock.hcl
+
+# Upload to a specific store
+atmos terraform planfile upload vpc -s dev-us-east-1 --store s3
+
+# Upload with explicit SHA
+atmos terraform planfile upload vpc -s dev-us-east-1 --sha abc123def
+```
+
+## Related
+
+- [`atmos terraform planfile download`](/cli/commands/terraform/planfile/download) - Download planfiles
+- [`atmos terraform planfile list`](/cli/commands/terraform/planfile/list) - List stored planfiles
+- [`atmos terraform plan`](/cli/commands/terraform/plan) - Generate planfiles

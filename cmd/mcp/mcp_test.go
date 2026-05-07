@@ -4,6 +4,8 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+
+	"github.com/cloudposse/atmos/cmd/mcp/mcpcmd"
 )
 
 // TestMCPCommandProvider tests the MCPCommandProvider implementation.
@@ -27,7 +29,7 @@ func TestMCPCommandProvider(t *testing.T) {
 
 // TestMCPCmd_BasicProperties tests the basic properties of the mcp command.
 func TestMCPCmd_BasicProperties(t *testing.T) {
-	cmd := mcpCmd
+	cmd := mcpcmd.McpCmd
 
 	assert.Equal(t, "mcp", cmd.Use)
 	assert.NotEmpty(t, cmd.Short)
@@ -70,7 +72,7 @@ func TestMCPCommandProvider_GetAliases(t *testing.T) {
 
 // TestMCPCmd_HasSubcommands tests that mcp command has the start subcommand.
 func TestMCPCmd_HasSubcommands(t *testing.T) {
-	cmd := mcpCmd
+	cmd := mcpcmd.McpCmd
 
 	// Check that start subcommand exists.
 	startSubCmd, _, err := cmd.Find([]string{"start"})
@@ -81,7 +83,7 @@ func TestMCPCmd_HasSubcommands(t *testing.T) {
 
 // TestMCPCmd_LongDescriptionContent tests the content of the long description.
 func TestMCPCmd_LongDescriptionContent(t *testing.T) {
-	cmd := mcpCmd
+	cmd := mcpcmd.McpCmd
 
 	// Verify it mentions key concepts.
 	assert.Contains(t, cmd.Long, "Model Context Protocol")
@@ -91,7 +93,7 @@ func TestMCPCmd_LongDescriptionContent(t *testing.T) {
 
 // TestMCPCmd_ShortDescription tests the short description.
 func TestMCPCmd_ShortDescription(t *testing.T) {
-	cmd := mcpCmd
+	cmd := mcpcmd.McpCmd
 
 	// Short description should mention MCP and be concise.
 	assert.Contains(t, cmd.Short, "MCP")
