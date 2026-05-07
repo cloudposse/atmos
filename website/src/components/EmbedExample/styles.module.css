@@ -136,6 +136,19 @@
   margin-top: 0;
 }
 
+/*
+ * The README's original `# Heading` is rendered as <h2 class="embeddedH1">
+ * (see EmbedExample's markdownComponents) so it doesn't create a second
+ * <h1> on the host page, but visually it should still read as a section
+ * title — match the typography of a real h1.
+ */
+.embeddedH1 {
+  font-size: var(--ifm-h1-font-size);
+  font-weight: var(--ifm-heading-font-weight);
+  line-height: var(--ifm-heading-line-height);
+  margin-bottom: calc(var(--ifm-heading-margin-bottom) * 1.25);
+}
+
 .readmeContent table {
   display: block;
   overflow-x: auto;
