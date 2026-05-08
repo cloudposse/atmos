@@ -271,8 +271,73 @@ func TestResolveBase_Push_NewBranch(t *testing.T) {
 	assert.Contains(t, res.Source, "no before SHA")
 }
 
+// TestResolveBase_MergeGroup verifies that a merge_group event with a full
+// payload resolves to event.merge_group.base_sha (the target-branch commit
+// the synthetic merge commit was built on top of), populates HeadSHA from
+// merge_group.head_sha, and strips refs/heads/ from base_ref to derive the
+// target branch.
 func TestResolveBase_MergeGroup(t *testing.T) {
 	t.Setenv("GITHUB_EVENT_NAME", "merge_group")
+	t.Setenv("GITHUB_BASE_REF", "main")
+
+	eventPayload := map[string]any{
+		"action": "checks_requested",
+		"merge_group": map[string]any{
+			"base_sha": "basesha123456789012345678901234567890ab",
+			"head_sha": "synthsha123456789012345678901234567890ab",
+			"base_ref": "refs/heads/main",
+			"head_ref": "refs/heads/gh-readonly-queue/main/pr-42-headsha",
+		},
+	}
+	eventPath := writeEventPayload(t, eventPayload)
+	t.Setenv("GITHUB_EVENT_PATH", eventPath)
+
+	p := NewProvider()
+	res, err := p.ResolveBase()
+
+	require.NoError(t, err)
+	require.NotNil(t, res)
+	assert.Equal(t, "merge_group", res.EventType)
+	assert.Equal(t, "basesha123456789012345678901234567890ab", res.SHA)
+	assert.Equal(t, "synthsha123456789012345678901234567890ab", res.HeadSHA)
+	assert.Equal(t, "main", res.TargetBranch)
+	assert.Equal(t, "event.merge_group.base_sha", res.Source)
+	assert.Empty(t, res.Ref, "should resolve to a SHA, not fall back to a ref")
+}
+
+// TestResolveBase_MergeGroup_PayloadHeadSHAOnly verifies that when the payload
+// has head_sha but no base_sha (an unlikely-but-possible truncated payload),
+// we fall back to env-based ref resolution while still populating HeadSHA.
+func TestResolveBase_MergeGroup_PayloadHeadSHAOnly(t *testing.T) {
+	t.Setenv("GITHUB_EVENT_NAME", "merge_group")
+	t.Setenv("GITHUB_BASE_REF", "main")
+
+	eventPayload := map[string]any{
+		"merge_group": map[string]any{
+			"head_sha": "synthsha123456789012345678901234567890ab",
+			"base_ref": "refs/heads/main",
+		},
+	}
+	eventPath := writeEventPayload(t, eventPayload)
+	t.Setenv("GITHUB_EVENT_PATH", eventPath)
+
+	p := NewProvider()
+	res, err := p.ResolveBase()
+
+	require.NoError(t, err)
+	require.NotNil(t, res)
+	assert.Equal(t, "merge_group", res.EventType)
+	assert.Equal(t, "refs/remotes/origin/main", res.Ref, "no base_sha → fall back to ref")
+	assert.Equal(t, "synthsha123456789012345678901234567890ab", res.HeadSHA)
+	assert.Equal(t, "main", res.TargetBranch)
+}
+
+// TestResolveBase_MergeGroup_NoEventPath verifies graceful degradation when
+// GITHUB_EVENT_PATH is unset (e.g., test environments without a real event
+// file). We must not error out — fall back to env-only resolution.
+func TestResolveBase_MergeGroup_NoEventPath(t *testing.T) {
+	t.Setenv("GITHUB_EVENT_NAME", "merge_group")
+	t.Setenv("GITHUB_EVENT_PATH", "")
 	t.Setenv("GITHUB_BASE_REF", "main")
 
 	p := NewProvider()
@@ -280,9 +345,9 @@ func TestResolveBase_MergeGroup(t *testing.T) {
 
 	require.NoError(t, err)
 	require.NotNil(t, res)
+	assert.Equal(t, "merge_group", res.EventType)
 	assert.Equal(t, "refs/remotes/origin/main", res.Ref)
 	assert.Equal(t, "GITHUB_BASE_REF", res.Source)
-	assert.Equal(t, "merge_group", res.EventType)
 }
 
 func TestResolveBase_UnknownEvent(t *testing.T) {
@@ -308,9 +373,13 @@ func TestResolveBase_MissingEventPath(t *testing.T) {
 	assert.Contains(t, err.Error(), "GITHUB_EVENT_PATH")
 }
 
+// TestResolveBase_MergeGroup_NoBaseRef verifies that with no event payload
+// and no GITHUB_BASE_REF, we still gracefully degrade to the default ref
+// rather than erroring out.
 func TestResolveBase_MergeGroup_NoBaseRef(t *testing.T) {
 	t.Setenv("GITHUB_EVENT_NAME", "merge_group")
 	t.Setenv("GITHUB_BASE_REF", "")
+	t.Setenv("GITHUB_EVENT_PATH", "")
 
 	p := NewProvider()
 	res, err := p.ResolveBase()

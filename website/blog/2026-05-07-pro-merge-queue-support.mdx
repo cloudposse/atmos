@@ -1,0 +1,73 @@
+---
+slug: pro-merge-queue-support
+title: "Atmos Pro now reports check status on GitHub merge queue commits"
+authors: [osterman]
+tags: [feature, atmos-pro]
+---
+
+`atmos describe affected --upload` now works under `GITHUB_EVENT_NAME=merge_group`, so Atmos Pro can correctly conclude check runs on the synthetic commits GitHub creates when a PR enters a merge queue. If you have already enabled GitHub merge queue on your repository, no `atmos.yaml` changes are required — Atmos Pro will reuse your existing `pull_request.synchronize` workflows for queue checks.
+
+<!--truncate-->
+
+## What Changed
+
+Until now, the CLI rejected `merge_group` events at the `--upload` boundary, and Atmos Pro had no way to correlate the synthetic merge-queue commits with stack-affected results. Required "Atmos Pro" checks would stay in **Expected — Waiting for status to be reported** until a delayed reconciler swept them.
+
+This release lifts that guard and makes the CLI fully aware of merge-queue events:
+
+- `atmos describe affected --upload` accepts `GITHUB_EVENT_NAME=merge_group` alongside `pull_request` and `pull_request_target`.
+- The diff base is resolved from `event.merge_group.base_sha` (the target-branch commit the synthetic commit was merged on top of), with `merge_group.head_sha` and `merge_group.base_ref` used for upload correlation and target-branch derivation.
+- The full `settings.pro.merge_group` schema rounds-trips through the upload payload, so the new optional `merge_group.checks_requested.workflows` block reaches Atmos Pro intact.
+
+On the Atmos Pro side, check-suite webhooks filtered on `head_branch` matching `gh-readonly-queue/<base>/pr-<N>-<sha>` now drive a full check-run lifecycle: create on the synthetic SHA, watch for the customer's workflow to complete, and conclude (success / failure / no-affected-stacks neutral). Comment updates are posted to the originating PR so queue check resolution shows up on the same thread.
+
+## Why This Matters
+
+GitHub merge queues add a second SHA to every PR's lifecycle: the PR head commit, then a synthetic merge commit when the PR enters the queue. Required status checks must report against both. Before this release, customers using merge queues with Atmos Pro saw the queue check run hang — there was no way for the CLI to upload the affected stacks against the synthetic SHA. This release closes that gap so a PR added to a merge queue gets the same affected-stacks correlation it gets on the PR itself.
+
+The default behavior is invisible: existing `pull_request.synchronize.workflows` are reused automatically for queue checks, so customers running a recent CLI get merge-queue support the moment they enable a GitHub merge queue on their repository.
+
+## How to Use It
+
+### Default (no config changes)
+
+If a stack already has `settings.pro.pull_request.synchronize.workflows` configured, you do not need to change anything. Atmos Pro will dispatch the same workflow against the merge-queue synthetic commit.
+
+### Optional: different policy in the queue
+
+For teams that want stricter policy in the queue (different inputs, a different workflow file, fail-on-drift, etc.), declare a `merge_group` block alongside `pull_request`:
+
+```yaml
+settings:
+  pro:
+    enabled: true
+    pull_request:
+      synchronize:
+        workflows:
+          atmos-terraform-plan.yaml:
+            inputs:
+              component: "{{ .atmos_component }}"
+              stack: "{{ .atmos_stack }}"
+    merge_group:
+      checks_requested:
+        workflows:
+          atmos-terraform-plan.yaml:
+            inputs:
+              component: "{{ .atmos_component }}"
+              stack: "{{ .atmos_stack }}"
+              fail_on_drift: "true"
+```
+
+`merge_group` is a sibling of `pull_request` / `release` / `drift_detection` (not nested under `pull_request`). The only meaningful activity today is `checks_requested`. Apply continues to fire on `pull_request.merged` — not on `merge_group` events.
+
+### Resolution order
+
+When Atmos Pro receives a merge-queue trigger for a stack, it picks the workflow to dispatch in this order:
+
+1. `settings.pro.merge_group.checks_requested.workflows` if defined.
+2. Otherwise fall back to `settings.pro.pull_request.synchronize.workflows`.
+3. Otherwise, no workflow is dispatched.
+
+## Get Involved
+
+See the [full configuration reference](/cli/configuration/settings/pro#merge-queue-support) for the schema, prerequisites, and migration notes. GitHub's docs on [managing a merge queue](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/configuring-pull-request-merges/managing-a-merge-queue) are a good starting point if you have not enabled queues yet.

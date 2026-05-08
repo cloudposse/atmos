@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/cloudposse/atmos/pkg/ci/internal/provider"
 	"github.com/cloudposse/atmos/pkg/git"
@@ -19,6 +20,8 @@ const (
 	eventPush = "push"
 	// PayloadKeyPullRequest is the top-level key in the event payload for PR events.
 	payloadKeyPullRequest = "pull_request"
+	// PayloadKeyMergeGroup is the top-level key in the event payload for merge_group events.
+	payloadKeyMergeGroup = "merge_group"
 	// EnvGitHubBaseRef is the environment variable for the PR target branch.
 	envGitHubBaseRef = "GITHUB_BASE_REF"
 	// SourceDefault is the source label for default fallback resolution.
@@ -27,6 +30,12 @@ const (
 	sourceGitHubBaseRef = "GITHUB_BASE_REF"
 	// SourcePayloadBaseSHA is the source label when falling back to event.pull_request.base.sha.
 	sourcePayloadBaseSHA = "event.pull_request.base.sha"
+	// SourceMergeGroupBaseSHA is the source label when resolving from event.merge_group.base_sha.
+	sourceMergeGroupBaseSHA = "event.merge_group.base_sha"
+	// EventMergeGroup is the GitHub Actions merge_group event name.
+	eventMergeGroup = "merge_group"
+	// RefsHeadsPrefix is the prefix on fully-qualified branch refs in event payloads.
+	refsHeadsPrefix = "refs/heads/"
 )
 
 // ErrEventPathNotSet is returned when $GITHUB_EVENT_PATH is not set.
@@ -55,7 +64,7 @@ func (p *Provider) ResolveBase() (*provider.BaseResolution, error) {
 		return resolvePRBase(eventName)
 	case eventPush:
 		return resolvePushBase()
-	case "merge_group":
+	case eventMergeGroup:
 		return resolveMergeGroupBase(), nil
 	default:
 		return &provider.BaseResolution{
@@ -277,9 +286,94 @@ func resolvePushBase() (*provider.BaseResolution, error) {
 	}, nil
 }
 
-// resolveMergeGroupBase resolves the base commit for merge group events.
+// resolveMergeGroupBase resolves the base commit for merge_group events.
+//
+// GitHub creates a synthetic merge commit on a temporary
+// `gh-readonly-queue/<base>/pr-<N>-<sha>` branch when a PR enters the merge
+// queue, and re-runs all required status checks against that new SHA. The
+// event payload exposes:
+//   - merge_group.base_sha — the target-branch commit the synthetic commit
+//     was merged on top of (the right diff base for "affected").
+//   - merge_group.head_sha — the synthetic merge commit (used for upload
+//     correlation, parallel to pull_request.head.sha).
+//   - merge_group.base_ref — the fully-qualified target branch ref
+//     (e.g. "refs/heads/main").
+//
+// Strategy:
+//  1. Read the event payload and use base_sha / head_sha / base_ref directly.
+//  2. If the payload is missing or fields are empty (e.g. test environments
+//     without a real GitHub event file), fall back to GITHUB_BASE_REF and
+//     ultimately to refs/remotes/origin/HEAD.
 func resolveMergeGroupBase() *provider.BaseResolution {
-	return resolveFromBaseRef("merge_group")
+	payload, err := readEventPayload()
+	if err != nil {
+		// Without a payload we cannot read merge_group.base_sha — fall back
+		// to env-only resolution rather than failing the whole describe-affected
+		// run. This preserves test-environment ergonomics.
+		log.Debug("merge_group: event payload unavailable, falling back to GITHUB_BASE_REF", "error", err)
+		return resolveFromBaseRef(eventMergeGroup)
+	}
+
+	baseSHA := extractMergeGroupBaseSHA(payload)
+	headSHA := extractMergeGroupHeadSHA(payload)
+	targetBranch := extractMergeGroupTargetBranch(payload)
+
+	if baseSHA != "" {
+		return &provider.BaseResolution{
+			SHA:          baseSHA,
+			HeadSHA:      headSHA,
+			TargetBranch: targetBranch,
+			Source:       sourceMergeGroupBaseSHA,
+			EventType:    eventMergeGroup,
+		}
+	}
+
+	// Payload is present but lacks merge_group.base_sha — last-resort env fallback.
+	res := resolveFromBaseRef(eventMergeGroup)
+	if headSHA != "" {
+		res.HeadSHA = headSHA
+	}
+	if targetBranch != "" {
+		res.TargetBranch = targetBranch
+	}
+	return res
+}
+
+// extractMergeGroupBaseSHA extracts merge_group.base_sha from the event payload.
+// Returns empty string if absent.
+func extractMergeGroupBaseSHA(payload map[string]any) string {
+	mg, _ := payload[payloadKeyMergeGroup].(map[string]any)
+	if mg == nil {
+		return ""
+	}
+	sha, _ := mg["base_sha"].(string)
+	return sha
+}
+
+// extractMergeGroupHeadSHA extracts merge_group.head_sha from the event payload.
+// This is the synthetic merge commit SHA Atmos Pro indexes by; used for upload
+// correlation. Returns empty string if absent.
+func extractMergeGroupHeadSHA(payload map[string]any) string {
+	mg, _ := payload[payloadKeyMergeGroup].(map[string]any)
+	if mg == nil {
+		return ""
+	}
+	sha, _ := mg["head_sha"].(string)
+	return sha
+}
+
+// extractMergeGroupTargetBranch extracts the target branch name from
+// merge_group.base_ref (e.g. "refs/heads/main" → "main"). Falls back to
+// $GITHUB_BASE_REF, then empty.
+func extractMergeGroupTargetBranch(payload map[string]any) string {
+	mg, _ := payload[payloadKeyMergeGroup].(map[string]any)
+	if mg != nil {
+		ref, _ := mg["base_ref"].(string)
+		if ref != "" {
+			return strings.TrimPrefix(ref, refsHeadsPrefix)
+		}
+	}
+	return os.Getenv(envGitHubBaseRef)
 }
 
 // readEventPayload reads and parses the GitHub event payload from $GITHUB_EVENT_PATH.
