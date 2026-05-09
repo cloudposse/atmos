@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -332,4 +333,76 @@ func TestAwsUserIdentityInfo(t *testing.T) {
 	assert.Equal(t, "arn:aws:iam::123456789012:mfa/user", info.MfaArn)
 	assert.Equal(t, "12h", info.SessionDuration)
 	assert.True(t, info.AllInYAML)
+}
+
+// TestBuildCredentialFormField covers all branches of the form-builder helper:
+// YAML-managed → Note field, default value pre-fill, password mode, optional,
+// custom validate func, and the default required-field validator.
+func TestBuildCredentialFormField(t *testing.T) {
+	t.Run("YAML-managed value renders a Note and pre-fills value", func(t *testing.T) {
+		var captured string
+		field := buildCredentialFormField(formFieldConfig{
+			YAMLValue:  "AKIA-fixed-in-yaml",
+			InputTitle: "AWS Access Key ID",
+			NoteTitle:  "AWS Access Key ID (managed by Atmos configuration)",
+			NoteDesc:   "AKIA-fixed-in-yaml",
+		}, &captured)
+
+		require.NotNil(t, field)
+		// The pointer must have been pre-filled with the YAML value so the
+		// caller doesn't accidentally overwrite it with a blank prompt result.
+		assert.Equal(t, "AKIA-fixed-in-yaml", captured)
+	})
+
+	t.Run("missing YAML value with DefaultValue pre-fills the input", func(t *testing.T) {
+		var captured string
+		field := buildCredentialFormField(formFieldConfig{
+			InputTitle:   "Session Duration",
+			DefaultValue: "12h",
+			IsOptional:   true,
+		}, &captured)
+
+		require.NotNil(t, field)
+		assert.Equal(t, "12h", captured,
+			"DefaultValue must populate the input when no YAML value is set")
+	})
+
+	t.Run("password mode does not panic and returns a field", func(t *testing.T) {
+		var captured string
+		field := buildCredentialFormField(formFieldConfig{
+			InputTitle: "AWS Secret Access Key",
+			IsPassword: true,
+		}, &captured)
+		require.NotNil(t, field)
+	})
+
+	t.Run("optional field with no default leaves capture empty", func(t *testing.T) {
+		var captured string
+		field := buildCredentialFormField(formFieldConfig{
+			InputTitle: "MFA ARN (optional)",
+			IsOptional: true,
+		}, &captured)
+		require.NotNil(t, field)
+		assert.Empty(t, captured)
+	})
+
+	t.Run("custom ValidateFunc is wired in without invoking it", func(t *testing.T) {
+		var captured string
+		field := buildCredentialFormField(formFieldConfig{
+			InputTitle:   "Session Duration",
+			IsOptional:   true,
+			ValidateFunc: func(s string) error { return nil },
+		}, &captured)
+		require.NotNil(t, field)
+	})
+
+	t.Run("description message is wired in", func(t *testing.T) {
+		var captured string
+		field := buildCredentialFormField(formFieldConfig{
+			InputTitle:     "Session Duration",
+			DescriptionMsg: "How long before MFA expires",
+			IsOptional:     true,
+		}, &captured)
+		require.NotNil(t, field)
+	})
 }

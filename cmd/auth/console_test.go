@@ -7,6 +7,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -399,4 +400,149 @@ func TestDestinationFlagCompletion(t *testing.T) {
 	assert.Contains(t, completions, "ec2")
 	// Directive should indicate no file completion.
 	assert.NotZero(t, directive)
+}
+
+// TestConsoleSessionDir verifies the deterministic XDG data directory used for
+// isolated browser sessions. Same realm+identity must hash to the same dirname;
+// different realms or identities must diverge.
+func TestConsoleSessionDir(t *testing.T) {
+	t.Run("returns a path under the XDG data dir", func(t *testing.T) {
+		path, err := consoleSessionDir("test-realm", "id-a")
+		require.NoError(t, err)
+		assert.Contains(t, path, "console")
+		assert.Contains(t, path, "sessions")
+	})
+
+	t.Run("same realm+identity produces the same path", func(t *testing.T) {
+		first, err := consoleSessionDir("realm-1", "shared-id")
+		require.NoError(t, err)
+		second, err := consoleSessionDir("realm-1", "shared-id")
+		require.NoError(t, err)
+		assert.Equal(t, first, second,
+			"deterministic hash means repeat calls reuse the same browser profile dir")
+	})
+
+	t.Run("different identity produces a different path", func(t *testing.T) {
+		first, err := consoleSessionDir("realm-1", "id-a")
+		require.NoError(t, err)
+		second, err := consoleSessionDir("realm-1", "id-b")
+		require.NoError(t, err)
+		assert.NotEqual(t, first, second)
+	})
+
+	t.Run("different realm produces a different path", func(t *testing.T) {
+		first, err := consoleSessionDir("realm-1", "shared-id")
+		require.NoError(t, err)
+		second, err := consoleSessionDir("realm-2", "shared-id")
+		require.NoError(t, err)
+		assert.NotEqual(t, first, second,
+			"realm scoping must isolate sessions across credential boundaries")
+	})
+}
+
+// TestResolveConsoleIsolated covers the flag/config/default precedence ladder.
+func TestResolveConsoleIsolated(t *testing.T) {
+	newCmdWithIsolatedFlag := func() *cobra.Command {
+		cmd := &cobra.Command{Use: "console"}
+		cmd.Flags().Bool("isolated", false, "isolated session")
+		return cmd
+	}
+
+	t.Run("default is false when flag and config both absent", func(t *testing.T) {
+		cmd := newCmdWithIsolatedFlag()
+		v := viper.New()
+		cfg := &schema.AtmosConfiguration{}
+
+		assert.False(t, resolveConsoleIsolated(cmd, v, cfg))
+	})
+
+	t.Run("auth.console.isolated config is honoured when flag is unset", func(t *testing.T) {
+		cmd := newCmdWithIsolatedFlag()
+		v := viper.New()
+		isolated := true
+		cfg := &schema.AtmosConfiguration{
+			Auth: schema.AuthConfig{
+				Console: &schema.AuthConsoleConfig{Isolated: &isolated},
+			},
+		}
+
+		assert.True(t, resolveConsoleIsolated(cmd, v, cfg))
+	})
+
+	t.Run("flag overrides config when explicitly set", func(t *testing.T) {
+		cmd := newCmdWithIsolatedFlag()
+		require.NoError(t, cmd.Flags().Set("isolated", "false"))
+
+		v := viper.New()
+		v.Set("isolated", false)
+
+		// Config says isolated=true; flag should win.
+		isolated := true
+		cfg := &schema.AtmosConfiguration{
+			Auth: schema.AuthConfig{
+				Console: &schema.AuthConsoleConfig{Isolated: &isolated},
+			},
+		}
+
+		assert.False(t, resolveConsoleIsolated(cmd, v, cfg),
+			"explicit --isolated=false must override auth.console.isolated=true config")
+	})
+
+	t.Run("flag set to true overrides config false", func(t *testing.T) {
+		cmd := newCmdWithIsolatedFlag()
+		require.NoError(t, cmd.Flags().Set("isolated", "true"))
+
+		v := viper.New()
+		v.Set("isolated", true)
+
+		isolated := false
+		cfg := &schema.AtmosConfiguration{
+			Auth: schema.AuthConfig{
+				Console: &schema.AuthConsoleConfig{Isolated: &isolated},
+			},
+		}
+
+		assert.True(t, resolveConsoleIsolated(cmd, v, cfg))
+	})
+}
+
+// TestPrintConsoleHelpers asserts the formatted I/O helpers don't panic and
+// produce the expected key strings. Coverage gain over no-tests.
+func TestPrintConsoleHelpers(t *testing.T) {
+	t.Run("printConsoleURL writes the URL", func(t *testing.T) {
+		assert.NotPanics(t, func() {
+			printConsoleURL("https://example.com/console")
+		})
+	})
+
+	t.Run("printConsoleInfo with full whoami including expiration", func(t *testing.T) {
+		future := time.Now().Add(2 * time.Hour)
+		whoami := &authTypes.WhoamiInfo{
+			Provider:   "aws-sso",
+			Identity:   "prod-admin",
+			Account:    "123456789012",
+			Expiration: &future,
+		}
+
+		assert.NotPanics(t, func() {
+			printConsoleInfo(whoami, time.Hour, false, "")
+		})
+	})
+
+	t.Run("printConsoleInfo with showURL=true prints the URL", func(t *testing.T) {
+		whoami := &authTypes.WhoamiInfo{Provider: "aws-sso", Identity: "prod-admin"}
+		assert.NotPanics(t, func() {
+			printConsoleInfo(whoami, 0, true, "https://example.com")
+		})
+	})
+}
+
+// TestRetrieveCredentials_NoCredentialsAvailable asserts that an empty
+// WhoamiInfo (no Credentials, no CredentialsRef) errors out cleanly.
+func TestRetrieveCredentials_NoCredentialsAvailable(t *testing.T) {
+	whoami := &authTypes.WhoamiInfo{Identity: "id"}
+	creds, err := retrieveCredentials(whoami)
+	require.Error(t, err)
+	assert.Nil(t, creds)
+	assert.ErrorIs(t, err, errUtils.ErrAuthConsole)
 }

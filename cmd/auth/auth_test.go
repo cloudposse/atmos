@@ -133,3 +133,40 @@ func TestAddIdentityCompletion(t *testing.T) {
 		AddIdentityCompletion(cmd)
 	})
 }
+
+// TestAuthCommandProvider_OptionalMethods covers the CommandProvider interface
+// methods that have stable, contract-level returns (no auth/IO required).
+func TestAuthCommandProvider_OptionalMethods(t *testing.T) {
+	provider := &AuthCommandProvider{}
+
+	t.Run("GetPositionalArgsBuilder returns nil", func(t *testing.T) {
+		assert.Nil(t, provider.GetPositionalArgsBuilder(),
+			"auth command does not declare positional args via the builder")
+	})
+
+	t.Run("GetCompatibilityFlags returns nil", func(t *testing.T) {
+		assert.Nil(t, provider.GetCompatibilityFlags(),
+			"auth command has no terraform/helmfile-style compat flags")
+	})
+
+	t.Run("GetAliases returns nil", func(t *testing.T) {
+		assert.Nil(t, provider.GetAliases(),
+			"auth command has no top-level aliases")
+	})
+
+	t.Run("IsExperimental returns true", func(t *testing.T) {
+		// Auth is currently in experimental Pro Features. If this flips to
+		// stable, the change is intentional and the assertion should be flipped.
+		assert.True(t, provider.IsExperimental(),
+			"auth command is experimental (Pro Feature)")
+	})
+}
+
+// TestGetAuthCmd_ReturnsAuthCmd guards the public accessor used by other
+// packages (e.g. cmd/ai) to attach subcommands.
+func TestGetAuthCmd_ReturnsAuthCmd(t *testing.T) {
+	got := GetAuthCmd()
+	assert.NotNil(t, got)
+	assert.Equal(t, "auth", got.Use)
+	assert.Same(t, authCmd, got, "GetAuthCmd must return the package-level authCmd")
+}

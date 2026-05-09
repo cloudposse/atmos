@@ -121,3 +121,25 @@ func TestCompletionFunctions_WithPrefix(t *testing.T) {
 		})
 	}
 }
+
+// TestIdentityFlagCompletion covers the no-config branch of the flag-level
+// completer (the only one reachable without a real atmos.yaml).
+func TestIdentityFlagCompletion(t *testing.T) {
+	// chdir to an empty tempdir so cfg.InitCliConfig can't find an atmos.yaml.
+	t.Chdir(t.TempDir())
+
+	completions, directive := identityFlagCompletion(nil, nil, "")
+	assert.Nil(t, completions, "no atmos.yaml means no identities")
+	assert.Equal(t, cobra.ShellCompDirectiveNoFileComp, directive,
+		"completion must always disable file completion to avoid suggesting filenames")
+}
+
+// TestAddIdentityCompletion_NoFlag covers the path where the command has no
+// --identity flag — the helper must be a no-op rather than panicking.
+func TestAddIdentityCompletion_NoFlag(t *testing.T) {
+	cmd := &cobra.Command{Use: "test-no-identity"}
+	// No identity flag registered.
+	assert.NotPanics(t, func() {
+		AddIdentityCompletion(cmd)
+	})
+}

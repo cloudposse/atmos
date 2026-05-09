@@ -5,6 +5,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"gopkg.in/yaml.v3"
@@ -402,4 +404,115 @@ func TestAuthListCommand_Structure(t *testing.T) {
 	// Check identities flag exists.
 	identitiesFlag := authListCmd.Flags().Lookup("identities")
 	assert.NotNil(t, identitiesFlag)
+}
+
+// TestParseFilterFlags covers mutual-exclusivity validation and the comma-
+// separated parsing branches of parseFilterFlags.
+func TestParseFilterFlags(t *testing.T) {
+	newCmd := func() *cobra.Command {
+		cmd := &cobra.Command{Use: "list"}
+		cmd.Flags().String("providers", "", "providers")
+		cmd.Flags().String("identities", "", "identities")
+		return cmd
+	}
+
+	t.Run("neither flag changed returns default config", func(t *testing.T) {
+		viper.Reset()
+		t.Cleanup(viper.Reset)
+		cmd := newCmd()
+
+		got, err := parseFilterFlags(cmd)
+		require.NoError(t, err)
+		require.NotNil(t, got)
+		assert.False(t, got.showProvidersOnly)
+		assert.False(t, got.showIdentitiesOnly)
+		assert.Empty(t, got.providerNames)
+		assert.Empty(t, got.identityNames)
+	})
+
+	t.Run("--providers without value enables providers-only filter", func(t *testing.T) {
+		viper.Reset()
+		t.Cleanup(viper.Reset)
+		cmd := newCmd()
+		require.NoError(t, cmd.Flags().Set("providers", ""))
+
+		got, err := parseFilterFlags(cmd)
+		require.NoError(t, err)
+		assert.True(t, got.showProvidersOnly)
+		assert.Empty(t, got.providerNames)
+	})
+
+	t.Run("--providers with comma list parses names", func(t *testing.T) {
+		viper.Reset()
+		t.Cleanup(viper.Reset)
+		viper.Set(providersKey, "p1, p2 , p3")
+
+		cmd := newCmd()
+		require.NoError(t, cmd.Flags().Set("providers", "p1, p2 , p3"))
+
+		got, err := parseFilterFlags(cmd)
+		require.NoError(t, err)
+		assert.True(t, got.showProvidersOnly)
+		assert.Equal(t, []string{"p1", "p2", "p3"}, got.providerNames,
+			"comma-separated values must be split and trimmed")
+	})
+
+	t.Run("--identities with comma list parses names", func(t *testing.T) {
+		viper.Reset()
+		t.Cleanup(viper.Reset)
+		viper.Set(identitiesKey, "i1,i2")
+
+		cmd := newCmd()
+		require.NoError(t, cmd.Flags().Set("identities", "i1,i2"))
+
+		got, err := parseFilterFlags(cmd)
+		require.NoError(t, err)
+		assert.True(t, got.showIdentitiesOnly)
+		assert.Equal(t, []string{"i1", "i2"}, got.identityNames)
+	})
+
+	t.Run("both --providers and --identities is mutually-exclusive error", func(t *testing.T) {
+		viper.Reset()
+		t.Cleanup(viper.Reset)
+		cmd := newCmd()
+		require.NoError(t, cmd.Flags().Set("providers", "p1"))
+		require.NoError(t, cmd.Flags().Set("identities", "i1"))
+
+		got, err := parseFilterFlags(cmd)
+		require.Error(t, err)
+		assert.Nil(t, got)
+		assert.ErrorIs(t, err, errUtils.ErrMutuallyExclusiveFlags)
+	})
+}
+
+// TestRenderOutput_InvalidFormatErrors guards the default-case error in the
+// dispatcher. Each valid format branch is covered by other tests; this test
+// just pins the negative path.
+func TestRenderOutput_InvalidFormatErrors(t *testing.T) {
+	got, err := renderOutput(nil, nil, nil, "no-such-format")
+	require.Error(t, err)
+	assert.Empty(t, got)
+	assert.ErrorIs(t, err, errUtils.ErrInvalidFlag)
+}
+
+// TestListFlagCompletions_NoConfig covers the early-return path of
+// listProvidersFlagCompletion / listIdentitiesFlagCompletion when
+// cfg.InitCliConfig fails (no atmos.yaml). They must return nil, no panic.
+func TestListFlagCompletions_NoConfig(t *testing.T) {
+	// Run from /tmp to ensure no atmos.yaml is found on most machines.
+	tmp := t.TempDir()
+	t.Chdir(tmp)
+
+	// These functions should return safely even without a config.
+	t.Run("listProvidersFlagCompletion", func(t *testing.T) {
+		assert.NotPanics(t, func() {
+			_, _ = listProvidersFlagCompletion(nil, nil, "")
+		})
+	})
+
+	t.Run("listIdentitiesFlagCompletion", func(t *testing.T) {
+		assert.NotPanics(t, func() {
+			_, _ = listIdentitiesFlagCompletion(nil, nil, "")
+		})
+	})
 }

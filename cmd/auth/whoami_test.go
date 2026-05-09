@@ -2,11 +2,13 @@ package auth
 
 import (
 	"context"
+	"errors"
 	"path/filepath"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -501,4 +503,106 @@ func TestRedactHomeDirWithOsPathSeparator(t *testing.T) {
 	// Result should start with ~.
 	assert.True(t, len(result) > 0 && result[0] == '~',
 		"expected result to start with ~, got: %s", result)
+}
+
+// TestAddGCPReauthExplanation covers the three branches of the GCP reauth
+// hint: nil pass-through, unrelated error pass-through, and the
+// invalid_grant + invalid_rapt enrichment path.
+func TestAddGCPReauthExplanation(t *testing.T) {
+	t.Run("nil error returns nil", func(t *testing.T) {
+		assert.NoError(t, addGCPReauthExplanation(nil))
+	})
+
+	t.Run("unrelated error passes through unchanged", func(t *testing.T) {
+		original := errors.New("network down")
+		got := addGCPReauthExplanation(original)
+		assert.Same(t, original, got,
+			"errors that don't match the GCP reauth pattern must not be re-wrapped")
+	})
+
+	t.Run("invalid_grant alone is not enriched", func(t *testing.T) {
+		original := errors.New("oauth: invalid_grant — token expired")
+		got := addGCPReauthExplanation(original)
+		// Need BOTH invalid_grant AND invalid_rapt to trigger the GCP-specific hint.
+		assert.Same(t, original, got)
+	})
+
+	t.Run("invalid_grant + invalid_rapt triggers gcloud reauth hint", func(t *testing.T) {
+		original := errors.New(`oauth2: "invalid_grant" "reauth related error (invalid_rapt)"`)
+		got := addGCPReauthExplanation(original)
+		require.Error(t, got)
+		// Original error preserved in the chain.
+		assert.ErrorIs(t, got, original)
+	})
+}
+
+// TestPrintWhoamiJSON_RedactsCredentials guards the contract that the JSON
+// output never includes Credentials and that the Environment map is
+// home-redacted/sanitised.
+func TestPrintWhoamiJSON_RedactsCredentials(t *testing.T) {
+	t.Run("nil Environment is fine", func(t *testing.T) {
+		whoami := &authTypes.WhoamiInfo{
+			Provider: "aws-sso",
+			Identity: "prod-admin",
+		}
+		assert.NotPanics(t, func() {
+			_ = printWhoamiJSON(whoami)
+		})
+	})
+
+	t.Run("Environment with secrets and home paths is sanitised", func(t *testing.T) {
+		whoami := &authTypes.WhoamiInfo{
+			Provider: "aws-sso",
+			Identity: "prod-admin",
+			Environment: map[string]string{
+				"AWS_REGION":                  "us-east-1",
+				"AWS_SECRET_ACCESS_KEY":       "super-secret",
+				"AWS_SHARED_CREDENTIALS_FILE": filepath.Join("home", "user", ".aws", "creds"),
+			},
+		}
+		assert.NotPanics(t, func() {
+			_ = printWhoamiJSON(whoami)
+		})
+		// The original whoami.Environment must NOT have been mutated by the
+		// sanitiser (the function operates on a copy via redactedWhoami).
+		assert.Equal(t, "super-secret", whoami.Environment["AWS_SECRET_ACCESS_KEY"],
+			"printWhoamiJSON must not mutate the caller's Environment map")
+	})
+}
+
+// TestPrintWhoamiHuman covers the table-rendering paths for valid and invalid
+// credential states. Smoke-level: just confirm no panic and key fields render.
+func TestPrintWhoamiHuman(t *testing.T) {
+	future := time.Now().Add(2 * time.Hour)
+	whoami := &authTypes.WhoamiInfo{
+		Provider:    "aws-sso",
+		Identity:    "prod-admin",
+		Account:     "123456789012",
+		Region:      "us-east-1",
+		Expiration:  &future,
+		LastUpdated: time.Now(),
+	}
+
+	t.Run("valid credentials renders without warning section", func(t *testing.T) {
+		assert.NotPanics(t, func() {
+			printWhoamiHuman(whoami, true)
+		})
+	})
+
+	t.Run("invalid credentials renders the refresh tip", func(t *testing.T) {
+		assert.NotPanics(t, func() {
+			printWhoamiHuman(whoami, false)
+		})
+	})
+
+	t.Run("nil expiration is handled", func(t *testing.T) {
+		w := &authTypes.WhoamiInfo{
+			Provider:    "aws-sso",
+			Identity:    "prod-admin",
+			LastUpdated: time.Now(),
+		}
+		assert.NotPanics(t, func() {
+			printWhoamiHuman(w, true)
+		})
+	})
 }

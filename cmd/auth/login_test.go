@@ -6,6 +6,7 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -143,4 +144,62 @@ func TestAuthLoginCommand_ValidArgsFunction(t *testing.T) {
 func TestAuthLoginCommand_FParseErrWhitelist(t *testing.T) {
 	// Verify FParseErrWhitelist is configured.
 	assert.False(t, authLoginCmd.FParseErrWhitelist.UnknownFlags)
+}
+
+// fakeProviderLister is a minimal stand-in for the providerLister interface so
+// we can exercise getProviderForFallback's branches without spinning up an
+// AuthManager that touches the keyring.
+type fakeProviderLister struct {
+	providers []string
+}
+
+func (f *fakeProviderLister) ListProviders() []string { return f.providers }
+
+// TestGetProviderForFallback covers the deterministic branches of the no-
+// identities-available auto-provision flow. The interactive prompt branch is
+// covered by isInteractive() guards plus integration tests; here we only
+// assert the non-interactive paths.
+func TestGetProviderForFallback(t *testing.T) {
+	t.Run("zero providers returns ErrNoProvidersAvailable", func(t *testing.T) {
+		got, err := getProviderForFallback(&fakeProviderLister{providers: nil})
+		require.Error(t, err)
+		assert.Empty(t, got)
+		assert.ErrorIs(t, err, errUtils.ErrNoProvidersAvailable)
+	})
+
+	t.Run("single provider auto-selects without prompting", func(t *testing.T) {
+		got, err := getProviderForFallback(&fakeProviderLister{providers: []string{"only-sso"}})
+		require.NoError(t, err)
+		assert.Equal(t, "only-sso", got,
+			"a single configured provider must be auto-selected — no prompt, no env var needed")
+	})
+
+	t.Run("multiple providers in non-interactive context returns ErrNoDefaultProvider", func(t *testing.T) {
+		// isInteractive() returns false in `go test` because stdin is not a TTY.
+		// Even if it were, telemetry.IsCI() should return true under most CI
+		// environments. Either way, the multi-provider non-interactive branch
+		// must surface ErrNoDefaultProvider with a --provider flag hint.
+		got, err := getProviderForFallback(&fakeProviderLister{providers: []string{"sso-a", "sso-b"}})
+		// One of two outcomes is acceptable depending on the test runner's TTY
+		// state: either an error for non-interactive, or a successful return
+		// from the interactive prompt. The interactive case can't be reached
+		// in unit tests without a real TTY, so we expect the error path here.
+		if err == nil {
+			t.Skipf("test environment unexpectedly looks interactive; got %q", got)
+		}
+		assert.ErrorIs(t, err, errUtils.ErrNoDefaultProvider)
+		assert.Empty(t, got)
+	})
+}
+
+// TestIsInteractive asserts the function is callable and returns a bool. The
+// actual return value depends on the test runner environment (CI vs local
+// terminal vs piped run) so we cannot pin a specific value, but the function
+// must not panic and must return a deterministic bool.
+func TestIsInteractive(t *testing.T) {
+	// First call.
+	got := isInteractive()
+	// Second call should agree (no hidden state).
+	again := isInteractive()
+	assert.Equal(t, got, again, "isInteractive() must be deterministic for a given environment")
 }

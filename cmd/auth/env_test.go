@@ -2,6 +2,8 @@ package auth
 
 import (
 	"bytes"
+	"context"
+	"errors"
 	"io"
 	"os"
 	"path/filepath"
@@ -12,7 +14,10 @@ import (
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
 
+	errUtils "github.com/cloudposse/atmos/errors"
+	authTypes "github.com/cloudposse/atmos/pkg/auth/types"
 	"github.com/cloudposse/atmos/pkg/env"
 )
 
@@ -383,5 +388,228 @@ func TestGitHubEnvAutoDetect(t *testing.T) {
 		assert.Contains(t, string(content), "CERT<<ATMOS_EOF_CERT")
 		assert.Contains(t, string(content), "-----BEGIN CERT-----\ndata\n-----END CERT-----\n")
 		assert.Contains(t, string(content), "ATMOS_EOF_CERT\n")
+	})
+}
+
+// TestResolveEnvOutputFile covers all branches of the github auto-detect path.
+func TestResolveEnvOutputFile(t *testing.T) {
+	t.Run("non-github format passes outputFile through", func(t *testing.T) {
+		got, err := resolveEnvOutputFile("bash", "/tmp/out.sh")
+		require.NoError(t, err)
+		assert.Equal(t, "/tmp/out.sh", got)
+	})
+
+	t.Run("non-github format with empty outputFile returns empty", func(t *testing.T) {
+		got, err := resolveEnvOutputFile("dotenv", "")
+		require.NoError(t, err)
+		assert.Empty(t, got)
+	})
+
+	t.Run("github format with explicit outputFile passes through", func(t *testing.T) {
+		got, err := resolveEnvOutputFile("github", "/explicit/path")
+		require.NoError(t, err)
+		assert.Equal(t, "/explicit/path", got)
+	})
+
+	t.Run("github format with GITHUB_ENV env var auto-detects", func(t *testing.T) {
+		tempDir := t.TempDir()
+		envFile := filepath.Join(tempDir, "github_env")
+		t.Setenv("GITHUB_ENV", envFile)
+
+		got, err := resolveEnvOutputFile("github", "")
+		require.NoError(t, err)
+		assert.Equal(t, envFile, got)
+	})
+
+	t.Run("github format without outputFile or GITHUB_ENV errors", func(t *testing.T) {
+		t.Setenv("GITHUB_ENV", "")
+
+		got, err := resolveEnvOutputFile("github", "")
+		require.Error(t, err)
+		assert.Empty(t, got)
+		// Sentinel must be ErrRequiredFlagNotProvided so callers can branch on it.
+		assert.ErrorIs(t, err, errUtils.ErrRequiredFlagNotProvided)
+	})
+}
+
+// TestResolveEnvOutputTarget covers the viper-backed orchestrator over
+// resolveEnvOutputFile.
+func TestResolveEnvOutputTarget(t *testing.T) {
+	t.Run("default format is bash when viper has no value", func(t *testing.T) {
+		v := viper.New()
+
+		format, outputFile, err := resolveEnvOutputTarget(v)
+		require.NoError(t, err)
+		assert.Equal(t, "bash", format)
+		assert.Empty(t, outputFile)
+	})
+
+	t.Run("explicit format and output-file in viper round-trip", func(t *testing.T) {
+		v := viper.New()
+		v.Set(FormatFlagName, "dotenv")
+		v.Set(OutputFileFlagName, "/path/to/.env")
+
+		format, outputFile, err := resolveEnvOutputTarget(v)
+		require.NoError(t, err)
+		assert.Equal(t, "dotenv", format)
+		assert.Equal(t, "/path/to/.env", outputFile)
+	})
+
+	t.Run("github format auto-detects $GITHUB_ENV", func(t *testing.T) {
+		tempDir := t.TempDir()
+		envFile := filepath.Join(tempDir, "github_env")
+		t.Setenv("GITHUB_ENV", envFile)
+
+		v := viper.New()
+		v.Set(FormatFlagName, "github")
+
+		format, outputFile, err := resolveEnvOutputTarget(v)
+		require.NoError(t, err)
+		assert.Equal(t, "github", format)
+		assert.Equal(t, envFile, outputFile)
+	})
+
+	t.Run("github format without GITHUB_ENV propagates error", func(t *testing.T) {
+		t.Setenv("GITHUB_ENV", "")
+
+		v := viper.New()
+		v.Set(FormatFlagName, "github")
+
+		_, _, err := resolveEnvOutputTarget(v)
+		require.Error(t, err)
+	})
+}
+
+// TestLoginIfNeeded covers the cache-hit, fresh-auth-success, ErrUserAborted,
+// and generic-failure branches via a mocked AuthManager.
+func TestLoginIfNeeded(t *testing.T) {
+	ctx := context.Background()
+
+	t.Run("cached credentials skip Authenticate", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+
+		m := authTypes.NewMockAuthManager(ctrl)
+		m.EXPECT().GetCachedCredentials(ctx, "id").Return(&authTypes.WhoamiInfo{Identity: "id"}, nil)
+		// Authenticate must NOT be called when cache is warm.
+		m.EXPECT().Authenticate(gomock.Any(), gomock.Any()).Times(0)
+
+		require.NoError(t, loginIfNeeded(ctx, m, "id"))
+	})
+
+	t.Run("missing cache triggers Authenticate", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+
+		m := authTypes.NewMockAuthManager(ctrl)
+		m.EXPECT().GetCachedCredentials(ctx, "id").Return(nil, errors.New("no cache"))
+		m.EXPECT().Authenticate(ctx, "id").Return(&authTypes.WhoamiInfo{Identity: "id"}, nil)
+
+		require.NoError(t, loginIfNeeded(ctx, m, "id"))
+	})
+
+	t.Run("ErrUserAborted surfaces unwrapped", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+
+		m := authTypes.NewMockAuthManager(ctrl)
+		m.EXPECT().GetCachedCredentials(ctx, "id").Return(nil, errors.New("no cache"))
+		m.EXPECT().Authenticate(ctx, "id").Return(nil, errUtils.ErrUserAborted)
+
+		err := loginIfNeeded(ctx, m, "id")
+		require.Error(t, err)
+		assert.ErrorIs(t, err, errUtils.ErrUserAborted)
+		// Must not be wrapped with ErrAuthenticationFailed (clean abort).
+		assert.NotErrorIs(t, err, errUtils.ErrAuthenticationFailed)
+	})
+
+	t.Run("generic Authenticate error is wrapped with ErrAuthenticationFailed", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+
+		m := authTypes.NewMockAuthManager(ctrl)
+		boom := errors.New("backend down")
+		m.EXPECT().GetCachedCredentials(ctx, "id").Return(nil, errors.New("no cache"))
+		m.EXPECT().Authenticate(ctx, "id").Return(nil, boom)
+
+		err := loginIfNeeded(ctx, m, "id")
+		require.Error(t, err)
+		assert.ErrorIs(t, err, errUtils.ErrAuthenticationFailed)
+		assert.ErrorIs(t, err, boom, "original error must be preserved in the chain")
+	})
+}
+
+// TestResolveIdentityNameForEnv covers the flag, viper-fallback, and default
+// auto-detection branches via a mocked AuthManager.
+func TestResolveIdentityNameForEnv(t *testing.T) {
+	t.Run("explicit --identity flag wins", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+
+		m := authTypes.NewMockAuthManager(ctrl)
+		// GetDefaultIdentity must NOT be called.
+		m.EXPECT().GetDefaultIdentity(gomock.Any()).Times(0)
+
+		cmd := &cobra.Command{Use: "env"}
+		cmd.Flags().String(IdentityFlagName, "", "identity")
+		require.NoError(t, cmd.Flags().Set(IdentityFlagName, "explicit-id"))
+
+		v := viper.New()
+
+		got, err := resolveIdentityNameForEnv(cmd, v, m)
+		require.NoError(t, err)
+		assert.Equal(t, "explicit-id", got)
+	})
+
+	t.Run("viper fallback when flag unset", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+
+		m := authTypes.NewMockAuthManager(ctrl)
+		m.EXPECT().GetDefaultIdentity(gomock.Any()).Times(0)
+
+		cmd := &cobra.Command{Use: "env"}
+		cmd.Flags().String(IdentityFlagName, "", "identity")
+
+		v := viper.New()
+		v.Set(IdentityFlagName, "viper-id")
+
+		got, err := resolveIdentityNameForEnv(cmd, v, m)
+		require.NoError(t, err)
+		assert.Equal(t, "viper-id", got)
+	})
+
+	t.Run("falls back to GetDefaultIdentity when neither set", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+
+		m := authTypes.NewMockAuthManager(ctrl)
+		m.EXPECT().GetDefaultIdentity(false).Return("default-id", nil)
+
+		cmd := &cobra.Command{Use: "env"}
+		cmd.Flags().String(IdentityFlagName, "", "identity")
+		v := viper.New()
+
+		got, err := resolveIdentityNameForEnv(cmd, v, m)
+		require.NoError(t, err)
+		assert.Equal(t, "default-id", got)
+	})
+
+	t.Run("__SELECT__ value forces interactive selection", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+
+		m := authTypes.NewMockAuthManager(ctrl)
+		m.EXPECT().GetDefaultIdentity(true).Return("picked-id", nil)
+
+		cmd := &cobra.Command{Use: "env"}
+		cmd.Flags().String(IdentityFlagName, "", "identity")
+		require.NoError(t, cmd.Flags().Set(IdentityFlagName, IdentityFlagSelectValue))
+
+		v := viper.New()
+
+		got, err := resolveIdentityNameForEnv(cmd, v, m)
+		require.NoError(t, err)
+		assert.Equal(t, "picked-id", got)
 	})
 }
