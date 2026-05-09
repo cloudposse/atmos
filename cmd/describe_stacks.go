@@ -154,7 +154,8 @@ func init() {
 
 	describeStacksCmd.PersistentFlags().String("format", "yaml", "Specify the output format (`yaml` is default)")
 
-	describeStacksCmd.PersistentFlags().StringP("stack", "s", "",
+	describeStacksCmd.PersistentFlags().StringP(
+		"stack", "s", "",
 		"Filter by a specific stack\n"+
 			"The filter supports names of the top-level stack manifests (including subfolder paths), and `atmos` stack names (derived from the context vars)",
 	)

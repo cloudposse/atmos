@@ -27,7 +27,8 @@ var describeDependentsCmd = &cobra.Command{
 		checkAtmosConfig,
 		exec.ProcessCommandLineArgs,
 		cfg.InitCliConfig,
-		exec.NewDescribeDependentsExec),
+		exec.NewDescribeDependentsExec,
+	),
 }
 
 func getRunnableDescribeDependentsCmd(

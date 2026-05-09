@@ -119,7 +119,8 @@ func executeAuthEnvCommand(cmd *cobra.Command, args []string) error {
 	}
 
 	// Use unified env.Output() for all format/output combinations.
-	return env.Output(envVars, format, outputFile,
+	return env.Output(
+		envVars, format, outputFile,
 		env.WithFileMode(env.CredentialFileMode),
 		env.WithAtmosConfig(atmosConfig),
 	)
