@@ -30,7 +30,7 @@ html[data-theme="dark"] .terminal {
     background-size: 9px 20px;
 }
 
-.terminal h1 {
+.terminal .window-title {
     text-align: center;
     font-size: 1em;
     font-family: monospace;
@@ -52,7 +52,7 @@ html[data-theme="dark"] .terminal {
     text-overflow: ellipsis;
 }
 
-html[data-theme="dark"] .terminal h1 {
+html[data-theme="dark"] .terminal .window-title {
     color: #fff;
 }
 
