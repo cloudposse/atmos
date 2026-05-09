@@ -222,11 +222,20 @@ func ReadTerraformBackendS3Internal(
 
 		output, err := s3Client.GetObject(ctx, getInput)
 		if err != nil {
-			// Check if the error is because the object doesn't exist.
+			// Check if the error is because the object or bucket doesn't exist.
 			// If the state file does not exist (the component in the stack has not been provisioned yet), return a `nil` result and no error.
 			var nsk *types.NoSuchKey
 			if errors.As(err, &nsk) {
 				log.Debug("Terraform state file doesn't exist in the S3 bucket; returning 'null'", "file", tfStateFilePath, log.FieldBucket, bucket)
+				return nil, nil
+			}
+
+			// If the bucket itself doesn't exist, the backend has not been provisioned yet.
+			// This happens when using `provision.backend.enabled: true` with `--all` flag:
+			// YAML functions (e.g. !terraform.state) are evaluated before provisioners create the bucket.
+			// Treat identically to NoSuchKey — the state cannot exist if the bucket doesn't exist.
+			if isNoSuchBucketError(err) {
+				log.Debug("S3 bucket does not exist (backend not provisioned); returning 'null'", log.FieldBucket, bucket)
 				return nil, nil
 			}
 
@@ -260,6 +269,23 @@ func ReadTerraformBackendS3Internal(
 	}
 
 	return nil, fmt.Errorf("%w: %v", errUtils.ErrGetObjectFromS3, lastErr)
+}
+
+// isNoSuchBucketError checks whether an error indicates the S3 bucket does not exist.
+// It handles both the typed *types.NoSuchBucket error (AWS SDK v2) and the generic
+// smithy.APIError with code "NoSuchBucket" (returned by some S3-compatible backends).
+func isNoSuchBucketError(err error) bool {
+	var nsb *types.NoSuchBucket
+	if errors.As(err, &nsb) {
+		return true
+	}
+
+	var apiErr smithy.APIError
+	if errors.As(err, &apiErr) && apiErr.ErrorCode() == "NoSuchBucket" {
+		return true
+	}
+
+	return false
 }
 
 // logS3RetryExhausted logs a warning when all retries are exhausted for S3 operations.

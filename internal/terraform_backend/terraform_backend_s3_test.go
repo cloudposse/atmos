@@ -209,14 +209,22 @@ func Test_ReadTerraformBackendS3Internal_Errors(t *testing.T) {
 			expectedNilBody: true,
 		},
 		{
-			name: "no such bucket",
+			name: "no such bucket - generic API error (backend not provisioned)",
 			client: &erroringS3Client{
 				err: &smithy.GenericAPIError{
 					Code:    "NoSuchBucket",
 					Message: "The specified bucket does not exist",
 				},
 			},
-			expectedErrSub:  "NoSuchBucket",
+			expectedErrSub:  "",
+			expectedNilBody: true,
+		},
+		{
+			name: "no such bucket - typed error (backend not provisioned)",
+			client: &erroringS3Client{
+				err: &s3types.NoSuchBucket{},
+			},
+			expectedErrSub:  "",
 			expectedNilBody: true,
 		},
 		{
