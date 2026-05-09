@@ -389,6 +389,35 @@ func TestResolveBase_MergeGroup_NoBaseRef(t *testing.T) {
 	assert.Equal(t, "refs/remotes/origin/HEAD", res.Ref)
 }
 
+// TestResolveBase_MergeGroup_PayloadBaseRefNoEnv verifies that when the payload
+// supplies merge_group.base_ref but GITHUB_BASE_REF is empty (and base_sha is
+// absent), the payload base_ref is promoted to res.Ref instead of defaulting
+// to refs/remotes/origin/HEAD.
+func TestResolveBase_MergeGroup_PayloadBaseRefNoEnv(t *testing.T) {
+	t.Setenv("GITHUB_EVENT_NAME", "merge_group")
+	t.Setenv("GITHUB_BASE_REF", "")
+
+	eventPayload := map[string]any{
+		"merge_group": map[string]any{
+			"head_sha": "synthsha123456789012345678901234567890ab",
+			"base_ref": "refs/heads/main",
+		},
+	}
+	eventPath := writeEventPayload(t, eventPayload)
+	t.Setenv("GITHUB_EVENT_PATH", eventPath)
+
+	p := NewProvider()
+	res, err := p.ResolveBase()
+
+	require.NoError(t, err)
+	require.NotNil(t, res)
+	assert.Equal(t, "merge_group", res.EventType)
+	assert.Equal(t, "refs/remotes/origin/main", res.Ref, "payload base_ref should be promoted when env is empty")
+	assert.Equal(t, "event.merge_group.base_ref", res.Source)
+	assert.Equal(t, "synthsha123456789012345678901234567890ab", res.HeadSHA)
+	assert.Equal(t, "main", res.TargetBranch)
+}
+
 // TestReadEventPayload tests the readEventPayload helper function.
 func TestReadEventPayload(t *testing.T) {
 	t.Run("missing GITHUB_EVENT_PATH", func(t *testing.T) {

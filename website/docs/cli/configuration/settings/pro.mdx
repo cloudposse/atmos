@@ -350,7 +350,7 @@ Atmos Pro reports check status on GitHub merge-queue synthetic commits the same 
 </Intro>
 
 <Note>
-**Prerequisites.** Full merge-queue support requires **Atmos CLI ≥ X.Y.Z**. Earlier CLI versions still work for the empty-diff case (Atmos Pro concludes the check as "No affected stacks workflow detected"), but PRs that actually touch stacks will be reported incorrectly until the CLI is upgraded. {/* TODO: replace X.Y.Z with the released version once tagged. */}
+**Prerequisites.** Full merge-queue support requires **Atmos CLI ≥ 1.218.0**. Earlier CLI versions still work for the empty-diff case (Atmos Pro concludes the check as "No affected stacks workflow detected"), but PRs that actually touch stacks will be reported incorrectly until the CLI is upgraded.
 </Note>
 
 #### How it works
@@ -430,7 +430,7 @@ workflow to dispatch in this order:
 #### Migration note
 
 If you have already enabled GitHub merge queue on your repository and you are
-on Atmos CLI ≥ X.Y.Z, no Atmos config changes are required. Atmos Pro will use
+on Atmos CLI ≥ 1.218.0, no Atmos config changes are required. Atmos Pro will use
 your existing `pull_request.synchronize` workflows for queue checks. Add a
 `merge_group` block only if you want different policy in the queue.
 

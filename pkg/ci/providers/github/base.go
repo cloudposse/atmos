@@ -32,6 +32,8 @@ const (
 	sourcePayloadBaseSHA = "event.pull_request.base.sha"
 	// SourceMergeGroupBaseSHA is the source label when resolving from event.merge_group.base_sha.
 	sourceMergeGroupBaseSHA = "event.merge_group.base_sha"
+	// SourceMergeGroupBaseRef is the source label when falling back to event.merge_group.base_ref.
+	sourceMergeGroupBaseRef = "event.merge_group.base_ref"
 	// EventMergeGroup is the GitHub Actions merge_group event name.
 	eventMergeGroup = "merge_group"
 	// RefsHeadsPrefix is the prefix on fully-qualified branch refs in event payloads.
@@ -330,6 +332,12 @@ func resolveMergeGroupBase() *provider.BaseResolution {
 
 	// Payload is present but lacks merge_group.base_sha — last-resort env fallback.
 	res := resolveFromBaseRef(eventMergeGroup)
+	// If GITHUB_BASE_REF was empty but the payload supplied merge_group.base_ref,
+	// promote the payload value to res.Ref instead of leaving the default.
+	if res.Ref == defaultRef && targetBranch != "" {
+		res.Ref = "refs/remotes/origin/" + targetBranch
+		res.Source = sourceMergeGroupBaseRef
+	}
 	if headSHA != "" {
 		res.HeadSHA = headSHA
 	}

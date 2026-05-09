@@ -439,7 +439,7 @@ func (d *describeAffectedExec) uploadableQuery(args *DescribeAffectedCmdArgs, re
 		args.CIEventType != "pull_request_target" &&
 		args.CIEventType != "merge_group" {
 		return errUtils.Build(
-			fmt.Errorf("%w: detected CI event %q, but Atmos Pro only supports pull_request and merge_group events", errUtils.ErrUploadRequiresSupportedEvent, args.CIEventType),
+			fmt.Errorf("%w: detected CI event %q, but Atmos Pro only supports pull_request, pull_request_target, and merge_group events", errUtils.ErrUploadRequiresSupportedEvent, args.CIEventType),
 		).
 			WithHint("Trigger your workflow on pull_request, pull_request_target, or merge_group events when using --upload.").
 			WithHint("Push events and other ad-hoc triggers cannot be correlated to an Atmos Pro check run.").
