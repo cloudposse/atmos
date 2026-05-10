@@ -1,6 +1,7 @@
 package user
 
 import (
+	"context"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -36,4 +37,20 @@ func TestAuthUserConfigureCommand_IsSubcommandOfUser(t *testing.T) {
 		}
 	}
 	assert.True(t, found, "configure should be a subcommand of user")
+}
+
+// TestExecuteAuthUserConfigureCommand_SmokeNoConfig exercises the user
+// configure orchestrator from a directory without an atmos.yaml. Contract:
+// no panic. The function will error out at config load, no AWS user
+// identities, or huh form (in non-TTY) — all acceptable failure modes.
+func TestExecuteAuthUserConfigureCommand_SmokeNoConfig(t *testing.T) {
+	tmp := t.TempDir()
+	t.Chdir(tmp)
+
+	cmd := authUserConfigureCmd
+	cmd.SetContext(context.Background())
+
+	assert.NotPanics(t, func() {
+		_ = executeAuthUserConfigureCommand(cmd, nil)
+	})
 }

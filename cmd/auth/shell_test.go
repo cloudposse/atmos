@@ -1,14 +1,19 @@
 package auth
 
 import (
+	"context"
+	"errors"
 	"testing"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	authTypes "github.com/cloudposse/atmos/pkg/auth/types"
+	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 // Main identity resolution tests are in identity_resolution_test.go.
@@ -129,6 +134,20 @@ func TestResolveIdentityNameForShell_ViperFallback(t *testing.T) {
 	assert.Equal(t, "viper-identity", result)
 }
 
+// TestExecuteAuthShellCommand_SmokeNoConfig exercises the shell orchestrator
+// from a directory without an atmos.yaml. Contract: no panic.
+func TestExecuteAuthShellCommand_SmokeNoConfig(t *testing.T) {
+	tmp := t.TempDir()
+	t.Chdir(tmp)
+
+	cmd := authShellCmd
+	cmd.SetContext(context.Background())
+
+	assert.NotPanics(t, func() {
+		_ = executeAuthShellCommand(cmd, nil)
+	})
+}
+
 // TestAuthShell_ProfileFlagAppliedToConfig is a regression test for issue #1973
 // (`--profile` global flag not applied for `auth exec` and `auth shell` commands).
 //
@@ -172,4 +191,136 @@ func TestAuthShell_ProfileFlagAppliedToConfig(t *testing.T) {
 				"--profile flag must reach ConfigAndStacksInfo for `auth shell` (issue #1973)")
 		})
 	}
+}
+
+// TestPrepareShellEnvironment covers the cache-hit, fresh-auth, ErrUserAborted,
+// authenticate-error, and PrepareShellEnvironment-error branches via a mocked
+// AuthManager. The atmos config Env map is passed through to MergeGlobalEnv.
+func TestPrepareShellEnvironment(t *testing.T) {
+	emptyCfg := &schema.AtmosConfiguration{}
+
+	t.Run("cached credentials skip Authenticate", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+		m := authTypes.NewMockAuthManager(ctrl)
+
+		m.EXPECT().GetCachedCredentials(gomock.Any(), "id").
+			Return(&authTypes.WhoamiInfo{Identity: "id"}, nil)
+		m.EXPECT().Authenticate(gomock.Any(), gomock.Any()).Times(0)
+		m.EXPECT().PrepareShellEnvironment(gomock.Any(), "id", gomock.Any()).
+			Return([]string{"AWS_REGION=us-east-1", "AWS_PROFILE=p"}, nil)
+		m.EXPECT().GetProviderForIdentity("id").Return("aws-sso")
+
+		envList, provider, err := prepareShellEnvironment(m, "id", emptyCfg)
+		require.NoError(t, err)
+		assert.Equal(t, []string{"AWS_REGION=us-east-1", "AWS_PROFILE=p"}, envList)
+		assert.Equal(t, "aws-sso", provider)
+	})
+
+	t.Run("missing cache triggers Authenticate then succeeds", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+		m := authTypes.NewMockAuthManager(ctrl)
+
+		m.EXPECT().GetCachedCredentials(gomock.Any(), "id").
+			Return(nil, errors.New("no cache"))
+		m.EXPECT().Authenticate(gomock.Any(), "id").
+			Return(&authTypes.WhoamiInfo{Identity: "id"}, nil)
+		m.EXPECT().PrepareShellEnvironment(gomock.Any(), "id", gomock.Any()).
+			Return([]string{"AWS_REGION=us-east-1"}, nil)
+		m.EXPECT().GetProviderForIdentity("id").Return("aws-sso")
+
+		envList, provider, err := prepareShellEnvironment(m, "id", emptyCfg)
+		require.NoError(t, err)
+		assert.NotEmpty(t, envList)
+		assert.Equal(t, "aws-sso", provider)
+	})
+
+	t.Run("ErrUserAborted surfaces unwrapped", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+		m := authTypes.NewMockAuthManager(ctrl)
+
+		m.EXPECT().GetCachedCredentials(gomock.Any(), "id").
+			Return(nil, errors.New("no cache"))
+		m.EXPECT().Authenticate(gomock.Any(), "id").
+			Return(nil, errUtils.ErrUserAborted)
+
+		envList, provider, err := prepareShellEnvironment(m, "id", emptyCfg)
+		require.Error(t, err)
+		assert.Nil(t, envList)
+		assert.Empty(t, provider)
+		assert.ErrorIs(t, err, errUtils.ErrUserAborted)
+		assert.NotErrorIs(t, err, errUtils.ErrAuthenticationFailed,
+			"ErrUserAborted is a clean cancel; do not wrap as failure")
+	})
+
+	t.Run("generic Authenticate error wraps with ErrAuthenticationFailed", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+		m := authTypes.NewMockAuthManager(ctrl)
+
+		boom := errors.New("backend down")
+		m.EXPECT().GetCachedCredentials(gomock.Any(), "id").
+			Return(nil, errors.New("no cache"))
+		m.EXPECT().Authenticate(gomock.Any(), "id").Return(nil, boom)
+
+		_, _, err := prepareShellEnvironment(m, "id", emptyCfg)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, errUtils.ErrAuthenticationFailed)
+		assert.ErrorIs(t, err, boom, "original error must be preserved in the chain")
+	})
+
+	t.Run("PrepareShellEnvironment failure surfaces a wrapped error", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+		m := authTypes.NewMockAuthManager(ctrl)
+
+		m.EXPECT().GetCachedCredentials(gomock.Any(), "id").
+			Return(&authTypes.WhoamiInfo{Identity: "id"}, nil)
+		envErr := errors.New("env build failed")
+		m.EXPECT().PrepareShellEnvironment(gomock.Any(), "id", gomock.Any()).
+			Return(nil, envErr)
+
+		_, _, err := prepareShellEnvironment(m, "id", emptyCfg)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, envErr,
+			"PrepareShellEnvironment error must surface to the caller")
+	})
+
+	t.Run("atmosConfig.Env contributes to the base env list", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+		m := authTypes.NewMockAuthManager(ctrl)
+
+		cfgWithGlobalEnv := &schema.AtmosConfiguration{
+			Env: map[string]string{
+				"ATMOS_GLOBAL_VAR": "from-config",
+			},
+		}
+
+		var capturedBaseEnv []string
+		m.EXPECT().GetCachedCredentials(gomock.Any(), "id").
+			Return(&authTypes.WhoamiInfo{Identity: "id"}, nil)
+		m.EXPECT().PrepareShellEnvironment(gomock.Any(), "id", gomock.Any()).
+			DoAndReturn(func(_ context.Context, _ string, baseEnv []string) ([]string, error) {
+				capturedBaseEnv = baseEnv
+				return baseEnv, nil
+			})
+		m.EXPECT().GetProviderForIdentity("id").Return("aws-sso")
+
+		_, _, err := prepareShellEnvironment(m, "id", cfgWithGlobalEnv)
+		require.NoError(t, err)
+		// The global env value from atmos.yaml must appear in the base env list
+		// passed to PrepareShellEnvironment (via MergeGlobalEnv).
+		var found bool
+		for _, kv := range capturedBaseEnv {
+			if kv == "ATMOS_GLOBAL_VAR=from-config" {
+				found = true
+				break
+			}
+		}
+		assert.True(t, found,
+			"atmosConfig.Env entries must be merged into the base env before PrepareShellEnvironment")
+	})
 }

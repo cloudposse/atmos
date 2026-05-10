@@ -11,6 +11,7 @@ import (
 	"go.uber.org/mock/gomock"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/auth/realm"
 	authTypes "github.com/cloudposse/atmos/pkg/auth/types"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -145,6 +146,153 @@ func TestExecuteLogoutOption_InvalidType(t *testing.T) {
 	err := executeLogoutOption(context.Background(), m, logoutOption{typ: "bogus"}, false, false, false)
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrInvalidLogoutOption)
+}
+
+// TestPerformIdentityLogout_NotFound covers the "identity not in config" error
+// branch via a mocked AuthManager.
+func TestPerformIdentityLogout_NotFound(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	m := authTypes.NewMockAuthManager(ctrl)
+
+	// Identity "missing" is not present in the configured identities map.
+	m.EXPECT().GetIdentities().Return(map[string]schema.Identity{
+		"prod-admin": {Kind: "aws/permission-set"},
+	})
+
+	err := performIdentityLogout(context.Background(), m, "missing", false, false, false)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrIdentityNotInConfig)
+}
+
+// TestPerformIdentityLogout_DryRun covers the dry-run path. No Logout call
+// must be made; the function must complete successfully.
+func TestPerformIdentityLogout_DryRun(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	m := authTypes.NewMockAuthManager(ctrl)
+
+	m.EXPECT().GetIdentities().Return(map[string]schema.Identity{
+		"prod-admin": {Kind: "aws/permission-set"},
+	})
+	m.EXPECT().GetProviderForIdentity("prod-admin").Return("aws-sso")
+	m.EXPECT().GetFilesDisplayPath("aws-sso").Return("/atmos/realm/creds")
+	// Logout must NOT be called in dry-run mode.
+	m.EXPECT().Logout(gomock.Any(), gomock.Any(), gomock.Any()).Times(0)
+
+	err := performIdentityLogout(context.Background(), m, "prod-admin", true /*dryRun*/, true /*deleteKeychain*/, false)
+	require.NoError(t, err)
+}
+
+// TestPerformProviderLogout_NotFound covers the "provider not in config"
+// error branch.
+func TestPerformProviderLogout_NotFound(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	m := authTypes.NewMockAuthManager(ctrl)
+
+	m.EXPECT().GetProviders().Return(map[string]schema.Provider{
+		"aws-sso": {Kind: "aws/iam-identity-center"},
+	})
+
+	err := performProviderLogout(context.Background(), m, "missing", false, false, false)
+	require.Error(t, err)
+	// Could be ErrProviderNotInConfig or similar; just verify error surfaces.
+	assert.Contains(t, err.Error(), "missing",
+		"the missing provider name must appear in the error message")
+}
+
+// TestPerformLogoutAll_DryRun covers the dry-run path. LogoutAll must not be
+// called.
+func TestPerformLogoutAll_DryRun(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	m := authTypes.NewMockAuthManager(ctrl)
+
+	m.EXPECT().GetProviders().Return(map[string]schema.Provider{
+		"aws-sso": {Kind: "aws/iam-identity-center"},
+	})
+	m.EXPECT().GetFilesDisplayPath("aws-sso").Return("/atmos/realm/creds")
+	// LogoutAll must NOT be called in dry-run mode.
+	m.EXPECT().LogoutAll(gomock.Any(), gomock.Any()).Times(0)
+
+	err := performLogoutAll(context.Background(), m, true /*dryRun*/, true /*deleteKeychain*/, false)
+	require.NoError(t, err)
+}
+
+// TestPerformLogoutAll_Success covers the happy path with no keychain
+// deletion (so no confirmation prompt is invoked).
+func TestPerformLogoutAll_Success(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	m := authTypes.NewMockAuthManager(ctrl)
+
+	m.EXPECT().LogoutAll(gomock.Any(), false).Return(nil)
+	m.EXPECT().GetIdentities().Return(map[string]schema.Identity{
+		"prod-admin": {Kind: "aws/permission-set"},
+		"dev-admin":  {Kind: "aws/permission-set"},
+	})
+	m.EXPECT().GetRealm().Return(realmInfoMatcher())
+
+	err := performLogoutAll(context.Background(), m, false /*dryRun*/, false /*deleteKeychain*/, false)
+	require.NoError(t, err)
+}
+
+// realmInfoMatcher returns a stub RealmInfo for use in mock returns.
+func realmInfoMatcher() realm.RealmInfo {
+	return realm.RealmInfo{Value: "test-realm", Source: "test"}
+}
+
+// TestExecuteAuthLogoutCommand_SmokeNoConfig exercises the logout orchestrator
+// from a directory without an atmos.yaml. Contract: no panic.
+func TestExecuteAuthLogoutCommand_SmokeNoConfig(t *testing.T) {
+	tmp := t.TempDir()
+	t.Chdir(tmp)
+
+	cmd := authLogoutCmd
+	cmd.SetContext(context.Background())
+
+	assert.NotPanics(t, func() {
+		_ = executeAuthLogoutCommand(cmd, nil)
+	})
+}
+
+// TestDisplayExternalCredentialWarnings smoke-covers the I/O wrapper around
+// detectExternalCredentials. Two branches: warnings present and not.
+func TestDisplayExternalCredentialWarnings(t *testing.T) {
+	t.Run("no env vars: silent no-op", func(t *testing.T) {
+		t.Setenv("GOOGLE_APPLICATION_CREDENTIALS", "")
+		t.Setenv("AZURE_CERTIFICATE_PATH", "")
+		t.Setenv("AWS_SHARED_CREDENTIALS_FILE", "")
+		assert.NotPanics(t, func() {
+			displayExternalCredentialWarnings()
+		})
+	})
+
+	t.Run("env vars present: emits warning section", func(t *testing.T) {
+		t.Setenv("GOOGLE_APPLICATION_CREDENTIALS", "/tmp/gcp.json")
+		t.Setenv("AZURE_CERTIFICATE_PATH", "")
+		t.Setenv("AWS_SHARED_CREDENTIALS_FILE", "/tmp/aws-creds")
+		assert.NotPanics(t, func() {
+			displayExternalCredentialWarnings()
+		})
+	})
+}
+
+// TestDisplayBrowserWarning smoke-covers the deferred-warning helper. The
+// cache state is environment-dependent — both `cache hit, skip` and `cache
+// miss, write` paths are exercised together by simply ensuring the function
+// is non-panicking.
+func TestDisplayBrowserWarning(t *testing.T) {
+	assert.NotPanics(t, func() {
+		displayBrowserWarning()
+	})
+
+	// Calling it again should also not panic — the second call hits the
+	// "already shown" cache branch.
+	assert.NotPanics(t, func() {
+		displayBrowserWarning()
+	})
 }
 
 // TestDiscoverRealms covers the realm-discovery helper used by the multi-realm

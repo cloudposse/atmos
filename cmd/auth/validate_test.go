@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"context"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -33,4 +34,18 @@ func TestAuthValidateCommand_VerboseFlagDefault(t *testing.T) {
 	verboseFlag := authValidateCmd.Flags().Lookup("verbose")
 	assert.NotNil(t, verboseFlag)
 	assert.Equal(t, "false", verboseFlag.DefValue)
+}
+
+// TestExecuteAuthValidateCommand_SmokeNoConfig exercises the validate
+// orchestrator from a directory without an atmos.yaml. Contract: no panic.
+func TestExecuteAuthValidateCommand_SmokeNoConfig(t *testing.T) {
+	tmp := t.TempDir()
+	t.Chdir(tmp)
+
+	cmd := authValidateCmd
+	cmd.SetContext(context.Background())
+
+	assert.NotPanics(t, func() {
+		_ = executeAuthValidateCommand(cmd, nil)
+	})
 }

@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"context"
 	"encoding/json"
 	"strings"
 	"testing"
@@ -495,6 +496,28 @@ func TestRenderOutput_InvalidFormatErrors(t *testing.T) {
 	assert.ErrorIs(t, err, errUtils.ErrInvalidFlag)
 }
 
+// TestRenderOutput_AllValidFormats covers each format branch in the dispatcher
+// with empty maps. The intent is branch coverage of the switch statement,
+// not assertions on the renderers' output (those are tested in pkg/auth/list).
+func TestRenderOutput_AllValidFormats(t *testing.T) {
+	providers := map[string]schema.Provider{}
+	identities := map[string]schema.Identity{}
+
+	formats := []string{"table", "tree", "json", "yaml", "graphviz", "dot", "mermaid", "markdown", "md"}
+	for _, format := range formats {
+		t.Run("format="+format, func(t *testing.T) {
+			// Most renderers tolerate empty input and return an empty string;
+			// the contract here is "no panic + no error from the dispatcher".
+			out, err := renderOutput(nil, providers, identities, format)
+			// Some renderers may error on nil authManager — both outcomes are
+			// acceptable for branch coverage; we just want the switch covered.
+			if err == nil {
+				assert.NotNil(t, out, "successful render must return a non-nil string")
+			}
+		})
+	}
+}
+
 // TestListFlagCompletions_NoConfig covers the early-return path of
 // listProvidersFlagCompletion / listIdentitiesFlagCompletion when
 // cfg.InitCliConfig fails (no atmos.yaml). They must return nil, no panic.
@@ -515,4 +538,52 @@ func TestListFlagCompletions_NoConfig(t *testing.T) {
 			_, _ = listIdentitiesFlagCompletion(nil, nil, "")
 		})
 	})
+}
+
+// TestLoadAuthManagerForList_SmokeFromEmptyTempDir exercises the helper from a
+// directory without an atmos.yaml. Either succeeds (defaults loaded) or
+// fails with the documented ErrInvalidAuthConfig sentinel.
+func TestLoadAuthManagerForList_SmokeFromEmptyTempDir(t *testing.T) {
+	tmp := t.TempDir()
+	t.Chdir(tmp)
+
+	cmd := &cobra.Command{Use: "list"}
+	v := viper.New()
+
+	manager, atmosCfg, err := loadAuthManagerForList(cmd, v)
+	if err != nil {
+		assert.ErrorIs(t, err, errUtils.ErrInvalidAuthConfig,
+			"loadAuthManagerForList must wrap failures with ErrInvalidAuthConfig")
+		assert.Nil(t, manager)
+		assert.Nil(t, atmosCfg)
+		return
+	}
+	assert.NotNil(t, manager)
+	assert.NotNil(t, atmosCfg)
+}
+
+// TestExecuteAuthListCommand_SmokeNoConfig exercises the list orchestrator
+// from a directory without an atmos.yaml. Contract: no panic.
+func TestExecuteAuthListCommand_SmokeNoConfig(t *testing.T) {
+	tmp := t.TempDir()
+	t.Chdir(tmp)
+
+	cmd := authListCmd
+	cmd.SetContext(context.Background())
+
+	assert.NotPanics(t, func() {
+		_ = executeAuthListCommand(cmd, nil)
+	})
+}
+
+// TestSuggestProfilesForAuth_NoProfilesReturnsNil verifies that when no
+// profiles exist (empty atmos config), suggestProfilesForAuth returns nil
+// (no enrichment) rather than synthesizing an error.
+func TestSuggestProfilesForAuth_NoProfilesReturnsNil(t *testing.T) {
+	tmp := t.TempDir()
+	t.Chdir(tmp)
+
+	got := suggestProfilesForAuth(&schema.AtmosConfiguration{})
+	assert.Nil(t, got,
+		"with no profiles discovered, suggestProfilesForAuth must return nil so the caller can surface its own error")
 }

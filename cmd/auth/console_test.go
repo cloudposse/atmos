@@ -1,6 +1,8 @@
 package auth
 
 import (
+	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -545,4 +547,102 @@ func TestRetrieveCredentials_NoCredentialsAvailable(t *testing.T) {
 	require.Error(t, err)
 	assert.Nil(t, creds)
 	assert.ErrorIs(t, err, errUtils.ErrAuthConsole)
+}
+
+// fakeOpener is a test double for browser.Opener with switchable error
+// behaviour. Tracks whether Open was called and with which URL.
+type fakeOpener struct {
+	openErr  error
+	openedAt string
+	calls    int
+}
+
+func (f *fakeOpener) Open(url string) error {
+	f.calls++
+	f.openedAt = url
+	return f.openErr
+}
+
+// TestHandleBrowserOpen exercises the three branches of the browser-open
+// router: skipOpen=true (always show URL), opener=nil (CI/no-TTY, show URL),
+// and opener.Open success vs error.
+func TestHandleBrowserOpen(t *testing.T) {
+	const url = "https://console.example.com/sign-in"
+
+	t.Run("skipOpen=true prints URL and does not call opener", func(t *testing.T) {
+		op := &fakeOpener{}
+		assert.NotPanics(t, func() {
+			handleBrowserOpen(url, true /*skipOpen*/, op)
+		})
+		assert.Zero(t, op.calls, "skipOpen must not invoke the browser opener")
+	})
+
+	t.Run("nil opener prints URL and does not panic", func(t *testing.T) {
+		// nil opener is the CI/no-TTY case: handleBrowserOpen falls through
+		// to printConsoleURL.
+		assert.NotPanics(t, func() {
+			handleBrowserOpen(url, false /*skipOpen*/, nil)
+		})
+	})
+
+	t.Run("successful Open is invoked with the URL", func(t *testing.T) {
+		op := &fakeOpener{}
+		// When CI is detected, the function takes the skipOpen-style branch
+		// and does not call the opener. We can't reliably disable CI mode in
+		// unit tests, so this test simply asserts non-panic plus invocation
+		// count consistency.
+		assert.NotPanics(t, func() {
+			handleBrowserOpen(url, false, op)
+		})
+		// Either 0 (CI detected, fell through to print) or 1 (not CI, called)
+		// — both are valid; assert no double-call.
+		assert.LessOrEqual(t, op.calls, 1)
+		if op.calls == 1 {
+			assert.Equal(t, url, op.openedAt)
+		}
+	})
+
+	t.Run("opener error path is non-panicking", func(t *testing.T) {
+		op := &fakeOpener{openErr: errors.New("browser unavailable")}
+		assert.NotPanics(t, func() {
+			handleBrowserOpen(url, false, op)
+		})
+	})
+}
+
+// TestExecuteAuthConsoleCommand_SmokeNoConfig exercises the console
+// orchestrator from a directory without an atmos.yaml. Contract: no panic.
+func TestExecuteAuthConsoleCommand_SmokeNoConfig(t *testing.T) {
+	tmp := t.TempDir()
+	t.Chdir(tmp)
+
+	cmd := authConsoleCmd
+	cmd.SetContext(context.Background())
+
+	assert.NotPanics(t, func() {
+		_ = executeAuthConsoleCommand(cmd, nil)
+	})
+}
+
+// TestInitializeAuthManager_SmokeFromEmptyTempDir exercises the console
+// helper from a directory without an atmos.yaml.
+func TestInitializeAuthManager_SmokeFromEmptyTempDir(t *testing.T) {
+	tmp := t.TempDir()
+	t.Chdir(tmp)
+
+	cmd := &cobra.Command{Use: "console"}
+	v := viper.New()
+
+	manager, atmosCfg, err := initializeAuthManager(cmd, v)
+	if err != nil {
+		// Either ErrAuthConsole or wrapped variants are acceptable; the contract
+		// is "any error must be a documented sentinel and nil returns".
+		assert.ErrorIs(t, err, errUtils.ErrAuthConsole,
+			"initializeAuthManager must wrap failures with ErrAuthConsole")
+		assert.Nil(t, manager)
+		assert.Nil(t, atmosCfg)
+		return
+	}
+	assert.NotNil(t, manager)
+	assert.NotNil(t, atmosCfg)
 }

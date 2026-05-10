@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"context"
 	"testing"
 
 	"github.com/spf13/cobra"
@@ -137,6 +138,35 @@ func TestExecuteCommandWithEnv_WithValidCommand(t *testing.T) {
 
 	// "go version" command should succeed.
 	assert.NoError(t, err)
+}
+
+// TestExecuteAuthExecCommand_SmokeNoConfig exercises the exec orchestrator
+// from a directory without an atmos.yaml. Contract: no panic.
+func TestExecuteAuthExecCommand_SmokeNoConfig(t *testing.T) {
+	tmp := t.TempDir()
+	t.Chdir(tmp)
+
+	cmd := authExecCmd
+	cmd.SetContext(context.Background())
+
+	assert.NotPanics(t, func() {
+		_ = executeAuthExecCommand(cmd, nil)
+	})
+}
+
+// TestPrepareAuthenticatedEnv_SmokeNoConfig exercises the exec helper from a
+// directory without an atmos.yaml.
+func TestPrepareAuthenticatedEnv_SmokeNoConfig(t *testing.T) {
+	tmp := t.TempDir()
+	t.Chdir(tmp)
+
+	cmd := authExecCmd
+	cmd.SetContext(context.Background())
+	v := viper.New()
+
+	assert.NotPanics(t, func() {
+		_, _ = prepareAuthenticatedEnv(cmd, v)
+	})
 }
 
 // TestAuthExec_ProfileFlagAppliedToConfig is a regression test for issue #1973

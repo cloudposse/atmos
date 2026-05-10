@@ -203,3 +203,17 @@ func TestIsInteractive(t *testing.T) {
 	again := isInteractive()
 	assert.Equal(t, got, again, "isInteractive() must be deterministic for a given environment")
 }
+
+// TestExecuteAuthLoginCommand_SmokeNoConfig exercises the login orchestrator
+// from a directory without an atmos.yaml. Contract: no panic.
+func TestExecuteAuthLoginCommand_SmokeNoConfig(t *testing.T) {
+	tmp := t.TempDir()
+	t.Chdir(tmp)
+
+	cmd := authLoginCmd
+	cmd.SetContext(context.Background())
+
+	assert.NotPanics(t, func() {
+		_ = executeAuthLoginCommand(cmd, nil)
+	})
+}

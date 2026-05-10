@@ -613,3 +613,45 @@ func TestResolveIdentityNameForEnv(t *testing.T) {
 		assert.Equal(t, "picked-id", got)
 	})
 }
+
+// TestExecuteAuthEnvCommand_SmokeNoConfig exercises the orchestrator's
+// load-config-fail path from a directory without an atmos.yaml. We only
+// require non-panic and (when an error surfaces) a non-empty message — the
+// rest of the path is mocked-via-helper-tests above.
+func TestExecuteAuthEnvCommand_SmokeNoConfig(t *testing.T) {
+	tmp := t.TempDir()
+	t.Chdir(tmp)
+
+	cmd := authEnvCmd
+	// Cobra needs SetContext for cmd.Context() to be non-nil downstream.
+	cmd.SetContext(context.Background())
+
+	assert.NotPanics(t, func() {
+		_ = executeAuthEnvCommand(cmd, nil)
+	})
+}
+
+// TestLoadAuthManagerForEnv_SmokeFromEmptyTempDir exercises the orchestrator's
+// config-load path from a directory without an atmos.yaml.
+func TestLoadAuthManagerForEnv_SmokeFromEmptyTempDir(t *testing.T) {
+	tmp := t.TempDir()
+	t.Chdir(tmp)
+
+	cmd := &cobra.Command{Use: "env"}
+	v := viper.New()
+
+	atmosCfg, manager, err := loadAuthManagerForEnv(cmd, v)
+	if err != nil {
+		// Failure path: must wrap with one of the documented sentinels.
+		hasInitErr := errors.Is(err, errUtils.ErrFailedToInitializeAtmosConfig)
+		hasMgrErr := errors.Is(err, errUtils.ErrFailedToInitializeAuthManager)
+		assert.True(t, hasInitErr || hasMgrErr,
+			"loadAuthManagerForEnv must wrap failures with ErrFailedToInitializeAtmosConfig or ErrFailedToInitializeAuthManager; got %v", err)
+		assert.Nil(t, atmosCfg)
+		assert.Nil(t, manager)
+		return
+	}
+	// Success path: both returns must be non-nil.
+	assert.NotNil(t, atmosCfg)
+	assert.NotNil(t, manager)
+}

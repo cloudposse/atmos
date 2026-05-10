@@ -7,6 +7,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
@@ -568,6 +570,45 @@ func TestPrintWhoamiJSON_RedactsCredentials(t *testing.T) {
 		assert.Equal(t, "super-secret", whoami.Environment["AWS_SECRET_ACCESS_KEY"],
 			"printWhoamiJSON must not mutate the caller's Environment map")
 	})
+}
+
+// TestExecuteAuthWhoamiCommand_SmokeNoConfig exercises the whoami orchestrator
+// from a directory without an atmos.yaml. Contract: no panic.
+func TestExecuteAuthWhoamiCommand_SmokeNoConfig(t *testing.T) {
+	tmp := t.TempDir()
+	t.Chdir(tmp)
+
+	cmd := authWhoamiCmd
+	cmd.SetContext(context.Background())
+
+	assert.NotPanics(t, func() {
+		_ = executeAuthWhoamiCommand(cmd, nil)
+	})
+}
+
+// TestLoadAuthManager_SmokeFromEmptyTempDir exercises the orchestrator's load
+// path from a directory without an atmos.yaml. Either it succeeds (atmos
+// falls back to defaults and finds a usable config) or it fails with an
+// error wrapped by ErrInvalidAuthConfig — both are acceptable; the contract
+// is "no panic and any error must be the documented sentinel".
+func TestLoadAuthManager_SmokeFromEmptyTempDir(t *testing.T) {
+	tmp := t.TempDir()
+	t.Chdir(tmp)
+
+	v := viper.New()
+	cmd := &cobra.Command{Use: "whoami"}
+
+	manager, err := loadAuthManager(cmd, v)
+	if err != nil {
+		// Failure path: must wrap with ErrInvalidAuthConfig per the function's
+		// stated contract.
+		assert.ErrorIs(t, err, errUtils.ErrInvalidAuthConfig,
+			"loadAuthManager must wrap any failure with ErrInvalidAuthConfig")
+		assert.Nil(t, manager)
+		return
+	}
+	// Success path: manager must be non-nil.
+	assert.NotNil(t, manager)
 }
 
 // TestPrintWhoamiHuman covers the table-rendering paths for valid and invalid
