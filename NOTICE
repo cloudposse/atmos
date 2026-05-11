@@ -275,11 +275,11 @@ APACHE 2.0 LICENSED DEPENDENCIES
 
   - github.com/go-git/go-billy/v5
     License: Apache-2.0
-    URL: https://github.com/go-git/go-billy/blob/v5.8.0/LICENSE
+    URL: https://github.com/go-git/go-billy/blob/v5.9.0/LICENSE
 
   - github.com/go-git/go-git/v5
     License: Apache-2.0
-    URL: https://github.com/go-git/go-git/blob/v5.18.0/LICENSE
+    URL: https://github.com/go-git/go-git/blob/v5.19.0/LICENSE
 
   - github.com/go-ini/ini
     License: Apache-2.0
@@ -407,7 +407,7 @@ APACHE 2.0 LICENSED DEPENDENCIES
 
   - github.com/pjbgf/sha1cd
     License: Apache-2.0
-    URL: https://github.com/pjbgf/sha1cd/blob/v0.5.0/LICENSE
+    URL: https://github.com/pjbgf/sha1cd/blob/v0.6.0/LICENSE
 
   - github.com/prometheus/client_golang/prometheus
     License: Apache-2.0
