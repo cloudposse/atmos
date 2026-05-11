@@ -52,6 +52,7 @@ Note: This only removes local credentials. Your browser session with your identi
 may still be active. Works with all cloud providers (AWS, Azure, GCP, etc.).`,
 
 	Example:            authLogoutUsageMarkdown,
+	Args:               cobra.MaximumNArgs(1),
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
 	ValidArgsFunction:  IdentityArgCompletion,
 	RunE:               executeAuthLogoutCommand,

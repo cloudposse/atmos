@@ -55,6 +55,19 @@ func getIdentityResolutionTestCases() []identityResolutionTestCase {
 			expectedResult: "",
 			expectedError:  errUtils.ErrNoDefaultIdentity,
 		},
+		{
+			// Precedence: flag > env > default. When both --identity and the
+			// ATMOS_IDENTITY env (via viper) are set, the explicit flag must
+			// win and GetDefaultIdentity must NOT be called.
+			name: "flag takes precedence over env",
+			setupMock: func(m *authTypes.MockAuthManager) {
+				// No GetDefaultIdentity expectation — calling it is a regression.
+			},
+			identityFlag:   "flag-identity",
+			viperIdentity:  "env-identity",
+			expectedResult: "flag-identity",
+			expectedError:  nil,
+		},
 	}
 }
 

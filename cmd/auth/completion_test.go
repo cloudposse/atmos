@@ -128,7 +128,12 @@ func TestIdentityFlagCompletion(t *testing.T) {
 	// chdir to an empty tempdir so cfg.InitCliConfig can't find an atmos.yaml.
 	t.Chdir(t.TempDir())
 
-	completions, directive := identityFlagCompletion(nil, nil, "")
+	// BuildConfigAndStacksInfo dereferences cmd to read global flags, so we
+	// pass a real cobra.Command. It needs no flags registered — completion
+	// must remain robust to missing global flags.
+	cmd := &cobra.Command{Use: "completion-test"}
+
+	completions, directive := identityFlagCompletion(cmd, nil, "")
 	assert.Nil(t, completions, "no atmos.yaml means no identities")
 	assert.Equal(t, cobra.ShellCompDirectiveNoFileComp, directive,
 		"completion must always disable file completion to avoid suggesting filenames")

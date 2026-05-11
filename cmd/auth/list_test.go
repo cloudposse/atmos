@@ -526,16 +526,21 @@ func TestListFlagCompletions_NoConfig(t *testing.T) {
 	tmp := t.TempDir()
 	t.Chdir(tmp)
 
+	// BuildConfigAndStacksInfo dereferences cmd to read global flags, so we
+	// pass a real cobra.Command. It needs no flags registered — completion
+	// must remain robust to missing global flags.
+	cmd := &cobra.Command{Use: "list-completion-test"}
+
 	// These functions should return safely even without a config.
 	t.Run("listProvidersFlagCompletion", func(t *testing.T) {
 		assert.NotPanics(t, func() {
-			_, _ = listProvidersFlagCompletion(nil, nil, "")
+			_, _ = listProvidersFlagCompletion(cmd, nil, "")
 		})
 	})
 
 	t.Run("listIdentitiesFlagCompletion", func(t *testing.T) {
 		assert.NotPanics(t, func() {
-			_, _ = listIdentitiesFlagCompletion(nil, nil, "")
+			_, _ = listIdentitiesFlagCompletion(cmd, nil, "")
 		})
 	})
 }
@@ -574,6 +579,34 @@ func TestExecuteAuthListCommand_SmokeNoConfig(t *testing.T) {
 	assert.NotPanics(t, func() {
 		_ = executeAuthListCommand(cmd, nil)
 	})
+}
+
+// TestExecuteAuthListCommand_WithMockAuth exercises list end-to-end against
+// the mock auth fixture. Drives the load → filter → render-tree → print
+// pipeline for non-trivial coverage of list.go.
+func TestExecuteAuthListCommand_WithMockAuth(t *testing.T) {
+	setupMockAuthFixture(t)
+
+	cmd := authListCmd
+	cmd.SetContext(context.Background())
+	require.NoError(t, cmd.ParseFlags(nil))
+
+	err := executeAuthListCommand(cmd, nil)
+	assert.NoError(t, err)
+}
+
+// TestExecuteAuthListCommand_JSONFormat exercises the renderJSON path via
+// the orchestrator (this is a coarser-grained check than the unit test
+// on renderJSON itself).
+func TestExecuteAuthListCommand_JSONFormat(t *testing.T) {
+	setupMockAuthFixture(t)
+
+	cmd := authListCmd
+	cmd.SetContext(context.Background())
+	require.NoError(t, cmd.ParseFlags([]string{"--format=json"}))
+
+	err := executeAuthListCommand(cmd, nil)
+	assert.NoError(t, err)
 }
 
 // TestSuggestProfilesForAuth_NoProfilesReturnsNil verifies that when no

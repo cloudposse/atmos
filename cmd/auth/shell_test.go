@@ -154,43 +154,7 @@ func TestExecuteAuthShellCommand_SmokeNoConfig(t *testing.T) {
 // HEAD's executeAuthShellCommand calls BuildConfigAndStacksInfo(cmd, v) before
 // cfg.InitCliConfig, so --profile must round-trip into ProfilesFromArg.
 func TestAuthShell_ProfileFlagAppliedToConfig(t *testing.T) {
-	tests := []struct {
-		name             string
-		profiles         []string
-		expectedProfiles []string
-	}{
-		{
-			name:             "single profile via --profile flag",
-			profiles:         []string{"devops"},
-			expectedProfiles: []string{"devops"},
-		},
-		{
-			name:             "multiple profiles",
-			profiles:         []string{"devops", "platform"},
-			expectedProfiles: []string{"devops", "platform"},
-		},
-		{
-			name:             "no profile",
-			profiles:         nil,
-			expectedProfiles: nil,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			cmd := newTestCommandWithGlobalFlags("shell")
-
-			v := viper.New()
-			if tt.profiles != nil {
-				v.Set("profile", tt.profiles)
-			}
-
-			info := BuildConfigAndStacksInfo(cmd, v)
-
-			assert.Equal(t, tt.expectedProfiles, info.ProfilesFromArg,
-				"--profile flag must reach ConfigAndStacksInfo for `auth shell` (issue #1973)")
-		})
-	}
+	runProfileFlagAppliedRegressionTest(t, "shell")
 }
 
 // TestPrepareShellEnvironment covers the cache-hit, fresh-auth, ErrUserAborted,

@@ -6,6 +6,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/auth/validation"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/flags"
@@ -70,7 +71,7 @@ func executeAuthValidateCommand(cmd *cobra.Command, args []string) error {
 	// Load atmos config.
 	atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, false)
 	if err != nil {
-		return fmt.Errorf("failed to load atmos config: %w", err)
+		return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrFailedToInitializeAtmosConfig, err)
 	}
 
 	// Create validator.

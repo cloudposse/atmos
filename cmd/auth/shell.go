@@ -74,6 +74,17 @@ func executeAuthShellCommand(cmd *cobra.Command, args []string) error {
 	defer perf.Track(nil, "auth.executeAuthShellCommand")()
 
 	handleHelpRequest(cmd, args)
+
+	// Reject mistyped positional args that weren't preceded by "--".
+	// cmd.ArgsLenAtDash() returns -1 when no "--" appears in the arg list.
+	// Without this guard, `atmos auth shell bash` would silently drop "bash"
+	// (since the shell defaults to $SHELL or /bin/sh anyway) instead of
+	// surfacing the user's mistake.
+	if len(args) > 0 && cmd.ArgsLenAtDash() == -1 {
+		return fmt.Errorf("%w: positional args must be preceded by `--` (e.g. `atmos auth shell -- bash`)",
+			errUtils.ErrInvalidArguments)
+	}
+
 	if err := internal.ValidateAtmosConfig(); err != nil {
 		return err
 	}

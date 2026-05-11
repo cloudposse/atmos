@@ -2,11 +2,13 @@ package auth
 
 import (
 	"context"
+	"os"
 	"testing"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -50,32 +52,32 @@ func TestExecuteCommandWithEnv_Validation(t *testing.T) {
 	tests := []struct {
 		name          string
 		args          []string
-		envVars       map[string]string
+		envList       []string
 		expectedError error
 	}{
 		{
 			name:          "empty args returns error",
 			args:          []string{},
-			envVars:       nil,
+			envList:       nil,
 			expectedError: errUtils.ErrNoCommandSpecified,
 		},
 		{
 			name:          "nil args returns error",
 			args:          nil,
-			envVars:       nil,
+			envList:       nil,
 			expectedError: errUtils.ErrNoCommandSpecified,
 		},
 		{
 			name:          "command not found",
 			args:          []string{"nonexistent-command-that-does-not-exist-12345"},
-			envVars:       nil,
+			envList:       nil,
 			expectedError: errUtils.ErrCommandNotFound,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := executeCommandWithEnv(tt.args, tt.envVars)
+			err := executeCommandWithEnv(tt.args, tt.envList)
 
 			assert.Error(t, err)
 			assert.ErrorIs(t, err, tt.expectedError)
@@ -130,14 +132,27 @@ func TestGetSeparatedArgsForExec_EmptyCommand(t *testing.T) {
 }
 
 func TestExecuteCommandWithEnv_WithValidCommand(t *testing.T) {
-	// Test with a valid cross-platform command that exits quickly.
-	// "go version" works on all platforms where Go is installed.
-	err := executeCommandWithEnv([]string{"go", "version"}, map[string]string{
-		"TEST_VAR": "test_value",
-	})
+	// Cross-platform: spawn the test binary itself with the exit-OK env flag
+	// (handled by TestMain). This avoids dependence on PATH-resolved binaries
+	// like `go` / `true` which aren't available on every CI runner.
+	exe, err := os.Executable()
+	require.NoError(t, err)
 
-	// "go version" command should succeed.
+	err = executeCommandWithEnv([]string{exe}, []string{"_ATMOS_AUTH_TEST_EXIT_OK=1"})
 	assert.NoError(t, err)
+}
+
+func TestExecuteCommandWithEnv_NonZeroExit(t *testing.T) {
+	// Cross-platform exit-1 subprocess: test binary + flag, expect ExitCodeError.
+	exe, err := os.Executable()
+	require.NoError(t, err)
+
+	err = executeCommandWithEnv([]string{exe}, []string{"_ATMOS_AUTH_TEST_EXIT_ONE=1"})
+	require.Error(t, err)
+	var exitErr errUtils.ExitCodeError
+	require.ErrorAs(t, err, &exitErr,
+		"non-zero subprocess exit must surface as errUtils.ExitCodeError so the root can propagate the code")
+	assert.Equal(t, 1, exitErr.Code)
 }
 
 // TestExecuteAuthExecCommand_SmokeNoConfig exercises the exec orchestrator
@@ -152,6 +167,22 @@ func TestExecuteAuthExecCommand_SmokeNoConfig(t *testing.T) {
 	assert.NotPanics(t, func() {
 		_ = executeAuthExecCommand(cmd, nil)
 	})
+}
+
+// TestExecuteAuthExecCommand_NoCommand covers the validation branch where
+// the user invokes `atmos auth exec` without a `--` separator + command.
+// Must return ErrNoCommandSpecified before authenticating.
+func TestExecuteAuthExecCommand_NoCommand(t *testing.T) {
+	setupMockAuthFixture(t)
+
+	cmd := authExecCmd
+	cmd.SetContext(context.Background())
+	require.NoError(t, cmd.ParseFlags(nil))
+
+	err := executeAuthExecCommand(cmd, nil)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrNoCommandSpecified,
+		"no command args must surface ErrNoCommandSpecified")
 }
 
 // TestPrepareAuthenticatedEnv_SmokeNoConfig exercises the exec helper from a
@@ -169,6 +200,39 @@ func TestPrepareAuthenticatedEnv_SmokeNoConfig(t *testing.T) {
 	})
 }
 
+// TestPrepareAuthenticatedEnv_WithMockAuth exercises the full happy path
+// against the mock auth fixture. Drives config load, auth manager creation,
+// identity resolution, cache check, authentication, and PrepareShellEnvironment.
+func TestPrepareAuthenticatedEnv_WithMockAuth(t *testing.T) {
+	setupMockAuthFixture(t)
+
+	cmd := authExecCmd
+	cmd.SetContext(context.Background())
+	require.NoError(t, cmd.ParseFlags(nil))
+	v := viper.GetViper()
+
+	envList, err := prepareAuthenticatedEnv(cmd, v)
+	require.NoError(t, err,
+		"prepareAuthenticatedEnv against the mock provider must run to completion")
+	assert.NotEmpty(t, envList,
+		"the returned env list must include the OS env merged with auth vars")
+
+	// The mock identity sets AWS_PROFILE=mock-identity and AWS_REGION=us-east-1.
+	var awsProfile, awsRegion string
+	for _, kv := range envList {
+		switch {
+		case len(kv) > len("AWS_PROFILE=") && kv[:len("AWS_PROFILE=")] == "AWS_PROFILE=":
+			awsProfile = kv[len("AWS_PROFILE="):]
+		case len(kv) > len("AWS_REGION=") && kv[:len("AWS_REGION=")] == "AWS_REGION=":
+			awsRegion = kv[len("AWS_REGION="):]
+		}
+	}
+	assert.Equal(t, "mock-identity", awsProfile,
+		"mock provider must inject AWS_PROFILE")
+	assert.Equal(t, "us-east-1", awsRegion,
+		"mock provider must inject AWS_REGION")
+}
+
 // TestAuthExec_ProfileFlagAppliedToConfig is a regression test for issue #1973
 // (`--profile` global flag not applied for `auth exec` and `auth shell` commands).
 //
@@ -180,41 +244,5 @@ func TestPrepareAuthenticatedEnv_SmokeNoConfig(t *testing.T) {
 // This test asserts that the helper used by `auth exec` actually surfaces the
 // --profile flag value into the ConfigAndStacksInfo used to InitCliConfig.
 func TestAuthExec_ProfileFlagAppliedToConfig(t *testing.T) {
-	tests := []struct {
-		name             string
-		profiles         []string
-		expectedProfiles []string
-	}{
-		{
-			name:             "single profile via --profile flag",
-			profiles:         []string{"devops"},
-			expectedProfiles: []string{"devops"},
-		},
-		{
-			name:             "multiple profiles",
-			profiles:         []string{"devops", "platform"},
-			expectedProfiles: []string{"devops", "platform"},
-		},
-		{
-			name:             "no profile",
-			profiles:         nil,
-			expectedProfiles: nil,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			cmd := newTestCommandWithGlobalFlags("exec")
-
-			v := viper.New()
-			if tt.profiles != nil {
-				v.Set("profile", tt.profiles)
-			}
-
-			info := BuildConfigAndStacksInfo(cmd, v)
-
-			assert.Equal(t, tt.expectedProfiles, info.ProfilesFromArg,
-				"--profile flag must reach ConfigAndStacksInfo for `auth exec` (issue #1973)")
-		})
-	}
+	runProfileFlagAppliedRegressionTest(t, "exec")
 }

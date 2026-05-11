@@ -184,5 +184,7 @@ func CreateAuthManagerFromIdentityWithStackScan(
 	authConfig *schema.AuthConfig,
 	atmosConfig *schema.AtmosConfiguration,
 ) (auth.AuthManager, error) {
+	defer perf.Track(nil, "cmd.CreateAuthManagerFromIdentityWithStackScan")()
+
 	return auth.CreateAndAuthenticateManagerWithStackScan(identityName, authConfig, cfg.IdentityFlagSelectValue, atmosConfig)
 }

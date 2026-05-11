@@ -586,6 +586,21 @@ func TestExecuteAuthWhoamiCommand_SmokeNoConfig(t *testing.T) {
 	})
 }
 
+// TestExecuteAuthWhoamiCommand_WithMockAuth exercises whoami end-to-end with
+// a real auth config (mock/aws provider). Drives identity resolution,
+// authManager.Whoami, and the human-format output path.
+func TestExecuteAuthWhoamiCommand_WithMockAuth(t *testing.T) {
+	setupMockAuthFixture(t)
+
+	cmd := authWhoamiCmd
+	cmd.SetContext(context.Background())
+	require.NoError(t, cmd.ParseFlags(nil))
+
+	// The mock provider implements Whoami; we don't pin its exact output —
+	// the contract here is that the orchestrator runs to completion.
+	_ = executeAuthWhoamiCommand(cmd, nil)
+}
+
 // TestLoadAuthManager_SmokeFromEmptyTempDir exercises the orchestrator's load
 // path from a directory without an atmos.yaml. Either it succeeds (atmos
 // falls back to defaults and finds a usable config) or it fails with an

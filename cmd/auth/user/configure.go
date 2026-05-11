@@ -14,6 +14,7 @@ import (
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/ui"
 )
 
 // authUserConfigureCmd prompts for static AWS user credentials and stores them in keyring.
@@ -76,20 +77,20 @@ func executeAuthUserConfigureCommand(cmd *cobra.Command, args []string) error {
 	// Check if all credentials are managed by Atmos configuration.
 	if yamlInfo.AllInYAML {
 		// All credentials are in YAML - nothing to configure in keyring.
-		fmt.Fprintln(cmd.ErrOrStderr(), "All credentials are managed by Atmos configuration (atmos.yaml)")
-		fmt.Fprintln(cmd.ErrOrStderr(), "To update credentials, edit your atmos.yaml configuration file")
+		ui.Writeln("All credentials are managed by Atmos configuration (atmos.yaml)")
+		ui.Writeln("To update credentials, edit your atmos.yaml configuration file")
 		if yamlInfo.MfaArn != "" {
-			fmt.Fprintf(cmd.ErrOrStderr(), "MFA ARN is also managed by Atmos configuration: %s\n", yamlInfo.MfaArn)
+			ui.Writef("MFA ARN is also managed by Atmos configuration: %s\n", yamlInfo.MfaArn)
 		}
 		return nil
 	}
 
 	// Prompt and save credentials.
-	return promptAndSaveCredentials(cmd, yamlInfo, alias)
+	return promptAndSaveCredentials(yamlInfo, alias)
 }
 
 // promptAndSaveCredentials prompts for credentials and saves them to keyring.
-func promptAndSaveCredentials(cmd *cobra.Command, yamlInfo awsUserIdentityInfo, alias string) error {
+func promptAndSaveCredentials(yamlInfo awsUserIdentityInfo, alias string) error {
 	defer perf.Track(nil, "auth.user.promptAndSaveCredentials")()
 
 	// Prompt user for credentials.
@@ -103,9 +104,9 @@ func promptAndSaveCredentials(cmd *cobra.Command, yamlInfo awsUserIdentityInfo, 
 	if err := store.Store(alias, creds, ""); err != nil {
 		return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrAwsAuth, err)
 	}
-	fmt.Fprintf(cmd.ErrOrStderr(), "Saved credentials to keyring: %s\n", alias)
+	ui.Writef("Saved credentials to keyring: %s\n", alias)
 	if creds.SessionDuration != "" {
-		fmt.Fprintf(cmd.ErrOrStderr(), "Session duration configured: %s\n", creds.SessionDuration)
+		ui.Writef("Session duration configured: %s\n", creds.SessionDuration)
 	}
 	return nil
 }

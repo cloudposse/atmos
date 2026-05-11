@@ -549,6 +549,25 @@ func TestRetrieveCredentials_NoCredentialsAvailable(t *testing.T) {
 	assert.ErrorIs(t, err, errUtils.ErrAuthConsole)
 }
 
+// TestRetrieveCredentials_InlineCredentials covers the path where the
+// WhoamiInfo already carries Credentials directly. The function must return
+// those without touching the credential store.
+func TestRetrieveCredentials_InlineCredentials(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	mockCreds := authTypes.NewMockICredentials(ctrl)
+
+	whoami := &authTypes.WhoamiInfo{
+		Identity:    "prod-admin",
+		Credentials: mockCreds,
+	}
+
+	got, err := retrieveCredentials(whoami)
+	require.NoError(t, err)
+	assert.Same(t, mockCreds, got,
+		"inline Credentials must be returned verbatim without store lookup")
+}
+
 // fakeOpener is a test double for browser.Opener with switchable error
 // behaviour. Tracks whether Open was called and with which URL.
 type fakeOpener struct {
@@ -622,6 +641,26 @@ func TestExecuteAuthConsoleCommand_SmokeNoConfig(t *testing.T) {
 	assert.NotPanics(t, func() {
 		_ = executeAuthConsoleCommand(cmd, nil)
 	})
+}
+
+// TestExecuteAuthConsoleCommand_WithMockAuth drives the console orchestrator
+// against the mock auth fixture. The mock/aws provider is not in the
+// ProviderKindAWSIAMIdentityCenter/SAML/Azure* set, so getConsoleProvider
+// returns ErrProviderNotSupported — exercising that branch of the executor.
+// --print-only is set so the function does not attempt to open a browser.
+func TestExecuteAuthConsoleCommand_WithMockAuth(t *testing.T) {
+	setupMockAuthFixture(t)
+
+	cmd := authConsoleCmd
+	cmd.SetContext(context.Background())
+	require.NoError(t, cmd.ParseFlags([]string{"--print-only"}))
+
+	// Mock provider doesn't support console access; expect the
+	// ErrProviderNotSupported sentinel surfaced via getConsoleProvider.
+	err := executeAuthConsoleCommand(cmd, nil)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrAuthConsole,
+		"console against an unsupported provider must wrap with ErrAuthConsole")
 }
 
 // TestInitializeAuthManager_SmokeFromEmptyTempDir exercises the console

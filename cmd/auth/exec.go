@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"strings"
 	"syscall"
 
 	"github.com/spf13/cobra"
@@ -84,17 +83,20 @@ func executeAuthExecCommand(cmd *cobra.Command, args []string) error {
 	}
 
 	// Prepare the authenticated environment.
-	envMap, err := prepareAuthenticatedEnv(cmd, v)
+	envList, err := prepareAuthenticatedEnv(cmd, v)
 	if err != nil {
 		return err
 	}
 
 	// Execute the command with authentication environment.
-	return executeCommandWithEnv(commandArgs, envMap)
+	return executeCommandWithEnv(commandArgs, envList)
 }
 
-// prepareAuthenticatedEnv loads config, authenticates, and prepares the shell environment.
-func prepareAuthenticatedEnv(cmd *cobra.Command, v *viper.Viper) (map[string]string, error) {
+// prepareAuthenticatedEnv loads config, authenticates, and prepares the shell
+// environment. Returns the sanitized env list (os.Environ + global env + auth
+// vars, with credential leaks removed) for direct use as the child process's
+// Env so order is preserved and no duplicate-key collisions are introduced.
+func prepareAuthenticatedEnv(cmd *cobra.Command, v *viper.Viper) ([]string, error) {
 	defer perf.Track(nil, "auth.exec.prepareAuthenticatedEnv")()
 
 	// Parse global flags and build ConfigAndStacksInfo to honor --base-path, --config, --config-path, --profile.
@@ -137,22 +139,16 @@ func prepareAuthenticatedEnv(cmd *cobra.Command, v *viper.Viper) (map[string]str
 	}
 
 	// Prepare shell environment with file-based credentials.
-	// Start with current OS environment + global env from atmos.yaml and let PrepareShellEnvironment configure auth.
+	// Start with current OS environment + global env from atmos.yaml and let
+	// PrepareShellEnvironment configure auth. The returned env list is already
+	// sanitised (IRSA/credential leaks removed) — pass it through verbatim.
 	baseEnv := envpkg.MergeGlobalEnv(os.Environ(), atmosConfig.Env)
 	envList, err := authManager.PrepareShellEnvironment(ctx, identityName, baseEnv)
 	if err != nil {
 		return nil, fmt.Errorf("failed to prepare command environment: %w", err)
 	}
 
-	// Convert environment list to map.
-	envMap := make(map[string]string)
-	for _, envVar := range envList {
-		if idx := strings.IndexByte(envVar, '='); idx >= 0 {
-			envMap[envVar[:idx]] = envVar[idx+1:]
-		}
-	}
-
-	return envMap, nil
+	return envList, nil
 }
 
 // resolveIdentityNameForExec resolves the identity name from flags, viper, or prompts for selection.
@@ -196,8 +192,13 @@ func getSeparatedArgsForExec(cmd *cobra.Command) []string {
 	return nil
 }
 
-// executeCommandWithEnv executes a command with additional environment variables.
-func executeCommandWithEnv(args []string, envVars map[string]string) error {
+// executeCommandWithEnv executes a command with the sanitised environment list
+// produced by prepareAuthenticatedEnv. The list already includes the full
+// environment (OS env + global env + auth vars, with credential leaks removed)
+// and must be passed through to the child process verbatim — do NOT prepend
+// os.Environ() or convert to a map (that would lose ordering and could collide
+// on duplicate keys like Windows-style drive-scoped vars).
+func executeCommandWithEnv(args []string, envList []string) error {
 	defer perf.Track(nil, "auth.executeCommandWithEnv")()
 
 	if len(args) == 0 {
@@ -214,15 +215,10 @@ func executeCommandWithEnv(args []string, envVars map[string]string) error {
 		return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrCommandNotFound, err)
 	}
 
-	// Convert the prepared environment map to a slice for the child process.
-	// The envVars map already includes the full environment (OS env + global env + auth vars)
-	// from prepareAuthenticatedEnv(), so we must not prepend os.Environ() again.
-	env := envpkg.ConvertMapToSlice(envVars)
-
 	// Execute the command.
 	// #nosec G204 -- This is intentional: auth exec is designed to run user-specified commands.
 	execCmd := exec.Command(cmdPath, cmdArgs...)
-	execCmd.Env = env
+	execCmd.Env = envList
 	execCmd.Stdin = os.Stdin
 	execCmd.Stdout = os.Stdout
 	execCmd.Stderr = os.Stderr

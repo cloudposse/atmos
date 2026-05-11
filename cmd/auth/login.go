@@ -179,6 +179,12 @@ func isInteractive() bool {
 	return term.IsTTYSupportForStdin() && !telemetry.IsCI()
 }
 
+// isInteractiveFn indirects through isInteractive so tests can force the
+// non-interactive branch of getProviderForFallback deterministically — running
+// the test from a real TTY would otherwise trip into promptForProvider which
+// blocks on stdin. Production callers should never reassign this.
+var isInteractiveFn = isInteractive
+
 // getProviderForFallback determines which provider to use when no identities are configured.
 // If only one provider exists, it is auto-selected.
 // If multiple providers exist and interactive, prompts user.
@@ -198,7 +204,7 @@ func getProviderForFallback(authManager providerLister) (string, error) {
 	}
 
 	// Multiple providers - need interactive selection or error.
-	if !isInteractive() {
+	if !isInteractiveFn() {
 		return "", fmt.Errorf("%w: use --provider flag to specify which provider", errUtils.ErrNoDefaultProvider)
 	}
 

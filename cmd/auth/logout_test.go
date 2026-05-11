@@ -2,6 +2,7 @@ package auth
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -220,6 +221,228 @@ func TestPerformLogoutAll_DryRun(t *testing.T) {
 	require.NoError(t, err)
 }
 
+// TestPerformIdentityLogout_Success covers the happy path with no keychain
+// deletion (so no confirmation prompt is invoked).
+func TestPerformIdentityLogout_Success(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	m := authTypes.NewMockAuthManager(ctrl)
+
+	m.EXPECT().GetIdentities().Return(map[string]schema.Identity{
+		"prod-admin": {Kind: "aws/permission-set"},
+	})
+	m.EXPECT().GetProviderForIdentity("prod-admin").Return("aws-sso")
+	m.EXPECT().GetRealm().Return(realmInfoMatcher())
+	m.EXPECT().Logout(gomock.Any(), "prod-admin", false).Return(nil)
+
+	err := performIdentityLogout(context.Background(), m, "prod-admin", false /*dryRun*/, false /*deleteKeychain*/, false)
+	require.NoError(t, err)
+}
+
+// TestPerformIdentityLogout_PartialLogout covers the ErrPartialLogout branch:
+// the function should not surface an error but should print a warning.
+func TestPerformIdentityLogout_PartialLogout(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	m := authTypes.NewMockAuthManager(ctrl)
+
+	m.EXPECT().GetIdentities().Return(map[string]schema.Identity{
+		"prod-admin": {Kind: "aws/permission-set"},
+	})
+	m.EXPECT().GetProviderForIdentity("prod-admin").Return("aws-sso")
+	m.EXPECT().GetRealm().Return(realmInfoMatcher())
+	m.EXPECT().Logout(gomock.Any(), "prod-admin", false).Return(errUtils.ErrPartialLogout)
+
+	err := performIdentityLogout(context.Background(), m, "prod-admin", false, false, false)
+	// Partial logout is treated as success — the function prints a warning
+	// but returns nil so the user sees a meaningful summary instead of an error.
+	require.NoError(t, err,
+		"ErrPartialLogout must be downgraded to success-with-warning")
+}
+
+// TestPerformIdentityLogout_LogoutError covers the generic-error path: the
+// function must surface the error to the caller (not swallow it).
+func TestPerformIdentityLogout_LogoutError(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	m := authTypes.NewMockAuthManager(ctrl)
+
+	boom := errors.New("keyring backend unavailable")
+	m.EXPECT().GetIdentities().Return(map[string]schema.Identity{
+		"prod-admin": {Kind: "aws/permission-set"},
+	})
+	m.EXPECT().GetProviderForIdentity("prod-admin").Return("aws-sso")
+	m.EXPECT().GetRealm().Return(realmInfoMatcher())
+	m.EXPECT().Logout(gomock.Any(), "prod-admin", false).Return(boom)
+
+	err := performIdentityLogout(context.Background(), m, "prod-admin", false, false, false)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, boom)
+}
+
+// TestPerformProviderLogout_Success covers the happy path.
+func TestPerformProviderLogout_Success(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	m := authTypes.NewMockAuthManager(ctrl)
+
+	m.EXPECT().GetProviders().Return(map[string]schema.Provider{
+		"aws-sso": {Kind: "aws/iam-identity-center"},
+	})
+	m.EXPECT().GetIdentities().Return(map[string]schema.Identity{
+		"prod-admin": {Kind: "aws/permission-set"},
+		"dev-admin":  {Kind: "aws/permission-set"},
+	})
+	m.EXPECT().GetProviderForIdentity("prod-admin").Return("aws-sso")
+	m.EXPECT().GetProviderForIdentity("dev-admin").Return("aws-sso")
+	m.EXPECT().GetRealm().Return(realmInfoMatcher())
+	m.EXPECT().LogoutProvider(gomock.Any(), "aws-sso", false).Return(nil)
+
+	err := performProviderLogout(context.Background(), m, "aws-sso", false, false, false)
+	require.NoError(t, err)
+}
+
+// TestPerformProviderLogout_DryRun covers the dry-run path. LogoutProvider must
+// not be called.
+func TestPerformProviderLogout_DryRun(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	m := authTypes.NewMockAuthManager(ctrl)
+
+	m.EXPECT().GetProviders().Return(map[string]schema.Provider{
+		"aws-sso": {Kind: "aws/iam-identity-center"},
+	})
+	m.EXPECT().GetIdentities().Return(map[string]schema.Identity{
+		"prod-admin": {Kind: "aws/permission-set"},
+	})
+	m.EXPECT().GetProviderForIdentity("prod-admin").Return("aws-sso")
+	m.EXPECT().GetFilesDisplayPath("aws-sso").Return("/atmos/realm/creds")
+	m.EXPECT().LogoutProvider(gomock.Any(), gomock.Any(), gomock.Any()).Times(0)
+
+	err := performProviderLogout(context.Background(), m, "aws-sso", true /*dryRun*/, false, false)
+	require.NoError(t, err)
+}
+
+// TestExecuteLogoutOption_DispatchAll covers the "all" branch of the
+// dispatcher.
+func TestExecuteLogoutOption_DispatchAll(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	m := authTypes.NewMockAuthManager(ctrl)
+
+	// performLogoutAll dry-run path: short-circuits with no LogoutAll call.
+	m.EXPECT().GetProviders().Return(map[string]schema.Provider{})
+	m.EXPECT().LogoutAll(gomock.Any(), gomock.Any()).Times(0)
+
+	err := executeLogoutOption(context.Background(), m, logoutOption{typ: "all"}, true, false, false)
+	require.NoError(t, err)
+}
+
+// TestExecuteLogoutOption_DispatchIdentity covers the "identity" branch.
+func TestExecuteLogoutOption_DispatchIdentity(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	m := authTypes.NewMockAuthManager(ctrl)
+
+	// performIdentityLogout dry-run path: needs GetFilesDisplayPath for
+	// the "Would remove ... files:" message but does not invoke Logout.
+	m.EXPECT().GetIdentities().Return(map[string]schema.Identity{
+		"prod-admin": {Kind: "aws/permission-set"},
+	})
+	m.EXPECT().GetProviderForIdentity("prod-admin").Return("aws-sso")
+	m.EXPECT().GetFilesDisplayPath("aws-sso").Return("/atmos/creds")
+	m.EXPECT().Logout(gomock.Any(), gomock.Any(), gomock.Any()).Times(0)
+
+	err := executeLogoutOption(context.Background(), m, logoutOption{typ: "identity", target: "prod-admin"}, true, false, false)
+	require.NoError(t, err)
+}
+
+// TestExecuteLogoutOption_DispatchProvider covers the "provider" branch.
+func TestExecuteLogoutOption_DispatchProvider(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	m := authTypes.NewMockAuthManager(ctrl)
+
+	m.EXPECT().GetProviders().Return(map[string]schema.Provider{
+		"aws-sso": {Kind: "aws/iam-identity-center"},
+	})
+	m.EXPECT().GetIdentities().Return(map[string]schema.Identity{})
+	m.EXPECT().GetFilesDisplayPath("aws-sso").Return("/atmos/creds")
+	m.EXPECT().LogoutProvider(gomock.Any(), gomock.Any(), gomock.Any()).Times(0)
+
+	err := executeLogoutOption(context.Background(), m, logoutOption{typ: "provider", target: "aws-sso"}, true, false, false)
+	require.NoError(t, err)
+}
+
+// TestPerformInteractiveLogout_NoIdentities covers the early-return branch
+// when the auth config has no identities at all.
+func TestPerformInteractiveLogout_NoIdentities(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	m := authTypes.NewMockAuthManager(ctrl)
+
+	m.EXPECT().GetIdentities().Return(map[string]schema.Identity{})
+	m.EXPECT().GetProviders().Return(map[string]schema.Provider{})
+	// LogoutAll / Logout / huh form must NOT be invoked.
+
+	err := performInteractiveLogout(context.Background(), m, false, false, false)
+	require.NoError(t, err,
+		"empty-identities branch must short-circuit cleanly without an error")
+}
+
+// TestPerformLogoutAllRealms_NoRealms covers the early-return branch where
+// the XDG config directory exists but contains no realm subdirectories.
+func TestPerformLogoutAllRealms_NoRealms(t *testing.T) {
+	tmpHome := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmpHome)
+
+	atmosCfg := &schema.AtmosConfiguration{}
+	err := performLogoutAllRealms(context.Background(), atmosCfg, false, false, false)
+	require.NoError(t, err,
+		"no-realms branch must return success cleanly")
+}
+
+// TestPerformLogoutAllRealms_RealRemove covers the non-dry-run, no-keychain
+// path: realm directories must be physically removed.
+func TestPerformLogoutAllRealms_RealRemove(t *testing.T) {
+	tmpHome := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmpHome)
+
+	realmAWSDir := filepath.Join(tmpHome, "atmos", "realm-1", "aws")
+	require.NoError(t, os.MkdirAll(realmAWSDir, 0o755))
+
+	atmosCfg := &schema.AtmosConfiguration{}
+	err := performLogoutAllRealms(context.Background(), atmosCfg, false /*dryRun*/, false /*deleteKeychain*/, false)
+	require.NoError(t, err)
+
+	// The realm directory must be gone.
+	_, err = os.Stat(filepath.Join(tmpHome, "atmos", "realm-1"))
+	assert.True(t, os.IsNotExist(err),
+		"non-dry-run logout-all-realms must remove discovered realm directories")
+}
+
+// TestPerformLogoutAllRealms_DryRun covers the dry-run branch with discovered
+// realms. The realm directories must NOT be removed.
+func TestPerformLogoutAllRealms_DryRun(t *testing.T) {
+	tmpHome := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmpHome)
+
+	// Create realm directories matching the discoverRealms convention:
+	// XDG_CONFIG_HOME/atmos/<realm>/<provider>/.
+	require.NoError(t, os.MkdirAll(filepath.Join(tmpHome, "atmos", "realm-1", "aws"), 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(tmpHome, "atmos", "realm-2", "azure"), 0o755))
+
+	atmosCfg := &schema.AtmosConfiguration{}
+	err := performLogoutAllRealms(context.Background(), atmosCfg, true /*dryRun*/, false, false)
+	require.NoError(t, err)
+
+	// Dry-run must not remove the realm directories.
+	_, err = os.Stat(filepath.Join(tmpHome, "atmos", "realm-1", "aws"))
+	require.NoError(t, err, "dry-run must NOT delete realm directories")
+	_, err = os.Stat(filepath.Join(tmpHome, "atmos", "realm-2", "azure"))
+	require.NoError(t, err)
+}
+
 // TestPerformLogoutAll_Success covers the happy path with no keychain
 // deletion (so no confirmation prompt is invoked).
 func TestPerformLogoutAll_Success(t *testing.T) {
@@ -255,6 +478,21 @@ func TestExecuteAuthLogoutCommand_SmokeNoConfig(t *testing.T) {
 	assert.NotPanics(t, func() {
 		_ = executeAuthLogoutCommand(cmd, nil)
 	})
+}
+
+// TestExecuteAuthLogoutCommand_WithMockAuthDryRun exercises logout
+// end-to-end against the mock auth fixture in --dry-run mode (no actual
+// credential removal). Drives interactive/identity/provider dispatch.
+func TestExecuteAuthLogoutCommand_WithMockAuthDryRun(t *testing.T) {
+	setupMockAuthFixture(t)
+
+	cmd := authLogoutCmd
+	cmd.SetContext(context.Background())
+	require.NoError(t, cmd.ParseFlags([]string{"--dry-run", "mock-identity"}))
+
+	err := executeAuthLogoutCommand(cmd, []string{"mock-identity"})
+	assert.NoError(t, err,
+		"dry-run logout of a configured identity must succeed")
 }
 
 // TestDisplayExternalCredentialWarnings smoke-covers the I/O wrapper around

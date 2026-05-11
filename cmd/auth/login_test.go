@@ -175,18 +175,15 @@ func TestGetProviderForFallback(t *testing.T) {
 	})
 
 	t.Run("multiple providers in non-interactive context returns ErrNoDefaultProvider", func(t *testing.T) {
-		// isInteractive() returns false in `go test` because stdin is not a TTY.
-		// Even if it were, telemetry.IsCI() should return true under most CI
-		// environments. Either way, the multi-provider non-interactive branch
-		// must surface ErrNoDefaultProvider with a --provider flag hint.
+		// Force the non-interactive branch deterministically — otherwise a
+		// test runner with a real TTY would block on the huh prompt or be
+		// skipped.
+		orig := isInteractiveFn
+		t.Cleanup(func() { isInteractiveFn = orig })
+		isInteractiveFn = func() bool { return false }
+
 		got, err := getProviderForFallback(&fakeProviderLister{providers: []string{"sso-a", "sso-b"}})
-		// One of two outcomes is acceptable depending on the test runner's TTY
-		// state: either an error for non-interactive, or a successful return
-		// from the interactive prompt. The interactive case can't be reached
-		// in unit tests without a real TTY, so we expect the error path here.
-		if err == nil {
-			t.Skipf("test environment unexpectedly looks interactive; got %q", got)
-		}
+		require.Error(t, err)
 		assert.ErrorIs(t, err, errUtils.ErrNoDefaultProvider)
 		assert.Empty(t, got)
 	})
@@ -204,6 +201,16 @@ func TestIsInteractive(t *testing.T) {
 	assert.Equal(t, got, again, "isInteractive() must be deterministic for a given environment")
 }
 
+// TestPromptForProvider_EmptyList covers the deterministic guard at the top
+// of the interactive prompt: when called with no providers, it returns
+// ErrNoProvidersAvailable without ever touching the huh form.
+func TestPromptForProvider_EmptyList(t *testing.T) {
+	got, err := promptForProvider("Choose a provider:", nil)
+	require.Error(t, err)
+	assert.Empty(t, got)
+	assert.ErrorIs(t, err, errUtils.ErrNoProvidersAvailable)
+}
+
 // TestExecuteAuthLoginCommand_SmokeNoConfig exercises the login orchestrator
 // from a directory without an atmos.yaml. Contract: no panic.
 func TestExecuteAuthLoginCommand_SmokeNoConfig(t *testing.T) {
@@ -216,4 +223,19 @@ func TestExecuteAuthLoginCommand_SmokeNoConfig(t *testing.T) {
 	assert.NotPanics(t, func() {
 		_ = executeAuthLoginCommand(cmd, nil)
 	})
+}
+
+// TestExecuteAuthLoginCommand_WithMockAuth exercises login end-to-end against
+// the mock auth fixture. Drives identity-mode auth (no --provider flag), so
+// the orchestrator goes through authenticateIdentity → mock.Authenticate.
+func TestExecuteAuthLoginCommand_WithMockAuth(t *testing.T) {
+	setupMockAuthFixture(t)
+
+	cmd := authLoginCmd
+	cmd.SetContext(context.Background())
+	require.NoError(t, cmd.ParseFlags(nil))
+
+	err := executeAuthLoginCommand(cmd, nil)
+	assert.NoError(t, err,
+		"login against the mock provider must succeed")
 }

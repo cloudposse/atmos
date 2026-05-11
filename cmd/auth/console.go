@@ -178,9 +178,9 @@ func executeAuthConsoleCommand(cmd *cobra.Command, args []string) error {
 	}
 
 	if printOnly {
-		// Print to stdout for piping.
-		_ = data.Writeln(consoleURL)
-		return nil
+		// Print to stdout for piping. Propagate write errors (e.g. broken pipe)
+		// so the caller can surface a non-zero exit code.
+		return data.Writeln(consoleURL)
 	}
 
 	// Print formatted output.
@@ -341,11 +341,17 @@ func resolveIdentityName(cmd *cobra.Command, v *viper.Viper, authManager types.A
 
 	identityName, err := authManager.GetDefaultIdentity(forceSelect)
 	if err != nil {
+		// Multi-%w keeps both sentinels in the chain so
+		// maybeOfferProfileFallbackOnAuthConfigError can still detect
+		// ErrNoDefaultIdentity / ErrNoIdentitiesAvailable / ErrNoProvidersAvailable.
 		return "", fmt.Errorf("%w: failed to get default identity: %w", errUtils.ErrAuthConsole, err)
 	}
 
 	if identityName == "" {
-		return "", fmt.Errorf("%w: no default identity configured", errUtils.ErrAuthConsole)
+		// Surface ErrNoDefaultIdentity in the chain so the profile-fallback
+		// dispatcher recognises this state and can offer a `--profile <name>`
+		// suggestion when applicable.
+		return "", fmt.Errorf("%w: no default identity configured: %w", errUtils.ErrAuthConsole, errUtils.ErrNoDefaultIdentity)
 	}
 
 	return identityName, nil

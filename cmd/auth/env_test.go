@@ -631,6 +631,23 @@ func TestExecuteAuthEnvCommand_SmokeNoConfig(t *testing.T) {
 	})
 }
 
+// TestExecuteAuthEnvCommand_WithMockAuth exercises executeAuthEnvCommand
+// against a minimal atmos.yaml that wires up the mock/aws provider. This
+// drives the orchestrator past the config-load and auth-manager-create
+// branches, through identity resolution, env preparation, and the bash
+// formatter — paths that the SmokeNoConfig test cannot reach.
+func TestExecuteAuthEnvCommand_WithMockAuth(t *testing.T) {
+	setupMockAuthFixture(t)
+
+	cmd := authEnvCmd
+	cmd.SetContext(context.Background())
+	require.NoError(t, cmd.ParseFlags(nil))
+
+	err := executeAuthEnvCommand(cmd, nil)
+	assert.NoError(t, err,
+		"executeAuthEnvCommand with mock/aws provider must run to completion")
+}
+
 // TestLoadAuthManagerForEnv_SmokeFromEmptyTempDir exercises the orchestrator's
 // config-load path from a directory without an atmos.yaml.
 func TestLoadAuthManagerForEnv_SmokeFromEmptyTempDir(t *testing.T) {

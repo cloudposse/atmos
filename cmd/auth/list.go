@@ -96,8 +96,13 @@ func listFormatFlagCompletion(cmd *cobra.Command, args []string, toComplete stri
 }
 
 // listProvidersFlagCompletion provides shell completion for the providers flag.
+//
+// Honors --base-path, --config, --config-path, and --profile from the current
+// command context so completion sees the same atmos config the command would
+// actually run against.
 func listProvidersFlagCompletion(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
-	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+	v := viper.GetViper()
+	atmosConfig, err := cfg.InitCliConfig(BuildConfigAndStacksInfo(cmd, v), false)
 	if err != nil {
 		return nil, cobra.ShellCompDirectiveNoFileComp
 	}
@@ -115,8 +120,13 @@ func listProvidersFlagCompletion(cmd *cobra.Command, args []string, toComplete s
 }
 
 // listIdentitiesFlagCompletion provides shell completion for the identities flag.
+//
+// Honors --base-path, --config, --config-path, and --profile from the current
+// command context so completion sees the same atmos config the command would
+// actually run against.
 func listIdentitiesFlagCompletion(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
-	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+	v := viper.GetViper()
+	atmosConfig, err := cfg.InitCliConfig(BuildConfigAndStacksInfo(cmd, v), false)
 	if err != nil {
 		return nil, cobra.ShellCompDirectiveNoFileComp
 	}

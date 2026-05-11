@@ -4,19 +4,24 @@ import (
 	"sort"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
-	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 // identityFlagCompletion provides shell completion for identity flags by fetching
 // available identities from the Atmos configuration.
+//
+// Honors --base-path, --config, --config-path, and --profile from the current
+// command context so completion sees the same atmos config the command would
+// actually run against.
 func identityFlagCompletion(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
 	defer perf.Track(nil, "auth.identityFlagCompletion")()
 
-	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+	v := viper.GetViper()
+	atmosConfig, err := cfg.InitCliConfig(BuildConfigAndStacksInfo(cmd, v), false)
 	if err != nil {
 		return nil, cobra.ShellCompDirectiveNoFileComp
 	}
@@ -46,6 +51,10 @@ func AddIdentityCompletion(cmd *cobra.Command) {
 
 // IdentityArgCompletion provides shell completion for identity positional arguments.
 // It returns a list of available identities from the Atmos configuration.
+//
+// Honors --base-path, --config, --config-path, and --profile from the current
+// command context so completion sees the same atmos config the command would
+// actually run against.
 func IdentityArgCompletion(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
 	defer perf.Track(nil, "auth.IdentityArgCompletion")()
 
@@ -54,7 +63,8 @@ func IdentityArgCompletion(cmd *cobra.Command, args []string, toComplete string)
 		return nil, cobra.ShellCompDirectiveNoFileComp
 	}
 
-	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+	v := viper.GetViper()
+	atmosConfig, err := cfg.InitCliConfig(BuildConfigAndStacksInfo(cmd, v), false)
 	if err != nil {
 		return nil, cobra.ShellCompDirectiveNoFileComp
 	}
@@ -83,6 +93,10 @@ func ComponentsArgCompletion(cmd *cobra.Command, args []string, toComplete strin
 
 // ProviderArgCompletion provides shell completion for provider positional arguments.
 // It returns a list of available providers from the Atmos configuration.
+//
+// Honors --base-path, --config, --config-path, and --profile from the current
+// command context so completion sees the same atmos config the command would
+// actually run against.
 func ProviderArgCompletion(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
 	defer perf.Track(nil, "auth.ProviderArgCompletion")()
 
@@ -91,7 +105,8 @@ func ProviderArgCompletion(cmd *cobra.Command, args []string, toComplete string)
 		return nil, cobra.ShellCompDirectiveNoFileComp
 	}
 
-	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+	v := viper.GetViper()
+	atmosConfig, err := cfg.InitCliConfig(BuildConfigAndStacksInfo(cmd, v), false)
 	if err != nil {
 		return nil, cobra.ShellCompDirectiveNoFileComp
 	}

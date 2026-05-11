@@ -1,6 +1,8 @@
 package auth
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -165,10 +167,150 @@ func TestBuildConfigAndStacksInfo(t *testing.T) {
 // newTestCommandWithGlobalFlags creates a test command with all global flags registered.
 // This mirrors the pattern used in production where commands inherit global flags from RootCmd.
 func newTestCommandWithGlobalFlags(use string) *cobra.Command {
+	cmd, _ := newTestCommandWithGlobalParser(use)
+	return cmd
+}
+
+// newTestCommandWithGlobalParser is the parser-returning variant used by tests
+// that need to drive the real Cobra → Viper binding path (e.g. regression
+// tests for the --profile flag — issue #1973). Production-equivalent flow:
+//
+//	cmd, parser := newTestCommandWithGlobalParser("auth")
+//	cmd.Flags().Set("profile", "devops")
+//	parser.BindFlagsToViper(cmd, v)
+//	info := BuildConfigAndStacksInfo(cmd, v)
+func newTestCommandWithGlobalParser(use string) (*cobra.Command, *flags.StandardParser) {
 	cmd := &cobra.Command{Use: use}
 	globalParser := flags.NewGlobalOptionsBuilder().Build()
 	globalParser.RegisterPersistentFlags(cmd)
-	return cmd
+	return cmd, globalParser
+}
+
+// runProfileFlagAppliedRegressionTest is the shared regression-test driver
+// for issue #1973 (`--profile` global flag silently dropped on `auth exec`
+// and `auth shell`). The exec_test and shell_test thin wrappers feed the
+// same table into this helper so any future profile-precedence regression
+// is caught at both surfaces with a single set of cases.
+//
+// The commandName is just the cosmetic cobra `Use` field used to construct
+// the stand-in command — the actual command code under test is the shared
+// BuildConfigAndStacksInfo helper which both `auth exec` and `auth shell`
+// route through.
+func runProfileFlagAppliedRegressionTest(t *testing.T, commandName string) {
+	t.Helper()
+
+	tests := []struct {
+		name             string
+		cliArgs          []string
+		expectedProfiles []string
+	}{
+		{
+			name:             "single profile via --profile flag",
+			cliArgs:          []string{"--profile=devops"},
+			expectedProfiles: []string{"devops"},
+		},
+		{
+			name:             "multiple profiles",
+			cliArgs:          []string{"--profile=devops", "--profile=platform"},
+			expectedProfiles: []string{"devops", "platform"},
+		},
+		{
+			name:             "no profile",
+			cliArgs:          nil,
+			expectedProfiles: nil,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Drive the real Cobra → Viper path that executeAuthExecCommand /
+			// executeAuthShellCommand use in production:
+			//   1. Register --profile as a persistent flag on the command.
+			//   2. ParseFlags() with realistic CLI args — Cobra merges
+			//      persistent flags into cmd.Flags() during parse, which the
+			//      next step depends on.
+			//   3. BindFlagsToViper plumbs cmd flags → viper.
+			//   4. BuildConfigAndStacksInfo extracts the profile value.
+			cmd, globalParser := newTestCommandWithGlobalParser(commandName)
+			v := viper.New()
+
+			// ParseFlags must run before BindFlagsToViper. Without it, the
+			// parser's `cmd.Flags().Lookup("profile")` returns nil for the
+			// persistent flag and viper sees only the default. This mirrors
+			// production: Cobra parses CLI args before invoking RunE.
+			if err := cmd.ParseFlags(tt.cliArgs); err != nil {
+				t.Fatalf("ParseFlags(%v): %v", tt.cliArgs, err)
+			}
+			if err := globalParser.BindFlagsToViper(cmd, v); err != nil {
+				t.Fatalf("BindFlagsToViper: %v", err)
+			}
+
+			info := BuildConfigAndStacksInfo(cmd, v)
+
+			if tt.expectedProfiles == nil {
+				// `viper.GetStringSlice` returns [] (not nil) for an unset
+				// slice with a default of []. Accept either as "no profile";
+				// downstream consumers only ever check len().
+				assert.Empty(t, info.ProfilesFromArg,
+					"no --profile flag must surface as an empty/nil slice")
+				return
+			}
+			assert.Equal(t, tt.expectedProfiles, info.ProfilesFromArg,
+				"--profile flag must reach ConfigAndStacksInfo (issue #1973)")
+		})
+	}
+}
+
+// setupMockAuthFixture writes a minimal atmos.yaml wired to the mock/aws
+// provider into a tempdir and isolates keyring + XDG state to that dir.
+// Tests use this to exercise auth orchestrators end-to-end without touching
+// the host's real keyring or atmos.yaml. The function also chdirs into the
+// fixture and resets viper so subsequent calls in the test see clean state.
+func setupMockAuthFixture(t *testing.T) {
+	t.Helper()
+	tmp := t.TempDir()
+
+	// Isolate keyring + XDG to the tempdir.
+	t.Setenv("ATMOS_KEYRING_TYPE", "memory")
+	t.Setenv("XDG_CONFIG_HOME", tmp)
+	t.Setenv("XDG_DATA_HOME", tmp)
+	t.Setenv("XDG_CACHE_HOME", tmp)
+
+	atmosYaml := `base_path: "./"
+stacks:
+  base_path: stacks
+  included_paths: ["**/*"]
+  name_pattern: "{stage}"
+auth:
+  providers:
+    mock-provider:
+      kind: mock/aws
+      config:
+        description: "Mock AWS provider for testing"
+  identities:
+    mock-identity:
+      kind: mock/aws
+      default: true
+      via:
+        provider: mock-provider
+      principal:
+        account:
+          id: "123456789012"
+logs:
+  level: Info
+`
+	if err := os.WriteFile(filepath.Join(tmp, "atmos.yaml"), []byte(atmosYaml), 0o644); err != nil {
+		t.Fatalf("setupMockAuthFixture: write atmos.yaml: %v", err)
+	}
+	if err := os.MkdirAll(filepath.Join(tmp, "stacks"), 0o755); err != nil {
+		t.Fatalf("setupMockAuthFixture: mkdir stacks: %v", err)
+	}
+
+	t.Chdir(tmp)
+
+	// Reset viper since auth tests share the global instance.
+	viper.Reset()
+	t.Cleanup(viper.Reset)
 }
 
 // TestBuildConfigAndStacksInfo_ProfileFlag tests that the --profile global flag
