@@ -359,19 +359,19 @@ Atmos Pro reports check status on GitHub merge-queue synthetic commits the same 
 2. **PR added to the merge queue** → GitHub creates a synthetic merge commit on `gh-readonly-queue/<base>/pr-<N>-<sha>`. Atmos Pro creates a check run on that synthetic SHA and dispatches the workflow resolved from `merge_group` (see below).
 3. **Queue ultimately merges the PR** → GitHub fires `pull_request.closed` with `merged: true` on the originating PR. The existing `pull_request.merged.workflows` (apply) flow runs unchanged. Apply does **not** fire on `merge_group` events.
 
-#### Zero-config behavior
+#### Configure `settings.pro.merge_group`
 
-If a stack already has `settings.pro.pull_request.synchronize.workflows`
-configured, no YAML changes are required. Atmos Pro will dispatch the same
-workflow on merge-queue synthetic commits via an automatic fallback. Customers
-running a recent CLI get merge-queue support the moment they enable a GitHub
-merge queue on their repository.
+To get the right outcome on merge-queue synthetic commits, declare a
+`merge_group` block alongside `pull_request` and `release` and point it at the
+workflow you want dispatched in the queue. Workflow filenames are arbitrary —
+Atmos Pro has no way to tell from the filename whether a workflow plans,
+applies, or does something else — so the recommended pattern is to be
+explicit about which workflow runs in the queue rather than relying on Atmos
+Pro to infer one from your `pull_request.synchronize` config.
 
-#### Optional: `settings.pro.merge_group`
-
-For teams that want different policy in the queue (stricter affected-stack
-scope, different workflow inputs, a different workflow file), declare a
-`merge_group` block alongside `pull_request` and `release`:
+In most cases the queue should run the **same plan workflow** as
+`pull_request.synchronize`, optionally with stricter inputs (fail-on-drift,
+required approvals, etc.):
 
 <File title="stacks/mixins/atmos-pro.yaml">
 ```yaml
@@ -411,8 +411,13 @@ settings:
 When Atmos Pro receives a merge-queue trigger for a stack, it resolves the
 workflow to dispatch in this order:
 
-1. `settings.pro.merge_group.checks_requested.workflows` if defined.
-2. Otherwise, fall back to `settings.pro.pull_request.synchronize.workflows`.
+1. `settings.pro.merge_group.checks_requested.workflows` if defined — **this
+   is the recommended path.**
+2. Otherwise, `settings.pro.pull_request.synchronize.workflows` is used as a
+   backstop so existing customers do not regress when a queue is enabled.
+   Because workflow filenames are arbitrary, this backstop can dispatch a
+   workflow that is not appropriate for the queue (e.g. an apply step). Treat
+   it as a transitional behavior, not a recommended configuration.
 3. Otherwise, no workflow is dispatched (same null behavior as a stack with no
    per-event configuration).
 
@@ -429,10 +434,13 @@ workflow to dispatch in this order:
 
 #### Migration note
 
-If you have already enabled GitHub merge queue on your repository and you are
-on Atmos CLI ≥ 1.218.0, no Atmos config changes are required. Atmos Pro will use
-your existing `pull_request.synchronize` workflows for queue checks. Add a
-`merge_group` block only if you want different policy in the queue.
+If you are enabling GitHub merge queue on a repository that already uses
+Atmos Pro, the right migration is to add a `settings.pro.merge_group` block
+to every stack mixin that already has `settings.pro.pull_request`. In most
+cases the queue should dispatch the same plan workflow as
+`pull_request.synchronize` — declare it explicitly so the queue's check
+outcome is deterministic and reviewable from your stack config rather than
+inferred from a backstop.
 
 #### See also
 
