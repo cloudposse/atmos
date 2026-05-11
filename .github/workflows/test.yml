@@ -258,6 +258,40 @@ jobs:
           category: hadolint
           wait-for-processing: true
 
+  compile-plan9:
+    name: "[compile] Plan 9 (compile-only)"
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: "go.mod"
+
+      - name: Compile homedir for Plan 9 (no execution, guards bit-rot)
+        run: GOOS=plan9 go build ./pkg/config/homedir/...
+
+  test-homedir-macos:
+    name: "[test] homedir (macOS, race detector)"
+    runs-on: macos-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: "go.mod"
+
+      - name: Run homedir unit tests with race detector
+        run: go test -race ./pkg/config/homedir/...
+
   # run localstack demo tests
   localstack:
     name: "[localstack] ${{ matrix.demo-folder }}"

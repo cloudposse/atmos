@@ -535,10 +535,10 @@ func TestInstallCmd_RunE_InstallerInitFailure(t *testing.T) {
 
 		// Reset homedir cache to pick up new HOME.
 		homedir.Reset()
-		homedir.DisableCache = true
+		homedir.SetDisableCache(true)
 		t.Cleanup(func() {
 			homedir.Reset()
-			homedir.DisableCache = false
+			homedir.SetDisableCache(false)
 		})
 
 		// Capture stdout.
