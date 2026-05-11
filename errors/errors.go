@@ -697,6 +697,7 @@ var (
 	ErrInvalidProviderConfig        = errors.New("invalid provider config")
 	ErrInvalidBrowserExecutable     = errors.New("invalid browser executable")
 	ErrAuthenticationFailed         = errors.New("authentication failed")
+	ErrPrepareShellEnvironment      = errors.New("failed to prepare authenticated shell environment")
 	ErrInvalidADCContent            = errors.New("invalid ADC content")
 	ErrWriteADCFile                 = errors.New("failed to write ADC file")
 	ErrWritePropertiesFile          = errors.New("failed to write properties file")

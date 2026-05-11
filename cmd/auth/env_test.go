@@ -1,10 +1,8 @@
 package auth
 
 import (
-	"bytes"
 	"context"
 	"errors"
-	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -81,21 +79,10 @@ func TestOutputEnvAsExport(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Capture stdout.
-			oldStdout := os.Stdout
-			r, w, _ := os.Pipe()
-			os.Stdout = w
+			read := captureStdout(t)
 
-			err := outputEnvAsExport(tt.envVars)
-			require.NoError(t, err)
-
-			// Restore stdout and read output.
-			w.Close()
-			os.Stdout = oldStdout
-
-			var buf bytes.Buffer
-			_, _ = io.Copy(&buf, r)
-			output := buf.String()
+			require.NoError(t, outputEnvAsExport(tt.envVars))
+			output := read()
 
 			for _, expected := range tt.contains {
 				assert.Contains(t, output, expected)
@@ -115,21 +102,9 @@ func TestOutputEnvAsExport_Sorting(t *testing.T) {
 		"M_VAR": "m",
 	}
 
-	// Capture stdout.
-	oldStdout := os.Stdout
-	r, w, _ := os.Pipe()
-	os.Stdout = w
-
-	err := outputEnvAsExport(envVars)
-	require.NoError(t, err)
-
-	// Restore stdout and read output.
-	w.Close()
-	os.Stdout = oldStdout
-
-	var buf bytes.Buffer
-	_, _ = io.Copy(&buf, r)
-	output := buf.String()
+	read := captureStdout(t)
+	require.NoError(t, outputEnvAsExport(envVars))
+	output := read()
 
 	// Verify A comes before M, M comes before Z.
 	aIndex := strings.Index(output, "A_VAR")
@@ -187,21 +162,10 @@ func TestOutputEnvAsDotenv(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Capture stdout.
-			oldStdout := os.Stdout
-			r, w, _ := os.Pipe()
-			os.Stdout = w
+			read := captureStdout(t)
 
-			err := outputEnvAsDotenv(tt.envVars)
-			require.NoError(t, err)
-
-			// Restore stdout and read output.
-			w.Close()
-			os.Stdout = oldStdout
-
-			var buf bytes.Buffer
-			_, _ = io.Copy(&buf, r)
-			output := buf.String()
+			require.NoError(t, outputEnvAsDotenv(tt.envVars))
+			output := read()
 
 			for _, expected := range tt.contains {
 				assert.Contains(t, output, expected)
@@ -221,21 +185,9 @@ func TestOutputEnvAsDotenv_Sorting(t *testing.T) {
 		"M_VAR": "m",
 	}
 
-	// Capture stdout.
-	oldStdout := os.Stdout
-	r, w, _ := os.Pipe()
-	os.Stdout = w
-
-	err := outputEnvAsDotenv(envVars)
-	require.NoError(t, err)
-
-	// Restore stdout and read output.
-	w.Close()
-	os.Stdout = oldStdout
-
-	var buf bytes.Buffer
-	_, _ = io.Copy(&buf, r)
-	output := buf.String()
+	read := captureStdout(t)
+	require.NoError(t, outputEnvAsDotenv(envVars))
+	output := read()
 
 	// Verify A comes before M, M comes before Z.
 	aIndex := strings.Index(output, "A_VAR")
@@ -298,21 +250,9 @@ func TestOutputEnvAsExport_MultipleQuotes(t *testing.T) {
 		"VAR": "it's got 'multiple' quotes",
 	}
 
-	// Capture stdout.
-	oldStdout := os.Stdout
-	r, w, _ := os.Pipe()
-	os.Stdout = w
-
-	err := outputEnvAsExport(envVars)
-	require.NoError(t, err)
-
-	// Restore stdout and read output.
-	w.Close()
-	os.Stdout = oldStdout
-
-	var buf bytes.Buffer
-	_, _ = io.Copy(&buf, r)
-	output := buf.String()
+	read := captureStdout(t)
+	require.NoError(t, outputEnvAsExport(envVars))
+	output := read()
 
 	// Each single quote should be escaped.
 	assert.Contains(t, output, "export VAR=")
@@ -394,9 +334,13 @@ func TestGitHubEnvAutoDetect(t *testing.T) {
 // TestResolveEnvOutputFile covers all branches of the github auto-detect path.
 func TestResolveEnvOutputFile(t *testing.T) {
 	t.Run("non-github format passes outputFile through", func(t *testing.T) {
-		got, err := resolveEnvOutputFile("bash", "/tmp/out.sh")
+		// Build the expected path via filepath.Join so the assertion uses the
+		// native separator on every OS — resolveEnvOutputFile is a pure
+		// passthrough so it returns the input string unchanged.
+		want := filepath.Join(t.TempDir(), "out.sh")
+		got, err := resolveEnvOutputFile("bash", want)
 		require.NoError(t, err)
-		assert.Equal(t, "/tmp/out.sh", got)
+		assert.Equal(t, want, got)
 	})
 
 	t.Run("non-github format with empty outputFile returns empty", func(t *testing.T) {
@@ -406,9 +350,10 @@ func TestResolveEnvOutputFile(t *testing.T) {
 	})
 
 	t.Run("github format with explicit outputFile passes through", func(t *testing.T) {
-		got, err := resolveEnvOutputFile("github", "/explicit/path")
+		want := filepath.Join(t.TempDir(), "explicit-output")
+		got, err := resolveEnvOutputFile("github", want)
 		require.NoError(t, err)
-		assert.Equal(t, "/explicit/path", got)
+		assert.Equal(t, want, got)
 	})
 
 	t.Run("github format with GITHUB_ENV env var auto-detects", func(t *testing.T) {
@@ -445,14 +390,16 @@ func TestResolveEnvOutputTarget(t *testing.T) {
 	})
 
 	t.Run("explicit format and output-file in viper round-trip", func(t *testing.T) {
+		want := filepath.Join(t.TempDir(), ".env")
+
 		v := viper.New()
 		v.Set(FormatFlagName, "dotenv")
-		v.Set(OutputFileFlagName, "/path/to/.env")
+		v.Set(OutputFileFlagName, want)
 
 		format, outputFile, err := resolveEnvOutputTarget(v)
 		require.NoError(t, err)
 		assert.Equal(t, "dotenv", format)
-		assert.Equal(t, "/path/to/.env", outputFile)
+		assert.Equal(t, want, outputFile)
 	})
 
 	t.Run("github format auto-detects $GITHUB_ENV", func(t *testing.T) {
@@ -640,6 +587,7 @@ func TestExecuteAuthEnvCommand_WithMockAuth(t *testing.T) {
 	setupMockAuthFixture(t)
 
 	cmd := authEnvCmd
+	resetAuthCmdFlags(t, cmd)
 	cmd.SetContext(context.Background())
 	require.NoError(t, cmd.ParseFlags(nil))
 

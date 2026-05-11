@@ -1,12 +1,15 @@
 package auth
 
 import (
+	"bytes"
+	"io"
 	"os"
 	"path/filepath"
 	"testing"
 	"time"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 
@@ -258,6 +261,95 @@ func runProfileFlagAppliedRegressionTest(t *testing.T, commandName string) {
 			assert.Equal(t, tt.expectedProfiles, info.ProfilesFromArg,
 				"--profile flag must reach ConfigAndStacksInfo (issue #1973)")
 		})
+	}
+}
+
+// resetAuthCmdFlags snapshots the cobra parser state of the given
+// package-level command (auth*Cmd) and registers cleanup that restores every
+// flag's Value + Changed flag to its pre-test state. Tests that call
+// cmd.ParseFlags() on a shared *cobra.Command must use this so subsequent
+// tests don't see leaked flag values (Cobra does not auto-reset between
+// ParseFlags calls).
+//
+// This is the cmd/auth-local equivalent of cmd.NewTestKit — which lives in
+// the cmd package and isn't reachable from here without a circular import.
+//
+// Usage:
+//
+//	cmd := authLogoutCmd
+//	resetAuthCmdFlags(t, cmd)
+//	require.NoError(t, cmd.ParseFlags([]string{"--dry-run"}))
+func resetAuthCmdFlags(t *testing.T, cmd *cobra.Command) {
+	t.Helper()
+
+	type flagSnapshot struct {
+		value   string
+		changed bool
+	}
+	snapshot := map[string]flagSnapshot{}
+	cmd.Flags().VisitAll(func(f *pflag.Flag) {
+		snapshot[f.Name] = flagSnapshot{value: f.Value.String(), changed: f.Changed}
+	})
+
+	t.Cleanup(func() {
+		cmd.Flags().VisitAll(func(f *pflag.Flag) {
+			snap, ok := snapshot[f.Name]
+			if !ok {
+				return
+			}
+			// Best-effort restore: Set may fail for some custom Value types,
+			// but in that case we still reset Changed which is the more
+			// important pollution vector.
+			_ = f.Value.Set(snap.value)
+			f.Changed = snap.changed
+		})
+	})
+}
+
+// captureStdout redirects os.Stdout to an os.Pipe for the duration of the
+// caller's test and returns a closure that flushes the write end and reads
+// everything written. Cleanup is registered via t.Cleanup so if an
+// intervening require.* aborts the test, os.Stdout is still restored and
+// both pipe handles are closed — without this, a failing test bleeds its
+// captured stdout into every subsequent test in the same package.
+//
+// Usage:
+//
+//	read := captureStdout(t)
+//	doSomethingThatPrintsToStdout()
+//	got := read()
+func captureStdout(t *testing.T) func() string {
+	t.Helper()
+
+	oldStdout := os.Stdout
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("captureStdout: os.Pipe: %v", err)
+	}
+	os.Stdout = w
+
+	// Guarantee restoration even if the test aborts mid-flight.
+	restored := false
+	t.Cleanup(func() {
+		if !restored {
+			os.Stdout = oldStdout
+			_ = w.Close()
+		}
+		_ = r.Close()
+	})
+
+	return func() string {
+		if err := w.Close(); err != nil {
+			t.Fatalf("captureStdout: pipe close: %v", err)
+		}
+		os.Stdout = oldStdout
+		restored = true
+
+		var buf bytes.Buffer
+		if _, err := io.Copy(&buf, r); err != nil {
+			t.Fatalf("captureStdout: copy from pipe: %v", err)
+		}
+		return buf.String()
 	}
 }
 

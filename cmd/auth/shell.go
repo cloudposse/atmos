@@ -75,14 +75,8 @@ func executeAuthShellCommand(cmd *cobra.Command, args []string) error {
 
 	handleHelpRequest(cmd, args)
 
-	// Reject mistyped positional args that weren't preceded by "--".
-	// cmd.ArgsLenAtDash() returns -1 when no "--" appears in the arg list.
-	// Without this guard, `atmos auth shell bash` would silently drop "bash"
-	// (since the shell defaults to $SHELL or /bin/sh anyway) instead of
-	// surfacing the user's mistake.
-	if len(args) > 0 && cmd.ArgsLenAtDash() == -1 {
-		return fmt.Errorf("%w: positional args must be preceded by `--` (e.g. `atmos auth shell -- bash`)",
-			errUtils.ErrInvalidArguments)
+	if err := validateAuthShellArgs(cmd, args); err != nil {
+		return err
 	}
 
 	if err := internal.ValidateAtmosConfig(); err != nil {
@@ -186,13 +180,37 @@ func prepareShellEnvironment(authManager auth.AuthManager, identityName string, 
 	baseEnv := envpkg.MergeGlobalEnv(os.Environ(), atmosConfig.Env)
 	envList, err := authManager.PrepareShellEnvironment(ctx, identityName, baseEnv)
 	if err != nil {
-		return nil, "", fmt.Errorf("failed to prepare shell environment: %w", err)
+		return nil, "", fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrPrepareShellEnvironment, err)
 	}
 
 	// Get provider name from the identity to display in shell messages.
 	providerName := authManager.GetProviderForIdentity(identityName)
 
 	return envList, providerName, nil
+}
+
+// validateAuthShellArgs rejects mistyped positional args that aren't located
+// strictly after `--`. Cobra's ArgsLenAtDash returns -1 when no "--" appears,
+// 0 when "--" is the first non-flag token, and >0 when N positional args
+// appeared before "--".
+//
+// Without this guard, getSeparatedArgs() returns args[dashIndex:] and silently
+// drops anything before "--". E.g. `atmos auth shell bash` loses "bash"
+// entirely, and `atmos auth shell bash -- -lc env` loses "bash" while only
+// forwarding `-lc env`. Both are user mistakes; surface them up front. The
+// correct invocations are:
+//
+//   - choose a shell:  `atmos auth shell --shell bash`
+//   - pass shell args: `atmos auth shell -- -lc env`
+func validateAuthShellArgs(cmd *cobra.Command, args []string) error {
+	defer perf.Track(nil, "auth.shell.validateAuthShellArgs")()
+
+	dashIndex := cmd.ArgsLenAtDash()
+	if len(args) > 0 && (dashIndex == -1 || dashIndex > 0) {
+		return fmt.Errorf("%w: use `--shell` to choose a shell binary, and place shell args only after `--`",
+			errUtils.ErrInvalidArguments)
+	}
+	return nil
 }
 
 // getSeparatedArgs returns args after "--" separator.

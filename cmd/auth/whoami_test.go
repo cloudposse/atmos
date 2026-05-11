@@ -593,6 +593,7 @@ func TestExecuteAuthWhoamiCommand_WithMockAuth(t *testing.T) {
 	setupMockAuthFixture(t)
 
 	cmd := authWhoamiCmd
+	resetAuthCmdFlags(t, cmd)
 	cmd.SetContext(context.Background())
 	require.NoError(t, cmd.ParseFlags(nil))
 

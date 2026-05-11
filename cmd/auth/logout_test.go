@@ -473,6 +473,7 @@ func TestExecuteAuthLogoutCommand_SmokeNoConfig(t *testing.T) {
 	t.Chdir(tmp)
 
 	cmd := authLogoutCmd
+	resetAuthCmdFlags(t, cmd)
 	cmd.SetContext(context.Background())
 
 	assert.NotPanics(t, func() {
@@ -487,6 +488,7 @@ func TestExecuteAuthLogoutCommand_WithMockAuthDryRun(t *testing.T) {
 	setupMockAuthFixture(t)
 
 	cmd := authLogoutCmd
+	resetAuthCmdFlags(t, cmd)
 	cmd.SetContext(context.Background())
 	require.NoError(t, cmd.ParseFlags([]string{"--dry-run", "mock-identity"}))
 

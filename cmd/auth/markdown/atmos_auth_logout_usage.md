@@ -16,4 +16,4 @@ $ atmos auth logout dev-admin --dry-run
 
 # Non-interactive logout for CI/CD (skips confirmation prompts)
 $ atmos auth logout dev-admin --force
-```shell
+```

@@ -232,6 +232,7 @@ func TestExecuteAuthLoginCommand_WithMockAuth(t *testing.T) {
 	setupMockAuthFixture(t)
 
 	cmd := authLoginCmd
+	resetAuthCmdFlags(t, cmd)
 	cmd.SetContext(context.Background())
 	require.NoError(t, cmd.ParseFlags(nil))
 

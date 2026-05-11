@@ -588,6 +588,7 @@ func TestExecuteAuthListCommand_WithMockAuth(t *testing.T) {
 	setupMockAuthFixture(t)
 
 	cmd := authListCmd
+	resetAuthCmdFlags(t, cmd)
 	cmd.SetContext(context.Background())
 	require.NoError(t, cmd.ParseFlags(nil))
 
@@ -602,6 +603,7 @@ func TestExecuteAuthListCommand_JSONFormat(t *testing.T) {
 	setupMockAuthFixture(t)
 
 	cmd := authListCmd
+	resetAuthCmdFlags(t, cmd)
 	cmd.SetContext(context.Background())
 	require.NoError(t, cmd.ParseFlags([]string{"--format=json"}))
 

@@ -19,15 +19,36 @@ import (
 
 func TestGetSeparatedArgsForExec(t *testing.T) {
 	tests := []struct {
-		name     string
-		setup    func(*cobra.Command)
+		name string
+		// args is the raw CLI arg list passed to cmd.ParseFlags; the helper
+		// reads cmd.Flags().Args() + cmd.Flags().ArgsLenAtDash() to find the
+		// segment after `--`.
+		args     []string
 		expected []string
 	}{
 		{
-			name: "no separator",
-			setup: func(cmd *cobra.Command) {
-				// No args set.
-			},
+			name:     "no separator and no positional args",
+			args:     nil,
+			expected: nil,
+		},
+		{
+			name:     "positional args without separator are dropped",
+			args:     []string{"some-stray-arg"},
+			expected: nil,
+		},
+		{
+			name:     "single command after separator",
+			args:     []string{"--", "aws"},
+			expected: []string{"aws"},
+		},
+		{
+			name:     "command with arguments after separator",
+			args:     []string{"--", "aws", "sts", "get-caller-identity"},
+			expected: []string{"aws", "sts", "get-caller-identity"},
+		},
+		{
+			name:     "separator with no following args yields nil",
+			args:     []string{"--"},
 			expected: nil,
 		},
 	}
@@ -35,15 +56,15 @@ func TestGetSeparatedArgsForExec(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			cmd := &cobra.Command{Use: "test"}
-			tt.setup(cmd)
+			require.NoError(t, cmd.ParseFlags(tt.args))
 
 			result := getSeparatedArgsForExec(cmd)
 
 			if tt.expected == nil {
 				assert.Nil(t, result)
-			} else {
-				assert.Equal(t, tt.expected, result)
+				return
 			}
+			assert.Equal(t, tt.expected, result)
 		})
 	}
 }
@@ -123,14 +144,6 @@ func TestResolveIdentityNameForExec_ViperFallback(t *testing.T) {
 	assert.Equal(t, "viper-identity", result)
 }
 
-func TestGetSeparatedArgsForExec_EmptyCommand(t *testing.T) {
-	cmd := &cobra.Command{Use: "test"}
-
-	result := getSeparatedArgsForExec(cmd)
-
-	assert.Nil(t, result)
-}
-
 func TestExecuteCommandWithEnv_WithValidCommand(t *testing.T) {
 	// Cross-platform: spawn the test binary itself with the exit-OK env flag
 	// (handled by TestMain). This avoids dependence on PATH-resolved binaries
@@ -176,6 +189,7 @@ func TestExecuteAuthExecCommand_NoCommand(t *testing.T) {
 	setupMockAuthFixture(t)
 
 	cmd := authExecCmd
+	resetAuthCmdFlags(t, cmd)
 	cmd.SetContext(context.Background())
 	require.NoError(t, cmd.ParseFlags(nil))
 
@@ -207,6 +221,7 @@ func TestPrepareAuthenticatedEnv_WithMockAuth(t *testing.T) {
 	setupMockAuthFixture(t)
 
 	cmd := authExecCmd
+	resetAuthCmdFlags(t, cmd)
 	cmd.SetContext(context.Background())
 	require.NoError(t, cmd.ParseFlags(nil))
 	v := viper.GetViper()

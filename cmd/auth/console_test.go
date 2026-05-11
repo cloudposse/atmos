@@ -156,6 +156,9 @@ func TestResolveConsoleDuration(t *testing.T) {
 		providerName   string
 		expectedResult time.Duration
 		expectedError  error
+		// expectParseError pins the "invalid provider duration format"
+		// case without coupling the assertion to the test name string.
+		expectParseError bool
 	}{
 		{
 			name: "flag takes precedence",
@@ -220,11 +223,11 @@ func TestResolveConsoleDuration(t *testing.T) {
 					},
 				})
 			},
-			flagChanged:    false,
-			flagDuration:   1 * time.Hour,
-			providerName:   "aws-sso",
-			expectedResult: 0,
-			expectedError:  nil, // Function returns error, check non-nil.
+			flagChanged:      false,
+			flagDuration:     1 * time.Hour,
+			providerName:     "aws-sso",
+			expectedResult:   0,
+			expectParseError: true,
 		},
 	}
 
@@ -243,9 +246,9 @@ func TestResolveConsoleDuration(t *testing.T) {
 			result, err := resolveConsoleDuration(cmd, mockAuthManager, tt.providerName, tt.flagDuration)
 
 			switch {
-			case tt.name == "invalid provider duration format":
-				// This case returns an error.
-				assert.Error(t, err)
+			case tt.expectParseError:
+				assert.Error(t, err,
+					"an unparseable provider session_duration must surface as a parse error")
 			case tt.expectedError != nil:
 				assert.Error(t, err)
 				assert.ErrorIs(t, err, tt.expectedError)
@@ -382,14 +385,6 @@ func TestAuthConsoleCommand_Structure(t *testing.T) {
 func TestConsoleParser_Initialization(t *testing.T) {
 	// consoleParser should be initialized in init().
 	assert.NotNil(t, consoleParser)
-}
-
-func TestConsoleLabelWidth(t *testing.T) {
-	assert.Equal(t, 18, ConsoleLabelWidth)
-}
-
-func TestConsoleOutputFormat(t *testing.T) {
-	assert.Equal(t, "%s %s\n", ConsoleOutputFormat)
 }
 
 func TestDestinationFlagCompletion(t *testing.T) {
@@ -652,6 +647,7 @@ func TestExecuteAuthConsoleCommand_WithMockAuth(t *testing.T) {
 	setupMockAuthFixture(t)
 
 	cmd := authConsoleCmd
+	resetAuthCmdFlags(t, cmd)
 	cmd.SetContext(context.Background())
 	require.NoError(t, cmd.ParseFlags([]string{"--print-only"}))
 

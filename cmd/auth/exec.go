@@ -145,7 +145,7 @@ func prepareAuthenticatedEnv(cmd *cobra.Command, v *viper.Viper) ([]string, erro
 	baseEnv := envpkg.MergeGlobalEnv(os.Environ(), atmosConfig.Env)
 	envList, err := authManager.PrepareShellEnvironment(ctx, identityName, baseEnv)
 	if err != nil {
-		return nil, fmt.Errorf("failed to prepare command environment: %w", err)
+		return nil, fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrPrepareShellEnvironment, err)
 	}
 
 	return envList, nil

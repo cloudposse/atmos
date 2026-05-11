@@ -134,6 +134,61 @@ func TestResolveIdentityNameForShell_ViperFallback(t *testing.T) {
 	assert.Equal(t, "viper-identity", result)
 }
 
+// TestValidateAuthShellArgs covers all four positional-arg shapes for the
+// shell command. The two acceptable shapes are: no positional args at all,
+// or `--` as the first non-flag token followed by zero+ shell args. The
+// two rejected shapes are: positional args without any `--`, and positional
+// args appearing before a `--` (which getSeparatedArgs would silently drop).
+func TestValidateAuthShellArgs(t *testing.T) {
+	tests := []struct {
+		name      string
+		cliArgs   []string
+		expectErr bool
+	}{
+		{
+			name:      "no positional args",
+			cliArgs:   nil,
+			expectErr: false,
+		},
+		{
+			name:      "dash-separator with shell args is allowed",
+			cliArgs:   []string{"--", "-lc", "echo hello"},
+			expectErr: false,
+		},
+		{
+			name:      "dash-separator alone is allowed",
+			cliArgs:   []string{"--"},
+			expectErr: false,
+		},
+		{
+			name:      "positional arg without separator is rejected",
+			cliArgs:   []string{"bash"},
+			expectErr: true,
+		},
+		{
+			name:      "positional arg before separator is rejected (would be silently dropped)",
+			cliArgs:   []string{"bash", "--", "-lc", "echo hello"},
+			expectErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cmd := &cobra.Command{Use: "shell"}
+			require.NoError(t, cmd.ParseFlags(tt.cliArgs))
+
+			err := validateAuthShellArgs(cmd, cmd.Flags().Args())
+			if tt.expectErr {
+				require.Error(t, err)
+				assert.ErrorIs(t, err, errUtils.ErrInvalidArguments,
+					"rejected arg shape must wrap ErrInvalidArguments so callers can branch on it")
+				return
+			}
+			require.NoError(t, err)
+		})
+	}
+}
+
 // TestExecuteAuthShellCommand_SmokeNoConfig exercises the shell orchestrator
 // from a directory without an atmos.yaml. Contract: no panic.
 func TestExecuteAuthShellCommand_SmokeNoConfig(t *testing.T) {
@@ -235,7 +290,7 @@ func TestPrepareShellEnvironment(t *testing.T) {
 		assert.ErrorIs(t, err, boom, "original error must be preserved in the chain")
 	})
 
-	t.Run("PrepareShellEnvironment failure surfaces a wrapped error", func(t *testing.T) {
+	t.Run("PrepareShellEnvironment failure wraps ErrPrepareShellEnvironment", func(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
 		m := authTypes.NewMockAuthManager(ctrl)
@@ -248,8 +303,10 @@ func TestPrepareShellEnvironment(t *testing.T) {
 
 		_, _, err := prepareShellEnvironment(m, "id", emptyCfg)
 		require.Error(t, err)
+		assert.ErrorIs(t, err, errUtils.ErrPrepareShellEnvironment,
+			"sentinel must be in the chain so callers can branch via errors.Is")
 		assert.ErrorIs(t, err, envErr,
-			"PrepareShellEnvironment error must surface to the caller")
+			"original underlying error must also be preserved in the chain")
 	})
 
 	t.Run("atmosConfig.Env contributes to the base env list", func(t *testing.T) {

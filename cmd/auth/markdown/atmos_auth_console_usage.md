@@ -2,7 +2,7 @@
 
 ```shell
 atmos auth console
-```shell
+```
 
 - Open console with specific identity
 
@@ -14,7 +14,7 @@ atmos auth console --identity prod-admin
 
 ```shell
 atmos auth console --destination s3
-```shell
+```
 
 - Open AWS EC2 console (using alias)
 
@@ -26,7 +26,7 @@ atmos auth console --destination ec2
 
 ```shell
 atmos auth console --destination https://console.aws.amazon.com/lambda
-```shell
+```
 
 - Print URL without opening browser (useful for scripts)
 
@@ -38,7 +38,7 @@ atmos auth console --print-only
 
 ```shell
 atmos auth console --no-open
-```shell
+```
 
 - Specify custom session duration (AWS max: 12h)
 
@@ -50,7 +50,7 @@ atmos auth console --duration 2h
 
 ```shell
 atmos auth console --issuer my-org
-```shell
+```
 
 - Combine options for specific service with longer session
 
