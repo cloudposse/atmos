@@ -175,6 +175,7 @@ func TestExecuteAuthExecCommand_SmokeNoConfig(t *testing.T) {
 	t.Chdir(tmp)
 
 	cmd := authExecCmd
+	resetAuthCmdFlags(t, cmd)
 	cmd.SetContext(context.Background())
 
 	assert.NotPanics(t, func() {
@@ -206,6 +207,7 @@ func TestPrepareAuthenticatedEnv_SmokeNoConfig(t *testing.T) {
 	t.Chdir(tmp)
 
 	cmd := authExecCmd
+	resetAuthCmdFlags(t, cmd)
 	cmd.SetContext(context.Background())
 	v := viper.New()
 

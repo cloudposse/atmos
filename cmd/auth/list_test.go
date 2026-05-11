@@ -574,6 +574,7 @@ func TestExecuteAuthListCommand_SmokeNoConfig(t *testing.T) {
 	t.Chdir(tmp)
 
 	cmd := authListCmd
+	resetAuthCmdFlags(t, cmd)
 	cmd.SetContext(context.Background())
 
 	assert.NotPanics(t, func() {

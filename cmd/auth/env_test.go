@@ -231,6 +231,8 @@ func TestFormatFlagName(t *testing.T) {
 func TestEnvCommand_FlagCompletion(t *testing.T) {
 	// Test that format flag has completion registered.
 	cmd := authEnvCmd
+	// Defensive isolation in case a prior test left the format flag Changed.
+	resetAuthCmdFlags(t, cmd)
 
 	// Get the flag.
 	flag := cmd.Flags().Lookup("format")
@@ -570,6 +572,7 @@ func TestExecuteAuthEnvCommand_SmokeNoConfig(t *testing.T) {
 	t.Chdir(tmp)
 
 	cmd := authEnvCmd
+	resetAuthCmdFlags(t, cmd)
 	// Cobra needs SetContext for cmd.Context() to be non-nil downstream.
 	cmd.SetContext(context.Background())
 

@@ -218,6 +218,7 @@ func TestExecuteAuthLoginCommand_SmokeNoConfig(t *testing.T) {
 	t.Chdir(tmp)
 
 	cmd := authLoginCmd
+	resetAuthCmdFlags(t, cmd)
 	cmd.SetContext(context.Background())
 
 	assert.NotPanics(t, func() {
