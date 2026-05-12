@@ -19,15 +19,15 @@ import (
 )
 
 // describeClusterCache memoizes EKS DescribeCluster responses for the lifetime
-// of the current process, keyed by (identity, cluster name, region).
+// of the current process, keyed by (AWS account ID, cluster name, region).
 //
 // Why cache only DescribeCluster, not the whole Execute call:
 //
 // Auto-provisioned EKS integrations re-run on every identity resolution (each
 // template lookup, each !terraform.output evaluation, each workflow step). A
-// single `atmos workflow ...` invocation can authenticate the same identity
-// hundreds of times. Each unique resolution otherwise costs an EKS
-// DescribeCluster API round trip — that is the expensive part.
+// single `atmos workflow ...` invocation can authenticate identities targeting
+// the same EKS cluster many times over. Each unique resolution otherwise costs
+// an EKS DescribeCluster API round trip — that is the expensive part.
 //
 // Caching the whole Execute body is unsafe: WriteClusterConfig sets
 // `current-context` on every write, callers depend on `current-context` being
@@ -35,8 +35,7 @@ import (
 // between calls (manual `kubectl config use-context`, another integration
 // re-pointing `current-context`, `auth logout` removing entries, file
 // deletion). Skipping kubeconfig reconciliation in those scenarios would
-// cause downstream tools to run against the wrong cluster or a missing
-// file.
+// cause downstream tools to run against the wrong cluster or a missing file.
 //
 // Caching only DescribeCluster keeps the expensive part out of the hot path
 // while letting WriteClusterConfig run every time. Combined with the no-op
@@ -47,30 +46,109 @@ import (
 // fresh `atmos` invocation always starts with an empty cache, so any rare
 // staleness is recovered on the next command.
 //
-// The cache key includes identity because eks:DescribeCluster IAM permission
-// can differ between identities; a denial for one identity must not be
-// masked by a success cached from another.
+// Why the cache key is identity-independent but ACCOUNT-scoped:
+//
+// `eks:DescribeCluster` is a *setup-time* permission. At runtime, kubectl
+// authenticates to the cluster via the exec credential plugin we install
+// (`atmos aws eks token --identity=…`), which uses `sts:GetCallerIdentity`
+// — not `eks:DescribeCluster` — to mint EKS bearer tokens. So the cluster
+// metadata we cache (endpoint, CA, ARN) is genuinely identity-independent
+// *within one AWS account*; the only thing identity controls is whether the
+// *initial* DescribeCluster call succeeds.
+//
+// EKS cluster names are unique within an account+region but NOT across
+// accounts. So the cache key must include the AWS account ID — otherwise
+// identity A in account 111111111111 and identity B in account 222222222222,
+// both with a cluster named "prod" in us-east-2, would share a cache entry
+// and the second one would receive the wrong endpoint/CA/ARN. Within a
+// single account, all identities legitimately share the same cluster
+// metadata regardless of which IAM role describes it.
+//
+// Empirically this matters: in typical Atmos auth setups, every stack has its
+// own identity with its own `aws/eks` integration pointing to a shared cluster.
+// An identity-scoped cache key never collapses anything because each
+// resolution is a unique (identity, cluster) tuple. A real-world workflow
+// trace shows 16 Execute calls across 6 unique clusters → 0 cache hits with
+// an identity-scoped key, but 10 hits + 6 misses with an account-scoped key.
+//
+// The pathological mixed-permission case — identity A has describe but
+// identity B does not, both targeting the same cluster *in the same account* —
+// would, with this cache, let B receive A's cached cluster metadata and
+// write a kubeconfig. B's subsequent kubectl calls would then fail at
+// STS-bearer-token time with a clear permission error. That is a slightly
+// worse error message in a niche scenario, not a correctness or security bug.
 var describeClusterCache sync.Map
+
+// accountIDCache memoizes the result of resolving an AWS account ID for a
+// given set of credentials, keyed by AccessKeyID. AccessKeyID is unique per
+// credential session, so this is safe and stable. The resolution itself
+// requires a one-off STS:GetCallerIdentity round trip; we trade that single
+// cheap call for the ability to share DescribeCluster results across all
+// identities that authenticate into the same AWS account.
+var accountIDCache sync.Map
+
+// accountIDResolver returns the AWS account ID for the given credentials.
+// Overridable in tests so unit tests don't have to make real STS calls.
+var accountIDResolver = defaultResolveAccountID
+
+// defaultResolveAccountID resolves the AWS account ID for a set of credentials,
+// caching by AccessKeyID. On cache miss it calls creds.Validate(ctx), which
+// performs an STS:GetCallerIdentity round trip.
+func defaultResolveAccountID(ctx context.Context, creds types.ICredentials) (string, error) {
+	defer perf.Track(nil, "aws.defaultResolveAccountID")()
+
+	awsCreds, isAWS := creds.(*types.AWSCredentials)
+	if isAWS && awsCreds.AccessKeyID != "" {
+		if cached, ok := accountIDCache.Load(awsCreds.AccessKeyID); ok {
+			id, _ := cached.(string)
+			return id, nil
+		}
+	}
+
+	if creds == nil {
+		return "", fmt.Errorf("%w: cannot resolve AWS account ID from nil credentials", errUtils.ErrEKSIntegrationFailed)
+	}
+
+	info, err := creds.Validate(ctx)
+	if err != nil {
+		return "", fmt.Errorf("%w: failed to resolve AWS account ID: %w", errUtils.ErrEKSIntegrationFailed, err)
+	}
+	if info == nil || info.Account == "" {
+		return "", fmt.Errorf("%w: AWS account ID not present in credential validation result", errUtils.ErrEKSIntegrationFailed)
+	}
+
+	if isAWS && awsCreds.AccessKeyID != "" {
+		accountIDCache.Store(awsCreds.AccessKeyID, info.Account)
+	}
+	return info.Account, nil
+}
 
 // describeCacheKey is the lookup key for describeClusterCache.
 type describeCacheKey struct {
-	identity    string
+	accountID   string
 	clusterName string
 	region      string
 }
 
 // describeClusterCached returns the EKS cluster metadata, using the
-// process-local cache when available. On a cache miss it creates an EKS
-// client via the package-level factory and calls DescribeCluster, caching
-// only the successful result.
-func describeClusterCached(ctx context.Context, creds types.ICredentials, identity, clusterName, region string) (*awsCloud.EKSClusterInfo, error) {
+// process-local cache when available. The cache is keyed by AWS account ID,
+// cluster name, and region — see describeClusterCache for the rationale.
+// On a cache miss it resolves the account ID (one STS call per credential
+// session), creates an EKS client via the package-level factory, and calls
+// DescribeCluster. Only successful results are cached.
+func describeClusterCached(ctx context.Context, creds types.ICredentials, clusterName, region string) (*awsCloud.EKSClusterInfo, error) {
 	defer perf.Track(nil, "aws.describeClusterCached")()
 
-	key := describeCacheKey{identity: identity, clusterName: clusterName, region: region}
+	accountID, err := accountIDResolver(ctx, creds)
+	if err != nil {
+		return nil, err
+	}
+
+	key := describeCacheKey{accountID: accountID, clusterName: clusterName, region: region}
 	if cached, ok := describeClusterCache.Load(key); ok {
 		info, _ := cached.(*awsCloud.EKSClusterInfo)
 		log.Debug("EKS DescribeCluster cache hit",
-			"cluster", clusterName, "region", region, "identity", identity)
+			"account", accountID, "cluster", clusterName, "region", region)
 		return info, nil
 	}
 
@@ -179,7 +257,7 @@ func (e *EKSIntegration) Execute(ctx context.Context, creds types.ICredentials) 
 	log.Debug("Configuring kubeconfig for EKS cluster", "cluster", e.cluster.Name, "region", e.cluster.Region)
 
 	// Describe cluster (cached) — endpoint, CA data, and ARN.
-	info, err := describeClusterCached(ctx, creds, e.identity, e.cluster.Name, e.cluster.Region)
+	info, err := describeClusterCached(ctx, creds, e.cluster.Name, e.cluster.Region)
 	if err != nil {
 		return fmt.Errorf("%w: %w", errUtils.ErrEKSIntegrationFailed, err)
 	}

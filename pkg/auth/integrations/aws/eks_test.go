@@ -516,6 +516,9 @@ func TestEKSIntegration_ResolveKubeconfigSettings_WithSettings(t *testing.T) {
 }
 
 func TestEKSIntegration_Execute_Success(t *testing.T) {
+	describeClusterCache.Clear()
+	installFixedAccountID(t, "123456789012")
+
 	kubeconfigPath := filepath.Join(t.TempDir(), "kubeconfig")
 	clusterARN := "arn:aws:eks:us-east-2:123456789012:cluster/dev-cluster"
 
@@ -567,6 +570,9 @@ func TestEKSIntegration_Execute_Success(t *testing.T) {
 }
 
 func TestEKSIntegration_Execute_NoAlias(t *testing.T) {
+	describeClusterCache.Clear()
+	installFixedAccountID(t, "123456789012")
+
 	kubeconfigPath := filepath.Join(t.TempDir(), "kubeconfig")
 	clusterARN := "arn:aws:eks:us-east-2:123456789012:cluster/dev-cluster"
 
@@ -615,9 +621,10 @@ func TestEKSIntegration_Execute_NoAlias(t *testing.T) {
 func TestEKSIntegration_Execute_ClientFactoryError(t *testing.T) {
 	// Clear DescribeCluster cache so this test's failing factory is actually
 	// exercised — a prior successful Execute could otherwise populate the
-	// cache under the same (identity, cluster, region) key and make this
+	// cache under the same (account, cluster, region) key and make this
 	// test skip the factory entirely.
 	describeClusterCache.Clear()
+	installFixedAccountID(t, "123456789012")
 
 	origClientFactory := eksClientFactory
 	t.Cleanup(func() { eksClientFactory = origClientFactory })
@@ -644,6 +651,7 @@ func TestEKSIntegration_Execute_ClientFactoryError(t *testing.T) {
 func TestEKSIntegration_Execute_DescribeClusterError(t *testing.T) {
 	// Clear DescribeCluster cache — see comment on Execute_ClientFactoryError.
 	describeClusterCache.Clear()
+	installFixedAccountID(t, "123456789012")
 
 	origClientFactory := eksClientFactory
 	origDescribe := eksDescribeCluster
@@ -676,6 +684,9 @@ func TestEKSIntegration_Execute_DescribeClusterError(t *testing.T) {
 }
 
 func TestEKSIntegration_Execute_ReplaceMode(t *testing.T) {
+	describeClusterCache.Clear()
+	installFixedAccountID(t, "123456789012")
+
 	kubeconfigPath := filepath.Join(t.TempDir(), "kubeconfig")
 	clusterARN := "arn:aws:eks:us-east-2:123456789012:cluster/dev-cluster"
 
