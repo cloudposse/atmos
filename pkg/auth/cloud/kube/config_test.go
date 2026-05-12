@@ -123,8 +123,9 @@ func TestWriteClusterConfig_MergeNewFile(t *testing.T) {
 	require.NoError(t, err)
 
 	info := testClusterInfo()
-	err = mgr.WriteClusterConfig(info, "dev-eks", "dev-admin", "merge")
+	changed, err := mgr.WriteClusterConfig(info, "dev-eks", "dev-admin", "merge")
 	require.NoError(t, err)
+	assert.True(t, changed, "first write to a new file must report changed=true")
 
 	// Verify file exists and is valid kubeconfig.
 	loaded, err := clientcmd.LoadFromFile(path)
@@ -133,6 +134,77 @@ func TestWriteClusterConfig_MergeNewFile(t *testing.T) {
 	assert.Contains(t, loaded.Clusters, info.ARN)
 	assert.Contains(t, loaded.Contexts, "dev-eks")
 	assert.Contains(t, loaded.AuthInfos, "atmos-eks-dev-cluster-us-east-2")
+}
+
+// TestWriteClusterConfig_MergeUnchanged verifies that re-writing identical
+// content reports changed=false. Auto-provisioned EKS integrations re-run on
+// every identity resolution, so the integration layer relies on this to avoid
+// flooding the user with redundant success messages.
+func TestWriteClusterConfig_MergeUnchanged(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "kubeconfig")
+
+	mgr, err := NewKubeconfigManager(path, "")
+	require.NoError(t, err)
+
+	info := testClusterInfo()
+	changed, err := mgr.WriteClusterConfig(info, "dev-eks", "dev-admin", "merge")
+	require.NoError(t, err)
+	require.True(t, changed)
+
+	// Capture mtime to confirm the second call does not touch the file.
+	statBefore, err := os.Stat(path)
+	require.NoError(t, err)
+
+	// Identical inputs → no on-disk change.
+	changed, err = mgr.WriteClusterConfig(info, "dev-eks", "dev-admin", "merge")
+	require.NoError(t, err)
+	assert.False(t, changed, "writing identical content must report changed=false")
+
+	statAfter, err := os.Stat(path)
+	require.NoError(t, err)
+	assert.Equal(t, statBefore.ModTime(), statAfter.ModTime(), "file must not be rewritten when unchanged")
+}
+
+// TestWriteClusterConfig_ReplaceUnchanged covers the replace mode no-op path.
+func TestWriteClusterConfig_ReplaceUnchanged(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "kubeconfig")
+
+	mgr, err := NewKubeconfigManager(path, "")
+	require.NoError(t, err)
+
+	info := testClusterInfo()
+	changed, err := mgr.WriteClusterConfig(info, "dev-eks", "dev-admin", "replace")
+	require.NoError(t, err)
+	require.True(t, changed)
+
+	changed, err = mgr.WriteClusterConfig(info, "dev-eks", "dev-admin", "replace")
+	require.NoError(t, err)
+	assert.False(t, changed, "replace with identical content must report changed=false")
+}
+
+// TestWriteClusterConfig_MergeChangedFields verifies that altering any visible
+// field (endpoint, in this case) flips changed back to true even when the ARN
+// key stays the same.
+func TestWriteClusterConfig_MergeChangedFields(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "kubeconfig")
+
+	mgr, err := NewKubeconfigManager(path, "")
+	require.NoError(t, err)
+
+	info := testClusterInfo()
+	_, err = mgr.WriteClusterConfig(info, "dev-eks", "dev-admin", "merge")
+	require.NoError(t, err)
+
+	// Rotate the endpoint — same ARN, different cluster data.
+	rotated := *info
+	rotated.Endpoint = "https://ZZZZ.gr7.us-east-2.eks.amazonaws.com"
+
+	changed, err := mgr.WriteClusterConfig(&rotated, "dev-eks", "dev-admin", "merge")
+	require.NoError(t, err)
+	assert.True(t, changed, "endpoint change must report changed=true")
 }
 
 func TestWriteClusterConfig_MergeExisting(t *testing.T) {
@@ -144,7 +216,7 @@ func TestWriteClusterConfig_MergeExisting(t *testing.T) {
 
 	// Write first cluster.
 	info1 := testClusterInfo()
-	err = mgr.WriteClusterConfig(info1, "dev-eks", "dev-admin", "merge")
+	_, err = mgr.WriteClusterConfig(info1, "dev-eks", "dev-admin", "merge")
 	require.NoError(t, err)
 
 	// Write second cluster.
@@ -155,7 +227,7 @@ func TestWriteClusterConfig_MergeExisting(t *testing.T) {
 		ARN:                      "arn:aws:eks:us-east-1:123456789012:cluster/staging-cluster",
 		Region:                   "us-east-1",
 	}
-	err = mgr.WriteClusterConfig(info2, "staging-eks", "dev-admin", "merge")
+	_, err = mgr.WriteClusterConfig(info2, "staging-eks", "dev-admin", "merge")
 	require.NoError(t, err)
 
 	// Both clusters should exist.
@@ -178,7 +250,7 @@ func TestWriteClusterConfig_Replace(t *testing.T) {
 
 	// Write first cluster.
 	info1 := testClusterInfo()
-	err = mgr.WriteClusterConfig(info1, "dev-eks", "dev-admin", "merge")
+	_, err = mgr.WriteClusterConfig(info1, "dev-eks", "dev-admin", "merge")
 	require.NoError(t, err)
 
 	// Replace with second cluster.
@@ -189,7 +261,7 @@ func TestWriteClusterConfig_Replace(t *testing.T) {
 		ARN:                      "arn:aws:eks:us-east-1:123456789012:cluster/staging-cluster",
 		Region:                   "us-east-1",
 	}
-	err = mgr.WriteClusterConfig(info2, "staging-eks", "dev-admin", "replace")
+	_, err = mgr.WriteClusterConfig(info2, "staging-eks", "dev-admin", "replace")
 	require.NoError(t, err)
 
 	// Only second cluster should exist.
@@ -209,11 +281,11 @@ func TestWriteClusterConfig_ErrorMode(t *testing.T) {
 	info := testClusterInfo()
 
 	// First write should succeed.
-	err = mgr.WriteClusterConfig(info, "dev-eks", "dev-admin", "error")
+	_, err = mgr.WriteClusterConfig(info, "dev-eks", "dev-admin", "error")
 	require.NoError(t, err)
 
 	// Second write with same cluster should fail.
-	err = mgr.WriteClusterConfig(info, "dev-eks", "dev-admin", "error")
+	_, err = mgr.WriteClusterConfig(info, "dev-eks", "dev-admin", "error")
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrKubeconfigMerge)
 }
@@ -229,7 +301,7 @@ func TestWriteClusterConfig_FilePermissions(t *testing.T) {
 	require.NoError(t, err)
 
 	info := testClusterInfo()
-	err = mgr.WriteClusterConfig(info, "dev-eks", "dev-admin", "merge")
+	_, err = mgr.WriteClusterConfig(info, "dev-eks", "dev-admin", "merge")
 	require.NoError(t, err)
 
 	stat, err := os.Stat(path)
@@ -245,7 +317,7 @@ func TestRemoveClusterConfig_Success(t *testing.T) {
 	require.NoError(t, err)
 
 	info := testClusterInfo()
-	err = mgr.WriteClusterConfig(info, "dev-eks", "dev-admin", "merge")
+	_, err = mgr.WriteClusterConfig(info, "dev-eks", "dev-admin", "merge")
 	require.NoError(t, err)
 
 	// Remove the cluster.
@@ -266,7 +338,7 @@ func TestRemoveClusterConfig_PreservesOthers(t *testing.T) {
 
 	// Write two clusters.
 	info1 := testClusterInfo()
-	err = mgr.WriteClusterConfig(info1, "dev-eks", "dev-admin", "merge")
+	_, err = mgr.WriteClusterConfig(info1, "dev-eks", "dev-admin", "merge")
 	require.NoError(t, err)
 
 	info2 := &awsCloud.EKSClusterInfo{
@@ -276,7 +348,7 @@ func TestRemoveClusterConfig_PreservesOthers(t *testing.T) {
 		ARN:                      "arn:aws:eks:us-east-1:123456789012:cluster/staging-cluster",
 		Region:                   "us-east-1",
 	}
-	err = mgr.WriteClusterConfig(info2, "staging-eks", "dev-admin", "merge")
+	_, err = mgr.WriteClusterConfig(info2, "staging-eks", "dev-admin", "merge")
 	require.NoError(t, err)
 
 	// Remove first cluster.
@@ -311,7 +383,7 @@ func TestRemoveClusterConfig_ClearsCurrentContext(t *testing.T) {
 
 	// Write two clusters.
 	info1 := testClusterInfo()
-	err = mgr.WriteClusterConfig(info1, "dev-eks", "dev-admin", "merge")
+	_, err = mgr.WriteClusterConfig(info1, "dev-eks", "dev-admin", "merge")
 	require.NoError(t, err)
 
 	info2 := &awsCloud.EKSClusterInfo{
@@ -321,7 +393,7 @@ func TestRemoveClusterConfig_ClearsCurrentContext(t *testing.T) {
 		ARN:                      "arn:aws:eks:us-east-1:123456789012:cluster/staging-cluster",
 		Region:                   "us-east-1",
 	}
-	err = mgr.WriteClusterConfig(info2, "staging-eks", "dev-admin", "merge")
+	_, err = mgr.WriteClusterConfig(info2, "staging-eks", "dev-admin", "merge")
 	require.NoError(t, err)
 
 	// Current context should be staging-eks (last written).
@@ -345,7 +417,7 @@ func TestWriteClusterConfig_CreatesDirectory(t *testing.T) {
 	require.NoError(t, err)
 
 	info := testClusterInfo()
-	err = mgr.WriteClusterConfig(info, "dev-eks", "dev-admin", "merge")
+	_, err = mgr.WriteClusterConfig(info, "dev-eks", "dev-admin", "merge")
 	require.NoError(t, err)
 
 	// File should exist.
@@ -363,7 +435,7 @@ func TestWriteClusterConfig_DefaultUpdateMode(t *testing.T) {
 	info := testClusterInfo()
 
 	// Empty update mode should default to merge.
-	err = mgr.WriteClusterConfig(info, "dev-eks", "dev-admin", "")
+	_, err = mgr.WriteClusterConfig(info, "dev-eks", "dev-admin", "")
 	require.NoError(t, err)
 
 	loaded, err := clientcmd.LoadFromFile(path)
@@ -380,7 +452,7 @@ func TestListClusterARNs_Success(t *testing.T) {
 
 	// Write two clusters.
 	info1 := testClusterInfo()
-	err = mgr.WriteClusterConfig(info1, "dev-eks", "dev-admin", "merge")
+	_, err = mgr.WriteClusterConfig(info1, "dev-eks", "dev-admin", "merge")
 	require.NoError(t, err)
 
 	info2 := &awsCloud.EKSClusterInfo{
@@ -390,7 +462,7 @@ func TestListClusterARNs_Success(t *testing.T) {
 		ARN:                      "arn:aws:eks:us-east-1:123456789012:cluster/staging-cluster",
 		Region:                   "us-east-1",
 	}
-	err = mgr.WriteClusterConfig(info2, "staging-eks", "dev-admin", "merge")
+	_, err = mgr.WriteClusterConfig(info2, "staging-eks", "dev-admin", "merge")
 	require.NoError(t, err)
 
 	arns, err := mgr.ListClusterARNs()
@@ -455,7 +527,7 @@ func TestWriteClusterConfig_InvalidUpdateMode(t *testing.T) {
 	require.NoError(t, err)
 
 	info := testClusterInfo()
-	err = mgr.WriteClusterConfig(info, "dev-eks", "dev-admin", "invalid")
+	_, err = mgr.WriteClusterConfig(info, "dev-eks", "dev-admin", "invalid")
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrKubeconfigMerge)
 	assert.Contains(t, err.Error(), "invalid update mode")
@@ -469,7 +541,7 @@ func TestWriteClusterConfig_ErrorMode_ContextCollision(t *testing.T) {
 	require.NoError(t, err)
 
 	info := testClusterInfo()
-	err = mgr.WriteClusterConfig(info, "dev-eks", "dev-admin", "merge")
+	_, err = mgr.WriteClusterConfig(info, "dev-eks", "dev-admin", "merge")
 	require.NoError(t, err)
 
 	// Write a different cluster but with same alias (context name).
@@ -480,7 +552,7 @@ func TestWriteClusterConfig_ErrorMode_ContextCollision(t *testing.T) {
 		ARN:                      "arn:aws:eks:us-east-1:123456789012:cluster/other-cluster",
 		Region:                   "us-east-1",
 	}
-	err = mgr.WriteClusterConfig(info2, "dev-eks", "other-admin", "error")
+	_, err = mgr.WriteClusterConfig(info2, "dev-eks", "other-admin", "error")
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrKubeconfigMerge)
 	assert.Contains(t, err.Error(), "context dev-eks already exists")
@@ -495,7 +567,7 @@ func TestWriteClusterConfig_ErrorMode_NewFile(t *testing.T) {
 
 	// Error mode on new file should succeed.
 	info := testClusterInfo()
-	err = mgr.WriteClusterConfig(info, "", "dev-admin", "error")
+	_, err = mgr.WriteClusterConfig(info, "", "dev-admin", "error")
 	require.NoError(t, err)
 
 	loaded, err := clientcmd.LoadFromFile(path)

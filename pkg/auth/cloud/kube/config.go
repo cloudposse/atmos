@@ -1,6 +1,7 @@
 package kube
 
 import (
+	"bytes"
 	"encoding/base64"
 	"fmt"
 	"os"
@@ -77,7 +78,11 @@ func (m *KubeconfigManager) GetPath() string {
 }
 
 // WriteClusterConfig generates and writes kubeconfig for an EKS cluster.
-func (m *KubeconfigManager) WriteClusterConfig(info *awsCloud.EKSClusterInfo, alias, identityName, updateMode string) error {
+// Returns changed=true when the on-disk file was modified, and changed=false
+// when the existing kubeconfig already matches the desired state (no write
+// performed). Callers can use this to suppress noisy success messages on
+// repeated invocations that produce identical output.
+func (m *KubeconfigManager) WriteClusterConfig(info *awsCloud.EKSClusterInfo, alias, identityName, updateMode string) (bool, error) {
 	defer perf.Track(nil, "kube.KubeconfigManager.WriteClusterConfig")()
 
 	if updateMode == "" {
@@ -90,12 +95,12 @@ func (m *KubeconfigManager) WriteClusterConfig(info *awsCloud.EKSClusterInfo, al
 	// Ensure parent directory exists.
 	dir := filepath.Dir(m.path)
 	if err := os.MkdirAll(dir, defaultDirMode); err != nil {
-		return fmt.Errorf("%w: failed to create directory %s: %w", errUtils.ErrKubeconfigWrite, dir, err)
+		return false, fmt.Errorf("%w: failed to create directory %s: %w", errUtils.ErrKubeconfigWrite, dir, err)
 	}
 
 	switch updateMode {
 	case "replace":
-		return m.writeConfig(newConfig)
+		return m.writeIfChanged(newConfig)
 
 	case "error":
 		if _, err := os.Stat(m.path); err == nil {
@@ -103,7 +108,7 @@ func (m *KubeconfigManager) WriteClusterConfig(info *awsCloud.EKSClusterInfo, al
 			existing, loadErr := clientcmd.LoadFromFile(m.path)
 			if loadErr == nil {
 				if _, exists := existing.Clusters[info.ARN]; exists {
-					return fmt.Errorf("%w: cluster %s already exists in %s", errUtils.ErrKubeconfigMerge, info.ARN, m.path)
+					return false, fmt.Errorf("%w: cluster %s already exists in %s", errUtils.ErrKubeconfigMerge, info.ARN, m.path)
 				}
 				// Check context name collision.
 				contextName := info.ARN
@@ -111,17 +116,17 @@ func (m *KubeconfigManager) WriteClusterConfig(info *awsCloud.EKSClusterInfo, al
 					contextName = alias
 				}
 				if _, exists := existing.Contexts[contextName]; exists {
-					return fmt.Errorf("%w: context %s already exists in %s", errUtils.ErrKubeconfigMerge, contextName, m.path)
+					return false, fmt.Errorf("%w: context %s already exists in %s", errUtils.ErrKubeconfigMerge, contextName, m.path)
 				}
 			}
 		}
-		return m.mergeConfig(newConfig)
+		return m.mergeIfChanged(newConfig)
 
 	case "merge":
-		return m.mergeConfig(newConfig)
+		return m.mergeIfChanged(newConfig)
 
 	default:
-		return fmt.Errorf("%w: invalid update mode %q", errUtils.ErrKubeconfigMerge, updateMode)
+		return false, fmt.Errorf("%w: invalid update mode %q", errUtils.ErrKubeconfigMerge, updateMode)
 	}
 }
 
@@ -278,16 +283,47 @@ func (m *KubeconfigManager) writeConfig(config *clientcmdapi.Config) error {
 	return nil
 }
 
-// mergeConfig merges a kubeconfig into the existing file.
-func (m *KubeconfigManager) mergeConfig(newConfig *clientcmdapi.Config) error {
+// writeIfChanged writes newConfig only if it differs from the file on disk.
+// Returns changed=false when the file already serializes to the same bytes.
+func (m *KubeconfigManager) writeIfChanged(newConfig *clientcmdapi.Config) (bool, error) {
+	if _, err := os.Stat(m.path); err == nil {
+		existing, loadErr := clientcmd.LoadFromFile(m.path)
+		if loadErr == nil {
+			same, cmpErr := configsEqual(existing, newConfig)
+			if cmpErr == nil && same {
+				return false, nil
+			}
+		}
+	}
+	if err := m.writeConfig(newConfig); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+// mergeIfChanged merges newConfig into the existing file. Returns changed=false
+// when the merge result would equal the existing on-disk content.
+func (m *KubeconfigManager) mergeIfChanged(newConfig *clientcmdapi.Config) (bool, error) {
 	// Load existing config if file exists.
 	existing := clientcmdapi.NewConfig()
+	fileExists := false
 	if _, err := os.Stat(m.path); err == nil {
 		loaded, loadErr := clientcmd.LoadFromFile(m.path)
 		if loadErr != nil {
-			return fmt.Errorf("%w: %w", errUtils.ErrKubeconfigMerge, loadErr)
+			return false, fmt.Errorf("%w: %w", errUtils.ErrKubeconfigMerge, loadErr)
 		}
 		existing = loaded
+		fileExists = true
+	}
+
+	// Snapshot the existing serialized form before mutating, so we can compare
+	// against the post-merge state without a deep-copy dance.
+	var beforeBytes []byte
+	if fileExists {
+		b, err := clientcmd.Write(*existing)
+		if err == nil {
+			beforeBytes = b
+		}
 	}
 
 	// Merge new entries into existing config.
@@ -306,5 +342,28 @@ func (m *KubeconfigManager) mergeConfig(newConfig *clientcmdapi.Config) error {
 		existing.CurrentContext = newConfig.CurrentContext
 	}
 
-	return m.writeConfig(existing)
+	if beforeBytes != nil {
+		afterBytes, err := clientcmd.Write(*existing)
+		if err == nil && bytes.Equal(beforeBytes, afterBytes) {
+			return false, nil
+		}
+	}
+
+	if err := m.writeConfig(existing); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+// configsEqual returns true when two kubeconfigs serialize to identical bytes.
+func configsEqual(a, b *clientcmdapi.Config) (bool, error) {
+	aBytes, err := clientcmd.Write(*a)
+	if err != nil {
+		return false, err
+	}
+	bBytes, err := clientcmd.Write(*b)
+	if err != nil {
+		return false, err
+	}
+	return bytes.Equal(aBytes, bBytes), nil
 }
