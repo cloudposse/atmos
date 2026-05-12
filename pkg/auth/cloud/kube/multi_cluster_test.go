@@ -38,7 +38,8 @@ func TestMultiCluster_SecondRewriteSameClusterNoOp(t *testing.T) {
 	_, err = mgr.WriteClusterConfig(infoB, "ctx-b", "admin", "merge")
 	require.NoError(t, err)
 
-	loaded, _ := clientcmd.LoadFromFile(path)
+	loaded, err := clientcmd.LoadFromFile(path)
+	require.NoError(t, err)
 	require.Contains(t, loaded.Clusters, infoA.ARN)
 	require.Contains(t, loaded.Clusters, infoB.ARN)
 	require.Equal(t, "ctx-b", loaded.CurrentContext)
@@ -53,7 +54,8 @@ func TestMultiCluster_SecondRewriteSameClusterNoOp(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, changed, "re-writing A while current-context is B must flip context → changed=true")
 
-	loaded, _ = clientcmd.LoadFromFile(path)
+	loaded, err = clientcmd.LoadFromFile(path)
+	require.NoError(t, err)
 	assert.Equal(t, "ctx-a", loaded.CurrentContext)
 	// Both clusters still present.
 	assert.Contains(t, loaded.Clusters, infoA.ARN)
@@ -80,13 +82,15 @@ func TestMultiCluster_UnknownThirdPartyClusterPreserved(t *testing.T) {
 	require.NoError(t, clientcmd.WriteToFile(*loaded, path))
 
 	// Capture state.
-	before, _ := os.ReadFile(path)
+	before, err := os.ReadFile(path)
+	require.NoError(t, err)
 
 	// Re-run our integration — should be a no-op even though kubeconfig diverged.
 	changed, err := mgr.WriteClusterConfig(ours, "ours", "admin", "merge")
 	require.NoError(t, err)
 	assert.False(t, changed)
 
-	after, _ := os.ReadFile(path)
+	after, err := os.ReadFile(path)
+	require.NoError(t, err)
 	assert.Equal(t, before, after, "third-party cluster entry must be preserved byte-for-byte")
 }
