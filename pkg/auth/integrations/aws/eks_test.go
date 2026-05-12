@@ -613,6 +613,12 @@ func TestEKSIntegration_Execute_NoAlias(t *testing.T) {
 }
 
 func TestEKSIntegration_Execute_ClientFactoryError(t *testing.T) {
+	// Clear DescribeCluster cache so this test's failing factory is actually
+	// exercised — a prior successful Execute could otherwise populate the
+	// cache under the same (identity, cluster, region) key and make this
+	// test skip the factory entirely.
+	describeClusterCache.Clear()
+
 	origClientFactory := eksClientFactory
 	t.Cleanup(func() { eksClientFactory = origClientFactory })
 
@@ -636,6 +642,9 @@ func TestEKSIntegration_Execute_ClientFactoryError(t *testing.T) {
 }
 
 func TestEKSIntegration_Execute_DescribeClusterError(t *testing.T) {
+	// Clear DescribeCluster cache — see comment on Execute_ClientFactoryError.
+	describeClusterCache.Clear()
+
 	origClientFactory := eksClientFactory
 	origDescribe := eksDescribeCluster
 	t.Cleanup(func() {

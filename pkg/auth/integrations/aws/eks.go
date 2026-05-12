@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"sync"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	awsCloud "github.com/cloudposse/atmos/pkg/auth/cloud/aws"
@@ -16,6 +17,74 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui"
 )
+
+// describeClusterCache memoizes EKS DescribeCluster responses for the lifetime
+// of the current process, keyed by (identity, cluster name, region).
+//
+// Why cache only DescribeCluster, not the whole Execute call:
+//
+// Auto-provisioned EKS integrations re-run on every identity resolution (each
+// template lookup, each !terraform.output evaluation, each workflow step). A
+// single `atmos workflow ...` invocation can authenticate the same identity
+// hundreds of times. Each unique resolution otherwise costs an EKS
+// DescribeCluster API round trip — that is the expensive part.
+//
+// Caching the whole Execute body is unsafe: WriteClusterConfig sets
+// `current-context` on every write, callers depend on `current-context` being
+// correct after Execute returns, and the kubeconfig file may be mutated
+// between calls (manual `kubectl config use-context`, another integration
+// re-pointing `current-context`, `auth logout` removing entries, file
+// deletion). Skipping kubeconfig reconciliation in those scenarios would
+// cause downstream tools to run against the wrong cluster or a missing
+// file.
+//
+// Caching only DescribeCluster keeps the expensive part out of the hot path
+// while letting WriteClusterConfig run every time. Combined with the no-op
+// detection added in PR #2402, the kubeconfig path is fast and idempotent.
+//
+// Cluster metadata (endpoint, CA, ARN) is immutable in practice — CA
+// rotation is a multi-year event and is stored in the kubeconfig anyway. A
+// fresh `atmos` invocation always starts with an empty cache, so any rare
+// staleness is recovered on the next command.
+//
+// The cache key includes identity because eks:DescribeCluster IAM permission
+// can differ between identities; a denial for one identity must not be
+// masked by a success cached from another.
+var describeClusterCache sync.Map
+
+// describeCacheKey is the lookup key for describeClusterCache.
+type describeCacheKey struct {
+	identity    string
+	clusterName string
+	region      string
+}
+
+// describeClusterCached returns the EKS cluster metadata, using the
+// process-local cache when available. On a cache miss it creates an EKS
+// client via the package-level factory and calls DescribeCluster, caching
+// only the successful result.
+func describeClusterCached(ctx context.Context, creds types.ICredentials, identity, clusterName, region string) (*awsCloud.EKSClusterInfo, error) {
+	defer perf.Track(nil, "aws.describeClusterCached")()
+
+	key := describeCacheKey{identity: identity, clusterName: clusterName, region: region}
+	if cached, ok := describeClusterCache.Load(key); ok {
+		info, _ := cached.(*awsCloud.EKSClusterInfo)
+		log.Debug("EKS DescribeCluster cache hit",
+			"cluster", clusterName, "region", region, "identity", identity)
+		return info, nil
+	}
+
+	client, err := eksClientFactory(ctx, creds, region)
+	if err != nil {
+		return nil, err
+	}
+	info, err := eksDescribeCluster(ctx, client, clusterName, region)
+	if err != nil {
+		return nil, err
+	}
+	describeClusterCache.Store(key, info)
+	return info, nil
+}
 
 func init() {
 	integrations.Register(integrations.KindAWSEKS, NewEKSIntegration)
@@ -99,19 +168,18 @@ func (e *EKSIntegration) Kind() string {
 }
 
 // Execute performs EKS kubeconfig provisioning for the configured cluster.
+//
+// The DescribeCluster API call is memoized via describeClusterCache, but the
+// kubeconfig write path runs every time so callers can rely on
+// `current-context` and file presence being reasserted on every call. See
+// the describeClusterCache doc comment for the safety argument.
 func (e *EKSIntegration) Execute(ctx context.Context, creds types.ICredentials) error {
 	defer perf.Track(nil, "aws.EKSIntegration.Execute")()
 
 	log.Debug("Configuring kubeconfig for EKS cluster", "cluster", e.cluster.Name, "region", e.cluster.Region)
 
-	// Create EKS client.
-	client, err := eksClientFactory(ctx, creds, e.cluster.Region)
-	if err != nil {
-		return fmt.Errorf("%w: %w", errUtils.ErrEKSIntegrationFailed, err)
-	}
-
-	// Describe cluster to get endpoint and certificate data.
-	info, err := eksDescribeCluster(ctx, client, e.cluster.Name, e.cluster.Region)
+	// Describe cluster (cached) — endpoint, CA data, and ARN.
+	info, err := describeClusterCached(ctx, creds, e.identity, e.cluster.Name, e.cluster.Region)
 	if err != nil {
 		return fmt.Errorf("%w: %w", errUtils.ErrEKSIntegrationFailed, err)
 	}
