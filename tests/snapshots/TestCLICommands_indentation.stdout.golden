@@ -63,7 +63,6 @@ settings:
         tab_width: 4
     experimental: warn
     inject_github_token: true
-    github_token: <MASKED>
     inject_bitbucket_token: true
     inject_gitlab_token: true
     pro:
