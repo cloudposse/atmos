@@ -184,6 +184,38 @@ func TestWriteClusterConfig_ReplaceUnchanged(t *testing.T) {
 	assert.False(t, changed, "replace with identical content must report changed=false")
 }
 
+// TestWriteClusterConfig_MergeUnchangedReconcilesMode verifies that when content
+// is unchanged but the file mode drifted (e.g., user ran chmod 0644 manually),
+// the no-op path still restores the configured mode and reports changed=true.
+// Prior to the change-detection refactor, every WriteClusterConfig call called
+// os.Chmod unconditionally, so a regression here would silently let the
+// kubeconfig persist at a weaker permission than configured.
+func TestWriteClusterConfig_MergeUnchangedReconcilesMode(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("file permission tests are not reliable on Windows")
+	}
+	dir := t.TempDir()
+	path := filepath.Join(dir, "kubeconfig")
+
+	mgr, err := NewKubeconfigManager(path, "0600")
+	require.NoError(t, err)
+
+	info := testClusterInfo()
+	_, err = mgr.WriteClusterConfig(info, "dev-eks", "dev-admin", "merge")
+	require.NoError(t, err)
+
+	// Simulate an out-of-band chmod that weakens the file.
+	require.NoError(t, os.Chmod(path, 0o644))
+
+	changed, err := mgr.WriteClusterConfig(info, "dev-eks", "dev-admin", "merge")
+	require.NoError(t, err)
+	assert.True(t, changed, "mode drift on identical content must report changed=true")
+
+	stat, err := os.Stat(path)
+	require.NoError(t, err)
+	assert.Equal(t, os.FileMode(0o600), stat.Mode().Perm(), "no-op path must restore configured mode")
+}
+
 // TestWriteClusterConfig_MergeChangedFields verifies that altering any visible
 // field (endpoint, in this case) flips changed back to true even when the ARN
 // key stays the same.

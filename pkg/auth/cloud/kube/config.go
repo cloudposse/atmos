@@ -284,14 +284,17 @@ func (m *KubeconfigManager) writeConfig(config *clientcmdapi.Config) error {
 }
 
 // writeIfChanged writes newConfig only if it differs from the file on disk.
-// Returns changed=false when the file already serializes to the same bytes.
+// Returns changed=false when the file already serializes to the same bytes
+// and the on-disk mode already matches the configured mode. Always reconciles
+// permissions on the no-op path so a file left at a weaker mode (e.g., 0644
+// when 0600 was configured) is brought back into compliance.
 func (m *KubeconfigManager) writeIfChanged(newConfig *clientcmdapi.Config) (bool, error) {
 	if _, err := os.Stat(m.path); err == nil {
 		existing, loadErr := clientcmd.LoadFromFile(m.path)
 		if loadErr == nil {
 			same, cmpErr := configsEqual(existing, newConfig)
 			if cmpErr == nil && same {
-				return false, nil
+				return m.reconcileMode()
 			}
 		}
 	}
@@ -345,12 +348,31 @@ func (m *KubeconfigManager) mergeIfChanged(newConfig *clientcmdapi.Config) (bool
 	if beforeBytes != nil {
 		afterBytes, err := clientcmd.Write(*existing)
 		if err == nil && bytes.Equal(beforeBytes, afterBytes) {
-			return false, nil
+			return m.reconcileMode()
 		}
 	}
 
 	if err := m.writeConfig(existing); err != nil {
 		return false, err
+	}
+	return true, nil
+}
+
+// reconcileMode enforces the configured file mode on the kubeconfig without
+// touching its contents. Used by the no-op paths so a kubeconfig left at a
+// weaker permission (e.g., manually chmod-ed or created by another tool) is
+// brought back into compliance even when content is unchanged. Returns
+// changed=true only when an actual chmod was performed.
+func (m *KubeconfigManager) reconcileMode() (bool, error) {
+	stat, err := os.Stat(m.path)
+	if err != nil {
+		return false, fmt.Errorf("%w: failed to stat %s: %w", errUtils.ErrKubeconfigWrite, m.path, err)
+	}
+	if stat.Mode().Perm() == m.mode.Perm() {
+		return false, nil
+	}
+	if err := os.Chmod(m.path, m.mode); err != nil {
+		return false, fmt.Errorf("%w: failed to set permissions on %s: %w", errUtils.ErrKubeconfigWrite, m.path, err)
 	}
 	return true, nil
 }
