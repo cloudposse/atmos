@@ -431,15 +431,19 @@ func (d *describeAffectedExec) uploadableQuery(args *DescribeAffectedCmdArgs, re
 		return nil
 	}
 
-	// Validate that the CI event is a pull_request event when uploading.
-	// Atmos Pro only processes pull_request webhooks, so push events cannot be correlated.
-	if args.CIEventType != "" && args.CIEventType != "pull_request" && args.CIEventType != "pull_request_target" {
+	// Validate that the CI event is one Atmos Pro can correlate when uploading.
+	// Supported events: pull_request, pull_request_target, and merge_group (GitHub merge queue).
+	// Push events and other ad-hoc triggers cannot be correlated to a check run.
+	if args.CIEventType != "" &&
+		args.CIEventType != "pull_request" &&
+		args.CIEventType != "pull_request_target" &&
+		args.CIEventType != "merge_group" {
 		return errUtils.Build(
-			fmt.Errorf("%w: detected CI event %q, but Atmos Pro only supports pull_request events", errUtils.ErrUploadRequiresPullRequestEvent, args.CIEventType),
+			fmt.Errorf("%w: detected CI event %q, but Atmos Pro only supports pull_request, pull_request_target, and merge_group events", errUtils.ErrUploadRequiresSupportedEvent, args.CIEventType),
 		).
-			WithHint("Ensure your workflow triggers on pull_request events when using --upload.").
-			WithHint("Push events and other event types are not supported for Atmos Pro uploads.").
-			WithHint("See https://atmos.tools/integrations/pro for supported CI configurations.").
+			WithHint("Trigger your workflow on pull_request, pull_request_target, or merge_group events when using --upload.").
+			WithHint("Push events and other ad-hoc triggers cannot be correlated to an Atmos Pro check run.").
+			WithHint("See https://atmos.tools/cli/configuration/settings/pro for supported CI configurations.").
 			Err()
 	}
 

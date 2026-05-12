@@ -2074,7 +2074,7 @@ func TestUploadAllowsPullRequestEvent(t *testing.T) {
 	baseRef := plumbing.NewHashReference("refs/heads/main", plumbing.NewHash("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"))
 
 	// This will fail at the API client creation step (no env vars set), but the event
-	// validation should pass — it should NOT return ErrUploadRequiresPullRequestEvent.
+	// validation should pass — it should NOT return ErrUploadRequiresSupportedEvent.
 	err := d.uploadableQuery(
 		&DescribeAffectedCmdArgs{
 			Upload:          true,
@@ -2091,6 +2091,44 @@ func TestUploadAllowsPullRequestEvent(t *testing.T) {
 	// Should NOT be an event validation error — it should fail at API client creation instead.
 	require.Error(t, err)
 	assert.NotContains(t, err.Error(), "pull_request event")
+	assert.ErrorIs(t, err, errUtils.ErrFailedToCreateAPIClient)
+}
+
+// TestUploadAllowsMergeGroupEvent verifies that --upload does not error for merge_group events
+// (GitHub merge queue). Atmos Pro creates check runs on the synthetic merge-queue commits, and
+// the CLI must allow the upload to flow through under GITHUB_EVENT_NAME=merge_group.
+// Note: the actual upload call requires an API client, so we only verify the event validation passes.
+func TestUploadAllowsMergeGroupEvent(t *testing.T) {
+	d := describeAffectedExec{
+		atmosConfig: &schema.AtmosConfiguration{},
+		printOrWriteToFile: func(atmosConfig *schema.AtmosConfiguration, format, file string, data any) error {
+			return nil
+		},
+		IsTTYSupportForStdout: func() bool { return false },
+		pageCreator:           pager.New(),
+	}
+
+	headRef := plumbing.NewHashReference("refs/heads/gh-readonly-queue/main/pr-42-headsha", plumbing.NewHash("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"))
+	baseRef := plumbing.NewHashReference("refs/heads/main", plumbing.NewHash("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"))
+
+	// This will fail at the API client creation step (no env vars set), but the event
+	// validation should pass — it should NOT return ErrUploadRequiresSupportedEvent.
+	err := d.uploadableQuery(
+		&DescribeAffectedCmdArgs{
+			Upload:          true,
+			Format:          "json",
+			CIEventType:     "merge_group",
+			HeadSHAOverride: "synthsha123456789012345678901234567890ab",
+			CLIConfig:       &schema.AtmosConfiguration{},
+		},
+		"https://github.com/example/repo.git",
+		headRef,
+		baseRef,
+		[]schema.Affected{},
+	)
+	// Should NOT be an event validation error — it should fail at API client creation instead.
+	require.Error(t, err)
+	assert.NotErrorIs(t, err, errUtils.ErrUploadRequiresSupportedEvent)
 	assert.ErrorIs(t, err, errUtils.ErrFailedToCreateAPIClient)
 }
 
