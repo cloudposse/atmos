@@ -621,3 +621,70 @@ func TestBuildClusterConfig_RawPEMCertificate(t *testing.T) {
 	cluster := config.Clusters[info.ARN]
 	assert.Equal(t, []byte("not-valid-base64!@#$"), cluster.CertificateAuthorityData)
 }
+
+// TestMergeWouldChange_StructuralComparison locks in the contract for the
+// no-op detection helper. This test does NOT touch the filesystem and so
+// is immune to platform-specific YAML serialization quirks (Windows line
+// endings, clientcmd LocationOfOrigin paths populated during LoadFromFile,
+// …) that previously caused TestWriteClusterConfig_MergeUnchanged and
+// friends to fail on Windows.
+func TestMergeWouldChange_StructuralComparison(t *testing.T) {
+	info := testClusterInfo()
+	base := BuildClusterConfig(info, "dev-eks", "dev-admin")
+
+	t.Run("identical configs return false", func(t *testing.T) {
+		other := BuildClusterConfig(info, "dev-eks", "dev-admin")
+		assert.False(t, mergeWouldChange(base, other),
+			"merging an identical config must be a no-op")
+	})
+
+	t.Run("different current-context returns true", func(t *testing.T) {
+		other := BuildClusterConfig(info, "dev-eks", "dev-admin")
+		other.CurrentContext = "different-context"
+		assert.True(t, mergeWouldChange(base, other),
+			"a different current-context is a meaningful change")
+	})
+
+	t.Run("empty current-context in newConfig is treated as no-op for that field", func(t *testing.T) {
+		other := BuildClusterConfig(info, "dev-eks", "dev-admin")
+		other.CurrentContext = ""
+		// All other fields match, and an empty newConfig.CurrentContext doesn't
+		// overwrite, so this must report no change.
+		assert.False(t, mergeWouldChange(base, other),
+			"empty CurrentContext in newConfig must not flag the merge as a change")
+	})
+
+	t.Run("missing cluster in existing returns true", func(t *testing.T) {
+		existing := BuildClusterConfig(info, "dev-eks", "dev-admin")
+		// Wipe the cluster the newConfig adds.
+		delete(existing.Clusters, info.ARN)
+		assert.True(t, mergeWouldChange(existing, base),
+			"adding a cluster that isn't in existing must flag a change")
+	})
+
+	t.Run("different cluster endpoint returns true", func(t *testing.T) {
+		other := BuildClusterConfig(info, "dev-eks", "dev-admin")
+		other.Clusters[info.ARN].Server = "https://different.eks.amazonaws.com"
+		assert.True(t, mergeWouldChange(base, other),
+			"changed cluster Server must flag a change")
+	})
+
+	t.Run("different exec plugin identity returns true", func(t *testing.T) {
+		other := BuildClusterConfig(info, "dev-eks", "different-admin")
+		assert.True(t, mergeWouldChange(base, other),
+			"different identity changes the exec args, must flag a change")
+	})
+
+	t.Run("loaded entry with LocationOfOrigin matches freshly built", func(t *testing.T) {
+		// Simulate the post-load state: cluster has LocationOfOrigin set
+		// (which clientcmd populates from the source file path). The fresh
+		// BuildClusterConfig output has LocationOfOrigin empty. Without the
+		// structural comparison, byte equality would diverge here.
+		existing := BuildClusterConfig(info, "dev-eks", "dev-admin")
+		existing.Clusters[info.ARN].LocationOfOrigin = "/some/path/kubeconfig"
+		existing.Contexts["dev-eks"].LocationOfOrigin = "/some/path/kubeconfig"
+		existing.AuthInfos["atmos-eks-dev-cluster-us-east-2"].LocationOfOrigin = "/some/path/kubeconfig"
+		assert.False(t, mergeWouldChange(existing, base),
+			"LocationOfOrigin is load-time metadata and must not affect no-op detection")
+	})
+}

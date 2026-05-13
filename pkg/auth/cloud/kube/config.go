@@ -284,18 +284,15 @@ func (m *KubeconfigManager) writeConfig(config *clientcmdapi.Config) error {
 }
 
 // writeIfChanged writes newConfig only if it differs from the file on disk.
-// Returns changed=false when the file already serializes to the same bytes
-// and the on-disk mode already matches the configured mode. Always reconciles
-// permissions on the no-op path so a file left at a weaker mode (e.g., 0644
-// when 0600 was configured) is brought back into compliance.
+// Returns changed=false when the file already contains the same kubeconfig
+// content and the on-disk mode already matches the configured mode. Always
+// reconciles permissions on the no-op path so a file left at a weaker mode
+// (e.g., 0644 when 0600 was configured) is brought back into compliance.
 func (m *KubeconfigManager) writeIfChanged(newConfig *clientcmdapi.Config) (bool, error) {
 	if _, err := os.Stat(m.path); err == nil {
 		existing, loadErr := clientcmd.LoadFromFile(m.path)
-		if loadErr == nil {
-			same, cmpErr := configsEqual(existing, newConfig)
-			if cmpErr == nil && same {
-				return m.reconcileMode()
-			}
+		if loadErr == nil && configContentEqual(existing, newConfig) {
+			return m.reconcileMode()
 		}
 	}
 	if err := m.writeConfig(newConfig); err != nil {
@@ -319,14 +316,15 @@ func (m *KubeconfigManager) mergeIfChanged(newConfig *clientcmdapi.Config) (bool
 		fileExists = true
 	}
 
-	// Snapshot the existing serialized form before mutating, so we can compare
-	// against the post-merge state without a deep-copy dance.
-	var beforeBytes []byte
-	if fileExists {
-		b, err := clientcmd.Write(*existing)
-		if err == nil {
-			beforeBytes = b
-		}
+	// Short-circuit when the merge would be a no-op: every entry in newConfig
+	// is already present in existing with the same fields, and current-context
+	// already matches. We check this structurally rather than by serializing
+	// YAML to bytes — clientcmd's YAML output can vary by platform (Windows
+	// CRLF handling, internal LocationOfOrigin paths populated during load) in
+	// ways that don't reflect actual content changes and would cause false
+	// positives on the no-op path.
+	if fileExists && !mergeWouldChange(existing, newConfig) {
+		return m.reconcileMode()
 	}
 
 	// Merge new entries into existing config.
@@ -343,13 +341,6 @@ func (m *KubeconfigManager) mergeIfChanged(newConfig *clientcmdapi.Config) (bool
 	// Set current-context to the new config's current-context.
 	if newConfig.CurrentContext != "" {
 		existing.CurrentContext = newConfig.CurrentContext
-	}
-
-	if beforeBytes != nil {
-		afterBytes, err := clientcmd.Write(*existing)
-		if err == nil && bytes.Equal(beforeBytes, afterBytes) {
-			return m.reconcileMode()
-		}
 	}
 
 	if err := m.writeConfig(existing); err != nil {
@@ -377,15 +368,238 @@ func (m *KubeconfigManager) reconcileMode() (bool, error) {
 	return true, nil
 }
 
-// configsEqual returns true when two kubeconfigs serialize to identical bytes.
-func configsEqual(a, b *clientcmdapi.Config) (bool, error) {
-	aBytes, err := clientcmd.Write(*a)
-	if err != nil {
-		return false, err
+// configContentEqual returns true when two kubeconfigs have the same
+// user-visible content: same current-context, same clusters, same contexts,
+// same auth infos. Used by the replace-mode no-op detection.
+//
+// Compares fields structurally rather than via YAML byte equality so the
+// check is robust against platform-specific clientcmd serialization quirks
+// (line endings, LocationOfOrigin populated during load on Windows, …) that
+// don't reflect actual content changes.
+func configContentEqual(a, b *clientcmdapi.Config) bool {
+	if a == nil || b == nil {
+		return a == b
 	}
-	bBytes, err := clientcmd.Write(*b)
-	if err != nil {
-		return false, err
+	if a.CurrentContext != b.CurrentContext {
+		return false
 	}
-	return bytes.Equal(aBytes, bBytes), nil
+	if !clusterMapsEqual(a.Clusters, b.Clusters) {
+		return false
+	}
+	if !contextMapsEqual(a.Contexts, b.Contexts) {
+		return false
+	}
+	return authInfoMapsEqual(a.AuthInfos, b.AuthInfos)
+}
+
+// mergeWouldChange returns true when merging newConfig into existing would
+// produce a different result. The merge is a no-op when every entry in
+// newConfig is already present in existing with identical fields and
+// current-context already matches. Entries in existing that aren't in
+// newConfig are preserved by merge regardless, so they don't enter the
+// comparison.
+func mergeWouldChange(existing, newConfig *clientcmdapi.Config) bool {
+	if newConfig.CurrentContext != "" && existing.CurrentContext != newConfig.CurrentContext {
+		return true
+	}
+	for k, v := range newConfig.Clusters {
+		ev, ok := existing.Clusters[k]
+		if !ok || !clustersEqual(ev, v) {
+			return true
+		}
+	}
+	for k, v := range newConfig.Contexts {
+		ev, ok := existing.Contexts[k]
+		if !ok || !contextsEqual(ev, v) {
+			return true
+		}
+	}
+	for k, v := range newConfig.AuthInfos {
+		ev, ok := existing.AuthInfos[k]
+		if !ok || !authInfosEqual(ev, v) {
+			return true
+		}
+	}
+	return false
+}
+
+// clusterMapsEqual returns true when two cluster maps have identical
+// key sets and identical entry contents.
+func clusterMapsEqual(a, b map[string]*clientcmdapi.Cluster) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for k, av := range a {
+		bv, ok := b[k]
+		if !ok || !clustersEqual(av, bv) {
+			return false
+		}
+	}
+	return true
+}
+
+// contextMapsEqual returns true when two context maps have identical
+// key sets and identical entry contents.
+func contextMapsEqual(a, b map[string]*clientcmdapi.Context) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for k, av := range a {
+		bv, ok := b[k]
+		if !ok || !contextsEqual(av, bv) {
+			return false
+		}
+	}
+	return true
+}
+
+// authInfoMapsEqual returns true when two auth-info maps have identical
+// key sets and identical entry contents.
+func authInfoMapsEqual(a, b map[string]*clientcmdapi.AuthInfo) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for k, av := range a {
+		bv, ok := b[k]
+		if !ok || !authInfosEqual(av, bv) {
+			return false
+		}
+	}
+	return true
+}
+
+// clustersEqual compares the fields of two Cluster entries that BuildClusterConfig
+// populates plus the other fields a user might reasonably set in a kubeconfig.
+// LocationOfOrigin and Extensions are intentionally excluded — they're load-time
+// metadata, not user-visible content.
+func clustersEqual(a, b *clientcmdapi.Cluster) bool {
+	if a == nil || b == nil {
+		return a == b
+	}
+	return a.Server == b.Server &&
+		a.TLSServerName == b.TLSServerName &&
+		a.InsecureSkipTLSVerify == b.InsecureSkipTLSVerify &&
+		a.CertificateAuthority == b.CertificateAuthority &&
+		bytes.Equal(a.CertificateAuthorityData, b.CertificateAuthorityData) &&
+		a.ProxyURL == b.ProxyURL &&
+		a.DisableCompression == b.DisableCompression
+}
+
+// contextsEqual compares the meaningful fields of two Context entries.
+func contextsEqual(a, b *clientcmdapi.Context) bool {
+	if a == nil || b == nil {
+		return a == b
+	}
+	return a.Cluster == b.Cluster &&
+		a.AuthInfo == b.AuthInfo &&
+		a.Namespace == b.Namespace
+}
+
+// authInfosEqual compares the meaningful fields of two AuthInfo entries,
+// including the embedded exec credential plugin config (which is what
+// BuildClusterConfig populates). Impersonation and auth-provider fields are
+// included so a user-edited kubeconfig with those set isn't incorrectly
+// detected as "unchanged" against a freshly built exec-plugin AuthInfo.
+func authInfosEqual(a, b *clientcmdapi.AuthInfo) bool {
+	if a == nil || b == nil {
+		return a == b
+	}
+	if a.ClientCertificate != b.ClientCertificate ||
+		a.ClientKey != b.ClientKey ||
+		!bytes.Equal(a.ClientCertificateData, b.ClientCertificateData) ||
+		!bytes.Equal(a.ClientKeyData, b.ClientKeyData) ||
+		a.Token != b.Token ||
+		a.TokenFile != b.TokenFile ||
+		a.Username != b.Username ||
+		a.Password != b.Password ||
+		a.Impersonate != b.Impersonate ||
+		a.ImpersonateUID != b.ImpersonateUID {
+		return false
+	}
+	if !stringSlicesEqual(a.ImpersonateGroups, b.ImpersonateGroups) {
+		return false
+	}
+	if !impersonateUserExtraEqual(a.ImpersonateUserExtra, b.ImpersonateUserExtra) {
+		return false
+	}
+	if !authProvidersEqual(a.AuthProvider, b.AuthProvider) {
+		return false
+	}
+	return execConfigsEqual(a.Exec, b.Exec)
+}
+
+// stringSlicesEqual returns true when two []string slices have the same
+// length and elements in the same order. Nil and empty slices compare equal.
+func stringSlicesEqual(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
+}
+
+// impersonateUserExtraEqual compares two impersonate-extra maps for equality.
+// Element order within each value slice is treated as significant — matches
+// how clientcmd round-trips the field.
+func impersonateUserExtraEqual(a, b map[string][]string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for k, av := range a {
+		bv, ok := b[k]
+		if !ok || !stringSlicesEqual(av, bv) {
+			return false
+		}
+	}
+	return true
+}
+
+// authProvidersEqual compares two AuthProviderConfig values. Both nil is equal.
+func authProvidersEqual(a, b *clientcmdapi.AuthProviderConfig) bool {
+	if a == nil || b == nil {
+		return a == b
+	}
+	if a.Name != b.Name || len(a.Config) != len(b.Config) {
+		return false
+	}
+	for k, av := range a.Config {
+		if bv, ok := b.Config[k]; !ok || bv != av {
+			return false
+		}
+	}
+	return true
+}
+
+// execConfigsEqual compares two ExecConfig values. Returns true when both are
+// nil; otherwise compares APIVersion, Command, Args, Env, and InteractiveMode.
+func execConfigsEqual(a, b *clientcmdapi.ExecConfig) bool {
+	if a == nil || b == nil {
+		return a == b
+	}
+	if a.APIVersion != b.APIVersion ||
+		a.Command != b.Command ||
+		a.InteractiveMode != b.InteractiveMode {
+		return false
+	}
+	if len(a.Args) != len(b.Args) {
+		return false
+	}
+	for i := range a.Args {
+		if a.Args[i] != b.Args[i] {
+			return false
+		}
+	}
+	if len(a.Env) != len(b.Env) {
+		return false
+	}
+	for i := range a.Env {
+		if a.Env[i].Name != b.Env[i].Name || a.Env[i].Value != b.Env[i].Value {
+			return false
+		}
+	}
+	return true
 }
