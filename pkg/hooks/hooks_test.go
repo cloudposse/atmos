@@ -155,6 +155,37 @@ func TestGetHooks_WithRealComponent(t *testing.T) {
 	assert.Equal(t, "store", hooks.items["vpc-store-outputs"].Command)
 }
 
+// TestGetHooks_TemplateYamlFuncIsProcessed verifies that !template YAML functions in hook
+// configuration are evaluated during GetHooks (regression test for v1.210.0 regression).
+// In v1.210.0 the fix incorrectly set ProcessYamlFunctions=false which caused !template to
+// be treated as a literal string (e.g. "!template staging") instead of being evaluated.
+func TestGetHooks_TemplateYamlFuncIsProcessed(t *testing.T) {
+	testDir := "../../tests/test-cases/hooks-component-scoped"
+
+	absTestDir, err := filepath.Abs(testDir)
+	require.NoError(t, err)
+
+	t.Chdir(absTestDir)
+
+	atmosConfig := &schema.AtmosConfiguration{}
+	info := &schema.ConfigAndStacksInfo{
+		ComponentFromArg: "api",
+		Stack:            "acme-dev-test",
+	}
+
+	hooks, err := GetHooks(atmosConfig, info)
+
+	require.NoError(t, err)
+	require.NotNil(t, hooks)
+	require.NotNil(t, hooks.items)
+	require.Contains(t, hooks.items, "api-store-outputs")
+
+	hook := hooks.items["api-store-outputs"]
+	// Verify the !template function was evaluated: name should be "prod/ssm" not "!template prod/ssm"
+	assert.Equal(t, "prod/ssm", hook.Name,
+		"!template in hook name should be evaluated, not returned as a literal string")
+}
+
 func TestRunAll(t *testing.T) {
 	tests := []struct {
 		name        string

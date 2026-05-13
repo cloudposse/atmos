@@ -24,6 +24,10 @@ schemas: {}
 logs:
   level: Info
 
+templates:
+  settings:
+    enabled: true
+
 settings:
   terminal:
     pager:

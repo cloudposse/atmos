@@ -2,6 +2,7 @@ import:
   - catalog/vpc
   - catalog/rds
   - catalog/lambda
+  - catalog/api
 
 vars:
   tenant: acme
