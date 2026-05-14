@@ -615,6 +615,50 @@ func TestOnAfterPlan_OutputEnabled_WritesVariables(t *testing.T) {
 	assert.Equal(t, "0", mp.writer.outputs["resources_to_destroy"])
 }
 
+func TestOnAfterPlan_OutputOnlyStdout_RendersOutputChangeSummary(t *testing.T) {
+	p := &Plugin{}
+	mp := newMockProvider()
+
+	ctx := &plugin.HookContext{
+		Config: &schema.AtmosConfiguration{
+			CI: schema.CIConfig{
+				Summary: schema.CISummaryConfig{Enabled: boolPtr(true)},
+				Output:  schema.CIOutputConfig{Enabled: boolPtr(false)},
+				Checks:  schema.CIChecksConfig{Enabled: boolPtr(false)},
+			},
+		},
+		Provider:       mp,
+		TemplateLoader: templates.NewLoader(&schema.AtmosConfiguration{}),
+		Command:        "plan",
+		Info: &schema.ConfigAndStacksInfo{
+			Stack:            "test-stack",
+			ComponentFromArg: "test/component",
+		},
+		Output: `Note: Objects have changed outside of OpenTofu
+
+OpenTofu detected changes made outside of OpenTofu since the last apply.
+
+Changes to Outputs:
+  ~ image_id = "old-image" -> "new-image"
+
+You can apply this plan to save these new output values to the OpenTofu
+state, without changing any real infrastructure.
+`,
+	}
+
+	err := p.onAfterPlan(ctx)
+	require.NoError(t, err)
+
+	require.Len(t, mp.writer.summaries, 1, "summary should have been rendered")
+	rendered := mp.writer.summaries[0]
+
+	assert.Contains(t, rendered, "## Output Changes Found for")
+	assert.Contains(t, rendered, "PLAN-OUTPUT_CHANGE-blue")
+	assert.Contains(t, rendered, "Output values will change. No infrastructure changes.")
+	assert.NotContains(t, rendered, "## No Changes for")
+	assert.NotContains(t, rendered, "NO_CHANGE-inactive")
+}
+
 func TestOnAfterPlan_CheckEnabled_UpdatesCheckRun(t *testing.T) {
 	p := &Plugin{}
 	mp := newMockProvider()

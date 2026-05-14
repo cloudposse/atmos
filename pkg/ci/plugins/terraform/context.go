@@ -69,7 +69,7 @@ func NewTemplateContext(base *plugin.TemplateContext, data *plugin.TerraformOutp
 		ctx.Outputs = data.Outputs
 		ctx.ChangedResult = data.ChangedResult
 		ctx.HasDestroy = data.ResourceCounts.Destroy > 0
-		ctx.HasOutputChanges = len(data.Outputs) > 0
+		ctx.HasOutputChanges = data.HasOutputChanges || len(data.Outputs) > 0
 		ctx.Warnings = blockquoteWarnings(data.Warnings)
 	}
 
