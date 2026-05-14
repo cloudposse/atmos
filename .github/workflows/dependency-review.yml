@@ -18,6 +18,7 @@ jobs:
       - extras=s3-cache
       - private=false
     steps:
+      - uses: runs-on/action@v2    
       - name: Checkout code
         uses: actions/checkout@v4
 
