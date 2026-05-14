@@ -383,6 +383,12 @@ func LoadConfig(configAndStacksInfo *schema.ConfigAndStacksInfo) (schema.AtmosCo
 	// the global viper when searching for candidate profiles; without this
 	// sync, custom profile locations configured in atmos.yaml are invisible
 	// to the fallback and no candidates are found.
+	//
+	// NOTE: viper.Set() writes to viper's override layer, which sits ABOVE
+	// any future BindPFlag/BindEnv bindings on the same key. There is no
+	// such binding today, but if a `--profiles-base-path` flag (or
+	// equivalent env binding) is ever added, this sync will silently shadow
+	// it. Either drop this sync at that point or guard with IsSet().
 	if atmosConfig.Profiles.BasePath != "" {
 		viper.GetViper().Set("profiles.base_path", atmosConfig.Profiles.BasePath)
 	}

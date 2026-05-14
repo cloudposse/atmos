@@ -510,5 +510,9 @@ func TestRenderTable_OutputFormat(t *testing.T) {
 	assert.Contains(t, output, "dev")
 
 	// The active profile gets a green dot indicator; inactive profiles do not.
+	// Asserting an exact count of one catches a regression where every row
+	// is marked active (the "marker leaks into all rows" failure mode).
 	assert.Contains(t, output, "●", "active profile should have a dot indicator")
+	assert.Equal(t, 1, strings.Count(output, "●"),
+		"only the active profile (production) should have a dot indicator, not the inactive 'dev' row")
 }

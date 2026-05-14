@@ -16,6 +16,52 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
+// TestBuildActiveProfileSet exercises the active-profile lookup builder
+// used by executeProfileListCommand to flag rows in the rendered table.
+// The builder short-circuits empty/nil input (so the table renderer can skip
+// the indicator column) and otherwise produces a map[name]bool for O(1)
+// lookups.
+func TestBuildActiveProfileSet(t *testing.T) {
+	tests := []struct {
+		name  string
+		input []string
+		want  map[string]bool
+	}{
+		{
+			name:  "nil input returns nil — table renderer treats nil as 'no indicator column'",
+			input: nil,
+			want:  nil,
+		},
+		{
+			name:  "empty input returns nil — same fast-path as nil",
+			input: []string{},
+			want:  nil,
+		},
+		{
+			name:  "single name",
+			input: []string{"dev"},
+			want:  map[string]bool{"dev": true},
+		},
+		{
+			name:  "multiple names",
+			input: []string{"dev", "prod", "staging"},
+			want:  map[string]bool{"dev": true, "prod": true, "staging": true},
+		},
+		{
+			name:  "duplicate names collapse to a single key",
+			input: []string{"dev", "dev", "prod"},
+			want:  map[string]bool{"dev": true, "prod": true},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := buildActiveProfileSet(tt.input)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
 // TestProfileFormatFlagCompletion tests the format flag completion function.
 func TestProfileFormatFlagCompletion(t *testing.T) {
 	cmd := &cobra.Command{}
@@ -251,10 +297,11 @@ func TestRenderProfileListOutput(t *testing.T) {
 	}
 
 	tests := []struct {
-		name        string
-		format      string
-		expectError bool
-		validate    func(t *testing.T, output string, err error)
+		name           string
+		format         string
+		activeProfiles map[string]bool
+		expectError    bool
+		validate       func(t *testing.T, output string, err error)
 	}{
 		{
 			name:        "table format",
@@ -265,6 +312,20 @@ func TestRenderProfileListOutput(t *testing.T) {
 				assert.NotEmpty(t, output)
 				// Table should contain headers.
 				assert.Contains(t, output, "PROFILES")
+			},
+		},
+		{
+			// Threads a non-nil activeProfiles map through the table path so
+			// the active-row indicator wiring (the `●` marker that
+			// RenderTable colours post-render) is exercised at this layer.
+			name:           "table format marks active profile",
+			format:         "table",
+			activeProfiles: map[string]bool{"test": true},
+			expectError:    false,
+			validate: func(t *testing.T, output string, err error) {
+				require.NoError(t, err)
+				assert.Contains(t, output, "●",
+					"active-profile dot must appear in the table output when activeProfiles is non-nil")
 			},
 		},
 		{
@@ -318,7 +379,7 @@ func TestRenderProfileListOutput(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			output, err := renderProfileListOutput(atmosConfig, profiles, nil, tt.format)
+			output, err := renderProfileListOutput(atmosConfig, profiles, tt.activeProfiles, tt.format)
 
 			if tt.expectError {
 				assert.Error(t, err)

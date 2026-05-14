@@ -93,7 +93,8 @@ func TestCreateProvidersTable_MultipleRowsVisible(t *testing.T) {
 			Default:  true,
 		},
 		"okta": {
-			Kind:   "aws/saml",
+			// Use Kind: "okta" to match the convention in TestBuildProviderRows_WithURL.
+			Kind:   "okta",
 			Region: "us-west-2",
 			URL:    "https://company.okta.com/app",
 		},
@@ -114,6 +115,13 @@ func TestCreateProvidersTable_MultipleRowsVisible(t *testing.T) {
 	assert.Contains(t, view, "aws-sso")
 	assert.Contains(t, view, "okta")
 	assert.Contains(t, view, "google")
+
+	// Assert a per-row distinguishing field so a regression that visibly
+	// renders all rows but corrupts row content (e.g., column misalignment,
+	// shared-row data) is caught — not just one that drops rows entirely.
+	assert.Contains(t, view, "us-east-1", "aws-sso row content must include its region")
+	assert.Contains(t, view, "us-west-2", "okta row content must include its region")
+	assert.Contains(t, view, "us-east-2", "google row content must include its region")
 }
 
 // TestCreateIdentitiesTable_MultipleRowsVisible guards against a

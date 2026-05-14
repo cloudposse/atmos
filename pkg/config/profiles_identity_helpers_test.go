@@ -331,3 +331,95 @@ func TestProfilesWithAuthConfig_NoProfiles(t *testing.T) {
 	require.NoError(t, err)
 	assert.Empty(t, matches)
 }
+
+// GetActiveProfiles mirrors the LoadConfig resolution order:
+//
+//	flag/env (explicit) → profiles.default (implicit) → nil.
+//
+// The tests below exercise each branch in isolation so a regression to any
+// step (e.g., losing the env-var path, ignoring profiles.default) is caught
+// before it breaks the profile-list active-row indicator.
+func TestGetActiveProfiles_EnvVar(t *testing.T) {
+	t.Setenv("ATMOS_PROFILE", "prod")
+	origArgs := os.Args
+	os.Args = []string{"atmos", "profile", "list"}
+	t.Cleanup(func() { os.Args = origArgs })
+
+	got := GetActiveProfiles(&schema.AtmosConfiguration{
+		Profiles: schema.ProfilesConfig{Default: "ignored"},
+	})
+	assert.Equal(t, []string{"prod"}, got,
+		"explicit env-var profile must take precedence over profiles.default")
+}
+
+func TestGetActiveProfiles_FlagInArgs(t *testing.T) {
+	t.Setenv("ATMOS_PROFILE", "")
+	origArgs := os.Args
+	os.Args = []string{"atmos", "--profile", "dev", "profile", "list"}
+	t.Cleanup(func() { os.Args = origArgs })
+
+	got := GetActiveProfiles(&schema.AtmosConfiguration{
+		Profiles: schema.ProfilesConfig{Default: "ignored"},
+	})
+	assert.Equal(t, []string{"dev"}, got,
+		"explicit --profile flag must take precedence over profiles.default")
+}
+
+func TestGetActiveProfiles_DefaultOnly(t *testing.T) {
+	t.Setenv("ATMOS_PROFILE", "")
+	origArgs := os.Args
+	os.Args = []string{"atmos", "profile", "list"}
+	t.Cleanup(func() { os.Args = origArgs })
+
+	got := GetActiveProfiles(&schema.AtmosConfiguration{
+		Profiles: schema.ProfilesConfig{Default: "team"},
+	})
+	assert.Equal(t, []string{"team"}, got,
+		"profiles.default must surface when no explicit profile is set")
+}
+
+func TestGetActiveProfiles_DefaultWhitespaceTrimmed(t *testing.T) {
+	t.Setenv("ATMOS_PROFILE", "")
+	origArgs := os.Args
+	os.Args = []string{"atmos", "profile", "list"}
+	t.Cleanup(func() { os.Args = origArgs })
+
+	got := GetActiveProfiles(&schema.AtmosConfiguration{
+		Profiles: schema.ProfilesConfig{Default: "  team  "},
+	})
+	assert.Equal(t, []string{"team"}, got,
+		"surrounding whitespace in profiles.default must be trimmed")
+}
+
+func TestGetActiveProfiles_DefaultBlankReturnsNil(t *testing.T) {
+	t.Setenv("ATMOS_PROFILE", "")
+	origArgs := os.Args
+	os.Args = []string{"atmos", "profile", "list"}
+	t.Cleanup(func() { os.Args = origArgs })
+
+	got := GetActiveProfiles(&schema.AtmosConfiguration{
+		Profiles: schema.ProfilesConfig{Default: "   "},
+	})
+	assert.Nil(t, got,
+		"a whitespace-only profiles.default must not be treated as an active profile")
+}
+
+func TestGetActiveProfiles_NilConfig(t *testing.T) {
+	t.Setenv("ATMOS_PROFILE", "")
+	origArgs := os.Args
+	os.Args = []string{"atmos", "profile", "list"}
+	t.Cleanup(func() { os.Args = origArgs })
+
+	assert.Nil(t, GetActiveProfiles(nil),
+		"nil atmosConfig must not panic and must return nil when no flag/env profile is set")
+}
+
+func TestGetActiveProfiles_NoneAtAll(t *testing.T) {
+	t.Setenv("ATMOS_PROFILE", "")
+	origArgs := os.Args
+	os.Args = []string{"atmos", "profile", "list"}
+	t.Cleanup(func() { os.Args = origArgs })
+
+	assert.Nil(t, GetActiveProfiles(&schema.AtmosConfiguration{}),
+		"no flag, no env, no profiles.default must yield nil")
+}

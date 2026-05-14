@@ -48,9 +48,11 @@ func (s *stubAuthManager) Validate() error { return nil }
 func (s *stubAuthManager) GetDefaultIdentity(_ bool) (string, error) {
 	return s.defaultIdentity, s.defaultErr
 }
+
 func (s *stubAuthManager) ListIdentities() []string                          { return []string{"one", "two"} }
 func (s *stubAuthManager) GetProviderForIdentity(identityName string) string { return "prov" }
 func (s *stubAuthManager) GetFilesDisplayPath(providerName string) string    { return "~/.aws/atmos" }
+
 func (s *stubAuthManager) GetProviderKindForIdentity(identityName string) (string, error) {
 	return "kind", nil
 }
@@ -338,8 +340,15 @@ func TestResolveTargetIdentityName(t *testing.T) {
 	assert.Zero(t, mgr.fallbackCalls, "unrelated errors must not trigger the profile fallback")
 
 	// Manager returns empty default -> ErrNoDefaultIdentity.
-	_, err = resolveTargetIdentityName(ctx, stack, &stubAuthManager{defaultIdentity: ""})
-	assert.Error(t, err)
+	// This branch also flows through the profile-fallback path (err is nil,
+	// name is empty, so the `!isNoAuthConfigError(err)` short-circuit does
+	// not fire). Asserting the fallback fires here catches a regression
+	// that skips it in the "empty default, no error" branch.
+	emptyMgr := &stubAuthManager{defaultIdentity: ""}
+	_, err = resolveTargetIdentityName(ctx, stack, emptyMgr)
+	assert.ErrorIs(t, err, errUtils.ErrNoDefaultIdentity)
+	assert.Equal(t, 1, emptyMgr.fallbackCalls,
+		"empty default identity must also try the profile fallback before surfacing ErrNoDefaultIdentity")
 }
 
 // TestResolveTargetIdentityName_InvokesFallbackOnNoAuthConfig is a regression

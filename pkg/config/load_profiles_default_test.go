@@ -175,8 +175,17 @@ func TestLoadConfig_DoesNotOverwriteGlobalProfilesBasePathWhenUnset(t *testing.T
 	viper.GetViper().Set("profiles.base_path", "preexisting-value")
 
 	configAndStacksInfo := schema.ConfigAndStacksInfo{}
-	_, err := LoadConfig(&configAndStacksInfo)
+	atmosConfig, err := LoadConfig(&configAndStacksInfo)
 	require.NoError(t, err)
+
+	// Precondition: the loaded atmosConfig must have an empty
+	// Profiles.BasePath. If a future change starts populating this from a
+	// different source (defaults, env, etc.), this test would silently
+	// become a "no-op preserves global" test rather than the intended
+	// "guard skips the Set() call" test. Failing here makes that explicit.
+	require.Empty(t, atmosConfig.Profiles.BasePath,
+		"precondition: atmos.yaml under test must not set profiles.base_path — "+
+			"otherwise this test stops exercising the non-empty guard in load.go")
 
 	assert.Equal(t, "preexisting-value", viper.GetString("profiles.base_path"),
 		"LoadConfig must not overwrite a pre-existing global viper value "+
