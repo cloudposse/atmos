@@ -1,0 +1,125 @@
+---
+title: atmos mcp start
+sidebar_label: start
+sidebar_class_name: command
+id: start
+description: Start the Atmos MCP server for AI client integration
+---
+import Screengrab from '@site/src/components/Screengrab'
+import DocCardList from '@theme/DocCardList'
+import Intro from '@site/src/components/Intro'
+import ActionCard from '@site/src/components/ActionCard'
+import PrimaryCTA from '@site/src/components/PrimaryCTA'
+import Experimental from '@site/src/components/Experimental'
+
+<Intro>
+Use this command to start the Atmos Model Context Protocol (MCP) server. The MCP server exposes Atmos AI tools through the [MCP open standard](https://modelcontextprotocol.io), enabling any compatible AI client — Claude Desktop, Claude Code, VS Code, Cursor, and [many others](https://modelcontextprotocol.io/clients) — to connect to your infrastructure tools.
+</Intro>
+
+<Experimental />
+
+<ActionCard title="Configure MCP">
+    Learn how to configure MCP server and AI tool settings in your atmos.yaml.
+    <div>
+      <PrimaryCTA to="/cli/configuration/mcp">Configuration Reference</PrimaryCTA>
+    </div>
+</ActionCard>
+
+<Screengrab title="atmos mcp start --help" slug="atmos-mcp-start--help" />
+
+## Prerequisites
+
+The MCP server must be explicitly enabled in `atmos.yaml`:
+
+```yaml
+mcp:
+  enabled: true
+ai:
+  enabled: true
+  tools:
+    enabled: true
+```
+
+The MCP server is **disabled by default**. Enabling AI features alone (`ai.enabled: true`) does not enable MCP.
+
+## Description
+
+The `atmos mcp start` command starts the Atmos MCP server, enabling AI clients to query your infrastructure using Atmos tools.
+
+The server supports two transport protocols:
+- **stdio** (default) — Standard input/output for desktop apps like Claude Desktop, VS Code, and Cursor
+- **http** — HTTP with Server-Sent Events (SSE) for remote access, shared servers, and CI/CD
+
+## Usage
+
+```shell
+atmos mcp start [flags]
+```
+
+### Flags
+
+<dl>
+  <dt>`--transport`</dt>
+  <dd>Transport type: `stdio` (default) or `http`</dd>
+
+  <dt>`--host`</dt>
+  <dd>Host to bind HTTP server (HTTP transport only). Default: `localhost`</dd>
+
+  <dt>`--port`</dt>
+  <dd>Port to bind HTTP server (HTTP transport only). Default: `8080`</dd>
+</dl>
+
+### Examples
+
+```shell
+# Start MCP server with stdio transport (default, for desktop clients)
+atmos mcp start
+
+# Start MCP server with HTTP transport
+atmos mcp start --transport http
+
+# Start HTTP server on custom host and port
+atmos mcp start --transport http --host 127.0.0.1 --port 3000
+```
+
+## Transport Modes
+
+<dl>
+  <dt>How it works</dt>
+  <dd>**stdio (default):** Client spawns Atmos as a subprocess; communication over stdin/stdout. **HTTP:** Atmos listens on an HTTP port with SSE.</dd>
+
+  <dt>Best for</dt>
+  <dd>**stdio:** Desktop apps, local development. **HTTP:** Remote access, shared servers, CI/CD.</dd>
+
+  <dt>Multiple clients</dt>
+  <dd>**stdio:** No (1:1 with client). **HTTP:** Yes.</dd>
+
+  <dt>Network exposure</dt>
+  <dd>**stdio:** None. **HTTP:** Requires security measures.</dd>
+</dl>
+
+### HTTP Endpoints
+
+When running with `--transport http`, the server exposes:
+
+<dl>
+  <dt>`GET /sse`</dt>
+  <dd>Server-Sent Events stream for client communication.</dd>
+
+  <dt>`POST /message`</dt>
+  <dd>JSON-RPC 2.0 message endpoint.</dd>
+
+  <dt>`GET /health`</dt>
+  <dd>Returns `{"status":"healthy","clients":N}`. Use for monitoring and liveness probes.</dd>
+</dl>
+
+:::warning HTTP Transport
+When using `--transport http`, the server has no built-in authentication. Always add firewall rules, VPN, or a reverse proxy before exposing it on a network. The default **stdio** transport has no network exposure.
+:::
+
+## Related
+
+<DocCardList items={[
+  {type: 'link', href: '/cli/configuration/mcp', label: 'MCP Configuration', description: 'Configure MCP server and AI tool settings in atmos.yaml'},
+  {type: 'link', href: '/ai/mcp-server', label: 'MCP Server Guide', description: 'Client setup guides, security, and advanced deployments'},
+]} />

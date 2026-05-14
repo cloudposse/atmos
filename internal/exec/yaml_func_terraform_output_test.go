@@ -2,6 +2,7 @@ package exec
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
 	"testing"
 
@@ -10,10 +11,22 @@ import (
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
+	tfoutput "github.com/cloudposse/atmos/pkg/terraform/output"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 func TestYamlFuncTerraformOutput(t *testing.T) {
+	// Clear caches to ensure isolation from other tests that may have run first.
+	tfoutput.ResetOutputsCache()
+	t.Cleanup(func() {
+		tfoutput.ResetOutputsCache()
+	})
+
+	if _, err := exec.LookPath("tofu"); err != nil {
+		if _, err2 := exec.LookPath("terraform"); err2 != nil {
+			t.Skip("skipping: neither 'tofu' nor 'terraform' binary found in PATH (required for !terraform.output integration test)")
+		}
+	}
 	err := os.Unsetenv("ATMOS_CLI_CONFIG_PATH")
 	if err != nil {
 		t.Fatalf("Failed to unset 'ATMOS_CLI_CONFIG_PATH': %v", err)
@@ -138,4 +151,43 @@ func TestYamlFuncTerraformOutput(t *testing.T) {
 	assert.Contains(t, y, `test_map:
     key1: value1
     key2: value2`)
+
+	// Test bracket notation with map keys containing slashes (user-reported issue)
+	// https://atmos.tools/functions/yaml/terraform.output#handling-yq-expressions-with-bracket-notation-and-quotes
+	t.Run("bracket notation with slashes in map keys", func(t *testing.T) {
+		// Test with single quotes around the YQ expression (recommended syntax)
+		d, err = processTagTerraformOutput(&atmosConfig, `!terraform.output component-1 '.secret_arns_map["auth0-event-stream/app/client-id"]'`, stack, nil)
+		assert.NoError(t, err)
+		assert.Equal(t, "arn:aws:secretsmanager:us-east-1:123456789012:secret:client-id-abc123", d)
+
+		// Test with bare brackets (also valid)
+		d, err = processTagTerraformOutput(&atmosConfig, `!terraform.output component-1 .secret_arns_map["auth0-event-stream/app/client-id"]`, stack, nil)
+		assert.NoError(t, err)
+		assert.Equal(t, "arn:aws:secretsmanager:us-east-1:123456789012:secret:client-id-abc123", d)
+
+		// Test with stack parameter and single quotes
+		d, err = processTagTerraformOutput(&atmosConfig, `!terraform.output component-1 nonprod '.secret_arns_map["auth0-event-stream/app/client-secret"]'`, stack, nil)
+		assert.NoError(t, err)
+		assert.Equal(t, "arn:aws:secretsmanager:us-east-1:123456789012:secret:client-secret-xyz789", d)
+	})
+
+	// Test the component-bracket-notation component resolution
+	t.Run("component-bracket-notation describe", func(t *testing.T) {
+		res, err = ExecuteDescribeComponent(&ExecuteDescribeComponentParams{
+			Component:            "component-bracket-notation",
+			Stack:                stack,
+			ProcessTemplates:     true,
+			ProcessYamlFunctions: true,
+			Skip:                 nil,
+			AuthManager:          nil,
+		})
+		assert.NoError(t, err)
+
+		y, err = u.ConvertToYAML(res)
+		assert.Nil(t, err)
+		assert.Contains(t, y, "client_id_arn: arn:aws:secretsmanager:us-east-1:123456789012:secret:client-id-abc123")
+		assert.Contains(t, y, "client_secret_arn: arn:aws:secretsmanager:us-east-1:123456789012:secret:client-secret-xyz789")
+		assert.Contains(t, y, "client_id_arn_bare: arn:aws:secretsmanager:us-east-1:123456789012:secret:client-id-abc123")
+		assert.Contains(t, y, "client_id_arn_with_stack: arn:aws:secretsmanager:us-east-1:123456789012:secret:client-id-abc123")
+	})
 }

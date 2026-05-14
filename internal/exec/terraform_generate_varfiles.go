@@ -14,6 +14,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
+	atmosYaml "github.com/cloudposse/atmos/pkg/yaml"
 )
 
 // ExecuteTerraformGenerateVarfilesCmd executes `terraform generate varfiles` command.
@@ -202,7 +203,7 @@ func ExecuteTerraformGenerateVarfiles(
 				componentSection["atmos_manifest"] = stackFileName
 
 				// Process `Go` templates
-				componentSectionStr, err := u.ConvertToYAML(componentSection)
+				componentSectionStr, err := atmosYaml.ConvertToYAMLPreservingDelimiters(componentSection, atmosConfig.Templates.Settings.Delimiters)
 				if err != nil {
 					return err
 				}

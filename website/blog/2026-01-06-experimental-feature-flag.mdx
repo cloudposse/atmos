@@ -1,0 +1,115 @@
+---
+slug: experimental-feature-flag
+title: "Experimental Feature Controls"
+authors: [osterman]
+tags: [feature, dx]
+---
+
+Atmos now provides granular control over experimental features with the new `settings.experimental` configuration option—giving teams the flexibility to explore new capabilities safely while maintaining stability in production environments.
+
+<!--truncate-->
+
+## What's New
+
+Experimental features in Atmos are now clearly marked and controllable. The new `settings.experimental` configuration option lets you choose how Atmos handles experimental commands:
+
+- **`warn`** (default) — Show a notification when running experimental commands, then continue
+- **`silence`** — Run experimental commands without any notification
+- **`disable`** — Block experimental commands entirely
+- **`error`** — Show notification and exit with an error code
+
+### CLI Visibility
+
+Experimental commands are now clearly marked in help output with an `[EXPERIMENTAL]` badge:
+
+```
+AVAILABLE COMMANDS
+
+      devcontainer [command] [EXPERIMENTAL]  Manage development containers
+      terraform                              Execute terraform commands
+      toolchain [command] [EXPERIMENTAL]     Manage CLI tool versions
+```
+
+When you run `--help` on an experimental command, you'll see a prominent badge at the top:
+
+```
+[EXPERIMENTAL]
+
+Manage development containers with full lifecycle support.
+```
+
+## Configuration
+
+Control experimental features in `atmos.yaml`:
+
+```yaml
+settings:
+  # Control experimental feature handling
+  # Values: "silence", "disable", "warn" (default), "error"
+  experimental: warn
+```
+
+Or via environment variable:
+
+```bash
+export ATMOS_EXPERIMENTAL=disable
+```
+
+## Current Experimental Features
+
+The following features are currently marked as experimental:
+
+| Feature | Command | Description |
+|---------|---------|-------------|
+| Devcontainers | `atmos devcontainer` | Development container lifecycle management |
+| Toolchain | `atmos toolchain` | Tool version management and installation |
+| Backend Provisioning | `atmos terraform backend` | Terraform state backend management |
+| Workdir Management | `atmos terraform workdir` | Component working directory management |
+| Affected Components | `atmos list affected` | Identify changes for targeted CI/CD |
+
+## Use Cases
+
+### Development Environment
+
+For local development where you want to experiment with new features:
+
+```yaml
+settings:
+  experimental: warn  # See warnings but continue working
+```
+
+### CI/CD Pipeline
+
+For continuous integration where you want stability:
+
+```yaml
+settings:
+  experimental: disable  # Block experimental commands in CI
+```
+
+### Production Environment
+
+For production where experimental features must be explicitly enabled:
+
+```yaml
+settings:
+  experimental: error  # Require explicit opt-in
+```
+
+## Why This Matters
+
+As Atmos continues to evolve, we're adding powerful new capabilities like devcontainers, toolchain management, and advanced Terraform features. These features need real-world testing before they're considered stable.
+
+The experimental feature flag gives you:
+
+- **Clear visibility** — Know immediately when you're using an experimental feature
+- **Granular control** — Choose how to handle experimental features per environment
+- **Safe exploration** — Try new features locally while keeping CI stable
+- **Predictable behavior** — Same configuration works identically across environments
+
+## Documentation
+
+For complete documentation on experimental features and configuration options, see:
+
+- [Experimental Features Configuration](/cli/configuration/settings/experimental)
+- [Settings Reference](/cli/configuration/settings)

@@ -17,8 +17,10 @@ import (
 
 	"github.com/cloudposse/atmos/cmd/internal"
 	tuiUtils "github.com/cloudposse/atmos/internal/tui/utils"
+	atmosansi "github.com/cloudposse/atmos/pkg/ansi"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/flags/compat"
+	ioLayer "github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui"
@@ -51,6 +53,17 @@ const (
 	valueOne  = "1"
 	valueZero = "0"
 )
+
+// Command annotation constants.
+const (
+	annotationExperimental = "experimental"
+	annotationValueTrue    = "true"
+)
+
+// isExperimentalCommand checks if a command has the experimental annotation.
+func isExperimentalCommand(cmd *cobra.Command) bool {
+	return cmd.Annotations != nil && cmd.Annotations[annotationExperimental] == annotationValueTrue
+}
 
 // colorConfig holds the color detection and environment variable configuration.
 type colorConfig struct {
@@ -198,16 +211,17 @@ func detectColorConfig() colorConfig {
 
 // printColorDebugInfo prints debug information about color detection.
 func printColorDebugInfo(profileDetector *colorprofile.Writer, config colorConfig) {
-	fmt.Fprintf(os.Stderr, "\n[DEBUG] Color Detection:\n")
-	fmt.Fprintf(os.Stderr, "  Detected Profile: %v\n", profileDetector.Profile)
-	fmt.Fprintf(os.Stderr, "  ATMOS_FORCE_COLOR: %s\n", viper.GetString(envAtmosForceColor))
-	fmt.Fprintf(os.Stderr, "  FORCE_COLOR: %s\n", viper.GetString(envForceColor))
-	fmt.Fprintf(os.Stderr, "  CLICOLOR_FORCE: %s\n", viper.GetString(envCliColorForce))
-	fmt.Fprintf(os.Stderr, "  NO_COLOR: %s\n", viper.GetString(envNoColor))
-	fmt.Fprintf(os.Stderr, "  TERM: %s\n", viper.GetString(envTerm))
-	fmt.Fprintf(os.Stderr, "  COLORTERM: %s\n", viper.GetString(envColorTerm))
-	fmt.Fprintf(os.Stderr, "  forceColor: %v\n", config.forceColor)
-	fmt.Fprintf(os.Stderr, "  explicitlyDisabled: %v\n", config.explicitlyDisabled)
+	maskedStderr := ioLayer.MaskWriter(os.Stderr)
+	fmt.Fprintf(maskedStderr, "\n[DEBUG] Color Detection:\n")
+	fmt.Fprintf(maskedStderr, "  Detected Profile: %v\n", profileDetector.Profile)
+	fmt.Fprintf(maskedStderr, "  ATMOS_FORCE_COLOR: %s\n", viper.GetString(envAtmosForceColor))
+	fmt.Fprintf(maskedStderr, "  FORCE_COLOR: %s\n", viper.GetString(envForceColor))
+	fmt.Fprintf(maskedStderr, "  CLICOLOR_FORCE: %s\n", viper.GetString(envCliColorForce))
+	fmt.Fprintf(maskedStderr, "  NO_COLOR: %s\n", viper.GetString(envNoColor))
+	fmt.Fprintf(maskedStderr, "  TERM: %s\n", viper.GetString(envTerm))
+	fmt.Fprintf(maskedStderr, "  COLORTERM: %s\n", viper.GetString(envColorTerm))
+	fmt.Fprintf(maskedStderr, "  forceColor: %v\n", config.forceColor)
+	fmt.Fprintf(maskedStderr, "  explicitlyDisabled: %v\n", config.explicitlyDisabled)
 }
 
 // configureDisabledColorWriter creates a writer with colors explicitly disabled.
@@ -218,8 +232,9 @@ func configureDisabledColorWriter(out io.Writer, debugColors bool) (io.Writer, c
 	renderer.SetColorProfile(termenv.Ascii)
 
 	if debugColors {
-		fmt.Fprintf(os.Stderr, "  Mode: Explicitly Disabled\n")
-		fmt.Fprintf(os.Stderr, "  Final Profile: Ascii\n")
+		maskedStderr := ioLayer.MaskWriter(os.Stderr)
+		fmt.Fprintf(maskedStderr, "  Mode: Explicitly Disabled\n")
+		fmt.Fprintf(maskedStderr, "  Final Profile: Ascii\n")
 	}
 
 	return colorW, colorprofile.Ascii, renderer
@@ -233,11 +248,12 @@ func configureForcedColorWriter(out io.Writer, debugColors bool) (io.Writer, col
 	renderer := lipgloss.NewRenderer(termOut, termenv.WithProfile(termenv.ANSI256))
 
 	if debugColors {
-		fmt.Fprintf(os.Stderr, "  Mode: Force Color (pipe-safe)\n")
-		fmt.Fprintf(os.Stderr, "  Final Profile: ANSI256 (forced)\n")
-		fmt.Fprintf(os.Stderr, "  Renderer: Created with termenv.Output ANSI256 as writer\n")
-		fmt.Fprintf(os.Stderr, "  Renderer ColorProfile: %v\n", renderer.ColorProfile())
-		fmt.Fprintf(os.Stderr, "  Global termenv DefaultOutput profile: %v\n", termenv.DefaultOutput().ColorProfile())
+		maskedStderr := ioLayer.MaskWriter(os.Stderr)
+		fmt.Fprintf(maskedStderr, "  Mode: Force Color (pipe-safe)\n")
+		fmt.Fprintf(maskedStderr, "  Final Profile: ANSI256 (forced)\n")
+		fmt.Fprintf(maskedStderr, "  Renderer: Created with termenv.Output ANSI256 as writer\n")
+		fmt.Fprintf(maskedStderr, "  Renderer ColorProfile: %v\n", renderer.ColorProfile())
+		fmt.Fprintf(maskedStderr, "  Global termenv DefaultOutput profile: %v\n", termenv.DefaultOutput().ColorProfile())
 	}
 
 	return out, profile, renderer
@@ -245,26 +261,27 @@ func configureForcedColorWriter(out io.Writer, debugColors bool) (io.Writer, col
 
 // setRendererProfileForAutoDetect configures the renderer based on the detected color profile.
 func setRendererProfileForAutoDetect(renderer *lipgloss.Renderer, profile colorprofile.Profile, debugColors bool) {
+	maskedStderr := ioLayer.MaskWriter(os.Stderr)
 	switch profile {
 	case colorprofile.TrueColor:
 		renderer.SetColorProfile(termenv.TrueColor)
 		if debugColors {
-			fmt.Fprintf(os.Stderr, "  Renderer: Auto-detect, set to TrueColor\n")
+			fmt.Fprintf(maskedStderr, "  Renderer: Auto-detect, set to TrueColor\n")
 		}
 	case colorprofile.ANSI256:
 		renderer.SetColorProfile(termenv.ANSI256)
 		if debugColors {
-			fmt.Fprintf(os.Stderr, "  Renderer: Auto-detect, set to ANSI256\n")
+			fmt.Fprintf(maskedStderr, "  Renderer: Auto-detect, set to ANSI256\n")
 		}
 	case colorprofile.ANSI:
 		renderer.SetColorProfile(termenv.ANSI)
 		if debugColors {
-			fmt.Fprintf(os.Stderr, "  Renderer: Auto-detect, set to ANSI\n")
+			fmt.Fprintf(maskedStderr, "  Renderer: Auto-detect, set to ANSI\n")
 		}
 	case colorprofile.Ascii:
 		renderer.SetColorProfile(termenv.Ascii)
 		if debugColors {
-			fmt.Fprintf(os.Stderr, "  Renderer: Auto-detect, set to Ascii\n")
+			fmt.Fprintf(maskedStderr, "  Renderer: Auto-detect, set to Ascii\n")
 		}
 	}
 }
@@ -278,8 +295,9 @@ func configureAutoDetectColorWriter(out io.Writer, detectedProfile colorprofile.
 	setRendererProfileForAutoDetect(renderer, colorW.Profile, debugColors)
 
 	if debugColors {
-		fmt.Fprintf(os.Stderr, "  Mode: Auto-detect\n")
-		fmt.Fprintf(os.Stderr, "  Final Profile: %v\n", colorW.Profile)
+		maskedStderr := ioLayer.MaskWriter(os.Stderr)
+		fmt.Fprintf(maskedStderr, "  Mode: Auto-detect\n")
+		fmt.Fprintf(maskedStderr, "  Final Profile: %v\n", colorW.Profile)
 	}
 
 	return colorW, colorW.Profile, renderer
@@ -309,8 +327,9 @@ func configureWriter(cmd *cobra.Command, config colorConfig) writerConfig {
 	}
 
 	if config.debugColors {
-		fmt.Fprintf(os.Stderr, "  Renderer Color Profile: %v\n", renderer.ColorProfile())
-		fmt.Fprintf(os.Stderr, "  Renderer Has Dark Background: %v\n\n", renderer.HasDarkBackground())
+		maskedStderr := ioLayer.MaskWriter(os.Stderr)
+		fmt.Fprintf(maskedStderr, "  Renderer Color Profile: %v\n", renderer.ColorProfile())
+		fmt.Fprintf(maskedStderr, "  Renderer Has Dark Background: %v\n\n", renderer.HasDarkBackground())
 	}
 
 	renderer.SetHasDarkBackground(true)
@@ -358,6 +377,13 @@ func printLogoAndVersion(w io.Writer, styles *helpStyles) {
 func printDescription(w io.Writer, cmd *cobra.Command, styles *helpStyles) {
 	defer perf.Track(nil, "cmd.printDescription")()
 
+	// Print experimental badge if command is experimental.
+	if isExperimentalCommand(cmd) {
+		badge := ui.FormatExperimentalBadge()
+		fmt.Fprintln(w, badge)
+		fmt.Fprintln(w)
+	}
+
 	var desc string
 	switch {
 	case cmd.Long != "":
@@ -373,7 +399,7 @@ func printDescription(w io.Writer, cmd *cobra.Command, styles *helpStyles) {
 	rendered := renderMarkdownDescription(desc)
 	styled := styles.commandDesc.Render(rendered)
 	// Lipgloss pads multi-line strings to uniform width. Trim trailing whitespace from each line.
-	styled = ui.TrimLinesRight(styled)
+	styled = atmosansi.TrimLinesRight(styled)
 	fmt.Fprintln(w, styled)
 	fmt.Fprintln(w)
 }
@@ -496,23 +522,29 @@ func isConfigAlias(cmd *cobra.Command) bool {
 }
 
 // calculateCommandWidth calculates the display width of a command name including type suffix.
-func calculateCommandWidth(cmd *cobra.Command) int {
+// If parentExperimental is true, experimental badges won't be shown on subcommands.
+func calculateCommandWidth(cmd *cobra.Command, parentExperimental bool) int {
 	width := len(cmd.Name())
 	if cmd.HasAvailableSubCommands() {
 		width += len(" [command]")
+	}
+	// Account for experimental badge if present and parent is not already experimental.
+	if isExperimentalCommand(cmd) && !parentExperimental {
+		width += len(" [EXPERIMENTAL]")
 	}
 	return width
 }
 
 // calculateMaxCommandWidth finds the maximum command name width for alignment.
 // Config aliases are excluded from this calculation since they're shown in a separate section.
-func calculateMaxCommandWidth(commands []*cobra.Command) int {
+// If parentExperimental is true, experimental badges won't be included in width calculations.
+func calculateMaxCommandWidth(commands []*cobra.Command, parentExperimental bool) int {
 	maxWidth := 0
 	for _, c := range commands {
 		if !isCommandAvailable(c) || isConfigAlias(c) {
 			continue
 		}
-		width := calculateCommandWidth(c)
+		width := calculateCommandWidth(c, parentExperimental)
 		if width > maxWidth {
 			maxWidth = width
 		}
@@ -520,58 +552,56 @@ func calculateMaxCommandWidth(commands []*cobra.Command) int {
 	return maxWidth
 }
 
+// getExperimentalBadge returns the styled and plain badge strings if command is experimental.
+// Returns empty strings if parent is already experimental or command is not experimental.
+func getExperimentalBadge(cmd *cobra.Command, parentExperimental bool) (styled, plain string) {
+	if isExperimentalCommand(cmd) && !parentExperimental {
+		return " " + ui.FormatExperimentalBadge(), " [EXPERIMENTAL]"
+	}
+	return "", ""
+}
+
 // formatCommandLine formats a single command line with proper padding and styling.
-func formatCommandLine(ctx *helpRenderContext, cmd *cobra.Command, maxWidth int, mdRenderer *markdown.Renderer) {
+func formatCommandLine(ctx *helpRenderContext, cmd *cobra.Command, maxWidth int, mdRenderer *markdown.Renderer, parentExperimental bool) {
 	cmdName := cmd.Name()
-	cmdTypePlain := ""
-	cmdTypeStyled := ""
+	cmdTypePlain, cmdTypeStyled := "", ""
 	if cmd.HasAvailableSubCommands() {
 		cmdTypePlain = " [command]"
 		cmdTypeStyled = " " + ctx.styles.flagName.Render("[command]")
 	}
 
-	padding := maxWidth - len(cmdName) - len(cmdTypePlain)
+	experimentalBadge, experimentalBadgePlain := getExperimentalBadge(cmd, parentExperimental)
+	padding := maxWidth - len(cmdName) - len(cmdTypePlain) - len(experimentalBadgePlain)
 
-	// Calculate where the description starts (left pad + command name + padding + spacing)
+	// Calculate description column position and width.
 	descColStart := commandListLeftPad + maxWidth + commandDescriptionSpacing
-
-	// Get terminal width and calculate available width for description
-	termWidth := getTerminalWidth()
-	descWidth := termWidth - descColStart
+	descWidth := getTerminalWidth() - descColStart
 	if descWidth < minDescriptionWidth {
 		descWidth = minDescriptionWidth
 	}
 
+	// Write command name and badges.
 	fmt.Fprint(ctx.writer, strings.Repeat(spaceChar, commandListLeftPad))
 	fmt.Fprint(ctx.writer, ctx.styles.commandName.Render(cmdName))
 	fmt.Fprint(ctx.writer, cmdTypeStyled)
-	fmt.Fprint(ctx.writer, strings.Repeat(spaceChar, padding))
-	fmt.Fprint(ctx.writer, strings.Repeat(spaceChar, commandDescriptionSpacing))
+	fmt.Fprint(ctx.writer, experimentalBadge)
+	fmt.Fprint(ctx.writer, strings.Repeat(spaceChar, padding+commandDescriptionSpacing))
 
-	// Wrap plain text first, then render markdown without additional wrapping.
-	// This matches the approach used by flag description rendering.
+	// Render description with word wrap and markdown.
 	wrapped := wordwrap.String(cmd.Short, descWidth)
-
 	if mdRenderer != nil {
-		rendered, err := mdRenderer.RenderWithoutWordWrap(wrapped)
-		if err == nil {
+		if rendered, err := mdRenderer.RenderWithoutWordWrap(wrapped); err == nil {
 			wrapped = strings.TrimSpace(rendered)
 		}
 	}
 
+	// Write description lines.
 	lines := strings.Split(wrapped, "\n")
-
-	// Print first line (already positioned)
 	if len(lines) > 0 {
 		fmt.Fprintf(ctx.writer, "%s\n", ctx.styles.commandDesc.Render(lines[0]))
 	}
-
-	// Print continuation lines with proper indentation
-	if len(lines) > 1 {
-		indentStr := strings.Repeat(spaceChar, descColStart)
-		for i := 1; i < len(lines); i++ {
-			fmt.Fprintf(ctx.writer, "%s%s\n", indentStr, ctx.styles.commandDesc.Render(lines[i]))
-		}
+	for i := 1; i < len(lines); i++ {
+		fmt.Fprintf(ctx.writer, "%s%s\n", strings.Repeat(spaceChar, descColStart), ctx.styles.commandDesc.Render(lines[i]))
 	}
 }
 
@@ -586,7 +616,11 @@ func printAvailableCommands(ctx *helpRenderContext, cmd *cobra.Command) {
 	fmt.Fprintln(ctx.writer, ctx.styles.heading.Render("AVAILABLE COMMANDS"))
 	fmt.Fprintln(ctx.writer)
 
-	maxCmdWidth := calculateMaxCommandWidth(cmd.Commands())
+	// Check if the parent command is experimental.
+	// If so, subcommands don't need to repeat the badge since it's shown at the top.
+	parentExperimental := isExperimentalCommand(cmd)
+
+	maxCmdWidth := calculateMaxCommandWidth(cmd.Commands(), parentExperimental)
 
 	// Create markdown renderer for command descriptions (same approach as flag rendering).
 	var mdRenderer *markdown.Renderer
@@ -598,7 +632,7 @@ func printAvailableCommands(ctx *helpRenderContext, cmd *cobra.Command) {
 		if !isCommandAvailable(c) || isConfigAlias(c) {
 			continue
 		}
-		formatCommandLine(ctx, c, maxCmdWidth, mdRenderer)
+		formatCommandLine(ctx, c, maxCmdWidth, mdRenderer, parentExperimental)
 	}
 	fmt.Fprintln(ctx.writer)
 }

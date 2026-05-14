@@ -656,7 +656,7 @@ func TestBuildTemplateContext(t *testing.T) {
 			},
 		},
 		{
-			name: "workflow data",
+			name: "workflow data with name key",
 			data: map[string]any{
 				"file":        "workflows/deploy.yaml",
 				"name":        "deploy",
@@ -666,6 +666,21 @@ func TestBuildTemplateContext(t *testing.T) {
 				"file":        "workflows/deploy.yaml",
 				"name":        "deploy",
 				"description": "Deploy workflow",
+			},
+		},
+		{
+			name: "workflow data with workflow key",
+			data: map[string]any{
+				"file":        "workflows/deploy.yaml",
+				"workflow":    "deploy-all",
+				"description": "Deploy all components",
+				"steps":       3,
+			},
+			expected: map[string]any{
+				"file":        "workflows/deploy.yaml",
+				"workflow":    "deploy-all",
+				"description": "Deploy all components",
+				"steps":       3,
 			},
 		},
 	}

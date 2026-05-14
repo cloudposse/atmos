@@ -1,0 +1,47 @@
+---
+slug: sse-c-support
+title: "SSE-C Encryption Support for Remote State Lookups"
+authors: [osterman]
+tags: [enhancement]
+---
+
+The `!terraform.state` YAML function now supports reading from S3 buckets encrypted with customer-provided keys (SSE-C).
+
+<!--truncate-->
+
+## What Changed
+
+When using `!terraform.state` to read Terraform or OpenTofu state directly from S3, Atmos now supports SSE-C (Server-Side Encryption with Customer-Provided Keys). Previously, state files stored in SSE-C encrypted buckets were inaccessible through `!terraform.state`, requiring workarounds to retrieve outputs.
+
+You can provide the SSE-C key in two ways:
+
+1. **Backend attribute** in your stack configuration:
+
+   ```yaml
+   components:
+     terraform:
+       my-component:
+         backend:
+           s3:
+             sse_customer_key: "your-base64-encoded-key"
+   ```
+
+2. **Environment variable**:
+
+   ```shell
+   export AWS_SSE_CUSTOMER_KEY="your-base64-encoded-key"
+   ```
+
+The backend attribute takes precedence over the environment variable, following the same convention as OpenTofu and Terraform.
+
+This also works with `remote_state_backend` overrides, so you can configure SSE-C keys per-component when referencing remote state.
+
+## Why This Matters
+
+Organizations that use SSE-C for S3 state encryption previously couldn't use `!terraform.state` to reference outputs from those state files. This meant either switching encryption strategies or falling back to `!terraform.output` (which runs `terraform output` and requires the full Terraform/OpenTofu binary). With SSE-C support, `!terraform.state` reads the state file directly from S3 with the correct encryption headers, keeping lookups fast and dependency-free.
+
+Note that this only affects `!terraform.state` (which reads state files directly from S3). The `!terraform.output` function is unaffected since it delegates to Terraform/OpenTofu, which already handles SSE-C natively.
+
+## Get Involved
+
+Have questions or feedback? Join us on [Slack](https://slack.cloudposse.com/) or open an issue on [GitHub](https://github.com/cloudposse/atmos/issues).

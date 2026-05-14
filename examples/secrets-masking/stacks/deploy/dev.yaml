@@ -1,0 +1,20 @@
+# Stack configuration for secrets masking demo.
+
+vars:
+  tenant: demo
+  environment: dev
+  stage: test
+
+components:
+  terraform:
+    secrets-demo:
+      metadata:
+        component: secrets-demo
+      vars:
+        # These values will be output by the component.
+        # They will be masked in terminal output based on patterns/literals.
+        demo_api_key: "demo-key-ABCD1234EFGH5678"
+        internal_id: "internal-0123456789abcdef0123456789abcdef"
+        custom_token: "tkn_live_abcdefghijklmnopqrstuvwx"
+        literal_secret: "super-secret-demo-value"
+        plain_value: "this-is-not-a-secret"

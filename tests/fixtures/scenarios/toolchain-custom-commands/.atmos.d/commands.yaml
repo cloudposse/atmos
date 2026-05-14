@@ -1,0 +1,79 @@
+# Custom CLI commands that use tools from the toolchain
+# This tests that all toolchain tools are in PATH when running custom commands
+# Tool versions are specified via dependencies.tools (not .tool-versions file)
+commands:
+  - name: "test-gum"
+    description: "Test that gum is available in PATH"
+    dependencies:
+      tools:
+        charmbracelet/gum: "0.17.0"
+    steps:
+      - gum --version
+
+  - name: "test-k9s"
+    description: "Test that k9s is available in PATH"
+    dependencies:
+      tools:
+        derailed/k9s: "0.32.7"
+    steps:
+      - k9s version --short
+
+  - name: "test-helm"
+    description: "Test that helm is available in PATH"
+    dependencies:
+      tools:
+        helm: "3.16.3"
+    steps:
+      - helm version --short
+
+  - name: "test-jq"
+    description: "Test that jq is available in PATH"
+    dependencies:
+      tools:
+        jqlang/jq: "1.7.1"
+    steps:
+      - jq --version
+
+  - name: "test-kubectl"
+    description: "Test that kubectl is available in PATH"
+    dependencies:
+      tools:
+        kubectl: "1.31.4"
+    steps:
+      - kubectl version --client
+
+  - name: "test-tofu"
+    description: "Test that tofu is available in PATH"
+    dependencies:
+      tools:
+        tofu: "1.9.0"
+    steps:
+      - tofu --version
+
+  - name: "test-replicated"
+    description: "Test that replicated is available in PATH"
+    dependencies:
+      tools:
+        replicated: "0.124.1"
+    steps:
+      - replicated version
+
+  - name: "test-all-tools"
+    description: "Test all toolchain tools are in PATH"
+    dependencies:
+      tools:
+        charmbracelet/gum: "0.17.0"
+        derailed/k9s: "0.32.7"
+        helm: "3.16.3"
+        jqlang/jq: "1.7.1"
+        kubectl: "1.31.4"
+        tofu: "1.9.0"
+        replicated: "0.124.1"
+    steps:
+      - gum --version
+      - k9s version --short
+      - helm version --short
+      - jq --version
+      - kubectl version --client
+      - tofu --version
+      - replicated version

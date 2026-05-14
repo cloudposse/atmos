@@ -8,7 +8,7 @@ slug: /components
 import Intro from '@site/src/components/Intro'
 
 <Intro>
-Components are the building blocks of your infrastructure. Each component is a Terraform root module or Helmfile that does one thing well.
+Components are the building blocks of your infrastructure. Each component is a Terraform root module, Helmfile, Packer template, or Ansible playbook that does one thing well.
 </Intro>
 
 The most common use case for Atmos is implementing components using [Terraform "root modules"](https://developer.hashicorp.com/terraform/language/modules#the-root-module). Since Atmos is tool-agnostic, [custom commands](/cli/configuration/commands) can implement components for any tooling.
@@ -33,7 +33,7 @@ Components offer a multitude of applications across various business scenarios. 
 
 ## Flavors of Components
 
-Atmos natively supports two kinds of components, but using [custom commands](/cli/configuration/commands), the [CLI](/cli) can be extended to support anything (e.g. `docker`, `packer`, `ansible`, etc.)
+Atmos natively supports four kinds of components:
 
 1. [Terraform](/components/terraform): These are stand-alone "root modules" that implement some piece of your infrastructure. For example, typical components might be an
    EKS cluster, RDS cluster, EFS filesystem, S3 bucket, DynamoDB table, etc. You can find
@@ -42,6 +42,10 @@ Atmos natively supports two kinds of components, but using [custom commands](/cl
 
 2. [Helmfiles](/components/helmfile): These are stand-alone applications deployed using [`helmfile`](https://github.com/helmfile) to Kubernetes. For example, typical
    helmfiles might deploy the DataDog agent, `cert-manager` controller, `nginx-ingress` controller, etc. By convention, we store these types of components in the `components/helmfile/` directory within the infrastructure repository.
+
+3. [Packer](/components/packer): These build machine images (AMIs, VM images, container images) using HashiCorp Packer. By convention, we store Packer components in the `components/packer/` directory.
+
+4. [Ansible](/components/ansible): These run Ansible playbooks for configuration management and infrastructure automation. Atmos passes stack variables to playbooks via `--extra-vars`. By convention, we store Ansible components in the `components/ansible/` directory.
 
 ## Terraform Components
 

@@ -46,6 +46,8 @@ const (
 	ColumnNameManifest = "Manifest"
 	// ColumnNameFolder is the column name for folder.
 	ColumnNameFolder = "Folder"
+	// ColumnNameTags is the column name for tags.
+	ColumnNameTags = "Tags"
 	// TemplateKeyComponent is the template key for component name.
 	TemplateKeyComponent = "atmos_component"
 	// TemplateKeyVendorType is the template key for vendor type.
@@ -54,6 +56,8 @@ const (
 	TemplateKeyVendorFile = "atmos_vendor_file"
 	// TemplateKeyVendorTarget is the template key for vendor target.
 	TemplateKeyVendorTarget = "atmos_vendor_target"
+	// TemplateKeyVendorTags is the template key for vendor tags.
+	TemplateKeyVendorTags = "atmos_vendor_tags"
 	// MaxManifestSearchDepth is the maximum directory depth to search for component manifests.
 	MaxManifestSearchDepth = 10
 )
@@ -162,6 +166,7 @@ func getVendorColumns(atmosConfig *schema.AtmosConfiguration) []schema.ListColum
 		columns = []schema.ListColumnConfig{
 			{Name: ColumnNameComponent, Value: "{{ .atmos_component }}"},
 			{Name: ColumnNameType, Value: "{{ .atmos_vendor_type }}"},
+			{Name: ColumnNameTags, Value: "{{ .atmos_vendor_tags }}"},
 			{Name: ColumnNameManifest, Value: "{{ .atmos_vendor_file }}"},
 			{Name: ColumnNameFolder, Value: "{{ .atmos_vendor_target }}"},
 		}
@@ -539,8 +544,14 @@ func processVendorManifest(path string) []extract.VendorInfo {
 				relativeManifestPath = filepath.Base(path)
 			}
 
+			// Use the target's version if set, otherwise fall back to the source-level version.
+			effectiveVersion := source.Version
+			if target.Version != "" {
+				effectiveVersion = target.Version
+			}
+
 			// Format the folder path.
-			formattedFolder := formatTargetFolder(*target, source.Component, source.Version)
+			formattedFolder := formatTargetFolder(target.Path, source.Component, effectiveVersion)
 
 			// Add to vendor infos.
 			vendorInfos = append(vendorInfos, extract.VendorInfo{
@@ -548,6 +559,7 @@ func processVendorManifest(path string) []extract.VendorInfo {
 				Type:      extract.VendorTypeVendor,
 				Manifest:  relativeManifestPath,
 				Folder:    formattedFolder,
+				Tags:      source.Tags,
 			})
 		}
 	}

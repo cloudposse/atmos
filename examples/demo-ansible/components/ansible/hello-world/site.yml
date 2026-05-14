@@ -1,0 +1,9 @@
+---
+- name: Hello World
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  tasks:
+    - name: Say hello
+      ansible.builtin.debug:
+        msg: "Hello from {{ app_name }} (version {{ app_version }}) on port {{ app_port }}"

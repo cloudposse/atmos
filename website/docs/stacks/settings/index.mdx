@@ -43,7 +43,7 @@ settings:
 
 ### Component-Type Level
 
-Settings defined under `terraform`, `helmfile`, or `packer` apply to all components of that type:
+Settings defined under `terraform`, `helmfile`, `packer`, or `ansible` apply to all components of that type:
 
 ```yaml
 # stacks/orgs/acme/plat/prod/_defaults.yaml
@@ -78,7 +78,7 @@ components:
 Settings are deep-merged from the most general to the most specific level:
 
 1. **Global `settings:`** (applies to all components)
-2. **Component-type `terraform.settings:` / `helmfile.settings:` / `packer.settings:`** (applies to all components of that type)
+2. **Component-type `terraform.settings:` / `helmfile.settings:` / `packer.settings:` / `ansible.settings:`** (applies to all components of that type)
 3. **Component `components.terraform.<name>.settings`** (applies to a specific component)
 
 Maps are recursively merged, and lists are replaced (not appended).
@@ -146,19 +146,25 @@ settings:
       policy_path: "policies/vpc.rego"
 ```
 
-### Component Dependencies
+### Component Dependencies (Legacy)
 
-Define dependencies between components using `depends_on`:
+Define dependencies between components using the legacy `depends_on` format:
 
 ```yaml
 settings:
   depends_on:
-    - component: vpc
-    - component: security-groups
+    1:
+      component: vpc
+    2:
+      component: security-groups
       namespace: "{{ .namespace }}"
 ```
 
-For detailed dependency configuration, see [depends_on](/stacks/settings/depends_on).
+:::tip Recommended
+Use the new [`dependencies.components`](/stacks/dependencies/components) format instead.
+:::
+
+For legacy dependency configuration, see [depends_on](/stacks/settings/depends_on).
 
 ## Example: Multi-Level Settings
 
@@ -257,7 +263,7 @@ settings:
 - [Variables (vars)](/stacks/vars)
 - [Locals](/stacks/locals)
 - [Environment Variables (env)](/stacks/env)
-- [depends_on](/stacks/settings/depends_on)
+- [Component Dependencies](/stacks/dependencies/components)
 - [Imports](/stacks/imports)
 - [Inheritance](/howto/inheritance)
 - [Spacelift Integration](/cli/configuration/integrations/spacelift)

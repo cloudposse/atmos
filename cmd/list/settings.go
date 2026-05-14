@@ -115,9 +115,9 @@ func setupSettingsOptions(opts *SettingsOptions, componentFilter string) *l.Filt
 // displayNoSettingsFoundMessage displays an appropriate message when no settings are found.
 func displayNoSettingsFoundMessage(componentFilter string) {
 	if componentFilter != "" {
-		_ = ui.Info("No settings found for component: " + componentFilter)
+		ui.Info("No settings found for component: " + componentFilter)
 	} else {
-		_ = ui.Info("No settings found")
+		ui.Info("No settings found")
 	}
 }
 

@@ -10,14 +10,14 @@ import Intro from '@site/src/components/Intro'
 import File from '@site/src/components/File'
 
 <Intro>
-Components are the building blocks of your infrastructure. They are opinionated, reusable units of infrastructure-as-code that solve specific problems—Terraform root modules, Helmfiles, or Packer templates.
+Components are the building blocks of your infrastructure. They are opinionated, reusable units of infrastructure-as-code that solve specific problems—Terraform root modules, Helmfiles, Packer templates, or Ansible playbooks.
 </Intro>
 
 ## What are Components?
 
 In Atmos, a **component** consists of two parts:
 
-1. **Implementation** — The infrastructure code itself (a Terraform root module, Helmfile, or Packer template)
+1. **Implementation** — The infrastructure code itself (a Terraform root module, Helmfile, Packer template, or Ansible playbook)
 2. **Configuration** — The settings that customize how the component is deployed in each environment
 
 This separation of concerns is fundamental to Atmos. You write the implementation once, then configure it differently for each environment through [stacks](/stacks).
@@ -102,13 +102,14 @@ This separation allows you to:
 
 ## Component Types
 
-Atmos natively supports three component types:
+Atmos natively supports four component types:
 
 | Type | Implementation | Description |
 |------|----------------|-------------|
 | **[Terraform/OpenTofu](/components/terraform)** | Terraform root modules | Provision cloud infrastructure |
 | **[Helmfile](/components/helmfile)** | Helmfile configurations | Deploy Helm charts to Kubernetes |
 | **[Packer](/components/packer)** | Packer templates | Build machine images |
+| **[Ansible](/components/ansible)** | Ansible playbooks | Configuration management and automation |
 
 Each type has its own configuration schema, but they share common patterns for `metadata` and `settings`.
 
@@ -126,8 +127,10 @@ components/
 ├── helmfile/            # Helmfile configurations
 │   ├── nginx-ingress/
 │   └── cert-manager/
-└── packer/              # Packer templates
-    └── ubuntu-base/
+├── packer/              # Packer templates
+│   └── ubuntu-base/
+└── ansible/             # Ansible playbooks
+    └── webserver/
 ```
 
 :::tip
@@ -190,3 +193,4 @@ For more powerful filtering options, consider [describing stacks](/describe/stac
 - [Terraform Components](/components/terraform) — Terraform root modules
 - [Helmfile Components](/components/helmfile) — Helmfile configurations
 - [Packer Components](/components/packer) — Packer templates
+- [Ansible Components](/components/ansible) — Ansible playbooks

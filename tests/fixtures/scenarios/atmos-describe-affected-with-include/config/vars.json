@@ -1,0 +1,5 @@
+{
+  "app_name": "my-app",
+  "enabled": true,
+  "replicas": 3
+}

@@ -1,0 +1,29 @@
+**Notice:** Telemetry Enabled - Atmos now collects anonymous telemetry regarding usage. This information is used to shape the Atmos roadmap and prioritize features. You can learn more, including how to opt out if you'd prefer not to participate in this anonymous program, by visiting: https://atmos.tools/cli/telemetry
+🧪 toolchain is an experimental feature. Learn more https://atmos.tools/experimental
+ℹ Found 20 tools matching terraform:
+
+      TOOL                                          TYPE                REGISTRY        
+────────────────────────────────────────────────────────────────────────────────────────
+       terraform-docs/terraform-docs                 github_release      aqua-public      
+      hashicorp/terraform                           http                aqua-public       
+      plumber-cd/terraform-backend-git              github_release      aqua-public       
+      sylwit/terraform-cleaner                      github_release      aqua-public       
+      hashicorp/terraform-config-inspect            go_install          aqua-public       
+      pcasteran/terraform-graph-beautifier          github_release      aqua-public       
+      reproio/terraform-j2md                        github_release      aqua-public       
+      hashicorp/terraform-ls                        http                aqua-public       
+      juliosueiras/terraform-lsp                    github_release      aqua-public       
+      hashicorp/terraform-mcp-server                go_install          aqua-public       
+      keilerkonzept/terraform-module-versions       github_release      aqua-public       
+      hashicorp/terraform-plugin-docs               github_release      aqua-public       
+      thazelart/terraform-validator                 github_release      aqua-public       
+      GoogleCloudPlatform/terraformer               github_release      aqua-public       
+      GoogleCloudPlatform/terraformer               github_release      aqua-public       
+      hrmsk66/terraformify                          github_release      aqua-public       
+      cloudflare/cf-terraforming                    github_release      aqua-public       
+      flosell/iam-policy-json-to-terraform          github_release      aqua-public       
+      kreuzwerker/m1-terraform-provider-helper      github_release      aqua-public       
+      terraform-linters/tflint                      github_release      aqua-public       
+
+💡 Use atmos toolchain info <tool> for details
+💡 Use atmos toolchain install <tool>@<version> to install

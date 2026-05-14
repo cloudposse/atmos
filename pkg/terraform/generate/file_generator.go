@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"text/template"
 
@@ -25,12 +26,24 @@ const filePermissions = 0o644
 
 // File extension constants for serialization format detection.
 const (
-	ExtJSON = ".json"
-	ExtYAML = ".yaml"
-	ExtYML  = ".yml"
-	ExtTF   = ".tf"
-	ExtHCL  = ".hcl"
+	ExtJSON   = ".json"
+	ExtYAML   = ".yaml"
+	ExtYML    = ".yml"
+	ExtTF     = ".tf"
+	ExtHCL    = ".hcl"
+	ExtTFVars = ".tfvars"
 )
+
+// labeledBlockTypes defines Terraform block types that require labels.
+// The value indicates the number of labels required.
+var labeledBlockTypes = map[string]int{
+	"variable": 1, // variable "name" {}.
+	"output":   1, // output "name" {}.
+	"provider": 1, // provider "aws" {}.
+	"module":   1, // module "name" {}.
+	"resource": 2, // resource "type" "name" {}.
+	"data":     2, // data "type" "name" {}.
+}
 
 // GenerateConfig contains configuration for file generation.
 type GenerateConfig struct {
@@ -92,7 +105,77 @@ func GenerateFiles(
 		results = append(results, result)
 	}
 
+	// Emit summary (skip for dry-run which shows individual files).
+	if !config.DryRun {
+		emitSummary(results, config.Clean, componentDir)
+	}
+
 	return results, nil
+}
+
+// emitSummary outputs the results of file generation/clean operation.
+// Shows individual files that changed, plus a summary line.
+func emitSummary(results []GenerateResult, isClean bool, componentDir string) { //nolint:revive,cyclop
+	var createdFiles, updatedFiles, deletedFiles []string
+	var unchanged, errors int
+
+	for _, r := range results {
+		if r.Error != nil { //nolint:nestif,gocritic
+			errors++
+		} else if r.Deleted {
+			deletedFiles = append(deletedFiles, r.Filename)
+		} else if r.Skipped {
+			unchanged++
+		} else if r.Created {
+			createdFiles = append(createdFiles, r.Filename)
+		} else {
+			updatedFiles = append(updatedFiles, r.Filename)
+		}
+	}
+
+	// No output if nothing changed (all unchanged or skipped).
+	if len(createdFiles) == 0 && len(updatedFiles) == 0 && len(deletedFiles) == 0 && errors == 0 {
+		return
+	}
+
+	relDir := relativePath(componentDir)
+
+	// Show individual files that changed.
+	for _, f := range createdFiles {
+		ui.Successf("Created `%s`", filepath.Join(relDir, f))
+	}
+	for _, f := range updatedFiles {
+		ui.Successf("Updated `%s`", filepath.Join(relDir, f))
+	}
+	for _, f := range deletedFiles {
+		ui.Successf("Deleted `%s`", filepath.Join(relDir, f))
+	}
+
+	// Build summary parts, omitting any zero counts.
+	var parts []string
+	if len(createdFiles) > 0 {
+		parts = append(parts, fmt.Sprintf("%d created", len(createdFiles)))
+	}
+	if len(updatedFiles) > 0 {
+		parts = append(parts, fmt.Sprintf("%d updated", len(updatedFiles)))
+	}
+	if unchanged > 0 {
+		parts = append(parts, fmt.Sprintf("%d unchanged", unchanged))
+	}
+	if len(deletedFiles) > 0 {
+		parts = append(parts, fmt.Sprintf("%d deleted", len(deletedFiles)))
+	}
+	if errors > 0 {
+		parts = append(parts, fmt.Sprintf("%d errors", errors))
+	}
+
+	// Show summary line.
+	summary := strings.Join(parts, ", ")
+	if isClean {
+		ui.Successf("Cleaned `%s` (%s)", relDir, summary)
+	} else {
+		ui.Successf("Generated `%s` (%s)", relDir, summary)
+	}
 }
 
 // fileContext holds context for file generation operations.
@@ -104,11 +187,25 @@ type fileContext struct {
 	dryRun          bool
 }
 
+// relativePath returns a relative path from the current working directory.
+// Falls back to the absolute path if relative path computation fails.
+func relativePath(absPath string) string {
+	cwd, err := os.Getwd()
+	if err != nil {
+		return absPath
+	}
+	relPath, err := filepath.Rel(cwd, absPath)
+	if err != nil {
+		return absPath
+	}
+	return relPath
+}
+
 // processCleanFile handles file deletion in clean mode.
 func processCleanFile(result *GenerateResult, filePath string, dryRun bool) {
 	if dryRun {
 		result.Skipped = true
-		_ = ui.Writef("Would delete: %s\n", filePath)
+		ui.Writef("Would delete: %s\n", relativePath(filePath))
 		return
 	}
 
@@ -122,7 +219,7 @@ func processCleanFile(result *GenerateResult, filePath string, dryRun bool) {
 	}
 
 	result.Deleted = true
-	_ = ui.Writef("Deleted: %s\n", filePath)
+	ui.Writef("Deleted: %s\n", relativePath(filePath))
 }
 
 // processGenerateFile handles file generation in generate mode.
@@ -135,24 +232,40 @@ func processGenerateFile(result *GenerateResult, ctx fileContext) {
 
 	if ctx.dryRun {
 		result.Skipped = true
-		_ = ui.Writef("Would generate: %s\n", ctx.filePath)
+		ui.Writef("Would generate: %s\n", relativePath(ctx.filePath))
 		return
 	}
 
-	// Check if file exists.
-	_, statErr := os.Stat(ctx.filePath)
-	result.Created = os.IsNotExist(statErr)
+	// Check if file exists and compare content.
+	existingContent, readErr := os.ReadFile(ctx.filePath)
+	if readErr == nil { //nolint:gocritic
+		// File exists - check if content changed.
+		if bytes.Equal(existingContent, fileContent) {
+			// Content unchanged - skip silently.
+			result.Skipped = true
+			return
+		}
+		// Content changed - will update.
+		result.Created = false
+	} else if os.IsNotExist(readErr) {
+		// File doesn't exist - will create.
+		result.Created = true
+	} else {
+		// Other read error.
+		result.Error = fmt.Errorf("%w: failed to read existing %s: %w", errUtils.ErrFileOperation, ctx.filePath, readErr)
+		return
+	}
 
 	// Write file with standard permissions for config files.
 	if err := os.WriteFile(ctx.filePath, fileContent, filePermissions); err != nil {
-		result.Error = fmt.Errorf("failed to write %s: %w", ctx.filePath, err)
+		result.Error = fmt.Errorf("%w: failed to write %s: %w", errUtils.ErrFileOperation, ctx.filePath, err)
 		return
 	}
 
 	if result.Created {
-		_ = ui.Writef("Created: %s\n", ctx.filePath)
+		ui.Writef("Created: %s\n", relativePath(ctx.filePath))
 	} else {
-		_ = ui.Writef("Updated: %s\n", ctx.filePath)
+		ui.Writef("Updated: %s\n", relativePath(ctx.filePath))
 	}
 }
 
@@ -222,6 +335,8 @@ func serializeByExtension(filename string, content map[string]any, templateConte
 		return serializeToYAML(rendered)
 	case ExtHCL, ExtTF:
 		return serializeToHCL(rendered)
+	case ExtTFVars:
+		return serializeToTFVars(rendered)
 	default:
 		// Default to JSON for unknown extensions.
 		return json.MarshalIndent(rendered, "", "  ")
@@ -325,27 +440,148 @@ func serializeToHCL(content map[string]any) ([]byte, error) {
 	return f.Bytes(), nil
 }
 
-// writeHCLBlock writes content to an HCL body.
-// Note: All nested maps are treated as HCL blocks (e.g., locals {}, resource {}),
-// not as map attribute values. This matches typical Terraform configuration patterns
-// but may not be suitable for all HCL use cases.
+// sortedKeys returns the keys of a map in sorted order.
+// This ensures deterministic output for HCL serialization.
+func sortedKeys(m map[string]any) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return keys
+}
+
+// serializeToTFVars converts a map to .tfvars format.
+// Unlike .tf files, .tfvars only contains flat attribute assignments (no blocks).
+// Nested maps are written as HCL object syntax: { key = value }.
+func serializeToTFVars(content map[string]any) ([]byte, error) {
+	f := hclwrite.NewEmptyFile()
+	body := f.Body()
+
+	// Iterate in sorted order for deterministic output.
+	for _, key := range sortedKeys(content) {
+		value := content[key]
+		ctyVal, err := toCtyValue(value)
+		if err != nil {
+			return nil, fmt.Errorf("%w: error converting %s to tfvars: %w", errUtils.ErrInvalidConfig, key, err)
+		}
+		body.SetAttributeValue(key, ctyVal)
+	}
+
+	return f.Bytes(), nil
+}
+
+// knownBlockTypes lists HCL block types that should be rendered as blocks at the top level.
+// Maps with these keys become unlabeled blocks (e.g., locals {}, terraform {}).
+var knownBlockTypes = map[string]bool{
+	"locals":    true,
+	"terraform": true,
+}
+
+// writeHCLBlock writes content to an HCL body at the top level.
+// Handles both labeled blocks (variable, output, resource, data, etc.) and
+// unlabeled blocks (locals, terraform). Maps inside blocks are rendered as attributes.
 func writeHCLBlock(body *hclwrite.Body, content map[string]any) error {
-	for key, value := range content {
-		switch v := value.(type) {
-		case map[string]any:
-			// Create a block for nested maps (e.g., locals {}, provider {}).
+	// Iterate in sorted order for deterministic output.
+	for _, key := range sortedKeys(content) {
+		value := content[key]
+		mapValue, isMap := value.(map[string]any)
+		if !isMap {
+			// Non-map values are always attributes.
+			ctyVal, err := toCtyValue(value)
+			if err != nil {
+				return fmt.Errorf("%w: error converting %s to HCL: %w", errUtils.ErrInvalidConfig, key, err)
+			}
+			body.SetAttributeValue(key, ctyVal)
+			continue
+		}
+
+		// Handle map values based on block type.
+		labelCount, isLabeled := labeledBlockTypes[key]
+		switch {
+		case isLabeled:
+			// Write labeled blocks (e.g., variable "name" {}, resource "type" "name" {}).
+			if err := writeLabeledBlocks(body, key, mapValue, labelCount); err != nil {
+				return err
+			}
+		case knownBlockTypes[key]:
+			// Create an unlabeled block for known block types (e.g., locals {}, terraform {}).
+			// Inside these blocks, nested maps become attributes, not blocks.
 			block := body.AppendNewBlock(key, nil)
-			if err := writeHCLBlock(block.Body(), v); err != nil {
+			if err := writeBlockBody(block.Body(), mapValue); err != nil {
 				return err
 			}
 		default:
-			// Convert value to cty and set as attribute.
-			ctyVal, err := toCtyValue(value)
+			// Unknown map at top level - treat as attribute value.
+			ctyVal, err := toCtyValue(mapValue)
 			if err != nil {
-				return fmt.Errorf("error converting %s to HCL: %w", key, err)
+				return fmt.Errorf("%w: error converting %s to HCL: %w", errUtils.ErrInvalidConfig, key, err)
 			}
 			body.SetAttributeValue(key, ctyVal)
 		}
+	}
+	return nil
+}
+
+// writeLabeledBlocks writes HCL blocks that require labels.
+// For single-label types (variable, output, module, provider).
+//
+//	Input: {"app_name": {"type": "string"}}.
+//	Output: variable "app_name" { type = "string" }.
+//
+// For double-label types (resource, data).
+//
+//	Input: {"aws_instance": {"my_instance": {"ami": "ami-123"}}}.
+//	Output: resource "aws_instance" "my_instance" { ami = "ami-123" }.
+func writeLabeledBlocks(body *hclwrite.Body, blockType string, content map[string]any, labelCount int) error {
+	// Iterate in sorted order for deterministic output.
+	for _, firstLabel := range sortedKeys(content) {
+		firstValue := content[firstLabel]
+		firstMap, ok := firstValue.(map[string]any)
+		if !ok {
+			return fmt.Errorf("%w: labeled block %s %q expects a map, got %T", errUtils.ErrInvalidConfig, blockType, firstLabel, firstValue)
+		}
+
+		switch labelCount {
+		case 1:
+			// Single label: variable "name" {}, output "name" {}, etc.
+			block := body.AppendNewBlock(blockType, []string{firstLabel})
+			if err := writeBlockBody(block.Body(), firstMap); err != nil {
+				return err
+			}
+		case 2:
+			// Double label: resource "type" "name" {}, data "type" "name" {}.
+			// Iterate in sorted order for deterministic output.
+			for _, secondLabel := range sortedKeys(firstMap) {
+				secondValue := firstMap[secondLabel]
+				secondMap, ok := secondValue.(map[string]any)
+				if !ok {
+					return fmt.Errorf("%w: labeled block %s %q %q expects a map, got %T", errUtils.ErrInvalidConfig, blockType, firstLabel, secondLabel, secondValue)
+				}
+				block := body.AppendNewBlock(blockType, []string{firstLabel, secondLabel})
+				if err := writeBlockBody(block.Body(), secondMap); err != nil {
+					return err
+				}
+			}
+		}
+	}
+	return nil
+}
+
+// writeBlockBody writes the body content of an HCL block.
+// All values including maps are written as attributes using toCtyValue.
+// This ensures maps like tags = { Name = "value" } render correctly with "=".
+func writeBlockBody(body *hclwrite.Body, content map[string]any) error {
+	// Iterate in sorted order for deterministic output.
+	for _, key := range sortedKeys(content) {
+		value := content[key]
+		// Convert all values to cty and set as attributes.
+		// Maps will be rendered as object values: key = { ... }.
+		ctyVal, err := toCtyValue(value)
+		if err != nil {
+			return fmt.Errorf("%w: error converting %s to HCL: %w", errUtils.ErrInvalidConfig, key, err)
+		}
+		body.SetAttributeValue(key, ctyVal)
 	}
 	return nil
 }

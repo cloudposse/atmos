@@ -65,7 +65,7 @@ func TestGetComponentOutputs_PanicWhenNoExecutor(t *testing.T) {
 	assert.PanicsWithValue(t,
 		"output.SetDefaultExecutor must be called before GetComponentOutputs",
 		func() {
-			_, _ = GetComponentOutputs(atmosConfig, "component", "stack", false)
+			_, _ = GetComponentOutputs(atmosConfig, "component", "stack", false, nil)
 		},
 	)
 }
@@ -130,7 +130,7 @@ func TestGetComponentOutputsWithExecutor(t *testing.T) {
 		Logs: schema.Logs{Level: "debug"},
 	}
 
-	outputs, err := GetComponentOutputsWithExecutor(exec, atmosConfig, "component", "stack", false)
+	outputs, err := GetComponentOutputsWithExecutor(exec, atmosConfig, "component", "stack", false, nil)
 	require.NoError(t, err)
 	assert.Empty(t, outputs)
 }

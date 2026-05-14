@@ -1,0 +1,38 @@
+---
+slug: artifactory-store-fix
+title: Artifactory Store Fix and Documentation Corrections
+authors: [osterman]
+tags: [bugfix, documentation]
+---
+
+Fixed an issue where retrieving values from Artifactory stores would fail when using nested paths, and corrected store documentation to accurately reflect supported backends.
+
+<!--truncate-->
+
+## What Changed
+
+### Artifactory Store Fix
+
+When using Artifactory as a store backend with nested directory structures, retrieving values would fail with a "file not found" error even though the data existed. This happened because files were being downloaded to unexpected locations within temporary directories.
+
+For example, storing a value at `dev/myapp/private_ip` and then trying to retrieve it would fail because Atmos was looking for the file in the wrong place.
+
+This is now fixed. Retrieving values from Artifactory works correctly regardless of how deeply nested your paths are.
+
+### Documentation Corrections
+
+The store documentation had several issues that could cause confusion:
+
+- **Wrong field names**: Examples showed `backend` and `config` instead of the correct `type` and `options`
+- **Wrong store type names**: Examples showed `aws/ssm` instead of the correct `aws-ssm-parameter-store`
+- **Non-existent backends**: Vault and AWS Secrets Manager were documented but aren't actually implemented
+- **Missing backends**: Azure Key Vault and Google Secret Manager were implemented but not documented
+- **Artifactory setup**: Added guidance on using Generic repository type in JFrog Artifactory
+
+## Why This Matters
+
+If you've been struggling to get Artifactory working as a store backend, especially with nested paths, this fix should resolve those issues. And if you've been confused by store configuration examples that didn't work, the documentation now reflects the actual supported backends and correct configuration format.
+
+## Get Involved
+
+Have questions or feedback? Join us on [Slack](https://slack.cloudposse.com/) or open an issue on [GitHub](https://github.com/cloudposse/atmos/issues).

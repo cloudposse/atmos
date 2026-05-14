@@ -55,6 +55,9 @@ const (
 
 	// TagAwsRegion returns the AWS region.
 	TagAwsRegion = "aws.region"
+
+	// TagAwsOrganizationID returns the AWS Organization ID.
+	TagAwsOrganizationID = "aws.organization_id"
 )
 
 // YAMLTagPrefix is the prefix used for YAML custom tags.
@@ -81,6 +84,7 @@ func AllTags() []string {
 		TagAwsCallerIdentityArn,
 		TagAwsCallerIdentityUserID,
 		TagAwsRegion,
+		TagAwsOrganizationID,
 	}
 }
 
@@ -102,6 +106,7 @@ var tagsMap = map[string]bool{
 	TagAwsCallerIdentityArn:    true,
 	TagAwsCallerIdentityUserID: true,
 	TagAwsRegion:               true,
+	TagAwsOrganizationID:       true,
 }
 
 // IsValidTag checks if the given tag name is registered.

@@ -1,0 +1,73 @@
+{
+  "format_version": "1.2",
+  "terraform_version": "1.5.0",
+  "planned_values": {
+    "root_module": {
+      "resources": [
+        {
+          "address": "aws_s3_bucket.main",
+          "mode": "managed",
+          "type": "aws_s3_bucket",
+          "name": "main",
+          "provider_name": "registry.terraform.io/hashicorp/aws",
+          "schema_version": 0,
+          "values": {
+            "bucket": "my-bucket"
+          }
+        }
+      ]
+    },
+    "outputs": {
+      "bucket_arn": {
+        "sensitive": false,
+        "value": "arn:aws:s3:::my-bucket",
+        "type": "string"
+      },
+      "bucket_name": {
+        "sensitive": false,
+        "value": "my-bucket",
+        "type": "string"
+      }
+    }
+  },
+  "resource_changes": [
+    {
+      "address": "aws_s3_bucket.main",
+      "mode": "managed",
+      "type": "aws_s3_bucket",
+      "name": "main",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": ["create"],
+        "before": null,
+        "after": {
+          "bucket": "my-bucket"
+        },
+        "after_unknown": {
+          "id": true,
+          "arn": true
+        },
+        "before_sensitive": false,
+        "after_sensitive": false
+      }
+    }
+  ],
+  "output_changes": {
+    "bucket_arn": {
+      "actions": ["create"],
+      "before": null,
+      "after": "arn:aws:s3:::my-bucket",
+      "after_unknown": false,
+      "before_sensitive": false,
+      "after_sensitive": false
+    },
+    "bucket_name": {
+      "actions": ["create"],
+      "before": null,
+      "after": "my-bucket",
+      "after_unknown": false,
+      "before_sensitive": false,
+      "after_sensitive": false
+    }
+  }
+}

@@ -1,0 +1,3 @@
+# Ignore vendored source directories
+components/
+.workdir/

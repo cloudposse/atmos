@@ -1188,7 +1188,7 @@ If a component folder is used by multiple component instances in a stack (e.g., 
 - **Research Document:** `/Users/erik/conductor/atmos/COMPONENT_RESOLUTION_RESEARCH.md`
 - **Command Registry Pattern:** `docs/prd/command-registry-pattern.md`
 - **Error Handling Strategy:** `docs/prd/error-handling-strategy.md`
-- **Testing Strategy:** `docs/prd/testing-strategy.md`
+- **Testing Strategy:** `docs/prd/testability-refactoring-strategy.md`
 - **Component Path Utils:** `pkg/utils/component_path_utils.go`
 - **CLI Utils:** `internal/exec/cli_utils.go`
 - **Process Stacks:** `internal/exec/utils.go`

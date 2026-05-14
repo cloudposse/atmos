@@ -1,0 +1,59 @@
+# yaml-language-server: $schema=https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
+
+vars:
+  stage: dev
+
+components:
+  terraform:
+    # Test 'terraform apply --all' with dependencies
+    # Expected execution order: vpc -> database -> cache -> application
+
+    vpc:
+      metadata:
+        component: mock
+      vars:
+        cidr: "10.0.0.0/16"
+        name: "dev-vpc"
+        tags:
+          environment: dev
+          layer: network
+
+    database:
+      metadata:
+        component: mock
+      vars:
+        instance_class: "db.t3.medium"
+        engine: "postgres"
+        tags:
+          environment: dev
+          layer: data
+      settings:
+        depends_on:
+          - component: vpc
+
+    cache:
+      metadata:
+        component: mock
+      vars:
+        node_type: "cache.t3.micro"
+        engine: "redis"
+        tags:
+          environment: dev
+          layer: data
+      settings:
+        depends_on:
+          - component: vpc
+
+    application:
+      metadata:
+        component: mock
+      vars:
+        instance_type: "t3.small"
+        desired_count: 2
+        tags:
+          environment: dev
+          layer: application
+      settings:
+        depends_on:
+          - component: database
+          - component: cache

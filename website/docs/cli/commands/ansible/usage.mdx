@@ -1,0 +1,186 @@
+---
+title: atmos ansible
+sidebar_label: ansible
+sidebar_class_name: command
+---
+import Screengrab from '@site/src/components/Screengrab'
+import DocCardList from '@theme/DocCardList'
+import File from '@site/src/components/File'
+import Terminal from '@site/src/components/Terminal'
+import Intro from '@site/src/components/Intro'
+import ActionCard from '@site/src/components/ActionCard'
+
+<Intro>
+Use these subcommands to interact with [Ansible](https://docs.ansible.com/ansible/latest/index.html)
+for automating infrastructure configuration, application deployment, and orchestration.
+</Intro>
+
+<Screengrab title="atmos ansible --help" slug="atmos-ansible--help" />
+
+## Usage
+
+<Terminal>
+```shell
+# For playbook subcommand (requires component and stack)
+atmos ansible playbook <atmos-component> --stack <atmos-stack> [atmos-flags] -- [ansible-options]
+
+# For version subcommand (no arguments required)
+atmos ansible version
+```
+</Terminal>
+
+:::tip
+For more details on Ansible commands and options, refer to the [Ansible Documentation](https://docs.ansible.com/ansible/latest/cli/index.html).
+:::
+
+### Path-Based Component Resolution
+
+Atmos supports using filesystem paths instead of component names for convenience. This allows you to navigate to a component directory and use `.` to reference it:
+
+<Terminal>
+```shell
+# Navigate to component directory
+cd components/ansible/webserver
+
+# Use . to reference current directory
+atmos ansible playbook . -s prod
+```
+</Terminal>
+
+This automatically resolves the path to the component name configured in your stack, eliminating the need to remember exact component names.
+
+**Supported path formats:**
+- `.` - Current directory
+- `./component` - Relative path from current directory
+- `../other-component` - Relative path to sibling directory
+- `/absolute/path/to/component` - Absolute path
+
+**Requirements:**
+- Must be inside a component directory under the configured base path
+- Must specify `--stack` flag
+- Component must exist in the specified stack configuration
+- **The component path must resolve to a unique component name** - If multiple components in the stack reference the same component path, you must use the unique component name instead of the path
+
+## Atmos Flags
+
+<dl>
+    <dt>`--stack` <em>(alias `-s`)</em></dt>
+    <dd>
+        Atmos stack.
+    </dd>
+
+    <dt>`--playbook` <em>(alias `-p`)</em><em>(optional)</em></dt>
+    <dd>
+        Ansible playbook file to execute. Defaults to the playbook specified in `settings.ansible.playbook`
+        in the stack manifest.
+
+        The command line flag takes precedence over the stack manifest setting.
+    </dd>
+
+    <dt>`--inventory` <em>(alias `-i`)</em><em>(optional)</em></dt>
+    <dd>
+        Ansible inventory source. Can be a file path, directory, or dynamic inventory script.
+
+        Can also be specified via `settings.ansible.inventory` in the stack manifest.
+        The command line flag takes precedence.
+    </dd>
+
+    <dt>`--dry-run`<em>(optional)</em></dt>
+    <dd>
+        Perform a dry run without making actual changes. Displays the commands that would be executed.
+    </dd>
+</dl>
+
+## Examples
+
+### Component Name Examples
+
+<Terminal>
+```shell
+atmos ansible version
+
+atmos ansible playbook webserver --stack prod
+atmos ansible playbook webserver -s prod --playbook site.yml
+atmos ansible playbook webserver -s nonprod -p deploy.yml -i hosts.ini
+```
+</Terminal>
+
+### Path-Based Examples
+
+<Terminal>
+```shell
+# Navigate to component directory and use current directory
+cd components/ansible/webserver
+atmos ansible playbook . -s prod
+
+# Use relative path from components/ansible directory
+cd components/ansible
+atmos ansible playbook ./webserver -s prod
+
+# Use from project root with relative path
+atmos ansible playbook components/ansible/webserver -s prod
+
+# Combine with other flags
+cd components/ansible/webserver
+atmos ansible playbook . -s prod --playbook deploy.yml --inventory production
+```
+</Terminal>
+
+### Passing Additional Ansible Options
+
+Any flags after `--` are passed directly to the underlying Ansible command:
+
+<Terminal>
+```shell
+# Run playbook in check mode (dry run)
+atmos ansible playbook webserver -s prod -- --check
+
+# Run with verbose output
+atmos ansible playbook webserver -s prod -- -vvv
+
+# Limit to specific hosts
+atmos ansible playbook webserver -s prod -- --limit web01
+
+# Run with specific tags
+atmos ansible playbook webserver -s prod -- --tags "deploy,config"
+```
+</Terminal>
+
+## Arguments
+
+<dl>
+  <dt>`atmos-component` <em>(required for playbook)</em></dt>
+  <dd>
+    Atmos component name or filesystem path.<br/><br/>
+    Supports both:
+    <ul>
+      <li>Component names: <code>webserver</code>, <code>database/postgres</code></li>
+      <li>Filesystem paths: <code>.</code> (current directory), <code>./webserver</code>, <code>components/ansible/webserver</code></li>
+    </ul>
+    When using paths, Atmos automatically resolves the path to the component name based on your stack configuration.
+    See <a href="#path-based-component-resolution">Path-Based Component Resolution</a> above.
+  </dd>
+</dl>
+
+## Stack Configuration
+
+Configure Ansible components in your stack manifests:
+
+```yaml
+components:
+  ansible:
+    webserver:
+      vars:
+        app_name: myapp
+        app_port: 8080
+      settings:
+        ansible:
+          playbook: site.yml
+          inventory: inventory/production
+```
+
+Variables defined in `vars` are passed to Ansible as extra variables via a generated YAML file.
+
+## Subcommands
+
+<DocCardList />

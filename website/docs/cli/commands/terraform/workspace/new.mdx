@@ -1,0 +1,120 @@
+---
+title: atmos terraform workspace new
+sidebar_label: workspace new
+sidebar_class_name: command
+id: new
+description: Create a new Terraform workspace.
+---
+import Intro from '@site/src/components/Intro'
+import Screengrab from '@site/src/components/Screengrab'
+
+<Intro>
+Use this command to create a new Terraform workspace for an Atmos component in a stack.
+</Intro>
+
+<Screengrab title="atmos terraform workspace new --help" slug="atmos-terraform-workspace-new--help" />
+
+## Usage
+
+Execute the `terraform workspace new` command like this:
+
+```shell
+atmos terraform workspace new <component> -s <stack> [workspace-name] [options]
+```
+
+This command creates a new Terraform workspace. If no workspace name is provided, Atmos calculates the appropriate workspace name from the component's context variables and stack configuration.
+
+:::tip
+Run `atmos terraform workspace new --help` to see all the available options
+:::
+
+## Examples
+
+```shell
+# Create a new workspace (auto-calculated from stack context)
+atmos terraform workspace new vpc -s dev
+
+# Create a workspace with a specific name
+atmos terraform workspace new vpc -s dev my-workspace
+```
+
+## Arguments
+
+<dl>
+    <dt>`component` <em>(required)</em></dt>
+    <dd>
+        Atmos terraform component.
+    </dd>
+
+    <dt>`workspace-name` <em>(optional)</em></dt>
+    <dd>
+        The name of the workspace to create. If not provided, Atmos calculates the workspace name from the stack context.
+    </dd>
+</dl>
+
+## Flags
+
+<dl>
+    <dt>`--stack` <em>(alias `-s`)</em> <em>(required)</em></dt>
+    <dd>
+        Atmos stack.
+    </dd>
+
+    <dt>`--dry-run` <em>(optional)</em></dt>
+    <dd>
+        Show what would be executed without actually running the command.
+
+        ```shell
+        atmos terraform workspace new vpc -s dev --dry-run
+        ```
+    </dd>
+
+    <dt>`--skip-init` <em>(optional)</em></dt>
+    <dd>
+        Skip running `terraform init` before executing the command.
+
+        ```shell
+        atmos terraform workspace new vpc -s dev --skip-init
+        ```
+    </dd>
+</dl>
+
+## Native Terraform Flags
+
+The `atmos terraform workspace new` command supports native `terraform workspace new` flags. Pass them directly or use `--` to separate Atmos flags from Terraform flags.
+
+<dl>
+    <dt>`-lock=true`</dt>
+    <dd>
+        Lock the state file when locking is supported. Defaults to `true`.
+
+        ```shell
+        atmos terraform workspace new vpc -s dev -lock=false my-workspace
+        ```
+    </dd>
+
+    <dt>`-lock-timeout=DURATION`</dt>
+    <dd>
+        Duration to retry a state lock. Defaults to `0s`.
+
+        ```shell
+        atmos terraform workspace new vpc -s dev -lock-timeout=30s my-workspace
+        ```
+    </dd>
+
+    <dt>`-state=FILE`</dt>
+    <dd>
+        Path to a local state file to use for the new workspace's initial state.
+
+        ```shell
+        atmos terraform workspace new vpc -s dev -state=initial.tfstate my-workspace
+        ```
+    </dd>
+</dl>
+
+## See Also
+
+- [`atmos terraform workspace`](/cli/commands/terraform/workspace) - Workspace management overview
+- [`atmos terraform workspace list`](/cli/commands/terraform/workspace/list) - List workspaces
+- [`atmos terraform workspace select`](/cli/commands/terraform/workspace/select) - Select a workspace
+- [`atmos terraform workspace delete`](/cli/commands/terraform/workspace/delete) - Delete a workspace

@@ -133,23 +133,23 @@ To avoid conflicting quotes, wrap the entire YQ expression in single quotes whil
 
 ```yaml
 # Use single quotes around the expression to allow double quotes inside brackets
-access_key_id: !terraform.state security '.outputs.users["github-dependabot"].access_key_id'
+access_key_id: !terraform.state security '.users["github-dependabot"].access_key_id'
 ```
 
 Additional examples:
 
 ```yaml
 # Access map keys with special characters
-api_key: !terraform.state config '.outputs.api_keys["service-account-1"]'
+api_key: !terraform.state config '.api_keys["service-account-1"]'
 
 # Access nested maps with special characters in multiple levels
-endpoint: !terraform.state services '.outputs.endpoints["my-service"]["production"]'
+endpoint: !terraform.state services '.endpoints["my-service"]["production"]'
 
 # Combine with stack templating
-token: !terraform.state identity {{ .stack }} '.outputs.tokens["github-actions"]'
+token: !terraform.state identity {{ .stack }} '.tokens["github-actions"]'
 
 # Escape single quotes by doubling them when needed inside the expression
-app_name: !terraform.state config '.outputs.apps["app''s-name"].display_name'
+app_name: !terraform.state config '.apps["app''s-name"].display_name'
 ```
 
 **Quote escaping rules**
@@ -407,6 +407,63 @@ The YAML function `!terraform.state` is executed three times (once for each tag)
 After the first execution, Atmos caches the result in memory,
 and reuses it in the next two calls to the function. The caching makes the stack processing much faster.
 In a production environment where many components are used, the speedup can be significant.
+
+## Using `!terraform.state` with S3 SSE-C Encrypted State
+
+If your S3 backend uses [SSE-C (Server-Side Encryption with Customer-Provided Keys)](https://docs.aws.amazon.com/AmazonS3/latest/userguide/ServerSideEncryptionCustomerKeys.html),
+you need to provide the customer encryption key so that Atmos can decrypt the state file when reading it directly from S3.
+
+This follows the same configuration conventions as [OpenTofu](https://opentofu.org/docs/language/settings/backends/s3/#sse_customer_key)
+and [Terraform](https://developer.hashicorp.com/terraform/language/backend/s3#sse_customer_key).
+
+### Configuration
+
+Provide the SSE-C key using either the `sse_customer_key` backend attribute or the `AWS_SSE_CUSTOMER_KEY` environment variable.
+The key must be a base64-encoded 256-bit (32-byte) encryption key.
+
+<File title="stacks/orgs/acme/_defaults.yaml">
+```yaml
+terraform:
+  backend_type: s3
+  backend:
+    s3:
+      bucket: acme-ue1-root-tfstate
+      region: us-east-1
+      key: "terraform.tfstate"
+      encrypt: true
+      use_lockfile: true
+      sse_customer_key: "base64-encoded-32-byte-key"
+```
+</File>
+
+Alternatively, set the key via an environment variable to avoid storing it in stack configuration:
+
+```shell
+export AWS_SSE_CUSTOMER_KEY="base64-encoded-32-byte-key"
+```
+
+:::tip
+The backend attribute `sse_customer_key` takes precedence over the `AWS_SSE_CUSTOMER_KEY` environment variable.
+:::
+
+### Remote State Backend Override
+
+When using a separate `remote_state_backend` configuration for reading state (e.g., with a read-only role),
+the `sse_customer_key` can also be specified in the `remote_state_backend` section:
+
+```yaml
+terraform:
+  remote_state_backend_type: s3
+  remote_state_backend:
+    s3:
+      role_arn: "arn:aws:iam::xxxxxxxx:role/terraform-backend-read-only"
+      sse_customer_key: "base64-encoded-32-byte-key"
+```
+
+:::note
+SSE-C support only applies to the `!terraform.state` function, which reads state files directly from S3.
+The `!terraform.output` function is unaffected because it delegates to `terraform output`, which handles encryption internally.
+:::
 
 ## Using `!terraform.state` with GCS backend
 

@@ -1,0 +1,27 @@
+# yaml-language-server: $schema=https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
+
+vars:
+  stage: dev
+
+components:
+  terraform:
+    # LOCAL source - vendors from sibling directory
+    weather:
+      source:
+        uri: "../demo-library/weather"
+      provision:
+        workdir:
+          enabled: true
+      vars:
+        location: "San Francisco"
+
+    # REMOTE source - vendors from GitHub
+    ipinfo:
+      source:
+        uri: "github.com/cloudposse/atmos//examples/demo-library/ipinfo"
+        version: "main"
+      provision:
+        workdir:
+          enabled: true
+      vars:
+        ip_address: "8.8.8.8"

@@ -27,6 +27,7 @@ func TestAllTags(t *testing.T) {
 		TagAwsCallerIdentityArn,
 		TagAwsCallerIdentityUserID,
 		TagAwsRegion,
+		TagAwsOrganizationID,
 	}
 
 	assert.Equal(t, len(expectedTags), len(tags))
@@ -55,6 +56,7 @@ func TestIsValidTag(t *testing.T) {
 		TagAwsCallerIdentityArn,
 		TagAwsCallerIdentityUserID,
 		TagAwsRegion,
+		TagAwsOrganizationID,
 	}
 
 	for _, tag := range expectedTags {
@@ -86,6 +88,7 @@ func TestYAMLTag(t *testing.T) {
 		{TagAwsCallerIdentityArn, "!aws.caller_identity_arn"},
 		{TagAwsCallerIdentityUserID, "!aws.caller_identity_user_id"},
 		{TagAwsRegion, "!aws.region"},
+		{TagAwsOrganizationID, "!aws.organization_id"},
 		{"custom", "!custom"},
 		{"", "!"},
 	}
@@ -119,6 +122,7 @@ func TestFromYAMLTag(t *testing.T) {
 		{"!aws.caller_identity_arn", "aws.caller_identity_arn"},
 		{"!aws.caller_identity_user_id", "aws.caller_identity_user_id"},
 		{"!aws.region", "aws.region"},
+		{"!aws.organization_id", "aws.organization_id"},
 		{"!custom", "custom"},
 		// Without prefix - returns as-is.
 		{"env", "env"},
@@ -156,6 +160,7 @@ func TestTagConstants(t *testing.T) {
 	assert.Equal(t, "aws.caller_identity_arn", TagAwsCallerIdentityArn)
 	assert.Equal(t, "aws.caller_identity_user_id", TagAwsCallerIdentityUserID)
 	assert.Equal(t, "aws.region", TagAwsRegion)
+	assert.Equal(t, "aws.organization_id", TagAwsOrganizationID)
 }
 
 func TestYAMLTag_RoundTrip(t *testing.T) {

@@ -10,11 +10,20 @@ jobs:
     steps:
     - name: "Checkout source code at current commit"
       uses: actions/checkout@v4
+      with:
+        fetch-depth: 0  # Required for tj-actions/changed-files
+
+    - name: Check if CODEOWNERS changed
+      id: changed-files
+      uses: tj-actions/changed-files@v45
+      with:
+        files: .github/CODEOWNERS
 
     # Leave pinned at 0.7.1 until https://github.com/mszostok/codeowners-validator/issues/173 is resolved
     - uses: mszostok/codeowners-validator@v0.7.4
       # This condition verifies that the PR repo equals the Github Repo and it's NOT dependabot
-      if: ${{ (github.event.pull_request.head.repo.full_name == github.repository) && (github.actor != 'dependabot[bot]') }}
+      # Also runs on workflow_dispatch (manual trigger) or when CODEOWNERS file is changed
+      if: ${{ github.event_name == 'workflow_dispatch' || (steps.changed-files.outputs.any_changed == 'true' && (github.event.pull_request.head.repo.full_name == github.repository) && (github.actor != 'dependabot[bot]')) }}
       name: "Full check of CODEOWNERS"
       with:
         # For now, remove "files" check to allow CODEOWNERS to specify non-existent
@@ -26,8 +35,9 @@ jobs:
         github_access_token: "${{ secrets.REPO_ACCESS_TOKEN }}"
 
     - uses: mszostok/codeowners-validator@v0.7.4
-      # This condition verifies that the PR repo does NOT equal the Github Repo
-      if: github.event.pull_request.head.repo.full_name != github.repository
+      # This condition verifies that the PR repo does NOT equal the Github Repo (fork PR)
+      # Only runs when CODEOWNERS file is changed
+      if: ${{ steps.changed-files.outputs.any_changed == 'true' && github.event.pull_request.head.repo.full_name != github.repository }}
       name: "Syntax check of CODEOWNERS"
       with:
         checks: "syntax,duppatterns"

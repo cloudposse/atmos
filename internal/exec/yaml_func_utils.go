@@ -195,6 +195,9 @@ func processSimpleTags(
 	if input == u.AtmosYamlFuncAwsRegion && !skipFunc(skip, u.AtmosYamlFuncAwsRegion) {
 		return processTagAwsRegion(atmosConfig, input, stackInfo), true, nil
 	}
+	if input == u.AtmosYamlFuncAwsOrganizationID && !skipFunc(skip, u.AtmosYamlFuncAwsOrganizationID) {
+		return processTagAwsOrganizationID(atmosConfig, input, stackInfo), true, nil
+	}
 	return nil, false, nil
 }
 

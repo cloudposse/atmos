@@ -185,3 +185,55 @@ func TestBuildComponentPath(t *testing.T) {
 		})
 	}
 }
+
+func TestBuildComponentPathWithFallback(t *testing.T) {
+	atmosConfig := schema.AtmosConfiguration{
+		BasePath: string(filepath.Separator) + "base",
+		Components: schema.Components{
+			Terraform: schema.Terraform{
+				BasePath: "terraform",
+			},
+		},
+	}
+
+	tests := []struct {
+		name             string
+		componentSection map[string]any
+		fallback         []string
+		expected         string
+	}{
+		{
+			name: "uses fallback when component field is missing",
+			componentSection: map[string]any{
+				"source": map[string]any{"uri": "github.com/example/vpc"},
+				"vars":   map[string]any{"name": "test"},
+			},
+			fallback: []string{"vpc-sourced"},
+			expected: string(filepath.Separator) + filepath.Join("base", "terraform", "vpc-sourced"),
+		},
+		{
+			name: "explicit component field takes precedence over fallback",
+			componentSection: map[string]any{
+				"component": "vpc",
+				"vars":      map[string]any{"name": "test"},
+			},
+			fallback: []string{"vpc-production"},
+			expected: string(filepath.Separator) + filepath.Join("base", "terraform", "vpc"),
+		},
+		{
+			name: "returns empty when no component field and no fallback",
+			componentSection: map[string]any{
+				"vars": map[string]any{"name": "test"},
+			},
+			fallback: nil,
+			expected: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := BuildComponentPath(&atmosConfig, &tt.componentSection, cfg.TerraformComponentType, tt.fallback...)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}

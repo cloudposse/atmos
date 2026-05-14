@@ -179,24 +179,24 @@ func TestExecuteProvisionCommand(t *testing.T) {
 	}
 }
 
-// TestDeleteCmd_RunE tests the delete command RunE function.
-func TestDeleteCmd_RunE(t *testing.T) {
+// TestExecuteDeleteCommandWithValues tests the delete command helper function.
+func TestExecuteDeleteCommandWithValues(t *testing.T) {
 	tests := []struct {
 		name          string
-		args          []string
-		viperValues   map[string]any
+		component     string
+		stack         string
+		identity      string
+		force         bool
 		setupMocks    func(*MockConfigInitializer, *MockProvisioner)
 		expectError   bool
 		expectedError error
 	}{
 		{
-			name: "successful delete with force",
-			args: []string{"vpc"},
-			viperValues: map[string]any{
-				"stack":    "dev",
-				"identity": "",
-				"force":    true,
-			},
+			name:      "successful delete with force",
+			component: "vpc",
+			stack:     "dev",
+			identity:  "",
+			force:     true,
 			setupMocks: func(mci *MockConfigInitializer, mp *MockProvisioner) {
 				mci.EXPECT().
 					InitConfigAndAuth("vpc", "dev", "").
@@ -208,13 +208,11 @@ func TestDeleteCmd_RunE(t *testing.T) {
 			expectError: false,
 		},
 		{
-			name: "delete without force flag",
-			args: []string{"vpc"},
-			viperValues: map[string]any{
-				"stack":    "dev",
-				"identity": "",
-				"force":    false,
-			},
+			name:      "delete without force flag",
+			component: "vpc",
+			stack:     "dev",
+			identity:  "",
+			force:     false,
 			setupMocks: func(mci *MockConfigInitializer, mp *MockProvisioner) {
 				mci.EXPECT().
 					InitConfigAndAuth("vpc", "dev", "").
@@ -226,25 +224,21 @@ func TestDeleteCmd_RunE(t *testing.T) {
 			expectError: false,
 		},
 		{
-			name: "missing stack flag",
-			args: []string{"vpc"},
-			viperValues: map[string]any{
-				"stack":    "",
-				"identity": "",
-				"force":    true,
-			},
+			name:          "missing stack",
+			component:     "vpc",
+			stack:         "",
+			identity:      "",
+			force:         true,
 			setupMocks:    func(*MockConfigInitializer, *MockProvisioner) {},
 			expectError:   true,
 			expectedError: errUtils.ErrRequiredFlagNotProvided,
 		},
 		{
-			name: "config init failure",
-			args: []string{"vpc"},
-			viperValues: map[string]any{
-				"stack":    "dev",
-				"identity": "",
-				"force":    true,
-			},
+			name:      "config init failure",
+			component: "vpc",
+			stack:     "dev",
+			identity:  "",
+			force:     true,
 			setupMocks: func(mci *MockConfigInitializer, mp *MockProvisioner) {
 				mci.EXPECT().
 					InitConfigAndAuth("vpc", "dev", "").
@@ -253,13 +247,11 @@ func TestDeleteCmd_RunE(t *testing.T) {
 			expectError: true,
 		},
 		{
-			name: "delete backend failure",
-			args: []string{"vpc"},
-			viperValues: map[string]any{
-				"stack":    "dev",
-				"identity": "",
-				"force":    true,
-			},
+			name:      "delete backend failure",
+			component: "vpc",
+			stack:     "dev",
+			identity:  "",
+			force:     true,
 			setupMocks: func(mci *MockConfigInitializer, mp *MockProvisioner) {
 				mci.EXPECT().
 					InitConfigAndAuth("vpc", "dev", "").
@@ -275,10 +267,9 @@ func TestDeleteCmd_RunE(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			mockConfigInit, mockProv := setupTestWithMocks(t)
-			setupViperForTest(t, tt.viperValues)
 			tt.setupMocks(mockConfigInit, mockProv)
 
-			err := deleteCmd.RunE(deleteCmd, tt.args)
+			err := executeDeleteCommandWithValues(tt.component, tt.stack, tt.identity, tt.force)
 
 			if tt.expectError {
 				assert.Error(t, err)
@@ -292,24 +283,24 @@ func TestDeleteCmd_RunE(t *testing.T) {
 	}
 }
 
-// TestDescribeCmd_RunE tests the describe command RunE function.
-func TestDescribeCmd_RunE(t *testing.T) {
+// TestExecuteDescribeCommandWithValues tests the describe command helper function.
+func TestExecuteDescribeCommandWithValues(t *testing.T) {
 	tests := []struct {
 		name          string
-		args          []string
-		viperValues   map[string]any
+		component     string
+		stack         string
+		identity      string
+		format        string
 		setupMocks    func(*MockConfigInitializer, *MockProvisioner)
 		expectError   bool
 		expectedError error
 	}{
 		{
-			name: "successful describe with yaml format",
-			args: []string{"vpc"},
-			viperValues: map[string]any{
-				"stack":    "dev",
-				"identity": "",
-				"format":   "yaml",
-			},
+			name:      "successful describe with yaml format",
+			component: "vpc",
+			stack:     "dev",
+			identity:  "",
+			format:    "yaml",
 			setupMocks: func(mci *MockConfigInitializer, mp *MockProvisioner) {
 				atmosConfig := &schema.AtmosConfiguration{}
 				mci.EXPECT().
@@ -322,13 +313,11 @@ func TestDescribeCmd_RunE(t *testing.T) {
 			expectError: false,
 		},
 		{
-			name: "successful describe with json format",
-			args: []string{"vpc"},
-			viperValues: map[string]any{
-				"stack":    "dev",
-				"identity": "",
-				"format":   "json",
-			},
+			name:      "successful describe with json format",
+			component: "vpc",
+			stack:     "dev",
+			identity:  "",
+			format:    "json",
 			setupMocks: func(mci *MockConfigInitializer, mp *MockProvisioner) {
 				atmosConfig := &schema.AtmosConfiguration{}
 				mci.EXPECT().
@@ -341,25 +330,21 @@ func TestDescribeCmd_RunE(t *testing.T) {
 			expectError: false,
 		},
 		{
-			name: "missing stack flag",
-			args: []string{"vpc"},
-			viperValues: map[string]any{
-				"stack":    "",
-				"identity": "",
-				"format":   "yaml",
-			},
+			name:          "missing stack",
+			component:     "vpc",
+			stack:         "",
+			identity:      "",
+			format:        "yaml",
 			setupMocks:    func(*MockConfigInitializer, *MockProvisioner) {},
 			expectError:   true,
 			expectedError: errUtils.ErrRequiredFlagNotProvided,
 		},
 		{
-			name: "config init failure",
-			args: []string{"vpc"},
-			viperValues: map[string]any{
-				"stack":    "dev",
-				"identity": "",
-				"format":   "yaml",
-			},
+			name:      "config init failure",
+			component: "vpc",
+			stack:     "dev",
+			identity:  "",
+			format:    "yaml",
 			setupMocks: func(mci *MockConfigInitializer, mp *MockProvisioner) {
 				mci.EXPECT().
 					InitConfigAndAuth("vpc", "dev", "").
@@ -368,13 +353,11 @@ func TestDescribeCmd_RunE(t *testing.T) {
 			expectError: true,
 		},
 		{
-			name: "describe backend failure",
-			args: []string{"vpc"},
-			viperValues: map[string]any{
-				"stack":    "dev",
-				"identity": "",
-				"format":   "yaml",
-			},
+			name:      "describe backend failure",
+			component: "vpc",
+			stack:     "dev",
+			identity:  "",
+			format:    "yaml",
 			setupMocks: func(mci *MockConfigInitializer, mp *MockProvisioner) {
 				atmosConfig := &schema.AtmosConfiguration{}
 				mci.EXPECT().
@@ -391,10 +374,9 @@ func TestDescribeCmd_RunE(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			mockConfigInit, mockProv := setupTestWithMocks(t)
-			setupViperForTest(t, tt.viperValues)
 			tt.setupMocks(mockConfigInit, mockProv)
 
-			err := describeCmd.RunE(describeCmd, tt.args)
+			err := executeDescribeCommandWithValues(tt.component, tt.stack, tt.identity, tt.format)
 
 			if tt.expectError {
 				assert.Error(t, err)
@@ -408,24 +390,22 @@ func TestDescribeCmd_RunE(t *testing.T) {
 	}
 }
 
-// TestListCmd_RunE tests the list command RunE function.
-func TestListCmd_RunE(t *testing.T) {
+// TestExecuteListCommandWithValues tests the list command helper function.
+func TestExecuteListCommandWithValues(t *testing.T) {
 	tests := []struct {
 		name          string
-		args          []string
-		viperValues   map[string]any
+		stack         string
+		identity      string
+		format        string
 		setupMocks    func(*MockConfigInitializer, *MockProvisioner)
 		expectError   bool
 		expectedError error
 	}{
 		{
-			name: "successful list with table format",
-			args: []string{},
-			viperValues: map[string]any{
-				"stack":    "dev",
-				"identity": "",
-				"format":   "table",
-			},
+			name:     "successful list with table format",
+			stack:    "dev",
+			identity: "",
+			format:   "table",
 			setupMocks: func(mci *MockConfigInitializer, mp *MockProvisioner) {
 				atmosConfig := &schema.AtmosConfiguration{}
 				mci.EXPECT().
@@ -438,13 +418,10 @@ func TestListCmd_RunE(t *testing.T) {
 			expectError: false,
 		},
 		{
-			name: "successful list with json format",
-			args: []string{},
-			viperValues: map[string]any{
-				"stack":    "dev",
-				"identity": "",
-				"format":   "json",
-			},
+			name:     "successful list with json format",
+			stack:    "dev",
+			identity: "",
+			format:   "json",
 			setupMocks: func(mci *MockConfigInitializer, mp *MockProvisioner) {
 				atmosConfig := &schema.AtmosConfiguration{}
 				mci.EXPECT().
@@ -457,25 +434,19 @@ func TestListCmd_RunE(t *testing.T) {
 			expectError: false,
 		},
 		{
-			name: "missing stack flag",
-			args: []string{},
-			viperValues: map[string]any{
-				"stack":    "",
-				"identity": "",
-				"format":   "table",
-			},
+			name:          "missing stack",
+			stack:         "",
+			identity:      "",
+			format:        "table",
 			setupMocks:    func(*MockConfigInitializer, *MockProvisioner) {},
 			expectError:   true,
 			expectedError: errUtils.ErrRequiredFlagNotProvided,
 		},
 		{
-			name: "config init failure",
-			args: []string{},
-			viperValues: map[string]any{
-				"stack":    "dev",
-				"identity": "",
-				"format":   "table",
-			},
+			name:     "config init failure",
+			stack:    "dev",
+			identity: "",
+			format:   "table",
 			setupMocks: func(mci *MockConfigInitializer, mp *MockProvisioner) {
 				mci.EXPECT().
 					InitConfigAndAuth("", "dev", "").
@@ -484,13 +455,10 @@ func TestListCmd_RunE(t *testing.T) {
 			expectError: true,
 		},
 		{
-			name: "list backends failure",
-			args: []string{},
-			viperValues: map[string]any{
-				"stack":    "dev",
-				"identity": "",
-				"format":   "table",
-			},
+			name:     "list backends failure",
+			stack:    "dev",
+			identity: "",
+			format:   "table",
 			setupMocks: func(mci *MockConfigInitializer, mp *MockProvisioner) {
 				atmosConfig := &schema.AtmosConfiguration{}
 				mci.EXPECT().
@@ -507,10 +475,9 @@ func TestListCmd_RunE(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			mockConfigInit, mockProv := setupTestWithMocks(t)
-			setupViperForTest(t, tt.viperValues)
 			tt.setupMocks(mockConfigInit, mockProv)
 
-			err := listCmd.RunE(listCmd, tt.args)
+			err := executeListCommandWithValues(tt.stack, tt.identity, tt.format)
 
 			if tt.expectError {
 				assert.Error(t, err)
@@ -609,4 +576,102 @@ func TestParseCommonFlags_Success(t *testing.T) {
 	assert.NotNil(t, opts)
 	assert.Equal(t, "test-stack", opts.Stack)
 	assert.Equal(t, "test-identity", opts.Identity)
+}
+
+// TestExecuteProvisionCommandWithValues tests the provision command helper function.
+func TestExecuteProvisionCommandWithValues(t *testing.T) {
+	tests := []struct {
+		name          string
+		component     string
+		stack         string
+		identity      string
+		setupMocks    func(*MockConfigInitializer, *MockProvisioner)
+		expectError   bool
+		expectedError error
+	}{
+		{
+			name:      "successful provision",
+			component: "vpc",
+			stack:     "dev",
+			identity:  "",
+			setupMocks: func(mci *MockConfigInitializer, mp *MockProvisioner) {
+				mci.EXPECT().
+					InitConfigAndAuth("vpc", "dev", "").
+					Return(&schema.AtmosConfiguration{}, nil, nil)
+				mp.EXPECT().
+					CreateBackend(gomock.Any()).
+					Return(nil)
+			},
+			expectError: false,
+		},
+		{
+			name:          "missing stack",
+			component:     "vpc",
+			stack:         "",
+			identity:      "",
+			setupMocks:    func(*MockConfigInitializer, *MockProvisioner) {},
+			expectError:   true,
+			expectedError: errUtils.ErrRequiredFlagNotProvided,
+		},
+		{
+			name:      "config init failure",
+			component: "vpc",
+			stack:     "dev",
+			identity:  "",
+			setupMocks: func(mci *MockConfigInitializer, mp *MockProvisioner) {
+				mci.EXPECT().
+					InitConfigAndAuth("vpc", "dev", "").
+					Return(nil, nil, errors.New("config init failed"))
+			},
+			expectError: true,
+		},
+		{
+			name:      "provision failure",
+			component: "vpc",
+			stack:     "dev",
+			identity:  "",
+			setupMocks: func(mci *MockConfigInitializer, mp *MockProvisioner) {
+				mci.EXPECT().
+					InitConfigAndAuth("vpc", "dev", "").
+					Return(&schema.AtmosConfiguration{}, nil, nil)
+				mp.EXPECT().
+					CreateBackend(gomock.Any()).
+					Return(errors.New("provision failed"))
+			},
+			expectError: true,
+		},
+		{
+			name:      "with identity",
+			component: "vpc",
+			stack:     "prod",
+			identity:  "aws-prod",
+			setupMocks: func(mci *MockConfigInitializer, mp *MockProvisioner) {
+				mci.EXPECT().
+					InitConfigAndAuth("vpc", "prod", "aws-prod").
+					Return(&schema.AtmosConfiguration{}, &schema.AuthContext{AWS: &schema.AWSAuthContext{}}, nil)
+				mp.EXPECT().
+					CreateBackend(gomock.Any()).
+					Return(nil)
+			},
+			expectError: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mockConfigInit, mockProv := setupTestWithMocks(t)
+			tt.setupMocks(mockConfigInit, mockProv)
+
+			err := executeProvisionCommandWithValues(tt.component, tt.stack, tt.identity)
+
+			if tt.expectError {
+				assert.Error(t, err)
+				if tt.expectedError != nil {
+					assert.ErrorIs(t, err, tt.expectedError)
+				}
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
 }

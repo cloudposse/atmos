@@ -1,0 +1,90 @@
+---
+slug: ansible-component-support
+title: "Ansible Component Support"
+authors: [rosesecurity]
+tags: [feature]
+---
+
+Atmos now supports Ansible as a first-class component type, enabling unified orchestration of infrastructure provisioning (Terraform) and configuration management (Ansible) from the same stack manifests.
+
+<!--truncate-->
+
+## What Changed
+
+Ansible joins Terraform, Helmfile, and Packer as a native component type in Atmos:
+
+- **New `atmos ansible playbook` command** executes Ansible playbooks with stack-based configuration
+- **New `atmos ansible version` command** displays Ansible version information
+- **Full-stack processor support** including inheritance, vars, env, settings, and auth sections
+- **Automatic variable file generation** passed to Ansible via `--extra-vars @<varfile>`
+- **Native flag passthrough** via `--` separator for any Ansible option
+
+## Why This Matters
+
+Infrastructure automation typically involves two layers: provisioning (creating resources) and configuration (setting up software). Teams often use Terraform for the first and Ansible for the second, but manage them with separate tooling and workflows.
+
+With Ansible component support, you can:
+
+- **Manage both layers from one tool** with consistent patterns
+- **Share variables between Terraform and Ansible** components in the same stack
+- **Apply the same inheritance model** to Ansible playbooks
+- **Use familiar Atmos workflows** for configuration management
+
+## How to Use It
+
+### Configuration
+
+Add Ansible configuration to `atmos.yaml`:
+
+```yaml
+components:
+  ansible:
+    base_path: "components/ansible"
+    command: "ansible-playbook"      # optional
+```
+
+### Stack Manifest
+
+Define Ansible components alongside Terraform:
+
+```yaml
+components:
+  terraform:
+    vpc:
+      vars:
+        cidr_block: "10.0.0.0/16"
+
+  ansible:
+    webserver:
+      vars:
+        app_name: myapp
+        app_port: 8080
+      settings:
+        ansible:
+          playbook: site.yml
+          inventory: inventory/production
+```
+
+### Commands
+
+```bash
+# Show Ansible version
+atmos ansible version
+
+# Run playbook with stack settings
+atmos ansible playbook webserver --stack prod
+
+# Override playbook and inventory
+atmos ansible playbook webserver -s prod -p deploy.yml -i hosts.ini
+
+# Pass native Ansible flags
+atmos ansible playbook webserver -s prod -- --check --verbose
+
+# Use aliases
+atmos an pb webserver -s prod
+```
+
+## Get Involved
+
+- Report issues or request features on [GitHub](https://github.com/cloudposse/atmos/issues)
+- Join the discussion in [Slack](https://slack.cloudposse.com/)

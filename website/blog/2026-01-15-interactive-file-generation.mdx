@@ -1,0 +1,110 @@
+---
+slug: interactive-file-generation
+title: "Interactive File Generation for Terraform, Helmfile, and Packer"
+authors: [osterman]
+tags: [feature, dx]
+---
+
+File generation now features interactive component and stack selection, plus cross-provisioner support for helmfile and packer. Run `atmos terraform generate files` without arguments and get an intuitive selector.
+
+<!--truncate-->
+
+## What Changed
+
+Building on the [declarative file generation](/changelog/declarative-file-generation) feature, this release adds several improvements:
+
+- **Interactive prompts** for component and stack selection when arguments are missing
+- **Cross-provisioner support** for helmfile and packer (not just terraform)
+- **Idempotent generation** that only writes files when content changes
+- **Deterministic output** with sorted map keys for reproducible generation
+- **JIT component creation** with auto-generation running BEFORE path validation
+
+```bash
+$ atmos terraform generate files
+? Choose a component
+  > vpc
+    eks-cluster
+    rds-aurora
+? Choose a stack
+  > ue2-dev
+    ue2-prod
+```
+
+## Why This Matters
+
+### Discoverability
+
+When working with unfamiliar infrastructure, you may not know which components have file generation configured. Interactive prompts let you explore what's available without digging through YAML files.
+
+### Cross-Provisioner Consistency
+
+Teams using helmfile or packer alongside terraform can now use the same file generation patterns across all provisioners:
+
+```yaml
+# atmos.yaml
+components:
+  terraform:
+    auto_generate_files: true
+  helmfile:
+    auto_generate_files: true
+  packer:
+    auto_generate_files: true
+```
+
+### Idempotent Operations
+
+File generation now compares existing content before writing. This means:
+
+- No unnecessary file modifications
+- Cleaner git diffs
+- Faster execution when files haven't changed
+
+## How It Works
+
+### Interactive Selection
+
+When you omit the component or stack argument in an interactive terminal, Atmos prompts for selection:
+
+```bash
+$ atmos terraform generate files
+? Choose a component
+  > vpc
+i Selected component `vpc`
+? Choose a stack
+  > ue2-dev
+i Selected stack `ue2-dev`
+
+Generating files for component `vpc` in stack `ue2-dev`...
+```
+
+### JIT Component Creation
+
+With `auto_generate_files: true`, files are generated BEFORE path validation during component execution. This enables just-in-time component creation where the generated files can create the component directory itself.
+
+### Summary Output
+
+After generation, you see exactly what changed:
+
+```bash
+✓ Generated file: locals.tf
+✓ Generated file: context.json
+i Summary: 2 files generated (2 created, 0 updated, 0 unchanged)
+```
+
+## Disabling Interactive Prompts
+
+For scripts and automation, disable prompts the same way as other interactive commands:
+
+```bash
+# Via flag
+atmos terraform generate files vpc -s ue2-dev --interactive=false
+
+# Via environment variable
+export ATMOS_INTERACTIVE=false
+```
+
+## Get Involved
+
+- Review the [generate files documentation](/cli/commands/terraform/generate/files) for configuration options
+- See the example in `examples/generate-files/` demonstrating the feature
+- Share feedback on [GitHub](https://github.com/cloudposse/atmos/issues)

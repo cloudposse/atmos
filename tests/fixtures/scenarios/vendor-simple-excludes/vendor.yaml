@@ -1,0 +1,48 @@
+# Test for simple filename exclusions without **/ prefix.
+# This tests the fix for the bug where excluded_paths like "README.md" were not working.
+
+apiVersion: atmos/v1
+kind: AtmosVendorConfig
+metadata:
+  name: test-simple-excludes
+  description: Test simple filename exclusions without glob prefixes
+spec:
+  sources:
+    # Test 1: Simple filename exclusion (the reported bug)
+    # Exclude "README.md" - should work without needing "**/README.md"
+    - component: "simple-exclude"
+      source: "../../../fixtures/components/terraform/mock"
+      targets:
+        - "components/terraform/simple-exclude"
+      included_paths:
+        - "**/*"
+      excluded_paths:
+        - "README.md"
+      tags:
+        - simple
+
+    # Test 2: Multiple simple filename exclusions (the user's exact use case)
+    - component: "multi-exclude"
+      source: "../../../fixtures/components/terraform/mock"
+      targets:
+        - "components/terraform/multi-exclude"
+      included_paths:
+        - "**/*.tf"
+        - "**/*.md"
+      excluded_paths:
+        - "README.md"
+      tags:
+        - multi
+
+    # Test 3: Both excludes and includes combined
+    # Include only .tf files, exclude main.tf
+    - component: "combined"
+      source: "../../../fixtures/components/terraform/mock"
+      targets:
+        - "components/terraform/combined"
+      included_paths:
+        - "**/*.tf"
+      excluded_paths:
+        - "main.tf"
+      tags:
+        - combined

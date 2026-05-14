@@ -21,24 +21,24 @@ Here's a scenario you've probably faced: You want Atmos to behave one way in CI,
 - **Different terminal settings** - CI needs plain text output with no color, developers want rich formatting
 - **Different authentication** - Interactive AWS SSO for developers, GitHub OIDC for automation
 
-Sure, you *could* handle this with flags:
+Sure, you *could* handle this with environment variables scattered across GitHub Actions, `.bashrc`, and CI configs:
 
 ```bash
-# Every single time in CI
-atmos terraform apply vpc -s prod \
-  --identity github-oidc \
-  --no-color \
-  --logs-level info \
-  --sentry-enabled true
+# Every single time in CI - export all these env vars
+export ATMOS_IDENTITY=github-oidc
+export ATMOS_LOGS_LEVEL=info
+export NO_COLOR=1
+# Plus Sentry config, terminal settings, etc.
+atmos terraform apply vpc -s prod
 
-# Every single time as a developer
-atmos terraform plan vpc -s dev \
-  --identity developer-sandbox \
-  --logs-level debug \
-  --terminal-width 120
+# Every single time as a developer - different env vars
+export ATMOS_IDENTITY=developer-sandbox
+export ATMOS_LOGS_LEVEL=debug
+# Plus terminal width, color settings, etc.
+atmos terraform plan vpc -s dev
 ```
 
-Or environment variables scattered across GitHub Actions, `.bashrc`, and CI configs. Either way, you're juggling a complex combination of overrides that aren't version-controlled or easily shared.
+Either way, you're juggling a complex combination of overrides that aren't version-controlled or easily shared.
 
 How do you codify these contexts so they're consistent, version-controlled, and easy to switch between?
 
@@ -95,7 +95,7 @@ logs:
 
 settings:
   terminal:
-    width: 120
+    max_width: 120
 ```
 
 Activate it with:
@@ -143,7 +143,7 @@ errors:
 settings:
   terminal:
     color: false  # Plain text for CI logs
-    width: 80
+    max_width: 80
     markdown:
       code:
         style: ascii
@@ -192,28 +192,16 @@ The output shows you exactly what settings the profile provides, where it's loca
 
 ## Why This Matters
 
-Before profiles, you had two bad options:
+Before profiles, you had environment variables and config scattered everywhere:
 
-**Option 1: Flags everywhere**
-```bash
-# Hope you don't forget any of these
-atmos terraform apply vpc -s prod \
-  --identity github-oidc \
-  --no-color \
-  --logs-level info \
-  --sentry-enabled true \
-  --terminal-width 80 \
-  --markdown-style ascii
-```
-
-**Option 2: Environment variables scattered everywhere**
-- `.bashrc` for developers
-- GitHub Actions secrets for CI
-- GitLab CI variables
+- `.bashrc` for developers with `ATMOS_IDENTITY`, `ATMOS_LOGS_LEVEL`, etc.
+- GitHub Actions secrets for CI with different values
+- GitLab CI variables for other pipelines
 - Different dotfiles for different team members
+- `atmos.yaml` overrides that vary by machine
 - No version control, no consistency
 
-Both approaches meant:
+This approach meant:
 - ❌ **Settings aren't codified** - Tribal knowledge about which flags to use
 - ❌ **Easy to get wrong** - Forget one flag, wrong behavior
 - ❌ **Can't share configurations** - Everyone maintains their own setup

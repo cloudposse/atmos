@@ -24,7 +24,8 @@ func mergeComponentConfigurations(atmosConfig *schema.AtmosConfiguration, opts *
 			result.BaseComponentVars,
 			result.ComponentVars,
 			result.ComponentOverridesVars,
-		})
+		},
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -42,7 +43,8 @@ func mergeComponentConfigurations(atmosConfig *schema.AtmosConfiguration, opts *
 			result.BaseComponentSettings,
 			result.ComponentSettings,
 			result.ComponentOverridesSettings,
-		})
+		},
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -60,7 +62,8 @@ func mergeComponentConfigurations(atmosConfig *schema.AtmosConfiguration, opts *
 			result.BaseComponentEnv,
 			result.ComponentEnv,
 			result.ComponentOverridesEnv,
-		})
+		},
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -78,7 +81,8 @@ func mergeComponentConfigurations(atmosConfig *schema.AtmosConfiguration, opts *
 			result.BaseComponentAuth,
 			result.ComponentAuth,
 			result.ComponentOverridesAuth,
-		})
+		},
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -99,7 +103,8 @@ func mergeComponentConfigurations(atmosConfig *schema.AtmosConfiguration, opts *
 				result.BaseComponentProviders,
 				result.ComponentProviders,
 				result.ComponentOverridesProviders,
-			})
+			},
+		)
 		if err != nil {
 			return nil, err
 		}
@@ -121,7 +126,8 @@ func mergeComponentConfigurations(atmosConfig *schema.AtmosConfiguration, opts *
 				result.BaseComponentRequiredProviders,
 				result.ComponentRequiredProviders,
 				result.ComponentOverridesRequiredProviders,
-			})
+			},
+		)
 		if err != nil {
 			return nil, err
 		}
@@ -161,7 +167,8 @@ func mergeComponentConfigurations(atmosConfig *schema.AtmosConfiguration, opts *
 				result.BaseComponentHooks,
 				result.ComponentHooks,
 				result.ComponentOverridesHooks,
-			})
+			},
+		)
 		if err != nil {
 			return nil, err
 		}
@@ -188,7 +195,8 @@ func mergeComponentConfigurations(atmosConfig *schema.AtmosConfiguration, opts *
 				result.BaseComponentGenerate,
 				result.ComponentGenerate,
 				result.ComponentOverridesGenerate,
-			})
+			},
+		)
 		if err != nil {
 			return nil, err
 		}
@@ -244,22 +252,25 @@ func mergeComponentConfigurations(atmosConfig *schema.AtmosConfiguration, opts *
 			[]map[string]any{
 				result.BaseComponentMetadata,
 				result.ComponentMetadata,
-			})
+			},
+		)
 		if err != nil {
 			return nil, err
 		}
 	}
 
-	// Merge dependencies (base component dependencies + component dependencies).
-	// Component dependencies take precedence over base component dependencies.
+	// Merge dependencies (global + base component + component dependencies).
+	// Priority (lowest to highest): global/component-type → base component → component instance.
 	var finalComponentDependencies map[string]any
-	if len(result.BaseComponentDependencies) > 0 || len(result.ComponentDependencies) > 0 {
+	if len(opts.GlobalDependencies) > 0 || len(result.BaseComponentDependencies) > 0 || len(result.ComponentDependencies) > 0 {
 		finalComponentDependencies, err = m.Merge(
 			atmosConfig,
 			[]map[string]any{
+				opts.GlobalDependencies,
 				result.BaseComponentDependencies,
 				result.ComponentDependencies,
-			})
+			},
+		)
 		if err != nil {
 			return nil, err
 		}
@@ -275,7 +286,8 @@ func mergeComponentConfigurations(atmosConfig *schema.AtmosConfiguration, opts *
 			[]map[string]any{
 				result.BaseComponentLocals,
 				result.ComponentLocals,
-			})
+			},
+		)
 		if err != nil {
 			return nil, err
 		}
@@ -389,12 +401,27 @@ func mergeComponentConfigurations(atmosConfig *schema.AtmosConfiguration, opts *
 				opts.GlobalSourceSection,
 				result.BaseComponentSourceSection,
 				result.ComponentSourceSection,
-			})
+			},
+		)
 		if err != nil {
 			return nil, err
 		}
 		comp[cfg.SourceSectionName] = finalComponentSource
-		comp[cfg.ProvisionSectionName] = result.ComponentProvision
+
+		// Merge provision from global, base component, and component levels.
+		// Priority (lowest to highest): global → base component → component.
+		finalComponentProvision, err := m.Merge(
+			atmosConfig,
+			[]map[string]any{
+				opts.GlobalProvisionSection,
+				result.BaseComponentProvisionSection,
+				result.ComponentProvision,
+			},
+		)
+		if err != nil {
+			return nil, err
+		}
+		comp[cfg.ProvisionSectionName] = finalComponentProvision
 	}
 
 	// Add base component name if present.
@@ -414,7 +441,8 @@ func processAuthConfig(atmosConfig *schema.AtmosConfiguration, globalAuthConfig 
 		[]map[string]any{
 			globalAuthConfig,
 			authConfig,
-		})
+		},
+	)
 	if err != nil {
 		return nil, fmt.Errorf("%w: merge auth config: %w", errUtils.ErrInvalidAuthConfig, err)
 	}

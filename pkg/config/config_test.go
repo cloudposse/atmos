@@ -294,7 +294,10 @@ terraform:
 		{
 			name: "valid import custom",
 			setup: func(t *testing.T, dir string, tc testCase) {
-				changeWorkingDir(t, "../../tests/fixtures/scenarios/atmos-cli-imports")
+				// Set up test adapters to enable import processing.
+				setupTestAdapters()
+				fixtureDir := filepath.Join("..", "..", "tests", "fixtures", "scenarios", "atmos-cli-imports")
+				changeWorkingDir(t, fixtureDir)
 			},
 			assertions: func(t *testing.T, tempDirPath string, cfg *schema.AtmosConfiguration, err error) {
 				require.NoError(t, err)
@@ -309,7 +312,9 @@ terraform:
 		{
 			name: "valid import custom override",
 			setup: func(t *testing.T, dir string, tc testCase) {
-				changeWorkingDir(t, "../../tests/fixtures/scenarios/atmos-cli-imports-override")
+				// Set up test adapters to enable import processing.
+				setupTestAdapters()
+				changeWorkingDir(t, filepath.Join("..", "..", "tests", "fixtures", "scenarios", "atmos-cli-imports-override"))
 			},
 			assertions: func(t *testing.T, tempDirPath string, cfg *schema.AtmosConfiguration, err error) {
 				assert.Equal(t, "foo", cfg.Commands[0].Name)
@@ -1109,7 +1114,7 @@ func TestResolveAbsolutePath(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result, err := resolveAbsolutePath(tt.path, tt.cliConfigPath)
+			result, err := resolveAbsolutePath(tt.path, tt.cliConfigPath, "")
 			require.NoError(t, err)
 
 			if filepath.IsAbs(tt.path) {
@@ -1264,18 +1269,20 @@ func TestDotPathResolvesRelativeToConfigDir(t *testing.T) {
 	err = os.Unsetenv("ATMOS_BASE_PATH")
 	require.NoError(t, err)
 
-	t.Run("ATMOS_BASE_PATH=. should resolve to config dir (config-file-relative)", func(t *testing.T) {
-		// This test verifies that "." resolves relative to where atmos.yaml is located,
-		// NOT relative to CWD. This follows the convention of other config files.
-		//
-		// Users who need CWD-relative behavior should use the !cwd YAML tag:
-		// - base_path: !cwd
+	t.Run("ATMOS_BASE_PATH=. should resolve to CWD (shell convention)", func(t *testing.T) {
+		// This test verifies that "." from an env var (runtime source) resolves to CWD,
+		// NOT config dir. In shell context, "." means "here" = where the command runs.
+		// This follows the unified convention: dot-prefix anchors to context
+		// (config dir in yaml, CWD in shell).
 		changeWorkingDir(t, "../../tests/fixtures/scenarios/complete/components/terraform/top-level-component1")
+
+		cwd, err := os.Getwd()
+		require.NoError(t, err)
 
 		// Point to the repo root where atmos.yaml is located.
 		configPath := "../../.."
 		t.Setenv("ATMOS_CLI_CONFIG_PATH", configPath)
-		// Set base_path to "." - this should resolve to config dir (where atmos.yaml is).
+		// Set base_path to "." via env var — runtime source → CWD.
 		t.Setenv("ATMOS_BASE_PATH", ".")
 		// Disable git root discovery for this test.
 		t.Setenv("ATMOS_GIT_ROOT_BASEPATH", "false")
@@ -1283,13 +1290,9 @@ func TestDotPathResolvesRelativeToConfigDir(t *testing.T) {
 		cfg, err := InitCliConfig(schema.ConfigAndStacksInfo{}, false)
 		require.NoError(t, err, "InitCliConfig should succeed")
 
-		// Get the absolute path of the config directory.
-		configDir, err := filepath.Abs(configPath)
-		require.NoError(t, err)
-
-		// BasePathAbsolute should be the config directory, not CWD.
-		assert.Equal(t, configDir, cfg.BasePathAbsolute,
-			"Base path with '.' should resolve to config directory (config-file-relative)")
+		// BasePathAbsolute should be CWD (shell convention for runtime source).
+		assert.Equal(t, cwd, cfg.BasePathAbsolute,
+			"ATMOS_BASE_PATH=. should resolve to CWD (shell convention), not config dir")
 	})
 
 	t.Run("base_path=. when CWD equals config dir resolves to config dir", func(t *testing.T) {
@@ -1337,7 +1340,7 @@ func TestTryResolveWithGitRoot(t *testing.T) {
 	t.Run("returns git root when path is empty and git available", func(t *testing.T) {
 		t.Setenv("ATMOS_GIT_ROOT_BASEPATH", "")
 
-		result, err := tryResolveWithGitRoot("", false, "")
+		result, err := tryResolveWithGitRoot("", "", "")
 		require.NoError(t, err)
 		// We're in a git repo, so should get the git root.
 		assert.NotEmpty(t, result)
@@ -1349,24 +1352,15 @@ func TestTryResolveWithGitRoot(t *testing.T) {
 
 		// Use t.TempDir() for cross-platform compatibility.
 		configPath := t.TempDir()
-		result, err := tryResolveWithGitRoot("", false, configPath)
+		result, err := tryResolveWithGitRoot("", configPath, "")
 		require.NoError(t, err)
 		assert.Equal(t, configPath, result)
-	})
-
-	t.Run("resolves explicit relative path with git root", func(t *testing.T) {
-		t.Setenv("ATMOS_GIT_ROOT_BASEPATH", "")
-
-		result, err := tryResolveWithGitRoot("./subdir", true, "")
-		require.NoError(t, err)
-		assert.True(t, filepath.IsAbs(result))
-		assert.Contains(t, result, "subdir")
 	})
 
 	t.Run("joins simple relative path with git root", func(t *testing.T) {
 		t.Setenv("ATMOS_GIT_ROOT_BASEPATH", "")
 
-		result, err := tryResolveWithGitRoot("stacks", false, "")
+		result, err := tryResolveWithGitRoot("stacks", "", "")
 		require.NoError(t, err)
 		assert.Contains(t, result, "stacks")
 	})
@@ -1376,7 +1370,7 @@ func TestTryResolveWithConfigPath(t *testing.T) {
 	t.Run("returns config path when path is empty", func(t *testing.T) {
 		// Use t.TempDir() for cross-platform compatibility.
 		configPath := t.TempDir()
-		result, err := tryResolveWithConfigPath("", configPath)
+		result, err := tryResolveWithConfigPath("", configPath, "")
 		require.NoError(t, err)
 		assert.Equal(t, configPath, result)
 	})
@@ -1384,14 +1378,14 @@ func TestTryResolveWithConfigPath(t *testing.T) {
 	t.Run("joins path with config path", func(t *testing.T) {
 		// Use t.TempDir() for cross-platform compatibility.
 		configPath := t.TempDir()
-		result, err := tryResolveWithConfigPath("subdir", configPath)
+		result, err := tryResolveWithConfigPath("subdir", configPath, "")
 		require.NoError(t, err)
 		expected := filepath.Join(configPath, "subdir")
 		assert.Equal(t, expected, result)
 	})
 
 	t.Run("resolves relative to CWD when no config path", func(t *testing.T) {
-		result, err := tryResolveWithConfigPath("subdir", "")
+		result, err := tryResolveWithConfigPath("subdir", "", "")
 		require.NoError(t, err)
 
 		cwd, _ := os.Getwd()
@@ -1400,7 +1394,7 @@ func TestTryResolveWithConfigPath(t *testing.T) {
 	})
 
 	t.Run("handles empty path and empty config path", func(t *testing.T) {
-		result, err := tryResolveWithConfigPath("", "")
+		result, err := tryResolveWithConfigPath("", "", "")
 		require.NoError(t, err)
 
 		cwd, _ := os.Getwd()

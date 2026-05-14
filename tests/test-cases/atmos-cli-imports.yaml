@@ -17,8 +17,13 @@ tests:
       exit_code: 0
       diff:
         - "github_token"
+        - "Failed to use pager"  # May or may not appear depending on environment
       sanitize:
         "basePathAbsolute: .+": "basePathAbsolute: /absolute/path/to/repo"
+        # Normalize pager setting which varies by environment (PAGER env var)
+        'pager: ("false"|""|cat)': "pager: less"
+        # Normalize realm hash which varies by environment (derived from config path)
+        "realm: [a-f0-9]+": "realm: <hash>"
   - name: atmos_describe_configuration
     snapshot: true
     enabled: true
@@ -36,5 +41,10 @@ tests:
       exit_code: 0
       diff:
         - "github_token"
+        - "Failed to use pager"  # May or may not appear depending on environment
       sanitize:
         "basePathAbsolute: .+": "basePathAbsolute: /absolute/path/to/repo"
+        # Normalize pager setting which varies by environment (PAGER env var)
+        'pager: ("false"|""|cat)': "pager: less"
+        # Normalize realm hash which varies by environment (derived from config path)
+        "realm: [a-f0-9]+": "realm: <hash>"

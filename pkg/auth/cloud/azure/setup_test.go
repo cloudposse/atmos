@@ -66,7 +66,7 @@ func TestSetupFiles(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := SetupFiles(tt.providerName, tt.identityName, tt.creds, tt.basePath)
+			err := SetupFiles(tt.providerName, tt.identityName, tt.creds, tt.basePath, "")
 
 			if tt.expectError {
 				require.Error(t, err)
@@ -123,6 +123,29 @@ func TestSetAuthContext(t *testing.T) {
 				assert.Equal(t, "sub-456", authContext.Azure.SubscriptionID)
 				assert.Equal(t, "eastus", authContext.Azure.Location)
 				assert.Contains(t, authContext.Azure.CredentialsFile, "test-provider")
+			},
+		},
+		{
+			name: "propagates cloud environment to auth context",
+			params: &SetAuthContextParams{
+				AuthContext:  &schema.AuthContext{},
+				StackInfo:    nil,
+				ProviderName: "test-provider",
+				IdentityName: "test-identity",
+				Credentials: &types.AzureCredentials{
+					AccessToken:      "test-token",
+					TenantID:         "tenant-123",
+					SubscriptionID:   "sub-456",
+					Location:         "eastus",
+					Expiration:       now.Add(1 * time.Hour).Format(time.RFC3339),
+					CloudEnvironment: "usgovernment",
+				},
+				BasePath: tmpDir,
+			},
+			expectError: false,
+			checkAuth: func(t *testing.T, authContext *schema.AuthContext) {
+				require.NotNil(t, authContext.Azure)
+				assert.Equal(t, "usgovernment", authContext.Azure.CloudEnvironment)
 			},
 		},
 		{
@@ -335,7 +358,7 @@ func TestSetEnvironmentVariables(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	// Create credentials file for testing.
-	mgr, err := NewAzureFileManager(tmpDir)
+	mgr, err := NewAzureFileManager(tmpDir, "")
 	require.NoError(t, err)
 
 	now := time.Now().UTC()
@@ -380,6 +403,29 @@ func TestSetEnvironmentVariables(t *testing.T) {
 				"ARM_TENANT_ID":         "tenant-123",
 				"AZURE_LOCATION":        "eastus",
 				"ARM_LOCATION":          "eastus",
+				"ARM_USE_CLI":           "true",
+			},
+		},
+		{
+			name: "sets ARM_ENVIRONMENT for sovereign cloud",
+			authContext: &schema.AuthContext{
+				Azure: &schema.AzureAuthContext{
+					CredentialsFile:  credPath,
+					Profile:          "test-identity",
+					SubscriptionID:   "sub-456",
+					TenantID:         "tenant-123",
+					Location:         "usgovvirginia",
+					CloudEnvironment: "usgovernment",
+				},
+			},
+			stackInfo: &schema.ConfigAndStacksInfo{
+				ComponentEnvSection: map[string]any{},
+			},
+			expectedContains: map[string]string{
+				"AZURE_SUBSCRIPTION_ID": "sub-456",
+				"ARM_SUBSCRIPTION_ID":   "sub-456",
+				"ARM_ENVIRONMENT":       "usgovernment",
+				"AZURE_ENVIRONMENT":     "usgovernment",
 				"ARM_USE_CLI":           "true",
 			},
 		},
@@ -694,23 +740,25 @@ func TestUpdateAzureProfile(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	tests := []struct {
-		name           string
-		setupProfile   func(string)
-		username       string
-		tenantID       string
-		subscriptionID string
-		expectError    bool
-		checkProfile   func(*testing.T, map[string]interface{})
+		name                string
+		setupProfile        func(string)
+		username            string
+		tenantID            string
+		subscriptionID      string
+		azureProfileEnvName string
+		expectError         bool
+		checkProfile        func(*testing.T, map[string]interface{})
 	}{
 		{
 			name: "creates new profile with subscription",
 			setupProfile: func(home string) {
 				// Don't create profile file.
 			},
-			username:       "user@example.com",
-			tenantID:       "tenant-456",
-			subscriptionID: "sub-123",
-			expectError:    false,
+			username:            "user@example.com",
+			tenantID:            "tenant-456",
+			subscriptionID:      "sub-123",
+			azureProfileEnvName: "AzureCloud",
+			expectError:         false,
 			checkProfile: func(t *testing.T, profile map[string]interface{}) {
 				subs, ok := profile["subscriptions"].([]interface{})
 				require.True(t, ok)
@@ -720,6 +768,7 @@ func TestUpdateAzureProfile(t *testing.T) {
 				assert.Equal(t, "sub-123", sub["id"])
 				assert.Equal(t, "tenant-456", sub["tenantId"])
 				assert.True(t, sub["isDefault"].(bool))
+				assert.Equal(t, "AzureCloud", sub["environmentName"])
 			},
 		},
 		{
@@ -740,10 +789,11 @@ func TestUpdateAzureProfile(t *testing.T) {
 				os.MkdirAll(azureDir, 0o700)
 				os.WriteFile(filepath.Join(azureDir, "azureProfile.json"), data, 0o600)
 			},
-			username:       "user@example.com",
-			tenantID:       "new-tenant",
-			subscriptionID: "sub-123",
-			expectError:    false,
+			username:            "user@example.com",
+			tenantID:            "new-tenant",
+			subscriptionID:      "sub-123",
+			azureProfileEnvName: "AzureCloud",
+			expectError:         false,
 			checkProfile: func(t *testing.T, profile map[string]interface{}) {
 				subs, ok := profile["subscriptions"].([]interface{})
 				require.True(t, ok)
@@ -753,6 +803,7 @@ func TestUpdateAzureProfile(t *testing.T) {
 				assert.Equal(t, "sub-123", sub["id"])
 				assert.Equal(t, "new-tenant", sub["tenantId"])
 				assert.True(t, sub["isDefault"].(bool))
+				assert.Equal(t, "AzureCloud", sub["environmentName"])
 			},
 		},
 		{
@@ -768,14 +819,59 @@ func TestUpdateAzureProfile(t *testing.T) {
 				os.MkdirAll(azureDir, 0o700)
 				os.WriteFile(filepath.Join(azureDir, "azureProfile.json"), dataWithBOM, 0o600)
 			},
-			username:       "user@example.com",
-			tenantID:       "tenant-123",
-			subscriptionID: "sub-456",
-			expectError:    false,
+			username:            "user@example.com",
+			tenantID:            "tenant-123",
+			subscriptionID:      "sub-456",
+			azureProfileEnvName: "AzureCloud",
+			expectError:         false,
 			checkProfile: func(t *testing.T, profile map[string]interface{}) {
 				subs, ok := profile["subscriptions"].([]interface{})
 				require.True(t, ok)
 				require.Len(t, subs, 1)
+			},
+		},
+		{
+			name: "sovereign cloud sets correct environment name",
+			setupProfile: func(home string) {
+				// Don't create profile file.
+			},
+			username:            "admin@gov.onmicrosoft.us",
+			tenantID:            "gov-tenant-789",
+			subscriptionID:      "gov-sub-456",
+			azureProfileEnvName: "AzureUSGovernment",
+			expectError:         false,
+			checkProfile: func(t *testing.T, profile map[string]interface{}) {
+				subs, ok := profile["subscriptions"].([]interface{})
+				require.True(t, ok)
+				require.Len(t, subs, 1)
+
+				sub := subs[0].(map[string]interface{})
+				assert.Equal(t, "gov-sub-456", sub["id"])
+				assert.Equal(t, "gov-tenant-789", sub["tenantId"])
+				assert.True(t, sub["isDefault"].(bool))
+				assert.Equal(t, "AzureUSGovernment", sub["environmentName"])
+			},
+		},
+		{
+			name: "china cloud sets correct environment name",
+			setupProfile: func(home string) {
+				// Don't create profile file.
+			},
+			username:            "admin@contoso.partner.onmschina.cn",
+			tenantID:            "china-tenant-101",
+			subscriptionID:      "china-sub-202",
+			azureProfileEnvName: "AzureChinaCloud",
+			expectError:         false,
+			checkProfile: func(t *testing.T, profile map[string]interface{}) {
+				subs, ok := profile["subscriptions"].([]interface{})
+				require.True(t, ok)
+				require.Len(t, subs, 1)
+
+				sub := subs[0].(map[string]interface{})
+				assert.Equal(t, "china-sub-202", sub["id"])
+				assert.Equal(t, "china-tenant-101", sub["tenantId"])
+				assert.True(t, sub["isDefault"].(bool))
+				assert.Equal(t, "AzureChinaCloud", sub["environmentName"])
 			},
 		},
 	}
@@ -788,7 +884,13 @@ func TestUpdateAzureProfile(t *testing.T) {
 
 			tt.setupProfile(testHome)
 
-			err := updateAzureProfile(testHome, tt.username, tt.tenantID, tt.subscriptionID, false)
+			err := updateAzureProfile(testHome, ProfileUpdateParams{
+				Username:            tt.username,
+				TenantID:            tt.tenantID,
+				SubscriptionID:      tt.subscriptionID,
+				IsServicePrincipal:  false,
+				AzureProfileEnvName: tt.azureProfileEnvName,
+			})
 
 			if tt.expectError {
 				require.Error(t, err)
@@ -1310,4 +1412,192 @@ func TestUpdateMSALCache_ServicePrincipal(t *testing.T) {
 	accountSection, ok := cache["Account"].(map[string]interface{})
 	require.True(t, ok, "Account section should exist")
 	assert.Empty(t, accountSection, "Account section should be empty for service principal")
+}
+
+func TestUpdateMSALCacheFromCreds_SovereignCloud(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	now := time.Now().UTC()
+	accessToken := createTestJWT(map[string]interface{}{"oid": "user-oid-gov", "upn": "admin@gov.onmicrosoft.us"})
+	graphToken := createTestJWT(map[string]interface{}{"oid": "user-oid-gov", "upn": "admin@gov.onmicrosoft.us"})
+	keyVaultToken := createTestJWT(map[string]interface{}{"oid": "user-oid-gov", "upn": "admin@gov.onmicrosoft.us"})
+
+	cloudEnv := GetCloudEnvironment("usgovernment")
+	azureCreds := &types.AzureCredentials{
+		AccessToken:        accessToken,
+		Expiration:         now.Add(1 * time.Hour).Format(time.RFC3339),
+		GraphAPIToken:      graphToken,
+		GraphAPIExpiration: now.Add(2 * time.Hour).Format(time.RFC3339),
+		KeyVaultToken:      keyVaultToken,
+		KeyVaultExpiration: now.Add(3 * time.Hour).Format(time.RFC3339),
+	}
+
+	updateMSALCacheFromCreds(tmpDir, azureCreds, "user-oid-gov", "gov-tenant", cloudEnv)
+
+	// Verify MSAL cache was created with sovereign cloud scopes.
+	msalCachePath := filepath.Join(tmpDir, ".azure", "msal_token_cache.json")
+	data, err := os.ReadFile(msalCachePath)
+	require.NoError(t, err)
+
+	var cache map[string]interface{}
+	err = json.Unmarshal(data, &cache)
+	require.NoError(t, err)
+
+	// Verify token entries contain US Government scopes.
+	accessTokenSection, ok := cache["AccessToken"].(map[string]interface{})
+	require.True(t, ok)
+
+	var foundGovScope bool
+	for _, entry := range accessTokenSection {
+		tokenEntry, ok := entry.(map[string]interface{})
+		if !ok {
+			continue
+		}
+		target, _ := tokenEntry["target"].(string)
+		if target == cloudEnv.ManagementScope {
+			foundGovScope = true
+			// Verify the environment/realm uses the government login endpoint.
+			realm, _ := tokenEntry["realm"].(string)
+			assert.Equal(t, "gov-tenant", realm)
+			break
+		}
+	}
+	assert.True(t, foundGovScope, "Should find token entry with US Government management scope")
+}
+
+func TestResolveUsername(t *testing.T) {
+	tests := []struct {
+		name     string
+		creds    *types.AzureCredentials
+		expected string
+	}{
+		{
+			name: "extracts UPN from valid JWT",
+			creds: &types.AzureCredentials{
+				AccessToken: createTestJWT(map[string]interface{}{
+					"oid": "user-oid",
+					"upn": "alice@contoso.com",
+				}),
+			},
+			expected: "alice@contoso.com",
+		},
+		{
+			name: "falls back to client ID for service principal",
+			creds: &types.AzureCredentials{
+				AccessToken:        "not-a-jwt",
+				IsServicePrincipal: true,
+				ClientID:           "sp-client-id-123",
+			},
+			expected: "sp-client-id-123",
+		},
+		{
+			name: "falls back to user@unknown for user with invalid token",
+			creds: &types.AzureCredentials{
+				AccessToken: "not-a-jwt",
+			},
+			expected: "user@unknown",
+		},
+		{
+			name: "service principal without client ID falls back to user@unknown",
+			creds: &types.AzureCredentials{
+				AccessToken:        "not-a-jwt",
+				IsServicePrincipal: true,
+				ClientID:           "",
+			},
+			expected: "user@unknown",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := resolveUsername(tt.creds)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestUpdateAzureCLIFiles(t *testing.T) {
+	// Redirect HOME/USERPROFILE to a temp directory to avoid polluting the real ~/.azure.
+	tmpHome := t.TempDir()
+	t.Setenv("HOME", tmpHome)
+	t.Setenv("USERPROFILE", tmpHome)
+
+	t.Run("non-Azure credentials returns nil", func(t *testing.T) {
+		// Pass a non-Azure credential type.
+		err := UpdateAzureCLIFiles(nil, "tenant", "sub", "")
+		assert.NoError(t, err)
+	})
+
+	t.Run("invalid token returns nil gracefully", func(t *testing.T) {
+		creds := &types.AzureCredentials{
+			AccessToken: "not-a-jwt",
+		}
+		err := UpdateAzureCLIFiles(creds, "tenant", "sub", "")
+		assert.NoError(t, err, "Invalid token should return nil (non-fatal)")
+	})
+
+	t.Run("valid token updates CLI files", func(t *testing.T) {
+		now := time.Now().UTC()
+		accessToken := createTestJWT(map[string]interface{}{
+			"oid": "user-oid-123",
+			"upn": "admin@contoso.com",
+		})
+
+		creds := &types.AzureCredentials{
+			AccessToken:    accessToken,
+			Expiration:     now.Add(1 * time.Hour).Format(time.RFC3339),
+			TenantID:       "tenant-abc",
+			SubscriptionID: "sub-def",
+		}
+
+		err := UpdateAzureCLIFiles(creds, "tenant-abc", "sub-def", "")
+		assert.NoError(t, err)
+
+		// Verify files were created in the isolated temp home directory.
+		msalPath := filepath.Join(tmpHome, ".azure", "msal_token_cache.json")
+		profilePath := filepath.Join(tmpHome, ".azure", "azureProfile.json")
+		_, msalErr := os.Stat(msalPath)
+		_, profileErr := os.Stat(profilePath)
+		assert.NoError(t, msalErr, "MSAL cache should exist")
+		assert.NoError(t, profileErr, "Azure profile should exist")
+	})
+
+	t.Run("sovereign cloud passes correct env name", func(t *testing.T) {
+		now := time.Now().UTC()
+		accessToken := createTestJWT(map[string]interface{}{
+			"oid": "gov-oid-456",
+			"upn": "admin@gov.onmicrosoft.us",
+		})
+
+		creds := &types.AzureCredentials{
+			AccessToken:    accessToken,
+			Expiration:     now.Add(1 * time.Hour).Format(time.RFC3339),
+			TenantID:       "gov-tenant",
+			SubscriptionID: "gov-sub",
+		}
+
+		err := UpdateAzureCLIFiles(creds, "gov-tenant", "gov-sub", "usgovernment")
+		assert.NoError(t, err)
+	})
+
+	t.Run("service principal with OIDC updates entries", func(t *testing.T) {
+		now := time.Now().UTC()
+		accessToken := createTestJWT(map[string]interface{}{
+			"oid":   "sp-oid-789",
+			"appid": "sp-client-id",
+		})
+
+		creds := &types.AzureCredentials{
+			AccessToken:        accessToken,
+			Expiration:         now.Add(1 * time.Hour).Format(time.RFC3339),
+			TenantID:           "sp-tenant",
+			SubscriptionID:     "sp-sub",
+			ClientID:           "sp-client-id",
+			IsServicePrincipal: true,
+			FederatedToken:     "federated-token-value",
+		}
+
+		err := UpdateAzureCLIFiles(creds, "sp-tenant", "sp-sub", "")
+		assert.NoError(t, err)
+	})
 }

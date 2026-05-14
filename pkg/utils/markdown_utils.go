@@ -11,6 +11,7 @@ import (
 	"golang.org/x/term"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	ioLayer "github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui/markdown"
@@ -80,7 +81,7 @@ func printfMarkdownTo(w io.Writer, format string, a ...interface{}) {
 func PrintfMarkdown(format string, a ...interface{}) {
 	defer perf.Track(nil, "utils.PrintfMarkdown")()
 
-	printfMarkdownTo(os.Stdout, format, a...)
+	printfMarkdownTo(ioLayer.MaskWriter(os.Stdout), format, a...)
 }
 
 // PrintfMarkdownToTUI prints a message in Markdown format to stderr.
@@ -89,7 +90,7 @@ func PrintfMarkdown(format string, a ...interface{}) {
 func PrintfMarkdownToTUI(format string, a ...interface{}) {
 	defer perf.Track(nil, "utils.PrintfMarkdownToTUI")()
 
-	printfMarkdownTo(os.Stderr, format, a...)
+	printfMarkdownTo(ioLayer.MaskWriter(os.Stderr), format, a...)
 }
 
 // InitializeMarkdown initializes a new Markdown renderer.

@@ -1,0 +1,263 @@
+---
+title: AI Skill Marketplace
+sidebar_label: Skill Marketplace
+description: Install and share community AI skills from GitHub
+id: skill-marketplace
+---
+import Terminal from '@site/src/components/Terminal'
+import File from '@site/src/components/File'
+import Intro from '@site/src/components/Intro'
+import Experimental from '@site/src/components/Experimental'
+
+<Intro>
+The Atmos AI Skill Marketplace enables you to install, share, and use community-created AI skills from GitHub repositories. Installed skills are stored in `~/.atmos/skills/` and appear in the TUI skill selector (Ctrl+A).
+</Intro>
+
+<Experimental />
+
+:::info Not Claude's Marketplace
+The Atmos Skill Marketplace is **not related to Anthropic's Claude marketplace**. This is Atmos's own system for installing and sharing specialized AI skills from GitHub repositories. Skills follow the [Agent Skills open standard](https://agentskills.io) governed by the Linux Foundation's Agentic AI Foundation (AAIF).
+:::
+
+## Installing Skills
+
+Install skills using various GitHub URL formats:
+
+<Terminal title="terminal">
+```bash
+# Install all 21+ official Atmos skills (recommended)
+atmos ai skill install cloudposse/atmos
+
+# With specific version tag
+atmos ai skill install cloudposse/atmos@v1.200.0
+
+# With branch name
+atmos ai skill install cloudposse/atmos@main
+
+# Full GitHub URL
+atmos ai skill install https://github.com/cloudposse/atmos.git
+
+# Force reinstall
+atmos ai skill install cloudposse/atmos --force
+
+# Skip confirmation prompt
+atmos ai skill install cloudposse/atmos --yes
+```
+</Terminal>
+
+:::warning Security Consideration
+Only use `--yes` with skills from trusted sources. Always review skill metadata before installing, especially the `tools.allowed` section.
+:::
+
+When you install a skill, Atmos downloads the repository, validates the SKILL.md file, checks version compatibility, prompts for confirmation, and registers it in the local skill registry.
+
+## Managing Installed Skills
+
+### List Installed Skills
+
+<Terminal title="terminal">
+```bash
+atmos ai skill list
+```
+</Terminal>
+
+### Uninstall a Skill
+
+<Terminal title="terminal">
+```bash
+# Interactive confirmation
+atmos ai skill uninstall atmos-terraform
+
+# Force uninstall (no confirmation)
+atmos ai skill uninstall atmos-terraform --force
+```
+</Terminal>
+
+### Enable/Disable Skills
+
+*(Coming soon)* Temporarily disable skills without uninstalling:
+
+<Terminal title="terminal">
+```bash
+atmos ai skill disable atmos-terraform
+atmos ai skill enable atmos-terraform
+```
+</Terminal>
+
+## Creating Marketplace Skills
+
+### SKILL.md Format
+
+Skills follow the [Agent Skills open standard](https://agentskills.io) format -- a single SKILL.md file with YAML frontmatter and a Markdown body containing the system prompt.
+
+```
+your-skill-repo/
+├── SKILL.md             # Skill definition (required)
+├── README.md            # Documentation (recommended)
+├── examples/            # Usage examples (optional)
+└── LICENSE              # License file (recommended)
+```
+
+### SKILL.md Structure
+
+The frontmatter declares metadata and tool access. The Markdown body is the AI system prompt.
+
+<File title="SKILL.md (abbreviated)">
+```markdown
+---
+name: terraform-expert
+display_name: "Terraform Expert"
+version: 1.0.0
+author: Cloud Posse
+description: >
+  Specialized AI skill for Terraform component development,
+  debugging, and best practices.
+category: refactor
+
+atmos:
+  min_version: 1.50.0
+  max_version: ""
+
+tools:
+  allowed:
+    - atmos_describe_component
+    - read_component_file
+    - read_file
+    - edit_file
+    - execute_bash
+  restricted:
+    - edit_file
+    - execute_bash
+
+capabilities:
+  - terraform-development
+  - component-architecture
+
+dependencies:
+  - terraform
+
+repository: https://github.com/yourorg/atmos-skill-terraform
+---
+
+# Skill: Terraform Expert
+
+## Role
+
+You are a specialized AI skill for Terraform component development...
+
+## Instructions
+
+[Detailed instructions for the AI skill go here]
+
+## Restrictions
+
+- Always confirm before executing destructive commands
+- Never commit secrets or credentials to code
+```
+</File>
+
+<dl>
+  <dt>`name`</dt>
+  <dd>Unique skill identifier in kebab-case.</dd>
+
+  <dt>`display_name`</dt>
+  <dd>User-facing display name.</dd>
+
+  <dt>`version`</dt>
+  <dd>Semantic version (e.g., `1.2.3`).</dd>
+
+  <dt>`author`</dt>
+  <dd>Author name or organization.</dd>
+
+  <dt>`description`</dt>
+  <dd>Brief description of skill purpose.</dd>
+
+  <dt>`category`</dt>
+  <dd>One of: `general`, `analysis`, `refactor`, `security`, `validation`, `optimization`.</dd>
+
+  <dt>`atmos.min_version`</dt>
+  <dd>Minimum compatible Atmos version.</dd>
+
+  <dt>`tools.allowed`</dt>
+  <dd>Tools the skill can use. Tools in `restricted` require user confirmation each time.</dd>
+
+  <dt>`repository`</dt>
+  <dd>GitHub repository URL.</dd>
+</dl>
+
+### Publishing Your Skill
+
+Create a GitHub repository with a valid SKILL.md, tag a release, and share it:
+
+<Terminal title="terminal">
+```bash
+mkdir atmos-skill-terraform && cd atmos-skill-terraform
+git init
+
+# Create SKILL.md with frontmatter and prompt (see format above)
+
+git add . && git commit -m "Initial skill release"
+git remote add origin git@github.com:yourorg/atmos-skill-terraform.git
+git push -u origin main
+git tag v1.0.0 && git push origin v1.0.0
+```
+</Terminal>
+
+Share your skill in [Atmos Discussions](https://github.com/cloudposse/atmos/discussions) and add the `atmos-skill` topic to your repository.
+
+:::tip Naming Convention
+- **Repository**: prefix with `atmos-skill-`, use kebab-case (e.g., `atmos-skill-cost-optimizer`)
+- **Skill name**: no prefix, kebab-case (e.g., `cost-optimizer`)
+- **Display name**: title case (e.g., "Cost Optimizer")
+:::
+
+## Tool Access and Security
+
+Skills declare which tools they need. Review the `tools.allowed` section before installing any skill.
+
+:::danger Review Before Installing
+**Always review skill source code on GitHub before installing skills that request:**
+- File write access (`edit_file`, `write_stack_file`, `write_component_file`)
+- Command execution (`execute_bash_command`, `execute_atmos_command`)
+:::
+
+Use the `restricted` field to require user confirmation for sensitive operations. A tool listed in both `allowed` and `restricted` means the skill can use it, but the user must approve each invocation.
+
+## Troubleshooting
+
+### Skill Not Found After Installation
+
+Skill may be disabled or the registry is corrupted. Check with `atmos ai skill list` and inspect `~/.atmos/skills/registry.json`.
+
+### Version Compatibility Error
+
+```
+Error: skill requires Atmos >= 1.50.0, but current version is 1.48.0
+```
+
+Upgrade Atmos (`brew upgrade atmos`) or install an older skill version (`atmos ai skill install user/skill@v0.9.0`).
+
+### Invalid Metadata Error
+
+The skill's SKILL.md has malformed frontmatter. Report the issue to the skill author or try a different version tag.
+
+### Registry Corruption
+
+<Terminal title="terminal">
+```bash
+# Backup and reset registry
+cp ~/.atmos/skills/registry.json ~/.atmos/skills/registry.json.backup
+rm ~/.atmos/skills/registry.json
+
+# Reinstall skills
+atmos ai skill install cloudposse/atmos
+```
+</Terminal>
+
+## Related Documentation
+
+- [AI Skills](/cli/configuration/ai/skills) - Skill system overview and configuration
+- [AI Configuration](/cli/configuration/ai) - Configure AI providers
+- [AI Chat Command](/cli/commands/ai/chat) - Interactive AI chat interface
+- [Tool Execution](/cli/configuration/ai/tools) - How AI skills use tools
+- [Community Discussions](https://github.com/cloudposse/atmos/discussions) - Discover and share skills

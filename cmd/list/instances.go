@@ -20,16 +20,19 @@ var instancesParser *flags.StandardParser
 // InstancesOptions contains parsed flags for the instances command.
 type InstancesOptions struct {
 	global.Flags
-	Format     string
-	Columns    []string
-	MaxColumns int
-	Delimiter  string
-	Stack      string
-	Filter     string
-	Query      string
-	Sort       string
-	Upload     bool
-	Provenance bool
+	Format           string
+	Columns          []string
+	MaxColumns       int
+	Delimiter        string
+	Stack            string
+	Filter           string
+	Query            string
+	Sort             string
+	Upload           bool
+	Provenance       bool
+	OutputFile       string
+	ProcessTemplates bool
+	ProcessFunctions bool
 }
 
 // instancesCmd lists atmos instances.
@@ -53,26 +56,36 @@ var instancesCmd = &cobra.Command{
 			return err
 		}
 
-		opts := &InstancesOptions{
-			Flags:      flags.ParseGlobalFlags(cmd, v),
-			Format:     v.GetString("format"),
-			Columns:    v.GetStringSlice("columns"),
-			MaxColumns: v.GetInt("max-columns"),
-			Delimiter:  v.GetString("delimiter"),
-			Stack:      v.GetString("stack"),
-			Filter:     v.GetString("filter"),
-			Query:      v.GetString("query"),
-			Sort:       v.GetString("sort"),
-			Upload:     v.GetBool("upload"),
-			Provenance: v.GetBool("provenance"),
-		}
+		opts := parseInstancesOptions(cmd, v)
 
 		return executeListInstancesCmd(cmd, args, opts)
 	},
 }
 
+// parseInstancesOptions maps viper state into an InstancesOptions struct.
+// Extracted from the RunE closure so the viper→options mapping can be
+// unit-tested without driving the whole cobra command.
+func parseInstancesOptions(cmd *cobra.Command, v *viper.Viper) *InstancesOptions {
+	return &InstancesOptions{
+		Flags:            flags.ParseGlobalFlags(cmd, v),
+		Format:           v.GetString("format"),
+		Columns:          v.GetStringSlice("columns"),
+		MaxColumns:       v.GetInt("max-columns"),
+		Delimiter:        v.GetString("delimiter"),
+		Stack:            v.GetString("stack"),
+		Filter:           v.GetString("filter"),
+		Query:            v.GetString("query"),
+		Sort:             v.GetString("sort"),
+		Upload:           v.GetBool("upload"),
+		Provenance:       v.GetBool("provenance"),
+		OutputFile:       v.GetString("output-file"),
+		ProcessTemplates: v.GetBool("process-templates"),
+		ProcessFunctions: v.GetBool("process-functions"),
+	}
+}
+
 // columnsCompletionForInstances provides dynamic tab completion for --columns flag.
-// Returns column names from atmos.yaml components.list.columns configuration.
+// Returns column names from atmos.yaml list.instances.columns or components.list.columns configuration.
 func columnsCompletionForInstances(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
 	// Load atmos configuration.
 	configAndStacksInfo, err := e.ProcessCommandLineArgs("list", cmd, args, nil)
@@ -85,7 +98,16 @@ func columnsCompletionForInstances(cmd *cobra.Command, args []string, toComplete
 		return nil, cobra.ShellCompDirectiveNoFileComp
 	}
 
-	// Extract column names from atmos.yaml configuration.
+	// Check new config path: list.instances.columns.
+	if len(atmosConfig.List.Instances.Columns) > 0 {
+		var columnNames []string
+		for _, col := range atmosConfig.List.Instances.Columns {
+			columnNames = append(columnNames, col.Name)
+		}
+		return columnNames, cobra.ShellCompDirectiveNoFileComp
+	}
+
+	// Backward compatibility: check old config path components.list.columns.
 	if len(atmosConfig.Components.List.Columns) > 0 {
 		var columnNames []string
 		for _, col := range atmosConfig.Components.List.Columns {
@@ -111,6 +133,9 @@ func init() {
 		WithSortFlag,
 		WithUploadFlag,
 		WithProvenanceFlag,
+		WithOutputFileFlag,
+		WithProcessTemplatesFlag,
+		WithProcessFunctionsFlag,
 	)
 
 	// Register flags.
@@ -154,15 +179,18 @@ func executeListInstancesCmd(cmd *cobra.Command, args []string, opts *InstancesO
 	}
 
 	return list.ExecuteListInstancesCmd(&list.InstancesCommandOptions{
-		Info:        &configAndStacksInfo,
-		Cmd:         cmd,
-		Args:        args,
-		ShowImports: opts.Provenance,
-		ColumnsFlag: opts.Columns,
-		FilterSpec:  opts.Filter,
-		SortSpec:    opts.Sort,
-		Delimiter:   opts.Delimiter,
-		Query:       opts.Query,
-		AuthManager: authManager,
+		Info:             &configAndStacksInfo,
+		Cmd:              cmd,
+		Args:             args,
+		ShowImports:      opts.Provenance,
+		ColumnsFlag:      opts.Columns,
+		FilterSpec:       opts.Filter,
+		SortSpec:         opts.Sort,
+		Delimiter:        opts.Delimiter,
+		Query:            opts.Query,
+		AuthManager:      authManager,
+		OutputFile:       opts.OutputFile,
+		ProcessTemplates: opts.ProcessTemplates,
+		ProcessFunctions: opts.ProcessFunctions,
 	})
 }

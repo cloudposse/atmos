@@ -22,7 +22,9 @@ import (
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+	tfoutput "github.com/cloudposse/atmos/pkg/terraform/output"
 	u "github.com/cloudposse/atmos/pkg/utils"
+	atmosYaml "github.com/cloudposse/atmos/pkg/yaml"
 )
 
 const (
@@ -271,6 +273,8 @@ func getFindStacksMapCacheKey(atmosConfig *schema.AtmosConfiguration, ignoreMiss
 	keyBuilder.WriteString(cacheKeyDelimiter)
 	keyBuilder.WriteString(atmosConfig.PackerDirAbsolutePath)
 	keyBuilder.WriteString(cacheKeyDelimiter)
+	keyBuilder.WriteString(atmosConfig.AnsibleDirAbsolutePath)
+	keyBuilder.WriteString(cacheKeyDelimiter)
 	keyBuilder.WriteString(fmt.Sprintf("%v", ignoreMissingFiles))
 	keyBuilder.WriteString(cacheKeyDelimiter)
 
@@ -347,6 +351,7 @@ func FindStacksMap(atmosConfig *schema.AtmosConfiguration, ignoreMissingFiles bo
 		atmosConfig.TerraformDirAbsolutePath,
 		atmosConfig.HelmfileDirAbsolutePath,
 		atmosConfig.PackerDirAbsolutePath,
+		atmosConfig.AnsibleDirAbsolutePath,
 		atmosConfig.StackConfigFilesAbsolutePaths,
 		false,
 		true,
@@ -371,11 +376,24 @@ func FindStacksMap(atmosConfig *schema.AtmosConfiguration, ignoreMissingFiles bo
 }
 
 // processStackContextPrefix processes the context prefix for a stack based on name template or pattern.
+// If stackManifestName is provided (stack has explicit name), template/pattern processing is skipped.
 func processStackContextPrefix(
 	atmosConfig *schema.AtmosConfiguration,
 	configAndStacksInfo *schema.ConfigAndStacksInfo,
 	stackName string,
+	stackManifestName string,
 ) error {
+	// If stack has explicit name, skip template/pattern processing.
+	// The explicit name takes precedence over any generated name.
+	// Still populate Context from vars to avoid stale values from previous iterations.
+	if stackManifestName != "" {
+		configAndStacksInfo.Context = cfg.GetContextFromVars(configAndStacksInfo.ComponentVarsSection)
+		configAndStacksInfo.ContextPrefix = stackManifestName
+		configAndStacksInfo.Context.Component = configAndStacksInfo.ComponentFromArg
+		configAndStacksInfo.Context.BaseComponent = configAndStacksInfo.BaseComponentPath
+		return nil
+	}
+
 	switch {
 	case atmosConfig.Stacks.NameTemplate != "":
 		tmpl, err := ProcessTmpl(atmosConfig, "name-template", atmosConfig.Stacks.NameTemplate, configAndStacksInfo.ComponentSection, false)
@@ -388,7 +406,8 @@ func processStackContextPrefix(
 		configAndStacksInfo.Context = cfg.GetContextFromVars(configAndStacksInfo.ComponentVarsSection)
 
 		var err error
-		configAndStacksInfo.ContextPrefix, err = cfg.GetContextPrefix(configAndStacksInfo.Stack,
+		configAndStacksInfo.ContextPrefix, err = cfg.GetContextPrefix(
+			configAndStacksInfo.Stack,
 			configAndStacksInfo.Context,
 			GetStackNamePattern(atmosConfig),
 			stackName,
@@ -447,7 +466,7 @@ func findComponentInStacks(
 			continue
 		}
 
-		if err := processStackContextPrefix(atmosConfig, configAndStacksInfo, stackName); err != nil {
+		if err := processStackContextPrefix(atmosConfig, configAndStacksInfo, stackName, stackManifestName); err != nil {
 			continue
 		}
 
@@ -491,11 +510,13 @@ func findComponentInStacks(
 			foundStacks = append(foundStacks, stackName)
 
 			log.Debug(
-				fmt.Sprintf("Found component '%s' in the stack '%s' in the stack manifest '%s'",
+				fmt.Sprintf(
+					"Found component '%s' in the stack '%s' in the stack manifest '%s'",
 					configAndStacksInfo.ComponentFromArg,
 					configAndStacksInfo.Stack,
 					stackName,
-				))
+				),
+			)
 		}
 	}
 
@@ -569,7 +590,8 @@ func ProcessStacks(
 		configAndStacksInfo.Context.Component = configAndStacksInfo.ComponentFromArg
 		configAndStacksInfo.Context.BaseComponent = configAndStacksInfo.BaseComponentPath
 
-		configAndStacksInfo.ContextPrefix, err = cfg.GetContextPrefix(configAndStacksInfo.Stack,
+		configAndStacksInfo.ContextPrefix, err = cfg.GetContextPrefix(
+			configAndStacksInfo.Stack,
 			configAndStacksInfo.Context,
 			GetStackNamePattern(atmosConfig),
 			configAndStacksInfo.Stack,
@@ -618,7 +640,8 @@ func ProcessStacks(
 			// Component not found - try fallback to path resolution.
 			// If the component argument looks like it could be a path (e.g., "components/terraform/vpc"),
 			// try resolving it as a filesystem path and retry with the resolved component name.
-			log.Debug("Component not found by name, attempting path resolution fallback",
+			log.Debug(
+				"Component not found by name, attempting path resolution fallback",
 				"component", configAndStacksInfo.ComponentFromArg,
 				"stack", configAndStacksInfo.Stack,
 			)
@@ -631,7 +654,8 @@ func ProcessStacks(
 
 			if pathErr == nil {
 				// Path resolution succeeded - retry with resolved component name.
-				log.Debug("Path resolution succeeded, retrying with resolved component",
+				log.Debug(
+					"Path resolution succeeded, retrying with resolved component",
 					"original", configAndStacksInfo.ComponentFromArg,
 					"resolved", resolvedComponent,
 				)
@@ -681,9 +705,10 @@ func ProcessStacks(
 					configAndStacksInfo.Stack,
 					cliConfigYaml)
 		} else if foundStackCount > 1 {
-			err = fmt.Errorf("%w: Found duplicate config for the component `%s` in the stack `%s` in the manifests: %v\n"+
-				"Check that all the context variables are correctly defined in the manifests and not duplicated\n"+
-				"Check that all imports are valid",
+			err = fmt.Errorf(
+				"%w: Found duplicate config for the component `%s` in the stack `%s` in the manifests: %v\n"+
+					"Check that all the context variables are correctly defined in the manifests and not duplicated\n"+
+					"Check that all imports are valid",
 				errUtils.ErrInvalidComponent,
 				configAndStacksInfo.ComponentFromArg,
 				configAndStacksInfo.Stack,
@@ -741,7 +766,13 @@ func ProcessStacks(
 
 	// Process `Go` templates in Atmos manifest sections.
 	if processTemplates {
-		componentSectionStr, err := u.ConvertToYAML(configAndStacksInfo.ComponentSection)
+		// Use delimiter-safe YAML encoding when custom delimiters are configured.
+		// This prevents YAML's single-quote escaping ('') from breaking template delimiters
+		// that contain single-quote characters (e.g., ["'{{", "}}'"]). See #2052.
+		componentSectionStr, err := atmosYaml.ConvertToYAMLPreservingDelimiters(
+			configAndStacksInfo.ComponentSection,
+			atmosConfig.Templates.Settings.Delimiters,
+		)
 		if err != nil {
 			return configAndStacksInfo, err
 		}
@@ -751,6 +782,11 @@ func ProcessStacks(
 		err = mapstructure.Decode(configAndStacksInfo.ComponentSettingsSection, &settingsSectionStruct)
 		if err != nil {
 			return configAndStacksInfo, err
+		}
+
+		// Restore env vars that mapstructure:"-" dropped during Decode.
+		if envMap := extractEnvFromRawMap(configAndStacksInfo.ComponentSettingsSection); len(envMap) > 0 {
+			settingsSectionStruct.Templates.Settings.Env = envMap
 		}
 
 		componentSectionProcessed, err := ProcessTmplWithDatasources(
@@ -896,7 +932,7 @@ func ProcessStacks(
 					}
 
 					// For known OpenTofu features, skip validation. Otherwise, return the error.
-					if !IsOpenTofu(&effectiveConfig) || !isKnownOpenTofuFeature(diagErr) {
+					if !IsOpenTofu(&effectiveConfig, nil) || !isKnownOpenTofuFeature(diagErr) {
 						// For other errors (syntax errors, permission issues, etc.), return error.
 						// Use ErrorBuilder to provide helpful context about the HCL parsing failure.
 						// This fixes https://github.com/cloudposse/atmos/issues/1864 by showing a clear error
@@ -1042,9 +1078,12 @@ func generateComponentBackendConfig(backendType string, backendConfig map[string
 }
 
 // generateComponentProviderOverrides generates provider overrides for components.
+// Dot-notation provider keys (e.g., "aws.use1") are grouped into arrays under the
+// base provider name via tfoutput.ProcessProviderAliases so the output matches
+// Terraform's JSON provider-block format.
 func generateComponentProviderOverrides(providerOverrides map[string]any, _ *schema.AuthContext) map[string]any {
 	return map[string]any{
-		"provider": providerOverrides,
+		"provider": tfoutput.ProcessProviderAliases(providerOverrides),
 	}
 }
 

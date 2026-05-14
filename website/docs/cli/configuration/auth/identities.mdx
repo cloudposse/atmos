@@ -4,17 +4,22 @@ sidebar_position: 3
 sidebar_label: identities
 sidebar_class_name: command
 id: identities
-description: Configure authentication identities including AWS permission sets, assume roles, and IAM users in your `atmos.yaml`.
+description: Configure authentication identities for AWS, Azure, and GCP in your `atmos.yaml`.
 ---
 import DocCardList from '@theme/DocCardList'
 import File from '@site/src/components/File'
 import Intro from '@site/src/components/Intro'
+import Tabs from '@theme/Tabs'
+import TabItem from '@theme/TabItem'
 
 <Intro>
 Identities represent the user accounts or roles available from provider credentials. Configure identities in the `auth.identities` section of your `atmos.yaml`.
 </Intro>
 
-## AWS Permission Set
+<Tabs>
+<TabItem value="aws" label="AWS" default>
+
+## Permission Set
 
 For AWS SSO permission sets.
 
@@ -56,7 +61,7 @@ auth:
   <dd>Numeric account ID (used directly, no lookup required).</dd>
 </dl>
 
-## AWS Assume Role
+## Assume Role
 
 For assuming IAM roles, either directly from a provider or chained from another identity.
 
@@ -93,7 +98,54 @@ auth:
   <dd>Optional. Session name for CloudTrail auditing.</dd>
 </dl>
 
-## AWS User (Break-glass)
+## Assume Root (Organizations)
+
+For centralized root access in AWS Organizations using sts:AssumeRoot. This allows privileged operations on member accounts without enabling root user credentials.
+
+<File title="atmos.yaml">
+```yaml
+auth:
+  identities:
+    root-audit:
+      kind: aws/assume-root
+      via:
+        identity: admin-base        # Chain through an existing identity
+      principal:
+        target_principal: "123456789012"           # 12-digit member account ID
+        task_policy_arn: arn:aws:iam::aws:policy/root-task/IAMAuditRootUserCredentials
+        duration: 15m                              # Optional (max 15m for AssumeRoot)
+```
+</File>
+
+<dl>
+  <dt>`kind`</dt>
+  <dd>**Required.** Must be `aws/assume-root`.</dd>
+
+  <dt>`via.identity`</dt>
+  <dd>**Required.** Name of another identity to chain from (must provide AWS credentials).</dd>
+
+  <dt>`principal.target_principal`</dt>
+  <dd>**Required.** 12-digit AWS account ID of the member account to assume root on.</dd>
+
+  <dt>`principal.task_policy_arn`</dt>
+  <dd>**Required.** AWS-managed root task policy ARN. See supported policies below.</dd>
+
+  <dt>`principal.duration`</dt>
+  <dd>Optional. Session duration (max 15 minutes for AssumeRoot).</dd>
+</dl>
+
+**Supported task policies:**
+- `arn:aws:iam::aws:policy/root-task/IAMAuditRootUserCredentials`
+- `arn:aws:iam::aws:policy/root-task/IAMCreateRootUserPassword`
+- `arn:aws:iam::aws:policy/root-task/IAMDeleteRootUserCredentials`
+- `arn:aws:iam::aws:policy/root-task/S3UnlockBucketPolicy`
+- `arn:aws:iam::aws:policy/root-task/SQSUnlockQueuePolicy`
+
+:::note
+AssumeRoot requires AWS Organizations with centralized root access enabled and appropriate permissions on the base identity.
+:::
+
+## User (Break-glass)
 
 For static IAM user credentials, typically used for emergency access.
 
@@ -126,11 +178,184 @@ auth:
 
   <dt>`credentials.mfa_arn`</dt>
   <dd>Optional. MFA device ARN. When set, Atmos prompts for TOTP code during authentication.</dd>
+
+  <dt>`credentials.webflow_enabled`</dt>
+  <dd>Optional. Defaults to `true`. Set to `false` to disable browser-based authentication fallback.</dd>
 </dl>
 
 :::tip
 Instead of storing credentials in configuration, use `atmos auth user configure` to store them securely in the system keyring.
 :::
+
+### Browser-Based Authentication (Automatic Fallback)
+
+When no static credentials or keyring entries are available, Atmos automatically initiates an OAuth2 PKCE flow via the AWS sign-in service. This provides the same convenient web-based authentication that SSO users already enjoy, without requiring static access keys.
+
+**Authentication priority:**
+
+1. Static credentials from configuration or environment variables
+2. Credentials stored in the system keyring (via `atmos auth user configure`)
+3. Browser-based OAuth2 PKCE flow (automatic fallback)
+
+**How it works:**
+
+1. Atmos starts a local callback server on an ephemeral port
+2. Opens your default browser to the AWS sign-in authorization endpoint
+3. Exchanges the authorization code for temporary credentials using PKCE
+4. Caches a refresh token for 12-hour session reuse
+
+Subsequent authentications within the 12-hour window reuse the cached refresh token, avoiding repeated browser prompts. Credentials refresh automatically every 15 minutes.
+
+In non-interactive environments (CI/CD), Atmos displays a URL that can be opened manually.
+
+**Disabling browser authentication:**
+
+<File title="atmos.yaml">
+```yaml
+auth:
+  identities:
+    my-user:
+      kind: aws/user
+      credentials:
+        webflow_enabled: false  # Disable browser-based auth fallback
+```
+</File>
+
+</TabItem>
+<TabItem value="azure" label="Azure">
+
+## Subscription
+
+For targeting a specific Azure subscription using credentials from an Azure provider.
+
+<File title="atmos.yaml">
+```yaml
+auth:
+  identities:
+    dev-subscription:
+      kind: azure/subscription
+      via:
+        provider: azure-cli          # Reference to an Azure provider
+      principal:
+        subscription_id: "12345678-1234-1234-1234-123456789012"
+        location: eastus             # Optional: default location
+        resource_group: my-rg        # Optional: default resource group
+```
+</File>
+
+<dl>
+  <dt>`kind`</dt>
+  <dd>**Required.** Must be `azure/subscription`.</dd>
+
+  <dt>`via.provider`</dt>
+  <dd>**Required.** Name of an Azure provider to obtain credentials from.</dd>
+
+  <dt>`principal.subscription_id`</dt>
+  <dd>**Required.** Azure subscription ID to target.</dd>
+
+  <dt>`principal.location`</dt>
+  <dd>Optional. Default Azure region for resources.</dd>
+
+  <dt>`principal.resource_group`</dt>
+  <dd>Optional. Default resource group for resources.</dd>
+</dl>
+
+The Azure subscription identity inherits credentials from the provider and sets subscription-specific environment variables (`AZURE_SUBSCRIPTION_ID`, `ARM_SUBSCRIPTION_ID`, etc.) for Terraform and other Azure tools.
+
+:::tip
+For a detailed walkthrough with examples, see the [Azure Authentication Tutorial](/tutorials/azure-authentication).
+:::
+
+</TabItem>
+<TabItem value="gcp" label="GCP">
+
+## Service Account
+
+For impersonating a GCP service account using credentials from a GCP provider.
+
+<File title="atmos.yaml">
+```yaml
+auth:
+  identities:
+    terraform:
+      kind: gcp/service-account
+      default: true
+      via:
+        provider: gcp-adc             # Or gcp-wif for CI/CD
+      principal:
+        service_account_email: terraform@my-project.iam.gserviceaccount.com
+        project_id: my-project        # Optional: override project
+        scopes:                       # Optional: custom scopes
+          - https://www.googleapis.com/auth/cloud-platform
+        lifetime: 3600s               # Optional: token lifetime (default 1h)
+```
+</File>
+
+<dl>
+  <dt>`kind`</dt>
+  <dd>**Required.** Must be `gcp/service-account`.</dd>
+
+  <dt>`via.provider`</dt>
+  <dd>**Required.** Name of a GCP provider (`gcp/adc` or `gcp/workload-identity-federation`).</dd>
+
+  <dt>`principal.service_account_email`</dt>
+  <dd>**Required.** Email of the service account to impersonate.</dd>
+
+  <dt>`principal.project_id`</dt>
+  <dd>Optional. GCP project ID. If not set, extracted from service account email.</dd>
+
+  <dt>`principal.scopes`</dt>
+  <dd>Optional. OAuth scopes for the impersonated token. Defaults to `https://www.googleapis.com/auth/cloud-platform`.</dd>
+
+  <dt>`principal.lifetime`</dt>
+  <dd>Optional. Token lifetime (e.g., `3600s`, `1h`). Default is 1 hour, maximum is 12 hours.</dd>
+
+  <dt>`principal.delegates`</dt>
+  <dd>Optional. Chain of service accounts for multi-hop impersonation.</dd>
+</dl>
+
+The service account identity uses the IAM Credentials API to generate access tokens. Requires the base identity to have `roles/iam.serviceAccountTokenCreator` on the target service account.
+
+## Project
+
+For setting GCP project context without authentication. Useful for targeting a specific project when credentials come from a provider or parent identity.
+
+<File title="atmos.yaml">
+```yaml
+auth:
+  identities:
+    prod-project:
+      kind: gcp/project
+      via:
+        provider: gcp-adc
+      principal:
+        project_id: production-project
+        region: us-central1           # Optional: default region
+        zone: us-central1-a           # Optional: default zone
+```
+</File>
+
+<dl>
+  <dt>`kind`</dt>
+  <dd>**Required.** Must be `gcp/project`.</dd>
+
+  <dt>`via.provider`</dt>
+  <dd>Optional. Name of a GCP provider to obtain credentials from.</dd>
+
+  <dt>`principal.project_id`</dt>
+  <dd>**Required.** GCP project ID to target.</dd>
+
+  <dt>`principal.region`</dt>
+  <dd>Optional. Default GCP region for resources.</dd>
+
+  <dt>`principal.zone`</dt>
+  <dd>Optional. Default GCP zone for resources.</dd>
+</dl>
+
+The project identity sets environment variables (`GOOGLE_CLOUD_PROJECT`, `CLOUDSDK_CORE_PROJECT`, `GOOGLE_CLOUD_REGION`, etc.) for Terraform and gcloud tools.
+
+</TabItem>
+</Tabs>
 
 ## Identity Chaining
 
@@ -222,6 +447,8 @@ components:
 
 Component auth configuration is deep-merged with global auth. Component identities override global identities with the same name.
 
+For components that need multiple identities authenticated simultaneously, see [Required](/cli/configuration/auth/required).
+
 ## Default Identity
 
 Mark one identity as the default to use when no identity is explicitly specified:
@@ -253,57 +480,72 @@ Only one identity should be marked as default. If multiple identities have `defa
 
 ## Using Profiles for Role-Based Access
 
-Use [Atmos profiles](/cli/configuration/profiles) to define different identity configurations for various team roles:
+Use [Atmos profiles](/cli/configuration/profiles) to define different identity configurations for various team roles. Each profile is a **directory** containing YAML configuration files.
 
-<File title="atmos.yaml">
+**Profile structure:**
+```
+profiles/
+├── developer/
+│   └── auth.yaml      # Developer identity config
+├── platform/
+│   └── auth.yaml      # Platform engineer identity config
+└── ci/
+    └── auth.yaml      # CI/CD identity config
+```
+
+<File title="profiles/developer/auth.yaml">
 ```yaml
-profiles:
-  # Profile for developers - limited to dev/staging
-  developer:
-    auth:
-      identities:
-        dev-access:
-          kind: aws/permission-set
-          default: true
-          via:
-            provider: company-sso
-          principal:
-            name: DeveloperAccess
-            account:
-              name: development
+# Profile for developers - limited to dev/staging
+auth:
+  identities:
+    dev-access:
+      kind: aws/permission-set
+      default: true
+      via:
+        provider: company-sso
+      principal:
+        name: DeveloperAccess
+        account:
+          name: development
+```
+</File>
 
-  # Profile for DevOps/Platform engineers - cross-account access
-  platform:
-    auth:
-      identities:
-        platform-admin:
-          kind: aws/permission-set
-          default: true
-          via:
-            provider: company-sso
-          principal:
-            name: AdminAccess
-            account:
-              name: core-identity
+<File title="profiles/platform/auth.yaml">
+```yaml
+# Profile for DevOps/Platform engineers - cross-account access
+auth:
+  identities:
+    platform-admin:
+      kind: aws/permission-set
+      default: true
+      via:
+        provider: company-sso
+      principal:
+        name: AdminAccess
+        account:
+          name: core-identity
 
-        prod-deploy:
-          kind: aws/assume-role
-          via:
-            identity: platform-admin
-          principal:
-            assume_role: arn:aws:iam::999999999999:role/ProductionDeploy
+    prod-deploy:
+      kind: aws/assume-role
+      via:
+        identity: platform-admin
+      principal:
+        assume_role: arn:aws:iam::999999999999:role/ProductionDeploy
+```
+</File>
 
-  # Profile for CI/CD pipelines
-  ci:
-    auth:
-      identities:
-        github-deploy:
-          kind: aws/assume-role
-          default: true
-          via:
-            provider: github-oidc
-          principal:
-            assume_role: arn:aws:iam::123456789012:role/GitHubActionsRole
+<File title="profiles/ci/auth.yaml">
+```yaml
+# Profile for CI/CD pipelines
+auth:
+  identities:
+    github-deploy:
+      kind: aws/assume-role
+      default: true
+      via:
+        provider: github-oidc
+      principal:
+        assume_role: arn:aws:iam::123456789012:role/GitHubActionsRole
 ```
 </File>
 

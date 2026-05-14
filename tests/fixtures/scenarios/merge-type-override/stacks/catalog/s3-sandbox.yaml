@@ -1,0 +1,10 @@
+# Sandbox S3 overlay — overrides list with null.
+import:
+  - catalog/s3-defaults
+
+components:
+  terraform:
+    s3-bucket:
+      vars:
+        # Override list with null — disable lifecycle rules entirely.
+        lifecycle_rules: null

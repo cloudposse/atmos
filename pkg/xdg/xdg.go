@@ -51,6 +51,28 @@ func GetXDGConfigDir(subpath string, perm os.FileMode) (string, error) {
 	return getXDGDir("XDG_CONFIG_HOME", "ATMOS_XDG_CONFIG_HOME", xdg.ConfigHome, subpath, perm)
 }
 
+// LookupXDGConfigDir resolves the Atmos config directory path without creating it.
+// Use this for read-only checks where directory creation is not desired.
+func LookupXDGConfigDir(subpath string) string {
+	return lookupXDGDir("XDG_CONFIG_HOME", "ATMOS_XDG_CONFIG_HOME", xdg.ConfigHome, subpath)
+}
+
+// lookupXDGDir resolves an XDG directory path without creating it.
+func lookupXDGDir(xdgVar, atmosVar string, defaultDir string, subpath string) string {
+	v := viper.New()
+	// Best-effort bind; fall through to default on error.
+	_ = v.BindEnv(atmosVar, atmosVar)
+	_ = v.BindEnv(xdgVar, xdgVar)
+
+	if dir := v.GetString(atmosVar); dir != "" {
+		return filepath.Join(dir, "atmos", subpath)
+	}
+	if dir := v.GetString(xdgVar); dir != "" {
+		return filepath.Join(dir, "atmos", subpath)
+	}
+	return filepath.Join(defaultDir, "atmos", subpath)
+}
+
 // getXDGDir is the internal implementation for getting XDG directories.
 // It follows this precedence:
 // 1. ATMOS_XDG_*_HOME environment variable (Atmos-specific override).

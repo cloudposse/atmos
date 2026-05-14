@@ -1,0 +1,51 @@
+# Toolchain Integration Demo Workflows
+#
+# These workflows demonstrate different ways to use toolchain-managed tools.
+# Each workflow shows a distinct feature of toolchain integration.
+
+name: Toolchain Demo
+description: Workflows demonstrating different toolchain integration patterns
+
+workflows:
+  # Example 1: Implicit dependencies from .tool-versions
+  # No dependencies declared - uses tools from .tool-versions automatically
+  which:
+    description: Verify toolchain tools are in PATH (uses .tool-versions)
+    steps:
+      - name: show-paths
+        command: "echo 'jq:' && which jq && echo 'yq:' && which yq"
+        type: shell
+
+  # Example 2: Exact version pinning
+  # Override .tool-versions with specific versions
+  pinned:
+    description: Use exact pinned versions (overrides .tool-versions)
+    dependencies:
+      tools:
+        jq: "1.7.1"
+    steps:
+      - name: verify-version
+        command: "echo 'Using pinned jq 1.7.1:' && jq --version"
+        type: shell
+
+  # Example 3: SemVer constraints
+  # Allow compatible versions within a range
+  constrained:
+    description: Use SemVer version constraints
+    dependencies:
+      tools:
+        jq: "^1.7.0"
+        yq: "~> 4.40.0"
+    steps:
+      - name: show-versions
+        command: "echo 'jq (^1.7.0):' && jq --version && echo 'yq (~> 4.40.0):' && yq --version"
+        type: shell
+
+  # Example 4: Multi-tool pipeline
+  # Use multiple tools together to convert YAML to formatted JSON
+  convert:
+    description: Convert YAML to JSON using yq and jq together
+    steps:
+      - name: yaml-to-json
+        command: "echo 'name: atmos\nversion: 1.0' | yq -o json | jq ."
+        type: shell

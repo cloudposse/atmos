@@ -250,9 +250,26 @@ func TestExtractS3Config(t *testing.T) {
 }
 
 func TestS3ProvisionerRegistration(t *testing.T) {
-	// Test that S3 provisioner is registered in init().
-	provisioner := GetBackendCreate("s3")
-	assert.NotNil(t, provisioner, "S3 provisioner should be registered")
+	// Reset and manually register S3 provisioners to test registration functions.
+	// Other tests may have cleared the registry, so we can't rely on init().
+	ResetRegistryForTesting()
+	RegisterBackendCreate(backendTypeS3, CreateS3Backend)
+	RegisterBackendDelete(backendTypeS3, DeleteS3Backend)
+	RegisterBackendExists(backendTypeS3, S3BackendExists)
+	RegisterBackendName(backendTypeS3, S3BackendName)
+
+	// Test that all S3 provisioner functions are registered.
+	createFunc := GetBackendCreate("s3")
+	assert.NotNil(t, createFunc, "S3 create provisioner should be registered")
+
+	deleteFunc := GetBackendDelete("s3")
+	assert.NotNil(t, deleteFunc, "S3 delete provisioner should be registered")
+
+	existsFunc := GetBackendExists("s3")
+	assert.NotNil(t, existsFunc, "S3 exists function should be registered")
+
+	nameFunc := GetBackendName("s3")
+	assert.NotNil(t, nameFunc, "S3 name function should be registered")
 }
 
 func TestS3Config_FieldValues(t *testing.T) {
@@ -688,8 +705,9 @@ func TestApplyS3BucketDefaults_NewBucket(t *testing.T) {
 		},
 	}
 
-	err := applyS3BucketDefaults(ctx, mockClient, "new-bucket", false)
+	warnings, err := applyS3BucketDefaults(ctx, mockClient, "new-bucket", false)
 	require.NoError(t, err)
+	assert.Empty(t, warnings, "No warnings should be returned for new bucket")
 	assert.True(t, versioningCalled, "Versioning should be enabled")
 	assert.True(t, encryptionCalled, "Encryption should be enabled")
 	assert.True(t, publicAccessCalled, "Public access should be blocked")
@@ -720,9 +738,11 @@ func TestApplyS3BucketDefaults_ExistingBucket(t *testing.T) {
 	}
 
 	// With alreadyExisted=true, all operations should still be called.
-	err := applyS3BucketDefaults(ctx, mockClient, "existing-bucket", true)
+	warnings, err := applyS3BucketDefaults(ctx, mockClient, "existing-bucket", true)
 	require.NoError(t, err)
 	assert.Equal(t, 4, callCount, "All 4 operations should be called")
+	assert.Len(t, warnings, 1, "Warning should be returned for existing bucket")
+	assert.Contains(t, warnings[0], "Applying Atmos defaults to existing bucket")
 }
 
 func TestApplyS3BucketDefaults_VersioningFails(t *testing.T) {
@@ -733,7 +753,7 @@ func TestApplyS3BucketDefaults_VersioningFails(t *testing.T) {
 		},
 	}
 
-	err := applyS3BucketDefaults(ctx, mockClient, "test-bucket", false)
+	_, err := applyS3BucketDefaults(ctx, mockClient, "test-bucket", false)
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrEnableVersioning)
 }
@@ -749,7 +769,7 @@ func TestApplyS3BucketDefaults_EncryptionFails(t *testing.T) {
 		},
 	}
 
-	err := applyS3BucketDefaults(ctx, mockClient, "test-bucket", false)
+	_, err := applyS3BucketDefaults(ctx, mockClient, "test-bucket", false)
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrEnableEncryption)
 }
@@ -768,7 +788,7 @@ func TestApplyS3BucketDefaults_PublicAccessFails(t *testing.T) {
 		},
 	}
 
-	err := applyS3BucketDefaults(ctx, mockClient, "test-bucket", false)
+	_, err := applyS3BucketDefaults(ctx, mockClient, "test-bucket", false)
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrBlockPublicAccess)
 }
@@ -790,7 +810,7 @@ func TestApplyS3BucketDefaults_TaggingFails(t *testing.T) {
 		},
 	}
 
-	err := applyS3BucketDefaults(ctx, mockClient, "test-bucket", false)
+	_, err := applyS3BucketDefaults(ctx, mockClient, "test-bucket", false)
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrApplyTags)
 }
@@ -1288,4 +1308,115 @@ func TestListAllObjects_NilKeyHandling(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, 2, totalObjects)
 	assert.Equal(t, 1, stateFiles) // Only the non-nil key ending with .tfstate.
+}
+
+// TestS3BackendName tests the S3BackendName function.
+func TestS3BackendName(t *testing.T) {
+	tests := []struct {
+		name          string
+		backendConfig map[string]any
+		expected      string
+	}{
+		{
+			name: "valid bucket name",
+			backendConfig: map[string]any{
+				"bucket": "my-terraform-state",
+				"region": "us-west-2",
+			},
+			expected: "my-terraform-state",
+		},
+		{
+			name: "bucket with complex name",
+			backendConfig: map[string]any{
+				"bucket": "company-dev-us-west-2-terraform-state",
+				"region": "us-west-2",
+			},
+			expected: "company-dev-us-west-2-terraform-state",
+		},
+		{
+			name: "empty bucket returns empty string",
+			backendConfig: map[string]any{
+				"bucket": "",
+				"region": "us-west-2",
+			},
+			expected: "",
+		},
+		{
+			name: "missing bucket key returns empty string",
+			backendConfig: map[string]any{
+				"region": "us-west-2",
+			},
+			expected: "",
+		},
+		{
+			name: "bucket is not a string returns empty string",
+			backendConfig: map[string]any{
+				"bucket": 12345,
+				"region": "us-west-2",
+			},
+			expected: "",
+		},
+		{
+			name:          "nil config returns empty string",
+			backendConfig: nil,
+			expected:      "",
+		},
+		{
+			name:          "empty config returns empty string",
+			backendConfig: map[string]any{},
+			expected:      "",
+		},
+		{
+			name: "bucket is nil returns empty string",
+			backendConfig: map[string]any{
+				"bucket": nil,
+				"region": "us-west-2",
+			},
+			expected: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := S3BackendName(tt.backendConfig)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+// TestS3BackendExists_MissingBucket tests S3BackendExists with missing bucket config.
+func TestS3BackendExists_MissingBucket(t *testing.T) {
+	ctx := context.Background()
+	backendConfig := map[string]any{
+		"region": "us-west-2",
+	}
+
+	exists, err := S3BackendExists(ctx, &schema.AtmosConfiguration{}, backendConfig, nil)
+	require.Error(t, err)
+	assert.False(t, exists)
+	assert.ErrorIs(t, err, errUtils.ErrBucketRequired)
+}
+
+// TestS3BackendExists_MissingRegion tests S3BackendExists with missing region config.
+func TestS3BackendExists_MissingRegion(t *testing.T) {
+	ctx := context.Background()
+	backendConfig := map[string]any{
+		"bucket": "my-terraform-state",
+	}
+
+	exists, err := S3BackendExists(ctx, &schema.AtmosConfiguration{}, backendConfig, nil)
+	require.Error(t, err)
+	assert.False(t, exists)
+	assert.ErrorIs(t, err, errUtils.ErrRegionRequired)
+}
+
+// TestS3BackendExists_EmptyConfig tests S3BackendExists with empty config.
+func TestS3BackendExists_EmptyConfig(t *testing.T) {
+	ctx := context.Background()
+	backendConfig := map[string]any{}
+
+	exists, err := S3BackendExists(ctx, &schema.AtmosConfiguration{}, backendConfig, nil)
+	require.Error(t, err)
+	assert.False(t, exists)
+	assert.ErrorIs(t, err, errUtils.ErrBucketRequired)
 }

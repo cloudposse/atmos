@@ -1849,7 +1849,7 @@ func RegisterPlugin(plugin *Plugin) {
 ## References
 
 - [Cobra Command Documentation](https://github.com/spf13/cobra)
-- [Atmos Custom Commands](/core-concepts/custom-commands)
+- [Atmos Custom Commands](https://atmos.tools/cli/configuration/commands)
 - [Go Init Functions](https://golang.org/doc/effective_go#init)
 - [Docker CLI Command Registry](https://github.com/docker/cli/tree/master/cli/command)
 - [kubectl Plugin System](https://kubernetes.io/docs/tasks/extend-kubectl/kubectl-plugins/)

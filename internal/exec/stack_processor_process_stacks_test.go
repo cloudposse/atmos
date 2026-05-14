@@ -299,6 +299,65 @@ func TestProcessStackConfig_ErrorPaths(t *testing.T) {
 			},
 			expectedError: errUtils.ErrInvalidComponentsPacker,
 		},
+		{
+			name: "invalid ansible section type",
+			config: map[string]any{
+				cfg.AnsibleSectionName: "invalid-not-a-map",
+			},
+			expectedError: errUtils.ErrInvalidAnsibleSection,
+		},
+		{
+			name: "invalid components.ansible type",
+			config: map[string]any{
+				cfg.ComponentsSectionName: map[string]any{
+					cfg.AnsibleComponentType: "invalid",
+				},
+			},
+			expectedError: errUtils.ErrInvalidComponentsAnsible,
+		},
+		{
+			name: "invalid dependencies section type",
+			config: map[string]any{
+				cfg.DependenciesSectionName: "invalid-not-a-map",
+			},
+			expectedError: errUtils.ErrInvalidDependenciesSection,
+		},
+		{
+			name: "invalid terraform dependencies type",
+			config: map[string]any{
+				cfg.TerraformSectionName: map[string]any{
+					cfg.DependenciesSectionName: "invalid",
+				},
+			},
+			expectedError: errUtils.ErrInvalidTerraformDependencies,
+		},
+		{
+			name: "invalid helmfile dependencies type",
+			config: map[string]any{
+				cfg.HelmfileSectionName: map[string]any{
+					cfg.DependenciesSectionName: "invalid",
+				},
+			},
+			expectedError: errUtils.ErrInvalidHelmfileDependencies,
+		},
+		{
+			name: "invalid packer dependencies type",
+			config: map[string]any{
+				cfg.PackerSectionName: map[string]any{
+					cfg.DependenciesSectionName: "invalid",
+				},
+			},
+			expectedError: errUtils.ErrInvalidPackerDependencies,
+		},
+		{
+			name: "invalid ansible dependencies type",
+			config: map[string]any{
+				cfg.AnsibleSectionName: map[string]any{
+					cfg.DependenciesSectionName: "invalid",
+				},
+			},
+			expectedError: errUtils.ErrInvalidAnsibleDependencies,
+		},
 	}
 
 	for _, tt := range tests {
@@ -309,6 +368,7 @@ func TestProcessStackConfig_ErrorPaths(t *testing.T) {
 				"/test/terraform",
 				"/test/helmfile",
 				"/test/packer",
+				"/test/ansible",
 				"test-stack.yaml",
 				tt.config,
 				false,

@@ -1,0 +1,95 @@
+# yaml-language-server: $schema=schema.json
+# Tests for the toolchain example in examples/toolchain/
+# These tests verify the example configuration loads correctly and
+# component-level tool dependencies are properly parsed.
+
+tests:
+  # Verify stack configuration loads and component is described correctly
+  - name: "toolchain example describe component mock -s dev"
+    enabled: true
+    tty: false
+    description: "Verify toolchain example stack config loads and describes the mock component"
+    workdir: "../examples/toolchain/"
+    env:
+      ATMOS_VERSION_CHECK_ENABLED: "false"
+    command: "atmos"
+    args:
+      - "describe"
+      - "component"
+      - "mock"
+      - "-s"
+      - "dev"
+    expect:
+      exit_code: 0
+      stdout:
+        - "mock"
+        - "dev"
+
+  # Verify component-level tool dependencies are present in described output
+  - name: "toolchain example describe component shows dependencies"
+    enabled: true
+    tty: false
+    description: "Verify component-level tool dependencies appear in describe output"
+    workdir: "../examples/toolchain/"
+    env:
+      ATMOS_VERSION_CHECK_ENABLED: "false"
+    command: "atmos"
+    args:
+      - "describe"
+      - "component"
+      - "mock"
+      - "-s"
+      - "dev"
+      - "--format"
+      - "json"
+    expect:
+      exit_code: 0
+      stdout:
+        - "opentofu"
+        - "mock"
+      valid:
+        - "json"
+
+  # Verify the terraform command is set to tofu
+  - name: "toolchain example command is tofu"
+    enabled: true
+    tty: false
+    description: "Verify components.terraform.command is set to tofu"
+    workdir: "../examples/toolchain/"
+    env:
+      ATMOS_VERSION_CHECK_ENABLED: "false"
+    command: "atmos"
+    args:
+      - "describe"
+      - "component"
+      - "mock"
+      - "-s"
+      - "dev"
+      - "--format"
+      - "json"
+    expect:
+      exit_code: 0
+      stdout:
+        - "\"command\": \"tofu\""
+
+  # Verify describe stacks works for the toolchain example
+  - name: "toolchain example describe stacks"
+    enabled: true
+    tty: false
+    description: "Verify describe stacks works for toolchain example"
+    workdir: "../examples/toolchain/"
+    env:
+      ATMOS_VERSION_CHECK_ENABLED: "false"
+    command: "atmos"
+    args:
+      - "describe"
+      - "stacks"
+      - "--format"
+      - "json"
+    expect:
+      exit_code: 0
+      stdout:
+        - "mock"
+        - "dev"
+      valid:
+        - "json"

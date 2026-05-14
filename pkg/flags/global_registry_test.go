@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/flags/preprocess"
 )
 
 func TestParseIdentityFlag_NormalizesDisabledValues(t *testing.T) {
@@ -435,6 +436,101 @@ func TestParsePagerFlag_FallbackToEnv(t *testing.T) {
 	assert.True(t, result.IsEnabled(), "Should be enabled")
 }
 
+// TestParseGlobalFlags_AIFlag tests that the --ai flag is correctly parsed.
+func TestParseGlobalFlags_AIFlag(t *testing.T) {
+	t.Run("defaults to false", func(t *testing.T) {
+		cmd := &cobra.Command{Use: "test"}
+		v := viper.New()
+		parser := NewGlobalOptionsBuilder().Build()
+		parser.RegisterFlags(cmd)
+		_ = parser.BindToViper(v)
+
+		flags := ParseGlobalFlags(cmd, v)
+		assert.False(t, flags.AI, "AI should default to false")
+	})
+
+	t.Run("CLI flag enables AI", func(t *testing.T) {
+		cmd := &cobra.Command{Use: "test"}
+		v := viper.New()
+		parser := NewGlobalOptionsBuilder().Build()
+		parser.RegisterFlags(cmd)
+		_ = parser.BindToViper(v)
+
+		v.Set("ai", true)
+
+		flags := ParseGlobalFlags(cmd, v)
+		assert.True(t, flags.AI, "AI should be true when set via CLI flag")
+	})
+
+	t.Run("environment variable enables AI", func(t *testing.T) {
+		cmd := &cobra.Command{Use: "test"}
+		v := viper.New()
+		parser := NewGlobalOptionsBuilder().Build()
+		parser.RegisterFlags(cmd)
+		_ = parser.BindToViper(v)
+
+		t.Setenv("ATMOS_AI", "true")
+		_ = v.BindEnv("ai", "ATMOS_AI")
+
+		flags := ParseGlobalFlags(cmd, v)
+		assert.True(t, flags.AI, "AI should be true when ATMOS_AI is set")
+	})
+}
+
+// TestParseGlobalFlags_SkillFlag tests that the --skill flag is correctly parsed as a string slice.
+func TestParseGlobalFlags_SkillFlag(t *testing.T) {
+	t.Run("defaults to empty", func(t *testing.T) {
+		cmd := &cobra.Command{Use: "test"}
+		v := viper.New()
+		parser := NewGlobalOptionsBuilder().Build()
+		parser.RegisterFlags(cmd)
+		_ = parser.BindToViper(v)
+
+		flags := ParseGlobalFlags(cmd, v)
+		assert.Empty(t, flags.Skill, "Skill should default to empty slice")
+	})
+
+	t.Run("CLI flag sets single skill", func(t *testing.T) {
+		cmd := &cobra.Command{Use: "test"}
+		v := viper.New()
+		parser := NewGlobalOptionsBuilder().Build()
+		parser.RegisterFlags(cmd)
+		_ = parser.BindToViper(v)
+
+		v.Set("skill", []string{"atmos-terraform"})
+
+		flags := ParseGlobalFlags(cmd, v)
+		assert.Equal(t, []string{"atmos-terraform"}, flags.Skill, "Skill should be set via CLI flag")
+	})
+
+	t.Run("CLI flag sets multiple skills", func(t *testing.T) {
+		cmd := &cobra.Command{Use: "test"}
+		v := viper.New()
+		parser := NewGlobalOptionsBuilder().Build()
+		parser.RegisterFlags(cmd)
+		_ = parser.BindToViper(v)
+
+		v.Set("skill", []string{"atmos-terraform", "atmos-stacks"})
+
+		flags := ParseGlobalFlags(cmd, v)
+		assert.Equal(t, []string{"atmos-terraform", "atmos-stacks"}, flags.Skill, "Skill should support multiple values")
+	})
+
+	t.Run("environment variable sets skill", func(t *testing.T) {
+		cmd := &cobra.Command{Use: "test"}
+		v := viper.New()
+		parser := NewGlobalOptionsBuilder().Build()
+		parser.RegisterFlags(cmd)
+		_ = parser.BindToViper(v)
+
+		t.Setenv("ATMOS_SKILL", "atmos-terraform")
+		_ = v.BindEnv("skill", "ATMOS_SKILL")
+
+		flags := ParseGlobalFlags(cmd, v)
+		assert.Contains(t, flags.Skill, "atmos-terraform", "Skill should be set when ATMOS_SKILL is set")
+	})
+}
+
 // TestParsePagerFlag_NoFlagRegistered tests behavior when pager flag is not registered.
 func TestParsePagerFlag_NoFlagRegistered(t *testing.T) {
 	// Create command WITHOUT pager flag.
@@ -449,4 +545,72 @@ func TestParsePagerFlag_NoFlagRegistered(t *testing.T) {
 	assert.False(t, result.IsProvided(), "Should not be provided")
 	assert.Equal(t, "", result.Value(), "Value should be empty")
 	assert.False(t, result.IsEnabled(), "Should not be enabled")
+}
+
+func TestGlobalFlagsRegistry_ContainsNoOptDefValFlags(t *testing.T) {
+	registry := GlobalFlagsRegistry()
+
+	// Verify identity flag is registered with NoOptDefVal.
+	identityFlag := registry.Get("identity")
+	assert.NotNil(t, identityFlag, "identity flag should be registered")
+	assert.Equal(t, cfg.IdentityFlagSelectValue, identityFlag.GetNoOptDefVal(), "identity should have NoOptDefVal set")
+	assert.Equal(t, "i", identityFlag.GetShorthand(), "identity should have shorthand 'i'")
+
+	// Verify pager flag is registered with NoOptDefVal.
+	pagerFlag := registry.Get("pager")
+	assert.NotNil(t, pagerFlag, "pager flag should be registered")
+	assert.Equal(t, "true", pagerFlag.GetNoOptDefVal(), "pager should have NoOptDefVal set")
+}
+
+func TestGlobalFlagsRegistry_PreprocessesIdentityFlag(t *testing.T) {
+	registry := GlobalFlagsRegistry()
+
+	// Convert flags to preprocess.FlagInfo interface.
+	allFlags := registry.All()
+	flagInfos := make([]preprocess.FlagInfo, len(allFlags))
+	for i, f := range allFlags {
+		flagInfos[i] = f
+	}
+
+	// Create the preprocessor.
+	preprocessor := preprocess.NewNoOptDefValPreprocessor(flagInfos)
+
+	tests := []struct {
+		name     string
+		input    []string
+		expected []string
+	}{
+		{
+			name:     "identity with space-separated value",
+			input:    []string{"auth", "login", "--identity", "prod-admin"},
+			expected: []string{"auth", "login", "--identity=prod-admin"},
+		},
+		{
+			name:     "identity shorthand with space-separated value",
+			input:    []string{"auth", "login", "-i", "prod-admin"},
+			expected: []string{"auth", "login", "-i=prod-admin"},
+		},
+		{
+			name:     "identity with equals syntax unchanged",
+			input:    []string{"auth", "login", "--identity=prod-admin"},
+			expected: []string{"auth", "login", "--identity=prod-admin"},
+		},
+		{
+			name:     "identity at end unchanged",
+			input:    []string{"auth", "login", "--identity"},
+			expected: []string{"auth", "login", "--identity"},
+		},
+		{
+			name:     "identity followed by another flag unchanged",
+			input:    []string{"auth", "login", "--identity", "--verbose"},
+			expected: []string{"auth", "login", "--identity", "--verbose"},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			result := preprocessor.Preprocess(tc.input)
+			assert.Equal(t, tc.expected, result)
+		})
+	}
 }

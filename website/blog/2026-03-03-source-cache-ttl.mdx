@@ -1,0 +1,76 @@
+---
+slug: source-cache-ttl
+title: "Source Cache TTL for JIT-Vendored Components"
+authors: [osterman]
+tags: [feature]
+---
+
+Atmos now supports a `ttl` field on component source configuration to control how long cached JIT-vendored sources are reused before automatically re-pulling from the remote. This is especially useful when working with floating refs like branch names during active development.
+
+<!--truncate-->
+
+## What Changed
+
+The `source` specification now accepts an optional `ttl` (time-to-live) field that controls cache expiration for JIT-vendored components. When the TTL expires, the source is automatically re-pulled on the next command invocation.
+
+```yaml
+components:
+  terraform:
+    my-module:
+      source:
+        uri: "git::https://github.com/org/repo.git"
+        version: "main"
+        ttl: "0s"   # Always re-pull from upstream
+```
+
+A global default TTL can be set in `atmos.yaml` and overridden per-component:
+
+```yaml
+# atmos.yaml
+components:
+  terraform:
+    source:
+      ttl: "1h"   # Re-pull sources older than 1 hour
+```
+
+If no TTL is set, behavior is unchanged: cached sources are reused indefinitely and only re-pulled when the version or URI changes.
+
+## Why This Matters
+
+When using floating refs like branch names (`version: "main"`), the version string never changes even though the upstream content does. Previously, Atmos would silently reuse stale cached code, forcing developers to manually delete `.workdir/` or run `source pull --force` before every plan.
+
+This created a painful inner loop during active development and a behavioral gap between local environments (cached) and CI (ephemeral, always fresh).
+
+With `ttl`, you describe how stale is acceptable and Atmos enforces it automatically.
+
+## How to Use It
+
+**Active development** (always get latest):
+```yaml
+source:
+  uri: "git::https://github.com/org/repo.git"
+  version: "develop"
+  ttl: "0s"
+```
+
+**Team collaboration** (hourly refresh):
+```yaml
+source:
+  uri: "git::https://github.com/org/repo.git"
+  version: "main"
+  ttl: "1h"
+```
+
+**Stable releases** (no TTL needed):
+```yaml
+source:
+  uri: "github.com/cloudposse/terraform-aws-components//modules/vpc"
+  version: "1.450.0"
+  # No ttl - cache indefinitely, only re-pull on version change
+```
+
+Supported duration formats: `"0s"`, `"30m"`, `"1h"`, `"7d"`, `"daily"`, `"weekly"`.
+
+## Get Involved
+
+We'd love to hear your feedback on this feature! Please [open an issue](https://github.com/cloudposse/atmos/issues) if you have questions or suggestions.

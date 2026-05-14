@@ -40,8 +40,8 @@ func newSystemKeyringStore() (*systemKeyringStore, error) {
 	return &systemKeyringStore{}, nil
 }
 
-// Store stores credentials for the given alias.
-func (s *systemKeyringStore) Store(alias string, creds types.ICredentials) error {
+// Store stores credentials for the given alias within the specified realm.
+func (s *systemKeyringStore) Store(alias string, creds types.ICredentials, realm string) error {
 	defer perf.Track(nil, "credentials.systemKeyringStore.Store")()
 
 	var (
@@ -58,13 +58,28 @@ func (s *systemKeyringStore) Store(alias string, creds types.ICredentials) error
 		if expTime, expErr := c.GetExpiration(); expErr == nil && expTime != nil {
 			log.Debug("Storing AWS credentials in keyring",
 				logKeyAlias, alias,
+				"realm", realm,
 				"expiration", *expTime,
 				"expiration_str", c.Expiration,
 				logKeyHasSessionTok, c.SessionToken != "")
 		} else {
 			log.Debug("Storing AWS credentials in keyring (no expiration)",
 				logKeyAlias, alias,
+				"realm", realm,
 				logKeyHasSessionTok, c.SessionToken != "")
+		}
+	case *types.GCPCredentials:
+		typ = "gcp"
+		raw, err = json.Marshal(c)
+		if expTime, expErr := c.GetExpiration(); expErr == nil && expTime != nil {
+			log.Debug("Storing GCP credentials in keyring",
+				logKeyAlias, alias,
+				"expiration", *expTime,
+				"project_id", c.ProjectID)
+		} else {
+			log.Debug("Storing GCP credentials in keyring (no expiration)",
+				logKeyAlias, alias,
+				"project_id", c.ProjectID)
 		}
 	case *types.OIDCCredentials:
 		typ = "oidc"
@@ -82,17 +97,29 @@ func (s *systemKeyringStore) Store(alias string, creds types.ICredentials) error
 		return errors.Join(ErrCredentialStore, fmt.Errorf("failed to marshal credentials: %w", err))
 	}
 
-	if err := keyring.Set(alias, KeyringUser, string(data)); err != nil {
+	key := buildKeyringKey(alias, realm)
+	log.Debug("Storing credentials in system keyring",
+		logKeyAlias, alias,
+		"realm", realm,
+		"key", key,
+		"keyring_user", KeyringUser)
+	if err := keyring.Set(key, KeyringUser, string(data)); err != nil {
 		return errors.Join(ErrCredentialStore, fmt.Errorf("failed to store credentials in system keyring: %w", err))
 	}
 	return nil
 }
 
-// Retrieve retrieves credentials for the given alias.
-func (s *systemKeyringStore) Retrieve(alias string) (types.ICredentials, error) {
+// Retrieve retrieves credentials for the given alias within the specified realm.
+func (s *systemKeyringStore) Retrieve(alias string, realm string) (types.ICredentials, error) {
 	defer perf.Track(nil, "credentials.systemKeyringStore.Retrieve")()
 
-	data, err := keyring.Get(alias, KeyringUser)
+	key := buildKeyringKey(alias, realm)
+	log.Debug("Retrieving credentials from system keyring",
+		logKeyAlias, alias,
+		"realm", realm,
+		"key", key,
+		"keyring_user", KeyringUser)
+	data, err := keyring.Get(key, KeyringUser)
 	if err != nil {
 		// If credentials not found, return ErrCredentialsNotFound for consistent error handling.
 		if errors.Is(err, keyring.ErrNotFound) {
@@ -116,6 +143,7 @@ func (s *systemKeyringStore) Retrieve(alias string) (types.ICredentials, error) 
 		if expTime, expErr := c.GetExpiration(); expErr == nil && expTime != nil {
 			log.Debug("Retrieved AWS credentials from keyring",
 				logKeyAlias, alias,
+				"realm", realm,
 				"expiration", *expTime,
 				"expiration_str", c.Expiration,
 				"time_until_expiry", time.Until(*expTime),
@@ -123,7 +151,25 @@ func (s *systemKeyringStore) Retrieve(alias string) (types.ICredentials, error) 
 		} else {
 			log.Debug("Retrieved AWS credentials from keyring (no expiration)",
 				logKeyAlias, alias,
+				"realm", realm,
 				logKeyHasSessionTok, c.SessionToken != "")
+		}
+		return &c, nil
+	case "gcp":
+		var c types.GCPCredentials
+		if err := json.Unmarshal(env.Data, &c); err != nil {
+			return nil, errors.Join(ErrCredentialStore, fmt.Errorf("failed to unmarshal GCP credentials: %w", err))
+		}
+		if expTime, expErr := c.GetExpiration(); expErr == nil && expTime != nil {
+			log.Debug("Retrieved GCP credentials from keyring",
+				logKeyAlias, alias,
+				"expiration", *expTime,
+				"time_until_expiry", time.Until(*expTime),
+				"project_id", c.ProjectID)
+		} else {
+			log.Debug("Retrieved GCP credentials from keyring (no expiration)",
+				logKeyAlias, alias,
+				"project_id", c.ProjectID)
 		}
 		return &c, nil
 	case "oidc":
@@ -137,11 +183,12 @@ func (s *systemKeyringStore) Retrieve(alias string) (types.ICredentials, error) 
 	}
 }
 
-// Delete deletes credentials for the given alias.
-func (s *systemKeyringStore) Delete(alias string) error {
+// Delete deletes credentials for the given alias within the specified realm.
+func (s *systemKeyringStore) Delete(alias string, realm string) error {
 	defer perf.Track(nil, "credentials.systemKeyringStore.Delete")()
 
-	if err := keyring.Delete(alias, KeyringUser); err != nil {
+	key := buildKeyringKey(alias, realm)
+	if err := keyring.Delete(key, KeyringUser); err != nil {
 		// Treat "not found" as success - credential already removed.
 		if errors.Is(err, keyring.ErrNotFound) {
 			return nil
@@ -155,7 +202,8 @@ func (s *systemKeyringStore) Delete(alias string) error {
 // List is not supported by the system keyring store due to go-keyring library limitations.
 // Returns an error combining ErrCredentialStore, ErrNotSupported, and ErrListNotSupported.
 // Callers should use errors.Is to detect the not-supported condition and treat List as unsupported.
-func (s *systemKeyringStore) List() ([]string, error) {
+// The realm parameter is accepted for interface compatibility but not used.
+func (s *systemKeyringStore) List(realm string) ([]string, error) {
 	defer perf.Track(nil, "credentials.systemKeyringStore.List")()
 
 	// Note: go-keyring doesn't provide a list function.
@@ -164,11 +212,11 @@ func (s *systemKeyringStore) List() ([]string, error) {
 	return nil, errors.Join(ErrCredentialStore, ErrNotSupported, ErrListNotSupported)
 }
 
-// IsExpired checks if credentials for the given alias are expired.
-func (s *systemKeyringStore) IsExpired(alias string) (bool, error) {
+// IsExpired checks if credentials for the given alias are expired within the specified realm.
+func (s *systemKeyringStore) IsExpired(alias string, realm string) (bool, error) {
 	defer perf.Track(nil, "credentials.systemKeyringStore.IsExpired")()
 
-	creds, err := s.Retrieve(alias)
+	creds, err := s.Retrieve(alias, realm)
 	if err != nil {
 		return true, err
 	}

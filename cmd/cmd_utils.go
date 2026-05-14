@@ -30,7 +30,9 @@ import (
 	l "github.com/cloudposse/atmos/pkg/list"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/reexec"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui"
 	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/cloudposse/atmos/pkg/version"
 )
@@ -65,49 +67,6 @@ func WithStackValidation(check bool) AtmosValidateOption {
 	}
 }
 
-// getGlobalFlagNames returns a set of all global persistent flag names and shorthands.
-// It also includes reserved names like "identity".
-// It queries RootCmd at runtime so the set stays current without maintaining a static list.
-func getGlobalFlagNames() map[string]bool {
-	return getReservedFlagNamesFor(RootCmd)
-}
-
-// getReservedFlagNamesFor returns a set of all reserved flag names and shorthands.
-// For a given parent command, this includes:
-// 1. The parent command's own persistent flags.
-// 2. Flags inherited from ancestor commands (via InheritedFlags).
-// 3. The hardcoded "identity" flag that gets added to every custom command.
-//
-// This function is used to validate that child commands don't define flags that
-// would conflict with their parent's flags at any level of nesting.
-func getReservedFlagNamesFor(parent *cobra.Command) map[string]bool {
-	reserved := make(map[string]bool)
-
-	// Query persistent flags from the parent command.
-	parent.PersistentFlags().VisitAll(func(f *pflag.Flag) {
-		reserved[f.Name] = true
-		if f.Shorthand != "" {
-			reserved[f.Shorthand] = true
-		}
-	})
-
-	// Query inherited flags from ancestor commands.
-	// InheritedFlags() returns flags that are inherited from parent commands
-	// but not defined on this command itself.
-	parent.InheritedFlags().VisitAll(func(f *pflag.Flag) {
-		reserved[f.Name] = true
-		if f.Shorthand != "" {
-			reserved[f.Shorthand] = true
-		}
-	})
-
-	// Also include the hardcoded "identity" flag that gets added to every custom command.
-	// This prevents user-defined flags from conflicting with it.
-	reserved["identity"] = true
-
-	return reserved
-}
-
 // processCustomCommands registers custom commands defined in the Atmos configuration onto the given parent Cobra command.
 //
 // It reads the provided command definitions, reuses any existing top-level commands when appropriate, and adds new Cobra
@@ -118,14 +77,8 @@ func processCustomCommands(
 	atmosConfig schema.AtmosConfiguration,
 	commands []schema.Command,
 	parentCommand *cobra.Command,
-	topLevel bool,
 ) error {
 	var command *cobra.Command
-	existingTopLevelCommands := make(map[string]*cobra.Command)
-
-	if topLevel {
-		existingTopLevelCommands = getTopLevelCommands()
-	}
 
 	for _, commandCfg := range commands {
 		// Clone the 'commandCfg' struct into a local variable because of the automatic closure in the `Run` function of the Cobra command.
@@ -136,174 +89,35 @@ func processCustomCommands(
 			return err
 		}
 
-		if _, exist := existingTopLevelCommands[commandConfig.Name]; exist && topLevel {
-			command = existingTopLevelCommands[commandConfig.Name]
+		// Check if the parent already has a subcommand with this name (built-in or previously added).
+		// If so, reuse it to allow custom subcommands to merge into built-in namespaces.
+		existing := findSubcommand(parentCommand, commandConfig.Name)
+		if existing != nil {
+			if len(commandConfig.Steps) > 0 {
+				ui.Warningf(
+					"Custom command %q defines steps that conflict with built-in command %q; "+
+						"built-in behavior preserved, custom steps ignored",
+					commandConfig.Name, existing.CommandPath(),
+				)
+			}
+			command = existing
 		} else {
-			customCommand := &cobra.Command{
-				Use:   commandConfig.Name,
-				Short: commandConfig.Description,
-				Long:  commandConfig.Description,
-				PreRun: func(cmd *cobra.Command, args []string) {
-					preCustomCommand(cmd, args, parentCommand, commandConfig)
-				},
-				Run: func(cmd *cobra.Command, args []string) {
-					executeCustomCommand(atmosConfig, cmd, args, parentCommand, commandConfig)
-				},
+			// Create new custom command with flag validation.
+			customCommand, err := createCustomCommand(&atmosConfig, commandConfig, parentCommand)
+			if err != nil {
+				return err
 			}
-			customCommand.PersistentFlags().Bool("", false, doubleDashHint)
-
-			// Add --identity flag to all custom commands to allow runtime override
-			customCommand.PersistentFlags().String("identity", "", "Identity to use for authentication (overrides identity in command config)")
-			AddIdentityCompletion(customCommand)
-
-			// Get reserved flag names by querying the parent command's persistent and inherited flags.
-			// This ensures we detect conflicts with both global flags and parent custom command flags.
-			reservedFlags := getReservedFlagNamesFor(parentCommand)
-
-			// Validate flags don't conflict with global/reserved flags or parent command flags,
-			// and detect duplicate flag names/shorthands within the same command config.
-			seen := make(map[string]bool)
-			for _, flag := range commandConfig.Flags {
-				// Detect duplicates within the same command config early.
-				if seen[flag.Name] {
-					return errUtils.Build(errUtils.ErrDuplicateFlagRegistration).
-						WithExplanation(fmt.Sprintf("Custom command '%s' defines duplicate flag '--%s'", commandConfig.Name, flag.Name)).
-						WithHint("Remove or rename the duplicate flag in your atmos.yaml").
-						WithContext("command", commandConfig.Name).
-						WithContext("flag", flag.Name).
-						Err()
-				}
-				seen[flag.Name] = true
-
-				if reservedFlags[flag.Name] {
-					return errUtils.Build(errUtils.ErrReservedFlagName).
-						WithExplanation(fmt.Sprintf("Custom command '%s' defines flag '--%s' which conflicts with a reserved or parent command flag", commandConfig.Name, flag.Name)).
-						WithHint("Rename the flag in your atmos.yaml to avoid conflicts with reserved flag names").
-						WithContext("command", commandConfig.Name).
-						WithContext("flag", flag.Name).
-						Err()
-				}
-				if flag.Shorthand != "" && reservedFlags[flag.Shorthand] {
-					return errUtils.Build(errUtils.ErrReservedFlagName).
-						WithExplanation(fmt.Sprintf("Custom command '%s' defines flag shorthand '-%s' which conflicts with a reserved or parent command flag shorthand", commandConfig.Name, flag.Shorthand)).
-						WithHint("Change the shorthand in your atmos.yaml to avoid conflicts with reserved flag shorthands").
-						WithContext("command", commandConfig.Name).
-						WithContext("shorthand", flag.Shorthand).
-						Err()
-				}
-				if flag.Shorthand != "" {
-					if seen[flag.Shorthand] {
-						return errUtils.Build(errUtils.ErrDuplicateFlagRegistration).
-							WithExplanation(fmt.Sprintf("Custom command '%s' defines duplicate flag shorthand '-%s'", commandConfig.Name, flag.Shorthand)).
-							WithHint("Remove or change the duplicate shorthand in your atmos.yaml").
-							WithContext("command", commandConfig.Name).
-							WithContext("shorthand", flag.Shorthand).
-							Err()
-					}
-					seen[flag.Shorthand] = true
-				}
-			}
-
-			// Process and add flags to the command.
-			for _, flag := range commandConfig.Flags {
-				if flag.Type == "bool" {
-					defaultVal := false
-					if flag.Default != nil {
-						if boolVal, ok := flag.Default.(bool); ok {
-							defaultVal = boolVal
-						}
-					}
-					if flag.Shorthand != "" {
-						customCommand.PersistentFlags().BoolP(flag.Name, flag.Shorthand, defaultVal, flag.Usage)
-					} else {
-						customCommand.PersistentFlags().Bool(flag.Name, defaultVal, flag.Usage)
-					}
-				} else {
-					defaultVal := ""
-					if flag.Default != nil {
-						if strVal, ok := flag.Default.(string); ok {
-							defaultVal = strVal
-						}
-					}
-					if flag.Shorthand != "" {
-						customCommand.PersistentFlags().StringP(flag.Name, flag.Shorthand, defaultVal, flag.Usage)
-					} else {
-						customCommand.PersistentFlags().String(flag.Name, defaultVal, flag.Usage)
-					}
-				}
-
-				if flag.Required {
-					err := customCommand.MarkPersistentFlagRequired(flag.Name)
-					if err != nil {
-						return err
-					}
-				}
-			}
-
-			// Add the command to the parent command
 			parentCommand.AddCommand(customCommand)
 			command = customCommand
 		}
 
-		err = processCustomCommands(atmosConfig, commandConfig.Commands, command, false)
+		err = processCustomCommands(atmosConfig, commandConfig.Commands, command)
 		if err != nil {
 			return err
 		}
 	}
 
 	return nil
-}
-
-// filterChdirEnv removes ATMOS_CHDIR from environ and optionally adds an empty
-// ATMOS_CHDIR= entry to override any parent value when spawning child processes.
-// This prevents child processes from re-applying the parent's chdir directive.
-func filterChdirEnv(environ []string) []string {
-	filtered := make([]string, 0, len(environ))
-	foundAtmosChdir := false
-	for _, env := range environ {
-		if strings.HasPrefix(env, "ATMOS_CHDIR=") {
-			foundAtmosChdir = true
-			continue
-		}
-		filtered = append(filtered, env)
-	}
-	// Add empty ATMOS_CHDIR to override parent's value in merged environment.
-	if foundAtmosChdir {
-		filtered = append(filtered, "ATMOS_CHDIR=")
-	}
-	return filtered
-}
-
-// filterChdirArgs returns a copy of args with any chdir flags and their values removed.
-// It removes `--chdir`, `--chdir=<value>`, `-C`, `-C=<value>`, and concatenated `-C<value>` forms, preserving the order of all other arguments.
-func filterChdirArgs(args []string) []string {
-	filtered := make([]string, 0, len(args))
-	skipNext := false
-
-	for _, arg := range args {
-		if skipNext {
-			skipNext = false
-			continue
-		}
-
-		// Skip --chdir=value, -C=value, -C<value> (concatenated).
-		if strings.HasPrefix(arg, "--chdir=") ||
-			strings.HasPrefix(arg, "-C=") ||
-			(strings.HasPrefix(arg, "-C") && len(arg) > 2) {
-			continue
-		}
-
-		// Skip --chdir value or -C value (next arg is the value).
-		if arg == "--chdir" || arg == "-C" {
-			skipNext = true
-			continue
-		}
-
-		// Keep all other args.
-		filtered = append(filtered, arg)
-	}
-
-	return filtered
 }
 
 // processCommandAliases registers command aliases from the provided configuration as subcommands of
@@ -352,11 +166,11 @@ func processCommandAliases(
 					// The chdir has already been processed by the parent atmos invocation, and passing
 					// it again would cause the new process to try to chdir to a relative path that's
 					// now invalid (since we already changed directories).
-					filteredArgs := filterChdirArgs(args)
+					filteredArgs := reexec.StripChdirArgs(args)
 
 					// Filter out ATMOS_CHDIR from environment variables to prevent the child process
 					// from re-applying the parent's chdir directive.
-					filteredEnv := filterChdirEnv(os.Environ())
+					filteredEnv := reexec.FilterChdirEnv(os.Environ())
 
 					// Build command arguments: split aliasCmd into parts and append filteredArgs.
 					// Use direct process execution instead of shell to avoid path escaping
@@ -414,7 +228,7 @@ func preCustomCommand(
 					fmt.Sprintf("%d. %s %s %s\n", i+1, parentCommand.Use, commandConfig.Name, c.Name),
 				)
 			}
-			log.Info(sb.String())
+			ui.Writeln(sb.String())
 			errUtils.Exit(1)
 		} else {
 			// truly invalid, nothing to do
@@ -482,6 +296,235 @@ func preCustomCommand(
 	}
 }
 
+// findSubcommand returns the existing subcommand of parent with the given name, or nil.
+func findSubcommand(parent *cobra.Command, name string) *cobra.Command {
+	for _, c := range parent.Commands() {
+		if c.Name() == name {
+			return c
+		}
+	}
+	return nil
+}
+
+// createCustomCommand creates a new cobra command with flags from commandConfig,
+// validating flag names and types for conflicts with parent command flags.
+func createCustomCommand(
+	atmosConfig *schema.AtmosConfiguration,
+	commandConfig *schema.Command,
+	parentCommand *cobra.Command,
+) (*cobra.Command, error) {
+	customCommand := &cobra.Command{
+		Use:   commandConfig.Name,
+		Short: commandConfig.Description,
+		Long:  commandConfig.Description,
+		PreRun: func(cmd *cobra.Command, args []string) {
+			preCustomCommand(cmd, args, parentCommand, commandConfig)
+		},
+		Run: func(cmd *cobra.Command, args []string) {
+			executeCustomCommand(*atmosConfig, cmd, args, parentCommand, commandConfig)
+		},
+	}
+	customCommand.PersistentFlags().Bool("", false, doubleDashHint)
+
+	// Add --identity flag to all custom commands to allow runtime override.
+	customCommand.PersistentFlags().String("identity", "", "Identity to use for authentication (overrides identity in command config)")
+	AddIdentityCompletion(customCommand)
+
+	if err := validateCustomCommandFlags(commandConfig, parentCommand); err != nil {
+		return nil, err
+	}
+
+	if err := registerCustomCommandFlags(commandConfig, customCommand, parentCommand); err != nil {
+		return nil, err
+	}
+
+	return customCommand, nil
+}
+
+// validateCustomCommandFlags checks for duplicate flags and type conflicts
+// between the custom command's flags and parent/inherited flags.
+func validateCustomCommandFlags(commandConfig *schema.Command, parentCommand *cobra.Command) error {
+	seen := make(map[string]bool)
+	for i := range commandConfig.Flags {
+		if err := validateFlag(commandConfig.Name, &commandConfig.Flags[i], seen, parentCommand); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// validateFlag checks a single flag for duplicates and type conflicts with parent flags.
+func validateFlag(cmdName string, flag *schema.CommandFlag, seen map[string]bool, parentCommand *cobra.Command) error {
+	// Detect duplicates within the same command config early.
+	if seen[flag.Name] {
+		return errUtils.Build(errUtils.ErrDuplicateFlagRegistration).
+			WithExplanation(fmt.Sprintf("Custom command '%s' defines duplicate flag '--%s'", cmdName, flag.Name)).
+			WithHint("Remove or rename the duplicate flag in your atmos.yaml").
+			WithContext("command", cmdName).
+			WithContext("flag", flag.Name).
+			Err()
+	}
+	seen[flag.Name] = true
+
+	// Check if this flag already exists on parent or globally.
+	// Only check PersistentFlags() and InheritedFlags() - NOT Flags().
+	// Local flags (Flags()) on the parent are NOT inherited by subcommands,
+	// so they shouldn't block subcommands from defining the same flag.
+	existingFlag := parentCommand.PersistentFlags().Lookup(flag.Name)
+	if existingFlag == nil {
+		existingFlag = parentCommand.InheritedFlags().Lookup(flag.Name)
+	}
+
+	if existingFlag != nil {
+		return validateFlagTypeConflict(cmdName, flag, existingFlag)
+	}
+
+	// Flag doesn't exist yet - validate shorthand for new flags only.
+	return validateFlagShorthand(cmdName, flag, seen, parentCommand)
+}
+
+// validateFlagTypeConflict checks that a custom flag's type matches an existing flag's type.
+func validateFlagTypeConflict(cmdName string, flag *schema.CommandFlag, existingFlag *pflag.Flag) error {
+	customFlagType := flag.Type
+	if customFlagType == "" || customFlagType == "string" {
+		customFlagType = "string"
+	}
+
+	existingFlagType := existingFlag.Value.Type()
+	if existingFlagType != customFlagType {
+		return errUtils.Build(errUtils.ErrReservedFlagName).
+			WithExplanation(fmt.Sprintf("Custom command '%s' in atmos.yaml declares flag '--%s' with type '%s', but it already exists with type '%s'",
+				cmdName, flag.Name, customFlagType, existingFlagType)).
+			WithHint("Check the 'commands' section in atmos.yaml").
+			WithHint("Either use the existing flag type, or rename your flag to avoid conflicts").
+			WithContext("command", cmdName).
+			WithContext("flag", flag.Name).
+			WithContext("declared_type", customFlagType).
+			WithContext("existing_type", existingFlagType).
+			WithContext("config_path", fmt.Sprintf("commands.%s.flags", cmdName)).
+			Err()
+	}
+	return nil
+}
+
+// validateFlagShorthand checks for shorthand conflicts with parent/inherited flags.
+func validateFlagShorthand(cmdName string, flag *schema.CommandFlag, seen map[string]bool, parentCommand *cobra.Command) error {
+	if flag.Shorthand == "" {
+		return nil
+	}
+
+	if len([]rune(flag.Shorthand)) != 1 {
+		return errUtils.Build(errUtils.ErrDuplicateFlagRegistration).
+			WithExplanation(fmt.Sprintf("Custom command '%s' defines invalid shorthand '-%s' for flag '--%s'", cmdName, flag.Shorthand, flag.Name)).
+			WithHint("Use exactly one character for shorthand flags").
+			WithContext("command", cmdName).
+			WithContext("flag", flag.Name).
+			WithContext("shorthand", flag.Shorthand).
+			Err()
+	}
+
+	if seen[flag.Shorthand] {
+		return errUtils.Build(errUtils.ErrDuplicateFlagRegistration).
+			WithExplanation(fmt.Sprintf("Custom command '%s' defines duplicate flag shorthand '-%s'", cmdName, flag.Shorthand)).
+			WithHint("Remove or change the duplicate shorthand in your atmos.yaml").
+			WithContext("command", cmdName).
+			WithContext("shorthand", flag.Shorthand).
+			Err()
+	}
+	seen[flag.Shorthand] = true
+
+	// Check if shorthand conflicts with existing persistent/inherited flags.
+	// Only check PersistentFlags() and InheritedFlags() - NOT Flags().
+	// Local flags (Flags()) on the parent are NOT inherited by subcommands.
+	existingByShorthand := parentCommand.PersistentFlags().ShorthandLookup(flag.Shorthand)
+	if existingByShorthand == nil {
+		existingByShorthand = parentCommand.InheritedFlags().ShorthandLookup(flag.Shorthand)
+	}
+	if existingByShorthand != nil {
+		return errUtils.Build(errUtils.ErrReservedFlagName).
+			WithExplanation(fmt.Sprintf("Custom command '%s' in atmos.yaml defines flag shorthand '-%s' which conflicts with existing flag '--%s'",
+				cmdName, flag.Shorthand, existingByShorthand.Name)).
+			WithHint("Check the 'commands' section in atmos.yaml").
+			WithHint("Change the shorthand to avoid conflicts").
+			WithContext("command", cmdName).
+			WithContext("shorthand", flag.Shorthand).
+			WithContext("existing_flag", existingByShorthand.Name).
+			WithContext("config_path", fmt.Sprintf("commands.%s.flags", cmdName)).
+			Err()
+	}
+	return nil
+}
+
+// registerCustomCommandFlags adds validated flags to the custom command,
+// skipping flags that are inherited from the parent command chain.
+func registerCustomCommandFlags(commandConfig *schema.Command, customCommand *cobra.Command, parentCommand *cobra.Command) error {
+	for i := range commandConfig.Flags {
+		flag := &commandConfig.Flags[i]
+		// Skip flags that already exist as persistent/inherited (not local).
+		existingFlag := parentCommand.PersistentFlags().Lookup(flag.Name)
+		if existingFlag == nil {
+			existingFlag = parentCommand.InheritedFlags().Lookup(flag.Name)
+		}
+		if existingFlag != nil {
+			continue
+		}
+
+		registerFlag(customCommand, flag)
+
+		if flag.Required {
+			if err := customCommand.MarkPersistentFlagRequired(flag.Name); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+// registerFlag adds a single flag to the command with the appropriate type and defaults.
+func registerFlag(cmd *cobra.Command, flag *schema.CommandFlag) {
+	// Get flag description, preferring Description over Usage for backward compatibility.
+	flagUsage := flag.Description
+	if flagUsage == "" {
+		flagUsage = flag.Usage
+	}
+
+	if flag.Type == "bool" {
+		registerBoolFlag(cmd, flag, flagUsage)
+		return
+	}
+	registerStringFlag(cmd, flag, flagUsage)
+}
+
+// registerBoolFlag adds a boolean persistent flag to the command.
+func registerBoolFlag(cmd *cobra.Command, flag *schema.CommandFlag, usage string) {
+	defaultVal := false
+	if flag.Default != nil {
+		if boolVal, ok := flag.Default.(bool); ok {
+			defaultVal = boolVal
+		}
+	}
+	if flag.Shorthand != "" {
+		cmd.PersistentFlags().BoolP(flag.Name, flag.Shorthand, defaultVal, usage)
+	} else {
+		cmd.PersistentFlags().Bool(flag.Name, defaultVal, usage)
+	}
+}
+
+// registerStringFlag adds a string persistent flag to the command.
+func registerStringFlag(cmd *cobra.Command, flag *schema.CommandFlag, usage string) {
+	defaultVal := ""
+	if flag.Default != nil {
+		if strVal, ok := flag.Default.(string); ok {
+			defaultVal = strVal
+		}
+	}
+	if flag.Shorthand != "" {
+		cmd.PersistentFlags().StringP(flag.Name, flag.Shorthand, defaultVal, usage)
+	} else {
+		cmd.PersistentFlags().String(flag.Name, defaultVal, usage)
+	}
+}
+
 // getTopLevelCommands returns the top-level commands.
 func getTopLevelCommands() map[string]*cobra.Command {
 	existingTopLevelCommands := make(map[string]*cobra.Command)
@@ -523,23 +566,67 @@ func executeCustomCommand(
 		finalArgs = args
 	}
 
-	// Resolve and install command dependencies
+	// Resolve and install command dependencies.
+	// First, load tools from .tool-versions (project-wide defaults).
+	// Then merge with command-specific dependencies (command deps override .tool-versions).
 	resolver := dependencies.NewResolver(&atmosConfig)
-	deps, err := resolver.ResolveCommandDependencies(commandConfig)
+
+	// Load project-wide tools from .tool-versions.
+	toolVersionsDeps, err := dependencies.LoadToolVersionsDependencies(&atmosConfig)
 	if err != nil {
-		errUtils.CheckErrorPrintAndExit(err, "", fmt.Sprintf("Failed to resolve dependencies for command '%s'", commandConfig.Name))
+		err = errUtils.Build(errUtils.ErrDependencyResolution).
+			WithCause(err).
+			WithExplanationf("Failed to load .tool-versions for command '%s'", commandConfig.Name).
+			WithHint("Check that .tool-versions file exists and is readable").
+			WithHint("See https://atmos.tools/cli/commands/toolchain/ for toolchain configuration").
+			Err()
+		errUtils.CheckErrorPrintAndExit(err, "", "")
+	}
+
+	// Get command-specific dependencies.
+	commandDeps, err := resolver.ResolveCommandDependencies(commandConfig)
+	if err != nil {
+		err = errUtils.Build(errUtils.ErrDependencyResolution).
+			WithCause(err).
+			WithExplanationf("Failed to resolve dependencies for command '%s'", commandConfig.Name).
+			WithHint("Check the command's dependencies section for valid tool specifications").
+			WithHint("See https://atmos.tools/cli/commands/toolchain/ for toolchain configuration").
+			Err()
+		errUtils.CheckErrorPrintAndExit(err, "", "")
+	}
+
+	// Merge: .tool-versions as base, command deps override.
+	deps, err := dependencies.MergeDependencies(toolVersionsDeps, commandDeps)
+	if err != nil {
+		err = errUtils.Build(errUtils.ErrDependencyResolution).
+			WithCause(err).
+			WithExplanationf("Failed to merge dependencies for command '%s'", commandConfig.Name).
+			WithHint("Check that command dependency versions satisfy constraints from .tool-versions").
+			WithHint("See https://atmos.tools/cli/commands/toolchain/ for toolchain configuration").
+			Err()
+		errUtils.CheckErrorPrintAndExit(err, "", "")
 	}
 
 	if len(deps) > 0 {
 		log.Debug("Installing command dependencies", "command", commandConfig.Name, "tools", deps)
 		installer := dependencies.NewInstaller(&atmosConfig)
 		if err := installer.EnsureTools(deps); err != nil {
-			errUtils.CheckErrorPrintAndExit(err, "", fmt.Sprintf("Failed to install dependencies for command '%s'", commandConfig.Name))
+			err = errUtils.Build(errUtils.ErrToolInstall).
+				WithCause(err).
+				WithExplanationf("Failed to install dependencies for command '%s'", commandConfig.Name).
+				Err()
+			errUtils.CheckErrorPrintAndExit(err, "", "")
 		}
 
-		// Update PATH to include installed tools
+		// Update PATH to include installed tools.
 		if err := dependencies.UpdatePathForTools(&atmosConfig, deps); err != nil {
-			errUtils.CheckErrorPrintAndExit(err, "", fmt.Sprintf("Failed to update PATH for command '%s'", commandConfig.Name))
+			err = errUtils.Build(errUtils.ErrDependencyResolution).
+				WithCause(err).
+				WithExplanationf("Failed to update PATH for command '%s'", commandConfig.Name).
+				WithHint("Check that toolchain install_path is writable").
+				WithHint("See https://atmos.tools/cli/commands/toolchain/ for toolchain configuration").
+				Err()
+			errUtils.CheckErrorPrintAndExit(err, "", "")
 		}
 	}
 
@@ -563,7 +650,7 @@ func executeCustomCommand(
 
 		credStore := credentials.NewCredentialStore()
 		validator := validation.NewValidator()
-		authManager, err = auth.NewAuthManager(&atmosConfig.Auth, credStore, validator, authStackInfo)
+		authManager, err = auth.NewAuthManager(&atmosConfig.Auth, credStore, validator, authStackInfo, atmosConfig.CliConfigPath)
 		if err != nil {
 			errUtils.CheckErrorPrintAndExit(fmt.Errorf("%w: %w", errUtils.ErrFailedToInitializeAuthManager, err), "", "")
 		}

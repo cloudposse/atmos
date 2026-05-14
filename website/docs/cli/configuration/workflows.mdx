@@ -141,7 +141,39 @@ workflows:
 Use `working_directory` when your workflow includes shell commands that depend on relative file paths, or when you need to run commands like `terraform import` directly in a component directory.
 :::
 
-## Environment Variables
+## Workflow Environment Variables
+
+Workflows support an `env` map for setting environment variables. This can be set at both workflow level (applies to all steps) and step level (overrides workflow values).
+
+```yaml
+workflows:
+  deploy-multi-region:
+    env:
+      TF_LOG: INFO
+    steps:
+      - command: terraform apply vpc -s plat-ue2-dev --auto-approve
+        env:
+          AWS_REGION: us-east-2
+      - command: terraform apply vpc -s plat-uw2-dev --auto-approve
+        env:
+          AWS_REGION: us-west-2
+```
+
+### Precedence
+
+Environment variables merge in this order (later values win):
+
+1. System environment
+2. Global env from `atmos.yaml`
+3. Workflow-level `env`
+4. Step-level `env`
+5. Auth identity environment (if `identity` specified)
+
+### Scoping
+
+Each step runs as a separate subprocess. Step-level `env` and shell `export` commands only affect that step and do not persist to subsequent steps.
+
+## CLI Environment Variables
 
 <dl>
   <dt>`ATMOS_WORKFLOWS_BASE_PATH`</dt>

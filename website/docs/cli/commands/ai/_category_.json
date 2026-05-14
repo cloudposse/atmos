@@ -1,0 +1,10 @@
+{
+  "label": "ai",
+  "className": "command",
+  "collapsible": true,
+  "collapsed": true,
+  "link": {
+    "type": "doc",
+    "id": "usage"
+  }
+}

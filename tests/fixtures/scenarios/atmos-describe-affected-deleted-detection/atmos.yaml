@@ -1,0 +1,49 @@
+# Test fixture for describe affected with deleted component detection
+# Tests that deleted components and stacks are detected as affected
+#
+# Scenario:
+# - HEAD (stacks/): Component "monitoring" has been DELETED from staging stack
+# - HEAD (stacks/): Stack "production" has been entirely DELETED
+# - BASE (stacks-with-deleted-component/): Has all original components including "monitoring"
+# - BASE (stacks-with-deleted-component/): Has "production" stack with all components
+# - Expected: Deleted component "monitoring" and all components from deleted stack "production"
+#             should be marked as affected with deleted: true
+
+base_path: "./"
+
+components:
+  terraform:
+    base_path: "../../components/terraform"
+    apply_auto_approve: false
+    deploy_run_init: true
+    init_run_reconfigure: true
+    auto_generate_backend_file: false
+
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "deploy/**/*"
+  excluded_paths:
+    - "**/_defaults.yaml"
+  name_template: "{{ .vars.environment }}-{{ .vars.stage }}"
+
+logs:
+  file: "/dev/stderr"
+  level: Info
+
+# Enable templates
+templates:
+  settings:
+    enabled: true
+    evaluations: 1
+    sprig:
+      enabled: true
+    gomplate:
+      enabled: true
+      timeout: 10
+      datasources: {}
+
+settings:
+  terminal:
+    no_color: true
+    max_width: 120

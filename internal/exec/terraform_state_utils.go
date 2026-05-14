@@ -16,6 +16,17 @@ import (
 
 var terraformStateCache = sync.Map{}
 
+// ResetStateCache clears the terraform state cache.
+// This is exported for use in tests to ensure cache isolation between test functions.
+func ResetStateCache() {
+	defer perf.Track(nil, "exec.ResetStateCache")()
+
+	terraformStateCache.Range(func(key, _ any) bool {
+		terraformStateCache.Delete(key)
+		return true
+	})
+}
+
 // GetTerraformState retrieves a specified Terraform output variable for a given component within a stack.
 // It optionally uses a cache to avoid redundant state retrievals and supports both static and dynamic backends.
 // Parameters:
@@ -87,7 +98,18 @@ func GetTerraformState(
 		resolvedAuthMgr = parentAuthMgr
 	}
 
+	// Derive the effective AuthContext for backend reads.
+	// If we resolved a component-specific AuthManager, use its AuthContext instead of the
+	// passed-in one (which may be nil when the parent didn't propagate auth).
+	resolvedAuthContext := authContext
+	if resolvedAuthMgr != nil {
+		if si := resolvedAuthMgr.GetStackInfo(); si != nil && si.AuthContext != nil {
+			resolvedAuthContext = si.AuthContext
+		}
+	}
+
 	componentSections, err := ExecuteDescribeComponent(&ExecuteDescribeComponentParams{
+		AtmosConfig:          atmosConfig,
 		Component:            component,
 		Stack:                stack,
 		ProcessTemplates:     true,
@@ -119,8 +141,8 @@ func GetTerraformState(
 		return result, nil
 	}
 
-	// Read Terraform backend.
-	backend, err := tb.GetTerraformBackend(atmosConfig, &componentSections, authContext)
+	// Read Terraform backend using resolved auth context.
+	backend, err := tb.GetTerraformBackend(atmosConfig, &componentSections, resolvedAuthContext)
 	if err != nil {
 		er := fmt.Errorf("%w for component `%s` in stack `%s`\nin YAML function: `%s`\n%v", errUtils.ErrReadTerraformState, component, stack, yamlFunc, err)
 		return nil, er

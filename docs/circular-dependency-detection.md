@@ -236,4 +236,4 @@ See `internal/exec/yaml_func_circular_deps_test.go` for comprehensive test examp
 
 - [PRD: Circular Dependency Detection](prd/circular-dependency-detection.md)
 - [Error Handling Strategy](prd/error-handling-strategy.md)
-- [Testing Strategy](prd/testing-strategy.md)
+- [Testability Refactoring Strategy](prd/testability-refactoring-strategy.md)

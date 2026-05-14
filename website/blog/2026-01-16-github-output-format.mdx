@@ -1,0 +1,122 @@
+---
+slug: github-output-format
+title: "GitHub Actions Output Format"
+authors: [osterman]
+tags: [feature, dx]
+date: 2026-01-16T00:00:00.000Z
+---
+
+Atmos now supports a dedicated `github` output format for `atmos terraform output`, making it easier than ever to pass Terraform outputs between GitHub Actions steps.
+
+<!--truncate-->
+
+## What's New
+
+The new `--format=github` option for `atmos terraform output` automatically writes outputs to `$GITHUB_OUTPUT` in the format GitHub Actions expects, including proper handling of multiline values using heredoc syntax.
+
+```shell
+# In a GitHub Actions workflow
+atmos terraform output vpc -s dev --format=github
+```
+
+This writes outputs directly to `$GITHUB_OUTPUT`, making them available to subsequent workflow steps.
+
+## Why This Matters
+
+Previously, passing Terraform outputs between GitHub Actions steps required manual formatting or shell scripting to handle:
+
+- Multiline values (JSON objects, lists, multi-line strings)
+- Special characters that need escaping
+- The correct `$GITHUB_OUTPUT` file format
+
+The `github` format handles all of this automatically:
+
+- **Single-line values** are written as `key=value`
+- **Multiline values** use heredoc syntax: `key<<DELIMITER\nvalue\nDELIMITER`
+- **Complex types** (maps, arrays) are JSON-encoded for easy parsing
+
+## Example Workflow
+
+```yaml
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Get Terraform Outputs
+        id: outputs
+        run: atmos terraform output vpc -s dev --format=github
+
+      - name: Use Outputs
+        run: |
+          echo "VPC ID: ${{ steps.outputs.outputs.vpc_id }}"
+          echo "Subnets: ${{ steps.outputs.outputs.private_subnet_ids }}"
+```
+
+## Usage Options
+
+### Automatic `$GITHUB_OUTPUT` Detection
+
+When running in GitHub Actions, the format automatically writes to `$GITHUB_OUTPUT`:
+
+```shell
+atmos terraform output vpc -s dev --format=github
+```
+
+### Custom Output File
+
+You can specify a different output file if needed:
+
+```shell
+atmos terraform output vpc -s dev --format=github --output-file=outputs.txt
+```
+
+### Combined with Other Options
+
+The `github` format works with other output options:
+
+```shell
+# Uppercase keys for conventional ENV_VAR naming
+atmos terraform output vpc -s dev --format=github --uppercase
+
+# Flatten nested maps
+atmos terraform output vpc -s dev --format=github --flatten
+
+# Skip init for faster execution in CI
+atmos terraform output vpc -s dev --format=github --skip-init
+```
+
+## Output Format Details
+
+### Simple Values
+
+```
+vpc_id=vpc-12345
+region=us-east-1
+enabled=true
+```
+
+### Multiline Values (Heredoc)
+
+For values containing newlines, the format uses GitHub's heredoc syntax:
+
+```
+vpc_config<<ATMOS_EOF_vpc_config
+{
+  "id": "vpc-12345",
+  "cidr": "10.0.0.0/16"
+}
+ATMOS_EOF_vpc_config
+```
+
+## Documentation
+
+For complete documentation on terraform output formatting options, see:
+
+- [Terraform Output Command](/cli/commands/terraform/output)
+
+## Get Involved
+
+Try out the new GitHub Actions output format and let us know what you think! File issues or feature requests on [GitHub](https://github.com/cloudposse/atmos/issues).

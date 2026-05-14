@@ -11,9 +11,11 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/cloudposse/atmos/internal/exec"
+	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+
+	"github.com/cloudposse/atmos/internal/exec"
 )
 
 // skipInMacOSCI skips the test if running on macOS in a CI environment.
@@ -70,7 +72,7 @@ func TestTerraformToolchain_WithDependencies(t *testing.T) {
 		t.Skip("Skipping toolchain integration test in short mode (requires network)")
 	}
 
-	workDir := "fixtures/scenarios/toolchain-terraform-integration"
+	workDir := filepath.Join("fixtures", "scenarios", "toolchain-terraform-integration")
 	t.Chdir(workDir)
 
 	// Clean up any existing toolchain installations.
@@ -164,7 +166,7 @@ func TestTerraformToolchain_WithoutDependencies(t *testing.T) {
 		t.Skip("Skipping toolchain integration test in short mode")
 	}
 
-	workDir := "fixtures/scenarios/toolchain-terraform-integration"
+	workDir := filepath.Join("fixtures", "scenarios", "toolchain-terraform-integration")
 	t.Chdir(workDir)
 
 	// Clean up any existing toolchain installations.
@@ -269,7 +271,7 @@ func TestTerraformToolchain_PathPropagation(t *testing.T) {
 		t.Skip("Skipping toolchain integration test in short mode")
 	}
 
-	workDir := "fixtures/scenarios/toolchain-terraform-integration"
+	workDir := filepath.Join("fixtures", "scenarios", "toolchain-terraform-integration")
 	t.Chdir(workDir)
 
 	toolsDir := ".tools"
@@ -353,7 +355,7 @@ func TestTerraformToolchain_BinaryLocation(t *testing.T) {
 	// component processing), this can be enabled.
 	t.Skip("Skipping: terraform version subcommand bypasses toolchain dependency installation")
 
-	workDir := "fixtures/scenarios/toolchain-terraform-integration"
+	workDir := filepath.Join("fixtures", "scenarios", "toolchain-terraform-integration")
 	t.Chdir(workDir)
 
 	toolsDir := ".tools"
@@ -400,4 +402,236 @@ func TestTerraformToolchain_BinaryLocation(t *testing.T) {
 	}
 
 	assert.True(t, foundBinary, "Terraform binary should be installed at expected location")
+}
+
+// TestTerraformToolchain_MixinLevelDependencies verifies that dependencies defined at
+// the component-type level (Scope 2) in stack YAML are propagated through to the
+// component section after stack processing.
+//
+// This reproduces the bug where a user configures:
+//
+//	terraform:
+//	  dependencies:
+//	    tools:
+//	      terraform: "1.6.0"
+//
+// But the stack processor drops this data, so toolchain auto-install never triggers.
+func TestTerraformToolchain_MixinLevelDependencies(t *testing.T) {
+	defer perf.Track(nil, "tests.TestTerraformToolchain_MixinLevelDependencies")()
+
+	workDir := filepath.Join("fixtures", "scenarios", "toolchain-terraform-integration")
+	t.Chdir(workDir)
+
+	// Initialize CLI config and process stacks via ProcessStacks, which handles
+	// stack name resolution, stack map lookup, and component config extraction.
+	info := schema.ConfigAndStacksInfo{
+		Stack:            "mixin-test",
+		ComponentType:    "terraform",
+		ComponentFromArg: "test-component-mixin",
+		SubCommand:       "plan",
+	}
+
+	atmosConfig, err := cfg.InitCliConfig(info, true)
+	require.NoError(t, err)
+
+	info, err = exec.ProcessStacks(&atmosConfig, info, true, false, false, nil, nil)
+	require.NoError(t, err)
+
+	// Verify that the component section contains dependencies from the terraform
+	// section (Scope 2). Before the fix, this would be nil/empty because the stack
+	// processor dropped the terraform.dependencies section.
+	compSection := info.ComponentSection
+	require.NotNil(t, compSection, "ComponentSection should not be nil")
+
+	depsRaw, ok := compSection["dependencies"]
+	require.True(t, ok, "ComponentSection should contain 'dependencies' key from terraform section (Scope 2)")
+
+	deps, ok := depsRaw.(map[string]any)
+	require.True(t, ok, "dependencies should be a map")
+
+	toolsRaw, ok := deps["tools"]
+	require.True(t, ok, "dependencies should contain 'tools' key")
+
+	tools, ok := toolsRaw.(map[string]any)
+	require.True(t, ok, "tools should be a map")
+
+	tfVersion, ok := tools["terraform"]
+	require.True(t, ok, "tools should contain 'terraform' key")
+	assert.Equal(t, "1.6.0", tfVersion, "terraform version should be '1.6.0' from terraform section (Scope 2)")
+}
+
+// TestTerraformToolchain_MixinLevelDependencies_PlanCommand verifies end-to-end that
+// when dependencies are configured at the component-type level (Scope 2),
+// ExecuteTerraform with 'plan' subcommand resolves and auto-installs the terraform
+// binary from the toolchain.
+//
+// This test proves that Scope 2 dependencies flow through the stack processor
+// and trigger the toolchain installer. It verifies the binary is downloaded and
+// placed at the correct path.
+//
+// Note: The subprocess may still fail to find the binary due to a separate PATH
+// propagation issue (the installed binary path is in ComponentEnvList, but Go's
+// exec.LookPath checks the process PATH). That is tracked separately.
+func TestTerraformToolchain_MixinLevelDependencies_PlanCommand(t *testing.T) {
+	defer perf.Track(nil, "tests.TestTerraformToolchain_MixinLevelDependencies_PlanCommand")()
+
+	// Skip on macOS CI to prevent timeouts - these tests can be slow.
+	skipInMacOSCI(t)
+
+	// Skip if running in short mode (requires network to download terraform).
+	if testing.Short() {
+		t.Skip("Skipping toolchain integration test in short mode (requires network)")
+	}
+
+	workDir := filepath.Join("fixtures", "scenarios", "toolchain-terraform-integration")
+	t.Chdir(workDir)
+
+	// Clean up any existing toolchain installations.
+	toolsDir := ".tools"
+	os.RemoveAll(toolsDir)
+	defer os.RemoveAll(toolsDir)
+
+	info := schema.ConfigAndStacksInfo{
+		Stack:            "mixin-test",
+		ComponentType:    "terraform",
+		ComponentFromArg: "test-component-mixin",
+		SubCommand:       "plan",
+	}
+
+	// Preserve PATH so toolchain installer mutations don't leak to other tests.
+	t.Setenv("PATH", os.Getenv("PATH"))
+
+	// Capture stdout/stderr.
+	oldStdout := os.Stdout
+	oldStderr := os.Stderr
+	rOut, wOut, pipeErr := os.Pipe()
+	require.NoError(t, pipeErr)
+	rErr, wErr, pipeErr := os.Pipe()
+	require.NoError(t, pipeErr)
+	t.Cleanup(func() {
+		os.Stdout = oldStdout
+		os.Stderr = oldStderr
+		_ = wOut.Close()
+		_ = wErr.Close()
+		_ = rOut.Close()
+		_ = rErr.Close()
+	})
+	os.Stdout = wOut
+	os.Stderr = wErr
+
+	// Execute terraform - it may fail for various reasons (no init, no backend, etc.)
+	// but the key thing we verify is that the toolchain binary was installed.
+	_ = exec.ExecuteTerraform(info)
+
+	// Restore stdout/stderr and close write ends so readers can drain.
+	_ = wOut.Close()
+	_ = wErr.Close()
+	os.Stdout = oldStdout
+	os.Stderr = oldStderr
+
+	// Read captured output.
+	var bufOut, bufErr bytes.Buffer
+	_, _ = bufOut.ReadFrom(rOut)
+	_, _ = bufErr.ReadFrom(rErr)
+
+	t.Logf("Stdout:\n%s", bufOut.String())
+	t.Logf("Stderr:\n%s", bufErr.String())
+
+	// Verify toolchain binary was installed at the expected location.
+	// This is the critical assertion: before the fix, the dependencies from the
+	// terraform section (Scope 2) were dropped by the stack processor, so the
+	// toolchain installer was never triggered and no binary was downloaded.
+	expectedBinaryPath := filepath.Join(toolsDir, "bin", "hashicorp", "terraform", "1.6.0", "terraform")
+	if runtime.GOOS == "windows" {
+		expectedBinaryPath += ".exe"
+	}
+	_, statErr := os.Stat(expectedBinaryPath)
+	assert.NoError(t, statErr, "Toolchain binary should be installed at: %s (Scope 2 dependencies should trigger auto-install)", expectedBinaryPath)
+}
+
+// TestTerraformToolchain_DependencyPrecedence verifies that all 3 scopes of
+// dependencies are properly merged with correct precedence through the full
+// stack processor pipeline:
+//
+//	Scope 1 (global)          → lowest priority
+//	Scope 2 (component-type)  → middle priority
+//	Scope 3 (component)       → highest priority
+//
+// It tests two components in the same stack:
+//  1. test-component-override: has Scope 3 deps that override Scope 2
+//  2. test-component-inherit: has NO Scope 3 deps, inherits from Scope 1+2
+func TestTerraformToolchain_DependencyPrecedence(t *testing.T) {
+	defer perf.Track(nil, "tests.TestTerraformToolchain_DependencyPrecedence")()
+
+	workDir := filepath.Join("fixtures", "scenarios", "toolchain-terraform-integration")
+	t.Chdir(workDir)
+
+	// --- Test component that OVERRIDES Scope 2 at Scope 3 ---
+	overrideInfo := schema.ConfigAndStacksInfo{
+		Stack:            "override-test",
+		ComponentType:    "terraform",
+		ComponentFromArg: "test-component-override",
+		SubCommand:       "plan",
+	}
+
+	atmosConfig, err := cfg.InitCliConfig(overrideInfo, true)
+	require.NoError(t, err)
+
+	overrideInfo, err = exec.ProcessStacks(&atmosConfig, overrideInfo, true, false, false, nil, nil)
+	require.NoError(t, err)
+
+	compSection := overrideInfo.ComponentSection
+	require.NotNil(t, compSection)
+
+	depsRaw, ok := compSection["dependencies"]
+	require.True(t, ok, "override component should have dependencies")
+	deps := depsRaw.(map[string]any)
+	tools := deps["tools"].(map[string]any)
+
+	// Scope 3 overrides Scope 2 for terraform version.
+	assert.Equal(t, "1.10.3", tools["terraform"], "Scope 3 should override Scope 2 terraform version")
+
+	// Scope 2 tflint should be inherited (not overridden by Scope 3).
+	assert.Equal(t, "^0.54.0", tools["tflint"], "Scope 2 tflint should be inherited")
+
+	// Scope 1 jq should be inherited through.
+	assert.Equal(t, "latest", tools["jq"], "Scope 1 jq should be inherited")
+
+	// Scope 3 adds a new tool not in Scope 1 or 2.
+	assert.Equal(t, "latest", tools["checkov"], "Scope 3 should add checkov")
+
+	// --- Test component that INHERITS from Scope 1+2 only ---
+	inheritInfo := schema.ConfigAndStacksInfo{
+		Stack:            "override-test",
+		ComponentType:    "terraform",
+		ComponentFromArg: "test-component-inherit",
+		SubCommand:       "plan",
+	}
+
+	atmosConfig2, err := cfg.InitCliConfig(inheritInfo, true)
+	require.NoError(t, err)
+
+	inheritInfo, err = exec.ProcessStacks(&atmosConfig2, inheritInfo, true, false, false, nil, nil)
+	require.NoError(t, err)
+
+	compSection2 := inheritInfo.ComponentSection
+	require.NotNil(t, compSection2)
+
+	depsRaw2, ok := compSection2["dependencies"]
+	require.True(t, ok, "inherit component should have dependencies from Scope 1+2")
+	deps2 := depsRaw2.(map[string]any)
+	tools2 := deps2["tools"].(map[string]any)
+
+	// Should get Scope 2 terraform version (no Scope 3 override).
+	assert.Equal(t, "1.6.0", tools2["terraform"], "Scope 2 terraform should be inherited without override")
+
+	// Should get Scope 2 tflint.
+	assert.Equal(t, "^0.54.0", tools2["tflint"], "Scope 2 tflint should be inherited")
+
+	// Should get Scope 1 jq.
+	assert.Equal(t, "latest", tools2["jq"], "Scope 1 jq should be inherited")
+
+	// Should NOT have checkov (that was only in Scope 3 of the other component).
+	_, hasCheckov := tools2["checkov"]
+	assert.False(t, hasCheckov, "inherit component should NOT have checkov (only defined in other component's Scope 3)")
 }

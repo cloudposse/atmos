@@ -6,6 +6,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/cloudposse/atmos/pkg/reexec"
 )
 
 func TestCommandAliases(t *testing.T) {
@@ -129,14 +131,14 @@ func TestAliasChdirProcessing(t *testing.T) {
 
 		for _, tt := range tests {
 			t.Run(tt.name, func(t *testing.T) {
-				result := filterChdirArgs(tt.input)
+				result := reexec.StripChdirArgs(tt.input)
 				assert.Equal(t, tt.expected, result)
 			})
 		}
 	})
 
 	t.Run("filterChdirEnv removes ATMOS_CHDIR from environment", func(t *testing.T) {
-		// This test verifies that the production filterChdirEnv function properly
+		// This test verifies that the production reexec.FilterChdirEnv function properly
 		// filters out ATMOS_CHDIR from the environment to prevent child processes
 		// from re-applying the parent's chdir directive.
 
@@ -185,7 +187,7 @@ func TestAliasChdirProcessing(t *testing.T) {
 		for _, tt := range tests {
 			t.Run(tt.name, func(t *testing.T) {
 				// Call the production function.
-				filteredEnv := filterChdirEnv(tt.environ)
+				filteredEnv := reexec.FilterChdirEnv(tt.environ)
 
 				// Verify expectations.
 				envStr := strings.Join(filteredEnv, "\n")

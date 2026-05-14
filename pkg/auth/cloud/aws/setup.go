@@ -12,15 +12,16 @@ import (
 
 // SetupFiles sets up AWS credentials and config files for the given identity.
 // BasePath specifies the base directory for AWS files (from provider's files.base_path).
-// If empty, uses the default ~/.aws/atmos path.
-func SetupFiles(providerName, identityName string, creds types.ICredentials, basePath string) error {
+// Realm provides credential isolation for multi-repository environments.
+// If empty, uses the default XDG config path.
+func SetupFiles(providerName, identityName string, creds types.ICredentials, basePath, realm string) error {
 	awsCreds, ok := creds.(*types.AWSCredentials)
 	if !ok {
 		return nil // No AWS credentials to setup
 	}
 
-	// Create AWS file manager with configured or default path.
-	fileManager, err := NewAWSFileManager(basePath)
+	// Create AWS file manager with configured or default path and realm.
+	fileManager, err := NewAWSFileManager(basePath, realm)
 	if err != nil {
 		return errors.Join(errUtils.ErrAuthAwsFileManagerFailed, err)
 	}
@@ -51,6 +52,7 @@ type SetAuthContextParams struct {
 	IdentityName string
 	Credentials  types.ICredentials
 	BasePath     string
+	Realm        string // Realm for credential isolation (optional).
 }
 
 // SetAuthContext populates the AWS auth context with Atmos-managed credential paths.
@@ -70,7 +72,7 @@ func SetAuthContext(params *SetAuthContextParams) error {
 		return nil // No AWS credentials to setup.
 	}
 
-	m, err := NewAWSFileManager(params.BasePath)
+	m, err := NewAWSFileManager(params.BasePath, params.Realm)
 	if err != nil {
 		return errors.Join(errUtils.ErrAuthAwsFileManagerFailed, err)
 	}

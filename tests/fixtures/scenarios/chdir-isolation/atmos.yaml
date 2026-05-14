@@ -1,0 +1,18 @@
+# Minimal config for testing --chdir config isolation.
+# This config has unique values that should NOT appear when --chdir'ing
+# to directories with their own config.
+base_path: "."
+
+vendor:
+  base_path: "chdir-isolation-vendor"
+
+components:
+  terraform:
+    base_path: "chdir-isolation-components"
+    command: terraform
+
+stacks:
+  base_path: "chdir-isolation-stacks"
+  included_paths:
+    - "**/*"
+  name_template: "{{.vars.stage}}"

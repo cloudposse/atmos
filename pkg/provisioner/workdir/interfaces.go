@@ -26,6 +26,12 @@ type FileSystem interface {
 	// CopyDir recursively copies a directory from src to dst.
 	CopyDir(src, dst string) error
 
+	// SyncDir syncs files from src to dst using per-file checksums.
+	// Only copies changed files, adds new files, and deletes removed files.
+	// Skips the .atmos/ directory which contains Atmos metadata.
+	// Returns true if any changes were made, false if directories were in sync.
+	SyncDir(src, dst string, hasher Hasher) (bool, error)
+
 	// Walk walks the file tree rooted at root, calling fn for each file or directory.
 	Walk(root string, fn fs.WalkDirFunc) error
 

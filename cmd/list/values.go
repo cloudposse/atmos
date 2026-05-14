@@ -153,13 +153,13 @@ var varsCmd = &cobra.Command{
 		if err != nil {
 			var componentVarsNotFoundErr *listerrors.ComponentVarsNotFoundError
 			if errors.As(err, &componentVarsNotFoundErr) {
-				_ = ui.Info("No vars found for component: " + componentVarsNotFoundErr.Component)
+				ui.Info("No vars found for component: " + componentVarsNotFoundErr.Component)
 				return nil
 			}
 
 			var noValuesErr *listerrors.NoValuesFoundError
 			if errors.As(err, &noValuesErr) {
-				_ = ui.Info("No values found for query '.vars' for component: " + args[0])
+				ui.Info("No values found for query '.vars' for component: " + args[0])
 				return nil
 			}
 
@@ -280,9 +280,9 @@ func getFilterOptionsFromValues(opts *ValuesOptions) *l.FilterOptions {
 // displayNoValuesFoundMessage displays an appropriate message when no values or vars are found.
 func displayNoValuesFoundMessage(componentName string, query string) {
 	if query == ".vars" {
-		_ = ui.Info("No vars found for component: " + componentName)
+		ui.Info("No vars found for component: " + componentName)
 	} else {
-		_ = ui.Info("No values found for component: " + componentName)
+		ui.Info("No values found for component: " + componentName)
 	}
 }
 

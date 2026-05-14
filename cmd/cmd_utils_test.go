@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/reexec"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -621,7 +622,9 @@ func TestListStacksForComponentEmptyComponent(t *testing.T) {
 	assert.NotEmpty(t, stacks, "Empty component filter returns all stacks")
 }
 
-// TestFilterChdirArgs tests the filterChdirArgs function.
+// TestFilterChdirArgs verifies the chdir-strip behavior used by alias re-exec.
+// The implementation now lives in pkg/reexec.StripChdirArgs; this test
+// remains as an integration guard for the alias path.
 func TestFilterChdirArgs(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -712,8 +715,8 @@ func TestFilterChdirArgs(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := filterChdirArgs(tt.input)
-			assert.Equal(t, tt.expected, result, "filterChdirArgs should correctly filter chdir arguments")
+			result := reexec.StripChdirArgs(tt.input)
+			assert.Equal(t, tt.expected, result, "reexec.StripChdirArgs should correctly filter chdir arguments")
 		})
 	}
 }
@@ -1577,4 +1580,195 @@ func TestProcessCommandAliases_NonTopLevel(t *testing.T) {
 		}
 	}
 	assert.False(t, hasAliases, "Non-top-level aliases should not be added")
+}
+
+// TestFilterChdirEnv verifies the ATMOS_CHDIR env-filter behavior used by
+// alias re-exec. The implementation now lives in pkg/reexec.FilterChdirEnv;
+// this test remains as an integration guard for the alias path.
+func TestFilterChdirEnv(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    []string
+		expected []string
+	}{
+		{
+			name:     "no ATMOS_CHDIR",
+			input:    []string{"PATH=/usr/bin", "HOME=/home/user"},
+			expected: []string{"PATH=/usr/bin", "HOME=/home/user"},
+		},
+		{
+			name:     "contains ATMOS_CHDIR",
+			input:    []string{"PATH=/usr/bin", "ATMOS_CHDIR=/some/path", "HOME=/home/user"},
+			expected: []string{"PATH=/usr/bin", "HOME=/home/user", "ATMOS_CHDIR="},
+		},
+		{
+			name:     "ATMOS_CHDIR at beginning",
+			input:    []string{"ATMOS_CHDIR=/path", "PATH=/usr/bin"},
+			expected: []string{"PATH=/usr/bin", "ATMOS_CHDIR="},
+		},
+		{
+			name:     "ATMOS_CHDIR at end",
+			input:    []string{"PATH=/usr/bin", "ATMOS_CHDIR=/path"},
+			expected: []string{"PATH=/usr/bin", "ATMOS_CHDIR="},
+		},
+		{
+			name:     "empty value ATMOS_CHDIR",
+			input:    []string{"PATH=/usr/bin", "ATMOS_CHDIR=", "HOME=/home"},
+			expected: []string{"PATH=/usr/bin", "HOME=/home", "ATMOS_CHDIR="},
+		},
+		{
+			name:     "empty input",
+			input:    []string{},
+			expected: []string{},
+		},
+		{
+			name:     "only ATMOS_CHDIR",
+			input:    []string{"ATMOS_CHDIR=/path"},
+			expected: []string{"ATMOS_CHDIR="},
+		},
+		{
+			name:     "similar but not matching",
+			input:    []string{"ATMOS_CHDIR_OTHER=/path", "NOT_ATMOS_CHDIR=/other"},
+			expected: []string{"ATMOS_CHDIR_OTHER=/path", "NOT_ATMOS_CHDIR=/other"},
+		},
+		{
+			name:     "duplicate ATMOS_CHDIR entries",
+			input:    []string{"PATH=/usr/bin", "ATMOS_CHDIR=/first", "HOME=/home", "ATMOS_CHDIR=/second"},
+			expected: []string{"PATH=/usr/bin", "HOME=/home", "ATMOS_CHDIR="},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := reexec.FilterChdirEnv(tt.input)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+// TestIsVersionManagementCommand tests the isVersionManagementCommand function.
+func TestIsVersionManagementCommand(t *testing.T) {
+	tests := []struct {
+		name     string
+		setup    func() *cobra.Command
+		expected bool
+	}{
+		{
+			name: "nil command",
+			setup: func() *cobra.Command {
+				return nil
+			},
+			expected: false,
+		},
+		{
+			name: "version install command",
+			setup: func() *cobra.Command {
+				root := &cobra.Command{Use: "atmos"}
+				version := &cobra.Command{Use: "version"}
+				install := &cobra.Command{Use: "install"}
+				root.AddCommand(version)
+				version.AddCommand(install)
+				return install
+			},
+			expected: true,
+		},
+		{
+			name: "version uninstall command",
+			setup: func() *cobra.Command {
+				root := &cobra.Command{Use: "atmos"}
+				version := &cobra.Command{Use: "version"}
+				uninstall := &cobra.Command{Use: "uninstall"}
+				root.AddCommand(version)
+				version.AddCommand(uninstall)
+				return uninstall
+			},
+			expected: true,
+		},
+		{
+			name: "version list command - not management",
+			setup: func() *cobra.Command {
+				root := &cobra.Command{Use: "atmos"}
+				version := &cobra.Command{Use: "version"}
+				list := &cobra.Command{Use: "list"}
+				root.AddCommand(version)
+				version.AddCommand(list)
+				return list
+			},
+			expected: false,
+		},
+		{
+			name: "version command itself",
+			setup: func() *cobra.Command {
+				root := &cobra.Command{Use: "atmos"}
+				version := &cobra.Command{Use: "version"}
+				root.AddCommand(version)
+				return version
+			},
+			expected: true,
+		},
+		{
+			name: "other command",
+			setup: func() *cobra.Command {
+				root := &cobra.Command{Use: "atmos"}
+				terraform := &cobra.Command{Use: "terraform"}
+				root.AddCommand(terraform)
+				return terraform
+			},
+			expected: false,
+		},
+		{
+			name: "standalone command",
+			setup: func() *cobra.Command {
+				return &cobra.Command{Use: "standalone"}
+			},
+			expected: false,
+		},
+		{
+			name: "version command with non-atmos parent",
+			setup: func() *cobra.Command {
+				root := &cobra.Command{Use: "other"}
+				version := &cobra.Command{Use: "version"}
+				root.AddCommand(version)
+				return version
+			},
+			expected: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cmd := tt.setup()
+			result := isVersionManagementCommand(cmd)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+// TestWithStackValidation tests the WithStackValidation option function.
+func TestWithStackValidation(t *testing.T) {
+	tests := []struct {
+		name     string
+		check    bool
+		expected bool
+	}{
+		{
+			name:     "enable stack validation",
+			check:    true,
+			expected: true,
+		},
+		{
+			name:     "disable stack validation",
+			check:    false,
+			expected: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := &ValidateConfig{CheckStack: !tt.expected} // Start with opposite.
+			opt := WithStackValidation(tt.check)
+			opt(cfg)
+			assert.Equal(t, tt.expected, cfg.CheckStack)
+		})
+	}
 }

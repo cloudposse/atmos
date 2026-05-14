@@ -2,6 +2,8 @@
 package list
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/spf13/cobra"
@@ -35,24 +37,6 @@ func TestUploadInstances(t *testing.T) {
 	// We expect an error because Pro API is likely not configured in test environment.
 	// The important thing is that the function executes without panic.
 	// The underlying uploadInstancesWithDeps() is already tested at 100% with mocks.
-	_ = err
-}
-
-// TestProcessInstances tests the processInstances() wrapper function.
-func TestProcessInstances(t *testing.T) {
-	// This wrapper calls processInstancesWithDeps which is already tested at 100%.
-	// We just need to execute it to achieve coverage of the wrapper itself.
-	// The underlying processInstancesWithDeps() is already tested at 100% with mocks.
-	atmosConfig := &schema.AtmosConfiguration{
-		BasePath: "/nonexistent",
-	}
-
-	// Call the wrapper - it may return empty list or error depending on config.
-	instances, err := processInstances(atmosConfig, nil)
-
-	// Either result is acceptable - key is the function executes without panic.
-	// The function behavior is fully tested via processInstancesWithDeps tests.
-	_ = instances
 	_ = err
 }
 
@@ -303,6 +287,66 @@ func TestGetInstanceColumns(t *testing.T) {
 			columnsFlag: []string{"InvalidSpec"},
 			expectErr:   true,
 		},
+		{
+			name: "new list.instances.columns config takes precedence over deprecated components.list.columns",
+			atmosConfig: &schema.AtmosConfiguration{
+				List: schema.TopLevelListConfig{
+					Instances: schema.ListConfig{
+						Columns: []schema.ListColumnConfig{
+							{Name: "NewConfigStack", Value: "{{ .stack }}", Width: 20},
+							{Name: "NewConfigComponent", Value: "{{ .component }}", Width: 30},
+						},
+					},
+				},
+				Components: schema.Components{
+					List: schema.ListConfig{
+						Columns: []schema.ListColumnConfig{
+							{Name: "OldConfigColumn", Value: "{{ .old }}"},
+						},
+					},
+				},
+			},
+			columnsFlag: nil,
+			expected: []column.Config{
+				{Name: "NewConfigStack", Value: "{{ .stack }}", Width: 20},
+				{Name: "NewConfigComponent", Value: "{{ .component }}", Width: 30},
+			},
+			expectErr: false,
+		},
+		{
+			name: "new list.instances.columns config used when no deprecated config",
+			atmosConfig: &schema.AtmosConfiguration{
+				List: schema.TopLevelListConfig{
+					Instances: schema.ListConfig{
+						Columns: []schema.ListColumnConfig{
+							{Name: "InstanceColumn", Value: "{{ .instance }}"},
+						},
+					},
+				},
+			},
+			columnsFlag: nil,
+			expected: []column.Config{
+				{Name: "InstanceColumn", Value: "{{ .instance }}"},
+			},
+			expectErr: false,
+		},
+		{
+			name: "CLI flag takes precedence over new list.instances.columns config",
+			atmosConfig: &schema.AtmosConfiguration{
+				List: schema.TopLevelListConfig{
+					Instances: schema.ListConfig{
+						Columns: []schema.ListColumnConfig{
+							{Name: "ConfigColumn", Value: "{{ .config }}"},
+						},
+					},
+				},
+			},
+			columnsFlag: []string{"FlagColumn={{ .flag }}"},
+			expected: []column.Config{
+				{Name: "FlagColumn", Value: "{{ .flag }}"},
+			},
+			expectErr: false,
+		},
 	}
 
 	for _, tc := range tests {
@@ -407,10 +451,170 @@ func TestBuildInstanceSorters(t *testing.T) {
 	}
 }
 
+// TestExecuteListInstancesCmd_MatrixFormatRejectsUpload tests that matrix format rejects --upload.
+func TestExecuteListInstancesCmd_MatrixFormatRejectsUpload(t *testing.T) {
+	cmd := &cobra.Command{}
+	cmd.Flags().Bool("upload", true, "Upload instances to Atmos Pro")
+	cmd.Flags().String("format", "matrix", "Output format")
+
+	info := &schema.ConfigAndStacksInfo{
+		BasePath: "../../tests/fixtures/scenarios/complete",
+	}
+
+	err := ExecuteListInstancesCmd(&InstancesCommandOptions{
+		Info: info,
+		Cmd:  cmd,
+		Args: []string{},
+	})
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrInvalidFlag)
+	assert.Contains(t, err.Error(), "--upload is not supported with --format=matrix")
+}
+
+// TestExecuteListInstancesCmd_MatrixFormat tests matrix format with valid fixture.
+func TestExecuteListInstancesCmd_MatrixFormat(t *testing.T) {
+	ioCtx, err := iolib.NewContext()
+	require.NoError(t, err)
+	ui.InitFormatter(ioCtx)
+	data.InitWriter(ioCtx)
+
+	fixturePath := "../../tests/fixtures/scenarios/complete"
+	tests.RequireFilePath(t, fixturePath, "test fixture directory")
+
+	cmd := &cobra.Command{}
+	cmd.Flags().Bool("upload", false, "Upload instances to Atmos Pro")
+	cmd.Flags().String("format", "matrix", "Output format")
+
+	info := &schema.ConfigAndStacksInfo{
+		BasePath: fixturePath,
+	}
+
+	err = ExecuteListInstancesCmd(&InstancesCommandOptions{
+		Info: info,
+		Cmd:  cmd,
+		Args: []string{},
+	})
+
+	assert.NoError(t, err)
+}
+
+// TestExecuteListInstancesCmd_MatrixFormatWithOutputFile tests matrix format writing to file.
+func TestExecuteListInstancesCmd_MatrixFormatWithOutputFile(t *testing.T) {
+	ioCtx, err := iolib.NewContext()
+	require.NoError(t, err)
+	ui.InitFormatter(ioCtx)
+	data.InitWriter(ioCtx)
+
+	fixturePath := "../../tests/fixtures/scenarios/complete"
+	tests.RequireFilePath(t, fixturePath, "test fixture directory")
+
+	outputFile := filepath.Join(t.TempDir(), "github_output")
+
+	cmd := &cobra.Command{}
+	cmd.Flags().Bool("upload", false, "Upload instances to Atmos Pro")
+	cmd.Flags().String("format", "matrix", "Output format")
+
+	info := &schema.ConfigAndStacksInfo{
+		BasePath: fixturePath,
+	}
+
+	err = ExecuteListInstancesCmd(&InstancesCommandOptions{
+		Info:       info,
+		Cmd:        cmd,
+		Args:       []string{},
+		OutputFile: outputFile,
+	})
+	require.NoError(t, err)
+
+	// Verify file was written with expected format.
+	content, err := os.ReadFile(outputFile)
+	require.NoError(t, err)
+	assert.Contains(t, string(content), "matrix=")
+	assert.Contains(t, string(content), "count=")
+	assert.Contains(t, string(content), `"include"`)
+}
+
+// TestExecuteListInstancesCmd_OutputFileRejectsNonMatrix tests that --output-file is rejected for non-matrix formats.
+func TestExecuteListInstancesCmd_OutputFileRejectsNonMatrix(t *testing.T) {
+	cmd := &cobra.Command{}
+	cmd.Flags().Bool("upload", false, "Upload instances to Atmos Pro")
+	cmd.Flags().String("format", "json", "Output format")
+
+	info := &schema.ConfigAndStacksInfo{
+		BasePath: "../../tests/fixtures/scenarios/complete",
+	}
+
+	err := ExecuteListInstancesCmd(&InstancesCommandOptions{
+		Info:       info,
+		Cmd:        cmd,
+		Args:       []string{},
+		OutputFile: "/tmp/some-file",
+	})
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrInvalidFlag)
+	assert.Contains(t, err.Error(), "--output-file is only supported with --format=matrix")
+}
+
 // TestBuildInstanceFilters tests the filter builder placeholder.
 func TestBuildInstanceFilters(t *testing.T) {
 	// Currently buildInstanceFilters is a placeholder that returns nil.
 	result, err := buildInstanceFilters("any-spec")
 	require.NoError(t, err)
 	assert.Nil(t, result)
+}
+
+// TestExecuteListInstancesCmd_TreeFormat exercises the tree-format branch
+// of ExecuteListInstancesCmd — enables provenance tracking, re-processes
+// stacks via ResolveImportTreeFromProvenance, and renders via
+// format.RenderInstancesTree.
+func TestExecuteListInstancesCmd_TreeFormat(t *testing.T) {
+	ioCtx, err := iolib.NewContext()
+	require.NoError(t, err)
+	ui.InitFormatter(ioCtx)
+	data.InitWriter(ioCtx)
+
+	fixturePath := "../../tests/fixtures/scenarios/complete"
+	tests.RequireFilePath(t, fixturePath, "test fixture directory")
+
+	cmd := &cobra.Command{}
+	cmd.Flags().Bool("upload", false, "Upload instances to Atmos Pro")
+	cmd.Flags().String("format", "tree", "Output format")
+
+	info := &schema.ConfigAndStacksInfo{
+		BasePath: fixturePath,
+	}
+
+	err = ExecuteListInstancesCmd(&InstancesCommandOptions{
+		Info:             info,
+		Cmd:              cmd,
+		Args:             []string{},
+		ProcessTemplates: true,
+		ProcessFunctions: false,
+	})
+	require.NoError(t, err, "complete fixture should render instances tree cleanly")
+}
+
+// TestExecuteListInstancesCmd_TreeFormatRejectsUpload verifies the
+// tree-format branch rejects `--upload` (mirrors the matrix-format
+// rejection test).
+func TestExecuteListInstancesCmd_TreeFormatRejectsUpload(t *testing.T) {
+	cmd := &cobra.Command{}
+	cmd.Flags().Bool("upload", true, "Upload instances to Atmos Pro")
+	cmd.Flags().String("format", "tree", "Output format")
+
+	info := &schema.ConfigAndStacksInfo{
+		BasePath: "../../tests/fixtures/scenarios/complete",
+	}
+
+	err := ExecuteListInstancesCmd(&InstancesCommandOptions{
+		Info: info,
+		Cmd:  cmd,
+		Args: []string{},
+	})
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrInvalidFlag)
+	assert.Contains(t, err.Error(), "--upload is not supported with --format=tree")
 }

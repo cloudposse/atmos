@@ -89,7 +89,7 @@ func TestProvisionWithParams_BackendProvisioningSuccess(t *testing.T) {
 
 	// Register a mock backend provisioner for testing.
 	mockProvisionerCalled := false
-	mockProvisioner := func(ctx context.Context, atmosConfig *schema.AtmosConfiguration, backendConfig map[string]any, authContext *schema.AuthContext) error {
+	mockProvisioner := func(ctx context.Context, atmosConfig *schema.AtmosConfiguration, backendConfig map[string]any, authContext *schema.AuthContext) (*backend.ProvisionResult, error) {
 		mockProvisionerCalled = true
 		// Verify the backend config was passed correctly.
 		bucket, ok := backendConfig["bucket"].(string)
@@ -100,7 +100,7 @@ func TestProvisionWithParams_BackendProvisioningSuccess(t *testing.T) {
 		assert.True(t, ok)
 		assert.Equal(t, "us-west-2", region)
 
-		return nil
+		return &backend.ProvisionResult{}, nil
 	}
 
 	// Temporarily register the mock provisioner.
@@ -143,8 +143,8 @@ func TestProvisionWithParams_BackendProvisioningFailure(t *testing.T) {
 	t.Cleanup(backend.ResetRegistryForTesting)
 
 	// Register a mock backend provisioner that fails.
-	mockProvisioner := func(ctx context.Context, atmosConfig *schema.AtmosConfiguration, backendConfig map[string]any, authContext *schema.AuthContext) error {
-		return errors.New("provisioning failed: bucket already exists in another account")
+	mockProvisioner := func(ctx context.Context, atmosConfig *schema.AtmosConfiguration, backendConfig map[string]any, authContext *schema.AuthContext) (*backend.ProvisionResult, error) {
+		return nil, errors.New("provisioning failed: bucket already exists in another account")
 	}
 
 	// Temporarily register the mock provisioner.
@@ -176,7 +176,8 @@ func TestProvisionWithParams_BackendProvisioningFailure(t *testing.T) {
 
 	err := ProvisionWithParams(params)
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "backend provisioning failed")
+	// The spinner passes through the original error from the backend provisioner.
+	assert.Contains(t, err.Error(), "provisioning failed")
 	assert.Contains(t, err.Error(), "bucket already exists in another account")
 }
 
@@ -207,9 +208,9 @@ func TestProvision_DelegatesToProvisionWithParams(t *testing.T) {
 
 	// Register a mock backend provisioner.
 	mockProvisionerCalled := false
-	mockProvisioner := func(ctx context.Context, atmosConfig *schema.AtmosConfiguration, backendConfig map[string]any, authContext *schema.AuthContext) error {
+	mockProvisioner := func(ctx context.Context, atmosConfig *schema.AtmosConfiguration, backendConfig map[string]any, authContext *schema.AuthContext) (*backend.ProvisionResult, error) {
 		mockProvisionerCalled = true
-		return nil
+		return &backend.ProvisionResult{}, nil
 	}
 	backend.RegisterBackendCreate("s3", mockProvisioner)
 
@@ -249,10 +250,10 @@ func TestProvisionWithParams_WithAuthContext(t *testing.T) {
 	}
 
 	// Register a mock backend provisioner that verifies authContext handling.
-	mockProvisioner := func(ctx context.Context, atmosConfig *schema.AtmosConfiguration, backendConfig map[string]any, authContext *schema.AuthContext) error {
+	mockProvisioner := func(ctx context.Context, atmosConfig *schema.AtmosConfiguration, backendConfig map[string]any, authContext *schema.AuthContext) (*backend.ProvisionResult, error) {
 		// AuthContext is passed through from params; nil here because test provides nil.
 		assert.Nil(t, authContext, "AuthContext should be nil when params.AuthContext is nil")
-		return nil
+		return &backend.ProvisionResult{}, nil
 	}
 	backend.RegisterBackendCreate("s3", mockProvisioner)
 
@@ -313,13 +314,18 @@ func TestProvisionWithParams_BackendTypeValidation(t *testing.T) {
 						"bucket": "test-bucket",
 						"region": "us-west-2",
 					},
+					"provision": map[string]any{
+						"backend": map[string]any{
+							"enabled": true,
+						},
+					},
 				}, nil
 			}
 
 			// Register a mock provisioner for backend type.
 			if tt.provisionType == "backend" {
-				mockProvisioner := func(ctx context.Context, atmosConfig *schema.AtmosConfiguration, backendConfig map[string]any, authContext *schema.AuthContext) error {
-					return nil
+				mockProvisioner := func(ctx context.Context, atmosConfig *schema.AtmosConfiguration, backendConfig map[string]any, authContext *schema.AuthContext) (*backend.ProvisionResult, error) {
+					return &backend.ProvisionResult{}, nil
 				}
 				backend.RegisterBackendCreate("s3", mockProvisioner)
 			}

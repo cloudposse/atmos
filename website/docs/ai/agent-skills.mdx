@@ -1,0 +1,288 @@
+---
+title: AI Agent Skills
+sidebar_label: AI Agent Skills
+description: Give AI coding assistants deep knowledge of Atmos through portable agent skills that work across Claude Code, Gemini CLI, OpenAI Codex, Cursor, Windsurf, GitHub Copilot, and more.
+id: agent-skills
+slug: /ai/agent-skills
+---
+import Intro from '@site/src/components/Intro'
+import KeyPoints from '@site/src/components/KeyPoints'
+
+<Intro>
+Atmos ships 21+ agent skills that give AI coding assistants deep, accurate knowledge of Atmos conventions, stack
+configuration, Terraform orchestration, authentication, validation, and more. The skills live in the `agent-skills/`
+folder at the root of the Atmos repository and work across all major AI tools.
+</Intro>
+
+<KeyPoints>
+- 21 domain-specific skills covering every Atmos subsystem
+- Works with Claude Code, Gemini CLI, OpenAI Codex, Cursor, Windsurf, GitHub Copilot, and more
+- Progressive disclosure: AI loads only the skill it needs, keeping context focused
+- Portable SKILL.md format with YAML frontmatter and tiered reference files
+</KeyPoints>
+
+## What Are Agent Skills?
+
+Agent skills are structured knowledge files that teach AI coding assistants how to work with specific tools and
+frameworks. Each skill is a self-contained package with:
+
+- **SKILL.md** -- The primary instruction file (under 500 lines) with YAML frontmatter metadata
+- **references/** -- Deeper reference files that the AI loads only when the task requires them
+
+Skills use a three-tier progressive disclosure pattern:
+
+1. **Router** (`AGENTS.md`) -- A lightweight index that maps user tasks to the right skill
+2. **Skill** (`SKILL.md`) -- Domain-specific instructions, patterns, and examples
+3. **References** (`references/*.md`) -- Detailed specifications, schemas, and command references
+
+This design keeps AI context windows focused. The AI loads the router first, identifies which skill applies, loads
+that skill, and only pulls in reference files when deep detail is needed.
+
+## Available Skills
+
+Atmos includes 21 skills covering every major subsystem:
+
+<dl>
+  <dt>`atmos-ansible`</dt>
+  <dd>Ansible playbook execution, variable passing, inventory management.</dd>
+
+  <dt>`atmos-auth`</dt>
+  <dd>Multi-provider auth (SSO/SAML/OIDC), identities, keyring, login/exec/shell.</dd>
+
+  <dt>`atmos-components`</dt>
+  <dd>Terraform root modules, abstract components, component inheritance, versioning.</dd>
+
+  <dt>`atmos-config`</dt>
+  <dd>Project configuration: atmos.yaml structure, all sections, discovery, merging, profiles.</dd>
+
+  <dt>`atmos-custom-commands`</dt>
+  <dd>User-defined CLI commands in atmos.yaml with arguments, flags, and steps.</dd>
+
+  <dt>`atmos-design-patterns`</dt>
+  <dd>Stack organization, component catalogs, inheritance, version management patterns.</dd>
+
+  <dt>`atmos-devcontainer`</dt>
+  <dd>Devcontainer management: start/stop/shell/exec, Docker/Podman, identity integration.</dd>
+
+  <dt>`atmos-gitops`</dt>
+  <dd>GitHub Actions, Spacelift, Atlantis, `atmos describe affected`, PR-based workflows.</dd>
+
+  <dt>`atmos-helmfile`</dt>
+  <dd>Helmfile sync/apply/destroy/diff, Kubernetes deployments, EKS integration.</dd>
+
+  <dt>`atmos-introspection`</dt>
+  <dd>describe/list commands for querying stacks, components, dependencies, and change impact.</dd>
+
+  <dt>`atmos-packer`</dt>
+  <dd>Packer init/build/validate, machine image building, template management.</dd>
+
+  <dt>`atmos-schemas`</dt>
+  <dd>JSON Schema for stack manifests, IDE auto-completion, schema validation.</dd>
+
+  <dt>`atmos-stacks`</dt>
+  <dd>Stack YAML manifests, imports, inheritance, deep merging, vars, settings, metadata.</dd>
+
+  <dt>`atmos-stores`</dt>
+  <dd>Store backends (SSM, Azure Key Vault, GCP Secret Manager, Redis, Artifactory).</dd>
+
+  <dt>`atmos-templates`</dt>
+  <dd>Go templates, Sprig/Gomplate functions, `atmos.Component`, datasources.</dd>
+
+  <dt>`atmos-terraform`</dt>
+  <dd>Terraform plan/apply/deploy/destroy, workspace management, backend config.</dd>
+
+  <dt>`atmos-toolchain`</dt>
+  <dd>CLI tool version management via Aqua registries, .tool-versions, install/exec.</dd>
+
+  <dt>`atmos-validation`</dt>
+  <dd>OPA/Rego policies, JSON Schema validation, `atmos validate` commands.</dd>
+
+  <dt>`atmos-vendoring`</dt>
+  <dd>Vendor manifests, pulling from Git/S3/HTTP/OCI/Terraform Registry.</dd>
+
+  <dt>`atmos-workflows`</dt>
+  <dd>Multi-step workflows, Go template support, cross-component orchestration.</dd>
+
+  <dt>`atmos-yaml-functions`</dt>
+  <dd>YAML functions: `!terraform.state`, `!store`, `!env`, `!exec`, `!include`, `!aws.*`.</dd>
+</dl>
+
+## Folder Structure
+
+All 21 skills live in a single flat directory, packaged as one Claude Code plugin:
+
+```text
+agent-skills/                                  # Single plugin
+  AGENTS.md                                    # Skill-activation router (loaded first)
+  .claude-plugin/plugin.json                   # Plugin manifest
+  skills/
+    atmos-terraform/                           # One directory per skill (21 total)
+      SKILL.md                                 # Primary instruction file (<500 lines)
+      references/                              # Deep-dive reference files
+    atmos-stacks/
+      SKILL.md
+      references/
+    atmos-config/
+      SKILL.md
+      references/
+    ...                                        # 18 more skills
+
+.claude/skills/                                # Symlinks for auto-discovery (Atmos contributors)
+  atmos-terraform -> ../../agent-skills/skills/atmos-terraform
+  atmos-config -> ../../agent-skills/skills/atmos-config
+  atmos-stacks -> ../../agent-skills/skills/atmos-stacks
+  ...                                          # 21 symlinks total
+```
+
+`agent-skills/` is the single source of truth. `.claude/skills/` contains symlinks so Claude Code auto-discovers
+skills when working directly in the Atmos repo. Both paths resolve to the same 21 `SKILL.md` files.
+
+Each skill folder follows the same pattern: one `SKILL.md` file and a `references/` directory with one or more
+deep-dive reference files.
+
+## SKILL.md Format
+
+Every skill file uses YAML frontmatter followed by markdown instructions:
+
+```yaml
+---
+name: atmos-stacks
+description: "Stack configuration: imports, inheritance, deep merging, locals, vars, settings, metadata, overrides, atmos.yaml setup"
+metadata:
+  copyright: Copyright Cloud Posse, LLC 2026
+  version: "1.0.0"
+references:
+  - references/import-patterns.md
+  - references/inheritance-deep-merge.md
+---
+
+# Atmos Stacks
+
+Instructions for the AI assistant...
+```
+
+<dl>
+  <dt>`name`</dt>
+  <dd>Unique identifier for the skill (must match the directory name).</dd>
+
+  <dt>`description`</dt>
+  <dd>Human-readable summary of what the skill teaches.</dd>
+
+  <dt>`metadata.copyright`</dt>
+  <dd>Copyright notice.</dd>
+
+  <dt>`metadata.version`</dt>
+  <dd>SemVer version of the skill content.</dd>
+
+  <dt>`references`</dt>
+  <dd>Optional list of deeper reference files the AI should load when more detail is needed.</dd>
+</dl>
+
+## AGENTS.md Router
+
+The `AGENTS.md` file at the root of `agent-skills/` is a lightweight router that maps tasks to skills. AI tools
+load this file first and use it to decide which skill to activate.
+
+The router includes:
+- **Core Concepts** -- Brief definitions of stacks, components, vendoring, auth, stores, workflows
+- **Key Commands** -- Quick reference for the most common Atmos CLI commands
+- **Skill Index** -- A table mapping task descriptions to skill names and file paths
+- **Common Patterns** -- Naming conventions, inheritance patterns, and cross-stack references
+
+## How Skills Are Activated
+
+You do **not** invoke skills manually. Your AI tool activates the right skill automatically based on your question:
+
+1. **At session start**, the AI loads lightweight metadata (name and description) from each installed skill
+2. **When you ask a question** about Atmos, the AI matches your question to the most relevant skill's description
+3. **The full skill content** loads on demand, giving the AI accurate, up-to-date guidance
+4. **Reference files** load only when the AI needs deeper detail (e.g., full command reference, schema examples)
+
+For example, if you ask *"How do I configure stack imports?"*, the AI automatically activates the `atmos-stacks`
+skill and uses its content to answer correctly -- no special syntax or commands needed.
+
+:::tip
+For Claude Code plugin installations, activation uses the `description` field in each SKILL.md's frontmatter.
+For file-based installations (Codex, Gemini, Windsurf, Copilot), the `AGENTS.md` router maps your task to
+the right skill via its skill index table. Both mechanisms are automatic.
+:::
+
+## Open Standards
+
+Atmos skills build on two open standards that are broadly adopted across AI coding tools:
+
+- **[AGENTS.md](https://agents.md/)** -- A Markdown file convention for project-level AI instructions. Created by OpenAI
+  with Google, Cursor, and others. Governed by the [Linux Foundation's Agentic AI Foundation (AAIF)](https://www.linuxfoundation.org/press/linux-foundation-announces-the-formation-of-the-agentic-ai-foundation).
+  Adopted by 60,000+ GitHub repositories.
+- **[Agent Skills](https://agentskills.io/specification)** (`SKILL.md`) -- A directory-based format for packaging AI
+  capabilities with instructions, references, and assets. Created by Anthropic as an open standard. Adopted by Microsoft,
+  OpenAI, Cursor, and GitHub.
+
+Every major AI tool has its own configuration directory (`.claude/`, `.cursor/`, `.gemini/`, `.github/`, etc.).
+Cross-tool interoperability happens at the **file format level** (`AGENTS.md` and `SKILL.md`), not through a shared
+directory path. This is why Atmos places skills in a tool-agnostic `agent-skills/` directory and uses symlinks for
+tool-specific discovery.
+
+## Uninstalling Skills
+
+To remove Atmos skills from Claude Code:
+
+```bash
+# Remove the plugin
+/plugin uninstall atmos@cloudposse
+
+# Remove the marketplace (optional)
+/plugin marketplace remove cloudposse
+```
+
+## Using Skills with AI Tools
+
+For step-by-step instructions on configuring each AI tool, see
+[Configure AI Assistants](/projects/setup-editor/ai-assistants). That page covers installation and setup for
+Claude Code, Cursor, Windsurf, GitHub Copilot, Gemini CLI, OpenAI Codex, and more.
+
+## How Skills Improve AI Assistance
+
+Without skills, AI assistants rely on general training data that may be outdated or incomplete. With skills:
+
+- **Accurate configuration** -- The AI knows the exact YAML schema, merge behavior, and naming conventions
+- **Correct commands** -- The AI generates valid `atmos terraform`, `atmos helmfile`, and other CLI commands
+- **Best practices** -- The AI follows Atmos design patterns for stack organization and component reuse
+- **Current features** -- Skills are updated with each Atmos release, covering features like YAML functions (`!store`, `!aws.*`),
+  store integrations, and multi-provider auth
+
+### Example: Without Skills vs. With Skills
+
+**Without skills**, an AI might generate incorrect stack configuration:
+
+```yaml
+# Wrong: AI guesses at the format
+terraform:
+  vpc:
+    region: us-east-1
+    cidr: "10.0.0.0/16"
+```
+
+**With the `atmos-stacks` skill loaded**, the AI generates correct configuration:
+
+```yaml
+# Correct: AI knows the Atmos schema
+components:
+  terraform:
+    vpc:
+      vars:
+        region: us-east-1
+        cidr_block: "10.0.0.0/16"
+```
+
+## Contributing Skills
+
+Skills are maintained in the Atmos repository under `agent-skills/`. To contribute:
+
+1. Follow the existing folder structure: `agent-skills/skills/<skill-name>/SKILL.md`
+2. Keep the primary `SKILL.md` under 500 lines for optimal context usage
+3. Place detailed reference material in `references/` subdirectories
+4. Update `AGENTS.md` to include your skill in the routing table
+5. Use YAML frontmatter with `name`, `description`, `metadata` (containing `copyright` and `version`), and optionally `references` fields
+
+See the [Atmos Contributing Guide](/community) for general contribution guidelines.

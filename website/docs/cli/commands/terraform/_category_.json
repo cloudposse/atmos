@@ -1,6 +1,5 @@
 {
   "label": "terraform",
-  "position": 15,
   "className": "command",
   "collapsible": true,
   "collapsed": true,

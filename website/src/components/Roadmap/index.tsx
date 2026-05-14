@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { MotionConfig } from 'framer-motion';
 import Link from '@docusaurus/Link';
-import { RiLightbulbLine, RiExternalLinkLine, RiExpandDiagonalLine } from 'react-icons/ri';
+import { RiLightbulbLine, RiExternalLinkLine, RiExpandDiagonalLine, RiFlaskLine } from 'react-icons/ri';
 import RoadmapHero from './RoadmapHero';
 import QuarterTimeline from './QuarterTimeline';
 import FeaturedSection from './FeaturedSection';
@@ -63,6 +63,13 @@ export default function Roadmap(): JSX.Element {
             >
               <RiLightbulbLine />
               <span>Request a Feature</span>
+            </Link>
+            <Link
+              to="/experimental"
+              className={styles.experimentalFeaturesLink}
+            >
+              <RiFlaskLine />
+              <span>Experimental Features</span>
             </Link>
             <button
               type="button"

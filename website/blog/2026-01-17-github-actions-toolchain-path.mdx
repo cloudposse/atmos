@@ -1,0 +1,49 @@
+---
+slug: github-actions-toolchain-path
+title: "Native GitHub Actions Support for Atmos Toolchain"
+authors: [osterman]
+tags: [enhancement, dx]
+---
+
+Atmos toolchain now has native GitHub Actions support with the new `github` format for `atmos toolchain env`.
+
+<!--truncate-->
+
+## What Changed
+
+The `atmos toolchain env` command now supports a `github` format that outputs paths compatible with GitHub Actions' `$GITHUB_PATH` environment file. When running in GitHub Actions, it automatically detects and writes to `$GITHUB_PATH`.
+
+### New Features
+
+- **`--format github`**: Outputs one path per line, compatible with `$GITHUB_PATH`
+- **`--output` flag**: Append output to any file instead of stdout
+- **Auto-detection**: When `$GITHUB_PATH` is set, the `github` format automatically writes to it
+- **Improved error messages**: Helpful hints guide you when tools aren't installed
+
+## How to Use It
+
+In your GitHub Actions workflow:
+
+```yaml
+- name: Install Atmos toolchain
+  run: |
+    atmos toolchain install
+    atmos toolchain env --format github
+```
+
+The next step in your workflow will have access to all your toolchain binaries (OpenTofu, Terraform, Helmfile, etc.) in the PATH.
+
+## Why This Matters
+
+Previously, integrating Atmos toolchain with GitHub Actions required shell tricks:
+
+```yaml
+# Before: Manual PATH manipulation
+- run: echo "$(atmos toolchain path)" >> $GITHUB_PATH
+```
+
+Now it's a single, intuitive command that handles everything automatically.
+
+## Get Involved
+
+Try out the new GitHub Actions integration and let us know what you think! File issues or feature requests on [GitHub](https://github.com/cloudposse/atmos/issues).

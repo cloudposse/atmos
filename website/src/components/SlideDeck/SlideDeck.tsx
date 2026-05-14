@@ -256,10 +256,11 @@ function SlideDeckInner({
       }
     }
 
-    if (e.key === 'ArrowRight' || e.key === ' ') {
+    // Skip arrow navigation when Shift is held (reserved for inner pagination)
+    if ((e.key === 'ArrowRight' || e.key === ' ') && !e.shiftKey) {
       e.preventDefault();
       nextSlide();
-    } else if (e.key === 'ArrowLeft') {
+    } else if (e.key === 'ArrowLeft' && !e.shiftKey) {
       e.preventDefault();
       prevSlide();
     } else if (e.key === 'f' || e.key === 'F') {

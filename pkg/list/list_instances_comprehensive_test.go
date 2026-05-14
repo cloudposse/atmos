@@ -36,7 +36,7 @@ func TestProcessComponentConfig(t *testing.T) {
 
 	t.Run("valid component config", func(t *testing.T) {
 		config := map[string]any{
-			"settings": map[string]any{"pro": map[string]any{"drift_detection": map[string]any{"enabled": true}}},
+			"settings": map[string]any{"pro": map[string]any{"enabled": true}},
 			"vars":     map[string]any{"key": "value"},
 		}
 		result := processComponentConfig("stack1", "comp1", "terraform", config)
@@ -174,102 +174,6 @@ func TestSortInstances(t *testing.T) {
 		assert.Equal(t, "stack1", result[1].Stack)
 		assert.Equal(t, "vpc", result[2].Component)
 		assert.Equal(t, "stack2", result[2].Stack)
-	})
-}
-
-// Test filterProEnabledInstances edge cases.
-func TestFilterProEnabledInstancesEdgeCases(t *testing.T) {
-	t.Run("instances with invalid pro settings", func(t *testing.T) {
-		instances := []schema.Instance{
-			{
-				Component: "vpc",
-				Stack:     "stack1",
-				Settings: map[string]interface{}{
-					"pro": "invalid", // Not a map.
-				},
-			},
-			{
-				Component: "app",
-				Stack:     "stack1",
-				Settings: map[string]interface{}{
-					"pro": map[string]interface{}{
-						"drift_detection": "invalid", // Not a map.
-					},
-				},
-			},
-			{
-				Component: "db",
-				Stack:     "stack1",
-				Settings: map[string]interface{}{
-					"pro": map[string]interface{}{
-						"drift_detection": map[string]interface{}{
-							"enabled": "invalid", // Not a bool.
-						},
-					},
-				},
-			},
-		}
-
-		filtered := filterProEnabledInstances(instances)
-		assert.Empty(t, filtered)
-	})
-
-	t.Run("instances with missing pro settings", func(t *testing.T) {
-		instances := []schema.Instance{
-			{
-				Component: "vpc",
-				Stack:     "stack1",
-				Settings:  map[string]interface{}{},
-			},
-			{
-				Component: "app",
-				Stack:     "stack1",
-				Settings: map[string]interface{}{
-					"other": "value",
-				},
-			},
-		}
-
-		filtered := filterProEnabledInstances(instances)
-		assert.Empty(t, filtered)
-	})
-
-	t.Run("instances with pro settings but missing drift_detection", func(t *testing.T) {
-		instances := []schema.Instance{
-			{
-				Component: "vpc",
-				Stack:     "stack1",
-				Settings: map[string]interface{}{
-					"pro": map[string]interface{}{
-						"other": "value",
-					},
-				},
-			},
-		}
-
-		filtered := filterProEnabledInstances(instances)
-		assert.Empty(t, filtered)
-	})
-
-	t.Run("instances with pro settings and drift_detection.enabled is true", func(t *testing.T) {
-		instances := []schema.Instance{
-			{
-				Component: "vpc",
-				Stack:     "stack1",
-				Settings: map[string]interface{}{
-					"pro": map[string]interface{}{
-						"drift_detection": map[string]interface{}{
-							"enabled": true,
-						},
-					},
-				},
-			},
-		}
-
-		filtered := filterProEnabledInstances(instances)
-		assert.Len(t, filtered, 1)
-		assert.Equal(t, "vpc", filtered[0].Component)
-		assert.Equal(t, "stack1", filtered[0].Stack)
 	})
 }
 

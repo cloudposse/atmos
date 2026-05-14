@@ -1,0 +1,9 @@
+# Terraform state and working directories.
+.terraform
+*.tfstate
+*.tfstate.*
+*.tfplan
+.terraform.lock.hcl
+
+# Generated files.
+*.generated.*

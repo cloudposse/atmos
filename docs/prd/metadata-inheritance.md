@@ -402,7 +402,7 @@ This could allow users to disable inheritance of specific sections if needed, th
 
 ## References
 
-- [Component Inheritance Documentation](https://atmos.tools/core-concepts/stacks/inheritance)
-- [Terraform Backends Documentation](https://atmos.tools/core-concepts/components/terraform/backends)
+- [Component Inheritance Documentation](https://atmos.tools/howto/inheritance)
+- [Terraform Backends Documentation](https://atmos.tools/components/terraform/backends)
 - [Version Management Design Patterns](https://atmos.tools/design-patterns/version-management)
 - Related code: `internal/exec/stack_processor_process_stacks_helpers_inheritance.go`

@@ -225,6 +225,8 @@ func (m *mockIdentityForShellEnv) Paths() ([]types.Path, error) {
 	return []types.Path{}, nil
 }
 
+func (m *mockIdentityForShellEnv) SetRealm(_ string) {}
+
 // TestPrepareShellEnvironment_Success tests successful environment preparation.
 func TestPrepareShellEnvironment_Success(t *testing.T) {
 	// Create mock identity that implements PrepareEnvironment.

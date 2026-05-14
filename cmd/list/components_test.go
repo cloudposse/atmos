@@ -264,7 +264,7 @@ func TestBuildComponentFilters(t *testing.T) {
 			opts: &ComponentsOptions{
 				Stack: "prod-*",
 			},
-			expectedCount: 2, // Stack filter + abstract filter
+			expectedCount: 1, // abstract filter only (stack filter not applicable to unique components)
 			description:   "Stack glob filter + abstract filter",
 		},
 		{
@@ -315,7 +315,7 @@ func TestBuildComponentFilters(t *testing.T) {
 				Enabled: &enabledTrue,
 				Locked:  &lockedTrue,
 			},
-			expectedCount: 4, // Stack + Type + Enabled + Locked (no abstract filter when Type is set)
+			expectedCount: 3, // Type + Enabled + Locked (stack filter not applicable to unique components)
 			description:   "All filters combined",
 		},
 		{
@@ -353,7 +353,7 @@ func TestGetComponentColumns(t *testing.T) {
 				},
 			},
 			columnsFlag: []string{},
-			expectLen:   6, // All standard fields: Component, Stack, Type, Component Type, Enabled, Locked
+			expectLen:   3, // Unique component fields: Component, Type, Stacks
 			expectName:  "Component",
 		},
 		{
@@ -370,8 +370,8 @@ func TestGetComponentColumns(t *testing.T) {
 		{
 			name: "Columns from config",
 			atmosConfig: &schema.AtmosConfiguration{
-				Components: schema.Components{
-					List: schema.ListConfig{
+				List: schema.TopLevelListConfig{
+					Components: schema.ListConfig{
 						Columns: []schema.ListColumnConfig{
 							{Name: "Component", Value: "{{ .component }}"},
 							{Name: "Stack", Value: "{{ .stack }}"},
@@ -410,7 +410,7 @@ func TestBuildComponentSorters(t *testing.T) {
 		{
 			name:      "Empty sort (default)",
 			sortSpec:  "",
-			expectLen: 1, // Default sort by component ascending
+			expectLen: 1, // Default sort by component ascending only (unique components)
 		},
 		{
 			name:      "Single sort field ascending",
@@ -873,8 +873,8 @@ func TestRenderComponents(t *testing.T) {
 		{
 			name: "Components with custom columns from config",
 			atmosConfig: &schema.AtmosConfiguration{
-				Components: schema.Components{
-					List: schema.ListConfig{
+				List: schema.TopLevelListConfig{
+					Components: schema.ListConfig{
 						Columns: []schema.ListColumnConfig{
 							{Name: "Name", Value: "{{ .component }}"},
 							{Name: "Environment", Value: "{{ .stack }}"},
@@ -1118,3 +1118,26 @@ func TestRenderComponents_TypeFilter(t *testing.T) {
 // TestInitAndExtractComponents is documented in integration tests.
 // Unit testing with nil command is not meaningful as ProcessCommandLineArgs requires a valid command context.
 // See tests/cli_list_commands_test.go for integration tests that exercise the full command flow.
+
+// TestComponentsProcessTemplatesAndFunctionsFlags verifies that
+// --process-templates and --process-functions are registered on the real
+// `components` cobra command with the documented defaults (both true).
+func TestComponentsProcessTemplatesAndFunctionsFlags(t *testing.T) {
+	processTemplatesFlag := componentsCmd.Flags().Lookup("process-templates")
+	if processTemplatesFlag == nil {
+		processTemplatesFlag = componentsCmd.PersistentFlags().Lookup("process-templates")
+	}
+	assert.NotNil(t, processTemplatesFlag, "process-templates flag should be registered on components command")
+	if processTemplatesFlag != nil {
+		assert.Equal(t, "true", processTemplatesFlag.DefValue)
+	}
+
+	processFunctionsFlag := componentsCmd.Flags().Lookup("process-functions")
+	if processFunctionsFlag == nil {
+		processFunctionsFlag = componentsCmd.PersistentFlags().Lookup("process-functions")
+	}
+	assert.NotNil(t, processFunctionsFlag, "process-functions flag should be registered on components command")
+	if processFunctionsFlag != nil {
+		assert.Equal(t, "true", processFunctionsFlag.DefValue)
+	}
+}

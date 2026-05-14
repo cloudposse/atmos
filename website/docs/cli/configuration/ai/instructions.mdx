@@ -1,0 +1,181 @@
+---
+title: Project Instructions
+sidebar_label: instructions
+sidebar_class_name: command
+description: Configure project-specific AI instructions in the `ai.instructions` section of your `atmos.yaml`.
+---
+import File from '@site/src/components/File'
+import Terminal from '@site/src/components/Terminal'
+import Intro from '@site/src/components/Intro'
+import Experimental from '@site/src/components/Experimental'
+
+<Intro>
+The `ai.instructions` section configures the `ATMOS.md` file that provides persistent, project-specific
+instructions to the AI assistant.
+</Intro>
+
+<Experimental />
+
+## What are Project Instructions?
+
+Project Instructions are stored in a markdown file (`ATMOS.md`) in your project root. You create and maintain this file yourself. When enabled, its contents are automatically included with every AI request, providing consistent context across all conversations.
+
+Common things to include:
+- **Project Context**: Organization name, Atmos version, regions, environments
+- **Common Commands**: Frequently used Atmos commands for your project
+- **Stack Patterns**: Naming conventions and YAML structure patterns
+- **Infrastructure Patterns**: Multi-region setups, component dependencies
+- **Component Catalog**: Your component organization and structure
+- **Team Conventions**: Development practices and documentation standards
+
+## Configuration
+
+<File title="atmos.yaml">
+```yaml
+ai:
+  instructions:
+    enabled: true                        # Enable project instructions (default: false)
+    file: "ATMOS.md"                     # Instructions file location (default: ATMOS.md)
+```
+</File>
+
+## Instruction Settings
+
+<dl>
+  <dt>`instructions.enabled`</dt>
+  <dd>Enable project instructions (default: `false`). When enabled, the contents of the instructions file are automatically included with every AI request.</dd>
+
+  <dt>`instructions.file`</dt>
+  <dd>Path to the instructions file, relative to project root or absolute (default: `ATMOS.md`). The file uses Markdown format. If the file does not exist, instructions are silently skipped.</dd>
+</dl>
+
+## Creating Your Instructions File
+
+Create an `ATMOS.md` file in your project root with any content relevant to your project:
+
+<File title="ATMOS.md">
+````markdown
+# Atmos Project Instructions
+
+## Project Context
+
+**Organization:** acme-corp
+**Atmos Version:** 1.89.0
+**Primary Regions:** us-east-1, us-west-2
+**Environments:** dev, staging, prod
+
+**Stack Naming Pattern:**
+```
+{org}-{tenant}-{environment}-{region}-{stage}
+Example: acme-core-prod-use1-network
+```
+
+## Common Commands
+
+```bash
+# Describe a component
+atmos describe component <component> -s <stack>
+
+# List all stacks
+atmos list stacks
+
+# Validate stacks
+atmos validate stacks
+
+# Plan a component
+atmos terraform plan <component> -s <stack>
+```
+
+## Stack Patterns
+
+```yaml
+# Common import pattern
+import:
+  - catalog/stacks/baseline
+  - catalog/stacks/network
+```
+
+### CIDR Blocks
+- dev: 10.0.0.0/16
+- staging: 10.1.0.0/16
+- prod: 10.2.0.0/16
+
+## Component Dependencies
+
+```
+vpc → subnets → security-groups → rds → eks
+```
+
+## Team Conventions
+
+- All infrastructure changes require PR review
+- Use `atmos validate` before committing
+- Tag all resources appropriately
+- Document component changes
+````
+</File>
+
+## Instructions vs Context Sharing
+
+<dl>
+  <dt>Content</dt>
+  <dd>**Project Instructions:** High-level patterns, conventions, common commands. **Context Sharing:** Actual stack YAML files and configurations.</dd>
+
+  <dt>Update frequency</dt>
+  <dd>**Project Instructions:** Updated manually by you. **Context Sharing:** Every request (real-time).</dd>
+
+  <dt>Size</dt>
+  <dd>**Project Instructions:** Small (few KB). **Context Sharing:** Large (multiple files).</dd>
+
+  <dt>Privacy</dt>
+  <dd>**Project Instructions:** Low risk (you control content). **Context Sharing:** Higher risk (may contain secrets).</dd>
+
+  <dt>Use case</dt>
+  <dd>**Project Instructions:** Consistent AI behavior across chats. **Context Sharing:** Deep analysis of specific configs.</dd>
+</dl>
+
+**Best Practice:** Enable both for optimal results:
+- Instructions provide consistent baseline knowledge
+- Context sharing adds real-time specifics when needed
+
+## Performance Considerations
+
+Project instructions add tokens to every AI request:
+
+<dl>
+  <dt>Small file (1-2 KB)</dt>
+  <dd>Negligible impact on performance and cost.</dd>
+
+  <dt>Medium file (5-10 KB)</dt>
+  <dd>~500-1000 tokens per request.</dd>
+
+  <dt>Large file (20+ KB)</dt>
+  <dd>~2000+ tokens per request. Keep your instructions concise.</dd>
+</dl>
+
+## Privacy
+
+The contents of your `ATMOS.md` file are sent to your AI provider with every request when instructions
+are enabled. Only include information you are comfortable sharing with your configured AI provider.
+
+## Troubleshooting
+
+**Instructions not loading:**
+```bash
+# Check if file exists
+ls -la ATMOS.md
+
+# Verify configuration
+grep -A3 "instructions:" atmos.yaml
+```
+
+**AI not using instructions:**
+- Verify `instructions.enabled: true` in atmos.yaml
+- Check that `ATMOS.md` exists in project root
+- Ensure the file is readable
+
+## Related Documentation
+
+- [AI Configuration](/cli/configuration/ai) - Configure AI provider settings
+- [AI Sessions](/cli/configuration/ai/sessions) - Persistent conversation management
+- [AI Tools](/cli/configuration/ai/tools) - Available tools and permissions

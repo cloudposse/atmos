@@ -358,3 +358,221 @@ components:
 	assert.Equal(t, multiDotContent, componentVars["multi_dot_raw"].(string))
 	assert.Equal(t, hiddenJsonContent, componentVars["hidden_json_raw"].(string))
 }
+
+// TestFindLocalFileWithEmptyBasePath reproduces the bug from GitHub issue #2090.
+// When `describe affected` processes the base-ref repo, it does not update
+// atmosConfig.BasePath, leaving it empty. This causes `!include` to fail
+// for files that can only be resolved relative to the base path.
+func TestFindLocalFileWithEmptyBasePath(t *testing.T) {
+	tempDir := t.TempDir()
+
+	// Create a nested directory structure simulating a real repo.
+	policyDir := filepath.Join(tempDir, "stacks", "catalog", "spaces", "policies")
+	err := os.MkdirAll(policyDir, 0o755)
+	assert.NoError(t, err)
+
+	// Create two policy files (like the user's .rego files).
+	policyFile1 := filepath.Join(policyDir, "notification-failure.rego")
+	err = os.WriteFile(policyFile1, []byte("package notification\n"), 0o644)
+	assert.NoError(t, err)
+
+	policyFile2 := filepath.Join(policyDir, "push-prioritize.rego")
+	err = os.WriteFile(policyFile2, []byte("package push\n"), 0o644)
+	assert.NoError(t, err)
+
+	// The include path as used in the stack manifest (relative to base path).
+	includePath := filepath.Join("stacks", "catalog", "spaces", "policies", "notification-failure.rego")
+	includePath2 := filepath.Join("stacks", "catalog", "spaces", "policies", "push-prioritize.rego")
+
+	// The manifest file path (absolute path in the base-ref checkout).
+	manifestFile := filepath.Join(tempDir, "stacks", "catalog", "spaces", "local.yaml")
+
+	t.Run("with correct BasePath files are found", func(t *testing.T) {
+		atmosConfig := &schema.AtmosConfiguration{
+			BasePath: tempDir,
+		}
+
+		result := findLocalFile(includePath, manifestFile, atmosConfig)
+		assert.NotEmpty(t, result, "file should be found when BasePath is set correctly")
+
+		result2 := findLocalFile(includePath2, manifestFile, atmosConfig)
+		assert.NotEmpty(t, result2, "second file should also be found when BasePath is set correctly")
+	})
+
+	t.Run("with empty BasePath files are NOT found", func(t *testing.T) {
+		// This reproduces the describe affected bug (issue #2090).
+		// When BasePath is empty, findLocalFile cannot resolve files
+		// that are relative to the base path.
+		atmosConfig := &schema.AtmosConfiguration{
+			BasePath: "",
+		}
+
+		result := findLocalFile(includePath, manifestFile, atmosConfig)
+		assert.Empty(t, result, "file should NOT be found when BasePath is empty (bug #2090)")
+
+		result2 := findLocalFile(includePath2, manifestFile, atmosConfig)
+		assert.Empty(t, result2, "second file should NOT be found when BasePath is empty (bug #2090)")
+	})
+
+	t.Run("with wrong BasePath files are NOT found", func(t *testing.T) {
+		atmosConfig := &schema.AtmosConfiguration{
+			BasePath: filepath.Join(tempDir, "nonexistent"),
+		}
+
+		result := findLocalFile(includePath, manifestFile, atmosConfig)
+		assert.Empty(t, result, "file should NOT be found when BasePath points to wrong dir")
+	})
+}
+
+// TestIncludeMultipleInSameFile tests that multiple !include tags in the same
+// YAML file all resolve correctly. This verifies there is no state corruption
+// between consecutive include resolutions (related to issue #2090).
+func TestIncludeMultipleInSameFile(t *testing.T) {
+	tempDir := t.TempDir()
+
+	// Create multiple files to include.
+	file1 := filepath.Join(tempDir, "policy1.rego")
+	file1Content := "package policy1\ndefault allow = false"
+	err := os.WriteFile(file1, []byte(file1Content), 0o644)
+	assert.NoError(t, err)
+
+	file2 := filepath.Join(tempDir, "policy2.rego")
+	file2Content := "package policy2\ndefault deny = true"
+	err = os.WriteFile(file2, []byte(file2Content), 0o644)
+	assert.NoError(t, err)
+
+	file3 := filepath.Join(tempDir, "config.json")
+	file3Content := `{"key": "value"}`
+	err = os.WriteFile(file3, []byte(file3Content), 0o644)
+	assert.NoError(t, err)
+
+	// Create a manifest that includes all three files.
+	manifestFile := filepath.Join(tempDir, "manifest.yaml")
+	manifestContent := `---
+components:
+  terraform:
+    test_component:
+      vars:
+        policy1_body: !include policy1.rego
+        policy2_body: !include policy2.rego
+        json_config: !include config.json`
+
+	err = os.WriteFile(manifestFile, []byte(manifestContent), 0o644)
+	assert.NoError(t, err)
+
+	t.Chdir(tempDir)
+
+	yamlFileContent, err := os.ReadFile("manifest.yaml")
+	assert.NoError(t, err)
+
+	atmosConfig := &schema.AtmosConfiguration{
+		BasePath: ".",
+		Logs: schema.Logs{
+			Level: "Info",
+		},
+	}
+
+	manifest, err := UnmarshalYAMLFromFile[schema.AtmosSectionMapType](atmosConfig, string(yamlFileContent), "manifest.yaml")
+	assert.NoError(t, err)
+
+	componentVars := manifest["components"].(map[string]any)["terraform"].(map[string]any)["test_component"].(map[string]any)["vars"].(map[string]any)
+
+	// All three includes should succeed - no state corruption between them.
+	assert.Equal(t, file1Content, componentVars["policy1_body"].(string), "first include should return raw .rego content")
+	assert.Equal(t, file2Content, componentVars["policy2_body"].(string), "second include should return raw .rego content")
+
+	// JSON should be parsed as a map.
+	jsonConfig, ok := componentVars["json_config"].(map[string]any)
+	assert.True(t, ok, "JSON include should be parsed as a map")
+	assert.Equal(t, "value", jsonConfig["key"])
+}
+
+// TestIncludeBasePathResolution tests that !include resolves files correctly
+// via BasePath when paths are not relative to the manifest (issue #2090).
+// This simulates the describe affected scenario where include paths are
+// relative to the repo root (base path), not to the manifest file.
+func TestIncludeBasePathResolution(t *testing.T) {
+	tempDir := t.TempDir()
+
+	// Create directory structure:
+	//   tempDir/
+	//     policies/
+	//       notify.rego
+	//       push.rego
+	//     stacks/
+	//       deploy/
+	//         app.yaml  (the manifest)
+	policiesDir := filepath.Join(tempDir, "policies")
+	err := os.MkdirAll(policiesDir, 0o755)
+	assert.NoError(t, err)
+
+	stacksDir := filepath.Join(tempDir, "stacks", "deploy")
+	err = os.MkdirAll(stacksDir, 0o755)
+	assert.NoError(t, err)
+
+	notifyContent := "package notify\ndefault allow = true"
+	err = os.WriteFile(filepath.Join(policiesDir, "notify.rego"), []byte(notifyContent), 0o644)
+	assert.NoError(t, err)
+
+	pushContent := "package push\ndefault priority = 0"
+	err = os.WriteFile(filepath.Join(policiesDir, "push.rego"), []byte(pushContent), 0o644)
+	assert.NoError(t, err)
+
+	// Manifest uses paths relative to the base path (tempDir), NOT relative to manifest dir.
+	manifestFile := filepath.Join(stacksDir, "app.yaml")
+	manifestContent := `---
+components:
+  terraform:
+    test_component:
+      vars:
+        notify_policy: !include policies/notify.rego
+        push_policy: !include policies/push.rego`
+
+	err = os.WriteFile(manifestFile, []byte(manifestContent), 0o644)
+	assert.NoError(t, err)
+
+	t.Run("with BasePath set to repo root both includes succeed", func(t *testing.T) {
+		t.Chdir(tempDir)
+
+		yamlFileContent, err := os.ReadFile(manifestFile)
+		assert.NoError(t, err)
+
+		atmosConfig := &schema.AtmosConfiguration{
+			BasePath: tempDir,
+			Logs: schema.Logs{
+				Level: "Info",
+			},
+		}
+
+		manifest, err := UnmarshalYAMLFromFile[schema.AtmosSectionMapType](atmosConfig, string(yamlFileContent), manifestFile)
+		assert.NoError(t, err)
+
+		componentVars := manifest["components"].(map[string]any)["terraform"].(map[string]any)["test_component"].(map[string]any)["vars"].(map[string]any)
+
+		// Both files should be resolved via BasePath.
+		assert.Equal(t, notifyContent, componentVars["notify_policy"].(string))
+		assert.Equal(t, pushContent, componentVars["push_policy"].(string))
+	})
+
+	t.Run("with empty BasePath includes fail - reproduces issue 2090", func(t *testing.T) {
+		// Change to a directory where the relative paths won't resolve.
+		otherDir := t.TempDir()
+		t.Chdir(otherDir)
+
+		yamlFileContent, err := os.ReadFile(manifestFile)
+		assert.NoError(t, err)
+
+		atmosConfig := &schema.AtmosConfiguration{
+			BasePath: "",
+			Logs: schema.Logs{
+				Level: "Info",
+			},
+		}
+
+		// With empty BasePath and CWD not matching the repo root,
+		// the include paths cannot be resolved.
+		_, err = UnmarshalYAMLFromFile[schema.AtmosSectionMapType](atmosConfig, string(yamlFileContent), manifestFile)
+		assert.Error(t, err, "should fail when BasePath is empty and CWD doesn't match repo root (issue #2090)")
+		assert.Contains(t, err.Error(), "does not exist", "error should indicate file not found")
+	})
+}

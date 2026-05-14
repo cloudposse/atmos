@@ -4,7 +4,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/cloudposse/atmos/pkg/perf"
-	"github.com/cloudposse/atmos/toolchain"
+	"github.com/cloudposse/atmos/pkg/toolchain"
 )
 
 // uninstallCmd represents the `atmos version uninstall` command.
@@ -42,5 +42,5 @@ func runUninstall(cmd *cobra.Command, args []string) error {
 
 	// Delegate to toolchain uninstaller.
 	// The built-in alias "atmos" -> "cloudposse/atmos" handles the resolution.
-	return toolchain.RunUninstall(toolSpec)
+	return toolchain.RunUninstall(toolSpec, false)
 }
