@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strconv"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -354,7 +355,19 @@ func (m *KubeconfigManager) mergeIfChanged(newConfig *clientcmdapi.Config) (bool
 // weaker permission (e.g., manually chmod-ed or created by another tool) is
 // brought back into compliance even when content is unchanged. Returns
 // changed=true only when an actual chmod was performed.
+//
+// On Windows this is a no-op: `os.Chmod` only honors the read-only bit and
+// `os.Stat(..).Mode().Perm()` reports Windows-emulated mode bits (typically
+// 0o666 for a writable file) that don't reliably match the Unix mode the
+// kubeconfig manager was configured with. Comparing those would make
+// reconcileMode permanently report a mismatch and falsely flag every no-op
+// write as `changed=true`. The trade-off — that an out-of-band mode drift
+// won't get auto-corrected on Windows — matches Go's general posture that
+// Unix mode bits are not a faithful concept on Windows.
 func (m *KubeconfigManager) reconcileMode() (bool, error) {
+	if runtime.GOOS == "windows" {
+		return false, nil
+	}
 	stat, err := os.Stat(m.path)
 	if err != nil {
 		return false, fmt.Errorf("%w: failed to stat %s: %w", errUtils.ErrKubeconfigWrite, m.path, err)
