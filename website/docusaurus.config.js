@@ -63,6 +63,13 @@ const config = {
                     // Redirects for integrations pages moved to cli/configuration
                     {from: '/integrations/atlantis', to: '/cli/configuration/integrations/atlantis'},
                     {from: '/integrations/integrations', to: '/cli/configuration/integrations'},
+                    // Legacy GitHub Actions redirected to native CI (deprecated)
+                    {from: '/integrations/github-actions', to: '/ci'},
+                    {from: '/integrations/github-actions/affected-stacks', to: '/ci'},
+                    {from: '/integrations/github-actions/atmos-terraform-plan', to: '/ci'},
+                    {from: '/integrations/github-actions/atmos-terraform-apply', to: '/ci'},
+                    {from: '/integrations/github-actions/atmos-terraform-drift-detection', to: '/ci'},
+                    {from: '/integrations/github-actions/atmos-terraform-drift-remediation', to: '/ci'},
                     {
                         from: '/reference/terraform-limitations',
                         to: '/intro/why-atmos'
@@ -81,6 +88,10 @@ const config = {
                     {
                         from: '/core-concepts/components/terraform/remote-state',
                         to: '/components/terraform/remote-state'
+                    },
+                    {
+                        from: '/components/terraform/backend-provisioning',
+                        to: '/stacks/components/provision/backend'
                     },
                     // Component Catalog redirects for reorganization
                     {
@@ -322,7 +333,7 @@ const config = {
                     // Broken URLs referenced by LLMs — screenshot-confirmed 404s
                     {from: '/core-concepts/components/vendoring', to: '/vendor/'},
                     {from: '/core-concepts/vendor/component-management', to: '/vendor/vendor-config'},
-                    {from: '/core-concepts/stacks/provisioning', to: '/components/terraform/backend-provisioning'},
+                    {from: '/core-concepts/stacks/provisioning', to: '/stacks/components/provision/backend'},
                     {from: '/reference/schemas', to: '/cli/configuration/schemas'},
                     // Projects section moved to /projects/ and /cli/configuration/
                     {from: '/core-concepts/projects', to: '/projects/layout'},

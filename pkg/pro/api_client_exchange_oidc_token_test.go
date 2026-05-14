@@ -128,19 +128,11 @@ func TestExchangeOIDCTokenForAtmosToken_ErrorStatusNonJSON(t *testing.T) {
 	assert.Equal(t, "", token)
 	assert.ErrorIs(t, err, errUtils.ErrFailedToExchangeOIDCToken)
 	assert.ErrorIs(t, err, errUtils.ErrFailedToDecodeTokenResponse)
-	// The troubleshooting hint is attached to the enriched inner error.
-	// errors.Join doesn't propagate cockroach hints, so unwrap to find them.
-	var innerErrs interface{ Unwrap() []error }
-	if assert.ErrorAs(t, err, &innerErrs) {
-		for _, inner := range innerErrs.Unwrap() {
-			hints := cockroachErrors.GetAllHints(inner)
-			allHints := strings.Join(hints, "\n")
-			if strings.Contains(allHints, "troubleshooting") {
-				return // Found it.
-			}
-		}
-		t.Error("expected troubleshooting hint in inner errors")
-	}
+	// The troubleshooting hint is now visible at the top-level error because
+	// wrapErr re-attaches cockroach hints to the outer layer.
+	hints := cockroachErrors.GetAllHints(err)
+	allHints := strings.Join(hints, "\n")
+	assert.Contains(t, allHints, "troubleshooting")
 }
 
 func TestExchangeOIDCTokenForAtmosToken_MarshalError(t *testing.T) {

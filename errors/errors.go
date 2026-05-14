@@ -63,6 +63,7 @@ var (
 	ErrMissingDocType                        = errors.New("doc-type argument missing")
 	ErrUnsupportedInputType                  = errors.New("unsupported input type")
 	ErrMissingStackNameTemplateAndPattern    = errors.New("'stacks.name_pattern' or 'stacks.name_template' needs to be specified in 'atmos.yaml'")
+	ErrStackNamePatternPartMissing           = errors.New("stack name pattern references a context part that is not defined in the stack file")
 	ErrFailedMarshalConfigToYaml             = errors.New("failed to marshal config to YAML")
 	ErrStacksDirectoryDoesNotExist           = errors.New("directory for Atmos stacks does not exist")
 	ErrMissingAtmosConfig                    = errors.New("atmos configuration not found or invalid")
@@ -192,6 +193,9 @@ var (
 	ErrFailedToGetRepoInfo  = errors.New("failed to get repository info")
 	ErrLocalRepoFetch       = errors.New("local repo unavailable")
 	ErrGitRefNotFound       = errors.New("git reference not found on local filesystem")
+	ErrGitWorktreeAdd       = errors.New("failed to create git worktree")
+	ErrFetchOrigin          = errors.New("failed to fetch from origin")
+	ErrDeepenOrigin         = errors.New("failed to deepen fetch from origin")
 
 	// I/O and output errors.
 	ErrBuildIOConfig  = errors.New("failed to build I/O config")
@@ -607,14 +611,14 @@ var (
 	ErrComponentWithAllFlagConflict = errors.New("component argument can't be used with --all flag")
 
 	// Terraform execution errors.
-	ErrTerraformExecFailed            = errors.New("terraform execution failed")
-	ErrDescribeAffected               = errors.New("describe affected failed")
-	ErrUploadRequiresPullRequestEvent = errors.New("upload requires a pull_request event")
-	ErrDescribeStacks                 = errors.New("describe stacks failed")
-	ErrBuildDepGraph                  = errors.New("build dependency graph failed")
-	ErrTopologicalOrder               = errors.New("topological sort failed")
-	ErrFormatForLogging               = errors.New("format affected for logging failed")
-	ErrQueryEvaluation                = errors.New("query evaluation failed")
+	ErrTerraformExecFailed          = errors.New("terraform execution failed")
+	ErrDescribeAffected             = errors.New("describe affected failed")
+	ErrUploadRequiresSupportedEvent = errors.New("upload requires a supported CI event")
+	ErrDescribeStacks               = errors.New("describe stacks failed")
+	ErrBuildDepGraph                = errors.New("build dependency graph failed")
+	ErrTopologicalOrder             = errors.New("topological sort failed")
+	ErrFormatForLogging             = errors.New("format affected for logging failed")
+	ErrQueryEvaluation              = errors.New("query evaluation failed")
 
 	// Cache-related errors.
 	ErrCacheLocked    = errors.New("cache file is locked")
@@ -694,6 +698,7 @@ var (
 	ErrInvalidProviderConfig        = errors.New("invalid provider config")
 	ErrInvalidBrowserExecutable     = errors.New("invalid browser executable")
 	ErrAuthenticationFailed         = errors.New("authentication failed")
+	ErrPrepareShellEnvironment      = errors.New("failed to prepare authenticated shell environment")
 	ErrInvalidADCContent            = errors.New("invalid ADC content")
 	ErrWriteADCFile                 = errors.New("failed to write ADC file")
 	ErrWritePropertiesFile          = errors.New("failed to write properties file")
@@ -854,6 +859,7 @@ var (
 	ErrPathResolutionFailed   = errors.New("failed to resolve component from path")
 	ErrPathIsComponentBase    = errors.New("must specify a component directory, not the base directory")
 	ErrAmbiguousComponentPath = errors.New("ambiguous component path")
+	ErrComponentPathNotFound  = errors.New("component path does not exist")
 
 	// Interactive prompt errors.
 	ErrInteractiveModeNotAvailable = errors.New("interactive mode not available")
@@ -927,6 +933,10 @@ var (
 	ErrCIStatusFetchFailed     = errors.New("failed to fetch CI status")
 	ErrCIOutputWriteFailed     = errors.New("failed to write CI output")
 	ErrCISummaryWriteFailed    = errors.New("failed to write CI summary")
+	ErrCICommentPostFailed     = errors.New("failed to post PR comment")
+	ErrCICommentListFailed     = errors.New("failed to list PR comments")
+	ErrCICommentUpdateFailed   = errors.New("failed to update PR comment")
+	ErrCICommentNotFound       = errors.New("PR comment not found")
 	ErrGitHubTokenNotFound     = errors.New("GitHub token not found")
 
 	// Planfile storage errors.

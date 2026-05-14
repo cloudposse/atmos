@@ -8,14 +8,29 @@ import File from '@site/src/components/File'
 import Intro from '@site/src/components/Intro'
 
 <Intro>
-The Cloud Posse GitHub Action to “Setup Atmos” makes it easy to run atmos in your GitHub Action workflows by installing Atmos.
+Two ways to make `atmos` available in your GitHub Actions workflows: run the job inside the official Atmos container image (recommended), or install the binary on a runner with the `setup-atmos` action.
 </Intro>
 
-Easily integrate Atmos into your GitHub Action workflows using [`github-action-setup-atmos`](https://github.com/cloudposse/github-action-setup-atmos). To simplify your workflows, we offer a [GitHub Action](https://github.com/cloudposse/github-action-setup-atmos) that streamlines the process of [installing Atmos](/install).
+:::tip Recommended: use the container image
+For most workflows, the simplest path is to run the job inside the [official Atmos container](https://github.com/cloudposse/atmos/pkgs/container/atmos) and skip a separate setup step. The image already includes `atmos` plus its toolchain, so the workflow reduces to **checkout + run an `atmos` command**. See the [Native CI page](/ci) for end-to-end examples.
 
-We provide a [GitHub Action](https://github.com/cloudposse/github-action-setup-atmos) to make that easier for CI/CD applications.
+```yaml
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/cloudposse/atmos:${{ vars.ATMOS_VERSION }}
+    steps:
+      - uses: actions/checkout@v6
+      - run: atmos terraform deploy vpc -s prod
+```
 
-## Usage Example
+We don't publish a `latest` tag — pin to a specific version via a [repository variable](https://docs.github.com/en/actions/learn-github-actions/variables) (e.g. `vars.ATMOS_VERSION`).
+:::
+
+## Setup Atmos Action
+
+When the container approach doesn't fit — for example, when other steps need tools that aren't in the Atmos image, or when you want to run on a self-hosted runner with a specific OS — install the `atmos` binary onto the runner with [`cloudposse/github-action-setup-atmos`](https://github.com/cloudposse/github-action-setup-atmos):
 
 <File title=".github/workflows/example.yaml">
 ```yaml
@@ -27,12 +42,16 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v6
 
       - name: Setup Atmos
         uses: cloudposse/github-action-setup-atmos
         with:
           # Version can be pinned but defaults to latest if not specified
           atmos-version: 1.88.0
+
+      - run: atmos terraform deploy vpc -s prod
 ```
 </File>
+
+For native CI integration patterns (job summaries, output variables, status checks, planfile storage, matrix workflows, OIDC auth), see the [Native CI](/ci) page.

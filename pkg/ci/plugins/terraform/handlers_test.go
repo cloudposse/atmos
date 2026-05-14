@@ -3,13 +3,16 @@ package terraform
 import (
 	"context"
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/ci/internal/plugin"
 	"github.com/cloudposse/atmos/pkg/ci/internal/provider"
+	"github.com/cloudposse/atmos/pkg/ci/templates"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -43,6 +46,9 @@ type mockProvider struct {
 	writer         *mockOutputWriter
 	checkRunCalls  []*provider.CreateCheckRunOptions
 	updateRunCalls []*provider.UpdateCheckRunOptions
+	commentCalls   []*provider.PostCommentOptions
+	commentErr     error
+	commentResult  *provider.Comment
 	nextID         int64
 }
 
@@ -70,6 +76,18 @@ func (m *mockProvider) UpdateCheckRun(_ context.Context, opts *provider.UpdateCh
 	m.updateRunCalls = append(m.updateRunCalls, opts)
 	m.nextID++
 	return &provider.CheckRun{ID: m.nextID, Name: opts.Name, Status: opts.Status}, nil
+}
+
+func (m *mockProvider) PostComment(_ context.Context, opts *provider.PostCommentOptions) (*provider.Comment, error) {
+	m.commentCalls = append(m.commentCalls, opts)
+	if m.commentErr != nil {
+		return nil, m.commentErr
+	}
+	if m.commentResult != nil {
+		return m.commentResult, nil
+	}
+	m.nextID++
+	return &provider.Comment{ID: m.nextID, URL: "https://example.test/c/1", Body: opts.Body, Created: true}, nil
 }
 
 func (m *mockProvider) ResolveBase() (*provider.BaseResolution, error) {
@@ -196,6 +214,32 @@ func TestResolveCheckResult(t *testing.T) {
 		assert.Equal(t, provider.CheckRunStateFailure, status)
 		assert.Equal(t, "failure", conclusion)
 	})
+
+	t.Run("failure when only ExitCode is non-zero", func(t *testing.T) {
+		// Exit code is authoritative: a non-zero code must produce a failure
+		// check run even if CommandError is nil. Without this, a check run
+		// could disagree with the summary (which already treats ExitCode as
+		// authoritative).
+		ctx := &plugin.HookContext{ExitCode: 1}
+		status, conclusion := resolveCheckResult(ctx)
+		assert.Equal(t, provider.CheckRunStateFailure, status)
+		assert.Equal(t, "failure", conclusion)
+	})
+
+	t.Run("success for plan exit 2 even when CommandError is set", func(t *testing.T) {
+		// `terraform plan -detailed-exitcode` returns 2 to mean "changes
+		// detected"; ExecuteShellCommand wraps that in an ExitCodeError, so
+		// CommandError is non-nil for this success case. The check run must
+		// still report success.
+		ctx := &plugin.HookContext{
+			Command:      "plan",
+			ExitCode:     2,
+			CommandError: errUtils.ExitCodeError{Code: 2},
+		}
+		status, conclusion := resolveCheckResult(ctx)
+		assert.Equal(t, provider.CheckRunStateSuccess, status)
+		assert.Equal(t, "success", conclusion)
+	})
 }
 
 func TestBuildStatusDescription(t *testing.T) {
@@ -270,17 +314,96 @@ func TestFormatResourceCount(t *testing.T) {
 func TestParseOutputWithError(t *testing.T) {
 	p := &Plugin{}
 
-	t.Run("no command error", func(t *testing.T) {
+	t.Run("plan exit 0 with text changes - text-detected changes preserved", func(t *testing.T) {
+		// Plan WITHOUT -detailed-exitcode: terraform always returns 0 even for
+		// changes; text parsing is the only HasChanges signal. Exit code is 0
+		// so HasErrors must remain false.
 		ctx := &plugin.HookContext{
-			Output:  "Plan: 1 to add, 0 to change, 0 to destroy.",
-			Command: "plan",
+			Output:   "Plan: 1 to add, 0 to change, 0 to destroy.",
+			Command:  "plan",
+			ExitCode: 0,
 		}
 		result := p.parseOutputWithError(ctx)
 		assert.True(t, result.HasChanges)
 		assert.False(t, result.HasErrors)
 	})
 
-	t.Run("with command error", func(t *testing.T) {
+	t.Run("plan exit 1 with empty output - HasErrors from exit code only", func(t *testing.T) {
+		// Auth failure: terraform never ran, no parseable "Error:" line, but
+		// exit code 1 must still flip HasErrors=true.
+		ctx := &plugin.HookContext{
+			Output:   "",
+			Command:  "plan",
+			ExitCode: 1,
+		}
+		result := p.parseOutputWithError(ctx)
+		assert.True(t, result.HasErrors, "exit code 1 must mark plan as errored")
+		assert.Equal(t, 1, result.ExitCode)
+	})
+
+	t.Run("plan exit 2 with empty output - HasChanges from exit code only", func(t *testing.T) {
+		// Plan with -detailed-exitcode and changes: exit 2 is authoritative
+		// even when text parsing finds no "Plan: X to add" markers.
+		ctx := &plugin.HookContext{
+			Output:   "",
+			Command:  "plan",
+			ExitCode: 2,
+		}
+		result := p.parseOutputWithError(ctx)
+		assert.True(t, result.HasChanges, "exit code 2 must mark plan as having changes")
+		assert.False(t, result.HasErrors, "exit code 2 is success, not error")
+	})
+
+	t.Run("plan exit 2 with wrapped ExitCodeError - changes detected preserved", func(t *testing.T) {
+		// Production scenario for `terraform plan -detailed-exitcode` with
+		// changes: ExecuteShellCommand wraps the non-zero exit in an
+		// ExitCodeError, so cmd/terraform/utils.go forwards both ExitCode=2
+		// AND a non-nil CommandError into the hook. The CommandError-based
+		// fallback must NOT flip this case to "failure" — that would regress
+		// the summary from "Changes detected" to "Plan Failed".
+		ctx := &plugin.HookContext{
+			Output:       "",
+			Command:      "plan",
+			CommandError: errUtils.ExitCodeError{Code: 2},
+			ExitCode:     2,
+		}
+		result := p.parseOutputWithError(ctx)
+		assert.False(t, result.HasErrors, "plan exit 2 with wrapped error must remain 'changes detected'")
+		assert.True(t, result.HasChanges, "exit code 2 must mark plan as having changes")
+		assert.Equal(t, 2, result.ExitCode, "exit code 2 must be preserved")
+		assert.Empty(t, result.Errors, "no error body should be injected for plan/2")
+	})
+
+	t.Run("apply exit 1 with empty output - HasErrors from exit code only", func(t *testing.T) {
+		// Auth failure on `terraform deploy/apply`: same fix as the plan
+		// equivalent above.
+		ctx := &plugin.HookContext{
+			Output:   "",
+			Command:  "apply",
+			ExitCode: 1,
+		}
+		result := p.parseOutputWithError(ctx)
+		assert.True(t, result.HasErrors, "non-zero exit must mark apply as errored")
+		assert.Equal(t, 1, result.ExitCode)
+	})
+
+	t.Run("apply exit 0 with stray Error in output - exit code wins", func(t *testing.T) {
+		// Exit code is authoritative: if terraform exited 0, the apply
+		// succeeded, even if the captured output contains a stray "Error:"
+		// line (e.g., from a pre-condition warning that did not block).
+		ctx := &plugin.HookContext{
+			Output:   "Error: stray noise that should not flip status\n\nApply complete! Resources: 1 added, 0 changed, 0 destroyed.",
+			Command:  "apply",
+			ExitCode: 0,
+		}
+		result := p.parseOutputWithError(ctx)
+		assert.False(t, result.HasErrors, "apply with exit 0 must be success regardless of stray Error: text")
+	})
+
+	t.Run("with command error - defensive fallback when exit code unset", func(t *testing.T) {
+		// Defensive: if a caller forgets to set ExitCode but does pass
+		// CommandError, the result still reports failure with a default
+		// exit code of 1 and the error message.
 		ctx := &plugin.HookContext{
 			Output:       "",
 			Command:      "plan",
@@ -290,6 +413,21 @@ func TestParseOutputWithError(t *testing.T) {
 		assert.True(t, result.HasErrors)
 		assert.Equal(t, 1, result.ExitCode)
 		assert.Equal(t, []string{"terraform plan failed"}, result.Errors)
+	})
+
+	t.Run("exit 1 surfaces command error message", func(t *testing.T) {
+		// Production path: cmd/terraform/utils.go sets both CommandError and
+		// ExitCode. Confirm the error message is surfaced for the template.
+		ctx := &plugin.HookContext{
+			Output:       "",
+			Command:      "apply",
+			CommandError: fmt.Errorf("authentication failed"),
+			ExitCode:     1,
+		}
+		result := p.parseOutputWithError(ctx)
+		assert.True(t, result.HasErrors)
+		assert.Equal(t, 1, result.ExitCode)
+		assert.Equal(t, []string{"authentication failed"}, result.Errors)
 	})
 }
 
@@ -1177,4 +1315,297 @@ func TestIsPlanfileStorageEnabled(t *testing.T) {
 		cfg.Components.Terraform.Planfiles.Priority = []string{}
 		assert.False(t, isPlanfileStorageEnabled(cfg))
 	})
+}
+
+// newFailureSummaryHookContext builds a HookContext suited for verifying that
+// summary rendering reflects an exit-code failure. Output is intentionally
+// empty because the bug under test is auth (or other pre-terraform) failures
+// where no terraform output exists yet. Both ExitCode and CommandError are set
+// to mirror production: cmd/terraform/utils.go computes ExitCode from CmdErr
+// via errUtils.GetExitCode and passes both into RunCIHooks.
+func newFailureSummaryHookContext(command string, cmdErr error) *plugin.HookContext {
+	return &plugin.HookContext{
+		Config: &schema.AtmosConfiguration{
+			CI: schema.CIConfig{
+				Summary: schema.CISummaryConfig{Enabled: boolPtr(true)},
+				Output:  schema.CIOutputConfig{Enabled: boolPtr(false)},
+				Checks:  schema.CIChecksConfig{Enabled: boolPtr(false)},
+			},
+		},
+		Provider:       newMockProvider(),
+		TemplateLoader: templates.NewLoader(&schema.AtmosConfiguration{}),
+		Command:        command,
+		CommandError:   cmdErr,
+		ExitCode:       1,
+		Output:         "",
+		Info: &schema.ConfigAndStacksInfo{
+			Stack:            "dev",
+			ComponentFromArg: "vpc",
+		},
+	}
+}
+
+func TestOnAfterPlan_WithCommandError_RendersFailureSummary(t *testing.T) {
+	p := &Plugin{}
+	ctx := newFailureSummaryHookContext("plan", fmt.Errorf("identity failed: assume role denied"))
+	mp := ctx.Provider.(*mockProvider)
+
+	err := p.onAfterPlan(ctx)
+	require.NoError(t, err)
+
+	require.Len(t, mp.writer.summaries, 1, "summary should have been rendered")
+	rendered := mp.writer.summaries[0]
+
+	assert.Contains(t, rendered, "Plan Failed for", "should use the failure header")
+	assert.Contains(t, rendered, "PLAN-FAILED-ff0000", "should use the FAILED badge")
+	assert.Contains(t, rendered, "identity failed: assume role denied", "should surface the command error")
+	assert.NotContains(t, rendered, "No Changes for", "must not fall through to no-changes branch")
+	assert.NotContains(t, rendered, "NO_CHANGE-inactive", "must not use the no-change badge")
+}
+
+func TestOnAfterApply_WithCommandError_RendersFailureSummary(t *testing.T) {
+	p := &Plugin{}
+	ctx := newFailureSummaryHookContext("apply", fmt.Errorf("identity failed: assume role denied"))
+	mp := ctx.Provider.(*mockProvider)
+
+	err := p.onAfterApply(ctx)
+	require.NoError(t, err)
+
+	require.Len(t, mp.writer.summaries, 1, "summary should have been rendered")
+	rendered := mp.writer.summaries[0]
+
+	assert.Contains(t, rendered, "Apply Failed for", "should use the failure header")
+	assert.Contains(t, rendered, "APPLY-FAILED-ff0000", "should use the FAILED badge")
+	assert.Contains(t, rendered, "identity failed: assume role denied", "should surface the command error")
+	assert.NotContains(t, rendered, "No Changes Applied for", "must not fall through to no-changes branch")
+	assert.NotContains(t, rendered, "NO_CHANGE-inactive", "must not use the no-change badge")
+}
+
+// TestOnAfterApply_WithExitCodeOnly_RendersFailureSummary verifies that the
+// summary reflects failure even when only the exit code is set (no
+// CommandError). Checks are enabled here so the test also catches the
+// production mismatch where the summary said "failure" but the check run
+// said "success" — both must agree that ExitCode is authoritative.
+func TestOnAfterApply_WithExitCodeOnly_RendersFailureSummary(t *testing.T) {
+	p := &Plugin{}
+	ctx := newFailureSummaryHookContext("apply", nil)
+	ctx.ExitCode = 1
+	// Enable checks so updateCheckRun runs and we can assert the recorded
+	// check update is "failure".
+	ctx.Config.CI.Checks.Enabled = boolPtr(true)
+	mp := ctx.Provider.(*mockProvider)
+
+	err := p.onAfterApply(ctx)
+	require.NoError(t, err)
+
+	require.Len(t, mp.writer.summaries, 1)
+	rendered := mp.writer.summaries[0]
+	assert.Contains(t, rendered, "Apply Failed for")
+	assert.Contains(t, rendered, "APPLY-FAILED-ff0000")
+	assert.NotContains(t, rendered, "No Changes Applied for")
+
+	require.Len(t, mp.updateRunCalls, 1, "check run should be updated when checks are enabled")
+	assert.Equal(t, provider.CheckRunStateFailure, mp.updateRunCalls[0].Status,
+		"exit code is authoritative — non-zero ExitCode must produce a failure check run")
+}
+
+// TestOnAfterDeploy_WithCommandError_RendersFailureSummary covers the original
+// reported bug: `atmos terraform deploy ... --upload-status` failing at auth
+// before terraform runs must produce an "Apply Failed" summary, not "No Changes
+// Applied". Deploy uses the apply template internally (handlers.go onAfterDeploy
+// overrides ctx.Command to "apply" for templating).
+func TestOnAfterDeploy_WithCommandError_RendersFailureSummary(t *testing.T) {
+	p := &Plugin{}
+	ctx := newFailureSummaryHookContext("deploy", fmt.Errorf("identity failed: assume role denied"))
+	mp := ctx.Provider.(*mockProvider)
+
+	err := p.onAfterDeploy(ctx)
+	require.NoError(t, err)
+
+	require.Len(t, mp.writer.summaries, 1, "summary should have been rendered")
+	rendered := mp.writer.summaries[0]
+
+	assert.Contains(t, rendered, "Apply Failed for", "deploy must render via the apply template's failure branch")
+	assert.Contains(t, rendered, "APPLY-FAILED-ff0000", "should use the FAILED badge")
+	assert.Contains(t, rendered, "identity failed: assume role denied", "should surface the command error")
+	assert.NotContains(t, rendered, "No Changes Applied for", "must not fall through to no-changes branch")
+	assert.NotContains(t, rendered, "NO_CHANGE-inactive", "must not use the no-change badge")
+}
+
+func TestIsCommentsEnabled(t *testing.T) {
+	tests := []struct {
+		name     string
+		config   *schema.AtmosConfiguration
+		expected bool
+	}{
+		{"nil config - disabled", nil, false},
+		{"nil enabled - disabled", &schema.AtmosConfiguration{}, false},
+		{"explicit true", &schema.AtmosConfiguration{
+			CI: schema.CIConfig{Comments: schema.CICommentsConfig{Enabled: boolPtr(true)}},
+		}, true},
+		{"explicit false", &schema.AtmosConfiguration{
+			CI: schema.CIConfig{Comments: schema.CICommentsConfig{Enabled: boolPtr(false)}},
+		}, false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.expected, isCommentsEnabled(tt.config))
+		})
+	}
+}
+
+func TestResolveCommentBehavior(t *testing.T) {
+	cases := map[string]provider.CommentBehavior{
+		"":       provider.CommentBehaviorUpsert,
+		"upsert": provider.CommentBehaviorUpsert,
+		"create": provider.CommentBehaviorCreate,
+		"update": provider.CommentBehaviorUpdate,
+	}
+	for input, expected := range cases {
+		t.Run("behavior="+input, func(t *testing.T) {
+			cfg := &schema.AtmosConfiguration{
+				CI: schema.CIConfig{Comments: schema.CICommentsConfig{Behavior: input}},
+			}
+			got, err := resolveCommentBehavior(cfg)
+			require.NoError(t, err)
+			assert.Equal(t, expected, got)
+		})
+	}
+	t.Run("nil config defaults to upsert", func(t *testing.T) {
+		got, err := resolveCommentBehavior(nil)
+		require.NoError(t, err)
+		assert.Equal(t, provider.CommentBehaviorUpsert, got)
+	})
+	t.Run("unknown behavior returns error", func(t *testing.T) {
+		cfg := &schema.AtmosConfiguration{
+			CI: schema.CIConfig{Comments: schema.CICommentsConfig{Behavior: "garbage"}},
+		}
+		_, err := resolveCommentBehavior(cfg)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, errUtils.ErrCICommentPostFailed)
+	})
+}
+
+func TestBuildCommentMarker(t *testing.T) {
+	got := buildCommentMarker("plan", "vpc", "plat-ue2-dev")
+	assert.Equal(t, "<!-- atmos:ci:plan:vpc:plat-ue2-dev -->", got,
+		"segments must be in (command, component, stack) order to match the marker format")
+	assert.True(t, strings.HasPrefix(got, "<!--"), "marker must be an HTML comment so it renders invisibly")
+	assert.True(t, strings.HasSuffix(got, "-->"))
+}
+
+// commentsHookContext builds a HookContext wired for the comment-posting path:
+// PR present, comments enabled, summary enabled (so postComment has a body).
+func commentsHookContext(t *testing.T) *plugin.HookContext {
+	t.Helper()
+	return &plugin.HookContext{
+		Config: &schema.AtmosConfiguration{
+			CI: schema.CIConfig{
+				Summary:  schema.CISummaryConfig{Enabled: boolPtr(true)},
+				Output:   schema.CIOutputConfig{Enabled: boolPtr(false)},
+				Checks:   schema.CIChecksConfig{Enabled: boolPtr(false)},
+				Comments: schema.CICommentsConfig{Enabled: boolPtr(true)},
+			},
+		},
+		Provider:       newMockProvider(),
+		TemplateLoader: templates.NewLoader(&schema.AtmosConfiguration{}),
+		Command:        "plan",
+		CICtx: &provider.Context{
+			RepoOwner:   "owner",
+			RepoName:    "repo",
+			PullRequest: &provider.PRInfo{Number: 42},
+		},
+		Info: &schema.ConfigAndStacksInfo{
+			Stack:            "dev",
+			ComponentFromArg: "vpc",
+		},
+		Output: "Plan: 1 to add, 0 to change, 0 to destroy.",
+	}
+}
+
+func TestOnAfterPlan_PostsCommentWhenEnabledAndPRPresent(t *testing.T) {
+	p := &Plugin{}
+	ctx := commentsHookContext(t)
+	mp := ctx.Provider.(*mockProvider)
+
+	require.NoError(t, p.onAfterPlan(ctx))
+
+	require.Len(t, mp.commentCalls, 1, "must post exactly one comment")
+	call := mp.commentCalls[0]
+	assert.Equal(t, "owner", call.Owner)
+	assert.Equal(t, "repo", call.Repo)
+	assert.Equal(t, 42, call.PRNumber)
+	assert.Equal(t, provider.CommentBehaviorUpsert, call.Behavior)
+	assert.Contains(t, call.Marker, "atmos:ci:plan")
+	assert.Contains(t, call.Marker, "vpc")
+	assert.Contains(t, call.Marker, "dev")
+	assert.Contains(t, call.Body, call.Marker, "body must embed the marker")
+	// Body should contain the rendered plan summary header from plan.md.
+	assert.Contains(t, call.Body, "vpc")
+	assert.Contains(t, call.Body, "dev")
+}
+
+func TestOnAfterPlan_SkipsCommentWhenDisabled(t *testing.T) {
+	p := &Plugin{}
+	ctx := commentsHookContext(t)
+	ctx.Config.CI.Comments.Enabled = boolPtr(false)
+	mp := ctx.Provider.(*mockProvider)
+
+	require.NoError(t, p.onAfterPlan(ctx))
+	assert.Empty(t, mp.commentCalls, "no comment should be posted when ci.comments.enabled=false")
+}
+
+func TestOnAfterPlan_SkipsCommentWhenUnsetNilDefault(t *testing.T) {
+	p := &Plugin{}
+	ctx := commentsHookContext(t)
+	ctx.Config.CI.Comments.Enabled = nil // unset
+	mp := ctx.Provider.(*mockProvider)
+
+	require.NoError(t, p.onAfterPlan(ctx))
+	assert.Empty(t, mp.commentCalls,
+		"nil Enabled must default to false so upgrade does not silently start posting comments")
+}
+
+func TestOnAfterPlan_SkipsCommentWhenNoPR(t *testing.T) {
+	p := &Plugin{}
+	ctx := commentsHookContext(t)
+	ctx.CICtx.PullRequest = nil
+	mp := ctx.Provider.(*mockProvider)
+
+	require.NoError(t, p.onAfterPlan(ctx))
+	assert.Empty(t, mp.commentCalls, "no comment on push/non-PR events")
+}
+
+func TestOnAfterPlan_SkipsCommentWhenNoRepoContext(t *testing.T) {
+	p := &Plugin{}
+	ctx := commentsHookContext(t)
+	ctx.CICtx.RepoOwner = ""
+	mp := ctx.Provider.(*mockProvider)
+
+	require.NoError(t, p.onAfterPlan(ctx))
+	assert.Empty(t, mp.commentCalls)
+}
+
+func TestOnAfterPlan_CommentFailureIsWarnOnly(t *testing.T) {
+	p := &Plugin{}
+	ctx := commentsHookContext(t)
+	mp := ctx.Provider.(*mockProvider)
+	mp.commentErr = fmt.Errorf("github API blew up")
+
+	// Handler must still return nil — comment posting is warn-only.
+	err := p.onAfterPlan(ctx)
+	require.NoError(t, err, "comment failure must not fail the handler")
+	assert.Len(t, mp.commentCalls, 1, "PostComment was attempted")
+}
+
+func TestOnAfterPlan_CommentRespectsCreateBehavior(t *testing.T) {
+	p := &Plugin{}
+	ctx := commentsHookContext(t)
+	ctx.Config.CI.Comments.Behavior = string(provider.CommentBehaviorCreate)
+	mp := ctx.Provider.(*mockProvider)
+
+	require.NoError(t, p.onAfterPlan(ctx))
+	require.Len(t, mp.commentCalls, 1)
+	assert.Equal(t, provider.CommentBehaviorCreate, mp.commentCalls[0].Behavior)
 }

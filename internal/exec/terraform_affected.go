@@ -54,6 +54,7 @@ func getAffectedComponents(args *DescribeAffectedCmdArgs) ([]schema.Affected, er
 			args.CLIConfig,
 			args.Ref,
 			args.SHA,
+			args.TargetBranch,
 			args.IncludeSpaceliftAdminStacks,
 			args.IncludeSettings,
 			args.Stack,

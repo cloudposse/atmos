@@ -11,13 +11,12 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
+	"github.com/cloudposse/atmos/pkg/component"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/data"
 	"github.com/cloudposse/atmos/pkg/dependencies"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
-	provSource "github.com/cloudposse/atmos/pkg/provisioner/source"
-	provWorkdir "github.com/cloudposse/atmos/pkg/provisioner/workdir"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -126,7 +125,8 @@ func ExecutePlaybook(
 		return err
 	}
 	if !valid {
-		return fmt.Errorf("%w: the component '%s' did not pass the validation policies",
+		return fmt.Errorf(
+			"%w: the component '%s' did not pass the validation policies",
 			errUtils.ErrInvalidComponent,
 			info.ComponentFromArg,
 		)
@@ -167,7 +167,8 @@ func ExecutePlaybook(
 		inheritance = info.ComponentFromArg + " -> " + strings.Join(info.ComponentInheritanceChain, " -> ")
 	}
 
-	log.Debug("Ansible context",
+	log.Debug(
+		"Ansible context",
 		"executable", info.Command,
 		"command", info.SubCommand,
 		"atmos component", info.ComponentFromArg,
@@ -379,48 +380,31 @@ func resolveComponentPath(
 ) (string, error) {
 	defer perf.Track(atmosConfig, "ansible.resolveComponentPath")()
 
-	componentPath := initialPath
-	componentPathExists, err := u.IsDirectory(componentPath)
-
-	// If path exists, return it directly.
-	if err == nil && componentPathExists {
-		return componentPath, nil
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	defer cancel()
+	componentPath, componentPathExists, err := component.ProvisionAndResolveComponentPath(
+		ctx, atmosConfig, info, cfg.AnsibleComponentType, initialPath,
+	)
+	if err != nil {
+		return "", err
 	}
-
-	// Check if component has source configured for JIT provisioning.
-	if provSource.HasSource(info.ComponentSection) {
-		// Run JIT source provisioning before path validation.
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
-		defer cancel()
-
-		if provErr := provSource.AutoProvisionSource(ctx, atmosConfig, cfg.AnsibleComponentType, info.ComponentSection, info.AuthContext); provErr != nil {
-			return "", errors.Join(errUtils.ErrProvisionerFailed, fmt.Errorf("auto-provision source: %w", provErr))
-		}
-
-		// Check if source provisioner set a workdir path (source + workdir case).
-		// If so, use that path instead of the component path.
-		if workdirPath, ok := info.ComponentSection[provWorkdir.WorkdirPathKey].(string); ok {
-			return workdirPath, nil
-		}
-
-		// Re-check if component path now exists after provisioning (source only case).
-		componentPathExists, err = u.IsDirectory(componentPath)
-		if err == nil && componentPathExists {
-			return componentPath, nil
-		}
+	if componentPathExists {
+		return componentPath, nil
 	}
 
 	// If still doesn't exist, return the error.
 	basePath, basePathErr := u.GetComponentBasePath(atmosConfig, "ansible")
 	if basePathErr != nil {
-		return "", fmt.Errorf("%w: '%s' points to the Ansible component '%s', but failed to resolve base path: %v",
+		return "", fmt.Errorf(
+			"%w: '%s' points to the Ansible component '%s', but failed to resolve base path: %v",
 			errUtils.ErrInvalidComponent,
 			info.ComponentFromArg,
 			info.FinalComponent,
 			basePathErr,
 		)
 	}
-	return "", fmt.Errorf("%w: '%s' points to the Ansible component '%s', but it does not exist in '%s'",
+	return "", fmt.Errorf(
+		"%w: '%s' points to the Ansible component '%s', but it does not exist in '%s'",
 		errUtils.ErrInvalidComponent,
 		info.ComponentFromArg,
 		info.FinalComponent,
