@@ -145,6 +145,9 @@ type TerraformOutputData struct {
 	// Outputs contains terraform output values (after apply).
 	Outputs map[string]TerraformOutput
 
+	// HasOutputChanges indicates whether a plan includes output value changes.
+	HasOutputChanges bool
+
 	// ChangedResult contains the plan summary text.
 	ChangedResult string
 
