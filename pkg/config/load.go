@@ -83,6 +83,16 @@ func parseProfilesFromOsArgs(args []string) []string {
 	fs := pflag.NewFlagSet("profile-parser", pflag.ContinueOnError)
 	fs.ParseErrorsAllowlist.UnknownFlags = true // Ignore other flags.
 
+	// Suppress pflag's automatic usage printout. When args contain `--help` or
+	// `-h`, pflag implicitly handles those flags and calls `fs.Usage()` (which
+	// writes "Usage of profile-parser: …" to stderr) before returning ErrHelp.
+	// Because LoadConfig may run multiple times during a single command (once
+	// in Execute() and again in PersistentPreRun), the user would otherwise
+	// see duplicate "Usage of profile-parser:" blocks in `atmos … --help`
+	// output. We only use this FlagSet to extract `--profile` values, so its
+	// usage block is never the right thing to display.
+	fs.Usage = func() {}
+
 	// Register profile flag using pflag's StringSlice (handles comma-separated values).
 	profiles := fs.StringSlice(profileKey, []string{}, "Configuration profiles")
 
