@@ -607,8 +607,11 @@ type CIChecksStatusesConfig struct {
 
 // CICommentsConfig configures PR/MR comment integration.
 // GitHub: PR comments, GitLab: MR notes.
+//
+// Enabled is *bool so callers can distinguish "unset" (nil, default applies)
+// from explicit false. Default is true when omitted; see `isCommentsEnabled`.
 type CICommentsConfig struct {
-	Enabled  bool   `yaml:"enabled,omitempty" json:"enabled,omitempty" mapstructure:"enabled"`
+	Enabled  *bool  `yaml:"enabled,omitempty" json:"enabled,omitempty" mapstructure:"enabled"`
 	Behavior string `yaml:"behavior,omitempty" json:"behavior,omitempty" mapstructure:"behavior"` // create, update, upsert
 	Template string `yaml:"template,omitempty" json:"template,omitempty" mapstructure:"template"`
 }
