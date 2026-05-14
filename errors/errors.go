@@ -63,6 +63,7 @@ var (
 	ErrMissingDocType                        = errors.New("doc-type argument missing")
 	ErrUnsupportedInputType                  = errors.New("unsupported input type")
 	ErrMissingStackNameTemplateAndPattern    = errors.New("'stacks.name_pattern' or 'stacks.name_template' needs to be specified in 'atmos.yaml'")
+	ErrStackNamePatternPartMissing           = errors.New("stack name pattern references a context part that is not defined in the stack file")
 	ErrFailedMarshalConfigToYaml             = errors.New("failed to marshal config to YAML")
 	ErrStacksDirectoryDoesNotExist           = errors.New("directory for Atmos stacks does not exist")
 	ErrMissingAtmosConfig                    = errors.New("atmos configuration not found or invalid")
@@ -932,6 +933,10 @@ var (
 	ErrCIStatusFetchFailed     = errors.New("failed to fetch CI status")
 	ErrCIOutputWriteFailed     = errors.New("failed to write CI output")
 	ErrCISummaryWriteFailed    = errors.New("failed to write CI summary")
+	ErrCICommentPostFailed     = errors.New("failed to post PR comment")
+	ErrCICommentListFailed     = errors.New("failed to list PR comments")
+	ErrCICommentUpdateFailed   = errors.New("failed to update PR comment")
+	ErrCICommentNotFound       = errors.New("PR comment not found")
 	ErrGitHubTokenNotFound     = errors.New("GitHub token not found")
 
 	// Planfile storage errors.
