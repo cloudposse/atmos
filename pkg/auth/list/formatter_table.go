@@ -85,7 +85,7 @@ func createProvidersTable(providers map[string]schema.Provider) (table.Model, er
 		table.WithColumns(columns),
 		table.WithRows(rows),
 		table.WithFocused(false),
-		table.WithHeight(len(rows)),
+		table.WithHeight(len(rows)+1), // +1 for header row.
 	)
 
 	applyTableStyles(&t)
@@ -185,7 +185,7 @@ func createIdentitiesTable(authManager authTypes.AuthManager, identities map[str
 		table.WithColumns(columns),
 		table.WithRows(rows),
 		table.WithFocused(false),
-		table.WithHeight(len(rows)),
+		table.WithHeight(len(rows)+1), // +1 for header row.
 	)
 
 	applyTableStyles(&t)
