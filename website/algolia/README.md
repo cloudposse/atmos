@@ -15,7 +15,7 @@ The dry run serializes and redacts the crawler payload. It does not require Algo
 
 ## Main deployment
 
-After changes merge to `main`, `.github/workflows/deploy-algolia-crawler.yaml` deploys from the GitHub Actions environment named `algolia`.
+After changes merge to `main`, `.github/workflows/algolia.yaml` deploys from the GitHub Actions environment named `algolia`.
 
 Configure these environment secrets in `algolia`:
 
