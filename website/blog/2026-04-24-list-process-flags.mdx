@@ -1,0 +1,82 @@
+---
+slug: list-process-flags
+title: "Full Template and YAML-Function Control for `atmos list`"
+authors: [aknysh]
+tags: [enhancement, dx]
+date: 2026-04-24T00:00:00.000Z
+---
+
+Every `atmos list` subcommand that processes stack manifests now accepts `--process-templates` and `--process-functions`
+(with matching `ATMOS_PROCESS_TEMPLATES` / `ATMOS_PROCESS_FUNCTIONS` env vars), matching the flag surface of
+`atmos describe affected` and `atmos describe stacks`. Defaults are `true` across the board.
+
+<!--truncate-->
+
+## What Changed
+
+Five commands gained the two flags:
+
+- `atmos list instances`
+- `atmos list components`
+- `atmos list metadata`
+- `atmos list sources`
+- `atmos list stacks`
+
+`atmos list affected`, `atmos list settings`, and `atmos list values` (plus its `list vars` alias) already had them;
+the naming, defaults, and env-var bindings now line up with the rest of the `list` family and with `describe affected` / `describe stacks` / `describe component`.
+
+## Why This Matters
+
+The two flags control two different things, and the distinction finally matches what's actually happening:
+
+- **`--process-templates`** toggles Go template processing — including the `atmos.Component(...)` template function.
+- **`--process-functions`** toggles YAML functions — `!terraform.state`, `!terraform.output`, `!store`, `!aws.*`, and friends.
+
+Before this release, the flag descriptions and docs conflated the two. If you wanted to run `atmos list instances --upload`
+in CI against a repo where component sections call `atmos.Component(...)` inside Go templates,
+you had no user-facing dial — the combination was pinned to `processTemplates=true, processYamlFunctions=false`,
+and the upload path would fail with `No valid credential sources found` when Terraform tried to read a remote backend.
+
+Now you can mix and match:
+
+```bash
+# CI upload with full processing (default)
+atmos list instances --upload
+
+# Skip terraform-dependent functions in environments without `tofu`
+atmos list instances --process-functions=false
+
+# Tabular listing without template expansion (cheaper, no atmos.Component calls)
+atmos list components --process-templates=false
+```
+
+Both flags accept `true` / `false` explicitly and can be set via `ATMOS_PROCESS_TEMPLATES` / `ATMOS_PROCESS_FUNCTIONS` in CI.
+
+## How to Use It
+
+Defaults (`true`) cover the common case — no flags needed for CI uploads:
+
+```bash
+atmos list instances --upload
+```
+
+Use the flags (or env vars) to opt out when you need to:
+
+```bash
+# Skip YAML functions — no `tofu` / `terraform` on $PATH locally
+atmos list instances --process-functions=false
+
+# Skip templates too, for the lightest stack pass
+atmos list components --process-templates=false --process-functions=false
+
+# Same knobs via env, handy in CI workflows
+ATMOS_PROCESS_FUNCTIONS=false atmos list instances
+```
+
+If you're running locally without `tofu` / `terraform` on `$PATH` and hit errors from `!terraform.state` or `!terraform.output`, flip `--process-functions=false` — templates that don't touch terraform outputs still render correctly.
+
+Docs for each command list the two flags in full: see [`atmos list instances`](/cli/commands/list/list-instances), [`atmos list components`](/cli/commands/list/components), [`atmos list metadata`](/cli/commands/list/list-metadata), [`atmos list sources`](/cli/commands/list/sources), and [`atmos list stacks`](/cli/commands/list/stacks).
+
+## Get Involved
+
+Found an issue or have a feature request? Open an issue on [GitHub](https://github.com/cloudposse/atmos/issues).

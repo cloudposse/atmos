@@ -3,7 +3,6 @@ package pro
 import (
 	"bytes"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -21,7 +20,7 @@ const operationCreateCommit = "CreateCommit"
 // backoff, refreshing the OIDC token on 401 errors before each retry.
 func (c *AtmosProAPIClient) CreateCommit(dto *dtos.CommitRequest) (*dtos.CommitResponse, error) {
 	if dto == nil {
-		return nil, errors.Join(errUtils.ErrFailedToCreateCommit, errUtils.ErrNilRequestDTO)
+		return nil, wrapErr(errUtils.ErrFailedToCreateCommit, errUtils.ErrNilRequestDTO)
 	}
 
 	targetURL := fmt.Sprintf("%s/%s/git/commit", c.BaseURL, c.BaseAPIEndpoint)
@@ -29,7 +28,7 @@ func (c *AtmosProAPIClient) CreateCommit(dto *dtos.CommitRequest) (*dtos.CommitR
 
 	data, err := json.Marshal(dto)
 	if err != nil {
-		return nil, errors.Join(errUtils.ErrFailedToMarshalPayload, err)
+		return nil, wrapErr(errUtils.ErrFailedToMarshalPayload, err)
 	}
 
 	var commitResp dtos.CommitResponse
@@ -38,7 +37,7 @@ func (c *AtmosProAPIClient) CreateCommit(dto *dtos.CommitRequest) (*dtos.CommitR
 		return c.sendCommitRequest(targetURL, data, &commitResp)
 	}, c, defaultRetryConfig())
 	if err != nil {
-		return nil, errors.Join(errUtils.ErrFailedToCreateCommit, err)
+		return nil, wrapErr(errUtils.ErrFailedToCreateCommit, err)
 	}
 
 	log.Debug("Created commit via Atmos Pro.", logKeyURL, targetURL, "sha", commitResp.Data.SHA)
@@ -50,7 +49,7 @@ func (c *AtmosProAPIClient) CreateCommit(dto *dtos.CommitRequest) (*dtos.CommitR
 func (c *AtmosProAPIClient) sendCommitRequest(targetURL string, data []byte, commitResp *dtos.CommitResponse) error {
 	req, reqErr := getAuthenticatedRequest(c, "POST", targetURL, bytes.NewBuffer(data))
 	if reqErr != nil {
-		return errors.Join(errUtils.ErrFailedToCreateAuthRequest, reqErr)
+		return wrapErr(errUtils.ErrFailedToCreateAuthRequest, reqErr)
 	}
 
 	// Guard against nil HTTPClient by ensuring a default client with a sane timeout.
@@ -61,13 +60,18 @@ func (c *AtmosProAPIClient) sendCommitRequest(targetURL string, data []byte, com
 
 	resp, doErr := client.Do(req) //nolint:gosec // URL constructed from trusted config, not user input.
 	if doErr != nil {
-		return errors.Join(errUtils.ErrFailedToMakeRequest, doErr)
+		// http.Client.Do can return a non-nil response alongside an error
+		// (e.g., on redirect failures); close it to avoid leaking the connection.
+		if resp != nil && resp.Body != nil {
+			_ = resp.Body.Close()
+		}
+		return wrapErr(errUtils.ErrFailedToMakeRequest, doErr)
 	}
 	defer resp.Body.Close()
 
 	body, readErr := io.ReadAll(resp.Body)
 	if readErr != nil {
-		return errors.Join(errUtils.ErrFailedToReadResponseBody, readErr)
+		return wrapErr(errUtils.ErrFailedToReadResponseBody, readErr)
 	}
 
 	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusBadRequest {
@@ -75,7 +79,7 @@ func (c *AtmosProAPIClient) sendCommitRequest(targetURL string, data []byte, com
 	}
 
 	if jsonErr := json.Unmarshal(body, commitResp); jsonErr != nil {
-		return errors.Join(errUtils.ErrFailedToUnmarshalAPIResponse, jsonErr)
+		return wrapErr(errUtils.ErrFailedToUnmarshalAPIResponse, jsonErr)
 	}
 
 	logProAPIResponse(operationCreateCommit, commitResp.AtmosApiResponse)

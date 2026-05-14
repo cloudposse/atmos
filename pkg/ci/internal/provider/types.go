@@ -16,6 +16,12 @@ type BaseResolution struct {
 	// Empty for non-PR events (push, merge_group, etc.).
 	HeadSHA string
 
+	// TargetBranch is the PR target branch name (e.g., "main") when known.
+	// Used by callers to recover from missing local refs by running a
+	// targeted git fetch. Empty when the event has no notion of a target
+	// branch (e.g., push events on the default branch).
+	TargetBranch string
+
 	// Source describes where the base was resolved from (for logging).
 	Source string
 
@@ -42,6 +48,12 @@ type Provider interface {
 
 	// UpdateCheckRun updates an existing check run.
 	UpdateCheckRun(ctx context.Context, opts *UpdateCheckRunOptions) (*CheckRun, error)
+
+	// PostComment posts or upserts a PR/MR comment. Providers that do not
+	// support comments should return errUtils.ErrCIOperationNotSupported.
+	// Implementations use the marker string to find and update existing
+	// comments on repeat runs (upsert); callers embed the marker in Body.
+	PostComment(ctx context.Context, opts *PostCommentOptions) (*Comment, error)
 
 	// OutputWriter returns a writer for CI outputs ($GITHUB_OUTPUT, etc.).
 	OutputWriter() OutputWriter

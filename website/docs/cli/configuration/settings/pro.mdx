@@ -11,6 +11,7 @@ slug: /cli/configuration/settings/pro
 import DocCardList from '@theme/DocCardList'
 import Intro from '@site/src/components/Intro'
 import File from '@site/src/components/File'
+import Note from '@site/src/components/Note'
 import Tabs from '@theme/Tabs'
 import TabItem from '@theme/TabItem'
 
@@ -207,6 +208,256 @@ atmos pro lock vpc -s prod/us-east-1
 ```
 
 </details>
+
+## Event Integration
+
+Atmos Pro reacts to GitHub webhook events on your repositories and dispatches
+workflows on a per-stack, per-event basis. The contract is defined under
+`settings.pro` on each stack (or component): for every event activity you want
+Atmos Pro to handle, declare which workflow file to dispatch and which inputs
+to pass.
+
+The CLI does not interpret these blocks — they are passed through unchanged in
+the payload uploaded by `atmos describe affected --upload` (and `atmos list
+instances --upload`). Atmos Pro reads the blocks server-side when the matching
+GitHub webhook arrives and dispatches the configured workflow against the
+correct SHA.
+
+### Supported events
+
+<dl>
+  <dt>`settings.pro.pull_request`</dt>
+  <dd>Plan and apply workflows for pull-request lifecycle activities (`opened`, `synchronize`, `reopened`, `merged`).</dd>
+
+  <dt>`settings.pro.release`</dt>
+  <dd>Workflows triggered when a GitHub release is published.</dd>
+
+  <dt>`settings.pro.drift_detection`</dt>
+  <dd>Per-stack opt-in for drift detection. Atmos Pro periodically inspects enabled stacks and surfaces drift.</dd>
+
+  <dt>`settings.pro.merge_group`</dt>
+  <dd>Workflows for GitHub merge-queue checks. New in this release — see [Merge Queue Support](#merge-queue-support).</dd>
+</dl>
+
+### `settings.pro.pull_request`
+
+Configure workflow dispatch for pull-request activities. Each activity maps a
+GitHub PR action to a list of workflows to dispatch. The `merged` activity is
+synthesized by Atmos Pro from `pull_request.closed` events with `merged: true`
+and is the conventional place to wire your apply workflow.
+
+<File title="stacks/mixins/atmos-pro.yaml">
+```yaml
+settings:
+  pro:
+    enabled: true
+    pull_request:
+      opened:
+        workflows:
+          atmos-terraform-plan.yaml:
+            inputs:
+              component: "{{ .atmos_component }}"
+              stack: "{{ .atmos_stack }}"
+      synchronize:
+        workflows:
+          atmos-terraform-plan.yaml:
+            inputs:
+              component: "{{ .atmos_component }}"
+              stack: "{{ .atmos_stack }}"
+      reopened:
+        workflows:
+          atmos-terraform-plan.yaml:
+            inputs:
+              component: "{{ .atmos_component }}"
+              stack: "{{ .atmos_stack }}"
+      # `merged` is synthesized from pull_request.closed{merged:true}.
+      merged:
+        workflows:
+          atmos-terraform-apply.yaml:
+            inputs:
+              component: "{{ .atmos_component }}"
+              stack: "{{ .atmos_stack }}"
+```
+</File>
+
+<dl>
+  <dt>`settings.pro.pull_request.opened`</dt>
+  <dd>Activity fired when a pull request is opened.</dd>
+
+  <dt>`settings.pro.pull_request.synchronize`</dt>
+  <dd>Activity fired when new commits are pushed to a pull request. This is the canonical "plan on every push" trigger and is also the fallback target for merge-queue checks (see [Resolution order](#resolution-order)).</dd>
+
+  <dt>`settings.pro.pull_request.reopened`</dt>
+  <dd>Activity fired when a closed pull request is reopened.</dd>
+
+  <dt>`settings.pro.pull_request.merged`</dt>
+  <dd>Activity fired when a pull request is closed with `merged: true`. This is the conventional place to wire the apply workflow. Apply continues to fire here even when the PR is merged through a merge queue.</dd>
+</dl>
+
+### `settings.pro.release`
+
+Configure workflow dispatch for GitHub release activities.
+
+<File title="atmos.yaml">
+```yaml
+settings:
+  pro:
+    enabled: true
+    release:
+      published:
+        workflows:
+          atmos-terraform-apply.yaml:
+            inputs:
+              component: "{{ .atmos_component }}"
+              stack: "{{ .atmos_stack }}"
+```
+</File>
+
+<dl>
+  <dt>`settings.pro.release.published`</dt>
+  <dd>Activity fired when a GitHub release is published. Typically wired to an apply workflow scoped to a production stack.</dd>
+</dl>
+
+### `settings.pro.drift_detection`
+
+Per-stack opt-in for Atmos Pro's drift detection. Configure once per stack
+(usually in `_defaults.yaml`) and override per environment as needed.
+
+<File title="stacks/deploy/_defaults.yaml">
+```yaml
+settings:
+  pro:
+    enabled: true
+    drift_detection:
+      enabled: true
+```
+</File>
+
+<dl>
+  <dt>`settings.pro.drift_detection.enabled`</dt>
+  <dd>
+    Enable Atmos Pro drift detection for this stack.
+
+    - **Type:** `boolean`
+    - **Default:** `false`
+  </dd>
+</dl>
+
+### Merge Queue Support
+
+<Intro>
+Atmos Pro reports check status on GitHub merge-queue synthetic commits the same way it does on regular pull-request commits. When a PR enters the merge queue, GitHub creates a synthetic merge commit on a temporary `gh-readonly-queue/<base>/pr-<N>-<sha>` branch and re-runs all required status checks against that new SHA. Atmos Pro creates an "Atmos Pro" check run on that synthetic SHA, watches for the configured workflow to complete, and concludes the check (success / failure / no-affected-stacks neutral). Comment updates are posted to the originating PR so the queue check resolution appears on the same thread.
+</Intro>
+
+<Note>
+**Prerequisites.** Full merge-queue support requires **Atmos CLI ≥ 1.218.0**. Earlier CLI versions still work for the empty-diff case (Atmos Pro concludes the check as "No affected stacks workflow detected"), but PRs that actually touch stacks will be reported incorrectly until the CLI is upgraded.
+</Note>
+
+#### How it works
+
+1. **PR opened or synchronized** → Atmos Pro dispatches `pull_request.synchronize.workflows` against the PR head SHA.
+2. **PR added to the merge queue** → GitHub creates a synthetic merge commit on `gh-readonly-queue/<base>/pr-<N>-<sha>`. Atmos Pro creates a check run on that synthetic SHA and dispatches the workflow resolved from `merge_group` (see below).
+3. **Queue ultimately merges the PR** → GitHub fires `pull_request.closed` with `merged: true` on the originating PR. The existing `pull_request.merged.workflows` (apply) flow runs unchanged. Apply does **not** fire on `merge_group` events.
+
+#### Configure `settings.pro.merge_group`
+
+To get the right outcome on merge-queue synthetic commits, declare a
+`merge_group` block alongside `pull_request` and `release` and point it at the
+workflow you want dispatched in the queue. Workflow filenames are arbitrary —
+Atmos Pro has no way to tell from the filename whether a workflow plans,
+applies, or does something else — so the recommended pattern is to be
+explicit about which workflow runs in the queue rather than relying on Atmos
+Pro to infer one from your `pull_request.synchronize` config.
+
+In most cases the queue should run the **same plan workflow** as
+`pull_request.synchronize`, optionally with stricter inputs (fail-on-drift,
+required approvals, etc.):
+
+<File title="stacks/mixins/atmos-pro.yaml">
+```yaml
+settings:
+  pro:
+    enabled: true
+    pull_request:
+      synchronize:
+        workflows:
+          atmos-terraform-plan.yaml:
+            inputs:
+              component: "{{ .atmos_component }}"
+              stack: "{{ .atmos_stack }}"
+    merge_group:
+      checks_requested:
+        workflows:
+          atmos-terraform-plan.yaml:
+            inputs:
+              component: "{{ .atmos_component }}"
+              stack: "{{ .atmos_stack }}"
+              # Example: stricter inputs in the queue.
+              fail_on_drift: "true"
+```
+</File>
+
+<dl>
+  <dt>`settings.pro.merge_group.checks_requested`</dt>
+  <dd>
+    Activity fired when GitHub requests checks on a merge-queue synthetic
+    commit (the only meaningful merge_group activity for Atmos Pro). The
+    `workflows` map has the same shape as `pull_request.<activity>.workflows`.
+  </dd>
+</dl>
+
+#### Resolution order
+
+When Atmos Pro receives a merge-queue trigger for a stack, it resolves the
+workflow to dispatch in this order:
+
+1. `settings.pro.merge_group.checks_requested.workflows` if defined — **this
+   is the recommended path.**
+2. Otherwise, `settings.pro.pull_request.synchronize.workflows` is used as a
+   backstop so existing customers do not regress when a queue is enabled.
+   Because workflow filenames are arbitrary, this backstop can dispatch a
+   workflow that is not appropriate for the queue (e.g. an apply step). Treat
+   it as a transitional behavior, not a recommended configuration.
+3. Otherwise, no workflow is dispatched (same null behavior as a stack with no
+   per-event configuration).
+
+#### Schema notes
+
+- `merge_group` is a **sibling** of `pull_request` / `release` /
+  `drift_detection`, not nested under `pull_request`. The events fire on
+  different SHAs and have a different action vocabulary, matching GitHub's
+  webhook event model.
+- The only valid activity under `merge_group` today is `checks_requested`.
+  GitHub also fires `merge_group.destroyed`, but Atmos Pro relies on its
+  existing stale-uploads reconciler for cleanup, so users do not configure
+  anything for it.
+
+#### Migration note
+
+If you are enabling GitHub merge queue on a repository that already uses
+Atmos Pro, the right migration is to add a `settings.pro.merge_group` block
+to every stack mixin that already has `settings.pro.pull_request`. In most
+cases the queue should dispatch the same plan workflow as
+`pull_request.synchronize` — declare it explicitly so the queue's check
+outcome is deterministic and reviewable from your stack config rather than
+inferred from a backstop.
+
+#### See also
+
+- [Managing a merge queue](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/configuring-pull-request-merges/managing-a-merge-queue) — GitHub documentation
+- [`atmos describe affected --upload`](/cli/commands/describe/affected) — uploads affected stacks under `pull_request`, `pull_request_target`, and `merge_group` events
+
+### Workflow input templating
+
+Inputs to dispatched workflows are rendered as Go templates against the
+component context. The most common variables:
+
+- `{{ .atmos_component }}` — the affected component name
+- `{{ .atmos_stack }}` — the affected stack name
+- `{{ .vars.<name> }}` — any value from the component's `vars` section
+- `{{ .settings.<name> }}` — any value from the component's `settings` section
+
+Use these to keep workflow definitions DRY across stacks.
 
 ## Related Commands
 

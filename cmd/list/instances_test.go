@@ -297,3 +297,75 @@ func TestInstancesOutputFileFlag(t *testing.T) {
 		assert.Equal(t, "", outputFileFlag.DefValue, "output-file flag default should be empty")
 	}
 }
+
+// TestInstancesProcessTemplatesAndFunctionsFlags verifies that --process-templates
+// and --process-functions are registered on the real `instances` cobra command
+// with the documented defaults (both true). Regression guard:
+// docs/fixes/2026-04-24-list-instances-per-component-auth.md added these flags
+// for parity with `describe affected` / `describe stacks`; if the parser wiring
+// is ever removed the upload path will silently stop processing templates and
+// YAML functions.
+func TestInstancesProcessTemplatesAndFunctionsFlags(t *testing.T) {
+	processTemplatesFlag := instancesCmd.Flags().Lookup("process-templates")
+	if processTemplatesFlag == nil {
+		processTemplatesFlag = instancesCmd.PersistentFlags().Lookup("process-templates")
+	}
+	assert.NotNil(t, processTemplatesFlag, "process-templates flag should be registered on instances command")
+	if processTemplatesFlag != nil {
+		assert.Equal(t, "true", processTemplatesFlag.DefValue, "process-templates default should be true for parity with describe affected")
+	}
+
+	processFunctionsFlag := instancesCmd.Flags().Lookup("process-functions")
+	if processFunctionsFlag == nil {
+		processFunctionsFlag = instancesCmd.PersistentFlags().Lookup("process-functions")
+	}
+	assert.NotNil(t, processFunctionsFlag, "process-functions flag should be registered on instances command")
+	if processFunctionsFlag != nil {
+		assert.Equal(t, "true", processFunctionsFlag.DefValue, "process-functions default should be true for parity with describe affected")
+	}
+}
+
+// TestParseInstancesOptions verifies the viper→options mapping extracted
+// from the RunE closure. Uses an isolated viper.Viper (via bindFlagsToViper
+// in parse_options_test.go) and a synthesized cobra command with the same
+// flags the real parser registers, so the test exercises the actual
+// `v.GetString` / `v.GetBool` calls without a full cobra execution context.
+func TestParseInstancesOptions(t *testing.T) {
+	buildCmd := func() *cobra.Command {
+		cmd := &cobra.Command{Use: "instances"}
+		instancesParser.RegisterFlags(cmd)
+		return cmd
+	}
+
+	t.Run("defaults", func(t *testing.T) {
+		cmd := buildCmd()
+		v := bindFlagsToViper(t, cmd, instancesParser)
+
+		opts := parseInstancesOptions(cmd, v)
+
+		assert.Equal(t, "", opts.Format)
+		assert.False(t, opts.Upload)
+		assert.False(t, opts.Provenance)
+		// Both process-* flags default to true per parity-with-describe.
+		assert.True(t, opts.ProcessTemplates)
+		assert.True(t, opts.ProcessFunctions)
+	})
+
+	t.Run("explicit_flags", func(t *testing.T) {
+		cmd := buildCmd()
+		setFlag(t, cmd, "format", "json")
+		setFlag(t, cmd, "stack", "prod-*")
+		setFlag(t, cmd, "upload", "true")
+		setFlag(t, cmd, "process-templates", "false")
+		setFlag(t, cmd, "process-functions", "false")
+		v := bindFlagsToViper(t, cmd, instancesParser)
+
+		opts := parseInstancesOptions(cmd, v)
+
+		assert.Equal(t, "json", opts.Format)
+		assert.Equal(t, "prod-*", opts.Stack)
+		assert.True(t, opts.Upload)
+		assert.False(t, opts.ProcessTemplates)
+		assert.False(t, opts.ProcessFunctions)
+	})
+}

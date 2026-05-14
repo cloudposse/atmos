@@ -444,6 +444,8 @@ Auto-enabled via `RootCmd.ExecuteC()`. Non-standard paths use `telemetry.Capture
 
 **Prerequisites**: Go 1.26+, golangci-lint, Make. See `.cursor/rules/atmos-rules.mdc`.
 
+> **Minimum Go version**: `go.mod` requires Go 1.26. Test helpers use `sync.Map.Clear` (added in Go 1.23) and range-over-int (Go 1.22). CI pins the Go version via `go-version-file: go.mod`. Local development with an older toolchain will fail to compile test-only files.
+
 **Build**: CGO disabled, cross-platform, version via ldflags, output to `./build/`
 
 ### Compilation (MANDATORY)
