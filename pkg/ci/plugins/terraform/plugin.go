@@ -74,16 +74,24 @@ func (p *Plugin) GetHookBindings() []plugin.HookBinding {
 
 // buildTemplateContext creates a TerraformTemplateContext from execution results.
 // Returns an extended context with terraform-specific fields for template rendering.
+// Callers in production paths pass an enriched result from parseOutputWithError so
+// that ctx.CommandError flips Result.HasErrors=true; legacy/test callers may pass
+// nil and the function falls back to parsing the raw output.
 func (p *Plugin) buildTemplateContext(
 	info *schema.ConfigAndStacksInfo,
 	ciCtx *provider.Context,
 	output string,
 	command string,
+	result *plugin.OutputResult,
 ) (any, error) {
 	defer perf.Track(nil, "terraform.Plugin.buildTemplateContext")()
 
-	// Parse the output to get structured data.
-	result := ParseOutput(output, command)
+	// Fall back to parsing only when no enriched result is provided. Production
+	// callers should always pass the result from parseOutputWithError so that
+	// command errors are reflected as Result.HasErrors=true in the template.
+	if result == nil {
+		result = ParseOutput(output, command)
+	}
 
 	// Build base context.
 	baseCtx := &plugin.TemplateContext{

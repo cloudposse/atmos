@@ -52,8 +52,8 @@ func BenchmarkSortInstances(b *testing.B) {
 	}
 }
 
-// BenchmarkFilterProEnabledInstances measures performance of filtering Pro-enabled instances.
-func BenchmarkFilterProEnabledInstances(b *testing.B) {
+// BenchmarkCountEnabledDisabled measures performance of the tally helper.
+func BenchmarkCountEnabledDisabled(b *testing.B) {
 	// Create 100 instances, half with Pro enabled, half without.
 	instances := make([]schema.Instance, 100)
 	for i := 0; i < 100; i++ {
@@ -66,9 +66,7 @@ func BenchmarkFilterProEnabledInstances(b *testing.B) {
 		// Enable Pro for every other instance.
 		if i%2 == 0 {
 			instance.Settings["pro"] = map[string]any{
-				"drift_detection": map[string]any{
-					"enabled": true,
-				},
+				"enabled": true,
 			}
 		}
 
@@ -77,7 +75,7 @@ func BenchmarkFilterProEnabledInstances(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_ = filterProEnabledInstances(instances)
+		_, _, _ = countEnabledDisabled(instances)
 	}
 }
 
@@ -113,22 +111,20 @@ func BenchmarkCreateInstance(b *testing.B) {
 	}
 }
 
-// BenchmarkIsProDriftDetectionEnabled measures performance of Pro drift detection check.
-func BenchmarkIsProDriftDetectionEnabled(b *testing.B) {
+// BenchmarkIsProEnabled measures performance of Pro-enabled check.
+func BenchmarkIsProEnabled(b *testing.B) {
 	instance := &schema.Instance{
 		Component: "vpc",
 		Stack:     "dev",
 		Settings: map[string]interface{}{
 			"pro": map[string]interface{}{
-				"drift_detection": map[string]interface{}{
-					"enabled": true,
-				},
+				"enabled": true,
 			},
 		},
 	}
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_ = isProDriftDetectionEnabled(instance)
+		_ = isProEnabled(instance)
 	}
 }

@@ -258,24 +258,30 @@ func WithAbstractFlag(options *[]flags.Option) {
 	)
 }
 
-// WithProcessTemplatesFlag adds template processing flag.
-// Used by: values, vars, metadata, settings.
+// WithProcessTemplatesFlag adds the --process-templates flag that controls Go
+// template processing of stack manifests. Go template functions include
+// `atmos.Component(...)` (see internal/exec/template_funcs.go). Default: true
+// for parity with `describe affected` / `describe stacks` / `describe component`.
 func WithProcessTemplatesFlag(options *[]flags.Option) {
 	defer perf.Track(nil, "list.WithProcessTemplatesFlag")()
 
 	*options = append(*options,
-		flags.WithBoolFlag("process-templates", "", true, "Enable/disable Go template processing"),
+		flags.WithBoolFlag("process-templates", "", true, "Enable/disable Go template processing in Atmos stack manifests when executing the command"),
 		flags.WithEnvVars("process-templates", "ATMOS_PROCESS_TEMPLATES"),
 	)
 }
 
-// WithProcessFunctionsFlag adds template function processing flag.
-// Used by: values, vars, metadata, settings.
+// WithProcessFunctionsFlag adds the --process-functions flag that controls
+// YAML function evaluation (e.g. `!terraform.state`, `!terraform.output`,
+// `!store`, `!aws.*`). This is distinct from Go template functions like
+// `atmos.Component(...)`, which are controlled by --process-templates.
+// Default: true for parity with `describe affected` / `describe stacks` /
+// `describe component`.
 func WithProcessFunctionsFlag(options *[]flags.Option) {
 	defer perf.Track(nil, "list.WithProcessFunctionsFlag")()
 
 	*options = append(*options,
-		flags.WithBoolFlag("process-functions", "", true, "Enable/disable template function processing"),
+		flags.WithBoolFlag("process-functions", "", true, "Enable/disable YAML functions processing in Atmos stack manifests when executing the command"),
 		flags.WithEnvVars("process-functions", "ATMOS_PROCESS_FUNCTIONS"),
 	)
 }

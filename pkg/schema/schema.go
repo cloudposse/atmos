@@ -30,6 +30,12 @@ type ProfilesConfig struct {
 	// If relative, resolved from atmos.yaml directory.
 	// If absolute, used as-is.
 	BasePath string `yaml:"base_path,omitempty" json:"base_path,omitempty" mapstructure:"base_path"`
+
+	// Default is the name of a profile loaded automatically when neither the
+	// --profile flag nor the ATMOS_PROFILE environment variable is set.
+	// The default is treated as implicit: an explicit --profile or ATMOS_PROFILE
+	// always wins, and it does not suppress the interactive identity fallback.
+	Default string `yaml:"default,omitempty" json:"default,omitempty" mapstructure:"default"`
 }
 
 // ConfigMetadata contains metadata about a configuration file or profile.
@@ -479,6 +485,11 @@ type Terraform struct {
 	// PluginCacheDir is an optional custom path for the plugin cache.
 	// If empty and PluginCache is true, uses XDG cache: ~/.cache/atmos/terraform/plugins.
 	PluginCacheDir string `yaml:"plugin_cache_dir,omitempty" json:"plugin_cache_dir,omitempty" mapstructure:"plugin_cache_dir"`
+	// AutoProvisionWorkdirForOutputs controls whether Atmos automatically provisions
+	// JIT working directories before running terraform output.
+	// When true (default), output fetching transparently provisions the workdir
+	// if provision.workdir.enabled is set on the referenced component.
+	AutoProvisionWorkdirForOutputs bool `yaml:"auto_provision_workdir_for_outputs" json:"auto_provision_workdir_for_outputs" mapstructure:"auto_provision_workdir_for_outputs"`
 	// Source holds global source configuration defaults for JIT-vendored components.
 	Source *SourceSettings `yaml:"source,omitempty" json:"source,omitempty" mapstructure:"source"`
 	// CI holds terraform-specific CI configuration (e.g., exit code mapping).

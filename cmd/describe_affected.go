@@ -6,6 +6,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/cloudposse/atmos/internal/exec"
+	cfg "github.com/cloudposse/atmos/pkg/config"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -82,7 +83,7 @@ func getRunnableDescribeAffectedCmd(
 		// When functions are disabled (--process-functions=false), there are no YAML functions
 		// (like !terraform.state) that need auth credentials, so identity resolution is unnecessary.
 		identityName := GetIdentityFromFlags(cmd, os.Args)
-		identityExplicit := cmd.Flags().Changed(IdentityFlagName)
+		identityExplicit := cmd.Flags().Changed(cfg.IdentityFlagName)
 		if props.ProcessYamlFunctions || identityExplicit {
 			// Category B: describe affected operates on multiple affected components across stacks
 			// with no single target (component, stack) pair. Use the SCAN wrapper to discover

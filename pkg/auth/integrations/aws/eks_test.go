@@ -396,7 +396,7 @@ func TestEKSIntegration_Cleanup_RemovesEntries(t *testing.T) {
 
 			mgr, err := kube.NewKubeconfigManager(kubeconfigPath, "")
 			require.NoError(t, err)
-			err = mgr.WriteClusterConfig(info, tt.alias, "dev-admin", "merge")
+			_, err = mgr.WriteClusterConfig(info, tt.alias, "dev-admin", "merge")
 			require.NoError(t, err)
 
 			// Verify entries exist.
@@ -727,7 +727,7 @@ func TestEKSIntegration_Cleanup_NoAliasWithARNInKubeconfig(t *testing.T) {
 	}
 	mgr, err := kube.NewKubeconfigManager(kubeconfigPath, "")
 	require.NoError(t, err)
-	err = mgr.WriteClusterConfig(info, "", "dev-admin", "merge")
+	_, err = mgr.WriteClusterConfig(info, "", "dev-admin", "merge")
 	require.NoError(t, err)
 
 	// Verify entry exists.
@@ -780,7 +780,7 @@ func TestEKSIntegration_FindClusterARN_MultipleCluster(t *testing.T) {
 			ARN:                      cluster.arn,
 			Region:                   "us-east-2",
 		}
-		err = mgr.WriteClusterConfig(info, cluster.alias, "admin", "merge")
+		_, err = mgr.WriteClusterConfig(info, cluster.alias, "admin", "merge")
 		require.NoError(t, err)
 	}
 
@@ -814,7 +814,7 @@ func TestEKSIntegration_FindClusterARN_NoMatch(t *testing.T) {
 		ARN:                      "arn:aws:eks:us-east-2:123456789012:cluster/other-cluster",
 		Region:                   "us-east-2",
 	}
-	err = mgr.WriteClusterConfig(info, "other", "admin", "merge")
+	_, err = mgr.WriteClusterConfig(info, "other", "admin", "merge")
 	require.NoError(t, err)
 
 	integration := &EKSIntegration{

@@ -7,7 +7,6 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"github.com/cloudposse/atmos/pkg/pro/dtos"
-	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 // --- Mocks
@@ -39,7 +38,7 @@ func TestListInstancesCommandLogic(t *testing.T) {
 					"vpc": map[string]interface{}{
 						"settings": map[string]interface{}{
 							"pro": map[string]interface{}{
-								"drift_detection": map[string]interface{}{"enabled": true},
+								"enabled": true,
 							},
 						},
 						"metadata": map[string]interface{}{"type": "real"},
@@ -49,7 +48,7 @@ func TestListInstancesCommandLogic(t *testing.T) {
 					"app": map[string]interface{}{
 						"settings": map[string]interface{}{
 							"pro": map[string]interface{}{
-								"drift_detection": map[string]interface{}{"enabled": false},
+								"enabled": false,
 							},
 						},
 						"metadata": map[string]interface{}{"type": "real"},
@@ -79,7 +78,7 @@ func TestListInstancesCommandLogic(t *testing.T) {
 			upload:            true,
 			stacks:            mockStacks,
 			expectedListSize:  2,
-			expectedUploadNum: 1, // only vpc pro-enabled
+			expectedUploadNum: 2, // all real instances upload; Atmos Pro reconciles enabled/disabled
 		},
 		{
 			name:        "describe error",
@@ -93,7 +92,7 @@ func TestListInstancesCommandLogic(t *testing.T) {
 			stacks:            mockStacks,
 			uploadErr:         errors.New("upload failed"),
 			expectedListSize:  2,
-			expectedUploadNum: 1,
+			expectedUploadNum: 2,
 			expectError:       true,
 		},
 	}
@@ -121,9 +120,8 @@ func TestListInstancesCommandLogic(t *testing.T) {
 
 			if tc.upload {
 				api := &mockAPI{err: tc.uploadErr}
-				proDeps := filterProEnabledInstances(list)
-				uploadDeps := make([]dtos.UploadInstance, len(proDeps))
-				for i, inst := range proDeps {
+				uploadDeps := make([]dtos.UploadInstance, len(list))
+				for i, inst := range list {
 					uploadDeps[i] = dtos.UploadInstance{
 						Component:     inst.Component,
 						Stack:         inst.Stack,
@@ -138,11 +136,11 @@ func TestListInstancesCommandLogic(t *testing.T) {
 					return
 				}
 				assert.NoError(t, err)
-				assert.Equal(t, tc.expectedUploadNum, len(proDeps))
+				assert.Equal(t, tc.expectedUploadNum, len(uploadDeps))
 
 				// Verify API received correct payload
 				assert.NotNil(t, api.captured)
-				assert.Equal(t, len(proDeps), len(api.captured.Instances))
+				assert.Equal(t, len(uploadDeps), len(api.captured.Instances))
 			}
 		})
 	}
@@ -153,9 +151,7 @@ func TestCreateInstanceWithTemplateRendering(t *testing.T) {
 	componentConfigMap := map[string]any{
 		"settings": map[string]any{
 			"pro": map[string]any{
-				"drift_detection": map[string]any{
-					"enabled": true,
-				},
+				"enabled": true,
 				"pull_request": map[string]any{
 					"merged": map[string]any{
 						"workflows": map[string]any{
@@ -200,8 +196,6 @@ func TestCreateInstanceWithTemplateRendering(t *testing.T) {
 	assert.Equal(t, "tenant1-dev", inputs["github_environment"])
 	assert.Equal(t, "tenant1-ue2-dev", inputs["stack"])
 
-	// Verify that the instance would be included in pro-enabled instances
-	proInstances := filterProEnabledInstances([]schema.Instance{*instance})
-	assert.Len(t, proInstances, 1)
-	assert.Equal(t, "vpc", proInstances[0].Component)
+	// Verify that the instance is reported as pro-enabled.
+	assert.True(t, isProEnabled(instance))
 }

@@ -135,6 +135,12 @@ atmos list sources --format csv
 
   <dt>`--format` / `-f`</dt>
   <dd>Output format: `table`, `json`, `yaml`, `csv`, `tsv` (default: `table`).<br/>Environment variable: `ATMOS_FORMAT`</dd>
+
+  <dt>`--process-templates`</dt>
+  <dd>Enable/disable Go template processing in Atmos stack manifests (default `true`). Go template functions include `atmos.Component(...)`.<br/>Environment variable: `ATMOS_PROCESS_TEMPLATES`</dd>
+
+  <dt>`--process-functions`</dt>
+  <dd>Enable/disable YAML functions processing in Atmos stack manifests (default `true`). YAML functions include `!terraform.state`, `!terraform.output`, `!store`, `!aws.*`, etc. This is distinct from Go template functions like `atmos.Component(...)`, which are controlled by `--process-templates`.<br/>Environment variable: `ATMOS_PROCESS_FUNCTIONS`</dd>
 </dl>
 
 ## Dynamic Columns

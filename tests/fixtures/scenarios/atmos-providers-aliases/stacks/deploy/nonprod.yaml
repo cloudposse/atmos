@@ -1,0 +1,35 @@
+# yaml-language-server: $schema=https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
+
+# Reproduces cloudposse/atmos#2208. The two components below cover both forms
+# of the provider-aliases shorthand:
+#   - `eip-explicit-alias` matches the reporter's original config verbatim
+#     (with `alias: use1` set explicitly inside the block).
+#   - `eip-derived-alias` relies on Atmos to auto-derive `alias` from the key
+#     suffix (a user-ergonomics win added alongside the fix).
+#
+# Both components MUST produce a JSON array under `provider.aws` in the
+# generated `providers_override.tf.json`.
+
+vars:
+  stage: nonprod
+
+components:
+  terraform:
+    eip-explicit-alias:
+      metadata:
+        component: mock
+      providers:
+        aws:
+          region: us-east-2
+        aws.use1:
+          region: us-east-1
+          alias: use1
+
+    eip-derived-alias:
+      metadata:
+        component: mock
+      providers:
+        aws:
+          region: us-east-2
+        aws.use1:
+          region: us-east-1

@@ -14,6 +14,8 @@ import (
 	"github.com/cloudposse/atmos/pkg/auth"
 	"github.com/cloudposse/atmos/pkg/ci"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	atmosgit "github.com/cloudposse/atmos/pkg/git"
+	ghactions "github.com/cloudposse/atmos/pkg/github/actions"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/matrix"
 	"github.com/cloudposse/atmos/pkg/pager"
@@ -55,6 +57,7 @@ type DescribeAffectedCmdArgs struct {
 	AuthManager                 auth.AuthManager // Optional: Auth manager for credential management (from --identity flag).
 	HeadSHAOverride             string           // PR head SHA from CI event payload, used for upload correlation with Atmos Pro.
 	CIEventType                 string           // CI event type (e.g., "pull_request", "push") for upload validation.
+	TargetBranch                string           // PR target branch (e.g., "main") used to auto-fetch when refs are missing locally.
 }
 
 //go:generate go run go.uber.org/mock/mockgen@v0.6.0 -source=$GOFILE -destination=mock_$GOFILE -package=$GOPACKAGE
@@ -95,6 +98,7 @@ type describeAffectedExec struct {
 		atmosConfig *schema.AtmosConfiguration,
 		ref string,
 		sha string,
+		targetBranch string,
 		includeSpaceliftAdminStacks bool,
 		includeSettings bool,
 		stack string,
@@ -249,12 +253,29 @@ func SetDescribeAffectedFlagValueInCliArgs(flags *pflag.FlagSet, describe *Descr
 }
 
 // resolveBaseFromCI attempts to auto-detect the base commit from the CI provider.
+//
+// This function is only invoked when `ci.enabled: true` in atmos.yaml and no
+// explicit base flag was provided (see the call site above). Because the user
+// has opted into CI auto-detect, it is appropriate to mutate the runner's git
+// config (via `EnsureGitSafeDirectory`) so that downstream git commands —
+// `merge-base`, the targeted `git fetch` for shallow clones, and the
+// `HEAD~1` lookup for closed PRs — do not fail with "dubious ownership in
+// repository" inside GitHub Actions container jobs. The helper is a no-op
+// outside GitHub Actions, so it does nothing when running locally.
 func resolveBaseFromCI(describe *DescribeAffectedCmdArgs) {
 	defer perf.Track(nil, "exec.resolveBaseFromCI")()
 
 	p := ci.Detect()
 	if p == nil {
 		return
+	}
+
+	// Trust the GitHub Actions workspace before any git operation the
+	// provider is about to run. Gated by `ci.enabled` via the call site.
+	if err := atmosgit.EnsureGitSafeDirectory(); err != nil {
+		// Non-fatal: subsequent git commands will surface a clearer error
+		// if this actually matters. We log so the cause is visible.
+		log.Warn("Failed to configure git safe.directory for GitHub Actions workspace", "error", err)
 	}
 
 	resolution, err := p.ResolveBase()
@@ -270,6 +291,7 @@ func resolveBaseFromCI(describe *DescribeAffectedCmdArgs) {
 	describe.SHA = resolution.SHA
 	describe.HeadSHAOverride = resolution.HeadSHA
 	describe.CIEventType = resolution.EventType
+	describe.TargetBranch = resolution.TargetBranch
 
 	base := resolution.SHA
 	if base == "" {
@@ -326,6 +348,7 @@ func (d *describeAffectedExec) Execute(a *DescribeAffectedCmdArgs) error {
 			a.CLIConfig,
 			a.Ref,
 			a.SHA,
+			a.TargetBranch,
 			a.IncludeSpaceliftAdminStacks,
 			a.IncludeSettings,
 			a.Stack,
@@ -361,7 +384,13 @@ func (d *describeAffectedExec) view(a *DescribeAffectedCmdArgs, repoUrl string, 
 	// Handle matrix format specially - it bypasses the normal view flow.
 	if a.Format == "matrix" {
 		entries := convertAffectedToMatrix(affected)
-		return matrix.WriteOutput(entries, a.GithubOutputFile)
+
+		// Resolve output file: explicit flag > CI auto-detect > stdout.
+		outputFile := a.GithubOutputFile
+		if outputFile == "" && d.atmosConfig.CI.Enabled {
+			outputFile = ghactions.GetOutputPath()
+		}
+		return matrix.WriteOutput(entries, outputFile)
 	}
 
 	// Reject --output-file for non-matrix formats — it would be silently ignored.
@@ -402,15 +431,19 @@ func (d *describeAffectedExec) uploadableQuery(args *DescribeAffectedCmdArgs, re
 		return nil
 	}
 
-	// Validate that the CI event is a pull_request event when uploading.
-	// Atmos Pro only processes pull_request webhooks, so push events cannot be correlated.
-	if args.CIEventType != "" && args.CIEventType != "pull_request" && args.CIEventType != "pull_request_target" {
+	// Validate that the CI event is one Atmos Pro can correlate when uploading.
+	// Supported events: pull_request, pull_request_target, and merge_group (GitHub merge queue).
+	// Push events and other ad-hoc triggers cannot be correlated to a check run.
+	if args.CIEventType != "" &&
+		args.CIEventType != "pull_request" &&
+		args.CIEventType != "pull_request_target" &&
+		args.CIEventType != "merge_group" {
 		return errUtils.Build(
-			fmt.Errorf("%w: detected CI event %q, but Atmos Pro only supports pull_request events", errUtils.ErrUploadRequiresPullRequestEvent, args.CIEventType),
+			fmt.Errorf("%w: detected CI event %q, but Atmos Pro only supports pull_request, pull_request_target, and merge_group events", errUtils.ErrUploadRequiresSupportedEvent, args.CIEventType),
 		).
-			WithHint("Ensure your workflow triggers on pull_request events when using --upload.").
-			WithHint("Push events and other event types are not supported for Atmos Pro uploads.").
-			WithHint("See https://atmos.tools/integrations/pro for supported CI configurations.").
+			WithHint("Trigger your workflow on pull_request, pull_request_target, or merge_group events when using --upload.").
+			WithHint("Push events and other ad-hoc triggers cannot be correlated to an Atmos Pro check run.").
+			WithHint("See https://atmos.tools/cli/configuration/settings/pro for supported CI configurations.").
 			Err()
 	}
 

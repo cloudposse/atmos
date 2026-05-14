@@ -119,6 +119,7 @@ var (
 	ErrDescribeComponent                = errors.New("failed to describe component")
 	ErrReadTerraformState               = errors.New("failed to read Terraform state")
 	ErrEvaluateTerraformBackendVariable = errors.New("failed to evaluate terraform backend variable")
+	ErrEvaluateOutput                   = errors.New("failed to evaluate output expression")
 
 	// Recoverable YAML function errors - use YQ default if available.
 	// These errors indicate the data is not available but do not represent API failures.
@@ -191,6 +192,9 @@ var (
 	ErrFailedToGetRepoInfo  = errors.New("failed to get repository info")
 	ErrLocalRepoFetch       = errors.New("local repo unavailable")
 	ErrGitRefNotFound       = errors.New("git reference not found on local filesystem")
+	ErrGitWorktreeAdd       = errors.New("failed to create git worktree")
+	ErrFetchOrigin          = errors.New("failed to fetch from origin")
+	ErrDeepenOrigin         = errors.New("failed to deepen fetch from origin")
 
 	// I/O and output errors.
 	ErrBuildIOConfig  = errors.New("failed to build I/O config")
@@ -245,12 +249,13 @@ var (
 	ErrInvalidFlagValue               = errors.New("invalid value for flag")
 
 	// File and URL handling errors.
-	ErrInvalidPagerCommand = errors.New("invalid pager command")
-	ErrEmptyURL            = errors.New("empty URL provided")
-	ErrFailedToFindImport  = errors.New("failed to find import")
-	ErrInvalidFilePath     = errors.New("invalid file path")
-	ErrRelPath             = errors.New("error determining relative path")
-	ErrHTTPRequestFailed   = errors.New("HTTP request failed")
+	ErrInvalidPagerCommand   = errors.New("invalid pager command")
+	ErrEmptyURL              = errors.New("empty URL provided")
+	ErrFailedToFindImport    = errors.New("failed to find import")
+	ErrInvalidFilePath       = errors.New("invalid file path")
+	ErrRelPath               = errors.New("error determining relative path")
+	ErrHTTPRequestFailed     = errors.New("HTTP request failed")
+	ErrRedirectLimitExceeded = errors.New("stopped after 10 redirects")
 
 	// Config loading errors.
 	ErrAtmosDirConfigNotFound      = errors.New("atmos config directory not found")
@@ -605,14 +610,14 @@ var (
 	ErrComponentWithAllFlagConflict = errors.New("component argument can't be used with --all flag")
 
 	// Terraform execution errors.
-	ErrTerraformExecFailed            = errors.New("terraform execution failed")
-	ErrDescribeAffected               = errors.New("describe affected failed")
-	ErrUploadRequiresPullRequestEvent = errors.New("upload requires a pull_request event")
-	ErrDescribeStacks                 = errors.New("describe stacks failed")
-	ErrBuildDepGraph                  = errors.New("build dependency graph failed")
-	ErrTopologicalOrder               = errors.New("topological sort failed")
-	ErrFormatForLogging               = errors.New("format affected for logging failed")
-	ErrQueryEvaluation                = errors.New("query evaluation failed")
+	ErrTerraformExecFailed          = errors.New("terraform execution failed")
+	ErrDescribeAffected             = errors.New("describe affected failed")
+	ErrUploadRequiresSupportedEvent = errors.New("upload requires a supported CI event")
+	ErrDescribeStacks               = errors.New("describe stacks failed")
+	ErrBuildDepGraph                = errors.New("build dependency graph failed")
+	ErrTopologicalOrder             = errors.New("topological sort failed")
+	ErrFormatForLogging             = errors.New("format affected for logging failed")
+	ErrQueryEvaluation              = errors.New("query evaluation failed")
 
 	// Cache-related errors.
 	ErrCacheLocked    = errors.New("cache file is locked")
@@ -692,6 +697,7 @@ var (
 	ErrInvalidProviderConfig        = errors.New("invalid provider config")
 	ErrInvalidBrowserExecutable     = errors.New("invalid browser executable")
 	ErrAuthenticationFailed         = errors.New("authentication failed")
+	ErrPrepareShellEnvironment      = errors.New("failed to prepare authenticated shell environment")
 	ErrInvalidADCContent            = errors.New("invalid ADC content")
 	ErrWriteADCFile                 = errors.New("failed to write ADC file")
 	ErrWritePropertiesFile          = errors.New("failed to write properties file")
@@ -852,6 +858,7 @@ var (
 	ErrPathResolutionFailed   = errors.New("failed to resolve component from path")
 	ErrPathIsComponentBase    = errors.New("must specify a component directory, not the base directory")
 	ErrAmbiguousComponentPath = errors.New("ambiguous component path")
+	ErrComponentPathNotFound  = errors.New("component path does not exist")
 
 	// Interactive prompt errors.
 	ErrInteractiveModeNotAvailable = errors.New("interactive mode not available")

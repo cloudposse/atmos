@@ -51,6 +51,18 @@ type InstancesCommandOptions struct {
 	Query       string
 	AuthManager auth.AuthManager
 	OutputFile  string
+	// ProcessTemplates toggles Go template processing of stack manifests
+	// (controls the `processTemplates` parameter of `ExecuteDescribeStacks`).
+	// Default true for parity with `describe affected` / `describe stacks`.
+	// Go template functions include `atmos.Component(...)`.
+	ProcessTemplates bool
+	// ProcessFunctions toggles YAML function evaluation in stack manifests
+	// (controls the `processYamlFunctions` parameter of `ExecuteDescribeStacks`).
+	// YAML functions include `!terraform.state`, `!terraform.output`, `!store`,
+	// `!aws.*`, etc. Default true for parity with `describe affected`; set to
+	// false to avoid requiring `tofu` / `terraform` on $PATH when the only
+	// YAML functions in the manifests are terraform-output-shaped.
+	ProcessFunctions bool
 }
 
 // parseColumnsFlag parses column specifications from CLI flag.
@@ -184,38 +196,50 @@ func createInstance(stackName, componentName, componentType string, componentCon
 	return instance
 }
 
-// isProDriftDetectionEnabled checks if an instance has Atmos Pro drift detection enabled.
-// Returns true if settings.pro.drift_detection.enabled == true and settings.pro.enabled != false.
-func isProDriftDetectionEnabled(instance *schema.Instance) bool {
+// isProEnabled checks if an instance has Atmos Pro enabled.
+// Returns true only if settings.pro.enabled is the boolean true.
+// Non-boolean values (e.g., the string "true") and missing values return false.
+func isProEnabled(instance *schema.Instance) bool {
 	proSettings, ok := instance.Settings["pro"].(map[string]any)
 	if !ok {
 		return false
 	}
 
-	// Skip if pro is explicitly disabled
-	if proEnabled, ok := proSettings["enabled"].(bool); ok && !proEnabled {
-		return false
-	}
-
-	driftDetection, ok := proSettings["drift_detection"].(map[string]any)
-	if !ok {
-		return false
-	}
-
-	enabled, ok := driftDetection["enabled"].(bool)
+	enabled, ok := proSettings["enabled"].(bool)
 	return ok && enabled
 }
 
-// filterProEnabledInstances returns only instances that have Atmos Pro drift detection explicitly enabled
-// via settings.pro.drift_detection.enabled == true, but excludes instances where settings.pro.enabled == false.
-func filterProEnabledInstances(instances []schema.Instance) []schema.Instance {
-	filtered := make([]schema.Instance, 0, len(instances))
+// isDriftEnabled checks if an instance has drift detection enabled.
+// Returns true only if settings.pro.drift_detection.enabled is the boolean true.
+func isDriftEnabled(instance *schema.Instance) bool {
+	proSettings, ok := instance.Settings["pro"].(map[string]any)
+	if !ok {
+		return false
+	}
+	drift, ok := proSettings["drift_detection"].(map[string]any)
+	if !ok {
+		return false
+	}
+	enabled, ok := drift["enabled"].(bool)
+	return ok && enabled
+}
+
+// countEnabledDisabled returns counts of pro-enabled and non-enabled instances,
+// plus the number with drift detection enabled.
+// "Disabled" covers both explicit `settings.pro.enabled: false` and instances
+// with no `pro` config at all.
+func countEnabledDisabled(instances []schema.Instance) (enabled, disabled, drift int) {
 	for i := range instances {
-		if isProDriftDetectionEnabled(&instances[i]) {
-			filtered = append(filtered, instances[i])
+		if isProEnabled(&instances[i]) {
+			enabled++
+		} else {
+			disabled++
+		}
+		if isDriftEnabled(&instances[i]) {
+			drift++
 		}
 	}
-	return filtered
+	return enabled, disabled, drift
 }
 
 // sortInstances sorts instances by stack and component.
@@ -338,7 +362,8 @@ func uploadInstancesWithDeps(
 		return errors.Join(errUtils.ErrFailedToUploadInstances, err)
 	}
 
-	u.PrintfMessageToTUI("Successfully uploaded instances to Atmos Pro API.")
+	enabled, disabled, drift := countEnabledDisabled(instances)
+	u.PrintfMessageToTUI("Successfully uploaded %d instances to Atmos Pro API (%d enabled, %d disabled, %d drift enabled).", len(instances), enabled, disabled, drift)
 	return nil
 }
 
@@ -355,16 +380,33 @@ func uploadInstances(instances []schema.Instance) error {
 
 // processInstancesWithDeps collects, filters, and sorts instances using injected dependencies.
 // This function is testable via mocks. Use processInstances() for production code.
+//
+// Template processing (`processTemplates`) controls Go-template evaluation,
+// which includes the `atmos.Component(...)` template function — NOT the YAML
+// functions like `!terraform.state` / `!terraform.output`. Those are
+// controlled by `processYamlFunctions`. The two are independent.
+//
+// The CLI defaults both flags to `true` via `--process-templates` /
+// `--process-functions` (env: `ATMOS_PROCESS_TEMPLATES` /
+// `ATMOS_PROCESS_FUNCTIONS`), matching the describe command family. Callers
+// running without `tofu` / `terraform` on `$PATH` should pass
+// `--process-functions=false` to skip YAML-function evaluation while still
+// letting templates expand stack names and metadata.
 func processInstancesWithDeps(
 	atmosConfig *schema.AtmosConfiguration,
 	stacksProcessor e.StacksProcessor,
 	authManager auth.AuthManager,
+	processTemplates, processYamlFunctions bool,
 ) ([]schema.Instance, error) {
-	// Get all stacks with template processing but without YAML functions.
-	// Templates are needed because they can create additional stacks and components.
-	// YAML functions (e.g., !terraform.output, atmos.Component()) are disabled to avoid
-	// requiring external binaries like tofu/terraform in $PATH.
-	stacksMap, err := stacksProcessor.ExecuteDescribeStacks(atmosConfig, "", nil, nil, nil, false, true, false, false, nil, authManager)
+	stacksMap, err := stacksProcessor.ExecuteDescribeStacks(
+		atmosConfig, "", nil, nil, nil,
+		false, // ignoreMissingFiles
+		processTemplates,
+		processYamlFunctions,
+		false, // includeEmptyStacks
+		nil,   // skip
+		authManager,
+	)
 	if err != nil {
 		log.Error(errUtils.ErrExecuteDescribeStacks.Error(), "error", err)
 		return nil, errors.Join(errUtils.ErrExecuteDescribeStacks, err)
@@ -381,8 +423,12 @@ func processInstancesWithDeps(
 
 // processInstances collects, filters, and sorts instances.
 // This is a convenience wrapper around processInstancesWithDeps() for production use.
-func processInstances(atmosConfig *schema.AtmosConfiguration, authManager auth.AuthManager) ([]schema.Instance, error) {
-	return processInstancesWithDeps(atmosConfig, &e.DefaultStacksProcessor{}, authManager)
+func processInstances(
+	atmosConfig *schema.AtmosConfiguration,
+	authManager auth.AuthManager,
+	processTemplates, processYamlFunctions bool,
+) ([]schema.Instance, error) {
+	return processInstancesWithDeps(atmosConfig, &e.DefaultStacksProcessor{}, authManager, processTemplates, processYamlFunctions)
 }
 
 // ExecuteListInstancesCmd executes the list instances command.
@@ -441,7 +487,18 @@ func ExecuteListInstancesCmd(opts *InstancesCommandOptions) error {
 		e.ClearFindStacksMapCache()
 
 		// Get all stacks for provenance-based import resolution (single call).
-		stacksMap, err := e.ExecuteDescribeStacks(&atmosConfig, "", nil, nil, nil, false, false, false, false, nil, opts.AuthManager)
+		// Honor the caller-supplied template/function flags so tree output is
+		// consistent with non-tree runs of the same command invocation, matching
+		// the behavior of `list stacks --format=tree`.
+		stacksMap, err := e.ExecuteDescribeStacks(
+			&atmosConfig, "", nil, nil, nil,
+			false, // ignoreMissingFiles
+			opts.ProcessTemplates,
+			opts.ProcessFunctions,
+			false, // includeEmptyStacks
+			nil,   // skip
+			opts.AuthManager,
+		)
 		if err != nil {
 			log.Error(errUtils.ErrExecuteDescribeStacks.Error(), "error", err)
 			return errors.Join(errUtils.ErrExecuteDescribeStacks, err)
@@ -460,7 +517,7 @@ func ExecuteListInstancesCmd(opts *InstancesCommandOptions) error {
 	}
 
 	// For non-tree formats, process instances normally.
-	instances, err := processInstances(&atmosConfig, opts.AuthManager)
+	instances, err := processInstances(&atmosConfig, opts.AuthManager, opts.ProcessTemplates, opts.ProcessFunctions)
 	if err != nil {
 		log.Error(errUtils.ErrProcessInstances.Error(), "error", err)
 		return errors.Join(errUtils.ErrProcessInstances, err)
@@ -505,12 +562,11 @@ func ExecuteListInstancesCmd(opts *InstancesCommandOptions) error {
 
 	// Handle upload if requested.
 	if upload {
-		proInstances := filterProEnabledInstances(instances)
-		if len(proInstances) == 0 {
-			ui.Info("No Atmos Pro-enabled instances found; nothing to upload.")
+		if len(instances) == 0 {
+			ui.Info("No instances found; nothing to upload.")
 			return nil
 		}
-		if uploadErr := uploadInstances(proInstances); uploadErr != nil {
+		if uploadErr := uploadInstances(instances); uploadErr != nil {
 			return uploadErr
 		}
 	}
@@ -570,8 +626,18 @@ func sanitizeForJSON(v any) any {
 func executeMatrixFormat(atmosConfig *schema.AtmosConfiguration, opts *InstancesCommandOptions) error {
 	defer perf.Track(nil, "list.executeMatrixFormat")()
 
-	// Get stacksMap to extract component_path from component_info.
-	stacksMap, err := e.ExecuteDescribeStacks(atmosConfig, "", nil, nil, nil, false, true, false, false, nil, opts.AuthManager)
+	// Get stacksMap to extract component_path from component_info. Honor the
+	// caller-supplied template/function flags so matrix output stays consistent
+	// with non-matrix runs of the same command invocation.
+	stacksMap, err := e.ExecuteDescribeStacks(
+		atmosConfig, "", nil, nil, nil,
+		false, // ignoreMissingFiles
+		opts.ProcessTemplates,
+		opts.ProcessFunctions,
+		false, // includeEmptyStacks
+		nil,   // skip
+		opts.AuthManager,
+	)
 	if err != nil {
 		log.Error(errUtils.ErrExecuteDescribeStacks.Error(), "error", err)
 		return errors.Join(errUtils.ErrExecuteDescribeStacks, err)

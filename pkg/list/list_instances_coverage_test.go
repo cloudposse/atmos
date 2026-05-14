@@ -40,24 +40,6 @@ func TestUploadInstances(t *testing.T) {
 	_ = err
 }
 
-// TestProcessInstances tests the processInstances() wrapper function.
-func TestProcessInstances(t *testing.T) {
-	// This wrapper calls processInstancesWithDeps which is already tested at 100%.
-	// We just need to execute it to achieve coverage of the wrapper itself.
-	// The underlying processInstancesWithDeps() is already tested at 100% with mocks.
-	atmosConfig := &schema.AtmosConfiguration{
-		BasePath: "/nonexistent",
-	}
-
-	// Call the wrapper - it may return empty list or error depending on config.
-	instances, err := processInstances(atmosConfig, nil)
-
-	// Either result is acceptable - key is the function executes without panic.
-	// The function behavior is fully tested via processInstancesWithDeps tests.
-	_ = instances
-	_ = err
-}
-
 // TestExecuteListInstancesCmd tests the main command entry point with real fixtures.
 func TestExecuteListInstancesCmd(t *testing.T) {
 	// Initialize I/O and UI contexts for testing.
@@ -581,4 +563,58 @@ func TestBuildInstanceFilters(t *testing.T) {
 	result, err := buildInstanceFilters("any-spec")
 	require.NoError(t, err)
 	assert.Nil(t, result)
+}
+
+// TestExecuteListInstancesCmd_TreeFormat exercises the tree-format branch
+// of ExecuteListInstancesCmd — enables provenance tracking, re-processes
+// stacks via ResolveImportTreeFromProvenance, and renders via
+// format.RenderInstancesTree.
+func TestExecuteListInstancesCmd_TreeFormat(t *testing.T) {
+	ioCtx, err := iolib.NewContext()
+	require.NoError(t, err)
+	ui.InitFormatter(ioCtx)
+	data.InitWriter(ioCtx)
+
+	fixturePath := "../../tests/fixtures/scenarios/complete"
+	tests.RequireFilePath(t, fixturePath, "test fixture directory")
+
+	cmd := &cobra.Command{}
+	cmd.Flags().Bool("upload", false, "Upload instances to Atmos Pro")
+	cmd.Flags().String("format", "tree", "Output format")
+
+	info := &schema.ConfigAndStacksInfo{
+		BasePath: fixturePath,
+	}
+
+	err = ExecuteListInstancesCmd(&InstancesCommandOptions{
+		Info:             info,
+		Cmd:              cmd,
+		Args:             []string{},
+		ProcessTemplates: true,
+		ProcessFunctions: false,
+	})
+	require.NoError(t, err, "complete fixture should render instances tree cleanly")
+}
+
+// TestExecuteListInstancesCmd_TreeFormatRejectsUpload verifies the
+// tree-format branch rejects `--upload` (mirrors the matrix-format
+// rejection test).
+func TestExecuteListInstancesCmd_TreeFormatRejectsUpload(t *testing.T) {
+	cmd := &cobra.Command{}
+	cmd.Flags().Bool("upload", true, "Upload instances to Atmos Pro")
+	cmd.Flags().String("format", "tree", "Output format")
+
+	info := &schema.ConfigAndStacksInfo{
+		BasePath: "../../tests/fixtures/scenarios/complete",
+	}
+
+	err := ExecuteListInstancesCmd(&InstancesCommandOptions{
+		Info: info,
+		Cmd:  cmd,
+		Args: []string{},
+	})
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrInvalidFlag)
+	assert.Contains(t, err.Error(), "--upload is not supported with --format=tree")
 }

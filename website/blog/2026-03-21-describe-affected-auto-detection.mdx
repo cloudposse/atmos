@@ -38,11 +38,13 @@ When `ci.enabled` is `true` in your `atmos.yaml` and no explicit `--base` flag i
 
 | GitHub Actions Event | Base Resolution |
 |---------------------|----------------|
-| Pull request (open/sync) | Target branch from `GITHUB_BASE_REF` |
-| Pull request (closed/merged) | PR base SHA from event payload |
-| Push | Previous HEAD from event payload |
+| Pull request (open/sync) | `git merge-base(HEAD, origin/<target>)` — auto-fetches the target branch in shallow CI checkouts so it works without `fetch-depth: 0` |
+| Pull request (closed/merged) | `git merge-base`, falling back to `HEAD~1` for merge-commit checkouts |
+| Push | Previous HEAD from event payload (`event.before`) |
 | Force push | Parent commit (`HEAD~1`) |
 | Merge group | Target branch from `GITHUB_BASE_REF` |
+
+`git merge-base` is the gold standard for PR base resolution: it returns the **fork point** of the PR branch regardless of how out of date the PR is with `<target>`. If the PR was forked at commit `B` and main has since advanced to `E`, the diff is still computed against `B` — never against `E` — so commits on main that the PR hasn't pulled in do not show up as "affected".
 
 ## The `--base` Flag
 

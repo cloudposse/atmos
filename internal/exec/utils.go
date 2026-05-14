@@ -22,6 +22,7 @@ import (
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+	tfoutput "github.com/cloudposse/atmos/pkg/terraform/output"
 	u "github.com/cloudposse/atmos/pkg/utils"
 	atmosYaml "github.com/cloudposse/atmos/pkg/yaml"
 )
@@ -1035,9 +1036,12 @@ func generateComponentBackendConfig(backendType string, backendConfig map[string
 }
 
 // generateComponentProviderOverrides generates provider overrides for components.
+// Dot-notation provider keys (e.g., "aws.use1") are grouped into arrays under the
+// base provider name via tfoutput.ProcessProviderAliases so the output matches
+// Terraform's JSON provider-block format.
 func generateComponentProviderOverrides(providerOverrides map[string]any, _ *schema.AuthContext) map[string]any {
 	return map[string]any{
-		"provider": providerOverrides,
+		"provider": tfoutput.ProcessProviderAliases(providerOverrides),
 	}
 }
 
