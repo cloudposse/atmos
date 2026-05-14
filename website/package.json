@@ -14,7 +14,11 @@
     "serve": "docusaurus serve",
     "write-translations": "docusaurus write-translations",
     "write-heading-ids": "docusaurus write-heading-ids",
-    "build:site": "npm run build"
+    "build:site": "npm run build",
+    "algolia:deploy": "node algolia/deploy-crawler-config.mjs",
+    "algolia:deploy:dry-run": "node algolia/deploy-crawler-config.mjs --dry-run",
+    "test:algolia": "node --test algolia/atmos-tools.crawler.test.mjs",
+    "test:algolia:live": "ALGOLIA_LIVE_RELEVANCE_TESTS=1 node --test algolia/search-relevance.test.mjs"
   },
   "dependencies": {
     "@docsearch/react": "^4.2.0",

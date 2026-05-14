@@ -1,0 +1,99 @@
+name: "Algolia"
+
+on:
+  pull_request:
+    types:
+      - opened
+      - synchronize
+      - reopened
+    paths:
+      - "website/algolia/**"
+      - "website/docusaurus.config.js"
+      - "website/package.json"
+      - "website/pnpm-lock.yaml"
+      - ".github/workflows/algolia.yaml"
+
+  push:
+    branches:
+      - main
+    paths:
+      - "website/algolia/**"
+      - "website/docusaurus.config.js"
+      - "website/package.json"
+      - "website/pnpm-lock.yaml"
+      - ".github/workflows/algolia.yaml"
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: "website/.nvmrc"
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Install Dependencies
+        run: |
+          cd website
+          pnpm install --frozen-lockfile
+
+      - name: Test Algolia crawler config
+        run: |
+          cd website
+          pnpm run test:algolia
+
+      - name: Validate deploy payload without upload
+        run: |
+          cd website
+          pnpm run algolia:deploy:dry-run
+
+  deploy:
+    if: ${{ github.event_name == 'push' }}
+    needs:
+      - validate
+    runs-on: ubuntu-latest
+
+    environment:
+      name: algolia
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: "website/.nvmrc"
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Install Dependencies
+        run: |
+          cd website
+          pnpm install --frozen-lockfile
+
+      - name: Deploy crawler config
+        run: |
+          cd website
+          pnpm run algolia:deploy
+        env:
+          ALGOLIA_CRAWLER_ID: ${{ secrets.ALGOLIA_CRAWLER_ID }}
+          ALGOLIA_CRAWLER_USER_ID: ${{ secrets.ALGOLIA_CRAWLER_USER_ID }}
+          ALGOLIA_CRAWLER_API_KEY: ${{ secrets.ALGOLIA_CRAWLER_API_KEY }}
+          ALGOLIA_CRAWLER_INDEXING_API_KEY: ${{ secrets.ALGOLIA_CRAWLER_INDEXING_API_KEY }}
+          ALGOLIA_CRAWLER_REINDEX: "true"
