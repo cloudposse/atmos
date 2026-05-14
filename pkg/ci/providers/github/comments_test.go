@@ -159,12 +159,13 @@ func TestProvider_PostComment_CreateAlwaysPosts(t *testing.T) {
 
 	p := newTestProvider(t, mux)
 
+	marker := "<!-- atmos:ci:plan:vpc:dev -->"
 	_, err := p.PostComment(context.Background(), &provider.PostCommentOptions{
 		Owner:    "owner",
 		Repo:     "repo",
 		PRNumber: 42,
-		Marker:   "<!-- atmos:ci:plan:vpc:dev -->",
-		Body:     "body",
+		Marker:   marker,
+		Body:     marker + "\nbody",
 		Behavior: provider.CommentBehaviorCreate,
 	})
 	require.NoError(t, err)
@@ -182,12 +183,13 @@ func TestProvider_PostComment_UpdateReturnsNotFoundWhenAbsent(t *testing.T) {
 
 	p := newTestProvider(t, mux)
 
+	marker := "<!-- atmos:ci:plan:vpc:dev -->"
 	_, err := p.PostComment(context.Background(), &provider.PostCommentOptions{
 		Owner:    "owner",
 		Repo:     "repo",
 		PRNumber: 42,
-		Marker:   "<!-- atmos:ci:plan:vpc:dev -->",
-		Body:     "body",
+		Marker:   marker,
+		Body:     marker + "\nbody",
 		Behavior: provider.CommentBehaviorUpdate,
 	})
 	require.Error(t, err)
@@ -221,6 +223,79 @@ func TestProvider_PostComment_ValidatesRequiredFields(t *testing.T) {
 	}
 }
 
+// TestProvider_PostComment_RequiresMarkerInBody verifies the invariant that
+// Body must contain Marker. Without this check, an upsert that writes a body
+// missing the marker would cause subsequent runs to fail to match the existing
+// comment and create duplicates.
+func TestProvider_PostComment_RequiresMarkerInBody(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		t.Fatalf("unexpected HTTP call: %s %s", r.Method, r.URL.Path)
+	})
+	p := newTestProvider(t, mux)
+
+	_, err := p.PostComment(context.Background(), &provider.PostCommentOptions{
+		Owner:    "owner",
+		Repo:     "repo",
+		PRNumber: 42,
+		Marker:   "<!-- atmos:ci:plan:vpc:dev -->",
+		Body:     "no marker here",
+		Behavior: provider.CommentBehaviorUpsert,
+	})
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrCICommentPostFailed)
+}
+
+// TestProvider_PostComment_EmptyMarkerSkipsInvariantCheck — when Marker is
+// empty the body-invariant check does not apply; the call should still reach
+// the HTTP layer (and in this test, succeed at create via an empty list).
+func TestProvider_PostComment_EmptyMarkerSkipsInvariantCheck(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/repos/owner/repo/issues/42/comments", func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodGet:
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode([]map[string]any{})
+		case http.MethodPost:
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(map[string]any{"id": 5, "body": "ok"})
+		}
+	})
+	p := newTestProvider(t, mux)
+
+	_, err := p.PostComment(context.Background(), &provider.PostCommentOptions{
+		Owner:    "owner",
+		Repo:     "repo",
+		PRNumber: 42,
+		Marker:   "",
+		Body:     "body without marker",
+		Behavior: provider.CommentBehaviorUpsert,
+	})
+	require.NoError(t, err)
+}
+
+// TestProvider_PostComment_RejectsUnknownBehavior verifies that
+// misconfigured ci.comments.behavior values fail fast rather than silently
+// defaulting to upsert.
+func TestProvider_PostComment_RejectsUnknownBehavior(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		t.Fatalf("unexpected HTTP call: %s %s", r.Method, r.URL.Path)
+	})
+	p := newTestProvider(t, mux)
+
+	_, err := p.PostComment(context.Background(), &provider.PostCommentOptions{
+		Owner:    "owner",
+		Repo:     "repo",
+		PRNumber: 42,
+		Marker:   "m",
+		Body:     "m body",
+		Behavior: provider.CommentBehavior("upsrt"), // typo.
+	})
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrCICommentPostFailed)
+}
+
 func TestProvider_PostComment_403HintedForMissingPermission(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/repos/owner/repo/issues/42/comments", func(w http.ResponseWriter, r *http.Request) {
@@ -234,7 +309,7 @@ func TestProvider_PostComment_403HintedForMissingPermission(t *testing.T) {
 		Repo:     "repo",
 		PRNumber: 42,
 		Marker:   "m",
-		Body:     "b",
+		Body:     "m body",
 		Behavior: provider.CommentBehaviorUpsert,
 	})
 	require.Error(t, err)
@@ -255,7 +330,7 @@ func TestProvider_PostComment_404HintedOnNotFound(t *testing.T) {
 		Repo:     "repo",
 		PRNumber: 42,
 		Marker:   "m",
-		Body:     "b",
+		Body:     "m body",
 		Behavior: provider.CommentBehaviorUpsert,
 	})
 	require.Error(t, err)
@@ -285,7 +360,7 @@ func TestProvider_PostComment_DefaultBehaviorIsUpsert(t *testing.T) {
 		Repo:     "repo",
 		PRNumber: 42,
 		Marker:   "m",
-		Body:     "b",
+		Body:     "m body",
 		// Behavior left empty on purpose.
 	})
 	require.NoError(t, err)
@@ -319,12 +394,13 @@ func TestProvider_PostComment_PaginatesListSearch(t *testing.T) {
 	})
 
 	p := newTestProvider(t, mux)
+	marker := "<!-- atmos:ci:plan:vpc:dev -->"
 	_, err := p.PostComment(context.Background(), &provider.PostCommentOptions{
 		Owner:    "owner",
 		Repo:     "repo",
 		PRNumber: 42,
-		Marker:   "<!-- atmos:ci:plan:vpc:dev -->",
-		Body:     "updated",
+		Marker:   marker,
+		Body:     marker + "\nupdated",
 		Behavior: provider.CommentBehaviorUpsert,
 	})
 	require.NoError(t, err)

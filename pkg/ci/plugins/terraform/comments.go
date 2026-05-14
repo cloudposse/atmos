@@ -42,8 +42,9 @@ func logCommentError(msg string, err error) {
 
 // buildCommentMarker builds the HTML comment marker used to find and update
 // existing PR comments on repeat runs. The marker is unique per
-// (command, stack, component) triple.
-func buildCommentMarker(command, stack, component string) string {
+// (command, component, stack) triple and its segments are in the same order
+// as the rendered marker string for readability at the callsite.
+func buildCommentMarker(command, component, stack string) string {
 	return fmt.Sprintf(commentMarkerFormat, command, component, stack)
 }
 
@@ -81,14 +82,19 @@ func (p *Plugin) postComment(ctx *plugin.HookContext, renderedSummary string) er
 		return nil
 	}
 
-	marker := buildCommentMarker(ctx.Command, ctx.Info.Stack, ctx.Info.ComponentFromArg)
+	behavior, err := resolveCommentBehavior(ctx.Config)
+	if err != nil {
+		return err
+	}
+
+	marker := buildCommentMarker(ctx.Command, ctx.Info.ComponentFromArg, ctx.Info.Stack)
 	opts := &provider.PostCommentOptions{
 		Owner:    ctx.CICtx.RepoOwner,
 		Repo:     ctx.CICtx.RepoName,
 		PRNumber: ctx.CICtx.PullRequest.Number,
 		Marker:   marker,
 		Body:     marker + "\n" + renderedSummary,
-		Behavior: resolveCommentBehavior(ctx.Config),
+		Behavior: behavior,
 	}
 
 	result, err := ctx.Provider.PostComment(context.Background(), opts)
@@ -115,17 +121,22 @@ func logCommentResult(prNumber int, result *provider.Comment) {
 }
 
 // resolveCommentBehavior maps the config string to a provider.CommentBehavior.
-// Unknown or empty values default to upsert.
-func resolveCommentBehavior(cfg *schema.AtmosConfiguration) provider.CommentBehavior {
+// Empty (unset) defaults to upsert. Unknown non-empty values return an error
+// so that typos in ci.comments.behavior surface immediately rather than
+// silently behaving as upsert.
+func resolveCommentBehavior(cfg *schema.AtmosConfiguration) (provider.CommentBehavior, error) {
 	if cfg == nil {
-		return provider.CommentBehaviorUpsert
+		return provider.CommentBehaviorUpsert, nil
 	}
-	switch provider.CommentBehavior(cfg.CI.Comments.Behavior) {
-	case provider.CommentBehaviorCreate:
-		return provider.CommentBehaviorCreate
-	case provider.CommentBehaviorUpdate:
-		return provider.CommentBehaviorUpdate
+	switch b := provider.CommentBehavior(cfg.CI.Comments.Behavior); b {
+	case "":
+		return provider.CommentBehaviorUpsert, nil
+	case provider.CommentBehaviorCreate, provider.CommentBehaviorUpdate, provider.CommentBehaviorUpsert:
+		return b, nil
 	default:
-		return provider.CommentBehaviorUpsert
+		return "", errUtils.Build(errUtils.ErrCICommentPostFailed).
+			WithExplanation("ci.comments.behavior must be one of: create, update, upsert").
+			WithContext("behavior", string(b)).
+			Err()
 	}
 }

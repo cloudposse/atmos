@@ -40,7 +40,10 @@ func (p *Provider) postComment(ctx context.Context, opts *provider.PostCommentOp
 		return nil, err
 	}
 
-	behavior := normalizeBehavior(opts.Behavior)
+	behavior, err := normalizeBehavior(opts.Behavior)
+	if err != nil {
+		return nil, err
+	}
 	if behavior == provider.CommentBehaviorCreate {
 		return p.createComment(ctx, opts)
 	}
@@ -70,22 +73,42 @@ func (p *Provider) upsertOrUpdate(ctx context.Context, opts *provider.PostCommen
 	return p.createComment(ctx, opts)
 }
 
-// validatePostCommentOptions rejects nil or incomplete option structs.
+// validatePostCommentOptions rejects nil or incomplete option structs, and
+// enforces the marker-in-body invariant so repeat runs can reliably reconcile
+// against the same comment. An upsert that writes a body without its marker
+// would leave a comment that future runs cannot match — breaking idempotency
+// and causing duplicate comments on subsequent plans.
 func validatePostCommentOptions(opts *provider.PostCommentOptions) error {
 	if opts == nil || opts.Owner == "" || opts.Repo == "" || opts.PRNumber <= 0 {
 		return errUtils.Build(errUtils.ErrCICommentPostFailed).
 			WithExplanation("Owner, Repo, and PRNumber are required to post a PR comment").
 			Err()
 	}
+	if opts.Marker != "" && !strings.Contains(opts.Body, opts.Marker) {
+		return errUtils.Build(errUtils.ErrCICommentPostFailed).
+			WithExplanation("Marker must appear in Body so future runs can find and update this comment; without it, upserts will create duplicates").
+			WithContext("marker", opts.Marker).
+			Err()
+	}
 	return nil
 }
 
-// normalizeBehavior resolves an empty behavior to the default (upsert).
-func normalizeBehavior(b provider.CommentBehavior) provider.CommentBehavior {
-	if b == "" {
-		return provider.CommentBehaviorUpsert
+// normalizeBehavior resolves the configured behavior. An empty value defaults
+// to upsert; any other value must be one of the declared CommentBehavior
+// constants. Unknown values fail fast so typos in ci.comments.behavior surface
+// immediately rather than silently behaving as upsert.
+func normalizeBehavior(b provider.CommentBehavior) (provider.CommentBehavior, error) {
+	switch b {
+	case "":
+		return provider.CommentBehaviorUpsert, nil
+	case provider.CommentBehaviorCreate, provider.CommentBehaviorUpdate, provider.CommentBehaviorUpsert:
+		return b, nil
+	default:
+		return "", errUtils.Build(errUtils.ErrCICommentPostFailed).
+			WithExplanation("ci.comments.behavior must be one of: create, update, upsert").
+			WithContext("behavior", string(b)).
+			Err()
 	}
-	return b
 }
 
 // findCommentByMarker walks all issue comment pages looking for the first

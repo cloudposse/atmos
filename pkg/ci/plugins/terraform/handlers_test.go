@@ -1457,30 +1457,40 @@ func TestIsCommentsEnabled(t *testing.T) {
 
 func TestResolveCommentBehavior(t *testing.T) {
 	cases := map[string]provider.CommentBehavior{
-		"":        provider.CommentBehaviorUpsert,
-		"upsert":  provider.CommentBehaviorUpsert,
-		"create":  provider.CommentBehaviorCreate,
-		"update":  provider.CommentBehaviorUpdate,
-		"garbage": provider.CommentBehaviorUpsert,
+		"":       provider.CommentBehaviorUpsert,
+		"upsert": provider.CommentBehaviorUpsert,
+		"create": provider.CommentBehaviorCreate,
+		"update": provider.CommentBehaviorUpdate,
 	}
 	for input, expected := range cases {
 		t.Run("behavior="+input, func(t *testing.T) {
 			cfg := &schema.AtmosConfiguration{
 				CI: schema.CIConfig{Comments: schema.CICommentsConfig{Behavior: input}},
 			}
-			assert.Equal(t, expected, resolveCommentBehavior(cfg))
+			got, err := resolveCommentBehavior(cfg)
+			require.NoError(t, err)
+			assert.Equal(t, expected, got)
 		})
 	}
 	t.Run("nil config defaults to upsert", func(t *testing.T) {
-		assert.Equal(t, provider.CommentBehaviorUpsert, resolveCommentBehavior(nil))
+		got, err := resolveCommentBehavior(nil)
+		require.NoError(t, err)
+		assert.Equal(t, provider.CommentBehaviorUpsert, got)
+	})
+	t.Run("unknown behavior returns error", func(t *testing.T) {
+		cfg := &schema.AtmosConfiguration{
+			CI: schema.CIConfig{Comments: schema.CICommentsConfig{Behavior: "garbage"}},
+		}
+		_, err := resolveCommentBehavior(cfg)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, errUtils.ErrCICommentPostFailed)
 	})
 }
 
 func TestBuildCommentMarker(t *testing.T) {
-	got := buildCommentMarker("plan", "plat-ue2-dev", "vpc")
-	assert.Contains(t, got, "atmos:ci:plan")
-	assert.Contains(t, got, "vpc")
-	assert.Contains(t, got, "plat-ue2-dev")
+	got := buildCommentMarker("plan", "vpc", "plat-ue2-dev")
+	assert.Equal(t, "<!-- atmos:ci:plan:vpc:plat-ue2-dev -->", got,
+		"segments must be in (command, component, stack) order to match the marker format")
 	assert.True(t, strings.HasPrefix(got, "<!--"), "marker must be an HTML comment so it renders invisibly")
 	assert.True(t, strings.HasSuffix(got, "-->"))
 }
