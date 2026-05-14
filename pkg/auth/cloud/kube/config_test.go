@@ -141,6 +141,7 @@ func TestWriteClusterConfig_MergeNewFile(t *testing.T) {
 // every identity resolution, so the integration layer relies on this to avoid
 // flooding the user with redundant success messages.
 func TestWriteClusterConfig_MergeUnchanged(t *testing.T) {
+	t.Setenv("ATMOS_KUBECONFIG_DEBUG_DIFF", "1")
 	dir := t.TempDir()
 	path := filepath.Join(dir, "kubeconfig")
 
@@ -168,6 +169,7 @@ func TestWriteClusterConfig_MergeUnchanged(t *testing.T) {
 
 // TestWriteClusterConfig_ReplaceUnchanged covers the replace mode no-op path.
 func TestWriteClusterConfig_ReplaceUnchanged(t *testing.T) {
+	t.Setenv("ATMOS_KUBECONFIG_DEBUG_DIFF", "1")
 	dir := t.TempDir()
 	path := filepath.Join(dir, "kubeconfig")
 

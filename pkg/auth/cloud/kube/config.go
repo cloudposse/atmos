@@ -376,20 +376,105 @@ func (m *KubeconfigManager) reconcileMode() (bool, error) {
 // check is robust against platform-specific clientcmd serialization quirks
 // (line endings, LocationOfOrigin populated during load on Windows, …) that
 // don't reflect actual content changes.
+//
+// When ATMOS_KUBECONFIG_DEBUG_DIFF is set, emits a diagnostic line to
+// stderr describing which entry/field caused the inequality.
 func configContentEqual(a, b *clientcmdapi.Config) bool {
 	if a == nil || b == nil {
 		return a == b
 	}
+	debug := kubeconfigDebugDiff()
 	if a.CurrentContext != b.CurrentContext {
+		if debug {
+			fmt.Fprintf(os.Stderr, "[kubeconfig-diff] CurrentContext differs: a=%q b=%q\n", a.CurrentContext, b.CurrentContext)
+		}
 		return false
 	}
-	if !clusterMapsEqual(a.Clusters, b.Clusters) {
+	if !clusterMapsEqualDebug(a.Clusters, b.Clusters, debug) {
 		return false
 	}
-	if !contextMapsEqual(a.Contexts, b.Contexts) {
+	if !contextMapsEqualDebug(a.Contexts, b.Contexts, debug) {
 		return false
 	}
-	return authInfoMapsEqual(a.AuthInfos, b.AuthInfos)
+	return authInfoMapsEqualDebug(a.AuthInfos, b.AuthInfos, debug)
+}
+
+func clusterMapsEqualDebug(a, b map[string]*clientcmdapi.Cluster, debug bool) bool {
+	if len(a) != len(b) {
+		if debug {
+			fmt.Fprintf(os.Stderr, "[kubeconfig-diff] Clusters map length differs: a=%d b=%d\n", len(a), len(b))
+		}
+		return false
+	}
+	for k, av := range a {
+		bv, ok := b[k]
+		if !ok {
+			if debug {
+				fmt.Fprintf(os.Stderr, "[kubeconfig-diff] Clusters[%q] missing from b\n", k)
+			}
+			return false
+		}
+		if !clustersEqual(av, bv) {
+			if debug {
+				fmt.Fprintf(os.Stderr, "[kubeconfig-diff] Clusters[%q] differs:\n  a=%#v\n  b=%#v\n", k, av, bv)
+			}
+			return false
+		}
+	}
+	return true
+}
+
+func contextMapsEqualDebug(a, b map[string]*clientcmdapi.Context, debug bool) bool {
+	if len(a) != len(b) {
+		if debug {
+			fmt.Fprintf(os.Stderr, "[kubeconfig-diff] Contexts map length differs: a=%d b=%d\n", len(a), len(b))
+		}
+		return false
+	}
+	for k, av := range a {
+		bv, ok := b[k]
+		if !ok {
+			if debug {
+				fmt.Fprintf(os.Stderr, "[kubeconfig-diff] Contexts[%q] missing from b\n", k)
+			}
+			return false
+		}
+		if !contextsEqual(av, bv) {
+			if debug {
+				fmt.Fprintf(os.Stderr, "[kubeconfig-diff] Contexts[%q] differs:\n  a=%#v\n  b=%#v\n", k, av, bv)
+			}
+			return false
+		}
+	}
+	return true
+}
+
+func authInfoMapsEqualDebug(a, b map[string]*clientcmdapi.AuthInfo, debug bool) bool {
+	if len(a) != len(b) {
+		if debug {
+			fmt.Fprintf(os.Stderr, "[kubeconfig-diff] AuthInfos map length differs: a=%d b=%d\n", len(a), len(b))
+		}
+		return false
+	}
+	for k, av := range a {
+		bv, ok := b[k]
+		if !ok {
+			if debug {
+				fmt.Fprintf(os.Stderr, "[kubeconfig-diff] AuthInfos[%q] missing from b\n", k)
+			}
+			return false
+		}
+		if !authInfosEqual(av, bv) {
+			if debug {
+				fmt.Fprintf(os.Stderr, "[kubeconfig-diff] AuthInfos[%q] differs:\n  a=%#v\n  b=%#v\n", k, av, bv)
+				if av.Exec != nil || bv.Exec != nil {
+					fmt.Fprintf(os.Stderr, "  a.Exec=%#v\n  b.Exec=%#v\n", av.Exec, bv.Exec)
+				}
+			}
+			return false
+		}
+	}
+	return true
 }
 
 // mergeWouldChange returns true when merging newConfig into existing would
@@ -398,29 +483,78 @@ func configContentEqual(a, b *clientcmdapi.Config) bool {
 // current-context already matches. Entries in existing that aren't in
 // newConfig are preserved by merge regardless, so they don't enter the
 // comparison.
+//
+// When ATMOS_KUBECONFIG_DEBUG_DIFF is set in the environment, the function
+// emits a diagnostic line to stderr describing which entry/field caused
+// the "would change" result. Used to debug platform-specific divergences
+// where a logically-identical kubeconfig appears to differ after a load+
+// re-serialize cycle (most notably on Windows).
 func mergeWouldChange(existing, newConfig *clientcmdapi.Config) bool {
+	debug := kubeconfigDebugDiff()
+
 	if newConfig.CurrentContext != "" && existing.CurrentContext != newConfig.CurrentContext {
+		if debug {
+			fmt.Fprintf(os.Stderr, "[kubeconfig-diff] CurrentContext differs: existing=%q new=%q\n",
+				existing.CurrentContext, newConfig.CurrentContext)
+		}
 		return true
 	}
 	for k, v := range newConfig.Clusters {
 		ev, ok := existing.Clusters[k]
-		if !ok || !clustersEqual(ev, v) {
+		if !ok {
+			if debug {
+				fmt.Fprintf(os.Stderr, "[kubeconfig-diff] Clusters[%q] missing from existing\n", k)
+			}
+			return true
+		}
+		if !clustersEqual(ev, v) {
+			if debug {
+				fmt.Fprintf(os.Stderr, "[kubeconfig-diff] Clusters[%q] differs:\n  existing=%#v\n  new=%#v\n", k, ev, v)
+			}
 			return true
 		}
 	}
 	for k, v := range newConfig.Contexts {
 		ev, ok := existing.Contexts[k]
-		if !ok || !contextsEqual(ev, v) {
+		if !ok {
+			if debug {
+				fmt.Fprintf(os.Stderr, "[kubeconfig-diff] Contexts[%q] missing from existing\n", k)
+			}
+			return true
+		}
+		if !contextsEqual(ev, v) {
+			if debug {
+				fmt.Fprintf(os.Stderr, "[kubeconfig-diff] Contexts[%q] differs:\n  existing=%#v\n  new=%#v\n", k, ev, v)
+			}
 			return true
 		}
 	}
 	for k, v := range newConfig.AuthInfos {
 		ev, ok := existing.AuthInfos[k]
-		if !ok || !authInfosEqual(ev, v) {
+		if !ok {
+			if debug {
+				fmt.Fprintf(os.Stderr, "[kubeconfig-diff] AuthInfos[%q] missing from existing\n", k)
+			}
+			return true
+		}
+		if !authInfosEqual(ev, v) {
+			if debug {
+				fmt.Fprintf(os.Stderr, "[kubeconfig-diff] AuthInfos[%q] differs:\n  existing=%#v\n  new=%#v\n", k, ev, v)
+				if ev.Exec != nil || v.Exec != nil {
+					fmt.Fprintf(os.Stderr, "  existing.Exec=%#v\n  new.Exec=%#v\n", ev.Exec, v.Exec)
+				}
+			}
 			return true
 		}
 	}
 	return false
+}
+
+// kubeconfigDebugDiff returns true when the user has opted in to diagnostic
+// output from the no-op detection helpers. Gate is an env var so prod paths
+// stay silent and tests can flip it per-test via t.Setenv.
+func kubeconfigDebugDiff() bool {
+	return os.Getenv("ATMOS_KUBECONFIG_DEBUG_DIFF") != ""
 }
 
 // clusterMapsEqual returns true when two cluster maps have identical

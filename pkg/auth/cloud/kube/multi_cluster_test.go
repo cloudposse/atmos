@@ -17,6 +17,7 @@ import (
 // kubeconfig has two atmos-managed clusters, we re-write the *second* one with identical inputs.
 // current-context should remain on cluster B, and changed should be false.
 func TestMultiCluster_SecondRewriteSameClusterNoOp(t *testing.T) {
+	t.Setenv("ATMOS_KUBECONFIG_DEBUG_DIFF", "1")
 	dir := t.TempDir()
 	path := filepath.Join(dir, "kubeconfig")
 	mgr, err := NewKubeconfigManager(path, "")
@@ -66,6 +67,7 @@ func TestMultiCluster_SecondRewriteSameClusterNoOp(t *testing.T) {
 // didn't write (e.g., user added one manually). Re-running for our cluster must
 // preserve the third-party entry and report changed=false.
 func TestMultiCluster_UnknownThirdPartyClusterPreserved(t *testing.T) {
+	t.Setenv("ATMOS_KUBECONFIG_DEBUG_DIFF", "1")
 	dir := t.TempDir()
 	path := filepath.Join(dir, "kubeconfig")
 	mgr, err := NewKubeconfigManager(path, "")
