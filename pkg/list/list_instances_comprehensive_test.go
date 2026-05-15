@@ -180,7 +180,7 @@ func TestSortInstances(t *testing.T) {
 // Test collectInstances edge cases.
 func TestCollectInstances(t *testing.T) {
 	t.Run("empty stacks map", func(t *testing.T) {
-		result := collectInstances(map[string]interface{}{})
+		result := collectInstances(map[string]interface{}{}, "")
 		assert.Empty(t, result)
 	})
 
@@ -191,7 +191,7 @@ func TestCollectInstances(t *testing.T) {
 				"components": "invalid",
 			},
 		}
-		result := collectInstances(stacks)
+		result := collectInstances(stacks, "")
 		assert.Empty(t, result)
 	})
 }

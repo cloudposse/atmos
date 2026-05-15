@@ -3,6 +3,8 @@ package list
 import (
 	"errors"
 	"fmt"
+	"path"
+	"path/filepath"
 	"sort"
 	"strings"
 
@@ -45,6 +47,18 @@ type InstancesCommandOptions struct {
 	Args        []string
 	ShowImports bool
 	ColumnsFlag []string
+	// Format selects the output format (table, json, yaml, csv, tsv, tree, matrix).
+	// Authoritative source — must reach this struct via viper so ATMOS_FORMAT
+	// is honored. Do not re-read from cmd.Flags() inside the impl.
+	Format string
+	// Upload toggles upload of the instance inventory to Atmos Pro.
+	// Authoritative source — must reach this struct via viper so ATMOS_UPLOAD
+	// is honored. Do not re-read from cmd.Flags() inside the impl.
+	Upload bool
+	// Stack is an optional glob pattern (path.Match syntax) that filters
+	// instances to stacks whose names match. Empty means no filter.
+	// Matches the semantics used by `list components`.
+	Stack       string
 	FilterSpec  string
 	SortSpec    string
 	Delimiter   string
@@ -63,6 +77,11 @@ type InstancesCommandOptions struct {
 	// false to avoid requiring `tofu` / `terraform` on $PATH when the only
 	// YAML functions in the manifests are terraform-output-shaped.
 	ProcessFunctions bool
+	// Skip lists individual YAML functions to bypass during evaluation
+	// (controls the `skip` parameter of `ExecuteDescribeStacks`).
+	// Use to skip a specific function (e.g. `terraform.state`) while leaving
+	// the rest of YAML function processing enabled.
+	Skip []string
 }
 
 // parseColumnsFlag parses column specifications from CLI flag.
@@ -148,10 +167,47 @@ func processStackComponents(stackName string, stackConfig interface{}) []schema.
 	return instances
 }
 
-// collectInstances collects all instances from the stacks map.
-func collectInstances(stacksMap map[string]interface{}) []schema.Instance {
+// matchStackPattern reports whether stackName matches the glob pattern using
+// path.Match semantics. Both inputs are normalized with filepath.ToSlash so
+// behavior is consistent across platforms. An empty pattern matches everything;
+// an invalid glob silently returns false (no error), mirroring the behavior of
+// `pkg/list/extract/components.go:UniqueComponents`.
+func matchStackPattern(stackName, pattern string) bool {
+	if pattern == "" {
+		return true
+	}
+	matched, err := path.Match(filepath.ToSlash(pattern), filepath.ToSlash(stackName))
+	if err != nil {
+		return false
+	}
+	return matched
+}
+
+// filterStacksMapByPattern returns a new map containing only the entries of
+// stacksMap whose stack name matches the glob pattern. When pattern is empty
+// the original map is returned unchanged (no allocation).
+func filterStacksMapByPattern(stacksMap map[string]any, pattern string) map[string]any {
+	if pattern == "" {
+		return stacksMap
+	}
+	filtered := make(map[string]any, len(stacksMap))
+	for stackName, stackConfig := range stacksMap {
+		if matchStackPattern(stackName, pattern) {
+			filtered[stackName] = stackConfig
+		}
+	}
+	return filtered
+}
+
+// collectInstances collects all instances from the stacks map. When
+// stackPattern is non-empty, stacks whose names do not match the glob are
+// skipped.
+func collectInstances(stacksMap map[string]interface{}, stackPattern string) []schema.Instance {
 	var instances []schema.Instance
 	for stackName, stackConfig := range stacksMap {
+		if !matchStackPattern(stackName, stackPattern) {
+			continue
+		}
 		if stackInstances := processStackComponents(stackName, stackConfig); stackInstances != nil {
 			instances = append(instances, stackInstances...)
 		}
@@ -397,6 +453,8 @@ func processInstancesWithDeps(
 	stacksProcessor e.StacksProcessor,
 	authManager auth.AuthManager,
 	processTemplates, processYamlFunctions bool,
+	skip []string,
+	stackPattern string,
 ) ([]schema.Instance, error) {
 	stacksMap, err := stacksProcessor.ExecuteDescribeStacks(
 		atmosConfig, "", nil, nil, nil,
@@ -404,7 +462,7 @@ func processInstancesWithDeps(
 		processTemplates,
 		processYamlFunctions,
 		false, // includeEmptyStacks
-		nil,   // skip
+		skip,
 		authManager,
 	)
 	if err != nil {
@@ -412,8 +470,8 @@ func processInstancesWithDeps(
 		return nil, errors.Join(errUtils.ErrExecuteDescribeStacks, err)
 	}
 
-	// Collect instances.
-	instances := collectInstances(stacksMap)
+	// Collect instances, applying the --stack glob filter when present.
+	instances := collectInstances(stacksMap, stackPattern)
 
 	// Sort instances.
 	instances = sortInstances(instances)
@@ -427,8 +485,10 @@ func processInstances(
 	atmosConfig *schema.AtmosConfiguration,
 	authManager auth.AuthManager,
 	processTemplates, processYamlFunctions bool,
+	skip []string,
+	stackPattern string,
 ) ([]schema.Instance, error) {
-	return processInstancesWithDeps(atmosConfig, &e.DefaultStacksProcessor{}, authManager, processTemplates, processYamlFunctions)
+	return processInstancesWithDeps(atmosConfig, &e.DefaultStacksProcessor{}, authManager, processTemplates, processYamlFunctions, skip, stackPattern)
 }
 
 // ExecuteListInstancesCmd executes the list instances command.
@@ -445,23 +505,22 @@ func ExecuteListInstancesCmd(opts *InstancesCommandOptions) error {
 		return errors.Join(errUtils.ErrFailedToInitConfig, err)
 	}
 
-	// Get flags.
-	upload, err := opts.Cmd.Flags().GetBool("upload")
-	if err != nil {
-		log.Error(errUtils.ErrParseFlag.Error(), "flag", "upload", "error", err)
-		return errors.Join(errUtils.ErrParseFlag, err)
-	}
-
-	formatFlag, err := opts.Cmd.Flags().GetString("format")
-	if err != nil {
-		log.Error(errUtils.ErrParseFlag.Error(), "flag", "format", "error", err)
-		return errors.Join(errUtils.ErrParseFlag, err)
-	}
+	// Read flags from the options struct (populated via viper, so env vars
+	// like ATMOS_FORMAT / ATMOS_UPLOAD are honored). Reading from
+	// opts.Cmd.Flags() here would bypass viper precedence.
+	upload := opts.Upload
+	formatFlag := opts.Format
 
 	// Handle matrix format specially - it bypasses the normal rendering pipeline.
 	if formatFlag == string(format.FormatMatrix) {
 		if upload {
 			return fmt.Errorf("%w: --upload is not supported with --format=matrix", errUtils.ErrInvalidFlag)
+		}
+		if opts.FilterSpec != "" {
+			return fmt.Errorf("%w: --filter is not supported with --format=matrix", errUtils.ErrInvalidFlag)
+		}
+		if opts.Query != "" {
+			return fmt.Errorf("%w: --query is not supported with --format=matrix", errUtils.ErrInvalidFlag)
 		}
 		return executeMatrixFormat(&atmosConfig, opts)
 	}
@@ -474,9 +533,17 @@ func ExecuteListInstancesCmd(opts *InstancesCommandOptions) error {
 	// Handle tree format specially - branch before calling processInstances to avoid double processing.
 	log.Trace("Checking format flag", "format_flag", formatFlag, "format_tree", format.FormatTree, "match", formatFlag == string(format.FormatTree))
 	if formatFlag == string(format.FormatTree) {
-		// Tree format does not support --upload.
+		// Tree format does not support --upload, --filter, or --query because it
+		// renders the import hierarchy rather than per-row values; row-shaped
+		// transforms have no meaningful target here.
 		if upload {
 			return fmt.Errorf("%w: --upload is not supported with --format=tree", errUtils.ErrInvalidFlag)
+		}
+		if opts.FilterSpec != "" {
+			return fmt.Errorf("%w: --filter is not supported with --format=tree", errUtils.ErrInvalidFlag)
+		}
+		if opts.Query != "" {
+			return fmt.Errorf("%w: --query is not supported with --format=tree", errUtils.ErrInvalidFlag)
 		}
 
 		// Enable provenance tracking to capture import chains.
@@ -496,13 +563,18 @@ func ExecuteListInstancesCmd(opts *InstancesCommandOptions) error {
 			opts.ProcessTemplates,
 			opts.ProcessFunctions,
 			false, // includeEmptyStacks
-			nil,   // skip
+			opts.Skip,
 			opts.AuthManager,
 		)
 		if err != nil {
 			log.Error(errUtils.ErrExecuteDescribeStacks.Error(), "error", err)
 			return errors.Join(errUtils.ErrExecuteDescribeStacks, err)
 		}
+
+		// Apply --stack glob filter before provenance resolution so the tree
+		// only contains matching stacks. Provenance keeps the full merge-context
+		// cache so import chains for matching stacks still resolve correctly.
+		stacksMap = filterStacksMapByPattern(stacksMap, opts.Stack)
 
 		// Resolve import trees using provenance system.
 		importTrees, err := importresolver.ResolveImportTreeFromProvenance(stacksMap, &atmosConfig)
@@ -517,7 +589,7 @@ func ExecuteListInstancesCmd(opts *InstancesCommandOptions) error {
 	}
 
 	// For non-tree formats, process instances normally.
-	instances, err := processInstances(&atmosConfig, opts.AuthManager, opts.ProcessTemplates, opts.ProcessFunctions)
+	instances, err := processInstances(&atmosConfig, opts.AuthManager, opts.ProcessTemplates, opts.ProcessFunctions, opts.Skip, opts.Stack)
 	if err != nil {
 		log.Error(errUtils.ErrProcessInstances.Error(), "error", err)
 		return errors.Join(errUtils.ErrProcessInstances, err)
@@ -540,9 +612,19 @@ func ExecuteListInstancesCmd(opts *InstancesCommandOptions) error {
 	}
 
 	// Build filters from filter specification.
-	filters, err := buildInstanceFilters(opts.FilterSpec)
+	filters, err := buildInstanceFilters(opts.FilterSpec, &atmosConfig)
 	if err != nil {
 		return fmt.Errorf("failed to build filters: %w", err)
+	}
+
+	// Append the --query projector after filters so it rewrites only the
+	// rows that survived predicate filtering.
+	if opts.Query != "" {
+		proj, err := filter.NewYQProjector(opts.Query, &atmosConfig)
+		if err != nil {
+			return fmt.Errorf("failed to build query projector: %w", err)
+		}
+		filters = append(filters, proj)
 	}
 
 	// Build sorters from sort specification.
@@ -635,13 +717,17 @@ func executeMatrixFormat(atmosConfig *schema.AtmosConfiguration, opts *Instances
 		opts.ProcessTemplates,
 		opts.ProcessFunctions,
 		false, // includeEmptyStacks
-		nil,   // skip
+		opts.Skip,
 		opts.AuthManager,
 	)
 	if err != nil {
 		log.Error(errUtils.ErrExecuteDescribeStacks.Error(), "error", err)
 		return errors.Join(errUtils.ErrExecuteDescribeStacks, err)
 	}
+
+	// Apply --stack glob filter before flattening so matrix entries only
+	// reflect matching stacks.
+	stacksMap = filterStacksMapByPattern(stacksMap, opts.Stack)
 
 	entries := extract.StacksMatrixEntries(stacksMap)
 
@@ -654,13 +740,18 @@ func executeMatrixFormat(atmosConfig *schema.AtmosConfiguration, opts *Instances
 	return matrix.WriteOutput(entries, outputFile)
 }
 
-// buildInstanceFilters creates filters from filter specification.
-// The filter spec format is currently undefined for instances,
-// so this returns an empty filter list for now.
-func buildInstanceFilters(filterSpec string) ([]filter.Filter, error) {
-	// TODO: Implement filter parsing when filter spec format is defined.
-	// For now, return empty filter list.
-	return nil, nil
+// buildInstanceFilters creates filters from a `--filter` specification. The
+// spec is interpreted as a YQ expression evaluated per row; rows for which
+// the expression is truthy are kept. An empty spec produces no filters.
+func buildInstanceFilters(filterSpec string, atmosConfig *schema.AtmosConfiguration) ([]filter.Filter, error) {
+	if filterSpec == "" {
+		return nil, nil
+	}
+	f, err := filter.NewYQPredicateFilter(filterSpec, atmosConfig)
+	if err != nil {
+		return nil, err
+	}
+	return []filter.Filter{f}, nil
 }
 
 // buildInstanceSorters creates sorters from sort specification.

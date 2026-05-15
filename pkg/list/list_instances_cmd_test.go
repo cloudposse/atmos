@@ -114,7 +114,7 @@ func TestListInstancesCommandLogic(t *testing.T) {
 				t.Fatalf("unexpected error: %v", err)
 			}
 
-			list := collectInstances(stacks)
+			list := collectInstances(stacks, "")
 			list = sortInstances(list)
 			assert.Equal(t, tc.expectedListSize, len(list))
 

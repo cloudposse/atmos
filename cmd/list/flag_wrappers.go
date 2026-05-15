@@ -419,13 +419,14 @@ func WithExcludeLockedFlag(options *[]flags.Option) {
 }
 
 // WithSkipFlag adds skip YAML functions flag.
-// Used by: affected.
+// Used by: affected, instances, components, metadata, sources, stacks.
+// ATMOS_AFFECTED_SKIP is preserved as a backward-compatible alias for `list affected`.
 func WithSkipFlag(options *[]flags.Option) {
 	defer perf.Track(nil, "list.WithSkipFlag")()
 
 	*options = append(*options,
-		flags.WithStringSliceFlag("skip", "", nil, "Skip executing specific YAML functions"),
-		flags.WithEnvVars("skip", "ATMOS_AFFECTED_SKIP"),
+		flags.WithStringSliceFlag("skip", "", nil, "Skip executing a YAML function in the Atmos stack manifests when executing the command"),
+		flags.WithEnvVars("skip", "ATMOS_SKIP", "ATMOS_AFFECTED_SKIP"),
 	)
 }
 

@@ -247,6 +247,22 @@ func TestWithProcessFunctionsFlag(t *testing.T) {
 	assert.Contains(t, flag.Usage, "YAML functions processing")
 }
 
+// TestWithSkipFlag verifies skip flag registration.
+func TestWithSkipFlag(t *testing.T) {
+	parser := NewListParser(WithSkipFlag)
+	assert.NotNil(t, parser)
+
+	cmd := &cobra.Command{Use: "test"}
+	parser.RegisterFlags(cmd)
+
+	// Verify flag exists.
+	flag := cmd.Flags().Lookup("skip")
+	require.NotNil(t, flag, "skip flag should be registered")
+	assert.Equal(t, "[]", flag.DefValue)
+	assert.Equal(t, "stringSlice", flag.Value.Type())
+	assert.Contains(t, flag.Usage, "Skip executing a YAML function")
+}
+
 // TestWithUploadFlag verifies upload flag registration.
 func TestWithUploadFlag(t *testing.T) {
 	parser := NewListParser(WithUploadFlag)
@@ -307,8 +323,9 @@ func TestNewListParser_SelectiveFlagComposition(t *testing.T) {
 				WithTypeFlag,
 				WithEnabledFlag,
 				WithLockedFlag,
+				WithSkipFlag,
 			},
-			expectedFlags: []string{"format", "columns", "sort", "filter", "stack", "type", "enabled", "locked"},
+			expectedFlags: []string{"format", "columns", "sort", "filter", "stack", "type", "enabled", "locked", "skip"},
 			missingFlags:  []string{"component", "file", "max-columns", "query", "upload"},
 		},
 		{
@@ -318,9 +335,24 @@ func TestNewListParser_SelectiveFlagComposition(t *testing.T) {
 				WithStacksColumnsFlag,
 				WithSortFlag,
 				WithComponentFlag,
+				WithSkipFlag,
 			},
-			expectedFlags: []string{"format", "columns", "sort", "component"},
+			expectedFlags: []string{"format", "columns", "sort", "component", "skip"},
 			missingFlags:  []string{"stack", "filter", "type", "enabled", "locked"},
+		},
+		{
+			name: "instances command (skip wired)",
+			builders: []func(*[]flags.Option){
+				WithFormatFlag,
+				WithInstancesColumnsFlag,
+				WithStackFlag,
+				WithUploadFlag,
+				WithProcessTemplatesFlag,
+				WithProcessFunctionsFlag,
+				WithSkipFlag,
+			},
+			expectedFlags: []string{"format", "columns", "stack", "upload", "process-templates", "process-functions", "skip"},
+			missingFlags:  []string{"component", "type", "enabled", "locked"},
 		},
 		{
 			name: "workflows command",
@@ -428,6 +460,7 @@ func TestFlagDefaultValues(t *testing.T) {
 		{"abstract false", WithAbstractFlag, "abstract", "false"},
 		{"process-templates true", WithProcessTemplatesFlag, "process-templates", "true"},
 		{"process-functions true", WithProcessFunctionsFlag, "process-functions", "true"},
+		{"skip empty", WithSkipFlag, "skip", "[]"},
 		{"upload false", WithUploadFlag, "upload", "false"},
 		{"max-columns zero", WithMaxColumnsFlag, "max-columns", "0"},
 	}

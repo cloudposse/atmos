@@ -107,6 +107,7 @@ type MetadataOptions struct {
 	AuthManager      auth.AuthManager
 	ProcessTemplates bool
 	ProcessFunctions bool
+	Skip             []string
 }
 
 // ExecuteListMetadataCmd executes the list metadata command using the renderer pipeline.
@@ -118,7 +119,7 @@ func ExecuteListMetadataCmd(info *schema.ConfigAndStacksInfo, cmd *cobra.Command
 	}
 
 	// Process instances (same as list instances, but we'll extract metadata).
-	instances, err := processInstances(&atmosConfig, opts.AuthManager, opts.ProcessTemplates, opts.ProcessFunctions)
+	instances, err := processInstances(&atmosConfig, opts.AuthManager, opts.ProcessTemplates, opts.ProcessFunctions, opts.Skip, opts.Stack)
 	if err != nil {
 		return errors.Join(errUtils.ErrProcessInstances, err)
 	}

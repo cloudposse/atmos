@@ -162,7 +162,7 @@ func TestCollectInstancesEdgeCases(t *testing.T) {
 				"components": "invalid", // Invalid components.
 			},
 		}
-		result := collectInstances(stacks)
+		result := collectInstances(stacks, "")
 		// Should only process stack1.
 		assert.Len(t, result, 1)
 		assert.Equal(t, "vpc", result[0].Component)
@@ -175,7 +175,7 @@ func TestCollectInstancesEdgeCases(t *testing.T) {
 				"components": map[string]interface{}{},
 			},
 		}
-		result := collectInstances(stacks)
+		result := collectInstances(stacks, "")
 		assert.Empty(t, result)
 	})
 }
