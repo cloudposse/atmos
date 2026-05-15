@@ -1121,14 +1121,13 @@ func postProcessTemplatesAndYamlFunctions(configAndStacksInfo *schema.ConfigAndS
 		configAndStacksInfo.ComponentProvidersSection = i
 	}
 
-	// Restore required_providers section (DEV-3124).
-	if rawRequiredProviders, ok := configAndStacksInfo.ComponentSection[cfg.RequiredProvidersSectionName].(map[string]any); ok {
-		configAndStacksInfo.RequiredProviders = make(map[string]map[string]any)
-		for k, v := range rawRequiredProviders {
-			if providerConfig, ok2 := v.(map[string]any); ok2 {
-				configAndStacksInfo.RequiredProviders[k] = providerConfig
-			}
-		}
+	// Restore required_providers section (DEV-3124). Delegate to the shared
+	// extractRequiredProviders helper so the conversion is defined in exactly one
+	// place — keeps the type-tolerance (map[string]map[string]any vs.
+	// map[string]any) and the silent skipping of non-object entries consistent
+	// across the extract and post-process paths.
+	if restored := extractRequiredProviders(configAndStacksInfo.ComponentSection); restored != nil {
+		configAndStacksInfo.RequiredProviders = restored
 	}
 
 	// Restore required_version section (DEV-3124).
