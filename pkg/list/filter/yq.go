@@ -120,7 +120,7 @@ func projectionRow(original map[string]any, result any) map[string]any {
 		if len(v) == 0 {
 			return nil
 		}
-		row := make(map[string]any, len(v)+2)
+		row := make(map[string]any, len(v))
 		// Preserve stack/component identity for column resolution.
 		if s, ok := original[keyStack]; ok {
 			row[keyStack] = s

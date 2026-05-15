@@ -28,7 +28,7 @@ func BenchmarkCollectInstances(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_ = collectInstances(stacksMap, "")
+		_, _ = collectInstances(stacksMap, "")
 	}
 }
 

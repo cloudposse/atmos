@@ -8,6 +8,7 @@ import (
 const (
 	// Flag names.
 	flagColumns = "columns"
+	flagSkip    = "skip"
 
 	// Environment variables.
 	envListColumns = "ATMOS_LIST_COLUMNS"
@@ -452,15 +453,26 @@ func WithExcludeLockedFlag(options *[]flags.Option) {
 }
 
 // WithSkipFlag adds skip YAML functions flag.
-// Used by: affected, instances, components, metadata, sources, stacks.
-// ATMOS_AFFECTED_SKIP is preserved as a backward-compatible alias for `list affected`.
+// Used by: instances, components, metadata, sources, stacks.
 func WithSkipFlag(options *[]flags.Option) {
 	defer perf.Track(nil, "list.WithSkipFlag")()
 
 	*options = append(
 		*options,
-		flags.WithStringSliceFlag("skip", "", nil, "Skip executing a YAML function in the Atmos stack manifests when executing the command"),
-		flags.WithEnvVars("skip", "ATMOS_SKIP", "ATMOS_AFFECTED_SKIP"),
+		flags.WithStringSliceFlag(flagSkip, "", nil, "Skip executing a YAML function in the Atmos stack manifests when executing the command"),
+		flags.WithEnvVars(flagSkip, "ATMOS_SKIP"),
+	)
+}
+
+// WithAffectedSkipFlag adds skip YAML functions flag for list affected.
+// ATMOS_AFFECTED_SKIP is preserved as a backward-compatible alias for `list affected`.
+func WithAffectedSkipFlag(options *[]flags.Option) {
+	defer perf.Track(nil, "list.WithAffectedSkipFlag")()
+
+	*options = append(
+		*options,
+		flags.WithStringSliceFlag(flagSkip, "", nil, "Skip executing a YAML function in the Atmos stack manifests when executing the command"),
+		flags.WithEnvVars(flagSkip, "ATMOS_SKIP", "ATMOS_AFFECTED_SKIP"),
 	)
 }
 

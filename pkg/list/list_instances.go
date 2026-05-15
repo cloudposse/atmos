@@ -169,50 +169,77 @@ func processStackComponents(stackName string, stackConfig interface{}) []schema.
 
 // matchStackPattern reports whether stackName matches the glob pattern using
 // path.Match semantics. Both inputs are normalized with filepath.ToSlash so
-// behavior is consistent across platforms. An empty pattern matches everything;
-// an invalid glob silently returns false (no error), mirroring the behavior of
-// `pkg/list/extract/components.go:UniqueComponents`.
-func matchStackPattern(stackName, pattern string) bool {
+// behavior is consistent across platforms. An empty pattern matches everything.
+func matchStackPattern(stackName, pattern string) (bool, error) {
 	if pattern == "" {
-		return true
+		return true, nil
 	}
 	matched, err := path.Match(filepath.ToSlash(pattern), filepath.ToSlash(stackName))
 	if err != nil {
-		return false
+		return false, invalidStackPatternError(pattern, err)
 	}
-	return matched
+	return matched, nil
+}
+
+func validateStackPattern(pattern string) error {
+	if pattern == "" {
+		return nil
+	}
+	if _, err := path.Match(filepath.ToSlash(pattern), ""); err != nil {
+		return invalidStackPatternError(pattern, err)
+	}
+	return nil
+}
+
+func invalidStackPatternError(pattern string, err error) error {
+	return fmt.Errorf("%w: invalid --stack pattern %q: %w", errUtils.ErrInvalidFlag, pattern, err)
 }
 
 // filterStacksMapByPattern returns a new map containing only the entries of
 // stacksMap whose stack name matches the glob pattern. When pattern is empty
 // the original map is returned unchanged (no allocation).
-func filterStacksMapByPattern(stacksMap map[string]any, pattern string) map[string]any {
+func filterStacksMapByPattern(stacksMap map[string]any, pattern string) (map[string]any, error) {
 	if pattern == "" {
-		return stacksMap
+		return stacksMap, nil
+	}
+	if err := validateStackPattern(pattern); err != nil {
+		return nil, err
 	}
 	filtered := make(map[string]any, len(stacksMap))
 	for stackName, stackConfig := range stacksMap {
-		if matchStackPattern(stackName, pattern) {
+		matched, err := matchStackPattern(stackName, pattern)
+		if err != nil {
+			return nil, err
+		}
+		if matched {
 			filtered[stackName] = stackConfig
 		}
 	}
-	return filtered
+	return filtered, nil
 }
 
 // collectInstances collects all instances from the stacks map. When
 // stackPattern is non-empty, stacks whose names do not match the glob are
 // skipped.
-func collectInstances(stacksMap map[string]interface{}, stackPattern string) []schema.Instance {
+func collectInstances(stacksMap map[string]interface{}, stackPattern string) ([]schema.Instance, error) {
+	if err := validateStackPattern(stackPattern); err != nil {
+		return nil, err
+	}
+
 	var instances []schema.Instance
 	for stackName, stackConfig := range stacksMap {
-		if !matchStackPattern(stackName, stackPattern) {
+		matched, err := matchStackPattern(stackName, stackPattern)
+		if err != nil {
+			return nil, err
+		}
+		if !matched {
 			continue
 		}
 		if stackInstances := processStackComponents(stackName, stackConfig); stackInstances != nil {
 			instances = append(instances, stackInstances...)
 		}
 	}
-	return instances
+	return instances, nil
 }
 
 // createInstance creates an instance from the component configuration.
@@ -471,7 +498,10 @@ func processInstancesWithDeps(
 	}
 
 	// Collect instances, applying the --stack glob filter when present.
-	instances := collectInstances(stacksMap, stackPattern)
+	instances, err := collectInstances(stacksMap, stackPattern)
+	if err != nil {
+		return nil, err
+	}
 
 	// Sort instances.
 	instances = sortInstances(instances)
@@ -574,7 +604,10 @@ func ExecuteListInstancesCmd(opts *InstancesCommandOptions) error {
 		// Apply --stack glob filter before provenance resolution so the tree
 		// only contains matching stacks. Provenance keeps the full merge-context
 		// cache so import chains for matching stacks still resolve correctly.
-		stacksMap = filterStacksMapByPattern(stacksMap, opts.Stack)
+		stacksMap, err = filterStacksMapByPattern(stacksMap, opts.Stack)
+		if err != nil {
+			return err
+		}
 
 		// Resolve import trees using provenance system.
 		importTrees, err := importresolver.ResolveImportTreeFromProvenance(stacksMap, &atmosConfig)
@@ -727,7 +760,10 @@ func executeMatrixFormat(atmosConfig *schema.AtmosConfiguration, opts *Instances
 
 	// Apply --stack glob filter before flattening so matrix entries only
 	// reflect matching stacks.
-	stacksMap = filterStacksMapByPattern(stacksMap, opts.Stack)
+	stacksMap, err = filterStacksMapByPattern(stacksMap, opts.Stack)
+	if err != nil {
+		return err
+	}
 
 	entries := extract.StacksMatrixEntries(stacksMap)
 

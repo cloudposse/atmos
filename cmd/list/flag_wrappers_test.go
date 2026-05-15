@@ -263,6 +263,21 @@ func TestWithSkipFlag(t *testing.T) {
 	assert.Contains(t, flag.Usage, "Skip executing a YAML function")
 }
 
+// TestWithAffectedSkipFlag verifies skip flag registration for list affected.
+func TestWithAffectedSkipFlag(t *testing.T) {
+	parser := NewListParser(WithAffectedSkipFlag)
+	assert.NotNil(t, parser)
+
+	cmd := &cobra.Command{Use: "test"}
+	parser.RegisterFlags(cmd)
+
+	flag := cmd.Flags().Lookup("skip")
+	require.NotNil(t, flag, "skip flag should be registered")
+	assert.Equal(t, "[]", flag.DefValue)
+	assert.Equal(t, "stringSlice", flag.Value.Type())
+	assert.Contains(t, flag.Usage, "Skip executing a YAML function")
+}
+
 // TestWithUploadFlag verifies upload flag registration.
 func TestWithUploadFlag(t *testing.T) {
 	parser := NewListParser(WithUploadFlag)
@@ -425,6 +440,8 @@ func TestFlagEnvironmentVariableBinding(t *testing.T) {
 		{"component", WithComponentFlag, "component", "ATMOS_COMPONENT"},
 		{"delimiter", WithDelimiterFlag, "delimiter", "ATMOS_LIST_DELIMITER"},
 		{"query", WithQueryFlag, "query", "ATMOS_LIST_QUERY"},
+		{"skip", WithSkipFlag, "skip", "ATMOS_SKIP"},
+		{"affected skip", WithAffectedSkipFlag, "skip", "ATMOS_AFFECTED_SKIP"},
 	}
 
 	for _, tt := range tests {
@@ -445,6 +462,36 @@ func TestFlagEnvironmentVariableBinding(t *testing.T) {
 	}
 }
 
+func TestSkipEnvVarScope(t *testing.T) {
+	t.Run("shared skip ignores affected legacy env var", func(t *testing.T) {
+		t.Setenv("ATMOS_AFFECTED_SKIP", "terraform.state")
+
+		v := viper.New()
+		parser := NewListParser(WithSkipFlag)
+		cmd := &cobra.Command{Use: "test"}
+		parser.RegisterFlags(cmd)
+
+		require.NoError(t, parser.BindToViper(v))
+		require.NoError(t, parser.BindFlagsToViper(cmd, v))
+
+		assert.Empty(t, v.GetStringSlice("skip"))
+	})
+
+	t.Run("affected skip honors affected legacy env var", func(t *testing.T) {
+		t.Setenv("ATMOS_AFFECTED_SKIP", "terraform.state")
+
+		v := viper.New()
+		parser := NewListParser(WithAffectedSkipFlag)
+		cmd := &cobra.Command{Use: "test"}
+		parser.RegisterFlags(cmd)
+
+		require.NoError(t, parser.BindToViper(v))
+		require.NoError(t, parser.BindFlagsToViper(cmd, v))
+
+		assert.Equal(t, []string{"terraform.state"}, v.GetStringSlice("skip"))
+	})
+}
+
 // TestFlagDefaultValues verifies default values for flags.
 func TestFlagDefaultValues(t *testing.T) {
 	tests := []struct {
@@ -461,6 +508,7 @@ func TestFlagDefaultValues(t *testing.T) {
 		{"process-templates true", WithProcessTemplatesFlag, "process-templates", "true"},
 		{"process-functions true", WithProcessFunctionsFlag, "process-functions", "true"},
 		{"skip empty", WithSkipFlag, "skip", "[]"},
+		{"affected skip empty", WithAffectedSkipFlag, "skip", "[]"},
 		{"upload false", WithUploadFlag, "upload", "false"},
 		{"max-columns zero", WithMaxColumnsFlag, "max-columns", "0"},
 	}
