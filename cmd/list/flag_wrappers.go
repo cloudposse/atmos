@@ -32,7 +32,8 @@ const (
 func WithFormatFlag(options *[]flags.Option) {
 	defer perf.Track(nil, "list.WithFormatFlag")()
 
-	*options = append(*options,
+	*options = append(
+		*options,
 		flags.WithStringFlag("format", "f", "", "Output format: table, json, yaml, csv, tsv, tree, matrix"),
 		flags.WithEnvVars("format", "ATMOS_LIST_FORMAT"),
 		flags.WithValidValues("format", "table", "json", "yaml", "csv", "tsv", "tree", "matrix"),
@@ -44,7 +45,8 @@ func WithFormatFlag(options *[]flags.Option) {
 func WithOutputFileFlag(options *[]flags.Option) {
 	defer perf.Track(nil, "list.WithOutputFileFlag")()
 
-	*options = append(*options,
+	*options = append(
+		*options,
 		flags.WithStringFlag("output-file", "o", "", "Write output to file in key=value format (for $GITHUB_OUTPUT)"),
 		flags.WithEnvVars("output-file", "ATMOS_LIST_OUTPUT_FILE"),
 	)
@@ -55,7 +57,8 @@ func WithOutputFileFlag(options *[]flags.Option) {
 func WithDelimiterFlag(options *[]flags.Option) {
 	defer perf.Track(nil, "list.WithDelimiterFlag")()
 
-	*options = append(*options,
+	*options = append(
+		*options,
 		flags.WithStringFlag("delimiter", "", "", "Delimiter for CSV/TSV output"),
 		flags.WithEnvVars("delimiter", "ATMOS_LIST_DELIMITER"),
 	)
@@ -67,7 +70,8 @@ func WithDelimiterFlag(options *[]flags.Option) {
 func WithInstancesColumnsFlag(options *[]flags.Option) {
 	defer perf.Track(nil, "list.WithInstancesColumnsFlag")()
 
-	*options = append(*options,
+	*options = append(
+		*options,
 		flags.WithStringSliceFlag(flagColumns, "", []string{}, descColumns),
 		flags.WithEnvVars(flagColumns, envListColumns),
 	)
@@ -79,7 +83,8 @@ func WithInstancesColumnsFlag(options *[]flags.Option) {
 func WithMetadataColumnsFlag(options *[]flags.Option) {
 	defer perf.Track(nil, "list.WithMetadataColumnsFlag")()
 
-	*options = append(*options,
+	*options = append(
+		*options,
 		flags.WithStringSliceFlag(flagColumns, "", []string{}, descColumns),
 		flags.WithEnvVars(flagColumns, envListColumns),
 	)
@@ -102,7 +107,8 @@ func WithComponentsColumnsFlag(options *[]flags.Option) {
 func WithStacksColumnsFlag(options *[]flags.Option) {
 	defer perf.Track(nil, "list.WithStacksColumnsFlag")()
 
-	*options = append(*options,
+	*options = append(
+		*options,
 		flags.WithStringSliceFlag(flagColumns, "", []string{}, descColumns),
 		flags.WithEnvVars(flagColumns, envListColumns),
 	)
@@ -114,7 +120,8 @@ func WithStacksColumnsFlag(options *[]flags.Option) {
 func WithWorkflowsColumnsFlag(options *[]flags.Option) {
 	defer perf.Track(nil, "list.WithWorkflowsColumnsFlag")()
 
-	*options = append(*options,
+	*options = append(
+		*options,
 		flags.WithStringSliceFlag(flagColumns, "", []string{}, descColumns),
 		flags.WithEnvVars(flagColumns, envListColumns),
 	)
@@ -126,7 +133,8 @@ func WithWorkflowsColumnsFlag(options *[]flags.Option) {
 func WithVendorColumnsFlag(options *[]flags.Option) {
 	defer perf.Track(nil, "list.WithVendorColumnsFlag")()
 
-	*options = append(*options,
+	*options = append(
+		*options,
 		flags.WithStringSliceFlag(flagColumns, "", []string{}, descColumns),
 		flags.WithEnvVars(flagColumns, envListColumns),
 	)
@@ -137,7 +145,8 @@ func WithVendorColumnsFlag(options *[]flags.Option) {
 func WithStackFlag(options *[]flags.Option) {
 	defer perf.Track(nil, "list.WithStackFlag")()
 
-	*options = append(*options,
+	*options = append(
+		*options,
 		flags.WithStringFlag("stack", "s", "", "Filter by stack pattern (glob, e.g., 'plat-*-prod')"),
 		flags.WithEnvVars("stack", "ATMOS_STACK"),
 	)
@@ -148,7 +157,8 @@ func WithStackFlag(options *[]flags.Option) {
 func WithFilterFlag(options *[]flags.Option) {
 	defer perf.Track(nil, "list.WithFilterFlag")()
 
-	*options = append(*options,
+	*options = append(
+		*options,
 		flags.WithStringFlag("filter", "", "", "Filter expression using YQ syntax"),
 		flags.WithEnvVars("filter", "ATMOS_LIST_FILTER"),
 	)
@@ -160,7 +170,8 @@ func WithFilterFlag(options *[]flags.Option) {
 func WithSortFlag(options *[]flags.Option) {
 	defer perf.Track(nil, "list.WithSortFlag")()
 
-	*options = append(*options,
+	*options = append(
+		*options,
 		flags.WithStringFlag("sort", "", "", "Sort by column:order (e.g., 'stack:asc,component:desc')"),
 		flags.WithEnvVars("sort", "ATMOS_LIST_SORT"),
 	)
@@ -172,7 +183,8 @@ func WithSortFlag(options *[]flags.Option) {
 func WithEnabledFlag(options *[]flags.Option) {
 	defer perf.Track(nil, "list.WithEnabledFlag")()
 
-	*options = append(*options,
+	*options = append(
+		*options,
 		flags.WithBoolFlag("enabled", "", false, "Filter by enabled status (omit for all, --enabled=true for enabled only)"),
 		flags.WithEnvVars("enabled", "ATMOS_COMPONENT_ENABLED"),
 	)
@@ -184,7 +196,8 @@ func WithEnabledFlag(options *[]flags.Option) {
 func WithLockedFlag(options *[]flags.Option) {
 	defer perf.Track(nil, "list.WithLockedFlag")()
 
-	*options = append(*options,
+	*options = append(
+		*options,
 		flags.WithBoolFlag("locked", "", false, "Filter by locked status (omit for all, --locked=true for locked only)"),
 		flags.WithEnvVars("locked", "ATMOS_COMPONENT_LOCKED"),
 	)
@@ -196,7 +209,8 @@ func WithLockedFlag(options *[]flags.Option) {
 func WithTypeFlag(options *[]flags.Option) {
 	defer perf.Track(nil, "list.WithTypeFlag")()
 
-	*options = append(*options,
+	*options = append(
+		*options,
 		flags.WithStringFlag("type", "t", "real", "Component type: real, abstract, all"),
 		flags.WithEnvVars("type", "ATMOS_COMPONENT_TYPE"),
 		flags.WithValidValues("type", "real", "abstract", "all"),
@@ -208,7 +222,8 @@ func WithTypeFlag(options *[]flags.Option) {
 func WithComponentFlag(options *[]flags.Option) {
 	defer perf.Track(nil, "list.WithComponentFlag")()
 
-	*options = append(*options,
+	*options = append(
+		*options,
 		flags.WithStringFlag("component", "c", "", "Filter stacks by component name"),
 		flags.WithEnvVars("component", "ATMOS_COMPONENT"),
 	)
@@ -219,7 +234,8 @@ func WithComponentFlag(options *[]flags.Option) {
 func WithFileFlag(options *[]flags.Option) {
 	defer perf.Track(nil, "list.WithFileFlag")()
 
-	*options = append(*options,
+	*options = append(
+		*options,
 		flags.WithStringFlag("file", "", "", "Filter workflows by file path"),
 		flags.WithEnvVars("file", "ATMOS_WORKFLOW_FILE"),
 	)
@@ -230,7 +246,8 @@ func WithFileFlag(options *[]flags.Option) {
 func WithMaxColumnsFlag(options *[]flags.Option) {
 	defer perf.Track(nil, "list.WithMaxColumnsFlag")()
 
-	*options = append(*options,
+	*options = append(
+		*options,
 		flags.WithIntFlag("max-columns", "", 0, "Maximum number of columns to display (0 = no limit)"),
 		flags.WithEnvVars("max-columns", "ATMOS_LIST_MAX_COLUMNS"),
 	)
@@ -241,7 +258,8 @@ func WithMaxColumnsFlag(options *[]flags.Option) {
 func WithQueryFlag(options *[]flags.Option) {
 	defer perf.Track(nil, "list.WithQueryFlag")()
 
-	*options = append(*options,
+	*options = append(
+		*options,
 		flags.WithStringFlag("query", "q", "", "YQ expression to filter values (e.g., '.vars.region')"),
 		flags.WithEnvVars("query", "ATMOS_LIST_QUERY"),
 	)
@@ -252,7 +270,8 @@ func WithQueryFlag(options *[]flags.Option) {
 func WithAbstractFlag(options *[]flags.Option) {
 	defer perf.Track(nil, "list.WithAbstractFlag")()
 
-	*options = append(*options,
+	*options = append(
+		*options,
 		flags.WithBoolFlag("abstract", "", false, "Include abstract components in output"),
 		flags.WithEnvVars("abstract", "ATMOS_ABSTRACT"),
 	)
@@ -265,7 +284,8 @@ func WithAbstractFlag(options *[]flags.Option) {
 func WithProcessTemplatesFlag(options *[]flags.Option) {
 	defer perf.Track(nil, "list.WithProcessTemplatesFlag")()
 
-	*options = append(*options,
+	*options = append(
+		*options,
 		flags.WithBoolFlag("process-templates", "", true, "Enable/disable Go template processing in Atmos stack manifests when executing the command"),
 		flags.WithEnvVars("process-templates", "ATMOS_PROCESS_TEMPLATES"),
 	)
@@ -280,7 +300,8 @@ func WithProcessTemplatesFlag(options *[]flags.Option) {
 func WithProcessFunctionsFlag(options *[]flags.Option) {
 	defer perf.Track(nil, "list.WithProcessFunctionsFlag")()
 
-	*options = append(*options,
+	*options = append(
+		*options,
 		flags.WithBoolFlag("process-functions", "", true, "Enable/disable YAML functions processing in Atmos stack manifests when executing the command"),
 		flags.WithEnvVars("process-functions", "ATMOS_PROCESS_FUNCTIONS"),
 	)
@@ -291,7 +312,8 @@ func WithProcessFunctionsFlag(options *[]flags.Option) {
 func WithUploadFlag(options *[]flags.Option) {
 	defer perf.Track(nil, "list.WithUploadFlag")()
 
-	*options = append(*options,
+	*options = append(
+		*options,
 		flags.WithBoolFlag("upload", "", false, "Upload instances to Atmos Pro API"),
 		flags.WithEnvVars("upload", "ATMOS_UPLOAD"),
 	)
@@ -302,7 +324,8 @@ func WithUploadFlag(options *[]flags.Option) {
 func WithProvenanceFlag(options *[]flags.Option) {
 	defer perf.Track(nil, "list.WithProvenanceFlag")()
 
-	*options = append(*options,
+	*options = append(
+		*options,
 		flags.WithBoolFlag("provenance", "", false, "Show import provenance (only works with --format=tree)"),
 		flags.WithEnvVars("provenance", "ATMOS_PROVENANCE"),
 	)
@@ -313,7 +336,8 @@ func WithProvenanceFlag(options *[]flags.Option) {
 func WithAffectedColumnsFlag(options *[]flags.Option) {
 	defer perf.Track(nil, "list.WithAffectedColumnsFlag")()
 
-	*options = append(*options,
+	*options = append(
+		*options,
 		flags.WithStringSliceFlag(flagColumns, "", []string{}, descColumns),
 		flags.WithEnvVars(flagColumns, envListColumns),
 	)
@@ -324,7 +348,8 @@ func WithAffectedColumnsFlag(options *[]flags.Option) {
 func WithAliasesColumnsFlag(options *[]flags.Option) {
 	defer perf.Track(nil, "list.WithAliasesColumnsFlag")()
 
-	*options = append(*options,
+	*options = append(
+		*options,
 		flags.WithStringSliceFlag(flagColumns, "", []string{}, descColumns),
 		flags.WithEnvVars(flagColumns, envListColumns),
 	)
@@ -335,7 +360,8 @@ func WithAliasesColumnsFlag(options *[]flags.Option) {
 func WithRefFlag(options *[]flags.Option) {
 	defer perf.Track(nil, "list.WithRefFlag")()
 
-	*options = append(*options,
+	*options = append(
+		*options,
 		flags.WithStringFlag("ref", "", "", "Git reference with which to compare the current branch"),
 		flags.WithEnvVars("ref", "ATMOS_AFFECTED_REF"),
 	)
@@ -346,7 +372,8 @@ func WithRefFlag(options *[]flags.Option) {
 func WithSHAFlag(options *[]flags.Option) {
 	defer perf.Track(nil, "list.WithSHAFlag")()
 
-	*options = append(*options,
+	*options = append(
+		*options,
 		flags.WithStringFlag("sha", "", "", "Git commit SHA with which to compare the current branch"),
 		flags.WithEnvVars("sha", "ATMOS_AFFECTED_SHA"),
 	)
@@ -357,7 +384,8 @@ func WithSHAFlag(options *[]flags.Option) {
 func WithRepoPathFlag(options *[]flags.Option) {
 	defer perf.Track(nil, "list.WithRepoPathFlag")()
 
-	*options = append(*options,
+	*options = append(
+		*options,
 		flags.WithStringFlag("repo-path", "", "", "Filesystem path to the already cloned target repository"),
 		flags.WithEnvVars("repo-path", "ATMOS_AFFECTED_REPO_PATH"),
 	)
@@ -368,7 +396,8 @@ func WithRepoPathFlag(options *[]flags.Option) {
 func WithSSHKeyFlag(options *[]flags.Option) {
 	defer perf.Track(nil, "list.WithSSHKeyFlag")()
 
-	*options = append(*options,
+	*options = append(
+		*options,
 		flags.WithStringFlag("ssh-key", "", "", "Path to PEM-encoded private key to clone private repos using SSH"),
 		flags.WithEnvVars("ssh-key", "ATMOS_AFFECTED_SSH_KEY"),
 	)
@@ -379,7 +408,8 @@ func WithSSHKeyFlag(options *[]flags.Option) {
 func WithSSHKeyPasswordFlag(options *[]flags.Option) {
 	defer perf.Track(nil, "list.WithSSHKeyPasswordFlag")()
 
-	*options = append(*options,
+	*options = append(
+		*options,
 		flags.WithStringFlag("ssh-key-password", "", "", "Encryption password for the PEM-encoded private key"),
 		flags.WithEnvVars("ssh-key-password", "ATMOS_AFFECTED_SSH_KEY_PASSWORD"),
 	)
@@ -390,7 +420,8 @@ func WithSSHKeyPasswordFlag(options *[]flags.Option) {
 func WithCloneTargetRefFlag(options *[]flags.Option) {
 	defer perf.Track(nil, "list.WithCloneTargetRefFlag")()
 
-	*options = append(*options,
+	*options = append(
+		*options,
 		flags.WithBoolFlag("clone-target-ref", "", false, "Clone the target reference instead of checking it out"),
 		flags.WithEnvVars("clone-target-ref", "ATMOS_AFFECTED_CLONE_TARGET_REF"),
 	)
@@ -401,7 +432,8 @@ func WithCloneTargetRefFlag(options *[]flags.Option) {
 func WithIncludeDependentsFlag(options *[]flags.Option) {
 	defer perf.Track(nil, "list.WithIncludeDependentsFlag")()
 
-	*options = append(*options,
+	*options = append(
+		*options,
 		flags.WithBoolFlag("include-dependents", "", false, "Include dependent components and stacks"),
 		flags.WithEnvVars("include-dependents", "ATMOS_AFFECTED_INCLUDE_DEPENDENTS"),
 	)
@@ -412,7 +444,8 @@ func WithIncludeDependentsFlag(options *[]flags.Option) {
 func WithExcludeLockedFlag(options *[]flags.Option) {
 	defer perf.Track(nil, "list.WithExcludeLockedFlag")()
 
-	*options = append(*options,
+	*options = append(
+		*options,
 		flags.WithBoolFlag("exclude-locked", "", false, "Exclude locked components (metadata.locked: true)"),
 		flags.WithEnvVars("exclude-locked", "ATMOS_AFFECTED_EXCLUDE_LOCKED"),
 	)
@@ -424,7 +457,8 @@ func WithExcludeLockedFlag(options *[]flags.Option) {
 func WithSkipFlag(options *[]flags.Option) {
 	defer perf.Track(nil, "list.WithSkipFlag")()
 
-	*options = append(*options,
+	*options = append(
+		*options,
 		flags.WithStringSliceFlag("skip", "", nil, "Skip executing a YAML function in the Atmos stack manifests when executing the command"),
 		flags.WithEnvVars("skip", "ATMOS_SKIP", "ATMOS_AFFECTED_SKIP"),
 	)

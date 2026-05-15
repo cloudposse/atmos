@@ -248,7 +248,8 @@ func buildSourcesSorters(includeStack bool) []*listSort.Sorter {
 	if includeStack {
 		sorters = append(sorters, listSort.NewSorter("Stack", listSort.Ascending))
 	}
-	sorters = append(sorters,
+	sorters = append(
+		sorters,
 		listSort.NewSorter("Type", listSort.Ascending),
 		listSort.NewSorter("Component", listSort.Ascending),
 	)
@@ -278,7 +279,8 @@ func getSourcesListColumnsForContext(hasStack, hasFolderDiff bool) []column.Conf
 	}
 
 	// URI and Version always shown.
-	columns = append(columns,
+	columns = append(
+		columns,
 		column.Config{Name: "URI", Value: "{{ .uri }}"},
 		column.Config{Name: "Version", Value: "{{ .version }}"},
 	)
