@@ -465,6 +465,7 @@ func TestFlagEnvironmentVariableBinding(t *testing.T) {
 func TestSkipEnvVarScope(t *testing.T) {
 	t.Run("shared skip ignores affected legacy env var", func(t *testing.T) {
 		t.Setenv("ATMOS_AFFECTED_SKIP", "terraform.state")
+		t.Setenv("ATMOS_SKIP", "")
 
 		v := viper.New()
 		parser := NewListParser(WithSkipFlag)
@@ -479,6 +480,7 @@ func TestSkipEnvVarScope(t *testing.T) {
 
 	t.Run("affected skip honors affected legacy env var", func(t *testing.T) {
 		t.Setenv("ATMOS_AFFECTED_SKIP", "terraform.state")
+		t.Setenv("ATMOS_SKIP", "")
 
 		v := viper.New()
 		parser := NewListParser(WithAffectedSkipFlag)
