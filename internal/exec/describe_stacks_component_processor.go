@@ -8,6 +8,7 @@ import (
 
 	"github.com/go-viper/mapstructure/v2"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/auth"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	log "github.com/cloudposse/atmos/pkg/logger"
@@ -142,7 +143,7 @@ func (p *describeStacksProcessor) resolveComponentAuthManager(
 	}
 	resolved, createErr := resolver(p.atmosConfig, componentSection, componentName, stackName, p.authManager)
 	if createErr != nil {
-		return componentAuthManager, fmt.Errorf("failed to resolve auth for component %q in stack %q: %w", componentName, stackName, createErr)
+		return componentAuthManager, fmt.Errorf("%w: failed to resolve auth for component %q in stack %q: %w", errUtils.ErrAuthManager, componentName, stackName, createErr)
 	}
 	if resolved != nil {
 		return resolved, nil

@@ -7,6 +7,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/auth"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -293,6 +294,7 @@ func TestResolveComponentAuthManager_ResolverErrorIsFatal(t *testing.T) {
 	require.EqualValues(t, 1, spy.calls.Load(), "resolver should still be called on error path")
 	require.Error(t, err)
 	assert.ErrorIs(t, err, assert.AnError)
+	assert.ErrorIs(t, err, errUtils.ErrAuthManager, "error must be wrapped with ErrAuthManager sentinel")
 	assert.Contains(t, err.Error(), "test-component")
 	assert.Contains(t, err.Error(), "test-stack")
 	assert.Nil(t, got, "error path should return the parent AuthManager value alongside the error")
