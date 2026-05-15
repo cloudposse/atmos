@@ -56,7 +56,8 @@ func resolveAndInstallToolchainDeps(atmosConfig *schema.AtmosConfiguration, info
 func ExecuteTerraform(info schema.ConfigAndStacksInfo, opts ...ShellCommandOption) error {
 	defer perf.Track(nil, "exec.ExecuteTerraform")()
 
-	log.Debug("ExecuteTerraform entry",
+	log.Debug(
+		"ExecuteTerraform entry",
 		"SubCommand", info.SubCommand,
 		"ComponentFromArg", info.ComponentFromArg,
 		"FinalComponent", info.FinalComponent,

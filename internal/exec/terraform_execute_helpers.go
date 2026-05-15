@@ -308,7 +308,11 @@ func generateConfigFiles(atmosConfig *schema.AtmosConfiguration, info *schema.Co
 	if err := GenerateFilesForComponent(atmosConfig, info, workingDir); err != nil {
 		return err
 	}
-	return generateProviderOverrides(atmosConfig, info, workingDir)
+	if err := generateProviderOverrides(atmosConfig, info, workingDir); err != nil {
+		return err
+	}
+	// Generate required_providers (terraform_override.tf.json) for version pinning (DEV-3124).
+	return generateRequiredProviders(atmosConfig, info, workingDir)
 }
 
 // warnOnConflictingEnvVars inspects the current process environment for variables
