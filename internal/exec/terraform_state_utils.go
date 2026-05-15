@@ -58,7 +58,8 @@ func GetTerraformState(
 	if !skipCache {
 		backend, found := terraformStateCache.Load(stackSlug)
 		if found && backend != nil {
-			log.Debug("Cache hit",
+			log.Debug(
+				"Cache hit",
 				"function", yamlFunc,
 				cfg.ComponentStr, component,
 				cfg.StackStr, stack,
@@ -100,7 +101,8 @@ func GetTerraformState(
 		var err error
 		resolvedAuthMgr, err = resolveAuthManagerForNestedComponent(atmosConfig, component, stack, parentAuthMgr)
 		if err != nil {
-			log.Debug("Auth does not exist for nested component, using parent AuthManager",
+			log.Debug(
+				"Auth does not exist for nested component, using parent AuthManager",
 				"component", component,
 				"stack", stack,
 				"error", err,

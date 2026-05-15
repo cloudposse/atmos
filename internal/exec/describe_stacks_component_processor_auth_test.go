@@ -60,7 +60,8 @@ func TestShouldResolvePerComponentAuth(t *testing.T) {
 			t.Parallel()
 
 			got := shouldResolvePerComponentAuth(tc.processTemplates, tc.processYaml)
-			assert.Equal(t, tc.want, got,
+			assert.Equal(
+				t, tc.want, got,
 				"shouldResolvePerComponentAuth(processTemplates=%v, processYamlFunctions=%v)",
 				tc.processTemplates, tc.processYaml,
 			)
