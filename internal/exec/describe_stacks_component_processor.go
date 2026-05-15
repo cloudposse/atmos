@@ -66,6 +66,7 @@ type describeStacksProcessor struct {
 	componentTypes       []string
 	processTemplates     bool
 	processYamlFunctions bool
+	authDisabled         bool
 	includeEmptyStacks   bool
 	skip                 []string
 	authManager          auth.AuthManager
@@ -84,6 +85,26 @@ func newDescribeStacksProcessor( //nolint:revive // argument-limit: constructor 
 	skip []string,
 	authManager auth.AuthManager,
 ) *describeStacksProcessor {
+	return newDescribeStacksProcessorWithAuthDisabled(
+		atmosConfig,
+		filterByStack,
+		components, componentTypes, sections,
+		processTemplates, processYamlFunctions, includeEmptyStacks,
+		skip,
+		authManager,
+		false,
+	)
+}
+
+func newDescribeStacksProcessorWithAuthDisabled( //nolint:revive // argument-limit: constructor needs all config params.
+	atmosConfig *schema.AtmosConfiguration,
+	filterByStack string,
+	components, componentTypes, sections []string,
+	processTemplates, processYamlFunctions, includeEmptyStacks bool,
+	skip []string,
+	authManager auth.AuthManager,
+	authDisabled bool,
+) *describeStacksProcessor {
 	return &describeStacksProcessor{
 		atmosConfig:           atmosConfig,
 		filterByStack:         filterByStack,
@@ -92,6 +113,7 @@ func newDescribeStacksProcessor( //nolint:revive // argument-limit: constructor 
 		componentTypes:        componentTypes,
 		processTemplates:      processTemplates,
 		processYamlFunctions:  processYamlFunctions,
+		authDisabled:          authDisabled,
 		includeEmptyStacks:    includeEmptyStacks,
 		skip:                  skip,
 		authManager:           authManager,
@@ -129,7 +151,7 @@ func (p *describeStacksProcessor) resolveComponentAuthManager(
 	componentName, stackName string,
 ) auth.AuthManager {
 	componentAuthManager := p.authManager
-	if !shouldResolvePerComponentAuth(p.processTemplates, p.processYamlFunctions) {
+	if p.authDisabled || !shouldResolvePerComponentAuth(p.processTemplates, p.processYamlFunctions) {
 		return componentAuthManager
 	}
 	authSection, hasAuth := componentSection[cfg.AuthSectionName].(map[string]any)
@@ -302,6 +324,7 @@ func (p *describeStacksProcessor) processComponentEntry( //nolint:gocognit,reviv
 		return err
 	}
 	info.Context = resolvedContext
+	info.AuthDisabled = p.authDisabled
 
 	// Resolve the per-component auth manager (may fall back to the parent).
 	componentAuthManager := p.resolveComponentAuthManager(componentSection, componentName, stackName)

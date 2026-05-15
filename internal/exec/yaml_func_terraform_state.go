@@ -113,6 +113,9 @@ func processTagTerraformStateWithContext(
 	if stackInfo != nil {
 		authContext = stackInfo.AuthContext
 		authManager = stackInfo.AuthManager
+		if authManager == nil && stackInfo.AuthDisabled {
+			authManager = &authContextWrapper{stackInfo: stackInfo}
+		}
 	}
 
 	value, err := stateGetter.GetState(atmosConfig, input, stack, component, output, false, authContext, authManager)

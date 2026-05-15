@@ -83,19 +83,30 @@ func GetTerraformState(
 		}
 	}
 
+	authDisabled := false
+	if parentAuthMgr != nil {
+		if stackInfo := parentAuthMgr.GetStackInfo(); stackInfo != nil {
+			authDisabled = stackInfo.AuthDisabled
+		}
+	}
+
 	// Resolve AuthManager for this nested component.
 	// Checks if component has auth config defined:
 	//   - If yes: creates component-specific AuthManager with merged auth config
 	//   - If no: uses parent AuthManager (inherits authentication)
 	// This enables each nested level to optionally override auth settings.
-	resolvedAuthMgr, err := resolveAuthManagerForNestedComponent(atmosConfig, component, stack, parentAuthMgr)
-	if err != nil {
-		log.Debug("Auth does not exist for nested component, using parent AuthManager",
-			"component", component,
-			"stack", stack,
-			"error", err,
-		)
-		resolvedAuthMgr = parentAuthMgr
+	resolvedAuthMgr := parentAuthMgr
+	if !authDisabled {
+		var err error
+		resolvedAuthMgr, err = resolveAuthManagerForNestedComponent(atmosConfig, component, stack, parentAuthMgr)
+		if err != nil {
+			log.Debug("Auth does not exist for nested component, using parent AuthManager",
+				"component", component,
+				"stack", stack,
+				"error", err,
+			)
+			resolvedAuthMgr = parentAuthMgr
+		}
 	}
 
 	// Derive the effective AuthContext for backend reads.
@@ -116,6 +127,7 @@ func GetTerraformState(
 		ProcessYamlFunctions: true,
 		Skip:                 nil,
 		AuthManager:          resolvedAuthMgr, // Use resolved AuthManager (may be component-specific or inherited)
+		AuthDisabled:         authDisabled,
 	})
 	if err != nil {
 		er := fmt.Errorf("%w `%s` in stack `%s`\nin YAML function: `%s`\n%v", errUtils.ErrDescribeComponent, component, stack, yamlFunc, err)
