@@ -8,6 +8,7 @@ import (
 
 	"github.com/go-viper/mapstructure/v2"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/auth"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	log "github.com/cloudposse/atmos/pkg/logger"
@@ -143,30 +144,33 @@ func shouldResolvePerComponentAuth(processTemplates, processYamlFunctions bool) 
 // resolveComponentAuthManager returns the AuthManager to use for this component.
 // It returns the parent AuthManager unchanged when per-component resolution is
 // disabled (see shouldResolvePerComponentAuth) or when the component does not
-// declare its own default identity in its auth section. Any error from the
-// resolver is swallowed and the parent AuthManager is used — this preserves the
-// original swallow-on-error behavior of the inline code that was refactored.
+// declare its own default identity in its auth section. When the component
+// declares a default identity, resolver errors are fatal: falling back to the
+// parent manager could read the wrong backend/account.
 func (p *describeStacksProcessor) resolveComponentAuthManager(
 	componentSection map[string]any,
 	componentName, stackName string,
-) auth.AuthManager {
+) (auth.AuthManager, error) {
 	componentAuthManager := p.authManager
 	if p.authDisabled || !shouldResolvePerComponentAuth(p.processTemplates, p.processYamlFunctions) {
-		return componentAuthManager
+		return componentAuthManager, nil
 	}
 	authSection, hasAuth := componentSection[cfg.AuthSectionName].(map[string]any)
 	if !hasAuth || !hasDefaultIdentity(authSection) {
-		return componentAuthManager
+		return componentAuthManager, nil
 	}
 	resolver := p.componentAuthResolver
 	if resolver == nil {
 		resolver = createComponentAuthManager
 	}
 	resolved, createErr := resolver(p.atmosConfig, componentSection, componentName, stackName, p.authManager)
-	if createErr == nil && resolved != nil {
-		componentAuthManager = resolved
+	if createErr != nil {
+		return componentAuthManager, fmt.Errorf("%w: failed to resolve auth for component %q in stack %q: %w", errUtils.ErrAuthManager, componentName, stackName, createErr)
 	}
-	return componentAuthManager
+	if resolved != nil {
+		return resolved, nil
+	}
+	return componentAuthManager, nil
 }
 
 // processStackFile processes one stack file, iterating over all requested component types.
@@ -327,7 +331,10 @@ func (p *describeStacksProcessor) processComponentEntry( //nolint:gocognit,reviv
 	info.AuthDisabled = p.authDisabled
 
 	// Resolve the per-component auth manager (may fall back to the parent).
-	componentAuthManager := p.resolveComponentAuthManager(componentSection, componentName, stackName)
+	componentAuthManager, err := p.resolveComponentAuthManager(componentSection, componentName, stackName)
+	if err != nil {
+		return err
+	}
 	propagateAuth(&info, componentAuthManager)
 
 	// Filter: skip this component if it does not belong to the requested stack.
