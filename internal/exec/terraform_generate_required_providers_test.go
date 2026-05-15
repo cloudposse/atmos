@@ -2,6 +2,7 @@ package exec
 
 import (
 	"errors"
+	"path/filepath"
 	"testing"
 
 	"github.com/spf13/cobra"
@@ -104,14 +105,21 @@ func TestParseRequiredProvidersFlags(t *testing.T) {
 func TestConfigureCustomFilePath(t *testing.T) {
 	// genCtx baseline — the helper only mutates CustomFilename / WorkingDir,
 	// so anything else is irrelevant for these table-driven cases.
+	//
+	// Path-separator note: the production helper calls filepath.Dir, which is
+	// platform-aware (`\` on Windows, `/` on Unix). Tests therefore compute the
+	// expected workdir via filepath.Dir(tt.fileFromArg) rather than hardcoding
+	// a Unix path — otherwise the absolute-path case fails on Windows CI
+	// because `filepath.Dir("/tmp/generated/custom.tf.json")` returns
+	// `\tmp\generated` there.
+	originalWorkdir := filepath.FromSlash("/original/workdir")
 	makeCtx := func() *generator.GeneratorContext {
-		return &generator.GeneratorContext{WorkingDir: "/original/workdir"}
+		return &generator.GeneratorContext{WorkingDir: originalWorkdir}
 	}
 
 	tests := []struct {
 		name            string
 		fileFromArg     string
-		wantWorkingDir  string // empty means "unchanged from baseline".
 		wantCustomFile  string
 		wantWorkingKept bool // when true, asserts the working dir is NOT changed.
 	}{
@@ -134,14 +142,12 @@ func TestConfigureCustomFilePath(t *testing.T) {
 		},
 		{
 			name:           "absolute path splits into dir+basename",
-			fileFromArg:    "/tmp/generated/custom.tf.json",
-			wantWorkingDir: "/tmp/generated",
+			fileFromArg:    filepath.FromSlash("/tmp/generated/custom.tf.json"),
 			wantCustomFile: "custom.tf.json",
 		},
 		{
 			name:           "relative path with subdir splits into dir+basename",
-			fileFromArg:    "subdir/custom.tf.json",
-			wantWorkingDir: "subdir",
+			fileFromArg:    filepath.FromSlash("subdir/custom.tf.json"),
 			wantCustomFile: "custom.tf.json",
 		},
 	}
@@ -153,10 +159,12 @@ func TestConfigureCustomFilePath(t *testing.T) {
 
 			assert.Equal(t, tt.wantCustomFile, ctx.CustomFilename)
 			if tt.wantWorkingKept {
-				assert.Equal(t, "/original/workdir", ctx.WorkingDir,
+				assert.Equal(t, originalWorkdir, ctx.WorkingDir,
 					"workdir must not be mutated when fileFromArg has no directory component")
 			} else {
-				assert.Equal(t, tt.wantWorkingDir, ctx.WorkingDir)
+				// Match what filepath.Dir would produce for this input on the
+				// current platform — that is what the helper writes back.
+				assert.Equal(t, filepath.Dir(tt.fileFromArg), ctx.WorkingDir)
 			}
 		})
 	}
