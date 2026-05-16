@@ -210,9 +210,9 @@ git push --force-with-lease
 
 Always use `--force-with-lease` (not `--force`) to avoid clobbering work from other sessions on the same branch.
 
-## End-to-end checklist (before pushing)
+## Pre-push checklist
 
-Run through these in order. Don't skip — every item has burned someone before.
+Run through these in order before `git push`. Every item has burned someone before.
 
 1. **Identify the smallest accurate label.** Use the decision tree above. Default to `no-release` for plumbing.
 2. **Confirm commit signing is on** (see above). One unsigned commit blocks the entire PR from merging.
@@ -223,10 +223,15 @@ Run through these in order. Don't skip — every item has burned someone before.
    - Delegate the roadmap update to the `roadmap` agent (do not touch `featured[]`).
 4. **Build the website** to verify MDX renders: `cd website && npm run build`.
 5. **Commit and push.**
-6. **Open the PR** with title (under 70 chars) + body using the project's PR template (what / why / references). See the gotcha below about `gh pr create` body formatting.
-7. **Apply the label immediately** after opening: `gh pr edit <num> --add-label <label>`.
-8. **If the PR fixes a tracked issue:** include `Closes #<issue>` in the PR body so it auto-closes on merge.
-9. **Check CI status** after the first push: `gh pr checks <num>`. If `PR Semver Labels`, `Check for changelog and roadmap updates`, or signed-commit verification fails, fix it before requesting review.
+
+## Post-push / PR checklist
+
+Once the branch is on GitHub, finish the workflow:
+
+1. **Open the PR** with title (under 70 chars) + body using the project's PR template (what / why / references). See the gotcha below about `gh pr create` body formatting.
+2. **Apply the label immediately** after opening: `gh pr edit <num> --add-label <label>`.
+3. **If the PR fixes a tracked issue:** include `Closes #<issue>` in the PR body so it auto-closes on merge.
+4. **Check CI status** after the first push: `gh pr checks <num>`. If `PR Semver Labels`, `Check for changelog and roadmap updates`, or signed-commit verification fails, fix it before requesting review.
 
 ## Gotcha: `gh pr create --body` and backtick escaping
 
