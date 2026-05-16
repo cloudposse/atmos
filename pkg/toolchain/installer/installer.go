@@ -31,8 +31,7 @@ const (
 	bufferSizeBytes             = 32 * 1024
 
 	// Registry path parsing constants.
-	minRegistryPathSegments = 8          // Minimum path segments for registry.yaml parsing.
-	filenameKey             = "filename" // Key for filename in template replacements.
+	filenameKey = "filename" // Key for filename in template replacements.
 
 	// Log field names for consistent debugging.
 	logFieldOwner   = "owner"
@@ -96,10 +95,20 @@ func (d *DefaultToolResolver) Resolve(toolName string) (string, string, error) {
 		}
 	}
 
-	// Step 3: Try to find the tool in the Aqua registry.
-	owner, repo, err := searchRegistryForTool(toolName)
-	if err == nil {
-		return owner, repo, nil
+	// Step 3: Consult the default registry's short-name resolver (aqua-style).
+	// Aqua itself has no runtime short-name resolution — `aqua g` is the upstream
+	// discovery flow — so atmos provides this UX by searching the cached registry
+	// index for a package whose binary name matches. The type assertion keeps
+	// short-name resolution aqua-specific (matches upstream's design where short
+	// names are a discovery concern, not a registry-protocol one).
+	if reg := registry.DefaultRegistry(); reg != nil {
+		if shortNameResolver, ok := reg.(interface {
+			ResolveShortName(string) (string, string, error)
+		}); ok {
+			if owner, repo, err := shortNameResolver.ResolveShortName(toolName); err == nil {
+				return owner, repo, nil
+			}
+		}
 	}
 	return "", "", errUtils.Build(errUtils.ErrToolNotInRegistry).
 		WithExplanationf("Tool '%s' not found in Aqua registry", toolName).

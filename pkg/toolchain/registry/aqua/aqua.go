@@ -66,7 +66,19 @@ type AquaRegistry struct {
 	registryBaseURL string // Base URL of the aqua-registry repo (raw content). See defaultAquaRegistryBaseURL.
 	lastSearchTotal int    // Total number of search results before pagination.
 	pathIndexMu     sync.RWMutex
-	pathIndex       map[string]string // "owner/repo" -> full registry path (e.g., "openbao/openbao/bao"). Populated lazily by fetchRegistryIndex.
+	pathIndex       map[string]string  // "owner/repo" -> registry path of one package under that owner/repo. Monorepo packages (e.g., kubernetes/kubernetes/{kubectl,kubeadm,...}) collide here — last wins. Use packageList for full enumeration.
+	packageList     []indexPackageInfo // One entry per index package, preserving the (owner, repo, binary) triple. Used by ResolveShortName so monorepo binaries aren't lost to map collisions.
+}
+
+// indexPackageInfo captures the minimal data ResolveShortName needs from each
+// index package: the canonical owner/repo (from repo_owner/repo_name) plus the
+// binary name (last segment of the package's `name` when 3-segment, else
+// repo_name). Stored as a list because multiple packages can share owner/repo
+// (kubernetes/kubernetes/{kubectl,kubeadm,...}) and a map would lose them.
+type indexPackageInfo struct {
+	owner  string
+	repo   string
+	binary string
 }
 
 // RegistryCache handles caching of registry files.
@@ -164,9 +176,12 @@ func (ar *AquaRegistry) LoadLocalConfig(configPath string) error {
 // Resolution order:
 //  1. Index-driven lookup: consult the cached aqua-registry index for the package's full
 //     registry path (e.g., "openbao/openbao/bao") and fetch pkgs/<path>/registry.yaml directly.
-//     This handles packages whose binary subdir differs from the repo name.
-//  2. Legacy prefix probe: try a hardcoded set of pkgs/<prefix> roots. Kept as a backstop
-//     for cases where the index is unreachable or hasn't surfaced the package yet.
+//     This is the only path that handles packages whose binary subdir differs from the
+//     repo name (3-segment layouts).
+//  2. Generic 2-segment probe: fall back to pkgs/<owner>/<repo>/registry.yaml for the
+//     standard layout, so installs still work when the index endpoint is transiently
+//     unreachable. We intentionally do NOT enumerate specific orgs here — 3-segment
+//     layouts are the index's responsibility, not a hardcoded allowlist's.
 func (ar *AquaRegistry) GetTool(owner, repo string) (*registry.Tool, error) {
 	defer perf.Track(nil, "aqua.AquaRegistry.GetTool")()
 
@@ -174,16 +189,12 @@ func (ar *AquaRegistry) GetTool(owner, repo string) (*registry.Tool, error) {
 		return tool, nil
 	}
 
-	// Legacy prefix probes. Most useful when the index fetch fails entirely.
+	// Generic 2-segment fallback for when the index is unreachable.
 	// The refs/heads/main variant is kept so previously-cached entries (whose disk cache key
 	// embeds the old URL) continue to resolve without a fresh network fetch.
 	registries := []string{
 		ar.registryBaseURL + "/pkgs",
 		"https://raw.githubusercontent.com/aquaproj/aqua-registry/refs/heads/main/pkgs",
-		ar.registryBaseURL + "/pkgs/kubernetes/kubernetes",
-		ar.registryBaseURL + "/pkgs/hashicorp",
-		ar.registryBaseURL + "/pkgs/helm",
-		ar.registryBaseURL + "/pkgs/opentofu",
 	}
 
 	for _, registry := range registries {

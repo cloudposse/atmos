@@ -1148,20 +1148,6 @@ func TestListInstalledVersions(t *testing.T) {
 	})
 }
 
-func TestBuildCommonRegistryPaths(t *testing.T) {
-	paths := buildCommonRegistryPaths("terraform")
-	assert.NotEmpty(t, paths)
-	// Should contain a path with the tool name.
-	found := false
-	for _, p := range paths {
-		if strings.Contains(p, "terraform") {
-			found = true
-			break
-		}
-	}
-	assert.True(t, found, "paths should contain the tool name")
-}
-
 // mockRegistryForInstaller implements registry.ToolRegistry for testing WithConfiguredRegistry.
 type mockRegistryForInstaller struct{}
 

@@ -274,21 +274,34 @@ type indexFile struct {
 
 // indexPackage represents a package in the registry index.
 type indexPackage struct {
-	Type      string `yaml:"type"`
-	RepoOwner string `yaml:"repo_owner"`
-	RepoName  string `yaml:"repo_name"`
-	Name      string `yaml:"name"`
-	Path      string `yaml:"path"`
+	Type      string       `yaml:"type"`
+	RepoOwner string       `yaml:"repo_owner"`
+	RepoName  string       `yaml:"repo_name"`
+	Name      string       `yaml:"name"`
+	Path      string       `yaml:"path"`
+	Aliases   []indexAlias `yaml:"aliases"` // Per-aqua-package alternate names (rename compatibility); used by atmos to address monorepo binaries via 2-segment alias paths like "kubernetes/kubectl" → "kubernetes/kubernetes/kubectl".
+}
+
+// indexAlias is one alternate name declared inside a package's `aliases` block.
+type indexAlias struct {
+	Name string `yaml:"name"`
 }
 
 // convertPackagesToTools converts index packages to Tool objects and, as a side effect,
-// rebuilds ar.pathIndex so GetTool can fetch packages via their full registry path. The
-// path is the value of the package's `name` field when present (which preserves a 3rd
-// "binary" segment for packages whose binary name differs from the repo name, e.g.,
-// `openbao/openbao/bao`), falling back to `<owner>/<repo>` for packages without `name`.
+// rebuilds ar.pathIndex (owner/repo -> path) and ar.packageList (full per-package
+// triples). The path index drives GetTool's 3-segment-aware lookup; the package list
+// drives ResolveShortName, which can't rely on the map because monorepo packages
+// (e.g., kubernetes/kubernetes/{kubectl,kubeadm,...}) collide on owner/repo.
+//
+// Per-package `aliases` entries are also indexed: an alias like `kubernetes/kubectl`
+// for the canonical `kubernetes/kubernetes/kubectl` becomes a pathIndex entry at
+// "kubernetes/kubectl" → canonical path, plus a packageList entry that lets
+// ResolveShortName score `kubectl` as a canonical (repo == binary) match. This is how
+// monorepo binaries become addressable by a 2-segment owner/repo without collisions.
 func (ar *AquaRegistry) convertPackagesToTools(packages []indexPackage) []*registry.Tool {
 	tools := make([]*registry.Tool, 0, len(packages))
 	pathIdx := make(map[string]string, len(packages))
+	pkgList := make([]indexPackageInfo, 0, len(packages))
 	for i := range packages {
 		pkg := &packages[i]
 		if pkg.Type == "" {
@@ -314,10 +327,41 @@ func (ar *AquaRegistry) convertPackagesToTools(packages []indexPackage) []*regis
 			path = key
 		}
 		pathIdx[key] = path
+
+		binary := binaryFromPath(path, repo)
+		// Record one entry per package — never overwrite, since monorepo packages all
+		// hash to the same owner/repo and ResolveShortName needs every binary.
+		pkgList = append(pkgList, indexPackageInfo{
+			owner:  owner,
+			repo:   repo,
+			binary: binary,
+		})
+
+		// Index each alias as an addressable 2-segment shorthand for the canonical
+		// 3-segment path. This makes monorepo binaries (kubectl, kubeadm, …) usable
+		// without colliding in pathIndex on their shared canonical owner/repo.
+		for _, a := range pkg.Aliases {
+			aOwner, aRepo, ok := splitOwnerRepo(a.Name)
+			if !ok {
+				continue
+			}
+			aKey := aOwner + "/" + aRepo
+			if _, exists := pathIdx[aKey]; exists {
+				// Don't overwrite a real package's entry with an alias of a different package.
+				continue
+			}
+			pathIdx[aKey] = path
+			pkgList = append(pkgList, indexPackageInfo{
+				owner:  aOwner,
+				repo:   aRepo,
+				binary: binary,
+			})
+		}
 	}
 
 	ar.pathIndexMu.Lock()
 	ar.pathIndex = pathIdx
+	ar.packageList = pkgList
 	ar.pathIndexMu.Unlock()
 
 	return tools
