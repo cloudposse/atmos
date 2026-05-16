@@ -56,7 +56,7 @@ Centralized auth. Centralized security and permissions. One `atmos.yaml`.
 
 | Server             | Purpose                                                  | Transport | Auth                       |
 |--------------------|----------------------------------------------------------|-----------|----------------------------|
-| **atmos**          | Atmos AI tools (describe/list/validate, search)          | stdio     | None (local)               |
+| **atmos**          | Atmos AI tools (describe/list/validate, search)          | stdio     | Atmos Auth                 |
 | **atmos-pro**      | Atmos Pro — drift, deployments, workflow runs, audit log | HTTP      | Browser OAuth (GitHub)     |
 | **aws-docs**       | Search and fetch AWS documentation                       | stdio     | None (public docs)         |
 | **aws-knowledge**  | Managed AWS knowledge base (remote)                      | stdio     | None (public)              |
@@ -77,7 +77,7 @@ than through `atmos mcp export`. This may change in a future release.
 
 ## What the `atmos` MCP Server Does
 
-The first entry in the table above — **atmos** — is *not* an awslabs server.
+The first entry in the table above — **atmos** — is *not* an `awslabs` server.
 It's the [Atmos MCP server](/ai/mcp-server) running inside the
 `atmos` binary itself, started by `atmos mcp start`. Including it in your AI
 coding assistant's config gives the assistant direct programmatic access to
@@ -159,7 +159,7 @@ from `aws-api`.
 
 MCP servers give your AI coding assistant **tools** — to inspect your
 stacks, query AWS, check Atmos Pro. [Atmos Agent Skills](/ai/agent-skills)
-give it **knowledge** — 21 domain-specific skills (stacks, components,
+give it **knowledge** — domain-specific skills (stacks, components,
 validation, YAML functions, vendoring, toolchain, GitOps, design patterns,
 auth, …) that activate automatically based on what you ask.
 
@@ -173,7 +173,7 @@ Terraform workaround.
 
 Skills are built on two open standards — [AGENTS.md](https://agents.md/)
 and [Agent Skills](https://agentskills.io/specification) — so they work
-across every AI coding assistant in this example (Claude Code, Codex CLI,
+across every AI coding assistant (Claude Code, Codex CLI,
 Gemini CLI) plus Cursor, Windsurf, GitHub Copilot, and others.
 
 **Claude Code (one command):**
@@ -208,7 +208,7 @@ applies Atmos-specific reasoning from the relevant skill.
      `brew install gemini-cli` *or* `npm install -g @google/gemini-cli` → `gemini auth login`
 
 2. **Python 3.10+** — required by the AWS MCP servers. `uvx` is installed by the Atmos
-   toolchain (next step).
+   toolchain.
 
 3. **Atmos Auth** for AWS MCP servers. Edit the `auth` section of `atmos.yaml` with your
    SSO start URL, permission set, and account ID, then:
@@ -216,8 +216,8 @@ applies Atmos-specific reasoning from the relevant skill.
    atmos auth login
    ```
 
-4. **(Optional) [Atmos Pro](https://atmos-pro.com/) account and workspace** for the
-   `atmos-pro` MCP server. Skip this prereq if you're not using Atmos Pro — the rest
+4. **[Atmos Pro](https://atmos-pro.com/) accounts and workspaces** for the
+   `atmos-pro` MCP server. If you're not using Atmos Pro — the rest
    of the example works without it. If you are, the first time any AI CLI starts the
    `atmos-pro` server you'll be redirected to GitHub to authorize Atmos Pro. The token
    binds to a specific Atmos Pro workspace; switch workspaces by re-authorizing.
@@ -284,15 +284,13 @@ Claude Code picks which MCP tools to call based on the question — you don't ne
 
 ### Option 2 — OpenAI Codex CLI
 
-Codex CLI reads MCP servers from `~/.codex/config.toml` (TOML, not JSON). Atmos doesn't
-export this format directly today — translate the `.mcp.json` output by hand, or let
-Atmos do it via `atmos ai exec`:
+Codex CLI reads MCP servers from `~/.codex/config.toml` (TOML, not JSON).
 
 #### Direct integration
 
 Generate `.mcp.json` and translate to TOML in `~/.codex/config.toml`. For each server
 in the JSON, add a `[mcp_servers.<name>]` block. Example (matches what this example's
-atmos.yaml produces):
+`atmos.yaml` produces):
 
 ```toml
 # ~/.codex/config.toml

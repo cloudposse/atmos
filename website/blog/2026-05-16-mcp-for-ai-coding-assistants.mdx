@@ -44,7 +44,7 @@ Centralized auth. Centralized security and permissions. One `atmos.yaml`.
 
 ## The Problem
 
-If you've tried to use the awslabs MCP servers with more than one AI coding
+If you've tried to use the `awslabs` MCP servers with more than one AI coding
 assistant, with each MCP server requiring different credentials, you've probably hit this:
 
 - **Three different config files.** Claude Code reads `.mcp.json`,
@@ -52,7 +52,7 @@ assistant, with each MCP server requiring different credentials, you've probably
   Google Gemini CLI reads `.gemini/settings.json`. The schemas are
   *almost* the same but not quite, and each CLI looks in a different place.
 - **Three different ways to register servers.** Each CLI has its own
-  `<cli> mcp add` command with subtly different flags. Or you can hand-edit
+  `mcp add` command with subtly different flags. Or you can hand-edit
   the config file. Or both.
 - **AWS credentials need to flow through.** Every AWS MCP server needs
   AWS credentials. Without help, that means `aws configure`, juggling
@@ -121,7 +121,7 @@ All three CLIs end up with the same set of MCP servers:
 
 | Server          | Purpose                                       | Transport | Auth                   |
 |-----------------|-----------------------------------------------|-----------|------------------------|
-| **atmos**       | `describe component`, `list stacks`, etc.     | stdio     | None (local)           |
+| **atmos**       | `describe component`, `list stacks`, etc.     | stdio     | Atmos Auth             |
 | **atmos-pro**   | Drift, deployments, workflow runs, audit log  | HTTP      | Browser OAuth (GitHub) |
 | aws-docs        | Search AWS documentation                      | stdio     | None (public)          |
 | aws-knowledge   | Managed AWS knowledge base (remote)           | stdio     | None (public)          |
@@ -132,7 +132,7 @@ All three CLIs end up with the same set of MCP servers:
 | aws-security    | Well-Architected security                     | stdio     | AWS (via Atmos Auth)   |
 | aws-api         | Direct AWS CLI (read-only by default)         | stdio     | AWS (via Atmos Auth)   |
 
-The eight AWS servers plus the embedded **atmos** server are stdio-transport
+The AWS servers plus the embedded **atmos** server are stdio-transport
 and managed through `atmos mcp export`. The **atmos-pro** entry is HTTP-
 transport (it runs on `https://atmos-pro.com/mcp`), so it's registered
 directly with each AI CLI alongside the exported config — see the
@@ -151,15 +151,12 @@ It exposes more than 20 tools:
 
 - **Stack & component introspection** (read-only) —
   `atmos_list_stacks`, `atmos_describe_component`,
-  `atmos_validate_stacks`, `describe_affected` (git-aware change set
-  vs `main`), `get_template_context`, `list_component_files`.
+  `atmos_validate_stacks`, `describe_affected`, `get_template_context`, `list_component_files`.
 - **File operations** — `read_stack_file`, `read_component_file`,
   `read_file`, `write_stack_file`, `write_component_file`, `edit_file`,
-  `search_files` (grep across the project).
-- **Execution** — `execute_atmos_command` (invokes the `atmos` CLI
-  with arbitrary args), `execute_bash_command` (permission-gated).
-- **Security & compliance** — `atmos_list_findings`,
-  `atmos_describe_finding`, `atmos_analyze_finding`,
+  `search_files`.
+- **Execution** — `execute_atmos_command` (invokes the `atmos` CLI), `execute_bash_command` (permission-gated).
+- **Security & compliance** — `atmos_list_findings`, `atmos_describe_finding`, `atmos_analyze_finding`,
   `atmos_compliance_report`.
 
 Write-side tools (`write_*`, `edit_file`, `execute_bash_command`)
@@ -210,15 +207,15 @@ So the AI can answer cross-layer questions in one prompt:
 > AWS resource is now out of sync?"*
 
 …pulling deployment history from `atmos-pro`, declared config from
-`atmos` (or directly from your infra repo, and live state from `aws-api` in a single coherent answer.
+`atmos` (or directly from your infra repo), and live state from `aws-api` in a single coherent answer.
 
 ## Pair with Atmos Agent Skills
 
 MCP gives the AI **tools** — to inspect stacks, query AWS, check Atmos
 Pro. [Atmos Agent Skills](/ai/agent-skills) give it
-**knowledge** — 21 domain-specific skills (stacks, components,
+**knowledge** — domain-specific skills (stacks, components,
 validation, YAML functions, vendoring, toolchain, GitOps, auth, …) that
-activate automatically based on what you ask.
+activate based on what you ask.
 
 Without skills, an AI assistant falls back to general training data that
 may generate invalid YAML, miss features like `!store` /
@@ -226,7 +223,7 @@ may generate invalid YAML, miss features like `!store` /
 loads the right Atmos context just before answering. The skills are
 built on the open [AGENTS.md](https://agents.md/) and
 [Agent Skills](https://agentskills.io/specification) standards, so they
-work across all three CLIs in this post (Claude Code, Codex CLI, Gemini
+work across all three CLIs (Claude Code, Codex CLI, Gemini
 CLI) plus Cursor, Windsurf, GitHub Copilot, and others.
 
 For Claude Code:
@@ -245,7 +242,7 @@ files and live state; skills answer *"what should this code do?"* by
 teaching the assistant Atmos's conventions. The same prompt — *"set up
 cross-stack dependencies with remote state"* — pulls live data through
 MCP **and** applies Atmos-native patterns (`!terraform.state`, abstract
-components, settings inheritance) from the relevant skill. Stronger
+components, inheritance) from the relevant skill. Stronger
 together than either alone.
 
 ## Wiring Up Each CLI
@@ -364,7 +361,7 @@ Or merge the JSON entry into `.mcp.json` / `.gemini/settings.json` / `~/.claude.
 
 ## What You Can Ask
 
-Same questions, three CLIs:
+Same questions, three AIs:
 
 ```text
 List all IAM roles with AdministratorAccess.
@@ -399,7 +396,7 @@ Four benefits:
    AWS credentials live. Each external MCP server is spawned via
    `atmos auth exec`, which resolves credentials at runtime and writes them
    only into that subprocess's env. The exported `.mcp.json` is safe to check
-   into the repo — the worst it leaks is the IAM role name. No static
+   into the repo if needed — the worst it leaks is the IAM role name. No static
    secrets in `~/.aws/credentials`, no `AWS_PROFILE` scattered across shells,
    no per-server authentication, no token files in each CLI's config dir.
 
