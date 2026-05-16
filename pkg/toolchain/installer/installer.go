@@ -1,8 +1,10 @@
 package installer
 
 import (
+	"context"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -17,6 +19,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/toolchain/registry"
+	"github.com/cloudposse/atmos/pkg/toolchain/verification"
 	"github.com/cloudposse/atmos/pkg/xdg"
 )
 
@@ -114,14 +117,17 @@ func (d *DefaultToolResolver) Resolve(toolName string) (string, string, error) {
 
 // Installer handles the installation of CLI binaries.
 type Installer struct {
-	registryPath     string
-	cacheDir         string
-	binDir           string
-	registries       []string
-	resolver         ToolResolver
-	configuredReg    registry.ToolRegistry // Registry loaded from atmos.yaml config.
-	useConfiguredReg bool                  // Whether to use configured registry vs builtin registry list.
-	registryFactory  RegistryFactory       // Factory for creating Aqua registry instances.
+	registryPath       string
+	cacheDir           string
+	binDir             string
+	registries         []string
+	resolver           ToolResolver
+	configuredReg      registry.ToolRegistry // Registry loaded from atmos.yaml config.
+	useConfiguredReg   bool                  // Whether to use configured registry vs builtin registry list.
+	registryFactory    RegistryFactory       // Factory for creating Aqua registry instances.
+	verificationPolicy verification.Policy
+	useLockFile        bool
+	lockFilePath       string
 }
 
 // RegistryFactory creates registry instances. This allows dependency injection.
@@ -170,6 +176,11 @@ func WithAtmosConfig(config *schema.AtmosConfiguration) Option {
 			resolver.AtmosConfig = config
 		} else {
 			log.Debug("WithAtmosConfig skipped: resolver is not DefaultToolResolver")
+		}
+		if config != nil {
+			i.verificationPolicy = verification.PolicyFromConfig(config.Toolchain.Verification)
+			i.useLockFile = config.Toolchain.UseLockFile
+			i.lockFilePath = resolveLockFilePath(config)
 		}
 	}
 }
@@ -228,8 +239,9 @@ func New(opts ...Option) *Installer {
 			"https://raw.githubusercontent.com/aquaproj/aqua-registry/main/pkgs",
 			"./tool-registry",
 		},
-		registryFactory: &defaultRegistryFactory{},
-		resolver:        &DefaultToolResolver{}, // Default resolver.
+		registryFactory:    &defaultRegistryFactory{},
+		resolver:           &DefaultToolResolver{}, // Default resolver.
+		verificationPolicy: verification.PolicyFromConfig(schema.ToolchainVerification{}),
 	}
 
 	// Apply options.
@@ -287,6 +299,14 @@ func (i *Installer) installFromTool(tool *registry.Tool, version string) (string
 	if err != nil {
 		return "", fmt.Errorf(errUtils.ErrWrapFormat, ErrHTTPRequest, err)
 	}
+	verificationResult, err := i.verifyDownloadedAsset(tool, version, assetURL, assetPath)
+	if err != nil {
+		_ = os.Remove(assetPath)
+		return "", err
+	}
+	if err := i.updateLockFile(tool, version, assetURL, verificationResult); err != nil {
+		return "", err
+	}
 	binaryPath, err := i.extractAndInstall(tool, assetPath, version)
 	if err != nil {
 		return "", fmt.Errorf(errUtils.ErrWrapFormat, ErrFileOperation, err)
@@ -298,6 +318,85 @@ func (i *Installer) installFromTool(tool *registry.Tool, version string) (string
 	now := time.Now()
 	_ = os.Chtimes(binaryPath, now, now)
 	return binaryPath, nil
+}
+
+func (i *Installer) verifyDownloadedAsset(tool *registry.Tool, version, assetURL, assetPath string) (*verification.Result, error) {
+	verifier := verification.Verifier{}
+	result, err := verifier.Verify(context.Background(), verification.Request{
+		Tool:      tool,
+		Version:   version,
+		AssetURL:  assetURL,
+		AssetPath: assetPath,
+		Policy:    i.verificationPolicy,
+		Runner:    verifierCommandRunner{installer: i, policy: i.verificationPolicy},
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to verify downloaded asset: %w", err)
+	}
+	return result, nil
+}
+
+type verifierCommandRunner struct {
+	installer *Installer
+	policy    verification.Policy
+}
+
+func (r verifierCommandRunner) Run(ctx context.Context, name string, args ...string) error {
+	defer perf.Track(nil, "installer.verifierCommandRunner.Run")()
+
+	if path, err := exec.LookPath(name); err == nil {
+		return runVerifierCommand(ctx, path, args...)
+	}
+	if r.policy.VerifierInstall != verification.VerifierInstallAuto {
+		return verification.ExecRunner{}.Run(ctx, name, args...)
+	}
+	owner, repo, ok := verifierTool(name)
+	if !ok {
+		return verification.ExecRunner{}.Run(ctx, name, args...)
+	}
+	bootstrap := *r.installer
+	bootstrap.verificationPolicy = verification.Policy{
+		Checksums:       verification.PolicyDisabled,
+		Signatures:      verification.PolicyDisabled,
+		VerifierInstall: verification.VerifierInstallPathOnly,
+	}
+	version := "latest"
+	if bootstrap.registryFactory != nil {
+		if reg := bootstrap.registryFactory.NewAquaRegistry(); reg != nil {
+			if latest, err := reg.GetLatestVersion(owner, repo); err == nil && latest != "" {
+				version = latest
+			}
+		}
+	}
+	binaryPath, err := bootstrap.Install(owner, repo, version)
+	if err != nil {
+		return fmt.Errorf("%w: install verifier %s: %w", verification.ErrVerifierCommandRequired, name, err)
+	}
+	return runVerifierCommand(ctx, binaryPath, args...)
+}
+
+func runVerifierCommand(ctx context.Context, path string, args ...string) error {
+	// #nosec G204 -- verifier path is discovered via PATH or installed by the toolchain.
+	cmd := exec.CommandContext(ctx, path, args...)
+	if output, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("%w: %s %v: %w\n%s", verification.ErrSignatureFailed, path, args, err, string(output))
+	}
+	return nil
+}
+
+func verifierTool(name string) (owner, repo string, ok bool) {
+	switch name {
+	case "cosign":
+		return "sigstore", "cosign", true
+	case "slsa-verifier":
+		return "slsa-framework", "slsa-verifier", true
+	case "gh":
+		return "cli", "cli", true
+	case "minisign":
+		return "jedisct1", "minisign", true
+	default:
+		return "", "", false
+	}
 }
 
 // FindTool searches for a tool in the registry.

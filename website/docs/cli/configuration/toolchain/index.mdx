@@ -16,6 +16,7 @@ The toolchain feature enables you to manage CLI tool versions (Terraform, kubect
 - Manage tool versions with `.tool-versions` files
 - Install CLI binaries from GitHub releases and other sources
 - Integrate with the Aqua registry ecosystem for 1,000+ pre-configured tools
+- Verify package checksums and signatures when registry metadata provides them
 - Version control your tools for team consistency
 - Automatic tool provisioning in workflows
 </KeyPoints>
@@ -65,6 +66,49 @@ toolchain:
     Alternative name for `install_path`. Use `install_path` for consistency.
   </dd>
 </dl>
+
+## Package Verification
+
+Atmos verifies downloaded toolchain packages before extraction when registry metadata includes checksums, signatures, or attestations. The default behavior is non-breaking: verification runs when metadata is available, and packages without verification metadata can still install.
+
+<File title="atmos.yaml">
+```yaml
+toolchain:
+  verification:
+    checksums: when_available
+    signatures: when_available
+    verifier_install: auto
+```
+</File>
+
+### Verification Options
+
+<dl>
+  <dt>`verification.checksums`</dt>
+  <dd>
+    Controls checksum verification for downloaded packages.
+    - `when_available` verifies checksums when registry metadata provides them. This is the default.
+    - `required` fails installation when checksum metadata is missing or verification fails.
+    - `disabled` skips checksum verification.
+  </dd>
+
+  <dt>`verification.signatures`</dt>
+  <dd>
+    Controls signature and attestation verification for downloaded packages.
+    - `when_available` verifies signatures or attestations when registry metadata provides them. This is the default.
+    - `required` fails installation when signature metadata is missing or verification fails.
+    - `disabled` skips signature and attestation verification.
+  </dd>
+
+  <dt>`verification.verifier_install`</dt>
+  <dd>
+    Controls how external verifier CLIs are resolved.
+    - `auto` installs supported verifier CLIs through the Atmos toolchain when they are not already on `PATH`. This is the default.
+    - `path_only` requires verifier CLIs to already be available on `PATH`.
+  </dd>
+</dl>
+
+Supported checksum algorithms are `sha256`, `sha512`, `sha1`, and `md5`. Supported verifier CLIs are `cosign`, `slsa-verifier`, `gh` for GitHub artifact attestations, and `minisign`.
 
 ## Tool Versions File
 
@@ -151,6 +195,12 @@ toolchain:
       type: aqua
       source: https://github.com/aquaproj/aqua-registry/tree/main/pkgs
       priority: 10
+
+  # Package verification
+  verification:
+    checksums: when_available
+    signatures: when_available
+    verifier_install: auto
 ```
 </File>
 

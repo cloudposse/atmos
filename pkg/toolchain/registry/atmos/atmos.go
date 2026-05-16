@@ -8,6 +8,7 @@ import (
 
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/toolchain/registry"
+	"gopkg.in/yaml.v3"
 )
 
 // Error definitions for the atmos registry package.
@@ -190,6 +191,33 @@ func parseOptionalFields(tool *registry.Tool, config map[string]any) {
 	if filesRaw, ok := config["files"].([]any); ok {
 		tool.Files = parseFiles(filesRaw)
 	}
+	parseVerificationFields(tool, config)
+}
+
+func parseVerificationFields(tool *registry.Tool, config map[string]any) {
+	if raw, ok := config["checksum"]; ok {
+		_ = parseYAMLStruct(raw, &tool.Checksum)
+	}
+	if raw, ok := config["cosign"]; ok {
+		_ = parseYAMLStruct(raw, &tool.Cosign)
+	}
+	if raw, ok := config["slsa_provenance"]; ok {
+		_ = parseYAMLStruct(raw, &tool.SLSAProvenance)
+	}
+	if raw, ok := config["minisign"]; ok {
+		_ = parseYAMLStruct(raw, &tool.Minisign)
+	}
+	if raw, ok := config["github_artifact_attestations"]; ok {
+		_ = parseYAMLStruct(raw, &tool.GitHubArtifactAttestations)
+	}
+}
+
+func parseYAMLStruct(raw any, target any) error {
+	data, err := yaml.Marshal(raw)
+	if err != nil {
+		return err
+	}
+	return yaml.Unmarshal(data, target)
 }
 
 // parseReplacements parses the replacements map (e.g., darwin->macos).
@@ -251,6 +279,21 @@ func parseOverrides(overridesRaw []any) []registry.Override {
 		// Parse replacements in override (for platform-specific OS/arch mappings).
 		if replacementsRaw, ok := overrideMap["replacements"].(map[string]any); ok {
 			override.Replacements = parseReplacements(replacementsRaw)
+		}
+		if raw, ok := overrideMap["checksum"]; ok {
+			_ = parseYAMLStruct(raw, &override.Checksum)
+		}
+		if raw, ok := overrideMap["cosign"]; ok {
+			_ = parseYAMLStruct(raw, &override.Cosign)
+		}
+		if raw, ok := overrideMap["slsa_provenance"]; ok {
+			_ = parseYAMLStruct(raw, &override.SLSAProvenance)
+		}
+		if raw, ok := overrideMap["minisign"]; ok {
+			_ = parseYAMLStruct(raw, &override.Minisign)
+		}
+		if raw, ok := overrideMap["github_artifact_attestations"]; ok {
+			_ = parseYAMLStruct(raw, &override.GitHubArtifactAttestations)
 		}
 		overrides = append(overrides, override)
 	}

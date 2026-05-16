@@ -1,0 +1,55 @@
+---
+slug: toolchain-package-verification
+title: "Atmos Toolchain Now Verifies Package Checksums and Signatures"
+authors: [osterman]
+tags: [security, feature]
+---
+
+Atmos toolchain installs now verify downloaded packages before extraction when registry metadata provides checksums, signatures, or attestations.
+
+<!--truncate-->
+
+## What Changed
+
+Atmos now preserves and evaluates Aqua-compatible verification metadata during toolchain installs:
+
+- Checksum files from GitHub releases and HTTP sources are downloaded and parsed before extraction.
+- `raw` and `regexp` checksum formats are supported with templated asset names such as `.Asset` and `.AssetWithoutExt`.
+- `sha256`, `sha512`, `sha1`, and `md5` digests are supported.
+- Signature and attestation metadata can invoke `cosign verify-blob`, `slsa-verifier verify-artifact`, `gh attestation verify`, and `minisign -Vm`.
+- Verified package URL, checksum, size, and verification methods are recorded in the toolchain lockfile with backward-compatible optional fields.
+
+By default, Atmos verifies checksums and signatures when metadata exists, while still allowing packages without verification metadata to install.
+
+## Why This Matters
+
+Toolchain packages are often fetched directly from release assets, so download integrity matters as much as version pinning. This release lets Atmos use the same verification metadata already maintained by Aqua package definitions, reducing exposure to tampered archives, corrupted caches, and accidental asset mismatches.
+
+Cached assets are no longer trusted blindly. If verification fails, Atmos rejects the cached asset and prevents extraction instead of installing a package that does not match the registry metadata.
+
+## How to Use It
+
+The default configuration verifies available metadata without requiring every package to publish checksums or signatures:
+
+```yaml
+toolchain:
+  verification:
+    checksums: when_available
+    signatures: when_available
+    verifier_install: auto
+```
+
+For stricter environments, require verification metadata:
+
+```yaml
+toolchain:
+  verification:
+    checksums: required
+    signatures: required
+```
+
+Set `verifier_install: path_only` when CI images already provide `cosign`, `slsa-verifier`, `gh`, or `minisign` and Atmos should not install verifier CLIs automatically.
+
+## Get Involved
+
+See the [toolchain configuration reference](/cli/configuration/toolchain#package-verification) for the verification policy settings and supported verifier commands.

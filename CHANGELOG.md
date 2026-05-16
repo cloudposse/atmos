@@ -38,6 +38,10 @@ See [Conventional Commits](https://www.conventionalcommits.org/) for commit mess
 
 ### Security
 
+- **Toolchain package verification**: downloaded toolchain assets are verified before extraction when
+  registry metadata provides checksums, signatures, or attestations. Aqua-compatible checksum,
+  Cosign, SLSA provenance, GitHub artifact attestation, and Minisign metadata now round-trip
+  through the registry resolver, and failed verification rejects cached assets.
 - Cross-host HTTP redirects and HTTPS-to-HTTP redirect downgrades (all five status
   codes: 301, 302, 303, 307, 308) no longer forward the `Authorization` header to
   the redirect target, preventing accidental token leakage via open redirects or

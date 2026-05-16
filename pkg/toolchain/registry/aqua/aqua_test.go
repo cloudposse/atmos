@@ -2056,6 +2056,70 @@ func TestEvaluateVersionConstraint_WithVersionPrefix(t *testing.T) {
 	}
 }
 
+func TestResolveVersionOverrides_VerificationMetadata(t *testing.T) {
+	registryYAML := `
+packages:
+  - type: github_release
+    repo_owner: jqlang
+    repo_name: jq
+    asset: jq-{{.OS}}-{{.Arch}}
+    version_constraint: semver(">= 1.8.0")
+    checksum:
+      type: github_release
+      asset: sha256sum.txt
+      file_format: regexp
+      algorithm: sha256
+      pattern:
+        checksum: ^(\b[A-Fa-f0-9]{64}\b)
+        file: "^\\b[A-Fa-f0-9]{64}\\b\\s+(\\S+)$"
+    cosign:
+      opts:
+        - --signature
+        - https://example.com/checksums.sig
+    github_artifact_attestations:
+      signer_workflow: jqlang/jq/.github/workflows/ci.yml
+    version_overrides:
+      - version_constraint: semver("< 1.8.0")
+        checksum:
+          type: github_release
+          asset: old-sha256sum.txt
+          algorithm: sha256
+          cosign:
+            bundle:
+              type: github_release
+              asset: old-sha256sum.txt.sigstore.json
+        minisign:
+          type: github_release
+          asset: old-sha256sum.txt.minisig
+          public_key: RWTOKEN
+`
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/x-yaml")
+		_, _ = w.Write([]byte(registryYAML))
+	}))
+	defer ts.Close()
+
+	ar := NewAquaRegistry()
+	ar.cache.baseDir = t.TempDir()
+
+	tool, err := ar.resolveVersionOverrides(ts.URL+"/registry.yaml", "1.7.1")
+	require.NoError(t, err)
+	require.NotNil(t, tool)
+
+	assert.Equal(t, "old-sha256sum.txt", tool.Checksum.Asset)
+	assert.Equal(t, "old-sha256sum.txt.sigstore.json", tool.Checksum.Cosign.Bundle.Asset)
+	assert.Equal(t, "old-sha256sum.txt.minisig", tool.Minisign.Asset)
+	assert.Equal(t, "RWTOKEN", tool.Minisign.PublicKey)
+
+	baseTool, err := ar.resolveVersionOverrides(ts.URL+"/registry.yaml", "1.8.0")
+	require.NoError(t, err)
+	assert.Equal(t, "sha256sum.txt", baseTool.Checksum.Asset)
+	assert.Equal(t, "regexp", baseTool.Checksum.FileFormat)
+	assert.Equal(t, `^(\b[A-Fa-f0-9]{64}\b)`, baseTool.Checksum.Pattern.Checksum)
+	assert.Equal(t, "https://example.com/checksums.sig", baseTool.Cosign.Opts[1])
+	assert.Equal(t, "jqlang/jq/.github/workflows/ci.yml", baseTool.GitHubArtifactAttestations.SignerWorkflow)
+}
+
 func TestExtractBinaryNameFromPackageName(t *testing.T) {
 	tests := []struct {
 		name        string
