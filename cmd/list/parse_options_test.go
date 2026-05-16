@@ -54,6 +54,7 @@ func TestParseComponentsOptions(t *testing.T) {
 		assert.Nil(t, opts.Locked, "locked should be nil when flag was not changed")
 		assert.True(t, opts.ProcessTemplates)
 		assert.True(t, opts.ProcessFunctions)
+		assert.Empty(t, opts.Skip, "skip should default to empty")
 	})
 
 	t.Run("explicit_flags", func(t *testing.T) {
@@ -64,6 +65,8 @@ func TestParseComponentsOptions(t *testing.T) {
 		setFlag(t, cmd, "locked", "false")
 		setFlag(t, cmd, "process-templates", "false")
 		setFlag(t, cmd, "process-functions", "false")
+		setFlag(t, cmd, "skip", "terraform.state")
+		setFlag(t, cmd, "skip", "terraform.output")
 		v := bindFlagsToViper(t, cmd, componentsParser)
 
 		opts := parseComponentsOptions(cmd, v)
@@ -76,6 +79,7 @@ func TestParseComponentsOptions(t *testing.T) {
 		assert.False(t, *opts.Locked)
 		assert.False(t, opts.ProcessTemplates)
 		assert.False(t, opts.ProcessFunctions)
+		assert.Equal(t, []string{"terraform.state", "terraform.output"}, opts.Skip)
 	})
 }
 
@@ -97,6 +101,7 @@ func TestParseMetadataOptions(t *testing.T) {
 		assert.Equal(t, "", opts.Format)
 		assert.True(t, opts.ProcessTemplates)
 		assert.True(t, opts.ProcessFunctions)
+		assert.Empty(t, opts.Skip)
 	})
 
 	t.Run("explicit_flags", func(t *testing.T) {
@@ -105,6 +110,7 @@ func TestParseMetadataOptions(t *testing.T) {
 		setFlag(t, cmd, "stack", "dev-*")
 		setFlag(t, cmd, "process-templates", "false")
 		setFlag(t, cmd, "process-functions", "true")
+		setFlag(t, cmd, "skip", "terraform.state")
 		v := bindFlagsToViper(t, cmd, metadataParser)
 
 		opts := parseMetadataOptions(cmd, v)
@@ -113,6 +119,7 @@ func TestParseMetadataOptions(t *testing.T) {
 		assert.Equal(t, "dev-*", opts.Stack)
 		assert.False(t, opts.ProcessTemplates)
 		assert.True(t, opts.ProcessFunctions)
+		assert.Equal(t, []string{"terraform.state"}, opts.Skip)
 	})
 }
 
@@ -135,6 +142,7 @@ func TestParseSourcesOptions(t *testing.T) {
 		assert.Equal(t, "", opts.Component, "no positional arg → empty component filter")
 		assert.True(t, opts.ProcessTemplates)
 		assert.True(t, opts.ProcessFunctions)
+		assert.Empty(t, opts.Skip)
 	})
 
 	t.Run("component_filter_from_args", func(t *testing.T) {
@@ -151,6 +159,7 @@ func TestParseSourcesOptions(t *testing.T) {
 		setFlag(t, cmd, "format", "json")
 		setFlag(t, cmd, "stack", "prod-us-east-1")
 		setFlag(t, cmd, "process-functions", "false")
+		setFlag(t, cmd, "skip", "terraform.state")
 		v := bindFlagsToViper(t, cmd, sourcesParser)
 
 		opts := parseSourcesOptions(cmd, v, nil)
@@ -159,6 +168,7 @@ func TestParseSourcesOptions(t *testing.T) {
 		assert.Equal(t, "prod-us-east-1", opts.Stack)
 		assert.True(t, opts.ProcessTemplates)
 		assert.False(t, opts.ProcessFunctions)
+		assert.Equal(t, []string{"terraform.state"}, opts.Skip)
 	})
 }
 
@@ -181,6 +191,7 @@ func TestParseStacksOptions(t *testing.T) {
 		assert.False(t, opts.Provenance)
 		assert.True(t, opts.ProcessTemplates)
 		assert.True(t, opts.ProcessFunctions)
+		assert.Empty(t, opts.Skip)
 	})
 
 	t.Run("explicit_flags", func(t *testing.T) {
@@ -190,6 +201,7 @@ func TestParseStacksOptions(t *testing.T) {
 		setFlag(t, cmd, "component", "vpc")
 		setFlag(t, cmd, "process-templates", "false")
 		setFlag(t, cmd, "process-functions", "false")
+		setFlag(t, cmd, "skip", "terraform.state")
 		v := bindFlagsToViper(t, cmd, stacksParser)
 
 		opts := parseStacksOptions(cmd, v)
@@ -199,5 +211,6 @@ func TestParseStacksOptions(t *testing.T) {
 		assert.Equal(t, "vpc", opts.Component)
 		assert.False(t, opts.ProcessTemplates)
 		assert.False(t, opts.ProcessFunctions)
+		assert.Equal(t, []string{"terraform.state"}, opts.Skip)
 	})
 }
