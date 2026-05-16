@@ -2,6 +2,7 @@ package verification
 
 import (
 	"context"
+	"os"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -287,6 +288,78 @@ func TestVerifyCosignRequiredUnavailableSidecar(t *testing.T) {
 	require.ErrorIs(t, err, ErrSignatureRequired)
 }
 
+func TestVerifyCosignDownloadsSidecars(t *testing.T) {
+	runner := &fakeRunner{}
+	result, err := (&Verifier{}).Verify(context.Background(), Request{
+		Tool: &registry.Tool{
+			RepoOwner: "owner",
+			RepoName:  "tool",
+			Cosign: registry.CosignConfig{
+				Signature:   registry.DownloadedFile{Type: "http", URL: "https://example.com/tool.sig"},
+				Certificate: registry.DownloadedFile{Type: "http", URL: "https://example.com/tool.pem"},
+				Key:         registry.DownloadedFile{Type: "http", URL: "https://example.com/tool.pub"},
+				Bundle:      registry.DownloadedFile{Type: "http", URL: "https://example.com/tool.bundle"},
+			},
+		},
+		Version:   "1.0.0",
+		AssetURL:  "https://example.com/tool.tar.gz",
+		AssetPath: writeAsset(t, []byte("hello")),
+		Downloader: fakeDownloader{
+			"https://example.com/tool.sig":    []byte("sig"),
+			"https://example.com/tool.pem":    []byte("pem"),
+			"https://example.com/tool.pub":    []byte("pub"),
+			"https://example.com/tool.bundle": []byte("bundle"),
+		},
+		Policy: Policy{
+			Checksums:  PolicyDisabled,
+			Signatures: PolicyWhenAvailable,
+		},
+		Runner: runner,
+	})
+
+	require.NoError(t, err)
+	require.Len(t, runner.calls, 1)
+	assert.Equal(t, "cosign", runner.calls[0].name)
+	assert.Contains(t, runner.calls[0].args, "--signature")
+	assert.Contains(t, runner.calls[0].args, "--certificate")
+	assert.Contains(t, runner.calls[0].args, "--key")
+	assert.Contains(t, runner.calls[0].args, "--bundle")
+	assert.Contains(t, result.SignatureMethods, "cosign")
+}
+
+func TestVerifySignaturesDisabledByMetadata(t *testing.T) {
+	disabled := false
+	runner := &fakeRunner{}
+	result, err := (&Verifier{}).Verify(context.Background(), Request{
+		Tool: &registry.Tool{
+			RepoOwner: "owner",
+			RepoName:  "tool",
+			Cosign:    registry.CosignConfig{Enabled: &disabled, Opts: []string{"--signature", "sig"}},
+			SLSAProvenance: registry.SLSAProvenance{
+				Enabled: &disabled,
+				URL:     "https://example.com/provenance",
+			},
+			Minisign: registry.MinisignConfig{
+				Enabled: &disabled,
+				URL:     "https://example.com/tool.minisig",
+			},
+			GitHubArtifactAttestations: registry.GitHubArtifactAttestations{
+				Enabled:        &disabled,
+				SignerWorkflow: "release.yaml",
+			},
+		},
+		Version:   "1.0.0",
+		AssetURL:  "https://example.com/tool.tar.gz",
+		AssetPath: writeAsset(t, []byte("hello")),
+		Policy:    Policy{Checksums: PolicyDisabled, Signatures: PolicyWhenAvailable},
+		Runner:    runner,
+	})
+
+	require.NoError(t, err)
+	assert.Empty(t, runner.calls)
+	assert.Empty(t, result.SignatureMethods)
+}
+
 func TestSidecarURLUsesGitHubReleaseVersionFromAssetURL(t *testing.T) {
 	u, err := sidecarURL(&registry.Tool{
 		RepoOwner: "owner",
@@ -298,6 +371,48 @@ func TestSidecarURLUsesGitHubReleaseVersionFromAssetURL(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.Equal(t, "https://github.com/owner/tool/releases/download/v1.0.0/tool_1.0.0_linux_amd64.tar.gz.sig", u)
+}
+
+func TestSidecarURLBranchesAndErrors(t *testing.T) {
+	_, err := sidecarURL(&registry.Tool{}, "1.0.0", "https://example.com/tool", &registry.DownloadedFile{
+		Type: "http",
+		URL:  "{{",
+	})
+	require.Error(t, err)
+
+	_, err = sidecarURL(&registry.Tool{}, "1.0.0", "https://example.com/tool", &registry.DownloadedFile{
+		Type:  "http",
+		Asset: "{{",
+	})
+	require.Error(t, err)
+
+	u, err := sidecarURL(&registry.Tool{RepoOwner: "owner", RepoName: "tool"}, "1.0.0", "https://example.com/v1.0.0/tool.tar.gz", &registry.DownloadedFile{
+		Type: "http",
+		URL:  "https://example.com/{{.Version}}/tool.sig",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, "https://example.com/v1.0.0/tool.sig", u)
+
+	u, err = sidecarURL(&registry.Tool{RepoOwner: "owner", RepoName: "tool"}, "1.0.0", "https://example.com/tool.tar.gz", &registry.DownloadedFile{
+		Type:      "github_release",
+		RepoOwner: "other",
+		RepoName:  "repo",
+		Asset:     "tool.sig",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, "https://github.com/other/repo/releases/download/1.0.0/tool.sig", u)
+}
+
+func TestDownloadTempSidecar(t *testing.T) {
+	path, err := (&Verifier{}).downloadTempSidecar(context.Background(), &Request{
+		Downloader: fakeDownloader{"https://example.com/tool.sig": []byte("sig")},
+	}, "https://example.com/tool.sig")
+	require.NoError(t, err)
+	defer os.Remove(path)
+
+	data, err := os.ReadFile(path)
+	require.NoError(t, err)
+	assert.Equal(t, []byte("sig"), data)
 }
 
 func normalizeLastArg(args []string) []string {

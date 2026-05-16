@@ -15,6 +15,7 @@ import (
 
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/toolchain/registry"
+	"github.com/cloudposse/atmos/pkg/toolchain/verification"
 )
 
 // Add a mock ToolResolver for tests
@@ -934,6 +935,9 @@ func TestNewWithOptions(t *testing.T) {
 		assert.NotEmpty(t, installer.cacheDir)
 		assert.NotNil(t, installer.registryFactory)
 		assert.NotNil(t, installer.resolver)
+		assert.Equal(t, verification.PolicyWhenAvailable, installer.verificationPolicy.Checksums)
+		assert.Equal(t, verification.PolicyWhenAvailable, installer.verificationPolicy.Signatures)
+		assert.Equal(t, verification.VerifierInstallAuto, installer.verificationPolicy.VerifierInstall)
 	})
 
 	t.Run("creates installer with custom binDir", func(t *testing.T) {
@@ -1089,12 +1093,27 @@ func TestWithAtmosConfig(t *testing.T) {
 		inst := &Installer{
 			resolver: &DefaultToolResolver{},
 		}
-		config := &schema.AtmosConfiguration{}
+		config := &schema.AtmosConfiguration{
+			Toolchain: schema.Toolchain{
+				InstallPath: "bin",
+				UseLockFile: true,
+				Verification: &schema.ToolchainVerification{
+					Checksums:       verification.PolicyRequired,
+					Signatures:      verification.PolicyDisabled,
+					VerifierInstall: verification.VerifierInstallPathOnly,
+				},
+			},
+		}
 		opt := WithAtmosConfig(config)
 		opt(inst)
 		resolver, ok := inst.resolver.(*DefaultToolResolver)
 		require.True(t, ok)
 		assert.Equal(t, config, resolver.AtmosConfig)
+		assert.True(t, inst.useLockFile)
+		assert.Equal(t, filepath.Join("bin", "toolchain.lock.yaml"), inst.lockFilePath)
+		assert.Equal(t, verification.PolicyRequired, inst.verificationPolicy.Checksums)
+		assert.Equal(t, verification.PolicyDisabled, inst.verificationPolicy.Signatures)
+		assert.Equal(t, verification.VerifierInstallPathOnly, inst.verificationPolicy.VerifierInstall)
 	})
 
 	t.Run("skips non-default resolver", func(t *testing.T) {

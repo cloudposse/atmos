@@ -376,7 +376,7 @@ func (r verifierCommandRunner) Run(ctx context.Context, name string, args ...str
 }
 
 func runVerifierCommand(ctx context.Context, path string, args ...string) error {
-	// #nosec G204 -- verifier path is discovered via PATH or installed by the toolchain.
+	// #nosec G204,G702 -- verifier path is discovered via PATH or installed by the toolchain.
 	cmd := exec.CommandContext(ctx, path, args...)
 	if output, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("%w: %s %v: %w\n%s", verification.ErrSignatureFailed, path, args, err, string(output))

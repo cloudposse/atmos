@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -199,6 +200,62 @@ func TestVerifyChecksumRequiredUnavailableSidecar(t *testing.T) {
 	require.ErrorIs(t, err, ErrChecksumRequired)
 }
 
+func TestVerifyChecksumRequiredMissingAndDisabledMetadata(t *testing.T) {
+	_, err := (&Verifier{}).Verify(context.Background(), Request{
+		Tool:      &registry.Tool{RepoOwner: "owner", RepoName: "tool"},
+		Version:   "1.0.0",
+		AssetURL:  "https://example.com/tool",
+		AssetPath: writeAsset(t, []byte("hello")),
+		Policy:    Policy{Checksums: PolicyRequired, Signatures: PolicyDisabled},
+	})
+	require.ErrorIs(t, err, ErrChecksumRequired)
+
+	disabled := false
+	_, err = (&Verifier{}).Verify(context.Background(), Request{
+		Tool: &registry.Tool{
+			RepoOwner: "owner",
+			RepoName:  "tool",
+			Checksum: registry.ChecksumConfig{
+				Enabled: &disabled,
+				Type:    "http",
+				URL:     "https://example.com/checksums.txt",
+			},
+		},
+		Version:   "1.0.0",
+		AssetURL:  "https://example.com/tool",
+		AssetPath: writeAsset(t, []byte("hello")),
+		Policy:    Policy{Checksums: PolicyRequired, Signatures: PolicyDisabled},
+	})
+	require.ErrorIs(t, err, ErrChecksumRequired)
+}
+
+func TestVerifyChecksumSkipsMissingAndDisabledWhenAvailable(t *testing.T) {
+	result, err := (&Verifier{}).Verify(context.Background(), Request{
+		Tool:      &registry.Tool{RepoOwner: "owner", RepoName: "tool"},
+		Version:   "1.0.0",
+		AssetURL:  "https://example.com/tool",
+		AssetPath: writeAsset(t, []byte("hello")),
+		Policy:    Policy{Checksums: PolicyWhenAvailable, Signatures: PolicyDisabled},
+	})
+	require.NoError(t, err)
+	assert.Contains(t, result.SkippedReasons, "checksum metadata unavailable")
+
+	disabled := false
+	result, err = (&Verifier{}).Verify(context.Background(), Request{
+		Tool: &registry.Tool{
+			RepoOwner: "owner",
+			RepoName:  "tool",
+			Checksum:  registry.ChecksumConfig{Enabled: &disabled},
+		},
+		Version:   "1.0.0",
+		AssetURL:  "https://example.com/tool",
+		AssetPath: writeAsset(t, []byte("hello")),
+		Policy:    Policy{Checksums: PolicyWhenAvailable, Signatures: PolicyDisabled},
+	})
+	require.NoError(t, err)
+	assert.Contains(t, result.SkippedReasons, "checksum disabled by registry metadata")
+}
+
 func TestChecksumFileURLUsesGitHubReleaseVersionFromAssetURL(t *testing.T) {
 	u, err := checksumFileURL(&registry.Tool{
 		RepoOwner: "owner",
@@ -234,6 +291,60 @@ func TestChecksumFileURLUsesEffectiveVersionInEmbeddedAssetName(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.Equal(t, "https://get.helm.sh/helm-v3.17.0-darwin-arm64.tar.gz.sha256sum", u)
+}
+
+func TestChecksumFileURLBranchesAndErrors(t *testing.T) {
+	_, err := checksumFileURL(&registry.Tool{}, "1.0.0", "https://example.com/tool", &registry.ChecksumConfig{
+		Type: "http",
+		URL:  "{{",
+	})
+	require.Error(t, err)
+
+	_, err = checksumFileURL(&registry.Tool{}, "1.0.0", "https://example.com/tool", &registry.ChecksumConfig{
+		Type:  "http",
+		Asset: "{{",
+	})
+	require.Error(t, err)
+
+	u, err := checksumFileURL(&registry.Tool{RepoOwner: "owner", RepoName: "tool"}, "1.0.0", "::::", &registry.ChecksumConfig{
+		Type:  "github_release",
+		Asset: "checksums.txt",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, "https://github.com/owner/tool/releases/download/1.0.0/checksums.txt", u)
+}
+
+func TestChecksumParsingEdgeCases(t *testing.T) {
+	_, err := parseRawChecksum([]byte(""), "sha256")
+	require.ErrorIs(t, err, ErrChecksumNotFound)
+
+	_, err = parseRegexpChecksum([]byte("abc tool\nabc other\n"), "missing", "sha256", registry.ChecksumPattern{
+		Checksum: "abc",
+	})
+	require.ErrorIs(t, err, ErrChecksumAmbiguous)
+
+	sum, err := parseRegexpChecksum([]byte("abc artifact\n"), "artifact", "sha256", registry.ChecksumPattern{
+		Checksum: "abc",
+		File:     "artifact",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, "abc", sum)
+
+	_, _, ok := matchChecksumLine("abc artifact", "missing", regexp.MustCompile("abc"), regexp.MustCompile("different"))
+	assert.False(t, ok)
+}
+
+func TestDigestAndURLHelpers(t *testing.T) {
+	_, err := digestFile(filepath.Join(t.TempDir(), "missing"), "sha256")
+	require.Error(t, err)
+
+	_, err = digestFile(writeAsset(t, []byte("hello")), "sha999")
+	require.ErrorIs(t, err, ErrUnsupportedAlgorithm)
+
+	assert.Equal(t, "", effectiveReleaseVersionFromAssetURL("://bad-url", "1.0.0"))
+	assert.Equal(t, "", releaseVersionFromGitHubAssetURL("https://example.com/owner/tool/releases/download/v1.0.0/tool.tar.gz"))
+	assert.Equal(t, "https://example.com/tool-1.0.0.sig", replaceVersionSegmentInURL("https://example.com/tool-1.0.0.sig", "1.0.0", "v1.0.0"))
+	assert.Equal(t, "tool", assetNameFromURL("://bad-url/tool"))
 }
 
 func TestVerifyChecksumCosignVerifiesChecksumSidecar(t *testing.T) {
