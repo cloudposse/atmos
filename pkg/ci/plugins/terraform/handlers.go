@@ -33,7 +33,7 @@ func (p *Plugin) onBeforePlan(ctx *plugin.HookContext) error {
 }
 
 // onAfterPlan handles the after.terraform.plan event.
-// Writes summary, outputs, uploads planfile, and updates check run.
+// Writes summary, outputs, uploads planfile, updates check run, and posts PR comment.
 func (p *Plugin) onAfterPlan(ctx *plugin.HookContext) error {
 	defer perf.Track(ctx.Config, "terraform.Plugin.onAfterPlan")()
 
@@ -68,6 +68,14 @@ func (p *Plugin) onAfterPlan(ctx *plugin.HookContext) error {
 	if isCheckEnabled(ctx.Config) {
 		if err := p.updateCheckRun(ctx, result); err != nil {
 			logCheckRunError("CI check run update skipped", err)
+		}
+	}
+
+	// PR comment -- warn-only. Reuses the summary already rendered above
+	// to honor user template overrides in ci.templates.terraform.plan.
+	if isCommentsEnabled(ctx.Config) {
+		if err := p.postComment(ctx, renderedSummary); err != nil {
+			logCommentError("CI PR comment skipped", err)
 		}
 	}
 
@@ -371,7 +379,8 @@ func (p *Plugin) writeSummary(ctx *plugin.HookContext, result *plugin.OutputResu
 			Err()
 	}
 
-	log.Debug("Wrote CI summary",
+	log.Debug(
+		"Wrote CI summary",
 		"stack", ctx.Info.Stack,
 		"component", ctx.Info.ComponentFromArg,
 		"template", templateName,
@@ -789,6 +798,19 @@ func isCheckEnabled(cfg *schema.AtmosConfiguration) bool {
 		return false
 	}
 	return *cfg.CI.Checks.Enabled
+}
+
+// isCommentsEnabled returns whether PR comment posting is enabled. Nil means
+// "unset" and defaults to false so that upgrading installations don't start
+// posting comments until the feature is explicitly opted into.
+func isCommentsEnabled(cfg *schema.AtmosConfiguration) bool {
+	if cfg == nil {
+		return false
+	}
+	if cfg.CI.Comments.Enabled == nil {
+		return false
+	}
+	return *cfg.CI.Comments.Enabled
 }
 
 // filterVariables filters a map of variables to only include those in the allowed list.

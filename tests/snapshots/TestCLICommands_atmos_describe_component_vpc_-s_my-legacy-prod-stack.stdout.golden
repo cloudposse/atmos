@@ -119,6 +119,8 @@
   "provision": {},
   "remote_state_backend": {},
   "remote_state_backend_type": "",
+  "required_providers": {},
+  "required_version": "",
   "settings": {},
   "source": {},
   "sources": {

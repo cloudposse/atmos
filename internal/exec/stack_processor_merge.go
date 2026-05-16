@@ -24,7 +24,8 @@ func mergeComponentConfigurations(atmosConfig *schema.AtmosConfiguration, opts *
 			result.BaseComponentVars,
 			result.ComponentVars,
 			result.ComponentOverridesVars,
-		})
+		},
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -42,7 +43,8 @@ func mergeComponentConfigurations(atmosConfig *schema.AtmosConfiguration, opts *
 			result.BaseComponentSettings,
 			result.ComponentSettings,
 			result.ComponentOverridesSettings,
-		})
+		},
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -60,7 +62,8 @@ func mergeComponentConfigurations(atmosConfig *schema.AtmosConfiguration, opts *
 			result.BaseComponentEnv,
 			result.ComponentEnv,
 			result.ComponentOverridesEnv,
-		})
+		},
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -78,7 +81,8 @@ func mergeComponentConfigurations(atmosConfig *schema.AtmosConfiguration, opts *
 			result.BaseComponentAuth,
 			result.ComponentAuth,
 			result.ComponentOverridesAuth,
-		})
+		},
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -99,7 +103,8 @@ func mergeComponentConfigurations(atmosConfig *schema.AtmosConfiguration, opts *
 				result.BaseComponentProviders,
 				result.ComponentProviders,
 				result.ComponentOverridesProviders,
-			})
+			},
+		)
 		if err != nil {
 			return nil, err
 		}
@@ -107,6 +112,47 @@ func mergeComponentConfigurations(atmosConfig *schema.AtmosConfiguration, opts *
 		// Apply deferred merges for providers (without YAML processing - already done earlier).
 		if err := m.ApplyDeferredMerges(providersCtx, finalComponentProviders, atmosConfig, nil); err != nil {
 			return nil, err
+		}
+	}
+
+	// Terraform-specific: merge required_providers using deferred merge (DEV-3124).
+	var finalComponentRequiredProviders map[string]any
+	if opts.ComponentType == cfg.TerraformComponentType {
+		var requiredProvidersCtx *m.DeferredMergeContext
+		finalComponentRequiredProviders, requiredProvidersCtx, err = m.MergeWithDeferred(
+			atmosConfig,
+			[]map[string]any{
+				opts.TerraformRequiredProviders,
+				result.BaseComponentRequiredProviders,
+				result.ComponentRequiredProviders,
+				result.ComponentOverridesRequiredProviders,
+			},
+		)
+		if err != nil {
+			return nil, err
+		}
+
+		// Apply deferred merges for required_providers (without YAML processing - already done earlier).
+		if err := m.ApplyDeferredMerges(requiredProvidersCtx, finalComponentRequiredProviders, atmosConfig, nil); err != nil {
+			return nil, err
+		}
+	}
+
+	// Terraform-specific: resolve required_version (DEV-3124).
+	// Uses the same precedence as command: global -> base component -> component -> overrides.
+	var finalComponentRequiredVersion string
+	if opts.ComponentType == cfg.TerraformComponentType {
+		if opts.TerraformRequiredVersion != "" {
+			finalComponentRequiredVersion = opts.TerraformRequiredVersion
+		}
+		if result.BaseComponentRequiredVersion != "" {
+			finalComponentRequiredVersion = result.BaseComponentRequiredVersion
+		}
+		if result.ComponentRequiredVersion != "" {
+			finalComponentRequiredVersion = result.ComponentRequiredVersion
+		}
+		if result.ComponentOverridesRequiredVersion != "" {
+			finalComponentRequiredVersion = result.ComponentOverridesRequiredVersion
 		}
 	}
 
@@ -121,7 +167,8 @@ func mergeComponentConfigurations(atmosConfig *schema.AtmosConfiguration, opts *
 				result.BaseComponentHooks,
 				result.ComponentHooks,
 				result.ComponentOverridesHooks,
-			})
+			},
+		)
 		if err != nil {
 			return nil, err
 		}
@@ -148,7 +195,8 @@ func mergeComponentConfigurations(atmosConfig *schema.AtmosConfiguration, opts *
 				result.BaseComponentGenerate,
 				result.ComponentGenerate,
 				result.ComponentOverridesGenerate,
-			})
+			},
+		)
 		if err != nil {
 			return nil, err
 		}
@@ -204,7 +252,8 @@ func mergeComponentConfigurations(atmosConfig *schema.AtmosConfiguration, opts *
 			[]map[string]any{
 				result.BaseComponentMetadata,
 				result.ComponentMetadata,
-			})
+			},
+		)
 		if err != nil {
 			return nil, err
 		}
@@ -220,7 +269,8 @@ func mergeComponentConfigurations(atmosConfig *schema.AtmosConfiguration, opts *
 				opts.GlobalDependencies,
 				result.BaseComponentDependencies,
 				result.ComponentDependencies,
-			})
+			},
+		)
 		if err != nil {
 			return nil, err
 		}
@@ -236,7 +286,8 @@ func mergeComponentConfigurations(atmosConfig *schema.AtmosConfiguration, opts *
 			[]map[string]any{
 				result.BaseComponentLocals,
 				result.ComponentLocals,
-			})
+			},
+		)
 		if err != nil {
 			return nil, err
 		}
@@ -329,6 +380,8 @@ func mergeComponentConfigurations(atmosConfig *schema.AtmosConfiguration, opts *
 
 		// Add Terraform-specific fields to component map.
 		comp[cfg.ProvidersSectionName] = finalComponentProviders
+		comp[cfg.RequiredProvidersSectionName] = finalComponentRequiredProviders
+		comp[cfg.RequiredVersionSectionName] = finalComponentRequiredVersion
 		comp[cfg.HooksSectionName] = finalComponentHooks
 		comp[cfg.GenerateSectionName] = finalComponentGenerate
 		comp[cfg.BackendTypeSectionName] = finalComponentBackendType
@@ -348,7 +401,8 @@ func mergeComponentConfigurations(atmosConfig *schema.AtmosConfiguration, opts *
 				opts.GlobalSourceSection,
 				result.BaseComponentSourceSection,
 				result.ComponentSourceSection,
-			})
+			},
+		)
 		if err != nil {
 			return nil, err
 		}
@@ -362,7 +416,8 @@ func mergeComponentConfigurations(atmosConfig *schema.AtmosConfiguration, opts *
 				opts.GlobalProvisionSection,
 				result.BaseComponentProvisionSection,
 				result.ComponentProvision,
-			})
+			},
+		)
 		if err != nil {
 			return nil, err
 		}
@@ -386,7 +441,8 @@ func processAuthConfig(atmosConfig *schema.AtmosConfiguration, globalAuthConfig 
 		[]map[string]any{
 			globalAuthConfig,
 			authConfig,
-		})
+		},
+	)
 	if err != nil {
 		return nil, fmt.Errorf("%w: merge auth config: %w", errUtils.ErrInvalidAuthConfig, err)
 	}

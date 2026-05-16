@@ -487,13 +487,18 @@ func parseFlagValue(flag, arg string, args []string, index int) (string, bool, e
 //   - --identity=value   → use value.
 //   - --identity=        → __SELECT__ (interactive selection).
 //
+// Boolean-false representations of the value ("false", "0", "no", "off",
+// case-insensitive) are normalized to cfg.IdentityFlagDisabledValue so that
+// --identity=false disables authentication, matching the documented behavior
+// of ATMOS_IDENTITY=false. Normalization is identity-on for all other values.
+//
 // SplitN(arg, "=", 2) is used so that identity values containing "=" (e.g., ARN-like
 // strings with key=value parameters) are handled correctly.
 func parseIdentityFlag(info *schema.ArgsAndFlagsInfo, arg string, args []string, index int) {
 	if arg == cfg.IdentityFlag {
 		// Has value: --identity <value> (next arg exists and is not another flag).
 		if len(args) > index+1 && !strings.HasPrefix(args[index+1], "-") {
-			info.Identity = args[index+1]
+			info.Identity = cfg.NormalizeIdentityValue(args[index+1])
 		} else {
 			// No value: --identity (interactive selection).
 			info.Identity = cfg.IdentityFlagSelectValue
@@ -507,7 +512,7 @@ func parseIdentityFlag(info *schema.ArgsAndFlagsInfo, arg string, args []string,
 			// Empty value: --identity= (interactive selection).
 			info.Identity = cfg.IdentityFlagSelectValue
 		} else {
-			info.Identity = parts[1]
+			info.Identity = cfg.NormalizeIdentityValue(parts[1])
 		}
 	}
 }

@@ -319,6 +319,26 @@ func HasExplicitProfile() bool {
 	return len(profiles) > 0
 }
 
+// GetActiveProfiles returns the profiles currently active for this command
+// invocation, using the same resolution order as LoadConfig:
+//
+//  1. --profile flag (explicit).
+//  2. ATMOS_PROFILE environment variable (explicit).
+//  3. profiles.default from atmos.yaml (implicit).
+//
+// Returns nil when no profile is active.
+func GetActiveProfiles(atmosConfig *schema.AtmosConfiguration) []string {
+	if profiles, _ := getProfilesFromFlagsOrEnv(); len(profiles) > 0 {
+		return profiles
+	}
+	if atmosConfig != nil {
+		if def := strings.TrimSpace(atmosConfig.Profiles.Default); def != "" {
+			return []string{def}
+		}
+	}
+	return nil
+}
+
 // ProfileDefinesIdentity reports whether the named profile defines the given
 // identity in its auth.identities section. Match is case-insensitive.
 //

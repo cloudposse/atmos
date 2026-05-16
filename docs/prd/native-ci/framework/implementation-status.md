@@ -56,7 +56,7 @@ Phases are organized by PRD workstream and functional requirement (FR). See [Ove
 
 ---
 
-### Providers: GitHub Actions — Mostly Complete (PR Comments remaining)
+### Providers: GitHub Actions — COMPLETE
 
 > PRDs: [GitHub Provider](../providers/github/provider.md) | [Job Summaries](../providers/github/job-summaries.md) | [CI Outputs](../providers/github/ci-outputs.md) | [Status Checks](../providers/github/status-checks.md) | [PR Comments](../providers/github/pr-comments.md)
 
@@ -92,10 +92,13 @@ Phases are organized by PRD workstream and functional requirement (FR). See [Ove
 3. `checks.go` — CreateCheckRun, UpdateCheckRun — Done
 4. `status.go` — GetStatus implementation — Done
 
-**PR Comments** — Not Started (design deferred)
-1. PR comment action type in executor — **Not Started**
-2. Comment upsert behavior (HTML marker, find-and-update) — **Not Started**
-3. `github/comment.go` — PR comment API — **Not Started**
+**PR Comments** — Done (plan-only, issue #2367)
+1. `provider.Provider.PostComment` method on the provider interface — Done
+2. Comment upsert behavior (HTML marker `<!-- atmos:ci:{command}:{component}:{stack} -->`, find-and-update via `Issues.ListComments` + `EditComment`) — Done
+3. `pkg/ci/providers/github/comments.go` — PR comment API with 403/404 permission hints — Done
+4. Terraform plugin `postComment()` handler wired into `onAfterPlan` — Done
+5. `ci.comments.enabled` schema changed from `bool` → `*bool` so nil (unset) can default to false (off) without colliding with explicit false
+6. `ATMOS_CI_COMMENTS_ENABLED` env override updated for pointer-bool semantics
 
 ---
 
@@ -272,10 +275,12 @@ Verification lives on `deploy`, not `apply`. The `apply` command does NOT intera
 | **FR-9** | CI Status Command | [status-checks.md](../providers/github/status-checks.md) | **Done** | 100% |
 | | `atmos ci status` command | | Done | |
 | | Current branch status + PRs + review requests | | Done | |
-| **—** | PR Comments | [pr-comments.md](../providers/github/pr-comments.md) | **Not Started** | 0% |
-| | PR comment action type in executor | | Not Started | |
-| | Comment upsert behavior (HTML marker) | | Not Started | |
-| | `github/comment.go` — PR comment API | | Not Started | |
+| **—** | PR Comments (plan-only, issue #2367) | [pr-comments.md](../providers/github/pr-comments.md) | **Done** | 100% |
+| | `Provider.PostComment` interface method | | Done | |
+| | Upsert via HTML marker + ListComments/EditComment | | Done | |
+| | `pkg/ci/providers/github/comments.go` | | Done | |
+| | Plugin `postComment()` handler wired into `onAfterPlan` | | Done | |
+| | `CICommentsConfig.Enabled` bool → *bool (nil defaults off) | | Done | |
 | **—** | Terraform Output Export | [ci-outputs.md](../providers/github/ci-outputs.md) | **Done** | 100% |
 | | Export terraform outputs after apply (`output_*`) | | Done | |
 | | `pkg/terraform/output/FlattenMap()` formatting | | Done | |
@@ -300,7 +305,7 @@ Verification lives on `deploy`, not `apply`. The `apply` command does NOT intera
 | Framework: CI Detection (FR-1) | 4/4 | 0 | 0 |
 | Framework: Artifact Storage | 7/7 | 0 | 0 |
 | Providers: GitHub (FR-2, FR-3, FR-4, FR-9) | 17/17 | 0 | 0 |
-| Providers: GitHub — PR Comments | 0/3 | 3 | 0 |
+| Providers: GitHub — PR Comments | 6/6 | 0 | 0 |
 | Providers: Generic | 3/3 | 0 | 0 |
 | Terraform Plugin: Hook Bindings (callback-based) | 9/9 | 0 | 0 |
 | Terraform Plugin: Planfile Storage (FR-5) | 16/18 | 0 | 2 (Azure, GCS) |
@@ -317,7 +322,7 @@ Verification lives on `deploy`, not `apply`. The `apply` command does NOT intera
 | Phases: CLI Component/Stack Addressing | 10/10 | 0 | 0 |
 | Phases: Apply Command Parity (FR-7) | 7/7 | 0 | 0 |
 | Phases: Planfile Download Path Resolution & Integrity | 6/6 | 0 | 0 |
-| **Total** | **142/148** | **4** | **2** |
+| **Total** | **148/151** | **0** | **3** |
 
 ## Implementation Phases (Incremental)
 
@@ -483,7 +488,10 @@ These are incremental improvements shipped as focused PRDs.
 | `pkg/ci/providers/github/checks_test.go` | Check runs tests | Done |
 | `pkg/ci/providers/github/status.go` | GetStatus implementation | Done |
 | `pkg/ci/providers/github/status_test.go` | Status tests | Done |
-| `pkg/ci/providers/github/comment.go` | PR comment API (tfcmt-inspired) | Phase 4 |
+| `pkg/ci/providers/github/comments.go` | PR comment API: Issues.ListComments + marker scan + CreateComment/EditComment, with 403/404 permission hints | Done |
+| `pkg/ci/providers/github/comments_test.go` | Upsert/create/update + 403/404 hint + pagination tests (13 tests) | Done |
+| `pkg/ci/internal/provider/comment.go` | PostCommentOptions, Comment, CommentBehavior types | Done |
+| `pkg/ci/plugins/terraform/comments.go` | Terraform `postComment()` handler, marker builder, behavior resolver, warn-only logger | Done |
 | **pkg/ci/providers/generic/** | Generic CI provider | |
 | `pkg/ci/providers/generic/provider.go` | Generic provider (CI=true detection, env var context, OutputWriter) | Done |
 | `pkg/ci/providers/generic/provider_test.go` | Provider tests | Done |
@@ -549,6 +557,10 @@ ErrCICheckRunUpdateFailed  = errors.New("failed to update check run")
 ErrCIStatusFetchFailed     = errors.New("failed to fetch CI status")
 ErrCIOutputWriteFailed     = errors.New("failed to write CI output")
 ErrCISummaryWriteFailed    = errors.New("failed to write CI summary")
+ErrCICommentPostFailed     = errors.New("failed to post PR comment")
+ErrCICommentListFailed     = errors.New("failed to list PR comments")
+ErrCICommentUpdateFailed   = errors.New("failed to update PR comment")
+ErrCICommentNotFound       = errors.New("PR comment not found")
 
 // Artifact storage errors
 ErrArtifactNotFound         = errors.New("artifact not found")
@@ -719,6 +731,7 @@ Coverage target: 80%.
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 14.0 | 2026-05-13 | PR Comments SHIPPED (issue #2367). `Provider.PostComment` added to the provider interface. `pkg/ci/providers/github/comments.go` implements upsert via HTML marker (`<!-- atmos:ci:{command}:{component}:{stack} -->`) using `Issues.ListComments` + `Issues.EditComment`/`CreateComment`, with 403/404 hints directing users to `permissions: pull-requests: write`. Terraform plugin `postComment()` handler wired into `onAfterPlan` (plan-only; reuses the rendered summary so `ci.templates.terraform.plan` overrides are honored). `CICommentsConfig.Enabled` changed from `bool` → `*bool` so nil (unset) can default off without colliding with explicit false. Generic provider returns `ErrCIOperationNotSupported`. Warn-only errors. Added 4 sentinel errors. 13 new provider tests + 8 new handler tests. |
 | 13.0 | 2026-03-11 | Documentation COMPLETE. (1) Archived old GitHub Actions docs — added deprecation `:::tip` to `website/docs/integrations/github-actions/github-actions.mdx` pointing to native CI. (2) Expanded CI integration docs — `website/docs/cli/configuration/ci.mdx` now has experimental warning, planfile storage configuration (github-artifacts/s3/local), deploy workflow example, and environment variables table. (3) Updated command reference docs — added `--ci` flag with CI Integration sections to `terraform-plan.mdx`, `terraform-apply.mdx`, `terraform-deploy.mdx`. (4) JSON schemas confirmed N/A — `pkg/datafetcher/schema/` covers stack manifests only, not `atmos.yaml` global config. Summary: 142/148 done. |
 | 12.0 | 2026-03-11 | CI Experimental Feature Gating SHIPPED. `atmos ci` command already marked experimental via `IsExperimental()`. CI hooks in `RunCIHooks()` now gated via `checkExperimental()` in `pkg/hooks/hooks.go`, respecting `settings.experimental` modes (silence/warn/error/disable). Experimental check placed after `ci.enabled` gate so warning only appears when CI is active. Uses existing sentinel errors `ErrExperimentalDisabled` and `ErrExperimentalRequiresIn`. |
 | 11.0 | 2026-03-11 | Bug fixes: (1) Deploy check run name mismatch — `onAfterDeploy` was setting `ctx.Command = "apply"` which changed check run name from `atmos/deploy:` to `atmos/apply:`, leaving original stuck in_progress; fixed by preserving original command for check run update. (2) Planfile storage skipped when not configured — `isPlanfileStorageEnabled()` guard added to `uploadPlanfile()` and `downloadPlanfileForVerification()` so planfile operations don't fail when `components.terraform.planfiles` is empty. (3) Apply warnings not shown — `ParseApplyOutput()` now calls `ExtractWarningBlocks()` and `apply.md` template includes warnings section. |

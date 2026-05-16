@@ -50,7 +50,11 @@ type InstancesCommandOptions struct {
 	Delimiter   string
 	Query       string
 	AuthManager auth.AuthManager
-	OutputFile  string
+	// AuthDisabled is true when the caller explicitly used --identity=false.
+	// It prevents per-component auth auto-detection while still allowing
+	// templates and YAML functions that do not require credentials to run.
+	AuthDisabled bool
+	OutputFile   string
 	// ProcessTemplates toggles Go template processing of stack manifests
 	// (controls the `processTemplates` parameter of `ExecuteDescribeStacks`).
 	// Default true for parity with `describe affected` / `describe stacks`.
@@ -398,14 +402,31 @@ func processInstancesWithDeps(
 	authManager auth.AuthManager,
 	processTemplates, processYamlFunctions bool,
 ) ([]schema.Instance, error) {
-	stacksMap, err := stacksProcessor.ExecuteDescribeStacks(
-		atmosConfig, "", nil, nil, nil,
-		false, // ignoreMissingFiles
+	return processInstancesWithDepsAuthDisabled(
+		atmosConfig,
+		stacksProcessor,
+		authManager,
 		processTemplates,
 		processYamlFunctions,
-		false, // includeEmptyStacks
-		nil,   // skip
+		false,
+	)
+}
+
+//nolint:revive // Test seam mirrors processInstancesWithDeps with authDisabled passthrough.
+func processInstancesWithDepsAuthDisabled(
+	atmosConfig *schema.AtmosConfiguration,
+	stacksProcessor e.StacksProcessor,
+	authManager auth.AuthManager,
+	processTemplates, processYamlFunctions bool,
+	authDisabled bool,
+) ([]schema.Instance, error) {
+	stacksMap, err := executeDescribeStacksForInstances(
+		atmosConfig,
+		stacksProcessor,
 		authManager,
+		processTemplates,
+		processYamlFunctions,
+		authDisabled,
 	)
 	if err != nil {
 		log.Error(errUtils.ErrExecuteDescribeStacks.Error(), "error", err)
@@ -421,6 +442,57 @@ func processInstancesWithDeps(
 	return instances, nil
 }
 
+type authDisabledStacksProcessor interface {
+	ExecuteDescribeStacksWithAuthDisabled(
+		atmosConfig *schema.AtmosConfiguration,
+		filterByStack string,
+		components []string,
+		componentTypes []string,
+		sections []string,
+		ignoreMissingFiles bool,
+		processTemplates bool,
+		processYamlFunctions bool,
+		includeEmptyStacks bool,
+		skip []string,
+		authManager auth.AuthManager,
+		authDisabled bool,
+	) (map[string]any, error)
+}
+
+//nolint:revive // Helper mirrors the StacksProcessor call shape with authDisabled passthrough.
+func executeDescribeStacksForInstances(
+	atmosConfig *schema.AtmosConfiguration,
+	stacksProcessor e.StacksProcessor,
+	authManager auth.AuthManager,
+	processTemplates, processYamlFunctions bool,
+	authDisabled bool,
+) (map[string]any, error) {
+	if authDisabled {
+		if processor, ok := stacksProcessor.(authDisabledStacksProcessor); ok {
+			return processor.ExecuteDescribeStacksWithAuthDisabled(
+				atmosConfig, "", nil, nil, nil,
+				false,
+				processTemplates,
+				processYamlFunctions,
+				false,
+				nil,
+				authManager,
+				authDisabled,
+			)
+		}
+	}
+
+	return stacksProcessor.ExecuteDescribeStacks(
+		atmosConfig, "", nil, nil, nil,
+		false, // ignoreMissingFiles
+		processTemplates,
+		processYamlFunctions,
+		false, // includeEmptyStacks
+		nil,   // skip
+		authManager,
+	)
+}
+
 // processInstances collects, filters, and sorts instances.
 // This is a convenience wrapper around processInstancesWithDeps() for production use.
 func processInstances(
@@ -429,6 +501,22 @@ func processInstances(
 	processTemplates, processYamlFunctions bool,
 ) ([]schema.Instance, error) {
 	return processInstancesWithDeps(atmosConfig, &e.DefaultStacksProcessor{}, authManager, processTemplates, processYamlFunctions)
+}
+
+func processInstancesWithAuthDisabled(
+	atmosConfig *schema.AtmosConfiguration,
+	authManager auth.AuthManager,
+	processTemplates, processYamlFunctions bool,
+	authDisabled bool,
+) ([]schema.Instance, error) {
+	return processInstancesWithDepsAuthDisabled(
+		atmosConfig,
+		&e.DefaultStacksProcessor{},
+		authManager,
+		processTemplates,
+		processYamlFunctions,
+		authDisabled,
+	)
 }
 
 // ExecuteListInstancesCmd executes the list instances command.
@@ -490,7 +578,7 @@ func ExecuteListInstancesCmd(opts *InstancesCommandOptions) error {
 		// Honor the caller-supplied template/function flags so tree output is
 		// consistent with non-tree runs of the same command invocation, matching
 		// the behavior of `list stacks --format=tree`.
-		stacksMap, err := e.ExecuteDescribeStacks(
+		stacksMap, err := e.ExecuteDescribeStacksWithAuthDisabled(
 			&atmosConfig, "", nil, nil, nil,
 			false, // ignoreMissingFiles
 			opts.ProcessTemplates,
@@ -498,6 +586,7 @@ func ExecuteListInstancesCmd(opts *InstancesCommandOptions) error {
 			false, // includeEmptyStacks
 			nil,   // skip
 			opts.AuthManager,
+			opts.AuthDisabled,
 		)
 		if err != nil {
 			log.Error(errUtils.ErrExecuteDescribeStacks.Error(), "error", err)
@@ -517,7 +606,13 @@ func ExecuteListInstancesCmd(opts *InstancesCommandOptions) error {
 	}
 
 	// For non-tree formats, process instances normally.
-	instances, err := processInstances(&atmosConfig, opts.AuthManager, opts.ProcessTemplates, opts.ProcessFunctions)
+	instances, err := processInstancesWithAuthDisabled(
+		&atmosConfig,
+		opts.AuthManager,
+		opts.ProcessTemplates,
+		opts.ProcessFunctions,
+		opts.AuthDisabled,
+	)
 	if err != nil {
 		log.Error(errUtils.ErrProcessInstances.Error(), "error", err)
 		return errors.Join(errUtils.ErrProcessInstances, err)
@@ -629,7 +724,7 @@ func executeMatrixFormat(atmosConfig *schema.AtmosConfiguration, opts *Instances
 	// Get stacksMap to extract component_path from component_info. Honor the
 	// caller-supplied template/function flags so matrix output stays consistent
 	// with non-matrix runs of the same command invocation.
-	stacksMap, err := e.ExecuteDescribeStacks(
+	stacksMap, err := e.ExecuteDescribeStacksWithAuthDisabled(
 		atmosConfig, "", nil, nil, nil,
 		false, // ignoreMissingFiles
 		opts.ProcessTemplates,
@@ -637,6 +732,7 @@ func executeMatrixFormat(atmosConfig *schema.AtmosConfiguration, opts *Instances
 		false, // includeEmptyStacks
 		nil,   // skip
 		opts.AuthManager,
+		opts.AuthDisabled,
 	)
 	if err != nil {
 		log.Error(errUtils.ErrExecuteDescribeStacks.Error(), "error", err)
