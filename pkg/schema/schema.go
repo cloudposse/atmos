@@ -1014,6 +1014,7 @@ type ConfigAndStacksInfo struct {
 	//   - This would create: schema → auth → schema (circular dependency error)
 	//   - Type assertions are used at usage sites to recover type safety
 	AuthManager          any
+	AuthDisabled         bool
 	ComponentBackendType string
 	// RequiredVersion is the Terraform version constraint (e.g., ">= 1.10.1").
 	// This is extracted from terraform.required_version or components.terraform.<name>.required_version.

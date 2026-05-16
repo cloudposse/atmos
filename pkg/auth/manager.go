@@ -173,7 +173,6 @@ func NewAuthManager(
 	// Initialize providers.
 	if err := m.initializeProviders(); err != nil {
 		wrappedErr := fmt.Errorf("failed to initialize providers: %w", err)
-		errUtils.CheckErrorAndPrint(wrappedErr, "Initialize Providers", "")
 		return nil, wrappedErr
 	}
 
@@ -185,7 +184,6 @@ func NewAuthManager(
 	// Initialize identities.
 	if err := m.initializeIdentities(); err != nil {
 		wrappedErr := fmt.Errorf("failed to initialize identities: %w", err)
-		errUtils.CheckErrorAndPrint(wrappedErr, "Initialize Identities", "")
 		return nil, wrappedErr
 	}
 
@@ -594,7 +592,6 @@ func (m *manager) initializeProviders() error {
 	for name, providerConfig := range m.config.Providers {
 		provider, err := factory.NewProvider(name, &providerConfig)
 		if err != nil {
-			errUtils.CheckErrorAndPrint(err, "Initialize Providers", "")
 			return fmt.Errorf("%w: provider=%s: %w", errUtils.ErrInvalidProviderConfig, name, err)
 		}
 		m.providers[name] = provider
@@ -628,13 +625,11 @@ func (m *manager) initializeIdentities() error {
 			err := builder.
 				WithHint("Run `atmos profile list` to see available profiles").
 				WithExitCode(1).Err()
-			errUtils.CheckErrorAndPrint(err, "Initialize Identities", "")
 			return err
 		}
 
 		identity, err := factory.NewIdentity(name, &identityConfig)
 		if err != nil {
-			errUtils.CheckErrorAndPrint(err, "Initialize Identities", "")
 			return fmt.Errorf("%w: identity=%s: %w", errUtils.ErrInvalidIdentityConfig, name, err)
 		}
 		m.identities[name] = identity

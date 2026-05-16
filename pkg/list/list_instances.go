@@ -64,7 +64,11 @@ type InstancesCommandOptions struct {
 	Delimiter   string
 	Query       string
 	AuthManager auth.AuthManager
-	OutputFile  string
+	// AuthDisabled is true when the caller explicitly used --identity=false.
+	// It prevents per-component auth auto-detection while still allowing
+	// templates and YAML functions that do not require credentials to run.
+	AuthDisabled bool
+	OutputFile   string
 	// ProcessTemplates toggles Go template processing of stack manifests
 	// (controls the `processTemplates` parameter of `ExecuteDescribeStacks`).
 	// Default true for parity with `describe affected` / `describe stacks`.
@@ -475,6 +479,8 @@ func uploadInstances(instances []schema.Instance) error {
 // running without `tofu` / `terraform` on `$PATH` should pass
 // `--process-functions=false` to skip YAML-function evaluation while still
 // letting templates expand stack names and metadata.
+//
+//nolint:revive // argument-limit: positional fan-out kept for test-seam clarity.
 func processInstancesWithDeps(
 	atmosConfig *schema.AtmosConfiguration,
 	stacksProcessor e.StacksProcessor,
@@ -482,15 +488,16 @@ func processInstancesWithDeps(
 	processTemplates, processYamlFunctions bool,
 	skip []string,
 	stackPattern string,
+	authDisabled bool,
 ) ([]schema.Instance, error) {
-	stacksMap, err := stacksProcessor.ExecuteDescribeStacks(
-		atmosConfig, "", nil, nil, nil,
-		false, // ignoreMissingFiles
+	stacksMap, err := executeDescribeStacksForInstances(
+		atmosConfig,
+		stacksProcessor,
+		authManager,
 		processTemplates,
 		processYamlFunctions,
-		false, // includeEmptyStacks
 		skip,
-		authManager,
+		authDisabled,
 	)
 	if err != nil {
 		log.Error(errUtils.ErrExecuteDescribeStacks.Error(), "error", err)
@@ -509,16 +516,92 @@ func processInstancesWithDeps(
 	return instances, nil
 }
 
-// processInstances collects, filters, and sorts instances.
-// This is a convenience wrapper around processInstancesWithDeps() for production use.
+type authDisabledStacksProcessor interface {
+	ExecuteDescribeStacksWithAuthDisabled(
+		atmosConfig *schema.AtmosConfiguration,
+		filterByStack string,
+		components []string,
+		componentTypes []string,
+		sections []string,
+		ignoreMissingFiles bool,
+		processTemplates bool,
+		processYamlFunctions bool,
+		includeEmptyStacks bool,
+		skip []string,
+		authManager auth.AuthManager,
+		authDisabled bool,
+	) (map[string]any, error)
+}
+
+// executeDescribeStacksForInstances dispatches to ExecuteDescribeStacksWithAuthDisabled
+// when authDisabled is requested AND the processor implements the optional
+// authDisabledStacksProcessor interface; otherwise it falls back to the
+// standard ExecuteDescribeStacks call. The `skip` list is forwarded to both
+// paths so --skip continues to bypass the named YAML functions regardless of
+// whether auth is disabled.
+//
+//nolint:revive // Helper mirrors the StacksProcessor call shape with skip + authDisabled passthrough.
+func executeDescribeStacksForInstances(
+	atmosConfig *schema.AtmosConfiguration,
+	stacksProcessor e.StacksProcessor,
+	authManager auth.AuthManager,
+	processTemplates, processYamlFunctions bool,
+	skip []string,
+	authDisabled bool,
+) (map[string]any, error) {
+	if authDisabled {
+		if processor, ok := stacksProcessor.(authDisabledStacksProcessor); ok {
+			return processor.ExecuteDescribeStacksWithAuthDisabled(
+				atmosConfig, "", nil, nil, nil,
+				false, // ignoreMissingFiles
+				processTemplates,
+				processYamlFunctions,
+				false, // includeEmptyStacks
+				skip,
+				authManager,
+				authDisabled,
+			)
+		}
+	}
+
+	return stacksProcessor.ExecuteDescribeStacks(
+		atmosConfig, "", nil, nil, nil,
+		false, // ignoreMissingFiles
+		processTemplates,
+		processYamlFunctions,
+		false, // includeEmptyStacks
+		skip,
+		authManager,
+	)
+}
+
+// processInstances collects, filters, and sorts instances using the default
+// DefaultStacksProcessor. This is the production entry point — tests use
+// processInstancesWithDeps directly to inject a mocked StacksProcessor.
+//
+// The wrapper threads --skip / --stack glob / --identity=false through to the
+// describe pipeline. The authDisabled flag short-circuits per-component auth
+// resolution while still letting templates and credential-free YAML functions run.
+//
+//nolint:revive // argument-limit: positional fan-out matches processInstancesWithDeps.
 func processInstances(
 	atmosConfig *schema.AtmosConfiguration,
 	authManager auth.AuthManager,
 	processTemplates, processYamlFunctions bool,
 	skip []string,
 	stackPattern string,
+	authDisabled bool,
 ) ([]schema.Instance, error) {
-	return processInstancesWithDeps(atmosConfig, &e.DefaultStacksProcessor{}, authManager, processTemplates, processYamlFunctions, skip, stackPattern)
+	return processInstancesWithDeps(
+		atmosConfig,
+		&e.DefaultStacksProcessor{},
+		authManager,
+		processTemplates,
+		processYamlFunctions,
+		skip,
+		stackPattern,
+		authDisabled,
+	)
 }
 
 // ExecuteListInstancesCmd executes the list instances command.
@@ -587,7 +670,7 @@ func ExecuteListInstancesCmd(opts *InstancesCommandOptions) error {
 		// Honor the caller-supplied template/function flags so tree output is
 		// consistent with non-tree runs of the same command invocation, matching
 		// the behavior of `list stacks --format=tree`.
-		stacksMap, err := e.ExecuteDescribeStacks(
+		stacksMap, err := e.ExecuteDescribeStacksWithAuthDisabled(
 			&atmosConfig, "", nil, nil, nil,
 			false, // ignoreMissingFiles
 			opts.ProcessTemplates,
@@ -595,6 +678,7 @@ func ExecuteListInstancesCmd(opts *InstancesCommandOptions) error {
 			false, // includeEmptyStacks
 			opts.Skip,
 			opts.AuthManager,
+			opts.AuthDisabled,
 		)
 		if err != nil {
 			log.Error(errUtils.ErrExecuteDescribeStacks.Error(), "error", err)
@@ -621,8 +705,19 @@ func ExecuteListInstancesCmd(opts *InstancesCommandOptions) error {
 		return data.Writeln(output)
 	}
 
-	// For non-tree formats, process instances normally.
-	instances, err := processInstances(&atmosConfig, opts.AuthManager, opts.ProcessTemplates, opts.ProcessFunctions, opts.Skip, opts.Stack)
+	// For non-tree formats, process instances normally. The single call threads
+	// every relevant option through one canonical path: --skip bypasses named
+	// YAML functions, opts.Stack applies the glob filter post-describe, and
+	// --identity=false (opts.AuthDisabled) short-circuits per-component auth.
+	instances, err := processInstances(
+		&atmosConfig,
+		opts.AuthManager,
+		opts.ProcessTemplates,
+		opts.ProcessFunctions,
+		opts.Skip,
+		opts.Stack,
+		opts.AuthDisabled,
+	)
 	if err != nil {
 		log.Error(errUtils.ErrProcessInstances.Error(), "error", err)
 		return errors.Join(errUtils.ErrProcessInstances, err)
@@ -744,7 +839,7 @@ func executeMatrixFormat(atmosConfig *schema.AtmosConfiguration, opts *Instances
 	// Get stacksMap to extract component_path from component_info. Honor the
 	// caller-supplied template/function flags so matrix output stays consistent
 	// with non-matrix runs of the same command invocation.
-	stacksMap, err := e.ExecuteDescribeStacks(
+	stacksMap, err := e.ExecuteDescribeStacksWithAuthDisabled(
 		atmosConfig, "", nil, nil, nil,
 		false, // ignoreMissingFiles
 		opts.ProcessTemplates,
@@ -752,6 +847,7 @@ func executeMatrixFormat(atmosConfig *schema.AtmosConfiguration, opts *Instances
 		false, // includeEmptyStacks
 		opts.Skip,
 		opts.AuthManager,
+		opts.AuthDisabled,
 	)
 	if err != nil {
 		log.Error(errUtils.ErrExecuteDescribeStacks.Error(), "error", err)

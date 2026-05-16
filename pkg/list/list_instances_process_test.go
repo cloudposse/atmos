@@ -42,7 +42,7 @@ func TestProcessInstancesWithDeps_Success(t *testing.T) {
 		ExecuteDescribeStacks(atmosConfig, "", nil, nil, nil, false, true, false, false, nil, nil).
 		Return(stacksMap, nil)
 
-	instances, err := processInstancesWithDeps(atmosConfig, mockStacksProcessor, nil, true, false, nil, "")
+	instances, err := processInstancesWithDeps(atmosConfig, mockStacksProcessor, nil, true, false, nil, "", false)
 
 	assert.NoError(t, err)
 	assert.Len(t, instances, 2)
@@ -66,7 +66,7 @@ func TestProcessInstancesWithDeps_ExecuteDescribeStacksError(t *testing.T) {
 		ExecuteDescribeStacks(atmosConfig, "", nil, nil, nil, false, true, false, false, nil, nil).
 		Return(nil, expectedErr)
 
-	instances, err := processInstancesWithDeps(atmosConfig, mockStacksProcessor, nil, true, false, nil, "")
+	instances, err := processInstancesWithDeps(atmosConfig, mockStacksProcessor, nil, true, false, nil, "", false)
 
 	assert.Error(t, err)
 	assert.Nil(t, instances)
@@ -87,7 +87,7 @@ func TestProcessInstancesWithDeps_EmptyStacksMap(t *testing.T) {
 		ExecuteDescribeStacks(atmosConfig, "", nil, nil, nil, false, true, false, false, nil, nil).
 		Return(stacksMap, nil)
 
-	instances, err := processInstancesWithDeps(atmosConfig, mockStacksProcessor, nil, true, false, nil, "")
+	instances, err := processInstancesWithDeps(atmosConfig, mockStacksProcessor, nil, true, false, nil, "", false)
 
 	assert.NoError(t, err)
 	assert.Empty(t, instances)
@@ -136,7 +136,7 @@ func TestProcessInstancesWithDeps_MultipleStacks(t *testing.T) {
 		ExecuteDescribeStacks(atmosConfig, "", nil, nil, nil, false, true, false, false, nil, nil).
 		Return(stacksMap, nil)
 
-	instances, err := processInstancesWithDeps(atmosConfig, mockStacksProcessor, nil, true, false, nil, "")
+	instances, err := processInstancesWithDeps(atmosConfig, mockStacksProcessor, nil, true, false, nil, "", false)
 
 	assert.NoError(t, err)
 	assert.Len(t, instances, 3)
@@ -177,7 +177,7 @@ func TestProcessInstancesWithDeps_AbstractComponentsFiltered(t *testing.T) {
 		ExecuteDescribeStacks(atmosConfig, "", nil, nil, nil, false, true, false, false, nil, nil).
 		Return(stacksMap, nil)
 
-	instances, err := processInstancesWithDeps(atmosConfig, mockStacksProcessor, nil, true, false, nil, "")
+	instances, err := processInstancesWithDeps(atmosConfig, mockStacksProcessor, nil, true, false, nil, "", false)
 
 	assert.NoError(t, err)
 	assert.Len(t, instances, 1)
@@ -213,7 +213,7 @@ func TestProcessInstancesWithDeps_InvalidStackStructure(t *testing.T) {
 		ExecuteDescribeStacks(atmosConfig, "", nil, nil, nil, false, true, false, false, nil, nil).
 		Return(stacksMap, nil)
 
-	instances, err := processInstancesWithDeps(atmosConfig, mockStacksProcessor, nil, true, false, nil, "")
+	instances, err := processInstancesWithDeps(atmosConfig, mockStacksProcessor, nil, true, false, nil, "", false)
 
 	assert.NoError(t, err)
 	// Only prod stack should be processed successfully.
@@ -268,7 +268,7 @@ func TestProcessInstancesWithDeps_PropagatesTemplateAndFunctionFlags(t *testing.
 				).
 				Return(map[string]interface{}{}, nil)
 
-			_, err := processInstancesWithDeps(atmosConfig, mockStacksProcessor, nil, tc.processTemplates, tc.processYamlFunctions, nil, "")
+			_, err := processInstancesWithDeps(atmosConfig, mockStacksProcessor, nil, tc.processTemplates, tc.processYamlFunctions, nil, "", false)
 			assert.NoError(t, err)
 		})
 	}
@@ -312,7 +312,7 @@ func TestProcessInstancesWithDeps_PropagatesSkipFlag(t *testing.T) {
 				).
 				Return(map[string]interface{}{}, nil)
 
-			_, err := processInstancesWithDeps(atmosConfig, mockStacksProcessor, nil, true, false, tc.skip, "")
+			_, err := processInstancesWithDeps(atmosConfig, mockStacksProcessor, nil, true, false, tc.skip, "", false)
 			assert.NoError(t, err)
 		})
 	}
