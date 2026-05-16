@@ -23,6 +23,8 @@ on:
       - "website/pnpm-lock.yaml"
       - ".github/workflows/algolia.yaml"
 
+  workflow_dispatch:
+
 permissions:
   contents: read
 
@@ -60,7 +62,7 @@ jobs:
           pnpm run algolia:deploy:dry-run
 
   deploy:
-    if: ${{ github.event_name == 'push' }}
+    if: ${{ github.event_name == 'push' || github.event_name == 'workflow_dispatch' }}
     needs:
       - validate
     runs-on: ubuntu-latest
