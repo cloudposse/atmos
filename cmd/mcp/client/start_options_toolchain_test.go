@@ -43,14 +43,22 @@ func TestResolveToolchainEnvironment_LoadsFromToolVersions(t *testing.T) {
 	}
 
 	got := resolveToolchainEnvironment(atmosConfig)
-	// The function may return either a usable environment (when the
-	// pinned tool resolves on the test box's PATH) or fall through
-	// to the terraform-component fallback. Both outcomes exercise
-	// the `len(deps) > 0` branch — the assertion-shaped contract is
-	// "the function did not panic and returned a representable
-	// value." Either nil or non-nil is acceptable; coverage is the
-	// objective.
-	_ = got
+	// Observable contract: with `.tool-versions` present, the function
+	// must return a usable (non-nil) environment, and that environment
+	// must respond to its public Resolve API. A future regression where
+	// the deps>0 branch silently returns nil would fail NotNil; a
+	// regression that returned a half-built env where Resolve panics
+	// or returns "" would fail the Resolve assertion.
+	//
+	// Resolve falls back to exec.LookPath when no toolchain install
+	// exists, and returns the original command name when even that
+	// misses. The contract is "always returns a non-empty string for
+	// a non-empty input."
+	require.NotNil(t, got,
+		"with a .tool-versions file present, resolveToolchainEnvironment must return a non-nil environment (either from NewEnvironmentFromDeps directly, or via the terraform-component fallback)")
+	resolved := got.Resolve("terraform")
+	assert.NotEmpty(t, resolved,
+		"Resolve on a non-empty command name must return a non-empty string (toolchain path, system PATH lookup, or original name); got %q", resolved)
 }
 
 // TestBuildToolchainOption_WithToolVersionsReturnsOption pairs the
@@ -89,28 +97,41 @@ func TestBuildToolchainOption_WithToolVersionsReturnsOption(t *testing.T) {
 // guard — when servers have identity, buildStartOptions must include
 // the auth option somewhere in the result. This exercises the
 // concatenation logic that appends buildToolchainOption + buildAuthOption.
+//
+// The behavioral observable: compare against a baseline of the SAME
+// atmos config but with no identity set. The auth-config case must
+// have exactly one more option than the baseline — proving the
+// auth-only delta is what the test exercises, not a flaky toolchain
+// option count that happens to satisfy `len >= 1`.
 func TestBuildStartOptions_WithAuthIncludesAuthOption(t *testing.T) {
 	tempDir := t.TempDir()
-	atmosConfig := &schema.AtmosConfiguration{
-		BasePath: tempDir,
-		Stacks: schema.Stacks{
-			BasePath: "stacks",
-		},
-		Components: schema.Components{
-			Terraform: schema.Terraform{
-				BasePath: "components/terraform",
+	makeConfig := func(identity string) *schema.AtmosConfiguration {
+		c := &schema.AtmosConfiguration{
+			BasePath: tempDir,
+			Stacks: schema.Stacks{
+				BasePath: "stacks",
 			},
-		},
-	}
-	atmosConfig.MCP.Servers = map[string]schema.MCPServerConfig{
-		"with-auth": {Command: "echo", Identity: "core-root/terraform"},
+			Components: schema.Components{
+				Terraform: schema.Terraform{
+					BasePath: "components/terraform",
+				},
+			},
+		}
+		c.MCP.Servers = map[string]schema.MCPServerConfig{
+			"server": {Command: "echo", Identity: identity},
+		}
+		return c
 	}
 
-	got := buildStartOptions(atmosConfig)
-	// At minimum: auth option (from buildAuthOption). Plus possibly
-	// a toolchain option (from the terraform-component fallback,
-	// which returns a non-nil empty environment in tempdirs without
-	// a .tool-versions file).
-	assert.GreaterOrEqual(t, len(got), 1,
-		"buildStartOptions must include the auth option when a server has identity")
+	// Baseline: same config, no identity → buildAuthOption returns nil,
+	// so the total option count reflects only the toolchain contribution.
+	baseline := buildStartOptions(makeConfig(""))
+
+	// With identity set, buildAuthOption contributes exactly one option,
+	// and the toolchain contribution is unchanged (same atmosConfig).
+	withAuth := buildStartOptions(makeConfig("core-root/terraform"))
+
+	assert.Equal(t, len(baseline)+1, len(withAuth),
+		"buildStartOptions must add exactly one option (the auth one) when identity is set; baseline=%d, withAuth=%d",
+		len(baseline), len(withAuth))
 }

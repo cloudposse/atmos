@@ -1,7 +1,9 @@
 package client
 
 import (
+	"bytes"
 	"errors"
+	stdio "io"
 	"os"
 	"path/filepath"
 	"testing"
@@ -10,8 +12,45 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	iolib "github.com/cloudposse/atmos/pkg/io"
 	mcpclient "github.com/cloudposse/atmos/pkg/mcp/client"
+	"github.com/cloudposse/atmos/pkg/ui"
 )
+
+// uiCaptureStreams implements iolib.Streams with in-memory buffers so tests
+// can assert on the bytes ui.Success/Error/Errorf produces.
+type uiCaptureStreams struct {
+	stdin  stdio.Reader
+	stdout stdio.Writer
+	stderr stdio.Writer
+}
+
+func (s *uiCaptureStreams) Input() stdio.Reader     { return s.stdin }
+func (s *uiCaptureStreams) Output() stdio.Writer    { return s.stdout }
+func (s *uiCaptureStreams) Error() stdio.Writer     { return s.stderr }
+func (s *uiCaptureStreams) RawOutput() stdio.Writer { return s.stdout }
+func (s *uiCaptureStreams) RawError() stdio.Writer  { return s.stderr }
+
+// setupCapturedUI wires ui.* into in-memory buffers so the test can read
+// exactly what ui.Errorf / ui.Success printed. Returns the stderr buffer
+// the caller asserts against. Cleanup restores the global formatter so
+// other tests in this package don't see a leaked one.
+func setupCapturedUI(t *testing.T) *bytes.Buffer {
+	t.Helper()
+	stderr := &bytes.Buffer{}
+	streams := &uiCaptureStreams{
+		stdin:  &bytes.Buffer{},
+		stdout: &bytes.Buffer{},
+		stderr: stderr,
+	}
+	ioCtx, err := iolib.NewContext(iolib.WithStreams(streams))
+	require.NoError(t, err)
+	ui.InitFormatter(ioCtx)
+	t.Cleanup(func() {
+		ui.Reset()
+	})
+	return stderr
+}
 
 func TestPrintTestResult_AllSuccess(t *testing.T) {
 	result := &mcpclient.TestResult{
@@ -51,21 +90,53 @@ func TestPrintTestResult_StartedButNoTools(t *testing.T) {
 // branch added in response to CodeRabbit feedback. Before this branch was
 // added, `printTestResult` told the user WHICH stage failed but never WHY —
 // users saw `✗ Server failed to start` with no actionable context. The new
-// `ui.Errorf("Error: %v", result.Error)` line surfaces the underlying error
-// so users can troubleshoot without having to re-run with --debug.
+// `ui.Errorf("Error: %v", result.Error)` line surfaces the underlying error.
 //
-// We can't easily capture stderr in a unit test (ui.Errorf goes through
-// the formatter pipeline), but we can pin the structural contract: with
-// a non-nil Error, printTestResult must not panic and must walk through
-// the error branch.
+// This is a behavioral test, not a "doesn't panic" check: it wires ui.*
+// to an in-memory buffer and asserts the exact failure message reaches
+// stderr. That is the only assertion that proves the new branch actually
+// improves user-facing diagnostics — a NotPanics-only test would still
+// pass if the branch was deleted.
 func TestPrintTestResult_SurfacesUnderlyingError(t *testing.T) {
+	stderr := setupCapturedUI(t)
+
+	const failureMessage = "connection refused on /tmp/mcp.sock"
 	result := &mcpclient.TestResult{
 		ServerStarted: false,
-		Error:         errors.New("connection refused on /tmp/mcp.sock"),
+		Error:         errors.New(failureMessage),
 	}
-	assert.NotPanics(t, func() {
-		printTestResult(result)
-	}, "printTestResult must handle the non-nil Error branch without panicking")
+	printTestResult(result)
+
+	captured := stderr.String()
+	assert.Contains(t, captured, failureMessage,
+		"printTestResult MUST surface result.Error to stderr (the regression CodeRabbit flagged was the message being swallowed); got stderr:\n%s",
+		captured)
+	// The "Error:" prefix is the contract the call site sets ("Error: %v").
+	// Pinning it confirms the new ui.Errorf line is responsible — not some
+	// other accidental path that happens to mention the string.
+	assert.Contains(t, captured, "Error:",
+		"the failure surface must use the explicit `Error:` prefix so users can distinguish it from the ✗ status markers; got:\n%s",
+		captured)
+}
+
+// TestPrintTestResult_OmitsErrorPrefixWhenSuccessful is the negative-path
+// guard: when result.Error is nil, the "Error:" line must not appear in
+// stderr. Without this test, a future "always print Error: <nil>" regression
+// would pass the previous test.
+func TestPrintTestResult_OmitsErrorPrefixWhenSuccessful(t *testing.T) {
+	stderr := setupCapturedUI(t)
+
+	printTestResult(&mcpclient.TestResult{
+		ServerStarted: true,
+		Initialized:   true,
+		ToolCount:     5,
+		PingOK:        true,
+	})
+
+	captured := stderr.String()
+	assert.NotContains(t, captured, "Error:",
+		"printTestResult MUST NOT print an Error: line when result.Error is nil; got stderr:\n%s",
+		captured)
 }
 
 // TestTestCmd_Registration is the basic shape guard.

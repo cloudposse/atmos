@@ -234,11 +234,34 @@ func TestMCPToolsContainsTemplate(t *testing.T) {
 // instead of returning the hard-coded NAME asc sorter. The existing
 // TestRenderMCPTools_SortByName only exercises the default-spec
 // branch via the empty Sort field.
+//
+// The assertion goes past "got a sorter back" and actually applies
+// the parsed sorter to sample data, then pins the resulting order.
+// A "did the sort field/direction parse correctly" regression would
+// reorder the rows the other way — caught by the first/last-element
+// assertions below, which a NotEmpty-only test would miss.
 func TestBuildMCPToolsSorters_CustomSortSpec(t *testing.T) {
 	sorters, err := buildMCPToolsSorters("description:desc")
 	require.NoError(t, err)
-	require.NotEmpty(t, sorters,
-		"a valid sort spec must produce at least one sorter")
+	require.Len(t, sorters, 1,
+		"a single column:order spec must produce exactly one sorter")
+
+	// Apply the parsed sorter to a sample [][]string with a Description
+	// column. If the column/order parsed correctly, descending sort
+	// puts "carrot" first and "apple" last.
+	headers := []string{"NAME", "Description"}
+	rows := [][]string{
+		{"tool-a", "apple"},
+		{"tool-c", "carrot"},
+		{"tool-b", "banana"},
+	}
+	require.NoError(t, sorters[0].Sort(rows, headers))
+
+	require.Len(t, rows, 3, "Sort must not drop or duplicate rows")
+	assert.Equal(t, "carrot", rows[0][1],
+		"descending sort on Description must put 'carrot' first; got first row: %v", rows[0])
+	assert.Equal(t, "apple", rows[2][1],
+		"descending sort on Description must put 'apple' last; got last row: %v", rows[2])
 }
 
 // TestBuildMCPToolsSorters_InvalidSpecReturnsError pins the wrap
