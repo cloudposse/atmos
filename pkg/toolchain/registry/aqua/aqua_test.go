@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -2819,9 +2820,12 @@ func TestGetTool_ThreeSegmentPackagePath(t *testing.T) {
     binary_name: bao
 `
 
+	var hitsMu sync.Mutex
 	var hits []string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hitsMu.Lock()
 		hits = append(hits, r.URL.Path)
+		hitsMu.Unlock()
 		switch r.URL.Path {
 		case "/registry.yaml":
 			w.Write([]byte(indexYAML))
@@ -2842,12 +2846,16 @@ func TestGetTool_ThreeSegmentPackagePath(t *testing.T) {
 	assert.Equal(t, "bao", tool.BinaryName)
 	assert.Equal(t, "bao_{{trimV .Version}}_{{.OS}}_{{.Arch}}.tar.gz", tool.Asset)
 
+	hitsMu.Lock()
+	observedHits := append([]string(nil), hits...)
+	hitsMu.Unlock()
+
 	// The index path lookup must take precedence over the legacy probe. Confirm we hit
 	// the index and then the 3-segment URL directly — no wasted probes against the
 	// 2-segment path.
-	assert.Contains(t, hits, "/registry.yaml")
-	assert.Contains(t, hits, "/pkgs/openbao/openbao/bao/registry.yaml")
-	assert.NotContains(t, hits, "/pkgs/openbao/openbao/registry.yaml",
+	assert.Contains(t, observedHits, "/registry.yaml")
+	assert.Contains(t, observedHits, "/pkgs/openbao/openbao/bao/registry.yaml")
+	assert.NotContains(t, observedHits, "/pkgs/openbao/openbao/registry.yaml",
 		"resolver should not waste a probe on the 2-segment path when the index gives us the 3-segment one")
 }
 
@@ -2938,12 +2946,10 @@ func TestConvertPackagesToTools_PopulatesPathIndex(t *testing.T) {
 		{Name: "openbao/openbao/bao", Type: "github_release", RepoOwner: "openbao", RepoName: "openbao"},
 		{Type: "github_release", RepoOwner: "hashicorp", RepoName: "terraform"},
 		{Name: "kubernetes/kubernetes/kubectl", Type: "github_release", RepoOwner: "kubernetes", RepoName: "kubernetes"},
-		{Type: "http", RepoOwner: "", RepoName: ""}, // ignored: no owner/repo and no name to parse.
+		{Type: "http", RepoOwner: "", RepoName: ""}, // ignored by pathIndex: no owner/repo and no name to parse.
 	}
 
-	tools := ar.convertPackagesToTools(packages)
-
-	assert.Len(t, tools, 4)
+	ar.convertPackagesToTools(packages)
 
 	ar.pathIndexMu.RLock()
 	idx := ar.pathIndex

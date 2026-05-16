@@ -1,6 +1,7 @@
 package installer
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -66,9 +67,24 @@ var BuiltinAliases = map[string]string{
 	"atmos": "cloudposse/atmos",
 }
 
+var defaultRegistry = registry.DefaultRegistry
+
+type shortNameResolver interface {
+	ResolveShortName(string) (string, string, error)
+}
+
 // DefaultToolResolver implements ToolResolver using configured aliases and registry search.
 type DefaultToolResolver struct {
 	AtmosConfig *schema.AtmosConfiguration
+}
+
+func defaultShortNameResolver() (shortNameResolver, bool) {
+	reg := defaultRegistry()
+	if reg == nil {
+		return nil, false
+	}
+	resolver, ok := reg.(shortNameResolver)
+	return resolver, ok
 }
 
 func (d *DefaultToolResolver) Resolve(toolName string) (string, string, error) {
@@ -101,13 +117,11 @@ func (d *DefaultToolResolver) Resolve(toolName string) (string, string, error) {
 	// index for a package whose binary name matches. The type assertion keeps
 	// short-name resolution aqua-specific (matches upstream's design where short
 	// names are a discovery concern, not a registry-protocol one).
-	if reg := registry.DefaultRegistry(); reg != nil {
-		if shortNameResolver, ok := reg.(interface {
-			ResolveShortName(string) (string, string, error)
-		}); ok {
-			if owner, repo, err := shortNameResolver.ResolveShortName(toolName); err == nil {
-				return owner, repo, nil
-			}
+	if resolver, ok := defaultShortNameResolver(); ok {
+		if owner, repo, err := resolver.ResolveShortName(toolName); err == nil {
+			return owner, repo, nil
+		} else if !errors.Is(err, registry.ErrToolNotFound) {
+			return "", "", err
 		}
 	}
 	return "", "", errUtils.Build(errUtils.ErrToolNotInRegistry).
