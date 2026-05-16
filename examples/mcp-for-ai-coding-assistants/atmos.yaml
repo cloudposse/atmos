@@ -17,7 +17,6 @@ base_path: "."
 # ---------------------------------------------------------------------------
 # Map `uv` to the aqua registry so the toolchain can resolve and install it.
 # This ensures `uvx` is available to spawn AWS MCP servers from the AI CLIs.
-# Install with: atmos toolchain install astral-sh/uv
 toolchain:
   aliases:
     uv: astral-sh/uv
@@ -30,9 +29,8 @@ toolchain:
 # exposed to AI coding assistants as a regular MCP server. The `atmos` entry
 # under `servers` below wires that in.
 #
-# servers: …    configures external MCP servers Atmos manages. `atmos mcp
-#               export` writes these to .mcp.json (Claude Code, Gemini) or
-#               you can hand-translate to ~/.codex/config.toml.
+# servers: …    configures external MCP servers Atmos manages.
+#               `atmos mcp export` writes these to .mcp.json.
 mcp:
   enabled: true
 
@@ -89,9 +87,8 @@ mcp:
 
     # AWS Billing & Cost Management — billing summaries, payment history,
     # cost allocation tags.
-    # MUST run as the AWS Organizations management/payer account
-    # (core-root) — Cost Explorer + Billing APIs return AccessDenied
-    # elsewhere. "What did we spend last month?" only works here.
+    # MUST run as the AWS Organizations management/payer account (core-root).
+    # "What did we spend last month?" only works here.
     # IAM permissions: ce:*, billing:*
     aws-billing:
       command: uvx
@@ -103,7 +100,7 @@ mcp:
       identity: "core-root/terraform"
 
     # AWS IAM — role/policy analysis and access patterns. Read-only.
-    # IAM is per-account (no org-wide IAM API). Run in core-root so the AI
+    # Run in core-root so the AI
     # sees the IAM Identity Center-provisioned admin roles
     # (AWSReservedSSO_AdministratorAccess_*) plus Organizations-related
     # roles. "What admin roles do we use?" → answered against the root
@@ -153,13 +150,11 @@ mcp:
     # AWS API — direct AWS CLI access via AI, with built-in safety controls.
     # Pin to a workload account (plat-dev) so questions like "do we have a
     # VPC?", "list EC2 instances", "describe RDS clusters" actually return
-    # data. core-root/core-audit/core-security host shared infra, not
-    # application workloads, so they're a poor fit here.
+    # data.
     # READ_OPERATIONS_ONLY=true blocks mutations at the tool layer; flip to
     # false + REQUIRE_MUTATION_CONSENT=true if you want approval-gated
     # mutations. Note that mutations also need the underlying IAM role to
-    # allow them — TerraformApplyAccess-Plat does, so the safety net is the
-    # MCP server's flag, not IAM.
+    # allow them.
     aws-api:
       command: uvx
       args: ["awslabs.aws-api-mcp-server@latest"]
@@ -178,12 +173,6 @@ mcp:
 # subprocess inherits AWS credentials resolved by Atmos Auth — no need to
 # touch ~/.aws/config, AWS_PROFILE, or other credential files.
 #
-#   - provider name `sso`
-#   - identity uses `via: { provider: sso }` rather than a direct `provider:` field
-#   - principal uses `name` + `account.name` (account is resolved by name, not ID)
-#   - identity names follow `<account>/terraform` so AI assistants and CI share
-#     the same naming convention.
-#
 # Per-server identity mapping (so a single `atmos auth login` lets every MCP
 # server use the right account for its API):
 #
@@ -194,7 +183,7 @@ mcp:
 #   aws-security     → core-security/terraform (delegated GuardDuty/SecurityHub admin)
 #   aws-api          → plat-dev/terraform      (workload account: VPC/EC2/RDS lives here)
 #
-# All four identities sit under the same SSO provider, so `atmos auth login`
+# All identities sit under the same SSO provider, so `atmos auth login`
 # authenticates the SSO session once; each identity is then assumed
 # on-demand when the MCP server is spawned (the cached SSO token covers all
 # four).
@@ -238,7 +227,7 @@ auth:
           name: core-audit
 
     # core-security/terraform — the security tooling account.
-    # GuardDuty/SecurityHub/Inspector/Access Analyzer are typically
+    # GuardDuty/SecurityHub/Inspector are typically
     # delegated here in Cloud Posse setups, so aws-security gets the
     # org-wide aggregated findings rather than a single account's view.
     core-security/terraform:
@@ -277,25 +266,16 @@ auth:
 ai:
   enabled: true
   default_provider: "anthropic"
-  timeout_seconds: 120
   max_tool_iterations: 25
 
   providers:
     anthropic:
       model: "claude-sonnet-4-6"
       api_key: !env "ANTHROPIC_API_KEY"
-      max_tokens: 4096
-      cache:
-        enabled: true
 
   tools:
     enabled: true
     require_confirmation: true
-    allowed_tools:
-      - atmos_describe_component
-      - atmos_list_stacks
-      - atmos_validate_stacks
-      - read_stack_file
 
   sessions:
     enabled: true
