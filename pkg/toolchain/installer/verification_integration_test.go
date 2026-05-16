@@ -17,14 +17,15 @@ import (
 )
 
 func TestInstallFromTool_VerifiesChecksumBeforeExtraction(t *testing.T) {
+	assetName := EnsureWindowsExeExtension("tool")
 	asset := []byte("#!/bin/sh\n")
 	sum := "a8076d3d28d21e02012b20eaf7dbf75409a6277134439025f282e368e3305abf"
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
-		case "/tool":
+		case "/" + assetName:
 			_, _ = w.Write(asset)
 		case "/checksums.txt":
-			_, _ = fmt.Fprintf(w, "%s  tool\n", sum)
+			_, _ = fmt.Fprintf(w, "%s  %s\n", sum, assetName)
 		default:
 			http.NotFound(w, r)
 		}
@@ -42,7 +43,7 @@ func TestInstallFromTool_VerifiesChecksumBeforeExtraction(t *testing.T) {
 		Type:      "http",
 		RepoOwner: "owner",
 		RepoName:  "tool",
-		Asset:     ts.URL + "/tool",
+		Asset:     ts.URL + "/" + assetName,
 		Checksum: registry.ChecksumConfig{
 			Type:      "http",
 			URL:       ts.URL + "/checksums.txt",
@@ -59,6 +60,7 @@ func TestInstallFromTool_VerifiesChecksumBeforeExtraction(t *testing.T) {
 }
 
 func TestInstallFromTool_RemovesTamperedCachedAsset(t *testing.T) {
+	assetName := EnsureWindowsExeExtension("tool")
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/checksums.txt":
@@ -70,7 +72,7 @@ func TestInstallFromTool_RemovesTamperedCachedAsset(t *testing.T) {
 	defer ts.Close()
 
 	cacheDir := t.TempDir()
-	cachedPath := filepath.Join(cacheDir, "tool")
+	cachedPath := filepath.Join(cacheDir, assetName)
 	require.NoError(t, os.WriteFile(cachedPath, []byte("tampered"), 0o644))
 
 	installer := &Installer{
@@ -82,7 +84,7 @@ func TestInstallFromTool_RemovesTamperedCachedAsset(t *testing.T) {
 		Type:      "http",
 		RepoOwner: "owner",
 		RepoName:  "tool",
-		Asset:     ts.URL + "/tool",
+		Asset:     ts.URL + "/" + assetName,
 		Checksum: registry.ChecksumConfig{
 			Type:       "http",
 			URL:        ts.URL + "/checksums.txt",
