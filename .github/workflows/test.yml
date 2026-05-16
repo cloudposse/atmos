@@ -152,30 +152,8 @@ jobs:
         if: matrix.flavor.target == 'windows' && ! github.event.pull_request.draft
         shell: pwsh
         run: |
-          $ErrorActionPreference = "Stop"
-          $version = "${{ env.OPEN_TOFU_VERSION }}"
-          $archiveName = "tofu_${version}_windows_amd64.zip"
-          $downloadUrl = "https://github.com/opentofu/opentofu/releases/download/v${version}/${archiveName}"
-          $archivePath = Join-Path $env:RUNNER_TEMP $archiveName
-          $installDir = Join-Path $env:RUNNER_TEMP "opentofu"
-
-          New-Item -ItemType Directory -Force -Path $installDir | Out-Null
-
-          for ($attempt = 1; $attempt -le 5; $attempt++) {
-            try {
-              Invoke-WebRequest -Uri $downloadUrl -OutFile $archivePath
-              break
-            } catch {
-              if ($attempt -eq 5) {
-                throw
-              }
-              Start-Sleep -Seconds ([Math]::Min(30, [Math]::Pow(2, $attempt)))
-            }
-          }
-
-          Expand-Archive -LiteralPath $archivePath -DestinationPath $installDir -Force
-          Add-Content -Path $env:GITHUB_PATH -Value $installDir
-          & (Join-Path $installDir "tofu.exe") version
+          atmos toolchain install opentofu/opentofu@${{ env.OPEN_TOFU_VERSION }}
+          atmos toolchain env --format github
 
       # https://github.com/hashicorp/setup-packer
       - name: Install Packer
@@ -499,30 +477,8 @@ jobs:
         if: matrix.flavor.target == 'windows' && ! github.event.pull_request.draft
         shell: pwsh
         run: |
-          $ErrorActionPreference = "Stop"
-          $version = "${{ env.OPEN_TOFU_VERSION }}"
-          $archiveName = "tofu_${version}_windows_amd64.zip"
-          $downloadUrl = "https://github.com/opentofu/opentofu/releases/download/v${version}/${archiveName}"
-          $archivePath = Join-Path $env:RUNNER_TEMP $archiveName
-          $installDir = Join-Path $env:RUNNER_TEMP "opentofu"
-
-          New-Item -ItemType Directory -Force -Path $installDir | Out-Null
-
-          for ($attempt = 1; $attempt -le 5; $attempt++) {
-            try {
-              Invoke-WebRequest -Uri $downloadUrl -OutFile $archivePath
-              break
-            } catch {
-              if ($attempt -eq 5) {
-                throw
-              }
-              Start-Sleep -Seconds ([Math]::Min(30, [Math]::Pow(2, $attempt)))
-            }
-          }
-
-          Expand-Archive -LiteralPath $archivePath -DestinationPath $installDir -Force
-          Add-Content -Path $env:GITHUB_PATH -Value $installDir
-          & (Join-Path $installDir "tofu.exe") version
+          atmos toolchain install opentofu/opentofu@${{ env.OPEN_TOFU_VERSION }}
+          atmos toolchain env --format github
 
       # https://github.com/hashicorp/setup-packer
       - name: Install Packer
