@@ -170,22 +170,87 @@ If the user explicitly asks ("promote X to featured", "add Y to the featured sec
 
 If your PR is `no-release` or `patch`, **don't touch the roadmap**. It's not required by CI for those labels, and adding noise milestones dilutes the roadmap's signal value.
 
+## Signed commits (MANDATORY — branch protection blocks merge)
+
+**Every commit on the PR must be GPG- or SSH-signed.** Branch protection on `main` rejects merges of any PR containing unsigned commits — there is no override. If you push unsigned commits, you will rewrite history later to re-sign them, which is painful for reviewers (force-push invalidates their in-progress reviews).
+
+Get this right the first time:
+
+1. Verify your local git is configured to sign automatically before your first commit:
+
+   ```bash
+   git config --get commit.gpgsign       # should print: true
+   git config --get gpg.format            # "openpgp" or "ssh"
+   git config --get user.signingkey       # your signing key
+   ```
+
+   If `commit.gpgsign` is not `true`, set it for the repo:
+
+   ```bash
+   git config commit.gpgsign true
+   ```
+
+2. After your first commit, verify it's signed:
+
+   ```bash
+   git log --show-signature -1
+   ```
+
+   Look for `gpg: Good signature from ...` or `Good "git" signature for ...`. If you see "no signature found", **stop and fix your git config before pushing**.
+
+3. **Never bypass signing with `--no-gpg-sign` or `-c commit.gpgsign=false`** even temporarily. The CLAUDE.md rules forbid this, and the resulting commit cannot be merged.
+
+If you discover unsigned commits already on the branch:
+
+```bash
+# For the last N commits (interactive rebase, sign each):
+git rebase --exec 'git commit --amend --no-edit -S' -i HEAD~N
+git push --force-with-lease
+```
+
+Always use `--force-with-lease` (not `--force`) to avoid clobbering work from other sessions on the same branch.
+
 ## End-to-end checklist (before pushing)
 
 Run through these in order. Don't skip — every item has burned someone before.
 
 1. **Identify the smallest accurate label.** Use the decision tree above. Default to `no-release` for plumbing.
-2. **If `minor` or `major`:**
+2. **Confirm commit signing is on** (see above). One unsigned commit blocks the entire PR from merging.
+3. **If `minor` or `major`:**
    - Create a blog post at `website/blog/YYYY-MM-DD-<slug>.mdx`.
    - Read `website/blog/tags.yml` and pick a defined tag.
    - Check `website/blog/authors.yml` for your handle; add yourself if missing.
    - Delegate the roadmap update to the `roadmap` agent (do not touch `featured[]`).
-3. **Build the website** to verify MDX renders: `cd website && npm run build`.
-4. **Commit and push.**
-5. **Open the PR** with title (under 70 chars) + body using the project's PR template (what / why / references).
-6. **Apply the label immediately** after opening: `gh pr edit <num> --add-label <label>`.
-7. **If the PR fixes a tracked issue:** include `Closes #<issue>` in the PR body so it auto-closes on merge.
-8. **Check CI status** after the first push: `gh pr checks <num>`. If `PR Semver Labels` or `Check for changelog and roadmap updates` fails, fix it before requesting review.
+4. **Build the website** to verify MDX renders: `cd website && npm run build`.
+5. **Commit and push.**
+6. **Open the PR** with title (under 70 chars) + body using the project's PR template (what / why / references). See the gotcha below about `gh pr create` body formatting.
+7. **Apply the label immediately** after opening: `gh pr edit <num> --add-label <label>`.
+8. **If the PR fixes a tracked issue:** include `Closes #<issue>` in the PR body so it auto-closes on merge.
+9. **Check CI status** after the first push: `gh pr checks <num>`. If `PR Semver Labels`, `Check for changelog and roadmap updates`, or signed-commit verification fails, fix it before requesting review.
+
+## Gotcha: `gh pr create --body` and backtick escaping
+
+Do NOT escape backticks (`` \` ``) inside a single-quoted heredoc passed to `gh pr create --body`. The single-quoted form preserves the backslashes literally, so GitHub renders them as escaped characters instead of rendering the code spans. The result is a PR body full of `\`atmos.yaml\`` instead of `atmos.yaml`.
+
+**Wrong** (produces visible `\`` in the PR body):
+
+```bash
+gh pr create --body "$(cat <<'EOF'
+This file is named \`atmos.yaml\`.
+EOF
+)"
+```
+
+**Right** — write a `.md` file and pass it with `--body-file`:
+
+```bash
+cat > /tmp/pr-body.md <<'EOF'
+This file is named `atmos.yaml`.
+EOF
+gh pr create --body-file /tmp/pr-body.md
+```
+
+(Alternatively, the single-quoted heredoc already disables shell expansion, so plain unescaped backticks work — but `--body-file` is more robust because file content survives shell quoting unchanged.)
 
 ## Updating an existing PR
 
