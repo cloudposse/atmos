@@ -215,8 +215,25 @@ func TestProcessInstancesWithDepsAuthDisabled_PropagatesAuthDisabledFlag(t *test
 // and not error when there are no stacks. The function is small but it's the
 // path the CLI actually takes, so a smoke test catches a future signature
 // drift between wrapper and helper.
+//
+// Anchoring BasePath/Stacks.BasePath/Components.Terraform.BasePath to a
+// per-test temp directory makes the assertion CWD-independent. With an empty
+// AtmosConfiguration the underlying FindStacksMap resolves CWD-relative empty
+// paths, which is the kind of ambient-state dependency CLAUDE.md flags. This
+// mirrors the convention in TestDefaultStacksProcessor_ExecuteDescribeStacks.
 func TestProcessInstancesWithAuthDisabled_ConstructsDefaultProcessor(t *testing.T) {
-	atmosConfig := &schema.AtmosConfiguration{}
+	testDir := t.TempDir()
+	atmosConfig := &schema.AtmosConfiguration{
+		BasePath: testDir,
+		Stacks: schema.Stacks{
+			BasePath: "stacks",
+		},
+		Components: schema.Components{
+			Terraform: schema.Terraform{
+				BasePath: "components/terraform",
+			},
+		},
+	}
 
 	instances, err := processInstancesWithAuthDisabled(
 		atmosConfig,
