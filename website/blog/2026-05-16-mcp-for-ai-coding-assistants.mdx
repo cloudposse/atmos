@@ -16,7 +16,7 @@ credentials into each MCP subprocess automatically, the
 [Atmos toolchain](https://atmos.tools/cli/configuration/toolchain) pins
 `uvx` to a known version, and Atmos Pro adds drift/deployment/audit context
 via a one-time browser OAuth — no API keys to share. New example:
-[`examples/mcp-for-ai-coding-assistants/`](https://github.com/cloudposse/atmos/tree/main/examples/mcp-for-ai-coding-assistants).
+[`examples/mcp-for-ai-coding-assistants/`](https://atmos.tools/examples/mcp-for-ai-coding-assistants).
 
 <!--truncate-->
 
@@ -31,7 +31,7 @@ In one prompt, your AI coding assistant answers:
 - What **changed** — when, why, how, and by whom
 
 Centralized auth. Centralized permissions. One `atmos.yaml`.
-[Try the example →](https://github.com/cloudposse/atmos/tree/main/examples/mcp-for-ai-coding-assistants)
+[Try the example →](https://atmos.tools/examples/mcp-for-ai-coding-assistants)
 
 ---
 
@@ -105,7 +105,7 @@ For Claude Code that's the native format. Gemini's
 `.gemini/settings.json` is structurally identical, so the same export
 works with `--output .gemini/settings.json`. For Codex, you translate
 the JSON to TOML once — and the example
-[walks you through that](https://github.com/cloudposse/atmos/tree/main/examples/mcp-for-ai-coding-assistants#option-2--openai-codex-cli).
+[walks you through that](https://atmos.tools/examples/mcp-for-ai-coding-assistants#option-2--openai-codex-cli).
 
 The result: ten MCP servers, three AI CLIs, one Atmos config.
 
@@ -377,30 +377,32 @@ Three benefits stack on top of each other:
 
 The example walks through the full setup end to end, including the per-CLI
 config layouts:
-[`examples/mcp-for-ai-coding-assistants/`](https://github.com/cloudposse/atmos/tree/main/examples/mcp-for-ai-coding-assistants).
+[`examples/mcp-for-ai-coding-assistants/`](https://atmos.tools/examples/mcp-for-ai-coding-assistants).
 
 ## Related Examples
 
 If this isn't quite the topology you want, three sibling examples cover the
 adjacent setups:
 
-- **[`examples/mcp/`](https://github.com/cloudposse/atmos/tree/main/examples/mcp)** —
-  Same external MCP server config, but Atmos drives the AI loop (`atmos ai ask`)
-  instead of an external CLI. Useful if you'd rather stay inside the `atmos`
-  CLI than spawn Claude Code / Codex / Gemini.
-- **[`examples/ai-claude-code/`](https://github.com/cloudposse/atmos/tree/main/examples/ai-claude-code)** —
+- **[Atmos MCP integrations](https://atmos.tools/examples/mcp)** — Same external
+  MCP server config, but Atmos drives the AI loop (`atmos ai ask`) instead of an
+  external CLI. Useful if you'd rather stay inside the `atmos` CLI than spawn
+  Claude Code / Codex / Gemini.
+- **[Atmos AI with Claude Code](https://atmos.tools/examples/ai-claude-code)** —
   Use a Claude Pro/Max subscription as Atmos's AI provider (no Anthropic API
   key). Atmos hosts the AI conversation; Claude Code provides the model;
   MCP servers pass through.
-- **[`examples/ai/`](https://github.com/cloudposse/atmos/tree/main/examples/ai)** —
-  Multi-provider Atmos AI setup (Anthropic API, OpenAI API, Ollama, …). No
-  external CLI; chat with your infra from `atmos ai ask`.
+- **[Atmos AI (multi-provider)](https://atmos.tools/examples/ai)** — Multi-provider
+  Atmos AI setup (Anthropic API, OpenAI API, Ollama, …). No external CLI; chat
+  with your infra from `atmos ai ask`.
 
-|                                     | Atmos drives the AI loop  | External CLI drives the AI loop      |
-|-------------------------------------|---------------------------|--------------------------------------|
-| **API-key AI providers**            | `examples/ai/`            | *(this post, Codex/Gemini paths)*    |
-| **CLI AI providers (subscription)** | `examples/ai-claude-code/`| *(this post, Claude Code path)*      |
-| **Just external MCP servers**       | `examples/mcp/`           | *(this post)*                        |
+Full index at [atmos.tools/examples](https://atmos.tools/examples).
+
+|                                     | Atmos drives the AI loop                                                  | External CLI drives the AI loop      |
+|-------------------------------------|---------------------------------------------------------------------------|--------------------------------------|
+| **API-key AI providers**            | [Atmos AI](https://atmos.tools/examples/ai)                               | *(this post, Codex/Gemini paths)*    |
+| **CLI AI providers (subscription)** | [Atmos AI with Claude Code](https://atmos.tools/examples/ai-claude-code)  | *(this post, Claude Code path)*      |
+| **Just external MCP servers**       | [Atmos MCP integrations](https://atmos.tools/examples/mcp)                | *(this post)*                        |
 
 ## Related Reading
 
