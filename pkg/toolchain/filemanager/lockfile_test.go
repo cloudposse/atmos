@@ -264,18 +264,34 @@ func TestLockFileManager_Name(t *testing.T) {
 }
 
 func TestLockFileManager_DefaultFilePath(t *testing.T) {
+	// The lockfile now defaults to the atmos base path (peer of atmos.yaml) instead of
+	// under InstallPath. InstallPath is the cache/binary directory and is not where
+	// users expect to commit lockfiles. See the docs on NewLockFileManager.
 	config := &schema.AtmosConfiguration{
+		BasePath: "my-project",
 		Toolchain: schema.Toolchain{
-			InstallPath: ".custom-tools",
+			InstallPath: ".custom-tools", // Ignored for lockfile path purposes.
 			UseLockFile: true,
 		},
 	}
 
 	mgr := NewLockFileManager(config)
 
-	// Should use install_path/toolchain.lock.yaml
-	expectedPath := filepath.Join(".custom-tools", "toolchain.lock.yaml")
+	expectedPath := filepath.Join("my-project", "toolchain.lock.yaml")
 	assert.Equal(t, expectedPath, mgr.filePath)
+}
+
+// TestLockFileManager_DefaultFilePath_ExplicitLockFileWins verifies that an explicit
+// toolchain.lock_file setting takes precedence over the BasePath default.
+func TestLockFileManager_DefaultFilePath_ExplicitLockFileWins(t *testing.T) {
+	config := &schema.AtmosConfiguration{
+		BasePath: "my-project",
+		Toolchain: schema.Toolchain{
+			LockFile: "custom/path/locks.yaml",
+		},
+	}
+	mgr := NewLockFileManager(config)
+	assert.Equal(t, "custom/path/locks.yaml", mgr.filePath)
 }
 
 func TestLockFileManager_RemoveTool_Disabled(t *testing.T) {
@@ -442,19 +458,18 @@ func TestLockFileManager_Verify_Disabled(t *testing.T) {
 	assert.NoError(t, err)
 }
 
-func TestLockFileManager_DefaultFilePath_NoInstallPath(t *testing.T) {
+func TestLockFileManager_DefaultFilePath_NoBasePath(t *testing.T) {
+	// When neither LockFile nor BasePath is set, the lockfile lands in CWD —
+	// the friendliest fallback for a fresh `atmos toolchain lock` invocation.
 	config := &schema.AtmosConfiguration{
 		Toolchain: schema.Toolchain{
 			UseLockFile: true,
-			// No InstallPath set.
 		},
 	}
 
 	mgr := NewLockFileManager(config)
 
-	// Should use default .tools/toolchain.lock.yaml.
-	expectedPath := filepath.Join(".tools", "toolchain.lock.yaml")
-	assert.Equal(t, expectedPath, mgr.filePath)
+	assert.Equal(t, "toolchain.lock.yaml", mgr.filePath)
 }
 
 func TestLockFileManager_AddTool_WithPlatform(t *testing.T) {
