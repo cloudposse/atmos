@@ -41,7 +41,7 @@ The `atmos.tools` documentation uses [Algolia DocSearch](https://docsearch.algol
 - Pull requests run `pnpm run test:algolia` and `pnpm run algolia:deploy:dry-run`. No Algolia secrets are used.
 - The `deploy` job is triggered by GitHub Actions `workflow_run` on completion of `Website Deploy Prod`, gated on `workflow_run.conclusion == 'success'`. This guarantees the site on S3 is fresh **before** any Algolia work begins.
 - The `deploy` job runs in the `algolia` GitHub environment. It PATCHes the crawler config, PUTs the index settings, and then POSTs the reindex — all from a single Node script (`deploy-crawler-config.mjs`) so the reindex cannot race the config update.
-- `workflow_dispatch` is available to manually re-run the deploy from any branch (used during initial bring-up while environment protections are relaxed).
+- `workflow_dispatch` is available to manually re-run the deploy from `main` only. Dispatches from pull request branches still run validation, but skip deploy and do not access Algolia secrets.
 
 This split keeps AWS production deployment credentials in the `production` environment and Algolia crawler credentials in the `algolia` environment, while still enforcing strict ordering across the two workflows.
 

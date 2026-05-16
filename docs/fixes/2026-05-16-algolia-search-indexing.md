@@ -124,9 +124,9 @@ website-deploy-prod (S3 sync)
 ```
 
 `pull_request` still runs `validate` only — no secrets, no upload.
-`workflow_dispatch` is retained for manual admin runs from any branch
-(used once during initial bring-up while environment protections were
-relaxed).
+`workflow_dispatch` is retained for manual admin runs from `main` only.
+Dispatches from pull request branches still run validation, but skip
+deploy and do not access Algolia secrets.
 
 This split keeps AWS production deployment credentials in the
 `production` environment and Algolia crawler credentials in the
