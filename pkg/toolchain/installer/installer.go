@@ -471,6 +471,10 @@ func (i *Installer) loadToolFile(filePath string) (*registry.Tool, error) {
 func (i *Installer) ParseToolSpec(tool string) (string, string, error) {
 	defer perf.Track(nil, "installer.ParseToolSpec")()
 
+	if tool == "" {
+		return "", "", fmt.Errorf("%w: empty tool specification", ErrInvalidToolSpec)
+	}
+
 	parts := strings.Split(tool, "/")
 	if len(parts) == 2 {
 		return parts[0], parts[1], nil
