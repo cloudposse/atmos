@@ -1,12 +1,14 @@
 package aqua
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"text/template"
 
 	sprig "github.com/Masterminds/sprig/v3"
@@ -51,13 +53,20 @@ func init() {
 	})
 }
 
+// defaultAquaRegistryBaseURL is the upstream aqua-registry raw content base URL.
+// It serves both the top-level registry.yaml index and the per-package pkgs/<name>/registry.yaml files.
+const defaultAquaRegistryBaseURL = "https://raw.githubusercontent.com/aquaproj/aqua-registry/main"
+
 // AquaRegistry represents the Aqua registry structure.
 type AquaRegistry struct {
 	client          httpClient.Client
 	cache           *RegistryCache
 	cacheStore      cache.Store
 	githubBaseURL   string
-	lastSearchTotal int // Total number of search results before pagination.
+	registryBaseURL string // Base URL of the aqua-registry repo (raw content). See defaultAquaRegistryBaseURL.
+	lastSearchTotal int    // Total number of search results before pagination.
+	pathIndexMu     sync.RWMutex
+	pathIndex       map[string]string // "owner/repo" -> full registry path (e.g., "openbao/openbao/bao"). Populated lazily by fetchRegistryIndex.
 }
 
 // RegistryCache handles caching of registry files.
@@ -83,6 +92,16 @@ func WithGitHubBaseURL(url string) RegistryOption {
 	}
 }
 
+// WithRegistryBaseURL sets the aqua-registry raw content base URL (primarily for testing).
+// The URL must serve registry.yaml at its root and per-package files under pkgs/<name>/registry.yaml.
+func WithRegistryBaseURL(url string) RegistryOption {
+	defer perf.Track(nil, "aqua.WithRegistryBaseURL")()
+
+	return func(ar *AquaRegistry) {
+		ar.registryBaseURL = strings.TrimRight(url, "/")
+	}
+}
+
 // NewAquaRegistry creates a new Aqua registry client.
 func NewAquaRegistry(opts ...RegistryOption) *AquaRegistry {
 	defer perf.Track(nil, "aqua.NewAquaRegistry")()
@@ -103,8 +122,9 @@ func NewAquaRegistry(opts ...RegistryOption) *AquaRegistry {
 		cache: &RegistryCache{
 			baseDir: filepath.Join(cacheBaseDir, "registry"),
 		},
-		cacheStore:    cache.NewFileStore(cacheBaseDir),
-		githubBaseURL: "https://api.github.com", // default
+		cacheStore:      cache.NewFileStore(cacheBaseDir),
+		githubBaseURL:   "https://api.github.com", // default
+		registryBaseURL: defaultAquaRegistryBaseURL,
 	}
 
 	// Apply options.
@@ -140,18 +160,30 @@ func (ar *AquaRegistry) LoadLocalConfig(configPath string) error {
 }
 
 // GetTool fetches tool metadata from the Aqua registry.
+//
+// Resolution order:
+//  1. Index-driven lookup: consult the cached aqua-registry index for the package's full
+//     registry path (e.g., "openbao/openbao/bao") and fetch pkgs/<path>/registry.yaml directly.
+//     This handles packages whose binary subdir differs from the repo name.
+//  2. Legacy prefix probe: try a hardcoded set of pkgs/<prefix> roots. Kept as a backstop
+//     for cases where the index is unreachable or hasn't surfaced the package yet.
 func (ar *AquaRegistry) GetTool(owner, repo string) (*registry.Tool, error) {
 	defer perf.Track(nil, "aqua.AquaRegistry.GetTool")()
 
-	// Fall back to remote registry
-	// Try multiple registry sources
+	if tool, err := ar.fetchByIndexPath(owner, repo); err == nil {
+		return tool, nil
+	}
+
+	// Legacy prefix probes. Most useful when the index fetch fails entirely.
+	// The refs/heads/main variant is kept so previously-cached entries (whose disk cache key
+	// embeds the old URL) continue to resolve without a fresh network fetch.
 	registries := []string{
+		ar.registryBaseURL + "/pkgs",
 		"https://raw.githubusercontent.com/aquaproj/aqua-registry/refs/heads/main/pkgs",
-		"https://raw.githubusercontent.com/aquaproj/aqua-registry/main/pkgs/kubernetes/kubernetes",
-		"https://raw.githubusercontent.com/aquaproj/aqua-registry/main/pkgs/hashicorp",
-		"https://raw.githubusercontent.com/aquaproj/aqua-registry/main/pkgs/helm",
-		"https://raw.githubusercontent.com/aquaproj/aqua-registry/main/pkgs/opentofu",
-		"https://raw.githubusercontent.com/aquaproj/aqua-registry/main/pkgs",
+		ar.registryBaseURL + "/pkgs/kubernetes/kubernetes",
+		ar.registryBaseURL + "/pkgs/hashicorp",
+		ar.registryBaseURL + "/pkgs/helm",
+		ar.registryBaseURL + "/pkgs/opentofu",
 	}
 
 	for _, registry := range registries {
@@ -165,6 +197,51 @@ func (ar *AquaRegistry) GetTool(owner, repo string) (*registry.Tool, error) {
 	}
 
 	return nil, fmt.Errorf("%w: %s/%s not found in any registry", registry.ErrToolNotFound, owner, repo)
+}
+
+// fetchByIndexPath looks up the package's full registry path in the cached index and
+// fetches its registry.yaml directly. This is the only resolution path that works for
+// packages whose YAML lives at pkgs/<owner>/<repo>/<binary>/registry.yaml (i.e., when the
+// binary name differs from the repo name, like openbao/openbao/bao).
+func (ar *AquaRegistry) fetchByIndexPath(owner, repo string) (*registry.Tool, error) {
+	defer perf.Track(nil, "aqua.AquaRegistry.fetchByIndexPath")()
+
+	path, ok := ar.lookupRegistryPath(owner, repo)
+	if !ok {
+		return nil, fmt.Errorf("%w: no index entry for %s/%s", registry.ErrToolNotFound, owner, repo)
+	}
+
+	url := fmt.Sprintf("%s/pkgs/%s/registry.yaml", ar.registryBaseURL, path)
+	log.Debug("Fetching package via index path", "path", path, "url", url)
+	return ar.fetchRegistryFile(url)
+}
+
+// lookupRegistryPath returns the full registry path (e.g., "openbao/openbao/bao") for a
+// given owner/repo, loading the index lazily if not yet cached. Returns ok=false when the
+// index can't be loaded or the package isn't listed.
+func (ar *AquaRegistry) lookupRegistryPath(owner, repo string) (string, bool) {
+	defer perf.Track(nil, "aqua.AquaRegistry.lookupRegistryPath")()
+
+	ar.pathIndexMu.RLock()
+	idx := ar.pathIndex
+	ar.pathIndexMu.RUnlock()
+
+	if idx == nil {
+		// Trigger lazy load via fetchRegistryIndex, which populates ar.pathIndex as a side effect.
+		if _, err := ar.fetchRegistryIndex(context.Background()); err != nil {
+			log.Debug("Failed to load registry index for path lookup", "error", err)
+			return "", false
+		}
+		ar.pathIndexMu.RLock()
+		idx = ar.pathIndex
+		ar.pathIndexMu.RUnlock()
+	}
+
+	if idx == nil {
+		return "", false
+	}
+	path, ok := idx[owner+"/"+repo]
+	return path, ok
 }
 
 // GetToolWithVersion fetches tool metadata and resolves version-specific overrides.

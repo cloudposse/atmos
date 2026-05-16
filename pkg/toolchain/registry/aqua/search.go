@@ -220,7 +220,7 @@ func (ar *AquaRegistry) tryGetCachedIndex(ctx context.Context, cacheKey string) 
 
 // fetchAndCacheIndex fetches the registry index from GitHub and caches it.
 func (ar *AquaRegistry) fetchAndCacheIndex(ctx context.Context, cacheKey string, cacheTTL time.Duration) ([]*registry.Tool, error) {
-	indexURL := "https://raw.githubusercontent.com/aquaproj/aqua-registry/main/registry.yaml"
+	indexURL := ar.registryBaseURL + "/registry.yaml"
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, indexURL, nil)
 	if err != nil {
@@ -281,9 +281,14 @@ type indexPackage struct {
 	Path      string `yaml:"path"`
 }
 
-// convertPackagesToTools converts index packages to Tool objects.
+// convertPackagesToTools converts index packages to Tool objects and, as a side effect,
+// rebuilds ar.pathIndex so GetTool can fetch packages via their full registry path. The
+// path is the value of the package's `name` field when present (which preserves a 3rd
+// "binary" segment for packages whose binary name differs from the repo name, e.g.,
+// `openbao/openbao/bao`), falling back to `<owner>/<repo>` for packages without `name`.
 func (ar *AquaRegistry) convertPackagesToTools(packages []indexPackage) []*registry.Tool {
 	tools := make([]*registry.Tool, 0, len(packages))
+	pathIdx := make(map[string]string, len(packages))
 	for i := range packages {
 		pkg := &packages[i]
 		if pkg.Type == "" {
@@ -297,7 +302,24 @@ func (ar *AquaRegistry) convertPackagesToTools(packages []indexPackage) []*regis
 			Type:      pkg.Type,
 			Registry:  "aqua-public",
 		})
+
+		if owner == "" || repo == "" {
+			continue
+		}
+		key := owner + "/" + repo
+		// Prefer the explicit `name` field — it carries the 3rd binary segment when present.
+		// Fall back to `<owner>/<repo>` so 2-segment packages get a usable entry too.
+		path := pkg.Name
+		if path == "" {
+			path = key
+		}
+		pathIdx[key] = path
 	}
+
+	ar.pathIndexMu.Lock()
+	ar.pathIndex = pathIdx
+	ar.pathIndexMu.Unlock()
+
 	return tools
 }
 
