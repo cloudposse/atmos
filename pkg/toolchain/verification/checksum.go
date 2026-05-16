@@ -138,14 +138,14 @@ func checksumFileURL(tool *registry.Tool, version, assetURL string, checksum *re
 		if err != nil {
 			return "", err
 		}
-		return replaceVersionSegmentInURL(u, version, effectiveReleaseVersionFromAssetURL(assetURL, version)), nil
+		return alignSidecarURLWithAssetURL(u, assetURL, version), nil
 	}
 	checksumAsset, err := renderTemplateString(checksum.Asset, tool, version, assetName, checksum.Replacements)
 	if err != nil {
 		return "", err
 	}
 	if checksum.Type == "http" {
-		return replaceVersionSegmentInURL(checksumAsset, version, effectiveReleaseVersionFromAssetURL(assetURL, version)), nil
+		return alignSidecarURLWithAssetURL(checksumAsset, assetURL, version), nil
 	}
 	repoOwner := tool.RepoOwner
 	repoName := tool.RepoName
@@ -175,6 +175,9 @@ func effectiveReleaseVersionFromAssetURL(assetURL, version string) string {
 	for _, part := range strings.Split(strings.Trim(parsed.Path, "/"), "/") {
 		if strings.TrimPrefix(part, versionPrefixV) == target {
 			return part
+		}
+		if prefixed := versionPrefixV + target; strings.Contains(part, prefixed) {
+			return prefixed
 		}
 	}
 	return ""
@@ -216,6 +219,36 @@ func replaceVersionSegmentInURL(rawURL, version, effectiveVersion string) string
 	}
 	parsed.Path = "/" + strings.Join(parts, "/")
 	return parsed.String()
+}
+
+func alignSidecarURLWithAssetURL(rawURL, assetURL, version string) string {
+	effectiveVersion := effectiveReleaseVersionFromAssetURL(assetURL, version)
+	aligned := replaceVersionSegmentInURL(rawURL, version, effectiveVersion)
+	if aligned != rawURL || effectiveVersion == "" || effectiveVersion == version {
+		return aligned
+	}
+	return replaceEmbeddedAssetVersionInSidecarURL(rawURL, assetURL, version, effectiveVersion)
+}
+
+func replaceEmbeddedAssetVersionInSidecarURL(rawURL, assetURL, version, effectiveVersion string) string {
+	parsedSidecar, err := url.Parse(rawURL)
+	if err != nil || parsedSidecar.Host == "" {
+		return rawURL
+	}
+	parsedAsset, err := url.Parse(assetURL)
+	if err != nil || parsedAsset.Host != parsedSidecar.Host {
+		return rawURL
+	}
+	effectiveAssetBase := path.Base(parsedAsset.Path)
+	requestedAssetBase := strings.Replace(effectiveAssetBase, effectiveVersion, version, 1)
+	sidecarBase := path.Base(parsedSidecar.Path)
+	if requestedAssetBase == effectiveAssetBase || !strings.Contains(sidecarBase, requestedAssetBase) {
+		return rawURL
+	}
+	parts := strings.Split(parsedSidecar.Path, "/")
+	parts[len(parts)-1] = strings.Replace(sidecarBase, requestedAssetBase, effectiveAssetBase, 1)
+	parsedSidecar.Path = strings.Join(parts, "/")
+	return parsedSidecar.String()
 }
 
 func digestFile(filePath, algorithm string) (string, error) {

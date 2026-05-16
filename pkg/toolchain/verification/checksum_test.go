@@ -226,6 +226,16 @@ func TestChecksumFileURLUsesHTTPVersionSegmentFromAssetURL(t *testing.T) {
 	assert.Equal(t, "https://dl.k8s.io/v1.31.4/bin/darwin/arm64/kubectl.sha256", u)
 }
 
+func TestChecksumFileURLUsesEffectiveVersionInEmbeddedAssetName(t *testing.T) {
+	u, err := checksumFileURL(&registry.Tool{}, "3.17.0", "https://get.helm.sh/helm-v3.17.0-darwin-arm64.tar.gz", &registry.ChecksumConfig{
+		Type: "http",
+		URL:  "https://get.helm.sh/helm-{{.Version}}-darwin-arm64.tar.gz.sha256sum",
+	})
+
+	require.NoError(t, err)
+	assert.Equal(t, "https://get.helm.sh/helm-v3.17.0-darwin-arm64.tar.gz.sha256sum", u)
+}
+
 func TestVerifyChecksumCosignVerifiesChecksumSidecar(t *testing.T) {
 	assetPath := writeAsset(t, []byte("hello"))
 	sum := sha256.Sum256([]byte("hello"))
