@@ -500,6 +500,11 @@ func setDefaultConfiguration(v *viper.Viper) {
 	// Atmos Pro defaults
 	v.SetDefault("settings.pro.base_url", AtmosProDefaultBaseUrl)
 	v.SetDefault("settings.pro.endpoint", AtmosProDefaultEndpoint)
+
+	// Toolchain lockfile enabled by default — reproducible builds are the whole point.
+	// Users who want the old "re-resolve every time" behavior set use_lock_file: false
+	// or pass `--no-lockfile` on the CLI.
+	v.SetDefault("toolchain.use_lock_file", true)
 }
 
 // loadConfigSources loads configuration from multiple sources in priority order,
