@@ -72,6 +72,8 @@ exclude = [
   "taskfile\\.dev",
   # regex101.com (intermittent timeouts in CI)
   "regex101\\.com",
+  # nx.dev (intermittent connection failures in CI)
+  "nx\\.dev",
   # Test data placeholder URLs (intentional)
   "github\\.com/test/",
   # Planned documentation paths (not yet published)
