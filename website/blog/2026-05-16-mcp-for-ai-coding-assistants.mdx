@@ -11,19 +11,19 @@ idea of where binaries live. This post shows how to centralize all of it —
 server configuration, AWS credentials, and toolchain version — in **one
 `atmos.yaml`** that every AI coding assistant uses unchanged.
 
-[Atmos Auth](https://atmos.tools/cli/configuration/auth) is the only place
+[Atmos Auth](/cli/configuration/auth) is the only place
 AWS credentials live; each MCP server is automatically wrapped with the
 right identity for the question it'll answer (billing → payer account,
 CloudTrail → audit, IAM → root, workload queries → dev). One
 `atmos auth login` covers them all — no API keys in CLI configs, no
 `AWS_PROFILE` swapping between prompts. The server set spans the
-[Atmos MCP server](https://atmos.tools/ai/mcp-server) for project stacks,
+[Atmos MCP server](/ai/mcp-server) for project stacks,
 the [AWS MCP server suite](https://github.com/awslabs/mcp) for live cloud
 queries, and the [Atmos Pro MCP server](https://atmos-pro.com/mcp/install)
 for drift, deployment, and audit history. The
-[Atmos toolchain](https://atmos.tools/cli/configuration/toolchain) pins
+[Atmos toolchain](/cli/configuration/toolchain) pins
 binaries so every assistant runs the same binary. See the example:
-[`examples/mcp-for-ai-coding-assistants/`](https://atmos.tools/examples/mcp-for-ai-coding-assistants).
+[`examples/mcp-for-ai-coding-assistants/`](/examples/mcp-for-ai-coding-assistants).
 
 <!--truncate-->
 
@@ -38,7 +38,7 @@ In one prompt, your AI coding assistant answers:
 - What **changed** — when, why, how, and by whom
 
 Centralized auth. Centralized security and permissions. One `atmos.yaml`.
-[Try the example →](https://atmos.tools/examples/mcp-for-ai-coding-assistants)
+[Try the example →](/examples/mcp-for-ai-coding-assistants)
 
 ---
 
@@ -111,7 +111,7 @@ MCP-compatible client.
 For Claude Code that's the native format. Gemini's
 `.gemini/settings.json` is structurally identical, so the same export
 works with `--output .gemini/settings.json`. For Codex, it's TOML format — and the example
-[walks you through that](https://atmos.tools/examples/mcp-for-ai-coding-assistants#option-2--openai-codex-cli).
+[walks you through that](/examples/mcp-for-ai-coding-assistants#option-2--openai-codex-cli).
 
 The result: many MCP servers, three AI CLIs, one Atmos config.
 
@@ -141,7 +141,7 @@ directly with each AI CLI alongside the exported config — see the
 ### What the `atmos` MCP server does
 
 The first entry — **atmos** — is the
-[Atmos MCP server itself](https://atmos.tools/ai/mcp-server), running
+[Atmos MCP server itself](/ai/mcp-server), running
 inside the `atmos` binary via `atmos mcp start`. Including it in the
 exported config gives your AI coding assistant programmatic access to
 **your Atmos project** — the stacks, components, manifests, and the
@@ -163,7 +163,7 @@ It exposes more than 20 tools:
   `atmos_compliance_report`.
 
 Write-side tools (`write_*`, `edit_file`, `execute_bash_command`)
-respect [Atmos's tool permission model](https://atmos.tools/cli/configuration/ai/tools#permissions).
+respect [Atmos's tool permission model](/cli/configuration/ai/tools#permissions).
 The MCP server runs in YOLO mode by default, so the AI coding
 assistant's own permission UI — Claude Code's per-tool approval,
 Codex's confirm prompt, Gemini's consent dialog — handles execution
@@ -215,7 +215,7 @@ So the AI can answer cross-layer questions in one prompt:
 ## Pair with Atmos Agent Skills
 
 MCP gives the AI **tools** — to inspect stacks, query AWS, check Atmos
-Pro. [Atmos Agent Skills](https://atmos.tools/ai/agent-skills) give it
+Pro. [Atmos Agent Skills](/ai/agent-skills) give it
 **knowledge** — 21 domain-specific skills (stacks, components,
 validation, YAML functions, vendoring, toolchain, GitOps, auth, …) that
 activate automatically based on what you ask.
@@ -237,7 +237,7 @@ For Claude Code:
 ```
 
 For other tools, see the
-[AI Agent Skills announcement](https://atmos.tools/blog/ai-agent-skills)
+[AI Agent Skills announcement](/changelog/ai-agent-skills)
 for tool-specific install paths.
 
 **Why pair them:** MCP answers *"what does this code do?"* by reading
@@ -417,39 +417,39 @@ Four benefits:
 
 The example walks through the full setup end to end, including the per-CLI
 config layouts:
-[`examples/mcp-for-ai-coding-assistants/`](https://atmos.tools/examples/mcp-for-ai-coding-assistants).
+[`examples/mcp-for-ai-coding-assistants/`](/examples/mcp-for-ai-coding-assistants).
 
 ## Related Examples
 
-- **[Atmos MCP integrations](https://atmos.tools/examples/mcp)** — Same external
+- **[Atmos MCP integrations](/examples/mcp)** — Same external
   MCP server config, but Atmos drives the AI loop (`atmos ai ask`) instead of an
   external CLI. Useful if you'd rather stay inside the `atmos` CLI than spawn
   Claude Code / Codex / Gemini.
-- **[Atmos AI with Claude Code](https://atmos.tools/examples/ai-claude-code)** —
+- **[Atmos AI with Claude Code](/examples/ai-claude-code)** —
   Use a Claude Pro/Max subscription as Atmos's AI provider (no Anthropic API
   key). Atmos hosts the AI conversation; Claude Code provides the model;
   MCP servers pass through.
-- **[Atmos AI (multi-provider)](https://atmos.tools/examples/ai)** — Multi-provider
+- **[Atmos AI (multi-provider)](/examples/ai)** — Multi-provider
   Atmos AI setup (Anthropic API, OpenAI API, Ollama, …). No external CLI; chat
   with your infra from `atmos ai ask`.
 
 ## Related Reading
 
-- [MCP Configuration in Atmos](https://atmos.tools/cli/configuration/mcp) — full
+- [MCP Configuration in Atmos](/cli/configuration/mcp) — full
   reference for the `mcp:` section, including server-config fields and
   smart-routing.
-- [Atmos Auth](https://atmos.tools/cli/configuration/auth) — provider/identity
+- [Atmos Auth](/cli/configuration/auth) — provider/identity
   model and `atmos auth login` flow.
-- [Atmos Toolchain](https://atmos.tools/cli/configuration/toolchain) — how
+- [Atmos Toolchain](/cli/configuration/toolchain) — how
   toolchain aliases and `atmos toolchain install` work.
-- [Atmos MCP Server](https://atmos.tools/ai/mcp-server) — the
+- [Atmos MCP Server](/ai/mcp-server) — the
   Atmos-AI-tools-as-MCP-server mode, exposed to your AI coding assistant via
   the `atmos` entry in `mcp.servers`.
-- [Atmos Agent Skills](https://atmos.tools/ai/agent-skills) — 21
+- [Atmos Agent Skills](/ai/agent-skills) — 21
   domain-specific skills that complement MCP tools by giving AI
   assistants deep Atmos knowledge (stacks, components, validation,
   YAML functions, vendoring, GitOps, design patterns, …).
-- [AI Agent Skills announcement](https://atmos.tools/blog/ai-agent-skills) —
+- [AI Agent Skills announcement](/changelog/ai-agent-skills) —
   install paths for Claude Code, Codex, Gemini, Cursor, Windsurf,
   GitHub Copilot, JetBrains Junie, and Amazon Q.
 - [Atmos Pro MCP server install](https://atmos-pro.com/mcp/install) —

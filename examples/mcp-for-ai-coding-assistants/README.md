@@ -1,13 +1,13 @@
 # Example: MCP for AI Coding Assistants
 
-Configure MCP servers (the [Atmos MCP server](https://atmos.tools/ai/mcp-server) plus the
+Configure MCP servers (the [Atmos MCP server](/ai/mcp-server) plus the
 [AWS MCP server suite](https://github.com/awslabs/mcp)) **once** in `atmos.yaml`, then use
 the same set of tools — with the same AWS credentials — from
 [Claude Code](https://www.anthropic.com/claude-code),
 [OpenAI Codex CLI](https://github.com/openai/codex), and
 [Google Gemini CLI](https://github.com/google-gemini/gemini-cli).
 
-Learn more in the [MCP configuration documentation](https://atmos.tools/cli/configuration/mcp).
+Learn more in the [MCP configuration documentation](/cli/configuration/mcp).
 
 ---
 
@@ -30,7 +30,7 @@ Centralized auth. Centralized security and permissions. One `atmos.yaml`.
   (versioned with your infrastructure code) instead of three separate
   per-CLI config files.
 - **Security — every credential, in one place** —
-  [Atmos Auth](https://atmos.tools/cli/configuration/auth) is the only place
+  [Atmos Auth](/cli/configuration/auth) is the only place
   AWS credentials live. The exported `.mcp.json` references IAM role names
   but holds **no static secrets** — safe to check into the repo. Each
   external MCP server is spawned by `atmos auth exec`, which resolves
@@ -46,7 +46,7 @@ Centralized auth. Centralized security and permissions. One `atmos.yaml`.
   No identity juggling between prompts, no `AWS_PROFILE` swapping, no
   re-logins to ask a billing question after asking a VPC question.
 - **Toolchain managed by Atmos** — `uvx` is installed and resolved via the
-  [Atmos toolchain](https://atmos.tools/cli/configuration/toolchain) so every
+  [Atmos toolchain](/cli/configuration/toolchain) so every
   CLI uses the same binary version. No "works on my machine" drift.
 - **Atmos's own AI tools exposed** — your AI assistant can call
   `describe_component`, `list_stacks`, `validate_stacks`, `read_stack_file`,
@@ -78,7 +78,7 @@ than through `atmos mcp export`. This may change in a future release.
 ## What the `atmos` MCP Server Does
 
 The first entry in the table above — **atmos** — is *not* an awslabs server.
-It's the [Atmos MCP server](https://atmos.tools/ai/mcp-server) running inside the
+It's the [Atmos MCP server](/ai/mcp-server) running inside the
 `atmos` binary itself, started by `atmos mcp start`. Including it in your AI
 coding assistant's config gives the assistant direct programmatic access to
 **your Atmos project** — your stacks, components, manifests, validation logic,
@@ -101,7 +101,7 @@ modified a variable.
 ### What requires permission
 
 Tools marked **(requires permission)** above respect Atmos's
-[tool permission model](https://atmos.tools/cli/configuration/ai/tools#permissions).
+[tool permission model](/cli/configuration/ai/tools#permissions).
 By default, the MCP server runs in YOLO mode (no interactive prompts —
 the client handles approvals), so the AI coding assistant's own
 permission UI (Claude Code's per-tool approval, Codex's confirm prompt,
@@ -158,7 +158,7 @@ from `aws-api`.
 ## Pair with Atmos Agent Skills
 
 MCP servers give your AI coding assistant **tools** — to inspect your
-stacks, query AWS, check Atmos Pro. [Atmos Agent Skills](https://atmos.tools/ai/agent-skills)
+stacks, query AWS, check Atmos Pro. [Atmos Agent Skills](/ai/agent-skills)
 give it **knowledge** — 21 domain-specific skills (stacks, components,
 validation, YAML functions, vendoring, toolchain, GitOps, design patterns,
 auth, …) that activate automatically based on what you ask.
@@ -185,9 +185,9 @@ Gemini CLI) plus Cursor, Windsurf, GitHub Copilot, and others.
 
 **Other tools** (Codex CLI, Gemini CLI, Cursor, Windsurf, GitHub Copilot,
 JetBrains Junie, …): see the
-[AI Agent Skills announcement](https://atmos.tools/blog/ai-agent-skills) for
+[AI Agent Skills announcement](/changelog/ai-agent-skills) for
 each tool's install path, or the
-[Atmos Agent Skills documentation](https://atmos.tools/ai/agent-skills) for
+[Atmos Agent Skills documentation](/ai/agent-skills) for
 the full skill reference.
 
 **MCP + Skills together** are stronger than either alone. MCP answers
@@ -452,14 +452,6 @@ UI under *Settings → MCP Clients*.
         "PATH": "/Users/you/.atmos/toolchain/...:..."
       }
     },
-    "aws-docs": {
-      "command": "uvx",
-      "args": ["awslabs.aws-documentation-mcp-server@latest"],
-      "env": {
-        "FASTMCP_LOG_LEVEL": "ERROR",
-        "PATH": "/Users/you/.atmos/toolchain/...:..."
-      }
-    },
     "aws-pricing": {
       "command": "atmos",
       "args": [
@@ -522,7 +514,7 @@ Two things to notice:
 ## Switching Profiles or Identities
 
 Need different credentials for different tasks? Atmos profiles handle this — see the
-[profile documentation](https://atmos.tools/cli/configuration/profiles) for the full
+[profile documentation](/cli/configuration/profiles) for the full
 flow. Quick version:
 
 ```bash
@@ -564,12 +556,12 @@ atmos --profile billing mcp export
 
 ## Learn More
 
-- [MCP Configuration](https://atmos.tools/cli/configuration/mcp)
-- [Atmos Auth Documentation](https://atmos.tools/cli/configuration/auth)
-- [Atmos Toolchain](https://atmos.tools/cli/configuration/toolchain)
-- [Atmos MCP Server](https://atmos.tools/ai/mcp-server)
-- [Atmos Agent Skills](https://atmos.tools/ai/agent-skills) — 21 domain-specific skills that pair with MCP tools to give AI assistants deep Atmos knowledge
-- [Atmos Agent Skills announcement](https://atmos.tools/blog/ai-agent-skills) — install paths for Claude Code, Codex, Gemini, Cursor, Windsurf, Copilot
+- [MCP Configuration](/cli/configuration/mcp)
+- [Atmos Auth Documentation](/cli/configuration/auth)
+- [Atmos Toolchain](/cli/configuration/toolchain)
+- [Atmos MCP Server](/ai/mcp-server)
+- [Atmos Agent Skills](/ai/agent-skills) — 21 domain-specific skills that pair with MCP tools to give AI assistants deep Atmos knowledge
+- [Atmos Agent Skills announcement](/changelog/ai-agent-skills) — install paths for Claude Code, Codex, Gemini, Cursor, Windsurf, Copilot
 - [Atmos Pro](https://atmos-pro.com/) — the fastest way to deploy your apps on AWS with Terraform and GitHub Actions
 - [Atmos Pro MCP server install](https://atmos-pro.com/mcp/install)
 - [Atmos Pro MCP server announcement](https://atmos-pro.com/changelog/2026-05-09-mcp-server)
