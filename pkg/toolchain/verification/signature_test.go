@@ -63,6 +63,80 @@ func TestVerifyCosignCommandFromOpts(t *testing.T) {
 	assert.Contains(t, result.SignatureMethods, "cosign")
 }
 
+func TestVerifyCosignCommandFromOptsUsesEffectiveGitHubReleaseVersion(t *testing.T) {
+	runner := &fakeRunner{}
+	_, err := (&Verifier{}).Verify(context.Background(), Request{
+		Tool: &registry.Tool{
+			RepoOwner: "owner",
+			RepoName:  "tool",
+			Cosign: registry.CosignConfig{
+				Opts: []string{
+					"--certificate",
+					"https://github.com/owner/tool/releases/download/{{.Version}}/tool_{{.Version}}_linux_amd64.tar.gz.pem",
+					"--signature",
+					"https://github.com/owner/tool/releases/download/{{.Version}}/tool_{{.Version}}_linux_amd64.tar.gz.sig",
+				},
+			},
+		},
+		Version:   "1.0.0",
+		AssetURL:  "https://github.com/owner/tool/releases/download/v1.0.0/tool_1.0.0_linux_amd64.tar.gz",
+		AssetPath: writeAsset(t, []byte("hello")),
+		Policy: Policy{
+			Checksums:  PolicyDisabled,
+			Signatures: PolicyWhenAvailable,
+		},
+		Runner: runner,
+	})
+
+	require.NoError(t, err)
+	require.Len(t, runner.calls, 1)
+	assert.Equal(t, []string{
+		"verify-blob",
+		"--certificate",
+		"https://github.com/owner/tool/releases/download/v1.0.0/tool_1.0.0_linux_amd64.tar.gz.pem",
+		"--signature",
+		"https://github.com/owner/tool/releases/download/v1.0.0/tool_1.0.0_linux_amd64.tar.gz.sig",
+		writeAssetPathPlaceholder(runner.calls[0].args),
+	}, normalizeLastArg(runner.calls[0].args))
+}
+
+func TestVerifyCosignCommandFromOptsUsesEffectiveHTTPVersionSegment(t *testing.T) {
+	runner := &fakeRunner{}
+	_, err := (&Verifier{}).Verify(context.Background(), Request{
+		Tool: &registry.Tool{
+			RepoOwner: "kubernetes",
+			RepoName:  "kubectl",
+			Cosign: registry.CosignConfig{
+				Opts: []string{
+					"--signature",
+					"https://dl.k8s.io/{{.Version}}/bin/darwin/arm64/kubectl.sig",
+					"--certificate",
+					"https://dl.k8s.io/{{.Version}}/bin/darwin/arm64/kubectl.cert",
+				},
+			},
+		},
+		Version:   "1.31.4",
+		AssetURL:  "https://dl.k8s.io/v1.31.4/bin/darwin/arm64/kubectl",
+		AssetPath: writeAsset(t, []byte("hello")),
+		Policy: Policy{
+			Checksums:  PolicyDisabled,
+			Signatures: PolicyWhenAvailable,
+		},
+		Runner: runner,
+	})
+
+	require.NoError(t, err)
+	require.Len(t, runner.calls, 1)
+	assert.Equal(t, []string{
+		"verify-blob",
+		"--signature",
+		"https://dl.k8s.io/v1.31.4/bin/darwin/arm64/kubectl.sig",
+		"--certificate",
+		"https://dl.k8s.io/v1.31.4/bin/darwin/arm64/kubectl.cert",
+		writeAssetPathPlaceholder(runner.calls[0].args),
+	}, normalizeLastArg(runner.calls[0].args))
+}
+
 func TestVerifySignatureCommands(t *testing.T) {
 	tests := []struct {
 		name        string
@@ -148,6 +222,82 @@ func TestVerifySignatureRequiredMissingMetadata(t *testing.T) {
 	})
 
 	require.ErrorIs(t, err, ErrSignatureRequired)
+}
+
+func TestVerifyCosignSkipsUnavailableSidecarWhenAvailable(t *testing.T) {
+	runner := &fakeRunner{}
+	result, err := (&Verifier{}).Verify(context.Background(), Request{
+		Tool: &registry.Tool{
+			RepoOwner: "owner",
+			RepoName:  "tool",
+			Cosign: registry.CosignConfig{
+				Signature: registry.DownloadedFile{
+					Type:  "http",
+					URL:   "https://example.com/missing.sig",
+					Asset: "missing.sig",
+				},
+			},
+		},
+		Version:   "1.0.0",
+		AssetURL:  "https://example.com/tool.tar.gz",
+		AssetPath: writeAsset(t, []byte("hello")),
+		Downloader: fakeDownloader{
+			"https://example.com/other.sig": []byte("not used"),
+		},
+		Policy: Policy{
+			Checksums:  PolicyDisabled,
+			Signatures: PolicyWhenAvailable,
+		},
+		Runner: runner,
+	})
+
+	require.NoError(t, err)
+	require.Empty(t, runner.calls)
+	assert.Contains(t, result.SkippedReasons, "checksum verification disabled")
+	require.Len(t, result.SkippedReasons, 2)
+	assert.Contains(t, result.SkippedReasons[1], "cosign sidecar unavailable")
+}
+
+func TestVerifyCosignRequiredUnavailableSidecar(t *testing.T) {
+	_, err := (&Verifier{}).Verify(context.Background(), Request{
+		Tool: &registry.Tool{
+			RepoOwner: "owner",
+			RepoName:  "tool",
+			Cosign: registry.CosignConfig{
+				Signature: registry.DownloadedFile{
+					Type:  "http",
+					URL:   "https://example.com/missing.sig",
+					Asset: "missing.sig",
+				},
+			},
+		},
+		Version:   "1.0.0",
+		AssetURL:  "https://example.com/tool.tar.gz",
+		AssetPath: writeAsset(t, []byte("hello")),
+		Downloader: fakeDownloader{
+			"https://example.com/other.sig": []byte("not used"),
+		},
+		Policy: Policy{
+			Checksums:  PolicyDisabled,
+			Signatures: PolicyRequired,
+		},
+		Runner: &fakeRunner{},
+	})
+
+	require.Error(t, err)
+}
+
+func TestSidecarURLUsesGitHubReleaseVersionFromAssetURL(t *testing.T) {
+	u, err := sidecarURL(&registry.Tool{
+		RepoOwner: "owner",
+		RepoName:  "tool",
+	}, "1.0.0", "https://github.com/owner/tool/releases/download/v1.0.0/tool_1.0.0_linux_amd64.tar.gz", &registry.DownloadedFile{
+		Type:  "github_release",
+		Asset: "tool_1.0.0_linux_amd64.tar.gz.sig",
+	})
+
+	require.NoError(t, err)
+	assert.Equal(t, "https://github.com/owner/tool/releases/download/v1.0.0/tool_1.0.0_linux_amd64.tar.gz.sig", u)
 }
 
 func normalizeLastArg(args []string) []string {

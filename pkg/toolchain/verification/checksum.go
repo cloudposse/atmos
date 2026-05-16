@@ -20,6 +20,8 @@ import (
 	"github.com/cloudposse/atmos/pkg/toolchain/registry"
 )
 
+const versionPrefixV = "v"
+
 //nolint:revive // The checksum policy branches are kept together to make required/optional behavior explicit.
 func (v *Verifier) verifyChecksum(ctx context.Context, req *Request, result *Result) error {
 	checksum := &req.Tool.Checksum
@@ -47,9 +49,39 @@ func (v *Verifier) verifyChecksum(ctx context.Context, req *Request, result *Res
 		return err
 	}
 
-	checksumURL, err := checksumFileURL(req.Tool, req.Version, req.AssetURL, checksum)
+	sidecar, err := v.downloadChecksumData(ctx, req, checksum, result)
+	if err != nil || sidecar == nil {
+		return err
+	}
+
+	if req.Policy.Signatures != PolicyDisabled && hasCosign(&checksum.Cosign) {
+		if err := v.verifyChecksumCosign(ctx, req, sidecar.url, sidecar.data, result); err != nil {
+			return err
+		}
+	}
+
+	assetName := assetNameFromURL(req.AssetURL)
+	expected, err := expectedChecksum(sidecar.data, assetName, algorithm, checksum)
 	if err != nil {
 		return err
+	}
+	if !strings.EqualFold(actual, expected) {
+		return fmt.Errorf("%w: expected %s, got %s", ErrChecksumMismatch, expected, actual)
+	}
+	result.ChecksumAlgorithm = algorithm
+	result.Checksum = actual
+	return nil
+}
+
+type checksumSidecar struct {
+	url  string
+	data []byte
+}
+
+func (v *Verifier) downloadChecksumData(ctx context.Context, req *Request, checksum *registry.ChecksumConfig, result *Result) (*checksumSidecar, error) {
+	checksumURL, err := checksumFileURL(req.Tool, req.Version, req.AssetURL, checksum)
+	if err != nil {
+		return nil, err
 	}
 	downloader := req.Downloader
 	if downloader == nil {
@@ -60,20 +92,36 @@ func (v *Verifier) verifyChecksum(ctx context.Context, req *Request, result *Res
 	}
 	data, err := downloader.Download(ctx, checksumURL)
 	if err != nil {
-		return err
+		if req.Policy.Checksums != PolicyRequired {
+			result.SkippedReasons = append(result.SkippedReasons, fmt.Sprintf("checksum sidecar unavailable: %v", err))
+			return nil, nil
+		}
+		return nil, err
 	}
+	return &checksumSidecar{url: checksumURL, data: data}, nil
+}
 
-	assetName := assetNameFromURL(req.AssetURL)
-	expected, err := expectedChecksum(data, assetName, algorithm, checksum)
+func (v *Verifier) verifyChecksumCosign(ctx context.Context, req *Request, checksumURL string, data []byte, result *Result) error {
+	file, err := os.CreateTemp("", "atmos-checksum-*"+path.Ext(checksumURL))
 	if err != nil {
 		return err
 	}
-	if !strings.EqualFold(actual, expected) {
-		return fmt.Errorf("%w: expected %s, got %s", ErrChecksumMismatch, expected, actual)
+	defer func() {
+		// #nosec G703 -- file is a temporary checksum sidecar created by this process.
+		_ = os.Remove(file.Name())
+	}()
+	if _, err := file.Write(data); err != nil {
+		_ = file.Close()
+		return err
 	}
-	result.ChecksumAlgorithm = algorithm
-	result.Checksum = actual
-	return nil
+	if err := file.Close(); err != nil {
+		return err
+	}
+
+	checksumReq := *req
+	checksumReq.AssetURL = checksumURL
+	checksumReq.AssetPath = file.Name()
+	return v.verifyCosign(ctx, &checksumReq, &req.Tool.Checksum.Cosign, result)
 }
 
 func hasChecksum(checksum *registry.ChecksumConfig) bool {
@@ -86,22 +134,88 @@ func hasChecksum(checksum *registry.ChecksumConfig) bool {
 func checksumFileURL(tool *registry.Tool, version, assetURL string, checksum *registry.ChecksumConfig) (string, error) {
 	assetName := assetNameFromURL(assetURL)
 	if checksum.URL != "" {
-		return renderTemplateString(checksum.URL, tool, version, assetName, checksum.Replacements)
+		u, err := renderTemplateString(checksum.URL, tool, version, assetName, checksum.Replacements)
+		if err != nil {
+			return "", err
+		}
+		return replaceVersionSegmentInURL(u, version, effectiveReleaseVersionFromAssetURL(assetURL, version)), nil
 	}
 	checksumAsset, err := renderTemplateString(checksum.Asset, tool, version, assetName, checksum.Replacements)
 	if err != nil {
 		return "", err
 	}
 	if checksum.Type == "http" {
-		return checksumAsset, nil
+		return replaceVersionSegmentInURL(checksumAsset, version, effectiveReleaseVersionFromAssetURL(assetURL, version)), nil
 	}
 	repoOwner := tool.RepoOwner
 	repoName := tool.RepoName
-	releaseVersion, err := renderTemplateString("{{.Version}}", tool, version, assetName, checksum.Replacements)
+	releaseVersion, err := checksumReleaseVersion(tool, version, assetURL, assetName, checksum.Replacements)
 	if err != nil {
 		return "", err
 	}
 	return fmt.Sprintf("https://github.com/%s/%s/releases/download/%s/%s", repoOwner, repoName, releaseVersion, checksumAsset), nil
+}
+
+func checksumReleaseVersion(tool *registry.Tool, version, assetURL, assetName string, replacements map[string]string) (string, error) {
+	if releaseVersion := effectiveReleaseVersionFromAssetURL(assetURL, version); releaseVersion != "" {
+		return releaseVersion, nil
+	}
+	return renderTemplateString("{{.Version}}", tool, version, assetName, replacements)
+}
+
+func effectiveReleaseVersionFromAssetURL(assetURL, version string) string {
+	if releaseVersion := releaseVersionFromGitHubAssetURL(assetURL); releaseVersion != "" {
+		return releaseVersion
+	}
+	parsed, err := url.Parse(assetURL)
+	if err != nil {
+		return ""
+	}
+	target := strings.TrimPrefix(version, versionPrefixV)
+	for _, part := range strings.Split(strings.Trim(parsed.Path, "/"), "/") {
+		if strings.TrimPrefix(part, versionPrefixV) == target {
+			return part
+		}
+	}
+	return ""
+}
+
+func releaseVersionFromGitHubAssetURL(rawURL string) string {
+	parsed, err := url.Parse(rawURL)
+	if err != nil || parsed.Host != "github.com" {
+		return ""
+	}
+	parts := strings.Split(strings.Trim(parsed.Path, "/"), "/")
+	for i, part := range parts {
+		if part == "download" && i+1 < len(parts) {
+			return parts[i+1]
+		}
+	}
+	return ""
+}
+
+func replaceVersionSegmentInURL(rawURL, version, effectiveVersion string) string {
+	if effectiveVersion == "" || effectiveVersion == version {
+		return rawURL
+	}
+	parsed, err := url.Parse(rawURL)
+	if err != nil || parsed.Host == "" {
+		return rawURL
+	}
+	target := strings.TrimPrefix(version, versionPrefixV)
+	parts := strings.Split(strings.Trim(parsed.Path, "/"), "/")
+	changed := false
+	for i, part := range parts {
+		if strings.TrimPrefix(part, versionPrefixV) == target {
+			parts[i] = effectiveVersion
+			changed = true
+		}
+	}
+	if !changed {
+		return rawURL
+	}
+	parsed.Path = "/" + strings.Join(parts, "/")
+	return parsed.String()
 }
 
 func digestFile(filePath, algorithm string) (string, error) {

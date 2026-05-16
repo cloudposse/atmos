@@ -281,16 +281,16 @@ type EditorConfig struct {
 
 // Toolchain configures the built-in CLI toolchain management system for installing and managing external tools.
 type Toolchain struct {
-	InstallPath     string                `yaml:"install_path" json:"install_path" mapstructure:"install_path"`
-	FilePath        string                `yaml:"file_path" json:"file_path" mapstructure:"file_path"`
-	ToolsDir        string                `yaml:"tools_dir" json:"tools_dir" mapstructure:"tools_dir"`
-	VersionsFile    string                `yaml:"versions_file" json:"versions_file" mapstructure:"versions_file"`
-	LockFile        string                `yaml:"lock_file,omitempty" json:"lock_file,omitempty" mapstructure:"lock_file"`
-	UseToolVersions bool                  `yaml:"use_tool_versions" json:"use_tool_versions" mapstructure:"use_tool_versions"`
-	UseLockFile     bool                  `yaml:"use_lock_file" json:"use_lock_file" mapstructure:"use_lock_file"`
-	Verification    ToolchainVerification `yaml:"verification,omitempty" json:"verification,omitempty" mapstructure:"verification"`
-	Registries      []ToolchainRegistry   `yaml:"registries,omitempty" json:"registries,omitempty" mapstructure:"registries"`
-	Aliases         map[string]string     `yaml:"aliases,omitempty" json:"aliases,omitempty" mapstructure:"aliases"`
+	InstallPath     string                 `yaml:"install_path" json:"install_path" mapstructure:"install_path"`
+	FilePath        string                 `yaml:"file_path" json:"file_path" mapstructure:"file_path"`
+	ToolsDir        string                 `yaml:"tools_dir" json:"tools_dir" mapstructure:"tools_dir"`
+	VersionsFile    string                 `yaml:"versions_file" json:"versions_file" mapstructure:"versions_file"`
+	LockFile        string                 `yaml:"lock_file,omitempty" json:"lock_file,omitempty" mapstructure:"lock_file"`
+	UseToolVersions bool                   `yaml:"use_tool_versions" json:"use_tool_versions" mapstructure:"use_tool_versions"`
+	UseLockFile     bool                   `yaml:"use_lock_file" json:"use_lock_file" mapstructure:"use_lock_file"`
+	Verification    *ToolchainVerification `yaml:"verification,omitempty" json:"verification,omitempty" mapstructure:"verification"`
+	Registries      []ToolchainRegistry    `yaml:"registries,omitempty" json:"registries,omitempty" mapstructure:"registries"`
+	Aliases         map[string]string      `yaml:"aliases,omitempty" json:"aliases,omitempty" mapstructure:"aliases"`
 }
 
 // ToolchainVerification configures package integrity and signature checks.

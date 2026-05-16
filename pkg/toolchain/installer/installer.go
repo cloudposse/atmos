@@ -241,7 +241,7 @@ func New(opts ...Option) *Installer {
 		},
 		registryFactory:    &defaultRegistryFactory{},
 		resolver:           &DefaultToolResolver{}, // Default resolver.
-		verificationPolicy: verification.PolicyFromConfig(schema.ToolchainVerification{}),
+		verificationPolicy: verification.PolicyFromConfig(nil),
 	}
 
 	// Apply options.
@@ -295,16 +295,16 @@ func (i *Installer) installFromTool(tool *registry.Tool, version string) (string
 	}
 	log.Debug("Downloading tool", "owner", tool.RepoOwner, "repo", tool.RepoName, logFieldVersion, version, "url", assetURL)
 
-	assetPath, err := i.downloadAssetWithVersionFallback(tool, version, assetURL)
+	assetPath, effectiveAssetURL, err := i.downloadAssetWithVersionFallback(tool, version, assetURL)
 	if err != nil {
 		return "", fmt.Errorf(errUtils.ErrWrapFormat, ErrHTTPRequest, err)
 	}
-	verificationResult, err := i.verifyDownloadedAsset(tool, version, assetURL, assetPath)
+	verificationResult, err := i.verifyDownloadedAsset(tool, version, effectiveAssetURL, assetPath)
 	if err != nil {
 		_ = os.Remove(assetPath)
 		return "", err
 	}
-	if err := i.updateLockFile(tool, version, assetURL, verificationResult); err != nil {
+	if err := i.updateLockFile(tool, version, effectiveAssetURL, verificationResult); err != nil {
 		return "", err
 	}
 	binaryPath, err := i.extractAndInstall(tool, assetPath, version)

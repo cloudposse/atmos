@@ -37,13 +37,42 @@ func (i *Installer) downloadAsset(url string) (string, error) {
 
 	// Check if already cached.
 	if _, err := os.Stat(cachePath); err == nil {
-		log.Debug("Using cached asset", filenameKey, filename)
-		return cachePath, nil
+		if cachedAssetMatchesURL(cachePath, url) {
+			log.Debug("Using cached asset", filenameKey, filename)
+			return cachePath, nil
+		}
+		log.Debug("Ignoring cached asset from a different URL", filenameKey, filename)
 	}
 
 	// Download the file using authenticated HTTP client.
 	log.Debug("Downloading asset", filenameKey, filename)
-	return downloadToCache(url, cachePath)
+	assetPath, err := downloadToCache(url, cachePath)
+	if err != nil {
+		return "", err
+	}
+	if err := writeCacheSourceURL(cachePath, url); err != nil {
+		return "", err
+	}
+	return assetPath, nil
+}
+
+func cachedAssetMatchesURL(cachePath, url string) bool {
+	data, err := os.ReadFile(cacheSourceURLPath(cachePath))
+	if err != nil {
+		return os.IsNotExist(err)
+	}
+	return strings.TrimSpace(string(data)) == url
+}
+
+func writeCacheSourceURL(cachePath, url string) error {
+	if err := os.WriteFile(cacheSourceURLPath(cachePath), []byte(url+"\n"), defaultFileWritePermissions); err != nil {
+		return fmt.Errorf("%w: failed to record cache source URL: %w", ErrFileOperation, err)
+	}
+	return nil
+}
+
+func cacheSourceURLPath(cachePath string) string {
+	return cachePath + ".url"
 }
 
 // downloadToCache downloads a URL to the specified cache path.
@@ -138,15 +167,15 @@ func buildDownloadError(url string, statusCode int) error {
 }
 
 // downloadAssetWithVersionFallback tries the asset URL as-is, then with 'v' prefix or without, if 404.
-func (i *Installer) downloadAssetWithVersionFallback(tool *registry.Tool, version, assetURL string) (string, error) {
+func (i *Installer) downloadAssetWithVersionFallback(tool *registry.Tool, version, assetURL string) (string, string, error) {
 	defer perf.Track(nil, "Installer.downloadAssetWithVersionFallback")()
 
 	assetPath, err := i.downloadAsset(assetURL)
 	if err == nil {
-		return assetPath, nil
+		return assetPath, assetURL, nil
 	}
 	if !isHTTP404(err) {
-		return "", err
+		return "", "", err
 	}
 
 	return i.tryFallbackVersion(tool, version, assetURL, err)
@@ -154,7 +183,7 @@ func (i *Installer) downloadAssetWithVersionFallback(tool *registry.Tool, versio
 
 // tryFallbackVersion attempts download with an alternative version prefix.
 // Uses the tool's VersionPrefix if set, otherwise falls back to the standard "v" prefix.
-func (i *Installer) tryFallbackVersion(tool *registry.Tool, version, assetURL string, originalErr error) (string, error) {
+func (i *Installer) tryFallbackVersion(tool *registry.Tool, version, assetURL string, originalErr error) (string, string, error) {
 	defer perf.Track(nil, "Installer.tryFallbackVersion")()
 
 	// Use tool-specific prefix (e.g., "jq-") if available, otherwise use standard "v".
@@ -171,23 +200,23 @@ func (i *Installer) tryFallbackVersion(tool *registry.Tool, version, assetURL st
 	}
 
 	if fallbackVersion == version {
-		return "", originalErr
+		return "", "", originalErr
 	}
 
 	fallbackURL, buildErr := i.BuildAssetURL(tool, fallbackVersion)
 	if buildErr != nil {
-		return "", fmt.Errorf(errUtils.ErrWrapFormat, ErrInvalidToolSpec, buildErr)
+		return "", "", fmt.Errorf(errUtils.ErrWrapFormat, ErrInvalidToolSpec, buildErr)
 	}
 
 	log.Debug("Asset 404, trying fallback version", "original", assetURL, "fallback", fallbackURL)
 	assetPath, err := i.downloadAsset(fallbackURL)
 	if err == nil {
-		return assetPath, nil
+		return assetPath, fallbackURL, nil
 	}
 
 	// Both URLs failed - create a user-friendly error message.
 	// Don't nest ErrHTTPRequest again since the inner error already contains it.
-	return "", buildDownloadNotFoundError(tool.RepoOwner, tool.RepoName, version, assetURL, fallbackURL)
+	return "", "", buildDownloadNotFoundError(tool.RepoOwner, tool.RepoName, version, assetURL, fallbackURL)
 }
 
 // buildDownloadNotFoundError creates a user-friendly error for when both URL attempts fail.

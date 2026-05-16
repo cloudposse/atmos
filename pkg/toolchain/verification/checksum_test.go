@@ -142,6 +142,144 @@ func TestVerifyChecksumMismatch(t *testing.T) {
 	require.ErrorIs(t, err, ErrChecksumMismatch)
 }
 
+func TestVerifyChecksumSkipsUnavailableSidecarWhenAvailable(t *testing.T) {
+	result, err := (&Verifier{}).Verify(context.Background(), Request{
+		Tool: &registry.Tool{
+			RepoOwner: "owner",
+			RepoName:  "tool",
+			Checksum: registry.ChecksumConfig{
+				Type:       "http",
+				URL:        "https://example.com/missing-checksums.txt",
+				FileFormat: "raw",
+				Algorithm:  "sha256",
+			},
+		},
+		Version:   "1.0.0",
+		AssetURL:  "https://example.com/tool",
+		AssetPath: writeAsset(t, []byte("hello")),
+		Downloader: fakeDownloader{
+			"https://example.com/other.txt": []byte("not used"),
+		},
+		Policy: Policy{
+			Checksums:  PolicyWhenAvailable,
+			Signatures: PolicyDisabled,
+		},
+	})
+
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	assert.Empty(t, result.Checksum)
+	assert.Contains(t, result.SkippedReasons[0], "checksum sidecar unavailable")
+}
+
+func TestVerifyChecksumRequiredUnavailableSidecar(t *testing.T) {
+	_, err := (&Verifier{}).Verify(context.Background(), Request{
+		Tool: &registry.Tool{
+			RepoOwner: "owner",
+			RepoName:  "tool",
+			Checksum: registry.ChecksumConfig{
+				Type:       "http",
+				URL:        "https://example.com/missing-checksums.txt",
+				FileFormat: "raw",
+				Algorithm:  "sha256",
+			},
+		},
+		Version:   "1.0.0",
+		AssetURL:  "https://example.com/tool",
+		AssetPath: writeAsset(t, []byte("hello")),
+		Downloader: fakeDownloader{
+			"https://example.com/other.txt": []byte("not used"),
+		},
+		Policy: Policy{
+			Checksums:  PolicyRequired,
+			Signatures: PolicyDisabled,
+		},
+	})
+
+	require.Error(t, err)
+}
+
+func TestChecksumFileURLUsesGitHubReleaseVersionFromAssetURL(t *testing.T) {
+	u, err := checksumFileURL(&registry.Tool{
+		RepoOwner: "owner",
+		RepoName:  "tool",
+		Checksum: registry.ChecksumConfig{
+			Type:  "github_release",
+			Asset: "checksums.txt",
+		},
+	}, "1.0.0", "https://github.com/owner/tool/releases/download/v1.0.0/tool_1.0.0_linux_amd64.tar.gz", &registry.ChecksumConfig{
+		Type:  "github_release",
+		Asset: "checksums.txt",
+	})
+
+	require.NoError(t, err)
+	assert.Equal(t, "https://github.com/owner/tool/releases/download/v1.0.0/checksums.txt", u)
+}
+
+func TestChecksumFileURLUsesHTTPVersionSegmentFromAssetURL(t *testing.T) {
+	u, err := checksumFileURL(&registry.Tool{}, "1.31.4", "https://dl.k8s.io/v1.31.4/bin/darwin/arm64/kubectl", &registry.ChecksumConfig{
+		Type: "http",
+		URL:  "https://dl.k8s.io/{{.Version}}/bin/darwin/arm64/kubectl.sha256",
+	})
+
+	require.NoError(t, err)
+	assert.Equal(t, "https://dl.k8s.io/v1.31.4/bin/darwin/arm64/kubectl.sha256", u)
+}
+
+func TestVerifyChecksumCosignVerifiesChecksumSidecar(t *testing.T) {
+	assetPath := writeAsset(t, []byte("hello"))
+	sum := sha256.Sum256([]byte("hello"))
+	checksumData := []byte(fmt.Sprintf("%x  tool_1.0.0_linux_amd64.tar.gz\n", sum))
+	runner := &fakeRunner{}
+
+	result, err := (&Verifier{}).Verify(context.Background(), Request{
+		Tool: &registry.Tool{
+			RepoOwner: "owner",
+			RepoName:  "tool",
+			Checksum: registry.ChecksumConfig{
+				Type:       "github_release",
+				Asset:      "checksums.txt",
+				FileFormat: "regexp",
+				Algorithm:  "sha256",
+				Cosign: registry.CosignConfig{
+					Opts: []string{
+						"--certificate",
+						"https://github.com/owner/tool/releases/download/{{.Version}}/{{.Asset}}.pem",
+						"--signature",
+						"https://github.com/owner/tool/releases/download/{{.Version}}/{{.Asset}}.sig",
+					},
+				},
+			},
+		},
+		Version:   "1.0.0",
+		AssetURL:  "https://github.com/owner/tool/releases/download/v1.0.0/tool_1.0.0_linux_amd64.tar.gz",
+		AssetPath: assetPath,
+		Downloader: fakeDownloader{
+			"https://github.com/owner/tool/releases/download/v1.0.0/checksums.txt": checksumData,
+		},
+		Policy: Policy{
+			Checksums:  PolicyWhenAvailable,
+			Signatures: PolicyWhenAvailable,
+		},
+		Runner: runner,
+	})
+
+	require.NoError(t, err)
+	require.Len(t, runner.calls, 1)
+	assert.Equal(t, "cosign", runner.calls[0].name)
+	assert.Equal(t, []string{
+		"verify-blob",
+		"--certificate",
+		"https://github.com/owner/tool/releases/download/v1.0.0/checksums.txt.pem",
+		"--signature",
+		"https://github.com/owner/tool/releases/download/v1.0.0/checksums.txt.sig",
+		writeAssetPathPlaceholder(runner.calls[0].args),
+	}, normalizeLastArg(runner.calls[0].args))
+	assert.NotEqual(t, assetPath, runner.calls[0].args[len(runner.calls[0].args)-1])
+	assert.Contains(t, result.SignatureMethods, "cosign")
+	assert.Equal(t, "sha256", result.ChecksumAlgorithm)
+}
+
 func TestVerifyChecksumRequiredMissingMetadata(t *testing.T) {
 	_, err := (&Verifier{}).Verify(context.Background(), Request{
 		Tool:      &registry.Tool{RepoOwner: "owner", RepoName: "tool"},

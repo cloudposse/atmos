@@ -10,17 +10,11 @@ import (
 	"github.com/cloudposse/atmos/pkg/toolchain/registry"
 )
 
-//nolint:cyclop,gocognit,revive // This mirrors Aqua's independent signature metadata branches.
+//nolint:gocognit,revive // This mirrors Aqua's independent signature metadata branches.
 func (v *Verifier) verifySignatures(ctx context.Context, req *Request, result *Result) error {
-	count := 0
+	count := len(result.SignatureMethods)
 	if hasCosign(&req.Tool.Cosign) {
 		if err := v.verifyCosign(ctx, req, &req.Tool.Cosign, result); err != nil {
-			return err
-		}
-		count++
-	}
-	if hasCosign(&req.Tool.Checksum.Cosign) {
-		if err := v.verifyCosign(ctx, req, &req.Tool.Checksum.Cosign, result); err != nil {
 			return err
 		}
 		count++
@@ -64,20 +58,15 @@ func (v *Verifier) verifyCosign(ctx context.Context, req *Request, cfg *registry
 	if cfg.Enabled != nil && !*cfg.Enabled {
 		return nil
 	}
-	args := []string{"verify-blob"}
-	if len(cfg.Opts) > 0 {
-		rendered, err := renderArgs(cfg.Opts, req)
-		if err != nil {
-			return err
-		}
-		args = append(args, rendered...)
-	} else {
-		sidecars, cleanup, err := v.downloadCosignSidecars(ctx, req, cfg)
-		if err != nil {
-			return err
-		}
+	args, cleanup, err := v.cosignArgs(ctx, req, cfg, result)
+	if err != nil {
+		return err
+	}
+	if len(args) == 0 {
+		return nil
+	}
+	if cleanup != nil {
 		defer cleanup()
-		args = append(args, sidecars...)
 	}
 	args = append(args, req.AssetPath)
 	if err := runner(req).Run(ctx, "cosign", args...); err != nil {
@@ -87,6 +76,26 @@ func (v *Verifier) verifyCosign(ctx context.Context, req *Request, cfg *registry
 	return nil
 }
 
+func (v *Verifier) cosignArgs(ctx context.Context, req *Request, cfg *registry.CosignConfig, result *Result) ([]string, func(), error) {
+	args := []string{"verify-blob"}
+	if len(cfg.Opts) > 0 {
+		rendered, err := renderArgs(cfg.Opts, req)
+		if err != nil {
+			return nil, nil, err
+		}
+		return append(args, rendered...), nil, nil
+	}
+	sidecars, cleanup, err := v.downloadCosignSidecars(ctx, req, cfg)
+	if err == nil {
+		return append(args, sidecars...), cleanup, nil
+	}
+	if req.Policy.Signatures != PolicyRequired {
+		result.SkippedReasons = append(result.SkippedReasons, fmt.Sprintf("cosign sidecar unavailable: %v", err))
+		return nil, cleanup, nil
+	}
+	return nil, cleanup, err
+}
+
 func (v *Verifier) verifySLSA(ctx context.Context, req *Request, cfg *registry.SLSAProvenance, result *Result) error {
 	if cfg.Enabled != nil && !*cfg.Enabled {
 		return nil
@@ -94,7 +103,7 @@ func (v *Verifier) verifySLSA(ctx context.Context, req *Request, cfg *registry.S
 	provenance := registry.DownloadedFile{
 		Type: cfg.Type, RepoOwner: cfg.RepoOwner, RepoName: cfg.RepoName, Asset: cfg.Asset, URL: cfg.URL,
 	}
-	provenanceURL, err := sidecarURL(req.Tool, req.Version, req.AssetURL, &provenance, nil)
+	provenanceURL, err := sidecarURL(req.Tool, req.Version, req.AssetURL, &provenance)
 	if err != nil {
 		return err
 	}
@@ -119,7 +128,7 @@ func (v *Verifier) verifyMinisign(ctx context.Context, req *Request, cfg *regist
 	signature := registry.DownloadedFile{
 		Type: cfg.Type, RepoOwner: cfg.RepoOwner, RepoName: cfg.RepoName, Asset: cfg.Asset, URL: cfg.URL,
 	}
-	sigURL, err := sidecarURL(req.Tool, req.Version, req.AssetURL, &signature, nil)
+	sigURL, err := sidecarURL(req.Tool, req.Version, req.AssetURL, &signature)
 	if err != nil {
 		return err
 	}
@@ -159,7 +168,7 @@ func (v *Verifier) downloadCosignSidecars(ctx context.Context, req *Request, cfg
 		if !hasSidecar(sidecar) {
 			return nil
 		}
-		u, err := sidecarURL(req.Tool, req.Version, req.AssetURL, sidecar, nil)
+		u, err := sidecarURL(req.Tool, req.Version, req.AssetURL, sidecar)
 		if err != nil {
 			return err
 		}
@@ -226,26 +235,27 @@ func runner(req *Request) CommandRunner {
 
 func renderArgs(args []string, req *Request) ([]string, error) {
 	rendered := make([]string, len(args))
+	effectiveVersion := effectiveReleaseVersionFromAssetURL(req.AssetURL, req.Version)
 	for i, arg := range args {
 		if strings.Contains(arg, "{{") {
 			value, err := renderTemplateString(arg, req.Tool, req.Version, assetNameFromURL(req.AssetURL), nil)
 			if err != nil {
 				return nil, err
 			}
-			rendered[i] = value
+			rendered[i] = replaceVersionSegmentInURL(value, req.Version, effectiveVersion)
 		} else {
-			rendered[i] = arg
+			rendered[i] = replaceVersionSegmentInURL(arg, req.Version, effectiveVersion)
 		}
 	}
 	return rendered, nil
 }
 
-func sidecarURL(tool *registry.Tool, version, assetURL string, sidecar *registry.DownloadedFile, replacements map[string]string) (string, error) {
+func sidecarURL(tool *registry.Tool, version, assetURL string, sidecar *registry.DownloadedFile) (string, error) {
 	assetName := assetNameFromURL(assetURL)
 	if sidecar.URL != "" {
-		return renderTemplateString(sidecar.URL, tool, version, assetName, replacements)
+		return renderTemplateString(sidecar.URL, tool, version, assetName, nil)
 	}
-	sidecarAsset, err := renderTemplateString(sidecar.Asset, tool, version, assetName, replacements)
+	sidecarAsset, err := renderTemplateString(sidecar.Asset, tool, version, assetName, nil)
 	if err != nil {
 		return "", err
 	}
@@ -260,11 +270,18 @@ func sidecarURL(tool *registry.Tool, version, assetURL string, sidecar *registry
 	if sidecar.RepoName != "" {
 		repoName = sidecar.RepoName
 	}
-	releaseVersion, err := renderTemplateString("{{.Version}}", tool, version, assetName, replacements)
+	releaseVersion, err := sidecarReleaseVersion(tool, version, assetURL, assetName)
 	if err != nil {
 		return "", err
 	}
 	return fmt.Sprintf("https://github.com/%s/%s/releases/download/%s/%s", repoOwner, repoName, releaseVersion, sidecarAsset), nil
+}
+
+func sidecarReleaseVersion(tool *registry.Tool, version, assetURL, assetName string) (string, error) {
+	if releaseVersion := effectiveReleaseVersionFromAssetURL(assetURL, version); releaseVersion != "" {
+		return releaseVersion, nil
+	}
+	return renderTemplateString("{{.Version}}", tool, version, assetName, nil)
 }
 
 func hasCosign(cfg *registry.CosignConfig) bool {

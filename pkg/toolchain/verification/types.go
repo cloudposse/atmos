@@ -73,8 +73,16 @@ type Verifier struct {
 }
 
 // PolicyFromConfig returns a fully defaulted verification policy.
-func PolicyFromConfig(config schema.ToolchainVerification) Policy {
+func PolicyFromConfig(config *schema.ToolchainVerification) Policy {
 	defer perf.Track(nil, "verification.PolicyFromConfig")()
+
+	if config == nil {
+		return Policy{
+			Checksums:       PolicyWhenAvailable,
+			Signatures:      PolicyWhenAvailable,
+			VerifierInstall: VerifierInstallAuto,
+		}
+	}
 
 	return Policy{
 		Checksums:       defaultPolicy(config.Checksums),
