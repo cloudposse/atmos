@@ -1,6 +1,6 @@
 # Example: MCP for AI Coding Assistants
 
-Configure MCP servers (the [Atmos MCP server](/ai/mcp-server) plus the
+Configure MCP servers (the [Atmos MCP server](https://atmos.tools/ai/mcp-server) plus the
 [AWS MCP server suite](https://github.com/awslabs/mcp)) **once** in `atmos.yaml`, then use
 the same set of tools — with the same AWS credentials managed by Atmos Auth — from
 [Claude Code](https://www.anthropic.com/claude-code),
@@ -78,7 +78,7 @@ than through `atmos mcp export`. This may change in a future release.
 ## What the `atmos` MCP Server Does
 
 The first entry in the table above — **atmos** — is *not* an `awslabs` server.
-It's the [Atmos MCP server](/ai/mcp-server) running inside the
+It's the [Atmos MCP server](https://atmos.tools/ai/mcp-server) running inside the
 `atmos` binary itself, started by `atmos mcp start`. Including it in your AI
 coding assistant's config gives the assistant direct programmatic access to
 **your Atmos project** — your stacks, components, manifests, validation logic,
@@ -158,7 +158,7 @@ from `aws-api`.
 ## Pair with Atmos Agent Skills
 
 MCP servers give your AI coding assistant **tools** — to inspect your
-stacks, query AWS, check Atmos Pro. [Atmos Agent Skills](/ai/agent-skills)
+stacks, query AWS, check Atmos Pro. [Atmos Agent Skills](https://atmos.tools/ai/agent-skills)
 give it **knowledge** — domain-specific skills (stacks, components,
 validation, YAML functions, vendoring, toolchain, GitOps, design patterns,
 auth, …) that activate automatically based on what you ask.
@@ -185,9 +185,9 @@ Gemini CLI) plus Cursor, Windsurf, GitHub Copilot, and others.
 
 **Other tools** (Codex CLI, Gemini CLI, Cursor, Windsurf, GitHub Copilot,
 JetBrains Junie, …): see the
-[AI Agent Skills announcement](/changelog/ai-agent-skills) for
+[AI Agent Skills announcement](https://atmos.tools/changelog/ai-agent-skills) for
 each tool's install path, or the
-[Atmos Agent Skills documentation](/ai/agent-skills) for
+[Atmos Agent Skills documentation](https://atmos.tools/ai/agent-skills) for
 the full skill reference.
 
 **MCP + Skills together** are stronger than either alone. MCP answers
@@ -365,7 +365,7 @@ gemini
 ```
 
 :::tip
-Gemini's [Trusted Folders feature](https://github.com/google-gemini/gemini-cli/blob/main/docs/trusted-folders.md)
+Gemini's [Trusted Folders feature](https://github.com/google-gemini/gemini-cli/blob/main/docs/cli/trusted-folders.md)
 blocks MCP servers in untrusted directories. Trust this folder once via the Gemini UI
 or settings before the MCP servers will start.
 :::
@@ -579,7 +579,7 @@ each CLI separately?
   coding assistant uses the same binaries; no "works on my machine"
   drift between Claude Code, Codex, and Gemini sessions.
 - **Embedded `atmos` MCP server** — Atmos ships its own MCP server
-  ([`atmos mcp start`](/ai/mcp-server)) that exposes 20+ tools for
+  ([`atmos mcp start`](https://atmos.tools/ai/mcp-server)) that exposes 20+ tools for
   introspecting your stacks, components, manifests, and the `atmos` CLI
   itself (`atmos_describe_component`, `atmos_list_stacks`, `describe_affected`,
   `read_stack_file`, `execute_atmos_command`, …). Including it in the
@@ -587,7 +587,7 @@ each CLI separately?
   the **declared** state of your infrastructure, alongside the AWS
   introspection tools that cover **deployed** state.
 
-Pair the MCP setup with [Atmos Agent Skills](/ai/agent-skills) for the
+Pair the MCP setup with [Atmos Agent Skills](https://atmos.tools/ai/agent-skills) for the
 strongest result: MCP gives the assistant **tools**, Skills give it
 **knowledge** of Atmos conventions. Together they cover both *"what does
 this code do?"* and *"what should this code do?"*.
@@ -597,9 +597,9 @@ this code do?"* and *"what should this code do?"*.
 - [MCP Configuration](/cli/configuration/mcp)
 - [Atmos Auth Documentation](/cli/configuration/auth)
 - [Atmos Toolchain](/cli/configuration/toolchain)
-- [Atmos MCP Server](/ai/mcp-server)
-- [Atmos Agent Skills](/ai/agent-skills) — 21 domain-specific skills that pair with MCP tools to give AI assistants deep Atmos knowledge
-- [Atmos Agent Skills announcement](/changelog/ai-agent-skills) — install paths for Claude Code, Codex, Gemini, Cursor, Windsurf, Copilot
+- [Atmos MCP Server](https://atmos.tools/ai/mcp-server)
+- [Atmos Agent Skills](https://atmos.tools/ai/agent-skills) — 21 domain-specific skills that pair with MCP tools to give AI assistants deep Atmos knowledge
+- [Atmos Agent Skills announcement](https://atmos.tools/changelog/ai-agent-skills) — install paths for Claude Code, Codex, Gemini, Cursor, Windsurf, Copilot
 - [Atmos Pro](https://atmos-pro.com/) — the fastest way to deploy your apps on AWS with Terraform and GitHub Actions
 - [Atmos Pro MCP server install](https://atmos-pro.com/mcp/install)
 - [Atmos Pro MCP server announcement](https://atmos-pro.com/changelog/2026-05-09-mcp-server)
