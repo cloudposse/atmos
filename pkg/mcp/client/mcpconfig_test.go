@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"sync"
@@ -12,6 +13,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -240,6 +242,73 @@ func TestCopyEnv_Nil(t *testing.T) {
 	result := copyEnv(nil)
 	assert.NotNil(t, result)
 	assert.Empty(t, result)
+}
+
+// TestWriteMCPConfigToTempFile_CreateTempFailure exercises the
+// os.CreateTemp failure branch in WriteMCPConfigToTempFile by pointing
+// TMPDIR at a path that doesn't exist. Without this test the CreateTemp
+// error wrap is unreachable from the existing happy-path / concurrent
+// tests, leaving the wrapped sentinel (errUtils.ErrMCPConfigWriteFailed)
+// untested.
+func TestWriteMCPConfigToTempFile_CreateTempFailure(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		// On Windows, os.TempDir resolution differs and TMP/TEMP env
+		// vars interact with the OS API in ways that aren't trivially
+		// portable. The Unix path covers the contract; Windows-specific
+		// failure modes are tested by the OS, not this test suite.
+		t.Skip("TMPDIR override semantics differ on Windows")
+	}
+
+	// Point TMPDIR at a path that doesn't exist. os.CreateTemp uses
+	// os.TempDir() which honors TMPDIR; CreateTemp will fail on the
+	// underlying open(2) because the dir doesn't exist.
+	t.Setenv("TMPDIR", filepath.Join(t.TempDir(), "does-not-exist"))
+
+	servers := map[string]schema.MCPServerConfig{
+		"test-server": {Command: "echo", Args: []string{"hello"}},
+	}
+	path, err := WriteMCPConfigToTempFile(servers, "")
+	require.Error(t, err,
+		"CreateTemp must fail when TMPDIR points at a missing directory")
+	assert.Empty(t, path,
+		"failed write must return empty path so callers don't try to clean up a non-existent file")
+	assert.ErrorIs(t, err, errUtils.ErrMCPConfigWriteFailed,
+		"the CreateTemp failure must be wrapped with ErrMCPConfigWriteFailed for errors.Is matching")
+}
+
+// TestWriteMCPConfigToTempFile_TempDirHonored verifies the cooperative
+// contract with os.TempDir — when TMPDIR is set to a writable directory,
+// WriteMCPConfigToTempFile creates the temp file IN that directory (not
+// the system default). This is what makes the concurrent test work in
+// CI runners and matters for users who set TMPDIR to redirect writes
+// onto a faster volume.
+func TestWriteMCPConfigToTempFile_TempDirHonored(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("TMPDIR override semantics differ on Windows")
+	}
+
+	overrideDir := t.TempDir()
+	t.Setenv("TMPDIR", overrideDir)
+
+	servers := map[string]schema.MCPServerConfig{
+		"test-server": {Command: "echo", Args: []string{"hello"}},
+	}
+	path, err := WriteMCPConfigToTempFile(servers, "")
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = os.Remove(path) })
+
+	// Resolve symlinks for both — macOS tends to symlink /tmp → /private/tmp
+	// and t.Setenv("TMPDIR", ...) sometimes lands either side of that link
+	// depending on whether t.TempDir() already resolved it. Resolving both
+	// sides makes the assertion robust to that platform quirk.
+	resolvedOverride, err := filepath.EvalSymlinks(overrideDir)
+	require.NoError(t, err)
+	resolvedPath, err := filepath.EvalSymlinks(path)
+	require.NoError(t, err)
+
+	assert.True(t, strings.HasPrefix(resolvedPath, resolvedOverride),
+		"WriteMCPConfigToTempFile must respect TMPDIR; got path %q (resolved %q), expected prefix %q (resolved %q)",
+		path, resolvedPath, overrideDir, resolvedOverride)
 }
 
 func TestDeduplicatePATH(t *testing.T) {

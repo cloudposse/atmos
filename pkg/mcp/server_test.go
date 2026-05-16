@@ -583,3 +583,52 @@ func TestServer_GenerateInputSchema_UnknownParameterType(t *testing.T) {
 	assert.Equal(t, "string", unknownProp["type"], "Unknown parameter types should default to string")
 	assert.Equal(t, "Parameter with unknown type", unknownProp["description"])
 }
+
+// TestServer_Run_TerminatesOnContextCancel exercises Server.Run end-to-end
+// over an in-memory transport. The MCP SDK ships NewInMemoryTransports()
+// which gives us two ends of a pipe — one for the server, one for a
+// fake client — so Run can be called inside a test without spawning a
+// subprocess, opening stdio, or binding HTTP.
+//
+// The contract being pinned: Run returns cleanly when its context is
+// cancelled (otherwise `atmos mcp start` could leak goroutines on shutdown).
+// This is the only assertion possible without driving an actual JSON-RPC
+// exchange; combined with the existing handleToolCall / registerTools
+// tests, it gives Run the regression coverage it was previously missing.
+func TestServer_Run_TerminatesOnContextCancel(t *testing.T) {
+	registry := tools.NewRegistry()
+	executor := tools.NewExecutor(registry, nil, tools.DefaultTimeout)
+	adapter := NewAdapter(registry, executor)
+	server := NewServer(adapter)
+
+	// In-memory transport pair: serverTransport is what we hand to Run;
+	// clientTransport is held in scope so the SDK doesn't immediately
+	// tear down the pipe when only one end has a reference.
+	serverTransport, clientTransport := mcpsdk.NewInMemoryTransports()
+	_ = clientTransport
+
+	ctx, cancel := context.WithCancel(context.Background())
+
+	// Run in a goroutine so we can cancel from the test and wait for
+	// the goroutine to return — proving Run honored the context.
+	runErr := make(chan error, 1)
+	go func() {
+		runErr <- server.Run(ctx, serverTransport)
+	}()
+
+	cancel()
+
+	// Run must return within a reasonable time after context cancel.
+	// If Run blocks forever, the test timeout fires and we see a
+	// goroutine leak in the logs.
+	select {
+	case err := <-runErr:
+		// Run may return nil, context.Canceled, or a transport-EOF error
+		// depending on which side wins the race. All are acceptable;
+		// the contract being tested is "it returns", not "with what".
+		_ = err
+	case <-context.Background().Done():
+		// Unreachable — context.Background never cancels.
+		t.Fatal("unreachable")
+	}
+}
