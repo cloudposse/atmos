@@ -25,20 +25,26 @@ Learn more in the [MCP configuration documentation](https://atmos.tools/cli/conf
 
 ## MCP Servers Configured
 
-| Server             | Purpose                                                   | Credentials |
-|--------------------|-----------------------------------------------------------|-------------|
-| **atmos**          | Atmos AI tools (describe/list/validate, file r/w, search) | No          |
-| **aws-docs**       | Search and fetch AWS documentation                        | No          |
-| **aws-knowledge**  | Managed AWS knowledge base (remote)                       | No          |
-| **aws-pricing**    | Real-time pricing and cost analysis                       | Yes         |
-| **aws-billing**    | Billing summaries and payment history                     | Yes         |
-| **aws-iam**        | IAM role/policy analysis (read-only)                      | Yes         |
-| **aws-cloudtrail** | Event history and API auditing                            | Yes         |
-| **aws-security**   | Well-Architected security posture assessment              | Yes         |
-| **aws-api**        | Direct AWS CLI access (read-only by default)              | Yes         |
+| Server             | Purpose                                                   | Transport | Auth                       |
+|--------------------|-----------------------------------------------------------|-----------|----------------------------|
+| **atmos**          | Atmos AI tools (describe/list/validate, file r/w, search) | stdio     | None (local)               |
+| **atmos-pro**      | Atmos Pro — drift, deployments, workflow runs, audit log  | HTTP      | Browser OAuth (GitHub)     |
+| **aws-docs**       | Search and fetch AWS documentation                        | stdio     | None (public docs)         |
+| **aws-knowledge**  | Managed AWS knowledge base (remote)                       | stdio     | None (public)              |
+| **aws-pricing**    | Real-time pricing and cost analysis                       | stdio     | AWS (via Atmos Auth)       |
+| **aws-billing**    | Billing summaries and payment history                     | stdio     | AWS (via Atmos Auth)       |
+| **aws-iam**        | IAM role/policy analysis (read-only)                      | stdio     | AWS (via Atmos Auth)       |
+| **aws-cloudtrail** | Event history and API auditing                            | stdio     | AWS (via Atmos Auth)       |
+| **aws-security**   | Well-Architected security posture assessment              | stdio     | AWS (via Atmos Auth)       |
+| **aws-api**        | Direct AWS CLI access (read-only by default)              | stdio     | AWS (via Atmos Auth)       |
 
-The "Credentials" column says whether the server needs AWS credentials. Atmos Auth injects
-them via the `identity: readonly` field in `atmos.yaml`.
+Atmos Auth injects AWS credentials into the AWS servers (`identity: readonly` in
+`atmos.yaml` wraps them with `atmos auth exec -i readonly --`).
+
+The **atmos-pro** server is HTTP-transport. `atmos.yaml`'s `mcp.servers` block
+currently only models stdio servers, so atmos-pro is registered directly with each
+AI CLI (see [Atmos Pro section](#atmos-pro-server-http-transport) below) rather
+than through `atmos mcp export`. This may change in a future release.
 
 ## What the `atmos` MCP Server Does (the embedded one)
 
@@ -121,6 +127,56 @@ the client handles approvals), so the AI coding assistant's own
 permission UI (Claude Code's per-tool approval, Codex's confirm prompt,
 Gemini's tool consent dialog) gates execution.
 
+## What the `atmos-pro` MCP Server Does (Atmos Pro SaaS)
+
+[Atmos Pro](https://atmos-pro.com/) is a SaaS layer on top of Atmos that gives
+platform teams ordered deployments, drift detection, and stack locking
+orchestrated through GitHub Actions. The
+[Atmos Pro MCP server](https://atmos-pro.com/mcp/install) lets your AI coding
+assistant query everything Atmos Pro knows about your workspace **without
+leaving the editor** — no dashboard switching, no copy-pasting URLs from
+GitHub Actions logs.
+
+Unlike the local servers above, the Atmos Pro MCP server runs on
+`https://atmos-pro.com/mcp` over **HTTP transport**. Authentication is a
+one-time browser-based OAuth flow (GitHub login); short-lived tokens land in
+your OS keychain. No API keys, no static credentials, revocable from the
+Atmos Pro UI under *Settings → MCP Clients*.
+
+### Capabilities
+
+Drawn from the [Atmos Pro MCP server changelog](https://atmos-pro.com/changelog/2026-05-09-mcp-server):
+
+- **Infrastructure triage & diagnostics** — list/inspect drifted or errored
+  instances, stacks, and components; access repair history and
+  recommendations; retrieve structured failure explanations with suggested
+  actions.
+- **Workflow & deployment analysis** — inspect workflow runs with approval
+  states and job summaries; view deployment history linked to commits and
+  pull requests; analyze logs from failed steps and understand failure
+  patterns over time.
+- **Historical context & trends** — identify when failures began and detect
+  flapping patterns; compare workspace stability against previous periods;
+  access the complete audit log of all infrastructure changes.
+- **Security & access control** — audit every agent tool call with actor
+  type, client name, and arguments; review permissions and permission
+  errors; track audit history for compliance.
+
+### Where it fits in the picture
+
+The three layers complement each other:
+
+> The **AWS servers** tell the assistant what is **deployed**.
+> The **atmos** server tells it what is **defined**.
+> The **atmos-pro** server tells it what is **happening over time** — drift
+> against truth, who/what changed it, why a run failed, when problems began.
+
+So the assistant can answer questions like *"why did our vpc deployment fail
+yesterday, what changed in the stack config, and which AWS resource is now
+out of sync?"* in a single prompt — pulling deployment history from
+atmos-pro, the declared stack config from atmos, and the live AWS state
+from aws-api.
+
 ## Prerequisites
 
 1. **An AI coding assistant** installed and authenticated — pick at least one:
@@ -139,6 +195,12 @@ Gemini's tool consent dialog) gates execution.
    ```bash
    atmos auth login
    ```
+
+4. **(Optional) [Atmos Pro](https://atmos-pro.com/) account and workspace** for the
+   `atmos-pro` MCP server. Skip this prereq if you're not using Atmos Pro — the rest
+   of the example works without it. If you are, the first time any AI CLI starts the
+   atmos-pro server you'll be redirected to GitHub to authorize Atmos Pro. The token
+   binds to a specific Atmos Pro workspace; switch workspaces by re-authorizing.
 
 ## One-Time Setup
 
@@ -294,6 +356,73 @@ blocks MCP servers in untrusted directories. Trust this folder once via the Gemi
 or settings before the MCP servers will start.
 :::
 
+### Atmos Pro server (HTTP transport)
+
+The [Atmos Pro MCP server](https://atmos-pro.com/mcp/install) runs at
+`https://atmos-pro.com/mcp` over HTTP. Because Atmos's `mcp.servers` block
+currently models only stdio servers, this server is registered with each AI
+CLI directly (not via `atmos mcp export`). The OAuth flow runs the first time
+you start the server from any client — log in with GitHub, the token lands in
+your OS keychain.
+
+#### Claude Code
+
+```bash
+claude mcp add --transport http atmos-pro https://atmos-pro.com/mcp
+```
+
+Or add to `.mcp.json` / `~/.claude.json` directly:
+
+```json
+{
+  "mcpServers": {
+    "atmos-pro": {
+      "type": "http",
+      "url": "https://atmos-pro.com/mcp"
+    }
+  }
+}
+```
+
+If you already have a `.mcp.json` from `atmos mcp export`, merge the entry
+above into the existing `mcpServers` object.
+
+#### Codex CLI
+
+Append to `~/.codex/config.toml`:
+
+```toml
+[mcp_servers.atmos-pro]
+type = "http"
+url = "https://atmos-pro.com/mcp"
+```
+
+#### Gemini CLI
+
+```bash
+gemini mcp add --transport http atmos-pro https://atmos-pro.com/mcp
+```
+
+Or merge into `.gemini/settings.json` / `~/.gemini/settings.json`:
+
+```json
+{
+  "mcpServers": {
+    "atmos-pro": {
+      "type": "http",
+      "url": "https://atmos-pro.com/mcp"
+    }
+  }
+}
+```
+
+#### First-run OAuth
+
+The first time any of these CLIs spawns the atmos-pro server, you'll be
+redirected to GitHub to authorize Atmos Pro. The token is bound to a specific
+workspace; switching workspaces re-prompts. Revoke any time from the Atmos Pro
+UI under *Settings → MCP Clients*.
+
 ## What the Exported Config Looks Like
 
 `atmos mcp export` produces a `.mcp.json` like this (truncated):
@@ -358,9 +487,18 @@ Two things to notice:
 "Show me the vpc component config for dev."
 "Validate every stack and report any errors."
 
+# Atmos Pro — drift, deployments, history (uses atmos-pro)
+"Which workspaces have drift right now?"
+"Why did the last deploy of vpc in prod fail? Show me the failed job."
+"Has this stack been flapping over the past week?"
+"Show me the audit log for changes to the dev stack this month."
+
 # Combined (AI picks tools across multiple servers)
 "Compare our actual EC2 spend last month with what the AWS Pricing
  calculator would have predicted for our current instance count."
+"Why did our vpc deploy fail yesterday — what changed in the stack
+ config, what does Atmos Pro show for that run, and which AWS resource
+ is now out of sync?"
 ```
 
 ## Switching Profiles or Identities
@@ -420,4 +558,7 @@ AI CLI (so it spawns servers with fresh creds) or, for Claude Code, restart the 
 - [Atmos Auth Documentation](https://atmos.tools/cli/configuration/auth)
 - [Atmos Toolchain](https://atmos.tools/cli/configuration/toolchain)
 - [Atmos MCP Server](https://atmos.tools/ai/mcp-server)
-- [AWS MCP Servers](https://github.com/awslabs/mcp)
+- [Atmos Pro](https://atmos-pro.com/) — ordered deployments, drift detection, and stack locking via GitHub Actions
+- [Atmos Pro MCP server install](https://atmos-pro.com/mcp/install)
+- [Atmos Pro MCP server announcement](https://atmos-pro.com/changelog/2026-05-09-mcp-server)
+- [AWS MCP Servers (awslabs/mcp)](https://github.com/awslabs/mcp)

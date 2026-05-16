@@ -5,15 +5,17 @@ authors: [aknysh]
 tags: [feature, dx]
 ---
 
-`atmos mcp export` (plus a small amount of per-CLI wiring) lets you maintain
-one source of truth for your AI coding assistant's MCP server set —
-the [Atmos MCP server](https://atmos.tools/ai/mcp-server) and the entire
-[AWS MCP server suite](https://github.com/awslabs/mcp) — and use it
+`atmos mcp export` (plus a small amount of per-CLI wiring) lets you
+maintain one source of truth for your AI coding assistant's MCP server
+set — the [Atmos MCP server](https://atmos.tools/ai/mcp-server), the entire
+[AWS MCP server suite](https://github.com/awslabs/mcp), and the
+[Atmos Pro MCP server](https://atmos-pro.com/mcp/install) — and use it
 unchanged from Claude Code, OpenAI Codex CLI, and Google Gemini CLI.
 [Atmos Auth](https://atmos.tools/cli/configuration/auth) injects AWS
-credentials into each MCP subprocess automatically, and the
-[Atmos toolchain](https://atmos.tools/cli/configuration/toolchain)
-pins `uvx` to a known version. New example:
+credentials into each MCP subprocess automatically, the
+[Atmos toolchain](https://atmos.tools/cli/configuration/toolchain) pins
+`uvx` to a known version, and Atmos Pro adds drift/deployment/audit context
+via a one-time browser OAuth — no API keys to share. New example:
 [`examples/mcp-for-ai-coding-assistants/`](https://github.com/cloudposse/atmos/tree/main/examples/mcp-for-ai-coding-assistants).
 
 <!--truncate-->
@@ -90,23 +92,30 @@ works with `--output .gemini/settings.json`. For Codex, you translate
 the JSON to TOML once — and the example
 [walks you through that](https://github.com/cloudposse/atmos/tree/main/examples/mcp-for-ai-coding-assistants#option-2--openai-codex-cli).
 
-The result: nine MCP servers, three AI CLIs, one Atmos config.
+The result: ten MCP servers, three AI CLIs, one Atmos config.
 
 ## What Each AI CLI Gets
 
 All three CLIs end up with the same set of MCP servers:
 
-| Server          | Purpose                                       | Needs AWS auth? |
-|-----------------|-----------------------------------------------|-----------------|
-| **atmos**       | `describe_component`, `list_stacks`, file r/w | No              |
-| aws-docs        | Search AWS documentation                      | No              |
-| aws-knowledge   | Managed AWS knowledge base (remote)           | No              |
-| aws-pricing     | Real-time pricing                             | Yes             |
-| aws-billing     | Billing summaries                             | Yes             |
-| aws-iam         | IAM role/policy analysis                      | Yes             |
-| aws-cloudtrail  | Event history                                 | Yes             |
-| aws-security    | Well-Architected security                     | Yes             |
-| aws-api         | Direct AWS CLI (read-only by default)         | Yes             |
+| Server          | Purpose                                       | Transport | Auth                   |
+|-----------------|-----------------------------------------------|-----------|------------------------|
+| **atmos**       | `describe_component`, `list_stacks`, file r/w | stdio     | None (local)           |
+| **atmos-pro**   | Drift, deployments, workflow runs, audit log  | HTTP      | Browser OAuth (GitHub) |
+| aws-docs        | Search AWS documentation                      | stdio     | None (public)          |
+| aws-knowledge   | Managed AWS knowledge base (remote)           | stdio     | None (public)          |
+| aws-pricing     | Real-time pricing                             | stdio     | AWS (via Atmos Auth)   |
+| aws-billing     | Billing summaries                             | stdio     | AWS (via Atmos Auth)   |
+| aws-iam         | IAM role/policy analysis                      | stdio     | AWS (via Atmos Auth)   |
+| aws-cloudtrail  | Event history                                 | stdio     | AWS (via Atmos Auth)   |
+| aws-security    | Well-Architected security                     | stdio     | AWS (via Atmos Auth)   |
+| aws-api         | Direct AWS CLI (read-only by default)         | stdio     | AWS (via Atmos Auth)   |
+
+The eight AWS servers plus the embedded **atmos** server are stdio-transport
+and managed through `atmos mcp export`. The **atmos-pro** entry is HTTP-
+transport (it runs on `https://atmos-pro.com/mcp`), so it's registered
+directly with each AI CLI alongside the exported config — see the
+[Atmos Pro section](#the-atmos-pro-mcp-server-saas-history-and-drift) below.
 
 ### What the `atmos` MCP server does
 
@@ -133,25 +142,56 @@ It exposes ~20 tools across five buckets:
   `atmos_compliance_report`.
 - **Grounding** — `web_search`.
 
-Mental model for which server the AI picks:
-
-> The **AWS servers** tell the assistant what is **deployed**.
-> The **Atmos server** tells it what is **defined**.
-
-The AWS servers know about IAM roles in the account, last month's EC2
-spend, GuardDuty status, real-time pricing. The Atmos server knows
-which stacks exist, what their declared config is, what `describe
-affected` would report on the current git diff, which files reference
-the `vpc` module. The AI picks the right tool for the question and
-can also *combine* both — *"compare what we declared in stacks vs
-what's actually deployed in the account"* is one prompt away.
-
 Write-side tools (`write_*`, `edit_file`, `execute_bash_command`)
 respect [Atmos's tool permission model](https://atmos.tools/cli/configuration/ai/tools#permissions).
 The MCP server runs in YOLO mode by default, so the AI coding
 assistant's own permission UI — Claude Code's per-tool approval,
 Codex's confirm prompt, Gemini's consent dialog — handles execution
 approval.
+
+### The Atmos Pro MCP server (SaaS, history and drift)
+
+[Atmos Pro](https://atmos-pro.com/) is a SaaS layer that gives platform
+teams ordered deployments, drift detection, and stack locking
+orchestrated through GitHub Actions. The
+[Atmos Pro MCP server](https://atmos-pro.com/mcp/install) lets your AI
+assistant query everything Atmos Pro knows without leaving the editor.
+
+Unlike the local servers, this one runs on `https://atmos-pro.com/mcp`
+over **HTTP transport**. Auth is a one-time browser OAuth (GitHub
+login); short-lived tokens land in your OS keychain, revocable from
+the Atmos Pro UI. No API keys to leak.
+
+Drawn from the [Atmos Pro MCP changelog](https://atmos-pro.com/changelog/2026-05-09-mcp-server),
+it exposes capabilities across four areas:
+
+- **Triage & diagnostics** — list/inspect drifted or errored
+  instances, stacks, and components; access repair history and
+  recommendations; structured failure explanations.
+- **Workflows & deployments** — workflow runs with approval states
+  and job summaries; deployment history linked to commits and PRs;
+  failed-step logs and failure-pattern analysis over time.
+- **Historical context** — when failures began, flapping detection,
+  stability comparisons against previous periods, full audit log.
+- **Security & access** — audit every agent tool call (actor type,
+  client name, arguments); permission reviews; compliance audit trail.
+
+### How the three layers complement each other
+
+> The **AWS servers** tell the assistant what is **deployed**.
+> The **atmos** server tells it what is **defined**.
+> The **atmos-pro** server tells it what is **happening over time** —
+> drift against truth, who/what changed it, why a run failed, when
+> problems began.
+
+So the AI can answer cross-layer questions in one prompt:
+
+> *"Why did our vpc deploy fail yesterday — what changed in the
+> stack config, what does Atmos Pro show for that run, and which
+> AWS resource is now out of sync?"*
+
+…pulling deployment history from atmos-pro, declared config from
+atmos, and live state from aws-api in a single coherent answer.
 
 ## Wiring Up Each CLI
 
@@ -242,6 +282,42 @@ blocks MCP servers in untrusted directories. Trust the folder once via the
 Gemini UI/settings before the servers will start.
 :::
 
+### Atmos Pro (all three CLIs)
+
+The atmos-pro server is HTTP-transport and registered separately from the
+`atmos mcp export` flow. The OAuth handshake runs the first time the
+server is spawned — log in with GitHub, the token lands in your OS
+keychain (no API keys to leak, revocable from the Atmos Pro UI).
+
+```bash
+# Claude Code
+claude mcp add --transport http atmos-pro https://atmos-pro.com/mcp
+
+# Gemini CLI
+gemini mcp add --transport http atmos-pro https://atmos-pro.com/mcp
+```
+
+For Codex CLI, append to `~/.codex/config.toml`:
+
+```toml
+[mcp_servers.atmos-pro]
+type = "http"
+url = "https://atmos-pro.com/mcp"
+```
+
+Or merge the JSON entry into `.mcp.json` / `.gemini/settings.json` / `~/.claude.json`:
+
+```json
+{
+  "mcpServers": {
+    "atmos-pro": {
+      "type": "http",
+      "url": "https://atmos-pro.com/mcp"
+    }
+  }
+}
+```
+
 ## What You Can Ask
 
 Same questions, three CLIs:
@@ -252,7 +328,16 @@ What did we spend on EC2 across all accounts last month?
 Is GuardDuty enabled in every region?
 What stacks are defined in this project?
 Validate every stack and report any errors.
-Compare our EC2 spend with what the AWS Pricing calculator would predict.
+
+# Atmos Pro questions:
+Which workspaces have drift right now?
+Why did the last deploy of vpc in prod fail?
+Has this stack been flapping over the past week?
+
+# Cross-layer (mixes atmos-pro + atmos + aws-api):
+Why did our vpc deploy fail yesterday — what changed in the stack
+config, what does Atmos Pro show for that run, and which AWS resource
+is now out of sync?
 ```
 
 The AI assistant picks which MCP tools to call. You don't specify them.
@@ -291,5 +376,9 @@ config layouts:
 - [Atmos MCP Server](https://atmos.tools/ai/mcp-server) — the
   Atmos-AI-tools-as-MCP-server mode, exposed to your AI coding assistant via
   the `atmos` entry in `mcp.servers`.
+- [Atmos Pro MCP server install](https://atmos-pro.com/mcp/install) —
+  HTTP-transport SaaS server for drift, deployments, and audit context.
+- [Atmos Pro MCP server announcement](https://atmos-pro.com/changelog/2026-05-09-mcp-server) —
+  full capability list and the design choices behind the OAuth flow.
 - [AWS MCP servers (awslabs/mcp)](https://github.com/awslabs/mcp) — the upstream
   source of the AWS MCP servers used in the example.
