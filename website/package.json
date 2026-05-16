@@ -69,6 +69,9 @@
   "devDependencies": {
     "@docusaurus/module-type-aliases": "^3.9.2",
     "@types/canvas-confetti": "^1.9.0",
+    "acorn": "^8.15.0",
+    "ajv": "^8.17.1",
+    "eslint-scope": "^8.0.0",
     "prettier": "^3.4.2"
   },
   "browserslist": {
