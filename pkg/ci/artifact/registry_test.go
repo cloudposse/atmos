@@ -112,6 +112,7 @@ func (b *nonIdentityAwareBackend) Delete(_ context.Context, _ string) error { re
 func (b *nonIdentityAwareBackend) List(_ context.Context, _ Query) ([]ArtifactInfo, error) {
 	return nil, nil
 }
+
 func (b *nonIdentityAwareBackend) Exists(_ context.Context, _ string) (bool, error) {
 	return false, nil
 }
