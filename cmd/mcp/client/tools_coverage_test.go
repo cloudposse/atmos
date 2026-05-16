@@ -19,6 +19,16 @@ import (
 // data.Writer() returns nil and Render fails with a nil-pointer
 // dereference. Tests that call renderMCPTools (or executeMCPTools)
 // directly must call this first.
+//
+// Note on cmd.NewTestKit(t): the CLAUDE.md guideline asks all cmd
+// tests to call cmd.NewTestKit(t) for RootCmd state isolation, but
+// this package can't import cmd — cmd already imports cmd/mcp which
+// imports cmd/mcp/client (cmd/root.go:75), so going back the other
+// way is a circular dependency. The same workaround is documented
+// in cmd/auth/helpers_test.go::resetAuthCmdFlags. None of these tests
+// mutate RootCmd state — they build fresh cobra.Command instances or
+// call package-local helpers — so there is nothing for NewTestKit to
+// clean up here.
 func initMCPToolsTestIO(t *testing.T) {
 	t.Helper()
 	ioCtx, err := iolib.NewContext()
@@ -100,12 +110,18 @@ func TestExecuteMCPTools_UnknownServerNameReturnsError(t *testing.T) {
 	initMCPToolsTestIO(t)
 
 	tempDir := t.TempDir()
+	// The command value is deliberately a platform-neutral placeholder
+	// because this test exits the executeMCPTools flow at the
+	// "server name not found in atmos.yaml" check — mgr.Start never
+	// resolves or spawns the command, so the string is data-only.
+	// Using a real binary here ("echo") would couple the test to
+	// platform behavior even though we never run it.
 	atmosYAML := `
 base_path: "."
 mcp:
   servers:
     only-server:
-      command: "echo"
+      command: "placeholder-never-executed"
       description: "the only configured server"
 `
 	require.NoError(t,

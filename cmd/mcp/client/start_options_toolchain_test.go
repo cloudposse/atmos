@@ -117,8 +117,12 @@ func TestBuildStartOptions_WithAuthIncludesAuthOption(t *testing.T) {
 				},
 			},
 		}
+		// The command value is platform-neutral because these tests
+		// only exercise the option-builder composition (not the spawn
+		// path). mcpServersNeedAuth + WithToolchain only read fields,
+		// they never resolve or run the command.
 		c.MCP.Servers = map[string]schema.MCPServerConfig{
-			"server": {Command: "echo", Identity: identity},
+			"server": {Command: "placeholder-never-executed", Identity: identity},
 		}
 		return c
 	}
