@@ -84,46 +84,11 @@ coding assistant's config gives the assistant direct programmatic access to
 **your Atmos project** — your stacks, components, manifests, validation logic,
 and the `atmos` CLI as a whole — alongside the AWS introspection tools.
 
-Concretely, the `atmos` server exposes more than 20 tools:
-
-### Stack & component introspection (read-only, no credentials)
-
-| Tool                       | What it returns                                                                                  |
-|----------------------------|--------------------------------------------------------------------------------------------------|
-| `atmos_list_stacks`        | All stacks defined in this project, optionally filtered                                          |
-| `atmos_describe_component` | The fully-rendered config for one component in one stack (vars, settings, backend, env, hooks)   |
-| `atmos_validate_stacks`    | Runs `atmos validate stacks` and returns errors/warnings                                         |
-| `describe_affected`        | Components affected by the current git diff (vs `main` by default) — the same data CI uses       |
-| `get_template_context`     | The Go-template context Atmos would render for a given stack/component (vars, env, settings)     |
-| `list_component_files`     | All files under a component directory                                                            |
-
-### File operations (read + write)
-
-| Tool                   | What it does                                                              |
-|------------------------|---------------------------------------------------------------------------|
-| `read_stack_file`      | Reads a raw stack manifest (`.yaml`) by path                              |
-| `read_component_file`  | Reads a Terraform/Helmfile/Packer source file                             |
-| `read_file`            | General-purpose file read (anywhere under the project)                    |
-| `write_stack_file`     | Overwrites a stack manifest (requires permission)                         |
-| `write_component_file` | Overwrites a component source file (requires permission)                  |
-| `edit_file`            | Patch-style edit instead of full overwrite (requires permission)          |
-| `search_files`         | grep across the project — useful for "find all stacks using the X module" |
-
-### Execution
-
-| Tool                    | What it does                                                                 |
-|-------------------------|------------------------------------------------------------------------------|
-| `execute_atmos_command` | Invokes the `atmos` CLI with a given subcommand and returns stdout/stderr    |
-| `execute_bash_command`  | Runs an arbitrary shell command (requires permission — gated by config)      |
-
-### Security / compliance (introspection of finding data)
-
-| Tool                       | What it returns                                                  |
-|----------------------------|------------------------------------------------------------------|
-| `atmos_list_findings`      | Security findings collected by Atmos (e.g., from `aws security`) |
-| `atmos_describe_finding`   | One finding's full detail                                        |
-| `atmos_analyze_finding`    | AI-friendly analysis of a finding (suggested remediation, etc.)  |
-| `atmos_compliance_report`  | Aggregated compliance report across findings                     |
+The `atmos` server exposes more than 20 tools:
+- Stack & component introspection (read-only, no credentials)
+- File operations (read + write)
+- Execution (`atmos` and `bash` commands)
+- Security / compliance (introspection of finding data)
 
 ### Why have this in addition to the AWS MCP servers?
 
