@@ -196,7 +196,7 @@ func TestVerifyChecksumRequiredUnavailableSidecar(t *testing.T) {
 		},
 	})
 
-	require.Error(t, err)
+	require.ErrorIs(t, err, ErrChecksumRequired)
 }
 
 func TestChecksumFileURLUsesGitHubReleaseVersionFromAssetURL(t *testing.T) {

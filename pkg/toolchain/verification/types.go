@@ -22,6 +22,7 @@ var (
 	ErrChecksumRequired        = errors.New("checksum verification required")
 	ErrChecksumMismatch        = errors.New("checksum mismatch")
 	ErrChecksumNotFound        = errors.New("checksum not found")
+	ErrChecksumAmbiguous       = errors.New("ambiguous checksum entries for asset")
 	ErrDownloadFailed          = errors.New("verification sidecar download failed")
 	ErrUnsupportedAlgorithm    = errors.New("unsupported checksum algorithm")
 	ErrSignatureRequired       = errors.New("signature verification required")

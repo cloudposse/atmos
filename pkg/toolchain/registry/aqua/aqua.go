@@ -291,23 +291,19 @@ func applyVersionOverride(tool *registry.Tool, override *versionOverride, versio
 }
 
 func hasCosignConfig(c *registry.CosignConfig) bool {
-	return c != nil && (c.Enabled != nil || len(c.Opts) > 0 || hasDownloadedFile(&c.Signature) || hasDownloadedFile(&c.Certificate) || hasDownloadedFile(&c.Key) || hasDownloadedFile(&c.Bundle))
+	return registry.HasCosignConfig(c)
 }
 
 func hasSLSAProvenance(s *registry.SLSAProvenance) bool {
-	return s != nil && (s.Enabled != nil || s.Type != "" || s.Asset != "" || s.URL != "" || s.SourceURI != "" || s.SourceTag != "")
+	return registry.HasSLSAProvenance(s)
 }
 
 func hasMinisignConfig(m *registry.MinisignConfig) bool {
-	return m != nil && (m.Enabled != nil || m.Type != "" || m.Asset != "" || m.URL != "" || m.PublicKey != "")
+	return registry.HasMinisignConfig(m)
 }
 
 func hasGitHubArtifactAttestations(g *registry.GitHubArtifactAttestations) bool {
-	return g != nil && (g.Enabled != nil || g.PredicateType != "" || g.SignerWorkflow != "")
-}
-
-func hasDownloadedFile(f *registry.DownloadedFile) bool {
-	return f != nil && (f.Type != "" || f.Asset != "" || f.URL != "")
+	return registry.HasGitHubArtifactAttestations(g)
 }
 
 // resetByPkgType clears fields not applicable when changing to a new package type.

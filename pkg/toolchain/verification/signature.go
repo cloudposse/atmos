@@ -93,7 +93,7 @@ func (v *Verifier) cosignArgs(ctx context.Context, req *Request, cfg *registry.C
 		result.SkippedReasons = append(result.SkippedReasons, fmt.Sprintf("cosign sidecar unavailable: %v", err))
 		return nil, cleanup, nil
 	}
-	return nil, cleanup, err
+	return nil, cleanup, fmt.Errorf("%w: %w", ErrSignatureRequired, err)
 }
 
 func (v *Verifier) verifySLSA(ctx context.Context, req *Request, cfg *registry.SLSAProvenance, result *Result) error {
@@ -252,15 +252,20 @@ func renderArgs(args []string, req *Request) ([]string, error) {
 
 func sidecarURL(tool *registry.Tool, version, assetURL string, sidecar *registry.DownloadedFile) (string, error) {
 	assetName := assetNameFromURL(assetURL)
+	effectiveVersion := effectiveReleaseVersionFromAssetURL(assetURL, version)
 	if sidecar.URL != "" {
-		return renderTemplateString(sidecar.URL, tool, version, assetName, nil)
+		rendered, err := renderTemplateString(sidecar.URL, tool, version, assetName, nil)
+		if err != nil {
+			return "", err
+		}
+		return replaceVersionSegmentInURL(rendered, version, effectiveVersion), nil
 	}
 	sidecarAsset, err := renderTemplateString(sidecar.Asset, tool, version, assetName, nil)
 	if err != nil {
 		return "", err
 	}
 	if sidecar.Type == "http" {
-		return sidecarAsset, nil
+		return replaceVersionSegmentInURL(sidecarAsset, version, effectiveVersion), nil
 	}
 	repoOwner := tool.RepoOwner
 	if sidecar.RepoOwner != "" {

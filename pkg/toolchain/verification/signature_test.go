@@ -284,7 +284,7 @@ func TestVerifyCosignRequiredUnavailableSidecar(t *testing.T) {
 		Runner: &fakeRunner{},
 	})
 
-	require.Error(t, err)
+	require.ErrorIs(t, err, ErrSignatureRequired)
 }
 
 func TestSidecarURLUsesGitHubReleaseVersionFromAssetURL(t *testing.T) {

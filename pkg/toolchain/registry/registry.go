@@ -415,3 +415,97 @@ type VersionOverride struct {
 type AquaRegistryFile struct {
 	Packages []AquaPackage `yaml:"packages"`
 }
+
+// HasDownloadedFile reports whether any meaningful field is set on a sidecar
+// file descriptor. Used to decide whether an override should be applied.
+func HasDownloadedFile(f *DownloadedFile) bool {
+	defer perf.Track(nil, "registry.HasDownloadedFile")()
+
+	return f != nil && (f.Type != "" || f.RepoOwner != "" || f.RepoName != "" || f.Asset != "" || f.URL != "")
+}
+
+// HasChecksumConfig reports whether any meaningful field is set on a checksum
+// configuration.
+func HasChecksumConfig(c *ChecksumConfig) bool {
+	defer perf.Track(nil, "registry.HasChecksumConfig")()
+
+	if c == nil {
+		return false
+	}
+	return hasChecksumScalarConfig(c) ||
+		hasChecksumPatternConfig(c) ||
+		len(c.Replacements) > 0 ||
+		HasCosignConfig(&c.Cosign) ||
+		HasMinisignConfig(&c.Minisign) ||
+		HasGitHubArtifactAttestations(&c.GitHubArtifactAttestations)
+}
+
+func hasChecksumScalarConfig(c *ChecksumConfig) bool {
+	return c.Enabled != nil || c.Type != "" || c.Asset != "" || c.URL != "" || c.Algorithm != "" || c.FileFormat != ""
+}
+
+func hasChecksumPatternConfig(c *ChecksumConfig) bool {
+	return c.Pattern.Checksum != "" || c.Pattern.File != ""
+}
+
+// HasCosignConfig reports whether any meaningful field is set on a cosign
+// verification configuration.
+func HasCosignConfig(c *CosignConfig) bool {
+	defer perf.Track(nil, "registry.HasCosignConfig")()
+
+	if c == nil {
+		return false
+	}
+	return c.Enabled != nil ||
+		len(c.Opts) > 0 ||
+		HasDownloadedFile(&c.Signature) ||
+		HasDownloadedFile(&c.Certificate) ||
+		HasDownloadedFile(&c.Key) ||
+		HasDownloadedFile(&c.Bundle)
+}
+
+// HasSLSAProvenance reports whether any meaningful field is set on a SLSA
+// provenance configuration.
+func HasSLSAProvenance(s *SLSAProvenance) bool {
+	defer perf.Track(nil, "registry.HasSLSAProvenance")()
+
+	if s == nil {
+		return false
+	}
+	return s.Enabled != nil ||
+		s.Type != "" ||
+		s.RepoOwner != "" ||
+		s.RepoName != "" ||
+		s.Asset != "" ||
+		s.URL != "" ||
+		s.SourceURI != "" ||
+		s.SourceTag != ""
+}
+
+// HasMinisignConfig reports whether any meaningful field is set on a minisign
+// verification configuration.
+func HasMinisignConfig(m *MinisignConfig) bool {
+	defer perf.Track(nil, "registry.HasMinisignConfig")()
+
+	if m == nil {
+		return false
+	}
+	return m.Enabled != nil ||
+		m.Type != "" ||
+		m.RepoOwner != "" ||
+		m.RepoName != "" ||
+		m.Asset != "" ||
+		m.URL != "" ||
+		m.PublicKey != ""
+}
+
+// HasGitHubArtifactAttestations reports whether any meaningful field is set on
+// a GitHub artifact attestation configuration.
+func HasGitHubArtifactAttestations(g *GitHubArtifactAttestations) bool {
+	defer perf.Track(nil, "registry.HasGitHubArtifactAttestations")()
+
+	if g == nil {
+		return false
+	}
+	return g.Enabled != nil || g.PredicateType != "" || g.SignerWorkflow != ""
+}

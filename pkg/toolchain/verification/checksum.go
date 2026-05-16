@@ -96,7 +96,7 @@ func (v *Verifier) downloadChecksumData(ctx context.Context, req *Request, check
 			result.SkippedReasons = append(result.SkippedReasons, fmt.Sprintf("checksum sidecar unavailable: %v", err))
 			return nil, nil
 		}
-		return nil, err
+		return nil, fmt.Errorf("%w: %w", ErrChecksumRequired, err)
 	}
 	return &checksumSidecar{url: checksumURL, data: data}, nil
 }
@@ -318,6 +318,7 @@ func parseRegexpChecksum(data []byte, assetName, algorithm string, pattern regis
 	}
 
 	var singleMatch string
+	nonExactMatches := 0
 	scanner := bufio.NewScanner(strings.NewReader(string(data)))
 	for scanner.Scan() {
 		value, exact, ok := matchChecksumLine(scanner.Text(), assetName, checksumRE, fileRE)
@@ -328,14 +329,23 @@ func parseRegexpChecksum(data []byte, assetName, algorithm string, pattern regis
 			return value, nil
 		}
 		singleMatch = value
+		nonExactMatches++
 	}
 	if scannerErr := scanner.Err(); scannerErr != nil {
 		return "", scannerErr
 	}
-	if singleMatch != "" {
+	return resolveRegexpChecksumMatch(assetName, singleMatch, nonExactMatches)
+}
+
+func resolveRegexpChecksumMatch(assetName, singleMatch string, nonExactMatches int) (string, error) {
+	switch nonExactMatches {
+	case 0:
+		return "", fmt.Errorf("%w: %s", ErrChecksumNotFound, assetName)
+	case 1:
 		return singleMatch, nil
+	default:
+		return "", fmt.Errorf("%w: %s", ErrChecksumAmbiguous, assetName)
 	}
-	return "", fmt.Errorf("%w: %s", ErrChecksumNotFound, assetName)
 }
 
 func matchChecksumLine(line, assetName string, checksumRE, fileRE *regexp.Regexp) (string, bool, bool) {

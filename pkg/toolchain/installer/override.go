@@ -82,19 +82,19 @@ func applyOverride(tool *registry.Tool, override *registry.Override) {
 			tool.Replacements[k] = v
 		}
 	}
-	if override.Checksum.Type != "" || override.Checksum.Asset != "" || override.Checksum.URL != "" || override.Checksum.Enabled != nil {
+	if registry.HasChecksumConfig(&override.Checksum) {
 		tool.Checksum = override.Checksum
 	}
-	if override.Cosign.Enabled != nil || len(override.Cosign.Opts) > 0 {
+	if registry.HasCosignConfig(&override.Cosign) {
 		tool.Cosign = override.Cosign
 	}
-	if override.SLSAProvenance.Enabled != nil || override.SLSAProvenance.Asset != "" || override.SLSAProvenance.URL != "" {
+	if registry.HasSLSAProvenance(&override.SLSAProvenance) {
 		tool.SLSAProvenance = override.SLSAProvenance
 	}
-	if override.Minisign.Enabled != nil || override.Minisign.Asset != "" || override.Minisign.URL != "" || override.Minisign.PublicKey != "" {
+	if registry.HasMinisignConfig(&override.Minisign) {
 		tool.Minisign = override.Minisign
 	}
-	if override.GitHubArtifactAttestations.Enabled != nil || override.GitHubArtifactAttestations.SignerWorkflow != "" {
+	if registry.HasGitHubArtifactAttestations(&override.GitHubArtifactAttestations) {
 		tool.GitHubArtifactAttestations = override.GitHubArtifactAttestations
 	}
 }

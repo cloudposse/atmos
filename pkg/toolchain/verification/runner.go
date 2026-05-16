@@ -25,18 +25,22 @@ func (d HTTPDownloader) Download(ctx context.Context, url string) ([]byte, error
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("%w: build request for %s: %w", ErrDownloadFailed, url, err)
 	}
 	// #nosec G704 -- verification sidecar URLs come from registry metadata and user configuration.
 	resp, err := client.Do(req)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("%w: GET %s: %w", ErrDownloadFailed, url, err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("%w: %s: HTTP %d", ErrDownloadFailed, url, resp.StatusCode)
 	}
-	return io.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("%w: read response body for %s: %w", ErrDownloadFailed, url, err)
+	}
+	return body, nil
 }
 
 // ExecRunner runs verifier commands from PATH.
