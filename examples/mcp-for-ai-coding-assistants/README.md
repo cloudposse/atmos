@@ -26,17 +26,31 @@ Centralized auth. Centralized permissions. One `atmos.yaml`.
 
 ## What This Example Demonstrates
 
-- **One source of truth** — every MCP server is defined in `atmos.yaml` (versioned with your
-  infrastructure code) instead of three separate per-CLI config files.
-- **Centralized AWS auth** — [Atmos Auth](https://atmos.tools/cli/configuration/auth) handles
-  SSO/role assumption once; each MCP server subprocess gets the credentials it needs
-  automatically, with no `~/.aws/credentials`, `AWS_PROFILE`, or `aws configure` needed.
+- **One source of truth** — every MCP server is defined in `atmos.yaml`
+  (versioned with your infrastructure code) instead of three separate
+  per-CLI config files.
+- **Security — every credential, in one place** —
+  [Atmos Auth](https://atmos.tools/cli/configuration/auth) is the only place
+  AWS credentials live. The exported `.mcp.json` references IAM role names
+  but holds **no static secrets** — safe to check into the repo. Each
+  external MCP server is spawned by `atmos auth exec`, which resolves
+  credentials at runtime and writes them only into that subprocess's env.
+  No `~/.aws/credentials`, no scattered `AWS_PROFILE`, no per-server
+  authentication, no token files in each CLI's config directory.
+- **Convenience — one login, every account auto-routed** — configure all
+  the accounts you care about in `auth.identities`, run `atmos auth login`
+  once, and Atmos handles the rest. Each MCP server is pinned to the
+  account where its API actually works (billing → payer, CloudTrail → audit,
+  IAM analysis → root, workload introspection → dev). When the AI calls a
+  tool, Atmos automatically picks the right account for that tool's server.
+  No identity juggling between prompts, no `AWS_PROFILE` swapping, no
+  re-logins to ask a billing question after asking a VPC question.
 - **Toolchain managed by Atmos** — `uvx` is installed and resolved via the
-  [Atmos toolchain](https://atmos.tools/cli/configuration/toolchain) so every CLI uses the
-  same binary version. No "works on my machine" drift.
-- **Atmos's own AI tools exposed** — your AI assistant can call `describe_component`,
-  `list_stacks`, `validate_stacks`, `read_stack_file`, `execute_atmos_command`, etc.
-  alongside the AWS MCP tools.
+  [Atmos toolchain](https://atmos.tools/cli/configuration/toolchain) so every
+  CLI uses the same binary version. No "works on my machine" drift.
+- **Atmos's own AI tools exposed** — your AI assistant can call
+  `describe_component`, `list_stacks`, `validate_stacks`, `read_stack_file`,
+  `execute_atmos_command`, etc. alongside the AWS MCP tools.
 
 ## MCP Servers Configured
 
@@ -56,8 +70,8 @@ Centralized auth. Centralized permissions. One `atmos.yaml`.
 Atmos Auth injects AWS credentials into the AWS servers (`identity: readonly` in
 `atmos.yaml` wraps them with `atmos auth exec -i readonly --`).
 
-The **atmos-pro** server is HTTP-transport. `atmos.yaml`'s `mcp.servers` block
-currently only models stdio servers, so atmos-pro is registered directly with each
+The **atmos-pro** server is HTTP-transport. `atmos.yaml`'s `mcp.servers`
+currently only supports `stdio` servers, so `atmos-pro` is registered directly with each
 AI CLI (see [Atmos Pro section](#atmos-pro-server-http-transport) below) rather
 than through `atmos mcp export`. This may change in a future release.
 
@@ -85,15 +99,15 @@ Concretely, the `atmos` server exposes ~20 tools that fall into five buckets:
 
 ### File operations (read + write)
 
-| Tool                  | What it does                                                              |
-|-----------------------|---------------------------------------------------------------------------|
-| `read_stack_file`     | Reads a raw stack manifest (`.yaml`) by path                              |
-| `read_component_file` | Reads a Terraform/Helmfile/Packer source file                             |
-| `read_file`           | General-purpose file read (anywhere under the project)                    |
-| `write_stack_file`    | Overwrites a stack manifest (requires permission)                         |
-| `write_component_file`| Overwrites a component source file (requires permission)                  |
-| `edit_file`           | Patch-style edit instead of full overwrite (requires permission)          |
-| `search_files`        | grep across the project — useful for "find all stacks using the X module" |
+| Tool                   | What it does                                                              |
+|------------------------|---------------------------------------------------------------------------|
+| `read_stack_file`      | Reads a raw stack manifest (`.yaml`) by path                              |
+| `read_component_file`  | Reads a Terraform/Helmfile/Packer source file                             |
+| `read_file`            | General-purpose file read (anywhere under the project)                    |
+| `write_stack_file`     | Overwrites a stack manifest (requires permission)                         |
+| `write_component_file` | Overwrites a component source file (requires permission)                  |
+| `edit_file`            | Patch-style edit instead of full overwrite (requires permission)          |
+| `search_files`         | grep across the project — useful for "find all stacks using the X module" |
 
 ### Execution
 
@@ -142,7 +156,7 @@ the client handles approvals), so the AI coding assistant's own
 permission UI (Claude Code's per-tool approval, Codex's confirm prompt,
 Gemini's tool consent dialog) gates execution.
 
-## What the `atmos-pro` MCP Server Does (Atmos Pro SaaS)
+## What the `atmos-pro` MCP Server Does
 
 [Atmos Pro](https://atmos-pro.com/) is a SaaS layer on top of Atmos that gives
 platform teams ordered deployments, drift detection, and stack locking
@@ -159,8 +173,6 @@ your OS keychain. No API keys, no static credentials, revocable from the
 Atmos Pro UI under *Settings → MCP Clients*.
 
 ### Capabilities
-
-Drawn from the [Atmos Pro MCP server changelog](https://atmos-pro.com/changelog/2026-05-09-mcp-server):
 
 - **Infrastructure triage & diagnostics** — list/inspect drifted or errored
   instances, stacks, and components; access repair history and
@@ -222,9 +234,6 @@ from aws-api.
 ```bash
 cd examples/mcp-for-ai-coding-assistants
 
-# Install uvx via the Atmos toolchain.
-atmos toolchain install astral-sh/uv
-
 # Authenticate against your AWS organization via SSO.
 atmos auth login
 
@@ -272,14 +281,20 @@ Manage with `claude mcp list`, `claude mcp get <name>`, `claude mcp remove <name
 
 Once registered, ask away:
 
-```
+```text
 List all the IAM roles in this account that have admin access.
 What did we spend on EC2 last month?
-Show me the vpc component configuration for the dev stack.
 Audit our security posture against the Well-Architected framework.
 ```
 
 Claude Code picks which MCP tools to call based on the question — you don't need to specify them.
+
+In a real project (with `stacks/` and `components/`) you can also ask questions
+like *"Show me the vpc component configuration for the dev stack"* — the
+Atmos MCP server's `atmos_describe_component` tool answers from your stack
+configs. This example ships without those directories so the focus stays on
+MCP, but the tool is registered and ready as soon as you point Atmos at a
+project that has them.
 
 ### Option 2 — OpenAI Codex CLI
 
@@ -498,6 +513,9 @@ Two things to notice:
 "List all IAM roles with AdministratorAccess attached."
 
 # Atmos introspection (uses the atmos MCP server)
+# These require stacks/ and components/ — this example ships without them
+# (so the focus stays on MCP). Run from a real Atmos project to see real
+# answers; the prompts below illustrate the shape.
 "What stacks are defined in this project?"
 "Show me the vpc component config for dev."
 "Validate every stack and report any errors."
@@ -557,19 +575,24 @@ Pick the example that matches your workflow (full index at
 
 ### Quick mental map
 
-|                                     | Atmos drives the AI loop                                            | External CLI drives the AI loop      |
-|-------------------------------------|---------------------------------------------------------------------|--------------------------------------|
-| **API-key AI providers**            | [Atmos AI](https://atmos.tools/examples/ai)                         | *(this example, Codex/Gemini paths)* |
-| **CLI AI providers (subscription)** | [Atmos AI with Claude Code](https://atmos.tools/examples/ai-claude-code) | *(this example, Claude Code path)* |
-| **Just external MCP servers**       | [Atmos MCP integrations](https://atmos.tools/examples/mcp)          | *(this example)*                     |
+|                                     | Atmos drives the AI loop                                                 | External CLI drives the AI loop      |
+|-------------------------------------|--------------------------------------------------------------------------|--------------------------------------|
+| **API-key AI providers**            | [Atmos AI](https://atmos.tools/examples/ai)                              | *(this example, Codex/Gemini paths)* |
+| **CLI AI providers (subscription)** | [Atmos AI with Claude Code](https://atmos.tools/examples/ai-claude-code) | *(this example, Claude Code path)*   |
+| **Just external MCP servers**       | [Atmos MCP integrations](https://atmos.tools/examples/mcp)               | *(this example)*                     |
 
 ## Key Files
 
-| File                        | Purpose                                                   |
-|-----------------------------|-----------------------------------------------------------|
-| `atmos.yaml`                | Toolchain, MCP servers, Atmos Auth, and AI configuration  |
-| `stacks/example.yaml`       | Minimal stack so Atmos's MCP tools have something to show |
-| `components/terraform/vpc/` | Mock component — no real cloud resources                  |
+| File             | Purpose                                                                                       |
+|------------------|-----------------------------------------------------------------------------------------------|
+| `atmos.yaml`     | Toolchain, MCP servers, Atmos Auth, and AI configuration                                      |
+| `.tool-versions` | Pins `uvx` to a known version so the exported `.mcp.json` carries a consistent toolchain PATH |
+
+This example deliberately ships no `stacks/` or `components/` directories
+— the focus is purely the MCP configuration. To see a complete project
+shape, look at
+[`examples/quick-start-advanced/`](https://atmos.tools/examples/quick-start-advanced)
+or [`examples/mcp/`](https://atmos.tools/examples/mcp).
 
 ## Troubleshooting
 

@@ -81,7 +81,9 @@ mcp:
       description: "AWS Knowledge — managed AWS knowledge base (remote)"
 
     # AWS Pricing — real-time pricing and cost analysis.
-    # All Pricing API calls are free of charge.
+    # All Pricing API calls are free of charge and account-agnostic, but we
+    # pin to core-root/terraform so all "money" servers share an identity
+    # and the user only logs into one account for cost-related questions.
     # IAM permissions: pricing:*
     aws-pricing:
       command: uvx
@@ -90,10 +92,13 @@ mcp:
         AWS_REGION: "us-east-1"
         FASTMCP_LOG_LEVEL: "ERROR"
       description: "AWS Pricing — real-time pricing and cost analysis"
-      identity: "readonly"
+      identity: "core-root/terraform"
 
     # AWS Billing & Cost Management — billing summaries, payment history,
     # cost allocation tags.
+    # MUST run as the AWS Organizations management/payer account
+    # (core-root) — Cost Explorer + Billing APIs return AccessDenied
+    # elsewhere. "What did we spend last month?" only works here.
     # IAM permissions: ce:*, billing:*
     aws-billing:
       command: uvx
@@ -102,9 +107,14 @@ mcp:
         AWS_REGION: "us-east-1"
         FASTMCP_LOG_LEVEL: "ERROR"
       description: "AWS Billing — billing summaries and payment history"
-      identity: "readonly"
+      identity: "core-root/terraform"
 
     # AWS IAM — role/policy analysis and access patterns. Read-only.
+    # IAM is per-account (no org-wide IAM API). Run in core-root so the AI
+    # sees the IAM Identity Center-provisioned admin roles
+    # (AWSReservedSSO_AdministratorAccess_*) plus Organizations-related
+    # roles. "What admin roles do we use?" → answered against the root
+    # account's IAM view.
     # IAM permissions: iam:Get*, iam:List*
     aws-iam:
       command: uvx
@@ -113,9 +123,14 @@ mcp:
         AWS_REGION: "us-east-1"
         FASTMCP_LOG_LEVEL: "ERROR"
       description: "AWS IAM — role/policy analysis and access patterns"
-      identity: "readonly"
+      identity: "core-root/terraform"
 
     # AWS CloudTrail — event history and API call auditing.
+    # Pin to core-audit/terraform because that's where the org-wide
+    # CloudTrail lands. Running this in any other account only sees that
+    # account's local events; running in audit sees cross-account admin
+    # role assumptions, which is what "who accessed the admin roles?"
+    # actually needs.
     # IAM permissions: cloudtrail:LookupEvents
     aws-cloudtrail:
       command: uvx
@@ -124,9 +139,13 @@ mcp:
         AWS_REGION: "us-east-1"
         FASTMCP_LOG_LEVEL: "ERROR"
       description: "AWS CloudTrail — event history and API call auditing"
-      identity: "readonly"
+      identity: "core-audit/terraform"
 
     # AWS Security — Well-Architected security posture assessment. Read-only.
+    # GuardDuty / SecurityHub / Inspector / Access Analyzer are typically
+    # delegated to a dedicated security account in Cloud Posse setups, so
+    # pinning to core-security/terraform gets the org-wide aggregated
+    # findings rather than a single account's local view.
     # IAM permissions: GuardDuty/Inspector/SecurityHub/Access Analyzer read,
     # plus S3/EBS/RDS/ELB read for encryption/TLS checks.
     aws-security:
@@ -136,11 +155,18 @@ mcp:
         AWS_REGION: "us-east-1"
         FASTMCP_LOG_LEVEL: "ERROR"
       description: "AWS Security — Well-Architected security posture assessment"
-      identity: "readonly"
+      identity: "core-security/terraform"
 
     # AWS API — direct AWS CLI access via AI, with built-in safety controls.
-    # READ_OPERATIONS_ONLY=true blocks mutations entirely; flip to false +
-    # REQUIRE_MUTATION_CONSENT=true if you want approval-gated mutations.
+    # Pin to a workload account (plat-dev) so questions like "do we have a
+    # VPC?", "list EC2 instances", "describe RDS clusters" actually return
+    # data. core-root/core-audit/core-security host shared infra, not
+    # application workloads, so they're a poor fit here.
+    # READ_OPERATIONS_ONLY=true blocks mutations at the tool layer; flip to
+    # false + REQUIRE_MUTATION_CONSENT=true if you want approval-gated
+    # mutations. Note that mutations also need the underlying IAM role to
+    # allow them — TerraformApplyAccess-Plat does, so the safety net is the
+    # MCP server's flag, not IAM.
     aws-api:
       command: uvx
       args: ["awslabs.aws-api-mcp-server@latest"]
@@ -149,7 +175,7 @@ mcp:
         READ_OPERATIONS_ONLY: "true"
         REQUIRE_MUTATION_CONSENT: "true"
       description: "AWS API — direct AWS CLI access with security controls"
-      identity: "readonly"
+      identity: "plat-dev/terraform"
 
 # ---------------------------------------------------------------------------
 # Atmos Auth — automatic credential injection for AWS MCP servers
@@ -159,24 +185,91 @@ mcp:
 # subprocess inherits AWS credentials resolved by Atmos Auth — no need to
 # touch ~/.aws/config, AWS_PROFILE, or other credential files.
 #
-# Update the three values marked "← Change this" to match your AWS org,
-# then: atmos auth login
+#   - provider name `sso`
+#   - identity uses `via: { provider: sso }` rather than a direct `provider:` field
+#   - principal uses `name` + `account.name` (account is resolved by name, not ID)
+#   - identity names follow `<account>/terraform` so AI assistants and CI share
+#     the same naming convention.
+#
+# Per-server identity mapping (so a single `atmos auth login` lets every MCP
+# server use the right account for its API):
+#
+#   aws-pricing      → core-root/terraform     (pricing API, free, any account)
+#   aws-billing      → core-root/terraform     (MUST be the payer/management account)
+#   aws-iam          → core-root/terraform     (best central view of admin roles)
+#   aws-cloudtrail   → core-audit/terraform    (org trail lands in audit)
+#   aws-security     → core-security/terraform (delegated GuardDuty/SecurityHub admin)
+#   aws-api          → plat-dev/terraform      (workload account: VPC/EC2/RDS lives here)
+#
+# All four identities sit under the same SSO provider, so `atmos auth login`
+# authenticates the SSO session once; each identity is then assumed
+# on-demand when the MCP server is spawned (the cached SSO token covers all
+# four).
+#
+# Update the `start_url` to your AWS IAM Identity Center start URL, then:
+#   atmos auth login
 auth:
   providers:
-    aws-sso:
+    sso:
       kind: aws/iam-identity-center
       start_url: "https://your-org.awsapps.com/start"   # ← Change this
-      region: "us-east-1"
+      region: "us-west-1"
   identities:
-    # Read-only identity for cost analysis, IAM/security audits, etc.
-    readonly:
+    # core-root/terraform — the AWS Organizations management/payer account.
+    # Used by aws-billing (Cost Explorer only works here), aws-pricing
+    # (free, account-agnostic, but grouped here so all "money" servers
+    # share an identity), and aws-iam (sees IAM-Identity-Center-provisioned
+    # admin roles and Organizations-related roles).
+    core-root/terraform:
       kind: aws/permission-set
-      provider: aws-sso
       default: true
+      via:
+        provider: sso
       principal:
-        permission_set: "ReadOnlyAccess"                 # ← Change this
+        name: TerraformApplyAccess-Core
         account:
-          id: "123456789012"                             # ← Change this
+          name: root
+
+    # core-audit/terraform — where the org-wide CloudTrail lands.
+    # Running aws-cloudtrail here gives the AI visibility into
+    # cross-account admin role assumptions ("who accessed the admin
+    # roles?"). Running it anywhere else only sees that account's
+    # local events.
+    core-audit/terraform:
+      kind: aws/permission-set
+      via:
+        provider: sso
+      principal:
+        name: TerraformApplyAccess-Core
+        account:
+          name: core-audit
+
+    # core-security/terraform — the security tooling account.
+    # GuardDuty/SecurityHub/Inspector/Access Analyzer are typically
+    # delegated here in Cloud Posse setups, so aws-security gets the
+    # org-wide aggregated findings rather than a single account's view.
+    core-security/terraform:
+      kind: aws/permission-set
+      via:
+        provider: sso
+      principal:
+        name: TerraformApplyAccess-Core
+        account:
+          name: core-security
+
+    # plat-dev/terraform — a workload account where application VPCs,
+    # EC2 instances, RDS, S3 buckets, etc. actually live. aws-api uses
+    # this so "do we have a VPC?", "list EC2 instances", "describe RDS
+    # clusters" return real data. Swap to plat-prod/terraform (or
+    # another workload account) if you want the AI to query production.
+    plat-dev/terraform:
+      kind: aws/permission-set
+      via:
+        provider: sso
+      principal:
+        name: TerraformApplyAccess-Plat
+        account:
+          name: plat-dev
 
 # ---------------------------------------------------------------------------
 # AI Configuration
@@ -215,14 +308,7 @@ ai:
     enabled: true
     path: ".atmos/sessions"
 
-# Minimal stacks config (required for Atmos to load).
-stacks:
-  base_path: stacks
-  included_paths:
-    - "**/*.yaml"
-  excluded_paths: []
-  name_template: "{{ .vars.stage }}"
-
-components:
-  terraform:
-    base_path: components/terraform
+# No stacks/components are defined for this example — the focus is the MCP
+# configuration above. If you adapt this file for a real project, add
+# `stacks:` and `components:` blocks (see examples/quick-start-advanced/
+# or examples/mcp/ for a complete reference).

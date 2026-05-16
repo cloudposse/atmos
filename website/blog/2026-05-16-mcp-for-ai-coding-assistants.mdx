@@ -38,7 +38,7 @@ Centralized auth. Centralized permissions. One `atmos.yaml`.
 ## The Problem
 
 If you've tried to use the awslabs MCP servers with more than one AI coding
-assistant, you've probably hit this:
+assistant, and each MCP server requiring different credentials, you've probably hit this:
 
 - **Three different config files.** Claude Code reads `.mcp.json`,
   OpenAI Codex CLI reads `~/.codex/config.toml` (TOML, not JSON), and
@@ -79,7 +79,7 @@ mcp:
       args: ["awslabs.billing-cost-management-mcp-server@latest"]
       env: { AWS_REGION: "us-east-1" }
       identity: "readonly"     # ← Atmos Auth identity
-    # … and seven more
+    # … and more
 
 auth:
   providers:
@@ -107,7 +107,7 @@ works with `--output .gemini/settings.json`. For Codex, you translate
 the JSON to TOML once — and the example
 [walks you through that](https://atmos.tools/examples/mcp-for-ai-coding-assistants#option-2--openai-codex-cli).
 
-The result: ten MCP servers, three AI CLIs, one Atmos config.
+The result: many MCP servers, three AI CLIs, one Atmos config.
 
 ## What Each AI CLI Gets
 
@@ -177,8 +177,7 @@ over **HTTP transport**. Auth is a one-time browser OAuth (GitHub
 login); short-lived tokens land in your OS keychain, revocable from
 the Atmos Pro UI. No API keys to leak.
 
-Drawn from the [Atmos Pro MCP changelog](https://atmos-pro.com/changelog/2026-05-09-mcp-server),
-it exposes capabilities across four areas:
+It exposes capabilities across four areas:
 
 - **Triage & diagnostics** — list/inspect drifted or errored
   instances, stacks, and components; access repair history and
@@ -359,19 +358,30 @@ The AI assistant picks which MCP tools to call. You don't specify them.
 
 ## Why This Matters
 
-Three benefits stack on top of each other:
+Four benefits:
 
 1. **Central management.** One `atmos.yaml`, versioned with your infrastructure
    repo. Onboarding a new engineer is `git clone` + `atmos auth login`. Adding a
    new MCP server is one block in `atmos.yaml` and one re-export. No
    per-engineer drift.
 
-2. **Security boundary.** AWS credentials never land in a config file. Atmos Auth
-   resolves them at MCP-server-spawn time and writes them into the subprocess
-   environment, scoped per identity. The exported `.mcp.json` is safe to check
-   into the repo — the worst it leaks is the IAM role name.
+2. **Security — every credential, in one place.** Atmos Auth is the only place
+   AWS credentials live. Each external MCP server is spawned via
+   `atmos auth exec`, which resolves credentials at runtime and writes them
+   only into that subprocess's env. The exported `.mcp.json` is safe to check
+   into the repo — the worst it leaks is the IAM role name. No static
+   secrets in `~/.aws/credentials`, no `AWS_PROFILE` scattered across shells,
+   no per-server authentication, no token files in each CLI's config dir.
 
-3. **Toolchain hygiene.** `uvx` and friends are pinned to a known version
+3. **Convenience — one login, every account auto-routed.** Configure all the
+   accounts you care about in `auth.identities`, run `atmos auth login` once,
+   and Atmos picks the right account for every MCP server automatically
+   (billing → payer, CloudTrail → audit, IAM analysis → root, workload
+   introspection → dev). The AI calls a tool and the right credentials are
+   already there — no identity juggling between prompts, no `AWS_PROFILE`
+   swapping, no re-login to ask a billing question after asking a VPC one.
+
+4. **Toolchain hygiene.** `uvx` and friends are pinned to a known version
    via the Atmos toolchain. Every engineer's AI assistant uses the same
    binaries. No "but it works on my machine" with a different `uvx` minor.
 
@@ -395,14 +405,6 @@ adjacent setups:
 - **[Atmos AI (multi-provider)](https://atmos.tools/examples/ai)** — Multi-provider
   Atmos AI setup (Anthropic API, OpenAI API, Ollama, …). No external CLI; chat
   with your infra from `atmos ai ask`.
-
-Full index at [atmos.tools/examples](https://atmos.tools/examples).
-
-|                                     | Atmos drives the AI loop                                                  | External CLI drives the AI loop      |
-|-------------------------------------|---------------------------------------------------------------------------|--------------------------------------|
-| **API-key AI providers**            | [Atmos AI](https://atmos.tools/examples/ai)                               | *(this post, Codex/Gemini paths)*    |
-| **CLI AI providers (subscription)** | [Atmos AI with Claude Code](https://atmos.tools/examples/ai-claude-code)  | *(this post, Claude Code path)*      |
-| **Just external MCP servers**       | [Atmos MCP integrations](https://atmos.tools/examples/mcp)                | *(this post)*                        |
 
 ## Related Reading
 
