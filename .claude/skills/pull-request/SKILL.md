@@ -14,7 +14,7 @@ Use this skill **every time you open or update a PR**. It encodes three policies
 2. **`minor` and `major` PRs require a blog post AND a roadmap update.** The `Check for changelog and roadmap updates` workflow gates merging on both.
 3. **`featured[]` in the roadmap is curated.** Never auto-promote a shipped milestone into `featured[]` — only the user decides.
 
-If you violate any of these, CI fails and the PR can't merge. Follow this skill end-to-end before pushing, not after.
+If you violate any of these, CI fails and the PR can't merge. Follow this skill across both phases: complete the **pre-push checklist** before `git push`, then immediately work through the **post-push / PR checklist** (open the PR, apply the label, monitor CI).
 
 ## The label decision tree
 
