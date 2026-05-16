@@ -62,7 +62,6 @@ jobs:
           pnpm run algolia:deploy:dry-run
 
   deploy:
-    if: ${{ github.event_name == 'push' || github.event_name == 'workflow_dispatch' }}
     needs:
       - validate
     runs-on: ubuntu-latest
