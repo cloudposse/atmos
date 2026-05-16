@@ -78,23 +78,7 @@ jobs:
             https://api.github.com/repos/cloudposse/refarch-scaffold/dispatches \
             -d '{"event_type": "reindex"}'
 
-  algolia-reindex-prod:
-    needs:
-      - website-deploy-prod
-    runs-on: ubuntu-latest
-
-    environment:
-      name: algolia
-
-    env:
-      ALGOLIA_APP_ID: 32YOERUX83
-
-    steps:
-      - name: Trigger Algolia Crawler
-        uses: algolia/algoliasearch-crawler-github-actions@v1
-        with:
-          crawler-user-id: ${{ secrets.ALGOLIA_CRAWLER_USER_ID }}
-          crawler-api-key: ${{ secrets.ALGOLIA_CRAWLER_API_KEY }}
-          algolia-app-id: ${{ env.ALGOLIA_APP_ID }}
-          algolia-api-key: ${{ secrets.ALGOLIA_CRAWLER_INDEXING_API_KEY }}
-          site-url: "https://${{ env.DEPLOYMENT_HOST }}"
+  # Algolia crawler config deploy + reindex are owned by .github/workflows/algolia.yaml,
+  # which is triggered via workflow_run after this workflow succeeds. That ordering
+  # guarantees the reindex runs against the freshly-deployed site AND the just-PATCHed
+  # crawler config — neither can race the other.

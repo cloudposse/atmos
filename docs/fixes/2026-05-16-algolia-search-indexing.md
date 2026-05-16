@@ -98,19 +98,40 @@ for unit-test coverage and are not what the runtime crawler executes.
 
 ### Deploy pipeline
 
-`.github/workflows/algolia.yaml` validates and deploys the crawler config:
+The two workflows are explicitly sequenced so the reindex always runs
+against the new site **and** the new crawler config — never one without
+the other:
 
-- `pull_request` runs `pnpm run test:algolia` and
-  `pnpm run algolia:deploy:dry-run`. No secrets are required.
-- `push` to `main` deploys crawler config + index settings from the
-  `algolia` GitHub environment.
-- `workflow_dispatch` lets an admin deploy from any branch (used once,
-  before merging this PR, to validate the live deploy path).
+1. `.github/workflows/website-deploy-prod.yml` builds the site, syncs to
+   S3, and triggers the external refarch-scaffold reindex. It no longer
+   owns Algolia crawler reindex — that was previously a sibling job
+   (`algolia-reindex-prod`) which raced the crawler config deploy after
+   we moved config-as-code into the repo.
+2. `.github/workflows/algolia.yaml` is triggered by `workflow_run` on
+   `Website Deploy Prod → completed`, gated on
+   `workflow_run.conclusion == 'success'`. It runs in the `algolia`
+   GitHub environment and, inside a single `deploy` job, PATCHes the
+   crawler config, PUTs index settings, and POSTs the reindex — all
+   from `deploy-crawler-config.mjs` with `ALGOLIA_CRAWLER_REINDEX=true`.
 
-The production content reindex is split into its own job
-(`algolia-reindex-prod` in `.github/workflows/website-deploy-prod.yml`)
-so that AWS production secrets stay in the `production` environment and
-Algolia crawler secrets stay in the `algolia` environment.
+End-to-end order on a push to `main`:
+
+```text
+website-deploy-prod (S3 sync)
+  └─► workflow_run → algolia.yaml
+        ├─ validate (tests + dry-run)
+        └─ deploy   (PATCH config → PUT settings → POST reindex)
+```
+
+`pull_request` still runs `validate` only — no secrets, no upload.
+`workflow_dispatch` is retained for manual admin runs from any branch
+(used once during initial bring-up while environment protections were
+relaxed).
+
+This split keeps AWS production deployment credentials in the
+`production` environment and Algolia crawler credentials in the
+`algolia` environment, while strict cross-workflow ordering guarantees
+the reindex never runs against stale content or stale config.
 
 ### Pre-deploy CI guards
 

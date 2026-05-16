@@ -34,19 +34,16 @@ The `atmos.tools` documentation uses [Algolia DocSearch](https://docsearch.algol
 - `search-relevance.test.mjs`: opt-in live relevance test.
 - `atmos-tools.crawler.dashboard.js`: paste-ready dashboard fallback.
 
-### Config Deployment
+### Config Deployment and Reindex
 
-`.github/workflows/algolia.yaml` validates and deploys crawler configuration.
+`.github/workflows/algolia.yaml` validates the crawler config on pull requests and, after every successful production website deploy, deploys the crawler config + index settings AND triggers a content reindex — in that order.
 
-- Pull requests run `pnpm run test:algolia` and `pnpm run algolia:deploy:dry-run`.
-- Pull requests do not upload crawler config or use Algolia write secrets.
-- Pushes to `main` deploy crawler config and index settings from the `algolia` GitHub environment.
+- Pull requests run `pnpm run test:algolia` and `pnpm run algolia:deploy:dry-run`. No Algolia secrets are used.
+- The `deploy` job is triggered by GitHub Actions `workflow_run` on completion of `Website Deploy Prod`, gated on `workflow_run.conclusion == 'success'`. This guarantees the site on S3 is fresh **before** any Algolia work begins.
+- The `deploy` job runs in the `algolia` GitHub environment. It PATCHes the crawler config, PUTs the index settings, and then POSTs the reindex — all from a single Node script (`deploy-crawler-config.mjs`) so the reindex cannot race the config update.
+- `workflow_dispatch` is available to manually re-run the deploy from any branch (used during initial bring-up while environment protections are relaxed).
 
-### Production Content Reindex
-
-`.github/workflows/website-deploy-prod.yml` deploys the website to S3 from the `production` environment. After that job succeeds, a separate `algolia-reindex-prod` job runs in the `algolia` environment and triggers the Algolia Crawler for `https://atmos.tools`.
-
-This split keeps AWS production deployment credentials in the `production` environment and Algolia crawler credentials in the `algolia` environment.
+This split keeps AWS production deployment credentials in the `production` environment and Algolia crawler credentials in the `algolia` environment, while still enforcing strict ordering across the two workflows.
 
 ### Frontend Search
 
@@ -113,9 +110,9 @@ Preview deployments do not run Algolia indexing. The old preview reindex path ha
 
 ### Ranking Changes Not Visible
 
-1. Confirm `.github/workflows/algolia.yaml` deployed the crawler config and index settings after merge.
-2. Confirm `.github/workflows/website-deploy-prod.yml` completed the `algolia-reindex-prod` job.
-3. Run the opt-in live relevance test from `website/`.
+1. Confirm `.github/workflows/website-deploy-prod.yml` succeeded on the merge commit (site is on S3).
+2. Confirm the `Algolia` workflow ran via `workflow_run` after that, with both `validate` and `deploy` green. The `deploy` step both PATCHes the crawler config and POSTs the reindex.
+3. Run the opt-in live relevance test from `website/` once the crawler reports the reindex complete.
 
 ## References
 

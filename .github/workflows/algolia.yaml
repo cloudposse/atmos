@@ -13,15 +13,12 @@ on:
       - "website/pnpm-lock.yaml"
       - ".github/workflows/algolia.yaml"
 
-  push:
+  workflow_run:
+    workflows: ["Website Deploy Prod"]
+    types:
+      - completed
     branches:
       - main
-    paths:
-      - "website/algolia/**"
-      - "website/docusaurus.config.js"
-      - "website/package.json"
-      - "website/pnpm-lock.yaml"
-      - ".github/workflows/algolia.yaml"
 
   workflow_dispatch:
 
@@ -62,6 +59,9 @@ jobs:
           pnpm run algolia:deploy:dry-run
 
   deploy:
+    if: |
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success')
     needs:
       - validate
     runs-on: ubuntu-latest
@@ -97,4 +97,8 @@ jobs:
           ALGOLIA_CRAWLER_USER_ID: ${{ secrets.ALGOLIA_CRAWLER_USER_ID }}
           ALGOLIA_CRAWLER_API_KEY: ${{ secrets.ALGOLIA_CRAWLER_API_KEY }}
           ALGOLIA_CRAWLER_INDEXING_API_KEY: ${{ secrets.ALGOLIA_CRAWLER_INDEXING_API_KEY }}
+          # Deploy script PATCHes the crawler config and PUTs index settings, then
+          # POSTs /reindex. Order is critical: reindex must use the just-deployed
+          # config, and the site must already be live on S3 (guaranteed by the
+          # workflow_run trigger on Website Deploy Prod success).
           ALGOLIA_CRAWLER_REINDEX: "true"
