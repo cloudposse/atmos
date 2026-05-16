@@ -160,6 +160,7 @@ func TestResolveComponentAuthManager(t *testing.T) {
 		name               string
 		processTemplates   bool
 		processYaml        bool
+		authDisabled       bool
 		componentSection   map[string]any
 		expectResolverCall bool
 		expectSentinel     bool // true when result should be the spy's componentMgr
@@ -198,6 +199,15 @@ func TestResolveComponentAuthManager(t *testing.T) {
 			expectSentinel:     true,
 		},
 		{
+			name:               "auth_disabled_with_templates_and_yaml__resolver_skipped",
+			processTemplates:   true,
+			processYaml:        true,
+			authDisabled:       true,
+			componentSection:   componentSectionWithAuth(authSectionWithDefault()),
+			expectResolverCall: false,
+			expectSentinel:     false,
+		},
+		{
 			// Component without its own auth section: the resolver must NOT
 			// run even when templates are enabled, because there is no
 			// component-level identity to resolve. The parent AuthManager
@@ -231,6 +241,7 @@ func TestResolveComponentAuthManager(t *testing.T) {
 				atmosConfig:           &schema.AtmosConfiguration{},
 				processTemplates:      tc.processTemplates,
 				processYamlFunctions:  tc.processYaml,
+				authDisabled:          tc.authDisabled,
 				authManager:           parentMgr,
 				componentAuthResolver: spy.resolver(),
 				finalStacksMap:        make(map[string]any),
