@@ -100,6 +100,8 @@ function createRecordExtractor() {
       ["/reference", 30],
     ];
 
+    // The Algolia Crawler linter rejects ES2020+ syntax (optional chaining,
+    // binding-less catch, nullish coalescing) — keep this block ES2017-only.
     const normalize = (pathname) => {
       if (!pathname || pathname === "/") {
         return "/";
@@ -108,26 +110,33 @@ function createRecordExtractor() {
     };
 
     const toPathname = (urlInput) => {
-      const rawUrl =
-        typeof urlInput === "string"
-          ? urlInput
-          : urlInput?.href || urlInput?.url || "";
+      let rawUrl = "";
+      if (typeof urlInput === "string") {
+        rawUrl = urlInput;
+      } else if (urlInput && urlInput.href) {
+        rawUrl = urlInput.href;
+      } else if (urlInput && urlInput.url) {
+        rawUrl = urlInput.url;
+      }
       try {
         return normalize(new URL(rawUrl).pathname);
-      } catch {
-        return normalize(
-          String(rawUrl).split("#")[0]?.split("?")[0] || "/",
-        );
+      } catch (_err) {
+        const beforeHash = String(rawUrl).split("#")[0] || "";
+        const beforeQuery = beforeHash.split("?")[0] || "/";
+        return normalize(beforeQuery);
       }
     };
 
     const findPrefixValue = (prefixes, pathname, fallback) => {
       const normalized = normalize(pathname);
       const match = prefixes.find(
-        ([prefix]) =>
-          normalized === prefix || normalized.startsWith(`${prefix}/`),
+        (entry) =>
+          normalized === entry[0] || normalized.startsWith(entry[0] + "/"),
       );
-      return match?.[1] || fallback;
+      if (match && match[1] !== undefined) {
+        return match[1];
+      }
+      return fallback;
     };
 
     const pathname = toPathname(url);
