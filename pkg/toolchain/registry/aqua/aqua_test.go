@@ -831,14 +831,16 @@ func TestAquaRegistry_ListAll(t *testing.T) {
 		limit := 5
 
 		// Get first batch.
-		firstBatch, err := ar.ListAll(ctx,
+		firstBatch, err := ar.ListAll(
+			ctx,
 			registry.WithListLimit(limit),
 			registry.WithListOffset(0),
 		)
 		require.NoError(t, err)
 
 		// Get second batch with offset.
-		secondBatch, err := ar.ListAll(ctx,
+		secondBatch, err := ar.ListAll(
+			ctx,
 			registry.WithListLimit(limit),
 			registry.WithListOffset(offset),
 		)
@@ -850,7 +852,8 @@ func TestAquaRegistry_ListAll(t *testing.T) {
 	})
 
 	t.Run("list with sort", func(t *testing.T) {
-		tools, err := ar.ListAll(ctx,
+		tools, err := ar.ListAll(
+			ctx,
 			registry.WithListLimit(10),
 			registry.WithSort("name"),
 		)
