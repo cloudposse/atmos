@@ -368,8 +368,7 @@ or settings before the MCP servers will start.
 ### Atmos Pro server (HTTP transport)
 
 The [Atmos Pro MCP server](https://atmos-pro.com/mcp/install) runs at
-`https://atmos-pro.com/mcp` over HTTP. Because Atmos's `mcp.servers` block
-currently models only stdio servers, this server is registered with each AI
+`https://atmos-pro.com/mcp` over HTTP. This server is registered with each AI
 CLI directly (not via `atmos mcp export`). The OAuth flow runs the first time
 you start the server from any client — log in with GitHub, the token lands in
 your OS keychain.
@@ -529,9 +528,6 @@ atmos --profile billing mcp export
 
 ## Related Examples
 
-Pick the example that matches your workflow (full index at
-[atmos.tools/examples](https://atmos.tools/examples)):
-
 - **This example (`examples/mcp-for-ai-coding-assistants/`)** — You drive the AI
   assistant from **outside** Atmos (`claude`, `codex`, `gemini`) and want them
   to use Atmos-managed MCP servers with centralized auth.
@@ -552,45 +548,12 @@ Pick the example that matches your workflow (full index at
   chat with your infrastructure using API-key providers (Anthropic, OpenAI,
   Ollama, …). Multi-provider Atmos AI setup, no external CLI needed.
 
-### Quick mental map
-
-|                                     | Atmos drives the AI loop                                                 | External CLI drives the AI loop      |
-|-------------------------------------|--------------------------------------------------------------------------|--------------------------------------|
-| **API-key AI providers**            | [Atmos AI](https://atmos.tools/examples/ai)                              | *(this example, Codex/Gemini paths)* |
-| **CLI AI providers (subscription)** | [Atmos AI with Claude Code](https://atmos.tools/examples/ai-claude-code) | *(this example, Claude Code path)*   |
-| **Just external MCP servers**       | [Atmos MCP integrations](https://atmos.tools/examples/mcp)               | *(this example)*                     |
-
 ## Key Files
 
 | File             | Purpose                                                                                       |
 |------------------|-----------------------------------------------------------------------------------------------|
 | `atmos.yaml`     | Toolchain, MCP servers, Atmos Auth, and AI configuration                                      |
 | `.tool-versions` | Pins `uvx` to a known version so the exported `.mcp.json` carries a consistent toolchain PATH |
-
-This example deliberately ships no `stacks/` or `components/` directories
-— the focus is purely the MCP configuration. To see a complete project
-shape, look at
-[`examples/quick-start-advanced/`](https://atmos.tools/examples/quick-start-advanced)
-or [`examples/mcp/`](https://atmos.tools/examples/mcp).
-
-## Troubleshooting
-
-**`atmos mcp test aws-docs` works but `claude` can't connect to it.**
-Make sure you exported `.mcp.json` in the directory where Claude is running. Use
-`pwd` to confirm. If you wrote it globally (`~/.claude.json` etc.), restart Claude.
-
-**Codex says "uvx: command not found" when running an AWS server.**
-The `~/.codex/config.toml` you wrote is missing the `PATH` env entry. Either copy the
-PATH from `atmos mcp export`'s output, or put `~/.atmos/toolchain/aqua/bin` (and any
-parent dirs) on your system PATH.
-
-**Gemini refuses to start the MCP servers.**
-Gemini's Trusted Folders feature blocks MCP in untrusted directories. Trust this
-folder via the Gemini UI/settings.
-
-**One of the AWS servers gets a credential error.**
-Re-run `atmos auth login` — your SSO session probably expired. Then either restart the
-AI CLI (so it spawns servers with fresh creds) or, for Claude Code, restart the session.
 
 ## Learn More
 
