@@ -1,0 +1,16 @@
+import:
+  - ./_defaults
+
+vars:
+  stage: prod
+
+locals:
+  suffix: state
+
+components:
+  terraform:
+    vpc:
+      metadata:
+        component: mock
+      vars:
+        name: "bucket-{{ .locals.suffix }}"
