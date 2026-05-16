@@ -379,6 +379,29 @@ The example walks through the full setup end to end, including the per-CLI
 config layouts:
 [`examples/mcp-for-ai-coding-assistants/`](https://github.com/cloudposse/atmos/tree/main/examples/mcp-for-ai-coding-assistants).
 
+## Related Examples
+
+If this isn't quite the topology you want, three sibling examples cover the
+adjacent setups:
+
+- **[`examples/mcp/`](https://github.com/cloudposse/atmos/tree/main/examples/mcp)** —
+  Same external MCP server config, but Atmos drives the AI loop (`atmos ai ask`)
+  instead of an external CLI. Useful if you'd rather stay inside the `atmos`
+  CLI than spawn Claude Code / Codex / Gemini.
+- **[`examples/ai-claude-code/`](https://github.com/cloudposse/atmos/tree/main/examples/ai-claude-code)** —
+  Use a Claude Pro/Max subscription as Atmos's AI provider (no Anthropic API
+  key). Atmos hosts the AI conversation; Claude Code provides the model;
+  MCP servers pass through.
+- **[`examples/ai/`](https://github.com/cloudposse/atmos/tree/main/examples/ai)** —
+  Multi-provider Atmos AI setup (Anthropic API, OpenAI API, Ollama, …). No
+  external CLI; chat with your infra from `atmos ai ask`.
+
+|                                     | Atmos drives the AI loop  | External CLI drives the AI loop      |
+|-------------------------------------|---------------------------|--------------------------------------|
+| **API-key AI providers**            | `examples/ai/`            | *(this post, Codex/Gemini paths)*    |
+| **CLI AI providers (subscription)** | `examples/ai-claude-code/`| *(this post, Claude Code path)*      |
+| **Just external MCP servers**       | `examples/mcp/`           | *(this post)*                        |
+
 ## Related Reading
 
 - [MCP Configuration in Atmos](https://atmos.tools/cli/configuration/mcp) — full

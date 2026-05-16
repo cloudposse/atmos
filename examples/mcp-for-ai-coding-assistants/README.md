@@ -532,13 +532,33 @@ atmos --profile billing mcp export
 
 ## Related Examples
 
-- **[examples/mcp/](../mcp/)** — Atmos drives the MCP conversation itself via
-  `atmos ai ask` (no external CLI). Use this when you don't want to leave the terminal.
-- **[examples/ai-claude-code/](../ai-claude-code/)** — Use Claude Code as the AI provider
-  *inside* `atmos ai ask`. Different topology — Claude Code is the AI brain, not the
-  MCP host.
-- **[examples/ai/](../ai/)** — Multi-provider Atmos AI setup (Anthropic API, OpenAI API,
-  Ollama, …).
+Pick the example that matches your workflow:
+
+- **This example (`examples/mcp-for-ai-coding-assistants/`)** — You drive the AI
+  assistant from **outside** Atmos (`claude`, `codex`, `gemini`) and want them
+  to use Atmos-managed MCP servers with centralized auth.
+
+- **[`examples/mcp/`](../mcp/)** — You drive the AI loop **through Atmos**
+  (`atmos ai ask`, `atmos ai chat`, `atmos ai exec`) and want it to call external
+  MCP servers. Atmos hosts the AI conversation; the AWS MCP suite is configured
+  the same way as this example, but you stay inside the `atmos` CLI.
+
+- **[`examples/ai-claude-code/`](../ai-claude-code/)** — You want to use your
+  Claude Pro/Max subscription as the AI provider for `atmos ai ask` (no Anthropic
+  API key needed). Atmos hosts the conversation; Claude Code provides the model.
+  MCP servers are passed through to Claude Code automatically.
+
+- **[`examples/ai/`](../ai/)** — You want to chat with your infrastructure using
+  API-key providers (Anthropic, OpenAI, Ollama, …). Multi-provider Atmos AI
+  setup, no external CLI needed.
+
+### Quick mental map
+
+|                                     | Atmos drives the AI loop                                | External CLI drives the AI loop      |
+|-------------------------------------|---------------------------------------------------------|--------------------------------------|
+| **API-key AI providers**            | [`examples/ai/`](../ai/)                                | *(this example, Codex/Gemini paths)* |
+| **CLI AI providers (subscription)** | [`examples/ai-claude-code/`](../ai-claude-code/)        | *(this example, Claude Code path)*   |
+| **Just external MCP servers**       | [`examples/mcp/`](../mcp/) (the older sibling) | *(this example)*                     |
 
 ## Key Files
 
