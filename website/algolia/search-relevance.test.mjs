@@ -7,8 +7,13 @@ const LIVE_RELEVANCE_ENABLED = ["1", "true", "yes"].includes(
 
 const APP_ID = process.env.ALGOLIA_APP_ID || "32YOERUX83";
 const INDEX_NAME = process.env.ALGOLIA_INDEX_NAME || "atmos.tools";
-const SEARCH_API_KEY =
-  process.env.ALGOLIA_SEARCH_API_KEY || "557985309adf0e4df9dcf3cb29c61928";
+const SEARCH_API_KEY = process.env.ALGOLIA_SEARCH_API_KEY || "";
+
+if (LIVE_RELEVANCE_ENABLED && !SEARCH_API_KEY) {
+  throw new Error(
+    "ALGOLIA_SEARCH_API_KEY is required when ALGOLIA_LIVE_RELEVANCE_TESTS is enabled",
+  );
+}
 
 function canonicalPath(hit) {
   const url = hit.url_without_anchor || hit.url;

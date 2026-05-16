@@ -76,9 +76,9 @@ Configure these secrets in the `algolia` GitHub environment:
 | `ALGOLIA_CRAWLER_ID`               | Crawler UUID used by the config deploy script                          | Algolia Crawler URL              |
 | `ALGOLIA_CRAWLER_USER_ID`          | Crawler authentication user ID                                         | Algolia Crawler account settings |
 | `ALGOLIA_CRAWLER_API_KEY`          | Crawler authentication API key                                         | Algolia Crawler account settings |
-| `ALGOLIA_CRAWLER_INDEXING_API_KEY` | Search API key used to update index settings and write crawler records | Algolia application API keys     |
+| `ALGOLIA_CRAWLER_INDEXING_API_KEY` | Indexing/Admin API key used to update index settings and write crawler records | Algolia application API keys     |
 
-The indexing key must be allowed to update settings and write records for the `atmos.tools` index.
+The indexing/admin API key must have permission to update index settings and write crawler records for the `atmos.tools` index. Do not use a search-only key here.
 
 ## Common Commands
 
