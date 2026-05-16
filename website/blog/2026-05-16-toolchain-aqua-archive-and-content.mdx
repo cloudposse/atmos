@@ -1,0 +1,68 @@
+---
+slug: toolchain-aqua-archive-and-content
+title: "Toolchain registry adds github_archive and github_content support"
+authors: [osterman]
+tags: [feature]
+---
+
+Atmos's Aqua-compatible toolchain registry now understands two more package types: `github_archive` and `github_content`. Tools that ship as a source tarball (like `adr-tools` and `tfenv`) or as a single raw file in a repo (like `kubens` and `kubectx`) can now be installed through `atmos toolchain install` without any registry workarounds.
+
+<!--truncate-->
+
+## What Changed
+
+Aqua's registry defines several package types for downloading tools. Atmos previously supported only two:
+
+- `github_release` — assets attached to a GitHub Release
+- `http` — arbitrary HTTP(S) URLs
+
+Two more are now supported:
+
+- `github_archive` — the auto-generated source tarball produced by GitHub for any tag, downloaded from `github.com/{owner}/{repo}/archive/refs/tags/{version}.tar.gz`. Always `.tar.gz`, regardless of the `format` field.
+- `github_content` — a single file from a GitHub repo at a tag, downloaded from `raw.githubusercontent.com/{owner}/{repo}/{version}/{path}`. The required `path` field points to the file inside the repo.
+
+Both implementations match upstream `aquaproj/aqua` exactly. For `github_archive`, the `asset`, `url`, and `format` fields are intentionally ignored (Aqua hardcodes `tar.gz` and the URL pattern). For `github_content`, the same fields are ignored — only `repo_owner`, `repo_name`, and `path` are used.
+
+Before this release, any Aqua registry entry using either type failed with `unsupported tool type: ...`. Those entries now resolve correctly.
+
+## How to Use It
+
+### github_archive
+
+For a tool that ships its binary as a script inside its source tree — such as `adr-tools`:
+
+```yaml
+packages:
+  - type: github_archive
+    repo_owner: npryce
+    repo_name: adr-tools
+    files:
+      - name: adr
+        src: adr-tools-{{trimV .Version}}/src/adr
+```
+
+The `{{trimV .Version}}` template expands to match GitHub's archive root directory (e.g., `adr-tools-3.0.0/` for version `v3.0.0`), so `files[].src` points to the file inside the extracted archive.
+
+### github_content
+
+For a tool that ships as a single raw file in a repo — such as `kubens` from `ahmetb/kubectx`:
+
+```yaml
+packages:
+  - type: github_content
+    repo_owner: ahmetb
+    repo_name: kubectx
+    path: kubens
+```
+
+The download URL becomes `https://raw.githubusercontent.com/ahmetb/kubectx/{version}/kubens`. No archive extraction is involved — the file is downloaded directly.
+
+## Why This Matters
+
+Aqua's upstream registry has hundreds of entries that use these two types — `tfenv`, `tgswitch`, `adr-tools`, `kubectx`, `kubens`, and many one-binary shell-script projects. Until now, those entries were dead in Atmos. Adding these two package types unblocks all of them without registry-level changes: pull the Aqua registry entry as-is and it just works.
+
+The Aqua-compatible build/install types (`go_install`, `go_build_install`, `cargo`) remain unsupported — they require invoking a language toolchain at install time rather than downloading an artifact, which is a different installation model. A follow-up issue tracks that work.
+
+## Get Involved
+
+Atmos is open source on [GitHub](https://github.com/cloudposse/atmos). File issues or open PRs if you hit any tools the registry can't resolve.

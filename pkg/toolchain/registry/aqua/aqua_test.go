@@ -2962,3 +2962,230 @@ packages:
 	assert.Empty(t, tool.URL,
 		"URL must be cleared after switching to github_archive via version override")
 }
+
+// =============================================================================
+// github_content package type registry parsing tests
+// =============================================================================
+//
+// Mirrors upstream aquaproj/aqua test coverage for github_content:
+//   - Validate fails when repo_owner/repo_name/path missing
+//   - Required fields (including Path) parsed correctly
+//   - Path field flows through the AquaPackage -> Tool conversion
+//   - Version override switching applies/resets Path correctly
+
+// TestResetByPkgType_GitHubContent covers every switch direction involving
+// github_content, including the Path-clearing rule for non-github_content types.
+func TestResetByPkgType_GitHubContent(t *testing.T) {
+	t.Run("http to github_content clears Asset and URL", func(t *testing.T) {
+		tool := &registry.Tool{
+			Type:  "http",
+			Asset: "tool.tar.gz",
+			URL:   "https://example.com/tool.tar.gz",
+		}
+		resetByPkgType(tool, "github_content")
+		assert.Empty(t, tool.Asset, "Asset cleared when switching to github_content")
+		assert.Empty(t, tool.URL, "URL cleared when switching to github_content")
+	})
+
+	t.Run("github_release to github_content clears Asset and URL", func(t *testing.T) {
+		tool := &registry.Tool{
+			Type:  "github_release",
+			Asset: "tool_{{.Version}}.tar.gz",
+		}
+		resetByPkgType(tool, "github_content")
+		assert.Empty(t, tool.Asset, "Asset cleared when switching to github_content")
+		assert.Empty(t, tool.URL, "URL cleared when switching to github_content")
+	})
+
+	t.Run("github_archive to github_content clears Asset and URL", func(t *testing.T) {
+		tool := &registry.Tool{Type: "github_archive"}
+		resetByPkgType(tool, "github_content")
+		assert.Empty(t, tool.Asset)
+		assert.Empty(t, tool.URL)
+	})
+
+	t.Run("github_content to http clears Path and Asset", func(t *testing.T) {
+		tool := &registry.Tool{
+			Type:  "github_content",
+			Path:  "kubens",
+			Asset: "leftover",
+		}
+		resetByPkgType(tool, "http")
+		assert.Empty(t, tool.Path, "Path cleared when switching away from github_content")
+		assert.Empty(t, tool.Asset, "Asset cleared when switching to http")
+	})
+
+	t.Run("github_content to github_release clears Path and URL", func(t *testing.T) {
+		tool := &registry.Tool{
+			Type: "github_content",
+			Path: "kubens",
+			URL:  "leftover",
+		}
+		resetByPkgType(tool, "github_release")
+		assert.Empty(t, tool.Path, "Path cleared when switching away from github_content")
+		assert.Empty(t, tool.URL, "URL cleared when switching to github_release")
+	})
+
+	t.Run("github_content to github_archive clears Path, Asset, URL", func(t *testing.T) {
+		tool := &registry.Tool{
+			Type:  "github_content",
+			Path:  "kubens",
+			Asset: "leftover",
+			URL:   "leftover",
+		}
+		resetByPkgType(tool, "github_archive")
+		assert.Empty(t, tool.Path)
+		assert.Empty(t, tool.Asset)
+		assert.Empty(t, tool.URL)
+	})
+
+	t.Run("github_content to github_content preserves Path", func(t *testing.T) {
+		tool := &registry.Tool{
+			Type: "github_content",
+			Path: "kubens",
+		}
+		resetByPkgType(tool, "github_content")
+		assert.Equal(t, "kubens", tool.Path, "Path must survive a same-type reset")
+	})
+}
+
+// TestAquaRegistry_parseRegistryFile_GitHubContent verifies that a github_content
+// package definition from a fixture file parses correctly, including the Path field.
+func TestAquaRegistry_parseRegistryFile_GitHubContent(t *testing.T) {
+	data, err := os.ReadFile("testdata/kubectx-github-content.yaml")
+	require.NoError(t, err, "Should read testdata file")
+
+	ar := NewAquaRegistry()
+	tool, err := ar.parseRegistryFile(data)
+	require.NoError(t, err)
+	require.NotNil(t, tool)
+
+	assert.Equal(t, "github_content", tool.Type)
+	assert.Equal(t, "ahmetb", tool.RepoOwner)
+	assert.Equal(t, "kubectx", tool.RepoName)
+	assert.Equal(t, "kubens", tool.Path, "Path must be parsed from the fixture")
+
+	// github_content does not use asset or url fields.
+	assert.Empty(t, tool.Asset, "github_content must not have Asset")
+	assert.Empty(t, tool.URL, "github_content must not have URL")
+}
+
+// TestAquaRegistry_GetTool_GitHubContent_RemoteRegistry verifies that a remote
+// registry serving a github_content package is fetched and parsed correctly,
+// with the Path field flowing through to the resulting Tool.
+func TestAquaRegistry_GetTool_GitHubContent_RemoteRegistry(t *testing.T) {
+	registryYAML := `
+packages:
+  - type: github_content
+    repo_owner: ahmetb
+    repo_name: kubectx
+    path: kubens
+`
+
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/x-yaml")
+		_, _ = w.Write([]byte(registryYAML))
+	}))
+	defer ts.Close()
+
+	ar := NewAquaRegistry()
+	ar.cache.baseDir = t.TempDir()
+
+	tool, err := ar.fetchFromRegistry(ts.URL, "ahmetb", "kubectx")
+	require.NoError(t, err)
+	require.NotNil(t, tool)
+
+	assert.Equal(t, "github_content", tool.Type)
+	assert.Equal(t, "ahmetb", tool.RepoOwner)
+	assert.Equal(t, "kubectx", tool.RepoName)
+	assert.Equal(t, "kubens", tool.Path)
+}
+
+// TestAquaRegistry_parseRegistryFile_GitHubContent_DirectContent verifies that
+// github_content entries in registry YAML parse deterministically.
+func TestAquaRegistry_parseRegistryFile_GitHubContent_DirectContent(t *testing.T) {
+	ar := NewAquaRegistry()
+
+	configContent := `
+packages:
+  - name: ahmetb/kubectx
+    type: github_content
+    repo_owner: ahmetb
+    repo_name: kubectx
+    path: scripts/install.sh
+`
+
+	tool, err := ar.parseRegistryFile([]byte(configContent))
+	require.NoError(t, err)
+	require.NotNil(t, tool)
+	assert.Equal(t, "github_content", tool.Type)
+	assert.Equal(t, "ahmetb", tool.RepoOwner)
+	assert.Equal(t, "kubectx", tool.RepoName)
+	assert.Equal(t, "scripts/install.sh", tool.Path)
+}
+
+// TestAquaRegistry_GetToolWithVersion_GitHubContent_VersionOverride verifies
+// that a version_override switching FROM github_release TO github_content
+// applies the new Path field and resets Asset/URL. This exercises
+// applyVersionOverride and resetByPkgType together.
+func TestAquaRegistry_GetToolWithVersion_GitHubContent_VersionOverride(t *testing.T) {
+	registryYAML := `
+packages:
+  - type: github_release
+    repo_owner: ahmetb
+    repo_name: kubectx
+    asset: kubectx-{{.Version}}.tar.gz
+    version_constraint: "false"
+    version_overrides:
+      - version_constraint: "true"
+        type: github_content
+        path: kubens
+`
+
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/x-yaml")
+		_, _ = w.Write([]byte(registryYAML))
+	}))
+	defer ts.Close()
+
+	ar := NewAquaRegistry()
+	ar.cache.baseDir = t.TempDir()
+
+	tool, err := ar.resolveVersionOverrides(ts.URL+"/registry.yaml", "0.9.4")
+	require.NoError(t, err)
+	require.NotNil(t, tool)
+
+	assert.Equal(t, "github_content", tool.Type)
+	assert.Equal(t, "kubens", tool.Path,
+		"Path from version_override must be applied to the resulting Tool")
+	assert.Empty(t, tool.Asset,
+		"Asset must be cleared after switching to github_content via version override")
+	assert.Empty(t, tool.URL,
+		"URL must be cleared after switching to github_content via version override")
+}
+
+// TestApplyVersionOverride_GitHubContent_PathChange covers the Path-application
+// branch of applyVersionOverride in isolation (without HTTP fixtures).
+func TestApplyVersionOverride_GitHubContent_PathChange(t *testing.T) {
+	tool := &registry.Tool{
+		Type: "github_content",
+		Path: "old/path",
+	}
+	override := &versionOverride{Path: "new/path"}
+	applyVersionOverride(tool, override, "1.0.0")
+	assert.Equal(t, "new/path", tool.Path, "Path should be updated from override")
+}
+
+// TestApplyVersionOverride_GitHubContent_EmptyPathPreservesBase verifies that
+// an empty override.Path does NOT overwrite the base tool's Path. This is the
+// negative-path counterpart that protects against a regression where every
+// version override blanks the Path field.
+func TestApplyVersionOverride_GitHubContent_EmptyPathPreservesBase(t *testing.T) {
+	tool := &registry.Tool{
+		Type: "github_content",
+		Path: "kubens",
+	}
+	override := &versionOverride{Path: ""}
+	applyVersionOverride(tool, override, "1.0.0")
+	assert.Equal(t, "kubens", tool.Path, "Empty override Path must not overwrite base Path")
+}

@@ -194,6 +194,7 @@ type Tool struct {
 	RepoName            string            `yaml:"repo_name"`
 	Asset               string            `yaml:"asset"`
 	URL                 string            `yaml:"url"`
+	Path                string            `yaml:"path"` // Source path within the repo for github_content type.
 	Format              string            `yaml:"format"`
 	FormatOverrides     []FormatOverride  `yaml:"format_overrides"`
 	Files               []File            `yaml:"files"`
@@ -257,7 +258,7 @@ type AquaPackage struct {
 	RepoOwner  string `yaml:"repo_owner"`
 	RepoName   string `yaml:"repo_name"`
 	Name       string `yaml:"name"`  // Used by http and some go_install types.
-	Path       string `yaml:"path"`  // Used by go_install types (Go module path).
+	Path       string `yaml:"path"`  // Used by go_install (Go module path) and github_content (path within repo).
 	Asset      string `yaml:"asset"` // Used by github_release types.
 	URL        string `yaml:"url"`   // Used by http types (complete URL).
 	Format     string `yaml:"format"`
@@ -314,6 +315,7 @@ type VersionOverride struct {
 	RepoName            string            `yaml:"repo_name"`
 	Asset               string            `yaml:"asset"`
 	URL                 string            `yaml:"url"`
+	Path                string            `yaml:"path"` // Source path within repo (github_content) or Go module path (go_install).
 	Format              string            `yaml:"format"`
 	FormatOverrides     []FormatOverride  `yaml:"format_overrides"`
 	Rosetta2            bool              `yaml:"rosetta2"`

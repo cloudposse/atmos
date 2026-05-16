@@ -1203,3 +1203,272 @@ func TestExpandFileSrcTemplate_GitHubArchiveVersion(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "adr-tools-3.0.0/src/adr", got)
 }
+
+// =============================================================================
+// github_content package type tests
+// =============================================================================
+//
+// Cross-references upstream aquaproj/aqua test coverage:
+//   - Validate fails when repo_owner/repo_name/path missing
+//     (aqua: pkg/config/registry/package_info.go Validate)
+//   - URL is built from raw.githubusercontent.com with tag and path
+//     (aqua: pkg/download/github_content.go)
+//   - Asset, URL, Format, FormatOverrides fields are ignored
+//
+// Atmos splits the work into a validator + formatter + dispatcher to keep
+// each piece independently testable. Tests below exercise each layer.
+
+// TestValidateGitHubContentFields exercises every branch of the pure validator.
+func TestValidateGitHubContentFields(t *testing.T) {
+	tests := []struct {
+		name      string
+		tool      *registry.Tool
+		wantErr   bool
+		errSubstr []string
+	}{
+		{
+			name: "all fields present is valid",
+			tool: &registry.Tool{RepoOwner: "ahmetb", RepoName: "kubectx", Path: "kubens"},
+		},
+		{
+			name:      "missing RepoOwner is error",
+			tool:      &registry.Tool{RepoName: "kubectx", Path: "kubens"},
+			wantErr:   true,
+			errSubstr: []string{"github_content", "RepoOwner", "RepoName=\"kubectx\"", "Path=\"kubens\""},
+		},
+		{
+			name:      "missing RepoName is error",
+			tool:      &registry.Tool{RepoOwner: "ahmetb", Path: "kubens"},
+			wantErr:   true,
+			errSubstr: []string{"github_content", "RepoName", "RepoOwner=\"ahmetb\"", "Path=\"kubens\""},
+		},
+		{
+			name:      "missing Path is error",
+			tool:      &registry.Tool{RepoOwner: "ahmetb", RepoName: "kubectx"},
+			wantErr:   true,
+			errSubstr: []string{"github_content", "Path", "RepoOwner=\"ahmetb\"", "RepoName=\"kubectx\""},
+		},
+		{
+			name:      "all three empty is one combined error",
+			tool:      &registry.Tool{},
+			wantErr:   true,
+			errSubstr: []string{"github_content", "RepoOwner=\"\"", "RepoName=\"\"", "Path=\"\""},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := validateGitHubContentFields(tt.tool)
+			if !tt.wantErr {
+				require.NoError(t, err)
+				return
+			}
+			require.Error(t, err)
+			require.ErrorIs(t, err, ErrInvalidToolSpec)
+			for _, s := range tt.errSubstr {
+				assert.Contains(t, err.Error(), s)
+			}
+		})
+	}
+}
+
+// TestFormatGitHubContentURL exercises the pure URL formatter.
+func TestFormatGitHubContentURL(t *testing.T) {
+	tests := []struct {
+		name                       string
+		owner, repo, version, path string
+		want                       string
+	}{
+		{
+			name:    "typical single-file path",
+			owner:   "ahmetb",
+			repo:    "kubectx",
+			version: "v0.9.4",
+			path:    "kubens",
+			want:    "https://raw.githubusercontent.com/ahmetb/kubectx/v0.9.4/kubens",
+		},
+		{
+			name:    "nested path preserves separators",
+			owner:   "ahmetb",
+			repo:    "kubectx",
+			version: "v0.9.4",
+			path:    "scripts/install.sh",
+			want:    "https://raw.githubusercontent.com/ahmetb/kubectx/v0.9.4/scripts/install.sh",
+		},
+		{
+			name:    "version without v prefix passes through unchanged",
+			owner:   "ahmetb",
+			repo:    "kubectx",
+			version: "0.9.4",
+			path:    "kubens",
+			want:    "https://raw.githubusercontent.com/ahmetb/kubectx/0.9.4/kubens",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := formatGitHubContentURL(tt.owner, tt.repo, tt.version, tt.path)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+// TestBuildAssetURL_GitHubContentType exercises end-to-end URL building via
+// the method receiver, including version_prefix handling and the fields that
+// must be ignored.
+func TestBuildAssetURL_GitHubContentType(t *testing.T) {
+	installer := &Installer{}
+
+	tests := []struct {
+		name    string
+		tool    *registry.Tool
+		version string
+		want    string
+	}{
+		{
+			name: "default URL with no version_prefix",
+			tool: &registry.Tool{
+				Type:      "github_content",
+				RepoOwner: "ahmetb",
+				RepoName:  "kubectx",
+				Path:      "kubens",
+			},
+			version: "0.9.4",
+			want:    "https://raw.githubusercontent.com/ahmetb/kubectx/0.9.4/kubens",
+		},
+		{
+			name: "version_prefix v adds v to URL",
+			tool: &registry.Tool{
+				Type:          "github_content",
+				RepoOwner:     "ahmetb",
+				RepoName:      "kubectx",
+				Path:          "kubens",
+				VersionPrefix: "v",
+			},
+			version: "0.9.4",
+			want:    "https://raw.githubusercontent.com/ahmetb/kubectx/v0.9.4/kubens",
+		},
+		{
+			name: "version already has matching prefix is not doubled",
+			tool: &registry.Tool{
+				Type:          "github_content",
+				RepoOwner:     "ahmetb",
+				RepoName:      "kubectx",
+				Path:          "kubens",
+				VersionPrefix: "v",
+			},
+			version: "v0.9.4",
+			want:    "https://raw.githubusercontent.com/ahmetb/kubectx/v0.9.4/kubens",
+		},
+		{
+			name: "asset field is ignored",
+			tool: &registry.Tool{
+				Type:      "github_content",
+				RepoOwner: "ahmetb",
+				RepoName:  "kubectx",
+				Path:      "kubens",
+				Asset:     "ignored-{{.Version}}.tar.gz",
+			},
+			version: "0.9.4",
+			want:    "https://raw.githubusercontent.com/ahmetb/kubectx/0.9.4/kubens",
+		},
+		{
+			name: "url field is ignored",
+			tool: &registry.Tool{
+				Type:      "github_content",
+				RepoOwner: "ahmetb",
+				RepoName:  "kubectx",
+				Path:      "kubens",
+				URL:       "https://example.com/should-not-be-used",
+			},
+			version: "0.9.4",
+			want:    "https://raw.githubusercontent.com/ahmetb/kubectx/0.9.4/kubens",
+		},
+		{
+			name: "format field is ignored (no archive extension applied)",
+			tool: &registry.Tool{
+				Type:      "github_content",
+				RepoOwner: "ahmetb",
+				RepoName:  "kubectx",
+				Path:      "kubens",
+				Format:    "zip",
+			},
+			version: "0.9.4",
+			want:    "https://raw.githubusercontent.com/ahmetb/kubectx/0.9.4/kubens",
+		},
+		{
+			name: "nested path is preserved",
+			tool: &registry.Tool{
+				Type:      "github_content",
+				RepoOwner: "ahmetb",
+				RepoName:  "kubectx",
+				Path:      "scripts/install.sh",
+			},
+			version: "0.9.4",
+			want:    "https://raw.githubusercontent.com/ahmetb/kubectx/0.9.4/scripts/install.sh",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := installer.BuildAssetURL(tt.tool, tt.version)
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+// TestBuildAssetURL_GitHubContent_MissingFields ensures the method wires the
+// validator through and surfaces each missing-field error.
+func TestBuildAssetURL_GitHubContent_MissingFields(t *testing.T) {
+	installer := &Installer{}
+
+	tests := []struct {
+		name string
+		tool *registry.Tool
+	}{
+		{
+			name: "missing RepoOwner",
+			tool: &registry.Tool{Type: "github_content", RepoName: "kubectx", Path: "kubens"},
+		},
+		{
+			name: "missing RepoName",
+			tool: &registry.Tool{Type: "github_content", RepoOwner: "ahmetb", Path: "kubens"},
+		},
+		{
+			name: "missing Path",
+			tool: &registry.Tool{Type: "github_content", RepoOwner: "ahmetb", RepoName: "kubectx"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := installer.BuildAssetURL(tt.tool, "0.9.4")
+			require.Error(t, err)
+			require.ErrorIs(t, err, ErrInvalidToolSpec)
+			assert.Contains(t, err.Error(), "github_content")
+		})
+	}
+}
+
+// TestBuildAssetURL_GitHubContent_URLPattern verifies the exact host and
+// endpoint used by upstream aqua (raw.githubusercontent.com, not raw.github.com
+// and not the API).
+func TestBuildAssetURL_GitHubContent_URLPattern(t *testing.T) {
+	installer := &Installer{}
+
+	tool := &registry.Tool{
+		Type:      "github_content",
+		RepoOwner: "ahmetb",
+		RepoName:  "kubectx",
+		Path:      "kubens",
+	}
+
+	got, err := installer.BuildAssetURL(tool, "0.9.4")
+	require.NoError(t, err)
+
+	assert.True(t, strings.HasPrefix(got, "https://raw.githubusercontent.com/"),
+		"URL must use raw.githubusercontent.com host, got %q", got)
+	assert.Contains(t, got, "/ahmetb/kubectx/0.9.4/kubens",
+		"URL must contain owner/repo/version/path, got %q", got)
+}

@@ -40,6 +40,8 @@ func (i *Installer) BuildAssetURL(tool *registry.Tool, version string) (string, 
 		return i.buildGitHubReleaseURL(tool, version)
 	case "github_archive":
 		return i.buildGitHubArchiveURL(tool, version)
+	case "github_content":
+		return i.buildGitHubContentURL(tool, version)
 	default:
 		return "", fmt.Errorf("%w: unsupported tool type: %s", ErrInvalidToolSpec, tool.Type)
 	}
@@ -120,6 +122,37 @@ func (i *Installer) buildGitHubArchiveURL(tool *registry.Tool, version string) (
 	data := buildTemplateData(tool, version)
 	return fmt.Sprintf("https://github.com/%s/%s/archive/refs/tags/%s.tar.gz",
 		tool.RepoOwner, tool.RepoName, data.Version), nil
+}
+
+// buildGitHubContentURL builds an asset URL for github_content type tools.
+// Matches upstream aquaproj/aqua behavior: downloads a single file from a repo
+// at a tag via raw.githubusercontent.com. The Asset, URL, Format, and
+// FormatOverrides fields are intentionally ignored for this type.
+// See: https://github.com/aquaproj/aqua/blob/main/pkg/download/github_content.go.
+func (i *Installer) buildGitHubContentURL(tool *registry.Tool, version string) (string, error) {
+	defer perf.Track(nil, "Installer.buildGitHubContentURL")()
+
+	if err := validateGitHubContentFields(tool); err != nil {
+		return "", err
+	}
+	data := buildTemplateData(tool, version)
+	return formatGitHubContentURL(tool.RepoOwner, tool.RepoName, data.Version, tool.Path), nil
+}
+
+// validateGitHubContentFields verifies that a github_content tool has the
+// required RepoOwner, RepoName, and Path fields. Pure function: no I/O, no state.
+func validateGitHubContentFields(tool *registry.Tool) error {
+	if tool.RepoOwner == "" || tool.RepoName == "" || tool.Path == "" {
+		return fmt.Errorf("%w: RepoOwner, RepoName, and Path must be set for github_content type (got RepoOwner=%q, RepoName=%q, Path=%q)",
+			ErrInvalidToolSpec, tool.RepoOwner, tool.RepoName, tool.Path)
+	}
+	return nil
+}
+
+// formatGitHubContentURL formats a raw.githubusercontent.com URL from its
+// component parts. Pure function: no inputs beyond the parameters.
+func formatGitHubContentURL(owner, repo, version, path string) string {
+	return fmt.Sprintf("https://raw.githubusercontent.com/%s/%s/%s/%s", owner, repo, version, path)
 }
 
 // archiveExtensions contains known archive file extensions.
