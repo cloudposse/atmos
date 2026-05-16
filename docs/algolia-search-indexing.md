@@ -8,7 +8,7 @@ The `atmos.tools` documentation uses [Algolia DocSearch](https://docsearch.algol
 
 ## Architecture
 
-```
+```text
 ┌──────────────────────┐     ┌──────────────────────┐     ┌─────────────────┐
 │ website/algolia      │────▶│   Algolia Crawler    │────▶│  Algolia Index  │
 │ crawler config       │     │   (cloud-hosted)     │     │  (atmos.tools)  │

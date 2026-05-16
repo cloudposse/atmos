@@ -64,12 +64,23 @@ function redactSecrets(value) {
 }
 
 async function requestJson(label, url, options) {
-  const response = await fetch(url, options);
+  const response = await fetch(url, {
+    ...options,
+    signal: options?.signal ?? AbortSignal.timeout(30_000),
+  });
   const body = await response.text();
-  const data = body ? JSON.parse(body) : {};
 
   if (!response.ok) {
     throw new Error(`${label} failed with ${response.status}: ${body}`);
+  }
+
+  let data = {};
+  if (body) {
+    try {
+      data = JSON.parse(body);
+    } catch {
+      data = {};
+    }
   }
 
   return data;

@@ -83,9 +83,10 @@ test("crawler config keeps definition terms searchable at lower hierarchy", () =
 
 test("crawler config uses pageRank and respects canonical URLs", () => {
   const config = createAtmosToolsCrawlerConfig();
+  const indexName = config.actions[0].indexName;
 
   assert.equal(config.ignoreCanonicalTo, false);
-  assert.deepEqual(config.initialIndexSettings["atmos.tools"].customRanking, [
+  assert.deepEqual(config.initialIndexSettings[indexName].customRanking, [
     "desc(weight.pageRank)",
     "desc(weight.level)",
     "asc(weight.position)",

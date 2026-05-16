@@ -30,6 +30,7 @@ async function search(query, hitsPerPage = 20) {
     )}/query`,
     {
       method: "POST",
+      signal: AbortSignal.timeout(10_000),
       headers: {
         "Content-Type": "application/json",
         "X-Algolia-API-Key": SEARCH_API_KEY,
