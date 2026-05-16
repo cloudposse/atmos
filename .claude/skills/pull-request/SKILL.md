@@ -56,6 +56,18 @@ If you're opening multiple related PRs that are foundation work, label them all 
 for pr in 2417 2418 2419; do gh pr edit "$pr" --add-label no-release; done
 ```
 
+**Changing a label later requires removing the old one first.** `--add-label` doesn't replace — running `--add-label minor` on a PR already labeled `patch` leaves *both* attached, which violates the "exactly one semver label" invariant and fails the `PR Semver Labels` CI gate:
+
+```bash
+# Wrong — leaves both labels:
+gh pr edit <pr-number> --add-label minor
+
+# Right — remove the old semver label first, then add the new one:
+gh pr edit <pr-number> --remove-label patch --add-label minor
+```
+
+`gh pr edit` accepts `--remove-label` and `--add-label` in the same invocation, so the relabel is atomic.
+
 ## Blog post (changelog) rules
 
 A blog post is **only** required when the PR is labeled `minor` or `major`. CI checks for a new `.mdx` file under `website/blog/`. If you have the wrong label, fix the label rather than writing a blog post you don't need.
@@ -259,13 +271,24 @@ gh pr create --body-file /tmp/pr-body.md
 
 ## Updating an existing PR
 
-If a PR has already been opened without a label:
+If a PR has already been opened without a label, or with the wrong one:
 
-1. Run `gh pr view <num>` to read the title, description, and changed files.
-2. Apply the decision tree to pick a label.
-3. `gh pr edit <num> --add-label <label>`.
-4. If you changed from `no-release`/`patch` to `minor`/`major`, you now owe a blog post and roadmap update — add them in a new commit on the same branch.
-5. If you changed from `minor`/`major` to a lower label, you can (optionally) remove the blog post and roadmap update in a new commit, but it's also fine to leave them.
+1. Run `gh pr view <num> --json labels` to see what's already attached. Look for any of `no-release` / `patch` / `minor` / `major` — at most one should remain.
+2. Apply the decision tree to pick the correct label.
+3. **If the PR has no semver label yet:** add it.
+
+   ```bash
+   gh pr edit <num> --add-label <label>
+   ```
+
+4. **If the PR has a different semver label already:** remove the old one and add the new one in a single invocation, so you never have two semver labels at once (which fails CI):
+
+   ```bash
+   gh pr edit <num> --remove-label <old-label> --add-label <new-label>
+   ```
+
+5. If you changed from `no-release`/`patch` to `minor`/`major`, you now owe a blog post and roadmap update — add them in a new commit on the same branch.
+6. If you changed from `minor`/`major` to a lower label, you can (optionally) remove the blog post and roadmap update in a new commit, but it's also fine to leave them.
 
 ## Reference
 
