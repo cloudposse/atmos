@@ -2897,16 +2897,15 @@ packages:
 	assert.Equal(t, "adr-tools-{{trimV .Version}}/src/adr", tool.Files[0].Src)
 }
 
-// TestAquaRegistry_GetTool_GitHubArchive_LocalConfig verifies that a local atmos.yaml
-// config containing a github_archive tool is loaded and looked up correctly.
-func TestAquaRegistry_GetTool_GitHubArchive_LocalConfig(t *testing.T) {
+// TestAquaRegistry_parseRegistryFile_GitHubArchive_DirectContent verifies that
+// github_archive entries in registry YAML parse deterministically
+// without relying on LoadLocalConfig's deprecated no-op or remote GetTool fallback.
+func TestAquaRegistry_parseRegistryFile_GitHubArchive_DirectContent(t *testing.T) {
 	ar := NewAquaRegistry()
 
-	tempDir := t.TempDir()
-	configPath := filepath.Join(tempDir, "tools.yaml")
 	configContent := `
-tools:
-  npryce/adr-tools:
+packages:
+  - name: npryce/adr-tools
     type: github_archive
     repo_owner: npryce
     repo_name: adr-tools
@@ -2914,13 +2913,8 @@ tools:
       - name: adr
         src: adr-tools-{{trimV .Version}}/src/adr
 `
-	err := os.WriteFile(configPath, []byte(configContent), defaultFileWritePermissions)
-	require.NoError(t, err)
 
-	err = ar.LoadLocalConfig(configPath)
-	require.NoError(t, err)
-
-	tool, err := ar.GetTool("npryce", "adr-tools")
+	tool, err := ar.parseRegistryFile([]byte(configContent))
 	require.NoError(t, err)
 	require.NotNil(t, tool)
 	assert.Equal(t, "github_archive", tool.Type)
@@ -2928,6 +2922,7 @@ tools:
 	assert.Equal(t, "adr-tools", tool.RepoName)
 	require.Len(t, tool.Files, 1)
 	assert.Equal(t, "adr", tool.Files[0].Name)
+	assert.Equal(t, "adr-tools-{{trimV .Version}}/src/adr", tool.Files[0].Src)
 }
 
 // TestAquaRegistry_GetToolWithVersion_GitHubArchive_VersionOverride verifies that a
