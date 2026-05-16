@@ -5,13 +5,6 @@
 # toolchain (uvx/npx) and AWS credential injection — your AI coding
 # assistant just calls tools.
 #
-# Workflow:
-#   1. Edit auth section below to match your AWS organization.
-#   2. atmos auth login                         # AWS SSO login (once)
-#   3. atmos toolchain install astral-sh/uv     # ensure uvx is available
-#   4. atmos mcp export                         # generates .mcp.json
-#   5. Open Claude Code / Codex / Gemini in this directory and ask away.
-#
 # Docs:
 #   https://atmos.tools/cli/configuration/mcp
 #   https://atmos.tools/cli/configuration/auth
@@ -30,7 +23,7 @@ toolchain:
     uv: astral-sh/uv
 
 # ---------------------------------------------------------------------------
-# MCP — enable both modes
+# MCP
 # ---------------------------------------------------------------------------
 # enabled: true allows `atmos mcp start` to run, so this Atmos project's own
 # AI tools (describe_component, list_stacks, validate_stacks, …) can be
@@ -54,7 +47,7 @@ mcp:
     atmos:
       command: atmos
       args: ["mcp", "start"]
-      description: "Atmos AI tools — describe/list/validate stacks and components, read/write files"
+      description: "Atmos AI tools — describe/list/validate stacks and components"
 
     # =======================================================================
     # AWS MCP servers — credentials injected via Atmos Auth
@@ -307,8 +300,3 @@ ai:
   sessions:
     enabled: true
     path: ".atmos/sessions"
-
-# No stacks/components are defined for this example — the focus is the MCP
-# configuration above. If you adapt this file for a real project, add
-# `stacks:` and `components:` blocks (see examples/quick-start-advanced/
-# or examples/mcp/ for a complete reference).
