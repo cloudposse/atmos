@@ -963,3 +963,512 @@ func TestBuildTemplateData_WindowsArmEmulation(t *testing.T) {
 		assert.Equal(t, runtime.GOARCH, data.Arch, "WindowsArmEmulation should not affect Arch on non-windows-arm64")
 	}
 }
+
+// =============================================================================
+// github_archive package type tests
+// =============================================================================
+//
+// Cross-references upstream aquaproj/aqua test coverage:
+//   - Validate fails when repo_owner/repo_name missing
+//     (aqua: pkg/config/registry/package_info_test.go)
+//   - GetFormat hardcodes "tar.gz" regardless of Format field
+//     (aqua: pkg/config/registry/package_info.go GetFormat)
+//   - RenderAsset returns "" for github_archive (no separate asset name)
+//     (aqua: pkg/config/package_test.go)
+//
+// Atmos has no separate RenderAsset; the URL is built directly via BuildAssetURL.
+// The "asset field ignored" subtest below is the behavioral equivalent.
+
+// TestBuildAssetURL_GitHubArchiveType covers URL building for the github_archive
+// type, including version_prefix handling and the fields that must be ignored.
+func TestBuildAssetURL_GitHubArchiveType(t *testing.T) {
+	installer := &Installer{}
+
+	tests := []struct {
+		name    string
+		tool    *registry.Tool
+		version string
+		want    string
+	}{
+		{
+			name: "default tag URL with no version_prefix",
+			tool: &registry.Tool{
+				Type:      "github_archive",
+				RepoOwner: "npryce",
+				RepoName:  "adr-tools",
+			},
+			version: "3.0.0",
+			want:    "https://github.com/npryce/adr-tools/archive/refs/tags/3.0.0.tar.gz",
+		},
+		{
+			name: "version_prefix v adds v to URL",
+			tool: &registry.Tool{
+				Type:          "github_archive",
+				RepoOwner:     "tfutils",
+				RepoName:      "tfenv",
+				VersionPrefix: "v",
+			},
+			version: "3.0.0",
+			want:    "https://github.com/tfutils/tfenv/archive/refs/tags/v3.0.0.tar.gz",
+		},
+		{
+			name: "version already has matching prefix is not doubled",
+			tool: &registry.Tool{
+				Type:          "github_archive",
+				RepoOwner:     "tfutils",
+				RepoName:      "tfenv",
+				VersionPrefix: "v",
+			},
+			version: "v3.0.0",
+			want:    "https://github.com/tfutils/tfenv/archive/refs/tags/v3.0.0.tar.gz",
+		},
+		{
+			name: "asset field is ignored (no separate asset for archives)",
+			tool: &registry.Tool{
+				Type:      "github_archive",
+				RepoOwner: "npryce",
+				RepoName:  "adr-tools",
+				Asset:     "ignored-{{.Version}}.tar.gz",
+			},
+			version: "3.0.0",
+			want:    "https://github.com/npryce/adr-tools/archive/refs/tags/3.0.0.tar.gz",
+		},
+		{
+			name: "url field is ignored",
+			tool: &registry.Tool{
+				Type:      "github_archive",
+				RepoOwner: "npryce",
+				RepoName:  "adr-tools",
+				URL:       "https://example.com/should-not-be-used",
+			},
+			version: "3.0.0",
+			want:    "https://github.com/npryce/adr-tools/archive/refs/tags/3.0.0.tar.gz",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := installer.BuildAssetURL(tt.tool, tt.version)
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+// TestBuildAssetURL_GitHubArchive_MissingOwner verifies required-field validation
+// mirrors aqua's Validate() behavior for github_archive (repo_owner required).
+func TestBuildAssetURL_GitHubArchive_MissingOwner(t *testing.T) {
+	installer := &Installer{}
+
+	tool := &registry.Tool{
+		Type:     "github_archive",
+		RepoName: "adr-tools",
+	}
+
+	_, err := installer.BuildAssetURL(tool, "3.0.0")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "RepoOwner and RepoName must be set")
+	assert.Contains(t, err.Error(), "github_archive")
+}
+
+// TestBuildAssetURL_GitHubArchive_MissingName verifies required-field validation
+// mirrors aqua's Validate() behavior for github_archive (repo_name required).
+func TestBuildAssetURL_GitHubArchive_MissingName(t *testing.T) {
+	installer := &Installer{}
+
+	tool := &registry.Tool{
+		Type:      "github_archive",
+		RepoOwner: "npryce",
+	}
+
+	_, err := installer.BuildAssetURL(tool, "3.0.0")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "RepoOwner and RepoName must be set")
+	assert.Contains(t, err.Error(), "github_archive")
+}
+
+// TestBuildAssetURL_GitHubArchive_FormatDefaultsToTarGz mirrors aqua's GetFormat()
+// behavior: github_archive always produces a .tar.gz URL regardless of Format /
+// FormatOverrides settings. See aquaproj/aqua pkg/config/registry/package_info.go:GetFormat.
+func TestBuildAssetURL_GitHubArchive_FormatDefaultsToTarGz(t *testing.T) {
+	installer := &Installer{}
+
+	tests := []struct {
+		name string
+		tool *registry.Tool
+	}{
+		{
+			name: "Format unset",
+			tool: &registry.Tool{
+				Type:      "github_archive",
+				RepoOwner: "npryce",
+				RepoName:  "adr-tools",
+			},
+		},
+		{
+			name: "Format=zip is ignored",
+			tool: &registry.Tool{
+				Type:      "github_archive",
+				RepoOwner: "npryce",
+				RepoName:  "adr-tools",
+				Format:    "zip",
+			},
+		},
+		{
+			name: "Format=tar.xz is ignored",
+			tool: &registry.Tool{
+				Type:      "github_archive",
+				RepoOwner: "npryce",
+				RepoName:  "adr-tools",
+				Format:    "tar.xz",
+			},
+		},
+		{
+			name: "FormatOverrides are ignored",
+			tool: &registry.Tool{
+				Type:      "github_archive",
+				RepoOwner: "npryce",
+				RepoName:  "adr-tools",
+				FormatOverrides: []registry.FormatOverride{
+					{GOOS: runtime.GOOS, Format: "zip"},
+				},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := installer.BuildAssetURL(tt.tool, "3.0.0")
+			require.NoError(t, err)
+			assert.True(t, strings.HasSuffix(got, ".tar.gz"),
+				"github_archive URL must end with .tar.gz regardless of Format, got %q", got)
+		})
+	}
+}
+
+// TestBuildAssetURL_GitHubArchive_URLPattern verifies the exact URL host and path
+// pattern used by upstream aqua (archive/refs/tags endpoint, not codeload or API).
+func TestBuildAssetURL_GitHubArchive_URLPattern(t *testing.T) {
+	installer := &Installer{}
+
+	tool := &registry.Tool{
+		Type:      "github_archive",
+		RepoOwner: "npryce",
+		RepoName:  "adr-tools",
+	}
+
+	got, err := installer.BuildAssetURL(tool, "3.0.0")
+	require.NoError(t, err)
+
+	assert.True(t, strings.HasPrefix(got, "https://github.com/"),
+		"URL must use github.com host, got %q", got)
+	assert.Contains(t, got, "/archive/refs/tags/",
+		"URL must use /archive/refs/tags/ endpoint, got %q", got)
+	assert.True(t, strings.HasSuffix(got, ".tar.gz"),
+		"URL must end with .tar.gz, got %q", got)
+}
+
+// TestExpandFileSrcTemplate_GitHubArchiveTrimV verifies the documented Aqua idiom
+// for github_archive: files[].src uses "{{trimV .Version}}" to match GitHub's
+// archive root directory name (e.g., "adr-tools-3.0.0/src/adr" for version v3.0.0).
+func TestExpandFileSrcTemplate_GitHubArchiveTrimV(t *testing.T) {
+	installer := &Installer{}
+
+	tool := &registry.Tool{
+		Type:          "github_archive",
+		RepoOwner:     "npryce",
+		RepoName:      "adr-tools",
+		VersionPrefix: "v",
+		Version:       "v3.0.0",
+	}
+
+	got, err := installer.expandFileSrcTemplate("adr-tools-{{trimV .Version}}/src/adr", tool)
+	require.NoError(t, err)
+	assert.Equal(t, "adr-tools-3.0.0/src/adr", got)
+}
+
+// TestExpandFileSrcTemplate_GitHubArchiveVersion verifies that {{.Version}} (without
+// trimV) is used literally when version_prefix is unset.
+func TestExpandFileSrcTemplate_GitHubArchiveVersion(t *testing.T) {
+	installer := &Installer{}
+
+	tool := &registry.Tool{
+		Type:      "github_archive",
+		RepoOwner: "npryce",
+		RepoName:  "adr-tools",
+		Version:   "3.0.0",
+	}
+
+	got, err := installer.expandFileSrcTemplate("adr-tools-{{.Version}}/src/adr", tool)
+	require.NoError(t, err)
+	assert.Equal(t, "adr-tools-3.0.0/src/adr", got)
+}
+
+// =============================================================================
+// github_content package type tests
+// =============================================================================
+//
+// Cross-references upstream aquaproj/aqua test coverage:
+//   - Validate fails when repo_owner/repo_name/path missing
+//     (aqua: pkg/config/registry/package_info.go Validate)
+//   - URL is built from raw.githubusercontent.com with tag and path
+//     (aqua: pkg/download/github_content.go)
+//   - Asset, URL, Format, FormatOverrides fields are ignored
+//
+// Atmos splits the work into a validator + formatter + dispatcher to keep
+// each piece independently testable. Tests below exercise each layer.
+
+// TestValidateGitHubContentFields exercises every branch of the pure validator.
+func TestValidateGitHubContentFields(t *testing.T) {
+	tests := []struct {
+		name      string
+		tool      *registry.Tool
+		wantErr   bool
+		errSubstr []string
+	}{
+		{
+			name: "all fields present is valid",
+			tool: &registry.Tool{RepoOwner: "ahmetb", RepoName: "kubectx", Path: "kubens"},
+		},
+		{
+			name:      "missing RepoOwner is error",
+			tool:      &registry.Tool{RepoName: "kubectx", Path: "kubens"},
+			wantErr:   true,
+			errSubstr: []string{"github_content", "RepoOwner", "RepoName=\"kubectx\"", "Path=\"kubens\""},
+		},
+		{
+			name:      "missing RepoName is error",
+			tool:      &registry.Tool{RepoOwner: "ahmetb", Path: "kubens"},
+			wantErr:   true,
+			errSubstr: []string{"github_content", "RepoName", "RepoOwner=\"ahmetb\"", "Path=\"kubens\""},
+		},
+		{
+			name:      "missing Path is error",
+			tool:      &registry.Tool{RepoOwner: "ahmetb", RepoName: "kubectx"},
+			wantErr:   true,
+			errSubstr: []string{"github_content", "Path", "RepoOwner=\"ahmetb\"", "RepoName=\"kubectx\""},
+		},
+		{
+			name:      "all three empty is one combined error",
+			tool:      &registry.Tool{},
+			wantErr:   true,
+			errSubstr: []string{"github_content", "RepoOwner=\"\"", "RepoName=\"\"", "Path=\"\""},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := validateGitHubContentFields(tt.tool)
+			if !tt.wantErr {
+				require.NoError(t, err)
+				return
+			}
+			require.Error(t, err)
+			require.ErrorIs(t, err, ErrInvalidToolSpec)
+			for _, s := range tt.errSubstr {
+				assert.Contains(t, err.Error(), s)
+			}
+		})
+	}
+}
+
+// TestFormatGitHubContentURL exercises the pure URL formatter.
+func TestFormatGitHubContentURL(t *testing.T) {
+	tests := []struct {
+		name                       string
+		owner, repo, version, path string
+		want                       string
+	}{
+		{
+			name:    "typical single-file path",
+			owner:   "ahmetb",
+			repo:    "kubectx",
+			version: "v0.9.4",
+			path:    "kubens",
+			want:    "https://raw.githubusercontent.com/ahmetb/kubectx/v0.9.4/kubens",
+		},
+		{
+			name:    "nested path preserves separators",
+			owner:   "ahmetb",
+			repo:    "kubectx",
+			version: "v0.9.4",
+			path:    "scripts/install.sh",
+			want:    "https://raw.githubusercontent.com/ahmetb/kubectx/v0.9.4/scripts/install.sh",
+		},
+		{
+			name:    "version without v prefix passes through unchanged",
+			owner:   "ahmetb",
+			repo:    "kubectx",
+			version: "0.9.4",
+			path:    "kubens",
+			want:    "https://raw.githubusercontent.com/ahmetb/kubectx/0.9.4/kubens",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := formatGitHubContentURL(tt.owner, tt.repo, tt.version, tt.path)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+// TestBuildAssetURL_GitHubContentType exercises end-to-end URL building via
+// the method receiver, including version_prefix handling and the fields that
+// must be ignored.
+func TestBuildAssetURL_GitHubContentType(t *testing.T) {
+	installer := &Installer{}
+
+	tests := []struct {
+		name    string
+		tool    *registry.Tool
+		version string
+		want    string
+	}{
+		{
+			name: "default URL with no version_prefix",
+			tool: &registry.Tool{
+				Type:      "github_content",
+				RepoOwner: "ahmetb",
+				RepoName:  "kubectx",
+				Path:      "kubens",
+			},
+			version: "0.9.4",
+			want:    "https://raw.githubusercontent.com/ahmetb/kubectx/0.9.4/kubens",
+		},
+		{
+			name: "version_prefix v adds v to URL",
+			tool: &registry.Tool{
+				Type:          "github_content",
+				RepoOwner:     "ahmetb",
+				RepoName:      "kubectx",
+				Path:          "kubens",
+				VersionPrefix: "v",
+			},
+			version: "0.9.4",
+			want:    "https://raw.githubusercontent.com/ahmetb/kubectx/v0.9.4/kubens",
+		},
+		{
+			name: "version already has matching prefix is not doubled",
+			tool: &registry.Tool{
+				Type:          "github_content",
+				RepoOwner:     "ahmetb",
+				RepoName:      "kubectx",
+				Path:          "kubens",
+				VersionPrefix: "v",
+			},
+			version: "v0.9.4",
+			want:    "https://raw.githubusercontent.com/ahmetb/kubectx/v0.9.4/kubens",
+		},
+		{
+			name: "asset field is ignored",
+			tool: &registry.Tool{
+				Type:      "github_content",
+				RepoOwner: "ahmetb",
+				RepoName:  "kubectx",
+				Path:      "kubens",
+				Asset:     "ignored-{{.Version}}.tar.gz",
+			},
+			version: "0.9.4",
+			want:    "https://raw.githubusercontent.com/ahmetb/kubectx/0.9.4/kubens",
+		},
+		{
+			name: "url field is ignored",
+			tool: &registry.Tool{
+				Type:      "github_content",
+				RepoOwner: "ahmetb",
+				RepoName:  "kubectx",
+				Path:      "kubens",
+				URL:       "https://example.com/should-not-be-used",
+			},
+			version: "0.9.4",
+			want:    "https://raw.githubusercontent.com/ahmetb/kubectx/0.9.4/kubens",
+		},
+		{
+			name: "format field is ignored (no archive extension applied)",
+			tool: &registry.Tool{
+				Type:      "github_content",
+				RepoOwner: "ahmetb",
+				RepoName:  "kubectx",
+				Path:      "kubens",
+				Format:    "zip",
+			},
+			version: "0.9.4",
+			want:    "https://raw.githubusercontent.com/ahmetb/kubectx/0.9.4/kubens",
+		},
+		{
+			name: "nested path is preserved",
+			tool: &registry.Tool{
+				Type:      "github_content",
+				RepoOwner: "ahmetb",
+				RepoName:  "kubectx",
+				Path:      "scripts/install.sh",
+			},
+			version: "0.9.4",
+			want:    "https://raw.githubusercontent.com/ahmetb/kubectx/0.9.4/scripts/install.sh",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := installer.BuildAssetURL(tt.tool, tt.version)
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+// TestBuildAssetURL_GitHubContent_MissingFields ensures the method wires the
+// validator through and surfaces each missing-field error.
+func TestBuildAssetURL_GitHubContent_MissingFields(t *testing.T) {
+	installer := &Installer{}
+
+	tests := []struct {
+		name string
+		tool *registry.Tool
+	}{
+		{
+			name: "missing RepoOwner",
+			tool: &registry.Tool{Type: "github_content", RepoName: "kubectx", Path: "kubens"},
+		},
+		{
+			name: "missing RepoName",
+			tool: &registry.Tool{Type: "github_content", RepoOwner: "ahmetb", Path: "kubens"},
+		},
+		{
+			name: "missing Path",
+			tool: &registry.Tool{Type: "github_content", RepoOwner: "ahmetb", RepoName: "kubectx"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := installer.BuildAssetURL(tt.tool, "0.9.4")
+			require.Error(t, err)
+			require.ErrorIs(t, err, ErrInvalidToolSpec)
+			assert.Contains(t, err.Error(), "github_content")
+		})
+	}
+}
+
+// TestBuildAssetURL_GitHubContent_URLPattern verifies the exact host and
+// endpoint used by upstream aqua (raw.githubusercontent.com, not raw.github.com
+// and not the API).
+func TestBuildAssetURL_GitHubContent_URLPattern(t *testing.T) {
+	installer := &Installer{}
+
+	tool := &registry.Tool{
+		Type:      "github_content",
+		RepoOwner: "ahmetb",
+		RepoName:  "kubectx",
+		Path:      "kubens",
+	}
+
+	got, err := installer.BuildAssetURL(tool, "0.9.4")
+	require.NoError(t, err)
+
+	assert.True(t, strings.HasPrefix(got, "https://raw.githubusercontent.com/"),
+		"URL must use raw.githubusercontent.com host, got %q", got)
+	assert.Contains(t, got, "/ahmetb/kubectx/0.9.4/kubens",
+		"URL must contain owner/repo/version/path, got %q", got)
+}

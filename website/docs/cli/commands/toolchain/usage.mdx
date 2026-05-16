@@ -89,6 +89,8 @@ We support the core Aqua registry features needed for infrastructure tooling whi
 **Package Types:**
 - `github_release` - GitHub release assets with version overrides
 - `http` - Direct HTTP downloads (e.g., HashiCorp releases)
+- `github_archive` - GitHub auto-generated source tarball for any tag (`archive/refs/tags/{version}.tar.gz`)
+- `github_content` - Single file from a GitHub repo at a tag (via `raw.githubusercontent.com`)
 
 **Archive Formats:**
 - `.tar.gz` - Gzip-compressed tarballs
@@ -121,9 +123,8 @@ Atmos provides focused Aqua registry support optimized for infrastructure toolin
 
 | Type | Description | Alternative |
 |------|-------------|-------------|
-| `github_content` | Downloads raw files from repository source | Use `http` type with raw GitHub URL |
-| `github_archive` | Downloads repository archive (tarball) | Use `http` type with archive URL |
-| `go_build` | Compiles Go source with custom build flags | Use `go_install` or pre-built releases |
+| `go_install` | Installs Go binaries via `go install` (requires Go toolchain) | Use `github_release` for pre-built binaries |
+| `go_build_install` | Compiles Go source with custom build flags | Use `go_install` or pre-built releases |
 | `cargo` | Installs Rust crates via cargo | Use `github_release` for pre-built binaries |
 
 <details>

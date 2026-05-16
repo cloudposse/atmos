@@ -196,7 +196,8 @@ type versionOverride struct {
 	RepoOwner           string                    `yaml:"repo_owner"`
 	RepoName            string                    `yaml:"repo_name"`
 	Asset               string                    `yaml:"asset"`
-	URL                 string                    `yaml:"url"` // Alternative to Asset for http type tools.
+	URL                 string                    `yaml:"url"`  // Alternative to Asset for http type tools.
+	Path                string                    `yaml:"path"` // Source path within the repo for github_content type.
 	Format              string                    `yaml:"format"`
 	FormatOverrides     []registry.FormatOverride `yaml:"format_overrides"`
 	VersionPrefix       string                    `yaml:"version_prefix"`
@@ -231,6 +232,9 @@ func applyVersionOverride(tool *registry.Tool, override *versionOverride, versio
 		tool.Asset = override.Asset
 	} else if override.URL != "" {
 		tool.Asset = override.URL
+	}
+	if override.Path != "" {
+		tool.Path = override.Path
 	}
 	if override.Format != "" {
 		tool.Format = override.Format
@@ -278,12 +282,24 @@ func applyVersionOverride(tool *registry.Tool, override *versionOverride, versio
 // This matches upstream aquaproj/aqua behavior where switching types (e.g., github_release -> http)
 // resets type-specific fields to avoid stale configuration.
 func resetByPkgType(tool *registry.Tool, newType string) {
+	// Path is github_content-specific; clear it unless we're switching TO github_content.
+	if newType != "github_content" {
+		tool.Path = ""
+	}
 	switch newType {
 	case "http":
 		// HTTP type uses URL, not github_release-specific fields.
 		tool.Asset = ""
 	case "github_release":
 		// GitHub release type uses Asset, not http-specific URL.
+		tool.URL = ""
+	case "github_archive":
+		// GitHub archive type derives its URL from repo + version; neither Asset nor URL applies.
+		tool.Asset = ""
+		tool.URL = ""
+	case "github_content":
+		// GitHub content type uses repo + path + version; Asset and URL do not apply.
+		tool.Asset = ""
 		tool.URL = ""
 	}
 }
@@ -297,6 +313,7 @@ type registryPackage struct {
 	RepoName            string                    `yaml:"repo_name"`
 	Asset               string                    `yaml:"asset"` // Used by github_release types.
 	URL                 string                    `yaml:"url"`   // Used by http types.
+	Path                string                    `yaml:"path"`  // Used by github_content (path within repo) and go_install (Go module path).
 	Format              string                    `yaml:"format"`
 	FormatOverrides     []registry.FormatOverride `yaml:"format_overrides"`
 	BinaryName          string                    `yaml:"binary_name"`
@@ -346,6 +363,7 @@ func (ar *AquaRegistry) resolveVersionOverrides(sourceURL, version string) (*reg
 		RepoOwner:           pkgDef.RepoOwner,
 		RepoName:            pkgDef.RepoName,
 		Asset:               asset,
+		Path:                pkgDef.Path,
 		Format:              pkgDef.Format,
 		FormatOverrides:     pkgDef.FormatOverrides,
 		BinaryName:          pkgDef.BinaryName,
@@ -542,6 +560,7 @@ func (ar *AquaRegistry) parseRegistryFile(data []byte) (*registry.Tool, error) {
 			RepoOwner:           pkg.RepoOwner,
 			RepoName:            pkg.RepoName,
 			Asset:               asset,
+			Path:                pkg.Path,
 			Format:              pkg.Format,
 			FormatOverrides:     pkg.FormatOverrides,
 			Type:                pkg.Type,
