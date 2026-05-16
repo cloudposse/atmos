@@ -3,6 +3,7 @@ package toolchain
 import (
 	"fmt"
 	"os"
+	"sort"
 	"strings"
 	"time"
 
@@ -239,7 +240,11 @@ func installFromToolVersions(toolVersionsPath string, reinstallFlag, showHint bo
 		return fmt.Errorf("failed to load .tool-versions: %w", err)
 	}
 
-	toolList := buildToolList(installer, toolVersions)
+	toolList, skipped := buildToolListWithSkipped(installer, toolVersions)
+	// Closes #2256: `.tool-versions` is a shared ecosystem file (asdf, mise, setup-node,
+	// rtx). Atmos installs the tools it can resolve and emits a single aggregated warning
+	// for entries managed by other ecosystems instead of hard-failing the whole batch.
+	warnSkippedAdvisoryTools(skipped)
 	if len(toolList) == 0 {
 		ui.Writef("No tools found in %s\n", toolVersionsPath)
 		return nil
@@ -270,18 +275,56 @@ func installFromToolVersions(toolVersionsPath string, reinstallFlag, showHint bo
 	return nil
 }
 
+// buildToolList resolves every entry in `.tool-versions` against the installer's
+// configured registries and returns the installable list. Entries that fail to resolve
+// are silently dropped — see buildToolListWithSkipped for the variant that surfaces
+// those skips for warning purposes.
 func buildToolList(installer *Installer, toolVersions *ToolVersions) []toolInfo {
-	var toolList []toolInfo
+	list, _ := buildToolListWithSkipped(installer, toolVersions)
+	return list
+}
+
+// buildToolListWithSkipped is the advisory-aware form of buildToolList. It returns:
+//   - toolList: every (tool, version) pair that resolves against a configured registry
+//   - skipped:  the names of `.tool-versions` entries that aren't in any registry atmos
+//     knows about (i.e. managed by another ecosystem like asdf, mise, or setup-node)
+//
+// Closes #2256: callers warn the user about `skipped` once after the loop instead of
+// failing the whole batch.
+func buildToolListWithSkipped(installer *Installer, toolVersions *ToolVersions) (toolList []toolInfo, skipped []string) {
 	for toolName, versions := range toolVersions.Tools {
 		owner, repo, err := installer.ParseToolSpec(toolName)
 		if err != nil {
+			// Collect the original `.tool-versions` name (what the user typed), not the
+			// resolved owner/repo, so the warning mentions familiar identifiers.
+			skipped = append(skipped, toolName)
 			continue
 		}
 		for _, version := range versions {
 			toolList = append(toolList, toolInfo{version, owner, repo})
 		}
 	}
-	return toolList
+	return toolList, skipped
+}
+
+// warnSkippedAdvisoryTools emits a single aggregated warning naming every
+// `.tool-versions` entry atmos couldn't resolve. Quiet if nothing was skipped.
+//
+// The single-line aggregated form is deliberate — `.tool-versions` is commonly used
+// across half a dozen ecosystems, so warning per-tool would spam the output for repos
+// where atmos manages only a subset of the toolchain.
+func warnSkippedAdvisoryTools(skipped []string) {
+	if len(skipped) == 0 {
+		return
+	}
+	// Sort so the warning is stable across runs (Go map iteration is non-deterministic).
+	sorted := append([]string(nil), skipped...)
+	sort.Strings(sorted)
+	ui.Warningf(
+		"Skipping %d entry/entries in .tool-versions not in any configured atmos toolchain registry: %s "+
+			"(these are typically managed by their native ecosystems — asdf, mise, setup-node, etc.)",
+		len(sorted), strings.Join(sorted, ", "),
+	)
 }
 
 func installOrSkipTool(installer *Installer, tool toolInfo, reinstallFlag, showHint bool) (string, error) {
