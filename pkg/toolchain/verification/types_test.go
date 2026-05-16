@@ -8,6 +8,12 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
+var _ = schema.ToolchainVerification{
+	Checksums:       "",
+	Signatures:      "",
+	VerifierInstall: "",
+}
+
 func TestPolicyFromConfigDefaults(t *testing.T) {
 	assert.Equal(t, Policy{
 		Checksums:       PolicyWhenAvailable,

@@ -170,7 +170,7 @@ func TestVerifyChecksumSkipsUnavailableSidecarWhenAvailable(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, result)
 	assert.Empty(t, result.Checksum)
-	assert.Contains(t, result.SkippedReasons[0], "checksum sidecar unavailable")
+	assert.True(t, hasSkipReasonContaining(result.SkippedReasons, "checksum sidecar unavailable"))
 }
 
 func TestVerifyChecksumRequiredUnavailableSidecar(t *testing.T) {

@@ -256,7 +256,7 @@ func TestVerifyCosignSkipsUnavailableSidecarWhenAvailable(t *testing.T) {
 	require.Empty(t, runner.calls)
 	assert.Contains(t, result.SkippedReasons, "checksum verification disabled")
 	require.Len(t, result.SkippedReasons, 2)
-	assert.Contains(t, result.SkippedReasons[1], "cosign sidecar unavailable")
+	assert.True(t, hasSkipReasonContaining(result.SkippedReasons, "cosign sidecar unavailable"))
 }
 
 func TestVerifyCosignRequiredUnavailableSidecar(t *testing.T) {
