@@ -52,7 +52,20 @@ func executeMCPTest(cmd *cobra.Command, args []string) error {
 	startOpts := buildStartOptions(&atmosConfig)
 	result := mgr.Test(ctx, name, startOpts...)
 	printTestResult(result)
-	return result.Error
+
+	// IMPORTANT: We deliberately do NOT return result.Error here, even when
+	// the test failed. printTestResult already shows the user the failure
+	// (✗ markers, warning lines, the error context). Returning result.Error
+	// would cause main.go's errUtils.Format pipeline to print a SECOND,
+	// styled copy of the same message — issue #9 in
+	// docs/fixes/2026-05-15-mcp-review-fixes.md.
+	//
+	// `mcp test` is a diagnostic command, not a CI gate: its output is
+	// designed to be read by humans, and the pass/fail is unambiguous
+	// from the ✓/✗ markers. Callers needing exit-code-driven CI behavior
+	// should parse the structured output (e.g., `atmos mcp tools` or
+	// `atmos mcp status --format=json`) instead.
+	return nil
 }
 
 // printTestResult displays the test results with success/failure indicators.

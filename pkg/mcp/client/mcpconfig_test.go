@@ -2,9 +2,11 @@ package client
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"runtime"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -117,6 +119,94 @@ func TestWriteMCPConfigToTempFile(t *testing.T) {
 		info, err := os.Stat(tmpFile)
 		require.NoError(t, err)
 		assert.Equal(t, os.FileMode(0o600), info.Mode().Perm())
+	}
+}
+
+// TestWriteMCPConfigToTempFile_ConcurrentWritesGetDistinctPaths is the
+// regression guard for issue #4 in docs/fixes/2026-05-15-mcp-review-fixes.md.
+//
+// Pre-fix, WriteMCPConfigToTempFile used a fixed path
+// (os.TempDir()/atmos-mcp-config.json) and two concurrent invocations
+// raced on the same file — the slower writer's content silently
+// overwrote the faster's, and a slower reader could see partial JSON.
+// Post-fix the function uses os.CreateTemp with the pattern
+// "atmos-mcp-config-*.json", so each invocation gets a unique path.
+//
+// The test drives 16 concurrent writes (each with a distinct, identifiable
+// server name) and asserts:
+//
+//  1. All 16 writes succeed.
+//  2. All 16 returned paths are pairwise distinct.
+//  3. Each file on disk contains the server name the goroutine wrote —
+//     proving no cross-talk (i.e., no writer clobbered another's content).
+func TestWriteMCPConfigToTempFile_ConcurrentWritesGetDistinctPaths(t *testing.T) {
+	const goroutines = 16
+
+	// Pre-size the result slices and write by goroutine index so the
+	// assertion-side code can correlate path[i] with "server-i". An
+	// append-based approach loses that mapping because goroutines finish
+	// in arbitrary order — leading to false "content was clobbered"
+	// failures even when nothing was actually clobbered.
+	var (
+		wg    sync.WaitGroup
+		paths = make([]string, goroutines)
+		errs  = make([]error, goroutines)
+	)
+
+	for i := 0; i < goroutines; i++ {
+		wg.Add(1)
+		go func(idx int) {
+			defer wg.Done()
+			serverName := fmt.Sprintf("server-%d", idx)
+			servers := map[string]schema.MCPServerConfig{
+				serverName: {Command: "echo", Args: []string{fmt.Sprintf("%d", idx)}},
+			}
+
+			path, err := WriteMCPConfigToTempFile(servers, "")
+			// Each goroutine writes to its own slot — no mutex needed,
+			// and -race stays clean.
+			paths[idx] = path
+			errs[idx] = err
+		}(i)
+	}
+
+	wg.Wait()
+
+	// Cleanup every successfully-written file at the end.
+	t.Cleanup(func() {
+		for _, p := range paths {
+			if p != "" {
+				_ = os.Remove(p)
+			}
+		}
+	})
+
+	for i, err := range errs {
+		require.NoError(t, err, "goroutine %d failed to write", i)
+	}
+
+	// All paths must be distinct — the headline assertion.
+	seen := make(map[string]int, len(paths))
+	for i, p := range paths {
+		if prev, ok := seen[p]; ok {
+			t.Fatalf("concurrent writes returned the same path twice: goroutines %d and %d both wrote %q", prev, i, p)
+		}
+		seen[p] = i
+	}
+
+	// Every file must contain the server name its goroutine wrote — proves
+	// no goroutine's content was clobbered by another.
+	for i, p := range paths {
+		data, err := os.ReadFile(p)
+		require.NoError(t, err, "could not read file from goroutine %d", i)
+
+		var config MCPJSONConfig
+		require.NoError(t, json.Unmarshal(data, &config), "file from goroutine %d is not valid JSON: %s", i, string(data))
+
+		wantServer := fmt.Sprintf("server-%d", i)
+		require.Contains(t, config.MCPServers, wantServer,
+			"file from goroutine %d (path=%s) is missing its own server %q — content was clobbered by another writer",
+			i, p, wantServer)
 	}
 }
 

@@ -2,10 +2,10 @@ package client
 
 import (
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 
 	mcpclient "github.com/cloudposse/atmos/pkg/mcp/client"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -72,6 +72,58 @@ func TestFirstSentence(t *testing.T) {
 			input:    "## Header only",
 			expected: "## Header only",
 		},
+		// Cases below are regression coverage for issue #6 in
+		// docs/fixes/2026-05-15-mcp-review-fixes.md (firstSentence
+		// hardening). They cover the previously-unrecognized terminators
+		// (`!`, `?`), the URL/version false-split case, and the no-
+		// terminator length bound.
+		{
+			name:     "exclamation+space ends a sentence",
+			input:    "First sentence! Second sentence.",
+			expected: "First sentence!",
+		},
+		{
+			name:     "question+space ends a sentence",
+			input:    "Is this a sentence? Yes it is.",
+			expected: "Is this a sentence?",
+		},
+		{
+			name: "earliest terminator wins among period/exclamation/question",
+			// "?" appears before "." in the input — it should win.
+			input:    "Really? Yes. Indeed.",
+			expected: "Really?",
+		},
+		{
+			name: "version string before real period does NOT cause false split",
+			// "v1.0" has a period but no following space, so the old
+			// `strings.Index(". ")` already handled it. This guards
+			// the contract.
+			input:    "Supports v1.0 and v2.0. End.",
+			expected: "Supports v1.0 and v2.0.",
+		},
+		{
+			name: "no terminator, long input is truncated to firstSentenceMaxLen",
+			// 81 chars, no terminator → truncated to 79 + ellipsis (80 runes total).
+			input:    strings.Repeat("a", 81),
+			expected: strings.Repeat("a", 79) + "…",
+		},
+		{
+			name: "no terminator, exactly maxLen input is returned as-is",
+			// At the boundary the input must not be truncated.
+			input:    strings.Repeat("a", firstSentenceMaxLen),
+			expected: strings.Repeat("a", firstSentenceMaxLen),
+		},
+		{
+			name:     "no terminator, short input is returned as-is",
+			input:    "Just a short phrase",
+			expected: "Just a short phrase",
+		},
+		{
+			name: "markdown header beats length truncation",
+			// Header is preferred when both apply.
+			input:    "Some text " + strings.Repeat("x", 100) + " ## Header",
+			expected: "Some text " + strings.Repeat("x", 100) + ".",
+		},
 	}
 
 	for _, tt := range tests {
@@ -82,80 +134,16 @@ func TestFirstSentence(t *testing.T) {
 	}
 }
 
-// TestBuildMCPJSONEntry tests the buildMCPJSONEntry function that creates .mcp.json
-// entries from MCPServerConfig, with optional identity wrapping.
-func TestBuildMCPJSONEntry(t *testing.T) {
-	t.Run("server without identity uses command directly", func(t *testing.T) {
-		cfg := &schema.MCPServerConfig{
-			Command: "npx",
-			Args:    []string{"-y", "some-mcp-server"},
-			Env:     map[string]string{"API_KEY": "abc123"},
-		}
-
-		entry := buildMCPJSONEntry("my-server", cfg)
-
-		assert.Equal(t, "npx", entry.Command)
-		assert.Equal(t, []string{"-y", "some-mcp-server"}, entry.Args)
-		assert.Equal(t, map[string]string{"API_KEY": "abc123"}, entry.Env)
-	})
-
-	t.Run("server with identity wraps with atmos auth exec", func(t *testing.T) {
-		cfg := &schema.MCPServerConfig{
-			Command:  "npx",
-			Args:     []string{"-y", "some-mcp-server"},
-			Env:      map[string]string{"REGION": "us-east-1"},
-			Identity: "aws-dev",
-		}
-
-		entry := buildMCPJSONEntry("my-server", cfg)
-
-		assert.Equal(t, "atmos", entry.Command)
-		// Should be: atmos auth exec -i aws-dev -- npx -y some-mcp-server.
-		expectedArgs := []string{"auth", "exec", "-i", "aws-dev", "--", "npx", "-y", "some-mcp-server"}
-		assert.Equal(t, expectedArgs, entry.Args)
-		assert.Equal(t, map[string]string{"REGION": "us-east-1"}, entry.Env)
-	})
-
-	t.Run("server with no env has nil env", func(t *testing.T) {
-		cfg := &schema.MCPServerConfig{
-			Command: "echo",
-			Args:    []string{"hello"},
-		}
-
-		entry := buildMCPJSONEntry("simple", cfg)
-
-		assert.Equal(t, "echo", entry.Command)
-		assert.Equal(t, []string{"hello"}, entry.Args)
-		assert.Nil(t, entry.Env)
-	})
-
-	t.Run("server with identity and no args", func(t *testing.T) {
-		cfg := &schema.MCPServerConfig{
-			Command:  "my-server",
-			Identity: "prod-identity",
-		}
-
-		entry := buildMCPJSONEntry("prod", cfg)
-
-		assert.Equal(t, "atmos", entry.Command)
-		expectedArgs := []string{"auth", "exec", "-i", "prod-identity", "--", "my-server"}
-		assert.Equal(t, expectedArgs, entry.Args)
-	})
-
-	t.Run("server with empty env map", func(t *testing.T) {
-		cfg := &schema.MCPServerConfig{
-			Command: "echo",
-			Env:     map[string]string{},
-		}
-
-		entry := buildMCPJSONEntry("test", cfg)
-
-		assert.Equal(t, "echo", entry.Command)
-		// Empty map is preserved (not nil).
-		require.NotNil(t, entry.Env)
-		assert.Empty(t, entry.Env)
-	})
-}
+// Note: the previous TestBuildMCPJSONEntry exercised a cmd-local
+// buildMCPJSONEntry that was removed when export.go was refactored to
+// delegate to mcpclient.GenerateMCPConfig. The same contract is now
+// covered by:
+//
+//   - pkg/mcp/client/mcpconfig_test.go (package-level unit tests for
+//     BuildMCPJSONEntry and GenerateMCPConfig).
+//   - cmd/mcp/client/export_test.go::TestExport_DelegatesToPackageGenerator
+//     (cmd-level regression guard for identity wrapping + toolchain
+//     PATH injection in the export path).
 
 func TestFormatStatusRow(t *testing.T) {
 	tests := []struct {
