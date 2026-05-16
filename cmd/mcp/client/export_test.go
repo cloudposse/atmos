@@ -328,6 +328,8 @@ func TestExecuteMCPExport_WriteFailure_NonExistentDir(t *testing.T) {
 
 	err := executeMCPExport(cmd, nil)
 	require.Error(t, err, "writing to a non-existent directory must return an error")
-	assert.Contains(t, err.Error(), "does/not/exist",
+	// Normalize separators so the assertion works on Windows (where
+	// filepath.Join uses `\`) as well as Unix.
+	assert.Contains(t, filepath.ToSlash(err.Error()), "does/not/exist",
 		"error must include the offending path for actionable diagnostics; got: %v", err)
 }

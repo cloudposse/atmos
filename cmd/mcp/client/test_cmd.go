@@ -91,4 +91,17 @@ func printTestResult(result *mcpclient.TestResult) {
 	} else if result.ServerStarted {
 		ui.Warning("Server did not respond to ping")
 	}
+
+	// Surface the underlying error message so users have something
+	// actionable to investigate. The ✗/⚠️ markers above tell the user
+	// WHICH stage failed; this line tells them WHY. Without it, a
+	// "Server failed to start" line is uninformative.
+	//
+	// We print this here (rather than in executeMCPTest) so the single
+	// "✗ ... + context" pair stays together in the output, and so that
+	// the executeMCPTest contract — "always return nil; printTestResult
+	// is the single source of stderr output" — is preserved.
+	if result.Error != nil {
+		ui.Errorf("Error: %v", result.Error)
+	}
 }

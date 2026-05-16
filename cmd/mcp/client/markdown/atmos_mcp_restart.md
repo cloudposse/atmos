@@ -26,6 +26,6 @@ If you want to invoke the server's tools, use `atmos ai ask`, `chat`, or
 atmos mcp restart aws-eks
 
 # Example output:
-# ✓ Restarted MCP server "aws-eks" (12 tools available)
+# ✓ Restarted MCP server `aws-eks` (12 tools available)
 # Note: the server is no longer running after the command exits.
 ```

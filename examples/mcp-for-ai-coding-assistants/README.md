@@ -11,7 +11,7 @@ Learn more in the [MCP configuration documentation](/cli/configuration/mcp).
 
 ---
 
-### Your AI knows your stacks and components. And your cloud. And your history.
+## Your AI knows your stacks and components. And your cloud. And your history.
 
 In one prompt, your AI coding assistant answers:
 

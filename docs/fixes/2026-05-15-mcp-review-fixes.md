@@ -205,14 +205,14 @@ non-nil value.
 ### Problem
 
 `cmd/mcp/client/tools.go:85-100` truncates tool descriptions to the
-first sentence using only two terminator patterns: `". "` and `" ##"`.
-That fails for:
+first sentence using only two terminator patterns: `.` (followed by a
+space) and ` ##`. That fails for:
 
-- `! ` or `? ` endings — no match, returns the entire description.
+- `!` or `?` endings — no match, returns the entire description.
 - No terminator at all — returns the entire description unchanged
   (the function is named `firstSentence` but performs no length
   bound).
-- A URL or version string like `v1.0 ` appearing before the real
+- A URL or version string like `v1.0` appearing before the real
   sentence end — splits at the wrong place.
 
 The downstream renderer (`theme.CreateMinimalTable`) then has to
@@ -221,11 +221,12 @@ inconsistent column widths.
 
 ### Fix
 
-- Recognize `. `, `! `, `? ` as sentence terminators (matching English
-  sentence punctuation).
-- Add a hard 80-char ceiling: if no terminator is found in the first
-  80 chars, truncate with an ellipsis.
-- Keep the `" ##"` markdown-header break (existing behavior).
+- Recognize `.`, `!`, `?` (each followed by a space) as sentence
+  terminators (matching English sentence punctuation).
+- Add a hard 80-char ceiling that always applies — including
+  terminated sentences — so a 150-rune sentence ending in `.` is
+  truncated with an ellipsis.
+- Keep the ` ##` markdown-header break (existing behavior).
 - Whitespace collapsing is preserved.
 
 ### Test

@@ -119,10 +119,24 @@ func TestFirstSentence(t *testing.T) {
 			expected: "Just a short phrase",
 		},
 		{
-			name: "markdown header beats length truncation",
-			// Header is preferred when both apply.
-			input:    "Some text " + strings.Repeat("x", 100) + " ## Header",
-			expected: "Some text " + strings.Repeat("x", 100) + ".",
+			name: "markdown header is treated as a terminator but ceiling still applies",
+			// The markdown-header break gives us a sentence boundary, but
+			// the firstSentenceMaxLen ceiling is now universal — including
+			// for terminated sentences and markdown breaks. So a 111-char
+			// candidate gets truncated to firstSentenceMaxLen-1 + "…"
+			// (79 + 1 = 80 runes total).
+			input: "Some text " + strings.Repeat("x", 100) + " ## Header",
+			expected: "Some text " + strings.Repeat("x",
+				firstSentenceMaxLen-1-len("Some text ")) + "…",
+		},
+		{
+			name: "long sentence ending in period is truncated to firstSentenceMaxLen",
+			// Doc/impl mismatch guard: the firstSentenceMaxLen ceiling
+			// must apply even when a terminator is present, otherwise a
+			// 150-rune sentence ending in `. ` would leak into the
+			// `atmos mcp tools` table (the original review nitpick).
+			input:    strings.Repeat("a", 100) + ". Rest.",
+			expected: strings.Repeat("a", firstSentenceMaxLen-1) + "…",
 		},
 	}
 

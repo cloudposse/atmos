@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"testing"
+	"time"
 
 	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/assert"
@@ -619,16 +620,15 @@ func TestServer_Run_TerminatesOnContextCancel(t *testing.T) {
 	cancel()
 
 	// Run must return within a reasonable time after context cancel.
-	// If Run blocks forever, the test timeout fires and we see a
-	// goroutine leak in the logs.
+	// Use a real timeout so this test fails fast if Run blocks, rather
+	// than hanging until the global `go test` timeout fires.
 	select {
 	case err := <-runErr:
 		// Run may return nil, context.Canceled, or a transport-EOF error
 		// depending on which side wins the race. All are acceptable;
 		// the contract being tested is "it returns", not "with what".
 		_ = err
-	case <-context.Background().Done():
-		// Unreachable — context.Background never cancels.
-		t.Fatal("unreachable")
+	case <-time.After(2 * time.Second):
+		t.Fatal("Server.Run did not return after context cancellation")
 	}
 }

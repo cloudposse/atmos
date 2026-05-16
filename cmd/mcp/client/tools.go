@@ -248,12 +248,15 @@ const firstSentenceMaxLen = 80
 // firstSentence extracts the first sentence from a description, collapsing
 // whitespace, and ensures the output never exceeds firstSentenceMaxLen runes.
 //
-// Recognized sentence terminators are `. `, `! `, `? ` — matching standard
-// English punctuation. A markdown header boundary (` ##`) is also treated
-// as a sentence end (turning the preceding text into a single sentence).
+// Recognized sentence terminators are `.`, `!`, `?` (each followed by a
+// space) — matching standard English punctuation. A markdown header
+// boundary (` ##`) is also treated as a sentence end (turning the
+// preceding text into a single sentence).
 //
-// If no terminator is found, the input is hard-truncated to
-// firstSentenceMaxLen with an ellipsis. Earlier versions only split on
+// The firstSentenceMaxLen ceiling is enforced on every return path —
+// including terminated sentences and markdown-header breaks — so a
+// 150-rune sentence ending in `. ` is truncated with an ellipsis just
+// like a paragraph with no terminator. Earlier versions only split on
 // `. ` / ` ##` and applied no length bound — descriptions ending in `!`,
 // `?`, or with no terminator at all leaked full paragraphs into the
 // `atmos mcp tools` table.
@@ -276,25 +279,31 @@ func firstSentence(desc string) string {
 	}
 	if earliest > 0 {
 		// desc[:earliest+1] includes the terminator's punctuation but not
-		// the following space.
-		return desc[:earliest+1]
+		// the following space. Apply the rune-length ceiling here too —
+		// the doc promises "never exceeds firstSentenceMaxLen runes",
+		// so even a 150-rune sentence ending in `. ` must be truncated.
+		return truncateToMaxLen(desc[:earliest+1])
 	}
 
 	// Stop at markdown header even when no sentence terminator was found.
 	if idx := strings.Index(desc, " ##"); idx > 0 {
-		return strings.TrimSpace(desc[:idx]) + "."
+		return truncateToMaxLen(strings.TrimSpace(desc[:idx]) + ".")
 	}
 
 	// No terminator and no markdown header — apply the hard length bound.
 	// strings.Fields above already collapsed runs of whitespace, so this is
 	// just a length check on the collapsed string.
-	if len(desc) > firstSentenceMaxLen {
-		const ellipsis = "…"
-		runes := []rune(desc)
-		if len(runes) > firstSentenceMaxLen {
-			return string(runes[:firstSentenceMaxLen-1]) + ellipsis
-		}
-	}
+	return truncateToMaxLen(desc)
+}
 
-	return desc
+// truncateToMaxLen returns s unchanged if it fits within firstSentenceMaxLen
+// runes, otherwise truncates to firstSentenceMaxLen-1 runes and appends a
+// single ellipsis rune so the total stays within the budget.
+func truncateToMaxLen(s string) string {
+	runes := []rune(s)
+	if len(runes) <= firstSentenceMaxLen {
+		return s
+	}
+	const ellipsis = "…"
+	return string(runes[:firstSentenceMaxLen-1]) + ellipsis
 }
