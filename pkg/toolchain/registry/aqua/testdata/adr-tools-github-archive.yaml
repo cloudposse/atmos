@@ -1,0 +1,9 @@
+packages:
+  - type: github_archive
+    repo_owner: npryce
+    repo_name: adr-tools
+    files:
+      - name: adr
+        src: adr-tools-{{trimV .Version}}/src/adr
+      - name: _adr
+        src: adr-tools-{{trimV .Version}}/src/_adr

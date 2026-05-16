@@ -2257,6 +2257,39 @@ func TestResetByPkgType(t *testing.T) {
 		resetByPkgType(tool, "github_release")
 		assert.Equal(t, "", tool.URL, "URL should be cleared when switching to github_release")
 	})
+
+	t.Run("http to github_archive clears Asset and URL", func(t *testing.T) {
+		tool := &registry.Tool{
+			Type:  "http",
+			Asset: "tool.tar.gz",
+			URL:   "https://example.com/tool.tar.gz",
+		}
+		resetByPkgType(tool, "github_archive")
+		assert.Equal(t, "", tool.Asset, "Asset should be cleared when switching to github_archive")
+		assert.Equal(t, "", tool.URL, "URL should be cleared when switching to github_archive")
+	})
+
+	t.Run("github_release to github_archive clears Asset and URL", func(t *testing.T) {
+		tool := &registry.Tool{
+			Type:  "github_release",
+			Asset: "tool_{{.Version}}.tar.gz",
+			URL:   "",
+		}
+		resetByPkgType(tool, "github_archive")
+		assert.Equal(t, "", tool.Asset, "Asset should be cleared when switching to github_archive")
+		assert.Equal(t, "", tool.URL, "URL should be cleared when switching to github_archive")
+	})
+
+	t.Run("github_archive to http clears Asset", func(t *testing.T) {
+		tool := &registry.Tool{
+			Type: "github_archive",
+			URL:  "https://example.com/preserved.tar.gz",
+		}
+		resetByPkgType(tool, "http")
+		// "http" case only clears Asset; URL is preserved (http uses URL).
+		assert.Equal(t, "https://example.com/preserved.tar.gz", tool.URL,
+			"URL should be preserved when switching to http")
+	})
 }
 
 // TestStripFileExtension verifies file extension stripping for AssetWithoutExt.
@@ -2787,4 +2820,147 @@ func TestExecuteAssetTemplate_AssetWithoutExt(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, "tool_v1.0.0_linux_amd64_checksums.txt", result)
 	})
+}
+
+// =============================================================================
+// github_archive package type registry parsing tests
+// =============================================================================
+//
+// Mirrors upstream aquaproj/aqua test coverage for github_archive:
+//   - Validate fails when repo_owner/repo_name missing
+//     (aqua: pkg/config/registry/package_info_test.go)
+//   - Required fields parsed correctly with both owner and name set
+//     (aqua: pkg/config/registry/package_info_test.go)
+
+// TestAquaRegistry_parseRegistryFile_GitHubArchive verifies that a github_archive
+// package definition from a fixture file parses correctly, including the files[]
+// entries with template-based src paths (the documented Aqua idiom).
+func TestAquaRegistry_parseRegistryFile_GitHubArchive(t *testing.T) {
+	data, err := os.ReadFile("testdata/adr-tools-github-archive.yaml")
+	require.NoError(t, err, "Should read testdata file")
+
+	ar := NewAquaRegistry()
+	tool, err := ar.parseRegistryFile(data)
+	require.NoError(t, err)
+	require.NotNil(t, tool)
+
+	assert.Equal(t, "github_archive", tool.Type)
+	assert.Equal(t, "npryce", tool.RepoOwner)
+	assert.Equal(t, "adr-tools", tool.RepoName)
+
+	// github_archive uses files[] with {{trimV .Version}} idiom for the archive root dir.
+	require.Len(t, tool.Files, 2)
+	assert.Equal(t, "adr", tool.Files[0].Name)
+	assert.Equal(t, "adr-tools-{{trimV .Version}}/src/adr", tool.Files[0].Src)
+	assert.Equal(t, "_adr", tool.Files[1].Name)
+	assert.Equal(t, "adr-tools-{{trimV .Version}}/src/_adr", tool.Files[1].Src)
+
+	// github_archive does not use asset or url fields.
+	assert.Empty(t, tool.Asset, "github_archive must not have Asset")
+	assert.Empty(t, tool.URL, "github_archive must not have URL")
+}
+
+// TestAquaRegistry_GetTool_GitHubArchive_RemoteRegistry verifies that a remote
+// registry serving a github_archive package is fetched and parsed correctly.
+func TestAquaRegistry_GetTool_GitHubArchive_RemoteRegistry(t *testing.T) {
+	registryYAML := `
+packages:
+  - type: github_archive
+    repo_owner: npryce
+    repo_name: adr-tools
+    files:
+      - name: adr
+        src: adr-tools-{{trimV .Version}}/src/adr
+`
+
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/x-yaml")
+		_, _ = w.Write([]byte(registryYAML))
+	}))
+	defer ts.Close()
+
+	ar := NewAquaRegistry()
+	ar.cache.baseDir = t.TempDir()
+
+	tool, err := ar.fetchFromRegistry(ts.URL, "npryce", "adr-tools")
+	require.NoError(t, err)
+	require.NotNil(t, tool)
+
+	assert.Equal(t, "github_archive", tool.Type)
+	assert.Equal(t, "npryce", tool.RepoOwner)
+	assert.Equal(t, "adr-tools", tool.RepoName)
+	require.Len(t, tool.Files, 1)
+	assert.Equal(t, "adr", tool.Files[0].Name)
+	assert.Equal(t, "adr-tools-{{trimV .Version}}/src/adr", tool.Files[0].Src)
+}
+
+// TestAquaRegistry_GetTool_GitHubArchive_LocalConfig verifies that a local atmos.yaml
+// config containing a github_archive tool is loaded and looked up correctly.
+func TestAquaRegistry_GetTool_GitHubArchive_LocalConfig(t *testing.T) {
+	ar := NewAquaRegistry()
+
+	tempDir := t.TempDir()
+	configPath := filepath.Join(tempDir, "tools.yaml")
+	configContent := `
+tools:
+  npryce/adr-tools:
+    type: github_archive
+    repo_owner: npryce
+    repo_name: adr-tools
+    files:
+      - name: adr
+        src: adr-tools-{{trimV .Version}}/src/adr
+`
+	err := os.WriteFile(configPath, []byte(configContent), defaultFileWritePermissions)
+	require.NoError(t, err)
+
+	err = ar.LoadLocalConfig(configPath)
+	require.NoError(t, err)
+
+	tool, err := ar.GetTool("npryce", "adr-tools")
+	require.NoError(t, err)
+	require.NotNil(t, tool)
+	assert.Equal(t, "github_archive", tool.Type)
+	assert.Equal(t, "npryce", tool.RepoOwner)
+	assert.Equal(t, "adr-tools", tool.RepoName)
+	require.Len(t, tool.Files, 1)
+	assert.Equal(t, "adr", tool.Files[0].Name)
+}
+
+// TestAquaRegistry_GetToolWithVersion_GitHubArchive_VersionOverride verifies that a
+// version_override switching to github_archive correctly resets Asset/URL and parses
+// the resulting tool. This exercises both resolveVersionOverrides and resetByPkgType.
+func TestAquaRegistry_GetToolWithVersion_GitHubArchive_VersionOverride(t *testing.T) {
+	// Base package is github_release with an Asset template; one version_override
+	// switches it to github_archive. After the switch, Asset and URL must be cleared.
+	registryYAML := `
+packages:
+  - type: github_release
+    repo_owner: npryce
+    repo_name: adr-tools
+    asset: adr-tools-{{.Version}}.tar.gz
+    version_constraint: "false"
+    version_overrides:
+      - version_constraint: "true"
+        type: github_archive
+`
+
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/x-yaml")
+		_, _ = w.Write([]byte(registryYAML))
+	}))
+	defer ts.Close()
+
+	ar := NewAquaRegistry()
+	ar.cache.baseDir = t.TempDir()
+
+	tool, err := ar.resolveVersionOverrides(ts.URL+"/registry.yaml", "3.0.0")
+	require.NoError(t, err)
+	require.NotNil(t, tool)
+
+	assert.Equal(t, "github_archive", tool.Type)
+	assert.Empty(t, tool.Asset,
+		"Asset must be cleared after switching to github_archive via version override")
+	assert.Empty(t, tool.URL,
+		"URL must be cleared after switching to github_archive via version override")
 }

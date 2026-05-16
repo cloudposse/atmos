@@ -285,6 +285,10 @@ func resetByPkgType(tool *registry.Tool, newType string) {
 	case "github_release":
 		// GitHub release type uses Asset, not http-specific URL.
 		tool.URL = ""
+	case "github_archive":
+		// GitHub archive type derives its URL from repo + version; neither Asset nor URL applies.
+		tool.Asset = ""
+		tool.URL = ""
 	}
 }
 

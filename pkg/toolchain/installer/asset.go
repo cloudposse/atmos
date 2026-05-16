@@ -38,6 +38,8 @@ func (i *Installer) BuildAssetURL(tool *registry.Tool, version string) (string, 
 		return i.buildHTTPAssetURL(tool, version)
 	case "github_release":
 		return i.buildGitHubReleaseURL(tool, version)
+	case "github_archive":
+		return i.buildGitHubArchiveURL(tool, version)
 	default:
 		return "", fmt.Errorf("%w: unsupported tool type: %s", ErrInvalidToolSpec, tool.Type)
 	}
@@ -100,6 +102,24 @@ func (i *Installer) buildGitHubReleaseURL(tool *registry.Tool, version string) (
 		tool.RepoOwner, tool.RepoName, data.Version, assetName)
 
 	return url, nil
+}
+
+// buildGitHubArchiveURL builds an asset URL for github_archive type tools.
+// Matches upstream aquaproj/aqua behavior: always uses GitHub's tag archive endpoint
+// with .tar.gz format. The Asset, URL, Format, and FormatOverrides fields are
+// intentionally ignored (Aqua's GetFormat() hardcodes "tar.gz" for github_archive).
+// See: https://github.com/aquaproj/aqua/blob/main/pkg/download/github_archive.go.
+func (i *Installer) buildGitHubArchiveURL(tool *registry.Tool, version string) (string, error) {
+	defer perf.Track(nil, "Installer.buildGitHubArchiveURL")()
+
+	if tool.RepoOwner == "" || tool.RepoName == "" {
+		return "", fmt.Errorf("%w: RepoOwner and RepoName must be set for github_archive type (got RepoOwner=%q, RepoName=%q)",
+			ErrInvalidToolSpec, tool.RepoOwner, tool.RepoName)
+	}
+
+	data := buildTemplateData(tool, version)
+	return fmt.Sprintf("https://github.com/%s/%s/archive/refs/tags/%s.tar.gz",
+		tool.RepoOwner, tool.RepoName, data.Version), nil
 }
 
 // archiveExtensions contains known archive file extensions.
