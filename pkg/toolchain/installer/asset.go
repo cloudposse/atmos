@@ -189,9 +189,11 @@ func buildTemplateData(tool *registry.Tool, version string) *assetTemplateData {
 }
 
 // assetTemplateFuncs returns the template functions for asset URL templates.
-// Uses Sprig v3 text functions as the base (matching Aqua upstream), with Aqua-specific overrides.
+// Uses Sprig v3 hermetic text functions as the base (matching Aqua upstream), with Aqua-specific overrides.
+// HermeticTxtFuncMap is used instead of TxtFuncMap to exclude env/expandenv, preventing
+// asset URL templates from reading arbitrary process environment variables (CWE-526).
 func assetTemplateFuncs() template.FuncMap {
-	funcs := sprig.TxtFuncMap()
+	funcs := sprig.HermeticTxtFuncMap()
 
 	// Override with Aqua-specific functions that have different argument order
 	// or behavior than Sprig equivalents.
