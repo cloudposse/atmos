@@ -673,6 +673,172 @@ func TestBuildBaseComponent(t *testing.T) {
 	assert.Equal(t, "terraform", comp["type"])
 }
 
+// TestUniqueComponents_EnabledFieldDeterministic_Issue2359 reproduces
+// https://github.com/cloudposse/atmos/issues/2359. When the same component
+// has different `enabled` values across stacks, UniqueComponents must
+// return a deterministic `enabled` value. Currently it records metadata
+// only from the first stack iterated (in extractUniqueComponentType, see
+// components.go:251-271), and Go map iteration order is randomized — so
+// the result varies between runs. This causes `atmos list components
+// --enabled=false` to return different content on every invocation.
+func TestUniqueComponents_EnabledFieldDeterministic_Issue2359(t *testing.T) {
+	// vpc is disabled in two stacks and enabled in a third.
+	// Whichever stack iterates first determines the reported `enabled`.
+	stacksMap := map[string]any{
+		"stack-a-disabled": map[string]any{
+			"components": map[string]any{
+				"terraform": map[string]any{
+					"vpc": map[string]any{
+						"metadata": map[string]any{"enabled": false},
+					},
+				},
+			},
+		},
+		"stack-b-disabled": map[string]any{
+			"components": map[string]any{
+				"terraform": map[string]any{
+					"vpc": map[string]any{
+						"metadata": map[string]any{"enabled": false},
+					},
+				},
+			},
+		},
+		"stack-c-enabled": map[string]any{
+			"components": map[string]any{
+				"terraform": map[string]any{
+					"vpc": map[string]any{
+						"metadata": map[string]any{"enabled": true},
+					},
+				},
+			},
+		},
+	}
+
+	const iterations = 200
+	seenEnabled := make(map[bool]int)
+	for i := 0; i < iterations; i++ {
+		components, err := UniqueComponents(stacksMap, "")
+		require.NoError(t, err)
+		require.Len(t, components, 1)
+		enabled, ok := components[0]["enabled"].(bool)
+		require.True(t, ok, "enabled field missing or not bool")
+		seenEnabled[enabled]++
+	}
+
+	// With the pre-fix code, both true and false appeared across iterations
+	// because Go map iteration order is randomized. Post-fix, the value must
+	// be deterministic (only one key in the map).
+	assert.Lenf(t, seenEnabled, 1,
+		"issue #2359: enabled field is non-deterministic across runs — "+
+			"saw distribution %v over %d iterations",
+		seenEnabled, iterations)
+
+	// Fix policy: any-disabled-wins. vpc is disabled in at least one stack,
+	// so the aggregate must be disabled regardless of iteration order.
+	assert.Equal(t, 200, seenEnabled[false],
+		"issue #2359: when any instance is disabled, the unique component "+
+			"must be reported as disabled (any-disabled-wins)")
+}
+
+// TestUniqueComponents_AnyDisabledWins verifies the aggregation policy:
+// when a component is enabled in some stacks and disabled in others, the
+// unique component is reported as disabled so it appears under
+// `atmos list components --enabled=false`.
+func TestUniqueComponents_AnyDisabledWins(t *testing.T) {
+	stacksMap := map[string]any{
+		"stack-1": map[string]any{
+			"components": map[string]any{
+				"terraform": map[string]any{
+					"vpc": map[string]any{
+						"metadata": map[string]any{"enabled": true},
+					},
+					"eks": map[string]any{
+						"metadata": map[string]any{"enabled": true, "locked": true},
+					},
+				},
+			},
+		},
+		"stack-2": map[string]any{
+			"components": map[string]any{
+				"terraform": map[string]any{
+					"vpc": map[string]any{
+						"metadata": map[string]any{"enabled": false},
+					},
+					"eks": map[string]any{
+						"metadata": map[string]any{"enabled": true, "locked": false},
+					},
+				},
+			},
+		},
+	}
+
+	components, err := UniqueComponents(stacksMap, "")
+	require.NoError(t, err)
+	require.Len(t, components, 2)
+
+	byName := make(map[string]map[string]any, len(components))
+	for _, c := range components {
+		byName[c["component"].(string)] = c
+	}
+
+	// vpc: enabled in stack-1, disabled in stack-2 → aggregate disabled.
+	require.Contains(t, byName, "vpc")
+	assert.Equal(t, false, byName["vpc"]["enabled"])
+	assert.Equal(t, "disabled", byName["vpc"]["status_text"])
+	assert.Equal(t, 2, byName["vpc"]["stack_count"])
+
+	// eks: enabled in both; locked in stack-1, unlocked in stack-2 → aggregate locked.
+	require.Contains(t, byName, "eks")
+	assert.Equal(t, true, byName["eks"]["enabled"])
+	assert.Equal(t, true, byName["eks"]["locked"])
+	assert.Equal(t, "locked", byName["eks"]["status_text"])
+	assert.Equal(t, 2, byName["eks"]["stack_count"])
+}
+
+// TestUniqueComponents_DeterministicOrder verifies that the output slice
+// itself is returned in a stable order across runs, not just that the
+// per-component metadata is stable.
+func TestUniqueComponents_DeterministicOrder(t *testing.T) {
+	stacksMap := map[string]any{
+		"stack-a": map[string]any{
+			"components": map[string]any{
+				"terraform": map[string]any{
+					"zebra": map[string]any{},
+					"alpha": map[string]any{},
+					"mango": map[string]any{},
+				},
+				"helmfile": map[string]any{
+					"alpha": map[string]any{},
+				},
+			},
+		},
+		"stack-b": map[string]any{
+			"components": map[string]any{
+				"terraform": map[string]any{
+					"alpha": map[string]any{},
+				},
+			},
+		},
+	}
+
+	var first []string
+	const iterations = 50
+	for i := 0; i < iterations; i++ {
+		components, err := UniqueComponents(stacksMap, "")
+		require.NoError(t, err)
+		names := make([]string, len(components))
+		for j, c := range components {
+			names[j] = c["component"].(string) + ":" + c["type"].(string)
+		}
+		if i == 0 {
+			first = names
+			continue
+		}
+		require.Equal(t, first, names,
+			"issue #2359: UniqueComponents output order must be deterministic")
+	}
+}
+
 // Test extractUniqueComponentType function.
 func TestExtractUniqueComponentType(t *testing.T) {
 	seen := make(map[string]map[string]any)
