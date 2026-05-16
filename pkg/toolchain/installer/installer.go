@@ -49,10 +49,17 @@ const (
 func EnsureWindowsExeExtension(binaryName string) string {
 	defer perf.Track(nil, "installer.EnsureWindowsExeExtension")()
 
-	if runtime.GOOS == "windows" && !strings.HasSuffix(strings.ToLower(binaryName), windowsExeExt) {
-		return binaryName + windowsExeExt
+	return ensureExeExtensionForOS(binaryName, runtime.GOOS)
+}
+
+// ensureExeExtensionForOS is the platform-parameterized form of EnsureWindowsExeExtension.
+// Used by cross-platform URL building (lockfile generation) where the target OS may not
+// match the host. Returns name unchanged when targetGOOS is not "windows".
+func ensureExeExtensionForOS(name, targetGOOS string) string {
+	if targetGOOS == "windows" && !strings.HasSuffix(strings.ToLower(name), windowsExeExt) {
+		return name + windowsExeExt
 	}
-	return binaryName
+	return name
 }
 
 // ToolResolver defines an interface for resolving tool names to owner/repo pairs

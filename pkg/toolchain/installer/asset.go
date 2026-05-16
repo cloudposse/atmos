@@ -29,29 +29,46 @@ type assetTemplateData struct {
 	AssetWithoutExt string // Asset with file extension removed (populated in second pass).
 }
 
-// BuildAssetURL constructs the asset download URL based on tool configuration.
+// BuildAssetURL constructs the asset download URL for the current platform.
+// This is a convenience wrapper around BuildAssetURLForPlatform that uses runtime.GOOS / runtime.GOARCH.
+// Callers needing cross-platform resolution (e.g. lockfile generation) should call
+// BuildAssetURLForPlatform directly.
 func (i *Installer) BuildAssetURL(tool *registry.Tool, version string) (string, error) {
 	defer perf.Track(nil, "Installer.BuildAssetURL")()
 
-	switch tool.Type {
+	return i.BuildAssetURLForPlatform(tool, version, runtime.GOOS, runtime.GOARCH)
+}
+
+// BuildAssetURLForPlatform constructs the asset download URL for an explicit target platform.
+// Used by `atmos toolchain lock` to populate every platform the registry advertises for a tool
+// (a Mac dev can produce a lockfile that works in Linux / Windows CI).
+//
+// Does NOT mutate the input tool — platform overrides are applied to an internal copy so
+// callers can invoke this repeatedly with different (goos, goarch) values for the same tool.
+func (i *Installer) BuildAssetURLForPlatform(tool *registry.Tool, version, goos, goarch string) (string, error) {
+	defer perf.Track(nil, "Installer.BuildAssetURLForPlatform")()
+
+	resolved := resolveToolForPlatform(tool, goos, goarch)
+
+	switch resolved.Type {
 	case "http":
-		return i.buildHTTPAssetURL(tool, version)
+		return i.buildHTTPAssetURL(resolved, version, goos, goarch)
 	case "github_release":
-		return i.buildGitHubReleaseURL(tool, version)
+		return i.buildGitHubReleaseURL(resolved, version, goos, goarch)
 	default:
-		return "", fmt.Errorf("%w: unsupported tool type: %s", ErrInvalidToolSpec, tool.Type)
+		return "", fmt.Errorf("%w: unsupported tool type: %s", ErrInvalidToolSpec, resolved.Type)
 	}
 }
 
 // buildHTTPAssetURL builds an asset URL for HTTP type tools.
-func (i *Installer) buildHTTPAssetURL(tool *registry.Tool, version string) (string, error) {
+func (i *Installer) buildHTTPAssetURL(tool *registry.Tool, version, goos, goarch string) (string, error) {
 	defer perf.Track(nil, "Installer.buildHTTPAssetURL")()
 
 	if tool.Asset == "" {
 		return "", fmt.Errorf("%w: Asset URL template is required for HTTP type tools", ErrInvalidToolSpec)
 	}
 
-	data := buildTemplateData(tool, version)
+	data := buildTemplateDataForPlatform(tool, version, goos, goarch)
 	url, err := executeAssetTemplate(tool.Asset, tool, data)
 	if err != nil {
 		return "", err
@@ -62,14 +79,14 @@ func (i *Installer) buildHTTPAssetURL(tool *registry.Tool, version string) (stri
 	// Only apply when: not an archive AND has no extension (avoids .msi.exe, etc.).
 	// See: https://aquaproj.github.io/docs/reference/windows-support/.
 	if !hasArchiveExtension(url) && filepath.Ext(url) == "" {
-		url = EnsureWindowsExeExtension(url)
+		url = ensureExeExtensionForOS(url, goos)
 	}
 
 	return url, nil
 }
 
 // buildGitHubReleaseURL builds an asset URL for GitHub release type tools.
-func (i *Installer) buildGitHubReleaseURL(tool *registry.Tool, version string) (string, error) {
+func (i *Installer) buildGitHubReleaseURL(tool *registry.Tool, version, goos, goarch string) (string, error) {
 	defer perf.Track(nil, "Installer.buildGitHubReleaseURL")()
 
 	if tool.RepoOwner == "" || tool.RepoName == "" {
@@ -82,7 +99,7 @@ func (i *Installer) buildGitHubReleaseURL(tool *registry.Tool, version string) (
 		assetTemplate = "{{.RepoName}}_{{.Version}}_{{.OS}}_{{.Arch}}.tar.gz"
 	}
 
-	data := buildTemplateData(tool, version)
+	data := buildTemplateDataForPlatform(tool, version, goos, goarch)
 	assetName, err := executeAssetTemplate(assetTemplate, tool, data)
 	if err != nil {
 		return "", err
@@ -93,7 +110,7 @@ func (i *Installer) buildGitHubReleaseURL(tool *registry.Tool, version string) (
 	// Only apply when: not an archive AND has no extension (avoids .msi.exe, etc.).
 	// See: https://aquaproj.github.io/docs/reference/windows-support/.
 	if !hasArchiveExtension(assetName) && filepath.Ext(assetName) == "" {
-		assetName = EnsureWindowsExeExtension(assetName)
+		assetName = ensureExeExtensionForOS(assetName, goos)
 	}
 
 	url := fmt.Sprintf("https://github.com/%s/%s/releases/download/%s/%s",
@@ -120,43 +137,69 @@ func hasArchiveExtension(name string) bool {
 	return false
 }
 
-// buildTemplateData creates template data for asset URL building.
-// Following Aqua behavior: version_prefix defaults to empty, not "v".
-// Templates use {{trimV .Version}} or {{.SemVer}} when they need the version without prefix.
+// buildTemplateData creates template data for asset URL building for the current platform.
+// Convenience wrapper around buildTemplateDataForPlatform.
 func buildTemplateData(tool *registry.Tool, version string) *assetTemplateData {
 	defer perf.Track(nil, "buildTemplateData")()
 
-	// Use version_prefix only if explicitly set in registry definition.
-	// This matches Aqua's behavior where version_prefix defaults to empty.
+	return buildTemplateDataForPlatform(tool, version, runtime.GOOS, runtime.GOARCH)
+}
+
+// buildTemplateDataForPlatform creates template data for asset URL building for an explicit
+// target platform. Following Aqua behavior: version_prefix defaults to empty, not "v".
+// Templates use {{trimV .Version}} or {{.SemVer}} when they need the version without prefix.
+func buildTemplateDataForPlatform(tool *registry.Tool, version, goos, goarch string) *assetTemplateData {
+	defer perf.Track(nil, "buildTemplateDataForPlatform")()
+
+	releaseVersion, semVer := resolveVersion(tool, version)
+	osVal, archVal := resolveOSArch(tool, goos, goarch)
+	format := resolveFormat(tool, goos)
+
+	return &assetTemplateData{
+		Version:   releaseVersion,
+		SemVer:    semVer,
+		OS:        osVal,
+		Arch:      archVal,
+		GOOS:      goos,
+		GOARCH:    goarch,
+		RepoOwner: tool.RepoOwner,
+		RepoName:  tool.RepoName,
+		Format:    format,
+	}
+}
+
+// resolveVersion applies the registry's version prefix rules, returning both the
+// prefixed release version (used in URLs / tag names) and the bare SemVer.
+func resolveVersion(tool *registry.Tool, version string) (release, semVer string) {
 	prefix := tool.VersionPrefix
-
-	releaseVersion := version
-	if prefix != "" && !strings.HasPrefix(releaseVersion, prefix) {
-		releaseVersion = prefix + releaseVersion
+	release = version
+	if prefix != "" && !strings.HasPrefix(release, prefix) {
+		release = prefix + release
 	}
-
-	// SemVer is the version without any prefix.
-	semVer := version
+	semVer = version
 	if prefix != "" {
-		semVer = strings.TrimPrefix(releaseVersion, prefix)
+		semVer = strings.TrimPrefix(release, prefix)
 	}
+	return release, semVer
+}
 
-	// Get OS and Arch, applying emulation fallbacks and replacements.
-	osVal := runtime.GOOS
-	archVal := runtime.GOARCH
+// resolveOSArch applies emulation fallbacks (Rosetta 2, Windows ARM) and per-platform
+// replacements from the tool config, returning the OS/Arch values to use in templates.
+func resolveOSArch(tool *registry.Tool, goos, goarch string) (osVal, archVal string) {
+	osVal = goos
+	archVal = goarch
 
 	// Rosetta 2 fallback: on darwin/arm64, always use amd64 when rosetta2 is enabled.
 	// This matches upstream aquaproj/aqua behavior (no arm64 replacement check).
 	if tool.Rosetta2 && osVal == "darwin" && archVal == "arm64" {
 		archVal = "amd64"
 	}
-
 	// Windows ARM emulation fallback: always use amd64 when enabled on windows/arm64.
 	if tool.WindowsArmEmulation && osVal == "windows" && archVal == "arm64" {
 		archVal = "amd64"
 	}
 
-	// Apply replacements from the tool config.
+	// Apply replacements from the tool config (e.g. amd64 -> x86_64, darwin -> macOS).
 	if tool.Replacements != nil {
 		if replacement, ok := tool.Replacements[osVal]; ok {
 			osVal = replacement
@@ -165,27 +208,35 @@ func buildTemplateData(tool *registry.Tool, version string) *assetTemplateData {
 			archVal = replacement
 		}
 	}
+	return osVal, archVal
+}
 
-	// Apply per-OS format overrides (e.g., zip on Windows, tar.gz on Linux).
-	format := tool.Format
-	for _, fo := range tool.FormatOverrides {
-		if fo.GOOS == runtime.GOOS {
-			format = fo.Format
+// resolveFormat applies per-OS format overrides (e.g. zip on Windows, tar.gz on Linux).
+// Falls back to the tool's default Format if no override matches.
+func resolveFormat(tool *registry.Tool, goos string) string {
+	for i := range tool.FormatOverrides {
+		if tool.FormatOverrides[i].GOOS == goos {
+			return tool.FormatOverrides[i].Format
+		}
+	}
+	return tool.Format
+}
+
+// resolveToolForPlatform returns a copy of tool with any matching `overrides[]` block
+// already merged in for the given (goos, goarch). The caller's tool is never mutated, so
+// this is safe to call repeatedly with different platforms (e.g. during lockfile generation).
+//
+// First-matching-override-wins semantics match installer.ApplyPlatformOverrides.
+func resolveToolForPlatform(tool *registry.Tool, goos, goarch string) *registry.Tool {
+	copyOfTool := *tool
+	for i := range tool.Overrides {
+		override := &tool.Overrides[i]
+		if matchesOverride(override, goos, goarch) {
+			applyOverride(&copyOfTool, override)
 			break
 		}
 	}
-
-	return &assetTemplateData{
-		Version:   releaseVersion,
-		SemVer:    semVer,
-		OS:        osVal,
-		Arch:      archVal,
-		GOOS:      runtime.GOOS,
-		GOARCH:    runtime.GOARCH,
-		RepoOwner: tool.RepoOwner,
-		RepoName:  tool.RepoName,
-		Format:    format,
-	}
+	return &copyOfTool
 }
 
 // assetTemplateFuncs returns the template functions for asset URL templates.
