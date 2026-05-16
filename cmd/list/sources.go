@@ -52,6 +52,7 @@ type SourcesOptions struct {
 	AuthManager      auth.AuthManager
 	ProcessTemplates bool
 	ProcessFunctions bool
+	Skip             []string
 }
 
 // sourcesCmd lists components with source configuration.
@@ -91,6 +92,7 @@ func init() {
 		WithStackFlag,
 		WithProcessTemplatesFlag,
 		WithProcessFunctionsFlag,
+		WithSkipFlag,
 	)
 
 	// Register flags for sources command.
@@ -116,6 +118,7 @@ func parseSourcesOptions(cmd *cobra.Command, v *viper.Viper, args []string) *Sou
 		Stack:            v.GetString("stack"),
 		ProcessTemplates: v.GetBool("process-templates"),
 		ProcessFunctions: v.GetBool("process-functions"),
+		Skip:             v.GetStringSlice("skip"),
 	}
 	if len(args) > 0 {
 		opts.Component = args[0]
@@ -189,7 +192,7 @@ func fetchAndFilterSources(opts *SourcesOptions) ([]map[string]any, error) {
 		opts.ProcessTemplates,
 		opts.ProcessFunctions,
 		false, // includeEmptyStacks
-		nil,   // skip
+		opts.Skip,
 		opts.AuthManager,
 	)
 	if err != nil {
@@ -245,7 +248,8 @@ func buildSourcesSorters(includeStack bool) []*listSort.Sorter {
 	if includeStack {
 		sorters = append(sorters, listSort.NewSorter("Stack", listSort.Ascending))
 	}
-	sorters = append(sorters,
+	sorters = append(
+		sorters,
 		listSort.NewSorter("Type", listSort.Ascending),
 		listSort.NewSorter("Component", listSort.Ascending),
 	)
@@ -275,7 +279,8 @@ func getSourcesListColumnsForContext(hasStack, hasFolderDiff bool) []column.Conf
 	}
 
 	// URI and Version always shown.
-	columns = append(columns,
+	columns = append(
+		columns,
 		column.Config{Name: "URI", Value: "{{ .uri }}"},
 		column.Config{Name: "Version", Value: "{{ .version }}"},
 	)

@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
 
 	e "github.com/cloudposse/atmos/internal/exec"
@@ -158,16 +159,29 @@ func newCommonListParser(additionalOptions ...flags.Option) *flags.StandardParse
 func getIdentityFromCommand(cmd *cobra.Command) string {
 	var value string
 
-	// Check if flag was explicitly set.
-	if cmd.Flags().Changed("identity") {
-		value, _ = cmd.Flags().GetString("identity")
-	} else {
-		// Fall back to environment variable via Viper.
-		value = viper.GetString("identity")
+	if flag := lookupChangedIdentityFlag(cmd); flag != nil {
+		value = flag.Value.String()
+		return normalizeIdentityValue(value)
 	}
 
-	// Normalize boolean false representations to disabled sentinel value.
+	// Fall back to environment variable via Viper.
+	value = viper.GetString(cfg.IdentityFlagName)
 	return normalizeIdentityValue(value)
+}
+
+func lookupChangedIdentityFlag(cmd *cobra.Command) *pflag.Flag {
+	for current := cmd; current != nil; current = current.Parent() {
+		for _, flagSet := range []*pflag.FlagSet{
+			current.Flags(),
+			current.InheritedFlags(),
+			current.PersistentFlags(),
+		} {
+			if flag := flagSet.Lookup(cfg.IdentityFlagName); flag != nil && flag.Changed {
+				return flag
+			}
+		}
+	}
+	return nil
 }
 
 // normalizeIdentityValue converts boolean false representations to the disabled sentinel value.

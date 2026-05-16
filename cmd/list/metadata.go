@@ -23,6 +23,7 @@ type MetadataOptions struct {
 	Filter           string
 	ProcessTemplates bool
 	ProcessFunctions bool
+	Skip             []string
 }
 
 // metadataCmd lists metadata across stacks.
@@ -70,6 +71,7 @@ func parseMetadataOptions(cmd *cobra.Command, v *viper.Viper) *MetadataOptions {
 		Filter:           v.GetString("filter"),
 		ProcessTemplates: v.GetBool("process-templates"),
 		ProcessFunctions: v.GetBool("process-functions"),
+		Skip:             v.GetStringSlice("skip"),
 	}
 }
 
@@ -110,6 +112,7 @@ func init() {
 		WithFilterFlag,
 		WithProcessTemplatesFlag,
 		WithProcessFunctionsFlag,
+		WithSkipFlag,
 	)
 
 	// Register flags.
@@ -157,6 +160,7 @@ func executeListMetadataCmd(cmd *cobra.Command, args []string, opts *MetadataOpt
 		AuthManager:      authManager,
 		ProcessTemplates: opts.ProcessTemplates,
 		ProcessFunctions: opts.ProcessFunctions,
+		Skip:             opts.Skip,
 	}
 
 	return list.ExecuteListMetadataCmd(&configAndStacksInfo, cmd, args, pkgOpts)

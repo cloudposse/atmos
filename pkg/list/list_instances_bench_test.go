@@ -28,7 +28,10 @@ func BenchmarkCollectInstances(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_ = collectInstances(stacksMap)
+		_, err := collectInstances(stacksMap, "")
+		if err != nil {
+			b.Fatalf("collectInstances returned error: %v", err)
+		}
 	}
 }
 
