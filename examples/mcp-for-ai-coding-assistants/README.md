@@ -9,6 +9,21 @@ the same set of tools — with the same AWS credentials — from
 
 Learn more in the [MCP configuration documentation](https://atmos.tools/cli/configuration/mcp).
 
+---
+
+### Your AI knows your stacks. And your cloud. And your history.
+
+In one prompt, your AI coding assistant answers:
+
+- What's **configured** in your infrastructure
+- What's **deployed** in your cloud accounts
+- What **changed** — when, why, how, and by whom
+
+Centralized auth. Centralized permissions. One `atmos.yaml`.
+[Jump to the setup →](#one-time-setup)
+
+---
+
 ## What This Example Demonstrates
 
 - **One source of truth** — every MCP server is defined in `atmos.yaml` (versioned with your
