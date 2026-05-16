@@ -1,6 +1,7 @@
 package verification
 
 import (
+	"runtime"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -17,15 +18,15 @@ func TestRenderTemplateStringAquaFieldsAndFunctions(t *testing.T) {
 			RepoName:      "tool",
 			VersionPrefix: "v",
 			Format:        "tar.gz",
-			Replacements:  map[string]string{"darwin": "darwin_os"},
+			Replacements:  map[string]string{runtime.GOOS: "test_os"},
 		},
 		"1.2.3",
 		"tool-v1.2.3.tar.gz",
-		map[string]string{"darwin_os": "darwin"},
+		nil,
 	)
 
 	require.NoError(t, err)
-	assert.Contains(t, rendered, "owner/tool/1.2.3/v1.2.3/darwin-os/tar.gz")
+	assert.Contains(t, rendered, "owner/tool/1.2.3/v1.2.3/test-os/tar.gz")
 }
 
 func TestRenderTemplateStringErrors(t *testing.T) {
