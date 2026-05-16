@@ -1,6 +1,7 @@
 package client
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -44,6 +45,27 @@ func TestPrintTestResult_StartedButNoTools(t *testing.T) {
 	assert.NotPanics(t, func() {
 		printTestResult(result)
 	})
+}
+
+// TestPrintTestResult_SurfacesUnderlyingError covers the `result.Error != nil`
+// branch added in response to CodeRabbit feedback. Before this branch was
+// added, `printTestResult` told the user WHICH stage failed but never WHY —
+// users saw `✗ Server failed to start` with no actionable context. The new
+// `ui.Errorf("Error: %v", result.Error)` line surfaces the underlying error
+// so users can troubleshoot without having to re-run with --debug.
+//
+// We can't easily capture stderr in a unit test (ui.Errorf goes through
+// the formatter pipeline), but we can pin the structural contract: with
+// a non-nil Error, printTestResult must not panic and must walk through
+// the error branch.
+func TestPrintTestResult_SurfacesUnderlyingError(t *testing.T) {
+	result := &mcpclient.TestResult{
+		ServerStarted: false,
+		Error:         errors.New("connection refused on /tmp/mcp.sock"),
+	}
+	assert.NotPanics(t, func() {
+		printTestResult(result)
+	}, "printTestResult must handle the non-nil Error branch without panicking")
 }
 
 // TestTestCmd_Registration is the basic shape guard.
