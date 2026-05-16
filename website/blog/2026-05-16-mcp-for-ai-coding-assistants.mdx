@@ -1,28 +1,35 @@
 ---
 slug: mcp-for-ai-coding-assistants
-title: "Configure MCP once in Atmos, use it from Claude Code, Codex, and Gemini"
+title: "Configure MCPs once in Atmos, use it from Claude Code, Codex, and Gemini"
 authors: [aknysh]
 tags: [feature, dx]
 ---
 
-`atmos mcp export` (plus a small amount of per-CLI wiring) lets you
-maintain one source of truth for your AI coding assistant's MCP server
-set — the [Atmos MCP server](https://atmos.tools/ai/mcp-server), the entire
-[AWS MCP server suite](https://github.com/awslabs/mcp), and the
-[Atmos Pro MCP server](https://atmos-pro.com/mcp/install) — and use it
-unchanged from Claude Code, OpenAI Codex CLI, and Google Gemini CLI.
-[Atmos Auth](https://atmos.tools/cli/configuration/auth) injects AWS
-credentials into each MCP subprocess automatically, the
+Claude Code, OpenAI Codex CLI, and Google Gemini CLI all speak MCP, but
+each wants its own config format, its own credentials flow, and its own
+idea of where binaries live. This post shows how to centralize all of it —
+server configuration, AWS credentials, and toolchain version — in **one
+`atmos.yaml`** that every AI coding assistant uses unchanged.
+
+[Atmos Auth](https://atmos.tools/cli/configuration/auth) is the only place
+AWS credentials live; each MCP server is automatically wrapped with the
+right identity for the question it'll answer (billing → payer account,
+CloudTrail → audit, IAM → root, workload queries → dev). One
+`atmos auth login` covers them all — no API keys in CLI configs, no
+`AWS_PROFILE` swapping between prompts. The server set spans the
+[Atmos MCP server](https://atmos.tools/ai/mcp-server) for project stacks,
+the [AWS MCP server suite](https://github.com/awslabs/mcp) for live cloud
+queries, and the [Atmos Pro MCP server](https://atmos-pro.com/mcp/install)
+for drift, deployment, and audit history. The
 [Atmos toolchain](https://atmos.tools/cli/configuration/toolchain) pins
-`uvx` to a known version, and Atmos Pro adds drift/deployment/audit context
-via a one-time browser OAuth — no API keys to share. New example:
+binaries so every assistant runs the same binary. See the example:
 [`examples/mcp-for-ai-coding-assistants/`](https://atmos.tools/examples/mcp-for-ai-coding-assistants).
 
 <!--truncate-->
 
 ---
 
-### Your AI knows your stacks. And your cloud. And your history.
+### Your AI knows your stacks and components. And your cloud. And your history.
 
 In one prompt, your AI coding assistant answers:
 
@@ -30,7 +37,7 @@ In one prompt, your AI coding assistant answers:
 - What's **deployed** in your cloud accounts
 - What **changed** — when, why, how, and by whom
 
-Centralized auth. Centralized permissions. One `atmos.yaml`.
+Centralized auth. Centralized security and permissions. One `atmos.yaml`.
 [Try the example →](https://atmos.tools/examples/mcp-for-ai-coding-assistants)
 
 ---
@@ -38,7 +45,7 @@ Centralized auth. Centralized permissions. One `atmos.yaml`.
 ## The Problem
 
 If you've tried to use the awslabs MCP servers with more than one AI coding
-assistant, and each MCP server requiring different credentials, you've probably hit this:
+assistant, with each MCP server requiring different credentials, you've probably hit this:
 
 - **Three different config files.** Claude Code reads `.mcp.json`,
   OpenAI Codex CLI reads `~/.codex/config.toml` (TOML, not JSON), and
@@ -56,7 +63,7 @@ assistant, and each MCP server requiring different credentials, you've probably 
   uses a different shell session than Claude Code, one of them might not
   find `uvx`.
 
-Each of these is solvable individually. Solving all four for three CLIs
+Each of these is solvable individually. Solving all of them for three CLIs
 is annoying.
 
 ## The Idea
@@ -103,8 +110,7 @@ MCP-compatible client.
 
 For Claude Code that's the native format. Gemini's
 `.gemini/settings.json` is structurally identical, so the same export
-works with `--output .gemini/settings.json`. For Codex, you translate
-the JSON to TOML once — and the example
+works with `--output .gemini/settings.json`. For Codex, it's TOML format — and the example
 [walks you through that](https://atmos.tools/examples/mcp-for-ai-coding-assistants#option-2--openai-codex-cli).
 
 The result: many MCP servers, three AI CLIs, one Atmos config.
@@ -115,7 +121,7 @@ All three CLIs end up with the same set of MCP servers:
 
 | Server          | Purpose                                       | Transport | Auth                   |
 |-----------------|-----------------------------------------------|-----------|------------------------|
-| **atmos**       | `describe_component`, `list_stacks`, file r/w | stdio     | None (local)           |
+| **atmos**       | `describe component`, `list stacks`, etc.     | stdio     | None (local)           |
 | **atmos-pro**   | Drift, deployments, workflow runs, audit log  | HTTP      | Browser OAuth (GitHub) |
 | aws-docs        | Search AWS documentation                      | stdio     | None (public)          |
 | aws-knowledge   | Managed AWS knowledge base (remote)           | stdio     | None (public)          |
@@ -141,7 +147,7 @@ exported config gives your AI coding assistant programmatic access to
 **your Atmos project** — the stacks, components, manifests, and the
 `atmos` CLI as a whole — alongside the AWS introspection tools.
 
-It exposes ~20 tools across five buckets:
+It exposes more than 20 tools:
 
 - **Stack & component introspection** (read-only) —
   `atmos_list_stacks`, `atmos_describe_component`,
@@ -155,7 +161,6 @@ It exposes ~20 tools across five buckets:
 - **Security & compliance** — `atmos_list_findings`,
   `atmos_describe_finding`, `atmos_analyze_finding`,
   `atmos_compliance_report`.
-- **Grounding** — `web_search`.
 
 Write-side tools (`write_*`, `edit_file`, `execute_bash_command`)
 respect [Atmos's tool permission model](https://atmos.tools/cli/configuration/ai/tools#permissions).
@@ -164,7 +169,7 @@ assistant's own permission UI — Claude Code's per-tool approval,
 Codex's confirm prompt, Gemini's consent dialog — handles execution
 approval.
 
-### The Atmos Pro MCP server (SaaS, history and drift)
+### The Atmos Pro MCP server (SaaS)
 
 [Atmos Pro](https://atmos-pro.com/) is a SaaS layer that gives platform
 teams ordered deployments, drift detection, and stack locking
@@ -177,14 +182,14 @@ over **HTTP transport**. Auth is a one-time browser OAuth (GitHub
 login); short-lived tokens land in your OS keychain, revocable from
 the Atmos Pro UI. No API keys to leak.
 
-It exposes capabilities across four areas:
+It exposes capabilities across these areas:
 
-- **Triage & diagnostics** — list/inspect drifted or errored
-  instances, stacks, and components; access repair history and
-  recommendations; structured failure explanations.
 - **Workflows & deployments** — workflow runs with approval states
   and job summaries; deployment history linked to commits and PRs;
   failed-step logs and failure-pattern analysis over time.
+- **Triage & diagnostics** — list/inspect drifted or errored
+  instances, stacks, and components; access repair history and
+  recommendations; structured failure explanations.
 - **Historical context** — when failures began, flapping detection,
   stability comparisons against previous periods, full audit log.
 - **Security & access** — audit every agent tool call (actor type,
@@ -204,13 +209,12 @@ So the AI can answer cross-layer questions in one prompt:
 > stack config, what does Atmos Pro show for that run, and which
 > AWS resource is now out of sync?"*
 
-…pulling deployment history from atmos-pro, declared config from
-atmos, and live state from aws-api in a single coherent answer.
+…pulling deployment history from `atmos-pro`, declared config from
+`atmos` (or directly from your infra repo, and live state from `aws-api` in a single coherent answer.
 
 ## Wiring Up Each CLI
 
-Once you've run `atmos auth login` and `atmos toolchain install astral-sh/uv`,
-each CLI takes a couple of commands.
+Once you've run `atmos auth login`, each CLI takes a couple of commands.
 
 ### Claude Code
 
@@ -219,7 +223,6 @@ each CLI takes a couple of commands.
 atmos mcp export
 
 # Start Claude Code from that directory.
-cd examples/mcp-for-ai-coding-assistants
 claude
 ```
 
@@ -239,7 +242,7 @@ MCP server's process.
 
 ### OpenAI Codex CLI
 
-Codex reads `~/.codex/config.toml`. Translate the JSON output of `atmos mcp export`:
+Codex reads `~/.codex/config.toml`:
 
 ```toml
 [mcp_servers.atmos]
@@ -255,15 +258,6 @@ args = ["auth", "exec", "-i", "readonly", "--",
 AWS_REGION = "us-east-1"
 FASTMCP_LOG_LEVEL = "ERROR"
 ```
-
-…or skip the translation and run Codex through Atmos:
-
-```bash
-atmos ai exec --provider codex-cli "list unused IAM roles"
-```
-
-Atmos writes the TOML config for that invocation, spawns Codex, and tears
-down the config afterward.
 
 ### Google Gemini CLI
 
@@ -298,7 +292,7 @@ Gemini UI/settings before the servers will start.
 
 ### Atmos Pro (all three CLIs)
 
-The atmos-pro server is HTTP-transport and registered separately from the
+The `atmos-pro` server is HTTP-transport and registered separately from the
 `atmos mcp export` flow. The OAuth handshake runs the first time the
 server is spawned — log in with GitHub, the token lands in your OS
 keychain (no API keys to leak, revocable from the Atmos Pro UI).
@@ -377,7 +371,7 @@ Four benefits:
    accounts you care about in `auth.identities`, run `atmos auth login` once,
    and Atmos picks the right account for every MCP server automatically
    (billing → payer, CloudTrail → audit, IAM analysis → root, workload
-   introspection → dev). The AI calls a tool and the right credentials are
+   introspection → dev). The AI calls a tool, and the right credentials are
    already there — no identity juggling between prompts, no `AWS_PROFILE`
    swapping, no re-login to ask a billing question after asking a VPC one.
 
@@ -390,9 +384,6 @@ config layouts:
 [`examples/mcp-for-ai-coding-assistants/`](https://atmos.tools/examples/mcp-for-ai-coding-assistants).
 
 ## Related Examples
-
-If this isn't quite the topology you want, three sibling examples cover the
-adjacent setups:
 
 - **[Atmos MCP integrations](https://atmos.tools/examples/mcp)** — Same external
   MCP server config, but Atmos drives the AI loop (`atmos ai ask`) instead of an
