@@ -552,6 +552,46 @@ atmos --profile billing mcp export
 | `atmos.yaml`     | Toolchain, MCP servers, Atmos Auth, and AI configuration                                      |
 | `.tool-versions` | Pins `uvx` to a known version so the exported `.mcp.json` carries a consistent toolchain PATH |
 
+## Summary
+
+Why use Atmos to manage external MCP servers for your AI coding assistants
+(Claude Code, OpenAI Codex CLI, Google Gemini CLI) instead of configuring
+each CLI separately?
+
+- **Centralized MCP server management** — one `atmos.yaml` defines every
+  MCP server (Atmos, AWS suite, Atmos Pro, anything else you add) and
+  every AI CLI consumes the same set via `atmos mcp export`. Adding a new
+  server is one block in `atmos.yaml` and one re-export — no per-CLI
+  config drift, no copy-pasting between `.mcp.json` / `config.toml` /
+  `settings.json`.
+- **Centralized auth and security** — [Atmos Auth](/cli/configuration/auth)
+  is the only place AWS credentials live. The exported `.mcp.json`
+  carries IAM role names but no static secrets, so it's safe to check
+  into the repo. Each MCP server is wrapped at spawn time with the right
+  identity for the question it'll answer (billing → payer, CloudTrail →
+  audit, IAM → root, workload queries → dev). One `atmos auth login`
+  covers them all — no `~/.aws/credentials`, no `AWS_PROFILE` swapping,
+  no per-server authentication, no token files in each CLI's config
+  directory.
+- **Centralized toolchain management** — `uvx`, `npx`, and friends are
+  pinned to known versions via the [Atmos toolchain](/cli/configuration/toolchain)
+  and prepended to each MCP server's `PATH` automatically. Every AI
+  coding assistant uses the same binaries; no "works on my machine"
+  drift between Claude Code, Codex, and Gemini sessions.
+- **Embedded `atmos` MCP server** — Atmos ships its own MCP server
+  ([`atmos mcp start`](/ai/mcp-server)) that exposes 20+ tools for
+  introspecting your stacks, components, manifests, and the `atmos` CLI
+  itself (`atmos_describe_component`, `atmos_list_stacks`, `describe_affected`,
+  `read_stack_file`, `execute_atmos_command`, …). Including it in the
+  exported config gives your AI assistant direct programmatic access to
+  the **declared** state of your infrastructure, alongside the AWS
+  introspection tools that cover **deployed** state.
+
+Pair the MCP setup with [Atmos Agent Skills](/ai/agent-skills) for the
+strongest result: MCP gives the assistant **tools**, Skills give it
+**knowledge** of Atmos conventions. Together they cover both *"what does
+this code do?"* and *"what should this code do?"*.
+
 ## Learn More
 
 - [MCP Configuration](/cli/configuration/mcp)
