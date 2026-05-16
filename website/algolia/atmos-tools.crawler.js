@@ -70,14 +70,77 @@ function getPageRankForPath(pathname) {
 }
 
 function createRecordExtractor() {
+  // The Algolia Crawler runs this function in an isolated context and only
+  // serializes its source. Module-level helpers and constants are not visible
+  // there, so everything the extractor needs must be defined inside.
   return ({ url, helpers }) => {
-    const pathname = getPathname(url);
+    const taxonomyPrefixes = [
+      ["/cli/commands", "CLI Commands"],
+      ["/cli/configuration", "CLI Configuration"],
+      ["/changelog", "Changelog"],
+      ["/tutorials", "Tutorials"],
+      ["/functions", "Functions"],
+      ["/stacks", "Stacks"],
+      ["/components", "Components"],
+      ["/integrations", "Integrations"],
+      ["/reference", "Reference"],
+      ["/quick-start", "Quick Start"],
+      ["/learn", "Learn"],
+      ["/intro", "Learn"],
+      ["/terms", "Terms"],
+    ];
+    const pageRankPrefixes = [
+      ["/cli/commands", 80],
+      ["/tutorials", 65],
+      ["/changelog", 60],
+      ["/quick-start", 55],
+      ["/learn", 50],
+      ["/intro", 50],
+      ["/cli/configuration", 35],
+      ["/reference", 30],
+    ];
+
+    const normalize = (pathname) => {
+      if (!pathname || pathname === "/") {
+        return "/";
+      }
+      return pathname.replace(/\/+$/, "");
+    };
+
+    const toPathname = (urlInput) => {
+      const rawUrl =
+        typeof urlInput === "string"
+          ? urlInput
+          : urlInput?.href || urlInput?.url || "";
+      try {
+        return normalize(new URL(rawUrl).pathname);
+      } catch {
+        return normalize(
+          String(rawUrl).split("#")[0]?.split("?")[0] || "/",
+        );
+      }
+    };
+
+    const findPrefixValue = (prefixes, pathname, fallback) => {
+      const normalized = normalize(pathname);
+      const match = prefixes.find(
+        ([prefix]) =>
+          normalized === prefix || normalized.startsWith(`${prefix}/`),
+      );
+      return match?.[1] || fallback;
+    };
+
+    const pathname = toPathname(url);
 
     return helpers.docsearch({
       recordProps: {
         lvl0: {
           selectors: "",
-          defaultValue: getLvl0ForPath(pathname),
+          defaultValue: findPrefixValue(
+            taxonomyPrefixes,
+            pathname,
+            "Documentation",
+          ),
         },
         lvl1: ["header h1", "article > h1"],
         lvl2: "article h2",
@@ -86,7 +149,7 @@ function createRecordExtractor() {
         lvl5: "article h5",
         lvl6: "article h6, article dt",
         content: "article p, article li, article dd, article td",
-        pageRank: getPageRankForPath(pathname),
+        pageRank: findPrefixValue(pageRankPrefixes, pathname, 40),
       },
       aggregateContent: true,
       recordVersion: "v3",
