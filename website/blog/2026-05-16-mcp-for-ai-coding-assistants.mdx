@@ -212,6 +212,42 @@ So the AI can answer cross-layer questions in one prompt:
 …pulling deployment history from `atmos-pro`, declared config from
 `atmos` (or directly from your infra repo, and live state from `aws-api` in a single coherent answer.
 
+## Pair with Atmos Agent Skills
+
+MCP gives the AI **tools** — to inspect stacks, query AWS, check Atmos
+Pro. [Atmos Agent Skills](https://atmos.tools/ai/agent-skills) give it
+**knowledge** — 21 domain-specific skills (stacks, components,
+validation, YAML functions, vendoring, toolchain, GitOps, auth, …) that
+activate automatically based on what you ask.
+
+Without skills, an AI assistant falls back to general training data that
+may generate invalid YAML, miss features like `!store` /
+`!terraform.output`, or use wrong CLI flags. With skills, the assistant
+loads the right Atmos context just before answering. The skills are
+built on the open [AGENTS.md](https://agents.md/) and
+[Agent Skills](https://agentskills.io/specification) standards, so they
+work across all three CLIs in this post (Claude Code, Codex CLI, Gemini
+CLI) plus Cursor, Windsurf, GitHub Copilot, and others.
+
+For Claude Code:
+
+```bash
+/plugin marketplace add cloudposse/atmos
+/plugin install atmos@cloudposse
+```
+
+For other tools, see the
+[AI Agent Skills announcement](https://atmos.tools/blog/ai-agent-skills)
+for tool-specific install paths.
+
+**Why pair them:** MCP answers *"what does this code do?"* by reading
+files and live state; skills answer *"what should this code do?"* by
+teaching the assistant Atmos's conventions. The same prompt — *"set up
+cross-stack dependencies with remote state"* — pulls live data through
+MCP **and** applies Atmos-native patterns (`!terraform.state`, abstract
+components, settings inheritance) from the relevant skill. Stronger
+together than either alone.
+
 ## Wiring Up Each CLI
 
 Once you've run `atmos auth login`, each CLI takes a couple of commands.
@@ -409,6 +445,13 @@ config layouts:
 - [Atmos MCP Server](https://atmos.tools/ai/mcp-server) — the
   Atmos-AI-tools-as-MCP-server mode, exposed to your AI coding assistant via
   the `atmos` entry in `mcp.servers`.
+- [Atmos Agent Skills](https://atmos.tools/ai/agent-skills) — 21
+  domain-specific skills that complement MCP tools by giving AI
+  assistants deep Atmos knowledge (stacks, components, validation,
+  YAML functions, vendoring, GitOps, design patterns, …).
+- [AI Agent Skills announcement](https://atmos.tools/blog/ai-agent-skills) —
+  install paths for Claude Code, Codex, Gemini, Cursor, Windsurf,
+  GitHub Copilot, JetBrains Junie, and Amazon Q.
 - [Atmos Pro MCP server install](https://atmos-pro.com/mcp/install) —
   HTTP-transport SaaS server for drift, deployments, and audit context.
 - [Atmos Pro MCP server announcement](https://atmos-pro.com/changelog/2026-05-09-mcp-server) —

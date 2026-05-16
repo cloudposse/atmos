@@ -155,6 +155,48 @@ out of sync?"* in a single prompt — pulling deployment history from
 `atmos-pro`, the declared stack config from `atmos` (or your local infra repo), and the live AWS state
 from `aws-api`.
 
+## Pair with Atmos Agent Skills
+
+MCP servers give your AI coding assistant **tools** — to inspect your
+stacks, query AWS, check Atmos Pro. [Atmos Agent Skills](https://atmos.tools/ai/agent-skills)
+give it **knowledge** — 21 domain-specific skills (stacks, components,
+validation, YAML functions, vendoring, toolchain, GitOps, design patterns,
+auth, …) that activate automatically based on what you ask.
+
+Without skills, an AI assistant falls back to general training data that
+may be outdated or incomplete for Atmos: it generates invalid YAML, misses
+features like `!store` / `!terraform.output` / `!terraform.state`, or uses
+the wrong CLI flags. With skills, the assistant loads the right Atmos
+context just before answering — *"how do I set up cross-stack dependencies
+with remote state?"* gets the real Atmos-native pattern, not a generic
+Terraform workaround.
+
+Skills are built on two open standards — [AGENTS.md](https://agents.md/)
+and [Agent Skills](https://agentskills.io/specification) — so they work
+across every AI coding assistant in this example (Claude Code, Codex CLI,
+Gemini CLI) plus Cursor, Windsurf, GitHub Copilot, and others.
+
+**Claude Code (one command):**
+
+```bash
+/plugin marketplace add cloudposse/atmos
+/plugin install atmos@cloudposse
+```
+
+**Other tools** (Codex CLI, Gemini CLI, Cursor, Windsurf, GitHub Copilot,
+JetBrains Junie, …): see the
+[AI Agent Skills announcement](https://atmos.tools/blog/ai-agent-skills) for
+each tool's install path, or the
+[Atmos Agent Skills documentation](https://atmos.tools/ai/agent-skills) for
+the full skill reference.
+
+**MCP + Skills together** are stronger than either alone. MCP answers
+*"what does this code do?"* by reading the actual files and querying
+live state; skills answer *"what should this code do?"* by teaching the
+assistant Atmos's conventions. The same prompt — e.g., *"validate every
+stack and explain any errors"* — pulls live data through MCP **and**
+applies Atmos-specific reasoning from the relevant skill.
+
 ## Prerequisites
 
 1. **An AI coding assistant** installed and authenticated — pick at least one:
@@ -497,19 +539,19 @@ atmos --profile billing mcp export
   assistant from **outside** Atmos (`claude`, `codex`, `gemini`) and want them
   to use Atmos-managed MCP servers with centralized auth.
 
-- **[Atmos MCP integrations](https://atmos.tools/examples/mcp)** — You drive the
+- **[Atmos MCP integrations](/examples/mcp)** — You drive the
   AI loop **through Atmos** (`atmos ai ask`, `atmos ai chat`, `atmos ai exec`)
   and want it to call external MCP servers. Atmos hosts the AI conversation;
   the AWS MCP suite is configured the same way as this example, but you stay
   inside the `atmos` CLI.
 
-- **[Atmos AI with Claude Code](https://atmos.tools/examples/ai-claude-code)** —
+- **[Atmos AI with Claude Code](/examples/ai-claude-code)** —
   You want to use your Claude Pro/Max subscription as the AI provider for
   `atmos ai ask` (no Anthropic API key needed). Atmos hosts the conversation;
   Claude Code provides the model. MCP servers are passed through to Claude Code
   automatically.
 
-- **[Atmos AI (multi-provider)](https://atmos.tools/examples/ai)** — You want to
+- **[Atmos AI (multi-provider)](/examples/ai)** — You want to
   chat with your infrastructure using API-key providers (Anthropic, OpenAI,
   Ollama, …). Multi-provider Atmos AI setup, no external CLI needed.
 
@@ -526,6 +568,8 @@ atmos --profile billing mcp export
 - [Atmos Auth Documentation](https://atmos.tools/cli/configuration/auth)
 - [Atmos Toolchain](https://atmos.tools/cli/configuration/toolchain)
 - [Atmos MCP Server](https://atmos.tools/ai/mcp-server)
+- [Atmos Agent Skills](https://atmos.tools/ai/agent-skills) — 21 domain-specific skills that pair with MCP tools to give AI assistants deep Atmos knowledge
+- [Atmos Agent Skills announcement](https://atmos.tools/blog/ai-agent-skills) — install paths for Claude Code, Codex, Gemini, Cursor, Windsurf, Copilot
 - [Atmos Pro](https://atmos-pro.com/) — the fastest way to deploy your apps on AWS with Terraform and GitHub Actions
 - [Atmos Pro MCP server install](https://atmos-pro.com/mcp/install)
 - [Atmos Pro MCP server announcement](https://atmos-pro.com/changelog/2026-05-09-mcp-server)
