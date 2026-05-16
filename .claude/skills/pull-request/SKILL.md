@@ -68,121 +68,24 @@ gh pr edit <pr-number> --remove-label patch --add-label minor
 
 `gh pr edit` accepts `--remove-label` and `--add-label` in the same invocation, so the relabel is atomic.
 
-## Blog post (changelog) rules
+## Blog post (changelog) — when, where, and who owns it
 
-A blog post is **only** required when the PR is labeled `minor` or `major`. CI checks for a new `.mdx` file under `website/blog/`. If you have the wrong label, fix the label rather than writing a blog post you don't need.
+Required **only** when the PR is labeled `minor` or `major`. CI checks for a new `.mdx` file under `website/blog/`. If you have the wrong label, fix the label rather than writing a blog post you don't need.
 
-### When you DO write a blog post
+The how-to lives elsewhere — don't re-derive it:
 
-- File path: `website/blog/YYYY-MM-DD-feature-name.mdx` (kebab-case slug after the date).
-- Use `.mdx` (not `.md`). MDX lets you embed components like `<EmbedFile>` and `<Screengrab>`.
-- Front matter is YAML with fields: `slug`, `title`, `authors`, `tags`.
-- Body opens with a 1–2 sentence intro, then `<!--truncate-->`, then the long-form content under section headers.
+- **Template, MDX syntax, front-matter fields:** see the "Blog Posts (CI Enforced)" section in `CLAUDE.md`.
+- **Valid tag values:** read `website/blog/tags.yml`. Never invent a tag.
+- **Authors:** read `website/blog/authors.yml`. Add yourself if missing (in the same PR).
+- **What does NOT get a blog post** (internal refactors with zero user-visible change): the `roadmap` agent owns this invariant. Default to "no blog post" when in doubt and let the label decision tree above settle it.
 
-Template:
+## Roadmap — when required, who owns it
 
-```mdx
----
-slug: descriptive-slug
-title: "Clear, concise title"
-authors: [your-github-handle]
-tags: [feature]
----
+Required **only** when the PR is labeled `minor` or `major`. CI checks for changes to `website/src/data/roadmap.js`.
 
-One-paragraph intro that tells the reader why this matters.
+**Always delegate the edit to the [`roadmap` agent](../../agents/roadmap.md)** — invoke via `Agent` with `subagent_type: "roadmap"`. The agent owns the milestone schema, the `featured[]`-is-curated rule, the no-changelog-for-internal-refactors invariant, and progress-percentage math. Do not edit `roadmap.js` directly from this skill; call the agent and let it do the work.
 
-<!--truncate-->
-
-## What changed
-
-...
-
-## Why it matters
-
-...
-
-## How to use it
-
-...
-
-## Get involved
-
-...
-```
-
-### Tags (MUST read before picking)
-
-Only use tags defined in `website/blog/tags.yml`. **Never invent a tag** — CI doesn't check, but the website will render an empty tag page.
-
-User-facing tags (use one of these for user-visible PRs):
-- `feature` — new capability
-- `enhancement` — improvement to an existing feature
-- `bugfix` — bug fix
-- `dx` — developer-experience improvement
-- `breaking-change` — required user action
-- `security` — security-related
-- `documentation` — docs-only changes (also pair with `no-release`)
-- `deprecation` — feature scheduled for removal
-
-Internal tag (rarely the right pick):
-- `core` — contributor-only changes with zero user impact (but if user impact is zero, you should be `no-release` anyway — `core` is for the rare case where you want a changelog entry for contributor visibility)
-
-### Authors
-
-Use an existing author from `website/blog/authors.yml`. If the committer isn't there, **add an entry to `authors.yml` in the same PR**.
-
-### Internal refactors do NOT get blog posts
-
-This invariant is owned by the [`roadmap` agent](../../agents/roadmap.md) — see its "No Changelog Posts for Internal-Only Refactors" section. The short version: if a user upgrading Atmos would see no change in behavior, output, errors, performance, or available commands/flags, **do not write a changelog post**. Refactors are visible in PR descriptions and `git log`; that is sufficient.
-
-Engineering wins like "complexity 247→10" or "test coverage 60%→95%" can live as milestones inside the `quality` initiative on the roadmap — but **without** a `changelog:` field and **without** a `website/blog/*.mdx`. (The roadmap agent enforces this when it edits the file.)
-
-## Roadmap rules
-
-A roadmap update is **only** required when the PR is labeled `minor` or `major`. CI checks for changes to `website/src/data/roadmap.js`.
-
-**Delegate the actual edit to the [`roadmap` agent](../../agents/roadmap.md)** — invoke it via `Agent` with `subagent_type: "roadmap"`. The agent owns the canonical rules for data shape, the no-auto-feature invariant, the no-changelog-for-internal-refactors invariant, and how to compute progress percentages. Don't re-derive these here — call the agent.
-
-For reference, the shape it follows:
-
-- A new shipped milestone goes under the relevant initiative's `milestones[]` array, with:
-  - `status: 'shipped'`
-  - `quarter: 'qN-YYYY'`
-  - `pr: <pr-number>` (the GitHub PR number)
-  - `changelog: '<blog-post-slug>'` (matches the blog post `slug`)
-  - `description` — what shipped
-  - `benefits` — why users care
-
-Example milestone entry:
-
-```js
-{
-  label: 'Toolchain support for X',
-  status: 'shipped',
-  quarter: 'q2-2026',
-  pr: 2416,
-  changelog: 'toolchain-x-support',
-  description: '...',
-  benefits: '...',
-},
-```
-
-After adding the milestone, recompute the initiative's `progress` percentage: `(shipped milestones / total milestones) * 100`.
-
-### NEVER touch `featured[]` unless explicitly asked
-
-The `featured: []` array in `roadmap.js` is a **manually curated** highlight reel — **max 6 strategic initiatives**, not a list of every shipped milestone. The user is the only person who decides what gets featured.
-
-When you ship a milestone:
-- ✅ Add it to `initiatives[].milestones[]` with `status: 'shipped'`
-- ❌ Do NOT add it to `featured[]`
-- ❌ Do NOT reorder existing `featured[]` entries
-
-If the user explicitly asks ("promote X to featured", "add Y to the featured section"), then act — and only then. If you're unsure, ask.
-
-### When NOT to touch the roadmap
-
-If your PR is `no-release` or `patch`, **don't touch the roadmap**. It's not required by CI for those labels, and adding noise milestones dilutes the roadmap's signal value.
+If your PR is `no-release` or `patch`, **don't touch the roadmap at all** — CI doesn't require it for those labels, and adding noise milestones dilutes the roadmap's signal value.
 
 ## Signed commits (MANDATORY — branch protection blocks merge)
 
