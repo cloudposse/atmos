@@ -133,15 +133,17 @@ Use an existing author from `website/blog/authors.yml`. If the committer isn't t
 
 ### Internal refactors do NOT get blog posts
 
-Per [`.claude/agents/roadmap.md`](../../agents/roadmap.md): if a user upgrading Atmos would see no change in behavior, output, errors, performance, or available commands/flags, **do not write a changelog post**. Refactors are visible in PR descriptions and `git log`; that is sufficient.
+This invariant is owned by the [`roadmap` agent](../../agents/roadmap.md) — see its "No Changelog Posts for Internal-Only Refactors" section. The short version: if a user upgrading Atmos would see no change in behavior, output, errors, performance, or available commands/flags, **do not write a changelog post**. Refactors are visible in PR descriptions and `git log`; that is sufficient.
 
-Engineering wins like "complexity 247→10" or "test coverage 60%→95%" can live as milestones inside the `quality` initiative on the roadmap — but **without** a `changelog:` field and **without** a `website/blog/*.mdx`.
+Engineering wins like "complexity 247→10" or "test coverage 60%→95%" can live as milestones inside the `quality` initiative on the roadmap — but **without** a `changelog:` field and **without** a `website/blog/*.mdx`. (The roadmap agent enforces this when it edits the file.)
 
 ## Roadmap rules
 
 A roadmap update is **only** required when the PR is labeled `minor` or `major`. CI checks for changes to `website/src/data/roadmap.js`.
 
-**Delegate the actual edit to the `roadmap` agent** — it knows the data shape, the no-auto-feature rule, and how to compute progress percentages. The shape it follows:
+**Delegate the actual edit to the [`roadmap` agent](../../agents/roadmap.md)** — invoke it via `Agent` with `subagent_type: "roadmap"`. The agent owns the canonical rules for data shape, the no-auto-feature invariant, the no-changelog-for-internal-refactors invariant, and how to compute progress percentages. Don't re-derive these here — call the agent.
+
+For reference, the shape it follows:
 
 - A new shipped milestone goes under the relevant initiative's `milestones[]` array, with:
   - `status: 'shipped'`
@@ -244,6 +246,7 @@ Once the branch is on GitHub, finish the workflow:
 2. **Apply the label immediately** after opening: `gh pr edit <num> --add-label <label>`.
 3. **If the PR fixes a tracked issue:** include `Closes #<issue>` in the PR body so it auto-closes on merge.
 4. **Check CI status** after the first push: `gh pr checks <num>`. If `PR Semver Labels`, `Check for changelog and roadmap updates`, or signed-commit verification fails, fix it before requesting review.
+5. **Address CodeRabbit comments** as they arrive. For substantial review threads (5+ comments, or any comment spanning multiple files), delegate to the [`coderabbit-review` agent](../../agents/coderabbit-review.md) via `Agent` with `subagent_type: "coderabbit-review"` — it knows how to parse CR threads, verify each finding against current code, and skip stale or wrong ones with explanation instead of silently ignoring them.
 
 ## Gotcha: `gh pr create --body` and backtick escaping
 
@@ -290,6 +293,23 @@ If a PR has already been opened without a label, or with the wrong one:
 5. If you changed from `no-release`/`patch` to `minor`/`major`, you now owe a blog post and roadmap update — add them in a new commit on the same branch.
 6. If you changed from `minor`/`major` to a lower label, you can (optionally) remove the blog post and roadmap update in a new commit, but it's also fine to leave them.
 
+## Related agents
+
+This skill orchestrates the PR workflow but delegates the deep domain work to dedicated agents. Use them — don't re-derive their rules here.
+
+- **[`roadmap` agent](../../agents/roadmap.md)** — invoke when you need to edit `website/src/data/roadmap.js`. Owns the milestone schema, `featured[]` curation rule, no-changelog-for-internal-refactors invariant, and progress-percentage math. Invoke via `Agent` with `subagent_type: "roadmap"`.
+- **[`coderabbit-review` agent](../../agents/coderabbit-review.md)** — invoke when a CodeRabbit review lands with substantial feedback. Knows how to parse CR threads, verify findings against current code, apply valid suggestions, and skip stale/wrong ones with explanation. Invoke via `Agent` with `subagent_type: "coderabbit-review"`.
+
+If your PR also touches a specific Atmos subsystem, the matching domain agent is the right collaborator for the implementation work (separate from this PR-workflow skill):
+
+- **[`agent-developer`](../../agents/agent-developer.md)** — creating or updating agents
+- **[`atmos-errors`](../../agents/atmos-errors.md)** — error handling code
+- **[`flag-handler`](../../agents/flag-handler.md)** — CLI flag wiring
+- **[`tui-expert`](../../agents/tui-expert.md)** — terminal UI / theme system
+- **[`tui-list`](../../agents/tui-list.md)** — list commands
+- **[`example-creator`](../../agents/example-creator.md)** — examples under `examples/`
+- **[`gist-creator`](../../agents/gist-creator.md)** — gist documentation
+
 ## Reference
 
 - CI workflow: `.github/workflows/changelog-check.yml` (release docs gate)
@@ -297,5 +317,4 @@ If a PR has already been opened without a label, or with the wrong one:
 - Tags: `website/blog/tags.yml`
 - Authors: `website/blog/authors.yml`
 - Roadmap data: `website/src/data/roadmap.js`
-- Roadmap agent: `.claude/agents/roadmap.md`
 - Project rules: `CLAUDE.md` (search for "Pull Requests", "Blog Posts", "Roadmap Updates")
