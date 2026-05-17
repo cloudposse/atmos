@@ -49,8 +49,8 @@ Centralized auth. Centralized security and permissions. One `atmos.yaml`.
   [Atmos toolchain](/cli/configuration/toolchain) so every
   CLI uses the same binary version. No "works on my machine" drift.
 - **Atmos's own AI tools exposed** — your AI assistant can call
-  `describe_component`, `list_stacks`, `validate_stacks`, `read_stack_file`,
-  `execute_atmos_command`, etc. alongside the AWS MCP tools.
+  `describe component`, `list stacks`, `validate stacks`,
+  `execute atmos command`, etc. alongside the AWS MCP tools.
 
 ## MCP Servers Configured
 
@@ -69,11 +69,6 @@ Centralized auth. Centralized security and permissions. One `atmos.yaml`.
 
 Atmos Auth injects AWS credentials into the AWS servers (`identity: readonly` in
 `atmos.yaml` wraps them with `atmos auth exec -i readonly --`).
-
-The **atmos-pro** server is HTTP-transport. `atmos.yaml`'s `mcp.servers`
-currently only supports `stdio` servers, so `atmos-pro` is registered directly with each
-AI CLI (see [Atmos Pro section](#atmos-pro-server-http-transport) below) rather
-than through `atmos mcp export`. This may change in a future release.
 
 ## What the `atmos` MCP Server Does
 
