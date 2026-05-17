@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -15,6 +16,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/cloudposse/atmos/pkg/toolchain/registry"
+	"github.com/cloudposse/atmos/pkg/toolchain/registry/cache"
 )
 
 // TestHTTPTimeout is the timeout for HTTP requests in tests to prevent hangs.
@@ -2854,4 +2856,172 @@ func TestExecuteAssetTemplate_AssetWithoutExt(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, "tool_v1.0.0_linux_amd64_checksums.txt", result)
 	})
+}
+
+// TestGetTool_ThreeSegmentPackagePath verifies that GetTool correctly resolves packages
+// whose YAML lives at pkgs/<owner>/<repo>/<binary>/registry.yaml (i.e., when the binary
+// name differs from the repo name, like openbao/openbao/bao). This is a regression test
+// for the bug where search found such packages but install failed with "tool not in registry"
+// because the resolver only probed the 2-segment path pkgs/<owner>/<repo>/registry.yaml.
+//
+// See cloudposse/atmos#2383.
+func TestGetTool_ThreeSegmentPackagePath(t *testing.T) {
+	const indexYAML = `packages:
+  - name: openbao/openbao/bao
+    type: github_release
+    repo_owner: openbao
+    repo_name: openbao
+  - type: github_release
+    repo_owner: hashicorp
+    repo_name: terraform
+`
+	const openbaoYAML = `packages:
+  - name: openbao/openbao/bao
+    type: github_release
+    repo_owner: openbao
+    repo_name: openbao
+    asset: "bao_{{trimV .Version}}_{{.OS}}_{{.Arch}}.tar.gz"
+    binary_name: bao
+`
+
+	var hitsMu sync.Mutex
+	var hits []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hitsMu.Lock()
+		hits = append(hits, r.URL.Path)
+		hitsMu.Unlock()
+		switch r.URL.Path {
+		case "/registry.yaml":
+			w.Write([]byte(indexYAML))
+		case "/pkgs/openbao/openbao/bao/registry.yaml":
+			w.Write([]byte(openbaoYAML))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+
+	ar := newTestAquaRegistry(t, srv.URL)
+
+	tool, err := ar.GetTool("openbao", "openbao")
+	require.NoError(t, err)
+	assert.Equal(t, "openbao", tool.RepoOwner)
+	assert.Equal(t, "openbao", tool.RepoName)
+	assert.Equal(t, "bao", tool.BinaryName)
+	assert.Equal(t, "bao_{{trimV .Version}}_{{.OS}}_{{.Arch}}.tar.gz", tool.Asset)
+
+	hitsMu.Lock()
+	observedHits := append([]string(nil), hits...)
+	hitsMu.Unlock()
+
+	// The index path lookup must take precedence over the legacy probe. Confirm we hit
+	// the index and then the 3-segment URL directly — no wasted probes against the
+	// 2-segment path.
+	assert.Contains(t, observedHits, "/registry.yaml")
+	assert.Contains(t, observedHits, "/pkgs/openbao/openbao/bao/registry.yaml")
+	assert.NotContains(t, observedHits, "/pkgs/openbao/openbao/registry.yaml",
+		"resolver should not waste a probe on the 2-segment path when the index gives us the 3-segment one")
+}
+
+// newTestAquaRegistry returns an AquaRegistry pointed at the given fake registry server,
+// with both the file cache and the cache.Store wired to fresh temp dirs so on-disk state
+// from prior tests or real runs can't leak in.
+func newTestAquaRegistry(t *testing.T, registryURL string) *AquaRegistry {
+	t.Helper()
+	ar := NewAquaRegistry(WithRegistryBaseURL(registryURL))
+	ar.cache.baseDir = t.TempDir()
+	ar.cacheStore = cache.NewFileStore(t.TempDir())
+	return ar
+}
+
+// TestGetTool_TwoSegmentPackageStillWorks verifies the regular 2-segment path
+// (pkgs/<owner>/<repo>/registry.yaml) still resolves, both via the index lookup and via
+// the legacy prefix probe when the index entry lacks a `name` field.
+func TestGetTool_TwoSegmentPackageStillWorks(t *testing.T) {
+	const indexYAML = `packages:
+  - type: github_release
+    repo_owner: hashicorp
+    repo_name: terraform
+`
+	const terraformYAML = `packages:
+  - type: http
+    repo_owner: hashicorp
+    repo_name: terraform
+    url: "https://releases.hashicorp.com/terraform/{{.Version}}/terraform_{{.Version}}_{{.OS}}_{{.Arch}}.zip"
+    format: zip
+    binary_name: terraform
+`
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/registry.yaml":
+			w.Write([]byte(indexYAML))
+		case "/pkgs/hashicorp/terraform/registry.yaml":
+			w.Write([]byte(terraformYAML))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+
+	ar := newTestAquaRegistry(t, srv.URL)
+
+	tool, err := ar.GetTool("hashicorp", "terraform")
+	require.NoError(t, err)
+	assert.Equal(t, "terraform", tool.BinaryName)
+	assert.Equal(t, "http", tool.Type)
+}
+
+// TestGetTool_FallsBackWhenIndexUnreachable verifies that if the registry index can't be
+// fetched (e.g., GitHub outage), GetTool falls through to the legacy prefix probe and
+// can still resolve packages that live at the 2-segment path.
+func TestGetTool_FallsBackWhenIndexUnreachable(t *testing.T) {
+	const terraformYAML = `packages:
+  - type: github_release
+    repo_owner: hashicorp
+    repo_name: terraform
+    asset: "terraform_{{.Version}}_{{.OS}}_{{.Arch}}.zip"
+    binary_name: terraform
+`
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/registry.yaml":
+			http.Error(w, "simulated index outage", http.StatusInternalServerError)
+		case "/pkgs/hashicorp/terraform/registry.yaml":
+			w.Write([]byte(terraformYAML))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+
+	ar := newTestAquaRegistry(t, srv.URL)
+
+	tool, err := ar.GetTool("hashicorp", "terraform")
+	require.NoError(t, err)
+	assert.Equal(t, "terraform", tool.BinaryName)
+}
+
+// TestConvertPackagesToTools_PopulatesPathIndex verifies the side effect that
+// convertPackagesToTools rebuilds the path index so 3-segment names are reachable by
+// `<owner>/<repo>` key, and 2-segment packages get a usable default entry.
+func TestConvertPackagesToTools_PopulatesPathIndex(t *testing.T) {
+	ar := NewAquaRegistry()
+	packages := []indexPackage{
+		{Name: "openbao/openbao/bao", Type: "github_release", RepoOwner: "openbao", RepoName: "openbao"},
+		{Type: "github_release", RepoOwner: "hashicorp", RepoName: "terraform"},
+		{Name: "kubernetes/kubernetes/kubectl", Type: "github_release", RepoOwner: "kubernetes", RepoName: "kubernetes"},
+		{Type: "http", RepoOwner: "", RepoName: ""}, // ignored by pathIndex: no owner/repo and no name to parse.
+	}
+
+	ar.convertPackagesToTools(packages)
+
+	ar.pathIndexMu.RLock()
+	idx := ar.pathIndex
+	ar.pathIndexMu.RUnlock()
+
+	assert.Equal(t, "openbao/openbao/bao", idx["openbao/openbao"],
+		"3-segment name must be preserved so the resolver can find pkgs/openbao/openbao/bao/registry.yaml")
+	assert.Equal(t, "hashicorp/terraform", idx["hashicorp/terraform"],
+		"2-segment packages should still get a default <owner>/<repo> entry")
+	assert.Equal(t, "kubernetes/kubernetes/kubectl", idx["kubernetes/kubernetes"])
 }

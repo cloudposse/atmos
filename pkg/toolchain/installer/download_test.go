@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -224,7 +225,7 @@ func TestDownloadAsset_CacheBehavior(t *testing.T) {
 		}
 
 		// This will fail on the download (no server), but should create the dir.
-		url := "https://localhost:99999/asset.tar.gz"
+		url := "://invalid/asset.tar.gz"
 		_, _ = installer.downloadAsset(url)
 
 		// Cache directory should have been created.
@@ -232,6 +233,46 @@ func TestDownloadAsset_CacheBehavior(t *testing.T) {
 		assert.NoError(t, err)
 		assert.True(t, info.IsDir())
 	})
+}
+
+func TestDownloadToCache_RetriesTransientHTTPStatus(t *testing.T) {
+	var attempts atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		attempt := attempts.Add(1)
+		if attempt < 3 {
+			http.Error(w, "bad gateway", http.StatusBadGateway)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("asset content"))
+	}))
+	defer server.Close()
+
+	cachePath := filepath.Join(t.TempDir(), "asset.zip")
+
+	result, err := downloadToCache(server.URL+"/asset.zip", cachePath)
+
+	require.NoError(t, err)
+	assert.Equal(t, cachePath, result)
+	assert.Equal(t, int32(3), attempts.Load())
+	data, err := os.ReadFile(cachePath)
+	require.NoError(t, err)
+	assert.Equal(t, "asset content", string(data))
+}
+
+func TestDownloadToCache_DoesNotRetryNotFound(t *testing.T) {
+	var attempts atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		attempts.Add(1)
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	_, err := downloadToCache(server.URL+"/missing.zip", filepath.Join(t.TempDir(), "missing.zip"))
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrHTTP404)
+	assert.Equal(t, int32(1), attempts.Load())
 }
 
 func TestDownloadAsset_FilenameExtraction(t *testing.T) {
@@ -498,7 +539,7 @@ func TestDownloadAssetWithVersionFallback(t *testing.T) {
 		require.NoError(t, os.MkdirAll(cacheDir, 0o755))
 
 		ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			w.WriteHeader(http.StatusInternalServerError)
+			w.WriteHeader(http.StatusForbidden)
 		}))
 		defer ts.Close()
 

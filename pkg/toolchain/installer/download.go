@@ -2,6 +2,7 @@ package installer
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -10,6 +11,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"time"
 
 	log "github.com/charmbracelet/log"
 
@@ -18,7 +20,15 @@ import (
 	github "github.com/cloudposse/atmos/pkg/github"
 	httpClient "github.com/cloudposse/atmos/pkg/http"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/retry"
+	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/toolchain/registry"
+)
+
+const (
+	downloadRetryMaxAttempts  = 5
+	downloadRetryInitialDelay = 1 * time.Second
+	downloadRetryMaxDelay     = 10 * time.Second
 )
 
 // downloadAsset downloads an asset to the cache directory.
@@ -79,6 +89,34 @@ func cacheSourceURLPath(cachePath string) string {
 func downloadToCache(url, cachePath string) (string, error) {
 	defer perf.Track(nil, "downloadToCache")()
 
+	maxAttempts := downloadRetryMaxAttempts
+	initialDelay := downloadRetryInitialDelay
+	maxDelay := downloadRetryMaxDelay
+	retryConfig := &schema.RetryConfig{
+		MaxAttempts:     &maxAttempts,
+		BackoffStrategy: schema.BackoffExponential,
+		InitialDelay:    &initialDelay,
+		MaxDelay:        &maxDelay,
+	}
+
+	var result string
+	err := retry.WithPredicate(
+		context.Background(),
+		retryConfig,
+		func() error {
+			var downloadErr error
+			result, downloadErr = downloadToCacheOnce(url, cachePath)
+			return downloadErr
+		},
+		isRetryableDownloadError,
+	)
+	if err != nil {
+		return "", err
+	}
+	return result, nil
+}
+
+func downloadToCacheOnce(url, cachePath string) (string, error) {
 	client := httpClient.NewDefaultClient(
 		httpClient.WithGitHubToken(github.GetGitHubToken()),
 	)
@@ -90,7 +128,7 @@ func downloadToCache(url, cachePath string) (string, error) {
 
 	resp, err := client.Do(req)
 	if err != nil {
-		return "", errUtils.Build(errUtils.ErrDownloadFailed).
+		return "", errors.Join(errUtils.ErrDownloadRetryable, errUtils.Build(errUtils.ErrDownloadFailed).
 			WithExplanationf("Failed to download asset from `%s`", url).
 			WithHint("Check your internet connection").
 			WithHint("Verify GitHub access: `curl -I https://api.github.com`").
@@ -98,7 +136,7 @@ func downloadToCache(url, cachePath string) (string, error) {
 			WithContext("url", url).
 			WithContext("error", err.Error()).
 			WithExitCode(1).
-			Err()
+			Err())
 	}
 	defer resp.Body.Close()
 
@@ -107,6 +145,13 @@ func downloadToCache(url, cachePath string) (string, error) {
 	}
 
 	return writeResponseToCache(resp.Body, cachePath)
+}
+
+func isRetryableDownloadError(err error) bool {
+	if err == nil || errors.Is(err, ErrHTTP404) {
+		return false
+	}
+	return errors.Is(err, errUtils.ErrDownloadRetryable)
 }
 
 // writeResponseToCache reads the response body and writes it atomically to cache.
@@ -163,7 +208,24 @@ func buildDownloadError(url string, statusCode int) error {
 		builder.WithHint("Check GitHub status: https://www.githubstatus.com")
 	}
 
-	return builder.Err()
+	err := builder.Err()
+	if isRetryableHTTPStatus(statusCode) {
+		return errors.Join(errUtils.ErrDownloadRetryable, err)
+	}
+	return err
+}
+
+func isRetryableHTTPStatus(statusCode int) bool {
+	switch statusCode {
+	case http.StatusTooManyRequests,
+		http.StatusInternalServerError,
+		http.StatusBadGateway,
+		http.StatusServiceUnavailable,
+		http.StatusGatewayTimeout:
+		return true
+	default:
+		return false
+	}
 }
 
 // downloadAssetWithVersionFallback tries the asset URL as-is, then with 'v' prefix or without, if 404.

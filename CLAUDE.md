@@ -301,6 +301,9 @@ ALWAYS build after doc changes: `cd website && npm run build`. Verify: no broken
 All Product Requirement Documents (PRDs) MUST be placed in `docs/prd/`. Use kebab-case filenames.
 
 ### Pull Requests (MANDATORY)
+
+**Use the `pull-request` skill** (`/pull-request`) before opening or updating any PR. It encodes the label decision tree (`no-release` / `patch` / `minor` / `major`), when a blog post is required, when a roadmap update is required, and how to do each without violating the `featured[]`-is-curated rule. Skipping this skill is how unlabeled PRs and missing changelog entries land in CI.
+
 Follow template (what/why/references).
 
 **Blog Posts (CI Enforced):**

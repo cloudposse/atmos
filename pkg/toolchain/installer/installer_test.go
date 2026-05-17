@@ -4,6 +4,8 @@ import (
 	"archive/tar"
 	"compress/gzip"
 	"context"
+	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -13,12 +15,25 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/toolchain/registry"
 	"github.com/cloudposse/atmos/pkg/toolchain/verification"
 )
 
 // Add a mock ToolResolver for tests
+
+type testShortNameRegistry struct {
+	registry.ToolRegistry
+
+	owner string
+	repo  string
+	err   error
+}
+
+func (r *testShortNameRegistry) ResolveShortName(string) (string, string, error) {
+	return r.owner, r.repo, r.err
+}
 
 func TestParseToolSpec(t *testing.T) {
 	mockResolver := &mockToolResolver{
@@ -321,6 +336,39 @@ func TestSearchRegistryForTool(t *testing.T) {
 	if err == nil {
 		t.Error("Expected error for non-existent tool but got none")
 	}
+}
+
+func TestDefaultToolResolver_ResolveShortNameErrors(t *testing.T) {
+	originalDefaultRegistry := defaultRegistry
+	t.Cleanup(func() {
+		defaultRegistry = originalDefaultRegistry
+	})
+
+	t.Run("tool not found falls through to generic registry guidance", func(t *testing.T) {
+		defaultRegistry = func() registry.ToolRegistry {
+			return &testShortNameRegistry{
+				err: fmt.Errorf("wrapped resolver miss: %w", registry.ErrToolNotFound),
+			}
+		}
+
+		_, _, err := (&DefaultToolResolver{}).Resolve("missing-tool")
+
+		require.Error(t, err)
+		assert.ErrorIs(t, err, errUtils.ErrToolNotInRegistry)
+	})
+
+	t.Run("non-not-found resolver errors are propagated", func(t *testing.T) {
+		resolverErr := errors.New("ambiguous short name")
+		defaultRegistry = func() registry.ToolRegistry {
+			return &testShortNameRegistry{err: resolverErr}
+		}
+
+		_, _, err := (&DefaultToolResolver{}).Resolve("ambiguous-tool")
+
+		require.Error(t, err)
+		assert.ErrorIs(t, err, resolverErr)
+		assert.NotErrorIs(t, err, errUtils.ErrToolNotInRegistry)
+	})
 }
 
 func TestUninstall(t *testing.T) {
@@ -1165,20 +1213,6 @@ func TestListInstalledVersions(t *testing.T) {
 		assert.Contains(t, versions, "1.0.0")
 		assert.Contains(t, versions, "2.0.0")
 	})
-}
-
-func TestBuildCommonRegistryPaths(t *testing.T) {
-	paths := buildCommonRegistryPaths("terraform")
-	assert.NotEmpty(t, paths)
-	// Should contain a path with the tool name.
-	found := false
-	for _, p := range paths {
-		if strings.Contains(p, "terraform") {
-			found = true
-			break
-		}
-	}
-	assert.True(t, found, "paths should contain the tool name")
 }
 
 // mockRegistryForInstaller implements registry.ToolRegistry for testing WithConfiguredRegistry.

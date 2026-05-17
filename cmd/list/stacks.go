@@ -39,6 +39,7 @@ type StacksOptions struct {
 	Provenance       bool
 	ProcessTemplates bool
 	ProcessFunctions bool
+	Skip             []string
 }
 
 // stacksCmd lists atmos stacks.
@@ -80,6 +81,7 @@ func parseStacksOptions(cmd *cobra.Command, v *viper.Viper) *StacksOptions {
 		Provenance:       v.GetBool("provenance"),
 		ProcessTemplates: v.GetBool("process-templates"),
 		ProcessFunctions: v.GetBool("process-functions"),
+		Skip:             v.GetStringSlice("skip"),
 	}
 }
 
@@ -122,6 +124,7 @@ func init() {
 		WithProvenanceFlag,
 		WithProcessTemplatesFlag,
 		WithProcessFunctionsFlag,
+		WithSkipFlag,
 	)
 
 	// Register flags.
@@ -230,7 +233,7 @@ func executeAndExtractStacks(
 		opts.ProcessTemplates,
 		opts.ProcessFunctions,
 		false, // includeEmptyStacks
-		nil,   // skip
+		opts.Skip,
 		authManager,
 	)
 	if err != nil {
@@ -346,7 +349,7 @@ func renderStacksTreeFormat(
 		opts.ProcessTemplates,
 		opts.ProcessFunctions,
 		false, // includeEmptyStacks
-		nil,   // skip
+		opts.Skip,
 		authManager,
 	)
 	if err != nil {
