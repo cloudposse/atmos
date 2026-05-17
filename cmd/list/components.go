@@ -38,6 +38,7 @@ type ComponentsOptions struct {
 	Abstract         bool
 	ProcessTemplates bool
 	ProcessFunctions bool
+	Skip             []string
 }
 
 // componentsCmd lists atmos components.
@@ -99,6 +100,7 @@ func parseComponentsOptions(cmd *cobra.Command, v *viper.Viper) *ComponentsOptio
 		Abstract:         v.GetBool("abstract"),
 		ProcessTemplates: v.GetBool("process-templates"),
 		ProcessFunctions: v.GetBool("process-functions"),
+		Skip:             v.GetStringSlice("skip"),
 	}
 }
 
@@ -144,6 +146,7 @@ func init() {
 		WithAbstractFlag,
 		WithProcessTemplatesFlag,
 		WithProcessFunctionsFlag,
+		WithSkipFlag,
 	)
 
 	// Register flags.
@@ -210,7 +213,7 @@ func initAndExtractComponents(cmd *cobra.Command, args []string, opts *Component
 		opts.ProcessTemplates,
 		opts.ProcessFunctions,
 		false, // includeEmptyStacks
-		nil,   // skip
+		opts.Skip,
 		authManager,
 	)
 	if err != nil {
