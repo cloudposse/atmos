@@ -143,10 +143,17 @@ jobs:
 
       - name: Install OpenTofu
         uses: opentofu/setup-opentofu@v1
-        if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
+        if: matrix.flavor.target != 'windows'
         with:
           tofu_version: ${{ env.OPEN_TOFU_VERSION }}
           tofu_wrapper: false
+
+      - name: Install OpenTofu on Windows
+        if: matrix.flavor.target == 'windows' && ! github.event.pull_request.draft
+        shell: pwsh
+        run: |
+          atmos toolchain install opentofu/opentofu@${{ env.OPEN_TOFU_VERSION }}
+          atmos toolchain env --format github
 
       # https://github.com/hashicorp/setup-packer
       - name: Install Packer
@@ -460,11 +467,18 @@ jobs:
           terraform_wrapper: false
 
       - name: Install OpenTofu
-        if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
+        if: matrix.flavor.target != 'windows'
         uses: opentofu/setup-opentofu@v1
         with:
           tofu_version: ${{ env.OPEN_TOFU_VERSION }}
           tofu_wrapper: false
+
+      - name: Install OpenTofu on Windows
+        if: matrix.flavor.target == 'windows' && ! github.event.pull_request.draft
+        shell: pwsh
+        run: |
+          atmos toolchain install opentofu/opentofu@${{ env.OPEN_TOFU_VERSION }}
+          atmos toolchain env --format github
 
       # https://github.com/hashicorp/setup-packer
       - name: Install Packer
