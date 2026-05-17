@@ -1,6 +1,6 @@
 ---
 name: docs
-description: "Docs: Atmos documentation conventions for configuration pages, command pages, action cards, examples, changelog, roadmap, and stale-content checks"
+description: "Docs: contributor documentation conventions for Atmos website docs, CLI command docs, configuration pages, action cards, changelog, roadmap, and stale-content checks"
 metadata:
   copyright: Copyright Cloud Posse, LLC 2026
   version: "1.0.0"
@@ -8,22 +8,22 @@ metadata:
 
 # Docs
 
-Use this skill when adding or changing Atmos documentation, especially for CLI commands, `atmos.yaml`
-configuration, website pages, changelog posts, roadmap entries, and agent skills.
+Use this skill when changing documentation for Atmos itself: website docs, CLI command docs, `atmos.yaml`
+configuration docs, changelog posts, roadmap entries, and project-local contributor guidance.
 
 ## First Pass
 
 Before editing, inspect the related implementation and existing docs:
 
 ```bash
-rg -n "<feature>|<config-key>|<command>" website/docs docs agent-skills
+rg -n "<feature>|<config-key>|<command>" website/docs docs agent-skills .claude/skills
 rg -n "<feature>|<config-key>|<command>" pkg cmd internal
 ```
 
 Search for stale claims before finishing:
 
 ```bash
-rg -n "unsupported|not supported|not currently|not enforced|TODO|coming soon" website/docs docs agent-skills
+rg -n "unsupported|not supported|not currently|not enforced|TODO|coming soon" website/docs docs agent-skills .claude/skills
 ```
 
 ## Configuration Docs
@@ -64,7 +64,8 @@ When behavior changes, update all user-facing surfaces in the same PR:
 
 - Configuration docs for new or changed `atmos.yaml` keys.
 - Command docs for changed CLI behavior.
-- Agent skills when the behavior changes how AI assistants should answer or work.
+- Consumer agent skills when product behavior changes how AI assistants should answer questions about Atmos.
+- Claude skills when contributor documentation workflows or repo-local development guidance changes.
 - Changelog and roadmap pages when the feature is user-visible.
 - Remove or revise stale “unsupported”, “not enforced”, and “not currently” language.
 

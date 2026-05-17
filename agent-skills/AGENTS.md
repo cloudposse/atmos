@@ -53,7 +53,6 @@ When a task involves Atmos, activate the matching skill for detailed guidance.
 | Task                                                                                                                  | Skill                   | Path                                                                  |
 |-----------------------------------------------------------------------------------------------------------------------|-------------------------|-----------------------------------------------------------------------|
 | atmos.yaml project config: all sections, discovery, merging, base paths, settings, imports, profiles                 | `atmos-config`          | `agent-skills/skills/atmos-config/SKILL.md`          |
-| Documentation conventions: website pages, command/config docs, action cards, changelog, roadmap, stale-content checks | `docs`                  | `agent-skills/skills/docs/SKILL.md`                  |
 | Stack YAML, imports, inheritance, deep merging, vars, settings, locals, metadata, overrides                          | `atmos-stacks`          | `agent-skills/skills/atmos-stacks/SKILL.md`          |
 | Terraform root modules, abstract components, component inheritance, versioning, mixins, catalog patterns              | `atmos-components`      | `agent-skills/skills/atmos-components/SKILL.md`      |
 | vendor.yaml manifests, pulling from Git/S3/HTTP/OCI/Terraform Registry, component.yaml                                | `atmos-vendoring`       | `agent-skills/skills/atmos-vendoring/SKILL.md`       |
