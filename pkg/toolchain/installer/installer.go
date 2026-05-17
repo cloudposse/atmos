@@ -1,6 +1,7 @@
 package installer
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -31,8 +32,7 @@ const (
 	bufferSizeBytes             = 32 * 1024
 
 	// Registry path parsing constants.
-	minRegistryPathSegments = 8          // Minimum path segments for registry.yaml parsing.
-	filenameKey             = "filename" // Key for filename in template replacements.
+	filenameKey = "filename" // Key for filename in template replacements.
 
 	// Log field names for consistent debugging.
 	logFieldOwner   = "owner"
@@ -67,9 +67,24 @@ var BuiltinAliases = map[string]string{
 	"atmos": "cloudposse/atmos",
 }
 
+var defaultRegistry = registry.DefaultRegistry
+
+type shortNameResolver interface {
+	ResolveShortName(string) (string, string, error)
+}
+
 // DefaultToolResolver implements ToolResolver using configured aliases and registry search.
 type DefaultToolResolver struct {
 	AtmosConfig *schema.AtmosConfiguration
+}
+
+func defaultShortNameResolver() (shortNameResolver, bool) {
+	reg := defaultRegistry()
+	if reg == nil {
+		return nil, false
+	}
+	resolver, ok := reg.(shortNameResolver)
+	return resolver, ok
 }
 
 func (d *DefaultToolResolver) Resolve(toolName string) (string, string, error) {
@@ -96,10 +111,18 @@ func (d *DefaultToolResolver) Resolve(toolName string) (string, string, error) {
 		}
 	}
 
-	// Step 3: Try to find the tool in the Aqua registry.
-	owner, repo, err := searchRegistryForTool(toolName)
-	if err == nil {
-		return owner, repo, nil
+	// Step 3: Consult the default registry's short-name resolver (aqua-style).
+	// Aqua itself has no runtime short-name resolution — `aqua g` is the upstream
+	// discovery flow — so atmos provides this UX by searching the cached registry
+	// index for a package whose binary name matches. The type assertion keeps
+	// short-name resolution aqua-specific (matches upstream's design where short
+	// names are a discovery concern, not a registry-protocol one).
+	if resolver, ok := defaultShortNameResolver(); ok {
+		if owner, repo, err := resolver.ResolveShortName(toolName); err == nil {
+			return owner, repo, nil
+		} else if !errors.Is(err, registry.ErrToolNotFound) {
+			return "", "", err
+		}
 	}
 	return "", "", errUtils.Build(errUtils.ErrToolNotInRegistry).
 		WithExplanationf("Tool '%s' not found in Aqua registry", toolName).
@@ -447,6 +470,10 @@ func (i *Installer) loadToolFile(filePath string) (*registry.Tool, error) {
 // ParseToolSpec parses a tool specification (owner/repo or just repo).
 func (i *Installer) ParseToolSpec(tool string) (string, string, error) {
 	defer perf.Track(nil, "installer.ParseToolSpec")()
+
+	if tool == "" {
+		return "", "", fmt.Errorf("%w: empty tool specification", ErrInvalidToolSpec)
+	}
 
 	parts := strings.Split(tool, "/")
 	if len(parts) == 2 {
