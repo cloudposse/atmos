@@ -14,7 +14,11 @@
     "serve": "docusaurus serve",
     "write-translations": "docusaurus write-translations",
     "write-heading-ids": "docusaurus write-heading-ids",
-    "build:site": "npm run build"
+    "build:site": "npm run build",
+    "algolia:deploy": "node algolia/deploy-crawler-config.mjs",
+    "algolia:deploy:dry-run": "node algolia/deploy-crawler-config.mjs --dry-run",
+    "test:algolia": "node --test algolia/atmos-tools.crawler.test.mjs",
+    "test:algolia:live": "ALGOLIA_LIVE_RELEVANCE_TESTS=1 node --test algolia/search-relevance.test.mjs"
   },
   "dependencies": {
     "@docsearch/react": "^4.2.0",
@@ -65,6 +69,9 @@
   "devDependencies": {
     "@docusaurus/module-type-aliases": "^3.9.2",
     "@types/canvas-confetti": "^1.9.0",
+    "acorn": "^8.15.0",
+    "ajv": "^8.17.1",
+    "eslint-scope": "^8.0.0",
     "prettier": "^3.4.2"
   },
   "browserslist": {
