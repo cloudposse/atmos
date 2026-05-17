@@ -23,7 +23,9 @@ By default, Atmos verifies checksums and signatures when metadata exists, while 
 
 ## Why This Matters
 
-Toolchain packages are often fetched directly from release assets, so download integrity matters as much as version pinning. This release lets Atmos use the same verification metadata already maintained by Aqua package definitions, reducing exposure to tampered archives, corrupted caches, and accidental asset mismatches.
+Toolchain packages are often fetched directly from release assets, so download integrity matters as much as version pinning. With supply-chain attacks and compromised package artifacts becoming routine operational risks, verifying that a downloaded archive is the artifact the publisher intended is now part of the trust boundary for every install.
+
+This release lets Atmos use the same verification metadata already maintained by Aqua package definitions, reducing exposure to tampered archives, corrupted caches, and accidental asset mismatches.
 
 Cached assets are no longer trusted blindly. If verification fails, Atmos rejects the cached asset and prevents extraction instead of installing a package that does not match the registry metadata.
 
