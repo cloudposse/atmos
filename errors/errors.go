@@ -228,6 +228,7 @@ var (
 	ErrInvalidToolSpec              = errors.New("invalid tool specification")
 	ErrToolAlreadyInstalled         = errors.New("tool already installed")
 	ErrDownloadFailed               = errors.New("download failed")
+	ErrDownloadRetryable            = errors.New("retryable download error")
 	ErrExtractionFailed             = errors.New("extraction failed")
 	ErrChecksumMismatch             = errors.New("checksum mismatch")
 	ErrNoVersionsInstalled          = errors.New("no versions installed")

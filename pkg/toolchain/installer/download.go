@@ -31,8 +31,6 @@ const (
 	downloadRetryMaxDelay     = 10 * time.Second
 )
 
-var errRetryableDownload = errors.New("retryable download error")
-
 // downloadAsset downloads an asset to the cache directory.
 func (i *Installer) downloadAsset(url string) (string, error) {
 	defer perf.Track(nil, "Installer.downloadAsset")()
@@ -101,7 +99,7 @@ func downloadToCacheOnce(url, cachePath string) (string, error) {
 
 	resp, err := client.Do(req)
 	if err != nil {
-		return "", errors.Join(errRetryableDownload, errUtils.Build(errUtils.ErrDownloadFailed).
+		return "", errors.Join(errUtils.ErrDownloadRetryable, errUtils.Build(errUtils.ErrDownloadFailed).
 			WithExplanationf("Failed to download asset from `%s`", url).
 			WithHint("Check your internet connection").
 			WithHint("Verify GitHub access: `curl -I https://api.github.com`").
@@ -124,7 +122,7 @@ func isRetryableDownloadError(err error) bool {
 	if err == nil || errors.Is(err, ErrHTTP404) {
 		return false
 	}
-	return errors.Is(err, errRetryableDownload)
+	return errors.Is(err, errUtils.ErrDownloadRetryable)
 }
 
 // writeResponseToCache reads the response body and writes it atomically to cache.
@@ -183,7 +181,7 @@ func buildDownloadError(url string, statusCode int) error {
 
 	err := builder.Err()
 	if isRetryableHTTPStatus(statusCode) {
-		return errors.Join(errRetryableDownload, err)
+		return errors.Join(errUtils.ErrDownloadRetryable, err)
 	}
 	return err
 }
