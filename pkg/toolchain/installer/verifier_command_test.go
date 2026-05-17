@@ -2,13 +2,17 @@ package installer
 
 import (
 	"context"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/cloudposse/atmos/pkg/toolchain/registry"
 	"github.com/cloudposse/atmos/pkg/toolchain/verification"
 )
 
@@ -70,6 +74,48 @@ func TestVerifierCommandRunnerUsesExistingCommandOnPath(t *testing.T) {
 	require.NoError(t, err)
 }
 
+func TestVerifierCommandRunnerAutoInstallUsesResolvedVersion(t *testing.T) {
+	testBinary, err := os.ReadFile(os.Args[0])
+	require.NoError(t, err)
+
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write(testBinary)
+	}))
+	defer ts.Close()
+
+	reg := &verifierBootstrapRegistry{
+		latest: "v3.0.6",
+		tool: &registry.Tool{
+			Type:       "http",
+			RepoOwner:  "sigstore",
+			RepoName:   "cosign",
+			Asset:      ts.URL + "/{{.Version}}/cosign",
+			Format:     "raw",
+			BinaryName: "cosign",
+		},
+	}
+	inst := &Installer{
+		cacheDir:         t.TempDir(),
+		binDir:           t.TempDir(),
+		configuredReg:    reg,
+		useConfiguredReg: true,
+		registryFactory:  verifierBootstrapFactory{registry: reg},
+	}
+
+	t.Setenv("PATH", t.TempDir())
+	t.Setenv("ATMOS_VERIFIER_HELPER_PROCESS", "1")
+
+	err = verifierCommandRunner{
+		installer: inst,
+		policy: verification.Policy{
+			VerifierInstall: verification.VerifierInstallAuto,
+		},
+	}.Run(context.Background(), "cosign", "-test.run=TestVerifierCommandHelperProcess", "--", "success")
+
+	require.NoError(t, err)
+	assert.Equal(t, "v3.0.6", reg.requestedVersion)
+}
+
 func TestRunVerifierCommandFailure(t *testing.T) {
 	t.Setenv("ATMOS_VERIFIER_HELPER_PROCESS", "1")
 
@@ -88,4 +134,48 @@ func TestVerifierCommandHelperProcess(t *testing.T) {
 		}
 	}
 	os.Exit(1)
+}
+
+type verifierBootstrapFactory struct {
+	registry registry.ToolRegistry
+}
+
+func (f verifierBootstrapFactory) NewAquaRegistry() registry.ToolRegistry {
+	return f.registry
+}
+
+type verifierBootstrapRegistry struct {
+	mu               sync.Mutex
+	latest           string
+	tool             *registry.Tool
+	requestedVersion string
+}
+
+func (r *verifierBootstrapRegistry) GetTool(_, _ string) (*registry.Tool, error) {
+	return r.tool, nil
+}
+
+func (r *verifierBootstrapRegistry) GetToolWithVersion(_, _, version string) (*registry.Tool, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.requestedVersion = version
+	return r.tool, nil
+}
+
+func (r *verifierBootstrapRegistry) GetLatestVersion(_, _ string) (string, error) {
+	return r.latest, nil
+}
+
+func (r *verifierBootstrapRegistry) LoadLocalConfig(_ string) error { return nil }
+
+func (r *verifierBootstrapRegistry) Search(_ context.Context, _ string, _ ...registry.SearchOption) ([]*registry.Tool, error) {
+	return nil, nil
+}
+
+func (r *verifierBootstrapRegistry) ListAll(_ context.Context, _ ...registry.ListOption) ([]*registry.Tool, error) {
+	return nil, nil
+}
+
+func (r *verifierBootstrapRegistry) GetMetadata(_ context.Context) (*registry.RegistryMetadata, error) {
+	return nil, nil
 }

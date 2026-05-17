@@ -500,6 +500,68 @@ func TestAquaRegistry_GetLatestVersion(t *testing.T) {
 	assert.Equal(t, "1.5.0", version) // Should skip draft v1.6.0 and prerelease v2.0.0-beta
 }
 
+func TestAquaRegistry_GetLatestVersion_NoVersionPrefixPreservesTag(t *testing.T) {
+	const packageYAML = `packages:
+  - type: github_release
+    repo_owner: sigstore
+    repo_name: cosign
+    asset: cosign-{{.OS}}-{{.Arch}}
+    format: raw
+`
+
+	version := latestVersionFromAquaFixture(t, "sigstore", "cosign", "v3.0.6", packageYAML)
+	assert.Equal(t, "v3.0.6", version)
+}
+
+func TestAquaRegistry_GetLatestVersion_ExplicitVersionPrefixStripsTag(t *testing.T) {
+	const packageYAML = `packages:
+  - type: github_release
+    repo_owner: opentofu
+    repo_name: opentofu
+    version_prefix: v
+    asset: tofu_{{trimV .Version}}_{{.OS}}_{{.Arch}}.zip
+    format: zip
+`
+
+	version := latestVersionFromAquaFixture(t, "opentofu", "opentofu", "v1.9.1", packageYAML)
+	assert.Equal(t, "1.9.1", version)
+}
+
+func latestVersionFromAquaFixture(t *testing.T, owner, repo, tagName, packageYAML string) string {
+	t.Helper()
+
+	releases := []releaseInfo{
+		{TagName: tagName, Prerelease: false, Draft: false},
+	}
+	indexYAML := "packages:\n  - type: github_release\n    repo_owner: " + owner + "\n    repo_name: " + repo + "\n"
+	packagePath := "/pkgs/" + owner + "/" + repo + "/registry.yaml"
+	releasesPath := "/repos/" + owner + "/" + repo + "/releases"
+
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/registry.yaml":
+			w.Header().Set("Content-Type", "application/yaml")
+			w.Write([]byte(indexYAML))
+		case packagePath:
+			w.Header().Set("Content-Type", "application/yaml")
+			w.Write([]byte(packageYAML))
+		case releasesPath:
+			json.NewEncoder(w).Encode(releases)
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer ts.Close()
+
+	ar := newTestAquaRegistry(t, ts.URL)
+	ar.githubBaseURL = ts.URL
+
+	version, err := ar.GetLatestVersion(owner, repo)
+	require.NoError(t, err)
+	return version
+}
+
 func TestAquaRegistry_GetLatestVersion_NoReleases(t *testing.T) {
 	// Mock GitHub API server that returns empty releases array
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -2378,6 +2440,7 @@ func TestGetLatestVersion_GitHubTag(t *testing.T) {
   - type: github_release
     repo_owner: test
     repo_name: tool
+    version_prefix: v
     version_source: github_tag
     asset: "tool-{{.Version}}-{{.OS}}-{{.Arch}}.tar.gz"
     binary_name: tool
@@ -2408,7 +2471,7 @@ func TestGetLatestTag(t *testing.T) {
 		defer ts.Close()
 
 		ar := NewAquaRegistry(WithGitHubBaseURL(ts.URL))
-		version, err := ar.getLatestTag("test", "tool", "")
+		version, err := ar.getLatestTag("test", "tool", "", false)
 		require.NoError(t, err)
 		assert.Equal(t, "2.0.0", version)
 	})
@@ -2421,7 +2484,7 @@ func TestGetLatestTag(t *testing.T) {
 		defer ts.Close()
 
 		ar := NewAquaRegistry(WithGitHubBaseURL(ts.URL))
-		version, err := ar.getLatestTag("jqlang", "jq", "jq-")
+		version, err := ar.getLatestTag("jqlang", "jq", "jq-", true)
 		require.NoError(t, err)
 		assert.Equal(t, "1.7.1", version)
 	})
@@ -2434,7 +2497,7 @@ func TestGetLatestTag(t *testing.T) {
 		defer ts.Close()
 
 		ar := NewAquaRegistry(WithGitHubBaseURL(ts.URL))
-		_, err := ar.getLatestTag("test", "empty", "")
+		_, err := ar.getLatestTag("test", "empty", "", false)
 		require.Error(t, err)
 		assert.ErrorIs(t, err, registry.ErrNoVersionsFound)
 	})
@@ -2446,7 +2509,7 @@ func TestGetLatestTag(t *testing.T) {
 		defer ts.Close()
 
 		ar := NewAquaRegistry(WithGitHubBaseURL(ts.URL))
-		_, err := ar.getLatestTag("test", "tool", "")
+		_, err := ar.getLatestTag("test", "tool", "", false)
 		require.Error(t, err)
 		assert.ErrorIs(t, err, registry.ErrHTTPRequest)
 	})
@@ -2459,7 +2522,7 @@ func TestGetLatestTag(t *testing.T) {
 		defer ts.Close()
 
 		ar := NewAquaRegistry(WithGitHubBaseURL(ts.URL))
-		_, err := ar.getLatestTag("test", "tool", "")
+		_, err := ar.getLatestTag("test", "tool", "", false)
 		require.Error(t, err)
 		assert.ErrorIs(t, err, registry.ErrRegistryParse)
 	})

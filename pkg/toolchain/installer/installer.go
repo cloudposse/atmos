@@ -324,7 +324,7 @@ func (i *Installer) installFromTool(tool *registry.Tool, version string) (string
 	}
 	verificationResult, err := i.verifyDownloadedAsset(tool, version, effectiveAssetURL, assetPath)
 	if err != nil {
-		_ = os.Remove(assetPath)
+		_ = os.Remove(assetPath) // #nosec G703 -- assetPath is the installer-created cache file for the downloaded asset.
 		return "", err
 	}
 	if err := i.updateLockFile(tool, version, effectiveAssetURL, verificationResult); err != nil {
