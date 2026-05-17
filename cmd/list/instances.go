@@ -33,6 +33,7 @@ type InstancesOptions struct {
 	OutputFile       string
 	ProcessTemplates bool
 	ProcessFunctions bool
+	Skip             []string
 	AuthDisabled     bool
 }
 
@@ -84,6 +85,7 @@ func parseInstancesOptions(cmd *cobra.Command, v *viper.Viper) *InstancesOptions
 		OutputFile:       v.GetString("output-file"),
 		ProcessTemplates: v.GetBool("process-templates"),
 		ProcessFunctions: v.GetBool("process-functions"),
+		Skip:             v.GetStringSlice("skip"),
 		AuthDisabled:     identityName == cfg.IdentityFlagDisabledValue,
 	}
 }
@@ -140,6 +142,7 @@ func init() {
 		WithOutputFileFlag,
 		WithProcessTemplatesFlag,
 		WithProcessFunctionsFlag,
+		WithSkipFlag,
 	)
 
 	// Register flags.
@@ -186,6 +189,9 @@ func executeListInstancesCmd(cmd *cobra.Command, args []string, opts *InstancesO
 		Info:             &configAndStacksInfo,
 		Cmd:              cmd,
 		Args:             args,
+		Format:           opts.Format,
+		Upload:           opts.Upload,
+		Stack:            opts.Stack,
 		ShowImports:      opts.Provenance,
 		ColumnsFlag:      opts.Columns,
 		FilterSpec:       opts.Filter,
@@ -197,5 +203,6 @@ func executeListInstancesCmd(cmd *cobra.Command, args []string, opts *InstancesO
 		OutputFile:       opts.OutputFile,
 		ProcessTemplates: opts.ProcessTemplates,
 		ProcessFunctions: opts.ProcessFunctions,
+		Skip:             opts.Skip,
 	})
 }

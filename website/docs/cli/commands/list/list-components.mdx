@@ -159,10 +159,10 @@ This means you can write simple `select()` expressions without worrying about th
   <dd>Include abstract components in output. Equivalent to `--type all`.<br/>Environment variable: `ATMOS_ABSTRACT`</dd>
 
   <dt>`--enabled`</dt>
-  <dd>Filter by enabled status (omit for all, `--enabled=true` for enabled only, `--enabled=false` for disabled only).<br/>Environment variable: `ATMOS_COMPONENT_ENABLED`</dd>
+  <dd>Filter by enabled status (omit for all, `--enabled=true` for enabled only, `--enabled=false` for disabled only). Because `list components` returns each component deduplicated across stacks, a component is reported as `enabled=false` if it is disabled in **any** of its stack instances. To see per-stack-instance state, use [`atmos list instances`](/cli/commands/list/list-instances).<br/>Environment variable: `ATMOS_COMPONENT_ENABLED`</dd>
 
   <dt>`--locked`</dt>
-  <dd>Filter by locked status (omit for all, `--locked=true` for locked only, `--locked=false` for unlocked only).<br/>Environment variable: `ATMOS_COMPONENT_LOCKED`</dd>
+  <dd>Filter by locked status (omit for all, `--locked=true` for locked only, `--locked=false` for unlocked only). A deduplicated component is reported as `locked=true` if it is locked in **any** of its stack instances. Use [`atmos list instances`](/cli/commands/list/list-instances) for per-stack-instance state.<br/>Environment variable: `ATMOS_COMPONENT_LOCKED`</dd>
 
   <dt>`--sort`</dt>
   <dd>Sort by column:order (e.g., `component:asc,stack:desc`). Multiple sort columns separated by comma.<br/>Environment variable: `ATMOS_LIST_SORT`</dd>
@@ -178,6 +178,9 @@ This means you can write simple `select()` expressions without worrying about th
 
   <dt>`--process-functions`</dt>
   <dd>Enable/disable YAML functions processing in Atmos stack manifests (default `true`). YAML functions include `!terraform.state`, `!terraform.output`, `!store`, `!aws.*`, etc. This is distinct from Go template functions like `atmos.Component(...)`, which are controlled by `--process-templates`.<br/>Environment variable: `ATMOS_PROCESS_FUNCTIONS`</dd>
+
+  <dt>`--skip`</dt>
+  <dd>Skip executing a specific YAML function in the Atmos stack manifests when processing stacks. Repeat the flag to skip multiple functions (for example, `--skip terraform.state --skip terraform.output`). Use this to bypass a single function (such as a backend-resolving `!terraform.state` call) while leaving other YAML functions enabled.<br/>Environment variable: `ATMOS_SKIP`</dd>
 </dl>
 
 ## Configuration
