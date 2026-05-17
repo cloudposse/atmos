@@ -6,6 +6,7 @@ import (
 	stdio "io"
 	"os"
 	"path/filepath"
+	"regexp"
 	"testing"
 
 	"github.com/spf13/cobra"
@@ -16,6 +17,20 @@ import (
 	mcpclient "github.com/cloudposse/atmos/pkg/mcp/client"
 	"github.com/cloudposse/atmos/pkg/ui"
 )
+
+// ansiEscapeRE matches CSI-style ANSI escape sequences (`\x1b[…m`).
+// The UI formatter wraps text in style codes for color, which split
+// otherwise-contiguous strings across multiple escape blocks on CI
+// (where TrueColor is enabled). Tests that assert on the visible
+// content of captured stderr must strip these before searching.
+var ansiEscapeRE = regexp.MustCompile(`\x1b\[[0-9;]*m`)
+
+// stripANSI returns s with all CSI ANSI escape sequences removed.
+// Used by tests so substring searches survive the formatter inserting
+// color codes mid-string (e.g. "Error: ...on\x1b[0m\x1b[97m /tmp/...").
+func stripANSI(s string) string {
+	return ansiEscapeRE.ReplaceAllString(s, "")
+}
 
 // uiCaptureStreams implements iolib.Streams with in-memory buffers so tests
 // can assert on the bytes ui.Success/Error/Errorf produces.
@@ -107,15 +122,19 @@ func TestPrintTestResult_SurfacesUnderlyingError(t *testing.T) {
 	}
 	printTestResult(result)
 
-	captured := stderr.String()
+	// Strip ANSI escapes before asserting — the UI formatter wraps
+	// styled text in color codes that can split a single logical
+	// message across multiple escape blocks (especially on CI with
+	// TrueColor on), which breaks naive substring searches.
+	captured := stripANSI(stderr.String())
 	assert.Contains(t, captured, failureMessage,
-		"printTestResult MUST surface result.Error to stderr (the regression CodeRabbit flagged was the message being swallowed); got stderr:\n%s",
+		"printTestResult MUST surface result.Error to stderr (the regression CodeRabbit flagged was the message being swallowed); got stderr (ANSI-stripped):\n%s",
 		captured)
 	// The "Error:" prefix is the contract the call site sets ("Error: %v").
 	// Pinning it confirms the new ui.Errorf line is responsible — not some
 	// other accidental path that happens to mention the string.
 	assert.Contains(t, captured, "Error:",
-		"the failure surface must use the explicit `Error:` prefix so users can distinguish it from the ✗ status markers; got:\n%s",
+		"the failure surface must use the explicit `Error:` prefix so users can distinguish it from the ✗ status markers; got (ANSI-stripped):\n%s",
 		captured)
 }
 
@@ -133,9 +152,10 @@ func TestPrintTestResult_OmitsErrorPrefixWhenSuccessful(t *testing.T) {
 		PingOK:        true,
 	})
 
-	captured := stderr.String()
+	// Strip ANSI escapes for the same reason as the positive test.
+	captured := stripANSI(stderr.String())
 	assert.NotContains(t, captured, "Error:",
-		"printTestResult MUST NOT print an Error: line when result.Error is nil; got stderr:\n%s",
+		"printTestResult MUST NOT print an Error: line when result.Error is nil; got stderr (ANSI-stripped):\n%s",
 		captured)
 }
 
