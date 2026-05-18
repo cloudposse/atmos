@@ -14,7 +14,7 @@ server configuration, AWS credentials, and toolchain version — in **one
 [Atmos Auth](/cli/configuration/auth) is the only place
 AWS credentials live; each MCP server is automatically wrapped with the
 right identity for the question it'll answer (billing → payer account,
-CloudTrail → audit, IAM → root, workload queries → dev). One
+CloudTrail → audit, IAM → root, workload queries → dev/rpg/staging). One
 `atmos auth login` covers them all — no API keys in CLI configs, no
 `AWS_PROFILE` swapping between prompts. The server set spans the
 [Atmos MCP server](/ai/mcp-server) for project stacks,
@@ -29,7 +29,7 @@ binaries so every assistant runs the same binary. See the example:
 
 ---
 
-### Your AI knows your stacks and components. And your cloud. And your history.
+## Your AI knows your stacks and components. And your cloud. And your history.
 
 In one prompt, your AI coding assistant answers:
 
@@ -90,17 +90,20 @@ mcp:
 
 auth:
   providers:
-    aws-sso:
+    sso:
       kind: aws/iam-identity-center
       start_url: "https://your-org.awsapps.com/start"
       region: "us-east-1"
   identities:
     readonly:
       kind: aws/permission-set
-      provider: aws-sso
+      default: true
+      via:
+        provider: sso
       principal:
-        permission_set: "ReadOnlyAccess"
-        account: { id: "123456789012" }
+        name: ReadOnlyAccess
+        account:
+          id: "123456789012"
 ```
 
 `atmos mcp export` reads the `mcp.servers` block, wraps every server with
@@ -149,17 +152,12 @@ exported config gives your AI coding assistant programmatic access to
 
 It exposes more than 20 tools:
 
-- **Stack & component introspection** (read-only) —
-`atmos_list_stacks`, `atmos_describe_component`,
-`atmos_validate_stacks`, `describe_affected`, `get_template_context`, `list_component_files`.
-- **File operations** — `read_stack_file`, `read_component_file`,
-`read_file`, `write_stack_file`, `write_component_file`, `edit_file`,
-`search_files`.
-- **Execution** — `execute_atmos_command` (invokes the `atmos` CLI), `execute_bash_command` (permission-gated).
+- **Stack & component introspection** (read-only).
+- **Execution** (permission-gated).
 - **Security & compliance** — `atmos_list_findings`, `atmos_describe_finding`, `atmos_analyze_finding`,
 `atmos_compliance_report`.
 
-Write-side tools (`write_*`, `edit_file`, `execute_bash_command`)
+Write-side tools (`write_*`, `execute_bash_command`)
 respect [Atmos's tool permission model](/cli/configuration/ai/tools#permissions).
 The MCP server runs in YOLO mode by default, so the AI coding
 assistant's own permission UI — Claude Code's per-tool approval,
@@ -207,7 +205,7 @@ So the AI can answer cross-layer questions in one prompt:
 > AWS resource is now out of sync?"*
 
 …pulling deployment history from `atmos-pro`, declared config from
-`atmos` (or directly from your infra repo), and live state from `aws-api` in a single coherent answer.
+`atmos` (or directly from your repo Atmos config), and live state from `aws-api` in a single coherent answer.
 
 ## Pair with Atmos Agent Skills
 

@@ -25,23 +25,17 @@ toolchain:
 # MCP
 # ---------------------------------------------------------------------------
 # enabled: true allows `atmos mcp start` to run, so this Atmos project's own
-# AI tools (describe_component, list_stacks, validate_stacks, …) can be
-# exposed to AI coding assistants as a regular MCP server. The `atmos` entry
-# under `servers` below wires that in.
+# AI tools can be exposed to AI coding assistants as a regular MCP server.
 #
-# servers: …    configures external MCP servers Atmos manages.
-#               `atmos mcp export` writes these to .mcp.json.
+# servers: configures external MCP servers Atmos manages.
+#  `atmos mcp export` writes these to .mcp.json.
 mcp:
   enabled: true
 
   servers:
     # =======================================================================
-    # The Atmos MCP server itself
+    # Atmos MCP server
     # =======================================================================
-    # Exposes Atmos AI tools (describe_component, list_stacks, validate_stacks,
-    # read_component_file, write_stack_file, search_files, execute_atmos_command,
-    # describe_affected, …) to your AI coding assistant. No identity needed —
-    # the server uses your local atmos.yaml, no remote auth involved.
     atmos:
       command: atmos
       args: ["mcp", "start"]
@@ -72,10 +66,6 @@ mcp:
       description: "AWS Knowledge — managed AWS knowledge base (remote)"
 
     # AWS Pricing — real-time pricing and cost analysis.
-    # All Pricing API calls are free of charge and account-agnostic, but we
-    # pin to core-root so all "money" servers share an identity
-    # and the user only logs into one account for cost-related questions.
-    # IAM permissions: pricing:*
     aws-pricing:
       command: uvx
       args: ["awslabs.aws-pricing-mcp-server@latest"]
@@ -83,13 +73,10 @@ mcp:
         AWS_REGION: "us-east-1"
         FASTMCP_LOG_LEVEL: "ERROR"
       description: "AWS Pricing — real-time pricing and cost analysis"
-      identity: "core-root"
+      identity: "readonly"
 
     # AWS Billing & Cost Management — billing summaries, payment history,
     # cost allocation tags.
-    # MUST run as the AWS Organizations management/payer account (core-root).
-    # "What did we spend last month?" only works here.
-    # IAM permissions: ce:*, billing:*
     aws-billing:
       command: uvx
       args: ["awslabs.billing-cost-management-mcp-server@latest"]
@@ -97,15 +84,9 @@ mcp:
         AWS_REGION: "us-east-1"
         FASTMCP_LOG_LEVEL: "ERROR"
       description: "AWS Billing — billing summaries and payment history"
-      identity: "core-root"
+      identity: "readonly"
 
-    # AWS IAM — role/policy analysis and access patterns. Read-only.
-    # Run in core-root so the AI
-    # sees the IAM Identity Center-provisioned admin roles
-    # (AWSReservedSSO_AdministratorAccess_*) plus Organizations-related
-    # roles. "What admin roles do we use?" → answered against the root
-    # account's IAM view.
-    # IAM permissions: iam:Get*, iam:List*
+    # AWS IAM — role/policy analysis and access patterns.
     aws-iam:
       command: uvx
       args: ["awslabs.iam-mcp-server@latest"]
@@ -113,15 +94,9 @@ mcp:
         AWS_REGION: "us-east-1"
         FASTMCP_LOG_LEVEL: "ERROR"
       description: "AWS IAM — role/policy analysis and access patterns"
-      identity: "core-root"
+      identity: "readonly"
 
     # AWS CloudTrail — event history and API call auditing.
-    # Pin to core-audit because that's where the org-wide
-    # CloudTrail lands. Running this in any other account only sees that
-    # account's local events; running in audit sees cross-account admin
-    # role assumptions, which is what "who accessed the admin roles?"
-    # actually needs.
-    # IAM permissions: cloudtrail:LookupEvents
     aws-cloudtrail:
       command: uvx
       args: ["awslabs.cloudtrail-mcp-server@latest"]
@@ -129,15 +104,10 @@ mcp:
         AWS_REGION: "us-east-1"
         FASTMCP_LOG_LEVEL: "ERROR"
       description: "AWS CloudTrail — event history and API call auditing"
-      identity: "core-audit"
+      identity: "readonly"
 
-    # AWS Security — Well-Architected security posture assessment. Read-only.
-    # GuardDuty / SecurityHub / Inspector / Access Analyzer are typically
-    # delegated to a dedicated security account in Cloud Posse setups, so
-    # pinning to core-security gets the org-wide aggregated
-    # findings rather than a single account's local view.
-    # IAM permissions: GuardDuty/Inspector/SecurityHub/Access Analyzer read,
-    # plus S3/EBS/RDS/ELB read for encryption/TLS checks.
+    # AWS Security — Well-Architected security posture assessment.
+    # GuardDuty, SecurityHub, Inspector, Access Analyzer.
     aws-security:
       command: uvx
       args: ["awslabs.well-architected-security-mcp-server@latest"]
@@ -145,16 +115,9 @@ mcp:
         AWS_REGION: "us-east-1"
         FASTMCP_LOG_LEVEL: "ERROR"
       description: "AWS Security — Well-Architected security posture assessment"
-      identity: "core-security"
+      identity: "readonly"
 
     # AWS API — direct AWS CLI access via AI, with built-in safety controls.
-    # Pin to a workload account (plat-dev) so questions like "do we have a
-    # VPC?", "list EC2 instances", "describe RDS clusters" actually return
-    # data.
-    # READ_OPERATIONS_ONLY=true blocks mutations at the tool layer; flip to
-    # false + REQUIRE_MUTATION_CONSENT=true if you want approval-gated
-    # mutations. Note that mutations also need the underlying IAM role to
-    # allow them.
     aws-api:
       command: uvx
       args: ["awslabs.aws-api-mcp-server@latest"]
@@ -163,46 +126,21 @@ mcp:
         READ_OPERATIONS_ONLY: "true"
         REQUIRE_MUTATION_CONSENT: "true"
       description: "AWS API — direct AWS CLI access with security controls"
-      identity: "plat-dev"
+      identity: "readonly"
 
 # ---------------------------------------------------------------------------
 # Atmos Auth — automatic credential injection for AWS MCP servers
 # ---------------------------------------------------------------------------
-# Servers with `identity` are wrapped (in the exported .mcp.json) with
-# `atmos auth exec -i <identity> --`. When the AI CLI spawns them, the
-# subprocess inherits AWS credentials resolved by Atmos Auth — no need to
-# touch ~/.aws/config, AWS_PROFILE, or other credential files.
-#
-# Per-server identity mapping (so a single `atmos auth login` lets every MCP
-# server use the right account for its API):
-#
-#   aws-pricing      → core-root     (pricing API, free, any account)
-#   aws-billing      → core-root     (MUST be the payer/management account)
-#   aws-iam          → core-root     (best central view of admin roles)
-#   aws-cloudtrail   → core-audit    (org trail lands in audit)
-#   aws-security     → core-security (delegated GuardDuty/SecurityHub admin)
-#   aws-api          → plat-dev      (workload account: VPC/EC2/RDS lives here)
-#
-# All identities sit under the same SSO provider, so `atmos auth login`
-# authenticates the SSO session once; each identity is then assumed
-# on-demand when the MCP server is spawned (the cached SSO token covers all
-# four).
-#
-# Update the `start_url` to your AWS IAM Identity Center start URL, then:
-#   atmos auth login
+# Update the `start_url` to your AWS IAM Identity Center start URL,
+# then: atmos auth login
 auth:
   providers:
     sso:
       kind: aws/iam-identity-center
-      start_url: "https://your-org.awsapps.com/start"   # ← Change this
-      region: "us-west-1"
+      start_url: "https://your-org.awsapps.com/start"
+      region: "us-east-1"
   identities:
-    # core-root — the AWS Organizations management/payer account.
-    # Used by aws-billing (Cost Explorer only works here), aws-pricing
-    # (free, account-agnostic, but grouped here so all "money" servers
-    # share an identity), and aws-iam (sees IAM-Identity-Center-provisioned
-    # admin roles and Organizations-related roles).
-    core-root:
+    readonly:
       kind: aws/permission-set
       default: true
       via:
@@ -210,45 +148,4 @@ auth:
       principal:
         name: ReadOnlyAccess
         account:
-          name: root
-
-    # core-audit — where the org-wide CloudTrail lands.
-    # Running aws-cloudtrail here gives the AI visibility into
-    # cross-account admin role assumptions ("who accessed the admin
-    # roles?"). Running it anywhere else only sees that account's
-    # local events.
-    core-audit:
-      kind: aws/permission-set
-      via:
-        provider: sso
-      principal:
-        name: ReadOnlyAccess
-        account:
-          name: core-audit
-
-    # core-security — the security tooling account.
-    # GuardDuty/SecurityHub/Inspector are typically
-    # delegated here in Cloud Posse setups, so aws-security gets the
-    # org-wide aggregated findings rather than a single account's view.
-    core-security:
-      kind: aws/permission-set
-      via:
-        provider: sso
-      principal:
-        name: ReadOnlyAccess
-        account:
-          name: core-security
-
-    # plat-dev — a workload account where application VPCs,
-    # EC2 instances, RDS, S3 buckets, etc. actually live. aws-api uses
-    # this so "do we have a VPC?", "list EC2 instances", "describe RDS
-    # clusters" return real data. Swap to plat-prod (or
-    # another workload account) if you want the AI to query production.
-    plat-dev:
-      kind: aws/permission-set
-      via:
-        provider: sso
-      principal:
-        name: ReadOnlyAccess
-        account:
-          name: plat-dev
+          id: "123456789012"
