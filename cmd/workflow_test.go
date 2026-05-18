@@ -68,3 +68,24 @@ func TestWorkflowCmd_WithFileFlag(t *testing.T) {
 	// and NOT show "Incorrect Usage" message
 	assert.NoError(t, err, "workflow should execute successfully with --file flag")
 }
+
+// TestWorkflowCmd_NoArgsNonTTY tests that workflow command without arguments
+// returns a clear error when running in non-TTY environment (e.g., from within a script).
+func TestWorkflowCmd_NoArgsNonTTY(t *testing.T) {
+	_ = NewTestKit(t)
+
+	stacksPath := "../tests/fixtures/scenarios/complete"
+
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
+	t.Setenv("ATMOS_BASE_PATH", stacksPath)
+
+	// Execute workflow with no arguments (should fail in non-TTY mode)
+	// Tests run in non-TTY mode by default, so this should trigger the error
+	RootCmd.SetArgs([]string{"workflow"})
+	err := RootCmd.Execute()
+
+	// Should return an error indicating that workflow name is required
+	assert.Error(t, err, "workflow without arguments should fail in non-TTY mode")
+	assert.Contains(t, err.Error(), "Workflow name is required when running in non-interactive mode",
+		"error should indicate that workflow name is required in non-interactive mode")
+}
