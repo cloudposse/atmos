@@ -25,10 +25,8 @@ Centralized auth. Centralized security and permissions. One `atmos.yaml`.
 
 ## What This Example Demonstrates
 
-- **One source of truth** — every stdio MCP server is defined in
-  `atmos.yaml` and versioned with your infrastructure code. (Atmos Pro
-  is an HTTP MCP server and is registered separately per-CLI — Atmos's
-  stdio-only `MCPServerConfig` doesn't cover HTTP transport yet.)
+- **One source of truth** — every MCP server is defined in
+  `atmos.yaml` and versioned with your infrastructure code.
 - **Security — every credential, in one place** —
   [Atmos Auth](/cli/configuration/auth) is the only place
   AWS credentials live. Each server with an `identity` (everything
