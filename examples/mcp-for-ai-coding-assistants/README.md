@@ -25,12 +25,16 @@ Centralized auth. Centralized security and permissions. One `atmos.yaml`.
 
 ## What This Example Demonstrates
 
-- **One source of truth** — every MCP server is defined in `atmos.yaml`
-  (versioned with your infrastructure code).
+- **One source of truth** — every stdio MCP server is defined in
+  `atmos.yaml` and versioned with your infrastructure code. (Atmos Pro
+  is an HTTP MCP server and is registered separately per-CLI — Atmos's
+  stdio-only `MCPServerConfig` doesn't cover HTTP transport yet.)
 - **Security — every credential, in one place** —
   [Atmos Auth](/cli/configuration/auth) is the only place
-  AWS credentials live. Each external MCP server is spawned by `atmos auth exec`, which resolves
-  credentials at runtime and writes them only into that subprocess's env.
+  AWS credentials live. Each server with an `identity` (everything
+  except `aws-docs` and `aws-knowledge`, which talk to public endpoints)
+  is spawned by `atmos auth exec`, which resolves credentials at
+  runtime and writes them only into that subprocess's env.
 - **Convenience — one login, every account auto-routed** — configure all
   the accounts you care about in `auth.identities`, run `atmos auth login`
   once, and Atmos handles the rest. When the AI calls a
@@ -43,18 +47,18 @@ Centralized auth. Centralized security and permissions. One `atmos.yaml`.
 
 ## MCP Servers Configured
 
-| Server             | Purpose                                                  | Auth                   |
-|--------------------|----------------------------------------------------------|------------------------|
-| **atmos**          | Atmos AI tools (describe/list/validate, search)          | Atmos Auth             |
-| **atmos-pro**      | Atmos Pro — drift, deployments, workflow runs, audit log | Browser OAuth (GitHub) |
-| **aws-docs**       | Search and fetch AWS documentation                       | None (public docs)     |
-| **aws-knowledge**  | Managed AWS knowledge base (remote)                      | None (public)          |
-| **aws-pricing**    | Real-time pricing and cost analysis                      | AWS (via Atmos Auth)   |
-| **aws-billing**    | Billing summaries and payment history                    | AWS (via Atmos Auth)   |
-| **aws-iam**        | IAM role/policy analysis (read-only)                     | AWS (via Atmos Auth)   |
-| **aws-cloudtrail** | Event history and API auditing                           | AWS (via Atmos Auth)   |
-| **aws-security**   | Well-Architected security posture assessment             | AWS (via Atmos Auth)   |
-| **aws-api**        | Direct AWS CLI access (read-only by default)             | AWS (via Atmos Auth)   |
+| Server             | Purpose                                                  | Auth                                         |
+|--------------------|----------------------------------------------------------|----------------------------------------------|
+| **atmos**          | Atmos AI tools (describe/list/validate, search)          | Atmos Auth                                   |
+| **atmos-pro**      | Atmos Pro — drift, deployments, workflow runs, audit log | Browser OAuth (registered separately, HTTP)  |
+| **aws-docs**       | Search and fetch AWS documentation                       | None (public docs)                           |
+| **aws-knowledge**  | Managed AWS knowledge base (remote)                      | None (public)                                |
+| **aws-pricing**    | Real-time pricing and cost analysis                      | AWS (via Atmos Auth)                         |
+| **aws-billing**    | Billing summaries and payment history                    | AWS (via Atmos Auth)                         |
+| **aws-iam**        | IAM role/policy analysis (read-only)                     | AWS (via Atmos Auth)                         |
+| **aws-cloudtrail** | Event history and API auditing                           | AWS (via Atmos Auth)                         |
+| **aws-security**   | Well-Architected security posture assessment             | AWS (via Atmos Auth)                         |
+| **aws-api**        | Direct AWS CLI access (read-only by default)             | AWS (via Atmos Auth)                         |
 
 ### Where it fits in the picture
 
