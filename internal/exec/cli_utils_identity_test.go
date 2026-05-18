@@ -61,6 +61,20 @@ func TestProcessArgsAndFlags_IdentityFlag(t *testing.T) {
 			expectError:      false,
 			description:      "--identity without value, next arg is another flag",
 		},
+		{
+			name:             "--identity=false should normalize to disabled sentinel",
+			args:             []string{"plan", "vpc", "--stack", "test-stack", "--identity=false"},
+			expectedIdentity: cfg.IdentityFlagDisabledValue,
+			expectError:      false,
+			description:      "Boolean-false flag value disables authentication",
+		},
+		{
+			name:             "--identity false (space-separated) should normalize to disabled sentinel",
+			args:             []string{"plan", "vpc", "--stack", "test-stack", "--identity", "false"},
+			expectedIdentity: cfg.IdentityFlagDisabledValue,
+			expectError:      false,
+			description:      "Space-separated boolean-false flag value disables authentication",
+		},
 	}
 
 	for _, tc := range tests {
@@ -102,6 +116,12 @@ func TestProcessArgsAndFlags_IdentityFlagHelmfile(t *testing.T) {
 			expectedIdentity: "test-identity",
 			description:      "Explicit identity specified",
 		},
+		{
+			name:             "--identity=false should normalize to disabled sentinel",
+			args:             []string{"sync", "nginx", "--stack", "test-stack", "--identity=false"},
+			expectedIdentity: cfg.IdentityFlagDisabledValue,
+			description:      "Boolean-false flag value disables authentication for helmfile",
+		},
 	}
 
 	for _, tc := range tests {
@@ -132,6 +152,12 @@ func TestProcessArgsAndFlags_IdentityFlagPacker(t *testing.T) {
 			args:             []string{"build", "example", "--stack", "test-stack", "--identity", "test-identity"},
 			expectedIdentity: "test-identity",
 			description:      "Explicit identity specified",
+		},
+		{
+			name:             "--identity=false should normalize to disabled sentinel",
+			args:             []string{"build", "example", "--stack", "test-stack", "--identity=false"},
+			expectedIdentity: cfg.IdentityFlagDisabledValue,
+			description:      "Boolean-false flag value disables authentication for packer",
 		},
 	}
 

@@ -49,6 +49,12 @@ type Provider interface {
 	// UpdateCheckRun updates an existing check run.
 	UpdateCheckRun(ctx context.Context, opts *UpdateCheckRunOptions) (*CheckRun, error)
 
+	// PostComment posts or upserts a PR/MR comment. Providers that do not
+	// support comments should return errUtils.ErrCIOperationNotSupported.
+	// Implementations use the marker string to find and update existing
+	// comments on repeat runs (upsert); callers embed the marker in Body.
+	PostComment(ctx context.Context, opts *PostCommentOptions) (*Comment, error)
+
 	// OutputWriter returns a writer for CI outputs ($GITHUB_OUTPUT, etc.).
 	OutputWriter() OutputWriter
 

@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -162,7 +163,8 @@ func TestCollectInstancesEdgeCases(t *testing.T) {
 				"components": "invalid", // Invalid components.
 			},
 		}
-		result := collectInstances(stacks)
+		result, err := collectInstances(stacks, "")
+		require.NoError(t, err)
 		// Should only process stack1.
 		assert.Len(t, result, 1)
 		assert.Equal(t, "vpc", result[0].Component)
@@ -175,7 +177,8 @@ func TestCollectInstancesEdgeCases(t *testing.T) {
 				"components": map[string]interface{}{},
 			},
 		}
-		result := collectInstances(stacks)
+		result, err := collectInstances(stacks, "")
+		require.NoError(t, err)
 		assert.Empty(t, result)
 	})
 }

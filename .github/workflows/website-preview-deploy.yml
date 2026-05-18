@@ -13,8 +13,6 @@ env:
   S3_BUCKET_NAME: cplive-plat-ue2-dev-atmos-docs-origin
   PR_NUMBER: ${{ github.event.workflow_run.pull_requests[0].number }}
   DEPLOYMENT_HOST: pr-${{ github.event.workflow_run.pull_requests[0].number }}.atmos-docs.ue2.dev.plat.cloudposse.org
-  ALGOLIA_INDEX_NAME: atmos-preview.tools
-  ALGOLIA_APP_ID: 32YOERUX83
 
 # These permissions are needed to interact with the GitHub's OIDC Token endpoint
 permissions:
@@ -73,13 +71,6 @@ jobs:
           aws sts get-caller-identity
           aws s3 sync . s3://${{ env.S3_BUCKET_NAME }}/pr-${{ env.PR_NUMBER }}/ --delete
           aws s3 ls s3://${{ env.S3_BUCKET_NAME }}/pr-${{ env.PR_NUMBER }}/ --recursive --human-readable --summarize
-
-      - name: ReIndex with Algolia
-        if: ${{ contains(github.event.workflow_run.pull_requests.*.labels.*.name, 'reindex') }}
-        env:
-          ALGOLIA_SCRAPER_API_KEY: ${{ secrets.ALGOLIA_SCRAPER_API_KEY }}
-        run: |
-          ./website/algolia/reindex.sh
 
       - name: Update deployment status
         uses: bobheadxi/deployments@648679e8e4915b27893bd7dbc35cb504dc915bc8 # v1

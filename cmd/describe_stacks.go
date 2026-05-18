@@ -75,7 +75,7 @@ func getRunnableDescribeStacksCmd(
 		// When functions are disabled (--process-functions=false), there are no YAML functions
 		// (like !terraform.state) that need auth credentials, so identity resolution is unnecessary.
 		identityName := GetIdentityFromFlags(cmd, os.Args)
-		identityExplicit := cmd.Flags().Changed(IdentityFlagName)
+		identityExplicit := cmd.Flags().Changed(cfg.IdentityFlagName)
 		if describe.ProcessYamlFunctions || identityExplicit {
 			// Category B: describe stacks operates on multiple stacks/components with no single
 			// target (component, stack) pair. Use the SCAN wrapper so stack-level default identities
@@ -154,7 +154,8 @@ func init() {
 
 	describeStacksCmd.PersistentFlags().String("format", "yaml", "Specify the output format (`yaml` is default)")
 
-	describeStacksCmd.PersistentFlags().StringP("stack", "s", "",
+	describeStacksCmd.PersistentFlags().StringP(
+		"stack", "s", "",
 		"Filter by a specific stack\n"+
 			"The filter supports names of the top-level stack manifests (including subfolder paths), and `atmos` stack names (derived from the context vars)",
 	)

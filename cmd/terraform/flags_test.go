@@ -447,5 +447,4 @@ func TestIdentityFlagConfiguration(t *testing.T) {
 	assert.Equal(t, "__SELECT__", strFlag.NoOptDefVal, "identity NoOptDefVal should be __SELECT__ for interactive selection")
 	assert.Equal(t, "i", strFlag.Shorthand, "identity should have -i shorthand")
 	assert.Contains(t, strFlag.EnvVars, "ATMOS_IDENTITY")
-	assert.Contains(t, strFlag.EnvVars, "IDENTITY")
 }

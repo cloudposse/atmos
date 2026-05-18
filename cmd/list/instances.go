@@ -33,6 +33,8 @@ type InstancesOptions struct {
 	OutputFile       string
 	ProcessTemplates bool
 	ProcessFunctions bool
+	Skip             []string
+	AuthDisabled     bool
 }
 
 // instancesCmd lists atmos instances.
@@ -66,6 +68,8 @@ var instancesCmd = &cobra.Command{
 // Extracted from the RunE closure so the viper→options mapping can be
 // unit-tested without driving the whole cobra command.
 func parseInstancesOptions(cmd *cobra.Command, v *viper.Viper) *InstancesOptions {
+	identityName := getIdentityFromCommand(cmd)
+
 	return &InstancesOptions{
 		Flags:            flags.ParseGlobalFlags(cmd, v),
 		Format:           v.GetString("format"),
@@ -81,6 +85,8 @@ func parseInstancesOptions(cmd *cobra.Command, v *viper.Viper) *InstancesOptions
 		OutputFile:       v.GetString("output-file"),
 		ProcessTemplates: v.GetBool("process-templates"),
 		ProcessFunctions: v.GetBool("process-functions"),
+		Skip:             v.GetStringSlice("skip"),
+		AuthDisabled:     identityName == cfg.IdentityFlagDisabledValue,
 	}
 }
 
@@ -136,6 +142,7 @@ func init() {
 		WithOutputFileFlag,
 		WithProcessTemplatesFlag,
 		WithProcessFunctionsFlag,
+		WithSkipFlag,
 	)
 
 	// Register flags.
@@ -182,6 +189,9 @@ func executeListInstancesCmd(cmd *cobra.Command, args []string, opts *InstancesO
 		Info:             &configAndStacksInfo,
 		Cmd:              cmd,
 		Args:             args,
+		Format:           opts.Format,
+		Upload:           opts.Upload,
+		Stack:            opts.Stack,
 		ShowImports:      opts.Provenance,
 		ColumnsFlag:      opts.Columns,
 		FilterSpec:       opts.Filter,
@@ -189,8 +199,10 @@ func executeListInstancesCmd(cmd *cobra.Command, args []string, opts *InstancesO
 		Delimiter:        opts.Delimiter,
 		Query:            opts.Query,
 		AuthManager:      authManager,
+		AuthDisabled:     opts.AuthDisabled,
 		OutputFile:       opts.OutputFile,
 		ProcessTemplates: opts.ProcessTemplates,
 		ProcessFunctions: opts.ProcessFunctions,
+		Skip:             opts.Skip,
 	})
 }

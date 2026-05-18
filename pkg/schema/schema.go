@@ -607,8 +607,11 @@ type CIChecksStatusesConfig struct {
 
 // CICommentsConfig configures PR/MR comment integration.
 // GitHub: PR comments, GitLab: MR notes.
+//
+// Enabled is *bool so callers can distinguish "unset" (nil, default applies)
+// from explicit false. Default is true when omitted; see `isCommentsEnabled`.
 type CICommentsConfig struct {
-	Enabled  bool   `yaml:"enabled,omitempty" json:"enabled,omitempty" mapstructure:"enabled"`
+	Enabled  *bool  `yaml:"enabled,omitempty" json:"enabled,omitempty" mapstructure:"enabled"`
 	Behavior string `yaml:"behavior,omitempty" json:"behavior,omitempty" mapstructure:"behavior"` // create, update, upsert
 	Template string `yaml:"template,omitempty" json:"template,omitempty" mapstructure:"template"`
 }
@@ -1010,8 +1013,16 @@ type ConfigAndStacksInfo struct {
 	//   - pkg/auth already imports pkg/schema (for ConfigAndStacksInfo)
 	//   - This would create: schema → auth → schema (circular dependency error)
 	//   - Type assertions are used at usage sites to recover type safety
-	AuthManager               any
-	ComponentBackendType      string
+	AuthManager          any
+	AuthDisabled         bool
+	ComponentBackendType string
+	// RequiredVersion is the Terraform version constraint (e.g., ">= 1.10.1").
+	// This is extracted from terraform.required_version or components.terraform.<name>.required_version.
+	RequiredVersion string
+	// RequiredProviders maps provider names to their configuration.
+	// Example: {"aws": {"source": "hashicorp/aws", "version": "~> 5.0"}}.
+	// This is extracted from terraform.required_providers or components.terraform.<name>.required_providers.
+	RequiredProviders         map[string]map[string]any
 	AdditionalArgsAndFlags    []string
 	GlobalOptions             []string
 	BasePath                  string
@@ -1183,15 +1194,17 @@ type Affected struct {
 }
 
 type BaseComponentConfig struct {
-	BaseComponentVars         AtmosSectionMapType
-	BaseComponentSettings     AtmosSectionMapType
-	BaseComponentEnv          AtmosSectionMapType
-	BaseComponentAuth         AtmosSectionMapType
-	BaseComponentDependencies AtmosSectionMapType
-	BaseComponentLocals       AtmosSectionMapType // Component-level locals for template processing.
-	BaseComponentMetadata     AtmosSectionMapType
-	BaseComponentProviders    AtmosSectionMapType
-	BaseComponentHooks        AtmosSectionMapType
+	BaseComponentVars              AtmosSectionMapType
+	BaseComponentSettings          AtmosSectionMapType
+	BaseComponentEnv               AtmosSectionMapType
+	BaseComponentAuth              AtmosSectionMapType
+	BaseComponentDependencies      AtmosSectionMapType
+	BaseComponentLocals            AtmosSectionMapType // Component-level locals for template processing.
+	BaseComponentMetadata          AtmosSectionMapType
+	BaseComponentProviders         AtmosSectionMapType
+	BaseComponentRequiredProviders AtmosSectionMapType
+	BaseComponentRequiredVersion   string
+	BaseComponentHooks             AtmosSectionMapType
 	// BaseComponentGenerate holds the generate section configuration from the base component,
 	// defining auxiliary files to be generated for this component.
 	BaseComponentGenerate                  AtmosSectionMapType
