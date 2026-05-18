@@ -327,9 +327,6 @@ func (i *Installer) installFromTool(tool *registry.Tool, version string) (string
 		_ = os.Remove(assetPath) // #nosec G703 -- assetPath is the installer-created cache file for the downloaded asset.
 		return "", err
 	}
-	if err := i.updateLockFile(tool, version, effectiveAssetURL, verificationResult); err != nil {
-		return "", err
-	}
 	binaryPath, err := i.extractAndInstall(tool, assetPath, version)
 	if err != nil {
 		return "", fmt.Errorf(errUtils.ErrWrapFormat, ErrFileOperation, err)
@@ -340,6 +337,9 @@ func (i *Installer) installFromTool(tool *registry.Tool, version string) (string
 	// Set mod time to now so install date reflects installation, not archive timestamp
 	now := time.Now()
 	_ = os.Chtimes(binaryPath, now, now)
+	if err := i.updateLockFile(tool, version, effectiveAssetURL, verificationResult); err != nil {
+		return "", err
+	}
 	return binaryPath, nil
 }
 

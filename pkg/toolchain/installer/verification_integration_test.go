@@ -59,6 +59,46 @@ func TestInstallFromTool_VerifiesChecksumBeforeExtraction(t *testing.T) {
 	assert.Contains(t, string(lockData), sum)
 }
 
+func TestInstallFromTool_DoesNotUpdateLockFileWhenExtractionFails(t *testing.T) {
+	assetName := "tool.zip"
+	asset := []byte("not a zip archive")
+	sum := "a90877b716582c036052f8b70ed0e9a60464ad21daa00ed4c77d2f478ca16239"
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/" + assetName:
+			_, _ = w.Write(asset)
+		case "/checksums.txt":
+			_, _ = fmt.Fprintf(w, "%s  %s\n", sum, assetName)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer ts.Close()
+
+	installer := &Installer{
+		cacheDir:           t.TempDir(),
+		binDir:             t.TempDir(),
+		useLockFile:        true,
+		lockFilePath:       filepath.Join(t.TempDir(), "toolchain.lock.yaml"),
+		verificationPolicy: verification.Policy{Checksums: verification.PolicyWhenAvailable, Signatures: verification.PolicyDisabled},
+	}
+	_, err := installer.installFromTool(&registry.Tool{
+		Type:      "http",
+		RepoOwner: "owner",
+		RepoName:  "tool",
+		Asset:     ts.URL + "/" + assetName,
+		Format:    "zip",
+		Checksum: registry.ChecksumConfig{
+			Type:      "http",
+			URL:       ts.URL + "/checksums.txt",
+			Algorithm: "sha256",
+		},
+	}, "1.0.0")
+
+	require.ErrorIs(t, err, ErrFileOperation)
+	assert.NoFileExists(t, installer.lockFilePath)
+}
+
 func TestInstallFromTool_RemovesTamperedCachedAsset(t *testing.T) {
 	assetName := EnsureWindowsExeExtension("tool")
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

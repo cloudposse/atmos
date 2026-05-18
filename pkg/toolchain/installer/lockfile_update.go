@@ -37,7 +37,7 @@ func (i *Installer) updateLockFile(tool *registry.Tool, version, assetURL string
 	lf, err := loadInstallerLockFile(i.lockFilePath)
 	if err != nil {
 		if !errors.Is(err, fs.ErrNotExist) {
-			return err
+			return fmt.Errorf("load installer lockfile: %w", err)
 		}
 		lf = newInstallerLockFile()
 	}
@@ -54,7 +54,10 @@ func (i *Installer) updateLockFile(tool *registry.Tool, version, assetURL string
 		ChecksumAlgorithm: result.ChecksumAlgorithm,
 		Verification:      result.SignatureMethods,
 	}
-	return saveInstallerLockFile(i.lockFilePath, lf)
+	if err := saveInstallerLockFile(i.lockFilePath, lf); err != nil {
+		return fmt.Errorf("save installer lockfile: %w", err)
+	}
+	return nil
 }
 
 type installerLockFile struct {
