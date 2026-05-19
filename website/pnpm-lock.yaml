@@ -51,10 +51,10 @@ importers:
         specifier: ^6.7.2
         version: 6.7.2
       '@fortawesome/react-fontawesome':
-        specifier: ^0.2.2
+        specifier: ^0.2.6
         version: 0.2.6(@fortawesome/fontawesome-svg-core@6.7.2)(react@18.3.1)
       '@mdx-js/react':
-        specifier: ^3.1.0
+        specifier: ^3.1.1
         version: 3.1.1(@types/react@19.2.2)(react@18.3.1)
       canvas-confetti:
         specifier: ^1.9.4
@@ -72,7 +72,7 @@ importers:
         specifier: ^0.2.2
         version: 0.2.2(@docusaurus/core@3.9.2(@mdx-js/react@3.1.1(@types/react@19.2.2)(react@18.3.1))(react-dom@18.3.1(react@18.3.1))(react@18.3.1))
       docusaurus-plugin-sentry:
-        specifier: ^2.0.0
+        specifier: ^2.1.0
         version: 2.1.0(@docusaurus/core@3.9.2(@mdx-js/react@3.1.1(@types/react@19.2.2)(react@18.3.1))(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       framer-motion:
         specifier: ^12.23.24
@@ -84,16 +84,16 @@ importers:
         specifier: ^5.1.0
         version: 5.1.0(webpack@5.102.1)
       marked:
-        specifier: ^15.0.4
+        specifier: ^15.0.12
         version: 15.0.12
       node-fetch:
         specifier: ^3.3.2
         version: 3.3.2
       posthog-docusaurus:
-        specifier: ^2.0.2
+        specifier: ^2.0.5
         version: 2.0.5
       posthog-js:
-        specifier: ^1.203.2
+        specifier: ^1.280.0
         version: 1.280.0
       prism-react-renderer:
         specifier: ^2.4.1
@@ -114,16 +114,16 @@ importers:
         specifier: ^5.5.0
         version: 5.5.0(react@18.3.1)
       react-image-gallery:
-        specifier: ^1.3.0
+        specifier: ^1.4.0
         version: 1.4.0(react@18.3.1)
       react-markdown:
         specifier: ^10.1.0
         version: 10.1.0(@types/react@19.2.2)(react@18.3.1)
       react-player:
-        specifier: ^2.16.0
+        specifier: ^2.16.1
         version: 2.16.1(react@18.3.1)
       react-social-media-embed:
-        specifier: ^2.5.17
+        specifier: ^2.5.18
         version: 2.5.18(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       react-table:
         specifier: ^7.8.0
@@ -154,10 +154,10 @@ importers:
         specifier: ^8.17.1
         version: 8.17.1
       eslint-scope:
-        specifier: ^8.0.0
+        specifier: ^8.4.0
         version: 8.4.0
       prettier:
-        specifier: ^3.4.2
+        specifier: ^3.6.2
         version: 3.6.2
 
 packages:
@@ -825,6 +825,10 @@ packages:
     resolution: {integrity: sha512-Q/N6JNWvIvPnLDvjlE1OUBLPQHH6l3CltCEsHIujp45zQUSSh8K+gHnaEX45yAT1nyngnINhvWtzN+Nb9D8RAQ==}
     engines: {node: '>=6.9.0'}
 
+  '@babel/runtime@7.29.2':
+    resolution: {integrity: sha512-JiDShH45zKHWyGe4ZNVRrCjBz8Nh9TMmZG1kh4QTK8hCBTWBi8Da+i7s1fJw7/lYpM4ccepSNfqzZ/QvABBi5g==}
+    engines: {node: '>=6.9.0'}
+
   '@babel/template@7.27.2':
     resolution: {integrity: sha512-LPDZ85aEJyYSd18/DkjNh4/y1ntkE5KwUHWTiqgRxruuZL2F1yuHligVHLvcHY2vMHXttKFpJn6LwfI7cw7ODw==}
     engines: {node: '>=6.9.0'}
@@ -1372,6 +1376,7 @@ packages:
 
   '@fortawesome/react-fontawesome@0.2.6':
     resolution: {integrity: sha512-mtBFIi1UsYQo7rYonYFkjgYKGoL8T+fEH6NGUpvuqtY3ytMsAoDaPo5rk25KuMtKDipY4bGYM/CkmCHA1N3FUg==}
+    deprecated: v0.2.x is no longer supported. Unless you are still using FontAwesome 5, please update to v3.1.1 or greater.
     peerDependencies:
       '@fortawesome/fontawesome-svg-core': ~1 || ~6 || ~7
       react: ^16.3 || ^17.0.0 || ^18.0.0 || ^19.0.0
@@ -1869,6 +1874,7 @@ packages:
 
   '@ungap/structured-clone@1.3.0':
     resolution: {integrity: sha512-WmoN8qaIAo7WTYWbAZuG8PYEhn5fkz7dZrqTBZ7dtt//lL2Gwms1IcnQ5yHqjDfX8Ft5j4YzDM23f87zBfDe9g==}
+    deprecated: Potential CWE-502 - Update to 1.3.1 or higher
 
   '@vercel/oidc@3.0.3':
     resolution: {integrity: sha512-yNEQvPcVrK9sIe637+I0jD6leluPxzwJKx/Haw6F4H77CdDsszUn5V3o96LPziXkSNE2B83+Z3mjqGKBK/R6Gg==}
@@ -4337,8 +4343,8 @@ packages:
   picocolors@1.1.1:
     resolution: {integrity: sha512-xceH2snhtb5M9liqDsmEw56le376mTZkEX/jEb/RxNFyegNul7eNslCXP9FDj/Lcu0X8KEyMceP2ntpaHrDEVA==}
 
-  picomatch@2.3.1:
-    resolution: {integrity: sha512-JU3teHTNjmE2VCGFzuY8EXzCDVwEqB2a8fsIvwaStHhAWJEeVd1o1QD80CU6+ZdEXXSLbSsuLwJjkCBWqRQUVA==}
+  picomatch@2.3.2:
+    resolution: {integrity: sha512-V7+vQEJ06Z+c5tSye8S+nHUfI51xoXIXjHQ99cQtKUkQqqO1kO/KCJUfZXuB47h/YBlDhah2H3hdUGXn8ie0oA==}
     engines: {node: '>=8.6'}
 
   pkg-dir@7.0.0:
@@ -5629,6 +5635,7 @@ packages:
 
   uuid@8.3.2:
     resolution: {integrity: sha512-+NYs2QeMWy+GWFOEm9xnn6HCDp0l7QBD7ml8zLUmJ+93Q5NF0NocErnwkTkXVFNiX3/fpC6afS8Dhb/gz7R7eg==}
+    deprecated: uuid@10 and below is no longer supported.  For ESM codebases, update to uuid@latest.  For CommonJS codebases, use uuid@11 (but be aware this version will likely be deprecated in 2028).
     hasBin: true
 
   validate-peer-dependencies@2.2.0:
@@ -6705,6 +6712,8 @@ snapshots:
       core-js-pure: 3.46.0
 
   '@babel/runtime@7.28.4': {}
+
+  '@babel/runtime@7.29.2': {}
 
   '@babel/template@7.27.2':
     dependencies:
@@ -8081,7 +8090,7 @@ snapshots:
 
   '@slorber/react-helmet-async@1.3.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)':
     dependencies:
-      '@babel/runtime': 7.28.4
+      '@babel/runtime': 7.29.2
       invariant: 2.2.4
       prop-types: 15.8.1
       react: 18.3.1
@@ -8684,7 +8693,7 @@ snapshots:
   anymatch@3.1.3:
     dependencies:
       normalize-path: 3.0.0
-      picomatch: 2.3.1
+      picomatch: 2.3.2
 
   arg@5.0.2: {}
 
@@ -10425,7 +10434,7 @@ snapshots:
       chalk: 4.1.2
       ci-info: 3.9.0
       graceful-fs: 4.2.11
-      picomatch: 2.3.1
+      picomatch: 2.3.2
 
   jest-worker@27.5.1:
     dependencies:
@@ -11122,7 +11131,7 @@ snapshots:
   micromatch@4.0.8:
     dependencies:
       braces: 3.0.3
-      picomatch: 2.3.1
+      picomatch: 2.3.2
 
   mime-db@1.33.0: {}
 
@@ -11402,7 +11411,7 @@ snapshots:
 
   picocolors@1.1.1: {}
 
-  picomatch@2.3.1: {}
+  picomatch@2.3.2: {}
 
   pkg-dir@7.0.0:
     dependencies:
@@ -12116,7 +12125,7 @@ snapshots:
 
   readdirp@3.6.0:
     dependencies:
-      picomatch: 2.3.1
+      picomatch: 2.3.2
 
   recma-build-jsx@1.0.0:
     dependencies:
