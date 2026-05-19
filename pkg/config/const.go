@@ -117,6 +117,7 @@ const (
 	GithubSectionName                 = "github"
 	ProcessEnvSectionName             = "process_env"
 	CliArgsSectionName                = "cli_args"
+	RetrySectionName                  = "retry"
 	TerraformCliVarsSectionName       = "tf_cli_vars"
 	TerraformCliArgsEnvSectionName    = "env_tf_cli_args"
 	TerraformCliVarsEnvSectionName    = "env_tf_cli_vars"

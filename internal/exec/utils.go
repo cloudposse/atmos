@@ -184,6 +184,15 @@ func ProcessComponentConfig(
 		componentOverridesSection = map[string]any{}
 	}
 
+	// Decode the component-level `retry:` block (if any) into a typed *RetryConfig.
+	// Inheritance/deep-merge has already happened at the stack-processor level, so the
+	// retry value found here reflects the final effective configuration for this
+	// component within this stack.
+	componentRetrySection, err := schema.DecodeRetryConfig(componentSection[cfg.RetrySectionName])
+	if err != nil {
+		return fmt.Errorf("'components.%s.%s.retry' in the stack manifest '%s': %w", componentType, component, stack, err)
+	}
+
 	if componentInheritanceChain, ok = componentSection["inheritance"].([]string); !ok {
 		componentInheritanceChain = []string{}
 	}
@@ -217,6 +226,7 @@ func ProcessComponentConfig(
 	configAndStacksInfo.ComponentAuthSection = componentAuthSection
 	configAndStacksInfo.ComponentBackendSection = componentBackendSection
 	configAndStacksInfo.ComponentBackendType = componentBackendType
+	configAndStacksInfo.ComponentRetrySection = componentRetrySection
 	configAndStacksInfo.BaseComponentPath = baseComponentName
 	configAndStacksInfo.ComponentInheritanceChain = componentInheritanceChain
 	configAndStacksInfo.ComponentIsAbstract = componentIsAbstract
@@ -1165,6 +1175,15 @@ func postProcessTemplatesAndYamlFunctions(configAndStacksInfo *schema.ConfigAndS
 
 	if i, ok := configAndStacksInfo.ComponentSection[cfg.BackendTypeSectionName].(string); ok {
 		configAndStacksInfo.ComponentBackendType = i
+	}
+
+	// Restore retry configuration after template / YAML-function processing.
+	// Decode errors here are logged but do not fail post-processing — the initial
+	// extraction in ProcessStackConfig is the authoritative validation point.
+	if retryCfg, err := schema.DecodeRetryConfig(configAndStacksInfo.ComponentSection[cfg.RetrySectionName]); err != nil {
+		log.Warn("Failed to restore retry configuration after template processing", "error", err)
+	} else if retryCfg != nil {
+		configAndStacksInfo.ComponentRetrySection = retryCfg
 	}
 
 	if i, ok := configAndStacksInfo.ComponentSection[cfg.ComponentSectionName].(string); ok {

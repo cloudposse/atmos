@@ -1,0 +1,126 @@
+---
+title: Component Retry
+description: Automatically retry transient Terraform errors with configurable backoff and pattern matching.
+id: retry
+slug: /stacks/components/terraform/retry
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Configure per-component retry behavior so transient failures — provider download 502s, S3 backend timeouts, registry rate limits — recover automatically without manual re-runs.
+</Intro>
+
+Terraform commands often fail with transient infrastructure errors that have nothing to do with the Terraform code. The most common is a 502 Bad Gateway during `terraform init`:
+
+```text
+Error: Failed to install provider … 502 Bad Gateway returned from
+https://github.com/opentofu/terraform-provider-local/releases/...
+```
+
+Configure a `retry` block on the component and Atmos will retry each subprocess invocation (init, workspace, plan/apply) when the captured output matches one of the regex patterns you list as recoverable.
+
+## Usage
+
+```yaml
+components:
+  terraform:
+    vpc:
+      retry:
+        max_attempts: 5
+        backoff_strategy: exponential
+        initial_delay: 2s
+        max_delay: 30s
+        conditions:
+          - /Bad Gateway/
+          - /5\d\d /
+          - /connection reset/
+          - /TLS handshake timeout/
+          - /could not query provider registry/
+```
+
+## How it works
+
+When `retry.conditions` is configured, each call Atmos makes to the terraform/tofu binary is wrapped in an independent retry loop:
+
+1. The subprocess runs as usual; its stdout and stderr stream to the user **and** are captured into an in-memory buffer.
+2. When the subprocess exits with a non-zero status, the captured output is matched against every regex in `conditions`.
+3. If at least one pattern matches, Atmos waits for the configured backoff and retries.
+4. If no pattern matches, the error is returned immediately — real failures (`terraform plan` exit-code 2, schema errors, permission denials) are never silently retried.
+
+Each subprocess invocation has its own retry loop. Retrying `terraform init` does not consume the `apply` retry budget.
+
+## Arguments
+
+<dl>
+  <dt>`conditions`</dt>
+  <dd>
+    A list of regex patterns matched against captured stdout/stderr. Only errors whose output matches at least one pattern are retried. Patterns may be wrapped in <code>/.../</code> for readability. <strong>Without `conditions`, no retry is attempted</strong> — this is a safety default so a typo never silently retries real failures.
+  </dd>
+
+  <dt>`max_attempts`</dt>
+  <dd>Maximum number of attempts, including the first. Omit for unlimited; defaults to <code>1</code> (no retry) when `retry` is unset entirely.</dd>
+
+  <dt>`backoff_strategy`</dt>
+  <dd>One of <code>constant</code>, <code>linear</code>, or <code>exponential</code>. Defaults to <code>exponential</code> when <code>initial_delay</code> is set.</dd>
+
+  <dt>`initial_delay`</dt>
+  <dd>Delay before the second attempt as a Go duration string (e.g. <code>"2s"</code>, <code>"500ms"</code>).</dd>
+
+  <dt>`max_delay`</dt>
+  <dd>Upper bound on any single delay; caps exponential growth (e.g. <code>"30s"</code>).</dd>
+
+  <dt>`max_elapsed_time`</dt>
+  <dd>Total time budget across all attempts (e.g. <code>"5m"</code>). After this the most recent error is returned regardless of `max_attempts`.</dd>
+
+  <dt>`multiplier`</dt>
+  <dd>Growth multiplier for exponential backoff. Defaults to <code>2.0</code>.</dd>
+
+  <dt>`random_jitter`</dt>
+  <dd>Fractional jitter applied to each delay (0–1). Useful to avoid thundering-herd retries from CI fleets.</dd>
+</dl>
+
+## Inheritance
+
+The `retry` block participates in component inheritance. Abstract components can define a default retry policy that concrete components inherit and override:
+
+```yaml
+components:
+  terraform:
+    base/network:
+      metadata:
+        type: abstract
+      retry:
+        max_attempts: 3
+        initial_delay: 2s
+        backoff_strategy: exponential
+        conditions:
+          - /Bad Gateway/
+          - /5\d\d /
+
+    vpc:
+      metadata:
+        component: base/network
+      # vpc inherits the base retry block.
+
+    transit-gateway:
+      metadata:
+        component: base/network
+      retry:
+        # Override only the fields we care about. `conditions` is appended to,
+        # `max_attempts` is replaced.
+        max_attempts: 5
+        conditions:
+          - /TLS handshake timeout/
+```
+
+## When NOT to use retry
+
+- **Real Terraform failures.** A `plan` that exits with code 2 because of a configuration error or a `validate` that catches a typo should fail loudly. Keep `conditions` narrowly scoped to transient infra patterns.
+- **Stateful mutations with non-idempotent side effects.** If a third-party API is invoked from a `local-exec` provisioner and is not safe to retry, do not configure retry conditions that could match its error output.
+- **Hooks.** Atmos hooks have their own configuration and are not affected by component retry.
+
+## See also
+
+- [Workflow retry](/core-concepts/workflows) — retry configuration for multi-step workflows.
+- [Vendor retry](/core-concepts/vendor) — retry configuration for component vendoring.

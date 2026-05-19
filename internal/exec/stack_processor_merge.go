@@ -293,6 +293,26 @@ func mergeComponentConfigurations(atmosConfig *schema.AtmosConfiguration, opts *
 		}
 	}
 
+	// Merge retry config (base → component → overrides).
+	// Deep-merge handles top-level scalars (max_attempts, backoff_strategy, ...) and the
+	// list-valued `conditions:` field — the merge package appends list elements rather
+	// than replacing them, so concrete components add to (rather than replace) the
+	// inherited conditions.
+	var finalComponentRetry map[string]any
+	if len(result.BaseComponentRetry) > 0 || len(result.ComponentRetry) > 0 || len(result.ComponentOverridesRetry) > 0 {
+		finalComponentRetry, err = m.Merge(
+			atmosConfig,
+			[]map[string]any{
+				result.BaseComponentRetry,
+				result.ComponentRetry,
+				result.ComponentOverridesRetry,
+			},
+		)
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	// Build final component map.
 	comp := map[string]any{
 		cfg.VarsSectionName:        finalComponentVars,
@@ -313,6 +333,11 @@ func mergeComponentConfigurations(atmosConfig *schema.AtmosConfiguration, opts *
 	// Add locals if present (for template processing, not passed to terraform/helmfile).
 	if len(finalComponentLocals) > 0 {
 		comp[cfg.LocalsSectionName] = finalComponentLocals
+	}
+
+	// Add retry config if present.
+	if len(finalComponentRetry) > 0 {
+		comp[cfg.RetrySectionName] = finalComponentRetry
 	}
 
 	// Terraform-specific: process backends and add Terraform-specific fields.
