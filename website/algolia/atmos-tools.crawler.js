@@ -157,7 +157,13 @@ function createRecordExtractor() {
         lvl4: "article h4",
         lvl5: "article h5",
         lvl6: "article h6, article dt",
-        content: "article p, article li, article dd, article td",
+        // `article .intro` captures the page summary even when MDX does not
+        // wrap the children of `<Intro>` in a `<p>` (it doesn't when the
+        // source has no blank lines around the text). Listing it first puts
+        // the resulting record at position 0, which combined with
+        // `asc(weight.position)` in customRanking lets the Intro win the
+        // distinct dedup on title-only queries.
+        content: "article .intro, article p, article li, article dd, article td",
         pageRank: findPrefixValue(pageRankPrefixes, pathname, 40),
       },
       aggregateContent: true,
@@ -200,8 +206,13 @@ function createIndexSettings() {
     attributeForDistinct: "url",
     customRanking: [
       "desc(weight.pageRank)",
-      "desc(weight.level)",
+      // `asc(weight.position)` lets the page Intro (first content record on
+      // the page) win the distinct dedup over deeper heading records when
+      // the query matches the page title. Without this, queries like
+      // "atmos auth" resolve to `lvl1` records and DocSearch renders them
+      // hierarchy-only — no snippet shown.
       "asc(weight.position)",
+      "desc(weight.level)",
     ],
     ranking: [
       "words",
