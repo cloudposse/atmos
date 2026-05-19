@@ -1,6 +1,7 @@
 package exec
 
 import (
+	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -166,31 +167,61 @@ func TestExecuteNodeCommand_PerComponentHook(t *testing.T) {
 		Metadata: map[string]any{},
 	}
 
-	hookCalled := false
-	var hookComponent, hookStack string
-	var hookErr error
+	// newInfo builds a ConfigAndStacksInfo with a PerComponentHook that records its invocation.
+	newInfo := func(onHook func(ci *schema.ConfigAndStacksInfo, output string, execErr error)) *schema.ConfigAndStacksInfo {
+		return &schema.ConfigAndStacksInfo{
+			SubCommand:       "plan",
+			Component:        "vpc",
+			Stack:            "dev",
+			PerComponentHook: onHook,
+		}
+	}
 
-	// Mirror what executeTerraformForNode does via updateInfoFromNode so that
-	// compInfo snapshot contains the expected component and stack values.
-	info := &schema.ConfigAndStacksInfo{
-		SubCommand: "plan",
-		Component:  "vpc",
-		Stack:      "dev",
-		PerComponentHook: func(ci *schema.ConfigAndStacksInfo, output string, execErr error) {
+	t.Run("hook fires before error is returned", func(t *testing.T) {
+		sentinel := errors.New("injected terraform error")
+		orig := execTerraformFn
+		execTerraformFn = func(_ schema.ConfigAndStacksInfo, _ ...ShellCommandOption) error { return sentinel }
+		defer func() { execTerraformFn = orig }()
+
+		hookCalled := false
+		var hookComponent, hookStack string
+		var hookErr error
+
+		// Mirror what executeTerraformForNode does via updateInfoFromNode so that
+		// the compInfo snapshot contains the expected component and stack values.
+		info := newInfo(func(ci *schema.ConfigAndStacksInfo, _ string, execErr error) {
 			hookCalled = true
 			hookComponent = ci.Component
 			hookStack = ci.Stack
 			hookErr = execErr
-		},
-	}
+		})
 
-	// ExecuteTerraform will fail (no valid stack config in the test environment),
-	// but the hook fires before the error is propagated — that is the contract under test.
-	err := executeNodeCommand(node, info)
+		err := executeNodeCommand(node, info)
 
-	assert.True(t, hookCalled, "hook must fire even when ExecuteTerraform fails")
-	assert.Equal(t, "vpc", hookComponent)
-	assert.Equal(t, "dev", hookStack)
-	assert.Error(t, hookErr, "hook receives the executor error")
-	assert.ErrorIs(t, err, errUtils.ErrTerraformExecFailed)
+		assert.True(t, hookCalled, "hook must fire even when ExecuteTerraform fails")
+		assert.Equal(t, "vpc", hookComponent)
+		assert.Equal(t, "dev", hookStack)
+		assert.ErrorIs(t, hookErr, sentinel)
+		assert.ErrorIs(t, err, errUtils.ErrTerraformExecFailed)
+	})
+
+	t.Run("hook fires with nil error on success", func(t *testing.T) {
+		orig := execTerraformFn
+		execTerraformFn = func(_ schema.ConfigAndStacksInfo, _ ...ShellCommandOption) error { return nil }
+		defer func() { execTerraformFn = orig }()
+
+		hookCalled := false
+		var hookErr error
+
+		info := newInfo(func(_ *schema.ConfigAndStacksInfo, _ string, execErr error) {
+			hookCalled = true
+			hookErr = execErr
+		})
+
+		err := executeNodeCommand(node, info)
+
+		assert.True(t, hookCalled)
+		assert.NoError(t, hookErr)
+		assert.NoError(t, err)
+	})
 }

@@ -13,6 +13,10 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
+// execTerraformFn is the function used to execute a Terraform command.
+// Package-level variable to allow test injection without gomonkey.
+var execTerraformFn = ExecuteTerraform
+
 // executeTerraformForNode executes terraform for a single dependency graph node.
 func executeTerraformForNode(
 	node *dependency.Node,
@@ -124,7 +128,7 @@ func executeNodeCommand(node *dependency.Node, info *schema.ConfigAndStacksInfo)
 	// its own CI summary entry rather than sharing the final global call.
 	if info.PerComponentHook != nil {
 		var stdoutBuf, stderrBuf bytes.Buffer
-		execErr := ExecuteTerraform(*info, WithStdoutCapture(&stdoutBuf), WithStderrCapture(&stderrBuf))
+		execErr := execTerraformFn(*info, WithStdoutCapture(&stdoutBuf), WithStderrCapture(&stderrBuf))
 		combined := stdoutBuf.String()
 		if s := stderrBuf.String(); s != "" {
 			combined += "\n" + s
@@ -138,7 +142,7 @@ func executeNodeCommand(node *dependency.Node, info *schema.ConfigAndStacksInfo)
 	}
 
 	// Execute the terraform command.
-	if err := ExecuteTerraform(*info); err != nil {
+	if err := execTerraformFn(*info); err != nil {
 		return fmt.Errorf("%w: %w", errUtils.ErrTerraformExecFailed, err)
 	}
 
