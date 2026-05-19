@@ -512,16 +512,25 @@ func executeTerraformInitPhase(atmosConfig *schema.AtmosConfiguration, info *sch
 	}
 
 	initArgs := buildInitArgs(atmosConfig, info, varFile)
-	if err = ExecuteShellCommand(
-		*atmosConfig,
-		info.Command,
-		initArgs,
-		newPath,
-		info.ComponentEnvList,
-		info.DryRun,
-		info.RedirectStdErr,
+	err = executeShellCommandWithRetry(
+		atmosConfig,
+		info,
+		"init",
+		func(o ...ShellCommandOption) error {
+			return ExecuteShellCommand(
+				*atmosConfig,
+				info.Command,
+				initArgs,
+				newPath,
+				info.ComponentEnvList,
+				info.DryRun,
+				info.RedirectStdErr,
+				o...,
+			)
+		},
 		opts...,
-	); err != nil {
+	)
+	if err != nil {
 		return newPath, err
 	}
 
