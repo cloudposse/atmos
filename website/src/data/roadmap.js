@@ -127,6 +127,18 @@ export const roadmapConfig = {
       experimental: true,
       demoId: 'toolchain',
     },
+    {
+      id: 'pro-install',
+      icon: 'RiDownloadCloudLine',
+      title: 'Atmos Pro Installation Manager',
+      tagline: 'One-command Pro setup for any repository',
+      description: 'A single CLI command scaffolds GitHub Actions workflows, authentication profiles, and stack configuration for Atmos Pro integration. Supports dry-run preview, interactive conflict resolution, and smart import merging.',
+      benefits: 'Eliminates manual boilerplate when adopting Atmos Pro. New repositories get a working CI/CD integration in seconds instead of hours of copying and customizing templates.',
+      status: 'shipped',
+      quarter: 'q2-2026',
+      changelog: 'pro-install-command',
+      experimental: true,
+    },
   ],
 
   initiatives: [
