@@ -142,13 +142,16 @@ func ValidateStacks(atmosConfig *schema.AtmosConfiguration) error {
 
 	// Include (process and validate) all YAML files in the `stacks` folder in all subfolders
 	includedPaths := []string{"**/*"}
-	// Don't exclude any YAML files for validation except template files
+	// Don't exclude any YAML files for validation except template files and user-configured exclusions
 	excludedPaths := []string{
 		// Exclude template files from validation since they may contain invalid YAML before being rendered
 		"**/*.tmpl",
 		"**/*.yaml.tmpl",
 		"**/*.yml.tmpl",
 	}
+	// Also exclude paths specified in the atmos.yaml stacks.excluded_paths config
+	// This prevents non-Atmos YAML files (e.g., Helm Chart.yaml) from being validated as stack manifests
+	excludedPaths = append(excludedPaths, atmosConfig.Stacks.ExcludedPaths...)
 
 	includeStackAbsPaths, err := u.JoinPaths(atmosConfig.StacksBaseAbsolutePath, includedPaths)
 	if err != nil {

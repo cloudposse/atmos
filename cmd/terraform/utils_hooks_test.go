@@ -126,3 +126,25 @@ func TestRunCIHooksForDeploy_DemoStacks(t *testing.T) {
 	// construction path with a wired info struct.
 	runCIHooksForDeploy(hooks.BeforeTerraformDeploy, cmd, []string{"myapp"}, info, "")
 }
+
+// TestRunCIHooksForPlanComponent_DemoStacks exercises the per-component plan
+// CI hook wrapper introduced by issue #2397. The demo-stacks fixture has
+// ci.enabled=false so RunCIHooks short-circuits cleanly — the test verifies
+// no panic on option construction for both the success and failure paths.
+func TestRunCIHooksForPlanComponent_DemoStacks(t *testing.T) {
+	t.Chdir("../../examples/demo-stacks")
+
+	cmd := newHookTestCmd()
+	info := &schema.ConfigAndStacksInfo{
+		Stack:            "dev",
+		Component:        "myapp",
+		ComponentFromArg: "myapp",
+		ComponentType:    "terraform",
+	}
+
+	// Success path: execErr is nil, exit code forwarded as 0.
+	runCIHooksForPlanComponent(cmd, info, "plan output", nil)
+
+	// Failure path: non-nil execErr is forwarded with its exit code.
+	runCIHooksForPlanComponent(cmd, info, "", errUtils.ExitCodeError{Code: 1})
+}
