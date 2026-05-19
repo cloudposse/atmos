@@ -2939,7 +2939,7 @@ locals:
 settings:
   label: '{{ .locals.stage }}-config'
 `
-		ctx, err := extractAndAddLocalsToContext(atmosConfig, yamlContent, "test.yaml", "test.yaml", nil)
+		ctx, _, err := extractAndAddLocalsToContext(atmosConfig, yamlContent, "test.yaml", "test.yaml", nil)
 		require.NoError(t, err)
 		settings, ok := ctx["settings"].(map[string]any)
 		require.True(t, ok, "settings should exist in context")
@@ -2955,7 +2955,7 @@ settings:
 vars:
   deploy_env: '{{ .locals.env }}'
 `
-		ctx, err := extractAndAddLocalsToContext(atmosConfig, yamlContent, "test.yaml", "test.yaml", nil)
+		ctx, _, err := extractAndAddLocalsToContext(atmosConfig, yamlContent, "test.yaml", "test.yaml", nil)
 		require.NoError(t, err)
 		vars, ok := ctx["vars"].(map[string]any)
 		require.True(t, ok, "vars should exist in context")
@@ -2969,7 +2969,7 @@ locals:
 env:
   APP_NAME: '{{ .locals.app }}'
 `
-		ctx, err := extractAndAddLocalsToContext(atmosConfig, yamlContent, "test.yaml", "test.yaml", nil)
+		ctx, _, err := extractAndAddLocalsToContext(atmosConfig, yamlContent, "test.yaml", "test.yaml", nil)
 		require.NoError(t, err)
 		env, ok := ctx["env"].(map[string]any)
 		require.True(t, ok, "env should exist in context")
@@ -2986,7 +2986,7 @@ settings:
   component: '{{ .atmos_component }}'
   static: plain-value
 `
-		ctx, err := extractAndAddLocalsToContext(atmosConfig, yamlContent, "test.yaml", "test.yaml", nil)
+		ctx, _, err := extractAndAddLocalsToContext(atmosConfig, yamlContent, "test.yaml", "test.yaml", nil)
 		require.NoError(t, err)
 		settings, ok := ctx["settings"].(map[string]any)
 		require.True(t, ok, "settings should exist in context (raw fallback)")
@@ -3002,7 +3002,7 @@ locals:
 vars:
   stack: '{{ .atmos_stack }}'
 `
-		ctx, err := extractAndAddLocalsToContext(atmosConfig, yamlContent, "test.yaml", "test.yaml", nil)
+		ctx, _, err := extractAndAddLocalsToContext(atmosConfig, yamlContent, "test.yaml", "test.yaml", nil)
 		require.NoError(t, err)
 		vars, ok := ctx["vars"].(map[string]any)
 		require.True(t, ok, "vars should exist in context (raw fallback)")
@@ -3016,7 +3016,7 @@ locals:
 env:
   COMPONENT: '{{ .atmos_component }}'
 `
-		ctx, err := extractAndAddLocalsToContext(atmosConfig, yamlContent, "test.yaml", "test.yaml", nil)
+		ctx, _, err := extractAndAddLocalsToContext(atmosConfig, yamlContent, "test.yaml", "test.yaml", nil)
 		require.NoError(t, err)
 		env, ok := ctx["env"].(map[string]any)
 		require.True(t, ok, "env should exist in context (raw fallback)")
@@ -3031,7 +3031,7 @@ locals:
 		parentContext := map[string]any{
 			"locals": map[string]any{"inherited": "should-be-cleared"},
 		}
-		ctx, err := extractAndAddLocalsToContext(atmosConfig, yamlContent, "test.yaml", "test.yaml", parentContext)
+		ctx, _, err := extractAndAddLocalsToContext(atmosConfig, yamlContent, "test.yaml", "test.yaml", parentContext)
 		require.NoError(t, err)
 		locals, ok := ctx["locals"].(map[string]any)
 		require.True(t, ok)
@@ -3053,7 +3053,7 @@ vars:
 env:
   NAMESPACE: '{{ .locals.ns }}'
 `
-		ctx, err := extractAndAddLocalsToContext(atmosConfig, yamlContent, "test.yaml", "test.yaml", nil)
+		ctx, _, err := extractAndAddLocalsToContext(atmosConfig, yamlContent, "test.yaml", "test.yaml", nil)
 		require.NoError(t, err)
 
 		settings, ok := ctx["settings"].(map[string]any)
@@ -3092,7 +3092,7 @@ settings:
   label: '{{ .locals.stage }}-{{ .tenant }}'
 `
 		externalCtx := map[string]any{"tenant": "acme"}
-		ctx, err := extractAndAddLocalsToContext(atmosConfig, yamlContent, "test.yaml", "test.yaml", externalCtx)
+		ctx, _, err := extractAndAddLocalsToContext(atmosConfig, yamlContent, "test.yaml", "test.yaml", externalCtx)
 		require.NoError(t, err)
 		settings, ok := ctx["settings"].(map[string]any)
 		require.True(t, ok, "settings should exist in context")
@@ -3110,7 +3110,7 @@ vars:
   full_label: '{{ .settings.env_label }}'
 `
 		externalCtx := map[string]any{"region": "us-east-1"}
-		ctx, err := extractAndAddLocalsToContext(atmosConfig, yamlContent, "test.yaml", "test.yaml", externalCtx)
+		ctx, _, err := extractAndAddLocalsToContext(atmosConfig, yamlContent, "test.yaml", "test.yaml", externalCtx)
 		require.NoError(t, err)
 		settings, ok := ctx["settings"].(map[string]any)
 		require.True(t, ok)
@@ -3130,7 +3130,7 @@ settings:
   label: '{{ .locals.stage }}-{{ .missing_var }}'
 `
 		externalCtx := map[string]any{"tenant": "acme"}
-		ctx, err := extractAndAddLocalsToContext(atmosConfig, yamlContent, "test.yaml", "test.yaml", externalCtx)
+		ctx, _, err := extractAndAddLocalsToContext(atmosConfig, yamlContent, "test.yaml", "test.yaml", externalCtx)
 		require.NoError(t, err)
 		settings, ok := ctx["settings"].(map[string]any)
 		require.True(t, ok, "settings should exist (raw fallback)")
@@ -3349,7 +3349,7 @@ settings:
 vars:
   from_settings: '{{ .settings.resolved_stage }}'
 `
-	ctx, err := extractAndAddLocalsToContext(atmosConfig, yamlContent, "test.yaml", "test.yaml", nil)
+	ctx, _, err := extractAndAddLocalsToContext(atmosConfig, yamlContent, "test.yaml", "test.yaml", nil)
 	require.NoError(t, err)
 
 	// Settings should have resolved {{ .locals.stage }} → "dev".
@@ -3385,13 +3385,75 @@ env:
   APP: '{{ .locals.ns }}'
   REGION: '{{ .settings.region }}'
 `
-	ctx, err := extractAndAddLocalsToContext(atmosConfig, yamlContent, "test.yaml", "test.yaml", nil)
+	ctx, _, err := extractAndAddLocalsToContext(atmosConfig, yamlContent, "test.yaml", "test.yaml", nil)
 	require.NoError(t, err)
 
 	env, ok := ctx["env"].(map[string]any)
 	require.True(t, ok)
 	assert.Equal(t, "acme", env["APP"])
 	assert.Equal(t, "us-east-1", env["REGION"])
+}
+
+// TestExtractAndAddLocalsToContext_ReturnsSetByFlags is a regression
+// test for the deeper root cause of GitHub #2343 / #2374: the locals
+// pre-pass MUST distinguish "vars/settings/env that THIS file populated"
+// from "vars/settings/env inherited from a parent recursion frame".
+// Without this distinction, lines 864-872 in
+// processYAMLConfigFileWithContextInternal would unconditionally
+// overwrite an imported file's stackConfigMap with the parent's
+// context values, silently dropping vars defined in parent
+// _defaults.yaml.
+func TestExtractAndAddLocalsToContext_ReturnsSetByFlags(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{
+		Templates: schema.Templates{
+			Settings: schema.TemplatesSettings{Enabled: true},
+		},
+	}
+
+	t.Run("file with no locals returns all flags false", func(t *testing.T) {
+		// _defaults.yaml-style file: vars but no locals: section.
+		yamlContent := "vars:\n  namespace: acme\n"
+		_, setBy, err := extractAndAddLocalsToContext(atmosConfig, yamlContent, "test.yaml", "test.yaml", nil)
+		require.NoError(t, err)
+		assert.False(t, setBy.SetLocals, "no locals section -> SetLocals false")
+		assert.False(t, setBy.SetVars, "no locals section -> SetVars false (vars exists but pre-pass didn't process it)")
+		assert.False(t, setBy.SetSettings)
+		assert.False(t, setBy.SetEnv)
+	})
+
+	t.Run("file with locals + vars returns SetLocals and SetVars true", func(t *testing.T) {
+		yamlContent := "locals:\n  app: vpc\nvars:\n  name: '{{ .locals.app }}'\n"
+		_, setBy, err := extractAndAddLocalsToContext(atmosConfig, yamlContent, "test.yaml", "test.yaml", nil)
+		require.NoError(t, err)
+		assert.True(t, setBy.SetLocals, "has locals -> SetLocals true")
+		assert.True(t, setBy.SetVars, "has vars + locals -> SetVars true (pre-pass processed it)")
+		assert.False(t, setBy.SetSettings, "no settings -> SetSettings false")
+		assert.False(t, setBy.SetEnv, "no env -> SetEnv false")
+	})
+
+	t.Run("file with parent context but no own locals leaves parent context untouched but flags false", func(t *testing.T) {
+		// Simulate the recursive call: parent passes its resolved vars in.
+		yamlContent := "vars:\n  namespace: acme\n"
+		parentContext := map[string]any{
+			"vars":   map[string]any{"stage": "prod"}, // parent's resolved vars
+			"locals": map[string]any{"app": "vpc"},    // parent's locals
+		}
+		ctx, setBy, err := extractAndAddLocalsToContext(atmosConfig, yamlContent, "test.yaml", "test.yaml", parentContext)
+		require.NoError(t, err)
+
+		// Parent's locals must be cleared (file-scoped semantics).
+		_, hasLocals := ctx["locals"]
+		assert.False(t, hasLocals, "parent's locals must be cleared (file-scoped)")
+
+		// Parent's vars are preserved in context (vars DO inherit) for use in
+		// template processing of THIS file. But all setBy flags are false:
+		// the OVERWRITE block in the caller must NOT clobber this file's
+		// stackConfigMap.vars with the parent's vars.
+		assert.False(t, setBy.SetLocals)
+		assert.False(t, setBy.SetVars, "parent's vars in context must NOT trigger SetVars=true; that flag means THIS file populated it")
+		assert.False(t, setBy.SetSettings)
+		assert.False(t, setBy.SetEnv)
+	})
 }
 
 // TestAtmosProTemplateRegression tests that {{ .atmos_component }} templates in non-.tmpl files
@@ -3794,4 +3856,137 @@ locals:
 	require.NoError(t, err)
 	require.NotNil(t, result)
 	assert.Equal(t, "vpc-shared-01", result.locals["vpc_id"])
+}
+
+// TestExtractLocalsFromRawYAML_Memoizes is a regression test for
+// GitHub issue #2344. Calling extractLocalsFromRawYAML repeatedly with
+// the same content + filePath must reuse the cached result rather than
+// re-running every YAML function in `locals:` from scratch.
+//
+// On main, this test fails because the second call invokes
+// stateGetter.GetState a second time -- the gomock controller is
+// configured to expect exactly ONE call, so a second call fails the
+// test with "missing call to GetState".
+//
+// The reporter measured 1362 state-getter calls for 7 refs across 20
+// stacks (~195x per ref). Memoizing at this layer drops that to N.
+func TestExtractLocalsFromRawYAML_Memoizes(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockStateGetterObj := NewMockTerraformStateGetter(ctrl)
+	originalGetter := stateGetter
+	stateGetter = mockStateGetterObj
+	defer func() { stateGetter = originalGetter }()
+
+	atmosConfig := &schema.AtmosConfiguration{}
+
+	// EXPECT exactly ONE call. On main, the second invocation of
+	// extractLocalsFromRawYAML re-runs the resolver and calls GetState
+	// again, exhausting the mock's expectations.
+	mockStateGetterObj.EXPECT().
+		GetState(atmosConfig, gomock.Any(), "shared", "vpc", ".vpc_id", false, gomock.Any(), gomock.Any()).
+		Return("vpc-shared-01", nil).
+		Times(1)
+
+	// Use a stable file path so the cache key is identical across calls.
+	tmpDir := t.TempDir()
+	stackFile := filepath.Join(tmpDir, "memoize.yaml")
+
+	yamlContent := `
+locals:
+  vpc_id: !terraform.state vpc shared .vpc_id
+`
+
+	// Three identical calls -- the per-(filePath, contentHash) cache
+	// must serve calls 2 and 3 from memory.
+	for i := 0; i < 3; i++ {
+		result, err := extractLocalsFromRawYAML(atmosConfig, yamlContent, stackFile)
+		require.NoError(t, err, "call %d must succeed", i+1)
+		require.NotNil(t, result)
+		assert.Equal(t, "vpc-shared-01", result.locals["vpc_id"], "call %d: result must match", i+1)
+	}
+}
+
+// TestClearExtractLocalsCache verifies that the test-only cache reset
+// drops cached entries, forcing the next call to re-run the resolver.
+func TestClearExtractLocalsCache(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockStateGetterObj := NewMockTerraformStateGetter(ctrl)
+	originalGetter := stateGetter
+	stateGetter = mockStateGetterObj
+	defer func() { stateGetter = originalGetter }()
+
+	atmosConfig := &schema.AtmosConfiguration{}
+	// Two calls expected: one before clear, one after.
+	mockStateGetterObj.EXPECT().
+		GetState(atmosConfig, gomock.Any(), "shared", "vpc", ".vpc_id", false, gomock.Any(), gomock.Any()).
+		Return("vpc-1", nil).
+		Times(2)
+
+	tmpDir := t.TempDir()
+	stackFile := filepath.Join(tmpDir, "clear.yaml")
+	yamlContent := `
+locals:
+  v: !terraform.state vpc shared .vpc_id
+`
+
+	r1, err := extractLocalsFromRawYAML(atmosConfig, yamlContent, stackFile)
+	require.NoError(t, err)
+	assert.Equal(t, "vpc-1", r1.locals["v"])
+
+	// Without clear, the second call would be served from cache and
+	// the mock's Times(2) would fail with "missing call".
+	ClearExtractLocalsCache()
+
+	r2, err := extractLocalsFromRawYAML(atmosConfig, yamlContent, stackFile)
+	require.NoError(t, err)
+	assert.Equal(t, "vpc-1", r2.locals["v"])
+}
+
+// TestExtractLocalsFromRawYAML_MemoizeInvalidatesOnContentChange verifies
+// that the memoization cache is keyed on file content (not just path),
+// so editing a file mid-command produces a fresh evaluation.
+func TestExtractLocalsFromRawYAML_MemoizeInvalidatesOnContentChange(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockStateGetterObj := NewMockTerraformStateGetter(ctrl)
+	originalGetter := stateGetter
+	stateGetter = mockStateGetterObj
+	defer func() { stateGetter = originalGetter }()
+
+	atmosConfig := &schema.AtmosConfiguration{}
+
+	// Two distinct calls expected -- one per content variant.
+	mockStateGetterObj.EXPECT().
+		GetState(atmosConfig, gomock.Any(), "shared", "vpc", ".vpc_id", false, gomock.Any(), gomock.Any()).
+		Return("vpc-v1", nil).
+		Times(1)
+	mockStateGetterObj.EXPECT().
+		GetState(atmosConfig, gomock.Any(), "shared", "vpc", ".subnet_ids", false, gomock.Any(), gomock.Any()).
+		Return("subnet-v2", nil).
+		Times(1)
+
+	tmpDir := t.TempDir()
+	stackFile := filepath.Join(tmpDir, "invalidate.yaml")
+
+	yamlV1 := `
+locals:
+  v: !terraform.state vpc shared .vpc_id
+`
+	yamlV2 := `
+locals:
+  v: !terraform.state vpc shared .subnet_ids
+`
+
+	r1, err := extractLocalsFromRawYAML(atmosConfig, yamlV1, stackFile)
+	require.NoError(t, err)
+	assert.Equal(t, "vpc-v1", r1.locals["v"])
+
+	r2, err := extractLocalsFromRawYAML(atmosConfig, yamlV2, stackFile)
+	require.NoError(t, err)
+	assert.Equal(t, "subnet-v2", r2.locals["v"], "content change must invalidate the cache")
 }

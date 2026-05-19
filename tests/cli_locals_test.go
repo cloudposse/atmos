@@ -1403,3 +1403,172 @@ func TestLocalsGoTemplateConditionalWithEnvEmpty(t *testing.T) {
 	assert.Equal(t, "", vars["pr_number"],
 		"pr_number should be empty when env var is not set")
 }
+
+// TestLocalsNameTemplateVarsFromImports is a regression test for GitHub issue #2343.
+//
+// When `name_template` references vars (e.g. `namespace`) that are defined
+// in a parent `_defaults.yaml` import, and the leaf stack file defines
+// any `locals:` block, the locals pre-pass derives a malformed stack name
+// because it renders `name_template` against the un-merged single file.
+// Symptoms reported: `atmos list stacks` returns "-prod" instead of
+// "acme-prod"; the real stack disappears from listings.
+func TestLocalsNameTemplateVarsFromImports(t *testing.T) {
+	t.Chdir("./fixtures/scenarios/locals-name-template-vars-imports")
+
+	atmosConfig, err := config.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
+	require.NoError(t, err)
+
+	// describe stacks must produce the correctly-named stack despite
+	// the leaf file having a `locals:` block.
+	result, err := exec.ExecuteDescribeStacks(
+		&atmosConfig,
+		"",    // filterByStack
+		nil,   // components
+		nil,   // componentTypes
+		nil,   // sections
+		true,  // ignoreMissingFiles
+		true,  // processTemplates
+		true,  // processYamlFunctions
+		false, // includeEmptyStacks
+		nil,   // skip
+		nil,   // authManager
+	)
+	require.NoError(t, err, "describe stacks must not error when locals are present and name_template uses imported vars")
+	require.NotNil(t, result)
+
+	// The stack name MUST be "acme-prod" (namespace=acme from _defaults.yaml,
+	// stage=prod from leaf). Bug produced "-prod" or errored out entirely.
+	_, hasCorrectName := result["acme-prod"]
+	assert.True(t, hasCorrectName,
+		"stack must be listed as 'acme-prod' (namespace from imports + stage from leaf); got stacks: %v",
+		stackKeys(result))
+
+	// The malformed name from the bug must NOT appear.
+	_, hasMalformedName := result["-prod"]
+	assert.False(t, hasMalformedName,
+		"malformed stack name '-prod' must not appear; namespace from imports must be merged before name_template")
+}
+
+// TestLocalsNameTemplateVarsFromImportsDescribeComponent confirms that
+// `describe component` succeeds against the correctly-named stack.
+// On main, this fails with "Could not find the component vpc in the stack acme-prod".
+func TestLocalsNameTemplateVarsFromImportsDescribeComponent(t *testing.T) {
+	t.Chdir("./fixtures/scenarios/locals-name-template-vars-imports")
+
+	_, err := config.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+	require.NoError(t, err)
+
+	result, err := exec.ExecuteDescribeComponent(&exec.ExecuteDescribeComponentParams{
+		Component:            "vpc",
+		Stack:                "acme-prod",
+		ProcessTemplates:     true,
+		ProcessYamlFunctions: true,
+	})
+	require.NoError(t, err, "describe component must find vpc in acme-prod")
+	require.NotNil(t, result)
+
+	vars, ok := result["vars"].(map[string]any)
+	require.True(t, ok, "vars must be a map")
+	// {{ .locals.app }} must resolve to "vpc".
+	assert.Equal(t, "vpc", vars["name"], "locals.app must be resolved to 'vpc'")
+}
+
+// stackKeys returns the keys of a stack-result map for assertion messages.
+func stackKeys(m map[string]any) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	return keys
+}
+
+// TestLocalsNameTemplateSettingsFromImports is a regression test for GitHub
+// issue #2374. Same root cause as #2343, but `name_template` references
+// `.settings.*` instead of `.vars.*`. Two defects compound here:
+//   - templateData passed to ProcessTmpl in the locals pre-pass only carries
+//     `vars`, never `settings` -- so `name_template` referencing `.settings.X`
+//     can never resolve.
+//   - even if it did, `settings` from `_defaults.yaml` imports aren't merged
+//     before the template is rendered.
+//
+// Reporter saw {{ .locals.* }} render as "<no value>-key-logs" and
+// `describe locals -s cloudlabs-plat-ue1-prod` return "stack not found".
+func TestLocalsNameTemplateSettingsFromImports(t *testing.T) {
+	t.Chdir("./fixtures/scenarios/locals-name-template-settings-imports")
+
+	atmosConfig, err := config.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
+	require.NoError(t, err)
+
+	result, err := exec.ExecuteDescribeStacks(
+		&atmosConfig,
+		"",    // filterByStack
+		nil,   // components
+		nil,   // componentTypes
+		nil,   // sections
+		true,  // ignoreMissingFiles
+		true,  // processTemplates
+		true,  // processYamlFunctions
+		false, // includeEmptyStacks
+		nil,   // skip
+		nil,   // authManager
+	)
+	require.NoError(t, err, "describe stacks must not error when locals are present and name_template uses imported settings")
+	require.NotNil(t, result)
+
+	// The stack name MUST be "cloudlabs-plat-ue1-prod".
+	_, hasCorrectName := result["cloudlabs-plat-ue1-prod"]
+	assert.True(t, hasCorrectName,
+		"stack must be listed as 'cloudlabs-plat-ue1-prod' (settings from imports + stage from leaf); got stacks: %v",
+		stackKeys(result))
+}
+
+// TestLocalsNameTemplateSettingsFromImportsDescribeComponent confirms that
+// {{ .locals.* }} resolves correctly in component vars when the project
+// uses `name_template: "{{ .settings.* }}"` with imported settings.
+// On main, `vars.alias` renders as "<no value>-key-logs" because the
+// locals pre-pass bails out (stack name can't be derived) and locals
+// never become available to template processing.
+func TestLocalsNameTemplateSettingsFromImportsDescribeComponent(t *testing.T) {
+	t.Chdir("./fixtures/scenarios/locals-name-template-settings-imports")
+
+	_, err := config.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+	require.NoError(t, err)
+
+	result, err := exec.ExecuteDescribeComponent(&exec.ExecuteDescribeComponentParams{
+		Component:            "kms",
+		Stack:                "cloudlabs-plat-ue1-prod",
+		ProcessTemplates:     true,
+		ProcessYamlFunctions: true,
+	})
+	require.NoError(t, err, "describe component must find kms in cloudlabs-plat-ue1-prod")
+	require.NotNil(t, result)
+
+	vars, ok := result["vars"].(map[string]any)
+	require.True(t, ok, "vars must be a map")
+	assert.Equal(t, "cloudlabs-plat-ue1-prod-key-logs", vars["alias"],
+		"locals.prefix must resolve to 'cloudlabs-plat-ue1-prod' (not '<no value>')")
+}
+
+// TestLocalsNameTemplateSettingsFromImportsDescribeLocals confirms the
+// reporter's exact `describe locals` symptom -- the command erroneously
+// returns "stack not found" by logical name because the lookup index
+// was built with the malformed name produced by the locals pre-pass.
+func TestLocalsNameTemplateSettingsFromImportsDescribeLocals(t *testing.T) {
+	t.Chdir("./fixtures/scenarios/locals-name-template-settings-imports")
+
+	atmosConfig, err := config.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
+	require.NoError(t, err)
+
+	// On main: returns ErrStackNotFound for the logical name
+	// "cloudlabs-plat-ue1-prod" because deriveStackName produced ""
+	// (templateData missing settings, and even if present, imports
+	// aren't merged). After the fix: succeeds with non-empty locals.
+	result, err := exec.ExecuteDescribeLocals(&atmosConfig, "cloudlabs-plat-ue1-prod")
+	require.NoError(t, err, "describe locals -s cloudlabs-plat-ue1-prod must succeed")
+	require.NotNil(t, result)
+
+	locals, ok := result["locals"].(map[string]any)
+	require.True(t, ok, "locals must be a map; got: %v", result)
+	assert.Equal(t, "cloudlabs-plat-ue1-prod", locals["prefix"],
+		"locals.prefix must match the leaf file's value")
+}

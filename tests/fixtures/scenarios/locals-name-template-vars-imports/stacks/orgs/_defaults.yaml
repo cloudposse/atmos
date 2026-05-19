@@ -1,0 +1,6 @@
+# Identity vars defined in a parent file -- the locals pre-pass must
+# merge this when deriving the stack name. Before #2343 was fixed, this
+# file's `vars.namespace` was invisible to `deriveStackNameForLocals`,
+# producing "-prod" instead of "acme-prod".
+vars:
+  namespace: acme

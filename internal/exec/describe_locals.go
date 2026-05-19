@@ -459,6 +459,17 @@ func deriveStackFileName(atmosConfig *schema.AtmosConfiguration, filePath string
 }
 
 // deriveStackName derives the stack name using the same logic as describe stacks.
+//
+// Stack-name derivation must see the merged view of vars/settings/env across
+// imports because `name_template` (and `name_pattern`) commonly reference
+// values that live in parent `_defaults.yaml` files. We do a lite, YAML-only
+// import walk here -- no template processing, no YAML function resolution --
+// so the derivation is fast and side-effect-free even when called repeatedly
+// (the locals pre-pass and the main pipeline both reach this).
+//
+// Regression: GitHub issues #2343 (vars from imports) and #2374 (settings
+// from imports). Before the fix, only `varsSection` from the leaf file was
+// available, producing malformed names like "-prod" or "<no value>-prod".
 func deriveStackName(
 	atmosConfig *schema.AtmosConfiguration,
 	stackFileName string,
@@ -472,13 +483,26 @@ func deriveStackName(
 		return name
 	}
 
-	// Try name template.
-	if name := deriveStackNameFromTemplate(atmosConfig, stackFileName, varsSection); name != "" {
+	// Lite-merge vars/settings/env from imports so name_template (which can
+	// reference any of them) sees the full picture rather than just the leaf
+	// file. The current file's sections take precedence over imports.
+	mergedVars, mergedSettings, mergedEnv := deriveStackNameSections(atmosConfig, stackSectionMap, stackFileName)
+	// Always include the caller's varsSection on top -- handles the case
+	// where the caller already merged or pre-processed vars.
+	for k, v := range varsSection {
+		if mergedVars == nil {
+			mergedVars = map[string]any{}
+		}
+		mergedVars[k] = v
+	}
+
+	// Try name template using merged sections.
+	if name := deriveStackNameFromTemplate(atmosConfig, stackFileName, mergedVars, mergedSettings, mergedEnv); name != "" {
 		return name
 	}
 
-	// Try name pattern.
-	if name := deriveStackNameFromPattern(atmosConfig, stackFileName, varsSection); name != "" {
+	// Try name pattern using merged vars.
+	if name := deriveStackNameFromPattern(atmosConfig, stackFileName, mergedVars); name != "" {
 		return name
 	}
 
@@ -501,21 +525,45 @@ func getExplicitStackName(stackSectionMap map[string]any) string {
 
 // deriveStackNameFromTemplate derives a stack name using the configured name template.
 // Returns empty string if template is not configured or evaluation fails.
+//
+// TemplateData includes vars, settings, and env so that name_template can
+// reference any of them. Pre-fix this only included vars, breaking projects
+// that use `name_template: "{{ .settings.* }}"` (GitHub #2374).
+//
+// Renders with `ignoreMissingTemplateValues=true` so missing keys produce
+// `<no value>` rather than erroring out -- the pre-pass shouldn't fail just
+// because the leaf file is missing identifying values; it should fall back
+// to the filename. We then explicitly reject any rendered name that contains
+// `<no value>` or has empty segments around the configured delimiter so
+// downstream code never sees a malformed identifier (GitHub #2343).
 func deriveStackNameFromTemplate(
 	atmosConfig *schema.AtmosConfiguration,
 	stackFileName string,
-	varsSection map[string]any,
+	varsSection, settingsSection, envSection map[string]any,
 ) string {
 	if atmosConfig.Stacks.NameTemplate == "" {
 		return ""
 	}
 
-	// Wrap varsSection in "vars" key to match template syntax: {{ .vars.environment }}.
+	// Provide vars + settings + env so name_template can reference any
+	// of them. Empty maps are passed (not nil) so missingkey=default still
+	// produces "<no value>" rather than panicking on nil.
 	templateData := map[string]any{
-		"vars": varsSection,
+		cfg.VarsSectionName:     varsSection,
+		cfg.SettingsSectionName: settingsSection,
+		cfg.EnvSectionName:      envSection,
+	}
+	if templateData[cfg.VarsSectionName] == nil {
+		templateData[cfg.VarsSectionName] = map[string]any{}
+	}
+	if templateData[cfg.SettingsSectionName] == nil {
+		templateData[cfg.SettingsSectionName] = map[string]any{}
+	}
+	if templateData[cfg.EnvSectionName] == nil {
+		templateData[cfg.EnvSectionName] = map[string]any{}
 	}
 
-	stackName, err := ProcessTmpl(atmosConfig, "describe-locals-name-template", atmosConfig.Stacks.NameTemplate, templateData, false)
+	stackName, err := ProcessTmpl(atmosConfig, "describe-locals-name-template", atmosConfig.Stacks.NameTemplate, templateData, true)
 	if err != nil {
 		log.Debug("Failed to evaluate name template for stack", "file", stackFileName, "error", err)
 		return ""
@@ -532,7 +580,232 @@ func deriveStackNameFromTemplate(
 		return ""
 	}
 
+	// Reject any rendering that came from missing keys -- these are not
+	// usable as identifiers. Falls back to the filename.
+	if strings.Contains(stackName, "<no value>") {
+		log.Debug("Name template result contains <no value>, using filename",
+			"file", stackFileName, "result", stackName,
+			"hint", "ensure required vars/settings are defined or imported")
+		return ""
+	}
+
 	return stackName
+}
+
+// deriveStackNameSections walks the import graph starting from the given
+// raw config and returns vars/settings/env merged across this file and all
+// transitively-imported files. Imports become the base; the current file
+// overrides them (matching the main pipeline's merge semantics).
+//
+// This is a lite, YAML-only overlay used SOLELY to feed `name_template`
+// during stack-name derivation. It deliberately does NOT process Go
+// templates or YAML functions -- the main pipeline does that later. Any
+// import path that can't be resolved is silently skipped: a best-effort
+// merge that errs on the side of producing a usable stack name (or
+// falling back to the filename) rather than failing.
+//
+// Cycle detection via the visited set; deterministic top-level (last-wins)
+// merge sufficient because name_template typically references scalar
+// fields like `vars.namespace`, `settings.tenant`.
+//
+// Regression: GitHub issues #2343 and #2374. Without this walk, the
+// locals pre-pass renders `name_template` against the leaf file alone,
+// missing identifying values defined in parent `_defaults.yaml`.
+func deriveStackNameSections(
+	atmosConfig *schema.AtmosConfiguration,
+	rawConfig map[string]any,
+	stackFileName string,
+) (vars, settings, env map[string]any) {
+	defer perf.Track(atmosConfig, "exec.deriveStackNameSections")()
+
+	if atmosConfig == nil || rawConfig == nil {
+		return nil, nil, nil
+	}
+
+	visited := make(map[string]bool)
+	return deriveStackNameSectionsInto(atmosConfig, rawConfig, stackFileName, visited)
+}
+
+// deriveStackNameSectionsInto is the recursive helper for deriveStackNameSections.
+// It mutates the visited set to break cycles and is not safe for concurrent use.
+func deriveStackNameSectionsInto(
+	atmosConfig *schema.AtmosConfiguration,
+	rawConfig map[string]any,
+	originatingFilePath string,
+	visited map[string]bool,
+) (vars, settings, env map[string]any) {
+	if rawConfig == nil {
+		return nil, nil, nil
+	}
+
+	vars = make(map[string]any)
+	settings = make(map[string]any)
+	env = make(map[string]any)
+
+	// Walk imports DFS, merging their sections as the base.
+	dest := stackNameSectionMaps{vars: vars, settings: settings, env: env}
+	mergeImportedStackNameSections(atmosConfig, rawConfig, originatingFilePath, visited, dest)
+
+	// Apply current file's sections last so they override imports.
+	if v, ok := rawConfig[cfg.VarsSectionName].(map[string]any); ok {
+		mergeMapShallow(vars, v)
+	}
+	if s, ok := rawConfig[cfg.SettingsSectionName].(map[string]any); ok {
+		mergeMapShallow(settings, s)
+	}
+	if e, ok := rawConfig[cfg.EnvSectionName].(map[string]any); ok {
+		mergeMapShallow(env, e)
+	}
+	return vars, settings, env
+}
+
+// stackNameSectionMaps bundles the three destination maps that
+// mergeImportedStackNameSections / loadAndMergeStackNameImport accumulate
+// into, keeping the helpers' arg lists below the linter's per-function
+// limit.
+type stackNameSectionMaps struct {
+	vars     map[string]any
+	settings map[string]any
+	env      map[string]any
+}
+
+// mergeImportedStackNameSections walks imports of the given config and merges
+// their vars/settings/env into dest. Each import is processed at most once
+// per top-level call (cycle break via visited). Failures (unresolvable path,
+// bad YAML) are silently skipped; this is a best-effort overlay used solely
+// for stack-name derivation.
+func mergeImportedStackNameSections(
+	atmosConfig *schema.AtmosConfiguration,
+	rawConfig map[string]any,
+	originatingFilePath string,
+	visited map[string]bool,
+	dest stackNameSectionMaps,
+) {
+	importStructs, err := ProcessImportSection(rawConfig, originatingFilePath)
+	if err != nil {
+		log.Debug("deriveStackNameSections: failed to parse imports; continuing with leaf file only",
+			"file", originatingFilePath, "error", err)
+		return
+	}
+
+	stacksBasePath := filepath.Join(atmosConfig.BasePath, atmosConfig.Stacks.BasePath)
+	for _, imp := range importStructs {
+		for _, p := range resolveImportFilePathsForStackName(stacksBasePath, imp.Path) {
+			loadAndMergeStackNameImport(atmosConfig, p, visited, dest)
+		}
+	}
+}
+
+// loadAndMergeStackNameImport loads a single resolved import path, recurses
+// into it, and merges its vars/settings/env into dest. A no-op when the path
+// was already visited or YAML can't be parsed.
+func loadAndMergeStackNameImport(
+	atmosConfig *schema.AtmosConfiguration,
+	importedFilePath string,
+	visited map[string]bool,
+	dest stackNameSectionMaps,
+) {
+	abs, err := filepath.Abs(importedFilePath)
+	if err != nil {
+		abs = importedFilePath
+	}
+	if visited[abs] {
+		return
+	}
+	visited[abs] = true
+
+	content, err := os.ReadFile(importedFilePath)
+	if err != nil {
+		return
+	}
+	var importedConfig map[string]any
+	if err := yaml.Unmarshal(content, &importedConfig); err != nil {
+		// Likely a .yaml.tmpl file or other non-pure-YAML; skip.
+		return
+	}
+	iv, is, ie := deriveStackNameSectionsInto(atmosConfig, importedConfig, importedFilePath, visited)
+	mergeMapShallow(dest.vars, iv)
+	mergeMapShallow(dest.settings, is)
+	mergeMapShallow(dest.env, ie)
+}
+
+// stackNameImportYAMLExts is the ordered list of file extensions tried when
+// resolving an import path during stack-name derivation. Order matters:
+// .yaml wins over .yml when both exist.
+var stackNameImportYAMLExts = []string{
+	u.YamlFileExtension,
+	u.YmlFileExtension,
+}
+
+// resolveImportFilePathsForStackName resolves an import path to existing file
+// paths under the stacks base. The path may be either absolute (when the
+// original was `./xxx` and was already resolved by ResolveRelativePath in
+// ProcessImportSection) or relative-to-stacks-base. Returns existing matches;
+// silently returns nil for unresolvable paths since this is best-effort.
+func resolveImportFilePathsForStackName(stacksBasePath, importPath string) []string {
+	if importPath == "" {
+		return nil
+	}
+
+	// Determine the search base.
+	searchPath := importPath
+	if !filepath.IsAbs(importPath) {
+		searchPath = filepath.Join(stacksBasePath, importPath)
+	}
+
+	// If the path already has a recognized YAML extension and the file
+	// exists, use it directly.
+	if hasYAMLExt(searchPath) {
+		if _, err := os.Stat(searchPath); err == nil {
+			return []string{searchPath}
+		}
+	}
+
+	// Otherwise try common extensions; first match wins.
+	if found := findFirstExistingWithExt(searchPath, stackNameImportYAMLExts); found != "" {
+		return []string{found}
+	}
+
+	// Glob fallback (handles `mixins/region/*` style imports).
+	return globMatchesWithExt(searchPath, stackNameImportYAMLExts)
+}
+
+// hasYAMLExt reports whether path ends in `.yaml` or `.yml`.
+func hasYAMLExt(path string) bool {
+	ext := filepath.Ext(path)
+	return ext == u.YamlFileExtension || ext == u.YmlFileExtension
+}
+
+// findFirstExistingWithExt returns the first `searchPath+ext` that exists on
+// disk, or an empty string if none of them do.
+func findFirstExistingWithExt(searchPath string, exts []string) string {
+	for _, e := range exts {
+		candidate := searchPath + e
+		if _, err := os.Stat(candidate); err == nil {
+			return candidate
+		}
+	}
+	return ""
+}
+
+// globMatchesWithExt returns the first non-empty glob match for
+// `searchPath+ext` across the supplied extensions.
+func globMatchesWithExt(searchPath string, exts []string) []string {
+	for _, e := range exts {
+		matches, err := u.GetGlobMatches(searchPath + e)
+		if err == nil && len(matches) > 0 {
+			return matches
+		}
+	}
+	return nil
+}
+
+// mergeMapShallow merges src into dst at the top level (last wins). Nil src
+// is a no-op.
+func mergeMapShallow(dst, src map[string]any) {
+	for k, v := range src {
+		dst[k] = v
+	}
 }
 
 // deriveStackNameFromPattern derives a stack name using the configured name pattern.
