@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -497,6 +499,183 @@ func TestBuildTokenRequiredError_ContainsHints(t *testing.T) {
 	err := buildTokenRequiredError()
 	assert.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrAuthenticationFailed)
+}
+
+func TestBuildDownloadHTTPError(t *testing.T) {
+	tests := []struct {
+		name        string
+		statusCode  int
+		token       string
+		headers     map[string]string
+		expectedErr error
+	}{
+		{
+			name:        "401 without token returns auth required",
+			statusCode:  401,
+			token:       "",
+			expectedErr: errUtils.ErrAuthenticationFailed,
+		},
+		{
+			name:        "403 without token returns auth required",
+			statusCode:  403,
+			token:       "",
+			expectedErr: errUtils.ErrAuthenticationFailed,
+		},
+		{
+			name:        "401 with token returns token rejected",
+			statusCode:  401,
+			token:       "ghp_fake_token",
+			expectedErr: errUtils.ErrAuthenticationFailed,
+		},
+		{
+			name:        "403 with token returns token rejected",
+			statusCode:  403,
+			token:       "ghp_fake_token",
+			expectedErr: errUtils.ErrAuthenticationFailed,
+		},
+		{
+			name:        "429 without token returns rate limit error",
+			statusCode:  429,
+			token:       "",
+			expectedErr: errUtils.ErrGitHubRateLimitExceeded,
+		},
+		{
+			name:        "429 with token returns rate limit error",
+			statusCode:  429,
+			token:       "ghp_fake_token",
+			expectedErr: errUtils.ErrGitHubRateLimitExceeded,
+		},
+		{
+			name:       "429 with reset header returns rate limit error",
+			statusCode: 429,
+			token:      "",
+			headers: map[string]string{
+				"X-RateLimit-Reset": "1710612345",
+			},
+			expectedErr: errUtils.ErrGitHubRateLimitExceeded,
+		},
+		{
+			name:        "500 returns generic download error",
+			statusCode:  500,
+			token:       "",
+			expectedErr: ErrPRArtifactDownloadFailed,
+		},
+		{
+			name:        "502 returns generic download error",
+			statusCode:  502,
+			token:       "ghp_fake_token",
+			expectedErr: ErrPRArtifactDownloadFailed,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			resp := &http.Response{
+				StatusCode: tt.statusCode,
+				Header:     http.Header{},
+			}
+			for k, v := range tt.headers {
+				resp.Header.Set(k, v)
+			}
+
+			err := buildDownloadHTTPError(resp, tt.token)
+			assert.Error(t, err)
+			assert.ErrorIs(t, err, tt.expectedErr)
+		})
+	}
+}
+
+func TestDownloadPRArtifact_Success(t *testing.T) {
+	zipContent := []byte("PK\x03\x04fake-zip-content")
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Write(zipContent)
+	}))
+	defer server.Close()
+
+	info := &github.PRArtifactInfo{
+		DownloadURL: server.URL + "/artifact.zip",
+	}
+
+	path, err := downloadPRArtifact(context.Background(), "test-token", info)
+	require.NoError(t, err)
+	defer os.Remove(path)
+
+	data, err := os.ReadFile(path)
+	require.NoError(t, err)
+	assert.Equal(t, zipContent, data)
+}
+
+func TestDownloadPRArtifact_SuccessWithoutToken(t *testing.T) {
+	var receivedAuth string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		receivedAuth = r.Header.Get("Authorization")
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("content"))
+	}))
+	defer server.Close()
+
+	info := &github.PRArtifactInfo{
+		DownloadURL: server.URL + "/artifact.zip",
+	}
+
+	path, err := downloadPRArtifact(context.Background(), "", info)
+	require.NoError(t, err)
+	defer os.Remove(path)
+
+	// Verify no Authorization header was sent.
+	assert.Empty(t, receivedAuth, "should not send Authorization header without token")
+}
+
+func TestDownloadPRArtifact_WithToken(t *testing.T) {
+	var receivedAuth string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		receivedAuth = r.Header.Get("Authorization")
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("content"))
+	}))
+	defer server.Close()
+
+	info := &github.PRArtifactInfo{
+		DownloadURL: server.URL + "/artifact.zip",
+	}
+
+	path, err := downloadPRArtifact(context.Background(), "ghp_test123", info)
+	require.NoError(t, err)
+	defer os.Remove(path)
+
+	assert.Equal(t, "Bearer ghp_test123", receivedAuth)
+}
+
+func TestDownloadPRArtifact_AuthError(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusForbidden)
+	}))
+	defer server.Close()
+
+	info := &github.PRArtifactInfo{
+		DownloadURL: server.URL + "/artifact.zip",
+	}
+
+	_, err := downloadPRArtifact(context.Background(), "", info)
+	assert.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrAuthenticationFailed)
+}
+
+func TestDownloadPRArtifact_RateLimit(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("X-RateLimit-Reset", "1710612345")
+		w.WriteHeader(http.StatusTooManyRequests)
+	}))
+	defer server.Close()
+
+	info := &github.PRArtifactInfo{
+		DownloadURL: server.URL + "/artifact.zip",
+	}
+
+	_, err := downloadPRArtifact(context.Background(), "", info)
+	assert.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrGitHubRateLimitExceeded)
 }
 
 // Note: Full integration tests for InstallFromPR require:

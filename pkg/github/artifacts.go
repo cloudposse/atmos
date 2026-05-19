@@ -137,8 +137,7 @@ func defaultArtifactFetcherWithToken(ctx context.Context, token string) *Artifac
 // GetPRArtifactInfo retrieves build artifact information for a PR.
 // This finds the latest successful workflow run for the PR and locates
 // the artifact matching the current platform.
-//
-// Requires authentication - use GetGitHubTokenOrError() first.
+// Works without authentication for public repositories (subject to rate limits).
 func GetPRArtifactInfo(ctx context.Context, owner, repo string, prNumber int) (*PRArtifactInfo, error) {
 	defer perf.Track(nil, "github.GetPRArtifactInfo")()
 
@@ -371,7 +370,7 @@ func SupportedPRPlatforms() []string {
 
 // GetPRHeadSHA retrieves the current head commit SHA for a pull request.
 // This is used for cache validation to check if the PR has new commits.
-// The token parameter is required for API authentication.
+// The token parameter is used for API authentication if available; empty string for unauthenticated access.
 func GetPRHeadSHA(ctx context.Context, owner, repo string, prNumber int, token string) (string, error) {
 	defer perf.Track(nil, "github.GetPRHeadSHA")()
 
@@ -389,8 +388,7 @@ func (f *ArtifactFetcher) GetPRHeadSHA(ctx context.Context, owner, repo string, 
 // GetSHAArtifactInfo retrieves build artifact information for a commit SHA.
 // This finds the latest successful workflow run for the SHA and locates
 // the artifact matching the current platform.
-//
-// Requires authentication - use GetGitHubTokenOrError() first.
+// Works without authentication for public repositories (subject to rate limits).
 func GetSHAArtifactInfo(ctx context.Context, owner, repo, sha string) (*SHAArtifactInfo, error) {
 	defer perf.Track(nil, "github.GetSHAArtifactInfo")()
 
