@@ -1,6 +1,7 @@
 package exec
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -351,6 +352,21 @@ func processTerraformComponent(
 	info.ComponentFromArg = componentName
 	info.Stack = stackName
 	info.StackFromArg = stackName
+
+	// When a per-component hook is registered, capture this component's output
+	// and invoke the hook immediately after execution so each component receives
+	// its own CI summary entry rather than sharing the final global call.
+	if info.PerComponentHook != nil {
+		var stdoutBuf, stderrBuf bytes.Buffer
+		execErr := executeFn(*info, WithStdoutCapture(&stdoutBuf), WithStderrCapture(&stderrBuf))
+		combined := stdoutBuf.String()
+		if s := stderrBuf.String(); s != "" {
+			combined += "\n" + s
+		}
+		compInfo := *info // snapshot with this component's Component/Stack values set.
+		info.PerComponentHook(&compInfo, combined, execErr)
+		return true, execErr
+	}
 
 	if err := executeFn(*info); err != nil {
 		return true, err
