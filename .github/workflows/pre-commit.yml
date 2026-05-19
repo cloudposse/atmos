@@ -3,6 +3,8 @@ name: Pre-commit
 on:
   pull_request:
     types: [opened, synchronize, reopened]
+  merge_group:
+    types: [checks_requested]
 
 env:
   # Ensure pre-commit uses the right Python version
@@ -63,4 +65,4 @@ jobs:
         with:
           # Run against files changed in the PR only
           # This prevents formatting/checking unrelated files
-          extra_args: --from-ref ${{ github.event.pull_request.base.sha }} --to-ref HEAD
+          extra_args: --from-ref ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }} --to-ref HEAD

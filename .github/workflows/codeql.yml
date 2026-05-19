@@ -7,6 +7,8 @@ on:
     # The branches below must be a subset of the branches above
     branches: ["main"]
     types: [opened, labeled, unlabeled, synchronize]
+  merge_group:
+    types: [checks_requested]
   schedule:
     # runs on 19:17 every Tuesday
     - cron: "27 19 * * 2"
@@ -71,7 +73,7 @@ jobs:
       - extras=s3-cache
       - private=false
 
-    if: github.event_name == 'pull_request'
+    if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
     permissions:
       # Required: allow read access to the content for analysis.
       contents: read
