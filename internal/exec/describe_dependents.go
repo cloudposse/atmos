@@ -465,12 +465,17 @@ func getComponentDependencies(componentMap map[string]any) ([]schema.ComponentDe
 	// Get settings section for later use (Spacelift/Atlantis config and IncludeSettings).
 	settingsSection, _ := componentMap["settings"].(map[string]any)
 
-	// Check dependencies.components first (preferred location).
+	// Check dependencies.* first (preferred location).
 	if depsSection, ok := componentMap[cfg.DependenciesSectionName].(map[string]any); ok {
-		if _, hasComponents := depsSection["components"]; hasComponents {
+		if hasDependencyEntries(depsSection) {
 			var deps schema.Dependencies
-			if err := mapstructure.Decode(depsSection, &deps); err == nil && len(deps.Components) > 0 {
-				return deps.Components, settingsSection, dependencySourceDependenciesComponents
+			if err := mapstructure.Decode(depsSection, &deps); err == nil {
+				if normErr := deps.Normalize(); normErr != nil {
+					log.Warn("invalid dependencies section; entries may be silently ignored", "error", normErr)
+				}
+				if len(deps.Components) > 0 {
+					return deps.Components, settingsSection, dependencySourceDependenciesComponents
+				}
 			}
 		}
 	}
@@ -568,6 +573,23 @@ func matchContextField(depValue, providedValue, stackValue string) bool {
 		return providedValue == depValue
 	}
 	return providedValue == stackValue
+}
+
+// hasDependencyEntries reports whether a `dependencies` section declares any
+// of the entry-bearing keys that getComponentDependencies cares about. Tools
+// alone is intentionally excluded because tool dependencies are not what this
+// function returns.
+func hasDependencyEntries(depsSection map[string]any) bool {
+	if _, ok := depsSection["components"]; ok {
+		return true
+	}
+	if _, ok := depsSection["files"]; ok {
+		return true
+	}
+	if _, ok := depsSection["folders"]; ok {
+		return true
+	}
+	return false
 }
 
 // findComponentSectionInCachedStacks extracts a component section from pre-computed stacks.
