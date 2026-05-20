@@ -62,9 +62,9 @@ func TestLoadConfigFromCLIArgsMultipleMerge(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to initialize atmos config: %v", err)
 	}
-	assert.Equal(t, atmosConfig.Logs.Level, "Debug", "Logs level should be Debug")
-	assert.Equal(t, atmosConfig.Logs.File, "/dev/stderr", "Logs file should be /dev/stderr")
-	assert.Equal(t, atmosConfig.CliConfigPath, connectPaths([]string{filepath.Dir(atmosConfigFilePath), tmpDir2}), "CliConfigPath should be the concatenation of config files and directories")
+	assert.Equal(t, "Debug", atmosConfig.Logs.Level, "Logs level should be Debug")
+	assert.Equal(t, "/dev/stderr", atmosConfig.Logs.File, "Logs file should be /dev/stderr")
+	assert.Equal(t, connectPaths([]string{filepath.Dir(atmosConfigFilePath), tmpDir2}), atmosConfig.CliConfigPath, "CliConfigPath should be the concatenation of config files and directories")
 }
 
 func TestLoadConfigFromCLIArgs(t *testing.T) {
