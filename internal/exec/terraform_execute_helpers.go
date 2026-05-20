@@ -87,7 +87,7 @@ var defaultMergedAuthConfigGetter = getMergedAuthConfig
 
 func setupTerraformAuth(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) (auth.AuthManager, error) {
 	// Log the identity-selection decision point for easy debugging.
-	log.Debug("Resolving auth config for terraform command",
+	log.Debug("Resolving auth config for component command",
 		"stack", info.Stack, "component", info.ComponentFromArg, "subcommand", info.SubCommand)
 
 	// Get merged auth config (global + component-specific if stack/component are set).
@@ -134,6 +134,14 @@ func setupTerraformAuth(atmosConfig *schema.AtmosConfiguration, info *schema.Con
 // that need the same merged-auth and explicit-identity behavior as ExecuteTerraform.
 func SetupTerraformAuthForCLI(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) (any, error) {
 	defer perf.Track(atmosConfig, "exec.SetupTerraformAuthForCLI")()
+
+	return setupTerraformAuth(atmosConfig, info)
+}
+
+// SetupComponentAuthForCLI exposes the shared component auth setup to non-Terraform
+// command layers that still need authenticated YAML functions such as !terraform.state.
+func SetupComponentAuthForCLI(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) (auth.AuthManager, error) {
+	defer perf.Track(atmosConfig, "exec.SetupComponentAuthForCLI")()
 
 	return setupTerraformAuth(atmosConfig, info)
 }

@@ -1,7 +1,11 @@
 package ansible
 
 import (
+	"os"
+	"strings"
+
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
 
 	"github.com/cloudposse/atmos/cmd/internal"
@@ -47,6 +51,17 @@ func init() {
 	if err := ansibleParser.BindToViper(viper.GetViper()); err != nil {
 		panic(err)
 	}
+
+	// Normalize only the long identity flag for Ansible. The -i shorthand belongs
+	// to Ansible inventory, so Atmos identity must remain long-form here.
+	identityRegistry := flags.NewFlagRegistry()
+	identityRegistry.Register(&flags.StringFlag{
+		Name:        cfg.IdentityFlagName,
+		Default:     "",
+		Description: "Specify the identity to authenticate before running Ansible commands.",
+		NoOptDefVal: cfg.IdentityFlagSelectValue,
+	})
+	internal.RegisterCommandFlagRegistry("ansible", identityRegistry)
 
 	// Add subcommands.
 	ansibleCmd.AddCommand(playbookCmd)
@@ -108,6 +123,75 @@ func ansibleGlobalFlagsHandler(cmd *cobra.Command, args []string) error {
 	return cmd.Usage()
 }
 
+func resolveAnsibleIdentity(cmd *cobra.Command, parsedIdentity string) string {
+	if parsedIdentity != "" {
+		return parsedIdentity
+	}
+
+	if value, ok := getChangedIdentityFlagValue(cmd); ok {
+		return cfg.NormalizeIdentityValue(value)
+	}
+
+	if value, ok := getLongIdentityFromArgs(os.Args[1:]); ok {
+		return cfg.NormalizeIdentityValue(value)
+	}
+
+	if envIdentity := os.Getenv("ATMOS_IDENTITY"); envIdentity != "" {
+		return cfg.NormalizeIdentityValue(envIdentity)
+	}
+
+	return ""
+}
+
+func getChangedIdentityFlagValue(cmd *cobra.Command) (string, bool) {
+	for current := cmd; current != nil; current = current.Parent() {
+		for _, flagSet := range []*pflag.FlagSet{
+			current.Flags(),
+			current.InheritedFlags(),
+			current.PersistentFlags(),
+		} {
+			if flagSet == nil {
+				continue
+			}
+
+			flag := flagSet.Lookup(cfg.IdentityFlagName)
+			if flag == nil || !flag.Changed {
+				continue
+			}
+
+			return flag.Value.String(), true
+		}
+	}
+
+	return "", false
+}
+
+func getLongIdentityFromArgs(args []string) (string, bool) {
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		if arg == "--" {
+			return "", false
+		}
+
+		if arg == cfg.IdentityFlag {
+			if i+1 < len(args) && !strings.HasPrefix(args[i+1], "-") {
+				return args[i+1], true
+			}
+			return cfg.IdentityFlagSelectValue, true
+		}
+
+		if strings.HasPrefix(arg, cfg.IdentityFlag+"=") {
+			value := strings.TrimPrefix(arg, cfg.IdentityFlag+"=")
+			if value == "" {
+				return cfg.IdentityFlagSelectValue, true
+			}
+			return value, true
+		}
+	}
+
+	return "", false
+}
+
 // buildConfigAndStacksInfo creates a ConfigAndStacksInfo with global flags populated.
 // This ensures config selection flags (--base-path, --config, --config-path, --profile)
 // are properly honored when initializing CLI config.
@@ -119,6 +203,7 @@ func buildConfigAndStacksInfo(cmd *cobra.Command) schema.ConfigAndStacksInfo {
 		AtmosBasePath:           globalFlags.BasePath,
 		AtmosConfigFilesFromArg: globalFlags.Config,
 		AtmosConfigDirsFromArg:  globalFlags.ConfigPath,
+		Identity:                resolveAnsibleIdentity(cmd, globalFlags.Identity.Value()),
 		ProfilesFromArg:         globalFlags.Profile,
 	}
 
