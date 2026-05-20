@@ -1,6 +1,7 @@
 package exec
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"os"
@@ -15,6 +16,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	envpkg "github.com/cloudposse/atmos/pkg/env"
+	process "github.com/cloudposse/atmos/pkg/process"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -184,6 +186,55 @@ func TestDecrementAtmosShellLevel(t *testing.T) {
 			os.Unsetenv(atmosShellLevelEnvVar)
 		})
 	}
+}
+
+func TestExecuteShellCommandUsesInjectedStreamsAndCapture(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("shell fixture is Unix-specific")
+	}
+
+	var terminalOut, terminalErr, captureOut, captureErr bytes.Buffer
+	err := ExecuteShellCommand(
+		schema.AtmosConfiguration{},
+		"/bin/sh",
+		[]string{"-c", "printf stdout; printf stderr >&2"},
+		"",
+		nil,
+		false,
+		"",
+		WithProcessStreams(process.Streams{
+			Stdout: &terminalOut,
+			Stderr: &terminalErr,
+		}),
+		WithStdoutCapture(&captureOut),
+		WithStderrCapture(&captureErr),
+	)
+
+	require.NoError(t, err)
+	assert.Equal(t, "stdout", terminalOut.String())
+	assert.Equal(t, "stderr", terminalErr.String())
+	assert.Equal(t, "stdout", captureOut.String())
+	assert.Equal(t, "stderr", captureErr.String())
+}
+
+func TestExecuteShellCommandPreservesDetailedExitCode(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("shell fixture is Unix-specific")
+	}
+
+	err := ExecuteShellCommand(
+		schema.AtmosConfiguration{},
+		"/bin/sh",
+		[]string{"-c", "exit 2"},
+		"",
+		nil,
+		false,
+		"",
+	)
+
+	var exitErr errUtils.ExitCodeError
+	require.ErrorAs(t, err, &exitErr)
+	assert.Equal(t, 2, exitErr.Code)
 }
 
 func TestConvertEnvMapToSlice(t *testing.T) {
