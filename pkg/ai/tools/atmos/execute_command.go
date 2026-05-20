@@ -84,18 +84,25 @@ func (t *ExecuteAtmosCommandTool) Execute(ctx context.Context, params map[string
 	// Capture output.
 	output, err := cmd.CombinedOutput()
 
+	// Use -1 as a sentinel for start failures where the process never ran
+	// (cmd.ProcessState is nil when the binary cannot be found or exec fails).
+	exitCode := -1
+	if cmd.ProcessState != nil {
+		exitCode = cmd.ProcessState.ExitCode()
+	}
+
 	// Even if there's an error, return the output for the AI to analyze.
 	result := &tools.Result{
 		Success: err == nil,
 		Output:  string(output),
 		Data: map[string]interface{}{
 			"command":   fmt.Sprintf("atmos %s", command),
-			"exit_code": cmd.ProcessState.ExitCode(),
+			"exit_code": exitCode,
 		},
 	}
 
 	if err != nil {
-		result.Error = fmt.Errorf("command failed with exit code %d: %w", cmd.ProcessState.ExitCode(), err)
+		result.Error = fmt.Errorf("command failed with exit code %d: %w", exitCode, err)
 	}
 
 	return result, nil
