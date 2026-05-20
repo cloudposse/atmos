@@ -125,7 +125,7 @@ func ansibleGlobalFlagsHandler(cmd *cobra.Command, args []string) error {
 
 func resolveAnsibleIdentity(cmd *cobra.Command, parsedIdentity string) string {
 	if parsedIdentity != "" {
-		return parsedIdentity
+		return cfg.NormalizeIdentityValue(parsedIdentity)
 	}
 
 	if value, ok := getChangedIdentityFlagValue(cmd); ok {

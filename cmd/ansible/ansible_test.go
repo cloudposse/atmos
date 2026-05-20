@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -13,6 +14,51 @@ import (
 	"github.com/cloudposse/atmos/pkg/flags/preprocess"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
+
+func initAnsibleCommandTest(t *testing.T) {
+	t.Helper()
+
+	// cmd.NewTestKit cannot be imported here: cmd/root.go imports cmd/ansible,
+	// so importing cmd from this package would create a circular dependency.
+	// Snapshot the package-level Cobra commands directly, matching the cleanup
+	// behavior these tests need.
+	resetAnsibleCommandFlags(t, ansibleCmd)
+	resetAnsibleCommandFlags(t, playbookCmd)
+	resetAnsibleCommandFlags(t, versionCmd)
+}
+
+func resetAnsibleCommandFlags(t *testing.T, cmd *cobra.Command) {
+	t.Helper()
+
+	type flagSnapshot struct {
+		value   string
+		changed bool
+	}
+
+	snapshot := map[*pflag.Flag]flagSnapshot{}
+	for _, flagSet := range []*pflag.FlagSet{
+		cmd.Flags(),
+		cmd.PersistentFlags(),
+		cmd.InheritedFlags(),
+	} {
+		if flagSet == nil {
+			continue
+		}
+		flagSet.VisitAll(func(flag *pflag.Flag) {
+			snapshot[flag] = flagSnapshot{
+				value:   flag.Value.String(),
+				changed: flag.Changed,
+			}
+		})
+	}
+
+	t.Cleanup(func() {
+		for flag, snap := range snapshot {
+			_ = flag.Value.Set(snap.value)
+			flag.Changed = snap.changed
+		}
+	})
+}
 
 func TestAnsibleCommandProvider(t *testing.T) {
 	provider := &AnsibleCommandProvider{}
@@ -80,6 +126,8 @@ func TestAnsibleCommandStructure(t *testing.T) {
 }
 
 func TestAnsibleIdentityRegistryNormalizesLongIdentityOnly(t *testing.T) {
+	initAnsibleCommandTest(t)
+
 	registry := internal.GetCommandFlagRegistry("ansible")
 	require.NotNil(t, registry)
 	allFlags := registry.All()
@@ -103,6 +151,8 @@ func TestAnsibleIdentityRegistryNormalizesLongIdentityOnly(t *testing.T) {
 }
 
 func TestGetLongIdentityFromArgs(t *testing.T) {
+	initAnsibleCommandTest(t)
+
 	tests := []struct {
 		name       string
 		args       []string
@@ -148,6 +198,12 @@ func TestGetLongIdentityFromArgs(t *testing.T) {
 	}
 }
 
+func TestResolveAnsibleIdentity_NormalizesParsedIdentity(t *testing.T) {
+	initAnsibleCommandTest(t)
+
+	assert.Equal(t, cfg.IdentityFlagDisabledValue, resolveAnsibleIdentity(&cobra.Command{}, "false"))
+}
+
 func TestPlaybookCommandStructure(t *testing.T) {
 	t.Run("playbook command has correct properties", func(t *testing.T) {
 		assert.Equal(t, "playbook", playbookCmd.Use)
@@ -170,6 +226,8 @@ func TestVersionCommandStructure(t *testing.T) {
 }
 
 func TestBuildConfigAndStacksInfo(t *testing.T) {
+	initAnsibleCommandTest(t)
+
 	t.Run("returns empty info when no stack flag", func(t *testing.T) {
 		cmd := &cobra.Command{Use: "test"}
 		info := buildConfigAndStacksInfo(cmd)
