@@ -44,6 +44,10 @@ func (m *mockProvider) UpdateCheckRun(_ context.Context, _ *provider.UpdateCheck
 	return &provider.CheckRun{ID: 1}, nil
 }
 
+func (m *mockProvider) PostComment(_ context.Context, _ *provider.PostCommentOptions) (*provider.Comment, error) {
+	return &provider.Comment{ID: 1}, nil
+}
+
 func (m *mockProvider) OutputWriter() provider.OutputWriter {
 	return nil
 }

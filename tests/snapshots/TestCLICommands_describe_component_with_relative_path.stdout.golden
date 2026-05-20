@@ -548,6 +548,8 @@ remote_state_backend:
   role_arn: arn:aws:iam::123456789012:role/cp-gbl-root-terraform
   workspace_key_prefix: top-level-component1
 remote_state_backend_type: s3
+required_providers: {}
+required_version: ""
 settings:
   atlantis:
     config_template:

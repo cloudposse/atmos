@@ -27,7 +27,8 @@ var describeDependentsCmd = &cobra.Command{
 		checkAtmosConfig,
 		exec.ProcessCommandLineArgs,
 		cfg.InitCliConfig,
-		exec.NewDescribeDependentsExec),
+		exec.NewDescribeDependentsExec,
+	),
 }
 
 func getRunnableDescribeDependentsCmd(
@@ -60,7 +61,7 @@ func getRunnableDescribeDependentsCmd(
 		// When functions are disabled (--process-functions=false), there are no YAML functions
 		// (like !terraform.state) that need auth credentials, so identity resolution is unnecessary.
 		identityName := GetIdentityFromFlags(cmd, os.Args)
-		identityExplicit := cmd.Flags().Changed(IdentityFlagName)
+		identityExplicit := cmd.Flags().Changed(cfg.IdentityFlagName)
 		if describe.ProcessYamlFunctions || identityExplicit {
 			// Category B: describe dependents has no single target (component, stack) pair.
 			// Use the SCAN wrapper to discover stack-level defaults.

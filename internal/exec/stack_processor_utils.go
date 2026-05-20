@@ -433,7 +433,8 @@ func ProcessYAMLConfigFiles(
 			stackFileName := strings.TrimSuffix(
 				strings.TrimSuffix(
 					u.TrimBasePathFromPath(stackBasePath+"/", p),
-					u.DefaultStackConfigFileExtension),
+					u.DefaultStackConfigFileExtension,
+				),
 				".yml",
 			)
 
@@ -499,7 +500,8 @@ func ProcessYAMLConfigFiles(
 				"",
 				componentStackMap,
 				importsConfig,
-				true)
+				true,
+			)
 			if err != nil {
 				results <- stackProcessResult{index: i, err: err}
 				return
@@ -1377,7 +1379,8 @@ func processSettingsIntegrationsGithub(atmosConfig *schema.AtmosConfiguration, s
 		[]map[string]any{
 			atmosConfig.Integrations.GitHub,
 			settingsIntegrationsGithubSection,
-		})
+		},
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -1781,8 +1784,9 @@ func processBaseComponentConfigInternal(
 
 					if _, ok := allComponentsMap[baseComponentFromInheritList]; !ok {
 						if checkBaseComponentExists {
-							errorMessage := fmt.Sprintf("The component '%[1]s' in the stack manifest '%[2]s' inherits from '%[3]s' "+
-								"(using 'metadata.inherits'), but '%[3]s' is not defined in any of the config files for the stack '%[2]s'",
+							errorMessage := fmt.Sprintf(
+								"The component '%[1]s' in the stack manifest '%[2]s' inherits from '%[3]s' "+
+									"(using 'metadata.inherits'), but '%[3]s' is not defined in any of the config files for the stack '%[2]s'",
 								component,
 								stack,
 								baseComponentFromInheritList,
@@ -1857,6 +1861,24 @@ func processBaseComponentConfigInternal(
 			baseComponentProviders, ok = baseComponentProvidersSection.(map[string]any)
 			if !ok {
 				return fmt.Errorf("%w '%s.providers' in the stack '%s'", errUtils.ErrInvalidComponentProviders, baseComponent, stack)
+			}
+		}
+
+		// Base component required_providers (DEV-3124).
+		var baseComponentRequiredProviders map[string]any
+		if baseComponentRequiredProvidersSection, baseComponentRequiredProvidersSectionExist := baseComponentMap[cfg.RequiredProvidersSectionName]; baseComponentRequiredProvidersSectionExist {
+			baseComponentRequiredProviders, ok = baseComponentRequiredProvidersSection.(map[string]any)
+			if !ok {
+				return fmt.Errorf("%w '%s.required_providers' in the stack '%s'", errUtils.ErrInvalidComponentRequiredProviders, baseComponent, stack)
+			}
+		}
+
+		// Base component required_version (DEV-3124).
+		var baseComponentRequiredVersion string
+		if baseComponentRequiredVersionSection, baseComponentRequiredVersionSectionExist := baseComponentMap[cfg.RequiredVersionSectionName]; baseComponentRequiredVersionSectionExist {
+			baseComponentRequiredVersion, ok = baseComponentRequiredVersionSection.(string)
+			if !ok {
+				return fmt.Errorf("%w '%s.required_version' in the stack '%s'", errUtils.ErrInvalidComponentRequiredVersion, baseComponent, stack)
 			}
 		}
 
@@ -2009,6 +2031,19 @@ func processBaseComponentConfigInternal(
 			return err
 		}
 		baseComponentConfig.BaseComponentProviders = merged
+
+		// Base component `required_providers` (DEV-3124).
+		merged, err = m.Merge(atmosConfig, []map[string]any{baseComponentConfig.BaseComponentRequiredProviders, baseComponentRequiredProviders})
+		if err != nil {
+			return err
+		}
+		baseComponentConfig.BaseComponentRequiredProviders = merged
+
+		// Base component `required_version` (DEV-3124).
+		// String values are not merged - the most specific value wins.
+		if baseComponentRequiredVersion != "" {
+			baseComponentConfig.BaseComponentRequiredVersion = baseComponentRequiredVersion
+		}
 
 		// Base component `hooks`
 		merged, err = m.Merge(atmosConfig, []map[string]any{baseComponentConfig.BaseComponentHooks, baseComponentHooks})

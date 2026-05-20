@@ -633,6 +633,34 @@ func TestProcessCommandLineArgs_EmptyIdentityFlagIsExplicitSelect(t *testing.T) 
 	}
 }
 
+// TestProcessCommandLineArgs_TerraformIdentityFlag_Issue2392 is a regression test
+// for issue #2392 (`--identity` flag silently ignored by `atmos terraform plan`).
+//
+// Reproduces the exact arg shape from the bug report:
+//
+//	atmos terraform plan account-map -s core-gbl-root --identity core-root/admin
+//
+// Before the StandardParser registration of --identity on terraform commands,
+// this could resolve to the profile-default identity instead of the value of
+// the --identity flag. The legacy arg-walker MUST still set info.Identity to
+// the explicit value so that downstream auth resolution honours --identity.
+func TestProcessCommandLineArgs_TerraformIdentityFlag_Issue2392(t *testing.T) {
+	cmd := newTestCommandWithGlobalFlags("terraform")
+	cmd.Flags().StringP("stack", "s", "", "stack name")
+	cmd.Flags().String("identity", "", "identity name")
+
+	args := []string{
+		"plan", "account-map",
+		"-s", "core-gbl-root",
+		"--identity", "core-root/admin",
+	}
+
+	info, err := ProcessCommandLineArgs("terraform", cmd, args, []string{})
+	require.NoError(t, err)
+	assert.Equal(t, "core-root/admin", info.Identity,
+		"--identity must populate info.Identity verbatim for terraform commands (issue #2392)")
+}
+
 // TestProcessCommandLineArgs_IdentityFlagParsing verifies that the --identity flag
 // is correctly parsed in both space-separated and equals syntax formats.
 func TestProcessCommandLineArgs_IdentityFlagParsing(t *testing.T) {

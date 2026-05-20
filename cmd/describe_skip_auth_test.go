@@ -13,6 +13,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/internal/exec"
+	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -115,7 +116,7 @@ func TestDescribeStacks_SkipsAuthWhenEnvVarSetButFunctionsDisabled(t *testing.T)
 	_ = NewTestKit(t)
 	viper.Reset()
 	// Re-bind after reset so viper can see the env var via GetIdentityFromFlags.
-	require.NoError(t, viper.BindEnv(IdentityFlagName, "ATMOS_IDENTITY", "IDENTITY"))
+	require.NoError(t, viper.BindEnv(cfg.IdentityFlagName, "ATMOS_IDENTITY", "IDENTITY"))
 	// Set the env var — this should NOT trigger auth when functions are disabled.
 	t.Setenv("ATMOS_IDENTITY", "some-identity")
 	t.Setenv("IDENTITY", "")
@@ -227,7 +228,7 @@ func TestDescribeDependents_SkipsAuthWhenFunctionsDisabled(t *testing.T) {
 func TestDescribeDependents_SkipsAuthWhenEnvVarSetButFunctionsDisabled(t *testing.T) {
 	_ = NewTestKit(t)
 	viper.Reset()
-	require.NoError(t, viper.BindEnv(IdentityFlagName, "ATMOS_IDENTITY", "IDENTITY"))
+	require.NoError(t, viper.BindEnv(cfg.IdentityFlagName, "ATMOS_IDENTITY", "IDENTITY"))
 	t.Setenv("ATMOS_IDENTITY", "some-identity")
 	t.Setenv("IDENTITY", "")
 
@@ -339,7 +340,7 @@ func TestDescribeAffected_SkipsAuthWhenFunctionsDisabled(t *testing.T) {
 func TestDescribeAffected_SkipsAuthWhenEnvVarSetButFunctionsDisabled(t *testing.T) {
 	_ = NewTestKit(t)
 	viper.Reset()
-	require.NoError(t, viper.BindEnv(IdentityFlagName, "ATMOS_IDENTITY", "IDENTITY"))
+	require.NoError(t, viper.BindEnv(cfg.IdentityFlagName, "ATMOS_IDENTITY", "IDENTITY"))
 	t.Setenv("ATMOS_IDENTITY", "some-identity")
 	t.Setenv("IDENTITY", "")
 
@@ -491,7 +492,7 @@ func TestDescribeComponent_SkipsAuthWhenFunctionsDisabled(t *testing.T) {
 func TestDescribeComponent_SkipsAuthWhenEnvVarSetButFunctionsDisabled(t *testing.T) {
 	_ = NewTestKit(t)
 	viper.Reset()
-	require.NoError(t, viper.BindEnv(IdentityFlagName, "ATMOS_IDENTITY", "IDENTITY"))
+	require.NoError(t, viper.BindEnv(cfg.IdentityFlagName, "ATMOS_IDENTITY", "IDENTITY"))
 	t.Setenv("ATMOS_IDENTITY", "some-identity")
 	t.Setenv("IDENTITY", "")
 
@@ -535,7 +536,7 @@ func TestDescribeComponent_ExplicitIdentityForcesAuthWhenFunctionsDisabled(t *te
 }
 
 // TestIdentityExplicitGuard_FlagChangedVsEnvVar verifies the guard logic unit:
-// cmd.Flags().Changed(IdentityFlagName) must be false when only env var is set,
+// cmd.Flags().Changed(cfg.IdentityFlagName) must be false when only env var is set,
 // and true when the CLI flag is explicitly set. This protects all describe commands
 // that share the identityExplicit guard pattern (including describe component which
 // is not testable via factory function injection).
@@ -545,13 +546,13 @@ func TestIdentityExplicitGuard_FlagChangedVsEnvVar(t *testing.T) {
 		t.Setenv("ATMOS_IDENTITY", "some-identity")
 
 		// Re-bind env after reset so viper can see the env var.
-		require.NoError(t, viper.BindEnv(IdentityFlagName, "ATMOS_IDENTITY", "IDENTITY"))
+		require.NoError(t, viper.BindEnv(cfg.IdentityFlagName, "ATMOS_IDENTITY", "IDENTITY"))
 
 		cmd := &cobra.Command{Use: "test"}
 		cmd.Flags().StringP("identity", "i", "", "")
 
 		// Flag should NOT be marked as changed — only env var is set.
-		assert.False(t, cmd.Flags().Changed(IdentityFlagName),
+		assert.False(t, cmd.Flags().Changed(cfg.IdentityFlagName),
 			"Flags().Changed must be false when identity comes from env var only")
 
 		// GetIdentityFromFlags should still return the env var value (for when auth IS needed).
@@ -567,7 +568,7 @@ func TestIdentityExplicitGuard_FlagChangedVsEnvVar(t *testing.T) {
 		cmd.Flags().StringP("identity", "i", "", "")
 		require.NoError(t, cmd.Flags().Set("identity", "explicit-identity"))
 
-		assert.True(t, cmd.Flags().Changed(IdentityFlagName),
+		assert.True(t, cmd.Flags().Changed(cfg.IdentityFlagName),
 			"Flags().Changed must be true when --identity is explicitly set")
 
 		identity := GetIdentityFromFlags(cmd, []string{"test", "--identity", "explicit-identity"})
@@ -582,7 +583,7 @@ func TestIdentityExplicitGuard_FlagChangedVsEnvVar(t *testing.T) {
 		cmd := &cobra.Command{Use: "test"}
 		cmd.Flags().StringP("identity", "i", "", "")
 
-		assert.False(t, cmd.Flags().Changed(IdentityFlagName),
+		assert.False(t, cmd.Flags().Changed(cfg.IdentityFlagName),
 			"Flags().Changed must be false when nothing is set")
 
 		identity := GetIdentityFromFlags(cmd, []string{"test"})

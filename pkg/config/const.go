@@ -108,6 +108,8 @@ const (
 	AnsibleInventorySectionName       = "inventory"
 	WorkspaceSectionName              = "workspace"
 	AuthSectionName                   = "auth"
+	RequiredVersionSectionName        = "required_version"
+	RequiredProvidersSectionName      = "required_providers"
 	GenerateSectionName               = "generate"
 	ProvisionSectionName              = "provision"
 	InheritanceSectionName            = "inheritance"

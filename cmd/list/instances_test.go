@@ -6,6 +6,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // TestListInstancesFlags tests that the list instances command has the correct flags.
@@ -296,4 +297,131 @@ func TestInstancesOutputFileFlag(t *testing.T) {
 	if outputFileFlag != nil {
 		assert.Equal(t, "", outputFileFlag.DefValue, "output-file flag default should be empty")
 	}
+}
+
+// TestInstancesProcessTemplatesAndFunctionsFlags verifies that --process-templates
+// and --process-functions are registered on the real `instances` cobra command
+// with the documented defaults (both true). Regression guard:
+// docs/fixes/2026-04-24-list-instances-per-component-auth.md added these flags
+// for parity with `describe affected` / `describe stacks`; if the parser wiring
+// is ever removed the upload path will silently stop processing templates and
+// YAML functions.
+func TestInstancesProcessTemplatesAndFunctionsFlags(t *testing.T) {
+	processTemplatesFlag := instancesCmd.Flags().Lookup("process-templates")
+	if processTemplatesFlag == nil {
+		processTemplatesFlag = instancesCmd.PersistentFlags().Lookup("process-templates")
+	}
+	assert.NotNil(t, processTemplatesFlag, "process-templates flag should be registered on instances command")
+	if processTemplatesFlag != nil {
+		assert.Equal(t, "true", processTemplatesFlag.DefValue, "process-templates default should be true for parity with describe affected")
+	}
+
+	processFunctionsFlag := instancesCmd.Flags().Lookup("process-functions")
+	if processFunctionsFlag == nil {
+		processFunctionsFlag = instancesCmd.PersistentFlags().Lookup("process-functions")
+	}
+	assert.NotNil(t, processFunctionsFlag, "process-functions flag should be registered on instances command")
+	if processFunctionsFlag != nil {
+		assert.Equal(t, "true", processFunctionsFlag.DefValue, "process-functions default should be true for parity with describe affected")
+	}
+}
+
+// TestParseInstancesOptions verifies the viper→options mapping extracted
+// from the RunE closure. Uses an isolated viper.Viper (via bindFlagsToViper
+// in parse_options_test.go) and a synthesized cobra command with the same
+// flags the real parser registers, so the test exercises the actual
+// `v.GetString` / `v.GetBool` calls without a full cobra execution context.
+func TestParseInstancesOptions(t *testing.T) {
+	buildCmd := func() *cobra.Command {
+		cmd := &cobra.Command{Use: "instances"}
+		instancesParser.RegisterFlags(cmd)
+		return cmd
+	}
+
+	t.Run("defaults", func(t *testing.T) {
+		cmd := buildCmd()
+		v := bindFlagsToViper(t, cmd, instancesParser)
+
+		opts := parseInstancesOptions(cmd, v)
+
+		assert.Equal(t, "", opts.Format)
+		assert.False(t, opts.Upload)
+		assert.False(t, opts.Provenance)
+		// Both process-* flags default to true per parity-with-describe.
+		assert.True(t, opts.ProcessTemplates)
+		assert.True(t, opts.ProcessFunctions)
+		assert.Empty(t, opts.Skip)
+	})
+
+	t.Run("explicit_flags", func(t *testing.T) {
+		cmd := buildCmd()
+		setFlag(t, cmd, "format", "json")
+		setFlag(t, cmd, "stack", "prod-*")
+		setFlag(t, cmd, "upload", "true")
+		setFlag(t, cmd, "process-templates", "false")
+		setFlag(t, cmd, "process-functions", "false")
+		setFlag(t, cmd, "skip", "terraform.state")
+		setFlag(t, cmd, "skip", "terraform.output")
+		v := bindFlagsToViper(t, cmd, instancesParser)
+
+		opts := parseInstancesOptions(cmd, v)
+
+		assert.Equal(t, "json", opts.Format)
+		assert.Equal(t, "prod-*", opts.Stack)
+		assert.True(t, opts.Upload)
+		assert.False(t, opts.ProcessTemplates)
+		assert.False(t, opts.ProcessFunctions)
+		assert.Equal(t, []string{"terraform.state", "terraform.output"}, opts.Skip)
+	})
+
+	// Regression: the literal user-reported failure was
+	//   atmos list instances --upload --skip terraform.state
+	// returning `unknown flag --skip`. This test ensures the parser accepts
+	// the flag and the value lands on the options struct.
+	t.Run("upload_with_skip_terraform_state_regression", func(t *testing.T) {
+		cmd := buildCmd()
+		setFlag(t, cmd, "upload", "true")
+		setFlag(t, cmd, "skip", "terraform.state")
+		v := bindFlagsToViper(t, cmd, instancesParser)
+
+		opts := parseInstancesOptions(cmd, v)
+
+		assert.True(t, opts.Upload)
+		assert.Equal(t, []string{"terraform.state"}, opts.Skip)
+	})
+
+	// Regression: ATMOS_LIST_FORMAT and ATMOS_UPLOAD env vars were silently
+	// ignored because ExecuteListInstancesCmd re-read them from cobra
+	// flags. After the fix, parseInstancesOptions reads via viper (which
+	// is bound to the env vars), so the values land on opts and are
+	// passed through to the impl.
+	t.Run("env_vars_override_defaults_for_format_and_upload", func(t *testing.T) {
+		t.Setenv("ATMOS_LIST_FORMAT", "json")
+		t.Setenv("ATMOS_UPLOAD", "true")
+
+		cmd := buildCmd()
+		// Bind to a fresh viper that also reads ATMOS_* env vars
+		// (BindToViper handles the env-var aliasing).
+		v := viper.New()
+		require.NoError(t, instancesParser.BindToViper(v))
+		require.NoError(t, instancesParser.BindFlagsToViper(cmd, v))
+
+		opts := parseInstancesOptions(cmd, v)
+
+		assert.Equal(t, "json", opts.Format, "ATMOS_LIST_FORMAT should land on opts.Format")
+		assert.True(t, opts.Upload, "ATMOS_UPLOAD should land on opts.Upload")
+	})
+
+	t.Run("env_var_overrides_default_for_stack", func(t *testing.T) {
+		t.Setenv("ATMOS_STACK", "prod-*")
+
+		cmd := buildCmd()
+		v := viper.New()
+		require.NoError(t, instancesParser.BindToViper(v))
+		require.NoError(t, instancesParser.BindFlagsToViper(cmd, v))
+
+		opts := parseInstancesOptions(cmd, v)
+
+		assert.Equal(t, "prod-*", opts.Stack)
+	})
 }

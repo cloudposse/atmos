@@ -10,6 +10,7 @@ import (
 
 	"github.com/cloudposse/atmos/cmd/internal"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/flags/preprocess"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -81,17 +82,23 @@ func TestAnsibleCommandStructure(t *testing.T) {
 func TestAnsibleIdentityRegistryNormalizesLongIdentityOnly(t *testing.T) {
 	registry := internal.GetCommandFlagRegistry("ansible")
 	require.NotNil(t, registry)
+	allFlags := registry.All()
+	flagInfos := make([]preprocess.FlagInfo, len(allFlags))
+	for i, f := range allFlags {
+		flagInfos[i] = f
+	}
+	preprocessor := preprocess.NewNoOptDefValPreprocessor(flagInfos)
 
 	assert.Equal(
 		t,
 		[]string{"playbook", "--identity=terraform", "pg-auto-failover"},
-		registry.PreprocessNoOptDefValArgs([]string{"playbook", "--identity", "terraform", "pg-auto-failover"}),
+		preprocessor.Preprocess([]string{"playbook", "--identity", "terraform", "pg-auto-failover"}),
 	)
 
 	assert.Equal(
 		t,
 		[]string{"playbook", "-i", "localhost,", "pg-auto-failover"},
-		registry.PreprocessNoOptDefValArgs([]string{"playbook", "-i", "localhost,", "pg-auto-failover"}),
+		preprocessor.Preprocess([]string{"playbook", "-i", "localhost,", "pg-auto-failover"}),
 	)
 }
 
