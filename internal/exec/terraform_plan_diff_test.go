@@ -618,6 +618,35 @@ trailing text`
 	})
 }
 
+func TestRunTerraformShowCapturesWithInjectedStdout(t *testing.T) {
+	origStdout := os.Stdout
+	origExec := executeTerraformForPlanDiff
+	t.Cleanup(func() {
+		executeTerraformForPlanDiff = origExec
+	})
+
+	executeTerraformForPlanDiff = func(info schema.ConfigAndStacksInfo, opts ...ShellCommandOption) error {
+		assert.Equal(t, "show", info.SubCommand)
+		assert.Equal(t, []string{"-json", "plan.tfplan"}, info.AdditionalArgsAndFlags)
+		assert.Same(t, origStdout, os.Stdout)
+
+		var cfg shellCommandConfig
+		for _, opt := range opts {
+			opt(&cfg)
+		}
+		require.NotNil(t, cfg.stdoutOverride)
+		_, err := cfg.stdoutOverride.Write([]byte("terraform noise\n{\"format_version\":\"1.0\"}"))
+		require.NoError(t, err)
+		return nil
+	}
+
+	output, err := runTerraformShow(&schema.ConfigAndStacksInfo{}, "plan.tfplan")
+
+	require.NoError(t, err)
+	assert.Equal(t, "terraform noise\n{\"format_version\":\"1.0\"}", output)
+	assert.Same(t, origStdout, os.Stdout)
+}
+
 // TestMockTerraformPlanDiff tests the generatePlanDiff function directly.
 func TestMockTerraformPlanDiff(t *testing.T) {
 	// Create JSON content for the original plan

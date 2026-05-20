@@ -26,6 +26,8 @@ var (
 	ErrNoJSONOutput = errors.New("no JSON output found in terraform show output")
 )
 
+var executeTerraformForPlanDiff = ExecuteTerraform
+
 // PlanFileOptions contains parameters for plan file operations.
 type PlanFileOptions struct {
 	ComponentPath string
@@ -272,25 +274,7 @@ func copyPlanFileIfNeeded(planFile, componentPath string) (string, func(), error
 
 // runTerraformShow runs the terraform show command and captures its output.
 func runTerraformShow(info *schema.ConfigAndStacksInfo, planFile string) (string, error) {
-	r, w, err := os.Pipe()
-	if err != nil {
-		return "", fmt.Errorf("error creating pipe: %w", err)
-	}
-	defer r.Close()
-	defer w.Close()
-
-	// Save original stdout and replace it with the pipe
-	origStdout := os.Stdout
-	os.Stdout = w
-	defer func() { os.Stdout = origStdout }()
-
-	// Use a goroutine to read from the pipe
 	var outputBuf bytes.Buffer
-	readDone := make(chan error)
-	go func() {
-		_, err := io.Copy(&outputBuf, r)
-		readDone <- err
-	}()
 
 	// Set up the show command
 	showInfo := *info
@@ -298,19 +282,8 @@ func runTerraformShow(info *schema.ConfigAndStacksInfo, planFile string) (string
 	showInfo.AdditionalArgsAndFlags = []string{"-json", planFile}
 
 	// Run the command
-	execErr := ExecuteTerraform(showInfo)
-
-	// Close writer to signal EOF to reader
-	w.Close()
-
-	// Wait for reader to finish
-	readErr := <-readDone
-
-	if execErr != nil {
+	if execErr := executeTerraformForPlanDiff(showInfo, WithStdoutOverride(&outputBuf)); execErr != nil {
 		return "", fmt.Errorf("error running terraform show: %w", execErr)
-	}
-	if readErr != nil {
-		return "", fmt.Errorf("error reading output: %w", readErr)
 	}
 
 	return outputBuf.String(), nil
