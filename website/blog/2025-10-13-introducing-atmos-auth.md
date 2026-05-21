@@ -87,14 +87,16 @@ Different components can use different identities:
 components:
   terraform:
     vpc:
-      settings:
-        auth:
-          identity: network-admin
+      auth:
+        identities:
+          network-admin:
+            default: true
 
     database:
-      settings:
-        auth:
-          identity: data-admin
+      auth:
+        identities:
+          data-admin:
+            default: true
 ```
 
 ### Credential Security
