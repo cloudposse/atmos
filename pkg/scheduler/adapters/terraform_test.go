@@ -2,7 +2,9 @@ package adapters
 
 import (
 	"context"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 
@@ -122,6 +124,94 @@ func TestBuildTerraformGraphFallsBackToSettingsDependsOn(t *testing.T) {
 	require.Equal(t, []string{"vpc-dev"}, app.Dependencies)
 }
 
+func TestExecuteTerraformSerializesSharedPhysicalComponentPath(t *testing.T) {
+	t.Setenv("ATMOS_EXPERIMENTAL_DAG_MAX_CONCURRENCY", "3")
+
+	stacks := map[string]any{
+		"dev": map[string]any{
+			cfg.ComponentsSectionName: map[string]any{
+				cfg.TerraformSectionName: map[string]any{
+					"service-api":    terraformAdapterComponentWithPath("selected", "components/terraform/shared-service"),
+					"service-worker": terraformAdapterComponentWithPath("selected", "components/terraform/shared-service"),
+					"service-cron":   terraformAdapterComponentWithPath("selected", "components/terraform/shared-service"),
+				},
+			},
+		},
+	}
+
+	var active atomic.Int32
+	var maxActive atomic.Int32
+
+	err := ExecuteTerraform(context.Background(), TerraformOptions{
+		AtmosConfig: &schema.AtmosConfiguration{},
+		Info: &schema.ConfigAndStacksInfo{
+			All:        true,
+			SubCommand: "plan",
+		},
+		Stacks: stacks,
+		Executor: func(info schema.ConfigAndStacksInfo) error {
+			current := active.Add(1)
+			updateMaxActive(&maxActive, current)
+			time.Sleep(20 * time.Millisecond)
+			active.Add(-1)
+			return nil
+		},
+	})
+
+	require.NoError(t, err)
+	require.EqualValues(t, 1, maxActive.Load())
+}
+
+func TestExecuteTerraformAllowsParallelDifferentPhysicalComponentPaths(t *testing.T) {
+	t.Setenv("ATMOS_EXPERIMENTAL_DAG_MAX_CONCURRENCY", "3")
+
+	stacks := map[string]any{
+		"dev": map[string]any{
+			cfg.ComponentsSectionName: map[string]any{
+				cfg.TerraformSectionName: map[string]any{
+					"app":      terraformAdapterComponentWithPath("selected", "components/terraform/app"),
+					"database": terraformAdapterComponentWithPath("selected", "components/terraform/database"),
+					"vpc":      terraformAdapterComponentWithPath("selected", "components/terraform/vpc"),
+				},
+			},
+		},
+	}
+
+	var active atomic.Int32
+	var maxActive atomic.Int32
+
+	err := ExecuteTerraform(context.Background(), TerraformOptions{
+		AtmosConfig: &schema.AtmosConfiguration{},
+		Info: &schema.ConfigAndStacksInfo{
+			All:        true,
+			SubCommand: "plan",
+		},
+		Stacks: stacks,
+		Executor: func(info schema.ConfigAndStacksInfo) error {
+			current := active.Add(1)
+			updateMaxActive(&maxActive, current)
+			time.Sleep(20 * time.Millisecond)
+			active.Add(-1)
+			return nil
+		},
+	})
+
+	require.NoError(t, err)
+	require.Greater(t, maxActive.Load(), int32(1))
+}
+
+func updateMaxActive(maxActive *atomic.Int32, current int32) {
+	for {
+		previous := maxActive.Load()
+		if current <= previous {
+			return
+		}
+		if maxActive.CompareAndSwap(previous, current) {
+			return
+		}
+	}
+}
+
 func terraformAdapterTestStacks() map[string]any {
 	return map[string]any{
 		"dev": map[string]any{
@@ -160,6 +250,14 @@ func terraformAdapterComponent(group string, dependenciesComponents []any, setti
 		component[cfg.SettingsSectionName] = map[string]any{
 			"depends_on": settingsDependsOn,
 		}
+	}
+	return component
+}
+
+func terraformAdapterComponentWithPath(group string, componentPath string) map[string]any {
+	component := terraformAdapterComponent(group, nil, nil)
+	component["component_info"] = map[string]any{
+		cfg.ComponentPathSectionName: componentPath,
 	}
 	return component
 }
