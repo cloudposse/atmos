@@ -1,0 +1,76 @@
+---
+slug: aws-sso-session-sharing
+title: "One Browser Flow Unlocks Every AWS SSO Provider"
+authors: [Benbentwo]
+tags: [feature, dx]
+date: 2026-05-21T00:00:00.000Z
+---
+
+`atmos auth login` now performs **one** browser interaction per AWS SSO portal, no matter how many
+`aws/iam-identity-center` providers in your `atmos.yaml` point at it. Cached tokens also refresh silently for the
+full ~8-hour portal session window — no more re-prompt every hour.
+
+<!--truncate-->
+
+## What Changed
+
+The `aws/iam-identity-center` provider's token-acquisition path was rebuilt around the AWS SSO token provider behavior
+that AWS CLI v2 has used since late 2022:
+
+- **Implicit session sharing.** Providers with identical `start_url` + `region` now share an OIDC token in a single
+  in-process registry, keyed by `sha1(start_url + "|" + region)`. The first provider to authenticate completes the
+  device-authorization flow once; subsequent providers reuse the same token without prompting.
+- **Refresh-token renewal.** When the cached access token expires but the refresh token is still valid, atmos
+  silently exchanges it via `ssooidc:CreateToken` with `grant_type=refresh_token`. Browser interaction only happens
+  when both the access token AND the refresh token have expired (typically after ~8 hours of portal-level session).
+- **Session-keyed disk cache.** The on-disk cache moved from `~/.cache/atmos/aws-sso/<provider-name>/token.json` to
+  `~/.cache/atmos/aws-sso/sessions/<sha1>.json`. Renaming a provider in `atmos.yaml` no longer invalidates a valid
+  cached token, and the cache file format is compatible with the AWS SDK's `ssocreds` package.
+
+There are **no configuration changes**. Same `atmos.yaml`, same `kind: aws/iam-identity-center`, same
+`start_url`/`region` fields. The improvement is invisible until you notice you're hitting the browser less often.
+
+## Why This Matters
+
+A common atmos setup has one provider per environment (dev / staging / prod) all backed by the same corporate SSO
+portal. Before this release, `atmos auth login` would launch the browser flow three times — once per provider —
+even though the underlying portal session is the same. Worse, each provider had its own token cache file, so a
+rename or a config refactor silently invalidated cached tokens.
+
+The headline UX problem: AWS itself shows users the message *"Your credentials have been shared successfully and
+can be used until your session expires"* after a single portal sign-in. Atmos's behavior didn't match that promise.
+This release closes the gap.
+
+The secondary problem solved is **silent renewal**. The original SSO flow re-ran the full browser interaction on
+every access-token expiry (~1 hour). With refresh tokens wired into the cache, atmos now mirrors the AWS CLI's
+behavior: one browser interaction holds for the portal-session lifetime, often a full 8-hour workday.
+
+## How It Works
+
+The new `Authenticate()` flow is a four-stage pipeline:
+
+1. **In-memory session cache** — instant return for any provider that shares an already-authenticated portal in
+   the current process.
+2. **On-disk session cache** — survives process restart; populated by prior atmos invocations.
+3. **Refresh-token exchange** — silent network call when the cached access token expired but the refresh token
+   is still valid. No browser.
+4. **Device-authorization flow** — full browser interaction. Only runs when all three fast paths miss. Single-flighted
+   per session, so parallel `atmos terraform` invocations don't race into duplicate browser prompts.
+
+Per-session mutexes coalesce concurrent callers: if you fire `atmos terraform plan` against three components backed
+by the same SSO portal, only one device-auth flow runs and the other two wait on its result.
+
+## Migration
+
+None required. Existing `atmos.yaml` files keep working. Old per-provider cache files become orphans on first login
+post-upgrade — they're not deleted automatically (another in-flight atmos version might still be using them) but
+get cleared by `atmos auth logout`.
+
+If you previously relied on atmos's cache being disjoint from the `aws` CLI's cache, that separation is unchanged
+in this release. Sharing the cache with `aws sso login` directly is tracked as a future opt-in; see the PRD at
+[`docs/prd/aws-sso-session-support.md`](https://github.com/cloudposse/atmos/blob/main/docs/prd/aws-sso-session-support.md)
+for the design rationale.
+
+## Get Involved
+
+Found an issue or have feedback? Open an issue on [GitHub](https://github.com/cloudposse/atmos/issues).

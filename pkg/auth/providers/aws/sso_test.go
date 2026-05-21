@@ -135,6 +135,12 @@ func TestSSOProvider_Authenticate_Simple(t *testing.T) {
 	provider, err := NewSSOProvider(testProviderName, config)
 	require.NoError(t, err)
 
+	// Isolate from the package-level defaultSessionStore so this test cannot be
+	// influenced by — nor pollute — sibling tests that share the same (start_url,
+	// region) tuple. Each Authenticate() invocation here must do its own
+	// fast-path miss → fall-through-to-auth dance, independent of other tests.
+	provider.sessionStore = newSessionTokenStore()
+
 	// Use short timeout so SDK calls fail fast in tests.
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	defer cancel()
@@ -913,6 +919,11 @@ func TestSSOProvider_Authenticate_NonInteractive_ErrorMessage(t *testing.T) {
 
 	provider, err := NewSSOProvider(testProviderName, providerConfig)
 	require.NoError(t, err)
+
+	// Isolate from defaultSessionStore. If a sibling test had seeded a token for
+	// this (start_url, region), the in-memory fast path would return it before
+	// the non-interactive guard runs, and we'd assert against the wrong code path.
+	provider.sessionStore = newSessionTokenStore()
 
 	ctx := context.Background()
 	_, err = provider.Authenticate(ctx)
