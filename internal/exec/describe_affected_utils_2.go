@@ -542,13 +542,14 @@ func addDependentsToAffected(
 	skip []string,
 	onlyInStack string,
 	authManager auth.AuthManager,
+	authDisabled bool,
 ) error {
 	// Resolve all stacks once and build a reverse dependency index — these are the expensive
 	// operations (~1s for large infras). Previously ExecuteDescribeStacks was called inside
 	// ExecuteDescribeDependents for every affected component, causing O(N) full resolutions
 	// (e.g., 2,422 × ~1s = 40+ minutes). The dependency index further eliminates the
 	// O(stacks × components) scan per affected item.
-	stacks, err := ExecuteDescribeStacks(
+	stacks, err := ExecuteDescribeStacksWithAuthDisabled(
 		atmosConfig,
 		onlyInStack,
 		nil,
@@ -560,6 +561,7 @@ func addDependentsToAffected(
 		false,
 		skip,
 		authManager,
+		authDisabled,
 	)
 	if err != nil {
 		return err
