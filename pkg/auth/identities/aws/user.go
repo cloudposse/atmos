@@ -97,10 +97,19 @@ func (i *userIdentity) Authenticate(ctx context.Context, _ types.ICredentials) (
 	// No valid existing credentials - resolve base credentials and generate new session tokens.
 	longLivedCreds, err := i.resolveLongLivedCredentials(ctx)
 	if err != nil {
-		// Only try browser webflow when credentials are unavailable, not for config errors.
-		// Config errors (e.g. partial access_key_id/secret_access_key) must be surfaced immediately
-		// to avoid silently authenticating as a different principal.
-		if i.isWebflowEnabled() && !errors.Is(err, errUtils.ErrInvalidAuthConfig) {
+		// Only try browser webflow when credentials are genuinely absent.
+		// Skip webflow for:
+		//   - ErrInvalidAuthConfig: partial access_key_id/secret_access_key in YAML; surfacing
+		//     this immediately avoids silently authenticating as a different principal.
+		//   - ErrAwsUserKeyringReadFailed: the user configured credentials but the keyring
+		//     is unreadable (locked keychain, permission denial, corrupted entry). Falling
+		//     through to webflow would mask the real problem and ignore configured creds.
+		if i.shouldFallBackToWebflow(err) {
+			log.Info("No AWS credentials in YAML or keyring; starting browser-based authentication",
+				logKeyIdentity, i.name,
+				"reason", err.Error(),
+				"hint", fmt.Sprintf("Run 'atmos auth user configure --identity %s' to store credentials, or set credentials.webflow_enabled: false to disable browser auth", i.name),
+			)
 			webflowCreds, webflowErr := i.resolveCredentialsViaWebflow(ctx)
 			if webflowErr == nil {
 				region := i.resolveRegion()
@@ -127,6 +136,25 @@ func (i *userIdentity) Authenticate(ctx context.Context, _ types.ICredentials) (
 
 	// Generate a session token (handles MFA when configured).
 	return i.generateSessionToken(ctx, longLivedCreds, region)
+}
+
+// shouldFallBackToWebflow reports whether a credential-resolution error is
+// recoverable via browser-based authentication. Webflow is appropriate only
+// when the user has NOT supplied credentials anywhere; it must never bypass
+// configured credentials that simply could not be read.
+func (i *userIdentity) shouldFallBackToWebflow(err error) bool {
+	if !i.isWebflowEnabled() {
+		return false
+	}
+	// Partial / invalid YAML config — surface the real error.
+	if errors.Is(err, errUtils.ErrInvalidAuthConfig) {
+		return false
+	}
+	// Keyring read failed — user likely has credentials but we can't read them.
+	if errors.Is(err, errUtils.ErrAwsUserKeyringReadFailed) {
+		return false
+	}
+	return true
 }
 
 // resolveLongLivedCredentials returns long-lived credentials with deep merge precedence.
@@ -166,8 +194,16 @@ func (i *userIdentity) resolveCredentialsFromKeyring(ctx context.Context, yamlMf
 	keystoreCreds, keystoreErr := i.credentialsFromStore()
 	allowPrompts := types.AllowPrompts(ctx) && !i.isWebflowEnabled()
 
-	// No keyring credentials - prompt for new ones if allowed.
 	if keystoreErr != nil {
+		// A real keyring read failure (corrupted entry, deserialization error,
+		// permission denial) must propagate as-is so Authenticate skips the
+		// webflow fallback — otherwise webflow would silently bypass the
+		// credentials the user has already configured.
+		if errors.Is(keystoreErr, errUtils.ErrAwsUserKeyringReadFailed) {
+			return nil, keystoreErr
+		}
+		// "Not found" - prompt for new ones if allowed, else return
+		// ErrAwsUserNotConfigured so Authenticate may try webflow.
 		return i.promptOrError(allowPrompts, yamlMfaArn, "No credentials found",
 			fmt.Sprintf("AWS User credentials not found for identity %q", i.name),
 			fmt.Sprintf("atmos auth user configure --identity %s", i.name))
@@ -238,20 +274,33 @@ func (i *userIdentity) credentialsFromConfig() (*types.AWSCredentials, error) {
 }
 
 // credentialsFromStore retrieves AWS credentials from the keyring store.
+// Distinguishes "credentials not configured" (ErrAwsUserNotConfigured) from
+// "keyring read failed" (ErrAwsUserKeyringReadFailed) so callers can decide
+// whether webflow is an appropriate fallback. A read failure means the user
+// likely DID configure credentials but the keyring is unreadable — falling
+// through to webflow would mask the real problem.
 func (i *userIdentity) credentialsFromStore() (*types.AWSCredentials, error) {
 	// Use realm for credential isolation between different repositories.
 	credStore := atmosCredentials.NewCredentialStore()
 	retrieved, err := credStore.Retrieve(i.name, i.realm)
 	if err != nil {
-		return nil, fmt.Errorf("%w: failed to retrieve AWS User credentials for %q: %w", errUtils.ErrAwsUserNotConfigured, i.name, err)
+		// Only "not found" maps to "not configured" — every other keyring error
+		// (locked keychain, permission denial, deserialization failure, etc.) is
+		// a real read failure and must not trigger webflow fallback.
+		if errors.Is(err, atmosCredentials.ErrCredentialsNotFound) {
+			return nil, fmt.Errorf("%w: AWS User credentials not found in keyring for identity %q: %w", errUtils.ErrAwsUserNotConfigured, i.name, err)
+		}
+		return nil, fmt.Errorf("%w: identity %q: %w", errUtils.ErrAwsUserKeyringReadFailed, i.name, err)
 	}
 
 	longLivedCreds, ok := retrieved.(*types.AWSCredentials)
 	if !ok {
-		return nil, fmt.Errorf("%w: stored credentials are not AWS credentials", errUtils.ErrAwsAuth)
+		// Stored value exists but is the wrong type — keyring is corrupted, not "missing".
+		return nil, fmt.Errorf("%w: identity %q: stored credentials are not AWS credentials", errUtils.ErrAwsUserKeyringReadFailed, i.name)
 	}
 	if longLivedCreds.AccessKeyID == "" || longLivedCreds.SecretAccessKey == "" {
-		return nil, fmt.Errorf("%w: stored AWS user credentials for %q are incomplete (missing access key or secret)", errUtils.ErrAwsUserNotConfigured, i.name)
+		// Entry exists but is incomplete — also a read failure, not "not configured".
+		return nil, fmt.Errorf("%w: identity %q: stored credentials are incomplete (missing access key or secret)", errUtils.ErrAwsUserKeyringReadFailed, i.name)
 	}
 
 	log.Debug("Using credentials from keyring", logKeyIdentity, i.name)

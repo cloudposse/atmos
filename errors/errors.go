@@ -722,6 +722,7 @@ var (
 	ErrDefaultIdentity              = errors.New("default identity error")
 	ErrAwsAuth                      = errors.New("aws auth error")
 	ErrAwsUserNotConfigured         = errors.New("aws user not configured")
+	ErrAwsUserKeyringReadFailed     = errors.New("failed to read AWS user credentials from keyring")
 	ErrAwsSAMLDecodeFailed          = errors.New("aws saml decode failed")
 	ErrAwsMissingEnvVars            = errors.New("missing required AWS environment variables")
 	ErrUnsupportedPlatform          = errors.New("unsupported platform")
