@@ -30,6 +30,7 @@ type DescribeDependentsExecProps struct {
 	ProcessYamlFunctions bool
 	Skip                 []string
 	AuthManager          auth.AuthManager // Optional: Auth manager for credential management (from --identity flag).
+	AuthDisabled         bool             // True when --identity=false (or alias) explicitly disables authentication; forwarded to DescribeDependentsArgs.
 }
 
 // DescribeDependentsArgs holds arguments for ExecuteDescribeDependents.
@@ -101,6 +102,7 @@ func (d *describeDependentsExec) Execute(describeDependentsExecProps *DescribeDe
 			Skip:                 describeDependentsExecProps.Skip,
 			OnlyInStack:          "", // empty string means process all stacks for direct CLI usage
 			AuthManager:          describeDependentsExecProps.AuthManager,
+			AuthDisabled:         describeDependentsExecProps.AuthDisabled,
 		},
 	)
 	if err != nil {
