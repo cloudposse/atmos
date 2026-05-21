@@ -688,7 +688,7 @@ func addDependentsToDependents(
 
 func processIncludedInDependencies(affected *[]schema.Affected) {
 	for i := 0; i < len(*affected); i++ {
-		a := &((*affected)[i])
+		a := &(*affected)[i]
 		a.IncludedInDependents = processIncludedInDependenciesForAffected(affected, a.StackSlug, i)
 		if !a.IncludedInDependents {
 			processPeerDependencies(&a.Dependents)
@@ -702,7 +702,7 @@ func processIncludedInDependenciesForAffected(affected *[]schema.Affected, stack
 			continue
 		}
 
-		a := &((*affected)[i])
+		a := &(*affected)[i]
 
 		if len(a.Dependents) > 0 {
 			includedInDeps := processIncludedInDependenciesForDependents(&a.Dependents, stackSlug)
@@ -716,7 +716,7 @@ func processIncludedInDependenciesForAffected(affected *[]schema.Affected, stack
 
 func processIncludedInDependenciesForDependents(dependents *[]schema.Dependent, stackSlug string) bool {
 	for i := 0; i < len(*dependents); i++ {
-		d := &((*dependents)[i])
+		d := &(*dependents)[i]
 
 		if d.StackSlug == stackSlug {
 			return true
@@ -734,7 +734,7 @@ func processIncludedInDependenciesForDependents(dependents *[]schema.Dependent, 
 
 func processPeerDependencies(dependents *[]schema.Dependent) {
 	for i := 0; i < len(*dependents); i++ {
-		d := &((*dependents)[i])
+		d := &(*dependents)[i]
 		d.IncludedInDependents = processIncludedInDependenciesForPeerDependencies(dependents, d.StackSlug, i)
 		processPeerDependencies(&d.Dependents)
 	}
@@ -746,7 +746,7 @@ func processIncludedInDependenciesForPeerDependencies(dependents *[]schema.Depen
 			continue
 		}
 
-		d := &((*dependents)[i])
+		d := &(*dependents)[i]
 
 		if d.StackSlug == stackSlug {
 			return true

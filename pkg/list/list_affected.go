@@ -132,7 +132,8 @@ func ExecuteListAffectedCmd(opts *AffectedCommandOptions) error {
 				return fmt.Sprintf("Compared `%s`...`%s`", result.RemoteRef, result.LocalRef), nil
 			}
 			return "Compared branches", nil
-		})
+		},
+	)
 	if err != nil {
 		return fmt.Errorf("failed to get affected components: %w", err)
 	}
