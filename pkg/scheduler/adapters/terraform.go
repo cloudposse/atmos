@@ -3,10 +3,8 @@ package adapters
 import (
 	"context"
 	"fmt"
-	"os"
 	"path/filepath"
 	"sort"
-	"strconv"
 	"sync"
 
 	"github.com/mitchellh/mapstructure"
@@ -74,7 +72,7 @@ func ExecuteTerraform(ctx context.Context, opts TerraformOptions) error {
 	result := scheduler.New(
 		graph,
 		dispatcher,
-		scheduler.WithMaxConcurrency(experimentalMaxConcurrency()),
+		scheduler.WithMaxConcurrency(1),
 	).Run(ctx)
 	if result.Err != nil {
 		return result.Err
@@ -544,17 +542,4 @@ func metadataComponent(metadata map[string]any) string {
 	}
 	component, _ := metadataSection[cfg.ComponentSectionName].(string)
 	return component
-}
-
-func experimentalMaxConcurrency() int {
-	value := os.Getenv("ATMOS_EXPERIMENTAL_DAG_MAX_CONCURRENCY")
-	if value == "" {
-		return 1
-	}
-	maxConcurrency, err := strconv.Atoi(value)
-	if err != nil || maxConcurrency < 1 {
-		log.Warn("Ignoring invalid ATMOS_EXPERIMENTAL_DAG_MAX_CONCURRENCY", "value", value)
-		return 1
-	}
-	return maxConcurrency
 }

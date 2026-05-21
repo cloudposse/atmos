@@ -124,47 +124,7 @@ func TestBuildTerraformGraphFallsBackToSettingsDependsOn(t *testing.T) {
 	require.Equal(t, []string{"vpc-dev"}, app.Dependencies)
 }
 
-func TestExecuteTerraformSerializesSharedPhysicalComponentPath(t *testing.T) {
-	t.Setenv("ATMOS_EXPERIMENTAL_DAG_MAX_CONCURRENCY", "3")
-
-	stacks := map[string]any{
-		"dev": map[string]any{
-			cfg.ComponentsSectionName: map[string]any{
-				cfg.TerraformSectionName: map[string]any{
-					"service-api":    terraformAdapterComponentWithPath("selected", "components/terraform/shared-service"),
-					"service-worker": terraformAdapterComponentWithPath("selected", "components/terraform/shared-service"),
-					"service-cron":   terraformAdapterComponentWithPath("selected", "components/terraform/shared-service"),
-				},
-			},
-		},
-	}
-
-	var active atomic.Int32
-	var maxActive atomic.Int32
-
-	err := ExecuteTerraform(context.Background(), TerraformOptions{
-		AtmosConfig: &schema.AtmosConfiguration{},
-		Info: &schema.ConfigAndStacksInfo{
-			All:        true,
-			SubCommand: "plan",
-		},
-		Stacks: stacks,
-		Executor: func(info schema.ConfigAndStacksInfo) error {
-			current := active.Add(1)
-			updateMaxActive(&maxActive, current)
-			time.Sleep(20 * time.Millisecond)
-			active.Add(-1)
-			return nil
-		},
-	})
-
-	require.NoError(t, err)
-	require.EqualValues(t, 1, maxActive.Load())
-}
-
-func TestExecuteTerraformAllowsParallelDifferentPhysicalComponentPaths(t *testing.T) {
-	t.Setenv("ATMOS_EXPERIMENTAL_DAG_MAX_CONCURRENCY", "3")
-
+func TestExecuteTerraformKeepsIndependentComponentsSequential(t *testing.T) {
 	stacks := map[string]any{
 		"dev": map[string]any{
 			cfg.ComponentsSectionName: map[string]any{
@@ -197,7 +157,7 @@ func TestExecuteTerraformAllowsParallelDifferentPhysicalComponentPaths(t *testin
 	})
 
 	require.NoError(t, err)
-	require.Greater(t, maxActive.Load(), int32(1))
+	require.EqualValues(t, 1, maxActive.Load())
 }
 
 func updateMaxActive(maxActive *atomic.Int32, current int32) {
