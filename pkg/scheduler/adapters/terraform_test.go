@@ -2,13 +2,17 @@ package adapters
 
 import (
 	"context"
+	"errors"
+	"os"
 	"path/filepath"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -24,9 +28,10 @@ func TestExecuteTerraformAllUsesGraphBackedSequentialOrder(t *testing.T) {
 			SubCommand: "plan",
 		},
 		Stacks: stacks,
-		Executor: func(info schema.ConfigAndStacksInfo) error {
+		Executor: func(execution TerraformExecution) (TerraformExecutionResult, error) {
+			info := execution.Info
 			executed = append(executed, info.Component+"@"+info.Stack)
-			return nil
+			return TerraformExecutionResult{}, nil
 		},
 	})
 
@@ -46,9 +51,10 @@ func TestExecuteTerraformComponentsUsesGraphBackedSequentialOrder(t *testing.T) 
 			SubCommand: "plan",
 		},
 		Stacks: stacks,
-		Executor: func(info schema.ConfigAndStacksInfo) error {
+		Executor: func(execution TerraformExecution) (TerraformExecutionResult, error) {
+			info := execution.Info
 			executed = append(executed, info.Component+"@"+info.Stack)
-			return nil
+			return TerraformExecutionResult{}, nil
 		},
 	})
 
@@ -68,9 +74,10 @@ func TestExecuteTerraformQueryUsesGraphBackedSequentialOrder(t *testing.T) {
 			SubCommand: "plan",
 		},
 		Stacks: stacks,
-		Executor: func(info schema.ConfigAndStacksInfo) error {
+		Executor: func(execution TerraformExecution) (TerraformExecutionResult, error) {
+			info := execution.Info
 			executed = append(executed, info.Component+"@"+info.Stack)
-			return nil
+			return TerraformExecutionResult{}, nil
 		},
 	})
 
@@ -89,9 +96,10 @@ func TestExecuteTerraformDestroyUsesReverseDependencyOrder(t *testing.T) {
 			SubCommand: "destroy",
 		},
 		Stacks: stacks,
-		Executor: func(info schema.ConfigAndStacksInfo) error {
+		Executor: func(execution TerraformExecution) (TerraformExecutionResult, error) {
+			info := execution.Info
 			executed = append(executed, info.Component+"@"+info.Stack)
-			return nil
+			return TerraformExecutionResult{}, nil
 		},
 	})
 
@@ -151,9 +159,9 @@ func TestExecuteTerraformKeepsIndependentComponentsSequential(t *testing.T) {
 		"dev": map[string]any{
 			cfg.ComponentsSectionName: map[string]any{
 				cfg.TerraformSectionName: map[string]any{
-					"app":      terraformAdapterComponentWithPath("selected", filepath.Join("components", "terraform", "app")),
-					"database": terraformAdapterComponentWithPath("selected", filepath.Join("components", "terraform", "database")),
-					"vpc":      terraformAdapterComponentWithPath("selected", filepath.Join("components", "terraform", "vpc")),
+					"app":      terraformAdapterComponentWithPath("selected", terraformAdapterPath("app")),
+					"database": terraformAdapterComponentWithPath("selected", terraformAdapterPath("database")),
+					"vpc":      terraformAdapterComponentWithPath("selected", terraformAdapterPath("vpc")),
 				},
 			},
 		},
@@ -169,12 +177,12 @@ func TestExecuteTerraformKeepsIndependentComponentsSequential(t *testing.T) {
 			SubCommand: "plan",
 		},
 		Stacks: stacks,
-		Executor: func(info schema.ConfigAndStacksInfo) error {
+		Executor: func(execution TerraformExecution) (TerraformExecutionResult, error) {
 			current := active.Add(1)
 			updateMaxActive(&maxActive, current)
 			time.Sleep(20 * time.Millisecond)
 			active.Add(-1)
-			return nil
+			return TerraformExecutionResult{}, nil
 		},
 	})
 
@@ -187,9 +195,9 @@ func TestExecuteTerraformAllowsParallelPlanForDifferentPhysicalComponentPaths(t 
 		"dev": map[string]any{
 			cfg.ComponentsSectionName: map[string]any{
 				cfg.TerraformSectionName: map[string]any{
-					"app":      terraformAdapterComponentWithPath("selected", "components/terraform/app"),
-					"database": terraformAdapterComponentWithPath("selected", "components/terraform/database"),
-					"vpc":      terraformAdapterComponentWithPath("selected", "components/terraform/vpc"),
+					"app":      terraformAdapterComponentWithPath("selected", terraformAdapterPath("app")),
+					"database": terraformAdapterComponentWithPath("selected", terraformAdapterPath("database")),
+					"vpc":      terraformAdapterComponentWithPath("selected", terraformAdapterPath("vpc")),
 				},
 			},
 		},
@@ -206,12 +214,12 @@ func TestExecuteTerraformAllowsParallelPlanForDifferentPhysicalComponentPaths(t 
 			MaxConcurrency: 3,
 		},
 		Stacks: stacks,
-		Executor: func(info schema.ConfigAndStacksInfo) error {
+		Executor: func(execution TerraformExecution) (TerraformExecutionResult, error) {
 			current := active.Add(1)
 			updateMaxActive(&maxActive, current)
 			time.Sleep(20 * time.Millisecond)
 			active.Add(-1)
-			return nil
+			return TerraformExecutionResult{}, nil
 		},
 	})
 
@@ -224,9 +232,9 @@ func TestExecuteTerraformSerializesParallelPlanForSharedPhysicalComponentPath(t 
 		"dev": map[string]any{
 			cfg.ComponentsSectionName: map[string]any{
 				cfg.TerraformSectionName: map[string]any{
-					"service-api":    terraformAdapterComponentWithPath("selected", "components/terraform/shared-service"),
-					"service-worker": terraformAdapterComponentWithPath("selected", "components/terraform/shared-service"),
-					"service-cron":   terraformAdapterComponentWithPath("selected", "components/terraform/shared-service"),
+					"service-api":    terraformAdapterComponentWithPath("selected", terraformAdapterPath("shared-service")),
+					"service-worker": terraformAdapterComponentWithPath("selected", terraformAdapterPath("shared-service")),
+					"service-cron":   terraformAdapterComponentWithPath("selected", terraformAdapterPath("shared-service")),
 				},
 			},
 		},
@@ -243,12 +251,12 @@ func TestExecuteTerraformSerializesParallelPlanForSharedPhysicalComponentPath(t 
 			MaxConcurrency: 3,
 		},
 		Stacks: stacks,
-		Executor: func(info schema.ConfigAndStacksInfo) error {
+		Executor: func(execution TerraformExecution) (TerraformExecutionResult, error) {
 			current := active.Add(1)
 			updateMaxActive(&maxActive, current)
 			time.Sleep(20 * time.Millisecond)
 			active.Add(-1)
-			return nil
+			return TerraformExecutionResult{}, nil
 		},
 	})
 
@@ -261,9 +269,9 @@ func TestExecuteTerraformIgnoresMaxConcurrencyForNonPlan(t *testing.T) {
 		"dev": map[string]any{
 			cfg.ComponentsSectionName: map[string]any{
 				cfg.TerraformSectionName: map[string]any{
-					"app":      terraformAdapterComponentWithPath("selected", "components/terraform/app"),
-					"database": terraformAdapterComponentWithPath("selected", "components/terraform/database"),
-					"vpc":      terraformAdapterComponentWithPath("selected", "components/terraform/vpc"),
+					"app":      terraformAdapterComponentWithPath("selected", terraformAdapterPath("app")),
+					"database": terraformAdapterComponentWithPath("selected", terraformAdapterPath("database")),
+					"vpc":      terraformAdapterComponentWithPath("selected", terraformAdapterPath("vpc")),
 				},
 			},
 		},
@@ -280,17 +288,221 @@ func TestExecuteTerraformIgnoresMaxConcurrencyForNonPlan(t *testing.T) {
 			MaxConcurrency: 3,
 		},
 		Stacks: stacks,
-		Executor: func(info schema.ConfigAndStacksInfo) error {
+		Executor: func(execution TerraformExecution) (TerraformExecutionResult, error) {
 			current := active.Add(1)
 			updateMaxActive(&maxActive, current)
 			time.Sleep(20 * time.Millisecond)
 			active.Add(-1)
-			return nil
+			return TerraformExecutionResult{}, nil
 		},
 	})
 
 	require.NoError(t, err)
 	require.EqualValues(t, 1, maxActive.Load())
+}
+
+func TestExecuteTerraformConcurrentStreamLogOrderInjectsStreams(t *testing.T) {
+	stacks := map[string]any{
+		"dev": map[string]any{
+			cfg.ComponentsSectionName: map[string]any{
+				cfg.TerraformSectionName: map[string]any{
+					"app": terraformAdapterComponentWithPath("selected", terraformAdapterPath("app")),
+				},
+			},
+		},
+	}
+
+	var sawStreams bool
+	var sawCapture bool
+	err := ExecuteTerraform(context.Background(), TerraformOptions{
+		AtmosConfig: &schema.AtmosConfiguration{},
+		Info: &schema.ConfigAndStacksInfo{
+			All:                   true,
+			SubCommand:            "plan",
+			MaxConcurrency:        2,
+			TerraformPlanLogOrder: terraformPlanLogOrderStream,
+		},
+		Stacks: stacks,
+		Executor: func(execution TerraformExecution) (TerraformExecutionResult, error) {
+			sawStreams = execution.Stdout != nil && execution.Stderr != nil && execution.Flush != nil
+			sawCapture = execution.CaptureOutput
+			return TerraformExecutionResult{}, nil
+		},
+	})
+
+	require.NoError(t, err)
+	require.True(t, sawStreams)
+	require.False(t, sawCapture)
+}
+
+func TestExecuteTerraformConcurrentGroupedLogOrderCapturesOutput(t *testing.T) {
+	stacks := map[string]any{
+		"dev": map[string]any{
+			cfg.ComponentsSectionName: map[string]any{
+				cfg.TerraformSectionName: map[string]any{
+					"app": terraformAdapterComponentWithPath("selected", terraformAdapterPath("app")),
+				},
+			},
+		},
+	}
+
+	var sawCapture bool
+	err := ExecuteTerraform(context.Background(), TerraformOptions{
+		AtmosConfig: &schema.AtmosConfiguration{},
+		Info: &schema.ConfigAndStacksInfo{
+			All:                   true,
+			SubCommand:            "plan",
+			MaxConcurrency:        2,
+			TerraformPlanLogOrder: terraformPlanLogOrderGrouped,
+		},
+		Stacks: stacks,
+		Executor: func(execution TerraformExecution) (TerraformExecutionResult, error) {
+			sawCapture = execution.CaptureOutput
+			return TerraformExecutionResult{Stdout: "planned\n"}, nil
+		},
+	})
+
+	require.NoError(t, err)
+	require.True(t, sawCapture)
+}
+
+func TestExecuteTerraformRejectsUnsupportedLogOrder(t *testing.T) {
+	stacks := map[string]any{
+		"dev": map[string]any{
+			cfg.ComponentsSectionName: map[string]any{
+				cfg.TerraformSectionName: map[string]any{
+					"app": terraformAdapterComponentWithPath("selected", terraformAdapterPath("app")),
+				},
+			},
+		},
+	}
+	err := ExecuteTerraform(context.Background(), TerraformOptions{
+		AtmosConfig: &schema.AtmosConfiguration{},
+		Info: &schema.ConfigAndStacksInfo{
+			All:                   true,
+			SubCommand:            "plan",
+			MaxConcurrency:        2,
+			TerraformPlanLogOrder: "unknown",
+		},
+		Stacks: stacks,
+		Executor: func(execution TerraformExecution) (TerraformExecutionResult, error) {
+			return TerraformExecutionResult{}, nil
+		},
+	})
+
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "unsupported Terraform plan log order")
+}
+
+func TestTerraformPlanHasNoChanges(t *testing.T) {
+	require.True(t, terraformPlanHasNoChanges(TerraformExecutionResult{
+		Stdout: "No changes. Your infrastructure matches the configuration.\n",
+	}, nil))
+	require.True(t, terraformPlanHasNoChanges(TerraformExecutionResult{
+		Stdout: "\x1b[0m\x1b[1mNo changes. Your infrastructure matches the configuration.\x1b[0m\n",
+	}, nil))
+	require.True(t, terraformPlanHasNoChanges(TerraformExecutionResult{
+		Stdout: "No changes. Infrastructure is up-to-date.\n",
+	}, nil))
+	require.False(t, terraformPlanHasNoChanges(TerraformExecutionResult{
+		Stdout: "Plan: 1 to add, 0 to change, 0 to destroy.\n",
+	}, nil))
+	require.False(t, terraformPlanHasNoChanges(TerraformExecutionResult{}, errUtils.ExitCodeError{Code: 2}))
+	require.False(t, terraformPlanHasNoChanges(TerraformExecutionResult{}, errors.New("terraform failed")))
+}
+
+func TestTerraformHideNoChangesForcesGroupedLogOrder(t *testing.T) {
+	output, err := newTerraformOutput(&schema.AtmosConfiguration{}, &schema.ConfigAndStacksInfo{
+		SubCommand:                 "plan",
+		MaxConcurrency:             2,
+		TerraformPlanLogOrder:      terraformPlanLogOrderStream,
+		TerraformPlanHideNoChanges: true,
+	}, 2)
+
+	require.NoError(t, err)
+	require.Equal(t, terraformPlanLogOrderGrouped, output.logOrder)
+	require.True(t, output.hideNoChanges)
+	require.True(t, output.captureOutput())
+}
+
+func TestExecuteTerraformTreatsPlanExitTwoAsChangedSuccess(t *testing.T) {
+	stacks := map[string]any{
+		"dev": map[string]any{
+			cfg.ComponentsSectionName: map[string]any{
+				cfg.TerraformSectionName: map[string]any{
+					"app":      terraformAdapterComponentWithPath("selected", terraformAdapterPath("app")),
+					"database": terraformAdapterComponentWithPath("selected", terraformAdapterPath("database")),
+				},
+			},
+		},
+	}
+
+	var executed []string
+	err := ExecuteTerraform(context.Background(), TerraformOptions{
+		AtmosConfig: &schema.AtmosConfiguration{},
+		Info: &schema.ConfigAndStacksInfo{
+			All:            true,
+			SubCommand:     "plan",
+			MaxConcurrency: 2,
+		},
+		Stacks: stacks,
+		Executor: func(execution TerraformExecution) (TerraformExecutionResult, error) {
+			executed = append(executed, execution.Info.Component)
+			if execution.Info.Component == "app" {
+				return TerraformExecutionResult{}, errUtils.ExitCodeError{Code: 2}
+			}
+			return TerraformExecutionResult{}, nil
+		},
+	})
+
+	var exitErr errUtils.ExitCodeError
+	require.ErrorAs(t, err, &exitErr)
+	require.Equal(t, 2, exitErr.Code)
+	require.ElementsMatch(t, []string{"app", "database"}, executed)
+}
+
+func TestValidateTerraformConcurrentPlanRequiresWorkdir(t *testing.T) {
+	err := ExecuteTerraform(context.Background(), TerraformOptions{
+		AtmosConfig: &schema.AtmosConfiguration{},
+		Info: &schema.ConfigAndStacksInfo{
+			All:            true,
+			SubCommand:     "plan",
+			MaxConcurrency: 2,
+		},
+		Stacks: terraformAdapterTestStacks(),
+		Executor: func(execution TerraformExecution) (TerraformExecutionResult, error) {
+			return TerraformExecutionResult{}, nil
+		},
+	})
+
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "requires provision.workdir.enabled=true")
+}
+
+func TestWriteTerraformSummaryUsesDeterministicResultOrder(t *testing.T) {
+	tmpDir := t.TempDir()
+	summaryFile := filepath.Join(tmpDir, "summary.json")
+
+	err := ExecuteTerraform(context.Background(), TerraformOptions{
+		AtmosConfig: &schema.AtmosConfiguration{BasePathAbsolute: tmpDir},
+		Info: &schema.ConfigAndStacksInfo{
+			All:                      true,
+			SubCommand:               "plan",
+			MaxConcurrency:           1,
+			TerraformPlanSummaryFile: summaryFile,
+		},
+		Stacks: terraformAdapterTestStacks(),
+		Executor: func(execution TerraformExecution) (TerraformExecutionResult, error) {
+			return TerraformExecutionResult{}, nil
+		},
+	})
+
+	require.NoError(t, err)
+	data, err := os.ReadFile(summaryFile)
+	require.NoError(t, err)
+	require.Contains(t, string(data), `"node_id": "vpc-dev"`)
+	require.Less(t, stringIndex(string(data), `"node_id": "vpc-dev"`), stringIndex(string(data), `"node_id": "database-dev"`))
+	require.Less(t, stringIndex(string(data), `"node_id": "database-dev"`), stringIndex(string(data), `"node_id": "app-dev"`))
 }
 
 func updateMaxActive(maxActive *atomic.Int32, current int32) {
@@ -303,6 +515,14 @@ func updateMaxActive(maxActive *atomic.Int32, current int32) {
 			return
 		}
 	}
+}
+
+func stringIndex(value string, substr string) int {
+	idx := strings.Index(value, substr)
+	if idx < 0 {
+		return len(value)
+	}
+	return idx
 }
 
 func terraformAdapterTestStacks() map[string]any {
@@ -352,5 +572,15 @@ func terraformAdapterComponentWithPath(group, componentPath string) map[string]a
 	component["component_info"] = map[string]any{
 		cfg.ComponentPathSectionName: componentPath,
 	}
+	component["provision"] = map[string]any{
+		"workdir": map[string]any{
+			"enabled": true,
+		},
+	}
 	return component
+}
+
+func terraformAdapterPath(parts ...string) string {
+	segments := append([]string{"components", "terraform"}, parts...)
+	return filepath.Join(segments...)
 }

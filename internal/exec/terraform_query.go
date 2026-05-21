@@ -5,12 +5,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/auth"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/process"
 	scheduleradapters "github.com/cloudposse/atmos/pkg/scheduler/adapters"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/store/authbridge"
@@ -99,18 +101,32 @@ func createQueryAuthManager(info *schema.ConfigAndStacksInfo, atmosConfig *schem
 	return authManager, nil
 }
 
-func executeTerraformQueryComponent(info schema.ConfigAndStacksInfo) error {
-	if info.PerComponentHook == nil {
-		return ExecuteTerraform(info)
+func executeTerraformQueryComponent(execution scheduleradapters.TerraformExecution) (scheduleradapters.TerraformExecutionResult, error) {
+	info := execution.Info
+	var opts []ShellCommandOption
+	if execution.Stdout != nil || execution.Stderr != nil {
+		opts = append(opts, WithProcessStreams(process.Streams{
+			Stdin:  os.Stdin,
+			Stdout: execution.Stdout,
+			Stderr: execution.Stderr,
+		}))
 	}
 
 	var stdoutBuf, stderrBuf bytes.Buffer
-	execErr := ExecuteTerraform(info, WithStdoutCapture(&stdoutBuf), WithStderrCapture(&stderrBuf))
-	combined := stdoutBuf.String()
-	if s := stderrBuf.String(); s != "" {
-		combined += "\n" + s
+	if info.PerComponentHook != nil || execution.CaptureOutput {
+		opts = append(opts, WithStdoutCapture(&stdoutBuf), WithStderrCapture(&stderrBuf))
 	}
+
+	execErr := ExecuteTerraform(info, opts...)
+	result := scheduleradapters.TerraformExecutionResult{
+		Stdout: stdoutBuf.String(),
+		Stderr: stderrBuf.String(),
+	}
+	if info.PerComponentHook == nil {
+		return result, execErr
+	}
+
 	compInfo := info
-	info.PerComponentHook(&compInfo, combined, execErr)
-	return execErr
+	info.PerComponentHook(&compInfo, result.CombinedOutput(), execErr)
+	return result, execErr
 }

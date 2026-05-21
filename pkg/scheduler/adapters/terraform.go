@@ -2,18 +2,26 @@ package adapters
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
+	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"sync"
 
 	"github.com/mitchellh/mapstructure"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/ansi"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/dependency"
+	ioLayer "github.com/cloudposse/atmos/pkg/io"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
+	provWorkdir "github.com/cloudposse/atmos/pkg/provisioner/workdir"
 	"github.com/cloudposse/atmos/pkg/scheduler"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui"
@@ -22,8 +30,46 @@ import (
 
 const terraformNodeIDFormat = "%s-%s"
 
+const (
+	terraformPlanLogOrderStream  = "stream"
+	terraformPlanLogOrderGrouped = "grouped"
+)
+
+// TerraformExecution contains the execution context for one Terraform component.
+type TerraformExecution struct {
+	Info          schema.ConfigAndStacksInfo
+	Stdout        io.Writer
+	Stderr        io.Writer
+	CaptureOutput bool
+	Flush         func() error
+}
+
+// TerraformExecutionResult contains captured output for one Terraform component.
+type TerraformExecutionResult struct {
+	Stdout  string
+	Stderr  string
+	Changed bool
+}
+
+func (r TerraformExecutionResult) CombinedOutput() string {
+	if r.Stderr == "" {
+		return r.Stdout
+	}
+	if r.Stdout == "" {
+		return r.Stderr
+	}
+	return r.Stdout + "\n" + r.Stderr
+}
+
 // TerraformExecutor executes one resolved Terraform component instance.
-type TerraformExecutor func(schema.ConfigAndStacksInfo) error
+type TerraformExecutor func(TerraformExecution) (TerraformExecutionResult, error)
+
+type TerraformNodeOutcome struct {
+	Processed bool              `json:"processed"`
+	Changed   bool              `json:"changed"`
+	ExitCode  int               `json:"exit_code"`
+	LogFiles  map[string]string `json:"log_files,omitempty"`
+}
 
 // TerraformOptions configures graph-backed Terraform bulk execution.
 type TerraformOptions struct {
@@ -34,7 +80,6 @@ type TerraformOptions struct {
 }
 
 // ExecuteTerraform runs selected Terraform components through the shared scheduler.
-// This PR intentionally fixes effective concurrency at 1.
 func ExecuteTerraform(ctx context.Context, opts TerraformOptions) error {
 	defer perf.Track(opts.AtmosConfig, "scheduler.adapters.ExecuteTerraform")()
 
@@ -70,23 +115,39 @@ func ExecuteTerraform(ctx context.Context, opts TerraformOptions) error {
 		}
 	}
 
+	maxConcurrency := effectiveTerraformMaxConcurrency(opts.Info)
+	if err := validateTerraformConcurrentPlan(opts.Info, graph); err != nil {
+		return err
+	}
+	output, err := newTerraformOutput(opts.AtmosConfig, opts.Info, maxConcurrency)
+	if err != nil {
+		return err
+	}
+
 	dispatcher := &TerraformDispatcher{
 		atmosConfig: opts.AtmosConfig,
 		info:        opts.Info,
 		executor:    opts.Executor,
 		locks:       newTerraformResourceLocks(),
+		output:      output,
 	}
 	result := scheduler.New(
 		graph,
 		dispatcher,
-		scheduler.WithMaxConcurrency(effectiveTerraformMaxConcurrency(opts.Info)),
+		scheduler.WithMaxConcurrency(maxConcurrency),
 	).Run(ctx)
+	if err := writeTerraformSummary(opts.Info, result); err != nil {
+		return err
+	}
 	if result.Err != nil {
 		return result.Err
 	}
 
 	if processedCount(result) == 0 {
 		ui.Success("No components matched")
+	}
+	if terraformPlanChanged(result) {
+		return errUtils.ExitCodeError{Code: 2}
 	}
 	return nil
 }
@@ -193,12 +254,30 @@ func FilterTerraformGraph(atmosConfig *schema.AtmosConfiguration, graph *depende
 	}), nil
 }
 
+func validateTerraformConcurrentPlan(info *schema.ConfigAndStacksInfo, graph *dependency.Graph) error {
+	if effectiveTerraformMaxConcurrency(info) <= 1 {
+		return nil
+	}
+	if info.Identity == cfg.IdentityFlagSelectValue {
+		return fmt.Errorf("%w: --max-concurrency requires a non-interactive identity value", errUtils.ErrInvalidConfig)
+	}
+	for _, nodeID := range sortedGraphNodeIDs(graph) {
+		node := graph.Nodes[nodeID]
+		if node == nil || provWorkdir.IsWorkdirEnabled(node.Metadata) {
+			continue
+		}
+		return fmt.Errorf("%w: concurrent Terraform plan requires provision.workdir.enabled=true for component %q in stack %q", errUtils.ErrInvalidConfig, node.Component, node.Stack)
+	}
+	return nil
+}
+
 // TerraformDispatcher adapts scheduler nodes to Terraform component execution.
 type TerraformDispatcher struct {
 	atmosConfig *schema.AtmosConfiguration
 	info        *schema.ConfigAndStacksInfo
 	executor    TerraformExecutor
 	locks       *terraformResourceLocks
+	output      *terraformOutput
 }
 
 // Dispatch executes one Terraform scheduler node.
@@ -227,10 +306,39 @@ func (d *TerraformDispatcher) Dispatch(_ context.Context, node *dependency.Node)
 	unlock := d.lockTerraformResource(node)
 	defer unlock()
 
-	if err := d.executor(nodeInfo); err != nil {
-		return scheduler.Result{NodeID: node.ID, Status: scheduler.StatusFailed, Value: true}, fmt.Errorf("%w: component=%s stack=%s: %w", errUtils.ErrTerraformExecFailed, node.Component, node.Stack, err)
+	execution := TerraformExecution{
+		Info: nodeInfo,
 	}
-	return scheduler.Result{NodeID: node.ID, Status: scheduler.StatusSucceeded, Value: true}, nil
+	outcome := TerraformNodeOutcome{
+		Processed: true,
+	}
+	if d.output != nil {
+		var logFiles map[string]string
+		execution.Stdout, execution.Stderr, execution.Flush, logFiles = d.output.nodeWriters(node)
+		execution.CaptureOutput = d.output.captureOutput()
+		outcome.LogFiles = logFiles
+	}
+
+	execResult, err := d.executor(execution)
+	outcome.ExitCode = terraformExitCode(err)
+	outcome.Changed = terraformPlanChangedError(d.info, err)
+	if execution.Flush != nil {
+		if flushErr := execution.Flush(); flushErr != nil && err == nil {
+			err = flushErr
+			outcome.ExitCode = terraformExitCode(err)
+		}
+	}
+	if d.output != nil {
+		execResult.Changed = outcome.Changed
+		d.output.finishNode(node, execResult, err)
+	}
+	if outcome.Changed {
+		return scheduler.Result{NodeID: node.ID, Status: scheduler.StatusSucceeded, Value: outcome}, nil
+	}
+	if err != nil {
+		return scheduler.Result{NodeID: node.ID, Status: scheduler.StatusFailed, Value: outcome}, fmt.Errorf("%w: component=%s stack=%s: %w", errUtils.ErrTerraformExecFailed, node.Component, node.Stack, err)
+	}
+	return scheduler.Result{NodeID: node.ID, Status: scheduler.StatusSucceeded, Value: outcome}, nil
 }
 
 func (d *TerraformDispatcher) lockTerraformResource(node *dependency.Node) func() {
@@ -525,6 +633,11 @@ func processedCount(result *scheduler.AggregateResult) int {
 		return count
 	}
 	for _, nodeResult := range result.Results {
+		outcome, ok := nodeResult.Value.(TerraformNodeOutcome)
+		if ok && outcome.Processed {
+			count++
+			continue
+		}
 		processed, ok := nodeResult.Value.(bool)
 		if ok && processed {
 			count++
@@ -598,6 +711,289 @@ func metadataComponent(metadata map[string]any) string {
 	}
 	component, _ := metadataSection[cfg.ComponentSectionName].(string)
 	return component
+}
+
+type terraformOutput struct {
+	logOrder      string
+	hideNoChanges bool
+	logDir        string
+	stdoutMu      sync.Mutex
+	stderrMu      sync.Mutex
+	groupMu       sync.Mutex
+}
+
+func newTerraformOutput(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, maxConcurrency int) (*terraformOutput, error) {
+	hideNoChanges := info != nil && info.TerraformPlanHideNoChanges
+	if maxConcurrency <= 1 && !hideNoChanges {
+		return nil, nil
+	}
+	logOrder := terraformPlanLogOrderStream
+	if info != nil && info.TerraformPlanLogOrder != "" {
+		logOrder = strings.ToLower(info.TerraformPlanLogOrder)
+	}
+	if hideNoChanges {
+		logOrder = terraformPlanLogOrderGrouped
+	}
+	switch logOrder {
+	case terraformPlanLogOrderStream, terraformPlanLogOrderGrouped:
+	default:
+		return nil, fmt.Errorf("%w: unsupported Terraform plan log order %q", errUtils.ErrInvalidConfig, logOrder)
+	}
+	logDir := terraformLogDir(atmosConfig)
+	return &terraformOutput{
+		logOrder:      logOrder,
+		hideNoChanges: hideNoChanges,
+		logDir:        logDir,
+	}, nil
+}
+
+func (o *terraformOutput) captureOutput() bool {
+	return o != nil && o.logOrder == terraformPlanLogOrderGrouped
+}
+
+func (o *terraformOutput) nodeWriters(node *dependency.Node) (io.Writer, io.Writer, func() error, map[string]string) {
+	if o == nil {
+		return nil, nil, nil, nil
+	}
+	stdoutFile, stderrFile, logFiles := o.openNodeLogFiles(node)
+	if o.logOrder == terraformPlanLogOrderGrouped {
+		stdout := combineWriters(io.Discard, stdoutFile)
+		stderr := combineWriters(io.Discard, stderrFile)
+		return stdout, stderr, closeTerraformLogFiles(stdoutFile, stderrFile), logFiles
+	}
+	label := terraformNodeLabel(node)
+	stdout := ioLayer.NewLinePrefixWriter(label, os.Stdout, &o.stdoutMu)
+	stderr := ioLayer.NewLinePrefixWriter(label, os.Stderr, &o.stderrMu)
+	return combineWriters(stdout, stdoutFile), combineWriters(stderr, stderrFile), func() error {
+		if err := stdout.Flush(); err != nil {
+			return err
+		}
+		if err := stderr.Flush(); err != nil {
+			return err
+		}
+		return closeTerraformLogFiles(stdoutFile, stderrFile)()
+	}, logFiles
+}
+
+func (o *terraformOutput) openNodeLogFiles(node *dependency.Node) (*os.File, *os.File, map[string]string) {
+	if o == nil || o.logDir == "" {
+		return nil, nil, nil
+	}
+	if err := os.MkdirAll(o.logDir, 0o755); err != nil {
+		log.Warn("Failed to create Terraform plan log directory", "dir", o.logDir, "error", err)
+		return nil, nil, nil
+	}
+	nodeName := safeTerraformLogName(terraformNodeLabel(node))
+	stdoutPath := filepath.Join(o.logDir, nodeName+".stdout.log")
+	stderrPath := filepath.Join(o.logDir, nodeName+".stderr.log")
+	stdoutFile, stdoutErr := os.Create(stdoutPath)
+	if stdoutErr != nil {
+		log.Warn("Failed to create Terraform plan stdout log", "file", stdoutPath, "error", stdoutErr)
+	}
+	stderrFile, stderrErr := os.Create(stderrPath)
+	if stderrErr != nil {
+		log.Warn("Failed to create Terraform plan stderr log", "file", stderrPath, "error", stderrErr)
+	}
+	logFiles := make(map[string]string)
+	if stdoutFile != nil {
+		logFiles["stdout"] = stdoutPath
+	}
+	if stderrFile != nil {
+		logFiles["stderr"] = stderrPath
+	}
+	if len(logFiles) == 0 {
+		return stdoutFile, stderrFile, nil
+	}
+	return stdoutFile, stderrFile, logFiles
+}
+
+func combineWriters(primary io.Writer, secondary io.Writer) io.Writer {
+	if primary == nil {
+		primary = io.Discard
+	}
+	if secondary == nil {
+		return primary
+	}
+	return io.MultiWriter(primary, secondary)
+}
+
+func closeTerraformLogFiles(files ...*os.File) func() error {
+	return func() error {
+		var errs []error
+		for _, file := range files {
+			if file == nil {
+				continue
+			}
+			if err := file.Close(); err != nil {
+				errs = append(errs, err)
+			}
+		}
+		return errors.Join(errs...)
+	}
+}
+
+func terraformLogDir(atmosConfig *schema.AtmosConfiguration) string {
+	if atmosConfig == nil {
+		return ""
+	}
+	basePath := atmosConfig.BasePathAbsolute
+	if basePath == "" {
+		basePath = atmosConfig.BasePath
+	}
+	if basePath == "" {
+		return ""
+	}
+	return filepath.Join(basePath, ".atmos", "logs", "terraform", "plan")
+}
+
+func safeTerraformLogName(label string) string {
+	label = strings.TrimSpace(label)
+	if label == "" {
+		return "terraform"
+	}
+	replacer := strings.NewReplacer("/", "__", "\\", "__", ":", "_", " ", "_")
+	return replacer.Replace(label)
+}
+
+func (o *terraformOutput) finishNode(node *dependency.Node, result TerraformExecutionResult, execErr error) {
+	if o == nil || o.logOrder != terraformPlanLogOrderGrouped {
+		return
+	}
+	if o.hideNoChanges && terraformPlanHasNoChanges(result, execErr) {
+		return
+	}
+	o.groupMu.Lock()
+	defer o.groupMu.Unlock()
+
+	label := terraformNodeLabel(node)
+	status := "succeeded"
+	if execErr != nil {
+		status = "failed"
+	}
+	fmt.Fprintf(os.Stderr, "\n[%s] terraform plan %s\n", label, status)
+	replayGroupedOutput(ioLayer.MaskWriter(os.Stdout), result.Stdout)
+	replayGroupedOutput(ioLayer.MaskWriter(os.Stderr), result.Stderr)
+	fmt.Fprintf(os.Stderr, "[%s] end terraform plan output\n", label)
+}
+
+func replayGroupedOutput(w io.Writer, output string) {
+	if output == "" {
+		return
+	}
+	if _, err := io.WriteString(w, output); err != nil {
+		return
+	}
+	if output[len(output)-1] != '\n' {
+		_, _ = io.WriteString(w, "\n")
+	}
+}
+
+func terraformPlanHasNoChanges(result TerraformExecutionResult, execErr error) bool {
+	var exitCodeErr errUtils.ExitCodeError
+	if errors.As(execErr, &exitCodeErr) {
+		return exitCodeErr.Code == 0
+	}
+	if execErr != nil {
+		return false
+	}
+	output := ansi.Strip(result.CombinedOutput())
+	return strings.Contains(output, "No changes. Your infrastructure matches the configuration.") ||
+		strings.Contains(output, "No changes. Infrastructure is up-to-date.")
+}
+
+func terraformPlanChangedError(info *schema.ConfigAndStacksInfo, err error) bool {
+	if info == nil || info.SubCommand != "plan" {
+		return false
+	}
+	var exitCodeErr errUtils.ExitCodeError
+	return errors.As(err, &exitCodeErr) && exitCodeErr.Code == 2
+}
+
+func terraformExitCode(err error) int {
+	if err == nil {
+		return 0
+	}
+	var exitCodeErr errUtils.ExitCodeError
+	if errors.As(err, &exitCodeErr) {
+		return exitCodeErr.Code
+	}
+	return 1
+}
+
+func terraformPlanChanged(result *scheduler.AggregateResult) bool {
+	if result == nil {
+		return false
+	}
+	for _, nodeResult := range result.Results {
+		outcome, ok := nodeResult.Value.(TerraformNodeOutcome)
+		if ok && outcome.Changed {
+			return true
+		}
+	}
+	return false
+}
+
+type terraformSummary struct {
+	Results []terraformSummaryResult `json:"results"`
+}
+
+type terraformSummaryResult struct {
+	NodeID    string            `json:"node_id"`
+	Stack     string            `json:"stack"`
+	Component string            `json:"component"`
+	Status    scheduler.Status  `json:"status"`
+	Processed bool              `json:"processed"`
+	Changed   bool              `json:"changed"`
+	ExitCode  int               `json:"exit_code"`
+	LogFiles  map[string]string `json:"log_files,omitempty"`
+	Error     string            `json:"error,omitempty"`
+}
+
+func writeTerraformSummary(info *schema.ConfigAndStacksInfo, result *scheduler.AggregateResult) error {
+	if info == nil || info.TerraformPlanSummaryFile == "" || result == nil {
+		return nil
+	}
+	summary := terraformSummary{Results: make([]terraformSummaryResult, 0, len(result.Results))}
+	for _, nodeResult := range result.Results {
+		outcome, _ := nodeResult.Value.(TerraformNodeOutcome)
+		entry := terraformSummaryResult{
+			NodeID:    nodeResult.NodeID,
+			Stack:     nodeResult.Node.Stack,
+			Component: nodeResult.Node.Component,
+			Status:    nodeResult.Status,
+			Processed: outcome.Processed,
+			Changed:   outcome.Changed,
+			ExitCode:  outcome.ExitCode,
+			LogFiles:  outcome.LogFiles,
+		}
+		if nodeResult.Err != nil {
+			entry.Error = nodeResult.Err.Error()
+			if entry.ExitCode == 0 {
+				entry.ExitCode = 1
+			}
+		}
+		summary.Results = append(summary.Results, entry)
+	}
+	data, err := json.MarshalIndent(summary, "", "  ")
+	if err != nil {
+		return err
+	}
+	path := info.TerraformPlanSummaryFile
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return err
+	}
+	data = append(data, '\n')
+	return os.WriteFile(path, data, 0o644)
+}
+
+func terraformNodeLabel(node *dependency.Node) string {
+	if node == nil {
+		return "terraform"
+	}
+	if node.Stack == "" {
+		return node.Component
+	}
+	return node.Stack + "/" + node.Component
 }
 
 func effectiveTerraformMaxConcurrency(info *schema.ConfigAndStacksInfo) int {
