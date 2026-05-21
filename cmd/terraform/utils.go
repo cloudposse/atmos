@@ -244,7 +244,8 @@ func resolveComponentPath(info *schema.ConfigAndStacksInfo, commandName string) 
 		return handlePathResolutionError(err)
 	}
 
-	log.Debug("Resolved component from path",
+	log.Debug(
+		"Resolved component from path",
 		"original_path", info.ComponentFromArg,
 		"resolved_component", resolvedComponent,
 		"stack", info.Stack,

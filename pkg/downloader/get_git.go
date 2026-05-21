@@ -295,7 +295,8 @@ func setupGitEnv(cmd *exec.Cmd, sshKeyFile string) {
 
 	// Always enforce SSH timeouts — these bound the worst-case time a hung
 	// SSH connection can stall the pipeline.
-	sshCmd = append(sshCmd,
+	sshCmd = append(
+		sshCmd,
 		"-o", "ConnectTimeout="+sshConnectTimeoutSeconds,
 		"-o", "ServerAliveInterval="+sshServerAliveInterval,
 		"-o", "ServerAliveCountMax="+sshServerAliveCountMax,
@@ -330,7 +331,8 @@ func getRunCommand(cmd *exec.Cmd) error {
 				errUtils.ErrGitCommandExited,
 				cmd.Path,
 				status.ExitStatus(),
-				buf.String())
+				buf.String(),
+			)
 		}
 	}
 
