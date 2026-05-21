@@ -2,6 +2,7 @@ package exec
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -487,6 +488,73 @@ func TestProcessTerraformComponent(t *testing.T) {
 		assert.Error(t, err)
 		assert.True(t, processed)
 		assert.True(t, called)
+	})
+
+	t.Run("per-component hook fires on success with captured output", func(t *testing.T) {
+		section := newSection(map[string]any{"enabled": true})
+		hookCalled := false
+		var hookComponent, hookStack, hookOutput string
+		var hookErr error
+
+		info := schema.ConfigAndStacksInfo{
+			SubCommand: "plan",
+			PerComponentHook: func(ci *schema.ConfigAndStacksInfo, output string, execErr error) {
+				hookCalled = true
+				hookComponent = ci.Component
+				hookStack = ci.Stack
+				hookOutput = output
+				hookErr = execErr
+			},
+		}
+
+		// Executor writes to the capture buffers provided via ShellCommandOption.
+		executor := func(_ schema.ConfigAndStacksInfo, opts ...ShellCommandOption) error {
+			c := &shellCommandConfig{}
+			for _, opt := range opts {
+				opt(c)
+			}
+			if c.stdoutCapture != nil {
+				fmt.Fprint(c.stdoutCapture, "plan-stdout")
+			}
+			if c.stderrCapture != nil {
+				fmt.Fprint(c.stderrCapture, "plan-stderr")
+			}
+			return nil
+		}
+
+		processed, err := processTerraformComponent(&atmosConfig, &info, stack, component, section, logFunc, executor)
+
+		assert.NoError(t, err)
+		assert.True(t, processed)
+		assert.True(t, hookCalled)
+		assert.Equal(t, component, hookComponent)
+		assert.Equal(t, stack, hookStack)
+		assert.Contains(t, hookOutput, "plan-stdout")
+		assert.Contains(t, hookOutput, "plan-stderr")
+		assert.NoError(t, hookErr)
+	})
+
+	t.Run("per-component hook fires before error is returned", func(t *testing.T) {
+		section := newSection(map[string]any{"enabled": true})
+		expectedErr := errors.New("terraform failed")
+		hookCalled := false
+		var hookErr error
+
+		info := schema.ConfigAndStacksInfo{
+			SubCommand: "plan",
+			PerComponentHook: func(ci *schema.ConfigAndStacksInfo, output string, execErr error) {
+				hookCalled = true
+				hookErr = execErr
+			},
+		}
+
+		_, err := processTerraformComponent(&atmosConfig, &info, stack, component, section, logFunc,
+			func(_ schema.ConfigAndStacksInfo, _ ...ShellCommandOption) error { return expectedErr },
+		)
+
+		assert.ErrorIs(t, err, expectedErr)
+		assert.True(t, hookCalled, "hook must fire even when executor fails")
+		assert.ErrorIs(t, hookErr, expectedErr)
 	})
 }
 

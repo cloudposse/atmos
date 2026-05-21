@@ -1092,6 +1092,12 @@ type ConfigAndStacksInfo struct {
 	Identity                  string
 	ClusterName               string // EKS cluster name from --cluster-name flag.
 	NeedsPathResolution       bool   // True if ComponentFromArg is a path that needs resolution.
+
+	// PerComponentHook is called after each component executes in multi-component mode
+	// (--all, --query, --components). Receives a snapshot of info with Component/Stack
+	// set to the executed component, combined stdout+stderr output, and the execution
+	// error (nil on success). Nil means no per-component callback.
+	PerComponentHook func(info *ConfigAndStacksInfo, output string, execErr error)
 }
 
 // GetComponentEnvSection returns the component's env section map.

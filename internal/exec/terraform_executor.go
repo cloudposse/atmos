@@ -1,6 +1,7 @@
 package exec
 
 import (
+	"bytes"
 	"fmt"
 
 	log "github.com/charmbracelet/log"
@@ -11,6 +12,10 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
+
+// execTerraformFn is the function used to execute a Terraform command.
+// Package-level variable to allow test injection without gomonkey.
+var execTerraformFn = ExecuteTerraform
 
 // executeTerraformForNode executes terraform for a single dependency graph node.
 func executeTerraformForNode(
@@ -118,8 +123,26 @@ func executeNodeCommand(node *dependency.Node, info *schema.ConfigAndStacksInfo)
 
 	log.Debug("Executing", "command", command)
 
+	// When a per-component hook is registered, capture this component's output
+	// and invoke the hook immediately after execution so each component receives
+	// its own CI summary entry rather than sharing the final global call.
+	if info.PerComponentHook != nil {
+		var stdoutBuf, stderrBuf bytes.Buffer
+		execErr := execTerraformFn(*info, WithStdoutCapture(&stdoutBuf), WithStderrCapture(&stderrBuf))
+		combined := stdoutBuf.String()
+		if s := stderrBuf.String(); s != "" {
+			combined += "\n" + s
+		}
+		compInfo := *info // snapshot with this component's Component/Stack values set.
+		info.PerComponentHook(&compInfo, combined, execErr)
+		if execErr != nil {
+			return fmt.Errorf("%w: %w", errUtils.ErrTerraformExecFailed, execErr)
+		}
+		return nil
+	}
+
 	// Execute the terraform command.
-	if err := ExecuteTerraform(*info); err != nil {
+	if err := execTerraformFn(*info); err != nil {
 		return fmt.Errorf("%w: %w", errUtils.ErrTerraformExecFailed, err)
 	}
 
