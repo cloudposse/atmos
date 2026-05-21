@@ -114,7 +114,8 @@ func TestBuildTerraformGraphPrefersDependenciesComponentsOverSettingsDependsOn(t
 				cfg.TerraformSectionName: map[string]any{
 					"vpc":      terraformAdapterComponent("selected", nil, nil),
 					"database": terraformAdapterComponent("selected", nil, nil),
-					"app": terraformAdapterComponent("selected",
+					"app": terraformAdapterComponent(
+						"selected",
 						[]any{map[string]any{"component": "vpc"}},
 						[]any{map[string]any{"component": "database"}},
 					),
@@ -137,7 +138,8 @@ func TestBuildTerraformGraphFallsBackToSettingsDependsOn(t *testing.T) {
 			cfg.ComponentsSectionName: map[string]any{
 				cfg.TerraformSectionName: map[string]any{
 					"vpc": terraformAdapterComponent("selected", nil, nil),
-					"app": terraformAdapterComponent("selected",
+					"app": terraformAdapterComponent(
+						"selected",
 						nil,
 						[]any{map[string]any{"component": "vpc"}},
 					),
@@ -530,11 +532,13 @@ func terraformAdapterTestStacks() map[string]any {
 		"dev": map[string]any{
 			cfg.ComponentsSectionName: map[string]any{
 				cfg.TerraformSectionName: map[string]any{
-					"app": terraformAdapterComponent("selected",
+					"app": terraformAdapterComponent(
+						"selected",
 						[]any{map[string]any{"component": "database"}},
 						nil,
 					),
-					"database": terraformAdapterComponent("selected",
+					"database": terraformAdapterComponent(
+						"selected",
 						[]any{map[string]any{"component": "vpc"}},
 						nil,
 					),
