@@ -1,6 +1,8 @@
 package exec
 
 import (
+	"bytes"
+	"context"
 	"errors"
 	"fmt"
 
@@ -9,9 +11,9 @@ import (
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
+	scheduleradapters "github.com/cloudposse/atmos/pkg/scheduler/adapters"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/store/authbridge"
-	"github.com/cloudposse/atmos/pkg/ui"
 )
 
 // authManagerFactory creates an AuthManager from the given parameters.
@@ -29,9 +31,6 @@ func ExecuteTerraformQuery(info *schema.ConfigAndStacksInfo) error {
 	if err != nil {
 		return err
 	}
-
-	// Always use debug level for internal logging.
-	logFunc := log.Debug
 
 	// Create auth manager for YAML function processing during stack description.
 	// Without this, YAML functions like !terraform.state fail when using --all
@@ -66,26 +65,12 @@ func ExecuteTerraformQuery(info *schema.ConfigAndStacksInfo) error {
 		return err
 	}
 
-	// Track how many components were processed.
-	processedCount := 0
-
-	err = walkTerraformComponents(stacks, func(stackName, componentName string, componentSection map[string]any) error {
-		processed, err := processTerraformComponent(&atmosConfig, info, stackName, componentName, componentSection, logFunc, ExecuteTerraform)
-		if processed {
-			processedCount++
-		}
-		return err
+	return scheduleradapters.ExecuteTerraform(context.Background(), scheduleradapters.TerraformOptions{
+		AtmosConfig: &atmosConfig,
+		Info:        info,
+		Stacks:      stacks,
+		Executor:    executeTerraformQueryComponent,
 	})
-	if err != nil {
-		return err
-	}
-
-	// Show success message if no components matched the criteria.
-	if processedCount == 0 {
-		ui.Success("No components matched")
-	}
-
-	return nil
 }
 
 // createQueryAuthManager creates an AuthManager for multi-component execution paths.
@@ -112,4 +97,20 @@ func createQueryAuthManager(info *schema.ConfigAndStacksInfo, atmosConfig *schem
 	}
 
 	return authManager, nil
+}
+
+func executeTerraformQueryComponent(info schema.ConfigAndStacksInfo) error {
+	if info.PerComponentHook == nil {
+		return ExecuteTerraform(info)
+	}
+
+	var stdoutBuf, stderrBuf bytes.Buffer
+	execErr := ExecuteTerraform(info, WithStdoutCapture(&stdoutBuf), WithStderrCapture(&stderrBuf))
+	combined := stdoutBuf.String()
+	if s := stderrBuf.String(); s != "" {
+		combined += "\n" + s
+	}
+	compInfo := info
+	info.PerComponentHook(&compInfo, combined, execErr)
+	return execErr
 }
