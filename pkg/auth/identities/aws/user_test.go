@@ -136,9 +136,19 @@ func (s stubUser) Paths() ([]types.Path, error)            { return []types.Path
 func (s stubUser) PostAuthenticate(_ context.Context, _ *types.PostAuthenticateParams) error {
 	return nil
 }
-func (s stubUser) Logout(_ context.Context) error                                { return nil }
-func (s stubUser) CredentialsExist() (bool, error)                               { return true, nil }
-func (s stubUser) LoadCredentials(_ context.Context) (types.ICredentials, error) { return s.creds, nil }
+
+func (s stubUser) Logout(_ context.Context) error {
+	return nil
+}
+
+func (s stubUser) CredentialsExist() (bool, error) {
+	return true, nil
+}
+
+func (s stubUser) LoadCredentials(_ context.Context) (types.ICredentials, error) {
+	return s.creds, nil
+}
+
 func (s stubUser) PrepareEnvironment(_ context.Context, environ map[string]string) (map[string]string, error) {
 	return environ, nil
 }

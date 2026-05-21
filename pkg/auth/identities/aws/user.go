@@ -105,7 +105,8 @@ func (i *userIdentity) Authenticate(ctx context.Context, _ types.ICredentials) (
 		//     is unreadable (locked keychain, permission denial, corrupted entry). Falling
 		//     through to webflow would mask the real problem and ignore configured creds.
 		if i.shouldFallBackToWebflow(err) {
-			log.Info("No AWS credentials in YAML or keyring; starting browser-based authentication",
+			log.Info(
+				"No AWS credentials in YAML or keyring; starting browser-based authentication",
 				logKeyIdentity, i.name,
 				"reason", err.Error(),
 				"hint", fmt.Sprintf("Run 'atmos auth user configure --identity %s' to store credentials, or set credentials.webflow_enabled: false to disable browser auth", i.name),
