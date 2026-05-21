@@ -114,6 +114,7 @@ func TestInstallFromTool_RemovesTamperedCachedAsset(t *testing.T) {
 	cacheDir := t.TempDir()
 	cachedPath := filepath.Join(cacheDir, assetName)
 	require.NoError(t, os.WriteFile(cachedPath, []byte("tampered"), 0o644))
+	require.NoError(t, os.WriteFile(cacheSourceURLPath(cachedPath), []byte(ts.URL+"/"+assetName+"\n"), 0o644))
 
 	installer := &Installer{
 		cacheDir:           cacheDir,

@@ -69,7 +69,7 @@ func (i *Installer) downloadAsset(url string) (string, error) {
 func cachedAssetMatchesURL(cachePath, url string) bool {
 	data, err := os.ReadFile(cacheSourceURLPath(cachePath))
 	if err != nil {
-		return os.IsNotExist(err)
+		return false
 	}
 	return strings.TrimSpace(string(data)) == url
 }
@@ -274,6 +274,9 @@ func (i *Installer) tryFallbackVersion(tool *registry.Tool, version, assetURL st
 	assetPath, err := i.downloadAsset(fallbackURL)
 	if err == nil {
 		return assetPath, fallbackURL, nil
+	}
+	if !isHTTP404(err) {
+		return "", "", err
 	}
 
 	// Both URLs failed - create a user-friendly error message.
