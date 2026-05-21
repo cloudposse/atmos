@@ -4,8 +4,10 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
 	"sort"
 	"strconv"
+	"sync"
 
 	"github.com/mitchellh/mapstructure"
 
@@ -67,6 +69,7 @@ func ExecuteTerraform(ctx context.Context, opts TerraformOptions) error {
 		atmosConfig: opts.AtmosConfig,
 		info:        opts.Info,
 		executor:    opts.Executor,
+		locks:       newTerraformResourceLocks(),
 	}
 	result := scheduler.New(
 		graph,
@@ -148,6 +151,7 @@ type TerraformDispatcher struct {
 	atmosConfig *schema.AtmosConfiguration
 	info        *schema.ConfigAndStacksInfo
 	executor    TerraformExecutor
+	locks       *terraformResourceLocks
 }
 
 // Dispatch executes one Terraform scheduler node.
@@ -173,10 +177,25 @@ func (d *TerraformDispatcher) Dispatch(_ context.Context, node *dependency.Node)
 	nodeInfo.Stack = node.Stack
 	nodeInfo.StackFromArg = node.Stack
 
+	unlock := d.lockTerraformResource(node)
+	defer unlock()
+
 	if err := d.executor(nodeInfo); err != nil {
 		return scheduler.Result{NodeID: node.ID, Status: scheduler.StatusFailed, Value: true}, fmt.Errorf("%w: component=%s stack=%s: %w", errUtils.ErrTerraformExecFailed, node.Component, node.Stack, err)
 	}
 	return scheduler.Result{NodeID: node.ID, Status: scheduler.StatusSucceeded, Value: true}, nil
+}
+
+func (d *TerraformDispatcher) lockTerraformResource(node *dependency.Node) func() {
+	key := terraformResourceKey(node)
+	if key == "" {
+		return func() {}
+	}
+	if d.locks == nil {
+		return func() {}
+	}
+	log.Debug("Locking Terraform execution resource", "component", node.Component, "stack", node.Stack, "resource", key)
+	return d.locks.Lock(key)
 }
 
 func (d *TerraformDispatcher) shouldSkipByQuery(node *dependency.Node) bool {
@@ -462,6 +481,69 @@ func processedCount(result *scheduler.AggregateResult) int {
 
 func terraformNodeID(componentName, stackName string) string {
 	return fmt.Sprintf(terraformNodeIDFormat, componentName, stackName)
+}
+
+type terraformResourceLocks struct {
+	mu    sync.Mutex
+	locks map[string]*sync.Mutex
+}
+
+func newTerraformResourceLocks() *terraformResourceLocks {
+	return &terraformResourceLocks{
+		locks: make(map[string]*sync.Mutex),
+	}
+}
+
+func (l *terraformResourceLocks) Lock(key string) func() {
+	l.mu.Lock()
+	lock, ok := l.locks[key]
+	if !ok {
+		lock = &sync.Mutex{}
+		l.locks[key] = lock
+	}
+	l.mu.Unlock()
+
+	lock.Lock()
+	return lock.Unlock
+}
+
+func terraformResourceKey(node *dependency.Node) string {
+	if node == nil {
+		return ""
+	}
+	if path := componentInfoPath(node.Metadata); path != "" {
+		return "path:" + filepath.ToSlash(filepath.Clean(filepath.FromSlash(path)))
+	}
+	if component := componentField(node.Metadata); component != "" {
+		return "component:" + component
+	}
+	if component := metadataComponent(node.Metadata); component != "" {
+		return "component:" + component
+	}
+	return "component:" + node.Component
+}
+
+func componentInfoPath(metadata map[string]any) string {
+	componentInfo, ok := metadata["component_info"].(map[string]any)
+	if !ok {
+		return ""
+	}
+	path, _ := componentInfo[cfg.ComponentPathSectionName].(string)
+	return path
+}
+
+func componentField(metadata map[string]any) string {
+	component, _ := metadata[cfg.ComponentSectionName].(string)
+	return component
+}
+
+func metadataComponent(metadata map[string]any) string {
+	metadataSection, ok := metadata[cfg.MetadataSectionName].(map[string]any)
+	if !ok {
+		return ""
+	}
+	component, _ := metadataSection[cfg.ComponentSectionName].(string)
+	return component
 }
 
 func experimentalMaxConcurrency() int {
