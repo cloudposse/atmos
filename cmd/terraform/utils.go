@@ -119,7 +119,7 @@ func runHooksWithOutput(event h.HookEvent, cmd_ *cobra.Command, args []string, o
 	}
 
 	if hooks != nil && hooks.HasHooks() {
-		log.Info("Running hooks", "event", event)
+		log.Debug("Running hooks", "event", event)
 		if err := hooks.RunAll(event, &atmosConfig, &info, cmd_, args); err != nil {
 			return err
 		}

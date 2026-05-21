@@ -701,3 +701,19 @@ func TestCopyToTarget_WithCombinedPatterns(t *testing.T) {
 	_, err = os.Stat(filepath.Join(targetDir, "README.md"))
 	assert.True(t, os.IsNotExist(err), "README.md should not be copied")
 }
+
+func TestDefaultProvisionRetryConfig(t *testing.T) {
+	cfg := defaultProvisionRetryConfig()
+	require.NotNil(t, cfg)
+	require.NotNil(t, cfg.MaxAttempts)
+	assert.Equal(t, 3, *cfg.MaxAttempts, "auto-provision should retry up to 3 times by default so transient remote failures don't fail the whole apply")
+	assert.Equal(t, schema.BackoffExponential, cfg.BackoffStrategy)
+	require.NotNil(t, cfg.InitialDelay)
+	assert.Equal(t, 2*time.Second, *cfg.InitialDelay)
+	require.NotNil(t, cfg.MaxDelay)
+	assert.Equal(t, 30*time.Second, *cfg.MaxDelay)
+	require.NotNil(t, cfg.Multiplier)
+	assert.Equal(t, 2.0, *cfg.Multiplier)
+	require.NotNil(t, cfg.RandomJitter)
+	assert.Equal(t, 0.1, *cfg.RandomJitter)
+}

@@ -43,15 +43,32 @@ func envHas(env []string, kv string) bool {
 	return false
 }
 
-func TestSetupGitEnv_EmptyKeyNoop(t *testing.T) {
-	// Ensure no prior test pollution is carried over for GIT_SSH_COMMAND.
+func TestSetupGitEnv_EmptyKeyStillSetsTimeouts(t *testing.T) {
+	// Even without an sshKeyFile we must set GIT_SSH_COMMAND so SSH transports
+	// inherit ConnectTimeout / ServerAlive* — otherwise a stalled SSH link
+	// hangs until the caller's context cancels (5+ minutes in practice).
 	t.Setenv("GIT_SSH_COMMAND", "")
 
 	var cmd exec.Cmd
 	setupGitEnv(&cmd, "")
 
-	if cmd.Env != nil {
-		t.Fatalf("expected cmd.Env to be nil when sshKeyFile is empty; got %v", cmd.Env)
+	if len(cmd.Env) == 0 {
+		t.Fatalf("expected cmd.Env to be populated with SSH timeout options")
+	}
+	envMap := parseEnv(cmd.Env)
+	got, ok := envMap["GIT_SSH_COMMAND"]
+	if !ok {
+		t.Fatalf("expected GIT_SSH_COMMAND to be set even when sshKeyFile is empty")
+	}
+	want := "ssh -o ConnectTimeout=" + sshConnectTimeoutSeconds +
+		" -o ServerAliveInterval=" + sshServerAliveInterval +
+		" -o ServerAliveCountMax=" + sshServerAliveCountMax
+	if got != want {
+		t.Fatalf("unexpected GIT_SSH_COMMAND value:\n  got:  %q\n  want: %q", got, want)
+	}
+	// No "-i" flag should appear when no key file is configured.
+	if strings.Contains(got, " -i ") {
+		t.Fatalf("expected no -i flag when sshKeyFile is empty; got %q", got)
 	}
 }
 
@@ -76,12 +93,15 @@ func TestSetupGitEnv_AddsWhenMissing(t *testing.T) {
 
 	envMap := parseEnv(cmd.Env)
 
-	// Expect a new GIT_SSH_COMMAND entry like: "ssh -i <key>"
+	// Expect GIT_SSH_COMMAND to include the SSH timeout options followed by "-i <key>".
 	got, ok := envMap["GIT_SSH_COMMAND"]
 	if !ok {
 		t.Fatalf("expected GIT_SSH_COMMAND to be set")
 	}
-	want := "ssh -i " + expectedKeyPath
+	want := "ssh -o ConnectTimeout=" + sshConnectTimeoutSeconds +
+		" -o ServerAliveInterval=" + sshServerAliveInterval +
+		" -o ServerAliveCountMax=" + sshServerAliveCountMax +
+		" -i " + expectedKeyPath
 	if got != want {
 		t.Fatalf("unexpected GIT_SSH_COMMAND value:\n  got:  %q\n  want: %q", got, want)
 	}
@@ -133,12 +153,16 @@ func TestSetupGitEnv_AppendsToExisting(t *testing.T) {
 
 	envMap := parseEnv(cmd.Env)
 
-	// Should be "existing + -i <key>"
+	// Should preserve the existing options and append the timeout options + "-i <key>".
 	got, ok := envMap["GIT_SSH_COMMAND"]
 	if !ok {
 		t.Fatalf("expected GIT_SSH_COMMAND to be set")
 	}
-	want := existing + " -i " + expectedKeyPath
+	want := existing +
+		" -o ConnectTimeout=" + sshConnectTimeoutSeconds +
+		" -o ServerAliveInterval=" + sshServerAliveInterval +
+		" -o ServerAliveCountMax=" + sshServerAliveCountMax +
+		" -i " + expectedKeyPath
 	if got != want {
 		t.Fatalf("unexpected GIT_SSH_COMMAND value:\n  got:  %q\n  want: %q", got, want)
 	}

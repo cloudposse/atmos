@@ -130,6 +130,47 @@ func TestIsRetryableGitError(t *testing.T) {
 			expected: true,
 		},
 
+		// Real-world git HTTP transport error format (regression test for the
+		// reported 15-minute pipeline hang where git emits this exact string
+		// when GitLab returns 504 and the previous predicate missed it).
+		{
+			name:     "git http 504 returned error",
+			err:      errors.New("fatal: unable to access 'https://gitlab.example.com/org/repo.git/': The requested URL returned error: 504"),
+			expected: true,
+		},
+		{
+			name:     "git http 502 returned error",
+			err:      errors.New("fatal: unable to access 'https://example.com/repo.git/': The requested URL returned error: 502"),
+			expected: true,
+		},
+		{
+			name:     "git http 500 returned error",
+			err:      errors.New("The requested URL returned error: 500"),
+			expected: true,
+		},
+		{
+			name:     "could not resolve host (DNS transient)",
+			err:      errors.New("fatal: unable to access 'https://gitlab.example.com/': Could not resolve host: gitlab.example.com"),
+			expected: true,
+		},
+		{
+			name:     "early eof",
+			err:      errors.New("fatal: early EOF"),
+			expected: true,
+		},
+
+		// 4xx returned errors must NOT retry (auth / not-found are permanent).
+		{
+			name:     "git http 404 returned error not retryable",
+			err:      errors.New("fatal: unable to access 'https://github.com/org/repo.git/': The requested URL returned error: 404"),
+			expected: false,
+		},
+		{
+			name:     "git http 401 returned error not retryable",
+			err:      errors.New("fatal: unable to access 'https://github.com/org/repo.git/': The requested URL returned error: 401"),
+			expected: false,
+		},
+
 		// Non-retryable errors (should NOT retry).
 		{
 			name:     "authentication failed",

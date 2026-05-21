@@ -85,7 +85,41 @@ const (
 	gitCommand      = "git"
 	originRemote    = "origin"
 	gitArgSeparator = "--"
+
+	// Network timeout knobs for HTTP(S) transports. The http.lowSpeedTime bails the
+	// connection when throughput falls below http.lowSpeedLimit (bytes/sec) for
+	// this many seconds. Without these, a stalled remote will hang until the
+	// caller's context cancels — which is typically 5+ minutes per command.
+	gitHTTPLowSpeedLimit = "1000"
+	gitHTTPLowSpeedTime  = "30"
+
+	// SSH keepalive/connect timeouts (seconds). ConnectTimeout bounds initial
+	// TCP/SSH handshake; ServerAlive* drops the session after a stalled link.
+	sshConnectTimeoutSeconds = "30"
+	sshServerAliveInterval   = "15"
+	sshServerAliveCountMax   = "4"
 )
+
+// gitNetworkConfigArgs returns the leading "-c http.lowSpeedLimit=…" /
+// "-c http.lowSpeedTime=…" arguments that should precede every network-touching
+// git subcommand. These are safe no-ops for non-HTTP transports — git only
+// applies http.* config when an HTTP(S) URL is involved.
+func gitNetworkConfigArgs() []string {
+	return []string{
+		"-c", "http.lowSpeedLimit=" + gitHTTPLowSpeedLimit,
+		"-c", "http.lowSpeedTime=" + gitHTTPLowSpeedTime,
+	}
+}
+
+// gitCommandContext builds an *exec.Cmd that prepends the standard network
+// timeout knobs in front of subcommand args. All git invocations that touch
+// the network (clone, fetch, pull, ls-remote, submodule update) must go through
+// this helper rather than exec.CommandContext directly.
+func gitCommandContext(ctx context.Context, subArgs ...string) *exec.Cmd {
+	args := append(gitNetworkConfigArgs(), subArgs...)
+	// #nosec G702 -- gitCommand is constant; subArgs are validated upstream (URLs use "--" separators).
+	return exec.CommandContext(ctx, gitCommand, args...)
+}
 
 // gitOperationParams holds parameters for git operations to reduce function arguments.
 type gitOperationParams struct {
@@ -232,12 +266,12 @@ func (g *CustomGitGetter) GetCustom(dst string, u *url.URL) error {
 
 // setupGitEnv sets up the environment for the given command. This is used to
 // pass configuration data to git and ssh and enables advanced cloning methods.
+//
+// SSH timeouts (ConnectTimeout, ServerAliveInterval, ServerAliveCountMax) are
+// always applied — even when no sshKeyFile is provided — so that a stalled SSH
+// link surfaces an error within ~60s instead of consuming the full context
+// budget. For HTTPS the equivalent guards are set via gitNetworkConfigArgs().
 func setupGitEnv(cmd *exec.Cmd, sshKeyFile string) {
-	// If there's no sshKeyFile argument to deal with, we can skip this
-	// entirely.
-	if sshKeyFile == "" {
-		return
-	}
 	const gitSSHCommand = "GIT_SSH_COMMAND="
 	var sshCmd []string
 
@@ -259,11 +293,21 @@ func setupGitEnv(cmd *exec.Cmd, sshKeyFile string) {
 		sshCmd = []string{gitSSHCommand + "ssh"}
 	}
 
-	// We have an SSH key temp file configured, tell ssh about this.
-	if runtime.GOOS == "windows" {
-		sshKeyFile = strings.ReplaceAll(sshKeyFile, `\`, `/`)
+	// Always enforce SSH timeouts — these bound the worst-case time a hung
+	// SSH connection can stall the pipeline.
+	sshCmd = append(sshCmd,
+		"-o", "ConnectTimeout="+sshConnectTimeoutSeconds,
+		"-o", "ServerAliveInterval="+sshServerAliveInterval,
+		"-o", "ServerAliveCountMax="+sshServerAliveCountMax,
+	)
+
+	// If a temp SSH key file is configured, tell ssh about it.
+	if sshKeyFile != "" {
+		if runtime.GOOS == "windows" {
+			sshKeyFile = strings.ReplaceAll(sshKeyFile, `\`, `/`)
+		}
+		sshCmd = append(sshCmd, "-i", sshKeyFile)
 	}
-	sshCmd = append(sshCmd, "-i", sshKeyFile)
 	env = append(env, strings.Join(sshCmd, " "))
 
 	cmd.Env = env
@@ -333,8 +377,10 @@ func isRetryableGitError(err error) bool {
 		"timeout",
 		"timed out",
 		"eof",
+		"early eof",
 		"temporary failure",
 		"could not read from remote",
+		"could not resolve host",
 		"the remote end hung up",
 		"ssl",
 		"tls",
@@ -344,6 +390,9 @@ func isRetryableGitError(err error) bool {
 		"internal server error",
 		"bad gateway",
 		"gateway timeout",
+		// Matches git's HTTP transport errors: "The requested URL returned error: 5xx".
+		// Captures 500/502/503/504 without needing the full status text.
+		"returned error: 5",
 	}
 
 	for _, pattern := range transientPatterns {
@@ -376,7 +425,9 @@ func removeCaseInsensitiveGitDirectory(dst string) error {
 func findRemoteDefaultBranch(ctx context.Context, u *url.URL) string {
 	var stdoutbuf bytes.Buffer
 	// #nosec G204 -- The URL is validated and we use "--" separator to prevent command injection.
-	cmd := exec.CommandContext(ctx, gitCommand, "ls-remote", "--symref", gitArgSeparator, u.String(), "HEAD")
+	cmd := gitCommandContext(ctx, "ls-remote", "--symref", gitArgSeparator, u.String(), "HEAD")
+	// Apply SSH timeouts via env in case the URL is ssh://; harmless for HTTP(S).
+	setupGitEnv(cmd, "")
 	cmd.Stdout = &stdoutbuf
 	err := cmd.Run()
 	matches := lsRemoteSymRefRegexp.FindStringSubmatch(stdoutbuf.String())
@@ -454,7 +505,7 @@ func (g *CustomGitGetter) clone(params *gitOperationParams) error {
 	}
 	args = append(args, gitArgSeparator, u.String(), dst)
 
-	cmd := exec.CommandContext(ctx, gitCommand, args...)
+	cmd := gitCommandContext(ctx, args...)
 	setupGitEnv(cmd, sshKeyFile)
 	err := g.getRunCommandWithRetry(ctx, cmd)
 	if err != nil {
@@ -519,16 +570,18 @@ func (g *CustomGitGetter) update(params *gitOperationParams) error {
 	}
 
 	// Fetch the remote ref
-	cmd = exec.CommandContext(ctx, gitCommand, "fetch", "--tags")
+	cmd = gitCommandContext(ctx, "fetch", "--tags")
 	cmd.Dir = dst
+	setupGitEnv(cmd, sshKeyFile)
 	err = g.getRunCommandWithRetry(ctx, cmd)
 	if err != nil {
 		return err
 	}
 
 	// Fetch the remote ref
-	cmd = exec.CommandContext(ctx, gitCommand, "fetch", originRemote, gitArgSeparator, ref)
+	cmd = gitCommandContext(ctx, "fetch", originRemote, gitArgSeparator, ref)
 	cmd.Dir = dst
+	setupGitEnv(cmd, sshKeyFile)
 	err = g.getRunCommandWithRetry(ctx, cmd)
 	if err != nil {
 		return err
@@ -551,9 +604,9 @@ func (g *CustomGitGetter) update(params *gitOperationParams) error {
 	// Pull the latest changes from the ref branch
 	if depth > 0 {
 		// #nosec G204 -- The ref is from query parameters and we use "--" separator to prevent command injection.
-		cmd = exec.CommandContext(ctx, gitCommand, "pull", originRemote, "--depth", strconv.Itoa(depth), "--ff-only", gitArgSeparator, ref)
+		cmd = gitCommandContext(ctx, "pull", originRemote, "--depth", strconv.Itoa(depth), "--ff-only", gitArgSeparator, ref)
 	} else {
-		cmd = exec.CommandContext(ctx, gitCommand, "pull", originRemote, "--ff-only", gitArgSeparator, ref)
+		cmd = gitCommandContext(ctx, "pull", originRemote, "--ff-only", gitArgSeparator, ref)
 	}
 
 	cmd.Dir = dst
@@ -567,7 +620,7 @@ func (g *CustomGitGetter) fetchSubmodules(ctx context.Context, dst, sshKeyFile s
 	if depth > 0 {
 		args = append(args, "--depth", strconv.Itoa(depth))
 	}
-	cmd := exec.CommandContext(ctx, gitCommand, args...)
+	cmd := gitCommandContext(ctx, args...)
 	cmd.Dir = dst
 	setupGitEnv(cmd, sshKeyFile)
 	return g.getRunCommandWithRetry(ctx, cmd)
