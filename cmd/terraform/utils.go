@@ -439,6 +439,7 @@ func applyOptionsToInfo(info *schema.ConfigAndStacksInfo, opts *TerraformRunOpti
 	info.All = opts.All
 	info.Affected = opts.Affected
 	info.Query = opts.Query
+	info.MaxConcurrency = opts.MaxConcurrency
 
 	// Backend execution flags (only apply if set via CLI).
 	if opts.AutoGenerateBackendFile != "" {

@@ -79,7 +79,7 @@ func ExecuteTerraform(ctx context.Context, opts TerraformOptions) error {
 	result := scheduler.New(
 		graph,
 		dispatcher,
-		scheduler.WithMaxConcurrency(1),
+		scheduler.WithMaxConcurrency(effectiveTerraformMaxConcurrency(opts.Info)),
 	).Run(ctx)
 	if result.Err != nil {
 		return result.Err
@@ -598,4 +598,11 @@ func metadataComponent(metadata map[string]any) string {
 	}
 	component, _ := metadataSection[cfg.ComponentSectionName].(string)
 	return component
+}
+
+func effectiveTerraformMaxConcurrency(info *schema.ConfigAndStacksInfo) int {
+	if info == nil || info.SubCommand != "plan" || info.MaxConcurrency <= 1 {
+		return 1
+	}
+	return info.MaxConcurrency
 }

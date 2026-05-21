@@ -33,6 +33,7 @@ func TestParseTerraformRunOptions(t *testing.T) {
 				v.Set("components", []string{"vpc", "eks"})
 				v.Set("all", true)
 				v.Set("affected", true)
+				v.Set("max-concurrency", 4)
 			},
 			expected: &TerraformRunOptions{
 				ProcessTemplates:        true,
@@ -50,6 +51,7 @@ func TestParseTerraformRunOptions(t *testing.T) {
 				Components:              []string{"vpc", "eks"},
 				All:                     true,
 				Affected:                true,
+				MaxConcurrency:          4,
 			},
 		},
 		{
@@ -90,11 +92,13 @@ func TestParseTerraformRunOptions(t *testing.T) {
 				v.Set("all", true)
 				v.Set("affected", false)
 				v.Set("components", []string{"comp1", "comp2", "comp3"})
+				v.Set("max-concurrency", 2)
 			},
 			expected: &TerraformRunOptions{
-				Components: []string{"comp1", "comp2", "comp3"},
-				All:        true,
-				Affected:   false,
+				Components:     []string{"comp1", "comp2", "comp3"},
+				All:            true,
+				Affected:       false,
+				MaxConcurrency: 2,
 			},
 		},
 		{
@@ -250,6 +254,7 @@ func TestParseTerraformRunOptions(t *testing.T) {
 			assert.Equal(t, tt.expected.Components, result.Components, "Components should match")
 			assert.Equal(t, tt.expected.All, result.All, "All should match")
 			assert.Equal(t, tt.expected.Affected, result.Affected, "Affected should match")
+			assert.Equal(t, tt.expected.MaxConcurrency, result.MaxConcurrency, "MaxConcurrency should match")
 		})
 	}
 }
@@ -272,6 +277,7 @@ func TestTerraformRunOptions_Fields(t *testing.T) {
 		Components:              []string{"comp1"},
 		All:                     true,
 		Affected:                true,
+		MaxConcurrency:          4,
 	}
 
 	assert.True(t, opts.ProcessTemplates)
@@ -289,6 +295,7 @@ func TestTerraformRunOptions_Fields(t *testing.T) {
 	assert.Equal(t, []string{"comp1"}, opts.Components)
 	assert.True(t, opts.All)
 	assert.True(t, opts.Affected)
+	assert.Equal(t, 4, opts.MaxConcurrency)
 }
 
 // TestApplyOptionsToInfo tests that options are correctly applied to ConfigAndStacksInfo.
@@ -380,6 +387,7 @@ func TestApplyOptionsToInfo(t *testing.T) {
 				AutoGenerateBackendFile: "true",
 				InitRunReconfigure:      "false",
 				InitPassVars:            true,
+				MaxConcurrency:          4,
 			},
 			checkInfo: func(t *testing.T, info *schema.ConfigAndStacksInfo) {
 				assert.Equal(t, "/tmp/deploy.tfplan", info.PlanFile)
@@ -388,6 +396,7 @@ func TestApplyOptionsToInfo(t *testing.T) {
 				assert.Equal(t, "true", info.AutoGenerateBackendFile)
 				assert.Equal(t, "false", info.InitRunReconfigure)
 				assert.Equal(t, "true", info.InitPassVars)
+				assert.Equal(t, 4, info.MaxConcurrency)
 			},
 		},
 	}

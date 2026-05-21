@@ -125,9 +125,11 @@ func init() {
 		flags.WithBoolFlag("upload-status", "", false, "If set atmos will upload the plan result to the pro API"),
 		flags.WithBoolFlag("affected", "", false, "Plan the affected components in dependency order"),
 		flags.WithBoolFlag("all", "", false, "Plan all components in all stacks"),
+		flags.WithIntFlag("max-concurrency", "", 1, "Maximum number of Terraform plan components to execute concurrently"),
 		flags.WithBoolFlag("skip-planfile", "", false, "Skip writing the plan to a file by not passing the `-out` flag to Terraform when executing the command. Set it to true when using Terraform Cloud since the `-out` flag is not supported. Terraform Cloud automatically stores plans in its backend"),
 		flags.WithBoolFlag("ci", "", false, "Enable CI mode for automated pipelines (writes job summary, outputs)"),
 		flags.WithEnvVars("upload-status", "ATMOS_TERRAFORM_PLAN_UPLOAD_STATUS"),
+		flags.WithEnvVars("max-concurrency", "ATMOS_TERRAFORM_PLAN_MAX_CONCURRENCY"),
 		flags.WithEnvVars("skip-planfile", "ATMOS_TERRAFORM_PLAN_SKIP_PLANFILE"),
 		flags.WithEnvVars("ci", "ATMOS_CI", "CI"),
 	)

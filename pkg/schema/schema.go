@@ -1089,6 +1089,7 @@ type ConfigAndStacksInfo struct {
 	Affected                  bool
 	All                       bool
 	Components                []string
+	MaxConcurrency            int
 	Identity                  string
 	ClusterName               string // EKS cluster name from --cluster-name flag.
 	NeedsPathResolution       bool   // True if ComponentFromArg is a path that needs resolution.

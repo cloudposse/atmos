@@ -35,6 +35,9 @@ type TerraformRunOptions struct {
 	All        bool
 	Affected   bool
 
+	// Plan concurrency.
+	MaxConcurrency int
+
 	// Status upload flag.
 	UploadStatus bool
 }
@@ -60,6 +63,7 @@ func ParseTerraformRunOptions(v *viper.Viper) *TerraformRunOptions {
 		Components:              v.GetStringSlice("components"),
 		All:                     v.GetBool("all"),
 		Affected:                v.GetBool("affected"),
+		MaxConcurrency:          v.GetInt("max-concurrency"),
 		UploadStatus:            v.GetBool("upload-status"),
 	}
 }
