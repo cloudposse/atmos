@@ -1,6 +1,6 @@
 ---
 name: atmos-toolchain
-description: "Toolchain management: install/exec/search/env commands, Aqua registry integration, version pinning, multi-tooling execution"
+description: "Toolchain management: install/exec/search/env commands, Aqua registry integration, version pinning, package verification, multi-tooling execution"
 metadata:
   copyright: Copyright Cloud Posse, LLC 2026
   version: "1.0.0"
@@ -94,6 +94,22 @@ toolchain:
     kubectl: kubernetes-sigs/kubectl
 ```
 
+### Package Verification
+
+Atmos verifies downloaded packages before extraction when Aqua or inline registry metadata provides checksums,
+signatures, or attestations. Defaults are non-breaking: verify when metadata exists, allow packages without metadata.
+
+```yaml
+toolchain:
+  verification:
+    checksums: when_available   # when_available | required | disabled
+    signatures: when_available  # when_available | required | disabled
+    verifier_install: auto      # auto | path_only
+```
+
+Supported methods: checksums (`sha256`, `sha512`, `sha1`, `md5`), `cosign`, `slsa-verifier`,
+GitHub artifact attestations via `gh`, and `minisign`.
+
 ## Configuration in atmos.yaml
 
 ```yaml
@@ -120,6 +136,11 @@ toolchain:
       type: aqua
       source: https://github.com/aquaproj/aqua-registry/tree/main/pkgs
       priority: 10
+
+  verification:
+    checksums: when_available
+    signatures: when_available
+    verifier_install: auto
 ```
 
 ## Key Commands
@@ -245,7 +266,7 @@ atmos toolchain list
 - name: Install tools
   run: |
     atmos toolchain install
-    eval "$(atmos toolchain env --format=github)"
+    atmos toolchain env --format=github
 ```
 
 ### Custom Tool Registry
@@ -275,4 +296,3 @@ These Aqua features are intentionally not supported to keep Atmos focused:
 - `version_filter`, `version_expr` version manipulation
 - `import` (use multiple registries instead)
 - `command_aliases` (use `toolchain.aliases` in atmos.yaml)
-- `cosign`, `minisign`, `slsa_provenance` signature verification

@@ -548,7 +548,8 @@ func TestProcessTerraformComponent(t *testing.T) {
 			},
 		}
 
-		_, err := processTerraformComponent(&atmosConfig, &info, stack, component, section, logFunc,
+		_, err := processTerraformComponent(
+			&atmosConfig, &info, stack, component, section, logFunc,
 			func(_ schema.ConfigAndStacksInfo, _ ...ShellCommandOption) error { return expectedErr },
 		)
 
