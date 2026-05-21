@@ -1,0 +1,300 @@
+---
+title: Configure Component Settings
+sidebar_position: 6
+sidebar_label: "*.settings"
+sidebar_class_name: command
+description: Use the settings section to configure integrations, validation, templates, and custom metadata for components.
+id: component-settings
+---
+import File from '@site/src/components/File'
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+The `settings` section provides a flexible configuration space for integrations, validation, templates, and custom metadata. Unlike `vars` (which map to Terraform variables) or `metadata` (which control Atmos behavior), settings configure external integrations and tooling.
+</Intro>
+
+## Use Cases
+
+- **Validation Rules:** Configure JSON Schema or OPA policy validation per component
+- **Template Configuration:** Define template engine settings and data sources
+- **CI/CD Integration:** Configure Atlantis projects or other automation tools
+- **Custom Metadata:** Store arbitrary metadata for external tools and dashboards
+- **Component Dependencies (Legacy):** Define component dependencies using `depends_on`
+
+## Configuration Scope
+
+The `settings` section can be defined at three levels. Atmos deep-merges settings from all levels, with more specific levels taking precedence.
+
+### Global Level
+
+Settings defined at the root level apply to all components:
+
+<File title="stacks/orgs/acme/_defaults.yaml">
+```yaml
+settings:
+  templates:
+    settings:
+      gomplate:
+        enabled: true
+  validation:
+    schema:
+      enabled: true
+```
+</File>
+
+### Component-Type Level
+
+Settings defined under `terraform`, `helmfile`, `packer`, or `ansible` apply to all components of that type:
+
+<File title="stacks/orgs/acme/plat/prod/_defaults.yaml">
+```yaml
+terraform:
+  settings:
+    validation:
+      enforce_policies: true
+```
+</File>
+
+### Component Level
+
+Settings defined within a component override all higher-level settings:
+
+<File title="stacks/orgs/acme/plat/prod/us-east-1.yaml">
+```yaml
+components:
+  terraform:
+    vpc:
+      settings:
+        validation:
+          vpc-schema:
+            schema_type: jsonschema
+            schema_path: "schemas/vpc.json"
+```
+</File>
+
+## Merge Behavior
+
+Settings are deep-merged from the most general to the most specific level:
+
+1. **Global `settings:`** (applies to all components)
+2. **Component-type `terraform.settings:`** (applies to all Terraform components)
+3. **Component `components.terraform.<name>.settings`** (applies to a specific component)
+
+Maps are recursively merged. Lists are **replaced** (not appended).
+
+:::note Relationship to `atmos.yaml` settings
+The `settings` key appears in both stack manifests and [`atmos.yaml`](/cli/configuration). Some keys, like `templates`, work at both levels — stack-level values override `atmos.yaml` values. However, other `atmos.yaml` settings like `list_merge_strategy`, `terminal`, `pro`, and `telemetry` are **global-only** and are silently ignored if set in stack manifests.
+:::
+
+## Recognized Settings Keys
+
+Atmos processes certain settings keys for built-in integrations. All other keys are passed through as-is.
+
+### `validation`
+
+Configure schema and policy validation per component:
+
+```yaml
+settings:
+  validation:
+    vpc-schema:
+      schema_type: jsonschema
+      schema_path: "schemas/vpc.json"
+      description: "Validate VPC configuration"
+    vpc-policy:
+      schema_type: opa
+      schema_path: "policies/vpc.rego"
+      description: "Enforce VPC security policies"
+```
+
+See [Validation](/validation/validating) for full documentation.
+
+### `templates`
+
+Configure the template engine:
+
+```yaml
+settings:
+  templates:
+    settings:
+      gomplate:
+        enabled: true
+        timeout: 5
+        datasources:
+          config:
+            url: "file:///config"
+```
+
+See [Templates](/templates) for full documentation.
+
+### `integrations`
+
+Configure external integrations (e.g., GitHub):
+
+```yaml
+settings:
+  integrations:
+    github:
+      gitops:
+        opentofu-version: "1.8.4"
+        terraform-version: "1.9.8"
+        infracost-enabled: true
+```
+
+Integration settings are deep-merged with the global `integrations` configuration from `atmos.yaml`.
+
+### `atlantis`
+
+Configure [Atlantis](/cli/configuration/integrations/atlantis) for pull request automation:
+
+```yaml
+settings:
+  atlantis:
+    enabled: true
+    config_template_name: atmos-atlantis
+    project_template_name: atmos-project
+    workflow: terraform-workflow
+```
+
+### `depends_on` (Legacy)
+
+Define dependencies between components:
+
+```yaml
+settings:
+  depends_on:
+    1:
+      component: vpc
+    2:
+      component: security-groups
+```
+
+:::tip Recommended
+Use the new [`dependencies.components`](/stacks/dependencies/components) format instead of `settings.depends_on`.
+:::
+
+### Custom Keys
+
+The `settings` section is intentionally freeform. Any keys not recognized by Atmos are stored as-is and available in the component configuration. Use this to pass metadata to external tools:
+
+```yaml
+settings:
+  my_custom_tool:
+    feature_enabled: true
+    config:
+      option_a: value
+      option_b: value
+  team_metadata:
+    owner: platform-team
+    slack_channel: "#platform-alerts"
+```
+
+## Examples
+
+### Multi-Level Merge
+
+<File title="stacks/catalog/terraform/_defaults.yaml">
+```yaml
+# Base Terraform settings
+terraform:
+  settings:
+    validation:
+      enforce_policies: true
+    templates:
+      settings:
+        gomplate:
+          enabled: true
+```
+</File>
+
+<File title="stacks/orgs/acme/plat/prod/_defaults.yaml">
+```yaml
+# Production settings
+import:
+  - catalog/terraform/_defaults
+
+settings:
+  team_metadata:
+    environment: production
+    owner: platform-team
+```
+</File>
+
+<File title="stacks/orgs/acme/plat/prod/us-east-1.yaml">
+```yaml
+import:
+  - orgs/acme/plat/prod/_defaults
+
+components:
+  terraform:
+    vpc:
+      settings:
+        validation:
+          vpc-schema:
+            schema_type: jsonschema
+            schema_path: "schemas/vpc.json"
+        team_metadata:
+          owner: network-team     # Overrides production default
+```
+</File>
+
+The resulting `settings` for the `vpc` component:
+
+```yaml
+settings:
+  validation:
+    enforce_policies: true           # From catalog defaults
+    vpc-schema:                      # Added at component level
+      schema_type: jsonschema
+      schema_path: "schemas/vpc.json"
+  templates:
+    settings:
+      gomplate:
+        enabled: true                # From catalog defaults
+  team_metadata:
+    environment: production          # From production defaults
+    owner: network-team              # Overridden at component level
+```
+
+### Validation Per Component
+
+<File title="stacks/catalog/vpc.yaml">
+```yaml
+components:
+  terraform:
+    vpc:
+      settings:
+        validation:
+          vpc-schema:
+            schema_type: jsonschema
+            schema_path: "schemas/vpc.json"
+            description: "Validate VPC configuration"
+          vpc-policy:
+            schema_type: opa
+            schema_path: "policies/vpc.rego"
+            description: "Enforce VPC security policies"
+      vars:
+        cidr_block: "10.0.0.0/16"
+```
+</File>
+
+## Best Practices
+
+1. **Use Catalog Defaults** - Define common settings in `stacks/catalog/` and import them to ensure consistency across stacks.
+
+2. **Namespace Custom Settings** - Use meaningful prefixes for custom settings to avoid conflicts with Atmos or integration keys.
+
+3. **Document Custom Settings** - When adding custom settings, document their purpose and expected values for your team.
+
+4. **Validate Settings** - Use JSON Schema validation to enforce required settings and valid values.
+
+5. **Prefer `dependencies.components`** - Use the new `dependencies.components` format instead of `settings.depends_on` for component dependencies.
+
+## Related
+
+- [Settings Overview](/stacks/settings) - Global settings configuration
+- [Variables (vars)](/stacks/vars) - Terraform input variables
+- [Component Metadata (*.metadata)](/stacks/components/component-metadata) - Component behavior and inheritance
+- [Component Dependencies](/stacks/dependencies/components) - Component-to-component dependencies
+- [Validation](/validation/validating) - JSON Schema and OPA validation
+- [Templates](/templates) - Template engine configuration
