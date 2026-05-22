@@ -34,6 +34,7 @@ func TestUpdateKubeconfigCmd_Flags(t *testing.T) {
 		{name: "dry-run flag", flagName: "dry-run", shorthand: ""},
 		{name: "verbose flag", flagName: "verbose", shorthand: ""},
 		{name: "alias flag", flagName: "alias", shorthand: ""},
+		{name: "integration flag", flagName: "integration", shorthand: ""},
 	}
 
 	for _, tt := range tests {
@@ -126,6 +127,10 @@ func TestUpdateKubeconfigParser_ViperPrefix(t *testing.T) {
 // setting AWS_PROFILE does not cause the global Viper "profile" key to pick up
 // the AWS profile name. This is the core regression test for issue #2076.
 func TestUpdateKubeconfigParser_AwsProfileDoesNotAffectGlobalProfile(t *testing.T) {
+	// Clear env vars that could interfere.
+	t.Setenv("ATMOS_PROFILE", "")
+	t.Setenv("AWS_PROFILE", "")
+
 	v := viper.New()
 
 	// Step 1: Simulate global flag registration (what cmd/root.go init() does).
@@ -173,6 +178,10 @@ func TestUpdateKubeconfigParser_AwsProfileDoesNotAffectGlobalProfile(t *testing.
 // "profile" flag overwrites the global "profile" key binding, causing AWS_PROFILE
 // to be treated as an Atmos configuration profile name.
 func TestUpdateKubeconfigParser_WithoutPrefix_KeyCollision(t *testing.T) {
+	// Clear env vars that could interfere.
+	t.Setenv("ATMOS_PROFILE", "")
+	t.Setenv("AWS_PROFILE", "")
+
 	v := viper.New()
 
 	// Step 1: Global parser binds "profile" → ATMOS_PROFILE.

@@ -2,6 +2,7 @@ package exec
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -378,8 +379,8 @@ func TestProcessTerraformComponent(t *testing.T) {
 	}
 
 	// mockExecutor returns a mock executor that records whether it was called.
-	mockExecutor := func(called *bool, returnErr error) func(schema.ConfigAndStacksInfo) error {
-		return func(i schema.ConfigAndStacksInfo) error {
+	mockExecutor := func(called *bool, returnErr error) func(schema.ConfigAndStacksInfo, ...ShellCommandOption) error {
+		return func(i schema.ConfigAndStacksInfo, opts ...ShellCommandOption) error {
 			*called = true
 			return returnErr
 		}
@@ -450,7 +451,7 @@ func TestProcessTerraformComponent(t *testing.T) {
 	t.Run("execute", func(t *testing.T) {
 		section := newSection(map[string]any{"enabled": true})
 		called := false
-		executor := func(i schema.ConfigAndStacksInfo) error {
+		executor := func(i schema.ConfigAndStacksInfo, opts ...ShellCommandOption) error {
 			called = true
 			// check fields set
 			assert.Equal(t, component, i.Component)
@@ -487,6 +488,74 @@ func TestProcessTerraformComponent(t *testing.T) {
 		assert.Error(t, err)
 		assert.True(t, processed)
 		assert.True(t, called)
+	})
+
+	t.Run("per-component hook fires on success with captured output", func(t *testing.T) {
+		section := newSection(map[string]any{"enabled": true})
+		hookCalled := false
+		var hookComponent, hookStack, hookOutput string
+		var hookErr error
+
+		info := schema.ConfigAndStacksInfo{
+			SubCommand: "plan",
+			PerComponentHook: func(ci *schema.ConfigAndStacksInfo, output string, execErr error) {
+				hookCalled = true
+				hookComponent = ci.Component
+				hookStack = ci.Stack
+				hookOutput = output
+				hookErr = execErr
+			},
+		}
+
+		// Executor writes to the capture buffers provided via ShellCommandOption.
+		executor := func(_ schema.ConfigAndStacksInfo, opts ...ShellCommandOption) error {
+			c := &shellCommandConfig{}
+			for _, opt := range opts {
+				opt(c)
+			}
+			if c.stdoutCapture != nil {
+				fmt.Fprint(c.stdoutCapture, "plan-stdout")
+			}
+			if c.stderrCapture != nil {
+				fmt.Fprint(c.stderrCapture, "plan-stderr")
+			}
+			return nil
+		}
+
+		processed, err := processTerraformComponent(&atmosConfig, &info, stack, component, section, logFunc, executor)
+
+		assert.NoError(t, err)
+		assert.True(t, processed)
+		assert.True(t, hookCalled)
+		assert.Equal(t, component, hookComponent)
+		assert.Equal(t, stack, hookStack)
+		assert.Contains(t, hookOutput, "plan-stdout")
+		assert.Contains(t, hookOutput, "plan-stderr")
+		assert.NoError(t, hookErr)
+	})
+
+	t.Run("per-component hook fires before error is returned", func(t *testing.T) {
+		section := newSection(map[string]any{"enabled": true})
+		expectedErr := errors.New("terraform failed")
+		hookCalled := false
+		var hookErr error
+
+		info := schema.ConfigAndStacksInfo{
+			SubCommand: "plan",
+			PerComponentHook: func(ci *schema.ConfigAndStacksInfo, output string, execErr error) {
+				hookCalled = true
+				hookErr = execErr
+			},
+		}
+
+		_, err := processTerraformComponent(
+			&atmosConfig, &info, stack, component, section, logFunc,
+			func(_ schema.ConfigAndStacksInfo, _ ...ShellCommandOption) error { return expectedErr },
+		)
+
+		assert.ErrorIs(t, err, expectedErr)
+		assert.True(t, hookCalled, "hook must fire even when executor fails")
+		assert.ErrorIs(t, hookErr, expectedErr)
 	})
 }
 
@@ -1778,4 +1847,167 @@ func TestTFCliArgsAndVarsComponentSections(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestIsTerraformCurrentWorkspace verifies the helper that detects whether a given workspace
+// name matches the active workspace recorded in the .terraform/environment file.
+func TestIsTerraformCurrentWorkspace(t *testing.T) {
+	t.Run("returns true when environment file contains matching workspace", func(t *testing.T) {
+		dir := t.TempDir()
+		tfDir := filepath.Join(dir, ".terraform")
+		require.NoError(t, os.MkdirAll(tfDir, 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(tfDir, "environment"), []byte("nonprod"), 0o644))
+
+		assert.True(t, isTerraformCurrentWorkspace(dir, "nonprod", nil))
+	})
+
+	t.Run("returns true when environment file has trailing newline", func(t *testing.T) {
+		dir := t.TempDir()
+		tfDir := filepath.Join(dir, ".terraform")
+		require.NoError(t, os.MkdirAll(tfDir, 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(tfDir, "environment"), []byte("nonprod\n"), 0o644))
+
+		assert.True(t, isTerraformCurrentWorkspace(dir, "nonprod", nil))
+	})
+
+	t.Run("returns false when workspace does not match", func(t *testing.T) {
+		dir := t.TempDir()
+		tfDir := filepath.Join(dir, ".terraform")
+		require.NoError(t, os.MkdirAll(tfDir, 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(tfDir, "environment"), []byte("staging"), 0o644))
+
+		assert.False(t, isTerraformCurrentWorkspace(dir, "nonprod", nil))
+	})
+
+	t.Run("returns false when environment file does not exist", func(t *testing.T) {
+		dir := t.TempDir()
+		// Create .terraform dir but omit the environment file — distinct from the
+		// directory-absent case covered by the next sub-test.
+		require.NoError(t, os.MkdirAll(filepath.Join(dir, ".terraform"), 0o755))
+		assert.False(t, isTerraformCurrentWorkspace(dir, "nonprod", nil))
+	})
+
+	t.Run("returns false when .terraform directory does not exist", func(t *testing.T) {
+		dir := t.TempDir()
+		// No .terraform directory at all — environment file is implicitly absent.
+		assert.False(t, isTerraformCurrentWorkspace(dir, "nonprod", nil))
+	})
+
+	t.Run("respects TF_DATA_DIR env var", func(t *testing.T) {
+		dir := t.TempDir()
+		customDir := filepath.Join(dir, "custom-tf-dir")
+		require.NoError(t, os.MkdirAll(customDir, 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(customDir, "environment"), []byte("nonprod"), 0o644))
+
+		t.Setenv("TF_DATA_DIR", customDir)
+		assert.True(t, isTerraformCurrentWorkspace(dir, "nonprod", nil))
+	})
+
+	t.Run("respects relative TF_DATA_DIR env var", func(t *testing.T) {
+		// Terraform resolves TF_DATA_DIR relative to the component path (the process CWD
+		// at invocation time, which atmos sets to componentPath).  Verify that
+		// isTerraformCurrentWorkspace applies the same resolution.
+		dir := t.TempDir()
+		relDir := "custom-tf-dir"
+		customDir := filepath.Join(dir, relDir)
+		require.NoError(t, os.MkdirAll(customDir, 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(customDir, "environment"), []byte("nonprod"), 0o644))
+
+		t.Setenv("TF_DATA_DIR", relDir)
+		assert.True(t, isTerraformCurrentWorkspace(dir, "nonprod", nil))
+	})
+
+	// Default workspace: Terraform never writes the environment file for "default".
+	// Absence of the file (or an empty file) must be treated as the default workspace.
+	t.Run("returns true for default workspace when environment file is absent", func(t *testing.T) {
+		dir := t.TempDir()
+		// No .terraform directory or environment file — default workspace is implied.
+		assert.True(t, isTerraformCurrentWorkspace(dir, "default", nil))
+	})
+
+	t.Run("returns false for non-default workspace when environment file is absent", func(t *testing.T) {
+		dir := t.TempDir()
+		assert.False(t, isTerraformCurrentWorkspace(dir, "nonprod", nil))
+	})
+
+	t.Run("returns true for default workspace when environment file is empty", func(t *testing.T) {
+		dir := t.TempDir()
+		tfDir := filepath.Join(dir, ".terraform")
+		require.NoError(t, os.MkdirAll(tfDir, 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(tfDir, "environment"), []byte(""), 0o644))
+
+		assert.True(t, isTerraformCurrentWorkspace(dir, "default", nil))
+	})
+
+	t.Run("returns false for non-default workspace when environment file is empty", func(t *testing.T) {
+		dir := t.TempDir()
+		tfDir := filepath.Join(dir, ".terraform")
+		require.NoError(t, os.MkdirAll(tfDir, 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(tfDir, "environment"), []byte(""), 0o644))
+
+		assert.False(t, isTerraformCurrentWorkspace(dir, "nonprod", nil))
+	})
+
+	t.Run("TF_DATA_DIR absolute path is used directly without joining componentPath", func(t *testing.T) {
+		// When TF_DATA_DIR is set to an absolute path, isTerraformCurrentWorkspace must read
+		// the environment file from that absolute path rather than joining componentPath.
+		// This documents the invariant for the filepath.IsAbs guard in the implementation.
+		absDataDir := t.TempDir()
+		t.Setenv("TF_DATA_DIR", absDataDir)
+
+		workspace := "staging"
+		require.NoError(t, os.WriteFile(
+			filepath.Join(absDataDir, "environment"),
+			[]byte(workspace),
+			0o600,
+		))
+
+		// componentPath is a different directory — the environment file is under absDataDir, not here.
+		componentPath := t.TempDir()
+		assert.True(t, isTerraformCurrentWorkspace(componentPath, workspace, nil),
+			"absolute TF_DATA_DIR must resolve the environment file without joining componentPath")
+	})
+
+	t.Run("envList TF_DATA_DIR takes precedence over process env", func(t *testing.T) {
+		// When TF_DATA_DIR is set in the subprocess env (envList) but not in the parent
+		// process, the helper must use the envList value.  This covers the case where a
+		// component sets TF_DATA_DIR in its env config.
+		dir := t.TempDir()
+
+		// Create custom data dir with environment file.
+		customDir := filepath.Join(dir, "subprocess-tf-data")
+		require.NoError(t, os.MkdirAll(customDir, 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(customDir, "environment"), []byte("nonprod"), 0o644))
+
+		// Ensure TF_DATA_DIR is NOT set in the parent process env.
+		t.Setenv("TF_DATA_DIR", "")
+
+		// Pass TF_DATA_DIR via envList — simulates ComponentEnvList.
+		envList := []string{"TF_DATA_DIR=" + customDir}
+		assert.True(t, isTerraformCurrentWorkspace(dir, "nonprod", envList),
+			"envList TF_DATA_DIR must be used when set in subprocess env")
+	})
+
+	t.Run("envList TF_DATA_DIR overrides process TF_DATA_DIR", func(t *testing.T) {
+		// When both envList and process env set TF_DATA_DIR, envList wins (subprocess
+		// env is what terraform actually sees).
+		dir := t.TempDir()
+
+		// Process-level TF_DATA_DIR points to a dir with a different workspace.
+		processDir := filepath.Join(dir, "process-tf-data")
+		require.NoError(t, os.MkdirAll(processDir, 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(processDir, "environment"), []byte("staging"), 0o644))
+		t.Setenv("TF_DATA_DIR", processDir)
+
+		// envList TF_DATA_DIR points to a dir with the target workspace.
+		subprocessDir := filepath.Join(dir, "subprocess-tf-data")
+		require.NoError(t, os.MkdirAll(subprocessDir, 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(subprocessDir, "environment"), []byte("nonprod"), 0o644))
+
+		envList := []string{"TF_DATA_DIR=" + subprocessDir}
+		assert.True(t, isTerraformCurrentWorkspace(dir, "nonprod", envList),
+			"envList TF_DATA_DIR must override process env TF_DATA_DIR")
+		assert.False(t, isTerraformCurrentWorkspace(dir, "staging", envList),
+			"process env TF_DATA_DIR must not be used when envList overrides it")
+	})
 }

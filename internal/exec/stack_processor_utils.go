@@ -79,15 +79,86 @@ func extractLocalsFromRawYAML(atmosConfig *schema.AtmosConfiguration, yamlConten
 		return &extractLocalsResult{}, nil
 	}
 
-	// Use ProcessStackLocals which handles global and section-level scopes.
-	// Note: At this early stage, stack name is not yet determined, so we pass empty string.
-	// YAML functions that require stack context won't work here, but Go templates will.
-	localsCtx, err := ProcessStackLocals(atmosConfig, rawConfig, filePath, "")
+	// Derive the stack name from the file path so that YAML functions like
+	// !terraform.state (2-arg form) can resolve their implicit stack reference.
+	// Previously, an empty string was passed here, which caused !terraform.state
+	// to fail with "stack is required" (see GitHub issue #2080).
+	currentStack := deriveStackNameForLocals(atmosConfig, rawConfig, filePath)
+
+	localsCtx, err := ProcessStackLocals(atmosConfig, rawConfig, filePath, currentStack)
 	if err != nil {
 		return nil, fmt.Errorf("%w: failed to process stack locals: %w", errUtils.ErrInvalidStackManifest, err)
 	}
 
 	return buildLocalsResult(rawConfig, localsCtx), nil
+}
+
+// deriveStackNameForLocals derives the stack name from the file path and raw config
+// so that YAML functions in locals (like !terraform.state) can use stack context.
+// This uses the same logic as describe_locals.go (deriveStackName) to compute the
+// stack name from the file path, vars section, and atmos config.
+// Returns empty string if the stack name cannot be determined.
+func deriveStackNameForLocals(atmosConfig *schema.AtmosConfiguration, rawConfig map[string]any, filePath string) string {
+	if atmosConfig == nil {
+		return ""
+	}
+
+	// Extract vars section for stack name derivation.
+	var varsSection map[string]any
+	if vs, ok := rawConfig[cfg.VarsSectionName].(map[string]any); ok {
+		varsSection = vs
+	}
+
+	// Compute relative stack file name from file path.
+	stackFileName := computeStackFileName(atmosConfig, filePath)
+	if stackFileName == "" {
+		return ""
+	}
+
+	return deriveStackName(atmosConfig, stackFileName, varsSection, rawConfig)
+}
+
+// computeStackFileName computes the relative stack file name from an absolute file path
+// by stripping the stacks base path prefix and the file extension.
+// This produces a name like "deploy/dev" or "orgs/acme/plat/dev/us-east-1".
+func computeStackFileName(atmosConfig *schema.AtmosConfiguration, filePath string) string {
+	if atmosConfig == nil {
+		return ""
+	}
+
+	// Get the absolute stacks base path.
+	stacksBasePath := filepath.Join(atmosConfig.BasePath, atmosConfig.Stacks.BasePath)
+	absStacksBasePath, err := filepath.Abs(stacksBasePath)
+	if err != nil {
+		return ""
+	}
+
+	absFilePath, err := filepath.Abs(filePath)
+	if err != nil {
+		return ""
+	}
+
+	// Strip the base path prefix.
+	rel, err := filepath.Rel(absStacksBasePath, absFilePath)
+	if err != nil {
+		return ""
+	}
+
+	// Remove known stack/template suffixes (longest first to handle .yaml.tmpl correctly).
+	for _, suffix := range []string{
+		u.YamlTemplateExtension, // .yaml.tmpl
+		u.YmlTemplateExtension,  // .yml.tmpl
+		u.YamlFileExtension,     // .yaml
+		u.YmlFileExtension,      // .yml
+	} {
+		if strings.HasSuffix(rel, suffix) {
+			rel = strings.TrimSuffix(rel, suffix)
+
+			break
+		}
+	}
+
+	return rel
 }
 
 // buildLocalsResult builds an extractLocalsResult from raw config and resolved locals context.
@@ -363,7 +434,8 @@ func ProcessYAMLConfigFiles(
 			stackFileName := strings.TrimSuffix(
 				strings.TrimSuffix(
 					u.TrimBasePathFromPath(stackBasePath+"/", p),
-					u.DefaultStackConfigFileExtension),
+					u.DefaultStackConfigFileExtension,
+				),
 				".yml",
 			)
 
@@ -429,7 +501,8 @@ func ProcessYAMLConfigFiles(
 				"",
 				componentStackMap,
 				importsConfig,
-				true)
+				true,
+			)
 			if err != nil {
 				results <- stackProcessResult{index: i, err: err}
 				return
@@ -1048,13 +1121,17 @@ func processYAMLConfigFileWithContextInternal(
 					}
 
 					// If the import is not a Go template and SkipIfMissing is false, return the error.
+					// The wrapped `err` from GetGlobMatches already carries ErrFailedToFindImport, so
+					// callers using errors.Is (see describe_affected_utils.go) keep matching. When
+					// err is nil but importMatches is empty (defensive guard for unexpected empty/nil
+					// results from u.GetGlobMatches), we wrap ErrFailedToFindImport explicitly.
 					if !isGolangTemplate && !importStruct.SkipIfMissing {
 						if err != nil {
 							return nil, nil, nil, nil, nil, nil, nil, nil, fmt.Errorf("%w: import '%s' in file '%s': %w",
 								errUtils.ErrStackImportNotFound, imp, relativeFilePath, err)
 						} else if importMatches == nil {
-							return nil, nil, nil, nil, nil, nil, nil, nil, fmt.Errorf("%w: import '%s' in file '%s'",
-								errUtils.ErrStackImportNotFound, imp, relativeFilePath)
+							return nil, nil, nil, nil, nil, nil, nil, nil, fmt.Errorf("%w: import '%s' in file '%s': %w",
+								errUtils.ErrStackImportNotFound, imp, relativeFilePath, errUtils.ErrFailedToFindImport)
 						}
 					}
 				}
@@ -1321,7 +1398,8 @@ func processSettingsIntegrationsGithub(atmosConfig *schema.AtmosConfiguration, s
 		[]map[string]any{
 			atmosConfig.Integrations.GitHub,
 			settingsIntegrationsGithubSection,
-		})
+		},
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -1588,6 +1666,7 @@ func ProcessBaseComponentConfig(
 	}
 
 	// Process normally if not cached.
+	visited := make(map[string]bool)
 	err := processBaseComponentConfigInternal(
 		atmosConfig,
 		baseComponentConfig,
@@ -1598,6 +1677,7 @@ func ProcessBaseComponentConfig(
 		componentBasePath,
 		checkBaseComponentExists,
 		baseComponents,
+		visited,
 	)
 	if err != nil {
 		return err
@@ -1621,10 +1701,23 @@ func processBaseComponentConfigInternal(
 	componentBasePath string,
 	checkBaseComponentExists bool,
 	baseComponents *[]string,
+	visited map[string]bool,
 ) error {
 	if component == baseComponent {
 		return nil
 	}
+
+	// Cycle detection: check if we've already visited this (component, baseComponent) pair
+	// on the current DFS path. The defer delete ensures entries are cleaned up on backtrack,
+	// so diamond inheritance (shared ancestor reached via sibling branches) is not falsely
+	// flagged as circular.
+	visitKey := component + ":" + baseComponent
+	if visited[visitKey] {
+		return fmt.Errorf("%w: '%s' -> '%s' in the stack '%s'",
+			errUtils.ErrCircularComponentInheritance, component, baseComponent, stack)
+	}
+	visited[visitKey] = true
+	defer delete(visited, visitKey)
 
 	var baseComponentVars map[string]any
 	var baseComponentSettings map[string]any
@@ -1660,27 +1753,35 @@ func processBaseComponentConfigInternal(
 			baseComponentMap = baseComponentMapOfStrings
 		}
 
-		// First, process the base component(s) of this base component
-		if baseComponentOfBaseComponent, baseComponentOfBaseComponentExist := baseComponentMap["component"]; baseComponentOfBaseComponentExist {
-			baseComponentOfBaseComponentString, ok := baseComponentOfBaseComponent.(string)
-			if !ok {
-				return fmt.Errorf("%w 'component:' of the component '%s' in the stack '%s'",
-					errUtils.ErrInvalidComponentAttribute, baseComponent, stack)
-			}
+		// First, process the base component(s) of this base component.
+		// Skip component chain resolution for abstract components — their metadata.component
+		// is a pointer to the Terraform directory but should not trigger inheritance traversal.
+		// Following it on processed data (where mergeComponentConfigurations has promoted
+		// metadata.component to a top-level "component" key) can create circular references.
+		isAbstract := isAbstractComponent(baseComponentMap)
+		if !isAbstract {
+			if baseComponentOfBaseComponent, baseComponentOfBaseComponentExist := baseComponentMap["component"]; baseComponentOfBaseComponentExist {
+				baseComponentOfBaseComponentString, ok := baseComponentOfBaseComponent.(string)
+				if !ok {
+					return fmt.Errorf("%w 'component:' of the component '%s' in the stack '%s'",
+						errUtils.ErrInvalidComponentAttribute, baseComponent, stack)
+				}
 
-			err := processBaseComponentConfigInternal(
-				atmosConfig,
-				baseComponentConfig,
-				allComponentsMap,
-				baseComponent,
-				stack,
-				baseComponentOfBaseComponentString,
-				componentBasePath,
-				checkBaseComponentExists,
-				baseComponents,
-			)
-			if err != nil {
-				return err
+				err := processBaseComponentConfigInternal(
+					atmosConfig,
+					baseComponentConfig,
+					allComponentsMap,
+					baseComponent,
+					stack,
+					baseComponentOfBaseComponentString,
+					componentBasePath,
+					checkBaseComponentExists,
+					baseComponents,
+					visited,
+				)
+				if err != nil {
+					return err
+				}
 			}
 		}
 
@@ -1702,8 +1803,9 @@ func processBaseComponentConfigInternal(
 
 					if _, ok := allComponentsMap[baseComponentFromInheritList]; !ok {
 						if checkBaseComponentExists {
-							errorMessage := fmt.Sprintf("The component '%[1]s' in the stack manifest '%[2]s' inherits from '%[3]s' "+
-								"(using 'metadata.inherits'), but '%[3]s' is not defined in any of the config files for the stack '%[2]s'",
+							errorMessage := fmt.Sprintf(
+								"The component '%[1]s' in the stack manifest '%[2]s' inherits from '%[3]s' "+
+									"(using 'metadata.inherits'), but '%[3]s' is not defined in any of the config files for the stack '%[2]s'",
 								component,
 								stack,
 								baseComponentFromInheritList,
@@ -1723,6 +1825,7 @@ func processBaseComponentConfigInternal(
 						componentBasePath,
 						checkBaseComponentExists,
 						baseComponents,
+						visited,
 					)
 					if err != nil {
 						return err
@@ -1777,6 +1880,24 @@ func processBaseComponentConfigInternal(
 			baseComponentProviders, ok = baseComponentProvidersSection.(map[string]any)
 			if !ok {
 				return fmt.Errorf("%w '%s.providers' in the stack '%s'", errUtils.ErrInvalidComponentProviders, baseComponent, stack)
+			}
+		}
+
+		// Base component required_providers (DEV-3124).
+		var baseComponentRequiredProviders map[string]any
+		if baseComponentRequiredProvidersSection, baseComponentRequiredProvidersSectionExist := baseComponentMap[cfg.RequiredProvidersSectionName]; baseComponentRequiredProvidersSectionExist {
+			baseComponentRequiredProviders, ok = baseComponentRequiredProvidersSection.(map[string]any)
+			if !ok {
+				return fmt.Errorf("%w '%s.required_providers' in the stack '%s'", errUtils.ErrInvalidComponentRequiredProviders, baseComponent, stack)
+			}
+		}
+
+		// Base component required_version (DEV-3124).
+		var baseComponentRequiredVersion string
+		if baseComponentRequiredVersionSection, baseComponentRequiredVersionSectionExist := baseComponentMap[cfg.RequiredVersionSectionName]; baseComponentRequiredVersionSectionExist {
+			baseComponentRequiredVersion, ok = baseComponentRequiredVersionSection.(string)
+			if !ok {
+				return fmt.Errorf("%w '%s.required_version' in the stack '%s'", errUtils.ErrInvalidComponentRequiredVersion, baseComponent, stack)
 			}
 		}
 
@@ -1929,6 +2050,19 @@ func processBaseComponentConfigInternal(
 			return err
 		}
 		baseComponentConfig.BaseComponentProviders = merged
+
+		// Base component `required_providers` (DEV-3124).
+		merged, err = m.Merge(atmosConfig, []map[string]any{baseComponentConfig.BaseComponentRequiredProviders, baseComponentRequiredProviders})
+		if err != nil {
+			return err
+		}
+		baseComponentConfig.BaseComponentRequiredProviders = merged
+
+		// Base component `required_version` (DEV-3124).
+		// String values are not merged - the most specific value wins.
+		if baseComponentRequiredVersion != "" {
+			baseComponentConfig.BaseComponentRequiredVersion = baseComponentRequiredVersion
+		}
 
 		// Base component `hooks`
 		merged, err = m.Merge(atmosConfig, []map[string]any{baseComponentConfig.BaseComponentHooks, baseComponentHooks})

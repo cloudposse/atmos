@@ -1,0 +1,64 @@
+---
+title: atmos mcp list
+sidebar_label: list
+sidebar_class_name: command
+id: list
+description: List configured external MCP servers
+---
+import Intro from '@site/src/components/Intro'
+import Experimental from '@site/src/components/Experimental'
+import Screengrab from '@site/src/components/Screengrab'
+
+<Intro>
+Use this command to list all external MCP servers configured in `atmos.yaml` under `mcp.servers`.
+</Intro>
+
+<Experimental />
+
+<Screengrab title="atmos mcp list --help" slug="atmos-mcp-list--help" />
+
+## Description
+
+The `atmos mcp list` command displays a table of all configured MCP servers with their name, status, and description. Servers are not started — this shows configuration only. Use `atmos mcp status` to see live connection status.
+
+## Usage
+
+```shell
+atmos mcp list
+```
+
+### Examples
+
+```shell
+# List all configured servers
+atmos mcp list
+
+# Example output:
+# NAME              STATUS    DESCRIPTION
+# aws-docs          stopped   AWS Documentation — search and fetch AWS docs
+# aws-knowledge     stopped   AWS Knowledge — managed AWS knowledge base (remote)
+# aws-pricing       stopped   AWS Pricing — real-time pricing and cost analysis
+# aws-api           stopped   AWS API — direct AWS CLI access with security controls
+# aws-security      stopped   AWS Security — Well-Architected security posture assessment
+```
+
+## Arguments
+
+This command takes no arguments.
+
+## Flags
+
+This command has no command-specific flags.
+
+## Configuration
+
+Add servers under `mcp.servers` in `atmos.yaml`:
+
+```yaml
+mcp:
+  servers:
+    aws-docs:
+      command: uvx
+      args: ["awslabs.aws-documentation-mcp-server@latest"]
+      description: "AWS Documentation — search and fetch AWS docs"
+```

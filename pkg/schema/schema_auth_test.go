@@ -125,6 +125,63 @@ func TestAuthConfig_Structure(t *testing.T) {
 	assert.Len(t, config.IdentityCaseMap, 1)
 }
 
+func TestIdentity_Required(t *testing.T) {
+	tests := []struct {
+		name     string
+		identity Identity
+		expected bool
+	}{
+		{
+			name:     "required true",
+			identity: Identity{Kind: "aws/assume-role", Required: true},
+			expected: true,
+		},
+		{
+			name:     "required false (explicit)",
+			identity: Identity{Kind: "aws/assume-role", Required: false},
+			expected: false,
+		},
+		{
+			name:     "required default (zero value)",
+			identity: Identity{Kind: "aws/assume-role"},
+			expected: false,
+		},
+		{
+			name:     "required and default together",
+			identity: Identity{Kind: "aws/assume-role", Default: true, Required: true},
+			expected: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.expected, tt.identity.Required)
+		})
+	}
+}
+
+func TestAuthConfig_WithRequiredIdentities(t *testing.T) {
+	// Test that AuthConfig can hold identities with Required field set,
+	// simulating how auth config is constructed from stack YAML.
+	config := AuthConfig{
+		Realm: "test-realm",
+		Providers: map[string]Provider{
+			"sso": {Kind: "aws/iam-identity-center"},
+		},
+		Identities: map[string]Identity{
+			"identity-a": {Kind: "aws/permission-set", Default: true, Required: true},
+			"identity-b": {Kind: "aws/assume-role", Required: true},
+			"identity-c": {Kind: "aws/assume-role"},
+		},
+	}
+
+	assert.Equal(t, "test-realm", config.Realm)
+	assert.True(t, config.Identities["identity-a"].Default)
+	assert.True(t, config.Identities["identity-a"].Required)
+	assert.True(t, config.Identities["identity-b"].Required)
+	assert.False(t, config.Identities["identity-c"].Required)
+}
+
 func TestProvider_Structure(t *testing.T) {
 	// Test that Provider struct has expected fields.
 	autoProvision := true
@@ -156,6 +213,7 @@ func TestIdentity_Structure(t *testing.T) {
 	identity := Identity{
 		Kind:     "aws-assume-role",
 		Default:  true,
+		Required: true,
 		Provider: "test-provider",
 		Via: &IdentityVia{
 			Provider: "base-provider",
@@ -179,6 +237,7 @@ func TestIdentity_Structure(t *testing.T) {
 
 	assert.Equal(t, "aws-assume-role", identity.Kind)
 	assert.True(t, identity.Default)
+	assert.True(t, identity.Required)
 	assert.Equal(t, "test-provider", identity.Provider)
 	assert.NotNil(t, identity.Via)
 	assert.Equal(t, "base-provider", identity.Via.Provider)

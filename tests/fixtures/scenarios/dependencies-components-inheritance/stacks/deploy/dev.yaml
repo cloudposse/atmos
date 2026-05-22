@@ -1,0 +1,63 @@
+# Dev stack that imports base and adds its own dependencies.
+# Tests that child dependencies REPLACE parent dependencies (default behavior).
+import:
+  - catalog/base
+
+vars:
+  stage: dev
+
+components:
+  terraform:
+    # Provide minimal config for the base dependencies.
+    account-settings:
+      metadata:
+        component: mock
+
+    iam-baseline:
+      metadata:
+        component: mock
+
+    # VPC defines its own dependencies; parent entries are replaced.
+    vpc:
+      # Child dependencies replace parent (base.yaml deps are NOT inherited).
+      dependencies:
+        components:
+          - component: network-baseline
+          - component: security-group
+            stack: shared
+
+    # Subnet depends on vpc in the same stack.
+    subnet:
+      metadata:
+        component: mock
+      dependencies:
+        components:
+          - component: vpc
+
+    # RDS depends on vpc and subnet with no inheritance.
+    rds:
+      metadata:
+        component: mock
+      dependencies:
+        components:
+          - component: vpc
+          - component: subnet
+
+    # EKS depends on VPC using a templated stack reference.
+    eks:
+      metadata:
+        component: mock
+      dependencies:
+        components:
+          - component: vpc
+            stack: "{{ .vars.stage }}"
+
+  helmfile:
+    # Nginx (helmfile) depends on terraform VPC — cross-type dependency.
+    nginx:
+      metadata:
+        component: mock
+      dependencies:
+        components:
+          - component: vpc
+            kind: terraform

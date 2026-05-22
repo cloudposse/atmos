@@ -775,8 +775,8 @@ func TestExecCommand_ErrorMessages(t *testing.T) {
 	})
 }
 
-// TestExecCommand_IntegrationStyle tests the overall flow in a more integration-style manner.
-func TestExecCommand_IntegrationStyle(t *testing.T) {
+// TestExecCommand_ServerStyle tests the overall flow in a more server-style manner.
+func TestExecCommand_ServerStyle(t *testing.T) {
 	t.Run("full flag setup works", func(t *testing.T) {
 		// Create a copy of the command for isolated testing.
 		testCmd := &cobra.Command{
@@ -1493,8 +1493,8 @@ ai:
 	return tmpDir
 }
 
-// TestFormatterIntegration tests actual formatter usage with ExecutionResult.
-func TestFormatterIntegration(t *testing.T) {
+// TestFormatterServer tests actual formatter usage with ExecutionResult.
+func TestFormatterServer(t *testing.T) {
 	t.Run("text formatter writes response", func(t *testing.T) {
 		result := &formatter.ExecutionResult{
 			Success:  true,
@@ -1899,7 +1899,7 @@ func TestExecCommand_TimeoutConfiguration(t *testing.T) {
 	t.Run("custom timeout from config", func(t *testing.T) {
 		// Test that timeout_seconds config is read at lines 143-146.
 		extraConfig := `
-    timeout_seconds: 300
+    timeout_seconds: 120
 `
 		tmpDir := createValidAtmosConfig(t, true, extraConfig)
 
@@ -3313,9 +3313,9 @@ func TestGetPrompt_WithMockStdin(t *testing.T) {
 	})
 }
 
-// TestExecCommand_StandardParserIntegration tests that the exec command uses StandardParser
+// TestExecCommand_StandardParserServer tests that the exec command uses StandardParser
 // with proper Viper binding for flag precedence (CLI > ENV > defaults).
-func TestExecCommand_StandardParserIntegration(t *testing.T) {
+func TestExecCommand_StandardParserServer(t *testing.T) {
 	t.Run("execParser is initialized", func(t *testing.T) {
 		require.NotNil(t, execParser, "execParser should be initialized by init()")
 	})

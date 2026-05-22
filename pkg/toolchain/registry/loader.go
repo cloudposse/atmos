@@ -34,6 +34,19 @@ func RegisterDefaultRegistry(factory registryFactory) {
 	defaultRegistryFactory = factory
 }
 
+// DefaultRegistry returns a fresh instance of the registered default registry
+// (Aqua), or nil if none has been registered. Use this to access registry
+// capabilities (e.g., short-name resolution) from callers that don't have a
+// full atmos configuration available.
+func DefaultRegistry() ToolRegistry {
+	defer perf.Track(nil, "registry.DefaultRegistry")()
+
+	if defaultRegistryFactory == nil {
+		return nil
+	}
+	return defaultRegistryFactory()
+}
+
 // RegisterAtmosRegistry allows the atmos package to register its constructor.
 // This is called by atmos package during initialization.
 func RegisterAtmosRegistry(factory atmosRegistryFactory) {

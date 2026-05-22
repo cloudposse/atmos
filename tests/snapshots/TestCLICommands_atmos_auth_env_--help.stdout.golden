@@ -1,6 +1,8 @@
 
 👽 test linux/amd64
 
+[EXPERIMENTAL]
+
 Outputs environment variables for the assumed identity, suitable for use by
 external tools such as Terraform or Helm.
 
@@ -12,11 +14,13 @@ USAGE
 
 FLAGS
 
-  -f, --format string  Output format: bash, json, dotenv. (default bash)
+  -f, --format string       Output format: bash, dotenv, env, github, json (default bash)
 
-  -h, --help           help for env
+  -h, --help                help for env
 
-      --login          Trigger authentication if credentials are missing or expired (default: false)
+      --login               Trigger authentication if credentials are missing or expired
+
+  -o, --output-file string  Output file path (default: stdout, or $GITHUB_ENV for github format)
 
 
 GLOBAL FLAGS

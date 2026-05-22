@@ -60,6 +60,15 @@ This command is useful for:
 
   <dt>`--identity` / `-i` <em>(optional)</em></dt>
   <dd>Authenticate with a specific identity before listing metadata.<br/>This is required when stack configurations use YAML template functions<br/>(e.g., `!terraform.state`, `!terraform.output`) that require authentication.<br/>`atmos list metadata --identity my-aws-identity`<br/><br/>Can also be set via `ATMOS_IDENTITY` environment variable.</dd>
+
+  <dt>`--process-templates`</dt>
+  <dd>Enable/disable Go template processing in Atmos stack manifests (default `true`). Go template functions include `atmos.Component(...)`.<br/>Environment variable: `ATMOS_PROCESS_TEMPLATES`</dd>
+
+  <dt>`--process-functions`</dt>
+  <dd>Enable/disable YAML functions processing in Atmos stack manifests (default `true`). YAML functions include `!terraform.state`, `!terraform.output`, `!store`, `!aws.*`, etc. This is distinct from Go template functions like `atmos.Component(...)`, which are controlled by `--process-templates`.<br/>Environment variable: `ATMOS_PROCESS_FUNCTIONS`</dd>
+
+  <dt>`--skip`</dt>
+  <dd>Skip executing a specific YAML function in the Atmos stack manifests when processing stacks. Repeat the flag to skip multiple functions (for example, `--skip terraform.state --skip terraform.output`). Use this to bypass a single function (such as a backend-resolving `!terraform.state` call) while leaving other YAML functions enabled.<br/>Environment variable: `ATMOS_SKIP`</dd>
 </dl>
 
 ## Examples

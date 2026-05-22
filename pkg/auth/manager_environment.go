@@ -3,9 +3,12 @@ package auth
 import (
 	"context"
 	"fmt"
+	"os"
 	"strings"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/auth/integrations"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
@@ -31,6 +34,9 @@ func (m *manager) GetEnvironmentVariables(identityName string) (map[string]strin
 	if err != nil {
 		return nil, fmt.Errorf("%w: failed to get environment variables: %w", errUtils.ErrAuthManager, err)
 	}
+
+	// Compose integration environment variables.
+	env = m.composeIntegrationEnvironment(identityName, env)
 
 	return env, nil
 }
@@ -61,8 +67,88 @@ func (m *manager) PrepareShellEnvironment(ctx context.Context, identityName stri
 		return nil, fmt.Errorf("%w: failed to prepare shell environment for identity %q: %w", errUtils.ErrAuthManager, identityName, err)
 	}
 
+	// Compose integration environment variables.
+	preparedEnvMap = m.composeIntegrationEnvironment(identityName, preparedEnvMap)
+
 	// Convert map back to list for subprocess execution.
 	return mapToEnvironList(preparedEnvMap), nil
+}
+
+// composeIntegrationEnvironment collects environment variables from all integrations
+// linked to the identity and composes them into the base environment.
+func (m *manager) composeIntegrationEnvironment(identityName string, base map[string]string) map[string]string {
+	defer perf.Track(nil, "auth.Manager.composeIntegrationEnvironment")()
+
+	linkedIntegrations := m.findIntegrationsForIdentity(identityName, false)
+	if len(linkedIntegrations) == 0 {
+		return base
+	}
+
+	for _, integrationName := range linkedIntegrations {
+		integrationConfig, exists := m.config.Integrations[integrationName]
+		if !exists {
+			continue
+		}
+
+		integration, err := integrations.Create(&integrations.IntegrationConfig{
+			Name:   integrationName,
+			Config: &integrationConfig,
+		})
+		if err != nil {
+			log.Debug("Failed to create integration for environment", "integration", integrationName, "error", err)
+			continue
+		}
+
+		vars, err := integration.Environment()
+		if err != nil {
+			log.Debug("Failed to get integration environment", "integration", integrationName, "error", err)
+			continue
+		}
+
+		base = composeEnvironmentVariables(base, vars)
+	}
+
+	return base
+}
+
+// composeEnvironmentVariables merges additions into base.
+// KUBECONFIG and KUBE_CONFIG_PATH values are colon-separated with deduplication.
+// All other keys use last-write-wins.
+func composeEnvironmentVariables(base, additions map[string]string) map[string]string {
+	if base == nil {
+		base = make(map[string]string)
+	}
+
+	for key, value := range additions {
+		if key == "KUBECONFIG" || key == "KUBE_CONFIG_PATH" {
+			base[key] = appendPathList(base[key], value)
+		} else {
+			base[key] = value
+		}
+	}
+
+	return base
+}
+
+// appendPathList appends a path to a path list (colon-separated) with deduplication.
+func appendPathList(existing, newPath string) string {
+	if existing == "" {
+		return newPath
+	}
+	if newPath == "" {
+		return existing
+	}
+
+	// Check for duplicates.
+	sep := string(os.PathListSeparator)
+	parts := strings.Split(existing, sep)
+	for _, part := range parts {
+		if part == newPath {
+			return existing
+		}
+	}
+
+	return existing + sep + newPath
 }
 
 // environListToMap converts environment variable list to map.

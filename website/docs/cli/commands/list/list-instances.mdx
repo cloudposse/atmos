@@ -33,7 +33,7 @@ The `atmos list instances` command displays all component instances defined acro
 
 <dl>
   <dt>`--format` / `-f`</dt>
-  <dd>Output format: `table`, `json`, `yaml`, `csv`, `tsv`, `tree` (default: `table`)</dd>
+  <dd>Output format: `table`, `json`, `yaml`, `csv`, `tsv`, `tree`, `matrix` (default: `table`)</dd>
 
   <dt>`--delimiter`</dt>
   <dd>Delimiter for CSV/TSV output (default: tab for tsv, comma for csv)</dd>
@@ -48,16 +48,28 @@ The `atmos list instances` command displays all component instances defined acro
   <dd>Filter by stack pattern (supports glob patterns, e.g., `plat-*-prod`)</dd>
 
   <dt>`--filter`</dt>
-  <dd>Filter expression using YQ syntax (e.g., `.vars.region == "us-east-1"`)</dd>
+  <dd>YQ predicate evaluated against each instance row. Rows where the expression is truthy are kept (e.g., `.vars.region == "us-east-1"`, `.component == "vpc"`). Not supported with `--format=tree` or `--format=matrix`.</dd>
 
   <dt>`--query` / `-q`</dt>
-  <dd>YQ expression to filter values (e.g., `.vars.region`)</dd>
+  <dd>YQ expression that projects each row. Scalar results land in a `value` column; map results become row keys addressable via `--columns` templates (e.g., `--query '.vars.region'`, `--query '{"region": .vars.region, "tenant": .vars.tenant}'`). Not supported with `--format=tree` or `--format=matrix`.</dd>
 
   <dt>`--sort`</dt>
   <dd>Sort by column:order (e.g., `stack:asc,component:desc`)</dd>
 
   <dt>`--upload`</dt>
-  <dd>Upload instances to Atmos Pro API (requires Pro configuration)</dd>
+  <dd>Upload instances to Atmos Pro API (requires Pro configuration). Every real (non-abstract) instance is uploaded; `settings.pro.enabled` is preserved verbatim in the payload so Atmos Pro can reconcile enabled vs. disabled state server-side.</dd>
+
+  <dt>`--output-file` / `-o`</dt>
+  <dd>Write output to file in `key=value` format (for `$GITHUB_OUTPUT`). Only supported with `--format=matrix`.</dd>
+
+  <dt>`--process-templates`</dt>
+  <dd>Enable/disable Go template processing in Atmos stack manifests (default `true`). Go template functions include `atmos.Component(...)`.<br/>Environment variable: `ATMOS_PROCESS_TEMPLATES`</dd>
+
+  <dt>`--process-functions`</dt>
+  <dd>Enable/disable YAML functions processing in Atmos stack manifests (default `true`). YAML functions include `!terraform.state`, `!terraform.output`, `!store`, `!aws.*`, etc. This is distinct from Go template functions like `atmos.Component(...)`, which are controlled by `--process-templates`.<br/>Environment variable: `ATMOS_PROCESS_FUNCTIONS`</dd>
+
+  <dt>`--skip`</dt>
+  <dd>Skip executing a specific YAML function in the Atmos stack manifests when processing stacks. Repeat the flag to skip multiple functions (for example, `--skip terraform.state --skip terraform.output`). Useful with `--upload` to bypass backend-resolving functions while leaving other YAML functions like `!template` enabled.<br/>Environment variable: `ATMOS_SKIP`</dd>
 </dl>
 
 ## Examples
@@ -97,6 +109,24 @@ atmos list instances --filter '.vars.region == "us-east-1"'
 atmos list instances --filter '.component == "vpc" and .enabled == true'
 ```
 
+Project specific fields with `--query`:
+```shell
+# Pull the region for every instance (scalar projection → `value` column)
+atmos list instances --query '.vars.region' --columns 'Stack={{ .stack }},Region={{ .value }}'
+
+# Project multiple fields at once (map projection → addressable keys)
+atmos list instances \
+  --query '{"region": .vars.region, "tenant": .vars.tenant}' \
+  --columns 'Stack={{ .stack }},Tenant={{ .tenant }},Region={{ .region }}'
+```
+
+:::note
+`--filter` and `--query` operate per-row and require `--format=table`,
+`json`, `yaml`, `csv`, or `tsv`. They are rejected with `--format=tree` and
+`--format=matrix`, which render different shapes (import hierarchy and
+GitHub-Actions matrix JSON, respectively).
+:::
+
 Sort instances:
 ```shell
 # Sort by stack name ascending
@@ -111,6 +141,33 @@ Upload instances to Atmos Pro:
 atmos list instances --upload
 ```
 
+The upload includes **every real (non-abstract) instance**, regardless of whether Atmos Pro is enabled for it. The `settings.pro.enabled` flag is preserved verbatim in the payload, so Atmos Pro can reconcile which instances are active vs. disabled on the server side (e.g., grey out disabled instances in the UI rather than losing track of them):
+
+```yaml
+components:
+  terraform:
+    vpc:
+      settings:
+        pro:
+          enabled: true    # Uploaded as enabled
+    app:
+      settings:
+        pro:
+          enabled: false   # Uploaded as disabled — Atmos Pro keeps it visible but marks it inactive
+    db:
+      # No pro config — uploaded as disabled
+```
+
+On completion, the command reports a tally:
+
+```
+Successfully uploaded 3 instances to Atmos Pro API (1 enabled, 2 disabled, 1 drift enabled).
+```
+
+The `drift enabled` count reflects instances with `settings.pro.drift_detection.enabled: true` and is independent of `pro.enabled` — an instance can have drift detection enabled even if its `pro.enabled` flag is `false`.
+
+If the repository has no instances at all, the command prints `No instances found; nothing to upload.` and exits successfully.
+
 View instances in tree format:
 ```shell
 # Tree view without import details
@@ -118,6 +175,15 @@ atmos list instances --format tree
 
 # Tree view with import provenance (shows inheritance chain)
 atmos list instances --format tree --provenance
+```
+
+Output as GitHub Actions matrix JSON:
+```shell
+# Print matrix JSON to stdout
+atmos list instances --format matrix
+
+# Write to $GITHUB_OUTPUT for use in GitHub Actions
+atmos list instances --format matrix --output-file=$GITHUB_OUTPUT
 ```
 
 ## Tree Format with Import Provenance
@@ -156,6 +222,60 @@ Component Instances
 ```
 
 The import chain is shown from most specific (top) to most general (bottom), reflecting how Atmos merges configurations.
+
+## Matrix Format for CI/CD
+
+The `matrix` format produces GitHub Actions-compatible JSON for driving parallel CI/CD jobs. It outputs the same `{"include":[...]}` structure as [`atmos describe affected --format=matrix`](/cli/commands/describe/affected), but includes all instances rather than only changed ones.
+
+Each entry contains `stack`, `component`, `component_path`, and `component_type`:
+
+```shell
+atmos list instances --format matrix
+```
+
+```json
+{"include":[{"stack":"ue1-dev","component":"vpc","component_path":"components/terraform/vpc","component_type":"terraform"}]}
+```
+
+### Writing to `$GITHUB_OUTPUT`
+
+Use `--output-file` to write results in `key=value` format for GitHub Actions:
+
+```shell
+atmos list instances --format matrix --output-file=$GITHUB_OUTPUT
+```
+
+This writes two keys to the file:
+
+```
+matrix={"include":[...]}
+count=42
+```
+
+When `ci.enabled` is true in `atmos.yaml`, `--output-file` is not provided, and `GITHUB_OUTPUT` is available (for example, in GitHub Actions), the output is written to `$GITHUB_OUTPUT` automatically. Outside of GitHub Actions, or when `GITHUB_OUTPUT` is unset, output falls back to stdout.
+
+### GitHub Actions Example
+
+```yaml
+jobs:
+  enumerate:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.instances.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: List all instances
+        id: instances
+        run: atmos list instances --format=matrix --output-file=$GITHUB_OUTPUT
+
+  deploy:
+    needs: enumerate
+    runs-on: ubuntu-latest
+    strategy:
+      matrix: ${{ fromJson(needs.enumerate.outputs.matrix) }}
+    steps:
+      - run: echo "Deploying ${{ matrix.component }} to ${{ matrix.stack }}"
+```
 
 ## Custom Columns Configuration
 
@@ -232,7 +352,7 @@ atmos list instances --columns "stack,component,vars.region,enabled"
 - Use `--format tree --provenance` to visualize component import hierarchies
 - Use the `--filter` flag for complex filtering with YQ syntax
 - Combine `--stack` (glob pattern) with `--filter` (YQ expression) for precise filtering
-- The `--upload` flag sends instance data to Atmos Pro for centralized infrastructure management
+- The `--upload` flag sends every real instance to Atmos Pro; `settings.pro.enabled` is included in the payload so Atmos Pro decides enabled vs. disabled server-side
 - Use `--format json` or `--format yaml` for programmatic processing
 :::
 

@@ -1,0 +1,67 @@
+---
+title: atmos terraform planfile list
+sidebar_label: list
+sidebar_class_name: command
+sidebar_position: 4
+id: list
+description: List Terraform plan files from the configured storage backend.
+---
+import Intro from '@site/src/components/Intro'
+import Experimental from '@site/src/components/Experimental'
+
+<Intro>
+List Terraform plan files from the configured storage backend. Optionally filter by component (positional arg) and/or stack (`-s` flag). By default, only planfiles for the current SHA are shown. Use `--all` to show all SHAs.
+</Intro>
+
+<Experimental/>
+
+## Usage
+
+```shell
+atmos terraform planfile list [component] [flags]
+```
+
+## Arguments
+
+<dl>
+  <dt>`[component]`</dt>
+  <dd>Optional component name to filter planfiles.</dd>
+</dl>
+
+## Flags
+
+<dl>
+  <dt>`--all`</dt>
+  <dd>Show planfiles for all SHAs (bypass SHA filter).</dd>
+
+  <dt>`--format`</dt>
+  <dd>Output format: `table` (default), `json`, `yaml`, `csv`, `tsv`.</dd>
+
+  <dt>`--store`</dt>
+  <dd>Storage backend to use (default from config).</dd>
+</dl>
+
+## Examples
+
+```shell
+# List planfiles for the current SHA
+atmos terraform planfile list
+
+# List all planfiles (all SHAs)
+atmos terraform planfile list --all
+
+# List planfiles for a specific component
+atmos terraform planfile list vpc -s dev-us-east-1
+
+# JSON output for scripting
+atmos terraform planfile list --format json
+
+# List from a specific store
+atmos terraform planfile list --store s3
+```
+
+## Related
+
+- [`atmos terraform planfile upload`](/cli/commands/terraform/planfile/upload) - Upload planfiles
+- [`atmos terraform planfile download`](/cli/commands/terraform/planfile/download) - Download planfiles
+- [`atmos terraform planfile show`](/cli/commands/terraform/planfile/show) - Show planfile details

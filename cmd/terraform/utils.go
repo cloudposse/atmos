@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"sort"
 
 	"github.com/spf13/cobra"
@@ -13,7 +14,9 @@ import (
 	"github.com/cloudposse/atmos/cmd/terraform/shared"
 	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
+	"github.com/cloudposse/atmos/pkg/ansi"
 	"github.com/cloudposse/atmos/pkg/auth"
+	"github.com/cloudposse/atmos/pkg/ci/plugins/terraform/planfile"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/flags/compat"
 	h "github.com/cloudposse/atmos/pkg/hooks"
@@ -25,7 +28,58 @@ import (
 // errWrapFormat is the format string for wrapping errors with a cause.
 const errWrapFormat = "%w: %w"
 
+// wasMultiComponentExecution records whether the most recent terraformRunWithOptions call
+// was routed to ExecuteTerraformQuery. Read in plan.go PostRunE to suppress the global
+// CI hook call when per-component hooks already fired inside the component walker.
+var wasMultiComponentExecution bool
+
 func runHooks(event h.HookEvent, cmd_ *cobra.Command, args []string) error {
+	return runHooksWithOutput(event, cmd_, args, "")
+}
+
+// runHooksOnError runs CI hooks with command error context.
+// Used to update check runs to failure status when RunE fails
+// (Cobra skips PostRunE on error, so this must be called explicitly).
+func runHooksOnError(event h.HookEvent, cmd_ *cobra.Command, args []string, cmdErr error) {
+	runHooksOnErrorWithOutput(event, cmd_, args, cmdErr, "")
+}
+
+// runHooksOnErrorWithOutput runs CI hooks with command error context and captured output.
+func runHooksOnErrorWithOutput(event h.HookEvent, cmd_ *cobra.Command, args []string, cmdErr error, output string) {
+	finalArgs := append([]string{cmd_.Name()}, args...)
+
+	info, err := e.ProcessCommandLineArgs("terraform", cmd_, finalArgs, nil)
+	if err != nil {
+		return
+	}
+
+	atmosConfig, err := cfg.InitCliConfig(info, true)
+	if err != nil {
+		return
+	}
+
+	forceCIMode, _ := cmd_.Flags().GetBool("ci")
+	if !forceCIMode {
+		forceCIMode = viper.GetBool("ci")
+	}
+
+	// Extract the exit code from the command error. errUtils.GetExitCode unwraps
+	// the error chain (exec.ExitError, ExecError, exitCoder, etc.) and returns 1
+	// by default for non-nil errors with no attached code (e.g., auth failures).
+	if err := h.RunCIHooks(&h.RunCIHooksOptions{
+		Event:        event,
+		AtmosConfig:  &atmosConfig,
+		Info:         &info,
+		Output:       output,
+		ForceCIMode:  forceCIMode,
+		CommandError: cmdErr,
+		ExitCode:     errUtils.GetExitCode(cmdErr),
+	}); err != nil {
+		log.Warn("CI hook execution failed", "error", err)
+	}
+}
+
+func runHooksWithOutput(event h.HookEvent, cmd_ *cobra.Command, args []string, output string) error {
 	// Build args for ProcessCommandLineArgs.
 	// Note: Double-dash processing is handled by AtmosFlagParser in terraformRun (RunE).
 	// Hooks run in PostRunE after terraformRun has already parsed and executed.
@@ -37,15 +91,31 @@ func runHooks(event h.HookEvent, cmd_ *cobra.Command, args []string) error {
 		return err
 	}
 
-	// Initialize the CLI config
+	// Validate Atmos config first to provide specific error messages
+	// (e.g., stacks directory does not exist) before full initialization.
+	if err := internal.ValidateAtmosConfig(); err != nil {
+		return err
+	}
+
+	// Initialize the CLI config.
 	atmosConfig, err := cfg.InitCliConfig(info, true)
 	if err != nil {
 		return errors.Join(errUtils.ErrInitializeCLIConfig, err)
 	}
 
+	// Resolve path-based component arguments before getting hooks.
+	// Path resolution must happen before GetHooks because GetHooks calls
+	// ExecuteDescribeComponent which needs a valid component name, not a raw path.
+	if info.NeedsPathResolution && info.ComponentFromArg != "" {
+		if err := resolveComponentPath(&info, cfg.TerraformComponentType); err != nil {
+			return err
+		}
+	}
+
+	// Run user-defined hooks from stack configuration.
 	hooks, err := h.GetHooks(&atmosConfig, &info)
 	if err != nil {
-		return errors.Join(errUtils.ErrGetHooks, err)
+		return err
 	}
 
 	if hooks != nil && hooks.HasHooks() {
@@ -55,7 +125,98 @@ func runHooks(event h.HookEvent, cmd_ *cobra.Command, args []string) error {
 		}
 	}
 
+	// Check for --ci flag or CI environment variable.
+	// Read directly from Cobra flag (not Viper) because pflags are only bound
+	// to Viper in RunE via BindFlagsToViper. During PreRunE, Viper doesn't
+	// yet see the Cobra flag value — only env vars and defaults.
+	forceCIMode, _ := cmd_.Flags().GetBool("ci")
+	if !forceCIMode {
+		// Fall back to Viper for env var support (ATMOS_CI, CI).
+		forceCIMode = viper.GetBool("ci")
+	}
+
+	// Read --verify-plan flag early (same pattern as --ci above).
+	// PreRunE runs before RunE, so info.VerifyPlan is not yet set by applyOptionsToInfo().
+	// The CI hook handler needs it to decide whether to download with stored prefix.
+	verifyPlan, _ := cmd_.Flags().GetBool("verify-plan")
+	if !verifyPlan {
+		verifyPlan = viper.GetBool("verify-plan")
+	}
+	info.VerifyPlan = verifyPlan
+
+	// Run CI hooks based on component provider bindings.
+	// This is separate from user-defined hooks and runs automatically when CI is enabled.
+	// Success path: cmdErr is nil and exit code is 0.
+	if err := h.RunCIHooks(&h.RunCIHooksOptions{
+		Event:       event,
+		AtmosConfig: &atmosConfig,
+		Info:        &info,
+		Output:      output,
+		ForceCIMode: forceCIMode,
+	}); err != nil {
+		log.Warn("CI hook execution failed", "error", err)
+		// Don't fail the command on CI hook errors.
+	}
+
 	return nil
+}
+
+// runCIHooksForDeploy fires CI hooks using already-resolved info.
+// Unlike runHooksWithOutput, this avoids a second ProcessCommandLineArgs call
+// which would eagerly resolve !store YAML functions and fail if referenced
+// components haven't been deployed yet.
+func runCIHooksForDeploy(event h.HookEvent, cmd_ *cobra.Command, _ []string, info *schema.ConfigAndStacksInfo, output string) {
+	atmosConfig, err := cfg.InitCliConfig(*info, true)
+	if err != nil {
+		log.Warn("CI hook config init failed", "error", err)
+		return
+	}
+
+	forceCIMode, _ := cmd_.Flags().GetBool("ci")
+	if !forceCIMode {
+		forceCIMode = viper.GetBool("ci")
+	}
+
+	// Before-event hook (e.g., before.terraform.deploy): no command has run yet,
+	// so there is no exit code or error to report.
+	if err := h.RunCIHooks(&h.RunCIHooksOptions{
+		Event:       event,
+		AtmosConfig: &atmosConfig,
+		Info:        info,
+		Output:      output,
+		ForceCIMode: forceCIMode,
+	}); err != nil {
+		log.Warn("CI hook execution failed", "error", err)
+	}
+}
+
+// runCIHooksForPlanComponent fires CI hooks for a single component after it completes
+// in multi-component mode. Uses already-resolved info to avoid a second
+// ProcessCommandLineArgs call (same pattern as runCIHooksForDeploy).
+// rawOutput is the combined stdout+stderr from that component; ANSI codes are stripped here.
+func runCIHooksForPlanComponent(actualCmd *cobra.Command, info *schema.ConfigAndStacksInfo, rawOutput string, execErr error) {
+	atmosConfig, err := cfg.InitCliConfig(*info, true)
+	if err != nil {
+		log.Warn("CI hook config init failed", "component", info.Component, "error", err)
+		return
+	}
+
+	forceCIMode, _ := actualCmd.Flags().GetBool("ci")
+	if !forceCIMode {
+		forceCIMode = viper.GetBool("ci")
+	}
+
+	if err := h.RunCIHooks(&h.RunCIHooksOptions{
+		Event:        h.AfterTerraformPlan,
+		AtmosConfig:  &atmosConfig,
+		Info:         info,
+		Output:       ansi.Strip(rawOutput),
+		ForceCIMode:  forceCIMode,
+		CommandError: execErr,
+		ExitCode:     errUtils.GetExitCode(execErr),
+	}); err != nil {
+		log.Warn("CI hook execution failed", "component", info.Component, "error", err)
+	}
 }
 
 // resolveComponentPath resolves a path-based component argument to a component name.
@@ -83,7 +244,8 @@ func resolveComponentPath(info *schema.ConfigAndStacksInfo, commandName string) 
 		return handlePathResolutionError(err)
 	}
 
-	log.Debug("Resolved component from path",
+	log.Debug(
+		"Resolved component from path",
 		"original_path", info.ComponentFromArg,
 		"resolved_component", resolvedComponent,
 		"stack", info.Stack,
@@ -141,9 +303,9 @@ func isMultiComponentExecution(info *schema.ConfigAndStacksInfo) bool {
 }
 
 // executeSingleComponent executes terraform for a single component.
-func executeSingleComponent(info *schema.ConfigAndStacksInfo) error {
+func executeSingleComponent(info *schema.ConfigAndStacksInfo, shellOpts ...e.ShellCommandOption) error {
 	log.Debug("Routing to ExecuteTerraform (single-component)")
-	err := e.ExecuteTerraform(*info)
+	err := e.ExecuteTerraform(*info, shellOpts...)
 	if err != nil {
 		if errors.Is(err, errUtils.ErrPlanHasDiff) {
 			errUtils.CheckErrorAndPrint(err, "", "")
@@ -194,6 +356,7 @@ func applyOptionsToInfo(info *schema.ConfigAndStacksInfo, opts *TerraformRunOpti
 	info.Components = opts.Components
 	info.DryRun = opts.DryRun
 	info.SkipInit = opts.SkipInit
+	info.UploadStatus = opts.UploadStatus
 	info.All = opts.All
 	info.Affected = opts.Affected
 	info.Query = opts.Query
@@ -220,11 +383,13 @@ func applyOptionsToInfo(info *schema.ConfigAndStacksInfo, opts *TerraformRunOpti
 	if opts.DeployRunInit {
 		info.DeployRunInit = "true"
 	}
+	info.VerifyPlan = opts.VerifyPlan
 }
 
 // terraformRunWithOptions is the shared execution logic for terraform subcommands.
 // Commands with their own parsers (plan, apply, deploy) bind their parsers in RunE.
-func terraformRunWithOptions(parentCmd, actualCmd *cobra.Command, args []string, opts *TerraformRunOptions) error {
+// Optional ShellCommandOption values are forwarded to ExecuteTerraform for stdout capture, etc.
+func terraformRunWithOptions(parentCmd, actualCmd *cobra.Command, args []string, opts *TerraformRunOptions, shellOpts ...e.ShellCommandOption) error {
 	subCommand := actualCmd.Name()
 	log.Debug("terraformRunWithOptions entry", "subCommand", subCommand, "args", args)
 
@@ -266,15 +431,51 @@ func terraformRunWithOptions(parentCmd, actualCmd *cobra.Command, args []string,
 		return err
 	}
 
+	// Fire before.terraform.deploy CI hook after stack processing is complete.
+	// This runs inside RunE (not PreRunE) because ProcessCommandLineArgs eagerly
+	// resolves !store YAML functions for all stacks, which would fail if referenced
+	// components haven't been deployed yet. By running here, the hook has access
+	// to the resolved info without a second ProcessCommandLineArgs call.
+	if subCommand == "deploy" {
+		runCIHooksForDeploy(h.BeforeTerraformDeploy, actualCmd, args, &info, "")
+	}
+
 	// Route to appropriate execution path.
 	if info.Affected {
+		wasMultiComponentExecution = false
 		return executeAffectedCommand(parentCmd, args, &info)
 	}
 	if isMultiComponentExecution(&info) {
+		wasMultiComponentExecution = true
 		log.Debug("Routing to ExecuteTerraformQuery (multi-component)")
+		// Wire per-component CI hooks for plan so each component gets its own
+		// summary entry instead of a single misattributed global call in PostRunE.
+		if subCommand == "plan" {
+			info.PerComponentHook = func(compInfo *schema.ConfigAndStacksInfo, output string, execErr error) {
+				runCIHooksForPlanComponent(actualCmd, compInfo, output, execErr)
+			}
+		}
 		return e.ExecuteTerraformQuery(&info)
 	}
-	return executeSingleComponent(&info)
+	wasMultiComponentExecution = false
+
+	// Verify stored planfile matches current state before deploying.
+	if subCommand == "deploy" && info.VerifyPlan {
+		verifyAtmosConfig, configErr := cfg.InitCliConfig(info, true)
+		if configErr == nil {
+			canonicalPlanPath := e.ConstructTerraformComponentPlanfilePath(&verifyAtmosConfig, &info)
+			componentDir := filepath.Dir(canonicalPlanPath)
+			storedPlanPath := filepath.Join(componentDir, planfile.StoredPlanPrefix+planfile.PlanFilename)
+
+			if _, statErr := os.Stat(storedPlanPath); statErr == nil {
+				if verifyErr := e.VerifyPlanfile(&info, storedPlanPath); verifyErr != nil {
+					return verifyErr
+				}
+			}
+		}
+	}
+
+	return executeSingleComponent(&info, shellOpts...)
 }
 
 // hasMultiComponentFlags checks if any multi-component flags are set.

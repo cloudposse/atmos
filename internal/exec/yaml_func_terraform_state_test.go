@@ -2,6 +2,7 @@ package exec
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
 	"testing"
 
@@ -10,10 +11,24 @@ import (
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
+	tfoutput "github.com/cloudposse/atmos/pkg/terraform/output"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 func TestYamlFuncTerraformState(t *testing.T) {
+	// Clear caches to ensure isolation from other tests that may have run first.
+	ResetStateCache()
+	tfoutput.ResetOutputsCache()
+	t.Cleanup(func() {
+		ResetStateCache()
+		tfoutput.ResetOutputsCache()
+	})
+
+	if _, lookErr := exec.LookPath("tofu"); lookErr != nil {
+		if _, lookErr2 := exec.LookPath("terraform"); lookErr2 != nil {
+			t.Skip("skipping: neither 'tofu' nor 'terraform' binary found in PATH (required for !terraform.state integration test)")
+		}
+	}
 	err := os.Unsetenv("ATMOS_CLI_CONFIG_PATH")
 	if err != nil {
 		t.Fatalf("Failed to unset 'ATMOS_CLI_CONFIG_PATH': %v", err)

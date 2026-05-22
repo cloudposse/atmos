@@ -192,6 +192,51 @@ func TestWhichCommand_CanonicalName(t *testing.T) {
 	require.NoError(t, err, "Should succeed with canonical tool name")
 }
 
+// TestWhichCommand_StoredAsCanonicalLookupByAlias reproduces a bug where
+// .tool-versions stores a tool under its canonical owner/repo key (e.g.
+// "helm/helm") — which is what the write-side dedup (wouldCreateDuplicate)
+// keeps when install paths canonicalize — but findBinaryPath does a raw
+// map lookup and misses when the caller asks by alias (e.g. "helm").
+//
+// The install side already uses the resolver; the read side should too.
+func TestWhichCommand_StoredAsCanonicalLookupByAlias(t *testing.T) {
+	setupTestIO(t)
+
+	tempDir := t.TempDir()
+
+	// Entry stored under the canonical owner/repo key.
+	toolVersions := &ToolVersions{
+		Tools: map[string][]string{
+			"helm/helm": {"3.20.2"},
+		},
+	}
+	toolVersionsPath := filepath.Join(tempDir, DefaultToolVersionsFilePath)
+
+	// User-defined alias so "helm" resolves to "helm/helm" via the resolver
+	// without any network call to the Aqua registry.
+	SetAtmosConfig(&schema.AtmosConfiguration{Toolchain: schema.Toolchain{
+		InstallPath:  tempDir,
+		VersionsFile: toolVersionsPath,
+		Aliases: map[string]string{
+			"helm": "helm/helm",
+		},
+	}})
+	err := SaveToolVersions(toolVersionsPath, toolVersions)
+	require.NoError(t, err)
+
+	// Create mock installed binary at the canonical path.
+	installer := NewInstaller()
+	binaryPath := installer.GetBinaryPath("helm", "helm", "3.20.2", "")
+	err = os.MkdirAll(filepath.Dir(binaryPath), defaultMkdirPermissions)
+	require.NoError(t, err)
+	err = os.WriteFile(binaryPath, []byte("mock helm"), defaultMkdirPermissions)
+	require.NoError(t, err)
+
+	// Lookup by the alias — should resolve to the canonical entry.
+	err = WhichExec("helm")
+	require.NoError(t, err, "WhichExec(%q) should find entry stored as %q via alias resolution", "helm", "helm/helm")
+}
+
 func TestWhichCommand_WithVersionSpecifier(t *testing.T) {
 	setupTestIO(t)
 

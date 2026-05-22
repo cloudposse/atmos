@@ -143,10 +143,17 @@ jobs:
 
       - name: Install OpenTofu
         uses: opentofu/setup-opentofu@v1
-        if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
+        if: matrix.flavor.target != 'windows'
         with:
           tofu_version: ${{ env.OPEN_TOFU_VERSION }}
           tofu_wrapper: false
+
+      - name: Install OpenTofu on Windows
+        if: matrix.flavor.target == 'windows' && ! github.event.pull_request.draft
+        shell: pwsh
+        run: |
+          atmos toolchain install opentofu/opentofu@${{ env.OPEN_TOFU_VERSION }}
+          atmos toolchain env --format github
 
       # https://github.com/hashicorp/setup-packer
       - name: Install Packer
@@ -155,16 +162,18 @@ jobs:
         with:
           version: ${{ env.PACKER_VERSION }}
 
-      # https://github.com/helmfile/helmfile-action
-      - name: Install Helmfile
-        uses: helmfile/helmfile-action@v2.0.5
+      - name: Install Helm and Helmfile
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
-        with:
-          helm-version: ${{ env.HELM_VERSION }}
-          helmfile-version: ${{ env.HELMFILE_VERSION }}
-          helmfile-args: version
-          helmfile-auto-init: "false"
-          helm-plugins: ""
+        run: |
+          atmos toolchain install --default helm/helm@${{ env.HELM_VERSION }}
+          atmos toolchain install --default helmfile/helmfile@${{ env.HELMFILE_VERSION }}
+          atmos toolchain env --format github
+
+      - name: Verify Helm and Helmfile
+        if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
+        run: |
+          helm version --short
+          helmfile version
 
       - name: Install helm-diff plugin
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
@@ -214,6 +223,8 @@ jobs:
           PACKER_GITHUB_API_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # Skip precondition checks in CI to ensure tests run and maintain coverage
           ATMOS_TEST_SKIP_PRECONDITION_CHECKS: true
+          # Enable Playwright integration tests to validate browser driver download
+          RUN_PLAYWRIGHT_INTEGRATION: 1
         run: make testacc-cover
 
       - name: Upload coverage report to Codecov
@@ -458,11 +469,18 @@ jobs:
           terraform_wrapper: false
 
       - name: Install OpenTofu
-        if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
+        if: matrix.flavor.target != 'windows'
         uses: opentofu/setup-opentofu@v1
         with:
           tofu_version: ${{ env.OPEN_TOFU_VERSION }}
           tofu_wrapper: false
+
+      - name: Install OpenTofu on Windows
+        if: matrix.flavor.target == 'windows' && ! github.event.pull_request.draft
+        shell: pwsh
+        run: |
+          atmos toolchain install opentofu/opentofu@${{ env.OPEN_TOFU_VERSION }}
+          atmos toolchain env --format github
 
       # https://github.com/hashicorp/setup-packer
       - name: Install Packer

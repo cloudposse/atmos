@@ -411,7 +411,7 @@ These templates are processed in different phases and use different context:
   are processed when the CLI command [`atmos vendor pull`](/cli/commands/vendor/pull) is executed. The templates in
   the vendoring manifests support the `{{.Version}}` variable, and the execution context is provided in the `version` attribute
 
-- [`Go` Templates in Imports](/stacks/imports#go-templates-in-imports) are used in imported stack
+- [`Go` Templates in Imports](/stacks/imports#templated-imports) are used in imported stack
   manifests to make them DRY and reusable. The context (variables) for the `Go` templates is provided via the static
   `context` section. Atmos processes `Go` templates in imports as the **very first** phase of the stack processing pipeline.
   When executing the [CLI commands](/cli/commands), Atmos parses and executes the templates using the provided static
@@ -427,7 +427,7 @@ in different phases of the stack processing pipeline.
 
 For more details, refer to:
 
-- [`Go` Templates in Imports](/stacks/imports#go-templates-in-imports)
+- [`Go` Templates in Imports](/stacks/imports#templated-imports)
 - [Excluding templates in imports from processing by Atmos](#excluding-templates-in-stack-manifest-from-processing-by-atmos)
 
 ### Processing Pipelines
@@ -583,7 +583,7 @@ chart_values:
 
 ## Excluding Templates in Imports
 
-If you are using [`Go` Templates in Imports](/stacks/imports#go-templates-in-imports) and `Go` templates
+If you are using [`Go` Templates in Imports](/stacks/imports#templated-imports) and `Go` templates
 in stack manifests in the same Atmos manifest, take into account that in this case Atmos will do `Go`
 template processing two times (two passes):
 

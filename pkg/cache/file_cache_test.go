@@ -9,6 +9,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/filesystem"
@@ -452,47 +453,63 @@ func TestFileCache_Get_ReadError(t *testing.T) {
 
 func TestFileCache_Set_WriteError(t *testing.T) {
 	// Test that Set returns an error when WriteFileAtomic fails.
-	// Use a mock lock that succeeds but point cache at a non-writable directory.
 	tempDir := t.TempDir()
-	readOnlyDir := filepath.Join(tempDir, "readonly")
-	err := os.MkdirAll(readOnlyDir, 0o555)
-	require.NoError(t, err)
+	key := "test-key"
+	content := []byte("content")
+	expectedPath := filepath.Join(tempDir, keyToFilename(key))
+	writeErr := fmt.Errorf("write failed")
+
+	ctrl := gomock.NewController(t)
+	mockFS := filesystem.NewMockFileSystem(ctrl)
+	mockFS.EXPECT().
+		WriteFileAtomic(expectedPath, content, os.FileMode(DefaultFilePerm)).
+		Return(writeErr)
 
 	cache := &FileCache{
-		baseDir:      readOnlyDir,
-		lockFilePath: filepath.Join(readOnlyDir, "cache.lock"),
+		baseDir:      tempDir,
+		lockFilePath: filepath.Join(tempDir, "cache.lock"),
 		lock:         &mockFileLock{},
-		fs:           filesystem.NewOSFileSystem(),
+		fs:           mockFS,
 	}
 
-	err = cache.Set("test-key", []byte("content"))
+	err := cache.Set(key, content)
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrCacheWrite)
 }
 
 func TestFileCache_Clear_RemoveError(t *testing.T) {
 	// Test Clear when a cached file cannot be removed.
-	// Create a subdirectory inside the cache dir that contains a file,
-	// then make the subdirectory non-writable so file removal fails.
-	if os.Getuid() == 0 {
-		t.Skip("Skipping test when running as root")
+	tempDir := t.TempDir()
+	filePath := filepath.Join(tempDir, "cached-file")
+	err := os.WriteFile(filePath, []byte("content"), DefaultFilePerm)
+	require.NoError(t, err)
+
+	baseInfo, err := os.Stat(tempDir)
+	require.NoError(t, err)
+	fileInfo, err := os.Stat(filePath)
+	require.NoError(t, err)
+	removeErr := fmt.Errorf("remove failed")
+
+	ctrl := gomock.NewController(t)
+	mockFS := filesystem.NewMockFileSystem(ctrl)
+	mockFS.EXPECT().
+		Stat(tempDir).
+		Return(baseInfo, nil)
+	mockFS.EXPECT().
+		Walk(tempDir, gomock.Any()).
+		DoAndReturn(func(_ string, fn filepath.WalkFunc) error {
+			return fn(filePath, fileInfo, nil)
+		})
+	mockFS.EXPECT().
+		Remove(filePath).
+		Return(removeErr)
+
+	cache := &FileCache{
+		baseDir:      tempDir,
+		lockFilePath: filepath.Join(tempDir, "cache.lock"),
+		lock:         &mockFileLock{},
+		fs:           mockFS,
 	}
-
-	cache := newTestCache(t)
-
-	// Create a file inside a read-only subdirectory.
-	subDir := filepath.Join(cache.baseDir, "protected")
-	err := os.MkdirAll(subDir, 0o755)
-	require.NoError(t, err)
-
-	filePath := filepath.Join(subDir, "locked-file")
-	err = os.WriteFile(filePath, []byte("content"), 0o644)
-	require.NoError(t, err)
-
-	// Make the subdirectory read-only so remove fails.
-	err = os.Chmod(subDir, 0o555)
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = os.Chmod(subDir, 0o755) })
 
 	err = cache.Clear()
 	require.Error(t, err)

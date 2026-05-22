@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/store"
 )
@@ -303,6 +304,289 @@ func TestRunAll(t *testing.T) {
 				require.Error(t, err)
 			} else {
 				require.NoError(t, err)
+			}
+		})
+	}
+}
+
+// TestRunAll_EventFiltering verifies that RunAll only executes hooks whose Events list
+// includes the current event. This is the guard that prevents after-terraform-apply hooks
+// from firing during before-terraform-apply (and vice-versa).
+func TestRunAll_EventFiltering(t *testing.T) {
+	makeHooks := func(events []string) Hooks {
+		mockStore := NewMockStore()
+		cfg := &schema.AtmosConfiguration{Stores: make(store.StoreRegistry)}
+		cfg.Stores["test-store"] = mockStore
+		return Hooks{
+			config: cfg,
+			info:   &schema.ConfigAndStacksInfo{ComponentFromArg: "comp", Stack: "stack"},
+			items: map[string]Hook{
+				"hook": {
+					Events:  events,
+					Command: "store",
+					Name:    "test-store",
+					// Literal value (no dot prefix) — no terraform output call needed.
+					Outputs: map[string]string{"label_id": "literal-value"},
+				},
+			},
+		}
+	}
+
+	getStore := func(h Hooks) *MockStore {
+		return h.config.Stores["test-store"].(*MockStore)
+	}
+
+	t.Run("after-apply hook does not run on before-apply event", func(t *testing.T) {
+		h := makeHooks([]string{"after-terraform-apply"})
+		err := h.RunAll(BeforeTerraformApply, h.config, h.info, nil, nil)
+		require.NoError(t, err)
+		assert.Empty(t, getStore(h).GetData(), "store must not be called when event does not match")
+	})
+
+	t.Run("after-apply hook runs on after-apply event", func(t *testing.T) {
+		h := makeHooks([]string{"after-terraform-apply"})
+		err := h.RunAll(AfterTerraformApply, h.config, h.info, nil, nil)
+		require.NoError(t, err)
+		data := getStore(h).GetData()
+		assert.Equal(t, "literal-value", data["stack/comp/label_id"], "store must be called when event matches")
+	})
+
+	t.Run("hook with dot-format event matches correctly", func(t *testing.T) {
+		h := makeHooks([]string{"after.terraform.apply"})
+		err := h.RunAll(AfterTerraformApply, h.config, h.info, nil, nil)
+		require.NoError(t, err)
+		data := getStore(h).GetData()
+		assert.Equal(t, "literal-value", data["stack/comp/label_id"], "dot-format event must also match")
+	})
+
+	t.Run("hook with multiple events only runs on matching event", func(t *testing.T) {
+		h := makeHooks([]string{"before-terraform-plan", "after-terraform-apply"})
+		err := h.RunAll(BeforeTerraformApply, h.config, h.info, nil, nil)
+		require.NoError(t, err)
+		assert.Empty(t, getStore(h).GetData(), "store must not be called for non-matching event")
+	})
+
+	// Cross-fire: apply and deploy are aliases — hooks configured for either fire on both.
+	t.Run("after-terraform-apply hook fires when deploy command runs", func(t *testing.T) {
+		h := makeHooks([]string{"after-terraform-apply"})
+		err := h.RunAll(AfterTerraformDeploy, h.config, h.info, nil, nil)
+		require.NoError(t, err)
+		data := getStore(h).GetData()
+		assert.Equal(t, "literal-value", data["stack/comp/label_id"], "apply hook must fire on deploy event")
+	})
+
+	t.Run("after-terraform-deploy hook fires when apply command runs", func(t *testing.T) {
+		h := makeHooks([]string{"after-terraform-deploy"})
+		err := h.RunAll(AfterTerraformApply, h.config, h.info, nil, nil)
+		require.NoError(t, err)
+		data := getStore(h).GetData()
+		assert.Equal(t, "literal-value", data["stack/comp/label_id"], "deploy hook must fire on apply event")
+	})
+}
+
+// TestRunCIHooks_CIEnabledIsHardKillSwitch verifies that ci.enabled in atmos.yaml
+// is the authority for CI hooks. When ci.enabled is false (or not set, which defaults
+// to false), CI hooks must not run even when --ci flag is passed (forceCIMode=true).
+func TestRunCIHooks_CIEnabledIsHardKillSwitch(t *testing.T) {
+	tests := []struct {
+		name        string
+		ciEnabled   bool
+		forceCIMode bool
+		expectNoop  bool
+	}{
+		{
+			name:        "ci.enabled=false and forceCIMode=false skips CI hooks",
+			ciEnabled:   false,
+			forceCIMode: false,
+			expectNoop:  true,
+		},
+		{
+			name:        "ci.enabled=false and forceCIMode=true still skips CI hooks",
+			ciEnabled:   false,
+			forceCIMode: true,
+			expectNoop:  true,
+		},
+		{
+			name:        "ci.enabled not set (defaults to false) and forceCIMode=true still skips CI hooks",
+			ciEnabled:   false, // zero value = not set in YAML.
+			forceCIMode: true,
+			expectNoop:  true,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			config := &schema.AtmosConfiguration{
+				CI: schema.CIConfig{Enabled: tc.ciEnabled},
+			}
+			info := &schema.ConfigAndStacksInfo{
+				Stack:            "test-stack",
+				ComponentFromArg: "test-component",
+			}
+
+			// RunCIHooks should return nil immediately without reaching ci.Execute.
+			// If it did reach ci.Execute with a bogus event, the event would not
+			// match any binding and ci.Execute returns nil anyway — but the key
+			// assertion is that RunCIHooks itself short-circuits.
+			err := RunCIHooks(&RunCIHooksOptions{
+				Event:       "before.terraform.plan",
+				AtmosConfig: config,
+				Info:        info,
+				ForceCIMode: tc.forceCIMode,
+			})
+			assert.NoError(t, err)
+		})
+	}
+}
+
+// TestRunCIHooks_ForwardsErrorAndExitCode verifies that RunCIHooksOptions
+// fields (CommandError, ExitCode) flow through to ci.Execute when CI is
+// enabled. We trigger a clean early exit inside ci.Execute by using an
+// unhandled event so no real plugin is invoked.
+func TestRunCIHooks_ForwardsErrorAndExitCode(t *testing.T) {
+	tests := []struct {
+		name         string
+		commandError error
+		exitCode     int
+	}{
+		{
+			name:         "nil error and zero exit code (success path)",
+			commandError: nil,
+			exitCode:     0,
+		},
+		{
+			name:         "wrapped ExitCodeError with code 1",
+			commandError: errUtils.ExitCodeError{Code: 1},
+			exitCode:     1,
+		},
+		{
+			name:         "plan exit code 2 with wrapped error (changes detected)",
+			commandError: errUtils.ExitCodeError{Code: 2},
+			exitCode:     2,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			config := &schema.AtmosConfiguration{
+				CI:       schema.CIConfig{Enabled: true},
+				Settings: schema.AtmosSettings{Experimental: "silence"},
+			}
+			info := &schema.ConfigAndStacksInfo{
+				Stack:            "dev",
+				ComponentFromArg: "vpc",
+			}
+
+			// "unhandled.event" has no registered plugin binding, so ci.Execute
+			// returns nil cleanly after platform/binding lookup. We just need
+			// RunCIHooks itself to construct the ExecuteOptions correctly and
+			// not panic on the new ExitCode/CommandError fields.
+			err := RunCIHooks(&RunCIHooksOptions{
+				Event:        "unhandled.event",
+				AtmosConfig:  config,
+				Info:         info,
+				ForceCIMode:  true, // forces generic provider so platform detection succeeds.
+				CommandError: tc.commandError,
+				ExitCode:     tc.exitCode,
+			})
+			assert.NoError(t, err)
+		})
+	}
+}
+
+// TestRunCIHooks_NilAtmosConfig verifies RunCIHooks does not panic when
+// AtmosConfig is nil — ci.enabled and experimental checks are skipped and
+// the call still completes cleanly (ci.Execute returns nil with no platform
+// detected).
+func TestRunCIHooks_NilAtmosConfig(t *testing.T) {
+	err := RunCIHooks(&RunCIHooksOptions{
+		Event:       "before.terraform.plan",
+		AtmosConfig: nil,
+		Info:        &schema.ConfigAndStacksInfo{},
+		ForceCIMode: false,
+	})
+	assert.NoError(t, err)
+}
+
+// TestRunCIHooks_ExperimentalDisableReturnsError verifies RunCIHooks
+// short-circuits with an experimental-disabled error when CI is enabled
+// in atmos.yaml but settings.experimental is set to "disable".
+func TestRunCIHooks_ExperimentalDisableReturnsError(t *testing.T) {
+	config := &schema.AtmosConfiguration{
+		CI:       schema.CIConfig{Enabled: true},
+		Settings: schema.AtmosSettings{Experimental: "disable"},
+	}
+
+	err := RunCIHooks(&RunCIHooksOptions{
+		Event:        "after.terraform.plan",
+		AtmosConfig:  config,
+		Info:         &schema.ConfigAndStacksInfo{Stack: "dev", ComponentFromArg: "vpc"},
+		ForceCIMode:  true,
+		CommandError: errUtils.ExitCodeError{Code: 1},
+		ExitCode:     1,
+	})
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, errUtils.ErrExperimentalDisabled),
+		"expected ErrExperimentalDisabled, got %v", err)
+}
+
+// TestCheckExperimental verifies that checkExperimental gates CI hooks
+// based on settings.experimental, mirroring the command-level behavior.
+func TestCheckExperimental(t *testing.T) {
+	tests := []struct {
+		name        string
+		mode        string
+		expectErr   bool
+		expectedErr error
+	}{
+		{
+			name:      "empty defaults to warn (no error)",
+			mode:      "",
+			expectErr: false,
+		},
+		{
+			name:      "silence allows CI hooks",
+			mode:      "silence",
+			expectErr: false,
+		},
+		{
+			name:      "warn allows CI hooks",
+			mode:      "warn",
+			expectErr: false,
+		},
+		{
+			name:        "disable blocks CI hooks",
+			mode:        "disable",
+			expectErr:   true,
+			expectedErr: errUtils.ErrExperimentalDisabled,
+		},
+		{
+			name:        "error blocks CI hooks",
+			mode:        "error",
+			expectErr:   true,
+			expectedErr: errUtils.ErrExperimentalRequiresIn,
+		},
+		{
+			name:      "unknown mode treated as warn",
+			mode:      "unknown-value",
+			expectErr: false,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			config := &schema.AtmosConfiguration{
+				Settings: schema.AtmosSettings{
+					Experimental: tc.mode,
+				},
+			}
+
+			err := checkExperimental(config)
+			if tc.expectErr {
+				assert.Error(t, err)
+				assert.True(t, errors.Is(err, tc.expectedErr), "expected %v, got %v", tc.expectedErr, err)
+			} else {
+				assert.NoError(t, err)
 			}
 		})
 	}

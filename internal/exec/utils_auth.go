@@ -140,7 +140,7 @@ func storeAutoDetectedIdentity(authManager auth.AuthManager, info *schema.Config
 	chain := authManager.GetChain()
 	if len(chain) > 0 {
 		info.Identity = chain[len(chain)-1]
-		log.Debug("Stored authenticated identity", "identity", info.Identity)
+		log.Debug("Stored authenticated identity for hooks", "identity", info.Identity)
 	} else {
 		log.Debug("Auth chain empty, identity not updated")
 	}
@@ -187,6 +187,13 @@ func buildGlobalAuthSection(atmosConfig *schema.AtmosConfiguration) map[string]a
 	}
 	if atmosConfig.Auth.Keyring.Type != "" {
 		globalAuthSection["keyring"] = atmosConfig.Auth.Keyring
+	}
+	// Only include realm when explicitly configured (env var or atmos.yaml).
+	// Auto-computed realms (from config-path hash or default) are path-dependent
+	// and should not appear in component describe output.
+	if atmosConfig.Auth.Realm != "" &&
+		(atmosConfig.Auth.RealmSource == "env" || atmosConfig.Auth.RealmSource == "config") {
+		globalAuthSection["realm"] = atmosConfig.Auth.Realm
 	}
 
 	return globalAuthSection

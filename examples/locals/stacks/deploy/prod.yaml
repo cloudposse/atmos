@@ -1,7 +1,8 @@
 # Production Environment Stack
 #
-# This stack shows locals with different values for production.
-# Each file has its own isolated locals scope.
+# Each file has its own independent locals scope.
+# Even though both dev.yaml and prod.yaml define `namespace: acme`,
+# they are completely separate — changing one never affects the other.
 
 settings:
   version: v2
@@ -14,11 +15,14 @@ locals:
   namespace: acme
   environment: production
 
-  # Same pattern, different values
+  # Same patterns as dev.yaml, different values.
   name_prefix: "{{ .locals.namespace }}-{{ .locals.environment }}"
   full_name: "{{ .locals.name_prefix }}-{{ .vars.stage }}"
 
-  # Production-specific tags
+  # Sprig pipe syntax works too.
+  namespace_upper: '{{ .locals.namespace | upper }}'
+
+  # Production-specific tags with extra fields.
   default_tags:
     Namespace: "{{ .locals.namespace }}"
     Environment: "{{ .locals.environment }}"

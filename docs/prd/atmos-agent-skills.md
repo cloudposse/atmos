@@ -381,7 +381,7 @@ They learn this from Atmos documentation, blog posts, and the README.
 
 **Optional: official Anthropic marketplace**: Cloud Posse can optionally submit plugins to the
 official Anthropic marketplace ([claude-plugins-official](https://github.com/anthropics/claude-plugins-official))
-via the [plugin directory submission form](https://clau.de/plugin-directory-submission). Submitted
+via the [plugin directory submission form](https://code.claude.com/docs/en/plugins#submit-your-plugin-to-the-official-marketplace). Submitted
 plugins are reviewed for quality and security standards. If accepted, they appear in the
 `/external_plugins` directory of the official marketplace and become discoverable via the
 "Discover" tab inside Claude Code's `/plugin` UI for all users worldwide -- no marketplace setup

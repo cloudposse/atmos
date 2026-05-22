@@ -123,7 +123,7 @@ func TestSSOProvider_PreAuthenticate_NoOp(t *testing.T) {
 
 func TestSSOProvider_Authenticate_Simple(t *testing.T) {
 	// Prevent browser launch during device auth flow and shorten network timeouts.
-	t.Setenv("GO_TEST", "1") // utils.OpenUrl early-exits when set.
+	t.Setenv("GO_TEST", "1") // browser.Open early-exits when set.
 	t.Setenv("CI", "1")      // promptDeviceAuth avoids opening in CI.
 
 	config := &schema.Provider{
@@ -149,7 +149,7 @@ func TestSSOProvider_promptDeviceAuth_SafeInCI(t *testing.T) {
 	t.Setenv("CI", "1")
 	p, err := NewSSOProvider("sso", &schema.Provider{Kind: testSSOKind, Region: testRegion, StartURL: testStartURL})
 	require.NoError(t, err)
-	// With a full verification URL, OpenUrl is skipped under GO_TEST and CI.
+	// With a full verification URL, browser.Open is skipped under GO_TEST and CI.
 	url := "https://company.awsapps.com/start/#/device?user_code=WDDD-HRQV"
 	p.promptDeviceAuth(&ssooidc.StartDeviceAuthorizationOutput{VerificationUriComplete: &url})
 }
@@ -202,7 +202,7 @@ func TestSSOProvider_NameAndPreAuthenticate_NoOp(t *testing.T) {
 }
 
 func TestSSOProvider_promptDeviceAuth_NonCI_OpensURL(t *testing.T) {
-	t.Setenv("GO_TEST", "1") // ensure OpenUrl returns quickly
+	t.Setenv("GO_TEST", "1") // ensure browser.Open returns quickly.
 	t.Setenv("CI", "")       // not CI
 	p, err := NewSSOProvider("sso", &schema.Provider{Kind: "aws/iam-identity-center", Region: "us-east-1", StartURL: "https://x"})
 	require.NoError(t, err)

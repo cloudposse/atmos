@@ -7,6 +7,7 @@ id: apply
 import Intro from '@site/src/components/Intro'
 import Screengrab from '@site/src/components/Screengrab'
 import Terminal from '@site/src/components/Terminal'
+import Experimental from '@site/src/components/Experimental'
 
 <Intro>
 Use this command to apply Terraform changes for an Atmos component in a stack. Supports both direct applies and applying from previously generated planfiles.
@@ -207,6 +208,19 @@ atmos terraform apply vpc -s dev
 
         ```shell
         atmos terraform apply vpc -s dev --process-templates=false
+        ```
+    </dd>
+
+    <dt>`--ci` <em>(optional)</em></dt>
+    <dd>
+        Enable CI mode for automated pipelines. When enabled, Atmos writes job summaries, CI output variables, and status checks based on the [`ci` configuration](/cli/configuration/ci) in `atmos.yaml`.
+
+        CI mode is auto-detected when `CI=true` or `GITHUB_ACTIONS=true` environment variables are set.
+
+        **Environment variables:** `ATMOS_CI`, `CI`
+
+        ```shell
+        atmos terraform apply vpc -s dev --ci
         ```
     </dd>
 </dl>
@@ -412,6 +426,28 @@ atmos terraform apply --query '.vars.tags.team == "eks"' --stack prod
     <dt>`--clone-target-ref`</dt>
     <dd>Clone the target reference instead of checking it out locally.</dd>
 </dl>
+
+## CI Integration
+
+<Experimental/>
+
+When running in CI mode (`--ci` flag or auto-detected), Atmos produces rich CI artifacts:
+
+- **Job summaries** with resource counts, apply results, and terraform outputs written to `$GITHUB_STEP_SUMMARY`
+- **Output variables** (`success`, `has_changes`, `exit_code`, etc.) written to `$GITHUB_OUTPUT`
+- **Status checks** showing apply progress and results (requires `ci.checks.enabled: true`)
+
+```shell
+# In GitHub Actions (auto-detected)
+atmos terraform apply vpc -s dev
+
+# Explicit CI mode
+atmos terraform apply vpc -s dev --ci
+```
+
+:::info
+See [CI Configuration](/cli/configuration/ci) for full configuration options including custom templates, status checks, and output variables.
+:::
 
 ## Related Commands
 

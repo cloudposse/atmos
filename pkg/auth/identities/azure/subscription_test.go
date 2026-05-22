@@ -291,6 +291,24 @@ func TestSubscriptionIdentity_Authenticate(t *testing.T) {
 			expectError: false,
 		},
 		{
+			name: "preserves cloud environment from provider",
+			identity: &subscriptionIdentity{
+				name:           "azure-gov",
+				subscriptionID: "gov-sub-123",
+				location:       "usgovvirginia",
+			},
+			baseCreds: &types.AzureCredentials{
+				AccessToken:      "gov-token",
+				TokenType:        "Bearer",
+				Expiration:       now.Add(1 * time.Hour).Format(time.RFC3339),
+				TenantID:         "gov-tenant-456",
+				SubscriptionID:   "provider-sub",
+				Location:         "eastus",
+				CloudEnvironment: "usgovernment",
+			},
+			expectError: false,
+		},
+		{
 			name: "wrong credential type",
 			identity: &subscriptionIdentity{
 				name:           "azure-dev",
@@ -355,6 +373,9 @@ func TestSubscriptionIdentity_Authenticate(t *testing.T) {
 			assert.Equal(t, baseCreds.IsServicePrincipal, azureCreds.IsServicePrincipal)
 			assert.Equal(t, baseCreds.TokenFilePath, azureCreds.TokenFilePath)
 			assert.Equal(t, baseCreds.FederatedToken, azureCreds.FederatedToken)
+
+			// Verify cloud environment is preserved.
+			assert.Equal(t, baseCreds.CloudEnvironment, azureCreds.CloudEnvironment)
 		})
 	}
 }

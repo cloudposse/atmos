@@ -97,6 +97,24 @@ func (i *userIdentity) Authenticate(ctx context.Context, _ types.ICredentials) (
 	// No valid existing credentials - resolve base credentials and generate new session tokens.
 	longLivedCreds, err := i.resolveLongLivedCredentials(ctx)
 	if err != nil {
+		// Only try browser webflow when credentials are unavailable, not for config errors.
+		// Config errors (e.g. partial access_key_id/secret_access_key) must be surfaced immediately
+		// to avoid silently authenticating as a different principal.
+		if i.isWebflowEnabled() && !errors.Is(err, errUtils.ErrInvalidAuthConfig) {
+			webflowCreds, webflowErr := i.resolveCredentialsViaWebflow(ctx)
+			if webflowErr == nil {
+				region := i.resolveRegion()
+				if webflowCreds.Region == "" {
+					webflowCreds.Region = region
+				}
+				if writeErr := i.writeAWSFiles(webflowCreds, region); writeErr != nil {
+					return nil, fmt.Errorf("%w: failed to write AWS files: %w", errUtils.ErrAwsAuth, writeErr)
+				}
+				return webflowCreds, nil
+			}
+			log.Debug("Browser webflow failed", logKeyIdentity, i.name, "error", webflowErr)
+			return nil, webflowErr
+		}
 		return nil, err
 	}
 
@@ -142,9 +160,11 @@ func (i *userIdentity) resolveLongLivedCredentials(ctx context.Context) (*types.
 
 // resolveCredentialsFromKeyring resolves credentials from keyring with prompting fallback.
 // It validates that keyring contains long-lived credentials (not session tokens).
+// When browser webflow is enabled, credential prompts are skipped so the caller
+// can fall through to browser-based authentication instead.
 func (i *userIdentity) resolveCredentialsFromKeyring(ctx context.Context, yamlMfaArn string) (*types.AWSCredentials, error) {
 	keystoreCreds, keystoreErr := i.credentialsFromStore()
-	allowPrompts := types.AllowPrompts(ctx)
+	allowPrompts := types.AllowPrompts(ctx) && !i.isWebflowEnabled()
 
 	// No keyring credentials - prompt for new ones if allowed.
 	if keystoreErr != nil {

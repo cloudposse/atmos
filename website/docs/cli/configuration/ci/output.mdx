@@ -1,0 +1,107 @@
+---
+title: CI Output Variables
+sidebar_label: output
+sidebar_class_name: command
+description: Configure CI output variables for downstream jobs
+---
+
+import Intro from '@site/src/components/Intro'
+import File from '@site/src/components/File'
+import Experimental from '@site/src/components/Experimental'
+
+<Intro>
+The `ci.output` section configures output variables that are written for use in downstream CI jobs.
+On GitHub Actions, these are written to `$GITHUB_OUTPUT`. On GitLab CI, they create dotenv artifacts.
+</Intro>
+
+<Experimental />
+
+## Configuration
+
+<File title="atmos.yaml">
+```yaml
+ci:
+  output:
+    enabled: true
+    variables:
+      - has_changes
+      - has_additions
+      - has_destructions
+      - artifact_key
+      - plan_summary
+```
+</File>
+
+<dl>
+  <dt>`ci.output.enabled`</dt>
+  <dd>
+    Write plan/apply results as key-value pairs for use in downstream jobs.
+
+    **Default:** `true`
+  </dd>
+
+  <dt>`ci.output.variables`</dt>
+  <dd>
+    List of native CI variables to output. This whitelist controls which built-in variables are written.
+    Terraform outputs (prefixed with `output_`) are always included regardless of this setting.
+
+    **Default:** All available variables
+  </dd>
+</dl>
+
+## Available Variables
+
+### Plan Variables
+
+| Variable | Type | Description |
+|----------|------|-------------|
+| `has_changes` | `true`/`false` | Whether the plan has any changes |
+| `has_additions` | `true`/`false` | Whether the plan creates resources |
+| `has_destructions` | `true`/`false` | Whether the plan destroys resources |
+| `plan_summary` | string | Human-readable plan summary (e.g., "3 to add, 1 to change") |
+| `artifact_key` | string | Planfile storage key (when storage is configured) |
+
+### Apply/Deploy Variables
+
+| Variable | Type | Description |
+|----------|------|-------------|
+| `success` | `true`/`false` | Whether the operation succeeded |
+| `output_*` | varies | All terraform outputs, prefixed with `output_` |
+
+### Terraform Outputs
+
+After a successful `apply` or `deploy`, all terraform outputs are exported with the `output_` prefix.
+Nested outputs are flattened using dot notation.
+
+For example, a terraform output `vpc_id = "vpc-123"` becomes `output_vpc_id=vpc-123`.
+
+:::tip
+Terraform `output_*` variables bypass the `ci.output.variables` whitelist — they are always included
+when output is enabled.
+:::
+
+## Usage in GitHub Actions
+
+```yaml
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    outputs:
+      has_changes: ${{ steps.plan.outputs.has_changes }}
+    steps:
+      - name: Terraform Plan
+        id: plan
+        run: atmos terraform plan vpc -s prod
+
+  apply:
+    needs: plan
+    if: ${{ needs.plan.outputs.has_changes == 'true' }}
+    runs-on: ubuntu-latest
+    steps:
+      - run: atmos terraform deploy vpc -s prod
+```
+
+## Related
+
+- [CI Configuration](/cli/configuration/ci) - Full configuration reference
+- [Native CI Overview](/ci) - Feature overview
