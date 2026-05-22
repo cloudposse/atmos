@@ -38,6 +38,12 @@ func TestDeepCopyBaseComponentConfigMaps_Retry(t *testing.T) {
 	dstConds[0] = "/mutated/"
 	srcConds := src.BaseComponentRetry["conditions"].([]any)
 	assert.Equal(t, "/Bad Gateway/", srcConds[0], "slice inside retry map must be deep-copied")
+
+	// src→result isolation: mutating the source after the copy must not affect the destination.
+	src.BaseComponentRetry["max_attempts"] = 111
+	srcConds[0] = "/source-mutated/"
+	assert.EqualValues(t, 999, dst.BaseComponentRetry["max_attempts"], "mutating src must not leak into dst")
+	assert.Equal(t, "/mutated/", dst.BaseComponentRetry["conditions"].([]any)[0], "dst slice must stay isolated from src")
 }
 
 // TestDeepCopyBaseComponentConfigMaps_RetryNil covers the nil-source path: a base

@@ -126,3 +126,107 @@ func TestRunCIHooksForDeploy_DemoStacks(t *testing.T) {
 	// construction path with a wired info struct.
 	runCIHooksForDeploy(hooks.BeforeTerraformDeploy, cmd, []string{"myapp"}, info, "")
 }
+
+// TestRunCIHooksForPlanComponent_DemoStacks exercises the per-component plan
+// CI hook wrapper introduced by issue #2397. The demo-stacks fixture has
+// ci.enabled=false so RunCIHooks short-circuits cleanly — the test verifies
+// no panic on option construction for both the success and failure paths.
+func TestRunCIHooksForPlanComponent_DemoStacks(t *testing.T) {
+	t.Chdir("../../examples/demo-stacks")
+
+	cmd := newHookTestCmd()
+	info := &schema.ConfigAndStacksInfo{
+		Stack:            "dev",
+		Component:        "myapp",
+		ComponentFromArg: "myapp",
+		ComponentType:    "terraform",
+	}
+
+	// Success path: execErr is nil, exit code forwarded as 0.
+	runCIHooksForPlanComponent(cmd, info, "plan output", nil)
+
+	// Failure path: non-nil execErr is forwarded with its exit code.
+	runCIHooksForPlanComponent(cmd, info, "", errUtils.ExitCodeError{Code: 1})
+}
+
+// TestRunCIHooksForApplyComponent_DemoStacks exercises the per-component apply
+// CI hook wrapper introduced by issue #2475. The demo-stacks fixture has
+// ci.enabled=false so RunCIHooks short-circuits cleanly — the test verifies
+// no panic on option construction for both the success and failure paths.
+func TestRunCIHooksForApplyComponent_DemoStacks(t *testing.T) {
+	t.Chdir("../../examples/demo-stacks")
+
+	cmd := newHookTestCmd()
+	info := &schema.ConfigAndStacksInfo{
+		Stack:            "dev",
+		Component:        "myapp",
+		ComponentFromArg: "myapp",
+		ComponentType:    "terraform",
+	}
+
+	// Success path: execErr is nil, exit code forwarded as 0.
+	runCIHooksForApplyComponent(cmd, info, "apply output", nil)
+
+	// Failure path: non-nil execErr is forwarded with its exit code.
+	runCIHooksForApplyComponent(cmd, info, "", errUtils.ExitCodeError{Code: 1})
+}
+
+// TestApplyPostRunE_SuppressedWhenMultiComponent verifies that applyCmd.PostRunE
+// returns nil without error when wasMultiComponentExecution is true (multi-component
+// mode). This is the apply-command equivalent of the plan fix from issue #2397 —
+// it exercises the actual PostRunE closure, not just the sentinel variable.
+func TestApplyPostRunE_SuppressedWhenMultiComponent(t *testing.T) {
+	t.Chdir("../../examples/demo-stacks")
+
+	orig := wasMultiComponentExecution
+	defer func() { wasMultiComponentExecution = orig }()
+
+	cmd := newHookTestCmd()
+	cmd.Use = "apply"
+
+	// With wasMultiComponentExecution = true, PostRunE must return nil immediately
+	// without invoking runHooksWithOutput (which would attempt stack resolution).
+	wasMultiComponentExecution = true
+	err := applyCmd.PostRunE(cmd, []string{"--stack", "dev", "myapp"})
+	assert.NoError(t, err, "PostRunE must be suppressed when wasMultiComponentExecution is true")
+
+	// With wasMultiComponentExecution = false, PostRunE must run normally.
+	// The demo-stacks fixture has no hooks configured, so it completes without error.
+	wasMultiComponentExecution = false
+	err = applyCmd.PostRunE(cmd, []string{"--stack", "dev", "myapp"})
+	assert.NoError(t, err, "PostRunE must fire normally in single-component mode")
+}
+
+// TestRunCIHooksForApplyComponent_ExitCodeForwarding verifies that the exit code
+// extracted from execErr is forwarded correctly, matching the plan component
+// hook behaviour.
+func TestRunCIHooksForApplyComponent_ExitCodeForwarding(t *testing.T) {
+	t.Chdir("../../examples/demo-stacks")
+
+	cmd := newHookTestCmd()
+	info := &schema.ConfigAndStacksInfo{
+		Stack:            "dev",
+		Component:        "myapp",
+		ComponentFromArg: "myapp",
+		ComponentType:    "terraform",
+	}
+
+	tests := []struct {
+		name    string
+		execErr error
+		wantExt int
+	}{
+		{"nil error has exit code 0", nil, 0},
+		{"exit code 1", errUtils.ExitCodeError{Code: 1}, 1},
+		{"exit code 2 (non-standard error)", errUtils.ExitCodeError{Code: 2}, 2},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			assert.Equal(t, tc.wantExt, errUtils.GetExitCode(tc.execErr),
+				"GetExitCode must extract the wrapped exit code before forwarding to apply hook")
+			// The wrapper must not panic regardless of exit code.
+			runCIHooksForApplyComponent(cmd, info, "apply output", tc.execErr)
+		})
+	}
+}

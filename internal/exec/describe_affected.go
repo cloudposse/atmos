@@ -55,6 +55,7 @@ type DescribeAffectedCmdArgs struct {
 	Skip                        []string
 	ExcludeLocked               bool
 	AuthManager                 auth.AuthManager // Optional: Auth manager for credential management (from --identity flag).
+	AuthDisabled                bool             // True when --identity=false (or alias) explicitly disables authentication; routes stack resolution to ExecuteDescribeStacksWithAuthDisabled.
 	HeadSHAOverride             string           // PR head SHA from CI event payload, used for upload correlation with Atmos Pro.
 	CIEventType                 string           // CI event type (e.g., "pull_request", "push") for upload validation.
 	TargetBranch                string           // PR target branch (e.g., "main") used to auto-fetch when refs are missing locally.
@@ -78,6 +79,7 @@ type describeAffectedExec struct {
 		skip []string,
 		excludeLocked bool,
 		authManager auth.AuthManager,
+		authDisabled bool,
 	) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, string, error)
 	executeDescribeAffectedWithTargetRefClone func(
 		atmosConfig *schema.AtmosConfiguration,
@@ -93,6 +95,7 @@ type describeAffectedExec struct {
 		skip []string,
 		excludeLocked bool,
 		authManager auth.AuthManager,
+		authDisabled bool,
 	) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, string, error)
 	executeDescribeAffectedWithTargetRefCheckout func(
 		atmosConfig *schema.AtmosConfiguration,
@@ -107,6 +110,7 @@ type describeAffectedExec struct {
 		skip []string,
 		excludeLocked bool,
 		authManager auth.AuthManager,
+		authDisabled bool,
 	) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, string, error)
 	addDependentsToAffected func(
 		atmosConfig *schema.AtmosConfiguration,
@@ -117,6 +121,7 @@ type describeAffectedExec struct {
 		skip []string,
 		onlyInStack string,
 		authManager auth.AuthManager,
+		authDisabled bool,
 	) error
 	printOrWriteToFile func(
 		atmosConfig *schema.AtmosConfiguration,
@@ -326,6 +331,7 @@ func (d *describeAffectedExec) Execute(a *DescribeAffectedCmdArgs) error {
 			a.Skip,
 			a.ExcludeLocked,
 			a.AuthManager,
+			a.AuthDisabled,
 		)
 	case a.CloneTargetRef:
 		affected, headHead, baseHead, repoUrl, err = d.executeDescribeAffectedWithTargetRefClone(
@@ -342,6 +348,7 @@ func (d *describeAffectedExec) Execute(a *DescribeAffectedCmdArgs) error {
 			a.Skip,
 			a.ExcludeLocked,
 			a.AuthManager,
+			a.AuthDisabled,
 		)
 	default:
 		affected, headHead, baseHead, repoUrl, err = d.executeDescribeAffectedWithTargetRefCheckout(
@@ -357,6 +364,7 @@ func (d *describeAffectedExec) Execute(a *DescribeAffectedCmdArgs) error {
 			a.Skip,
 			a.ExcludeLocked,
 			a.AuthManager,
+			a.AuthDisabled,
 		)
 	}
 	if err != nil {
@@ -365,7 +373,7 @@ func (d *describeAffectedExec) Execute(a *DescribeAffectedCmdArgs) error {
 
 	// Add dependent components and stacks for each affected component.
 	if len(affected) > 0 && a.IncludeDependents {
-		err = d.addDependentsToAffected(a.CLIConfig, &affected, a.IncludeSettings, a.ProcessTemplates, a.ProcessYamlFunctions, a.Skip, a.Stack, a.AuthManager)
+		err = d.addDependentsToAffected(a.CLIConfig, &affected, a.IncludeSettings, a.ProcessTemplates, a.ProcessYamlFunctions, a.Skip, a.Stack, a.AuthManager, a.AuthDisabled)
 		if err != nil {
 			return err
 		}

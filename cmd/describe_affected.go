@@ -84,6 +84,14 @@ func getRunnableDescribeAffectedCmd(
 		// (like !terraform.state) that need auth credentials, so identity resolution is unnecessary.
 		identityName := GetIdentityFromFlags(cmd, os.Args)
 		identityExplicit := cmd.Flags().Changed(cfg.IdentityFlagName)
+
+		// Record an explicit "auth disabled" signal so downstream stack processors can skip
+		// per-component auth resolution. Without this, a nil AuthManager is indistinguishable
+		// from "no identity specified" and the per-component resolver still runs whenever
+		// --process-templates is true (its default), reintroducing the auth attempt the user
+		// tried to disable. See plan: --identity=false not honored in `atmos describe affected`.
+		props.AuthDisabled = identityName == cfg.IdentityFlagDisabledValue
+
 		if props.ProcessYamlFunctions || identityExplicit {
 			// Category B: describe affected operates on multiple affected components across stacks
 			// with no single target (component, stack) pair. Use the SCAN wrapper to discover
