@@ -49,6 +49,71 @@ func TestDescribeDependents(t *testing.T) {
 	assert.NoError(t, err, "describeDependentsCmd should execute without error")
 }
 
+// TestDescribeDependentsSetsAuthDisabled mirrors TestDescribeAffectedSetsAuthDisabled
+// for `describe dependents`. Before the wiring landed, `cmd/describe_dependents.go`
+// computed `identityName = __DISABLED__` but never stored that signal anywhere the
+// executor could read, so the inner per-component auth resolution still ran. CodeRabbit
+// flagged this on PR #2471 (the `DescribeDependentsExecProps` struct was missing the
+// `AuthDisabled` field). This test pins both ends: the cmd sets `props.AuthDisabled`,
+// and the executor receives it.
+func TestDescribeDependentsSetsAuthDisabled(t *testing.T) {
+	tests := []struct {
+		name             string
+		envIdentity      string
+		wantAuthDisabled bool
+	}{
+		{name: "identity=false sets AuthDisabled", envIdentity: "false", wantAuthDisabled: true},
+		{name: "identity=off sets AuthDisabled", envIdentity: "off", wantAuthDisabled: true},
+		{name: "identity=0 sets AuthDisabled", envIdentity: "0", wantAuthDisabled: true},
+		{name: "identity=no sets AuthDisabled", envIdentity: "no", wantAuthDisabled: true},
+		{name: "no identity flag does not set AuthDisabled", envIdentity: "", wantAuthDisabled: false},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			_ = NewTestKit(t)
+
+			viper.Reset()
+			t.Setenv("ATMOS_IDENTITY", tc.envIdentity)
+			t.Setenv("IDENTITY", "")
+			if tc.envIdentity != "" {
+				viper.Set("identity", tc.envIdentity)
+			}
+
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
+
+			var captured *exec.DescribeDependentsExecProps
+			mock := exec.NewMockDescribeDependentsExec(ctrl)
+			mock.EXPECT().Execute(gomock.Any()).DoAndReturn(func(props *exec.DescribeDependentsExecProps) error {
+				captured = props
+				return nil
+			})
+
+			run := getRunnableDescribeDependentsCmd(
+				func(opts ...AtmosValidateOption) {},
+				func(componentType string, cmd *cobra.Command, args, additionalArgsAndFlags []string) (schema.ConfigAndStacksInfo, error) {
+					return schema.ConfigAndStacksInfo{}, nil
+				},
+				func(info schema.ConfigAndStacksInfo, validate bool) (schema.AtmosConfiguration, error) {
+					return schema.AtmosConfiguration{}, nil
+				},
+				func(_ *schema.AtmosConfiguration) exec.DescribeDependentsExec { return mock },
+			)
+
+			err := run(describeDependentsCmd, []string{"component"})
+			assert.NoError(t, err)
+			assert.NotNil(t, captured, "Execute was not called with props")
+			assert.Equal(t, tc.wantAuthDisabled, captured.AuthDisabled,
+				"AuthDisabled should reflect the normalized identity flag value")
+			if tc.wantAuthDisabled {
+				assert.Nil(t, captured.AuthManager,
+					"AuthManager must be nil when authentication is explicitly disabled")
+			}
+		})
+	}
+}
+
 func TestSetFlagInDescribeDependents(t *testing.T) {
 	_ = NewTestKit(t)
 

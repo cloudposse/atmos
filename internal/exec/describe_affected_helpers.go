@@ -40,6 +40,7 @@ func ExecuteDescribeAffectedWithTargetRefClone(
 	skip []string,
 	excludeLocked bool,
 	authManager auth.AuthManager,
+	authDisabled bool,
 ) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, string, error) {
 	defer perf.Track(atmosConfig, "exec.ExecuteDescribeAffectedWithTargetRefClone")()
 
@@ -164,6 +165,7 @@ func ExecuteDescribeAffectedWithTargetRefClone(
 		skip,
 		excludeLocked,
 		authManager,
+		authDisabled,
 	)
 	if err != nil {
 		return nil, nil, nil, "", err
@@ -205,6 +207,7 @@ func ExecuteDescribeAffectedWithTargetRefCheckout(
 	skip []string,
 	excludeLocked bool,
 	authManager auth.AuthManager,
+	authDisabled bool,
 ) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, string, error) {
 	defer perf.Track(atmosConfig, "exec.ExecuteDescribeAffectedWithTargetRefCheckout")()
 
@@ -269,6 +272,7 @@ func ExecuteDescribeAffectedWithTargetRefCheckout(
 		skip,
 		excludeLocked,
 		authManager,
+		authDisabled,
 	)
 	if err != nil {
 		return nil, nil, nil, "", err
@@ -296,6 +300,7 @@ func ExecuteDescribeAffectedWithTargetRepoPath(
 	skip []string,
 	excludeLocked bool,
 	authManager auth.AuthManager,
+	authDisabled bool,
 ) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, string, error) {
 	defer perf.Track(atmosConfig, "exec.ExecuteDescribeAffectedWithTargetRepoPath")()
 
@@ -341,6 +346,7 @@ func ExecuteDescribeAffectedWithTargetRepoPath(
 		skip,
 		excludeLocked,
 		authManager,
+		authDisabled,
 	)
 	if err != nil {
 		return nil, nil, nil, "", err
