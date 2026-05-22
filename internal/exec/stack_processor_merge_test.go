@@ -2,16 +2,16 @@ package exec
 
 import (
 	"encoding/json"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	m "github.com/cloudposse/atmos/pkg/merge"
 	"github.com/cloudposse/atmos/pkg/schema"
-
-	errUtils "github.com/cloudposse/atmos/errors"
 )
 
 // Compile-time sentinels: if these fields are renamed the build breaks, preventing
@@ -390,10 +390,16 @@ func TestEffectiveAtmosConfig(t *testing.T) {
 		assert.Equal(t, "append", result.Settings.ListMergeStrategy)
 		assert.Equal(t, "replace", base.Settings.ListMergeStrategy, "original must be unchanged")
 
-		// Reverse direction: mutating the copy must not affect the original.
+		// result→src: mutating the copy must not affect the original.
 		result.Settings.ListMergeStrategy = "merge"
 		assert.Equal(t, "replace", base.Settings.ListMergeStrategy,
 			"mutating the copy must not affect the original (result→src isolation)")
+
+		// src→result: mutating the original after the call must not affect the copy.
+		base.Settings.ListMergeStrategy = "append"
+		assert.Equal(t, "merge", result.Settings.ListMergeStrategy,
+			"mutating the source after the call must not affect the copy (src→result isolation)")
+		base.Settings.ListMergeStrategy = "replace" // restore for subsequent subtests
 	})
 
 	t.Run("later layer wins over earlier layer", func(t *testing.T) {
@@ -436,7 +442,7 @@ func TestEffectiveAtmosConfig(t *testing.T) {
 //   - replace-component: inherits base-component, no strategy override
 //     → expected vars.tags: [child-tag].
 func TestComponentLevelListMergeStrategy(t *testing.T) {
-	workDir := "../../tests/fixtures/scenarios/component-list-merge-strategy"
+	workDir := filepath.Join("..", "..", "tests", "fixtures", "scenarios", "component-list-merge-strategy")
 	t.Chdir(workDir)
 	t.Setenv("ATMOS_CLI_CONFIG_PATH", ".")
 	t.Setenv("ATMOS_BASE_PATH", "")
