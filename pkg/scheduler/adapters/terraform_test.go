@@ -542,6 +542,34 @@ func TestWriteTerraformSummaryUsesDeterministicResultOrder(t *testing.T) {
 	require.Less(t, stringIndex(string(data), `"node_id": "database-dev"`), stringIndex(string(data), `"node_id": "app-dev"`))
 }
 
+func TestWriteTerraformSummaryIncludesNodeTimings(t *testing.T) {
+	tmpDir := t.TempDir()
+	summaryFile := filepath.Join(tmpDir, "summary.json")
+
+	err := ExecuteTerraform(context.Background(), TerraformOptions{
+		AtmosConfig: &schema.AtmosConfiguration{BasePathAbsolute: tmpDir},
+		Info: &schema.ConfigAndStacksInfo{
+			Components:               []string{"vpc"},
+			Stack:                    "dev",
+			SubCommand:               "plan",
+			MaxConcurrency:           1,
+			TerraformPlanSummaryFile: summaryFile,
+		},
+		Stacks: terraformAdapterTestStacks(),
+		Executor: func(execution TerraformExecution) (TerraformExecutionResult, error) {
+			time.Sleep(2 * time.Millisecond)
+			return TerraformExecutionResult{}, nil
+		},
+	})
+
+	require.NoError(t, err)
+	data, err := os.ReadFile(summaryFile)
+	require.NoError(t, err)
+	require.Contains(t, string(data), `"started_at":`)
+	require.Contains(t, string(data), `"finished_at":`)
+	require.Contains(t, string(data), `"duration_ms":`)
+}
+
 func updateMaxActive(maxActive *atomic.Int32, current int32) {
 	for {
 		previous := maxActive.Load()

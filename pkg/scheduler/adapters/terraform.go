@@ -11,6 +11,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/mitchellh/mapstructure"
 
@@ -131,12 +132,15 @@ func ExecuteTerraform(ctx context.Context, opts TerraformOptions) error {
 		locks:       newTerraformResourceLocks(),
 		output:      output,
 	}
+	timings := newTerraformNodeTimings()
 	result := scheduler.New(
 		graph,
 		dispatcher,
 		scheduler.WithMaxConcurrency(maxConcurrency),
+		scheduler.WithNodeStartHook(timings.Start),
+		scheduler.WithNodeCompleteHook(timings.Complete),
 	).Run(ctx)
-	if err := writeTerraformSummary(opts.Info, result); err != nil {
+	if err := writeTerraformSummary(opts.Info, result, timings); err != nil {
 		return err
 	}
 	if result.Err != nil {
@@ -941,18 +945,69 @@ type terraformSummary struct {
 }
 
 type terraformSummaryResult struct {
-	NodeID    string            `json:"node_id"`
-	Stack     string            `json:"stack"`
-	Component string            `json:"component"`
-	Status    scheduler.Status  `json:"status"`
-	Processed bool              `json:"processed"`
-	Changed   bool              `json:"changed"`
-	ExitCode  int               `json:"exit_code"`
-	LogFiles  map[string]string `json:"log_files,omitempty"`
-	Error     string            `json:"error,omitempty"`
+	NodeID     string            `json:"node_id"`
+	Stack      string            `json:"stack"`
+	Component  string            `json:"component"`
+	Status     scheduler.Status  `json:"status"`
+	Processed  bool              `json:"processed"`
+	Changed    bool              `json:"changed"`
+	ExitCode   int               `json:"exit_code"`
+	StartedAt  string            `json:"started_at,omitempty"`
+	FinishedAt string            `json:"finished_at,omitempty"`
+	DurationMS int64             `json:"duration_ms,omitempty"`
+	LogFiles   map[string]string `json:"log_files,omitempty"`
+	Error      string            `json:"error,omitempty"`
 }
 
-func writeTerraformSummary(info *schema.ConfigAndStacksInfo, result *scheduler.AggregateResult) error {
+type terraformNodeTiming struct {
+	startedAt  time.Time
+	finishedAt time.Time
+}
+
+type terraformNodeTimings struct {
+	mu      sync.Mutex
+	timings map[string]terraformNodeTiming
+}
+
+func newTerraformNodeTimings() *terraformNodeTimings {
+	return &terraformNodeTimings{
+		timings: make(map[string]terraformNodeTiming),
+	}
+}
+
+func (t *terraformNodeTimings) Start(node *dependency.Node) {
+	if t == nil || node == nil {
+		return
+	}
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	timing := t.timings[node.ID]
+	timing.startedAt = time.Now().UTC()
+	t.timings[node.ID] = timing
+}
+
+func (t *terraformNodeTimings) Complete(node *dependency.Node, _ scheduler.Result) {
+	if t == nil || node == nil {
+		return
+	}
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	timing := t.timings[node.ID]
+	timing.finishedAt = time.Now().UTC()
+	t.timings[node.ID] = timing
+}
+
+func (t *terraformNodeTimings) Get(nodeID string) (terraformNodeTiming, bool) {
+	if t == nil {
+		return terraformNodeTiming{}, false
+	}
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	timing, ok := t.timings[nodeID]
+	return timing, ok
+}
+
+func writeTerraformSummary(info *schema.ConfigAndStacksInfo, result *scheduler.AggregateResult, timings *terraformNodeTimings) error {
 	if info == nil || info.TerraformPlanSummaryFile == "" || result == nil {
 		return nil
 	}
@@ -968,6 +1023,17 @@ func writeTerraformSummary(info *schema.ConfigAndStacksInfo, result *scheduler.A
 			Changed:   outcome.Changed,
 			ExitCode:  outcome.ExitCode,
 			LogFiles:  outcome.LogFiles,
+		}
+		if timing, ok := timings.Get(nodeResult.NodeID); ok {
+			if !timing.startedAt.IsZero() {
+				entry.StartedAt = timing.startedAt.Format(time.RFC3339Nano)
+			}
+			if !timing.finishedAt.IsZero() {
+				entry.FinishedAt = timing.finishedAt.Format(time.RFC3339Nano)
+			}
+			if !timing.startedAt.IsZero() && !timing.finishedAt.IsZero() {
+				entry.DurationMS = timing.finishedAt.Sub(timing.startedAt).Milliseconds()
+			}
 		}
 		if nodeResult.Err != nil {
 			entry.Error = nodeResult.Err.Error()
