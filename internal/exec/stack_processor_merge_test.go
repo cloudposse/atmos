@@ -18,6 +18,10 @@ import (
 // tests that rely on specific field names from silently passing with zero values.
 var _ = schema.AtmosSettings{ListMergeStrategy: ""}
 
+// TestMergeComponentConfigurations verifies that mergeComponentConfigurations
+// correctly assembles the final component configuration from layered inputs
+// (global, base-component, component, and overrides) for both Terraform and
+// Helmfile component types.
 func TestMergeComponentConfigurations(t *testing.T) {
 	tests := []struct {
 		name                  string
@@ -540,6 +544,9 @@ func TestEffectiveAtmosConfig_InvalidStrategy(t *testing.T) {
 		"pkg/merge must reject the invalid strategy when a merge is attempted")
 }
 
+// TestProcessAuthConfig verifies that processAuthConfig merges global and
+// component-level auth configurations, with the component-level settings
+// taking precedence over the global ones.
 func TestProcessAuthConfig(t *testing.T) {
 	tests := []struct {
 		name        string
