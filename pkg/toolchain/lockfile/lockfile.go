@@ -66,9 +66,11 @@ type Tool struct {
 
 // PlatformEntry represents platform-specific download information.
 type PlatformEntry struct {
-	URL      string `yaml:"url"`
-	Checksum string `yaml:"checksum"`
-	Size     int64  `yaml:"size"`
+	URL               string   `yaml:"url"`
+	Checksum          string   `yaml:"checksum"`
+	Size              int64    `yaml:"size"`
+	ChecksumAlgorithm string   `yaml:"checksum_algorithm,omitempty"`
+	Verification      []string `yaml:"verification,omitempty"`
 }
 
 // LockFileMetadata contains metadata about the lock file.

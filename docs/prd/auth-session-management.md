@@ -725,14 +725,14 @@ See the updated [`atmos auth logout`](/cli/commands/auth/auth-logout) documentat
 ### Phase 5: Release (Sprint 2)
 
 **Tasks:**
-1. Update CHANGELOG.md with prominent BREAKING CHANGE notice
+1. Create a website changelog post with prominent BREAKING CHANGE notice
 2. Create release notes highlighting behavior change
 3. Tag v1.x.0 release
 4. Publish blog post announcing the change
 5. Update examples repository if needed
 6. Notify users via GitHub Discussions / Discord
 
-**CHANGELOG entry format:**
+**Website changelog post format:**
 ```markdown
 ## [1.x.0] - YYYY-MM-DD
 
