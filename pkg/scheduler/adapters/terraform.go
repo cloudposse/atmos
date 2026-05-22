@@ -258,19 +258,12 @@ func FilterTerraformGraph(atmosConfig *schema.AtmosConfiguration, graph *depende
 	}), nil
 }
 
-func validateTerraformConcurrentPlan(info *schema.ConfigAndStacksInfo, graph *dependency.Graph) error {
+func validateTerraformConcurrentPlan(info *schema.ConfigAndStacksInfo, _ *dependency.Graph) error {
 	if effectiveTerraformMaxConcurrency(info) <= 1 {
 		return nil
 	}
 	if info.Identity == cfg.IdentityFlagSelectValue {
 		return fmt.Errorf("%w: --max-concurrency requires a non-interactive identity value", errUtils.ErrInvalidConfig)
-	}
-	for _, nodeID := range sortedGraphNodeIDs(graph) {
-		node := graph.Nodes[nodeID]
-		if node == nil || provWorkdir.IsWorkdirEnabled(node.Metadata) {
-			continue
-		}
-		return fmt.Errorf("%w: concurrent Terraform plan requires provision.workdir.enabled=true for component %q in stack %q", errUtils.ErrInvalidConfig, node.Component, node.Stack)
 	}
 	return nil
 }

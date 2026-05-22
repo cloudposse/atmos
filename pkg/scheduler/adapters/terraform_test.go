@@ -202,9 +202,9 @@ func TestExecuteTerraformAllowsParallelPlanForDifferentPhysicalComponentPaths(t 
 		"dev": map[string]any{
 			cfg.ComponentsSectionName: map[string]any{
 				cfg.TerraformSectionName: map[string]any{
-					"app":      terraformAdapterComponentWithPath("selected", terraformAdapterPath("app")),
-					"database": terraformAdapterComponentWithPath("selected", terraformAdapterPath("database")),
-					"vpc":      terraformAdapterComponentWithPath("selected", terraformAdapterPath("vpc")),
+					"app":      terraformAdapterComponentWithPathNoWorkdir("selected", terraformAdapterPath("app")),
+					"database": terraformAdapterComponentWithPathNoWorkdir("selected", terraformAdapterPath("database")),
+					"vpc":      terraformAdapterComponentWithPathNoWorkdir("selected", terraformAdapterPath("vpc")),
 				},
 			},
 		},
@@ -232,6 +232,43 @@ func TestExecuteTerraformAllowsParallelPlanForDifferentPhysicalComponentPaths(t 
 
 	require.NoError(t, err)
 	require.Greater(t, maxActive.Load(), int32(1))
+}
+
+func TestExecuteTerraformSerializesAliasesForSharedPhysicalComponentPathWithoutWorkdir(t *testing.T) {
+	stacks := map[string]any{
+		"dev": map[string]any{
+			cfg.ComponentsSectionName: map[string]any{
+				cfg.TerraformSectionName: map[string]any{
+					"service-api":    terraformAdapterComponentWithPathNoWorkdir("selected", terraformAdapterPath("shared-service")),
+					"service-worker": terraformAdapterComponentWithPathNoWorkdir("selected", terraformAdapterPath("shared-service")),
+					"service-cron":   terraformAdapterComponentWithPathNoWorkdir("selected", terraformAdapterPath("shared-service")),
+				},
+			},
+		},
+	}
+
+	var active atomic.Int32
+	var maxActive atomic.Int32
+
+	err := ExecuteTerraform(context.Background(), TerraformOptions{
+		AtmosConfig: &schema.AtmosConfiguration{},
+		Info: &schema.ConfigAndStacksInfo{
+			All:            true,
+			SubCommand:     "plan",
+			MaxConcurrency: 3,
+		},
+		Stacks: stacks,
+		Executor: func(execution TerraformExecution) (TerraformExecutionResult, error) {
+			current := active.Add(1)
+			updateMaxActive(&maxActive, current)
+			time.Sleep(20 * time.Millisecond)
+			active.Add(-1)
+			return TerraformExecutionResult{}, nil
+		},
+	})
+
+	require.NoError(t, err)
+	require.EqualValues(t, 1, maxActive.Load())
 }
 
 func TestExecuteTerraformAllowsParallelPlanForSharedPhysicalComponentPathWhenWorkdirEnabled(t *testing.T) {
@@ -717,22 +754,25 @@ func TestExecuteTerraformTreatsPlanExitTwoAsChangedSuccess(t *testing.T) {
 	require.ElementsMatch(t, []string{"app", "database"}, executed)
 }
 
-func TestValidateTerraformConcurrentPlanRequiresWorkdir(t *testing.T) {
-	err := ExecuteTerraform(context.Background(), TerraformOptions{
-		AtmosConfig: &schema.AtmosConfiguration{},
-		Info: &schema.ConfigAndStacksInfo{
-			All:            true,
-			SubCommand:     "plan",
-			MaxConcurrency: 2,
-		},
-		Stacks: terraformAdapterTestStacks(),
-		Executor: func(execution TerraformExecution) (TerraformExecutionResult, error) {
-			return TerraformExecutionResult{}, nil
-		},
-	})
+func TestExecuteTerraformDoesNotRequireWorkdirForPlanApplyDestroy(t *testing.T) {
+	for _, subcommand := range []string{"plan", "apply", "destroy"} {
+		t.Run(subcommand, func(t *testing.T) {
+			err := ExecuteTerraform(context.Background(), TerraformOptions{
+				AtmosConfig: &schema.AtmosConfiguration{},
+				Info: &schema.ConfigAndStacksInfo{
+					All:            true,
+					SubCommand:     subcommand,
+					MaxConcurrency: 2,
+				},
+				Stacks: terraformAdapterTestStacks(),
+				Executor: func(execution TerraformExecution) (TerraformExecutionResult, error) {
+					return TerraformExecutionResult{}, nil
+				},
+			})
 
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "requires provision.workdir.enabled=true")
+			require.NoError(t, err)
+		})
+	}
 }
 
 func TestWriteTerraformSummaryUsesDeterministicResultOrder(t *testing.T) {
