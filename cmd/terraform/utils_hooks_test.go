@@ -215,7 +215,7 @@ func TestRunCIHooksForDeployComponent_ExitCodeForwarding(t *testing.T) {
 	}{
 		{"nil error has exit code 0", nil, 0},
 		{"exit code 1", errUtils.ExitCodeError{Code: 1}, 1},
-		{"exit code 2 (non-standard error)", errUtils.ExitCodeError{Code: 2}, 2},
+		{"exit code 2 (abnormal termination)", errUtils.ExitCodeError{Code: 2}, 2},
 	}
 
 	for _, tc := range tests {
