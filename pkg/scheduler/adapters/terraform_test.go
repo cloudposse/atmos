@@ -1,8 +1,11 @@
 package adapters
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -15,6 +18,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/dependency"
+	"github.com/cloudposse/atmos/pkg/scheduler"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -301,6 +305,220 @@ func TestTerraformResourceKeyUsesSharedPathWithoutWorkdir(t *testing.T) {
 	require.Equal(t, terraformResourceKey(serviceAPI), terraformResourceKey(serviceWorker))
 }
 
+func TestTerraformResourceKeyFallbacks(t *testing.T) {
+	require.Empty(t, terraformResourceKey(nil))
+
+	require.Equal(t, "component:from-field", terraformResourceKey(&dependency.Node{
+		Component: "node-component",
+		Metadata: map[string]any{
+			cfg.ComponentSectionName: "from-field",
+		},
+	}))
+
+	require.Equal(t, "component:from-metadata", terraformResourceKey(&dependency.Node{
+		Component: "node-component",
+		Metadata: map[string]any{
+			cfg.MetadataSectionName: map[string]any{
+				cfg.ComponentSectionName: "from-metadata",
+			},
+		},
+	}))
+
+	require.Equal(t, "component:node-component", terraformResourceKey(&dependency.Node{
+		Component: "node-component",
+		Metadata:  map[string]any{},
+	}))
+}
+
+func TestTerraformExecutionResultCombinedOutput(t *testing.T) {
+	require.Equal(t, "stdout", TerraformExecutionResult{Stdout: "stdout"}.CombinedOutput())
+	require.Equal(t, "stderr", TerraformExecutionResult{Stderr: "stderr"}.CombinedOutput())
+	require.Equal(t, "stdout\nstderr", TerraformExecutionResult{Stdout: "stdout", Stderr: "stderr"}.CombinedOutput())
+}
+
+func TestTerraformOutputConfiguration(t *testing.T) {
+	output, err := newTerraformOutput(&schema.AtmosConfiguration{BasePathAbsolute: t.TempDir()}, &schema.ConfigAndStacksInfo{}, 1)
+	require.NoError(t, err)
+	require.Nil(t, output)
+
+	output, err = newTerraformOutput(&schema.AtmosConfiguration{BasePathAbsolute: t.TempDir()}, &schema.ConfigAndStacksInfo{
+		TerraformPlanHideNoChanges: true,
+	}, 1)
+	require.NoError(t, err)
+	require.NotNil(t, output)
+	require.True(t, output.captureOutput())
+	require.Equal(t, terraformPlanLogOrderGrouped, output.logOrder)
+
+	_, err = newTerraformOutput(&schema.AtmosConfiguration{BasePathAbsolute: t.TempDir()}, &schema.ConfigAndStacksInfo{
+		TerraformPlanLogOrder: "invalid",
+	}, 2)
+	require.Error(t, err)
+}
+
+func TestTerraformOutputNodeWritersWriteGroupedLogFiles(t *testing.T) {
+	tmpDir := t.TempDir()
+	output, err := newTerraformOutput(&schema.AtmosConfiguration{BasePathAbsolute: tmpDir}, &schema.ConfigAndStacksInfo{
+		TerraformPlanLogOrder: terraformPlanLogOrderGrouped,
+	}, 2)
+	require.NoError(t, err)
+
+	stdout, stderr, flush, logFiles := output.nodeWriters(&dependency.Node{
+		Component: "app",
+		Stack:     "dev",
+	})
+	require.NotNil(t, stdout)
+	require.NotNil(t, stderr)
+	require.NotNil(t, flush)
+	require.Contains(t, logFiles, "stdout")
+	require.Contains(t, logFiles, "stderr")
+
+	_, err = stdout.Write([]byte("stdout"))
+	require.NoError(t, err)
+	_, err = stderr.Write([]byte("stderr"))
+	require.NoError(t, err)
+	require.NoError(t, flush())
+
+	stdoutContent, err := os.ReadFile(logFiles["stdout"])
+	require.NoError(t, err)
+	require.Equal(t, "stdout", string(stdoutContent))
+	stderrContent, err := os.ReadFile(logFiles["stderr"])
+	require.NoError(t, err)
+	require.Equal(t, "stderr", string(stderrContent))
+}
+
+func TestTerraformOutputNodeWritersStreamMode(t *testing.T) {
+	tmpDir := t.TempDir()
+	output, err := newTerraformOutput(&schema.AtmosConfiguration{BasePathAbsolute: tmpDir}, &schema.ConfigAndStacksInfo{
+		TerraformPlanLogOrder: terraformPlanLogOrderStream,
+	}, 2)
+	require.NoError(t, err)
+
+	stdout, stderr, flush, logFiles := output.nodeWriters(&dependency.Node{
+		Component: "app",
+		Stack:     "dev",
+	})
+	require.NotNil(t, stdout)
+	require.NotNil(t, stderr)
+	require.NotNil(t, flush)
+	require.Contains(t, logFiles, "stdout")
+	require.Contains(t, logFiles, "stderr")
+	require.NoError(t, flush())
+}
+
+func TestTerraformOutputFinishNodeGroupedOutput(t *testing.T) {
+	stdoutReader, stdoutWriter, err := os.Pipe()
+	require.NoError(t, err)
+	stderrReader, stderrWriter, err := os.Pipe()
+	require.NoError(t, err)
+
+	oldStdout := os.Stdout
+	oldStderr := os.Stderr
+	os.Stdout = stdoutWriter
+	os.Stderr = stderrWriter
+	defer func() {
+		os.Stdout = oldStdout
+		os.Stderr = oldStderr
+	}()
+
+	output := &terraformOutput{logOrder: terraformPlanLogOrderGrouped}
+	output.finishNode(&dependency.Node{Component: "app", Stack: "dev"}, TerraformExecutionResult{
+		Stdout: "stdout",
+		Stderr: "stderr",
+	}, nil)
+
+	require.NoError(t, stdoutWriter.Close())
+	require.NoError(t, stderrWriter.Close())
+	stdoutBytes, err := io.ReadAll(stdoutReader)
+	require.NoError(t, err)
+	stderrBytes, err := io.ReadAll(stderrReader)
+	require.NoError(t, err)
+
+	require.Contains(t, string(stdoutBytes), "stdout")
+	require.Contains(t, string(stderrBytes), "terraform plan succeeded")
+	require.Contains(t, string(stderrBytes), "stderr")
+	require.Contains(t, string(stderrBytes), "end terraform plan output")
+}
+
+func TestTerraformOutputFinishNodeSkipsNoChangesWhenHidden(t *testing.T) {
+	stdoutReader, stdoutWriter, err := os.Pipe()
+	require.NoError(t, err)
+	stderrReader, stderrWriter, err := os.Pipe()
+	require.NoError(t, err)
+
+	oldStdout := os.Stdout
+	oldStderr := os.Stderr
+	os.Stdout = stdoutWriter
+	os.Stderr = stderrWriter
+	defer func() {
+		os.Stdout = oldStdout
+		os.Stderr = oldStderr
+	}()
+
+	output := &terraformOutput{
+		logOrder:      terraformPlanLogOrderGrouped,
+		hideNoChanges: true,
+	}
+	output.finishNode(&dependency.Node{Component: "app", Stack: "dev"}, TerraformExecutionResult{
+		Stdout: "No changes. Your infrastructure matches the configuration.\n",
+	}, nil)
+
+	require.NoError(t, stdoutWriter.Close())
+	require.NoError(t, stderrWriter.Close())
+	stdoutBytes, err := io.ReadAll(stdoutReader)
+	require.NoError(t, err)
+	stderrBytes, err := io.ReadAll(stderrReader)
+	require.NoError(t, err)
+	require.Empty(t, stdoutBytes)
+	require.Empty(t, stderrBytes)
+}
+
+func TestTerraformOutputHelpers(t *testing.T) {
+	require.Equal(t, "", terraformLogDir(nil))
+	require.Equal(t, "", terraformLogDir(&schema.AtmosConfiguration{}))
+	require.Equal(t, filepath.Join("base", ".atmos", "logs", "terraform", "plan"), terraformLogDir(&schema.AtmosConfiguration{BasePath: "base"}))
+	require.Equal(t, "terraform", safeTerraformLogName(" "))
+	require.Equal(t, "dev__app_bad_name", safeTerraformLogName("dev/app:bad name"))
+
+	var out bytes.Buffer
+	replayGroupedOutput(&out, "")
+	require.Empty(t, out.String())
+	replayGroupedOutput(&out, "line")
+	require.Equal(t, "line\n", out.String())
+
+	var combined bytes.Buffer
+	writer := combineWriters(nil, &combined)
+	_, err := writer.Write([]byte("secondary"))
+	require.NoError(t, err)
+	require.Equal(t, "secondary", combined.String())
+
+	require.NoError(t, closeTerraformLogFiles(nil)())
+}
+
+func TestTerraformSummaryHelperBranches(t *testing.T) {
+	require.Equal(t, "terraform", terraformNodeLabel(nil))
+	require.Equal(t, "app", terraformNodeLabel(&dependency.Node{Component: "app"}))
+	require.Equal(t, "dev/app", terraformNodeLabel(&dependency.Node{Stack: "dev", Component: "app"}))
+
+	require.Equal(t, 1, effectiveTerraformMaxConcurrency(nil))
+	require.Equal(t, 1, effectiveTerraformMaxConcurrency(&schema.ConfigAndStacksInfo{SubCommand: "apply", MaxConcurrency: 4}))
+	require.Equal(t, 1, effectiveTerraformMaxConcurrency(&schema.ConfigAndStacksInfo{SubCommand: "plan", MaxConcurrency: 1}))
+	require.Equal(t, 4, effectiveTerraformMaxConcurrency(&schema.ConfigAndStacksInfo{SubCommand: "plan", MaxConcurrency: 4}))
+
+	require.Equal(t, 0, terraformExitCode(nil))
+	require.Equal(t, 2, terraformExitCode(errUtils.ExitCodeError{Code: 2}))
+	require.Equal(t, 1, terraformExitCode(errors.New("failed")))
+
+	require.False(t, terraformPlanChangedError(nil, errUtils.ExitCodeError{Code: 2}))
+	require.False(t, terraformPlanChangedError(&schema.ConfigAndStacksInfo{SubCommand: "apply"}, errUtils.ExitCodeError{Code: 2}))
+	require.False(t, terraformPlanChangedError(&schema.ConfigAndStacksInfo{SubCommand: "plan"}, errors.New("failed")))
+	require.True(t, terraformPlanChangedError(&schema.ConfigAndStacksInfo{SubCommand: "plan"}, errUtils.ExitCodeError{Code: 2}))
+
+	require.Equal(t, 0, processedCount(nil))
+	require.Equal(t, 1, processedCount(&scheduler.AggregateResult{Results: []scheduler.Result{{Value: true}}}))
+	require.False(t, terraformPlanChanged(nil))
+	require.True(t, terraformPlanChanged(&scheduler.AggregateResult{Results: []scheduler.Result{{Value: TerraformNodeOutcome{Changed: true}}}}))
+}
+
 func TestExecuteTerraformIgnoresMaxConcurrencyForNonPlan(t *testing.T) {
 	stacks := map[string]any{
 		"dev": map[string]any{
@@ -432,6 +650,7 @@ func TestExecuteTerraformRejectsUnsupportedLogOrder(t *testing.T) {
 }
 
 func TestTerraformPlanHasNoChanges(t *testing.T) {
+	require.True(t, terraformPlanHasNoChanges(TerraformExecutionResult{}, errUtils.ExitCodeError{Code: 0}))
 	require.True(t, terraformPlanHasNoChanges(TerraformExecutionResult{
 		Stdout: "No changes. Your infrastructure matches the configuration.\n",
 	}, nil))
@@ -568,6 +787,53 @@ func TestWriteTerraformSummaryIncludesNodeTimings(t *testing.T) {
 	require.Contains(t, string(data), `"started_at":`)
 	require.Contains(t, string(data), `"finished_at":`)
 	require.Contains(t, string(data), `"duration_ms":`)
+
+	var summary terraformSummary
+	require.NoError(t, json.Unmarshal(data, &summary))
+	require.Len(t, summary.Results, 1)
+	require.NotEmpty(t, summary.Results[0].StartedAt)
+	require.NotEmpty(t, summary.Results[0].FinishedAt)
+	require.GreaterOrEqual(t, summary.Results[0].DurationMS, int64(1))
+}
+
+func TestTerraformNodeTimingsHandlesNilInputs(t *testing.T) {
+	var nilTimings *terraformNodeTimings
+	_, ok := nilTimings.Get("missing")
+	require.False(t, ok)
+	nilTimings.Start(&dependency.Node{ID: "ignored"})
+	nilTimings.Complete(&dependency.Node{ID: "ignored"}, scheduler.Result{})
+
+	timings := newTerraformNodeTimings()
+	timings.Start(nil)
+	timings.Complete(nil, scheduler.Result{})
+	_, ok = timings.Get("missing")
+	require.False(t, ok)
+}
+
+func TestWriteTerraformSummaryHandlesNoopAndWriteError(t *testing.T) {
+	require.NoError(t, writeTerraformSummary(nil, nil, nil))
+	require.NoError(t, writeTerraformSummary(&schema.ConfigAndStacksInfo{}, nil, nil))
+
+	tmpDir := t.TempDir()
+	err := writeTerraformSummary(
+		&schema.ConfigAndStacksInfo{TerraformPlanSummaryFile: tmpDir},
+		&scheduler.AggregateResult{
+			Results: []scheduler.Result{
+				{
+					NodeID: "vpc-dev",
+					Node: dependency.Node{
+						ID:        "vpc-dev",
+						Component: "vpc",
+						Stack:     "dev",
+					},
+					Status: scheduler.StatusSucceeded,
+					Value:  TerraformNodeOutcome{Processed: true},
+				},
+			},
+		},
+		nil,
+	)
+	require.Error(t, err)
 }
 
 func updateMaxActive(maxActive *atomic.Int32, current int32) {
