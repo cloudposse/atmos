@@ -181,6 +181,7 @@ func TestDeployPostRunE_SuppressedWhenMultiComponent(t *testing.T) {
 	defer func() { wasMultiComponentExecution = orig }()
 
 	cmd := newHookTestCmd()
+	cmd.Use = "deploy"
 
 	// With wasMultiComponentExecution = true, PostRunE must return nil immediately
 	// without invoking runHooksWithOutput (which would attempt stack resolution).
