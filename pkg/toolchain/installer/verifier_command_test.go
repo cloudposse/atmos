@@ -2,6 +2,7 @@ package installer
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -14,6 +15,11 @@ import (
 
 	"github.com/cloudposse/atmos/pkg/toolchain/registry"
 	"github.com/cloudposse/atmos/pkg/toolchain/verification"
+)
+
+var (
+	errConfiguredLatest = errors.New("configured latest lookup failed")
+	errAquaLatest       = errors.New("aqua latest lookup failed")
 )
 
 func TestVerifierTool(t *testing.T) {
@@ -149,6 +155,25 @@ func TestVerifierCommandRunnerAutoInstallFailsBeforeInstallingLatest(t *testing.
 	assert.Empty(t, reg.requestedVersion, "bootstrap install must not be called with literal latest")
 }
 
+func TestResolveVerifierInstallVersionPreservesLookupErrors(t *testing.T) {
+	configuredReg := &verifierBootstrapRegistry{latestErr: errConfiguredLatest}
+	aquaReg := &verifierBootstrapRegistry{latestErr: errAquaLatest}
+	inst := &Installer{
+		configuredReg:    configuredReg,
+		useConfiguredReg: true,
+		registryFactory:  verifierBootstrapFactory{registry: aquaReg},
+	}
+
+	version, err := inst.resolveVerifierInstallVersion("sigstore", "cosign")
+
+	require.Empty(t, version)
+	require.ErrorIs(t, err, ErrVerifierVersionUnavailable)
+	require.ErrorIs(t, err, errConfiguredLatest)
+	require.ErrorIs(t, err, errAquaLatest)
+	assert.Contains(t, err.Error(), "configured registry latest version lookup failed")
+	assert.Contains(t, err.Error(), "aqua registry latest version lookup failed")
+}
+
 func TestRunVerifierCommandFailure(t *testing.T) {
 	t.Setenv("ATMOS_VERIFIER_HELPER_PROCESS", "1")
 
@@ -180,6 +205,7 @@ func (f verifierBootstrapFactory) NewAquaRegistry() registry.ToolRegistry {
 type verifierBootstrapRegistry struct {
 	mu               sync.Mutex
 	latest           string
+	latestErr        error
 	tool             *registry.Tool
 	requestedVersion string
 }
@@ -196,6 +222,9 @@ func (r *verifierBootstrapRegistry) GetToolWithVersion(_, _, version string) (*r
 }
 
 func (r *verifierBootstrapRegistry) GetLatestVersion(_, _ string) (string, error) {
+	if r.latestErr != nil {
+		return "", r.latestErr
+	}
 	return r.latest, nil
 }
 

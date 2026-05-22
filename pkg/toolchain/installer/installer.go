@@ -399,19 +399,52 @@ func (r verifierCommandRunner) Run(ctx context.Context, name string, args ...str
 }
 
 func (i *Installer) resolveVerifierInstallVersion(owner, repo string) (string, error) {
-	if i.useConfiguredReg && i.configuredReg != nil {
-		if latest, err := i.configuredReg.GetLatestVersion(owner, repo); err == nil && latest != "" {
+	var lookupErrs []error
+
+	if i.useConfiguredReg {
+		latest, err := latestVerifierVersion(i.configuredReg, owner, repo, "configured registry")
+		if latest != "" {
 			return latest, nil
 		}
-	}
-	if i.registryFactory != nil {
-		if reg := i.registryFactory.NewAquaRegistry(); reg != nil {
-			if latest, err := reg.GetLatestVersion(owner, repo); err == nil && latest != "" {
-				return latest, nil
-			}
+		if err != nil {
+			lookupErrs = append(lookupErrs, err)
 		}
 	}
-	return "", fmt.Errorf("%w: %s/%s", ErrVerifierVersionUnavailable, owner, repo)
+
+	latest, err := latestVerifierVersion(i.aquaVerifierRegistry(), owner, repo, "aqua registry")
+	if latest != "" {
+		return latest, nil
+	}
+	if err != nil {
+		lookupErrs = append(lookupErrs, err)
+	}
+
+	return "", verifierVersionUnavailableError(owner, repo, lookupErrs)
+}
+
+func (i *Installer) aquaVerifierRegistry() registry.ToolRegistry {
+	if i.registryFactory == nil {
+		return nil
+	}
+	return i.registryFactory.NewAquaRegistry()
+}
+
+func latestVerifierVersion(reg registry.ToolRegistry, owner, repo, source string) (string, error) {
+	if reg == nil {
+		return "", nil
+	}
+	latest, err := reg.GetLatestVersion(owner, repo)
+	if err != nil {
+		return "", fmt.Errorf("%s latest version lookup failed: %w", source, err)
+	}
+	return latest, nil
+}
+
+func verifierVersionUnavailableError(owner, repo string, lookupErrs []error) error {
+	if len(lookupErrs) > 0 {
+		return fmt.Errorf("%w: %s/%s: %w", ErrVerifierVersionUnavailable, owner, repo, errors.Join(lookupErrs...))
+	}
+	return fmt.Errorf("%w: %s/%s", ErrVerifierVersionUnavailable, owner, repo)
 }
 
 func runVerifierCommand(ctx context.Context, path string, args ...string) error {
