@@ -74,7 +74,8 @@ func (f *DefaultFileSystem) CopyDir(src, dst string) error {
 
 // SyncDir performs a true sync: copies changed files, adds new files, deletes removed files.
 // Returns true if any changes were made, false if directories were already in sync.
-// Skips the .atmos/ directory which contains Atmos metadata.
+// Skips runtime metadata/cache directories that should not be copied from source
+// components or deleted from workdirs.
 func (f *DefaultFileSystem) SyncDir(src, dst string, hasher Hasher) (bool, error) {
 	defer perf.Track(nil, "workdir.DefaultFileSystem.SyncDir")()
 
@@ -89,7 +90,7 @@ func (f *DefaultFileSystem) SyncDir(src, dst string, hasher Hasher) (bool, error
 
 // syncSourceToDest copies new/changed files from src to dst.
 // Returns a map of relative paths for deletion detection, and whether any changes were made.
-// Skips the .atmos/ directory which contains Atmos metadata.
+// Skips runtime metadata/cache directories.
 func syncSourceToDest(src, dst string, hasher Hasher) (map[string]bool, bool, error) {
 	srcFiles := make(map[string]bool)
 	anyChanged := false
@@ -104,8 +105,7 @@ func syncSourceToDest(src, dst string, hasher Hasher) (map[string]bool, bool, er
 			return err
 		}
 
-		// Skip .atmos/ directory entirely (contains Atmos metadata).
-		if d.IsDir() && relPath == AtmosDir {
+		if d.IsDir() && shouldSkipSyncDir(relPath) {
 			return filepath.SkipDir
 		}
 
@@ -159,7 +159,7 @@ func fileNeedsCopy(srcPath, dstPath string, hasher Hasher) bool {
 }
 
 // deleteRemovedFiles removes files in dst that no longer exist in src.
-// Skips the .atmos/ directory which contains metadata.
+// Skips runtime metadata/cache directories.
 func deleteRemovedFiles(dst string, srcFiles map[string]bool) (bool, error) {
 	anyDeleted := false
 
@@ -173,8 +173,7 @@ func deleteRemovedFiles(dst string, srcFiles map[string]bool) (bool, error) {
 			return err
 		}
 
-		// Skip .atmos/ directory entirely (contains Atmos metadata).
-		if d.IsDir() && relPath == AtmosDir {
+		if d.IsDir() && shouldSkipSyncDir(relPath) {
 			return filepath.SkipDir
 		}
 
@@ -187,6 +186,15 @@ func deleteRemovedFiles(dst string, srcFiles map[string]bool) (bool, error) {
 	})
 
 	return anyDeleted, err
+}
+
+func shouldSkipSyncDir(relPath string) bool {
+	switch filepath.Base(filepath.Clean(relPath)) {
+	case AtmosDir, ".terraform", "terraform.tfstate.d":
+		return true
+	default:
+		return false
+	}
 }
 
 // copyFile copies a single file from src to dst.
@@ -253,6 +261,13 @@ func (h *DefaultHasher) HashDir(path string) (string, error) {
 	err := filepath.WalkDir(path, func(p string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
+		}
+		relPath, relErr := filepath.Rel(path, p)
+		if relErr != nil {
+			return relErr
+		}
+		if d.IsDir() && shouldSkipSyncDir(relPath) {
+			return filepath.SkipDir
 		}
 		if !d.IsDir() {
 			files = append(files, p)

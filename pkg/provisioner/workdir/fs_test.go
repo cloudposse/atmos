@@ -321,6 +321,73 @@ func TestSyncDir_SkipsAtmosDir(t *testing.T) {
 	assert.Equal(t, `{"test": true}`, string(content))
 }
 
+func TestSyncDir_SkipsTerraformRuntimeDirs(t *testing.T) {
+	tmpDir := t.TempDir()
+	srcDir := filepath.Join(tmpDir, "src")
+	dstDir := filepath.Join(tmpDir, "dst")
+	require.NoError(t, os.MkdirAll(srcDir, 0o755))
+	require.NoError(t, os.MkdirAll(dstDir, 0o755))
+
+	require.NoError(t, os.WriteFile(filepath.Join(srcDir, "main.tf"), []byte("resource"), 0o644))
+	require.NoError(t, os.MkdirAll(filepath.Join(srcDir, ".terraform", "providers"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(srcDir, ".terraform", "providers", "from-src"), []byte("cache"), 0o644))
+	require.NoError(t, os.MkdirAll(filepath.Join(srcDir, "terraform.tfstate.d", "workspace"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(srcDir, "terraform.tfstate.d", "workspace", "from-src"), []byte("state"), 0o644))
+
+	dstProviderCache := filepath.Join(dstDir, ".terraform", "providers", "existing")
+	require.NoError(t, os.MkdirAll(filepath.Dir(dstProviderCache), 0o755))
+	require.NoError(t, os.WriteFile(dstProviderCache, []byte("keep"), 0o644))
+	dstState := filepath.Join(dstDir, "terraform.tfstate.d", "workspace", "existing")
+	require.NoError(t, os.MkdirAll(filepath.Dir(dstState), 0o755))
+	require.NoError(t, os.WriteFile(dstState, []byte("keep"), 0o644))
+
+	fs := NewDefaultFileSystem()
+	hasher := NewDefaultHasher()
+
+	changed, err := fs.SyncDir(srcDir, dstDir, hasher)
+	require.NoError(t, err)
+	assert.True(t, changed)
+
+	content, err := os.ReadFile(filepath.Join(dstDir, "main.tf"))
+	require.NoError(t, err)
+	assert.Equal(t, "resource", string(content))
+
+	_, err = os.Stat(filepath.Join(dstDir, ".terraform", "providers", "from-src"))
+	assert.True(t, os.IsNotExist(err), "source .terraform cache should not be copied")
+	_, err = os.Stat(filepath.Join(dstDir, "terraform.tfstate.d", "workspace", "from-src"))
+	assert.True(t, os.IsNotExist(err), "source terraform.tfstate.d state should not be copied")
+
+	content, err = os.ReadFile(dstProviderCache)
+	require.NoError(t, err)
+	assert.Equal(t, "keep", string(content))
+	content, err = os.ReadFile(dstState)
+	require.NoError(t, err)
+	assert.Equal(t, "keep", string(content))
+}
+
+func TestDefaultHasher_HashDir_SkipsTerraformRuntimeDirs(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "main.tf"), []byte("resource"), 0o644))
+	require.NoError(t, os.MkdirAll(filepath.Join(tmpDir, ".terraform", "providers"), 0o755))
+	providerCache := filepath.Join(tmpDir, ".terraform", "providers", "cache")
+	require.NoError(t, os.WriteFile(providerCache, []byte("first"), 0o644))
+	require.NoError(t, os.MkdirAll(filepath.Join(tmpDir, "terraform.tfstate.d", "workspace"), 0o755))
+	stateFile := filepath.Join(tmpDir, "terraform.tfstate.d", "workspace", "state")
+	require.NoError(t, os.WriteFile(stateFile, []byte("first"), 0o644))
+
+	hasher := NewDefaultHasher()
+	hash1, err := hasher.HashDir(tmpDir)
+	require.NoError(t, err)
+
+	require.NoError(t, os.WriteFile(providerCache, []byte("second"), 0o644))
+	require.NoError(t, os.WriteFile(stateFile, []byte("second"), 0o644))
+
+	hash2, err := hasher.HashDir(tmpDir)
+	require.NoError(t, err)
+	assert.Equal(t, hash1, hash2)
+}
+
 // Tests for DefaultPathFilter.
 
 func TestDefaultPathFilter_Match_NoPatterns(t *testing.T) {
