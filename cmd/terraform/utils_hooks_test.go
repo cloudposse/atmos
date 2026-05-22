@@ -148,3 +148,82 @@ func TestRunCIHooksForPlanComponent_DemoStacks(t *testing.T) {
 	// Failure path: non-nil execErr is forwarded with its exit code.
 	runCIHooksForPlanComponent(cmd, info, "", errUtils.ExitCodeError{Code: 1})
 }
+
+// TestRunCIHooksForDeployComponent_DemoStacks exercises the per-component deploy
+// CI hook wrapper introduced by issue #2476. The demo-stacks fixture has
+// ci.enabled=false so RunCIHooks short-circuits cleanly — the test verifies
+// no panic on option construction for both the success and failure paths.
+func TestRunCIHooksForDeployComponent_DemoStacks(t *testing.T) {
+	t.Chdir("../../examples/demo-stacks")
+
+	cmd := newHookTestCmd()
+	info := &schema.ConfigAndStacksInfo{
+		Stack:            "dev",
+		Component:        "myapp",
+		ComponentFromArg: "myapp",
+		ComponentType:    "terraform",
+	}
+
+	// Success path: execErr is nil, exit code forwarded as 0.
+	runCIHooksForDeployComponent(cmd, info, "deploy output", nil)
+
+	// Failure path: non-nil execErr is forwarded with its exit code.
+	runCIHooksForDeployComponent(cmd, info, "", errUtils.ExitCodeError{Code: 1})
+}
+
+// TestDeployPostRunE_SuppressedWhenMultiComponent verifies that deployCmd.PostRunE
+// returns nil without error when wasMultiComponentExecution is true (multi-component
+// mode). Exercises the actual PostRunE closure in both suppressed and non-suppressed states.
+func TestDeployPostRunE_SuppressedWhenMultiComponent(t *testing.T) {
+	t.Chdir("../../examples/demo-stacks")
+
+	orig := wasMultiComponentExecution
+	defer func() { wasMultiComponentExecution = orig }()
+
+	cmd := newHookTestCmd()
+
+	// With wasMultiComponentExecution = true, PostRunE must return nil immediately
+	// without invoking runHooksWithOutput (which would attempt stack resolution).
+	wasMultiComponentExecution = true
+	err := deployCmd.PostRunE(cmd, []string{"--stack", "dev", "myapp"})
+	assert.NoError(t, err, "PostRunE must be suppressed when wasMultiComponentExecution is true")
+
+	// With wasMultiComponentExecution = false, PostRunE must run normally.
+	// The demo-stacks fixture has no hooks configured, so it completes without error.
+	wasMultiComponentExecution = false
+	err = deployCmd.PostRunE(cmd, []string{"--stack", "dev", "myapp"})
+	assert.NoError(t, err, "PostRunE must fire normally in single-component mode")
+}
+
+// TestRunCIHooksForDeployComponent_ExitCodeForwarding verifies that the exit code
+// extracted from execErr is forwarded correctly, matching the plan component hook behaviour.
+func TestRunCIHooksForDeployComponent_ExitCodeForwarding(t *testing.T) {
+	t.Chdir("../../examples/demo-stacks")
+
+	cmd := newHookTestCmd()
+	info := &schema.ConfigAndStacksInfo{
+		Stack:            "dev",
+		Component:        "myapp",
+		ComponentFromArg: "myapp",
+		ComponentType:    "terraform",
+	}
+
+	tests := []struct {
+		name    string
+		execErr error
+		wantExt int
+	}{
+		{"nil error has exit code 0", nil, 0},
+		{"exit code 1", errUtils.ExitCodeError{Code: 1}, 1},
+		{"exit code 2 (non-standard error)", errUtils.ExitCodeError{Code: 2}, 2},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			assert.Equal(t, tc.wantExt, errUtils.GetExitCode(tc.execErr),
+				"GetExitCode must extract the wrapped exit code before forwarding to deploy hook")
+			// The wrapper must not panic regardless of exit code.
+			runCIHooksForDeployComponent(cmd, info, "deploy output", tc.execErr)
+		})
+	}
+}

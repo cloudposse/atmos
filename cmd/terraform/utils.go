@@ -29,8 +29,8 @@ import (
 const errWrapFormat = "%w: %w"
 
 // wasMultiComponentExecution records whether the most recent terraformRunWithOptions call
-// was routed to ExecuteTerraformQuery. Read in plan.go PostRunE to suppress the global
-// CI hook call when per-component hooks already fired inside the component walker.
+// was routed to ExecuteTerraformQuery. Read in plan.go and deploy.go PostRunE to suppress
+// the global CI hook call when per-component hooks already fired inside the component walker.
 var wasMultiComponentExecution bool
 
 func runHooks(event h.HookEvent, cmd_ *cobra.Command, args []string) error {
@@ -187,6 +187,33 @@ func runCIHooksForDeploy(event h.HookEvent, cmd_ *cobra.Command, _ []string, inf
 		ForceCIMode: forceCIMode,
 	}); err != nil {
 		log.Warn("CI hook execution failed", "error", err)
+	}
+}
+
+// runCIHooksForDeployComponent fires CI hooks for a single component after it completes
+// in multi-component deploy mode. Mirrors runCIHooksForPlanComponent using AfterTerraformDeploy.
+func runCIHooksForDeployComponent(actualCmd *cobra.Command, info *schema.ConfigAndStacksInfo, rawOutput string, execErr error) {
+	atmosConfig, err := cfg.InitCliConfig(*info, true)
+	if err != nil {
+		log.Warn("CI hook config init failed", "component", info.Component, "error", err)
+		return
+	}
+
+	forceCIMode, _ := actualCmd.Flags().GetBool("ci")
+	if !forceCIMode {
+		forceCIMode = viper.GetBool("ci")
+	}
+
+	if err := h.RunCIHooks(&h.RunCIHooksOptions{
+		Event:        h.AfterTerraformDeploy,
+		AtmosConfig:  &atmosConfig,
+		Info:         info,
+		Output:       ansi.Strip(rawOutput),
+		ForceCIMode:  forceCIMode,
+		CommandError: execErr,
+		ExitCode:     errUtils.GetExitCode(execErr),
+	}); err != nil {
+		log.Warn("CI hook execution failed", "component", info.Component, "error", err)
 	}
 }
 
@@ -448,11 +475,15 @@ func terraformRunWithOptions(parentCmd, actualCmd *cobra.Command, args []string,
 	if isMultiComponentExecution(&info) {
 		wasMultiComponentExecution = true
 		log.Debug("Routing to ExecuteTerraformQuery (multi-component)")
-		// Wire per-component CI hooks for plan so each component gets its own
-		// summary entry instead of a single misattributed global call in PostRunE.
+		// Wire per-component CI hooks for plan and deploy so each component gets
+		// its own summary entry instead of a single misattributed global call in PostRunE.
 		if subCommand == "plan" {
 			info.PerComponentHook = func(compInfo *schema.ConfigAndStacksInfo, output string, execErr error) {
 				runCIHooksForPlanComponent(actualCmd, compInfo, output, execErr)
+			}
+		} else if subCommand == "deploy" {
+			info.PerComponentHook = func(compInfo *schema.ConfigAndStacksInfo, output string, execErr error) {
+				runCIHooksForDeployComponent(actualCmd, compInfo, output, execErr)
 			}
 		}
 		return e.ExecuteTerraformQuery(&info)
