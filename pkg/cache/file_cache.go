@@ -241,7 +241,7 @@ func (c *FileCache) GetOrFetch(key string, fetch func() ([]byte, error)) ([]byte
 	}
 
 	if err := c.Set(key, content); err != nil {
-		// Cache write errors are non-critical; return fetched content.
+		// Cache write errors are non-critical and intentionally ignored; return fetched content.
 		return content, nil
 	}
 
