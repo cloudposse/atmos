@@ -41,6 +41,9 @@ FLAGS
 
       --init-run-reconfigure string        Override init_run_reconfigure setting from atmos.yaml (true/false)
 
+      --max-concurrency int                Maximum number of Terraform apply components to execute concurrently
+                                           (default 1)
+
       --planfile string                    Set the plan file to use
 
 

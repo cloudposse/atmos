@@ -235,40 +235,48 @@ func TestExecuteTerraformAllowsParallelPlanForDifferentPhysicalComponentPaths(t 
 }
 
 func TestExecuteTerraformSerializesAliasesForSharedPhysicalComponentPathWithoutWorkdir(t *testing.T) {
-	stacks := map[string]any{
-		"dev": map[string]any{
-			cfg.ComponentsSectionName: map[string]any{
-				cfg.TerraformSectionName: map[string]any{
-					"service-api":    terraformAdapterComponentWithPathNoWorkdir("selected", terraformAdapterPath("shared-service")),
-					"service-worker": terraformAdapterComponentWithPathNoWorkdir("selected", terraformAdapterPath("shared-service")),
-					"service-cron":   terraformAdapterComponentWithPathNoWorkdir("selected", terraformAdapterPath("shared-service")),
+	for _, subcommand := range []string{"plan", "apply", "destroy"} {
+		t.Run(subcommand, func(t *testing.T) {
+			stacks := map[string]any{
+				"dev": map[string]any{
+					cfg.ComponentsSectionName: map[string]any{
+						cfg.TerraformSectionName: map[string]any{
+							"service-api":    terraformAdapterComponentWithPathNoWorkdir("selected", terraformAdapterPath("shared-service")),
+							"service-worker": terraformAdapterComponentWithPathNoWorkdir("selected", terraformAdapterPath("shared-service")),
+							"service-cron":   terraformAdapterComponentWithPathNoWorkdir("selected", terraformAdapterPath("shared-service")),
+						},
+					},
 				},
-			},
-		},
+			}
+
+			var active atomic.Int32
+			var maxActive atomic.Int32
+			info := &schema.ConfigAndStacksInfo{
+				All:            true,
+				SubCommand:     subcommand,
+				MaxConcurrency: 3,
+			}
+			if requiresTerraformAutoApprove(info) {
+				info.AdditionalArgsAndFlags = []string{"-auto-approve"}
+			}
+
+			err := ExecuteTerraform(context.Background(), TerraformOptions{
+				AtmosConfig: &schema.AtmosConfiguration{},
+				Info:        info,
+				Stacks:      stacks,
+				Executor: func(execution TerraformExecution) (TerraformExecutionResult, error) {
+					current := active.Add(1)
+					updateMaxActive(&maxActive, current)
+					time.Sleep(20 * time.Millisecond)
+					active.Add(-1)
+					return TerraformExecutionResult{}, nil
+				},
+			})
+
+			require.NoError(t, err)
+			require.EqualValues(t, 1, maxActive.Load())
+		})
 	}
-
-	var active atomic.Int32
-	var maxActive atomic.Int32
-
-	err := ExecuteTerraform(context.Background(), TerraformOptions{
-		AtmosConfig: &schema.AtmosConfiguration{},
-		Info: &schema.ConfigAndStacksInfo{
-			All:            true,
-			SubCommand:     "plan",
-			MaxConcurrency: 3,
-		},
-		Stacks: stacks,
-		Executor: func(execution TerraformExecution) (TerraformExecutionResult, error) {
-			current := active.Add(1)
-			updateMaxActive(&maxActive, current)
-			time.Sleep(20 * time.Millisecond)
-			active.Add(-1)
-			return TerraformExecutionResult{}, nil
-		},
-	})
-
-	require.NoError(t, err)
-	require.EqualValues(t, 1, maxActive.Load())
 }
 
 func TestExecuteTerraformAllowsParallelPlanForSharedPhysicalComponentPathWhenWorkdirEnabled(t *testing.T) {
@@ -379,6 +387,7 @@ func TestTerraformOutputConfiguration(t *testing.T) {
 	require.Nil(t, output)
 
 	output, err = newTerraformOutput(&schema.AtmosConfiguration{BasePathAbsolute: t.TempDir()}, &schema.ConfigAndStacksInfo{
+		SubCommand:                 "plan",
 		TerraformPlanHideNoChanges: true,
 	}, 1)
 	require.NoError(t, err)
@@ -457,7 +466,7 @@ func TestTerraformOutputFinishNodeGroupedOutput(t *testing.T) {
 		os.Stderr = oldStderr
 	}()
 
-	output := &terraformOutput{logOrder: terraformPlanLogOrderGrouped}
+	output := &terraformOutput{command: "plan", logOrder: terraformPlanLogOrderGrouped}
 	output.finishNode(&dependency.Node{Component: "app", Stack: "dev"}, TerraformExecutionResult{
 		Stdout: "stdout",
 		Stderr: "stderr",
@@ -471,9 +480,9 @@ func TestTerraformOutputFinishNodeGroupedOutput(t *testing.T) {
 	require.NoError(t, err)
 
 	require.Contains(t, string(stdoutBytes), "stdout")
-	require.Contains(t, string(stderrBytes), "terraform plan succeeded")
+	require.Contains(t, string(stderrBytes), "plan output succeeded")
 	require.Contains(t, string(stderrBytes), "stderr")
-	require.Contains(t, string(stderrBytes), "end terraform plan output")
+	require.Contains(t, string(stderrBytes), "end plan output")
 }
 
 func TestTerraformOutputFinishNodeSkipsNoChangesWhenHidden(t *testing.T) {
@@ -510,9 +519,9 @@ func TestTerraformOutputFinishNodeSkipsNoChangesWhenHidden(t *testing.T) {
 }
 
 func TestTerraformOutputHelpers(t *testing.T) {
-	require.Equal(t, "", terraformLogDir(nil))
-	require.Equal(t, "", terraformLogDir(&schema.AtmosConfiguration{}))
-	require.Equal(t, filepath.Join("base", ".atmos", "logs", "terraform", "plan"), terraformLogDir(&schema.AtmosConfiguration{BasePath: "base"}))
+	require.Equal(t, "", terraformLogDir(nil, "plan"))
+	require.Equal(t, "", terraformLogDir(&schema.AtmosConfiguration{}, "plan"))
+	require.Equal(t, filepath.Join("base", ".atmos", "logs", "terraform", "plan"), terraformLogDir(&schema.AtmosConfiguration{BasePath: "base"}, "plan"))
 	require.Equal(t, "terraform", safeTerraformLogName(" "))
 	require.Equal(t, "dev__app_bad_name", safeTerraformLogName("dev/app:bad name"))
 
@@ -537,7 +546,7 @@ func TestTerraformSummaryHelperBranches(t *testing.T) {
 	require.Equal(t, "dev/app", terraformNodeLabel(&dependency.Node{Stack: "dev", Component: "app"}))
 
 	require.Equal(t, 1, effectiveTerraformMaxConcurrency(nil))
-	require.Equal(t, 1, effectiveTerraformMaxConcurrency(&schema.ConfigAndStacksInfo{SubCommand: "apply", MaxConcurrency: 4}))
+	require.Equal(t, 4, effectiveTerraformMaxConcurrency(&schema.ConfigAndStacksInfo{SubCommand: "apply", MaxConcurrency: 4}))
 	require.Equal(t, 1, effectiveTerraformMaxConcurrency(&schema.ConfigAndStacksInfo{SubCommand: "plan", MaxConcurrency: 1}))
 	require.Equal(t, 4, effectiveTerraformMaxConcurrency(&schema.ConfigAndStacksInfo{SubCommand: "plan", MaxConcurrency: 4}))
 
@@ -556,7 +565,7 @@ func TestTerraformSummaryHelperBranches(t *testing.T) {
 	require.True(t, terraformPlanChanged(&scheduler.AggregateResult{Results: []scheduler.Result{{Value: TerraformNodeOutcome{Changed: true}}}}))
 }
 
-func TestExecuteTerraformIgnoresMaxConcurrencyForNonPlan(t *testing.T) {
+func TestExecuteTerraformAllowsParallelApplyWithAutoApprove(t *testing.T) {
 	stacks := map[string]any{
 		"dev": map[string]any{
 			cfg.ComponentsSectionName: map[string]any{
@@ -575,9 +584,10 @@ func TestExecuteTerraformIgnoresMaxConcurrencyForNonPlan(t *testing.T) {
 	err := ExecuteTerraform(context.Background(), TerraformOptions{
 		AtmosConfig: &schema.AtmosConfiguration{},
 		Info: &schema.ConfigAndStacksInfo{
-			All:            true,
-			SubCommand:     "apply",
-			MaxConcurrency: 3,
+			All:                    true,
+			SubCommand:             "apply",
+			MaxConcurrency:         3,
+			AdditionalArgsAndFlags: []string{"-auto-approve"},
 		},
 		Stacks: stacks,
 		Executor: func(execution TerraformExecution) (TerraformExecutionResult, error) {
@@ -590,7 +600,156 @@ func TestExecuteTerraformIgnoresMaxConcurrencyForNonPlan(t *testing.T) {
 	})
 
 	require.NoError(t, err)
-	require.EqualValues(t, 1, maxActive.Load())
+	require.Greater(t, maxActive.Load(), int32(1))
+}
+
+func TestExecuteTerraformRejectsConcurrentApplyWithoutAutoApprove(t *testing.T) {
+	err := ExecuteTerraform(context.Background(), TerraformOptions{
+		AtmosConfig: &schema.AtmosConfiguration{},
+		Info: &schema.ConfigAndStacksInfo{
+			All:            true,
+			SubCommand:     "apply",
+			MaxConcurrency: 2,
+		},
+		Stacks: terraformAdapterTestStacksWithWorkdir(),
+		Executor: func(execution TerraformExecution) (TerraformExecutionResult, error) {
+			return TerraformExecutionResult{}, nil
+		},
+	})
+
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "requires -auto-approve")
+}
+
+func TestExecuteTerraformAcceptsDoubleDashAutoApprove(t *testing.T) {
+	err := ExecuteTerraform(context.Background(), TerraformOptions{
+		AtmosConfig: &schema.AtmosConfiguration{},
+		Info: &schema.ConfigAndStacksInfo{
+			All:                    true,
+			SubCommand:             "destroy",
+			MaxConcurrency:         2,
+			AdditionalArgsAndFlags: []string{"--auto-approve"},
+		},
+		Stacks: terraformAdapterTestStacksWithWorkdir(),
+		Executor: func(execution TerraformExecution) (TerraformExecutionResult, error) {
+			return TerraformExecutionResult{}, nil
+		},
+	})
+
+	require.NoError(t, err)
+}
+
+func TestExecuteTerraformAllowsConcurrentApplyWithConfiguredAutoApprove(t *testing.T) {
+	stacks := map[string]any{
+		"dev": map[string]any{
+			cfg.ComponentsSectionName: map[string]any{
+				cfg.TerraformSectionName: map[string]any{
+					"app":      terraformAdapterComponentWithPath("selected", terraformAdapterPath("app")),
+					"database": terraformAdapterComponentWithPath("selected", terraformAdapterPath("database")),
+				},
+			},
+		},
+	}
+	var active atomic.Int32
+	var maxActive atomic.Int32
+
+	err := ExecuteTerraform(context.Background(), TerraformOptions{
+		AtmosConfig: &schema.AtmosConfiguration{
+			Components: schema.Components{
+				Terraform: schema.Terraform{
+					ApplyAutoApprove: true,
+				},
+			},
+		},
+		Info: &schema.ConfigAndStacksInfo{
+			All:            true,
+			SubCommand:     "apply",
+			MaxConcurrency: 2,
+		},
+		Stacks: stacks,
+		Executor: func(execution TerraformExecution) (TerraformExecutionResult, error) {
+			current := active.Add(1)
+			updateMaxActive(&maxActive, current)
+			time.Sleep(20 * time.Millisecond)
+			active.Add(-1)
+			return TerraformExecutionResult{}, nil
+		},
+	})
+
+	require.NoError(t, err)
+	require.Greater(t, maxActive.Load(), int32(1))
+}
+
+func TestExecuteTerraformRunsDestroyInReverseDependencyOrder(t *testing.T) {
+	var executed []string
+
+	err := ExecuteTerraform(context.Background(), TerraformOptions{
+		AtmosConfig: &schema.AtmosConfiguration{},
+		Info: &schema.ConfigAndStacksInfo{
+			All:                    true,
+			SubCommand:             "destroy",
+			MaxConcurrency:         1,
+			AdditionalArgsAndFlags: []string{"-auto-approve"},
+		},
+		Stacks: terraformAdapterTestStacks(),
+		Executor: func(execution TerraformExecution) (TerraformExecutionResult, error) {
+			info := execution.Info
+			executed = append(executed, info.Component+"@"+info.Stack)
+			return TerraformExecutionResult{}, nil
+		},
+	})
+
+	require.NoError(t, err)
+	require.Equal(t, []string{"app@dev", "database@dev", "vpc@dev"}, executed)
+}
+
+func TestExecuteTerraformDestroyFailureBlocksPrerequisites(t *testing.T) {
+	var executed []string
+
+	err := ExecuteTerraform(context.Background(), TerraformOptions{
+		AtmosConfig: &schema.AtmosConfiguration{},
+		Info: &schema.ConfigAndStacksInfo{
+			All:                    true,
+			SubCommand:             "destroy",
+			MaxConcurrency:         2,
+			AdditionalArgsAndFlags: []string{"-auto-approve"},
+		},
+		Stacks: terraformAdapterTestStacksWithWorkdir(),
+		Executor: func(execution TerraformExecution) (TerraformExecutionResult, error) {
+			info := execution.Info
+			executed = append(executed, info.Component+"@"+info.Stack)
+			if info.Component == "app" {
+				return TerraformExecutionResult{}, errors.New("destroy failed")
+			}
+			return TerraformExecutionResult{}, nil
+		},
+	})
+
+	require.Error(t, err)
+	require.Equal(t, []string{"app@dev"}, executed)
+	require.Contains(t, err.Error(), "dependency app-dev failed")
+}
+
+func TestExecuteTerraformPassesSchedulerContextToExecutor(t *testing.T) {
+	type contextKey string
+	ctx := context.WithValue(context.Background(), contextKey("trace"), "expected")
+	var sawContext bool
+
+	err := ExecuteTerraform(ctx, TerraformOptions{
+		AtmosConfig: &schema.AtmosConfiguration{},
+		Info: &schema.ConfigAndStacksInfo{
+			All:        true,
+			SubCommand: "plan",
+		},
+		Stacks: terraformAdapterTestStacks(),
+		Executor: func(execution TerraformExecution) (TerraformExecutionResult, error) {
+			sawContext = execution.Context.Value(contextKey("trace")) == "expected"
+			return TerraformExecutionResult{}, nil
+		},
+	})
+
+	require.NoError(t, err)
+	require.True(t, sawContext)
 }
 
 func TestExecuteTerraformConcurrentStreamLogOrderInjectsStreams(t *testing.T) {
@@ -757,14 +916,19 @@ func TestExecuteTerraformTreatsPlanExitTwoAsChangedSuccess(t *testing.T) {
 func TestExecuteTerraformDoesNotRequireWorkdirForPlanApplyDestroy(t *testing.T) {
 	for _, subcommand := range []string{"plan", "apply", "destroy"} {
 		t.Run(subcommand, func(t *testing.T) {
+			info := &schema.ConfigAndStacksInfo{
+				All:            true,
+				SubCommand:     subcommand,
+				MaxConcurrency: 2,
+			}
+			if requiresTerraformAutoApprove(info) {
+				info.AdditionalArgsAndFlags = []string{"-auto-approve"}
+			}
+
 			err := ExecuteTerraform(context.Background(), TerraformOptions{
 				AtmosConfig: &schema.AtmosConfiguration{},
-				Info: &schema.ConfigAndStacksInfo{
-					All:            true,
-					SubCommand:     subcommand,
-					MaxConcurrency: 2,
-				},
-				Stacks: terraformAdapterTestStacks(),
+				Info:        info,
+				Stacks:      terraformAdapterTestStacks(),
 				Executor: func(execution TerraformExecution) (TerraformExecutionResult, error) {
 					return TerraformExecutionResult{}, nil
 				},
@@ -916,6 +1080,23 @@ func terraformAdapterTestStacks() map[string]any {
 			},
 		},
 	}
+}
+
+func terraformAdapterTestStacksWithWorkdir() map[string]any {
+	stacks := terraformAdapterTestStacks()
+	terraformComponents := stacks["dev"].(map[string]any)[cfg.ComponentsSectionName].(map[string]any)[cfg.TerraformSectionName].(map[string]any)
+	for componentName, component := range terraformComponents {
+		componentMap := component.(map[string]any)
+		componentMap["component_info"] = map[string]any{
+			cfg.ComponentPathSectionName: terraformAdapterPath(componentName),
+		}
+		componentMap["provision"] = map[string]any{
+			"workdir": map[string]any{
+				"enabled": true,
+			},
+		}
+	}
+	return stacks
 }
 
 func terraformAdapterComponent(group string, dependenciesComponents, settingsDependsOn []any) map[string]any {

@@ -28,6 +28,12 @@ var authManagerFactory = func(identity string, authConfig schema.AuthConfig, fla
 // ExecuteTerraformQuery executes `atmos terraform <command> --query <yq-expression --stack <stack>`.
 func ExecuteTerraformQuery(info *schema.ConfigAndStacksInfo) error {
 	defer perf.Track(nil, "exec.ExecuteTerraformQuery")()
+	return ExecuteTerraformQueryWithContext(context.Background(), info)
+}
+
+// ExecuteTerraformQueryWithContext executes graph-backed multi-component Terraform work.
+func ExecuteTerraformQueryWithContext(ctx context.Context, info *schema.ConfigAndStacksInfo) error {
+	defer perf.Track(nil, "exec.ExecuteTerraformQueryWithContext")()
 
 	atmosConfig, err := cfg.InitCliConfig(*info, true)
 	if err != nil {
@@ -67,7 +73,7 @@ func ExecuteTerraformQuery(info *schema.ConfigAndStacksInfo) error {
 		return err
 	}
 
-	return scheduleradapters.ExecuteTerraform(context.Background(), scheduleradapters.TerraformOptions{
+	return scheduleradapters.ExecuteTerraform(ctx, scheduleradapters.TerraformOptions{
 		AtmosConfig: &atmosConfig,
 		Info:        info,
 		Stacks:      stacks,
@@ -104,7 +110,7 @@ func createQueryAuthManager(info *schema.ConfigAndStacksInfo, atmosConfig *schem
 // executeTerraformQueryComponent runs one scheduled Terraform component and captures optional output.
 func executeTerraformQueryComponent(execution scheduleradapters.TerraformExecution) (scheduleradapters.TerraformExecutionResult, error) {
 	info := execution.Info
-	var opts []ShellCommandOption
+	opts := []ShellCommandOption{WithProcessContext(execution.Context)}
 	if execution.Stdout != nil || execution.Stderr != nil {
 		opts = append(opts, WithProcessStreams(process.Streams{
 			Stdin:  os.Stdin,

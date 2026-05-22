@@ -35,7 +35,7 @@ type TerraformRunOptions struct {
 	All        bool
 	Affected   bool
 
-	// Plan concurrency.
+	// Graph-backed Terraform concurrency.
 	MaxConcurrency    int
 	PlanLogOrder      string
 	PlanHideNoChanges bool
