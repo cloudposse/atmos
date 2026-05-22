@@ -8,6 +8,9 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// TestCompileConditions covers the supported pattern shapes (plain, slash-delimited,
+// whitespace-padded, empty/skipped, invalid) and verifies that compile failures wrap
+// ErrInvalidCondition so callers can branch on errors.Is.
 func TestCompileConditions(t *testing.T) {
 	tests := []struct {
 		name      string
@@ -39,6 +42,9 @@ func TestCompileConditions(t *testing.T) {
 	}
 }
 
+// TestMatchesAny verifies the OR-of-patterns matching behaviour over real Terraform-style
+// transient-error strings (5xx, connection reset, Bad Gateway) and confirms matching is
+// case-sensitive by default — users must opt in to case-insensitivity via (?i) in the regex.
 func TestMatchesAny(t *testing.T) {
 	patterns, err := CompileConditions([]string{"/Bad Gateway/", "/5\\d\\d /", "connection reset"})
 	require.NoError(t, err)
@@ -62,6 +68,8 @@ func TestMatchesAny(t *testing.T) {
 	}
 }
 
+// TestMatchesAny_NilOrEmptyPatterns asserts the no-patterns short-circuit: an empty
+// compiled slice (and a literal nil) must never match, regardless of the output content.
 func TestMatchesAny_NilOrEmptyPatterns(t *testing.T) {
 	empty, err := CompileConditions(nil)
 	require.NoError(t, err)
@@ -69,6 +77,10 @@ func TestMatchesAny_NilOrEmptyPatterns(t *testing.T) {
 	assert.False(t, MatchesAny(nil, "anything"))
 }
 
+// TestStripSlashDelimiters covers the YAML-readability shim that lets users write
+// patterns as /.../ — a balanced pair is stripped, an unbalanced or single slash is
+// preserved (so users still see a regex compile error rather than a silently mangled
+// pattern), and surrounding whitespace is trimmed first.
 func TestStripSlashDelimiters(t *testing.T) {
 	tests := []struct {
 		in, want string

@@ -361,6 +361,183 @@ func TestMergeComponentConfigurations(t *testing.T) {
 	}
 }
 
+// minimalComponentResult returns a ComponentProcessorResult with all map fields
+// initialized to empty maps — enough to satisfy mergeComponentConfigurations' nil-safety
+// expectations so a retry-focused test doesn't have to repeat the boilerplate.
+func minimalComponentResult() *ComponentProcessorResult {
+	return &ComponentProcessorResult{
+		ComponentVars:                          map[string]any{},
+		ComponentSettings:                      map[string]any{},
+		ComponentEnv:                           map[string]any{},
+		ComponentAuth:                          map[string]any{},
+		ComponentMetadata:                      map[string]any{},
+		ComponentOverrides:                     map[string]any{},
+		ComponentOverridesVars:                 map[string]any{},
+		ComponentOverridesSettings:             map[string]any{},
+		ComponentOverridesEnv:                  map[string]any{},
+		ComponentOverridesAuth:                 map[string]any{},
+		BaseComponentVars:                      map[string]any{},
+		BaseComponentSettings:                  map[string]any{},
+		BaseComponentEnv:                       map[string]any{},
+		BaseComponentAuth:                      map[string]any{},
+		ComponentProviders:                     map[string]any{},
+		ComponentHooks:                         map[string]any{},
+		ComponentBackendType:                   "",
+		ComponentBackendSection:                map[string]any{},
+		ComponentRemoteStateBackendType:        "",
+		ComponentRemoteStateBackendSection:     map[string]any{},
+		ComponentOverridesProviders:            map[string]any{},
+		ComponentOverridesHooks:                map[string]any{},
+		BaseComponentProviders:                 map[string]any{},
+		BaseComponentHooks:                     map[string]any{},
+		BaseComponentBackendType:               "",
+		BaseComponentBackendSection:            map[string]any{},
+		BaseComponentRemoteStateBackendType:    "",
+		BaseComponentRemoteStateBackendSection: map[string]any{},
+	}
+}
+
+// TestMergeComponentConfigurations_Retry covers the per-component retry merge added by
+// the component-retry feature: base → component → overrides precedence on scalars, and
+// list-append on the `conditions:` slice (the existing deep-merge semantic). It also
+// asserts that the retry section is omitted entirely when none of base/component/overrides
+// provide one (avoids leaking empty `retry: {}` into rendered component output).
+func TestMergeComponentConfigurations_Retry(t *testing.T) {
+	atmosCfg := &schema.AtmosConfiguration{}
+
+	t.Run("no-retry-anywhere-omits-section", func(t *testing.T) {
+		opts := ComponentProcessorOptions{
+			ComponentType: cfg.TerraformComponentType,
+			Component:     "vpc",
+			AtmosConfig:   atmosCfg,
+		}
+		comp, err := mergeComponentConfigurations(atmosCfg, &opts, minimalComponentResult())
+		require.NoError(t, err)
+		_, present := comp[cfg.RetrySectionName]
+		assert.False(t, present, "retry must be absent when neither base, component, nor overrides set it")
+	})
+
+	t.Run("base-only-flows-through", func(t *testing.T) {
+		opts := ComponentProcessorOptions{
+			ComponentType: cfg.TerraformComponentType,
+			Component:     "vpc",
+			AtmosConfig:   atmosCfg,
+		}
+		res := minimalComponentResult()
+		res.BaseComponentRetry = map[string]any{
+			"max_attempts": 5,
+			"conditions":   []any{"/Bad Gateway/"},
+		}
+		comp, err := mergeComponentConfigurations(atmosCfg, &opts, res)
+		require.NoError(t, err)
+		got, ok := comp[cfg.RetrySectionName].(map[string]any)
+		require.True(t, ok, "retry section must be present and a map")
+		assert.EqualValues(t, 5, got["max_attempts"])
+		assert.Equal(t, []any{"/Bad Gateway/"}, got["conditions"])
+	})
+
+	t.Run("component-overrides-base-scalar", func(t *testing.T) {
+		opts := ComponentProcessorOptions{
+			ComponentType: cfg.TerraformComponentType,
+			Component:     "vpc",
+			AtmosConfig:   atmosCfg,
+		}
+		res := minimalComponentResult()
+		res.BaseComponentRetry = map[string]any{"max_attempts": 3}
+		res.ComponentRetry = map[string]any{"max_attempts": 7}
+		comp, err := mergeComponentConfigurations(atmosCfg, &opts, res)
+		require.NoError(t, err)
+		got := comp[cfg.RetrySectionName].(map[string]any)
+		assert.EqualValues(t, 7, got["max_attempts"], "concrete component must override base scalar")
+	})
+
+	t.Run("overrides-wins-over-component-and-base", func(t *testing.T) {
+		opts := ComponentProcessorOptions{
+			ComponentType: cfg.TerraformComponentType,
+			Component:     "vpc",
+			AtmosConfig:   atmosCfg,
+		}
+		res := minimalComponentResult()
+		res.BaseComponentRetry = map[string]any{"max_attempts": 1, "backoff_strategy": "constant"}
+		res.ComponentRetry = map[string]any{"max_attempts": 2}
+		res.ComponentOverridesRetry = map[string]any{"max_attempts": 9, "backoff_strategy": "exponential"}
+		comp, err := mergeComponentConfigurations(atmosCfg, &opts, res)
+		require.NoError(t, err)
+		got := comp[cfg.RetrySectionName].(map[string]any)
+		assert.EqualValues(t, 9, got["max_attempts"], "overrides must win")
+		assert.Equal(t, "exponential", got["backoff_strategy"])
+	})
+
+	t.Run("conditions-list-replaces-by-default", func(t *testing.T) {
+		// Default list_merge_strategy is "replace", so the last non-empty conditions
+		// list wins. This documents the default behaviour — users who want additive
+		// conditions across inheritance layers must opt in with list_merge_strategy: append.
+		opts := ComponentProcessorOptions{
+			ComponentType: cfg.TerraformComponentType,
+			Component:     "vpc",
+			AtmosConfig:   atmosCfg,
+		}
+		res := minimalComponentResult()
+		res.BaseComponentRetry = map[string]any{"conditions": []any{"/base-only/"}}
+		res.ComponentRetry = map[string]any{"conditions": []any{"/component-only/"}}
+		res.ComponentOverridesRetry = map[string]any{"conditions": []any{"/override-only/"}}
+		comp, err := mergeComponentConfigurations(atmosCfg, &opts, res)
+		require.NoError(t, err)
+		got := comp[cfg.RetrySectionName].(map[string]any)
+		conds, ok := got["conditions"].([]any)
+		require.True(t, ok, "conditions must be a slice after merge")
+		require.Len(t, conds, 1, "default replace strategy keeps only the last layer's conditions")
+		assert.Equal(t, "/override-only/", conds[0], "overrides win under replace strategy")
+	})
+
+	t.Run("conditions-list-appends-when-strategy-is-append", func(t *testing.T) {
+		// Opt-in: with list_merge_strategy: append, conditions accumulate base →
+		// component → overrides so the iteration order in retry.MatchesAny matches
+		// the inheritance order.
+		appendCfg := &schema.AtmosConfiguration{
+			Settings: schema.AtmosSettings{ListMergeStrategy: "append"},
+		}
+		opts := ComponentProcessorOptions{
+			ComponentType: cfg.TerraformComponentType,
+			Component:     "vpc",
+			AtmosConfig:   appendCfg,
+		}
+		res := minimalComponentResult()
+		res.BaseComponentRetry = map[string]any{"conditions": []any{"/base-only/"}}
+		res.ComponentRetry = map[string]any{"conditions": []any{"/component-only/"}}
+		res.ComponentOverridesRetry = map[string]any{"conditions": []any{"/override-only/"}}
+		comp, err := mergeComponentConfigurations(appendCfg, &opts, res)
+		require.NoError(t, err)
+		got := comp[cfg.RetrySectionName].(map[string]any)
+		conds, ok := got["conditions"].([]any)
+		require.True(t, ok, "conditions must be a slice after merge")
+		require.Len(t, conds, 3, "append strategy must accumulate each layer's conditions")
+		assert.Equal(t, "/base-only/", conds[0], "base first")
+		assert.Equal(t, "/override-only/", conds[2], "overrides last")
+	})
+
+	t.Run("result-mutation-does-not-leak-into-source-maps", func(t *testing.T) {
+		// Aliasing-isolation check (per CLAUDE.md): mutating the merged result must
+		// not touch the original base/component/overrides input maps.
+		opts := ComponentProcessorOptions{
+			ComponentType: cfg.TerraformComponentType,
+			Component:     "vpc",
+			AtmosConfig:   atmosCfg,
+		}
+		baseRetry := map[string]any{"max_attempts": 2}
+		compRetry := map[string]any{"max_attempts": 4}
+		res := minimalComponentResult()
+		res.BaseComponentRetry = baseRetry
+		res.ComponentRetry = compRetry
+		comp, err := mergeComponentConfigurations(atmosCfg, &opts, res)
+		require.NoError(t, err)
+		got := comp[cfg.RetrySectionName].(map[string]any)
+		got["max_attempts"] = 999
+		assert.EqualValues(t, 2, baseRetry["max_attempts"], "base map must stay intact")
+		assert.EqualValues(t, 4, compRetry["max_attempts"], "component map must stay intact")
+	})
+}
+
 func TestProcessAuthConfig(t *testing.T) {
 	tests := []struct {
 		name        string

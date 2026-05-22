@@ -90,7 +90,6 @@ require (
 	github.com/mattn/go-runewidth v0.0.23
 	github.com/mikefarah/yq/v4 v4.53.2
 	github.com/mitchellh/go-wordwrap v1.0.1
-	github.com/mitchellh/mapstructure v1.5.0
 	github.com/modelcontextprotocol/go-sdk v1.6.0
 	github.com/muesli/ansi v0.0.0-20230316100256-276c6243b2f6
 	github.com/muesli/reflow v0.3.0
@@ -461,6 +460,7 @@ require (
 require (
 	github.com/bytecodealliance/wasmtime-go/v43 v43.0.2 // indirect
 	github.com/containerd/ttrpc v1.2.8 // indirect
+	github.com/mitchellh/mapstructure v1.5.0 // indirect
 	github.com/standard-webhooks/standard-webhooks/libraries v0.0.0-20260427160145-3afa6683f8b2 // indirect
 	go.opencensus.io v0.24.0 // indirect
 )

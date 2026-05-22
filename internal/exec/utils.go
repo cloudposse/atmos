@@ -1182,7 +1182,9 @@ func postProcessTemplatesAndYamlFunctions(configAndStacksInfo *schema.ConfigAndS
 	// extraction in ProcessStackConfig is the authoritative validation point.
 	if retryCfg, err := schema.DecodeRetryConfig(configAndStacksInfo.ComponentSection[cfg.RetrySectionName]); err != nil {
 		log.Warn("Failed to restore retry configuration after template processing", "error", err)
-	} else if retryCfg != nil {
+	} else {
+		// Always assign — including nil — so a retry section removed via templates
+		// or YAML functions clears any previously decoded config.
 		configAndStacksInfo.ComponentRetrySection = retryCfg
 	}
 

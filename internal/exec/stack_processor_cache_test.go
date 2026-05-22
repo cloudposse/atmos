@@ -12,6 +12,44 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
+// TestDeepCopyBaseComponentConfigMaps_Retry verifies that BaseComponentRetry is deep-copied
+// by the cache layer so mutating the returned config never reaches back into the cached
+// source map. Without this guarantee, a downstream merge could permanently corrupt the
+// cached base component config that subsequent components in the same stack reuse.
+func TestDeepCopyBaseComponentConfigMaps_Retry(t *testing.T) {
+	src := &schema.BaseComponentConfig{
+		BaseComponentRetry: map[string]any{
+			"max_attempts": 5,
+			"conditions":   []any{"/Bad Gateway/"},
+		},
+	}
+	dst := &schema.BaseComponentConfig{}
+	require.NoError(t, deepCopyBaseComponentConfigMaps(dst, src))
+
+	require.NotNil(t, dst.BaseComponentRetry)
+	assert.EqualValues(t, 5, dst.BaseComponentRetry["max_attempts"])
+
+	// Mutate the copy; original must be untouched.
+	dst.BaseComponentRetry["max_attempts"] = 999
+	assert.EqualValues(t, 5, src.BaseComponentRetry["max_attempts"], "mutating dst must not leak into src")
+
+	// Also check the slice — a shallow copy of the outer map would still alias the slice.
+	dstConds := dst.BaseComponentRetry["conditions"].([]any)
+	dstConds[0] = "/mutated/"
+	srcConds := src.BaseComponentRetry["conditions"].([]any)
+	assert.Equal(t, "/Bad Gateway/", srcConds[0], "slice inside retry map must be deep-copied")
+}
+
+// TestDeepCopyBaseComponentConfigMaps_RetryNil covers the nil-source path: a base
+// component with no retry block must produce a destination with a nil (not empty) map,
+// matching the original semantics so callers can distinguish "absent" from "empty".
+func TestDeepCopyBaseComponentConfigMaps_RetryNil(t *testing.T) {
+	src := &schema.BaseComponentConfig{}
+	dst := &schema.BaseComponentConfig{}
+	require.NoError(t, deepCopyBaseComponentConfigMaps(dst, src))
+	assert.Nil(t, dst.BaseComponentRetry, "nil source must produce nil destination")
+}
+
 // TestClearBaseComponentConfigCache tests that the cache clearing function works correctly.
 func TestClearBaseComponentConfigCache(t *testing.T) {
 	// First, populate the cache with a test entry.
