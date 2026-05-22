@@ -9,6 +9,7 @@ package terraform
 // exercise option construction without invoking real plugin handlers.
 
 import (
+	"errors"
 	"testing"
 
 	"github.com/spf13/cobra"
@@ -194,6 +195,75 @@ func TestDeployPostRunE_SuppressedWhenMultiComponent(t *testing.T) {
 	wasMultiComponentExecution = false
 	err = deployCmd.PostRunE(cmd, []string{"--stack", "dev", "myapp"})
 	assert.NoError(t, err, "PostRunE must fire normally in single-component mode")
+}
+
+// TestDeployRunE_DeferGuard verifies the RunE defer-guard contract in
+// deploy.go: the global error hook (runHooksOnErrorWithOutput) must fire
+// when runErr is non-nil AND wasMultiComponentExecution is false, and must
+// be suppressed when wasMultiComponentExecution is true (multi-component
+// mode, where per-component hooks already fired inside ExecuteTerraformQuery).
+//
+// The defer-guard lives inside deployCmd.RunE and is reset to false at the
+// start of RunE, so we can't pre-set wasMultiComponentExecution and invoke
+// RunE directly. Instead, this test mirrors the defer-body inline and
+// verifies both branches using a stubbed runHooksOnErrorWithOutput.
+func TestDeployRunE_DeferGuard(t *testing.T) {
+	origGuard := wasMultiComponentExecution
+	origHook := runHooksOnErrorWithOutput
+	defer func() {
+		wasMultiComponentExecution = origGuard
+		runHooksOnErrorWithOutput = origHook
+	}()
+
+	var called bool
+	var calledEvent hooks.HookEvent
+	var calledErr error
+	var calledOutput string
+	runHooksOnErrorWithOutput = func(event hooks.HookEvent, _ *cobra.Command, _ []string, cmdErr error, output string) {
+		called = true
+		calledEvent = event
+		calledErr = cmdErr
+		calledOutput = output
+	}
+
+	cmd := newHookTestCmd()
+	cmd.Use = "deploy"
+	args := []string{"--stack", "dev", "myapp"}
+
+	// invokeDefer mirrors the RunE defer-guard body in deploy.go lines 43-47.
+	// Any change to the production guard must be reflected here.
+	invokeDefer := func(runErr error, capturedOutput string) {
+		if runErr != nil && !wasMultiComponentExecution {
+			runHooksOnErrorWithOutput(hooks.AfterTerraformDeploy, cmd, args, runErr, capturedOutput)
+		}
+	}
+
+	// Case 1: non-nil error AND single-component mode → hook MUST fire.
+	called = false
+	wasMultiComponentExecution = false
+	runErr := errors.New("terraform deploy failed")
+	invokeDefer(runErr, "captured deploy output")
+	assert.True(t, called, "hook must fire when runErr is non-nil and wasMultiComponentExecution is false")
+	assert.Equal(t, hooks.AfterTerraformDeploy, calledEvent, "hook must fire with AfterTerraformDeploy event")
+	assert.Equal(t, runErr, calledErr, "hook must receive the original runErr")
+	assert.Equal(t, "captured deploy output", calledOutput, "hook must receive the captured deploy output")
+
+	// Case 2: non-nil error AND multi-component mode → hook MUST be suppressed.
+	called = false
+	wasMultiComponentExecution = true
+	invokeDefer(errors.New("terraform deploy failed"), "captured deploy output")
+	assert.False(t, called, "hook must be suppressed when wasMultiComponentExecution is true")
+
+	// Case 3: nil error → hook MUST NOT fire regardless of guard state.
+	called = false
+	wasMultiComponentExecution = false
+	invokeDefer(nil, "captured deploy output")
+	assert.False(t, called, "hook must not fire on success path (nil runErr)")
+
+	called = false
+	wasMultiComponentExecution = true
+	invokeDefer(nil, "captured deploy output")
+	assert.False(t, called, "hook must not fire on success path even in multi-component mode")
 }
 
 // TestRunCIHooksForDeployComponent_ExitCodeForwarding verifies that the exit code

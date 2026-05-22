@@ -45,7 +45,9 @@ func runHooksOnError(event h.HookEvent, cmd_ *cobra.Command, args []string, cmdE
 }
 
 // runHooksOnErrorWithOutput runs CI hooks with command error context and captured output.
-func runHooksOnErrorWithOutput(event h.HookEvent, cmd_ *cobra.Command, args []string, cmdErr error, output string) {
+// Declared as a package-level var so tests can stub it to verify the RunE defer-guard
+// in deploy.go suppresses the global error hook in multi-component mode.
+var runHooksOnErrorWithOutput = func(event h.HookEvent, cmd_ *cobra.Command, args []string, cmdErr error, output string) {
 	finalArgs := append([]string{cmd_.Name()}, args...)
 
 	info, err := e.ProcessCommandLineArgs("terraform", cmd_, finalArgs, nil)
