@@ -52,7 +52,11 @@ const (
 func EnsureWindowsExeExtension(binaryName string) string {
 	defer perf.Track(nil, "installer.EnsureWindowsExeExtension")()
 
-	if runtime.GOOS == "windows" && !strings.HasSuffix(strings.ToLower(binaryName), windowsExeExt) {
+	return ensureWindowsExeExtensionForOS(binaryName, runtime.GOOS)
+}
+
+func ensureWindowsExeExtensionForOS(binaryName, goos string) string {
+	if goos == "windows" && !strings.HasSuffix(strings.ToLower(binaryName), windowsExeExt) {
 		return binaryName + windowsExeExt
 	}
 	return binaryName
@@ -383,19 +387,31 @@ func (r verifierCommandRunner) Run(ctx context.Context, name string, args ...str
 		Signatures:      verification.PolicyDisabled,
 		VerifierInstall: verification.VerifierInstallPathOnly,
 	}
-	version := "latest"
-	if bootstrap.registryFactory != nil {
-		if reg := bootstrap.registryFactory.NewAquaRegistry(); reg != nil {
-			if latest, err := reg.GetLatestVersion(owner, repo); err == nil && latest != "" {
-				version = latest
-			}
-		}
+	version, err := bootstrap.resolveVerifierInstallVersion(owner, repo)
+	if err != nil {
+		return fmt.Errorf("%w: resolve verifier %s version: %w", verification.ErrVerifierCommandRequired, name, err)
 	}
 	binaryPath, err := bootstrap.Install(owner, repo, version)
 	if err != nil {
 		return fmt.Errorf("%w: install verifier %s: %w", verification.ErrVerifierCommandRequired, name, err)
 	}
 	return runVerifierCommand(ctx, binaryPath, args...)
+}
+
+func (i *Installer) resolveVerifierInstallVersion(owner, repo string) (string, error) {
+	if i.useConfiguredReg && i.configuredReg != nil {
+		if latest, err := i.configuredReg.GetLatestVersion(owner, repo); err == nil && latest != "" {
+			return latest, nil
+		}
+	}
+	if i.registryFactory != nil {
+		if reg := i.registryFactory.NewAquaRegistry(); reg != nil {
+			if latest, err := reg.GetLatestVersion(owner, repo); err == nil && latest != "" {
+				return latest, nil
+			}
+		}
+	}
+	return "", fmt.Errorf("%w: %s/%s", ErrVerifierVersionUnavailable, owner, repo)
 }
 
 func runVerifierCommand(ctx context.Context, path string, args ...string) error {

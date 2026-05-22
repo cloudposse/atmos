@@ -116,6 +116,39 @@ func TestVerifierCommandRunnerAutoInstallUsesResolvedVersion(t *testing.T) {
 	assert.Equal(t, "v3.0.6", reg.requestedVersion)
 }
 
+func TestVerifierCommandRunnerAutoInstallFailsBeforeInstallingLatest(t *testing.T) {
+	reg := &verifierBootstrapRegistry{
+		latest: "",
+		tool: &registry.Tool{
+			Type:       "http",
+			RepoOwner:  "sigstore",
+			RepoName:   "cosign",
+			Asset:      "https://example.com/{{.Version}}/cosign",
+			Format:     "raw",
+			BinaryName: "cosign",
+		},
+	}
+	inst := &Installer{
+		cacheDir:         t.TempDir(),
+		binDir:           t.TempDir(),
+		configuredReg:    reg,
+		useConfiguredReg: true,
+		registryFactory:  verifierBootstrapFactory{registry: reg},
+	}
+
+	t.Setenv("PATH", t.TempDir())
+
+	err := verifierCommandRunner{
+		installer: inst,
+		policy: verification.Policy{
+			VerifierInstall: verification.VerifierInstallAuto,
+		},
+	}.Run(context.Background(), "cosign", "-test.run=TestVerifierCommandHelperProcess", "--", "success")
+
+	require.ErrorIs(t, err, verification.ErrVerifierCommandRequired)
+	assert.Empty(t, reg.requestedVersion, "bootstrap install must not be called with literal latest")
+}
+
 func TestRunVerifierCommandFailure(t *testing.T) {
 	t.Setenv("ATMOS_VERIFIER_HELPER_PROCESS", "1")
 
