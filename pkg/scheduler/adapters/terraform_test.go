@@ -14,6 +14,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/dependency"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -229,7 +230,7 @@ func TestExecuteTerraformAllowsParallelPlanForDifferentPhysicalComponentPaths(t 
 	require.Greater(t, maxActive.Load(), int32(1))
 }
 
-func TestExecuteTerraformSerializesParallelPlanForSharedPhysicalComponentPath(t *testing.T) {
+func TestExecuteTerraformAllowsParallelPlanForSharedPhysicalComponentPathWhenWorkdirEnabled(t *testing.T) {
 	stacks := map[string]any{
 		"dev": map[string]any{
 			cfg.ComponentsSectionName: map[string]any{
@@ -263,7 +264,41 @@ func TestExecuteTerraformSerializesParallelPlanForSharedPhysicalComponentPath(t 
 	})
 
 	require.NoError(t, err)
-	require.EqualValues(t, 1, maxActive.Load())
+	require.Greater(t, maxActive.Load(), int32(1))
+}
+
+func TestTerraformResourceKeyUsesWorkdirIdentityForWorkdirEnabledAliases(t *testing.T) {
+	componentPath := terraformAdapterPath("shared-service")
+	serviceAPI := &dependency.Node{
+		Component: "service-api",
+		Stack:     "dev",
+		Metadata:  terraformAdapterComponentWithPath("selected", componentPath),
+	}
+	serviceWorker := &dependency.Node{
+		Component: "service-worker",
+		Stack:     "dev",
+		Metadata:  terraformAdapterComponentWithPath("selected", componentPath),
+	}
+
+	require.Equal(t, "workdir:dev/service-api", terraformResourceKey(serviceAPI))
+	require.Equal(t, "workdir:dev/service-worker", terraformResourceKey(serviceWorker))
+}
+
+func TestTerraformResourceKeyUsesSharedPathWithoutWorkdir(t *testing.T) {
+	componentPath := terraformAdapterPath("shared-service")
+	serviceAPI := &dependency.Node{
+		Component: "service-api",
+		Stack:     "dev",
+		Metadata:  terraformAdapterComponentWithPathNoWorkdir("selected", componentPath),
+	}
+	serviceWorker := &dependency.Node{
+		Component: "service-worker",
+		Stack:     "dev",
+		Metadata:  terraformAdapterComponentWithPathNoWorkdir("selected", componentPath),
+	}
+
+	require.Equal(t, "path:"+componentPath, terraformResourceKey(serviceAPI))
+	require.Equal(t, terraformResourceKey(serviceAPI), terraformResourceKey(serviceWorker))
 }
 
 func TestExecuteTerraformIgnoresMaxConcurrencyForNonPlan(t *testing.T) {
@@ -519,7 +554,7 @@ func updateMaxActive(maxActive *atomic.Int32, current int32) {
 	}
 }
 
-func stringIndex(value string, substr string) int {
+func stringIndex(value, substr string) int {
 	idx := strings.Index(value, substr)
 	if idx < 0 {
 		return len(value)
@@ -572,10 +607,7 @@ func terraformAdapterComponent(group string, dependenciesComponents, settingsDep
 }
 
 func terraformAdapterComponentWithPath(group, componentPath string) map[string]any {
-	component := terraformAdapterComponent(group, nil, nil)
-	component["component_info"] = map[string]any{
-		cfg.ComponentPathSectionName: componentPath,
-	}
+	component := terraformAdapterComponentWithPathNoWorkdir(group, componentPath)
 	component["provision"] = map[string]any{
 		"workdir": map[string]any{
 			"enabled": true,
@@ -587,4 +619,12 @@ func terraformAdapterComponentWithPath(group, componentPath string) map[string]a
 func terraformAdapterPath(parts ...string) string {
 	segments := append([]string{"components", "terraform"}, parts...)
 	return filepath.Join(segments...)
+}
+
+func terraformAdapterComponentWithPathNoWorkdir(group, componentPath string) map[string]any {
+	component := terraformAdapterComponent(group, nil, nil)
+	component["component_info"] = map[string]any{
+		cfg.ComponentPathSectionName: componentPath,
+	}
+	return component
 }

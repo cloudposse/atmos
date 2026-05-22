@@ -678,6 +678,9 @@ func terraformResourceKey(node *dependency.Node) string {
 	if node == nil {
 		return ""
 	}
+	if provWorkdir.IsWorkdirEnabled(node.Metadata) {
+		return "workdir:" + terraformNodeLabel(node)
+	}
 	if path := componentInfoPath(node.Metadata); path != "" {
 		return "path:" + filepath.ToSlash(filepath.Clean(filepath.FromSlash(path)))
 	}
@@ -807,7 +810,7 @@ func (o *terraformOutput) openNodeLogFiles(node *dependency.Node) (*os.File, *os
 	return stdoutFile, stderrFile, logFiles
 }
 
-func combineWriters(primary io.Writer, secondary io.Writer) io.Writer {
+func combineWriters(primary, secondary io.Writer) io.Writer {
 	if primary == nil {
 		primary = io.Discard
 	}
