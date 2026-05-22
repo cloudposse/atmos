@@ -155,6 +155,11 @@ func TestRunCIHooksForPlanComponent_DemoStacks(t *testing.T) {
 // ci.enabled=false so RunCIHooks short-circuits cleanly — the test verifies
 // no panic on option construction for both the success and failure paths.
 func TestRunCIHooksForDeployComponent_DemoStacks(t *testing.T) {
+// TestRunCIHooksForApplyComponent_DemoStacks exercises the per-component apply
+// CI hook wrapper introduced by issue #2475. The demo-stacks fixture has
+// ci.enabled=false so RunCIHooks short-circuits cleanly — the test verifies
+// no panic on option construction for both the success and failure paths.
+func TestRunCIHooksForApplyComponent_DemoStacks(t *testing.T) {
 	t.Chdir("../../examples/demo-stacks")
 
 	cmd := newHookTestCmd()
@@ -176,6 +181,17 @@ func TestRunCIHooksForDeployComponent_DemoStacks(t *testing.T) {
 // returns nil without error when wasMultiComponentExecution is true (multi-component
 // mode). Exercises the actual PostRunE closure in both suppressed and non-suppressed states.
 func TestDeployPostRunE_SuppressedWhenMultiComponent(t *testing.T) {
+	runCIHooksForApplyComponent(cmd, info, "apply output", nil)
+
+	// Failure path: non-nil execErr is forwarded with its exit code.
+	runCIHooksForApplyComponent(cmd, info, "", errUtils.ExitCodeError{Code: 1})
+}
+
+// TestApplyPostRunE_SuppressedWhenMultiComponent verifies that applyCmd.PostRunE
+// returns nil without error when wasMultiComponentExecution is true (multi-component
+// mode). This is the apply-command equivalent of the plan fix from issue #2397 —
+// it exercises the actual PostRunE closure, not just the sentinel variable.
+func TestApplyPostRunE_SuppressedWhenMultiComponent(t *testing.T) {
 	t.Chdir("../../examples/demo-stacks")
 
 	orig := wasMultiComponentExecution
@@ -183,11 +199,13 @@ func TestDeployPostRunE_SuppressedWhenMultiComponent(t *testing.T) {
 
 	cmd := newHookTestCmd()
 	cmd.Use = "deploy"
+	cmd.Use = "apply"
 
 	// With wasMultiComponentExecution = true, PostRunE must return nil immediately
 	// without invoking runHooksWithOutput (which would attempt stack resolution).
 	wasMultiComponentExecution = true
 	err := deployCmd.PostRunE(cmd, []string{"--stack", "dev", "myapp"})
+	err := applyCmd.PostRunE(cmd, []string{"--stack", "dev", "myapp"})
 	assert.NoError(t, err, "PostRunE must be suppressed when wasMultiComponentExecution is true")
 
 	// With wasMultiComponentExecution = false, PostRunE must run normally.
@@ -269,6 +287,14 @@ func TestDeployRunE_DeferGuard(t *testing.T) {
 // TestRunCIHooksForDeployComponent_ExitCodeForwarding verifies that the exit code
 // extracted from execErr is forwarded correctly, matching the plan component hook behaviour.
 func TestRunCIHooksForDeployComponent_ExitCodeForwarding(t *testing.T) {
+	err = applyCmd.PostRunE(cmd, []string{"--stack", "dev", "myapp"})
+	assert.NoError(t, err, "PostRunE must fire normally in single-component mode")
+}
+
+// TestRunCIHooksForApplyComponent_ExitCodeForwarding verifies that the exit code
+// extracted from execErr is forwarded correctly, matching the plan component
+// hook behaviour.
+func TestRunCIHooksForApplyComponent_ExitCodeForwarding(t *testing.T) {
 	t.Chdir("../../examples/demo-stacks")
 
 	cmd := newHookTestCmd()
@@ -286,15 +312,15 @@ func TestRunCIHooksForDeployComponent_ExitCodeForwarding(t *testing.T) {
 	}{
 		{"nil error has exit code 0", nil, 0},
 		{"exit code 1", errUtils.ExitCodeError{Code: 1}, 1},
-		{"exit code 2 (abnormal termination)", errUtils.ExitCodeError{Code: 2}, 2},
+		{"exit code 2 (non-standard error)", errUtils.ExitCodeError{Code: 2}, 2},
 	}
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			assert.Equal(t, tc.wantExt, errUtils.GetExitCode(tc.execErr),
-				"GetExitCode must extract the wrapped exit code before forwarding to deploy hook")
+				"GetExitCode must extract the wrapped exit code before forwarding to apply hook")
 			// The wrapper must not panic regardless of exit code.
-			runCIHooksForDeployComponent(cmd, info, "deploy output", tc.execErr)
+			runCIHooksForApplyComponent(cmd, info, "apply output", tc.execErr)
 		})
 	}
 }

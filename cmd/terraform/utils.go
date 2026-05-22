@@ -248,6 +248,33 @@ func runCIHooksForPlanComponent(actualCmd *cobra.Command, info *schema.ConfigAnd
 	}
 }
 
+// runCIHooksForApplyComponent fires CI hooks for a single component after it completes
+// in multi-component apply mode. Mirrors runCIHooksForPlanComponent using AfterTerraformApply.
+func runCIHooksForApplyComponent(actualCmd *cobra.Command, info *schema.ConfigAndStacksInfo, rawOutput string, execErr error) {
+	atmosConfig, err := cfg.InitCliConfig(*info, true)
+	if err != nil {
+		log.Warn("CI hook config init failed", "component", info.Component, "error", err)
+		return
+	}
+
+	forceCIMode, _ := actualCmd.Flags().GetBool("ci")
+	if !forceCIMode {
+		forceCIMode = viper.GetBool("ci")
+	}
+
+	if err := h.RunCIHooks(&h.RunCIHooksOptions{
+		Event:        h.AfterTerraformApply,
+		AtmosConfig:  &atmosConfig,
+		Info:         info,
+		Output:       ansi.Strip(rawOutput),
+		ForceCIMode:  forceCIMode,
+		CommandError: execErr,
+		ExitCode:     errUtils.GetExitCode(execErr),
+	}); err != nil {
+		log.Warn("CI hook execution failed", "component", info.Component, "error", err)
+	}
+}
+
 // resolveComponentPath resolves a path-based component argument to a component name.
 // It validates the component exists in the specified stack and handles ambiguous paths.
 func resolveComponentPath(info *schema.ConfigAndStacksInfo, commandName string) error {
@@ -477,7 +504,7 @@ func terraformRunWithOptions(parentCmd, actualCmd *cobra.Command, args []string,
 	if isMultiComponentExecution(&info) {
 		wasMultiComponentExecution = true
 		log.Debug("Routing to ExecuteTerraformQuery (multi-component)")
-		// Wire per-component CI hooks for plan and deploy so each component gets
+		// Wire per-component CI hooks for plan and apply so each component gets
 		// its own summary entry instead of a single misattributed global call in PostRunE.
 		if subCommand == "plan" {
 			info.PerComponentHook = func(compInfo *schema.ConfigAndStacksInfo, output string, execErr error) {
@@ -486,6 +513,9 @@ func terraformRunWithOptions(parentCmd, actualCmd *cobra.Command, args []string,
 		} else if subCommand == "deploy" {
 			info.PerComponentHook = func(compInfo *schema.ConfigAndStacksInfo, output string, execErr error) {
 				runCIHooksForDeployComponent(actualCmd, compInfo, output, execErr)
+		} else if subCommand == "apply" {
+			info.PerComponentHook = func(compInfo *schema.ConfigAndStacksInfo, output string, execErr error) {
+				runCIHooksForApplyComponent(actualCmd, compInfo, output, execErr)
 			}
 		}
 		return e.ExecuteTerraformQuery(&info)
