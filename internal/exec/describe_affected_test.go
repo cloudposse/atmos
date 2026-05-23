@@ -276,8 +276,10 @@ func setupDescribeAffectedTest(t *testing.T) (atmosConfig schema.AtmosConfigurat
 	copyOptions := cp.Options{
 		PreserveTimes: false,
 		PreserveOwner: false,
+		OnSymlink:     func(string) cp.SymlinkAction { return cp.Skip },
 		Skip: func(srcInfo os.FileInfo, src, dest string) (bool, error) {
 			if strings.Contains(src, "node_modules") ||
+				strings.Contains(src, ".claude") ||
 				strings.Contains(src, ".terraform") {
 				return true, nil
 			}
@@ -1190,8 +1192,10 @@ func setupDescribeAffectedTestWithFixture(t *testing.T, fixtureDir, affectedStac
 	copyOptions := cp.Options{
 		PreserveTimes: false,
 		PreserveOwner: false,
+		OnSymlink:     func(string) cp.SymlinkAction { return cp.Skip },
 		Skip: func(srcInfo os.FileInfo, src, dest string) (bool, error) {
 			if strings.Contains(src, "node_modules") ||
+				strings.Contains(src, ".claude") ||
 				strings.Contains(src, ".terraform") {
 				return true, nil
 			}

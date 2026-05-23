@@ -15,7 +15,7 @@ Most vanilla-Terraform repos fall into one of three shapes:
 | Shape                                                          | Recipe                          |
 |----------------------------------------------------------------|---------------------------------|
 | Per-environment dirs (`terraform/dev/`, `terraform/prod/`)     | [Shape A](#shape-a-per-environment-directories-with-tfvars)               |
-| One TF dir, env config via `-var-file` from a Makefile/script  | [Shape B](#shape-b-single-dir-with-var-file-from-a-makefile)               |
+| One TF dir, env config via `-var-file` from a Makefile/script  | [Shape B](#shape-b-single-dir-with--var-file-from-a-makefile)              |
 | Multiple root modules (`terraform/vpc/`, `terraform/eks/`)     | [Shape C](#shape-c-multiple-root-modules-with-shared-modules)               |
 
 Mixed shapes are common -- treat each root module independently.

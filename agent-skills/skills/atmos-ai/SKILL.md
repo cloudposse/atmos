@@ -164,7 +164,8 @@ mcp:
       description: "IAM role/policy analysis"
 ```
 
-The canonical AWS server set (all wrapped with `identity: readonly` via Atmos Auth):
+The canonical AWS server set (use `identity: readonly` via Atmos Auth for servers that
+need AWS credentials; `aws-docs` is commonly no-auth):
 
 | Server         | Purpose                                |
 |----------------|----------------------------------------|
