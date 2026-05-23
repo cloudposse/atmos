@@ -2,15 +2,26 @@ package exec
 
 import (
 	"encoding/json"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	m "github.com/cloudposse/atmos/pkg/merge"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
+// Compile-time sentinels: if these fields are renamed the build breaks, preventing
+// tests that rely on specific field names from silently passing with zero values.
+var _ = schema.AtmosSettings{ListMergeStrategy: ""}
+
+// TestMergeComponentConfigurations verifies that mergeComponentConfigurations
+// correctly assembles the final component configuration from layered inputs
+// (global, base-component, component, and overrides) for both Terraform and
+// Helmfile component types.
 func TestMergeComponentConfigurations(t *testing.T) {
 	tests := []struct {
 		name                  string
@@ -361,6 +372,181 @@ func TestMergeComponentConfigurations(t *testing.T) {
 	}
 }
 
+// TestEffectiveAtmosConfig verifies that effectiveAtmosConfig returns the
+// correct *AtmosConfiguration given various combinations of settings layers.
+func TestEffectiveAtmosConfig(t *testing.T) {
+	base := &schema.AtmosConfiguration{}
+	base.Settings.ListMergeStrategy = "replace"
+
+	t.Run("no override returns base pointer unchanged", func(t *testing.T) {
+		result := effectiveAtmosConfig(base)
+		assert.Same(t, base, result, "should return the original pointer when no layers override the strategy")
+	})
+
+	t.Run("empty layers return base pointer unchanged", func(t *testing.T) {
+		result := effectiveAtmosConfig(base, nil, map[string]any{}, map[string]any{"other_key": "value"})
+		assert.Same(t, base, result)
+	})
+
+	t.Run("single layer override returns copy with new strategy", func(t *testing.T) {
+		result := effectiveAtmosConfig(base, map[string]any{"list_merge_strategy": "append"})
+		assert.NotSame(t, base, result, "must return a copy, not the original")
+		assert.Equal(t, "append", result.Settings.ListMergeStrategy)
+		assert.Equal(t, "replace", base.Settings.ListMergeStrategy, "original must be unchanged")
+
+		// result→src: mutating the copy must not affect the original.
+		result.Settings.ListMergeStrategy = "merge"
+		assert.Equal(t, "replace", base.Settings.ListMergeStrategy,
+			"mutating the copy must not affect the original (result→src isolation)")
+
+		// src→result: mutating the original after the call must not affect the copy.
+		base.Settings.ListMergeStrategy = "append"
+		assert.Equal(t, "merge", result.Settings.ListMergeStrategy,
+			"mutating the source after the call must not affect the copy (src→result isolation)")
+		base.Settings.ListMergeStrategy = "replace" // restore for subsequent subtests
+	})
+
+	t.Run("later layer wins over earlier layer", func(t *testing.T) {
+		result := effectiveAtmosConfig(base,
+			map[string]any{"list_merge_strategy": "append"},
+			map[string]any{"list_merge_strategy": "merge"},
+		)
+		assert.Equal(t, "merge", result.Settings.ListMergeStrategy)
+	})
+
+	t.Run("empty string in later layer does not override earlier non-empty value", func(t *testing.T) {
+		result := effectiveAtmosConfig(base,
+			map[string]any{"list_merge_strategy": "append"},
+			map[string]any{"list_merge_strategy": ""},
+		)
+		assert.Equal(t, "append", result.Settings.ListMergeStrategy)
+	})
+
+	t.Run("override matching the base value returns base pointer unchanged", func(t *testing.T) {
+		result := effectiveAtmosConfig(base, map[string]any{"list_merge_strategy": "replace"})
+		assert.Same(t, base, result, "no copy needed when effective strategy equals the base strategy")
+	})
+
+	t.Run("non-string list_merge_strategy is ignored", func(t *testing.T) {
+		result := effectiveAtmosConfig(base, map[string]any{"list_merge_strategy": 42})
+		assert.Same(t, base, result, "non-string type assertion fails cleanly; base is returned unchanged")
+	})
+}
+
+// TestComponentLevelListMergeStrategy is an integration test that verifies issue
+// #2396: setting list_merge_strategy inside a component's settings section must
+// affect how that component's vars lists are merged, overriding the global config.
+//
+// Fixture (tests/fixtures/scenarios/component-list-merge-strategy):
+//   - atmos.yaml: global list_merge_strategy = "replace"
+//   - catalog/base.yaml: abstract base-component with vars.tags = [base-tag-1, base-tag-2]
+//   - deploy/dev.yaml:
+//   - append-component: inherits base-component, settings.list_merge_strategy = "append"
+//     → expected vars.tags: [base-tag-1, base-tag-2, child-tag]
+//   - replace-component: inherits base-component, no strategy override
+//     → expected vars.tags: [child-tag].
+func TestComponentLevelListMergeStrategy(t *testing.T) {
+	workDir := filepath.Join("..", "..", "tests", "fixtures", "scenarios", "component-list-merge-strategy")
+	t.Chdir(workDir)
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", ".")
+	t.Setenv("ATMOS_BASE_PATH", "")
+
+	configInfo := schema.ConfigAndStacksInfo{}
+	atmosConfig, err := cfg.InitCliConfig(configInfo, true)
+	require.NoError(t, err)
+	require.Equal(t, "replace", atmosConfig.Settings.ListMergeStrategy,
+		"global strategy must be 'replace' so the component-level override is meaningful")
+
+	stack := "dev"
+
+	t.Run("component-level append overrides global replace", func(t *testing.T) {
+		result, err := ExecuteDescribeComponent(&ExecuteDescribeComponentParams{
+			AtmosConfig:          &atmosConfig,
+			Component:            "append-component",
+			Stack:                stack,
+			ProcessTemplates:     true,
+			ProcessYamlFunctions: true,
+		})
+		require.NoError(t, err)
+
+		vars, ok := result["vars"].(map[string]any)
+		require.True(t, ok, "vars must be a map")
+		tags, ok := vars["tags"].([]any)
+		require.True(t, ok, "vars.tags must be a list")
+
+		assert.Equal(t, []any{"base-tag-1", "base-tag-2", "child-tag"}, tags,
+			"append strategy must accumulate base tags then child tag")
+	})
+
+	t.Run("component without override uses global replace strategy", func(t *testing.T) {
+		result, err := ExecuteDescribeComponent(&ExecuteDescribeComponentParams{
+			AtmosConfig:          &atmosConfig,
+			Component:            "replace-component",
+			Stack:                stack,
+			ProcessTemplates:     true,
+			ProcessYamlFunctions: true,
+		})
+		require.NoError(t, err)
+
+		vars, ok := result["vars"].(map[string]any)
+		require.True(t, ok, "vars must be a map")
+		tags, ok := vars["tags"].([]any)
+		require.True(t, ok, "vars.tags must be a list")
+
+		assert.Equal(t, []any{"child-tag"}, tags,
+			"replace strategy must discard base tags and keep only child tags")
+	})
+
+	// Verify that list_merge_strategy set in a base component's settings
+	// (result.BaseComponentSettings) is honoured even when the inheriting component
+	// does not set it in its own settings. This exercises the second layer in
+	// effectiveAtmosConfig's precedence scan.
+	t.Run("strategy inherited from base component settings", func(t *testing.T) {
+		result, err := ExecuteDescribeComponent(&ExecuteDescribeComponentParams{
+			AtmosConfig:          &atmosConfig,
+			Component:            "inherit-strategy-component",
+			Stack:                stack,
+			ProcessTemplates:     true,
+			ProcessYamlFunctions: true,
+		})
+		require.NoError(t, err)
+
+		vars, ok := result["vars"].(map[string]any)
+		require.True(t, ok, "vars must be a map")
+		tags, ok := vars["tags"].([]any)
+		require.True(t, ok, "vars.tags must be a list")
+
+		assert.Equal(t, []any{"base-tag-1", "base-tag-2", "child-tag"}, tags,
+			"append strategy from base component settings must be inherited")
+	})
+}
+
+// TestEffectiveAtmosConfig_InvalidStrategy verifies two properties:
+//  1. effectiveAtmosConfig passes an invalid strategy value through without
+//     validating it — validation is pkg/merge's responsibility.
+//  2. When the resulting config is used in a merge call, pkg/merge returns
+//     ErrInvalidListMergeStrategy so the error surfaces correctly.
+func TestEffectiveAtmosConfig_InvalidStrategy(t *testing.T) {
+	base := &schema.AtmosConfiguration{}
+	base.Settings.ListMergeStrategy = "replace"
+
+	result := effectiveAtmosConfig(base, map[string]any{"list_merge_strategy": "foobar"})
+	assert.Equal(t, "foobar", result.Settings.ListMergeStrategy,
+		"effectiveAtmosConfig must pass invalid values through; validation is pkg/merge's responsibility")
+	assert.NotSame(t, base, result)
+
+	// Verify the error surfaces when the config is actually used for a merge.
+	_, _, mergeErr := m.MergeWithDeferred(result, []map[string]any{
+		{"tags": []any{"a"}},
+		{"tags": []any{"b"}},
+	})
+	assert.ErrorIs(t, mergeErr, errUtils.ErrInvalidListMergeStrategy,
+		"pkg/merge must reject the invalid strategy when a merge is attempted")
+}
+
+// TestProcessAuthConfig verifies that processAuthConfig merges global and
+// component-level auth configurations, with the component-level settings
+// taking precedence over the global ones.
 func TestProcessAuthConfig(t *testing.T) {
 	tests := []struct {
 		name        string
