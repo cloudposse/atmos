@@ -80,110 +80,21 @@ atmos terraform plan vpc -s dev --terraform-command=tofu
 The Atmos toolchain installs and pins both Terraform and OpenTofu so the same binary version runs
 on every developer machine and in CI. Binary **selection** (`command: terraform` vs `command: tofu`)
 and binary **version pinning** (`dependencies.tools.terraform` vs `dependencies.tools.opentofu`) are
-independent settings that compose:
+independent settings -- `command` says *which* binary Atmos invokes, `dependencies.tools.<name>` says
+*which version* the toolchain installs. Always pin both together; setting `command: tofu` without a
+matching `opentofu` dependency leaves you at the mercy of whatever `tofu` is on PATH.
 
-- `command` says *which* binary Atmos invokes when you run `atmos terraform`.
-- `dependencies.tools.<name>` says *which version* of that binary the toolchain installs and uses.
+Pinning can be applied at four scopes, in increasing precedence:
 
-Always pin both together. Setting `command: tofu` without a corresponding `opentofu` dependency
-means Atmos invokes whatever `tofu` happens to be on PATH (or fails if there's nothing).
+1. **Project-wide** -- `.tool-versions` (asdf-compatible) at the repo root for defaults everyone shares.
+2. **Stack-wide** -- `dependencies.tools` in a stack default to pin a whole stack scope.
+3. **Component-type** -- `terraform.dependencies.tools` to default every Terraform/OpenTofu component.
+4. **Per-component** -- `dependencies.tools` on an individual component for migrations or one-offs.
 
-#### Project-wide default via `.tool-versions`
-
-Use `.tool-versions` (asdf-compatible) for tools every developer/agent/shell needs by default:
-
-```text
-# .tool-versions at repo root
-terraform 1.9.8
-opentofu 1.10.3
-```
-
-Then `atmos toolchain install` provisions both. After install, `atmos terraform plan` uses the
-version that matches the configured `command`.
-
-`.tool-versions` is the right place for project-wide defaults. It is NOT the right place when a
-specific stack or component requires a different version -- use `dependencies.tools` for that.
-
-#### Stack-wide pinning via `dependencies.tools`
-
-Put `dependencies.tools` in a stack default to pin the version for every component in that
-stack scope:
-
-```yaml
-# stacks/orgs/acme/_defaults.yaml -- applies to all components org-wide
-dependencies:
-  tools:
-    opentofu: "1.10.3"
-
-# stacks/orgs/acme/plat/prod/_defaults.yaml -- prod-only override
-dependencies:
-  tools:
-    opentofu: "1.10.2"      # Keep prod on a known-good slightly older patch
-```
-
-This is the right tool when a stack is on OpenTofu but the rest of the org is on Terraform (or
-vice versa). Combine with `terraform.overrides.command: tofu` in the same stack default so the
-stack switches binary AND version together.
-
-#### Per-component pinning
-
-Pin a single component to a specific version when it lags or leads the rest of the project:
-
-```yaml
-components:
-  terraform:
-    legacy-vpc:
-      command: terraform
-      dependencies:
-        tools:
-          terraform: "1.5.7"          # Legacy component pinned to older Terraform
-    new-eks:
-      command: tofu
-      dependencies:
-        tools:
-          opentofu: "1.10.3"          # New component on current OpenTofu
-```
-
-Per-component is the right tool during a Terraform → OpenTofu migration where some components
-are validated and switched while others remain on Terraform.
-
-#### Component-type defaults
-
-Apply a default to every Terraform/OpenTofu component without touching each one:
-
-```yaml
-# stacks/.../_defaults.yaml
-terraform:
-  dependencies:
-    tools:
-      opentofu: "1.10.3"
-```
-
-#### Resolution order
-
-When Atmos invokes the configured binary, it resolves the version using standard precedence:
-per-component `dependencies.tools` > component-type `terraform.dependencies.tools` > stack
-`dependencies.tools` > project `.tool-versions` > whatever's on PATH (last resort).
-
-#### Installation workflow
-
-```bash
-# Install everything declared in .tool-versions + dependencies.tools across the project
-atmos toolchain install
-
-# Install a specific version ad-hoc
-atmos toolchain install opentofu@1.10.3
-atmos toolchain install terraform@1.9.8
-
-# Verify what's installed
-atmos toolchain list
-
-# Pin a version into .tool-versions
-atmos toolchain set opentofu@1.10.3
-```
-
-See the [atmos-toolchain](../atmos-toolchain/SKILL.md) skill for registry configuration,
-custom registries, install paths, package verification, and the full command reference.
+Install everything declared across these scopes with `atmos toolchain install`. For full YAML
+examples, resolution order, ad-hoc installs, and the install/list/set workflow, see
+[references/toolchain-pinning.md](references/toolchain-pinning.md) and the
+[atmos-toolchain](../atmos-toolchain/SKILL.md) skill.
 
 ### OpenTofu-specific considerations
 
@@ -299,35 +210,14 @@ atmos terraform deploy vpc -s dev --planfile /tmp/vpc-plan.tfplan
 
 ### destroy
 
-Destroys all resources managed by a component in a stack.
-
-```shell
-atmos terraform destroy <component> -s <stack>
-
-# With auto-approve (use with extreme caution)
-atmos terraform destroy vpc -s dev -auto-approve
-
-# Targeted destroy
-atmos terraform destroy vpc -s dev -target=aws_instance.web
-```
+Destroys all resources managed by a component in a stack. Accepts `-auto-approve` and `-target=...`
+just like upstream Terraform: `atmos terraform destroy vpc -s dev`.
 
 ### init
 
-Initializes the Terraform working directory. Atmos runs this automatically before plan, apply, and deploy,
-so manual invocation is rarely needed.
-
-```shell
-atmos terraform init <component> -s <stack>
-
-# Reconfigure the backend
-atmos terraform init vpc -s dev -reconfigure
-
-# Upgrade provider plugins
-atmos terraform init vpc -s dev -upgrade
-
-# Migrate state between backends
-atmos terraform init vpc -s dev -migrate-state
-```
+Atmos runs `terraform init` automatically before plan, apply, and deploy, so manual invocation is
+rarely needed. When required, all upstream init flags pass through (`-reconfigure`, `-upgrade`,
+`-migrate-state`): `atmos terraform init vpc -s dev -reconfigure`.
 
 ## Multi-Component Operations
 
@@ -362,120 +252,26 @@ atmos terraform deploy --all --dry-run
 
 ## Workspace Management
 
-Atmos calculates Terraform workspace names from stack context variables and automatically manages workspace
-selection. When you run any terraform command, Atmos:
+Atmos computes the Terraform workspace name from stack context (namespace, tenant, environment,
+stage, component), runs `terraform init -reconfigure`, and selects (or creates) the workspace
+on every invocation. Explicit management is also available: `atmos terraform workspace vpc -s plat-ue2-dev`.
 
-1. Computes the workspace name from context (namespace, tenant, environment, stage, component)
-2. Runs `terraform init -reconfigure`
-3. Selects the workspace with `terraform workspace select` (or creates it with `terraform workspace new`
-   if it does not exist)
-
-You can also manage workspaces explicitly:
-
-```shell
-atmos terraform workspace vpc -s plat-ue2-dev
-```
-
-### Workspace Key Prefix
-
-The recommended approach for stable workspace keys uses `metadata.name`:
-
-```yaml
-components:
-  terraform:
-    vpc/defaults:
-      metadata:
-        type: abstract
-        name: vpc              # Stable identity
-        component: vpc/v2      # Implementation can change
-```
-
-For advanced dynamic naming, `workspace_key_prefix` supports Go templates:
-
-```yaml
-components:
-  terraform:
-    vpc:
-      backend:
-        workspace_key_prefix: "{{.vars.namespace}}-{{.vars.environment}}-{{.vars.stage}}"
-```
-
-Configure workspace behavior in `atmos.yaml`:
-
-```yaml
-components:
-  terraform:
-    init_run_reconfigure: true
-    workspaces_enabled: true
-```
+For stable workspace keys across component implementations, use `metadata.name` on an abstract
+base component (`name: vpc`, `component: vpc/v2`); for dynamic naming, `workspace_key_prefix`
+under `backend:` accepts Go templates. Toggle the runtime behavior via
+`components.terraform.init_run_reconfigure` and `workspaces_enabled` in `atmos.yaml`. Full
+examples are in [references/backend-configuration.md](references/backend-configuration.md).
 
 ## Backend Configuration and Auto-Generation
 
-Atmos reads `backend_type` and `backend` settings from the stack configuration and auto-generates
-a `backend.tf.json` file in the component directory before running `terraform init`.
+With `components.terraform.auto_generate_backend_file: true` in `atmos.yaml`, Atmos reads
+`backend_type` and `backend` from the resolved stack config, deep-merges through the stack
+hierarchy (org → tenant → environment → stage → component), and writes `backend.tf.json` into
+the component directory before `terraform init`. Add `backend.tf.json` to `.gitignore`.
 
-### Enabling Auto-Generation
-
-```yaml
-# atmos.yaml
-components:
-  terraform:
-    auto_generate_backend_file: true
-```
-
-### Stack-Level Backend Config
-
-Backend settings cascade through the stack hierarchy:
-
-```yaml
-# Organization defaults (stacks/orgs/acme/_defaults.yaml)
-terraform:
-  backend_type: s3
-  backend:
-    s3:
-      bucket: acme-ue1-root-tfstate
-      region: us-east-1
-      encrypt: true
-      use_lockfile: true
-
-# Component override (stacks/orgs/acme/plat/prod/us-east-1.yaml)
-components:
-  terraform:
-    special-component:
-      backend_type: s3
-      backend:
-        s3:
-          bucket: acme-ue1-prod-special-tfstate
-          key: "special/terraform.tfstate"
-```
-
-### Generated File
-
-The generated `backend.tf.json` looks like:
-
-```json
-{
-  "terraform": {
-    "backend": {
-      "s3": {
-        "bucket": "acme-ue1-root-tfstate",
-        "region": "us-east-1",
-        "encrypt": true,
-        "use_lockfile": true,
-        "key": "ue1/prod/vpc/terraform.tfstate"
-      }
-    }
-  }
-}
-```
-
-Add `backend.tf.json` to `.gitignore` since it is generated automatically.
-
-### Manual Generation
-
-```shell
-atmos terraform generate backend vpc -s plat-ue2-dev
-```
+Regenerate manually with `atmos terraform generate backend vpc -s plat-ue2-dev`. For full
+examples covering S3, GCS, Azure, and remote backends, plus workspace key prefix patterns, see
+[references/backend-configuration.md](references/backend-configuration.md).
 
 ## Variable File Generation
 
@@ -613,30 +409,10 @@ If a path matches multiple components, Atmos prompts for selection in interactiv
 
 ## Debugging
 
-### Describe Component
-
-Use `atmos describe component` to see the fully resolved configuration:
-
-```shell
-atmos describe component vpc -s plat-ue2-dev
-```
-
-This shows all merged vars, backend config, workspace name, metadata, and settings.
-
-### Dry Run
-
-Preview what Atmos will do without executing:
-
-```shell
-atmos terraform plan vpc -s dev --dry-run
-```
-
-### Terraform Debug Logging
-
-```shell
-export TF_LOG=DEBUG
-atmos terraform plan vpc -s dev
-```
+- `atmos describe component vpc -s plat-ue2-dev` -- show the fully resolved configuration
+  (merged vars, backend, workspace name, metadata, settings).
+- `atmos terraform plan vpc -s dev --dry-run` -- preview what Atmos will do without executing.
+- `TF_LOG=DEBUG atmos terraform plan vpc -s dev` -- enable upstream Terraform debug logging.
 
 ## Configuration in atmos.yaml
 
@@ -676,3 +452,4 @@ corresponding `ATMOS_COMPONENTS_TERRAFORM_*` environment variable override. See
 
 - For the complete list of all `atmos terraform` subcommands, see [references/commands-reference.md](references/commands-reference.md)
 - For backend configuration patterns (S3, GCS, Azure, remote), see [references/backend-configuration.md](references/backend-configuration.md)
+- For toolchain-based Terraform/OpenTofu version pinning at each scope, see [references/toolchain-pinning.md](references/toolchain-pinning.md)
