@@ -1579,6 +1579,59 @@ func TestExecuteTerraformAffectedComponentInDepOrder(t *testing.T) {
 	}
 }
 
+// TestExecuteTerraformAffectedComponentInDepOrder_NonTerraformDependentGuard
+// is a portable companion to the gomonkey-based table above. It exercises the
+// defense-in-depth guard at terraform_utils.go that drops helmfile/packer
+// dependents during the recursion. We use DryRun=true so the function never
+// invokes ExecuteTerraform — that lets the test run on every CI runner,
+// including macOS ARM64 where gomonkey is unsupported, and gives the dependent
+// type-check line real coverage instead of relying on a skipped suite.
+func TestExecuteTerraformAffectedComponentInDepOrder_NonTerraformDependentGuard(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name       string
+		dependents []schema.Dependent
+	}{
+		{
+			name: "helmfile dependent skipped (issue #2361)",
+			dependents: []schema.Dependent{
+				{Component: "helm-app", ComponentType: cfg.HelmfileComponentType, Stack: "prod"},
+			},
+		},
+		{
+			name: "packer dependent skipped (issue #2361)",
+			dependents: []schema.Dependent{
+				{Component: "image", ComponentType: cfg.PackerComponentType, Stack: "prod"},
+			},
+		},
+		{
+			name: "both non-terraform dependents skipped",
+			dependents: []schema.Dependent{
+				{Component: "helm-app", ComponentType: cfg.HelmfileComponentType, Stack: "prod"},
+				{Component: "image", ComponentType: cfg.PackerComponentType, Stack: "prod"},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			info := &schema.ConfigAndStacksInfo{SubCommand: "plan", DryRun: true}
+			args := &DescribeAffectedCmdArgs{IncludeDependents: true}
+			params := &affectedDepOrderParams{
+				AffectedComponent: "vpc",
+				AffectedStack:     "prod",
+				Dependents:        tt.dependents,
+			}
+
+			err := executeTerraformAffectedComponentInDepOrder(info, nil, params, args)
+			require.NoError(t, err)
+		})
+	}
+}
+
 func BenchmarkParseUploadStatusFlag(b *testing.B) {
 	args := []string{"--verbose", "--upload-status=true", "--output=json"}
 	flagName := "upload-status"

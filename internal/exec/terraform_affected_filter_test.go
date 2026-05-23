@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -130,7 +131,9 @@ func TestFilterTerraformAffected_InPlaceSemantics(t *testing.T) {
 	}
 	got := filterTerraformAffected(in)
 
-	assert.Len(t, got, 1)
+	// `require.Len` (vs `assert.Len`) — the next lines index `got[0]`, and a
+	// non-fatal assertion would let the test panic instead of failing cleanly.
+	require.Len(t, got, 1)
 	assert.Equal(t, "tf", got[0].Component)
 	// Prove the filter compacted into the same backing array rather than
 	// allocating a new one — the result's first element must be the input's
