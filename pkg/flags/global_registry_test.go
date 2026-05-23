@@ -416,6 +416,30 @@ func TestParseGlobalFlags_Integration(t *testing.T) {
 	assert.False(t, flags.Pager.IsEnabled(), "Pager should be disabled")
 }
 
+func TestParseGlobalFlags_InheritedIdentityUsesChangedFlagValue(t *testing.T) {
+	rootCmd := &cobra.Command{Use: "atmos"}
+	globalBuilder := NewGlobalOptionsBuilder()
+	parser := globalBuilder.Build()
+	parser.RegisterPersistentFlags(rootCmd)
+
+	ansibleCmd := &cobra.Command{Use: "ansible"}
+	playbookCmd := &cobra.Command{Use: "playbook"}
+	rootCmd.AddCommand(ansibleCmd)
+	ansibleCmd.AddCommand(playbookCmd)
+
+	err := rootCmd.PersistentFlags().Set("identity", "terraform")
+	require.NoError(t, err)
+
+	v := viper.New()
+	err = parser.BindToViper(v)
+	require.NoError(t, err)
+
+	flags := ParseGlobalFlags(playbookCmd, v)
+
+	assert.True(t, flags.Identity.IsProvided())
+	assert.Equal(t, "terraform", flags.Identity.Value())
+}
+
 // TestParsePagerFlag_FallbackToEnv tests that parsePagerFlag falls back to
 // environment variables when the flag is not provided.
 func TestParsePagerFlag_FallbackToEnv(t *testing.T) {

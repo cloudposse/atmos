@@ -160,6 +160,7 @@ func (e *Executor) GetAllOutputs(
 	component string,
 	stack string,
 	skipInit bool,
+	authContext *schema.AuthContext,
 	authManager any,
 ) (map[string]any, error) {
 	defer perf.Track(atmosConfig, "output.Executor.GetAllOutputs")()
@@ -175,7 +176,7 @@ func (e *Executor) GetAllOutputs(
 
 	// Use quiet mode to suppress terraform init/workspace output.
 	opts := &OutputOptions{QuietMode: true, SkipInit: skipInit}
-	outputs, err := e.fetchAndCacheOutputs(atmosConfig, component, stack, stackSlug, nil, opts, authManager)
+	outputs, err := e.fetchAndCacheOutputs(atmosConfig, component, stack, stackSlug, authContext, opts, authManager)
 	if err != nil {
 		ui.ClearLine()
 		ui.Error(message)
