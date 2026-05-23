@@ -155,7 +155,7 @@ type OCSFVuln struct {
 	Title            string                `json:"title,omitempty"`
 	Severity         string                `json:"severity,omitempty"`
 	IsFixAvailable   *bool                 `json:"is_fix_available,omitempty"`
-	FixAvailable     string                `json:"fix_available,omitempty"`
+	FixAvailable     *bool                 `json:"fix_available,omitempty"`
 	CVE              *OCSFCVE              `json:"cve,omitempty"`
 	CWE              *OCSFCWE              `json:"cwe,omitempty"`
 	AffectedPackages []OCSFAffectedPackage `json:"affected_packages,omitempty"`
@@ -399,9 +399,9 @@ func buildOCSFVulnerabilities(f *Finding) []OCSFVuln {
 		References:       v.ReferenceURLs,
 	}
 	if v.FixedInVersion != "" {
-		vuln.FixAvailable = v.FixedInVersion
 		t := true
 		vuln.IsFixAvailable = &t
+		vuln.FixAvailable = &t
 	}
 	return []OCSFVuln{vuln}
 }

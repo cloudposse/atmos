@@ -3,6 +3,7 @@ package security
 import (
 	"bytes"
 	"encoding/json"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -188,7 +189,11 @@ func TestBuildSARIFLog_DirectoryURIsHaveTrailingSlash(t *testing.T) {
 	assert.True(t, strings.HasSuffix(run.OriginalURIBaseIDs["%SRCROOT%"].URI, "/"))
 	require.Len(t, run.Invocations, 1)
 	require.NotNil(t, run.Invocations[0].WorkingDirectory)
-	assert.Equal(t, "file:///github/workspace/", run.Invocations[0].WorkingDirectory.URI)
+	expectedPath := filepath.ToSlash(report.Invocation.WorkingDirectory)
+	if !strings.HasSuffix(expectedPath, "/") {
+		expectedPath += "/"
+	}
+	assert.Equal(t, "file://"+expectedPath, run.Invocations[0].WorkingDirectory.URI)
 }
 
 func TestBuildSARIFTaxonomies_IndexesBySourceKeyWhenNamesCollide(t *testing.T) {

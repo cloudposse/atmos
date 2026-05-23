@@ -28,7 +28,9 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
 
       # Initializes the CodeQL tools for scanning.
       - name: Initialize CodeQL
@@ -83,8 +85,9 @@ jobs:
       security-events: write
     steps:
       - name: Check out code into the Go module directory
-        uses: actions/checkout@v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
+          persist-credentials: false
           fetch-depth: 0
 
       # golangci-lint-action@v4.0.0+ requires explicit Go setup
@@ -176,8 +179,10 @@ jobs:
       issues: write
     steps:
       # Checkout is required for local composite actions
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         if: github.event_name == 'pull_request' && github.event.pull_request.user.login == 'dependabot[bot]'
+        with:
+          persist-credentials: false
 
       # Remove Dependabot's auto-added semver labels
       # Dependabot PRs should only have the 'no-release' label since

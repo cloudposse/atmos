@@ -254,7 +254,6 @@ var securityAnalyzeCmd = &cobra.Command{
 		tagMapping := &atmosConfig.AWS.Security.TagMapping
 		report := buildSecurityReport(findings, stack, component, tagMapping)
 		report.GroupFindings = !noGroup
-		report.Invocation = buildReportInvocation(startTime, region, findings, stack)
 
 		// Determine output destination.
 		output := os.Stdout
@@ -272,6 +271,7 @@ var securityAnalyzeCmd = &cobra.Command{
 		}
 
 		// Render output.
+		report.Invocation = buildReportInvocation(startTime, region, findings, stack)
 		renderer := pkgsecurity.NewReportRenderer(outputFormat)
 
 		// For Markdown to stdout, render with colors via ui.Markdown().
