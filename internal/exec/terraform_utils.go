@@ -420,6 +420,12 @@ func executeTerraformAffectedComponentInDepOrder(
 
 	for i := 0; i < len(params.Dependents); i++ {
 		dep := &params.Dependents[i]
+		// Defense-in-depth: when --include-dependents is set, the dependency graph
+		// may include helmfile/packer dependents. `atmos terraform` must skip those
+		// — they belong to their own subcommands. See issue #2361.
+		if dep.ComponentType != "" && dep.ComponentType != cfg.TerraformComponentType {
+			continue
+		}
 		if !shouldProcessDependent(dep, affectedList, args.IncludeDependents) {
 			continue
 		}

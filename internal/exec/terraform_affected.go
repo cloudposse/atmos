@@ -2,12 +2,33 @@ package exec
 
 import (
 	errUtils "github.com/cloudposse/atmos/errors"
+	cfg "github.com/cloudposse/atmos/pkg/config"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
+
+// filterTerraformAffected narrows the affected list to items that `atmos terraform
+// plan/apply --affected` should actually execute: terraform components only, and
+// only those that still exist (not deleted in HEAD). Helmfile and Packer items
+// belong to their own subcommands; deleted components have no on-disk module so
+// terraform plan/apply against them would fail or no-op. See issue #2361.
+func filterTerraformAffected(affectedList []schema.Affected) []schema.Affected {
+	filtered := affectedList[:0]
+	for i := range affectedList {
+		a := &affectedList[i]
+		if a.ComponentType != cfg.TerraformComponentType {
+			continue
+		}
+		if a.Deleted {
+			continue
+		}
+		filtered = append(filtered, *a)
+	}
+	return filtered
+}
 
 // getAffectedComponents retrieves the list of affected components based on the provided arguments.
 func getAffectedComponents(args *DescribeAffectedCmdArgs) ([]schema.Affected, error) {
@@ -83,6 +104,11 @@ func ExecuteTerraformAffected(args *DescribeAffectedCmdArgs, info *schema.Config
 	if err != nil {
 		return err
 	}
+
+	// Drop non-terraform component types (helmfile, packer) and deleted components
+	// before resolving dependents — `addDependentsToAffected` is expensive and there
+	// is no reason to walk dependency graphs for items we will not execute.
+	affectedList = filterTerraformAffected(affectedList)
 
 	// Add dependent components for each directly affected component.
 	if len(affectedList) > 0 {

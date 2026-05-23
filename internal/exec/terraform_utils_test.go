@@ -1390,6 +1390,119 @@ func TestExecuteTerraformAffectedComponentInDepOrder(t *testing.T) {
 			expectedError:      false,
 			expectedCalls:      1, // Only vpc, dependents not included.
 		},
+		{
+			// Defense-in-depth coverage for issue #2361: a terraform component
+			// must never trigger terraform plan/apply on a helmfile dependent.
+			name: "helmfile dependent skipped (issue #2361)",
+			info: &schema.ConfigAndStacksInfo{
+				SubCommand: "plan",
+				DryRun:     false,
+			},
+			affectedList: []schema.Affected{
+				{StackSlug: "prod-helm-app"},
+			},
+			affectedComponent: "vpc",
+			affectedStack:     "prod",
+			parentComponent:   "",
+			parentStack:       "",
+			dependents: []schema.Dependent{
+				{
+					Component:            "helm-app",
+					ComponentType:        "helmfile",
+					Stack:                "prod",
+					StackSlug:            "prod-helm-app",
+					IncludedInDependents: false,
+					Dependents:           []schema.Dependent{},
+				},
+			},
+			args: &DescribeAffectedCmdArgs{
+				IncludeDependents: true,
+			},
+			mockTerraformError: false,
+			expectedError:      false,
+			expectedCalls:      1, // Only vpc; helmfile dependent filtered.
+		},
+		{
+			// Defense-in-depth coverage for issue #2361: a terraform component
+			// must never trigger terraform plan/apply on a packer dependent.
+			name: "packer dependent skipped (issue #2361)",
+			info: &schema.ConfigAndStacksInfo{
+				SubCommand: "plan",
+				DryRun:     false,
+			},
+			affectedList: []schema.Affected{
+				{StackSlug: "prod-image"},
+			},
+			affectedComponent: "vpc",
+			affectedStack:     "prod",
+			parentComponent:   "",
+			parentStack:       "",
+			dependents: []schema.Dependent{
+				{
+					Component:            "image",
+					ComponentType:        "packer",
+					Stack:                "prod",
+					StackSlug:            "prod-image",
+					IncludedInDependents: false,
+					Dependents:           []schema.Dependent{},
+				},
+			},
+			args: &DescribeAffectedCmdArgs{
+				IncludeDependents: true,
+			},
+			mockTerraformError: false,
+			expectedError:      false,
+			expectedCalls:      1, // Only vpc; packer dependent filtered.
+		},
+		{
+			// Mixed-type dependents: only the terraform one runs.
+			name: "mixed-type dependents — only terraform runs (issue #2361)",
+			info: &schema.ConfigAndStacksInfo{
+				SubCommand: "plan",
+				DryRun:     false,
+			},
+			affectedList: []schema.Affected{
+				{StackSlug: "prod-helm-app"},
+				{StackSlug: "prod-image"},
+				{StackSlug: "prod-security-group"},
+			},
+			affectedComponent: "vpc",
+			affectedStack:     "prod",
+			parentComponent:   "",
+			parentStack:       "",
+			dependents: []schema.Dependent{
+				{
+					Component:            "helm-app",
+					ComponentType:        "helmfile",
+					Stack:                "prod",
+					StackSlug:            "prod-helm-app",
+					IncludedInDependents: false,
+					Dependents:           []schema.Dependent{},
+				},
+				{
+					Component:            "image",
+					ComponentType:        "packer",
+					Stack:                "prod",
+					StackSlug:            "prod-image",
+					IncludedInDependents: false,
+					Dependents:           []schema.Dependent{},
+				},
+				{
+					Component:            "security-group",
+					ComponentType:        "terraform",
+					Stack:                "prod",
+					StackSlug:            "prod-security-group",
+					IncludedInDependents: false,
+					Dependents:           []schema.Dependent{},
+				},
+			},
+			args: &DescribeAffectedCmdArgs{
+				IncludeDependents: true,
+			},
+			mockTerraformError: false,
+			expectedError:      false,
+			expectedCalls:      2, // vpc + security-group; helmfile + packer filtered.
+		},
 	}
 
 	for _, tt := range tests {
