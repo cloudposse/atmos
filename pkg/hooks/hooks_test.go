@@ -248,7 +248,7 @@ vars:
 	require.NotNil(t, hooks)
 	require.NotNil(t, hooks.items)
 	assert.Contains(t, hooks.items, "static-hook")
-	assert.Equal(t, "store", hooks.items["static-hook"].Command)
+	assert.Equal(t, "store", hooks.items["static-hook"].Kind)
 	assert.Equal(t, "{{", hooks.items["static-hook"].Outputs["broken"])
 }
 
