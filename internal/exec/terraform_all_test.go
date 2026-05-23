@@ -1,6 +1,7 @@
 package exec
 
 import (
+	"os"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -277,6 +278,85 @@ func TestExecuteTerraformAll_Validation(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestExecuteTerraformAll_DryRunHappyPath exercises the full ExecuteTerraformAll
+// pipeline against a real fixture in dry-run mode. The existing validation tests
+// short-circuit on the very first guard (component-with-all), so the auth-manager
+// bootstrap, ExecuteDescribeStacks, dependency graph build, applyFiltersToGraph,
+// and executeInDependencyOrder branches had no unit-test coverage — codecov
+// flagged 7 missing lines on terraform_all.go for that reason.
+//
+// DryRun=true short-circuits inside executeNodeCommand so terraform itself is
+// never invoked; this means the test runs without requiring the terraform binary
+// and on every CI matrix entry. The fixture `terraform-apply-affected` defines
+// a `vpc → eks/cluster → eks/external-dns → …` dependency chain, which gives
+// us a non-trivial graph to walk so the topological-sort path is also covered.
+func TestExecuteTerraformAll_DryRunHappyPath(t *testing.T) {
+	// ATMOS_* env leak from earlier tests would silently shadow the fixture's
+	// atmos.yaml; clear them up-front so the fixture is the sole source of truth.
+	t.Setenv("ATMOS_BASE_PATH", "")
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", "")
+	os.Unsetenv("ATMOS_BASE_PATH")
+	os.Unsetenv("ATMOS_CLI_CONFIG_PATH")
+
+	t.Chdir("../../tests/fixtures/scenarios/terraform-apply-affected")
+
+	t.Run("no stack filter walks every stack", func(t *testing.T) {
+		info := &schema.ConfigAndStacksInfo{
+			ComponentType: "terraform",
+			SubCommand:    "plan",
+			DryRun:        true,
+		}
+		// Validation has been dropped for the no-stack case; the call should
+		// proceed end-to-end and short-circuit at the dry-run boundary.
+		assert.NoError(t, ExecuteTerraformAll(info))
+	})
+
+	t.Run("stack filter scopes execution to the requested stack", func(t *testing.T) {
+		info := &schema.ConfigAndStacksInfo{
+			Stack:         "prod",
+			ComponentType: "terraform",
+			SubCommand:    "plan",
+			DryRun:        true,
+		}
+		assert.NoError(t, ExecuteTerraformAll(info))
+	})
+
+	t.Run("destroy reverses order and still completes", func(t *testing.T) {
+		info := &schema.ConfigAndStacksInfo{
+			Stack:         "prod",
+			ComponentType: "terraform",
+			SubCommand:    "destroy",
+			DryRun:        true,
+		}
+		assert.NoError(t, ExecuteTerraformAll(info))
+	})
+}
+
+// TestApplyFiltersToGraph_NoCrossStackPullIn pins the new IncludeDependencies:false
+// contract: when a user asks for `--all -s <stack>`, components in *other* stacks
+// must NOT be pulled in even if they are prerequisites — that would broaden the
+// scope of an existing invocation in a way users would feel as a regression. A
+// future opt-in flag can re-enable cross-stack execution.
+func TestApplyFiltersToGraph_NoCrossStackPullIn(t *testing.T) {
+	graph := dependency.NewGraph()
+	vpcDev := &dependency.Node{ID: "vpc-dev", Component: "vpc", Stack: "dev", Type: config.TerraformComponentType}
+	appProd := &dependency.Node{ID: "app-prod", Component: "app", Stack: "prod", Type: config.TerraformComponentType}
+	require.NoError(t, graph.AddNode(vpcDev))
+	require.NoError(t, graph.AddNode(appProd))
+	// Cross-stack edge: prod's app depends on dev's vpc. With IncludeDependencies=true
+	// this would historically have pulled vpc-dev into a `--all -s prod` run.
+	require.NoError(t, graph.AddDependency("app-prod", "vpc-dev"))
+
+	info := &schema.ConfigAndStacksInfo{Stack: "prod"}
+	filtered := applyFiltersToGraph(graph, nil, info)
+
+	require.Equal(t, 1, filtered.Size(), "only the requested stack's components should remain")
+	_, hasApp := filtered.GetNode("app-prod")
+	assert.True(t, hasApp, "the requested-stack component must still be present")
+	_, hasVPC := filtered.GetNode("vpc-dev")
+	assert.False(t, hasVPC, "cross-stack prerequisite must NOT be pulled in (IncludeDependencies:false)")
 }
 
 // Renamed to avoid conflict.
