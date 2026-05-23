@@ -1,23 +1,44 @@
 # Tool Dependencies Integration
 
-**Status**: 🚧 Planned
+**Status**: 🟢 Shipping (workflows, custom commands, ansible components, hooks; terraform component coverage tracked below)
 
-**Last Updated**: 2025-11-09
+**Last Updated**: 2026-05-22
 
-**Related PRDs**: [Toolchain Implementation](./toolchain-implementation.md) | [Lock File Support](./toolchain-lock-file.md)
+**Related PRDs**: [Toolchain Implementation](./toolchain-implementation.md) | [Lock File Support](./toolchain-lock-file.md) | [Custom Hooks](./custom-hooks.md)
 
 ## Overview
 
 Integrate tool dependencies into Atmos workflows, custom commands, and components, enabling automatic tool installation and version management based on declarative configuration.
 
+## Current Status (2026-05-22)
+
+The PRD originally framed this as fully unimplemented. That's outdated — the underlying infrastructure (`pkg/dependencies/`) is in place and is in active use:
+
+- **Workflows** (`pkg/workflow/executor.go`) — call `EnsureTools` before each step.
+- **Custom commands** (`cmd/cmd_utils.go`) — call `EnsureTools` before invoking the user's command.
+- **Ansible components** (`pkg/component/ansible/executor.go::ensureDependencies`) — resolve via `dependencies.NewResolver().ResolveComponentDependencies("ansible", info.StackSection, info.ComponentSection)` then call `EnsureTools` + `BuildToolchainPATH`.
+- **Hooks** (`pkg/hooks/hooks.go::preflight`) — same pattern as ansible; resolves `dependencies.tools` from the component section, installs missing tools, builds a toolchain PATH used by the subprocess.
+
+What's still missing:
+
+- **Terraform components** don't yet call `EnsureTools` — `atmos terraform plan` doesn't auto-install tools declared in a terraform component's `dependencies.tools` block. The hook engine fills this gap for tools that hooks need, but the main terraform binary itself still relies on operator PATH. This is the natural next step.
+- **`"latest"` doesn't normalize for PATH**: `isConstraint("latest") == false`, so `resolveConstraints` doesn't rewrite the version, but `BuildToolchainPATH` then constructs the bin dir using the literal `"latest"` string and the resulting path doesn't exist. Users must pin a concrete version or use a SemVer constraint (e.g., `~> 0.10`). Either the resolver should treat `"latest"` as a constraint that resolves to the highest available, or `BuildToolchainPATH` should look up the resolved version. Tracked below.
+
 ## Problem Statement
 
-Currently, the toolchain package provides tool installation and execution capabilities, but:
+Originally:
 
 1. **No Automatic Installation**: Users must manually install tools before running commands
 2. **No Dependency Declaration**: Cannot declare tool requirements at component, stack, workflow, or command level
 3. **No Version Enforcement**: No way to ensure specific tool versions are used for specific contexts
 4. **Manual PATH Management**: Users must manage PATH environment variables themselves
+
+Status of each (as of 2026-05-22):
+
+1. **Done** for workflows, custom commands, ansible components, and hooks.
+2. **Done** — `dependencies.tools` parsed at workflow/command/component scopes.
+3. **Done** for concrete versions and SemVer constraints. `"latest"` is the open edge case (see above).
+4. **Done** — `BuildToolchainPATH` constructs the subprocess PATH so installed pinned versions take precedence.
 
 ## Goals
 
@@ -552,7 +573,7 @@ dependencies:
   tools:
     terraform: "~> 1.10.0"
     tflint: "^0.54.0"
-    tfsec: "latest"
+    trivy: "~> 0.70.0"
 
 components:
   terraform:

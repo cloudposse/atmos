@@ -1,0 +1,34 @@
+# yaml-language-server: $schema=https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
+
+vars:
+  stage: test
+
+components:
+  terraform:
+    demo:
+      vars:
+        environment: test
+      hooks:
+        # A fully custom hook using the generic `kind: command` engine.
+        # No built-in kind exists for our notify script — that's the
+        # point: kind: command runs any binary or script with Atmos's
+        # standard ATMOS_* env-var contract, so you don't need to write
+        # Go to plug in a tool of your own.
+        notify:
+          events:
+            - after-terraform-plan
+          kind: command
+          # We invoke python3 explicitly rather than relying on the
+          # script's shebang. That lets the example work on Windows
+          # (where shebangs aren't honored) and inside CI containers
+          # where executable bits may not survive checkout.
+          command: python3
+          args:
+            - "scripts/notify.py"
+          # The script writes a markdown body to $ATMOS_OUTPUT_FILE; the
+          # engine reads that and renders it via ui.MarkdownMessage, so
+          # the user sees a styled summary in the terminal. The same
+          # bytes go to Pro / PR comments when those are wired up —
+          # format symmetry.
+          format: markdown
+          on_failure: warn

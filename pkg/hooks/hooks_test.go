@@ -38,8 +38,8 @@ func TestHasHooks(t *testing.T) {
 			hooks: Hooks{
 				items: map[string]Hook{
 					"test-hook": {
-						Events:  []string{"after-terraform-apply"},
-						Command: "store",
+						Events: []string{"after-terraform-apply"},
+						Kind:   "store",
 					},
 				},
 			},
@@ -49,8 +49,8 @@ func TestHasHooks(t *testing.T) {
 			name: "returns true when hooks items has multiple hooks",
 			hooks: Hooks{
 				items: map[string]Hook{
-					"hook1": {Events: []string{"after-terraform-apply"}, Command: "store"},
-					"hook2": {Events: []string{"before-terraform-plan"}, Command: "store"},
+					"hook1": {Events: []string{"after-terraform-apply"}, Kind: "store"},
+					"hook2": {Events: []string{"before-terraform-plan"}, Kind: "store"},
 				},
 			},
 			expected: true,
@@ -152,7 +152,7 @@ func TestGetHooks_WithRealComponent(t *testing.T) {
 	assert.Equal(t, info, hooks.info)
 	assert.NotNil(t, hooks.items)
 	assert.Contains(t, hooks.items, "vpc-store-outputs")
-	assert.Equal(t, "store", hooks.items["vpc-store-outputs"].Command)
+	assert.Equal(t, "store", hooks.items["vpc-store-outputs"].Kind)
 }
 
 func TestRunAll(t *testing.T) {
@@ -194,9 +194,9 @@ func TestRunAll(t *testing.T) {
 				},
 				items: map[string]Hook{
 					"test-hook": {
-						Events:  []string{"after-terraform-apply"},
-						Command: "store",
-						Name:    "test-store",
+						Events: []string{"after-terraform-apply"},
+						Kind:   "store",
+						Name:   "test-store",
 						Outputs: map[string]string{
 							"key1": "value1",
 						},
@@ -220,13 +220,13 @@ func TestRunAll(t *testing.T) {
 				items: map[string]Hook{
 					"hook1": {
 						Events:  []string{"after-terraform-apply"},
-						Command: "store",
+						Kind:    "store",
 						Name:    "store1",
 						Outputs: map[string]string{"key1": "value1"},
 					},
 					"hook2": {
 						Events:  []string{"after-terraform-apply"},
-						Command: "store",
+						Kind:    "store",
 						Name:    "store2",
 						Outputs: map[string]string{"key2": "value2"},
 					},
@@ -249,7 +249,7 @@ func TestRunAll(t *testing.T) {
 				items: map[string]Hook{
 					"test-hook": {
 						Events:  []string{"after-terraform-apply"},
-						Command: "store",
+						Kind:    "store",
 						Name:    "nonexistent-store",
 						Outputs: map[string]string{"key1": "value1"},
 					},
@@ -272,7 +272,7 @@ func TestRunAll(t *testing.T) {
 				items: map[string]Hook{
 					"test-hook": {
 						Events:  []string{"after-terraform-apply"},
-						Command: "store",
+						Kind:    "store",
 						Name:    "test-store",
 						Outputs: map[string]string{"key1": "value1"},
 					},
@@ -322,9 +322,9 @@ func TestRunAll_EventFiltering(t *testing.T) {
 			info:   &schema.ConfigAndStacksInfo{ComponentFromArg: "comp", Stack: "stack"},
 			items: map[string]Hook{
 				"hook": {
-					Events:  events,
-					Command: "store",
-					Name:    "test-store",
+					Events: events,
+					Kind:   "store",
+					Name:   "test-store",
 					// Literal value (no dot prefix) — no terraform output call needed.
 					Outputs: map[string]string{"label_id": "literal-value"},
 				},
