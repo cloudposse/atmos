@@ -21,7 +21,7 @@ func TestGetAllTerraformOutputs_PanicWhenNoExecutor(t *testing.T) {
 	assert.PanicsWithValue(t,
 		"output.SetDefaultExecutor must be called before GetComponentOutputs",
 		func() {
-			_, _ = GetAllTerraformOutputs(atmosConfig, "component", "stack", false, nil)
+			_, _ = GetAllTerraformOutputs(atmosConfig, "component", "stack", false, nil, nil)
 		},
 	)
 }
