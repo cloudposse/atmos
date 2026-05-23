@@ -53,6 +53,25 @@ func TestCommandEngine_RejectsEmptyCommand(t *testing.T) {
 	assert.ErrorIs(t, err, errUtils.ErrInvalidConfig)
 }
 
+func TestValidateCtx_RejectsMissingRequiredFields(t *testing.T) {
+	tests := []struct {
+		name string
+		ctx  *ExecContext
+	}{
+		{name: "nil context", ctx: nil},
+		{name: "nil hook", ctx: &ExecContext{Kind: &Kind{Name: "command"}}},
+		{name: "nil kind", ctx: &ExecContext{Hook: &Hook{Command: "tool"}}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := validateCtx(tt.ctx)
+			require.Error(t, err)
+			assert.ErrorIs(t, err, errUtils.ErrNilParam)
+		})
+	}
+}
+
 func TestCommandEngine_SuccessNoOutput(t *testing.T) {
 	// Use the test binary itself as a no-op command via os.Executable(). The
 	// _ATMOS_TEST_WRITE_OUTPUT gate is not set, so it just runs the test
@@ -216,6 +235,20 @@ func TestCommandEngine_CommandKindIsRegistered(t *testing.T) {
 	assert.Equal(t, OnFailureWarn, k.OnFailure)
 }
 
+func TestPrepareSubprocess_MissingCommandReturnsCommandNotFound(t *testing.T) {
+	ctx := &ExecContext{
+		Hook: &Hook{
+			Kind:    "command",
+			Command: filepath.Join(t.TempDir(), "missing-tool"),
+		},
+		Kind: &Kind{Name: "command"},
+	}
+
+	_, err := prepareSubprocess(ctx, t.TempDir(), filepath.Join(t.TempDir(), "output"))
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrCommandNotFound)
+}
+
 func TestResolveBinaryOnPath_RejectsNonExecutableUnixFile(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("Unix executable bits do not apply on Windows")
@@ -240,6 +273,24 @@ func TestResolveBinaryOnPath_UsesWindowsPATHEXTForToolchainPath(t *testing.T) {
 	assert.Equal(t, path, got)
 }
 
+func TestResolveBinaryOnPathWithEnv_ErrorsOnEmptyAndMissingCommands(t *testing.T) {
+	tests := []struct {
+		name string
+		cmd  string
+	}{
+		{name: "empty command", cmd: ""},
+		{name: "missing command", cmd: "definitely-not-on-path-atmos-test"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := resolveBinaryOnPathWithEnv(tt.cmd, "", "", "", runtime.GOOS)
+			require.Error(t, err)
+			assert.ErrorIs(t, err, errUtils.ErrCommandNotFound)
+		})
+	}
+}
+
 func TestVerifyCommandAvailable_RejectsNonExecutableExplicitPath(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("Unix executable bits do not apply on Windows")
@@ -251,4 +302,107 @@ func TestVerifyCommandAvailable_RejectsNonExecutableExplicitPath(t *testing.T) {
 	err := verifyCommandAvailable(path, "")
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrCommandNotFound)
+}
+
+func TestCommandEngine_PathHelpers(t *testing.T) {
+	t.Run("combineSearchPath", func(t *testing.T) {
+		sep := string(os.PathListSeparator)
+		assert.Equal(t, "toolchain", combineSearchPath("toolchain", ""))
+		assert.Equal(t, "process", combineSearchPath("", "process"))
+		assert.Equal(t, "toolchain"+sep+"process", combineSearchPath("toolchain", "process"))
+	})
+
+	t.Run("candidateBinaryNames default Windows extensions", func(t *testing.T) {
+		assert.Equal(
+			t,
+			[]string{"trivy", "trivy.com", "trivy.exe", "trivy.bat", "trivy.cmd"},
+			candidateBinaryNames("trivy", "", "windows"),
+		)
+	})
+
+	t.Run("candidateBinaryNames normalizes custom PATHEXT and removes duplicates", func(t *testing.T) {
+		assert.Equal(
+			t,
+			[]string{"trivy", "trivy.EXE", "trivy.BAT"},
+			candidateBinaryNames("trivy", "EXE;.EXE;.BAT", "windows"),
+		)
+	})
+
+	t.Run("candidateBinaryNames keeps explicit extensions unchanged", func(t *testing.T) {
+		assert.Equal(t, []string{"trivy.exe"}, candidateBinaryNames("trivy.exe", ".COM;.EXE", "windows"))
+		assert.Equal(t, []string{"trivy"}, candidateBinaryNames("trivy", ".EXE", "linux"))
+	})
+
+	t.Run("prependToolchainPATH", func(t *testing.T) {
+		sep := string(os.PathListSeparator)
+		base := []string{"HOME=/tmp", "PATH=/usr/bin"}
+		assert.Equal(t, []string{"HOME=/tmp", "PATH=/tools" + sep + "/usr/bin"}, prependToolchainPATH(base, "/tools"))
+		assert.Equal(t, []string{"HOME=/tmp", "PATH=/usr/bin"}, prependToolchainPATH(base, ""))
+		assert.Equal(t, []string{"HOME=/tmp", "PATH=/tools"}, prependToolchainPATH([]string{"HOME=/tmp"}, "/tools"))
+	})
+}
+
+func TestComponentPathFor_Fallbacks(t *testing.T) {
+	wd := t.TempDir()
+	t.Chdir(wd)
+	terraformBasePath := filepath.Join(string(filepath.Separator), "repo", "components", "terraform")
+
+	tests := []struct {
+		name string
+		ctx  *ExecContext
+		want string
+	}{
+		{
+			name: "nil context uses working directory",
+			ctx:  nil,
+			want: wd,
+		},
+		{
+			name: "nil config uses working directory",
+			ctx:  &ExecContext{Info: &schema.ConfigAndStacksInfo{}},
+			want: wd,
+		},
+		{
+			name: "nil info uses working directory",
+			ctx:  &ExecContext{AtmosConfig: &schema.AtmosConfiguration{}},
+			want: wd,
+		},
+		{
+			name: "empty terraform base path uses working directory",
+			ctx: &ExecContext{
+				AtmosConfig: &schema.AtmosConfiguration{},
+				Info:        &schema.ConfigAndStacksInfo{ComponentFromArg: "vpc"},
+			},
+			want: wd,
+		},
+		{
+			name: "uses final component when set",
+			ctx: &ExecContext{
+				AtmosConfig: &schema.AtmosConfiguration{TerraformDirAbsolutePath: terraformBasePath},
+				Info: &schema.ConfigAndStacksInfo{
+					ComponentFolderPrefix: "catalog",
+					ComponentFromArg:      "vpc",
+					FinalComponent:        "vpc-final",
+				},
+			},
+			want: filepath.Join(terraformBasePath, "catalog", "vpc-final"),
+		},
+		{
+			name: "falls back to component argument",
+			ctx: &ExecContext{
+				AtmosConfig: &schema.AtmosConfiguration{TerraformDirAbsolutePath: terraformBasePath},
+				Info: &schema.ConfigAndStacksInfo{
+					ComponentFolderPrefix: "catalog",
+					ComponentFromArg:      "vpc",
+				},
+			},
+			want: filepath.Join(terraformBasePath, "catalog", "vpc"),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, componentPathFor(tt.ctx))
+		})
+	}
 }

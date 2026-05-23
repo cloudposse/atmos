@@ -504,6 +504,120 @@ func TestRunAll_SkipHooksBypassesPreflightBinaryCheck(t *testing.T) {
 	require.NoError(t, err)
 }
 
+func TestHooksPreflight_NoOpBranches(t *testing.T) {
+	skipNone := func(string) bool { return false }
+
+	tests := []struct {
+		name  string
+		hooks Hooks
+		cfg   *schema.AtmosConfiguration
+		info  *schema.ConfigAndStacksInfo
+		skip  func(string) bool
+	}{
+		{
+			name: "already done",
+			hooks: Hooks{
+				preflightDone: true,
+				items: map[string]Hook{
+					"missing": {Kind: "command", Command: "definitely-not-on-path-atmos-test"},
+				},
+			},
+			cfg:  &schema.AtmosConfiguration{},
+			info: &schema.ConfigAndStacksInfo{ComponentFromArg: "component", Stack: "stack"},
+			skip: skipNone,
+		},
+		{
+			name:  "empty hooks",
+			hooks: Hooks{items: map[string]Hook{}},
+			cfg:   &schema.AtmosConfiguration{},
+			info:  &schema.ConfigAndStacksInfo{ComponentFromArg: "component", Stack: "stack"},
+			skip:  skipNone,
+		},
+		{
+			name: "nil config",
+			hooks: Hooks{items: map[string]Hook{
+				"hook": {Kind: "command", Command: "tool"},
+			}},
+			cfg:  nil,
+			info: &schema.ConfigAndStacksInfo{ComponentFromArg: "component", Stack: "stack"},
+			skip: skipNone,
+		},
+		{
+			name: "nil info",
+			hooks: Hooks{items: map[string]Hook{
+				"hook": {Kind: "command", Command: "tool"},
+			}},
+			cfg:  &schema.AtmosConfiguration{},
+			info: nil,
+			skip: skipNone,
+		},
+		{
+			name: "all hooks skipped",
+			hooks: Hooks{items: map[string]Hook{
+				"hook": {Kind: "command", Command: "definitely-not-on-path-atmos-test"},
+			}},
+			cfg:  &schema.AtmosConfiguration{},
+			info: &schema.ConfigAndStacksInfo{ComponentFromArg: "component", Stack: "stack"},
+			skip: func(string) bool { return true },
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := tt.hooks.preflight(tt.cfg, tt.info, tt.skip)
+			require.NoError(t, err)
+			assert.True(t, tt.hooks.preflightDone)
+		})
+	}
+}
+
+func TestHooksVerifyAllBinaries(t *testing.T) {
+	t.Run("skips deprecated unknown skipped and no-command hooks", func(t *testing.T) {
+		h := Hooks{items: map[string]Hook{
+			"deprecated": {Kind: "ci.summary", Command: "definitely-not-on-path-atmos-test"},
+			"unknown":    {Kind: "not-registered", Command: "definitely-not-on-path-atmos-test"},
+			"store":      {Kind: "store"},
+			"skipped":    {Kind: "command", Command: "definitely-not-on-path-atmos-test"},
+		}}
+
+		err := h.verifyAllBinaries(func(name string) bool { return name == "skipped" })
+		require.NoError(t, err)
+	})
+
+	t.Run("returns command-not-found for missing command hook", func(t *testing.T) {
+		h := Hooks{items: map[string]Hook{
+			"missing": {Kind: "command", Command: "definitely-not-on-path-atmos-test"},
+		}}
+
+		err := h.verifyAllBinaries(nil)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, errUtils.ErrCommandNotFound)
+	})
+}
+
+func TestIsDeprecatedCIKind(t *testing.T) {
+	tests := []struct {
+		name string
+		kind string
+		want bool
+	}{
+		{name: "ci check", kind: "ci.check", want: true},
+		{name: "ci output", kind: "ci.output", want: true},
+		{name: "ci summary", kind: "ci.summary", want: true},
+		{name: "ci upload", kind: "ci.upload", want: true},
+		{name: "ci download", kind: "ci.download", want: true},
+		{name: "command", kind: "command", want: false},
+		{name: "store", kind: "store", want: false},
+		{name: "empty", kind: "", want: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, isDeprecatedCIKind(tt.kind))
+		})
+	}
+}
+
 // TestRunCIHooks_CIEnabledIsHardKillSwitch verifies that ci.enabled in atmos.yaml
 // is the authority for CI hooks. When ci.enabled is false (or not set, which defaults
 // to false), CI hooks must not run even when --ci flag is passed (forceCIMode=true).
