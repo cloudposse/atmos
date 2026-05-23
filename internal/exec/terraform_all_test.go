@@ -2,6 +2,7 @@ package exec
 
 import (
 	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -300,7 +301,7 @@ func TestExecuteTerraformAll_DryRunHappyPath(t *testing.T) {
 	os.Unsetenv("ATMOS_BASE_PATH")
 	os.Unsetenv("ATMOS_CLI_CONFIG_PATH")
 
-	t.Chdir("../../tests/fixtures/scenarios/terraform-apply-affected")
+	t.Chdir(filepath.Join("..", "..", "tests", "fixtures", "scenarios", "terraform-apply-affected"))
 
 	t.Run("no stack filter walks every stack", func(t *testing.T) {
 		info := &schema.ConfigAndStacksInfo{
