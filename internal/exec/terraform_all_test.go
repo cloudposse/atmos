@@ -1,6 +1,7 @@
 package exec
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -382,6 +383,41 @@ func TestExecuteTerraformAll_AuthManagerResolverWired(t *testing.T) {
 	// The factory above stored the AuthManager on info via createQueryAuthManager;
 	// this confirms the non-nil path actually ran rather than silently skipping.
 	assert.NotNil(t, info.AuthManager, "non-nil factory should populate info.AuthManager")
+}
+
+// TestExecuteTerraformAll_AuthManagerCreationError verifies that a failure in
+// createQueryAuthManager short-circuits ExecuteTerraformAll with the wrapped
+// error — i.e. we don't silently proceed to ExecuteDescribeStacks with a nil
+// auth manager when the user has clearly configured auth that we couldn't
+// resolve. This pins the error-propagation branch at terraform_all.go:41-43.
+func TestExecuteTerraformAll_AuthManagerCreationError(t *testing.T) {
+	t.Setenv("ATMOS_BASE_PATH", "")
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", "")
+	os.Unsetenv("ATMOS_BASE_PATH")
+	os.Unsetenv("ATMOS_CLI_CONFIG_PATH")
+
+	t.Chdir(filepath.Join("..", "..", "tests", "fixtures", "scenarios", "terraform-apply-affected"))
+
+	sentinel := errors.New("simulated auth manager init failure")
+	original := authManagerFactory
+	authManagerFactory = func(string, schema.AuthConfig, string, *schema.AtmosConfiguration) (auth.AuthManager, error) {
+		return nil, sentinel
+	}
+	t.Cleanup(func() { authManagerFactory = original })
+
+	info := &schema.ConfigAndStacksInfo{
+		Stack:         "prod",
+		ComponentType: "terraform",
+		SubCommand:    "plan",
+		DryRun:        true,
+	}
+	err := ExecuteTerraformAll(info)
+	require.Error(t, err)
+	// createQueryAuthManager wraps its own error in `create query auth manager: %w`,
+	// which then bubbles up unchanged. Use errors.Is to stay robust against
+	// future re-wrapping in either layer.
+	assert.ErrorIs(t, err, sentinel,
+		"auth manager init failure must propagate from ExecuteTerraformAll")
 }
 
 // TestApplyFiltersToGraph_NoCrossStackPullIn pins the new IncludeDependencies:false
