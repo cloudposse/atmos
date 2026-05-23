@@ -125,6 +125,7 @@ func extractExtension(uri string) string {
 	// Get the base name and extract extension.
 	base := filepath.Base(path)
 	ext := filepath.Ext(base)
+	lowerBase := strings.ToLower(base)
 
 	// Only return common config file extensions.
 	validExts := map[string]bool{
@@ -134,7 +135,7 @@ func extractExtension(uri string) string {
 	}
 
 	// Handle compound template extensions (e.g., .yaml.tmpl).
-	if strings.ToLower(ext) == ".tmpl" {
+	if strings.HasSuffix(lowerBase, ".tmpl") {
 		withoutTmpl := strings.TrimSuffix(base, ext)
 		innerExt := filepath.Ext(withoutTmpl)
 		if validExts[strings.ToLower(innerExt)] {
