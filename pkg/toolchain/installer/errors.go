@@ -47,4 +47,7 @@ var (
 
 	// ErrLockfileParse indicates the lockfile contents could not be parsed.
 	ErrLockfileParse = errors.New("toolchain lockfile parse failed")
+
+	// ErrVerifierVersionUnavailable indicates a verifier bootstrap version could not be resolved.
+	ErrVerifierVersionUnavailable = errors.New("verifier version unavailable")
 )
