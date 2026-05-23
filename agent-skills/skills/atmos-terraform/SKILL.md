@@ -1,16 +1,117 @@
 ---
 name: atmos-terraform
-description: "Terraform orchestration: plan/apply/deploy, workspace management, backend config, varfile generation, authentication"
+description: "Terraform and OpenTofu orchestration: plan/apply/deploy, workspace management, backend config, varfile generation, authentication, binary selection (terraform/tofu), mixed-binary setups"
 metadata:
   copyright: Copyright Cloud Posse, LLC 2026
   version: "1.0.0"
 ---
 
-# Atmos Terraform Orchestration
+# Atmos Terraform and OpenTofu Orchestration
 
-Atmos wraps the Terraform CLI to provide stack-aware orchestration of infrastructure operations. Instead of
-manually managing workspaces, backends, variable files, and authentication for each Terraform component, Atmos
+Atmos wraps the Terraform or OpenTofu CLI to provide stack-aware orchestration of infrastructure operations.
+Instead of manually managing workspaces, backends, variable files, and authentication for each component, Atmos
 resolves the full configuration from stack manifests and handles all of these concerns automatically.
+
+Everything in this skill applies identically to **Terraform** and **OpenTofu**. The `atmos terraform` command
+namespace is the same regardless of which binary is configured -- `atmos terraform plan` runs `tofu plan` when
+the binary is set to `tofu`. Use the user's terminology in responses (if they say "OpenTofu," say "OpenTofu").
+
+## Terraform or OpenTofu: Binary Selection
+
+Atmos defaults to the `terraform` binary. Switch to OpenTofu by setting `components.terraform.command: tofu`
+in `atmos.yaml`. The setting cascades through CLI > env > config > defaults precedence and can be overridden
+at multiple levels for mixed setups.
+
+### Global (whole project on OpenTofu)
+
+```yaml
+# atmos.yaml
+components:
+  terraform:
+    command: tofu                # All atmos terraform commands invoke `tofu` instead of `terraform`
+    base_path: components/terraform
+```
+
+Or via environment variable:
+
+```bash
+export ATMOS_COMPONENTS_TERRAFORM_COMMAND=tofu
+atmos terraform plan vpc -s dev   # Runs: tofu plan
+```
+
+### Per-stack override
+
+Use `terraform.overrides.command` in a stack manifest to switch the binary for everything in that stack:
+
+```yaml
+# stacks/orgs/acme/plat/prod/_defaults.yaml
+terraform:
+  overrides:
+    command: tofu
+```
+
+### Per-component override
+
+Set `command` on an individual component to run a single component on a different binary than the rest of
+the stack (useful for legacy components that haven't been validated on OpenTofu, or new components testing
+OpenTofu-specific features):
+
+```yaml
+components:
+  terraform:
+    legacy-vpc:
+      command: terraform           # This component stays on Terraform
+      vars: ...
+    new-eks:
+      command: tofu                # This component runs on OpenTofu
+      vars: ...
+```
+
+### Per-invocation override
+
+Pass `--terraform-command` on the CLI to override for a single command:
+
+```bash
+atmos terraform plan vpc -s dev --terraform-command=tofu
+```
+
+### Pinning the binary version
+
+The Atmos toolchain (`atmos-toolchain` skill) manages Terraform and OpenTofu versions separately:
+
+```yaml
+# stacks/.../_defaults.yaml
+dependencies:
+  tools:
+    terraform: "1.9.8"
+    opentofu: "1.8.0"
+```
+
+Or via `.tool-versions` at the project root:
+
+```text
+terraform 1.9.8
+opentofu 1.8.0
+```
+
+Then `atmos toolchain install` provisions both. When Atmos invokes the configured binary (`terraform` or
+`tofu`), it uses the pinned version. See the [atmos-toolchain](../atmos-toolchain/SKILL.md) skill for full
+toolchain semantics.
+
+### OpenTofu-specific considerations
+
+- **State encryption** (OpenTofu 1.7+) -- a Terraform-incompatible feature; if enabled, state can no longer
+  be read by `terraform`. Switching back is not zero-effort.
+- **`removed` blocks** -- supported by both binaries in recent versions; no Atmos-side difference.
+- **Provider/module registry** -- OpenTofu uses `registry.opentofu.org` by default; pinned modules sourced
+  from `registry.terraform.io` still work in OpenTofu but consult the relevant registry availability when
+  the user reports a missing module.
+- **`terraform.required_version`** -- OpenTofu respects this constraint; pin appropriately.
+- **`terraform { backend ... }` block** -- identical syntax in both binaries; no Atmos-side change needed.
+
+For users running mixed Terraform/OpenTofu deployments, the per-component or per-stack override pattern is
+the right tool. Do not propose a project-wide switch unless the user has validated all components against
+OpenTofu.
 
 ## How Atmos Orchestrates Terraform
 

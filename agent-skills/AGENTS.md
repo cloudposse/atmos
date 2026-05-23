@@ -79,6 +79,7 @@ When a task involves Atmos, activate the matching skill for detailed guidance.
 | AI and MCP: providers, skills, agent workflows, MCP server/client setup, auth-wrapped tools, toolchain-aware export  | `atmos-ai`              | `agent-skills/skills/atmos-ai/SKILL.md`              |
 | Devcontainers: start/stop/attach/exec/shell, Docker/Podman, identity integration, instance management (experimental) | `atmos-devcontainer`    | `agent-skills/skills/atmos-devcontainer/SKILL.md`    |
 | AWS security: analyze findings, map to components/stacks, structured remediation, compliance reports                  | `atmos-aws-security`    | `agent-skills/skills/atmos-aws-security/SKILL.md`    |
+| Migrating to Atmos from native Terraform/OpenTofu or Terraform Workspaces: layout, workspace mapping, remote-state bridge | `atmos-migration`       | `agent-skills/skills/atmos-migration/SKILL.md`       |
 
 ## Common Patterns
 
