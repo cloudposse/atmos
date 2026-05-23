@@ -66,6 +66,8 @@ jobs:
       - name: Check out code into the Go module directory
         if: ${{ ! ( matrix.target == 'windows' && github.event.pull_request.draft  ) }}
         uses: actions/checkout@v6
+        with:
+          persist-credentials: false
 
       - name: Set up Go
         if: ${{ ! ( matrix.target == 'windows' && github.event.pull_request.draft  ) }}
@@ -117,6 +119,8 @@ jobs:
       - name: Check out code into the Go module directory
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
         uses: actions/checkout@v6
+        with:
+          persist-credentials: false
 
       - name: Add GNU tar to PATH (significantly faster than windows tar)
         if: matrix.flavor.target == 'windows' && ! github.event.pull_request.draft
@@ -257,6 +261,8 @@ jobs:
     steps:
       - name: Check out code
         uses: actions/checkout@v6
+        with:
+          persist-credentials: false
 
       - uses: hadolint/hadolint-action@v3.1.0
         id: hadolint
@@ -322,6 +328,8 @@ jobs:
 
       - name: Check out code into the Go module directory
         uses: actions/checkout@v6
+        with:
+          persist-credentials: false
 
       - name: Install Terraform
         uses: hashicorp/setup-terraform@v3
@@ -363,6 +371,8 @@ jobs:
     steps:
       - name: Check out code into the Go module directory
         uses: actions/checkout@v6
+        with:
+          persist-credentials: false
 
       - name: Start Docker Compose
         working-directory: examples/${{ matrix.demo-folder }}
@@ -449,6 +459,8 @@ jobs:
       - name: Check out code into the Go module directory
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
         uses: actions/checkout@v6
+        with:
+          persist-credentials: false
 
       - name: Add GNU tar to flavor.target (significantly faster than windows tar)
         if: matrix.flavor.target == 'windows' && ! github.event.pull_request.draft
@@ -561,6 +573,8 @@ jobs:
     steps:
       - name: Check out code into the Go module directory
         uses: actions/checkout@v6
+        with:
+          persist-credentials: false
 
       - name: Install Terraform
         uses: hashicorp/setup-terraform@v3
@@ -613,6 +627,8 @@ jobs:
     steps:
       - name: Check out code
         uses: actions/checkout@v6
+        with:
+          persist-credentials: false
 
       - name: Validate YAML Schema for Stacks
         uses: InoUno/yaml-ls-check@v1.4.0
