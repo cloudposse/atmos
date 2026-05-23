@@ -1,8 +1,10 @@
 package sarif
 
 import (
+	"errors"
 	"testing"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -16,6 +18,7 @@ func TestParse_EmptyInput(t *testing.T) {
 func TestParse_InvalidJSON(t *testing.T) {
 	_, err := Parse([]byte("{not-json"))
 	require.Error(t, err)
+	assert.True(t, errors.Is(err, errUtils.ErrParseFile), "expected ErrParseFile, got %v", err)
 }
 
 func TestParse_LevelBasedSeverity(t *testing.T) {

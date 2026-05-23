@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -211,15 +212,18 @@ func captureOutput(ctx *ExecContext, outputFile string) *Output {
 	out := &Output{}
 
 	if data, readErr := os.ReadFile(outputFile); readErr == nil && len(data) > 0 {
+		metadata := map[string]string{
+			metadataKeyKind: ctx.Hook.Kind,
+		}
+		if ctx.Info != nil {
+			metadata[metadataKeyStack] = ctx.Info.Stack
+			metadata[metadataKeyComponent] = ctx.Info.ComponentFromArg
+		}
 		out.Artifact = &Artifact{
-			Name:   filepath.Base(outputFile),
-			Body:   data,
-			Format: ctx.Hook.Format,
-			Metadata: map[string]string{
-				metadataKeyKind:      ctx.Hook.Kind,
-				metadataKeyStack:     ctx.Info.Stack,
-				metadataKeyComponent: ctx.Info.ComponentFromArg,
-			},
+			Name:     filepath.Base(outputFile),
+			Body:     data,
+			Format:   ctx.Hook.Format,
+			Metadata: metadata,
 		}
 	}
 
@@ -329,59 +333,105 @@ func planfileFor(_ *ExecContext) string {
 // back to the process PATH. Mirrors exec.LookPath but uses our augmented
 // PATH instead of the process environment.
 //
-// Returns the absolute path on success. Absolute or relative paths
-// containing a separator are returned as-is (caller delegates to OS).
+// Returns the resolved path on success. Absolute or relative paths
+// containing a separator are accepted only when they point at an
+// executable file.
 func resolveBinaryOnPath(name, toolchainPATH string) (string, error) {
+	return resolveBinaryOnPathWithEnv(
+		name,
+		toolchainPATH,
+		os.Getenv("PATH"),    //nolint:forbidigo // PATH is a shell-managed env var, not viper-bound config
+		os.Getenv("PATHEXT"), //nolint:forbidigo // PATHEXT is Windows shell-managed command lookup config
+		runtime.GOOS,
+	)
+}
+
+func resolveBinaryOnPathWithEnv(name, toolchainPATH, processPATH, pathExt, goos string) (string, error) {
 	if name == "" {
 		return "", fmt.Errorf("%w: empty command name", errUtils.ErrCommandNotFound)
 	}
 	if filepath.IsAbs(name) || strings.ContainsAny(name, "/\\") {
-		// Caller passed an explicit path — let the OS surface a real error
-		// if it doesn't exist or isn't executable.
-		return name, nil
+		if isExecutableFile(name, goos) {
+			return name, nil
+		}
+		return "", fmt.Errorf("%w: %s", errUtils.ErrCommandNotFound, name)
 	}
 
-	if path, ok := searchPathForBinary(name, searchPathOrProcessEnv(toolchainPATH)); ok {
+	searchPath := combineSearchPath(toolchainPATH, processPATH)
+	if path, ok := searchPathForBinary(name, searchPath, pathExt, goos); ok {
 		return path, nil
 	}
 
-	// Final fallback uses exec.LookPath so platform-specific bits (e.g.
-	// .exe on Windows) are handled correctly.
-	if path, err := exec.LookPath(name); err == nil {
-		return path, nil
-	}
 	return "", fmt.Errorf("%w: %s", errUtils.ErrCommandNotFound, name)
 }
 
-// searchPathOrProcessEnv returns toolchainPATH when set; otherwise falls
-// back to the process PATH. Wrapped to keep the forbidigo nolint
-// localized: reading PATH from the OS is a legitimate need here (no
-// viper-managed setting represents the shell's PATH), and gating it
-// through this helper matches the pkg/dependencies convention.
-func searchPathOrProcessEnv(toolchainPATH string) string {
+func combineSearchPath(toolchainPATH, processPATH string) string {
 	if toolchainPATH != "" {
-		return toolchainPATH
+		if processPATH == "" {
+			return toolchainPATH
+		}
+		return toolchainPATH + string(os.PathListSeparator) + processPATH
 	}
-	return os.Getenv("PATH") //nolint:forbidigo // PATH is a shell-managed env var, not viper-bound config
+	return processPATH
 }
 
 // searchPathForBinary walks the PATH-style string and returns the first
 // directory entry that contains an executable file matching name.
-func searchPathForBinary(name, searchPath string) (string, bool) {
+func searchPathForBinary(name, searchPath, pathExt, goos string) (string, bool) {
 	for _, dir := range filepath.SplitList(searchPath) {
 		if dir == "" {
 			continue
 		}
-		candidate := filepath.Join(dir, name)
-		fi, err := os.Stat(candidate)
-		if err != nil || fi.IsDir() {
-			continue
-		}
-		if fi.Mode()&executableBits != 0 {
-			return candidate, true
+		for _, candidateName := range candidateBinaryNames(name, pathExt, goos) {
+			candidate := filepath.Join(dir, candidateName)
+			if isExecutableFile(candidate, goos) {
+				return candidate, true
+			}
 		}
 	}
 	return "", false
+}
+
+func candidateBinaryNames(name, pathExt, goos string) []string {
+	if goos != "windows" || filepath.Ext(name) != "" {
+		return []string{name}
+	}
+
+	exts := strings.Split(pathExt, ";")
+	if pathExt == "" {
+		exts = []string{".com", ".exe", ".bat", ".cmd"}
+	}
+
+	names := []string{name}
+	seen := map[string]struct{}{strings.ToLower(name): {}}
+	for _, ext := range exts {
+		ext = strings.TrimSpace(ext)
+		if ext == "" {
+			continue
+		}
+		if !strings.HasPrefix(ext, ".") {
+			ext = "." + ext
+		}
+		candidate := name + ext
+		key := strings.ToLower(candidate)
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		names = append(names, candidate)
+	}
+	return names
+}
+
+func isExecutableFile(path, goos string) bool {
+	info, err := os.Stat(path) //nolint:gosec // path built from PATH entries + binary name — both operator-controlled
+	if err != nil || info.IsDir() {
+		return false
+	}
+	if goos == "windows" {
+		return true
+	}
+	return info.Mode()&executableBits != 0
 }
 
 // prependToolchainPATH puts the toolchain bin dirs at the front of PATH in

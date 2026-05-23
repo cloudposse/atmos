@@ -2,9 +2,6 @@ package hooks
 
 import (
 	"fmt"
-	"os"
-	"os/exec"
-	"path/filepath"
 	"strings"
 
 	log "github.com/cloudposse/atmos/pkg/logger"
@@ -110,17 +107,16 @@ func GetHooks(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStac
 
 func (h *Hooks) RunAll(event HookEvent, atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, cmd *cobra.Command, args []string) error {
 	log.Debug("Running hooks", "count", len(h.items))
+	skipPredicate := newSkipPredicate(viper.GetString("skip-hooks"))
 
 	// Preflight runs once per command lifecycle: install component
 	// dependencies up front and verify every hook's binary resolves before
 	// any terraform action runs. Failures here surface BEFORE terraform —
 	// users find out their hook is misconfigured before plan/apply takes
 	// time, not after.
-	if err := h.preflight(atmosConfig, info); err != nil {
+	if err := h.preflight(atmosConfig, info, skipPredicate); err != nil {
 		return err
 	}
-
-	skipPredicate := newSkipPredicate(viper.GetString("skip-hooks"))
 
 	for name, hook := range h.items {
 		if !hook.MatchesEvent(event) {
@@ -192,7 +188,7 @@ func newSkipPredicate(raw string) func(string) bool {
 // per Hooks instance — subsequent lifecycle events reuse the cached PATH.
 // Failures use the error builder so the user sees a friendly message and
 // a hint pointing at dependencies.tools.
-func (h *Hooks) preflight(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) error {
+func (h *Hooks) preflight(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, skipPredicate func(string) bool) error {
 	defer perf.Track(atmosConfig, "hooks.Hooks.preflight")()
 
 	if h.preflightDone {
@@ -203,6 +199,9 @@ func (h *Hooks) preflight(atmosConfig *schema.AtmosConfiguration, info *schema.C
 	if len(h.items) == 0 || atmosConfig == nil || info == nil {
 		return nil
 	}
+	if !h.hasUnskippedHooks(skipPredicate) {
+		return nil
+	}
 
 	deps, err := h.resolveDeps(atmosConfig, info)
 	if err != nil {
@@ -211,7 +210,16 @@ func (h *Hooks) preflight(atmosConfig *schema.AtmosConfiguration, info *schema.C
 	if err := h.installDeps(atmosConfig, info, deps); err != nil {
 		return err
 	}
-	return h.verifyAllBinaries()
+	return h.verifyAllBinaries(skipPredicate)
+}
+
+func (h *Hooks) hasUnskippedHooks(skipPredicate func(string) bool) bool {
+	for name := range h.items {
+		if skipPredicate == nil || !skipPredicate(name) {
+			return true
+		}
+	}
+	return false
 }
 
 // resolveDeps walks the global → component-type → component-instance
@@ -280,8 +288,11 @@ func (h *Hooks) installDeps(atmosConfig *schema.AtmosConfiguration, info *schema
 // verifyAllBinaries checks every hook's command resolves on the
 // toolchain-augmented PATH so failures surface before terraform runs.
 // Store-kind hooks have no Command and are skipped naturally.
-func (h *Hooks) verifyAllBinaries() error {
+func (h *Hooks) verifyAllBinaries(skipPredicate func(string) bool) error {
 	for name := range h.items {
+		if skipPredicate != nil && skipPredicate(name) {
+			continue
+		}
 		hook := h.items[name]
 		if isDeprecatedCIKind(hook.Kind) {
 			continue
@@ -317,33 +328,8 @@ func verifyCommandAvailable(name, toolchainPATH string) error {
 	if name == "" {
 		return nil
 	}
-	// If it's an absolute or relative path, just stat it.
-	if strings.ContainsAny(name, "/\\") {
-		if _, err := os.Stat(name); err == nil {
-			return nil
-		}
-	}
-	// Search the toolchain PATH first (so pinned versions win), then OS PATH.
-	combined := toolchainPATH
-	if combined != "" {
-		combined += string(os.PathListSeparator)
-	}
-	combined += os.Getenv("PATH") //nolint:forbidigo // PATH is a shell-managed env var, not viper-bound config
-	for _, dir := range strings.Split(combined, string(os.PathListSeparator)) {
-		if dir == "" {
-			continue
-		}
-		candidate := filepath.Join(dir, name)
-		if info, err := os.Stat(candidate); err == nil && !info.IsDir() { //nolint:gosec // candidate built from PATH entries
-			return nil
-		}
-	}
-	// Final fallback: standard PATH lookup (handles platform-specific
-	// extensions like .exe on Windows).
-	if _, err := exec.LookPath(name); err == nil {
-		return nil
-	}
-	return fmt.Errorf("%w: %s", errUtils.ErrCommandNotFound, name)
+	_, err := resolveBinaryOnPath(name, toolchainPATH)
+	return err
 }
 
 // isDeprecatedCIKind reports whether the given kind name was one of the

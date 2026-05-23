@@ -12,6 +12,8 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+
+	errUtils "github.com/cloudposse/atmos/errors"
 )
 
 // Severity is the normalized severity of a finding. It maps SARIF's
@@ -208,7 +210,7 @@ func Parse(data []byte) (*Findings, error) {
 	}
 	var raw rawSARIF
 	if err := json.Unmarshal(data, &raw); err != nil {
-		return nil, fmt.Errorf("invalid SARIF document: %w", err)
+		return nil, fmt.Errorf("%w: invalid SARIF document: %w", errUtils.ErrParseFile, err)
 	}
 
 	out := &Findings{}

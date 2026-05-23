@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/hooks"
 )
 
@@ -26,7 +27,7 @@ type HandlerOptions struct {
 // single markdown body used by every consumer (terminal, Pro, PR comments).
 func NewResultHandler(opts HandlerOptions) hooks.ResultHandler {
 	return func(ctx *hooks.ExecContext) (*hooks.Summary, error) {
-		if ctx == nil {
+		if ctx == nil || opts.OutputPath == nil {
 			return nil, nil
 		}
 		path := opts.OutputPath(ctx)
@@ -45,12 +46,12 @@ func NewResultHandler(opts HandlerOptions) hooks.ResultHandler {
 			}, nil
 		}
 		if err != nil {
-			return nil, fmt.Errorf("%s: read SARIF: %w", opts.Kind, err)
+			return nil, fmt.Errorf("%s: read SARIF: %w: %w", opts.Kind, errUtils.ErrReadFile, err)
 		}
 
 		findings, err := Parse(data)
 		if err != nil {
-			return nil, fmt.Errorf("%s: parse SARIF: %w", opts.Kind, err)
+			return nil, fmt.Errorf("%s: parse SARIF: %w: %w", opts.Kind, errUtils.ErrParseFile, err)
 		}
 
 		body := RenderMarkdown(findings, RenderMarkdownOptions{

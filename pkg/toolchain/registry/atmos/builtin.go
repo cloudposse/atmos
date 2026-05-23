@@ -2,10 +2,10 @@ package atmos
 
 import (
 	_ "embed"
-	"fmt"
 
 	"gopkg.in/yaml.v3"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
@@ -32,7 +32,10 @@ func NewBuiltinRegistry() (*AtmosRegistry, error) {
 
 	var cfg builtinConfig
 	if err := yaml.Unmarshal(builtinYAML, &cfg); err != nil {
-		return nil, fmt.Errorf("failed to parse builtin atmos registry: %w", err)
+		return nil, errUtils.Build(errUtils.ErrParseFile).
+			WithCause(err).
+			WithExplanation("Failed to parse builtin atmos registry").
+			Err()
 	}
 	return NewAtmosRegistry(cfg.Tools)
 }

@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -382,6 +383,28 @@ func TestRunAll_EventFiltering(t *testing.T) {
 		data := getStore(h).GetData()
 		assert.Equal(t, "literal-value", data["stack/comp/label_id"], "deploy hook must fire on apply event")
 	})
+}
+
+func TestRunAll_SkipHooksBypassesPreflightBinaryCheck(t *testing.T) {
+	viper.Set("skip-hooks", "missing-tool")
+	t.Cleanup(func() { viper.Set("skip-hooks", "") })
+
+	h := Hooks{
+		config: &schema.AtmosConfiguration{},
+		info: &schema.ConfigAndStacksInfo{
+			ComponentFromArg: "test-component",
+			Stack:            "test-stack",
+		},
+		items: map[string]Hook{
+			"missing-tool": {
+				Kind:    "command",
+				Command: "definitely-not-on-path-atmos-test",
+			},
+		},
+	}
+
+	err := h.RunAll(BeforeTerraformPlan, h.config, h.info, nil, nil)
+	require.NoError(t, err)
 }
 
 // TestRunCIHooks_CIEnabledIsHardKillSwitch verifies that ci.enabled in atmos.yaml

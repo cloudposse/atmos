@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/hooks"
 )
 
@@ -59,7 +60,7 @@ func ResultHandler(ctx *hooks.ExecContext) (*hooks.Summary, error) {
 	}
 	data, err := os.ReadFile(ctx.OutputFile)
 	if err != nil {
-		return nil, fmt.Errorf("infracost: read output: %w", err)
+		return nil, fmt.Errorf("%w: infracost: read output: %w", errUtils.ErrReadFile, err)
 	}
 	if len(data) == 0 {
 		return &hooks.Summary{
@@ -72,7 +73,7 @@ func ResultHandler(ctx *hooks.ExecContext) (*hooks.Summary, error) {
 
 	var b breakdown
 	if err := json.Unmarshal(data, &b); err != nil {
-		return nil, fmt.Errorf("infracost: parse json: %w", err)
+		return nil, fmt.Errorf("%w: infracost: parse json: %w", errUtils.ErrParseFile, err)
 	}
 
 	currency := b.Currency

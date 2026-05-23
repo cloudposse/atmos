@@ -403,7 +403,7 @@ For each hook invocation:
 
 1. Docusaurus pages: hook kind reference, per-kind pages (infracost, checkov, trivy, kics, command), Pro upload behavior.
 2. Update `pkg/datafetcher/schema/` JSON Schema with `format:` enum.
-3. Examples under `examples/quick-start-advanced/` showing hook kinds in a realistic stack.
+3. Examples under `examples/hooks-*/` showing individual hook kinds (infracost, checkov, trivy, kics, custom-command).
 4. Blog post (PR labeled `minor`) announcing the feature.
 5. Roadmap update in `website/src/data/roadmap.js`.
 

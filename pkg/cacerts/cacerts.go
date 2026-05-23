@@ -62,8 +62,10 @@ var candidates = []string{
 	"/usr/local/etc/ca-certificates/cert.pem",
 }
 
+// findOnce is a pointer so tests can swap in a fresh sync.Once without
+// copying (sync.Once contains noCopy, which govet/copylocks rejects).
 var (
-	findOnce   sync.Once
+	findOnce   = new(sync.Once)
 	cachedPath string
 )
 

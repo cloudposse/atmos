@@ -1,6 +1,7 @@
 package infracost
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -8,6 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/hooks"
 )
 
@@ -124,6 +126,14 @@ func TestResultHandler_InvalidJSON(t *testing.T) {
 	ctx := &hooks.ExecContext{OutputFile: writeOutputFile(t, "{not-json")}
 	_, err := ResultHandler(ctx)
 	require.Error(t, err)
+	assert.True(t, errors.Is(err, errUtils.ErrParseFile), "expected ErrParseFile, got %v", err)
+}
+
+func TestResultHandler_ReadErrorUsesStaticError(t *testing.T) {
+	ctx := &hooks.ExecContext{OutputFile: filepath.Join(t.TempDir(), "missing.json")}
+	_, err := ResultHandler(ctx)
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, errUtils.ErrReadFile), "expected ErrReadFile, got %v", err)
 }
 
 func TestKindIsRegistered(t *testing.T) {

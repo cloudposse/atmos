@@ -2,6 +2,8 @@ package hooks
 
 import (
 	"os"
+	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -87,6 +89,21 @@ func TestCommandEngine_CapturesOutputFile(t *testing.T) {
 	assert.Equal(t, "command", out.Artifact.Metadata["kind"])
 	assert.Equal(t, "test-stack", out.Artifact.Metadata["stack"])
 	assert.Equal(t, "test-component", out.Artifact.Metadata["component"])
+}
+
+func TestCaptureOutput_AllowsNilInfo(t *testing.T) {
+	outputFile := filepath.Join(t.TempDir(), "output")
+	require.NoError(t, os.WriteFile(outputFile, []byte("hello"), 0o600))
+
+	out := captureOutput(&ExecContext{
+		Hook: &Hook{Kind: "command"},
+		Kind: &Kind{Name: "command"},
+	}, outputFile)
+
+	require.NotNil(t, out.Artifact)
+	assert.Equal(t, "command", out.Artifact.Metadata["kind"])
+	assert.NotContains(t, out.Artifact.Metadata, "stack")
+	assert.NotContains(t, out.Artifact.Metadata, "component")
 }
 
 func TestCommandEngine_OnFailureFailPropagates(t *testing.T) {
@@ -197,4 +214,41 @@ func TestCommandEngine_CommandKindIsRegistered(t *testing.T) {
 	require.True(t, ok, "generic command kind must self-register via init()")
 	require.NotNil(t, k.Engine)
 	assert.Equal(t, OnFailureWarn, k.OnFailure)
+}
+
+func TestResolveBinaryOnPath_RejectsNonExecutableUnixFile(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Unix executable bits do not apply on Windows")
+	}
+
+	dir := t.TempDir()
+	path := filepath.Join(dir, "tool")
+	require.NoError(t, os.WriteFile(path, []byte("not executable"), 0o600))
+
+	_, err := resolveBinaryOnPathWithEnv("tool", dir, "", "", runtime.GOOS)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrCommandNotFound)
+}
+
+func TestResolveBinaryOnPath_UsesWindowsPATHEXTForToolchainPath(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "trivy.EXE")
+	require.NoError(t, os.WriteFile(path, []byte("exe"), 0o600))
+
+	got, err := resolveBinaryOnPathWithEnv("trivy", dir, "", ".EXE;.BAT", "windows")
+	require.NoError(t, err)
+	assert.Equal(t, path, got)
+}
+
+func TestVerifyCommandAvailable_RejectsNonExecutableExplicitPath(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Unix executable bits do not apply on Windows")
+	}
+
+	path := filepath.Join(t.TempDir(), "tool")
+	require.NoError(t, os.WriteFile(path, []byte("not executable"), 0o600))
+
+	err := verifyCommandAvailable(path, "")
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrCommandNotFound)
 }

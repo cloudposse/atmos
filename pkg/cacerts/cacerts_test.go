@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -43,9 +44,15 @@ func TestFind_CachesResult(t *testing.T) {
 func TestEnv_NoBundle(t *testing.T) {
 	// When no bundle path is known, Env() returns nil — callers add
 	// nothing to the subprocess environment.
-	saved := cachedPath
+	savedPath := cachedPath
+	savedOnce := findOnce
 	cachedPath = ""
-	t.Cleanup(func() { cachedPath = saved })
+	findOnce = new(sync.Once)
+	findOnce.Do(func() {})
+	t.Cleanup(func() {
+		cachedPath = savedPath
+		findOnce = savedOnce
+	})
 
 	// Force the saved value to take effect without invoking sync.Once.
 	got := Env()
@@ -60,9 +67,15 @@ func TestEnv_WithBundle(t *testing.T) {
 	pem := filepath.Join(dir, "cert.pem")
 	require.NoError(t, os.WriteFile(pem, []byte("dummy"), 0o644))
 
-	saved := cachedPath
+	savedPath := cachedPath
+	savedOnce := findOnce
 	cachedPath = pem
-	t.Cleanup(func() { cachedPath = saved })
+	findOnce = new(sync.Once)
+	findOnce.Do(func() {})
+	t.Cleanup(func() {
+		cachedPath = savedPath
+		findOnce = savedOnce
+	})
 
 	got := Env()
 	require.NotNil(t, got)

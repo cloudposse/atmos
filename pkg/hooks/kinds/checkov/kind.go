@@ -1,7 +1,7 @@
 // Package checkov registers the built-in `checkov` hook kind.
 //
 // Defaults invoke `checkov -d $ATMOS_COMPONENT_PATH -o sarif
-// --output-file-path $ATMOS_OUTPUT_FILE`. Findings flow through the shared
+// --output-file-path $ATMOS_OUTPUT_DIR`. Findings flow through the shared
 // SARIF parser; the rendered markdown summary is identical across the
 // terminal, Pro run page, PR comments, and step summaries.
 package checkov

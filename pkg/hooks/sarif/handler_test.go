@@ -4,6 +4,7 @@
 package sarif_test
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -11,6 +12,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/hooks"
 	_ "github.com/cloudposse/atmos/pkg/hooks/kinds/checkov" // self-register checkov kind
 	_ "github.com/cloudposse/atmos/pkg/hooks/kinds/kics"    // self-register kics kind
@@ -62,9 +64,10 @@ func TestHandler_ParsesFindings(t *testing.T) {
 }
 
 func TestHandler_NoFindingsFile(t *testing.T) {
+	missingPath := filepath.Join(t.TempDir(), "missing.sarif")
 	handler := sarif.NewResultHandler(sarif.HandlerOptions{
 		Kind:       "trivy",
-		OutputPath: func(_ *hooks.ExecContext) string { return "/nonexistent/path.sarif" },
+		OutputPath: func(_ *hooks.ExecContext) string { return missingPath },
 	})
 	s, err := handler(&hooks.ExecContext{})
 	require.NoError(t, err)
@@ -73,6 +76,13 @@ func TestHandler_NoFindingsFile(t *testing.T) {
 	assert.Equal(t, hooks.StatusSuccess, s.Status)
 	assert.Equal(t, "no findings", s.Title)
 	assert.Contains(t, s.Body, "no findings")
+}
+
+func TestHandler_NilOutputPath(t *testing.T) {
+	handler := sarif.NewResultHandler(sarif.HandlerOptions{Kind: "trivy"})
+	s, err := handler(&hooks.ExecContext{})
+	require.NoError(t, err)
+	assert.Nil(t, s)
 }
 
 func TestHandler_EmptySARIF(t *testing.T) {
@@ -100,6 +110,17 @@ func TestHandler_InvalidJSON(t *testing.T) {
 	})
 	_, err := handler(&hooks.ExecContext{})
 	require.Error(t, err)
+	assert.True(t, errors.Is(err, errUtils.ErrParseFile), "expected ErrParseFile, got %v", err)
+}
+
+func TestHandler_ReadErrorUsesStaticError(t *testing.T) {
+	handler := sarif.NewResultHandler(sarif.HandlerOptions{
+		Kind:       "checkov",
+		OutputPath: func(_ *hooks.ExecContext) string { return t.TempDir() },
+	})
+	_, err := handler(&hooks.ExecContext{})
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, errUtils.ErrReadFile), "expected ErrReadFile, got %v", err)
 }
 
 func TestHandler_HighestSeverityCriticalElevatesStatus(t *testing.T) {
