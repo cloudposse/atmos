@@ -25,6 +25,9 @@ import (
 // outputParser handles flag parsing for output command.
 var outputParser *flags.StandardParser
 
+var outputSetupTerraformAuth = exec.SetupTerraformAuthForCLI
+var outputGetComponentOutputs = tfoutput.GetComponentOutputs
+
 // outputCmd represents the terraform output command.
 var outputCmd = &cobra.Command{
 	Use:   "output",
@@ -60,11 +63,11 @@ func outputRunWithFormat(cmd *cobra.Command, args []string, format string) error
 	if err := validateOutputFormat(format); err != nil {
 		return err
 	}
-	info, atmosConfig, err := prepareOutputContext(cmd, args)
+	info, atmosConfig, authManager, err := prepareOutputContext(cmd, args)
 	if err != nil {
 		return err
 	}
-	return executeOutputWithFormat(atmosConfig, info, format)
+	return executeOutputWithFormat(atmosConfig, info, authManager, format)
 }
 
 // validateOutputFormat checks if the format is supported.
@@ -79,18 +82,22 @@ func validateOutputFormat(format string) error {
 }
 
 // prepareOutputContext validates config and prepares component info.
-func prepareOutputContext(cmd *cobra.Command, args []string) (*schema.ConfigAndStacksInfo, *schema.AtmosConfiguration, error) {
+// Returns the populated info, the initialized Atmos configuration, and the auth manager
+// produced by outputSetupTerraformAuth. The auth manager is returned explicitly (rather
+// than read back off info.AuthManager at the call site) so the handoff to downstream
+// consumers like executeOutputWithFormat is explicit and easy to test.
+func prepareOutputContext(cmd *cobra.Command, args []string) (*schema.ConfigAndStacksInfo, *schema.AtmosConfiguration, any, error) {
 	if err := internal.ValidateAtmosConfig(); err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	separatedArgs := compat.GetSeparated()
 	argsWithSubCommand := append([]string{"output"}, args...)
 	info, err := exec.ProcessCommandLineArgs(cfg.TerraformComponentType, terraformCmd, argsWithSubCommand, separatedArgs)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	if err := resolveAndPromptForArgs(&info, cmd); err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	v := viper.GetViper()
 	globalFlags := flags.ParseGlobalFlags(cmd, v)
@@ -104,20 +111,27 @@ func prepareOutputContext(cmd *cobra.Command, args []string) (*schema.ConfigAndS
 	}
 	atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
 	if err != nil {
-		return nil, nil, errUtils.Build(errUtils.ErrInitializeCLIConfig).WithCause(err).Err()
+		return nil, nil, nil, errUtils.Build(errUtils.ErrInitializeCLIConfig).WithCause(err).Err()
 	}
-	return &info, &atmosConfig, nil
+	authManager, err := outputSetupTerraformAuth(&atmosConfig, &info)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	return &info, &atmosConfig, authManager, nil
 }
 
 // executeOutputWithFormat retrieves and formats terraform outputs.
-func executeOutputWithFormat(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, format string) error {
+// The authManager produced by outputSetupTerraformAuth is passed explicitly rather than
+// read back off info.AuthManager so callers (and tests) do not need to rely on the
+// side-effect wiring performed inside setupTerraformAuth.
+func executeOutputWithFormat(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, authManager any, format string) error {
 	v := viper.GetViper()
 	skipInit := v.GetBool("skip-init")
 	outputFile := v.GetString("output-file")
 	uppercase := v.GetBool("uppercase")
 	flatten := v.GetBool("flatten")
 
-	outputs, err := tfoutput.GetComponentOutputs(atmosConfig, info.ComponentFromArg, info.Stack, skipInit, nil)
+	outputs, err := outputGetComponentOutputs(atmosConfig, info.ComponentFromArg, info.Stack, skipInit, info.AuthContext, authManager)
 	if err != nil {
 		return errUtils.Build(errUtils.ErrTerraformOutputFailed).
 			WithCause(err).
