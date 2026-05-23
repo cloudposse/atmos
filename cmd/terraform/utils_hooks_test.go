@@ -158,20 +158,11 @@ func TestRunCIHooksForPlanComponent_DemoStacks(t *testing.T) {
 		ComponentType:    "terraform",
 	}
 
-	tests := []struct {
-		name    string
-		output  string
-		execErr error
-	}{
-		{name: "success path", output: "plan output", execErr: nil},
-		{name: "failure path forwards exit code", output: "", execErr: errUtils.ExitCodeError{Code: 1}},
-	}
+	// Success path: execErr is nil, exit code forwarded as 0.
+	runCIHooksForPlanComponent(cmd, info, "plan output", nil)
 
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			runCIHooksForPlanComponent(cmd, info, tc.output, tc.execErr)
-		})
-	}
+	// Failure path: non-nil execErr is forwarded with its exit code.
+	runCIHooksForPlanComponent(cmd, info, "", errUtils.ExitCodeError{Code: 1})
 }
 
 // TestRunCIHooksForDeployComponent_DemoStacks exercises the per-component deploy
@@ -220,20 +211,11 @@ func TestRunCIHooksForApplyComponent_DemoStacks(t *testing.T) {
 		ComponentType:    "terraform",
 	}
 
-	tests := []struct {
-		name    string
-		output  string
-		execErr error
-	}{
-		{name: "success path", output: "apply output", execErr: nil},
-		{name: "failure path forwards exit code", output: "", execErr: errUtils.ExitCodeError{Code: 1}},
-	}
+	// Success path: execErr is nil, exit code forwarded as 0.
+	runCIHooksForApplyComponent(cmd, info, "apply output", nil)
 
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			runCIHooksForApplyComponent(cmd, info, tc.output, tc.execErr)
-		})
-	}
+	// Failure path: non-nil execErr is forwarded with its exit code.
+	runCIHooksForApplyComponent(cmd, info, "", errUtils.ExitCodeError{Code: 1})
 }
 
 // TestDeployPostRunE_SuppressedWhenMultiComponent verifies that deployCmd.PostRunE

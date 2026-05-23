@@ -504,8 +504,8 @@ func terraformRunWithOptions(parentCmd, actualCmd *cobra.Command, args []string,
 	if isMultiComponentExecution(&info) {
 		wasMultiComponentExecution = true
 		log.Debug("Routing to ExecuteTerraformQuery (multi-component)")
-		// Wire per-component CI hooks for plan and apply so each component gets
-		// its own summary entry instead of a single misattributed global call in PostRunE.
+		// Wire per-component CI hooks for plan, deploy, and apply so each component
+		// gets its own summary entry instead of a single misattributed global call in PostRunE.
 		if subCommand == "plan" {
 			info.PerComponentHook = func(compInfo *schema.ConfigAndStacksInfo, output string, execErr error) {
 				runCIHooksForPlanComponent(actualCmd, compInfo, output, execErr)
