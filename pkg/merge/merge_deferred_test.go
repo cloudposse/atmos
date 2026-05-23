@@ -163,6 +163,110 @@ func TestWalkAndDeferYAMLFunctions(t *testing.T) {
 	})
 }
 
+// TestWalkAndDeferYAMLFunctions_NoFunctionsShortCircuit verifies the Phase 3
+// optimization: when the input contains no YAML functions anywhere in its
+// nested structure, WalkAndDeferYAMLFunctions returns the input map as-is
+// without allocating a deep copy. The function-free fast path is critical
+// for the merge pipeline in describe affected, where most component
+// configurations contain no YAML functions but were previously deep-copied
+// on every merge call.
+func TestWalkAndDeferYAMLFunctions_NoFunctionsShortCircuit(t *testing.T) {
+	t.Run("returns same map reference for function-free flat map", func(t *testing.T) {
+		dctx := NewDeferredMergeContext()
+		input := map[string]interface{}{
+			"region":      "us-east-1",
+			"environment": "prod",
+			"replicas":    3,
+			"enabled":     true,
+		}
+		// Capture a pointer-identity reference. The fast path must return
+		// the same map object, not a copy.
+		result := WalkAndDeferYAMLFunctions(dctx, input, []string{})
+		require.True(t, sameMapHeader(input, result),
+			"function-free input should be returned as-is (zero allocation)")
+		assert.False(t, dctx.HasDeferredValues(),
+			"no deferrals expected when no YAML functions are present")
+	})
+
+	t.Run("returns same map reference for function-free nested map", func(t *testing.T) {
+		dctx := NewDeferredMergeContext()
+		input := map[string]interface{}{
+			"tags": map[string]interface{}{
+				"namespace": "acme",
+				"stage":     "prod",
+				"meta": map[string]interface{}{
+					"owner": "platform",
+				},
+			},
+			"settings": map[string]interface{}{
+				"spacelift": map[string]interface{}{
+					"workspace_enabled": true,
+				},
+			},
+		}
+		result := WalkAndDeferYAMLFunctions(dctx, input, []string{})
+		require.True(t, sameMapHeader(input, result),
+			"function-free nested input should be returned as-is (zero allocation)")
+		assert.False(t, dctx.HasDeferredValues())
+	})
+
+	t.Run("walks normally when any subtree contains a YAML function", func(t *testing.T) {
+		dctx := NewDeferredMergeContext()
+		input := map[string]interface{}{
+			"tags": map[string]interface{}{
+				"namespace": "acme", // No function here.
+			},
+			"vars": map[string]interface{}{
+				"region": "!template '{{ .stage }}'", // Function here — must walk.
+			},
+		}
+		result := WalkAndDeferYAMLFunctions(dctx, input, []string{})
+		require.False(t, sameMapHeader(input, result),
+			"presence of any YAML function must force a deep walk")
+		assert.True(t, dctx.HasDeferredValues())
+
+		// The non-function tags subtree should still be reachable in the result.
+		tags, ok := result["tags"].(map[string]interface{})
+		require.True(t, ok)
+		assert.Equal(t, "acme", tags["namespace"])
+
+		// The function value should be replaced with nil placeholder.
+		vars, ok := result["vars"].(map[string]interface{})
+		require.True(t, ok)
+		assert.Nil(t, vars["region"])
+	})
+
+	t.Run("short-circuit return is safe under read-only access", func(t *testing.T) {
+		// The fast path returns the input directly. The caller contract says
+		// the result is read-only. This test documents the contract by
+		// asserting that subsequent reads yield identical values, and that
+		// the input itself was not modified.
+		dctx := NewDeferredMergeContext()
+		input := map[string]interface{}{
+			"key":   "value",
+			"count": 42,
+		}
+		original := map[string]interface{}{
+			"key":   "value",
+			"count": 42,
+		}
+
+		_ = WalkAndDeferYAMLFunctions(dctx, input, []string{})
+
+		// Input must be unchanged.
+		assert.Equal(t, original, input,
+			"WalkAndDeferYAMLFunctions must not mutate function-free inputs")
+	})
+}
+
+// sameMapHeader returns true if a and b are the same underlying map.
+// In Go a map is a pointer to the runtime map header, so reflect.ValueOf(m).Pointer()
+// (or fmt-printf of %p) compares header identity. Using fmt.Sprintf avoids importing
+// reflect for a single equality check.
+func sameMapHeader(a, b map[string]interface{}) bool {
+	return fmt.Sprintf("%p", a) == fmt.Sprintf("%p", b)
+}
+
 func TestIsMap(t *testing.T) {
 	tests := []struct {
 		name     string

@@ -191,11 +191,17 @@ open. Optimization plan:
       dropped 98.8% (5m50s → 4s), inheritance pipeline Total dropped
       91-94%. Race-clean. Bottleneck shifted to
       `mergeComponentConfigurations`.
-- [ ] Phase 3: parallelize component-level inheritance within
-      `processComponentsInParallel`.
+- [x] Phase 3: short-circuit `WalkAndDeferYAMLFunctions` for
+      function-free subtrees. Saved 200k recursive calls, dropped
+      Total from 1m26s → 15.4s (−82%), wall-clock 4.1s → 3.3s
+      (−19% locally; ~18-35s on GHA projected). Original plan
+      (component-level parallelization) abandoned because it's
+      already in place.
 - [ ] Phase 4: optimize `locals` extraction path.
-- [ ] Phase 5 (new): optimize `mergeComponentConfigurations` —
-      newly visible 2m22s hot path post-Phase-2.
+- [ ] Phase 5 (new): skip `MergeWithDeferred` when only one input is
+      non-empty — newly visible after Phase 3.
+- [ ] Phase 6 (new): investigate `ProcessYAMLConfigFileWithContext`
+      (1m11s) — file loading hot path.
 - [ ] Re-measure on GHA and confirm wall-clock improvement.
 
 ---
@@ -418,21 +424,81 @@ calls), followed by `merge.MergeWithDeferred` (1m35s, 752µs avg,
 83,349 calls). These are the next optimization targets after Phase
 3 lands.
 
-### Phase 3 (open) — component-level parallelization
+### Phase 3 (shipped 2026-05-23) — short-circuit YAML function walk for function-free subtrees
 
-`internal/exec/stack_processor_process_stacks_helpers.go` runs
-`processComponent` serially within each stack's
-`processComponentsInParallel`. 9,261 components ÷ 719 stacks ≈ 13
-components per stack — substantial parallelism opportunity at the
-component level. Worker pool inside the stack-processing goroutine
-would push the inheritance pipeline from ~108× parallelism (current,
-on an M-series Mac) to a higher ceiling on the same hardware, and
-materially help GHA's 2-4 core runners where current parallelism is
-capped at the core count.
+**Investigation pivot.** Phase 3 was originally planned as
+component-level parallelization within `processComponentsInParallel`.
+On inspection of the code, that parallelism is **already in place**
+(one goroutine per component within each stack, fanned out by
+`processComponentsInParallel`). Adding sub-component goroutines
+would not help on 2-4 core GHA runners — they're already CPU-bound
+at the component goroutine layer.
 
-Expected impact: 2-3× wall-clock improvement on the inheritance
-pipeline. On GHA's 2-4 cores, this matters more than on a laptop
-because the current parallelism is already saturated by stack count.
+**Real target identified.** Post-Phase-2 heatmap pinpointed
+`merge.WalkAndDeferYAMLFunctions` as the next bottleneck:
+
+- 527,765 calls (recursive — each call walks every nested map and
+  recurses into nested maps).
+- 1m26s cumulative, 164µs avg per call.
+- Function-free subtrees (no `!terraform.*`, `!template`, `!store*`,
+  `!exec`, `!env` strings anywhere) were being deep-copied at every
+  recursion level for no reason: the walk allocates a new
+  `map[string]interface{}` of equal capacity at each level, copies
+  every key, recurses into nested maps. The vast majority of the
+  workload — global vars, settings, env, hooks, generate, providers
+  for components without YAML functions — was generating pure GC
+  pressure.
+
+**Fix.** Added a non-allocating pre-scan
+`hasAnyYAMLFunction(map) bool` that returns true on the first YAML
+function string encountered anywhere in the subtree. When false,
+`WalkAndDeferYAMLFunctions` returns the input map as-is — zero
+allocation. When true, the original walk path runs unchanged.
+
+**Safety.** The fast-path return shares the input map with the
+caller. The contract is documented in the function comment: callers
+must treat the result as read-only. The only call site is
+`MergeWithDeferred → Merge`, which produces a new merged map without
+mutating inputs. A new test
+(`TestWalkAndDeferYAMLFunctions_NoFunctionsShortCircuit`) verifies
+the contract: returns same pointer for function-free input, walks
+normally when any subtree contains a function, does not mutate
+function-free input.
+
+**Confirmed impact (mean of 3 runs, customer workload):**
+
+| Function | Phase 2 (Total / Avg / Calls) | Phase 3 (Total / Avg / Calls) | Reduction |
+|---|---:|---:|---:|
+| `merge.WalkAndDeferYAMLFunctions` | 1m26s / 164µs / 527,765 | **15.4s / 47µs / 328,218** | **−82% Total, 3.5× faster avg, 200k fewer calls** |
+| `merge.MergeWithDeferred` | 1m35s / 752µs | **1m10s / 851µs** | **−26% Total** |
+| `merge.Merge` | 39s / 143µs | 39s / 143µs | unchanged |
+| `mergeComponentConfigurations` | 2m22s / 15ms | **1m54s / 12.5ms** | **−20% Total** |
+
+**Wall-clock impact (local Mac):** 4.1s → **3.3s mean across 3
+runs** (−19%). Unlike Phase 2 (which eliminated lock-wait padding
+without moving wall-clock), Phase 3 reduces real allocation work and
+GC pressure, so wall-clock improves on every architecture, including
+high-core machines. Projection for 2-4 core GHA: same ~71s of
+cumulative CPU saved → 18-35s wall-clock improvement.
+
+**Race detector:**
+`go test -race -count=1 ./pkg/merge/...` green. Note: pre-existing,
+unrelated race in `extractAndAddLocalsToContext`
+(`internal/exec/stack_processor_utils.go:260`) surfaces under
+`-race` for some `TestHierarchicalImports_*` tests — confirmed
+present in main without Phase 3 changes. Tracked separately.
+
+**Bottleneck remaining post-Phase-3:**
+
+- `mergeComponentConfigurations` (1m54s) — the next-deepest hot path.
+  ~8 sequential `MergeWithDeferred` calls per component (vars,
+  settings, env, auth, providers, required_providers, hooks,
+  generate). Most components don't have YAML functions, so each call
+  now skips the walk, but the merge itself still runs. Phase 5
+  candidate: skip the merge entirely when only one input is
+  non-empty (single-input merge degenerates to a copy).
+- `ProcessYAMLConfigFileWithContext` (1m11s) — file loading. May be
+  unrelated to inheritance; deferred to Phase 6.
 
 ### Phase 4 (open) — locals extraction
 

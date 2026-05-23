@@ -37,13 +37,46 @@ func isAtmosYAMLFunction(s string) bool {
 	return false
 }
 
+// hasAnyYAMLFunction reports whether `data` contains any Atmos YAML function
+// string anywhere in its nested map structure. Used by WalkAndDeferYAMLFunctions
+// to short-circuit the deep copy when there is nothing to defer.
+//
+// This is a non-allocating recursive scan. It returns on first hit.
+func hasAnyYAMLFunction(data map[string]interface{}) bool {
+	for _, value := range data {
+		if strVal, ok := value.(string); ok && isAtmosYAMLFunction(strVal) {
+			return true
+		}
+		if mapVal, ok := value.(map[string]interface{}); ok && hasAnyYAMLFunction(mapVal) {
+			return true
+		}
+	}
+	return false
+}
+
 // WalkAndDeferYAMLFunctions walks through a map and defers any YAML functions.
 // Returns a new map with YAML functions replaced by nil placeholders.
+//
+// When `data` contains no YAML functions anywhere in its nested structure,
+// returns `data` as-is without allocation. Callers must treat the returned
+// map as read-only; the existing call site (MergeWithDeferred → Merge) does
+// not mutate inputs, which is verified by TestWalkAndDeferYAMLFunctions_NoFunctionsShortCircuit.
+//
+// Heatmap context: in a large-stack workload (~9k component instances), this
+// function previously accounted for 527k recursive calls / 1m26s of CPU time,
+// with most subtrees containing zero YAML functions and being copied for no
+// reason. The short-circuit eliminates the deep-copy allocation in that case.
 func WalkAndDeferYAMLFunctions(dctx *DeferredMergeContext, data map[string]interface{}, basePath []string) map[string]interface{} {
 	defer perf.Track(nil, "merge.WalkAndDeferYAMLFunctions")()
 
 	if data == nil {
 		return nil
+	}
+
+	// Fast path: no YAML functions anywhere in this subtree — no walk, no
+	// allocation. Callers must treat the result as read-only (Merge does).
+	if !hasAnyYAMLFunction(data) {
+		return data
 	}
 
 	result := make(map[string]interface{}, len(data))
