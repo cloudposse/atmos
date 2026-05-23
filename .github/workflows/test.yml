@@ -51,7 +51,7 @@ jobs:
             target: macos
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: runs-on/action@v1
+      - uses: runs-on/action@v2
         if: matrix.target == 'linux'
 
       - name: Build
@@ -60,11 +60,12 @@ jobs:
 
       - name: Add GNU tar to PATH (significantly faster than windows tar)
         if: matrix.target == 'windows' && ! github.event.pull_request.draft
+        shell: pwsh
         run: echo "C:\Program Files\Git\usr\bin" >> $Env:GITHUB_PATH
 
       - name: Check out code into the Go module directory
         if: ${{ ! ( matrix.target == 'windows' && github.event.pull_request.draft  ) }}
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Set up Go
         if: ${{ ! ( matrix.target == 'windows' && github.event.pull_request.draft  ) }}
@@ -110,15 +111,16 @@ jobs:
     timeout-minutes: 45
     runs-on: ${{ matrix.flavor.os }}
     steps:
-      - uses: runs-on/action@v1
+      - uses: runs-on/action@v2
         if: matrix.flavor.target == 'linux'
 
       - name: Check out code into the Go module directory
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Add GNU tar to PATH (significantly faster than windows tar)
         if: matrix.flavor.target == 'windows' && ! github.event.pull_request.draft
+        shell: pwsh
         run: echo "C:\Program Files\Git\usr\bin" >> $Env:GITHUB_PATH
 
       - name: Download build artifacts for ${{ matrix.flavor.target }}
@@ -131,7 +133,7 @@ jobs:
       - name: Add build artifacts directory to PATH for linux or macos
         if: matrix.flavor.target == 'linux' || matrix.flavor.target == 'macos'
         run: |
-          echo "${{ github.workspace }}" >> $GITHUB_PATH
+          echo "${{ github.workspace }}" >> "$GITHUB_PATH"
           chmod +x "${{ github.workspace }}/atmos"
 
       - name: Add build artifacts directory to PATH for windows
@@ -254,7 +256,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Check out code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - uses: hadolint/hadolint-action@v3.1.0
         id: hadolint
@@ -319,7 +321,7 @@ jobs:
         run: chmod +x /usr/local/bin/atmos
 
       - name: Check out code into the Go module directory
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Install Terraform
         uses: hashicorp/setup-terraform@v3
@@ -360,7 +362,7 @@ jobs:
     timeout-minutes: 20
     steps:
       - name: Check out code into the Go module directory
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Start Docker Compose
         working-directory: examples/${{ matrix.demo-folder }}
@@ -446,10 +448,11 @@ jobs:
     steps:
       - name: Check out code into the Go module directory
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Add GNU tar to flavor.target (significantly faster than windows tar)
         if: matrix.flavor.target == 'windows' && ! github.event.pull_request.draft
+        shell: pwsh
         run: echo "C:\Program Files\Git\usr\bin" >> $Env:GITHUB_PATH
 
       - name: Download build artifacts for ${{ matrix.flavor.target }}
@@ -462,7 +465,7 @@ jobs:
       - name: Add build artifacts directory to PATH for linux or macos
         if: matrix.flavor.target == 'linux' || matrix.flavor.target == 'macos'
         run: |
-          echo "${{ github.workspace }}" >> $GITHUB_PATH
+          echo "${{ github.workspace }}" >> "$GITHUB_PATH"
           chmod +x "${{ github.workspace }}/atmos"
 
       - name: Add build artifacts directory to PATH for windows
@@ -557,7 +560,7 @@ jobs:
     timeout-minutes: 20
     steps:
       - name: Check out code into the Go module directory
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Install Terraform
         uses: hashicorp/setup-terraform@v3
@@ -609,7 +612,7 @@ jobs:
     timeout-minutes: 20
     steps:
       - name: Check out code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Validate YAML Schema for Stacks
         uses: InoUno/yaml-ls-check@v1.4.0
