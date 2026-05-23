@@ -11,9 +11,8 @@ summary in the terminal.
   $ATMOS_COMPONENT_PATH`), failure mode (`warn`), and SARIF result handler.
 - Static-analysis scan runs **before plan**, so security issues surface
   before any infrastructure action.
-- Single markdown rendering used everywhere: terminal, Pro run page, PR
-  comments. The same `pkg/hooks/sarif` parser also serves `checkov` and
-  `kics`.
+- Single markdown rendering used in the terminal and on the Pro run page.
+  The same `pkg/hooks/sarif` parser also serves `checkov` and `kics`.
 
 ## Requirements
 

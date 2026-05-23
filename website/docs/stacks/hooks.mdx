@@ -15,7 +15,7 @@ lifecycle — before/after `terraform plan`, `apply`, `deploy`, or `init`.
 Built-in kinds cover the common cases (cost analysis, security scanning,
 storing outputs) and the generic `command` kind plugs in any binary you
 need. Tools auto-install through the Atmos toolchain and their output
-renders identically in your terminal, on Atmos Pro, and in PR comments.
+renders identically in your terminal and on Atmos Pro.
 </Intro>
 
 ## Hooks Schema
@@ -266,7 +266,6 @@ does), Atmos renders **the same bytes** in:
 
 - Your terminal (via `ui.MarkdownMessage`)
 - The Atmos Pro run page (when Pro is connected)
-- PR comments / CI step summaries (when CI integration is wired up)
 
 No separate "terminal-friendly" vs "Pro-friendly" variants — write
 markdown once, get it everywhere.

@@ -33,7 +33,7 @@ Meanwhile, Atmos Pro has structured upload endpoints today (`UploadInstances`, `
 2. **Tool-agnostic Pro contract** — Pro receives `kind` + `tool_version` + bytes. Adding a new tool to Atmos requires a corresponding renderer in Pro, but no API/DTO changes.
 3. **Implicit uploads** — If Pro is connected, hook output flows there. No `upload:`, `to:`, `output_format:`, or `producer:` fields in user YAML.
 4. **Natural tool output** — Tool stdout/stderr streams through Atmos's I/O layer (`pkg/io/` + `pkg/ui/`) so users see infracost / trivy output in real time, the same way they see Terraform output today.
-5. **Format symmetry** — `format: markdown` renders the same way in the terminal, on the Pro run page, and in PR comments.
+5. **Format symmetry** — `format: markdown` renders the same way in the terminal and on the Pro run page.
 6. **Toolchain-pinned** — Hook binaries resolve through `pkg/toolchain/` so the same pinned version runs locally and in CI.
 7. **Skippable at runtime** — Operators can disable hooks for a single invocation (`--skip-hooks` / `ATMOS_SKIP_HOOKS`) without editing stack config. Useful for debugging, emergency operations, or local iteration where scans / cost estimates are noise.
 8. **Back-compat** — Existing `command: store` hooks continue to work without modification.
@@ -121,7 +121,7 @@ Pro primitives, both keyed on `kind`:
 - `format: markdown` → rendered markdown
 - omitted → stored as a downloadable artifact, no inline rendering
 
-Markdown is the only generic format in v1 because it's the universal rich-content format: it renders cleanly in the terminal (via the existing `ui.Markdown()` in `pkg/ui/`), on Pro's run page, in PR comments, in step summaries — same content, every surface. Other formats (html, json, yaml, text) can be added later if a concrete need emerges; until then they're opaque artifacts.
+Markdown is the only generic format in v1 because it's the universal rich-content format: it renders cleanly in the terminal (via the existing `ui.Markdown()` in `pkg/ui/`) and on Pro's run page — same content, every surface. Other formats (html, json, yaml, text) can be added later if a concrete need emerges; until then they're opaque artifacts.
 
 **Format symmetry**: `format:` isn't a Pro-specific knob. Whatever the hook declares, every consumer renders the same way. A `format: markdown` hook's output appears as rendered markdown in the user's terminal during `atmos terraform plan` AND on the Pro run page — same bytes, same rendering.
 

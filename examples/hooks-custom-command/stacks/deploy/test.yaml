@@ -27,8 +27,6 @@ components:
             - "scripts/notify.py"
           # The script writes a markdown body to $ATMOS_OUTPUT_FILE; the
           # engine reads that and renders it via ui.MarkdownMessage, so
-          # the user sees a styled summary in the terminal. The same
-          # bytes go to Pro / PR comments when those are wired up —
-          # format symmetry.
+          # the user sees a styled summary in the terminal.
           format: markdown
           on_failure: warn

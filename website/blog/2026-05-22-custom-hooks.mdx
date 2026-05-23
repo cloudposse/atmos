@@ -53,8 +53,34 @@ Built-in kinds ship in this release:
   sharing one parser. New SARIF-emitting tools slot in trivially.
 
 Each renders a **single markdown body** that shows up identically in
-the terminal, on the Pro run page, and (where supported) in PR comments.
-Same bytes, every surface.
+the terminal and on the Pro run page. Same bytes, every surface.
+
+### Bring your own command
+
+If Atmos doesn't ship a named kind for your tool yet, use `kind: command`
+and point it at any binary or script. Atmos injects the same `ATMOS_*`
+environment variables built-in kinds use, including
+`$ATMOS_COMPONENT_PATH`, `$ATMOS_STACK`, `$ATMOS_COMPONENT`,
+`$ATMOS_OUTPUT_FILE`, and `$ATMOS_OUTPUT_DIR`.
+
+```yaml
+components:
+  terraform:
+    demo:
+      hooks:
+        notify:
+          events: [after-terraform-plan]
+          kind: command
+          command: python3
+          args:
+            - scripts/notify.py
+          format: markdown
+          on_failure: warn
+```
+
+The script can stream progress to stdout/stderr in real time. If it
+writes markdown to `$ATMOS_OUTPUT_FILE`, Atmos renders that body in the
+terminal just like the built-in scanner summaries.
 
 ### `dependencies.tools` triggers auto-install
 
@@ -137,14 +163,6 @@ This is the first cut. On deck:
 - **Atmos Pro upload** — the engine already produces a typed `Summary`
   envelope and an `Artifact` blob per hook invocation. The Pro backend
   picks them up when a Pro instance is connected.
-- **Terraform component dependency auto-install** — workflows, custom
-  commands, ansible components, and hooks already auto-install via the
-  same `dependencies.tools` surface. Terraform components themselves
-  are next, so the terraform binary auto-installs the same way.
-- **Planfile threading** — `$ATMOS_PLANFILE` is exposed but the
-  terraform engine doesn't yet stash the planfile path. Wiring this
-  unlocks cleaner integration for tools that consume planfiles
-  (infracost, OPA/Sentinel, terraform-cost-estimation).
 
 This feature is **experimental** — the YAML shape is stable for v1
 but may grow new fields as we add Pro integration. Pin your Atmos

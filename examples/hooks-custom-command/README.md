@@ -12,8 +12,8 @@ Python script as an `after-terraform-plan` hook — the pattern for
   kinds use. No Go code, no contribution to Atmos required.
 - `format: markdown` tells Atmos the script's `$ATMOS_OUTPUT_FILE` is
   markdown; the engine renders it via `ui.MarkdownMessage()` in the
-  terminal. The same bytes flow to Pro / PR comments when those are
-  connected — _format symmetry_.
+  terminal. The same bytes flow to Pro when it is connected — _format
+  symmetry_.
 - The script (`scripts/notify.py`) is intentionally trivial. In real
   use this is where you'd hit a Slack webhook, file a Jira ticket,
   append to a deployment log, or trigger a compliance check.
