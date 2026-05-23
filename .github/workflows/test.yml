@@ -24,6 +24,16 @@ env:
   HELMFILE_VERSION: "v1.1.0"
   PACKER_VERSION: "1.14.2"
 
+# Grant `packages: read` so jobs that pull OCI images from ghcr.io
+# (e.g. vendor pulls in mock/acceptance tests) can authenticate with
+# the auto-generated GITHUB_TOKEN. The default PR-event scope is
+# `contents: read` only, which causes ghcr.io to reject the token with
+# `DENIED: denied` whenever credentials are sent (as happens on Windows
+# runners that have no usable Docker keychain entry for ghcr.io).
+permissions:
+  contents: read
+  packages: read
+
 jobs:
   # ensure the code builds...
   build:
