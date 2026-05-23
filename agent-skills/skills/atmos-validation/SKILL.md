@@ -328,13 +328,12 @@ Add a validation step early in your CI/CD pipeline:
 jobs:
   validate:
     runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/cloudposse/atmos:${{ vars.ATMOS_VERSION }}
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v4
-
-      - name: Setup Atmos
-        uses: cloudposse/github-action-setup-atmos@v2
-        with:
-          atmos-version: 1.88.0
 
       - name: Validate All Stacks
         run: atmos validate stacks

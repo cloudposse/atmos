@@ -87,7 +87,6 @@ Key flags:
 - `--clone-target-ref` -- Clone the target reference instead of checking out
 - `--include-dependents` -- Include components that depend on changed components
 - `--include-settings` -- Include the settings section for each affected component
-- `--include-spacelift-admin-stacks` -- Include Spacelift admin stacks of affected stacks
 - `--exclude-locked` -- Exclude components marked as locked
 - `--upload` -- Upload results to an HTTP endpoint (for CI/CD integration)
 - `--ssh-key` -- Path to PEM-encoded private key for SSH cloning
@@ -116,7 +115,7 @@ Display the final merged CLI configuration (atmos.yaml resolution result).
 ```bash
 atmos describe config
 atmos describe config --format json
-atmos describe config -q '.stacks.name_pattern'
+atmos describe config -q '.stacks.name_template'
 ```
 
 ### atmos describe workflows

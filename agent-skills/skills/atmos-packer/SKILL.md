@@ -250,6 +250,19 @@ atmos packer build ami-builder --stack dev
 # -> Packer runs
 ```
 
+When using `source`, prefer enabling `provision.workdir` so each component-stack instance runs from
+an isolated staged directory:
+
+```yaml
+components:
+  packer:
+    ami-builder:
+      source: "github.com/cloudposse/packer-templates//ami-builder?ref=1.0.0"
+      provision:
+        workdir:
+          enabled: true
+```
+
 ### Source Commands
 
 For fine-grained control over source management:

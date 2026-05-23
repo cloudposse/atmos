@@ -438,7 +438,7 @@ The manifest schema defines these top-level properties (each referencing a defin
 - `vars` -- Global variables
 - `hooks` -- Lifecycle hooks
 - `env` -- Environment variables
-- `settings` -- Settings including validation, depends_on, spacelift, atlantis, templates
+- `settings` -- Settings including validation, atlantis, templates, and custom metadata
 - `locals` -- File-scoped local variables for templates (do not inherit across imports)
 - `components` -- Component definitions (terraform, helmfile, packer)
 - `overrides` -- Override section
@@ -457,14 +457,13 @@ Key definitions in the `definitions` section:
 | `packer_components` | Map of Packer component names to manifests |
 | `packer_component_manifest` | Single Packer component |
 | `metadata` | Component metadata (type, enabled, component, inherits, workspace, custom, locked) |
-| `settings` | Settings with validation, depends_on, spacelift, atlantis, templates |
+| `settings` | Settings with validation, atlantis, templates, and custom metadata |
 | `validation` / `validation_manifest` | Validation rules (schema_type, schema_path, module_paths) |
 | `backend_type` | Backend type enum (local, s3, remote, vault, static, azurerm, gcs, cloud) |
 | `backend` / `backend_manifest` | Backend config per type |
 | `overrides` | Override section (command, vars, env, settings, providers) |
 | `workflows` / `workflow_manifest` | Workflow definitions with steps |
-| `depends_on` / `depends_on_manifest` | Dependency declarations |
-| `spacelift` | Spacelift integration settings |
+| `depends_on` / `depends_on_manifest` | Legacy dependency declarations; prefer `dependencies.components` |
 | `atlantis` | Atlantis integration settings |
 | `source` / `source_retry` | JIT vendoring source configuration |
 | `provision` / `provision_workdir` | Isolated workdir provisioner |

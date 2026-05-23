@@ -102,7 +102,7 @@ The `atmos.yaml` file supports these top-level sections. Each section is documen
 | Section | Purpose | Related Skill |
 |---------|---------|---------------|
 | `settings` | Global CLI behavior: terminal, telemetry, experimental features | -- |
-| `integrations` | Atlantis, GitHub Actions, Atmos Pro configuration | `atmos-gitops` |
+| `integrations` | Atlantis, GitHub Actions, Atmos Pro configuration | `atmos-ci` |
 | `logs` | Log level and log file path | -- |
 | `errors` | Error format and Sentry integration | -- |
 | `env` | Global environment variables for all operations | -- |

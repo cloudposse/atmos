@@ -92,8 +92,10 @@ components:
           - us-east-1a
           - us-east-1b
       settings:
-        spacelift:
-          workspace_enabled: true
+        validation:
+          check-cidr:
+            schema_type: jsonschema
+            schema_path: schemas/vpc.json
 
     eks-cluster:
       metadata:
@@ -110,12 +112,51 @@ Each component configuration can include these sections:
 | `metadata` | Component location, inheritance, type, and Atmos behavior |
 | `vars` | Input variables passed to Terraform/Helmfile/Packer |
 | `env` | Environment variables set during execution |
-| `settings` | Integration metadata (Spacelift, validation, depends_on) |
+| `settings` | Integration metadata such as Atlantis, validation, and custom settings |
+| `dependencies` | Component, file, folder, and tool dependencies |
 | `hooks` | Lifecycle event handlers |
 | `backend` / `backend_type` | Terraform state backend configuration |
 | `providers` | Terraform provider configuration |
 | `command` | Override the executable (e.g., `tofu` instead of `terraform`) |
 | `auth` | Authentication identity reference |
+
+## Dependencies
+
+Use `dependencies.components` for component ordering and affected/dependent analysis:
+
+```yaml
+components:
+  terraform:
+    app:
+      dependencies:
+        components:
+          - component: vpc
+          - component: database
+            stack: plat-ue2-prod
+          - kind: file
+            path: configs/app.yaml
+          - kind: folder
+            path: src/lambda
+```
+
+Do not add new `settings.depends_on` examples. If a repository already uses that legacy field,
+recommend migrating it to `dependencies.components`.
+
+## Source Provisioning and Workdirs
+
+Components can declare `source` in stack config for just-in-time provisioning from Git, OCI, S3,
+HTTP, or local paths. When source provisioning is used, prefer `provision.workdir.enabled: true`
+so each component-stack instance gets an isolated execution directory.
+
+```yaml
+components:
+  terraform:
+    vpc:
+      source: "github.com/cloudposse/terraform-aws-components//modules/vpc?ref=1.450.0"
+      provision:
+        workdir:
+          enabled: true
+```
 
 ## Abstract vs Real Components
 

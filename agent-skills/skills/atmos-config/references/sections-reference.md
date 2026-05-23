@@ -29,7 +29,6 @@ stacks:
     - "catalog/**/*"
     - "mixins/**/*"
   name_template: "{{ .vars.tenant }}-{{ .vars.environment }}-{{ .vars.stage }}"
-  name_pattern: "{tenant}-{environment}-{stage}"  # Legacy (superseded by name_template)
 ```
 
 | Field | Description |
@@ -38,7 +37,7 @@ stacks:
 | `included_paths` | Glob patterns identifying deployable stack files. |
 | `excluded_paths` | Glob patterns to skip (catalog, mixin, defaults files). |
 | `name_template` | Go template computing stack names from merged vars. Recommended. |
-| `name_pattern` | Legacy token-based naming pattern. Use `name_template` instead. |
+| `name_pattern` | Legacy token-based naming pattern. If found, migrate to `name_template` or explicit stack `name`. |
 
 Environment variables: `ATMOS_STACKS_BASE_PATH`, `ATMOS_STACKS_INCLUDED_PATHS`, `ATMOS_STACKS_EXCLUDED_PATHS`,
 `ATMOS_STACKS_NAME_TEMPLATE`, `ATMOS_STACKS_NAME_PATTERN`.
@@ -72,7 +71,7 @@ components:
   helmfile:
     base_path: "components/helmfile"
     command: "helmfile"
-    cluster_name_pattern: "{namespace}-{tenant}-{environment}-{stage}-eks-cluster"
+    cluster_name_template: "{{ .vars.namespace }}-{{ .vars.tenant }}-{{ .vars.environment }}-{{ .vars.stage }}-eks-cluster"
 
   packer:
     base_path: "components/packer"
@@ -94,7 +93,7 @@ components:
 | `terraform.init_run_reconfigure` | Pass `-reconfigure` to `init`. |
 | `terraform.auto_generate_backend_file` | Generate `backend.tf.json` automatically. |
 | `terraform.shell` | Configuration for `atmos terraform shell`. |
-| `helmfile.cluster_name_pattern` | Pattern for EKS cluster name resolution. |
+| `helmfile.cluster_name_template` | Template for EKS cluster name resolution. |
 
 For details on specific component types, see the `atmos-terraform`, `atmos-helmfile`,
 `atmos-packer`, and `atmos-ansible` skills.
@@ -308,16 +307,22 @@ Configures CLI tool version management.
 ```yaml
 toolchain:
   install_path: ".atmos/tools"
-  file_path: ".tool-versions"
+  versions_file: ".tool-versions"
   use_lock_file: true
   lock_file: ".tool-versions.lock"
   registries:
-    - type: aqua
-      ref: "v4.332.0"
-    - type: atmos
+    - name: company
+      type: atmos
+      priority: 150
       tools:
-        - name: tflint
-          version: "0.54.0"
+        company/policyctl:
+          type: github_release
+          url: "policyctl_{{.Version}}_{{.OS}}_{{.Arch}}.tar.gz"
+          format: tar.gz
+    - name: aqua
+      type: aqua
+      source: https://github.com/aquaproj/aqua-registry/tree/main/pkgs
+      priority: 10
   aliases:
     tf: hashicorp/terraform
 ```
@@ -353,16 +358,11 @@ integrations:
     project_templates: {}
     workflow_templates: {}
 
-  github:
-    gitops:
-      terraform-version: "1.9.8"
-      infracost-enabled: false
-      artifact-storage:
-        region: us-east-1
-        bucket: "gitops-plan-storage"
+  # Native CI workflows should run Atmos directly.
+  # Deprecated GitHub wrapper-action settings are not recommended.
 ```
 
-For complete integration configuration, see the `atmos-gitops` skill.
+For complete CI configuration, see the `atmos-ci` skill.
 
 ## settings
 

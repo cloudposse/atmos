@@ -27,7 +27,7 @@ Atmos resolves the stack name using this priority (highest first):
 
 1. `name` field in the stack manifest (explicit override).
 2. `name_template` in `atmos.yaml` (Go template).
-3. `name_pattern` in `atmos.yaml` (token pattern).
+3. Legacy `name_pattern` in `atmos.yaml` (migration-only; recommend `name_template` or explicit `name`).
 4. File basename (e.g., `prod.yaml` becomes `prod`).
 
 ## Stack Manifest Structure
@@ -140,15 +140,21 @@ env:
 
 ### settings
 
-Integration metadata and configuration not passed to Terraform. Used for Spacelift, Atlantis, validation, and other Atmos integrations.
+Integration metadata and configuration not passed to Terraform. Used for Atlantis, validation, and other Atmos integrations.
 
 ```yaml
 settings:
-  spacelift:
-    workspace_enabled: true
-    autodeploy: false
-  depends_on:
-    - vpc
+  validation:
+    check-cidr:
+      schema_type: jsonschema
+      schema_path: schemas/vpc.json
+dependencies:
+  components:
+    - component: vpc
+    - component: dns-zone
+      stack: plat-ue2-prod
+    - kind: file
+      path: configs/service.yaml
 ```
 
 ### metadata
@@ -246,8 +252,9 @@ overrides:
   vars:
     custom_tag: override
   settings:
-    spacelift:
-      autodeploy: true
+    validation:
+      check-cidr:
+        schema_path: schemas/vpc-override.json
 ```
 
 ## Deep-Merge Behavior and Override Precedence
@@ -340,7 +347,7 @@ Atmos provides YAML functions for dynamic value resolution at runtime:
 3. **Keep inheritance shallow**: Limit to 2-3 levels of `metadata.inherits` to maintain readability.
 4. **Use `_defaults.yaml` at every level**: Define shared vars, env, and settings at the appropriate organizational level.
 5. **Exclude non-deployable files**: Configure `excluded_paths` to prevent catalog, mixin, and defaults files from being treated as top-level stacks.
-6. **Prefer `name_template` over `name_pattern`**: The Go template approach is more flexible and is the recommended method.
+6. **Use `name` or `name_template` for stack naming**: If legacy `name_pattern` is present, migrate it.
 7. **Use `atmos describe stacks` liberally**: Always verify the resolved configuration before applying changes.
 
 ## References

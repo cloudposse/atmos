@@ -56,7 +56,10 @@ auth:
         audience: sts.us-east-1.amazonaws.com  # Optional: defaults to STS endpoint for region
 ```
 
-GitHub Actions workflow must have `id-token: write` permission.
+GitHub Actions workflow must have `id-token: write` permission and should select the CI profile with
+`ATMOS_PROFILE`. The cloud IAM trust policy must constrain GitHub OIDC `sub` claims to the intended
+repository plus branch or GitHub environment, such as `repo:ORG/REPO:ref:refs/heads/main` or
+`repo:ORG/REPO:environment:prod`.
 
 ### GCP Application Default Credentials
 
@@ -347,6 +350,9 @@ auth:
       principal:
         assume_role: arn:aws:iam::123456789012:role/GitHubActionsRole
 ```
+
+In GitHub Actions, do not add a routine `atmos auth login` step for OIDC jobs. Atmos resolves
+credentials when the command runs.
 
 ### GCP WIF with Service Account Impersonation
 

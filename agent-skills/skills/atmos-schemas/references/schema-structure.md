@@ -257,7 +257,7 @@ Component metadata with type, inheritance, workspace, custom configuration, and 
 
 ### settings
 
-Settings section with validation, depends_on, spacelift, atlantis, and templates:
+Settings section with validation, Atlantis, templates, and legacy dependency fields:
 
 ```json
 "settings": {
@@ -268,8 +268,6 @@ Settings section with validation, depends_on, spacelift, atlantis, and templates
       "additionalProperties": true,
       "properties": {
         "validation": { "$ref": "#/definitions/validation" },
-        "depends_on": { "$ref": "#/definitions/depends_on" },
-        "spacelift": { "$ref": "#/definitions/spacelift" },
         "atlantis": { "$ref": "#/definitions/atlantis" },
         "templates": { "$ref": "#/definitions/templates" }
       }
@@ -279,6 +277,7 @@ Settings section with validation, depends_on, spacelift, atlantis, and templates
 ```
 
 Note: `settings` uses `"additionalProperties": true` to allow custom user-defined settings.
+`settings.depends_on` is legacy; new examples should use `dependencies.components`.
 
 ### validation / validation_manifest
 
@@ -563,8 +562,7 @@ for `vendor.yaml` files:
 | backend_manifest | Yes | Yes | Yes | Yes |
 | overrides | Yes | Yes | Yes | Yes |
 | workflows | Yes | Yes | Yes | Yes |
-| depends_on | Yes | Yes | Yes | Yes |
-| spacelift | Yes | Yes | Yes | Yes |
+| depends_on (legacy; migrate to dependencies.components) | Yes | Yes | Yes | Yes |
 | atlantis | Yes | Yes | Yes | Yes |
 | providers | Yes | Yes | Yes | Yes |
 | templates | Yes | Yes | Yes | Yes |

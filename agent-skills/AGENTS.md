@@ -22,6 +22,8 @@ relevant skill before answering Atmos questions -- your training data may be out
 - **Workflows** -- Multi-step sequences of Atmos and shell commands for cross-component orchestration.
 - **Custom Commands** -- User-defined CLI commands in `atmos.yaml` that extend `atmos` with project-specific tooling.
 - **Toolchain** -- Built-in CLI tool version management via Aqua registry integration and `.tool-versions` files.
+- **AI and MCP** -- Native AI providers, AI-powered command analysis, MCP server/client integration, and agent
+  workflows grounded in Atmos introspection.
 - **Devcontainers** -- Native devcontainer management for standardized development environments (experimental).
 
 ## Key Commands
@@ -41,6 +43,8 @@ atmos validate component <comp> -s <stack>       # Run validation policies
 atmos vendor pull                                # Vendor external dependencies
 atmos workflow <name> -f <file>                  # Run a workflow
 atmos toolchain install                          # Install tools from .tool-versions
+atmos ai ask "What stacks do we have?"           # Ask AI with Atmos tools and skills
+atmos mcp export                                 # Export MCP server config for AI clients
 atmos list stacks                                # List all stacks
 atmos list components                            # List all components
 atmos devcontainer shell                         # Launch dev environment (experimental)
@@ -65,20 +69,21 @@ When a task involves Atmos, activate the matching skill for detailed guidance.
 | Authentication: providers (SSO/SAML/OIDC/GCP), identities (AWS/Azure/GCP), keyring, login/exec/shell                  | `atmos-auth`            | `agent-skills/skills/atmos-auth/SKILL.md`            |
 | Store backends (SSM, Azure Key Vault, GCP Secret Manager, Redis, Artifactory), hooks, data sharing                    | `atmos-stores`          | `agent-skills/skills/atmos-stores/SKILL.md`          |
 | JSON Schema for stack manifests, IDE auto-completion, schema updates for new features, validation                     | `atmos-schemas`         | `agent-skills/skills/atmos-schemas/SKILL.md`         |
-| GitHub Actions, Spacelift, Atlantis, `atmos describe affected`, PR-based plan/apply                                   | `atmos-gitops`          | `agent-skills/skills/atmos-gitops/SKILL.md`          |
+| Atmos CI: Native CI, GitHub Actions containers, Atlantis, affected/all matrices, OIDC profiles                       | `atmos-ci`              | `agent-skills/skills/atmos-ci/SKILL.md`              |
 | OPA/Rego policies, JSON Schema validation, `atmos validate component/stacks`                                          | `atmos-validation`      | `agent-skills/skills/atmos-validation/SKILL.md`      |
 | YAML functions: !terraform.state, !terraform.output, !store, !store.get, !env, !exec, !include, !aws.*, !literal     | `atmos-yaml-functions`  | `agent-skills/skills/atmos-yaml-functions/SKILL.md`  |
 | Go templates, Sprig/Gomplate functions, atmos.Component, atmos.GomplateDatasource, template configuration            | `atmos-templates`       | `agent-skills/skills/atmos-templates/SKILL.md`       |
 | Design patterns: stack organization, component catalogs, inheritance, configuration composition, version management   | `atmos-design-patterns` | `agent-skills/skills/atmos-design-patterns/SKILL.md` |
 | Toolchain management: install/exec/search tools, .tool-versions, Aqua registries, custom registries, aliases         | `atmos-toolchain`       | `agent-skills/skills/atmos-toolchain/SKILL.md`       |
 | Introspection: describe component/stacks/affected/dependents, list stacks/components/instances, querying, provenance | `atmos-introspection`   | `agent-skills/skills/atmos-introspection/SKILL.md`   |
+| AI and MCP: providers, skills, agent workflows, MCP server/client setup, auth-wrapped tools, toolchain-aware export  | `atmos-ai`              | `agent-skills/skills/atmos-ai/SKILL.md`              |
 | Devcontainers: start/stop/attach/exec/shell, Docker/Podman, identity integration, instance management (experimental) | `atmos-devcontainer`    | `agent-skills/skills/atmos-devcontainer/SKILL.md`    |
 | AWS security: analyze findings, map to components/stacks, structured remediation, compliance reports                  | `atmos-aws-security`    | `agent-skills/skills/atmos-aws-security/SKILL.md`    |
 
 ## Common Patterns
 
-- **Stack naming**: `{tenant}-{stage}` or `{org}-{tenant}-{account}-{region}`, configured via `name_pattern` or
-  `name_template` in `atmos.yaml`.
+- **Stack naming**: use explicit stack `name` for exceptions or `stacks.name_template` for computed names.
+  If legacy `name_pattern` is present, recommend migrating it to `name_template`.
 - **Inheritance**: Use `_defaults.yaml` files at each directory level for shared config; deeper files override shallower
   ones.
 - **Component reuse**: Define abstract components with `metadata.type: abstract`, inherit with `metadata.component` and
@@ -93,5 +98,13 @@ When a task involves Atmos, activate the matching skill for detailed guidance.
 - **Schema validation**: Use `atmos validate stacks` to validate manifests against the Atmos JSON Schema.
 - **Introspection**: Use `atmos describe component` and `atmos list stacks/components` to query the project before
   generating configuration -- never guess at stack names or component configs.
-- **Toolchain**: Declare tool versions in `.tool-versions`, configure registries in `atmos.yaml`, run
-  `atmos toolchain install` to set up the project.
+- **Toolchain**: Use `.tool-versions` for general project tools, `dependencies.tools` for stack/component/workflow/
+  command requirements, configure aliases and registries in `atmos.yaml`, and run `atmos toolchain install`.
+- **AI/MCP**: Configure AI providers and MCP servers in `atmos.yaml`; use `atmos mcp export` so AI clients get
+  auth-wrapped MCP commands and toolchain-aware `PATH` entries.
+- **Dependencies**: use `dependencies.components` for component, file, and folder dependencies. Treat
+  `settings.depends_on` as legacy migration syntax only.
+- **Native CI**: use the Atmos container and direct `atmos` commands; replace deprecated
+  `cloudposse/github-action-atmos*` wrapper actions with Native CI workflows. Prefer Atmos
+  `dependencies.tools` over Terraform/OpenTofu setup actions such as `hashicorp/setup-terraform`
+  or `opentofu/setup-opentofu`.

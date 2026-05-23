@@ -313,56 +313,48 @@ atmos terraform generate planfile vpc -s dev --format=yaml --file=planfile.yaml
 
 ## Authentication Configuration
 
-Atmos integrates authentication so components can automatically use the correct credentials.
-
-### Global Auth in atmos.yaml
-
-```yaml
-auth:
-  providers:
-    acme-sso:
-      kind: aws-sso
-      start_url: https://acme.awsapps.com/start
-      region: us-east-1
-
-  identities:
-    prod-admin:
-      kind: aws
-      via:
-        provider: acme-sso
-      principal:
-        name: AdministratorAccess
-        account:
-          id: "333333333333"
-      default: true
-```
-
-### Component-Level Identity
-
-```yaml
-components:
-  terraform:
-    vpc:
-      auth:
-        identity: prod-admin
-```
-
-### Runtime Override
+Terraform commands can use Atmos auth identities from `atmos.yaml` or component-level `auth.identity`.
+Keep detailed provider/profile setup in `atmos-auth`; this skill should only recommend the Terraform
+runtime controls:
 
 ```shell
-# Use a specific identity
 atmos terraform plan vpc -s prod --identity prod-admin
-
-# Skip authentication
 atmos terraform plan vpc -s dev --identity ""
 ```
 
 ## Backend Provisioning
 
-Set `provision.backend.enabled: true` in stack config to auto-provision backend infrastructure
-(S3 buckets, etc.), solving the Terraform bootstrap problem. Manual provisioning is available via
-`atmos terraform backend create/list/describe/update/delete`. See
+Backend configuration and backend provisioning are different:
+
+- `backend_type` and `backend` tell Terraform where state lives and generate `backend.tf.json`.
+- `provision.backend.enabled: true` tells Atmos to create the backend storage before first use.
+
+Set `provision.backend.enabled: true` in stack config to auto-provision backend infrastructure,
+solving the Terraform bootstrap problem. Manual provisioning is available via
+`atmos terraform backend create/list/describe/update/delete`. Backend provisioning currently applies
+to Terraform components. See
 [references/backend-configuration.md](references/backend-configuration.md) for details.
+
+## Source Provisioning and Workdirs
+
+Use `source` for just-in-time component provisioning and pair it with `provision.workdir` for isolated
+per-instance execution. Workdirs prevent shared `.terraform`, lockfile, backend, and varfile collisions
+when the same component source is used by multiple stacks or runs.
+
+```yaml
+components:
+  terraform:
+    vpc:
+      source:
+        uri: github.com/cloudposse/terraform-aws-components//modules/vpc
+        version: 1.450.0
+      provision:
+        workdir:
+          enabled: true
+```
+
+With workdirs enabled, Atmos stages the provisioned source into the instance workdir and runs Terraform
+there. Without workdirs, source provisioning targets the component path.
 
 ## Interactive Shell
 
@@ -488,6 +480,9 @@ corresponding `ATMOS_COMPONENTS_TERRAFORM_*` environment variable override. See
 
 8. **Enable backend provisioning** (`provision.backend.enabled: true`) to solve the Terraform bootstrap
    problem and ensure backends exist before first use.
+
+9. **Use source provisioning with workdirs** when components are pulled via `source`, especially in CI
+   or any multi-stack workflow that can run concurrently.
 
 ## Additional Resources
 
