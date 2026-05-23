@@ -482,8 +482,9 @@ func TestRunAll_EventFiltering(t *testing.T) {
 }
 
 func TestRunAll_SkipHooksBypassesPreflightBinaryCheck(t *testing.T) {
+	prev := viper.Get("skip-hooks")
 	viper.Set("skip-hooks", "missing-tool")
-	t.Cleanup(func() { viper.Set("skip-hooks", "") })
+	t.Cleanup(func() { viper.Set("skip-hooks", prev) })
 
 	h := Hooks{
 		config: &schema.AtmosConfiguration{},
