@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -52,6 +53,7 @@ var securityAnalyzeCmd = &cobra.Command{
 	Long:  securityLongMarkdown,
 	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
+		startTime := time.Now().UTC()
 		// Bind parsed flags to Viper for precedence handling.
 		v := viper.GetViper()
 		if err := securityParser.BindFlagsToViper(cmd, v); err != nil {
@@ -252,6 +254,7 @@ var securityAnalyzeCmd = &cobra.Command{
 		tagMapping := &atmosConfig.AWS.Security.TagMapping
 		report := buildSecurityReport(findings, stack, component, tagMapping)
 		report.GroupFindings = !noGroup
+		report.Invocation = buildReportInvocation(startTime, region, findings, stack)
 
 		// Determine output destination.
 		output := os.Stdout
@@ -299,7 +302,7 @@ func init() {
 		flags.WithStringFlag("severity", "", "critical,high", "Comma-separated severity filter"),
 		flags.WithStringFlag("source", "", "all", "Finding source: security-hub, config, inspector, guardduty, macie, access-analyzer, all"),
 		flags.WithStringFlag("framework", "", "", "Compliance framework filter"),
-		flags.WithStringFlag("format", "f", "markdown", "Output format: markdown, json, yaml, csv, sarif"),
+		flags.WithStringFlag("format", "f", "markdown", "Output format: markdown, json, yaml, csv, sarif, ocsf"),
 		flags.WithStringFlag("file", "", "", "Write output to file instead of stdout"),
 		flags.WithIntFlag("max-findings", "", defaultMaxFindings, "Maximum findings to analyze"),
 		flags.WithStringFlag("region", "", "", "AWS region override"),
@@ -348,6 +351,68 @@ func buildSecurityReport(findings []Finding, stack, component string, tagMapping
 	}
 
 	return report
+}
+
+func buildReportInvocation(startTime time.Time, region string, findings []Finding, stack string) *pkgsecurity.ReportInvocation {
+	endTime := time.Now().UTC()
+	return &pkgsecurity.ReportInvocation{
+		CommandLine:         strings.Join(os.Args, " "),
+		Arguments:           append([]string(nil), os.Args[1:]...),
+		StartTimeUTC:        startTime,
+		EndTimeUTC:          endTime,
+		ExitCode:            0,
+		ExitCodeDescription: "Success",
+		WorkingDirectory:    mustGetwd(),
+		ExecutionSuccessful: true,
+		AccountsScanned:     uniqueFindingValues(findings, func(f *Finding) string { return f.AccountID }),
+		RegionsScanned:      uniqueRegions(region, findings),
+		StacksScanned:       uniqueStacks(stack, findings),
+	}
+}
+
+func mustGetwd() string {
+	wd, err := os.Getwd()
+	if err != nil {
+		return ""
+	}
+	return wd
+}
+
+func uniqueRegions(region string, findings []Finding) []string {
+	values := uniqueFindingValues(findings, func(f *Finding) string { return f.Region })
+	if len(values) == 0 && region != "" {
+		return []string{region}
+	}
+	return values
+}
+
+func uniqueStacks(stack string, findings []Finding) []string {
+	if stack != "" {
+		return []string{stack}
+	}
+	return uniqueFindingValues(findings, func(f *Finding) string {
+		if f.Mapping == nil {
+			return ""
+		}
+		return f.Mapping.Stack
+	})
+}
+
+func uniqueFindingValues(findings []Finding, valueFn func(*Finding) string) []string {
+	seen := make(map[string]struct{})
+	for i := range findings {
+		value := valueFn(&findings[i])
+		if value == "" {
+			continue
+		}
+		seen[value] = struct{}{}
+	}
+	values := make([]string, 0, len(seen))
+	for value := range seen {
+		values = append(values, value)
+	}
+	sort.Strings(values)
+	return values
 }
 
 // parseSource validates and returns the finding source.

@@ -125,3 +125,16 @@ If reviving, the blog/docs/roadmap copy used in PR #2483 (subsequently reverted)
 - `website/src/data/roadmap.js` — milestone label "SARIF output and Atmos Pro upload (experimental)".
 
 The SARIF half of that PR shipped; this PRD describes only the upload half.
+
+## Future Wire Formats
+
+OCSF 1.4.0 was added as a sibling `--format=ocsf` output (Detection Finding class 2004 with cloud + vulnerability profiles) for SIEM/data-lake consumers. When the Atmos Pro upload endpoint is revived, OCSF is a candidate alternative wire format — particularly if downstream Atmos Pro features want to feed events into a security data lake (Splunk, Snowflake) rather than (or in addition to) the SARIF-shaped GitHub code-scanning surface.
+
+If we add an OCSF upload path:
+
+- Envelope mirrors the SARIF envelope: `Payload struct { Repo, SHA, OCSF json.RawMessage }`. Server inspects a `content_type` field (`"sarif"` vs `"ocsf"`) to route.
+- Reuses `pkgsecurity.BuildOCSFEvents(report)` then `json.Marshal` — same canonicalization story as `BuildSARIFLog`.
+- Same auth (`ATMOS_PRO_TOKEN` or GitHub OIDC) and retry semantics.
+- `--upload-format=sarif|ocsf` (default `sarif`) is the most natural flag shape; alternatively `--upload-ocsf` as a parallel boolean to the existing `--upload`.
+
+This is a design candidate for the endpoint revival, **not** a v1 commitment. The decision belongs to the Pro endpoint design that gates this PRD coming off ice.

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -104,6 +105,74 @@ func TestBuildSARIFLog_MappedFindingProducesPhysicalLocation(t *testing.T) {
 	assert.Equal(t, "atmos terraform apply s3-bucket -s tenant1-ue1-prod", mapped.Properties["remediation_deploy_command"])
 }
 
+func TestBuildSARIFLog_SourceEnrichment(t *testing.T) {
+	report := newTestSecurityReport()
+	firstObserved := fixedTime.Add(-48 * time.Hour)
+	lastObserved := fixedTime.Add(-24 * time.Hour)
+	updated := fixedTime
+	sourceScore := 9.8
+	report.Invocation = &ReportInvocation{
+		CommandLine:         "atmos aws security analyze --format sarif",
+		Arguments:           []string{"aws", "security", "analyze", "--format", "sarif"},
+		StartTimeUTC:        fixedTime.Add(-time.Minute),
+		EndTimeUTC:          fixedTime,
+		ExitCode:            0,
+		ExitCodeDescription: "Success",
+		WorkingDirectory:    "/github/workspace",
+		ExecutionSuccessful: true,
+		AccountsScanned:     []string{"123456789012"},
+		RegionsScanned:      []string{"us-east-1"},
+		StacksScanned:       []string{"tenant1-ue1-prod"},
+	}
+	report.Findings[0].SecurityControlID = "S3.1"
+	report.Findings[0].ComplianceStandards = []ComplianceStandard{
+		{ID: "ruleset/cis-aws-foundations-benchmark/v/1.4.0", Name: "cis-aws-foundations-benchmark", Version: "1.4.0"},
+	}
+	report.Findings[0].SourceSeverity = &SourceSeverity{Score: &sourceScore, Label: "vendor-critical"}
+	report.Findings[0].SourceLifecycle = &SourceLifecycle{WorkflowStatus: "NEW", RecordState: "ACTIVE", ComplianceStatus: "FAILED"}
+	report.Findings[0].SourceTimestamps = &SourceTimestamps{FirstObservedAt: &firstObserved, LastObservedAt: &lastObserved, UpdatedAt: &updated}
+	report.Findings[0].SourceRemediation = &SourceRemediation{Text: "Enable S3 block public access.", URL: "https://docs.aws.amazon.com/s3/"}
+	report.Findings[0].SourceURL = "https://console.aws.amazon.com/securityhub/home#/findings/finding-1"
+	report.Findings[0].Vulnerability = &VulnerabilityDetails{
+		ID:             "CVE-2026-0003",
+		CVEID:          "CVE-2026-0003",
+		CWEIDs:         []string{"CWE-79"},
+		EPSSScore:      0.55,
+		PackageName:    "openssl",
+		PackageVersion: "1.0.1",
+		FixedInVersion: "1.0.2",
+	}
+
+	log := BuildSARIFLog(report)
+	run := log.Runs[0]
+	require.Len(t, run.Invocations, 1)
+	assert.Equal(t, "atmos aws security analyze --format sarif", run.Invocations[0].CommandLine)
+	assert.NotEmpty(t, run.OriginalURIBaseIDs["%SRCROOT%"].URI)
+	assert.Len(t, run.Taxonomies, 2)
+
+	var result *Result
+	for i := range run.Results {
+		if run.Results[i].RuleID == "S3.1" {
+			result = &run.Results[i]
+			break
+		}
+	}
+	require.NotNil(t, result)
+	assert.Equal(t, "https://console.aws.amazon.com/securityhub/home#/findings/finding-1", result.HostedViewerURI)
+	assert.Equal(t, "9.8", result.Properties["security-severity"])
+	assert.Equal(t, "vendor-critical", result.Properties["source_severity_label"])
+	assert.Equal(t, "https://docs.aws.amazon.com/s3/", result.Properties["remediation_url"])
+	require.NotEmpty(t, result.Taxa)
+	assert.Equal(t, "CWE-79", result.Taxa[0].ID)
+
+	vuln, ok := result.Properties["vulnerability"].(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, "CVE-2026-0003", vuln["cve_id"])
+
+	require.NotEmpty(t, run.Tool.Driver.Rules[0].Relationships)
+	assert.Equal(t, "S3.1", run.Tool.Driver.Rules[0].Relationships[0].Target.ID)
+}
+
 func TestBuildSARIFLog_UnmappedFindingHasLogicalLocationOnly(t *testing.T) {
 	report := newTestSecurityReport()
 	log := BuildSARIFLog(report)
@@ -169,15 +238,6 @@ func TestSlugify(t *testing.T) {
 	for _, tc := range cases {
 		assert.Equal(t, tc.want, slugify(tc.in), "slugify(%q)", tc.in)
 	}
-}
-
-func TestSeverityToSecuritySeverity(t *testing.T) {
-	assert.Equal(t, "9.5", severityToSecuritySeverity(SeverityCritical))
-	assert.Equal(t, "8.0", severityToSecuritySeverity(SeverityHigh))
-	assert.Equal(t, "5.5", severityToSecuritySeverity(SeverityMedium))
-	assert.Equal(t, "3.0", severityToSecuritySeverity(SeverityLow))
-	assert.Equal(t, "1.0", severityToSecuritySeverity(SeverityInformational))
-	assert.Equal(t, "0.0", severityToSecuritySeverity(Severity("UNKNOWN")))
 }
 
 func TestSeverityRank(t *testing.T) {

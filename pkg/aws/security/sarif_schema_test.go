@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/santhosh-tekuri/jsonschema/v5"
 	"github.com/stretchr/testify/require"
@@ -52,6 +53,34 @@ func validateAgainstSARIFSpec(t *testing.T, schema *jsonschema.Schema, doc *SARI
 func TestBuildSARIFLog_ValidatesAgainstSARIF210Schema(t *testing.T) {
 	schema := compileSARIFSchema(t)
 	validateAgainstSARIFSpec(t, schema, BuildSARIFLog(newTestSecurityReport()))
+}
+
+func TestBuildSARIFLog_SourceEnrichmentValidatesAgainstSARIF210Schema(t *testing.T) {
+	schema := compileSARIFSchema(t)
+	report := newTestSecurityReport()
+	observedAt := time.Date(2026, 5, 22, 12, 0, 0, 0, time.UTC)
+	sourceScore := 9.8
+	report.Invocation = &ReportInvocation{
+		CommandLine:         "atmos aws security analyze --format sarif",
+		Arguments:           []string{"aws", "security", "analyze", "--format", "sarif"},
+		StartTimeUTC:        observedAt.Add(-time.Minute),
+		EndTimeUTC:          observedAt,
+		ExitCode:            0,
+		ExitCodeDescription: "Success",
+		WorkingDirectory:    "/github/workspace",
+		ExecutionSuccessful: true,
+	}
+	report.Findings[0].SecurityControlID = "S3.1"
+	report.Findings[0].ComplianceStandards = []ComplianceStandard{
+		{ID: "ruleset/cis-aws-foundations-benchmark/v/1.4.0", Name: "cis-aws-foundations-benchmark", Version: "1.4.0"},
+	}
+	report.Findings[0].SourceSeverity = &SourceSeverity{Score: &sourceScore, Label: "vendor-critical"}
+	report.Findings[0].SourceLifecycle = &SourceLifecycle{WorkflowStatus: "NEW", RecordState: "ACTIVE", ComplianceStatus: "FAILED"}
+	report.Findings[0].SourceTimestamps = &SourceTimestamps{FirstObservedAt: &observedAt, LastObservedAt: &observedAt, UpdatedAt: &observedAt}
+	report.Findings[0].SourceRemediation = &SourceRemediation{Text: "Enable block public access.", URL: "https://docs.aws.amazon.com/s3/"}
+	report.Findings[0].SourceURL = "https://console.aws.amazon.com/securityhub/home"
+	report.Findings[0].Vulnerability = &VulnerabilityDetails{ID: "CVE-2026-0001", CVEID: "CVE-2026-0001", CWEIDs: []string{"CWE-79"}}
+	validateAgainstSARIFSpec(t, schema, BuildSARIFLog(report))
 }
 
 func TestBuildSARIFLog_EmptyReportValidatesAgainstSchema(t *testing.T) {

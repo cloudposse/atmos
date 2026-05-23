@@ -34,6 +34,8 @@ func NewReportRenderer(format OutputFormat) ReportRenderer {
 		return &csvRenderer{}
 	case FormatSARIF:
 		return &sarifRenderer{}
+	case FormatOCSF:
+		return &ocsfRenderer{}
 	default:
 		return &markdownRenderer{}
 	}

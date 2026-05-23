@@ -4,8 +4,11 @@ import (
 	"context"
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/inspector2"
+	itypes "github.com/aws/aws-sdk-go-v2/service/inspector2/types"
 	"github.com/aws/aws-sdk-go-v2/service/securityhub"
 	shtypes "github.com/aws/aws-sdk-go-v2/service/securityhub/types"
 	"github.com/stretchr/testify/assert"
@@ -21,6 +24,22 @@ type mockSecurityHubClient struct {
 	standards          []shtypes.StandardsSubscription
 	controlDefinitions []shtypes.SecurityControlDefinition
 	err                error
+}
+
+type mockInspector2Client struct {
+	findings []itypes.Finding
+	err      error
+	calls    int
+}
+
+func (m *mockInspector2Client) ListFindings(_ context.Context, _ *inspector2.ListFindingsInput, _ ...func(*inspector2.Options)) (*inspector2.ListFindingsOutput, error) {
+	m.calls++
+	if m.err != nil {
+		return nil, m.err
+	}
+	return &inspector2.ListFindingsOutput{
+		Findings: m.findings,
+	}, nil
 }
 
 func (m *mockSecurityHubClient) GetFindings(_ context.Context, _ *securityhub.GetFindingsInput, _ ...func(*securityhub.Options)) (*securityhub.GetFindingsOutput, error) {
@@ -210,6 +229,73 @@ func TestFetchFindings_MaxLimit(t *testing.T) {
 	result, err := fetcher.FetchFindings(context.Background(), &opts)
 	require.NoError(t, err)
 	assert.Len(t, result, 3)
+}
+
+func TestFetchFindings_SourceDispatchAndDedupe(t *testing.T) {
+	securityHubMock := &mockSecurityHubClient{
+		findings: []shtypes.AwsSecurityFinding{
+			{
+				Id:          aws.String("securityhub-inspector-copy"),
+				Title:       aws.String("Security Hub Inspector copy"),
+				ProductName: aws.String("Inspector"),
+				Severity: &shtypes.Severity{
+					Label:      shtypes.SeverityLabelCritical,
+					Normalized: aws.Int32(90),
+				},
+				Resources: []shtypes.Resource{
+					{Id: aws.String("arn:aws:ecr:us-east-1:123456789012:repository/app"), Type: aws.String("AwsEcrContainerImage"), Region: aws.String("us-east-1")},
+				},
+				Vulnerabilities: []shtypes.Vulnerability{
+					{Id: aws.String("CVE-2026-1234")},
+				},
+			},
+		},
+	}
+	inspectorMock := &mockInspector2Client{
+		findings: []itypes.Finding{
+			{
+				FindingArn:     aws.String("arn:aws:inspector2:us-east-1:123456789012:finding/native"),
+				Title:          aws.String("Native Inspector finding"),
+				Description:    aws.String("Native finding"),
+				AwsAccountId:   aws.String("123456789012"),
+				Severity:       itypes.SeverityCritical,
+				Status:         itypes.FindingStatusActive,
+				InspectorScore: aws.Float64(9.7),
+				Resources: []itypes.Resource{
+					{Id: aws.String("arn:aws:ecr:us-east-1:123456789012:repository/app"), Type: itypes.ResourceTypeAwsEcrContainerImage, Region: aws.String("us-east-1")},
+				},
+				PackageVulnerabilityDetails: &itypes.PackageVulnerabilityDetails{
+					VulnerabilityId: aws.String("CVE-2026-1234"),
+				},
+			},
+		},
+	}
+	fetcher := &awsFindingFetcher{
+		atmosConfig: &schema.AtmosConfiguration{},
+		clients:     newAWSClientCache(),
+		cache:       NewFindingsCache(),
+	}
+	fetcher.clients.securityHub["us-east-1"] = securityHubMock
+	fetcher.clients.inspector2["us-east-1"] = inspectorMock
+
+	inspectorOnly, err := fetcher.FetchFindings(context.Background(), &QueryOptions{Source: SourceInspector, MaxFindings: 50})
+	require.NoError(t, err)
+	require.Len(t, inspectorOnly, 1)
+	assert.Equal(t, "Native Inspector finding", inspectorOnly[0].Title)
+
+	fetcher.cache.Invalidate()
+	all, err := fetcher.FetchFindings(context.Background(), &QueryOptions{Source: SourceAll, MaxFindings: 50})
+	require.NoError(t, err)
+	require.Len(t, all, 1, "native Inspector finding should replace duplicate Security Hub ASFF copy")
+	assert.Equal(t, "Native Inspector finding", all[0].Title)
+	require.NotNil(t, all[0].SourceLifecycle)
+	assert.Equal(t, "ACTIVE", all[0].SourceLifecycle.InspectorStatus)
+
+	fetcher.cache.Invalidate()
+	securityHubOnly, err := fetcher.FetchFindings(context.Background(), &QueryOptions{Source: SourceSecurityHub, MaxFindings: 50})
+	require.NoError(t, err)
+	require.Len(t, securityHubOnly, 1)
+	assert.Equal(t, 2, inspectorMock.calls, "Security Hub source should not call native Inspector")
 }
 
 func TestDetectSource(t *testing.T) {
@@ -784,6 +870,157 @@ func TestNormalizeSecurityHubFinding_WithComplianceAndTags(t *testing.T) {
 	require.NotNil(t, result.ResourceTags)
 	assert.Equal(t, "prod", result.ResourceTags["atmos:stack"])
 	assert.Equal(t, "web", result.ResourceTags["atmos:component"])
+}
+
+func TestNormalizeSecurityHubFinding_SourceData(t *testing.T) {
+	finding := &shtypes.AwsSecurityFinding{
+		Id:           aws.String("securityhub-finding-1"),
+		Title:        aws.String("Package vulnerability"),
+		Description:  aws.String("OpenSSL vulnerability"),
+		ProductName:  aws.String("Security Hub"),
+		SourceUrl:    aws.String("https://security.example/finding/1"),
+		AwsAccountId: aws.String("123456789012"),
+		Region:       aws.String("us-east-2"),
+		Severity: &shtypes.Severity{
+			Label:      shtypes.SeverityLabelCritical,
+			Normalized: aws.Int32(98),
+			Original:   aws.String("vendor-critical"),
+		},
+		Workflow:        &shtypes.Workflow{Status: shtypes.WorkflowStatusNotified},
+		RecordState:     shtypes.RecordStateActive,
+		CreatedAt:       aws.String("2026-05-01T10:00:00Z"),
+		UpdatedAt:       aws.String("2026-05-02T10:00:00Z"),
+		FirstObservedAt: aws.String("2026-04-29T10:00:00Z"),
+		LastObservedAt:  aws.String("2026-05-03T10:00:00Z"),
+		Resources: []shtypes.Resource{
+			{Id: aws.String("arn:aws:ec2:us-east-2:123456789012:instance/i-abc"), Type: aws.String("AwsEc2Instance")},
+		},
+		Compliance: &shtypes.Compliance{
+			Status:            shtypes.ComplianceStatusFailed,
+			SecurityControlId: aws.String("EC2.18"),
+			AssociatedStandards: []shtypes.AssociatedStandard{
+				{StandardsId: aws.String("ruleset/cis-aws-foundations-benchmark/v/1.4.0")},
+			},
+		},
+		Remediation: &shtypes.Remediation{
+			Recommendation: &shtypes.Recommendation{
+				Text: aws.String("Update the package."),
+				Url:  aws.String("https://remediation.example/update"),
+			},
+		},
+		Vulnerabilities: []shtypes.Vulnerability{
+			{
+				Id:        aws.String("CVE-2026-0001"),
+				EpssScore: aws.Float64(0.91),
+				RelatedVulnerabilities: []string{
+					"CWE-79",
+				},
+				VulnerablePackages: []shtypes.SoftwarePackage{
+					{
+						Name:           aws.String("openssl"),
+						Version:        aws.String("1.0.1"),
+						FixedInVersion: aws.String("1.0.2"),
+						PackageManager: aws.String("OS"),
+					},
+				},
+			},
+		},
+	}
+
+	result := normalizeSecurityHubFinding(finding)
+	require.NotNil(t, result.SourceSeverity)
+	require.NotNil(t, result.SourceSeverity.Score)
+	assert.Equal(t, 9.8, *result.SourceSeverity.Score)
+	assert.Equal(t, "vendor-critical", result.SourceSeverity.Label)
+	require.NotNil(t, result.SourceLifecycle)
+	assert.Equal(t, "NOTIFIED", result.SourceLifecycle.WorkflowStatus)
+	assert.Equal(t, "ACTIVE", result.SourceLifecycle.RecordState)
+	assert.Equal(t, "FAILED", result.SourceLifecycle.ComplianceStatus)
+	require.NotNil(t, result.SourceTimestamps)
+	assert.Equal(t, "2026-04-29T10:00:00Z", result.SourceTimestamps.FirstObservedAt.UTC().Format(time.RFC3339))
+	require.NotNil(t, result.SourceRemediation)
+	assert.Equal(t, "Update the package.", result.SourceRemediation.Text)
+	assert.Equal(t, "https://remediation.example/update", result.SourceRemediation.URL)
+	assert.Equal(t, "https://security.example/finding/1", result.SourceURL)
+	require.Len(t, result.ComplianceStandards, 1)
+	assert.Equal(t, "ruleset/cis-aws-foundations-benchmark/v/1.4.0", result.ComplianceStandards[0].ID)
+	require.NotNil(t, result.Vulnerability)
+	assert.Equal(t, "CVE-2026-0001", result.Vulnerability.CVEID)
+	assert.Equal(t, []string{"CWE-79"}, result.Vulnerability.CWEIDs)
+	assert.Equal(t, 0.91, result.Vulnerability.EPSSScore)
+	assert.Equal(t, "openssl", result.Vulnerability.PackageName)
+	assert.Equal(t, "1.0.2", result.Vulnerability.FixedInVersion)
+}
+
+func TestNormalizeInspector2Finding_PackageVulnerability(t *testing.T) {
+	firstObserved := time.Date(2026, 5, 1, 10, 0, 0, 0, time.UTC)
+	lastObserved := time.Date(2026, 5, 2, 10, 0, 0, 0, time.UTC)
+	updated := time.Date(2026, 5, 3, 10, 0, 0, 0, time.UTC)
+	finding := &itypes.Finding{
+		FindingArn:      aws.String("arn:aws:inspector2:us-east-2:123456789012:finding/native-1"),
+		Title:           aws.String("CVE in package"),
+		Description:     aws.String("Package vulnerability found"),
+		AwsAccountId:    aws.String("123456789012"),
+		Severity:        itypes.SeverityCritical,
+		Status:          itypes.FindingStatusActive,
+		Type:            itypes.FindingTypePackageVulnerability,
+		InspectorScore:  aws.Float64(9.9),
+		FirstObservedAt: &firstObserved,
+		LastObservedAt:  &lastObserved,
+		UpdatedAt:       &updated,
+		Epss:            &itypes.EpssDetails{Score: 0.42},
+		Resources: []itypes.Resource{
+			{
+				Id:     aws.String("arn:aws:ecr:us-east-2:123456789012:repository/app"),
+				Type:   itypes.ResourceTypeAwsEcrContainerImage,
+				Region: aws.String("us-east-2"),
+				Tags:   map[string]string{"atmos:component": "app"},
+			},
+		},
+		Remediation: &itypes.Remediation{
+			Recommendation: &itypes.Recommendation{
+				Text: aws.String("Upgrade libssl."),
+				Url:  aws.String("https://inspector.example/remediate"),
+			},
+		},
+		PackageVulnerabilityDetails: &itypes.PackageVulnerabilityDetails{
+			VulnerabilityId: aws.String("CVE-2026-0002"),
+			SourceUrl:       aws.String("https://nvd.nist.gov/vuln/detail/CVE-2026-0002"),
+			RelatedVulnerabilities: []string{
+				"CWE-20",
+			},
+			VulnerablePackages: []itypes.VulnerablePackage{
+				{
+					Name:           aws.String("libssl"),
+					Version:        aws.String("3.0.0"),
+					FixedInVersion: aws.String("3.0.1"),
+					PackageManager: itypes.PackageManagerOs,
+					Remediation:    aws.String("apt update libssl"),
+				},
+			},
+		},
+	}
+
+	result := normalizeInspector2Finding(finding)
+	assert.Equal(t, SourceInspector, result.Source)
+	assert.Equal(t, SeverityCritical, result.Severity)
+	assert.Equal(t, "us-east-2", result.Region)
+	assert.Equal(t, "AWS_ECR_CONTAINER_IMAGE", result.ResourceType)
+	require.NotNil(t, result.SourceSeverity)
+	require.NotNil(t, result.SourceSeverity.Score)
+	assert.Equal(t, 9.9, *result.SourceSeverity.Score)
+	assert.Equal(t, "CRITICAL", result.SourceSeverity.Label)
+	require.NotNil(t, result.SourceLifecycle)
+	assert.Equal(t, "ACTIVE", result.SourceLifecycle.InspectorStatus)
+	require.NotNil(t, result.SourceRemediation)
+	assert.Equal(t, "Upgrade libssl.", result.SourceRemediation.Text)
+	assert.Equal(t, "https://inspector.example/remediate", result.SourceURL)
+	require.NotNil(t, result.Vulnerability)
+	assert.Equal(t, "CVE-2026-0002", result.Vulnerability.CVEID)
+	assert.Equal(t, []string{"CWE-20"}, result.Vulnerability.CWEIDs)
+	assert.Equal(t, 0.42, result.Vulnerability.EPSSScore)
+	assert.Equal(t, "libssl", result.Vulnerability.PackageName)
+	assert.Equal(t, "3.0.1", result.Vulnerability.FixedInVersion)
 }
 
 func TestNormalizeSecurityHubFinding_NoSeverity(t *testing.T) {

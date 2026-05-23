@@ -53,7 +53,7 @@ atmos aws security analyze [flags]
   <dd>Filter findings by source service: `security-hub`, `config`, `inspector`, `guardduty`, `macie`, `access-analyzer`, `all` (default: `all`).</dd>
 
   <dt>`--format, -f`</dt>
-  <dd>Output format: `markdown`, `json`, `yaml`, `csv`, `sarif` (default: `markdown`). `sarif` emits a SARIF 2.1.0 document compatible with GitHub code scanning and other SARIF viewers.</dd>
+  <dd>Output format: `markdown`, `json`, `yaml`, `csv`, `sarif`, `ocsf` (default: `markdown`). `sarif` emits a SARIF 2.1.0 document compatible with GitHub code scanning and other SARIF viewers. `ocsf` emits OCSF 1.4.0 Detection Findings (cloud + vulnerability profiles) for ingestion into SIEM and security data lake platforms — Splunk, Elastic, Sumo Logic, Panther, Snowflake.</dd>
 
   <dt>`--file`</dt>
   <dd>Write output to a file instead of stdout. Creates parent directories if they don't exist.</dd>
@@ -121,6 +121,9 @@ atmos aws security analyze --stack prod-us-east-1 --format markdown --severity c
 
 # SARIF 2.1.0 for GitHub code scanning, Defender, and SARIF viewers
 atmos aws security analyze --stack prod-us-east-1 --format sarif --file findings.sarif
+
+# OCSF 1.4.0 Detection Findings for SIEM / security data lake ingestion
+atmos aws security analyze --stack prod-us-east-1 --format ocsf --file findings.ocsf.json
 ```
 </Terminal>
 
