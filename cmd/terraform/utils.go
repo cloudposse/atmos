@@ -445,6 +445,18 @@ func terraformRunWithOptions(parentCmd, actualCmd *cobra.Command, args []string,
 		wasMultiComponentExecution = false
 		return executeAffectedCommand(parentCmd, args, &info)
 	}
+	// --all routes to ExecuteTerraformAll for dependency-ordered execution.
+	// --components / --query / bare `-s stack` continue to route to ExecuteTerraformQuery.
+	if info.All {
+		wasMultiComponentExecution = true
+		log.Debug("Routing to ExecuteTerraformAll (dependency-ordered)")
+		if subCommand == "plan" {
+			info.PerComponentHook = func(compInfo *schema.ConfigAndStacksInfo, output string, execErr error) {
+				runCIHooksForPlanComponent(actualCmd, compInfo, output, execErr)
+			}
+		}
+		return e.ExecuteTerraformAll(&info)
+	}
 	if isMultiComponentExecution(&info) {
 		wasMultiComponentExecution = true
 		log.Debug("Routing to ExecuteTerraformQuery (multi-component)")

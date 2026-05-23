@@ -242,21 +242,14 @@ func TestApplyFiltersToGraph(t *testing.T) {
 }
 
 func TestExecuteTerraformAll_Validation(t *testing.T) {
+	// --all without a stack is allowed: it processes every stack
+	// (see website/docs/cli/commands/terraform/terraform-apply.mdx).
 	tests := []struct {
 		name        string
 		info        *schema.ConfigAndStacksInfo
 		expectError bool
 		errorMsg    string
 	}{
-		{
-			name: "no stack specified",
-			info: &schema.ConfigAndStacksInfo{
-				ComponentFromArg: "",
-				Stack:            "",
-			},
-			expectError: true,
-			errorMsg:    "stack is required",
-		},
 		{
 			name: "component specified with --all",
 			info: &schema.ConfigAndStacksInfo{
@@ -642,18 +635,23 @@ func TestApplyFiltersToGraph_DependencyChain(t *testing.T) {
 		assert.Equal(t, g.Size(), filtered.Size())
 	})
 
-	t.Run("stack filter includes dependencies", func(t *testing.T) {
+	t.Run("stack filter limits scope to stack", func(t *testing.T) {
 		info := &schema.ConfigAndStacksInfo{Stack: "dev"}
 		filtered := applyFiltersToGraph(g, nil, info)
 		// dev has 3 nodes: vpc-dev, rds-dev, app-dev.
 		assert.Equal(t, 3, filtered.Size())
 	})
 
-	t.Run("component filter includes dependencies", func(t *testing.T) {
+	t.Run("component filter limits scope to listed components", func(t *testing.T) {
+		// IncludeDependencies is intentionally false in applyFiltersToGraph
+		// so that --components matches the historical production scope
+		// (only the listed components are planned/applied, no transitive pull-in).
+		// Topological order is still applied to whatever is in scope.
 		info := &schema.ConfigAndStacksInfo{Components: []string{"app"}, Stack: "dev"}
 		filtered := applyFiltersToGraph(g, nil, info)
-		// app-dev depends on rds-dev depends on vpc-dev — all 3 included.
-		assert.Equal(t, 3, filtered.Size())
+		assert.Equal(t, 1, filtered.Size())
+		_, has := filtered.GetNode("app-dev")
+		assert.True(t, has)
 	})
 }
 
@@ -754,9 +752,12 @@ func TestApplyFiltersToGraph_ComponentFilter(t *testing.T) {
 
 	result := applyFiltersToGraph(graph, nil, info)
 	assert.NotNil(t, result)
-	// rds-dev and its dependency vpc-dev should be included.
+	// rds-dev is the only component in scope. Its prerequisite (vpc-dev) is
+	// not pulled in — applyFiltersToGraph preserves the historical scope of
+	// the --components flag (no transitive expansion). The dependency edge
+	// from rds-dev to vpc-dev is dropped because the target node is filtered out.
 	_, hasRDS := result.GetNode("rds-dev")
 	assert.True(t, hasRDS)
 	_, hasVPC := result.GetNode("vpc-dev")
-	assert.True(t, hasVPC)
+	assert.False(t, hasVPC)
 }
