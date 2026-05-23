@@ -40,7 +40,7 @@ The PRD for [DAG-based concurrent execution](https://github.com/cloudposse/atmos
 
 A few related changes ride along with the dispatch fix:
 
-- **Stack is no longer required with `--all`.** Running `atmos terraform plan --all` without `-s` now processes every stack, matching what the [terraform-apply docs](/cli/commands/terraform/terraform-apply) describe ("Apply all components in all stacks"). The internal `stack is required when using --all flag` error has been removed.
+- **Stack is no longer required with `--all`.** Running `atmos terraform plan --all` without `-s` now processes every stack, matching what the [terraform-apply docs](/cli/commands/terraform/apply) describe ("Apply all components in all stacks"). The internal `stack is required when using --all flag` error has been removed.
 - **`--all -s <stack>` still scopes to that stack.** Cross-stack prerequisites are not pulled in by default — same scope as before, just ordered. A future opt-in flag will allow cross-stack execution.
 - **Dry-run output is consistent.** Both multi-component paths now emit `Would <subcmd> <component> in <stack> (dry run)` for each component.
 - **Auth-aware YAML functions work under `--all`.** `!terraform.state`, `!store`, and friends now resolve credentials correctly during multi-component runs, the same as `--query` already did (fixes a latent regression of [#2081](https://github.com/cloudposse/atmos/issues/2081) for the `--all` path).
