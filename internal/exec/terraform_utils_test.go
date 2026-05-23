@@ -1586,24 +1586,37 @@ func TestExecuteTerraformAffectedComponentInDepOrder(t *testing.T) {
 // invokes ExecuteTerraform — that lets the test run on every CI runner,
 // including macOS ARM64 where gomonkey is unsupported, and gives the dependent
 // type-check line real coverage instead of relying on a skipped suite.
+//
+// Observable signal: `executeTerraformAffectedComponentInDepOrder` mutates
+// `info.Component` at the top of every call to whatever component it is
+// processing. After the function returns, `info.Component` is therefore the
+// last component that entered the recursion. A non-terraform dependent that
+// was skipped never enters the recursion, so `info.Component` stays at the
+// root ("vpc"). A terraform dependent that was processed sets it to itself.
+// We assert on that final value — `require.NoError` alone would let a
+// regression that still recursed into a helmfile/packer dependent pass
+// silently.
 func TestExecuteTerraformAffectedComponentInDepOrder_NonTerraformDependentGuard(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name       string
-		dependents []schema.Dependent
+		name                   string
+		dependents             []schema.Dependent
+		expectedFinalComponent string
 	}{
 		{
 			name: "helmfile dependent skipped (issue #2361)",
 			dependents: []schema.Dependent{
 				{Component: "helm-app", ComponentType: cfg.HelmfileComponentType, Stack: "prod"},
 			},
+			expectedFinalComponent: "vpc",
 		},
 		{
 			name: "packer dependent skipped (issue #2361)",
 			dependents: []schema.Dependent{
 				{Component: "image", ComponentType: cfg.PackerComponentType, Stack: "prod"},
 			},
+			expectedFinalComponent: "vpc",
 		},
 		{
 			name: "both non-terraform dependents skipped",
@@ -1611,6 +1624,16 @@ func TestExecuteTerraformAffectedComponentInDepOrder_NonTerraformDependentGuard(
 				{Component: "helm-app", ComponentType: cfg.HelmfileComponentType, Stack: "prod"},
 				{Component: "image", ComponentType: cfg.PackerComponentType, Stack: "prod"},
 			},
+			expectedFinalComponent: "vpc",
+		},
+		{
+			// Positive path: a terraform dependent must still recurse, otherwise
+			// the guard would be over-broad and silently drop legitimate work.
+			name: "terraform dependent recurses",
+			dependents: []schema.Dependent{
+				{Component: "security-group", ComponentType: cfg.TerraformComponentType, Stack: "prod"},
+			},
+			expectedFinalComponent: "security-group",
 		},
 	}
 
@@ -1628,6 +1651,8 @@ func TestExecuteTerraformAffectedComponentInDepOrder_NonTerraformDependentGuard(
 
 			err := executeTerraformAffectedComponentInDepOrder(info, nil, params, args)
 			require.NoError(t, err)
+			assert.Equal(t, tt.expectedFinalComponent, info.Component,
+				"info.Component reflects whether recursion happened; mismatch means the guard let a non-terraform dependent through or blocked a terraform one")
 		})
 	}
 }
