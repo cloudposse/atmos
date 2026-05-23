@@ -275,6 +275,29 @@ func runCIHooksForApplyComponent(actualCmd *cobra.Command, info *schema.ConfigAn
 	}
 }
 
+// wirePerComponentHook installs the per-component CI hook on info so each
+// component in a multi-component run (`--all`, `--components`, `--query`) gets
+// its own summary entry instead of a single misattributed global call from
+// PostRunE. The wiring is identical for both ExecuteTerraformAll and
+// ExecuteTerraformQuery dispatch paths; keep it in one place so a new
+// subcommand only needs to be added once.
+func wirePerComponentHook(info *schema.ConfigAndStacksInfo, subCommand string, actualCmd *cobra.Command) {
+	switch subCommand {
+	case "plan":
+		info.PerComponentHook = func(compInfo *schema.ConfigAndStacksInfo, output string, execErr error) {
+			runCIHooksForPlanComponent(actualCmd, compInfo, output, execErr)
+		}
+	case "deploy":
+		info.PerComponentHook = func(compInfo *schema.ConfigAndStacksInfo, output string, execErr error) {
+			runCIHooksForDeployComponent(actualCmd, compInfo, output, execErr)
+		}
+	case "apply":
+		info.PerComponentHook = func(compInfo *schema.ConfigAndStacksInfo, output string, execErr error) {
+			runCIHooksForApplyComponent(actualCmd, compInfo, output, execErr)
+		}
+	}
+}
+
 // resolveComponentPath resolves a path-based component argument to a component name.
 // It validates the component exists in the specified stack and handles ambiguous paths.
 func resolveComponentPath(info *schema.ConfigAndStacksInfo, commandName string) error {
@@ -506,42 +529,13 @@ func terraformRunWithOptions(parentCmd, actualCmd *cobra.Command, args []string,
 	if info.All {
 		wasMultiComponentExecution = true
 		log.Debug("Routing to ExecuteTerraformAll (dependency-ordered)")
-		// Wire per-component CI hooks for plan/deploy/apply so each component
-		// gets its own summary entry instead of a single misattributed global
-		// call in PostRunE — mirrors the ExecuteTerraformQuery branch below.
-		if subCommand == "plan" {
-			info.PerComponentHook = func(compInfo *schema.ConfigAndStacksInfo, output string, execErr error) {
-				runCIHooksForPlanComponent(actualCmd, compInfo, output, execErr)
-			}
-		} else if subCommand == "deploy" {
-			info.PerComponentHook = func(compInfo *schema.ConfigAndStacksInfo, output string, execErr error) {
-				runCIHooksForDeployComponent(actualCmd, compInfo, output, execErr)
-			}
-		} else if subCommand == "apply" {
-			info.PerComponentHook = func(compInfo *schema.ConfigAndStacksInfo, output string, execErr error) {
-				runCIHooksForApplyComponent(actualCmd, compInfo, output, execErr)
-			}
-		}
+		wirePerComponentHook(&info, subCommand, actualCmd)
 		return e.ExecuteTerraformAll(&info)
 	}
 	if isMultiComponentExecution(&info) {
 		wasMultiComponentExecution = true
 		log.Debug("Routing to ExecuteTerraformQuery (multi-component)")
-		// Wire per-component CI hooks for plan, deploy, and apply so each component
-		// gets its own summary entry instead of a single misattributed global call in PostRunE.
-		if subCommand == "plan" {
-			info.PerComponentHook = func(compInfo *schema.ConfigAndStacksInfo, output string, execErr error) {
-				runCIHooksForPlanComponent(actualCmd, compInfo, output, execErr)
-			}
-		} else if subCommand == "deploy" {
-			info.PerComponentHook = func(compInfo *schema.ConfigAndStacksInfo, output string, execErr error) {
-				runCIHooksForDeployComponent(actualCmd, compInfo, output, execErr)
-			}
-		} else if subCommand == "apply" {
-			info.PerComponentHook = func(compInfo *schema.ConfigAndStacksInfo, output string, execErr error) {
-				runCIHooksForApplyComponent(actualCmd, compInfo, output, execErr)
-			}
-		}
+		wirePerComponentHook(&info, subCommand, actualCmd)
 		return e.ExecuteTerraformQuery(&info)
 	}
 	wasMultiComponentExecution = false
