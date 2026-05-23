@@ -7,7 +7,10 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
 
+	"github.com/cloudposse/atmos/pkg/auth"
+	"github.com/cloudposse/atmos/pkg/auth/types"
 	"github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/dependency"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -333,6 +336,52 @@ func TestExecuteTerraformAll_DryRunHappyPath(t *testing.T) {
 		}
 		assert.NoError(t, ExecuteTerraformAll(info))
 	})
+}
+
+// TestExecuteTerraformAll_AuthManagerResolverWired exercises the
+// `if authManager != nil` branch that was added in this PR to mirror the
+// #2081 fix for `--query`/`--components`. The existing happy-path test
+// hits the nil-authManager branch (the fixture has no auth config), so
+// without this stub the resolver-creation lines were uncovered.
+//
+// We swap authManagerFactory for a stub that returns a gomock-generated
+// AuthManager. The fixture's stacks have no auth-dependent YAML functions,
+// so no AuthManager methods should be invoked downstream — if a future
+// change starts invoking the resolver during describe-stacks, this test
+// will fail loudly with an "unexpected call" message, which is the
+// signal we want.
+func TestExecuteTerraformAll_AuthManagerResolverWired(t *testing.T) {
+	t.Setenv("ATMOS_BASE_PATH", "")
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", "")
+	os.Unsetenv("ATMOS_BASE_PATH")
+	os.Unsetenv("ATMOS_CLI_CONFIG_PATH")
+
+	t.Chdir(filepath.Join("..", "..", "tests", "fixtures", "scenarios", "terraform-apply-affected"))
+
+	original := authManagerFactory
+	authManagerFactory = func(_ string, _ schema.AuthConfig, _ string, _ *schema.AtmosConfiguration) (auth.AuthManager, error) {
+		ctrl := gomock.NewController(t)
+		mgr := types.NewMockAuthManager(ctrl)
+		// ExecuteDescribeStacks calls GetStackInfo on the auth manager while
+		// processing each stack. The fixture has no auth-dependent YAML
+		// functions, so no other AuthManager methods get invoked — gomock
+		// will surface that explicitly via "unexpected call" failures if
+		// that ever changes.
+		mgr.EXPECT().GetStackInfo().Return(nil).AnyTimes()
+		return mgr, nil
+	}
+	t.Cleanup(func() { authManagerFactory = original })
+
+	info := &schema.ConfigAndStacksInfo{
+		Stack:         "prod",
+		ComponentType: "terraform",
+		SubCommand:    "plan",
+		DryRun:        true,
+	}
+	require.NoError(t, ExecuteTerraformAll(info))
+	// The factory above stored the AuthManager on info via createQueryAuthManager;
+	// this confirms the non-nil path actually ran rather than silently skipping.
+	assert.NotNil(t, info.AuthManager, "non-nil factory should populate info.AuthManager")
 }
 
 // TestApplyFiltersToGraph_NoCrossStackPullIn pins the new IncludeDependencies:false
