@@ -4,11 +4,61 @@ import (
 	"testing"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
+	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/cloudposse/atmos/cmd/internal"
+	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/flags/preprocess"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
+
+func initAnsibleCommandTest(t *testing.T) {
+	t.Helper()
+
+	// cmd.NewTestKit cannot be imported here: cmd/root.go imports cmd/ansible,
+	// so importing cmd from this package would create a circular dependency.
+	// Snapshot the package-level Cobra commands directly, matching the cleanup
+	// behavior these tests need.
+	resetAnsibleCommandFlags(t, ansibleCmd)
+	resetAnsibleCommandFlags(t, playbookCmd)
+	resetAnsibleCommandFlags(t, versionCmd)
+}
+
+func resetAnsibleCommandFlags(t *testing.T, cmd *cobra.Command) {
+	t.Helper()
+
+	type flagSnapshot struct {
+		value   string
+		changed bool
+	}
+
+	snapshot := map[*pflag.Flag]flagSnapshot{}
+	for _, flagSet := range []*pflag.FlagSet{
+		cmd.Flags(),
+		cmd.PersistentFlags(),
+		cmd.InheritedFlags(),
+	} {
+		if flagSet == nil {
+			continue
+		}
+		flagSet.VisitAll(func(flag *pflag.Flag) {
+			snapshot[flag] = flagSnapshot{
+				value:   flag.Value.String(),
+				changed: flag.Changed,
+			}
+		})
+	}
+
+	t.Cleanup(func() {
+		for flag, snap := range snapshot {
+			_ = flag.Value.Set(snap.value)
+			flag.Changed = snap.changed
+		}
+	})
+}
 
 func TestAnsibleCommandProvider(t *testing.T) {
 	provider := &AnsibleCommandProvider{}
@@ -75,6 +125,85 @@ func TestAnsibleCommandStructure(t *testing.T) {
 	})
 }
 
+func TestAnsibleIdentityRegistryNormalizesLongIdentityOnly(t *testing.T) {
+	initAnsibleCommandTest(t)
+
+	registry := internal.GetCommandFlagRegistry("ansible")
+	require.NotNil(t, registry)
+	allFlags := registry.All()
+	flagInfos := make([]preprocess.FlagInfo, len(allFlags))
+	for i, f := range allFlags {
+		flagInfos[i] = f
+	}
+	preprocessor := preprocess.NewNoOptDefValPreprocessor(flagInfos)
+
+	assert.Equal(
+		t,
+		[]string{"playbook", "--identity=terraform", "pg-auto-failover"},
+		preprocessor.Preprocess([]string{"playbook", "--identity", "terraform", "pg-auto-failover"}),
+	)
+
+	assert.Equal(
+		t,
+		[]string{"playbook", "-i", "localhost,", "pg-auto-failover"},
+		preprocessor.Preprocess([]string{"playbook", "-i", "localhost,", "pg-auto-failover"}),
+	)
+}
+
+func TestGetLongIdentityFromArgs(t *testing.T) {
+	initAnsibleCommandTest(t)
+
+	tests := []struct {
+		name       string
+		args       []string
+		expected   string
+		expectedOK bool
+	}{
+		{
+			name:       "equals form",
+			args:       []string{"ansible", "playbook", "component", "--identity=terraform"},
+			expected:   "terraform",
+			expectedOK: true,
+		},
+		{
+			name:       "space form",
+			args:       []string{"ansible", "playbook", "component", "--identity", "terraform"},
+			expected:   "terraform",
+			expectedOK: true,
+		},
+		{
+			name:       "without value selects interactively",
+			args:       []string{"ansible", "playbook", "component", "--identity"},
+			expected:   cfg.IdentityFlagSelectValue,
+			expectedOK: true,
+		},
+		{
+			name:       "does not consume ansible inventory shorthand",
+			args:       []string{"ansible", "playbook", "component", "-i", "localhost,"},
+			expectedOK: false,
+		},
+		{
+			name:       "stops at separator",
+			args:       []string{"ansible", "playbook", "component", "--", "--identity=terraform"},
+			expectedOK: false,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			actual, ok := getLongIdentityFromArgs(tc.args)
+			assert.Equal(t, tc.expectedOK, ok)
+			assert.Equal(t, tc.expected, actual)
+		})
+	}
+}
+
+func TestResolveAnsibleIdentity_NormalizesParsedIdentity(t *testing.T) {
+	initAnsibleCommandTest(t)
+
+	assert.Equal(t, cfg.IdentityFlagDisabledValue, resolveAnsibleIdentity(&cobra.Command{}, "false"))
+}
+
 func TestPlaybookCommandStructure(t *testing.T) {
 	t.Run("playbook command has correct properties", func(t *testing.T) {
 		assert.Equal(t, "playbook", playbookCmd.Use)
@@ -97,6 +226,8 @@ func TestVersionCommandStructure(t *testing.T) {
 }
 
 func TestBuildConfigAndStacksInfo(t *testing.T) {
+	initAnsibleCommandTest(t)
+
 	t.Run("returns empty info when no stack flag", func(t *testing.T) {
 		cmd := &cobra.Command{Use: "test"}
 		info := buildConfigAndStacksInfo(cmd)
@@ -111,6 +242,41 @@ func TestBuildConfigAndStacksInfo(t *testing.T) {
 
 		info := buildConfigAndStacksInfo(cmd)
 		assert.Equal(t, "dev-us-east-1", info.Stack)
+	})
+
+	t.Run("returns info with identity when global identity flag is set", func(t *testing.T) {
+		viper.Set("identity", "terraform")
+		t.Cleanup(func() { viper.Set("identity", "") })
+
+		cmd := &cobra.Command{Use: "test"}
+		cmd.Flags().String("identity", "", "identity name")
+		err := cmd.Flags().Set("identity", "terraform")
+		require.NoError(t, err)
+
+		info := buildConfigAndStacksInfo(cmd)
+		assert.Equal(t, "terraform", info.Identity)
+	})
+
+	t.Run("returns info with identity from changed root persistent flag", func(t *testing.T) {
+		rootCmd := &cobra.Command{Use: "atmos"}
+		rootCmd.PersistentFlags().String("identity", "", "identity name")
+		cmd := &cobra.Command{Use: "playbook"}
+		rootCmd.AddCommand(cmd)
+
+		err := rootCmd.PersistentFlags().Set("identity", "terraform")
+		require.NoError(t, err)
+
+		info := buildConfigAndStacksInfo(cmd)
+		assert.Equal(t, "terraform", info.Identity)
+	})
+
+	t.Run("returns info with identity from environment", func(t *testing.T) {
+		t.Setenv("ATMOS_IDENTITY", "terraform")
+
+		cmd := &cobra.Command{Use: "test"}
+
+		info := buildConfigAndStacksInfo(cmd)
+		assert.Equal(t, "terraform", info.Identity)
 	})
 }
 

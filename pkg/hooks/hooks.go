@@ -63,9 +63,11 @@ func GetHooks(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStac
 	// here would fail. The hooks section itself is static config (event names,
 	// commands, store names) and does not use YAML functions.
 	sections, err := e.ExecuteDescribeComponent(&e.ExecuteDescribeComponentParams{
-		Component:            info.ComponentFromArg,
-		Stack:                info.Stack,
-		ProcessTemplates:     true,
+		Component: info.ComponentFromArg,
+		Stack:     info.Stack,
+		// Hook discovery only needs static hook metadata; avoid template rendering
+		// here to prevent pre-auth side effects during command preflight.
+		ProcessTemplates:     false,
 		ProcessYamlFunctions: false,
 		Skip:                 []string{},
 		AuthManager:          nil,
@@ -381,6 +383,14 @@ func RunCIHooks(opts *RunCIHooksOptions) error {
 	// it cannot override a disabled config.
 	if opts.AtmosConfig != nil && !opts.AtmosConfig.CI.Enabled {
 		log.Debug("CI integration disabled in config (ci.enabled is not true)")
+		return nil
+	}
+
+	// Skip CI hooks entirely on local runs unless the user explicitly forced CI mode.
+	// This avoids emitting experimental warnings or performing any CI-specific setup
+	// when no CI provider is actually available.
+	if !opts.ForceCIMode && !ci.IsCI() {
+		log.Debug("Skipping CI hooks because no CI provider was detected and CI mode was not forced")
 		return nil
 	}
 
