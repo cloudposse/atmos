@@ -22,10 +22,13 @@ on:
 # the auto-generated GITHUB_TOKEN. The default PR-event scope is
 # `contents: read` only, which causes ghcr.io to reject the token with
 # `DENIED: denied` whenever credentials are sent (as happens on Windows
-# runners that have no usable Docker keychain entry for ghcr.io).
+# runners that have no usable Docker keychain entry for ghcr.io). Reviewdog
+# also needs PR diff access and checks write access for tflint annotations.
 permissions:
+  checks: write
   contents: read
   packages: read
+  pull-requests: read
 
 env:
   TERRAFORM_VERSION: "1.9.7"
@@ -566,7 +569,7 @@ jobs:
       - name: Lint examples/${{ matrix.demo-folder }}/components/terraform
         uses: reviewdog/action-tflint@v1
         with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
+          github_token: ${{ github.token }}
           working_directory: examples/${{ matrix.demo-folder }}/components/terraform
           flags: >-
             --enable-rule=terraform_unused_declarations
