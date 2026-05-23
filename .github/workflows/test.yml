@@ -112,7 +112,7 @@ jobs:
           - { os: "runs-on=${{github.run_id}}/runner=terraform/tag=atmos/extras=s3-cache/private=false", target: linux }
           - { os: "windows-latest", target: windows }
           - { os: "macos-latest", target: macos }
-    timeout-minutes: 45
+    timeout-minutes: 60
     runs-on: ${{ matrix.flavor.os }}
     steps:
       - uses: runs-on/action@v1
@@ -224,9 +224,9 @@ jobs:
       #        ]
       #       }
 
-      - name: Acceptance tests
+      - name: Acceptance tests with coverage
         timeout-minutes: 45
-        if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
+        if: matrix.flavor.target == 'linux'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # Use the GitHub token for downloading the Packer plugins
@@ -236,6 +236,19 @@ jobs:
           # Enable Playwright integration tests to validate browser driver download
           RUN_PLAYWRIGHT_INTEGRATION: 1
         run: make testacc-cover
+
+      - name: Acceptance tests
+        timeout-minutes: 45
+        if: matrix.flavor.target == 'macos' || (matrix.flavor.target == 'windows' && ! github.event.pull_request.draft)
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Use the GitHub token for downloading the Packer plugins
+          PACKER_GITHUB_API_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Skip precondition checks in CI to ensure tests run and maintain coverage
+          ATMOS_TEST_SKIP_PRECONDITION_CHECKS: true
+          # Enable Playwright integration tests to validate browser driver download
+          RUN_PLAYWRIGHT_INTEGRATION: 1
+        run: make testacc
 
       - name: Upload coverage report to Codecov
         if: matrix.flavor.target == 'linux' && (success() || failure())
