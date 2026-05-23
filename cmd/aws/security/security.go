@@ -305,8 +305,9 @@ var securityAnalyzeCmd = &cobra.Command{
 }
 
 // proClientFactory builds an Atmos Pro client. Overridden in tests so the
-// upload path can be exercised without real credentials.
-var proClientFactory = func(atmosConfig *schema.AtmosConfiguration) (pro.AtmosProAPIClientInterface, error) {
+// upload path can be exercised without real credentials. Returns the narrow
+// pro.APIClient interface so generated mocks can stand in.
+var proClientFactory = func(atmosConfig *schema.AtmosConfiguration) (pro.APIClient, error) {
 	return pro.NewAtmosProAPIClientFromEnv(atmosConfig)
 }
 

@@ -179,3 +179,120 @@ func TestSeverityToSecuritySeverity(t *testing.T) {
 	assert.Equal(t, "1.0", severityToSecuritySeverity(SeverityInformational))
 	assert.Equal(t, "0.0", severityToSecuritySeverity(Severity("UNKNOWN")))
 }
+
+func TestSeverityRank(t *testing.T) {
+	cases := []struct {
+		sev  Severity
+		want int
+	}{
+		{SeverityCritical, rankCritical},
+		{SeverityHigh, rankHigh},
+		{SeverityMedium, rankMedium},
+		{SeverityLow, rankLow},
+		{SeverityInformational, rankInformational},
+		{Severity("BOGUS"), rankUnknown},
+	}
+	for _, tc := range cases {
+		assert.Equal(t, tc.want, severityRank(tc.sev), "severity %s", tc.sev)
+	}
+}
+
+func TestBuildComplianceSARIFLog_NilReport(t *testing.T) {
+	log := buildComplianceSARIFLog(nil)
+	require.NotNil(t, log)
+	assert.Equal(t, "2.1.0", log.Version)
+	require.Len(t, log.Runs, 1)
+	assert.Empty(t, log.Runs[0].Results)
+}
+
+func TestBuildComplianceSARIFLog_EmptyDetails(t *testing.T) {
+	report := &ComplianceReport{
+		Framework: "cis-aws",
+	}
+	log := buildComplianceSARIFLog(report)
+	require.NotNil(t, log)
+	require.Len(t, log.Runs, 1)
+	assert.Empty(t, log.Runs[0].Tool.Driver.Rules)
+	assert.Empty(t, log.Runs[0].Results)
+}
+
+func TestBuildComplianceSARIFLog_DeduplicatesRules(t *testing.T) {
+	report := &ComplianceReport{
+		Framework: "cis-aws",
+		FailingDetails: []ComplianceControl{
+			{ControlID: "CIS.1.1", Title: "Root user MFA", Severity: SeverityHigh, Stack: "ue1", Component: "iam"},
+			{ControlID: "CIS.1.1", Title: "Root user MFA", Severity: SeverityHigh, Stack: "ue2", Component: "iam"},
+			{ControlID: "CIS.2.1", Title: "CloudTrail enabled", Severity: SeverityCritical, Stack: "ue1", Component: "cloudtrail"},
+		},
+	}
+	log := buildComplianceSARIFLog(report)
+	require.NotNil(t, log)
+	rules := log.Runs[0].Tool.Driver.Rules
+	results := log.Runs[0].Results
+	assert.Len(t, rules, 2, "two unique ControlIDs should produce two rules")
+	assert.Len(t, results, 3, "all three failing details should produce results")
+}
+
+func TestBuildComplianceSARIFLog_SlugFallbackForMissingControlID(t *testing.T) {
+	report := &ComplianceReport{
+		Framework: "custom",
+		FailingDetails: []ComplianceControl{
+			{Title: "Encryption at rest required!", Severity: SeverityHigh},
+		},
+	}
+	log := buildComplianceSARIFLog(report)
+	require.NotNil(t, log)
+	rules := log.Runs[0].Tool.Driver.Rules
+	require.Len(t, rules, 1)
+	assert.Equal(t, "encryption-at-rest-required", rules[0].ID,
+		"missing ControlID must fall back to slugified Title")
+}
+
+func TestBuildComplianceSARIFLog_OrderingIsDeterministic(t *testing.T) {
+	// Inputs in a random order; the sorted output must be (severity desc, then
+	// ControlID asc, then Title, Stack, Component).
+	report := &ComplianceReport{
+		Framework: "cis-aws",
+		FailingDetails: []ComplianceControl{
+			{ControlID: "CIS.3.1", Title: "Low risk", Severity: SeverityLow},
+			{ControlID: "CIS.2.1", Title: "High risk", Severity: SeverityHigh, Stack: "ue2"},
+			{ControlID: "CIS.1.1", Title: "Critical risk", Severity: SeverityCritical},
+			{ControlID: "CIS.2.1", Title: "High risk", Severity: SeverityHigh, Stack: "ue1"},
+		},
+	}
+	log := buildComplianceSARIFLog(report)
+	results := log.Runs[0].Results
+	require.Len(t, results, 4)
+	// Critical first.
+	assert.Equal(t, "CIS.1.1", results[0].RuleID)
+	// Then the two highs in stack asc order (ue1 before ue2).
+	assert.Equal(t, "CIS.2.1", results[1].RuleID)
+	assert.Equal(t, "ue1", results[1].Properties["stack"])
+	assert.Equal(t, "CIS.2.1", results[2].RuleID)
+	assert.Equal(t, "ue2", results[2].Properties["stack"])
+	// Low last.
+	assert.Equal(t, "CIS.3.1", results[3].RuleID)
+
+	// Run again — must be byte-identical.
+	log2 := buildComplianceSARIFLog(report)
+	a, err := json.Marshal(log)
+	require.NoError(t, err)
+	b, err := json.Marshal(log2)
+	require.NoError(t, err)
+	assert.True(t, bytes.Equal(a, b), "SARIF output must be deterministic across runs")
+}
+
+func TestSARIFRenderer_RenderComplianceReport(t *testing.T) {
+	r := &sarifRenderer{}
+	report := &ComplianceReport{
+		Framework: "cis-aws",
+		FailingDetails: []ComplianceControl{
+			{ControlID: "CIS.1.1", Title: "Root user MFA", Severity: SeverityHigh, Stack: "ue1", Component: "iam"},
+		},
+	}
+	var buf bytes.Buffer
+	require.NoError(t, r.RenderComplianceReport(&buf, report))
+	var decoded map[string]any
+	require.NoError(t, json.Unmarshal(buf.Bytes(), &decoded))
+	assert.Equal(t, "2.1.0", decoded["version"])
+}

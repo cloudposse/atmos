@@ -110,6 +110,8 @@ func GetRepoInfo(localRepo *git.Repository) (RepoInfo, error) {
 }
 
 // GitRepoInterface defines the interface for git repository operations.
+//
+//go:generate go run go.uber.org/mock/mockgen@v0.6.0 -source=$GOFILE -destination=mock_$GOFILE -package=$GOPACKAGE -mock_names=GitRepoInterface=MockGitRepoInterface
 type GitRepoInterface interface {
 	GetLocalRepoInfo() (*RepoInfo, error)
 	GetRepoInfo(repo *git.Repository) (RepoInfo, error)

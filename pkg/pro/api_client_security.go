@@ -10,6 +10,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	log "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/pro/dtos"
 )
 
@@ -17,6 +18,8 @@ import (
 // The endpoint is currently experimental — callers should advertise this to
 // users (e.g., via an "(experimental)" flag description).
 func (c *AtmosProAPIClient) UploadSecurityFindings(dto *dtos.SecurityFindingsUploadRequest) error {
+	defer perf.Track(nil, "pro.AtmosProAPIClient.UploadSecurityFindings")()
+
 	if dto == nil {
 		return wrapErr(errUtils.ErrAWSSecurityUploadFailed,
 			fmt.Errorf("UploadSecurityFindings: %w", errUtils.ErrNilRequestDTO))
