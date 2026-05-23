@@ -9,6 +9,16 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
+// Compile-time guard: rename of any field below must fail the build, since the
+// tests in this file rely on these schema.Affected fields by name.
+var _ = schema.Affected{
+	Component:     "sentinel",
+	Stack:         "sentinel",
+	ComponentType: cfg.TerraformComponentType,
+	Deleted:       true,
+	Affected:      "sentinel",
+}
+
 // TestFilterTerraformAffected verifies that `atmos terraform plan/apply --affected`
 // only executes against terraform components that still exist in HEAD. Helmfile,
 // Packer, and deleted components must be dropped — they are the surface of bug #2361
@@ -122,6 +132,11 @@ func TestFilterTerraformAffected_InPlaceSemantics(t *testing.T) {
 
 	assert.Len(t, got, 1)
 	assert.Equal(t, "tf", got[0].Component)
+	// Prove the filter compacted into the same backing array rather than
+	// allocating a new one — the result's first element must be the input's
+	// first slot, now overwritten to the kept terraform entry.
+	assert.Equal(t, "tf", in[0].Component, "input should be compacted in place")
+	assert.Same(t, &in[0], &got[0], "result should reuse input backing array")
 	// The filter intentionally reuses the backing array. Future maintainers must
 	// not assume `in` is unchanged. If a non-destructive variant is ever needed,
 	// allocate a fresh slice instead.
