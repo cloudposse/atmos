@@ -159,6 +159,7 @@ const (
 	FormatJSON     OutputFormat = "json"
 	FormatYAML     OutputFormat = "yaml"
 	FormatCSV      OutputFormat = "csv"
+	FormatSARIF    OutputFormat = "sarif"
 )
 
 // ParseOutputFormat validates a format string and returns the corresponding OutputFormat.
@@ -172,6 +173,8 @@ func ParseOutputFormat(format string) (OutputFormat, error) {
 		return FormatYAML, nil
 	case "csv":
 		return FormatCSV, nil
+	case "sarif":
+		return FormatSARIF, nil
 	default:
 		return "", errUtils.ErrAWSSecurityInvalidFormat
 	}

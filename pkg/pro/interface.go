@@ -12,6 +12,8 @@ import (
 type APIClient interface {
 	// UploadInstances uploads component instances to Atmos Pro.
 	UploadInstances(req *dtos.InstancesUploadRequest) error
+	// UploadSecurityFindings uploads a SARIF security report to Atmos Pro.
+	UploadSecurityFindings(req *dtos.SecurityFindingsUploadRequest) error
 }
 
 // ClientFactory creates an APIClient from configuration.

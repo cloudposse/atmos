@@ -1,0 +1,51 @@
+---
+slug: aws-security-sarif-and-upload
+title: "AWS Security Findings Now Export to SARIF and Atmos Pro"
+authors: [osterman]
+tags: [feature, security, experimental]
+---
+
+`atmos aws security analyze` can now emit findings as SARIF 2.1.0 and stream them to Atmos Pro with a single flag.
+
+<!--truncate-->
+
+## What Changed
+
+Two additions to the existing `atmos aws security analyze` command:
+
+- **`--format=sarif`** — produces a SARIF 2.1.0 document that GitHub code scanning, Azure DevOps, and most SARIF viewers ingest directly. Findings keep their Atmos context (stack, component, component path, remediation steps) as SARIF result properties, so downstream tooling sees the same information the Markdown report does.
+- **`--upload`** — POSTs the SARIF report to Atmos Pro using the existing token or GitHub OIDC authentication. The flag is independent of `--format`, so you can keep your local Markdown report and ship machine-readable findings to Atmos Pro in the same run.
+
+```shell
+# Local SARIF for GitHub code scanning.
+atmos aws security analyze --format=sarif --file=findings.sarif
+
+# Local Markdown for humans, SARIF to Atmos Pro for the platform.
+atmos aws security analyze --upload
+```
+
+## Why This Matters
+
+Security findings need to land in the systems that already track risk — GitHub Advanced Security, vulnerability dashboards, ticketing automations. Rendering Markdown is great for ad-hoc review, but SARIF is the format every code-scanning surface understands. With SARIF in the toolbox, `atmos aws security analyze` plugs into existing pipelines without a translation layer.
+
+The Atmos Pro integration takes this one step further: findings mapped to Atmos components and stacks now reach the same platform that already tracks drift, ownership, and deployment provenance.
+
+## How to Use It
+
+Locally:
+
+```shell
+atmos aws security analyze --stack prod-use1 --format=sarif --file=findings.sarif
+```
+
+In CI (uploading from a GitHub Actions workflow with `id-token: write`):
+
+```shell
+atmos aws security analyze --upload
+```
+
+The `--upload` flag is **experimental** while the Atmos Pro endpoint stabilizes. The request contract may change before the feature ships GA; expect a follow-up release note when the endpoint is locked in.
+
+## Get Involved
+
+If you're already collecting security findings outside Atmos and want them to flow through the same tooling that manages your stacks, this is the path. Open an issue with the SARIF or upload behavior you'd like to see at [github.com/cloudposse/atmos/issues](https://github.com/cloudposse/atmos/issues).
