@@ -513,6 +513,7 @@ func terraformRunWithOptions(parentCmd, actualCmd *cobra.Command, args []string,
 		} else if subCommand == "deploy" {
 			info.PerComponentHook = func(compInfo *schema.ConfigAndStacksInfo, output string, execErr error) {
 				runCIHooksForDeployComponent(actualCmd, compInfo, output, execErr)
+			}
 		} else if subCommand == "apply" {
 			info.PerComponentHook = func(compInfo *schema.ConfigAndStacksInfo, output string, execErr error) {
 				runCIHooksForApplyComponent(actualCmd, compInfo, output, execErr)
