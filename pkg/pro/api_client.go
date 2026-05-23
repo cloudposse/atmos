@@ -155,7 +155,6 @@ type AtmosProAPIClientInterface interface {
 	UploadInstances(req *dtos.InstancesUploadRequest) error
 	UploadInstanceStatus(dto *dtos.InstanceStatusUploadRequest) error
 	UploadAffectedStacks(dto *dtos.UploadAffectedStacksRequest) error
-	UploadSecurityFindings(dto *dtos.SecurityFindingsUploadRequest) error
 	LockStack(dto *dtos.LockStackRequest) (dtos.LockStackResponse, error)
 	UnlockStack(dto *dtos.UnlockStackRequest) (dtos.UnlockStackResponse, error)
 }

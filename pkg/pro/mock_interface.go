@@ -55,20 +55,6 @@ func (mr *MockAPIClientMockRecorder) UploadInstances(req any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UploadInstances", reflect.TypeOf((*MockAPIClient)(nil).UploadInstances), req)
 }
 
-// UploadSecurityFindings mocks base method.
-func (m *MockAPIClient) UploadSecurityFindings(req *dtos.SecurityFindingsUploadRequest) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "UploadSecurityFindings", req)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// UploadSecurityFindings indicates an expected call of UploadSecurityFindings.
-func (mr *MockAPIClientMockRecorder) UploadSecurityFindings(req any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UploadSecurityFindings", reflect.TypeOf((*MockAPIClient)(nil).UploadSecurityFindings), req)
-}
-
 // MockClientFactory is a mock of ClientFactory interface.
 type MockClientFactory struct {
 	ctrl     *gomock.Controller

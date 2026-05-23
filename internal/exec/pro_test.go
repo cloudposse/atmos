@@ -33,11 +33,6 @@ func (m *MockProAPIClient) UploadAffectedStacks(dto *dtos.UploadAffectedStacksRe
 	return args.Error(0)
 }
 
-func (m *MockProAPIClient) UploadSecurityFindings(dto *dtos.SecurityFindingsUploadRequest) error {
-	args := m.Called(dto)
-	return args.Error(0)
-}
-
 func (m *MockProAPIClient) LockStack(dto *dtos.LockStackRequest) (dtos.LockStackResponse, error) {
 	args := m.Called(dto)
 	if args.Get(0) == nil {

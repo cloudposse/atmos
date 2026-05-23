@@ -1074,7 +1074,6 @@ var (
 	ErrAWSSecurityInvalidFramework = errors.New("invalid compliance framework: valid values are cis-aws, pci-dss, soc2, hipaa, nist")
 	ErrAWSSecurityInvalidFormat    = errors.New("invalid output format: valid values are markdown, json, yaml, csv, sarif")
 	ErrAWSSecurityAnalysisFailed   = errors.New("AI analysis of security findings failed")
-	ErrAWSSecurityUploadFailed     = errors.New("failed to upload security findings to Atmos Pro")
 	ErrAWSCredentialsNotValid      = errors.New("AWS credentials are not configured or have expired")
 
 	// CLI provider errors.

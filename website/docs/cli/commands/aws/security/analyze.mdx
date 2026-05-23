@@ -58,9 +58,6 @@ atmos aws security analyze [flags]
   <dt>`--file`</dt>
   <dd>Write output to a file instead of stdout. Creates parent directories if they don't exist.</dd>
 
-  <dt>`--upload` <Experimental /></dt>
-  <dd>Upload the report to Atmos Pro as SARIF. Works independently of `--format` — your local output (markdown, json, …) is unchanged. Requires `ATMOS_PRO_TOKEN` or a GitHub Actions workflow with OIDC enabled. The Atmos Pro security findings endpoint is not yet generally available; the contract may change. Env var: `ATMOS_AWS_SECURITY_UPLOAD`.</dd>
-
   <dt>`--max-findings`</dt>
   <dd>Maximum number of findings to retrieve and analyze (default: `500`).</dd>
 
@@ -124,19 +121,6 @@ atmos aws security analyze --stack prod-us-east-1 --format markdown --severity c
 
 # SARIF 2.1.0 for GitHub code scanning, Defender, and SARIF viewers
 atmos aws security analyze --stack prod-us-east-1 --format sarif --file findings.sarif
-```
-</Terminal>
-
-### Atmos Pro Upload (Experimental)
-
-<Terminal title="atmos pro upload">
-```bash
-# Upload SARIF to Atmos Pro alongside the local Markdown report.
-# Requires ATMOS_PRO_TOKEN or a GitHub Actions workflow with OIDC enabled.
-atmos aws security analyze --stack prod-us-east-1 --upload
-
-# Combine: local SARIF file plus upload to Atmos Pro in one run.
-atmos aws security analyze --stack prod-us-east-1 --format sarif --file findings.sarif --upload
 ```
 </Terminal>
 

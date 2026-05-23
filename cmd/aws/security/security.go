@@ -3,8 +3,6 @@ package security
 import (
 	"context"
 	_ "embed"
-	"encoding/json"
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -23,10 +21,7 @@ import (
 	pkgsecurity "github.com/cloudposse/atmos/pkg/aws/security"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/flags"
-	"github.com/cloudposse/atmos/pkg/git"
 	log "github.com/cloudposse/atmos/pkg/logger"
-	"github.com/cloudposse/atmos/pkg/pro"
-	"github.com/cloudposse/atmos/pkg/pro/dtos"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui"
 )
@@ -76,7 +71,6 @@ var securityAnalyzeCmd = &cobra.Command{
 		identityFlag := v.GetString("identity")
 		noGroup := v.GetBool("no-group")
 		frameworkStr := v.GetString("framework")
-		upload := v.GetBool("upload")
 
 		// Initialize configuration with global flags (--base-path, --config, etc.).
 		globalFlags := flags.ParseGlobalFlags(cmd, v)
@@ -293,82 +287,8 @@ var securityAnalyzeCmd = &cobra.Command{
 			}
 		}
 
-		// Optional: upload SARIF to Atmos Pro. The endpoint is experimental.
-		if upload {
-			if err := uploadReportToAtmosPro(&atmosConfig, report, stack, component); err != nil {
-				return err
-			}
-		}
-
 		return nil
 	},
-}
-
-// proClientFactory builds an Atmos Pro client. Overridden in tests so the
-// upload path can be exercised without real credentials. Returns the narrow
-// pro.APIClient interface so generated mocks can stand in.
-var proClientFactory = func(atmosConfig *schema.AtmosConfiguration) (pro.APIClient, error) {
-	return pro.NewAtmosProAPIClientFromEnv(atmosConfig)
-}
-
-// gitRepoFactory builds a git repo accessor. Overridden in tests so callers can
-// inject a fake repo without touching the filesystem.
-var gitRepoFactory = git.NewDefaultGitRepo
-
-// uploadReportToAtmosPro serializes the report as SARIF and POSTs it to Atmos
-// Pro. The endpoint is currently experimental — callers see a warning before
-// any network activity so they know the contract may shift.
-func uploadReportToAtmosPro(atmosConfig *schema.AtmosConfiguration, report *pkgsecurity.Report, stack, component string) error {
-	ui.Warning("--upload is experimental; the Atmos Pro security findings endpoint is not yet generally available and may change.")
-
-	sarifDoc := pkgsecurity.BuildSARIFLog(report)
-	sarifBytes, err := json.Marshal(sarifDoc)
-	if err != nil {
-		return errUtils.Build(errUtils.ErrAWSSecurityUploadFailed).
-			WithCausef("failed to serialize SARIF: %s", err.Error()).
-			Err()
-	}
-
-	gitRepo := gitRepoFactory()
-	repoInfo, err := gitRepo.GetLocalRepoInfo()
-	if err != nil {
-		return errors.Join(errUtils.ErrAWSSecurityUploadFailed, err)
-	}
-
-	gitSHA, err := gitRepo.GetCurrentCommitSHA()
-	if err != nil {
-		// SHA is best-effort metadata; degrade gracefully so the upload still succeeds.
-		log.Warn("Failed to read current git SHA; uploading without it.", "error", err)
-		gitSHA = ""
-	}
-
-	apiClient, err := proClientFactory(atmosConfig)
-	if err != nil {
-		return errUtils.Build(errUtils.ErrAWSSecurityUploadFailed).
-			WithCausef("failed to create Atmos Pro client: %s", err.Error()).
-			WithHint("Set ATMOS_PRO_TOKEN or run from a GitHub Actions workflow with OIDC enabled.").
-			WithHint("See https://atmos-pro.com/docs/learn/authentication").
-			Err()
-	}
-
-	dto := &dtos.SecurityFindingsUploadRequest{
-		RepoURL:   repoInfo.RepoUrl,
-		RepoName:  repoInfo.RepoName,
-		RepoOwner: repoInfo.RepoOwner,
-		RepoHost:  repoInfo.RepoHost,
-		GitSHA:    gitSHA,
-		Stack:     stack,
-		Component: component,
-		Format:    string(pkgsecurity.FormatSARIF),
-		SARIF:     sarifBytes,
-	}
-
-	if err := apiClient.UploadSecurityFindings(dto); err != nil {
-		return err
-	}
-
-	ui.Successf("Uploaded SARIF report to Atmos Pro (%d findings).", report.TotalFindings)
-	return nil
 }
 
 func init() {
@@ -385,13 +305,11 @@ func init() {
 		flags.WithStringFlag("region", "", "", "AWS region override"),
 		flags.WithStringFlag("identity", "i", "", "Atmos Auth identity for AWS credentials"),
 		flags.WithBoolFlag("no-group", "", false, "Disable grouping of duplicate findings"),
-		flags.WithBoolFlag("upload", "", false, "Upload the report to Atmos Pro as SARIF (experimental)"),
 		flags.WithEnvVars("stack", "ATMOS_STACK"),
 		flags.WithEnvVars("identity", "ATMOS_AWS_SECURITY_IDENTITY"),
 		flags.WithEnvVars("format", "ATMOS_AWS_SECURITY_FORMAT"),
 		flags.WithEnvVars("max-findings", "ATMOS_AWS_SECURITY_MAX_FINDINGS"),
 		flags.WithEnvVars("region", "ATMOS_AWS_SECURITY_REGION"),
-		flags.WithEnvVars("upload", "ATMOS_AWS_SECURITY_UPLOAD"),
 	)
 
 	// Register flags on the analyze subcommand.
