@@ -3,6 +3,7 @@ package security
 import (
 	"bytes"
 	"encoding/json"
+	"strings"
 	"testing"
 	"time"
 
@@ -171,6 +172,53 @@ func TestBuildSARIFLog_SourceEnrichment(t *testing.T) {
 
 	require.NotEmpty(t, run.Tool.Driver.Rules[0].Relationships)
 	assert.Equal(t, "S3.1", run.Tool.Driver.Rules[0].Relationships[0].Target.ID)
+}
+
+func TestBuildSARIFLog_DirectoryURIsHaveTrailingSlash(t *testing.T) {
+	report := newTestSecurityReport()
+	report.Invocation = &ReportInvocation{
+		StartTimeUTC:        fixedTime.Add(-time.Minute),
+		EndTimeUTC:          fixedTime,
+		WorkingDirectory:    "/github/workspace",
+		ExecutionSuccessful: true,
+	}
+
+	run := BuildSARIFLog(report).Runs[0]
+	require.NotNil(t, run.OriginalURIBaseIDs)
+	assert.True(t, strings.HasSuffix(run.OriginalURIBaseIDs["%SRCROOT%"].URI, "/"))
+	require.Len(t, run.Invocations, 1)
+	require.NotNil(t, run.Invocations[0].WorkingDirectory)
+	assert.Equal(t, "file:///github/workspace/", run.Invocations[0].WorkingDirectory.URI)
+}
+
+func TestBuildSARIFTaxonomies_IndexesBySourceKeyWhenNamesCollide(t *testing.T) {
+	findings := []Finding{
+		{
+			Title:             "Control one",
+			SecurityControlID: "CTRL.1",
+			ComplianceStandards: []ComplianceStandard{
+				{ID: "ruleset/shared-standard/v/1.0.0"},
+			},
+		},
+		{
+			Title:             "Control two",
+			SecurityControlID: "CTRL.2",
+			ComplianceStandards: []ComplianceStandard{
+				{ID: "standards/shared-standard/v/1.0.0"},
+			},
+		},
+	}
+
+	taxonomies, index := buildSARIFTaxonomies(findings)
+	require.Len(t, taxonomies, 2)
+
+	rulesetKey := taxonomyKey("ruleset/shared-standard/v/1.0.0")
+	standardsKey := taxonomyKey("standards/shared-standard/v/1.0.0")
+	require.Contains(t, index, rulesetKey)
+	require.Contains(t, index, standardsKey)
+	assert.NotEqual(t, index[rulesetKey], index[standardsKey])
+	assert.Equal(t, "CTRL.1", taxonomies[index[rulesetKey]].Taxa[0].ID)
+	assert.Equal(t, "CTRL.2", taxonomies[index[standardsKey]].Taxa[0].ID)
 }
 
 func TestBuildSARIFLog_UnmappedFindingHasLogicalLocationOnly(t *testing.T) {

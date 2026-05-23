@@ -38,9 +38,6 @@ func buildComplianceOCSFEvents(report *ComplianceReport) []OCSFEvent {
 // we only populate what the ComplianceReport carries.
 func buildComplianceOCSFEvent(ctrl *ComplianceControl, report *ComplianceReport, correlationUID string, profiles []string) OCSFEvent {
 	now := report.GeneratedAt
-	if now.IsZero() {
-		now = time.Now().UTC()
-	}
 	return OCSFEvent{
 		ActivityID:   ocsfActivityCreate,
 		ActivityName: ocsfActivityName(ocsfActivityCreate),

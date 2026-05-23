@@ -237,6 +237,21 @@ func TestBuildComplianceOCSFEvents_Basic(t *testing.T) {
 	assert.Contains(t, names, "atmos.stack")
 }
 
+func TestBuildComplianceOCSFEvents_ZeroGeneratedAtUsesZeroTime(t *testing.T) {
+	report := newTestComplianceReport()
+	report.GeneratedAt = time.Time{}
+
+	events := buildComplianceOCSFEvents(report)
+	require.NotEmpty(t, events)
+	assert.Equal(t, int64(0), events[0].Time)
+
+	a, err := json.Marshal(events)
+	require.NoError(t, err)
+	b, err := json.Marshal(buildComplianceOCSFEvents(report))
+	require.NoError(t, err)
+	assert.True(t, bytes.Equal(a, b), "zero GeneratedAt compliance output must be byte-stable")
+}
+
 func TestBuildComplianceOCSFEvents_EmptyReport(t *testing.T) {
 	assert.Equal(t, []OCSFEvent{}, buildComplianceOCSFEvents(nil))
 	assert.Equal(t, []OCSFEvent{}, buildComplianceOCSFEvents(&ComplianceReport{}))

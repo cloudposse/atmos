@@ -387,15 +387,16 @@ func uniqueRegions(region string, findings []Finding) []string {
 }
 
 func uniqueStacks(stack string, findings []Finding) []string {
-	if stack != "" {
-		return []string{stack}
-	}
-	return uniqueFindingValues(findings, func(f *Finding) string {
+	values := uniqueFindingValues(findings, func(f *Finding) string {
 		if f.Mapping == nil {
 			return ""
 		}
 		return f.Mapping.Stack
 	})
+	if len(values) == 0 && stack != "" {
+		return []string{stack}
+	}
+	return values
 }
 
 func uniqueFindingValues(findings []Finding, valueFn func(*Finding) string) []string {

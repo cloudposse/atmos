@@ -481,6 +481,19 @@ func TestBuildSecurityReport_TagMappingNilWhenNotProvided(t *testing.T) {
 	assert.Nil(t, report.TagMapping)
 }
 
+func TestUniqueStacks(t *testing.T) {
+	findings := []Finding{
+		{ID: "f1", Mapping: &pkgsecurity.ComponentMapping{Stack: "plat-use2-prod", Mapped: true}},
+		{ID: "f2", Mapping: &pkgsecurity.ComponentMapping{Stack: "plat-use2-dev", Mapped: true}},
+		{ID: "f3", Mapping: &pkgsecurity.ComponentMapping{Stack: "plat-use2-prod", Mapped: true}},
+		{ID: "f4", Mapping: nil},
+	}
+
+	assert.Equal(t, []string{"plat-use2-dev", "plat-use2-prod"}, uniqueStacks("plat", findings))
+	assert.Equal(t, []string{"plat"}, uniqueStacks("plat", []Finding{{ID: "unmapped", Mapping: nil}}))
+	assert.Empty(t, uniqueStacks("", []Finding{{ID: "unmapped", Mapping: nil}}))
+}
+
 func TestFilterByStackAndComponent(t *testing.T) {
 	findings := []pkgsecurity.Finding{
 		{ID: "f1", Mapping: &pkgsecurity.ComponentMapping{Stack: "plat-use2-prod", Component: "vpc", Mapped: true}},

@@ -814,18 +814,11 @@ func buildSARIFTaxonomies(findings []Finding) ([]ToolComponent, map[string]int) 
 	}
 
 	index := make(map[string]int, len(taxonomies))
-	for i, taxonomy := range taxonomies {
-		if taxonomy.Name == cweTaxonomyID {
-			index[taxonomyKey(cweTaxonomyID)] = i
-			continue
-		}
-		for _, key := range keys {
-			standardID := strings.TrimPrefix(key, "compliance:")
-			if complianceTaxonomyName(parseComplianceStandard(standardID)) == taxonomy.Name {
-				index[key] = i
-				break
-			}
-		}
+	for i, key := range keys {
+		index[key] = i
+	}
+	if len(cweIDs) > 0 {
+		index[taxonomyKey(cweTaxonomyID)] = len(taxonomies) - 1
 	}
 	return taxonomies, index
 }
@@ -892,7 +885,7 @@ func buildSARIFRun(rules []Rule, results []Result, taxonomies []ToolComponent, r
 	if hasPhysicalLocations(results) {
 		rootURI := "file:///"
 		if wd, err := os.Getwd(); err == nil {
-			rootURI = "file://" + filepath.ToSlash(wd)
+			rootURI = fileDirectoryURI(wd)
 		}
 		run.OriginalURIBaseIDs = map[string]ArtifactLocation{
 			"%SRCROOT%": {URI: rootURI},
@@ -931,12 +924,20 @@ func buildSARIFInvocation(inv *ReportInvocation) Invocation {
 		},
 	}
 	if inv.WorkingDirectory != "" {
-		out.WorkingDirectory = &ArtifactLocation{URI: "file://" + filepath.ToSlash(inv.WorkingDirectory)}
+		out.WorkingDirectory = &ArtifactLocation{URI: fileDirectoryURI(inv.WorkingDirectory)}
 	}
 	if out.ExitCodeDescription == "" && out.ExecutionSuccessful {
 		out.ExitCodeDescription = "Success"
 	}
 	return out
+}
+
+func fileDirectoryURI(path string) string {
+	uriPath := filepath.ToSlash(path)
+	if !strings.HasSuffix(uriPath, "/") {
+		uriPath += "/"
+	}
+	return "file://" + uriPath
 }
 
 // wrapSARIFLog wraps the rules + results into a complete SARIF log document.
