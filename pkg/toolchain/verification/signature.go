@@ -83,11 +83,15 @@ func (v *Verifier) cosignArgs(ctx context.Context, req *Request, cfg *registry.C
 		if err != nil {
 			return nil, nil, err
 		}
-		return append(args, rendered...), nil, nil
+		args = append(args, rendered...)
 	}
 	sidecars, cleanup, err := v.downloadCosignSidecars(ctx, req, cfg)
 	if err == nil {
-		return append(args, sidecars...), cleanup, nil
+		args = append(args, sidecars...)
+		if len(args) == 1 {
+			return nil, cleanup, nil
+		}
+		return args, cleanup, nil
 	}
 	if req.Policy.Signatures != PolicyRequired {
 		result.SkippedReasons = append(result.SkippedReasons, fmt.Sprintf("cosign sidecar unavailable: %v", err))

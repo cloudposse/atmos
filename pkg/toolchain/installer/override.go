@@ -15,12 +15,15 @@ import (
 func ApplyPlatformOverrides(tool *registry.Tool) {
 	defer perf.Track(nil, "installer.ApplyPlatformOverrides")()
 
+	ApplyPlatformOverridesForPlatform(tool, runtime.GOOS, runtime.GOARCH)
+}
+
+func ApplyPlatformOverridesForPlatform(tool *registry.Tool, goos, goarch string) {
+	defer perf.Track(nil, "installer.ApplyPlatformOverridesForPlatform")()
+
 	if len(tool.Overrides) == 0 {
 		return
 	}
-
-	goos := runtime.GOOS
-	goarch := runtime.GOARCH
 
 	for i := range tool.Overrides {
 		override := &tool.Overrides[i]
