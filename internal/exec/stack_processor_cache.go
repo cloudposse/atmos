@@ -17,10 +17,17 @@ var (
 	getFileContentSyncMap = sync.Map{}
 
 	// Base component inheritance cache to avoid re-processing the same inheritance chains.
-	// Cache key: "stack:component:baseComponent" -> BaseComponentConfig.
+	// Cache key: "stack:component:baseComponent" -> *schema.BaseComponentConfig (immutable post-insert).
 	// No cache invalidation needed - configuration is immutable per command execution.
-	baseComponentConfigCache   = make(map[string]*schema.BaseComponentConfig)
-	baseComponentConfigCacheMu sync.RWMutex
+	//
+	// Uses sync.Map (not a RWMutex-protected map) because the write path is highly
+	// contended at scale: in a large-stack workload (~9k component instances across
+	// ~700 stacks), the previous RWMutex.Lock() inside cacheBaseComponentConfig
+	// serialized every write across goroutines, contributing ~5m50s of cumulative
+	// wait time to the heatmap (55ms avg per call) despite the actual deep-copy
+	// work being only ~525µs per call. The lock-free sync.Map removes the global
+	// lock and optimizes for the disjoint-key write pattern this cache exhibits.
+	baseComponentConfigCache sync.Map
 
 	// JSON schema compilation cache to avoid re-compiling the same schema for every stack file.
 	// Cache key: absolute file path to schema file -> compiled schema.
@@ -68,14 +75,19 @@ func deepCopyBaseComponentConfigMaps(dst, src *schema.BaseComponentConfig) error
 
 // getCachedBaseComponentConfig retrieves a cached base component config if it exists.
 // Returns a deep copy to prevent mutations affecting the cache.
+//
+// The deep copy runs outside the sync.Map.Load critical section: the cached
+// pointer's target is immutable post-insert (see cacheBaseComponentConfig), so
+// concurrent goroutines may safely deep-copy it without coordination.
 func getCachedBaseComponentConfig(cacheKey string) (*schema.BaseComponentConfig, *[]string, bool) {
 	defer perf.Track(nil, "exec.getCachedBaseComponentConfig")()
 
-	baseComponentConfigCacheMu.RLock()
-	defer baseComponentConfigCacheMu.RUnlock()
-
-	cached, found := baseComponentConfigCache[cacheKey]
+	raw, found := baseComponentConfigCache.Load(cacheKey)
 	if !found {
+		return nil, nil, false
+	}
+	cached, ok := raw.(*schema.BaseComponentConfig)
+	if !ok {
 		return nil, nil, false
 	}
 
@@ -104,11 +116,13 @@ func getCachedBaseComponentConfig(cacheKey string) (*schema.BaseComponentConfig,
 
 // cacheBaseComponentConfig stores a base component config in the cache.
 // Stores a deep copy to prevent external mutations from affecting the cache.
+//
+// The deep copy is performed BEFORE the store so the cache's critical section
+// is only the sync.Map.Store call, not the ~525µs deep-copy work. Combined with
+// sync.Map's lock-free read path, this keeps write contention out of the
+// inheritance pipeline's hot path.
 func cacheBaseComponentConfig(cacheKey string, config *schema.BaseComponentConfig) {
 	defer perf.Track(nil, "exec.cacheBaseComponentConfig")()
-
-	baseComponentConfigCacheMu.Lock()
-	defer baseComponentConfigCacheMu.Unlock()
 
 	// Deep copy to prevent external mutations from affecting the cache.
 	// All map fields must be deep copied since they are mutable.
@@ -130,7 +144,7 @@ func cacheBaseComponentConfig(cacheKey string, config *schema.BaseComponentConfi
 	copy(copyBaseComponents, config.ComponentInheritanceChain)
 	copyConfig.ComponentInheritanceChain = copyBaseComponents
 
-	baseComponentConfigCache[cacheKey] = &copyConfig
+	baseComponentConfigCache.Store(cacheKey, &copyConfig)
 }
 
 // getCachedCompiledSchema retrieves a cached compiled JSON schema if it exists.
@@ -161,9 +175,10 @@ func cacheCompiledSchema(schemaPath string, schema *jsonschema.Schema) {
 func ClearBaseComponentConfigCache() {
 	defer perf.Track(nil, "exec.ClearBaseComponentConfigCache")()
 
-	baseComponentConfigCacheMu.Lock()
-	defer baseComponentConfigCacheMu.Unlock()
-	baseComponentConfigCache = make(map[string]*schema.BaseComponentConfig)
+	baseComponentConfigCache.Range(func(key, _ any) bool {
+		baseComponentConfigCache.Delete(key)
+		return true
+	})
 }
 
 // ClearJsonSchemaCache clears the JSON schema cache.

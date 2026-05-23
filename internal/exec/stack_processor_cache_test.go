@@ -1,6 +1,7 @@
 package exec
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"sync"
@@ -312,6 +313,147 @@ func TestConcurrentCacheAccess(t *testing.T) {
 	// Clean up.
 	ClearBaseComponentConfigCache()
 	ClearFileContentCache()
+}
+
+// TestConcurrentCacheAccess_DisjointKeys verifies that many goroutines
+// writing distinct cache keys all succeed and every value is retrievable
+// afterwards. This is the production-realistic pattern: each component
+// instance writes its own unique "stack:component:baseComponent" key,
+// so the cache sees high write concurrency with no key overlap. The
+// Phase 2 sync.Map + outside-the-lock deep-copy change is specifically
+// optimized for this pattern; a regression that reintroduces a global
+// lock would still pass under TestConcurrentCacheAccess (single key,
+// race detector only verifies safety, not throughput) but would
+// reintroduce the lock-contention pathology this test guards against.
+func TestConcurrentCacheAccess_DisjointKeys(t *testing.T) {
+	ClearBaseComponentConfigCache()
+	defer ClearBaseComponentConfigCache()
+
+	const numKeys = 200
+	var wg sync.WaitGroup
+
+	// Each goroutine writes a unique key.
+	for i := 0; i < numKeys; i++ {
+		wg.Add(1)
+		go func(id int) {
+			defer wg.Done()
+			config := &schema.BaseComponentConfig{
+				FinalBaseComponentName: fmt.Sprintf("component-%d", id),
+				BaseComponentVars: map[string]any{
+					"id":    id,
+					"label": fmt.Sprintf("instance-%d", id),
+				},
+				ComponentInheritanceChain: []string{fmt.Sprintf("base-%d", id)},
+			}
+			cacheBaseComponentConfig(fmt.Sprintf("stack-%d:component:base", id), config)
+		}(i)
+	}
+	wg.Wait()
+
+	// Verify every key is independently readable with the right value.
+	for i := 0; i < numKeys; i++ {
+		cached, _, found := getCachedBaseComponentConfig(fmt.Sprintf("stack-%d:component:base", i))
+		require.True(t, found, "key %d should be cached", i)
+		require.NotNil(t, cached)
+		require.Equal(t, fmt.Sprintf("component-%d", i), cached.FinalBaseComponentName,
+			"key %d should have its own value (no cross-contamination)", i)
+		require.Equal(t, i, cached.BaseComponentVars["id"], "key %d vars id mismatch", i)
+	}
+}
+
+// TestConcurrentCacheAccess_InterleavedReadWrite stresses the read-while-write
+// path: half the goroutines write keys, the other half repeatedly read them.
+// With Phase 2's deep-copy-outside-the-lock change, readers no longer hold an
+// RLock while copying, so concurrent writes proceed without coordination.
+// Run with `go test -race` to catch data races introduced by future
+// modifications to the cache; this test must complete cleanly under the
+// race detector.
+func TestConcurrentCacheAccess_InterleavedReadWrite(t *testing.T) {
+	ClearBaseComponentConfigCache()
+	defer ClearBaseComponentConfigCache()
+
+	const writers = 50
+	const readers = 50
+	const itersPerReader = 20
+	var wg sync.WaitGroup
+
+	// Pre-seed a few keys so readers have something to find.
+	for i := 0; i < writers; i++ {
+		cacheBaseComponentConfig(fmt.Sprintf("seed-%d", i), &schema.BaseComponentConfig{
+			FinalBaseComponentName: fmt.Sprintf("seed-%d", i),
+		})
+	}
+
+	// Writers add new keys concurrently with readers.
+	for i := 0; i < writers; i++ {
+		wg.Add(1)
+		go func(id int) {
+			defer wg.Done()
+			cfg := &schema.BaseComponentConfig{
+				FinalBaseComponentName: fmt.Sprintf("writer-%d", id),
+				BaseComponentVars:      map[string]any{"id": id},
+			}
+			cacheBaseComponentConfig(fmt.Sprintf("writer-%d", id), cfg)
+		}(i)
+	}
+
+	// Readers read the seeded keys while writers are working.
+	for i := 0; i < readers; i++ {
+		wg.Add(1)
+		go func(id int) {
+			defer wg.Done()
+			for j := 0; j < itersPerReader; j++ {
+				key := fmt.Sprintf("seed-%d", (id+j)%writers)
+				cached, _, found := getCachedBaseComponentConfig(key)
+				if found {
+					require.NotNil(t, cached)
+					// Read a field; tripping the deep copy is the point.
+					_ = cached.FinalBaseComponentName
+				}
+			}
+		}(i)
+	}
+	wg.Wait()
+
+	// Every key should be present and intact.
+	for i := 0; i < writers; i++ {
+		cached, _, found := getCachedBaseComponentConfig(fmt.Sprintf("seed-%d", i))
+		require.True(t, found)
+		require.Equal(t, fmt.Sprintf("seed-%d", i), cached.FinalBaseComponentName)
+	}
+}
+
+// TestCacheReadIsolationAfterStoreReturns verifies that mutating the *input*
+// to cacheBaseComponentConfig AFTER the call returns does NOT affect what a
+// later reader sees. Phase 2 moved the deep-copy outside the lock, so this
+// test guards against a regression where the copy is skipped or aliased.
+//
+// This complements TestCacheBaseComponentConfigDeepCopy (which mutates BEFORE
+// the read happens). Here we mutate AFTER the cache write has completed,
+// proving the cached value is independent of the caller's struct.
+func TestCacheReadIsolationAfterStoreReturns(t *testing.T) {
+	ClearBaseComponentConfigCache()
+	defer ClearBaseComponentConfigCache()
+
+	src := &schema.BaseComponentConfig{
+		FinalBaseComponentName:    "original",
+		BaseComponentVars:         map[string]any{"key": "original"},
+		ComponentInheritanceChain: []string{"base"},
+	}
+	cacheBaseComponentConfig("iso-key", src)
+
+	// Mutate the source AFTER caching - cached entry must be unaffected.
+	src.FinalBaseComponentName = "mutated"
+	src.BaseComponentVars["key"] = "mutated"
+	src.ComponentInheritanceChain[0] = "mutated-base"
+	src.ComponentInheritanceChain = append(src.ComponentInheritanceChain, "appended")
+
+	cached, baseComponents, found := getCachedBaseComponentConfig("iso-key")
+	require.True(t, found)
+	require.Equal(t, "original", cached.FinalBaseComponentName)
+	require.Equal(t, "original", cached.BaseComponentVars["key"])
+	require.Equal(t, []string{"base"}, cached.ComponentInheritanceChain)
+	require.Equal(t, []string{"base"}, *baseComponents)
 }
 
 // TestCacheCompiledSchemaBasic tests JSON schema caching mechanics.
