@@ -1,6 +1,6 @@
 ---
 name: atmos-ai
-description: "Atmos AI and MCP: AI providers, AI command analysis, MCP server/client configuration, multi-CLI export (Claude Code, Codex, Gemini), Atmos MCP server, Atmos Pro MCP server, AWS MCP server suite, CLI provider pass-through, toolchain-aware export, auth-wrapped tools, MCP+skills pairing"
+description: "Atmos AI and MCP in both directions: external AI assistants using Atmos through agent skills, atmos mcp start, multi-CLI MCP export, Atmos Pro MCP, and AWS MCP servers; and Atmos using AI through atmos ai ask/chat/exec, --ai command analysis, API providers, CLI providers, external MCP routing/pass-through, toolchain-aware export, auth-wrapped tools, and MCP+skills pairing"
 metadata:
   copyright: Copyright Cloud Posse, LLC 2026
   version: "1.0.0"
@@ -10,16 +10,31 @@ metadata:
 
 ## Purpose
 
-Use this skill when configuring or troubleshooting Atmos AI, AI-powered command analysis,
-AI providers, or MCP integrations. Atmos AI can call configured providers directly, use
-local CLI providers, expose Atmos tools through MCP, and connect to external MCP servers
-(AWS server suite, Atmos Pro, custom servers).
+Use this skill when the work is about AI and Atmos together. There are two directions:
 
-For project discovery, resolved stack/component configuration, provenance, query filters,
-or affected-instance analysis, use the `atmos-introspection` skill. For Terraform multi-instance
-execution with `--affected`, `--all`, or `--query`, use the `atmos-terraform` or `atmos-ci` skill.
+- **AI uses Atmos**: external AI assistants use Atmos Agent Skills for knowledge and Atmos MCP
+  servers for tools. This includes `atmos mcp start`, `atmos mcp export`, the Atmos MCP server,
+  Atmos Pro MCP, AWS MCP servers, and MCP+skills setup for Claude Code, Codex, Gemini, Cursor,
+  Windsurf, GitHub Copilot, and similar clients.
+- **Atmos uses AI**: Atmos calls AI providers directly or through local CLI providers. This
+  includes `atmos ai ask`, `atmos ai chat`, `atmos ai exec`, `--ai` command analysis, API
+  providers, CLI providers, external MCP server routing, and CLI provider MCP pass-through.
 
-## AI Commands
+This skill is the coordination layer for AI providers, agent skills, MCP configuration, MCP
+export, and the "AI inside AI" setup where an external assistant calls Atmos, and Atmos can also
+call AI.
+
+## Routing
+
+| Work | Use |
+|------|-----|
+| AI provider setup, `atmos ai`, `--ai`, MCP server/client config, MCP export, agent-skill pairing | Stay in `atmos-ai` |
+| Project discovery, resolved stacks/components, provenance, query filters, affected analysis | Load `atmos-introspection` |
+| Terraform plan/apply/deploy/destroy, `--affected`, `--all`, `--query`, CI execution matrices | Load `atmos-terraform` or `atmos-ci` |
+| Cloud credentials, identities, SSO/OIDC, auth-wrapped MCP servers | Load `atmos-auth` |
+| Tool binaries for MCP servers, `uvx`/`npx` resolution, Aqua aliases, PATH injection | Load `atmos-toolchain` |
+
+## Atmos Uses AI: Commands and Providers
 
 ```bash
 atmos ai chat
@@ -48,7 +63,7 @@ ai:
     enabled: true
 ```
 
-## MCP Modes
+## AI Uses Atmos: MCP and Skills
 
 Atmos MCP has two separate capabilities:
 
@@ -67,6 +82,34 @@ ai:
   tools:
     enabled: true
 ```
+
+Use Atmos Agent Skills with MCP. MCP provides live tools; skills provide Atmos-native knowledge
+and conventions.
+
+| Layer  | What it provides                                | Example                                          |
+|--------|-------------------------------------------------|--------------------------------------------------|
+| MCP    | **Tools** -- live data and execution capability | "What stacks exist?" -> atmos MCP tool call      |
+| Skills | **Knowledge** -- domain patterns and conventions | "How should I structure cross-stack deps?" -> skill |
+
+Without skills, an AI assistant falls back to general training data that may generate invalid
+YAML, miss features like `!store` / `!terraform.output`, or use wrong CLI flags. With skills,
+the assistant loads the right Atmos context just before answering.
+
+The same prompt -- *"set up cross-stack dependencies with remote state"* -- pulls live data
+through MCP **and** applies Atmos-native patterns (`!terraform.state`, abstract components,
+inheritance, [remote-state-bridge](../atmos-migration/references/remote-state-bridge.md))
+from the relevant skill.
+
+Install the Atmos skills plugin into Claude Code:
+
+```bash
+/plugin marketplace add cloudposse/atmos
+/plugin install atmos@cloudposse
+```
+
+For Codex, Gemini, Cursor, Windsurf, GitHub Copilot, JetBrains Junie, and Amazon Q, see the
+[AI Agent Skills announcement](https://atmos.tools/changelog/ai-agent-skills) for tool-specific
+install paths.
 
 ## The Three Layers
 
@@ -249,35 +292,6 @@ Gemini's Trusted Folders feature blocks MCP servers in untrusted directories. Af
 `atmos mcp export --output .gemini/settings.json`, the user must trust the folder once via
 the Gemini UI/settings before the MCP servers will start. Symptom: servers configured
 correctly but no tools available in Gemini.
-
-## MCP + Skills: Tools vs Knowledge
-
-MCP and Atmos Agent Skills are complementary, not redundant. Use both together.
-
-| Layer  | What it provides                              | Example                                          |
-|--------|-----------------------------------------------|--------------------------------------------------|
-| MCP    | **Tools** -- live data and execution capability | "What stacks exist?" → atmos MCP tool call       |
-| Skills | **Knowledge** -- domain patterns and conventions | "How should I structure cross-stack deps?" → skill |
-
-Without skills, an AI assistant falls back to general training data that may generate invalid
-YAML, miss features like `!store` / `!terraform.output`, or use wrong CLI flags. With skills,
-the assistant loads the right Atmos context just before answering.
-
-The same prompt -- *"set up cross-stack dependencies with remote state"* -- pulls live data
-through MCP **and** applies Atmos-native patterns (`!terraform.state`, abstract components,
-inheritance, [remote-state-bridge](../atmos-migration/references/remote-state-bridge.md))
-from the relevant skill.
-
-Install the Atmos skills plugin into Claude Code:
-
-```bash
-/plugin marketplace add cloudposse/atmos
-/plugin install atmos@cloudposse
-```
-
-For Codex, Gemini, Cursor, Windsurf, GitHub Copilot, JetBrains Junie, and Amazon Q, see the
-[AI Agent Skills announcement](https://atmos.tools/changelog/ai-agent-skills) for tool-specific
-install paths.
 
 ## Related Examples
 

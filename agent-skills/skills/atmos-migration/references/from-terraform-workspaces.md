@@ -12,10 +12,11 @@ situation before proposing anything:
 | Situation                                                              | Path                                |
 |------------------------------------------------------------------------|-------------------------------------|
 | User wants to keep existing workspace state intact, migrate gradually  | [Path 1: Keep workspaces](#path-1-keep-the-workspace-state-easiest) |
-| User wants per-environment backend isolation (recommended steady state) | [Path 2: Separate backends](#path-2-migrate-to-separate-backends-recommended) |
+| User explicitly wants separate backend configuration, or policy requires it | [Path 2: Move to separate backends](#path-2-move-to-separate-backends-optional) |
 
-Default recommendation: **Path 1 first** to get the user running on Atmos with zero state risk,
-then **Path 2 later** when they have time for the state migration. Do not force Path 2 on day one.
+Default guidance: **Path 1 first** to get the user running on Atmos with zero state risk,
+and only discuss **Path 2** if the user asks for separate backends or has an operational policy
+that requires them. Do not make state migration a prerequisite for adopting Atmos.
 
 ## Mapping `terraform.workspace` → Atmos Stack
 
@@ -116,10 +117,11 @@ workspace name in their state backend. If their workspaces are named `env:prod` 
 After this works for one stack, repeat for `dev`, `staging`, etc. The user has zero state risk
 and can now use `atmos terraform plan/apply` against their existing infrastructure.
 
-## Path 2: Migrate to Separate Backends (Recommended)
+## Path 2: Move to Separate Backends (Optional)
 
-This is the steady-state target for most users -- per-environment backend isolation prevents the
-"prod state corrupted by dev misconfig" failure mode that workspaces are vulnerable to.
+This is an optional operational change for teams that explicitly want independent backend
+configuration per environment, or have an internal policy requiring separate state backends.
+Atmos does not require this layout, and users do not need it to migrate to Atmos.
 
 This requires a one-time state migration per workspace. Walk the user through it carefully -- it
 is the highest-risk step in the whole migration.
@@ -151,8 +153,8 @@ is the highest-risk step in the whole migration.
    ```
 5. Repeat for each workspace.
 
-After all environments are on isolated backends, the user can delete the workspaces from the
-original backend (after confirming no other tooling references them).
+If the team moves all environments to separate backends, they can delete the old workspaces from
+the original backend after confirming no other tooling references them.
 
 ## Real Environments vs Per-Developer Sandboxes
 
@@ -205,5 +207,5 @@ patterns), route to the [atmos-ci](../../atmos-ci/SKILL.md) skill.
 - **Removing workspace logic from `.tf` before stacks are ready** -- the user's existing
   `terraform apply` will break. Add the variable declarations alongside the locals, then remove
   locals only after stacks are populated.
-- **Forcing Path 2 on day one** -- Path 1 unblocks Atmos adoption; Path 2 can come later as a
-  steady-state cleanup. Don't make state migration a prerequisite for trying Atmos.
+- **Treating Path 2 as required** -- Path 1 unblocks Atmos adoption without state migration.
+  Only move to separate backends when the user explicitly wants that operating model.
