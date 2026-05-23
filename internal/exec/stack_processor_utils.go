@@ -1129,9 +1129,15 @@ func processYAMLConfigFileWithContextInternal(
 						if err != nil {
 							return nil, nil, nil, nil, nil, nil, nil, nil, fmt.Errorf("%w: import '%s' in file '%s': %w",
 								errUtils.ErrStackImportNotFound, imp, relativeFilePath, err)
-						} else if importMatches == nil {
-							return nil, nil, nil, nil, nil, nil, nil, nil, fmt.Errorf("%w: import '%s' in file '%s': %w",
-								errUtils.ErrStackImportNotFound, imp, relativeFilePath, errUtils.ErrFailedToFindImport)
+						}
+						if len(importMatches) == 0 {
+							return nil, nil, nil, nil, nil, nil, nil, nil, fmt.Errorf(
+								"%w: import '%s' in file '%s': %w",
+								errUtils.ErrStackImportNotFound,
+								imp,
+								relativeFilePath,
+								errUtils.ErrFailedToFindImport,
+							)
 						}
 					}
 				}

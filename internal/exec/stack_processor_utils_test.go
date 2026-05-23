@@ -2858,7 +2858,8 @@ func TestProcessImportSection_NoImportSection(t *testing.T) {
 		"vars": map[string]any{"stage": "dev"},
 	}
 
-	imports, err := ProcessImportSection(stackMap, filepath.Join("test", "path.yaml"))
+	manifestPath := filepath.Join("test", "path.yaml")
+	imports, err := ProcessImportSection(stackMap, manifestPath)
 	require.NoError(t, err)
 	assert.Nil(t, imports)
 }
@@ -2869,7 +2870,8 @@ func TestProcessImportSection_NilImportSection(t *testing.T) {
 		"import": nil,
 	}
 
-	imports, err := ProcessImportSection(stackMap, filepath.Join("test", "path.yaml"))
+	manifestPath := filepath.Join("test", "path.yaml")
+	imports, err := ProcessImportSection(stackMap, manifestPath)
 	require.NoError(t, err)
 	assert.Nil(t, imports)
 }
@@ -2880,7 +2882,8 @@ func TestProcessImportSection_EmptyList(t *testing.T) {
 		"import": []any{},
 	}
 
-	imports, err := ProcessImportSection(stackMap, filepath.Join("test", "path.yaml"))
+	manifestPath := filepath.Join("test", "path.yaml")
+	imports, err := ProcessImportSection(stackMap, manifestPath)
 	require.NoError(t, err)
 	assert.Nil(t, imports)
 }
@@ -2891,7 +2894,8 @@ func TestProcessImportSection_InvalidType(t *testing.T) {
 		"import": "not-a-list",
 	}
 
-	_, err := ProcessImportSection(stackMap, filepath.Join("test", "path.yaml"))
+	manifestPath := filepath.Join("test", "path.yaml")
+	_, err := ProcessImportSection(stackMap, manifestPath)
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrInvalidImportSection)
 }
@@ -2900,12 +2904,13 @@ func TestProcessImportSection_NilElement(t *testing.T) {
 	// Test with nil element in import list.
 	stackMap := map[string]any{
 		"import": []any{
-			"valid/path.yaml",
+			filepath.Join("valid", "path.yaml"),
 			nil,
 		},
 	}
 
-	_, err := ProcessImportSection(stackMap, filepath.Join("test", "path.yaml"))
+	manifestPath := filepath.Join("test", "path.yaml")
+	_, err := ProcessImportSection(stackMap, manifestPath)
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrInvalidImport)
 }

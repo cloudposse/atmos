@@ -259,6 +259,8 @@ func (c *FileCache) Clear() error {
 	}
 
 	return c.lock.WithLock(func() error {
+		lockFilePath := c.lockFilePath
+
 		// Remove all files in the cache directory using Walk.
 		return c.fs.Walk(c.baseDir, func(path string, info os.FileInfo, walkErr error) error {
 			if walkErr != nil {
@@ -277,7 +279,7 @@ func (c *FileCache) Clear() error {
 			}
 
 			// Skip the lock file to preserve mutual exclusion guarantees.
-			if path == c.lockFilePath {
+			if filepath.Clean(path) == filepath.Clean(lockFilePath) {
 				return nil
 			}
 
