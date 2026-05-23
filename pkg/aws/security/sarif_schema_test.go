@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/santhosh-tekuri/jsonschema/v5"
 	"github.com/stretchr/testify/require"
@@ -61,7 +60,7 @@ func TestBuildSARIFLog_EmptyReportValidatesAgainstSchema(t *testing.T) {
 	validateAgainstSARIFSpec(t, schema, BuildSARIFLog(nil))
 	// Empty-but-non-nil report (zero findings).
 	validateAgainstSARIFSpec(t, schema, BuildSARIFLog(&Report{
-		GeneratedAt: time.Date(2026, 5, 22, 12, 0, 0, 0, time.UTC),
+		GeneratedAt: fixedTime,
 	}))
 }
 
@@ -71,7 +70,7 @@ func TestBuildSARIFLog_UnmappedFindingValidatesAgainstSchema(t *testing.T) {
 	// have different required fields).
 	schema := compileSARIFSchema(t)
 	report := &Report{
-		GeneratedAt: time.Date(2026, 5, 22, 12, 0, 0, 0, time.UTC),
+		GeneratedAt: fixedTime,
 		Findings: []Finding{
 			{
 				ID:          "f-unmapped",

@@ -15,8 +15,12 @@ import (
 // (https://docs.oasis-open.org/sarif/sarif/v2.1.0/sarif-v2.1.0.html) and the
 // version consumed by GitHub code scanning, Azure DevOps, and most SARIF viewers.
 const (
-	sarifVersion      = "2.1.0"
-	sarifSchema       = "https://raw.githubusercontent.com/oasis-tcs/sarif-spec/master/Schemata/sarif-schema-2.1.0.json"
+	sarifVersion = "2.1.0"
+	// SARIF schema is the SchemaStore canonical mirror of the SARIF 2.1.0
+	// JSON Schema. SchemaStore is the stable URL used by editors and
+	// validators; the upstream `oasis-tcs/sarif-spec` GitHub layout has
+	// shifted branches and directories more than once, so we don't rely on it.
+	sarifSchema       = "https://json.schemastore.org/sarif-2.1.0.json"
 	sarifToolName     = "atmos"
 	sarifInfoURI      = "https://atmos.tools"
 	sarifLevelError   = "error"
@@ -163,45 +167,12 @@ func BuildSARIFLog(report *Report) *SARIFLog {
 		results = append(results, buildSARIFResult(&findings[i], ruleIndex))
 	}
 
-	return &SARIFLog{
-		Schema:  sarifSchema,
-		Version: sarifVersion,
-		Runs: []Run{
-			{
-				Tool: Tool{
-					Driver: Driver{
-						Name:            sarifToolName,
-						Version:         version.Version,
-						SemanticVersion: version.Version,
-						InformationURI:  sarifInfoURI,
-						Rules:           rules,
-					},
-				},
-				Results: results,
-			},
-		},
-	}
+	return wrapSARIFLog(rules, results)
 }
 
 // emptySARIFLog returns a well-formed SARIF document with no results.
 func emptySARIFLog() *SARIFLog {
-	return &SARIFLog{
-		Schema:  sarifSchema,
-		Version: sarifVersion,
-		Runs: []Run{
-			{
-				Tool: Tool{
-					Driver: Driver{
-						Name:            sarifToolName,
-						Version:         version.Version,
-						SemanticVersion: version.Version,
-						InformationURI:  sarifInfoURI,
-					},
-				},
-				Results: []Result{},
-			},
-		},
-	}
+	return wrapSARIFLog(nil, nil)
 }
 
 // sortedFindings returns findings sorted by (severity rank desc, ID asc) so
@@ -511,7 +482,13 @@ func buildLocations(f *Finding) []Location {
 }
 
 // wrapSARIFLog wraps the rules + results into a complete SARIF log document.
+// A nil results slice is normalized to an empty slice so the JSON output
+// always emits `"results": []` rather than `"results": null` — SARIF
+// consumers (GitHub code scanning in particular) reject null arrays.
 func wrapSARIFLog(rules []Rule, results []Result) *SARIFLog {
+	if results == nil {
+		results = []Result{}
+	}
 	return &SARIFLog{
 		Schema:  sarifSchema,
 		Version: sarifVersion,
