@@ -52,7 +52,11 @@ const (
 func EnsureWindowsExeExtension(binaryName string) string {
 	defer perf.Track(nil, "installer.EnsureWindowsExeExtension")()
 
-	if runtime.GOOS == "windows" && !strings.HasSuffix(strings.ToLower(binaryName), windowsExeExt) {
+	return ensureWindowsExeExtensionForOS(binaryName, runtime.GOOS)
+}
+
+func ensureWindowsExeExtensionForOS(binaryName, goos string) string {
+	if goos == "windows" && !strings.HasSuffix(strings.ToLower(binaryName), windowsExeExt) {
 		return binaryName + windowsExeExt
 	}
 	return binaryName
@@ -383,19 +387,64 @@ func (r verifierCommandRunner) Run(ctx context.Context, name string, args ...str
 		Signatures:      verification.PolicyDisabled,
 		VerifierInstall: verification.VerifierInstallPathOnly,
 	}
-	version := "latest"
-	if bootstrap.registryFactory != nil {
-		if reg := bootstrap.registryFactory.NewAquaRegistry(); reg != nil {
-			if latest, err := reg.GetLatestVersion(owner, repo); err == nil && latest != "" {
-				version = latest
-			}
-		}
+	version, err := bootstrap.resolveVerifierInstallVersion(owner, repo)
+	if err != nil {
+		return fmt.Errorf("%w: resolve verifier %s version: %w", verification.ErrVerifierCommandRequired, name, err)
 	}
 	binaryPath, err := bootstrap.Install(owner, repo, version)
 	if err != nil {
 		return fmt.Errorf("%w: install verifier %s: %w", verification.ErrVerifierCommandRequired, name, err)
 	}
 	return runVerifierCommand(ctx, binaryPath, args...)
+}
+
+func (i *Installer) resolveVerifierInstallVersion(owner, repo string) (string, error) {
+	var lookupErrs []error
+
+	if i.useConfiguredReg {
+		latest, err := latestVerifierVersion(i.configuredReg, owner, repo, "configured registry")
+		if latest != "" {
+			return latest, nil
+		}
+		if err != nil {
+			lookupErrs = append(lookupErrs, err)
+		}
+	}
+
+	latest, err := latestVerifierVersion(i.aquaVerifierRegistry(), owner, repo, "aqua registry")
+	if latest != "" {
+		return latest, nil
+	}
+	if err != nil {
+		lookupErrs = append(lookupErrs, err)
+	}
+
+	return "", verifierVersionUnavailableError(owner, repo, lookupErrs)
+}
+
+func (i *Installer) aquaVerifierRegistry() registry.ToolRegistry {
+	if i.registryFactory == nil {
+		return nil
+	}
+	return i.registryFactory.NewAquaRegistry()
+}
+
+func latestVerifierVersion(reg registry.ToolRegistry, owner, repo, source string) (string, error) {
+	if reg == nil {
+		return "", nil
+	}
+	latest, err := reg.GetLatestVersion(owner, repo)
+	if err != nil {
+		return "", fmt.Errorf("%s latest version lookup failed: %w", source, err)
+	}
+	return latest, nil
+}
+
+func verifierVersionUnavailableError(owner, repo string, lookupErrs []error) error {
+	if len(lookupErrs) > 0 {
+		return fmt.Errorf("%w: %s/%s: %w", ErrVerifierVersionUnavailable, owner, repo, errors.Join(lookupErrs...))
+	}
+	return fmt.Errorf("%w: %s/%s", ErrVerifierVersionUnavailable, owner, repo)
 }
 
 func runVerifierCommand(ctx context.Context, path string, args ...string) error {
