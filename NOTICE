@@ -425,10 +425,6 @@ APACHE 2.0 LICENSED DEPENDENCIES
     License: Apache-2.0
     URL: https://github.com/prometheus/common/blob/v0.67.5/LICENSE
 
-  - github.com/prometheus/procfs
-    License: Apache-2.0
-    URL: https://github.com/prometheus/procfs/blob/v0.20.1/LICENSE
-
   - github.com/protocolbuffers/txtpbfmt
     License: Apache-2.0
     URL: https://github.com/protocolbuffers/txtpbfmt/blob/c39628bde8b5/LICENSE
@@ -705,14 +701,6 @@ BSD LICENSED DEPENDENCIES
   - github.com/go-jose/go-jose/v4/json
     License: BSD-3-Clause
     URL: https://github.com/go-jose/go-jose/blob/v4.1.4/json/LICENSE
-
-  - github.com/godbus/dbus
-    License: BSD-2-Clause
-    URL: https://github.com/godbus/dbus/blob/v4.1.0/LICENSE
-
-  - github.com/godbus/dbus/v5
-    License: BSD-2-Clause
-    URL: https://github.com/godbus/dbus/blob/v5.2.2/LICENSE
 
   - github.com/gofrs/flock
     License: BSD-3-Clause
@@ -1072,6 +1060,10 @@ MIT LICENSED DEPENDENCIES
     License: MIT
     URL: https://github.com/alessio/shellescape/blob/v1.6.0/LICENSE
 
+  - github.com/99designs/go-keychain
+    License: MIT
+    URL: https://github.com/99designs/go-keychain/blob/8e49817e8af4/LICENSE
+
   - github.com/99designs/keyring
     License: MIT
     URL: https://github.com/99designs/keyring/blob/v1.2.2/LICENSE
@@ -1408,10 +1400,6 @@ MIT LICENSED DEPENDENCIES
     License: MIT
     URL: https://github.com/gookit/color/blob/v1.6.1/LICENSE
 
-  - github.com/gsterjov/go-libsecret
-    License: MIT
-    URL: https://github.com/gsterjov/go-libsecret/blob/a6f4afe4910c/LICENSE
-
   - github.com/hairyhenderson/go-fsimpl
     License: MIT
     URL: https://github.com/hairyhenderson/go-fsimpl/blob/v0.3.1/LICENSE
@@ -1636,6 +1624,10 @@ MIT LICENSED DEPENDENCIES
     License: MIT
     URL: https://github.com/muesli/termenv/blob/v0.16.0/LICENSE
 
+  - github.com/ncruces/go-strftime
+    License: MIT
+    URL: https://github.com/ncruces/go-strftime/blob/v1.0.0/LICENSE
+
   - github.com/otiai10/copy
     License: MIT
     URL: https://github.com/otiai10/copy/blob/v1.14.1/LICENSE
@@ -1791,6 +1783,10 @@ MIT LICENSED DEPENDENCIES
   - github.com/zalando/go-keyring
     License: MIT
     URL: https://github.com/zalando/go-keyring/blob/v0.2.8/LICENSE
+
+  - github.com/zalando/go-keyring/internal/shellescape
+    License: MIT
+    URL: https://github.com/zalando/go-keyring/blob/v0.2.8/internal/shellescape/LICENSE
 
   - github.com/zclconf/go-cty/cty
     License: MIT
