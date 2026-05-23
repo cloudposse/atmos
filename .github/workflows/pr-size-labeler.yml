@@ -16,7 +16,7 @@ jobs:
       issues: write
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           # Checkout the base branch (not the PR head) for security.
           # We only need the action definition from .github/actions/pr-sizer/
