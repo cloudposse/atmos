@@ -401,6 +401,76 @@ func TestVerifyChecksumCosignVerifiesChecksumSidecar(t *testing.T) {
 	assert.Equal(t, "sha256", result.ChecksumAlgorithm)
 }
 
+func TestVerifyChecksumCosignCombinesOptsWithBundleSidecar(t *testing.T) {
+	assetPath := writeAsset(t, []byte("hello"))
+	sum := sha256.Sum256([]byte("hello"))
+	checksumData := []byte(fmt.Sprintf("%x  trivy_0.70.0_macOS-ARM64.tar.gz\n", sum))
+	runner := &fakeRunner{}
+
+	result, err := (&Verifier{}).Verify(context.Background(), Request{
+		Tool: &registry.Tool{
+			RepoOwner: "aquasecurity",
+			RepoName:  "trivy",
+			Checksum: registry.ChecksumConfig{
+				Type:      "github_release",
+				Asset:     "trivy_{{trimV .Version}}_checksums.txt",
+				Algorithm: "sha256",
+				Cosign: registry.CosignConfig{
+					Bundle: registry.DownloadedFile{
+						Type:  "github_release",
+						Asset: "trivy_{{trimV .Version}}_checksums.txt.sigstore.json",
+					},
+					Opts: []string{
+						"--certificate-identity",
+						"https://github.com/aquasecurity/trivy/.github/workflows/reusable-release.yaml@refs/tags/{{.Version}}",
+						"--certificate-oidc-issuer",
+						"https://token.actions.githubusercontent.com",
+					},
+				},
+			},
+		},
+		Version:   "v0.70.0",
+		AssetURL:  "https://github.com/aquasecurity/trivy/releases/download/v0.70.0/trivy_0.70.0_macOS-ARM64.tar.gz",
+		AssetPath: assetPath,
+		Downloader: fakeDownloader{
+			"https://github.com/aquasecurity/trivy/releases/download/v0.70.0/trivy_0.70.0_checksums.txt":               checksumData,
+			"https://github.com/aquasecurity/trivy/releases/download/v0.70.0/trivy_0.70.0_checksums.txt.sigstore.json": []byte("bundle"),
+		},
+		Policy: Policy{
+			Checksums:  PolicyWhenAvailable,
+			Signatures: PolicyWhenAvailable,
+		},
+		Runner: runner,
+	})
+
+	require.NoError(t, err)
+	require.Len(t, runner.calls, 1)
+	assert.Equal(t, "cosign", runner.calls[0].name)
+	assert.Equal(t, []string{
+		"verify-blob",
+		"--certificate-identity",
+		"https://github.com/aquasecurity/trivy/.github/workflows/reusable-release.yaml@refs/tags/v0.70.0",
+		"--certificate-oidc-issuer",
+		"https://token.actions.githubusercontent.com",
+		"--bundle",
+		writeAssetPathPlaceholder(runner.calls[0].args),
+		writeAssetPathPlaceholder(runner.calls[0].args),
+	}, normalizeLastTwoArgs(runner.calls[0].args))
+	assert.Contains(t, result.SignatureMethods, "cosign")
+	assert.Equal(t, "sha256", result.ChecksumAlgorithm)
+}
+
+func normalizeLastTwoArgs(args []string) []string {
+	out := append([]string(nil), args...)
+	if len(out) > 1 {
+		out[len(out)-2] = writeAssetPathPlaceholder(args)
+	}
+	if len(out) > 0 {
+		out[len(out)-1] = writeAssetPathPlaceholder(args)
+	}
+	return out
+}
+
 func TestVerifyChecksumRequiredMissingMetadata(t *testing.T) {
 	_, err := (&Verifier{}).Verify(context.Background(), Request{
 		Tool:      &registry.Tool{RepoOwner: "owner", RepoName: "tool"},
