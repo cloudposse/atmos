@@ -1015,10 +1015,17 @@ that don't use them, `BaseComponentRequiredProviders` /
 `RequiredVersion` for non-Terraform.
 
 **Fix.** Guard each `m.DeepCopyMap` call with
-`if len(src.Field) > 0`. The function-call overhead and the
-empty-map allocation are skipped when the source field is empty;
-the dst field defaults to `nil`, matching the previous
-`m.DeepCopyMap(nil) == nil` contract.
+`if src.Field != nil`. This skips the function-call + perf.Track
+overhead when the source field is nil (the dst field defaults to
+`nil`, matching `m.DeepCopyMap(nil) == nil`), while still routing
+empty-non-nil source fields through `m.DeepCopyMap` so they
+round-trip as empty-non-nil dst fields. Collapsing empty-non-nil to
+`nil` would break the cache HIT-shape == MISS-shape contract and
+turn a downstream `result.BaseComponentX[k] = v` write into an
+"assignment to entry in nil map" panic. The original `len(...) > 0`
+form was reverted for exactly this reason — see the
+`TestCacheBaseComponentConfig_EmptyNonNilFieldsStayNonNil`
+regression guard.
 
 This change applies to **both** cache paths (Phase 12 = write side,
 Phase 13 = read side), since they share the same
@@ -1071,9 +1078,10 @@ missing fields.
 
 **Fix.** Added the five missing map fields to
 `deepCopyBaseComponentConfigMaps` (each behind the Phase 12/13
-`len(src.Field) > 0` guard so the empty-field optimization still
-applies) and the `BaseComponentRequiredVersion` string to both
-struct literals.
+`src.Field != nil` guard so the nil-field optimization still
+applies while empty-non-nil maps continue to round-trip through
+`m.DeepCopyMap`) and the `BaseComponentRequiredVersion` string to
+both struct literals.
 
 **Test added.** `TestCacheBaseComponentConfig_RoundTripsAllFields`
 populates every `BaseComponentConfig` field with a distinguishable
