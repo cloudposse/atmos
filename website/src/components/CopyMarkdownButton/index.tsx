@@ -68,8 +68,7 @@ export default function CopyMarkdownButton({ href }: CopyMarkdownButtonProps): J
     void handleCopy();
   }
 
-  function handleMenuCopy(e: React.MouseEvent) {
-    e.preventDefault();
+  function handleMenuCopy() {
     setMenuOpen(false);
     void handleCopy();
   }
@@ -99,7 +98,6 @@ export default function CopyMarkdownButton({ href }: CopyMarkdownButtonProps): J
           type="button"
           className={styles.caret}
           onClick={() => setMenuOpen((v) => !v)}
-          aria-haspopup="menu"
           aria-expanded={menuOpen}
           aria-label="More Markdown actions"
           title="More Markdown actions"
@@ -108,24 +106,29 @@ export default function CopyMarkdownButton({ href }: CopyMarkdownButtonProps): J
         </button>
       </div>
 
+      {/*
+        Plain popover with standard <button>/<a> semantics. We deliberately do
+        NOT use role="menu"/"menuitem" — the WAI-ARIA menu-button pattern
+        requires full keyboard nav (arrow-key roving focus, Home/End, focus
+        return on activation) which would be overkill for two static actions.
+        Native button + anchor semantics are accessible by default.
+      */}
       {menuOpen && (
-        <div className={styles.menu} role="menu">
-          <a
-            href={href}
+        <div className={styles.menu}>
+          <button
+            type="button"
             className={styles.menuItem}
             onClick={handleMenuCopy}
-            role="menuitem"
           >
             <FiCopy className={styles.icon} aria-hidden="true" />
             <span>Copy as Markdown</span>
-          </a>
+          </button>
           <a
             href={href}
             target="_blank"
             rel="noopener noreferrer"
             className={styles.menuItem}
             onClick={handleMenuView}
-            role="menuitem"
           >
             <FiExternalLink className={styles.icon} aria-hidden="true" />
             <span>View Markdown</span>

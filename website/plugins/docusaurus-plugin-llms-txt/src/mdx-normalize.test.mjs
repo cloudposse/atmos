@@ -138,24 +138,14 @@ test('preserves literal HTML comments inside fenced code blocks', async () => {
   assert.match(out, /<!-- this should survive -->/);
 });
 
-test('preserves non-truncate HTML comments outside code (best-effort: parser may strip)', async () => {
-  // We only special-case the `truncate` marker. Other top-level HTML comments
-  // are left for remark-mdx to handle — and it currently throws on them, so
-  // the plugin's caller (index.js) falls back to the raw source. This test
-  // pins the behavior: stripHtmlComments itself doesn't touch them.
-  const src = '<!-- a real comment -->\n\n# Heading';
-  // Parsing this end-to-end via remark-mdx would throw; assert only that the
-  // comment is still present *after* our pre-pass (i.e. not silently dropped).
-  // We achieve that indirectly by checking truncate alone is removed above
-  // and by checking the function exists with the targeted regex semantics.
-  const { stripHtmlComments } = await import('./mdx-normalize.mjs').then((m) => ({
-    stripHtmlComments: m.stripHtmlComments ?? null,
-  }));
-  // stripHtmlComments isn't exported; just sanity-check the public API
-  // doesn't regress the truncate-only contract by re-running it.
-  const out = (await normalizeMdxToMarkdown('<!--truncate-->\n\nBody.')).trim();
-  assert.equal(out, 'Body.');
-  // And confirm a code-block comment survives end-to-end.
-  const codeOut = await normalize('```\n<!-- kept -->\n```');
-  assert.match(codeOut, /<!-- kept -->/);
+test('non-truncate top-level HTML comments cause rejection (caller falls back to raw)', async () => {
+  // We deliberately only strip the Docusaurus `<!--truncate-->` marker. Any
+  // other top-level HTML comment is left for remark-mdx, which in MDX 3 rejects
+  // HTML comments. The plugin's caller (index.js processMarkdownFile) catches
+  // the rejection and falls back to the raw source — that's the intended
+  // behavior. This test pins it.
+  await assert.rejects(
+    () => normalizeMdxToMarkdown('<!-- a real comment -->\n\n# Heading'),
+    /Unexpected character/,
+  );
 });

@@ -196,9 +196,17 @@ async function generateRootIndexMarkdown(documents, outDir, siteConfig) {
   for (const section of orderedSections) {
     const docs = sectionMap.get(section);
     if (!docs || docs.length === 0) continue;
-    // Surface the section landing page (shortest route in the group) when one exists.
-    const landing = docs.find((d) => d.routePath === `/${section}`);
-    const heading = landing ? `[${landing.title}](${landing.routePath}.md)` : `${section}`;
+    // Surface the section landing page (shortest route in the group) when one
+    // exists. Match either `/<section>` or `/<section>/` so trailing-slash
+    // routes from Docusaurus don't produce `/cli/.md` links.
+    const landing = docs.find((d) => d.routePath === `/${section}` || d.routePath === `/${section}/`);
+    let heading = section;
+    if (landing) {
+      const landingPath = landing.routePath.endsWith('/')
+        ? landing.routePath.slice(0, -1)
+        : landing.routePath;
+      heading = `[${landing.title}](${landingPath}.md)`;
+    }
     lines.push(`- ${heading} — ${docs.length} page${docs.length === 1 ? '' : 's'}.`);
   }
   lines.push('');

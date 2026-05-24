@@ -19,7 +19,12 @@ type Props = WrapperProps<typeof DocItemContentType>;
 export default function ContentWrapper(props: Props): JSX.Element {
   const { metadata } = useDoc();
   const permalink = metadata?.permalink ?? '';
-  const mdHref = permalink ? permalink.replace(/\/$/, '') + '.md' : '';
+  // Match the breadcrumbs swizzle: linear trim of trailing `/`, and special-case
+  // the root permalink so `/` maps to `/index.md`, not `.md`.
+  let end = permalink.length;
+  while (end > 0 && permalink.charCodeAt(end - 1) === 47) end -= 1; // '/'
+  const normalized = permalink.slice(0, end);
+  const mdHref = permalink ? (normalized ? normalized + '.md' : '/index.md') : '';
 
   return (
     <>

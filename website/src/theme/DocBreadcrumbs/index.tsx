@@ -7,17 +7,41 @@ import CopyMarkdownButton from '@site/src/components/CopyMarkdownButton';
 import styles from './styles.module.css';
 
 /**
- * Wraps the default DocBreadcrumbs so the "Copy Markdown" split button
- * shares the breadcrumb row, floated to the right. Falls back to the
- * unmodified breadcrumbs when used outside a DocProvider (e.g. category
- * landing pages without a permalink).
+ * Derive `<permalink>.md` from the current doc's metadata, normalizing the
+ * root and any trailing slash:
+ *   /                      → /index.md
+ *   /cli/                  → /cli.md
+ *   /cli/commands/version  → /cli/commands/version.md
+ */
+function deriveMarkdownHref(permalink: string): string {
+  if (!permalink) return '';
+  // Linear trailing-slash trim (CodeQL-safe; avoids /\/+$/).
+  let end = permalink.length;
+  while (end > 0 && permalink.charCodeAt(end - 1) === 47) end -= 1; // '/'
+  const normalized = permalink.slice(0, end);
+  return normalized ? normalized + '.md' : '/index.md';
+}
+
+/**
+ * Wraps the default DocBreadcrumbs so the "Copy Markdown" split button shares
+ * the breadcrumb row, floated right.
+ *
+ * Why the try/catch around useDoc(): Docusaurus renders DocBreadcrumbs in two
+ * contexts — real doc pages (DocProvider in scope) and auto-generated category
+ * index pages (NO DocProvider). `useDoc()` throws a ReactContextError in the
+ * latter. React Error Boundaries don't catch errors during static SSG, so this
+ * is the only viable shape. The Rules of Hooks concern (hook order changing
+ * between renders) doesn't apply here: for a given render path the
+ * try/catch outcome is deterministic — the presence of DocProvider is
+ * fixed by Docusaurus, not by component-internal state. No
+ * eslint-plugin-react-hooks is configured in this repo.
  */
 export default function DocBreadcrumbsWrapper(props: Record<string, unknown>): JSX.Element {
   let mdHref = '';
   try {
+    // eslint-disable-next-line react-hooks/rules-of-hooks
     const { metadata } = useDoc();
-    const permalink = metadata?.permalink ?? '';
-    mdHref = permalink ? permalink.replace(/\/$/, '') + '.md' : '';
+    mdHref = deriveMarkdownHref(metadata?.permalink ?? '');
   } catch {
     mdHref = '';
   }
