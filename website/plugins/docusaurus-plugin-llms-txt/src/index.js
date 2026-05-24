@@ -144,6 +144,69 @@ async function generatePerPageMarkdown(documents, outDir) {
 }
 
 /**
+ * Write a synthesized index.md for the site root when no doc owns the `/`
+ * permalink (Atmos serves a React landing page there). Gives crawlers, LLMs,
+ * and "what does this site contain?" probes a discoverable Markdown overview
+ * pointing to llms.txt, llms-full.txt, and the main docs sections.
+ */
+async function generateRootIndexMarkdown(documents, outDir, siteConfig) {
+  // Don't overwrite if a real doc claims the root.
+  const rootAlreadyWritten = documents.some((d) => d.routePath === '/');
+  if (rootAlreadyWritten) return;
+
+  // Group top-level sections from the documents list.
+  const sectionMap = new Map();
+  for (const doc of documents) {
+    if (!doc.routePath || doc.routePath === '/') continue;
+    const segments = doc.routePath.split('/').filter(Boolean);
+    if (segments.length === 0) continue;
+    const section = segments[0];
+    if (!sectionMap.has(section)) sectionMap.set(section, []);
+    sectionMap.get(section).push(doc);
+  }
+
+  const sectionOrder = ['intro', 'quick-start', 'install', 'learn', 'cli', 'stacks', 'components', 'design-patterns', 'ai', 'ci', 'best-practices', 'cheatsheet', 'reference', 'faq', 'changelog'];
+  const knownSections = sectionOrder.filter((s) => sectionMap.has(s));
+  const extraSections = [...sectionMap.keys()].filter((s) => !sectionOrder.includes(s)).sort();
+  const orderedSections = [...knownSections, ...extraSections];
+
+  const lines = [];
+  lines.push(`# ${siteConfig.title}`);
+  lines.push('');
+  if (siteConfig.tagline) {
+    lines.push(`> ${siteConfig.tagline}`);
+    lines.push('');
+  }
+  lines.push('This is the Markdown index for the Atmos documentation site, written for crawlers, LLMs, and tooling. Every doc page is also available as raw Markdown by appending `.md` to its URL.');
+  lines.push('');
+  lines.push('## Machine-readable indexes');
+  lines.push('');
+  lines.push('- [`/llms.txt`](/llms.txt) — table-of-contents index of every page (follows the llmstxt.org standard).');
+  lines.push('- [`/llms-full.txt`](/llms-full.txt) — entire docs corpus in a single file.');
+  lines.push('- Per-page Markdown — any docs URL serves Markdown at `<url>.md` with `Content-Type: text/markdown`.');
+  lines.push('');
+  lines.push('## Sections');
+  lines.push('');
+  for (const section of orderedSections) {
+    const docs = sectionMap.get(section);
+    if (!docs || docs.length === 0) continue;
+    // Surface the section landing page (shortest route in the group) when one exists.
+    const landing = docs.find((d) => d.routePath === `/${section}`);
+    const heading = landing ? `[${landing.title}](${landing.routePath}.md)` : `${section}`;
+    lines.push(`- ${heading} — ${docs.length} page${docs.length === 1 ? '' : 's'}.`);
+  }
+  lines.push('');
+  lines.push('## Site root');
+  lines.push('');
+  lines.push(`The HTML homepage at \`${siteConfig.url}/\` is a marketing landing page rendered from React, not Markdown. Start exploring the docs at [/intro](/intro.md) or browse the full index at [/llms.txt](/llms.txt).`);
+  lines.push('');
+
+  const outPath = path.join(outDir, 'index.md');
+  await fs.writeFile(outPath, lines.join('\n'), 'utf-8');
+  console.log(`✓ Wrote synthesized index.md to ${outPath}`);
+}
+
+/**
  * Recursively extract all markdown file routes from Docusaurus route config.
  * Uses routesPaths array to get all resolved URLs.
  */
@@ -386,6 +449,7 @@ module.exports = function docusaurusPluginLlmsTxt(context, options) {
 
       if (enablePerPageMarkdown) {
         await generatePerPageMarkdown(documents, outDir);
+        await generateRootIndexMarkdown(documents, outDir, siteConfig);
       }
     },
   };

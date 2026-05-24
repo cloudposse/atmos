@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { FiCheck, FiCopy, FiExternalLink } from 'react-icons/fi';
+import { FiCheck, FiChevronDown, FiCopy, FiExternalLink } from 'react-icons/fi';
 
 import styles from './styles.module.css';
 
@@ -7,21 +7,44 @@ interface CopyMarkdownButtonProps {
   href: string;
 }
 
+type CopyState = 'idle' | 'copied' | 'error';
+
 /**
- * Small split control rendered above each doc page that lets readers grab the
- * raw Markdown for that page (the same file announced via <link rel=alternate
- * type="text/markdown">). "Copy" fetches the .md sibling and writes it to the
- * clipboard; "View" opens it in a new tab.
+ * Split button rendered above each doc page. The default action (clicking the
+ * label) copies the page's raw Markdown to the clipboard. The chevron opens a
+ * small menu with alternate actions (view in new tab, future: open in
+ * ChatGPT/Claude/etc).
  */
 export default function CopyMarkdownButton({ href }: CopyMarkdownButtonProps): JSX.Element {
-  const [state, setState] = useState<'idle' | 'copied' | 'error'>('idle');
-  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [copyState, setCopyState] = useState<CopyState>('idle');
+  const [menuOpen, setMenuOpen] = useState(false);
+  const copyTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const rootRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     return () => {
-      if (timeoutRef.current) clearTimeout(timeoutRef.current);
+      if (copyTimeoutRef.current) clearTimeout(copyTimeoutRef.current);
     };
   }, []);
+
+  // Close menu on outside click or Escape.
+  useEffect(() => {
+    if (!menuOpen) return;
+    function onPointer(e: MouseEvent) {
+      if (rootRef.current && !rootRef.current.contains(e.target as Node)) {
+        setMenuOpen(false);
+      }
+    }
+    function onKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') setMenuOpen(false);
+    }
+    document.addEventListener('mousedown', onPointer);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onPointer);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [menuOpen]);
 
   async function handleCopy() {
     try {
@@ -32,39 +55,83 @@ export default function CopyMarkdownButton({ href }: CopyMarkdownButtonProps): J
         throw new Error('clipboard unavailable');
       }
       await navigator.clipboard.writeText(md);
-      setState('copied');
+      setCopyState('copied');
     } catch {
-      setState('error');
+      setCopyState('error');
     }
-    if (timeoutRef.current) clearTimeout(timeoutRef.current);
-    timeoutRef.current = setTimeout(() => setState('idle'), 2000);
+    if (copyTimeoutRef.current) clearTimeout(copyTimeoutRef.current);
+    copyTimeoutRef.current = setTimeout(() => setCopyState('idle'), 2000);
   }
 
-  const copyLabel = state === 'copied' ? 'Copied!' : state === 'error' ? 'Copy failed' : 'Copy as Markdown';
-  const CopyIcon = state === 'copied' ? FiCheck : FiCopy;
+  function handlePrimary() {
+    setMenuOpen(false);
+    void handleCopy();
+  }
+
+  function handleMenuCopy(e: React.MouseEvent) {
+    e.preventDefault();
+    setMenuOpen(false);
+    void handleCopy();
+  }
+
+  function handleMenuView() {
+    setMenuOpen(false);
+    // The <a> tag handles navigation; just close the menu.
+  }
+
+  const label = copyState === 'copied' ? 'Copied!' : copyState === 'error' ? 'Copy failed' : 'Copy Markdown';
+  const PrimaryIcon = copyState === 'copied' ? FiCheck : FiCopy;
 
   return (
-    <div className={styles.container} role="group" aria-label="Markdown source">
-      <button
-        type="button"
-        className={styles.button}
-        onClick={handleCopy}
-        title="Copy this page as Markdown"
-        aria-live="polite"
-      >
-        <CopyIcon className={styles.icon} aria-hidden="true" />
-        <span>{copyLabel}</span>
-      </button>
-      <a
-        href={href}
-        target="_blank"
-        rel="noopener noreferrer"
-        className={styles.button}
-        title="View this page as Markdown"
-      >
-        <FiExternalLink className={styles.icon} aria-hidden="true" />
-        <span>View Markdown</span>
-      </a>
+    <div className={styles.container} ref={rootRef}>
+      <div className={styles.group} role="group" aria-label="Markdown source">
+        <button
+          type="button"
+          className={styles.primary}
+          onClick={handlePrimary}
+          title="Copy this page as Markdown"
+          aria-live="polite"
+        >
+          <PrimaryIcon className={styles.icon} aria-hidden="true" />
+          <span>{label}</span>
+        </button>
+        <button
+          type="button"
+          className={styles.caret}
+          onClick={() => setMenuOpen((v) => !v)}
+          aria-haspopup="menu"
+          aria-expanded={menuOpen}
+          aria-label="More Markdown actions"
+          title="More Markdown actions"
+        >
+          <FiChevronDown className={styles.icon} aria-hidden="true" />
+        </button>
+      </div>
+
+      {menuOpen && (
+        <div className={styles.menu} role="menu">
+          <a
+            href={href}
+            className={styles.menuItem}
+            onClick={handleMenuCopy}
+            role="menuitem"
+          >
+            <FiCopy className={styles.icon} aria-hidden="true" />
+            <span>Copy as Markdown</span>
+          </a>
+          <a
+            href={href}
+            target="_blank"
+            rel="noopener noreferrer"
+            className={styles.menuItem}
+            onClick={handleMenuView}
+            role="menuitem"
+          >
+            <FiExternalLink className={styles.icon} aria-hidden="true" />
+            <span>View Markdown</span>
+          </a>
+        </div>
+      )}
     </div>
   );
 }
