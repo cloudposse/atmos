@@ -227,13 +227,6 @@ open. Optimization plan:
       skip the per-call `yaml.Node.Decode` + `InternStringsInMap`
       walks (~500-700µs each). Wall-clock 2.4s → 2.06s (−14%
       locally).
-- [x] Phase 9: asymmetric clone in `cloneExtractLocalsResult` — only
-      `locals` is deep-copied (long-term stored in template context),
-      `settings`/`vars`/`env` are shared references (consumed only by
-      `processTemplatesInSection` which doesn't mutate inputs).
-      `extractLocalsFromRawYAML` Total dropped 17% (7.6s → 6.3s),
-      `extractAndAddLocalsToContext` Total dropped 18% (8.9s → 7.3s).
-      Local wall-clock within noise; ~750ms saved on 2-core GHA.
 - [ ] Re-measure on GHA and confirm wall-clock improvement.
 
 ---
@@ -816,54 +809,6 @@ relative improvement plus the GC win compounded across cores.
 
 **Race detector:** `go test -race -count=1 ./pkg/utils/...` green.
 Full `pkg/utils` and `internal/exec` test suites pass.
-
-### Phase 9 (shipped 2026-05-24) — asymmetric clone for extractLocalsResult
-
-**Root cause.** After Phase 4 cached the parsed locals result,
-`cloneExtractLocalsResult` deep-copied **all four** map fields
-(`locals`, `settings`, `vars`, `env`) on every retrieval to preserve
-the cache's immutability contract. This dominated the cache-hit
-path: 22,181 calls × ~343µs avg = 7.6s of cumulative CPU, with the
-deep-copy work being most of that.
-
-**The deep copy of settings/vars/env is overkill.** The only
-production consumer of those three fields is
-`processTemplatesInSection`, which:
-1. Marshals the section to YAML (read-only).
-2. Parses the YAML back into a *new* map.
-3. Returns the new map.
-
-The input section is never mutated. So sharing the cache's reference
-is safe — the per-caller deep copy was unnecessary overhead.
-
-**Fix.** Refactored `cloneExtractLocalsResult` to be asymmetric:
-
-- `locals` is still deep-copied. This field is stored long-term in
-  the template context (`context[cfg.LocalsSectionName] = ...`)
-  where downstream mutation surface is hard to bound, so the
-  defensive copy stays.
-- `settings`, `vars`, `env` are now shared references. The
-  contract is documented on the function: callers must treat them
-  as read-only.
-
-`TestExtractLocalsFromRawYAML_CacheReturnsIndependentCopies` was
-updated to reflect the new contract (only `locals` requires
-post-mutation isolation; settings/vars/env share with the cache).
-
-**Confirmed impact (mean of 3 runs, customer workload):**
-
-| Function | Phase 8 (Total / Avg) | Phase 9 (Total / Avg) | Reduction |
-|---|---:|---:|---:|
-| `exec.extractLocalsFromRawYAML` | 7.6s / 343µs | **6.3s / 282µs** | **−17% Total, 18% faster avg** |
-| `exec.extractAndAddLocalsToContext` | 8.9s / 401µs | **7.3s / 330µs** | **−18% Total, 18% faster avg** |
-
-**Wall-clock impact (local Mac):** 2.06s → 2.13s (within run-to-run
-noise on a many-core machine). Cumulative ~1.5s CPU saved →
-projected **~750ms wall-clock savings on a 2-core GHA runner**.
-
-**Race detector:**
-`go test -race -count=1 -run "TestExtractLocals|TestExtractAndAdd|TestHierarchicalImports" ./internal/exec/`
-green. Full `internal/exec` test suite passes.
 
 ### Verification
 
