@@ -75,7 +75,7 @@ Counter-intuitively, `--process-functions=false` made the run
 was already amortized while leaving the expensive inheritance path
 untouched.
 
-### Post-#2471 fresh heatmap (2026-05-23, local Mac, current main)
+## Post-#2471 fresh heatmap (2026-05-23, local Mac, current main)
 
 Reproducer below, `--identity=false --process-templates=false
 --process-functions=false`, comparing HEAD vs HEAD~1 via worktree.
@@ -126,7 +126,7 @@ machine; on a 2-4 core GHA runner the wall-clock projects to
   level. The 5.7-6 min of CPU work is bound by stack count, not
   component count.
 
-### Affected detection note
+## Affected detection note
 
 In the reproducer, the result set is empty (`[]`) even though a
 catalog file was modified. Atmos compares **resolved configs**, and
@@ -138,40 +138,30 @@ result size.**
 
 ## Status
 
-**Phase 1 fixed in PR #2471 (v1.220.0-rc.1).** Phases 2 and 3 still
-open. Optimization plan:
+**Phases 1-13 shipped** (with the Phase 5 1-input shortcut and Phase 9
+reverted — see their dedicated sections below). The progress checklist
+that follows is the authoritative record of what landed where, in what
+order, and with what measured impact.
 
-1. **~~Make `--identity=false` actually skip credential store
-   creation.~~ ✅ Shipped in PR #2471 (`fix(auth): honor
-   --identity=false in describe affected and dependents`), commit
-   `a0cd28671`, in `v1.220.0-rc.1`.** Reclaimed ~3.5 minutes of
-   credential-store CPU time. Confirmed zero credential calls in the
-   2026-05-23 reproduction.
-2. **Cache hit-rate audit of the inheritance pipeline (OPEN).**
-   `cacheBaseComponentConfig` is itself hot (6,431 calls, 5m50s),
-   which suggests either (a) the cache is being invalidated too
-   eagerly, (b) the cache key is too specific and missing equivalent
-   configurations, or (c) it is doing real work on first insertion
-   that should happen elsewhere. Companion: `getCachedBaseComponentConfig`
-   8,017 calls / 6.5s suggests reads are fast, so the cost is concentrated
-   on the insert path.
-3. **Parallelize the inheritance pipeline more aggressively (OPEN).**
-   `processComponentsInParallel` runs 719 times (one per stack)
-   fanning out into 9,261 component invocations. Stack-level
-   parallelism is in place (PR #1639 work); **component-level
-   parallelism within a stack is the next layer**. With ~13
-   components per stack on average and modern many-core runners,
-   pushing parallelism inside `processComponentsInParallel` should
-   yield 2-3× wall-clock improvement on the inheritance pipeline.
-4. **`locals` extraction (NEW, OPEN).**
-   `extractAndAddLocalsToContext` + `extractLocalsFromRawYAML` add
-   ~26s combined across 22,181 invocations each. The `locals`
-   feature shipped after #1639 and was never put through the
-   optimization taxonomy.
-5. **GHA container speed factor.** Even with #2471's win, the
-   remaining ~6m of CPU inheritance work projects to ~1.5-3 min on
-   a 2-4 core GHA runner. If users still see 5+ min on GHA after
-   upgrading to v1.220.0, Phase 2 + Phase 3 are required.
+The remaining open item is **end-to-end CI validation on the reference
+workload**: a 2-core GHA runner timing run that confirms the projected
+~11 minutes → ~60-105 seconds wall-clock improvement.
+
+Phase 1 (the `--identity=false` credential-store fix) shipped separately
+in PR #2471 (`a0cd28671`, in v1.220.0-rc.1) and reclaimed ~3.5 minutes
+of credential-store CPU on the reference workload. Phases 2-13 ship in
+PR #2496 (this branch).
+
+Two optimizations were attempted and reverted after CI surfaced
+correctness regressions — both shared the same root cause (returning a
+shared map reference to a caller that mutates the result). They are
+documented in their dedicated sections so future passes don't re-try
+the same approach without addressing the underlying contract violation:
+
+- Phase 5's 1-input shortcut in `MergeWithDeferred` —
+  [details below](#phase-5-initially-shipped-2026-05-23-1-input-shortcut-reverted-2026-05-24).
+- Phase 9's asymmetric clone in `cloneExtractLocalsResult` — reverted
+  in `b11f3cd9b`; documented in the Phase 9 checklist entry.
 
 ### Progress checklist
 
@@ -197,12 +187,16 @@ open. Optimization plan:
       (−19% locally; ~18-35s on GHA projected). Original plan
       (component-level parallelization) abandoned because it's
       already in place.
-- [x] Phase 5: skip `MergeWithDeferred` when 0 or 1 input is
-      non-empty. `mergeComponentConfigurations` Total dropped 50%
-      (1m54s → 57s), `MergeWithDeferred` Total dropped 64%, 65k
-      Merge calls eliminated, 215k walk calls eliminated. Wall-clock
-      3.3s → 3.0s locally; cumulative ~75s saved on a 2-core GHA
-      runner.
+- [x] Phase 5: 0-input fast path in `MergeWithDeferred` (skip walk +
+      merge when every input is empty). The 1-input shortcut was
+      tried alongside and REVERTED 2026-05-24 after CI surfaced a
+      regression in `TestSpaceliftStackProcessor` (47→40 stacks):
+      `WalkAndDeferYAMLFunctions`'s Phase 3 short-circuit returned
+      the input map as-is, and the 1-input shortcut handed that
+      reference back to the caller, which mutated the upstream
+      cached settings. Same class of failure as Phase 9. Post-revert
+      `mergeComponentConfigurations` Total: 1m54s → 1m35s (−17%);
+      regression test added to prevent re-attempts.
 - [x] Phase 4: cache `extractLocalsFromRawYAML` by file path + content
       hash; clone input context to fix pre-existing race. 22k+ calls
       eliminated, wall-clock 3.0s → 2.3s (−23%, biggest single-phase
@@ -551,7 +545,7 @@ present in main without Phase 3 changes. Tracked separately.
 - `ProcessYAMLConfigFileWithContext` (1m11s) — file loading. May be
   unrelated to inheritance; deferred to Phase 6.
 
-### Phase 5 (shipped 2026-05-23) — skip MergeWithDeferred for trivial input
+### Phase 5 (initially shipped 2026-05-23, 1-input shortcut REVERTED 2026-05-24)
 
 **Root cause.** `mergeComponentConfigurations` calls
 `MergeWithDeferred` 9 times per component instance — once per
@@ -571,48 +565,73 @@ runs and increments precedence), and call `Merge` to combine all
 processed inputs (which is a deep walk over all entries even when
 all but one are empty).
 
-**Fix.** Pre-scan the inputs in `MergeWithDeferred` and short-circuit
-when the merge degenerates:
+**Final fix (after revert).** `MergeWithDeferred` has a single
+all-empty fast path:
 
-- **0 non-empty inputs:** return a fresh empty map and empty dctx.
-  No walk, no merge.
-- **1 non-empty input:** advance precedence to that input's
-  position, walk just that input (so YAML functions are deferred at
-  the correct precedence), and return the walked map directly. Skip
-  the `Merge` call entirely — a merge of one map degenerates to a
-  copy of that map, and the walk's result is already the result.
+- **0 non-empty inputs:** return a fresh empty map and an empty
+  dctx. No walk, no merge.
+- **Any non-empty input:** fall through to the regular walk + merge
+  pipeline. `Merge` → `MergeWithOptions` returns a deep-copied,
+  caller-mutable map per its contract.
 
-The downstream `ApplyDeferredMerges` is dctx-driven: when dctx has
-no deferred values (the no-functions case), it's a no-op and does
-not touch the returned map. Combined with Phase 3's
-`WalkAndDeferYAMLFunctions` short-circuit, a single-input
-function-free section is now a zero-allocation pass-through end to
-end.
+The 0-input fast path is still a real win — many components leave
+several sections (especially `generate` / `required_providers` /
+`hooks` on non-terraform components) entirely empty.
 
-**Confirmed impact (mean of 3 runs, customer workload):**
+#### What was tried and reverted
 
-| Function | Phase 3 (Total / Avg / Calls) | Phase 5 (Total / Avg / Calls) | Reduction |
+A 1-input fast path was initially shipped alongside the 0-input one:
+when exactly one input was non-empty, the implementation walked just
+that input and returned it directly, skipping the `Merge` call. This
+broke `TestSpaceliftStackProcessor` and `TestLegacySpaceliftStackProcessor`
+on the CI sweep for PR #2496 (both lost exactly 7 spacelift stacks
+each, 47→40 / 44→37).
+
+Root cause: when the single non-empty input contained no Atmos YAML
+functions (the common case), `WalkAndDeferYAMLFunctions`'s Phase 3
+short-circuit returned the input map **as-is** — so the 1-input
+shortcut handed the caller a shared reference to the upstream
+cached `BaseComponentSettings` / `GlobalSettings` / etc. The
+downstream `mergeComponentConfigurations` mutated that result while
+building the per-component output map, which corrupted the upstream
+cache for sibling components. Specifically,
+`settings.spacelift.workspace_enabled` was getting flipped for
+seven components by the time they reached `CreateSpaceliftStacks`.
+
+This is the **same class of failure as Phase 9** (asymmetric
+`extractLocalsResult` clone): in both cases the optimization
+assumed downstream callers wouldn't mutate the returned map, but
+the assumption was wrong because a later pipeline stage modifies
+the result map in place. Per `Merge`'s contract, the returned map
+must be deep-copied, caller-mutable. The 1-input shortcut violated
+that contract.
+
+The `Merge` slow path that the revert restores **also** deep-copies
+its 1-input case (via `MergeWithOptions` → `DeepCopyMap`), so the
+saved wrapper overhead was small. The shortcut's measured savings
+(`MergeWithDeferred` Total 1m10s → 25s) over-attributed credit
+that was really earned by Phase 3's `WalkAndDeferYAMLFunctions`
+short-circuit reducing per-walk cost.
+
+A regression test
+(`TestMergeWithDeferred_TrivialInputShortCircuits/mutating the
+result does not mutate the input`) was added to lock in the
+restored contract: any future caller-mutation of the result must
+not bleed into the input.
+
+**Confirmed impact (mean of 3 runs, customer workload, post-revert):**
+
+| Function | Pre-Phase-5 baseline | Post-revert (0-input only) | Reduction |
 |---|---:|---:|---:|
-| `mergeComponentConfigurations` | 1m54s / 12.5ms / 9,261 | **57s / 6.2ms / 9,261** | **−50% Total** |
-| `merge.MergeWithDeferred` | 1m10s / 851µs / 83,349 | **25s / 305µs / 83,349** | **−64% Total, 2.8× faster avg** |
-| `merge.Merge` Calls | 273,379 | **207,934** | **−65k calls eliminated (−24%)** |
-| `merge.WalkAndDeferYAMLFunctions` | 15.4s / 47µs / 328,218 | **6.0s / 53µs / 112,832** | **−61% Total, −215k calls (−66%)** |
-| `processComponent` | 34s / 3.7ms | **27s / 2.9ms** | **−21% Total** |
+| `mergeComponentConfigurations` | 1m54s | **1m35s** | **−17% Total** |
+| `merge.MergeWithDeferred` | 1m10s | **51s** | **−27% Total** |
+| `merge.Merge` Calls | 273,379 | **235,806** | **−14% (−37k calls)** |
+| `merge.WalkAndDeferYAMLFunctions` | 15.4s / 328k | **11s / 178k** | **−29% Total, −46% Calls** |
 
-**Wall-clock (local Mac, mean of 3 runs):** 3.3s → **3.0s** (−10%).
-Same caveat as Phase 3 — on many-core machines the parallelism
-absorbs much of the cumulative savings. Cumulative CPU saved
-across Phases 3+5 ≈ 150 seconds → projected **~37-75s wall-clock
-improvement on 2-4 core GHA runners** (on top of Phase 2's
-contention elimination).
-
-**Tests added (race-clean):** `TestMergeWithDeferred_TrivialInputShortCircuits`
-covers (a) zero non-empty inputs returns empty, (b) single
-non-empty function-free input returns same map header (composes with
-Phase 3 zero-alloc fast path), (c) single non-empty input with YAML
-functions defers at the correct precedence, (d) two non-empty
-inputs take the full merge path, (e) the fast path does not mutate
-the input.
+**Wall-clock (local Mac):** 3.3s → **~2.2s** mean — still an
+improvement over the pre-Phase-2 baseline (4.1s, −47% cumulative),
+but ~170ms regression vs the original (unsafe) Phase 5
+measurement of 3.0s. Acceptable cost for correctness.
 
 ### Phase 4 (shipped 2026-05-23) — cache locals extraction by file path + content hash
 
