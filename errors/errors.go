@@ -229,6 +229,7 @@ var (
 	ErrToolAlreadyInstalled         = errors.New("tool already installed")
 	ErrDownloadFailed               = errors.New("download failed")
 	ErrDownloadRetryable            = errors.New("retryable download error")
+	ErrSignatureRetryable           = errors.New("retryable signature verification error")
 	ErrExtractionFailed             = errors.New("extraction failed")
 	ErrChecksumMismatch             = errors.New("checksum mismatch")
 	ErrNoVersionsInstalled          = errors.New("no versions installed")
