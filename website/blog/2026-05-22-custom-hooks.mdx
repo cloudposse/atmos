@@ -5,6 +5,8 @@ authors: [osterman]
 tags: [feature, dx, experimental]
 ---
 
+import ActionCard from '@site/src/components/ActionCard'
+
 Atmos hooks now have a **`kind`** system — same `before-terraform-plan` /
 `after-terraform-plan` lifecycle you already know, but the dispatch is
 pluggable and built-in kinds ship for common tools. Two lines in a stack
@@ -138,10 +140,10 @@ in-repo source path. `tool` and `terraform` see identical state.
 
 Four scanner/cost examples live under `examples/`:
 
-- [`hooks-infracost`](https://github.com/cloudposse/atmos/tree/main/examples/hooks-infracost) — cost analysis (`kind: infracost`)
-- [`hooks-trivy`](https://github.com/cloudposse/atmos/tree/main/examples/hooks-trivy) — security scanning (`kind: trivy`)
-- [`hooks-checkov`](https://github.com/cloudposse/atmos/tree/main/examples/hooks-checkov) — policy scanning (`kind: checkov`)
-- [`hooks-kics`](https://github.com/cloudposse/atmos/tree/main/examples/hooks-kics) — IaC scanning (`kind: kics`)
+- [`hooks-infracost`](/examples/hooks-infracost) — cost analysis (`kind: infracost`)
+- [`hooks-trivy`](/examples/hooks-trivy) — security scanning (`kind: trivy`)
+- [`hooks-checkov`](/examples/hooks-checkov) — policy scanning (`kind: checkov`)
+- [`hooks-kics`](/examples/hooks-kics) — IaC scanning (`kind: kics`)
 
 Each uses dummy AWS provider config so `tofu plan` succeeds offline —
 no real credentials needed to see the hooks fire.
@@ -169,3 +171,7 @@ atmos terraform plan bucket -s test
 You'll see trivy auto-install via the toolchain, scan the intentionally-
 misconfigured S3 bucket, and render the findings in your terminal —
 all without any cloud credentials.
+
+<ActionCard title="Read the docs" href="/stacks/hooks">
+  Full reference for hook kinds, override semantics, lifecycle events, tool auto-install, and the `--all` / `--skip-hooks` flags.
+</ActionCard>
