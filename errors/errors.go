@@ -621,7 +621,6 @@ var (
 	ErrDependencyTargetNotFound  = errors.New("dependency target not found")
 
 	// Terraform --all flag errors.
-	ErrStackRequiredWithAllFlag     = errors.New("stack is required when using --all flag")
 	ErrComponentWithAllFlagConflict = errors.New("component argument can't be used with --all flag")
 
 	// Terraform execution errors.
