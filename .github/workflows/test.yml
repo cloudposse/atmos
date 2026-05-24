@@ -17,13 +17,6 @@ on:
 
   workflow_dispatch:
 
-env:
-  TERRAFORM_VERSION: "1.9.7"
-  OPEN_TOFU_VERSION: "1.9.1"
-  HELM_VERSION: "v3.19.2"
-  HELMFILE_VERSION: "v1.1.0"
-  PACKER_VERSION: "1.14.2"
-
 # Grant `packages: read` so jobs that pull OCI images from ghcr.io
 # (e.g. vendor pulls in mock/acceptance tests) can authenticate with
 # the auto-generated GITHUB_TOKEN. The default PR-event scope is
@@ -33,6 +26,13 @@ env:
 permissions:
   contents: read
   packages: read
+
+env:
+  TERRAFORM_VERSION: "1.9.7"
+  OPEN_TOFU_VERSION: "1.9.1"
+  HELM_VERSION: "v3.19.2"
+  HELMFILE_VERSION: "v1.1.0"
+  PACKER_VERSION: "1.14.2"
 
 jobs:
   # ensure the code builds...
@@ -252,6 +252,16 @@ jobs:
     name: "[lint] Dockerfile"
     needs: build
     runs-on: ubuntu-latest
+    # The workflow-level `permissions:` block above (added in #2487 for
+    # `packages: read` on ghcr.io pulls) REPLACES — not extends — the default
+    # token scope for every job. That stripped the implicit
+    # `security-events: write` this job relied on for SARIF upload, breaking
+    # the post-merge run on main. Job-level `permissions:` also fully
+    # overrides the workflow-level set, so `contents: read` is re-listed here
+    # for actions/checkout.
+    permissions:
+      contents: read
+      security-events: write
     steps:
       - name: Check out code
         uses: actions/checkout@v4
@@ -530,6 +540,9 @@ jobs:
     name: "[lint] ${{ matrix.demo-folder }}"
     needs: build
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      checks: write
     strategy:
       fail-fast: false
       matrix:

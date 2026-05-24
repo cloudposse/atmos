@@ -1390,6 +1390,119 @@ func TestExecuteTerraformAffectedComponentInDepOrder(t *testing.T) {
 			expectedError:      false,
 			expectedCalls:      1, // Only vpc, dependents not included.
 		},
+		{
+			// Defense-in-depth coverage for issue #2361: a terraform component
+			// must never trigger terraform plan/apply on a helmfile dependent.
+			name: "helmfile dependent skipped (issue #2361)",
+			info: &schema.ConfigAndStacksInfo{
+				SubCommand: "plan",
+				DryRun:     false,
+			},
+			affectedList: []schema.Affected{
+				{StackSlug: "prod-helm-app"},
+			},
+			affectedComponent: "vpc",
+			affectedStack:     "prod",
+			parentComponent:   "",
+			parentStack:       "",
+			dependents: []schema.Dependent{
+				{
+					Component:            "helm-app",
+					ComponentType:        "helmfile",
+					Stack:                "prod",
+					StackSlug:            "prod-helm-app",
+					IncludedInDependents: false,
+					Dependents:           []schema.Dependent{},
+				},
+			},
+			args: &DescribeAffectedCmdArgs{
+				IncludeDependents: true,
+			},
+			mockTerraformError: false,
+			expectedError:      false,
+			expectedCalls:      1, // Only vpc; helmfile dependent filtered.
+		},
+		{
+			// Defense-in-depth coverage for issue #2361: a terraform component
+			// must never trigger terraform plan/apply on a packer dependent.
+			name: "packer dependent skipped (issue #2361)",
+			info: &schema.ConfigAndStacksInfo{
+				SubCommand: "plan",
+				DryRun:     false,
+			},
+			affectedList: []schema.Affected{
+				{StackSlug: "prod-image"},
+			},
+			affectedComponent: "vpc",
+			affectedStack:     "prod",
+			parentComponent:   "",
+			parentStack:       "",
+			dependents: []schema.Dependent{
+				{
+					Component:            "image",
+					ComponentType:        "packer",
+					Stack:                "prod",
+					StackSlug:            "prod-image",
+					IncludedInDependents: false,
+					Dependents:           []schema.Dependent{},
+				},
+			},
+			args: &DescribeAffectedCmdArgs{
+				IncludeDependents: true,
+			},
+			mockTerraformError: false,
+			expectedError:      false,
+			expectedCalls:      1, // Only vpc; packer dependent filtered.
+		},
+		{
+			// Mixed-type dependents: only the terraform one runs.
+			name: "mixed-type dependents — only terraform runs (issue #2361)",
+			info: &schema.ConfigAndStacksInfo{
+				SubCommand: "plan",
+				DryRun:     false,
+			},
+			affectedList: []schema.Affected{
+				{StackSlug: "prod-helm-app"},
+				{StackSlug: "prod-image"},
+				{StackSlug: "prod-security-group"},
+			},
+			affectedComponent: "vpc",
+			affectedStack:     "prod",
+			parentComponent:   "",
+			parentStack:       "",
+			dependents: []schema.Dependent{
+				{
+					Component:            "helm-app",
+					ComponentType:        "helmfile",
+					Stack:                "prod",
+					StackSlug:            "prod-helm-app",
+					IncludedInDependents: false,
+					Dependents:           []schema.Dependent{},
+				},
+				{
+					Component:            "image",
+					ComponentType:        "packer",
+					Stack:                "prod",
+					StackSlug:            "prod-image",
+					IncludedInDependents: false,
+					Dependents:           []schema.Dependent{},
+				},
+				{
+					Component:            "security-group",
+					ComponentType:        "terraform",
+					Stack:                "prod",
+					StackSlug:            "prod-security-group",
+					IncludedInDependents: false,
+					Dependents:           []schema.Dependent{},
+				},
+			},
+			args: &DescribeAffectedCmdArgs{
+				IncludeDependents: true,
+			},
+			mockTerraformError: false,
+			expectedError:      false,
+			expectedCalls:      2, // vpc + security-group; helmfile + packer filtered.
+		},
 	}
 
 	for _, tt := range tests {
@@ -1462,6 +1575,57 @@ func TestExecuteTerraformAffectedComponentInDepOrder(t *testing.T) {
 			// Verify that the function completed successfully.
 			// Note: The info object is modified during recursive execution,
 			// so we only verify the call count and error state.
+		})
+	}
+}
+
+// TestIsNonTerraformDependent is the portable companion to the gomonkey-based
+// table above. It directly exercises the defense-in-depth predicate that
+// `executeTerraformAffectedComponentInDepOrder` uses to drop helmfile/packer
+// dependents during the recursion. Testing the predicate (rather than the
+// orchestrator) avoids racing with parallel tests that monkey-patch the
+// orchestrator, and gives the guard real coverage on every CI runner —
+// including macOS ARM64 where gomonkey is unsupported.
+func TestIsNonTerraformDependent(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		dep  schema.Dependent
+		want bool
+	}{
+		{
+			name: "helmfile dependent is non-terraform (issue #2361)",
+			dep:  schema.Dependent{Component: "helm-app", ComponentType: cfg.HelmfileComponentType, Stack: "prod"},
+			want: true,
+		},
+		{
+			name: "packer dependent is non-terraform (issue #2361)",
+			dep:  schema.Dependent{Component: "image", ComponentType: cfg.PackerComponentType, Stack: "prod"},
+			want: true,
+		},
+		{
+			// Positive path: a terraform dependent must NOT be flagged,
+			// otherwise the guard would be over-broad and silently drop
+			// legitimate work.
+			name: "terraform dependent is not flagged",
+			dep:  schema.Dependent{Component: "security-group", ComponentType: cfg.TerraformComponentType, Stack: "prod"},
+			want: false,
+		},
+		{
+			// Empty ComponentType is treated as terraform for backward
+			// compatibility — older affected payloads omitted this field.
+			name: "empty ComponentType is treated as terraform",
+			dep:  schema.Dependent{Component: "legacy", ComponentType: "", Stack: "prod"},
+			want: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			dep := tt.dep
+			assert.Equal(t, tt.want, isNonTerraformDependent(&dep))
 		})
 	}
 }
