@@ -3,24 +3,9 @@ import OriginalDocBreadcrumbs from '@theme-original/DocBreadcrumbs';
 import { useDoc } from '@docusaurus/plugin-content-docs/client';
 
 import CopyMarkdownButton from '@site/src/components/CopyMarkdownButton';
+import { deriveMarkdownHref } from '@site/src/theme/docUtils';
 
 import styles from './styles.module.css';
-
-/**
- * Derive `<permalink>.md` from the current doc's metadata, normalizing the
- * root and any trailing slash:
- *   /                      → /index.md
- *   /cli/                  → /cli.md
- *   /cli/commands/version  → /cli/commands/version.md
- */
-function deriveMarkdownHref(permalink: string): string {
-  if (!permalink) return '';
-  // Linear trailing-slash trim (CodeQL-safe; avoids /\/+$/).
-  let end = permalink.length;
-  while (end > 0 && permalink.charCodeAt(end - 1) === 47) end -= 1; // '/'
-  const normalized = permalink.slice(0, end);
-  return normalized ? normalized + '.md' : '/index.md';
-}
 
 /**
  * Wraps the default DocBreadcrumbs so the "Copy Markdown" split button shares

@@ -5,6 +5,8 @@ import type DocItemContentType from '@theme/DocItem/Content';
 import type { WrapperProps } from '@docusaurus/types';
 import { useDoc } from '@docusaurus/plugin-content-docs/client';
 
+import { deriveMarkdownHref } from '@site/src/theme/docUtils';
+
 type Props = WrapperProps<typeof DocItemContentType>;
 
 /**
@@ -18,13 +20,7 @@ type Props = WrapperProps<typeof DocItemContentType>;
  */
 export default function ContentWrapper(props: Props): JSX.Element {
   const { metadata } = useDoc();
-  const permalink = metadata?.permalink ?? '';
-  // Match the breadcrumbs swizzle: linear trim of trailing `/`, and special-case
-  // the root permalink so `/` maps to `/index.md`, not `.md`.
-  let end = permalink.length;
-  while (end > 0 && permalink.charCodeAt(end - 1) === 47) end -= 1; // '/'
-  const normalized = permalink.slice(0, end);
-  const mdHref = permalink ? (normalized ? normalized + '.md' : '/index.md') : '';
+  const mdHref = deriveMarkdownHref(metadata?.permalink ?? '');
 
   return (
     <>
