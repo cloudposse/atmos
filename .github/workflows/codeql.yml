@@ -156,9 +156,6 @@ jobs:
         with:
           version: 101ccaca0df22b2e36dd917ed5d0be423baa6298
           install-mode: none
-          # Avoid a network-dependent schema fetch during `golangci-lint config verify`.
-          # The lint run itself still loads .golangci.yml and fails if the config is invalid.
-          verify: false
           only-new-issues: true
           args: >
             --output.sarif.path=golangci-lint.sarif
