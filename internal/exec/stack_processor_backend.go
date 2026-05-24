@@ -263,9 +263,14 @@ func processTerraformRemoteStateBackend(cfg *remoteStateBackendConfig) (string, 
 }
 
 // extractBackendTypeMap returns the inner map at section[backendType] as a
-// fresh map[string]any, or an empty map if the key is missing. Errors out
-// when the value exists but is not a map (which would have failed the
-// post-merge type assertion in the prior implementation).
+// reference into the input (not a copy), or a fresh empty map if section is
+// nil or the key is missing. Errors out when the value exists but is not a
+// map (which would have failed the post-merge type assertion in the prior
+// implementation).
+//
+// Callers are expected to feed the result into m.Merge (or otherwise treat
+// it as read-only); the only production caller does, and Merge's own
+// contract guarantees its output is a fresh map.
 func extractBackendTypeMap(section map[string]any, backendType, component string) (map[string]any, error) {
 	if section == nil {
 		return map[string]any{}, nil
