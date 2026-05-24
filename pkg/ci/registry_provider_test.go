@@ -143,6 +143,62 @@ func TestIsCI(t *testing.T) {
 	assert.True(t, IsCI())
 }
 
+// debugMockProvider extends mockProvider with the optional
+// DebugModeDetector capability for DetectDebugMode tests.
+type debugMockProvider struct {
+	mockProvider
+	debug bool
+}
+
+func (m *debugMockProvider) IsDebugMode() bool { return m.debug }
+
+func TestDetectDebugMode(t *testing.T) {
+	t.Run("no provider detected -> zero value", func(t *testing.T) {
+		backup := testSaveAndClearRegistry()
+		defer testRestoreRegistry(backup)
+
+		info := DetectDebugMode()
+		assert.False(t, info.Active)
+		assert.Empty(t, info.Provider)
+	})
+
+	t.Run("detected provider without capability -> Active=false, Provider set", func(t *testing.T) {
+		backup := testSaveAndClearRegistry()
+		defer testRestoreRegistry(backup)
+
+		Register(&mockProvider{name: "plain-ci", detected: true})
+		info := DetectDebugMode()
+		assert.False(t, info.Active)
+		assert.Equal(t, "plain-ci", info.Provider)
+	})
+
+	t.Run("detected provider with capability, debug off -> Active=false", func(t *testing.T) {
+		backup := testSaveAndClearRegistry()
+		defer testRestoreRegistry(backup)
+
+		Register(&debugMockProvider{
+			mockProvider: mockProvider{name: "debug-ci", detected: true},
+			debug:        false,
+		})
+		info := DetectDebugMode()
+		assert.False(t, info.Active)
+		assert.Equal(t, "debug-ci", info.Provider)
+	})
+
+	t.Run("detected provider with capability, debug on -> Active=true", func(t *testing.T) {
+		backup := testSaveAndClearRegistry()
+		defer testRestoreRegistry(backup)
+
+		Register(&debugMockProvider{
+			mockProvider: mockProvider{name: "debug-ci", detected: true},
+			debug:        true,
+		})
+		info := DetectDebugMode()
+		assert.True(t, info.Active)
+		assert.Equal(t, "debug-ci", info.Provider)
+	})
+}
+
 // testSaveAndClearRegistry clears the provider registry and returns a restore function.
 func testSaveAndClearRegistry() func() {
 	return SwapRegistryForTest()
