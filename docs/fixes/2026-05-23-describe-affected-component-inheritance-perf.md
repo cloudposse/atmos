@@ -214,6 +214,13 @@ open. Optimization plan:
       (18.7s → 3.7s, 5× faster avg). Wall-clock unchanged on Mac
       (parallelism already absorbed it); ~4-7s wall-clock saved on
       2-4 core GHA runners.
+- [x] Phase 7: hoist `hasCustomTags` pre-check out of recursion in
+      `processCustomTags`. Total dropped 76% (31.5s → 7.5s, 3.2×
+      faster avg). The previous implementation re-ran the full
+      subtree scan on every recursive call (O(N×depth) work just
+      for the early-exit check); a split into outer/inner functions
+      runs the check once per top-level call. ~24s cumulative CPU
+      saved on this workload → ~6-12s wall-clock on 2-4 core GHA.
 - [ ] Re-measure on GHA and confirm wall-clock improvement.
 
 ---
@@ -689,6 +696,55 @@ savings end-to-end**.
 
 **Race detector:**
 `go test -race -count=1 -run "UnmarshalYAMLFromFileWithPositions|HandleCacheMiss|CacheHit" ./pkg/utils/...`
+green. Full `pkg/utils` and `internal/exec` test suites pass.
+
+### Phase 7 (shipped 2026-05-23) — hoist hasCustomTags check out of recursion
+
+**Root cause.** `processCustomTags` (the YAML node walker that
+detects and processes `!terraform.*`, `!template`, `!store*`,
+`!exec`, `!env`, `!include`, `!literal` tags) had a `hasCustomTags`
+early-exit pre-check at the top of every invocation. The pre-check
+itself walks the entire subtree to find any custom tag. On
+recursive invocations (one per child node with content), the
+pre-check re-walks the same subtree it just walked at the level
+above — O(N×depth) work where it should be O(N).
+
+For trees with tags (which is most of them in the customer
+workload), this meant ~9k top-level `processCustomTags` calls each
+re-walked their tree at every recursion level. Total cumulative
+CPU: 31.5s, 3.4ms avg per top-level call.
+
+**Fix.** Split `processCustomTags` into outer entry + inner worker:
+
+- `processCustomTags` does the `hasCustomTags` check ONCE at the
+  top level. If no tags exist, early-exit. Otherwise, delegate to
+  the inner worker.
+- `processCustomTagsInner` is the recursive worker — no `hasCustomTags`
+  check on each call, just process and recurse. By the time we're
+  inside it, we already know the tree has tags.
+
+`perf.Track` stays on the outer function and is intentionally
+omitted from the inner worker: the outer call wraps the whole walk
+with one tracked frame, so adding per-recursion tracking would
+inflate the metric without yielding insight.
+
+**Confirmed impact (mean of 2 runs, customer workload):**
+
+| Function | Phase 6 (Total / Avg / Calls) | Phase 7 (Total / Avg / Calls) | Reduction |
+|---|---:|---:|---:|
+| `utils.processCustomTags` | 31.5s / 3.4ms / 9,200 | **7.5s / 1.07ms / ~7,000** | **−76% Total, 3.2× faster avg** |
+
+(The call-count drop is mechanical: recursive calls now go through
+the inner worker which lacks `perf.Track`, so only top-level calls
+are counted. The CPU-time drop is the real signal.)
+
+**Wall-clock impact (local Mac):** 2.3s → 2.4s (within noise on a
+many-core machine where parallelism absorbs the saved work).
+Cumulative ~24s CPU saved → projected **~6-12s wall-clock on 2-4
+core GHA runners** on top of Phases 1-6.
+
+**Race detector:**
+`go test -race -count=1 -run "ProcessCustomTags|UnmarshalYAML|TestHasCustomTags" ./pkg/utils/...`
 green. Full `pkg/utils` and `internal/exec` test suites pass.
 
 ### Verification

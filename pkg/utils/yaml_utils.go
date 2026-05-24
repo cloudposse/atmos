@@ -678,7 +678,19 @@ func ConvertToYAML(data any, opts ...YAMLOptions) (string, error) {
 	return buf.String(), nil
 }
 
-//nolint:gocognit,revive
+// processCustomTags walks a YAML node tree and processes any custom Atmos
+// tags it contains. The entry point performs the fast hasCustomTags scan
+// ONCE; if the tree contains no custom tags anywhere, it returns immediately.
+// If any custom tag is found, processCustomTagsInner does the actual walk
+// without re-checking subtrees — saving O(depth) redundant tree scans that
+// the prior implementation incurred by re-running hasCustomTags on every
+// recursive call.
+//
+// Background: in a large describe-affected run (~9k processCustomTags
+// invocations) the redundant per-recursion hasCustomTags walks accounted
+// for the bulk of the 31s cumulative CPU time. Hoisting the check to the
+// top eliminates that overhead without changing behavior for tag-free
+// subtrees (which still benefit from the early exit).
 func processCustomTags(atmosConfig *schema.AtmosConfiguration, node *yaml.Node, file string) error {
 	defer perf.Track(atmosConfig, "utils.processCustomTags")()
 
@@ -694,6 +706,23 @@ func processCustomTags(atmosConfig *schema.AtmosConfiguration, node *yaml.Node, 
 		return nil
 	}
 
+	// We've established there IS a custom tag somewhere in this subtree;
+	// walk it once via the inner helper which skips the (now redundant)
+	// hasCustomTags check on every recursion.
+	return processCustomTagsInner(atmosConfig, node, file)
+}
+
+// processCustomTagsInner is the recursive worker for processCustomTags.
+// Callers must have already established that the input tree contains at
+// least one custom tag (via hasCustomTags); this function does not perform
+// that check on each call, which is the key optimization vs the prior
+// implementation. The perf.Track on the outer processCustomTags wraps the
+// entire walk with one tracked frame, so per-recursion tracking is
+// intentionally omitted here to avoid inflating the metric (recursive
+// calls would be counted in addition to the top-level invocation).
+//
+//nolint:gocognit
+func processCustomTagsInner(atmosConfig *schema.AtmosConfiguration, node *yaml.Node, file string) error {
 	for _, n := range node.Content {
 		tag := strings.TrimSpace(n.Tag)
 		val := strings.TrimSpace(n.Value)
@@ -735,7 +764,7 @@ func processCustomTags(atmosConfig *schema.AtmosConfiguration, node *yaml.Node, 
 
 		// Recursively process the child nodes
 		if len(n.Content) > 0 {
-			if err := processCustomTags(atmosConfig, n, file); err != nil {
+			if err := processCustomTagsInner(atmosConfig, n, file); err != nil {
 				return err
 			}
 		}
