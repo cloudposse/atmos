@@ -270,7 +270,8 @@ nested:
 
 			// All goroutines parse the same file with the same content
 			result, _, err := UnmarshalYAMLFromFileWithPositions[map[string]any](
-				atmosConfig, input, "concurrent-test.yaml")
+				atmosConfig, input, "concurrent-test.yaml",
+			)
 			if err != nil {
 				errors <- err
 				return
@@ -356,7 +357,8 @@ func TestUnmarshalYAMLFromFileWithPositions_ConcurrentAccessDifferentFiles(t *te
 				<-start
 
 				result, _, err := UnmarshalYAMLFromFileWithPositions[map[string]any](
-					atmosConfig, content, name)
+					atmosConfig, content, name,
+				)
 				if err != nil {
 					errors <- err
 					return
@@ -1473,20 +1475,9 @@ nested:
   key: value`
 	fileName := "test-provenance-reparse.yaml"
 
-	// Capture old cache state and restore after test.
-	parsedYAMLCacheMu.Lock()
-	oldCache := parsedYAMLCache
-	parsedYAMLCacheMu.Unlock()
-	t.Cleanup(func() {
-		parsedYAMLCacheMu.Lock()
-		parsedYAMLCache = oldCache
-		parsedYAMLCacheMu.Unlock()
-	})
-
-	// Clear cache to ensure clean state.
-	parsedYAMLCacheMu.Lock()
-	parsedYAMLCache = make(map[string]*parsedYAMLCacheEntry)
-	parsedYAMLCacheMu.Unlock()
+	// Clear cache before and after test for isolation.
+	clearParsedYAMLCache()
+	t.Cleanup(clearParsedYAMLCache)
 
 	// First parse WITHOUT provenance tracking.
 	configNoProvenance := &schema.AtmosConfiguration{
@@ -1535,20 +1526,9 @@ func TestUnmarshalYAMLFromFileWithPositions_NilConfigReturnsError(t *testing.T) 
 // TestHandleCacheMiss_NilConfigSafe tests that handleCacheMiss handles nil atmosConfig safely.
 // This tests the nil checks we added to prevent panics.
 func TestHandleCacheMiss_NilConfigSafe(t *testing.T) {
-	// Capture old cache state and restore after test.
-	parsedYAMLCacheMu.Lock()
-	oldCache := parsedYAMLCache
-	parsedYAMLCacheMu.Unlock()
-	t.Cleanup(func() {
-		parsedYAMLCacheMu.Lock()
-		parsedYAMLCache = oldCache
-		parsedYAMLCacheMu.Unlock()
-	})
-
-	// Clear cache to ensure clean state.
-	parsedYAMLCacheMu.Lock()
-	parsedYAMLCache = make(map[string]*parsedYAMLCacheEntry)
-	parsedYAMLCacheMu.Unlock()
+	// Clear cache before and after test for isolation.
+	clearParsedYAMLCache()
+	t.Cleanup(clearParsedYAMLCache)
 
 	yamlContent := `name: test`
 
@@ -1569,19 +1549,13 @@ func TestUnmarshalYAMLFromFileWithPositions_CacheHitWithProvenance(t *testing.T)
 value: 123`
 	fileName := "test-cache-hit-provenance.yaml"
 
-	// Capture old cache state and restore after test.
-	// Note: Only capture values, not the struct containing the mutex.
-	parsedYAMLCacheMu.Lock()
-	oldCache := parsedYAMLCache
-	parsedYAMLCacheMu.Unlock()
+	// Save stats and restore after test.
 	parsedYAMLCacheStats.Lock()
 	oldHits := parsedYAMLCacheStats.hits
 	oldMisses := parsedYAMLCacheStats.misses
 	parsedYAMLCacheStats.Unlock()
 	t.Cleanup(func() {
-		parsedYAMLCacheMu.Lock()
-		parsedYAMLCache = oldCache
-		parsedYAMLCacheMu.Unlock()
+		clearParsedYAMLCache()
 		parsedYAMLCacheStats.Lock()
 		parsedYAMLCacheStats.hits = oldHits
 		parsedYAMLCacheStats.misses = oldMisses
@@ -1589,9 +1563,7 @@ value: 123`
 	})
 
 	// Clear cache to ensure clean state.
-	parsedYAMLCacheMu.Lock()
-	parsedYAMLCache = make(map[string]*parsedYAMLCacheEntry)
-	parsedYAMLCacheMu.Unlock()
+	clearParsedYAMLCache()
 
 	// Reset stats.
 	parsedYAMLCacheStats.Lock()

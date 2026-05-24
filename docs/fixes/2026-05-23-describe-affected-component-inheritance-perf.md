@@ -208,8 +208,12 @@ open. Optimization plan:
       eliminated, wall-clock 3.0s → 2.3s (−23%, biggest single-phase
       wall-clock win). Pre-existing race in
       `extractAndAddLocalsToContext` (mergedContext mutation) fixed.
-- [ ] Phase 6 (new): investigate `ProcessYAMLConfigFileWithContext`
-      (~1m post-Phase-4) — file loading hot path.
+- [x] Phase 6: apply Phase 2's sync.Map + deep-copy-outside-lock
+      pattern to `parsedYAMLCache` in `pkg/utils/yaml_utils.go`.
+      `UnmarshalYAMLFromFileWithPositions` Total dropped 80%
+      (18.7s → 3.7s, 5× faster avg). Wall-clock unchanged on Mac
+      (parallelism already absorbed it); ~4-7s wall-clock saved on
+      2-4 core GHA runners.
 - [ ] Re-measure on GHA and confirm wall-clock improvement.
 
 ---
@@ -637,6 +641,55 @@ introduced by Phase 4.
 | Phase 5 (skip trivial merges) | 3.0s | −10% |
 | Phase 4 (locals cache) | **2.3s** | **−23%** |
 | **Cumulative** | **2.3s** | **−44% vs baseline** |
+
+### Phase 6 (shipped 2026-05-23) — sync.Map for parsedYAMLCache
+
+**Root cause.** After Phase 4 eliminated 92% of locals-extraction
+parses, the next bottleneck became `UnmarshalYAMLFromFileWithPositions`
+(22,181 calls, 18.7s Total, 844µs avg) — the position-tracking YAML
+parser used by `processYAMLConfigFileWithContextInternal` for the
+final stack-config parse. It already had a content-hash cache, but
+the cache structure was the same RWMutex-protected map pattern that
+Phase 2 fixed for `cacheBaseComponentConfig`:
+
+- `cacheParsedYAML` held `parsedYAMLCacheMu.Lock()` during the
+  recursive `deepCopyYAMLNode` work.
+- `getCachedParsedYAML` held `parsedYAMLCacheMu.RLock()` during the
+  read-side `deepCopyYAMLNode`.
+
+With ~22k concurrent calls, the global write lock serialized every
+cache write, padding apparent CPU time with lock-wait.
+
+**Fix.** Same as Phase 2:
+
+1. `parsedYAMLCache` is now a `sync.Map` (was `map + sync.RWMutex`).
+2. Deep-copy of `yaml.Node` + `PositionMap` happens *before* the
+   `sync.Map.Store` and *after* the `sync.Map.Load`, never inside any
+   critical section.
+
+Added `clearParsedYAMLCache()` plus the public `ClearParsedYAMLCache()`
+for tests, mirroring the `ClearBaseComponentConfigCache` /
+`ClearLocalsExtractionCache` pattern. Three existing tests that
+manually saved/restored the `map + mutex` state were updated to use
+the helper.
+
+**Confirmed impact (mean of 3 runs, customer workload):**
+
+| Function | Phase 4 (Total / Avg) | Phase 6 (Total / Avg) | Reduction |
+|---|---:|---:|---:|
+| `utils.UnmarshalYAMLFromFileWithPositions` | 18.7s / 844µs | **3.7s / 166µs** | **−80% Total, 5× faster avg** |
+| `exec.ProcessYAMLConfigFileWithContext` | 57.6s / 37ms | **54s / 35ms** | −6% Total (downstream beneficiary) |
+
+**Wall-clock impact (local Mac):** 2.3s → 2.3s (unchanged). Same
+caveat as Phase 2: lock-wait padding doesn't show on many-core
+machines because the waiters park rather than consume cores. On 2-4
+core GHA runners where the lock-wait IS wall-clock, projecting from
+the 15s of cumulative CPU eliminated → **~4-7 seconds wall-clock
+savings end-to-end**.
+
+**Race detector:**
+`go test -race -count=1 -run "UnmarshalYAMLFromFileWithPositions|HandleCacheMiss|CacheHit" ./pkg/utils/...`
+green. Full `pkg/utils` and `internal/exec` test suites pass.
 
 ### Verification
 

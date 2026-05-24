@@ -86,11 +86,21 @@ var (
 		AtmosYamlFuncAwsOrganizationID:       true,
 	}
 
-	// ParsedYAMLCache stores parsed yaml.Node objects and their position information
-	// to avoid re-parsing the same files multiple times.
-	// Cache key: file path + content hash.
-	parsedYAMLCache   = make(map[string]*parsedYAMLCacheEntry)
-	parsedYAMLCacheMu sync.RWMutex
+	// ParsedYAML cache stores parsed yaml.Node objects and their position
+	// information to avoid re-parsing the same files multiple times. Cache key
+	// is file path + content hash. Values are *parsedYAMLCacheEntry and are
+	// treated as immutable post-insert; readers receive deep copies (the
+	// underlying yaml.Node tree has pointer-sharing aliases that would
+	// otherwise corrupt the cache if mutated).
+	//
+	// Uses sync.Map (not a RWMutex-protected map) because the write path is
+	// highly contended at scale: in a large-stack workload (~22k
+	// UnmarshalYAMLFromFileWithPositions calls), the prior RWMutex.Lock()
+	// inside cacheParsedYAML serialized every write across goroutines while
+	// holding the lock during the expensive deepCopyYAMLNode work. The
+	// lock-free sync.Map removes the global lock and optimizes for the
+	// disjoint-key write pattern this cache exhibits.
+	parsedYAMLCache sync.Map // map[string]*parsedYAMLCacheEntry (immutable post-insert).
 
 	// Per-key locks to prevent race conditions when multiple goroutines
 	// try to parse the same file simultaneously. This prevents 156+ goroutines
@@ -216,6 +226,12 @@ func clonePositions(positions PositionMap) PositionMap {
 
 // getCachedParsedYAML retrieves a cached parsed YAML node if it exists.
 // Returns a copy of the node and positions to prevent external mutations.
+//
+// The sync.Map.Load is non-blocking and the deep-copy of the cached entry runs
+// outside any critical section: cached values are treated as immutable
+// post-insert (see cacheParsedYAML), so concurrent goroutines may safely
+// deep-copy them without coordination.
+//
 // Note: Statistics tracking is done by the caller to avoid double-counting.
 // Note: perf.Track() removed from this hot path to reduce overhead.
 func getCachedParsedYAML(file string, content string) (*yaml.Node, PositionMap, bool) {
@@ -224,11 +240,12 @@ func getCachedParsedYAML(file string, content string) (*yaml.Node, PositionMap, 
 		return nil, nil, false
 	}
 
-	parsedYAMLCacheMu.RLock()
-	defer parsedYAMLCacheMu.RUnlock()
-
-	entry, found := parsedYAMLCache[cacheKey]
+	raw, found := parsedYAMLCache.Load(cacheKey)
 	if !found {
+		return nil, nil, false
+	}
+	entry, ok := raw.(*parsedYAMLCacheEntry)
+	if !ok {
 		return nil, nil, false
 	}
 
@@ -240,6 +257,14 @@ func getCachedParsedYAML(file string, content string) (*yaml.Node, PositionMap, 
 
 // cacheParsedYAML stores a parsed YAML node in the cache.
 // Stores copies to prevent external mutations from affecting the cache.
+//
+// The deep copy of node + positions runs BEFORE the sync.Map.Store so the
+// cache's critical section is only the atomic store, not the expensive
+// recursive yaml.Node copy. Combined with sync.Map's lock-free read path,
+// this removes the global write-lock that previously serialized every cache
+// write across the ~22k UnmarshalYAMLFromFileWithPositions calls produced by
+// a large-stack describe-affected run.
+//
 // Note: perf.Track() removed from this hot path to reduce overhead.
 func cacheParsedYAML(file string, content string, node *yaml.Node, positions PositionMap) {
 	cacheKey := generateParsedYAMLCacheKey(file, content)
@@ -247,16 +272,29 @@ func cacheParsedYAML(file string, content string, node *yaml.Node, positions Pos
 		return
 	}
 
-	parsedYAMLCacheMu.Lock()
-	defer parsedYAMLCacheMu.Unlock()
-
 	// Store copies to prevent external mutations from affecting the cache.
 	nodeCopy := deepCopyYAMLNode(node)
 	positionsCopy := clonePositions(positions)
-	parsedYAMLCache[cacheKey] = &parsedYAMLCacheEntry{
+	parsedYAMLCache.Store(cacheKey, &parsedYAMLCacheEntry{
 		node:      *nodeCopy,
 		positions: positionsCopy,
-	}
+	})
+}
+
+// clearParsedYAMLCache empties the parsed YAML cache. Exported indirectly via
+// ClearParsedYAMLCache for tests that need to reset state between subtests.
+func clearParsedYAMLCache() {
+	parsedYAMLCache.Range(func(key, _ any) bool {
+		parsedYAMLCache.Delete(key)
+		return true
+	})
+}
+
+// ClearParsedYAMLCache clears the parsed YAML cache.
+// This should be called between independent operations (like tests) to ensure
+// fresh processing of files whose on-disk content may have changed.
+func ClearParsedYAMLCache() {
+	clearParsedYAMLCache()
 }
 
 // parseAndCacheYAML parses YAML content and caches the result.
@@ -352,7 +390,8 @@ func PrintParsedYAMLCacheStats() {
 		callsPerHash = float64(totalCalls) / float64(uniqueHashes)
 	}
 
-	log.Info("YAML Cache Statistics",
+	log.Info(
+		"YAML Cache Statistics",
 		"totalCalls", totalCalls,
 		"cacheHits", hits,
 		"cacheMisses", misses,
