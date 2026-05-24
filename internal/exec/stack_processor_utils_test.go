@@ -2316,10 +2316,13 @@ func TestCacheCompiledSchema(t *testing.T) {
 }
 
 // TestExtractLocalsFromRawYAML_CacheReturnsIndependentCopies verifies the
-// Phase 4 cache returns deep copies, not shared map references. Without this
-// guarantee, downstream consumers — which store the locals/settings/vars/env
-// maps into shared template contexts and may mutate them later — would
-// corrupt the cache and observe values bleeding across files.
+// Phase 4 cache returns deep copies of the `locals` field, not shared map
+// references. Settings/vars/env are intentionally shared references per the
+// Phase 9 contract — they are passed only to processTemplatesInSection which
+// reads them, marshals to YAML, re-parses, and returns a NEW map; it never
+// mutates the input. Reclaiming those three deep-copies cuts the cache-hit
+// path cost dramatically. Only `locals` carries a long-term cross-context
+// mutation surface, so only `locals` is deep-copied.
 func TestExtractLocalsFromRawYAML_CacheReturnsIndependentCopies(t *testing.T) {
 	ClearLocalsExtractionCache()
 	defer ClearLocalsExtractionCache()
@@ -2341,18 +2344,21 @@ env:
 	require.NotNil(t, first)
 	require.True(t, first.hasLocals)
 
-	// Mutate every map on the first result.
+	// Mutate the locals map on the first result. Per the cloneExtractLocalsResult
+	// contract, this must NOT bleed into subsequent retrievals.
 	first.locals["region"] = "MUTATED"
-	first.settings["flavor"] = "MUTATED"
-	first.vars["stage"] = "MUTATED"
-	first.env["AWS_REGION"] = "MUTATED"
 
-	// A second call must NOT see the mutations.
+	// A second call must NOT see the locals mutation.
 	second, err := extractLocalsFromRawYAML(atmosConfig, yamlContent, "iso-test.yaml")
 	require.NoError(t, err)
 	require.NotNil(t, second)
 	assert.Equal(t, "us-east-1", second.locals["region"],
 		"cached locals must not reflect post-retrieval mutations to a prior result")
+
+	// Settings/vars/env values should match the source. These fields are
+	// shared references with the cached entry; the contract documented on
+	// cloneExtractLocalsResult requires callers to treat them as read-only,
+	// and the only production consumer (processTemplatesInSection) does so.
 	assert.Equal(t, "prod", second.settings["flavor"])
 	assert.Equal(t, "dev", second.vars["stage"])
 	assert.Equal(t, "us-east-1", second.env["AWS_REGION"])

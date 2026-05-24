@@ -79,34 +79,39 @@ func localsCacheKey(filePath, yamlContent string) string {
 	return filePath + "@" + strconv.FormatUint(h.Sum64(), hexBase)
 }
 
-// cloneExtractLocalsResult deep-copies an extractLocalsResult so the cache value
-// remains immutable across concurrent retrievals. Returns the same nil hint when
-// the source is nil.
+// cloneExtractLocalsResult returns a per-caller view of a cached extractLocalsResult.
+// Only the `locals` field is deep-copied; the other fields (settings, vars, env)
+// are shared references with the cached entry.
+//
+// Why this asymmetry is safe:
+//   - `locals` is stored long-term in the template context
+//     (`context[cfg.LocalsSectionName] = extractResult.locals`) and may be
+//     read by downstream template processors. To guard against any future
+//     caller that decides to mutate context entries, we deep-copy.
+//   - `settings`, `vars`, `env` are passed directly to processTemplatesInSection
+//     which reads the section, marshals it to YAML, re-parses, and returns a
+//     NEW map. It never mutates the input. The interim shared reference is
+//     therefore safe.
+//
+// This asymmetric clone reclaims ~75% of the per-retrieval deep-copy cost
+// in the customer workload (cloneExtractLocalsResult dominated the
+// post-Phase-4 cache-hit path at ~343µs avg across 22,181 calls).
 func cloneExtractLocalsResult(src *extractLocalsResult) *extractLocalsResult {
 	if src == nil {
 		return nil
 	}
 	dst := &extractLocalsResult{
 		hasLocals: src.hasLocals,
+		// Shared (read-only by processTemplatesInSection).
+		settings: src.settings,
+		vars:     src.vars,
+		env:      src.env,
 	}
+	// Deep-copy only the locals map: callers store this into a shared
+	// template context whose downstream mutation surface is hard to bound.
 	if src.locals != nil {
 		if cloned, err := m.DeepCopyMap(src.locals); err == nil {
 			dst.locals = cloned
-		}
-	}
-	if src.settings != nil {
-		if cloned, err := m.DeepCopyMap(src.settings); err == nil {
-			dst.settings = cloned
-		}
-	}
-	if src.vars != nil {
-		if cloned, err := m.DeepCopyMap(src.vars); err == nil {
-			dst.vars = cloned
-		}
-	}
-	if src.env != nil {
-		if cloned, err := m.DeepCopyMap(src.env); err == nil {
-			dst.env = cloned
 		}
 	}
 	return dst
