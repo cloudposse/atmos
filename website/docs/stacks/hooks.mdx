@@ -72,6 +72,13 @@ can use the dotted form (`after.terraform.plan`) or the hyphenated form
 
 ## Built-in Kinds
 
+Each named kind below ships defaults for `command`, `args`, `env`, and
+`on_failure` so the minimal config (just `events` and `kind`) does the
+right thing. Every default is overridable — set the field on your hook
+and your value wins. See [Overriding Kind Defaults](#overriding-kind-defaults)
+for the override rules (notably: `args` and `env` are full replacement,
+not merge).
+
 ### `kind: infracost`
 
 Runs [Infracost](https://www.infracost.io/) to compute monthly cloud cost
