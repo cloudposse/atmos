@@ -232,6 +232,60 @@ the same approach without addressing the underlying contract violation:
       than the perf.Track savings recovered (the inner-only walker
       had to allocate on every level). Documented in-code so future
       passes don't re-try.
+- [x] Phase 11: scope the remote-state-backend merge to the relevant
+      backend type. `processTerraformRemoteStateBackend` used to do
+      two `m.Merge` calls over the full remote-state-backend sections
+      (which can carry configs for multiple backend types — s3, gcs,
+      azurerm, etc.) and then extract one key from the merged result.
+      The Phase 11 helper `extractBackendTypeMap` pulls the chosen
+      backend-type's inner map from each of the four layered inputs
+      (backend section + global/base/component remote-state sections)
+      *before* the merge, so the only deep-copies are for entries
+      that actually end up in the result.
+      `processTerraformRemoteStateBackend` Total: 5.7s → 5.4s (−5%);
+      `processTerraformBackend` Total: 2.95s → 2.81s (−5%);
+      `merge.Merge` Total: 26.5s → 25.2s (−5%, smaller inputs
+      propagate). ~1s cumulative CPU saved; projected ~500ms wall-
+      clock on 2-core GHA.
+- [x] Phase 12 + 13: skip the deep-copy of nil fields in the
+      base-component cache. `deepCopyBaseComponentConfigMaps` used
+      to call `m.DeepCopyMap` unconditionally on 10 (later 15)
+      `BaseComponentConfig` map fields; in real workloads most
+      components leave several fields nil (notably
+      `BaseComponentProviders` / `Hooks` / `Generate` /
+      `Dependencies` for non-Terraform components). Each call is
+      now gated with `if src.Field != nil`, skipping the
+      function-call + perf.Track overhead for the nil case while
+      preserving `m.DeepCopyMap`'s exact semantics for empty-non-nil
+      input (empty-non-nil src → empty-non-nil dst, since collapsing
+      to nil would break the cache HIT/MISS shape contract and
+      could panic on later `result.BaseComponentX[k] = v`).
+      `cacheBaseComponentConfig` Total: 3.85s → 990ms (−74%, 3.9×
+      faster avg); `getCachedBaseComponentConfig` Total: 865ms →
+      360ms (−58%, 2.4× faster avg); `merge.DeepCopyMap` Calls:
+      223k → 175k (−22%, 48k calls eliminated).
+- [x] Coverage close-out: new tests cover the gaps the arc
+      introduced (public `Clear*Cache` wrappers,
+      `extractBackendTypeMap` type-mismatch path, Phase 12/13
+      empty-field contract). Final coverage on touched code is
+      85-100% on every function.
+- [x] Cache full BaseComponentConfig — follow-up correctness fix:
+      `deepCopyBaseComponentConfigMaps` and the surrounding struct
+      literals were missing **six** fields
+      (`BaseComponentLocals`, `BaseComponentGenerate`,
+      `BaseComponentSourceSection`, `BaseComponentProvisionSection`,
+      `BaseComponentRequiredProviders`, and the scalar
+      `BaseComponentRequiredVersion`) so cache HIT returned a
+      truncated config relative to cache MISS for the same
+      `(stack, component, baseComponent)` key. **Pre-existing
+      main-branch bug**, not introduced by this perf arc — same 10
+      of 21 fields covered on `main` HEAD before any commit on this
+      branch. Fixed alongside Phase 12/13 since the function was
+      already being modified.
+      `TestCacheBaseComponentConfig_RoundTripsAllFields` locks in
+      the contract that every field of `BaseComponentConfig`
+      populated by `processBaseComponentConfigInternal` round-trips
+      through the cache.
 - [~] Phase 9 (ATTEMPTED, REVERTED 2026-05-24, `b11f3cd9b`):
       asymmetric clone of `extractLocalsResult` — share
       `settings`/`vars`/`env` references with the cache, deep-copy
@@ -854,6 +908,181 @@ relative improvement plus the GC win compounded across cores.
 
 **Race detector:** `go test -race -count=1 ./pkg/utils/...` green.
 Full `pkg/utils` and `internal/exec` test suites pass.
+
+### Phase 10 (shipped 2026-05-24) — outer/inner perf.Track split for processYAMLNode
+
+**Root cause.** `processYAMLNode` is a recursive YAML walker invoked
+from `EvaluateYqExpression` (used by `atmos describe affected`'s yq
+filtering path). It adjusts the style of scalar string nodes that
+start with `#` so they round-trip without YAML re-interpreting them
+as comments. The body is trivial — a single tag/value comparison and
+an optional style assignment per node — but `perf.Track` was
+deferred on every recursive frame, adding ~3µs of mutex + counter
+overhead per call. The heatmap counted 34k recursive calls totaling
+5.5s for a function whose real work is microseconds.
+
+**Fix.** Same split as Phase 7 (`processCustomTags` /
+`processCustomTagsInner`):
+
+- `processYAMLNode` wraps the entry point with `perf.Track` and
+  delegates to the inner worker.
+- `processYAMLNodeInner` is the recursive walker, no `perf.Track`.
+  The metric now counts top-level invocations rather than every
+  node visited.
+
+**What was tried and not applied:** the same outer/inner pattern
+was tried for `WalkAndDeferYAMLFunctions` and reverted in-flight.
+That function uses `hasAnyYAMLFunction` as a per-recursion
+short-circuit to avoid allocating result maps for function-sparse
+subtrees. An outer/inner split made the inner walker allocate
+unconditionally on every recursion, regressing the common case
+(most subtrees have zero YAML functions) more than the `perf.Track`
+savings recovered. The current implementation documents this
+trade-off in-code so future passes don't re-try.
+
+**Confirmed impact (local Mac, mean of 3 runs):**
+
+| Function | Phase 9-reverted baseline | Phase 10 | Reduction |
+|---|---:|---:|---:|
+| `utils.processYAMLNode` | 5.5s / 34k calls / 160µs avg | **dropped out of top-25** | **>−90% Total** |
+| `utils.EvaluateYqExpression` | 2.5s / 82 calls | **180-206ms / 34-46 calls** | (call count varies; CPU dropped accordingly) |
+
+**Wall-clock (local Mac):** 2.2s → 2.03s (−7%). Cumulative CPU
+saved ~24s → projected ~6-12s wall-clock on 2-core GHA.
+
+### Phase 11 (shipped 2026-05-24) — scope remote-state-backend merge to the relevant backend type
+
+**Root cause.** `processTerraformRemoteStateBackend` used to do
+two `m.Merge` calls per component:
+
+1. Merge the three remote-state-backend sources (global / base
+   component / component) into a combined remote-state-backend
+   section, which can carry configs for *multiple* backend types
+   (`s3`, `gcs`, `azurerm`, ...).
+2. Merge that section with `finalComponentBackendSection` to layer
+   backend defaults under the remote-state overrides.
+
+Only the value at `merged[finalComponentRemoteStateBackendType]`
+was ever returned — but the merges deep-copied every backend type's
+config along the way. Most components carry s3 *and* gcs blocks
+in their backend section even when they're only ever provisioned
+into s3.
+
+**Fix.** Introduced `extractBackendTypeMap`, a small helper that
+returns the inner map at `section[backendType]` (or an empty map
+on miss). The function now extracts the chosen backend-type's
+inner map from **each** of the four layered inputs
+(`finalComponentBackendSection`, `globalRemoteStateBackendSection`,
+`baseComponentRemoteStateBackendSection`,
+`componentRemoteStateBackendSection`) *before* the merge, then
+runs a single `m.Merge` over those four scoped maps. The merge now
+operates on ~10x smaller inputs in the common case where multiple
+backend types coexist in the section maps.
+
+Precedence is preserved: backend section is the base, then the
+three remote-state layers stack global → base → component on top —
+matching the original two-stage merge semantics.
+
+**Confirmed impact (local Mac, mean of 3 runs):**
+
+| Function | Pre-Phase-11 | Phase 11 | Reduction |
+|---|---:|---:|---:|
+| `exec.processTerraformRemoteStateBackend` Total | 5.7s | **5.4s** | −5% |
+| `exec.processTerraformRemoteStateBackend` avg | 617µs | **582µs** | −5% |
+| `exec.processTerraformBackend` Total | 2.95s | **2.81s** | −5% |
+| `merge.Merge` Total | 26.5s | **25.2s** | −5% (smaller inputs propagate) |
+
+**Wall-clock:** unchanged on many-core Mac (parallelism absorbs the
+saved CPU). ~1s cumulative CPU saved → ~500ms wall-clock on 2-core
+GHA.
+
+### Phase 12 + 13 (shipped 2026-05-24) — skip deep-copy of empty BaseComponentConfig fields
+
+**Root cause.** `deepCopyBaseComponentConfigMaps` is invoked on
+every `cacheBaseComponentConfig` write and every
+`getCachedBaseComponentConfig` read. Pre-fix, it called
+`m.DeepCopyMap` unconditionally on **every** map field of
+`BaseComponentConfig` — even when the source field was empty or
+nil. `m.DeepCopyMap(nil)` is cheap (early-returns) but still pays
+the function-call + perf.Track overhead; `m.DeepCopyMap(emptyMap)`
+allocates an empty map for nothing.
+
+In the reference workload most components leave several fields
+empty: `BaseComponentProviders` / `Hooks` / `Generate` /
+`Dependencies` for non-Terraform components,
+`BaseComponentSourceSection` / `ProvisionSection` for components
+that don't use them, `BaseComponentRequiredProviders` /
+`RequiredVersion` for non-Terraform.
+
+**Fix.** Guard each `m.DeepCopyMap` call with
+`if len(src.Field) > 0`. The function-call overhead and the
+empty-map allocation are skipped when the source field is empty;
+the dst field defaults to `nil`, matching the previous
+`m.DeepCopyMap(nil) == nil` contract.
+
+This change applies to **both** cache paths (Phase 12 = write side,
+Phase 13 = read side), since they share the same
+`deepCopyBaseComponentConfigMaps` helper.
+
+**Confirmed impact (local Mac, mean of 3 runs):**
+
+| Function | Pre-Phase-11 | Phase 12+13 | Reduction |
+|---|---:|---:|---:|
+| `exec.cacheBaseComponentConfig` Total | 3.85s | **990ms** | **−74%, 3.9× faster avg** |
+| `exec.cacheBaseComponentConfig` avg | 598µs | **153µs** | |
+| `exec.getCachedBaseComponentConfig` Total | 865ms | **360ms** | **−58%, 2.4× faster avg** |
+| `exec.getCachedBaseComponentConfig` avg | 107µs | **44µs** | |
+| `merge.DeepCopyMap` Calls | 223,109 | **175,120** | **−22% (48k calls eliminated)** |
+| `merge.DeepCopyMap` Total | 5.0s | **3.8s** | **−24%** |
+
+**Wall-clock:** 2.05s → 2.02s (within noise on many-core Mac;
+parallelism absorbs the saved CPU). ~4.5s cumulative CPU saved →
+projected ~2.2s wall-clock on 2-core GHA.
+
+### Cache full BaseComponentConfig (correctness follow-up to Phase 12/13)
+
+**Root cause.** `deepCopyBaseComponentConfigMaps` and the
+surrounding `schema.BaseComponentConfig` struct literals on both
+the read and write sides covered only 10 of the 15
+`AtmosSectionMapType` fields in the struct, plus 4 of 5 string
+fields. Missing on **both** sides:
+
+- `BaseComponentLocals` (map)
+- `BaseComponentGenerate` (map)
+- `BaseComponentSourceSection` (map)
+- `BaseComponentProvisionSection` (map)
+- `BaseComponentRequiredProviders` (map)
+- `BaseComponentRequiredVersion` (string)
+
+`processBaseComponentConfigInternal` populates all of these.
+`applyBaseComponentConfig` (in the inheritance pipeline) reads
+every one of them off the cached config and assigns them into
+`result.BaseComponent*`. So the same
+`(stack, component, baseComponent)` cache key returned a **different
+config shape** on HIT (six fields nil) vs MISS (fields populated).
+Which path a given component took depended on goroutine scheduling
+order.
+
+**This was a pre-existing main-branch bug**, not a regression from
+this PR. Same 10-field coverage on `main` HEAD before any commit
+on this branch. The Phase 12+13 commit happened to land in this
+file, so it was the right place to also extend coverage to the
+missing fields.
+
+**Fix.** Added the five missing map fields to
+`deepCopyBaseComponentConfigMaps` (each behind the Phase 12/13
+`len(src.Field) > 0` guard so the empty-field optimization still
+applies) and the `BaseComponentRequiredVersion` string to both
+struct literals.
+
+**Test added.** `TestCacheBaseComponentConfig_RoundTripsAllFields`
+populates every `BaseComponentConfig` field with a distinguishable
+value and asserts each round-trips through the cache, plus a deep-
+copy isolation check on `BaseComponentLocals` (mutating a
+retrieved value must not affect subsequent retrievals).
+`TestCacheBaseComponentConfig_SkipsEmptyFields` was extended to
+also assert the previously-uncopied fields stay `nil` when the
+source is empty.
 
 ### Verification
 

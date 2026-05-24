@@ -820,6 +820,38 @@ func TestMergeWithDeferred_TrivialInputShortCircuits(t *testing.T) {
 				"nested maps must also be deep-copied")
 		}
 	})
+
+	t.Run("mutating the input after merge does not mutate the result (regression guard)", func(t *testing.T) {
+		// Mirror of the result→src isolation test above: also verify the
+		// src→result direction. Mutating the source map after the merge
+		// must not propagate into the returned result. Per CLAUDE.md
+		// testing convention: aliasing tests must verify BOTH directions.
+		single := map[string]any{
+			"region": "us-east-1",
+			"nested": map[string]any{"inner": "original"},
+		}
+		inputs := []map[string]any{single}
+
+		result, _, err := MergeWithDeferred(cfg, inputs)
+		require.NoError(t, err)
+
+		// Mutate every level of the input AFTER the merge.
+		single["region"] = "MUTATED_SRC"
+		single["newKey"] = "added-src"
+		if nested, ok := single["nested"].(map[string]any); ok {
+			nested["inner"] = "MUTATED_SRC"
+		}
+
+		// The result must be unchanged.
+		assert.Equal(t, "us-east-1", result["region"],
+			"mutating the input after Merge must not mutate the result")
+		_, hasNewKey := result["newKey"]
+		assert.False(t, hasNewKey, "result must not gain keys added to the input post-merge")
+		if nestedResult, ok := result["nested"].(map[string]any); ok {
+			assert.Equal(t, "original", nestedResult["inner"],
+				"nested maps must be deep-copied so post-merge src mutation cannot reach the result")
+		}
+	})
 }
 
 func TestApplyDeferredMerges(t *testing.T) {

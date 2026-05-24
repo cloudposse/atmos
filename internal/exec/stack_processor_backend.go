@@ -221,39 +221,40 @@ func processTerraformRemoteStateBackend(cfg *remoteStateBackendConfig) (string, 
 		finalComponentRemoteStateBackendType = cfg.componentRemoteStateBackendType
 	}
 
-	// Merge remote state backend sections.
-	finalComponentRemoteStateBackendSection, err := m.Merge(
-		cfg.atmosConfig,
-		[]map[string]any{
-			cfg.globalRemoteStateBackendSection,
-			cfg.baseComponentRemoteStateBackendSection,
-			cfg.componentRemoteStateBackendSection,
-		},
-	)
+	// Scope every input to just the backend-type-specific map before merging.
+	// The final result is only the value for finalComponentRemoteStateBackendType;
+	// no other backend-type keys ever escape this function. Extracting first
+	// avoids deep-copying unrelated backend-type entries (s3/gcs/azurerm/etc.)
+	// only to throw them away after merge — applies to BOTH the inter-layer
+	// merge of the three remote-state inputs AND the final stitch with the
+	// backend section. Precedence is preserved because the layered remotes
+	// are merged in the same order (global → base component → component) as
+	// the un-scoped path would have.
+	globalRemoteVal, err := extractBackendTypeMap(cfg.globalRemoteStateBackendSection, finalComponentRemoteStateBackendType, cfg.component)
+	if err != nil {
+		return "", nil, err
+	}
+	baseRemoteVal, err := extractBackendTypeMap(cfg.baseComponentRemoteStateBackendSection, finalComponentRemoteStateBackendType, cfg.component)
+	if err != nil {
+		return "", nil, err
+	}
+	componentRemoteVal, err := extractBackendTypeMap(cfg.componentRemoteStateBackendSection, finalComponentRemoteStateBackendType, cfg.component)
+	if err != nil {
+		return "", nil, err
+	}
+	backendVal, err := extractBackendTypeMap(cfg.finalComponentBackendSection, finalComponentRemoteStateBackendType, cfg.component)
 	if err != nil {
 		return "", nil, err
 	}
 
-	// Extract just the backend-type-specific config from each input. The
-	// final result is only the value for finalComponentRemoteStateBackendType;
-	// no other backend-type keys ever escape this function. Avoid merging
-	// the full sections (which would deep-copy unrelated backend-type entries
-	// like s3/gcs/azurerm/etc. just to throw them away on the extract step).
-	backendVal, backendErr := extractBackendTypeMap(cfg.finalComponentBackendSection, finalComponentRemoteStateBackendType, cfg.component)
-	if backendErr != nil {
-		return "", nil, backendErr
-	}
-	remoteStateBackendVal, remoteStateBackendErr := extractBackendTypeMap(finalComponentRemoteStateBackendSection, finalComponentRemoteStateBackendType, cfg.component)
-	if remoteStateBackendErr != nil {
-		return "", nil, remoteStateBackendErr
-	}
-
-	// Stitch the two scoped values into the result. m.Merge already handles
-	// the 0-input / 1-input fast paths (Phase 5), so we just feed it both;
-	// when one or both are empty the work is trivial.
+	// Stitch the four scoped values into the result. Order matters: the
+	// backend section provides the base, then the remote-state inputs layer
+	// on top in their normal precedence. m.Merge's existing fast paths
+	// (Phase 5) handle 0/1 non-empty inputs trivially when most layers are
+	// absent.
 	finalComponentRemoteStateBackend, err := m.Merge(
 		cfg.atmosConfig,
-		[]map[string]any{backendVal, remoteStateBackendVal},
+		[]map[string]any{backendVal, globalRemoteVal, baseRemoteVal, componentRemoteVal},
 	)
 	if err != nil {
 		return "", nil, err

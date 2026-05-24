@@ -267,6 +267,40 @@ func TestGetCachedBaseComponentConfigNotFound(t *testing.T) {
 	assert.Nil(t, baseComponents)
 }
 
+// TestGetCachedBaseComponentConfig_TypeMismatch verifies the defensive
+// type assertion in getCachedBaseComponentConfig: if some other code
+// somehow stored a non-*BaseComponentConfig value under a cache key
+// (programmer error), the lookup must surface as "not found" rather
+// than panicking.
+func TestGetCachedBaseComponentConfig_TypeMismatch(t *testing.T) {
+	ClearBaseComponentConfigCache()
+	defer ClearBaseComponentConfigCache()
+
+	// Stash a non-matching type directly into the underlying sync.Map.
+	baseComponentConfigCache.Store("type-mismatch-key", "not-a-config")
+
+	cached, baseComponents, found := getCachedBaseComponentConfig("type-mismatch-key")
+	assert.False(t, found, "type-mismatched entries must surface as cache miss")
+	assert.Nil(t, cached)
+	assert.Nil(t, baseComponents)
+}
+
+// TestGetFileContent_StringCachedValue exercises the string branch of
+// GetFileContent's type switch. Normal writes use []byte (the os.ReadFile
+// return type), but the switch also handles string values to be robust
+// against any caller (or future change) that caches a string directly.
+func TestGetFileContent_StringCachedValue(t *testing.T) {
+	ClearFileContentCache()
+	defer ClearFileContentCache()
+
+	// Pre-populate the cache with a string value (not []byte).
+	getFileContentSyncMap.Store("/virtual/string-cached.yaml", "cached-as-string")
+
+	content, err := GetFileContent("/virtual/string-cached.yaml")
+	require.NoError(t, err)
+	assert.Equal(t, "cached-as-string", content)
+}
+
 // TestConcurrentCacheAccess tests thread-safety of cache operations.
 func TestConcurrentCacheAccess(t *testing.T) {
 	ClearBaseComponentConfigCache()
@@ -482,16 +516,16 @@ func TestCacheCompiledSchemaBasic(t *testing.T) {
 	ClearJsonSchemaCache()
 }
 
-// TestCacheBaseComponentConfig_SkipsEmptyFields verifies the Phase 12/13
-// optimization: deepCopyBaseComponentConfigMaps skips m.DeepCopyMap for
-// fields that are empty in the source. The behavioral contract is that
-// empty (or nil) source fields produce nil dst fields, identical to the
-// pre-optimization behavior of m.DeepCopyMap(nil) returning nil.
-func TestCacheBaseComponentConfig_SkipsEmptyFields(t *testing.T) {
+// TestCacheBaseComponentConfig_NilFieldsStayNil verifies the Phase 12/13
+// optimization for the nil case: deepCopyBaseComponentConfigMaps skips the
+// m.DeepCopyMap call for nil source fields and the dst field stays nil
+// (matching m.DeepCopyMap(nil) returning nil). This is the dominant case
+// in real workloads where components leave several fields uninitialized.
+func TestCacheBaseComponentConfig_NilFieldsStayNil(t *testing.T) {
 	ClearBaseComponentConfigCache()
 	defer ClearBaseComponentConfigCache()
 
-	// Source with most fields empty — only Vars is populated.
+	// Source with most fields nil — only Vars is populated.
 	src := &schema.BaseComponentConfig{
 		FinalBaseComponentName: "minimal",
 		BaseComponentVars:      map[string]any{"region": "us-east-1"},
@@ -507,8 +541,7 @@ func TestCacheBaseComponentConfig_SkipsEmptyFields(t *testing.T) {
 	// The populated field round-trips.
 	assert.Equal(t, "us-east-1", cached.BaseComponentVars["region"])
 
-	// The empty-source fields stay nil on the retrieved copy (no empty-map
-	// allocations were performed during caching or retrieval).
+	// The nil-source fields stay nil on the retrieved copy.
 	assert.Nil(t, cached.BaseComponentSettings)
 	assert.Nil(t, cached.BaseComponentEnv)
 	assert.Nil(t, cached.BaseComponentAuth)
@@ -518,16 +551,83 @@ func TestCacheBaseComponentConfig_SkipsEmptyFields(t *testing.T) {
 	assert.Nil(t, cached.BaseComponentHooks)
 	assert.Nil(t, cached.BaseComponentBackendSection)
 	assert.Nil(t, cached.BaseComponentRemoteStateBackendSection)
-	// Locals/Generate/SourceSection/ProvisionSection/RequiredProviders were
-	// historically not deep-copied at all (pre-existing main-branch bug:
+	// Locals / Generate / SourceSection / ProvisionSection / RequiredProviders
+	// were historically not deep-copied at all (pre-existing main-branch bug:
 	// cache HIT returned them as nil even when the un-cached path populated
-	// them). Now covered by deepCopyBaseComponentConfigMaps — empty source
-	// still yields nil dst.
+	// them). Now covered by deepCopyBaseComponentConfigMaps — nil source
+	// still yields nil dst, populated source round-trips.
 	assert.Nil(t, cached.BaseComponentLocals)
 	assert.Nil(t, cached.BaseComponentGenerate)
 	assert.Nil(t, cached.BaseComponentSourceSection)
 	assert.Nil(t, cached.BaseComponentProvisionSection)
 	assert.Nil(t, cached.BaseComponentRequiredProviders)
+}
+
+// TestCacheBaseComponentConfig_EmptyNonNilFieldsStayNonNil locks in the
+// distinction between a nil map and an empty-but-non-nil map. The Phase
+// 12/13 skip guard MUST use `src.Field != nil` (not `len(src.Field) > 0`)
+// so an empty-non-nil source still goes through m.DeepCopyMap and yields
+// an empty-non-nil dst. Collapsing empty-non-nil maps to nil would (a)
+// break the "cache HIT shape == cache MISS shape" invariant the
+// processBaseComponentConfigInternal contract relies on, and (b) make
+// any downstream code that writes into result.BaseComponentX[key] panic
+// with "assignment to entry in nil map".
+func TestCacheBaseComponentConfig_EmptyNonNilFieldsStayNonNil(t *testing.T) {
+	ClearBaseComponentConfigCache()
+	defer ClearBaseComponentConfigCache()
+
+	// Source with every map field allocated but empty.
+	src := &schema.BaseComponentConfig{
+		FinalBaseComponentName:                 "empty-non-nil",
+		BaseComponentVars:                      map[string]any{},
+		BaseComponentSettings:                  map[string]any{},
+		BaseComponentEnv:                       map[string]any{},
+		BaseComponentAuth:                      map[string]any{},
+		BaseComponentDependencies:              map[string]any{},
+		BaseComponentLocals:                    map[string]any{},
+		BaseComponentMetadata:                  map[string]any{},
+		BaseComponentProviders:                 map[string]any{},
+		BaseComponentRequiredProviders:         map[string]any{},
+		BaseComponentHooks:                     map[string]any{},
+		BaseComponentGenerate:                  map[string]any{},
+		BaseComponentBackendSection:            map[string]any{},
+		BaseComponentRemoteStateBackendSection: map[string]any{},
+		BaseComponentSourceSection:             map[string]any{},
+		BaseComponentProvisionSection:          map[string]any{},
+		ComponentInheritanceChain:              []string{"base"},
+	}
+	cacheBaseComponentConfig("empty-key", src)
+
+	cached, _, found := getCachedBaseComponentConfig("empty-key")
+	require.True(t, found)
+	require.NotNil(t, cached)
+
+	// Every field that was empty-non-nil in the source must come back
+	// empty-non-nil from the cache. A nil result would (a) lose the
+	// hit==miss-shape contract, and (b) panic on a downstream map write.
+	maps := map[string]map[string]any{
+		"Vars":                      cached.BaseComponentVars,
+		"Settings":                  cached.BaseComponentSettings,
+		"Env":                       cached.BaseComponentEnv,
+		"Auth":                      cached.BaseComponentAuth,
+		"Dependencies":              cached.BaseComponentDependencies,
+		"Locals":                    cached.BaseComponentLocals,
+		"Metadata":                  cached.BaseComponentMetadata,
+		"Providers":                 cached.BaseComponentProviders,
+		"RequiredProviders":         cached.BaseComponentRequiredProviders,
+		"Hooks":                     cached.BaseComponentHooks,
+		"Generate":                  cached.BaseComponentGenerate,
+		"BackendSection":            cached.BaseComponentBackendSection,
+		"RemoteStateBackendSection": cached.BaseComponentRemoteStateBackendSection,
+		"SourceSection":             cached.BaseComponentSourceSection,
+		"ProvisionSection":          cached.BaseComponentProvisionSection,
+	}
+	for name, got := range maps {
+		require.NotNil(t, got, "BaseComponent%s must not be nil when source was empty-non-nil", name)
+		assert.Empty(t, got, "BaseComponent%s must round-trip as an empty map", name)
+		// Defensive: assignment into the returned map must not panic.
+		got["should-not-panic"] = "ok"
+	}
 }
 
 // TestCacheBaseComponentConfig_RoundTripsAllFields locks in the contract
@@ -554,12 +654,12 @@ func TestCacheBaseComponentConfig_RoundTripsAllFields(t *testing.T) {
 		BaseComponentSettings:                  map[string]any{"spacelift": map[string]any{"workspace_enabled": true}},
 		BaseComponentEnv:                       map[string]any{"AWS_REGION": "us-east-1"},
 		BaseComponentAuth:                      map[string]any{"identity": "default"},
-		BaseComponentDependencies:              map[string]any{"file": []any{"vpc-flow-logs"}},
+		BaseComponentDependencies:              map[string]any{"file": []any{"vpc-flow-logs", "vpc-endpoints"}},
 		BaseComponentLocals:                    map[string]any{"stage": "prod"},
 		BaseComponentMetadata:                  map[string]any{"component": "vpc"},
 		BaseComponentProviders:                 map[string]any{"aws": map[string]any{"region": "us-east-1"}},
 		BaseComponentRequiredProviders:         map[string]any{"aws": map[string]any{"source": "hashicorp/aws"}},
-		BaseComponentHooks:                     map[string]any{"pre_plan": []any{"echo"}},
+		BaseComponentHooks:                     map[string]any{"pre_plan": []any{"echo hello", "echo world"}},
 		BaseComponentGenerate:                  map[string]any{"backend.tf.json": map[string]any{"format": "json"}},
 		BaseComponentBackendSection:            map[string]any{"s3": map[string]any{"bucket": "tfstate"}},
 		BaseComponentRemoteStateBackendSection: map[string]any{"s3": map[string]any{"bucket": "tfstate-remote"}},
@@ -585,12 +685,25 @@ func TestCacheBaseComponentConfig_RoundTripsAllFields(t *testing.T) {
 	assert.True(t, cached.BaseComponentSettings["spacelift"].(map[string]any)["workspace_enabled"].(bool))
 	assert.Equal(t, "us-east-1", cached.BaseComponentEnv["AWS_REGION"])
 	assert.Equal(t, "default", cached.BaseComponentAuth["identity"])
-	assert.NotEmpty(t, cached.BaseComponentDependencies["file"])
+	// Slice-valued fields: assert element contents (first AND last) per the
+	// project's "assert element contents, not just length" testing
+	// convention. require.Len gates the index accesses below.
+	depsFiles, ok := cached.BaseComponentDependencies["file"].([]any)
+	require.True(t, ok, "BaseComponentDependencies[\"file\"] should be a slice")
+	require.Len(t, depsFiles, 2)
+	assert.Equal(t, "vpc-flow-logs", depsFiles[0])
+	assert.Equal(t, "vpc-endpoints", depsFiles[len(depsFiles)-1])
+
 	assert.Equal(t, "prod", cached.BaseComponentLocals["stage"])
 	assert.Equal(t, "vpc", cached.BaseComponentMetadata["component"])
 	assert.Equal(t, "us-east-1", cached.BaseComponentProviders["aws"].(map[string]any)["region"])
 	assert.Equal(t, "hashicorp/aws", cached.BaseComponentRequiredProviders["aws"].(map[string]any)["source"])
-	assert.NotEmpty(t, cached.BaseComponentHooks["pre_plan"])
+
+	prePlanHooks, ok := cached.BaseComponentHooks["pre_plan"].([]any)
+	require.True(t, ok, "BaseComponentHooks[\"pre_plan\"] should be a slice")
+	require.Len(t, prePlanHooks, 2)
+	assert.Equal(t, "echo hello", prePlanHooks[0])
+	assert.Equal(t, "echo world", prePlanHooks[len(prePlanHooks)-1])
 	assert.Equal(t, "json", cached.BaseComponentGenerate["backend.tf.json"].(map[string]any)["format"])
 	assert.Equal(t, "tfstate", cached.BaseComponentBackendSection["s3"].(map[string]any)["bucket"])
 	assert.Equal(t, "tfstate-remote", cached.BaseComponentRemoteStateBackendSection["s3"].(map[string]any)["bucket"])

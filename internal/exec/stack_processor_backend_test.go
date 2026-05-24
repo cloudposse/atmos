@@ -874,3 +874,133 @@ func TestExtractBackendTypeMap(t *testing.T) {
 		assert.Contains(t, err.Error(), "vpc", "error should mention the component name")
 	})
 }
+
+// TestProcessTerraformBackend_TypeMismatchSurfacesError covers the post-merge
+// type assertion in processTerraformBackend: if backendSection[type] exists
+// but is not a map (e.g., a string mistakenly written in YAML), the function
+// must return an ErrInvalidTerraformBackend rather than panicking.
+func TestProcessTerraformBackend_TypeMismatchSurfacesError(t *testing.T) {
+	cfg := &terraformBackendConfig{
+		atmosConfig:       &schema.AtmosConfiguration{},
+		component:         "broken",
+		globalBackendType: "s3",
+		globalBackendSection: map[string]any{
+			// Non-map value at the s3 key — invalid YAML structure.
+			"s3": "not-a-map",
+		},
+	}
+	gotType, gotBackend, err := processTerraformBackend(cfg)
+	require.Error(t, err)
+	assert.Empty(t, gotType)
+	assert.Nil(t, gotBackend)
+	assert.Contains(t, err.Error(), "broken", "error must reference the component name")
+}
+
+// TestProcessTerraformRemoteStateBackend_PropagatesExtractError covers the
+// four error-return sites in processTerraformRemoteStateBackend that bubble
+// up extractBackendTypeMap's type-mismatch error. Each test case poisons one
+// of the four input sections with a non-map value at the resolved backend
+// type, then verifies the error surfaces.
+func TestProcessTerraformRemoteStateBackend_PropagatesExtractError(t *testing.T) {
+	const component = "rs-broken"
+	const backendType = "s3"
+	validSection := map[string]any{"s3": map[string]any{"bucket": "ok"}}
+	poison := map[string]any{"s3": "not-a-map"}
+
+	cases := []struct {
+		name string
+		mut  func(c *remoteStateBackendConfig)
+	}{
+		{
+			name: "global remote state section poisoned",
+			mut:  func(c *remoteStateBackendConfig) { c.globalRemoteStateBackendSection = poison },
+		},
+		{
+			name: "base component remote state section poisoned",
+			mut:  func(c *remoteStateBackendConfig) { c.baseComponentRemoteStateBackendSection = poison },
+		},
+		{
+			name: "component remote state section poisoned",
+			mut:  func(c *remoteStateBackendConfig) { c.componentRemoteStateBackendSection = poison },
+		},
+		{
+			name: "final component backend section poisoned",
+			mut:  func(c *remoteStateBackendConfig) { c.finalComponentBackendSection = poison },
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			cfg := &remoteStateBackendConfig{
+				atmosConfig:                            &schema.AtmosConfiguration{},
+				component:                              component,
+				finalComponentBackendType:              backendType,
+				finalComponentBackendSection:           validSection,
+				globalRemoteStateBackendSection:        validSection,
+				baseComponentRemoteStateBackendSection: validSection,
+				componentRemoteStateBackendSection:     validSection,
+			}
+			tc.mut(cfg)
+			gotType, gotBackend, err := processTerraformRemoteStateBackend(cfg)
+			require.Error(t, err)
+			assert.Empty(t, gotType)
+			assert.Nil(t, gotBackend)
+			assert.Contains(t, err.Error(), component, "error must reference the component name")
+		})
+	}
+}
+
+// TestShouldPreserveAuthoredKey covers the three decision paths of the
+// helper: no authored key (false), no global azurerm section (true), no
+// global key in azurerm (true), global key matches authored (false, treat
+// global as prefix), global key differs from authored (true, preserve).
+func TestShouldPreserveAuthoredKey(t *testing.T) {
+	cases := []struct {
+		name     string
+		final    map[string]any
+		global   map[string]any
+		expected bool
+	}{
+		{
+			name:     "no authored key returns false",
+			final:    map[string]any{},
+			global:   map[string]any{"azurerm": map[string]any{"key": "global.tfstate"}},
+			expected: false,
+		},
+		{
+			name:     "empty-string authored key returns false",
+			final:    map[string]any{"key": ""},
+			global:   map[string]any{"azurerm": map[string]any{"key": "global.tfstate"}},
+			expected: false,
+		},
+		{
+			name:     "no global azurerm section preserves authored key",
+			final:    map[string]any{"key": "authored.tfstate"},
+			global:   map[string]any{},
+			expected: true,
+		},
+		{
+			name:     "global azurerm with no key preserves authored key",
+			final:    map[string]any{"key": "authored.tfstate"},
+			global:   map[string]any{"azurerm": map[string]any{"resource_group_name": "rg"}},
+			expected: true,
+		},
+		{
+			name:     "global key matches authored - treated as prefix, do not preserve",
+			final:    map[string]any{"key": "global-prefix"},
+			global:   map[string]any{"azurerm": map[string]any{"key": "global-prefix"}},
+			expected: false,
+		},
+		{
+			name:     "global key differs from authored - preserve",
+			final:    map[string]any{"key": "authored.tfstate"},
+			global:   map[string]any{"azurerm": map[string]any{"key": "global.tfstate"}},
+			expected: true,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := shouldPreserveAuthoredKey(tc.final, tc.global)
+			assert.Equal(t, tc.expected, got)
+		})
+	}
+}

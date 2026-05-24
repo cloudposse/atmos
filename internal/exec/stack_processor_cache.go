@@ -47,88 +47,89 @@ var (
 // fields (BaseComponentRequiredVersion etc.) are copied by the struct
 // literal in cacheBaseComponentConfig / getCachedBaseComponentConfig.
 //
-// Empty src fields are skipped (no DeepCopyMap call, no allocation). In the
-// customer workload most components leave several of these fields empty
-// (notably BaseComponentProviders / Hooks / Generate / Dependencies for
-// non-Terraform components), so skipping the no-op deep-copies cuts the
-// per-call cost in cacheBaseComponentConfig / getCachedBaseComponentConfig
-// proportional to how many fields are unused. Phases 12/13 of the
-// describe-affected perf investigation.
+// Each m.DeepCopyMap call is guarded by `src.Field != nil` (not
+// `len(...) > 0`): this matches m.DeepCopyMap's exact behavior on its
+// inputs — nil src returns nil dst (skipping is the same outcome), but
+// empty-non-nil src returns empty-non-nil dst (must still go through the
+// call so the caller observes the same map shape it would on a cache MISS,
+// and so any downstream code that writes into result.BaseComponentX[key]
+// doesn't panic with "assignment to entry in nil map"). Phases 12/13 of
+// the describe-affected perf investigation.
 //
 //nolint:cyclop,funlen // Cohesive field-by-field deep-copy; splitting would obscure that every map field of BaseComponentConfig is covered.
 func deepCopyBaseComponentConfigMaps(dst, src *schema.BaseComponentConfig) error {
 	var err error
-	if len(src.BaseComponentVars) > 0 {
+	if src.BaseComponentVars != nil {
 		if dst.BaseComponentVars, err = m.DeepCopyMap(src.BaseComponentVars); err != nil {
 			return err
 		}
 	}
-	if len(src.BaseComponentSettings) > 0 {
+	if src.BaseComponentSettings != nil {
 		if dst.BaseComponentSettings, err = m.DeepCopyMap(src.BaseComponentSettings); err != nil {
 			return err
 		}
 	}
-	if len(src.BaseComponentEnv) > 0 {
+	if src.BaseComponentEnv != nil {
 		if dst.BaseComponentEnv, err = m.DeepCopyMap(src.BaseComponentEnv); err != nil {
 			return err
 		}
 	}
-	if len(src.BaseComponentAuth) > 0 {
+	if src.BaseComponentAuth != nil {
 		if dst.BaseComponentAuth, err = m.DeepCopyMap(src.BaseComponentAuth); err != nil {
 			return err
 		}
 	}
-	if len(src.BaseComponentDependencies) > 0 {
+	if src.BaseComponentDependencies != nil {
 		if dst.BaseComponentDependencies, err = m.DeepCopyMap(src.BaseComponentDependencies); err != nil {
 			return err
 		}
 	}
-	if len(src.BaseComponentLocals) > 0 {
+	if src.BaseComponentLocals != nil {
 		if dst.BaseComponentLocals, err = m.DeepCopyMap(src.BaseComponentLocals); err != nil {
 			return err
 		}
 	}
-	if len(src.BaseComponentMetadata) > 0 {
+	if src.BaseComponentMetadata != nil {
 		if dst.BaseComponentMetadata, err = m.DeepCopyMap(src.BaseComponentMetadata); err != nil {
 			return err
 		}
 	}
-	if len(src.BaseComponentProviders) > 0 {
+	if src.BaseComponentProviders != nil {
 		if dst.BaseComponentProviders, err = m.DeepCopyMap(src.BaseComponentProviders); err != nil {
 			return err
 		}
 	}
-	if len(src.BaseComponentRequiredProviders) > 0 {
+	if src.BaseComponentRequiredProviders != nil {
 		if dst.BaseComponentRequiredProviders, err = m.DeepCopyMap(src.BaseComponentRequiredProviders); err != nil {
 			return err
 		}
 	}
-	if len(src.BaseComponentHooks) > 0 {
+	if src.BaseComponentHooks != nil {
 		if dst.BaseComponentHooks, err = m.DeepCopyMap(src.BaseComponentHooks); err != nil {
 			return err
 		}
 	}
-	if len(src.BaseComponentGenerate) > 0 {
+	if src.BaseComponentGenerate != nil {
 		if dst.BaseComponentGenerate, err = m.DeepCopyMap(src.BaseComponentGenerate); err != nil {
 			return err
 		}
 	}
-	if len(src.BaseComponentBackendSection) > 0 {
+	if src.BaseComponentBackendSection != nil {
 		if dst.BaseComponentBackendSection, err = m.DeepCopyMap(src.BaseComponentBackendSection); err != nil {
 			return err
 		}
 	}
-	if len(src.BaseComponentRemoteStateBackendSection) > 0 {
+	if src.BaseComponentRemoteStateBackendSection != nil {
 		if dst.BaseComponentRemoteStateBackendSection, err = m.DeepCopyMap(src.BaseComponentRemoteStateBackendSection); err != nil {
 			return err
 		}
 	}
-	if len(src.BaseComponentSourceSection) > 0 {
+	if src.BaseComponentSourceSection != nil {
 		if dst.BaseComponentSourceSection, err = m.DeepCopyMap(src.BaseComponentSourceSection); err != nil {
 			return err
 		}
 	}
-	if len(src.BaseComponentProvisionSection) > 0 {
+	if src.BaseComponentProvisionSection != nil {
 		if dst.BaseComponentProvisionSection, err = m.DeepCopyMap(src.BaseComponentProvisionSection); err != nil {
 			return err
 		}
