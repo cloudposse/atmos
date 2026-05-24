@@ -675,3 +675,69 @@ func TestExecuteProvisionCommandWithValues(t *testing.T) {
 		})
 	}
 }
+
+func TestBackendSubcommands_BindStackFlagFromCommand(t *testing.T) {
+	tests := []struct {
+		name      string
+		cmd       *cobra.Command
+		args      []string
+		component string
+	}{
+		{
+			name:      "create",
+			cmd:       createCmd,
+			args:      []string{"vpc"},
+			component: "vpc",
+		},
+		{
+			name:      "update",
+			cmd:       updateCmd,
+			args:      []string{"vpc"},
+			component: "vpc",
+		},
+		{
+			name:      "delete",
+			cmd:       deleteCmd,
+			args:      []string{"vpc"},
+			component: "vpc",
+		},
+		{
+			name:      "describe",
+			cmd:       describeCmd,
+			args:      []string{"vpc"},
+			component: "vpc",
+		},
+		{
+			name:      "list",
+			cmd:       listCmd,
+			args:      nil,
+			component: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mockConfigInit, _ := setupTestWithMocks(t)
+			setupViperForTest(t, map[string]any{
+				"stack":    "",
+				"identity": "",
+				"force":    false,
+			})
+
+			expectedErr := errors.New("stop after stack parse")
+			mockConfigInit.EXPECT().
+				InitConfigAndAuth(tt.component, "dev", "").
+				Return(nil, nil, expectedErr)
+
+			require.NoError(t, tt.cmd.Flags().Set("stack", "dev"))
+			if tt.name == "delete" {
+				require.NoError(t, tt.cmd.Flags().Set("force", "true"))
+			}
+
+			err := tt.cmd.RunE(tt.cmd, tt.args)
+			require.Error(t, err)
+			assert.ErrorIs(t, err, expectedErr)
+			assert.NotErrorIs(t, err, errUtils.ErrRequiredFlagNotProvided)
+		})
+	}
+}

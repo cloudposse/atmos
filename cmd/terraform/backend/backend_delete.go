@@ -23,16 +23,34 @@ Requires the --force flag for safety. The backend must be empty
 	// Args validator is auto-set by parser via SetPositionalArgs with prompt-aware validation.
 	RunE: func(cmd *cobra.Command, args []string) error {
 		ctx := context.Background()
+		v := viper.GetViper()
+		if err := deleteParser.BindFlagsToViper(cmd, v); err != nil {
+			return err
+		}
+		stack := getCommandFlagString(cmd, "stack")
+		identity := getCommandFlagString(cmd, "identity")
+		force, forceProvided := getCommandFlagBool(cmd, "force")
+		if stack == "" {
+			stack = v.GetString("stack")
+		}
+		if identity == "" {
+			identity = v.GetString("identity")
+		}
+		if !forceProvided {
+			force = v.GetBool("force")
+		}
 		result, err := deleteParser.Parse(ctx, args)
 		if err != nil {
 			return err
 		}
+		if stack == "" {
+			stack = result.Stack
+		}
+		if identity == "" {
+			identity = result.Identity.Value()
+		}
 
-		// Get force flag from Viper (not a standard StandardOptions field).
-		v := viper.GetViper()
-		force := v.GetBool("force")
-
-		return executeDeleteCommandWithValues(result.Component, result.Stack, result.Identity.Value(), force)
+		return executeDeleteCommandWithValues(result.Component, stack, identity, force)
 	},
 }
 
