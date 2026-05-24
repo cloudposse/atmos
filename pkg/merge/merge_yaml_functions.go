@@ -66,6 +66,13 @@ func hasAnyYAMLFunction(data map[string]interface{}) bool {
 // function previously accounted for 527k recursive calls / 1m26s of CPU time,
 // with most subtrees containing zero YAML functions and being copied for no
 // reason. The short-circuit eliminates the deep-copy allocation in that case.
+//
+// NOTE: The recursive call re-enters this same function (with its
+// hasAnyYAMLFunction short-circuit) by design — for function-sparse trees,
+// avoiding the per-subtree allocation outweighs the cost of the redundant
+// pre-check. A split into an outer/inner pair (Phase 7 style) was tried in
+// Phase 10 and reverted: the inner-only walker had to allocate on every
+// recursive level, regressing the common case.
 func WalkAndDeferYAMLFunctions(dctx *DeferredMergeContext, data map[string]interface{}, basePath []string) map[string]interface{} {
 	defer perf.Track(nil, "merge.WalkAndDeferYAMLFunctions")()
 

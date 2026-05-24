@@ -227,6 +227,17 @@ open. Optimization plan:
       skip the per-call `yaml.Node.Decode` + `InternStringsInMap`
       walks (~500-700µs each). Wall-clock 2.4s → 2.06s (−14%
       locally).
+- [x] Phase 10: apply Phase 7's outer/inner perf.Track pattern to
+      `processYAMLNode` (recursive YAML walker used by yq evaluation).
+      Removes per-recursion-step perf.Track overhead (~3µs each) from
+      ~34k recursive calls. `processYAMLNode` dropped out of the
+      top-25 hot list, wall-clock 2.2s → 2.03s (−7% local). The same
+      pattern was *not* applied to `WalkAndDeferYAMLFunctions`:
+      removing the per-recursion `hasAnyYAMLFunction` short-circuit
+      regressed allocation cost on function-sparse subtrees more
+      than the perf.Track savings recovered (the inner-only walker
+      had to allocate on every level). Documented in-code so future
+      passes don't re-try.
 - [~] Phase 9 (ATTEMPTED, REVERTED 2026-05-24, `b11f3cd9b`):
       asymmetric clone of `extractLocalsResult` — share
       `settings`/`vars`/`env` references with the cache, deep-copy
