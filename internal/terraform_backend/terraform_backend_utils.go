@@ -30,6 +30,10 @@ func GetTerraformWorkspace(sections *map[string]any) string {
 // Symmetric with the env overlay that `!terraform.output` already applies via
 // `pkg/terraform/output/environment.go::SetupEnvironment` (the loop that
 // writes `config.Env` over the subprocess environment).
+//
+// AWS_STS_REGIONAL_ENDPOINTS is intentionally NOT in this list — it was a v1
+// SDK toggle; SDK v2 always uses regional endpoints by default and the legacy
+// toggle is a no-op. Including it would silently fail to honor.
 var ComponentEnvKeysAWS = []string{
 	"AWS_PROFILE",
 	"AWS_REGION",
@@ -39,7 +43,6 @@ var ComponentEnvKeysAWS = []string{
 	"AWS_ENDPOINT_URL_S3",
 	"AWS_ENDPOINT_URL_STS",
 	"AWS_USE_FIPS_ENDPOINT",
-	"AWS_STS_REGIONAL_ENDPOINTS",
 }
 
 // ExtractComponentEnvOverlay returns a whitelisted overlay of the component's
@@ -52,6 +55,10 @@ var ComponentEnvKeysAWS = []string{
 // see no observable difference.
 func ExtractComponentEnvOverlay(sections *map[string]any, whitelist []string) map[string]string {
 	defer perf.Track(nil, "terraform_backend.ExtractComponentEnvOverlay")()
+
+	if sections == nil {
+		return nil
+	}
 
 	envSection, ok := (*sections)[cfg.EnvSectionName].(map[string]any)
 	if !ok || len(envSection) == 0 {

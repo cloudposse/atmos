@@ -65,7 +65,8 @@ func (d *defaultGetter) GetCallerIdentity(
 		Region:  result.Region,
 	}
 
-	log.Debug("Retrieved AWS caller identity",
+	log.Debug(
+		"Retrieved AWS caller identity",
 		"account", identity.Account,
 		"arn", identity.Arn,
 		"user_id", identity.UserID,
@@ -282,7 +283,8 @@ func LoadConfigWithAuthAndEnv(
 
 	// If auth context is provided, use Atmos-managed credentials.
 	if authContext != nil {
-		log.Debug("Using Atmos auth context for AWS SDK",
+		log.Debug(
+			"Using Atmos auth context for AWS SDK",
 			"profile", authContext.Profile,
 			"credentials", authContext.CredentialsFile,
 			"config", authContext.ConfigFile,
@@ -290,7 +292,8 @@ func LoadConfigWithAuthAndEnv(
 
 		// Set custom credential and config file paths.
 		// This overrides the default ~/.aws/credentials and ~/.aws/config.
-		cfgOpts = append(cfgOpts,
+		cfgOpts = append(
+			cfgOpts,
 			config.WithSharedCredentialsFiles([]string{authContext.CredentialsFile}),
 			config.WithSharedConfigFiles([]string{authContext.ConfigFile}),
 			config.WithSharedConfigProfile(authContext.Profile),
@@ -303,7 +306,8 @@ func LoadConfigWithAuthAndEnv(
 	} else if envOverlay != nil {
 		// envOverlay layers above process env but below Atmos auth.
 		// Only applied when authContext is absent.
-		log.Debug("Using component env overlay for AWS SDK credentials",
+		log.Debug(
+			"Using component env overlay for AWS SDK credentials",
 			"profile", envOverlay["AWS_PROFILE"],
 			"region", envOverlay["AWS_REGION"],
 		)
@@ -322,6 +326,11 @@ func LoadConfigWithAuthAndEnv(
 			} else if r := envOverlay["AWS_DEFAULT_REGION"]; r != "" {
 				region = r
 			}
+		}
+		// FIPS endpoint applies globally to the resolved aws.Config.
+		// "true"/"1" are the conventional truthy spellings tofu honors.
+		if fips := envOverlay["AWS_USE_FIPS_ENDPOINT"]; fips == "true" || fips == "1" {
+			cfgOpts = append(cfgOpts, config.WithUseFIPSEndpoint(aws.FIPSEndpointStateEnabled))
 		}
 	} else {
 		log.Debug("Using standard AWS SDK credential resolution (no auth context provided)")
@@ -345,7 +354,17 @@ func LoadConfigWithAuthAndEnv(
 	// Conditionally assume role if specified.
 	if roleArn != "" {
 		log.Debug("Assuming role", "ARN", roleArn)
-		stsClient := sts.NewFromConfig(baseCfg)
+		// Apply per-service STS endpoint override from the env overlay (SDK
+		// v2 endpoint URLs are per-service options, not global config). When
+		// an Atmos AuthContext is in use, the overlay is intentionally
+		// skipped — the auth path is canonical.
+		stsClient := sts.NewFromConfig(baseCfg, func(o *sts.Options) {
+			if authContext == nil && envOverlay != nil {
+				if ep := envOverlay["AWS_ENDPOINT_URL_STS"]; ep != "" {
+					o.BaseEndpoint = aws.String(ep)
+				}
+			}
+		})
 
 		creds := stscreds.NewAssumeRoleProvider(stsClient, roleArn, func(o *stscreds.AssumeRoleOptions) {
 			o.Duration = assumeRoleDuration
@@ -395,7 +414,8 @@ func ValidateAWSCredentials(ctx context.Context, region string, authCtx *schema.
 			Err()
 	}
 
-	log.Debug("AWS credentials validated successfully",
+	log.Debug(
+		"AWS credentials validated successfully",
 		"account", callerIdentity.Account,
 		"arn", callerIdentity.Arn,
 	)

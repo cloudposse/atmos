@@ -12,6 +12,13 @@ import (
 // in-process backend readers so `!terraform.state` matches the subprocess env
 // overlay `!terraform.output` already applies via SetupEnvironment.
 func TestExtractComponentEnvOverlay(t *testing.T) {
+	t.Run("nil-when-sections-pointer-is-nil", func(t *testing.T) {
+		// Defensive: callers from the YAML-function path should always pass
+		// a non-nil sections pointer, but the public helper must not panic.
+		got := tb.ExtractComponentEnvOverlay(nil, tb.ComponentEnvKeysAWS)
+		assert.Nil(t, got, "nil sections pointer must return nil overlay, not panic")
+	})
+
 	t.Run("nil-when-no-env-section", func(t *testing.T) {
 		sections := map[string]any{
 			"backend": map[string]any{"type": "s3"},
@@ -120,6 +127,9 @@ func TestExtractComponentEnvOverlay(t *testing.T) {
 // changes to the whitelist that would either expose non-credential env vars
 // or drop a credential one. Add new entries deliberately; this test will fail
 // loudly if the list drifts.
+//
+// AWS_STS_REGIONAL_ENDPOINTS is intentionally absent — it was a SDK v1 toggle
+// and is a no-op in SDK v2. Including it would silently fail to honor.
 func TestComponentEnvKeysAWS_StablePublicSurface(t *testing.T) {
 	expected := []string{
 		"AWS_PROFILE",
@@ -130,7 +140,6 @@ func TestComponentEnvKeysAWS_StablePublicSurface(t *testing.T) {
 		"AWS_ENDPOINT_URL_S3",
 		"AWS_ENDPOINT_URL_STS",
 		"AWS_USE_FIPS_ENDPOINT",
-		"AWS_STS_REGIONAL_ENDPOINTS",
 	}
 	assert.Equal(t, expected, tb.ComponentEnvKeysAWS,
 		"whitelist changes require deliberate review — see the issue tracker for rationale before editing")

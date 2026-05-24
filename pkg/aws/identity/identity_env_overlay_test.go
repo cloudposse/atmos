@@ -5,11 +5,28 @@ import (
 	"testing"
 	"time"
 
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/cloudposse/atmos/pkg/schema"
 )
+
+// fipsFromConfig inspects the resolved aws.Config's ConfigSources for a
+// LoadOptions entry and returns its UseFIPSEndpoint setting. SDK v2 stores
+// FIPS preference here rather than on aws.Config directly; this helper uses
+// only the public config.LoadOptions type, no internal packages.
+func fipsFromConfig(cfg aws.Config) aws.FIPSEndpointState {
+	for _, src := range cfg.ConfigSources {
+		if lo, ok := src.(config.LoadOptions); ok {
+			if lo.UseFIPSEndpoint != aws.FIPSEndpointStateUnset {
+				return lo.UseFIPSEndpoint
+			}
+		}
+	}
+	return aws.FIPSEndpointStateUnset
+}
 
 // TestLoadConfigWithAuthAndEnv_RegionFromOverlay confirms the env overlay's
 // AWS_REGION reaches the resolved aws.Config when no explicit region and no
@@ -75,6 +92,53 @@ func TestLoadConfigWithAuthAndEnv_AuthContextWinsOverOverlay(t *testing.T) {
 	cfg, err := LoadConfigWithAuthAndEnv(ctx, "", "", 15*time.Minute, authContext, overlay)
 	require.NoError(t, err)
 	assert.Equal(t, "ca-central-1", cfg.Region, "authContext.Region must override overlay AWS_REGION")
+}
+
+// TestLoadConfigWithAuthAndEnv_FIPSEndpointApplied confirms that
+// AWS_USE_FIPS_ENDPOINT from the overlay reaches the resolved config when
+// truthy ("true" or "1") and is ignored otherwise. FIPS is a global config
+// setting in SDK v2, not a per-service option.
+func TestLoadConfigWithAuthAndEnv_FIPSEndpointApplied(t *testing.T) {
+	t.Setenv("AWS_REGION", "")
+	t.Setenv("AWS_DEFAULT_REGION", "")
+	t.Setenv("AWS_PROFILE", "")
+	t.Setenv("AWS_USE_FIPS_ENDPOINT", "")
+
+	ctx := context.Background()
+
+	t.Run("true-enables-fips", func(t *testing.T) {
+		overlay := map[string]string{"AWS_USE_FIPS_ENDPOINT": "true", "AWS_REGION": "us-east-1"}
+		cfg, err := LoadConfigWithAuthAndEnv(ctx, "", "", 15*time.Minute, nil, overlay)
+		require.NoError(t, err)
+		assert.Equal(t, aws.FIPSEndpointStateEnabled, fipsFromConfig(cfg),
+			"AWS_USE_FIPS_ENDPOINT=true must enable FIPS on the resolved config")
+	})
+
+	t.Run("1-also-enables-fips", func(t *testing.T) {
+		overlay := map[string]string{"AWS_USE_FIPS_ENDPOINT": "1", "AWS_REGION": "us-east-1"}
+		cfg, err := LoadConfigWithAuthAndEnv(ctx, "", "", 15*time.Minute, nil, overlay)
+		require.NoError(t, err)
+		assert.Equal(t, aws.FIPSEndpointStateEnabled, fipsFromConfig(cfg))
+	})
+
+	t.Run("false-leaves-fips-unset", func(t *testing.T) {
+		overlay := map[string]string{"AWS_USE_FIPS_ENDPOINT": "false", "AWS_REGION": "us-east-1"}
+		cfg, err := LoadConfigWithAuthAndEnv(ctx, "", "", 15*time.Minute, nil, overlay)
+		require.NoError(t, err)
+		assert.Equal(t, aws.FIPSEndpointStateUnset, fipsFromConfig(cfg),
+			"non-truthy values must leave FIPS unset")
+	})
+
+	t.Run("auth-context-suppresses-fips-overlay", func(t *testing.T) {
+		// When Atmos auth is configured, the overlay branch is skipped entirely.
+		// FIPS from the overlay must not bleed through.
+		authContext := &schema.AWSAuthContext{Region: "us-east-1"}
+		overlay := map[string]string{"AWS_USE_FIPS_ENDPOINT": "true"}
+		cfg, err := LoadConfigWithAuthAndEnv(ctx, "", "", 15*time.Minute, authContext, overlay)
+		require.NoError(t, err)
+		assert.Equal(t, aws.FIPSEndpointStateUnset, fipsFromConfig(cfg),
+			"overlay FIPS must be ignored when authContext is set")
+	})
 }
 
 // TestLoadConfigWithAuth_PreservesExistingBehavior is the backward-compat

@@ -121,11 +121,23 @@ func getCachedS3Client(backend *map[string]any, authContext *schema.AuthContext,
 		cacheKey += fmt.Sprintf(";profile=%s", authContext.AWS.Profile)
 	}
 	if envOverlay != nil {
-		// Two components with different env profiles/credentials must produce
-		// distinct cache entries — otherwise cross-namespace reads alias each other.
-		cacheKey += fmt.Sprintf(";env_profile=%s;env_region=%s;env_config=%s;env_creds=%s",
-			envOverlay["AWS_PROFILE"], envOverlay["AWS_REGION"],
-			envOverlay["AWS_CONFIG_FILE"], envOverlay["AWS_SHARED_CREDENTIALS_FILE"])
+		// Two components with different env profiles/credentials/endpoints must
+		// produce distinct cache entries — otherwise cross-namespace or
+		// cross-endpoint reads alias each other in the cache. Include every
+		// whitelisted key that affects client behavior; FIPS, endpoint URL,
+		// and region variants all change which network endpoint the client
+		// targets and therefore must participate in the cache key.
+		cacheKey += fmt.Sprintf(
+			";env_profile=%s;env_region=%s;env_default_region=%s;env_config=%s;env_creds=%s;env_s3_endpoint=%s;env_sts_endpoint=%s;env_fips=%s",
+			envOverlay["AWS_PROFILE"],
+			envOverlay["AWS_REGION"],
+			envOverlay["AWS_DEFAULT_REGION"],
+			envOverlay["AWS_CONFIG_FILE"],
+			envOverlay["AWS_SHARED_CREDENTIALS_FILE"],
+			envOverlay["AWS_ENDPOINT_URL_S3"],
+			envOverlay["AWS_ENDPOINT_URL_STS"],
+			envOverlay["AWS_USE_FIPS_ENDPOINT"],
+		)
 	}
 
 	// Check the cache.
@@ -150,7 +162,16 @@ func getCachedS3Client(backend *map[string]any, authContext *schema.AuthContext,
 		return nil, err
 	}
 
-	s3Client := s3.NewFromConfig(cfg)
+	// Apply per-service S3 overrides from the env overlay. In SDK v2 the
+	// endpoint URL is a per-service option, not a global config setting, so
+	// we set it at client construction rather than inside LoadConfigWithAuth.
+	s3Client := s3.NewFromConfig(cfg, func(o *s3.Options) {
+		if envOverlay != nil {
+			if ep := envOverlay["AWS_ENDPOINT_URL_S3"]; ep != "" {
+				o.BaseEndpoint = aws.String(ep)
+			}
+		}
+	})
 	s3ClientCache.Store(cacheKey, s3Client)
 	return s3Client, nil
 }
@@ -246,7 +267,8 @@ func ReadTerraformBackendS3Internal(
 			if attempt < maxRetryCount {
 				// Exponential backoff: 1s, 2s, 4s for attempts 0, 1, 2.
 				backoff := time.Second * time.Duration(1<<attempt)
-				log.Debug("Failed to read Terraform state file from the S3 bucket",
+				log.Debug(
+					"Failed to read Terraform state file from the S3 bucket",
 					"attempt", attempt+1,
 					"file", tfStateFilePath,
 					log.FieldBucket, bucket,

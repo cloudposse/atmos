@@ -577,7 +577,7 @@ vars:
 This section covers an opt-in behavior used by setups that distribute Terraform state across multiple AWS accounts or organizations and discriminate them by a per-stack `env.AWS_PROFILE` (or similar). If you keep all state in a single account, you can skip this section — the default credential chain handles you correctly.
 :::
 
-When the calling stack and the target stack of `!terraform.state` live in **different AWS accounts**, `!terraform.state` needs to authenticate against the target account's backend. For users on [Atmos auth](/cli/commands/auth), the configured identity is the canonical source. For users **not yet on Atmos auth**, Atmos also honors a whitelisted subset of the target component's `env` section so that `!terraform.state` matches the credential resolution `!terraform.output` already performs via its subprocess.
+When the calling stack and the target stack of `!terraform.state` live in **different AWS accounts**, `!terraform.state` needs to authenticate against the target account's backend. For users on [Atmos auth](/stacks/auth), the configured identity is the canonical source. For users **not yet on Atmos auth**, Atmos also honors a whitelisted subset of the target component's `env` section so that `!terraform.state` matches the credential resolution `!terraform.output` already performs via its subprocess.
 
 This makes the two functions behave symmetrically: anything that works for `!terraform.output` because of the component's `env` (the loop in `pkg/terraform/output/environment.go::SetupEnvironment`) now also works for `!terraform.state`.
 
@@ -590,10 +590,11 @@ AWS_PROFILE              AWS_CONFIG_FILE
 AWS_REGION               AWS_SHARED_CREDENTIALS_FILE
 AWS_DEFAULT_REGION       AWS_ENDPOINT_URL_S3
 AWS_USE_FIPS_ENDPOINT    AWS_ENDPOINT_URL_STS
-AWS_STS_REGIONAL_ENDPOINTS
 ```
 
 A component with no whitelisted env key produces no overlay and resolves credentials exactly as before. This is a strict no-op for setups that don't use this pattern.
+
+`AWS_STS_REGIONAL_ENDPOINTS` is intentionally not honored — it was a SDK v1 toggle, and SDK v2 always uses regional endpoints by default. Setting it has no effect on the in-process client.
 
 ### Precedence
 
@@ -651,7 +652,7 @@ When Atmos resolves this, it picks up `componentSections.env.AWS_PROFILE = "prod
 
 ### When to use Atmos auth instead
 
-If you're rolling out [Atmos auth](/cli/commands/auth) across components, prefer it. The `env` overlay path is layered **below** Atmos auth and is intended for setups that haven't yet migrated. Setting both is safe: Atmos auth's `AWSAuthContext` wins and the overlay is ignored for that call.
+If you're rolling out [Atmos auth](/stacks/auth) across components, prefer it. The `env` overlay path is layered **below** Atmos auth and is intended for setups that haven't yet migrated. Setting both is safe: Atmos auth's `AWSAuthContext` wins and the overlay is ignored for that call.
 
 ### Coverage
 
