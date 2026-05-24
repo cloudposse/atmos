@@ -391,6 +391,15 @@ func shouldProcessDependent(dep *schema.Dependent, affectedList []schema.Affecte
 	return includeDependents || isComponentInStackAffected(affectedList, dep.StackSlug)
 }
 
+// isNonTerraformDependent returns true when dep is a dependent that
+// `atmos terraform` must skip during recursion: a helmfile or packer
+// component, or any other non-terraform type. Dependents with an empty
+// ComponentType are treated as terraform for backward compatibility. See
+// issue #2361.
+func isNonTerraformDependent(dep *schema.Dependent) bool {
+	return dep.ComponentType != "" && dep.ComponentType != cfg.TerraformComponentType
+}
+
 // executeTerraformAffectedComponentInDepOrder recursively processes the affected components in the dependency order.
 func executeTerraformAffectedComponentInDepOrder(
 	info *schema.ConfigAndStacksInfo,
@@ -423,7 +432,7 @@ func executeTerraformAffectedComponentInDepOrder(
 		// Defense-in-depth: when --include-dependents is set, the dependency graph
 		// may include helmfile/packer dependents. `atmos terraform` must skip those
 		// — they belong to their own subcommands. See issue #2361.
-		if dep.ComponentType != "" && dep.ComponentType != cfg.TerraformComponentType {
+		if isNonTerraformDependent(dep) {
 			continue
 		}
 		if !shouldProcessDependent(dep, affectedList, args.IncludeDependents) {

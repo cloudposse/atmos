@@ -1579,80 +1579,53 @@ func TestExecuteTerraformAffectedComponentInDepOrder(t *testing.T) {
 	}
 }
 
-// TestExecuteTerraformAffectedComponentInDepOrder_NonTerraformDependentGuard
-// is a portable companion to the gomonkey-based table above. It exercises the
-// defense-in-depth guard at terraform_utils.go that drops helmfile/packer
-// dependents during the recursion. We use DryRun=true so the function never
-// invokes ExecuteTerraform — that lets the test run on every CI runner,
-// including macOS ARM64 where gomonkey is unsupported, and gives the dependent
-// type-check line real coverage instead of relying on a skipped suite.
-//
-// Observable signal: `executeTerraformAffectedComponentInDepOrder` mutates
-// `info.Component` at the top of every call to whatever component it is
-// processing. After the function returns, `info.Component` is therefore the
-// last component that entered the recursion. A non-terraform dependent that
-// was skipped never enters the recursion, so `info.Component` stays at the
-// root ("vpc"). A terraform dependent that was processed sets it to itself.
-// We assert on that final value — `require.NoError` alone would let a
-// regression that still recursed into a helmfile/packer dependent pass
-// silently.
-func TestExecuteTerraformAffectedComponentInDepOrder_NonTerraformDependentGuard(t *testing.T) {
+// TestIsNonTerraformDependent is the portable companion to the gomonkey-based
+// table above. It directly exercises the defense-in-depth predicate that
+// `executeTerraformAffectedComponentInDepOrder` uses to drop helmfile/packer
+// dependents during the recursion. Testing the predicate (rather than the
+// orchestrator) avoids racing with parallel tests that monkey-patch the
+// orchestrator, and gives the guard real coverage on every CI runner —
+// including macOS ARM64 where gomonkey is unsupported.
+func TestIsNonTerraformDependent(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name                   string
-		dependents             []schema.Dependent
-		expectedFinalComponent string
+		name string
+		dep  schema.Dependent
+		want bool
 	}{
 		{
-			name: "helmfile dependent skipped (issue #2361)",
-			dependents: []schema.Dependent{
-				{Component: "helm-app", ComponentType: cfg.HelmfileComponentType, Stack: "prod"},
-			},
-			expectedFinalComponent: "vpc",
+			name: "helmfile dependent is non-terraform (issue #2361)",
+			dep:  schema.Dependent{Component: "helm-app", ComponentType: cfg.HelmfileComponentType, Stack: "prod"},
+			want: true,
 		},
 		{
-			name: "packer dependent skipped (issue #2361)",
-			dependents: []schema.Dependent{
-				{Component: "image", ComponentType: cfg.PackerComponentType, Stack: "prod"},
-			},
-			expectedFinalComponent: "vpc",
+			name: "packer dependent is non-terraform (issue #2361)",
+			dep:  schema.Dependent{Component: "image", ComponentType: cfg.PackerComponentType, Stack: "prod"},
+			want: true,
 		},
 		{
-			name: "both non-terraform dependents skipped",
-			dependents: []schema.Dependent{
-				{Component: "helm-app", ComponentType: cfg.HelmfileComponentType, Stack: "prod"},
-				{Component: "image", ComponentType: cfg.PackerComponentType, Stack: "prod"},
-			},
-			expectedFinalComponent: "vpc",
+			// Positive path: a terraform dependent must NOT be flagged,
+			// otherwise the guard would be over-broad and silently drop
+			// legitimate work.
+			name: "terraform dependent is not flagged",
+			dep:  schema.Dependent{Component: "security-group", ComponentType: cfg.TerraformComponentType, Stack: "prod"},
+			want: false,
 		},
 		{
-			// Positive path: a terraform dependent must still recurse, otherwise
-			// the guard would be over-broad and silently drop legitimate work.
-			name: "terraform dependent recurses",
-			dependents: []schema.Dependent{
-				{Component: "security-group", ComponentType: cfg.TerraformComponentType, Stack: "prod"},
-			},
-			expectedFinalComponent: "security-group",
+			// Empty ComponentType is treated as terraform for backward
+			// compatibility — older affected payloads omitted this field.
+			name: "empty ComponentType is treated as terraform",
+			dep:  schema.Dependent{Component: "legacy", ComponentType: "", Stack: "prod"},
+			want: false,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-
-			info := &schema.ConfigAndStacksInfo{SubCommand: "plan", DryRun: true}
-			args := &DescribeAffectedCmdArgs{IncludeDependents: true}
-			params := &affectedDepOrderParams{
-				AffectedComponent: "vpc",
-				AffectedStack:     "prod",
-				Dependents:        tt.dependents,
-			}
-
-			err := executeTerraformAffectedComponentInDepOrder(info, nil, params, args)
-			require.NoError(t, err)
-			assert.Equal(t, tt.expectedFinalComponent, info.Component,
-				"info.Component reflects whether recursion happened; mismatch means the guard let a non-terraform dependent through or blocked a terraform one")
+			dep := tt.dep
+			assert.Equal(t, tt.want, isNonTerraformDependent(&dep))
 		})
 	}
 }
