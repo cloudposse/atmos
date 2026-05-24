@@ -19,7 +19,8 @@ Stacks are not Terraform workspaces, although Atmos derives workspace names from
 ## Stack Discovery
 
 Atmos discovers stack manifests based on `included_paths` and `excluded_paths` configured in the `stacks` section
-of `atmos.yaml`. For the complete `atmos.yaml` configuration reference, see the `atmos-config` skill.
+of `atmos.yaml`. For root config discovery and routing, see the `atmos-config` skill; for path layout
+and `base_path` behavior, see `atmos-project-layout`.
 
 ### Stack Name Precedence
 

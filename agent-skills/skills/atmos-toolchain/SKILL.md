@@ -46,13 +46,18 @@ OpenTofu, scanner, or generator version.
 
 ### Tool Installation Path
 
-Tools are installed to `.tools/` (default) in a structured layout:
+By default, tools are installed in the XDG data directory for Atmos, such as
+`~/.local/share/atmos/toolchain` on Linux/macOS. If the XDG data directory cannot be created, Atmos
+falls back to `.tools` in the current project.
+
+Installed tools use this layout under the selected install path:
 
 ```text
-.tools/bin/{os}/{tool}/{version}/{binary}
+<install-path>/bin/{os}/{tool}/{version}/{binary}
 ```
 
-Override via `toolchain.install_path` in atmos.yaml or `ATMOS_TOOLCHAIN_PATH` env var.
+Override the install path with `toolchain.install_path` in `atmos.yaml` or `ATMOS_TOOLCHAIN_PATH`
+when tools must be stored in a project-local, shared, or cached directory.
 
 ### Registries
 
@@ -124,7 +129,7 @@ GitHub artifact attestations via `gh`, and `minisign`.
 
 ```yaml
 toolchain:
-  install_path: .tools              # Where to install tools
+  install_path: .tools              # Optional override; default is XDG data dir
   versions_file: .tool-versions     # Path to version file
 
   aliases:
@@ -214,7 +219,8 @@ atmos toolchain registry search jq         # Search across registries
 1. CLI flags (highest)
 2. Environment variables
 3. atmos.yaml configuration
-4. Defaults (lowest)
+4. XDG data directory
+5. `.tools` fallback
 
 ## Shell Integration
 
@@ -240,13 +246,14 @@ export ATMOS_TOOLCHAIN_PATH="$HOME/.cache/atmos/tools"
 eval "$(atmos toolchain env --format=bash)"
 ```
 
-In GitHub Actions, write the path entries to `$GITHUB_PATH`:
+In GitHub Actions, use the GitHub format. When `$GITHUB_PATH` is available, Atmos appends toolchain
+paths to it automatically:
 
 ```yaml
 - name: Install toolchain tools
   run: |
     atmos toolchain install
-    atmos toolchain env --format=github >> "$GITHUB_PATH"
+    atmos toolchain env --format=github
 ```
 
 ## Tool Dependencies in Atmos Config
@@ -392,6 +399,7 @@ atmos toolchain list
   run: |
     atmos toolchain install
     atmos toolchain env --format=github
+    # Automatically appends paths to $GITHUB_PATH when available
 ```
 
 ### Custom Tool Registry

@@ -1,6 +1,6 @@
 ---
 name: atmos-ci
-description: "Atmos CI: Native CI with GitHub Actions containers, affected/all matrix workflows, OIDC profiles, merge queues, environments, statuses, and Atlantis integration"
+description: "Atmos CI: Native CI with GitHub Actions containers, native outputs, affected/all matrix workflows, OIDC profiles, toolchain-aware jobs, merge queues, environments, statuses, and Atlantis integration"
 metadata:
   copyright: Copyright Cloud Posse, LLC 2026
   version: "1.0.0"
@@ -19,6 +19,15 @@ as the source of truth and `atmos describe affected`/`atmos list instances` prod
 Do not recommend the deprecated `cloudposse/github-action-atmos*` wrapper actions or
 `cloudposse/github-action-setup-atmos`. Replace those with containerized Native CI jobs that run
 Atmos commands directly.
+
+## Related Skills
+
+| Need | Load |
+|---|---|
+| Native CI workflow structure, matrices, outputs, summaries, checks, comments | stay in `atmos-ci` |
+| Tool versions, `dependencies.tools`, explicit job tool installs, PATH behavior | [atmos-toolchain](../atmos-toolchain/SKILL.md) |
+| OIDC providers, identities, trust policies, cloud auth conventions | [atmos-auth](../atmos-auth/SKILL.md) |
+| Profile mechanics for `ATMOS_PROFILE` and `--profile` | [atmos-profiles](../atmos-profiles/SKILL.md) |
 
 ## Native CI First
 
@@ -70,8 +79,13 @@ terraform:
 ```
 
 Discourage `hashicorp/setup-terraform`, `opentofu/setup-opentofu`, and similar setup actions in Atmos
-CI examples. Prefer `dependencies.tools` so Atmos installs and injects the exact Terraform/OpenTofu
-version for the stack, component, workflow, or command being executed.
+CI examples. Prefer `dependencies.tools` when the tool is required by a stack, component, workflow,
+or custom command; Atmos installs and injects the exact version for that execution context.
+
+Use explicit `atmos toolchain install ...` steps only for job-level scripts that need tools not
+declared as component, workflow, or custom command dependencies. In GitHub Actions, run
+`atmos toolchain env --format=github`; Atmos appends toolchain paths to `$GITHUB_PATH` when that
+file is available, so later steps can call those tools directly.
 
 Primary GitHub Actions pattern:
 
@@ -91,7 +105,7 @@ jobs:
       ATMOS_PROFILE: github
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - run: atmos terraform plan vpc -s prod
 ```
 
@@ -99,7 +113,9 @@ For new workflows, use the container image and direct Atmos commands.
 
 ## Matrix Patterns
 
-Use affected matrices for pull requests and targeted deploys:
+Use affected matrices for pull requests and targeted deploys. When `ci.enabled: true` and
+`ci.output.enabled: true` are configured, Atmos writes native outputs to `$GITHUB_OUTPUT`; pass them
+between steps and jobs with step `id`, job `outputs`, and `needs.<job>.outputs.*`.
 
 ```yaml
 jobs:
@@ -110,7 +126,7 @@ jobs:
     outputs:
       matrix: ${{ steps.affected.outputs.matrix }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - id: affected
         run: atmos describe affected --format=matrix
 
@@ -126,7 +142,7 @@ jobs:
     env:
       ATMOS_PROFILE: github
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - run: atmos terraform deploy "${{ matrix.component }}" -s "${{ matrix.stack }}"
 ```
 
@@ -174,6 +190,8 @@ as GitHub deployment controls; they are independent from Atmos stack names.
 - **Statuses, checks, comments, and summaries**: configure `ci.summary`, `ci.output`, `ci.checks`,
   and `ci.comments` in `atmos.yaml`; grant only the permissions needed, such as `statuses: write`,
   `checks: write`, or `pull-requests: write`, based on the chosen reporting mode.
+- **Step and job outputs**: let Native CI write to `$GITHUB_OUTPUT`, then pass values with step
+  `id`, job `outputs`, and `needs.<job>.outputs.*`.
 - **Atmos CI creation**: add the `ci` section, configure toolchain aliases and `dependencies.tools`,
   then create containerized workflows that run direct Atmos commands.
 

@@ -56,7 +56,9 @@ When a task involves Atmos, activate the matching skill for detailed guidance.
 
 | Task                                                                                                                  | Skill                   | Path                                                                  |
 |-----------------------------------------------------------------------------------------------------------------------|-------------------------|-----------------------------------------------------------------------|
-| atmos.yaml project config: all sections, discovery, merging, base paths, settings, imports, profiles                 | `atmos-config`          | `agent-skills/skills/atmos-config/SKILL.md`          |
+| atmos.yaml root config: discovery, precedence, deep merging, imports, minimal bootstrap, routing                    | `atmos-config`          | `agent-skills/skills/atmos-config/SKILL.md`          |
+| Project layout: base_path, relative paths, stacks/components/workflows/schemas directories, atmos.d config          | `atmos-project-layout`  | `agent-skills/skills/atmos-project-layout/SKILL.md`  |
+| Profiles: profile directories, --profile, ATMOS_PROFILE, profile merge behavior, environment switching             | `atmos-profiles`        | `agent-skills/skills/atmos-profiles/SKILL.md`        |
 | Stack YAML, imports, inheritance, deep merging, vars, settings, locals, metadata, overrides                          | `atmos-stacks`          | `agent-skills/skills/atmos-stacks/SKILL.md`          |
 | Terraform root modules, abstract components, component inheritance, versioning, mixins, catalog patterns              | `atmos-components`      | `agent-skills/skills/atmos-components/SKILL.md`      |
 | vendor.yaml manifests, pulling from Git/S3/HTTP/OCI/Terraform Registry, component.yaml                                | `atmos-vendoring`       | `agent-skills/skills/atmos-vendoring/SKILL.md`       |
@@ -76,6 +78,7 @@ When a task involves Atmos, activate the matching skill for detailed guidance.
 | Design patterns: stack organization, component catalogs, inheritance, configuration composition, version management   | `atmos-design-patterns` | `agent-skills/skills/atmos-design-patterns/SKILL.md` |
 | Toolchain management: install/exec/search tools, .tool-versions, Aqua registries, custom registries, aliases         | `atmos-toolchain`       | `agent-skills/skills/atmos-toolchain/SKILL.md`       |
 | Introspection: describe component/stacks/affected/dependents, list stacks/components/instances, querying, provenance | `atmos-introspection`   | `agent-skills/skills/atmos-introspection/SKILL.md`   |
+| Global settings: settings, logs, errors, env, docs, metadata, version requirements                                 | `atmos-settings`        | `agent-skills/skills/atmos-settings/SKILL.md`        |
 | AI and MCP: providers, skills, agent workflows, MCP server/client setup, auth-wrapped tools, toolchain-aware export  | `atmos-ai`              | `agent-skills/skills/atmos-ai/SKILL.md`              |
 | Devcontainers: start/stop/attach/exec/shell, Docker/Podman, identity integration, instance management (experimental) | `atmos-devcontainer`    | `agent-skills/skills/atmos-devcontainer/SKILL.md`    |
 | AWS security: analyze findings, map to components/stacks, structured remediation, compliance reports                  | `atmos-aws-security`    | `agent-skills/skills/atmos-aws-security/SKILL.md`    |

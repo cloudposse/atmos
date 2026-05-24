@@ -420,7 +420,8 @@ components:
 ## Profiles for Multi-Environment Auth
 
 Use Atmos profiles to swap provider implementations while keeping the same provider name. Identity
-configurations reference a consistent provider name that behaves differently per profile.
+configurations reference a consistent provider name that behaves differently per profile. For profile
+directory layout, activation, and merge behavior, see `atmos-profiles`.
 
 ```text
 profiles/

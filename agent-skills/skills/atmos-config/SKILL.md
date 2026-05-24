@@ -1,6 +1,6 @@
 ---
 name: atmos-config
-description: "Project configuration: atmos.yaml structure, all sections, discovery, merging, base paths, settings, imports, profiles"
+description: "Atmos root configuration: atmos.yaml discovery, precedence, deep merging, base_path, imports, minimal bootstrap, and routing to narrower Atmos skills"
 metadata:
   copyright: Copyright Cloud Posse, LLC 2026
   version: "1.0.0"
@@ -8,47 +8,37 @@ references:
   - references/sections-reference.md
 ---
 
-# Atmos Project Configuration (atmos.yaml)
+# Atmos Root Configuration
 
-The `atmos.yaml` file is the central project configuration for Atmos. It defines how Atmos discovers stacks, where
-components live, how templates are processed, and how every subsystem (auth, stores, workflows, toolchain, validation,
-integrations) is configured. Every Atmos project needs at least one `atmos.yaml`.
+Use this skill for the root mechanics of `atmos.yaml`: how Atmos finds config files, merges them,
+resolves project-relative paths, imports modular config, and routes section-specific work to the
+right skill. Do not use this skill as a catchall for every `atmos.yaml` section.
 
 ## Configuration Discovery
 
-Atmos searches for `atmos.yaml` in this order (first found wins):
+Atmos searches for `atmos.yaml` in this order:
 
-1. `--config` CLI flag or `ATMOS_CLI_CONFIG_PATH` environment variable.
-2. Active profile (`--profile` flag or `ATMOS_PROFILE` environment variable).
-3. Current working directory (`./atmos.yaml`).
-4. Git repository root (`<repo-root>/atmos.yaml`).
-5. Parent directory walk (searches upward until found).
-6. Home directory (`~/.atmos/atmos.yaml`).
-7. System directory (`/usr/local/etc/atmos/atmos.yaml` on Linux/macOS, `%LOCALAPPDATA%/atmos/atmos.yaml` on Windows).
+1. `--config` CLI flag or `ATMOS_CLI_CONFIG_PATH`.
+2. Active profile selected by `--profile` or `ATMOS_PROFILE`.
+3. Current working directory.
+4. Git repository root.
+5. Parent directory walk.
+6. Home directory.
+7. System directory.
 
-When multiple files are found, they are **deep-merged** with earlier sources taking precedence.
+When multiple configuration files apply, Atmos deep-merges them. More specific sources override
+broader defaults.
 
-### Environment Variable Override
+## Root Layout
 
-Most `atmos.yaml` settings can be overridden via environment variables using the `ATMOS_` prefix:
-
-```shell
-ATMOS_BASE_PATH=/path/to/project
-ATMOS_STACKS_BASE_PATH=stacks
-ATMOS_COMPONENTS_TERRAFORM_BASE_PATH=components/terraform
-ATMOS_WORKFLOWS_BASE_PATH=stacks/workflows
-ATMOS_LOGS_LEVEL=Debug
-```
-
-## Minimal Configuration
-
-The simplest `atmos.yaml` that works:
+Use `base_path` for the project root that relative paths resolve from. Keep the root config small
+and point subsystem paths at their owning directories:
 
 ```yaml
 base_path: ""
 
 stacks:
-  base_path: "stacks"
+  base_path: stacks
   included_paths:
     - "**/*"
   excluded_paths:
@@ -58,296 +48,56 @@ stacks:
 
 components:
   terraform:
-    base_path: "components/terraform"
-```
-
-## Complete Section Overview
-
-The `atmos.yaml` file supports these top-level sections. Each section is documented in detail in the
-[sections reference](references/sections-reference.md).
-
-### Core Structure
-
-| Section | Purpose | Related Skill |
-|---------|---------|---------------|
-| `base_path` | Root directory for all relative paths | -- |
-| `stacks` | Stack manifest discovery, naming, inheritance | `atmos-stacks` |
-| `components` | Component type paths and settings (Terraform, Helmfile, Packer, Ansible) | `atmos-components` |
-| `import` | Import other atmos.yaml files for modular configuration | -- |
-| `version` | Minimum/maximum Atmos version requirements | -- |
-
-### Subsystems
-
-| Section | Purpose | Related Skill |
-|---------|---------|---------------|
-| `workflows` | Workflow file discovery path | `atmos-workflows` |
-| `commands` | Custom CLI command definitions | `atmos-custom-commands` |
-| `aliases` | Command alias mappings | `atmos-custom-commands` |
-| `templates` | Go template and Gomplate processing settings | `atmos-templates` |
-| `schemas` | Validation schema base paths (JSON Schema, OPA, CUE) | `atmos-schemas` |
-| `validate` | Validation behavior (EditorConfig) | `atmos-validation` |
-
-### Platform
-
-| Section | Purpose | Related Skill |
-|---------|---------|---------------|
-| `auth` | Authentication providers, identities, keyring, integrations | `atmos-auth` |
-| `stores` | External key-value store backends | `atmos-stores` |
-| `vendor` | Vendoring base path and retry settings | `atmos-vendoring` |
-| `toolchain` | CLI tool version management, registries, aliases | `atmos-toolchain` |
-| `devcontainer` | Development container configurations | `atmos-devcontainer` |
-
-### Settings and Integrations
-
-| Section | Purpose | Related Skill |
-|---------|---------|---------------|
-| `settings` | Global CLI behavior: terminal, telemetry, experimental features | -- |
-| `integrations` | Atlantis, GitHub Actions, Atmos Pro configuration | `atmos-ci` |
-| `logs` | Log level and log file path | -- |
-| `errors` | Error format and Sentry integration | -- |
-| `env` | Global environment variables for all operations | -- |
-| `profiles` | Named configuration profiles base path | -- |
-| `describe` | `describe` command behavior settings | `atmos-introspection` |
-| `docs` | Documentation generation settings | -- |
-| `metadata` | Project metadata (name, version, tags) | -- |
-
-## Common Configuration Patterns
-
-### Multi-Environment Project
-
-```yaml
-base_path: ""
-
-stacks:
-  base_path: "stacks"
-  included_paths:
-    - "orgs/**/*"
-  excluded_paths:
-    - "**/_defaults.yaml"
-    - "catalog/**/*"
-    - "mixins/**/*"
-  name_template: "{{ .vars.tenant }}-{{ .vars.environment }}-{{ .vars.stage }}"
-
-components:
-  terraform:
-    base_path: "components/terraform"
-    command: "/usr/bin/terraform"
-  helmfile:
-    base_path: "components/helmfile"
+    base_path: components/terraform
 
 workflows:
-  base_path: "stacks/workflows"
-
-logs:
-  level: Info
+  base_path: stacks/workflows
 ```
 
-### With Authentication and Stores
+For deeper path/layout guidance, load [atmos-project-layout](../atmos-project-layout/SKILL.md).
+
+## Modular Imports
+
+Use `import` to split root config into focused files:
 
 ```yaml
-base_path: ""
-
-stacks:
-  base_path: "stacks"
-  included_paths:
-    - "deploy/**/*"
-  excluded_paths:
-    - "**/_defaults.yaml"
-    - "catalog/**/*"
-  name_template: "{{ .vars.stage }}"
-
-components:
-  terraform:
-    base_path: "components/terraform"
-
-auth:
-  providers:
-    company-sso:
-      kind: aws/iam-identity-center
-      region: us-east-1
-      start_url: https://company.awsapps.com/start
-  identities:
-    dev-admin:
-      kind: aws/permission-set
-      default: true
-      via:
-        provider: company-sso
-      principal:
-        name: AdminAccess
-        account:
-          name: development
-
-stores:
-  ssm/dev:
-    type: aws-ssm-parameter-store
-    options:
-      region: us-east-1
-      identity: dev-admin
-```
-
-### With Toolchain and Validation
-
-```yaml
-base_path: ""
-
-stacks:
-  base_path: "stacks"
-  included_paths:
-    - "**/*"
-  excluded_paths:
-    - "**/_defaults.yaml"
-  name_template: "{{ .vars.stage }}"
-
-components:
-  terraform:
-    base_path: "components/terraform"
-
-schemas:
-  jsonschema:
-    base_path: "stacks/schemas/jsonschema"
-  opa:
-    base_path: "stacks/schemas/opa"
-
-toolchain:
-  registries:
-    - type: aqua
-      ref: "v4.332.0"
-
-settings:
-  terminal:
-    pager: false
-    syntax_highlighting:
-      enabled: true
-```
-
-### Importing Other Config Files
-
-```yaml
-# atmos.yaml
 import:
   - atmos.d/stacks.yaml
+  - atmos.d/components.yaml
   - atmos.d/auth.yaml
-  - atmos.d/stores.yaml
-
-base_path: ""
-components:
-  terraform:
-    base_path: "components/terraform"
+  - atmos.d/toolchain.yaml
 ```
 
-Imported files are deep-merged into the main configuration, allowing modular organization of large configs.
+Imported files are deep-merged into the active configuration. Keep imported files aligned with the
+subsystem they configure and load the subsystem skill before changing that section.
 
-### Profiles
+## Routing
 
-```yaml
-# profiles/developer/atmos.yaml
-auth:
-  providers:
-    company-sso:
-      session:
-        duration: 8h
-```
+| Need | Load |
+|---|---|
+| Root discovery, merge order, imports, minimal bootstrap | stay in `atmos-config` |
+| Project paths, `base_path`, path conventions, relative path resolution | `atmos-project-layout` |
+| Profiles, `--profile`, `ATMOS_PROFILE`, profile directory merge behavior | `atmos-profiles` |
+| Global CLI behavior, `settings`, `logs`, `errors`, `env`, `docs`, `metadata` | `atmos-settings` |
+| Stack manifests, inheritance, stack imports, vars, locals, stack naming | `atmos-stacks` |
+| Component structure, abstract components, metadata, component inheritance | `atmos-components` |
+| Terraform/OpenTofu commands, backend defaults, Terraform component settings | `atmos-terraform` |
+| Helmfile, Packer, or Ansible component behavior | `atmos-helmfile`, `atmos-packer`, `atmos-ansible` |
+| Workflows section and workflow syntax | `atmos-workflows` |
+| Custom commands and aliases | `atmos-custom-commands` |
+| Auth providers, identities, keyring, cloud auth conventions | `atmos-auth` |
+| Stores and store-backed YAML functions | `atmos-stores` |
+| Tool versions, `dependencies.tools`, registries, shell/PATH integration | `atmos-toolchain` |
+| Native CI, GitHub Actions, Atlantis, matrices, CI outputs | `atmos-ci` |
+| Schemas and validation policy configuration | `atmos-schemas`, `atmos-validation` |
+| Templates and YAML functions | `atmos-templates`, `atmos-yaml-functions` |
+| Vendoring external components | `atmos-vendoring` |
+| Introspection commands and querying resolved config | `atmos-introspection` |
 
-```yaml
-# profiles/ci/atmos.yaml
-auth:
-  providers:
-    github-oidc:
-      kind: github/oidc
-      region: us-east-1
-```
+For a compact map of top-level sections, read [references/sections-reference.md](references/sections-reference.md).
 
-Activate with `--profile developer` or `ATMOS_PROFILE=ci`.
+## Guardrails
 
-## Terraform Component Settings
-
-The `components.terraform` section has extensive subsystem configuration:
-
-```yaml
-components:
-  terraform:
-    base_path: "components/terraform"
-    command: "terraform"
-    apply_auto_approve: false
-    deploy_run_init: true
-    init_run_reconfigure: true
-    auto_generate_backend_file: true
-
-    # Backend defaults applied to all Terraform components
-    backend_type: s3
-    backend:
-      s3:
-        encrypt: true
-        bucket: "acme-terraform-state"
-        dynamodb_table: "acme-terraform-state-lock"
-        region: "us-east-1"
-        key: "terraform.tfstate"
-        acl: "bucket-owner-full-control"
-        workspace_key_prefix: "terraform"
-
-    # Shell configuration for `atmos terraform shell`
-    shell:
-      shell: "/bin/bash"
-```
-
-For the complete Terraform configuration reference, see the `atmos-terraform` skill.
-
-## Settings Section
-
-Global CLI behavior and feature settings:
-
-```yaml
-settings:
-  # Terminal/UI settings
-  terminal:
-    pager: false
-    max_width: 120
-    colors: true
-    unicode: true
-    syntax_highlighting:
-      enabled: true
-      theme: dracula
-    masking:
-      enabled: true
-
-  # Telemetry
-  telemetry:
-    enabled: true
-
-  # Experimental features
-  experimental:
-    enabled: false
-```
-
-## Version Constraints
-
-Pin the minimum Atmos version required for the project:
-
-```yaml
-version:
-  check:
-    enabled: true
-    constraints: ">= 1.100.0"
-```
-
-## Debugging Configuration
-
-```shell
-# Show resolved configuration
-atmos describe config
-
-# Show where atmos.yaml was loaded from
-ATMOS_LOGS_LEVEL=Debug atmos version
-
-# Validate the configuration
-atmos validate stacks
-```
-
-## Key Principles
-
-1. **Single source of truth**: One `atmos.yaml` (or a set of imported files) configures the entire project.
-2. **Convention over configuration**: Sensible defaults minimize required settings.
-3. **Deep merging**: Multiple config sources are merged, with CLI flags taking highest precedence.
-4. **Environment variable overrides**: Every setting has a corresponding `ATMOS_` environment variable.
-5. **Modular composition**: Use `import` to split large configs across files.
-6. **Profile switching**: Named profiles swap entire config sections for different contexts.
+- Keep `atmos-config` examples minimal; detailed subsystem examples belong in their narrower skills.
+- Before editing a subsystem section, load the owning skill from the routing table.
+- Prefer `atmos describe config` or `atmos describe component` when verifying merge or path behavior.

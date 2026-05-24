@@ -50,6 +50,10 @@ ci:
 
 Set `GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}` when checks or comments are enabled.
 
+Native CI writes outputs to `$GITHUB_OUTPUT` when `ci.enabled: true`, `ci.output.enabled: true`, and
+GitHub Actions provides the output file. Give Atmos steps an `id`, expose job outputs when another
+job needs them, and read those values through `needs.<job>.outputs.*`.
+
 ## Terraform/OpenTofu Toolchain
 
 Use the Atmos toolchain to install Terraform or OpenTofu in CI instead of relying on runner images
@@ -73,7 +77,12 @@ terraform:
 Atmos installs and resolves declared tools into the command environment before running operations.
 Do not recommend `hashicorp/setup-terraform`, `opentofu/setup-opentofu`, or equivalent setup actions
 for Atmos Native CI unless the user is explicitly maintaining a non-Atmos workflow. In Atmos workflows,
-`dependencies.tools` is the source of truth for Terraform/OpenTofu versions.
+`dependencies.tools` is the source of truth for tools required by components, workflows, and custom
+commands.
+
+Use explicit `atmos toolchain install ...` only for job-level scripted tools that are not already
+declared in `dependencies.tools`. In GitHub Actions, `atmos toolchain env --format=github`
+automatically appends toolchain paths to `$GITHUB_PATH` when available.
 
 ## Minimal Permissions
 
@@ -119,7 +128,7 @@ jobs:
     outputs:
       matrix: ${{ steps.affected.outputs.matrix }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - id: affected
         run: atmos describe affected --format=matrix
 
@@ -142,7 +151,7 @@ jobs:
       ATMOS_PROFILE: github
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - run: atmos terraform plan "${{ matrix.component }}" -s "${{ matrix.stack }}"
 ```
 

@@ -8,7 +8,7 @@ Complete reference for all `atmos toolchain` subcommands, flags, and usage patte
 |------|---------|---------|-------------|
 | `--github-token` | `ATMOS_GITHUB_TOKEN`, `GITHUB_TOKEN` | -- | GitHub authentication token (hidden) |
 | `--tool-versions` | `ATMOS_TOOL_VERSIONS` | `.tool-versions` | Path to .tool-versions file |
-| `--toolchain-path` | `ATMOS_TOOLCHAIN_PATH` | `.tools` | Tool installation directory |
+| `--toolchain-path` | `ATMOS_TOOLCHAIN_PATH` | XDG data dir, `.tools` fallback | Tool installation directory |
 
 ---
 
@@ -181,7 +181,7 @@ eval "$(atmos toolchain env)"                         # Bash/Zsh
 eval "$(atmos toolchain env --format=bash)"           # Explicit bash
 atmos toolchain env --format=fish | source            # Fish
 atmos toolchain env --format=powershell | Invoke-Expression  # PowerShell
-atmos toolchain env --format=github >> $GITHUB_PATH   # GitHub Actions
+atmos toolchain env --format=github                   # GitHub Actions; appends to $GITHUB_PATH when set
 ```
 
 ---

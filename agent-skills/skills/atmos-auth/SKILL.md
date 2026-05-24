@@ -324,7 +324,11 @@ Disable Atmos-managed auth to use native cloud provider credentials:
 
 ```bash
 atmos terraform plan mycomponent --stack=dev --identity=false
-# or
+```
+
+Or:
+
+```bash
 export ATMOS_IDENTITY=false
 ```
 
@@ -343,7 +347,7 @@ jobs:
     env:
       ATMOS_PROFILE: github
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - run: atmos terraform deploy mycomponent -s prod
 ```
 
@@ -364,14 +368,17 @@ run: atmos terraform apply mycomponent --stack=prod
 
 ## Profiles for Environment Switching
 
-Use Atmos profiles to swap provider and identity configurations while keeping names consistent:
+Use Atmos profiles to swap provider and identity configurations while keeping names consistent.
+For profile directory layout, activation, and merge behavior, load
+[atmos-profiles](../atmos-profiles/SKILL.md):
 
 ```bash
 atmos --profile developer terraform plan myapp -s dev
 ATMOS_PROFILE=ci atmos terraform apply myapp -s prod
 ```
 
-Each profile is a directory (e.g., `profiles/developer/auth.yaml`) containing auth overrides.
+Keep this skill focused on the auth sections inside a profile, such as providers, identities, and
+keyring settings.
 
 ## ECR Integrations
 
