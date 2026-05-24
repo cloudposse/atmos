@@ -699,6 +699,92 @@ func TestMergeWithDeferred(t *testing.T) {
 	})
 }
 
+// TestMergeWithDeferred_TrivialInputShortCircuits exercises the Phase 5 fast
+// paths: zero non-empty inputs returns empty; exactly one non-empty input
+// skips the Merge call. The fast paths preserve precedence semantics for any
+// downstream consumer that inspects the dctx, even though precedence is
+// irrelevant for output when only one layer contributes values.
+func TestMergeWithDeferred_TrivialInputShortCircuits(t *testing.T) {
+	cfg := &schema.AtmosConfiguration{
+		Settings: schema.AtmosSettings{
+			ListMergeStrategy: ListMergeStrategyReplace,
+		},
+	}
+
+	t.Run("zero non-empty inputs returns empty result", func(t *testing.T) {
+		result, dctx, err := MergeWithDeferred(cfg, []map[string]any{nil, {}, nil})
+		require.NoError(t, err)
+		require.NotNil(t, result)
+		assert.Empty(t, result)
+		assert.NotNil(t, dctx)
+		assert.False(t, dctx.HasDeferredValues())
+	})
+
+	t.Run("single non-empty input with no functions returns same map header", func(t *testing.T) {
+		single := map[string]any{
+			"region":      "us-east-1",
+			"environment": "prod",
+		}
+		inputs := []map[string]any{nil, {}, single, nil}
+		result, dctx, err := MergeWithDeferred(cfg, inputs)
+		require.NoError(t, err)
+		// Phase 3 + Phase 5 compose: function-free single input is returned
+		// as-is, with no allocation in either MergeWithDeferred or its walk.
+		assert.True(t, sameMapHeader(single, result),
+			"single non-empty function-free input must be returned as-is")
+		assert.False(t, dctx.HasDeferredValues())
+	})
+
+	t.Run("single non-empty input with functions defers correctly", func(t *testing.T) {
+		single := map[string]any{
+			"region":   "us-east-1",
+			"template": "!template 'prod-{{ .region }}'",
+		}
+		inputs := []map[string]any{nil, single, nil}
+		result, dctx, err := MergeWithDeferred(cfg, inputs)
+		require.NoError(t, err)
+		// Function present → walk produces a new map with placeholders.
+		assert.False(t, sameMapHeader(single, result),
+			"single non-empty input with YAML functions must be walked into a fresh map")
+		assert.Equal(t, "us-east-1", result["region"])
+		assert.Nil(t, result["template"], "YAML function should be deferred to nil placeholder")
+		assert.True(t, dctx.HasDeferredValues())
+		deferred := dctx.GetDeferredValues()
+		require.Contains(t, deferred, "template")
+		// Precedence preserved: single is at index 1, so precedence is 1.
+		assert.Equal(t, 1, deferred["template"][0].Precedence)
+	})
+
+	t.Run("two non-empty inputs use the full merge path (not the fast path)", func(t *testing.T) {
+		a := map[string]any{"key": "value-a", "shared": "from-a"}
+		b := map[string]any{"key": "value-b", "extra": "from-b"}
+		inputs := []map[string]any{a, b}
+		result, dctx, err := MergeWithDeferred(cfg, inputs)
+		require.NoError(t, err)
+		// Full merge: later wins for overlapping keys.
+		assert.Equal(t, "value-b", result["key"])
+		assert.Equal(t, "from-a", result["shared"])
+		assert.Equal(t, "from-b", result["extra"])
+		// Result is a fresh map, not shared with either input.
+		assert.False(t, sameMapHeader(a, result))
+		assert.False(t, sameMapHeader(b, result))
+		assert.False(t, dctx.HasDeferredValues())
+	})
+
+	t.Run("fast path does not mutate function-free input", func(t *testing.T) {
+		single := map[string]any{"key": "value"}
+		original := map[string]any{"key": "value"}
+		inputs := []map[string]any{nil, single}
+
+		_, _, err := MergeWithDeferred(cfg, inputs)
+		require.NoError(t, err)
+
+		// Input must be unchanged after the call.
+		assert.Equal(t, original, single,
+			"MergeWithDeferred fast path must not mutate function-free input")
+	})
+}
+
 func TestApplyDeferredMerges(t *testing.T) {
 	t.Run("returns nil error when context is nil", func(t *testing.T) {
 		result := map[string]interface{}{}

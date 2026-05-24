@@ -367,6 +367,49 @@ func MergeWithDeferred(
 	// Create deferred merge context.
 	dctx := NewDeferredMergeContext()
 
+	// Fast paths for trivial input layouts. The mergeComponentConfigurations
+	// pipeline calls this function ~9 times per component instance with 3-4
+	// candidate inputs (e.g., GlobalVars / BaseComponentVars / ComponentVars /
+	// ComponentOverridesVars). On real workloads most of those layers are
+	// empty — the component does not inherit, has no overrides, or only
+	// defines a few sections. Detecting these cases and skipping the full
+	// walk-and-merge avoids both the per-call Merge allocation and the
+	// per-input walk, neither of which produce useful work when the merge
+	// degenerates to "use the only non-empty layer".
+	var nonEmptyInput map[string]any
+	nonEmptyPos := 0
+	nonEmptyCount := 0
+	for i, input := range inputs {
+		if len(input) > 0 {
+			nonEmptyInput = input
+			nonEmptyPos = i
+			nonEmptyCount++
+		}
+	}
+
+	// All inputs empty: result is an empty map, dctx has no deferrals.
+	if nonEmptyCount == 0 {
+		return map[string]any{}, dctx, nil
+	}
+
+	// Exactly one non-empty input: skip the Merge call entirely. Walk the
+	// single input at its original precedence so deferred YAML functions
+	// (if any) are tracked correctly. Empty layers above and below do not
+	// affect deferred resolution, so we can omit the no-op IncrementPrecedence
+	// calls for them — precedence ordering across layers is irrelevant when
+	// only one layer contributes values.
+	if nonEmptyCount == 1 {
+		// Advance precedence to match the position of the non-empty input.
+		// This preserves precedence semantics for any downstream consumers
+		// that inspect the dctx.
+		for i := 0; i < nonEmptyPos; i++ {
+			dctx.IncrementPrecedence()
+		}
+		walked := WalkAndDeferYAMLFunctions(dctx, nonEmptyInput, []string{})
+		dctx.IncrementPrecedence()
+		return walked, dctx, nil
+	}
+
 	// Walk each input and defer YAML functions.
 	processedInputs := make([]map[string]any, len(inputs))
 	for i, input := range inputs {

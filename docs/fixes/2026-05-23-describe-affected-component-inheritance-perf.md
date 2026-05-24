@@ -197,11 +197,15 @@ open. Optimization plan:
       (−19% locally; ~18-35s on GHA projected). Original plan
       (component-level parallelization) abandoned because it's
       already in place.
+- [x] Phase 5: skip `MergeWithDeferred` when 0 or 1 input is
+      non-empty. `mergeComponentConfigurations` Total dropped 50%
+      (1m54s → 57s), `MergeWithDeferred` Total dropped 64%, 65k
+      Merge calls eliminated, 215k walk calls eliminated. Wall-clock
+      3.3s → 3.0s locally; cumulative ~75s saved on a 2-core GHA
+      runner.
 - [ ] Phase 4: optimize `locals` extraction path.
-- [ ] Phase 5 (new): skip `MergeWithDeferred` when only one input is
-      non-empty — newly visible after Phase 3.
 - [ ] Phase 6 (new): investigate `ProcessYAMLConfigFileWithContext`
-      (1m11s) — file loading hot path.
+      (1m05s post-Phase-5) — file loading hot path.
 - [ ] Re-measure on GHA and confirm wall-clock improvement.
 
 ---
@@ -500,6 +504,69 @@ present in main without Phase 3 changes. Tracked separately.
 - `ProcessYAMLConfigFileWithContext` (1m11s) — file loading. May be
   unrelated to inheritance; deferred to Phase 6.
 
+### Phase 5 (shipped 2026-05-23) — skip MergeWithDeferred for trivial input
+
+**Root cause.** `mergeComponentConfigurations` calls
+`MergeWithDeferred` 9 times per component instance — once per
+section (vars, settings, env, auth, providers, required_providers,
+hooks, generate) plus auth-merge fan-out. Each call passes 3-4
+candidate inputs: typically `GlobalX / BaseComponentX / ComponentX /
+ComponentOverridesX`. On the customer workload, most of those
+layers are empty: components that don't inherit have empty
+`BaseComponentX`, most components have no `ComponentOverridesX`, and
+some sections (`generate`, `required_providers`, `hooks`) are empty
+for most components.
+
+Despite the empty layers, every call ran the full pipeline:
+allocate a deferred merge context, walk each input (Phase 3
+short-circuit avoids the inner deep-copy but the walk function still
+runs and increments precedence), and call `Merge` to combine all
+processed inputs (which is a deep walk over all entries even when
+all but one are empty).
+
+**Fix.** Pre-scan the inputs in `MergeWithDeferred` and short-circuit
+when the merge degenerates:
+
+- **0 non-empty inputs:** return a fresh empty map and empty dctx.
+  No walk, no merge.
+- **1 non-empty input:** advance precedence to that input's
+  position, walk just that input (so YAML functions are deferred at
+  the correct precedence), and return the walked map directly. Skip
+  the `Merge` call entirely — a merge of one map degenerates to a
+  copy of that map, and the walk's result is already the result.
+
+The downstream `ApplyDeferredMerges` is dctx-driven: when dctx has
+no deferred values (the no-functions case), it's a no-op and does
+not touch the returned map. Combined with Phase 3's
+`WalkAndDeferYAMLFunctions` short-circuit, a single-input
+function-free section is now a zero-allocation pass-through end to
+end.
+
+**Confirmed impact (mean of 3 runs, customer workload):**
+
+| Function | Phase 3 (Total / Avg / Calls) | Phase 5 (Total / Avg / Calls) | Reduction |
+|---|---:|---:|---:|
+| `mergeComponentConfigurations` | 1m54s / 12.5ms / 9,261 | **57s / 6.2ms / 9,261** | **−50% Total** |
+| `merge.MergeWithDeferred` | 1m10s / 851µs / 83,349 | **25s / 305µs / 83,349** | **−64% Total, 2.8× faster avg** |
+| `merge.Merge` Calls | 273,379 | **207,934** | **−65k calls eliminated (−24%)** |
+| `merge.WalkAndDeferYAMLFunctions` | 15.4s / 47µs / 328,218 | **6.0s / 53µs / 112,832** | **−61% Total, −215k calls (−66%)** |
+| `processComponent` | 34s / 3.7ms | **27s / 2.9ms** | **−21% Total** |
+
+**Wall-clock (local Mac, mean of 3 runs):** 3.3s → **3.0s** (−10%).
+Same caveat as Phase 3 — on many-core machines the parallelism
+absorbs much of the cumulative savings. Cumulative CPU saved
+across Phases 3+5 ≈ 150 seconds → projected **~37-75s wall-clock
+improvement on 2-4 core GHA runners** (on top of Phase 2's
+contention elimination).
+
+**Tests added (race-clean):** `TestMergeWithDeferred_TrivialInputShortCircuits`
+covers (a) zero non-empty inputs returns empty, (b) single
+non-empty function-free input returns same map header (composes with
+Phase 3 zero-alloc fast path), (c) single non-empty input with YAML
+functions defers at the correct precedence, (d) two non-empty
+inputs take the full merge path, (e) the fast path does not mutate
+the input.
+
 ### Phase 4 (open) — locals extraction
 
 `extractAndAddLocalsToContext` (22,181 calls, 14s) and
@@ -510,6 +577,11 @@ file, not per component. Likely caching opportunity: extract once
 per file, cache by file path + mtime.
 
 Expected impact: -20s CPU on this workload. Small but easy.
+
+Pre-existing data race in `extractAndAddLocalsToContext` at
+`internal/exec/stack_processor_utils.go:260` should also be
+fixed in this phase — currently surfaces under `-race` for some
+`TestHierarchicalImports_*` tests.
 
 ### Verification
 
