@@ -3,6 +3,7 @@ package exec
 import (
 	"errors"
 	"fmt"
+	"os"
 	osexec "os/exec"
 	"path/filepath"
 	"testing"
@@ -12,6 +13,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	provWorkdir "github.com/cloudposse/atmos/pkg/provisioner/workdir"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -297,6 +299,151 @@ func TestBuildInitArgs_PassVarsWithWorkspaceAndReconfigure(t *testing.T) {
 	info := schema.ConfigAndStacksInfo{SubCommand: "workspace"}
 	args := buildInitArgs(&atmosConfig, &info, "my-component.tfvars.json")
 	assert.Equal(t, []string{"init", "-reconfigure", varFileFlag, "my-component.tfvars.json"}, args)
+}
+
+// TestBuildInitArgs_ReconfigureWhenWorkdirReprovisioned verifies that -reconfigure is
+// added when the workdir was actually wiped and re-provisioned this invocation
+// (WorkdirReprovisionedKey set by the source/workdir provisioner).
+// This prevents "Do you want to migrate all workspaces?" on fresh workdirs.
+func TestBuildInitArgs_ReconfigureWhenWorkdirReprovisioned(t *testing.T) {
+	atmosConfig := schema.AtmosConfiguration{}
+	info := schema.ConfigAndStacksInfo{
+		SubCommand: "apply",
+		ComponentSection: map[string]any{
+			provWorkdir.WorkdirPathKey:          "/tmp/.workdir/terraform/demo-consumer",
+			provWorkdir.WorkdirReprovisionedKey: struct{}{},
+		},
+	}
+	args := buildInitArgs(&atmosConfig, &info, "vars.tfvars.json")
+	assert.Equal(t, []string{"init", "-reconfigure"}, args)
+}
+
+// TestBuildInitArgs_ReconfigureWhenWorkdirReprovisioned_WithPassVars verifies that both
+// -reconfigure and -var-file are added when workdir was re-provisioned and PassVars is enabled.
+func TestBuildInitArgs_ReconfigureWhenWorkdirReprovisioned_WithPassVars(t *testing.T) {
+	atmosConfig := schema.AtmosConfiguration{}
+	atmosConfig.Components.Terraform.Init.PassVars = true
+	info := schema.ConfigAndStacksInfo{
+		SubCommand: "apply",
+		ComponentSection: map[string]any{
+			provWorkdir.WorkdirPathKey:          "/tmp/.workdir/terraform/demo-consumer",
+			provWorkdir.WorkdirReprovisionedKey: struct{}{},
+		},
+	}
+	args := buildInitArgs(&atmosConfig, &info, "my-component.tfvars.json")
+	assert.Equal(t, []string{"init", "-reconfigure", varFileFlag, "my-component.tfvars.json"}, args)
+}
+
+// TestBuildInitArgs_NoReconfigureWhenWorkdirPreserved verifies that -reconfigure is NOT
+// added when the workdir exists but was not re-provisioned (TTL not expired).
+// Adding -reconfigure causes OpenTofu to treat init as fresh and prompt
+// "Do you want to migrate all workspaces?" even when the backend is unchanged.
+func TestBuildInitArgs_NoReconfigureWhenWorkdirPreserved(t *testing.T) {
+	atmosConfig := schema.AtmosConfiguration{}
+	info := schema.ConfigAndStacksInfo{
+		SubCommand: "apply",
+		ComponentSection: map[string]any{
+			provWorkdir.WorkdirPathKey: "/tmp/.workdir/terraform/demo-consumer",
+			// WorkdirReprovisionedKey intentionally absent — TTL not expired
+		},
+	}
+	args := buildInitArgs(&atmosConfig, &info, "vars.tfvars.json")
+	assert.Equal(t, []string{"init"}, args)
+}
+
+// TestBuildInitArgs_NoReconfigureWhenWorkdirPreserved_InitRunReconfigureIgnored verifies
+// that InitRunReconfigure: true is ignored for workdir components with a preserved workdir.
+// -reconfigure + workspace state dirs causes the "migrate all workspaces?" prompt even
+// when the backend is unchanged; the global flag must not override this protection.
+func TestBuildInitArgs_NoReconfigureWhenWorkdirPreserved_InitRunReconfigureIgnored(t *testing.T) {
+	atmosConfig := schema.AtmosConfiguration{}
+	atmosConfig.Components.Terraform.InitRunReconfigure = true
+	info := schema.ConfigAndStacksInfo{
+		SubCommand: "apply",
+		ComponentSection: map[string]any{
+			provWorkdir.WorkdirPathKey: "/tmp/.workdir/terraform/demo-consumer",
+			// WorkdirReprovisionedKey intentionally absent — workdir was NOT wiped
+		},
+	}
+	args := buildInitArgs(&atmosConfig, &info, "vars.tfvars.json")
+	assert.Equal(t, []string{"init"}, args)
+}
+
+// TestBuildInitArgs_ReconfigureForNonWorkdir_InitRunReconfigure verifies that
+// InitRunReconfigure: true still works as expected for non-workdir components.
+func TestBuildInitArgs_ReconfigureForNonWorkdir_InitRunReconfigure(t *testing.T) {
+	atmosConfig := schema.AtmosConfiguration{}
+	atmosConfig.Components.Terraform.InitRunReconfigure = true
+	info := schema.ConfigAndStacksInfo{
+		SubCommand:       "apply",
+		ComponentSection: map[string]any{}, // no WorkdirPathKey
+	}
+	args := buildInitArgs(&atmosConfig, &info, "vars.tfvars.json")
+	assert.Equal(t, []string{"init", "-reconfigure"}, args)
+}
+
+// TestBuildInitArgs_NoReconfigureWithoutWorkdir verifies that -reconfigure is NOT
+// added for regular (non-workdir) components unless explicitly configured.
+func TestBuildInitArgs_NoReconfigureWithoutWorkdir(t *testing.T) {
+	atmosConfig := schema.AtmosConfiguration{}
+	info := schema.ConfigAndStacksInfo{
+		SubCommand:       "apply",
+		ComponentSection: map[string]any{},
+	}
+	args := buildInitArgs(&atmosConfig, &info, "vars.tfvars.json")
+	assert.Equal(t, []string{"init"}, args)
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// prepareInitExecution — workspace file cleanup behaviour
+// ──────────────────────────────────────────────────────────────────────────────
+
+// TestPrepareInitExecution_SkipsCleanWorkspaceForWorkdir verifies that
+// .terraform/environment is NOT deleted for workdir-enabled components.
+// Deleting the file before init -reconfigure causes OpenTofu to prompt
+// "Do you want to migrate all workspaces?" because it sees workspace state
+// directories (terraform.tfstate.d/) but no active workspace recorded.
+// For workdir components the backend is always consistent so cleanup is wrong.
+func TestPrepareInitExecution_SkipsCleanWorkspaceForWorkdir(t *testing.T) {
+	tmpDir := t.TempDir()
+	tfDir := filepath.Join(tmpDir, ".terraform")
+	require.NoError(t, os.MkdirAll(tfDir, 0o755))
+	envFile := filepath.Join(tfDir, "environment")
+	require.NoError(t, os.WriteFile(envFile, []byte("myworkspace"), 0o644))
+
+	atmosConfig := schema.AtmosConfiguration{}
+	info := schema.ConfigAndStacksInfo{
+		ComponentSection: map[string]any{
+			provWorkdir.WorkdirPathKey: tmpDir,
+		},
+	}
+
+	_, err := prepareInitExecution(&atmosConfig, &info, tmpDir)
+	require.NoError(t, err)
+
+	_, statErr := os.Stat(envFile)
+	assert.NoError(t, statErr, ".terraform/environment must not be deleted for workdir components")
+}
+
+// TestPrepareInitExecution_CleansWorkspaceForNonWorkdir verifies that the standard
+// .terraform/environment cleanup still runs for non-workdir components.
+func TestPrepareInitExecution_CleansWorkspaceForNonWorkdir(t *testing.T) {
+	tmpDir := t.TempDir()
+	tfDir := filepath.Join(tmpDir, ".terraform")
+	require.NoError(t, os.MkdirAll(tfDir, 0o755))
+	envFile := filepath.Join(tfDir, "environment")
+	require.NoError(t, os.WriteFile(envFile, []byte("myworkspace"), 0o644))
+
+	atmosConfig := schema.AtmosConfiguration{}
+	info := schema.ConfigAndStacksInfo{
+		ComponentSection: map[string]any{}, // no WorkdirPathKey
+	}
+
+	_, err := prepareInitExecution(&atmosConfig, &info, tmpDir)
+	require.NoError(t, err)
+
+	_, statErr := os.Stat(envFile)
+	assert.True(t, os.IsNotExist(statErr), ".terraform/environment must be deleted for non-workdir components")
 }
 
 // ──────────────────────────────────────────────────────────────────────────────

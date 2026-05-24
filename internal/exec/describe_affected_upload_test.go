@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -185,6 +186,78 @@ func TestStripAffectedForUpload_SettingsWithoutPro(t *testing.T) {
 	assert.Len(t, result, 1)
 	// Settings should be nil when there's no pro section
 	assert.Nil(t, result[0].Settings)
+}
+
+// TestStripAffectedForUpload_PreservesProEventSchema locks in the contract that
+// stripSettings preserves the full settings.pro sub-tree opaquely. This is the
+// only thing keeping settings.pro.merge_group.checks_requested.workflows alive
+// from user YAML to the upload payload, and a future struct-tightening of
+// Affected.Settings could silently drop it. Assert the per-event schema we
+// support today: pull_request, release, drift_detection, and merge_group.
+func TestStripAffectedForUpload_PreservesProEventSchema(t *testing.T) {
+	planWorkflows := map[string]interface{}{
+		"atmos-terraform-plan.yaml": map[string]interface{}{
+			"inputs": map[string]interface{}{
+				"component": "{{ .atmos_component }}",
+				"stack":     "{{ .atmos_stack }}",
+			},
+		},
+	}
+	applyWorkflows := map[string]interface{}{
+		"atmos-terraform-apply.yaml": map[string]interface{}{
+			"inputs": map[string]interface{}{
+				"component": "{{ .atmos_component }}",
+				"stack":     "{{ .atmos_stack }}",
+			},
+		},
+	}
+
+	affected := []schema.Affected{
+		{
+			Component: "vpc",
+			Stack:     "plat-use2-dev",
+			Settings: schema.AtmosSectionMapType{
+				"pro": map[string]interface{}{
+					"enabled": true,
+					"pull_request": map[string]interface{}{
+						"opened":      map[string]interface{}{"workflows": planWorkflows},
+						"synchronize": map[string]interface{}{"workflows": planWorkflows},
+						"reopened":    map[string]interface{}{"workflows": planWorkflows},
+						"merged":      map[string]interface{}{"workflows": applyWorkflows},
+					},
+					"release": map[string]interface{}{
+						"published": map[string]interface{}{"workflows": applyWorkflows},
+					},
+					"drift_detection": map[string]interface{}{
+						"enabled": true,
+					},
+					"merge_group": map[string]interface{}{
+						"checks_requested": map[string]interface{}{"workflows": planWorkflows},
+					},
+				},
+			},
+		},
+	}
+
+	result := StripAffectedForUpload(affected)
+
+	require.Len(t, result, 1)
+	pro, ok := result[0].Settings["pro"].(map[string]interface{})
+	require.True(t, ok, "settings.pro must survive stripping as map[string]interface{}")
+
+	// Each per-event block must round-trip verbatim.
+	assert.Equal(t, true, pro["enabled"])
+	assert.NotNil(t, pro["pull_request"], "settings.pro.pull_request must round-trip")
+	assert.NotNil(t, pro["release"], "settings.pro.release must round-trip")
+	assert.NotNil(t, pro["drift_detection"], "settings.pro.drift_detection must round-trip")
+	assert.NotNil(t, pro["merge_group"], "settings.pro.merge_group must round-trip — required for GitHub merge-queue support")
+
+	// Drill into merge_group to make sure the nested workflows survive too.
+	mg, ok := pro["merge_group"].(map[string]interface{})
+	require.True(t, ok)
+	cr, ok := mg["checks_requested"].(map[string]interface{})
+	require.True(t, ok)
+	assert.Equal(t, planWorkflows, cr["workflows"])
 }
 
 func TestStripAffectedForUpload_EmptyInput(t *testing.T) {

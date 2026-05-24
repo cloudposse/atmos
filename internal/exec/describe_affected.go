@@ -1,10 +1,8 @@
 package exec
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
-	"os"
 
 	"github.com/go-git/go-git/v5/plumbing"
 	giturl "github.com/kubescape/go-git-url"
@@ -16,8 +14,10 @@ import (
 	"github.com/cloudposse/atmos/pkg/auth"
 	"github.com/cloudposse/atmos/pkg/ci"
 	cfg "github.com/cloudposse/atmos/pkg/config"
-	"github.com/cloudposse/atmos/pkg/data"
+	atmosgit "github.com/cloudposse/atmos/pkg/git"
+	ghactions "github.com/cloudposse/atmos/pkg/github/actions"
 	log "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/matrix"
 	"github.com/cloudposse/atmos/pkg/pager"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/pro"
@@ -55,8 +55,10 @@ type DescribeAffectedCmdArgs struct {
 	Skip                        []string
 	ExcludeLocked               bool
 	AuthManager                 auth.AuthManager // Optional: Auth manager for credential management (from --identity flag).
+	AuthDisabled                bool             // True when --identity=false (or alias) explicitly disables authentication; routes stack resolution to ExecuteDescribeStacksWithAuthDisabled.
 	HeadSHAOverride             string           // PR head SHA from CI event payload, used for upload correlation with Atmos Pro.
 	CIEventType                 string           // CI event type (e.g., "pull_request", "push") for upload validation.
+	TargetBranch                string           // PR target branch (e.g., "main") used to auto-fetch when refs are missing locally.
 }
 
 //go:generate go run go.uber.org/mock/mockgen@v0.6.0 -source=$GOFILE -destination=mock_$GOFILE -package=$GOPACKAGE
@@ -77,6 +79,7 @@ type describeAffectedExec struct {
 		skip []string,
 		excludeLocked bool,
 		authManager auth.AuthManager,
+		authDisabled bool,
 	) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, string, error)
 	executeDescribeAffectedWithTargetRefClone func(
 		atmosConfig *schema.AtmosConfiguration,
@@ -92,11 +95,13 @@ type describeAffectedExec struct {
 		skip []string,
 		excludeLocked bool,
 		authManager auth.AuthManager,
+		authDisabled bool,
 	) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, string, error)
 	executeDescribeAffectedWithTargetRefCheckout func(
 		atmosConfig *schema.AtmosConfiguration,
 		ref string,
 		sha string,
+		targetBranch string,
 		includeSpaceliftAdminStacks bool,
 		includeSettings bool,
 		stack string,
@@ -105,6 +110,7 @@ type describeAffectedExec struct {
 		skip []string,
 		excludeLocked bool,
 		authManager auth.AuthManager,
+		authDisabled bool,
 	) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, string, error)
 	addDependentsToAffected func(
 		atmosConfig *schema.AtmosConfiguration,
@@ -115,6 +121,7 @@ type describeAffectedExec struct {
 		skip []string,
 		onlyInStack string,
 		authManager auth.AuthManager,
+		authDisabled bool,
 	) error
 	printOrWriteToFile func(
 		atmosConfig *schema.AtmosConfiguration,
@@ -251,12 +258,29 @@ func SetDescribeAffectedFlagValueInCliArgs(flags *pflag.FlagSet, describe *Descr
 }
 
 // resolveBaseFromCI attempts to auto-detect the base commit from the CI provider.
+//
+// This function is only invoked when `ci.enabled: true` in atmos.yaml and no
+// explicit base flag was provided (see the call site above). Because the user
+// has opted into CI auto-detect, it is appropriate to mutate the runner's git
+// config (via `EnsureGitSafeDirectory`) so that downstream git commands —
+// `merge-base`, the targeted `git fetch` for shallow clones, and the
+// `HEAD~1` lookup for closed PRs — do not fail with "dubious ownership in
+// repository" inside GitHub Actions container jobs. The helper is a no-op
+// outside GitHub Actions, so it does nothing when running locally.
 func resolveBaseFromCI(describe *DescribeAffectedCmdArgs) {
 	defer perf.Track(nil, "exec.resolveBaseFromCI")()
 
 	p := ci.Detect()
 	if p == nil {
 		return
+	}
+
+	// Trust the GitHub Actions workspace before any git operation the
+	// provider is about to run. Gated by `ci.enabled` via the call site.
+	if err := atmosgit.EnsureGitSafeDirectory(); err != nil {
+		// Non-fatal: subsequent git commands will surface a clearer error
+		// if this actually matters. We log so the cause is visible.
+		log.Warn("Failed to configure git safe.directory for GitHub Actions workspace", "error", err)
 	}
 
 	resolution, err := p.ResolveBase()
@@ -272,6 +296,7 @@ func resolveBaseFromCI(describe *DescribeAffectedCmdArgs) {
 	describe.SHA = resolution.SHA
 	describe.HeadSHAOverride = resolution.HeadSHA
 	describe.CIEventType = resolution.EventType
+	describe.TargetBranch = resolution.TargetBranch
 
 	base := resolution.SHA
 	if base == "" {
@@ -306,6 +331,7 @@ func (d *describeAffectedExec) Execute(a *DescribeAffectedCmdArgs) error {
 			a.Skip,
 			a.ExcludeLocked,
 			a.AuthManager,
+			a.AuthDisabled,
 		)
 	case a.CloneTargetRef:
 		affected, headHead, baseHead, repoUrl, err = d.executeDescribeAffectedWithTargetRefClone(
@@ -322,12 +348,14 @@ func (d *describeAffectedExec) Execute(a *DescribeAffectedCmdArgs) error {
 			a.Skip,
 			a.ExcludeLocked,
 			a.AuthManager,
+			a.AuthDisabled,
 		)
 	default:
 		affected, headHead, baseHead, repoUrl, err = d.executeDescribeAffectedWithTargetRefCheckout(
 			a.CLIConfig,
 			a.Ref,
 			a.SHA,
+			a.TargetBranch,
 			a.IncludeSpaceliftAdminStacks,
 			a.IncludeSettings,
 			a.Stack,
@@ -336,6 +364,7 @@ func (d *describeAffectedExec) Execute(a *DescribeAffectedCmdArgs) error {
 			a.Skip,
 			a.ExcludeLocked,
 			a.AuthManager,
+			a.AuthDisabled,
 		)
 	}
 	if err != nil {
@@ -344,7 +373,7 @@ func (d *describeAffectedExec) Execute(a *DescribeAffectedCmdArgs) error {
 
 	// Add dependent components and stacks for each affected component.
 	if len(affected) > 0 && a.IncludeDependents {
-		err = d.addDependentsToAffected(a.CLIConfig, &affected, a.IncludeSettings, a.ProcessTemplates, a.ProcessYamlFunctions, a.Skip, a.Stack, a.AuthManager)
+		err = d.addDependentsToAffected(a.CLIConfig, &affected, a.IncludeSettings, a.ProcessTemplates, a.ProcessYamlFunctions, a.Skip, a.Stack, a.AuthManager, a.AuthDisabled)
 		if err != nil {
 			return err
 		}
@@ -362,7 +391,19 @@ func (d *describeAffectedExec) Execute(a *DescribeAffectedCmdArgs) error {
 func (d *describeAffectedExec) view(a *DescribeAffectedCmdArgs, repoUrl string, headHead, baseHead *plumbing.Reference, affected []schema.Affected) error {
 	// Handle matrix format specially - it bypasses the normal view flow.
 	if a.Format == "matrix" {
-		return writeMatrixOutput(affected, a.GithubOutputFile)
+		entries := convertAffectedToMatrix(affected)
+
+		// Resolve output file: explicit flag > CI auto-detect > stdout.
+		outputFile := a.GithubOutputFile
+		if outputFile == "" && d.atmosConfig.CI.Enabled {
+			outputFile = ghactions.GetOutputPath()
+		}
+		return matrix.WriteOutput(entries, outputFile)
+	}
+
+	// Reject --output-file for non-matrix formats — it would be silently ignored.
+	if a.GithubOutputFile != "" {
+		return fmt.Errorf("%w: --output-file is only supported with --format=matrix", errUtils.ErrInvalidFlag)
 	}
 
 	if a.Query == "" {
@@ -398,15 +439,19 @@ func (d *describeAffectedExec) uploadableQuery(args *DescribeAffectedCmdArgs, re
 		return nil
 	}
 
-	// Validate that the CI event is a pull_request event when uploading.
-	// Atmos Pro only processes pull_request webhooks, so push events cannot be correlated.
-	if args.CIEventType != "" && args.CIEventType != "pull_request" && args.CIEventType != "pull_request_target" {
+	// Validate that the CI event is one Atmos Pro can correlate when uploading.
+	// Supported events: pull_request, pull_request_target, and merge_group (GitHub merge queue).
+	// Push events and other ad-hoc triggers cannot be correlated to a check run.
+	if args.CIEventType != "" &&
+		args.CIEventType != "pull_request" &&
+		args.CIEventType != "pull_request_target" &&
+		args.CIEventType != "merge_group" {
 		return errUtils.Build(
-			fmt.Errorf("%w: detected CI event %q, but Atmos Pro only supports pull_request events", errUtils.ErrUploadRequiresPullRequestEvent, args.CIEventType),
+			fmt.Errorf("%w: detected CI event %q, but Atmos Pro only supports pull_request, pull_request_target, and merge_group events", errUtils.ErrUploadRequiresSupportedEvent, args.CIEventType),
 		).
-			WithHint("Ensure your workflow triggers on pull_request events when using --upload.").
-			WithHint("Push events and other event types are not supported for Atmos Pro uploads.").
-			WithHint("See https://atmos.tools/integrations/pro for supported CI configurations.").
+			WithHint("Trigger your workflow on pull_request, pull_request_target, or merge_group events when using --upload.").
+			WithHint("Push events and other ad-hoc triggers cannot be correlated to an Atmos Pro check run.").
+			WithHint("See https://atmos.tools/cli/configuration/settings/pro for supported CI configurations.").
 			Err()
 	}
 
@@ -527,69 +572,17 @@ func viewConfig(v *viewConfigProps) error {
 	return nil
 }
 
-// MatrixOutput represents the GitHub Actions matrix strategy format.
-type MatrixOutput struct {
-	Include []MatrixEntry `json:"include"`
-}
-
-// MatrixEntry represents a single entry in the matrix include array.
-type MatrixEntry struct {
-	Stack         string `json:"stack"`
-	Component     string `json:"component"`
-	ComponentPath string `json:"component_path"`
-	ComponentType string `json:"component_type"`
-}
-
-// convertAffectedToMatrix converts the affected list to GitHub Actions matrix format.
-func convertAffectedToMatrix(affected []schema.Affected) MatrixOutput {
-	matrix := MatrixOutput{
-		Include: make([]MatrixEntry, 0, len(affected)),
-	}
+// convertAffectedToMatrix converts the affected list to matrix entries.
+func convertAffectedToMatrix(affected []schema.Affected) []matrix.Entry {
+	entries := make([]matrix.Entry, 0, len(affected))
 	for i := range affected {
 		a := &affected[i]
-		entry := MatrixEntry{
+		entries = append(entries, matrix.Entry{
 			Stack:         a.Stack,
 			Component:     a.Component,
 			ComponentPath: a.ComponentPath,
 			ComponentType: a.ComponentType,
-		}
-		matrix.Include = append(matrix.Include, entry)
+		})
 	}
-	return matrix
-}
-
-// writeMatrixOutput writes the matrix output to stdout or a file.
-// If outputFile is specified (for $GITHUB_OUTPUT), writes in key=value format.
-// Otherwise, writes JSON to stdout.
-func writeMatrixOutput(affected []schema.Affected, outputFile string) error {
-	matrix := convertAffectedToMatrix(affected)
-	matrixJSON, err := json.Marshal(matrix)
-	if err != nil {
-		return fmt.Errorf("failed to marshal matrix output: %w", err)
-	}
-
-	if outputFile != "" {
-		// Write to file in key=value format for $GITHUB_OUTPUT.
-		// Using 0644 permissions - matrix contains only stack/component names, not secrets.
-		f, err := os.OpenFile(outputFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, defaultFilePermissions)
-		if err != nil {
-			return fmt.Errorf("failed to open output file %s: %w", outputFile, err)
-		}
-		defer f.Close()
-
-		// Write matrix=<json> format.
-		if _, err := fmt.Fprintf(f, "matrix=%s\n", string(matrixJSON)); err != nil {
-			return fmt.Errorf("failed to write to output file %s: %w", outputFile, err)
-		}
-		// Also write count for convenience.
-		if _, err := fmt.Fprintf(f, "affected_count=%d\n", len(affected)); err != nil {
-			return fmt.Errorf("failed to write count to output file %s: %w", outputFile, err)
-		}
-		log.Debug("Wrote matrix output to file", "file", outputFile, "count", len(affected))
-		return nil
-	}
-
-	// Write to stdout.
-	_ = data.Writeln(string(matrixJSON))
-	return nil
+	return entries
 }

@@ -229,43 +229,33 @@ func logServerInfo(server *mcp.Server, transportType, addr string) {
 }
 
 // initializeAIComponents initializes the AI tool registry and executor.
-// This reuses the same initialization logic as the 'atmos ai chat' command.
+// This reuses the same initialization logic as the 'atmos ai chat' command
+// by calling the canonical atmosTools.RegisterTools factory in
+// pkg/ai/tools/atmos/setup.go. Previously this function hand-rolled
+// a curated subset of seven tools, which meant docs (e.g.
+// website/docs/ai/mcp-server.mdx) and the actual exposed set drifted
+// (notably: docs advertised `describe_affected` but it was never
+// registered here). Delegating to the shared factory eliminates the
+// drift and exposes the full Atmos AI tool surface to MCP clients.
+//
+// The nil passed for the LSP manager is intentional — MCP servers do
+// not have an LSP context. RegisterTools handles this gracefully (the
+// LSP-only `validate_file_lsp` tool is skipped when lspManager is nil).
 func initializeAIComponents(atmosConfig *schema.AtmosConfiguration) (interface{}, interface{}, error) {
-	// Import cmd package will give circular dependency, so we need to inline
-	// the initialization here. This is the same pattern used in cmd/ai_chat.go
-
 	if !atmosConfig.AI.Tools.Enabled {
 		return nil, nil, errUtils.ErrAIToolsDisabled
 	}
 
 	log.Debug("Initializing AI tools")
 
-	// Create tool registry.
 	registry := tools.NewRegistry()
 
-	// Register Atmos tools.
-	if err := registry.Register(atmosTools.NewDescribeComponentTool(atmosConfig)); err != nil {
-		ui.Warningf("Failed to register describe_component tool: %v", err)
-	}
-	if err := registry.Register(atmosTools.NewListStacksTool(atmosConfig)); err != nil {
-		ui.Warningf("Failed to register list_stacks tool: %v", err)
-	}
-	if err := registry.Register(atmosTools.NewValidateStacksTool(atmosConfig)); err != nil {
-		ui.Warningf("Failed to register validate_stacks tool: %v", err)
-	}
-
-	// Register file access tools (read/write for components and stacks).
-	if err := registry.Register(atmosTools.NewReadComponentFileTool(atmosConfig)); err != nil {
-		ui.Warningf("Failed to register read_component_file tool: %v", err)
-	}
-	if err := registry.Register(atmosTools.NewReadStackFileTool(atmosConfig)); err != nil {
-		ui.Warningf("Failed to register read_stack_file tool: %v", err)
-	}
-	if err := registry.Register(atmosTools.NewWriteComponentFileTool(atmosConfig)); err != nil {
-		ui.Warningf("Failed to register write_component_file tool: %v", err)
-	}
-	if err := registry.Register(atmosTools.NewWriteStackFileTool(atmosConfig)); err != nil {
-		ui.Warningf("Failed to register write_stack_file tool: %v", err)
+	// Delegate to the shared registration factory. Errors are surfaced as
+	// warnings rather than fatals to preserve the previous hand-rolled
+	// behavior — a single tool failing to register should not prevent the
+	// MCP server from starting with the rest.
+	if err := atmosTools.RegisterTools(registry, atmosConfig, nil); err != nil {
+		ui.Warningf("Failed to register one or more AI tools: %v", err)
 	}
 
 	log.Debugf("Registered %d tools", registry.Count())

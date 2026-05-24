@@ -17,6 +17,16 @@ on:
 
   workflow_dispatch:
 
+# Grant `packages: read` so jobs that pull OCI images from ghcr.io
+# (e.g. vendor pulls in mock/acceptance tests) can authenticate with
+# the auto-generated GITHUB_TOKEN. The default PR-event scope is
+# `contents: read` only, which causes ghcr.io to reject the token with
+# `DENIED: denied` whenever credentials are sent (as happens on Windows
+# runners that have no usable Docker keychain entry for ghcr.io).
+permissions:
+  contents: read
+  packages: read
+
 env:
   TERRAFORM_VERSION: "1.9.7"
   OPEN_TOFU_VERSION: "1.9.1"
@@ -143,10 +153,17 @@ jobs:
 
       - name: Install OpenTofu
         uses: opentofu/setup-opentofu@v1
-        if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
+        if: matrix.flavor.target != 'windows'
         with:
           tofu_version: ${{ env.OPEN_TOFU_VERSION }}
           tofu_wrapper: false
+
+      - name: Install OpenTofu on Windows
+        if: matrix.flavor.target == 'windows' && ! github.event.pull_request.draft
+        shell: pwsh
+        run: |
+          atmos toolchain install opentofu/opentofu@${{ env.OPEN_TOFU_VERSION }}
+          atmos toolchain env --format github
 
       # https://github.com/hashicorp/setup-packer
       - name: Install Packer
@@ -155,16 +172,18 @@ jobs:
         with:
           version: ${{ env.PACKER_VERSION }}
 
-      # https://github.com/helmfile/helmfile-action
-      - name: Install Helmfile
-        uses: helmfile/helmfile-action@v2.0.5
+      - name: Install Helm and Helmfile
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
-        with:
-          helm-version: ${{ env.HELM_VERSION }}
-          helmfile-version: ${{ env.HELMFILE_VERSION }}
-          helmfile-args: version
-          helmfile-auto-init: "false"
-          helm-plugins: ""
+        run: |
+          atmos toolchain install --default helm/helm@${{ env.HELM_VERSION }}
+          atmos toolchain install --default helmfile/helmfile@${{ env.HELMFILE_VERSION }}
+          atmos toolchain env --format github
+
+      - name: Verify Helm and Helmfile
+        if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
+        run: |
+          helm version --short
+          helmfile version
 
       - name: Install helm-diff plugin
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
@@ -233,6 +252,16 @@ jobs:
     name: "[lint] Dockerfile"
     needs: build
     runs-on: ubuntu-latest
+    # The workflow-level `permissions:` block above (added in #2487 for
+    # `packages: read` on ghcr.io pulls) REPLACES — not extends — the default
+    # token scope for every job. That stripped the implicit
+    # `security-events: write` this job relied on for SARIF upload, breaking
+    # the post-merge run on main. Job-level `permissions:` also fully
+    # overrides the workflow-level set, so `contents: read` is re-listed here
+    # for actions/checkout.
+    permissions:
+      contents: read
+      security-events: write
     steps:
       - name: Check out code
         uses: actions/checkout@v4
@@ -460,11 +489,18 @@ jobs:
           terraform_wrapper: false
 
       - name: Install OpenTofu
-        if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
+        if: matrix.flavor.target != 'windows'
         uses: opentofu/setup-opentofu@v1
         with:
           tofu_version: ${{ env.OPEN_TOFU_VERSION }}
           tofu_wrapper: false
+
+      - name: Install OpenTofu on Windows
+        if: matrix.flavor.target == 'windows' && ! github.event.pull_request.draft
+        shell: pwsh
+        run: |
+          atmos toolchain install opentofu/opentofu@${{ env.OPEN_TOFU_VERSION }}
+          atmos toolchain env --format github
 
       # https://github.com/hashicorp/setup-packer
       - name: Install Packer
@@ -504,6 +540,9 @@ jobs:
     name: "[lint] ${{ matrix.demo-folder }}"
     needs: build
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      checks: write
     strategy:
       fail-fast: false
       matrix:

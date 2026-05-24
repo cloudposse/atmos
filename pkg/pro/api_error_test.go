@@ -10,12 +10,48 @@ import (
 )
 
 func TestAPIError_Error(t *testing.T) {
-	err := &APIError{
-		StatusCode: 500,
-		Operation:  "UploadInstanceStatus",
-		Err:        fmt.Errorf("internal server error"),
+	tests := []struct {
+		name       string
+		statusCode int
+		operation  string
+		inner      error
+		want       string
+	}{
+		{
+			name:       "5xx keeps HTTP <code> prefix",
+			statusCode: 500,
+			operation:  "UploadInstanceStatus",
+			inner:      fmt.Errorf("internal server error"),
+			want:       "UploadInstanceStatus: HTTP 500: internal server error",
+		},
+		{
+			name:       "4xx drops HTTP <code> prefix because server message is user-facing",
+			statusCode: 400,
+			operation:  "UploadInstances",
+			inner:      fmt.Errorf("Drift detection validation failed"),
+			want:       "UploadInstances: Drift detection validation failed",
+		},
+		{
+			name:       "404 also drops HTTP prefix",
+			statusCode: 404,
+			operation:  "LockStack",
+			inner:      fmt.Errorf("workspace not found"),
+			want:       "LockStack: workspace not found",
+		},
+		{
+			name:       "200 (unexpected, but defined) keeps HTTP prefix",
+			statusCode: 200,
+			operation:  "Op",
+			inner:      fmt.Errorf("something"),
+			want:       "Op: HTTP 200: something",
+		},
 	}
-	assert.Equal(t, "UploadInstanceStatus: HTTP 500: internal server error", err.Error())
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := &APIError{StatusCode: tt.statusCode, Operation: tt.operation, Err: tt.inner}
+			assert.Equal(t, tt.want, err.Error())
+		})
+	}
 }
 
 func TestAPIError_Unwrap(t *testing.T) {

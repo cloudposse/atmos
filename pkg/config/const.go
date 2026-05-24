@@ -108,6 +108,8 @@ const (
 	AnsibleInventorySectionName       = "inventory"
 	WorkspaceSectionName              = "workspace"
 	AuthSectionName                   = "auth"
+	RequiredVersionSectionName        = "required_version"
+	RequiredProvidersSectionName      = "required_providers"
 	GenerateSectionName               = "generate"
 	ProvisionSectionName              = "provision"
 	InheritanceSectionName            = "inheritance"
@@ -161,6 +163,8 @@ const (
 	// Auth flags.
 	IdentityFlagName          = "identity" // Flag name without prefix.
 	IdentityFlag              = "--identity"
+	IdentityFlagShortName     = "i"
+	IdentityFlagShort         = "-i"
 	IdentityFlagSelectValue   = "__SELECT__"   // Special value when --identity is used without argument.
 	IdentityFlagDisabledValue = "__DISABLED__" // Special value when --identity=false (skip authentication).
 

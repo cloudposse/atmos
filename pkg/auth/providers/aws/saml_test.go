@@ -206,6 +206,10 @@ func (s stubSamlMgr) ResolveProviderConfig(string) (*schema.Provider, bool) {
 	return nil, false
 }
 
+func (s stubSamlMgr) MaybeOfferAnyProfileFallback(context.Context) error {
+	return nil
+}
+
 func (s stubSamlMgr) GetRealm() realm.RealmInfo {
 	return realm.RealmInfo{}
 }

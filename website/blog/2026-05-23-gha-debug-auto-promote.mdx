@@ -1,0 +1,45 @@
+---
+slug: gha-debug-auto-promote
+title: "Atmos auto-detects GitHub Actions debug logging"
+authors: [osterman]
+tags: [enhancement, dx]
+---
+
+GitHub Actions has a built-in ["Re-run with debug logging"](https://github.blog/changelog/2022-05-24-github-actions-re-run-jobs-with-debug-logging/) button: when a workflow fails, you click it and the next run launches with runner and step debug logging turned on. Atmos now auto-detects that signal — when you re-run with debug logging, Atmos switches its own log level to `Debug` for the run. No need to remember to also set `ATMOS_LOGS_LEVEL=Debug` in your workflow YAML.
+
+<!--truncate-->
+
+## What Changed
+
+When all of the following are true, Atmos sets its log level to `Debug` for the current run and announces the change at startup:
+
+- `ci.enabled: true` in your `atmos.yaml`.
+- Atmos detects it is running in a CI provider that exposes a "debug mode" signal (today: GitHub Actions).
+- That provider reports debug mode is active for the current run. For GitHub Actions, that means either `ACTIONS_RUNNER_DEBUG=true` or `ACTIONS_STEP_DEBUG=true` is set — which is exactly what the "Re-run with debug logging" button does for you.
+
+When the auto-detect fires, you'll see a single Info line in the logs so it's obvious why the output got louder:
+
+```
+INFO CI provider debug mode detected — using Debug log level for this run provider=github-actions from=Info
+```
+
+## Why This Matters
+
+When something goes wrong in a workflow, debugging Atmos is usually just as important as debugging the workflow around it. The "Re-run with debug logging" button is meant to be one switch that makes everything in the run verbose — but a tool that ignores it forces you back into a per-tool dance: set this env var, add that flag, edit the workflow YAML, re-trigger the job. Atmos now picks up the signal on its own so the button does what you'd expect.
+
+The auto-detected level intentionally outranks `--logs-level` and `ATMOS_LOGS_LEVEL`. The CI-side debug signal is set at the repo or workflow level by the runner itself, so a per-invocation `--logs-level Warning` in your workflow YAML no longer hides debug information when you're actively debugging the run.
+
+## How to Use It
+
+You don't have to do anything in Atmos. Make sure `ci.enabled: true` is set in your `atmos.yaml`, and then use the existing GitHub Actions debug controls:
+
+- **Per-run**: GitHub's "Re-run with debug logging" button (the primary path).
+- **Always-on**: set `ACTIONS_STEP_DEBUG=true` as a repository or organization variable to enable step debug logging for every workflow run.
+
+See [GitHub's docs on enabling debug logging](https://docs.github.com/en/actions/how-tos/monitor-workflows/enable-debug-logging) for the full list of options.
+
+If you don't have `ci.enabled: true`, or you're running outside of GitHub Actions, the auto-detect is a no-op — your configured log level applies as before.
+
+## Get Involved
+
+Have feedback or want to suggest improvements? Open an issue on [GitHub](https://github.com/cloudposse/atmos/issues) or drop into the [Cloud Posse Slack community](https://slack.cloudposse.com) and let us know.

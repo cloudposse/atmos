@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	provWorkdir "github.com/cloudposse/atmos/pkg/provisioner/workdir"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -94,7 +95,15 @@ func buildInitSubcommandArgs(
 	}
 	*componentPath = newPath
 
-	if atmosConfig.Components.Terraform.InitRunReconfigure {
+	// For workdir components, ignore InitRunReconfigure when the workdir was not
+	// re-provisioned — see buildInitArgs for the full rationale.
+	_, hasWorkdir := info.ComponentSection[provWorkdir.WorkdirPathKey].(string)
+	_, wasReprovisioned := info.ComponentSection[provWorkdir.WorkdirReprovisionedKey]
+	useReconfigure := wasReprovisioned
+	if !hasWorkdir {
+		useReconfigure = useReconfigure || atmosConfig.Components.Terraform.InitRunReconfigure
+	}
+	if useReconfigure {
 		allArgsAndFlags = append(allArgsAndFlags, "-reconfigure")
 	}
 	if atmosConfig.Components.Terraform.Init.PassVars {

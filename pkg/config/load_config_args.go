@@ -45,9 +45,20 @@ func loadConfigFromCLIArgs(v *viper.Viper, configAndStacksInfo *schema.ConfigAnd
 		return fmt.Errorf("%w: no config files found from command line arguments (--config or --config-path)", errUtils.ErrAtmosArgConfigNotFound)
 	}
 
+	setEnv(v)
+
 	if err := v.Unmarshal(atmosConfig, atmosDecodeHook()); err != nil {
 		return err
 	}
+
+	// Fix auth.identities after Viper unmarshal (same as in main LoadConfig flow).
+	// Viper treats dots in map keys as nested paths, which breaks identity names like "product.usa".
+	if err := fixAuthIdentities(v, atmosConfig); err != nil {
+		return err
+	}
+
+	// Preserve case-sensitive map keys (same as in main LoadConfig flow).
+	preserveCaseSensitiveMaps(v, atmosConfig)
 
 	atmosConfig.CliConfigPath = connectPaths(configPaths)
 	return nil

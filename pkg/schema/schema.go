@@ -30,6 +30,12 @@ type ProfilesConfig struct {
 	// If relative, resolved from atmos.yaml directory.
 	// If absolute, used as-is.
 	BasePath string `yaml:"base_path,omitempty" json:"base_path,omitempty" mapstructure:"base_path"`
+
+	// Default is the name of a profile loaded automatically when neither the
+	// --profile flag nor the ATMOS_PROFILE environment variable is set.
+	// The default is treated as implicit: an explicit --profile or ATMOS_PROFILE
+	// always wins, and it does not suppress the interactive identity fallback.
+	Default string `yaml:"default,omitempty" json:"default,omitempty" mapstructure:"default"`
 }
 
 // ConfigMetadata contains metadata about a configuration file or profile.
@@ -275,15 +281,23 @@ type EditorConfig struct {
 
 // Toolchain configures the built-in CLI toolchain management system for installing and managing external tools.
 type Toolchain struct {
-	InstallPath     string              `yaml:"install_path" json:"install_path" mapstructure:"install_path"`
-	FilePath        string              `yaml:"file_path" json:"file_path" mapstructure:"file_path"`
-	ToolsDir        string              `yaml:"tools_dir" json:"tools_dir" mapstructure:"tools_dir"`
-	VersionsFile    string              `yaml:"versions_file" json:"versions_file" mapstructure:"versions_file"`
-	LockFile        string              `yaml:"lock_file,omitempty" json:"lock_file,omitempty" mapstructure:"lock_file"`
-	UseToolVersions bool                `yaml:"use_tool_versions" json:"use_tool_versions" mapstructure:"use_tool_versions"`
-	UseLockFile     bool                `yaml:"use_lock_file" json:"use_lock_file" mapstructure:"use_lock_file"`
-	Registries      []ToolchainRegistry `yaml:"registries,omitempty" json:"registries,omitempty" mapstructure:"registries"`
-	Aliases         map[string]string   `yaml:"aliases,omitempty" json:"aliases,omitempty" mapstructure:"aliases"`
+	InstallPath     string                 `yaml:"install_path" json:"install_path" mapstructure:"install_path"`
+	FilePath        string                 `yaml:"file_path" json:"file_path" mapstructure:"file_path"`
+	ToolsDir        string                 `yaml:"tools_dir" json:"tools_dir" mapstructure:"tools_dir"`
+	VersionsFile    string                 `yaml:"versions_file" json:"versions_file" mapstructure:"versions_file"`
+	LockFile        string                 `yaml:"lock_file,omitempty" json:"lock_file,omitempty" mapstructure:"lock_file"`
+	UseToolVersions bool                   `yaml:"use_tool_versions" json:"use_tool_versions" mapstructure:"use_tool_versions"`
+	UseLockFile     bool                   `yaml:"use_lock_file" json:"use_lock_file" mapstructure:"use_lock_file"`
+	Verification    *ToolchainVerification `yaml:"verification,omitempty" json:"verification,omitempty" mapstructure:"verification"`
+	Registries      []ToolchainRegistry    `yaml:"registries,omitempty" json:"registries,omitempty" mapstructure:"registries"`
+	Aliases         map[string]string      `yaml:"aliases,omitempty" json:"aliases,omitempty" mapstructure:"aliases"`
+}
+
+// ToolchainVerification configures package integrity and signature checks.
+type ToolchainVerification struct {
+	Checksums       string `yaml:"checksums,omitempty" json:"checksums,omitempty" mapstructure:"checksums"`
+	Signatures      string `yaml:"signatures,omitempty" json:"signatures,omitempty" mapstructure:"signatures"`
+	VerifierInstall string `yaml:"verifier_install,omitempty" json:"verifier_install,omitempty" mapstructure:"verifier_install"`
 }
 
 // ToolchainRegistry defines a registry source for tool metadata.
@@ -479,6 +493,11 @@ type Terraform struct {
 	// PluginCacheDir is an optional custom path for the plugin cache.
 	// If empty and PluginCache is true, uses XDG cache: ~/.cache/atmos/terraform/plugins.
 	PluginCacheDir string `yaml:"plugin_cache_dir,omitempty" json:"plugin_cache_dir,omitempty" mapstructure:"plugin_cache_dir"`
+	// AutoProvisionWorkdirForOutputs controls whether Atmos automatically provisions
+	// JIT working directories before running terraform output.
+	// When true (default), output fetching transparently provisions the workdir
+	// if provision.workdir.enabled is set on the referenced component.
+	AutoProvisionWorkdirForOutputs bool `yaml:"auto_provision_workdir_for_outputs" json:"auto_provision_workdir_for_outputs" mapstructure:"auto_provision_workdir_for_outputs"`
 	// Source holds global source configuration defaults for JIT-vendored components.
 	Source *SourceSettings `yaml:"source,omitempty" json:"source,omitempty" mapstructure:"source"`
 	// CI holds terraform-specific CI configuration (e.g., exit code mapping).
@@ -596,8 +615,11 @@ type CIChecksStatusesConfig struct {
 
 // CICommentsConfig configures PR/MR comment integration.
 // GitHub: PR comments, GitLab: MR notes.
+//
+// Enabled is *bool so callers can distinguish "unset" (nil, default applies)
+// from explicit false. Default is true when omitted; see `isCommentsEnabled`.
 type CICommentsConfig struct {
-	Enabled  bool   `yaml:"enabled,omitempty" json:"enabled,omitempty" mapstructure:"enabled"`
+	Enabled  *bool  `yaml:"enabled,omitempty" json:"enabled,omitempty" mapstructure:"enabled"`
 	Behavior string `yaml:"behavior,omitempty" json:"behavior,omitempty" mapstructure:"behavior"` // create, update, upsert
 	Template string `yaml:"template,omitempty" json:"template,omitempty" mapstructure:"template"`
 }
@@ -999,8 +1021,16 @@ type ConfigAndStacksInfo struct {
 	//   - pkg/auth already imports pkg/schema (for ConfigAndStacksInfo)
 	//   - This would create: schema → auth → schema (circular dependency error)
 	//   - Type assertions are used at usage sites to recover type safety
-	AuthManager               any
-	ComponentBackendType      string
+	AuthManager          any
+	AuthDisabled         bool
+	ComponentBackendType string
+	// RequiredVersion is the Terraform version constraint (e.g., ">= 1.10.1").
+	// This is extracted from terraform.required_version or components.terraform.<name>.required_version.
+	RequiredVersion string
+	// RequiredProviders maps provider names to their configuration.
+	// Example: {"aws": {"source": "hashicorp/aws", "version": "~> 5.0"}}.
+	// This is extracted from terraform.required_providers or components.terraform.<name>.required_providers.
+	RequiredProviders         map[string]map[string]any
 	AdditionalArgsAndFlags    []string
 	GlobalOptions             []string
 	BasePath                  string
@@ -1062,6 +1092,12 @@ type ConfigAndStacksInfo struct {
 	Identity                  string
 	ClusterName               string // EKS cluster name from --cluster-name flag.
 	NeedsPathResolution       bool   // True if ComponentFromArg is a path that needs resolution.
+
+	// PerComponentHook is called after each component executes in multi-component mode
+	// (--all, --query, --components). Receives a snapshot of info with Component/Stack
+	// set to the executed component, combined stdout+stderr output, and the execution
+	// error (nil on success). Nil means no per-component callback.
+	PerComponentHook func(info *ConfigAndStacksInfo, output string, execErr error)
 }
 
 // GetComponentEnvSection returns the component's env section map.
@@ -1172,15 +1208,17 @@ type Affected struct {
 }
 
 type BaseComponentConfig struct {
-	BaseComponentVars         AtmosSectionMapType
-	BaseComponentSettings     AtmosSectionMapType
-	BaseComponentEnv          AtmosSectionMapType
-	BaseComponentAuth         AtmosSectionMapType
-	BaseComponentDependencies AtmosSectionMapType
-	BaseComponentLocals       AtmosSectionMapType // Component-level locals for template processing.
-	BaseComponentMetadata     AtmosSectionMapType
-	BaseComponentProviders    AtmosSectionMapType
-	BaseComponentHooks        AtmosSectionMapType
+	BaseComponentVars              AtmosSectionMapType
+	BaseComponentSettings          AtmosSectionMapType
+	BaseComponentEnv               AtmosSectionMapType
+	BaseComponentAuth              AtmosSectionMapType
+	BaseComponentDependencies      AtmosSectionMapType
+	BaseComponentLocals            AtmosSectionMapType // Component-level locals for template processing.
+	BaseComponentMetadata          AtmosSectionMapType
+	BaseComponentProviders         AtmosSectionMapType
+	BaseComponentRequiredProviders AtmosSectionMapType
+	BaseComponentRequiredVersion   string
+	BaseComponentHooks             AtmosSectionMapType
 	// BaseComponentGenerate holds the generate section configuration from the base component,
 	// defining auxiliary files to be generated for this component.
 	BaseComponentGenerate                  AtmosSectionMapType

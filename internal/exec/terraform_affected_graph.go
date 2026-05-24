@@ -68,6 +68,7 @@ func getAffectedWithRepoPath(args *DescribeAffectedCmdArgs) ([]schema.Affected, 
 		args.Skip,
 		args.ExcludeLocked,
 		args.AuthManager,
+		args.AuthDisabled,
 	)
 	return affectedList, err
 }
@@ -88,6 +89,7 @@ func getAffectedWithClone(args *DescribeAffectedCmdArgs) ([]schema.Affected, err
 		args.Skip,
 		args.ExcludeLocked,
 		args.AuthManager,
+		args.AuthDisabled,
 	)
 	return affectedList, err
 }
@@ -98,6 +100,7 @@ func getAffectedWithCheckout(args *DescribeAffectedCmdArgs) ([]schema.Affected, 
 		args.CLIConfig,
 		args.Ref,
 		args.SHA,
+		args.TargetBranch,
 		args.IncludeSpaceliftAdminStacks,
 		args.IncludeSettings,
 		args.Stack,
@@ -106,6 +109,7 @@ func getAffectedWithCheckout(args *DescribeAffectedCmdArgs) ([]schema.Affected, 
 		args.Skip,
 		args.ExcludeLocked,
 		args.AuthManager,
+		args.AuthDisabled,
 	)
 	return affectedList, err
 }
@@ -132,7 +136,7 @@ func buildFilteredDependencyGraph(
 	affectedList []schema.Affected,
 ) (*dependency.Graph, error) {
 	// Get all stacks.
-	stacks, err := ExecuteDescribeStacks(
+	stacks, err := ExecuteDescribeStacksWithAuthDisabled(
 		args.CLIConfig,
 		"",  // all stacks
 		nil, // all components
@@ -144,6 +148,7 @@ func buildFilteredDependencyGraph(
 		false,
 		args.Skip,
 		args.AuthManager,
+		args.AuthDisabled,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("error describing stacks: %w", err)

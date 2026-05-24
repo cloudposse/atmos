@@ -14,7 +14,7 @@ jobs:
       - extras=s3-cache
       - private=false
     container:
-      image: ghcr.io/cloudposse/atmos:1.214.0
+      image: ghcr.io/cloudposse/atmos:1.215.0
     permissions:
       contents: read
       id-token: write
@@ -67,12 +67,6 @@ jobs:
       - name: Generate NOTICE file
         run: ./scripts/generate-notice.sh
 
-      - name: Build atmos from source
-        env:
-          CGO_ENABLED: "0"
-          GOFLAGS: -buildvcs=false
-        run: go build -o /tmp/atmos-dev .
-
       # Format HCL files in test fixtures and examples
       - name: Format HCL
         run: |
@@ -81,11 +75,11 @@ jobs:
 
       # Regenerate README.md from README.yaml
       - name: Regenerate README
-        run: /tmp/atmos-dev docs generate readme
+        run: atmos docs generate readme
 
       - name: Commit fixes via Atmos Pro
         env:
           ATMOS_LOGS_LEVEL: debug
           ATMOS_PRO_WORKSPACE_ID: ${{ vars.ATMOS_PRO_WORKSPACE_ID }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: /tmp/atmos-dev pro commit -m "[autocommit] formatting fixes" --all
+        run: atmos pro commit -m "[autocommit] formatting fixes" --all

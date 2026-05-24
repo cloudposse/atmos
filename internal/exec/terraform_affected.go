@@ -30,6 +30,7 @@ func getAffectedComponents(args *DescribeAffectedCmdArgs) ([]schema.Affected, er
 			args.Skip,
 			args.ExcludeLocked,
 			args.AuthManager,
+			args.AuthDisabled,
 		)
 		return affectedList, err
 	case args.CloneTargetRef:
@@ -47,6 +48,7 @@ func getAffectedComponents(args *DescribeAffectedCmdArgs) ([]schema.Affected, er
 			args.Skip,
 			args.ExcludeLocked,
 			args.AuthManager,
+			args.AuthDisabled,
 		)
 		return affectedList, err
 	default:
@@ -54,6 +56,7 @@ func getAffectedComponents(args *DescribeAffectedCmdArgs) ([]schema.Affected, er
 			args.CLIConfig,
 			args.Ref,
 			args.SHA,
+			args.TargetBranch,
 			args.IncludeSpaceliftAdminStacks,
 			args.IncludeSettings,
 			args.Stack,
@@ -62,6 +65,7 @@ func getAffectedComponents(args *DescribeAffectedCmdArgs) ([]schema.Affected, er
 			args.Skip,
 			args.ExcludeLocked,
 			args.AuthManager,
+			args.AuthDisabled,
 		)
 		return affectedList, err
 	}
@@ -94,6 +98,7 @@ func ExecuteTerraformAffected(args *DescribeAffectedCmdArgs, info *schema.Config
 			args.Skip,
 			"",
 			args.AuthManager,
+			args.AuthDisabled,
 		)
 		if err != nil {
 			return err

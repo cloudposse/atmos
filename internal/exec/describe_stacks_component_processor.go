@@ -8,6 +8,7 @@ import (
 
 	"github.com/go-viper/mapstructure/v2"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/auth"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	log "github.com/cloudposse/atmos/pkg/logger"
@@ -43,6 +44,18 @@ type processComponentTypeOpts struct {
 	checkIncludeEmpty bool
 }
 
+// componentAuthManagerResolver builds a per-component AuthManager for the given
+// component section. It mirrors the signature of createComponentAuthManager so
+// that describeStacksProcessor can inject a test double. See
+// docs/fixes/2026-04-24-list-instances-per-component-auth.md for context.
+type componentAuthManagerResolver func(
+	atmosConfig *schema.AtmosConfiguration,
+	componentConfig map[string]any,
+	component string,
+	stack string,
+	parentAuthManager auth.AuthManager,
+) (auth.AuthManager, error)
+
 // describeStacksProcessor holds the immutable configuration and the mutable result map
 // for a single call to ExecuteDescribeStacks.  All processing methods are attached to
 // this struct so that they share configuration without requiring long argument lists.
@@ -54,10 +67,14 @@ type describeStacksProcessor struct {
 	componentTypes       []string
 	processTemplates     bool
 	processYamlFunctions bool
+	authDisabled         bool
 	includeEmptyStacks   bool
 	skip                 []string
 	authManager          auth.AuthManager
 	finalStacksMap       map[string]any
+	// componentAuthResolver builds a per-component AuthManager; defaults to
+	// createComponentAuthManager and is overridable in tests.
+	componentAuthResolver componentAuthManagerResolver
 }
 
 // newDescribeStacksProcessor creates a processor with an empty result map.
@@ -69,19 +86,91 @@ func newDescribeStacksProcessor( //nolint:revive // argument-limit: constructor 
 	skip []string,
 	authManager auth.AuthManager,
 ) *describeStacksProcessor {
+	return newDescribeStacksProcessorWithAuthDisabled(
+		atmosConfig,
+		filterByStack,
+		components, componentTypes, sections,
+		processTemplates, processYamlFunctions, includeEmptyStacks,
+		skip,
+		authManager,
+		false,
+	)
+}
+
+func newDescribeStacksProcessorWithAuthDisabled( //nolint:revive // argument-limit: constructor needs all config params.
+	atmosConfig *schema.AtmosConfiguration,
+	filterByStack string,
+	components, componentTypes, sections []string,
+	processTemplates, processYamlFunctions, includeEmptyStacks bool,
+	skip []string,
+	authManager auth.AuthManager,
+	authDisabled bool,
+) *describeStacksProcessor {
 	return &describeStacksProcessor{
-		atmosConfig:          atmosConfig,
-		filterByStack:        filterByStack,
-		components:           components,
-		sections:             sections,
-		componentTypes:       componentTypes,
-		processTemplates:     processTemplates,
-		processYamlFunctions: processYamlFunctions,
-		includeEmptyStacks:   includeEmptyStacks,
-		skip:                 skip,
-		authManager:          authManager,
-		finalStacksMap:       make(map[string]any),
+		atmosConfig:           atmosConfig,
+		filterByStack:         filterByStack,
+		components:            components,
+		sections:              sections,
+		componentTypes:        componentTypes,
+		processTemplates:      processTemplates,
+		processYamlFunctions:  processYamlFunctions,
+		authDisabled:          authDisabled,
+		includeEmptyStacks:    includeEmptyStacks,
+		skip:                  skip,
+		authManager:           authManager,
+		finalStacksMap:        make(map[string]any),
+		componentAuthResolver: createComponentAuthManager,
 	}
+}
+
+// shouldResolvePerComponentAuth reports whether the per-component AuthManager
+// resolver should run for this processor configuration. Per-component auth is
+// needed whenever the component will be processed by either YAML functions
+// (e.g. !terraform.state, !terraform.output) or Go templates (e.g.
+// atmos.Component), because both paths consume info.AuthContext to authenticate
+// terraform subprocesses against remote backends.
+//
+// When both flags are false, no template or YAML-function evaluation will
+// occur on this component, so the authManager is not consulted downstream and
+// resolution can be skipped.
+//
+// See docs/fixes/2026-04-24-list-instances-per-component-auth.md for the fix
+// that widened this condition from processYamlFunctions-only to include
+// templates (the atmos.Component path).
+func shouldResolvePerComponentAuth(processTemplates, processYamlFunctions bool) bool {
+	return processTemplates || processYamlFunctions
+}
+
+// resolveComponentAuthManager returns the AuthManager to use for this component.
+// It returns the parent AuthManager unchanged when per-component resolution is
+// disabled (see shouldResolvePerComponentAuth) or when the component does not
+// declare its own default identity in its auth section. When the component
+// declares a default identity, resolver errors are fatal: falling back to the
+// parent manager could read the wrong backend/account.
+func (p *describeStacksProcessor) resolveComponentAuthManager(
+	componentSection map[string]any,
+	componentName, stackName string,
+) (auth.AuthManager, error) {
+	componentAuthManager := p.authManager
+	if p.authDisabled || !shouldResolvePerComponentAuth(p.processTemplates, p.processYamlFunctions) {
+		return componentAuthManager, nil
+	}
+	authSection, hasAuth := componentSection[cfg.AuthSectionName].(map[string]any)
+	if !hasAuth || !hasDefaultIdentity(authSection) {
+		return componentAuthManager, nil
+	}
+	resolver := p.componentAuthResolver
+	if resolver == nil {
+		resolver = createComponentAuthManager
+	}
+	resolved, createErr := resolver(p.atmosConfig, componentSection, componentName, stackName, p.authManager)
+	if createErr != nil {
+		return componentAuthManager, fmt.Errorf("%w: failed to resolve auth for component %q in stack %q: %w", errUtils.ErrAuthManager, componentName, stackName, createErr)
+	}
+	if resolved != nil {
+		return resolved, nil
+	}
+	return componentAuthManager, nil
 }
 
 // processStackFile processes one stack file, iterating over all requested component types.
@@ -239,18 +328,12 @@ func (p *describeStacksProcessor) processComponentEntry( //nolint:gocognit,reviv
 		return err
 	}
 	info.Context = resolvedContext
+	info.AuthDisabled = p.authDisabled
 
-	// Resolve per-component auth when YAML functions will be processed (the only consumer of auth context).
-	// This enables each component to use its own identity for !terraform.state reads.
-	componentAuthManager := p.authManager
-	if p.processYamlFunctions {
-		authSection, hasAuth := componentSection[cfg.AuthSectionName].(map[string]any)
-		if hasAuth && hasDefaultIdentity(authSection) {
-			resolved, createErr := createComponentAuthManager(p.atmosConfig, componentSection, componentName, stackName, p.authManager)
-			if createErr == nil && resolved != nil {
-				componentAuthManager = resolved
-			}
-		}
+	// Resolve the per-component auth manager (may fall back to the parent).
+	componentAuthManager, err := p.resolveComponentAuthManager(componentSection, componentName, stackName)
+	if err != nil {
+		return err
 	}
 	propagateAuth(&info, componentAuthManager)
 
