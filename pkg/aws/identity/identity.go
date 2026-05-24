@@ -255,6 +255,27 @@ func LoadConfigWithAuth(
 	assumeRoleDuration time.Duration,
 	authContext *schema.AWSAuthContext,
 ) (aws.Config, error) {
+	return LoadConfigWithAuthAndEnv(ctx, region, roleArn, assumeRoleDuration, authContext, nil)
+}
+
+// LoadConfigWithAuthAndEnv extends LoadConfigWithAuth with an envOverlay
+// derived from a component's `env` section (see
+// `internal/terraform_backend.ExtractComponentEnvOverlay`). Used by in-process
+// backend readers so `!terraform.state` matches `!terraform.output`'s
+// subprocess credential resolution for users encoding per-namespace AWS
+// profiles in `env`.
+//
+// Precedence (lowest -> highest): process env -> envOverlay -> authContext.
+// authContext, when non-nil, wins outright — the Atmos auth path remains
+// canonical and the overlay is ignored for that call.
+func LoadConfigWithAuthAndEnv(
+	ctx context.Context,
+	region string,
+	roleArn string,
+	assumeRoleDuration time.Duration,
+	authContext *schema.AWSAuthContext,
+	envOverlay map[string]string,
+) (aws.Config, error) {
 	defer perf.Track(nil, "identity.LoadConfigWithAuth")()
 
 	var cfgOpts []func(*config.LoadOptions) error
@@ -278,6 +299,29 @@ func LoadConfigWithAuth(
 		// Use region from auth context if not explicitly provided.
 		if region == "" && authContext.Region != "" {
 			region = authContext.Region
+		}
+	} else if envOverlay != nil {
+		// envOverlay layers above process env but below Atmos auth.
+		// Only applied when authContext is absent.
+		log.Debug("Using component env overlay for AWS SDK credentials",
+			"profile", envOverlay["AWS_PROFILE"],
+			"region", envOverlay["AWS_REGION"],
+		)
+		if p := envOverlay["AWS_PROFILE"]; p != "" {
+			cfgOpts = append(cfgOpts, config.WithSharedConfigProfile(p))
+		}
+		if cf := envOverlay["AWS_CONFIG_FILE"]; cf != "" {
+			cfgOpts = append(cfgOpts, config.WithSharedConfigFiles([]string{cf}))
+		}
+		if creds := envOverlay["AWS_SHARED_CREDENTIALS_FILE"]; creds != "" {
+			cfgOpts = append(cfgOpts, config.WithSharedCredentialsFiles([]string{creds}))
+		}
+		if region == "" {
+			if r := envOverlay["AWS_REGION"]; r != "" {
+				region = r
+			} else if r := envOverlay["AWS_DEFAULT_REGION"]; r != "" {
+				region = r
+			}
 		}
 	} else {
 		log.Debug("Using standard AWS SDK credential resolution (no auth context provided)")
