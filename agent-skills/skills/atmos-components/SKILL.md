@@ -481,17 +481,11 @@ Use `atmos vendor pull` to pin specific upstream versions. See the atmos-vendori
 ## Best Practices
 
 1. **One concern per component**: Each component should provision a single logical piece of infrastructure (VPC, EKS cluster, database). Do not combine resources with different lifecycles.
-
 2. **Use abstract base components**: Define catalog defaults as `abstract` components and inherit from them.
-
 3. **Keep inheritance chains shallow**: Limit to 2-3 levels for readability and debuggability.
-
 4. **Use metadata.component for instances**: When deploying the same module multiple times, use `metadata.component` to share the implementation.
-
 5. **Use metadata.name for versioning**: Set `metadata.name` to maintain stable Terraform workspace key prefixes across version upgrades.
-
 6. **Design for reuse**: Components should accept configuration through variables, not hard-coded values. Use the catalog pattern to define sensible defaults.
-
 7. **Use `atmos describe component`**: Always verify the resolved configuration before applying changes.
 
 ```bash
