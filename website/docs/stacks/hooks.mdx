@@ -88,27 +88,114 @@ hooks:
 Requires `INFRACOST_API_KEY` to be set in the shell or on the hook
 (free at [infracost.io](https://www.infracost.io)).
 
-### `kind: trivy` / `kind: checkov` / `kind: kics`
+### `kind: trivy`
 
-Three SARIF-emitting security scanners sharing one parser. Each defaults
-its `command`, `args`, and result-handling so zero configuration is
-needed.
+[Trivy](https://trivy.dev/) is an open-source security and misconfiguration
+scanner from [Aqua Security](https://www.aquasec.com/). The `trivy` kind
+runs Trivy in `config` mode against the component's Terraform sources and
+feeds the SARIF output through Atmos's shared scanner result handler.
 
 ```yaml
 hooks:
   security:
     events: [after-terraform-plan]
-    kind: trivy   # or checkov, or kics
+    kind: trivy
 ```
 
-Findings render as a compact table with severity, rule ID (linked to the
-official remediation guide when available), short description, and
-`file:line` location. The same markdown body flows to Atmos Pro and PR
-comments.
+<dl>
+  <dt>`command` (default)</dt>
+  <dd>`trivy`.</dd>
 
-KICS needs `KICS_QUERIES_PATH` set at runtime (the binary release tarball
-doesn't include the query library). Homebrew users: `export
-KICS_QUERIES_PATH=$(brew --prefix kics)/share/kics/assets/queries`.
+  <dt>`args` (default)</dt>
+  <dd>`config --format sarif --output $ATMOS_OUTPUT_FILE --quiet $ATMOS_COMPONENT_PATH`.</dd>
+
+  <dt>Output</dt>
+  <dd>Single SARIF file written directly to `$ATMOS_OUTPUT_FILE`.</dd>
+
+  <dt>`on_failure` (default)</dt>
+  <dd>`warn` — a scanner finding does not block your plan unless you override this.</dd>
+
+  <dt>Runtime requirements</dt>
+  <dd>The `trivy` binary on PATH. Declare it in `dependencies.tools` to have Atmos auto-install through the toolchain.</dd>
+
+  <dt>Authentication</dt>
+  <dd>None required for `config` scans.</dd>
+</dl>
+
+### `kind: checkov`
+
+[Checkov](https://www.checkov.io/) is an open-source policy-as-code scanner
+maintained by [Bridgecrew / Prisma Cloud](https://www.paloaltonetworks.com/prisma/cloud)
+(Palo Alto Networks). The `checkov` kind runs Checkov over the component's
+Terraform sources and feeds the SARIF output through Atmos's shared scanner
+result handler.
+
+```yaml
+hooks:
+  policy:
+    events: [after-terraform-plan]
+    kind: checkov
+```
+
+<dl>
+  <dt>`command` (default)</dt>
+  <dd>`checkov`.</dd>
+
+  <dt>`args` (default)</dt>
+  <dd>`-d $ATMOS_COMPONENT_PATH -o sarif --output-file-path $ATMOS_OUTPUT_DIR --quiet --soft-fail`. Note: Checkov's `--output-file-path` takes a *directory* and writes `results_sarif.sarif` inside it.</dd>
+
+  <dt>Output</dt>
+  <dd>SARIF file written to `$ATMOS_OUTPUT_DIR/results_sarif.sarif`; the kind's result handler reads from that nested path.</dd>
+
+  <dt>`on_failure` (default)</dt>
+  <dd>`warn`.</dd>
+
+  <dt>Runtime requirements</dt>
+  <dd>The `checkov` binary on PATH. Declare it in `dependencies.tools` to have Atmos auto-install through the toolchain.</dd>
+
+  <dt>Default env additions</dt>
+  <dd>Atmos sets `SSL_CERT_FILE` from the host CA bundle when one is detected. The PyInstaller-packaged Checkov release ships a frozen `certifi` bundle that often cannot validate the TLS chain serving `api0.prismacloud.io` (the API Checkov hits at startup to fetch guideline mappings); pointing `SSL_CERT_FILE` at the host bundle is the official PyInstaller workaround. On hosts where Atmos cannot detect a CA bundle, the kind makes no env change and Checkov falls back to its bundled `certifi`.</dd>
+</dl>
+
+### `kind: kics`
+
+[KICS](https://kics.io/) (Keeping Infrastructure as Code Secure) is an
+open-source IaC scanner from [Checkmarx](https://checkmarx.com/). The
+`kics` kind runs KICS over the component's Terraform sources and feeds
+the SARIF output through Atmos's shared scanner result handler.
+
+```yaml
+hooks:
+  iac-scan:
+    events: [after-terraform-plan]
+    kind: kics
+```
+
+<dl>
+  <dt>`command` (default)</dt>
+  <dd>`kics`.</dd>
+
+  <dt>`args` (default)</dt>
+  <dd>`scan -p $ATMOS_COMPONENT_PATH -o $ATMOS_OUTPUT_DIR --report-formats sarif --no-progress`.</dd>
+
+  <dt>Output</dt>
+  <dd>SARIF file written to `$ATMOS_OUTPUT_DIR/results.sarif`.</dd>
+
+  <dt>`on_failure` (default)</dt>
+  <dd>`warn`.</dd>
+
+  <dt>Runtime requirements</dt>
+  <dd>The `kics` binary on PATH. Declare it in `dependencies.tools` to have Atmos auto-install through the toolchain — Atmos ships a curated registry override so `kics: "<version>"` resolves correctly even though the upstream Aqua entry uses an unsupported `go_build` type.</dd>
+
+  <dt>`KICS_QUERIES_PATH`</dt>
+  <dd>Required at runtime. The KICS release tarball does not include the query library. Homebrew install: `export KICS_QUERIES_PATH=$(brew --prefix kics)/share/kics/assets/queries`. For toolchain installs, point at the unpacked `assets/queries` directory shipped alongside the release archive.</dd>
+</dl>
+
+All three scanner kinds emit SARIF and share a result handler that renders
+findings as a compact markdown table — severity, rule ID (linked to the
+upstream remediation guide when available), short description, and
+`file:line` location. The same markdown body flows to your terminal, the
+Atmos Pro run page, and PR comments.
 
 ### `kind: store`
 
@@ -163,11 +250,11 @@ The subprocess receives these environment variables:
   <dt>`ATMOS_PLANFILE`</dt>
   <dd>Planfile path on after-plan events (when threaded — currently a stub).</dd>
 
-  <dt>`ATMOS_OUTPUT_FILE`</dt>
-  <dd>Temp file path for structured output the kind's result handler should read.</dd>
-
   <dt>`ATMOS_OUTPUT_DIR`</dt>
-  <dd>Parent of `ATMOS_OUTPUT_FILE`. Use this for tools that write to a directory rather than a single file (e.g., KICS).</dd>
+  <dd>A fresh temp directory created by Atmos before the subprocess starts (via `os.MkdirTemp("", "atmos-hook-*")`). **Unique per hook invocation** — two hooks firing on the same event get separate directories and do not share state through these env vars. The directory and everything inside it is deleted automatically when the hook returns. Use this for tools that write to a directory rather than a single file (e.g., KICS, Checkov).</dd>
+
+  <dt>`ATMOS_OUTPUT_FILE`</dt>
+  <dd>`$ATMOS_OUTPUT_DIR/output`. Write structured output here for the kind's result handler to read. Same lifetime as `ATMOS_OUTPUT_DIR`.</dd>
 
   <dt>`ATMOS_STACK`</dt>
   <dd>The stack name.</dd>
@@ -175,6 +262,12 @@ The subprocess receives these environment variables:
   <dt>`ATMOS_COMPONENT`</dt>
   <dd>The component name.</dd>
 </dl>
+
+Atmos creates a fresh temp directory per hook invocation, points
+`ATMOS_OUTPUT_DIR` and `ATMOS_OUTPUT_FILE` at it, and deletes the entire
+directory after the hook returns. Custom commands can write any
+additional files they need into `$ATMOS_OUTPUT_DIR` — sibling hooks won't
+collide, and cleanup is automatic.
 
 Tool stdout/stderr stream through Atmos's I/O layer so you see them in
 real time — same UX as Terraform plan output.
@@ -243,6 +336,26 @@ Skipped hooks are logged at `INFO` level so it stays visible in CI
 output. The flag is **per-invocation only** — it doesn't propagate to
 nested commands or workflows. See [Global Flags](/cli/global-flags) for
 all options.
+
+## Hooks with `--all`
+
+`atmos terraform plan --all` / `atmos terraform apply --all` walks every
+terraform component in the selected stack(s) in dependency order and runs
+the command for each. Hooks fire just like a single-component invocation,
+with these specifics:
+
+- **Hooks fire per component**, in dependency order. `destroy --all`
+  reverses the order so dependents tear down before their dependencies.
+- **Tool auto-install runs per component.** Each component's
+  `dependencies.tools` is resolved on its own, so different components in
+  the same `--all` run can pin different versions of the same tool —
+  the toolchain PATH is rebuilt per component.
+- **`--skip-hooks` propagates across the whole run.** The flag is set on
+  the shared invocation state and applies uniformly to every component
+  `--all` visits.
+- **`on_failure: fail` aborts the remaining traversal.** A failing hook
+  on component K stops `--all` before it visits any downstream node.
+  Components already processed stay processed — there is no rollback.
 
 ## Failure Modes
 

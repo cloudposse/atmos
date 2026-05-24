@@ -1,44 +1,34 @@
 # Tool Dependencies Integration
 
-**Status**: 🟢 Shipping (workflows, custom commands, ansible components, hooks; terraform component coverage tracked below)
-
-**Last Updated**: 2026-05-22
-
 **Related PRDs**: [Toolchain Implementation](./toolchain-implementation.md) | [Lock File Support](./toolchain-lock-file.md) | [Custom Hooks](./custom-hooks.md)
 
 ## Overview
 
 Integrate tool dependencies into Atmos workflows, custom commands, and components, enabling automatic tool installation and version management based on declarative configuration.
 
-## Current Status (2026-05-22)
+## Requirements & Implementation Status
 
-The PRD originally framed this as fully unimplemented. That's outdated — the underlying infrastructure (`pkg/dependencies/`) is in place and is in active use:
-
-- **Workflows** (`pkg/workflow/executor.go`) — call `EnsureTools` before each step.
-- **Custom commands** (`cmd/cmd_utils.go`) — call `EnsureTools` before invoking the user's command.
-- **Ansible components** (`pkg/component/ansible/executor.go::ensureDependencies`) — resolve via `dependencies.NewResolver().ResolveComponentDependencies("ansible", info.StackSection, info.ComponentSection)` then call `EnsureTools` + `BuildToolchainPATH`.
-- **Hooks** (`pkg/hooks/hooks.go::preflight`) — same pattern as ansible; resolves `dependencies.tools` from the component section, installs missing tools, builds a toolchain PATH used by the subprocess.
-
-What's still missing:
-
-- **Terraform components** don't yet call `EnsureTools` — `atmos terraform plan` doesn't auto-install tools declared in a terraform component's `dependencies.tools` block. The hook engine fills this gap for tools that hooks need, but the main terraform binary itself still relies on operator PATH. This is the natural next step.
-- **`"latest"` doesn't normalize for PATH**: `isConstraint("latest") == false`, so `resolveConstraints` doesn't rewrite the version, but `BuildToolchainPATH` then constructs the bin dir using the literal `"latest"` string and the resulting path doesn't exist. Users must pin a concrete version or use a SemVer constraint (e.g., `~> 0.10`). Either the resolver should treat `"latest"` as a constraint that resolves to the highest available, or `BuildToolchainPATH` should look up the resolved version. Tracked below.
+| Requirement | Scope | Status | Reference |
+|---|---|---|---|
+| Resolve `dependencies.tools` from declaration scope | All scopes | Implemented | `pkg/dependencies/` resolver |
+| Auto-install missing tools before execution | Workflows | Implemented | `pkg/workflow/executor.go` calls `EnsureTools` before running each step |
+| Auto-install missing tools before execution | Custom commands | Implemented | `cmd/cmd_utils.go` calls `EnsureTools` before invoking the user's command |
+| Auto-install missing tools before execution | Ansible components | Implemented | `pkg/component/ansible/executor.go::ensureDependencies` resolves deps, calls `EnsureTools`, builds toolchain PATH |
+| Auto-install missing tools before execution | Hooks | Implemented | `pkg/hooks/hooks.go::preflight` resolves `dependencies.tools` from the component section, installs, builds toolchain PATH for the subprocess |
+| Auto-install missing tools before execution | Terraform components | Not implemented | `atmos terraform plan/apply` does not call `EnsureTools` for the terraform binary itself. Tools that the hook engine needs are installed by the hook pre-flight; tools the terraform invocation itself needs still rely on operator PATH. |
+| Auto-install missing tools before execution | Helmfile components | Not implemented | Same gap as terraform components. |
+| Auto-install missing tools before execution | Packer components | Not implemented | Same gap as terraform components. |
+| Normalize `"latest"` so `BuildToolchainPATH` resolves to a real bin directory | All scopes | Not implemented | `isConstraint("latest") == false`, so `resolveConstraints` does not rewrite the version, and `BuildToolchainPATH` constructs a bin directory containing the literal string `"latest"`, which does not exist on disk. Users must pin a concrete version or use a SemVer constraint (e.g., `~> 0.10`). The fix is either to treat `"latest"` as a constraint resolving to the highest installed/available version, or to have `BuildToolchainPATH` look up the resolved version. |
+| Validate SemVer constraints (`~>`, `^`, exact) | All scopes | Implemented | `pkg/dependencies/` resolver |
+| Inherit `dependencies` through stack imports with deep merge | Stack scopes | Implemented | Standard Atmos import + merge pipeline |
+| Surface a clear error when a child version does not satisfy a parent constraint | All scopes | Implemented | `pkg/dependencies/` resolver returns a structured validation error |
 
 ## Problem Statement
 
-Originally:
-
-1. **No Automatic Installation**: Users must manually install tools before running commands
-2. **No Dependency Declaration**: Cannot declare tool requirements at component, stack, workflow, or command level
-3. **No Version Enforcement**: No way to ensure specific tool versions are used for specific contexts
-4. **Manual PATH Management**: Users must manage PATH environment variables themselves
-
-Status of each (as of 2026-05-22):
-
-1. **Done** for workflows, custom commands, ansible components, and hooks.
-2. **Done** — `dependencies.tools` parsed at workflow/command/component scopes.
-3. **Done** for concrete versions and SemVer constraints. `"latest"` is the open edge case (see above).
-4. **Done** — `BuildToolchainPATH` constructs the subprocess PATH so installed pinned versions take precedence.
+1. **No Automatic Installation**: Users must manually install tools before running commands.
+2. **No Dependency Declaration**: Cannot declare tool requirements at component, stack, workflow, or command level.
+3. **No Version Enforcement**: No way to ensure specific tool versions are used for specific contexts.
+4. **Manual PATH Management**: Users must manage PATH environment variables themselves.
 
 ## Goals
 
@@ -209,7 +199,11 @@ Before execution:
 
 ## Implementation Plan
 
+Each phase below carries a `Status:` line describing where it stands today. The detailed code sketches that follow each phase document the intended shape of the work; consult the actual source for the canonical implementation.
+
 ### Phase 1: Schema Updates
+
+**Status**: Implemented.
 
 #### 1.1 Add Dependencies Struct
 
@@ -255,6 +249,8 @@ type Command struct {
 - Component-level `components.terraform.vpc.dependencies.tools`
 
 ### Phase 2: Dependency Resolution
+
+**Status**: Implemented.
 
 #### 2.1 Dependency Resolver Package
 
@@ -339,6 +335,8 @@ func validateConstraint(version string, constraint string) error {
 ```
 
 ### Phase 3: Auto-Install Integration
+
+**Status**: Partial. Workflows, custom commands, ansible components, and hooks are wired up. Terraform, helmfile, and packer components do not yet auto-install their declared tools — the component executors do not call `EnsureTools`.
 
 #### 3.1 Tool Installer Package
 
@@ -455,6 +453,8 @@ func ExecuteWorkflow(
 Similar pattern to workflow execution.
 
 ### Phase 4: PATH Management
+
+**Status**: Implemented, with one open edge case. `BuildToolchainPATH` builds the subprocess PATH so installed pinned versions win over any inherited PATH. `"latest"` is not normalized to a concrete version before the bin-directory path is constructed, so users currently must pin a concrete version or a SemVer constraint — see the requirements table above.
 
 **File**: `pkg/dependencies/path.go` (new)
 
@@ -699,9 +699,11 @@ Track via performance monitoring:
 
 ## Success Criteria
 
-1. ✅ Users can declare tool dependencies at any level (stack/component/workflow/command)
-2. ✅ Tools are automatically installed before execution
-3. ✅ SemVer constraints are validated and enforced
-4. ✅ Dependencies inherit through stack imports
-5. ✅ Zero breaking changes to existing workflows
-6. ✅ Test coverage ≥ 80% for new code
+Success criteria describe what "done" looks like for the feature as a whole. See the Requirements & Implementation Status table for what currently meets each criterion and what does not.
+
+1. Users can declare tool dependencies at any level (stack, component, workflow, custom command).
+2. Tools are automatically installed before execution at every level where dependencies can be declared.
+3. SemVer constraints are validated and enforced; child versions that do not satisfy a parent constraint produce a clear error.
+4. Dependencies inherit through stack imports with deep merge.
+5. Zero breaking changes to existing workflows — dependencies are opt-in.
+6. Test coverage ≥ 80% for new code.
