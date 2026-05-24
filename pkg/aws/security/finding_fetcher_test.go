@@ -13,6 +13,7 @@ import (
 	shtypes "github.com/aws/aws-sdk-go-v2/service/securityhub/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -24,22 +25,6 @@ type mockSecurityHubClient struct {
 	standards          []shtypes.StandardsSubscription
 	controlDefinitions []shtypes.SecurityControlDefinition
 	err                error
-}
-
-type mockInspector2Client struct {
-	findings []itypes.Finding
-	err      error
-	calls    int
-}
-
-func (m *mockInspector2Client) ListFindings(_ context.Context, _ *inspector2.ListFindingsInput, _ ...func(*inspector2.Options)) (*inspector2.ListFindingsOutput, error) {
-	m.calls++
-	if m.err != nil {
-		return nil, m.err
-	}
-	return &inspector2.ListFindingsOutput{
-		Findings: m.findings,
-	}, nil
 }
 
 func (m *mockSecurityHubClient) GetFindings(_ context.Context, _ *securityhub.GetFindingsInput, _ ...func(*securityhub.Options)) (*securityhub.GetFindingsOutput, error) {
@@ -251,25 +236,30 @@ func TestFetchFindings_SourceDispatchAndDedupe(t *testing.T) {
 			},
 		},
 	}
-	inspectorMock := &mockInspector2Client{
-		findings: []itypes.Finding{
-			{
-				FindingArn:     aws.String("arn:aws:inspector2:us-east-1:123456789012:finding/native"),
-				Title:          aws.String("Native Inspector finding"),
-				Description:    aws.String("Native finding"),
-				AwsAccountId:   aws.String("123456789012"),
-				Severity:       itypes.SeverityCritical,
-				Status:         itypes.FindingStatusActive,
-				InspectorScore: aws.Float64(9.7),
-				Resources: []itypes.Resource{
-					{Id: aws.String("arn:aws:ecr:us-east-1:123456789012:repository/app"), Type: itypes.ResourceTypeAwsEcrContainerImage, Region: aws.String("us-east-1")},
-				},
-				PackageVulnerabilityDetails: &itypes.PackageVulnerabilityDetails{
-					VulnerabilityId: aws.String("CVE-2026-1234"),
-				},
+	ctrl := gomock.NewController(t)
+	inspectorMock := NewMockInspector2API(ctrl)
+	inspectorFindings := []itypes.Finding{
+		{
+			FindingArn:     aws.String("arn:aws:inspector2:us-east-1:123456789012:finding/native"),
+			Title:          aws.String("Native Inspector finding"),
+			Description:    aws.String("Native finding"),
+			AwsAccountId:   aws.String("123456789012"),
+			Severity:       itypes.SeverityCritical,
+			Status:         itypes.FindingStatusActive,
+			InspectorScore: aws.Float64(9.7),
+			Resources: []itypes.Resource{
+				{Id: aws.String("arn:aws:ecr:us-east-1:123456789012:repository/app"), Type: itypes.ResourceTypeAwsEcrContainerImage, Region: aws.String("us-east-1")},
+			},
+			PackageVulnerabilityDetails: &itypes.PackageVulnerabilityDetails{
+				VulnerabilityId: aws.String("CVE-2026-1234"),
 			},
 		},
 	}
+	inspectorMock.EXPECT().
+		ListFindings(gomock.Any(), gomock.Any()).
+		Return(&inspector2.ListFindingsOutput{Findings: inspectorFindings}, nil).
+		Times(2)
+
 	fetcher := &awsFindingFetcher{
 		atmosConfig: &schema.AtmosConfiguration{},
 		clients:     newAWSClientCache(),
@@ -295,7 +285,6 @@ func TestFetchFindings_SourceDispatchAndDedupe(t *testing.T) {
 	securityHubOnly, err := fetcher.FetchFindings(context.Background(), &QueryOptions{Source: SourceSecurityHub, MaxFindings: 50})
 	require.NoError(t, err)
 	require.Len(t, securityHubOnly, 1)
-	assert.Equal(t, 2, inspectorMock.calls, "Security Hub source should not call native Inspector")
 }
 
 func TestDetectSource(t *testing.T) {

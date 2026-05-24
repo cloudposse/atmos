@@ -196,6 +196,10 @@ func TestBuildSARIFLog_DirectoryURIsHaveTrailingSlash(t *testing.T) {
 	assert.Equal(t, "file://"+expectedPath, run.Invocations[0].WorkingDirectory.URI)
 }
 
+func TestFileDirectoryURI_WindowsDriveLetter(t *testing.T) {
+	assert.Equal(t, "file:///C:/repo/", fileDirectoryURI("C:/repo"))
+}
+
 func TestBuildSARIFTaxonomies_IndexesBySourceKeyWhenNamesCollide(t *testing.T) {
 	findings := []Finding{
 		{

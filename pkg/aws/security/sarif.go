@@ -941,6 +941,9 @@ func buildSARIFInvocation(inv *ReportInvocation) Invocation {
 
 func fileDirectoryURI(path string) string {
 	uriPath := filepath.ToSlash(path)
+	if len(uriPath) >= 2 && uriPath[1] == ':' {
+		uriPath = "/" + uriPath
+	}
 	if !strings.HasSuffix(uriPath, "/") {
 		uriPath += "/"
 	}

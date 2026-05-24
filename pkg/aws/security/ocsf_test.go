@@ -80,6 +80,7 @@ func TestBuildOCSFEvents_MappingEnrichments(t *testing.T) {
 
 func TestBuildOCSFEvents_NoMapping_NoAtmosEnrichments(t *testing.T) {
 	events := BuildOCSFEvents(newTestSecurityReport())
+	require.NotEmpty(t, events)
 	// finding-3 (low severity, no mapping) lands last after severity-desc sort.
 	unmappedEvent := events[len(events)-1]
 	assert.Empty(t, unmappedEvent.Enrichments,
