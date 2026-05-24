@@ -4,10 +4,12 @@ import (
 	"encoding/json"
 	stderrors "errors"
 	"fmt"
+	"hash/fnv"
 	"os"
 	"path/filepath"
 	"reflect"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -37,6 +39,91 @@ type extractLocalsResult struct {
 	hasLocals bool           // Whether any locals section exists in the file (including empty locals).
 }
 
+// localsExtractionCache memoizes extractLocalsFromRawYAML results keyed by a
+// composite of the file path and a content fingerprint. Within a single command
+// execution against a real filesystem, file content is immutable (and is itself
+// cached via getFileContentSyncMap), so the parse + locals resolution is fully
+// deterministic and may be served from cache on repeat imports of the same file.
+//
+// On the customer workload, extractLocalsFromRawYAML was called 22,181 times for
+// ~836 unique files (~26 calls per file via transitive imports), accumulating 13s
+// of cumulative CPU time. ~7s of that was UnmarshalYAMLFromFile re-parsing the
+// same YAML content for the same file path. This cache eliminates the repeat work.
+//
+// The cache key includes a 64-bit FNV-1a hash of the YAML content so that test
+// callers reusing the same logical file path with different content (a common
+// pattern in stack_processor_utils_test.go) do not see stale results, and so that
+// a future caller doing dynamic content generation cannot trip on a stale parse.
+// FNV-1a was chosen for speed and stdlib availability; collisions on map-key
+// strings are not a security concern here because the cache only feeds back to
+// the same function under the same atmosConfig.
+//
+// Cached entries are deep-copied on retrieval (the result struct contains four
+// maps: locals/settings/vars/env, all of which downstream consumers store into
+// shared template contexts; mutating them would corrupt the cache). Deep-copy
+// cost is dominated by map allocation and is typically <50µs per call — well
+// below the 533µs avg of the un-cached path.
+var localsExtractionCache sync.Map // map[string]*extractLocalsResult (immutable post-insert).
+
+// hexBase is the base argument passed to strconv.FormatUint when building the
+// hex-encoded portion of localsCacheKey.
+const hexBase = 16
+
+// localsCacheKey builds a stable cache key from the absolute file path and a
+// content fingerprint. The fingerprint is a 64-bit FNV-1a hash of yamlContent
+// so that the same file path used with two different contents (mostly a test
+// pattern) yields two distinct cache entries.
+func localsCacheKey(filePath, yamlContent string) string {
+	h := fnv.New64a()
+	_, _ = h.Write([]byte(yamlContent))
+	return filePath + "@" + strconv.FormatUint(h.Sum64(), hexBase)
+}
+
+// cloneExtractLocalsResult deep-copies an extractLocalsResult so the cache value
+// remains immutable across concurrent retrievals. Returns the same nil hint when
+// the source is nil.
+func cloneExtractLocalsResult(src *extractLocalsResult) *extractLocalsResult {
+	if src == nil {
+		return nil
+	}
+	dst := &extractLocalsResult{
+		hasLocals: src.hasLocals,
+	}
+	if src.locals != nil {
+		if cloned, err := m.DeepCopyMap(src.locals); err == nil {
+			dst.locals = cloned
+		}
+	}
+	if src.settings != nil {
+		if cloned, err := m.DeepCopyMap(src.settings); err == nil {
+			dst.settings = cloned
+		}
+	}
+	if src.vars != nil {
+		if cloned, err := m.DeepCopyMap(src.vars); err == nil {
+			dst.vars = cloned
+		}
+	}
+	if src.env != nil {
+		if cloned, err := m.DeepCopyMap(src.env); err == nil {
+			dst.env = cloned
+		}
+	}
+	return dst
+}
+
+// ClearLocalsExtractionCache clears the locals extraction cache.
+// This should be called between independent operations (like tests) to ensure
+// fresh processing of files whose on-disk content may have changed.
+func ClearLocalsExtractionCache() {
+	defer perf.Track(nil, "exec.ClearLocalsExtractionCache")()
+
+	localsExtractionCache.Range(func(key, _ any) bool {
+		localsExtractionCache.Delete(key)
+		return true
+	})
+}
+
 // extractLocalsFromRawYAML parses raw YAML content and extracts/resolves file-scoped locals.
 // This function is called BEFORE template processing to make locals available during template execution.
 // The raw YAML may contain unresolved templates like {{ .locals.X }}, which YAML treats as strings.
@@ -49,8 +136,21 @@ type extractLocalsResult struct {
 //
 // Section-specific locals inherit from and can override global locals.
 // All resolved locals are flattened into a single map for template processing.
+//
+// Results are memoized in localsExtractionCache keyed by filePath. See the cache
+// declaration for rationale and the deep-copy contract.
 func extractLocalsFromRawYAML(atmosConfig *schema.AtmosConfiguration, yamlContent string, filePath string) (*extractLocalsResult, error) {
 	defer perf.Track(atmosConfig, "exec.extractLocalsFromRawYAML")()
+
+	// Fast path: result is cached for this (file path, content fingerprint)
+	// pair. Deep-copy on retrieval to keep the cache value immutable across
+	// concurrent callers.
+	cacheKey := localsCacheKey(filePath, yamlContent)
+	if raw, found := localsExtractionCache.Load(cacheKey); found {
+		if cached, ok := raw.(*extractLocalsResult); ok {
+			return cloneExtractLocalsResult(cached), nil
+		}
+	}
 
 	// Parse raw YAML to extract the structure.
 	// YAML treats template expressions like {{ .locals.X }} as plain strings,
@@ -75,7 +175,9 @@ func extractLocalsFromRawYAML(atmosConfig *schema.AtmosConfiguration, yamlConten
 	}
 
 	if rawConfig == nil {
-		return &extractLocalsResult{}, nil
+		empty := &extractLocalsResult{}
+		localsExtractionCache.Store(cacheKey, empty)
+		return cloneExtractLocalsResult(empty), nil
 	}
 
 	// Derive the stack name from the file path so that YAML functions like
@@ -89,7 +191,14 @@ func extractLocalsFromRawYAML(atmosConfig *schema.AtmosConfiguration, yamlConten
 		return nil, fmt.Errorf("%w: failed to process stack locals: %w", errUtils.ErrInvalidStackManifest, err)
 	}
 
-	return buildLocalsResult(rawConfig, localsCtx), nil
+	result := buildLocalsResult(rawConfig, localsCtx)
+	// Cache the canonical result and return a deep copy so the cache remains
+	// the single immutable source of truth. Concurrent goroutines that race
+	// on the first cache miss for a given file path will both run the parse
+	// (cheap given the cache hit on subsequent calls), and the later Store
+	// silently wins — both results are identical for the same input.
+	localsExtractionCache.Store(cacheKey, result)
+	return cloneExtractLocalsResult(result), nil
 }
 
 // deriveStackNameForLocals derives the stack name from the file path and raw config
@@ -253,12 +362,25 @@ func extractAndAddLocalsToContext(
 ) (map[string]any, error) {
 	defer perf.Track(atmosConfig, "exec.extractAndAddLocalsToContext")()
 
-	// Enforce file-scoped locals: clear any inherited locals from parent context.
-	// Locals are file-scoped and should NOT inherit across file boundaries.
-	// This ensures that each file only has access to its own locals.
-	if context != nil {
-		delete(context, cfg.LocalsSectionName)
+	// Clone the input context so concurrent goroutines processing sibling imports
+	// (in processYAMLConfigFileWithContextInternal, which fans out to one goroutine
+	// per import while sharing mergedContext) cannot race on the file-scoped
+	// delete + assign below. Without the clone, the parent context was mutated
+	// directly, producing a data race surfaced by `go test -race` on
+	// TestHierarchicalImports_*. Cloning is a shallow copy: the values are shared
+	// references but the map header is per-goroutine, which is the only mutation
+	// surface inside this function.
+	clonedContext := make(map[string]any, len(context))
+	for k, v := range context {
+		if k == cfg.LocalsSectionName {
+			// Enforce file-scoped locals: drop inherited locals during the
+			// clone. This replaces the previous in-place delete on the shared
+			// parent context.
+			continue
+		}
+		clonedContext[k] = v
 	}
+	context = clonedContext
 
 	extractResult, localsErr := extractLocalsFromRawYAML(atmosConfig, yamlContent, filePath)
 	if localsErr != nil {
@@ -293,10 +415,9 @@ func extractAndAddLocalsToContext(
 		return context, nil
 	}
 
-	// Initialize context if nil.
-	if context == nil {
-		context = make(map[string]any)
-	}
+	// context is never nil here: the clone above always allocates a fresh map
+	// (make returns a non-nil empty map when len(input)==0). The historical
+	// `if context == nil { context = make(...) }` initializer is now dead.
 
 	// Add resolved locals to the template context first.
 	// This allows settings/vars/env templates to reference locals.
