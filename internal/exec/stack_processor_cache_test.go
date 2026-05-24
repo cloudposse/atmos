@@ -476,3 +476,41 @@ func TestCacheCompiledSchemaBasic(t *testing.T) {
 	// Clean up.
 	ClearJsonSchemaCache()
 }
+
+// TestCacheBaseComponentConfig_SkipsEmptyFields verifies the Phase 12/13
+// optimization: deepCopyBaseComponentConfigMaps skips m.DeepCopyMap for
+// fields that are empty in the source. The behavioral contract is that
+// empty (or nil) source fields produce nil dst fields, identical to the
+// pre-optimization behavior of m.DeepCopyMap(nil) returning nil.
+func TestCacheBaseComponentConfig_SkipsEmptyFields(t *testing.T) {
+	ClearBaseComponentConfigCache()
+	defer ClearBaseComponentConfigCache()
+
+	// Source with most fields empty — only Vars is populated.
+	src := &schema.BaseComponentConfig{
+		FinalBaseComponentName: "minimal",
+		BaseComponentVars:      map[string]any{"region": "us-east-1"},
+		// All other map fields intentionally nil.
+		ComponentInheritanceChain: []string{"base"},
+	}
+	cacheBaseComponentConfig("minimal-key", src)
+
+	cached, _, found := getCachedBaseComponentConfig("minimal-key")
+	require.True(t, found)
+	require.NotNil(t, cached)
+
+	// The populated field round-trips.
+	assert.Equal(t, "us-east-1", cached.BaseComponentVars["region"])
+
+	// The empty-source fields stay nil on the retrieved copy (no empty-map
+	// allocations were performed during caching or retrieval).
+	assert.Nil(t, cached.BaseComponentSettings)
+	assert.Nil(t, cached.BaseComponentEnv)
+	assert.Nil(t, cached.BaseComponentAuth)
+	assert.Nil(t, cached.BaseComponentMetadata)
+	assert.Nil(t, cached.BaseComponentDependencies)
+	assert.Nil(t, cached.BaseComponentProviders)
+	assert.Nil(t, cached.BaseComponentHooks)
+	assert.Nil(t, cached.BaseComponentBackendSection)
+	assert.Nil(t, cached.BaseComponentRemoteStateBackendSection)
+}

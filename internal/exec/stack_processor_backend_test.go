@@ -838,3 +838,39 @@ func TestProcessTerraformBackend_WithPrefixSeparator(t *testing.T) {
 		assert.Equal(t, "services-consul", backendConfig["workspace_key_prefix"])
 	})
 }
+
+// TestExtractBackendTypeMap covers the helper introduced in Phase 11.
+// The success and missing-key paths are exercised by TestProcessTerraform*
+// indirectly, but the type-mismatch error path needs its own assertion.
+func TestExtractBackendTypeMap(t *testing.T) {
+	t.Run("returns empty map for nil section", func(t *testing.T) {
+		out, err := extractBackendTypeMap(nil, "s3", "vpc")
+		require.NoError(t, err)
+		assert.NotNil(t, out)
+		assert.Empty(t, out)
+	})
+
+	t.Run("returns empty map for missing key", func(t *testing.T) {
+		section := map[string]any{"gcs": map[string]any{"bucket": "x"}}
+		out, err := extractBackendTypeMap(section, "s3", "vpc")
+		require.NoError(t, err)
+		assert.NotNil(t, out)
+		assert.Empty(t, out)
+	})
+
+	t.Run("returns the inner map when key exists", func(t *testing.T) {
+		section := map[string]any{"s3": map[string]any{"bucket": "my-bucket", "key": "tfstate"}}
+		out, err := extractBackendTypeMap(section, "s3", "vpc")
+		require.NoError(t, err)
+		assert.Equal(t, "my-bucket", out["bucket"])
+		assert.Equal(t, "tfstate", out["key"])
+	})
+
+	t.Run("returns error when value at key is not a map", func(t *testing.T) {
+		section := map[string]any{"s3": "not-a-map"}
+		out, err := extractBackendTypeMap(section, "s3", "vpc")
+		require.Error(t, err)
+		assert.Nil(t, out)
+		assert.Contains(t, err.Error(), "vpc", "error should mention the component name")
+	})
+}

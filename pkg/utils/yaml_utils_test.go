@@ -1600,3 +1600,59 @@ value: 123`
 	// Verify cache hit (hits should increase).
 	assert.Greater(t, hitsAfter, hitsBefore, "Cache hits should increase on second call")
 }
+
+// TestClearParsedYAMLCache_Public exercises the exported ClearParsedYAMLCache
+// helper so tests in other packages can rely on it. The internal
+// clearParsedYAMLCache is already covered by other tests via the t.Cleanup
+// pattern, but the public wrapper itself needs its own coverage so the
+// "all exported APIs have a behavioral test" convention holds.
+func TestClearParsedYAMLCache_Public(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{}
+	// Seed an entry into the parsed cache via the public API.
+	_, _, err := UnmarshalYAMLFromFileWithPositions[map[string]any](atmosConfig, "key: value", "public-clear-test.yaml")
+	require.NoError(t, err)
+
+	// Confirm at least one entry is present.
+	var beforeCount int
+	parsedYAMLCache.Range(func(_, _ any) bool {
+		beforeCount++
+		return true
+	})
+	require.Positive(t, beforeCount, "cache should have at least one entry before clearing")
+
+	ClearParsedYAMLCache()
+
+	var afterCount int
+	parsedYAMLCache.Range(func(_, _ any) bool {
+		afterCount++
+		return true
+	})
+	assert.Equal(t, 0, afterCount, "ClearParsedYAMLCache should empty the cache")
+}
+
+// TestClearDecodedYAMLCache_Public exercises the exported ClearDecodedYAMLCache
+// helper. The decoded-result cache is populated by UnmarshalYAMLFromFileWithPositions
+// when T == map[string]any (the production fast path); this test seeds an entry
+// and then verifies the public clear API empties it.
+func TestClearDecodedYAMLCache_Public(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{}
+	// Seed an entry into the decoded cache via the public API.
+	_, _, err := UnmarshalYAMLFromFileWithPositions[map[string]any](atmosConfig, "key: value", "public-decoded-clear-test.yaml")
+	require.NoError(t, err)
+
+	var beforeCount int
+	decodedYAMLCache.Range(func(_, _ any) bool {
+		beforeCount++
+		return true
+	})
+	require.Positive(t, beforeCount, "decoded cache should have at least one entry before clearing")
+
+	ClearDecodedYAMLCache()
+
+	var afterCount int
+	decodedYAMLCache.Range(func(_, _ any) bool {
+		afterCount++
+		return true
+	})
+	assert.Equal(t, 0, afterCount, "ClearDecodedYAMLCache should empty the cache")
+}
