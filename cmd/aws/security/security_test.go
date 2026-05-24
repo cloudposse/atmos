@@ -482,16 +482,48 @@ func TestBuildSecurityReport_TagMappingNilWhenNotProvided(t *testing.T) {
 }
 
 func TestUniqueStacks(t *testing.T) {
-	findings := []Finding{
-		{ID: "f1", Mapping: &pkgsecurity.ComponentMapping{Stack: "plat-use2-prod", Mapped: true}},
-		{ID: "f2", Mapping: &pkgsecurity.ComponentMapping{Stack: "plat-use2-dev", Mapped: true}},
-		{ID: "f3", Mapping: &pkgsecurity.ComponentMapping{Stack: "plat-use2-prod", Mapped: true}},
-		{ID: "f4", Mapping: nil},
+	tests := []struct {
+		name     string
+		prefix   string
+		findings []Finding
+		expected []string
+		empty    bool
+	}{
+		{
+			name:   "deduplicates and sorts mapped stacks",
+			prefix: "plat",
+			findings: []Finding{
+				{ID: "f1", Mapping: &pkgsecurity.ComponentMapping{Stack: "plat-use2-prod", Mapped: true}},
+				{ID: "f2", Mapping: &pkgsecurity.ComponentMapping{Stack: "plat-use2-dev", Mapped: true}},
+				{ID: "f3", Mapping: &pkgsecurity.ComponentMapping{Stack: "plat-use2-prod", Mapped: true}},
+				{ID: "f4", Mapping: nil},
+			},
+			expected: []string{"plat-use2-dev", "plat-use2-prod"},
+		},
+		{
+			name:     "falls back to prefix for unmapped findings",
+			prefix:   "plat",
+			findings: []Finding{{ID: "unmapped", Mapping: nil}},
+			expected: []string{"plat"},
+		},
+		{
+			name:     "empty without prefix or mapped stacks",
+			prefix:   "",
+			findings: []Finding{{ID: "unmapped", Mapping: nil}},
+			empty:    true,
+		},
 	}
 
-	assert.Equal(t, []string{"plat-use2-dev", "plat-use2-prod"}, uniqueStacks("plat", findings))
-	assert.Equal(t, []string{"plat"}, uniqueStacks("plat", []Finding{{ID: "unmapped", Mapping: nil}}))
-	assert.Empty(t, uniqueStacks("", []Finding{{ID: "unmapped", Mapping: nil}}))
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := uniqueStacks(tt.prefix, tt.findings)
+			if tt.empty {
+				assert.Empty(t, got)
+				return
+			}
+			assert.Equal(t, tt.expected, got)
+		})
+	}
 }
 
 func TestFilterByStackAndComponent(t *testing.T) {

@@ -236,7 +236,7 @@ func (f *awsFindingFetcher) paginateInspector2Findings(
 			NextToken:      nextToken,
 		})
 		if err != nil {
-			return nil, fmt.Errorf("%w: %w", errUtils.ErrAWSSecurityFetchFailed, err)
+			return nil, fmt.Errorf(awsErrorWrapFormat, errUtils.ErrAWSSecurityFetchFailed, err)
 		}
 
 		for i := range output.Findings {

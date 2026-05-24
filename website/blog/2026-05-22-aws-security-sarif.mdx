@@ -1,28 +1,34 @@
 ---
 slug: aws-security-sarif
-title: "AWS Security Findings Now Export to SARIF"
+title: "AWS Security Findings Now Export to SARIF and OCSF"
 authors: [osterman]
 tags: [feature, security]
 ---
 
-`atmos aws security analyze` can now emit findings as SARIF 2.1.0, so they plug directly into GitHub code scanning, Azure DevOps, and other SARIF viewers — no translation layer required.
+The `atmos aws security analyze` command is the native Atmos workflow for turning AWS security findings into infrastructure-aware remediation guidance. It ingests findings from AWS Security Hub, Config, Inspector, GuardDuty, Macie, and Access Analyzer, then uses Atmos component tags and mapping heuristics to connect affected resources back to the stacks and components that manage them.
+
+Those mappings make findings more actionable: instead of stopping at an AWS resource ARN, Atmos can show the owning stack, component path, severity, source service, and remediation context. With new SARIF 2.1.0 and OCSF 1.4.0 output, those findings can now flow into code scanning, SIEM, governance, risk, and compliance workflows without a translation layer.
 
 <!--truncate-->
 
 ## What Changed
 
-`atmos aws security analyze` gains a new output format:
+The command now gains two new output formats:
 
 - **`--format=sarif`** — produces a SARIF 2.1.0 document. Findings keep their Atmos context (stack, component, component path, remediation steps) as SARIF result properties, so downstream tooling sees the same information the Markdown report does. Output is byte-stable across runs, so diffs and dedup work cleanly.
+- **`--format=ocsf`** — produces OCSF 1.4.0 Detection Finding events with cloud and vulnerability profile fields, suitable for SIEM and security data lake ingestion.
 
 ```shell
 # Local SARIF for GitHub code scanning.
 atmos aws security analyze --format=sarif --file=findings.sarif
+
+# OCSF Detection Findings for security data lakes.
+atmos aws security analyze --format=ocsf --file=findings.ocsf.json
 ```
 
 ## Why This Matters
 
-Security findings need to land in the systems that already track risk — GitHub Advanced Security, vulnerability dashboards, ticketing automations. Rendering Markdown is great for ad-hoc review, but SARIF is the format every code-scanning surface understands. With SARIF in the toolbox, `atmos aws security analyze` plugs into existing pipelines without a translation layer.
+Security findings need to land in the systems that already track risk — GitHub Advanced Security, vulnerability dashboards, SIEM pipelines, and ticketing automations. Rendering Markdown is great for ad-hoc review, but SARIF is the format code-scanning surfaces understand, while OCSF gives security analytics platforms a normalized event shape. With both formats in the toolbox, `atmos aws security analyze` plugs into existing pipelines without a translation layer.
 
 ## How to Use It
 
@@ -30,10 +36,11 @@ Local file:
 
 ```shell
 atmos aws security analyze --stack prod-use1 --format=sarif --file=findings.sarif
+atmos aws security analyze --stack prod-use1 --format=ocsf --file=findings.ocsf.json
 ```
 
-In GitHub Actions, hand the file to `github/codeql-action/upload-sarif` to surface findings in the Security tab.
+In GitHub Actions, hand the SARIF file to `github/codeql-action/upload-sarif` to surface findings in the Security tab. Send the OCSF JSON to your SIEM, data lake, or security analytics pipeline.
 
 ## Get Involved
 
-If you're already collecting security findings outside Atmos and want them to flow through the same tooling that manages your stacks, this is the path. Open an issue with the SARIF behavior you'd like to see at [github.com/cloudposse/atmos/issues](https://github.com/cloudposse/atmos/issues).
+If you're already collecting security findings outside Atmos and want them to flow through the same tooling that manages your stacks, this is the path. Open an issue with the SARIF or OCSF behavior you'd like to see at [github.com/cloudposse/atmos/issues](https://github.com/cloudposse/atmos/issues).

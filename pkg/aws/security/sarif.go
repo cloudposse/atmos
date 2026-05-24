@@ -13,6 +13,7 @@ import (
 
 	"github.com/google/uuid"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/version"
 )
@@ -197,7 +198,10 @@ func (r *sarifRenderer) RenderSecurityReport(w io.Writer, report *Report) error 
 	log := BuildSARIFLog(report)
 	enc := json.NewEncoder(w)
 	enc.SetIndent("", "  ")
-	return enc.Encode(log)
+	if err := enc.Encode(log); err != nil {
+		return fmt.Errorf("%w: failed to encode SARIF log: %w", errUtils.ErrEncode, err)
+	}
+	return nil
 }
 
 // RenderComplianceReport implements ReportRenderer. Compliance failures are
@@ -208,7 +212,10 @@ func (r *sarifRenderer) RenderComplianceReport(w io.Writer, report *ComplianceRe
 	log := buildComplianceSARIFLog(report)
 	enc := json.NewEncoder(w)
 	enc.SetIndent("", "  ")
-	return enc.Encode(log)
+	if err := enc.Encode(log); err != nil {
+		return fmt.Errorf("%w: failed to encode SARIF compliance log: %w", errUtils.ErrEncode, err)
+	}
+	return nil
 }
 
 // BuildSARIFLog converts a security Report into a SARIF 2.1.0 log.
