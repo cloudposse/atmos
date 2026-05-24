@@ -1,6 +1,6 @@
 ---
 name: atmos-ai
-description: "Atmos AI and MCP in both directions: external AI assistants using Atmos through agent skills, atmos mcp start, multi-CLI MCP export, Atmos Pro MCP, and AWS MCP servers; and Atmos using AI through atmos ai ask/chat/exec, --ai command analysis, API providers, CLI providers, external MCP routing/pass-through, toolchain-aware export, auth-wrapped tools, and MCP+skills pairing"
+description: "Atmos AI and MCP integrations: connect external AI assistants to Atmos through agent skills, atmos mcp start, multi-CLI MCP export, Atmos Pro MCP, and AWS MCP servers; run AI from Atmos through atmos ai ask/chat/exec, --ai command analysis, API providers, CLI providers, external MCP routing/pass-through, toolchain-aware export, auth-wrapped tools, and MCP+skills pairing"
 metadata:
   copyright: Copyright Cloud Posse, LLC 2026
   version: "1.0.0"
@@ -10,7 +10,7 @@ metadata:
 
 ## Purpose
 
-Use this skill when the work is about AI and Atmos together. There are two directions:
+Use this skill when the work is about AI and Atmos together. There are two integration patterns:
 
 - **AI uses Atmos**: external AI assistants use Atmos Agent Skills for knowledge and Atmos MCP
   servers for tools. This includes `atmos mcp start`, `atmos mcp export`, the Atmos MCP server,
