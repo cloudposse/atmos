@@ -118,8 +118,14 @@ async function processMarkdownFile(filePath, url, siteUrl) {
  *   /cli/commands/version/     → cli/commands/version.md
  */
 function perPageOutputPath(outDir, routePath) {
-  let rel = routePath.replace(/^\/+/, '').replace(/\/+$/, '');
-  if (!rel) rel = 'index';
+  // Character-walking trim avoids the polynomial-regex pattern CodeQL flags
+  // on `/^\/+/` / `/\/+$/`; routePath comes from Docusaurus so it's already
+  // bounded, but the linear loop is also marginally cheaper.
+  let start = 0;
+  let end = routePath.length;
+  while (start < end && routePath.charCodeAt(start) === 47) start += 1; // '/'
+  while (end > start && routePath.charCodeAt(end - 1) === 47) end -= 1;
+  const rel = start === end ? 'index' : routePath.slice(start, end);
   return path.join(outDir, rel + '.md');
 }
 
@@ -417,11 +423,14 @@ module.exports = function docusaurusPluginLlmsTxt(context, options) {
           seen.add(routePath);
         }
       }
-      if (contentRoutes.length === 0) {
-        const legacy = extractContentRoutes(routesPaths, context.siteDir);
-        for (const r of legacy) {
-          contentRoutes.push({ path: r.path, sourceAbs: path.join(context.siteDir, r.sourcePath) });
-        }
+      // Always backfill from the legacy filename-based search for any route
+      // the cache map didn't cover (per-PR-feedback: partial misses were
+      // silently dropped when the previous gate ran only on an empty map).
+      const legacy = extractContentRoutes(routesPaths, context.siteDir);
+      for (const r of legacy) {
+        if (seen.has(r.path)) continue;
+        contentRoutes.push({ path: r.path, sourceAbs: path.join(context.siteDir, r.sourcePath) });
+        seen.add(r.path);
       }
       console.log(`Found ${contentRoutes.length} content routes from Docusaurus`);
 

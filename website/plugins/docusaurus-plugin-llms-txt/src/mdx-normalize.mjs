@@ -318,11 +318,13 @@ function remarkNormalizeMdx() {
  * @param {string} source - MDX/Markdown source (without frontmatter).
  * @returns {Promise<string>} - Normalized Markdown.
  */
-// MDX 3 forbids HTML comments (uses {/* … */} instead). Strip them so we can
-// still normalize docs and blog posts that follow the Docusaurus convention
-// of `<!--truncate-->` markers.
+// MDX 3 forbids HTML comments (uses {/* … */} instead) but the Docusaurus
+// blog convention is `<!--truncate-->` at the end of the lede. Strip ONLY
+// that marker — global `<!--...-->` removal would (a) corrupt literal HTML
+// comment examples inside fenced code blocks and (b) trip CodeQL's
+// "incomplete multi-character sanitization" check.
 function stripHtmlComments(source) {
-  return source.replace(/<!--[\s\S]*?-->/g, '');
+  return source.replace(/^[ \t]*<!--\s*truncate\s*-->[ \t]*$/gm, '');
 }
 
 export async function normalizeMdxToMarkdown(source) {
