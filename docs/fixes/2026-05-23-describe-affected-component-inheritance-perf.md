@@ -227,6 +227,21 @@ open. Optimization plan:
       skip the per-call `yaml.Node.Decode` + `InternStringsInMap`
       walks (~500-700µs each). Wall-clock 2.4s → 2.06s (−14%
       locally).
+- [~] Phase 9 (ATTEMPTED, REVERTED 2026-05-24, `b11f3cd9b`):
+      asymmetric clone of `extractLocalsResult` — share
+      `settings`/`vars`/`env` references with the cache, deep-copy
+      only `locals`. Showed −17% on `extractLocalsFromRawYAML`
+      locally and passed `go test -race` on the targeted tests, but
+      crashed with `fatal error: concurrent map iteration and map
+      write` on the real customer workload (~9k parallel
+      goroutines). Root cause: `processTemplatesInSection` returns
+      its input map as-is when the section contains no `{{`, so the
+      cached settings *do* end up shared in the long-lived template
+      context where a sibling goroutine then mutates them via
+      `DeepCopyMap`. Lesson: the "consumed only by
+      `processTemplatesInSection`" claim was wrong — that function
+      has a fast-path pass-through. Re-attempting requires a clone
+      inside the pass-through, or a stronger immutability proof.
 - [ ] Re-measure on GHA and confirm wall-clock improvement.
 
 ---
