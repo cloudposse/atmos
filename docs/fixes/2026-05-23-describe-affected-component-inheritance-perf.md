@@ -203,9 +203,13 @@ open. Optimization plan:
       Merge calls eliminated, 215k walk calls eliminated. Wall-clock
       3.3s → 3.0s locally; cumulative ~75s saved on a 2-core GHA
       runner.
-- [ ] Phase 4: optimize `locals` extraction path.
+- [x] Phase 4: cache `extractLocalsFromRawYAML` by file path + content
+      hash; clone input context to fix pre-existing race. 22k+ calls
+      eliminated, wall-clock 3.0s → 2.3s (−23%, biggest single-phase
+      wall-clock win). Pre-existing race in
+      `extractAndAddLocalsToContext` (mergedContext mutation) fixed.
 - [ ] Phase 6 (new): investigate `ProcessYAMLConfigFileWithContext`
-      (1m05s post-Phase-5) — file loading hot path.
+      (~1m post-Phase-4) — file loading hot path.
 - [ ] Re-measure on GHA and confirm wall-clock improvement.
 
 ---
@@ -567,21 +571,72 @@ functions defers at the correct precedence, (d) two non-empty
 inputs take the full merge path, (e) the fast path does not mutate
 the input.
 
-### Phase 4 (open) — locals extraction
+### Phase 4 (shipped 2026-05-23) — cache locals extraction by file path + content hash
 
-`extractAndAddLocalsToContext` (22,181 calls, 14s) and
-`extractLocalsFromRawYAML` (22,181 calls, 13s) are the post-#1639
-additions for the `locals` feature. 22,181 = ~30 imports per
-stack × ~744 stacks processed — locals are extracted per imported
-file, not per component. Likely caching opportunity: extract once
-per file, cache by file path + mtime.
+**Root cause.** `extractLocalsFromRawYAML` was called 22,181 times for
+~836 unique files (~26 calls per file via transitive imports), at
+533µs avg. ~7s of the 13s total was `UnmarshalYAMLFromFile`
+re-parsing the same YAML content for the same file path. Within a
+single command execution, file content is immutable (and the file
+content itself was already cached via `getFileContentSyncMap`), so
+the parse + locals resolution is fully deterministic and trivially
+cacheable.
 
-Expected impact: -20s CPU on this workload. Small but easy.
+A pre-existing data race in `extractAndAddLocalsToContext`
+(surfaced under `-race` by some `TestHierarchicalImports_*` tests)
+mutated the parent `mergedContext` map directly via `delete(context,
+LocalsSectionName)` while multiple goroutines processed sibling
+imports concurrently. Phase 4 closes this race in the same fix.
 
-Pre-existing data race in `extractAndAddLocalsToContext` at
-`internal/exec/stack_processor_utils.go:260` should also be
-fixed in this phase — currently surfaces under `-race` for some
-`TestHierarchicalImports_*` tests.
+**Two changes:**
+
+1. **`localsExtractionCache` (sync.Map) keyed by `filePath + FNV-1a(yamlContent)`**
+   memoizes the parsed `*extractLocalsResult` for the duration of the
+   command. Cache reads deep-copy the cached value via
+   `cloneExtractLocalsResult` so downstream consumers can store the
+   maps into shared template contexts without corrupting the cache.
+   FNV-1a content fingerprinting prevents test pollution when the
+   same logical file path is reused with different content (a common
+   pattern in unit tests).
+2. **`extractAndAddLocalsToContext` clones its input context map** before
+   the file-scoped `delete` + assign, eliminating the pre-existing
+   race. The clone is shallow (values are shared references); the
+   only mutation surface inside the function is the map header, so
+   per-goroutine cloning is sufficient. Cost: O(N) over the context
+   entries, negligible compared to the function's overall work.
+
+**Confirmed impact (mean of 3 runs, customer workload):**
+
+| Function | Phase 5 (Total / Avg / Calls) | Phase 4 (Total / Avg / Calls) | Reduction |
+|---|---:|---:|---:|
+| `exec.extractAndAddLocalsToContext` | 13s / 580µs / 22,181 | **6.7s / 300µs / 22,181** | **−48% Total, 2× faster avg** |
+| `exec.extractLocalsFromRawYAML` | 13s / 533µs / 22,181 | **5.9s / 264µs / 22,181** | **−55% Total, 2× faster avg** |
+| `utils.UnmarshalYAMLFromFile` Calls | 22,374 | **~1,900** | **−92% (20k+ calls eliminated)** |
+| `exec.ProcessStackLocals` | 1.5s / 22,167 | **170ms / ~1,800** | **−89% Total, −92% Calls** |
+
+**Wall-clock impact (local Mac, mean of 3 runs):** 3.0s → **2.3s
+(−23%)** — the biggest single-phase wall-clock win in this
+investigation. Unlike Phase 2 (lock-wait padding that doesn't show
+on Mac), the locals cache eliminates real CPU work (YAML parsing +
+locals resolution) that was contributing directly to wall-clock on
+every architecture.
+
+**Race detector:**
+`go test -race -count=1 -run TestHierarchicalImports ./internal/exec/`
+now green. Other pre-existing races elsewhere in the package
+(`processSettingsIntegrationsGithub` racing with `DeepCopyMap`,
+`MergeContext.WithFile` racing) are tracked separately — not
+introduced by Phase 4.
+
+**Cumulative trajectory (local Mac wall-clock, mean of 3 runs):**
+
+| Stage | Elapsed | Δ vs prior |
+|---|---:|---:|
+| Baseline (pre-Phase-2) | 4.1s | — |
+| Phase 3 (walk short-circuit) | 3.3s | −19% |
+| Phase 5 (skip trivial merges) | 3.0s | −10% |
+| Phase 4 (locals cache) | **2.3s** | **−23%** |
+| **Cumulative** | **2.3s** | **−44% vs baseline** |
 
 ### Verification
 
