@@ -57,6 +57,37 @@ Built-in kinds ship in this release:
 Each renders a **single markdown body** that shows up identically in
 the terminal and on the Pro run page. Same bytes, every surface.
 
+### Override any default
+
+The defaults are good for the common case, but every field on a
+built-in kind — `command`, `args`, `env`, `on_failure` — is overridable.
+Set the field on your hook and your value wins. Useful when you want to
+tighten the severity threshold, point at a custom config, or make a
+finding block the run:
+
+```yaml
+hooks:
+  security:
+    events: [after-terraform-plan]
+    kind: trivy
+    on_failure: fail              # default is warn — fail the run on a finding
+    args:                         # full replacement, not merge
+      - config
+      - --format
+      - sarif
+      - --output
+      - $ATMOS_OUTPUT_FILE
+      - --severity
+      - HIGH,CRITICAL             # added on top of the default args
+      - --quiet
+      - $ATMOS_COMPONENT_PATH
+```
+
+`args` and `env` are full replacement, not merge — when you override
+`args` you restate every arg you want. If you only need to tweak one
+flag, copy the kind's default arg list from the
+[docs](/stacks/hooks#overriding-kind-defaults) and add your own.
+
 ### Bring your own command
 
 If Atmos doesn't ship a named kind for your tool yet, use `kind: command`
@@ -172,6 +203,12 @@ You'll see trivy auto-install via the toolchain, scan the intentionally-
 misconfigured S3 bucket, and render the findings in your terminal —
 all without any cloud credentials.
 
-<ActionCard title="Read the docs" href="/stacks/hooks">
+<ActionCard
+  title="Read the docs"
+  ctaText="Read the docs"
+  ctaLink="/stacks/hooks"
+  secondaryCtaText="Browse examples"
+  secondaryCtaLink="/examples/hooks-trivy"
+>
   Full reference for hook kinds, override semantics, lifecycle events, tool auto-install, and the `--all` / `--skip-hooks` flags.
 </ActionCard>
