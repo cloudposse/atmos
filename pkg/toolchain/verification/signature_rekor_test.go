@@ -21,15 +21,23 @@ func TestClassifyCosignError(t *testing.T) {
 		"Error: searching log query: [POST /api/v1/log/entries/retrieve][400] searchLogQueryBadRequest " +
 		`{"code":400,"message":"verifying signature: ecdsa: Invalid IEEE_P1363 encoded bytes"}`
 
-	rekor503 := "cosign [verify-blob ...]: exit status 1\n" +
-		"Error: searching log query: [POST /api/v1/log/entries/retrieve][503] retrieveLogEntryDefault " +
-		`{"code":503,"message":"service unavailable"}`
+	rekorStatusErr := func(status string) error {
+		return errors.New("cosign [verify-blob ...]: exit status 1\n" +
+			"Error: searching log query: [POST /api/v1/log/entries/retrieve][" + status + "] retrieveLogEntryDefault " +
+			`{"code":` + status + `,"message":"service unavailable"}`)
+	}
 
 	tampered := "cosign [verify-blob ...]: exit status 1\n" +
 		"Error: invalid signature when validating ASN.1 encoded signature"
 
 	identityMismatch := "cosign [verify-blob ...]: exit status 1\n" +
 		"Error: none of the expected identities matched what was in the certificate"
+
+	// Rekor /retrieve with a non-5xx status that is also not in the explicit
+	// 400-marker allowlist (e.g. 401) must surface immediately — only
+	// allowlisted 5xx codes are retried on that endpoint.
+	rekor401 := "cosign [verify-blob ...]: exit status 1\n" +
+		"Error: searching log query: [POST /api/v1/log/entries/retrieve][401] retrieveLogEntryUnauthorized"
 
 	cases := []struct {
 		name        string
@@ -38,7 +46,11 @@ func TestClassifyCosignError(t *testing.T) {
 	}{
 		{name: "nil error stays nil", err: nil, wantWrapped: false},
 		{name: "rekor 400 searchLogQueryBadRequest is retryable", err: errors.New(rekor400), wantWrapped: true},
-		{name: "rekor 503 on tlog retrieve endpoint is retryable", err: errors.New(rekor503), wantWrapped: true},
+		{name: "rekor 500 on tlog retrieve endpoint is retryable", err: rekorStatusErr("500"), wantWrapped: true},
+		{name: "rekor 502 on tlog retrieve endpoint is retryable", err: rekorStatusErr("502"), wantWrapped: true},
+		{name: "rekor 503 on tlog retrieve endpoint is retryable", err: rekorStatusErr("503"), wantWrapped: true},
+		{name: "rekor 504 on tlog retrieve endpoint is retryable", err: rekorStatusErr("504"), wantWrapped: true},
+		{name: "rekor 401 on tlog retrieve endpoint is NOT retryable", err: errors.New(rekor401), wantWrapped: false},
 		{name: "tampered artifact is NOT retryable", err: errors.New(tampered), wantWrapped: false},
 		{name: "identity mismatch is NOT retryable", err: errors.New(identityMismatch), wantWrapped: false},
 		{name: "generic cosign failure is NOT retryable", err: errors.New("cosign: exit status 1"), wantWrapped: false},

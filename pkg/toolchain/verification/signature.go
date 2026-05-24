@@ -88,7 +88,10 @@ func runCosignWithRetry(ctx context.Context, req *Request, args []string) error 
 	return retry.WithPredicate(ctx, cosignRetryConfig(), func() error {
 		attempt++
 		runErr := classifyCosignError(runner(req).Run(ctx, "cosign", args...))
-		if runErr != nil && isRetryableCosignError(runErr) {
+		// Only log the "retrying" warning when a retry will actually happen
+		// — suppress on the terminal attempt where the retry budget is
+		// exhausted and the error is about to surface unchanged.
+		if runErr != nil && isRetryableCosignError(runErr) && attempt < cosignRetryMaxAttempts {
 			log.Warn(
 				"cosign verification hit transient Sigstore Rekor error; retrying",
 				"attempt", attempt,
