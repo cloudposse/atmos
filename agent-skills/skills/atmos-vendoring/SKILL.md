@@ -12,13 +12,19 @@ Vendoring copies external components, stacks, and other artifacts into your repo
 
 ## Why Vendor
 
-Terraform root modules must exist locally -- they cannot be pulled from remote sources at runtime the way child modules can. Vendoring makes this explicit: you copy the code once, commit it, and control when updates happen. This provides:
+Vendoring is the checked-in model for remote component code: you copy the code into the repository,
+commit it, and control when updates happen. This provides:
 
 - **Visibility**: See actual code changes via `git diff`, not just version bumps.
 - **Audit trail**: Every update is a commit with full history for compliance.
 - **Emergency agility**: Patch vulnerabilities immediately without waiting for upstream.
 - **Developer experience**: Full IDE navigation, grep across all code, better onboarding.
 - **Deployment reliability**: No network dependencies during `terraform apply`.
+
+Atmos also supports component `source` provisioning for just-in-time fetching from stack
+configuration. Use the `atmos-components` skill for that model. Prefer vendoring when the fetched
+implementation should be reviewed and committed; prefer component source provisioning when the stack
+configuration should declare the remote source and Atmos should fetch it on demand.
 
 ## Types of Vendoring
 

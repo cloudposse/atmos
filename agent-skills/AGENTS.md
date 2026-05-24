@@ -60,8 +60,8 @@ When a task involves Atmos, activate the matching skill for detailed guidance.
 | Project layout: base_path, relative paths, stacks/components/workflows/schemas directories, atmos.d config          | `atmos-project-layout`  | `agent-skills/skills/atmos-project-layout/SKILL.md`  |
 | Profiles: profile directories, --profile, ATMOS_PROFILE, profile merge behavior, environment switching             | `atmos-profiles`        | `agent-skills/skills/atmos-profiles/SKILL.md`        |
 | Stack YAML, imports, inheritance, deep merging, vars, settings, locals, metadata, overrides                          | `atmos-stacks`          | `agent-skills/skills/atmos-stacks/SKILL.md`          |
-| Terraform root modules, abstract components, component inheritance, versioning, mixins, catalog patterns              | `atmos-components`      | `agent-skills/skills/atmos-components/SKILL.md`      |
-| vendor.yaml manifests, pulling from Git/S3/HTTP/OCI/Terraform Registry, component.yaml                                | `atmos-vendoring`       | `agent-skills/skills/atmos-vendoring/SKILL.md`       |
+| Terraform root modules, component source provisioning, abstract components, component inheritance, versioning, mixins | `atmos-components`      | `agent-skills/skills/atmos-components/SKILL.md`      |
+| vendor.yaml manifests, checked-in copies from Git/S3/HTTP/OCI/Terraform Registry, component.yaml                     | `atmos-vendoring`       | `agent-skills/skills/atmos-vendoring/SKILL.md`       |
 | terraform plan/apply/deploy/destroy, workspace management, backend config, varfile generation                         | `atmos-terraform`       | `agent-skills/skills/atmos-terraform/SKILL.md`       |
 | helmfile sync/apply/destroy/diff, Kubernetes deployments, EKS integration, varfile generation                         | `atmos-helmfile`        | `agent-skills/skills/atmos-helmfile/SKILL.md`        |
 | packer init/build/validate/inspect/output, machine image building, template management                                | `atmos-packer`          | `agent-skills/skills/atmos-packer/SKILL.md`          |
@@ -81,7 +81,10 @@ When a task involves Atmos, activate the matching skill for detailed guidance.
 | Global settings: settings, logs, errors, env, docs, metadata, version requirements                                 | `atmos-settings`        | `agent-skills/skills/atmos-settings/SKILL.md`        |
 | AI and MCP: providers, skills, agent workflows, MCP server/client setup, auth-wrapped tools, toolchain-aware export  | `atmos-ai`              | `agent-skills/skills/atmos-ai/SKILL.md`              |
 | Devcontainers: start/stop/attach/exec/shell, Docker/Podman, identity integration, instance management (experimental) | `atmos-devcontainer`    | `agent-skills/skills/atmos-devcontainer/SKILL.md`    |
-| AWS security: analyze findings, map to components/stacks, structured remediation, compliance reports                  | `atmos-aws-security`    | `agent-skills/skills/atmos-aws-security/SKILL.md`    |
+| AWS EKS: update kubeconfig, kubectl exec tokens, EKS auth integrations                                             | `atmos-aws-eks`         | `agent-skills/skills/atmos-aws-eks/SKILL.md`         |
+| AWS ECR: registry login, ECR auth integrations, Docker credential writes                                          | `atmos-aws-ecr`         | `agent-skills/skills/atmos-aws-ecr/SKILL.md`         |
+| AWS compliance: Security Hub standards, compliance reports, CIS AWS, PCI DSS, SOC2, HIPAA, NIST                   | `atmos-aws-compliance`  | `agent-skills/skills/atmos-aws-compliance/SKILL.md`  |
+| AWS security: analyze findings, map to components/stacks, structured remediation                                  | `atmos-aws-security`    | `agent-skills/skills/atmos-aws-security/SKILL.md`    |
 | Migrating to Atmos from native Terraform/OpenTofu or Terraform Workspaces: layout, workspace mapping, remote-state bridge | `atmos-migration`       | `agent-skills/skills/atmos-migration/SKILL.md`       |
 
 ## Common Patterns

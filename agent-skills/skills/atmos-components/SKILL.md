@@ -1,6 +1,6 @@
 ---
 name: atmos-components
-description: "Component architecture: Terraform root modules, abstract components, component inheritance, versioning, mixins, catalog patterns"
+description: "Component architecture: Terraform root modules, remote source provisioning, abstract components, component inheritance, versioning, mixins, catalog patterns"
 metadata:
   copyright: Copyright Cloud Posse, LLC 2026
   version: "1.0.0"
@@ -145,8 +145,14 @@ recommend migrating it to `dependencies.components`.
 ## Source Provisioning and Workdirs
 
 Components can declare `source` in stack config for just-in-time provisioning from Git, OCI, S3,
-HTTP, or local paths. When source provisioning is used, prefer `provision.workdir.enabled: true`
-so each component-stack instance gets an isolated execution directory.
+HTTP, or local paths. Treat source provisioning as part of component configuration: it controls
+how the component implementation is fetched, while `vars`, `env`, `backend`, and other sections
+control how that implementation is run.
+
+Use component source provisioning when different stacks need different remote component versions,
+or when the repository should not commit the fetched implementation. When source provisioning is
+used, prefer `provision.workdir.enabled: true` so each component-stack instance gets an isolated
+execution directory.
 
 ```yaml
 components:
@@ -157,6 +163,21 @@ components:
         workdir:
           enabled: true
 ```
+
+Atmos provisions sources automatically before Terraform commands when needed. Use explicit source
+commands when an agent needs to inspect, refresh, or clean the fetched implementation:
+
+```shell
+atmos terraform source pull vpc --stack dev
+atmos terraform source describe vpc --stack dev
+atmos terraform source list --stack dev
+atmos terraform source delete vpc --stack dev
+atmos list sources
+```
+
+For protected sources, route identity and provider details to `atmos-auth`. For checked-in copies
+of remote components, route to `atmos-vendoring`; vendoring and source provisioning are alternatives
+for obtaining component implementation code.
 
 ## Abstract vs Real Components
 

@@ -40,11 +40,14 @@ user's repo.
 
 1. **Migration is opt-in, not all-or-nothing.** Atmos does not require a filesystem
    reorganization. Point `base_path` at the user's existing layout (e.g., `base_path: "terraform"`
-   or `base_path: "."`). The `components/terraform/` convention exists because Atmos supports
-   multiple toolchains (Terraform, Helmfile, Packer, Ansible) -- it is not a requirement for
-   Terraform-only repos.
-2. **Keep existing `.tfvars` files.** Use `!include` to pull them into stacks. Conversion to
-   native YAML is a later, optional step that unlocks deep-merge inheritance.
+   or `base_path: "."`) when preserving layout lowers adoption risk. The `components/terraform/`
+   convention is still the best-practice layout for new or fully migrated repos because Atmos
+   supports multiple toolchains (Terraform, Helmfile, Packer, Ansible); it is not a prerequisite
+   for adopting Atmos in Terraform-only repos.
+2. **Existing `.tfvars` files may be kept during migration.** Use `!include` to pull them into
+   stacks when the user wants minimal disruption. Converting values into native stack YAML remains
+   the best-practice end state when the user wants deep-merge inheritance and richer stack
+   composition, but it can happen progressively.
 3. **No Terraform code changes are required.** Don't rewrite providers, backends, or modules
    during migration. Atmos generates `backend.tf.json` and `*.auto.tfvars.json` at runtime.
 4. **Workspaces are not the enemy.** If the user has `terraform.workspace`-driven environments,
@@ -101,8 +104,9 @@ A working reference for this shape lives at `examples/native-terraform/` in the 
 
 ## File-Layout Options
 
-Pick the layout that minimizes user disruption. None of these is "wrong"; they trade off Atmos
-convention against existing-repo continuity.
+Pick the layout that matches the user's migration goals. `components/terraform/` is the recommended
+Atmos convention, especially for new repos or multi-toolchain projects, but existing layouts can be
+preserved when the user wants a lower-disruption migration.
 
 | `base_path`                              | Use when                                                                |
 |------------------------------------------|-------------------------------------------------------------------------|
@@ -163,9 +167,12 @@ those questions to the right skill:
 
 Things to push back on if a user (or another agent) proposes them during migration:
 
-- **"Move all your Terraform into `components/terraform/` first."** No -- point `base_path` at
-  the existing layout. File moves are last, not first.
-- **"Rewrite all your `.tfvars` as YAML before running Atmos."** No -- `!include` them.
+- **"You must move all Terraform into `components/terraform/` before using Atmos."** No -- that is
+  the recommended layout, not a requirement. Let the user choose between adopting the best-practice
+  layout now or pointing `base_path` at the existing layout and reorganizing later.
+- **"You must rewrite all `.tfvars` as YAML before running Atmos."** No -- native stack YAML is the
+  best-practice destination for inheritance and composition, but `!include` lets users keep
+  existing `.tfvars` during a progressive migration.
 - **"Delete your workspace state and start over."** No -- bridge it with
   `metadata.terraform_workspace` and the remote-state-bridge pattern.
 - **"Add Gomplate datasources for everything."** No -- reach for YAML functions first.

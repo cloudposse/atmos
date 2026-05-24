@@ -151,25 +151,34 @@ Two valid paths:
 
 ### `TF_VAR_*` environment variables
 
-Replace exported `TF_VAR_foo=bar` with either:
+Move Terraform input values into first-class stack `vars:` when possible:
+
 ```yaml
-# Stack-level vars
 components:
   terraform:
     vpc:
       vars:
         foo: bar
 ```
-or, if the user really wants env-var semantics:
+
+Stack-level `vars:` is preferred because it shows up in `atmos describe component` and is
+deep-merged through inheritance. Do not promote `TF_VAR_*` under `env:` as the recommended target
+for Terraform input variables.
+
+Use `env:` for conventional environment variables needed by providers, scripts, or the Terraform
+process itself:
+
 ```yaml
 components:
   terraform:
     vpc:
       env:
-        TF_VAR_foo: bar
+        AWS_REGION: us-east-1
 ```
-Stack-level `vars:` is strongly preferred -- it shows up in `atmos describe component` and is
-deep-merged through inheritance.
+
+Existing `TF_VAR_*` exports can keep working during an initial low-disruption migration, but treat
+them as compatibility, not the end-state pattern. Convert them to stack `vars:` when the value is
+a Terraform input variable.
 
 ### Provider authentication
 
