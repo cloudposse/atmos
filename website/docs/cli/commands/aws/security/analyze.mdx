@@ -1,0 +1,215 @@
+---
+title: atmos aws security analyze
+sidebar_label: analyze
+sidebar_class_name: command
+id: analyze
+description: Analyze AWS security findings and map them to Atmos components and stacks with optional AI-powered remediation guidance
+---
+import Screengrab from '@site/src/components/Screengrab'
+import Terminal from '@site/src/components/Terminal'
+import DocCardList from '@theme/DocCardList'
+import Intro from '@site/src/components/Intro'
+import ActionCard from '@site/src/components/ActionCard'
+import PrimaryCTA from '@site/src/components/PrimaryCTA'
+import Experimental from '@site/src/components/Experimental'
+
+<Intro>
+Analyze AWS security findings from Security Hub, Config, Inspector, and GuardDuty, then map them to the Atmos components and stacks that manage the affected resources. Generates remediation reports with optional AI-powered analysis.
+</Intro>
+
+<Experimental />
+
+<Screengrab title="atmos aws security analyze --help" slug="atmos-aws-security-analyze--help" />
+
+## Description
+
+The `atmos aws security analyze` command connects to AWS security services via Atmos Auth, retrieves security findings, and maps them to the Terraform/Atmos components that manage the affected resources. By default, it works without any AI provider. When the `--ai` flag is passed, it uses the configured AI provider to analyze each finding and generate remediation guidance with concrete code changes.
+
+Use it for:
+- **Security Posture Review**: Get a prioritized view of security findings mapped to your Atmos components and stacks
+- **Remediation Planning**: Use `--ai` for AI-generated code changes to fix security issues in your Terraform components
+- **CI/CD Integration**: Export findings as JSON or CSV for automated security gates in deployment pipelines
+- **Compliance Reporting**: Filter findings by severity, source, or compliance framework for targeted reports
+
+## Usage
+
+```shell
+atmos aws security analyze [flags]
+```
+
+## Flags
+
+<dl>
+  <dt>`--stack, -s`</dt>
+  <dd>Filter findings to a specific Atmos stack (e.g., `prod-us-east-1`).</dd>
+
+  <dt>`--component, -c`</dt>
+  <dd>Filter findings to a specific Atmos component (e.g., `vpc`, `eks`).</dd>
+
+  <dt>`--severity`</dt>
+  <dd>Comma-separated list of severity levels (case-insensitive): `CRITICAL`, `HIGH`, `MEDIUM`, `LOW`, `INFORMATIONAL`. Default: `critical,high`.</dd>
+
+  <dt>`--source`</dt>
+  <dd>Filter findings by source service: `security-hub`, `config`, `inspector`, `guardduty`, `macie`, `access-analyzer`, `all` (default: `all`).</dd>
+
+  <dt>`--format, -f`</dt>
+  <dd>Output format: `markdown`, `json`, `yaml`, `csv` (default: `markdown`).</dd>
+
+  <dt>`--file`</dt>
+  <dd>Write output to a file instead of stdout. Creates parent directories if they don't exist.</dd>
+
+  <dt>`--max-findings`</dt>
+  <dd>Maximum number of findings to retrieve and analyze (default: `500`).</dd>
+
+  <dt>`--ai`</dt>
+  <dd>Enable AI-powered analysis and remediation suggestions. Requires `ai.enabled: true` in your `atmos.yaml`.</dd>
+
+  <dt>`--region`</dt>
+  <dd>AWS region to query for findings (overrides `aws.security.region` config).</dd>
+
+  <dt>`--identity, -i`</dt>
+  <dd>Atmos Auth identity for AWS credentials (overrides `aws.security.identity` config).</dd>
+
+  <dt>`--framework`</dt>
+  <dd>Filter findings by compliance framework (e.g., `cis-aws`, `pci-dss`).</dd>
+
+  <dt>`--no-group`</dt>
+  <dd>Disable grouping of duplicate findings. By default, findings with the same title are collapsed into a summary table. Use `--no-group` to show each finding individually with full tags — useful for AI pipelines and detailed analysis.</dd>
+</dl>
+
+## Examples
+
+### Basic Usage
+
+<Terminal title="basic examples">
+```bash
+# Analyze findings for a specific stack
+atmos aws security analyze --stack prod-us-east-1
+
+# Filter by severity
+atmos aws security analyze --stack prod-us-east-1 --severity critical,high
+
+# Filter by source service
+atmos aws security analyze --stack prod-us-east-1 --source security-hub
+```
+</Terminal>
+
+### AI-Powered Analysis
+
+<Terminal title="ai analysis examples">
+```bash
+# Enable AI analysis for remediation guidance
+atmos aws security analyze --stack prod-us-east-1 --ai
+
+# AI analysis for critical findings only
+atmos aws security analyze --stack prod-us-east-1 --severity critical --ai
+```
+</Terminal>
+
+### Output Formats
+
+<Terminal title="output format examples">
+```bash
+# Output as JSON for CI/CD integration
+atmos aws security analyze --stack prod-us-east-1 --format json
+
+# Output as CSV for compliance reporting
+atmos aws security analyze --format csv > findings.csv
+
+# Markdown report for documentation
+atmos aws security analyze --stack prod-us-east-1 --format markdown --severity critical,high
+```
+</Terminal>
+
+### Filtering and Targeting
+
+<Terminal title="filtering examples">
+```bash
+# Findings for a specific component
+atmos aws security analyze --stack prod-us-east-1 --component vpc
+
+# Limit number of findings
+atmos aws security analyze --stack prod-us-east-1 --max-findings 20
+
+# Filter by compliance framework
+atmos aws security analyze --stack prod-us-east-1 --framework cis-aws
+```
+</Terminal>
+
+### Saving to a File
+
+<Terminal title="file output examples">
+```bash
+# Save markdown report to a file
+atmos aws security analyze --stack prod-us-east-1 --file security-report.md
+
+# Save JSON findings to a file
+atmos aws security analyze --stack prod-us-east-1 --format json --file findings.json
+
+# Save to a nested directory (created automatically)
+atmos aws security analyze --stack prod-us-east-1 --format json --file reports/security/findings.json
+```
+</Terminal>
+
+### CI/CD Integration
+
+<Terminal title="ci/cd examples">
+```bash
+# Security gate in pipeline
+atmos aws security analyze --stack prod-us-east-1 --severity critical --format json --file security.json
+if jq -e '.findings | length > 0' security.json; then
+  echo "Critical security findings detected"
+  exit 1
+fi
+
+# Generate security report as a deployment artifact
+atmos aws security analyze --stack prod-us-east-1 \
+  --severity critical,high \
+  --file security-report.md
+```
+</Terminal>
+
+## Configuration
+
+Configure the security command in your `atmos.yaml` under the `aws.security` section:
+
+```yaml
+aws:
+  security:
+    enabled: true
+    identity: "security-readonly"  # Atmos Auth identity
+    region: "us-east-2"            # Security Hub aggregation region
+    default_severity:
+      - CRITICAL
+      - HIGH
+    sources:
+      security_hub: true
+      inspector: true
+      guardduty: true
+    max_findings: 50
+    tag_mapping:
+      stack_tag: "atmos:stack"
+      component_tag: "atmos:component"
+    account_map:                   # For account-level findings
+      "123456789012": "prod"
+      "234567890123": "security"
+```
+
+To enable AI-powered analysis with the `--ai` flag, also configure your AI provider:
+
+```yaml
+ai:
+  enabled: true
+  default_provider: bedrock
+  providers:
+    bedrock:
+      model: anthropic.claude-sonnet-4-6-20250514-v1:0
+      base_url: us-east-1
+```
+
+## Related Commands
+
+<DocCardList items={[
+  {type: 'link', href: '/cli/commands/aws/compliance/report', label: 'atmos aws compliance report', description: 'Compliance posture reports against frameworks'},
+  {type: 'link', href: '/cli/commands/aws/eks/update-kubeconfig', label: 'atmos aws eks update-kubeconfig', description: 'Update kubeconfig for EKS clusters'},
+]} />

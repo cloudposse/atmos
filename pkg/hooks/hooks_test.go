@@ -2,6 +2,7 @@ package hooks
 
 import (
 	"errors"
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -9,9 +10,24 @@ import (
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/ci"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/store"
 )
+
+// testSaveAndClearRegistry snapshots the CI provider registry, replaces it with
+// an empty one, and returns the restore function. Tests that call RunCIHooks
+// must use this to avoid depending on the host environment's CI detection
+// (e.g., GITHUB_ACTIONS=true on CI runners would make ci.IsCI() return true).
+func testSaveAndClearRegistry() func() {
+	return ci.SwapRegistryForTest()
+}
+
+// testRestoreRegistry restores the CI provider registry from the snapshot
+// returned by testSaveAndClearRegistry.
+func testRestoreRegistry(restore func()) {
+	restore()
+}
 
 func TestHasHooks(t *testing.T) {
 	tests := []struct {
@@ -153,6 +169,86 @@ func TestGetHooks_WithRealComponent(t *testing.T) {
 	assert.NotNil(t, hooks.items)
 	assert.Contains(t, hooks.items, "vpc-store-outputs")
 	assert.Equal(t, "store", hooks.items["vpc-store-outputs"].Command)
+}
+
+func TestGetHooks_DoesNotProcessTemplates(t *testing.T) {
+	tempDir := t.TempDir()
+
+	require.NoError(t, os.MkdirAll(filepath.Join(tempDir, "stacks", "orgs", "acme"), 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(tempDir, "stacks", "catalog"), 0o755))
+
+	require.NoError(t, os.WriteFile(
+		filepath.Join(tempDir, "atmos.yaml"),
+		[]byte(`base_path: "./"
+components:
+  terraform:
+    base_path: "components/terraform"
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "**/*"
+  excluded_paths:
+    - "catalog/**"
+  name_pattern: "{tenant}-{environment}-{stage}"
+schemas: {}
+logs:
+  level: Info
+`),
+		0o644,
+	))
+
+	// The invalid template would fail if ProcessTemplates=true in GetHooks.
+	require.NoError(t, os.WriteFile(
+		filepath.Join(tempDir, "stacks", "catalog", "vpc.yaml"),
+		[]byte(`components:
+  terraform:
+    vpc:
+      hooks:
+        static-hook:
+          events:
+            - after-terraform-apply
+          command: store
+          name: prod/ssm
+          outputs:
+            broken: "{{"
+`),
+		0o644,
+	))
+
+	require.NoError(t, os.WriteFile(
+		filepath.Join(tempDir, "stacks", "orgs", "acme", "_defaults.yaml"),
+		[]byte(`import:
+  - catalog/vpc
+`),
+		0o644,
+	))
+	require.NoError(t, os.WriteFile(
+		filepath.Join(tempDir, "stacks", "orgs", "acme", "acme-dev-test.yaml"),
+		[]byte(`import:
+  - orgs/acme/_defaults
+vars:
+  tenant: acme
+  environment: dev
+  stage: test
+`),
+		0o644,
+	))
+
+	t.Chdir(tempDir)
+
+	atmosConfig := &schema.AtmosConfiguration{}
+	info := &schema.ConfigAndStacksInfo{
+		ComponentFromArg: "vpc",
+		Stack:            "acme-dev-test",
+	}
+
+	hooks, err := GetHooks(atmosConfig, info)
+	require.NoError(t, err)
+	require.NotNil(t, hooks)
+	require.NotNil(t, hooks.items)
+	assert.Contains(t, hooks.items, "static-hook")
+	assert.Equal(t, "store", hooks.items["static-hook"].Command)
+	assert.Equal(t, "{{", hooks.items["static-hook"].Outputs["broken"])
 }
 
 func TestRunAll(t *testing.T) {
@@ -309,6 +405,81 @@ func TestRunAll(t *testing.T) {
 	}
 }
 
+// TestRunAll_EventFiltering verifies that RunAll only executes hooks whose Events list
+// includes the current event. This is the guard that prevents after-terraform-apply hooks
+// from firing during before-terraform-apply (and vice-versa).
+func TestRunAll_EventFiltering(t *testing.T) {
+	makeHooks := func(events []string) Hooks {
+		mockStore := NewMockStore()
+		cfg := &schema.AtmosConfiguration{Stores: make(store.StoreRegistry)}
+		cfg.Stores["test-store"] = mockStore
+		return Hooks{
+			config: cfg,
+			info:   &schema.ConfigAndStacksInfo{ComponentFromArg: "comp", Stack: "stack"},
+			items: map[string]Hook{
+				"hook": {
+					Events:  events,
+					Command: "store",
+					Name:    "test-store",
+					// Literal value (no dot prefix) — no terraform output call needed.
+					Outputs: map[string]string{"label_id": "literal-value"},
+				},
+			},
+		}
+	}
+
+	getStore := func(h Hooks) *MockStore {
+		return h.config.Stores["test-store"].(*MockStore)
+	}
+
+	t.Run("after-apply hook does not run on before-apply event", func(t *testing.T) {
+		h := makeHooks([]string{"after-terraform-apply"})
+		err := h.RunAll(BeforeTerraformApply, h.config, h.info, nil, nil)
+		require.NoError(t, err)
+		assert.Empty(t, getStore(h).GetData(), "store must not be called when event does not match")
+	})
+
+	t.Run("after-apply hook runs on after-apply event", func(t *testing.T) {
+		h := makeHooks([]string{"after-terraform-apply"})
+		err := h.RunAll(AfterTerraformApply, h.config, h.info, nil, nil)
+		require.NoError(t, err)
+		data := getStore(h).GetData()
+		assert.Equal(t, "literal-value", data["stack/comp/label_id"], "store must be called when event matches")
+	})
+
+	t.Run("hook with dot-format event matches correctly", func(t *testing.T) {
+		h := makeHooks([]string{"after.terraform.apply"})
+		err := h.RunAll(AfterTerraformApply, h.config, h.info, nil, nil)
+		require.NoError(t, err)
+		data := getStore(h).GetData()
+		assert.Equal(t, "literal-value", data["stack/comp/label_id"], "dot-format event must also match")
+	})
+
+	t.Run("hook with multiple events only runs on matching event", func(t *testing.T) {
+		h := makeHooks([]string{"before-terraform-plan", "after-terraform-apply"})
+		err := h.RunAll(BeforeTerraformApply, h.config, h.info, nil, nil)
+		require.NoError(t, err)
+		assert.Empty(t, getStore(h).GetData(), "store must not be called for non-matching event")
+	})
+
+	// Cross-fire: apply and deploy are aliases — hooks configured for either fire on both.
+	t.Run("after-terraform-apply hook fires when deploy command runs", func(t *testing.T) {
+		h := makeHooks([]string{"after-terraform-apply"})
+		err := h.RunAll(AfterTerraformDeploy, h.config, h.info, nil, nil)
+		require.NoError(t, err)
+		data := getStore(h).GetData()
+		assert.Equal(t, "literal-value", data["stack/comp/label_id"], "apply hook must fire on deploy event")
+	})
+
+	t.Run("after-terraform-deploy hook fires when apply command runs", func(t *testing.T) {
+		h := makeHooks([]string{"after-terraform-deploy"})
+		err := h.RunAll(AfterTerraformApply, h.config, h.info, nil, nil)
+		require.NoError(t, err)
+		data := getStore(h).GetData()
+		assert.Equal(t, "literal-value", data["stack/comp/label_id"], "deploy hook must fire on apply event")
+	})
+}
+
 // TestRunCIHooks_CIEnabledIsHardKillSwitch verifies that ci.enabled in atmos.yaml
 // is the authority for CI hooks. When ci.enabled is false (or not set, which defaults
 // to false), CI hooks must not run even when --ci flag is passed (forceCIMode=true).
@@ -353,10 +524,151 @@ func TestRunCIHooks_CIEnabledIsHardKillSwitch(t *testing.T) {
 			// If it did reach ci.Execute with a bogus event, the event would not
 			// match any binding and ci.Execute returns nil anyway — but the key
 			// assertion is that RunCIHooks itself short-circuits.
-			err := RunCIHooks("before.terraform.plan", config, info, "", tc.forceCIMode, nil)
+			err := RunCIHooks(&RunCIHooksOptions{
+				Event:       "before.terraform.plan",
+				AtmosConfig: config,
+				Info:        info,
+				ForceCIMode: tc.forceCIMode,
+			})
 			assert.NoError(t, err)
 		})
 	}
+}
+
+// TestRunCIHooks_LocalRunSkipsExperimentalGate verifies that local runs do not
+// hit the experimental CI gate unless CI mode is explicitly forced.
+func TestRunCIHooks_LocalRunSkipsExperimentalGate(t *testing.T) {
+	// Disable all registered CI providers for the duration of this test so the
+	// first subtest's ci.IsCI() check returns false regardless of the host
+	// environment (e.g., when this suite runs under GitHub Actions itself).
+	// Without this isolation, the github provider's Detect() would see
+	// GITHUB_ACTIONS=true and cause the non-force branch to fall through to
+	// the experimental gate, failing the test.
+	backup := testSaveAndClearRegistry()
+	defer testRestoreRegistry(backup)
+
+	config := &schema.AtmosConfiguration{
+		CI: schema.CIConfig{Enabled: true},
+		Settings: schema.AtmosSettings{
+			Experimental: "disable",
+		},
+	}
+	info := &schema.ConfigAndStacksInfo{
+		Stack:            "test-stack",
+		ComponentFromArg: "test-component",
+	}
+
+	t.Run("local run without force skips CI hooks before experimental gate", func(t *testing.T) {
+		err := RunCIHooks(&RunCIHooksOptions{
+			Event:       "before.terraform.plan",
+			AtmosConfig: config,
+			Info:        info,
+			ForceCIMode: false,
+		})
+		assert.NoError(t, err)
+	})
+
+	t.Run("forced CI mode still evaluates the experimental gate", func(t *testing.T) {
+		err := RunCIHooks(&RunCIHooksOptions{
+			Event:       "before.terraform.plan",
+			AtmosConfig: config,
+			Info:        info,
+			ForceCIMode: true,
+		})
+		assert.Error(t, err)
+		assert.True(t, errors.Is(err, errUtils.ErrExperimentalDisabled), "expected %v, got %v", errUtils.ErrExperimentalDisabled, err)
+	})
+}
+
+// TestRunCIHooks_ForwardsErrorAndExitCode verifies that RunCIHooksOptions
+// fields (CommandError, ExitCode) flow through to ci.Execute when CI is
+// enabled. We trigger a clean early exit inside ci.Execute by using an
+// unhandled event so no real plugin is invoked.
+func TestRunCIHooks_ForwardsErrorAndExitCode(t *testing.T) {
+	tests := []struct {
+		name         string
+		commandError error
+		exitCode     int
+	}{
+		{
+			name:         "nil error and zero exit code (success path)",
+			commandError: nil,
+			exitCode:     0,
+		},
+		{
+			name:         "wrapped ExitCodeError with code 1",
+			commandError: errUtils.ExitCodeError{Code: 1},
+			exitCode:     1,
+		},
+		{
+			name:         "plan exit code 2 with wrapped error (changes detected)",
+			commandError: errUtils.ExitCodeError{Code: 2},
+			exitCode:     2,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			config := &schema.AtmosConfiguration{
+				CI:       schema.CIConfig{Enabled: true},
+				Settings: schema.AtmosSettings{Experimental: "silence"},
+			}
+			info := &schema.ConfigAndStacksInfo{
+				Stack:            "dev",
+				ComponentFromArg: "vpc",
+			}
+
+			// "unhandled.event" has no registered plugin binding, so ci.Execute
+			// returns nil cleanly after platform/binding lookup. We just need
+			// RunCIHooks itself to construct the ExecuteOptions correctly and
+			// not panic on the new ExitCode/CommandError fields.
+			err := RunCIHooks(&RunCIHooksOptions{
+				Event:        "unhandled.event",
+				AtmosConfig:  config,
+				Info:         info,
+				ForceCIMode:  true, // forces generic provider so platform detection succeeds.
+				CommandError: tc.commandError,
+				ExitCode:     tc.exitCode,
+			})
+			assert.NoError(t, err)
+		})
+	}
+}
+
+// TestRunCIHooks_NilAtmosConfig verifies RunCIHooks does not panic when
+// AtmosConfig is nil — ci.enabled and experimental checks are skipped and
+// the call still completes cleanly (ci.Execute returns nil with no platform
+// detected).
+func TestRunCIHooks_NilAtmosConfig(t *testing.T) {
+	err := RunCIHooks(&RunCIHooksOptions{
+		Event:       "before.terraform.plan",
+		AtmosConfig: nil,
+		Info:        &schema.ConfigAndStacksInfo{},
+		ForceCIMode: false,
+	})
+	assert.NoError(t, err)
+}
+
+// TestRunCIHooks_ExperimentalDisableReturnsError verifies RunCIHooks
+// short-circuits with an experimental-disabled error when CI is enabled
+// in atmos.yaml but settings.experimental is set to "disable".
+func TestRunCIHooks_ExperimentalDisableReturnsError(t *testing.T) {
+	config := &schema.AtmosConfiguration{
+		CI:       schema.CIConfig{Enabled: true},
+		Settings: schema.AtmosSettings{Experimental: "disable"},
+	}
+
+	err := RunCIHooks(&RunCIHooksOptions{
+		Event:        "after.terraform.plan",
+		AtmosConfig:  config,
+		Info:         &schema.ConfigAndStacksInfo{Stack: "dev", ComponentFromArg: "vpc"},
+		ForceCIMode:  true,
+		CommandError: errUtils.ExitCodeError{Code: 1},
+		ExitCode:     1,
+	})
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, errUtils.ErrExperimentalDisabled),
+		"expected ErrExperimentalDisabled, got %v", err)
 }
 
 // TestCheckExperimental verifies that checkExperimental gates CI hooks

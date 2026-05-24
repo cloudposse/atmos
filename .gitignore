@@ -54,6 +54,7 @@ demos/audio/
 # Tool version managers
 .tool-versions
 !examples/toolchain/.tool-versions
+!examples/mcp-for-ai-coding-assistants/.tool-versions
 
 # Ignore cache files and sessions
 **/.atmos/cache.yaml
@@ -68,6 +69,7 @@ website/package-lock.json
 # Development configs - track only specific files
 .atmos.d/*
 !.atmos.d/dev.yaml
+!.atmos.d/toolchain.yaml
 !.atmos.d/README.md
 
 # Ignore components vendored during tests

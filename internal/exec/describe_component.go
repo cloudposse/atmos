@@ -12,6 +12,7 @@ import (
 	tuiTerm "github.com/cloudposse/atmos/internal/tui/templates/term"
 	"github.com/cloudposse/atmos/pkg/auth"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/data"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	m "github.com/cloudposse/atmos/pkg/merge"
 	"github.com/cloudposse/atmos/pkg/pager"
@@ -32,6 +33,7 @@ type DescribeComponentParams struct {
 	File                 string
 	Provenance           bool
 	AuthManager          auth.AuthManager // Optional: Auth manager for credential management (from --identity flag).
+	AuthDisabled         bool
 }
 
 //go:generate go run go.uber.org/mock/mockgen@v0.6.0 -source=$GOFILE -destination=mock_describe_component.go -package=$GOPACKAGE
@@ -106,6 +108,7 @@ func (d *DescribeComponentExec) ExecuteDescribeComponentCmd(describeComponentPar
 			ProcessYamlFunctions: processYamlFunctions,
 			Skip:                 skip,
 			AuthManager:          describeComponentParams.AuthManager,
+			AuthDisabled:         describeComponentParams.AuthDisabled,
 		})
 		if err != nil {
 			return err
@@ -125,6 +128,7 @@ func (d *DescribeComponentExec) ExecuteDescribeComponentCmd(describeComponentPar
 			ProcessYamlFunctions: processYamlFunctions,
 			Skip:                 skip,
 			AuthManager:          describeComponentParams.AuthManager,
+			AuthDisabled:         describeComponentParams.AuthDisabled,
 		})
 		if err != nil {
 			return err
@@ -215,6 +219,7 @@ type ExecuteDescribeComponentParams struct {
 	ProcessYamlFunctions bool
 	Skip                 []string
 	AuthManager          auth.AuthManager
+	AuthDisabled         bool
 }
 
 // ExecuteDescribeComponent describes component config.
@@ -229,6 +234,7 @@ func ExecuteDescribeComponent(params *ExecuteDescribeComponentParams) (map[strin
 		ProcessYamlFunctions: params.ProcessYamlFunctions,
 		Skip:                 params.Skip,
 		AuthManager:          params.AuthManager,
+		AuthDisabled:         params.AuthDisabled,
 	})
 	if err != nil {
 		return nil, err
@@ -260,9 +266,8 @@ func (d *DescribeComponentExec) renderProvenance(
 		return writeOutputToFile(file, output)
 	}
 
-	// Print to stdout (pipeable)
-	fmt.Print(output)
-	return nil
+	// Print to stdout (pipeable).
+	return data.Write(output)
 }
 
 // extractImportsList converts imports from any type to []string.
@@ -388,6 +393,7 @@ type DescribeComponentContextParams struct {
 	ProcessYamlFunctions bool
 	Skip                 []string
 	AuthManager          auth.AuthManager // Optional: Auth manager for credential management
+	AuthDisabled         bool
 }
 
 // componentTypeProcessParams contains parameters for tryProcessWithComponentType.
@@ -479,6 +485,7 @@ func ExecuteDescribeComponentWithContext(params DescribeComponentContextParams) 
 	configAndStacksInfo.Stack = params.Stack
 	configAndStacksInfo.CliArgs = []string{"describe", "component"}
 	configAndStacksInfo.ComponentSection = make(map[string]any)
+	configAndStacksInfo.AuthDisabled = params.AuthDisabled
 
 	var err error
 	atmosConfig := params.AtmosConfig

@@ -1,0 +1,5 @@
+vars:
+  stage: missing-import-test
+
+import:
+  - catalog/this-file-does-not-exist-at-all

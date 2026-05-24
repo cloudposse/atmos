@@ -63,6 +63,7 @@ var (
 	ErrMissingDocType                        = errors.New("doc-type argument missing")
 	ErrUnsupportedInputType                  = errors.New("unsupported input type")
 	ErrMissingStackNameTemplateAndPattern    = errors.New("'stacks.name_pattern' or 'stacks.name_template' needs to be specified in 'atmos.yaml'")
+	ErrStackNamePatternPartMissing           = errors.New("stack name pattern references a context part that is not defined in the stack file")
 	ErrFailedMarshalConfigToYaml             = errors.New("failed to marshal config to YAML")
 	ErrStacksDirectoryDoesNotExist           = errors.New("directory for Atmos stacks does not exist")
 	ErrMissingAtmosConfig                    = errors.New("atmos configuration not found or invalid")
@@ -119,6 +120,7 @@ var (
 	ErrDescribeComponent                = errors.New("failed to describe component")
 	ErrReadTerraformState               = errors.New("failed to read Terraform state")
 	ErrEvaluateTerraformBackendVariable = errors.New("failed to evaluate terraform backend variable")
+	ErrEvaluateOutput                   = errors.New("failed to evaluate output expression")
 
 	// Recoverable YAML function errors - use YQ default if available.
 	// These errors indicate the data is not available but do not represent API failures.
@@ -191,6 +193,9 @@ var (
 	ErrFailedToGetRepoInfo  = errors.New("failed to get repository info")
 	ErrLocalRepoFetch       = errors.New("local repo unavailable")
 	ErrGitRefNotFound       = errors.New("git reference not found on local filesystem")
+	ErrGitWorktreeAdd       = errors.New("failed to create git worktree")
+	ErrFetchOrigin          = errors.New("failed to fetch from origin")
+	ErrDeepenOrigin         = errors.New("failed to deepen fetch from origin")
 
 	// I/O and output errors.
 	ErrBuildIOConfig  = errors.New("failed to build I/O config")
@@ -223,6 +228,7 @@ var (
 	ErrInvalidToolSpec              = errors.New("invalid tool specification")
 	ErrToolAlreadyInstalled         = errors.New("tool already installed")
 	ErrDownloadFailed               = errors.New("download failed")
+	ErrDownloadRetryable            = errors.New("retryable download error")
 	ErrExtractionFailed             = errors.New("extraction failed")
 	ErrChecksumMismatch             = errors.New("checksum mismatch")
 	ErrNoVersionsInstalled          = errors.New("no versions installed")
@@ -245,12 +251,13 @@ var (
 	ErrInvalidFlagValue               = errors.New("invalid value for flag")
 
 	// File and URL handling errors.
-	ErrInvalidPagerCommand = errors.New("invalid pager command")
-	ErrEmptyURL            = errors.New("empty URL provided")
-	ErrFailedToFindImport  = errors.New("failed to find import")
-	ErrInvalidFilePath     = errors.New("invalid file path")
-	ErrRelPath             = errors.New("error determining relative path")
-	ErrHTTPRequestFailed   = errors.New("HTTP request failed")
+	ErrInvalidPagerCommand   = errors.New("invalid pager command")
+	ErrEmptyURL              = errors.New("empty URL provided")
+	ErrFailedToFindImport    = errors.New("failed to find import")
+	ErrInvalidFilePath       = errors.New("invalid file path")
+	ErrRelPath               = errors.New("error determining relative path")
+	ErrHTTPRequestFailed     = errors.New("HTTP request failed")
+	ErrRedirectLimitExceeded = errors.New("stopped after 10 redirects")
 
 	// Config loading errors.
 	ErrAtmosDirConfigNotFound      = errors.New("atmos config directory not found")
@@ -324,45 +331,49 @@ var (
 	ErrDecode                        = errors.New("decoding error")
 
 	// Stack processing errors.
-	ErrStackManifestFileNotFound              = errors.New("stack manifest file not found")
-	ErrInvalidStackManifest                   = errors.New("invalid stack manifest")
-	ErrStackManifestSchemaValidation          = errors.New("stack manifest schema validation failed")
-	ErrStackImportSelf                        = errors.New("stack manifest imports itself")
-	ErrStackImportNotFound                    = errors.New("stack import not found")
-	ErrStackCircularInheritance               = errors.New("circular component inheritance detected")
-	ErrInvalidHooksSection                    = errors.New("invalid 'hooks' section in the file")
-	ErrInvalidTerraformHooksSection           = errors.New("invalid 'terraform.hooks' section in the file")
-	ErrInvalidComponentVars                   = errors.New("invalid component vars section")
-	ErrInvalidComponentLocals                 = errors.New("invalid component locals section")
-	ErrInvalidComponentSettings               = errors.New("invalid component settings section")
-	ErrInvalidComponentEnv                    = errors.New("invalid component env section")
-	ErrInvalidComponentProviders              = errors.New("invalid component providers section")
-	ErrInvalidComponentHooks                  = errors.New("invalid component hooks section")
-	ErrInvalidComponentGenerate               = errors.New("invalid component generate section")
-	ErrInvalidComponentAuth                   = errors.New("invalid component auth section")
-	ErrInvalidComponentProvision              = errors.New("invalid component provision section")
-	ErrInvalidComponentMetadata               = errors.New("invalid component metadata section")
-	ErrInvalidComponentDependencies           = errors.New("invalid component dependencies section")
-	ErrInvalidComponentBackendType            = errors.New("invalid component backend_type attribute")
-	ErrInvalidComponentBackend                = errors.New("invalid component backend section")
-	ErrInvalidComponentRemoteStateBackendType = errors.New("invalid component remote_state_backend_type attribute")
-	ErrInvalidComponentRemoteStateBackend     = errors.New("invalid component remote_state_backend section")
-	ErrInvalidComponentCommand                = errors.New("invalid component command attribute")
-	ErrInvalidComponentSource                 = errors.New("invalid component source section")
-	ErrInvalidComponentOverrides              = errors.New("invalid component overrides section")
-	ErrInvalidComponentOverridesVars          = errors.New("invalid component overrides vars section")
-	ErrInvalidComponentOverridesSettings      = errors.New("invalid component overrides settings section")
-	ErrInvalidComponentOverridesEnv           = errors.New("invalid component overrides env section")
-	ErrInvalidComponentOverridesAuth          = errors.New("invalid component overrides auth section")
-	ErrInvalidComponentOverridesCommand       = errors.New("invalid component overrides command attribute")
-	ErrInvalidComponentOverridesProviders     = errors.New("invalid component overrides providers section")
-	ErrInvalidComponentOverridesHooks         = errors.New("invalid component overrides hooks section")
-	ErrInvalidComponentOverridesGenerate      = errors.New("invalid component overrides generate section")
-	ErrInvalidComponentAttribute              = errors.New("invalid component attribute")
-	ErrInvalidComponentMetadataComponent      = errors.New("invalid component metadata.component attribute")
-	ErrInvalidSpaceLiftSettings               = errors.New("invalid spacelift settings section")
-	ErrInvalidComponentMetadataInherits       = errors.New("invalid component metadata.inherits section")
-	ErrComponentNotDefined                    = errors.New("component not defined in any config files")
+	ErrStackManifestFileNotFound                  = errors.New("stack manifest file not found")
+	ErrInvalidStackManifest                       = errors.New("invalid stack manifest")
+	ErrStackManifestSchemaValidation              = errors.New("stack manifest schema validation failed")
+	ErrStackImportSelf                            = errors.New("stack manifest imports itself")
+	ErrStackImportNotFound                        = errors.New("stack import not found")
+	ErrStackCircularInheritance                   = errors.New("circular component inheritance detected")
+	ErrInvalidHooksSection                        = errors.New("invalid 'hooks' section in the file")
+	ErrInvalidTerraformHooksSection               = errors.New("invalid 'terraform.hooks' section in the file")
+	ErrInvalidComponentVars                       = errors.New("invalid component vars section")
+	ErrInvalidComponentLocals                     = errors.New("invalid component locals section")
+	ErrInvalidComponentSettings                   = errors.New("invalid component settings section")
+	ErrInvalidComponentEnv                        = errors.New("invalid component env section")
+	ErrInvalidComponentProviders                  = errors.New("invalid component providers section")
+	ErrInvalidComponentRequiredProviders          = errors.New("invalid component required_providers section")
+	ErrInvalidComponentRequiredVersion            = errors.New("invalid component required_version attribute")
+	ErrInvalidComponentHooks                      = errors.New("invalid component hooks section")
+	ErrInvalidComponentGenerate                   = errors.New("invalid component generate section")
+	ErrInvalidComponentAuth                       = errors.New("invalid component auth section")
+	ErrInvalidComponentProvision                  = errors.New("invalid component provision section")
+	ErrInvalidComponentMetadata                   = errors.New("invalid component metadata section")
+	ErrInvalidComponentDependencies               = errors.New("invalid component dependencies section")
+	ErrInvalidComponentBackendType                = errors.New("invalid component backend_type attribute")
+	ErrInvalidComponentBackend                    = errors.New("invalid component backend section")
+	ErrInvalidComponentRemoteStateBackendType     = errors.New("invalid component remote_state_backend_type attribute")
+	ErrInvalidComponentRemoteStateBackend         = errors.New("invalid component remote_state_backend section")
+	ErrInvalidComponentCommand                    = errors.New("invalid component command attribute")
+	ErrInvalidComponentSource                     = errors.New("invalid component source section")
+	ErrInvalidComponentOverrides                  = errors.New("invalid component overrides section")
+	ErrInvalidComponentOverridesVars              = errors.New("invalid component overrides vars section")
+	ErrInvalidComponentOverridesSettings          = errors.New("invalid component overrides settings section")
+	ErrInvalidComponentOverridesEnv               = errors.New("invalid component overrides env section")
+	ErrInvalidComponentOverridesAuth              = errors.New("invalid component overrides auth section")
+	ErrInvalidComponentOverridesCommand           = errors.New("invalid component overrides command attribute")
+	ErrInvalidComponentOverridesProviders         = errors.New("invalid component overrides providers section")
+	ErrInvalidComponentOverridesRequiredProviders = errors.New("invalid component overrides required_providers section")
+	ErrInvalidComponentOverridesRequiredVersion   = errors.New("invalid component overrides required_version attribute")
+	ErrInvalidComponentOverridesHooks             = errors.New("invalid component overrides hooks section")
+	ErrInvalidComponentOverridesGenerate          = errors.New("invalid component overrides generate section")
+	ErrInvalidComponentAttribute                  = errors.New("invalid component attribute")
+	ErrInvalidComponentMetadataComponent          = errors.New("invalid component metadata.component attribute")
+	ErrInvalidSpaceLiftSettings                   = errors.New("invalid spacelift settings section")
+	ErrInvalidComponentMetadataInherits           = errors.New("invalid component metadata.inherits section")
+	ErrComponentNotDefined                        = errors.New("component not defined in any config files")
 
 	// Component registry errors.
 	ErrComponentProviderNotFound          = errors.New("component provider not found")
@@ -379,6 +390,15 @@ var (
 	ErrInvalidTerraformBackend            = errors.New("invalid terraform.backend section")
 	ErrInvalidTerraformRemoteStateBackend = errors.New("invalid terraform.remote_state_backend section")
 	ErrUnsupportedComponentType           = errors.New("unsupported component type")
+
+	// Generator errors.
+	ErrGeneratorNotFound     = errors.New("generator not found")
+	ErrInvalidGeneratorCtx   = errors.New("invalid generator context")
+	ErrGeneratorValidation   = errors.New("generator validation failed")
+	ErrGenerationFailed      = errors.New("generation failed")
+	ErrGeneratorWriteFailed  = errors.New("failed to write generated file")
+	ErrMissingWorkingDir     = errors.New("working directory is required")
+	ErrMissingProviderSource = errors.New("required_providers entry missing 'source' field")
 
 	// List command errors.
 	ErrInvalidStackPattern          = errors.New("invalid stack pattern")
@@ -537,7 +557,21 @@ var (
 	ErrTokenRefreshFailed           = errors.New("failed to refresh API token")
 	ErrFailedToUnmarshalAPIResponse = errors.New("failed to unmarshal API response")
 	ErrNilRequestDTO                = errors.New("nil request DTO")
-	ErrAPIResponseError             = errors.New("API response error")
+
+	// Pro commit errors.
+	ErrCommitMessageRequired = errors.New("commit message is required")
+	ErrCommitMessageTooLong  = errors.New("commit message exceeds 500 characters")
+	ErrCommentTooLong        = errors.New("comment exceeds 2000 characters")
+	ErrBranchRequired        = errors.New("GITHUB_HEAD_REF is required (this command only runs in PR workflows)")
+	ErrBranchInvalid         = errors.New("branch name contains invalid characters")
+	ErrTooManyChanges        = errors.New("too many changed files (max 200)")
+	ErrCommitInvalidFilePath = errors.New("invalid file path for commit")
+	ErrFileTooLarge          = errors.New("file exceeds 2 MiB size limit")
+	ErrFailedToStageChanges  = errors.New("failed to stage changes")
+	ErrFailedToDetectChanges = errors.New("failed to detect git changes")
+	ErrFailedToCreateCommit  = errors.New("failed to create commit via Atmos Pro")
+	ErrStagingFlagConflict   = errors.New("--add and --all are mutually exclusive")
+	ErrAPIResponseError      = errors.New("API response error")
 
 	// Exec package errors.
 	ErrComponentAndStackRequired     = errors.New("component and stack are both required")
@@ -587,17 +621,17 @@ var (
 	ErrDependencyTargetNotFound  = errors.New("dependency target not found")
 
 	// Terraform --all flag errors.
-	ErrStackRequiredWithAllFlag     = errors.New("stack is required when using --all flag")
 	ErrComponentWithAllFlagConflict = errors.New("component argument can't be used with --all flag")
 
 	// Terraform execution errors.
-	ErrTerraformExecFailed = errors.New("terraform execution failed")
-	ErrDescribeAffected    = errors.New("describe affected failed")
-	ErrDescribeStacks      = errors.New("describe stacks failed")
-	ErrBuildDepGraph       = errors.New("build dependency graph failed")
-	ErrTopologicalOrder    = errors.New("topological sort failed")
-	ErrFormatForLogging    = errors.New("format affected for logging failed")
-	ErrQueryEvaluation     = errors.New("query evaluation failed")
+	ErrTerraformExecFailed          = errors.New("terraform execution failed")
+	ErrDescribeAffected             = errors.New("describe affected failed")
+	ErrUploadRequiresSupportedEvent = errors.New("upload requires a supported CI event")
+	ErrDescribeStacks               = errors.New("describe stacks failed")
+	ErrBuildDepGraph                = errors.New("build dependency graph failed")
+	ErrTopologicalOrder             = errors.New("topological sort failed")
+	ErrFormatForLogging             = errors.New("format affected for logging failed")
+	ErrQueryEvaluation              = errors.New("query evaluation failed")
 
 	// Cache-related errors.
 	ErrCacheLocked    = errors.New("cache file is locked")
@@ -675,7 +709,9 @@ var (
 	ErrInvalidIdentityConfig        = errors.New("invalid identity config")
 	ErrInvalidProviderKind          = errors.New("invalid provider kind")
 	ErrInvalidProviderConfig        = errors.New("invalid provider config")
+	ErrInvalidBrowserExecutable     = errors.New("invalid browser executable")
 	ErrAuthenticationFailed         = errors.New("authentication failed")
+	ErrPrepareShellEnvironment      = errors.New("failed to prepare authenticated shell environment")
 	ErrInvalidADCContent            = errors.New("invalid ADC content")
 	ErrWriteADCFile                 = errors.New("failed to write ADC file")
 	ErrWritePropertiesFile          = errors.New("failed to write properties file")
@@ -699,6 +735,25 @@ var (
 	ErrSSORoleListFailed      = errors.New("failed to list aws sso roles")
 	ErrSSOProvisioningFailed  = errors.New("aws sso identity provisioning failed")
 	ErrSSOInvalidToken        = errors.New("invalid aws sso token")
+
+	// AWS browser webflow errors.
+	ErrWebflowAuthFailed     = errors.New("browser authentication failed")
+	ErrWebflowDisabled       = errors.New("browser authentication is disabled")
+	ErrWebflowTokenExchange  = errors.New("failed to exchange authorization code for credentials")
+	ErrWebflowCallbackServer = errors.New("failed to start local callback server")
+	ErrWebflowTimeout        = errors.New("browser authentication timed out")
+	ErrWebflowRefreshFailed  = errors.New("failed to refresh browser credentials")
+	// ErrWebflowRefreshTokenRevoked indicates the refresh token has been definitively
+	// rejected by the AWS signin service (e.g. HTTP 400 invalid_grant/invalid_token).
+	// This is the only condition under which the cached refresh token should be deleted;
+	// transient failures (HTTP 5xx, 429, network errors) must preserve the cache.
+	ErrWebflowRefreshTokenRevoked = errors.New("browser refresh token has been revoked")
+	ErrWebflowCodeRequired        = errors.New("authorization code is required")
+	ErrWebflowReadAuthCodeFailed  = errors.New("failed to read authorization code")
+	ErrWebflowAuthorizationError  = errors.New("authorization error")
+	ErrWebflowMissingCallbackCode = errors.New("missing authorization code in callback")
+	ErrWebflowStateMismatch       = errors.New("state mismatch: possible CSRF attack")
+	ErrWebflowEmptyCachedToken    = errors.New("cached refresh token is empty")
 
 	// Credential errors.
 	ErrCredentialsInvalid = errors.New("credentials are invalid or have been revoked")
@@ -817,6 +872,7 @@ var (
 	ErrPathResolutionFailed   = errors.New("failed to resolve component from path")
 	ErrPathIsComponentBase    = errors.New("must specify a component directory, not the base directory")
 	ErrAmbiguousComponentPath = errors.New("ambiguous component path")
+	ErrComponentPathNotFound  = errors.New("component path does not exist")
 
 	// Interactive prompt errors.
 	ErrInteractiveModeNotAvailable = errors.New("interactive mode not available")
@@ -890,6 +946,10 @@ var (
 	ErrCIStatusFetchFailed     = errors.New("failed to fetch CI status")
 	ErrCIOutputWriteFailed     = errors.New("failed to write CI output")
 	ErrCISummaryWriteFailed    = errors.New("failed to write CI summary")
+	ErrCICommentPostFailed     = errors.New("failed to post PR comment")
+	ErrCICommentListFailed     = errors.New("failed to list PR comments")
+	ErrCICommentUpdateFailed   = errors.New("failed to update PR comment")
+	ErrCICommentNotFound       = errors.New("PR comment not found")
 	ErrGitHubTokenNotFound     = errors.New("GitHub token not found")
 
 	// Planfile storage errors.
@@ -1002,6 +1062,24 @@ var (
 	ErrAIUnsupportedCheckpointFormat  = errors.New("unsupported checkpoint format")
 	ErrAIComponentPathNotFound        = errors.New("component path not found")
 	ErrAIComponentPathNotDirectory    = errors.New("component path is not a directory")
+
+	// AWS security and compliance errors.
+	ErrAWSSecurityNotEnabled       = errors.New("security features are not enabled: add 'aws.security.enabled: true' to atmos.yaml")
+	ErrAWSSecurityNoFindings       = errors.New("no security findings found matching the specified filters")
+	ErrAWSSecurityFetchFailed      = errors.New("failed to fetch security findings from AWS")
+	ErrAWSSecurityMappingFailed    = errors.New("failed to map security finding to Atmos component")
+	ErrAWSSecurityInvalidSeverity  = errors.New("invalid severity filter: valid values are CRITICAL, HIGH, MEDIUM, LOW, INFORMATIONAL")
+	ErrAWSSecurityInvalidSource    = errors.New("invalid finding source: valid values are security-hub, config, inspector, guardduty, macie, access-analyzer, all")
+	ErrAWSSecurityInvalidFramework = errors.New("invalid compliance framework: valid values are cis-aws, pci-dss, soc2, hipaa, nist")
+	ErrAWSSecurityInvalidFormat    = errors.New("invalid output format: valid values are markdown, json, yaml, csv")
+	ErrAWSSecurityAnalysisFailed   = errors.New("AI analysis of security findings failed")
+	ErrAWSCredentialsNotValid      = errors.New("AWS credentials are not configured or have expired")
+
+	// CLI provider errors.
+	ErrCLIProviderBinaryNotFound    = errors.New("CLI provider binary not found on PATH")
+	ErrCLIProviderExecFailed        = errors.New("CLI provider execution failed")
+	ErrCLIProviderParseResponse     = errors.New("failed to parse CLI provider response")
+	ErrCLIProviderToolsNotSupported = errors.New("tool execution not supported for CLI providers; use MCP pass-through instead")
 
 	// Web search errors.
 	ErrWebSearchFailed      = errors.New("web search request failed")

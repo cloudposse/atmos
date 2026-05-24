@@ -1,0 +1,111 @@
+---
+title: atmos pro commit
+sidebar_label: commit
+sidebar_class_name: command
+id: commit
+description: Use this command to commit changes via the Atmos Pro GitHub App, ensuring commits trigger CI workflows.
+---
+
+import Screengrab from "@site/src/components/Screengrab";
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Use this command to commit staged changes via the [Atmos Pro](https://atmos-pro.com/docs) GitHub App.
+Unlike commits made with `GITHUB_TOKEN`, commits created through Atmos Pro trigger subsequent CI runs.
+</Intro>
+
+## Usage
+
+```shell
+atmos pro commit --message <message> [--comment <comment>] [--add <pattern>] [--all]
+```
+
+## Description
+
+When running in GitHub Actions, commits made with `GITHUB_TOKEN` do not trigger subsequent workflow runs.
+This is a deliberate GitHub limitation to prevent infinite loops, but it also prevents autofix workflows
+(like `terraform fmt`) from triggering validation on the reformatted code.
+
+`atmos pro commit` solves this by sending your changes to Atmos Pro, which creates the commit server-side
+using its GitHub App installation. Because the commit comes from the app (not `GITHUB_TOKEN`), GitHub
+triggers CI normally.
+
+The workflow never receives a write token. Atmos Pro controls exactly what gets committed.
+
+:::info Loop Prevention
+The command automatically detects when it's running in a workflow triggered by `atmos-pro[bot]` and
+exits early with a success message. This prevents infinite commit loops without requiring any workflow
+configuration. You can optionally add `if: github.actor != 'atmos-pro[bot]'` to skip the entire job
+for efficiency.
+:::
+
+## Examples
+
+```shell
+# Commit whatever is already staged
+atmos pro commit -m "terraform fmt"
+
+# Stage all changes then commit
+atmos pro commit -m "terraform fmt" --all
+
+# Stage only .tf files then commit
+atmos pro commit -m "terraform fmt" --add "*.tf"
+
+# Include a PR comment alongside the commit
+atmos pro commit -m "terraform fmt" --comment "Auto-formatted Terraform files"
+```
+
+### Example GitHub Actions Workflow
+
+```yaml
+name: autocommit
+on: pull_request
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  format:
+    if: github.actor != 'atmos-pro[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: terraform fmt -recursive
+      - run: atmos pro commit -m "[autocommit] terraform fmt" --all
+```
+
+## Flags
+
+<dl>
+  <dt>`--message` <em>(alias `-m`)</em> <em>(required)</em></dt>
+  <dd>Commit message. Maximum 500 characters.</dd>
+
+  <dt>`--comment` <em>(optional)</em></dt>
+  <dd>PR comment to post alongside the commit. Maximum 2000 characters.</dd>
+
+  <dt>`--add` <em>(optional)</em></dt>
+  <dd>File pattern to stage before committing (e.g. `"*.tf"`). Runs `git add <pattern>`. Mutually exclusive with `--all`.</dd>
+
+  <dt>`--all` <em>(alias `-A`)</em> <em>(optional)</em></dt>
+  <dd>Stage all changes before committing (runs `git add -A`). Mutually exclusive with `--add`.</dd>
+</dl>
+
+## Environment Variables
+
+<dl>
+  <dt>`ATMOS_PRO_BASE_URL`</dt>
+  <dd>Atmos Pro API URL (e.g. `https://app.atmos.pro`). Can also be set in `atmos.yaml`.</dd>
+
+  <dt>`ATMOS_PRO_WORKSPACE_ID`</dt>
+  <dd>Workspace ID for OIDC authentication.</dd>
+
+  <dt>`GITHUB_HEAD_REF`</dt>
+  <dd>PR branch name. Set automatically by GitHub Actions on `pull_request` events. Required.</dd>
+
+  <dt>`ACTIONS_ID_TOKEN_REQUEST_URL`</dt>
+  <dd>GitHub Actions OIDC token endpoint. Set automatically when `id-token: write` permission is granted.</dd>
+
+  <dt>`ACTIONS_ID_TOKEN_REQUEST_TOKEN`</dt>
+  <dd>GitHub Actions OIDC request bearer token. Set automatically when `id-token: write` permission is granted.</dd>
+</dl>

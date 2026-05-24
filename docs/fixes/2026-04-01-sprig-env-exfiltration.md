@@ -52,7 +52,9 @@ manual `delete(funcs, "env")` but this pattern is fragile. Both files now use
 
 `internal/exec/template_utils.go` and `pkg/locals/resolver.go` render Atmos stack manifests.
 `{{ env "KEY" }}` is a **documented, intentional feature** of Atmos stack templates, used e.g.
-to inject git tokens in `vendor.yaml` source URLs or to embed the current user in stack vars.
+to inject non-sensitive runtime settings and metadata (such as `{{ env "USER" }}` in stack vars).
+Avoid placing secrets directly in URL strings; use credential helpers, HTTP auth headers, or CI
+secret stores instead.
 
 The Sprig base is now `HermeticTxtFuncMap()` (removing other OS/network side-effects like
 `getHostByName`) but `env` and `expandenv` are **explicitly re-added** as a deliberate design

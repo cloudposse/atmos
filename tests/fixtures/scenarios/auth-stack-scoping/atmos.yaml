@@ -1,0 +1,69 @@
+# Test fixture for cloudposse/community discussion #122:
+# "Auth inheritance not scoping to stack"
+#
+# Scenario: a repo has many stacks across multiple tenants/OUs. ONE stack file
+# declares `auth.identities.<name>.default: true`. Currently, that single
+# declaration is picked up by the global pre-scanner in
+# pkg/config/stack_auth_loader.go and applied as THE default for every
+# subsequent `atmos terraform plan/apply` invocation — regardless of which
+# stack the user targeted.
+#
+# This is because LoadStackAuthDefaults:
+#   1. Reads every stack file in the include glob.
+#   2. Collects all `default: true` flags into a single global slice.
+#   3. Only discards them when DIFFERENT identities are flagged (the
+#      "conflict" branch). When exactly ONE stack flags a default, the
+#      `allAgree` loop sees 0 dissenting entries and the default is applied
+#      globally.
+#
+# Expected current (buggy) behavior:
+#   atmos auth whoami -s plat-staging → authenticates as `data-default`
+#   (the default declared in the unrelated data-staging monitoring stack).
+#
+# Expected behavior after the fix:
+#   Same command returns "no default identity configured" because the
+#   plat-staging stack has no auth block and should not inherit anything from
+#   the data stack.
+
+base_path: "./"
+
+components:
+  terraform:
+    base_path: "../../components/terraform"
+
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "orgs/**/us-east-1/*"
+  excluded_paths: []
+  name_template: "{{ .vars.tenant }}-{{ .vars.stage }}"
+
+# Global auth config: TWO mock identities, NEITHER of them globally default.
+# Any default must come from a specific stack — and should be scoped to that
+# stack only.
+auth:
+  providers:
+    mock-provider:
+      kind: mock/aws
+      config:
+        description: "Mock AWS provider for discussion #122 tests"
+
+  identities:
+    data-default:
+      kind: mock/aws
+      via:
+        provider: mock-provider
+      principal:
+        account:
+          id: "111111111111"
+
+    plat-default:
+      kind: mock/aws
+      via:
+        provider: mock-provider
+      principal:
+        account:
+          id: "222222222222"
+
+logs:
+  level: Info

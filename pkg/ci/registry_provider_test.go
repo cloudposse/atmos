@@ -44,8 +44,16 @@ func (m *mockProvider) UpdateCheckRun(_ context.Context, _ *provider.UpdateCheck
 	return &provider.CheckRun{ID: 1}, nil
 }
 
+func (m *mockProvider) PostComment(_ context.Context, _ *provider.PostCommentOptions) (*provider.Comment, error) {
+	return &provider.Comment{ID: 1}, nil
+}
+
 func (m *mockProvider) OutputWriter() provider.OutputWriter {
 	return nil
+}
+
+func (m *mockProvider) ResolveBase() (*provider.BaseResolution, error) {
+	return nil, nil
 }
 
 func TestRegisterAndGet(t *testing.T) {
@@ -135,19 +143,12 @@ func TestIsCI(t *testing.T) {
 	assert.True(t, IsCI())
 }
 
-// testSaveAndClearRegistry clears the provider registry and returns the previous
-// map. For use in tests only. Restore with testRestoreRegistry.
-func testSaveAndClearRegistry() map[string]provider.Provider {
-	providersMu.Lock()
-	defer providersMu.Unlock()
-	prev := providers
-	providers = make(map[string]provider.Provider)
-	return prev
+// testSaveAndClearRegistry clears the provider registry and returns a restore function.
+func testSaveAndClearRegistry() func() {
+	return SwapRegistryForTest()
 }
 
-// TestRestoreRegistry restores the provider registry from a previous snapshot.
-func testRestoreRegistry(m map[string]provider.Provider) {
-	providersMu.Lock()
-	defer providersMu.Unlock()
-	providers = m
+// testRestoreRegistry restores the provider registry from a previous snapshot.
+func testRestoreRegistry(restore func()) {
+	restore()
 }

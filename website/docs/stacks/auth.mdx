@@ -49,14 +49,16 @@ auth:
 
 ### Component-Level Configuration
 
-Components can reference or extend auth configuration via the `auth` top-level key:
+Components can override auth configuration by defining an `auth` section with an identity marked as `default: true`:
 
 ```yaml
 components:
   terraform:
     vpc:
       auth:
-        identity: prod-admin
+        identities:
+          prod-admin:
+            default: true
 ```
 
 ## Auth Configuration Structure
@@ -338,14 +340,18 @@ components:
     # This component needs admin access
     iam-roles:
       auth:
-        identity: prod-admin
+        identities:
+          prod-admin:
+            default: true
       vars:
         # ...
 
     # This component uses read-only access
     monitoring:
       auth:
-        identity: prod-readonly
+        identities:
+          prod-readonly:
+            default: true
       vars:
         # ...
 ```

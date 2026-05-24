@@ -894,6 +894,7 @@ func TestExecuteDescribeAffected(t *testing.T) {
 				tc.skip,
 				false,
 				nil,
+				false,
 			)
 
 			if tc.expectedErr != "" {
@@ -1236,6 +1237,7 @@ func TestExecuteDescribeAffectedLocalRepoHeadError(t *testing.T) {
 			nil,
 			false,
 			nil,
+			false,
 		)
 
 		assert.Error(t, err)
@@ -1273,6 +1275,7 @@ func TestExecuteDescribeAffectedRemoteRepoHeadError(t *testing.T) {
 			nil,
 			false,
 			nil,
+			false,
 		)
 
 		assert.Error(t, err)

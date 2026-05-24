@@ -37,7 +37,9 @@ func TestResolveAWSAuthContext_Success(t *testing.T) {
 	expectedCredsFile := filepath.Join("tmp", "aws-creds")
 	expectedConfigFile := filepath.Join("tmp", "aws-config")
 
-	stackInfo := &schema.ConfigAndStacksInfo{
+	// managerStackInfo simulates the auth manager's internal stackInfo, which is a
+	// separate allocation from the stackInfo passed to NewResolver (see pkg/auth.createAuthManagerInstance).
+	managerStackInfo := &schema.ConfigAndStacksInfo{
 		AuthContext: &schema.AuthContext{
 			AWS: &schema.AWSAuthContext{
 				CredentialsFile: expectedCredsFile,
@@ -51,8 +53,11 @@ func TestResolveAWSAuthContext_Success(t *testing.T) {
 	mockManager.EXPECT().
 		Authenticate(gomock.Any(), "prod-admin").
 		Return(&types.WhoamiInfo{}, nil)
+	mockManager.EXPECT().
+		GetStackInfo().
+		Return(managerStackInfo)
 
-	resolver := NewResolver(mockManager, stackInfo)
+	resolver := NewResolver(mockManager, &schema.ConfigAndStacksInfo{})
 
 	authConfig, err := resolver.ResolveAWSAuthContext(context.Background(), "prod-admin")
 	assert.NoError(t, err)
@@ -73,7 +78,7 @@ func TestResolveAWSAuthContext_RealmScopedPaths(t *testing.T) {
 	realmCredsFile := filepath.Join(".config", "atmos", "my-realm", "aws", "aws-sso", "credentials")
 	realmConfigFile := filepath.Join(".config", "atmos", "my-realm", "aws", "aws-sso", "config")
 
-	stackInfo := &schema.ConfigAndStacksInfo{
+	managerStackInfo := &schema.ConfigAndStacksInfo{
 		AuthContext: &schema.AuthContext{
 			AWS: &schema.AWSAuthContext{
 				CredentialsFile: realmCredsFile,
@@ -87,8 +92,11 @@ func TestResolveAWSAuthContext_RealmScopedPaths(t *testing.T) {
 	mockManager.EXPECT().
 		Authenticate(gomock.Any(), "prod-admin").
 		Return(&types.WhoamiInfo{}, nil)
+	mockManager.EXPECT().
+		GetStackInfo().
+		Return(managerStackInfo)
 
-	resolver := NewResolver(mockManager, stackInfo)
+	resolver := NewResolver(mockManager, &schema.ConfigAndStacksInfo{})
 
 	authConfig, err := resolver.ResolveAWSAuthContext(context.Background(), "prod-admin")
 	assert.NoError(t, err)
@@ -100,20 +108,68 @@ func TestResolveAWSAuthContext_RealmScopedPaths(t *testing.T) {
 	assert.Equal(t, "eu-west-1", authConfig.Region)
 }
 
+// TestResolveAWSAuthContext_PointerMismatch is a regression test for the bug where
+// NewResolver was given the terraform execution's stackInfo while the auth manager
+// internally used a separate *schema.ConfigAndStacksInfo allocated in
+// pkg/auth.createAuthManagerInstance. The resolver previously checked r.stackInfo.AuthContext.AWS
+// (always nil) instead of the manager's own stackInfo (populated by PostAuthenticate).
+func TestResolveAWSAuthContext_PointerMismatch(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockManager := types.NewMockAuthManager(ctrl)
+
+	// resolverStackInfo simulates the caller's ConfigAndStacksInfo — passed to NewResolver
+	// but never written to by the auth manager (different pointer).
+	resolverStackInfo := &schema.ConfigAndStacksInfo{}
+
+	// managerStackInfo simulates the auth manager's own internal allocation, which is
+	// what PostAuthenticate populates after a successful Authenticate call.
+	expectedCredsFile := filepath.Join("tmp", "aws-creds")
+	expectedConfigFile := filepath.Join("tmp", "aws-config")
+
+	managerStackInfo := &schema.ConfigAndStacksInfo{
+		AuthContext: &schema.AuthContext{
+			AWS: &schema.AWSAuthContext{
+				CredentialsFile: expectedCredsFile,
+				ConfigFile:      expectedConfigFile,
+				Profile:         "dev-admin",
+				Region:          "us-west-2",
+			},
+		},
+	}
+
+	mockManager.EXPECT().
+		Authenticate(gomock.Any(), "dev-admin").
+		Return(&types.WhoamiInfo{}, nil)
+	// GetStackInfo returns the manager's own stackInfo, NOT resolverStackInfo.
+	mockManager.EXPECT().
+		GetStackInfo().
+		Return(managerStackInfo)
+
+	resolver := NewResolver(mockManager, resolverStackInfo)
+
+	authConfig, err := resolver.ResolveAWSAuthContext(context.Background(), "dev-admin")
+	assert.NoError(t, err)
+	assert.NotNil(t, authConfig)
+	assert.Equal(t, expectedCredsFile, authConfig.CredentialsFile)
+	assert.Equal(t, "dev-admin", authConfig.Profile)
+
+	// Confirm the resolver's own stackInfo was never populated (proving the fix reads from the manager).
+	assert.Nil(t, resolverStackInfo.AuthContext)
+}
+
 func TestResolveAWSAuthContext_AuthFailure(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
 	mockManager := types.NewMockAuthManager(ctrl)
-	stackInfo := &schema.ConfigAndStacksInfo{
-		AuthContext: &schema.AuthContext{},
-	}
 
 	mockManager.EXPECT().
 		Authenticate(gomock.Any(), "bad-identity").
 		Return(nil, errors.New("authentication failed"))
 
-	resolver := NewResolver(mockManager, stackInfo)
+	resolver := NewResolver(mockManager, &schema.ConfigAndStacksInfo{})
 
 	authConfig, err := resolver.ResolveAWSAuthContext(context.Background(), "bad-identity")
 	assert.Error(t, err)
@@ -126,7 +182,9 @@ func TestResolveAWSAuthContext_NoAWSContext(t *testing.T) {
 	defer ctrl.Finish()
 
 	mockManager := types.NewMockAuthManager(ctrl)
-	stackInfo := &schema.ConfigAndStacksInfo{
+
+	// Manager's stackInfo has no AWS context (e.g., an Azure identity was authenticated).
+	managerStackInfo := &schema.ConfigAndStacksInfo{
 		AuthContext: &schema.AuthContext{
 			// AWS is nil — not populated by auth.
 		},
@@ -135,8 +193,11 @@ func TestResolveAWSAuthContext_NoAWSContext(t *testing.T) {
 	mockManager.EXPECT().
 		Authenticate(gomock.Any(), "azure-identity").
 		Return(&types.WhoamiInfo{}, nil)
+	mockManager.EXPECT().
+		GetStackInfo().
+		Return(managerStackInfo)
 
-	resolver := NewResolver(mockManager, stackInfo)
+	resolver := NewResolver(mockManager, &schema.ConfigAndStacksInfo{})
 
 	authConfig, err := resolver.ResolveAWSAuthContext(context.Background(), "azure-identity")
 	assert.Error(t, err)
@@ -153,7 +214,7 @@ func TestResolveAzureAuthContext_Success(t *testing.T) {
 	// Simulate realm-scoped credential path (as populated by auth system with realm).
 	realmCredsFile := filepath.Join(".azure", "atmos", "my-realm", "azure-oidc", "credentials.json")
 
-	stackInfo := &schema.ConfigAndStacksInfo{
+	managerStackInfo := &schema.ConfigAndStacksInfo{
 		AuthContext: &schema.AuthContext{
 			Azure: &schema.AzureAuthContext{
 				CredentialsFile: realmCredsFile,
@@ -169,8 +230,11 @@ func TestResolveAzureAuthContext_Success(t *testing.T) {
 	mockManager.EXPECT().
 		Authenticate(gomock.Any(), "azure-prod").
 		Return(&types.WhoamiInfo{}, nil)
+	mockManager.EXPECT().
+		GetStackInfo().
+		Return(managerStackInfo)
 
-	resolver := NewResolver(mockManager, stackInfo)
+	resolver := NewResolver(mockManager, &schema.ConfigAndStacksInfo{})
 
 	authConfig, err := resolver.ResolveAzureAuthContext(context.Background(), "azure-prod")
 	assert.NoError(t, err)
@@ -189,15 +253,12 @@ func TestResolveAzureAuthContext_AuthFailure(t *testing.T) {
 	defer ctrl.Finish()
 
 	mockManager := types.NewMockAuthManager(ctrl)
-	stackInfo := &schema.ConfigAndStacksInfo{
-		AuthContext: &schema.AuthContext{},
-	}
 
 	mockManager.EXPECT().
 		Authenticate(gomock.Any(), "bad-identity").
 		Return(nil, errors.New("authentication failed"))
 
-	resolver := NewResolver(mockManager, stackInfo)
+	resolver := NewResolver(mockManager, &schema.ConfigAndStacksInfo{})
 
 	authConfig, err := resolver.ResolveAzureAuthContext(context.Background(), "bad-identity")
 	assert.Error(t, err)
@@ -209,15 +270,19 @@ func TestResolveAzureAuthContext_NoAzureContext(t *testing.T) {
 	defer ctrl.Finish()
 
 	mockManager := types.NewMockAuthManager(ctrl)
-	stackInfo := &schema.ConfigAndStacksInfo{
+
+	managerStackInfo := &schema.ConfigAndStacksInfo{
 		AuthContext: &schema.AuthContext{},
 	}
 
 	mockManager.EXPECT().
 		Authenticate(gomock.Any(), "aws-identity").
 		Return(&types.WhoamiInfo{}, nil)
+	mockManager.EXPECT().
+		GetStackInfo().
+		Return(managerStackInfo)
 
-	resolver := NewResolver(mockManager, stackInfo)
+	resolver := NewResolver(mockManager, &schema.ConfigAndStacksInfo{})
 
 	authConfig, err := resolver.ResolveAzureAuthContext(context.Background(), "aws-identity")
 	assert.Error(t, err)
@@ -234,7 +299,7 @@ func TestResolveGCPAuthContext_Success(t *testing.T) {
 	// Simulate realm-scoped credential path (as populated by auth system with realm).
 	realmCredsFile := filepath.Join(".config", "atmos", "my-realm", "gcp", "gcp-adc", "adc", "gcp-prod", "application_default_credentials.json")
 
-	stackInfo := &schema.ConfigAndStacksInfo{
+	managerStackInfo := &schema.ConfigAndStacksInfo{
 		AuthContext: &schema.AuthContext{
 			GCP: &schema.GCPAuthContext{
 				CredentialsFile: realmCredsFile,
@@ -246,8 +311,11 @@ func TestResolveGCPAuthContext_Success(t *testing.T) {
 	mockManager.EXPECT().
 		Authenticate(gomock.Any(), "gcp-prod").
 		Return(&types.WhoamiInfo{}, nil)
+	mockManager.EXPECT().
+		GetStackInfo().
+		Return(managerStackInfo)
 
-	resolver := NewResolver(mockManager, stackInfo)
+	resolver := NewResolver(mockManager, &schema.ConfigAndStacksInfo{})
 
 	authConfig, err := resolver.ResolveGCPAuthContext(context.Background(), "gcp-prod")
 	assert.NoError(t, err)
@@ -262,15 +330,12 @@ func TestResolveGCPAuthContext_AuthFailure(t *testing.T) {
 	defer ctrl.Finish()
 
 	mockManager := types.NewMockAuthManager(ctrl)
-	stackInfo := &schema.ConfigAndStacksInfo{
-		AuthContext: &schema.AuthContext{},
-	}
 
 	mockManager.EXPECT().
 		Authenticate(gomock.Any(), "bad-identity").
 		Return(nil, errors.New("authentication failed"))
 
-	resolver := NewResolver(mockManager, stackInfo)
+	resolver := NewResolver(mockManager, &schema.ConfigAndStacksInfo{})
 
 	authConfig, err := resolver.ResolveGCPAuthContext(context.Background(), "bad-identity")
 	assert.Error(t, err)
@@ -282,15 +347,19 @@ func TestResolveGCPAuthContext_NoGCPContext(t *testing.T) {
 	defer ctrl.Finish()
 
 	mockManager := types.NewMockAuthManager(ctrl)
-	stackInfo := &schema.ConfigAndStacksInfo{
+
+	managerStackInfo := &schema.ConfigAndStacksInfo{
 		AuthContext: &schema.AuthContext{},
 	}
 
 	mockManager.EXPECT().
 		Authenticate(gomock.Any(), "aws-identity").
 		Return(&types.WhoamiInfo{}, nil)
+	mockManager.EXPECT().
+		GetStackInfo().
+		Return(managerStackInfo)
 
-	resolver := NewResolver(mockManager, stackInfo)
+	resolver := NewResolver(mockManager, &schema.ConfigAndStacksInfo{})
 
 	authConfig, err := resolver.ResolveGCPAuthContext(context.Background(), "aws-identity")
 	assert.Error(t, err)
@@ -298,22 +367,25 @@ func TestResolveGCPAuthContext_NoGCPContext(t *testing.T) {
 	assert.Contains(t, err.Error(), "GCP auth context not available")
 }
 
-func TestResolver_NilStackInfo(t *testing.T) {
+func TestResolver_NilManagerStackInfo(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
 	mockManager := types.NewMockAuthManager(ctrl)
 
-	// All three resolve methods call Authenticate, so expect three calls.
+	// All three resolve methods call Authenticate then GetStackInfo, so expect three calls each.
 	mockManager.EXPECT().
 		Authenticate(gomock.Any(), "test-identity").
 		Return(&types.WhoamiInfo{}, nil).
 		Times(3)
+	mockManager.EXPECT().
+		GetStackInfo().
+		Return(nil).
+		Times(3)
 
-	// Create resolver with nil stackInfo.
 	resolver := NewResolver(mockManager, nil)
 
-	// All resolve methods should return error when stackInfo is nil.
+	// All resolve methods should return error when the manager's stackInfo is nil.
 	_, err := resolver.ResolveAWSAuthContext(context.Background(), "test-identity")
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "AWS auth context not available")

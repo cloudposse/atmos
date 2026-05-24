@@ -426,6 +426,17 @@ func processEnvVars(atmosConfig *schema.AtmosConfiguration) error {
 		}
 	}
 
+	ciCommentsEnabled := os.Getenv("ATMOS_CI_COMMENTS_ENABLED")
+	if len(ciCommentsEnabled) > 0 {
+		log.Debug(foundEnvVarMessage, "ATMOS_CI_COMMENTS_ENABLED", ciCommentsEnabled)
+		enabled, err := strconv.ParseBool(ciCommentsEnabled)
+		if err != nil {
+			log.Warn("Invalid boolean value for ENV variable; using default.", "ATMOS_CI_COMMENTS_ENABLED", ciCommentsEnabled)
+		} else {
+			atmosConfig.CI.Comments.Enabled = &enabled
+		}
+	}
+
 	return nil
 }
 
@@ -779,12 +790,8 @@ func GetContextPrefix(stack string, context schema.Context, stackNamePattern str
 	for _, part := range stackNamePatternParts {
 		if part == "{namespace}" {
 			if len(context.Namespace) == 0 {
-				return "",
-					fmt.Errorf("the stack name pattern '%s' specifies 'namespace', but the stack '%s' does not have a namespace defined in the stack file '%s'",
-						stackNamePattern,
-						stack,
-						stackFile,
-					)
+				return "", fmt.Errorf("%w: the stack name pattern '%s' specifies 'namespace', but the stack '%s' does not have a namespace defined in the stack file '%s'",
+					errUtils.ErrStackNamePatternPartMissing, stackNamePattern, stack, stackFile)
 			}
 			if len(contextPrefix) == 0 {
 				contextPrefix = context.Namespace
@@ -793,12 +800,8 @@ func GetContextPrefix(stack string, context schema.Context, stackNamePattern str
 			}
 		} else if part == "{tenant}" {
 			if len(context.Tenant) == 0 {
-				return "",
-					fmt.Errorf("the stack name pattern '%s' specifies 'tenant', but the stack '%s' does not have a tenant defined in the stack file '%s'",
-						stackNamePattern,
-						stack,
-						stackFile,
-					)
+				return "", fmt.Errorf("%w: the stack name pattern '%s' specifies 'tenant', but the stack '%s' does not have a tenant defined in the stack file '%s'",
+					errUtils.ErrStackNamePatternPartMissing, stackNamePattern, stack, stackFile)
 			}
 			if len(contextPrefix) == 0 {
 				contextPrefix = context.Tenant
@@ -807,12 +810,8 @@ func GetContextPrefix(stack string, context schema.Context, stackNamePattern str
 			}
 		} else if part == "{environment}" {
 			if len(context.Environment) == 0 {
-				return "",
-					fmt.Errorf("the stack name pattern '%s' specifies 'environment', but the stack '%s' does not have an environment defined in the stack file '%s'",
-						stackNamePattern,
-						stack,
-						stackFile,
-					)
+				return "", fmt.Errorf("%w: the stack name pattern '%s' specifies 'environment', but the stack '%s' does not have an environment defined in the stack file '%s'",
+					errUtils.ErrStackNamePatternPartMissing, stackNamePattern, stack, stackFile)
 			}
 			if len(contextPrefix) == 0 {
 				contextPrefix = context.Environment
@@ -821,12 +820,8 @@ func GetContextPrefix(stack string, context schema.Context, stackNamePattern str
 			}
 		} else if part == "{stage}" {
 			if len(context.Stage) == 0 {
-				return "",
-					fmt.Errorf("the stack name pattern '%s' specifies 'stage', but the stack '%s' does not have a stage defined in the stack file '%s'",
-						stackNamePattern,
-						stack,
-						stackFile,
-					)
+				return "", fmt.Errorf("%w: the stack name pattern '%s' specifies 'stage', but the stack '%s' does not have a stage defined in the stack file '%s'",
+					errUtils.ErrStackNamePatternPartMissing, stackNamePattern, stack, stackFile)
 			}
 			if len(contextPrefix) == 0 {
 				contextPrefix = context.Stage
@@ -924,7 +919,8 @@ func getStackFilePatterns(basePath string, includeTemplates bool) []string {
 	}
 
 	if includeTemplates {
-		patterns = append(patterns,
+		patterns = append(
+			patterns,
 			basePath+u.YamlTemplateExtension,
 			basePath+u.YmlTemplateExtension,
 		)

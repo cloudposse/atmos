@@ -36,13 +36,17 @@ For complete Terraform/OpenTofu documentation, see:
 		return runHooks(h.BeforeTerraformApply, cmd, args)
 	},
 	RunE: func(cmd *cobra.Command, args []string) (runErr error) {
-		// Reset captured output for this run.
+		// Reset per-run globals. Both must be initialised before any early return
+		// so that the deferred hook and PostRunE read consistent state.
 		capturedApplyOutput = ""
+		wasMultiComponentExecution = false
 
 		// On failure, run after hooks with error context so CI check runs
 		// are updated to failure status. Cobra skips PostRunE on error.
+		// In multi-component mode the per-component hook already fired for each
+		// component, so the global error call is suppressed to avoid double-firing.
 		defer func() {
-			if runErr != nil {
+			if runErr != nil && !wasMultiComponentExecution {
 				runHooksOnErrorWithOutput(h.AfterTerraformApply, cmd, args, runErr, capturedApplyOutput)
 			}
 		}()
@@ -98,6 +102,12 @@ For complete Terraform/OpenTofu documentation, see:
 		return err
 	},
 	PostRunE: func(cmd *cobra.Command, args []string) error {
+		// In multi-component mode, CI hooks already fired per-component inside
+		// ExecuteTerraformQuery. Calling them again here would double-fire on the
+		// last component or fire with empty/misattributed output.
+		if wasMultiComponentExecution {
+			return nil
+		}
 		return runHooksWithOutput(h.AfterTerraformApply, cmd, args, capturedApplyOutput)
 	},
 }

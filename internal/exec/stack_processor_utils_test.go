@@ -12,6 +12,7 @@ import (
 	"go.uber.org/mock/gomock"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -1090,6 +1091,90 @@ func TestProcessYAMLConfigFileMissingFilesReturnError(t *testing.T) {
 	)
 
 	assert.Error(t, err)
+}
+
+// TestProcessYAMLConfigFile_ImportNotFound_ErrorPath exercises the branch where
+// GetGlobMatches returns an error (the import directory does not exist) and the
+// import is not a Go template, so processStackConfigImports propagates the
+// error back to ProcessYAMLConfigFile with the missing-file message.
+func TestProcessYAMLConfigFile_ImportNotFound_ErrorPath(t *testing.T) {
+	stacksBasePath := filepath.Join("..", "..", "tests", "fixtures", "scenarios", "invalid-stacks", "stacks")
+	// missing-import.yaml imports "catalog/this-file-does-not-exist-at-all" which has no
+	// matching files on disk — GetGlobMatches returns ErrFailedToFindImport.
+	filePath := filepath.Join("..", "..", "tests", "fixtures", "scenarios", "invalid-stacks", "stacks", "orgs", "acme", "platform", "missing-import.yaml")
+
+	atmosConfig := schema.AtmosConfiguration{
+		Templates: schema.Templates{
+			Settings: schema.TemplatesSettings{
+				Enabled: true,
+				Sprig: schema.TemplatesSettingsSprig{
+					Enabled: true,
+				},
+				Gomplate: schema.TemplatesSettingsGomplate{
+					Enabled: true,
+				},
+			},
+		},
+	}
+
+	_, _, _, _, _, _, _, err := ProcessYAMLConfigFile( //nolint:dogsled
+		&atmosConfig,
+		stacksBasePath,
+		filePath,
+		map[string]map[string]any{},
+		nil,
+		false,
+		false,
+		true,
+		false,
+		nil,
+		nil,
+		nil,
+		nil,
+		"",
+	)
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrFailedToFindImport)
+}
+
+// TestProcessYAMLConfigFile_InvalidTemplateInImportPath exercises the branch where
+// IsGolangTemplate itself returns an error because the import path contains invalid
+// Go template syntax — covering line 1093 inside processStackConfigImports.
+// Templates must be disabled so that the raw `{{ unclosed` string is preserved as
+// the import path and reaches IsGolangTemplate rather than failing during YAML
+// template pre-processing.
+func TestProcessYAMLConfigFile_InvalidTemplateInImportPath(t *testing.T) {
+	stacksBasePath := filepath.Join("..", "..", "tests", "fixtures", "scenarios", "invalid-stacks", "stacks")
+	// invalid-template-import-path.yaml imports `{{ unclosed` which is syntactically
+	// invalid as a Go template; IsGolangTemplate returns (false, err).
+	filePath := filepath.Join("..", "..", "tests", "fixtures", "scenarios", "invalid-stacks", "stacks", "orgs", "acme", "platform", "invalid-template-import-path.yaml")
+
+	// Disable template pre-processing so the raw `{{ unclosed` string is passed
+	// through YAML parsing unchanged and eventually reaches IsGolangTemplate.
+	atmosConfig := schema.AtmosConfiguration{}
+
+	_, _, _, _, _, _, _, err := ProcessYAMLConfigFile( //nolint:dogsled
+		&atmosConfig,
+		stacksBasePath,
+		filePath,
+		map[string]map[string]any{},
+		nil,
+		false,
+		false,
+		true,
+		false,
+		nil,
+		nil,
+		nil,
+		nil,
+		"",
+	)
+
+	require.Error(t, err)
+	// The error propagates from IsGolangTemplate which calls text/template.Parse on the
+	// import string — the error message contains the template name and parse failure.
+	assert.Contains(t, err.Error(), "unclosed")
 }
 
 func TestProcessYAMLConfigFileEmptyManifest(t *testing.T) {
@@ -2228,6 +2313,112 @@ func TestCacheCompiledSchema(t *testing.T) {
 	compiledSchema2, found2 := getCachedCompiledSchema(schemaPath)
 	assert.Equal(t, found, found2, "Consistent cache lookups should return same result")
 	assert.Equal(t, compiledSchema, compiledSchema2, "Consistent cache lookups should return same schema")
+}
+
+// TestExtractLocalsFromRawYAML_CacheReturnsIndependentCopies verifies the
+// Phase 4 cache returns deep copies, not shared map references. Without this
+// guarantee, downstream consumers — which store the locals/settings/vars/env
+// maps into shared template contexts and may mutate them later — would
+// corrupt the cache and observe values bleeding across files.
+func TestExtractLocalsFromRawYAML_CacheReturnsIndependentCopies(t *testing.T) {
+	ClearLocalsExtractionCache()
+	defer ClearLocalsExtractionCache()
+
+	atmosConfig := &schema.AtmosConfiguration{}
+	yamlContent := `
+locals:
+  region: us-east-1
+  count: 3
+settings:
+  flavor: prod
+vars:
+  stage: dev
+env:
+  AWS_REGION: us-east-1
+`
+	first, err := extractLocalsFromRawYAML(atmosConfig, yamlContent, "iso-test.yaml")
+	require.NoError(t, err)
+	require.NotNil(t, first)
+	require.True(t, first.hasLocals)
+
+	// Mutate every map on the first result.
+	first.locals["region"] = "MUTATED"
+	first.settings["flavor"] = "MUTATED"
+	first.vars["stage"] = "MUTATED"
+	first.env["AWS_REGION"] = "MUTATED"
+
+	// A second call must NOT see the mutations.
+	second, err := extractLocalsFromRawYAML(atmosConfig, yamlContent, "iso-test.yaml")
+	require.NoError(t, err)
+	require.NotNil(t, second)
+	assert.Equal(t, "us-east-1", second.locals["region"],
+		"cached locals must not reflect post-retrieval mutations to a prior result")
+	assert.Equal(t, "prod", second.settings["flavor"])
+	assert.Equal(t, "dev", second.vars["stage"])
+	assert.Equal(t, "us-east-1", second.env["AWS_REGION"])
+}
+
+// TestExtractLocalsFromRawYAML_CacheKeyIncludesContentHash verifies the
+// cache key encodes both the file path AND a content fingerprint so that
+// callers reusing the same logical file path with different content (a
+// common pattern in unit tests, and a safety property for any future
+// dynamic-content code path) do not see stale results from a prior call.
+func TestExtractLocalsFromRawYAML_CacheKeyIncludesContentHash(t *testing.T) {
+	ClearLocalsExtractionCache()
+	defer ClearLocalsExtractionCache()
+
+	atmosConfig := &schema.AtmosConfiguration{}
+	contentA := `
+locals:
+  marker: "alpha"
+`
+	contentB := `
+locals:
+  marker: "beta"
+`
+	// Same file path, different content — must yield distinct cached results.
+	rA, err := extractLocalsFromRawYAML(atmosConfig, contentA, "same-path.yaml")
+	require.NoError(t, err)
+	rB, err := extractLocalsFromRawYAML(atmosConfig, contentB, "same-path.yaml")
+	require.NoError(t, err)
+	assert.Equal(t, "alpha", rA.locals["marker"])
+	assert.Equal(t, "beta", rB.locals["marker"],
+		"different content under the same path must not return a stale cached result")
+}
+
+// TestExtractAndAddLocalsToContext_DoesNotMutateInputContext locks in the
+// Phase 4 race fix: the function used to call delete() on the parent context
+// map shared across sibling-import goroutines, producing a data race surfaced
+// by TestHierarchicalImports_* under -race. After Phase 4, the input context
+// is cloned before any modification so the caller's map is untouched.
+func TestExtractAndAddLocalsToContext_DoesNotMutateInputContext(t *testing.T) {
+	ClearLocalsExtractionCache()
+	defer ClearLocalsExtractionCache()
+
+	atmosConfig := &schema.AtmosConfiguration{}
+	parent := map[string]any{
+		cfg.LocalsSectionName: map[string]any{"inherited": "should-be-dropped"},
+		"unrelated":           "kept",
+	}
+	yamlContent := `
+locals:
+  region: us-east-1
+`
+	_, err := extractAndAddLocalsToContext(
+		atmosConfig,
+		yamlContent,
+		"iso-context.yaml",
+		"iso-context.yaml",
+		parent,
+	)
+	require.NoError(t, err)
+
+	// Parent context must still contain its original locals key (untouched).
+	gotLocals, ok := parent[cfg.LocalsSectionName].(map[string]any)
+	require.True(t, ok, "parent context locals key must be untouched")
+	assert.Equal(t, "should-be-dropped", gotLocals["inherited"],
+		"extractAndAddLocalsToContext must not mutate the caller's parent context")
+	assert.Equal(t, "kept", parent["unrelated"])
 }
 
 // TestExtractLocalsFromRawYAML_Basic tests basic locals extraction from raw YAML.

@@ -1,0 +1,85 @@
+---
+slug: pro-commit
+title: "Server-Side Commits via Atmos Pro GitHub App"
+authors: [osterman]
+tags: [feature, atmos-pro]
+---
+
+import ActionCard from '@site/src/components/ActionCard'
+
+Atmos now supports **server-side commits** via the Atmos Pro GitHub App. The new `atmos pro commit` command
+sends your changes to Atmos Pro, which creates the commit using its GitHub App installation — ensuring
+commits trigger CI workflows.
+
+<!--truncate-->
+
+## Why This Matters
+
+When running in GitHub Actions, commits made with `GITHUB_TOKEN` do not trigger subsequent workflow runs.
+This is a deliberate GitHub limitation to prevent infinite loops, but it blocks common autofix patterns
+like running `tofu fmt` and committing the result.
+
+Previously, teams worked around this by minting PATs (insecure and static), creating GitHub App tokens
+(tedious, and secrets need to be saved somewhere), or using dedicated services like
+[autofix.ci](https://autofix.ci/). Now this capability is built directly into Atmos.
+
+## How It Works
+
+1. Your workflow makes changes (e.g., `atmos toolchain exec -- tofu fmt -recursive`)
+2. `atmos pro commit` detects staged changes, base64-encodes file contents, and authenticates via GitHub OIDC
+3. Atmos Pro creates the commit server-side using its GitHub App
+4. Because the commit comes from the app (not `GITHUB_TOKEN`), GitHub triggers CI normally
+
+The workflow never receives a write token — Atmos Pro controls exactly what gets committed.
+
+**Built-in loop prevention:** The command automatically detects when it's running in a workflow triggered
+by `atmos-pro[bot]` and exits early. No workflow guards needed — though you can optionally add
+`if: github.actor != 'atmos-pro[bot]'` to skip the entire job for efficiency.
+
+## Quick Start
+
+```yaml
+name: autocommit
+on: pull_request
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  format:
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/cloudposse/atmos:1.214.0
+    steps:
+      - uses: actions/checkout@v4
+      - run: atmos toolchain exec -- tofu fmt -recursive components/terraform/
+      - run: atmos pro commit -m "[autocommit] formatting fixes" --all
+```
+
+## Staging Options
+
+Control what gets committed with flexible staging flags:
+
+```bash
+# Commit whatever is already staged
+atmos pro commit -m "formatting fixes"
+
+# Stage everything first
+atmos pro commit -m "formatting fixes" --all
+
+# Stage only specific files
+atmos pro commit -m "formatting fixes" --add "*.tf"
+```
+
+## Safety
+
+- `.github/` paths are rejected to prevent workflow injection
+- File size limit of 2 MiB per file (larger files are skipped with a warning)
+- Maximum 200 changed files per commit (enforced in [`pkg/pro/commit.go`](https://github.com/cloudposse/atmos/blob/main/pkg/pro/commit.go))
+- Atmos Pro RBAC required for commits and scoped to branches, workflows, and GitHub environments
+- Branch is validated against the OIDC JWT's `head_ref` claim server-side
+
+<ActionCard title="Get Started" href="/cli/commands/pro/commit">
+  Read the full CLI reference for `atmos pro commit`.
+</ActionCard>

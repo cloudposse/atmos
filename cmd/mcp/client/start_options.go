@@ -1,15 +1,10 @@
 package client
 
 import (
-	"fmt"
-
-	"github.com/cloudposse/atmos/pkg/auth"
-	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/dependencies"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	mcpclient "github.com/cloudposse/atmos/pkg/mcp/client"
 	"github.com/cloudposse/atmos/pkg/schema"
-	"github.com/cloudposse/atmos/pkg/ui"
 )
 
 // buildStartOptions creates StartOption slice with toolchain and auth resolution
@@ -30,6 +25,35 @@ func buildStartOptions(atmosConfig *schema.AtmosConfiguration) []mcpclient.Start
 
 // buildToolchainOption creates a toolchain StartOption if .tool-versions or component deps are available.
 func buildToolchainOption(atmosConfig *schema.AtmosConfiguration) []mcpclient.StartOption {
+	tenv := resolveToolchainEnvironment(atmosConfig)
+	if tenv == nil {
+		return nil
+	}
+	return []mcpclient.StartOption{mcpclient.WithToolchain(tenv)}
+}
+
+// buildToolchainPATH returns the toolchain-augmented PATH string for the
+// configured atmos toolchain, or "" when no toolchain dependencies are
+// resolved. Used by `atmos mcp export` so the exported .mcp.json carries the
+// toolchain PATH into the IDE-spawned subprocess (otherwise IDEs can't find
+// `uvx` / `npx` when those are only on the Atmos toolchain PATH).
+//
+// This mirrors buildToolchainOption's resolution chain (`.tool-versions`
+// first, then a terraform-component fallback) so the two `mcp` paths agree
+// on what "the toolchain" means for a given project.
+func buildToolchainPATH(atmosConfig *schema.AtmosConfiguration) string {
+	tenv := resolveToolchainEnvironment(atmosConfig)
+	if tenv == nil {
+		return ""
+	}
+	return tenv.PATH()
+}
+
+// resolveToolchainEnvironment loads the Atmos toolchain environment for the
+// current project, trying `.tool-versions` first and falling back to a
+// terraform-component resolution. Returns nil when no toolchain is
+// configured (callers should treat this as a no-op rather than an error).
+func resolveToolchainEnvironment(atmosConfig *schema.AtmosConfiguration) *dependencies.ToolchainEnvironment {
 	// Load dependencies from .tool-versions (the standard toolchain source).
 	deps, err := dependencies.LoadToolVersionsDependencies(atmosConfig)
 	if err != nil {
@@ -37,7 +61,7 @@ func buildToolchainOption(atmosConfig *schema.AtmosConfiguration) []mcpclient.St
 	} else if len(deps) > 0 {
 		tenv, tenvErr := dependencies.NewEnvironmentFromDeps(atmosConfig, deps)
 		if tenvErr == nil && tenv != nil {
-			return []mcpclient.StartOption{mcpclient.WithToolchain(tenv)}
+			return tenv
 		}
 		log.Debug("Failed to create toolchain environment for MCP", "error", tenvErr)
 	}
@@ -45,35 +69,29 @@ func buildToolchainOption(atmosConfig *schema.AtmosConfiguration) []mcpclient.St
 	// Fall back to component-based resolution.
 	tenv, tenvErr := dependencies.ForComponent(atmosConfig, "terraform", nil, nil)
 	if tenvErr == nil && tenv != nil {
-		return []mcpclient.StartOption{mcpclient.WithToolchain(tenv)}
+		return tenv
 	}
 	return nil
 }
 
-// buildAuthOption creates an auth StartOption if any configured server needs credentials.
+// buildAuthOption creates an auth StartOption if any configured server needs
+// credentials. The returned option delegates to mcpclient.NewScopedAuthProvider
+// which rebuilds the auth manager per-server, applying each server's `env:`
+// block (specifically ATMOS_* variables) before loading atmos config and
+// resolving identities.
 func buildAuthOption(atmosConfig *schema.AtmosConfiguration) []mcpclient.StartOption {
-	// Check if any server needs auth.
-	needsAuth := false
-	for _, s := range atmosConfig.MCP.Servers {
+	if !mcpServersNeedAuth(atmosConfig.MCP.Servers) {
+		return nil
+	}
+	return []mcpclient.StartOption{mcpclient.WithAuthManager(mcpclient.NewScopedAuthProvider())}
+}
+
+// mcpServersNeedAuth returns true if any configured MCP server has identity set.
+func mcpServersNeedAuth(servers map[string]schema.MCPServerConfig) bool {
+	for _, s := range servers {
 		if s.Identity != "" {
-			needsAuth = true
-			break
+			return true
 		}
 	}
-	if !needsAuth {
-		return nil
-	}
-
-	mgr, err := auth.CreateAndAuthenticateManagerWithAtmosConfig(
-		"", &atmosConfig.Auth, cfg.IdentityFlagSelectValue, atmosConfig,
-	)
-	if err != nil {
-		ui.Error(fmt.Sprintf("Failed to create auth manager for MCP servers: %v", err))
-		return nil
-	}
-	if mgr == nil {
-		return nil
-	}
-
-	return []mcpclient.StartOption{mcpclient.WithAuthManager(mgr)}
+	return false
 }

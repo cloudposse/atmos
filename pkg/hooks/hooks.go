@@ -43,9 +43,11 @@ func GetHooks(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStac
 	// here would fail. The hooks section itself is static config (event names,
 	// commands, store names) and does not use YAML functions.
 	sections, err := e.ExecuteDescribeComponent(&e.ExecuteDescribeComponentParams{
-		Component:            info.ComponentFromArg,
-		Stack:                info.Stack,
-		ProcessTemplates:     true,
+		Component: info.ComponentFromArg,
+		Stack:     info.Stack,
+		// Hook discovery only needs static hook metadata; avoid template rendering
+		// here to prevent pre-auth side effects during command preflight.
+		ProcessTemplates:     false,
 		ProcessYamlFunctions: false,
 		Skip:                 []string{},
 		AuthManager:          nil,
@@ -87,7 +89,12 @@ func GetHooks(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStac
 func (h Hooks) RunAll(event HookEvent, atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, cmd *cobra.Command, args []string) error {
 	log.Debug("Running hooks", "count", len(h.items))
 
-	for _, hook := range h.items {
+	for name, hook := range h.items {
+		if !hook.MatchesEvent(event) {
+			log.Debug("Skipping hook, event not in hook events list", "hook", name, "event", event, "hook_events", hook.Events)
+			continue
+		}
+
 		var hookCmd Command
 		var err error
 
@@ -115,41 +122,73 @@ func (h Hooks) RunAll(event HookEvent, atmosConfig *schema.AtmosConfiguration, i
 	return nil
 }
 
+// RunCIHooksOptions configures a RunCIHooks invocation.
+type RunCIHooksOptions struct {
+	// Event is the hook event (e.g., "after.terraform.deploy").
+	Event HookEvent
+
+	// AtmosConfig is the Atmos configuration.
+	AtmosConfig *schema.AtmosConfiguration
+
+	// Info contains component and stack information.
+	Info *schema.ConfigAndStacksInfo
+
+	// Output is the captured command output to process.
+	Output string
+
+	// ForceCIMode forces CI mode even when environment detection fails (--ci flag).
+	ForceCIMode bool
+
+	// CommandError is the error from the command execution, if any (nil on success).
+	CommandError error
+
+	// ExitCode is the exit code from the command execution. This is the
+	// authoritative signal plugins use to determine success/failure and (for
+	// `terraform plan` with -detailed-exitcode) change detection. Pass 0 on success.
+	ExitCode int
+}
+
 // RunCIHooks executes CI actions based on provider bindings.
 // This is called automatically during command execution if CI is enabled.
-// The output parameter is the command output to process (e.g., terraform plan output).
-// The forceCIMode parameter forces CI mode even when environment detection fails (--ci flag).
-// The cmdErr parameter is the error from the command execution (nil on success).
-func RunCIHooks(event HookEvent, atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, output string, forceCIMode bool, cmdErr error) error {
-	defer perf.Track(atmosConfig, "hooks.RunCIHooks")()
+func RunCIHooks(opts *RunCIHooksOptions) error {
+	defer perf.Track(opts.AtmosConfig, "hooks.RunCIHooks")()
 
-	log.Debug("Running CI hooks", "event", event, "force_ci", forceCIMode)
+	log.Debug("Running CI hooks", "event", opts.Event, "force_ci", opts.ForceCIMode)
 
 	// ci.enabled in atmos.yaml is the authority — if not set or false, CI is off.
 	// The --ci flag / ATMOS_CI env var only controls provider fallback (generic vs auto-detect),
 	// it cannot override a disabled config.
-	if atmosConfig != nil && !atmosConfig.CI.Enabled {
+	if opts.AtmosConfig != nil && !opts.AtmosConfig.CI.Enabled {
 		log.Debug("CI integration disabled in config (ci.enabled is not true)")
+		return nil
+	}
+
+	// Skip CI hooks entirely on local runs unless the user explicitly forced CI mode.
+	// This avoids emitting experimental warnings or performing any CI-specific setup
+	// when no CI provider is actually available.
+	if !opts.ForceCIMode && !ci.IsCI() {
+		log.Debug("Skipping CI hooks because no CI provider was detected and CI mode was not forced")
 		return nil
 	}
 
 	// CI integration is experimental. Check settings.experimental to decide
 	// whether to proceed, warn, or block — mirroring command-level behavior.
 	// This runs after the ci.enabled check so the warning only appears when CI is active.
-	if atmosConfig != nil {
-		if err := checkExperimental(atmosConfig); err != nil {
+	if opts.AtmosConfig != nil {
+		if err := checkExperimental(opts.AtmosConfig); err != nil {
 			return err
 		}
 	}
 
 	// Execute CI actions based on provider bindings.
 	return ci.Execute(ci.ExecuteOptions{
-		Event:        string(event),
-		AtmosConfig:  atmosConfig,
-		Info:         info,
-		Output:       output,
-		ForceCIMode:  forceCIMode,
-		CommandError: cmdErr,
+		Event:        string(opts.Event),
+		AtmosConfig:  opts.AtmosConfig,
+		Info:         opts.Info,
+		Output:       opts.Output,
+		ForceCIMode:  opts.ForceCIMode,
+		CommandError: opts.CommandError,
+		ExitCode:     opts.ExitCode,
 	})
 }
 
