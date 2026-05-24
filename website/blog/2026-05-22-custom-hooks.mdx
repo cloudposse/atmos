@@ -128,16 +128,6 @@ ATMOS_SKIP_HOOKS=true atmos terraform apply vpc -s prod        # env form
 Skipped hooks are logged at `INFO` so it's visible in CI output. Per
 invocation only — doesn't propagate to nested commands or workflows.
 
-### Tool output streams naturally
-
-Tool stdout/stderr stream straight through Atmos's I/O layer
-(`pkg/io/` + `pkg/ui/`). You see infracost progress and trivy warnings
-in real time the same way you see terraform plan output today —
-nothing gets swallowed, nothing waits until the end. Structured
-machine-readable output (JSON breakdowns, SARIF findings) flows through
-a side channel (`$ATMOS_OUTPUT_FILE` / `$ATMOS_OUTPUT_DIR`) the kind
-reads to build the markdown summary.
-
 ### Workdir compatible
 
 When the `component-workdir` feature is enabled, hooks scan the same

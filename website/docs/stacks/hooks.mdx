@@ -272,6 +272,68 @@ collide, and cleanup is automatic.
 Tool stdout/stderr stream through Atmos's I/O layer so you see them in
 real time — same UX as Terraform plan output.
 
+## Overriding Kind Defaults
+
+Every named kind (`infracost`, `trivy`, `checkov`, `kics`, `store`)
+ships defaults for `command`, `args`, `env`, and `on_failure`. Any
+field you set on the hook overrides the kind's default for that field.
+
+:::caution Override is replace, not merge
+`args` and `env` are **full replacement** — if you set `args` on the
+hook, the kind's default arg list is discarded entirely (you must
+restate every arg you want). Same for `env`. If you only need to tweak
+one flag, use `kind: command` directly and pass the full command line.
+:::
+
+A common case is bumping a scanner's severity threshold or adding a
+config file. Because override replaces the entire arg list, copy the
+default args from the [kind's reference section above](#kind-trivy) and
+add your overrides:
+
+```yaml
+hooks:
+  security:
+    events: [after-terraform-plan]
+    kind: trivy
+    args:
+      - config
+      - --format
+      - sarif
+      - --output
+      - $ATMOS_OUTPUT_FILE
+      - --severity
+      - HIGH,CRITICAL          # added
+      - --quiet
+      - $ATMOS_COMPONENT_PATH
+```
+
+You can also override just `on_failure` (independent of args/env) to
+make a scanner finding block the run:
+
+```yaml
+hooks:
+  security:
+    events: [after-terraform-plan]
+    kind: trivy
+    on_failure: fail            # default is warn
+```
+
+Or override `env` to inject a tool-specific config path:
+
+```yaml
+hooks:
+  policy:
+    events: [after-terraform-plan]
+    kind: checkov
+    env:
+      CHECKOV_CONFIG_FILE: $ATMOS_COMPONENT_PATH/.checkov.yaml
+```
+
+Setting `env` on the hook replaces the kind's `DefaultEnv` map
+entirely. For `kind: checkov` specifically, that means losing the
+default `SSL_CERT_FILE` workaround (see [`kind: checkov`](#kind-checkov))
+— restate it if you still need it.
+
 ## Tool Auto-Install via `dependencies.tools`
 
 Declare which tools a hook needs and Atmos installs them automatically
@@ -437,13 +499,13 @@ Stores](/stacks/sharing-state/stores).
 
 ## Examples
 
-Five working examples live under [`examples/`](https://github.com/cloudposse/atmos/tree/main/examples):
+Five working examples live in the [Examples gallery](/examples):
 
-- [`hooks-infracost`](https://github.com/cloudposse/atmos/tree/main/examples/hooks-infracost) — cost analysis with `kind: infracost`
-- [`hooks-trivy`](https://github.com/cloudposse/atmos/tree/main/examples/hooks-trivy) — security scanning with `kind: trivy`
-- [`hooks-checkov`](https://github.com/cloudposse/atmos/tree/main/examples/hooks-checkov) — policy scanning with `kind: checkov`
-- [`hooks-kics`](https://github.com/cloudposse/atmos/tree/main/examples/hooks-kics) — IaC scanning with `kind: kics`
-- [`hooks-custom-command`](https://github.com/cloudposse/atmos/tree/main/examples/hooks-custom-command) — custom Python script via `kind: command`
+- [`hooks-infracost`](/examples/hooks-infracost) — cost analysis with `kind: infracost`
+- [`hooks-trivy`](/examples/hooks-trivy) — security scanning with `kind: trivy`
+- [`hooks-checkov`](/examples/hooks-checkov) — policy scanning with `kind: checkov`
+- [`hooks-kics`](/examples/hooks-kics) — IaC scanning with `kind: kics`
+- [`hooks-custom-command`](/examples/hooks-custom-command) — custom Python script via `kind: command`
 
 Each uses dummy AWS provider config so `tofu plan` succeeds offline.
 
