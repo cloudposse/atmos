@@ -5,7 +5,7 @@ authors: [osterman]
 tags: [feature, security]
 ---
 
-The `atmos aws security analyze` command is the native Atmos command for turning AWS security findings into infrastructure-aware remediation guidance. It ingests findings from AWS Security Hub, Config, Inspector, GuardDuty, Macie, and Access Analyzer, then uses Atmos component tags and mapping heuristics to connect affected resources back to the stacks and components that manage them.
+The `atmos aws security analyze` command is the native Atmos command for turning AWS security findings into infrastructure-aware remediation guidance. It reads findings from AWS Security Hub and Amazon Inspector, including Security Hub product findings from services such as AWS Config, GuardDuty, Macie, and IAM Access Analyzer, then uses Atmos component tags and mapping heuristics to connect affected resources back to the stacks and components that manage them.
 
 Those mappings make findings more actionable: instead of stopping at an AWS resource ARN, Atmos can show the owning stack, component path, severity, source service, and remediation context. With new SARIF 2.1.0 and OCSF 1.4.0 output, those findings can now flow into code scanning, SIEM, governance, risk, and compliance workflows without a translation layer.
 
@@ -32,14 +32,14 @@ Security findings need to land in the systems that already track risk — GitHub
 
 ## How to Use It
 
-Local file:
+The `--stack` filter is where the report becomes operational: it narrows the export to the environment you own, and the mapped component metadata travels with each finding.
 
 ```shell
 atmos aws security analyze --stack prod-use1 --format=sarif --file=findings.sarif
 atmos aws security analyze --stack prod-use1 --format=ocsf --file=findings.ocsf.json
 ```
 
-In GitHub Actions, hand the SARIF file to `github/codeql-action/upload-sarif` to surface findings in the Security tab. Send the OCSF JSON to your SIEM, data lake, or security analytics pipeline.
+Use SARIF when you want stack-scoped findings in GitHub code scanning or another code-scanning surface. Use OCSF when you want the same stack and component context in your SIEM, GRC tooling, data lake, or security analytics pipeline.
 
 ## Get Involved
 
