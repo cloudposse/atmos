@@ -166,3 +166,34 @@ func TestMatchFiles(t *testing.T) {
 		})
 	}
 }
+
+func TestErrInvalidPattern_Error(t *testing.T) {
+	underlying := fmt.Errorf("syntax error at position 3")
+	err := ErrInvalidPattern{
+		Pattern: "*.{invalid",
+		Err:     underlying,
+	}
+	msg := err.Error()
+	if msg == "" {
+		t.Error("ErrInvalidPattern.Error() returned empty string")
+	}
+	if !contains(msg, "*.{invalid") {
+		t.Errorf("expected error message to contain pattern, got: %s", msg)
+	}
+	if !contains(msg, "syntax error at position 3") {
+		t.Errorf("expected error message to contain underlying error, got: %s", msg)
+	}
+}
+
+func contains(s, sub string) bool {
+	return len(s) >= len(sub) && (s == sub || len(s) > 0 && containsStr(s, sub))
+}
+
+func containsStr(s, sub string) bool {
+	for i := 0; i <= len(s)-len(sub); i++ {
+		if s[i:i+len(sub)] == sub {
+			return true
+		}
+	}
+	return false
+}
