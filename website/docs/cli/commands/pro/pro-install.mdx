@@ -9,6 +9,7 @@ description: Use this command to scaffold Atmos Pro workflows, auth profiles, an
 import Screengrab from "@site/src/components/Screengrab";
 import Intro from '@site/src/components/Intro'
 import Experimental from '@site/src/components/Experimental'
+import ActionCard from '@site/src/components/ActionCard'
 
 <Intro>
 Use this command to scaffold [Atmos Pro](https://atmos-pro.com) workflows, auth profiles, and drop-in configuration
@@ -16,7 +17,20 @@ into your repository. One command generates everything needed to connect your re
 orchestration platform.
 </Intro>
 
+This is the recommended onboarding path from the top-level [Atmos Pro](/pro) page once your
+repository already uses Atmos and your CI auth is set up with OIDC.
+
 <Experimental />
+
+<ActionCard
+  title="Start with Atmos Pro"
+  primaryCtaText="Atmos Pro Overview"
+  primaryCtaLink="/pro"
+  secondaryCtaText="Configuration"
+  secondaryCtaLink="/cli/configuration/settings/pro"
+>
+  Use the overview page for the high-level workflow, then return here for command details and flags.
+</ActionCard>
 
 <Screengrab title="atmos pro install" slug="atmos-pro-install" />
 
