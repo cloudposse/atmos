@@ -405,8 +405,13 @@ func TestConcurrentCacheAccess_InterleavedReadWrite(t *testing.T) {
 			for j := 0; j < itersPerReader; j++ {
 				key := fmt.Sprintf("seed-%d", (id+j)%writers)
 				cached, _, found := getCachedBaseComponentConfig(key)
-				if found {
-					require.NotNil(t, cached)
+				// assert.NotNil (not require.NotNil) so this is safe to call
+				// from a goroutine: require would call t.FailNow, which calls
+				// runtime.Goexit and would only exit THIS goroutine while the
+				// main test continued past wg.Wait without surfacing the
+				// failure deterministically. assert returns a bool we use to
+				// guard the subsequent field dereference.
+				if found && assert.NotNil(t, cached) {
 					// Read a field; tripping the deep copy is the point.
 					_ = cached.FinalBaseComponentName
 				}
@@ -513,4 +518,95 @@ func TestCacheBaseComponentConfig_SkipsEmptyFields(t *testing.T) {
 	assert.Nil(t, cached.BaseComponentHooks)
 	assert.Nil(t, cached.BaseComponentBackendSection)
 	assert.Nil(t, cached.BaseComponentRemoteStateBackendSection)
+	// Locals/Generate/SourceSection/ProvisionSection/RequiredProviders were
+	// historically not deep-copied at all (pre-existing main-branch bug:
+	// cache HIT returned them as nil even when the un-cached path populated
+	// them). Now covered by deepCopyBaseComponentConfigMaps — empty source
+	// still yields nil dst.
+	assert.Nil(t, cached.BaseComponentLocals)
+	assert.Nil(t, cached.BaseComponentGenerate)
+	assert.Nil(t, cached.BaseComponentSourceSection)
+	assert.Nil(t, cached.BaseComponentProvisionSection)
+	assert.Nil(t, cached.BaseComponentRequiredProviders)
+}
+
+// TestCacheBaseComponentConfig_RoundTripsAllFields locks in the contract
+// that EVERY field of BaseComponentConfig populated by
+// processBaseComponentConfigInternal round-trips through the cache. Before
+// the fix that accompanies this test, six fields (BaseComponentLocals,
+// BaseComponentGenerate, BaseComponentSourceSection,
+// BaseComponentProvisionSection, BaseComponentRequiredProviders,
+// BaseComponentRequiredVersion) were dropped by the cache write/read paths,
+// causing cache HIT to return a truncated config relative to cache MISS.
+func TestCacheBaseComponentConfig_RoundTripsAllFields(t *testing.T) {
+	ClearBaseComponentConfigCache()
+	defer ClearBaseComponentConfigCache()
+
+	src := &schema.BaseComponentConfig{
+		// All scalar (string) fields populated.
+		FinalBaseComponentName:              "base/vpc",
+		BaseComponentCommand:                "terraform",
+		BaseComponentBackendType:            "s3",
+		BaseComponentRemoteStateBackendType: "s3",
+		BaseComponentRequiredVersion:        ">= 1.5.0",
+		// All map fields populated with distinguishable values.
+		BaseComponentVars:                      map[string]any{"region": "us-east-1"},
+		BaseComponentSettings:                  map[string]any{"spacelift": map[string]any{"workspace_enabled": true}},
+		BaseComponentEnv:                       map[string]any{"AWS_REGION": "us-east-1"},
+		BaseComponentAuth:                      map[string]any{"identity": "default"},
+		BaseComponentDependencies:              map[string]any{"file": []any{"vpc-flow-logs"}},
+		BaseComponentLocals:                    map[string]any{"stage": "prod"},
+		BaseComponentMetadata:                  map[string]any{"component": "vpc"},
+		BaseComponentProviders:                 map[string]any{"aws": map[string]any{"region": "us-east-1"}},
+		BaseComponentRequiredProviders:         map[string]any{"aws": map[string]any{"source": "hashicorp/aws"}},
+		BaseComponentHooks:                     map[string]any{"pre_plan": []any{"echo"}},
+		BaseComponentGenerate:                  map[string]any{"backend.tf.json": map[string]any{"format": "json"}},
+		BaseComponentBackendSection:            map[string]any{"s3": map[string]any{"bucket": "tfstate"}},
+		BaseComponentRemoteStateBackendSection: map[string]any{"s3": map[string]any{"bucket": "tfstate-remote"}},
+		BaseComponentSourceSection:             map[string]any{"uri": "github.com/example/repo"},
+		BaseComponentProvisionSection:          map[string]any{"enabled": true},
+		ComponentInheritanceChain:              []string{"base", "abstract"},
+	}
+	cacheBaseComponentConfig("roundtrip-key", src)
+
+	cached, chain, found := getCachedBaseComponentConfig("roundtrip-key")
+	require.True(t, found)
+	require.NotNil(t, cached)
+
+	// Every scalar field.
+	assert.Equal(t, "base/vpc", cached.FinalBaseComponentName)
+	assert.Equal(t, "terraform", cached.BaseComponentCommand)
+	assert.Equal(t, "s3", cached.BaseComponentBackendType)
+	assert.Equal(t, "s3", cached.BaseComponentRemoteStateBackendType)
+	assert.Equal(t, ">= 1.5.0", cached.BaseComponentRequiredVersion)
+
+	// Every map field is present with the right value.
+	assert.Equal(t, "us-east-1", cached.BaseComponentVars["region"])
+	assert.True(t, cached.BaseComponentSettings["spacelift"].(map[string]any)["workspace_enabled"].(bool))
+	assert.Equal(t, "us-east-1", cached.BaseComponentEnv["AWS_REGION"])
+	assert.Equal(t, "default", cached.BaseComponentAuth["identity"])
+	assert.NotEmpty(t, cached.BaseComponentDependencies["file"])
+	assert.Equal(t, "prod", cached.BaseComponentLocals["stage"])
+	assert.Equal(t, "vpc", cached.BaseComponentMetadata["component"])
+	assert.Equal(t, "us-east-1", cached.BaseComponentProviders["aws"].(map[string]any)["region"])
+	assert.Equal(t, "hashicorp/aws", cached.BaseComponentRequiredProviders["aws"].(map[string]any)["source"])
+	assert.NotEmpty(t, cached.BaseComponentHooks["pre_plan"])
+	assert.Equal(t, "json", cached.BaseComponentGenerate["backend.tf.json"].(map[string]any)["format"])
+	assert.Equal(t, "tfstate", cached.BaseComponentBackendSection["s3"].(map[string]any)["bucket"])
+	assert.Equal(t, "tfstate-remote", cached.BaseComponentRemoteStateBackendSection["s3"].(map[string]any)["bucket"])
+	assert.Equal(t, "github.com/example/repo", cached.BaseComponentSourceSection["uri"])
+	assert.True(t, cached.BaseComponentProvisionSection["enabled"].(bool))
+
+	// The slice round-trips too.
+	require.NotNil(t, chain)
+	assert.Equal(t, []string{"base", "abstract"}, *chain)
+	assert.Equal(t, []string{"base", "abstract"}, cached.ComponentInheritanceChain)
+
+	// Deep-copy contract: mutating the cached value does not affect a
+	// subsequent retrieval. Pick a representative previously-dropped field.
+	cached.BaseComponentLocals["stage"] = "MUTATED"
+	second, _, _ := getCachedBaseComponentConfig("roundtrip-key")
+	require.NotNil(t, second)
+	assert.Equal(t, "prod", second.BaseComponentLocals["stage"],
+		"mutating a retrieved cached value must not affect subsequent retrievals")
 }

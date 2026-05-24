@@ -39,6 +39,14 @@ var (
 // deepCopyBaseComponentConfigMaps deep copies all map fields from src to dst.
 // Returns an error if any deep copy fails.
 //
+// This must cover EVERY AtmosSectionMapType field of BaseComponentConfig so
+// the cache's returned-on-hit shape matches the freshly-computed shape from
+// processBaseComponentConfigInternal. Missing a field here causes a silent
+// correctness bug: cache MISS yields the full config, cache HIT yields a
+// truncated one with the missed field as nil. The companion paired-string
+// fields (BaseComponentRequiredVersion etc.) are copied by the struct
+// literal in cacheBaseComponentConfig / getCachedBaseComponentConfig.
+//
 // Empty src fields are skipped (no DeepCopyMap call, no allocation). In the
 // customer workload most components leave several of these fields empty
 // (notably BaseComponentProviders / Hooks / Generate / Dependencies for
@@ -46,6 +54,8 @@ var (
 // per-call cost in cacheBaseComponentConfig / getCachedBaseComponentConfig
 // proportional to how many fields are unused. Phases 12/13 of the
 // describe-affected perf investigation.
+//
+//nolint:cyclop,funlen // Cohesive field-by-field deep-copy; splitting would obscure that every map field of BaseComponentConfig is covered.
 func deepCopyBaseComponentConfigMaps(dst, src *schema.BaseComponentConfig) error {
 	var err error
 	if len(src.BaseComponentVars) > 0 {
@@ -68,13 +78,18 @@ func deepCopyBaseComponentConfigMaps(dst, src *schema.BaseComponentConfig) error
 			return err
 		}
 	}
-	if len(src.BaseComponentMetadata) > 0 {
-		if dst.BaseComponentMetadata, err = m.DeepCopyMap(src.BaseComponentMetadata); err != nil {
+	if len(src.BaseComponentDependencies) > 0 {
+		if dst.BaseComponentDependencies, err = m.DeepCopyMap(src.BaseComponentDependencies); err != nil {
 			return err
 		}
 	}
-	if len(src.BaseComponentDependencies) > 0 {
-		if dst.BaseComponentDependencies, err = m.DeepCopyMap(src.BaseComponentDependencies); err != nil {
+	if len(src.BaseComponentLocals) > 0 {
+		if dst.BaseComponentLocals, err = m.DeepCopyMap(src.BaseComponentLocals); err != nil {
+			return err
+		}
+	}
+	if len(src.BaseComponentMetadata) > 0 {
+		if dst.BaseComponentMetadata, err = m.DeepCopyMap(src.BaseComponentMetadata); err != nil {
 			return err
 		}
 	}
@@ -83,8 +98,18 @@ func deepCopyBaseComponentConfigMaps(dst, src *schema.BaseComponentConfig) error
 			return err
 		}
 	}
+	if len(src.BaseComponentRequiredProviders) > 0 {
+		if dst.BaseComponentRequiredProviders, err = m.DeepCopyMap(src.BaseComponentRequiredProviders); err != nil {
+			return err
+		}
+	}
 	if len(src.BaseComponentHooks) > 0 {
 		if dst.BaseComponentHooks, err = m.DeepCopyMap(src.BaseComponentHooks); err != nil {
+			return err
+		}
+	}
+	if len(src.BaseComponentGenerate) > 0 {
+		if dst.BaseComponentGenerate, err = m.DeepCopyMap(src.BaseComponentGenerate); err != nil {
 			return err
 		}
 	}
@@ -95,6 +120,16 @@ func deepCopyBaseComponentConfigMaps(dst, src *schema.BaseComponentConfig) error
 	}
 	if len(src.BaseComponentRemoteStateBackendSection) > 0 {
 		if dst.BaseComponentRemoteStateBackendSection, err = m.DeepCopyMap(src.BaseComponentRemoteStateBackendSection); err != nil {
+			return err
+		}
+	}
+	if len(src.BaseComponentSourceSection) > 0 {
+		if dst.BaseComponentSourceSection, err = m.DeepCopyMap(src.BaseComponentSourceSection); err != nil {
+			return err
+		}
+	}
+	if len(src.BaseComponentProvisionSection) > 0 {
+		if dst.BaseComponentProvisionSection, err = m.DeepCopyMap(src.BaseComponentProvisionSection); err != nil {
 			return err
 		}
 	}
@@ -126,6 +161,11 @@ func getCachedBaseComponentConfig(cacheKey string) (*schema.BaseComponentConfig,
 		BaseComponentCommand:                cached.BaseComponentCommand,
 		BaseComponentBackendType:            cached.BaseComponentBackendType,
 		BaseComponentRemoteStateBackendType: cached.BaseComponentRemoteStateBackendType,
+		// BaseComponentRequiredVersion is a string set by
+		// processBaseComponentConfigInternal — it must round-trip through the
+		// cache so callers that read it after a cache HIT see the same value
+		// as after a cache MISS.
+		BaseComponentRequiredVersion: cached.BaseComponentRequiredVersion,
 	}
 
 	// Deep copy all map fields.
@@ -159,6 +199,11 @@ func cacheBaseComponentConfig(cacheKey string, config *schema.BaseComponentConfi
 		BaseComponentCommand:                config.BaseComponentCommand,
 		BaseComponentBackendType:            config.BaseComponentBackendType,
 		BaseComponentRemoteStateBackendType: config.BaseComponentRemoteStateBackendType,
+		// BaseComponentRequiredVersion is a string set by
+		// processBaseComponentConfigInternal — it must round-trip through the
+		// cache so callers that read it after a cache HIT see the same value
+		// as after a cache MISS.
+		BaseComponentRequiredVersion: config.BaseComponentRequiredVersion,
 	}
 
 	// Deep copy all map fields.
