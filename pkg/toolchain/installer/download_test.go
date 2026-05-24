@@ -2,6 +2,7 @@ package installer
 
 import (
 	"bytes"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -111,10 +112,41 @@ func TestBuildDownloadError(t *testing.T) {
 			assert.Error(t, err)
 			// The error wraps ErrDownloadFailed sentinel error.
 			assert.ErrorIs(t, err, errUtils.ErrDownloadFailed)
+			assert.Contains(t, err.Error(), url)
+			assert.Contains(t, err.Error(), http.StatusText(tt.statusCode))
 			// Non-404 errors should NOT include ErrHTTP404.
 			assert.NotErrorIs(t, err, ErrHTTP404, "Only 404 should include ErrHTTP404")
 		})
 	}
+}
+
+func TestBuildDownloadRetryError_HTTPStatusIncludesUsefulContext(t *testing.T) {
+	url := "https://github.com/owner/repo/releases/download/v1.0.0/tool.tar.gz"
+	lastErr := buildDownloadError(url, http.StatusServiceUnavailable)
+
+	err := buildDownloadRetryError(url, downloadRetryMaxAttempts, lastErr)
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrDownloadFailed)
+	assert.Contains(t, err.Error(), "failed to download "+url)
+	assert.Contains(t, err.Error(), "after 5 attempts")
+	assert.Contains(t, err.Error(), "HTTP 503 Service Unavailable")
+}
+
+func TestBuildDownloadRetryError_RequestErrorIncludesUnderlyingCause(t *testing.T) {
+	url := "https://github.com/owner/repo/releases/download/v1.0.0/tool.tar.gz"
+	lastErr := errors.Join(
+		errUtils.ErrDownloadRetryable,
+		&downloadRequestError{url: url, err: io.ErrUnexpectedEOF},
+	)
+
+	err := buildDownloadRetryError(url, downloadRetryMaxAttempts, lastErr)
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrDownloadFailed)
+	assert.Contains(t, err.Error(), "failed to download "+url)
+	assert.Contains(t, err.Error(), "after 5 attempts")
+	assert.Contains(t, err.Error(), "unexpected EOF")
 }
 
 func TestBuildDownloadError_404IncludesErrHTTP404(t *testing.T) {
