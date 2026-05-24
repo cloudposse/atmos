@@ -114,4 +114,3 @@ func TestCredentials_Validate(t *testing.T) {
 	require.NotNil(t, validation.Expiration)
 	assert.True(t, expiration.Equal(*validation.Expiration))
 }
-
