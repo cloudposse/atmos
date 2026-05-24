@@ -533,6 +533,9 @@ jobs:
     name: "[lint] ${{ matrix.demo-folder }}"
     needs: build
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      checks: write
     strategy:
       fail-fast: false
       matrix:
