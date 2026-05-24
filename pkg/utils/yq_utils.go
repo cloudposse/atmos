@@ -171,9 +171,23 @@ func isMisinterpretedScalar(node *yaml.Node, originalResult string) bool {
 	return keyMatchesOriginalWithColon(keyNode.Value, originalResult)
 }
 
+// processYAMLNode walks a YAML node tree and adjusts the style of scalar
+// string nodes that start with `#` so they round-trip without YAML
+// re-interpreting them as comments.
+//
+// The perf.Track defer is on this entry point only; the recursive worker
+// (processYAMLNodeInner) deliberately omits it to avoid inflating the
+// metric across every tree node — see processCustomTags /
+// processCustomTagsInner for the same pattern.
 func processYAMLNode(node *yaml.Node) {
 	defer perf.Track(nil, "utils.processYAMLNode")()
+	processYAMLNodeInner(node)
+}
 
+// processYAMLNodeInner is the recursive worker for processYAMLNode. No
+// perf.Track here; the outer call wraps the whole walk with one tracked
+// frame.
+func processYAMLNodeInner(node *yaml.Node) {
 	if node == nil {
 		return
 	}
@@ -183,7 +197,7 @@ func processYAMLNode(node *yaml.Node) {
 	}
 
 	for _, child := range node.Content {
-		processYAMLNode(child)
+		processYAMLNodeInner(child)
 	}
 }
 
