@@ -118,3 +118,36 @@ func IsCI() bool {
 
 	return Detect() != nil
 }
+
+// DebugModeInfo describes the detected CI provider's debug-mode state.
+// Returned by DetectDebugMode to keep callers provider-agnostic.
+type DebugModeInfo struct {
+	// Active is true when the detected provider reports that CI debug
+	// logging is enabled for the current run.
+	Active bool
+
+	// Provider is the name of the detected CI provider (e.g.
+	// "github-actions"). Empty when no CI provider is detected.
+	Provider string
+}
+
+// DetectDebugMode inspects the active CI provider for a debug-mode signal.
+// Returns a zero-value DebugModeInfo when no provider is detected or the
+// detected provider does not implement provider.DebugModeDetector.
+//
+// Callers (e.g., the CLI startup path) use this to auto-promote their own
+// log level when the user has opted into CI-side debug logging, without
+// hard-coding any provider-specific environment variables.
+func DetectDebugMode() DebugModeInfo {
+	defer perf.Track(nil, "ci.DetectDebugMode")()
+
+	p := Detect()
+	if p == nil {
+		return DebugModeInfo{}
+	}
+	info := DebugModeInfo{Provider: p.Name()}
+	if d, ok := p.(provider.DebugModeDetector); ok {
+		info.Active = d.IsDebugMode()
+	}
+	return info
+}

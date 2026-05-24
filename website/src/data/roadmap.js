@@ -362,7 +362,7 @@ export const roadmapConfig = {
       tagline: 'Native CI/CD support — local = CI',
       description:
         'CI pipelines shouldn\'t require complicated workflows, custom actions, and shell commands just to run what should be a one liner. They should just work. What works locally should work identically in CI with minimal configuration.',
-      progress: 92,
+      progress: 93,
       status: 'in-progress',
       milestones: [
         { label: 'Native GitHub OIDC enables automatic role assumptions', status: 'shipped', quarter: 'q3-2025', docs: '/cli/configuration/auth/providers', changelog: 'introducing-atmos-auth', version: 'v1.196.0', description: 'Secretless CI/CD with native OIDC—no AWS access keys stored in GitHub secrets.', category: 'featured', priority: 'high', benefits: 'No long-lived credentials to rotate. Security posture improves and audit burden decreases.' },
@@ -378,6 +378,7 @@ export const roadmapConfig = {
         { label: 'Push instance status to Atmos Pro after plan/apply', status: 'shipped', quarter: 'q1-2026', pr: 2216, changelog: 'instance-status-upload', description: 'CLI sends raw command and exit code to Atmos Pro after plan and apply, with configurable CI exit code mapping so detailed-exitcode does not break workflows.', benefits: 'Instance status updates in real-time without waiting for webhooks. Status logic evolves server-side without CLI releases.' },
         { label: 'Chunked uploads for large stack payloads', status: 'shipped', quarter: 'q1-2026', pr: 2251, changelog: 'chunked-stack-uploads', description: 'CLI automatically chunks large affected stack and instance payloads into multiple requests with batch metadata for server-side reassembly. Configurable threshold via max_payload_bytes in atmos.yaml.', benefits: 'Eliminates HTTP 413 errors for large infrastructure repositories. No practical upper limit on the number of stacks or instances uploaded to Atmos Pro.' },
         { label: 'GitHub merge queue support for affected uploads', status: 'shipped', quarter: 'q2-2026', pr: 2395, changelog: 'pro-merge-queue-support', docs: '/cli/configuration/settings/pro#merge-queue-support', description: 'atmos describe affected --upload now works under GITHUB_EVENT_NAME=merge_group, resolving the diff base from event.merge_group.base_sha and propagating the new optional settings.pro.merge_group.checks_requested.workflows block to Atmos Pro. Existing pull_request.synchronize workflows are reused automatically for queue checks.', benefits: 'Atmos Pro reports check status correctly on merge-queue synthetic commits. Required Atmos Pro checks no longer hang in "Expected — Waiting for status to be reported" when a PR is added to a merge queue.' },
+        { label: 'Auto-detect log level from GHA debug mode', status: 'shipped', quarter: 'q2-2026', pr: 2495, changelog: 'gha-debug-auto-promote', description: 'When ci.enabled is true and ACTIONS_RUNNER_DEBUG or ACTIONS_STEP_DEBUG is set, Atmos auto-detects that the user wants debug output and switches its log level to Debug for the run, with an Info log announcing the change. Built on a provider-agnostic DebugModeDetector interface so other CI providers can opt in.', benefits: 'No manual log-level flag in workflow YAML. GHA debug re-runs surface full Atmos debug output automatically.' },
       ],
       issues: [],
       prs: [
