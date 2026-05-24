@@ -38,37 +38,65 @@ var (
 
 // deepCopyBaseComponentConfigMaps deep copies all map fields from src to dst.
 // Returns an error if any deep copy fails.
+//
+// Empty src fields are skipped (no DeepCopyMap call, no allocation). In the
+// customer workload most components leave several of these fields empty
+// (notably BaseComponentProviders / Hooks / Generate / Dependencies for
+// non-Terraform components), so skipping the no-op deep-copies cuts the
+// per-call cost in cacheBaseComponentConfig / getCachedBaseComponentConfig
+// proportional to how many fields are unused. Phases 12/13 of the
+// describe-affected perf investigation.
 func deepCopyBaseComponentConfigMaps(dst, src *schema.BaseComponentConfig) error {
 	var err error
-	if dst.BaseComponentVars, err = m.DeepCopyMap(src.BaseComponentVars); err != nil {
-		return err
+	if len(src.BaseComponentVars) > 0 {
+		if dst.BaseComponentVars, err = m.DeepCopyMap(src.BaseComponentVars); err != nil {
+			return err
+		}
 	}
-	if dst.BaseComponentSettings, err = m.DeepCopyMap(src.BaseComponentSettings); err != nil {
-		return err
+	if len(src.BaseComponentSettings) > 0 {
+		if dst.BaseComponentSettings, err = m.DeepCopyMap(src.BaseComponentSettings); err != nil {
+			return err
+		}
 	}
-	if dst.BaseComponentEnv, err = m.DeepCopyMap(src.BaseComponentEnv); err != nil {
-		return err
+	if len(src.BaseComponentEnv) > 0 {
+		if dst.BaseComponentEnv, err = m.DeepCopyMap(src.BaseComponentEnv); err != nil {
+			return err
+		}
 	}
-	if dst.BaseComponentAuth, err = m.DeepCopyMap(src.BaseComponentAuth); err != nil {
-		return err
+	if len(src.BaseComponentAuth) > 0 {
+		if dst.BaseComponentAuth, err = m.DeepCopyMap(src.BaseComponentAuth); err != nil {
+			return err
+		}
 	}
-	if dst.BaseComponentMetadata, err = m.DeepCopyMap(src.BaseComponentMetadata); err != nil {
-		return err
+	if len(src.BaseComponentMetadata) > 0 {
+		if dst.BaseComponentMetadata, err = m.DeepCopyMap(src.BaseComponentMetadata); err != nil {
+			return err
+		}
 	}
-	if dst.BaseComponentDependencies, err = m.DeepCopyMap(src.BaseComponentDependencies); err != nil {
-		return err
+	if len(src.BaseComponentDependencies) > 0 {
+		if dst.BaseComponentDependencies, err = m.DeepCopyMap(src.BaseComponentDependencies); err != nil {
+			return err
+		}
 	}
-	if dst.BaseComponentProviders, err = m.DeepCopyMap(src.BaseComponentProviders); err != nil {
-		return err
+	if len(src.BaseComponentProviders) > 0 {
+		if dst.BaseComponentProviders, err = m.DeepCopyMap(src.BaseComponentProviders); err != nil {
+			return err
+		}
 	}
-	if dst.BaseComponentHooks, err = m.DeepCopyMap(src.BaseComponentHooks); err != nil {
-		return err
+	if len(src.BaseComponentHooks) > 0 {
+		if dst.BaseComponentHooks, err = m.DeepCopyMap(src.BaseComponentHooks); err != nil {
+			return err
+		}
 	}
-	if dst.BaseComponentBackendSection, err = m.DeepCopyMap(src.BaseComponentBackendSection); err != nil {
-		return err
+	if len(src.BaseComponentBackendSection) > 0 {
+		if dst.BaseComponentBackendSection, err = m.DeepCopyMap(src.BaseComponentBackendSection); err != nil {
+			return err
+		}
 	}
-	if dst.BaseComponentRemoteStateBackendSection, err = m.DeepCopyMap(src.BaseComponentRemoteStateBackendSection); err != nil {
-		return err
+	if len(src.BaseComponentRemoteStateBackendSection) > 0 {
+		if dst.BaseComponentRemoteStateBackendSection, err = m.DeepCopyMap(src.BaseComponentRemoteStateBackendSection); err != nil {
+			return err
+		}
 	}
 	return nil
 }
