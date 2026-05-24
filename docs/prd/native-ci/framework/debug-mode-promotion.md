@@ -82,7 +82,7 @@ This is intentional. The repo/workflow-level CI debug toggles are a high-priorit
 
 After `SetupLogger`, the call site emits a single Info-level log line so the user understands why their output got louder:
 
-```
+```text
 INFO CI provider debug mode detected — using Debug log level for this run provider=github-actions from=Info
 ```
 

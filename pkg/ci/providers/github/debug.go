@@ -22,7 +22,7 @@ import (
 // In production this is redundant — the provider only registers itself when
 // GITHUB_ACTIONS=true (see provider.go).
 //
-// Reference: https://docs.github.com/actions/how-tos/manage-workflow-runs/enable-debug-logging
+// Reference: https://docs.github.com/actions/how-tos/manage-workflow-runs/enable-debug-logging.
 func (p *Provider) IsDebugMode() bool {
 	defer perf.Track(nil, "github.Provider.IsDebugMode")()
 
