@@ -1,11 +1,13 @@
-<span style="font-weight:bold;filter: contrast(70%) brightness(190%);color:green;">&gt;</span> # Deploy your component to the production (prod) environment 🚀
 <span style="font-weight:bold;filter: contrast(70%) brightness(190%);color:green;">&gt;</span> 
 <span style="font-weight:bold;filter: contrast(70%) brightness(190%);color:green;">&gt;</span> atmos terraform deploy myapp --stack prod
 
+<span style="font-weight:bold;">Initializing provider plugins found in the configuration...</span>
+- Using hashicorp/local v2.9.0 from the shared cache directory
+- Using hashicorp/http v3.6.0 from the shared cache directory
+
 <span style="font-weight:bold;">Initializing the backend...</span>
-<span style="font-weight:bold;">Initializing provider plugins...</span>
-- Using hashicorp/local v2.6.2 from the shared cache directory
-- Using hashicorp/http v3.5.0 from the shared cache directory
+
+
 
 <span style="color:olive;">╷</span>
 <span style="color:olive;">│</span> <span style="font-weight:bold;"></span><span style="font-weight:bold;color:olive;">Warning: </span><span style="font-weight:bold;">Incomplete lock file information for providers</span>
@@ -16,7 +18,7 @@
 <span style="color:olive;">│</span>   - hashicorp/local
 <span style="color:olive;">│</span> 
 <span style="color:olive;">│</span> The current .terraform.lock.hcl file only includes checksums for
-<span style="color:olive;">│</span> darwin_arm64, so Terraform running on another platform will fail to install
+<span style="color:olive;">│</span> linux_amd64, so Terraform running on another platform will fail to install
 <span style="color:olive;">│</span> these providers.
 <span style="color:olive;">│</span> 
 <span style="color:olive;">│</span> To calculate additional checksums for another platform, run:
@@ -32,8 +34,8 @@ You're now on a new, empty workspace. Workspaces isolate their state,
 so if you run &quot;terraform plan&quot; Terraform will not see any existing state
 for this configuration.</span>
 <span style="font-weight:bold;">data.http.weather: Reading...</span>
-<span style="font-weight:bold;">data.http.weather: Read complete after 6s 
-    [id=https://wttr.in/Los+Angeles?0&amp;format=&amp;lang=en&amp;u=m]</span>
+<span style="font-weight:bold;">data.http.weather: Read complete after 1s 
+    [id=https://wttr.in/Los+Angeles?0m&amp;lang=en]</span>
 
 Terraform used the selected providers to generate the following execution
 plan. 
@@ -45,12 +47,12 @@ Terraform will perform the following actions:
   <span style="color:green;">+</span> resource &quot;local_file&quot; &quot;cache&quot; {
       <span style="color:green;">+</span> content              =
 
-            Weather report: Los+Angeles
+            Weather report: Los Angeles
             
-              <span style="color:#ffff00;">    \   /    </span> Clear
-              <span style="color:#ffff00;">     .-.     </span> <span style="color:#87ff00;">15</span> °C          
-              <span style="color:#ffff00;">  ― (   ) ―  </span> <span style="font-weight:bold;">↓</span> <span style="color:#87ff00;">6</span> km/h       
-              <span style="color:#ffff00;">     `-’     </span> 16 km          
+              <span style="color:#ffff00;">    \   /    </span> Sunny
+              <span style="color:#ffff00;">     .-.     </span> <span style="color:#d7ff00;">19</span> °C
+              <span style="color:#ffff00;">  ― (   ) ―  </span> <span style="font-weight:bold;">↗</span> <span style="color:#ffd700;">18</span> km/h
+              <span style="color:#ffff00;">     `-’     </span> 16 km
               <span style="color:#ffff00;">    /   \    </span> 0.0 mm
 
 
@@ -73,39 +75,38 @@ Changes to Outputs:
   <span style="color:green;">+</span> location = &quot;Los Angeles&quot;
   <span style="color:green;">+</span> stage    = &quot;prod&quot;
   <span style="color:green;">+</span> units    = &quot;m&quot;
-  <span style="color:green;">+</span> url      = &quot;https://wttr.in/Los+Angeles?0&amp;format=&amp;lang=en&amp;u=m&quot;
+  <span style="color:green;">+</span> url      = &quot;https://wttr.in/Los+Angeles?0m&amp;lang=en&quot;
   <span style="color:green;">+</span> weather  =
 
-        Weather report: Los+Angeles
+        Weather report: Los Angeles
         
-          <span style="color:#ffff00;">    \   /    </span> Clear
-          <span style="color:#ffff00;">     .-.     </span> <span style="color:#87ff00;">15</span> °C          
-          <span style="color:#ffff00;">  ― (   ) ―  </span> <span style="font-weight:bold;">↓</span> <span style="color:#87ff00;">6</span> km/h       
-          <span style="color:#ffff00;">     `-’     </span> 16 km          
+          <span style="color:#ffff00;">    \   /    </span> Sunny
+          <span style="color:#ffff00;">     .-.     </span> <span style="color:#d7ff00;">19</span> °C
+          <span style="color:#ffff00;">  ― (   ) ―  </span> <span style="font-weight:bold;">↗</span> <span style="color:#ffd700;">18</span> km/h
+          <span style="color:#ffff00;">     `-’     </span> 16 km
           <span style="color:#ffff00;">    /   \    </span> 0.0 mm
 
 
 <span style="font-weight:bold;">local_file.cache: Creating...</span>
 <span style="font-weight:bold;">local_file.cache: Creation complete after 0s </span>
 <span style="font-weight:bold;"></span><span style="font-weight:bold;color:green;">
-Apply complete! Resources: 1 added, 0 changed, 0 destroyed.
-</span><span style="font-weight:bold;"></span><span style="font-weight:bold;color:green;">
+Apply complete! Resources: 1 added, 0 changed, 0 destroyed.</span>
+<span style="font-weight:bold;"></span><span style="font-weight:bold;color:green;">
 Outputs:
 
 </span>lang = &quot;en&quot;
 location = &quot;Los Angeles&quot;
 stage = &quot;prod&quot;
 units = &quot;m&quot;
-url = &quot;https://wttr.in/Los+Angeles?0&amp;format=&amp;lang=en&amp;u=m&quot;
+url = &quot;https://wttr.in/Los+Angeles?0m&amp;lang=en&quot;
 weather =
 
-Weather report: Los+Angeles
+Weather report: Los Angeles
 
-  <span style="color:#ffff00;">    \   /    </span> Clear
-  <span style="color:#ffff00;">     .-.     </span> <span style="color:#87ff00;">15</span> °C          
-  <span style="color:#ffff00;">  ― (   ) ―  </span> <span style="font-weight:bold;">↓</span> <span style="color:#87ff00;">6</span> km/h       
-  <span style="color:#ffff00;">     `-’     </span> 16 km          
-  <span style="color:#ffff00;">    /   \    </span> 0.0 mm         
-
+  <span style="color:#ffff00;">    \   /    </span> Sunny
+  <span style="color:#ffff00;">     .-.     </span> <span style="color:#d7ff00;">19</span> °C
+  <span style="color:#ffff00;">  ― (   ) ―  </span> <span style="font-weight:bold;">↗</span> <span style="color:#ffd700;">18</span> km/h
+  <span style="color:#ffff00;">     `-’     </span> 16 km
+  <span style="color:#ffff00;">    /   \    </span> 0.0 mm
 
 
