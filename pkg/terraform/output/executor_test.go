@@ -84,7 +84,8 @@ func TestNewExecutor_WithOptions(t *testing.T) {
 		return NewMockTerraformRunner(ctrl), nil
 	}
 
-	exec := NewExecutor(mockDescriber,
+	exec := NewExecutor(
+		mockDescriber,
 		WithRunnerFactory(customFactory),
 		WithStaticRemoteStateGetter(mockGetter),
 	)

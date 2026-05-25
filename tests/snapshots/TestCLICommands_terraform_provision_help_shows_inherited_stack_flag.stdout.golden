@@ -110,6 +110,9 @@ GLOBAL FLAGS
 
       --skip strings              Skip executing specific YAML functions in the Atmos stack manifests
 
+      --skip-hooks string         Skip lifecycle hooks for this invocation. Use --skip-hooks (no value) to skip all, or --
+                                  skip-hooks=name1,name2 to skip specific hooks by name
+
       --skip-init                 Skip terraform init before running command
 
       --ssh-key string            Path to PEM-encoded private key to clone private repos using SSH
