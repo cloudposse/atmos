@@ -126,6 +126,7 @@ func TestBuildOCSFEvents_VulnerabilityMapping(t *testing.T) {
 	}
 
 	events := BuildOCSFEvents(report)
+	require.NotEmpty(t, events)
 	// finding-3 with vuln is low-severity, so it lands last after severity sort.
 	vulnEvent := events[len(events)-1]
 	require.Len(t, vulnEvent.Vulnerabilities, 1)

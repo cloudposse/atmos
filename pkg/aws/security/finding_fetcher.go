@@ -543,7 +543,11 @@ func normalizeSecurityHubSourceSeverity(sev *shtypes.Severity) *SourceSeverity {
 	if sev == nil {
 		return nil
 	}
-	out := &SourceSeverity{Label: aws.ToString(sev.Original)}
+	label := aws.ToString(sev.Original)
+	if label == "" {
+		label = string(sev.Label)
+	}
+	out := &SourceSeverity{Label: label}
 	if sev.Normalized != nil {
 		score := float64(*sev.Normalized) / securityHubSeverityScale
 		out.Score = &score
