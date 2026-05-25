@@ -258,16 +258,22 @@ func BuildOCSFEvents(report *Report) []OCSFEvent {
 	findings := sortedFindings(report.Findings)
 	correlationUID := stableCorrelationUID(report)
 	profiles := ocsfProfilesForFindings(findings)
+	// Build the invocation block once per report and attach it to every event's
+	// unmapped object. OCSF 1.4.0 Detection Finding has no native batch-level
+	// container, so this is the standard place for cross-event audit context.
+	// SIEMs that ignore unmapped fields are unaffected; those that key on it
+	// (e.g., Splunk, Panther) can answer "exactly what command produced this".
+	invocation := buildOCSFInvocation(report.Invocation)
 
 	events := make([]OCSFEvent, 0, len(findings))
 	for i := range findings {
-		events = append(events, buildOCSFEvent(&findings[i], correlationUID, profiles))
+		events = append(events, buildOCSFEvent(&findings[i], correlationUID, profiles, invocation))
 	}
 	return events
 }
 
 // buildOCSFEvent projects a single Finding onto an OCSF event.
-func buildOCSFEvent(f *Finding, correlationUID string, profiles []string) OCSFEvent {
+func buildOCSFEvent(f *Finding, correlationUID string, profiles []string, invocation map[string]any) OCSFEvent {
 	activityID, typeUID := ocsfActivityAndType(f)
 	return OCSFEvent{
 		ActivityID:      activityID,
@@ -295,7 +301,7 @@ func buildOCSFEvent(f *Finding, correlationUID string, profiles []string) OCSFEv
 		Vulnerabilities: buildOCSFVulnerabilities(f),
 		Remediation:     buildOCSFRemediation(f),
 		Enrichments:     buildOCSFEnrichments(f),
-		Unmapped:        buildOCSFUnmapped(f),
+		Unmapped:        buildOCSFUnmapped(f, invocation),
 	}
 }
 
@@ -491,16 +497,55 @@ func buildOCSFEnrichments(f *Finding) []OCSFEnrichment {
 }
 
 // buildOCSFUnmapped carries Atmos extension data and source metadata that has
-// no native OCSF 1.4.0 home on the Detection Finding class.
-func buildOCSFUnmapped(f *Finding) map[string]any {
+// no native OCSF 1.4.0 home on the Detection Finding class. The invocation
+// argument (when non-empty) is attached as atmos.invocation so each event
+// self-describes the exact command line and timing that produced it.
+func buildOCSFUnmapped(f *Finding, invocation map[string]any) map[string]any {
 	out := make(map[string]any)
 	addCompliance(out, f)
 	addSourceSeverity(out, f)
 	addSourceLifecycle(out, f)
 	addAIRemediation(out, f)
 	addVulnerabilityOverflow(out, f)
+	if len(invocation) > 0 {
+		out["atmos.invocation"] = invocation
+	}
 	if len(out) == 0 {
 		return nil
+	}
+	return out
+}
+
+// buildOCSFInvocation projects a ReportInvocation into a generic map suitable
+// for embedding under the OCSF unmapped extension. The shape mirrors SARIF's
+// `invocations[]` block so consumers that handle both formats see consistent
+// fields. Returns nil when no invocation context is available.
+func buildOCSFInvocation(inv *ReportInvocation) map[string]any {
+	if inv == nil {
+		return nil
+	}
+	out := map[string]any{
+		"command_line":         inv.CommandLine,
+		"arguments":            inv.Arguments,
+		"exit_code":            inv.ExitCode,
+		"execution_successful": inv.ExecutionSuccessful,
+	}
+	addNonEmpty(out, "exit_code_description", inv.ExitCodeDescription)
+	addNonEmpty(out, "working_directory", inv.WorkingDirectory)
+	if !inv.StartTimeUTC.IsZero() {
+		out["start_time_utc"] = inv.StartTimeUTC.UTC().Format(time.RFC3339)
+	}
+	if !inv.EndTimeUTC.IsZero() {
+		out["end_time_utc"] = inv.EndTimeUTC.UTC().Format(time.RFC3339)
+	}
+	if len(inv.AccountsScanned) > 0 {
+		out["accounts_scanned"] = inv.AccountsScanned
+	}
+	if len(inv.RegionsScanned) > 0 {
+		out["regions_scanned"] = inv.RegionsScanned
+	}
+	if len(inv.StacksScanned) > 0 {
+		out["stacks_scanned"] = inv.StacksScanned
 	}
 	return out
 }

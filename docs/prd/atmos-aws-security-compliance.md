@@ -155,7 +155,7 @@ atmos aws security analyze --identity security-admin --region us-west-2  # Overr
 | `--source`       | string | `all`           | Source: security-hub, config, inspector, guardduty, all |
 | `--format`       | string | `markdown`      | Output: markdown, json, yaml, csv, sarif, ocsf          |
 | `--file`         | string | (stdout)        | Write to file                                           |
-| `--max-findings` | int    | `500`           | Maximum findings                                        |
+| `--max-findings` | int    | `500`           | Maximum findings (`0` = unlimited, for exports)         |
 | `--ai`           | bool   | `false`         | Enable AI analysis                                      |
 | `--no-group`     | bool   | `false`         | Disable duplicate grouping                              |
 | `--region`       | string | (config)        | AWS region override                                     |
