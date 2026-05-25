@@ -153,7 +153,7 @@ atmos aws security analyze --identity security-admin --region us-west-2  # Overr
 | `--component`    | string | (all)           | Target component                                        |
 | `--severity`     | string | `critical,high` | Severity filter                                         |
 | `--source`       | string | `all`           | Source: security-hub, config, inspector, guardduty, all |
-| `--format`       | string | `markdown`      | Output: markdown, json, yaml, csv                       |
+| `--format`       | string | `markdown`      | Output: markdown, json, yaml, csv, sarif, ocsf          |
 | `--file`         | string | (stdout)        | Write to file                                           |
 | `--max-findings` | int    | `500`           | Maximum findings                                        |
 | `--ai`           | bool   | `false`         | Enable AI analysis                                      |
@@ -174,10 +174,40 @@ atmos aws compliance report --controls CIS.1.14,CIS.2.1             # Specific c
 |---------------|--------|------------|------------------------------------------------|
 | `--stack`     | string | (all)      | Target stack                                   |
 | `--framework` | string | (all)      | Framework: cis-aws, pci-dss, soc2, hipaa, nist |
-| `--format`    | string | `markdown` | Output: markdown, json, yaml, csv              |
+| `--format`    | string | `markdown` | Output: markdown, json, yaml, csv, sarif, ocsf |
 | `--file`      | string | (stdout)   | Write to file                                  |
 | `--controls`  | string | (all)      | Specific control IDs to check                  |
 | `--identity`  | string | (config)   | Atmos Auth identity override                   |
+
+---
+
+## Output Formats
+
+`atmos aws security analyze` and `atmos aws compliance report` share the same `--format` dispatcher. Each format targets a distinct consumer class:
+
+| Format     | Schema                                              | Primary consumers                                                            |
+|------------|-----------------------------------------------------|------------------------------------------------------------------------------|
+| `markdown` | Plain Markdown                                      | Terminal review (default)                                                    |
+| `json`     | Atmos-native (`Report` struct serialized directly)  | Scripting, `jq` pipelines, custom CI integrations                            |
+| `yaml`     | Atmos-native                                        | Configuration-style workflows, hand-editable diffs                           |
+| `csv`      | Flat tabular rows                                   | Spreadsheets, ad-hoc analysis, audit exports                                 |
+| `sarif`    | SARIF 2.1.0 (OASIS)                                 | Dev tooling: GitHub code scanning, Azure DevOps, IDE SARIF viewers           |
+| `ocsf`     | OCSF 1.4.0 Detection Findings (cloud + vulnerability profiles) | SIEM / security data lake: Splunk, Elastic, Sumo Logic, Panther, Snowflake |
+
+The atmos-native `json` shape is intentionally kept distinct from `ocsf` even though both serialize to JSON. The native shape is ergonomic for `jq`/shell pipelines (`.findings[].mapping.component` instead of `.[].enrichments[] | select(.name=="atmos.component").value`); OCSF wins precisely when piping into a system that *expects* OCSF.
+
+OCSF events emit Atmos's component/stack mapping as first-class `enrichments[]` entries (`atmos.stack`, `atmos.component`, `atmos.mapping.confidence`, …) and preserve AI remediation under `unmapped["atmos.remediation.*"]`. AWS-supplied source remediation (`SourceRemediation`) goes into the native OCSF `remediation` block so native consumers see only AWS guidance.
+
+The AWS service that produced the finding (`Finding.Source` — `security-hub`, `config`, `inspector`, …) surfaces on each OCSF event as `finding_info.product_uid`. That's distinct from `metadata.product` (= `atmos`, the event producer). The two dimensions are orthogonal — Security Hub aggregates findings from multiple sources, and `--source` filters the upstream producer, not the event producer.
+
+### OCSF future considerations
+
+These were considered for the initial OCSF support and intentionally left out of v1; they live here, in this PRD, rather than as issues, because they are design decisions we want to revisit deliberately rather than work tickets:
+
+- **NDJSON output (`--format=ocsf-ndjson`).** Useful for streaming SIEM ingestion (one event per line, resumable). Not required by any SIEM in our target set today; ~20-line addition when needed.
+- **Per-class routing (Vulnerability Finding 2002 / Compliance Finding 2003 / Detection Finding 2004).** Explicitly **not** routing by `Finding.Source` — that would conflate "who detected it" with "what kind of finding it is." The right routing key is the *shape* of the finding (`Vulnerability != nil` → 2002, `ComplianceStandards` populated → 2003, else → 2004). Detection Finding 2004 with the cloud + vulnerability profiles covers all three shapes today; per-class routing trades off having to embed two more schemas (~160 KB) and per-class required-field handling against marginal SIEM-side filtering convenience. Defer unless a real consumer asks for it.
+- **MITRE ATT&CK taxonomy on `finding_info.attacks[]`.** OCSF natively supports MITRE technique IDs, but the upstream `finding_fetcher.go` doesn't surface them yet from GuardDuty/Inspector. Pre-requisite is enriching `Finding` (or a sibling source-feed struct) with the technique data first.
+- **`--class` / `--finding-type` filter.** If we ever surface per-class routing, this is the right CLI dimension name. `--source` is taken and means producer, not class.
 
 ---
 

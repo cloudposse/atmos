@@ -165,13 +165,12 @@ func TestDownloadAsset_CacheBehavior(t *testing.T) {
 		cachedFilename := "already-cached.tar.gz"
 		cachedPath := filepath.Join(cacheDir, cachedFilename)
 		require.NoError(t, os.WriteFile(cachedPath, []byte("cached content"), 0o644))
+		url := "https://github.com/owner/repo/releases/download/v1.0.0/" + cachedFilename
+		require.NoError(t, os.WriteFile(cacheSourceURLPath(cachedPath), []byte(url+"\n"), 0o644))
 
 		installer := &Installer{
 			cacheDir: cacheDir,
 		}
-
-		// URL ends with the cached filename - should use cache.
-		url := "https://github.com/owner/repo/releases/download/v1.0.0/" + cachedFilename
 
 		result, err := installer.downloadAsset(url)
 		assert.NoError(t, err)
@@ -181,6 +180,67 @@ func TestDownloadAsset_CacheBehavior(t *testing.T) {
 		content, err := os.ReadFile(result)
 		assert.NoError(t, err)
 		assert.Equal(t, "cached content", string(content))
+	})
+
+	t.Run("redownloads cached file if source URL metadata differs", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		cacheDir := filepath.Join(tmpDir, "cache")
+		require.NoError(t, os.MkdirAll(cacheDir, 0o755))
+
+		cachedFilename := "asset.tar.gz"
+		cachedPath := filepath.Join(cacheDir, cachedFilename)
+		require.NoError(t, os.WriteFile(cachedPath, []byte("old content"), 0o644))
+		require.NoError(t, os.WriteFile(cacheSourceURLPath(cachedPath), []byte("https://example.com/old/asset.tar.gz\n"), 0o644))
+
+		ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			_, _ = w.Write([]byte("new content"))
+		}))
+		defer ts.Close()
+
+		installer := &Installer{
+			cacheDir: cacheDir,
+		}
+
+		url := ts.URL + "/" + cachedFilename
+		result, err := installer.downloadAsset(url)
+		require.NoError(t, err)
+		assert.Equal(t, cachedPath, result)
+
+		content, err := os.ReadFile(result)
+		require.NoError(t, err)
+		assert.Equal(t, "new content", string(content))
+
+		sourceURL, err := os.ReadFile(cacheSourceURLPath(cachedPath))
+		require.NoError(t, err)
+		assert.Equal(t, url+"\n", string(sourceURL))
+	})
+
+	t.Run("redownloads cached file if source URL metadata is missing", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		cacheDir := filepath.Join(tmpDir, "cache")
+		require.NoError(t, os.MkdirAll(cacheDir, 0o755))
+
+		cachedFilename := "asset.tar.gz"
+		cachedPath := filepath.Join(cacheDir, cachedFilename)
+		require.NoError(t, os.WriteFile(cachedPath, []byte("old content"), 0o644))
+
+		ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			_, _ = w.Write([]byte("new content"))
+		}))
+		defer ts.Close()
+
+		installer := &Installer{
+			cacheDir: cacheDir,
+		}
+
+		url := ts.URL + "/" + cachedFilename
+		result, err := installer.downloadAsset(url)
+		require.NoError(t, err)
+		assert.Equal(t, cachedPath, result)
+
+		content, err := os.ReadFile(result)
+		require.NoError(t, err)
+		assert.Equal(t, "new content", string(content))
 	})
 
 	t.Run("creates cache directory if it doesn't exist", func(t *testing.T) {
@@ -271,6 +331,7 @@ func TestDownloadAsset_FilenameExtraction(t *testing.T) {
 			// Pre-create the expected cached file.
 			cachedPath := filepath.Join(cacheDir, tt.expectedFilename)
 			require.NoError(t, os.WriteFile(cachedPath, []byte("cached"), 0o644))
+			require.NoError(t, os.WriteFile(cacheSourceURLPath(cachedPath), []byte(tt.url+"\n"), 0o644))
 
 			installer := &Installer{
 				cacheDir: cacheDir,
@@ -479,6 +540,8 @@ func TestDownloadAssetWithVersionFallback(t *testing.T) {
 		// Pre-create the asset file to simulate a successful download.
 		assetFile := filepath.Join(cacheDir, "tool_1.0.0_darwin_arm64.tar.gz")
 		require.NoError(t, os.WriteFile(assetFile, []byte("asset data"), 0o644))
+		url := "https://github.com/test/tool/releases/download/v1.0.0/tool_1.0.0_darwin_arm64.tar.gz"
+		require.NoError(t, os.WriteFile(cacheSourceURLPath(assetFile), []byte(url+"\n"), 0o644))
 
 		installer := &Installer{
 			cacheDir: cacheDir,
@@ -492,11 +555,10 @@ func TestDownloadAssetWithVersionFallback(t *testing.T) {
 			VersionPrefix: "v",
 		}
 
-		// URL matches the cached file.
-		url := "https://github.com/test/tool/releases/download/v1.0.0/tool_1.0.0_darwin_arm64.tar.gz"
-		result, err := installer.downloadAssetWithVersionFallback(tool, "1.0.0", url)
+		result, effectiveURL, err := installer.downloadAssetWithVersionFallback(tool, "1.0.0", url)
 		assert.NoError(t, err)
 		assert.Equal(t, assetFile, result)
+		assert.Equal(t, url, effectiveURL)
 	})
 
 	t.Run("returns non-404 errors without fallback", func(t *testing.T) {
@@ -521,10 +583,41 @@ func TestDownloadAssetWithVersionFallback(t *testing.T) {
 			VersionPrefix: "v",
 		}
 
-		_, err := installer.downloadAssetWithVersionFallback(tool, "1.0.0", ts.URL+"/asset.tar.gz")
+		_, _, err := installer.downloadAssetWithVersionFallback(tool, "1.0.0", ts.URL+"/asset.tar.gz")
 		assert.Error(t, err)
 		// Non-404 error should be returned directly, not trigger fallback.
 		assert.NotErrorIs(t, err, ErrHTTP404)
+	})
+
+	t.Run("returns non-404 fallback errors directly", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		cacheDir := filepath.Join(tmpDir, "cache")
+		require.NoError(t, os.MkdirAll(cacheDir, 0o755))
+
+		ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if strings.Contains(r.URL.Path, "v1.0.0") {
+				w.WriteHeader(http.StatusForbidden)
+				return
+			}
+			w.WriteHeader(http.StatusNotFound)
+		}))
+		defer ts.Close()
+
+		installer := &Installer{
+			cacheDir: cacheDir,
+		}
+		tool := &registry.Tool{
+			Type:          "http",
+			RepoOwner:     "test",
+			RepoName:      "tool",
+			Asset:         ts.URL + "/tool-{{.Version}}.tar.gz",
+			VersionPrefix: "v",
+		}
+
+		_, _, err := installer.downloadAssetWithVersionFallback(tool, "1.0.0", ts.URL+"/tool-1.0.0.tar.gz")
+		require.Error(t, err)
+		assert.NotErrorIs(t, err, ErrHTTP404)
+		assert.ErrorIs(t, err, errUtils.ErrDownloadFailed)
 	})
 }
 
@@ -554,7 +647,7 @@ func TestTryFallbackVersion(t *testing.T) {
 
 		// Version "1.0.0" without prefix → fallback adds "v" → "v1.0.0".
 		// BuildAssetURL with "v1.0.0" and prefix "v" → Version="v1.0.0" → /tool-v1.0.0.tar.gz.
-		_, err := inst.tryFallbackVersion(tool, "1.0.0", ts.URL+"/tool-1.0.0.tar.gz", ErrHTTP404)
+		_, _, err := inst.tryFallbackVersion(tool, "1.0.0", ts.URL+"/tool-1.0.0.tar.gz", ErrHTTP404)
 		assert.Error(t, err)
 		// Verify the fallback URL was actually requested.
 		assert.Contains(t, requestedPaths, "/tool-v1.0.0.tar.gz",
@@ -585,7 +678,7 @@ func TestTryFallbackVersion(t *testing.T) {
 		// Version "v1.0.0" with prefix → fallback strips to "1.0.0".
 		// Both produce SemVer="1.0.0", but the fallback IS attempted because
 		// the version strings differ ("v1.0.0" != "1.0.0").
-		_, err := inst.tryFallbackVersion(tool, "v1.0.0", ts.URL+"/tool-v1.0.0.tar.gz", ErrHTTP404)
+		_, _, err := inst.tryFallbackVersion(tool, "v1.0.0", ts.URL+"/tool-v1.0.0.tar.gz", ErrHTTP404)
 		assert.Error(t, err)
 		// Verify the fallback attempted the request (SemVer is "1.0.0" for both).
 		assert.Contains(t, requestedPaths, "/tool-1.0.0.tar.gz",

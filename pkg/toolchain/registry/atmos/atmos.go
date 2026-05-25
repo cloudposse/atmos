@@ -8,6 +8,7 @@ import (
 
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/toolchain/registry"
+	"gopkg.in/yaml.v3"
 )
 
 // Error definitions for the atmos registry package.
@@ -19,10 +20,15 @@ var (
 	ErrMissingRequiredField = errors.New("missing required field")
 )
 
-// init registers the Atmos registry constructor.
+// init registers the Atmos registry constructor and the built-in
+// registry factory. Both go through factory registration to avoid a
+// cyclic import between pkg/toolchain/registry and this subpackage.
 func init() {
 	registry.RegisterAtmosRegistry(func(tools map[string]any) (registry.ToolRegistry, error) {
 		return NewAtmosRegistry(tools)
+	})
+	registry.RegisterBuiltinAtmosRegistry(func() (registry.ToolRegistry, error) {
+		return NewBuiltinRegistry()
 	})
 }
 
@@ -123,7 +129,9 @@ func parseToolConfig(owner, repo string, config map[string]any) (*registry.Tool,
 	}
 
 	// Parse optional fields.
-	parseOptionalFields(tool, config)
+	if err := parseOptionalFields(tool, config); err != nil {
+		return nil, err
+	}
 
 	return tool, nil
 }
@@ -167,7 +175,7 @@ func parseGitHubReleaseAsset(tool *registry.Tool, config map[string]any) error {
 }
 
 // parseOptionalFields parses optional tool configuration fields.
-func parseOptionalFields(tool *registry.Tool, config map[string]any) {
+func parseOptionalFields(tool *registry.Tool, config map[string]any) error {
 	if format, ok := config["format"].(string); ok {
 		tool.Format = format
 	}
@@ -184,12 +192,56 @@ func parseOptionalFields(tool *registry.Tool, config map[string]any) {
 	}
 	// Parse platform-specific overrides.
 	if overridesRaw, ok := config["overrides"].([]any); ok {
-		tool.Overrides = parseOverrides(overridesRaw)
+		overrides, err := parseOverrides(overridesRaw)
+		if err != nil {
+			return err
+		}
+		tool.Overrides = overrides
 	}
 	// Parse files configuration for extraction.
 	if filesRaw, ok := config["files"].([]any); ok {
 		tool.Files = parseFiles(filesRaw)
 	}
+	return parseVerificationFields(tool, config)
+}
+
+// parseVerificationFields decodes verification-related YAML blocks onto the
+// tool. Returns an error if any block is malformed so callers can fail loudly
+// instead of silently dropping security metadata.
+func parseVerificationFields(tool *registry.Tool, config map[string]any) error {
+	return parseVerificationBlockSet(config, "", []verificationField{
+		{name: "checksum", target: &tool.Checksum},
+		{name: "cosign", target: &tool.Cosign},
+		{name: "slsa_provenance", target: &tool.SLSAProvenance},
+		{name: "minisign", target: &tool.Minisign},
+		{name: "github_artifact_attestations", target: &tool.GitHubArtifactAttestations},
+	})
+}
+
+type verificationField struct {
+	name   string
+	target any
+}
+
+func parseVerificationBlockSet(config map[string]any, prefix string, fields []verificationField) error {
+	for _, field := range fields {
+		raw, ok := config[field.name]
+		if !ok {
+			continue
+		}
+		if err := parseYAMLStruct(raw, field.target); err != nil {
+			return fmt.Errorf("%w: %s%s: %w", ErrInvalidToolConfig, prefix, field.name, err)
+		}
+	}
+	return nil
+}
+
+func parseYAMLStruct(raw any, target any) error {
+	data, err := yaml.Marshal(raw)
+	if err != nil {
+		return err
+	}
+	return yaml.Unmarshal(data, target)
 }
 
 // parseReplacements parses the replacements map (e.g., darwin->macos).
@@ -224,7 +276,7 @@ func parseFiles(filesRaw []any) []registry.File {
 }
 
 // parseOverrides parses platform-specific override configurations.
-func parseOverrides(overridesRaw []any) []registry.Override {
+func parseOverrides(overridesRaw []any) ([]registry.Override, error) {
 	var overrides []registry.Override
 	for _, overrideRaw := range overridesRaw {
 		overrideMap, ok := overrideRaw.(map[string]any)
@@ -252,9 +304,24 @@ func parseOverrides(overridesRaw []any) []registry.Override {
 		if replacementsRaw, ok := overrideMap["replacements"].(map[string]any); ok {
 			override.Replacements = parseReplacements(replacementsRaw)
 		}
+		if err := parseOverrideVerification(&override, overrideMap); err != nil {
+			return nil, err
+		}
 		overrides = append(overrides, override)
 	}
-	return overrides
+	return overrides, nil
+}
+
+// parseOverrideVerification decodes verification-related blocks onto a single
+// platform override. Returns an error if any block is malformed.
+func parseOverrideVerification(override *registry.Override, overrideMap map[string]any) error {
+	return parseVerificationBlockSet(overrideMap, "override ", []verificationField{
+		{name: "checksum", target: &override.Checksum},
+		{name: "cosign", target: &override.Cosign},
+		{name: "slsa_provenance", target: &override.SLSAProvenance},
+		{name: "minisign", target: &override.Minisign},
+		{name: "github_artifact_attestations", target: &override.GitHubArtifactAttestations},
+	})
 }
 
 // GetTool fetches tool metadata from inline definitions.

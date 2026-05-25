@@ -481,6 +481,51 @@ func TestBuildSecurityReport_TagMappingNilWhenNotProvided(t *testing.T) {
 	assert.Nil(t, report.TagMapping)
 }
 
+func TestUniqueStacks(t *testing.T) {
+	tests := []struct {
+		name     string
+		prefix   string
+		findings []Finding
+		expected []string
+		empty    bool
+	}{
+		{
+			name:   "deduplicates and sorts mapped stacks",
+			prefix: "plat",
+			findings: []Finding{
+				{ID: "f1", Mapping: &pkgsecurity.ComponentMapping{Stack: "plat-use2-prod", Mapped: true}},
+				{ID: "f2", Mapping: &pkgsecurity.ComponentMapping{Stack: "plat-use2-dev", Mapped: true}},
+				{ID: "f3", Mapping: &pkgsecurity.ComponentMapping{Stack: "plat-use2-prod", Mapped: true}},
+				{ID: "f4", Mapping: nil},
+			},
+			expected: []string{"plat-use2-dev", "plat-use2-prod"},
+		},
+		{
+			name:     "falls back to prefix for unmapped findings",
+			prefix:   "plat",
+			findings: []Finding{{ID: "unmapped", Mapping: nil}},
+			expected: []string{"plat"},
+		},
+		{
+			name:     "empty without prefix or mapped stacks",
+			prefix:   "",
+			findings: []Finding{{ID: "unmapped", Mapping: nil}},
+			empty:    true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := uniqueStacks(tt.prefix, tt.findings)
+			if tt.empty {
+				assert.Empty(t, got)
+				return
+			}
+			assert.Equal(t, tt.expected, got)
+		})
+	}
+}
+
 func TestFilterByStackAndComponent(t *testing.T) {
 	findings := []pkgsecurity.Finding{
 		{ID: "f1", Mapping: &pkgsecurity.ComponentMapping{Stack: "plat-use2-prod", Component: "vpc", Mapped: true}},

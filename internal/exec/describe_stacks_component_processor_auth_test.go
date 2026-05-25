@@ -208,6 +208,20 @@ func TestResolveComponentAuthManager(t *testing.T) {
 			expectSentinel:     false,
 		},
 		{
+			// Regression: this is the `atmos describe affected --upload --process-functions=false
+			// --identity=false` shape from infra-live CI. processTemplates defaults to true and
+			// stays on; --process-functions=false disables YAML functions; --identity=false sets
+			// authDisabled. Without the authDisabled short-circuit, per-component auth fired
+			// (the AssumeRoleWithWebIdentity 403 the user hit). With it, the resolver is skipped.
+			name:               "auth_disabled_describe_affected_upload_shape__resolver_skipped",
+			processTemplates:   true,
+			processYaml:        false,
+			authDisabled:       true,
+			componentSection:   componentSectionWithAuth(authSectionWithDefault()),
+			expectResolverCall: false,
+			expectSentinel:     false,
+		},
+		{
 			// Component without its own auth section: the resolver must NOT
 			// run even when templates are enabled, because there is no
 			// component-level identity to resolve. The parent AuthManager

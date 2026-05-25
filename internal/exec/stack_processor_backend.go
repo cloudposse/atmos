@@ -51,7 +51,8 @@ func processTerraformBackend(cfg *terraformBackendConfig) (string, map[string]an
 			cfg.globalBackendSection,
 			cfg.baseComponentBackendSection,
 			cfg.componentBackendSection,
-		})
+		},
+	)
 	if err != nil {
 		return "", nil, err
 	}
@@ -220,39 +221,70 @@ func processTerraformRemoteStateBackend(cfg *remoteStateBackendConfig) (string, 
 		finalComponentRemoteStateBackendType = cfg.componentRemoteStateBackendType
 	}
 
-	// Merge remote state backend sections.
-	finalComponentRemoteStateBackendSection, err := m.Merge(
-		cfg.atmosConfig,
-		[]map[string]any{
-			cfg.globalRemoteStateBackendSection,
-			cfg.baseComponentRemoteStateBackendSection,
-			cfg.componentRemoteStateBackendSection,
-		})
+	// Scope every input to just the backend-type-specific map before merging.
+	// The final result is only the value for finalComponentRemoteStateBackendType;
+	// no other backend-type keys ever escape this function. Extracting first
+	// avoids deep-copying unrelated backend-type entries (s3/gcs/azurerm/etc.)
+	// only to throw them away after merge — applies to BOTH the inter-layer
+	// merge of the three remote-state inputs AND the final stitch with the
+	// backend section. Precedence is preserved because the layered remotes
+	// are merged in the same order (global → base component → component) as
+	// the un-scoped path would have.
+	globalRemoteVal, err := extractBackendTypeMap(cfg.globalRemoteStateBackendSection, finalComponentRemoteStateBackendType, cfg.component)
+	if err != nil {
+		return "", nil, err
+	}
+	baseRemoteVal, err := extractBackendTypeMap(cfg.baseComponentRemoteStateBackendSection, finalComponentRemoteStateBackendType, cfg.component)
+	if err != nil {
+		return "", nil, err
+	}
+	componentRemoteVal, err := extractBackendTypeMap(cfg.componentRemoteStateBackendSection, finalComponentRemoteStateBackendType, cfg.component)
+	if err != nil {
+		return "", nil, err
+	}
+	backendVal, err := extractBackendTypeMap(cfg.finalComponentBackendSection, finalComponentRemoteStateBackendType, cfg.component)
 	if err != nil {
 		return "", nil, err
 	}
 
-	// Merge backend and remote_state_backend sections for DRY configuration.
-	finalComponentRemoteStateBackendSectionMerged, err := m.Merge(
+	// Stitch the four scoped values into the result. Order matters: the
+	// backend section provides the base, then the remote-state inputs layer
+	// on top in their normal precedence. m.Merge's existing fast paths
+	// (Phase 5) handle 0/1 non-empty inputs trivially when most layers are
+	// absent.
+	finalComponentRemoteStateBackend, err := m.Merge(
 		cfg.atmosConfig,
-		[]map[string]any{
-			cfg.finalComponentBackendSection,
-			finalComponentRemoteStateBackendSection,
-		})
+		[]map[string]any{backendVal, globalRemoteVal, baseRemoteVal, componentRemoteVal},
+	)
 	if err != nil {
 		return "", nil, err
-	}
-
-	// Extract remote state backend configuration for the specific backend type.
-	finalComponentRemoteStateBackend := map[string]any{}
-	if i, ok := finalComponentRemoteStateBackendSectionMerged[finalComponentRemoteStateBackendType]; ok {
-		finalComponentRemoteStateBackend, ok = i.(map[string]any)
-		if !ok {
-			return "", nil, fmt.Errorf("%w: for the component '%s'", errUtils.ErrInvalidTerraformRemoteStateBackend, cfg.component)
-		}
 	}
 
 	return finalComponentRemoteStateBackendType, finalComponentRemoteStateBackend, nil
+}
+
+// extractBackendTypeMap returns the inner map at section[backendType] as a
+// reference into the input (not a copy), or a fresh empty map if section is
+// nil or the key is missing. Errors out when the value exists but is not a
+// map (which would have failed the post-merge type assertion in the prior
+// implementation).
+//
+// Callers are expected to feed the result into m.Merge (or otherwise treat
+// it as read-only); the only production caller does, and Merge's own
+// contract guarantees its output is a fresh map.
+func extractBackendTypeMap(section map[string]any, backendType, component string) (map[string]any, error) {
+	if section == nil {
+		return map[string]any{}, nil
+	}
+	raw, ok := section[backendType]
+	if !ok {
+		return map[string]any{}, nil
+	}
+	asMap, ok := raw.(map[string]any)
+	if !ok {
+		return nil, fmt.Errorf("%w: for the component '%s'", errUtils.ErrInvalidTerraformRemoteStateBackend, component)
+	}
+	return asMap, nil
 }
 
 // getWorkspacePrefixSeparator returns the configured separator for auto-generated
