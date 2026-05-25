@@ -103,7 +103,7 @@ func CreateWorktree(repoDir, targetCommit string) (string, error) {
 // targetBranch is provided, the function performs a targeted
 // `git fetch origin <targetBranch>` and retries.
 //
-// This is the common shallow-clone CI scenario: actions/checkout@v4 with the
+// This is the common shallow-clone CI scenario: actions/checkout@v6 with the
 // default fetch-depth=1 only pulls the PR head, so a base SHA resolved from
 // the GitHub event payload (event.pull_request.base.sha) often is not in the
 // local object DB. A targeted fetch of the target branch is enough to make

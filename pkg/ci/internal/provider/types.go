@@ -63,6 +63,18 @@ type Provider interface {
 	ResolveBase() (*BaseResolution, error)
 }
 
+// DebugModeDetector is an optional capability for providers that expose a
+// "debug mode" signal set at the runner / step / job level (for example,
+// GitHub Actions' ACTIONS_RUNNER_DEBUG and ACTIONS_STEP_DEBUG). Providers
+// implement this when their platform has a documented way for users to opt
+// into verbose diagnostic logging for a run.
+type DebugModeDetector interface {
+	// IsDebugMode reports whether the current run has debug logging enabled
+	// at the CI provider level. Callers use this to auto-promote their own
+	// log level.
+	IsDebugMode() bool
+}
+
 // OutputWriter writes CI outputs (environment variables, job summaries, etc.).
 type OutputWriter interface {
 	// WriteOutput writes a key-value pair to CI outputs (e.g., $GITHUB_OUTPUT).
