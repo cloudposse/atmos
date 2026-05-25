@@ -55,6 +55,7 @@ type DescribeAffectedCmdArgs struct {
 	Skip                        []string
 	ExcludeLocked               bool
 	AuthManager                 auth.AuthManager // Optional: Auth manager for credential management (from --identity flag).
+	AuthDisabled                bool             // True when --identity=false (or alias) explicitly disables authentication; routes stack resolution to ExecuteDescribeStacksWithAuthDisabled.
 	HeadSHAOverride             string           // PR head SHA from CI event payload, used for upload correlation with Atmos Pro.
 	CIEventType                 string           // CI event type (e.g., "pull_request", "push") for upload validation.
 	TargetBranch                string           // PR target branch (e.g., "main") used to auto-fetch when refs are missing locally.
@@ -78,6 +79,7 @@ type describeAffectedExec struct {
 		skip []string,
 		excludeLocked bool,
 		authManager auth.AuthManager,
+		authDisabled bool,
 	) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, string, error)
 	executeDescribeAffectedWithTargetRefClone func(
 		atmosConfig *schema.AtmosConfiguration,
@@ -93,6 +95,7 @@ type describeAffectedExec struct {
 		skip []string,
 		excludeLocked bool,
 		authManager auth.AuthManager,
+		authDisabled bool,
 	) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, string, error)
 	executeDescribeAffectedWithTargetRefCheckout func(
 		atmosConfig *schema.AtmosConfiguration,
@@ -107,6 +110,7 @@ type describeAffectedExec struct {
 		skip []string,
 		excludeLocked bool,
 		authManager auth.AuthManager,
+		authDisabled bool,
 	) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, string, error)
 	addDependentsToAffected func(
 		atmosConfig *schema.AtmosConfiguration,
@@ -117,6 +121,7 @@ type describeAffectedExec struct {
 		skip []string,
 		onlyInStack string,
 		authManager auth.AuthManager,
+		authDisabled bool,
 	) error
 	printOrWriteToFile func(
 		atmosConfig *schema.AtmosConfiguration,
@@ -326,6 +331,7 @@ func (d *describeAffectedExec) Execute(a *DescribeAffectedCmdArgs) error {
 			a.Skip,
 			a.ExcludeLocked,
 			a.AuthManager,
+			a.AuthDisabled,
 		)
 	case a.CloneTargetRef:
 		affected, headHead, baseHead, repoUrl, err = d.executeDescribeAffectedWithTargetRefClone(
@@ -342,6 +348,7 @@ func (d *describeAffectedExec) Execute(a *DescribeAffectedCmdArgs) error {
 			a.Skip,
 			a.ExcludeLocked,
 			a.AuthManager,
+			a.AuthDisabled,
 		)
 	default:
 		affected, headHead, baseHead, repoUrl, err = d.executeDescribeAffectedWithTargetRefCheckout(
@@ -357,6 +364,7 @@ func (d *describeAffectedExec) Execute(a *DescribeAffectedCmdArgs) error {
 			a.Skip,
 			a.ExcludeLocked,
 			a.AuthManager,
+			a.AuthDisabled,
 		)
 	}
 	if err != nil {
@@ -365,7 +373,7 @@ func (d *describeAffectedExec) Execute(a *DescribeAffectedCmdArgs) error {
 
 	// Add dependent components and stacks for each affected component.
 	if len(affected) > 0 && a.IncludeDependents {
-		err = d.addDependentsToAffected(a.CLIConfig, &affected, a.IncludeSettings, a.ProcessTemplates, a.ProcessYamlFunctions, a.Skip, a.Stack, a.AuthManager)
+		err = d.addDependentsToAffected(a.CLIConfig, &affected, a.IncludeSettings, a.ProcessTemplates, a.ProcessYamlFunctions, a.Skip, a.Stack, a.AuthManager, a.AuthDisabled)
 		if err != nil {
 			return err
 		}
@@ -431,15 +439,19 @@ func (d *describeAffectedExec) uploadableQuery(args *DescribeAffectedCmdArgs, re
 		return nil
 	}
 
-	// Validate that the CI event is a pull_request event when uploading.
-	// Atmos Pro only processes pull_request webhooks, so push events cannot be correlated.
-	if args.CIEventType != "" && args.CIEventType != "pull_request" && args.CIEventType != "pull_request_target" {
+	// Validate that the CI event is one Atmos Pro can correlate when uploading.
+	// Supported events: pull_request, pull_request_target, and merge_group (GitHub merge queue).
+	// Push events and other ad-hoc triggers cannot be correlated to a check run.
+	if args.CIEventType != "" &&
+		args.CIEventType != "pull_request" &&
+		args.CIEventType != "pull_request_target" &&
+		args.CIEventType != "merge_group" {
 		return errUtils.Build(
-			fmt.Errorf("%w: detected CI event %q, but Atmos Pro only supports pull_request events", errUtils.ErrUploadRequiresPullRequestEvent, args.CIEventType),
+			fmt.Errorf("%w: detected CI event %q, but Atmos Pro only supports pull_request, pull_request_target, and merge_group events", errUtils.ErrUploadRequiresSupportedEvent, args.CIEventType),
 		).
-			WithHint("Ensure your workflow triggers on pull_request events when using --upload.").
-			WithHint("Push events and other event types are not supported for Atmos Pro uploads.").
-			WithHint("See https://atmos.tools/integrations/pro for supported CI configurations.").
+			WithHint("Trigger your workflow on pull_request, pull_request_target, or merge_group events when using --upload.").
+			WithHint("Push events and other ad-hoc triggers cannot be correlated to an Atmos Pro check run.").
+			WithHint("See https://atmos.tools/cli/configuration/settings/pro for supported CI configurations.").
 			Err()
 	}
 

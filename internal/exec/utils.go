@@ -32,6 +32,29 @@ const (
 	terraformConfigKey = "terraform_config"
 )
 
+// extractRequiredProviders extracts required_providers from a component section.
+// It handles both map[string]map[string]any and map[string]any formats.
+func extractRequiredProviders(componentSection map[string]any) map[string]map[string]any {
+	// Try direct type assertion first.
+	if section, ok := componentSection[cfg.RequiredProvidersSectionName].(map[string]map[string]any); ok {
+		return section
+	}
+
+	// Try map[string]any and convert each value.
+	rawProviders, ok := componentSection[cfg.RequiredProvidersSectionName].(map[string]any)
+	if !ok {
+		return nil
+	}
+
+	result := make(map[string]map[string]any)
+	for k, v := range rawProviders {
+		if providerConfig, ok := v.(map[string]any); ok {
+			result[k] = providerConfig
+		}
+	}
+	return result
+}
+
 // getStackManifestName extracts the manifest-level 'name' field from a stack section.
 // Returns empty string if the section is not a map or doesn't have a name field.
 func getStackManifestName(stackSection any) string {
@@ -63,6 +86,8 @@ func ProcessComponentConfig(
 	var componentSettingsSection map[string]any
 	var componentOverridesSection map[string]any
 	var componentProvidersSection map[string]any
+	var componentRequiredProvidersSection map[string]map[string]any
+	var componentRequiredVersion string
 	var componentHooksSection map[string]any
 	var componentImportsSection []string
 	var componentEnvSection map[string]any
@@ -109,6 +134,14 @@ func ProcessComponentConfig(
 		componentProvidersSection = map[string]any{}
 	}
 
+	// Extract required_providers section (DEV-3124: pin provider versions).
+	componentRequiredProvidersSection = extractRequiredProviders(componentSection)
+
+	// Extract required_version section (DEV-3124: pin Terraform version).
+	if componentRequiredVersion, ok = componentSection[cfg.RequiredVersionSectionName].(string); !ok {
+		componentRequiredVersion = ""
+	}
+
 	if componentHooksSection, ok = componentSection[cfg.HooksSectionName].(map[string]any); !ok {
 		componentHooksSection = map[string]any{}
 	}
@@ -151,6 +184,15 @@ func ProcessComponentConfig(
 		componentOverridesSection = map[string]any{}
 	}
 
+	// Decode the component-level `retry:` block (if any) into a typed *RetryConfig.
+	// Inheritance/deep-merge has already happened at the stack-processor level, so the
+	// retry value found here reflects the final effective configuration for this
+	// component within this stack.
+	componentRetrySection, err := schema.DecodeRetryConfig(componentSection[cfg.RetrySectionName])
+	if err != nil {
+		return fmt.Errorf("'components.%s.%s.retry' in the stack manifest '%s': %w", componentType, component, stack, err)
+	}
+
 	if componentInheritanceChain, ok = componentSection["inheritance"].([]string); !ok {
 		componentInheritanceChain = []string{}
 	}
@@ -176,12 +218,15 @@ func ProcessComponentConfig(
 	configAndStacksInfo.ComponentSettingsSection = componentSettingsSection
 	configAndStacksInfo.ComponentOverridesSection = componentOverridesSection
 	configAndStacksInfo.ComponentProvidersSection = componentProvidersSection
+	configAndStacksInfo.RequiredProviders = componentRequiredProvidersSection
+	configAndStacksInfo.RequiredVersion = componentRequiredVersion
 	configAndStacksInfo.StackSection = stackSection
 	configAndStacksInfo.ComponentHooksSection = componentHooksSection
 	configAndStacksInfo.ComponentEnvSection = componentEnvSectionFiltered
 	configAndStacksInfo.ComponentAuthSection = componentAuthSection
 	configAndStacksInfo.ComponentBackendSection = componentBackendSection
 	configAndStacksInfo.ComponentBackendType = componentBackendType
+	configAndStacksInfo.ComponentRetrySection = componentRetrySection
 	configAndStacksInfo.BaseComponentPath = baseComponentName
 	configAndStacksInfo.ComponentInheritanceChain = componentInheritanceChain
 	configAndStacksInfo.ComponentIsAbstract = componentIsAbstract
@@ -194,6 +239,7 @@ func ProcessComponentConfig(
 
 	// Populate AuthContext from AuthManager if provided (from --identity flag).
 	if authManager != nil {
+		configAndStacksInfo.AuthManager = authManager
 		managerStackInfo := authManager.GetStackInfo()
 		if managerStackInfo != nil && managerStackInfo.AuthContext != nil {
 			configAndStacksInfo.AuthContext = managerStackInfo.AuthContext
@@ -371,7 +417,8 @@ func processStackContextPrefix(
 		configAndStacksInfo.Context = cfg.GetContextFromVars(configAndStacksInfo.ComponentVarsSection)
 
 		var err error
-		configAndStacksInfo.ContextPrefix, err = cfg.GetContextPrefix(configAndStacksInfo.Stack,
+		configAndStacksInfo.ContextPrefix, err = cfg.GetContextPrefix(
+			configAndStacksInfo.Stack,
 			configAndStacksInfo.Context,
 			GetStackNamePattern(atmosConfig),
 			stackName,
@@ -474,11 +521,13 @@ func findComponentInStacks(
 			foundStacks = append(foundStacks, stackName)
 
 			log.Debug(
-				fmt.Sprintf("Found component '%s' in the stack '%s' in the stack manifest '%s'",
+				fmt.Sprintf(
+					"Found component '%s' in the stack '%s' in the stack manifest '%s'",
 					configAndStacksInfo.ComponentFromArg,
 					configAndStacksInfo.Stack,
 					stackName,
-				))
+				),
+			)
 		}
 	}
 
@@ -552,7 +601,8 @@ func ProcessStacks(
 		configAndStacksInfo.Context.Component = configAndStacksInfo.ComponentFromArg
 		configAndStacksInfo.Context.BaseComponent = configAndStacksInfo.BaseComponentPath
 
-		configAndStacksInfo.ContextPrefix, err = cfg.GetContextPrefix(configAndStacksInfo.Stack,
+		configAndStacksInfo.ContextPrefix, err = cfg.GetContextPrefix(
+			configAndStacksInfo.Stack,
 			configAndStacksInfo.Context,
 			GetStackNamePattern(atmosConfig),
 			configAndStacksInfo.Stack,
@@ -601,7 +651,8 @@ func ProcessStacks(
 			// Component not found - try fallback to path resolution.
 			// If the component argument looks like it could be a path (e.g., "components/terraform/vpc"),
 			// try resolving it as a filesystem path and retry with the resolved component name.
-			log.Debug("Component not found by name, attempting path resolution fallback",
+			log.Debug(
+				"Component not found by name, attempting path resolution fallback",
 				"component", configAndStacksInfo.ComponentFromArg,
 				"stack", configAndStacksInfo.Stack,
 			)
@@ -614,7 +665,8 @@ func ProcessStacks(
 
 			if pathErr == nil {
 				// Path resolution succeeded - retry with resolved component name.
-				log.Debug("Path resolution succeeded, retrying with resolved component",
+				log.Debug(
+					"Path resolution succeeded, retrying with resolved component",
 					"original", configAndStacksInfo.ComponentFromArg,
 					"resolved", resolvedComponent,
 				)
@@ -664,9 +716,10 @@ func ProcessStacks(
 					configAndStacksInfo.Stack,
 					cliConfigYaml)
 		} else if foundStackCount > 1 {
-			err = fmt.Errorf("%w: Found duplicate config for the component `%s` in the stack `%s` in the manifests: %v\n"+
-				"Check that all the context variables are correctly defined in the manifests and not duplicated\n"+
-				"Check that all imports are valid",
+			err = fmt.Errorf(
+				"%w: Found duplicate config for the component `%s` in the stack `%s` in the manifests: %v\n"+
+					"Check that all the context variables are correctly defined in the manifests and not duplicated\n"+
+					"Check that all imports are valid",
 				errUtils.ErrInvalidComponent,
 				configAndStacksInfo.ComponentFromArg,
 				configAndStacksInfo.Stack,
@@ -1079,6 +1132,20 @@ func postProcessTemplatesAndYamlFunctions(configAndStacksInfo *schema.ConfigAndS
 		configAndStacksInfo.ComponentProvidersSection = i
 	}
 
+	// Restore required_providers section (DEV-3124). Delegate to the shared
+	// extractRequiredProviders helper so the conversion is defined in exactly one
+	// place — keeps the type-tolerance (map[string]map[string]any vs.
+	// map[string]any) and the silent skipping of non-object entries consistent
+	// across the extract and post-process paths.
+	if restored := extractRequiredProviders(configAndStacksInfo.ComponentSection); restored != nil {
+		configAndStacksInfo.RequiredProviders = restored
+	}
+
+	// Restore required_version section (DEV-3124).
+	if i, ok := configAndStacksInfo.ComponentSection[cfg.RequiredVersionSectionName].(string); ok {
+		configAndStacksInfo.RequiredVersion = i
+	}
+
 	if i, ok := configAndStacksInfo.ComponentSection[cfg.AuthSectionName].(map[string]any); ok {
 		configAndStacksInfo.ComponentAuthSection = i
 	}
@@ -1109,6 +1176,17 @@ func postProcessTemplatesAndYamlFunctions(configAndStacksInfo *schema.ConfigAndS
 
 	if i, ok := configAndStacksInfo.ComponentSection[cfg.BackendTypeSectionName].(string); ok {
 		configAndStacksInfo.ComponentBackendType = i
+	}
+
+	// Restore retry configuration after template / YAML-function processing.
+	// Decode errors here are logged but do not fail post-processing — the initial
+	// extraction in ProcessStackConfig is the authoritative validation point.
+	if retryCfg, err := schema.DecodeRetryConfig(configAndStacksInfo.ComponentSection[cfg.RetrySectionName]); err != nil {
+		log.Warn("Failed to restore retry configuration after template processing", "error", err)
+	} else {
+		// Always assign — including nil — so a retry section removed via templates
+		// or YAML functions clears any previously decoded config.
+		configAndStacksInfo.ComponentRetrySection = retryCfg
 	}
 
 	if i, ok := configAndStacksInfo.ComponentSection[cfg.ComponentSectionName].(string); ok {

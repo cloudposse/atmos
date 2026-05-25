@@ -7,6 +7,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/auth"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -60,7 +61,8 @@ func TestShouldResolvePerComponentAuth(t *testing.T) {
 			t.Parallel()
 
 			got := shouldResolvePerComponentAuth(tc.processTemplates, tc.processYaml)
-			assert.Equal(t, tc.want, got,
+			assert.Equal(
+				t, tc.want, got,
 				"shouldResolvePerComponentAuth(processTemplates=%v, processYamlFunctions=%v)",
 				tc.processTemplates, tc.processYaml,
 			)
@@ -158,6 +160,7 @@ func TestResolveComponentAuthManager(t *testing.T) {
 		name               string
 		processTemplates   bool
 		processYaml        bool
+		authDisabled       bool
 		componentSection   map[string]any
 		expectResolverCall bool
 		expectSentinel     bool // true when result should be the spy's componentMgr
@@ -196,6 +199,29 @@ func TestResolveComponentAuthManager(t *testing.T) {
 			expectSentinel:     true,
 		},
 		{
+			name:               "auth_disabled_with_templates_and_yaml__resolver_skipped",
+			processTemplates:   true,
+			processYaml:        true,
+			authDisabled:       true,
+			componentSection:   componentSectionWithAuth(authSectionWithDefault()),
+			expectResolverCall: false,
+			expectSentinel:     false,
+		},
+		{
+			// Regression: this is the `atmos describe affected --upload --process-functions=false
+			// --identity=false` shape from infra-live CI. processTemplates defaults to true and
+			// stays on; --process-functions=false disables YAML functions; --identity=false sets
+			// authDisabled. Without the authDisabled short-circuit, per-component auth fired
+			// (the AssumeRoleWithWebIdentity 403 the user hit). With it, the resolver is skipped.
+			name:               "auth_disabled_describe_affected_upload_shape__resolver_skipped",
+			processTemplates:   true,
+			processYaml:        false,
+			authDisabled:       true,
+			componentSection:   componentSectionWithAuth(authSectionWithDefault()),
+			expectResolverCall: false,
+			expectSentinel:     false,
+		},
+		{
 			// Component without its own auth section: the resolver must NOT
 			// run even when templates are enabled, because there is no
 			// component-level identity to resolve. The parent AuthManager
@@ -229,12 +255,14 @@ func TestResolveComponentAuthManager(t *testing.T) {
 				atmosConfig:           &schema.AtmosConfiguration{},
 				processTemplates:      tc.processTemplates,
 				processYamlFunctions:  tc.processYaml,
+				authDisabled:          tc.authDisabled,
 				authManager:           parentMgr,
 				componentAuthResolver: spy.resolver(),
 				finalStacksMap:        make(map[string]any),
 			}
 
-			got := p.resolveComponentAuthManager(tc.componentSection, "test-component", "test-stack")
+			got, err := p.resolveComponentAuthManager(tc.componentSection, "test-component", "test-stack")
+			require.NoError(t, err)
 
 			if tc.expectResolverCall {
 				assert.EqualValues(t, 1, spy.calls.Load(),
@@ -258,12 +286,10 @@ func TestResolveComponentAuthManager(t *testing.T) {
 	}
 }
 
-// TestResolveComponentAuthManager_ResolverErrorFallsBackToParent verifies that
-// when the per-component resolver returns an error, we silently fall back to
-// the parent AuthManager. This preserves the original swallow-on-error behavior
-// of the inline code that was refactored in
-// docs/fixes/2026-04-24-list-instances-per-component-auth.md.
-func TestResolveComponentAuthManager_ResolverErrorFallsBackToParent(t *testing.T) {
+// TestResolveComponentAuthManager_ResolverErrorIsFatal verifies that when a
+// component declares a default identity, per-component auth resolver failures
+// stop processing instead of falling back to the parent AuthManager.
+func TestResolveComponentAuthManager_ResolverErrorIsFatal(t *testing.T) {
 	t.Parallel()
 
 	parentMgr := auth.AuthManager(nil)
@@ -284,13 +310,55 @@ func TestResolveComponentAuthManager_ResolverErrorFallsBackToParent(t *testing.T
 		finalStacksMap:        make(map[string]any),
 	}
 
-	got := p.resolveComponentAuthManager(
+	got, err := p.resolveComponentAuthManager(
 		componentSectionWithAuth(authSectionWithDefault()),
 		"test-component",
 		"test-stack",
 	)
 
 	require.EqualValues(t, 1, spy.calls.Load(), "resolver should still be called on error path")
-	assert.Nil(t, got, "error path should fall back to the parent AuthManager (nil in this test)")
+	require.Error(t, err)
+	assert.ErrorIs(t, err, assert.AnError)
+	assert.ErrorIs(t, err, errUtils.ErrAuthManager, "error must be wrapped with ErrAuthManager sentinel")
+	assert.Contains(t, err.Error(), "test-component")
+	assert.Contains(t, err.Error(), "test-stack")
+	assert.Nil(t, got, "error path should return the parent AuthManager value alongside the error")
 	_ = parentMgr // documented intent: parentMgr is the untyped-nil fallback value.
+}
+
+func TestProcessComponentEntry_ComponentAuthResolverErrorIsFatal(t *testing.T) {
+	t.Parallel()
+
+	spy := &componentAuthResolverSpy{
+		returnMgr: nil,
+		returnErr: assert.AnError,
+	}
+
+	componentSection := componentSectionWithAuth(authSectionWithDefault())
+	allTypeComponents := map[string]any{
+		"test-component": componentSection,
+	}
+	p := &describeStacksProcessor{
+		atmosConfig:           &schema.AtmosConfiguration{},
+		processTemplates:      true,
+		processYamlFunctions:  false,
+		componentAuthResolver: spy.resolver(),
+		finalStacksMap:        make(map[string]any),
+	}
+
+	err := p.processComponentEntry(
+		"test-stack",
+		"",
+		"helmfile",
+		"test-component",
+		componentSection,
+		allTypeComponents,
+		processComponentTypeOpts{},
+	)
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, assert.AnError)
+	assert.Contains(t, err.Error(), "test-component")
+	assert.Contains(t, err.Error(), "test-stack")
+	assert.EqualValues(t, 1, spy.calls.Load(), "resolver should stop processing after the first auth failure")
 }

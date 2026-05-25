@@ -1,9 +1,11 @@
 package ci
 
 import (
+	"fmt"
 	"os"
 	"strings"
 
+	authtypes "github.com/cloudposse/atmos/pkg/auth/types"
 	"github.com/cloudposse/atmos/pkg/ci/artifact"
 	_ "github.com/cloudposse/atmos/pkg/ci/artifact/github" // Register github artifact store.
 	_ "github.com/cloudposse/atmos/pkg/ci/artifact/local"  // Register local artifact store.
@@ -16,6 +18,8 @@ import (
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/store"
+	"github.com/cloudposse/atmos/pkg/store/authbridge"
 )
 
 // ExecuteOptions contains options for executing CI hooks.
@@ -183,6 +187,7 @@ func createPlanfileStore(opts ExecuteOptions) (planfile.Store, error) {
 			if storeSpec, ok := planfilesConfig.Stores[planfilesConfig.Default]; ok {
 				artOpts.Type = storeSpec.Type
 				artOpts.Options = storeSpec.Options
+				attachIdentity(&artOpts, opts.Info)
 				backend, err := artifact.NewStore(artOpts)
 				if err != nil {
 					return nil, err
@@ -195,6 +200,7 @@ func createPlanfileStore(opts ExecuteOptions) (planfile.Store, error) {
 	// Fall back to environment-based detection.
 	if envOpts := detectStoreFromEnv(); envOpts != nil {
 		envOpts.AtmosConfig = opts.AtmosConfig
+		attachIdentity(envOpts, opts.Info)
 		backend, err := artifact.NewStore(*envOpts)
 		if err != nil {
 			return nil, err
@@ -212,6 +218,41 @@ func createPlanfileStore(opts ExecuteOptions) (planfile.Store, error) {
 		return nil, err
 	}
 	return adapter.NewStore(backend), nil
+}
+
+// defaultResolverFactory builds the resolver that bridges Atmos auth into
+// identity-aware artifact backends. Indirection via a var lets tests swap in
+// a fake without an import cycle through authbridge.
+var defaultResolverFactory = func(authManager authtypes.AuthManager, info *schema.ConfigAndStacksInfo) store.AuthContextResolver {
+	return authbridge.NewResolver(authManager, info)
+}
+
+// attachIdentity propagates the active command identity (info.Identity) to
+// the planfile store so identity-aware backends can authenticate the
+// parent-process upload via the same chain as the terraform subprocess.
+func attachIdentity(artOpts *artifact.StoreOptions, info *schema.ConfigAndStacksInfo) {
+	defer perf.Track(nil, "ci.attachIdentity")()
+
+	if info == nil || info.Identity == "" {
+		return
+	}
+
+	artOpts.Identity = info.Identity
+
+	// info.AuthManager is typed as `any` in pkg/schema to avoid a circular
+	// import with pkg/auth. The type assertion recovers type safety. When
+	// the assertion fails or AuthManager is nil, we leave Resolver unset and
+	// identity-aware backends fall back to the default credential chain.
+	if info.AuthManager == nil {
+		return
+	}
+	authManager, ok := info.AuthManager.(authtypes.AuthManager)
+	if !ok {
+		log.Debug("Planfile store auth manager has unexpected type, falling back to default credential chain",
+			"identity", info.Identity, "type", fmt.Sprintf("%T", info.AuthManager))
+		return
+	}
+	artOpts.Resolver = defaultResolverFactory(authManager, info)
 }
 
 // detectStoreFromEnv detects the artifact store from environment variables.

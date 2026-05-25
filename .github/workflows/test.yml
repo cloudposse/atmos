@@ -17,6 +17,19 @@ on:
 
   workflow_dispatch:
 
+# Grant `packages: read` so jobs that pull OCI images from ghcr.io
+# (e.g. vendor pulls in mock/acceptance tests) can authenticate with
+# the auto-generated GITHUB_TOKEN. The default PR-event scope is
+# `contents: read` only, which causes ghcr.io to reject the token with
+# `DENIED: denied` whenever credentials are sent (as happens on Windows
+# runners that have no usable Docker keychain entry for ghcr.io). Reviewdog
+# gets job-level checks write access for tflint annotations.
+permissions:
+  checks: read
+  contents: read
+  packages: read
+  pull-requests: read
+
 env:
   TERRAFORM_VERSION: "1.9.7"
   OPEN_TOFU_VERSION: "1.9.1"
@@ -41,7 +54,7 @@ jobs:
             target: macos
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: runs-on/action@v1
+      - uses: runs-on/action@d141ef83eb66d096ce8afc767e09115a65c63b60 # v2.1.2
         if: matrix.target == 'linux'
 
       - name: Build
@@ -54,7 +67,9 @@ jobs:
 
       - name: Check out code into the Go module directory
         if: ${{ ! ( matrix.target == 'windows' && github.event.pull_request.draft  ) }}
-        uses: actions/checkout@v4
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
 
       - name: Set up Go
         if: ${{ ! ( matrix.target == 'windows' && github.event.pull_request.draft  ) }}
@@ -97,15 +112,17 @@ jobs:
           - { os: "runs-on=${{github.run_id}}/runner=terraform/tag=atmos/extras=s3-cache/private=false", target: linux }
           - { os: "windows-latest", target: windows }
           - { os: "macos-latest", target: macos }
-    timeout-minutes: 45
+    timeout-minutes: 60
     runs-on: ${{ matrix.flavor.os }}
     steps:
-      - uses: runs-on/action@v1
+      - uses: runs-on/action@d141ef83eb66d096ce8afc767e09115a65c63b60 # v2.1.2
         if: matrix.flavor.target == 'linux'
 
       - name: Check out code into the Go module directory
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
-        uses: actions/checkout@v4
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
 
       - name: Add GNU tar to PATH (significantly faster than windows tar)
         if: matrix.flavor.target == 'windows' && ! github.event.pull_request.draft
@@ -155,16 +172,18 @@ jobs:
         with:
           version: ${{ env.PACKER_VERSION }}
 
-      # https://github.com/helmfile/helmfile-action
-      - name: Install Helmfile
-        uses: helmfile/helmfile-action@v2.0.5
+      - name: Install Helm and Helmfile
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
-        with:
-          helm-version: ${{ env.HELM_VERSION }}
-          helmfile-version: ${{ env.HELMFILE_VERSION }}
-          helmfile-args: version
-          helmfile-auto-init: "false"
-          helm-plugins: ""
+        run: |
+          atmos toolchain install --default helm/helm@${{ env.HELM_VERSION }}
+          atmos toolchain install --default helmfile/helmfile@${{ env.HELMFILE_VERSION }}
+          atmos toolchain env --format github
+
+      - name: Verify Helm and Helmfile
+        if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
+        run: |
+          helm version --short
+          helmfile version
 
       - name: Install helm-diff plugin
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
@@ -205,9 +224,9 @@ jobs:
       #        ]
       #       }
 
-      - name: Acceptance tests
+      - name: Acceptance tests with coverage
         timeout-minutes: 45
-        if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
+        if: matrix.flavor.target == 'linux'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # Use the GitHub token for downloading the Packer plugins
@@ -217,6 +236,19 @@ jobs:
           # Enable Playwright integration tests to validate browser driver download
           RUN_PLAYWRIGHT_INTEGRATION: 1
         run: make testacc-cover
+
+      - name: Acceptance tests
+        timeout-minutes: 45
+        if: matrix.flavor.target == 'macos' || (matrix.flavor.target == 'windows' && ! github.event.pull_request.draft)
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Use the GitHub token for downloading the Packer plugins
+          PACKER_GITHUB_API_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Skip precondition checks in CI to ensure tests run and maintain coverage
+          ATMOS_TEST_SKIP_PRECONDITION_CHECKS: true
+          # Enable Playwright integration tests to validate browser driver download
+          RUN_PLAYWRIGHT_INTEGRATION: 1
+        run: make testacc
 
       - name: Upload coverage report to Codecov
         if: matrix.flavor.target == 'linux' && (success() || failure())
@@ -233,9 +265,21 @@ jobs:
     name: "[lint] Dockerfile"
     needs: build
     runs-on: ubuntu-latest
+    # The workflow-level `permissions:` block above (added in #2487 for
+    # `packages: read` on ghcr.io pulls) REPLACES — not extends — the default
+    # token scope for every job. That stripped the implicit
+    # `security-events: write` this job relied on for SARIF upload, breaking
+    # the post-merge run on main. Job-level `permissions:` also fully
+    # overrides the workflow-level set, so `contents: read` is re-listed here
+    # for actions/checkout.
+    permissions:
+      contents: read
+      security-events: write
     steps:
       - name: Check out code
-        uses: actions/checkout@v4
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
 
       - uses: hadolint/hadolint-action@v3.1.0
         id: hadolint
@@ -300,7 +344,9 @@ jobs:
         run: chmod +x /usr/local/bin/atmos
 
       - name: Check out code into the Go module directory
-        uses: actions/checkout@v4
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
 
       - name: Install Terraform
         uses: hashicorp/setup-terraform@v3
@@ -341,7 +387,9 @@ jobs:
     timeout-minutes: 20
     steps:
       - name: Check out code into the Go module directory
-        uses: actions/checkout@v4
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
 
       - name: Start Docker Compose
         working-directory: examples/${{ matrix.demo-folder }}
@@ -427,7 +475,9 @@ jobs:
     steps:
       - name: Check out code into the Go module directory
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
-        uses: actions/checkout@v4
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
 
       - name: Add GNU tar to flavor.target (significantly faster than windows tar)
         if: matrix.flavor.target == 'windows' && ! github.event.pull_request.draft
@@ -504,6 +554,10 @@ jobs:
     name: "[lint] ${{ matrix.demo-folder }}"
     needs: build
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      checks: write
+      pull-requests: read
     strategy:
       fail-fast: false
       matrix:
@@ -531,7 +585,9 @@ jobs:
     timeout-minutes: 20
     steps:
       - name: Check out code into the Go module directory
-        uses: actions/checkout@v4
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
 
       - name: Install Terraform
         uses: hashicorp/setup-terraform@v3
@@ -554,7 +610,7 @@ jobs:
       - name: Lint examples/${{ matrix.demo-folder }}/components/terraform
         uses: reviewdog/action-tflint@v1
         with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
+          github_token: ${{ github.token }}
           working_directory: examples/${{ matrix.demo-folder }}/components/terraform
           flags: >-
             --enable-rule=terraform_unused_declarations
@@ -583,7 +639,9 @@ jobs:
     timeout-minutes: 20
     steps:
       - name: Check out code
-        uses: actions/checkout@v4
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
 
       - name: Validate YAML Schema for Stacks
         uses: InoUno/yaml-ls-check@v1.4.0

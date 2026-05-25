@@ -281,15 +281,23 @@ type EditorConfig struct {
 
 // Toolchain configures the built-in CLI toolchain management system for installing and managing external tools.
 type Toolchain struct {
-	InstallPath     string              `yaml:"install_path" json:"install_path" mapstructure:"install_path"`
-	FilePath        string              `yaml:"file_path" json:"file_path" mapstructure:"file_path"`
-	ToolsDir        string              `yaml:"tools_dir" json:"tools_dir" mapstructure:"tools_dir"`
-	VersionsFile    string              `yaml:"versions_file" json:"versions_file" mapstructure:"versions_file"`
-	LockFile        string              `yaml:"lock_file,omitempty" json:"lock_file,omitempty" mapstructure:"lock_file"`
-	UseToolVersions bool                `yaml:"use_tool_versions" json:"use_tool_versions" mapstructure:"use_tool_versions"`
-	UseLockFile     bool                `yaml:"use_lock_file" json:"use_lock_file" mapstructure:"use_lock_file"`
-	Registries      []ToolchainRegistry `yaml:"registries,omitempty" json:"registries,omitempty" mapstructure:"registries"`
-	Aliases         map[string]string   `yaml:"aliases,omitempty" json:"aliases,omitempty" mapstructure:"aliases"`
+	InstallPath     string                 `yaml:"install_path" json:"install_path" mapstructure:"install_path"`
+	FilePath        string                 `yaml:"file_path" json:"file_path" mapstructure:"file_path"`
+	ToolsDir        string                 `yaml:"tools_dir" json:"tools_dir" mapstructure:"tools_dir"`
+	VersionsFile    string                 `yaml:"versions_file" json:"versions_file" mapstructure:"versions_file"`
+	LockFile        string                 `yaml:"lock_file,omitempty" json:"lock_file,omitempty" mapstructure:"lock_file"`
+	UseToolVersions bool                   `yaml:"use_tool_versions" json:"use_tool_versions" mapstructure:"use_tool_versions"`
+	UseLockFile     bool                   `yaml:"use_lock_file" json:"use_lock_file" mapstructure:"use_lock_file"`
+	Verification    *ToolchainVerification `yaml:"verification,omitempty" json:"verification,omitempty" mapstructure:"verification"`
+	Registries      []ToolchainRegistry    `yaml:"registries,omitempty" json:"registries,omitempty" mapstructure:"registries"`
+	Aliases         map[string]string      `yaml:"aliases,omitempty" json:"aliases,omitempty" mapstructure:"aliases"`
+}
+
+// ToolchainVerification configures package integrity and signature checks.
+type ToolchainVerification struct {
+	Checksums       string `yaml:"checksums,omitempty" json:"checksums,omitempty" mapstructure:"checksums"`
+	Signatures      string `yaml:"signatures,omitempty" json:"signatures,omitempty" mapstructure:"signatures"`
+	VerifierInstall string `yaml:"verifier_install,omitempty" json:"verifier_install,omitempty" mapstructure:"verifier_install"`
 }
 
 // ToolchainRegistry defines a registry source for tool metadata.
@@ -607,8 +615,11 @@ type CIChecksStatusesConfig struct {
 
 // CICommentsConfig configures PR/MR comment integration.
 // GitHub: PR comments, GitLab: MR notes.
+//
+// Enabled is *bool so callers can distinguish "unset" (nil, default applies)
+// from explicit false. Default is true when omitted; see `isCommentsEnabled`.
 type CICommentsConfig struct {
-	Enabled  bool   `yaml:"enabled,omitempty" json:"enabled,omitempty" mapstructure:"enabled"`
+	Enabled  *bool  `yaml:"enabled,omitempty" json:"enabled,omitempty" mapstructure:"enabled"`
 	Behavior string `yaml:"behavior,omitempty" json:"behavior,omitempty" mapstructure:"behavior"` // create, update, upsert
 	Template string `yaml:"template,omitempty" json:"template,omitempty" mapstructure:"template"`
 }
@@ -997,6 +1008,11 @@ type ConfigAndStacksInfo struct {
 	// which would reintroduce problematic vars (e.g., IRSA credentials on EKS pods).
 	SanitizedEnv            []string
 	ComponentBackendSection AtmosSectionMapType
+	// ComponentRetrySection holds the per-component `retry:` block parsed from stack
+	// manifests. When non-nil and `Conditions` is populated, each subprocess invocation
+	// in the terraform execution pipeline (init, workspace, main) is retried independently
+	// on errors whose captured output matches a `Conditions` regex.
+	ComponentRetrySection *RetryConfig
 	// AuthContext holds active authentication credentials for cloud providers.
 	// This is the SINGLE SOURCE OF TRUTH for auth credentials.
 	// ComponentEnvSection/ComponentEnvList are derived from this context.
@@ -1010,8 +1026,16 @@ type ConfigAndStacksInfo struct {
 	//   - pkg/auth already imports pkg/schema (for ConfigAndStacksInfo)
 	//   - This would create: schema → auth → schema (circular dependency error)
 	//   - Type assertions are used at usage sites to recover type safety
-	AuthManager               any
-	ComponentBackendType      string
+	AuthManager          any
+	AuthDisabled         bool
+	ComponentBackendType string
+	// RequiredVersion is the Terraform version constraint (e.g., ">= 1.10.1").
+	// This is extracted from terraform.required_version or components.terraform.<name>.required_version.
+	RequiredVersion string
+	// RequiredProviders maps provider names to their configuration.
+	// Example: {"aws": {"source": "hashicorp/aws", "version": "~> 5.0"}}.
+	// This is extracted from terraform.required_providers or components.terraform.<name>.required_providers.
+	RequiredProviders         map[string]map[string]any
 	AdditionalArgsAndFlags    []string
 	GlobalOptions             []string
 	BasePath                  string
@@ -1073,6 +1097,12 @@ type ConfigAndStacksInfo struct {
 	Identity                  string
 	ClusterName               string // EKS cluster name from --cluster-name flag.
 	NeedsPathResolution       bool   // True if ComponentFromArg is a path that needs resolution.
+
+	// PerComponentHook is called after each component executes in multi-component mode
+	// (--all, --query, --components). Receives a snapshot of info with Component/Stack
+	// set to the executed component, combined stdout+stderr output, and the execution
+	// error (nil on success). Nil means no per-component callback.
+	PerComponentHook func(info *ConfigAndStacksInfo, output string, execErr error)
 }
 
 // GetComponentEnvSection returns the component's env section map.
@@ -1105,6 +1135,11 @@ type RetryConfig struct {
 	RandomJitter    *float64        `yaml:"random_jitter,omitempty" json:"random_jitter,omitempty" mapstructure:"random_jitter"`
 	Multiplier      *float64        `yaml:"multiplier,omitempty" json:"multiplier,omitempty" mapstructure:"multiplier"`
 	MaxElapsedTime  *time.Duration  `yaml:"max_elapsed_time,omitempty" json:"max_elapsed_time,omitempty" mapstructure:"max_elapsed_time"`
+	// Conditions is a list of regex patterns matched against captured subprocess output
+	// to decide whether an error is recoverable and the command should be retried.
+	// When empty or nil, no pattern-based retry is performed (all failures are terminal).
+	// Patterns may be wrapped in optional /.../ delimiters for readability.
+	Conditions []string `yaml:"conditions,omitempty" json:"conditions,omitempty" mapstructure:"conditions"`
 }
 
 // EKS update-kubeconfig
@@ -1183,15 +1218,17 @@ type Affected struct {
 }
 
 type BaseComponentConfig struct {
-	BaseComponentVars         AtmosSectionMapType
-	BaseComponentSettings     AtmosSectionMapType
-	BaseComponentEnv          AtmosSectionMapType
-	BaseComponentAuth         AtmosSectionMapType
-	BaseComponentDependencies AtmosSectionMapType
-	BaseComponentLocals       AtmosSectionMapType // Component-level locals for template processing.
-	BaseComponentMetadata     AtmosSectionMapType
-	BaseComponentProviders    AtmosSectionMapType
-	BaseComponentHooks        AtmosSectionMapType
+	BaseComponentVars              AtmosSectionMapType
+	BaseComponentSettings          AtmosSectionMapType
+	BaseComponentEnv               AtmosSectionMapType
+	BaseComponentAuth              AtmosSectionMapType
+	BaseComponentDependencies      AtmosSectionMapType
+	BaseComponentLocals            AtmosSectionMapType // Component-level locals for template processing.
+	BaseComponentMetadata          AtmosSectionMapType
+	BaseComponentProviders         AtmosSectionMapType
+	BaseComponentRequiredProviders AtmosSectionMapType
+	BaseComponentRequiredVersion   string
+	BaseComponentHooks             AtmosSectionMapType
 	// BaseComponentGenerate holds the generate section configuration from the base component,
 	// defining auxiliary files to be generated for this component.
 	BaseComponentGenerate                  AtmosSectionMapType
@@ -1203,7 +1240,10 @@ type BaseComponentConfig struct {
 	BaseComponentRemoteStateBackendSection AtmosSectionMapType
 	BaseComponentSourceSection             AtmosSectionMapType
 	BaseComponentProvisionSection          AtmosSectionMapType
-	ComponentInheritanceChain              []string
+	// BaseComponentRetry holds the raw retry configuration inherited from base components.
+	// It is deep-merged with the child component's retry block by mergeComponentConfigurations.
+	BaseComponentRetry        AtmosSectionMapType
+	ComponentInheritanceChain []string
 }
 
 // Stack imports (`import` section)

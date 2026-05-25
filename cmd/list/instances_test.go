@@ -6,6 +6,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // TestListInstancesFlags tests that the list instances command has the correct flags.
@@ -349,6 +350,7 @@ func TestParseInstancesOptions(t *testing.T) {
 		// Both process-* flags default to true per parity-with-describe.
 		assert.True(t, opts.ProcessTemplates)
 		assert.True(t, opts.ProcessFunctions)
+		assert.Empty(t, opts.Skip)
 	})
 
 	t.Run("explicit_flags", func(t *testing.T) {
@@ -358,6 +360,8 @@ func TestParseInstancesOptions(t *testing.T) {
 		setFlag(t, cmd, "upload", "true")
 		setFlag(t, cmd, "process-templates", "false")
 		setFlag(t, cmd, "process-functions", "false")
+		setFlag(t, cmd, "skip", "terraform.state")
+		setFlag(t, cmd, "skip", "terraform.output")
 		v := bindFlagsToViper(t, cmd, instancesParser)
 
 		opts := parseInstancesOptions(cmd, v)
@@ -367,5 +371,57 @@ func TestParseInstancesOptions(t *testing.T) {
 		assert.True(t, opts.Upload)
 		assert.False(t, opts.ProcessTemplates)
 		assert.False(t, opts.ProcessFunctions)
+		assert.Equal(t, []string{"terraform.state", "terraform.output"}, opts.Skip)
+	})
+
+	// Regression: the literal user-reported failure was
+	//   atmos list instances --upload --skip terraform.state
+	// returning `unknown flag --skip`. This test ensures the parser accepts
+	// the flag and the value lands on the options struct.
+	t.Run("upload_with_skip_terraform_state_regression", func(t *testing.T) {
+		cmd := buildCmd()
+		setFlag(t, cmd, "upload", "true")
+		setFlag(t, cmd, "skip", "terraform.state")
+		v := bindFlagsToViper(t, cmd, instancesParser)
+
+		opts := parseInstancesOptions(cmd, v)
+
+		assert.True(t, opts.Upload)
+		assert.Equal(t, []string{"terraform.state"}, opts.Skip)
+	})
+
+	// Regression: ATMOS_LIST_FORMAT and ATMOS_UPLOAD env vars were silently
+	// ignored because ExecuteListInstancesCmd re-read them from cobra
+	// flags. After the fix, parseInstancesOptions reads via viper (which
+	// is bound to the env vars), so the values land on opts and are
+	// passed through to the impl.
+	t.Run("env_vars_override_defaults_for_format_and_upload", func(t *testing.T) {
+		t.Setenv("ATMOS_LIST_FORMAT", "json")
+		t.Setenv("ATMOS_UPLOAD", "true")
+
+		cmd := buildCmd()
+		// Bind to a fresh viper that also reads ATMOS_* env vars
+		// (BindToViper handles the env-var aliasing).
+		v := viper.New()
+		require.NoError(t, instancesParser.BindToViper(v))
+		require.NoError(t, instancesParser.BindFlagsToViper(cmd, v))
+
+		opts := parseInstancesOptions(cmd, v)
+
+		assert.Equal(t, "json", opts.Format, "ATMOS_LIST_FORMAT should land on opts.Format")
+		assert.True(t, opts.Upload, "ATMOS_UPLOAD should land on opts.Upload")
+	})
+
+	t.Run("env_var_overrides_default_for_stack", func(t *testing.T) {
+		t.Setenv("ATMOS_STACK", "prod-*")
+
+		cmd := buildCmd()
+		v := viper.New()
+		require.NoError(t, instancesParser.BindToViper(v))
+		require.NoError(t, instancesParser.BindFlagsToViper(cmd, v))
+
+		opts := parseInstancesOptions(cmd, v)
+
+		assert.Equal(t, "prod-*", opts.Stack)
 	})
 }

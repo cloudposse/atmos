@@ -3,6 +3,7 @@ package terraform
 import (
 	"context"
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -45,6 +46,9 @@ type mockProvider struct {
 	writer         *mockOutputWriter
 	checkRunCalls  []*provider.CreateCheckRunOptions
 	updateRunCalls []*provider.UpdateCheckRunOptions
+	commentCalls   []*provider.PostCommentOptions
+	commentErr     error
+	commentResult  *provider.Comment
 	nextID         int64
 }
 
@@ -72,6 +76,18 @@ func (m *mockProvider) UpdateCheckRun(_ context.Context, opts *provider.UpdateCh
 	m.updateRunCalls = append(m.updateRunCalls, opts)
 	m.nextID++
 	return &provider.CheckRun{ID: m.nextID, Name: opts.Name, Status: opts.Status}, nil
+}
+
+func (m *mockProvider) PostComment(_ context.Context, opts *provider.PostCommentOptions) (*provider.Comment, error) {
+	m.commentCalls = append(m.commentCalls, opts)
+	if m.commentErr != nil {
+		return nil, m.commentErr
+	}
+	if m.commentResult != nil {
+		return m.commentResult, nil
+	}
+	m.nextID++
+	return &provider.Comment{ID: m.nextID, URL: "https://example.test/c/1", Body: opts.Body, Created: true}, nil
 }
 
 func (m *mockProvider) ResolveBase() (*provider.BaseResolution, error) {
@@ -597,6 +613,50 @@ func TestOnAfterPlan_OutputEnabled_WritesVariables(t *testing.T) {
 	assert.Equal(t, "3", mp.writer.outputs["resources_to_create"])
 	assert.Equal(t, "1", mp.writer.outputs["resources_to_change"])
 	assert.Equal(t, "0", mp.writer.outputs["resources_to_destroy"])
+}
+
+func TestOnAfterPlan_OutputOnlyStdout_RendersOutputChangeSummary(t *testing.T) {
+	p := &Plugin{}
+	mp := newMockProvider()
+
+	ctx := &plugin.HookContext{
+		Config: &schema.AtmosConfiguration{
+			CI: schema.CIConfig{
+				Summary: schema.CISummaryConfig{Enabled: boolPtr(true)},
+				Output:  schema.CIOutputConfig{Enabled: boolPtr(false)},
+				Checks:  schema.CIChecksConfig{Enabled: boolPtr(false)},
+			},
+		},
+		Provider:       mp,
+		TemplateLoader: templates.NewLoader(&schema.AtmosConfiguration{}),
+		Command:        "plan",
+		Info: &schema.ConfigAndStacksInfo{
+			Stack:            "test-stack",
+			ComponentFromArg: "test/component",
+		},
+		Output: `Note: Objects have changed outside of OpenTofu
+
+OpenTofu detected changes made outside of OpenTofu since the last apply.
+
+Changes to Outputs:
+  ~ image_id = "old-image" -> "new-image"
+
+You can apply this plan to save these new output values to the OpenTofu
+state, without changing any real infrastructure.
+`,
+	}
+
+	err := p.onAfterPlan(ctx)
+	require.NoError(t, err)
+
+	require.Len(t, mp.writer.summaries, 1, "summary should have been rendered")
+	rendered := mp.writer.summaries[0]
+
+	assert.Contains(t, rendered, "## Output Changes Found for")
+	assert.Contains(t, rendered, "PLAN-OUTPUT_CHANGE-blue")
+	assert.Contains(t, rendered, "Output values will change. No infrastructure changes.")
+	assert.NotContains(t, rendered, "## No Changes for")
+	assert.NotContains(t, rendered, "NO_CHANGE-inactive")
 }
 
 func TestOnAfterPlan_CheckEnabled_UpdatesCheckRun(t *testing.T) {
@@ -1414,4 +1474,182 @@ func TestOnAfterDeploy_WithCommandError_RendersFailureSummary(t *testing.T) {
 	assert.Contains(t, rendered, "identity failed: assume role denied", "should surface the command error")
 	assert.NotContains(t, rendered, "No Changes Applied for", "must not fall through to no-changes branch")
 	assert.NotContains(t, rendered, "NO_CHANGE-inactive", "must not use the no-change badge")
+}
+
+func TestIsCommentsEnabled(t *testing.T) {
+	tests := []struct {
+		name     string
+		config   *schema.AtmosConfiguration
+		expected bool
+	}{
+		{"nil config - disabled", nil, false},
+		{"nil enabled - disabled", &schema.AtmosConfiguration{}, false},
+		{"explicit true", &schema.AtmosConfiguration{
+			CI: schema.CIConfig{Comments: schema.CICommentsConfig{Enabled: boolPtr(true)}},
+		}, true},
+		{"explicit false", &schema.AtmosConfiguration{
+			CI: schema.CIConfig{Comments: schema.CICommentsConfig{Enabled: boolPtr(false)}},
+		}, false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.expected, isCommentsEnabled(tt.config))
+		})
+	}
+}
+
+func TestResolveCommentBehavior(t *testing.T) {
+	cases := map[string]provider.CommentBehavior{
+		"":       provider.CommentBehaviorUpsert,
+		"upsert": provider.CommentBehaviorUpsert,
+		"create": provider.CommentBehaviorCreate,
+		"update": provider.CommentBehaviorUpdate,
+	}
+	for input, expected := range cases {
+		t.Run("behavior="+input, func(t *testing.T) {
+			cfg := &schema.AtmosConfiguration{
+				CI: schema.CIConfig{Comments: schema.CICommentsConfig{Behavior: input}},
+			}
+			got, err := resolveCommentBehavior(cfg)
+			require.NoError(t, err)
+			assert.Equal(t, expected, got)
+		})
+	}
+	t.Run("nil config defaults to upsert", func(t *testing.T) {
+		got, err := resolveCommentBehavior(nil)
+		require.NoError(t, err)
+		assert.Equal(t, provider.CommentBehaviorUpsert, got)
+	})
+	t.Run("unknown behavior returns error", func(t *testing.T) {
+		cfg := &schema.AtmosConfiguration{
+			CI: schema.CIConfig{Comments: schema.CICommentsConfig{Behavior: "garbage"}},
+		}
+		_, err := resolveCommentBehavior(cfg)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, errUtils.ErrCICommentPostFailed)
+	})
+}
+
+func TestBuildCommentMarker(t *testing.T) {
+	got := buildCommentMarker("plan", "vpc", "plat-ue2-dev")
+	assert.Equal(t, "<!-- atmos:ci:plan:vpc:plat-ue2-dev -->", got,
+		"segments must be in (command, component, stack) order to match the marker format")
+	assert.True(t, strings.HasPrefix(got, "<!--"), "marker must be an HTML comment so it renders invisibly")
+	assert.True(t, strings.HasSuffix(got, "-->"))
+}
+
+// commentsHookContext builds a HookContext wired for the comment-posting path:
+// PR present, comments enabled, summary enabled (so postComment has a body).
+func commentsHookContext(t *testing.T) *plugin.HookContext {
+	t.Helper()
+	return &plugin.HookContext{
+		Config: &schema.AtmosConfiguration{
+			CI: schema.CIConfig{
+				Summary:  schema.CISummaryConfig{Enabled: boolPtr(true)},
+				Output:   schema.CIOutputConfig{Enabled: boolPtr(false)},
+				Checks:   schema.CIChecksConfig{Enabled: boolPtr(false)},
+				Comments: schema.CICommentsConfig{Enabled: boolPtr(true)},
+			},
+		},
+		Provider:       newMockProvider(),
+		TemplateLoader: templates.NewLoader(&schema.AtmosConfiguration{}),
+		Command:        "plan",
+		CICtx: &provider.Context{
+			RepoOwner:   "owner",
+			RepoName:    "repo",
+			PullRequest: &provider.PRInfo{Number: 42},
+		},
+		Info: &schema.ConfigAndStacksInfo{
+			Stack:            "dev",
+			ComponentFromArg: "vpc",
+		},
+		Output: "Plan: 1 to add, 0 to change, 0 to destroy.",
+	}
+}
+
+func TestOnAfterPlan_PostsCommentWhenEnabledAndPRPresent(t *testing.T) {
+	p := &Plugin{}
+	ctx := commentsHookContext(t)
+	mp := ctx.Provider.(*mockProvider)
+
+	require.NoError(t, p.onAfterPlan(ctx))
+
+	require.Len(t, mp.commentCalls, 1, "must post exactly one comment")
+	call := mp.commentCalls[0]
+	assert.Equal(t, "owner", call.Owner)
+	assert.Equal(t, "repo", call.Repo)
+	assert.Equal(t, 42, call.PRNumber)
+	assert.Equal(t, provider.CommentBehaviorUpsert, call.Behavior)
+	assert.Contains(t, call.Marker, "atmos:ci:plan")
+	assert.Contains(t, call.Marker, "vpc")
+	assert.Contains(t, call.Marker, "dev")
+	assert.Contains(t, call.Body, call.Marker, "body must embed the marker")
+	// Body should contain the rendered plan summary header from plan.md.
+	assert.Contains(t, call.Body, "vpc")
+	assert.Contains(t, call.Body, "dev")
+}
+
+func TestOnAfterPlan_SkipsCommentWhenDisabled(t *testing.T) {
+	p := &Plugin{}
+	ctx := commentsHookContext(t)
+	ctx.Config.CI.Comments.Enabled = boolPtr(false)
+	mp := ctx.Provider.(*mockProvider)
+
+	require.NoError(t, p.onAfterPlan(ctx))
+	assert.Empty(t, mp.commentCalls, "no comment should be posted when ci.comments.enabled=false")
+}
+
+func TestOnAfterPlan_SkipsCommentWhenUnsetNilDefault(t *testing.T) {
+	p := &Plugin{}
+	ctx := commentsHookContext(t)
+	ctx.Config.CI.Comments.Enabled = nil // unset
+	mp := ctx.Provider.(*mockProvider)
+
+	require.NoError(t, p.onAfterPlan(ctx))
+	assert.Empty(t, mp.commentCalls,
+		"nil Enabled must default to false so upgrade does not silently start posting comments")
+}
+
+func TestOnAfterPlan_SkipsCommentWhenNoPR(t *testing.T) {
+	p := &Plugin{}
+	ctx := commentsHookContext(t)
+	ctx.CICtx.PullRequest = nil
+	mp := ctx.Provider.(*mockProvider)
+
+	require.NoError(t, p.onAfterPlan(ctx))
+	assert.Empty(t, mp.commentCalls, "no comment on push/non-PR events")
+}
+
+func TestOnAfterPlan_SkipsCommentWhenNoRepoContext(t *testing.T) {
+	p := &Plugin{}
+	ctx := commentsHookContext(t)
+	ctx.CICtx.RepoOwner = ""
+	mp := ctx.Provider.(*mockProvider)
+
+	require.NoError(t, p.onAfterPlan(ctx))
+	assert.Empty(t, mp.commentCalls)
+}
+
+func TestOnAfterPlan_CommentFailureIsWarnOnly(t *testing.T) {
+	p := &Plugin{}
+	ctx := commentsHookContext(t)
+	mp := ctx.Provider.(*mockProvider)
+	mp.commentErr = fmt.Errorf("github API blew up")
+
+	// Handler must still return nil — comment posting is warn-only.
+	err := p.onAfterPlan(ctx)
+	require.NoError(t, err, "comment failure must not fail the handler")
+	assert.Len(t, mp.commentCalls, 1, "PostComment was attempted")
+}
+
+func TestOnAfterPlan_CommentRespectsCreateBehavior(t *testing.T) {
+	p := &Plugin{}
+	ctx := commentsHookContext(t)
+	ctx.Config.CI.Comments.Behavior = string(provider.CommentBehaviorCreate)
+	mp := ctx.Provider.(*mockProvider)
+
+	require.NoError(t, p.onAfterPlan(ctx))
+	require.Len(t, mp.commentCalls, 1)
+	assert.Equal(t, provider.CommentBehaviorCreate, mp.commentCalls[0].Behavior)
 }

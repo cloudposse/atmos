@@ -103,6 +103,9 @@ GLOBAL FLAGS
 
       --skill strings           Specify skills for AI analysis context (comma-separated or repeated flag, requires --ai)
 
+      --skip-hooks string       Skip lifecycle hooks for this invocation. Use --skip-hooks (no value) to skip all, or --
+                                skip-hooks=name1,name2 to skip specific hooks by name
+
       --tool-versions string    Path to tool-versions file (default .tool-versions)
 
       --toolchain-path string   Directory to store installed tools (default .tools)

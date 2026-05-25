@@ -32,6 +32,7 @@ func GetDefaultExecutor() *Executor {
 //   - component: Component identifier
 //   - stack: Stack identifier
 //   - skipInit: If true, skip terraform init (assumes already initialized)
+//   - authContext: Optional authentication context for backend/provisioner/env setup (may be nil)
 //   - authManager: Optional auth manager for YAML functions that need AWS access (may be nil)
 //
 // Returns:
@@ -42,6 +43,7 @@ func GetComponentOutputs(
 	component string,
 	stack string,
 	skipInit bool,
+	authContext *schema.AuthContext,
 	authManager any,
 ) (map[string]any, error) {
 	defer perf.Track(atmosConfig, "output.GetComponentOutputs")()
@@ -50,7 +52,7 @@ func GetComponentOutputs(
 		panic("output.SetDefaultExecutor must be called before GetComponentOutputs")
 	}
 
-	return defaultExecutor.GetAllOutputs(atmosConfig, component, stack, skipInit, authManager)
+	return defaultExecutor.GetAllOutputs(atmosConfig, component, stack, skipInit, authContext, authManager)
 }
 
 // GetComponentOutputsWithExecutor retrieves all terraform outputs using a specific executor.
@@ -63,11 +65,12 @@ func GetComponentOutputsWithExecutor(
 	component string,
 	stack string,
 	skipInit bool,
+	authContext *schema.AuthContext,
 	authManager any,
 ) (map[string]any, error) {
 	defer perf.Track(atmosConfig, "output.GetComponentOutputsWithExecutor")()
 
-	return exec.GetAllOutputs(atmosConfig, component, stack, skipInit, authManager)
+	return exec.GetAllOutputs(atmosConfig, component, stack, skipInit, authContext, authManager)
 }
 
 // ExecuteWithSections retrieves terraform outputs using pre-loaded sections.

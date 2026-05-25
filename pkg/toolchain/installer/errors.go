@@ -41,4 +41,13 @@ var (
 
 	// ErrToolAlreadyExists indicates the tool version already exists in .tool-versions.
 	ErrToolAlreadyExists = registry.ErrToolAlreadyExists
+
+	// ErrLockfileIO indicates a lockfile read/write operation failed.
+	ErrLockfileIO = errors.New("toolchain lockfile I/O failed")
+
+	// ErrLockfileParse indicates the lockfile contents could not be parsed.
+	ErrLockfileParse = errors.New("toolchain lockfile parse failed")
+
+	// ErrVerifierVersionUnavailable indicates a verifier bootstrap version could not be resolved.
+	ErrVerifierVersionUnavailable = errors.New("verifier version unavailable")
 )

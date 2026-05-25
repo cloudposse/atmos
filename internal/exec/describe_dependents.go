@@ -30,6 +30,7 @@ type DescribeDependentsExecProps struct {
 	ProcessYamlFunctions bool
 	Skip                 []string
 	AuthManager          auth.AuthManager // Optional: Auth manager for credential management (from --identity flag).
+	AuthDisabled         bool             // True when --identity=false (or alias) explicitly disables authentication; forwarded to DescribeDependentsArgs.
 }
 
 // DescribeDependentsArgs holds arguments for ExecuteDescribeDependents.
@@ -42,6 +43,7 @@ type DescribeDependentsArgs struct {
 	Skip                 []string
 	OnlyInStack          string
 	AuthManager          auth.AuthManager // Optional: Auth manager for credential management (from --identity flag).
+	AuthDisabled         bool             // True when --identity=false (or alias) explicitly disables authentication; routes inner stack resolution to ExecuteDescribeStacksWithAuthDisabled.
 	// Stacks is an optional pre-computed result from ExecuteDescribeStacks.
 	// When provided, ExecuteDescribeDependents skips the expensive stack resolution
 	// and uses this cached result instead. This avoids O(N) full stack resolutions
@@ -100,6 +102,7 @@ func (d *describeDependentsExec) Execute(describeDependentsExecProps *DescribeDe
 			Skip:                 describeDependentsExecProps.Skip,
 			OnlyInStack:          "", // empty string means process all stacks for direct CLI usage
 			AuthManager:          describeDependentsExecProps.AuthManager,
+			AuthDisabled:         describeDependentsExecProps.AuthDisabled,
 		},
 	)
 	if err != nil {
@@ -148,7 +151,7 @@ func ExecuteDescribeDependents(
 	stacks := args.Stacks
 	if stacks == nil {
 		var err error
-		stacks, err = ExecuteDescribeStacks(
+		stacks, err = ExecuteDescribeStacksWithAuthDisabled(
 			atmosConfig,
 			args.OnlyInStack,
 			nil,
@@ -160,6 +163,7 @@ func ExecuteDescribeDependents(
 			false,
 			args.Skip,
 			args.AuthManager,
+			args.AuthDisabled,
 		)
 		if err != nil {
 			return nil, err

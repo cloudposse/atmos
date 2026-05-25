@@ -55,6 +55,7 @@ func (r *OsArgsInTestRule) Check(pass *analysis.Pass, file *ast.File) error {
 		strings.HasSuffix(normalized, "errors/error_funcs_test.go") ||
 		strings.HasSuffix(normalized, "pkg/config/config_test.go") ||
 		strings.HasSuffix(normalized, "pkg/config/load_flags_test.go") ||
+		strings.HasSuffix(normalized, "pkg/config/load_profiles_default_test.go") ||
 		strings.HasSuffix(normalized, "pkg/config/profiles_identity_helpers_test.go") ||
 		strings.HasSuffix(normalized, "pkg/auth/profile_fallback_test.go") {
 		return nil

@@ -24,7 +24,7 @@ AVAILABLE COMMANDS
       ai [command] [EXPERIMENTAL]            AI-powered assistant for Atmos operations
       ansible [command]                      Manage ansible-based automation for infrastructure configuration
       atlantis [command]                     Generate and manage Atlantis configurations
-      auth [command]                         Authenticate with cloud providers and identity services.
+      auth [command] [EXPERIMENTAL]          Authenticate with cloud providers and identity services.
       aws [command]                          Run AWS-specific commands for interacting with cloud resources
       ci [command] [EXPERIMENTAL]            CI/CD integration commands
       completion [command]                   Generate autocompletion scripts for Bash, Zsh, Fish, and PowerShell
@@ -113,6 +113,9 @@ FLAGS
                                 standard file descriptor (including '/dev/null')
 
       --skill strings           Specify skills for AI analysis context (comma-separated or repeated flag, requires --ai)
+
+      --skip-hooks string       Skip lifecycle hooks for this invocation. Use --skip-hooks (no value) to skip all, or --
+                                skip-hooks=name1,name2 to skip specific hooks by name
 
       --use-version string      Use a specific version of Atmos (e.g., --use-version=1.160.0)
 

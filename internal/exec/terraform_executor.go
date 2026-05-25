@@ -1,6 +1,7 @@
 package exec
 
 import (
+	"bytes"
 	"fmt"
 
 	log "github.com/charmbracelet/log"
@@ -9,8 +10,13 @@ import (
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/dependency"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
+
+// execTerraformFn is the function used to execute a Terraform command.
+// Package-level variable to allow test injection without gomonkey.
+var execTerraformFn = ExecuteTerraform
 
 // executeTerraformForNode executes terraform for a single dependency graph node.
 func executeTerraformForNode(
@@ -112,14 +118,36 @@ func executeNodeCommand(node *dependency.Node, info *schema.ConfigAndStacksInfo)
 	command := formatNodeCommand(node, info)
 
 	if info.DryRun {
-		log.Info("Would execute", "command", command)
+		// Match the user-facing dry-run message format emitted by ExecuteTerraformQuery
+		// so callers see a consistent "Would <subcmd> `<component>` in `<stack>` (dry run)"
+		// line for both multi-component execution paths.
+		ui.Successf("Would %s `%s` in `%s` (dry run)", info.SubCommand, node.Component, node.Stack)
+		log.Debug("Dry-run", "command", command)
 		return nil
 	}
 
 	log.Debug("Executing", "command", command)
 
+	// When a per-component hook is registered, capture this component's output
+	// and invoke the hook immediately after execution so each component receives
+	// its own CI summary entry rather than sharing the final global call.
+	if info.PerComponentHook != nil {
+		var stdoutBuf, stderrBuf bytes.Buffer
+		execErr := execTerraformFn(*info, WithStdoutCapture(&stdoutBuf), WithStderrCapture(&stderrBuf))
+		combined := stdoutBuf.String()
+		if s := stderrBuf.String(); s != "" {
+			combined += "\n" + s
+		}
+		compInfo := *info // snapshot with this component's Component/Stack values set.
+		info.PerComponentHook(&compInfo, combined, execErr)
+		if execErr != nil {
+			return fmt.Errorf("%w: %w", errUtils.ErrTerraformExecFailed, execErr)
+		}
+		return nil
+	}
+
 	// Execute the terraform command.
-	if err := ExecuteTerraform(*info); err != nil {
+	if err := execTerraformFn(*info); err != nil {
 		return fmt.Errorf("%w: %w", errUtils.ErrTerraformExecFailed, err)
 	}
 

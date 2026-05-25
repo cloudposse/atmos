@@ -164,6 +164,7 @@ func ExecuteAtlantisGenerateRepoConfigAffectedOnly(
 			nil,
 			false,
 			nil,
+			false,
 		)
 	} else if cloneTargetRef {
 		affected, _, _, _, err = ExecuteDescribeAffectedWithTargetRefClone(
@@ -180,6 +181,7 @@ func ExecuteAtlantisGenerateRepoConfigAffectedOnly(
 			nil,
 			false,
 			nil,
+			false,
 		)
 	} else {
 		affected, _, _, _, err = ExecuteDescribeAffectedWithTargetRefCheckout(
@@ -195,6 +197,7 @@ func ExecuteAtlantisGenerateRepoConfigAffectedOnly(
 			nil,
 			false,
 			nil,
+			false,
 		)
 	}
 
@@ -324,7 +327,8 @@ func ExecuteAtlantisGenerateRepoConfig(
 											"specifies the atlantis project template name '%s' "+
 											"in the 'settings.atlantis.project_template_name' section, "+
 											"but this atlantis project template is not defined in 'integrations.atlantis.project_templates' in 'atmos.yaml'",
-										componentName, stackConfigFileName, settingsAtlantisProjectTemplateName)
+										componentName, stackConfigFileName, settingsAtlantisProjectTemplateName,
+									)
 								}
 							}
 						}
@@ -339,7 +343,8 @@ func ExecuteAtlantisGenerateRepoConfig(
 							"'settings.atlantis.project_template' stack config section, "+
 							"or passed on the command line using the '--project-template' flag to select a project template from the "+
 							"collection of templates defined in the 'integrations.atlantis.project_templates' section in 'atmos.yaml'",
-						componentName)
+						componentName,
+					)
 				}
 
 				// Find the terraform component

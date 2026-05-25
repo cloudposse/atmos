@@ -35,6 +35,8 @@ type ComponentProcessorOptions struct {
 
 	// Terraform-specific options.
 	TerraformProviders              map[string]any
+	TerraformRequiredProviders      map[string]any
+	TerraformRequiredVersion        string
 	GlobalAndTerraformHooks         map[string]any
 	GlobalAndTerraformGenerate      map[string]any
 	GlobalBackendType               string
@@ -76,10 +78,12 @@ type ComponentProcessorResult struct {
 	BaseComponents             []string
 
 	// Terraform-specific fields.
-	ComponentProviders map[string]any
-	ComponentHooks     map[string]any
-	ComponentGenerate  map[string]any
-	ComponentAuth      map[string]any
+	ComponentProviders         map[string]any
+	ComponentRequiredProviders map[string]any
+	ComponentRequiredVersion   string
+	ComponentHooks             map[string]any
+	ComponentGenerate          map[string]any
+	ComponentAuth              map[string]any
 	// ComponentProvision holds provisioning configuration for the component (e.g., workdir settings).
 	ComponentProvision                     map[string]any
 	ComponentBackendType                   string
@@ -87,9 +91,13 @@ type ComponentProcessorResult struct {
 	ComponentRemoteStateBackendType        string
 	ComponentRemoteStateBackendSection     map[string]any
 	ComponentOverridesProviders            map[string]any
+	ComponentOverridesRequiredProviders    map[string]any
+	ComponentOverridesRequiredVersion      string
 	ComponentOverridesHooks                map[string]any
 	ComponentOverridesGenerate             map[string]any
 	BaseComponentProviders                 map[string]any
+	BaseComponentRequiredProviders         map[string]any
+	BaseComponentRequiredVersion           string
 	BaseComponentHooks                     map[string]any
 	BaseComponentGenerate                  map[string]any
 	BaseComponentBackendType               string
@@ -99,6 +107,15 @@ type ComponentProcessorResult struct {
 	ComponentSourceSection                 map[string]any
 	BaseComponentSourceSection             map[string]any
 	BaseComponentProvisionSection          map[string]any
+	// ComponentRetry holds the raw retry configuration from the concrete component
+	// (decoded to a typed *schema.RetryConfig only after deep-merge with base + overrides).
+	ComponentRetry map[string]any
+	// ComponentOverridesRetry holds the retry section from the component's `overrides:`
+	// block, which wins over both base and concrete component retry config.
+	ComponentOverridesRetry map[string]any
+	// BaseComponentRetry holds the retry configuration inherited from base components
+	// (deep-merged across the full inheritance chain by ProcessBaseComponentConfig).
+	BaseComponentRetry map[string]any
 }
 
 // processComponent processes a component extracting common configuration sections.

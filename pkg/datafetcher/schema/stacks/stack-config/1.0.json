@@ -234,8 +234,17 @@
             "providers": {
               "$ref": "#/definitions/providers"
             },
+            "required_version": {
+              "$ref": "#/definitions/required_version"
+            },
+            "required_providers": {
+              "$ref": "#/definitions/required_providers"
+            },
             "generate": {
               "$ref": "#/definitions/generate"
+            },
+            "retry": {
+              "$ref": "#/definitions/retry"
             }
           },
           "required": []
@@ -306,11 +315,20 @@
             "providers": {
               "$ref": "#/definitions/providers"
             },
+            "required_version": {
+              "$ref": "#/definitions/required_version"
+            },
+            "required_providers": {
+              "$ref": "#/definitions/required_providers"
+            },
             "hooks": {
               "$ref": "#/definitions/hooks"
             },
             "generate": {
               "$ref": "#/definitions/generate"
+            },
+            "retry": {
+              "$ref": "#/definitions/retry"
             }
           },
           "required": []
@@ -899,6 +917,72 @@
             },
             "providers": {
               "$ref": "#/definitions/providers"
+            },
+            "required_version": {
+              "$ref": "#/definitions/required_version"
+            },
+            "required_providers": {
+              "$ref": "#/definitions/required_providers"
+            },
+            "retry": {
+              "$ref": "#/definitions/retry"
+            }
+          },
+          "required": []
+        }
+      ]
+    },
+    "retry": {
+      "title": "retry",
+      "description": "Per-component retry configuration. When `conditions` patterns match captured subprocess output, the failing command is retried with the configured backoff. Without `conditions`, no retry is attempted.",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "max_attempts": {
+              "type": "integer",
+              "minimum": 1,
+              "description": "Maximum number of attempts (including the first). Omit for unlimited; defaults to 1 when retry is unset entirely."
+            },
+            "backoff_strategy": {
+              "type": "string",
+              "enum": ["constant", "linear", "exponential"],
+              "description": "How delays grow between attempts. Defaults to exponential when initial_delay is set."
+            },
+            "initial_delay": {
+              "type": "string",
+              "description": "Delay before the second attempt as a Go duration string, e.g. \"2s\", \"500ms\"."
+            },
+            "max_delay": {
+              "type": "string",
+              "description": "Upper bound on any single delay (caps exponential growth), e.g. \"30s\"."
+            },
+            "max_elapsed_time": {
+              "type": "string",
+              "description": "Total time budget across all attempts, e.g. \"5m\". After this the most recent error is returned."
+            },
+            "multiplier": {
+              "type": "number",
+              "exclusiveMinimum": 0,
+              "description": "Growth multiplier for exponential backoff. Defaults to 2.0."
+            },
+            "random_jitter": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1,
+              "description": "Fractional jitter applied to each delay (0–1)."
+            },
+            "conditions": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Regex patterns matched against captured stdout/stderr. Only errors whose output matches at least one pattern are retried. Patterns may be wrapped in `/.../` for readability."
             }
           },
           "required": []
@@ -1225,6 +1309,48 @@
         {
           "type": "object",
           "additionalProperties": true
+        }
+      ]
+    },
+    "required_version": {
+      "title": "required_version",
+      "description": "Terraform required version constraint (e.g., '>= 1.10.1')",
+      "type": "string"
+    },
+    "required_providers": {
+      "title": "required_providers",
+      "description": "Terraform required providers section for version pinning",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "object",
+          "additionalProperties": true,
+          "patternProperties": {
+            "^[a-zA-Z0-9-_]+$": {
+              "type": "object",
+              "properties": {
+                "source": {
+                  "type": "string",
+                  "description": "Provider source address (e.g., 'hashicorp/aws')"
+                },
+                "version": {
+                  "type": "string",
+                  "description": "Provider version constraint (e.g., '~> 5.0')"
+                },
+                "configuration_aliases": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "description": "List of provider configuration aliases"
+                }
+              },
+              "required": ["source"]
+            }
+          }
         }
       ]
     }

@@ -48,10 +48,10 @@ The `atmos list instances` command displays all component instances defined acro
   <dd>Filter by stack pattern (supports glob patterns, e.g., `plat-*-prod`)</dd>
 
   <dt>`--filter`</dt>
-  <dd>Filter expression using YQ syntax (e.g., `.vars.region == "us-east-1"`)</dd>
+  <dd>YQ predicate evaluated against each instance row. Rows where the expression is truthy are kept (e.g., `.vars.region == "us-east-1"`, `.component == "vpc"`). Not supported with `--format=tree` or `--format=matrix`.</dd>
 
   <dt>`--query` / `-q`</dt>
-  <dd>YQ expression to filter values (e.g., `.vars.region`)</dd>
+  <dd>YQ expression that projects each row. Scalar results land in a `value` column; map results become row keys addressable via `--columns` templates (e.g., `--query '.vars.region'`, `--query '{"region": .vars.region, "tenant": .vars.tenant}'`). Not supported with `--format=tree` or `--format=matrix`.</dd>
 
   <dt>`--sort`</dt>
   <dd>Sort by column:order (e.g., `stack:asc,component:desc`)</dd>
@@ -67,6 +67,9 @@ The `atmos list instances` command displays all component instances defined acro
 
   <dt>`--process-functions`</dt>
   <dd>Enable/disable YAML functions processing in Atmos stack manifests (default `true`). YAML functions include `!terraform.state`, `!terraform.output`, `!store`, `!aws.*`, etc. This is distinct from Go template functions like `atmos.Component(...)`, which are controlled by `--process-templates`.<br/>Environment variable: `ATMOS_PROCESS_FUNCTIONS`</dd>
+
+  <dt>`--skip`</dt>
+  <dd>Skip executing a specific YAML function in the Atmos stack manifests when processing stacks. Repeat the flag to skip multiple functions (for example, `--skip terraform.state --skip terraform.output`). Useful with `--upload` to bypass backend-resolving functions while leaving other YAML functions like `!template` enabled.<br/>Environment variable: `ATMOS_SKIP`</dd>
 </dl>
 
 ## Examples
@@ -105,6 +108,24 @@ atmos list instances --filter '.vars.region == "us-east-1"'
 # Find enabled VPC components
 atmos list instances --filter '.component == "vpc" and .enabled == true'
 ```
+
+Project specific fields with `--query`:
+```shell
+# Pull the region for every instance (scalar projection → `value` column)
+atmos list instances --query '.vars.region' --columns 'Stack={{ .stack }},Region={{ .value }}'
+
+# Project multiple fields at once (map projection → addressable keys)
+atmos list instances \
+  --query '{"region": .vars.region, "tenant": .vars.tenant}' \
+  --columns 'Stack={{ .stack }},Tenant={{ .tenant }},Region={{ .region }}'
+```
+
+:::note
+`--filter` and `--query` operate per-row and require `--format=table`,
+`json`, `yaml`, `csv`, or `tsv`. They are rejected with `--format=tree` and
+`--format=matrix`, which render different shapes (import hierarchy and
+GitHub-Actions matrix JSON, respectively).
+:::
 
 Sort instances:
 ```shell
@@ -242,7 +263,7 @@ jobs:
     outputs:
       matrix: ${{ steps.instances.outputs.matrix }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: List all instances
         id: instances
         run: atmos list instances --format=matrix --output-file=$GITHUB_OUTPUT
