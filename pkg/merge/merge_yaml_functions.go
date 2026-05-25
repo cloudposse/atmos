@@ -37,13 +37,53 @@ func isAtmosYAMLFunction(s string) bool {
 	return false
 }
 
+// hasAnyYAMLFunction reports whether `data` contains any Atmos YAML function
+// string anywhere in its nested map structure. Used by WalkAndDeferYAMLFunctions
+// to short-circuit the deep copy when there is nothing to defer.
+//
+// This is a non-allocating recursive scan. It returns on first hit.
+func hasAnyYAMLFunction(data map[string]interface{}) bool {
+	for _, value := range data {
+		if strVal, ok := value.(string); ok && isAtmosYAMLFunction(strVal) {
+			return true
+		}
+		if mapVal, ok := value.(map[string]interface{}); ok && hasAnyYAMLFunction(mapVal) {
+			return true
+		}
+	}
+	return false
+}
+
 // WalkAndDeferYAMLFunctions walks through a map and defers any YAML functions.
 // Returns a new map with YAML functions replaced by nil placeholders.
+//
+// When `data` contains no YAML functions anywhere in its nested structure,
+// returns `data` as-is without allocation. Callers must treat the returned
+// map as read-only; the existing call site (MergeWithDeferred → Merge) does
+// not mutate inputs, which is verified by TestWalkAndDeferYAMLFunctions_NoFunctionsShortCircuit.
+//
+// Heatmap context: in a large-stack workload (~9k component instances), this
+// function previously accounted for 527k recursive calls / 1m26s of CPU time,
+// with most subtrees containing zero YAML functions and being copied for no
+// reason. The short-circuit eliminates the deep-copy allocation in that case.
+//
+// NOTE: The recursive call re-enters this same function (with its
+// hasAnyYAMLFunction short-circuit) by design — for function-sparse trees,
+// avoiding the per-subtree allocation outweighs the cost of the redundant
+// pre-check. A split into an outer/inner pair (Phase 7 style) was tried in
+// Phase 10 and reverted: the inner-only walker had to allocate on every
+// recursive level, regressing the common case.
 func WalkAndDeferYAMLFunctions(dctx *DeferredMergeContext, data map[string]interface{}, basePath []string) map[string]interface{} {
 	defer perf.Track(nil, "merge.WalkAndDeferYAMLFunctions")()
 
 	if data == nil {
 		return nil
+	}
+
+	// Fast path: no YAML functions anywhere in this subtree — no walk, no
+	// allocation. Callers must treat the result as read-only (Merge does).
+	if !hasAnyYAMLFunction(data) {
+		return data
 	}
 
 	result := make(map[string]interface{}, len(data))
@@ -333,6 +373,38 @@ func MergeWithDeferred(
 
 	// Create deferred merge context.
 	dctx := NewDeferredMergeContext()
+
+	// Fast path for the all-empty case. The mergeComponentConfigurations
+	// pipeline calls this function ~9 times per component instance with 3-4
+	// candidate inputs (e.g., GlobalVars / BaseComponentVars / ComponentVars /
+	// ComponentOverridesVars). When every layer is empty (common for the
+	// terraform-only sections on non-terraform components), there is nothing
+	// to walk or merge — return an empty map and an empty dctx directly.
+	//
+	// A 1-input fast path was tried and reverted: when the single non-empty
+	// input contained no Atmos YAML functions, WalkAndDeferYAMLFunctions's
+	// Phase 3 short-circuit returned the input map as-is, and we were
+	// returning that shared reference to the caller. Downstream consumers in
+	// mergeComponentConfigurations mutate the result map (storing values into
+	// the assembled component map and re-using merge results), which then
+	// corrupted the upstream cached settings/vars/auth/etc. for sibling
+	// components — surfaced as TestSpaceliftStackProcessor losing 7 stacks
+	// because mutated settings.spacelift.workspace_enabled bled across
+	// components. The Merge slow path always returns a deep-copied result
+	// (via MergeWithOptions's own 1-input fast path → DeepCopyMap), so falling
+	// through preserves the contract; the wrapper overhead saved by the
+	// 1-input shortcut was small compared to the deep-copy cost that has to
+	// happen regardless.
+	allEmpty := true
+	for _, input := range inputs {
+		if len(input) > 0 {
+			allEmpty = false
+			break
+		}
+	}
+	if allEmpty {
+		return map[string]any{}, dctx, nil
+	}
 
 	// Walk each input and defer YAML functions.
 	processedInputs := make([]map[string]any, len(inputs))

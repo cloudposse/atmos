@@ -238,6 +238,7 @@ var (
 	ErrToolAlreadyInstalled         = errors.New("tool already installed")
 	ErrDownloadFailed               = errors.New("download failed")
 	ErrDownloadRetryable            = errors.New("retryable download error")
+	ErrSignatureRetryable           = errors.New("retryable signature verification error")
 	ErrExtractionFailed             = errors.New("extraction failed")
 	ErrChecksumMismatch             = errors.New("checksum mismatch")
 	ErrNoVersionsInstalled          = errors.New("no versions installed")
@@ -630,7 +631,6 @@ var (
 	ErrDependencyTargetNotFound  = errors.New("dependency target not found")
 
 	// Terraform --all flag errors.
-	ErrStackRequiredWithAllFlag     = errors.New("stack is required when using --all flag")
 	ErrComponentWithAllFlagConflict = errors.New("component argument can't be used with --all flag")
 
 	// Terraform execution errors.

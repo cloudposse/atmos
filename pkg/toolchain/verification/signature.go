@@ -7,6 +7,9 @@ import (
 	"path/filepath"
 	"strings"
 
+	log "github.com/charmbracelet/log"
+
+	"github.com/cloudposse/atmos/pkg/retry"
 	"github.com/cloudposse/atmos/pkg/toolchain/registry"
 )
 
@@ -69,11 +72,35 @@ func (v *Verifier) verifyCosign(ctx context.Context, req *Request, cfg *registry
 		defer cleanup()
 	}
 	args = append(args, req.AssetPath)
-	if err := runner(req).Run(ctx, "cosign", args...); err != nil {
+	if err := runCosignWithRetry(ctx, req, args); err != nil {
 		return err
 	}
 	result.SignatureMethods = append(result.SignatureMethods, "cosign")
 	return nil
+}
+
+// runCosignWithRetry invokes cosign with bounded exponential backoff,
+// retrying only on transient Sigstore Rekor failures. All other cosign
+// failures (tampering, expired cert, identity mismatch, missing signature)
+// surface immediately on the first attempt.
+func runCosignWithRetry(ctx context.Context, req *Request, args []string) error {
+	attempt := 0
+	return retry.WithPredicate(ctx, cosignRetryConfig(), func() error {
+		attempt++
+		runErr := classifyCosignError(runner(req).Run(ctx, "cosign", args...))
+		// Only log the "retrying" warning when a retry will actually happen
+		// — suppress on the terminal attempt where the retry budget is
+		// exhausted and the error is about to surface unchanged.
+		if runErr != nil && isRetryableCosignError(runErr) && attempt < cosignRetryMaxAttempts {
+			log.Warn(
+				"cosign verification hit transient Sigstore Rekor error; retrying",
+				"attempt", attempt,
+				"max_attempts", cosignRetryMaxAttempts,
+				"error", runErr.Error(),
+			)
+		}
+		return runErr
+	}, isRetryableCosignError)
 }
 
 func (v *Verifier) cosignArgs(ctx context.Context, req *Request, cfg *registry.CosignConfig, result *Result) ([]string, func(), error) {

@@ -10,6 +10,7 @@ import (
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/dependency"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -117,7 +118,11 @@ func executeNodeCommand(node *dependency.Node, info *schema.ConfigAndStacksInfo)
 	command := formatNodeCommand(node, info)
 
 	if info.DryRun {
-		log.Info("Would execute", "command", command)
+		// Match the user-facing dry-run message format emitted by ExecuteTerraformQuery
+		// so callers see a consistent "Would <subcmd> `<component>` in `<stack>` (dry run)"
+		// line for both multi-component execution paths.
+		ui.Successf("Would %s `%s` in `%s` (dry run)", info.SubCommand, node.Component, node.Stack)
+		log.Debug("Dry-run", "command", command)
 		return nil
 	}
 
