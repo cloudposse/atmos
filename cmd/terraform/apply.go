@@ -122,10 +122,14 @@ func init() {
 		flags.WithBoolFlag("affected", "", false, "Apply the affected components in dependency order"),
 		flags.WithBoolFlag("all", "", false, "Apply all components in all stacks"),
 		flags.WithIntFlag("max-concurrency", "", 1, "Maximum number of Terraform apply components to execute concurrently"),
+		flags.WithBoolFlag("fail-fast", "", false, "Stop scheduling Terraform components after the first failure"),
+		flags.WithBoolFlag("keep-going", "", false, "Continue scheduling independent Terraform components after a failure"),
 		flags.WithBoolFlag("ci", "", false, "Enable CI mode for automated pipelines (writes job summary, outputs)"),
 		flags.WithEnvVars("from-plan", "ATMOS_TERRAFORM_APPLY_FROM_PLAN"),
 		flags.WithEnvVars("planfile", "ATMOS_TERRAFORM_APPLY_PLANFILE"),
 		flags.WithEnvVars("max-concurrency", "ATMOS_TERRAFORM_APPLY_MAX_CONCURRENCY"),
+		flags.WithEnvVars("fail-fast", "ATMOS_TERRAFORM_APPLY_FAIL_FAST"),
+		flags.WithEnvVars("keep-going", "ATMOS_TERRAFORM_APPLY_KEEP_GOING"),
 		flags.WithEnvVars("ci", "ATMOS_CI", "CI"),
 	)
 

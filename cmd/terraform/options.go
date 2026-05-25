@@ -39,6 +39,8 @@ type TerraformRunOptions struct {
 
 	// Graph-backed Terraform concurrency.
 	MaxConcurrency    int
+	FailFast          bool
+	KeepGoing         bool
 	PlanLogOrder      string
 	PlanHide          []string
 	PlanHideNoChanges bool
@@ -70,6 +72,8 @@ func ParseTerraformRunOptions(v *viper.Viper) *TerraformRunOptions {
 		All:                     v.GetBool("all"),
 		Affected:                v.GetBool("affected"),
 		MaxConcurrency:          v.GetInt("max-concurrency"),
+		FailFast:                v.GetBool("fail-fast"),
+		KeepGoing:               v.GetBool("keep-going"),
 		PlanLogOrder:            v.GetString("log-order"),
 		PlanHide:                v.GetStringSlice("hide"),
 		PlanHideNoChanges:       terraformPlanHideContains(v.GetStringSlice("hide"), "no-changes"),

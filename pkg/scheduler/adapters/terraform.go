@@ -135,6 +135,9 @@ func ExecuteTerraform(ctx context.Context, opts TerraformOptions) error {
 		return err
 	}
 
+	if err := validateTerraformFailureMode(opts.Info); err != nil {
+		return err
+	}
 	if err := validateTerraformConcurrentExecution(opts.AtmosConfig, opts.Info, graph); err != nil {
 		return err
 	}
@@ -155,6 +158,7 @@ func ExecuteTerraform(ctx context.Context, opts TerraformOptions) error {
 		graph,
 		dispatcher,
 		scheduler.WithMaxConcurrency(maxConcurrency),
+		scheduler.WithFailFast(effectiveTerraformFailFast(opts.Info)),
 		scheduler.WithNodeStartHook(timings.Start),
 		scheduler.WithNodeCompleteHook(timings.Complete),
 	).Run(ctx)
@@ -1279,6 +1283,22 @@ func effectiveTerraformMaxConcurrency(info *schema.ConfigAndStacksInfo) int {
 		return 1
 	}
 	return info.MaxConcurrency
+}
+
+// validateTerraformFailureMode rejects mutually exclusive Terraform failure flags.
+func validateTerraformFailureMode(info *schema.ConfigAndStacksInfo) error {
+	if info != nil && info.FailFast && info.KeepGoing {
+		return fmt.Errorf("%w: --fail-fast and --keep-going cannot be used together", errUtils.ErrInvalidConfig)
+	}
+	return nil
+}
+
+// effectiveTerraformFailFast returns whether the scheduler should stop after the first failure.
+func effectiveTerraformFailFast(info *schema.ConfigAndStacksInfo) bool {
+	if info != nil && info.KeepGoing {
+		return false
+	}
+	return true
 }
 
 // supportsTerraformConcurrency reports whether subCommand can run through the scheduler concurrently.

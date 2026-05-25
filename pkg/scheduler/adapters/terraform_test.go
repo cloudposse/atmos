@@ -716,6 +716,75 @@ func TestExecuteTerraformRejectsConcurrentApplyWithoutAutoApprove(t *testing.T) 
 	require.Contains(t, err.Error(), "requires -auto-approve")
 }
 
+func TestExecuteTerraformFailsFastByDefault(t *testing.T) {
+	var executed []string
+
+	err := ExecuteTerraform(context.Background(), TerraformOptions{
+		AtmosConfig: &schema.AtmosConfiguration{},
+		Info: &schema.ConfigAndStacksInfo{
+			All:            true,
+			SubCommand:     "plan",
+			MaxConcurrency: 1,
+		},
+		Stacks: terraformAdapterFailureModeStacks(),
+		Executor: func(execution TerraformExecution) (TerraformExecutionResult, error) {
+			executed = append(executed, execution.Info.Component+"@"+execution.Info.Stack)
+			return TerraformExecutionResult{}, errors.New("planned failure")
+		},
+	})
+
+	require.Error(t, err)
+	require.Equal(t, []string{"a-fail@dev"}, executed)
+	require.Contains(t, err.Error(), "planned failure")
+	require.Contains(t, err.Error(), "fail-fast after a-fail-dev failed")
+}
+
+func TestExecuteTerraformKeepGoingRunsIndependentNodes(t *testing.T) {
+	var executed []string
+
+	err := ExecuteTerraform(context.Background(), TerraformOptions{
+		AtmosConfig: &schema.AtmosConfiguration{},
+		Info: &schema.ConfigAndStacksInfo{
+			All:            true,
+			SubCommand:     "plan",
+			MaxConcurrency: 1,
+			KeepGoing:      true,
+		},
+		Stacks: terraformAdapterFailureModeStacks(),
+		Executor: func(execution TerraformExecution) (TerraformExecutionResult, error) {
+			executed = append(executed, execution.Info.Component+"@"+execution.Info.Stack)
+			if execution.Info.Component == "a-fail" {
+				return TerraformExecutionResult{}, errors.New("planned failure")
+			}
+			return TerraformExecutionResult{}, nil
+		},
+	})
+
+	require.Error(t, err)
+	require.Equal(t, []string{"a-fail@dev", "c-independent@dev"}, executed)
+	require.Contains(t, err.Error(), "planned failure")
+	require.Contains(t, err.Error(), "dependency a-fail-dev failed")
+}
+
+func TestExecuteTerraformRejectsConflictingFailureModes(t *testing.T) {
+	err := ExecuteTerraform(context.Background(), TerraformOptions{
+		AtmosConfig: &schema.AtmosConfiguration{},
+		Info: &schema.ConfigAndStacksInfo{
+			All:        true,
+			SubCommand: "plan",
+			FailFast:   true,
+			KeepGoing:  true,
+		},
+		Stacks: terraformAdapterFailureModeStacks(),
+		Executor: func(execution TerraformExecution) (TerraformExecutionResult, error) {
+			return TerraformExecutionResult{}, nil
+		},
+	})
+
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "--fail-fast and --keep-going cannot be used together")
+}
+
 func TestExecuteTerraformAcceptsDoubleDashAutoApprove(t *testing.T) {
 	err := ExecuteTerraform(context.Background(), TerraformOptions{
 		AtmosConfig: &schema.AtmosConfiguration{},
@@ -886,6 +955,7 @@ func TestExecuteTerraformDestroyFailureBlocksPrerequisites(t *testing.T) {
 			All:                    true,
 			SubCommand:             "destroy",
 			MaxConcurrency:         2,
+			KeepGoing:              true,
 			AdditionalArgsAndFlags: []string{"-auto-approve"},
 		},
 		Stacks: terraformAdapterTestStacksWithWorkdir(),
@@ -1271,6 +1341,24 @@ func terraformAdapterTestStacksWithWorkdir() map[string]any {
 		}
 	}
 	return stacks
+}
+
+func terraformAdapterFailureModeStacks() map[string]any {
+	return map[string]any{
+		"dev": map[string]any{
+			cfg.ComponentsSectionName: map[string]any{
+				cfg.TerraformSectionName: map[string]any{
+					"a-fail": terraformAdapterComponent("selected", nil, nil),
+					"b-blocked": terraformAdapterComponent(
+						"selected",
+						[]any{map[string]any{"component": "a-fail"}},
+						nil,
+					),
+					"c-independent": terraformAdapterComponent("selected", nil, nil),
+				},
+			},
+		},
+	}
 }
 
 func terraformAdapterComponent(group string, dependenciesComponents, settingsDependsOn []any) map[string]any {

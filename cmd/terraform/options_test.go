@@ -37,6 +37,8 @@ func TestParseTerraformRunOptions(t *testing.T) {
 				v.Set("log-order", "grouped")
 				v.Set("hide", []string{"no-changes"})
 				v.Set("execution-summary-file", "/tmp/summary.json")
+				v.Set("fail-fast", true)
+				v.Set("keep-going", true)
 			},
 			expected: &TerraformRunOptions{
 				ProcessTemplates:        true,
@@ -59,6 +61,8 @@ func TestParseTerraformRunOptions(t *testing.T) {
 				PlanHide:                []string{"no-changes"},
 				PlanHideNoChanges:       true,
 				PlanSummaryFile:         "/tmp/summary.json",
+				FailFast:                true,
+				KeepGoing:               true,
 			},
 		},
 		{
@@ -100,12 +104,14 @@ func TestParseTerraformRunOptions(t *testing.T) {
 				v.Set("affected", false)
 				v.Set("components", []string{"comp1", "comp2", "comp3"})
 				v.Set("max-concurrency", 2)
+				v.Set("keep-going", true)
 			},
 			expected: &TerraformRunOptions{
 				Components:     []string{"comp1", "comp2", "comp3"},
 				All:            true,
 				Affected:       false,
 				MaxConcurrency: 2,
+				KeepGoing:      true,
 			},
 		},
 		{
@@ -286,6 +292,8 @@ func TestParseTerraformRunOptions(t *testing.T) {
 			assert.Equal(t, tt.expected.PlanHide, result.PlanHide, "PlanHide should match")
 			assert.Equal(t, tt.expected.PlanHideNoChanges, result.PlanHideNoChanges, "PlanHideNoChanges should match")
 			assert.Equal(t, tt.expected.PlanSummaryFile, result.PlanSummaryFile, "PlanSummaryFile should match")
+			assert.Equal(t, tt.expected.FailFast, result.FailFast, "FailFast should match")
+			assert.Equal(t, tt.expected.KeepGoing, result.KeepGoing, "KeepGoing should match")
 		})
 	}
 }
@@ -313,6 +321,8 @@ func TestTerraformRunOptions_Fields(t *testing.T) {
 		PlanHide:                []string{"no-changes"},
 		PlanHideNoChanges:       true,
 		PlanSummaryFile:         "/tmp/summary.json",
+		FailFast:                true,
+		KeepGoing:               true,
 	}
 
 	assert.True(t, opts.ProcessTemplates)
@@ -335,6 +345,8 @@ func TestTerraformRunOptions_Fields(t *testing.T) {
 	assert.Equal(t, []string{"no-changes"}, opts.PlanHide)
 	assert.True(t, opts.PlanHideNoChanges)
 	assert.Equal(t, "/tmp/summary.json", opts.PlanSummaryFile)
+	assert.True(t, opts.FailFast)
+	assert.True(t, opts.KeepGoing)
 }
 
 // TestApplyOptionsToInfo tests that options are correctly applied to ConfigAndStacksInfo.
@@ -431,6 +443,8 @@ func TestApplyOptionsToInfo(t *testing.T) {
 				PlanHide:                []string{"no-changes"},
 				PlanHideNoChanges:       true,
 				PlanSummaryFile:         "/tmp/summary.json",
+				FailFast:                true,
+				KeepGoing:               true,
 			},
 			checkInfo: func(t *testing.T, info *schema.ConfigAndStacksInfo) {
 				assert.Equal(t, "/tmp/deploy.tfplan", info.PlanFile)
@@ -444,6 +458,8 @@ func TestApplyOptionsToInfo(t *testing.T) {
 				assert.Equal(t, []string{"no-changes"}, info.TerraformPlanHide)
 				assert.True(t, info.TerraformPlanHideNoChanges)
 				assert.Equal(t, "/tmp/summary.json", info.TerraformPlanSummaryFile)
+				assert.True(t, info.FailFast)
+				assert.True(t, info.KeepGoing)
 			},
 		},
 	}
