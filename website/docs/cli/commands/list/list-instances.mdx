@@ -263,7 +263,7 @@ jobs:
     outputs:
       matrix: ${{ steps.instances.outputs.matrix }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: List all instances
         id: instances
         run: atmos list instances --format=matrix --output-file=$GITHUB_OUTPUT
