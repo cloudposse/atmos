@@ -3,9 +3,17 @@ package git
 import (
 	"errors"
 	"fmt"
+	"os/exec"
+	"path/filepath"
+	"strings"
 
+	"github.com/go-git/go-billy/v5/osfs"
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/config"
+	"github.com/go-git/go-git/v5/plumbing/cache"
+	"github.com/go-git/go-git/v5/storage"
+	"github.com/go-git/go-git/v5/storage/filesystem"
+	"github.com/go-git/go-git/v5/storage/filesystem/dotgit"
 	giturl "github.com/kubescape/go-git-url"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -19,7 +27,7 @@ func GetLocalRepo() (*git.Repository, error) {
 		EnableDotGitCommonDir: true, // Enable worktree support
 	})
 	if err != nil {
-		return nil, err
+		return openWorktreeConfigTolerantRepo(localPath, err)
 	}
 
 	return localRepo, nil
@@ -181,5 +189,84 @@ func OpenWorktreeAwareRepo(path string) (*git.Repository, error) {
 		EnableDotGitCommonDir: true,  // Enable worktree support for config/remotes
 	})
 
-	return repo, err
+	if err != nil {
+		return openWorktreeConfigTolerantRepo(path, err)
+	}
+
+	return repo, nil
+}
+
+type worktreeConfigTolerantStorer struct {
+	storage.Storer
+}
+
+func (s worktreeConfigTolerantStorer) Config() (*config.Config, error) {
+	cfg, err := s.Storer.Config()
+	if err != nil {
+		return nil, err
+	}
+	removeWorktreeConfigExtension(cfg)
+	return cfg, nil
+}
+
+func openWorktreeConfigTolerantRepo(path string, originalErr error) (*git.Repository, error) {
+	if !isUnsupportedWorktreeConfigError(originalErr) {
+		return nil, originalErr
+	}
+
+	repoRoot, gitDir, commonDir, err := gitRepositoryPaths(path)
+	if err != nil {
+		return nil, originalErr
+	}
+
+	dotGitFs := osfs.New(gitDir)
+	repositoryFs := dotGitFs
+	if commonDir != "" && commonDir != gitDir {
+		repositoryFs = dotgit.NewRepositoryFilesystem(dotGitFs, osfs.New(commonDir))
+	}
+
+	storer := filesystem.NewStorage(repositoryFs, cache.NewObjectLRUDefault())
+	return git.Open(worktreeConfigTolerantStorer{Storer: storer}, osfs.New(repoRoot))
+}
+
+func isUnsupportedWorktreeConfigError(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "repositoryformatversion") && strings.Contains(msg, "worktreeconfig")
+}
+
+func removeWorktreeConfigExtension(cfg *config.Config) {
+	if cfg == nil || cfg.Raw == nil || !cfg.Raw.HasSection("extensions") {
+		return
+	}
+
+	section := cfg.Raw.Section("extensions")
+	keys := make([]string, 0, len(section.Options))
+	for _, opt := range section.Options {
+		if strings.EqualFold(opt.Key, "worktreeConfig") {
+			keys = append(keys, opt.Key)
+		}
+	}
+	for _, key := range keys {
+		section.RemoveOption(key)
+	}
+}
+
+func gitRepositoryPaths(path string) (repoRoot string, gitDir string, commonDir string, err error) {
+	out, err := exec.Command("git", "-C", path, "rev-parse", "--path-format=absolute", "--show-toplevel", "--git-dir", "--git-common-dir").Output()
+	if err != nil {
+		return "", "", "", err
+	}
+
+	lines := strings.Split(strings.TrimSpace(string(out)), "\n")
+	if len(lines) != 3 {
+		return "", "", "", fmt.Errorf("unexpected git rev-parse output")
+	}
+
+	repoRoot = filepath.Clean(lines[0])
+	gitDir = filepath.Clean(lines[1])
+	commonDir = filepath.Clean(lines[2])
+	return repoRoot, gitDir, commonDir, nil
 }
