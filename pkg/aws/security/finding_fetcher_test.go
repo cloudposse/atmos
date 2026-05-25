@@ -788,8 +788,8 @@ func TestPaginateInspector2Findings_UnlimitedFetchesAllPages(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Len(t, got, totalPages*findingsPerPage)
-	assert.Contains(t, got[0].ID, "p0-f0")
-	assert.Contains(t, got[len(got)-1].ID, fmt.Sprintf("p%d-f%d", totalPages-1, findingsPerPage-1))
+	assert.Equal(t, "arn:aws:inspector2:us-east-1:123:finding/p0-f0", got[0].ID)
+	assert.Equal(t, fmt.Sprintf("arn:aws:inspector2:us-east-1:123:finding/p%d-f%d", totalPages-1, findingsPerPage-1), got[len(got)-1].ID)
 }
 
 // TestPaginateInspector2Findings_TruncatesAtLimit verifies that Inspector2
@@ -830,8 +830,8 @@ func TestPaginateInspector2Findings_TruncatesAtLimit(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Len(t, got, 50)
-	assert.Contains(t, got[0].ID, "f0")
-	assert.Contains(t, got[len(got)-1].ID, "f49")
+	assert.Equal(t, "arn:aws:inspector2:us-east-1:123:finding/f0", got[0].ID)
+	assert.Equal(t, "arn:aws:inspector2:us-east-1:123:finding/f49", got[len(got)-1].ID)
 }
 
 func TestResolveRegion(t *testing.T) {
