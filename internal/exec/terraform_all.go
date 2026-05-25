@@ -1,6 +1,7 @@
 package exec
 
 import (
+	"context"
 	"fmt"
 
 	log "github.com/charmbracelet/log"
@@ -9,6 +10,7 @@ import (
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/dependency"
 	"github.com/cloudposse/atmos/pkg/perf"
+	scheduleradapters "github.com/cloudposse/atmos/pkg/scheduler/adapters"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/store/authbridge"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -46,10 +48,9 @@ func ExecuteTerraformAll(info *schema.ConfigAndStacksInfo) error {
 		atmosConfig.Stores.SetAuthContextResolver(resolver)
 	}
 
-	// Get all stacks with terraform components.
 	stacks, err := ExecuteDescribeStacks(
 		&atmosConfig,
-		"",  // all stacks
+		info.Stack,
 		nil, // all components
 		[]string{cfg.TerraformComponentType},
 		nil,
@@ -64,23 +65,12 @@ func ExecuteTerraformAll(info *schema.ConfigAndStacksInfo) error {
 		return fmt.Errorf(errWrapFmt, errUtils.ErrExecuteDescribeStacks, err)
 	}
 
-	// Build dependency graph.
-	graph, err := buildTerraformDependencyGraph(
-		&atmosConfig,
-		stacks,
-		info,
-	)
-	if err != nil {
-		return fmt.Errorf(errWrapFmt, errUtils.ErrBuildDepGraph, err)
-	}
-
-	// Apply filters if specified.
-	if info.Query != "" || len(info.Components) > 0 || info.Stack != "" {
-		graph = applyFiltersToGraph(graph, stacks, info)
-	}
-
-	// Execute components in dependency order.
-	return executeInDependencyOrder(graph, info)
+	return scheduleradapters.ExecuteTerraform(context.Background(), scheduleradapters.TerraformOptions{
+		AtmosConfig: &atmosConfig,
+		Info:        info,
+		Stacks:      stacks,
+		Executor:    executeTerraformQueryComponent,
+	})
 }
 
 // executeInDependencyOrder executes terraform commands in dependency order.
