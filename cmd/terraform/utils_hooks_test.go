@@ -15,6 +15,7 @@ package terraform
 
 import (
 	"errors"
+	"reflect"
 	"testing"
 
 	"github.com/spf13/cobra"
@@ -439,4 +440,87 @@ func TestRunCIHooksForApplyComponent_ExitCodeForwarding(t *testing.T) {
 			runCIHooksForApplyComponent(cmd, info, "apply output", tc.execErr)
 		})
 	}
+}
+
+// TestWirePerComponentHook pins the per-subcommand hook wiring contract used
+// by both the ExecuteTerraformAll (--all) and ExecuteTerraformQuery
+// (--components/--query) dispatch branches in terraformRunWithOptions. Both
+// branches funnel through this helper, so a regression here would silently
+// drop per-component CI summary entries for one of plan/apply/deploy — which
+// is exactly the bug CodeRabbit caught on an earlier revision of this PR.
+func TestWirePerComponentHook(t *testing.T) {
+	t.Run("plan/deploy/apply install a non-nil hook", func(t *testing.T) {
+		for _, sub := range []string{"plan", "deploy", "apply"} {
+			t.Run(sub, func(t *testing.T) {
+				info := &schema.ConfigAndStacksInfo{}
+				wirePerComponentHook(info, sub, newHookTestCmd())
+				assert.NotNil(t, info.PerComponentHook,
+					"%q subcommand must install a per-component hook", sub)
+			})
+		}
+	})
+
+	t.Run("unknown subcommand leaves the hook unset", func(t *testing.T) {
+		// `destroy`, `init`, etc. are valid terraform subcommands but they do
+		// not have a per-component CI hook today. The helper must be a no-op
+		// for anything outside the {plan, deploy, apply} set so other
+		// subcommands don't accidentally start firing hooks.
+		for _, sub := range []string{"destroy", "init", "validate", ""} {
+			t.Run(sub, func(t *testing.T) {
+				info := &schema.ConfigAndStacksInfo{}
+				wirePerComponentHook(info, sub, newHookTestCmd())
+				assert.Nil(t, info.PerComponentHook,
+					"%q subcommand must NOT install a per-component hook", sub)
+			})
+		}
+	})
+
+	t.Run("installed hook does not panic when invoked", func(t *testing.T) {
+		// Smoke-test the closure body: it must reach RunCIHooks without
+		// panicking even when invoked outside a configured atmos directory.
+		// RunCIHooks short-circuits if the underlying config isn't loadable,
+		// so the closures should fail gracefully (Warn log) rather than crash.
+		t.Chdir("../../examples/demo-stacks")
+		cmd := newHookTestCmd()
+
+		for _, sub := range []string{"plan", "deploy", "apply"} {
+			t.Run(sub, func(t *testing.T) {
+				info := &schema.ConfigAndStacksInfo{
+					Stack:            "dev",
+					Component:        "myapp",
+					ComponentFromArg: "myapp",
+					ComponentType:    "terraform",
+				}
+				wirePerComponentHook(info, sub, cmd)
+				assert.NotPanics(t, func() {
+					info.PerComponentHook(info, "output", nil)
+				})
+			})
+		}
+	})
+
+	t.Run("the three subcommands wire to distinct hook closures", func(t *testing.T) {
+		// Sanity check: a future edit that copy-pastes one case over another
+		// (e.g. apply ends up calling the plan hook) wouldn't be caught by the
+		// nil/non-nil assertions above. Capture the hook for each subcommand
+		// and assert pairwise that they're distinct function values.
+		hookFor := func(sub string) func(*schema.ConfigAndStacksInfo, string, error) {
+			info := &schema.ConfigAndStacksInfo{}
+			wirePerComponentHook(info, sub, newHookTestCmd())
+			return info.PerComponentHook
+		}
+		plan, apply, deploy := hookFor("plan"), hookFor("apply"), hookFor("deploy")
+		// Compare reflect pointer identities (function values are not directly
+		// comparable in Go, but reflect.ValueOf(.).Pointer() returns the
+		// closure's code address).
+		assert.NotEqual(t, hookPointer(plan), hookPointer(apply), "plan and apply must call different CI hook functions")
+		assert.NotEqual(t, hookPointer(plan), hookPointer(deploy), "plan and deploy must call different CI hook functions")
+		assert.NotEqual(t, hookPointer(apply), hookPointer(deploy), "apply and deploy must call different CI hook functions")
+	})
+}
+
+// hookPointer returns the underlying code-pointer of a hook closure for
+// equality comparison. Function values themselves are not comparable in Go.
+func hookPointer(f func(*schema.ConfigAndStacksInfo, string, error)) uintptr {
+	return reflect.ValueOf(f).Pointer()
 }
