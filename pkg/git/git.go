@@ -188,7 +188,6 @@ func OpenWorktreeAwareRepo(path string) (*git.Repository, error) {
 		DetectDotGit:          false, // We want exact path, not parent search
 		EnableDotGitCommonDir: true,  // Enable worktree support for config/remotes
 	})
-
 	if err != nil {
 		return openWorktreeConfigTolerantRepo(path, err)
 	}
@@ -254,7 +253,7 @@ func removeWorktreeConfigExtension(cfg *config.Config) {
 	}
 }
 
-func gitRepositoryPaths(path string) (repoRoot string, gitDir string, commonDir string, err error) {
+func gitRepositoryPaths(path string) (repoRoot, gitDir, commonDir string, err error) {
 	out, err := exec.Command("git", "-C", path, "rev-parse", "--path-format=absolute", "--show-toplevel", "--git-dir", "--git-common-dir").Output()
 	if err != nil {
 		return "", "", "", err

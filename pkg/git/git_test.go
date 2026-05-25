@@ -66,7 +66,7 @@ func runNativeGit(t *testing.T, dir string, args ...string) {
 	require.NoError(t, err, string(output))
 }
 
-func requireSamePath(t *testing.T, expected string, actual string) {
+func requireSamePath(t *testing.T, expected, actual string) {
 	t.Helper()
 
 	expectedEval, err := filepath.EvalSymlinks(expected)
