@@ -64,7 +64,7 @@ require (
 	github.com/goccy/go-yaml v1.19.2
 	github.com/gofrs/flock v0.13.0
 	github.com/google/go-cmp v0.7.0
-	github.com/google/go-containerregistry v0.21.5
+	github.com/google/go-containerregistry v0.21.6
 	github.com/google/go-github/v59 v59.0.0
 	github.com/google/renameio/v2 v2.0.2
 	github.com/google/uuid v1.6.0
