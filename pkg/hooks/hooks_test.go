@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -54,8 +55,8 @@ func TestHasHooks(t *testing.T) {
 			hooks: Hooks{
 				items: map[string]Hook{
 					"test-hook": {
-						Events:  []string{"after-terraform-apply"},
-						Command: "store",
+						Events: []string{"after-terraform-apply"},
+						Kind:   "store",
 					},
 				},
 			},
@@ -65,8 +66,8 @@ func TestHasHooks(t *testing.T) {
 			name: "returns true when hooks items has multiple hooks",
 			hooks: Hooks{
 				items: map[string]Hook{
-					"hook1": {Events: []string{"after-terraform-apply"}, Command: "store"},
-					"hook2": {Events: []string{"before-terraform-plan"}, Command: "store"},
+					"hook1": {Events: []string{"after-terraform-apply"}, Kind: "store"},
+					"hook2": {Events: []string{"before-terraform-plan"}, Kind: "store"},
 				},
 			},
 			expected: true,
@@ -168,7 +169,7 @@ func TestGetHooks_WithRealComponent(t *testing.T) {
 	assert.Equal(t, info, hooks.info)
 	assert.NotNil(t, hooks.items)
 	assert.Contains(t, hooks.items, "vpc-store-outputs")
-	assert.Equal(t, "store", hooks.items["vpc-store-outputs"].Command)
+	assert.Equal(t, "store", hooks.items["vpc-store-outputs"].Kind)
 }
 
 func TestGetHooks_DoesNotProcessTemplates(t *testing.T) {
@@ -247,7 +248,7 @@ vars:
 	require.NotNil(t, hooks)
 	require.NotNil(t, hooks.items)
 	assert.Contains(t, hooks.items, "static-hook")
-	assert.Equal(t, "store", hooks.items["static-hook"].Command)
+	assert.Equal(t, "store", hooks.items["static-hook"].Kind)
 	assert.Equal(t, "{{", hooks.items["static-hook"].Outputs["broken"])
 }
 
@@ -290,9 +291,9 @@ func TestRunAll(t *testing.T) {
 				},
 				items: map[string]Hook{
 					"test-hook": {
-						Events:  []string{"after-terraform-apply"},
-						Command: "store",
-						Name:    "test-store",
+						Events: []string{"after-terraform-apply"},
+						Kind:   "store",
+						Name:   "test-store",
 						Outputs: map[string]string{
 							"key1": "value1",
 						},
@@ -316,13 +317,13 @@ func TestRunAll(t *testing.T) {
 				items: map[string]Hook{
 					"hook1": {
 						Events:  []string{"after-terraform-apply"},
-						Command: "store",
+						Kind:    "store",
 						Name:    "store1",
 						Outputs: map[string]string{"key1": "value1"},
 					},
 					"hook2": {
 						Events:  []string{"after-terraform-apply"},
-						Command: "store",
+						Kind:    "store",
 						Name:    "store2",
 						Outputs: map[string]string{"key2": "value2"},
 					},
@@ -345,7 +346,7 @@ func TestRunAll(t *testing.T) {
 				items: map[string]Hook{
 					"test-hook": {
 						Events:  []string{"after-terraform-apply"},
-						Command: "store",
+						Kind:    "store",
 						Name:    "nonexistent-store",
 						Outputs: map[string]string{"key1": "value1"},
 					},
@@ -368,7 +369,7 @@ func TestRunAll(t *testing.T) {
 				items: map[string]Hook{
 					"test-hook": {
 						Events:  []string{"after-terraform-apply"},
-						Command: "store",
+						Kind:    "store",
 						Name:    "test-store",
 						Outputs: map[string]string{"key1": "value1"},
 					},
@@ -418,9 +419,9 @@ func TestRunAll_EventFiltering(t *testing.T) {
 			info:   &schema.ConfigAndStacksInfo{ComponentFromArg: "comp", Stack: "stack"},
 			items: map[string]Hook{
 				"hook": {
-					Events:  events,
-					Command: "store",
-					Name:    "test-store",
+					Events: events,
+					Kind:   "store",
+					Name:   "test-store",
 					// Literal value (no dot prefix) — no terraform output call needed.
 					Outputs: map[string]string{"label_id": "literal-value"},
 				},
@@ -478,6 +479,143 @@ func TestRunAll_EventFiltering(t *testing.T) {
 		data := getStore(h).GetData()
 		assert.Equal(t, "literal-value", data["stack/comp/label_id"], "deploy hook must fire on apply event")
 	})
+}
+
+func TestRunAll_SkipHooksBypassesPreflightBinaryCheck(t *testing.T) {
+	prev := viper.Get("skip-hooks")
+	viper.Set("skip-hooks", "missing-tool")
+	t.Cleanup(func() { viper.Set("skip-hooks", prev) })
+
+	h := Hooks{
+		config: &schema.AtmosConfiguration{},
+		info: &schema.ConfigAndStacksInfo{
+			ComponentFromArg: "test-component",
+			Stack:            "test-stack",
+		},
+		items: map[string]Hook{
+			"missing-tool": {
+				Kind:    "command",
+				Command: "definitely-not-on-path-atmos-test",
+			},
+		},
+	}
+
+	err := h.RunAll(BeforeTerraformPlan, h.config, h.info, nil, nil)
+	require.NoError(t, err)
+}
+
+func TestHooksPreflight_NoOpBranches(t *testing.T) {
+	skipNone := func(string) bool { return false }
+
+	tests := []struct {
+		name  string
+		hooks Hooks
+		cfg   *schema.AtmosConfiguration
+		info  *schema.ConfigAndStacksInfo
+		skip  func(string) bool
+	}{
+		{
+			name: "already done",
+			hooks: Hooks{
+				preflightDone: true,
+				items: map[string]Hook{
+					"missing": {Kind: "command", Command: "definitely-not-on-path-atmos-test"},
+				},
+			},
+			cfg:  &schema.AtmosConfiguration{},
+			info: &schema.ConfigAndStacksInfo{ComponentFromArg: "component", Stack: "stack"},
+			skip: skipNone,
+		},
+		{
+			name:  "empty hooks",
+			hooks: Hooks{items: map[string]Hook{}},
+			cfg:   &schema.AtmosConfiguration{},
+			info:  &schema.ConfigAndStacksInfo{ComponentFromArg: "component", Stack: "stack"},
+			skip:  skipNone,
+		},
+		{
+			name: "nil config",
+			hooks: Hooks{items: map[string]Hook{
+				"hook": {Kind: "command", Command: "tool"},
+			}},
+			cfg:  nil,
+			info: &schema.ConfigAndStacksInfo{ComponentFromArg: "component", Stack: "stack"},
+			skip: skipNone,
+		},
+		{
+			name: "nil info",
+			hooks: Hooks{items: map[string]Hook{
+				"hook": {Kind: "command", Command: "tool"},
+			}},
+			cfg:  &schema.AtmosConfiguration{},
+			info: nil,
+			skip: skipNone,
+		},
+		{
+			name: "all hooks skipped",
+			hooks: Hooks{items: map[string]Hook{
+				"hook": {Kind: "command", Command: "definitely-not-on-path-atmos-test"},
+			}},
+			cfg:  &schema.AtmosConfiguration{},
+			info: &schema.ConfigAndStacksInfo{ComponentFromArg: "component", Stack: "stack"},
+			skip: func(string) bool { return true },
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := tt.hooks.preflight(tt.cfg, tt.info, tt.skip)
+			require.NoError(t, err)
+			assert.True(t, tt.hooks.preflightDone)
+		})
+	}
+}
+
+func TestHooksVerifyAllBinaries(t *testing.T) {
+	t.Run("skips deprecated unknown skipped and no-command hooks", func(t *testing.T) {
+		h := Hooks{items: map[string]Hook{
+			"deprecated": {Kind: "ci.summary", Command: "definitely-not-on-path-atmos-test"},
+			"unknown":    {Kind: "not-registered", Command: "definitely-not-on-path-atmos-test"},
+			"store":      {Kind: "store"},
+			"skipped":    {Kind: "command", Command: "definitely-not-on-path-atmos-test"},
+		}}
+
+		err := h.verifyAllBinaries(func(name string) bool { return name == "skipped" })
+		require.NoError(t, err)
+	})
+
+	t.Run("returns command-not-found for missing command hook", func(t *testing.T) {
+		h := Hooks{items: map[string]Hook{
+			"missing": {Kind: "command", Command: "definitely-not-on-path-atmos-test"},
+		}}
+
+		err := h.verifyAllBinaries(nil)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, errUtils.ErrCommandNotFound)
+	})
+}
+
+func TestIsDeprecatedCIKind(t *testing.T) {
+	tests := []struct {
+		name string
+		kind string
+		want bool
+	}{
+		{name: "ci check", kind: "ci.check", want: true},
+		{name: "ci output", kind: "ci.output", want: true},
+		{name: "ci summary", kind: "ci.summary", want: true},
+		{name: "ci upload", kind: "ci.upload", want: true},
+		{name: "ci download", kind: "ci.download", want: true},
+		{name: "command", kind: "command", want: false},
+		{name: "store", kind: "store", want: false},
+		{name: "empty", kind: "", want: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, isDeprecatedCIKind(tt.kind))
+		})
+	}
 }
 
 // TestRunCIHooks_CIEnabledIsHardKillSwitch verifies that ci.enabled in atmos.yaml

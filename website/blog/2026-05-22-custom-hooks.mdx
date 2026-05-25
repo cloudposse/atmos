@@ -1,0 +1,214 @@
+---
+slug: custom-hooks
+title: "Custom hooks: zero-config security & cost scanners"
+authors: [osterman]
+tags: [feature, dx, experimental]
+---
+
+import ActionCard from '@site/src/components/ActionCard'
+
+Atmos hooks now have a **`kind`** system — same `before-terraform-plan` /
+`after-terraform-plan` lifecycle you already know, but the dispatch is
+pluggable and built-in kinds ship for common tools. Two lines in a stack
+manifest gets you cost analysis from infracost, or SARIF scanning from
+checkov, trivy, or kics, with tools auto-installed via the Atmos
+toolchain.
+
+```yaml
+components:
+  terraform:
+    vpc:
+      dependencies:
+        tools:
+          checkov: "3.2.529"
+      hooks:
+        security:
+          events: [after-terraform-plan]
+          kind: checkov
+```
+
+That's the whole config. No scanner binary on PATH, no custom command
+wrapper, no GitHub Actions glue — `atmos terraform plan vpc -s prod`
+auto-installs checkov via the toolchain, runs it against the component,
+parses the SARIF, renders the findings as a markdown table in your
+terminal, and (when Atmos Pro is connected) ships the same body to the
+run page.
+
+<!--truncate-->
+
+## What's new
+
+### Built-in kinds for the common cases
+
+```yaml
+hooks:
+  cost:     { events: [after-terraform-plan], kind: infracost }
+  security: { events: [after-terraform-plan], kind: trivy }
+```
+
+Built-in kinds ship in this release:
+
+- **`command`** — generic engine. Runs any binary with `ATMOS_*` env vars
+  so your custom tool plugs in without writing Go.
+- **`infracost`** — cost diff card with per-resource breakdown.
+- **`checkov`** / **`trivy`** / **`kics`** — SARIF findings viewers
+  sharing one parser. New SARIF-emitting tools slot in trivially.
+
+Each renders a **single markdown body** that shows up identically in
+the terminal and on the Pro run page. Same bytes, every surface.
+
+### Override any default
+
+The defaults are good for the common case, but every field on a
+built-in kind — `command`, `args`, `env`, `on_failure` — is overridable.
+Set the field on your hook and your value wins. Useful when you want to
+tighten the severity threshold, point at a custom config, or make a
+finding block the run:
+
+```yaml
+hooks:
+  security:
+    events: [after-terraform-plan]
+    kind: trivy
+    on_failure: fail              # default is warn — fail the run on a finding
+    args:                         # full replacement, not merge
+      - config
+      - --format
+      - sarif
+      - --output
+      - $ATMOS_OUTPUT_FILE
+      - --severity
+      - HIGH,CRITICAL             # added on top of the default args
+      - --quiet
+      - $ATMOS_COMPONENT_PATH
+```
+
+`args` and `env` are full replacement, not merge — when you override
+`args` you restate every arg you want. If you only need to tweak one
+flag, copy the kind's default arg list from the
+[docs](/stacks/hooks#overriding-kind-defaults) and add your own.
+
+### Bring your own command
+
+If Atmos doesn't ship a named kind for your tool yet, use `kind: command`
+and point it at any binary or script. Atmos injects the same `ATMOS_*`
+environment variables built-in kinds use, including
+`$ATMOS_COMPONENT_PATH`, `$ATMOS_STACK`, `$ATMOS_COMPONENT`,
+`$ATMOS_OUTPUT_FILE`, and `$ATMOS_OUTPUT_DIR`.
+
+```yaml
+components:
+  terraform:
+    demo:
+      hooks:
+        notify:
+          events: [after-terraform-plan]
+          kind: command
+          command: python3
+          args:
+            - scripts/notify.py
+          format: markdown
+          on_failure: warn
+```
+
+The script can stream progress to stdout/stderr in real time. If it
+writes markdown to `$ATMOS_OUTPUT_FILE`, Atmos renders that body in the
+terminal just like the built-in scanner summaries.
+
+### `dependencies.tools` triggers auto-install
+
+Declare the tools your hooks need under `dependencies.tools` on the
+component (same surface ansible components and workflows already use)
+and Atmos installs them automatically before the hook runs:
+
+```yaml
+components:
+  terraform:
+    vpc:
+      dependencies:
+        tools:
+          infracost: "0.10.44"
+          trivy:     "0.70.0"
+      hooks:
+        cost:     { events: [after-terraform-plan], kind: infracost }
+        security: { events: [after-terraform-plan], kind: trivy }
+```
+
+A **pre-flight check** runs once per `atmos terraform …` invocation —
+it resolves and installs every component dependency, then verifies each
+hook's binary is on the resulting PATH. If something is missing or the
+declared tool can't be found, you find out **before terraform runs**,
+not after a 90-second plan. The error includes a hint pointing you at
+the relevant config:
+
+```
+Error: command not found
+  Hook "security" (kind trivy) requires "trivy", which is not installed and not on PATH
+  💡 Declare it in dependencies.tools (e.g. `trivy: "<version>"`) to auto-install before terraform runs
+  💡 Or install it manually so it appears on PATH
+```
+
+### `--skip-hooks` runtime escape hatch
+
+Sometimes you just want plan/apply to run without the scan:
+
+```bash
+atmos terraform plan vpc -s prod --skip-hooks                  # skip all
+atmos terraform plan vpc -s prod --skip-hooks=cost,security    # skip specific
+ATMOS_SKIP_HOOKS=true atmos terraform apply vpc -s prod        # env form
+```
+
+Skipped hooks are logged at `INFO` so it's visible in CI output. Per
+invocation only — doesn't propagate to nested commands or workflows.
+
+### Workdir compatible
+
+When the `component-workdir` feature is enabled, hooks scan the same
+directory terraform actually runs in (the provisioned workdir), not the
+in-repo source path. `tool` and `terraform` see identical state.
+
+## Examples
+
+Four scanner/cost examples live under `examples/`:
+
+- [`hooks-infracost`](/examples/hooks-infracost) — cost analysis (`kind: infracost`)
+- [`hooks-trivy`](/examples/hooks-trivy) — security scanning (`kind: trivy`)
+- [`hooks-checkov`](/examples/hooks-checkov) — policy scanning (`kind: checkov`)
+- [`hooks-kics`](/examples/hooks-kics) — IaC scanning (`kind: kics`)
+
+Each uses dummy AWS provider config so `tofu plan` succeeds offline —
+no real credentials needed to see the hooks fire.
+
+## What's next
+
+This is the first cut. On deck:
+
+- **Atmos Pro upload** — the engine already produces a typed `Summary`
+  envelope and an `Artifact` blob per hook invocation. The Pro backend
+  picks them up when a Pro instance is connected.
+
+This feature is **experimental** — the YAML shape is stable for v1
+but may grow new fields as we add Pro integration. Pin your Atmos
+version if you don't want to track changes.
+
+## Try it
+
+```bash
+git clone https://github.com/cloudposse/atmos
+cd atmos/examples/hooks-trivy
+atmos terraform plan bucket -s test
+```
+
+You'll see trivy auto-install via the toolchain, scan the intentionally-
+misconfigured S3 bucket, and render the findings in your terminal —
+all without any cloud credentials.
+
+<ActionCard
+  title="Read the docs"
+  ctaText="Read the docs"
+  ctaLink="/stacks/hooks"
+  secondaryCtaText="Browse examples"
+  secondaryCtaLink="/examples/hooks-trivy"
+>
+  Full reference for hook kinds, override semantics, lifecycle events, tool auto-install, and the `--all` / `--skip-hooks` flags.
+</ActionCard>
