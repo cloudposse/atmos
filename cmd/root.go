@@ -36,6 +36,7 @@ import (
 	_ "github.com/cloudposse/atmos/pkg/component/ansible"
 	_ "github.com/cloudposse/atmos/pkg/component/mock"
 
+	"github.com/cloudposse/atmos/pkg/ci"
 	"github.com/cloudposse/atmos/pkg/data"
 	"github.com/cloudposse/atmos/pkg/filesystem"
 	"github.com/cloudposse/atmos/pkg/flags"
@@ -593,6 +594,40 @@ var RootCmd = &cobra.Command{
 		err := e.ExecuteAtmosCmd()
 		return err
 	},
+}
+
+// debugModePromotion records the outcome of a CI-driven log-level promotion.
+type debugModePromotion struct {
+	// Promoted is true when the log level was actually overridden.
+	Promoted bool
+	// From is the prior atmosConfig.Logs.Level value (only set when Promoted).
+	From string
+	// Provider is the detected CI provider name (only set when Promoted).
+	Provider string
+}
+
+// maybePromoteLogLevelForDebugMode overrides atmosConfig.Logs.Level to
+// "Debug" when (a) atmos config loaded successfully, (b) ci.enabled is true
+// in atmos.yaml, and (c) the detected CI provider reports debug mode is
+// active for the current run. The override is intentional — the CI-side
+// debug toggles outrank --logs-level / ATMOS_LOGS_LEVEL because they are an
+// explicit, repo-/workflow-level "make everything noisy" signal.
+//
+// Knows nothing about specific CI providers: the debug-mode capability is
+// discovered through the provider-agnostic ci.DetectDebugMode helper.
+func maybePromoteLogLevelForDebugMode(atmosConfig *schema.AtmosConfiguration, configLoaded bool) debugModePromotion {
+	defer perf.Track(atmosConfig, "cmd.maybePromoteLogLevelForDebugMode")()
+
+	if !configLoaded || atmosConfig == nil || !atmosConfig.CI.Enabled {
+		return debugModePromotion{}
+	}
+	info := ci.DetectDebugMode()
+	if !info.Active {
+		return debugModePromotion{}
+	}
+	from := atmosConfig.Logs.Level
+	atmosConfig.Logs.Level = utils.LogLevelDebug
+	return debugModePromotion{Promoted: true, From: from, Provider: info.Provider}
 }
 
 // SetupLogger configures the global logger based on the provided Atmos configuration.
@@ -1448,8 +1483,22 @@ func Execute() error {
 		errUtils.InitializeMarkdown(&atmosConfig)
 	}
 
+	// Auto-promote to Debug when the active CI provider has debug mode enabled
+	// and native CI is enabled in atmos.yaml. Overrides any --logs-level /
+	// ATMOS_LOGS_LEVEL the user set, because the CI-side debug toggles are a
+	// higher-priority signal set at the repo/workflow level.
+	debugPromote := maybePromoteLogLevelForDebugMode(&atmosConfig, initErr == nil)
+
 	// Set the log level for the charmbracelet/log package based on the atmosConfig.
 	SetupLogger(&atmosConfig)
+
+	if debugPromote.Promoted {
+		log.Info(
+			"CI provider debug mode detected — using Debug log level for this run",
+			"provider", debugPromote.Provider,
+			"from", debugPromote.From,
+		)
+	}
 
 	// Setup color profile for lipgloss/termenv based rendering.
 	setupColorProfile(&atmosConfig)

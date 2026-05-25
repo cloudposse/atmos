@@ -1,0 +1,23 @@
+# yaml-language-server: $schema=https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
+
+vars:
+  stage: test
+
+components:
+  terraform:
+    bucket:
+      vars:
+        environment: test
+      # NOTE: dependencies.tools.trivy is intentionally omitted.
+      # The upstream Aqua registry entry for trivy requires cosign
+      # signature verification, which currently fails in many setups
+      # (cosign config not available to atmos's verifier). Trivy is
+      # widely available via `brew install trivy` or `apt install trivy`,
+      # and the hook's preflight check falls back to looking on PATH.
+      # When the cosign config issue is resolved upstream, we can
+      # re-enable `trivy: "0.70.0"` here for one-command install.
+      hooks:
+        security:
+          events:
+            - after-terraform-plan
+          kind: trivy

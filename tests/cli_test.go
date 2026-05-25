@@ -1217,6 +1217,12 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 	// Validate outputs
 	if !verifyExitCode(t, tc.Expect.ExitCode, exitCode) {
 		t.Errorf("Description: %s", tc.Description)
+		if stdout.Len() > 0 {
+			t.Errorf("Captured stdout:\n%s", stdout.String())
+		}
+		if stderr.Len() > 0 {
+			t.Errorf("Captured stderr:\n%s", stderr.String())
+		}
 	}
 
 	// Validate output based on TTY mode

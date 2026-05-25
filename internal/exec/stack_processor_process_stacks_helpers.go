@@ -107,6 +107,15 @@ type ComponentProcessorResult struct {
 	ComponentSourceSection                 map[string]any
 	BaseComponentSourceSection             map[string]any
 	BaseComponentProvisionSection          map[string]any
+	// ComponentRetry holds the raw retry configuration from the concrete component
+	// (decoded to a typed *schema.RetryConfig only after deep-merge with base + overrides).
+	ComponentRetry map[string]any
+	// ComponentOverridesRetry holds the retry section from the component's `overrides:`
+	// block, which wins over both base and concrete component retry config.
+	ComponentOverridesRetry map[string]any
+	// BaseComponentRetry holds the retry configuration inherited from base components
+	// (deep-merged across the full inheritance chain by ProcessBaseComponentConfig).
+	BaseComponentRetry map[string]any
 }
 
 // processComponent processes a component extracting common configuration sections.

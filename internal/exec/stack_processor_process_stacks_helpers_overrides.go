@@ -138,5 +138,14 @@ func processComponentOverrides(opts *ComponentProcessorOptions, result *Componen
 		}
 	}
 
+	// Extract retry overrides — applied last, wins over concrete and base retry config.
+	if i, ok := componentOverrides[cfg.RetrySectionName]; ok {
+		componentOverridesRetry, ok := i.(map[string]any)
+		if !ok {
+			return fmt.Errorf("%w: 'components.%s.%s.overrides.retry' in the manifest '%s'", errUtils.ErrInvalidConfig, opts.ComponentType, opts.Component, opts.StackName)
+		}
+		result.ComponentOverridesRetry = componentOverridesRetry
+	}
+
 	return nil
 }

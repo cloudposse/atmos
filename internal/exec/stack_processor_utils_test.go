@@ -12,6 +12,7 @@ import (
 	"go.uber.org/mock/gomock"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -2314,6 +2315,112 @@ func TestCacheCompiledSchema(t *testing.T) {
 	assert.Equal(t, compiledSchema, compiledSchema2, "Consistent cache lookups should return same schema")
 }
 
+// TestExtractLocalsFromRawYAML_CacheReturnsIndependentCopies verifies the
+// Phase 4 cache returns deep copies, not shared map references. Without this
+// guarantee, downstream consumers — which store the locals/settings/vars/env
+// maps into shared template contexts and may mutate them later — would
+// corrupt the cache and observe values bleeding across files.
+func TestExtractLocalsFromRawYAML_CacheReturnsIndependentCopies(t *testing.T) {
+	ClearLocalsExtractionCache()
+	defer ClearLocalsExtractionCache()
+
+	atmosConfig := &schema.AtmosConfiguration{}
+	yamlContent := `
+locals:
+  region: us-east-1
+  count: 3
+settings:
+  flavor: prod
+vars:
+  stage: dev
+env:
+  AWS_REGION: us-east-1
+`
+	first, err := extractLocalsFromRawYAML(atmosConfig, yamlContent, "iso-test.yaml")
+	require.NoError(t, err)
+	require.NotNil(t, first)
+	require.True(t, first.hasLocals)
+
+	// Mutate every map on the first result.
+	first.locals["region"] = "MUTATED"
+	first.settings["flavor"] = "MUTATED"
+	first.vars["stage"] = "MUTATED"
+	first.env["AWS_REGION"] = "MUTATED"
+
+	// A second call must NOT see the mutations.
+	second, err := extractLocalsFromRawYAML(atmosConfig, yamlContent, "iso-test.yaml")
+	require.NoError(t, err)
+	require.NotNil(t, second)
+	assert.Equal(t, "us-east-1", second.locals["region"],
+		"cached locals must not reflect post-retrieval mutations to a prior result")
+	assert.Equal(t, "prod", second.settings["flavor"])
+	assert.Equal(t, "dev", second.vars["stage"])
+	assert.Equal(t, "us-east-1", second.env["AWS_REGION"])
+}
+
+// TestExtractLocalsFromRawYAML_CacheKeyIncludesContentHash verifies the
+// cache key encodes both the file path AND a content fingerprint so that
+// callers reusing the same logical file path with different content (a
+// common pattern in unit tests, and a safety property for any future
+// dynamic-content code path) do not see stale results from a prior call.
+func TestExtractLocalsFromRawYAML_CacheKeyIncludesContentHash(t *testing.T) {
+	ClearLocalsExtractionCache()
+	defer ClearLocalsExtractionCache()
+
+	atmosConfig := &schema.AtmosConfiguration{}
+	contentA := `
+locals:
+  marker: "alpha"
+`
+	contentB := `
+locals:
+  marker: "beta"
+`
+	// Same file path, different content — must yield distinct cached results.
+	rA, err := extractLocalsFromRawYAML(atmosConfig, contentA, "same-path.yaml")
+	require.NoError(t, err)
+	rB, err := extractLocalsFromRawYAML(atmosConfig, contentB, "same-path.yaml")
+	require.NoError(t, err)
+	assert.Equal(t, "alpha", rA.locals["marker"])
+	assert.Equal(t, "beta", rB.locals["marker"],
+		"different content under the same path must not return a stale cached result")
+}
+
+// TestExtractAndAddLocalsToContext_DoesNotMutateInputContext locks in the
+// Phase 4 race fix: the function used to call delete() on the parent context
+// map shared across sibling-import goroutines, producing a data race surfaced
+// by TestHierarchicalImports_* under -race. After Phase 4, the input context
+// is cloned before any modification so the caller's map is untouched.
+func TestExtractAndAddLocalsToContext_DoesNotMutateInputContext(t *testing.T) {
+	ClearLocalsExtractionCache()
+	defer ClearLocalsExtractionCache()
+
+	atmosConfig := &schema.AtmosConfiguration{}
+	parent := map[string]any{
+		cfg.LocalsSectionName: map[string]any{"inherited": "should-be-dropped"},
+		"unrelated":           "kept",
+	}
+	yamlContent := `
+locals:
+  region: us-east-1
+`
+	_, err := extractAndAddLocalsToContext(
+		atmosConfig,
+		yamlContent,
+		"iso-context.yaml",
+		"iso-context.yaml",
+		parent,
+	)
+	require.NoError(t, err)
+
+	// Parent context must still contain its original locals key (untouched).
+	gotLocals, ok := parent[cfg.LocalsSectionName].(map[string]any)
+	require.True(t, ok, "parent context locals key must be untouched")
+	assert.Equal(t, "should-be-dropped", gotLocals["inherited"],
+		"extractAndAddLocalsToContext must not mutate the caller's parent context")
+	assert.Equal(t, "kept", parent["unrelated"])
+}
+
 // TestExtractLocalsFromRawYAML_Basic tests basic locals extraction from raw YAML.
 func TestExtractLocalsFromRawYAML_Basic(t *testing.T) {
 	atmosConfig := &schema.AtmosConfiguration{}
@@ -2850,6 +2957,69 @@ func TestBuildLocalsResult_NilLocalsWithHasLocals(t *testing.T) {
 	assert.True(t, result.hasLocals, "hasLocals should be true when HasTerraformLocals is true")
 	// locals should be initialized to empty map, not nil.
 	assert.NotNil(t, result.locals, "locals should be initialized to empty map when hasLocals is true")
+}
+
+func TestProcessImportSection_NoImportSection(t *testing.T) {
+	// Test with no import section present.
+	stackMap := map[string]any{
+		"vars": map[string]any{"stage": "dev"},
+	}
+
+	manifestPath := filepath.Join("test", "path.yaml")
+	imports, err := ProcessImportSection(stackMap, manifestPath)
+	require.NoError(t, err)
+	assert.Nil(t, imports)
+}
+
+func TestProcessImportSection_NilImportSection(t *testing.T) {
+	// Test with nil import section.
+	stackMap := map[string]any{
+		"import": nil,
+	}
+
+	manifestPath := filepath.Join("test", "path.yaml")
+	imports, err := ProcessImportSection(stackMap, manifestPath)
+	require.NoError(t, err)
+	assert.Nil(t, imports)
+}
+
+func TestProcessImportSection_EmptyList(t *testing.T) {
+	// Test with empty import list.
+	stackMap := map[string]any{
+		"import": []any{},
+	}
+
+	manifestPath := filepath.Join("test", "path.yaml")
+	imports, err := ProcessImportSection(stackMap, manifestPath)
+	require.NoError(t, err)
+	assert.Nil(t, imports)
+}
+
+func TestProcessImportSection_InvalidType(t *testing.T) {
+	// Test with invalid import section type (not a list).
+	stackMap := map[string]any{
+		"import": "not-a-list",
+	}
+
+	manifestPath := filepath.Join("test", "path.yaml")
+	_, err := ProcessImportSection(stackMap, manifestPath)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrInvalidImportSection)
+}
+
+func TestProcessImportSection_NilElement(t *testing.T) {
+	// Test with nil element in import list.
+	stackMap := map[string]any{
+		"import": []any{
+			filepath.Join("valid", "path.yaml"),
+			nil,
+		},
+	}
+
+	manifestPath := filepath.Join("test", "path.yaml")
+	_, err := ProcessImportSection(stackMap, manifestPath)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrInvalidImport)
 }
 
 // TestProcessTemplatesInSection tests the processTemplatesInSection helper function.

@@ -32,7 +32,7 @@ The deprecated `--ref` and `--sha` flags are still supported for backward compat
 
 :::tip Zero-Config CI
 When `ci.enabled` is `true` in `atmos.yaml`, the base commit is automatically resolved from the CI environment:
-- **Pull requests**: Compares against the **fork point** of the PR branch (`git merge-base HEAD origin/<target>`). This works correctly even when the PR is out of date with the target branch — only commits the PR introduced are reported as affected, never commits that landed on `<target>` after the PR was forked. In shallow CI checkouts (`actions/checkout@v4` defaults to `fetch-depth: 1`), Atmos transparently fetches the target branch on demand.
+- **Pull requests**: Compares against the **fork point** of the PR branch (`git merge-base HEAD origin/<target>`). This works correctly even when the PR is out of date with the target branch — only commits the PR introduced are reported as affected, never commits that landed on `<target>` after the PR was forked. In shallow CI checkouts (`actions/checkout@v6` defaults to `fetch-depth: 1`), Atmos transparently fetches the target branch on demand.
 - **Push events**: Compares against the previous commit
 - **Merge groups**: Compares against the merge queue base
 
@@ -102,7 +102,7 @@ resolution logic.
 | `push` (force-push) | Parent of current commit (`HEAD~1`) |
 | `merge_group` | Target branch (`GITHUB_BASE_REF`) |
 
-The `pull_request` strategy uses `git merge-base` as the gold standard. When the local repository is a shallow checkout (the default for `actions/checkout@v4`), Atmos automatically runs a targeted `git fetch origin <target>` and retries — you do not need to set `fetch-depth: 0` on your checkout step. If even the auto-fetch fails (offline runner, deeply orphaned history), Atmos falls back to `event.pull_request.base.sha` from the event payload, which is at worst stale by however many commits have landed on `<target>` since the PR was last synced.
+The `pull_request` strategy uses `git merge-base` as the gold standard. When the local repository is a shallow checkout (the default for `actions/checkout@v6`), Atmos automatically runs a targeted `git fetch origin <target>` and retries — you do not need to set `fetch-depth: 0` on your checkout step. If even the auto-fetch fails (offline runner, deeply orphaned history), Atmos falls back to `event.pull_request.base.sha` from the event payload, which is at worst stale by however many commits have landed on `<target>` since the PR was last synced.
 
 **Example workflow** — no `--ref` or `--sha` needed:
 
@@ -1204,7 +1204,7 @@ jobs:
       modified: ${{ steps.affected.outputs.modified }}
       deleted: ${{ steps.affected.outputs.deleted }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
       - uses: cloudposse/github-action-setup-atmos@v2
@@ -1230,7 +1230,7 @@ jobs:
       matrix:
         include: ${{ fromJson(needs.detect-changes.outputs.modified) }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: cloudposse/github-action-setup-atmos@v2
       - run: atmos terraform apply ${{ matrix.component }} -s ${{ matrix.stack }}
 
@@ -1244,7 +1244,7 @@ jobs:
     steps:
       # IMPORTANT: Check out the BASE branch (target branch), not HEAD.
       # The deleted component's configuration only exists in BASE.
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           ref: ${{ github.base_ref }}
       - uses: cloudposse/github-action-setup-atmos@v2
