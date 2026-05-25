@@ -112,6 +112,85 @@ func TestExecuteTerraformDestroyUsesReverseDependencyOrder(t *testing.T) {
 	require.Equal(t, []string{"app@dev", "database@dev", "vpc@dev"}, executed)
 }
 
+func TestExecuteTerraformAffectedSelectionUsesGraphBackedPath(t *testing.T) {
+	stacks := terraformAdapterTestStacks()
+	var executed []string
+
+	err := ExecuteTerraform(context.Background(), TerraformOptions{
+		AtmosConfig: &schema.AtmosConfiguration{},
+		Info: &schema.ConfigAndStacksInfo{
+			Affected:   true,
+			SubCommand: "plan",
+		},
+		Stacks: stacks,
+		Executor: func(execution TerraformExecution) (TerraformExecutionResult, error) {
+			info := execution.Info
+			executed = append(executed, info.Component+"@"+info.Stack)
+			return TerraformExecutionResult{}, nil
+		},
+		Selection: &TerraformSelection{
+			NodeIDs: []string{"database-dev"},
+		},
+	})
+
+	require.NoError(t, err)
+	require.Equal(t, []string{"database@dev"}, executed)
+}
+
+func TestExecuteTerraformAffectedSelectionIncludesDependentsWhenRequested(t *testing.T) {
+	stacks := terraformAdapterTestStacks()
+	var executed []string
+
+	err := ExecuteTerraform(context.Background(), TerraformOptions{
+		AtmosConfig: &schema.AtmosConfiguration{},
+		Info: &schema.ConfigAndStacksInfo{
+			Affected:   true,
+			SubCommand: "plan",
+		},
+		Stacks: stacks,
+		Executor: func(execution TerraformExecution) (TerraformExecutionResult, error) {
+			info := execution.Info
+			executed = append(executed, info.Component+"@"+info.Stack)
+			return TerraformExecutionResult{}, nil
+		},
+		Selection: &TerraformSelection{
+			NodeIDs:           []string{"database-dev"},
+			IncludeDependents: true,
+		},
+	})
+
+	require.NoError(t, err)
+	require.Equal(t, []string{"database@dev", "app@dev"}, executed)
+}
+
+func TestExecuteTerraformAffectedDestroyReversesSelectedDependents(t *testing.T) {
+	stacks := terraformAdapterTestStacks()
+	var executed []string
+
+	err := ExecuteTerraform(context.Background(), TerraformOptions{
+		AtmosConfig: &schema.AtmosConfiguration{},
+		Info: &schema.ConfigAndStacksInfo{
+			Affected:               true,
+			SubCommand:             "destroy",
+			MaxConcurrency:         2,
+			AdditionalArgsAndFlags: []string{"-auto-approve"},
+		},
+		Stacks: stacks,
+		Executor: func(execution TerraformExecution) (TerraformExecutionResult, error) {
+			info := execution.Info
+			executed = append(executed, info.Component+"@"+info.Stack)
+			return TerraformExecutionResult{}, nil
+		},
+		Selection: &TerraformSelection{
+			NodeIDs:           []string{"database-dev"},
+			IncludeDependents: true,
+		},
+	})
+
+	require.NoError(t, err)
+	require.Equal(t, []string{"app@dev", "database@dev"}, executed)
+}
+
 func TestBuildTerraformGraphPrefersDependenciesComponentsOverSettingsDependsOn(t *testing.T) {
 	stacks := map[string]any{
 		"dev": map[string]any{

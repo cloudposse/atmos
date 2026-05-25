@@ -340,7 +340,7 @@ func handlePathResolutionError(err error) error {
 }
 
 // executeAffectedCommand handles the --affected flag execution flow.
-func executeAffectedCommand(parentCmd *cobra.Command, args []string, info *schema.ConfigAndStacksInfo) error {
+func executeAffectedCommand(parentCmd *cobra.Command, args []string, info *schema.ConfigAndStacksInfo, ctx context.Context) error {
 	// Add these flags because `atmos describe affected` needs them, but `atmos terraform --affected` does not define them.
 	parentCmd.PersistentFlags().String("file", "", "")
 	parentCmd.PersistentFlags().String("format", "yaml", "")
@@ -359,7 +359,7 @@ func executeAffectedCommand(parentCmd *cobra.Command, args []string, info *schem
 	a.Upload = false
 	a.OutputFile = ""
 
-	return e.ExecuteTerraformAffected(&a, info)
+	return e.ExecuteTerraformAffectedWithContext(ctx, &a, info)
 }
 
 // isMultiComponentExecution checks if the command should be routed to multi-component execution.
@@ -513,8 +513,11 @@ func terraformRunWithOptions(parentCmd, actualCmd *cobra.Command, args []string,
 
 	// Route to appropriate execution path.
 	if info.Affected {
-		wasMultiComponentExecution = false
-		return executeAffectedCommand(parentCmd, args, &info)
+		wasMultiComponentExecution = true
+		wirePerComponentHook(&info, subCommand, actualCmd)
+		ctx, stop := terraformSignalContext(actualCmd)
+		defer stop()
+		return executeAffectedCommand(parentCmd, args, &info, ctx)
 	}
 	// --all routes to ExecuteTerraformAll for dependency-ordered execution.
 	// --components / --query / bare `-s stack` continue to route to ExecuteTerraformQuery.

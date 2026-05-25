@@ -90,6 +90,15 @@ type TerraformOptions struct {
 	Info        *schema.ConfigAndStacksInfo
 	Stacks      map[string]any
 	Executor    TerraformExecutor
+	Selection   *TerraformSelection
+}
+
+// TerraformSelection narrows the scheduler graph to a precomputed set of
+// Terraform nodes, optionally including graph closure around those nodes.
+type TerraformSelection struct {
+	NodeIDs             []string
+	IncludeDependencies bool
+	IncludeDependents   bool
 }
 
 // ExecuteTerraform runs selected Terraform components through the shared scheduler.
@@ -111,7 +120,7 @@ func ExecuteTerraform(ctx context.Context, opts TerraformOptions) error {
 		return fmt.Errorf("%w: %w", errUtils.ErrBuildDepGraph, err)
 	}
 
-	graph, err = FilterTerraformGraph(opts.AtmosConfig, graph, opts.Info)
+	graph, err = FilterTerraformGraph(opts.AtmosConfig, graph, opts.Info, opts.Selection)
 	if err != nil {
 		return err
 	}
@@ -208,8 +217,12 @@ func BuildTerraformGraph(stacks map[string]any) (*dependency.Graph, error) {
 }
 
 // FilterTerraformGraph narrows graph nodes to the user-selected bulk operation set.
-func FilterTerraformGraph(atmosConfig *schema.AtmosConfiguration, graph *dependency.Graph, info *schema.ConfigAndStacksInfo) (*dependency.Graph, error) {
+func FilterTerraformGraph(atmosConfig *schema.AtmosConfiguration, graph *dependency.Graph, info *schema.ConfigAndStacksInfo, selection *TerraformSelection) (*dependency.Graph, error) {
 	defer perf.Track(atmosConfig, "scheduler.adapters.FilterTerraformGraph")()
+
+	if selection != nil {
+		return filterTerraformGraphBySelection(graph, selection), nil
+	}
 
 	nodeIDs, err := selectedTerraformNodeIDs(atmosConfig, graph, info)
 	if err != nil {
@@ -223,6 +236,21 @@ func FilterTerraformGraph(atmosConfig *schema.AtmosConfiguration, graph *depende
 		IncludeDependencies: false,
 		IncludeDependents:   false,
 	}), nil
+}
+
+// filterTerraformGraphBySelection narrows graph using precomputed affected node IDs.
+func filterTerraformGraphBySelection(graph *dependency.Graph, selection *TerraformSelection) *dependency.Graph {
+	if graph == nil || selection == nil {
+		return dependency.NewGraph()
+	}
+	if len(selection.NodeIDs) == graph.Size() && !selection.IncludeDependencies && !selection.IncludeDependents {
+		return graph
+	}
+	return graph.Filter(dependency.Filter{
+		NodeIDs:             sortedUniqueStrings(selection.NodeIDs),
+		IncludeDependencies: selection.IncludeDependencies,
+		IncludeDependents:   selection.IncludeDependents,
+	})
 }
 
 // prepareTerraformGraphForCommand adjusts graph ordering for command-specific execution.
@@ -709,6 +737,27 @@ func sortedCopy(values []string) []string {
 	copied := append([]string{}, values...)
 	sort.Strings(copied)
 	return copied
+}
+
+// sortedUniqueStrings returns the sorted non-empty unique values.
+func sortedUniqueStrings(values []string) []string {
+	if len(values) == 0 {
+		return nil
+	}
+	seen := make(map[string]struct{}, len(values))
+	unique := make([]string, 0, len(values))
+	for _, value := range values {
+		if value == "" {
+			continue
+		}
+		if _, ok := seen[value]; ok {
+			continue
+		}
+		seen[value] = struct{}{}
+		unique = append(unique, value)
+	}
+	sort.Strings(unique)
+	return unique
 }
 
 // containsString reports whether values contains value.
