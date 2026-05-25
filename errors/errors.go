@@ -1077,7 +1077,7 @@ var (
 	ErrAWSSecurityInvalidSeverity  = errors.New("invalid severity filter: valid values are CRITICAL, HIGH, MEDIUM, LOW, INFORMATIONAL")
 	ErrAWSSecurityInvalidSource    = errors.New("invalid finding source: valid values are security-hub, config, inspector, guardduty, macie, access-analyzer, all")
 	ErrAWSSecurityInvalidFramework = errors.New("invalid compliance framework: valid values are cis-aws, pci-dss, soc2, hipaa, nist")
-	ErrAWSSecurityInvalidFormat    = errors.New("invalid output format: valid values are markdown, json, yaml, csv")
+	ErrAWSSecurityInvalidFormat    = errors.New("invalid output format: valid values are markdown, json, yaml, csv, sarif")
 	ErrAWSSecurityAnalysisFailed   = errors.New("AI analysis of security findings failed")
 	ErrAWSCredentialsNotValid      = errors.New("AWS credentials are not configured or have expired")
 
