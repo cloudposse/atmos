@@ -407,7 +407,8 @@ func TestEffectiveAtmosConfig(t *testing.T) {
 	})
 
 	t.Run("later layer wins over earlier layer", func(t *testing.T) {
-		result := effectiveAtmosConfig(base,
+		result := effectiveAtmosConfig(
+			base,
 			map[string]any{"list_merge_strategy": "append"},
 			map[string]any{"list_merge_strategy": "merge"},
 		)
@@ -415,7 +416,8 @@ func TestEffectiveAtmosConfig(t *testing.T) {
 	})
 
 	t.Run("empty string in later layer does not override earlier non-empty value", func(t *testing.T) {
-		result := effectiveAtmosConfig(base,
+		result := effectiveAtmosConfig(
+			base,
 			map[string]any{"list_merge_strategy": "append"},
 			map[string]any{"list_merge_strategy": ""},
 		)
