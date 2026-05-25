@@ -25,8 +25,10 @@ import (
 // outputParser handles flag parsing for output command.
 var outputParser *flags.StandardParser
 
-var outputSetupTerraformAuth = exec.SetupTerraformAuthForCLI
-var outputGetComponentOutputs = tfoutput.GetComponentOutputs
+var (
+	outputSetupTerraformAuth  = exec.SetupTerraformAuthForCLI
+	outputGetComponentOutputs = tfoutput.GetComponentOutputs
+)
 
 // outputCmd represents the terraform output command.
 var outputCmd = &cobra.Command{

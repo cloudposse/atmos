@@ -18,7 +18,8 @@ func TestGetAllTerraformOutputs_PanicWhenNoExecutor(t *testing.T) {
 
 	atmosConfig := &schema.AtmosConfiguration{}
 
-	assert.PanicsWithValue(t,
+	assert.PanicsWithValue(
+		t,
 		"output.SetDefaultExecutor must be called before GetComponentOutputs",
 		func() {
 			_, _ = GetAllTerraformOutputs(atmosConfig, "component", "stack", false, nil, nil)
@@ -35,7 +36,8 @@ func TestGetTerraformOutput_PanicWhenNoExecutor(t *testing.T) {
 
 	atmosConfig := &schema.AtmosConfiguration{}
 
-	assert.PanicsWithValue(t,
+	assert.PanicsWithValue(
+		t,
 		"output.SetDefaultExecutor must be called before GetOutput",
 		func() {
 			_, _, _ = GetTerraformOutput(atmosConfig, "stack", "component", "output", false, nil, nil)

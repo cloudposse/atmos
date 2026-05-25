@@ -247,11 +247,11 @@ Changes to Outputs:
   + foo = "foo prod override"
 ╷
 │ Warning: Value for undeclared variable
-│ 
+│
 │ The root module does not declare a variable named "stage" but a value was
 │ found in file "prod-mycomponent.terraform.tfvars.json". If you meant to use
 │ this value, add a "variable" block to the configuration.
-│ 
+│
 │ To silence these warnings, use TF_VAR_... environment variables to provide
 │ certain "global" settings to all configurations in your organization. To
 │ reduce the verbosity of these warnings, use the -compact-warnings option.
@@ -260,7 +260,7 @@ Changes to Outputs:
 
 Workspace "prod-mycomponent" doesn't exist.
 
-You can create this workspace with the "new" subcommand 
+You can create this workspace with the "new" subcommand
 or include the "-or-create" flag with the "select" subcommand.
 
 ```
