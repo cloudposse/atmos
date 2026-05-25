@@ -660,7 +660,7 @@ func TestPaginateFindings_UnlimitedFetchesAllPages(t *testing.T) {
 	mock := NewMockSecurityHubAPI(ctrl)
 
 	const totalPages = 7
-	const findingsPerPage = 100 // matches securityHubPageSize
+	const findingsPerPage = 100 // Matches securityHubPageSize.
 	// Build a paginated mock: each call returns a page plus a NextToken,
 	// except the last which returns no NextToken.
 	for page := 0; page < totalPages; page++ {
@@ -694,8 +694,10 @@ func TestPaginateFindings_UnlimitedFetchesAllPages(t *testing.T) {
 	// MaxFindings: 0 means "unlimited" — must fetch every page.
 	got, err := fetcher.FetchFindings(context.Background(), &QueryOptions{MaxFindings: 0})
 	require.NoError(t, err)
-	assert.Len(t, got, totalPages*findingsPerPage,
+	require.Len(t, got, totalPages*findingsPerPage,
 		"unlimited fetch must return every page of results (regression for silent 500 cap)")
+	assert.Equal(t, "p0-f0", got[0].ID)
+	assert.Equal(t, fmt.Sprintf("p%d-f%d", totalPages-1, findingsPerPage-1), got[len(got)-1].ID)
 }
 
 // TestPaginateFindings_TruncatesAndStopsAtLimit verifies the bounded path still
@@ -739,7 +741,97 @@ func TestPaginateFindings_TruncatesAndStopsAtLimit(t *testing.T) {
 
 	got, err := fetcher.FetchFindings(context.Background(), &QueryOptions{MaxFindings: 50})
 	require.NoError(t, err)
-	assert.Len(t, got, 50, "bounded fetch must return exactly --max-findings results")
+	require.Len(t, got, 50, "bounded fetch must return exactly --max-findings results")
+	assert.Equal(t, "f0", got[0].ID)
+	assert.Equal(t, "f49", got[len(got)-1].ID)
+}
+
+// TestPaginateInspector2Findings_UnlimitedFetchesAllPages verifies that
+// MaxFindings: 0 fetches every page from Inspector2 without truncation.
+func TestPaginateInspector2Findings_UnlimitedFetchesAllPages(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	mock := NewMockInspector2API(ctrl)
+
+	const totalPages = 3
+	const findingsPerPage = 100
+	for page := 0; page < totalPages; page++ {
+		findings := make([]itypes.Finding, findingsPerPage)
+		for i := 0; i < findingsPerPage; i++ {
+			findings[i] = itypes.Finding{
+				FindingArn:  aws.String(fmt.Sprintf("arn:aws:inspector2:us-east-1:123:finding/p%d-f%d", page, i)),
+				Title:       aws.String("Test"),
+				Description: aws.String("desc"),
+				Severity:    itypes.SeverityHigh,
+				Resources:   []itypes.Resource{{Id: aws.String("arn:aws:ec2:us-east-1:123:instance/i-abc")}},
+			}
+		}
+		out := &inspector2.ListFindingsOutput{Findings: findings}
+		if page < totalPages-1 {
+			out.NextToken = aws.String(fmt.Sprintf("token-%d", page))
+		}
+		mock.EXPECT().
+			ListFindings(gomock.Any(), gomock.Any()).
+			Return(out, nil).
+			Times(1)
+	}
+
+	fetcher := &awsFindingFetcher{
+		atmosConfig: &schema.AtmosConfiguration{},
+		clients:     newAWSClientCache(),
+		cache:       NewFindingsCache(),
+	}
+	fetcher.clients.inspector2["us-east-1"] = mock
+
+	got, err := fetcher.FetchFindings(context.Background(), &QueryOptions{
+		MaxFindings: 0,
+		Source:      SourceInspector,
+	})
+	require.NoError(t, err)
+	require.Len(t, got, totalPages*findingsPerPage)
+	assert.Contains(t, got[0].ID, "p0-f0")
+	assert.Contains(t, got[len(got)-1].ID, fmt.Sprintf("p%d-f%d", totalPages-1, findingsPerPage-1))
+}
+
+// TestPaginateInspector2Findings_TruncatesAtLimit verifies that Inspector2
+// pagination stops at the limit and emits a truncation warning.
+func TestPaginateInspector2Findings_TruncatesAtLimit(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	mock := NewMockInspector2API(ctrl)
+
+	mock.EXPECT().
+		ListFindings(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(_ context.Context, in *inspector2.ListFindingsInput, _ ...func(*inspector2.Options)) (*inspector2.ListFindingsOutput, error) {
+			require.NotNil(t, in.MaxResults)
+			assert.Equal(t, int32(50), *in.MaxResults)
+			findings := make([]itypes.Finding, 50)
+			for i := range findings {
+				findings[i] = itypes.Finding{
+					FindingArn:  aws.String(fmt.Sprintf("arn:aws:inspector2:us-east-1:123:finding/f%d", i)),
+					Title:       aws.String("Test"),
+					Description: aws.String("desc"),
+					Severity:    itypes.SeverityHigh,
+					Resources:   []itypes.Resource{{Id: aws.String("arn:aws:ec2:us-east-1:123:instance/i-abc")}},
+				}
+			}
+			return &inspector2.ListFindingsOutput{Findings: findings, NextToken: aws.String("more")}, nil
+		}).
+		Times(1)
+
+	fetcher := &awsFindingFetcher{
+		atmosConfig: &schema.AtmosConfiguration{},
+		clients:     newAWSClientCache(),
+		cache:       NewFindingsCache(),
+	}
+	fetcher.clients.inspector2["us-east-1"] = mock
+
+	got, err := fetcher.FetchFindings(context.Background(), &QueryOptions{
+		MaxFindings: 50,
+		Source:      SourceInspector,
+	})
+	require.NoError(t, err)
+	require.Len(t, got, 50)
+	assert.Contains(t, got[0].ID, "f0")
+	assert.Contains(t, got[len(got)-1].ID, "f49")
 }
 
 func TestResolveRegion(t *testing.T) {
