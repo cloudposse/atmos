@@ -1,0 +1,27 @@
+base_path: "./"
+
+settings:
+  experimental: warn
+
+components:
+  terraform:
+    base_path: "components/terraform"
+    # Use OpenTofu as the terraform binary so the example runs without
+    # requiring HashiCorp Terraform on PATH.
+    command: tofu
+    apply_auto_approve: false
+    deploy_run_init: true
+    init_run_reconfigure: true
+    auto_generate_backend_file: false
+
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "deploy/**/*"
+  excluded_paths:
+    - "**/_defaults.yaml"
+  name_pattern: "{stage}"
+
+logs:
+  level: Info
+  file: "/dev/stderr"
