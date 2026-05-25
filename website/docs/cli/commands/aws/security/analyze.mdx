@@ -59,7 +59,7 @@ atmos aws security analyze [flags]
   <dd>Write output to a file instead of stdout. Creates parent directories if they don't exist.</dd>
 
   <dt>`--max-findings`</dt>
-  <dd>Maximum number of findings to retrieve and analyze (default: `500`).</dd>
+  <dd>Maximum number of findings to retrieve and analyze (default: `500`). Set to `0` to fetch **all** matching findings — recommended when exporting to `--format json`, `sarif`, or `ocsf` so downstream tooling (SIEM, dashboards) sees complete data. When the limit is reached and more findings exist, a warning is logged so truncation is never silent.</dd>
 
   <dt>`--ai`</dt>
   <dd>Enable AI-powered analysis and remediation suggestions. Requires `ai.enabled: true` in your `atmos.yaml`.</dd>
