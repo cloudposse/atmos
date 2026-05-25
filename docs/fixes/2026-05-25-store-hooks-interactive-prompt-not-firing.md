@@ -3,6 +3,7 @@
 **Date:** 2026-05-25
 
 **Issue:** [#2432](https://github.com/cloudposse/atmos/issues/2432)
+**PR:** [#2520](https://github.com/cloudposse/atmos/pull/2520)
 **Related:** [#2428](https://github.com/cloudposse/atmos/issues/2428) (closed, superseded by #2432 and #2433)
 
 ## Problem
@@ -14,7 +15,6 @@ choice prompt, the hooks silently don't fire — no output, no errors.
 ### Reproducer
 
 ```yaml
-# Hook config (resolves correctly in `atmos describe component`)
 hooks:
   store-outputs:
     command: store
@@ -37,48 +37,46 @@ atmos terraform apply vpc-flow-logs-bucket
 # Hook never fires. No output, no errors.
 ```
 
-### Expected behavior
-
-Store hooks should fire regardless of whether the stack was passed via
-`-s` or selected interactively.
-
-### Environment
-
-- Atmos 1.218.0
-- macOS darwin/arm64
-
 ## Root cause
 
-When the stack is selected via the interactive prompt, the resolved
-stack name is not propagated to the hooks execution context. The hook
-runner receives an empty stack value and silently skips execution.
-
-The interactive prompt path sets the stack after the initial command
-parsing, but the hooks infrastructure reads the stack from the
-originally-parsed command arguments (which have an empty `-s` value).
-
-### Code path to investigate
-
-1. Interactive stack selection happens in the terraform command handler
-   after initial flag parsing.
-2. The selected stack must flow through to
-   `internal/exec/hooks.go` (or equivalent hook runner) so the
-   hook's `terraform output` subprocess can resolve the correct
-   state backend.
-3. The CI hooks check (`Running CI hooks`) may also be intercepting
-   the event before the store hook has a chance to run — trace shows
-   `CI provider not detected, skipping CI hooks` which suggests
-   the event dispatch path routes through CI hooks first and may
-   short-circuit for non-CI environments.
+The interactive prompt fills `info.Stack` inside
+`handleInteractiveComponentStackSelection` (`cmd/terraform/utils.go`),
+but never persists it to the Cobra flag set. PostRunE hooks re-parse
+args via `ProcessCommandLineArgs`, which reads
+`cmd.Flags().GetString("stack")` — still empty from the original
+parse. The hook runner sees an empty stack and silently skips.
 
 ## Fix
 
-TBD — requires investigation into:
+1. **Persist interactive selection to Cobra flag set.** After the
+   interactive prompt fills `info.Stack`, the value is written back
+   to the Cobra `--stack` flag via `f.Value.Set(stack)`. Errors from
+   the flag set are wrapped with `ErrSetFlag` and returned.
 
-1. How the interactively-selected stack propagates to hook execution.
-2. Whether the CI hooks check is gating non-CI hook events.
-3. Whether the hook runner should read the stack from the resolved
-   execution context rather than the original CLI arguments.
+2. **PostRunE hooks see the selected stack.** `runHooksWithOutput`
+   re-parses args via `ProcessCommandLineArgs`, which reads
+   `cmd.Flags().GetString("stack")` — now populated. Store hooks
+   execute as expected.
+
+3. **Consistent behavior.** Hook execution is now identical whether
+   the stack is provided via `-s` or selected interactively.
+
+### Files changed
+
+- `cmd/terraform/utils.go` — flag persistence in
+  `handleInteractiveComponentStackSelection`; `promptForStack` and
+  `promptForComponent` changed from functions to `var` for test
+  stubbing.
+
+## Tests
+
+- `TestInteractiveStackSelection_PersistsToCobraFlag` — stubs the
+  interactive prompt, calls `handleInteractiveComponentStackSelection`,
+  verifies both `info.Stack` and the Cobra flag are set.
+- `TestHandleInteractiveComponentStackSelection_BothProvided` —
+  short-circuit path when both component and stack are already set.
+- `TestHandleInteractiveComponentStackSelection_SkipsMultiComponent` —
+  skips prompting when multi-component flags are set.
 
 ## Workaround
 
@@ -88,21 +86,12 @@ Pass the stack explicitly with `-s`:
 atmos terraform apply vpc-flow-logs-bucket -s my-stack
 ```
 
-## Tests
-
-- Unit test: verify that hooks fire when the stack is set
-  programmatically (simulating interactive selection) rather than
-  via CLI flag.
-- Integration test: verify `after-terraform-apply` store hook fires
-  for both `-s` and interactive prompt paths.
-
 ---
 
 ## Related
 
 - [#2433](https://github.com/cloudposse/atmos/issues/2433) — Store
-  hook doesn't assume backend role when reading terraform outputs
-  (companion issue from the same investigation).
+  hook doesn't assume backend role when reading terraform outputs.
 - [#2428](https://github.com/cloudposse/atmos/issues/2428) — Original
   consolidated issue (closed in favor of #2432 and #2433).
 - [#2357](https://github.com/cloudposse/atmos/issues/2357) — Related

@@ -527,38 +527,43 @@ func hookPointer(f func(*schema.ConfigAndStacksInfo, string, error)) uintptr {
 }
 
 // TestInteractiveStackSelection_PersistsToCobraFlag verifies that when
-// handleInteractiveComponentStackSelection fills in the stack from a
-// prompt, the value is persisted to the Cobra flag set so PostRunE hooks
-// can read it via cmd.Flags().GetString("stack").
+// handleInteractiveComponentStackSelection fills in the stack from the
+// interactive prompt, the value is persisted to the Cobra flag set so
+// PostRunE hooks can read it via cmd.Flags().GetString("stack").
 // Regression test for https://github.com/cloudposse/atmos/issues/2432.
 func TestInteractiveStackSelection_PersistsToCobraFlag(t *testing.T) {
-	cmd := newHookTestCmd()
+	// Stub the interactive prompt to return a fixed stack name.
+	origPrompt := promptForStack
+	promptForStack = func(_ *cobra.Command, _ string) (string, error) {
+		return "tenant1-ue1-dev", nil
+	}
+	t.Cleanup(func() { promptForStack = origPrompt })
 
-	// Simulate the prompt filling in a stack on info.
+	cmd := newHookTestCmd()
 	info := &schema.ConfigAndStacksInfo{
 		ComponentFromArg: "myapp",
-		Stack:            "", // Empty — would trigger interactive prompt.
+		Stack:            "", // Empty — triggers the interactive prompt path.
 	}
 
-	// Directly set info.Stack and call the flag-persistence logic
-	// (the prompt itself can't be tested without a TTY).
-	info.Stack = "tenant1-ue1-dev"
-	if f := cmd.Flag("stack"); f != nil {
-		_ = f.Value.Set(info.Stack)
-	}
-
-	// Verify the flag is now readable.
-	got, err := cmd.Flags().GetString("stack")
+	err := handleInteractiveComponentStackSelection(info, cmd)
 	assert.NoError(t, err)
+
+	// Verify info.Stack was filled in by the prompt.
+	assert.Equal(t, "tenant1-ue1-dev", info.Stack)
+
+	// Verify the Cobra flag was also updated so PostRunE hooks can read it.
+	got, flagErr := cmd.Flags().GetString("stack")
+	assert.NoError(t, flagErr)
 	assert.Equal(t, "tenant1-ue1-dev", got, "interactively-selected stack must persist to Cobra flag")
 }
 
 // TestRunHooksWithOutput_InjectsLastAuthContext verifies that
 // runHooksWithOutput injects the auth context persisted by
-// ExecuteTerraform so store hooks can read terraform outputs from
-// backends requiring role assumption.
+// ExecuteTerraform into the hook info. Uses the demo-stacks fixture
+// where hooks short-circuit cleanly (no store hooks configured).
 // Regression test for https://github.com/cloudposse/atmos/issues/2433.
 func TestRunHooksWithOutput_InjectsLastAuthContext(t *testing.T) {
+	t.Chdir("../../examples/demo-stacks")
 	t.Cleanup(e.ClearLastAuthContext)
 
 	authCtx := &schema.AuthContext{
@@ -570,10 +575,68 @@ func TestRunHooksWithOutput_InjectsLastAuthContext(t *testing.T) {
 	}
 	e.SetLastAuthContext(authCtx, "mock-auth-manager")
 
+	cmd := newHookTestCmd()
+
+	// Call the real runHooksWithOutput — it will pick up the persisted
+	// auth context and inject it into the info struct. The demo-stacks
+	// fixture has no store hooks, so execution completes without error.
+	err := runHooksWithOutput(hooks.AfterTerraformApply, cmd, []string{"--stack", "dev", "myapp"}, "")
+	assert.NoError(t, err)
+
+	// Verify the auth context is still available (wasn't cleared by the call).
 	gotCtx, gotMgr := e.GetLastAuthContext()
-	assert.NotNil(t, gotCtx, "auth context must be available after SetLastAuthContext")
+	assert.NotNil(t, gotCtx, "auth context must survive through runHooksWithOutput")
 	assert.Equal(t, "test-profile", gotCtx.AWS.Profile)
 	assert.Equal(t, "mock-auth-manager", gotMgr)
+}
+
+// TestInteractiveStackSelection_PromptError verifies that when the
+// interactive stack prompt returns an error, it propagates correctly.
+func TestInteractiveStackSelection_PromptError(t *testing.T) {
+	origPrompt := promptForStack
+	promptForStack = func(_ *cobra.Command, _ string) (string, error) {
+		return "", errors.New("user cancelled")
+	}
+	t.Cleanup(func() { promptForStack = origPrompt })
+
+	cmd := newHookTestCmd()
+	info := &schema.ConfigAndStacksInfo{
+		ComponentFromArg: "myapp",
+		Stack:            "",
+	}
+
+	err := handleInteractiveComponentStackSelection(info, cmd)
+	assert.Error(t, err)
+	assert.Empty(t, info.Stack)
+}
+
+// TestInteractiveComponentSelection_PersistsPromptResult verifies that
+// when both component and stack are missing, the component prompt is
+// called first, then the stack prompt, and both results are persisted.
+func TestInteractiveComponentSelection_PersistsPromptResult(t *testing.T) {
+	origComp := promptForComponent
+	origStack := promptForStack
+	promptForComponent = func(_ *cobra.Command, _ string) (string, error) {
+		return "vpc", nil
+	}
+	promptForStack = func(_ *cobra.Command, _ string) (string, error) {
+		return "prod-ue1", nil
+	}
+	t.Cleanup(func() {
+		promptForComponent = origComp
+		promptForStack = origStack
+	})
+
+	cmd := newHookTestCmd()
+	info := &schema.ConfigAndStacksInfo{}
+
+	err := handleInteractiveComponentStackSelection(info, cmd)
+	assert.NoError(t, err)
+	assert.Equal(t, "vpc", info.ComponentFromArg)
+	assert.Equal(t, "prod-ue1", info.Stack)
+
+	got, _ := cmd.Flags().GetString("stack")
+	assert.Equal(t, "prod-ue1", got)
 }
 
 // TestHandleInteractiveComponentStackSelection_BothProvided verifies the

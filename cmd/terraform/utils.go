@@ -701,7 +701,9 @@ func handleInteractiveComponentStackSelection(info *schema.ConfigAndStacksInfo, 
 		// read it from cmd.Flags().GetString("stack"). Without this, hooks
 		// silently skip because they see an empty stack.
 		if f := cmd.Flag("stack"); f != nil {
-			_ = f.Value.Set(stack)
+			if err := f.Value.Set(stack); err != nil {
+				return fmt.Errorf("%w: stack=%q: %w", errUtils.ErrSetFlag, stack, err)
+			}
 		}
 	}
 
@@ -715,14 +717,12 @@ func handlePromptError(err error, name string) error {
 
 // promptForComponent delegates to shared.PromptForComponent.
 // If stack is provided, filters components to only those in that stack.
-func promptForComponent(cmd *cobra.Command, stack string) (string, error) {
-	return shared.PromptForComponent(cmd, stack)
-}
+// Declared as a var so tests can stub the interactive prompt.
+var promptForComponent = shared.PromptForComponent
 
 // promptForStack delegates to shared.PromptForStack.
-func promptForStack(cmd *cobra.Command, component string) (string, error) {
-	return shared.PromptForStack(cmd, component)
-}
+// Declared as a var so tests can stub the interactive prompt.
+var promptForStack = shared.PromptForStack
 
 // enableHeatmapIfRequested checks os.Args for --heatmap flag and enables performance tracking.
 // This is needed because --heatmap must be detected before flag parsing occurs.
