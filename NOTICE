@@ -245,10 +245,6 @@ APACHE 2.0 LICENSED DEPENDENCIES
     License: Apache-2.0
     URL: https://github.com/containerd/platforms/blob/v1.0.0-rc.4/LICENSE
 
-  - github.com/containerd/stargz-snapshotter/estargz
-    License: Apache-2.0
-    URL: https://github.com/containerd/stargz-snapshotter/blob/estargz/v0.18.2/estargz/LICENSE
-
   - github.com/containerd/ttrpc
     License: Apache-2.0
     URL: https://github.com/containerd/ttrpc/blob/v1.2.8/LICENSE
@@ -307,7 +303,7 @@ APACHE 2.0 LICENSED DEPENDENCIES
 
   - github.com/google/go-containerregistry
     License: Apache-2.0
-    URL: https://github.com/google/go-containerregistry/blob/v0.21.5/LICENSE
+    URL: https://github.com/google/go-containerregistry/blob/v0.21.6/LICENSE
 
   - github.com/google/renameio/v2
     License: Apache-2.0
@@ -821,10 +817,6 @@ BSD LICENSED DEPENDENCIES
   - github.com/ulikunitz/xz
     License: BSD-3-Clause
     URL: https://github.com/ulikunitz/xz/blob/v0.5.15/LICENSE
-
-  - github.com/vbatts/tar-split/archive/tar
-    License: BSD-3-Clause
-    URL: https://github.com/vbatts/tar-split/blob/v0.12.3/LICENSE
 
   - github.com/yosida95/uritemplate/v3
     License: BSD-3-Clause
