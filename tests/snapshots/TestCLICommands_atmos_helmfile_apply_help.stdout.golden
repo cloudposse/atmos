@@ -86,6 +86,9 @@ GLOBAL FLAGS
 
       --skill strings           Specify skills for AI analysis context (comma-separated or repeated flag, requires --ai)
 
+      --skip-hooks string       Skip lifecycle hooks for this invocation. Use --skip-hooks (no value) to skip all, or --
+                                skip-hooks=name1,name2 to skip specific hooks by name
+
   -s, --stack string            The stack flag specifies the environment or configuration set for deployment in Atmos
                                 CLI.
 
