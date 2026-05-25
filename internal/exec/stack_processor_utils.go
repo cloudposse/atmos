@@ -1862,6 +1862,7 @@ func processBaseComponentConfigInternal(
 	var baseComponentRemoteStateBackendSection map[string]any
 	var baseComponentSourceSection map[string]any
 	var baseComponentProvisionSection map[string]any
+	var baseComponentRetry map[string]any
 	var baseComponentMap map[string]any
 	var ok bool
 
@@ -2101,6 +2102,15 @@ func processBaseComponentConfigInternal(
 			}
 		}
 
+		// Base component `retry` — abstract components can define defaults that concrete
+		// components inherit and override.
+		if i, ok2 := baseComponentMap[cfg.RetrySectionName]; ok2 {
+			baseComponentRetry, ok = i.(map[string]any)
+			if !ok {
+				return fmt.Errorf("%w '%s.retry' in the stack '%s'", errUtils.ErrInvalidConfig, baseComponent, stack)
+			}
+		}
+
 		if len(baseComponentConfig.FinalBaseComponentName) == 0 {
 			baseComponentConfig.FinalBaseComponentName = baseComponent
 		}
@@ -2246,6 +2256,13 @@ func processBaseComponentConfigInternal(
 			}
 			baseComponentConfig.BaseComponentProvisionSection = merged
 		}
+
+		// Base component `retry` — deep-merge so multi-level inheritance composes correctly.
+		merged, err = m.Merge(atmosConfig, []map[string]any{baseComponentConfig.BaseComponentRetry, baseComponentRetry})
+		if err != nil {
+			return err
+		}
+		baseComponentConfig.BaseComponentRetry = merged
 
 		baseComponentConfig.ComponentInheritanceChain = u.UniqueStrings(append([]string{baseComponent}, baseComponentConfig.ComponentInheritanceChain...))
 	} else {
