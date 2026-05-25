@@ -411,6 +411,7 @@ const config = {
             {
                 generateLlmsTxt: true,
                 generateLlmsFullTxt: true,
+                generatePerPageMarkdown: true,
                 llmsTxtFilename: 'llms.txt',
                 llmsFullTxtFilename: 'llms-full.txt',
                 docsDir: 'docs',
