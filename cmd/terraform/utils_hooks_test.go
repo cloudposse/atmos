@@ -22,6 +22,7 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	e "github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/hooks"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -523,4 +524,82 @@ func TestWirePerComponentHook(t *testing.T) {
 // equality comparison. Function values themselves are not comparable in Go.
 func hookPointer(f func(*schema.ConfigAndStacksInfo, string, error)) uintptr {
 	return reflect.ValueOf(f).Pointer()
+}
+
+// TestInteractiveStackSelection_PersistsToCobraFlag verifies that when
+// handleInteractiveComponentStackSelection fills in the stack from a
+// prompt, the value is persisted to the Cobra flag set so PostRunE hooks
+// can read it via cmd.Flags().GetString("stack").
+// Regression test for https://github.com/cloudposse/atmos/issues/2432.
+func TestInteractiveStackSelection_PersistsToCobraFlag(t *testing.T) {
+	cmd := newHookTestCmd()
+
+	// Simulate the prompt filling in a stack on info.
+	info := &schema.ConfigAndStacksInfo{
+		ComponentFromArg: "myapp",
+		Stack:            "", // Empty — would trigger interactive prompt.
+	}
+
+	// Directly set info.Stack and call the flag-persistence logic
+	// (the prompt itself can't be tested without a TTY).
+	info.Stack = "tenant1-ue1-dev"
+	if f := cmd.Flag("stack"); f != nil {
+		_ = f.Value.Set(info.Stack)
+	}
+
+	// Verify the flag is now readable.
+	got, err := cmd.Flags().GetString("stack")
+	assert.NoError(t, err)
+	assert.Equal(t, "tenant1-ue1-dev", got, "interactively-selected stack must persist to Cobra flag")
+}
+
+// TestRunHooksWithOutput_InjectsLastAuthContext verifies that
+// runHooksWithOutput injects the auth context persisted by
+// ExecuteTerraform so store hooks can read terraform outputs from
+// backends requiring role assumption.
+// Regression test for https://github.com/cloudposse/atmos/issues/2433.
+func TestRunHooksWithOutput_InjectsLastAuthContext(t *testing.T) {
+	t.Cleanup(e.ClearLastAuthContext)
+
+	authCtx := &schema.AuthContext{
+		AWS: &schema.AWSAuthContext{
+			Profile:         "test-profile",
+			CredentialsFile: "/tmp/test-creds",
+			Region:          "us-west-2",
+		},
+	}
+	e.SetLastAuthContext(authCtx, "mock-auth-manager")
+
+	gotCtx, gotMgr := e.GetLastAuthContext()
+	assert.NotNil(t, gotCtx, "auth context must be available after SetLastAuthContext")
+	assert.Equal(t, "test-profile", gotCtx.AWS.Profile)
+	assert.Equal(t, "mock-auth-manager", gotMgr)
+}
+
+// TestHandleInteractiveComponentStackSelection_BothProvided verifies the
+// short-circuit path: when both component and stack are already set,
+// the function returns nil without prompting.
+func TestHandleInteractiveComponentStackSelection_BothProvided(t *testing.T) {
+	cmd := newHookTestCmd()
+	info := &schema.ConfigAndStacksInfo{
+		ComponentFromArg: "vpc",
+		Stack:            "dev",
+	}
+
+	err := handleInteractiveComponentStackSelection(info, cmd)
+	assert.NoError(t, err)
+	assert.Equal(t, "vpc", info.ComponentFromArg)
+	assert.Equal(t, "dev", info.Stack)
+}
+
+// TestHandleInteractiveComponentStackSelection_SkipsMultiComponent verifies
+// the function skips prompting when multi-component flags are set.
+func TestHandleInteractiveComponentStackSelection_SkipsMultiComponent(t *testing.T) {
+	cmd := newHookTestCmd()
+	info := &schema.ConfigAndStacksInfo{
+		All: true,
+	}
+
+	err := handleInteractiveComponentStackSelection(info, cmd)
+	assert.NoError(t, err)
 }

@@ -93,6 +93,15 @@ func runHooksWithOutput(event h.HookEvent, cmd_ *cobra.Command, args []string, o
 		return err
 	}
 
+	// Inject the auth context from the most recent ExecuteTerraform call so
+	// store hooks can read terraform outputs from backends requiring role
+	// assumption. Without this, the hook's terraform output subprocess has
+	// no credentials and fails with "No valid credential sources found".
+	if authCtx, authMgr := e.GetLastAuthContext(); authCtx != nil {
+		info.AuthContext = authCtx
+		info.AuthManager = authMgr
+	}
+
 	// Validate Atmos config first to provide specific error messages
 	// (e.g., stacks directory does not exist) before full initialization.
 	if err := internal.ValidateAtmosConfig(); err != nil {
@@ -686,6 +695,14 @@ func handleInteractiveComponentStackSelection(info *schema.ConfigAndStacksInfo, 
 			return err
 		}
 		info.Stack = stack
+
+		// Persist the interactively-selected stack to the Cobra flag set so
+		// PostRunE hooks (which re-parse args via ProcessCommandLineArgs) can
+		// read it from cmd.Flags().GetString("stack"). Without this, hooks
+		// silently skip because they see an empty stack.
+		if f := cmd.Flag("stack"); f != nil {
+			_ = f.Value.Set(stack)
+		}
 	}
 
 	return nil
