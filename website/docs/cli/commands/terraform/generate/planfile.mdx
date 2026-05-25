@@ -123,6 +123,43 @@ atmos terraform generate planfile <component> -s <stack> --file=/Users/me/Docume
         atmos terraform generate planfile <component> -s <stack> --skip=terraform.output,include
         ```
     </dd>
+
+    <dt>`--reuse-plan` <em>(optional, default `never`)</em></dt>
+    <dd>
+        Controls whether to reuse the binary planfile produced by a prior `atmos terraform plan` invocation
+        instead of running a fresh plan. Reusing is much faster (sub-second `terraform show -json` versus a
+        full re-plan), but the caller is responsible for ensuring the prior plan is still valid for the current
+        infrastructure state.
+
+        Accepted values:
+
+        - `never` *(default)* — always run a fresh `terraform plan`. Preserves the historical behavior.
+        - `auto` — reuse the canonical binary planfile if it exists and is fresher than `.terraform.lock.hcl`
+          and every `*.tf`, `*.tf.json`, or `*.tfvars*` file directly in the component directory. Otherwise
+          fall back to a fresh plan.
+        - `always` — require a fresh stored binary planfile. If the canonical binary is missing or stale,
+          return an error instead of running a fresh plan.
+
+        Can also be set via the `ATMOS_REUSE_PLAN` environment variable.
+
+        Caller responsibilities — the staleness gates only check on-disk inputs. They do **not** detect:
+
+        - Changes to `--process-templates`, `--process-functions`, or `--skip` between the original
+          `atmos terraform plan` and this invocation. Atmos cannot cheaply tell whether the stored binary
+          was produced with the same rendering flags, so it is on the caller to keep them aligned (or to
+          pass `--reuse-plan=never`).
+        - Modifications to vendored submodules under subdirectories (e.g. `./modules/<name>/*.tf`). Only
+          files directly in the component directory invalidate reuse.
+
+        If `components.terraform.plan.skip_planfile` is `true` (or `--skip-planfile=true` was used), no
+        binary planfile is ever produced; `--reuse-plan=always` fails fast with a clear error in that case.
+
+        ```shell
+        # In CI, after `atmos terraform plan` has produced the canonical binary planfile:
+        atmos terraform plan <component> -s <stack>
+        atmos terraform generate planfile <component> -s <stack> --reuse-plan=always
+        ```
+    </dd>
 </dl>
 
 ## Validate Terraform/OpenTofu planfiles using Checkov

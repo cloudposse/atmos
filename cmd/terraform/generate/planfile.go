@@ -10,6 +10,7 @@ import (
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/schema"
+	tf "github.com/cloudposse/atmos/pkg/terraform"
 )
 
 // planfileParser handles flag parsing for planfile command.
@@ -60,6 +61,7 @@ var planfileCmd = &cobra.Command{
 		processTemplates := v.GetBool("process-templates")
 		processFunctions := v.GetBool("process-functions")
 		skip := v.GetStringSlice("skip")
+		reusePlan := tf.ReusePlanMode(v.GetString("reuse-plan"))
 
 		// Prompt for stack if missing.
 		if stack == "" {
@@ -89,6 +91,7 @@ var planfileCmd = &cobra.Command{
 			ProcessTemplates:     processTemplates,
 			ProcessYamlFunctions: processFunctions,
 			Skip:                 skip,
+			ReusePlan:            reusePlan,
 		}
 		return e.ExecuteGeneratePlanfile(opts, &atmosConfig)
 	},
@@ -103,12 +106,14 @@ func init() {
 		flags.WithBoolFlag("process-templates", "", true, "Enable Go template processing in Atmos stack manifests"),
 		flags.WithBoolFlag("process-functions", "", true, "Enable YAML functions processing in Atmos stack manifests"),
 		flags.WithStringSliceFlag("skip", "", []string{}, "Skip processing specific Atmos YAML functions"),
+		flags.WithStringFlag("reuse-plan", "", string(tf.ReusePlanNever), "Reuse the binary planfile from a prior `atmos terraform plan`: 'never' (default, always replan), 'auto' (reuse if fresh, else replan), 'always' (require a fresh stored binary or fail)"),
 		flags.WithEnvVars("stack", "ATMOS_STACK"),
 		flags.WithEnvVars("file", "ATMOS_FILE"),
 		flags.WithEnvVars("format", "ATMOS_FORMAT"),
 		flags.WithEnvVars("process-templates", "ATMOS_PROCESS_TEMPLATES"),
 		flags.WithEnvVars("process-functions", "ATMOS_PROCESS_FUNCTIONS"),
 		flags.WithEnvVars("skip", "ATMOS_SKIP"),
+		flags.WithEnvVars("reuse-plan", "ATMOS_REUSE_PLAN"),
 	)
 
 	// Register flags with the command.

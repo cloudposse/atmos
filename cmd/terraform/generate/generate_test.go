@@ -182,6 +182,24 @@ func TestPlanfileCmd(t *testing.T) {
 		require.NotNil(t, planfileCmd)
 		assert.Equal(t, "planfile", planfileCmd.Name())
 	})
+
+	// Issue #2498: --reuse-plan flag wiring. Pin the default so a future
+	// change cannot silently flip planfile reuse on for existing users.
+	t.Run("reuse-plan flag is registered with `never` default", func(t *testing.T) {
+		require.NotNil(t, planfileCmd)
+		flag := planfileCmd.Flags().Lookup("reuse-plan")
+		require.NotNil(t, flag, "--reuse-plan flag must be registered")
+		assert.Equal(t, "never", flag.DefValue,
+			"--reuse-plan default must stay `never` to preserve historical behavior")
+	})
+
+	t.Run("reuse-plan flag is bound to ATMOS_REUSE_PLAN env var", func(t *testing.T) {
+		require.NotNil(t, planfileParser, "planfileParser should be initialized")
+		registered := planfileParser.Registry().Get("reuse-plan")
+		require.NotNil(t, registered, "reuse-plan must be registered with the parser")
+		assert.Contains(t, registered.GetEnvVars(), "ATMOS_REUSE_PLAN",
+			"--reuse-plan must be bound to ATMOS_REUSE_PLAN")
+	})
 }
 
 // PlanfileCmd wraps cobra.Command for type safety in tests.
