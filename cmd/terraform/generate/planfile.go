@@ -9,6 +9,7 @@ import (
 	e "github.com/cloudposse/atmos/internal/exec"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/flags"
+	h "github.com/cloudposse/atmos/pkg/hooks"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -22,7 +23,19 @@ var planfileCmd = &cobra.Command{
 	Long:               "This command generates a `planfile` for a specified Atmos Terraform component.",
 	Args:               cobra.MaximumNArgs(1),
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
-	RunE: func(cmd *cobra.Command, args []string) error {
+	PreRunE: func(cmd *cobra.Command, args []string) error {
+		return runGeneratePlanfileHooks(h.BeforeTerraformGeneratePlanfile, cmd, args)
+	},
+	RunE: func(cmd *cobra.Command, args []string) (runErr error) {
+		// On failure, fire the after-event hook with the command error so CI
+		// plugin handlers can update check runs to failure. Cobra skips PostRunE
+		// when RunE returns a non-nil error, so this defer is the only path.
+		defer func() {
+			if runErr != nil {
+				runGeneratePlanfileErrorHook(h.AfterTerraformGeneratePlanfile, cmd, args, runErr)
+			}
+		}()
+
 		var component string
 		if len(args) > 0 {
 			component = args[0]
@@ -92,6 +105,9 @@ var planfileCmd = &cobra.Command{
 		}
 		return e.ExecuteGeneratePlanfile(opts, &atmosConfig)
 	},
+	PostRunE: func(cmd *cobra.Command, args []string) error {
+		return runGeneratePlanfileHooks(h.AfterTerraformGeneratePlanfile, cmd, args)
+	},
 }
 
 func init() {
@@ -103,12 +119,14 @@ func init() {
 		flags.WithBoolFlag("process-templates", "", true, "Enable Go template processing in Atmos stack manifests"),
 		flags.WithBoolFlag("process-functions", "", true, "Enable YAML functions processing in Atmos stack manifests"),
 		flags.WithStringSliceFlag("skip", "", []string{}, "Skip processing specific Atmos YAML functions"),
+		flags.WithBoolFlag("ci", "", false, "Enable CI mode for automated pipelines (fires before/after.terraform.generate.planfile hooks and writes CI artifacts when configured)"),
 		flags.WithEnvVars("stack", "ATMOS_STACK"),
 		flags.WithEnvVars("file", "ATMOS_FILE"),
 		flags.WithEnvVars("format", "ATMOS_FORMAT"),
 		flags.WithEnvVars("process-templates", "ATMOS_PROCESS_TEMPLATES"),
 		flags.WithEnvVars("process-functions", "ATMOS_PROCESS_FUNCTIONS"),
 		flags.WithEnvVars("skip", "ATMOS_SKIP"),
+		flags.WithEnvVars("ci", "ATMOS_CI", "CI"),
 	)
 
 	// Register flags with the command.
