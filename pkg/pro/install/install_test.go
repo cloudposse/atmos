@@ -51,7 +51,8 @@ func (m *mockFileWriter) ReadFile(path string) ([]byte, error) {
 func TestInstaller_Install_FreshProject(t *testing.T) {
 	base := t.TempDir()
 	writer := newMockFileWriter()
-	installer := NewInstaller(writer,
+	installer := NewInstaller(
+		writer,
 		WithBasePath(base),
 		WithStacksBasePath("stacks"),
 	)
@@ -132,7 +133,8 @@ func TestInstaller_Install_ExistingFiles_NoForce(t *testing.T) {
 	planPath := filepath.Join(base, githubDir, "workflows", "atmos-pro-terraform-plan.yaml")
 	writer.files[planPath] = []byte("existing content")
 
-	installer := NewInstaller(writer,
+	installer := NewInstaller(
+		writer,
 		WithBasePath(base),
 		WithStacksBasePath("stacks"),
 	)
@@ -156,7 +158,8 @@ func TestInstaller_Install_ExistingFiles_WithForce(t *testing.T) {
 	planPath := filepath.Join(base, githubDir, "workflows", "atmos-pro-terraform-plan.yaml")
 	writer.files[planPath] = []byte("existing content")
 
-	installer := NewInstaller(writer,
+	installer := NewInstaller(
+		writer,
 		WithBasePath(base),
 		WithStacksBasePath("stacks"),
 		WithForce(true),
@@ -185,7 +188,8 @@ func TestInstaller_Install_OnConflict_Overwrite(t *testing.T) {
 	planPath := filepath.Join(base, githubDir, "workflows", "atmos-pro-terraform-plan.yaml")
 	writer.files[planPath] = []byte("existing content")
 
-	installer := NewInstaller(writer,
+	installer := NewInstaller(
+		writer,
 		WithBasePath(base),
 		WithStacksBasePath("stacks"),
 		WithOnConflict(func(_ string) (bool, error) {
@@ -212,7 +216,8 @@ func TestInstaller_Install_OnConflict_Skip(t *testing.T) {
 	planPath := filepath.Join(base, githubDir, "workflows", "atmos-pro-terraform-plan.yaml")
 	writer.files[planPath] = []byte("existing content")
 
-	installer := NewInstaller(writer,
+	installer := NewInstaller(
+		writer,
 		WithBasePath(base),
 		WithStacksBasePath("stacks"),
 		WithOnConflict(func(_ string) (bool, error) {
@@ -237,7 +242,8 @@ func TestInstaller_Install_OnConflict_Error(t *testing.T) {
 	planPath := filepath.Join(base, githubDir, "workflows", "atmos-pro-terraform-plan.yaml")
 	writer.files[planPath] = []byte("existing content")
 
-	installer := NewInstaller(writer,
+	installer := NewInstaller(
+		writer,
 		WithBasePath(base),
 		WithStacksBasePath("stacks"),
 		WithOnConflict(func(_ string) (bool, error) {
@@ -253,7 +259,8 @@ func TestInstaller_Install_OnConflict_Error(t *testing.T) {
 func TestInstaller_DryRun(t *testing.T) {
 	base := t.TempDir()
 	writer := newMockFileWriter()
-	installer := NewInstaller(writer,
+	installer := NewInstaller(
+		writer,
 		WithBasePath(base),
 		WithStacksBasePath("stacks"),
 	)
@@ -281,7 +288,8 @@ func TestInstaller_DryRun_ExistingFiles(t *testing.T) {
 	atmosPath := filepath.Join(base, "atmos.yaml")
 	writer.files[atmosPath] = []byte("existing")
 
-	installer := NewInstaller(writer,
+	installer := NewInstaller(
+		writer,
 		WithBasePath(base),
 		WithStacksBasePath("stacks"),
 	)
@@ -306,7 +314,8 @@ func TestInstaller_DryRun_WithForce(t *testing.T) {
 	planPath := filepath.Join(base, githubDir, workflowsDir, "atmos-pro-terraform-plan.yaml")
 	writer.files[planPath] = []byte("existing workflow")
 
-	installer := NewInstaller(writer,
+	installer := NewInstaller(
+		writer,
 		WithBasePath(base),
 		WithStacksBasePath("stacks"),
 		WithForce(true),
@@ -327,7 +336,8 @@ func TestInstaller_DryRun_WithForce(t *testing.T) {
 func TestInstaller_Install_CustomStacksPath(t *testing.T) {
 	base := t.TempDir()
 	writer := newMockFileWriter()
-	installer := NewInstaller(writer,
+	installer := NewInstaller(
+		writer,
 		WithBasePath(base),
 		WithStacksBasePath("custom/stacks"),
 	)
@@ -345,7 +355,8 @@ func TestInstaller_Install_CustomStacksPath(t *testing.T) {
 func TestInstaller_Install_MkdirAllError(t *testing.T) {
 	base := t.TempDir()
 	writer := &failingMkdirWriter{mockFileWriter: newMockFileWriter()}
-	installer := NewInstaller(writer,
+	installer := NewInstaller(
+		writer,
 		WithBasePath(base),
 		WithStacksBasePath("stacks"),
 	)
@@ -358,7 +369,8 @@ func TestInstaller_Install_MkdirAllError(t *testing.T) {
 func TestInstaller_Install_WriteFileError(t *testing.T) {
 	base := t.TempDir()
 	writer := &failingWriteWriter{mockFileWriter: newMockFileWriter()}
-	installer := NewInstaller(writer,
+	installer := NewInstaller(
+		writer,
 		WithBasePath(base),
 		WithStacksBasePath("stacks"),
 	)
@@ -440,7 +452,8 @@ func TestInstaller_Install_AtmosYaml_CreateOnly(t *testing.T) {
 	atmosPath := filepath.Join(base, "atmos.yaml")
 	writer.files[atmosPath] = []byte("existing config")
 
-	installer := NewInstaller(writer,
+	installer := NewInstaller(
+		writer,
 		WithBasePath(base),
 		WithStacksBasePath("stacks"),
 		WithForce(true),
@@ -466,7 +479,8 @@ func TestInstaller_Install_ExistingFiles_WithForce_UpdatedFiles(t *testing.T) {
 	planPath := filepath.Join(base, githubDir, workflowsDir, "atmos-pro-terraform-plan.yaml")
 	writer.files[planPath] = []byte("existing content")
 
-	installer := NewInstaller(writer,
+	installer := NewInstaller(
+		writer,
 		WithBasePath(base),
 		WithStacksBasePath("stacks"),
 		WithForce(true),
@@ -494,7 +508,8 @@ func TestNewInstaller_Defaults(t *testing.T) {
 func TestNewInstaller_WithOptions(t *testing.T) {
 	base := t.TempDir()
 	writer := newMockFileWriter()
-	installer := NewInstaller(writer,
+	installer := NewInstaller(
+		writer,
 		WithBasePath(base),
 		WithStacksBasePath("custom-stacks"),
 		WithForce(true),

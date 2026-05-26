@@ -1163,7 +1163,7 @@ func processYAMLConfigFileWithContextInternal(
 		// If the import file is specified without extension, use `.yaml` as default
 		impWithExt := imp
 		ext := filepath.Ext(imp)
-		if ext == "" {
+		if ext == "" { //nolint:nestif // Existing import resolution has several fallback paths.
 			extensions := []string{
 				u.YamlFileExtension,
 				u.YmlFileExtension,
@@ -1204,7 +1204,7 @@ func processYAMLConfigFileWithContextInternal(
 
 		// Find all import matches in the glob
 		importMatches, err := u.GetGlobMatches(impWithExtPath)
-		if err != nil || len(importMatches) == 0 {
+		if err != nil || len(importMatches) == 0 { //nolint:nestif // Retry/template/skip-if-missing handling is intentionally grouped here.
 			// Retry (b/c we are using `doublestar` library and it sometimes has issues reading many files in a Docker container)
 			// TODO: review `doublestar` library
 

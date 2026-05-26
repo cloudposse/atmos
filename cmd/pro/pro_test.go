@@ -1,6 +1,7 @@
 package pro
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
@@ -10,6 +11,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	mcpinstall "github.com/cloudposse/atmos/pkg/mcp/install"
 	"github.com/cloudposse/atmos/pkg/pro/install"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -132,6 +134,26 @@ func TestInstallCmd(t *testing.T) {
 
 		dryRunFlag := installCmd.Flags().Lookup("dry-run")
 		assert.NotNil(t, dryRunFlag)
+
+		mcpFlag := installCmd.Flags().Lookup("mcp")
+		assert.NotNil(t, mcpFlag)
+
+		clientFlag := installCmd.Flags().Lookup("client")
+		assert.NotNil(t, clientFlag)
+		assert.Equal(t, "c", clientFlag.Shorthand)
+
+		scopeFlag := installCmd.Flags().Lookup("scope")
+		assert.NotNil(t, scopeFlag)
+
+		globalFlag := installCmd.Flags().Lookup("global")
+		assert.NotNil(t, globalFlag)
+		assert.Equal(t, "g", globalFlag.Shorthand)
+
+		allClientsFlag := installCmd.Flags().Lookup("all-clients")
+		assert.NotNil(t, allClientsFlag)
+
+		gitignoreFlag := installCmd.Flags().Lookup("gitignore")
+		assert.NotNil(t, gitignoreFlag)
 	})
 }
 
@@ -372,6 +394,122 @@ func TestPromptOpenWorkspace_NonTTY(t *testing.T) {
 	require.NotPanics(t, func() {
 		promptOpenWorkspace()
 	})
+}
+
+func TestRunInstallMCP_InstallsAtmosProOnly(t *testing.T) {
+	origDir, err := os.Getwd()
+	require.NoError(t, err)
+
+	tmpDir := t.TempDir()
+	require.NoError(t, os.Chdir(tmpDir))
+	t.Cleanup(func() {
+		require.NoError(t, os.Chdir(origDir))
+		viper.Reset()
+	})
+
+	v := viper.GetViper()
+	v.Set("scope", mcpinstall.ScopeProject)
+	v.Set("client", []string{mcpinstall.ClientCursor})
+	v.Set("all-clients", false)
+	v.Set("global", false)
+	v.Set("gitignore", false)
+
+	cmd := &cobra.Command{Use: "install"}
+	installParser.RegisterFlags(cmd)
+
+	err = runInstallMCP(cmd, v, true, false, false)
+	require.NoError(t, err)
+
+	assert.NoDirExists(t, filepath.Join(tmpDir, ".github", "workflows"))
+	data, err := os.ReadFile(filepath.Join(tmpDir, ".cursor", "mcp.json"))
+	require.NoError(t, err)
+
+	var parsed struct {
+		MCPServers map[string]map[string]any `json:"mcpServers"`
+	}
+	require.NoError(t, json.Unmarshal(data, &parsed))
+	require.Contains(t, parsed.MCPServers, "atmos-pro")
+	assert.Equal(t, "http", parsed.MCPServers["atmos-pro"]["type"])
+	assert.Equal(t, atmosProMCPURL, parsed.MCPServers["atmos-pro"]["url"])
+}
+
+func TestRunInstallMCP_ExplicitProjectScopeBeatsGlobal(t *testing.T) {
+	origDir, err := os.Getwd()
+	require.NoError(t, err)
+
+	tmpDir := t.TempDir()
+	homeDir := filepath.Join(tmpDir, "home")
+	t.Setenv("HOME", homeDir)
+	require.NoError(t, os.Chdir(tmpDir))
+	t.Cleanup(func() {
+		require.NoError(t, os.Chdir(origDir))
+		viper.Reset()
+	})
+
+	v := viper.GetViper()
+	v.Set("scope", mcpinstall.ScopeProject)
+	v.Set("global", true)
+	v.Set("client", []string{mcpinstall.ClientCursor})
+	v.Set("all-clients", false)
+
+	cmd := &cobra.Command{Use: "install"}
+	installParser.RegisterFlags(cmd)
+	require.NoError(t, cmd.Flags().Set("scope", mcpinstall.ScopeProject))
+
+	err = runInstallMCP(cmd, v, true, false, false)
+	require.NoError(t, err)
+
+	assert.FileExists(t, filepath.Join(tmpDir, ".cursor", "mcp.json"))
+	assert.NoFileExists(t, filepath.Join(homeDir, ".cursor", "mcp.json"))
+}
+
+func TestRunInstallMCP_YesSkipsExistingServer(t *testing.T) {
+	origDir, err := os.Getwd()
+	require.NoError(t, err)
+
+	tmpDir := t.TempDir()
+	require.NoError(t, os.Chdir(tmpDir))
+	t.Cleanup(func() {
+		require.NoError(t, os.Chdir(origDir))
+		viper.Reset()
+	})
+
+	cursorConfig := filepath.Join(tmpDir, ".cursor", "mcp.json")
+	require.NoError(t, os.MkdirAll(filepath.Dir(cursorConfig), 0o755))
+	require.NoError(t, os.WriteFile(cursorConfig, []byte(`{"mcpServers":{"atmos-pro":{"command":"old"}}}`), 0o600))
+
+	v := viper.GetViper()
+	v.Set("scope", mcpinstall.ScopeProject)
+	v.Set("client", []string{mcpinstall.ClientCursor})
+	v.Set("all-clients", false)
+
+	cmd := &cobra.Command{Use: "install"}
+	installParser.RegisterFlags(cmd)
+
+	err = runInstallMCP(cmd, v, true, false, false)
+	require.NoError(t, err)
+
+	data, err := os.ReadFile(cursorConfig)
+	require.NoError(t, err)
+	assert.Contains(t, string(data), `"old"`)
+	assert.NotContains(t, string(data), atmosProMCPURL)
+}
+
+func TestValidateMCPOnlyInstallFlags(t *testing.T) {
+	cmd := &cobra.Command{Use: "install"}
+	installParser.RegisterFlags(cmd)
+	require.NoError(t, cmd.Flags().Set("client", mcpinstall.ClientCursor))
+
+	err := validateMCPOnlyInstallFlags(cmd)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "flag can only be used with --mcp")
+	assert.Contains(t, err.Error(), "--client")
+}
+
+func TestProMCPConflictHandlerYesSkips(t *testing.T) {
+	overwrite, err := proMCPConflictHandler(true)(mcpinstall.Target{}, "atmos-pro")
+	require.NoError(t, err)
+	assert.False(t, overwrite)
 }
 
 func TestPromptOverwrite(t *testing.T) {

@@ -55,6 +55,23 @@ func TestBuildMCPJSONEntry_WithToolchainPATH(t *testing.T) {
 	assert.Contains(t, entry.Env["PATH"], "/toolchain/bin")
 }
 
+func TestBuildMCPJSONEntry_HTTP(t *testing.T) {
+	cfg := &schema.MCPServerConfig{
+		Type: schema.MCPTransportHTTP,
+		URL:  "https://atmos-pro.com/mcp",
+		Headers: map[string]string{
+			"Authorization": "Bearer ${ATMOS_PRO_TOKEN}",
+		},
+	}
+	entry := BuildMCPJSONEntry(cfg, "/toolchain/bin")
+	assert.Equal(t, schema.MCPTransportHTTP, entry.Type)
+	assert.Equal(t, "https://atmos-pro.com/mcp", entry.URL)
+	assert.Equal(t, "Bearer ${ATMOS_PRO_TOKEN}", entry.Headers["Authorization"])
+	assert.Empty(t, entry.Command)
+	assert.Empty(t, entry.Args)
+	assert.Empty(t, entry.Env, "HTTP entries should not receive stdio PATH injection")
+}
+
 func TestBuildMCPJSONEntry_ToolchainPATH_PrependedToExisting(t *testing.T) {
 	cfg := &schema.MCPServerConfig{
 		Command: "uvx",

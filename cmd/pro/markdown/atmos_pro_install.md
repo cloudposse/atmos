@@ -1,5 +1,8 @@
 Install Atmos Pro workflows and configuration into your project.
 
+Use `--mcp` to install only the Atmos Pro MCP server into Claude Code, Cursor,
+VS Code, Codex, or Gemini without scaffolding workflows or profiles.
+
 If no `atmos.yaml` exists, a minimal one is created as an anchor for
 the `.atmos.d/` drop-in configuration files.
 
