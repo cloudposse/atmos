@@ -2,9 +2,12 @@ package tests
 
 import (
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"testing"
 
@@ -14,6 +17,71 @@ import (
 	"github.com/cloudposse/atmos/cmd"
 	stackimports "github.com/cloudposse/atmos/pkg/stack/imports"
 )
+
+func initRemoteImportsGitRepo(t *testing.T, files map[string]string) string {
+	t.Helper()
+
+	repoDir := t.TempDir()
+	runRemoteImportsGit(t, repoDir, "init")
+	runRemoteImportsGit(t, repoDir, "checkout", "-b", "main")
+	runRemoteImportsGit(t, repoDir, "config", "user.email", "test@example.com")
+	runRemoteImportsGit(t, repoDir, "config", "user.name", "Test User")
+
+	for name, content := range files {
+		path := filepath.Join(repoDir, filepath.FromSlash(name))
+		require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
+		require.NoError(t, os.WriteFile(path, []byte(content), 0o644))
+	}
+
+	runRemoteImportsGit(t, repoDir, "add", ".")
+	runRemoteImportsGit(t, repoDir, "commit", "-m", "initial")
+	return repoDir
+}
+
+func runRemoteImportsGit(t *testing.T, dir string, args ...string) {
+	t.Helper()
+	cmd := exec.Command("git", args...)
+	cmd.Dir = dir
+	out, err := cmd.CombinedOutput()
+	require.NoError(t, err, "git %v failed: %s", args, string(out))
+}
+
+func remoteImportsGitFileURI(path string) string {
+	return (&url.URL{Scheme: "file", Path: path}).String()
+}
+
+func executeRootCommand(t *testing.T, args ...string) string {
+	t.Helper()
+
+	oldStdout := os.Stdout
+	reader, writer, err := os.Pipe()
+	require.NoError(t, err)
+	defer reader.Close()
+	os.Stdout = writer
+	defer func() {
+		os.Stdout = oldStdout
+	}()
+
+	readDone := make(chan struct {
+		output []byte
+		err    error
+	}, 1)
+	go func() {
+		output, readErr := io.ReadAll(reader)
+		readDone <- struct {
+			output []byte
+			err    error
+		}{output: output, err: readErr}
+	}()
+
+	cmd.RootCmd.SetArgs(args)
+	execErr := cmd.Execute()
+	require.NoError(t, writer.Close())
+	readResult := <-readDone
+	require.NoError(t, readResult.err)
+	require.NoError(t, execErr)
+	return string(readResult.output)
+}
 
 // TestRemoteStackImports_LocalPath verifies that local import detection works correctly.
 func TestRemoteStackImports_LocalPath(t *testing.T) {
@@ -190,4 +258,82 @@ components:
 	cmd.RootCmd.SetArgs([]string{"describe", "stacks", "--format", "yaml"})
 	err = cmd.Execute()
 	require.NoError(t, err, "atmos describe stacks should succeed with skip_if_missing remote import")
+}
+
+func TestRemoteStackImports_GitDirectoryAndSkipIfMissing(t *testing.T) {
+	repoDir := initRemoteImportsGitRepo(t, map[string]string{
+		"remote/base.yaml": `
+components:
+  terraform:
+    myapp:
+      vars:
+        from_base: true
+`,
+		"remote/nested/override.yaml": `
+components:
+  terraform:
+    myapp:
+      vars:
+        from_nested: true
+`,
+		"remote/ignored.txt": "ignored\n",
+	})
+
+	tempDir := t.TempDir()
+
+	componentDir := filepath.Join(tempDir, "components", "terraform", "myapp")
+	err := os.MkdirAll(componentDir, 0o755)
+	require.NoError(t, err)
+
+	componentMain := `
+variable "from_base" { default = false }
+variable "from_nested" { default = false }
+output "from_base" { value = var.from_base }
+output "from_nested" { value = var.from_nested }
+`
+	err = os.WriteFile(filepath.Join(componentDir, "main.tf"), []byte(componentMain), 0o644)
+	require.NoError(t, err)
+
+	stacksDir := filepath.Join(tempDir, "stacks", "deploy")
+	err = os.MkdirAll(stacksDir, 0o755)
+	require.NoError(t, err)
+
+	atmosConfig := `
+base_path: "./"
+components:
+  terraform:
+    base_path: "components/terraform"
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "deploy/**/*"
+  name_template: "{{ .vars.stage }}"
+`
+	err = os.WriteFile(filepath.Join(tempDir, "atmos.yaml"), []byte(atmosConfig), 0o644)
+	require.NoError(t, err)
+
+	repoURI := remoteImportsGitFileURI(repoDir)
+	stackContent := fmt.Sprintf(`
+import:
+  - git::%s//remote?ref=main
+  - path: "git::%s//missing?ref=main"
+    skip_if_missing: true
+
+vars:
+  stage: test
+
+components:
+  terraform:
+    myapp:
+      vars:
+        local_override: "yes"
+`, repoURI, repoURI)
+	err = os.WriteFile(filepath.Join(stacksDir, "test.yaml"), []byte(stackContent), 0o644)
+	require.NoError(t, err)
+
+	t.Chdir(tempDir)
+
+	output := executeRootCommand(t, "describe", "stacks", "--format", "yaml")
+	assert.Contains(t, output, "from_base: true")
+	assert.Contains(t, output, "from_nested: true")
 }

@@ -4,7 +4,9 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"sync"
 	"sync/atomic"
@@ -31,6 +33,38 @@ func newTestRemoteImporter(t *testing.T, atmosConfig *schema.AtmosConfiguration)
 	require.NoError(t, err)
 
 	return importer
+}
+
+func initGitRepo(t *testing.T, files map[string]string) string {
+	t.Helper()
+
+	repoDir := t.TempDir()
+	runGit(t, repoDir, "init")
+	runGit(t, repoDir, "checkout", "-b", "main")
+	runGit(t, repoDir, "config", "user.email", "test@example.com")
+	runGit(t, repoDir, "config", "user.name", "Test User")
+
+	for name, content := range files {
+		path := filepath.Join(repoDir, filepath.FromSlash(name))
+		require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
+		require.NoError(t, os.WriteFile(path, []byte(content), 0o644))
+	}
+
+	runGit(t, repoDir, "add", ".")
+	runGit(t, repoDir, "commit", "-m", "initial")
+	return repoDir
+}
+
+func runGit(t *testing.T, dir string, args ...string) {
+	t.Helper()
+	cmd := exec.Command("git", args...)
+	cmd.Dir = dir
+	out, err := cmd.CombinedOutput()
+	require.NoError(t, err, "git %v failed: %s", args, string(out))
+}
+
+func gitFileURI(path string) string {
+	return (&url.URL{Scheme: "file", Path: path}).String()
 }
 
 func TestRemoteImporter_Download_HTTP(t *testing.T) {
@@ -67,6 +101,91 @@ components:
 	localPath2, err := importer.Download(server.URL + "/config.yaml")
 	require.NoError(t, err)
 	assert.Equal(t, localPath, localPath2, "should return cached path")
+}
+
+func TestRemoteImporter_Resolve_GitSubdirNoExtension(t *testing.T) {
+	repoDir := initGitRepo(t, map[string]string{
+		"stacks/orgs/acme/plat/dev.yaml": "vars:\n  imported: true\n",
+	})
+
+	atmosConfig := &schema.AtmosConfiguration{}
+	importer := newTestRemoteImporter(t, atmosConfig)
+
+	uri := fmt.Sprintf("git::%s//stacks/orgs/acme/plat/dev?ref=main", gitFileURI(repoDir))
+	matches, err := importer.Resolve(uri)
+	require.NoError(t, err)
+	require.Len(t, matches, 1)
+	assert.Equal(t, uri+"#stacks/orgs/acme/plat/dev.yaml", matches[0].Key)
+
+	data, err := os.ReadFile(matches[0].Path)
+	require.NoError(t, err)
+	assert.Equal(t, "vars:\n  imported: true\n", string(data))
+}
+
+func TestRemoteImporter_Resolve_GitDirectoryRecursive(t *testing.T) {
+	repoDir := initGitRepo(t, map[string]string{
+		"imports/b.yaml":            "vars:\n  order: b\n",
+		"imports/nested/a.yaml":     "vars:\n  order: a\n",
+		"imports/template.yml.tmpl": "vars:\n  template: true\n",
+		"imports/ignored.txt":       "ignored\n",
+	})
+
+	atmosConfig := &schema.AtmosConfiguration{}
+	importer := newTestRemoteImporter(t, atmosConfig)
+
+	uri := fmt.Sprintf("git::%s//imports?ref=main", gitFileURI(repoDir))
+	matches, err := importer.Resolve(uri)
+	require.NoError(t, err)
+	require.Len(t, matches, 3)
+
+	assert.Equal(t, []string{
+		uri + "#imports/b.yaml",
+		uri + "#imports/nested/a.yaml",
+		uri + "#imports/template.yml.tmpl",
+	}, []string{matches[0].Key, matches[1].Key, matches[2].Key})
+}
+
+func TestRemoteImporter_Resolve_GitExplicitWildcard(t *testing.T) {
+	repoDir := initGitRepo(t, map[string]string{
+		"imports/direct.yaml":      "vars:\n  direct: true\n",
+		"imports/nested/deep.yaml": "vars:\n  deep: true\n",
+		"imports/direct.yml.tmpl":  "vars:\n  template: true\n",
+	})
+
+	atmosConfig := &schema.AtmosConfiguration{}
+	importer := newTestRemoteImporter(t, atmosConfig)
+
+	uri := fmt.Sprintf("git::%s//imports/*.yaml?ref=main", gitFileURI(repoDir))
+	matches, err := importer.Resolve(uri)
+	require.NoError(t, err)
+	require.Len(t, matches, 1)
+	assert.Equal(t, uri+"#imports/direct.yaml", matches[0].Key)
+}
+
+func TestRemoteImporter_Resolve_GitHubShorthandSubdir(t *testing.T) {
+	repoDir := initGitRepo(t, map[string]string{
+		"stacks/dev.yaml": "vars:\n  shorthand: true\n",
+	})
+
+	gitConfigPath := filepath.Join(t.TempDir(), "gitconfig")
+	gitConfig := fmt.Sprintf("[url %q]\n\tinsteadOf = https://github.com/acme/infrastructure\n", gitFileURI(repoDir))
+	require.NoError(t, os.WriteFile(gitConfigPath, []byte(gitConfig), 0o644))
+	t.Setenv("GIT_CONFIG_GLOBAL", gitConfigPath)
+	t.Setenv("GIT_CONFIG_NOSYSTEM", "1")
+	t.Setenv("HOME", t.TempDir())
+
+	atmosConfig := &schema.AtmosConfiguration{}
+	importer := newTestRemoteImporter(t, atmosConfig)
+
+	uri := "github.com/acme/infrastructure//stacks/dev?ref=main"
+	matches, err := importer.Resolve(uri)
+	require.NoError(t, err)
+	require.Len(t, matches, 1)
+	assert.Equal(t, uri+"#stacks/dev.yaml", matches[0].Key)
+
+	data, err := os.ReadFile(matches[0].Path)
+	require.NoError(t, err)
+	assert.Equal(t, "vars:\n  shorthand: true\n", string(data))
 }
 
 func TestRemoteImporter_Download_NotFound(t *testing.T) {
