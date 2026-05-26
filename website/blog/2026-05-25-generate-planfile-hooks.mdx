@@ -1,0 +1,90 @@
+---
+slug: generate-planfile-hooks
+title: "Hook lifecycle events for `atmos terraform generate planfile`"
+authors: [thejrose1984]
+tags: [feature]
+date: 2026-05-25T00:00:00.000Z
+---
+
+`atmos terraform generate planfile` now fires `before.terraform.generate.planfile`
+and `after.terraform.generate.planfile` hook events, matching the lifecycle that
+`atmos terraform plan` has had all along. The same `--ci` flag that `plan` honours
+is now wired up here too, with `ATMOS_CI` / `CI` auto-detection so most CI
+platforms turn it on without configuration.
+
+<!--truncate-->
+
+## What Changed
+
+`atmos terraform generate planfile` is the command you reach for when you want a
+JSON or YAML rendering of a Terraform plan — typically because you're feeding it
+into Checkov, OPA / conftest, or another policy engine. Until now, the command
+ran without firing any hooks, which meant:
+
+- User-defined hooks configured in stack manifests (e.g. a notification, a
+  store write, a custom command) didn't fire for `generate planfile` even when
+  they fired for `plan` and `apply`.
+- The `--ci` flag — present on `plan`, `apply`, and `deploy` — wasn't recognized,
+  so CI auto-detection wouldn't activate the hook lifecycle.
+
+This release adds:
+
+- `before.terraform.generate.planfile` — fires in `PreRunE`, before any
+  Terraform invocation. Use it for setup hooks (e.g., a guard command that
+  exits non-zero to abort the run, or a "starting plan generation" notification).
+- `after.terraform.generate.planfile` — fires in `PostRunE` on success and via a
+  RunE-defer on failure, mirroring how `plan` reports outcomes. The hook
+  receives the command error and exit code on the failure path.
+- `--ci` flag — same shape as the one on `plan`, with `ATMOS_CI` and the standard
+  `CI` env vars bound, so GitHub Actions / GitLab CI / etc. auto-detect.
+
+## How to Use It
+
+Wire a hook to the new events in your stack manifest exactly like you would
+for `plan` or `apply`:
+
+```yaml
+components:
+  terraform:
+    vpc:
+      hooks:
+        notify-plan-rendered:
+          events:
+            - after-terraform-generate-planfile
+          kind: command
+          command: scripts/notify-plan-rendered.sh
+          on_failure: warn
+```
+
+Hook event names accept both dot and dash forms — `after.terraform.generate.planfile`
+and `after-terraform-generate-planfile` both work.
+
+If you're invoking the command from CI, the `--ci` flag activates the same
+auto-detection path the other terraform commands use:
+
+```shell
+atmos terraform generate planfile vpc -s plat-ue2-prod --ci
+# or simply rely on auto-detection:
+ATMOS_CI=true atmos terraform generate planfile vpc -s plat-ue2-prod
+```
+
+## What's Not in This Release
+
+This PR wires the hook *lifecycle*. The built-in CI plugin integration —
+job summary, planfile upload, check runs, PR comments — for `generate planfile`
+is tracked separately in [issue #2497](https://github.com/cloudposse/atmos/issues/2497)
+and will follow in a subsequent PR with its own `kind=plan-json` artifact key
+dimension (so the rendered JSON doesn't collide with the binary `.tfplan` that
+`atmos terraform plan` already uploads).
+
+Two refactor follow-ups are also tracked: consolidating the hook wrappers
+([#2522](https://github.com/cloudposse/atmos/issues/2522)) and adding an
+integration test for the `hooks.RunAll` branch
+([#2523](https://github.com/cloudposse/atmos/issues/2523)).
+
+## Get Involved
+
+If you've been bridging `atmos terraform generate planfile` to your policy
+engine with side scripts, give the new hook events a try and let us know how it
+goes. Bug reports and feedback are welcome on
+[GitHub Issues](https://github.com/cloudposse/atmos/issues).
