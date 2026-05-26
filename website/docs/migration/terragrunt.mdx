@@ -289,7 +289,7 @@ If you're familiar with Terragrunt, the concepts below will help you translate w
 
     The `ttl` setting is an Atmos-specific addition that controls when cached sources are refreshed, which is especially useful for floating refs like branches. Set `ttl: "0s"` to disable source caching and pull every time. Terragrunt does not provide an equivalent source cache TTL.
 
-    Workdir provisioning is strongly recommended with source provisioning. It stages each component instance under `.workdir/`, so Terraform runs with isolated `.terraform/` directories, lockfiles, generated varfiles, and backend files.
+    Workdir provisioning is strongly recommended with source provisioning. It stages each component instance under `.workdir/`, so Terraform runs with isolated `.terraform/` directories, generated varfiles, and backend files.
   </TabItem>
   <TabItem value="atmos-vendoring" label="Atmos Vendoring">
     Atmos vendoring is the workflow for explicitly pulling a local copy of remote module code. Define sources in `vendor.yaml`, pull them with `atmos vendor pull`, and reference the local component in stacks. Teams often use this when they want vendored code committed for review, auditability, offline use, or local customization.
