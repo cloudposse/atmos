@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -71,6 +72,10 @@ func gitFileURI(path string) string {
 	return (&url.URL{Scheme: "file", Path: cleaned}).String()
 }
 
+func normalizeLineEndings(s string) string {
+	return strings.ReplaceAll(s, "\r\n", "\n")
+}
+
 func TestRemoteImporter_Download_HTTP(t *testing.T) {
 	// Create a mock HTTP server.
 	content := `
@@ -123,7 +128,7 @@ func TestRemoteImporter_Resolve_GitSubdirNoExtension(t *testing.T) {
 
 	data, err := os.ReadFile(matches[0].Path)
 	require.NoError(t, err)
-	assert.Equal(t, "vars:\n  imported: true\n", string(data))
+	assert.Equal(t, "vars:\n  imported: true\n", normalizeLineEndings(string(data)))
 }
 
 func TestRemoteImporter_Resolve_GitDirectoryRecursive(t *testing.T) {
@@ -189,7 +194,7 @@ func TestRemoteImporter_Resolve_GitHubShorthandSubdir(t *testing.T) {
 
 	data, err := os.ReadFile(matches[0].Path)
 	require.NoError(t, err)
-	assert.Equal(t, "vars:\n  shorthand: true\n", string(data))
+	assert.Equal(t, "vars:\n  shorthand: true\n", normalizeLineEndings(string(data)))
 }
 
 func TestRemoteImporter_Download_NotFound(t *testing.T) {
