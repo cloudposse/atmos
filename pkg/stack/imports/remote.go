@@ -245,8 +245,8 @@ func cloneMatches(matches []RemoteImportMatch) []RemoteImportMatch {
 
 func (r *RemoteImporter) resolveGitSubdir(originalURI, sourceURI, subdir string) ([]RemoteImportMatch, error) {
 	sourceURI = r.detectGitSource(sourceURI)
-	tempDir := filepath.Join(r.cache.BaseDir(), uriToTempName(originalURI)+".dir")
-	if err := os.RemoveAll(tempDir); err != nil {
+	tempDir, err := os.MkdirTemp(r.cache.BaseDir(), uriToTempName(originalURI)+".dir-")
+	if err != nil {
 		return nil, err
 	}
 	defer os.RemoveAll(tempDir)

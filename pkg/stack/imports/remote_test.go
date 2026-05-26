@@ -64,7 +64,11 @@ func runGit(t *testing.T, dir string, args ...string) {
 }
 
 func gitFileURI(path string) string {
-	return (&url.URL{Scheme: "file", Path: path}).String()
+	cleaned := filepath.ToSlash(filepath.Clean(path))
+	if filepath.VolumeName(path) != "" && cleaned != "" && cleaned[0] != '/' {
+		cleaned = "/" + cleaned
+	}
+	return (&url.URL{Scheme: "file", Path: cleaned}).String()
 }
 
 func TestRemoteImporter_Download_HTTP(t *testing.T) {
