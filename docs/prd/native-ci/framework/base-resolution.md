@@ -91,7 +91,7 @@ The purpose of base resolution is to answer: "what is the fork point — the com
 - **Number of commits** — single or multi-commit PRs are handled identically.
 - **Target branch movement** — if other PRs merged into the target, merge-base still finds the true fork point.
 
-**Shallow CI checkouts**: merge-base requires the target branch ref (`origin/<target>`) to be available locally. `actions/checkout@v4` with the default `fetch-depth: 1` does not fetch other branches. The implementation handles this transparently:
+**Shallow CI checkouts**: merge-base requires the target branch ref (`origin/<target>`) to be available locally. `actions/checkout@v6` with the default `fetch-depth: 1` does not fetch other branches. The implementation handles this transparently:
 
 - `pkg/git/merge_base.go` exposes `MergeBaseWithAutoFetch`, which detects a missing `origin/<target>` ref (or an out-of-reach common ancestor) and runs a targeted `git fetch origin <target>` (and, if needed, one `--deepen=200` fetch) before retrying.
 - The CI provider calls the auto-fetch variant, so shallow checkouts are recovered without any change to the user's workflow.

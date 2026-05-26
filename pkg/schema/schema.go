@@ -1008,6 +1008,11 @@ type ConfigAndStacksInfo struct {
 	// which would reintroduce problematic vars (e.g., IRSA credentials on EKS pods).
 	SanitizedEnv            []string
 	ComponentBackendSection AtmosSectionMapType
+	// ComponentRetrySection holds the per-component `retry:` block parsed from stack
+	// manifests. When non-nil and `Conditions` is populated, each subprocess invocation
+	// in the terraform execution pipeline (init, workspace, main) is retried independently
+	// on errors whose captured output matches a `Conditions` regex.
+	ComponentRetrySection *RetryConfig
 	// AuthContext holds active authentication credentials for cloud providers.
 	// This is the SINGLE SOURCE OF TRUTH for auth credentials.
 	// ComponentEnvSection/ComponentEnvList are derived from this context.
@@ -1130,6 +1135,11 @@ type RetryConfig struct {
 	RandomJitter    *float64        `yaml:"random_jitter,omitempty" json:"random_jitter,omitempty" mapstructure:"random_jitter"`
 	Multiplier      *float64        `yaml:"multiplier,omitempty" json:"multiplier,omitempty" mapstructure:"multiplier"`
 	MaxElapsedTime  *time.Duration  `yaml:"max_elapsed_time,omitempty" json:"max_elapsed_time,omitempty" mapstructure:"max_elapsed_time"`
+	// Conditions is a list of regex patterns matched against captured subprocess output
+	// to decide whether an error is recoverable and the command should be retried.
+	// When empty or nil, no pattern-based retry is performed (all failures are terminal).
+	// Patterns may be wrapped in optional /.../ delimiters for readability.
+	Conditions []string `yaml:"conditions,omitempty" json:"conditions,omitempty" mapstructure:"conditions"`
 }
 
 // EKS update-kubeconfig
@@ -1230,7 +1240,10 @@ type BaseComponentConfig struct {
 	BaseComponentRemoteStateBackendSection AtmosSectionMapType
 	BaseComponentSourceSection             AtmosSectionMapType
 	BaseComponentProvisionSection          AtmosSectionMapType
-	ComponentInheritanceChain              []string
+	// BaseComponentRetry holds the raw retry configuration inherited from base components.
+	// It is deep-merged with the child component's retry block by mergeComponentConfigurations.
+	BaseComponentRetry        AtmosSectionMapType
+	ComponentInheritanceChain []string
 }
 
 // Stack imports (`import` section)

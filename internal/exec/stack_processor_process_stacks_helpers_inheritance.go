@@ -207,6 +207,9 @@ func applyBaseComponentConfig(opts *ComponentProcessorOptions, result *Component
 	result.BaseComponentLocals = baseComponentConfig.BaseComponentLocals
 	result.BaseComponentName = baseComponentConfig.FinalBaseComponentName
 	result.BaseComponentCommand = baseComponentConfig.BaseComponentCommand
+	// BaseComponentRetry flows from the inheritance chain through to merge — see
+	// mergeComponentConfigurations for the final deep-merge with concrete + overrides.
+	result.BaseComponentRetry = baseComponentConfig.BaseComponentRetry
 	*componentInheritanceChain = baseComponentConfig.ComponentInheritanceChain
 
 	// Terraform-specific: extract base component providers, hooks, generate, backend, source, and provision.

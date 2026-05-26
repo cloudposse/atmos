@@ -346,6 +346,34 @@ These flags are available for every Atmos command:
         - For richer output and additional flags, use the [`atmos version`](/cli/commands/version/usage) command
         - Example: `atmos --version`
     </dd>
+
+    <dt>`--skip-hooks`</dt>
+    <dd>
+        Bypass [lifecycle hooks](/stacks/hooks) for the current invocation
+        without editing stack configuration.
+
+        - **No value** (`--skip-hooks`): skip every hook.
+        - **Comma-separated list** (`--skip-hooks=cost,security`): skip
+          only the named hooks; others still run.
+        - **Boolean** (`--skip-hooks=true|false`): explicit on/off.
+        - Also available as `ATMOS_SKIP_HOOKS` env var (same value syntax).
+        - **Per-invocation only** — does not propagate to nested commands
+          or workflows.
+        - Skipped hooks are logged at `INFO` level so they're visible in
+          CI output.
+
+        **Examples:**
+        ```bash
+        # Skip all hooks for one run (emergency rollback, debugging, etc.)
+        atmos terraform apply vpc -s prod --skip-hooks
+
+        # Skip just the cost-estimator and security scanner
+        atmos terraform plan vpc -s prod --skip-hooks=cost,security
+
+        # Set once in your shell for a debugging session
+        export ATMOS_SKIP_HOOKS=true
+        ```
+    </dd>
 </dl>
 
 ## Command-Specific Flags
@@ -609,6 +637,16 @@ All global flags can be set using environment variables. The precedence order is
         - CLI flag takes precedence over this environment variable
         - Set to `false` or `__DISABLED__` to skip Atmos authentication
         - Example: `ATMOS_IDENTITY=admin atmos terraform plan vpc -s prod`
+    </dd>
+
+    <dt>`ATMOS_SKIP_HOOKS`</dt>
+    <dd>
+        Skip [lifecycle hooks](/stacks/hooks) for the current invocation.
+        - Equivalent to the `--skip-hooks` flag
+        - Accepts `true` / `false` / a comma-separated list of hook names
+        - CLI flag takes precedence over this environment variable
+        - Per-invocation only; does not propagate to nested commands
+        - Example: `ATMOS_SKIP_HOOKS=cost,security atmos terraform plan vpc -s prod`
     </dd>
 
     <dt>`ATMOS_PROFILER_ENABLED`</dt>

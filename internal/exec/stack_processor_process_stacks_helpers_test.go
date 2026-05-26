@@ -565,6 +565,60 @@ func TestExtractComponentSections(t *testing.T) {
 	}
 }
 
+// TestExtractComponentSections_Retry covers the retry extraction branch added by the
+// component-retry feature: a valid retry map populates ComponentRetry verbatim (decoding
+// happens later, after deep-merge), and a non-map value produces a precise per-component
+// error so misconfiguration is caught at extraction time rather than at execution.
+func TestExtractComponentSections_Retry(t *testing.T) {
+	t.Run("valid-retry-map-populates-result", func(t *testing.T) {
+		opts := ComponentProcessorOptions{
+			ComponentType: cfg.TerraformComponentType,
+			Component:     "vpc",
+			StackName:     "test-stack",
+			ComponentMap: map[string]any{
+				cfg.RetrySectionName: map[string]any{
+					"max_attempts": 3,
+					"conditions":   []any{"/Bad Gateway/"},
+				},
+			},
+			AtmosConfig: &schema.AtmosConfiguration{},
+		}
+		result := &ComponentProcessorResult{}
+		require.NoError(t, extractComponentSections(&opts, result))
+		require.NotNil(t, result.ComponentRetry)
+		assert.Equal(t, 3, result.ComponentRetry["max_attempts"])
+	})
+
+	t.Run("absent-retry-leaves-result-nil", func(t *testing.T) {
+		opts := ComponentProcessorOptions{
+			ComponentType: cfg.TerraformComponentType,
+			Component:     "vpc",
+			StackName:     "test-stack",
+			ComponentMap:  map[string]any{},
+			AtmosConfig:   &schema.AtmosConfiguration{},
+		}
+		result := &ComponentProcessorResult{}
+		require.NoError(t, extractComponentSections(&opts, result))
+		assert.Nil(t, result.ComponentRetry, "no retry key = nil result, never an empty map")
+	})
+
+	t.Run("non-map-retry-returns-error", func(t *testing.T) {
+		opts := ComponentProcessorOptions{
+			ComponentType: cfg.TerraformComponentType,
+			Component:     "vpc",
+			StackName:     "test-stack",
+			ComponentMap: map[string]any{
+				cfg.RetrySectionName: "not a map",
+			},
+			AtmosConfig: &schema.AtmosConfiguration{},
+		}
+		result := &ComponentProcessorResult{}
+		err := extractComponentSections(&opts, result)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "components.terraform.vpc.retry")
+	})
+}
+
 func TestProcessComponentOverrides(t *testing.T) {
 	tests := []struct {
 		name                    string
@@ -693,6 +747,50 @@ func TestProcessComponentOverrides(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestProcessComponentOverrides_Retry covers the retry-overrides extraction added by
+// the component-retry feature. Overrides retry must populate ComponentOverridesRetry on
+// success and produce a precise error on a non-map type (the value still goes through
+// merge later, so a wrong type here would only surface as a confusing downstream error).
+func TestProcessComponentOverrides_Retry(t *testing.T) {
+	t.Run("valid-overrides-retry-populates-result", func(t *testing.T) {
+		opts := ComponentProcessorOptions{
+			ComponentType: cfg.TerraformComponentType,
+			Component:     "vpc",
+			StackName:     "test-stack",
+			ComponentMap: map[string]any{
+				cfg.OverridesSectionName: map[string]any{
+					cfg.RetrySectionName: map[string]any{
+						"max_attempts": 9,
+					},
+				},
+			},
+			AtmosConfig: &schema.AtmosConfiguration{},
+		}
+		result := &ComponentProcessorResult{}
+		require.NoError(t, processComponentOverrides(&opts, result))
+		require.NotNil(t, result.ComponentOverridesRetry)
+		assert.Equal(t, 9, result.ComponentOverridesRetry["max_attempts"])
+	})
+
+	t.Run("non-map-overrides-retry-returns-error", func(t *testing.T) {
+		opts := ComponentProcessorOptions{
+			ComponentType: cfg.TerraformComponentType,
+			Component:     "vpc",
+			StackName:     "test-stack",
+			ComponentMap: map[string]any{
+				cfg.OverridesSectionName: map[string]any{
+					cfg.RetrySectionName: 42, // not a map.
+				},
+			},
+			AtmosConfig: &schema.AtmosConfiguration{},
+		}
+		result := &ComponentProcessorResult{}
+		err := processComponentOverrides(&opts, result)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "components.terraform.vpc.overrides.retry")
+	})
 }
 
 func TestProcessComponentInheritance(t *testing.T) {
