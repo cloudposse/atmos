@@ -206,14 +206,14 @@ func TestReportDryRun(t *testing.T) {
 			SkippedFiles: []string{"d.yaml"},
 		}
 		require.NotPanics(t, func() {
-			reportDryRun(result)
+			reportDryRun(result, ".", "stacks", false)
 		})
 	})
 
 	t.Run("empty result", func(t *testing.T) {
 		result := &install.InstallResult{}
 		require.NotPanics(t, func() {
-			reportDryRun(result)
+			reportDryRun(result, ".", "stacks", false)
 		})
 	})
 }

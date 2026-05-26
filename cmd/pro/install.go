@@ -4,6 +4,7 @@ import (
 	_ "embed"
 	"errors"
 	"fmt"
+	"path/filepath"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -41,6 +42,7 @@ const (
 	proInstallScopeFlag      = "scope"
 	proInstallGlobalFlag     = "global"
 	proInstallGitignoreFlag  = "gitignore"
+	installPreviewFileFormat = "%s `%s`"
 )
 
 var (
@@ -130,10 +132,14 @@ func runInstall(cmd *cobra.Command, _ []string) error {
 }
 
 func runStandardInstall(basePath, stacksBasePath string, yes, force, dryRun bool) error {
+	opts := buildInstallOpts(basePath, stacksBasePath, force, yes)
+	installer := install.NewInstaller(&install.OSFileWriter{}, opts...)
+
 	// Prompt for confirmation unless --yes or --dry-run.
 	if !dryRun && !yes {
+		reportInstallPreview(installer.DryRun(), basePath, stacksBasePath, force)
 		confirmed, err := flags.PromptForConfirmation(
-			"Install Atmos Pro workflows and configuration?",
+			"Proceed with Atmos Pro install?",
 			false,
 		)
 		if err != nil {
@@ -145,11 +151,8 @@ func runStandardInstall(basePath, stacksBasePath string, yes, force, dryRun bool
 		}
 	}
 
-	opts := buildInstallOpts(basePath, stacksBasePath, force, yes)
-	installer := install.NewInstaller(&install.OSFileWriter{}, opts...)
-
 	if dryRun {
-		reportDryRun(installer.DryRun())
+		reportDryRun(installer.DryRun(), basePath, stacksBasePath, force)
 		return nil
 	}
 
@@ -324,16 +327,47 @@ func reportResult(result *install.InstallResult) {
 	}
 }
 
+func reportInstallPreview(result *install.InstallResult, basePath, stacksBasePath string, force bool) {
+	ui.Infof("Atmos Pro install preview")
+	ui.Infof("Target directory: %s", displayPath(basePath))
+	ui.Infof("Stacks configuration path: %s", filepath.Join(stacksBasePath, "mixins", "atmos-pro.yaml"))
+	ui.Infof("This installs GitHub Actions workflows, GitHub OIDC auth profiles, Atmos Pro drop-in config, and an Atmos Pro stack mixin.")
+	if force {
+		ui.Warning("Existing files may be overwritten because --force is set.")
+	} else {
+		ui.Infof("Existing files are skipped unless you confirm an overwrite prompt.")
+	}
+	reportPlannedFiles(result, "Will create", "Will update", "Will skip")
+	ui.Infof("Run `atmos pro install --dry-run` to preview this without a confirmation prompt.")
+}
+
 // reportDryRun displays what would happen during installation.
-func reportDryRun(result *install.InstallResult) {
-	ui.Infof("Dry run - no files will be written\n")
+func reportDryRun(result *install.InstallResult, basePath, stacksBasePath string, force bool) {
+	ui.Infof("Dry run - no files will be written")
+	ui.Infof("Target directory: %s", displayPath(basePath))
+	ui.Infof("Stacks configuration path: %s", filepath.Join(stacksBasePath, "mixins", "atmos-pro.yaml"))
+	if force {
+		ui.Warning("Existing files would be overwritten because --force is set.")
+	}
+	reportPlannedFiles(result, "Would create", "Would update", "Would skip")
+}
+
+func reportPlannedFiles(result *install.InstallResult, createPrefix, updatePrefix, skipPrefix string) {
 	for _, f := range result.CreatedFiles {
-		ui.Infof("Would create `%s`", f)
+		ui.Infof(installPreviewFileFormat, createPrefix, f)
 	}
 	for _, f := range result.UpdatedFiles {
-		ui.Infof("Would update `%s`", f)
+		ui.Infof(installPreviewFileFormat, updatePrefix, f)
 	}
 	for _, f := range result.SkippedFiles {
-		ui.Warningf("Would skip `%s` (already exists)", f)
+		ui.Warningf("%s `%s` (already exists)", skipPrefix, f)
 	}
+}
+
+func displayPath(path string) string {
+	abs, err := filepath.Abs(path)
+	if err != nil || abs == path {
+		return path
+	}
+	return fmt.Sprintf("%s (%s)", path, abs)
 }
