@@ -3,10 +3,13 @@ package process
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"os/exec"
 	"time"
+
+	errUtils "github.com/cloudposse/atmos/errors"
 )
 
 // Runner executes a task and returns the observed process result.
@@ -63,10 +66,9 @@ func (r DefaultRunner) Run(ctx context.Context, spec TaskSpec) (result Result) {
 	}
 
 	result = Result{
-		Command:   spec.Command,
-		Args:      append([]string{}, spec.Args...),
-		ExitCode:  0,
-		StartedAt: time.Now(),
+		Command:  spec.Command,
+		Args:     append([]string{}, spec.Args...),
+		ExitCode: 0,
 	}
 	defer func() {
 		result.FinishedAt = time.Now()
@@ -86,22 +88,23 @@ func (r DefaultRunner) Run(ctx context.Context, spec TaskSpec) (result Result) {
 	cmd.Stderr = writerOrDiscard(spec.Streams.Stderr)
 
 	if err := cmd.Start(); err != nil {
-		result.Err = err
+		result.Err = fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrProcessStartFailed, err)
 		result.ExitCode = -1
 		return result
 	}
 	result.Started = true
+	result.StartedAt = time.Now()
 
 	err := cmd.Wait()
 	if err == nil {
 		return result
 	}
 
-	result.Err = err
+	result.Err = fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrProcessWaitFailed, err)
 	result.ExitCode = exitCode(err)
 	if ctxErr := ctx.Err(); ctxErr != nil {
 		result.Canceled = true
-		result.Err = errors.Join(err, ctxErr)
+		result.Err = errors.Join(result.Err, ctxErr)
 	}
 	return result
 }

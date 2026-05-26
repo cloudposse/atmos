@@ -7,29 +7,29 @@ import (
 	"sync"
 )
 
-// NodeStreams contains composed stdout/stderr writers for one execution node.
-type NodeStreams struct {
+// NodeOutput contains composed stdout/stderr writers for one execution node.
+type NodeOutput struct {
 	Stdout stdio.Writer
 	Stderr stdio.Writer
 }
 
-// NodeStreamSinks are the destinations for one node stream.
-type NodeStreamSinks struct {
+// NodeOutputSinks are the destinations for one node output stream.
+type NodeOutputSinks struct {
 	Terminal stdio.Writer
 	File     stdio.Writer
 	Capture  stdio.Writer
 }
 
-// NodeStreamsOptions configures per-node stream composition.
-type NodeStreamsOptions struct {
+// NodeOutputOptions configures per-node output composition.
+type NodeOutputOptions struct {
 	NodeID string
-	Stdout NodeStreamSinks
-	Stderr NodeStreamSinks
+	Stdout NodeOutputSinks
+	Stderr NodeOutputSinks
 }
 
-// NewNodeStreams creates masked per-node stdout/stderr writers that can fan out
+// NewNodeOutput creates masked per-node stdout/stderr writers that can fan out
 // to terminal, file, and capture sinks.
-func NewNodeStreams(opts NodeStreamsOptions) NodeStreams {
+func NewNodeOutput(opts NodeOutputOptions) NodeOutput {
 	stdout := opts.Stdout
 	stderr := opts.Stderr
 	if stdout.Terminal == nil && stdout.File == nil && stdout.Capture == nil {
@@ -39,13 +39,13 @@ func NewNodeStreams(opts NodeStreamsOptions) NodeStreams {
 		stderr.Terminal = os.Stderr
 	}
 
-	return NodeStreams{
-		Stdout: composeNodeStream(opts.NodeID, stdout),
-		Stderr: composeNodeStream(opts.NodeID, stderr),
+	return NodeOutput{
+		Stdout: composeNodeOutput(opts.NodeID, stdout),
+		Stderr: composeNodeOutput(opts.NodeID, stderr),
 	}
 }
 
-func composeNodeStream(nodeID string, sinks NodeStreamSinks) stdio.Writer {
+func composeNodeOutput(nodeID string, sinks NodeOutputSinks) stdio.Writer {
 	writers := make([]stdio.Writer, 0, 3)
 	addSink := func(w stdio.Writer) {
 		if w == nil {

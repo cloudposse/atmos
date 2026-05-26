@@ -20,6 +20,32 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
+const shellHelperProcessEnv = "GO_WANT_ATMOS_SHELL_HELPER_PROCESS"
+
+func TestShellHelperProcess(t *testing.T) {
+	if os.Getenv(shellHelperProcessEnv) != "1" {
+		return
+	}
+	args := os.Args
+	for len(args) > 0 && args[0] != "--" {
+		args = args[1:]
+	}
+	if len(args) < 2 {
+		os.Exit(2)
+	}
+
+	switch args[1] {
+	case "stdout-stderr":
+		fmt.Fprint(os.Stdout, "stdout")
+		fmt.Fprint(os.Stderr, "stderr")
+	case "exit":
+		os.Exit(2)
+	default:
+		os.Exit(2)
+	}
+	os.Exit(0)
+}
+
 func TestMergeEnvVars(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skipf("Skipping test on Windows: PATH case-sensitivity and HOME behavior differ")
@@ -189,17 +215,14 @@ func TestDecrementAtmosShellLevel(t *testing.T) {
 }
 
 func TestExecuteShellCommandUsesInjectedStreamsAndCapture(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("shell fixture is Unix-specific")
-	}
-
 	var terminalOut, terminalErr, captureOut, captureErr bytes.Buffer
+	helper := shellHelperCommand(t, "stdout-stderr")
 	err := ExecuteShellCommand(
 		schema.AtmosConfiguration{},
-		"/bin/sh",
-		[]string{"-c", "printf stdout; printf stderr >&2"},
+		helper.command,
+		helper.args,
 		"",
-		nil,
+		helper.env,
 		false,
 		"",
 		WithProcessStreams(process.Streams{
@@ -218,16 +241,13 @@ func TestExecuteShellCommandUsesInjectedStreamsAndCapture(t *testing.T) {
 }
 
 func TestExecuteShellCommandPreservesDetailedExitCode(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("shell fixture is Unix-specific")
-	}
-
+	helper := shellHelperCommand(t, "exit")
 	err := ExecuteShellCommand(
 		schema.AtmosConfiguration{},
-		"/bin/sh",
-		[]string{"-c", "exit 2"},
+		helper.command,
+		helper.args,
 		"",
-		nil,
+		helper.env,
 		false,
 		"",
 	)
@@ -235,6 +255,48 @@ func TestExecuteShellCommandPreservesDetailedExitCode(t *testing.T) {
 	var exitErr errUtils.ExitCodeError
 	require.ErrorAs(t, err, &exitErr)
 	assert.Equal(t, 2, exitErr.Code)
+}
+
+func TestExecuteShellCommandRedirectsStderrToStdoutCapture(t *testing.T) {
+	var terminalOut, terminalErr, captureOut bytes.Buffer
+	helper := shellHelperCommand(t, "stdout-stderr")
+	err := ExecuteShellCommand(
+		schema.AtmosConfiguration{},
+		helper.command,
+		helper.args,
+		"",
+		helper.env,
+		false,
+		"/dev/stdout",
+		WithProcessStreams(process.Streams{
+			Stdout: &terminalOut,
+			Stderr: &terminalErr,
+		}),
+		WithStdoutCapture(&captureOut),
+	)
+
+	require.NoError(t, err)
+	assert.Equal(t, "stdoutstderr", terminalOut.String())
+	assert.Empty(t, terminalErr.String())
+	assert.Equal(t, "stdoutstderr", captureOut.String())
+}
+
+type shellHelperInvocation struct {
+	command string
+	args    []string
+	env     []string
+}
+
+func shellHelperCommand(t *testing.T, command string) shellHelperInvocation {
+	t.Helper()
+	exe, err := os.Executable()
+	require.NoError(t, err)
+
+	return shellHelperInvocation{
+		command: exe,
+		args:    []string{"-test.run=TestShellHelperProcess", "--", command},
+		env:     []string{shellHelperProcessEnv + "=1"},
+	}
 }
 
 func TestConvertEnvMapToSlice(t *testing.T) {

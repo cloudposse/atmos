@@ -30,18 +30,18 @@ func TestPrefixedWriterHandlesPartialLines(t *testing.T) {
 	assert.Equal(t, "[node] one two\n[node] three", buf.String())
 }
 
-func TestNewNodeStreamsWritesTerminalFileAndCaptureSinks(t *testing.T) {
+func TestNewNodeOutputWritesTerminalFileAndCaptureSinks(t *testing.T) {
 	var terminal, file, capture bytes.Buffer
-	streams := NewNodeStreams(NodeStreamsOptions{
+	output := NewNodeOutput(NodeOutputOptions{
 		NodeID: "node-a",
-		Stdout: NodeStreamSinks{
+		Stdout: NodeOutputSinks{
 			Terminal: &terminal,
 			File:     &file,
 			Capture:  &capture,
 		},
 	})
 
-	_, err := streams.Stdout.Write([]byte("hello\n"))
+	_, err := output.Stdout.Write([]byte("hello\n"))
 	require.NoError(t, err)
 
 	expected := "[node-a] hello\n"
@@ -50,21 +50,21 @@ func TestNewNodeStreamsWritesTerminalFileAndCaptureSinks(t *testing.T) {
 	assert.Equal(t, expected, capture.String())
 }
 
-func TestNewNodeStreamsMasksAllSinks(t *testing.T) {
+func TestNewNodeOutputMasksAllSinks(t *testing.T) {
 	_ = Initialize()
 	RegisterSecret("secret-value")
 
 	var terminal, file, capture bytes.Buffer
-	streams := NewNodeStreams(NodeStreamsOptions{
+	output := NewNodeOutput(NodeOutputOptions{
 		NodeID: "node-a",
-		Stdout: NodeStreamSinks{
+		Stdout: NodeOutputSinks{
 			Terminal: &terminal,
 			File:     &file,
 			Capture:  &capture,
 		},
 	})
 
-	_, err := streams.Stdout.Write([]byte("secret-value\n"))
+	_, err := output.Stdout.Write([]byte("secret-value\n"))
 	require.NoError(t, err)
 
 	assert.NotContains(t, terminal.String(), "secret-value")

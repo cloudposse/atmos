@@ -12,6 +12,7 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"sync"
 	"text/template"
 
 	"github.com/charmbracelet/lipgloss"
@@ -177,6 +178,9 @@ func ExecuteShellCommand(
 	if runtime.GOOS == "windows" && redirectStdError == "/dev/null" {
 		redirectStdError = "NUL"
 	}
+	if redirectStdError == "/dev/stdout" {
+		stdout = &synchronizedWriter{w: stdout}
+	}
 
 	var stderr io.Writer
 	if redirectStdError == "/dev/stderr" {
@@ -187,7 +191,7 @@ func ExecuteShellCommand(
 			stderr = maskedStderr
 		}
 	} else if redirectStdError == "/dev/stdout" {
-		maskedStderr := ioLayer.MaskWriter(stdoutTarget)
+		maskedStderr := ioLayer.MaskWriter(stdout)
 		if cfg.stderrCapture != nil {
 			stderr = io.MultiWriter(maskedStderr, cfg.stderrCapture)
 		} else {
@@ -251,6 +255,17 @@ func ExecuteShellCommand(
 		return errUtils.ExitCodeError{Code: result.ExitCode}
 	}
 	return result.Err
+}
+
+type synchronizedWriter struct {
+	mu sync.Mutex
+	w  io.Writer
+}
+
+func (w *synchronizedWriter) Write(p []byte) (int, error) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return w.w.Write(p)
 }
 
 // ExecuteShell runs a shell script.
