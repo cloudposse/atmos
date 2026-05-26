@@ -23,9 +23,11 @@ ran without firing any hooks, which meant:
 
 - User-defined hooks configured in stack manifests (e.g. a notification, a
   store write, a custom command) didn't fire for `generate planfile` even when
-  they fired for `plan` and `apply`.
+  they fired for `plan` and `apply`. This is because `PreRunE` and `PostRunE`
+  weren't wired on the command at all.
 - The `--ci` flag — present on `plan`, `apply`, and `deploy` — wasn't recognized,
-  so CI auto-detection wouldn't activate the hook lifecycle.
+  so CI platforms couldn't activate Atmos's built-in CI plugin behavior on
+  `generate planfile` runs.
 
 This release adds:
 
@@ -58,6 +60,12 @@ components:
 
 Hook event names accept both dot and dash forms — `after.terraform.generate.planfile`
 and `after-terraform-generate-planfile` both work.
+
+Your hooks fire regardless of how the command is invoked — `--ci` is **not**
+required for stack-manifest hooks to run. The `--ci` flag specifically gates
+Atmos's built-in CI plugin behavior (job summaries, PR comments, etc.); see
+"What's Not in This Release" below for the current state of that integration
+for `generate planfile`.
 
 If you're invoking the command from CI, the `--ci` flag activates the same
 auto-detection path the other terraform commands use:

@@ -126,23 +126,26 @@ atmos terraform generate planfile <component> -s <stack> --file=/Users/me/Docume
 
     <dt>`--ci` <em>(optional)</em></dt>
     <dd>
-        Enable CI mode for automated pipelines. When set, Atmos fires the `before.terraform.generate.planfile`
-        and `after.terraform.generate.planfile` hook events around the command, allowing user-defined hooks
-        in stack configuration to run for `generate planfile` (parallel to how `--ci` works for
-        `atmos terraform plan`).
-
-        The flag is auto-enabled when `ATMOS_CI=true` or the standard `CI=true` env var is present, so most
-        CI platforms (GitHub Actions, GitLab CI, etc.) activate it without explicit configuration.
+        Enable CI mode for automated pipelines. The flag is auto-enabled when `ATMOS_CI=true` or the
+        standard `CI=true` env var is present, so most CI platforms (GitHub Actions, GitLab CI, etc.)
+        activate it without explicit configuration.
 
         ```shell
         atmos terraform generate planfile <component> -s <stack> --ci
         ATMOS_CI=true atmos terraform generate planfile <component> -s <stack>
         ```
 
-        :::note
-        Built-in CI plugin integration (job summaries, planfile upload, check runs, PR comments) for
-        `generate planfile` is tracked separately in [issue #2497](https://github.com/cloudposse/atmos/issues/2497).
-        This flag wires the hook lifecycle; the plugin-side integration follows in a subsequent PR.
+        :::note Hook events fire regardless of `--ci`
+        The `before.terraform.generate.planfile` and `after.terraform.generate.planfile` hook events
+        fire on **every** invocation of the command. Configure your stack-manifest hooks normally —
+        you don't need `--ci` set for them to run. The `--ci` flag specifically activates Atmos's
+        built-in CI plugin (job summaries, planfile upload, check runs, PR comments).
+        :::
+
+        :::note Built-in CI plugin integration is deferred
+        Built-in CI plugin integration for `generate planfile` is currently a no-op even with `--ci`
+        set; the hook lifecycle is wired in this release, and the plugin-side integration (artifact
+        upload, summary template, check runs) follows in [issue #2497](https://github.com/cloudposse/atmos/issues/2497).
         :::
     </dd>
 </dl>
