@@ -675,44 +675,65 @@ Terragrunt evolved from a directory-per-unit model and later added explicit stac
 
 ## Function Mapping
 
-Terragrunt exposes many built-in functions in HCL. Here's how they map to Atmos equivalents:
+Terragrunt exposes HCL functions for path discovery, environment lookup, command execution, dependency wiring, and file reading. Atmos supports the same workflows, but many of them move from inline functions to explicit YAML configuration, YAML functions, or stack templating. The table below audits the functions in the [Terragrunt function reference](https://docs.terragrunt.com/reference/hcl/functions/).
 
 ### Path and Directory Functions
 
 | Terragrunt Function | Atmos Equivalent | Notes |
 |---------------------|------------------|-------|
-| `find_in_parent_folders()` | `import:` | Atmos uses explicit imports instead of searching |
-| `path_relative_to_include()` | Automatic | State keys generated from stack/component names |
-| `path_relative_from_include()` | Automatic | Not needed—Atmos handles paths |
-| `get_terragrunt_dir()` | N/A | Components are always in `components/terraform/` |
-| `get_working_dir()` | N/A | Atmos manages working directories |
-| `get_parent_terragrunt_dir()` | N/A | Flat imports replace hierarchy |
+| OpenTofu/Terraform built-ins | Go templates with Sprig/Gomplate, or YAML functions | Atmos does not expose Terraform's HCL function set directly. Use YAML functions for data access and templates for string, path, list, map, and semver helpers. |
+| `find_in_parent_folders()` | `import:` or `!include` | Atmos uses explicit imports and includes instead of walking parent directories. |
+| `path_relative_to_include()` | Explicit `backend.key` or templates | Atmos does not derive state keys from include paths. Configure state keys directly from stack/component context. |
+| `path_relative_from_include()` | Not usually needed | Atmos imports, component base paths, and source provisioning use configured paths instead of include-relative module paths. |
 | `get_repo_root()` | `!repo-root` | YAML function returns repo root path |
-| `get_path_from_repo_root()` | `!repo-root` | Combine with path manipulation |
+| `get_path_from_repo_root()` | No direct scalar function | Usually not needed; use configured stack/component paths, or combine `!repo-root` with templates when an absolute repo path is required. |
+| `get_path_to_repo_root()` | No direct scalar function | Use `!repo-root` for the absolute root. Atmos generally avoids relative path hops back to repo root. |
+| `get_terragrunt_dir()` | Manifest-relative paths, component base paths | `./` and `../` in `!include` resolve relative to the manifest file. Component paths come from `components.terraform.base_path` plus the component name. |
+| `get_working_dir()` | `!cwd` | YAML function returns the directory where Atmos is executed. |
+| `get_parent_terragrunt_dir()` | `import:` | Explicit imports replace parent-config discovery. |
+| `get_original_terragrunt_dir()` | `!cwd` | Atmos is not directory-per-unit; use the command working directory when you need the invocation path. |
 
 ### Environment and Platform Functions
 
 | Terragrunt Function | Atmos Equivalent | Notes |
 |---------------------|------------------|-------|
 | `get_env("VAR", "default")` | `!env VAR, default` | YAML function for environment variables |
-| `get_platform()` | N/A | Use `!exec` if needed |
+| `get_platform()` | No native equivalent | Sprig and Gomplate can read environment variables, but do not expose Go `runtime.GOOS`/`runtime.GOARCH`. Use `!exec` if needed. |
 | `get_aws_account_id()` | `!aws.account_id` | YAML function backed by AWS STS |
 | `get_aws_account_alias()` | `!exec` | No dedicated YAML function; run an AWS CLI command |
 | `get_aws_caller_identity_arn()` | `!aws.caller_identity_arn` | YAML function backed by AWS STS |
 | `get_aws_caller_identity_user_id()` | `!aws.caller_identity_user_id` | YAML function backed by AWS STS |
 
+### Terraform Command Helpers
+
+| Terragrunt Function | Atmos Equivalent | Notes |
+|---------------------|------------------|-------|
+| `get_terraform_commands_that_need_vars()` | Built in | Atmos generates and passes component varfiles automatically for Terraform commands that need them. |
+| `get_terraform_commands_that_need_input()` | `settings.terraform.args` | Configure `-input=false` or related flags explicitly. |
+| `get_terraform_commands_that_need_locking()` | `settings.terraform.args` | Configure lock flags explicitly when needed. |
+| `get_terraform_commands_that_need_parallelism()` | `settings.terraform.args` | Configure `-parallelism` explicitly when needed. |
+| `get_terraform_command()` | No direct function | Atmos receives the Terraform subcommand from `atmos terraform <command>`. Use hooks or custom commands when behavior must vary by operation. |
+| `get_terraform_cli_args()` | `settings.terraform.args`, `env`, or pass-through args | Use component settings for durable args, `TF_CLI_ARGS*` env vars for Terraform-native behavior, or `--` for one-off pass-through args. |
+| `get_default_retryable_errors()` | `retry.conditions` | Atmos has component retry configuration instead of a helper returning default regexes. |
+
 ### Command Execution
 
 | Terragrunt Function | Atmos Equivalent | Notes |
 |---------------------|------------------|-------|
-| `run_cmd("cmd", "arg1", ...)` | `!exec` | `!exec cmd arg1` (inline syntax) |
+| `run_cmd("cmd", "arg1", ...)` | `!exec` | `!exec cmd arg1` executes shell commands in YAML functions. |
+| `run_cmd("--terragrunt-quiet", ...)` | No direct flag | Use Atmos secret masking and avoid printing sensitive command output. |
+| `run_cmd("--terragrunt-global-cache", ...)` | No direct flag | Atmos does not expose a command-output cache control for `!exec`. |
+| `run_cmd("--terragrunt-no-cache", ...)` | Default `!exec` behavior | `!exec` runs when functions are processed; there is no Terragrunt-style cache toggle. |
 
 ### Configuration Reading
 
 | Terragrunt Function | Atmos Equivalent | Notes |
 |---------------------|------------------|-------|
-| `read_terragrunt_config()` | `import:` | Import other stack configs |
-| `read_tfvars_file()` | `!include` | `vars: !include path/to/file.tfvars` |
+| `deep_merge()` | Stack imports and inheritance | Atmos deep-merges imported YAML configuration by design. Use Sprig/Gomplate template merge helpers only when inline expression merging is unavoidable. |
+| `read_terragrunt_config()` | `import:` | Import reusable Atmos stack YAML instead of reading HCL into a local value. |
+| `read_tfvars_file()` | `!include` | `!include` can load `.tfvars` and `.tfvars.json` into YAML values. |
+| `sops_decrypt_file()` | `!exec` or stores | No native SOPS YAML function. Use `!exec sops ...` for local encrypted files, or move secrets to a configured store and read with `!store`/`!store.get`. |
+| `get_terragrunt_source_cli_flag()` | No direct equivalent | Atmos source provisioning uses `source.uri` and `source.version` in stack config. Use `!env` for local override patterns if you need them. |
 
 ### State and Outputs
 
@@ -721,16 +742,18 @@ Terragrunt exposes many built-in functions in HCL. Here's how they map to Atmos 
 | `dependency.X.outputs.Y` | `!terraform.output` | `!terraform.output component.output_name` |
 | N/A | `!terraform.state` | Read arbitrary state attributes |
 
-### Secret Management
+### Change Tracking and Constraints
 
 | Terragrunt Function | Atmos Equivalent | Notes |
 |---------------------|------------------|-------|
-| `sops_decrypt_file()` | `!store` | Use store integrations (SSM, Secrets Manager, etc.) |
+| `mark_as_read()` | `dependencies.components` with `kind: file` | Declare explicit file dependencies so `describe affected` can track changes. |
+| `mark_glob_as_read()` | `dependencies.components` with `kind: folder` | Declare folder dependencies instead of imperatively marking glob reads. |
+| `constraint_check()` | Sprig `semverCompare` or tool dependency constraints | Use `semverCompare` in templates for conditional config, or Atmos toolchain dependency constraints for tool versions. |
 
 :::tip YAML Functions vs Templates
 Atmos offers two ways to access dynamic values:
 - **YAML Functions** (`!exec`, `!env`, `!terraform.output`) — Preferred. Validated at parse time, readable, works with YAML tooling.
-- **Go Templates** (`{{ env "VAR" }}`, `{{ exec "cmd" }}`) — Escape hatch. Use when YAML functions don't cover your use case.
+- **Go Templates** (`{{ env "VAR" }}`, `{{ semverCompare ">=2.0.0" .vars.version }}`) — Escape hatch. Use when YAML functions don't cover your use case.
 
 See [YAML Functions](/functions/yaml) for the complete reference.
 :::
