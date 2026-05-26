@@ -533,8 +533,13 @@ func hookPointer(f func(*schema.ConfigAndStacksInfo, string, error)) uintptr {
 // Regression test for https://github.com/cloudposse/atmos/issues/2432.
 func TestInteractiveStackSelection_PersistsToCobraFlag(t *testing.T) {
 	// Stub the interactive prompt to return a fixed stack name.
+	// The real shared.PromptForStack also persists to the Cobra flag;
+	// the stub replicates that behavior.
 	origPrompt := promptForStack
-	promptForStack = func(_ *cobra.Command, _ string) (string, error) {
+	promptForStack = func(cmd *cobra.Command, _ string) (string, error) {
+		if f := cmd.Flag("stack"); f != nil {
+			_ = f.Value.Set("tenant1-ue1-dev")
+		}
 		return "tenant1-ue1-dev", nil
 	}
 	t.Cleanup(func() { promptForStack = origPrompt })
@@ -619,7 +624,12 @@ func TestInteractiveComponentSelection_PersistsPromptResult(t *testing.T) {
 	promptForComponent = func(_ *cobra.Command, _ string) (string, error) {
 		return "vpc", nil
 	}
-	promptForStack = func(_ *cobra.Command, _ string) (string, error) {
+	// The real shared.PromptForStack also persists to the Cobra flag;
+	// the stub replicates that behavior.
+	promptForStack = func(cmd *cobra.Command, _ string) (string, error) {
+		if f := cmd.Flag("stack"); f != nil {
+			_ = f.Value.Set("prod-ue1")
+		}
 		return "prod-ue1", nil
 	}
 	t.Cleanup(func() {

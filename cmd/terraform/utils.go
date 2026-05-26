@@ -695,16 +695,6 @@ func handleInteractiveComponentStackSelection(info *schema.ConfigAndStacksInfo, 
 			return err
 		}
 		info.Stack = stack
-
-		// Persist the interactively-selected stack to the Cobra flag set so
-		// PostRunE hooks (which re-parse args via ProcessCommandLineArgs) can
-		// read it from cmd.Flags().GetString("stack"). Without this, hooks
-		// silently skip because they see an empty stack.
-		if f := cmd.Flag("stack"); f != nil {
-			if err := f.Value.Set(stack); err != nil {
-				return fmt.Errorf("%w: stack=%q: %w", errUtils.ErrSetFlag, stack, err)
-			}
-		}
 	}
 
 	return nil
