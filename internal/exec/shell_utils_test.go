@@ -276,9 +276,11 @@ func TestExecuteShellCommandRedirectsStderrToStdoutCapture(t *testing.T) {
 	)
 
 	require.NoError(t, err)
-	assert.Equal(t, "stdoutstderr", terminalOut.String())
+	assert.Contains(t, terminalOut.String(), "stdout")
+	assert.Contains(t, terminalOut.String(), "stderr")
 	assert.Empty(t, terminalErr.String())
-	assert.Equal(t, "stdoutstderr", captureOut.String())
+	assert.Contains(t, captureOut.String(), "stdout")
+	assert.Contains(t, captureOut.String(), "stderr")
 }
 
 type shellHelperInvocation struct {

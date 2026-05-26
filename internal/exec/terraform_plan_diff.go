@@ -26,7 +26,15 @@ var (
 	ErrNoJSONOutput = errors.New("no JSON output found in terraform show output")
 )
 
-var executeTerraformForPlanDiff = ExecuteTerraform
+type terraformPlanDiffExecutor interface {
+	ExecuteTerraform(schema.ConfigAndStacksInfo, ...ShellCommandOption) error
+}
+
+type terraformPlanDiffExecutorFunc func(schema.ConfigAndStacksInfo, ...ShellCommandOption) error
+
+func (f terraformPlanDiffExecutorFunc) ExecuteTerraform(info schema.ConfigAndStacksInfo, opts ...ShellCommandOption) error {
+	return f(info, opts...)
+}
 
 // PlanFileOptions contains parameters for plan file operations.
 type PlanFileOptions struct {
@@ -274,6 +282,10 @@ func copyPlanFileIfNeeded(planFile, componentPath string) (string, func(), error
 
 // runTerraformShow runs the terraform show command and captures its output.
 func runTerraformShow(info *schema.ConfigAndStacksInfo, planFile string) (string, error) {
+	return runTerraformShowWithExecutor(info, planFile, terraformPlanDiffExecutorFunc(ExecuteTerraform))
+}
+
+func runTerraformShowWithExecutor(info *schema.ConfigAndStacksInfo, planFile string, executor terraformPlanDiffExecutor) (string, error) {
 	var outputBuf bytes.Buffer
 
 	// Set up the show command
@@ -282,7 +294,7 @@ func runTerraformShow(info *schema.ConfigAndStacksInfo, planFile string) (string
 	showInfo.AdditionalArgsAndFlags = []string{"-json", planFile}
 
 	// Run the command
-	if execErr := executeTerraformForPlanDiff(showInfo, WithStdoutOverride(&outputBuf)); execErr != nil {
+	if execErr := executor.ExecuteTerraform(showInfo, WithStdoutOverride(&outputBuf)); execErr != nil {
 		return "", fmt.Errorf("error running terraform show: %w", execErr)
 	}
 

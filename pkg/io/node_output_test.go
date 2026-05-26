@@ -30,6 +30,14 @@ func TestPrefixedWriterHandlesPartialLines(t *testing.T) {
 	assert.Equal(t, "[node] one two\n[node] three", buf.String())
 }
 
+func TestPrefixedWriterDiscardsNilWriter(t *testing.T) {
+	w := NewPrefixedWriter("node", nil)
+
+	n, err := w.Write([]byte("hello\n"))
+	require.NoError(t, err)
+	assert.Equal(t, len("hello\n"), n)
+}
+
 func TestNewNodeOutputWritesTerminalFileAndCaptureSinks(t *testing.T) {
 	var terminal, file, capture bytes.Buffer
 	output := NewNodeOutput(NodeOutputOptions{
@@ -51,7 +59,7 @@ func TestNewNodeOutputWritesTerminalFileAndCaptureSinks(t *testing.T) {
 }
 
 func TestNewNodeOutputMasksAllSinks(t *testing.T) {
-	_ = Initialize()
+	require.NoError(t, Initialize())
 	RegisterSecret("secret-value")
 
 	var terminal, file, capture bytes.Buffer

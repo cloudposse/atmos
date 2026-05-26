@@ -620,12 +620,7 @@ trailing text`
 
 func TestRunTerraformShowCapturesWithInjectedStdout(t *testing.T) {
 	origStdout := os.Stdout
-	origExec := executeTerraformForPlanDiff
-	t.Cleanup(func() {
-		executeTerraformForPlanDiff = origExec
-	})
-
-	executeTerraformForPlanDiff = func(info schema.ConfigAndStacksInfo, opts ...ShellCommandOption) error {
+	executor := terraformPlanDiffExecutorFunc(func(info schema.ConfigAndStacksInfo, opts ...ShellCommandOption) error {
 		assert.Equal(t, "show", info.SubCommand)
 		assert.Equal(t, []string{"-json", "plan.tfplan"}, info.AdditionalArgsAndFlags)
 		assert.Same(t, origStdout, os.Stdout)
@@ -638,9 +633,9 @@ func TestRunTerraformShowCapturesWithInjectedStdout(t *testing.T) {
 		_, err := cfg.stdoutOverride.Write([]byte("terraform noise\n{\"format_version\":\"1.0\"}"))
 		require.NoError(t, err)
 		return nil
-	}
+	})
 
-	output, err := runTerraformShow(&schema.ConfigAndStacksInfo{}, "plan.tfplan")
+	output, err := runTerraformShowWithExecutor(&schema.ConfigAndStacksInfo{}, "plan.tfplan", executor)
 
 	require.NoError(t, err)
 	assert.Equal(t, "terraform noise\n{\"format_version\":\"1.0\"}", output)

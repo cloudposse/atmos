@@ -68,6 +68,9 @@ func composeNodeOutput(nodeID string, sinks NodeOutputSinks) stdio.Writer {
 
 // NewPrefixedWriter returns a writer that prefixes each line with [prefix].
 func NewPrefixedWriter(prefix string, w stdio.Writer) stdio.Writer {
+	if w == nil {
+		return stdio.Discard
+	}
 	if prefix == "" {
 		return w
 	}
