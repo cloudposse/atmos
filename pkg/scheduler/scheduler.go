@@ -2,21 +2,14 @@ package scheduler
 
 import (
 	"context"
-	"errors"
+	stdErrors "errors"
 	"fmt"
 	"sort"
 	"sync"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/dependency"
-)
-
-var (
-	ErrNilGraph      = errors.New("scheduler graph cannot be nil")
-	ErrNilDispatcher = errors.New("scheduler dispatcher cannot be nil")
-	ErrNodeSkipped   = errors.New("scheduler node skipped")
-	ErrNodeNotFound  = errors.New("scheduler node not found")
-	ErrInvalidGraph  = errors.New("scheduler graph is invalid")
-	ErrInvalidWorker = errors.New("scheduler max concurrency must be greater than zero")
+	"github.com/cloudposse/atmos/pkg/perf"
 )
 
 // Status describes the scheduler outcome for a node.
@@ -136,6 +129,8 @@ func New(graph *dependency.Graph, dispatcher Dispatcher, opts ...Option) *Schedu
 
 // Run executes the graph with ready-queue scheduling.
 func (s *Scheduler) Run(ctx context.Context) *AggregateResult {
+	defer perf.Track(nil, "scheduler.Run")()
+
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -205,11 +200,12 @@ func (s *Scheduler) Run(ctx context.Context) *AggregateResult {
 			if event.result.Status == StatusFailed {
 				if s.failFast {
 					stopping = true
-					cancel()
-					finished += skipPending(states, results, s.graph, fmt.Errorf("%w: fail-fast after %s failed", ErrNodeSkipped, event.nodeID))
+					finished += skipPending(states, results, s.graph, fmt.Errorf("%w: fail-fast after %s failed", errUtils.ErrNodeSkipped, event.nodeID))
 				} else {
-					finished += skipBlocked(event.nodeID, states, results, s.graph, fmt.Errorf("%w: dependency %s failed", ErrNodeSkipped, event.nodeID))
+					finished += skipBlocked(event.nodeID, states, results, s.graph, fmt.Errorf("%w: dependency %s failed", errUtils.ErrNodeSkipped, event.nodeID))
 				}
+			} else if event.result.Status == StatusSkipped {
+				finished += skipBlocked(event.nodeID, states, results, s.graph, skipCause(event))
 			}
 		case <-done:
 			stopping = true
@@ -229,19 +225,19 @@ func (s *Scheduler) Run(ctx context.Context) *AggregateResult {
 
 func (s *Scheduler) validate() ([]string, error) {
 	if s == nil {
-		return nil, ErrNilGraph
+		return nil, errUtils.ErrNilGraph
 	}
 	if s.graph == nil {
-		return nil, ErrNilGraph
+		return nil, errUtils.ErrNilGraph
 	}
 	if s.dispatcher == nil {
-		return nil, ErrNilDispatcher
+		return nil, errUtils.ErrNilDispatcher
 	}
 	if s.maxConcurrency <= 0 {
-		return nil, ErrInvalidWorker
+		return nil, errUtils.ErrInvalidWorker
 	}
 	if hasCycle, cyclePath := s.graph.HasCycles(); hasCycle {
-		return nil, fmt.Errorf("%w: %w: %v", ErrInvalidGraph, dependency.ErrCircularDependency, cyclePath)
+		return nil, fmt.Errorf("%w: %w: %v", errUtils.ErrInvalidGraph, dependency.ErrCircularDependency, cyclePath)
 	}
 	return topologicalNodeIDs(s.graph)
 }
@@ -251,7 +247,7 @@ func (s *Scheduler) worker(ctx context.Context, workCh <-chan string, eventCh ch
 	for nodeID := range workCh {
 		node, ok := s.graph.GetNode(nodeID)
 		if !ok {
-			eventCh <- runEvent{nodeID: nodeID, result: failedResult(nodeID, dependency.Node{ID: nodeID}, ErrNodeNotFound)}
+			eventCh <- runEvent{nodeID: nodeID, result: failedResult(nodeID, dependency.Node{ID: nodeID}, errUtils.ErrNodeNotFound)}
 			continue
 		}
 		if s.onNodeStart != nil {
@@ -296,6 +292,9 @@ func normalizeResult(node *dependency.Node, result Result, err error) Result {
 	if err != nil {
 		result.Err = err
 	}
+	if result.Status == StatusSkipped {
+		return result
+	}
 	if result.Err != nil {
 		result.Status = StatusFailed
 		return result
@@ -322,6 +321,13 @@ func skippedResult(node *dependency.Node, err error) Result {
 		Status: StatusSkipped,
 		Err:    err,
 	}
+}
+
+func skipCause(event runEvent) error {
+	if event.result.Err != nil {
+		return fmt.Errorf("%w: dependency %s skipped: %w", errUtils.ErrNodeSkipped, event.nodeID, event.result.Err)
+	}
+	return fmt.Errorf("%w: dependency %s skipped", errUtils.ErrNodeSkipped, event.nodeID)
 }
 
 func skipPending(states map[string]nodeState, results map[string]Result, graph *dependency.Graph, err error) int {
@@ -363,7 +369,7 @@ func aggregateError(results []Result) error {
 			errs = append(errs, result.Err)
 		}
 	}
-	return errors.Join(errs...)
+	return stdErrors.Join(errs...)
 }
 
 func orderedResults(orderedIDs []string, results map[string]Result) []Result {
@@ -393,7 +399,7 @@ func topologicalNodeIDs(graph *dependency.Graph) ([]string, error) {
 	}
 
 	if len(ordered) != len(graph.Nodes) {
-		return nil, fmt.Errorf("%w: %w", ErrInvalidGraph, dependency.ErrCircularDependency)
+		return nil, fmt.Errorf("%w: %w", errUtils.ErrInvalidGraph, dependency.ErrCircularDependency)
 	}
 	return ordered, nil
 }

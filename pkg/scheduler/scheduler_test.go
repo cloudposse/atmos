@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/dependency"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -329,20 +330,109 @@ func TestRunFailFastSkipsPendingWorkAfterFirstError(t *testing.T) {
 	assert.False(t, started["c"])
 }
 
+func TestRunFailFastLetsAlreadyRunningNodesDrain(t *testing.T) {
+	graph := testGraph(t, map[string][]string{
+		"a": nil,
+		"b": nil,
+		"c": {"b"},
+	})
+
+	boom := errors.New("boom")
+	releaseA := make(chan struct{})
+	releaseB := make(chan struct{})
+	started := make(chan string, 2)
+	dispatcher := DispatcherFunc(func(ctx context.Context, node *dependency.Node) (Result, error) {
+		started <- node.ID
+		switch node.ID {
+		case "a":
+			select {
+			case <-releaseA:
+			case <-ctx.Done():
+				return Result{}, ctx.Err()
+			}
+			return Result{}, boom
+		case "b":
+			select {
+			case <-releaseB:
+				return Result{}, nil
+			case <-ctx.Done():
+				return Result{}, ctx.Err()
+			}
+		default:
+			return Result{}, nil
+		}
+	})
+
+	done := make(chan *AggregateResult, 1)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	go func() {
+		done <- New(graph, dispatcher, WithMaxConcurrency(2), WithFailFast(true)).Run(ctx)
+	}()
+
+	waitForStartedSet(t, started, nil, "a", "b")
+	close(releaseA)
+	assertNoResult(t, done, 50*time.Millisecond)
+	close(releaseB)
+
+	result := <-done
+	require.ErrorIs(t, result.Err, boom)
+	require.NotErrorIs(t, result.Err, context.Canceled)
+	assertStatuses(t, result, map[string]Status{
+		"a": StatusFailed,
+		"b": StatusSucceeded,
+		"c": StatusSkipped,
+	})
+}
+
+func TestRunPropagatesSkippedStatusToDependents(t *testing.T) {
+	graph := testGraph(t, map[string][]string{
+		"a": nil,
+		"b": {"a"},
+		"c": {"b"},
+		"z": nil,
+	})
+
+	skipErr := errors.New("skip a")
+	dispatcher := DispatcherFunc(func(_ context.Context, node *dependency.Node) (Result, error) {
+		if node.ID == "a" {
+			return Result{Status: StatusSkipped, Err: skipErr}, nil
+		}
+		return Result{}, nil
+	})
+
+	result := runWithTimeout(t, New(graph, dispatcher, WithMaxConcurrency(2)))
+
+	require.ErrorIs(t, result.Err, skipErr)
+	require.ErrorIs(t, result.Err, errUtils.ErrNodeSkipped)
+	assertStatuses(t, result, map[string]Status{
+		"a": StatusSkipped,
+		"b": StatusSkipped,
+		"c": StatusSkipped,
+		"z": StatusSucceeded,
+	})
+	for _, id := range []string{"b", "c"} {
+		nodeResult, ok := result.ResultFor(id)
+		require.True(t, ok)
+		require.ErrorIs(t, nodeResult.Err, skipErr)
+		require.ErrorIs(t, nodeResult.Err, errUtils.ErrNodeSkipped)
+	}
+}
+
 func TestRunValidatesInputs(t *testing.T) {
 	result := New(nil, DispatcherFunc(func(context.Context, *dependency.Node) (Result, error) {
 		return Result{}, nil
 	})).Run(context.Background())
-	require.ErrorIs(t, result.Err, ErrNilGraph)
+	require.ErrorIs(t, result.Err, errUtils.ErrNilGraph)
 
 	graph := testGraph(t, map[string][]string{"a": nil})
 	result = New(graph, nil).Run(context.Background())
-	require.ErrorIs(t, result.Err, ErrNilDispatcher)
+	require.ErrorIs(t, result.Err, errUtils.ErrNilDispatcher)
 
 	result = New(graph, DispatcherFunc(func(context.Context, *dependency.Node) (Result, error) {
 		return Result{}, nil
 	}), WithMaxConcurrency(0)).Run(context.Background())
-	require.ErrorIs(t, result.Err, ErrInvalidWorker)
+	require.ErrorIs(t, result.Err, errUtils.ErrInvalidWorker)
 }
 
 func TestRunRejectsCyclicGraph(t *testing.T) {
@@ -354,7 +444,7 @@ func TestRunRejectsCyclicGraph(t *testing.T) {
 
 	result := New(graph, successfulDispatcher()).Run(context.Background())
 
-	require.ErrorIs(t, result.Err, ErrInvalidGraph)
+	require.ErrorIs(t, result.Err, errUtils.ErrInvalidGraph)
 	require.ErrorIs(t, result.Err, dependency.ErrCircularDependency)
 }
 
@@ -482,6 +572,16 @@ func assertNoStart(t *testing.T, started <-chan string, duration time.Duration) 
 	select {
 	case id := <-started:
 		t.Fatalf("unexpected node start while workers were saturated: %s", id)
+	case <-time.After(duration):
+	}
+}
+
+func assertNoResult(t *testing.T, done <-chan *AggregateResult, duration time.Duration) {
+	t.Helper()
+
+	select {
+	case result := <-done:
+		t.Fatalf("scheduler finished before running workers drained: %#v", result)
 	case <-time.After(duration):
 	}
 }
