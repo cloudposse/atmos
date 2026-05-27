@@ -870,10 +870,11 @@ func (o *terraformOutput) finishNode(node *dependency.Node, result TerraformExec
 	if execErr != nil {
 		status = "failed"
 	}
-	fmt.Fprintf(os.Stderr, "\n[%s] terraform plan %s\n", label, status)
+	stderr := ioLayer.MaskWriter(os.Stderr)
+	fmt.Fprintf(stderr, "\n[%s] terraform plan %s\n", label, status)
 	replayGroupedOutput(ioLayer.MaskWriter(os.Stdout), result.Stdout)
-	replayGroupedOutput(ioLayer.MaskWriter(os.Stderr), result.Stderr)
-	fmt.Fprintf(os.Stderr, "[%s] end terraform plan output\n", label)
+	replayGroupedOutput(stderr, result.Stderr)
+	fmt.Fprintf(stderr, "[%s] end terraform plan output\n", label)
 }
 
 func replayGroupedOutput(w io.Writer, output string) {

@@ -56,8 +56,11 @@ func (w *LinePrefixWriter) Flush() error {
 		return nil
 	}
 	line := append([]byte(nil), w.buffer...)
+	if err := w.writeLine(line); err != nil {
+		return err
+	}
 	w.buffer = w.buffer[:0]
-	return w.writeLine(line)
+	return nil
 }
 
 func (w *LinePrefixWriter) flushCompleteLinesLocked() error {
@@ -67,10 +70,10 @@ func (w *LinePrefixWriter) flushCompleteLinesLocked() error {
 			return nil
 		}
 		line := append([]byte(nil), w.buffer[:idx+1]...)
-		w.buffer = w.buffer[idx+1:]
 		if err := w.writeLine(line); err != nil {
 			return err
 		}
+		w.buffer = w.buffer[idx+1:]
 	}
 }
 
