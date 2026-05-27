@@ -33,6 +33,9 @@ atmos terraform migrate list [component] [options]
   <dt>`--stack` / `-s`</dt>
   <dd>Filter results to a stack.</dd>
 
+  <dt>`--identity` / `-i`</dt>
+  <dd>Identity to authenticate before resolving stacks and component migration context. Environment variable: `ATMOS_IDENTITY`.</dd>
+
   <dt>`--components`</dt>
   <dd>Filter results to one or more component names.</dd>
 
@@ -61,6 +64,12 @@ List migration context for a stack:
 
 ```shell
 atmos terraform migrate list -s plat-ue2-dev
+```
+
+List with an explicit identity:
+
+```shell
+atmos terraform migrate list -s plat-ue2-dev --identity aws-prod
 ```
 
 Show history keys for matching components:

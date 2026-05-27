@@ -101,7 +101,20 @@ func collectTfmigrateListRows(info *schema.ConfigAndStacksInfo) ([]map[string]an
 	if err != nil {
 		return nil, err
 	}
-	stacks, err := e.ExecuteDescribeStacks(&atmosConfig, info.Stack, info.Components, []string{cfg.TerraformComponentType}, nil, false, info.ProcessTemplates, info.ProcessFunctions, false, info.Skip, authManager)
+	stacks, err := e.ExecuteDescribeStacksWithAuthDisabled(
+		&atmosConfig,
+		info.Stack,
+		info.Components,
+		[]string{cfg.TerraformComponentType},
+		nil,
+		false,
+		info.ProcessTemplates,
+		info.ProcessFunctions,
+		false,
+		info.Skip,
+		authManager,
+		info.Identity == cfg.IdentityFlagDisabledValue,
+	)
 	if err != nil {
 		return nil, err
 	}

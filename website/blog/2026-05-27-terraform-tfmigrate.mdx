@@ -8,8 +8,8 @@ tags: [feature, dx]
 Atmos can now run user-authored [`tfmigrate`](https://github.com/minamijoyo/tfmigrate) migrations manually from the CLI and automatically from Terraform lifecycle hooks, all in the same component context as `atmos terraform plan` and `apply`.
 
 ```shell
-atmos terraform migrate plan s3-bucket -s plat-ue2-dev --migration migrations/001_remove_template_provider.hcl
-atmos terraform migrate apply s3-bucket -s plat-ue2-dev --migration migrations/001_remove_template_provider.hcl
+atmos terraform migrate plan s3-bucket -s plat-ue2-dev
+atmos terraform migrate apply s3-bucket -s plat-ue2-dev
 ```
 
 <!--truncate-->
@@ -58,9 +58,10 @@ For idempotent migrations in automation, use `tfmigrate` history mode:
 atmos terraform migrate apply s3-bucket -s plat-ue2-dev
 ```
 
-Atmos exports stack/component/workspace-scoped history variables and copies
-supported Terraform backend settings so the `tfmigrate` config can reuse the
-same bucket and identity setup:
+Atmos lets `tfmigrate` discover `.tfmigrate.hcl` by default. It also exports
+stack/component/workspace-scoped history variables and copies supported
+Terraform backend settings so the `tfmigrate` config can reuse the same bucket
+and identity setup:
 
 ```hcl
 tfmigrate {
@@ -91,9 +92,9 @@ Terraform backend bucket.
 Single-file `tfmigrate apply path.hcl` is not inherently idempotent. A rerun
 can fail after a state address has already moved or been removed.
 
-Atmos v1 passes `tfmigrate` config and history settings through, but it does
-not persist history itself. Durable history storage in S3, GCS, or CI-persisted
-local storage is required for safe reruns.
+Atmos v1 passes `tfmigrate` config overrides and history settings through, but
+it does not persist history itself. Durable history storage in S3, GCS, or
+CI-persisted local storage is required for safe reruns.
 
 ## Learn More
 

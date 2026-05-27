@@ -318,8 +318,8 @@ func tfmigrateComponentName(info *schema.ConfigAndStacksInfo) string {
 func init() {
 	migrateParser = flags.NewStandardParser(
 		shared.WithBackendExecutionFlags(),
-		flags.WithStringFlag("migration", "", "", "Path to a tfmigrate migration file. Omit to use tfmigrate history mode"),
-		flags.WithStringFlag("tfmigrate-config", "", "", "Path to a tfmigrate config file"),
+		flags.WithStringFlag("migration", "", "", "Path to a single tfmigrate migration file. Omit to let tfmigrate run history mode"),
+		flags.WithStringFlag("tfmigrate-config", "", "", "Override tfmigrate config path. Defaults to tfmigrate discovery"),
 		flags.WithStringSliceFlag("backend-config", "", nil, "Backend configuration passed to tfmigrate; may be specified multiple times"),
 		flags.WithBoolFlag("affected", "", false, "Run migrations for the affected components in dependency order"),
 		flags.WithBoolFlag("all", "", false, "Run migrations for all components in all stacks"),

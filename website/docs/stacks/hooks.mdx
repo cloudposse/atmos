@@ -94,6 +94,12 @@ workdir directories, generates backend and var files, runs Terraform init,
 selects the workspace, resolves `tfmigrate` from the toolchain or PATH, and
 sets `TFMIGRATE_EXEC_PATH` before the migration runs.
 
+The hook reuses the identity already resolved for the Terraform command. If the
+command used `--identity aws-prod`, `ATMOS_IDENTITY=aws-prod`, or a component
+default identity, the hook passes that identity to the nested
+`atmos terraform migrate` invocation. The nested command also sets
+`ATMOS_SKIP_HOOKS=*` so the migration hook does not recursively trigger itself.
+
 ```yaml
 components:
   terraform:
@@ -108,16 +114,15 @@ components:
             - before.terraform.plan
             - before.terraform.apply
           kind: tfmigrate
-          migration: migrations/001_remove_template_provider.hcl
           mode: dynamic
 ```
 
 <dl>
   <dt>`migration`</dt>
-  <dd>Path to a single `tfmigrate` migration file. Omit this field to use `tfmigrate` history mode with `config`.</dd>
+  <dd>Path to a single `tfmigrate` migration file. Omit this field to let `tfmigrate` run history mode.</dd>
 
   <dt>`config`</dt>
-  <dd>Path to a `tfmigrate` config file. Use this to configure `migration_dir` and durable `history.storage`.</dd>
+  <dd>Optional override for the `tfmigrate` config path. When omitted, `tfmigrate` uses its own default discovery, including `.tfmigrate.hcl`.</dd>
 
   <dt>`backend_config`</dt>
   <dd>List of entries passed through as repeated `tfmigrate --backend-config` arguments. This configures the Terraform state backend used by `tfmigrate`; it is not the `tfmigrate` history backend.</dd>
@@ -126,7 +131,7 @@ components:
   <dd>`dynamic` (default), `plan`, or `apply`. Dynamic mode runs `tfmigrate plan` for `before.terraform.plan` and `tfmigrate apply` for `before.terraform.apply` / `before.terraform.deploy`.</dd>
 </dl>
 
-History mode is enabled by omitting `migration` and supplying `config`:
+History mode is enabled by omitting `migration`. By default, `tfmigrate` discovers `.tfmigrate.hcl` from the component working directory:
 
 ```yaml
 hooks:
@@ -135,11 +140,12 @@ hooks:
       - before.terraform.plan
       - before.terraform.apply
     kind: tfmigrate
-    config: .tfmigrate.hcl
     mode: dynamic
 ```
 
-Atmos exposes helper variables so `.tfmigrate.hcl` can reuse the component's
+Set `config` only when the config file lives somewhere else.
+
+Atmos exposes helper variables so the `tfmigrate` config can reuse the component's
 Terraform backend bucket and stack-specific history key:
 
 ```hcl

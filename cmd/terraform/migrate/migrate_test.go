@@ -8,8 +8,11 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/cloudposse/atmos/cmd/terraform/shared"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/schema"
+	tfmigrate "github.com/cloudposse/atmos/pkg/terraform/tfmigrate"
 )
 
 func TestMigrateCommandRegistered(t *testing.T) {
@@ -54,6 +57,114 @@ func TestMigrateParserViperBinding(t *testing.T) {
 	assert.Equal(t, "migrations/001.hcl", v.GetString("migration"))
 	assert.Equal(t, ".tfmigrate.hcl", v.GetString("tfmigrate-config"))
 	assert.Equal(t, []string{"bucket=state"}, v.GetStringSlice("backend-config"))
+}
+
+func TestParseTerraformMigratePreservesIdentity(t *testing.T) {
+	tests := []struct {
+		name     string
+		action   string
+		args     []string
+		env      string
+		expected string
+	}{
+		{
+			name:     "plan with explicit identity",
+			action:   tfmigrate.ActionPlan,
+			args:     []string{"vpc", "--stack", "dev", "--identity", "aws-dev"},
+			expected: "aws-dev",
+		},
+		{
+			name:     "apply with explicit identity",
+			action:   tfmigrate.ActionApply,
+			args:     []string{"vpc", "--stack", "dev", "--identity=aws-prod"},
+			expected: "aws-prod",
+		},
+		{
+			name:     "plan with identity from environment",
+			action:   tfmigrate.ActionPlan,
+			args:     []string{"vpc", "--stack", "dev"},
+			env:      "env-identity",
+			expected: "env-identity",
+		},
+		{
+			name:     "apply with identity from environment",
+			action:   tfmigrate.ActionApply,
+			args:     []string{"vpc", "--stack", "dev"},
+			env:      "env-identity",
+			expected: "env-identity",
+		},
+		{
+			name:     "identity false disables auth",
+			action:   tfmigrate.ActionPlan,
+			args:     []string{"vpc", "--stack", "dev", "--identity=false"},
+			expected: cfg.IdentityFlagDisabledValue,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			parent := setupMigrateParseTest(t)
+			if tt.env != "" {
+				t.Setenv("ATMOS_IDENTITY", tt.env)
+			}
+			cmd := newMigrateActionTestCommand(parent, tt.action)
+
+			info, opts, err := parseTerraformMigrate(cmd, tt.args, tt.action)
+			require.NoError(t, err)
+
+			assert.Equal(t, tt.action, opts.Action)
+			assert.Equal(t, "vpc", info.ComponentFromArg)
+			assert.Equal(t, "dev", info.Stack)
+			assert.Equal(t, tt.expected, info.Identity)
+		})
+	}
+}
+
+func TestParseTerraformMigrateListArgsPreservesIdentity(t *testing.T) {
+	tests := []struct {
+		name     string
+		args     []string
+		env      string
+		expected string
+	}{
+		{
+			name:     "explicit identity",
+			args:     []string{"vpc", "--stack", "dev", "--identity", "aws-dev"},
+			expected: "aws-dev",
+		},
+		{
+			name:     "identity from environment",
+			args:     []string{"vpc", "--stack", "dev"},
+			env:      "env-identity",
+			expected: "env-identity",
+		},
+		{
+			name:     "identity false disables auth",
+			args:     []string{"vpc", "--stack", "dev", "--identity=false"},
+			expected: cfg.IdentityFlagDisabledValue,
+		},
+		{
+			name:     "identity without value uses interactive selector",
+			args:     []string{"vpc", "--stack", "dev", "--identity"},
+			expected: cfg.IdentityFlagSelectValue,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			setupMigrateParseTest(t)
+			if tt.env != "" {
+				t.Setenv("ATMOS_IDENTITY", tt.env)
+			}
+
+			info, err := parseTerraformMigrateListArgs(tt.args)
+			require.NoError(t, err)
+
+			assert.Equal(t, "dev", info.Stack)
+			assert.Equal(t, []string{"vpc"}, info.Components)
+			assert.Equal(t, tt.expected, info.Identity)
+		})
+	}
 }
 
 func TestMigrateListParserFlags(t *testing.T) {
@@ -136,4 +247,67 @@ func TestBuildTfmigrateEnvAddsHistoryNamespace(t *testing.T) {
 	assert.Contains(t, env, "ATMOS_TFMIGRATE_HISTORY_BUCKET=tfstate-bucket")
 	assert.Contains(t, env, "ATMOS_TFMIGRATE_HISTORY_REGION=us-east-1")
 	assert.Contains(t, env, "TFMIGRATE_EXEC_PATH=tofu")
+}
+
+func setupMigrateParseTest(t *testing.T) *cobra.Command {
+	t.Helper()
+
+	previousParentCommand := parentCommand
+	previousTerraformParser := terraformParser
+	viper.Reset()
+	t.Setenv("ATMOS_IDENTITY", "")
+
+	parent := &cobra.Command{
+		Use: "terraform",
+		FParseErrWhitelist: cobra.FParseErrWhitelist{
+			UnknownFlags: true,
+		},
+	}
+	parser := flags.NewStandardParser(
+		flags.WithCommonFlags(),
+		shared.WithBackendExecutionFlags(),
+		flags.WithBoolFlag("process-templates", "", true, "Enable/disable Go template processing"),
+		flags.WithBoolFlag("process-functions", "", true, "Enable/disable YAML functions processing"),
+		flags.WithStringSliceFlag("skip", "", nil, "Skip YAML functions"),
+		flags.WithBoolFlag("skip-init", "", false, "Skip terraform init before running command"),
+		flags.WithBoolFlag("init-pass-vars", "", false, "Pass generated varfile to init"),
+		flags.WithStringFlag("planfile", "", "", "Path to a Terraform plan file"),
+		flags.WithBoolFlag("skip-planfile", "", false, "Skip planfile generation"),
+		flags.WithBoolFlag("deploy-run-init", "", false, "Run init during deploy"),
+		flags.WithBoolFlag("verify-plan", "", false, "Verify plan before apply"),
+		flags.WithStringFlag("query", "q", "", "YQ component filter"),
+		flags.WithStringSliceFlag("components", "", nil, "Component filters"),
+		flags.WithBoolFlag("upload-status", "", false, "Upload status"),
+	)
+	parser.RegisterPersistentFlags(parent)
+	registerProcessCommandLineLocalFlags(parent)
+	require.NoError(t, parser.BindToViper(viper.GetViper()))
+
+	parentCommand = parent
+	terraformParser = parser
+
+	t.Cleanup(func() {
+		parentCommand = previousParentCommand
+		terraformParser = previousTerraformParser
+		viper.Reset()
+	})
+
+	return parent
+}
+
+func registerProcessCommandLineLocalFlags(cmd *cobra.Command) {
+	cmd.Flags().String("base-path", "", "")
+	cmd.Flags().StringSlice("config", nil, "")
+	cmd.Flags().StringSlice("config-path", nil, "")
+	cmd.Flags().StringSlice("profile", nil, "")
+	cmd.Flags().StringP("stack", "s", "", "")
+	cmd.Flags().StringP(cfg.IdentityFlagName, cfg.IdentityFlagShortName, "", "")
+	cmd.Flags().Lookup(cfg.IdentityFlagName).NoOptDefVal = cfg.IdentityFlagSelectValue
+}
+
+func newMigrateActionTestCommand(parent *cobra.Command, action string) *cobra.Command {
+	cmd := &cobra.Command{Use: action + " [component]"}
+	migrateParser.RegisterFlags(cmd)
+	parent.AddCommand(cmd)
+	return cmd
 }

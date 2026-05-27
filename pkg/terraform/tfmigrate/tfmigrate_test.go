@@ -28,6 +28,10 @@ func TestBuildArgs_HistoryModeOmitsMigrationFile(t *testing.T) {
 	args, err := BuildArgs(Options{Action: ActionPlan})
 	require.NoError(t, err)
 	assert.Equal(t, []string{"plan"}, args)
+
+	args, err = BuildArgs(Options{Action: ActionApply})
+	require.NoError(t, err)
+	assert.Equal(t, []string{"apply"}, args)
 }
 
 func TestBuildArgs_InvalidAction(t *testing.T) {

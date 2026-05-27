@@ -48,11 +48,14 @@ Atmos prepares the component before `tfmigrate` runs. Source provisioning, workd
   <dt>`--stack` / `-s`</dt>
   <dd>Atmos stack where the component is defined.</dd>
 
+  <dt>`--identity` / `-i`</dt>
+  <dd>Identity to authenticate before resolving the component and running `tfmigrate`. Environment variable: `ATMOS_IDENTITY`.</dd>
+
   <dt>`--migration`</dt>
-  <dd>Path to a single `tfmigrate` migration file for `plan` or `apply`.</dd>
+  <dd>Path to a single `tfmigrate` migration file for `plan` or `apply`. Omit this flag to let `tfmigrate` run history mode.</dd>
 
   <dt>`--tfmigrate-config`</dt>
-  <dd>Path to the `tfmigrate` config file. Omit `--migration` and use this flag for history mode.</dd>
+  <dd>Override the `tfmigrate` config path. When omitted, `tfmigrate` uses its own default discovery, including `.tfmigrate.hcl`.</dd>
 
   <dt>`--backend-config`</dt>
   <dd>Backend config entry passed to `tfmigrate --backend-config`. Repeat the flag for multiple entries.</dd>
@@ -64,6 +67,22 @@ Atmos prepares the component before `tfmigrate` runs. Source provisioning, workd
   <dd>Skip the normal Terraform init path before `tfmigrate` runs.</dd>
 </dl>
 
+## Authentication
+
+`atmos terraform migrate` uses the same identity flow as other Terraform commands. Pass an identity explicitly when the migration needs cloud credentials for backend access, YAML functions, source provisioning, or `tfmigrate` history storage:
+
+```shell
+atmos terraform migrate plan s3-bucket -s plat-ue2-dev --identity aws-prod --tfmigrate-config .tfmigrate.hcl
+```
+
+You can also use `ATMOS_IDENTITY`:
+
+```shell
+ATMOS_IDENTITY=aws-prod atmos terraform migrate apply s3-bucket -s plat-ue2-dev --tfmigrate-config .tfmigrate.hcl
+```
+
+When no identity is provided, Atmos can use the component or stack default identity. Use `--identity` without a value to select interactively, or `--identity=false` to disable authentication for the command.
+
 ## Subcommands
 
 <DocCardList items={[
@@ -74,16 +93,16 @@ Atmos prepares the component before `tfmigrate` runs. Source provisioning, workd
 
 ## Examples
 
-Preview a single-file migration:
+Preview history-mode migrations:
 
 ```shell
-atmos terraform migrate plan s3-bucket -s plat-ue2-dev --migration migrations/001_remove_template_provider.hcl
+atmos terraform migrate plan s3-bucket -s plat-ue2-dev
 ```
 
 Apply history-mode migrations:
 
 ```shell
-atmos terraform migrate apply s3-bucket -s plat-ue2-dev --tfmigrate-config .tfmigrate.hcl
+atmos terraform migrate apply s3-bucket -s plat-ue2-dev
 ```
 
 List migration context and history settings:
@@ -102,21 +121,27 @@ For every selected component instance, Atmos:
 - Selects the configured Terraform workspace.
 - Resolves `tfmigrate` and Terraform/OpenTofu through the Atmos toolchain or PATH.
 - Sets `TFMIGRATE_EXEC_PATH` to the resolved Terraform/OpenTofu binary unless already set.
-- Exports per-instance history helper variables for `.tfmigrate.hcl`.
+- Exports per-instance history helper variables for the `tfmigrate` config.
 
 ## History Mode
 
-Enable `tfmigrate` history mode by omitting `--migration` and passing a config file:
+Enable `tfmigrate` history mode by omitting `--migration`. By default, `tfmigrate` discovers `.tfmigrate.hcl` from the component working directory:
 
 ```shell
-atmos terraform migrate apply s3-bucket -s plat-ue2-dev --tfmigrate-config .tfmigrate.hcl
+atmos terraform migrate apply s3-bucket -s plat-ue2-dev
 ```
 
-Atmos v1 passes config and backend settings through to `tfmigrate`; it does not store or retrieve the history file for you. Durable history storage is required for rerun-safe automation.
+Use `--tfmigrate-config` only when the config file lives somewhere else:
+
+```shell
+atmos terraform migrate apply s3-bucket -s plat-ue2-dev --tfmigrate-config migrations/.tfmigrate.hcl
+```
+
+Atmos v1 passes config overrides and backend settings through to `tfmigrate`; it does not store or retrieve the history file for you. Durable history storage is required for rerun-safe automation.
 
 ## History Variables
 
-Atmos sets these variables for use from `.tfmigrate.hcl` via `env`:
+Atmos sets these variables for use from the `tfmigrate` config via `env`:
 
 <dl>
   <dt>`ATMOS_STACK`</dt>

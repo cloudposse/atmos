@@ -31,9 +31,9 @@
 
   <span style="font-weight:bold;color:teal;">    --init-run-reconfigure</span> <span style="filter: contrast(70%) brightness(190%);color:dimgray;">string</span>        <span style="filter: contrast(70%) brightness(190%);color:gray;">Override init_run_reconfigure setting from atmos.yaml (true/false)</span>
 
-  <span style="font-weight:bold;color:teal;">    --migration</span> <span style="filter: contrast(70%) brightness(190%);color:dimgray;">string</span>                   <span style="filter: contrast(70%) brightness(190%);color:gray;">Path to a tfmigrate migration file. Omit to use tfmigrate history mode</span>
+  <span style="font-weight:bold;color:teal;">    --migration</span> <span style="filter: contrast(70%) brightness(190%);color:dimgray;">string</span>                   <span style="filter: contrast(70%) brightness(190%);color:gray;">Path to a single tfmigrate migration file. Omit to let tfmigrate run history mode</span>
 
-  <span style="font-weight:bold;color:teal;">    --tfmigrate-config</span> <span style="filter: contrast(70%) brightness(190%);color:dimgray;">string</span>            <span style="filter: contrast(70%) brightness(190%);color:gray;">Path to a tfmigrate config file</span>
+  <span style="font-weight:bold;color:teal;">    --tfmigrate-config</span> <span style="filter: contrast(70%) brightness(190%);color:dimgray;">string</span>            <span style="filter: contrast(70%) brightness(190%);color:gray;">Override tfmigrate config path. Defaults to tfmigrate discovery</span>
 
 
 <span style="font-weight:bold;color:teal;">GLOBAL FLAGS</span>
@@ -171,4 +171,3 @@
       <span style="filter: contrast(70%) brightness(190%);color:dimgray;">-target</span>               <span style="filter: contrast(70%) brightness(190%);color:gray;">Target specific resources for planning/applying</span>
       <span style="filter: contrast(70%) brightness(190%);color:dimgray;">-var</span>                  <span style="filter: contrast(70%) brightness(190%);color:gray;">Set a value for one of the input variables</span>
       <span style="filter: contrast(70%) brightness(190%);color:dimgray;">-var-file</span>             <span style="filter: contrast(70%) brightness(190%);color:gray;">Load variable values from the given file</span>
-

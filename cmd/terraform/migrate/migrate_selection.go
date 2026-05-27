@@ -57,7 +57,20 @@ func executeTfmigrateQuery(info *schema.ConfigAndStacksInfo, opts tfmigrate.Opti
 	if err != nil {
 		return err
 	}
-	stacks, err := e.ExecuteDescribeStacks(&atmosConfig, info.Stack, info.Components, []string{cfg.TerraformComponentType}, nil, false, info.ProcessTemplates, info.ProcessFunctions, false, info.Skip, authManager)
+	stacks, err := e.ExecuteDescribeStacksWithAuthDisabled(
+		&atmosConfig,
+		info.Stack,
+		info.Components,
+		[]string{cfg.TerraformComponentType},
+		nil,
+		false,
+		info.ProcessTemplates,
+		info.ProcessFunctions,
+		false,
+		info.Skip,
+		authManager,
+		info.Identity == cfg.IdentityFlagDisabledValue,
+	)
 	if err != nil {
 		return err
 	}

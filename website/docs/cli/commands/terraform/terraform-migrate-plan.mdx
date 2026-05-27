@@ -33,11 +33,14 @@ atmos terraform migrate plan [component] -s <stack> [options]
   <dt>`--stack` / `-s`</dt>
   <dd>Atmos stack where the component is defined.</dd>
 
+  <dt>`--identity` / `-i`</dt>
+  <dd>Identity to authenticate before resolving the component and running `tfmigrate plan`. Environment variable: `ATMOS_IDENTITY`.</dd>
+
   <dt>`--migration`</dt>
-  <dd>Path to a single `tfmigrate` migration file.</dd>
+  <dd>Path to a single `tfmigrate` migration file. Omit this flag to let `tfmigrate` run history mode.</dd>
 
   <dt>`--tfmigrate-config`</dt>
-  <dd>Path to the `tfmigrate` config file. Use this to enable history mode with `history.storage`.</dd>
+  <dd>Override the `tfmigrate` config path. When omitted, `tfmigrate` uses its own default discovery, including `.tfmigrate.hcl`.</dd>
 
   <dt>`--backend-config`</dt>
   <dd>Backend config entry passed to `tfmigrate --backend-config`. Repeat the flag for multiple entries.</dd>
@@ -60,23 +63,35 @@ atmos terraform migrate plan [component] -s <stack> [options]
 
 ## Examples
 
+Preview history-mode migrations:
+
+```shell
+atmos terraform migrate plan s3-bucket -s plat-ue2-dev
+```
+
+Preview with an explicit identity:
+
+```shell
+atmos terraform migrate plan s3-bucket -s plat-ue2-dev --identity aws-prod
+```
+
 Preview a single-file migration:
 
 ```shell
 atmos terraform migrate plan s3-bucket -s plat-ue2-dev --migration migrations/001_remove_template_provider.hcl
 ```
 
-Preview history-mode migrations:
-
-```shell
-atmos terraform migrate plan s3-bucket -s plat-ue2-dev --tfmigrate-config .tfmigrate.hcl
-```
-
 Preview migrations across selected components:
 
 ```shell
-atmos terraform migrate plan --all --components s3-bucket --migration migrations/001_remove_template_provider.hcl
-atmos terraform migrate plan --query '.settings.requires_migration == true' --tfmigrate-config .tfmigrate.hcl
+atmos terraform migrate plan --all --components s3-bucket
+atmos terraform migrate plan --query '.settings.requires_migration == true'
+```
+
+Override the default `tfmigrate` config path:
+
+```shell
+atmos terraform migrate plan s3-bucket -s plat-ue2-dev --tfmigrate-config migrations/.tfmigrate.hcl
 ```
 
 ## Related

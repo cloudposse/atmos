@@ -25,14 +25,14 @@ The integration has two surfaces:
 Example:
 
 ```shell
-atmos terraform migrate plan vpc -s plat-ue2-dev --migration migrations/001_remove_template_provider.hcl
-atmos terraform migrate apply vpc -s plat-ue2-dev --migration migrations/001_remove_template_provider.hcl
+atmos terraform migrate plan vpc -s plat-ue2-dev
+atmos terraform migrate apply vpc -s plat-ue2-dev
 ```
 
-History mode is enabled by omitting `--migration` and providing a `tfmigrate` config:
+History mode is enabled by omitting `--migration`. Atmos does not require a config flag; `tfmigrate` discovers `.tfmigrate.hcl` by default. Use `--tfmigrate-config` only to override that path:
 
 ```shell
-atmos terraform migrate apply vpc -s plat-ue2-dev --tfmigrate-config .tfmigrate.hcl
+atmos terraform migrate apply vpc -s plat-ue2-dev --tfmigrate-config migrations/.tfmigrate.hcl
 ```
 
 For S3 history storage, the config can reuse the Terraform backend bucket and role resolved by Atmos:
@@ -83,7 +83,6 @@ components:
           events:
             - before.terraform.plan
             - before.terraform.apply
-          migration: migrations/001_remove_template_provider.hcl
           mode: dynamic
 ```
 
@@ -97,7 +96,7 @@ Hook `mode` values:
 
 Single-file `tfmigrate apply path.hcl` is not inherently idempotent. If the file contains `state mv` or `state rm`, rerunning it can fail because the source address or removed address is already gone.
 
-`tfmigrate` history mode can make reruns safe, but only when the history storage is durable across runs. Atmos v1 supports passing `--tfmigrate-config` and `--backend-config`, but it does not manage that persistence.
+`tfmigrate` history mode can make reruns safe, but only when the history storage is durable across runs. Atmos v1 supports tfmigrate's default config discovery plus explicit `--tfmigrate-config` and `--backend-config` overrides, but it does not manage that persistence.
 
 Users who need idempotent CI automation must configure durable `tfmigrate` history storage themselves, such as S3, GCS, or a local file persisted by CI.
 

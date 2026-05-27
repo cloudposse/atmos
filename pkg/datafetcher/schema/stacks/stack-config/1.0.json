@@ -1370,7 +1370,7 @@
             },
             "config": {
               "type": "string",
-              "description": "Path to a tfmigrate config file for kind: tfmigrate hooks."
+              "description": "Optional tfmigrate config path override for kind: tfmigrate hooks. When omitted, tfmigrate uses its own config discovery."
             },
             "backend_config": {
               "type": "array",

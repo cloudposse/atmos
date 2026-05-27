@@ -35,11 +35,14 @@ Atmos runs the same component preparation as `plan`: auth, source provisioning, 
   <dt>`--stack` / `-s`</dt>
   <dd>Atmos stack where the component is defined.</dd>
 
+  <dt>`--identity` / `-i`</dt>
+  <dd>Identity to authenticate before resolving the component and running `tfmigrate apply`. Environment variable: `ATMOS_IDENTITY`.</dd>
+
   <dt>`--migration`</dt>
-  <dd>Path to a single `tfmigrate` migration file. Single-file reruns are not inherently idempotent.</dd>
+  <dd>Path to a single `tfmigrate` migration file. Omit this flag to let `tfmigrate` run history mode. Single-file reruns are not inherently idempotent.</dd>
 
   <dt>`--tfmigrate-config`</dt>
-  <dd>Path to the `tfmigrate` config file. Omit `--migration` and use this flag to run history mode.</dd>
+  <dd>Override the `tfmigrate` config path. When omitted, `tfmigrate` uses its own default discovery, including `.tfmigrate.hcl`.</dd>
 
   <dt>`--backend-config`</dt>
   <dd>Backend config entry passed to `tfmigrate --backend-config`. Repeat the flag for multiple entries.</dd>
@@ -62,16 +65,28 @@ Atmos runs the same component preparation as `plan`: auth, source provisioning, 
 
 ## Examples
 
+Apply history-mode migrations:
+
+```shell
+atmos terraform migrate apply s3-bucket -s plat-ue2-dev
+```
+
+Apply with an explicit identity:
+
+```shell
+atmos terraform migrate apply s3-bucket -s plat-ue2-dev --identity aws-prod
+```
+
 Apply a single-file migration:
 
 ```shell
 atmos terraform migrate apply s3-bucket -s plat-ue2-dev --migration migrations/001_remove_template_provider.hcl
 ```
 
-Apply history-mode migrations:
+Override the default `tfmigrate` config path:
 
 ```shell
-atmos terraform migrate apply s3-bucket -s plat-ue2-dev --tfmigrate-config .tfmigrate.hcl
+atmos terraform migrate apply s3-bucket -s plat-ue2-dev --tfmigrate-config migrations/.tfmigrate.hcl
 ```
 
 Use a durable S3 history file in `.tfmigrate.hcl`:
