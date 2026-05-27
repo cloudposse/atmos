@@ -204,7 +204,7 @@ type TerraformDispatcher struct {
 // Dispatch executes one Terraform scheduler node.
 func (d *TerraformDispatcher) Dispatch(_ context.Context, node *dependency.Node) (scheduler.Result, error) {
 	if node == nil {
-		return scheduler.Result{}, errUtils.ErrInvalidConfig
+		return scheduler.Result{}, fmt.Errorf("%w: node is nil", errUtils.ErrInvalidConfig)
 	}
 	if d.shouldSkipByQuery(node) {
 		return scheduler.Result{NodeID: node.ID, Status: scheduler.StatusSucceeded, Value: false}, nil

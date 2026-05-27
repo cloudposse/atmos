@@ -214,7 +214,7 @@ func terraformAdapterTestStacks() map[string]any {
 	}
 }
 
-func terraformAdapterComponent(group string, dependenciesComponents []any, settingsDependsOn []any) map[string]any {
+func terraformAdapterComponent(group string, dependenciesComponents, settingsDependsOn []any) map[string]any {
 	component := map[string]any{
 		cfg.MetadataSectionName: map[string]any{
 			"component": "mock",
@@ -236,7 +236,7 @@ func terraformAdapterComponent(group string, dependenciesComponents []any, setti
 	return component
 }
 
-func terraformAdapterComponentWithPath(group string, componentPath string) map[string]any {
+func terraformAdapterComponentWithPath(group, componentPath string) map[string]any {
 	component := terraformAdapterComponent(group, nil, nil)
 	component["component_info"] = map[string]any{
 		cfg.ComponentPathSectionName: componentPath,
