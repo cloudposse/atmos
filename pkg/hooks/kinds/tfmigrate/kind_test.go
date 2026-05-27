@@ -1,6 +1,9 @@
 package tfmigrate
 
 import (
+	"os"
+	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -139,4 +142,93 @@ func TestAtmosArgs_OmitsOptionalTfmigrateConfig(t *testing.T) {
 		"--migration", "migrations/001.hcl",
 	}, args)
 	assert.NotContains(t, args, "--tfmigrate-config")
+}
+
+func TestEngineRunReturnsBeforeSubprocessForInvalidMode(t *testing.T) {
+	_, err := (&Engine{}).Run(&hooks.ExecContext{
+		Hook:  &hooks.Hook{Mode: "unknown"},
+		Event: hooks.BeforeTerraformPlan,
+		Info:  &schema.ConfigAndStacksInfo{ComponentFromArg: "vpc", Stack: "plat-ue2-dev"},
+	})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "invalid configuration")
+}
+
+func TestEngineRunReturnsBeforeSubprocessForInvalidDynamicEvent(t *testing.T) {
+	_, err := (&Engine{}).Run(&hooks.ExecContext{
+		Hook:  &hooks.Hook{Mode: tfmigrate.ModeDynamic},
+		Event: hooks.AfterTerraformPlan,
+		Info:  &schema.ConfigAndStacksInfo{ComponentFromArg: "vpc", Stack: "plat-ue2-dev"},
+	})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "invalid configuration")
+}
+
+func TestAtmosArgsMissingContextAndEmptyAppendHelpers(t *testing.T) {
+	_, err := atmosArgs(nil, tfmigrate.ActionPlan)
+	require.ErrorIs(t, err, errMissingHookContext)
+
+	_, err = atmosArgs(&hooks.ExecContext{}, tfmigrate.ActionPlan)
+	require.ErrorIs(t, err, errMissingHookContext)
+
+	args := []string{"terraform"}
+	assert.Equal(t, args, appendValue(args, ""))
+	assert.Equal(t, args, appendFlagValue(args, "--stack", ""))
+}
+
+func TestEngineRunExecutesCurrentBinaryWrapper(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("uses a POSIX shell wrapper")
+	}
+
+	script := filepath.Join(t.TempDir(), "atmos-wrapper")
+	require.NoError(t, os.WriteFile(script, []byte("#!/bin/sh\nexit 0\n"), 0o755))
+
+	previousArg0 := os.Args[0]
+	os.Args[0] = script
+	t.Cleanup(func() {
+		os.Args[0] = previousArg0
+	})
+
+	output, err := (&Engine{}).Run(&hooks.ExecContext{
+		Hook: &hooks.Hook{
+			Mode:          tfmigrate.ModeDynamic,
+			Migration:     "migrations/001.hcl",
+			Config:        ".tfmigrate.hcl",
+			BackendConfig: []string{"bucket=state"},
+		},
+		Event: hooks.BeforeTerraformPlan,
+		Info: &schema.ConfigAndStacksInfo{
+			ComponentFromArg: "vpc",
+			Stack:            "plat-ue2-dev",
+			Identity:         cfg.IdentityFlagDisabledValue,
+		},
+	})
+
+	require.NoError(t, err)
+	assert.Nil(t, output)
+}
+
+func TestEngineRunWrapsSubprocessFailure(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("uses a POSIX shell wrapper")
+	}
+
+	script := filepath.Join(t.TempDir(), "atmos-wrapper")
+	require.NoError(t, os.WriteFile(script, []byte("#!/bin/sh\nexit 7\n"), 0o755))
+
+	previousArg0 := os.Args[0]
+	os.Args[0] = script
+	t.Cleanup(func() {
+		os.Args[0] = previousArg0
+	})
+
+	_, err := (&Engine{}).Run(&hooks.ExecContext{
+		Hook:  &hooks.Hook{Mode: tfmigrate.ModePlan},
+		Event: hooks.BeforeTerraformPlan,
+		Info:  &schema.ConfigAndStacksInfo{ComponentFromArg: "vpc", Stack: "plat-ue2-dev"},
+	})
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "tfmigrate hook failed")
 }
