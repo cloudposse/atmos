@@ -194,7 +194,7 @@ func RegisterCompletions(tfCmd *cobra.Command) {
 }
 
 func identityFlagCompletion(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
-	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+	atmosConfig, err := cfg.InitCliConfig(buildConfigAndStacksInfo(cmd), false)
 	if err != nil {
 		return nil, cobra.ShellCompDirectiveNoFileComp
 	}
