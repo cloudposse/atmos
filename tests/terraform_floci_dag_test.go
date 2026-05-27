@@ -93,7 +93,7 @@ func ensureFlociAtmosRunner(t *testing.T) {
 	require.NoError(t, flociAtmosRunnerErr)
 }
 
-func runFlociLifecycle(t *testing.T, endpoint string, absWorkdir string, maxConcurrency int) {
+func runFlociLifecycle(t *testing.T, endpoint, absWorkdir string, maxConcurrency int) {
 	t.Helper()
 
 	sandbox := setupFlociSandbox(t, absWorkdir)
@@ -123,7 +123,7 @@ func runFlociLifecycle(t *testing.T, endpoint string, absWorkdir string, maxConc
 	requireFlociParametersGone(t, client, parameterNames)
 }
 
-func runFlociAliasSequentialProbe(t *testing.T, endpoint string, absWorkdir string) {
+func runFlociAliasSequentialProbe(t *testing.T, endpoint, absWorkdir string) {
 	t.Helper()
 
 	sandbox := setupFlociSandbox(t, absWorkdir)
@@ -220,7 +220,7 @@ func normalizeFlociEndpoint(endpoint string) string {
 	return "http://" + endpoint
 }
 
-func flociCommandEnv(t *testing.T, endpoint string, absWorkdir string, sandbox *testhelpers.SandboxEnvironment, testID string) map[string]string {
+func flociCommandEnv(t *testing.T, endpoint, absWorkdir string, sandbox *testhelpers.SandboxEnvironment, testID string) map[string]string {
 	t.Helper()
 
 	env := map[string]string{
