@@ -3,6 +3,8 @@ package io
 import (
 	"bytes"
 	"errors"
+	"fmt"
+	"strings"
 	"sync"
 	"testing"
 
@@ -37,6 +39,46 @@ func TestLinePrefixWriterSerializesCompleteLines(t *testing.T) {
 	require.NoError(t, err)
 
 	require.Equal(t, "[first] a\n[second] b\n", out.String())
+}
+
+func TestLinePrefixWriterHandlesConcurrentWrites(t *testing.T) {
+	var out bytes.Buffer
+	writeMu := &sync.Mutex{}
+	const writerCount = 10
+
+	var wg sync.WaitGroup
+	errs := make(chan error, writerCount)
+	for i := 0; i < writerCount; i++ {
+		id := i
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+
+			writer := NewLinePrefixWriter(fmt.Sprintf("g%d", id), &out, writeMu)
+			_, err := writer.Write([]byte(fmt.Sprintf("message from %d\n", id)))
+			errs <- err
+		}()
+	}
+	wg.Wait()
+	close(errs)
+
+	for err := range errs {
+		require.NoError(t, err)
+	}
+
+	lines := strings.Split(strings.TrimSuffix(out.String(), "\n"), "\n")
+	require.Len(t, lines, writerCount)
+
+	expected := make(map[string]struct{}, writerCount)
+	for i := 0; i < writerCount; i++ {
+		expected[fmt.Sprintf("[g%d] message from %d", i, i)] = struct{}{}
+	}
+	for _, line := range lines {
+		_, ok := expected[line]
+		require.Truef(t, ok, "unexpected line %q in output %q", line, out.String())
+		delete(expected, line)
+	}
+	require.Empty(t, expected)
 }
 
 func TestLinePrefixWriterWithoutPrefixWritesRawLines(t *testing.T) {
