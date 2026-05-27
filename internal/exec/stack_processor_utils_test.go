@@ -3022,6 +3022,41 @@ func TestProcessImportSection_NilElement(t *testing.T) {
 	assert.ErrorIs(t, err, errUtils.ErrInvalidImport)
 }
 
+func TestProcessImportSection_NestedImports(t *testing.T) {
+	manifestPath := filepath.Join("test", "path.yaml")
+
+	t.Run("decodes nested imports", func(t *testing.T) {
+		stackMap := map[string]any{
+			"import": []any{
+				map[string]any{
+					"path":           "catalog/base",
+					"nested_imports": "remote",
+				},
+			},
+		}
+
+		imports, err := ProcessImportSection(stackMap, manifestPath)
+		require.NoError(t, err)
+		require.Len(t, imports, 1)
+		assert.Equal(t, schema.StackImportNestedImportsRemote, imports[0].NestedImports)
+	})
+
+	t.Run("rejects invalid nested imports", func(t *testing.T) {
+		stackMap := map[string]any{
+			"import": []any{
+				map[string]any{
+					"path":           "catalog/base",
+					"nested_imports": "workspace",
+				},
+			},
+		}
+
+		_, err := ProcessImportSection(stackMap, manifestPath)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, errUtils.ErrInvalidImport)
+	})
+}
+
 // TestProcessTemplatesInSection tests the processTemplatesInSection helper function.
 func TestProcessTemplatesInSection(t *testing.T) {
 	atmosConfig := &schema.AtmosConfiguration{}

@@ -32,8 +32,9 @@ var (
 
 // RemoteImportMatch is a resolved remote stack import ready for local processing.
 type RemoteImportMatch struct {
-	Path string
-	Key  string
+	Path     string
+	Key      string
+	BasePath string
 }
 
 // RemoteImporter handles downloading stack imports from remote URLs.
@@ -44,6 +45,7 @@ type RemoteImporter struct {
 	memCache    map[string]string // In-memory cache for session.
 	matchCache  map[string][]RemoteImportMatch
 	memMu       sync.RWMutex
+	sourceMu    sync.Mutex
 }
 
 // RemoteImporterOption is a functional option for configuring RemoteImporter.

@@ -340,4 +340,82 @@ components:
 	output := executeRootCommand(t, "describe", "stacks", "--format", "yaml")
 	assert.Contains(t, output, "from_base: true")
 	assert.Contains(t, output, "from_nested: true")
+
+	componentOutput := executeRootCommand(t, "describe", "component", "myapp", "--stack", "test", "--format", "yaml")
+	assert.Contains(t, componentOutput, fmt.Sprintf("git::%s//remote?ref=main#remote/base.yaml", repoURI))
+	assert.Contains(t, componentOutput, fmt.Sprintf("git::%s//remote?ref=main#remote/nested/override.yaml", repoURI))
+	assert.NotContains(t, componentOutput, ".download.", "remote imports output should not expose cache paths")
+}
+
+func TestRemoteStackImports_NestedImportsRemote(t *testing.T) {
+	repoDir := initRemoteImportsGitRepo(t, map[string]string{
+		"stacks/orgs/l360/_defaults.yaml": `
+import:
+  - catalog/_defaults
+
+vars:
+  from_remote_org_defaults: true
+`,
+		"stacks/catalog/_defaults.yaml": `
+vars:
+  from_remote_catalog_defaults: true
+`,
+	})
+
+	tempDir := t.TempDir()
+
+	componentDir := filepath.Join(tempDir, "components", "terraform", "myapp")
+	err := os.MkdirAll(componentDir, 0o755)
+	require.NoError(t, err)
+
+	componentMain := `
+variable "from_remote_org_defaults" { default = false }
+variable "from_remote_catalog_defaults" { default = false }
+output "from_remote_org_defaults" { value = var.from_remote_org_defaults }
+output "from_remote_catalog_defaults" { value = var.from_remote_catalog_defaults }
+`
+	err = os.WriteFile(filepath.Join(componentDir, "main.tf"), []byte(componentMain), 0o644)
+	require.NoError(t, err)
+
+	stacksDir := filepath.Join(tempDir, "stacks", "deploy")
+	err = os.MkdirAll(stacksDir, 0o755)
+	require.NoError(t, err)
+
+	atmosConfig := `
+base_path: "./"
+components:
+  terraform:
+    base_path: "components/terraform"
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "deploy/**/*"
+  name_template: "{{ .vars.stage }}"
+`
+	err = os.WriteFile(filepath.Join(tempDir, "atmos.yaml"), []byte(atmosConfig), 0o644)
+	require.NoError(t, err)
+
+	repoURI := remoteImportsGitFileURI(repoDir)
+	stackContent := fmt.Sprintf(`
+import:
+  - path: "git::%s//stacks/orgs/l360/_defaults.yaml?ref=main"
+    nested_imports: remote
+
+vars:
+  stage: test
+
+components:
+  terraform:
+    myapp:
+      vars:
+        local_override: "yes"
+`, repoURI)
+	err = os.WriteFile(filepath.Join(stacksDir, "test.yaml"), []byte(stackContent), 0o644)
+	require.NoError(t, err)
+
+	t.Chdir(tempDir)
+
+	output := executeRootCommand(t, "describe", "stacks", "--format", "yaml")
+	assert.Contains(t, output, "from_remote_org_defaults: true")
+	assert.Contains(t, output, "from_remote_catalog_defaults: true")
 }
