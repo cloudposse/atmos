@@ -1,0 +1,28 @@
+# yaml-language-server: $schema=https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
+
+vars:
+  stage: test
+
+terraform:
+  backend_type: local
+  backend:
+    local:
+      path: "../../../state/service.tfstate"
+
+components:
+  terraform:
+    service-legacy:
+      vars:
+        environment: test
+
+    service:
+      vars:
+        environment: test
+      hooks:
+        state-migration:
+          events:
+            - before.terraform.plan
+            - before.terraform.apply
+          kind: tfmigrate
+          config: .tfmigrate.hcl
+          mode: dynamic

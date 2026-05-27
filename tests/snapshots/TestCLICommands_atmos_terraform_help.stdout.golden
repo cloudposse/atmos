@@ -44,6 +44,7 @@ AVAILABLE COMMANDS
       login                             Obtain and save credentials for a remote host
       logout                            Remove locally-stored credentials for a remote host
       metadata                          Metadata related commands
+      migrate [command]                 Run Terraform state migrations with tfmigrate
       modules                           Show all declared modules in a working directory
       output                            Show output values from your root module
       plan                              Show changes required by the current configuration

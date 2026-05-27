@@ -21,6 +21,7 @@ Valid subcommands are:
   • login
   • logout
   • metadata
+  • migrate
   • modules
   • output
   • plan
