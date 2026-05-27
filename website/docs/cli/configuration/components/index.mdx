@@ -45,6 +45,7 @@ components:
   terraform:
     base_path: components/terraform
     command: terraform
+    aliases: opentofu
     # ... terraform-specific settings
 
   helmfile:
@@ -74,10 +75,14 @@ All component types share these common configuration options:
 
   <dt>`command`</dt>
   <dd>Executable to run for this component type. Can be a command name (resolved via PATH) or an absolute path to a binary.</dd>
+
+  <dt>`aliases`</dt>
+  <dd>Optional component type alias or list of aliases for the canonical component type. Stack manifests can use the alias envelope, while Atmos resolves it to the canonical type internally. See [Component Type Aliases](/cli/configuration/components/aliases).</dd>
 </dl>
 
 ## Related
 
+- [Component Type Aliases](/cli/configuration/components/aliases)
 - [Terraform Configuration](/cli/configuration/components/terraform)
 - [Helmfile Configuration](/cli/configuration/components/helmfile)
 - [Packer Configuration](/cli/configuration/components/packer)

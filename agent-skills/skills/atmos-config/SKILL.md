@@ -59,7 +59,14 @@ stacks:
 components:
   terraform:
     base_path: "components/terraform"
+    aliases: opentofu
 ```
+
+`components.<type>.aliases` may be a string or list of strings. Aliases are declared under the canonical component type
+in `atmos.yaml`; stack manifests may use the alias as the component envelope. For example, `components.terraform.aliases:
+opentofu` allows `components.opentofu` in stacks and `atmos opentofu ...` commands, while Atmos resolves the component
+to canonical Terraform behavior internally. Use `components.terraform.command: tofu` separately when OpenTofu should be
+the executable.
 
 ## Complete Section Overview
 

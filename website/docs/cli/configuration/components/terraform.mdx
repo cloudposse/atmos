@@ -24,6 +24,9 @@ The term "Terraform" is used in this documentation to refer to generic concepts 
 ```yaml
 components:
   terraform:
+    # Optional aliases for the Terraform component type
+    aliases: opentofu
+
     # Executable to run (terraform, tofu, or absolute path)
     command: terraform
 
@@ -78,6 +81,19 @@ components:
     - `tofu` - Use OpenTofu from PATH
     - `/usr/local/bin/terraform-1.8` - Use specific version
     - `/usr/local/bin/tofu-1.7.1` - Use specific OpenTofu version
+  </dd>
+
+  <dt>`aliases`</dt>
+  <dd>
+    Optional alias or list of aliases for the Terraform component type. Aliases let stack manifests use an alternate envelope, such as `components.opentofu`, while Atmos resolves the component to Terraform semantics internally.
+
+    **Default:** unset
+
+    Examples:
+    - `opentofu` - Use `components.opentofu` in stack manifests and `atmos opentofu ...` as a command alias.
+    - `[opentofu, tofu]` - Register multiple aliases for Terraform semantics.
+
+    See [Component Type Aliases](/cli/configuration/components/aliases).
   </dd>
 
   <dt>`base_path`</dt>
@@ -208,6 +224,35 @@ components:
 ```
 </File>
 
+You can also add a component type alias so stack manifests and commands use `opentofu` while Atmos keeps Terraform semantics internally:
+
+<File title="atmos.yaml">
+```yaml
+components:
+  terraform:
+    aliases: opentofu
+    command: tofu
+    base_path: components/terraform
+```
+</File>
+
+Then define components under the alias envelope:
+
+<File title="stacks/dev.yaml">
+```yaml
+components:
+  opentofu:
+    vpc:
+      vars: {}
+```
+</File>
+
+Run the aliased command:
+
+```shell
+atmos opentofu plan vpc -s dev
+```
+
 OpenTofu supports additional features like passing variables to `init` for dynamic backend configuration:
 
 <File title="atmos.yaml">
@@ -245,6 +290,7 @@ backend.tf.json
 ## Related
 
 - [Component Configuration Overview](/cli/configuration/components)
+- [Component Type Aliases](/cli/configuration/components/aliases)
 - [Stack Configuration](/cli/configuration/stacks)
 - [Terraform Components](/components/terraform)
 - [Terraform Backend](/stacks/backend)

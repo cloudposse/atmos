@@ -1,0 +1,152 @@
+---
+title: Component Type Aliases
+sidebar_position: 6
+sidebar_label: aliases
+sidebar_class_name: command
+id: aliases
+description: Configure aliases for canonical Atmos component types in atmos.yaml.
+---
+import File from '@site/src/components/File'
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Component type aliases let stack manifests use an alternate envelope, such as `opentofu`, while Atmos continues to use the canonical component type implementation, such as `terraform`.
+</Intro>
+
+## Configuration
+
+Declare aliases under the canonical component type in `atmos.yaml`.
+
+<File title="atmos.yaml">
+```yaml
+components:
+  terraform:
+    aliases: opentofu
+    base_path: components/terraform
+    command: tofu
+```
+</File>
+
+The `aliases` value can be a single string or a list.
+
+<File title="atmos.yaml">
+```yaml
+components:
+  terraform:
+    aliases:
+      - opentofu
+      - tofu
+    base_path: components/terraform
+    command: tofu
+```
+</File>
+
+## Stack Manifests
+
+After an alias is configured, stack manifests may use the alias as a component envelope.
+
+<File title="stacks/dev.yaml">
+```yaml
+components:
+  opentofu:
+    vpc:
+      vars:
+        cidr_block: 10.10.0.0/16
+```
+</File>
+
+Atmos resolves `opentofu` to the canonical `terraform` component type for:
+
+- provider lookup
+- command execution
+- dependency processing
+- component path resolution
+- validation
+- generated backend and varfile behavior
+
+Describe output preserves the authored envelope. If a stack uses `components.opentofu`, commands such as `atmos describe stacks` and `atmos describe component` render that component under `components.opentofu`, with `component_info.component_type: terraform` available for canonical type context.
+
+## Alias Commands
+
+Component type aliases also register top-level command aliases. For example, with `aliases: opentofu` under `components.terraform`, these commands are equivalent:
+
+```shell
+atmos opentofu plan vpc -s dev
+atmos terraform plan vpc -s dev
+```
+
+The alias command reuses the canonical command's flags, completions, help, compatibility flags, and execution behavior.
+
+## OpenTofu
+
+An alias does not change the executable. To run OpenTofu, set the canonical Terraform command to `tofu`.
+
+<File title="atmos.yaml">
+```yaml
+components:
+  terraform:
+    aliases: opentofu
+    command: tofu
+    base_path: components/terraform
+```
+</File>
+
+With that configuration, `atmos opentofu plan vpc -s dev` uses Terraform semantics in Atmos and runs the `tofu` executable.
+
+## Configuration Reference
+
+<dl>
+  <dt>`components.<component-type>.aliases`</dt>
+  <dd>
+    Optional component type alias or list of aliases for a canonical component type. Supported forms are a string or a list of strings. Defaults to unset.
+  </dd>
+
+  <dt>`components.terraform.aliases`</dt>
+  <dd>
+    Aliases for Terraform semantics. Common use: `opentofu` or `tofu`.
+  </dd>
+
+  <dt>`components.helmfile.aliases`</dt>
+  <dd>
+    Aliases for Helmfile semantics.
+  </dd>
+
+  <dt>`components.packer.aliases`</dt>
+  <dd>
+    Aliases for Packer semantics.
+  </dd>
+
+  <dt>`components.ansible.aliases`</dt>
+  <dd>
+    Aliases for Ansible semantics.
+  </dd>
+</dl>
+
+## Validation
+
+Aliases must be unambiguous:
+
+- An alias cannot be empty.
+- An alias cannot be the same as its canonical component type.
+- The same alias cannot be declared more than once.
+- An alias cannot conflict with another registered component type or top-level command.
+- A component name cannot be defined under both canonical and alias envelopes in the same stack.
+
+For example, this is rejected because `vpc` appears under both `terraform` and `opentofu`:
+
+<File title="stacks/dev.yaml">
+```yaml
+components:
+  terraform:
+    vpc: {}
+  opentofu:
+    vpc: {}
+```
+</File>
+
+## Related
+
+- [Component Configuration Overview](/cli/configuration/components)
+- [Terraform Configuration](/cli/configuration/components/terraform)
+- [Terraform Commands](/cli/commands/terraform/usage)
+- [Stack Components](/stacks/components)
