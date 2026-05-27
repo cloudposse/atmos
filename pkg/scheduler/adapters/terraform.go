@@ -63,6 +63,13 @@ func ExecuteTerraform(ctx context.Context, opts TerraformOptions) error {
 		return nil
 	}
 
+	if opts.Info.SubCommand == "destroy" {
+		graph, err = reverseTerraformGraph(graph)
+		if err != nil {
+			return fmt.Errorf("%w: reverse terraform graph: %w", errUtils.ErrBuildDepGraph, err)
+		}
+	}
+
 	dispatcher := &TerraformDispatcher{
 		atmosConfig: opts.AtmosConfig,
 		info:        opts.Info,
@@ -124,6 +131,48 @@ func BuildTerraformGraph(stacks map[string]any) (*dependency.Graph, error) {
 	}
 	log.Debug("Terraform dependency graph built", "nodes", graph.Size(), "roots", len(graph.Roots))
 	return graph, nil
+}
+
+func reverseTerraformGraph(graph *dependency.Graph) (*dependency.Graph, error) {
+	builder := dependency.NewBuilder()
+
+	for _, id := range sortedGraphNodeIDs(graph) {
+		node := graph.Nodes[id]
+		if err := builder.AddNode(&dependency.Node{
+			ID:        node.ID,
+			Component: node.Component,
+			Stack:     node.Stack,
+			Type:      node.Type,
+			Metadata:  cloneTerraformNodeMetadata(node.Metadata),
+		}); err != nil {
+			return nil, err
+		}
+	}
+
+	for _, id := range sortedGraphNodeIDs(graph) {
+		node := graph.Nodes[id]
+		for _, dependencyID := range sortedStringValues(node.Dependencies) {
+			if _, ok := graph.Nodes[dependencyID]; !ok {
+				continue
+			}
+			if err := builder.AddDependency(dependencyID, id); err != nil {
+				return nil, err
+			}
+		}
+	}
+
+	return builder.Build()
+}
+
+func cloneTerraformNodeMetadata(metadata map[string]any) map[string]any {
+	if metadata == nil {
+		return nil
+	}
+	cloned := make(map[string]any, len(metadata))
+	for key, value := range metadata {
+		cloned[key] = value
+	}
+	return cloned
 }
 
 // FilterTerraformGraph narrows graph nodes to the user-selected bulk operation set.
@@ -452,6 +501,13 @@ func sortedGraphNodeIDs(graph *dependency.Graph) []string {
 	}
 	sort.Strings(ids)
 	return ids
+}
+
+func sortedStringValues(values []string) []string {
+	sorted := make([]string, len(values))
+	copy(sorted, values)
+	sort.Strings(sorted)
+	return sorted
 }
 
 func containsString(values []string, value string) bool {

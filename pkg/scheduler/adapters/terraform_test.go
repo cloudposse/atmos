@@ -2,6 +2,7 @@ package adapters
 
 import (
 	"context"
+	"path/filepath"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -77,6 +78,27 @@ func TestExecuteTerraformQueryUsesGraphBackedSequentialOrder(t *testing.T) {
 	require.Equal(t, []string{"vpc@dev", "database@dev", "app@dev"}, executed)
 }
 
+func TestExecuteTerraformDestroyUsesReverseDependencyOrder(t *testing.T) {
+	stacks := terraformAdapterTestStacks()
+	var executed []string
+
+	err := ExecuteTerraform(context.Background(), TerraformOptions{
+		AtmosConfig: &schema.AtmosConfiguration{},
+		Info: &schema.ConfigAndStacksInfo{
+			All:        true,
+			SubCommand: "destroy",
+		},
+		Stacks: stacks,
+		Executor: func(info schema.ConfigAndStacksInfo) error {
+			executed = append(executed, info.Component+"@"+info.Stack)
+			return nil
+		},
+	})
+
+	require.NoError(t, err)
+	require.Equal(t, []string{"app@dev", "database@dev", "vpc@dev"}, executed)
+}
+
 func TestBuildTerraformGraphPrefersDependenciesComponentsOverSettingsDependsOn(t *testing.T) {
 	stacks := map[string]any{
 		"dev": map[string]any{
@@ -129,9 +151,9 @@ func TestExecuteTerraformKeepsIndependentComponentsSequential(t *testing.T) {
 		"dev": map[string]any{
 			cfg.ComponentsSectionName: map[string]any{
 				cfg.TerraformSectionName: map[string]any{
-					"app":      terraformAdapterComponentWithPath("selected", "components/terraform/app"),
-					"database": terraformAdapterComponentWithPath("selected", "components/terraform/database"),
-					"vpc":      terraformAdapterComponentWithPath("selected", "components/terraform/vpc"),
+					"app":      terraformAdapterComponentWithPath("selected", filepath.Join("components", "terraform", "app")),
+					"database": terraformAdapterComponentWithPath("selected", filepath.Join("components", "terraform", "database")),
+					"vpc":      terraformAdapterComponentWithPath("selected", filepath.Join("components", "terraform", "vpc")),
 				},
 			},
 		},
