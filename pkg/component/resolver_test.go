@@ -296,6 +296,25 @@ func TestExtractComponentsSection_ComponentTypeNotMap(t *testing.T) {
 	assert.Nil(t, result)
 }
 
+func TestExtractComponentsSectionWithConfig_ResolvesAliasEnvelope(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{
+		Components: schema.Components{
+			Terraform: schema.Terraform{Aliases: []string{"opentofu"}},
+		},
+	}
+	stackConfig := map[string]any{
+		"components": map[string]any{
+			"opentofu": map[string]any{
+				"vpc": map[string]any{"vars": map[string]any{"name": "vpc"}},
+			},
+		},
+	}
+
+	result, err := extractComponentsSectionWithConfig(atmosConfig, stackConfig, "opentofu", "dev")
+	require.NoError(t, err)
+	assert.Contains(t, result, "vpc")
+}
+
 // TestHandleNoMatches_DifferentComponentTypes tests error messages for different component types.
 func TestHandleNoMatches_DifferentComponentTypes(t *testing.T) {
 	tests := []struct {

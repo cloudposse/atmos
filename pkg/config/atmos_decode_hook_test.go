@@ -54,6 +54,28 @@ func TestAtmosDecodeHook_StringToSlice(t *testing.T) {
 	assert.Equal(t, []string{"tag1", "tag2", "tag3"}, result.Tags)
 }
 
+func TestAtmosDecodeHook_ComponentAliases(t *testing.T) {
+	yamlContent := `
+components:
+  terraform:
+    aliases: opentofu
+  helmfile:
+    aliases: [helm, releases]
+`
+
+	v := viper.New()
+	v.SetConfigType("yaml")
+	err := v.ReadConfig(bytes.NewReader([]byte(yamlContent)))
+	require.NoError(t, err)
+
+	var result schema.AtmosConfiguration
+	err = v.Unmarshal(&result, atmosDecodeHook())
+	require.NoError(t, err)
+
+	assert.Equal(t, []string{"opentofu"}, result.Components.Terraform.Aliases)
+	assert.Equal(t, []string{"helm", "releases"}, result.Components.Helmfile.Aliases)
+}
+
 // TestAtmosDecodeHook_TasksDecodeHook tests that the decode hook
 // correctly handles Tasks (flexible command steps) conversion.
 func TestAtmosDecodeHook_TasksDecodeHook(t *testing.T) {

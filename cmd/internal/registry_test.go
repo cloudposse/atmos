@@ -184,12 +184,53 @@ func TestRegisterAllNilCommand(t *testing.T) {
 	assert.Contains(t, err.Error(), "test", "error message should include provider name")
 }
 
+func TestAddTopLevelAlias(t *testing.T) {
+	Reset()
+
+	provider := &mockCommandProvider{
+		name:  "terraform",
+		group: "Test",
+		cmd: &cobra.Command{
+			Use:     "terraform",
+			Aliases: []string{"tf"},
+		},
+	}
+	Register(provider)
+
+	err := AddTopLevelAlias("terraform", "opentofu")
+	require.NoError(t, err)
+	err = AddTopLevelAlias("terraform", "opentofu")
+	require.NoError(t, err)
+
+	assert.Contains(t, provider.cmd.Aliases, "tf")
+	assert.Contains(t, provider.cmd.Aliases, "opentofu")
+	assert.Equal(t, 1, countString(provider.cmd.Aliases, "opentofu"))
+}
+
+func TestAddTopLevelAliasUnknownProvider(t *testing.T) {
+	Reset()
+
+	err := AddTopLevelAlias("terraform", "opentofu")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), `command provider not found: "terraform"`)
+}
+
 func TestGetProviderNotFound(t *testing.T) {
 	Reset()
 
 	provider, ok := GetProvider("nonexistent")
 	assert.False(t, ok)
 	assert.Nil(t, provider)
+}
+
+func countString(values []string, target string) int {
+	var count int
+	for _, value := range values {
+		if value == target {
+			count++
+		}
+	}
+	return count
 }
 
 func TestListProviders(t *testing.T) {

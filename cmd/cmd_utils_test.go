@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	cmdregistry "github.com/cloudposse/atmos/cmd/internal"
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/reexec"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -1548,6 +1549,45 @@ func TestProcessCommandAliases_DoesNotOverrideExistingCommands(t *testing.T) {
 		}
 	}
 	assert.True(t, newAliasFound, "test-alias-new2 should be added")
+}
+
+func TestProcessComponentCommandAliasesAddsTopLevelCommandAlias(t *testing.T) {
+	_ = NewTestKit(t)
+
+	provider, ok := cmdregistry.GetProvider("terraform")
+	require.True(t, ok)
+	terraformCmd := provider.GetCommand()
+	originalAliases := append([]string(nil), terraformCmd.Aliases...)
+	t.Cleanup(func() {
+		terraformCmd.Aliases = originalAliases
+	})
+
+	alias := "opentofu-test-alias"
+	err := processComponentCommandAliases(&schema.AtmosConfiguration{
+		Components: schema.Components{
+			Terraform: schema.Terraform{Aliases: []string{alias}},
+		},
+	})
+	require.NoError(t, err)
+	assert.Contains(t, terraformCmd.Aliases, alias)
+
+	found, _, err := RootCmd.Find([]string{alias, "plan"})
+	require.NoError(t, err)
+	assert.Equal(t, "plan", found.Name())
+}
+
+func TestProcessComponentCommandAliasesRejectsConfiguredCommandAliasConflict(t *testing.T) {
+	alias := "opentofu-config-alias-conflict"
+	err := processComponentCommandAliases(&schema.AtmosConfiguration{
+		Components: schema.Components{
+			Terraform: schema.Terraform{Aliases: []string{alias}},
+		},
+		CommandAliases: schema.CommandAliases{
+			alias: "terraform plan",
+		},
+	})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "conflicts with configured command alias")
 }
 
 // TestProcessCommandAliases_NonTopLevel tests that non-top-level aliases are NOT added.

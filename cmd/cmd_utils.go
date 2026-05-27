@@ -18,12 +18,14 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
 	tuiUtils "github.com/cloudposse/atmos/internal/tui/utils"
 	"github.com/cloudposse/atmos/pkg/auth"
 	"github.com/cloudposse/atmos/pkg/auth/credentials"
 	"github.com/cloudposse/atmos/pkg/auth/validation"
+	"github.com/cloudposse/atmos/pkg/component"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/dependencies"
 	envpkg "github.com/cloudposse/atmos/pkg/env"
@@ -117,6 +119,30 @@ func processCustomCommands(
 		}
 	}
 
+	return nil
+}
+
+var ErrComponentCommandAliasConflict = errors.New("component command alias conflict")
+
+func processComponentCommandAliases(atmosConfig *schema.AtmosConfiguration) error {
+	aliases, err := component.AliasMap(atmosConfig)
+	if err != nil {
+		return err
+	}
+	existingTopLevelCommands := getTopLevelCommands()
+	for alias, canonical := range aliases {
+		if _, exists := existingTopLevelCommands[alias]; exists {
+			return fmt.Errorf("%w: component alias %q conflicts with an existing top-level command",
+				ErrComponentCommandAliasConflict, alias)
+		}
+		if _, exists := atmosConfig.CommandAliases[alias]; exists {
+			return fmt.Errorf("%w: component alias %q conflicts with configured command alias",
+				ErrComponentCommandAliasConflict, alias)
+		}
+		if err := internal.AddTopLevelAlias(canonical, alias); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
@@ -249,7 +275,8 @@ func preCustomCommand(
 	if len(args) < requiredNoDefaultCount {
 		sb.WriteString(
 			fmt.Sprintf("Command requires at least %d argument(s) (no defaults provided for them):\n",
-				requiredNoDefaultCount))
+				requiredNoDefaultCount),
+		)
 
 		// List out which arguments are missing
 		missingIndex := 1
@@ -531,6 +558,9 @@ func getTopLevelCommands() map[string]*cobra.Command {
 
 	for _, c := range RootCmd.Commands() {
 		existingTopLevelCommands[c.Name()] = c
+		for _, alias := range c.Aliases {
+			existingTopLevelCommands[alias] = c
+		}
 	}
 
 	return existingTopLevelCommands
@@ -1128,7 +1158,8 @@ func resolveComponentPath(info *schema.ConfigAndStacksInfo, commandName string) 
 		return handlePathResolutionError(err)
 	}
 
-	log.Debug("Resolved component from path",
+	log.Debug(
+		"Resolved component from path",
 		"original_path", info.ComponentFromArg,
 		"resolved_component", resolvedComponent,
 		"stack", info.Stack,
@@ -1272,7 +1303,8 @@ func StackFlagCompletion(cmd *cobra.Command, args []string, toComplete string) (
 				)
 				if err != nil {
 					// If resolution fails, fall through to list all stacks (graceful degradation)
-					log.Trace("Could not resolve path for stack completion, listing all stacks",
+					log.Trace(
+						"Could not resolve path for stack completion, listing all stacks",
 						"path", component,
 						"error", err,
 					)
@@ -1283,7 +1315,8 @@ func StackFlagCompletion(cmd *cobra.Command, args []string, toComplete string) (
 					return output, cobra.ShellCompDirectiveNoFileComp
 				}
 				component = resolvedComponent
-				log.Trace("Resolved path for stack completion",
+				log.Trace(
+					"Resolved path for stack completion",
 					"original", args[0],
 					"resolved", component,
 				)

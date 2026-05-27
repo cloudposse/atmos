@@ -1,3 +1,4 @@
+//nolint:revive // file-length-limit: existing stack processor is intentionally large.
 package exec
 
 import (
@@ -9,6 +10,7 @@ import (
 	"github.com/pkg/errors"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/component"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	envpkg "github.com/cloudposse/atmos/pkg/env"
 	m "github.com/cloudposse/atmos/pkg/merge"
@@ -42,11 +44,13 @@ func ProcessStackConfig(
 	checkBaseComponentExists bool,
 ) (map[string]any, error) {
 	defer perf.Track(atmosConfig, "exec.ProcessStackConfig")()
+	componentTypeFilter = component.CanonicalType(atmosConfig, componentTypeFilter)
 
 	stackName := strings.TrimSuffix(
 		strings.TrimSuffix(
 			u.TrimBasePathFromPath(stacksBasePath+"/", stack),
-			u.DefaultStackConfigFileExtension),
+			u.DefaultStackConfigFileExtension,
+		),
 		".yml",
 	)
 
@@ -175,6 +179,14 @@ func ProcessStackConfig(
 		globalComponentsSection, ok = i.(map[string]any)
 		if !ok {
 			return nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidComponentsSection, stackName)
+		}
+	}
+	componentEnvelopes := map[string]map[string]string{}
+	if len(globalComponentsSection) > 0 {
+		var err error
+		globalComponentsSection, componentEnvelopes, err = component.NormalizeComponentSections(atmosConfig, globalComponentsSection)
+		if err != nil {
+			return nil, fmt.Errorf(errFormatWithFile, err, stackName)
 		}
 	}
 
@@ -623,6 +635,7 @@ func ProcessStackConfig(
 			if err != nil {
 				return nil, err
 			}
+			annotateComponentEnvelopes(terraformComponents, cfg.TerraformComponentType, componentEnvelopes[cfg.TerraformComponentType])
 		}
 	}
 
@@ -661,6 +674,7 @@ func ProcessStackConfig(
 			if err != nil {
 				return nil, err
 			}
+			annotateComponentEnvelopes(helmfileComponents, cfg.HelmfileComponentType, componentEnvelopes[cfg.HelmfileComponentType])
 		}
 	}
 
@@ -699,6 +713,7 @@ func ProcessStackConfig(
 			if err != nil {
 				return nil, err
 			}
+			annotateComponentEnvelopes(packerComponents, cfg.PackerComponentType, componentEnvelopes[cfg.PackerComponentType])
 		}
 	}
 
@@ -737,6 +752,7 @@ func ProcessStackConfig(
 			if err != nil {
 				return nil, err
 			}
+			annotateComponentEnvelopes(ansibleComponents, cfg.AnsibleComponentType, componentEnvelopes[cfg.AnsibleComponentType])
 		}
 	}
 
@@ -859,4 +875,23 @@ func processComponentsInParallel(
 	}
 
 	return processedComponents, nil
+}
+
+func annotateComponentEnvelopes(components map[string]any, canonicalType string, envelopes map[string]string) {
+	if len(envelopes) == 0 {
+		return
+	}
+	for componentName, envelope := range envelopes {
+		componentSection, ok := components[componentName].(map[string]any)
+		if !ok {
+			continue
+		}
+		info, ok := componentSection[component.ComponentInfoKey].(map[string]any)
+		if !ok {
+			info = make(map[string]any)
+			componentSection[component.ComponentInfoKey] = info
+		}
+		info[component.ComponentTypeInfoKey] = canonicalType
+		info[component.ComponentEnvelopeKey] = envelope
+	}
 }

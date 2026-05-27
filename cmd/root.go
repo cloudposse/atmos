@@ -1517,6 +1517,11 @@ func Execute() error {
 		if err != nil {
 			return err
 		}
+
+		err = processComponentCommandAliases(&atmosConfig)
+		if err != nil {
+			return err
+		}
 	}
 
 	// Boa styling is already applied via RootCmd.SetHelpFunc() which is inherited by all subcommands.

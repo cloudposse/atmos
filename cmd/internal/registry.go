@@ -1,6 +1,7 @@
 package internal
 
 import (
+	"errors"
 	"fmt"
 	"sync"
 
@@ -23,6 +24,8 @@ const IoContextKey contextKey = "ioContext"
 var registry = &CommandRegistry{
 	providers: make(map[string]CommandProvider),
 }
+
+var ErrCommandProviderNotFound = errors.New("command provider not found")
 
 // CommandRegistry manages built-in command registration.
 //
@@ -221,6 +224,25 @@ func GetProvider(name string) (CommandProvider, bool) {
 
 	provider, ok := registry.providers[name]
 	return provider, ok
+}
+
+// AddTopLevelAlias adds a Cobra top-level alias to a registered command provider.
+func AddTopLevelAlias(providerName, alias string) error {
+	provider, ok := GetProvider(providerName)
+	if !ok {
+		return fmt.Errorf("%w: %q", ErrCommandProviderNotFound, providerName)
+	}
+	cmd := provider.GetCommand()
+	if cmd == nil {
+		return fmt.Errorf("%w: provider %s", errUtils.ErrCommandNil, providerName)
+	}
+	for _, existing := range cmd.Aliases {
+		if existing == alias {
+			return nil
+		}
+	}
+	cmd.Aliases = append(cmd.Aliases, alias)
+	return nil
 }
 
 // IsCommandExperimental returns true if the named command is experimental.

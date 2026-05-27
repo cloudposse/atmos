@@ -4,12 +4,14 @@ package exec
 import (
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/go-viper/mapstructure/v2"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/auth"
+	"github.com/cloudposse/atmos/pkg/component"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	m "github.com/cloudposse/atmos/pkg/merge"
@@ -42,6 +44,12 @@ type processComponentTypeOpts struct {
 	applyMetadataInheritance bool
 	// checkIncludeEmpty instructs the processor to filter out empty sections according to AtmosConfiguration.Describe.Settings.IncludeEmpty.
 	checkIncludeEmpty bool
+}
+
+type describeComponentTypeEntry struct {
+	displayName   string
+	canonicalName string
+	opts          processComponentTypeOpts
 }
 
 // componentAuthManagerResolver builds a per-component AuthManager for the given
@@ -215,30 +223,43 @@ func (p *describeStacksProcessor) processStackFile(stackFileName string, stackMa
 		return nil
 	}
 
-	type typeEntry struct {
-		name string
-		opts processComponentTypeOpts
-	}
-	typeEntries := []typeEntry{
-		{cfg.TerraformSectionName, processComponentTypeOpts{
+	typeOpts := map[string]processComponentTypeOpts{
+		cfg.TerraformSectionName: {
 			buildWorkspace:           true,
 			applyMetadataInheritance: true,
 			checkIncludeEmpty:        true,
-		}},
-		{cfg.HelmfileSectionName, processComponentTypeOpts{}},
-		{cfg.PackerSectionName, processComponentTypeOpts{}},
-		{cfg.AnsibleSectionName, processComponentTypeOpts{}},
+		},
+		cfg.HelmfileSectionName: {},
+		cfg.PackerSectionName:   {},
+		cfg.AnsibleSectionName:  {},
 	}
-
-	for _, te := range typeEntries {
-		if len(p.componentTypes) > 0 && !u.SliceContainsString(p.componentTypes, te.name) {
-			continue
-		}
-		typeSection, ok := componentsSection[te.name].(map[string]any)
+	typeEntries := make([]describeComponentTypeEntry, 0, len(componentsSection))
+	for displayName := range componentsSection {
+		canonicalName := component.CanonicalType(p.atmosConfig, displayName)
+		opts, ok := typeOpts[canonicalName]
 		if !ok {
 			continue
 		}
-		if err := p.processComponentTypeSection(stackFileName, stackManifestName, te.name, typeSection, te.opts); err != nil {
+		typeEntries = append(typeEntries, describeComponentTypeEntry{displayName: displayName, canonicalName: canonicalName, opts: opts})
+	}
+	sort.Slice(typeEntries, func(i, j int) bool {
+		return typeEntries[i].displayName < typeEntries[j].displayName
+	})
+	if err := validateComponentTypeEnvelopeDuplicates(componentsSection, typeEntries); err != nil {
+		return err
+	}
+
+	for _, te := range typeEntries {
+		if len(p.componentTypes) > 0 &&
+			!u.SliceContainsString(p.componentTypes, te.displayName) &&
+			!u.SliceContainsString(p.componentTypes, te.canonicalName) {
+			continue
+		}
+		typeSection, ok := componentsSection[te.displayName].(map[string]any)
+		if !ok {
+			continue
+		}
+		if err := p.processComponentTypeSection(stackFileName, stackManifestName, te.displayName, typeSection, te.opts); err != nil {
 			return err
 		}
 	}
@@ -246,10 +267,30 @@ func (p *describeStacksProcessor) processStackFile(stackFileName string, stackMa
 	return nil
 }
 
+func validateComponentTypeEnvelopeDuplicates(componentsSection map[string]any, typeEntries []describeComponentTypeEntry) error {
+	seenByCanonical := make(map[string]map[string]string)
+	for _, te := range typeEntries {
+		typeSection, ok := componentsSection[te.displayName].(map[string]any)
+		if !ok {
+			continue
+		}
+		if seenByCanonical[te.canonicalName] == nil {
+			seenByCanonical[te.canonicalName] = make(map[string]string)
+		}
+		for componentName := range typeSection {
+			if previousEnvelope, exists := seenByCanonical[te.canonicalName][componentName]; exists && previousEnvelope != te.displayName {
+				return fmt.Errorf("component %q is defined under both components.%s and components.%s", componentName, previousEnvelope, te.displayName) //nolint:err113 // Dynamic context for debugging.
+			}
+			seenByCanonical[te.canonicalName][componentName] = te.displayName
+		}
+	}
+	return nil
+}
+
 // processComponentTypeSection iterates over every component within a component type section
 // (e.g., all Terraform components in a stack file) and processes each one.
 func (p *describeStacksProcessor) processComponentTypeSection(
-	stackFileName, stackManifestName, typeName string,
+	stackFileName, stackManifestName, displayTypeName string,
 	typeSection map[string]any,
 	opts processComponentTypeOpts,
 ) error {
@@ -259,7 +300,7 @@ func (p *describeStacksProcessor) processComponentTypeSection(
 		origSection, ok := compSection.(map[string]any)
 		if !ok {
 			return fmt.Errorf("invalid 'components.%s.%s' section in the file '%s'", //nolint:err113 // Dynamic context needed for debugging.
-				typeName, componentName, stackFileName)
+				displayTypeName, componentName, stackFileName)
 		}
 
 		// Shallow-clone the component section so mutations (setting defaults,
@@ -275,7 +316,7 @@ func (p *describeStacksProcessor) processComponentTypeSection(
 		}
 
 		if err := p.processComponentEntry(
-			stackFileName, stackManifestName, typeName,
+			stackFileName, stackManifestName, displayTypeName,
 			componentName, componentSection, typeSection, opts,
 		); err != nil {
 			return err
@@ -287,12 +328,13 @@ func (p *describeStacksProcessor) processComponentTypeSection(
 // processComponentEntry processes a single component: resolves the stack name,
 // filters, builds the ConfigAndStacksInfo, processes templates, and writes to the result map.
 func (p *describeStacksProcessor) processComponentEntry( //nolint:gocognit,revive,cyclop,funlen // Orchestrator function with unavoidable branching.
-	stackFileName, stackManifestName, typeName,
+	stackFileName, stackManifestName, displayTypeName,
 	componentName string,
 	componentSection, allTypeComponents map[string]any,
 	opts processComponentTypeOpts,
 ) error {
 	defer perf.Track(p.atmosConfig, "exec.describeStacksProcessor.processComponentEntry")()
+	canonicalTypeName := component.CanonicalType(p.atmosConfig, displayTypeName)
 
 	// Find derived components to include even when the component filter is active.
 	derivedComponents, err := FindComponentsDerivedFromBaseComponents(stackFileName, allTypeComponents, p.components)
@@ -314,6 +356,7 @@ func (p *describeStacksProcessor) processComponentEntry( //nolint:gocognit,reviv
 	}
 
 	info := buildConfigAndStacksInfo(componentName, stackFileName, stackManifestName, secs)
+	info.ComponentType = canonicalTypeName
 
 	// Ensure the component key is present in the info's ComponentSection.
 	if comp, ok := info.ComponentSection[cfg.ComponentSectionName].(string); !ok || comp == "" {
@@ -365,7 +408,7 @@ func (p *describeStacksProcessor) processComponentEntry( //nolint:gocognit,reviv
 	setAtmosComponentMetadata(componentSection, componentName, stackName, stackFileName)
 	setAtmosComponentMetadata(info.ComponentSection, componentName, stackName, stackFileName)
 
-	ensureComponentEntryInMap(p.finalStacksMap, stackName, typeName, componentName)
+	ensureComponentEntryInMap(p.finalStacksMap, stackName, displayTypeName, componentName)
 
 	// Terraform-only: build and attach the Terraform workspace.
 	if opts.buildWorkspace {
@@ -378,7 +421,15 @@ func (p *describeStacksProcessor) processComponentEntry( //nolint:gocognit,reviv
 	}
 
 	// Add component_info with component_path.
-	componentInfo := buildComponentInfo(p.atmosConfig, componentSection, typeName)
+	if displayTypeName != canonicalTypeName {
+		existingInfo, _ := componentSection[componentInfoKey].(map[string]any)
+		if existingInfo == nil {
+			existingInfo = make(map[string]any)
+			componentSection[componentInfoKey] = existingInfo
+		}
+		existingInfo[component.ComponentEnvelopeKey] = displayTypeName
+	}
+	componentInfo := buildComponentInfo(p.atmosConfig, componentSection, canonicalTypeName)
 	componentSection[componentInfoKey] = componentInfo
 	info.ComponentSection[componentInfoKey] = componentInfo
 
@@ -403,9 +454,9 @@ func (p *describeStacksProcessor) processComponentEntry( //nolint:gocognit,reviv
 
 	// Write the (optionally filtered) sections into the result map.
 	includeEmpty := resolveIncludeEmpty(p.atmosConfig, opts.checkIncludeEmpty)
-	destMap, ok := getComponentDestMap(p.finalStacksMap, stackName, typeName, componentName)
+	destMap, ok := getComponentDestMap(p.finalStacksMap, stackName, displayTypeName, componentName)
 	if !ok {
-		return fmt.Errorf("internal error: component entry not found for %s/%s/%s", stackName, typeName, componentName) //nolint:err113 // Dynamic context for debugging.
+		return fmt.Errorf("internal error: component entry not found for %s/%s/%s", stackName, displayTypeName, componentName) //nolint:err113 // Dynamic context for debugging.
 	}
 	addSectionsToComponentEntry(destMap, componentSection, p.sections, includeEmpty)
 
