@@ -469,16 +469,17 @@ func getComponentDependencies(componentMap map[string]any) ([]schema.ComponentDe
 	// Get settings section for later use (Spacelift/Atlantis config and IncludeSettings).
 	settingsSection, _ := componentMap["settings"].(map[string]any)
 
-	// Check dependencies.* first (preferred location).
+	// Check dependencies.components first (preferred location).
 	if depsSection, ok := componentMap[cfg.DependenciesSectionName].(map[string]any); ok {
-		if hasDependencyEntries(depsSection) {
+		if _, hasComponents := depsSection["components"]; hasComponents {
 			var deps schema.Dependencies
 			if err := mapstructure.Decode(depsSection, &deps); err == nil {
 				if normErr := deps.Normalize(); normErr != nil {
 					log.Warn("invalid dependencies section; entries may be silently ignored", "error", normErr)
 				}
-				if len(deps.Components) > 0 {
-					return deps.Components, settingsSection, dependencySourceDependenciesComponents
+				componentDeps := filterComponentDependencies(deps.Components)
+				if len(componentDeps) > 0 {
+					return componentDeps, settingsSection, dependencySourceDependenciesComponents
 				}
 			}
 		}
@@ -502,6 +503,28 @@ func getComponentDependencies(componentMap map[string]any) ([]schema.ComponentDe
 	}
 
 	return nil, settingsSection, dependencySourceNone
+}
+
+// filterComponentDependencies removes file/folder path dependencies from the
+// dependents path. Those entries affect `describe affected`, but they are not
+// component-to-component relationships and must not suppress settings.depends_on
+// fallback during mixed migrations.
+func filterComponentDependencies(deps []schema.ComponentDependency) []schema.ComponentDependency {
+	if len(deps) == 0 {
+		return nil
+	}
+
+	result := make([]schema.ComponentDependency, 0, len(deps))
+	for i := range deps {
+		if !deps[i].IsComponentDependency() || deps[i].Component == "" {
+			continue
+		}
+		result = append(result, deps[i])
+	}
+	if len(result) == 0 {
+		return nil
+	}
+	return result
 }
 
 // contextToComponentDependency converts a legacy schema.Context to schema.ComponentDependency.
@@ -580,9 +603,9 @@ func matchContextField(depValue, providedValue, stackValue string) bool {
 }
 
 // hasDependencyEntries reports whether a `dependencies` section declares any
-// of the entry-bearing keys that getComponentDependencies cares about. Tools
-// alone is intentionally excluded because tool dependencies are not what this
-// function returns.
+// non-tool dependency entries. Tools alone is intentionally excluded because
+// file/folder and component dependency extraction paths do not return tool
+// dependencies.
 func hasDependencyEntries(depsSection map[string]any) bool {
 	if _, ok := depsSection["components"]; ok {
 		return true
