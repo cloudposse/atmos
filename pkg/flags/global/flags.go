@@ -77,6 +77,13 @@ type Flags struct {
 
 	// Version management.
 	UseVersion string // Specify which version of Atmos to use (--use-version).
+
+	// SkipHooks controls runtime hook execution. Empty / "false" runs all
+	// hooks normally; "*" / "true" (set when --skip-hooks is passed without
+	// a value) skips every hook; a comma-separated list (e.g. "cost,sec")
+	// skips only the named hooks. Per-invocation only — does not propagate
+	// to nested commands or workflows.
+	SkipHooks string
 }
 
 // NewFlags creates a Flags with default values.

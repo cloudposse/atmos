@@ -265,3 +265,198 @@ func TestRunWorkspaceSetup_NoRecoveryOnMismatchedEnv(t *testing.T) {
 		strings.Contains(logOutput, "Workspace is already active"),
 		"recovery warn log must NOT be emitted on mismatch; got log output: %q", logOutput)
 }
+
+// ──────────────────────────────────────────────────────────────────────────────
+// executeShellCommandWithRetry — per-invocation retry with pattern matching
+// ──────────────────────────────────────────────────────────────────────────────
+
+// applyOptsForTest captures the stdout/stderr writers a caller passed via
+// WithStdoutCapture / WithStderrCapture so a fake invoke can write to them and
+// drive the predicate check inside executeShellCommandWithRetry.
+func applyOptsForTest(opts []ShellCommandOption) shellCommandConfig {
+	var cfg shellCommandConfig
+	for _, o := range opts {
+		o(&cfg)
+	}
+	return cfg
+}
+
+// TestExecuteShellCommandWithRetry_NilConfig_RunsOnce verifies that when no retry
+// config is present the helper passes through to a single invocation with no capture.
+func TestExecuteShellCommandWithRetry_NilConfig_RunsOnce(t *testing.T) {
+	atmosConfig := schema.AtmosConfiguration{}
+	info := schema.ConfigAndStacksInfo{}
+
+	called := 0
+	fakeInvoke := func(opts ...ShellCommandOption) error {
+		called++
+		cfg := applyOptsForTest(opts)
+		// Without retry config the helper must not inject capture writers — they
+		// would silently swallow the user's terraform output.
+		assert.Nil(t, cfg.stdoutCapture, "stdoutCapture must be nil when retry config is absent")
+		assert.Nil(t, cfg.stderrCapture, "stderrCapture must be nil when retry config is absent")
+		return errors.New("boom")
+	}
+
+	err := executeShellCommandWithRetry(&atmosConfig, &info, "test", fakeInvoke)
+	require.Error(t, err)
+	assert.Equal(t, 1, called, "no retry config = exactly one attempt")
+}
+
+// TestExecuteShellCommandWithRetry_NoConditions_RunsOnce verifies that retry config
+// without `conditions` is treated as "no retry" (safe default — never blindly retry).
+func TestExecuteShellCommandWithRetry_NoConditions_RunsOnce(t *testing.T) {
+	atmosConfig := schema.AtmosConfiguration{}
+	info := schema.ConfigAndStacksInfo{
+		ComponentRetrySection: &schema.RetryConfig{MaxAttempts: intPtr(5)},
+	}
+
+	called := 0
+	fakeInvoke := func(opts ...ShellCommandOption) error {
+		called++
+		return errors.New("boom")
+	}
+
+	err := executeShellCommandWithRetry(&atmosConfig, &info, "test", fakeInvoke)
+	require.Error(t, err)
+	assert.Equal(t, 1, called, "empty conditions = no retry (safe default)")
+}
+
+// TestExecuteShellCommandWithRetry_MatchingError_Retries verifies that when an
+// error's captured output matches a `conditions` regex, the command is retried up
+// to max_attempts times.
+func TestExecuteShellCommandWithRetry_MatchingError_Retries(t *testing.T) {
+	atmosConfig := schema.AtmosConfiguration{}
+	info := schema.ConfigAndStacksInfo{
+		ComponentRetrySection: &schema.RetryConfig{
+			MaxAttempts: intPtr(3),
+			Conditions:  []string{"/Bad Gateway/"},
+		},
+	}
+
+	called := 0
+	fakeInvoke := func(opts ...ShellCommandOption) error {
+		called++
+		cfg := applyOptsForTest(opts)
+		require.NotNil(t, cfg.stderrCapture, "retry mode must inject stderr capture")
+		_, _ = cfg.stderrCapture.Write([]byte("Error: 502 Bad Gateway returned"))
+		return errors.New("install failed")
+	}
+
+	err := executeShellCommandWithRetry(&atmosConfig, &info, "test", fakeInvoke)
+	require.Error(t, err)
+	assert.Equal(t, 3, called, "matching error must retry until max_attempts")
+}
+
+// TestExecuteShellCommandWithRetry_NonMatchingError_FailsFast verifies that a real
+// terraform failure (e.g., plan exit-code-2) is NOT retried when its output does
+// not match any condition — protects users from runaway retries on real errors.
+func TestExecuteShellCommandWithRetry_NonMatchingError_FailsFast(t *testing.T) {
+	atmosConfig := schema.AtmosConfiguration{}
+	info := schema.ConfigAndStacksInfo{
+		ComponentRetrySection: &schema.RetryConfig{
+			MaxAttempts: intPtr(5),
+			Conditions:  []string{"/Bad Gateway/"},
+		},
+	}
+
+	called := 0
+	fakeInvoke := func(opts ...ShellCommandOption) error {
+		called++
+		cfg := applyOptsForTest(opts)
+		_, _ = cfg.stderrCapture.Write([]byte("Error: invalid resource argument"))
+		return errors.New("plan failed")
+	}
+
+	err := executeShellCommandWithRetry(&atmosConfig, &info, "test", fakeInvoke)
+	require.Error(t, err)
+	assert.Equal(t, 1, called, "non-matching error must fail fast on the first attempt")
+}
+
+// TestExecuteShellCommandWithRetry_RecoveryAfterTransient verifies that the helper
+// returns nil and stops retrying once an attempt succeeds.
+func TestExecuteShellCommandWithRetry_RecoveryAfterTransient(t *testing.T) {
+	atmosConfig := schema.AtmosConfiguration{}
+	info := schema.ConfigAndStacksInfo{
+		ComponentRetrySection: &schema.RetryConfig{
+			MaxAttempts: intPtr(5),
+			Conditions:  []string{"/Bad Gateway/"},
+		},
+	}
+
+	called := 0
+	fakeInvoke := func(opts ...ShellCommandOption) error {
+		called++
+		cfg := applyOptsForTest(opts)
+		if called < 3 {
+			_, _ = cfg.stderrCapture.Write([]byte("502 Bad Gateway"))
+			return errors.New("transient")
+		}
+		// Buffer reset between attempts means the success path writes nothing
+		// retryable — predicate returns false on nil err and the loop exits.
+		return nil
+	}
+
+	err := executeShellCommandWithRetry(&atmosConfig, &info, "test", fakeInvoke)
+	require.NoError(t, err)
+	assert.Equal(t, 3, called, "must stop retrying as soon as an attempt succeeds")
+}
+
+// TestExecuteShellCommandWithRetry_InvalidRegex_FailsFast verifies that a malformed
+// regex in `conditions` produces a wrapped ErrInvalidConfig instead of silently
+// disabling retry (avoid the foot-gun of silently dropping retry on a typo).
+func TestExecuteShellCommandWithRetry_InvalidRegex_FailsFast(t *testing.T) {
+	atmosConfig := schema.AtmosConfiguration{}
+	info := schema.ConfigAndStacksInfo{
+		ComponentRetrySection: &schema.RetryConfig{
+			MaxAttempts: intPtr(3),
+			Conditions:  []string{"/(/"},
+		},
+	}
+
+	fakeInvoke := func(opts ...ShellCommandOption) error {
+		t.Fatal("invoke must not be called when conditions regex is invalid")
+		return nil
+	}
+	err := executeShellCommandWithRetry(&atmosConfig, &info, "test", fakeInvoke)
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, errUtils.ErrInvalidConfig),
+		"invalid regex must surface as ErrInvalidConfig, got: %v", err)
+}
+
+// TestExecuteShellCommandWithRetry_BufferResetBetweenAttempts verifies that
+// captured output from a previous attempt does NOT leak into the predicate of a
+// later attempt — otherwise a transient match would force retry forever even
+// after the error pattern stopped appearing.
+func TestExecuteShellCommandWithRetry_BufferResetBetweenAttempts(t *testing.T) {
+	atmosConfig := schema.AtmosConfiguration{}
+	info := schema.ConfigAndStacksInfo{
+		ComponentRetrySection: &schema.RetryConfig{
+			MaxAttempts: intPtr(5),
+			Conditions:  []string{"/Bad Gateway/"},
+		},
+	}
+
+	called := 0
+	fakeInvoke := func(opts ...ShellCommandOption) error {
+		called++
+		cfg := applyOptsForTest(opts)
+		if called == 1 {
+			_, _ = cfg.stderrCapture.Write([]byte("502 Bad Gateway"))
+			return errors.New("transient")
+		}
+		// Second attempt emits a NON-matching error; if the buffer carried over
+		// from attempt 1 the predicate would still match and we'd keep retrying.
+		_, _ = cfg.stderrCapture.Write([]byte("permission denied"))
+		return errors.New("real failure")
+	}
+
+	err := executeShellCommandWithRetry(&atmosConfig, &info, "test", fakeInvoke)
+	require.Error(t, err)
+	assert.Equal(t, 2, called, "buffer must reset so attempt 2's non-matching error stops the loop")
+}
+
+// Compile-time guarantee that we are exercising the same `shellCommandConfig`
+// the helper writes into. If the field is renamed this test file will fail to
+// compile before the regression can ship.
+var _ = shellCommandConfig{stdoutCapture: nil, stderrCapture: nil}

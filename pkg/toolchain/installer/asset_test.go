@@ -963,3 +963,103 @@ func TestBuildTemplateData_WindowsArmEmulation(t *testing.T) {
 		assert.Equal(t, runtime.GOARCH, data.Arch, "WindowsArmEmulation should not affect Arch on non-windows-arm64")
 	}
 }
+
+func TestBuildAssetURLForPlatform_VerifierWindowsAssets(t *testing.T) {
+	tests := []struct {
+		name    string
+		tool    registry.Tool
+		version string
+		wantURL string
+	}{
+		{
+			name: "cosign raw windows binary keeps v tag and gets exe suffix",
+			tool: registry.Tool{
+				Type:                "github_release",
+				RepoOwner:           "sigstore",
+				RepoName:            "cosign",
+				Asset:               "cosign-{{.OS}}-{{.Arch}}",
+				Format:              "raw",
+				WindowsArmEmulation: true,
+			},
+			version: "v3.0.6",
+			wantURL: "https://github.com/sigstore/cosign/releases/download/" +
+				"v3.0.6/cosign-windows-amd64.exe",
+		},
+		{
+			name: "slsa-verifier raw windows binary keeps v tag and gets exe suffix",
+			tool: registry.Tool{
+				Type:      "github_release",
+				RepoOwner: "slsa-framework",
+				RepoName:  "slsa-verifier",
+				Asset:     "slsa-verifier-{{.OS}}-{{.Arch}}",
+				Format:    "raw",
+			},
+			version: "v2.7.1",
+			wantURL: "https://github.com/slsa-framework/slsa-verifier/releases/download/" +
+				"v2.7.1/slsa-verifier-windows-amd64.exe",
+		},
+		{
+			name: "gh windows zip uses trimmed version in asset and v tag in release URL",
+			tool: registry.Tool{
+				Type:      "github_release",
+				RepoOwner: "cli",
+				RepoName:  "cli",
+				Asset:     "gh_{{trimV .Version}}_{{.OS}}_{{.Arch}}.{{.Format}}",
+				Format:    "zip",
+				Overrides: []registry.Override{
+					{GOOS: "linux", Format: "tar.gz"},
+					{
+						GOOS:  "windows",
+						Files: []registry.File{{Name: "gh", Src: "bin/gh.exe"}},
+					},
+				},
+				Replacements: map[string]string{
+					"darwin": "macOS",
+				},
+			},
+			version: "v2.92.0",
+			wantURL: "https://github.com/cli/cli/releases/download/" +
+				"v2.92.0/gh_2.92.0_windows_amd64.zip",
+		},
+		{
+			name: "minisign windows zip applies registry replacements",
+			tool: registry.Tool{
+				Type:                "github_release",
+				RepoOwner:           "jedisct1",
+				RepoName:            "minisign",
+				Asset:               "minisign-{{.Version}}-{{.OS}}.{{.Format}}",
+				Format:              "zip",
+				WindowsArmEmulation: true,
+				Files: []registry.File{
+					{Name: "minisign", Src: "minisign-{{.OS}}/{{.Arch}}/minisign"},
+				},
+				Replacements: map[string]string{
+					"darwin":  "macos",
+					"windows": "win64",
+					"amd64":   "x86_64",
+					"arm64":   "aarch64",
+				},
+				Overrides: []registry.Override{
+					{GOOS: "linux", Format: "tar.gz"},
+					{GOOS: "darwin", Files: []registry.File{{Name: "minisign"}}},
+				},
+			},
+			version: "0.12",
+			wantURL: "https://github.com/jedisct1/minisign/releases/download/" +
+				"0.12/minisign-0.12-win64.zip",
+		},
+	}
+
+	installer := &Installer{}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tool := tt.tool
+			ApplyPlatformOverridesForPlatform(&tool, "windows", "amd64")
+
+			gotURL, err := installer.buildAssetURLForPlatform(&tool, tt.version, "windows", "amd64")
+
+			require.NoError(t, err)
+			assert.Equal(t, tt.wantURL, gotURL)
+		})
+	}
+}

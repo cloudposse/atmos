@@ -45,22 +45,96 @@ const (
 
 // Finding represents a normalized security finding from any AWS security service.
 type Finding struct {
-	ID                 string            `json:"id" yaml:"id"`
-	Title              string            `json:"title" yaml:"title"`
-	Description        string            `json:"description" yaml:"description"`
-	Severity           Severity          `json:"severity" yaml:"severity"`
-	Source             Source            `json:"source" yaml:"source"`
-	ComplianceStandard string            `json:"compliance_standard,omitempty" yaml:"compliance_standard,omitempty"`
-	SecurityControlID  string            `json:"security_control_id,omitempty" yaml:"security_control_id,omitempty"` // Per-control ID (e.g., "EC2.18") for compliance deduplication.
-	ResourceARN        string            `json:"resource_arn" yaml:"resource_arn"`
-	ResourceType       string            `json:"resource_type" yaml:"resource_type"`
-	ResourceTags       map[string]string `json:"resource_tags,omitempty" yaml:"resource_tags,omitempty"` // Tags from the Security Hub finding (no extra API call needed).
-	AccountID          string            `json:"account_id" yaml:"account_id"`
-	Region             string            `json:"region" yaml:"region"`
-	CreatedAt          time.Time         `json:"created_at" yaml:"created_at"`
-	UpdatedAt          time.Time         `json:"updated_at" yaml:"updated_at"`
-	Mapping            *ComponentMapping `json:"mapping,omitempty" yaml:"mapping,omitempty"`
-	Remediation        *Remediation      `json:"remediation,omitempty" yaml:"remediation,omitempty"`
+	ID                  string                `json:"id" yaml:"id"`
+	Title               string                `json:"title" yaml:"title"`
+	Description         string                `json:"description" yaml:"description"`
+	Severity            Severity              `json:"severity" yaml:"severity"`
+	Source              Source                `json:"source" yaml:"source"`
+	SourceSeverity      *SourceSeverity       `json:"source_severity,omitempty" yaml:"source_severity,omitempty"`
+	SourceLifecycle     *SourceLifecycle      `json:"source_lifecycle,omitempty" yaml:"source_lifecycle,omitempty"`
+	SourceTimestamps    *SourceTimestamps     `json:"source_timestamps,omitempty" yaml:"source_timestamps,omitempty"`
+	SourceRemediation   *SourceRemediation    `json:"source_remediation,omitempty" yaml:"source_remediation,omitempty"`
+	SourceURL           string                `json:"source_url,omitempty" yaml:"source_url,omitempty"`
+	ComplianceStandard  string                `json:"compliance_standard,omitempty" yaml:"compliance_standard,omitempty"`
+	ComplianceStandards []ComplianceStandard  `json:"compliance_standards,omitempty" yaml:"compliance_standards,omitempty"`
+	SecurityControlID   string                `json:"security_control_id,omitempty" yaml:"security_control_id,omitempty"` // Per-control ID (e.g., "EC2.18") for compliance deduplication.
+	ResourceARN         string                `json:"resource_arn" yaml:"resource_arn"`
+	ResourceType        string                `json:"resource_type" yaml:"resource_type"`
+	ResourceTags        map[string]string     `json:"resource_tags,omitempty" yaml:"resource_tags,omitempty"` // Tags from the Security Hub finding (no extra API call needed).
+	AccountID           string                `json:"account_id" yaml:"account_id"`
+	Region              string                `json:"region" yaml:"region"`
+	CreatedAt           time.Time             `json:"created_at" yaml:"created_at"`
+	UpdatedAt           time.Time             `json:"updated_at" yaml:"updated_at"`
+	Vulnerability       *VulnerabilityDetails `json:"vulnerability,omitempty" yaml:"vulnerability,omitempty"`
+	Mapping             *ComponentMapping     `json:"mapping,omitempty" yaml:"mapping,omitempty"`
+	Remediation         *Remediation          `json:"remediation,omitempty" yaml:"remediation,omitempty"`
+}
+
+// SourceSeverity preserves raw severity values from AWS source feeds.
+type SourceSeverity struct {
+	Score *float64 `json:"score,omitempty" yaml:"score,omitempty"`
+	Label string   `json:"label,omitempty" yaml:"label,omitempty"`
+}
+
+// SourceLifecycle preserves raw lifecycle state from AWS source feeds.
+type SourceLifecycle struct {
+	WorkflowStatus   string `json:"workflow_status,omitempty" yaml:"workflow_status,omitempty"`
+	RecordState      string `json:"record_state,omitempty" yaml:"record_state,omitempty"`
+	ComplianceStatus string `json:"compliance_status,omitempty" yaml:"compliance_status,omitempty"`
+	InspectorStatus  string `json:"inspector_status,omitempty" yaml:"inspector_status,omitempty"`
+}
+
+// SourceTimestamps preserves AWS source-feed timestamps separately from report upload time.
+type SourceTimestamps struct {
+	FirstObservedAt *time.Time `json:"first_observed_at,omitempty" yaml:"first_observed_at,omitempty"`
+	LastObservedAt  *time.Time `json:"last_observed_at,omitempty" yaml:"last_observed_at,omitempty"`
+	UpdatedAt       *time.Time `json:"updated_at,omitempty" yaml:"updated_at,omitempty"`
+	CreatedAt       *time.Time `json:"created_at,omitempty" yaml:"created_at,omitempty"`
+}
+
+// SourceRemediation preserves remediation guidance supplied by AWS.
+type SourceRemediation struct {
+	Text string `json:"text,omitempty" yaml:"text,omitempty"`
+	URL  string `json:"url,omitempty" yaml:"url,omitempty"`
+}
+
+// ComplianceStandard captures a source framework/control reference.
+type ComplianceStandard struct {
+	ID      string `json:"id,omitempty" yaml:"id,omitempty"`
+	Name    string `json:"name,omitempty" yaml:"name,omitempty"`
+	Version string `json:"version,omitempty" yaml:"version,omitempty"`
+}
+
+// VulnerabilityDetails preserves structured package vulnerability data from AWS.
+type VulnerabilityDetails struct {
+	ID             string              `json:"id,omitempty" yaml:"id,omitempty"`
+	CVEID          string              `json:"cve_id,omitempty" yaml:"cve_id,omitempty"`
+	CWEIDs         []string            `json:"cwe_ids,omitempty" yaml:"cwe_ids,omitempty"`
+	EPSSScore      float64             `json:"epss_score,omitempty" yaml:"epss_score,omitempty"`
+	PackageName    string              `json:"package_name,omitempty" yaml:"package_name,omitempty"`
+	PackageVersion string              `json:"package_version,omitempty" yaml:"package_version,omitempty"`
+	FixedInVersion string              `json:"fixed_in_version,omitempty" yaml:"fixed_in_version,omitempty"`
+	Packages       []VulnerablePackage `json:"packages,omitempty" yaml:"packages,omitempty"`
+	ReferenceURLs  []string            `json:"reference_urls,omitempty" yaml:"reference_urls,omitempty"`
+	CVSS           []CVSSScore         `json:"cvss,omitempty" yaml:"cvss,omitempty"`
+}
+
+// VulnerablePackage captures an affected package and available fix.
+type VulnerablePackage struct {
+	Name           string `json:"name,omitempty" yaml:"name,omitempty"`
+	Version        string `json:"version,omitempty" yaml:"version,omitempty"`
+	FixedInVersion string `json:"fixed_in_version,omitempty" yaml:"fixed_in_version,omitempty"`
+	PackageManager string `json:"package_manager,omitempty" yaml:"package_manager,omitempty"`
+	Remediation    string `json:"remediation,omitempty" yaml:"remediation,omitempty"`
+	FilePath       string `json:"file_path,omitempty" yaml:"file_path,omitempty"`
+}
+
+// CVSSScore captures source CVSS score details.
+type CVSSScore struct {
+	BaseScore float64 `json:"base_score,omitempty" yaml:"base_score,omitempty"`
+	Vector    string  `json:"vector,omitempty" yaml:"vector,omitempty"`
+	Source    string  `json:"source,omitempty" yaml:"source,omitempty"`
+	Version   string  `json:"version,omitempty" yaml:"version,omitempty"`
 }
 
 // ComponentMapping represents the resolved mapping from a finding to an Atmos component/stack.
@@ -108,6 +182,22 @@ type Report struct {
 	UnmappedCount  int                    `json:"unmapped_count" yaml:"unmapped_count"`
 	TagMapping     *AWSSecurityTagMapping `json:"-" yaml:"-"` // Display-only: configured tag keys for unmapped findings message.
 	GroupFindings  bool                   `json:"-" yaml:"-"` // Display-only: group duplicate findings in Markdown output.
+	Invocation     *ReportInvocation      `json:"-" yaml:"-"`
+}
+
+// ReportInvocation captures audit details for a CLI run.
+type ReportInvocation struct {
+	CommandLine         string
+	Arguments           []string
+	StartTimeUTC        time.Time
+	EndTimeUTC          time.Time
+	ExitCode            int
+	ExitCodeDescription string
+	WorkingDirectory    string
+	ExecutionSuccessful bool
+	AccountsScanned     []string
+	RegionsScanned      []string
+	StacksScanned       []string
 }
 
 // AWSSecurityTagMapping is re-exported from schema for use in reports.
@@ -159,6 +249,8 @@ const (
 	FormatJSON     OutputFormat = "json"
 	FormatYAML     OutputFormat = "yaml"
 	FormatCSV      OutputFormat = "csv"
+	FormatSARIF    OutputFormat = "sarif"
+	FormatOCSF     OutputFormat = "ocsf"
 )
 
 // ParseOutputFormat validates a format string and returns the corresponding OutputFormat.
@@ -172,6 +264,10 @@ func ParseOutputFormat(format string) (OutputFormat, error) {
 		return FormatYAML, nil
 	case "csv":
 		return FormatCSV, nil
+	case "sarif":
+		return FormatSARIF, nil
+	case "ocsf":
+		return FormatOCSF, nil
 	default:
 		return "", errUtils.ErrAWSSecurityInvalidFormat
 	}

@@ -72,6 +72,54 @@ func TestGetComponentDependencies(t *testing.T) {
 		assert.Equal(t, dependencySourceSettingsDependsOn, source)
 	})
 
+	t.Run("falls back to settings.depends_on when dependencies only has file and folder siblings", func(t *testing.T) {
+		componentMap := map[string]any{
+			"dependencies": map[string]any{
+				"files": []any{
+					"configs/app.json",
+				},
+				"folders": []any{
+					"src/lambda",
+				},
+			},
+			"settings": map[string]any{
+				"depends_on": map[any]any{
+					1: map[string]any{"component": "vpc"},
+				},
+			},
+		}
+
+		deps, settingsSection, source := getComponentDependencies(componentMap)
+
+		require.Len(t, deps, 1)
+		assert.Equal(t, "vpc", deps[0].Component)
+		assert.NotNil(t, settingsSection)
+		assert.Equal(t, dependencySourceSettingsDependsOn, source)
+	})
+
+	t.Run("falls back to settings.depends_on when dependencies.components only has inline file and folder deps", func(t *testing.T) {
+		componentMap := map[string]any{
+			"dependencies": map[string]any{
+				"components": []any{
+					map[string]any{"kind": "file", "path": "configs/app.json"},
+					map[string]any{"kind": "folder", "path": "src/lambda"},
+				},
+			},
+			"settings": map[string]any{
+				"depends_on": map[any]any{
+					1: map[string]any{"component": "vpc"},
+				},
+			},
+		}
+
+		deps, settingsSection, source := getComponentDependencies(componentMap)
+
+		require.Len(t, deps, 1)
+		assert.Equal(t, "vpc", deps[0].Component)
+		assert.NotNil(t, settingsSection)
+		assert.Equal(t, dependencySourceSettingsDependsOn, source)
+	})
+
 	t.Run("returns nil when no dependencies defined", func(t *testing.T) {
 		componentMap := map[string]any{
 			"vars": map[string]any{
@@ -137,7 +185,7 @@ func TestGetComponentDependencies(t *testing.T) {
 		assert.Equal(t, dependencySourceDependenciesComponents, source)
 	})
 
-	t.Run("handles file and folder dependencies in dependencies.components", func(t *testing.T) {
+	t.Run("filters file and folder dependencies in dependencies.components", func(t *testing.T) {
 		componentMap := map[string]any{
 			"dependencies": map[string]any{
 				"components": []any{
@@ -151,12 +199,8 @@ func TestGetComponentDependencies(t *testing.T) {
 		deps, _, source := getComponentDependencies(componentMap)
 		assert.Equal(t, dependencySourceDependenciesComponents, source)
 
-		assert.Len(t, deps, 3)
+		assert.Len(t, deps, 1)
 		assert.Equal(t, "vpc", deps[0].Component)
-		assert.Equal(t, "file", deps[1].Kind)
-		assert.Equal(t, "configs/settings.json", deps[1].Path)
-		assert.Equal(t, "folder", deps[2].Kind)
-		assert.Equal(t, "src/lambda", deps[2].Path)
 	})
 
 	t.Run("handles cross-type kind in dependencies.components", func(t *testing.T) {

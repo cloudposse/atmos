@@ -1,6 +1,7 @@
 package exec
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -352,6 +353,21 @@ func processTerraformComponent(
 	info.Stack = stackName
 	info.StackFromArg = stackName
 
+	// When a per-component hook is registered, capture this component's output
+	// and invoke the hook immediately after execution so each component receives
+	// its own CI summary entry rather than sharing the final global call.
+	if info.PerComponentHook != nil {
+		var stdoutBuf, stderrBuf bytes.Buffer
+		execErr := executeFn(*info, WithStdoutCapture(&stdoutBuf), WithStderrCapture(&stderrBuf))
+		combined := stdoutBuf.String()
+		if s := stderrBuf.String(); s != "" {
+			combined += "\n" + s
+		}
+		compInfo := *info // snapshot with this component's Component/Stack values set.
+		info.PerComponentHook(&compInfo, combined, execErr)
+		return true, execErr
+	}
+
 	if err := executeFn(*info); err != nil {
 		return true, err
 	}
@@ -373,6 +389,15 @@ func shouldProcessDependent(dep *schema.Dependent, affectedList []schema.Affecte
 		return false
 	}
 	return includeDependents || isComponentInStackAffected(affectedList, dep.StackSlug)
+}
+
+// isNonTerraformDependent returns true when dep is a dependent that
+// `atmos terraform` must skip during recursion: a helmfile or packer
+// component, or any other non-terraform type. Dependents with an empty
+// ComponentType are treated as terraform for backward compatibility. See
+// issue #2361.
+func isNonTerraformDependent(dep *schema.Dependent) bool {
+	return dep.ComponentType != "" && dep.ComponentType != cfg.TerraformComponentType
 }
 
 // executeTerraformAffectedComponentInDepOrder recursively processes the affected components in the dependency order.
@@ -404,6 +429,12 @@ func executeTerraformAffectedComponentInDepOrder(
 
 	for i := 0; i < len(params.Dependents); i++ {
 		dep := &params.Dependents[i]
+		// Defense-in-depth: when --include-dependents is set, the dependency graph
+		// may include helmfile/packer dependents. `atmos terraform` must skip those
+		// — they belong to their own subcommands. See issue #2361.
+		if isNonTerraformDependent(dep) {
+			continue
+		}
 		if !shouldProcessDependent(dep, affectedList, args.IncludeDependents) {
 			continue
 		}
