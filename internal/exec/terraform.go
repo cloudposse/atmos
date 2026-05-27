@@ -112,6 +112,11 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo, opts ...ShellCommandOptio
 		return err
 	}
 
+	// Persist auth context so PostRunE hooks (e.g. store hooks that read
+	// terraform outputs) can reuse the credentials established during this
+	// execution. Without this, hooks create a fresh info with no auth.
+	SetLastAuthContext(info.AuthContext, info.AuthManager)
+
 	// Run the full command pipeline: init, arg build, workspace, execute, cleanup.
 	// Forward caller-provided options (e.g. CI stdout/stderr capture) alongside the environment option.
 	opts = append(opts, WithEnvironment(info.SanitizedEnv))

@@ -93,6 +93,15 @@ func runHooksWithOutput(event h.HookEvent, cmd_ *cobra.Command, args []string, o
 		return err
 	}
 
+	// Inject the auth context from the most recent ExecuteTerraform call so
+	// store hooks can read terraform outputs from backends requiring role
+	// assumption. Without this, the hook's terraform output subprocess has
+	// no credentials and fails with "No valid credential sources found".
+	if authCtx, authMgr := e.GetLastAuthContext(); authCtx != nil {
+		info.AuthContext = authCtx
+		info.AuthManager = authMgr
+	}
+
 	// Validate Atmos config first to provide specific error messages
 	// (e.g., stacks directory does not exist) before full initialization.
 	if err := internal.ValidateAtmosConfig(); err != nil {
@@ -698,14 +707,12 @@ func handlePromptError(err error, name string) error {
 
 // promptForComponent delegates to shared.PromptForComponent.
 // If stack is provided, filters components to only those in that stack.
-func promptForComponent(cmd *cobra.Command, stack string) (string, error) {
-	return shared.PromptForComponent(cmd, stack)
-}
+// Declared as a var so tests can stub the interactive prompt.
+var promptForComponent = shared.PromptForComponent
 
 // promptForStack delegates to shared.PromptForStack.
-func promptForStack(cmd *cobra.Command, component string) (string, error) {
-	return shared.PromptForStack(cmd, component)
-}
+// Declared as a var so tests can stub the interactive prompt.
+var promptForStack = shared.PromptForStack
 
 // enableHeatmapIfRequested checks os.Args for --heatmap flag and enables performance tracking.
 // This is needed because --heatmap must be detected before flag parsing occurs.
