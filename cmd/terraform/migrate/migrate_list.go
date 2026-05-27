@@ -1,4 +1,4 @@
-package terraform
+package migrate
 
 import (
 	"strings"
@@ -6,6 +6,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
+	"github.com/cloudposse/atmos/cmd/terraform/shared"
 	e "github.com/cloudposse/atmos/internal/exec"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/flags/compat"
@@ -66,7 +67,7 @@ func runTerraformMigrateList(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	applyOptionsToInfo(&info, ParseTerraformRunOptions(v))
+	shared.ApplyRunOptions(&info, shared.ParseRunOptions(v))
 
 	rows, err := collectTfmigrateListRows(&info)
 	if err != nil {
@@ -81,7 +82,7 @@ func runTerraformMigrateList(cmd *cobra.Command, args []string) error {
 }
 
 func parseTerraformMigrateListArgs(args []string) (schema.ConfigAndStacksInfo, error) {
-	info, err := e.ProcessCommandLineArgs("terraform", terraformCmd, append([]string{"migrate list"}, args...), compat.GetSeparated())
+	info, err := e.ProcessCommandLineArgs("terraform", parentCommand, append([]string{"migrate list"}, args...), compat.GetSeparated())
 	if err != nil {
 		return schema.ConfigAndStacksInfo{}, err
 	}

@@ -1,8 +1,9 @@
-package terraform
+package migrate
 
 import (
 	"testing"
 
+	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -12,12 +13,13 @@ import (
 )
 
 func TestMigrateCommandRegistered(t *testing.T) {
-	require.NotNil(t, migrateCmd)
-	assert.Equal(t, "migrate", migrateCmd.Use)
+	cmd := GetCommand(Options{ParentCommand: &cobra.Command{Use: "terraform"}})
+	require.NotNil(t, cmd)
+	assert.Equal(t, "migrate", cmd.Use)
 
 	var foundPlan, foundApply, foundList bool
-	for _, cmd := range migrateCmd.Commands() {
-		switch cmd.Use {
+	for _, subCmd := range cmd.Commands() {
+		switch subCmd.Use {
 		case "plan [component]":
 			foundPlan = true
 		case "apply [component]":

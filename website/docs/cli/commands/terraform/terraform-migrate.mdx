@@ -6,6 +6,7 @@ description: Run Terraform state migrations with tfmigrate.
 id: migrate
 ---
 import Intro from '@site/src/components/Intro'
+import Screengrab from '@site/src/components/Screengrab'
 import DocCardList from '@theme/DocCardList'
 import ActionCard from '@site/src/components/ActionCard'
 import PrimaryCTA from '@site/src/components/PrimaryCTA'
@@ -21,6 +22,8 @@ Use `atmos terraform migrate` to run user-authored `tfmigrate` migrations in an 
     </div>
 </ActionCard>
 
+<Screengrab title="atmos terraform migrate --help" slug="atmos-terraform-migrate--help" />
+
 ## Usage
 
 ```shell
@@ -29,6 +32,38 @@ atmos terraform migrate <subcommand> [component] [options]
 
 Atmos prepares the component before `tfmigrate` runs. Source provisioning, workdir provisioning, generated backend files, generated varfiles, auth identity setup, and Terraform workspace selection all happen first.
 
+## Arguments
+
+<dl>
+  <dt>`subcommand`</dt>
+  <dd>Migration action to run. Supported values are `plan`, `apply`, and `list`.</dd>
+
+  <dt>`component`</dt>
+  <dd>Atmos Terraform component to migrate or inspect. Omit when selecting multiple components with flags such as `--all`, `--components`, `--query`, or `--affected`.</dd>
+</dl>
+
+## Flags
+
+<dl>
+  <dt>`--stack` / `-s`</dt>
+  <dd>Atmos stack where the component is defined.</dd>
+
+  <dt>`--migration`</dt>
+  <dd>Path to a single `tfmigrate` migration file for `plan` or `apply`.</dd>
+
+  <dt>`--tfmigrate-config`</dt>
+  <dd>Path to the `tfmigrate` config file. Omit `--migration` and use this flag for history mode.</dd>
+
+  <dt>`--backend-config`</dt>
+  <dd>Backend config entry passed to `tfmigrate --backend-config`. Repeat the flag for multiple entries.</dd>
+
+  <dt>`--all`, `--components`, `--query`, `--affected`</dt>
+  <dd>Select multiple Terraform component instances instead of passing one component argument.</dd>
+
+  <dt>`--skip-init`</dt>
+  <dd>Skip the normal Terraform init path before `tfmigrate` runs.</dd>
+</dl>
+
 ## Subcommands
 
 <DocCardList items={[
@@ -36,6 +71,26 @@ Atmos prepares the component before `tfmigrate` runs. Source provisioning, workd
   {type: 'link', href: '/cli/commands/terraform/migrate-apply', label: 'atmos terraform migrate apply', description: 'Apply a tfmigrate state migration'},
   {type: 'link', href: '/cli/commands/terraform/migrate-list', label: 'atmos terraform migrate list', description: 'List component tfmigrate context and history settings'},
 ]} />
+
+## Examples
+
+Preview a single-file migration:
+
+```shell
+atmos terraform migrate plan s3-bucket -s plat-ue2-dev --migration migrations/001_remove_template_provider.hcl
+```
+
+Apply history-mode migrations:
+
+```shell
+atmos terraform migrate apply s3-bucket -s plat-ue2-dev --tfmigrate-config .tfmigrate.hcl
+```
+
+List migration context and history settings:
+
+```shell
+atmos terraform migrate list -s plat-ue2-dev
+```
 
 ## How Atmos Runs `tfmigrate`
 

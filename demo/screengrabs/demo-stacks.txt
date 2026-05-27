@@ -82,6 +82,10 @@ atmos profile list
 atmos profile list --help
 atmos profile show --help
 atmos terraform --help
+atmos terraform migrate --help
+atmos terraform migrate plan --help
+atmos terraform migrate apply --help
+atmos terraform migrate list --help
 atmos terraform apply --help
 atmos terraform backend --help
 atmos terraform backend create --help

@@ -1,4 +1,4 @@
-package terraform
+package migrate
 
 import (
 	"context"
@@ -9,7 +9,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
-	"github.com/cloudposse/atmos/cmd/internal"
+	"github.com/cloudposse/atmos/cmd/terraform/shared"
 	e "github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/auth"
 	"github.com/cloudposse/atmos/pkg/component"
@@ -26,7 +26,15 @@ import (
 var (
 	migrateParser     *flags.StandardParser
 	migrateListParser *flags.StandardParser
+	parentCommand     *cobra.Command
+	terraformParser   *flags.StandardParser
 )
+
+// Options contains dependencies supplied by the parent terraform command package.
+type Options struct {
+	ParentCommand   *cobra.Command
+	TerraformParser *flags.StandardParser
+}
 
 var migrateCmd = &cobra.Command{
 	Use:   "migrate",
@@ -84,7 +92,7 @@ func runTerraformMigrate(cmd *cobra.Command, args []string, action string) error
 	if info.Affected {
 		return executeAffectedMigrateCommand(cmd, args, &info, migrateOpts)
 	}
-	if info.All || isMultiComponentExecution(&info) {
+	if info.All || shared.IsMultiComponentExecution(&info) {
 		return executeTfmigrateQuery(&info, migrateOpts)
 	}
 	return executeTfmigrateSingle(&info, migrateOpts)
@@ -99,7 +107,7 @@ func parseTerraformMigrate(cmd *cobra.Command, args []string, action string) (sc
 		return schema.ConfigAndStacksInfo{}, tfmigrate.Options{}, err
 	}
 
-	opts := ParseTerraformRunOptions(v)
+	opts := shared.ParseRunOptions(v)
 	migrateOpts := tfmigrate.Options{
 		Action:        action,
 		Migration:     v.GetString("migration"),
@@ -111,24 +119,24 @@ func parseTerraformMigrate(cmd *cobra.Command, args []string, action string) (sc
 	}
 
 	argsWithSubCommand := append([]string{"migrate " + action}, args...)
-	info, err := e.ProcessCommandLineArgs("terraform", terraformCmd, argsWithSubCommand, compat.GetSeparated())
+	info, err := e.ProcessCommandLineArgs("terraform", parentCommand, argsWithSubCommand, compat.GetSeparated())
 	if err != nil {
 		return schema.ConfigAndStacksInfo{}, tfmigrate.Options{}, err
 	}
-	applyOptionsToInfo(&info, opts)
+	shared.ApplyRunOptions(&info, opts)
 
-	if err := resolveAndPromptForArgs(&info, cmd); err != nil {
+	if err := shared.ResolveAndPromptForArgs(&info, cmd); err != nil {
 		return schema.ConfigAndStacksInfo{}, tfmigrate.Options{}, err
 	}
 	if info.NeedHelp {
 		return schema.ConfigAndStacksInfo{}, tfmigrate.Options{}, cmd.Usage()
 	}
 	if info.Identity == cfg.IdentityFlagSelectValue {
-		if err := handleInteractiveIdentitySelection(&info); err != nil {
+		if err := shared.HandleInteractiveIdentitySelection(&info); err != nil {
 			return schema.ConfigAndStacksInfo{}, tfmigrate.Options{}, err
 		}
 	}
-	if err := checkTerraformFlags(&info); err != nil {
+	if err := shared.CheckTerraformFlags(&info); err != nil {
 		return schema.ConfigAndStacksInfo{}, tfmigrate.Options{}, err
 	}
 
@@ -309,7 +317,7 @@ func tfmigrateComponentName(info *schema.ConfigAndStacksInfo) string {
 
 func init() {
 	migrateParser = flags.NewStandardParser(
-		WithBackendExecutionFlags(),
+		shared.WithBackendExecutionFlags(),
 		flags.WithStringFlag("migration", "", "", "Path to a tfmigrate migration file. Omit to use tfmigrate history mode"),
 		flags.WithStringFlag("tfmigrate-config", "", "", "Path to a tfmigrate config file"),
 		flags.WithStringSliceFlag("backend-config", "", nil, "Backend configuration passed to tfmigrate; may be specified multiple times"),
@@ -343,15 +351,21 @@ func init() {
 		panic(err)
 	}
 
-	RegisterTerraformCompletions(migratePlanCmd)
-	RegisterTerraformCompletions(migrateApplyCmd)
-	RegisterTerraformCompletions(migrateListCmd)
+	shared.RegisterCompletions(migratePlanCmd)
+	shared.RegisterCompletions(migrateApplyCmd)
+	shared.RegisterCompletions(migrateListCmd)
 
 	migrateCmd.AddCommand(migratePlanCmd, migrateApplyCmd, migrateListCmd)
-	internal.RegisterCommandCompatFlags("terraform", "migrate", MigrateCompatFlags())
-	terraformCmd.AddCommand(migrateCmd)
 }
 
-func MigrateCompatFlags() map[string]compat.CompatibilityFlag {
+// GetCommand returns the migrate command for parent registration.
+func GetCommand(opts Options) *cobra.Command {
+	parentCommand = opts.ParentCommand
+	terraformParser = opts.TerraformParser
+	return migrateCmd
+}
+
+// CompatFlags returns compatibility flags for the atmos terraform migrate command.
+func CompatFlags() map[string]compat.CompatibilityFlag {
 	return map[string]compat.CompatibilityFlag{}
 }
