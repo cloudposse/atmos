@@ -59,7 +59,6 @@ stacks:
 components:
   terraform:
     base_path: "components/terraform"
-    aliases: opentofu
 ```
 
 `components.<type>.aliases` may be a string or list of strings. Aliases are declared under the canonical component type

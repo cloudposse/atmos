@@ -39,11 +39,17 @@ Every new or changed `atmos.yaml` section needs configuration docs.
 
 ## Command Docs
 
-When command behavior is configured by `atmos.yaml`, link command docs back to configuration docs.
+When command behavior is materially configured by `atmos.yaml`, link command docs back to the command-level
+configuration page. For example, `atmos terraform` should link to Terraform configuration, not to every nested
+Terraform configuration subsection.
 
-- Import `ActionCard` and `PrimaryCTA`.
-- Place the card near the top, after `Intro` and any status badges.
-- Link to the relevant configuration page, not just the root docs section.
+- Use action cards sparingly. Before adding one, ask whether that configuration is one of the main things readers should
+  take away from the page.
+- Avoid placing emphasized React components back-to-back, such as a screengrab immediately followed by an action card or
+  an admonition immediately followed by another callout.
+- Import `ActionCard` and `PrimaryCTA` only when a command-level configuration link deserves callout treatment.
+- Place the card near the top, after `Intro` and any status badges, only when it is part of the primary page path.
+- Link to the relevant command-level configuration page, not to every nested option or feature-specific child page.
 - Use definition lists for flags and positional arguments.
 - Use `DocCardList` for command families and subcommands.
 
