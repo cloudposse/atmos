@@ -1,0 +1,102 @@
+---
+slug: terraform-tfmigrate
+title: "Terraform state migrations with tfmigrate"
+authors: [osterman]
+tags: [feature, dx]
+---
+
+Atmos can now run user-authored [`tfmigrate`](https://github.com/minamijoyo/tfmigrate) migrations manually from the CLI and automatically from Terraform lifecycle hooks, all in the same component context as `atmos terraform plan` and `apply`.
+
+```shell
+atmos terraform migrate plan s3-bucket -s plat-ue2-dev --migration migrations/001_remove_template_provider.hcl
+atmos terraform migrate apply s3-bucket -s plat-ue2-dev --migration migrations/001_remove_template_provider.hcl
+```
+
+<!--truncate-->
+
+## What Changed
+
+The new `atmos terraform migrate` command family adds:
+
+- `atmos terraform migrate plan` to preview a migration.
+- `atmos terraform migrate apply` to apply a migration.
+- `atmos terraform migrate list` to inspect per-component hook and history context.
+- `kind: tfmigrate` hooks for running migrations from Terraform lifecycle events.
+
+Before `tfmigrate` runs, Atmos performs the normal Terraform component setup:
+auth identity resolution, source provisioning, workdir provisioning, generated
+backend files, generated varfiles, Terraform init, and workspace selection.
+
+## Dynamic Hooks
+
+`kind: tfmigrate` hooks default to `mode: dynamic`, so automation follows the
+Terraform operation:
+
+```yaml
+hooks:
+  state-migration:
+    events:
+      - before.terraform.plan
+      - before.terraform.apply
+    kind: tfmigrate
+    mode: dynamic
+```
+
+`before.terraform.plan` runs `tfmigrate plan`; `before.terraform.apply` and
+`before.terraform.deploy` run `tfmigrate apply`. Static `mode: plan` and
+`mode: apply` are available when a hook must always run one action.
+
+Hooks run through Atmos, so they use the same identity as the Terraform
+operation. If the Terraform command or component selects an Atmos auth
+identity, the migration gets that same authenticated environment.
+
+## History Mode
+
+For idempotent migrations in automation, use `tfmigrate` history mode:
+
+```shell
+atmos terraform migrate apply s3-bucket -s plat-ue2-dev
+```
+
+Atmos exports stack/component/workspace-scoped history variables and copies
+supported Terraform backend settings so the `tfmigrate` config can reuse the
+same bucket and identity setup:
+
+```hcl
+tfmigrate {
+  migration_dir = "./tfmigrate"
+
+  history {
+    storage "s3" {
+      bucket   = env.ATMOS_TFMIGRATE_HISTORY_BUCKET
+      key      = env.ATMOS_TFMIGRATE_HISTORY_KEY
+      region   = env.ATMOS_TFMIGRATE_HISTORY_REGION
+      role_arn = env.ATMOS_TFMIGRATE_HISTORY_ROLE_ARN
+    }
+  }
+}
+```
+
+The default history key is:
+
+```text
+tfmigrate/<stack>/<component>/<workspace>/history.json
+```
+
+That keeps multiple Atmos component instances from colliding when they share a
+Terraform backend bucket.
+
+## Important Limitation
+
+Single-file `tfmigrate apply path.hcl` is not inherently idempotent. A rerun
+can fail after a state address has already moved or been removed.
+
+Atmos v1 passes `tfmigrate` config and history settings through, but it does
+not persist history itself. Durable history storage in S3, GCS, or CI-persisted
+local storage is required for safe reruns.
+
+## Learn More
+
+- [`atmos terraform migrate`](/cli/commands/terraform/migrate)
+- [Hooks](/stacks/hooks)
+- [Terraform Component Configuration](/cli/configuration/components/terraform)

@@ -1,0 +1,103 @@
+---
+title: atmos terraform migrate
+sidebar_label: migrate
+sidebar_class_name: command
+description: Run Terraform state migrations with tfmigrate.
+id: migrate
+---
+import Intro from '@site/src/components/Intro'
+import DocCardList from '@theme/DocCardList'
+import ActionCard from '@site/src/components/ActionCard'
+import PrimaryCTA from '@site/src/components/PrimaryCTA'
+
+<Intro>
+Use `atmos terraform migrate` to run user-authored `tfmigrate` migrations in an Atmos Terraform component context.
+</Intro>
+
+<ActionCard title="Configure Tfmigrate Hooks">
+    Run migrations automatically from Terraform lifecycle hooks.
+    <div>
+      <PrimaryCTA to="/stacks/hooks">Hooks Reference</PrimaryCTA>
+    </div>
+</ActionCard>
+
+## Usage
+
+```shell
+atmos terraform migrate <subcommand> [component] [options]
+```
+
+Atmos prepares the component before `tfmigrate` runs. Source provisioning, workdir provisioning, generated backend files, generated varfiles, auth identity setup, and Terraform workspace selection all happen first.
+
+## Subcommands
+
+<DocCardList items={[
+  {type: 'link', href: '/cli/commands/terraform/migrate-plan', label: 'atmos terraform migrate plan', description: 'Preview a tfmigrate state migration'},
+  {type: 'link', href: '/cli/commands/terraform/migrate-apply', label: 'atmos terraform migrate apply', description: 'Apply a tfmigrate state migration'},
+  {type: 'link', href: '/cli/commands/terraform/migrate-list', label: 'atmos terraform migrate list', description: 'List component tfmigrate context and history settings'},
+]} />
+
+## How Atmos Runs `tfmigrate`
+
+For every selected component instance, Atmos:
+
+- Resolves the stack/component with the standard Terraform command flags.
+- Authenticates the configured Atmos identity before migration.
+- Runs the normal Terraform init path unless `--skip-init` is set.
+- Selects the configured Terraform workspace.
+- Resolves `tfmigrate` and Terraform/OpenTofu through the Atmos toolchain or PATH.
+- Sets `TFMIGRATE_EXEC_PATH` to the resolved Terraform/OpenTofu binary unless already set.
+- Exports per-instance history helper variables for `.tfmigrate.hcl`.
+
+## History Mode
+
+Enable `tfmigrate` history mode by omitting `--migration` and passing a config file:
+
+```shell
+atmos terraform migrate apply s3-bucket -s plat-ue2-dev --tfmigrate-config .tfmigrate.hcl
+```
+
+Atmos v1 passes config and backend settings through to `tfmigrate`; it does not store or retrieve the history file for you. Durable history storage is required for rerun-safe automation.
+
+## History Variables
+
+Atmos sets these variables for use from `.tfmigrate.hcl` via `env`:
+
+<dl>
+  <dt>`ATMOS_STACK`</dt>
+  <dd>The selected Atmos stack.</dd>
+
+  <dt>`ATMOS_COMPONENT`</dt>
+  <dd>The selected Terraform component instance.</dd>
+
+  <dt>`ATMOS_TERRAFORM_WORKSPACE`</dt>
+  <dd>The selected Terraform workspace, or `default` when none is configured.</dd>
+
+  <dt>`ATMOS_TFMIGRATE_HISTORY_NAMESPACE`</dt>
+  <dd>`tfmigrate/&lt;stack&gt;/&lt;component&gt;/&lt;workspace&gt;`.</dd>
+
+  <dt>`ATMOS_TFMIGRATE_HISTORY_KEY`</dt>
+  <dd>`tfmigrate/&lt;stack&gt;/&lt;component&gt;/&lt;workspace&gt;/history.json`.</dd>
+
+  <dt>`ATMOS_TFMIGRATE_HISTORY_BUCKET`</dt>
+  <dd>Copied from the component Terraform backend when the backend is S3 or GCS.</dd>
+
+  <dt>`ATMOS_TFMIGRATE_HISTORY_REGION`, `ATMOS_TFMIGRATE_HISTORY_PROFILE`, `ATMOS_TFMIGRATE_HISTORY_ROLE_ARN`</dt>
+  <dd>Copied from supported S3 backend settings.</dd>
+</dl>
+
+The history key is namespaced by stack, component, and workspace to avoid collisions when multiple Atmos component instances share the same Terraform backend bucket.
+
+## Rerun Safety
+
+Single-file `tfmigrate apply path.hcl` is not inherently idempotent. A rerun can fail if a `state mv` source or `state rm` address has already been changed.
+
+For CI, use `tfmigrate` history mode with durable storage such as S3, GCS, or a local file persisted by the workflow runner.
+
+## Related
+
+- [`atmos terraform migrate plan`](/cli/commands/terraform/migrate-plan)
+- [`atmos terraform migrate apply`](/cli/commands/terraform/migrate-apply)
+- [`atmos terraform migrate list`](/cli/commands/terraform/migrate-list)
+- [Hooks](/stacks/hooks)
+- [Terraform Component Configuration](/cli/configuration/components/terraform)

@@ -1179,7 +1179,95 @@
         },
         {
           "type": "object",
-          "additionalProperties": true
+          "additionalProperties": {
+            "$ref": "#/definitions/hook"
+          }
+        }
+      ]
+    },
+    "hook": {
+      "title": "hook",
+      "description": "Lifecycle hook configuration",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "kind": {
+              "type": "string",
+              "description": "Hook kind. Built-in values include command, store, infracost, checkov, trivy, kics, and tfmigrate."
+            },
+            "events": {
+              "type": "array",
+              "description": "Lifecycle events that trigger this hook.",
+              "items": {
+                "type": "string"
+              }
+            },
+            "command": {
+              "type": "string",
+              "description": "Command to run for command-style hooks."
+            },
+            "args": {
+              "type": "array",
+              "description": "Arguments passed to the hook command.",
+              "items": {
+                "type": "string"
+              }
+            },
+            "env": {
+              "type": "object",
+              "description": "Environment variables passed to the hook command.",
+              "additionalProperties": {
+                "type": "string"
+              }
+            },
+            "format": {
+              "type": "string",
+              "description": "Inline rendering format for generic hook output."
+            },
+            "on_failure": {
+              "type": "string",
+              "description": "Failure behavior for the hook.",
+              "enum": ["warn", "fail", "ignore"]
+            },
+            "migration": {
+              "type": "string",
+              "description": "Path to a tfmigrate migration file for kind: tfmigrate hooks."
+            },
+            "config": {
+              "type": "string",
+              "description": "Path to a tfmigrate config file for kind: tfmigrate hooks."
+            },
+            "backend_config": {
+              "type": "array",
+              "description": "Backend config entries passed to tfmigrate.",
+              "items": {
+                "type": "string"
+              }
+            },
+            "mode": {
+              "type": "string",
+              "description": "tfmigrate hook mode. dynamic maps the Terraform lifecycle event to plan or apply.",
+              "enum": ["dynamic", "plan", "apply"],
+              "default": "dynamic"
+            },
+            "name": {
+              "type": "string",
+              "description": "Store name for kind: store hooks."
+            },
+            "outputs": {
+              "type": "object",
+              "description": "Output mappings for kind: store hooks.",
+              "additionalProperties": {
+                "type": "string"
+              }
+            }
+          }
         }
       ]
     }

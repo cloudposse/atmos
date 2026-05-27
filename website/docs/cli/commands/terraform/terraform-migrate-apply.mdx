@@ -1,0 +1,101 @@
+---
+title: atmos terraform migrate apply
+sidebar_label: migrate apply
+sidebar_class_name: command
+description: Apply Terraform state migrations with tfmigrate.
+id: migrate-apply
+---
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Use `atmos terraform migrate apply` to apply a user-authored `tfmigrate` migration for an Atmos Terraform component.
+</Intro>
+
+## Usage
+
+```shell
+atmos terraform migrate apply [component] -s <stack> [options]
+```
+
+Atmos runs the same component preparation as `plan`: auth, source provisioning, workdir provisioning, generated files, Terraform init, and workspace selection.
+
+## Arguments
+
+<dl>
+  <dt>`component`</dt>
+  <dd>Atmos Terraform component to migrate. Omit when selecting multiple components with `--all`, `--components`, `--query`, or `--affected`.</dd>
+</dl>
+
+## Flags
+
+<dl>
+  <dt>`--stack` / `-s`</dt>
+  <dd>Atmos stack where the component is defined.</dd>
+
+  <dt>`--migration`</dt>
+  <dd>Path to a single `tfmigrate` migration file. Single-file reruns are not inherently idempotent.</dd>
+
+  <dt>`--tfmigrate-config`</dt>
+  <dd>Path to the `tfmigrate` config file. Omit `--migration` and use this flag to run history mode.</dd>
+
+  <dt>`--backend-config`</dt>
+  <dd>Backend config entry passed to `tfmigrate --backend-config`. Repeat the flag for multiple entries.</dd>
+
+  <dt>`--all`</dt>
+  <dd>Apply the migration for all selected component instances.</dd>
+
+  <dt>`--components`</dt>
+  <dd>Apply the migration for the listed component names.</dd>
+
+  <dt>`--query`</dt>
+  <dd>Apply the migration for component instances matching a YQ expression.</dd>
+
+  <dt>`--affected`</dt>
+  <dd>Apply the migration for affected Terraform components. `--include-dependents` is not supported for migrate yet.</dd>
+
+  <dt>`--skip-init`</dt>
+  <dd>Skip the normal Terraform init path before `tfmigrate` runs.</dd>
+</dl>
+
+## Examples
+
+Apply a single-file migration:
+
+```shell
+atmos terraform migrate apply s3-bucket -s plat-ue2-dev --migration migrations/001_remove_template_provider.hcl
+```
+
+Apply history-mode migrations:
+
+```shell
+atmos terraform migrate apply s3-bucket -s plat-ue2-dev --tfmigrate-config .tfmigrate.hcl
+```
+
+Use a durable S3 history file in `.tfmigrate.hcl`:
+
+```hcl
+tfmigrate {
+  migration_dir = "./tfmigrate"
+
+  history {
+    storage "s3" {
+      bucket   = env.ATMOS_TFMIGRATE_HISTORY_BUCKET
+      key      = env.ATMOS_TFMIGRATE_HISTORY_KEY
+      region   = env.ATMOS_TFMIGRATE_HISTORY_REGION
+      role_arn = env.ATMOS_TFMIGRATE_HISTORY_ROLE_ARN
+    }
+  }
+}
+```
+
+Atmos authenticates the component identity before `tfmigrate` runs, so the history storage client inherits the same environment used by the Terraform backend.
+
+## Rerun Safety
+
+Use history mode for automation. Single-file `tfmigrate apply path.hcl` can fail on rerun after state addresses have already moved or been removed.
+
+## Related
+
+- [`atmos terraform migrate`](/cli/commands/terraform/migrate)
+- [`atmos terraform migrate plan`](/cli/commands/terraform/migrate-plan)
+- [`atmos terraform migrate list`](/cli/commands/terraform/migrate-list)

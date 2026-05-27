@@ -1,0 +1,89 @@
+---
+title: atmos terraform migrate list
+sidebar_label: migrate list
+sidebar_class_name: command
+description: List Terraform component tfmigrate context and history settings.
+id: migrate-list
+---
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Use `atmos terraform migrate list` to inspect which Terraform component instances have `kind: tfmigrate` hooks and which history settings Atmos will expose.
+</Intro>
+
+## Usage
+
+```shell
+atmos terraform migrate list [component] [options]
+```
+
+## Arguments
+
+<dl>
+  <dt>`component`</dt>
+  <dd>Optional component name filter.</dd>
+</dl>
+
+## Flags
+
+<dl>
+  <dt>`--stack` / `-s`</dt>
+  <dd>Filter results to a stack.</dd>
+
+  <dt>`--components`</dt>
+  <dd>Filter results to one or more component names.</dd>
+
+  <dt>`--query`</dt>
+  <dd>Filter component instances with a YQ expression.</dd>
+
+  <dt>`--all`</dt>
+  <dd>List all component instances in all stacks.</dd>
+
+  <dt>`--format` / `-f`</dt>
+  <dd>Output format. Supported values: `table`, `json`, `yaml`, `csv`, `tsv`.</dd>
+
+  <dt>`--columns`</dt>
+  <dd>Columns to display. Use field names such as `component`, `stack`, `workspace`, `hook`, `mode`, `history_bucket`, and `history_key`.</dd>
+
+  <dt>`--sort`</dt>
+  <dd>Sort by column and order, for example `stack:asc,component:asc`.</dd>
+
+  <dt>`--delimiter`</dt>
+  <dd>Delimiter for CSV or TSV output.</dd>
+</dl>
+
+## Examples
+
+List migration context for a stack:
+
+```shell
+atmos terraform migrate list -s plat-ue2-dev
+```
+
+Show history keys for matching components:
+
+```shell
+atmos terraform migrate list --query '.settings.requires_migration == true' --columns component --columns stack --columns history_key
+```
+
+Output JSON for automation:
+
+```shell
+atmos terraform migrate list --all --format json
+```
+
+## Output Columns
+
+Default columns include component, stack, workspace, hook, mode, migration, config, history storage, history bucket, history key, and history role ARN.
+
+The `history_key` value is stack/component/workspace scoped:
+
+```text
+tfmigrate/<stack>/<component>/<workspace>/history.json
+```
+
+## Related
+
+- [`atmos terraform migrate`](/cli/commands/terraform/migrate)
+- [`atmos terraform migrate plan`](/cli/commands/terraform/migrate-plan)
+- [`atmos terraform migrate apply`](/cli/commands/terraform/migrate-apply)
