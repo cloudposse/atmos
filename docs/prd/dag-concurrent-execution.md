@@ -429,8 +429,8 @@ func (o *Orchestrator) Dispatch(ctx context.Context, node *Node) (*Result, error
         return nil, err
     }
 
-    // Create per-node isolated output (see "Output Under Concurrency")
-    output := io.NewNodeOutput(...)
+    // Create isolated output for this node (see "Output Under Concurrency")
+    output := io.NewOutput(...)
     spec.Streams.Stdout = output.Stdout
     spec.Streams.Stderr = output.Stderr
 
@@ -560,7 +560,7 @@ The scheduler doesn't care about component types — it dispatches to the orches
 1. **`pkg/process/`** — New package: `Runner`, `TaskSpec`, `Streams`, `Result`
 2. **`pkg/scheduler/`** — New package: `Scheduler`, `Node`, `Dispatcher`, `Orchestrator`, `Result`
 3. **`pkg/scheduler/adapters/`** — Tool-specific adapters: `TerraformAdapter`, `PackerAdapter`, etc.
-4. **`pkg/io/`** — Extend with `prefixedWriter` and `NewNodeOutput()` factory
+4. **`pkg/io/`** — Extend with `prefixedWriter` and `NewOutput()` factory
 5. **`internal/exec/terraform_all.go`** — Wire orchestrator into `executeInDependencyOrder()` (modify existing file, no new files in exec)
 6. **Unify routing** — `--all`, `--components`, `--query` all flow through the scheduler
 
@@ -648,13 +648,13 @@ Stream injection is a prerequisite for the scheduler, not a future optimization.
 
 1. **`prefixedWriter`** — follows the exact same `maskedWriter` pattern in `pkg/io/streams.go` (lines 97-124). Wraps an `io.Writer` and prepends a configurable prefix (e.g., `[vpc/tenant1-ue2-dev]`) to each line of output. Line-prefixed output is a general I/O concern reusable beyond scheduling.
 
-2. **`NewNodeOutput()`** — factory that composes the per-node output pipeline:
+2. **`NewOutput()`** — factory that composes an execution-scoped output pipeline:
    ```go
-   func NewNodeOutput(opts NodeOutputOptions) NodeOutput
+   func NewOutput(opts OutputOptions) Output
    ```
-   Each node's output pipeline branches after masking and prefixing so the terminal, log file, and capture sinks receive consistently labeled output:
+   Each output pipeline branches after masking and prefixing so the terminal, log file, and capture sinks receive consistently labeled output:
    - `maskedWriter` → applies secret masking (shared global `Masker` — thread-safe, secrets are process-wide)
-   - `prefixedWriter` → labels each line with the node ID
+   - `prefixedWriter` → labels each line with the configured prefix
    - `io.MultiWriter` → fans out the composed writer to terminal, file, and capture sinks
 
 **Note on `maskedWriter` vs `dynamicMaskedWriter`:** The `dynamicMaskedWriter` pattern (line 129 of `streams.go`) resolves writers at write time via `getWriter func() io.Writer`. This is needed for the global singletons but NOT for per-node streams — each node has fixed writers. Use the simpler `maskedWriter` directly.
@@ -777,7 +777,7 @@ New additions to the existing I/O package:
 pkg/io/
 ├── ...                # existing files unchanged
 ├── prefixed_writer.go # prefixedWriter (follows maskedWriter pattern)
-└── node_output.go     # NewNodeOutput() factory for per-node output pipelines
+└── output.go          # NewOutput() factory for execution-scoped output pipelines
 ```
 
 ### No new files in `internal/exec/` (MANDATORY)
@@ -793,7 +793,7 @@ The long-term goal is to eliminate `internal/exec/`. All new code goes into `pkg
 | Orchestration | `pkg/scheduler/` | Combines scheduler + process runner + adapters |
 | Tool adapters | `pkg/scheduler/adapters/` | Prepare (→ TaskSpec) and Finalize per tool type |
 | Subprocess lifecycle | `pkg/process/` | Spawn/wait/stop/kill, stream injection, signal handling |
-| Stream isolation | `pkg/io/` | Per-node streams, prefix writers, masking (extended) |
+| Stream isolation | `pkg/io/` | Execution-scoped streams, prefix writers, masking (extended) |
 | Component abstraction | `pkg/component/` | `ComponentProvider` interface + registry (unchanged) |
 
 This follows Atmos's existing pattern of purpose-built packages (`pkg/store/`, `pkg/git/`, `pkg/component/`).
@@ -843,7 +843,7 @@ When users enable `--max-concurrency > 1`, understanding the DAG is critical for
 
 ### Phase 1: Foundation Packages
 1. Create `pkg/process/` with `Runner` interface, `TaskSpec`, `Streams`, `Result`, default exec-based implementation
-2. Extend `pkg/io/` with `prefixedWriter` and `NewNodeOutput()` factory (reuse existing `maskedWriter` pattern)
+2. Extend `pkg/io/` with `prefixedWriter` and `NewOutput()` factory (reuse existing `maskedWriter` pattern)
 3. Refactor `ExecuteShellCommand()` to accept optional `process.Streams` parameter (backward-compatible: `nil` means current behavior)
 4. Eliminate the `os.Stdout` swap pattern in `terraform_plan_diff.go` — replaced by stream injection
 
@@ -900,7 +900,7 @@ Notable details from PR #2159 that should be preserved:
 - **Package location**: `pkg/scheduler/` (separate from `pkg/dependency/`)
 - **Scheduler vs process separation**: The scheduler is pure scheduling data + ready queue. The process runner (`pkg/process/`) owns subprocess lifecycle. They are connected via the `Dispatcher` interface and `Adapter` pattern, with the orchestrator as the integration point.
 - **Legacy built-ins**: NOT migrated to `ComponentProvider` — they get dedicated adapters (`TerraformAdapter`, `PackerAdapter`) that call into existing execution functions
-- **Stream injection**: Required as Phase 1 foundation. Extends `pkg/io/` with `prefixedWriter` and `NewNodeOutput()`. Process runner accepts injected `Streams` instead of hardcoding `os.Stdout`/`os.Stderr`. Both live streaming and per-node log files are needed — they are complementary, not alternatives.
+- **Stream injection**: Required as Phase 1 foundation. Extends `pkg/io/` with `prefixedWriter` and `NewOutput()`. Process runner accepts injected `Streams` instead of hardcoding `os.Stdout`/`os.Stderr`. Both live streaming and per-node log files are needed — they are complementary, not alternatives.
 - **`pkg/io/` reuse**: Per-node stream isolation extends the existing `pkg/io/` package. The shared global `Masker` instance handles secret masking (thread-safe, secrets are process-wide). `prefixedWriter` follows the existing `maskedWriter` pattern.
 - **No new exec files**: Adapters and orchestrator live in `pkg/scheduler/` and `pkg/scheduler/adapters/`, NOT in `internal/exec/`. The long-term goal is to eliminate `internal/exec/`.
 - **`pkg/process/` vs `pkg/runner/`**: `pkg/process/` is subprocess-level (spawn, streams, signals, exit codes). `pkg/runner/` is task-level (shell tasks, atmos sub-commands). Different abstraction levels, complementary.

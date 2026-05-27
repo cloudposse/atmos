@@ -38,11 +38,11 @@ func TestPrefixedWriterDiscardsNilWriter(t *testing.T) {
 	assert.Equal(t, len("hello\n"), n)
 }
 
-func TestNewNodeOutputWritesTerminalFileAndCaptureSinks(t *testing.T) {
+func TestNewOutputWritesTerminalFileAndCaptureSinks(t *testing.T) {
 	var terminal, file, capture bytes.Buffer
-	output := NewNodeOutput(NodeOutputOptions{
-		NodeID: "node-a",
-		Stdout: NodeOutputSinks{
+	output := NewOutput(OutputOptions{
+		Prefix: "component-a",
+		Stdout: OutputSinks{
 			Terminal: &terminal,
 			File:     &file,
 			Capture:  &capture,
@@ -52,20 +52,20 @@ func TestNewNodeOutputWritesTerminalFileAndCaptureSinks(t *testing.T) {
 	_, err := output.Stdout.Write([]byte("hello\n"))
 	require.NoError(t, err)
 
-	expected := "[node-a] hello\n"
+	expected := "[component-a] hello\n"
 	assert.Equal(t, expected, terminal.String())
 	assert.Equal(t, expected, file.String())
 	assert.Equal(t, expected, capture.String())
 }
 
-func TestNewNodeOutputMasksAllSinks(t *testing.T) {
+func TestNewOutputMasksAllSinks(t *testing.T) {
 	require.NoError(t, Initialize())
 	RegisterSecret("secret-value")
 
 	var terminal, file, capture bytes.Buffer
-	output := NewNodeOutput(NodeOutputOptions{
-		NodeID: "node-a",
-		Stdout: NodeOutputSinks{
+	output := NewOutput(OutputOptions{
+		Prefix: "component-a",
+		Stdout: OutputSinks{
 			Terminal: &terminal,
 			File:     &file,
 			Capture:  &capture,

@@ -7,29 +7,29 @@ import (
 	"sync"
 )
 
-// NodeOutput contains composed stdout/stderr writers for one execution node.
-type NodeOutput struct {
+// Output contains composed stdout/stderr writers for one execution scope.
+type Output struct {
 	Stdout stdio.Writer
 	Stderr stdio.Writer
 }
 
-// NodeOutputSinks are the destinations for one node output stream.
-type NodeOutputSinks struct {
+// OutputSinks are the destinations for one output stream.
+type OutputSinks struct {
 	Terminal stdio.Writer
 	File     stdio.Writer
 	Capture  stdio.Writer
 }
 
-// NodeOutputOptions configures per-node output composition.
-type NodeOutputOptions struct {
-	NodeID string
-	Stdout NodeOutputSinks
-	Stderr NodeOutputSinks
+// OutputOptions configures masked, prefixed output composition.
+type OutputOptions struct {
+	Prefix string
+	Stdout OutputSinks
+	Stderr OutputSinks
 }
 
-// NewNodeOutput creates masked per-node stdout/stderr writers that can fan out
+// NewOutput creates masked stdout/stderr writers that can fan out
 // to terminal, file, and capture sinks.
-func NewNodeOutput(opts NodeOutputOptions) NodeOutput {
+func NewOutput(opts OutputOptions) Output {
 	stdout := opts.Stdout
 	stderr := opts.Stderr
 	if stdout.Terminal == nil && stdout.File == nil && stdout.Capture == nil {
@@ -39,19 +39,19 @@ func NewNodeOutput(opts NodeOutputOptions) NodeOutput {
 		stderr.Terminal = os.Stderr
 	}
 
-	return NodeOutput{
-		Stdout: composeNodeOutput(opts.NodeID, stdout),
-		Stderr: composeNodeOutput(opts.NodeID, stderr),
+	return Output{
+		Stdout: composeOutput(opts.Prefix, stdout),
+		Stderr: composeOutput(opts.Prefix, stderr),
 	}
 }
 
-func composeNodeOutput(nodeID string, sinks NodeOutputSinks) stdio.Writer {
+func composeOutput(prefix string, sinks OutputSinks) stdio.Writer {
 	writers := make([]stdio.Writer, 0, 3)
 	addSink := func(w stdio.Writer) {
 		if w == nil {
 			return
 		}
-		writers = append(writers, MaskWriter(NewPrefixedWriter(nodeID, w)))
+		writers = append(writers, MaskWriter(NewPrefixedWriter(prefix, w)))
 	}
 	addSink(sinks.Terminal)
 	addSink(sinks.File)
