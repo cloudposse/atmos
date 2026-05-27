@@ -211,6 +211,7 @@ var (
 	// Scheduler errors.
 	ErrNilGraph      = errors.New("scheduler graph cannot be nil")
 	ErrNilDispatcher = errors.New("scheduler dispatcher cannot be nil")
+	ErrNodeFailed    = errors.New("scheduler node failed")
 	ErrNodeSkipped   = errors.New("scheduler node skipped")
 	ErrNodeNotFound  = errors.New("scheduler node not found")
 	ErrInvalidGraph  = errors.New("scheduler graph is invalid")

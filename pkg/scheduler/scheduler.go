@@ -57,7 +57,15 @@ type AggregateResult struct {
 
 // Success reports whether all scheduled nodes completed successfully.
 func (r *AggregateResult) Success() bool {
-	return r != nil && r.Err == nil
+	if r == nil || r.Err != nil {
+		return false
+	}
+	for _, result := range r.Results {
+		if !result.Success() {
+			return false
+		}
+	}
+	return true
 }
 
 // ResultFor returns the result for a node ID.
@@ -293,6 +301,9 @@ func normalizeResult(node *dependency.Node, result Result, err error) Result {
 		result.Err = err
 	}
 	if result.Status == StatusSkipped {
+		if result.Err == nil {
+			result.Err = nonSuccessResultError(result)
+		}
 		return result
 	}
 	if result.Err != nil {
@@ -302,7 +313,21 @@ func normalizeResult(node *dependency.Node, result Result, err error) Result {
 	if result.Status == "" {
 		result.Status = StatusSucceeded
 	}
+	if result.Status != StatusSucceeded && result.Err == nil {
+		result.Err = nonSuccessResultError(result)
+	}
 	return result
+}
+
+func nonSuccessResultError(result Result) error {
+	switch result.Status {
+	case StatusFailed:
+		return fmt.Errorf("%w: node %s failed", errUtils.ErrNodeFailed, result.NodeID)
+	case StatusSkipped:
+		return fmt.Errorf("%w: node %s skipped", errUtils.ErrNodeSkipped, result.NodeID)
+	default:
+		return fmt.Errorf("scheduler node %s finished with status %q", result.NodeID, result.Status)
+	}
 }
 
 func failedResult(nodeID string, node dependency.Node, err error) Result {
@@ -365,9 +390,14 @@ func skipBlocked(failedID string, states map[string]nodeState, results map[strin
 func aggregateError(results []Result) error {
 	errs := make([]error, 0)
 	for _, result := range results {
-		if (result.Status == StatusFailed || result.Status == StatusSkipped) && result.Err != nil {
-			errs = append(errs, result.Err)
+		if result.Status == StatusSucceeded {
+			continue
 		}
+		if result.Err != nil {
+			errs = append(errs, result.Err)
+			continue
+		}
+		errs = append(errs, nonSuccessResultError(result))
 	}
 	return stdErrors.Join(errs...)
 }

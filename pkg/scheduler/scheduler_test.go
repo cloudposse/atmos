@@ -59,6 +59,44 @@ func TestRunExecutesSingleNode(t *testing.T) {
 	assert.Equal(t, "a", result.Results[0].Value)
 }
 
+func TestRunTreatsNonSuccessStatusWithoutErrorAsFailure(t *testing.T) {
+	tests := []struct {
+		name    string
+		status  Status
+		wantErr error
+	}{
+		{
+			name:    "failed",
+			status:  StatusFailed,
+			wantErr: errUtils.ErrNodeFailed,
+		},
+		{
+			name:    "skipped",
+			status:  StatusSkipped,
+			wantErr: errUtils.ErrNodeSkipped,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			graph := testGraph(t, map[string][]string{
+				"a": nil,
+			})
+			result := runWithTimeout(t, New(graph, DispatcherFunc(func(_ context.Context, _ *dependency.Node) (Result, error) {
+				return Result{Status: tt.status}, nil
+			})))
+
+			require.ErrorIs(t, result.Err, tt.wantErr)
+			assert.False(t, result.Success())
+
+			nodeResult, ok := result.ResultFor("a")
+			require.True(t, ok)
+			require.ErrorIs(t, nodeResult.Err, tt.wantErr)
+			assert.False(t, nodeResult.Success())
+		})
+	}
+}
+
 func TestRunExecutesDiamondDAGInStableOrder(t *testing.T) {
 	graph := testGraph(t, map[string][]string{
 		"a": nil,
