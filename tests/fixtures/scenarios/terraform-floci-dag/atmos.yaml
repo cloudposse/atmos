@@ -18,5 +18,4 @@ stacks:
   name_template: "{{ .vars.stage }}"
 
 logs:
-  file: "/dev/stderr"
   level: Info
