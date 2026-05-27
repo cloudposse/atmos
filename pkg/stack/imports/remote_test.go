@@ -17,40 +17,13 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/cache"
 	"github.com/cloudposse/atmos/pkg/downloader"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
-
-type stubRemoteDownloader struct {
-	fetch func(src, dest string, mode downloader.ClientMode, timeout time.Duration) error
-}
-
-func (s stubRemoteDownloader) Fetch(src, dest string, mode downloader.ClientMode, timeout time.Duration) error {
-	return s.fetch(src, dest, mode, timeout)
-}
-
-func (s stubRemoteDownloader) FetchAndAutoParse(string) (any, error) {
-	return nil, errors.New("not implemented")
-}
-
-func (s stubRemoteDownloader) FetchAndParseByExtension(string) (any, error) {
-	return nil, errors.New("not implemented")
-}
-
-func (s stubRemoteDownloader) FetchAndParseRaw(string) (any, error) {
-	return nil, errors.New("not implemented")
-}
-
-func (s stubRemoteDownloader) FetchData(string) ([]byte, error) {
-	return nil, errors.New("not implemented")
-}
-
-func (s stubRemoteDownloader) FetchAtomic(string, string, downloader.ClientMode, time.Duration) error {
-	return errors.New("not implemented")
-}
 
 // newTestRemoteImporter creates a RemoteImporter for testing with a temp cache directory.
 func newTestRemoteImporter(t *testing.T, atmosConfig *schema.AtmosConfiguration) *RemoteImporter {
@@ -210,22 +183,59 @@ func TestRemoteImporter_Resolve_GitDownloaderError(t *testing.T) {
 	testCache, err := cache.NewFileCache("test", cache.WithBaseDir(t.TempDir()))
 	require.NoError(t, err)
 
+	ctrl := gomock.NewController(t)
+	mockDownloader := downloader.NewMockFileDownloader(ctrl)
+	uri := "git::https://example.com/acme/infrastructure.git//stacks?ref=main"
+	mockDownloader.EXPECT().
+		Fetch(
+			"git::https://example.com/acme/infrastructure.git?ref=main",
+			gomock.Any(),
+			downloader.ClientModeDir,
+			gomock.Any(),
+		).
+		Return(expectedErr)
+
 	importer, err := NewRemoteImporter(
 		&schema.AtmosConfiguration{},
 		WithCache(testCache),
-		WithDownloader(stubRemoteDownloader{
-			fetch: func(_ string, _ string, mode downloader.ClientMode, _ time.Duration) error {
-				assert.Equal(t, downloader.ClientModeDir, mode)
-				return expectedErr
-			},
-		}),
+		WithDownloader(mockDownloader),
 	)
 	require.NoError(t, err)
 
-	matches, err := importer.Resolve("git::https://example.com/acme/infrastructure.git//stacks?ref=main")
+	matches, err := importer.Resolve(uri)
 	require.Error(t, err)
 	assert.Nil(t, matches)
 	assert.ErrorIs(t, err, expectedErr)
+}
+
+func TestRemoteImporter_Resolve_GitNoSubdirDownloadsAsFile(t *testing.T) {
+	testCache, err := cache.NewFileCache("test", cache.WithBaseDir(t.TempDir()))
+	require.NoError(t, err)
+
+	ctrl := gomock.NewController(t)
+	mockDownloader := downloader.NewMockFileDownloader(ctrl)
+	uri := "git::https://example.com/acme/infrastructure.git?ref=main"
+	mockDownloader.EXPECT().
+		Fetch(uri, gomock.Any(), downloader.ClientModeFile, gomock.Any()).
+		DoAndReturn(func(_ string, dest string, _ downloader.ClientMode, _ time.Duration) error {
+			return os.WriteFile(dest, []byte("vars:\n  from_git_file: true\n"), 0o644)
+		})
+
+	importer, err := NewRemoteImporter(
+		&schema.AtmosConfiguration{},
+		WithCache(testCache),
+		WithDownloader(mockDownloader),
+	)
+	require.NoError(t, err)
+
+	matches, err := importer.Resolve(uri)
+	require.NoError(t, err)
+	require.Len(t, matches, 1)
+	assert.Equal(t, uri, matches[0].Key)
+
+	data, err := os.ReadFile(matches[0].Path)
+	require.NoError(t, err)
+	assert.Equal(t, "vars:\n  from_git_file: true\n", string(data))
 }
 
 func TestRemoteImporter_Resolve_GitSubdirNoExtension(t *testing.T) {
@@ -336,6 +346,31 @@ func TestRemoteImporter_ResolveNested_RemoteBase(t *testing.T) {
 	assert.Contains(t, string(data), "catalog: true")
 }
 
+func TestRemoteImporter_ResolveNested_ErrorBranches(t *testing.T) {
+	importer := newTestRemoteImporter(t, &schema.AtmosConfiguration{})
+
+	t.Run("invalid nested imports", func(t *testing.T) {
+		matches, err := importer.ResolveNested("github.com/acme/infrastructure//stacks/dev?ref=main", "workspace")
+		require.Error(t, err)
+		assert.Nil(t, matches)
+		assert.ErrorIs(t, err, errUtils.ErrInvalidImport)
+	})
+
+	t.Run("non remote uri", func(t *testing.T) {
+		matches, err := importer.ResolveNested("catalog/base", schema.StackImportNestedImportsRemote)
+		require.Error(t, err)
+		assert.Nil(t, matches)
+		assert.ErrorIs(t, err, errUtils.ErrInvalidRemoteImport)
+	})
+
+	t.Run("git uri without subdir", func(t *testing.T) {
+		matches, err := importer.ResolveNested("git::https://example.com/acme/infrastructure.git?ref=main", schema.StackImportNestedImportsRemote)
+		require.Error(t, err)
+		assert.Nil(t, matches)
+		assert.ErrorIs(t, err, errUtils.ErrInvalidRemoteImport)
+	})
+}
+
 func TestRemoteImporter_ResolveNested_UnsupportedRawHTTP(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
@@ -349,6 +384,82 @@ func TestRemoteImporter_ResolveNested_UnsupportedRawHTTP(t *testing.T) {
 	_, err := importer.ResolveNested(server.URL+"/config.yaml", schema.StackImportNestedImportsRemote)
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrInvalidRemoteImport)
+}
+
+func TestRemoteImporter_ResolveNested_RemoteBaseInferenceError(t *testing.T) {
+	repoDir := initGitRepo(t, map[string]string{
+		"config/dev.yaml": "vars:\n  outside_stacks: true\n",
+	})
+
+	importer := newTestRemoteImporter(t, &schema.AtmosConfiguration{
+		Stacks: schema.Stacks{BasePath: "stacks"},
+	})
+
+	uri := fmt.Sprintf("git::%s//config/dev.yaml?ref=main", gitFileURI(repoDir))
+	matches, err := importer.ResolveNested(uri, schema.StackImportNestedImportsRemote)
+	require.Error(t, err)
+	assert.Nil(t, matches)
+	assert.ErrorIs(t, err, errUtils.ErrInvalidRemoteImport)
+}
+
+func TestRemoteImporter_ResolveNested_SourceDirCacheReuse(t *testing.T) {
+	repoDir := initGitRepo(t, map[string]string{
+		"stacks/orgs/acme/dev.yaml":  "vars:\n  env: dev\n",
+		"stacks/orgs/acme/prod.yaml": "vars:\n  env: prod\n",
+	})
+
+	importer := newTestRemoteImporter(t, &schema.AtmosConfiguration{
+		Stacks: schema.Stacks{BasePath: "stacks"},
+	})
+
+	repoURI := gitFileURI(repoDir)
+	devURI := fmt.Sprintf("git::%s//stacks/orgs/acme/dev.yaml?ref=main", repoURI)
+	devMatches, err := importer.ResolveNested(devURI, schema.StackImportNestedImportsRemote)
+	require.NoError(t, err)
+	require.Len(t, devMatches, 1)
+
+	prodURI := fmt.Sprintf("git::%s//stacks/orgs/acme/prod.yaml?ref=main", repoURI)
+	prodMatches, err := importer.ResolveNested(prodURI, schema.StackImportNestedImportsRemote)
+	require.NoError(t, err)
+	require.Len(t, prodMatches, 1)
+
+	assert.Equal(t, devMatches[0].BasePath, prodMatches[0].BasePath)
+	assert.True(t, strings.HasSuffix(filepath.ToSlash(devMatches[0].BasePath), "/stacks"))
+
+	data, err := os.ReadFile(filepath.Join(devMatches[0].BasePath, "orgs", "acme", "prod.yaml"))
+	require.NoError(t, err)
+	assert.Contains(t, string(data), "env: prod")
+}
+
+func TestRemoteImporter_RemoteNestedHelpers(t *testing.T) {
+	assert.Equal(t, "stacks", (&RemoteImporter{}).remoteStacksBasePath())
+	assert.Equal(t, "custom/stacks", (&RemoteImporter{
+		atmosConfig: &schema.AtmosConfiguration{Stacks: schema.Stacks{BasePath: "custom/stacks"}},
+	}).remoteStacksBasePath())
+
+	sourceRoot := t.TempDir()
+	base, err := inferRemoteStackBasePath(sourceRoot, "orgs/acme/dev.yaml", "")
+	require.NoError(t, err)
+	assert.Equal(t, sourceRoot, base)
+
+	base, err = inferRemoteStackBasePath(sourceRoot, "orgs/acme/dev.yaml", ".")
+	require.NoError(t, err)
+	assert.Equal(t, sourceRoot, base)
+
+	base, err = inferRemoteStackBasePath(sourceRoot, "platform/stacks/orgs/acme/dev.yaml", "./platform/stacks")
+	require.NoError(t, err)
+	assert.Equal(t, filepath.Join(sourceRoot, "platform", "stacks"), base)
+
+	_, err = inferRemoteStackBasePath(sourceRoot, "orgs/acme/dev.yaml", "stacks")
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrInvalidRemoteImport)
+
+	_, err = inferRemoteStackBasePath(sourceRoot, "../outside.yaml", "stacks")
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errRemoteSubdirTraversal)
+
+	assert.False(t, samePathParts([]string{"stacks"}, []string{"platform", "stacks"}))
+	assert.False(t, samePathParts([]string{"stack"}, []string{"stacks"}))
 }
 
 func TestRemoteImporter_Download_NotFound(t *testing.T) {
@@ -404,6 +515,31 @@ func TestRemoteImporter_ResolveRemoteImport_GlobalImporter(t *testing.T) {
 	assert.Equal(t, uri, matches[0].Key)
 
 	data, err := os.ReadFile(matches[0].Path)
+	require.NoError(t, err)
+	assert.Equal(t, content, string(data))
+}
+
+func TestRemoteImporter_DownloadRemoteImport_GlobalImporter(t *testing.T) {
+	content := "vars:\n  downloaded: true\n"
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(content))
+	}))
+	defer server.Close()
+
+	globalImporterOnce = sync.Once{}
+	globalImporter = newTestRemoteImporter(t, &schema.AtmosConfiguration{})
+	globalImporterErr = nil
+	t.Cleanup(func() {
+		globalImporterOnce = sync.Once{}
+		globalImporter = nil
+		globalImporterErr = nil
+	})
+
+	path, err := DownloadRemoteImport(&schema.AtmosConfiguration{}, server.URL+"/config.yaml")
+	require.NoError(t, err)
+
+	data, err := os.ReadFile(path)
 	require.NoError(t, err)
 	assert.Equal(t, content, string(data))
 }
