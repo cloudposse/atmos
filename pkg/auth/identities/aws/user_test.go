@@ -136,9 +136,19 @@ func (s stubUser) Paths() ([]types.Path, error)            { return []types.Path
 func (s stubUser) PostAuthenticate(_ context.Context, _ *types.PostAuthenticateParams) error {
 	return nil
 }
-func (s stubUser) Logout(_ context.Context) error                                { return nil }
-func (s stubUser) CredentialsExist() (bool, error)                               { return true, nil }
-func (s stubUser) LoadCredentials(_ context.Context) (types.ICredentials, error) { return s.creds, nil }
+
+func (s stubUser) Logout(_ context.Context) error {
+	return nil
+}
+
+func (s stubUser) CredentialsExist() (bool, error) {
+	return true, nil
+}
+
+func (s stubUser) LoadCredentials(_ context.Context) (types.ICredentials, error) {
+	return s.creds, nil
+}
+
 func (s stubUser) PrepareEnvironment(_ context.Context, environ map[string]string) (map[string]string, error) {
 	return environ, nil
 }
@@ -316,25 +326,35 @@ func TestUser_credentialsFromStore(t *testing.T) {
 	assert.Equal(t, "AKIA", creds.AccessKeyID)
 	assert.Equal(t, "us-east-1", creds.Region)
 
-	// Wrong type stored.
+	// Wrong type stored: keyring is reachable but the entry is corrupted —
+	// classify as a read failure so callers don't silently fall back to webflow.
 	_ = store.Store("other", &types.OIDCCredentials{Token: "hdr.payload."}, "")
 	id, _ = NewUserIdentity("other", &schema.Identity{Kind: "aws/user"})
 	ui = id.(*userIdentity)
 	_, err = ui.credentialsFromStore()
-	assert.Error(t, err)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrAwsUserKeyringReadFailed,
+		"wrong-type entries are a keyring read failure, not 'not configured'")
 
-	// Incomplete stored.
+	// Incomplete stored (missing secret_access_key) — also a read failure.
 	_ = store.Store("incomplete", &types.AWSCredentials{AccessKeyID: "AKIA"}, "")
 	id, _ = NewUserIdentity("incomplete", &schema.Identity{Kind: "aws/user"})
 	ui = id.(*userIdentity)
 	_, err = ui.credentialsFromStore()
-	assert.Error(t, err)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrAwsUserKeyringReadFailed,
+		"incomplete keyring entries are a read failure, not 'not configured'")
 
-	// Missing alias -> retrieval error.
+	// Missing alias -> retrieval miss returns "not configured" so callers can
+	// optionally fall back to webflow.
 	id, _ = NewUserIdentity("missing", &schema.Identity{Kind: "aws/user"})
 	ui = id.(*userIdentity)
 	_, err = ui.credentialsFromStore()
-	assert.Error(t, err)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrAwsUserNotConfigured,
+		"missing keyring entry should report 'not configured'")
+	assert.NotErrorIs(t, err, errUtils.ErrAwsUserKeyringReadFailed,
+		"missing entry must not be classified as a read failure")
 }
 
 func TestUser_resolveLongLivedCredentials_Order(t *testing.T) {
@@ -2450,6 +2470,54 @@ func TestUserIdentity_Authenticate_PartialYAMLCredsSurfacesConfigError(t *testin
 		"partial YAML credentials must surface ErrInvalidAuthConfig, not trigger webflow")
 	assert.False(t, webflowReached,
 		"webflow must NOT be reached when YAML credentials are partial")
+}
+
+// TestUserIdentity_Authenticate_KeyringReadFailureSkipsWebflow verifies that
+// when the keyring is reachable but contains a corrupted entry (e.g. missing
+// secret_access_key), Authenticate surfaces ErrAwsUserKeyringReadFailed and
+// does NOT fall through to webflow — webflow would mask the real failure and
+// ignore credentials the user already configured.
+//
+// Regression: prior to the keyring-error distinction fix, any keyring failure
+// (locked keychain, deserialization error, incomplete entry) was collapsed
+// into ErrAwsUserNotConfigured, which then triggered webflow despite the user
+// having credentials configured.
+func TestUserIdentity_Authenticate_KeyringReadFailureSkipsWebflow(t *testing.T) {
+	tmpDir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmpDir)
+	t.Setenv("ATMOS_XDG_CACHE_HOME", tmpDir)
+
+	// Fail loudly if webflow display is reached.
+	origDisplay := displayWebflowPlainTextFunc
+	webflowReached := false
+	displayWebflowPlainTextFunc = func(_ string) { webflowReached = true }
+	defer func() { displayWebflowPlainTextFunc = origDisplay }()
+
+	identityName := "test-keyring-read-fail-" + t.Name()
+
+	// Prime the keyring with an incomplete entry (no secret_access_key).
+	// This simulates a configure run that stored corrupted creds, or any other
+	// read-then-validate failure that's NOT "not found".
+	store := atmosCreds.NewCredentialStore()
+	require.NoError(t, store.Store(identityName, &types.AWSCredentials{AccessKeyID: "AKIA_ONLY"}, ""))
+
+	identity, err := NewUserIdentity(identityName, &schema.Identity{
+		Kind: "aws/user",
+		// webflow_enabled left unset, so it defaults to true — the test still
+		// must NOT trigger webflow because the error is a keyring read failure,
+		// not a "not configured" miss.
+	})
+	require.NoError(t, err)
+
+	ctx := types.WithAllowPrompts(context.Background(), true)
+	result, err := identity.Authenticate(ctx, nil)
+
+	assert.Nil(t, result)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrAwsUserKeyringReadFailed,
+		"keyring read failures must surface ErrAwsUserKeyringReadFailed, not fall through to webflow")
+	assert.False(t, webflowReached,
+		"webflow must NOT be reached when the keyring is readable but the stored entry is corrupted")
 }
 
 // TestUserIdentity_Authenticate_WebflowDisabledBypassed verifies that when

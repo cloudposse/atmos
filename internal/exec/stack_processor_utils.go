@@ -24,6 +24,7 @@ import (
 	m "github.com/cloudposse/atmos/pkg/merge"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+	stackimports "github.com/cloudposse/atmos/pkg/stack/imports"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -814,7 +815,7 @@ type importFileResult struct {
 
 // processYAMLConfigFileWithContextInternal is the internal recursive implementation.
 //
-//nolint:gocognit,revive,cyclop,funlen
+//nolint:gocognit,revive,cyclop,funlen,nestif
 func processYAMLConfigFileWithContextInternal(
 	atmosConfig *schema.AtmosConfiguration,
 	basePath string,
@@ -1160,87 +1161,105 @@ func processYAMLConfigFileWithContextInternal(
 			return nil, nil, nil, nil, nil, nil, nil, nil, fmt.Errorf("%w in the manifest '%s'", errUtils.ErrInvalidImport, relativeFilePath)
 		}
 
-		// If the import file is specified without extension, use `.yaml` as default
-		impWithExt := imp
-		ext := filepath.Ext(imp)
-		if ext == "" {
-			extensions := []string{
-				u.YamlFileExtension,
-				u.YmlFileExtension,
-				u.YamlTemplateExtension,
-				u.YmlTemplateExtension,
-			}
+		var importMatches []string
 
-			found := false
-			for _, extension := range extensions {
-				testPath := filepath.Join(basePath, imp+extension)
-				if _, err := os.Stat(testPath); err == nil {
-					impWithExt = imp + extension
-					found = true
-					break
+		// Capture remote status and original import key before resolution.
+		// For remote imports, the original URI must be preserved as the import key
+		// so that downstream lookups and imports output use the user-specified URI
+		// rather than the local cache path.
+		isRemote := stackimports.IsRemote(imp)
+		importKey := imp
+
+		// Check if the import is a remote URL.
+		if isRemote {
+			// Download the remote import.
+			log.Debug("Downloading remote stack import", "uri", imp, "file", relativeFilePath)
+			localPath, err := stackimports.DownloadRemoteImport(atmosConfig, imp)
+			if err != nil {
+				if importStruct.SkipIfMissing {
+					log.Debug("Skipping missing remote import", "uri", imp)
+					continue
+				}
+				return nil, nil, nil, nil, nil, nil, nil, nil, fmt.Errorf("%w '%s' in file '%s': %w",
+					errUtils.ErrDownloadRemoteImport, imp, relativeFilePath, err)
+			}
+			// Remote imports return a single file path.
+			importMatches = []string{localPath}
+		} else {
+			// Local import - handle extension resolution and glob matching.
+			impWithExt := imp
+			ext := filepath.Ext(imp)
+			if ext == "" {
+				extensions := []string{
+					u.YamlFileExtension,
+					u.YmlFileExtension,
+					u.YamlTemplateExtension,
+					u.YmlTemplateExtension,
+				}
+
+				found := false
+				for _, extension := range extensions {
+					testPath := filepath.Join(basePath, imp+extension)
+					if _, err := os.Stat(testPath); err == nil {
+						impWithExt = imp + extension
+						found = true
+						break
+					}
+				}
+
+				if !found {
+					// Default to .yaml if no file is found.
+					impWithExt = imp + u.DefaultStackConfigFileExtension
+				}
+			} else if ext == u.YamlFileExtension || ext == u.YmlFileExtension {
+				// Check if there's a template version of this file.
+				templatePath := impWithExt + u.TemplateExtension
+				if _, err := os.Stat(filepath.Join(basePath, templatePath)); err == nil {
+					impWithExt = templatePath
 				}
 			}
 
-			if !found {
-				// Default to .yaml if no file is found
-				impWithExt = imp + u.DefaultStackConfigFileExtension
+			impWithExtPath := filepath.Join(basePath, impWithExt)
+
+			if impWithExtPath == filePath {
+				return nil, nil, nil, nil, nil, nil, nil, nil, fmt.Errorf("%w: manifest '%s' imports itself via '%s'",
+					errUtils.ErrStackImportSelf, relativeFilePath, imp)
 			}
-		} else if ext == u.YamlFileExtension || ext == u.YmlFileExtension {
-			// Check if there's a template version of this file
-			templatePath := impWithExt + u.TemplateExtension
-			if _, err := os.Stat(filepath.Join(basePath, templatePath)); err == nil {
-				impWithExt = templatePath
-			}
-		}
 
-		impWithExtPath := filepath.Join(basePath, impWithExt)
-
-		if impWithExtPath == filePath {
-			errorMessage := fmt.Sprintf("invalid import in the manifest '%s'\nThe file imports itself in '%s'",
-				relativeFilePath,
-				imp)
-			return nil, nil, nil, nil, nil, nil, nil, nil, errors.New(errorMessage)
-		}
-
-		// Find all import matches in the glob
-		importMatches, err := u.GetGlobMatches(impWithExtPath)
-		if err != nil || len(importMatches) == 0 {
-			// Retry (b/c we are using `doublestar` library and it sometimes has issues reading many files in a Docker container)
-			// TODO: review `doublestar` library
-
+			// Find all import matches in the glob.
+			var err error
 			importMatches, err = u.GetGlobMatches(impWithExtPath)
 			if err != nil || len(importMatches) == 0 {
-				// The import was not found -> check if the import is a Go template; if not, return the error
-				isGolangTemplate, err2 := IsGolangTemplate(atmosConfig, imp)
-				if err2 != nil {
-					return nil, nil, nil, nil, nil, nil, nil, nil, err2
-				}
+				// Retry (b/c we are using `doublestar` library and it sometimes has issues reading many files in a Docker container).
+				// TODO: review `doublestar` library.
 
-				// If the import is not a Go template and SkipIfMissing is false, return the error.
-				if !isGolangTemplate && !importStruct.SkipIfMissing {
-					if err != nil {
-						// Preserve the sentinel error chain (ErrFailedToFindImport) via %w so callers
-						// can match with errors.Is (see describe_affected_utils.go).
-						return nil, nil, nil, nil, nil, nil, nil, nil, fmt.Errorf(
-							"no matches found for the import '%s' in the file '%s'\nError: %w",
-							imp,
-							relativeFilePath,
-							err,
-						)
-					} else {
-						// err == nil but importMatches is empty: this is a defensive guard for
-						// unexpected empty/nil results from u.GetGlobMatches (pkg/utils). Note
-						// that pkg/utils.GetGlobMatches treats no matches as an error and may
-						// return a nil slice alongside that error; unlike pkg/filesystem.GetGlobMatches
-						// which returns ([]string{}, nil) for no matches. This check protects
-						// against any unexpected empty result that slips through without an error.
-						// Wrap the sentinel so callers can still match with errors.Is.
-						return nil, nil, nil, nil, nil, nil, nil, nil, fmt.Errorf(
-							"no matches found for the import '%s' in the file '%s': %w",
-							imp,
-							relativeFilePath,
-							errUtils.ErrFailedToFindImport,
-						)
+				importMatches, err = u.GetGlobMatches(impWithExtPath)
+				if err != nil || len(importMatches) == 0 {
+					// The import was not found -> check if the import is a Go template; if not, return the error.
+					isGolangTemplate, err2 := IsGolangTemplate(atmosConfig, imp)
+					if err2 != nil {
+						return nil, nil, nil, nil, nil, nil, nil, nil, err2
+					}
+
+					// If the import is not a Go template and SkipIfMissing is false, return the error.
+					// The wrapped `err` from GetGlobMatches already carries ErrFailedToFindImport, so
+					// callers using errors.Is (see describe_affected_utils.go) keep matching. When
+					// err is nil but importMatches is empty (defensive guard for unexpected empty/nil
+					// results from u.GetGlobMatches), we wrap ErrFailedToFindImport explicitly.
+					if !isGolangTemplate && !importStruct.SkipIfMissing {
+						if err != nil {
+							return nil, nil, nil, nil, nil, nil, nil, nil, fmt.Errorf("%w: import '%s' in file '%s': %w",
+								errUtils.ErrStackImportNotFound, imp, relativeFilePath, err)
+						}
+						if len(importMatches) == 0 {
+							return nil, nil, nil, nil, nil, nil, nil, nil, fmt.Errorf(
+								"%w: import '%s' in file '%s': %w",
+								errUtils.ErrStackImportNotFound,
+								imp,
+								relativeFilePath,
+								errUtils.ErrFailedToFindImport,
+							)
+						}
 					}
 				}
 			}
@@ -1271,7 +1290,7 @@ func processYAMLConfigFileWithContextInternal(
 
 		for i, importFile := range importMatches {
 			wg.Add(1)
-			go func(index int, file string) {
+			go func(index int, file string, isRemote bool, importKey string) {
 				defer wg.Done()
 
 				// Process the import file (expensive I/O + parsing + recursive imports).
@@ -1313,6 +1332,12 @@ func processYAMLConfigFileWithContextInternal(
 				}
 				importRelativePathWithoutExt := strings.TrimSuffix(importRelativePathWithExt, ext2)
 
+				// For remote imports, use the original URI as the import key
+				// instead of the cache-derived path.
+				if isRemote {
+					importRelativePathWithoutExt = importKey
+				}
+
 				// Store result with all necessary data for sequential merging.
 				results[index] = importFileResult{
 					index:                        index,
@@ -1327,7 +1352,7 @@ func processYAMLConfigFileWithContextInternal(
 					mergeContext:                 importMergeContext,
 					err:                          nil,
 				}
-			}(i, importFile)
+			}(i, importFile, isRemote, importKey)
 		}
 
 		// Wait for all parallel processing to complete.
@@ -1837,6 +1862,7 @@ func processBaseComponentConfigInternal(
 	var baseComponentRemoteStateBackendSection map[string]any
 	var baseComponentSourceSection map[string]any
 	var baseComponentProvisionSection map[string]any
+	var baseComponentRetry map[string]any
 	var baseComponentMap map[string]any
 	var ok bool
 
@@ -2076,6 +2102,15 @@ func processBaseComponentConfigInternal(
 			}
 		}
 
+		// Base component `retry` — abstract components can define defaults that concrete
+		// components inherit and override.
+		if i, ok2 := baseComponentMap[cfg.RetrySectionName]; ok2 {
+			baseComponentRetry, ok = i.(map[string]any)
+			if !ok {
+				return fmt.Errorf("%w '%s.retry' in the stack '%s'", errUtils.ErrInvalidConfig, baseComponent, stack)
+			}
+		}
+
 		if len(baseComponentConfig.FinalBaseComponentName) == 0 {
 			baseComponentConfig.FinalBaseComponentName = baseComponent
 		}
@@ -2221,6 +2256,13 @@ func processBaseComponentConfigInternal(
 			}
 			baseComponentConfig.BaseComponentProvisionSection = merged
 		}
+
+		// Base component `retry` — deep-merge so multi-level inheritance composes correctly.
+		merged, err = m.Merge(atmosConfig, []map[string]any{baseComponentConfig.BaseComponentRetry, baseComponentRetry})
+		if err != nil {
+			return err
+		}
+		baseComponentConfig.BaseComponentRetry = merged
 
 		baseComponentConfig.ComponentInheritanceChain = u.UniqueStrings(append([]string{baseComponent}, baseComponentConfig.ComponentInheritanceChain...))
 	} else {
