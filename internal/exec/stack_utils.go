@@ -139,8 +139,9 @@ func BuildDependentStackNameFromDependsOnLegacy(
 	} else if u.SliceContainsString(componentNamesInCurrentStack, dep) {
 		dependentStackName = fmt.Sprintf("%s-%s", currentStackName, dep)
 	} else {
-		errorMessage := fmt.Errorf("the component '%[1]s' in the stack '%[2]s' specifies 'depends_on' dependency '%[3]s', "+
-			"but '%[3]s' is not a stack and not a component in the '%[2]s' stack",
+		errorMessage := fmt.Errorf( //nolint:err113 // Preserves existing user-facing validation message format.
+			"the component '%[1]s' in the stack '%[2]s' specifies 'depends_on' dependency '%[3]s', "+
+				"but '%[3]s' is not a stack and not a component in the '%[2]s' stack",
 			currentComponentName,
 			currentStackName,
 			dependsOn,
@@ -168,8 +169,9 @@ func BuildDependentStackNameFromDependsOn(
 		return dep, nil
 	}
 
-	errorMessage := fmt.Errorf("the component '%[1]s' in the stack '%[2]s' specifies 'settings.depends_on' dependency "+
-		"on the component '%[3]s' in the stack '%[4]s', but '%[3]s' is not defined in the '%[4]s' stack, or the component and stack names are not correct",
+	errorMessage := fmt.Errorf( //nolint:err113 // Preserves existing user-facing validation message format.
+		"the component '%[1]s' in the stack '%[2]s' specifies 'settings.depends_on' dependency "+
+			"on the component '%[3]s' in the stack '%[4]s', but '%[3]s' is not defined in the '%[4]s' stack, or the component and stack names are not correct",
 		currentComponentName,
 		currentStackName,
 		dependsOnComponentName,
@@ -204,6 +206,8 @@ func BuildComponentPath(
 		return filepath.Join(atmosConfig.BasePath, atmosConfig.Components.Helmfile.BasePath, componentFolder)
 	case cfg.PackerComponentType:
 		return filepath.Join(atmosConfig.BasePath, atmosConfig.Components.Packer.BasePath, componentFolder)
+	case cfg.RainComponentType:
+		return filepath.Join(atmosConfig.BasePath, atmosConfig.Components.Rain.BasePath, componentFolder)
 	default:
 		return ""
 	}

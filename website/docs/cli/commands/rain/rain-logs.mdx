@@ -1,0 +1,49 @@
+---
+title: atmos rain logs
+sidebar_label: logs
+sidebar_class_name: command
+sidebar_position: 11
+id: logs
+---
+import Terminal from '@site/src/components/Terminal'
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Use this command to run `rain logs` for the CloudFormation stack named by a Rain component.
+</Intro>
+
+## Usage
+
+```shell
+atmos rain logs <component> --stack <stack> [atmos-flags] -- [rain-options]
+```
+
+## Arguments
+
+<dl>
+  <dt>`component` <em>(required)</em></dt>
+  <dd>Atmos Rain component. The component must define `name`, which Atmos passes to Rain as the CloudFormation stack name.</dd>
+</dl>
+
+## Examples
+
+<Terminal>
+```shell
+atmos rain logs api -s dev
+atmos rain logs api -s dev --identity prod-admin
+```
+</Terminal>
+
+## Stack Configuration
+
+```yaml
+components:
+  rain:
+    api:
+      name: app-api-dev
+```
+
+## Related
+
+- [atmos rain](/cli/commands/rain/usage)
+- [Rain Components](/stacks/components/rain)

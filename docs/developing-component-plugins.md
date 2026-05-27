@@ -826,7 +826,7 @@ output, err := cmd.CombinedOutput()
 
 The component registry pattern is designed to eventually migrate all component types to plugins:
 
-**Phase 1-3 (Current)**: Built-in types (terraform, helmfile, packer) remain static
+**Phase 1-3 (Current)**: Built-in types (terraform, helmfile, packer, ansible, rain) remain static
 **Phase 4**: New types use plugin pattern
 **Phase 5**: Migrate built-in types to plugin implementations
 **Phase 6**: Unified plugin architecture

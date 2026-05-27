@@ -1,0 +1,41 @@
+---
+title: atmos rain info
+sidebar_label: info
+sidebar_class_name: command
+sidebar_position: 10
+id: info
+---
+import Terminal from '@site/src/components/Terminal'
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Use this command to run `rain info` through Atmos. Atmos can prepare stack configuration, authentication, and toolchain dependencies before invoking Rain.
+</Intro>
+
+## Usage
+
+```shell
+atmos rain info [component] --stack <stack> [atmos-flags] -- [rain-options]
+atmos rain info -- [rain-options]
+```
+
+## Arguments
+
+<dl>
+  <dt>`component` <em>(optional)</em></dt>
+  <dd>Rain component used to resolve Atmos stack context, auth, dependencies, and working directory before running `rain info`.</dd>
+</dl>
+
+## Examples
+
+<Terminal>
+```shell
+atmos rain info api -s dev
+atmos rain info -- --help
+```
+</Terminal>
+
+## Related
+
+- [atmos rain](/cli/commands/rain/usage)
+- [Rain Components](/stacks/components/rain)

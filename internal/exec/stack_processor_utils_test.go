@@ -1520,6 +1520,7 @@ func TestProcessStackConfigProviderSection(t *testing.T) {
 		filepath.Join(basePath, "components", "helmfile"),
 		filepath.Join(basePath, "components", "packer"),
 		filepath.Join(basePath, "components", "ansible"),
+		filepath.Join(basePath, "components", "rain"),
 		"nonprod",
 		deepMergedStackConfig,
 		false,
@@ -1731,6 +1732,7 @@ func TestProcessYAMLConfigFiles(t *testing.T) {
 		"", // helmfileComponentsBasePath
 		"", // packerComponentsBasePath
 		"", // ansibleComponentsBasePath
+		"", // rainComponentsBasePath
 		filePaths,
 		true,  // processStackDeps
 		true,  // processComponentDeps
@@ -2179,6 +2181,7 @@ func TestHierarchicalImports_MultipleStacksConsistency(t *testing.T) {
 		&atmosConfig,
 		stacksBasePath,
 		"../../tests/fixtures/scenarios/hierarchical-imports/components/terraform",
+		"",
 		"",
 		"",
 		"",

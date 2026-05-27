@@ -1,0 +1,50 @@
+---
+title: atmos rain fmt
+sidebar_label: fmt
+sidebar_class_name: command
+sidebar_position: 8
+id: fmt
+---
+import Terminal from '@site/src/components/Terminal'
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Use this command to format the CloudFormation template resolved from an Atmos Rain component.
+</Intro>
+
+## Usage
+
+```shell
+atmos rain fmt <component> --stack <stack> [atmos-flags] -- [rain-options]
+atmos rain fmt --all [-s <stack>] [atmos-flags]
+```
+
+## Arguments
+
+<dl>
+  <dt>`component` <em>(required for single-component runs)</em></dt>
+  <dd>Atmos Rain component. Atmos resolves the component `template` and passes it to `rain fmt`.</dd>
+</dl>
+
+## Examples
+
+<Terminal>
+```shell
+atmos rain fmt api -s dev
+atmos rain fmt --all -s dev
+```
+</Terminal>
+
+## Stack Configuration
+
+```yaml
+components:
+  rain:
+    api:
+      template: template.yaml
+```
+
+## Related
+
+- [atmos rain](/cli/commands/rain/usage)
+- [Rain Components](/stacks/components/rain)

@@ -1,0 +1,89 @@
+---
+title: atmos rain deploy
+sidebar_label: deploy
+sidebar_class_name: command
+sidebar_position: 6
+id: deploy
+---
+import Terminal from '@site/src/components/Terminal'
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Use this command to deploy a CloudFormation stack with Rain using the template and stack name resolved from an Atmos Rain component.
+</Intro>
+
+## Usage
+
+```shell
+atmos rain deploy <component> --stack <stack> [atmos-flags] -- [rain-options]
+atmos rain deploy --all [-s <stack>] [atmos-flags]
+atmos rain deploy --affected [git-flags] [atmos-flags]
+```
+
+## Arguments
+
+<dl>
+  <dt>`component` <em>(required for single-component runs)</em></dt>
+  <dd>Atmos Rain component. Atmos resolves `template` and required `name`, then invokes Rain with the template path and CloudFormation stack name.</dd>
+</dl>
+
+## Flags
+
+<dl>
+  <dt>`--stack`, `-s` <em>(required for single-component runs)</em></dt>
+  <dd>Atmos stack.</dd>
+
+  <dt>`--identity`, `-i` <em>(optional)</em></dt>
+  <dd>Authenticate with an Atmos identity before stack processing and before invoking Rain.</dd>
+
+  <dt>`--all` <em>(optional)</em></dt>
+  <dd>Deploy all non-abstract, enabled Rain components in dependency order.</dd>
+
+  <dt>`--affected` <em>(optional)</em></dt>
+  <dd>Deploy Git-affected Rain components only.</dd>
+</dl>
+
+## Examples
+
+<Terminal>
+```shell
+# Deploy one component
+atmos rain deploy api -s dev
+
+# Deploy with Atmos identity auth
+atmos rain deploy api -s dev --identity prod-admin
+
+# Deploy every Rain component in dependency order
+atmos rain deploy --all -s dev
+
+# Deploy only affected Rain components
+atmos rain deploy --affected --ref origin/main --sha HEAD
+
+# Pass options directly to Rain
+atmos rain deploy api -s dev -- --yes
+```
+</Terminal>
+
+## Stack Configuration
+
+```yaml
+components:
+  rain:
+    api:
+      template: template.yaml
+      name: app-api-dev
+      config: rain-config.yaml
+      params:
+        Environment: dev
+      tags:
+        ManagedBy: atmos
+      dependencies:
+        tools:
+          rain: latest
+```
+
+## Related
+
+- [atmos rain](/cli/commands/rain/usage)
+- [Rain Components](/stacks/components/rain)
+- [Dependencies](/stacks/dependencies)

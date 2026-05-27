@@ -78,6 +78,7 @@ func executeDescribeAffected(
 	currentStacksTerraformDirAbsolutePath := atmosConfig.TerraformDirAbsolutePath
 	currentStacksHelmfileDirAbsolutePath := atmosConfig.HelmfileDirAbsolutePath
 	currentStacksPackerDirAbsolutePath := atmosConfig.PackerDirAbsolutePath
+	currentStacksRainDirAbsolutePath := atmosConfig.RainDirAbsolutePath
 	currentStacksStackConfigFilesAbsolutePaths := atmosConfig.StackConfigFilesAbsolutePaths
 
 	// Compute the relative paths from the git repo root to the current absolute paths.
@@ -103,6 +104,10 @@ func executeDescribeAffected(
 	if err != nil {
 		return nil, nil, nil, err
 	}
+	rainRelPath, err := filepath.Rel(localRepoFileSystemPathAbs, currentStacksRainDirAbsolutePath)
+	if err != nil {
+		return nil, nil, nil, err
+	}
 
 	// Update paths to point to the remote repo dir using the computed relative paths.
 	// BasePath and BasePathAbsolute must be updated so that !include can resolve files
@@ -114,6 +119,7 @@ func executeDescribeAffected(
 	atmosConfig.TerraformDirAbsolutePath = filepath.Join(remoteRepoFileSystemPath, terraformRelPath)
 	atmosConfig.HelmfileDirAbsolutePath = filepath.Join(remoteRepoFileSystemPath, helmfileRelPath)
 	atmosConfig.PackerDirAbsolutePath = filepath.Join(remoteRepoFileSystemPath, packerRelPath)
+	atmosConfig.RainDirAbsolutePath = filepath.Join(remoteRepoFileSystemPath, rainRelPath)
 
 	// Re-scan the BASE (remote) directory for stack config files.
 	// This is necessary to detect deleted stacks - files that exist in BASE but not in HEAD.
@@ -187,6 +193,7 @@ func executeDescribeAffected(
 	atmosConfig.TerraformDirAbsolutePath = currentStacksTerraformDirAbsolutePath
 	atmosConfig.HelmfileDirAbsolutePath = currentStacksHelmfileDirAbsolutePath
 	atmosConfig.PackerDirAbsolutePath = currentStacksPackerDirAbsolutePath
+	atmosConfig.RainDirAbsolutePath = currentStacksRainDirAbsolutePath
 	atmosConfig.StackConfigFilesAbsolutePaths = currentStacksStackConfigFilesAbsolutePaths
 
 	log.Debug("Getting current working repo commit object")

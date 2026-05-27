@@ -12,7 +12,7 @@ import TabItem from '@theme/TabItem'
 import DocCardList from '@theme/DocCardList'
 
 <Intro>
-Components are the building blocks of your infrastructure, defined in the `components` section of stack manifests. Each component represents infrastructure-as-code (Terraform, Helmfile, Packer, or Ansible) combined with its configuration. This page covers how to configure components in stacks and the common attributes available across all component types.
+Components are the building blocks of your infrastructure, defined in the `components` section of stack manifests. Each component represents infrastructure-as-code (Terraform, Helmfile, Packer, Ansible, or Rain) combined with its configuration. This page covers how to configure components in stacks and the common attributes available across all component types.
 </Intro>
 
 ## Supported Component Types
@@ -85,6 +85,11 @@ components:
     webserver:
       vars:
         app_name: myapp
+
+  rain:
+    api:
+      template: template.yaml
+      name: app-api-dev
 ```
 
 ## Metadata Attributes
@@ -237,6 +242,12 @@ Ansible components use the standard sections listed above, plus `settings.ansibl
 
 See [Ansible Components](/stacks/components/ansible) for details.
 
+### Rain-Specific
+
+Rain components use the standard sections listed above, plus `template`, `name`, `config`, `params`, `tags`, and `settings.rain` for CloudFormation configuration.
+
+See [Rain Components](/stacks/components/rain) for details.
+
 ## Component-Type Defaults
 
 You can define default settings for all components of a type at the root level:
@@ -267,6 +278,14 @@ ansible:
   env:
     ANSIBLE_HOST_KEY_CHECKING: "false"
 
+# Defaults for all Rain components
+rain:
+  env:
+    AWS_REGION: us-east-1
+  settings:
+    rain:
+      region: us-east-1
+
 # Individual components inherit and can override these defaults
 components:
   terraform:
@@ -290,6 +309,8 @@ components:
     base_path: components/packer
   ansible:
     base_path: components/ansible
+  rain:
+    base_path: components/rain
 ```
 
 Your project structure would look like:
@@ -309,9 +330,12 @@ Your project structure would look like:
 │   ├── packer/
 │   │   └── ami-builder/
 │   │       └── template.pkr.hcl
-│   └── ansible/
-│       └── webserver/
-│           └── site.yml
+│   ├── ansible/
+│   │   └── webserver/
+│   │       └── site.yml
+│   └── rain/
+│       └── api/
+│           └── template.yaml
 └── stacks/
 ```
 
@@ -334,4 +358,5 @@ Your project structure would look like:
 - [Helmfile Components](/stacks/components/helmfile)
 - [Packer Components](/stacks/components/packer)
 - [Ansible Components](/stacks/components/ansible)
+- [Rain Components](/stacks/components/rain)
 - [Version Management Patterns](/design-patterns/version-management)

@@ -40,7 +40,7 @@ Locals are similar to [Terraform locals](https://developer.hashicorp.com/terrafo
 Locals are resolved in a specific order during stack configuration loading:
 
 ```text
-1. Parse raw YAML → extract locals sections (global, terraform, helmfile, packer)
+1. Parse raw YAML → extract locals sections (global, terraform, helmfile, packer, ansible, rain)
 2. Build dependency graph (extract {{ .locals.X }} references)
 3. Topological sort with cycle detection
 4. Resolve YAML functions (!env, !terraform.state)
@@ -55,7 +55,7 @@ This means you can fetch a value with `!env` or `!terraform.state` and then use 
 Locals can be defined at three levels within a file, each inheriting from its parent:
 
 ```text
-Global locals → Component-type locals (terraform/helmfile/packer) → Component-level locals
+Global locals → Component-type locals (terraform/helmfile/packer/ansible/rain) → Component-level locals
 ```
 
 When the same key exists at multiple levels, the most specific scope wins.
@@ -371,7 +371,7 @@ terraform:
 |-----------------------|-------------------------------|-------------------------------------------|
 | **Scope**             | File-scoped only              | Inherits across imports                   |
 | **Purpose**           | Temporary values for DRY      | Input variables for components            |
-| **Output**            | Not passed to components      | Passed to Terraform/Helmfile/Packer       |
+| **Output**            | Not passed to components      | Passed to component processing and supported tools |
 | **Cross-File Access** | Cannot access imported values | Can access merged values from all imports |
 
 Use `locals` for intermediate computations within a single file, and `vars` for values that need to be passed to components or shared across files.

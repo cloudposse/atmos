@@ -1,0 +1,232 @@
+---
+title: Rain Components
+sidebar_position: 6
+sidebar_label: rain
+sidebar_class_name: command
+description: Configure Rain CloudFormation components in Atmos stack manifests.
+id: rain
+---
+import File from '@site/src/components/File'
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Rain components manage AWS CloudFormation stacks through the external Rain CLI while using Atmos stack configuration, dependency ordering, and authentication.
+</Intro>
+
+## Available Configuration Sections
+
+Rain components support these configuration sections:
+
+<dl>
+  <dt>[`metadata`](/stacks/components/component-metadata)</dt>
+  <dd>Component behavior, inheritance, and implementation path.</dd>
+
+  <dt>`template`</dt>
+  <dd>CloudFormation template path, relative to the resolved Rain component directory unless absolute.</dd>
+
+  <dt>`name`</dt>
+  <dd>CloudFormation stack name. This replaces older `stack_name`-style configuration.</dd>
+
+  <dt>`config`</dt>
+  <dd>Optional Rain config file path, relative to the resolved Rain component directory unless absolute.</dd>
+
+  <dt>`params`</dt>
+  <dd>CloudFormation parameters used by `deploy`, `forecast`, and `diff` when Atmos generates a Rain config file.</dd>
+
+  <dt>`tags`</dt>
+  <dd>CloudFormation tags used by `deploy`, `forecast`, and `diff` when Atmos generates a Rain config file.</dd>
+
+  <dt>[`auth`](/stacks/auth)</dt>
+  <dd>Authentication settings processed during stack resolution. `--identity` uses the same Atmos auth path before invoking Rain.</dd>
+
+  <dt>[`env`](/stacks/env)</dt>
+  <dd>Environment variables during execution.</dd>
+
+  <dt>[`settings`](/stacks/settings)</dt>
+  <dd>Integrations, metadata, and Rain-specific settings under `settings.rain`.</dd>
+
+  <dt>[`dependencies`](/stacks/dependencies)</dt>
+  <dd>Tool dependencies and component dependencies used for tool resolution and multi-component ordering.</dd>
+
+  <dt>[`command`](/stacks/command)</dt>
+  <dd>Override the Rain executable for a component type or component.</dd>
+
+  <dt>[`hooks`](/stacks/hooks)</dt>
+  <dd>Lifecycle event handlers.</dd>
+</dl>
+
+## Component Structure
+
+A typical Rain component configuration:
+
+<File title="stacks/catalog/api.yaml">
+```yaml
+components:
+  rain:
+    api:
+      metadata:
+        component: api
+      template: template.yaml
+      name: app-api-dev
+      config: rain-config.yaml
+      params:
+        Environment: dev
+        Service: api
+      tags:
+        ManagedBy: atmos
+      auth:
+        role: cloudformation-admin
+      settings:
+        rain:
+          region: us-east-1
+          s3_bucket: my-rain-artifacts
+          s3_prefix: api
+      dependencies:
+        tools:
+          rain: latest
+```
+</File>
+
+## Rain Directory Structure
+
+Rain components are located in the path configured in `atmos.yaml`:
+
+```yaml
+# atmos.yaml
+components:
+  rain:
+    base_path: components/rain
+```
+
+Example structure:
+
+```
+components/rain/
+├── api/
+│   ├── template.yaml
+│   └── rain-config.yaml
+└── worker/
+    └── template.yaml
+```
+
+## Stack Name
+
+The `name` field is the CloudFormation stack name. It is required for stack-targeted commands:
+
+- `deploy`
+- `rm`
+- `logs`
+- `watch`
+- `cat`
+- `console`
+- `forecast`
+- `diff`
+
+Atmos returns a validation error before invoking Rain when `name` is required and missing.
+
+Rain-specific code does not expand deprecated Cloud Posse token interpolation such as `{namespace}`, `{tenant}`, `{environment}`, or `{stage}`. If you need dynamic names, produce the final `name` through supported stack processing before Rain runs.
+
+## Rain Settings
+
+Use `settings.rain` for Rain CLI options that are common to a component:
+
+<File title="stacks/catalog/api.yaml">
+```yaml
+components:
+  rain:
+    api:
+      name: app-api-dev
+      template: template.yaml
+      settings:
+        rain:
+          region: us-east-1
+          profile: prod
+          s3_bucket: my-rain-artifacts
+          s3_prefix: api
+          role_arn: arn:aws:iam::123456789012:role/cloudformation-admin
+```
+</File>
+
+These settings are translated to Rain flags when supported by the command:
+
+<dl>
+  <dt>`region`</dt>
+  <dd>Passes `--region`.</dd>
+
+  <dt>`profile`</dt>
+  <dd>Passes `--profile`.</dd>
+
+  <dt>`s3_bucket`</dt>
+  <dd>Passes `--s3-bucket`.</dd>
+
+  <dt>`s3_prefix`</dt>
+  <dd>Passes `--s3-prefix`.</dd>
+
+  <dt>`role_arn`</dt>
+  <dd>Passes `--role-arn`.</dd>
+</dl>
+
+## Toolchain Dependencies
+
+Rain is executed as an external binary. Declare a tool dependency when a component should use an Atmos-managed Rain version:
+
+<File title="stacks/catalog/api.yaml">
+```yaml
+components:
+  rain:
+    api:
+      dependencies:
+        tools:
+          rain: latest
+```
+</File>
+
+You can define the same dependency at the Rain component-type level to apply it to all Rain components in a stack:
+
+<File title="stacks/catalog/_defaults.yaml">
+```yaml
+rain:
+  dependencies:
+    tools:
+      rain: latest
+```
+</File>
+
+## Authentication
+
+Rain supports Atmos authentication in the same stack-processing flow as other component types.
+
+```bash
+atmos rain deploy api -s dev --identity prod-admin
+```
+
+When Atmos auth produces a sanitized AWS environment, Rain receives that environment, including credential/config file variables, profile values, and region values. Atmos does not fall back to host AWS credentials after producing a sanitized environment.
+
+## Running Rain Commands
+
+```bash
+# Deploy one component
+atmos rain deploy api -s dev
+
+# Preview CloudFormation changes
+atmos rain forecast api -s dev
+
+# Format a component template
+atmos rain fmt api -s dev
+
+# Deploy all enabled Rain components in dependency order
+atmos rain deploy --all -s dev
+
+# Remove all enabled Rain components in reverse dependency order
+atmos rain rm --all -s dev
+
+# Deploy only affected Rain components from a Git comparison
+atmos rain deploy --affected --ref origin/main --sha HEAD
+```
+
+## Related
+
+- [atmos rain](/cli/commands/rain/usage)
+- [Rain CLI Configuration](/cli/configuration/components/rain)
+- [Dependencies](/stacks/dependencies)
+- [Authentication](/stacks/auth)

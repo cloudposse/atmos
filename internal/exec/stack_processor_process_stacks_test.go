@@ -369,6 +369,7 @@ func TestProcessStackConfig_ErrorPaths(t *testing.T) {
 				"/test/helmfile",
 				"/test/packer",
 				"/test/ansible",
+				"/test/rain",
 				"test-stack.yaml",
 				tt.config,
 				false,

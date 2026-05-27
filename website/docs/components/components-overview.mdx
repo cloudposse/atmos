@@ -10,15 +10,15 @@ import Intro from '@site/src/components/Intro'
 import File from '@site/src/components/File'
 
 <Intro>
-Components are the building blocks of your infrastructure. They are opinionated, reusable units of infrastructure-as-code that solve specific problems—Terraform root modules, Helmfiles, Packer templates, or Ansible playbooks.
+Components are the building blocks of your infrastructure. They are opinionated, reusable units of infrastructure-as-code that solve specific problems: Terraform root modules, Helmfiles, Packer templates, Ansible playbooks, or Rain CloudFormation templates.
 </Intro>
 
 ## What are Components?
 
 In Atmos, a **component** consists of two parts:
 
-1. **Implementation** — The infrastructure code itself (a Terraform root module, Helmfile, Packer template, or Ansible playbook)
-2. **Configuration** — The settings that customize how the component is deployed in each environment
+1. **Implementation** - The infrastructure code itself (a Terraform root module, Helmfile, Packer template, Ansible playbook, or Rain CloudFormation template)
+2. **Configuration** - The settings that customize how the component is deployed in each environment
 
 This separation of concerns is fundamental to Atmos. You write the implementation once, then configure it differently for each environment through [stacks](/stacks).
 
@@ -102,7 +102,7 @@ This separation allows you to:
 
 ## Component Types
 
-Atmos natively supports four component types:
+Atmos natively supports five component types:
 
 | Type | Implementation | Description |
 |------|----------------|-------------|
@@ -110,6 +110,7 @@ Atmos natively supports four component types:
 | **[Helmfile](/components/helmfile)** | Helmfile configurations | Deploy Helm charts to Kubernetes |
 | **[Packer](/components/packer)** | Packer templates | Build machine images |
 | **[Ansible](/components/ansible)** | Ansible playbooks | Configuration management and automation |
+| **[Rain](/components/rain)** | CloudFormation templates | Manage AWS CloudFormation stacks |
 
 Each type has its own configuration schema, but they share common patterns for `metadata` and `settings`.
 
@@ -129,8 +130,10 @@ components/
 │   └── cert-manager/
 ├── packer/              # Packer templates
 │   └── ubuntu-base/
-└── ansible/             # Ansible playbooks
-    └── webserver/
+├── ansible/             # Ansible playbooks
+│   └── webserver/
+└── rain/                # Rain CloudFormation templates
+    └── api/
 ```
 
 :::tip
@@ -194,3 +197,4 @@ For more powerful filtering options, consider [describing stacks](/describe/stac
 - [Helmfile Components](/components/helmfile) — Helmfile configurations
 - [Packer Components](/components/packer) — Packer templates
 - [Ansible Components](/components/ansible) — Ansible playbooks
+- [Rain Components](/components/rain) — CloudFormation templates

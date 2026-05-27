@@ -1,0 +1,41 @@
+---
+title: atmos rain stackset
+sidebar_label: stackset
+sidebar_class_name: command
+sidebar_position: 17
+id: stackset
+---
+import Terminal from '@site/src/components/Terminal'
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Use this command to run `rain stackset` through Atmos. Atmos can prepare stack configuration, authentication, and toolchain dependencies before invoking Rain.
+</Intro>
+
+## Usage
+
+```shell
+atmos rain stackset [component] --stack <stack> [atmos-flags] -- [rain-options]
+atmos rain stackset -- [rain-options]
+```
+
+## Arguments
+
+<dl>
+  <dt>`component` <em>(optional)</em></dt>
+  <dd>Rain component used to resolve Atmos stack context, auth, dependencies, and working directory before running `rain stackset`.</dd>
+</dl>
+
+## Examples
+
+<Terminal>
+```shell
+atmos rain stackset api -s dev -- --help
+atmos rain stackset -- --help
+```
+</Terminal>
+
+## Related
+
+- [atmos rain](/cli/commands/rain/usage)
+- [Rain Components](/stacks/components/rain)

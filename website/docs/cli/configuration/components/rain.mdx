@@ -1,0 +1,124 @@
+---
+title: Rain Configuration
+sidebar_position: 6
+sidebar_label: rain
+sidebar_class_name: command
+id: rain
+description: Configure Rain component behavior in atmos.yaml.
+---
+import File from '@site/src/components/File'
+import Intro from '@site/src/components/Intro'
+import DocCardList from '@theme/DocCardList'
+
+<Intro>
+Configure how Atmos locates and executes Rain components for AWS CloudFormation management.
+</Intro>
+
+## Configuration
+
+<File title="atmos.yaml">
+```yaml
+components:
+  rain:
+    # Executable to run
+    command: rain
+
+    # Base path to Rain components
+    base_path: components/rain
+
+    # Generate temporary Rain config files from stack params and tags
+    auto_generate_files: false
+```
+</File>
+
+## Configuration Reference
+
+<dl>
+  <dt>`command`</dt>
+  <dd>
+    Specifies the executable to run for Rain commands. Defaults to `rain`.
+
+    Examples:
+    - `rain` - Use Rain from PATH
+    - `/usr/local/bin/rain` - Use a specific binary
+    - `/opt/tools/rain` - Use a toolchain-managed binary
+
+    You can override this value with `ATMOS_RAIN_COMMAND` or the `--rain-command` flag.
+  </dd>
+
+  <dt>`base_path`</dt>
+  <dd>
+    Directory containing Rain component directories. Supports absolute and relative paths.
+
+    Relative paths are resolved from the Atmos base path. Defaults to `components/rain`.
+    You can override this value with `ATMOS_COMPONENTS_RAIN_BASE_PATH` or the `--rain-dir` flag.
+  </dd>
+
+  <dt>`auto_generate_files`</dt>
+  <dd>
+    Enables generated Rain support files from stack configuration when supported by the command.
+    Defaults to `false`.
+  </dd>
+</dl>
+
+## Component Directory Structure
+
+Rain components follow the same directory structure as other component types:
+
+```
+components/
+└── rain/
+    ├── api/
+    │   ├── template.yaml
+    │   └── rain-config.yaml
+    └── worker/
+        └── template.yaml
+```
+
+## Example Configuration
+
+<File title="atmos.yaml">
+```yaml
+components:
+  rain:
+    command: rain
+    base_path: components/rain
+```
+</File>
+
+With this configuration, you can run Rain commands through Atmos:
+
+```bash
+# Deploy a CloudFormation stack
+atmos rain deploy api -s dev
+
+# Show a CloudFormation forecast
+atmos rain forecast api -s dev
+```
+
+## Toolchain Dependencies
+
+Rain remains an external executable. Use a tool dependency when you want Atmos to ensure the Rain binary is available for a component:
+
+<File title="stacks/catalog/api.yaml">
+```yaml
+components:
+  rain:
+    api:
+      dependencies:
+        tools:
+          rain: latest
+```
+</File>
+
+## Related Commands
+
+<DocCardList items={[
+  {type: 'link', href: '/cli/commands/rain/usage', label: 'atmos rain', description: 'Execute Rain commands'},
+]} />
+
+## Related
+
+- [Component Configuration Overview](/cli/configuration/components)
+- [Rain Components](/stacks/components/rain)
+- [Stack Configuration](/cli/configuration/stacks)

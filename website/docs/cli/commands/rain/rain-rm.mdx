@@ -1,0 +1,57 @@
+---
+title: atmos rain rm
+sidebar_label: rm
+sidebar_class_name: command
+sidebar_position: 16
+id: rm
+---
+import Terminal from '@site/src/components/Terminal'
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Use this command to remove the CloudFormation stack named by an Atmos Rain component.
+</Intro>
+
+## Usage
+
+```shell
+atmos rain rm <component> --stack <stack> [atmos-flags] -- [rain-options]
+atmos rain rm --all [-s <stack>] [atmos-flags]
+atmos rain rm --affected [git-flags] [atmos-flags]
+```
+
+## Arguments
+
+<dl>
+  <dt>`component` <em>(required for single-component runs)</em></dt>
+  <dd>Atmos Rain component. The component must define `name`, which Atmos passes to Rain as the CloudFormation stack name.</dd>
+</dl>
+
+## Examples
+
+<Terminal>
+```shell
+# Remove one stack
+atmos rain rm api -s dev
+
+# Remove all Rain stacks in reverse dependency order
+atmos rain rm --all -s dev
+
+# Authenticate before removal
+atmos rain rm api -s dev --identity prod-admin
+```
+</Terminal>
+
+## Stack Configuration
+
+```yaml
+components:
+  rain:
+    api:
+      name: app-api-dev
+```
+
+## Related
+
+- [atmos rain](/cli/commands/rain/usage)
+- [Rain Components](/stacks/components/rain)

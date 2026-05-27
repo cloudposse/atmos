@@ -1,0 +1,41 @@
+---
+title: atmos rain module
+sidebar_label: module
+sidebar_class_name: command
+sidebar_position: 14
+id: module
+---
+import Terminal from '@site/src/components/Terminal'
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Use this command to run `rain module` through Atmos. Atmos can prepare stack configuration, authentication, and toolchain dependencies before invoking Rain.
+</Intro>
+
+## Usage
+
+```shell
+atmos rain module [component] --stack <stack> [atmos-flags] -- [rain-options]
+atmos rain module -- [rain-options]
+```
+
+## Arguments
+
+<dl>
+  <dt>`component` <em>(optional)</em></dt>
+  <dd>Rain component used to resolve Atmos stack context, auth, dependencies, and working directory before running `rain module`.</dd>
+</dl>
+
+## Examples
+
+<Terminal>
+```shell
+atmos rain module api -s dev -- --help
+atmos rain module -- --help
+```
+</Terminal>
+
+## Related
+
+- [atmos rain](/cli/commands/rain/usage)
+- [Rain Components](/stacks/components/rain)

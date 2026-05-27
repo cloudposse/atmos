@@ -197,5 +197,25 @@ func processStackAffected(
 		affected = append(affected, packerAffected...)
 	}
 
+	// Process Rain components.
+	if rainSection, ok := componentsSection[cfg.RainComponentType].(map[string]any); ok {
+		rainAffected, err := processRainComponentsIndexed(
+			stackName,
+			rainSection,
+			remoteStacks,
+			currentStacks,
+			atmosConfig,
+			filesIndex,
+			patternCache,
+			includeSpaceliftAdminStacks,
+			includeSettings,
+			excludeLocked,
+		)
+		if err != nil {
+			return nil, err
+		}
+		affected = append(affected, rainAffected...)
+	}
+
 	return affected, nil
 }

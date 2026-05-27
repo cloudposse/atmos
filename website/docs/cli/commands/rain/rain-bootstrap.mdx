@@ -1,0 +1,44 @@
+---
+title: atmos rain bootstrap
+sidebar_label: bootstrap
+sidebar_class_name: command
+sidebar_position: 1
+id: bootstrap
+---
+import Terminal from '@site/src/components/Terminal'
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Use this command to run `rain bootstrap` through Atmos. Atmos can prepare stack configuration, authentication, and toolchain dependencies before invoking Rain.
+</Intro>
+
+## Usage
+
+```shell
+atmos rain bootstrap [component] --stack <stack> [atmos-flags] -- [rain-options]
+atmos rain bootstrap -- [rain-options]
+```
+
+## Arguments
+
+<dl>
+  <dt>`component` <em>(optional)</em></dt>
+  <dd>Rain component used to resolve Atmos stack context, auth, dependencies, and working directory before running `rain bootstrap`.</dd>
+</dl>
+
+## Examples
+
+<Terminal>
+```shell
+# Run with Atmos component context
+atmos rain bootstrap api -s dev
+
+# Run Rain directly after loading Atmos CLI configuration
+atmos rain bootstrap -- --help
+```
+</Terminal>
+
+## Related
+
+- [atmos rain](/cli/commands/rain/usage)
+- [Rain Components](/stacks/components/rain)

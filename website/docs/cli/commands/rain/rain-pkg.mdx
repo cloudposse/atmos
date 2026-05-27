@@ -1,0 +1,55 @@
+---
+title: atmos rain pkg
+sidebar_label: pkg
+sidebar_class_name: command
+sidebar_position: 15
+id: pkg
+---
+import Terminal from '@site/src/components/Terminal'
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Use this command to package the CloudFormation template resolved from an Atmos Rain component.
+</Intro>
+
+## Usage
+
+```shell
+atmos rain pkg <component> --stack <stack> [atmos-flags] -- [rain-options]
+atmos rain pkg --all [-s <stack>] [atmos-flags]
+```
+
+## Arguments
+
+<dl>
+  <dt>`component` <em>(required for single-component runs)</em></dt>
+  <dd>Atmos Rain component. Atmos resolves the component `template` and passes it to `rain pkg`.</dd>
+</dl>
+
+## Examples
+
+<Terminal>
+```shell
+atmos rain pkg api -s dev
+atmos rain pkg api -s dev -- --help
+atmos rain pkg --all -s dev
+```
+</Terminal>
+
+## Stack Configuration
+
+```yaml
+components:
+  rain:
+    api:
+      template: template.yaml
+      settings:
+        rain:
+          s3_bucket: my-rain-artifacts
+          s3_prefix: api
+```
+
+## Related
+
+- [atmos rain](/cli/commands/rain/usage)
+- [Rain Components](/stacks/components/rain)

@@ -226,6 +226,10 @@ func getBasePathForComponentType(atmosConfig *schema.AtmosConfiguration, compone
 		envVarName = "ATMOS_COMPONENTS_ANSIBLE_BASE_PATH"
 		resolvedPath = atmosConfig.AnsibleDirAbsolutePath
 		configBasePath = atmosConfig.Components.Ansible.BasePath
+	case "rain":
+		envVarName = "ATMOS_COMPONENTS_RAIN_BASE_PATH"
+		resolvedPath = atmosConfig.RainDirAbsolutePath
+		configBasePath = atmosConfig.Components.Rain.BasePath
 	default:
 		return "", "", fmt.Errorf("%w: %s", ErrUnknownComponentType, componentType)
 	}
@@ -283,7 +287,8 @@ func GetComponentPath(atmosConfig *schema.AtmosConfiguration, componentType stri
 	// Clean the path to handle any redundant separators or relative components.
 	cleanPath := filepath.Clean(componentPath)
 
-	log.Debug("Resolved component path",
+	log.Debug(
+		"Resolved component path",
 		"type", componentType,
 		"component", component,
 		"resolved_path", cleanPath,

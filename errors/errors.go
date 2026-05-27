@@ -526,17 +526,34 @@ var (
 	// Ansible execution errors.
 	ErrAnsiblePlaybookMissing = errors.New("ansible playbook is required")
 
+	// Rain configuration errors.
+	ErrMissingRainBasePath = errors.New("rain base path is required")
+
+	// Rain-specific subsection errors.
+	ErrInvalidRainSection      = errors.New("invalid rain section")
+	ErrInvalidRainCommand      = errors.New("invalid rain command")
+	ErrInvalidRainVars         = errors.New("invalid rain vars section")
+	ErrInvalidRainSettings     = errors.New("invalid rain settings section")
+	ErrInvalidRainEnv          = errors.New("invalid rain env section")
+	ErrInvalidRainAuth         = errors.New("invalid rain auth section")
+	ErrInvalidRainDependencies = errors.New("invalid rain dependencies section")
+
+	// Rain execution errors.
+	ErrRainStackNameMissing = errors.New("rain stack name is required")
+
 	// Component type-specific section errors.
 	ErrInvalidComponentsTerraform = errors.New("invalid components.terraform section")
 	ErrInvalidComponentsHelmfile  = errors.New("invalid components.helmfile section")
 	ErrInvalidComponentsPacker    = errors.New("invalid components.packer section")
 	ErrInvalidComponentsAnsible   = errors.New("invalid components.ansible section")
+	ErrInvalidComponentsRain      = errors.New("invalid components.rain section")
 
 	// Specific component configuration errors.
 	ErrInvalidSpecificTerraformComponent = errors.New("invalid terraform component configuration")
 	ErrInvalidSpecificHelmfileComponent  = errors.New("invalid helmfile component configuration")
 	ErrInvalidSpecificPackerComponent    = errors.New("invalid packer component configuration")
 	ErrInvalidSpecificAnsibleComponent   = errors.New("invalid ansible component configuration")
+	ErrInvalidSpecificRainComponent      = errors.New("invalid rain component configuration")
 
 	// Pro API client errors.
 	ErrFailedToCreateRequest        = errors.New("failed to create request")

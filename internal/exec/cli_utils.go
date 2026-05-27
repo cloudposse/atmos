@@ -47,6 +47,8 @@ var commonFlags = []string{
 	cfg.TerraformDirFlag,
 	cfg.HelmfileCommandFlag,
 	cfg.HelmfileDirFlag,
+	cfg.RainCommandFlag,
+	cfg.RainDirFlag,
 	cfg.CliConfigDirFlag,
 	cfg.StackDirFlag,
 	cfg.BasePathFlag,
@@ -69,12 +71,20 @@ var commonFlags = []string{
 	cfg.LogsLevelFlag,
 	cfg.LogsFileFlag,
 	cfg.QueryFlag,
+	"--components",
 	cfg.SettingsListMergeStrategyFlag,
 	cfg.ProcessTemplatesFlag,
 	cfg.ProcessFunctionsFlag,
 	cfg.SkipFlag,
 	cfg.AffectedFlag,
 	cfg.AllFlag,
+	"--ref",
+	"--sha",
+	"--repo-path",
+	"--clone-target-ref",
+	"--ssh-key",
+	"--ssh-key-password",
+	"--include-dependents",
 	cfg.InitPassVars,
 	cfg.PlanSkipPlanfile,
 	cfg.IdentityFlag,
@@ -167,6 +177,8 @@ func ProcessCommandLineArgs(
 	configAndStacksInfo.TerraformDir = argsAndFlagsInfo.TerraformDir
 	configAndStacksInfo.HelmfileCommand = argsAndFlagsInfo.HelmfileCommand
 	configAndStacksInfo.HelmfileDir = argsAndFlagsInfo.HelmfileDir
+	configAndStacksInfo.RainCommand = argsAndFlagsInfo.RainCommand
+	configAndStacksInfo.RainDir = argsAndFlagsInfo.RainDir
 	configAndStacksInfo.StacksDir = argsAndFlagsInfo.StacksDir
 	configAndStacksInfo.ConfigDir = argsAndFlagsInfo.ConfigDir
 	configAndStacksInfo.WorkflowsDir = argsAndFlagsInfo.WorkflowsDir
@@ -475,6 +487,8 @@ var stringFlagDefs = []stringFlagDef{
 	{cfg.AppendUserAgentFlag, func(info *schema.ArgsAndFlagsInfo, v string) { info.AppendUserAgent = v }},
 	{cfg.HelmfileCommandFlag, func(info *schema.ArgsAndFlagsInfo, v string) { info.HelmfileCommand = v }},
 	{cfg.HelmfileDirFlag, func(info *schema.ArgsAndFlagsInfo, v string) { info.HelmfileDir = v }},
+	{cfg.RainCommandFlag, func(info *schema.ArgsAndFlagsInfo, v string) { info.RainCommand = v }},
+	{cfg.RainDirFlag, func(info *schema.ArgsAndFlagsInfo, v string) { info.RainDir = v }},
 	{cfg.CliConfigDirFlag, func(info *schema.ArgsAndFlagsInfo, v string) { info.ConfigDir = v }},
 	{cfg.StackDirFlag, func(info *schema.ArgsAndFlagsInfo, v string) { info.StacksDir = v }},
 	{cfg.BasePathFlag, func(info *schema.ArgsAndFlagsInfo, v string) { info.BasePath = v }},
@@ -534,6 +548,12 @@ var valueTakingCommonFlags = func() map[string]bool {
 	set[cfg.AtmosProfileFlag] = true
 	// --skip is a StringSlice flag that can be used in space form ("--skip funcname").
 	set[cfg.SkipFlag] = true
+	set["--components"] = true
+	set["--ref"] = true
+	set["--sha"] = true
+	set["--repo-path"] = true
+	set["--ssh-key"] = true
+	set["--ssh-key-password"] = true
 	return set
 }()
 

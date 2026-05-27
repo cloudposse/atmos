@@ -1,0 +1,41 @@
+---
+title: atmos rain ls
+sidebar_label: ls
+sidebar_class_name: command
+sidebar_position: 12
+id: ls
+---
+import Terminal from '@site/src/components/Terminal'
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Use this command to run `rain ls` through Atmos. Atmos can prepare stack configuration, authentication, and toolchain dependencies before invoking Rain.
+</Intro>
+
+## Usage
+
+```shell
+atmos rain ls [component] --stack <stack> [atmos-flags] -- [rain-options]
+atmos rain ls -- [rain-options]
+```
+
+## Arguments
+
+<dl>
+  <dt>`component` <em>(optional)</em></dt>
+  <dd>Rain component used to resolve Atmos stack context, auth, dependencies, and working directory before running `rain ls`.</dd>
+</dl>
+
+## Examples
+
+<Terminal>
+```shell
+atmos rain ls api -s dev
+atmos rain ls -- --all
+```
+</Terminal>
+
+## Related
+
+- [atmos rain](/cli/commands/rain/usage)
+- [Rain Components](/stacks/components/rain)

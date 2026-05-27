@@ -1,0 +1,258 @@
+---
+title: atmos rain
+sidebar_label: rain
+sidebar_class_name: command
+---
+import File from '@site/src/components/File'
+import Terminal from '@site/src/components/Terminal'
+import Intro from '@site/src/components/Intro'
+import ActionCard from '@site/src/components/ActionCard'
+import PrimaryCTA from '@site/src/components/PrimaryCTA'
+import DocCardList from '@theme/DocCardList'
+
+<Intro>
+Use this command to run Rain for AWS CloudFormation components configured in Atmos stacks.
+</Intro>
+
+<ActionCard title="Configure Rain">
+    Configure Rain component paths, command overrides, and stack-level CloudFormation settings in Atmos.
+    <div>
+      <PrimaryCTA to="/cli/configuration/components/rain">Configuration Reference</PrimaryCTA>
+    </div>
+</ActionCard>
+
+## Usage
+
+<Terminal>
+```shell
+atmos rain <rain-command> <atmos-component> --stack <atmos-stack> [atmos-flags] -- [rain-options]
+atmos rain <rain-command> --all [-s <atmos-stack>] [atmos-flags]
+atmos rain <rain-command> --affected [git-flags] [atmos-flags]
+```
+</Terminal>
+
+Supported Rain commands:
+
+`bootstrap`, `build`, `cat`, `cc`, `console`, `deploy`, `diff`, `fmt`, `forecast`, `info`, `logs`, `ls`, `merge`, `module`, `pkg`, `rm`, `stackset`, `tree`, `watch`
+
+:::tip
+For Rain command-specific options, pass arguments after `--`. Atmos resolves stack configuration, authentication, and toolchain context first, then invokes Rain.
+:::
+
+## Subcommands
+
+<DocCardList />
+
+## Examples
+
+### Single Component
+
+<Terminal>
+```shell
+# Deploy a CloudFormation stack
+atmos rain deploy api -s dev
+
+# Forecast changes for the same template and stack name
+atmos rain forecast api -s dev
+
+# Remove the CloudFormation stack named by components.rain.api.name
+atmos rain rm api -s dev
+
+# Stream CloudFormation stack logs
+atmos rain logs api -s dev
+
+# Format the component template
+atmos rain fmt api -s dev
+
+# Pass options directly to Rain
+atmos rain deploy api -s dev -- --yes
+```
+</Terminal>
+
+### Toolchain Dependency
+
+Declare Rain as a tool dependency when the component should run with an Atmos-managed Rain binary:
+
+<File title="stacks/catalog/api.yaml">
+```yaml
+components:
+  rain:
+    api:
+      dependencies:
+        tools:
+          rain: latest
+```
+</File>
+
+Then run the component normally:
+
+<Terminal>
+```shell
+atmos rain deploy api -s dev
+```
+</Terminal>
+
+### Identity
+
+<Terminal>
+```shell
+# Authenticate before stack processing and before invoking Rain
+atmos rain deploy api -s dev --identity prod-admin
+
+# Identity also works for multi-component runs
+atmos rain deploy --all -s dev --identity prod-admin
+atmos rain deploy --affected --identity prod-admin --ref origin/main --sha HEAD
+```
+</Terminal>
+
+### Multi-Component
+
+<Terminal>
+```shell
+# Deploy all enabled Rain components in dependency order
+atmos rain deploy --all -s dev
+
+# Remove all enabled Rain components in reverse dependency order
+atmos rain rm --all -s dev
+
+# Limit the run to selected components
+atmos rain deploy --all -s dev --components api,worker
+
+# Filter selected components with a query
+atmos rain deploy --all -s dev --query '.components[] | select(.name == "api")'
+```
+</Terminal>
+
+### Git-Aware Affected Runs
+
+<Terminal>
+```shell
+# Deploy Rain components affected by changes since origin/main
+atmos rain deploy --affected --ref origin/main --sha HEAD
+
+# Include dependents of affected Rain components
+atmos rain deploy --affected --include-dependents --ref origin/main --sha HEAD
+
+# Run affected detection from an explicit repository path
+atmos rain deploy --affected --repo-path /repo --ref origin/main --sha HEAD
+```
+</Terminal>
+
+`--affected` filters affected results to `component_type == rain`, skips deleted components, and does not run Terraform, Helmfile, Packer, or Ansible components from a Rain command.
+
+## Command Behavior
+
+| Rain command | Atmos target | Requires `name` |
+|--------------|--------------|-----------------|
+| `deploy` | Resolved template and explicit CloudFormation stack `name` | Yes |
+| `forecast` | Resolved template and explicit CloudFormation stack `name` | Yes |
+| `diff` | Resolved template and explicit CloudFormation stack `name` | Yes |
+| `pkg` | Resolved component template | No |
+| `fmt` | Resolved component template | No |
+| `tree` | Resolved component template | No |
+| `rm` | Explicit CloudFormation stack `name` | Yes |
+| `logs` | Explicit CloudFormation stack `name` | Yes |
+| `watch` | Explicit CloudFormation stack `name` | Yes |
+| `cat` | Explicit CloudFormation stack `name` | Yes |
+| `console` | Explicit CloudFormation stack `name` | Yes |
+| Other Rain commands | Raw Rain args after Atmos resolves context | No |
+
+Atmos validates `name` before invoking Rain for stack-targeted commands. Use `name`, not `stack_name`, for the CloudFormation stack name.
+
+## Stack Configuration
+
+<File title="stacks/catalog/api.yaml">
+```yaml
+components:
+  rain:
+    api:
+      metadata:
+        component: api
+      template: template.yaml
+      name: app-api-dev
+      config: rain-config.yaml
+      params:
+        Environment: dev
+        Service: api
+      tags:
+        ManagedBy: atmos
+      auth:
+        role: cloudformation-admin
+      settings:
+        rain:
+          region: us-east-1
+          s3_bucket: my-rain-artifacts
+          s3_prefix: api
+      dependencies:
+        tools:
+          rain: latest
+```
+</File>
+
+## Atmos Flags
+
+<dl>
+  <dt>`--stack`, `-s`</dt>
+  <dd>Atmos stack to process for a single component or stack-filtered multi-component run.</dd>
+
+  <dt>`--identity`, `-i`</dt>
+  <dd>Atmos identity to authenticate before stack processing and before invoking Rain.</dd>
+
+  <dt>`--all`</dt>
+  <dd>Process all non-abstract, enabled Rain components. `rm --all` runs in reverse dependency order.</dd>
+
+  <dt>`--affected`</dt>
+  <dd>Process Rain components affected by a Git comparison.</dd>
+
+  <dt>`--components`</dt>
+  <dd>Comma-separated component filter for multi-component runs.</dd>
+
+  <dt>`--query`</dt>
+  <dd>Query expression used to filter multi-component results.</dd>
+
+  <dt>`--include-dependents`</dt>
+  <dd>Include dependents of affected Rain components.</dd>
+
+  <dt>`--ref`</dt>
+  <dd>Git ref used as the comparison base for affected detection.</dd>
+
+  <dt>`--sha`</dt>
+  <dd>Git SHA used as the comparison head for affected detection.</dd>
+
+  <dt>`--repo-path`</dt>
+  <dd>Repository path used for affected detection.</dd>
+
+  <dt>`--clone-target-ref`</dt>
+  <dd>Clone target ref used by affected detection when Atmos needs to clone a repository.</dd>
+
+  <dt>`--ssh-key`</dt>
+  <dd>SSH private key path used when cloning for affected detection.</dd>
+
+  <dt>`--ssh-key-password`</dt>
+  <dd>Password for the SSH private key used when cloning for affected detection.</dd>
+
+  <dt>`--rain-command`</dt>
+  <dd>Override the Rain executable configured in `components.rain.command`.</dd>
+
+  <dt>`--rain-dir`</dt>
+  <dd>Override the Rain component base path configured in `components.rain.base_path`.</dd>
+
+  <dt>`--dry-run`</dt>
+  <dd>Print the command that would run without invoking Rain.</dd>
+
+  <dt>`--process-templates`</dt>
+  <dd>Process templates during stack resolution.</dd>
+
+  <dt>`--process-functions`</dt>
+  <dd>Process YAML functions during stack resolution.</dd>
+
+  <dt>`--skip`</dt>
+  <dd>Skip selected processing steps.</dd>
+</dl>
+
+## Related
+
+- [Rain Components in Stacks](/stacks/components/rain)
+- [Rain CLI Configuration](/cli/configuration/components/rain)
+- [Dependencies](/stacks/dependencies)
+- [Authentication](/stacks/auth)

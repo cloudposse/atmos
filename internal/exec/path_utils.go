@@ -10,6 +10,8 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
+const componentPathFallbackLog = "Failed to resolve component path, falling back to construction"
+
 // constructTerraformComponentWorkingDir constructs the working dir for a terraform component in a stack.
 func constructTerraformComponentWorkingDir(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) string {
 	// Check if a provisioner (source or workdir) set a workdir path.
@@ -27,7 +29,7 @@ func constructTerraformComponentWorkingDir(atmosConfig *schema.AtmosConfiguratio
 			return path
 		}
 		// Log error but still try to return something.
-		log.Debug("Failed to resolve component path, falling back to construction", "error", err)
+		log.Debug(componentPathFallbackLog, "error", err)
 	}
 
 	// Direct path construction without converting to absolute.
@@ -97,7 +99,7 @@ func constructHelmfileComponentWorkingDir(atmosConfig *schema.AtmosConfiguration
 			return path
 		}
 		// Log error but still try to return something.
-		log.Debug("Failed to resolve component path, falling back to construction", "error", err)
+		log.Debug(componentPathFallbackLog, "error", err)
 	}
 
 	// Direct path construction without converting to absolute.
@@ -165,7 +167,7 @@ func constructPackerComponentWorkingDir(atmosConfig *schema.AtmosConfiguration, 
 			return path
 		}
 		// Log error but still try to return something.
-		log.Debug("Failed to resolve component path, falling back to construction", "error", err)
+		log.Debug(componentPathFallbackLog, "error", err)
 	}
 
 	// Direct path construction without converting to absolute.
@@ -173,6 +175,28 @@ func constructPackerComponentWorkingDir(atmosConfig *schema.AtmosConfiguration, 
 	return filepath.Join(
 		atmosConfig.BasePath,
 		atmosConfig.Components.Packer.BasePath,
+		info.ComponentFolderPrefix,
+		info.FinalComponent,
+	)
+}
+
+// constructRainComponentWorkingDir constructs the working dir for a rain component in a stack.
+func constructRainComponentWorkingDir(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) string {
+	if workdirPath, ok := info.ComponentSection[provWorkdir.WorkdirPathKey].(string); ok && workdirPath != "" {
+		return filepath.FromSlash(workdirPath)
+	}
+
+	if atmosConfig.RainDirAbsolutePath != "" {
+		path, err := u.GetComponentPath(atmosConfig, "rain", info.ComponentFolderPrefix, info.FinalComponent)
+		if err == nil {
+			return path
+		}
+		log.Debug(componentPathFallbackLog, "error", err)
+	}
+
+	return filepath.Join(
+		atmosConfig.BasePath,
+		atmosConfig.Components.Rain.BasePath,
 		info.ComponentFolderPrefix,
 		info.FinalComponent,
 	)

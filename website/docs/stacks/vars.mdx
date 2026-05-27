@@ -2,7 +2,7 @@
 title: Configure Variables
 sidebar_label: vars
 sidebar_class_name: command
-description: Use the vars section to pass variables to your Terraform, Helmfile, Packer, or Ansible components.
+description: Use the vars section to pass variables to components and share values across stack configuration.
 id: vars
 ---
 import File from '@site/src/components/File'
@@ -14,7 +14,7 @@ The `vars` section defines variables that are passed to your components. Variabl
 
 ## Use Cases
 
-- **Component Configuration:** Pass input variables to Terraform root modules, Helmfile releases, Packer templates, or Ansible playbooks.
+- **Component Configuration:** Pass input variables to Terraform root modules, Helmfile releases, Packer templates, or Ansible playbooks, and share values used by Rain component configuration.
 - **Environment-Specific Values:** Define different values for dev, staging, and production environments.
 - **Shared Defaults:** Set common variables at higher levels and override them at lower levels as needed.
 
@@ -38,7 +38,7 @@ vars:
 
 ### Component-Type Level
 
-Variables defined under `terraform`, `helmfile`, `packer`, or `ansible` apply to all components of that type:
+Variables defined under `terraform`, `helmfile`, `packer`, `ansible`, or `rain` apply to all components of that type:
 
 ```yaml
 # stacks/orgs/acme/plat/prod/_defaults.yaml
@@ -51,6 +51,10 @@ helmfile:
     helm_timeout: 300
 
 ansible:
+  vars:
+    managed_by: Atmos
+
+rain:
   vars:
     managed_by: Atmos
 ```

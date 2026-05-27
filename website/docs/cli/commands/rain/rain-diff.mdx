@@ -1,0 +1,53 @@
+---
+title: atmos rain diff
+sidebar_label: diff
+sidebar_class_name: command
+sidebar_position: 7
+id: diff
+---
+import Terminal from '@site/src/components/Terminal'
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Use this command to run `rain diff` using the template and CloudFormation stack name resolved from an Atmos Rain component.
+</Intro>
+
+## Usage
+
+```shell
+atmos rain diff <component> --stack <stack> [atmos-flags] -- [rain-options]
+atmos rain diff --all [-s <stack>] [atmos-flags]
+atmos rain diff --affected [git-flags] [atmos-flags]
+```
+
+## Arguments
+
+<dl>
+  <dt>`component` <em>(required for single-component runs)</em></dt>
+  <dd>Atmos Rain component. The component must define `template` and `name`.</dd>
+</dl>
+
+## Examples
+
+<Terminal>
+```shell
+atmos rain diff api -s dev
+atmos rain diff api -s dev --identity prod-admin
+atmos rain diff --affected --ref origin/main --sha HEAD
+```
+</Terminal>
+
+## Stack Configuration
+
+```yaml
+components:
+  rain:
+    api:
+      template: template.yaml
+      name: app-api-dev
+```
+
+## Related
+
+- [atmos rain](/cli/commands/rain/usage)
+- [Rain Components](/stacks/components/rain)

@@ -247,6 +247,7 @@ func ValidateStacks(atmosConfig *schema.AtmosConfiguration) error {
 				atmosConfig.HelmfileDirAbsolutePath,
 				atmosConfig.PackerDirAbsolutePath,
 				atmosConfig.AnsibleDirAbsolutePath,
+				atmosConfig.RainDirAbsolutePath,
 				filePath,
 				stackConfig,
 				false,

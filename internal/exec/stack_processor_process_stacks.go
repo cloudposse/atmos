@@ -32,6 +32,7 @@ func ProcessStackConfig(
 	helmfileComponentsBasePath string,
 	packerComponentsBasePath string,
 	ansibleComponentsBasePath string,
+	rainComponentsBasePath string,
 	stack string,
 	config map[string]any,
 	processStackDeps bool,
@@ -46,7 +47,8 @@ func ProcessStackConfig(
 	stackName := strings.TrimSuffix(
 		strings.TrimSuffix(
 			u.TrimBasePathFromPath(stacksBasePath+"/", stack),
-			u.DefaultStackConfigFileExtension),
+			u.DefaultStackConfigFileExtension,
+		),
 		".yml",
 	)
 
@@ -67,6 +69,7 @@ func ProcessStackConfig(
 	globalHelmfileSection := map[string]any{}
 	globalPackerSection := map[string]any{}
 	globalAnsibleSection := map[string]any{}
+	globalRainSection := map[string]any{}
 	globalComponentsSection := map[string]any{}
 	globalAuthSection := map[string]any{}
 
@@ -101,10 +104,18 @@ func ProcessStackConfig(
 	ansibleAuth := map[string]any{}
 	ansibleDependencies := map[string]any{}
 
+	rainVars := map[string]any{}
+	rainSettings := map[string]any{}
+	rainEnv := map[string]any{}
+	rainCommand := ""
+	rainAuth := map[string]any{}
+	rainDependencies := map[string]any{}
+
 	terraformComponents := map[string]any{}
 	helmfileComponents := map[string]any{}
 	packerComponents := map[string]any{}
 	ansibleComponents := map[string]any{}
+	rainComponents := map[string]any{}
 	allComponents := map[string]any{}
 
 	// Global sections.
@@ -168,6 +179,13 @@ func ProcessStackConfig(
 		globalAnsibleSection, ok = i.(map[string]any)
 		if !ok {
 			return nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidAnsibleSection, stackName)
+		}
+	}
+
+	if i, ok := config[cfg.RainSectionName]; ok {
+		globalRainSection, ok = i.(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidRainSection, stackName)
 		}
 	}
 
@@ -563,6 +581,74 @@ func ProcessStackConfig(
 		return nil, err
 	}
 
+	// Rain section.
+	if i, ok := globalRainSection[cfg.CommandSectionName]; ok {
+		rainCommand, ok = i.(string)
+		if !ok {
+			return nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidRainCommand, stackName)
+		}
+	}
+
+	if i, ok := globalRainSection[cfg.VarsSectionName]; ok {
+		rainVars, ok = i.(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidRainVars, stackName)
+		}
+	}
+
+	globalAndRainVars, err := m.Merge(atmosConfig, []map[string]any{globalVarsSection, rainVars})
+	if err != nil {
+		return nil, err
+	}
+
+	if i, ok := globalRainSection[cfg.SettingsSectionName]; ok {
+		rainSettings, ok = i.(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidRainSettings, stackName)
+		}
+	}
+
+	globalAndRainSettings, err := m.Merge(atmosConfig, []map[string]any{globalSettingsSection, rainSettings})
+	if err != nil {
+		return nil, err
+	}
+
+	if i, ok := globalRainSection[cfg.EnvSectionName]; ok {
+		rainEnv, ok = i.(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidRainEnv, stackName)
+		}
+	}
+
+	globalAndRainEnv, err := m.Merge(atmosConfig, []map[string]any{atmosConfigEnv, globalEnvSection, rainEnv})
+	if err != nil {
+		return nil, err
+	}
+
+	if i, ok := globalRainSection[cfg.AuthSectionName]; ok {
+		rainAuth, ok = i.(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidRainAuth, stackName)
+		}
+	}
+
+	globalAndRainAuth, err := m.Merge(atmosConfig, []map[string]any{globalAuthSection, rainAuth})
+	if err != nil {
+		return nil, err
+	}
+
+	if i, ok := globalRainSection[cfg.DependenciesSectionName]; ok {
+		rainDependencies, ok = i.(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidRainDependencies, stackName)
+		}
+	}
+
+	globalAndRainDependencies, err := m.Merge(atmosConfig, []map[string]any{globalDependenciesSection, rainDependencies})
+	if err != nil {
+		return nil, err
+	}
+
 	// Convert atmosConfig.Auth struct to map[string]any once before parallel processing.
 	// This prevents race conditions when processAuthConfig is called from multiple goroutines.
 	// Use JSON marshaling for deep conversion of nested structs to maps.
@@ -740,10 +826,48 @@ func ProcessStackConfig(
 		}
 	}
 
+	// Process all Rain components in parallel.
+	if componentTypeFilter == "" || componentTypeFilter == cfg.RainComponentType {
+		if allRainComponents, ok := globalComponentsSection[cfg.RainComponentType]; ok {
+			allRainComponentsMap, ok := allRainComponents.(map[string]any)
+			if !ok {
+				return nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidComponentsRain, stackName)
+			}
+
+			buildRainOpts := func(component string, componentMap map[string]any) (*ComponentProcessorOptions, error) {
+				return &ComponentProcessorOptions{
+					ComponentType:            cfg.RainComponentType,
+					Component:                component,
+					Stack:                    stack,
+					StackName:                stackName,
+					ComponentMap:             componentMap,
+					AllComponentsMap:         allRainComponentsMap,
+					ComponentsBasePath:       rainComponentsBasePath,
+					CheckBaseComponentExists: checkBaseComponentExists,
+					GlobalVars:               globalAndRainVars,
+					GlobalSettings:           globalAndRainSettings,
+					GlobalEnv:                globalAndRainEnv,
+					GlobalAuth:               globalAndRainAuth,
+					GlobalDependencies:       globalAndRainDependencies,
+					GlobalCommand:            rainCommand,
+					AtmosGlobalAuthMap:       atmosAuthConfig,
+					AtmosConfig:              atmosConfig,
+				}, nil
+			}
+
+			var err error
+			rainComponents, err = processComponentsInParallel(atmosConfig, allRainComponentsMap, buildRainOpts)
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+
 	allComponents[cfg.TerraformComponentType] = terraformComponents
 	allComponents[cfg.HelmfileComponentType] = helmfileComponents
 	allComponents[cfg.PackerComponentType] = packerComponents
 	allComponents[cfg.AnsibleComponentType] = ansibleComponents
+	allComponents[cfg.RainComponentType] = rainComponents
 
 	result := map[string]any{
 		cfg.ComponentsSectionName: allComponents,

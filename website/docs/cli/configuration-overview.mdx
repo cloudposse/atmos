@@ -20,7 +20,7 @@ Atmos organizes configuration into four main categories:
 |-------------------|---------|---------|
 | **[CLI Configuration](#cli-configuration)** | `atmos.yaml` | Configure the Atmos CLI behavior, paths, and integrations |
 | **[Stack Configuration](#stack-configuration)** | `stacks/**/*.yaml` | Define environments and component configurations |
-| **[Component Configuration](#component-configuration)** | `components/` | Infrastructure code (Terraform, Helmfile, Packer) |
+| **[Component Configuration](#component-configuration)** | `components/` | Infrastructure code (Terraform, Helmfile, Packer, Ansible, Rain) |
 | **[Vendor Configuration](#vendor-configuration)** | `vendor.yaml` | Define external dependencies to vendor |
 
 ## CLI Configuration
@@ -29,7 +29,7 @@ The `atmos.yaml` file configures the Atmos CLI itself. It tells Atmos where to f
 
 **Key settings include:**
 - Base paths for components, stacks, and workflows
-- Terraform/Helmfile command configuration
+- Terraform, Helmfile, Packer, Ansible, and Rain command configuration
 - Stack naming patterns
 - Template and schema settings
 - Integrations (Atlantis, Spacelift, GitHub Actions)
@@ -127,6 +127,34 @@ components:
 
 [Packer Configuration →](/components/packer)
 
+### Ansible Components
+
+Ansible playbooks in `components/ansible/`. Used for configuration management and automation.
+
+```yaml
+components:
+  ansible:
+    webserver:
+      vars:
+        app_name: myapp
+```
+
+[Ansible Configuration →](/components/ansible)
+
+### Rain Components
+
+Rain CloudFormation templates in `components/rain/`. Used for managing AWS CloudFormation stacks.
+
+```yaml
+components:
+  rain:
+    api:
+      template: template.yaml
+      name: app-api-dev
+```
+
+[Rain Configuration →](/components/rain)
+
 ## Vendor Configuration
 
 Vendor manifests define external dependencies that Atmos should download and manage. This enables you to use third-party components, modules, and configurations without copying them into your repository.
@@ -161,7 +189,9 @@ atmos.yaml                    # CLI: Where to find things
 ├── components/               # Components: Infrastructure code
 │   ├── terraform/
 │   ├── helmfile/
-│   └── packer/
+│   ├── packer/
+│   ├── ansible/
+│   └── rain/
 └── stacks/                   # Stacks: Environment definitions
     ├── catalog/              # Reusable configurations
     └── orgs/                 # Environment-specific stacks

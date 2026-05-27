@@ -1,0 +1,59 @@
+---
+title: atmos rain cat
+sidebar_label: cat
+sidebar_class_name: command
+sidebar_position: 3
+id: cat
+---
+import Terminal from '@site/src/components/Terminal'
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Use this command to run `rain cat` for the CloudFormation stack named by a Rain component.
+</Intro>
+
+## Usage
+
+```shell
+atmos rain cat <component> --stack <stack> [atmos-flags] -- [rain-options]
+```
+
+## Arguments
+
+<dl>
+  <dt>`component` <em>(required)</em></dt>
+  <dd>Atmos Rain component. The component must define `name`, which Atmos passes to Rain as the CloudFormation stack name.</dd>
+</dl>
+
+## Flags
+
+<dl>
+  <dt>`--stack`, `-s` <em>(required)</em></dt>
+  <dd>Atmos stack.</dd>
+
+  <dt>`--identity`, `-i` <em>(optional)</em></dt>
+  <dd>Authenticate with an Atmos identity before stack processing and before invoking Rain.</dd>
+</dl>
+
+## Examples
+
+<Terminal>
+```shell
+atmos rain cat api -s dev
+atmos rain cat api -s dev --identity prod-admin
+```
+</Terminal>
+
+## Stack Configuration
+
+```yaml
+components:
+  rain:
+    api:
+      name: app-api-dev
+```
+
+## Related
+
+- [atmos rain](/cli/commands/rain/usage)
+- [Rain Components](/stacks/components/rain)

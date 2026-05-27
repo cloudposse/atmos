@@ -444,6 +444,113 @@ func processPackerComponentsIndexed(
 	return affected, nil
 }
 
+// processRainComponentsIndexed processes Rain components using the files index.
+//
+//nolint:cyclop,dupl,funlen // Mirrors Packer processing for a non-Terraform component type.
+func processRainComponentsIndexed(
+	stackName string,
+	rainSection map[string]any,
+	remoteStacks *map[string]any,
+	currentStacks *map[string]any,
+	atmosConfig *schema.AtmosConfiguration,
+	filesIndex *changedFilesIndex,
+	patternCache *componentPathPatternCache,
+	includeSpaceliftAdminStacks bool,
+	includeSettings bool,
+	excludeLocked bool,
+) ([]schema.Affected, error) {
+	var affected []schema.Affected
+
+	for componentName, compSection := range rainSection {
+		componentSection, ok := compSection.(map[string]any)
+		if !ok {
+			continue
+		}
+
+		metadataSection, hasMetadata := componentSection[sectionNameMetadata].(map[string]any)
+		if hasMetadata {
+			if shouldSkipComponent(metadataSection, componentName, excludeLocked) {
+				continue
+			}
+
+			if !isEqual(remoteStacks, stackName, cfg.RainComponentType, componentName, metadataSection, sectionNameMetadata) {
+				err := addAffectedComponent(&affected, atmosConfig, componentName, stackName, cfg.RainComponentType,
+					&componentSection, affectedReasonStackMetadata, false, nil, includeSettings)
+				if err != nil {
+					return nil, err
+				}
+			}
+		}
+
+		component := GetComponentFolder(&componentSection, componentName)
+
+		changed, err := isComponentFolderChangedIndexed(component, cfg.RainComponentType, atmosConfig, filesIndex, patternCache)
+		if err != nil {
+			return nil, err
+		}
+		if changed {
+			err := addAffectedComponent(&affected, atmosConfig, componentName, stackName, cfg.RainComponentType,
+				&componentSection, affectedReasonComponent, false, nil, includeSettings)
+			if err != nil {
+				return nil, err
+			}
+		}
+
+		if varSection, ok := componentSection[sectionNameVars].(map[string]any); ok {
+			if !isEqual(remoteStacks, stackName, cfg.RainComponentType, componentName, varSection, sectionNameVars) {
+				err := addAffectedComponent(&affected, atmosConfig, componentName, stackName, cfg.RainComponentType,
+					&componentSection, affectedReasonStackVars, false, nil, includeSettings)
+				if err != nil {
+					return nil, err
+				}
+			}
+		}
+
+		if envSection, ok := componentSection[sectionNameEnv].(map[string]any); ok {
+			if !isEqual(remoteStacks, stackName, cfg.RainComponentType, componentName, envSection, sectionNameEnv) {
+				err := addAffectedComponent(&affected, atmosConfig, componentName, stackName, cfg.RainComponentType,
+					&componentSection, affectedReasonStackEnv, false, nil, includeSettings)
+				if err != nil {
+					return nil, err
+				}
+			}
+		}
+
+		if settingsSection, ok := componentSection[cfg.SettingsSectionName].(map[string]any); ok {
+			err := checkSettingsAndDependenciesIndexed(
+				&affected, atmosConfig, componentName, stackName, cfg.RainComponentType,
+				&componentSection, settingsSection, remoteStacks, currentStacks, filesIndex,
+				includeSpaceliftAdminStacks, includeSettings,
+			)
+			if err != nil {
+				return nil, err
+			}
+		}
+
+		if sourceSection, ok := componentSection[sectionNameSource].(map[string]any); ok {
+			if !isEqual(remoteStacks, stackName, cfg.RainComponentType, componentName, sourceSection, sectionNameSource) {
+				err := addAffectedComponent(&affected, atmosConfig, componentName, stackName, cfg.RainComponentType,
+					&componentSection, affectedReasonStackSource, false, nil, includeSettings)
+				if err != nil {
+					return nil, err
+				}
+			}
+		}
+
+		if provisionSection, ok := componentSection[sectionNameProvision].(map[string]any); ok {
+			if !isEqual(remoteStacks, stackName, cfg.RainComponentType, componentName, provisionSection, sectionNameProvision) {
+				err := addAffectedComponent(&affected, atmosConfig, componentName, stackName, cfg.RainComponentType,
+					&componentSection, affectedReasonStackProvision, false, nil, includeSettings)
+				if err != nil {
+					return nil, err
+				}
+			}
+		}
+	}
+
+	return affected, nil
+}
+
 // checkSettingsAndDependenciesIndexed checks settings using indexed files.
 func checkSettingsAndDependenciesIndexed(
 	affected *[]schema.Affected,

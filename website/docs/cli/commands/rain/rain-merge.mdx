@@ -1,0 +1,41 @@
+---
+title: atmos rain merge
+sidebar_label: merge
+sidebar_class_name: command
+sidebar_position: 13
+id: merge
+---
+import Terminal from '@site/src/components/Terminal'
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Use this command to run `rain merge` through Atmos. Atmos can prepare stack configuration, authentication, and toolchain dependencies before invoking Rain.
+</Intro>
+
+## Usage
+
+```shell
+atmos rain merge [component] --stack <stack> [atmos-flags] -- [rain-options]
+atmos rain merge -- [rain-options]
+```
+
+## Arguments
+
+<dl>
+  <dt>`component` <em>(optional)</em></dt>
+  <dd>Rain component used to resolve Atmos stack context, auth, dependencies, and working directory before running `rain merge`.</dd>
+</dl>
+
+## Examples
+
+<Terminal>
+```shell
+atmos rain merge api -s dev -- --help
+atmos rain merge -- --help
+```
+</Terminal>
+
+## Related
+
+- [atmos rain](/cli/commands/rain/usage)
+- [Rain Components](/stacks/components/rain)

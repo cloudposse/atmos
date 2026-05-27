@@ -98,7 +98,7 @@ func processAllComponentsAsDeleted(
 	var deleted []schema.Affected
 
 	// Process each component type.
-	for _, componentType := range []string{cfg.TerraformComponentType, cfg.HelmfileComponentType, cfg.PackerComponentType} {
+	for _, componentType := range []string{cfg.TerraformComponentType, cfg.HelmfileComponentType, cfg.PackerComponentType, cfg.RainComponentType} {
 		componentTypeSection, ok := remoteComponentsSection[componentType].(map[string]any)
 		if !ok {
 			continue
@@ -164,7 +164,7 @@ func processDeletedComponentsInStack(
 	var deleted []schema.Affected
 
 	// Process each component type.
-	for _, componentType := range []string{cfg.TerraformComponentType, cfg.HelmfileComponentType, cfg.PackerComponentType} {
+	for _, componentType := range []string{cfg.TerraformComponentType, cfg.HelmfileComponentType, cfg.PackerComponentType, cfg.RainComponentType} {
 		remoteTypeSection, ok := remoteComponentsSection[componentType].(map[string]any)
 		if !ok {
 			continue

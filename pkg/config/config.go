@@ -508,6 +508,14 @@ func AtmosConfigAbsolutePaths(atmosConfig *schema.AtmosConfiguration) error {
 	}
 	atmosConfig.AnsibleDirAbsolutePath = ansibleDirAbsPath
 
+	// Convert Rain dir to an absolute path.
+	rainBasePath := u.JoinPath(atmosBasePathAbs, atmosConfig.Components.Rain.BasePath)
+	rainDirAbsPath, err := filepath.Abs(rainBasePath)
+	if err != nil {
+		return err
+	}
+	atmosConfig.RainDirAbsolutePath = rainDirAbsPath
+
 	return nil
 }
 

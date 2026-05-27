@@ -1,0 +1,57 @@
+---
+title: atmos rain forecast
+sidebar_label: forecast
+sidebar_class_name: command
+sidebar_position: 9
+id: forecast
+---
+import Terminal from '@site/src/components/Terminal'
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Use this command to forecast CloudFormation changes with Rain using the template and stack name resolved from an Atmos Rain component.
+</Intro>
+
+## Usage
+
+```shell
+atmos rain forecast <component> --stack <stack> [atmos-flags] -- [rain-options]
+atmos rain forecast --all [-s <stack>] [atmos-flags]
+atmos rain forecast --affected [git-flags] [atmos-flags]
+```
+
+## Arguments
+
+<dl>
+  <dt>`component` <em>(required for single-component runs)</em></dt>
+  <dd>Atmos Rain component. Atmos resolves `template` and required `name`, then invokes Rain with the template path and CloudFormation stack name.</dd>
+</dl>
+
+## Examples
+
+<Terminal>
+```shell
+atmos rain forecast api -s dev
+atmos rain forecast api -s dev --identity prod-admin
+atmos rain forecast --affected --ref origin/main --sha HEAD
+```
+</Terminal>
+
+## Stack Configuration
+
+```yaml
+components:
+  rain:
+    api:
+      template: template.yaml
+      name: app-api-dev
+      params:
+        Environment: dev
+      tags:
+        ManagedBy: atmos
+```
+
+## Related
+
+- [atmos rain](/cli/commands/rain/usage)
+- [Rain Components](/stacks/components/rain)

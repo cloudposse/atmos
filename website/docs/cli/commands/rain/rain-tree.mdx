@@ -1,0 +1,50 @@
+---
+title: atmos rain tree
+sidebar_label: tree
+sidebar_class_name: command
+sidebar_position: 18
+id: tree
+---
+import Terminal from '@site/src/components/Terminal'
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Use this command to inspect the CloudFormation template tree resolved from an Atmos Rain component.
+</Intro>
+
+## Usage
+
+```shell
+atmos rain tree <component> --stack <stack> [atmos-flags] -- [rain-options]
+atmos rain tree --all [-s <stack>] [atmos-flags]
+```
+
+## Arguments
+
+<dl>
+  <dt>`component` <em>(required for single-component runs)</em></dt>
+  <dd>Atmos Rain component. Atmos resolves the component `template` and passes it to `rain tree`.</dd>
+</dl>
+
+## Examples
+
+<Terminal>
+```shell
+atmos rain tree api -s dev
+atmos rain tree --all -s dev
+```
+</Terminal>
+
+## Stack Configuration
+
+```yaml
+components:
+  rain:
+    api:
+      template: template.yaml
+```
+
+## Related
+
+- [atmos rain](/cli/commands/rain/usage)
+- [Rain Components](/stacks/components/rain)

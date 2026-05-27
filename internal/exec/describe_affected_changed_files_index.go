@@ -100,6 +100,10 @@ func buildNormalizedBasePaths(atmosConfig *schema.AtmosConfiguration) []string {
 		basePaths = append(basePaths, filepath.Join(atmosConfig.BasePath, atmosConfig.Components.Packer.BasePath))
 	}
 
+	if atmosConfig.Components.Rain.BasePath != "" {
+		basePaths = append(basePaths, filepath.Join(atmosConfig.BasePath, atmosConfig.Components.Rain.BasePath))
+	}
+
 	// Add stacks base path if configured.
 	if atmosConfig.Stacks.BasePath != "" {
 		basePaths = append(basePaths, filepath.Join(atmosConfig.BasePath, atmosConfig.Stacks.BasePath))
@@ -176,6 +180,8 @@ func (idx *changedFilesIndex) getRelevantFiles(componentType string, atmosConfig
 		basePath = filepath.Join(atmosConfig.BasePath, atmosConfig.Components.Helmfile.BasePath)
 	case cfg.PackerComponentType:
 		basePath = filepath.Join(atmosConfig.BasePath, atmosConfig.Components.Packer.BasePath)
+	case cfg.RainComponentType:
+		basePath = filepath.Join(atmosConfig.BasePath, atmosConfig.Components.Rain.BasePath)
 	default:
 		// Unknown component type - return all files as fallback.
 		return idx.allFiles
