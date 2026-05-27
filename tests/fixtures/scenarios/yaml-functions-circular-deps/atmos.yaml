@@ -9,7 +9,3 @@ stacks:
   included_paths:
     - "**/*"
   name_pattern: "{stage}"
-
-logs:
-  file: "/dev/stderr"
-  level: Info

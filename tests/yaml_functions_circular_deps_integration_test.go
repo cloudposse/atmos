@@ -1,6 +1,7 @@
 package tests
 
 import (
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -30,7 +31,7 @@ import (
 // detected during the YAML-function resolution pass, before any backend read
 // is attempted.
 func TestYAMLFunctionsCrossComponentCycle(t *testing.T) {
-	t.Chdir("./fixtures/scenarios/yaml-functions-circular-deps")
+	t.Chdir(filepath.Join(".", "fixtures", "scenarios", "yaml-functions-circular-deps"))
 
 	e.ClearResolutionContext()
 	t.Cleanup(e.ClearResolutionContext)
