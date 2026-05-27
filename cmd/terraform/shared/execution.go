@@ -15,6 +15,8 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
+var resolveComponentFromPath = e.ResolveComponentFromPath
+
 const errWrapFormat = "%w: %w"
 
 // IsMultiComponentExecution checks if the command should be routed to multi-component execution.
@@ -53,7 +55,7 @@ func CheckTerraformFlags(info *schema.ConfigAndStacksInfo) error {
 
 // HandleInteractiveIdentitySelection handles the case where --identity was used without a value.
 func HandleInteractiveIdentitySelection(info *schema.ConfigAndStacksInfo) error {
-	atmosConfig, err := cfg.InitCliConfig(*info, false)
+	atmosConfig, err := initCliConfig(*info, false)
 	if err != nil {
 		return fmt.Errorf(errWrapFormat, errUtils.ErrInitializeCLIConfig, err)
 	}
@@ -146,12 +148,12 @@ func promptMissingStack(info *schema.ConfigAndStacksInfo, cmd *cobra.Command) er
 
 // ResolveComponentPath resolves a path-based component argument to a component name.
 func ResolveComponentPath(info *schema.ConfigAndStacksInfo, commandName string) error {
-	atmosConfig, err := cfg.InitCliConfig(*info, true)
+	atmosConfig, err := initCliConfig(*info, true)
 	if err != nil {
 		return fmt.Errorf(errWrapFormat, errUtils.ErrPathResolutionFailed, err)
 	}
 
-	resolvedComponent, err := e.ResolveComponentFromPath(
+	resolvedComponent, err := resolveComponentFromPath(
 		&atmosConfig,
 		info.ComponentFromArg,
 		info.Stack,
@@ -194,7 +196,7 @@ func RegisterCompletions(tfCmd *cobra.Command) {
 }
 
 func identityFlagCompletion(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
-	atmosConfig, err := cfg.InitCliConfig(buildConfigAndStacksInfo(cmd), false)
+	atmosConfig, err := initCliConfig(buildConfigAndStacksInfo(cmd), false)
 	if err != nil {
 		return nil, cobra.ShellCompDirectiveNoFileComp
 	}

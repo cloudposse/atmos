@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/auth"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -174,6 +175,13 @@ func TestCompletionsAndPathResolutionErrors(t *testing.T) {
 	RegisterCompletions(cmd)
 	assert.NotNil(t, cmd.ValidArgsFunction)
 
+	parent := &cobra.Command{Use: "terraform"}
+	parent.PersistentFlags().String(cfg.IdentityFlagName, "", "")
+	child := &cobra.Command{Use: "apply"}
+	parent.AddCommand(child)
+	RegisterCompletions(child)
+	assert.NotNil(t, child.ValidArgsFunction)
+
 	cmdWithoutIdentity := &cobra.Command{Use: "plan"}
 	RegisterCompletions(cmdWithoutIdentity)
 	assert.NotNil(t, cmdWithoutIdentity.ValidArgsFunction)
@@ -190,6 +198,63 @@ func TestCompletionsAndPathResolutionErrors(t *testing.T) {
 	wrapped := HandlePathResolutionError(errors.New("boom"))
 	require.Error(t, wrapped)
 	assert.ErrorIs(t, wrapped, errUtils.ErrPathResolutionFailed)
+}
+
+func TestResolveAndPromptForArgsResolvesComponentPath(t *testing.T) {
+	fixtureDir := createSharedExecutionFixture(t)
+
+	previousInitCliConfig := initCliConfig
+	previousResolver := resolveComponentFromPath
+	initCliConfig = func(schema.ConfigAndStacksInfo, bool) (schema.AtmosConfiguration, error) {
+		return schema.AtmosConfiguration{}, nil
+	}
+	resolveComponentFromPath = func(_ *schema.AtmosConfiguration, path string, stack string, expectedComponentType string) (string, error) {
+		assert.Equal(t, "components/terraform/vpc", path)
+		assert.Equal(t, "dev", stack)
+		assert.Equal(t, cfg.TerraformComponentType, expectedComponentType)
+		return "vpc", nil
+	}
+	t.Cleanup(func() {
+		initCliConfig = previousInitCliConfig
+		resolveComponentFromPath = previousResolver
+	})
+
+	info := &schema.ConfigAndStacksInfo{
+		AtmosConfigDirsFromArg: []string{fixtureDir},
+		ComponentFromArg:       "components/terraform/vpc",
+		Stack:                  "dev",
+		NeedsPathResolution:    true,
+	}
+
+	require.NoError(t, ResolveAndPromptForArgs(info, &cobra.Command{Use: "plan"}))
+	assert.Equal(t, "vpc", info.ComponentFromArg)
+	assert.False(t, info.NeedsPathResolution)
+}
+
+func TestResolveAndPromptForArgsReturnsPathResolutionError(t *testing.T) {
+	fixtureDir := createSharedExecutionFixture(t)
+
+	previousInitCliConfig := initCliConfig
+	previousResolver := resolveComponentFromPath
+	initCliConfig = func(schema.ConfigAndStacksInfo, bool) (schema.AtmosConfiguration, error) {
+		return schema.AtmosConfiguration{}, nil
+	}
+	resolveComponentFromPath = func(_ *schema.AtmosConfiguration, _ string, _ string, _ string) (string, error) {
+		return "", errUtils.ErrComponentNotInStack
+	}
+	t.Cleanup(func() {
+		initCliConfig = previousInitCliConfig
+		resolveComponentFromPath = previousResolver
+	})
+
+	err := ResolveAndPromptForArgs(&schema.ConfigAndStacksInfo{
+		AtmosConfigDirsFromArg: []string{fixtureDir},
+		ComponentFromArg:       "components/terraform/missing",
+		Stack:                  "dev",
+		NeedsPathResolution:    true,
+	}, &cobra.Command{Use: "plan"})
+
+	assert.ErrorIs(t, err, errUtils.ErrComponentNotInStack)
 }
 
 func TestIdentityFlagCompletionReturnsConfiguredIdentities(t *testing.T) {
@@ -273,4 +338,76 @@ func TestResolveAndPromptForArgsShortCircuitsForMultiComponent(t *testing.T) {
 
 	info = &schema.ConfigAndStacksInfo{Stack: "dev", ComponentFromArg: "vpc"}
 	require.NoError(t, HandleInteractiveComponentStackSelection(info, &cobra.Command{Use: "plan"}))
+}
+
+func TestHandleInteractiveComponentStackSelectionValidatesStackOnlyInput(t *testing.T) {
+	restoreStackListingStubs(t, map[string]any{
+		"dev":  map[string]any{},
+		"prod": map[string]any{},
+	}, nil)
+
+	err := HandleInteractiveComponentStackSelection(&schema.ConfigAndStacksInfo{Stack: "dev"}, &cobra.Command{Use: "plan"})
+	require.NoError(t, err)
+
+	err = HandleInteractiveComponentStackSelection(&schema.ConfigAndStacksInfo{Stack: "missing"}, &cobra.Command{Use: "plan"})
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrInvalidStack)
+}
+
+func TestHandleInteractiveComponentStackSelectionReturnsStackListError(t *testing.T) {
+	expectedErr := errors.New("describe stacks")
+	restoreStackListingStubs(t, nil, expectedErr)
+
+	err := HandleInteractiveComponentStackSelection(&schema.ConfigAndStacksInfo{Stack: "dev"}, &cobra.Command{Use: "plan"})
+
+	assert.ErrorIs(t, err, expectedErr)
+}
+
+func restoreStackListingStubs(t *testing.T, stacks map[string]any, stubErr error) {
+	t.Helper()
+
+	previousInitCliConfig := initCliConfig
+	previousExecuteDescribeStacks := executeDescribeStacks
+	initCliConfig = func(schema.ConfigAndStacksInfo, bool) (schema.AtmosConfiguration, error) {
+		return schema.AtmosConfiguration{}, nil
+	}
+	executeDescribeStacks = func(
+		_ *schema.AtmosConfiguration,
+		_ string,
+		_ []string,
+		_ []string,
+		_ []string,
+		_ bool,
+		_ bool,
+		_ bool,
+		_ bool,
+		_ []string,
+		_ auth.AuthManager,
+	) (map[string]any, error) {
+		return stacks, stubErr
+	}
+
+	t.Cleanup(func() {
+		initCliConfig = previousInitCliConfig
+		executeDescribeStacks = previousExecuteDescribeStacks
+	})
+}
+
+func createSharedExecutionFixture(t *testing.T) string {
+	t.Helper()
+
+	dir := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "stacks"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "atmos.yaml"), []byte(`
+base_path: "./"
+components:
+  terraform:
+    base_path: "components/terraform"
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "**/*.yaml"
+  name_pattern: "{stage}"
+`), 0o644))
+	return dir
 }

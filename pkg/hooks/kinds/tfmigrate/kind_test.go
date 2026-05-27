@@ -2,8 +2,6 @@ package tfmigrate
 
 import (
 	"os"
-	"path/filepath"
-	"runtime"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -14,6 +12,21 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 	tfmigrate "github.com/cloudposse/atmos/pkg/terraform/tfmigrate"
 )
+
+const helperProcessActionEnv = "ATMOS_TFMIGRATE_TEST_HELPER_ACTION"
+
+func TestMain(m *testing.M) {
+	switch os.Getenv(helperProcessActionEnv) {
+	case "success":
+		os.Exit(0)
+	case "failure":
+		os.Exit(7)
+	case "":
+		os.Exit(m.Run())
+	default:
+		os.Exit(2)
+	}
+}
 
 func TestKindRegistered(t *testing.T) {
 	kind, ok := hooks.GetKind("tfmigrate")
@@ -177,18 +190,7 @@ func TestAtmosArgsMissingContextAndEmptyAppendHelpers(t *testing.T) {
 }
 
 func TestEngineRunExecutesCurrentBinaryWrapper(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("uses a POSIX shell wrapper")
-	}
-
-	script := filepath.Join(t.TempDir(), "atmos-wrapper")
-	require.NoError(t, os.WriteFile(script, []byte("#!/bin/sh\nexit 0\n"), 0o755))
-
-	previousArg0 := os.Args[0]
-	os.Args[0] = script
-	t.Cleanup(func() {
-		os.Args[0] = previousArg0
-	})
+	useHelperProcess(t, "success")
 
 	output, err := (&Engine{}).Run(&hooks.ExecContext{
 		Hook: &hooks.Hook{
@@ -210,18 +212,7 @@ func TestEngineRunExecutesCurrentBinaryWrapper(t *testing.T) {
 }
 
 func TestEngineRunWrapsSubprocessFailure(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("uses a POSIX shell wrapper")
-	}
-
-	script := filepath.Join(t.TempDir(), "atmos-wrapper")
-	require.NoError(t, os.WriteFile(script, []byte("#!/bin/sh\nexit 7\n"), 0o755))
-
-	previousArg0 := os.Args[0]
-	os.Args[0] = script
-	t.Cleanup(func() {
-		os.Args[0] = previousArg0
-	})
+	useHelperProcess(t, "failure")
 
 	_, err := (&Engine{}).Run(&hooks.ExecContext{
 		Hook:  &hooks.Hook{Mode: tfmigrate.ModePlan},
@@ -231,4 +222,19 @@ func TestEngineRunWrapsSubprocessFailure(t *testing.T) {
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "tfmigrate hook failed")
+}
+
+func useHelperProcess(t *testing.T, action string) {
+	t.Helper()
+
+	executable, err := os.Executable()
+	require.NoError(t, err)
+
+	previousArg0 := os.Args[0]
+	os.Args[0] = executable
+	t.Setenv(helperProcessActionEnv, action)
+
+	t.Cleanup(func() {
+		os.Args[0] = previousArg0
+	})
 }

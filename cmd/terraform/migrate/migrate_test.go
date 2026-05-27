@@ -2,11 +2,13 @@ package migrate
 
 import (
 	"bytes"
+	"errors"
 	"io"
 	"os"
 	"path/filepath"
 	"testing"
 
+	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
@@ -14,6 +16,7 @@ import (
 
 	"github.com/cloudposse/atmos/cmd/terraform/shared"
 	e "github.com/cloudposse/atmos/internal/exec"
+	"github.com/cloudposse/atmos/pkg/auth"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/data"
 	"github.com/cloudposse/atmos/pkg/flags"
@@ -261,11 +264,12 @@ func TestRunTerraformMigratePlanDryRunFixture(t *testing.T) {
 	cmd := newMigrateActionTestCommand(parent, tfmigrate.ActionPlan)
 	viper.GetViper().Set("dry-run", true)
 	viper.GetViper().Set("skip-init", true)
+	configPath := filepath.Join("..", "..", "..", "examples", "hooks-tfmigrate")
 
 	err := runTerraformMigrate(cmd, []string{
 		"service",
 		"--stack", "deploy/test",
-		"--config-path", "../../../examples/hooks-tfmigrate",
+		"--config-path", configPath,
 		"--identity=false",
 	}, tfmigrate.ActionPlan)
 
@@ -278,12 +282,13 @@ func TestRunTerraformMigrateListFixtureRenders(t *testing.T) {
 	migrateListParser.RegisterFlags(cmd)
 	viper.GetViper().Set(migrateListFlagFormat, "json")
 	viper.GetViper().Set(migrateListFlagColumns, []string{"component", "stack", "hook"})
+	configPath := filepath.Join("..", "..", "..", "examples", "hooks-tfmigrate")
 
 	output := captureDataOutput(t, func() {
 		err := runTerraformMigrateList(cmd, []string{
 			"service",
 			"--stack", "deploy/test",
-			"--config-path", "../../../examples/hooks-tfmigrate",
+			"--config-path", configPath,
 			"--identity=false",
 		})
 		require.NoError(t, err)
@@ -445,12 +450,122 @@ func TestExecuteAffectedMigrateCommandRejectsDependents(t *testing.T) {
 	assert.Contains(t, err.Error(), "invalid configuration")
 }
 
+func TestExecuteAffectedMigrateCommandRegistersDefaultFlags(t *testing.T) {
+	fixtureDir := createMinimalAtmosFixture(t)
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", fixtureDir)
+	restoreDescribeAffectedStubs(t, nil, nil)
+
+	cmd := &cobra.Command{Use: "affected"}
+	registerProcessCommandLineLocalFlags(cmd)
+	err := executeAffectedMigrateCommand(cmd, nil, &schema.ConfigAndStacksInfo{}, tfmigrate.Options{Action: tfmigrate.ActionPlan})
+
+	require.NoError(t, err)
+	assert.NotNil(t, cmd.PersistentFlags().Lookup("file"))
+	assert.NotNil(t, cmd.PersistentFlags().Lookup("format"))
+	assert.NotNil(t, cmd.PersistentFlags().Lookup("verbose"))
+	assert.NotNil(t, cmd.PersistentFlags().Lookup("include-spacelift-admin-stacks"))
+	assert.NotNil(t, cmd.PersistentFlags().Lookup("include-settings"))
+	assert.NotNil(t, cmd.PersistentFlags().Lookup("upload"))
+	assert.Equal(t, "yaml", cmd.PersistentFlags().Lookup("format").Value.String())
+}
+
+func TestExecuteTfmigrateAffectedFiltersAndRunsTerraformItems(t *testing.T) {
+	restoreDescribeAffectedStubs(t, []schema.Affected{
+		{ComponentType: "helmfile", Component: "skip-type", Stack: "dev"},
+		{ComponentType: cfg.TerraformComponentType, Component: "skip-deleted", Stack: "dev", Deleted: true},
+		{ComponentType: cfg.TerraformComponentType, Component: "service", Stack: "prod"},
+	}, nil)
+
+	var executed []schema.ConfigAndStacksInfo
+	previousExecuteSingle := executeTfmigrateSingleForSelection
+	executeTfmigrateSingleForSelection = func(info *schema.ConfigAndStacksInfo, opts tfmigrate.Options) error {
+		executed = append(executed, *info)
+		assert.Equal(t, tfmigrate.ActionApply, opts.Action)
+		return nil
+	}
+	t.Cleanup(func() {
+		executeTfmigrateSingleForSelection = previousExecuteSingle
+	})
+
+	err := executeTfmigrateAffected(&e.DescribeAffectedCmdArgs{
+		CLIConfig: &schema.AtmosConfiguration{},
+	}, &schema.ConfigAndStacksInfo{Identity: cfg.IdentityFlagDisabledValue}, tfmigrate.Options{Action: tfmigrate.ActionApply})
+
+	require.NoError(t, err)
+	require.Len(t, executed, 1)
+	assert.Equal(t, "service", executed[0].Component)
+	assert.Equal(t, "service", executed[0].ComponentFromArg)
+	assert.Equal(t, "prod", executed[0].Stack)
+	assert.Equal(t, "prod", executed[0].StackFromArg)
+	assert.Equal(t, cfg.IdentityFlagDisabledValue, executed[0].Identity)
+}
+
+func TestExecuteTfmigrateAffectedReturnsSingleExecutionError(t *testing.T) {
+	restoreDescribeAffectedStubs(t, []schema.Affected{
+		{ComponentType: cfg.TerraformComponentType, Component: "service", Stack: "prod"},
+	}, nil)
+	expectedErr := errors.New("run tfmigrate")
+
+	previousExecuteSingle := executeTfmigrateSingleForSelection
+	executeTfmigrateSingleForSelection = func(info *schema.ConfigAndStacksInfo, opts tfmigrate.Options) error {
+		return expectedErr
+	}
+	t.Cleanup(func() {
+		executeTfmigrateSingleForSelection = previousExecuteSingle
+	})
+
+	err := executeTfmigrateAffected(&e.DescribeAffectedCmdArgs{
+		CLIConfig: &schema.AtmosConfiguration{},
+	}, &schema.ConfigAndStacksInfo{}, tfmigrate.Options{Action: tfmigrate.ActionPlan})
+
+	assert.ErrorIs(t, err, expectedErr)
+}
+
 func TestDescribeAffectedForTfmigrateRepoPathError(t *testing.T) {
 	_, err := describeAffectedForTfmigrate(&e.DescribeAffectedCmdArgs{
 		CLIConfig: &schema.AtmosConfiguration{},
 		RepoPath:  filepath.Join(t.TempDir(), "missing"),
 	})
 	require.Error(t, err)
+}
+
+func TestDescribeAffectedForTfmigrateSelectsTargetStrategy(t *testing.T) {
+	expectedErr := errors.New("selected strategy")
+
+	tests := []struct {
+		name string
+		args e.DescribeAffectedCmdArgs
+		want string
+	}{
+		{
+			name: "repo path",
+			args: e.DescribeAffectedCmdArgs{RepoPath: "target"},
+			want: "repo-path",
+		},
+		{
+			name: "clone target ref",
+			args: e.DescribeAffectedCmdArgs{CloneTargetRef: true, Ref: "refs/heads/main", SHA: "abc123"},
+			want: "clone",
+		},
+		{
+			name: "checkout default",
+			args: e.DescribeAffectedCmdArgs{Ref: "refs/remotes/origin/main", TargetBranch: "main"},
+			want: "checkout",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var called string
+			restoreDescribeAffectedStrategyStubs(t, &called, expectedErr)
+			tt.args.CLIConfig = &schema.AtmosConfiguration{}
+
+			_, err := describeAffectedForTfmigrate(&tt.args)
+
+			assert.ErrorIs(t, err, expectedErr)
+			assert.Equal(t, tt.want, called)
+		})
+	}
 }
 
 func TestFirstTfmigrateHookDefaultsAndInvalidValues(t *testing.T) {
@@ -488,6 +603,130 @@ func TestTfmigrateListColumnDefaultsAndInvalidRender(t *testing.T) {
 	err := renderTfmigrateList(nil, migrateListRenderOptions{Format: "bogus"})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "unsupported format")
+}
+
+func restoreDescribeAffectedStubs(t *testing.T, affected []schema.Affected, stubErr error) {
+	t.Helper()
+
+	previousRepoPath := executeDescribeAffectedWithTargetRepoPath
+	previousClone := executeDescribeAffectedWithTargetRefClone
+	previousCheckout := executeDescribeAffectedWithTargetRefCheckout
+
+	executeDescribeAffectedWithTargetRepoPath = func(
+		_ *schema.AtmosConfiguration,
+		_ string,
+		_ bool,
+		_ bool,
+		_ string,
+		_ bool,
+		_ bool,
+		_ []string,
+		_ bool,
+		_ auth.AuthManager,
+		_ bool,
+	) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, string, error) {
+		return affected, nil, nil, "", stubErr
+	}
+	executeDescribeAffectedWithTargetRefClone = func(
+		_ *schema.AtmosConfiguration,
+		_ string,
+		_ string,
+		_ string,
+		_ string,
+		_ bool,
+		_ bool,
+		_ string,
+		_ bool,
+		_ bool,
+		_ []string,
+		_ bool,
+		_ auth.AuthManager,
+		_ bool,
+	) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, string, error) {
+		return affected, nil, nil, "", stubErr
+	}
+	executeDescribeAffectedWithTargetRefCheckout = func(
+		_ *schema.AtmosConfiguration,
+		_ string,
+		_ string,
+		_ string,
+		_ bool,
+		_ bool,
+		_ string,
+		_ bool,
+		_ bool,
+		_ []string,
+		_ bool,
+		_ auth.AuthManager,
+		_ bool,
+	) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, string, error) {
+		return affected, nil, nil, "", stubErr
+	}
+
+	t.Cleanup(func() {
+		executeDescribeAffectedWithTargetRepoPath = previousRepoPath
+		executeDescribeAffectedWithTargetRefClone = previousClone
+		executeDescribeAffectedWithTargetRefCheckout = previousCheckout
+	})
+}
+
+func restoreDescribeAffectedStrategyStubs(t *testing.T, called *string, stubErr error) {
+	t.Helper()
+	restoreDescribeAffectedStubs(t, nil, stubErr)
+
+	executeDescribeAffectedWithTargetRepoPath = func(
+		_ *schema.AtmosConfiguration,
+		_ string,
+		_ bool,
+		_ bool,
+		_ string,
+		_ bool,
+		_ bool,
+		_ []string,
+		_ bool,
+		_ auth.AuthManager,
+		_ bool,
+	) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, string, error) {
+		*called = "repo-path"
+		return nil, nil, nil, "", stubErr
+	}
+	executeDescribeAffectedWithTargetRefClone = func(
+		_ *schema.AtmosConfiguration,
+		_ string,
+		_ string,
+		_ string,
+		_ string,
+		_ bool,
+		_ bool,
+		_ string,
+		_ bool,
+		_ bool,
+		_ []string,
+		_ bool,
+		_ auth.AuthManager,
+		_ bool,
+	) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, string, error) {
+		*called = "clone"
+		return nil, nil, nil, "", stubErr
+	}
+	executeDescribeAffectedWithTargetRefCheckout = func(
+		_ *schema.AtmosConfiguration,
+		_ string,
+		_ string,
+		_ string,
+		_ bool,
+		_ bool,
+		_ string,
+		_ bool,
+		_ bool,
+		_ []string,
+		_ bool,
+		_ auth.AuthManager,
+		_ bool,
+	) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, string, error) {
+		*called = "checkout"
+		return nil, nil, nil, "", stubErr
+	}
 }
 
 func captureDataOutput(t *testing.T, fn func()) string {

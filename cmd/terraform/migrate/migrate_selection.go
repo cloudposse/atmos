@@ -11,6 +11,13 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
+var (
+	executeTfmigrateSingleForSelection           = executeTfmigrateSingle
+	executeDescribeAffectedWithTargetRepoPath    = e.ExecuteDescribeAffectedWithTargetRepoPath
+	executeDescribeAffectedWithTargetRefClone    = e.ExecuteDescribeAffectedWithTargetRefClone
+	executeDescribeAffectedWithTargetRefCheckout = e.ExecuteDescribeAffectedWithTargetRefCheckout
+)
+
 func executeAffectedMigrateCommand(cmd *cobra.Command, args []string, info *schema.ConfigAndStacksInfo, opts tfmigrate.Options) error {
 	flags := cmd.PersistentFlags()
 	if flags.Lookup("file") == nil {
@@ -83,7 +90,7 @@ func executeTfmigrateQuery(info *schema.ConfigAndStacksInfo, opts tfmigrate.Opti
 		next.ComponentFromArg = componentName
 		next.Stack = stackName
 		next.StackFromArg = stackName
-		return executeTfmigrateSingle(&next, opts)
+		return executeTfmigrateSingleForSelection(&next, opts)
 	})
 }
 
@@ -109,7 +116,7 @@ func executeTfmigrateAffected(args *e.DescribeAffectedCmdArgs, info *schema.Conf
 		next.ComponentFromArg = item.Component
 		next.Stack = item.Stack
 		next.StackFromArg = item.Stack
-		if err := executeTfmigrateSingle(&next, opts); err != nil {
+		if err := executeTfmigrateSingleForSelection(&next, opts); err != nil {
 			return err
 		}
 	}
@@ -119,7 +126,7 @@ func executeTfmigrateAffected(args *e.DescribeAffectedCmdArgs, info *schema.Conf
 func describeAffectedForTfmigrate(args *e.DescribeAffectedCmdArgs) ([]schema.Affected, error) {
 	switch {
 	case args.RepoPath != "":
-		affected, _, _, _, err := e.ExecuteDescribeAffectedWithTargetRepoPath(
+		affected, _, _, _, err := executeDescribeAffectedWithTargetRepoPath(
 			args.CLIConfig,
 			args.RepoPath,
 			args.IncludeSpaceliftAdminStacks,
@@ -134,7 +141,7 @@ func describeAffectedForTfmigrate(args *e.DescribeAffectedCmdArgs) ([]schema.Aff
 		)
 		return affected, err
 	case args.CloneTargetRef:
-		affected, _, _, _, err := e.ExecuteDescribeAffectedWithTargetRefClone(
+		affected, _, _, _, err := executeDescribeAffectedWithTargetRefClone(
 			args.CLIConfig,
 			args.Ref,
 			args.SHA,
@@ -152,7 +159,7 @@ func describeAffectedForTfmigrate(args *e.DescribeAffectedCmdArgs) ([]schema.Aff
 		)
 		return affected, err
 	default:
-		affected, _, _, _, err := e.ExecuteDescribeAffectedWithTargetRefCheckout(
+		affected, _, _, _, err := executeDescribeAffectedWithTargetRefCheckout(
 			args.CLIConfig,
 			args.Ref,
 			args.SHA,
