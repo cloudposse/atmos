@@ -222,16 +222,16 @@ func runCIHooksForDeployComponent(actualCmd *cobra.Command, info *schema.ConfigA
 	}
 }
 
-// runCIHooksForPlanComponent fires CI hooks for a single component after it completes
-// in multi-component mode. Uses already-resolved info to avoid a second
+// runCIHooksForPlanComponent fires CI hooks for a single component after it completes.
+// It runs in multi-component mode. Uses already-resolved info to avoid a second
 // ProcessCommandLineArgs call (same pattern as runCIHooksForDeploy).
 // rawOutput is the combined stdout+stderr from that component; ANSI codes are stripped here.
 func runCIHooksForPlanComponent(actualCmd *cobra.Command, info *schema.ConfigAndStacksInfo, rawOutput string, execErr error) {
 	runCIHooksForTerraformComponent(actualCmd, h.AfterTerraformPlan, info, rawOutput, execErr)
 }
 
-// runCIHooksForApplyComponent fires CI hooks for a single apply component after it completes
-// in multi-component mode.
+// runCIHooksForApplyComponent fires CI hooks for a single apply component after it completes.
+// It runs in multi-component mode.
 func runCIHooksForApplyComponent(actualCmd *cobra.Command, info *schema.ConfigAndStacksInfo, rawOutput string, execErr error) {
 	runCIHooksForTerraformComponent(actualCmd, h.AfterTerraformApply, info, rawOutput, execErr)
 }

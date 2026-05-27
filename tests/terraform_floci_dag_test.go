@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -39,14 +40,16 @@ var flociMarkerKeys = []string{
 	"final-marker",
 }
 
+var (
+	flociAtmosRunnerOnce sync.Once
+	flociAtmosRunnerErr  error
+)
+
 func TestTerraformFlociApplyDestroyDAG(t *testing.T) {
 	endpoint := requireFlociEndpoint(t)
 	RequireTerraform(t)
 
-	if atmosRunner == nil {
-		atmosRunner = testhelpers.NewAtmosRunner(coverDir)
-		require.NoError(t, atmosRunner.Build())
-	}
+	ensureFlociAtmosRunner(t)
 
 	workdir := filepath.Join("fixtures", "scenarios", "terraform-floci-dag")
 	absWorkdir, err := filepath.Abs(workdir)
@@ -75,6 +78,19 @@ func TestTerraformFlociApplyDestroyDAG(t *testing.T) {
 	t.Run("aliases sharing source path are sequential without workdir", func(t *testing.T) {
 		runFlociAliasSequentialProbe(t, endpoint, absWorkdir)
 	})
+}
+
+func ensureFlociAtmosRunner(t *testing.T) {
+	t.Helper()
+
+	flociAtmosRunnerOnce.Do(func() {
+		if atmosRunner != nil {
+			return
+		}
+		atmosRunner = testhelpers.NewAtmosRunner(coverDir)
+		flociAtmosRunnerErr = atmosRunner.Build()
+	})
+	require.NoError(t, flociAtmosRunnerErr)
 }
 
 func runFlociLifecycle(t *testing.T, endpoint string, absWorkdir string, maxConcurrency int) {

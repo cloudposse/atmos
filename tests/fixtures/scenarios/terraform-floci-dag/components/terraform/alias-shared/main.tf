@@ -16,6 +16,10 @@ resource "terraform_data" "alias_probe" {
       active="${var.alias_lock_dir}/active"
       overlap="${var.alias_lock_dir}/overlap"
       events="${var.alias_lock_dir}/events.log"
+      cleanup() {
+        rm -f "$active"
+      }
+      trap cleanup EXIT INT TERM
       if ! ( set -C; echo "${var.alias_name}" > "$active" ) 2>/dev/null; then
         echo "${var.alias_name}" > "$overlap"
       fi

@@ -33,12 +33,11 @@ func ExecuteTerraformQuery(info *schema.ConfigAndStacksInfo) error {
 
 // ExecuteTerraformQueryWithContext executes graph-backed multi-component Terraform work.
 func ExecuteTerraformQueryWithContext(ctx context.Context, info *schema.ConfigAndStacksInfo) error {
-	defer perf.Track(nil, "exec.ExecuteTerraformQueryWithContext")()
-
 	atmosConfig, err := cfg.InitCliConfig(*info, true)
 	if err != nil {
 		return err
 	}
+	defer perf.Track(&atmosConfig, "exec.ExecuteTerraformQueryWithContext")()
 
 	// Create auth manager for YAML function processing during stack description.
 	// Without this, YAML functions like !terraform.state fail when using --all
