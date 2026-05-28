@@ -404,7 +404,7 @@ func newTerraformPassthroughSubcommand(parent *cobra.Command, name, short string
 
 // terraformRun is for simple subcommands without their own parsers.
 // It binds terraformParser and delegates to terraformRunWithOptions.
-func terraformRun(parentCmd *cobra.Command, actualCmd *cobra.Command, args []string) error {
+func terraformRun(parentCmd, actualCmd *cobra.Command, args []string) error {
 	v := viper.GetViper()
 	if err := terraformParser.BindFlagsToViper(actualCmd, v); err != nil {
 		return err
