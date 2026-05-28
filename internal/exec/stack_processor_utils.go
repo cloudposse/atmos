@@ -783,6 +783,8 @@ func ProcessYAMLConfigFileWithContext(
 		atmosConfig,
 		basePath,
 		filePath,
+		basePath,
+		schema.StackImportNestedImportsLocal,
 		importsConfig,
 		context,
 		ignoreMissingFiles,
@@ -820,6 +822,8 @@ func processYAMLConfigFileWithContextInternal(
 	atmosConfig *schema.AtmosConfiguration,
 	basePath string,
 	filePath string,
+	localBasePath string,
+	inheritedNestedImports string,
 	importsConfig map[string]map[string]any,
 	context map[string]any,
 	ignoreMissingFiles bool,
@@ -844,6 +848,10 @@ func processYAMLConfigFileWithContextInternal(
 	error,
 ) {
 	var stackConfigs []map[string]any
+	inheritedNestedImports = normalizeNestedImports(inheritedNestedImports)
+	if localBasePath == "" {
+		localBasePath = basePath
+	}
 	relativeFilePath := u.TrimBasePathFromPath(basePath+"/", filePath)
 
 	log.Trace("Processing YAML config file", "file", relativeFilePath)
@@ -1156,25 +1164,29 @@ func processYAMLConfigFileWithContextInternal(
 	log.Trace("Processing import structs", "count", len(importStructs), "file", relativeFilePath, "track_provenance", atmosConfig != nil && atmosConfig.TrackProvenance)
 	for _, importStruct := range importStructs {
 		imp := importStruct.Path
+		nestedImports := importStruct.NestedImports
+		if nestedImports == "" {
+			nestedImports = inheritedNestedImports
+		}
+		nestedImports = normalizeNestedImports(nestedImports)
 
 		if imp == "" {
 			return nil, nil, nil, nil, nil, nil, nil, nil, fmt.Errorf("%w in the manifest '%s'", errUtils.ErrInvalidImport, relativeFilePath)
 		}
 
-		var importMatches []string
+		var importMatches []stackimports.RemoteImportMatch
 
 		// Capture remote status and original import key before resolution.
 		// For remote imports, the original URI must be preserved as the import key
 		// so that downstream lookups and imports output use the user-specified URI
 		// rather than the local cache path.
 		isRemote := stackimports.IsRemote(imp)
-		importKey := imp
 
 		// Check if the import is a remote URL.
 		if isRemote {
 			// Download the remote import.
-			log.Debug("Downloading remote stack import", "uri", imp, "file", relativeFilePath)
-			localPath, err := stackimports.DownloadRemoteImport(atmosConfig, imp)
+			log.Debug("Downloading remote stack import", "uri", imp, "file", relativeFilePath, "nested_imports", nestedImports)
+			remoteMatches, err := stackimports.ResolveRemoteImportNested(atmosConfig, imp, nestedImports)
 			if err != nil {
 				if importStruct.SkipIfMissing {
 					log.Debug("Skipping missing remote import", "uri", imp)
@@ -1183,8 +1195,7 @@ func processYAMLConfigFileWithContextInternal(
 				return nil, nil, nil, nil, nil, nil, nil, nil, fmt.Errorf("%w '%s' in file '%s': %w",
 					errUtils.ErrDownloadRemoteImport, imp, relativeFilePath, err)
 			}
-			// Remote imports return a single file path.
-			importMatches = []string{localPath}
+			importMatches = remoteMatches
 		} else {
 			// Local import - handle extension resolution and glob matching.
 			impWithExt := imp
@@ -1228,13 +1239,13 @@ func processYAMLConfigFileWithContextInternal(
 
 			// Find all import matches in the glob.
 			var err error
-			importMatches, err = u.GetGlobMatches(impWithExtPath)
-			if err != nil || len(importMatches) == 0 {
+			localMatches, err := u.GetGlobMatches(impWithExtPath)
+			if err != nil || len(localMatches) == 0 {
 				// Retry (b/c we are using `doublestar` library and it sometimes has issues reading many files in a Docker container).
 				// TODO: review `doublestar` library.
 
-				importMatches, err = u.GetGlobMatches(impWithExtPath)
-				if err != nil || len(importMatches) == 0 {
+				localMatches, err = u.GetGlobMatches(impWithExtPath)
+				if err != nil || len(localMatches) == 0 {
 					// The import was not found -> check if the import is a Go template; if not, return the error.
 					isGolangTemplate, err2 := IsGolangTemplate(atmosConfig, imp)
 					if err2 != nil {
@@ -1244,14 +1255,14 @@ func processYAMLConfigFileWithContextInternal(
 					// If the import is not a Go template and SkipIfMissing is false, return the error.
 					// The wrapped `err` from GetGlobMatches already carries ErrFailedToFindImport, so
 					// callers using errors.Is (see describe_affected_utils.go) keep matching. When
-					// err is nil but importMatches is empty (defensive guard for unexpected empty/nil
+					// err is nil but localMatches is empty (defensive guard for unexpected empty/nil
 					// results from u.GetGlobMatches), we wrap ErrFailedToFindImport explicitly.
 					if !isGolangTemplate && !importStruct.SkipIfMissing {
 						if err != nil {
 							return nil, nil, nil, nil, nil, nil, nil, nil, fmt.Errorf("%w: import '%s' in file '%s': %w",
 								errUtils.ErrStackImportNotFound, imp, relativeFilePath, err)
 						}
-						if len(importMatches) == 0 {
+						if len(localMatches) == 0 {
 							return nil, nil, nil, nil, nil, nil, nil, nil, fmt.Errorf(
 								"%w: import '%s' in file '%s': %w",
 								errUtils.ErrStackImportNotFound,
@@ -1262,6 +1273,10 @@ func processYAMLConfigFileWithContextInternal(
 						}
 					}
 				}
+			}
+			importMatches = make([]stackimports.RemoteImportMatch, len(localMatches))
+			for i, match := range localMatches {
+				importMatches[i] = stackimports.RemoteImportMatch{Path: match}
 			}
 		}
 
@@ -1288,10 +1303,18 @@ func processYAMLConfigFileWithContextInternal(
 		results := make([]importFileResult, len(importMatches))
 		var wg sync.WaitGroup
 
-		for i, importFile := range importMatches {
+		for i, importMatch := range importMatches {
 			wg.Add(1)
-			go func(index int, file string, isRemote bool, importKey string) {
+			go func(index int, match stackimports.RemoteImportMatch) {
 				defer wg.Done()
+				file := match.Path
+				childBasePath := basePath
+				if nestedImports == schema.StackImportNestedImportsLocal {
+					childBasePath = localBasePath
+				}
+				if nestedImports == schema.StackImportNestedImportsRemote && match.BasePath != "" {
+					childBasePath = match.BasePath
+				}
 
 				// Process the import file (expensive I/O + parsing + recursive imports).
 				yamlConfig,
@@ -1304,8 +1327,10 @@ func processYAMLConfigFileWithContextInternal(
 					importMergeContext,
 					processErr := processYAMLConfigFileWithContextInternal(
 					atmosConfig,
-					basePath,
+					childBasePath,
 					file,
+					localBasePath,
+					nestedImports,
 					importsConfig,
 					mergedContext,
 					ignoreMissingFiles,
@@ -1334,8 +1359,8 @@ func processYAMLConfigFileWithContextInternal(
 
 				// For remote imports, use the original URI as the import key
 				// instead of the cache-derived path.
-				if isRemote {
-					importRelativePathWithoutExt = importKey
+				if match.Key != "" {
+					importRelativePathWithoutExt = match.Key
 				}
 
 				// Store result with all necessary data for sequential merging.
@@ -1352,7 +1377,7 @@ func processYAMLConfigFileWithContextInternal(
 					mergeContext:                 importMergeContext,
 					err:                          nil,
 				}
-			}(i, importFile, isRemote, importKey)
+			}(i, importMatch)
 		}
 
 		// Wait for all parallel processing to complete.
@@ -1727,6 +1752,12 @@ func ProcessImportSection(stackMap map[string]any, filePath string) ([]schema.St
 		var importObj schema.StackImport
 		err := mapstructure.Decode(imp, &importObj)
 		if err == nil {
+			if importObj.NestedImports != "" {
+				importObj.NestedImports = normalizeNestedImports(importObj.NestedImports)
+				if err := validateNestedImports(importObj.NestedImports); err != nil {
+					return nil, fmt.Errorf("%w in the file '%s'", err, filePath)
+				}
+			}
 			importObj.Path = u.ResolveRelativePath(importObj.Path, filePath)
 			result = append(result, importObj)
 			continue
@@ -1746,6 +1777,22 @@ func ProcessImportSection(stackMap map[string]any, filePath string) ([]schema.St
 	}
 
 	return result, nil
+}
+
+func normalizeNestedImports(value string) string {
+	if value == "" {
+		return schema.StackImportNestedImportsLocal
+	}
+	return strings.ToLower(strings.TrimSpace(value))
+}
+
+func validateNestedImports(value string) error {
+	switch normalizeNestedImports(value) {
+	case schema.StackImportNestedImportsLocal, schema.StackImportNestedImportsRemote:
+		return nil
+	default:
+		return fmt.Errorf("%w: nested_imports must be either 'local' or 'remote'", errUtils.ErrInvalidImport)
+	}
 }
 
 // sectionContainsAnyNotEmptySections checks if a section contains any of the provided low-level sections, and it's not empty.
