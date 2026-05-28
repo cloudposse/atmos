@@ -24,10 +24,11 @@ The new Git function family exposes common repository values without shelling ou
 All four functions support fallback values using the same pattern as `!repo-root`:
 
 ```yaml
-root: !git.root /fallback/path
-sha: !git.sha unknown
-ref: !git.ref unknown
-branch: !git.branch detached
+vars:
+  root: !git.root /fallback/path
+  sha: !git.sha unknown
+  ref: !git.ref unknown
+  branch: !git.branch detached
 ```
 
 ## Source Pinning
