@@ -4,6 +4,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/cloudposse/atmos/tests"
@@ -314,11 +315,23 @@ func TestOpenWorktreeAwareRepoWithWorktreeConfigExtension(t *testing.T) {
 	worktreeDir := filepath.Join(t.TempDir(), "linked-worktree")
 	runNativeGit(t, repoDir, "worktree", "add", "--detach", worktreeDir, "HEAD")
 
-	repo, err := OpenWorktreeAwareRepo(worktreeDir)
+	var repo *git.Repository
+	var worktree *git.Worktree
+	t.Cleanup(func() {
+		repo = nil
+		worktree = nil
+		if runtime.GOOS == "windows" {
+			runtime.GC()
+			runtime.Gosched()
+		}
+	})
+
+	var err error
+	repo, err = OpenWorktreeAwareRepo(worktreeDir)
 	require.NoError(t, err)
 	require.NotNil(t, repo)
 
-	worktree, err := repo.Worktree()
+	worktree, err = repo.Worktree()
 	require.NoError(t, err)
 	requireSamePath(t, worktreeDir, worktree.Filesystem.Root())
 }
