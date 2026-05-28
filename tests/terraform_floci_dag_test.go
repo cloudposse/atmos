@@ -59,7 +59,8 @@ func TestTerraformFlociApplyDestroyDAG(t *testing.T) {
 		sandbox := setupFlociSandbox(t, absWorkdir)
 		env := flociCommandEnv(t, endpoint, absWorkdir, sandbox, uniqueFlociTestID(t))
 
-		stdout, stderr, err := runFlociAtmos(t, env, 2*time.Minute,
+		stdout, stderr, err := runFlociAtmos(
+			t, env, 2*time.Minute,
 			"terraform", "apply", "--all", "-s", "local", "--max-concurrency", "2", "-i", "false",
 		)
 
@@ -104,7 +105,8 @@ func runFlociLifecycle(t *testing.T, endpoint, absWorkdir string, maxConcurrency
 
 	defer bestEffortFlociDestroy(t, env)
 
-	_, stderr, err := runFlociAtmos(t, env, 5*time.Minute,
+	_, stderr, err := runFlociAtmos(
+		t, env, 5*time.Minute,
 		"terraform", "apply", "--all", "-s", "local",
 		"--max-concurrency", fmt.Sprintf("%d", maxConcurrency),
 		"-i", "false",
@@ -113,7 +115,8 @@ func runFlociLifecycle(t *testing.T, endpoint, absWorkdir string, maxConcurrency
 	require.NoError(t, err, "apply failed:\n%s", stderr)
 	requireFlociParametersExist(t, client, parameterNames)
 
-	_, stderr, err = runFlociAtmos(t, env, 5*time.Minute,
+	_, stderr, err = runFlociAtmos(
+		t, env, 5*time.Minute,
 		"terraform", "destroy", "--all", "-s", "local",
 		"--max-concurrency", fmt.Sprintf("%d", maxConcurrency),
 		"-i", "false",
@@ -134,7 +137,8 @@ func runFlociAliasSequentialProbe(t *testing.T, endpoint, absWorkdir string) {
 
 	defer bestEffortFlociAliasDestroy(t, env)
 
-	_, stderr, err := runFlociAtmos(t, env, 5*time.Minute,
+	_, stderr, err := runFlociAtmos(
+		t, env, 5*time.Minute,
 		"terraform", "apply",
 		"--components=alias-one,alias-two",
 		"-s", "local",
@@ -353,7 +357,8 @@ func flociParameterExists(client *ssm.Client, name string) (bool, error) {
 func bestEffortFlociDestroy(t *testing.T, env map[string]string) {
 	t.Helper()
 
-	_, stderr, err := runFlociAtmos(t, env, 3*time.Minute,
+	_, stderr, err := runFlociAtmos(
+		t, env, 3*time.Minute,
 		"terraform", "destroy", "--all", "-s", "local",
 		"--max-concurrency", "4",
 		"-i", "false",
@@ -367,7 +372,8 @@ func bestEffortFlociDestroy(t *testing.T, env map[string]string) {
 func bestEffortFlociAliasDestroy(t *testing.T, env map[string]string) {
 	t.Helper()
 
-	_, stderr, err := runFlociAtmos(t, env, 3*time.Minute,
+	_, stderr, err := runFlociAtmos(
+		t, env, 3*time.Minute,
 		"terraform", "destroy",
 		"--components=alias-one,alias-two",
 		"-s", "local",
