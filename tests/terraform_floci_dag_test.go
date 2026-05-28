@@ -98,7 +98,8 @@ func TestTerraformFlociAffectedApplyDestroyDAG(t *testing.T) {
 
 		defer bestEffortFlociDestroyInDir(t, repos.HeadDir, env)
 
-		_, stderr, err := runFlociAtmosInDir(t, repos.HeadDir, env, 5*time.Minute,
+		_, stderr, err := runFlociAtmosInDir(
+			t, repos.HeadDir, env, 5*time.Minute,
 			"terraform", "plan", "--affected",
 			"--repo-path", repos.BaseDir,
 			"-s", "local",
@@ -109,7 +110,8 @@ func TestTerraformFlociAffectedApplyDestroyDAG(t *testing.T) {
 		requireTerraformPlanExit(t, err, stderr)
 		requireTerraformSummaryNodes(t, summaryFile, []string{"seed-local"})
 
-		_, stderr, err = runFlociAtmosInDir(t, repos.HeadDir, env, 5*time.Minute,
+		_, stderr, err = runFlociAtmosInDir(
+			t, repos.HeadDir, env, 5*time.Minute,
 			"terraform", "apply", "--affected",
 			"--repo-path", repos.BaseDir,
 			"-s", "local",
@@ -121,7 +123,8 @@ func TestTerraformFlociAffectedApplyDestroyDAG(t *testing.T) {
 		requireFlociParametersExist(t, client, flociParameterNamesForKeys(testID, []string{"seed"}))
 		requireFlociParametersGone(t, client, flociParameterNamesForKeys(testID, []string{"bucket-marker", "queue-marker", "topic-marker", "final-marker"}))
 
-		_, stderr, err = runFlociAtmosInDir(t, repos.HeadDir, env, 5*time.Minute,
+		_, stderr, err = runFlociAtmosInDir(
+			t, repos.HeadDir, env, 5*time.Minute,
 			"terraform", "destroy", "--affected",
 			"--repo-path", repos.BaseDir,
 			"-s", "local",
@@ -142,7 +145,8 @@ func TestTerraformFlociAffectedApplyDestroyDAG(t *testing.T) {
 
 		defer bestEffortFlociDestroyInDir(t, repos.HeadDir, env)
 
-		_, stderr, err := runFlociAtmosInDir(t, repos.HeadDir, env, 5*time.Minute,
+		_, stderr, err := runFlociAtmosInDir(
+			t, repos.HeadDir, env, 5*time.Minute,
 			"terraform", "plan", "--affected", "--include-dependents",
 			"--repo-path", repos.BaseDir,
 			"-s", "local",
@@ -159,7 +163,8 @@ func TestTerraformFlociAffectedApplyDestroyDAG(t *testing.T) {
 			"final-marker-local",
 		})
 
-		_, stderr, err = runFlociAtmosInDir(t, repos.HeadDir, env, 5*time.Minute,
+		_, stderr, err = runFlociAtmosInDir(
+			t, repos.HeadDir, env, 5*time.Minute,
 			"terraform", "apply", "--affected", "--include-dependents",
 			"--repo-path", repos.BaseDir,
 			"-s", "local",
@@ -170,7 +175,8 @@ func TestTerraformFlociAffectedApplyDestroyDAG(t *testing.T) {
 		require.NoError(t, err, "affected apply with dependents failed:\n%s", stderr)
 		requireFlociParametersExist(t, client, flociParameterNames(testID))
 
-		_, stderr, err = runFlociAtmosInDir(t, repos.HeadDir, env, 5*time.Minute,
+		_, stderr, err = runFlociAtmosInDir(
+			t, repos.HeadDir, env, 5*time.Minute,
 			"terraform", "destroy", "--affected", "--include-dependents",
 			"--repo-path", repos.BaseDir,
 			"-s", "local",
@@ -575,7 +581,8 @@ func bestEffortFlociDestroy(t *testing.T, env map[string]string) {
 func bestEffortFlociDestroyInDir(t *testing.T, dir string, env map[string]string) {
 	t.Helper()
 
-	_, stderr, err := runFlociAtmosInDir(t, dir, env, 3*time.Minute,
+	_, stderr, err := runFlociAtmosInDir(
+		t, dir, env, 3*time.Minute,
 		"terraform", "destroy", "--all", "-s", "local",
 		"--max-concurrency", "4",
 		"-i", "false",
