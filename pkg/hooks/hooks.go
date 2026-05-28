@@ -1,6 +1,7 @@
 package hooks
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 
@@ -21,6 +22,8 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui"
 )
+
+var errRenderedHookNotMap = errors.New("rendered hook is not a map")
 
 type Hooks struct {
 	config *schema.AtmosConfiguration
@@ -144,7 +147,12 @@ func (h *Hooks) RunAll(event HookEvent, atmosConfig *schema.AtmosConfiguration, 
 			continue
 		}
 
-		resolved := kind.ResolveDefaults(&hook)
+		executionHook, err := h.resolveHookForExecution(name, &hook, atmosConfig, info)
+		if err != nil {
+			return err
+		}
+
+		resolved := kind.ResolveDefaults(executionHook)
 		if _, err := kind.Engine.Run(&ExecContext{
 			Hook:          resolved,
 			Kind:          kind,
@@ -159,6 +167,184 @@ func (h *Hooks) RunAll(event HookEvent, atmosConfig *schema.AtmosConfiguration, 
 		}
 	}
 	return nil
+}
+
+func (h *Hooks) resolveHookForExecution(name string, hook *Hook, atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) (*Hook, error) {
+	rawHook, ok := h.rawHookSection(name)
+	if !ok {
+		return hook, nil
+	}
+
+	stackInfo := h.executionStackInfo(info)
+	processed, err := processHookExecutionValue(atmosConfig, rawHook, stackInfo)
+	if err != nil {
+		return nil, fmt.Errorf("failed to render hook %q: %w", name, err)
+	}
+
+	processedHook, ok := processed.(map[string]any)
+	if !ok {
+		return nil, fmt.Errorf("%w: hook %q expected map, got %T", errRenderedHookNotMap, name, processed)
+	}
+
+	yamlData, err := yaml.Marshal(processedHook)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal rendered hook %q: %w", name, err)
+	}
+
+	var rendered Hook
+	if err := yaml.Unmarshal(yamlData, &rendered); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal rendered hook %q: %w", name, err)
+	}
+	return &rendered, nil
+}
+
+func (h *Hooks) rawHookSection(name string) (map[string]any, bool) {
+	if h == nil || h.sections == nil {
+		return nil, false
+	}
+	hooksSection, ok := h.sections["hooks"].(map[string]any)
+	if !ok {
+		return nil, false
+	}
+	rawHook, ok := hooksSection[name].(map[string]any)
+	return rawHook, ok
+}
+
+func (h *Hooks) executionStackInfo(info *schema.ConfigAndStacksInfo) *schema.ConfigAndStacksInfo {
+	if info == nil {
+		info = h.info
+	}
+	if info == nil {
+		info = &schema.ConfigAndStacksInfo{}
+	}
+
+	stackInfo := *info
+	if stackInfo.ComponentSection == nil {
+		stackInfo.ComponentSection = h.sections
+	}
+	if stackInfo.ComponentSettingsSection == nil {
+		if settings, ok := h.sections["settings"].(map[string]any); ok {
+			stackInfo.ComponentSettingsSection = settings
+		}
+	}
+	if stackInfo.ComponentVarsSection == nil {
+		if vars, ok := h.sections["vars"].(map[string]any); ok {
+			stackInfo.ComponentVarsSection = vars
+		}
+	}
+	if stackInfo.ComponentHooksSection == nil {
+		if hooks, ok := h.sections["hooks"].(map[string]any); ok {
+			stackInfo.ComponentHooksSection = hooks
+		}
+	}
+	return &stackInfo
+}
+
+func processHookExecutionValue(atmosConfig *schema.AtmosConfiguration, value any, info *schema.ConfigAndStacksInfo) (any, error) {
+	switch v := value.(type) {
+	case string:
+		return processHookExecutionString(atmosConfig, v, info)
+	case []any:
+		return processHookExecutionSlice(atmosConfig, v, info)
+	case map[string]any:
+		return processHookExecutionStringMap(atmosConfig, v, info)
+	case map[any]any:
+		return processHookExecutionAnyMap(atmosConfig, v, info)
+	default:
+		return value, nil
+	}
+}
+
+func processHookExecutionSlice(atmosConfig *schema.AtmosConfiguration, values []any, info *schema.ConfigAndStacksInfo) ([]any, error) {
+	result := make([]any, 0, len(values))
+	for _, item := range values {
+		processed, err := processHookExecutionValue(atmosConfig, item, info)
+		if err != nil {
+			return nil, err
+		}
+		result = append(result, processed)
+	}
+	return result, nil
+}
+
+func processHookExecutionStringMap(atmosConfig *schema.AtmosConfiguration, values map[string]any, info *schema.ConfigAndStacksInfo) (map[string]any, error) {
+	result := make(map[string]any, len(values))
+	for key, item := range values {
+		stringKey, err := processHookExecutionMapKey(atmosConfig, key, info)
+		if err != nil {
+			return nil, err
+		}
+		processedValue, err := processHookExecutionValue(atmosConfig, item, info)
+		if err != nil {
+			return nil, err
+		}
+		result[stringKey] = processedValue
+	}
+	return result, nil
+}
+
+func processHookExecutionAnyMap(atmosConfig *schema.AtmosConfiguration, values map[any]any, info *schema.ConfigAndStacksInfo) (map[string]any, error) {
+	result := make(map[string]any, len(values))
+	for key, item := range values {
+		stringKey, err := processHookExecutionMapKey(atmosConfig, fmt.Sprint(key), info)
+		if err != nil {
+			return nil, err
+		}
+		processedValue, err := processHookExecutionValue(atmosConfig, item, info)
+		if err != nil {
+			return nil, err
+		}
+		result[stringKey] = processedValue
+	}
+	return result, nil
+}
+
+func processHookExecutionMapKey(atmosConfig *schema.AtmosConfiguration, key string, info *schema.ConfigAndStacksInfo) (string, error) {
+	processedKey, err := processHookExecutionString(atmosConfig, key, info)
+	if err != nil {
+		return "", err
+	}
+	if stringKey, ok := processedKey.(string); ok {
+		return stringKey, nil
+	}
+	return fmt.Sprint(processedKey), nil
+}
+
+func processHookExecutionString(atmosConfig *schema.AtmosConfiguration, value string, info *schema.ConfigAndStacksInfo) (any, error) {
+	trimmed := strings.TrimSpace(value)
+	if strings.HasPrefix(trimmed, "!") {
+		return processHookExecutionYAMLFunction(atmosConfig, value, info)
+	}
+
+	if strings.Contains(value, "{{") {
+		var tmplData any = map[string]any{}
+		if info != nil && info.ComponentSection != nil {
+			tmplData = info.ComponentSection
+		}
+		return e.ProcessTmpl(atmosConfig, "hook", value, tmplData, false)
+	}
+
+	return value, nil
+}
+
+func processHookExecutionYAMLFunction(atmosConfig *schema.AtmosConfiguration, value string, info *schema.ConfigAndStacksInfo) (any, error) {
+	stack := ""
+	if info != nil {
+		stack = info.Stack
+	}
+	processor := e.NewComponentYAMLProcessor(atmosConfig, stack, nil, nil, info)
+	processed, err := processor.ProcessYAMLFunctionString(value)
+	if err != nil {
+		return nil, err
+	}
+	processedString, ok := processed.(string)
+	if !ok {
+		return processHookExecutionValue(atmosConfig, processed, info)
+	}
+	if processedString == value {
+		return processedString, nil
+	}
+	return processHookExecutionString(atmosConfig, processedString, info)
 }
 
 // newSkipPredicate builds the per-hook skip decision from the value of the
