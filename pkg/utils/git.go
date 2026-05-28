@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	atmosGit "github.com/cloudposse/atmos/pkg/git"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
@@ -40,6 +41,7 @@ func ProcessTagGitRoot(input string) (string, error) {
 	// Check if we're in test mode and should use a mock Git root.
 	//nolint:forbidigo // TEST_GIT_ROOT is specifically for test isolation, not application configuration
 	if testGitRoot := os.Getenv("TEST_GIT_ROOT"); testGitRoot != "" {
+		log.Trace("Using test Git root override", "path", testGitRoot)
 		return testGitRoot, nil
 	}
 
