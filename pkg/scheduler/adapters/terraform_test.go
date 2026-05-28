@@ -758,10 +758,10 @@ func TestExecuteTerraformKeepGoingRunsIndependentNodes(t *testing.T) {
 	err := ExecuteTerraform(context.Background(), TerraformOptions{
 		AtmosConfig: &schema.AtmosConfiguration{},
 		Info: &schema.ConfigAndStacksInfo{
-			All:            true,
-			SubCommand:     "plan",
-			MaxConcurrency: 1,
-			KeepGoing:      true,
+			All:                  true,
+			SubCommand:           "plan",
+			MaxConcurrency:       1,
+			TerraformFailureMode: terraformFailureModeKeepGoing,
 		},
 		Stacks: terraformAdapterFailureModeStacks(),
 		Executor: func(execution TerraformExecution) (TerraformExecutionResult, error) {
@@ -795,7 +795,25 @@ func TestExecuteTerraformRejectsConflictingFailureModes(t *testing.T) {
 	})
 
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "--fail-fast and --keep-going cannot be used together")
+	require.Contains(t, err.Error(), `failure mode cannot be both "fail-fast" and "keep-going"`)
+}
+
+func TestExecuteTerraformRejectsUnsupportedFailureMode(t *testing.T) {
+	err := ExecuteTerraform(context.Background(), TerraformOptions{
+		AtmosConfig: &schema.AtmosConfiguration{},
+		Info: &schema.ConfigAndStacksInfo{
+			All:                  true,
+			SubCommand:           "plan",
+			TerraformFailureMode: "eventually",
+		},
+		Stacks: terraformAdapterFailureModeStacks(),
+		Executor: func(execution TerraformExecution) (TerraformExecutionResult, error) {
+			return TerraformExecutionResult{}, nil
+		},
+	})
+
+	require.Error(t, err)
+	require.Contains(t, err.Error(), `unsupported Terraform failure mode "eventually"`)
 }
 
 func TestExecuteTerraformAcceptsDoubleDashAutoApprove(t *testing.T) {
@@ -968,7 +986,7 @@ func TestExecuteTerraformDestroyFailureBlocksPrerequisites(t *testing.T) {
 			All:                    true,
 			SubCommand:             "destroy",
 			MaxConcurrency:         2,
-			KeepGoing:              true,
+			TerraformFailureMode:   terraformFailureModeKeepGoing,
 			AdditionalArgsAndFlags: []string{"-auto-approve"},
 		},
 		Stacks: terraformAdapterTestStacksWithWorkdir(),

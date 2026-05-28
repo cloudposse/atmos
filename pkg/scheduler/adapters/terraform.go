@@ -35,6 +35,11 @@ const (
 )
 
 const (
+	terraformFailureModeFailFast  = "fail-fast"
+	terraformFailureModeKeepGoing = "keep-going"
+)
+
+const (
 	terraformPlanLogOrderStream  = "stream"
 	terraformPlanLogOrderGrouped = "grouped"
 	terraformPlanHideNoChanges   = "no-changes"
@@ -1296,17 +1301,32 @@ func effectiveTerraformMaxConcurrency(info *schema.ConfigAndStacksInfo) int {
 // validateTerraformFailureMode rejects mutually exclusive Terraform failure flags.
 func validateTerraformFailureMode(info *schema.ConfigAndStacksInfo) error {
 	if info != nil && info.FailFast && info.KeepGoing {
-		return fmt.Errorf("%w: --fail-fast and --keep-going cannot be used together", errUtils.ErrInvalidConfig)
+		return fmt.Errorf("%w: failure mode cannot be both %q and %q", errUtils.ErrInvalidConfig, terraformFailureModeFailFast, terraformFailureModeKeepGoing)
 	}
-	return nil
+	switch effectiveTerraformFailureMode(info) {
+	case terraformFailureModeFailFast, terraformFailureModeKeepGoing:
+		return nil
+	default:
+		return fmt.Errorf("%w: unsupported Terraform failure mode %q", errUtils.ErrInvalidConfig, info.TerraformFailureMode)
+	}
 }
 
 // effectiveTerraformFailFast returns whether the scheduler should stop after the first failure.
 func effectiveTerraformFailFast(info *schema.ConfigAndStacksInfo) bool {
-	if info != nil && info.KeepGoing {
-		return false
+	return effectiveTerraformFailureMode(info) == terraformFailureModeFailFast
+}
+
+func effectiveTerraformFailureMode(info *schema.ConfigAndStacksInfo) string {
+	if info == nil {
+		return terraformFailureModeFailFast
 	}
-	return true
+	if info.TerraformFailureMode != "" {
+		return info.TerraformFailureMode
+	}
+	if info.KeepGoing {
+		return terraformFailureModeKeepGoing
+	}
+	return terraformFailureModeFailFast
 }
 
 // supportsTerraformConcurrency reports whether subCommand can run through the scheduler concurrently.

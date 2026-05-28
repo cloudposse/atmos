@@ -39,15 +39,14 @@ FLAGS
       --execution-summary-file string      Write graph-backed Terraform plan execution summary JSON to the specified
                                            file
 
-      --fail-fast                          Stop scheduling Terraform components after the first failure
+      --failure-mode string                Terraform plan failure handling mode. Supported values: fail-fast, keep-going
+                                           (default fail-fast)
 
   -h, --help                               help for plan
 
       --hide strings                       Hide Terraform plan output sections. Supported values: no-changes
 
       --init-run-reconfigure string        Override init_run_reconfigure setting from atmos.yaml (true/false)
-
-      --keep-going                         Continue scheduling independent Terraform components after a failure
 
       --log-order string                   Order concurrent Terraform plan logs. Supported values: stream, grouped
                                            (default stream)

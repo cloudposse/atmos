@@ -8,6 +8,11 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
+const (
+	terraformFailureModeFailFast  = "fail-fast"
+	terraformFailureModeKeepGoing = "keep-going"
+)
+
 // TerraformRunOptions contains shared flags from terraformParser.
 // Used by simple subcommands that only need the base terraform flags.
 type TerraformRunOptions struct {
@@ -39,8 +44,7 @@ type TerraformRunOptions struct {
 
 	// Graph-backed Terraform concurrency.
 	MaxConcurrency    int
-	FailFast          bool
-	KeepGoing         bool
+	FailureMode       string
 	PlanLogOrder      string
 	PlanHide          []string
 	PlanHideNoChanges bool
@@ -72,8 +76,7 @@ func ParseTerraformRunOptions(v *viper.Viper) *TerraformRunOptions {
 		All:                     v.GetBool("all"),
 		Affected:                v.GetBool("affected"),
 		MaxConcurrency:          v.GetInt("max-concurrency"),
-		FailFast:                v.GetBool("fail-fast"),
-		KeepGoing:               v.GetBool("keep-going"),
+		FailureMode:             v.GetString("failure-mode"),
 		PlanLogOrder:            v.GetString("log-order"),
 		PlanHide:                v.GetStringSlice("hide"),
 		PlanHideNoChanges:       terraformPlanHideContains(v.GetStringSlice("hide"), "no-changes"),
