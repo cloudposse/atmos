@@ -694,6 +694,30 @@ func TestContainsTerraformFlagParsesBooleanValues(t *testing.T) {
 	}
 }
 
+func TestHasTerraformAutoApproveEnvChecksGlobalAndSubcommandArgs(t *testing.T) {
+	t.Run("global", func(t *testing.T) {
+		t.Setenv(terraformCLIArgsEnv, "-auto-approve")
+		require.True(t, hasTerraformAutoApproveEnv("apply"))
+	})
+
+	t.Run("apply specific", func(t *testing.T) {
+		t.Setenv(terraformCLIArgsEnvPrefix+"apply", "-auto-approve")
+		require.True(t, hasTerraformAutoApproveEnv("apply"))
+		require.False(t, hasTerraformAutoApproveEnv("destroy"))
+	})
+
+	t.Run("destroy specific", func(t *testing.T) {
+		t.Setenv(terraformCLIArgsEnvPrefix+"destroy", "--auto-approve=true")
+		require.True(t, hasTerraformAutoApproveEnv("destroy"))
+		require.False(t, hasTerraformAutoApproveEnv("apply"))
+	})
+
+	t.Run("explicit false", func(t *testing.T) {
+		t.Setenv(terraformCLIArgsEnvPrefix+"apply", "-auto-approve=false")
+		require.False(t, hasTerraformAutoApproveEnv("apply"))
+	})
+}
+
 func TestExecuteTerraformAllowsConcurrentApplyWithConfiguredAutoApprove(t *testing.T) {
 	stacks := map[string]any{
 		"dev": map[string]any{

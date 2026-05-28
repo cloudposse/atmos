@@ -29,11 +29,19 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
-const terraformNodeIDFormat = "%s-%s"
+const (
+	terraformDefaultCommand = "terraform"
+	terraformNodeIDFormat   = "%s-%s"
+)
 
 const (
 	terraformPlanLogOrderStream  = "stream"
 	terraformPlanLogOrderGrouped = "grouped"
+)
+
+const (
+	terraformCLIArgsEnv       = "TF_CLI_ARGS"
+	terraformCLIArgsEnvPrefix = "TF_CLI_ARGS_"
 )
 
 // TerraformExecution contains the execution context for one Terraform component.
@@ -301,8 +309,19 @@ func hasTerraformAutoApprove(atmosConfig *schema.AtmosConfiguration, info *schem
 	if containsTerraformFlag(info.AdditionalArgsAndFlags, "-auto-approve") {
 		return true
 	}
-	//nolint:forbidigo // TF_CLI_ARGS is Terraform's native non-interactive flag path.
-	return containsTerraformFlag(strings.Fields(os.Getenv("TF_CLI_ARGS")), "-auto-approve")
+	return hasTerraformAutoApproveEnv(info.SubCommand)
+}
+
+func hasTerraformAutoApproveEnv(subcommand string) bool {
+	//nolint:forbidigo // TF_CLI_ARGS* are Terraform's native non-interactive flag paths.
+	if containsTerraformFlag(strings.Fields(os.Getenv(terraformCLIArgsEnv)), "-auto-approve") {
+		return true
+	}
+	if subcommand == "" {
+		return false
+	}
+	//nolint:forbidigo // TF_CLI_ARGS_<subcommand> is Terraform's native command-specific flag path.
+	return containsTerraformFlag(strings.Fields(os.Getenv(terraformCLIArgsEnvPrefix+subcommand)), "-auto-approve")
 }
 
 // containsTerraformFlag matches Terraform flags with either one or two leading dashes.
@@ -944,7 +963,7 @@ func terraformLogDir(atmosConfig *schema.AtmosConfiguration, command string) str
 // terraformOutputCommand returns the command name used in log paths and messages.
 func terraformOutputCommand(info *schema.ConfigAndStacksInfo) string {
 	if info == nil || info.SubCommand == "" {
-		return "terraform"
+		return terraformDefaultCommand
 	}
 	return info.SubCommand
 }
@@ -978,12 +997,16 @@ func (o *terraformOutput) finishNode(node *dependency.Node, result TerraformExec
 	stderr := ioLayer.MaskWriter(os.Stderr)
 	command := o.command
 	if command == "" {
-		command = "terraform"
+		command = terraformDefaultCommand
 	}
-	fmt.Fprintf(stderr, "\n[%s] %s output %s\n", label, command, status)
+	writeGroupedOutputMarker(stderr, "\n["+label+"] "+command+" output "+status+"\n")
 	replayGroupedOutput(ioLayer.MaskWriter(os.Stdout), result.Stdout)
 	replayGroupedOutput(stderr, result.Stderr)
-	fmt.Fprintf(stderr, "[%s] end %s output\n", label, command)
+	writeGroupedOutputMarker(stderr, "["+label+"] end "+command+" output\n")
+}
+
+func writeGroupedOutputMarker(w io.Writer, marker string) {
+	_, _ = io.WriteString(w, marker)
 }
 
 // replayGroupedOutput writes captured output and ensures it ends with a newline.
