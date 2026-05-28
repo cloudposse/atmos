@@ -12,11 +12,6 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 )
 
-var (
-	ErrDetachedHead    = errors.New("git HEAD is detached")
-	ErrEmptyBranchName = errors.New("git branch name is empty")
-)
-
 func GetLocalRepo() (*git.Repository, error) {
 	localPath := "."
 
@@ -193,12 +188,12 @@ func GetCurrentBranch() (string, error) {
 	}
 
 	if !ref.Name().IsBranch() {
-		return "", ErrDetachedHead
+		return "", errUtils.ErrDetachedHead
 	}
 
 	branch := ref.Name().Short()
 	if branch == "" {
-		return "", ErrEmptyBranchName
+		return "", errUtils.ErrEmptyBranchName
 	}
 
 	return branch, nil
@@ -213,12 +208,12 @@ func GetRoot() (string, error) {
 
 	worktree, err := repo.Worktree()
 	if err != nil {
-		return "", fmt.Errorf("failed to get worktree: %w", err)
+		return "", fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrGitWorktree, err)
 	}
 
 	rootPath, err := filepath.Abs(worktree.Filesystem.Root())
 	if err != nil {
-		return "", fmt.Errorf("failed to resolve absolute path: %w", err)
+		return "", fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrPathResolution, err)
 	}
 
 	return rootPath, nil

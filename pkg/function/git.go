@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	atmosGit "github.com/cloudposse/atmos/pkg/git"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -36,7 +37,7 @@ func (f *GitShaFunction) Execute(ctx context.Context, args string, execCtx *Exec
 
 	result, err := atmosGit.ProcessTagSHA(strings.TrimSpace(fmt.Sprintf("%s %s", atmosGit.YAMLFuncSHA, args)))
 	if err != nil {
-		return "", fmt.Errorf("failed to get Git SHA: %w", err)
+		return "", fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrGitSHA, err)
 	}
 
 	return result, nil
@@ -68,7 +69,7 @@ func (f *GitBranchFunction) Execute(ctx context.Context, args string, execCtx *E
 
 	result, err := atmosGit.ProcessTagBranch(strings.TrimSpace(fmt.Sprintf("%s %s", atmosGit.YAMLFuncBranch, args)))
 	if err != nil {
-		return "", fmt.Errorf("failed to get Git branch: %w", err)
+		return "", fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrGitBranch, err)
 	}
 
 	return result, nil
@@ -100,7 +101,7 @@ func (f *GitRefFunction) Execute(ctx context.Context, args string, execCtx *Exec
 
 	result, err := atmosGit.ProcessTagRef(strings.TrimSpace(fmt.Sprintf("%s %s", atmosGit.YAMLFuncRef, args)))
 	if err != nil {
-		return "", fmt.Errorf("failed to get Git ref: %w", err)
+		return "", fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrGitRef, err)
 	}
 
 	return result, nil

@@ -90,9 +90,10 @@ func TestGitTagFallbacksOutsideRepository(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "detached", branch)
 
-	root, err := ProcessTagRoot(YAMLFuncRoot + " /fallback/root")
+	fallbackRoot := filepath.Join("fallback", "root")
+	root, err := ProcessTagRoot(YAMLFuncRoot + " " + fallbackRoot)
 	require.NoError(t, err)
-	assert.Equal(t, "/fallback/root", root)
+	assert.Equal(t, fallbackRoot, root)
 }
 
 func initCurrentTestGitRepo(t *testing.T, branch string) (string, string) {

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	atmosGit "github.com/cloudposse/atmos/pkg/git"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -41,7 +42,7 @@ func (f *GitRootFunction) Execute(ctx context.Context, args string, execCtx *Exe
 
 	result, err := atmosGit.ProcessTagRoot(strings.TrimSpace(fmt.Sprintf("%s %s", atmosGit.YAMLFuncRepoRoot, args)))
 	if err != nil {
-		return "", fmt.Errorf("failed to get git repository root: %w", err)
+		return "", fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrGitRoot, err)
 	}
 
 	log.Debug("Resolved repo-root", "path", result)
