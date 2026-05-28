@@ -3,12 +3,18 @@ package git
 import (
 	"errors"
 	"fmt"
+	"path/filepath"
 
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/config"
 	giturl "github.com/kubescape/go-git-url"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+)
+
+var (
+	ErrDetachedHead    = errors.New("git HEAD is detached")
+	ErrEmptyBranchName = errors.New("git branch name is empty")
 )
 
 func GetLocalRepo() (*git.Repository, error) {
@@ -167,6 +173,55 @@ func (d *DefaultGitRepo) GetCurrentCommitSHA() (string, error) {
 	}
 
 	return ref.Hash().String(), nil
+}
+
+// GetCurrentCommitSHA returns the SHA of the current HEAD commit.
+func GetCurrentCommitSHA() (string, error) {
+	return NewDefaultGitRepo().GetCurrentCommitSHA()
+}
+
+// GetCurrentBranch returns the current Git branch name.
+func GetCurrentBranch() (string, error) {
+	repo, err := GetLocalRepo()
+	if err != nil {
+		return "", fmt.Errorf("%w: failed to get local repository: %w", errUtils.ErrLocalRepoFetch, err)
+	}
+
+	ref, err := repo.Head()
+	if err != nil {
+		return "", fmt.Errorf("%w: failed to get HEAD reference: %w", errUtils.ErrHeadLookup, err)
+	}
+
+	if !ref.Name().IsBranch() {
+		return "", ErrDetachedHead
+	}
+
+	branch := ref.Name().Short()
+	if branch == "" {
+		return "", ErrEmptyBranchName
+	}
+
+	return branch, nil
+}
+
+// GetRoot returns the absolute root path of the current Git worktree.
+func GetRoot() (string, error) {
+	repo, err := GetLocalRepo()
+	if err != nil {
+		return "", fmt.Errorf("%w: failed to get local repository: %w", errUtils.ErrLocalRepoFetch, err)
+	}
+
+	worktree, err := repo.Worktree()
+	if err != nil {
+		return "", fmt.Errorf("failed to get worktree: %w", err)
+	}
+
+	rootPath, err := filepath.Abs(worktree.Filesystem.Root())
+	if err != nil {
+		return "", fmt.Errorf("failed to resolve absolute path: %w", err)
+	}
+
+	return rootPath, nil
 }
 
 // OpenWorktreeAwareRepo opens a Git repository at the given path,
