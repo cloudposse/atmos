@@ -14,6 +14,12 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
+const (
+	// Terraform and OpenTofu both use .terraform as the default TF_DATA_DIR.
+	terraformDataDir           = ".terraform"
+	terraformWorkspaceStateDir = "terraform.tfstate.d"
+)
+
 // copyDir recursively copies a directory from src to dst.
 func copyDir(src, dst string) error {
 	return cp.Copy(src, dst)
@@ -190,7 +196,7 @@ func deleteRemovedFiles(dst string, srcFiles map[string]bool) (bool, error) {
 
 func shouldSkipSyncDir(relPath string) bool {
 	switch filepath.Base(filepath.Clean(relPath)) {
-	case AtmosDir, ".terraform", "terraform.tfstate.d":
+	case AtmosDir, terraformDataDir, terraformWorkspaceStateDir:
 		return true
 	default:
 		return false

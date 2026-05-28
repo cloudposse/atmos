@@ -321,7 +321,7 @@ func TestSyncDir_SkipsAtmosDir(t *testing.T) {
 	assert.Equal(t, `{"test": true}`, string(content))
 }
 
-func TestSyncDir_SkipsTerraformRuntimeDirs(t *testing.T) {
+func TestSyncDir_SkipsTerraformAndOpenTofuRuntimeDirs(t *testing.T) {
 	tmpDir := t.TempDir()
 	srcDir := filepath.Join(tmpDir, "src")
 	dstDir := filepath.Join(tmpDir, "dst")
@@ -329,15 +329,15 @@ func TestSyncDir_SkipsTerraformRuntimeDirs(t *testing.T) {
 	require.NoError(t, os.MkdirAll(dstDir, 0o755))
 
 	require.NoError(t, os.WriteFile(filepath.Join(srcDir, "main.tf"), []byte("resource"), 0o644))
-	require.NoError(t, os.MkdirAll(filepath.Join(srcDir, ".terraform", "providers"), 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(srcDir, ".terraform", "providers", "from-src"), []byte("cache"), 0o644))
-	require.NoError(t, os.MkdirAll(filepath.Join(srcDir, "terraform.tfstate.d", "workspace"), 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(srcDir, "terraform.tfstate.d", "workspace", "from-src"), []byte("state"), 0o644))
+	require.NoError(t, os.MkdirAll(filepath.Join(srcDir, terraformDataDir, "providers"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(srcDir, terraformDataDir, "providers", "from-src"), []byte("cache"), 0o644))
+	require.NoError(t, os.MkdirAll(filepath.Join(srcDir, terraformWorkspaceStateDir, "workspace"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(srcDir, terraformWorkspaceStateDir, "workspace", "from-src"), []byte("state"), 0o644))
 
-	dstProviderCache := filepath.Join(dstDir, ".terraform", "providers", "existing")
+	dstProviderCache := filepath.Join(dstDir, terraformDataDir, "providers", "existing")
 	require.NoError(t, os.MkdirAll(filepath.Dir(dstProviderCache), 0o755))
 	require.NoError(t, os.WriteFile(dstProviderCache, []byte("keep"), 0o644))
-	dstState := filepath.Join(dstDir, "terraform.tfstate.d", "workspace", "existing")
+	dstState := filepath.Join(dstDir, terraformWorkspaceStateDir, "workspace", "existing")
 	require.NoError(t, os.MkdirAll(filepath.Dir(dstState), 0o755))
 	require.NoError(t, os.WriteFile(dstState, []byte("keep"), 0o644))
 
@@ -352,9 +352,9 @@ func TestSyncDir_SkipsTerraformRuntimeDirs(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "resource", string(content))
 
-	_, err = os.Stat(filepath.Join(dstDir, ".terraform", "providers", "from-src"))
-	assert.True(t, os.IsNotExist(err), "source .terraform cache should not be copied")
-	_, err = os.Stat(filepath.Join(dstDir, "terraform.tfstate.d", "workspace", "from-src"))
+	_, err = os.Stat(filepath.Join(dstDir, terraformDataDir, "providers", "from-src"))
+	assert.True(t, os.IsNotExist(err), "source Terraform/OpenTofu data dir should not be copied")
+	_, err = os.Stat(filepath.Join(dstDir, terraformWorkspaceStateDir, "workspace", "from-src"))
 	assert.True(t, os.IsNotExist(err), "source terraform.tfstate.d state should not be copied")
 
 	content, err = os.ReadFile(dstProviderCache)
@@ -365,15 +365,15 @@ func TestSyncDir_SkipsTerraformRuntimeDirs(t *testing.T) {
 	assert.Equal(t, "keep", string(content))
 }
 
-func TestDefaultHasher_HashDir_SkipsTerraformRuntimeDirs(t *testing.T) {
+func TestDefaultHasher_HashDir_SkipsTerraformAndOpenTofuRuntimeDirs(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "main.tf"), []byte("resource"), 0o644))
-	require.NoError(t, os.MkdirAll(filepath.Join(tmpDir, ".terraform", "providers"), 0o755))
-	providerCache := filepath.Join(tmpDir, ".terraform", "providers", "cache")
+	require.NoError(t, os.MkdirAll(filepath.Join(tmpDir, terraformDataDir, "providers"), 0o755))
+	providerCache := filepath.Join(tmpDir, terraformDataDir, "providers", "cache")
 	require.NoError(t, os.WriteFile(providerCache, []byte("first"), 0o644))
-	require.NoError(t, os.MkdirAll(filepath.Join(tmpDir, "terraform.tfstate.d", "workspace"), 0o755))
-	stateFile := filepath.Join(tmpDir, "terraform.tfstate.d", "workspace", "state")
+	require.NoError(t, os.MkdirAll(filepath.Join(tmpDir, terraformWorkspaceStateDir, "workspace"), 0o755))
+	stateFile := filepath.Join(tmpDir, terraformWorkspaceStateDir, "workspace", "state")
 	require.NoError(t, os.WriteFile(stateFile, []byte("first"), 0o644))
 
 	hasher := NewDefaultHasher()
