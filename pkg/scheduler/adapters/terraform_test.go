@@ -338,7 +338,7 @@ func TestTerraformResourceKeyUsesSharedPathWithoutWorkdir(t *testing.T) {
 		Metadata:  terraformAdapterComponentWithPathNoWorkdir("selected", componentPath),
 	}
 
-	require.Equal(t, "path:"+componentPath, terraformResourceKey(serviceAPI))
+	require.Equal(t, "path:"+filepath.ToSlash(componentPath), terraformResourceKey(serviceAPI))
 	require.Equal(t, terraformResourceKey(serviceAPI), terraformResourceKey(serviceWorker))
 }
 
