@@ -68,8 +68,8 @@ terraform:
       region: us-east-1
       default_tags:
         tags:
-          atmos_stack: !template '{{ .stack }}'
-          atmos_component: !template '{{ .component }}'
+          atmos_stack: !template '{{ .atmos_stack }}'
+          atmos_component: !template '{{ .atmos_component }}'
           atmos_git_ref: !git.ref
           atmos_git_branch: !git.branch unknown
 ```
@@ -97,7 +97,7 @@ When you run an `atmos terraform` command, Atmos writes the provider override fo
 This tags every resource supported by the AWS provider with the Atmos stack, Atmos component, and exact Git commit used for the run. The commit tag is especially useful when dev environments use `source.version: !git.ref`, because the component source and resource provenance point at the same immutable revision.
 
 :::note
-Dedicated `!atmos.stack` and `!atmos.component` YAML functions would make this pattern a little cleaner, but they are not required for this workflow today. The current template context already exposes `{{ .stack }}` and `{{ .component }}`, and `!git.ref` covers the immutable Git side.
+Dedicated `!atmos.stack` and `!atmos.component` YAML functions would make this pattern a little cleaner, but they are not required for this workflow today. The current template context already exposes `{{ .atmos_stack }}` and `{{ .atmos_component }}` for the Atmos identity, and `!git.ref` covers the immutable Git side.
 :::
 
 ## Repository Metadata in Config
