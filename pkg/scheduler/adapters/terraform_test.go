@@ -639,6 +639,61 @@ func TestExecuteTerraformAcceptsDoubleDashAutoApprove(t *testing.T) {
 	require.NoError(t, err)
 }
 
+func TestContainsTerraformFlagParsesBooleanValues(t *testing.T) {
+	tests := []struct {
+		name string
+		args []string
+		want bool
+	}{
+		{
+			name: "bare flag",
+			args: []string{"-auto-approve"},
+			want: true,
+		},
+		{
+			name: "double dash true",
+			args: []string{"--auto-approve=true"},
+			want: true,
+		},
+		{
+			name: "numeric true",
+			args: []string{"-auto-approve=1"},
+			want: true,
+		},
+		{
+			name: "yes true",
+			args: []string{"-auto-approve=yes"},
+			want: true,
+		},
+		{
+			name: "false value",
+			args: []string{"-auto-approve=false"},
+			want: false,
+		},
+		{
+			name: "numeric false",
+			args: []string{"-auto-approve=0"},
+			want: false,
+		},
+		{
+			name: "no value",
+			args: []string{"-auto-approve=no"},
+			want: false,
+		},
+		{
+			name: "unrelated flag",
+			args: []string{"-lock=false"},
+			want: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			require.Equal(t, tt.want, containsTerraformFlag(tt.args, "-auto-approve"))
+		})
+	}
+}
+
 func TestExecuteTerraformAllowsConcurrentApplyWithConfiguredAutoApprove(t *testing.T) {
 	stacks := map[string]any{
 		"dev": map[string]any{

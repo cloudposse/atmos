@@ -310,7 +310,15 @@ func containsTerraformFlag(args []string, flag string) bool {
 	normalizedFlag := strings.TrimLeft(flag, "-")
 	for _, arg := range args {
 		normalizedArg := strings.TrimLeft(arg, "-")
-		if normalizedArg == normalizedFlag || strings.HasPrefix(normalizedArg, normalizedFlag+"=") {
+		if normalizedArg == normalizedFlag {
+			return true
+		}
+		if !strings.HasPrefix(normalizedArg, normalizedFlag+"=") {
+			continue
+		}
+		value := strings.ToLower(strings.TrimSpace(strings.TrimPrefix(normalizedArg, normalizedFlag+"=")))
+		switch value {
+		case "", "1", "t", "true", "y", "yes", "on":
 			return true
 		}
 	}
