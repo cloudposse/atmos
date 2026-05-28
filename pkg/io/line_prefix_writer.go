@@ -63,6 +63,7 @@ func (w *LinePrefixWriter) Flush() error {
 	return nil
 }
 
+// flushCompleteLinesLocked writes buffered complete lines while w.mu is held.
 func (w *LinePrefixWriter) flushCompleteLinesLocked() error {
 	for {
 		idx := newlineIndex(w.buffer)
@@ -77,6 +78,7 @@ func (w *LinePrefixWriter) flushCompleteLinesLocked() error {
 	}
 }
 
+// writeLine writes one already-delimited line with the configured prefix.
 func (w *LinePrefixWriter) writeLine(line []byte) error {
 	if w.w == nil {
 		return nil
@@ -104,6 +106,7 @@ func (w *LinePrefixWriter) writeLine(line []byte) error {
 	return err
 }
 
+// newlineIndex returns the first newline byte position or -1 when absent.
 func newlineIndex(p []byte) int {
 	for i, c := range p {
 		if c == '\n' {

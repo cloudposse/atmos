@@ -101,6 +101,7 @@ func createQueryAuthManager(info *schema.ConfigAndStacksInfo, atmosConfig *schem
 	return authManager, nil
 }
 
+// executeTerraformQueryComponent runs one scheduled Terraform component and captures optional output.
 func executeTerraformQueryComponent(execution scheduleradapters.TerraformExecution) (scheduleradapters.TerraformExecutionResult, error) {
 	info := execution.Info
 	var opts []ShellCommandOption

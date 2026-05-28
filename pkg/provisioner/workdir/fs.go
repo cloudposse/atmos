@@ -194,6 +194,7 @@ func deleteRemovedFiles(dst string, srcFiles map[string]bool) (bool, error) {
 	return anyDeleted, err
 }
 
+// shouldSkipSyncDir reports whether relPath is runtime state excluded from sync.
 func shouldSkipSyncDir(relPath string) bool {
 	switch filepath.Base(filepath.Clean(relPath)) {
 	case AtmosDir, terraformDataDir, terraformWorkspaceStateDir:

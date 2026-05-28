@@ -377,6 +377,7 @@ func executeAffectedCommand(parentCmd *cobra.Command, args []string, info *schem
 }
 
 // isMultiComponentExecution checks if the command should be routed to multi-component execution.
+// isMultiComponentExecution reports whether the parsed command targets more than one component.
 func isMultiComponentExecution(info *schema.ConfigAndStacksInfo) bool {
 	return info.All || len(info.Components) > 0 || info.Query != "" || (info.Stack != "" && info.ComponentFromArg == "")
 }

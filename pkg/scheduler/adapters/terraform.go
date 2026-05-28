@@ -52,6 +52,7 @@ type TerraformExecutionResult struct {
 	Changed bool
 }
 
+// CombinedOutput returns stdout and stderr in the order hooks expect.
 func (r TerraformExecutionResult) CombinedOutput() string {
 	if r.Stderr == "" {
 		return r.Stdout
@@ -65,6 +66,7 @@ func (r TerraformExecutionResult) CombinedOutput() string {
 // TerraformExecutor executes one resolved Terraform component instance.
 type TerraformExecutor func(TerraformExecution) (TerraformExecutionResult, error)
 
+// TerraformNodeOutcome records the scheduler-visible result for one Terraform node.
 type TerraformNodeOutcome struct {
 	Processed bool              `json:"processed"`
 	Changed   bool              `json:"changed"`
@@ -198,6 +200,7 @@ func BuildTerraformGraph(stacks map[string]any) (*dependency.Graph, error) {
 	return graph, nil
 }
 
+// reverseTerraformGraph reverses dependency edges so destroy runs dependents first.
 func reverseTerraformGraph(graph *dependency.Graph) (*dependency.Graph, error) {
 	builder := dependency.NewBuilder()
 
@@ -229,6 +232,7 @@ func reverseTerraformGraph(graph *dependency.Graph) (*dependency.Graph, error) {
 	return builder.Build()
 }
 
+// cloneTerraformNodeMetadata shallow-copies node metadata for graph rewrites.
 func cloneTerraformNodeMetadata(metadata map[string]any) map[string]any {
 	if metadata == nil {
 		return nil
@@ -258,6 +262,7 @@ func FilterTerraformGraph(atmosConfig *schema.AtmosConfiguration, graph *depende
 	}), nil
 }
 
+// validateTerraformConcurrentPlan enforces constraints for concurrent plan runs.
 func validateTerraformConcurrentPlan(info *schema.ConfigAndStacksInfo, _ *dependency.Graph) error {
 	if effectiveTerraformMaxConcurrency(info) <= 1 {
 		return nil
@@ -338,6 +343,7 @@ func (d *TerraformDispatcher) Dispatch(_ context.Context, node *dependency.Node)
 	return scheduler.Result{NodeID: node.ID, Status: scheduler.StatusSucceeded, Value: outcome}, nil
 }
 
+// lockTerraformResource serializes nodes that share the same physical Terraform workdir.
 func (d *TerraformDispatcher) lockTerraformResource(node *dependency.Node) func() {
 	key := terraformResourceKey(node)
 	if key == "" {
@@ -350,6 +356,7 @@ func (d *TerraformDispatcher) lockTerraformResource(node *dependency.Node) func(
 	return d.locks.Lock(key)
 }
 
+// shouldSkipByQuery evaluates the query filter for a scheduler node.
 func (d *TerraformDispatcher) shouldSkipByQuery(node *dependency.Node) bool {
 	if d.info.Query == "" || node.Metadata == nil {
 		return false
@@ -366,6 +373,7 @@ func (d *TerraformDispatcher) shouldSkipByQuery(node *dependency.Node) bool {
 	return !passed
 }
 
+// selectedTerraformNodeIDs returns graph node IDs matching CLI selection flags.
 func selectedTerraformNodeIDs(atmosConfig *schema.AtmosConfiguration, graph *dependency.Graph, info *schema.ConfigAndStacksInfo) ([]string, error) {
 	nodeIDs := make([]string, 0, graph.Size())
 	for _, id := range sortedGraphNodeIDs(graph) {
@@ -378,6 +386,7 @@ func selectedTerraformNodeIDs(atmosConfig *schema.AtmosConfiguration, graph *dep
 	return nodeIDs, nil
 }
 
+// matchesTerraformSelection reports whether a node is included by stack, component, and query filters.
 func matchesTerraformSelection(atmosConfig *schema.AtmosConfiguration, node *dependency.Node, info *schema.ConfigAndStacksInfo) bool {
 	if info.Stack != "" && node.Stack != info.Stack {
 		return false
@@ -396,6 +405,7 @@ func matchesTerraformSelection(atmosConfig *schema.AtmosConfiguration, node *dep
 	return true
 }
 
+// evaluateTerraformQuery runs a yq expression against Terraform component metadata.
 func evaluateTerraformQuery(atmosConfig *schema.AtmosConfiguration, metadata map[string]any, query string) (bool, error) {
 	queryResult, err := u.EvaluateYqExpression(atmosConfig, metadata, query)
 	if err != nil {
@@ -405,6 +415,7 @@ func evaluateTerraformQuery(atmosConfig *schema.AtmosConfiguration, metadata map
 	return ok && queryPassed, nil
 }
 
+// addTerraformDependencies adds component dependency edges for one graph node.
 func addTerraformDependencies(
 	builder *dependency.GraphBuilder,
 	nodeIDs map[string]struct{},
@@ -439,6 +450,7 @@ func addTerraformDependencies(
 	return nil
 }
 
+// terraformDependencies extracts modern or legacy dependency declarations from a component.
 func terraformDependencies(componentSection map[string]any) []schema.ComponentDependency {
 	if depsSection, ok := componentSection[cfg.DependenciesSectionName].(map[string]any); ok {
 		if _, hasComponents := depsSection["components"]; hasComponents {
@@ -482,6 +494,7 @@ func terraformDependencies(componentSection map[string]any) []schema.ComponentDe
 	return deps
 }
 
+// parseLegacyDependsOn normalizes settings.depends_on into component dependencies.
 func parseLegacyDependsOn(dependsOn any) []schema.ComponentDependency {
 	switch deps := dependsOn.(type) {
 	case []any:
@@ -503,6 +516,7 @@ func parseLegacyDependsOn(dependsOn any) []schema.ComponentDependency {
 	}
 }
 
+// parseLegacyDependsOnList parses a legacy depends_on sequence.
 func parseLegacyDependsOnList(values []any) []schema.ComponentDependency {
 	deps := make([]schema.ComponentDependency, 0, len(values))
 	for _, value := range values {
@@ -514,6 +528,7 @@ func parseLegacyDependsOnList(values []any) []schema.ComponentDependency {
 	return deps
 }
 
+// parseLegacyDependsOnEntry parses one legacy dependency entry.
 func parseLegacyDependsOnEntry(value any) (schema.ComponentDependency, bool) {
 	switch dep := value.(type) {
 	case string:
@@ -540,6 +555,7 @@ func parseLegacyDependsOnEntry(value any) (schema.ComponentDependency, bool) {
 	}
 }
 
+// shouldSkipComponent reports whether a component is abstract or disabled.
 func shouldSkipComponent(componentSection map[string]any) bool {
 	metadataSection, ok := componentSection[cfg.MetadataSectionName].(map[string]any)
 	if !ok {
@@ -554,6 +570,7 @@ func shouldSkipComponent(componentSection map[string]any) bool {
 	return false
 }
 
+// walkTerraformComponents visits Terraform components in deterministic stack/component order.
 func walkTerraformComponents(stacks map[string]any, fn func(stackName, componentName string, componentSection map[string]any) error) error {
 	for _, stackName := range sortedStackNames(stacks) {
 		stackSectionMap, ok := stacks[stackName].(map[string]any)
@@ -581,6 +598,7 @@ func walkTerraformComponents(stacks map[string]any, fn func(stackName, component
 	return nil
 }
 
+// sortedStackNames returns stable stack names for deterministic graph construction.
 func sortedStackNames(stacks map[string]any) []string {
 	names := make([]string, 0, len(stacks))
 	for name := range stacks {
@@ -590,6 +608,7 @@ func sortedStackNames(stacks map[string]any) []string {
 	return names
 }
 
+// sortedComponentNames returns stable component names for deterministic graph construction.
 func sortedComponentNames(components map[string]any) []string {
 	names := make([]string, 0, len(components))
 	for name := range components {
@@ -599,6 +618,7 @@ func sortedComponentNames(components map[string]any) []string {
 	return names
 }
 
+// sortedGraphNodeIDs returns graph node IDs in lexical order.
 func sortedGraphNodeIDs(graph *dependency.Graph) []string {
 	ids := make([]string, 0, graph.Size())
 	for id := range graph.Nodes {
@@ -608,6 +628,7 @@ func sortedGraphNodeIDs(graph *dependency.Graph) []string {
 	return ids
 }
 
+// sortedStringValues returns a sorted copy of values.
 func sortedStringValues(values []string) []string {
 	sorted := make([]string, len(values))
 	copy(sorted, values)
@@ -615,6 +636,7 @@ func sortedStringValues(values []string) []string {
 	return sorted
 }
 
+// containsString reports whether values contains value.
 func containsString(values []string, value string) bool {
 	for _, candidate := range values {
 		if candidate == value {
@@ -624,6 +646,7 @@ func containsString(values []string, value string) bool {
 	return false
 }
 
+// processedCount counts nodes that actually reached Terraform execution.
 func processedCount(result *scheduler.AggregateResult) int {
 	count := 0
 	if result == nil {
@@ -643,6 +666,7 @@ func processedCount(result *scheduler.AggregateResult) int {
 	return count
 }
 
+// terraformNodeID returns the stable scheduler node ID for a component stack pair.
 func terraformNodeID(componentName, stackName string) string {
 	return fmt.Sprintf(terraformNodeIDFormat, componentName, stackName)
 }
@@ -652,12 +676,14 @@ type terraformResourceLocks struct {
 	locks map[string]*sync.Mutex
 }
 
+// newTerraformResourceLocks creates a keyed lock registry for shared Terraform resources.
 func newTerraformResourceLocks() *terraformResourceLocks {
 	return &terraformResourceLocks{
 		locks: make(map[string]*sync.Mutex),
 	}
 }
 
+// Lock acquires the mutex for key and returns its unlock function.
 func (l *terraformResourceLocks) Lock(key string) func() {
 	l.mu.Lock()
 	lock, ok := l.locks[key]
@@ -671,6 +697,7 @@ func (l *terraformResourceLocks) Lock(key string) func() {
 	return lock.Unlock
 }
 
+// terraformResourceKey returns the physical resource key used to serialize aliases.
 func terraformResourceKey(node *dependency.Node) string {
 	if node == nil {
 		return ""
@@ -690,6 +717,7 @@ func terraformResourceKey(node *dependency.Node) string {
 	return "component:" + node.Component
 }
 
+// componentInfoPath extracts component_info.component_path from metadata.
 func componentInfoPath(metadata map[string]any) string {
 	componentInfo, ok := metadata["component_info"].(map[string]any)
 	if !ok {
@@ -699,11 +727,13 @@ func componentInfoPath(metadata map[string]any) string {
 	return path
 }
 
+// componentField extracts the direct component field from metadata.
 func componentField(metadata map[string]any) string {
 	component, _ := metadata[cfg.ComponentSectionName].(string)
 	return component
 }
 
+// metadataComponent extracts metadata.component from metadata.
 func metadataComponent(metadata map[string]any) string {
 	metadataSection, ok := metadata[cfg.MetadataSectionName].(map[string]any)
 	if !ok {
@@ -722,6 +752,7 @@ type terraformOutput struct {
 	groupMu       sync.Mutex
 }
 
+// newTerraformOutput configures concurrent Terraform output streaming or grouping.
 func newTerraformOutput(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, maxConcurrency int) (*terraformOutput, error) {
 	hideNoChanges := info != nil && info.TerraformPlanHideNoChanges
 	if maxConcurrency <= 1 && !hideNoChanges {
@@ -747,10 +778,12 @@ func newTerraformOutput(atmosConfig *schema.AtmosConfiguration, info *schema.Con
 	}, nil
 }
 
+// captureOutput reports whether the executor should capture stdout and stderr.
 func (o *terraformOutput) captureOutput() bool {
 	return o != nil && o.logOrder == terraformPlanLogOrderGrouped
 }
 
+// nodeWriters returns stdout/stderr writers, a flush function, and created log paths for a node.
 func (o *terraformOutput) nodeWriters(node *dependency.Node) (io.Writer, io.Writer, func() error, map[string]string) {
 	if o == nil {
 		return nil, nil, nil, nil
@@ -775,6 +808,7 @@ func (o *terraformOutput) nodeWriters(node *dependency.Node) (io.Writer, io.Writ
 	}, logFiles
 }
 
+// openNodeLogFiles creates per-node stdout and stderr log files when logging is enabled.
 func (o *terraformOutput) openNodeLogFiles(node *dependency.Node) (*os.File, *os.File, map[string]string) {
 	if o == nil || o.logDir == "" {
 		return nil, nil, nil
@@ -807,6 +841,7 @@ func (o *terraformOutput) openNodeLogFiles(node *dependency.Node) (*os.File, *os
 	return stdoutFile, stderrFile, logFiles
 }
 
+// combineWriters combines a primary writer with an optional secondary writer.
 func combineWriters(primary, secondary io.Writer) io.Writer {
 	if primary == nil {
 		primary = io.Discard
@@ -817,6 +852,7 @@ func combineWriters(primary, secondary io.Writer) io.Writer {
 	return io.MultiWriter(primary, secondary)
 }
 
+// closeTerraformLogFiles returns a cleanup function that closes all non-nil files.
 func closeTerraformLogFiles(files ...*os.File) func() error {
 	return func() error {
 		var errs []error
@@ -832,6 +868,7 @@ func closeTerraformLogFiles(files ...*os.File) func() error {
 	}
 }
 
+// terraformLogDir returns the base directory for Terraform plan logs.
 func terraformLogDir(atmosConfig *schema.AtmosConfiguration) string {
 	if atmosConfig == nil {
 		return ""
@@ -846,6 +883,7 @@ func terraformLogDir(atmosConfig *schema.AtmosConfiguration) string {
 	return filepath.Join(basePath, ".atmos", "logs", "terraform", "plan")
 }
 
+// safeTerraformLogName converts a node label into a filesystem-safe log prefix.
 func safeTerraformLogName(label string) string {
 	label = strings.TrimSpace(label)
 	if label == "" {
@@ -855,6 +893,7 @@ func safeTerraformLogName(label string) string {
 	return replacer.Replace(label)
 }
 
+// finishNode replays grouped node output after the node completes.
 func (o *terraformOutput) finishNode(node *dependency.Node, result TerraformExecutionResult, execErr error) {
 	if o == nil || o.logOrder != terraformPlanLogOrderGrouped {
 		return
@@ -877,6 +916,7 @@ func (o *terraformOutput) finishNode(node *dependency.Node, result TerraformExec
 	fmt.Fprintf(stderr, "[%s] end terraform plan output\n", label)
 }
 
+// replayGroupedOutput writes captured output and ensures it ends with a newline.
 func replayGroupedOutput(w io.Writer, output string) {
 	if output == "" {
 		return
@@ -889,6 +929,7 @@ func replayGroupedOutput(w io.Writer, output string) {
 	}
 }
 
+// terraformPlanHasNoChanges reports whether plan output indicates no infrastructure changes.
 func terraformPlanHasNoChanges(result TerraformExecutionResult, execErr error) bool {
 	var exitCodeErr errUtils.ExitCodeError
 	if errors.As(execErr, &exitCodeErr) {
@@ -902,6 +943,7 @@ func terraformPlanHasNoChanges(result TerraformExecutionResult, execErr error) b
 		strings.Contains(output, "No changes. Infrastructure is up-to-date.")
 }
 
+// terraformPlanChangedError treats Terraform plan exit code 2 as a changed result.
 func terraformPlanChangedError(info *schema.ConfigAndStacksInfo, err error) bool {
 	if info == nil || info.SubCommand != "plan" {
 		return false
@@ -910,6 +952,7 @@ func terraformPlanChangedError(info *schema.ConfigAndStacksInfo, err error) bool
 	return errors.As(err, &exitCodeErr) && exitCodeErr.Code == 2
 }
 
+// terraformExitCode maps execution errors into summary exit codes.
 func terraformExitCode(err error) int {
 	if err == nil {
 		return 0
@@ -921,6 +964,7 @@ func terraformExitCode(err error) int {
 	return 1
 }
 
+// terraformPlanChanged reports whether any scheduled plan node found changes.
 func terraformPlanChanged(result *scheduler.AggregateResult) bool {
 	if result == nil {
 		return false
@@ -963,12 +1007,14 @@ type terraformNodeTimings struct {
 	timings map[string]terraformNodeTiming
 }
 
+// newTerraformNodeTimings creates a concurrency-safe timing recorder.
 func newTerraformNodeTimings() *terraformNodeTimings {
 	return &terraformNodeTimings{
 		timings: make(map[string]terraformNodeTiming),
 	}
 }
 
+// Start records the UTC start time for a node.
 func (t *terraformNodeTimings) Start(node *dependency.Node) {
 	if t == nil || node == nil {
 		return
@@ -980,6 +1026,7 @@ func (t *terraformNodeTimings) Start(node *dependency.Node) {
 	t.timings[node.ID] = timing
 }
 
+// Complete records the UTC finish time for a node.
 func (t *terraformNodeTimings) Complete(node *dependency.Node, _ scheduler.Result) {
 	if t == nil || node == nil {
 		return
@@ -991,6 +1038,7 @@ func (t *terraformNodeTimings) Complete(node *dependency.Node, _ scheduler.Resul
 	t.timings[node.ID] = timing
 }
 
+// Get returns the recorded timing for nodeID.
 func (t *terraformNodeTimings) Get(nodeID string) (terraformNodeTiming, bool) {
 	if t == nil {
 		return terraformNodeTiming{}, false
@@ -1001,6 +1049,7 @@ func (t *terraformNodeTimings) Get(nodeID string) (terraformNodeTiming, bool) {
 	return timing, ok
 }
 
+// writeTerraformSummary writes deterministic per-node execution results to JSON.
 func writeTerraformSummary(info *schema.ConfigAndStacksInfo, result *scheduler.AggregateResult, timings *terraformNodeTimings) error {
 	if info == nil || info.TerraformPlanSummaryFile == "" || result == nil {
 		return nil
@@ -1049,6 +1098,7 @@ func writeTerraformSummary(info *schema.ConfigAndStacksInfo, result *scheduler.A
 	return os.WriteFile(path, data, 0o644)
 }
 
+// terraformNodeLabel returns the human-readable stack/component label for a node.
 func terraformNodeLabel(node *dependency.Node) string {
 	if node == nil {
 		return "terraform"
@@ -1059,6 +1109,7 @@ func terraformNodeLabel(node *dependency.Node) string {
 	return node.Stack + "/" + node.Component
 }
 
+// effectiveTerraformMaxConcurrency returns the scheduler concurrency for Terraform plan.
 func effectiveTerraformMaxConcurrency(info *schema.ConfigAndStacksInfo) int {
 	if info == nil || info.SubCommand != "plan" || info.MaxConcurrency <= 1 {
 		return 1
