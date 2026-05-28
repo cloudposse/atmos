@@ -132,7 +132,10 @@ func GetTerraformState(
 		AuthDisabled:         authDisabled,
 	})
 	if err != nil {
-		er := fmt.Errorf("%w `%s` in stack `%s`\nin YAML function: `%s`\n%v", errUtils.ErrDescribeComponent, component, stack, yamlFunc, err)
+		// Use double %w so that errors.Is can match both ErrDescribeComponent and
+		// any sentinel propagated from the inner describe (e.g., ErrCircularDependency
+		// from a !terraform.state cycle — see #2457).
+		er := fmt.Errorf("%w `%s` in stack `%s`\nin YAML function: `%s`\n%w", errUtils.ErrDescribeComponent, component, stack, yamlFunc, err)
 		return nil, er
 	}
 
