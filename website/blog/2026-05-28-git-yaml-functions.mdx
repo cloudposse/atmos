@@ -1,0 +1,67 @@
+---
+slug: git-yaml-functions
+title: "Git YAML Functions for Source Pinning"
+authors: [osterman]
+tags: [feature]
+date: 2026-05-28
+---
+
+Atmos now includes core Git YAML functions for resolving repository metadata directly in stack and config processing: `!git.root`, `!git.sha`, `!git.branch`, and `!git.ref`.
+
+<!--truncate-->
+
+## What Changed
+
+The new Git function family exposes common repository values without shelling out through `!exec`:
+
+| Function | Returns |
+|----------|---------|
+| `!git.root` | The current repository root, with the same behavior as `!repo-root` |
+| `!git.sha` | The full current `HEAD` commit SHA |
+| `!git.ref` | The same full current `HEAD` commit SHA, intended for immutable source pinning |
+| `!git.branch` | The current branch name |
+
+All four functions support fallback values using the same pattern as `!repo-root`:
+
+```yaml
+root: !git.root /fallback/path
+sha: !git.sha unknown
+ref: !git.ref unknown
+branch: !git.branch detached
+```
+
+## Source Pinning
+
+The primary use case is development source pinning. Dev stacks can point component source versions at the current commit:
+
+```yaml
+components:
+  terraform:
+    vpc:
+      source:
+        uri: github.com/my-org/my-repo//components/terraform/vpc
+        version: !git.ref
+```
+
+Production stacks can stay explicit:
+
+```yaml
+components:
+  terraform:
+    vpc:
+      source:
+        uri: github.com/my-org/my-repo//components/terraform/vpc
+        version: "1.2.3"
+```
+
+This lets pull requests exercise local component changes in development environments while production remains controlled by explicit pins in protected stack or catalog files.
+
+## Repository Metadata in Config
+
+The same functions work in both stack/component YAML processing and Atmos config preprocessing, so repository metadata can be used consistently wherever Atmos already resolves core YAML functions.
+
+`!git.root` is also available as an alias for `!repo-root`, and the function registry exposes `git.root` alongside the existing `git-root` alias.
+
+## Detached HEAD Behavior
+
+`!git.sha` and `!git.ref` continue to work in detached HEAD checkouts because `HEAD` still resolves to a commit. `!git.branch` returns an error when no branch name exists unless a fallback value is provided.
