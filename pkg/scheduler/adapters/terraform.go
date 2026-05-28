@@ -1316,6 +1316,7 @@ func effectiveTerraformFailFast(info *schema.ConfigAndStacksInfo) bool {
 	return effectiveTerraformFailureMode(info) == terraformFailureModeFailFast
 }
 
+// effectiveTerraformFailureMode returns the requested mode with legacy field fallback.
 func effectiveTerraformFailureMode(info *schema.ConfigAndStacksInfo) string {
 	if info == nil {
 		return terraformFailureModeFailFast

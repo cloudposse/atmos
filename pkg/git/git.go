@@ -195,10 +195,13 @@ func OpenWorktreeAwareRepo(path string) (*git.Repository, error) {
 	return repo, nil
 }
 
+// worktreeConfigTolerantStorer strips unsupported worktree config extensions
+// when reading repository config through go-git.
 type worktreeConfigTolerantStorer struct {
 	storage.Storer
 }
 
+// Config returns repository config after removing unsupported worktreeConfig metadata.
 func (s worktreeConfigTolerantStorer) Config() (*config.Config, error) {
 	cfg, err := s.Storer.Config()
 	if err != nil {
@@ -208,6 +211,7 @@ func (s worktreeConfigTolerantStorer) Config() (*config.Config, error) {
 	return cfg, nil
 }
 
+// openWorktreeConfigTolerantRepo retries repository open for worktrees using worktreeConfig.
 func openWorktreeConfigTolerantRepo(path string, originalErr error) (*git.Repository, error) {
 	if !isUnsupportedWorktreeConfigError(originalErr) {
 		return nil, originalErr
@@ -228,6 +232,7 @@ func openWorktreeConfigTolerantRepo(path string, originalErr error) (*git.Reposi
 	return git.Open(worktreeConfigTolerantStorer{Storer: storer}, osfs.New(repoRoot))
 }
 
+// isUnsupportedWorktreeConfigError reports go-git failures caused by worktreeConfig.
 func isUnsupportedWorktreeConfigError(err error) bool {
 	if err == nil {
 		return false
@@ -236,6 +241,7 @@ func isUnsupportedWorktreeConfigError(err error) bool {
 	return strings.Contains(msg, "repositoryformatversion") && strings.Contains(msg, "worktreeconfig")
 }
 
+// removeWorktreeConfigExtension removes the worktreeConfig extension from config.
 func removeWorktreeConfigExtension(cfg *config.Config) {
 	if cfg == nil || cfg.Raw == nil || !cfg.Raw.HasSection("extensions") {
 		return
@@ -253,6 +259,7 @@ func removeWorktreeConfigExtension(cfg *config.Config) {
 	}
 }
 
+// gitRepositoryPaths returns the repository root, git dir, and common dir for path.
 func gitRepositoryPaths(path string) (repoRoot, gitDir, commonDir string, err error) {
 	out, err := exec.Command("git", "-C", path, "rev-parse", "--path-format=absolute", "--show-toplevel", "--git-dir", "--git-common-dir").Output()
 	if err != nil {
