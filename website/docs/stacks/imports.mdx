@@ -137,6 +137,27 @@ import:
   - https://artifacts.internal.acme.com/stacks/v1.0.0/defaults.yaml
 ```
 
+### Nested Imports in Remote Files
+
+Remote files can import other stack files. By default, nested imports inside a remote file resolve from your local `stacks.base_path`. This preserves the existing behavior and supports remote files that intentionally expect the consuming repository to provide local extension points.
+
+Use the map form with `nested_imports: remote` when the remote file should behave as part of a self-contained remote stack library:
+
+```yaml
+import:
+  - path: git::https://github.com/acme/infrastructure.git//stacks/orgs/acme/_defaults.yaml?ref=v1.2.0
+    nested_imports: remote
+```
+
+In this mode, if the remote file imports `catalog/_defaults`, Atmos resolves it from the remote source's stack base path, for example `stacks/catalog/_defaults.yaml` in the same Git source.
+
+The supported values are:
+
+- `local` - resolve nested imports from the consuming repository's `stacks.base_path` (default)
+- `remote` - resolve nested imports from the remote source's stack base path
+
+`nested_imports: remote` is supported for Git/go-getter sources where Atmos can infer the remote stack base path from the import path. Plain string imports and map imports without `nested_imports` use `local`.
+
 ### Best Practices for Remote Imports
 
 1. **Pin Versions:** Always use `?ref=` with a specific tag or commit SHA for Git imports to ensure reproducible builds.
@@ -259,6 +280,9 @@ The `import` section supports the following fields:
 
   <dt>`skip_if_missing` - (boolean)</dt>
   <dd>Skip the import without error if the file does not exist.</dd>
+
+  <dt>`nested_imports` - (string)</dt>
+  <dd>Controls how imports inside the imported file are resolved. Use `local` to resolve nested imports from the consuming repository's stack base path, or `remote` to resolve them from the remote source's stack base path. Defaults to `local`.</dd>
 
 </dl>
 

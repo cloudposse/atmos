@@ -1248,12 +1248,18 @@ type BaseComponentConfig struct {
 
 // Stack imports (`import` section)
 
+const (
+	StackImportNestedImportsLocal  = "local"
+	StackImportNestedImportsRemote = "remote"
+)
+
 type StackImport struct {
 	Path                        string              `yaml:"path" json:"path" mapstructure:"path"`
 	Context                     AtmosSectionMapType `yaml:"context" json:"context" mapstructure:"context"`
 	SkipTemplatesProcessing     bool                `yaml:"skip_templates_processing,omitempty" json:"skip_templates_processing,omitempty" mapstructure:"skip_templates_processing"`
 	IgnoreMissingTemplateValues bool                `yaml:"ignore_missing_template_values,omitempty" json:"ignore_missing_template_values,omitempty" mapstructure:"ignore_missing_template_values"`
 	SkipIfMissing               bool                `yaml:"skip_if_missing,omitempty" json:"skip_if_missing,omitempty" mapstructure:"skip_if_missing"`
+	NestedImports               string              `yaml:"nested_imports,omitempty" json:"nested_imports,omitempty" mapstructure:"nested_imports"`
 }
 
 // Dependencies
