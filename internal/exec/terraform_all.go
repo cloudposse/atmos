@@ -13,6 +13,7 @@ import (
 	scheduleradapters "github.com/cloudposse/atmos/pkg/scheduler/adapters"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/store/authbridge"
+	"github.com/cloudposse/atmos/pkg/ui"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -63,6 +64,12 @@ func ExecuteTerraformAll(info *schema.ConfigAndStacksInfo) error {
 	)
 	if err != nil {
 		return fmt.Errorf(errWrapFmt, errUtils.ErrExecuteDescribeStacks, err)
+	}
+
+	if info.SubCommand == "destroy" {
+		ui.Info("Processing components in reverse dependency order for destroy")
+	} else {
+		ui.Info("Processing components in dependency order")
 	}
 
 	return scheduleradapters.ExecuteTerraform(context.Background(), scheduleradapters.TerraformOptions{
