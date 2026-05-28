@@ -86,19 +86,75 @@ const (
 	originRemote    = "origin"
 	gitArgSeparator = "--"
 
-	// Network timeout knobs for HTTP(S) transports. The http.lowSpeedTime bails the
-	// connection when throughput falls below http.lowSpeedLimit (bytes/sec) for
-	// this many seconds. Without these, a stalled remote will hang until the
-	// caller's context cancels — which is typically 5+ minutes per command.
-	gitHTTPLowSpeedLimit = "1000"
-	gitHTTPLowSpeedTime  = "30"
+	// Default network timeout knobs for HTTP(S) transports. The http.lowSpeedTime
+	// bails the connection when throughput falls below http.lowSpeedLimit
+	// (bytes/sec) for this many seconds. Without these, a stalled remote will
+	// hang until the caller's context cancels — which is typically 5+ minutes
+	// per command. Override per-environment via ATMOS_GIT_HTTP_LOW_SPEED_LIMIT
+	// and ATMOS_GIT_HTTP_LOW_SPEED_TIME.
+	defaultGitHTTPLowSpeedLimit = "1000"
+	defaultGitHTTPLowSpeedTime  = "30"
 
-	// SSH keepalive/connect timeouts (seconds). ConnectTimeout bounds initial
-	// TCP/SSH handshake; ServerAlive* drops the session after a stalled link.
-	sshConnectTimeoutSeconds = "30"
-	sshServerAliveInterval   = "15"
-	sshServerAliveCountMax   = "4"
+	// Default SSH keepalive/connect timeouts (seconds). ConnectTimeout bounds
+	// initial TCP/SSH handshake; ServerAlive* drops the session after a stalled
+	// link. Override per-environment via ATMOS_GIT_SSH_CONNECT_TIMEOUT,
+	// ATMOS_GIT_SSH_SERVER_ALIVE_INTERVAL, and ATMOS_GIT_SSH_SERVER_ALIVE_COUNT_MAX.
+	defaultSSHConnectTimeoutSeconds = "30"
+	defaultSSHServerAliveInterval   = "15"
+	defaultSSHServerAliveCountMax   = "4"
+
+	// Environment variable names for overriding the defaults above.
+	envGitHTTPLowSpeedLimit   = "ATMOS_GIT_HTTP_LOW_SPEED_LIMIT"
+	envGitHTTPLowSpeedTime    = "ATMOS_GIT_HTTP_LOW_SPEED_TIME"
+	envSSHConnectTimeout      = "ATMOS_GIT_SSH_CONNECT_TIMEOUT"
+	envSSHServerAliveInterval = "ATMOS_GIT_SSH_SERVER_ALIVE_INTERVAL"
+	envSSHServerAliveCountMax = "ATMOS_GIT_SSH_SERVER_ALIVE_COUNT_MAX"
 )
+
+// numericEnvOr returns the value of envVar when set to a non-empty,
+// non-negative integer string; otherwise returns the supplied default. Anything
+// non-numeric is rejected so a typo can't disable the timeout silently (a
+// non-numeric value passed to git's http.lowSpeedTime would crash the command).
+// ATMOS_GIT_* knobs are runtime tuning read once per git command, not Atmos
+// config loaded through Viper — see precedent in pkg/config/git_root.go and
+// pkg/config/utils.go (ATMOS_VERSION_ENFORCEMENT).
+func numericEnvOr(envVar, defaultValue string) string {
+	v := strings.TrimSpace(os.Getenv(envVar)) //nolint:forbidigo
+	if v == "" {
+		return defaultValue
+	}
+	if n, err := strconv.Atoi(v); err != nil || n < 0 {
+		log.Warn("Ignoring invalid override; expected a non-negative integer",
+			"env", envVar, "value", v, "default", defaultValue)
+		return defaultValue
+	}
+	return v
+}
+
+// gitHTTPLowSpeedLimit returns the effective http.lowSpeedLimit (bytes/sec).
+func gitHTTPLowSpeedLimit() string {
+	return numericEnvOr(envGitHTTPLowSpeedLimit, defaultGitHTTPLowSpeedLimit)
+}
+
+// gitHTTPLowSpeedTime returns the effective http.lowSpeedTime (seconds).
+func gitHTTPLowSpeedTime() string {
+	return numericEnvOr(envGitHTTPLowSpeedTime, defaultGitHTTPLowSpeedTime)
+}
+
+// sshConnectTimeoutSeconds returns the effective SSH ConnectTimeout (seconds).
+func sshConnectTimeoutSeconds() string {
+	return numericEnvOr(envSSHConnectTimeout, defaultSSHConnectTimeoutSeconds)
+}
+
+// sshServerAliveInterval returns the effective SSH ServerAliveInterval (seconds).
+func sshServerAliveInterval() string {
+	return numericEnvOr(envSSHServerAliveInterval, defaultSSHServerAliveInterval)
+}
+
+// sshServerAliveCountMax returns the effective SSH ServerAliveCountMax (count).
+func sshServerAliveCountMax() string {
+	return numericEnvOr(envSSHServerAliveCountMax, defaultSSHServerAliveCountMax)
+}
 
 // gitNetworkConfigArgs returns the leading "-c http.lowSpeedLimit=…" /
 // "-c http.lowSpeedTime=…" arguments that should precede every network-touching
@@ -106,8 +162,8 @@ const (
 // applies http.* config when an HTTP(S) URL is involved.
 func gitNetworkConfigArgs() []string {
 	return []string{
-		"-c", "http.lowSpeedLimit=" + gitHTTPLowSpeedLimit,
-		"-c", "http.lowSpeedTime=" + gitHTTPLowSpeedTime,
+		"-c", "http.lowSpeedLimit=" + gitHTTPLowSpeedLimit(),
+		"-c", "http.lowSpeedTime=" + gitHTTPLowSpeedTime(),
 	}
 }
 
@@ -297,9 +353,9 @@ func setupGitEnv(cmd *exec.Cmd, sshKeyFile string) {
 	// SSH connection can stall the pipeline.
 	sshCmd = append(
 		sshCmd,
-		"-o", "ConnectTimeout="+sshConnectTimeoutSeconds,
-		"-o", "ServerAliveInterval="+sshServerAliveInterval,
-		"-o", "ServerAliveCountMax="+sshServerAliveCountMax,
+		"-o", "ConnectTimeout="+sshConnectTimeoutSeconds(),
+		"-o", "ServerAliveInterval="+sshServerAliveInterval(),
+		"-o", "ServerAliveCountMax="+sshServerAliveCountMax(),
 	)
 
 	// If a temp SSH key file is configured, tell ssh about it.

@@ -60,9 +60,9 @@ func TestSetupGitEnv_EmptyKeyStillSetsTimeouts(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected GIT_SSH_COMMAND to be set even when sshKeyFile is empty")
 	}
-	want := "ssh -o ConnectTimeout=" + sshConnectTimeoutSeconds +
-		" -o ServerAliveInterval=" + sshServerAliveInterval +
-		" -o ServerAliveCountMax=" + sshServerAliveCountMax
+	want := "ssh -o ConnectTimeout=" + defaultSSHConnectTimeoutSeconds +
+		" -o ServerAliveInterval=" + defaultSSHServerAliveInterval +
+		" -o ServerAliveCountMax=" + defaultSSHServerAliveCountMax
 	if got != want {
 		t.Fatalf("unexpected GIT_SSH_COMMAND value:\n  got:  %q\n  want: %q", got, want)
 	}
@@ -98,9 +98,9 @@ func TestSetupGitEnv_AddsWhenMissing(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected GIT_SSH_COMMAND to be set")
 	}
-	want := "ssh -o ConnectTimeout=" + sshConnectTimeoutSeconds +
-		" -o ServerAliveInterval=" + sshServerAliveInterval +
-		" -o ServerAliveCountMax=" + sshServerAliveCountMax +
+	want := "ssh -o ConnectTimeout=" + defaultSSHConnectTimeoutSeconds +
+		" -o ServerAliveInterval=" + defaultSSHServerAliveInterval +
+		" -o ServerAliveCountMax=" + defaultSSHServerAliveCountMax +
 		" -i " + expectedKeyPath
 	if got != want {
 		t.Fatalf("unexpected GIT_SSH_COMMAND value:\n  got:  %q\n  want: %q", got, want)
@@ -159,9 +159,9 @@ func TestSetupGitEnv_AppendsToExisting(t *testing.T) {
 		t.Fatalf("expected GIT_SSH_COMMAND to be set")
 	}
 	want := existing +
-		" -o ConnectTimeout=" + sshConnectTimeoutSeconds +
-		" -o ServerAliveInterval=" + sshServerAliveInterval +
-		" -o ServerAliveCountMax=" + sshServerAliveCountMax +
+		" -o ConnectTimeout=" + defaultSSHConnectTimeoutSeconds +
+		" -o ServerAliveInterval=" + defaultSSHServerAliveInterval +
+		" -o ServerAliveCountMax=" + defaultSSHServerAliveCountMax +
 		" -i " + expectedKeyPath
 	if got != want {
 		t.Fatalf("unexpected GIT_SSH_COMMAND value:\n  got:  %q\n  want: %q", got, want)
