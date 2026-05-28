@@ -261,7 +261,7 @@ func gitRepositoryPaths(path string) (repoRoot, gitDir, commonDir string, err er
 
 	lines := strings.Split(strings.TrimSpace(string(out)), "\n")
 	if len(lines) != 3 {
-		return "", "", "", fmt.Errorf("unexpected git rev-parse output")
+		return "", "", "", fmt.Errorf("%w: got %d lines: %q", errUtils.ErrUnexpectedGitRevParseOutput, len(lines), strings.TrimSpace(string(out)))
 	}
 
 	repoRoot = filepath.Clean(lines[0])

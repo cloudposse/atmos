@@ -343,6 +343,7 @@ func TestExecuteTerraformAffectedRoutesThroughSchedulerAdapter(t *testing.T) {
 	var describedAffected bool
 	var describedStacks bool
 	var scheduled bool
+	repoPath := t.TempDir()
 
 	patches := gomonkey.NewPatches()
 	defer patches.Reset()
@@ -354,7 +355,7 @@ func TestExecuteTerraformAffectedRoutesThroughSchedulerAdapter(t *testing.T) {
 	patches.ApplyFunc(getAffectedComponents, func(args *DescribeAffectedCmdArgs) ([]schema.Affected, error) {
 		describedAffected = true
 		require.NotNil(t, args.CLIConfig)
-		require.Equal(t, "/tmp/base", args.RepoPath)
+		require.Equal(t, repoPath, args.RepoPath)
 		require.Equal(t, "dev", args.Stack)
 		require.True(t, args.ProcessTemplates)
 		require.True(t, args.ProcessYamlFunctions)
@@ -420,7 +421,7 @@ func TestExecuteTerraformAffectedRoutesThroughSchedulerAdapter(t *testing.T) {
 		Skip:             []string{"skip-me"},
 	}
 	args := &DescribeAffectedCmdArgs{
-		RepoPath:             "/tmp/base",
+		RepoPath:             repoPath,
 		Stack:                "dev",
 		IncludeDependents:    true,
 		ProcessTemplates:     true,

@@ -247,11 +247,19 @@ func filterTerraformGraphBySelection(graph *dependency.Graph, selection *Terrafo
 	if graph == nil || selection == nil {
 		return dependency.NewGraph()
 	}
-	if len(selection.NodeIDs) == graph.Size() && !selection.IncludeDependencies && !selection.IncludeDependents {
+	nodeIDs := sortedUniqueStrings(selection.NodeIDs)
+	allNodesSelected := len(nodeIDs) == graph.Size()
+	for _, id := range nodeIDs {
+		if _, ok := graph.GetNode(id); !ok {
+			allNodesSelected = false
+			break
+		}
+	}
+	if allNodesSelected && !selection.IncludeDependencies && !selection.IncludeDependents {
 		return graph
 	}
 	return graph.Filter(dependency.Filter{
-		NodeIDs:             sortedUniqueStrings(selection.NodeIDs),
+		NodeIDs:             nodeIDs,
 		IncludeDependencies: selection.IncludeDependencies,
 		IncludeDependents:   selection.IncludeDependents,
 	})

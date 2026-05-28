@@ -163,6 +163,19 @@ func TestExecuteTerraformAffectedSelectionIncludesDependentsWhenRequested(t *tes
 	require.Equal(t, []string{"database@dev", "app@dev"}, executed)
 }
 
+func TestFilterTerraformGraphBySelectionDoesNotTreatDuplicatesAsAllNodes(t *testing.T) {
+	graph, err := BuildTerraformGraph(terraformAdapterTestStacks())
+	require.NoError(t, err)
+
+	filtered := filterTerraformGraphBySelection(graph, &TerraformSelection{
+		NodeIDs: []string{"database-dev", "database-dev", "missing-dev"},
+	})
+
+	require.Equal(t, 1, filtered.Size())
+	_, ok := filtered.GetNode("database-dev")
+	require.True(t, ok)
+}
+
 func TestExecuteTerraformAffectedDestroyReversesSelectedDependents(t *testing.T) {
 	stacks := terraformAdapterTestStacks()
 	var executed []string
