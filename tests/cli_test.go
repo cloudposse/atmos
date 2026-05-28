@@ -49,7 +49,9 @@ var (
 	repoRoot            string                   // Repository root directory for path normalization
 	skipReason          string                   // Package-level variable to track why tests should be skipped
 	atmosRunner         *testhelpers.AtmosRunner // Global runner for executing Atmos with coverage support (lazy initialized)
-	coverDir            string                   // GOCOVERDIR environment variable value
+	atmosRunnerOnce     sync.Once
+	atmosRunnerErr      error
+	coverDir            string // GOCOVERDIR environment variable value
 	sandboxRegistry     = make(map[string]*testhelpers.SandboxEnvironment)
 	sandboxMutex        sync.RWMutex
 )
@@ -781,6 +783,24 @@ func prepareAtmosCommand(t *testing.T, ctx context.Context, args ...string) *exe
 	return atmosRunner.CommandContext(ctx, args...)
 }
 
+func ensureAtmosRunner(t *testing.T) {
+	t.Helper()
+
+	atmosRunnerOnce.Do(func() {
+		if atmosRunner != nil {
+			return
+		}
+		atmosRunner = testhelpers.NewAtmosRunner(coverDir)
+		atmosRunnerErr = atmosRunner.Build()
+		if atmosRunnerErr == nil {
+			logger.Info("Atmos runner initialized for test", "coverageEnabled", coverDir != "")
+		}
+	})
+	if atmosRunnerErr != nil {
+		t.Skipf("Failed to initialize Atmos: %v", atmosRunnerErr)
+	}
+}
+
 func runCLICommandTest(t *testing.T, tc TestCase) {
 	// Skip long tests in short mode
 	if testing.Short() && tc.Short != nil && !*tc.Short {
@@ -791,12 +811,8 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 	checkPreconditions(t, tc.Preconditions)
 
 	// Initialize AtmosRunner early, before any directory changes, so it can build from the git repo
-	if tc.Command == "atmos" && atmosRunner == nil {
-		atmosRunner = testhelpers.NewAtmosRunner(coverDir)
-		if err := atmosRunner.Build(); err != nil {
-			t.Skipf("Failed to initialize Atmos: %v", err)
-		}
-		logger.Info("Atmos runner initialized for test", "coverageEnabled", coverDir != "")
+	if tc.Command == "atmos" {
+		ensureAtmosRunner(t)
 	}
 
 	// Create a context with timeout if specified, defaulting to 10 minutes

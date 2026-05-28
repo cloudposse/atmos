@@ -7,8 +7,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-
-	"github.com/cloudposse/atmos/tests/testhelpers"
 )
 
 // TestAuthConsole tests the `atmos auth console` command integration.
@@ -22,14 +20,7 @@ import (
 // Success paths require real cloud provider credentials and browser interaction.
 // These are tested manually and in production environments.
 func TestAuthConsole(t *testing.T) {
-	// Initialize atmosRunner if not already done.
-	if atmosRunner == nil {
-		atmosRunner = testhelpers.NewAtmosRunner(coverDir)
-		if err := atmosRunner.Build(); err != nil {
-			t.Skipf("Failed to initialize Atmos: %v", err)
-		}
-		logger.Info("Atmos runner initialized for auth console test", "coverageEnabled", coverDir != "")
-	}
+	ensureAtmosRunner(t)
 
 	t.Run("command exists and shows help", func(t *testing.T) {
 		cmd := atmosRunner.Command("auth", "console", "--help")

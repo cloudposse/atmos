@@ -13,7 +13,6 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 
@@ -39,11 +38,6 @@ var flociMarkerKeys = []string{
 	"topic-marker",
 	"final-marker",
 }
-
-var (
-	flociAtmosRunnerOnce sync.Once
-	flociAtmosRunnerErr  error
-)
 
 func TestTerraformFlociApplyDestroyDAG(t *testing.T) {
 	endpoint := requireFlociEndpoint(t)
@@ -84,14 +78,7 @@ func TestTerraformFlociApplyDestroyDAG(t *testing.T) {
 func ensureFlociAtmosRunner(t *testing.T) {
 	t.Helper()
 
-	flociAtmosRunnerOnce.Do(func() {
-		if atmosRunner != nil {
-			return
-		}
-		atmosRunner = testhelpers.NewAtmosRunner(coverDir)
-		flociAtmosRunnerErr = atmosRunner.Build()
-	})
-	require.NoError(t, flociAtmosRunnerErr)
+	ensureAtmosRunner(t)
 }
 
 func runFlociLifecycle(t *testing.T, endpoint, absWorkdir string, maxConcurrency int) {
@@ -151,10 +138,16 @@ func runFlociAliasSequentialProbe(t *testing.T, endpoint, absWorkdir string) {
 	eventsPath := filepath.Join(aliasLockDir, "events.log")
 	events, err := os.ReadFile(eventsPath)
 	require.NoError(t, err, "expected alias probe event log")
-	require.Contains(t, string(events), "start alias-one")
-	require.Contains(t, string(events), "end alias-one")
-	require.Contains(t, string(events), "start alias-two")
-	require.Contains(t, string(events), "end alias-two")
+	log := string(events)
+	oneStart := strings.Index(log, "start alias-one")
+	oneEnd := strings.Index(log, "end alias-one")
+	twoStart := strings.Index(log, "start alias-two")
+	twoEnd := strings.Index(log, "end alias-two")
+	require.GreaterOrEqual(t, oneStart, 0, "missing start alias-one")
+	require.GreaterOrEqual(t, oneEnd, 0, "missing end alias-one")
+	require.GreaterOrEqual(t, twoStart, 0, "missing start alias-two")
+	require.GreaterOrEqual(t, twoEnd, 0, "missing end alias-two")
+	require.True(t, oneEnd < twoStart || twoEnd < oneStart, "alias execution intervals overlapped")
 	require.NoFileExists(t, filepath.Join(aliasLockDir, "overlap"), "aliases sharing one Terraform source path overlapped")
 }
 
@@ -259,7 +252,7 @@ func runFlociAtmos(t *testing.T, env map[string]string, timeout time.Duration, a
 	cmd.Stderr = &stderr
 
 	err := cmd.Run()
-	if ctx.Err() == context.DeadlineExceeded {
+	if errors.Is(ctx.Err(), context.DeadlineExceeded) {
 		return stdout.String(), stderr.String(), ctx.Err()
 	}
 	return stdout.String(), stderr.String(), err
