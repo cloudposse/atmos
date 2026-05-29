@@ -574,6 +574,140 @@ func TestMergeComponentConfigurations_Retry(t *testing.T) {
 	})
 }
 
+func TestMergeComponentConfigurations_Dependencies(t *testing.T) {
+	atmosCfg := &schema.AtmosConfiguration{}
+
+	t.Run("deep-merges-distinct-dependency-keys", func(t *testing.T) {
+		opts := ComponentProcessorOptions{
+			ComponentType: cfg.TerraformComponentType,
+			Component:     "lambda",
+			AtmosConfig:   atmosCfg,
+			GlobalDependencies: map[string]any{
+				"tools": map[string]any{"terraform": "1.9.8"},
+			},
+		}
+		res := minimalComponentResult()
+		res.BaseComponentDependencies = map[string]any{
+			"components": []any{map[string]any{"component": "vpc"}},
+			"files":      []any{"configs/base.json"},
+		}
+		res.ComponentDependencies = map[string]any{
+			"folders": []any{"src/lambda"},
+			"tools":   map[string]any{"tflint": "0.54.2"},
+		}
+
+		comp, err := mergeComponentConfigurations(atmosCfg, &opts, res)
+		require.NoError(t, err)
+		deps, ok := comp[cfg.DependenciesSectionName].(map[string]any)
+		require.True(t, ok, "dependencies section must be present and a map")
+
+		assert.Equal(t, []any{map[string]any{"component": "vpc"}}, deps["components"])
+		assert.Equal(t, []any{"configs/base.json"}, deps["files"])
+		assert.Equal(t, []any{"src/lambda"}, deps["folders"])
+		assert.Equal(t, map[string]any{
+			"terraform": "1.9.8",
+			"tflint":    "0.54.2",
+		}, deps["tools"])
+	})
+
+	t.Run("same-list-keys-replace-by-default", func(t *testing.T) {
+		opts := ComponentProcessorOptions{
+			ComponentType: cfg.TerraformComponentType,
+			Component:     "lambda",
+			AtmosConfig:   atmosCfg,
+		}
+		res := minimalComponentResult()
+		res.BaseComponentDependencies = map[string]any{
+			"components": []any{map[string]any{"component": "base-vpc"}},
+			"files":      []any{"configs/base.json"},
+			"folders":    []any{"src/base"},
+		}
+		res.ComponentDependencies = map[string]any{
+			"components": []any{map[string]any{"component": "component-vpc"}},
+			"files":      []any{"configs/component.json"},
+			"folders":    []any{"src/component"},
+		}
+
+		comp, err := mergeComponentConfigurations(atmosCfg, &opts, res)
+		require.NoError(t, err)
+		deps, ok := comp[cfg.DependenciesSectionName].(map[string]any)
+		require.True(t, ok, "dependencies section must be present and a map")
+
+		assert.Equal(t, []any{map[string]any{"component": "component-vpc"}}, deps["components"])
+		assert.Equal(t, []any{"configs/component.json"}, deps["files"])
+		assert.Equal(t, []any{"src/component"}, deps["folders"])
+	})
+
+	t.Run("same-list-keys-append-when-strategy-is-append", func(t *testing.T) {
+		appendCfg := &schema.AtmosConfiguration{
+			Settings: schema.AtmosSettings{ListMergeStrategy: "append"},
+		}
+		opts := ComponentProcessorOptions{
+			ComponentType: cfg.TerraformComponentType,
+			Component:     "lambda",
+			AtmosConfig:   appendCfg,
+			GlobalDependencies: map[string]any{
+				"components": []any{map[string]any{"component": "global-baseline"}},
+				"files":      []any{"configs/global.json"},
+				"folders":    []any{"src/global"},
+			},
+		}
+		res := minimalComponentResult()
+		res.BaseComponentDependencies = map[string]any{
+			"components": []any{map[string]any{"component": "base-vpc"}},
+			"files":      []any{"configs/base.json"},
+			"folders":    []any{"src/base"},
+		}
+		res.ComponentDependencies = map[string]any{
+			"components": []any{map[string]any{"component": "component-vpc"}},
+			"files":      []any{"configs/component.json"},
+			"folders":    []any{"src/component"},
+		}
+
+		comp, err := mergeComponentConfigurations(appendCfg, &opts, res)
+		require.NoError(t, err)
+		deps, ok := comp[cfg.DependenciesSectionName].(map[string]any)
+		require.True(t, ok, "dependencies section must be present and a map")
+
+		assert.Equal(t, []any{
+			map[string]any{"component": "global-baseline"},
+			map[string]any{"component": "base-vpc"},
+			map[string]any{"component": "component-vpc"},
+		}, deps["components"])
+		assert.Equal(t, []any{"configs/global.json", "configs/base.json", "configs/component.json"}, deps["files"])
+		assert.Equal(t, []any{"src/global", "src/base", "src/component"}, deps["folders"])
+	})
+
+	t.Run("component-level-append-setting-controls-dependencies-list-merge", func(t *testing.T) {
+		replaceCfg := &schema.AtmosConfiguration{
+			Settings: schema.AtmosSettings{ListMergeStrategy: "replace"},
+		}
+		opts := ComponentProcessorOptions{
+			ComponentType: cfg.TerraformComponentType,
+			Component:     "lambda",
+			AtmosConfig:   replaceCfg,
+		}
+		res := minimalComponentResult()
+		res.BaseComponentSettings = map[string]any{
+			"list_merge_strategy": "append",
+		}
+		res.BaseComponentDependencies = map[string]any{
+			"files": []any{"configs/base.json"},
+		}
+		res.ComponentDependencies = map[string]any{
+			"files": []any{"configs/component.json"},
+		}
+
+		comp, err := mergeComponentConfigurations(replaceCfg, &opts, res)
+		require.NoError(t, err)
+		deps, ok := comp[cfg.DependenciesSectionName].(map[string]any)
+		require.True(t, ok, "dependencies section must be present and a map")
+
+		assert.Equal(t, []any{"configs/base.json", "configs/component.json"}, deps["files"],
+			"dependencies.files must follow the effective component list_merge_strategy")
+	})
+}
+
 // TestEffectiveAtmosConfig verifies that effectiveAtmosConfig returns the
 // correct *AtmosConfiguration given various combinations of settings layers.
 func TestEffectiveAtmosConfig(t *testing.T) {

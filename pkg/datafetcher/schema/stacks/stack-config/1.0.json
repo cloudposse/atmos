@@ -149,6 +149,13 @@
                   "skip_if_missing": {
                     "type": "boolean"
                   },
+                  "nested_imports": {
+                    "type": "string",
+                    "enum": [
+                      "local",
+                      "remote"
+                    ]
+                  },
                   "context": {
                     "type": "object",
                     "additionalProperties": true
