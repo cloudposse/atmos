@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	atmosGit "github.com/cloudposse/atmos/pkg/git"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -80,7 +81,8 @@ func processNodesWithContext(
 		case string:
 			result, err := processCustomTagsWithContext(atmosConfig, v, currentStack, skip, resolutionCtx, stackInfo)
 			if err != nil {
-				log.Debug("Error processing YAML function",
+				log.Debug(
+					"Error processing YAML function",
 					"value", v,
 					"stack", currentStack,
 					"error", err.Error(),
@@ -183,6 +185,27 @@ func processSimpleTags(
 	}
 	if matchesPrefix(input, u.AtmosYamlFuncEnv, skip) {
 		res, err := u.ProcessTagEnv(input, stackInfo)
+		if err != nil {
+			return nil, true, err
+		}
+		return res, true, nil
+	}
+	if matchesPrefix(input, u.AtmosYamlFuncGitRoot, skip) || matchesPrefix(input, u.AtmosYamlFuncGitRootAlias, skip) {
+		res, err := atmosGit.ProcessTagRoot(input)
+		if err != nil {
+			return nil, true, err
+		}
+		return res, true, nil
+	}
+	if matchesPrefix(input, u.AtmosYamlFuncGitSha, skip) || matchesPrefix(input, u.AtmosYamlFuncGitRef, skip) {
+		res, err := atmosGit.ProcessTagSHA(input)
+		if err != nil {
+			return nil, true, err
+		}
+		return res, true, nil
+	}
+	if matchesPrefix(input, u.AtmosYamlFuncGitBranch, skip) {
+		res, err := atmosGit.ProcessTagBranch(input)
 		if err != nil {
 			return nil, true, err
 		}
