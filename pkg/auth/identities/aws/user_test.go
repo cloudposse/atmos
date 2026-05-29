@@ -2586,12 +2586,25 @@ func TestUserIdentity_SetCredentialStore_HonorsInjectedStore(t *testing.T) {
 }
 
 // TestUserIdentity_credentialStore_FallsBackWhenNotInjected verifies that an
-// identity with no injected store still returns a usable default store.
+// identity with no injected store still returns a usable default store that
+// credentialsFromStore can round-trip through.
 func TestUserIdentity_credentialStore_FallsBackWhenNotInjected(t *testing.T) {
+	keyring.MockInit()
+
 	id, err := NewUserIdentity("fallback-test", &schema.Identity{Kind: "aws/user"})
 	require.NoError(t, err)
 	identity := id.(*userIdentity)
 
-	assert.NotNil(t, identity.credentialStore(),
-		"credentialStore must fall back to a default store when none is injected")
+	store := identity.credentialStore()
+	require.NotNil(t, store, "credentialStore must fall back to a default store when none is injected")
+
+	// The fallback store must be usable: seed it and confirm the identity reads
+	// the same credentials back through credentialsFromStore.
+	seeded := &types.AWSCredentials{AccessKeyID: "AKIAFALLBACK", SecretAccessKey: "SECRET", Region: "us-east-1"}
+	require.NoError(t, store.Store("fallback-test", seeded, identity.realm))
+
+	got, err := identity.credentialsFromStore()
+	require.NoError(t, err)
+	require.NotNil(t, got)
+	assert.Equal(t, "AKIAFALLBACK", got.AccessKeyID)
 }

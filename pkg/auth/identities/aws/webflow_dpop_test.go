@@ -18,6 +18,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	errUtils "github.com/cloudposse/atmos/errors"
 )
 
 // mustGenerateDPoPKey returns a fresh EC P-256 key for tests, failing the test
@@ -81,6 +83,26 @@ func TestExchangeCodeForCredentials_SendsDPoPHeader(t *testing.T) {
 	htm, htu := proofMethodAndURL(t, captured)
 	require.Equal(t, http.MethodPost, htm)
 	require.Equal(t, "https://us-east-2.signin.aws.amazon.com/v1/token", htu)
+}
+
+// TestExchangeCodeForCredentials_RequiresDPoPKey verifies the token request
+// fails locally with ErrWebflowDPoP when no key is supplied, rather than
+// sending a header-less request that AWS would reject with an opaque 400.
+func TestExchangeCodeForCredentials_RequiresDPoPKey(t *testing.T) {
+	called := false
+	mockClient := &mockHTTPClient{
+		doFunc: func(_ *http.Request) (*http.Response, error) {
+			called = true
+			return tokenSuccessResponse(), nil
+		},
+	}
+
+	_, err := exchangeCodeForCredentials(context.Background(), mockClient, exchangeCodeParams{
+		region: "us-east-2", code: "auth-code", codeVerifier: "verifier", redirectURI: "http://127.0.0.1:8080/oauth/callback",
+		// dpopKey intentionally omitted.
+	})
+	require.ErrorIs(t, err, errUtils.ErrWebflowDPoP)
+	require.False(t, called, "request must not be sent without a DPoP key")
 }
 
 // TestExchangeRefreshToken_SendsDPoPHeader reproduces issue #2542 for the

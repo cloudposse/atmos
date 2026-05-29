@@ -86,6 +86,14 @@ func callTokenEndpoint(ctx context.Context, client HTTPClient, region string, bo
 // Only non-sensitive metadata (endpoint, grant_type, status code) may be
 // logged. If body-level diagnostics are ever needed, redact first.
 func doTokenRequest(ctx context.Context, client HTTPClient, p tokenRequestParams) ([]byte, int, error) {
+	// AWS signin requires an RFC 9449 DPoP proof on every /v1/token request
+	// (both grants). A nil key means a key-propagation bug upstream — fail
+	// locally with ErrWebflowDPoP rather than sending a header-less request
+	// that AWS would reject with an opaque HTTP 400 (issue #2542).
+	if p.dpopKey == nil {
+		return nil, 0, fmt.Errorf("%w: missing DPoP key", errUtils.ErrWebflowDPoP)
+	}
+
 	encodedBody := p.body.Encode()
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, p.endpoint, strings.NewReader(encodedBody))
@@ -94,15 +102,13 @@ func doTokenRequest(ctx context.Context, client HTTPClient, p tokenRequestParams
 	}
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 
-	// Attach the RFC 9449 DPoP proof required by AWS signin (issue #2542).
-	// The htu is the token endpoint URL without query/fragment.
-	if p.dpopKey != nil {
-		proof, proofErr := newDPoPProof(p.dpopKey, http.MethodPost, p.endpoint)
-		if proofErr != nil {
-			return nil, 0, proofErr
-		}
-		req.Header.Set("DPoP", proof)
+	// Attach the DPoP proof. The htu is the token endpoint URL without
+	// query/fragment.
+	proof, proofErr := newDPoPProof(p.dpopKey, http.MethodPost, p.endpoint)
+	if proofErr != nil {
+		return nil, 0, proofErr
 	}
+	req.Header.Set("DPoP", proof)
 
 	log.Debug(
 		"Token exchange request",

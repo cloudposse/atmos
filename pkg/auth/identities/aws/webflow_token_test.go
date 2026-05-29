@@ -51,7 +51,7 @@ func TestExchangeCodeForCredentials_Success(t *testing.T) {
 	}
 
 	resp, err := exchangeCodeForCredentials(context.Background(), mockClient, exchangeCodeParams{
-		region: "us-east-2", code: "auth-code-123", codeVerifier: "code-verifier-abc", redirectURI: "http://127.0.0.1:8080/oauth/callback",
+		region: "us-east-2", code: "auth-code-123", codeVerifier: "code-verifier-abc", redirectURI: "http://127.0.0.1:8080/oauth/callback", dpopKey: mustGenerateDPoPKey(t),
 	})
 
 	require.NoError(t, err)
@@ -71,7 +71,7 @@ func TestExchangeCodeForCredentials_HTTPError(t *testing.T) {
 	}
 
 	resp, err := exchangeCodeForCredentials(context.Background(), mockClient, exchangeCodeParams{
-		region: "us-east-2", code: "code", codeVerifier: "verifier", redirectURI: "http://127.0.0.1:8080/oauth/callback",
+		region: "us-east-2", code: "code", codeVerifier: "verifier", redirectURI: "http://127.0.0.1:8080/oauth/callback", dpopKey: mustGenerateDPoPKey(t),
 	})
 
 	assert.Nil(t, resp)
@@ -98,7 +98,7 @@ func TestExchangeCodeForCredentials_ErrorResponse(t *testing.T) {
 	}
 
 	resp, err := exchangeCodeForCredentials(context.Background(), mockClient, exchangeCodeParams{
-		region: "us-east-2", code: "expired-code", codeVerifier: "verifier", redirectURI: "http://127.0.0.1:8080/oauth/callback",
+		region: "us-east-2", code: "expired-code", codeVerifier: "verifier", redirectURI: "http://127.0.0.1:8080/oauth/callback", dpopKey: mustGenerateDPoPKey(t),
 	})
 
 	assert.Nil(t, resp)
@@ -129,7 +129,7 @@ func TestExchangeCodeForCredentials_EmptyCredentials(t *testing.T) {
 	}
 
 	resp, err := exchangeCodeForCredentials(context.Background(), mockClient, exchangeCodeParams{
-		region: "us-east-2", code: "code", codeVerifier: "verifier", redirectURI: "http://127.0.0.1:8080/oauth/callback",
+		region: "us-east-2", code: "code", codeVerifier: "verifier", redirectURI: "http://127.0.0.1:8080/oauth/callback", dpopKey: mustGenerateDPoPKey(t),
 	})
 
 	assert.Nil(t, resp)
@@ -447,7 +447,7 @@ func TestExchangeCodeForCredentials_InvalidGrantNotWrappedAsRevoked(t *testing.T
 	}
 
 	resp, err := exchangeCodeForCredentials(context.Background(), mockClient, exchangeCodeParams{
-		region: "us-east-2", code: "expired-code", codeVerifier: "verifier", redirectURI: "http://127.0.0.1:8080/oauth/callback",
+		region: "us-east-2", code: "expired-code", codeVerifier: "verifier", redirectURI: "http://127.0.0.1:8080/oauth/callback", dpopKey: mustGenerateDPoPKey(t),
 	})
 
 	require.Error(t, err)
