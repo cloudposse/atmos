@@ -5,7 +5,6 @@ import (
 	"fmt"
 
 	"github.com/go-git/go-git/v5/plumbing"
-	giturl "github.com/kubescape/go-git-url"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 
@@ -455,18 +454,9 @@ func (d *describeAffectedExec) uploadableQuery(args *DescribeAffectedCmdArgs, re
 			Err()
 	}
 
-	// Parse the repo URL. The canonical parser only supports github.com,
-	// gitlab.com, and azure DevOps; for self-hosted instances (GHES,
-	// GitLab self-managed, Bitbucket Server) fall through to a generic
-	// parser. If both fail, surface the canonical error so genuinely-
-	// malformed URLs still propagate as before.
-	var repoOwner, repoName, repoHost string
-	if gitURL, gerr := giturl.NewGitURL(repoUrl); gerr == nil {
-		repoOwner, repoName, repoHost = gitURL.GetOwnerName(), gitURL.GetRepoName(), gitURL.GetHostName()
-	} else if h, o, n, ok := atmosgit.ParseGenericGitURL(repoUrl); ok {
-		repoOwner, repoName, repoHost = o, n, h
-	} else {
-		return gerr
+	repoHost, repoOwner, repoName, err := atmosgit.ParseRepoURL(repoUrl)
+	if err != nil {
+		return err
 	}
 
 	log.Debug("Creating API client")

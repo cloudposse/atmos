@@ -138,35 +138,36 @@ func GetRepoInfo(localRepo *git.Repository) (RepoInfo, error) {
 		return RepoInfo{}, nil
 	}
 
-	// kubescape/go-git-url ships hardcoded support for github.com,
-	// gitlab.com, and azure DevOps. Self-hosted instances (GitHub
-	// Enterprise Server, GitLab self-managed, Bitbucket Server, etc.)
-	// produce parse errors here. When that happens we fall through to
-	// a generic parser that handles the URL shapes Git itself supports.
-	// If both fail, surface the canonical error so genuinely-malformed
-	// URLs still propagate as before.
+	host, owner, name, err := ParseRepoURL(repoUrl)
+	if err != nil {
+		return RepoInfo{}, err
+	}
+	return RepoInfo{
+		LocalRepoPath:     localRepoPath,
+		LocalWorktree:     localRepoWorktree,
+		LocalWorktreePath: localRepoWorktree.Filesystem.Root(),
+		RepoUrl:           repoUrl,
+		RepoOwner:         owner,
+		RepoName:          name,
+		RepoHost:          host,
+	}, nil
+}
+
+// ParseRepoURL resolves host, owner, and repo name from a remote URL.
+//
+// kubescape/go-git-url ships hardcoded support for github.com, gitlab.com,
+// and azure DevOps. Self-hosted instances (GitHub Enterprise Server, GitLab
+// self-managed, Bitbucket Server, etc.) fall back to ParseGenericGitURL,
+// which handles the URL shapes Git itself supports. If both parsers fail,
+// the canonical error is returned so genuinely-malformed URLs still
+// propagate as before.
+func ParseRepoURL(repoUrl string) (host, owner, name string, err error) {
 	if gitURL, gerr := giturl.NewGitURL(repoUrl); gerr == nil {
-		return RepoInfo{
-			LocalRepoPath:     localRepoPath,
-			LocalWorktree:     localRepoWorktree,
-			LocalWorktreePath: localRepoWorktree.Filesystem.Root(),
-			RepoUrl:           repoUrl,
-			RepoOwner:         gitURL.GetOwnerName(),
-			RepoName:          gitURL.GetRepoName(),
-			RepoHost:          gitURL.GetHostName(),
-		}, nil
-	} else if host, owner, name, ok := ParseGenericGitURL(repoUrl); ok {
-		return RepoInfo{
-			LocalRepoPath:     localRepoPath,
-			LocalWorktree:     localRepoWorktree,
-			LocalWorktreePath: localRepoWorktree.Filesystem.Root(),
-			RepoUrl:           repoUrl,
-			RepoOwner:         owner,
-			RepoName:          name,
-			RepoHost:          host,
-		}, nil
+		return gitURL.GetHostName(), gitURL.GetOwnerName(), gitURL.GetRepoName(), nil
+	} else if h, o, n, ok := ParseGenericGitURL(repoUrl); ok {
+		return h, o, n, nil
 	} else {
-		return RepoInfo{}, gerr
+		return "", "", "", gerr
 	}
 }
 
