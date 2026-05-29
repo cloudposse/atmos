@@ -188,6 +188,15 @@ func ProcessCommandLineArgs(
 	configAndStacksInfo.LogsLevel = argsAndFlagsInfo.LogsLevel
 	configAndStacksInfo.LogsFile = argsAndFlagsInfo.LogsFile
 	configAndStacksInfo.SettingsListMergeStrategy = argsAndFlagsInfo.SettingsListMergeStrategy
+	// Fallback: Cobra strips flags from the args passed to RunE, so when this
+	// flag is provided on the command line after the subcommand, the legacy
+	// raw-args scan above will not see it. Pull the value from Cobra directly
+	// when the legacy path produced nothing.
+	if configAndStacksInfo.SettingsListMergeStrategy == "" {
+		if flag := cmd.Flag("settings-list-merge-strategy"); flag != nil && flag.Changed {
+			configAndStacksInfo.SettingsListMergeStrategy = flag.Value.String()
+		}
+	}
 	configAndStacksInfo.Query = argsAndFlagsInfo.Query
 	postParsedIdentityValue, postParsedIdentitySet := getExplicitIdentityFlagValue(cmd)
 	configAndStacksInfo.Identity = resolveIdentityValue(
