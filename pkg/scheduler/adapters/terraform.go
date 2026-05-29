@@ -29,15 +29,24 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
-const terraformNodeIDFormat = "%s-%s"
+const (
+	terraformDefaultCommand = "terraform"
+	terraformNodeIDFormat   = "%s-%s"
+)
 
 const (
 	terraformPlanLogOrderStream  = "stream"
 	terraformPlanLogOrderGrouped = "grouped"
 )
 
+const (
+	terraformCLIArgsEnv       = "TF_CLI_ARGS"
+	terraformCLIArgsEnvPrefix = "TF_CLI_ARGS_"
+)
+
 // TerraformExecution contains the execution context for one Terraform component.
 type TerraformExecution struct {
+	Context       context.Context
 	Info          schema.ConfigAndStacksInfo
 	Stdout        io.Writer
 	Stderr        io.Writer
@@ -111,15 +120,12 @@ func ExecuteTerraform(ctx context.Context, opts TerraformOptions) error {
 		return nil
 	}
 
-	if opts.Info.SubCommand == "destroy" {
-		graph, err = reverseTerraformGraph(graph)
-		if err != nil {
-			return fmt.Errorf("%w: reverse terraform graph: %w", errUtils.ErrBuildDepGraph, err)
-		}
+	maxConcurrency := effectiveTerraformMaxConcurrency(opts.Info)
+	if graph, err = prepareTerraformGraphForCommand(opts.Info, graph); err != nil {
+		return err
 	}
 
-	maxConcurrency := effectiveTerraformMaxConcurrency(opts.Info)
-	if err := validateTerraformConcurrentPlan(opts.Info, graph); err != nil {
+	if err := validateTerraformConcurrentExecution(opts.AtmosConfig, opts.Info, graph); err != nil {
 		return err
 	}
 	output, err := newTerraformOutput(opts.AtmosConfig, opts.Info, maxConcurrency)
@@ -200,50 +206,6 @@ func BuildTerraformGraph(stacks map[string]any) (*dependency.Graph, error) {
 	return graph, nil
 }
 
-// reverseTerraformGraph reverses dependency edges so destroy runs dependents first.
-func reverseTerraformGraph(graph *dependency.Graph) (*dependency.Graph, error) {
-	builder := dependency.NewBuilder()
-
-	for _, id := range sortedGraphNodeIDs(graph) {
-		node := graph.Nodes[id]
-		if err := builder.AddNode(&dependency.Node{
-			ID:        node.ID,
-			Component: node.Component,
-			Stack:     node.Stack,
-			Type:      node.Type,
-			Metadata:  cloneTerraformNodeMetadata(node.Metadata),
-		}); err != nil {
-			return nil, err
-		}
-	}
-
-	for _, id := range sortedGraphNodeIDs(graph) {
-		node := graph.Nodes[id]
-		for _, dependencyID := range sortedStringValues(node.Dependencies) {
-			if _, ok := graph.Nodes[dependencyID]; !ok {
-				continue
-			}
-			if err := builder.AddDependency(dependencyID, id); err != nil {
-				return nil, err
-			}
-		}
-	}
-
-	return builder.Build()
-}
-
-// cloneTerraformNodeMetadata shallow-copies node metadata for graph rewrites.
-func cloneTerraformNodeMetadata(metadata map[string]any) map[string]any {
-	if metadata == nil {
-		return nil
-	}
-	cloned := make(map[string]any, len(metadata))
-	for key, value := range metadata {
-		cloned[key] = value
-	}
-	return cloned
-}
-
 // FilterTerraformGraph narrows graph nodes to the user-selected bulk operation set.
 func FilterTerraformGraph(atmosConfig *schema.AtmosConfiguration, graph *dependency.Graph, info *schema.ConfigAndStacksInfo) (*dependency.Graph, error) {
 	defer perf.Track(atmosConfig, "scheduler.adapters.FilterTerraformGraph")()
@@ -262,15 +224,124 @@ func FilterTerraformGraph(atmosConfig *schema.AtmosConfiguration, graph *depende
 	}), nil
 }
 
-// validateTerraformConcurrentPlan enforces constraints for concurrent plan runs.
-func validateTerraformConcurrentPlan(info *schema.ConfigAndStacksInfo, _ *dependency.Graph) error {
+// prepareTerraformGraphForCommand adjusts graph ordering for command-specific execution.
+func prepareTerraformGraphForCommand(info *schema.ConfigAndStacksInfo, graph *dependency.Graph) (*dependency.Graph, error) {
+	if info == nil || graph == nil || info.SubCommand != "destroy" {
+		return graph, nil
+	}
+	return reverseTerraformGraph(graph)
+}
+
+// reverseTerraformGraph reverses dependency edges so destroy runs dependents first.
+func reverseTerraformGraph(graph *dependency.Graph) (*dependency.Graph, error) {
+	builder := dependency.NewBuilder()
+	for _, nodeID := range sortedGraphNodeIDs(graph) {
+		node := graph.Nodes[nodeID]
+		if node == nil {
+			continue
+		}
+		if err := builder.AddNode(&dependency.Node{
+			ID:        node.ID,
+			Component: node.Component,
+			Stack:     node.Stack,
+			Type:      node.Type,
+			Metadata:  cloneTerraformNodeMetadata(node.Metadata),
+		}); err != nil {
+			return nil, err
+		}
+	}
+	for _, nodeID := range sortedGraphNodeIDs(graph) {
+		node := graph.Nodes[nodeID]
+		if node == nil {
+			continue
+		}
+		for _, dependencyID := range sortedCopy(node.Dependencies) {
+			if _, ok := graph.Nodes[dependencyID]; !ok {
+				continue
+			}
+			if err := builder.AddDependency(dependencyID, node.ID); err != nil {
+				return nil, err
+			}
+		}
+	}
+	return builder.Build()
+}
+
+// cloneTerraformNodeMetadata shallow-copies node metadata for graph rewrites.
+func cloneTerraformNodeMetadata(metadata map[string]any) map[string]any {
+	if metadata == nil {
+		return nil
+	}
+	cloned := make(map[string]any, len(metadata))
+	for key, value := range metadata {
+		cloned[key] = value
+	}
+	return cloned
+}
+
+// validateTerraformConcurrentExecution enforces constraints for concurrent Terraform runs.
+func validateTerraformConcurrentExecution(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, _ *dependency.Graph) error {
 	if effectiveTerraformMaxConcurrency(info) <= 1 {
 		return nil
 	}
 	if info.Identity == cfg.IdentityFlagSelectValue {
 		return fmt.Errorf("%w: --max-concurrency requires a non-interactive identity value", errUtils.ErrInvalidConfig)
 	}
+	if requiresTerraformAutoApprove(info) && !hasTerraformAutoApprove(atmosConfig, info) {
+		return fmt.Errorf("%w: concurrent Terraform %s requires -auto-approve", errUtils.ErrInvalidConfig, info.SubCommand)
+	}
 	return nil
+}
+
+// requiresTerraformAutoApprove reports whether concurrent execution must be explicitly approved.
+func requiresTerraformAutoApprove(info *schema.ConfigAndStacksInfo) bool {
+	return info != nil && (info.SubCommand == "apply" || info.SubCommand == "destroy")
+}
+
+// hasTerraformAutoApprove detects auto-approve from config, CLI flags, or Terraform env flags.
+func hasTerraformAutoApprove(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) bool {
+	if info == nil {
+		return false
+	}
+	if info.SubCommand == "apply" && atmosConfig != nil && atmosConfig.Components.Terraform.ApplyAutoApprove {
+		return true
+	}
+	if containsTerraformFlag(info.AdditionalArgsAndFlags, "-auto-approve") {
+		return true
+	}
+	return hasTerraformAutoApproveEnv(info.SubCommand)
+}
+
+func hasTerraformAutoApproveEnv(subcommand string) bool {
+	//nolint:forbidigo // TF_CLI_ARGS* are Terraform's native non-interactive flag paths.
+	if containsTerraformFlag(strings.Fields(os.Getenv(terraformCLIArgsEnv)), "-auto-approve") {
+		return true
+	}
+	if subcommand == "" {
+		return false
+	}
+	//nolint:forbidigo // TF_CLI_ARGS_<subcommand> is Terraform's native command-specific flag path.
+	return containsTerraformFlag(strings.Fields(os.Getenv(terraformCLIArgsEnvPrefix+subcommand)), "-auto-approve")
+}
+
+// containsTerraformFlag matches Terraform flags with either one or two leading dashes.
+func containsTerraformFlag(args []string, flag string) bool {
+	normalizedFlag := strings.TrimLeft(flag, "-")
+	for _, arg := range args {
+		normalizedArg := strings.TrimLeft(arg, "-")
+		if normalizedArg == normalizedFlag {
+			return true
+		}
+		if !strings.HasPrefix(normalizedArg, normalizedFlag+"=") {
+			continue
+		}
+		value := strings.ToLower(strings.TrimSpace(strings.TrimPrefix(normalizedArg, normalizedFlag+"=")))
+		switch value {
+		case "", "1", "t", "true", "y", "yes", "on":
+			return true
+		}
+	}
+	return false
 }
 
 // TerraformDispatcher adapts scheduler nodes to Terraform component execution.
@@ -283,9 +354,12 @@ type TerraformDispatcher struct {
 }
 
 // Dispatch executes one Terraform scheduler node.
-func (d *TerraformDispatcher) Dispatch(_ context.Context, node *dependency.Node) (scheduler.Result, error) {
+func (d *TerraformDispatcher) Dispatch(ctx context.Context, node *dependency.Node) (scheduler.Result, error) {
 	if node == nil {
 		return scheduler.Result{}, fmt.Errorf("%w: node is nil", errUtils.ErrInvalidConfig)
+	}
+	if err := ctx.Err(); err != nil {
+		return scheduler.Result{NodeID: node.ID, Status: scheduler.StatusFailed}, err
 	}
 	if d.shouldSkipByQuery(node) {
 		return scheduler.Result{NodeID: node.ID, Status: scheduler.StatusSucceeded, Value: false}, nil
@@ -309,7 +383,8 @@ func (d *TerraformDispatcher) Dispatch(_ context.Context, node *dependency.Node)
 	defer unlock()
 
 	execution := TerraformExecution{
-		Info: nodeInfo,
+		Context: ctx,
+		Info:    nodeInfo,
 	}
 	outcome := TerraformNodeOutcome{
 		Processed: true,
@@ -628,12 +703,11 @@ func sortedGraphNodeIDs(graph *dependency.Graph) []string {
 	return ids
 }
 
-// sortedStringValues returns a sorted copy of values.
-func sortedStringValues(values []string) []string {
-	sorted := make([]string, len(values))
-	copy(sorted, values)
-	sort.Strings(sorted)
-	return sorted
+// sortedCopy returns a sorted copy of values.
+func sortedCopy(values []string) []string {
+	copied := append([]string{}, values...)
+	sort.Strings(copied)
+	return copied
 }
 
 // containsString reports whether values contains value.
@@ -744,6 +818,7 @@ func metadataComponent(metadata map[string]any) string {
 }
 
 type terraformOutput struct {
+	command       string
 	logOrder      string
 	hideNoChanges bool
 	logDir        string
@@ -754,7 +829,7 @@ type terraformOutput struct {
 
 // newTerraformOutput configures concurrent Terraform output streaming or grouping.
 func newTerraformOutput(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, maxConcurrency int) (*terraformOutput, error) {
-	hideNoChanges := info != nil && info.TerraformPlanHideNoChanges
+	hideNoChanges := info != nil && info.SubCommand == "plan" && info.TerraformPlanHideNoChanges
 	if maxConcurrency <= 1 && !hideNoChanges {
 		return nil, nil
 	}
@@ -770,8 +845,10 @@ func newTerraformOutput(atmosConfig *schema.AtmosConfiguration, info *schema.Con
 	default:
 		return nil, fmt.Errorf("%w: unsupported Terraform plan log order %q", errUtils.ErrInvalidConfig, logOrder)
 	}
-	logDir := terraformLogDir(atmosConfig)
+	command := terraformOutputCommand(info)
+	logDir := terraformLogDir(atmosConfig, command)
 	return &terraformOutput{
+		command:       command,
 		logOrder:      logOrder,
 		hideNoChanges: hideNoChanges,
 		logDir:        logDir,
@@ -814,7 +891,7 @@ func (o *terraformOutput) openNodeLogFiles(node *dependency.Node) (*os.File, *os
 		return nil, nil, nil
 	}
 	if err := os.MkdirAll(o.logDir, 0o755); err != nil {
-		log.Warn("Failed to create Terraform plan log directory", "dir", o.logDir, "error", err)
+		log.Warn("Failed to create Terraform log directory", "dir", o.logDir, "error", err)
 		return nil, nil, nil
 	}
 	nodeName := safeTerraformLogName(terraformNodeLabel(node))
@@ -822,11 +899,11 @@ func (o *terraformOutput) openNodeLogFiles(node *dependency.Node) (*os.File, *os
 	stderrPath := filepath.Join(o.logDir, nodeName+".stderr.log")
 	stdoutFile, stdoutErr := os.Create(stdoutPath)
 	if stdoutErr != nil {
-		log.Warn("Failed to create Terraform plan stdout log", "file", stdoutPath, "error", stdoutErr)
+		log.Warn("Failed to create Terraform stdout log", "file", stdoutPath, "error", stdoutErr)
 	}
 	stderrFile, stderrErr := os.Create(stderrPath)
 	if stderrErr != nil {
-		log.Warn("Failed to create Terraform plan stderr log", "file", stderrPath, "error", stderrErr)
+		log.Warn("Failed to create Terraform stderr log", "file", stderrPath, "error", stderrErr)
 	}
 	logFiles := make(map[string]string)
 	if stdoutFile != nil {
@@ -868,8 +945,8 @@ func closeTerraformLogFiles(files ...*os.File) func() error {
 	}
 }
 
-// terraformLogDir returns the base directory for Terraform plan logs.
-func terraformLogDir(atmosConfig *schema.AtmosConfiguration) string {
+// terraformLogDir returns the base directory for Terraform command logs.
+func terraformLogDir(atmosConfig *schema.AtmosConfiguration, command string) string {
 	if atmosConfig == nil {
 		return ""
 	}
@@ -880,7 +957,15 @@ func terraformLogDir(atmosConfig *schema.AtmosConfiguration) string {
 	if basePath == "" {
 		return ""
 	}
-	return filepath.Join(basePath, ".atmos", "logs", "terraform", "plan")
+	return filepath.Join(basePath, ".atmos", "logs", "terraform", command)
+}
+
+// terraformOutputCommand returns the command name used in log paths and messages.
+func terraformOutputCommand(info *schema.ConfigAndStacksInfo) string {
+	if info == nil || info.SubCommand == "" {
+		return terraformDefaultCommand
+	}
+	return info.SubCommand
 }
 
 // safeTerraformLogName converts a node label into a filesystem-safe log prefix.
@@ -910,10 +995,18 @@ func (o *terraformOutput) finishNode(node *dependency.Node, result TerraformExec
 		status = "failed"
 	}
 	stderr := ioLayer.MaskWriter(os.Stderr)
-	fmt.Fprintf(stderr, "\n[%s] terraform plan %s\n", label, status)
+	command := o.command
+	if command == "" {
+		command = terraformDefaultCommand
+	}
+	writeGroupedOutputMarker(stderr, "\n["+label+"] "+command+" output "+status+"\n")
 	replayGroupedOutput(ioLayer.MaskWriter(os.Stdout), result.Stdout)
 	replayGroupedOutput(stderr, result.Stderr)
-	fmt.Fprintf(stderr, "[%s] end terraform plan output\n", label)
+	writeGroupedOutputMarker(stderr, "["+label+"] end "+command+" output\n")
+}
+
+func writeGroupedOutputMarker(w io.Writer, marker string) {
+	_, _ = io.WriteString(w, marker)
 }
 
 // replayGroupedOutput writes captured output and ensures it ends with a newline.
@@ -1111,8 +1204,18 @@ func terraformNodeLabel(node *dependency.Node) string {
 
 // effectiveTerraformMaxConcurrency returns the scheduler concurrency for Terraform plan.
 func effectiveTerraformMaxConcurrency(info *schema.ConfigAndStacksInfo) int {
-	if info == nil || info.SubCommand != "plan" || info.MaxConcurrency <= 1 {
+	if info == nil || !supportsTerraformConcurrency(info.SubCommand) || info.MaxConcurrency <= 1 {
 		return 1
 	}
 	return info.MaxConcurrency
+}
+
+// supportsTerraformConcurrency reports whether subCommand can run through the scheduler concurrently.
+func supportsTerraformConcurrency(subCommand string) bool {
+	switch subCommand {
+	case "plan", "apply", "destroy":
+		return true
+	default:
+		return false
+	}
 }

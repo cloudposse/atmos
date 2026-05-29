@@ -8,21 +8,13 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-
-	"github.com/cloudposse/atmos/tests/testhelpers"
 )
 
 // TestTerraformPluginCache verifies that Terraform provider caching works correctly.
 // It runs terraform init on two components that use the same provider and verifies
 // that the provider is cached in the XDG cache directory.
 func TestTerraformPluginCache(t *testing.T) {
-	// Initialize atmosRunner if not already done.
-	if atmosRunner == nil {
-		atmosRunner = testhelpers.NewAtmosRunner(coverDir)
-		if err := atmosRunner.Build(); err != nil {
-			t.Skipf("Failed to initialize Atmos: %v", err)
-		}
-	}
+	ensureAtmosRunner(t)
 
 	// Skip if there's a skip reason.
 	if skipReason != "" {
@@ -85,13 +77,7 @@ func TestTerraformPluginCache(t *testing.T) {
 
 // TestTerraformPluginCacheClean verifies that `terraform clean --cache` works correctly.
 func TestTerraformPluginCacheClean(t *testing.T) {
-	// Initialize atmosRunner if not already done.
-	if atmosRunner == nil {
-		atmosRunner = testhelpers.NewAtmosRunner(coverDir)
-		if err := atmosRunner.Build(); err != nil {
-			t.Skipf("Failed to initialize Atmos: %v", err)
-		}
-	}
+	ensureAtmosRunner(t)
 
 	// Skip if there's a skip reason.
 	if skipReason != "" {
@@ -153,13 +139,7 @@ func TestTerraformPluginCacheClean(t *testing.T) {
 
 // TestTerraformPluginCacheDisabled verifies that plugin cache can be disabled.
 func TestTerraformPluginCacheDisabled(t *testing.T) {
-	// Initialize atmosRunner if not already done.
-	if atmosRunner == nil {
-		atmosRunner = testhelpers.NewAtmosRunner(coverDir)
-		if err := atmosRunner.Build(); err != nil {
-			t.Skipf("Failed to initialize Atmos: %v", err)
-		}
-	}
+	ensureAtmosRunner(t)
 
 	// Skip if there's a skip reason.
 	if skipReason != "" {
@@ -204,13 +184,7 @@ func TestTerraformPluginCacheDisabled(t *testing.T) {
 
 // TestTerraformPluginCacheUserOverride verifies that user's TF_PLUGIN_CACHE_DIR takes precedence.
 func TestTerraformPluginCacheUserOverride(t *testing.T) {
-	// Initialize atmosRunner if not already done.
-	if atmosRunner == nil {
-		atmosRunner = testhelpers.NewAtmosRunner(coverDir)
-		if err := atmosRunner.Build(); err != nil {
-			t.Skipf("Failed to initialize Atmos: %v", err)
-		}
-	}
+	ensureAtmosRunner(t)
 
 	// Skip if there's a skip reason.
 	if skipReason != "" {
