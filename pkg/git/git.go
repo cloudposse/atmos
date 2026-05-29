@@ -3,7 +3,10 @@ package git
 import (
 	"errors"
 	"fmt"
+	"net/url"
 	"path/filepath"
+	"regexp"
+	"strings"
 
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/config"
@@ -11,6 +14,49 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 )
+
+// scpLikeURLPattern matches scp-style SSH Git URLs: `[user@]host:path`.
+// Example: `git@gitlab.example.com:group/sub/repo.git`
+//
+// The leading user@ is required so the pattern doesn't false-match relative
+// filesystem paths like `dir:file`.
+var scpLikeURLPattern = regexp.MustCompile(`^[^@/]+@([^:/]+):(.+?)(?:\.git)?$`)
+
+// ParseGenericGitURL is a fallback parser used when the canonical parser
+// (github.com/kubescape/go-git-url) rejects a URL because the host is not
+// one of the few it ships hardcoded support for (github.com, gitlab.com,
+// azure DevOps). It handles the URL shapes Git itself supports:
+//
+//   - http(s)://[user[:pass]@]host[:port]/owner/repo[.git]
+//   - ssh://[user@]host[:port]/owner/repo[.git]
+//   - [user@]host:owner/repo[.git]                   (scp-style)
+//
+// On success returns (host, owner, name, true). On unrecognized shape returns
+// ("", "", "", false) — the caller should treat this as a parse error and
+// surface the original kubescape error to preserve existing semantics.
+//
+// `owner` is the first path segment and `name` is the remainder (with any
+// trailing `.git` stripped). For GitLab-style nested groups
+// (`group/subgroup/repo.git`) this assigns the top-level group as owner and
+// `subgroup/repo` as name, matching kubescape's behavior.
+func ParseGenericGitURL(repoUrl string) (host, owner, name string, ok bool) {
+	if u, err := url.Parse(repoUrl); err == nil && u.Scheme != "" && u.Host != "" {
+		host = u.Hostname()
+		path := strings.TrimPrefix(u.Path, "/")
+		path = strings.TrimSuffix(path, ".git")
+		if i := strings.Index(path, "/"); i > 0 {
+			return host, path[:i], path[i+1:], true
+		}
+	}
+	if m := scpLikeURLPattern.FindStringSubmatch(repoUrl); m != nil {
+		host = m[1]
+		path := strings.TrimSuffix(m[2], ".git")
+		if i := strings.Index(path, "/"); i > 0 {
+			return host, path[:i], path[i+1:], true
+		}
+	}
+	return "", "", "", false
+}
 
 func GetLocalRepo() (*git.Repository, error) {
 	localPath := "."
@@ -92,22 +138,36 @@ func GetRepoInfo(localRepo *git.Repository) (RepoInfo, error) {
 		return RepoInfo{}, nil
 	}
 
-	gitURL, err := giturl.NewGitURL(repoUrl)
-	if err != nil {
-		return RepoInfo{}, err
+	// kubescape/go-git-url ships hardcoded support for github.com,
+	// gitlab.com, and azure DevOps. Self-hosted instances (GitHub
+	// Enterprise Server, GitLab self-managed, Bitbucket Server, etc.)
+	// produce parse errors here. When that happens we fall through to
+	// a generic parser that handles the URL shapes Git itself supports.
+	// If both fail, surface the canonical error so genuinely-malformed
+	// URLs still propagate as before.
+	if gitURL, gerr := giturl.NewGitURL(repoUrl); gerr == nil {
+		return RepoInfo{
+			LocalRepoPath:     localRepoPath,
+			LocalWorktree:     localRepoWorktree,
+			LocalWorktreePath: localRepoWorktree.Filesystem.Root(),
+			RepoUrl:           repoUrl,
+			RepoOwner:         gitURL.GetOwnerName(),
+			RepoName:          gitURL.GetRepoName(),
+			RepoHost:          gitURL.GetHostName(),
+		}, nil
+	} else if host, owner, name, ok := ParseGenericGitURL(repoUrl); ok {
+		return RepoInfo{
+			LocalRepoPath:     localRepoPath,
+			LocalWorktree:     localRepoWorktree,
+			LocalWorktreePath: localRepoWorktree.Filesystem.Root(),
+			RepoUrl:           repoUrl,
+			RepoOwner:         owner,
+			RepoName:          name,
+			RepoHost:          host,
+		}, nil
+	} else {
+		return RepoInfo{}, gerr
 	}
-
-	response := RepoInfo{
-		LocalRepoPath:     localRepoPath,
-		LocalWorktree:     localRepoWorktree,
-		LocalWorktreePath: localRepoWorktree.Filesystem.Root(),
-		RepoUrl:           repoUrl,
-		RepoOwner:         gitURL.GetOwnerName(),
-		RepoName:          gitURL.GetRepoName(),
-		RepoHost:          gitURL.GetHostName(),
-	}
-
-	return response, nil
 }
 
 // GitRepoInterface defines the interface for git repository operations.
