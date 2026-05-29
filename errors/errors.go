@@ -216,6 +216,15 @@ var (
 	ErrInvalidFormat  = errors.New("invalid format")
 	ErrOutputFormat   = errors.New("output format error")
 
+	// Scheduler errors.
+	ErrNilGraph      = errors.New("scheduler graph cannot be nil")
+	ErrNilDispatcher = errors.New("scheduler dispatcher cannot be nil")
+	ErrNodeFailed    = errors.New("scheduler node failed")
+	ErrNodeSkipped   = errors.New("scheduler node skipped")
+	ErrNodeNotFound  = errors.New("scheduler node not found")
+	ErrInvalidGraph  = errors.New("scheduler graph is invalid")
+	ErrInvalidWorker = errors.New("scheduler max concurrency must be greater than zero")
+
 	// Slice utility errors.
 	ErrNilInput         = errors.New("input must not be nil")
 	ErrNonStringElement = errors.New("element is not a string")
