@@ -117,6 +117,7 @@ var (
 	ErrInvalidTerraformSingleComponentAndMultiComponentFlags = errors.New("the single-component flags (`--from-plan`, `--planfile`) can't be used with the multi-component (bulk operations) flags (`--affected`, `--all`, `--query`, `--components`)")
 
 	ErrYamlFuncInvalidArguments         = errors.New("invalid number of arguments in the Atmos YAML function")
+	ErrYamlFuncMaxResolutionDepth       = errors.New("Atmos YAML function resolution exceeded the maximum dependency depth (likely an undetected circular dependency)")
 	ErrAwsGetCallerIdentity             = errors.New("failed to get AWS caller identity")
 	ErrAwsDescribeOrganization          = errors.New("failed to describe AWS organization")
 	ErrDescribeComponent                = errors.New("failed to describe component")
@@ -182,6 +183,13 @@ var (
 
 	// Git-related errors.
 	ErrGitNotAvailable      = errors.New("git must be available and on the PATH")
+	ErrGitRoot              = errors.New("failed to get git repository root")
+	ErrGitSHA               = errors.New("failed to get git SHA")
+	ErrGitBranch            = errors.New("failed to get git branch")
+	ErrGitRef               = errors.New("failed to get git ref")
+	ErrGitWorktree          = errors.New("failed to get git worktree")
+	ErrDetachedHead         = errors.New("git HEAD is detached")
+	ErrEmptyBranchName      = errors.New("git branch name is empty")
 	ErrInvalidGitPort       = errors.New("invalid port number")
 	ErrSSHKeyUsage          = errors.New("error using SSH key")
 	ErrGitCommandExited     = errors.New("git command exited with non-zero status")
@@ -729,6 +737,7 @@ var (
 	ErrDefaultIdentity              = errors.New("default identity error")
 	ErrAwsAuth                      = errors.New("aws auth error")
 	ErrAwsUserNotConfigured         = errors.New("aws user not configured")
+	ErrAwsUserKeyringReadFailed     = errors.New("failed to read AWS user credentials from keyring")
 	ErrAwsSAMLDecodeFailed          = errors.New("aws saml decode failed")
 	ErrAwsMissingEnvVars            = errors.New("missing required AWS environment variables")
 	ErrUnsupportedPlatform          = errors.New("unsupported platform")
