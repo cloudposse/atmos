@@ -181,6 +181,13 @@ var (
 
 	// Git-related errors.
 	ErrGitNotAvailable      = errors.New("git must be available and on the PATH")
+	ErrGitRoot              = errors.New("failed to get git repository root")
+	ErrGitSHA               = errors.New("failed to get git SHA")
+	ErrGitBranch            = errors.New("failed to get git branch")
+	ErrGitRef               = errors.New("failed to get git ref")
+	ErrGitWorktree          = errors.New("failed to get git worktree")
+	ErrDetachedHead         = errors.New("git HEAD is detached")
+	ErrEmptyBranchName      = errors.New("git branch name is empty")
 	ErrInvalidGitPort       = errors.New("invalid port number")
 	ErrSSHKeyUsage          = errors.New("error using SSH key")
 	ErrGitCommandExited     = errors.New("git command exited with non-zero status")
