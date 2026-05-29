@@ -21,6 +21,10 @@ func TestAllTags(t *testing.T) {
 		TagInclude,
 		TagIncludeRaw,
 		TagRepoRoot,
+		TagGitRoot,
+		TagGitSha,
+		TagGitBranch,
+		TagGitRef,
 		TagRandom,
 		TagLiteral,
 		TagAwsAccountID,
@@ -50,6 +54,10 @@ func TestIsValidTag(t *testing.T) {
 		TagInclude,
 		TagIncludeRaw,
 		TagRepoRoot,
+		TagGitRoot,
+		TagGitSha,
+		TagGitBranch,
+		TagGitRef,
 		TagRandom,
 		TagLiteral,
 		TagAwsAccountID,
@@ -82,6 +90,10 @@ func TestYAMLTag(t *testing.T) {
 		{TagInclude, "!include"},
 		{TagIncludeRaw, "!include.raw"},
 		{TagRepoRoot, "!repo-root"},
+		{TagGitRoot, "!git.root"},
+		{TagGitSha, "!git.sha"},
+		{TagGitBranch, "!git.branch"},
+		{TagGitRef, "!git.ref"},
 		{TagRandom, "!random"},
 		{TagLiteral, "!literal"},
 		{TagAwsAccountID, "!aws.account_id"},
@@ -116,6 +128,10 @@ func TestFromYAMLTag(t *testing.T) {
 		{"!include", "include"},
 		{"!include.raw", "include.raw"},
 		{"!repo-root", "repo-root"},
+		{"!git.root", "git.root"},
+		{"!git.sha", "git.sha"},
+		{"!git.branch", "git.branch"},
+		{"!git.ref", "git.ref"},
 		{"!random", "random"},
 		{"!literal", "literal"},
 		{"!aws.account_id", "aws.account_id"},
@@ -154,6 +170,10 @@ func TestTagConstants(t *testing.T) {
 	assert.Equal(t, "include", TagInclude)
 	assert.Equal(t, "include.raw", TagIncludeRaw)
 	assert.Equal(t, "repo-root", TagRepoRoot)
+	assert.Equal(t, "git.root", TagGitRoot)
+	assert.Equal(t, "git.sha", TagGitSha)
+	assert.Equal(t, "git.branch", TagGitBranch)
+	assert.Equal(t, "git.ref", TagGitRef)
 	assert.Equal(t, "random", TagRandom)
 	assert.Equal(t, "literal", TagLiteral)
 	assert.Equal(t, "aws.account_id", TagAwsAccountID)

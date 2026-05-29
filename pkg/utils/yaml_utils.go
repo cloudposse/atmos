@@ -13,6 +13,7 @@ import (
 	yaml "gopkg.in/yaml.v3"
 
 	"github.com/cloudposse/atmos/pkg/config/homedir"
+	atmosGit "github.com/cloudposse/atmos/pkg/git"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -29,7 +30,11 @@ const (
 	AtmosYamlFuncEnv                     = "!env"
 	AtmosYamlFuncInclude                 = "!include"
 	AtmosYamlFuncIncludeRaw              = "!include.raw"
-	AtmosYamlFuncGitRoot                 = "!repo-root"
+	AtmosYamlFuncGitRoot                 = atmosGit.YAMLFuncRepoRoot
+	AtmosYamlFuncGitRootAlias            = atmosGit.YAMLFuncRoot
+	AtmosYamlFuncGitSha                  = atmosGit.YAMLFuncSHA
+	AtmosYamlFuncGitBranch               = atmosGit.YAMLFuncBranch
+	AtmosYamlFuncGitRef                  = atmosGit.YAMLFuncRef
 	AtmosYamlFuncCwd                     = "!cwd"
 	AtmosYamlFuncRandom                  = "!random"
 	AtmosYamlFuncLiteral                 = "!literal"
@@ -55,6 +60,11 @@ var (
 		AtmosYamlFuncTerraformOutput,
 		AtmosYamlFuncTerraformState,
 		AtmosYamlFuncEnv,
+		AtmosYamlFuncGitRoot,
+		AtmosYamlFuncGitRootAlias,
+		AtmosYamlFuncGitSha,
+		AtmosYamlFuncGitBranch,
+		AtmosYamlFuncGitRef,
 		AtmosYamlFuncCwd,
 		AtmosYamlFuncRandom,
 		AtmosYamlFuncLiteral,
@@ -76,6 +86,11 @@ var (
 		AtmosYamlFuncTerraformOutput:         true,
 		AtmosYamlFuncTerraformState:          true,
 		AtmosYamlFuncEnv:                     true,
+		AtmosYamlFuncGitRoot:                 true,
+		AtmosYamlFuncGitRootAlias:            true,
+		AtmosYamlFuncGitSha:                  true,
+		AtmosYamlFuncGitBranch:               true,
+		AtmosYamlFuncGitRef:                  true,
 		AtmosYamlFuncCwd:                     true,
 		AtmosYamlFuncRandom:                  true,
 		AtmosYamlFuncLiteral:                 true,
