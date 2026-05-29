@@ -94,6 +94,11 @@ func GetRepoConfig(repo *git.Repository) (*config.Config, error) {
 	return repoConfig, nil
 }
 
+// RepoInfo describes the local Git repository plus metadata extracted from
+// its remote URL. The Repo* fields are populated by ParseRepoURL using the
+// canonical parser (kubescape/go-git-url) when the host is recognized, or
+// the generic fallback parser for self-hosted instances. They may be empty
+// when the working tree has no remotes configured.
 type RepoInfo struct {
 	LocalRepoPath     string
 	LocalWorktree     *git.Worktree
@@ -104,6 +109,11 @@ type RepoInfo struct {
 	RepoHost          string
 }
 
+// GetRepoInfo opens the given local repository, reads its first remote URL,
+// and resolves host/owner/name via ParseRepoURL. Returns an empty RepoInfo
+// (no error) when the repository has no remotes or the remote URL is empty;
+// returns an error when the URL cannot be parsed by either the canonical or
+// the generic fallback parser.
 func GetRepoInfo(localRepo *git.Repository) (RepoInfo, error) {
 	localRepoConfig, err := GetRepoConfig(localRepo)
 	if err != nil {
