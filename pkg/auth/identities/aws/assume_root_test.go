@@ -1493,6 +1493,10 @@ func (m *mockAuthManager) GetIntegration(_ string) (*schema.Integration, error) 
 	return nil, nil
 }
 
+func (m *mockAuthManager) RevokeEphemeralIntegrations(_ context.Context, _ string, _ *bool) error {
+	return nil
+}
+
 func (m *mockAuthManager) ResolvePrincipalSetting(_ string, _ string) (interface{}, bool) {
 	return nil, false
 }

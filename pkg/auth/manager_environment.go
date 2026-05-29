@@ -93,6 +93,7 @@ func (m *manager) composeIntegrationEnvironment(identityName string, base map[st
 		integration, err := integrations.Create(&integrations.IntegrationConfig{
 			Name:   integrationName,
 			Config: &integrationConfig,
+			Realm:  m.realm.Value,
 		})
 		if err != nil {
 			log.Debug("Failed to create integration for environment", "integration", integrationName, "error", err)

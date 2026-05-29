@@ -19,7 +19,16 @@ import (
 	"github.com/cloudposse/atmos/pkg/flags"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/telemetry"
 )
+
+// authExecContext bundles what command-end teardown needs after running the command.
+type authExecContext struct {
+	envList             []string
+	authManager         auth.AuthManager
+	identity            string
+	revokeOnExitDefault *bool
+}
 
 // execParser handles flags for the exec command.
 var execParser *flags.StandardParser
@@ -83,20 +92,42 @@ func executeAuthExecCommand(cmd *cobra.Command, args []string) error {
 	}
 
 	// Prepare the authenticated environment.
-	envList, err := prepareAuthenticatedEnv(cmd, v)
+	execCtx, err := prepareAuthenticatedEnv(cmd, v)
 	if err != nil {
 		return err
 	}
 
+	// Revoke ephemeral (github/sts) tokens at command-end so brokered credentials
+	// don't outlive the command. Gated on CI and revoke_on_exit (default true);
+	// set revoke_on_exit: false to keep credentials for a separate step.
+	defer revokeEphemeralAuthExec(execCtx)
+
 	// Execute the command with authentication environment.
-	return executeCommandWithEnv(commandArgs, envList)
+	return executeCommandWithEnv(commandArgs, execCtx.envList)
+}
+
+// revokeEphemeralAuthExec performs command-end revocation of ephemeral auth
+// integrations (github/sts) for the resolved identity. No-op when not in CI,
+// when there is no auth manager, or when no identity was resolved.
+func revokeEphemeralAuthExec(execCtx *authExecContext) {
+	defer perf.Track(nil, "auth.exec.revokeEphemeralAuthExec")()
+
+	if execCtx == nil || execCtx.authManager == nil || execCtx.identity == "" {
+		return
+	}
+	if !telemetry.IsCI() {
+		return
+	}
+	if err := execCtx.authManager.RevokeEphemeralIntegrations(context.Background(), execCtx.identity, execCtx.revokeOnExitDefault); err != nil {
+		log.Debug("Command-end ephemeral revoke encountered errors", "identity", execCtx.identity, "error", err)
+	}
 }
 
 // prepareAuthenticatedEnv loads config, authenticates, and prepares the shell
 // environment. Returns the sanitized env list (os.Environ + global env + auth
 // vars, with credential leaks removed) for direct use as the child process's
 // Env so order is preserved and no duplicate-key collisions are introduced.
-func prepareAuthenticatedEnv(cmd *cobra.Command, v *viper.Viper) ([]string, error) {
+func prepareAuthenticatedEnv(cmd *cobra.Command, v *viper.Viper) (*authExecContext, error) {
 	defer perf.Track(nil, "auth.exec.prepareAuthenticatedEnv")()
 
 	// Parse global flags and build ConfigAndStacksInfo to honor --base-path, --config, --config-path, --profile.
@@ -113,6 +144,9 @@ func prepareAuthenticatedEnv(cmd *cobra.Command, v *viper.Viper) ([]string, erro
 	if err != nil {
 		return nil, fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrFailedToInitializeAuthManager, err)
 	}
+
+	// Capture the global revoke_on_exit default for command-end teardown.
+	revokeOnExitDefault := atmosConfig.Settings.Pro.GitSTS.RevokeOnExit
 
 	// Try to use cached credentials first (passive check, no prompts).
 	// Only authenticate if cached credentials are not available or expired.
@@ -148,7 +182,12 @@ func prepareAuthenticatedEnv(cmd *cobra.Command, v *viper.Viper) ([]string, erro
 		return nil, fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrPrepareShellEnvironment, err)
 	}
 
-	return envList, nil
+	return &authExecContext{
+		envList:             envList,
+		authManager:         authManager,
+		identity:            identityName,
+		revokeOnExitDefault: revokeOnExitDefault,
+	}, nil
 }
 
 // resolveIdentityNameForExec resolves the identity name from flags, viper, or prompts for selection.

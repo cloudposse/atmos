@@ -146,9 +146,13 @@ type Integration struct {
 	Spec *IntegrationSpec `yaml:"spec,omitempty" json:"spec,omitempty" mapstructure:"spec"` // Integration-specific configuration.
 }
 
-// IntegrationVia defines how an integration connects to an identity.
+// IntegrationVia defines how an integration connects to an identity or provider.
+// Exactly one of Identity or Provider must be set. Provider binding is useful when
+// the provider itself yields usable credentials (e.g., atmos/pro session JWT) and a
+// passthrough identity would otherwise be redundant.
 type IntegrationVia struct {
-	Identity string `yaml:"identity" json:"identity" mapstructure:"identity"` // Identity providing credentials.
+	Identity string `yaml:"identity,omitempty" json:"identity,omitempty" mapstructure:"identity"` // Identity providing credentials.
+	Provider string `yaml:"provider,omitempty" json:"provider,omitempty" mapstructure:"provider"` // Provider providing credentials (alternative to identity).
 }
 
 // IntegrationSpec defines the spec configuration for integrations.
@@ -156,6 +160,12 @@ type IntegrationSpec struct {
 	AutoProvision *bool        `yaml:"auto_provision,omitempty" json:"auto_provision,omitempty" mapstructure:"auto_provision"` // Whether to auto-provision on identity login. Defaults to true.
 	Registry      *ECRRegistry `yaml:"registry,omitempty" json:"registry,omitempty" mapstructure:"registry"`                   // Single ECR registry for aws/ecr integrations.
 	Cluster       *EKSCluster  `yaml:"cluster,omitempty" json:"cluster,omitempty" mapstructure:"cluster"`                      // EKS cluster for aws/eks integrations.
+
+	// GitHub STS integration (github/sts) fields.
+	Repos         []string `yaml:"repos,omitempty" json:"repos,omitempty" mapstructure:"repos"`                               // Optional source repos (sent as sts sources[]).
+	PolicyName    string   `yaml:"policy_name,omitempty" json:"policy_name,omitempty" mapstructure:"policy_name"`             // Optional trust policy name (default "default").
+	GitConfigMode string   `yaml:"git_config_mode,omitempty" json:"git_config_mode,omitempty" mapstructure:"git_config_mode"` // "env" (inline GIT_CONFIG_*) or "file" (include.path). Overrides settings.pro default.
+	RevokeOnExit  *bool    `yaml:"revoke_on_exit,omitempty" json:"revoke_on_exit,omitempty" mapstructure:"revoke_on_exit"`    // Auto-revoke minted tokens at command-end. Overrides settings.pro default.
 }
 
 // ECRRegistry represents an ECR registry configuration for aws/ecr integrations.

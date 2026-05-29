@@ -131,6 +131,10 @@ func (s *stubAuthManager) GetIntegration(integrationName string) (*schema.Integr
 	return nil, nil
 }
 
+func (s *stubAuthManager) RevokeEphemeralIntegrations(_ context.Context, _ string, _ *bool) error {
+	return nil
+}
+
 func (s *stubAuthManager) ResolvePrincipalSetting(identityName, key string) (interface{}, bool) {
 	return nil, false
 }

@@ -1615,9 +1615,15 @@ func (m *mockResolveAuthManager) PrepareShellEnvironment(_ context.Context, _ st
 func (m *mockResolveAuthManager) ExecuteIdentityIntegrations(_ context.Context, _ string) error {
 	return nil
 }
+
 func (m *mockResolveAuthManager) ExecuteIntegration(_ context.Context, _ string) error { return nil }
+
 func (m *mockResolveAuthManager) GetIntegration(_ string) (*schema.Integration, error) {
 	return nil, nil
+}
+
+func (m *mockResolveAuthManager) RevokeEphemeralIntegrations(_ context.Context, _ string, _ *bool) error {
+	return nil
 }
 
 func (m *mockResolveAuthManager) GetRealm() realm.RealmInfo {

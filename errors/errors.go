@@ -947,6 +947,23 @@ var (
 	ErrKubeconfigWrite      = errors.New("failed to write kubeconfig")
 	ErrKubeconfigMerge      = errors.New("failed to merge kubeconfig")
 
+	// Atmos Pro authentication (atmos/pro provider) errors.
+	ErrProAuthFailed         = errors.New("authentication to Atmos Pro failed")
+	ErrProWorkspaceIDMissing = errors.New("workspace ID for Atmos Pro is required (set via auth provider spec.workspace_id, settings.pro.workspace_id, or ATMOS_PRO_WORKSPACE_ID)")
+	ErrProCredentialsType    = errors.New("expected Atmos Pro credentials")
+
+	// GitHub STS integration (github/sts) errors.
+	ErrSTSMintFailed           = errors.New("failed to mint GitHub STS tokens")
+	ErrSTSNoEntitlement        = errors.New("workspace is not entitled to GitHub STS or the feature is disabled")
+	ErrNotGitHubActionsSession = errors.New("GitHub STS requires a GitHub Actions session")
+	ErrGitHubTokenRevokeFailed = errors.New("failed to revoke GitHub installation token")
+	ErrGitSTSStateWrite        = errors.New("failed to write GitHub STS state")
+	ErrGitSTSStateRead         = errors.New("failed to read GitHub STS state")
+
+	// Integration via configuration errors.
+	ErrIntegrationViaMissing   = errors.New("integration must define via.identity or via.provider")
+	ErrIntegrationViaAmbiguous = errors.New("integration must define exactly one of via.identity or via.provider")
+
 	// Identity authentication errors.
 	ErrIdentityAuthFailed      = errors.New("failed to authenticate identity")
 	ErrIdentityCredentialsNone = errors.New("credentials not available for identity")

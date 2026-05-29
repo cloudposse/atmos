@@ -198,6 +198,10 @@ func (s stubSamlMgr) GetIntegration(string) (*schema.Integration, error) {
 	return nil, nil
 }
 
+func (s stubSamlMgr) RevokeEphemeralIntegrations(context.Context, string, *bool) error {
+	return nil
+}
+
 func (s stubSamlMgr) ResolvePrincipalSetting(string, string) (interface{}, bool) {
 	return nil, false
 }

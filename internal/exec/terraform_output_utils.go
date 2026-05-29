@@ -161,6 +161,12 @@ func (a *authContextWrapper) GetIntegration(integrationName string) (*schema.Int
 	panic("authContextWrapper.GetIntegration should not be called")
 }
 
+func (a *authContextWrapper) RevokeEphemeralIntegrations(_ context.Context, _ string, _ *bool) error {
+	defer perf.Track(nil, "exec.authContextWrapper.RevokeEphemeralIntegrations")()
+
+	panic("authContextWrapper.RevokeEphemeralIntegrations should not be called")
+}
+
 func (a *authContextWrapper) ResolvePrincipalSetting(identityName, key string) (interface{}, bool) {
 	defer perf.Track(nil, "exec.authContextWrapper.ResolvePrincipalSetting")()
 

@@ -2,6 +2,7 @@ package auth
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -48,10 +49,20 @@ func (m *manager) findIntegrationsForIdentity(identityName string, autoProvision
 		return nil
 	}
 
+	// Resolve the identity's root provider once so integrations can bind via.provider.
+	rootProvider := m.resolveProviderForIdentity(identityName)
+
 	var result []string
 	for name, integration := range m.config.Integrations {
-		// Check if this integration references the given identity.
-		if integration.Via == nil || integration.Via.Identity != identityName {
+		if integration.Via == nil {
+			continue
+		}
+
+		// An integration applies to this identity if it references the identity directly
+		// (via.identity) or binds to the identity's root provider (via.provider).
+		matchesIdentity := integration.Via.Identity != "" && integration.Via.Identity == identityName
+		matchesProvider := integration.Via.Provider != "" && rootProvider != "" && integration.Via.Provider == rootProvider
+		if !matchesIdentity && !matchesProvider {
 			continue
 		}
 
@@ -89,6 +100,7 @@ func (m *manager) executeIntegration(ctx context.Context, integrationName string
 	integration, err := integrations.Create(&integrations.IntegrationConfig{
 		Name:   integrationName,
 		Config: &integrationConfig,
+		Realm:  m.realm.Value,
 	})
 	if err != nil {
 		return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrIntegrationFailed, err)
@@ -145,6 +157,7 @@ func (m *manager) ExecuteIntegration(ctx context.Context, integrationName string
 	integration, err := integrations.Create(&integrations.IntegrationConfig{
 		Name:   integrationName,
 		Config: &integrationConfig,
+		Realm:  m.realm.Value,
 	})
 	if err != nil {
 		return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrIntegrationFailed, err)
@@ -195,6 +208,77 @@ func (m *manager) ExecuteIdentityIntegrations(ctx context.Context, identityName 
 	}
 
 	return nil
+}
+
+// RevokeEphemeralIntegrations revokes and cleans up ephemeral integrations (currently
+// github/sts) linked to the identity. It is intended for command-end teardown in CI:
+// minted tokens are revoked directly against the provider so they don't outlive the command.
+//
+// Per-integration revoke_on_exit (spec) overrides globalDefault, which overrides the
+// built-in default (true). When the effective value is false the integration is skipped,
+// allowing users to keep credentials alive for a separate CI step.
+//
+// Best-effort: failures are logged and returned joined; callers typically ignore the error.
+func (m *manager) RevokeEphemeralIntegrations(ctx context.Context, identityName string, globalDefault *bool) error {
+	defer perf.Track(nil, "auth.Manager.RevokeEphemeralIntegrations")()
+
+	linkedIntegrations := m.findIntegrationsForIdentity(identityName, false)
+	if len(linkedIntegrations) == 0 {
+		return nil
+	}
+
+	var errs []error
+	for _, integrationName := range linkedIntegrations {
+		integrationConfig, exists := m.config.Integrations[integrationName]
+		if !exists {
+			continue
+		}
+
+		// Only ephemeral kinds are revoked at command-end. Other kinds (aws/ecr, aws/eks)
+		// rely on natural expiry and logout-time cleanup.
+		if integrationConfig.Kind != integrations.KindGitHubSTS {
+			continue
+		}
+
+		if !resolveRevokeOnExit(&integrationConfig, globalDefault) {
+			log.Debug("Skipping command-end revoke (revoke_on_exit disabled)", logKeyIntegration, integrationName)
+			continue
+		}
+
+		integration, err := integrations.Create(&integrations.IntegrationConfig{
+			Name:   integrationName,
+			Config: &integrationConfig,
+			Realm:  m.realm.Value,
+		})
+		if err != nil {
+			log.Warn("Failed to create integration for revoke", logKeyIntegration, integrationName, "error", err)
+			continue
+		}
+
+		if err := integration.Cleanup(ctx); err != nil {
+			log.Warn("Command-end revoke failed", logKeyIntegration, integrationName, "error", err)
+			errs = append(errs, err)
+		} else {
+			log.Debug("Command-end revoke succeeded", logKeyIntegration, integrationName)
+		}
+	}
+
+	if len(errs) > 0 {
+		return errors.Join(errs...)
+	}
+	return nil
+}
+
+// resolveRevokeOnExit resolves the effective revoke_on_exit value:
+// integration spec → globalDefault → built-in default (true).
+func resolveRevokeOnExit(integrationConfig *schema.Integration, globalDefault *bool) bool {
+	if integrationConfig.Spec != nil && integrationConfig.Spec.RevokeOnExit != nil {
+		return *integrationConfig.Spec.RevokeOnExit
+	}
+	if globalDefault != nil {
+		return *globalDefault
+	}
+	return true
 }
 
 // GetIntegration returns the integration config by name.

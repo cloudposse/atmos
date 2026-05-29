@@ -819,6 +819,20 @@ func (mr *MockAuthManagerMockRecorder) ResolveProviderConfig(identityName any) *
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ResolveProviderConfig", reflect.TypeOf((*MockAuthManager)(nil).ResolveProviderConfig), identityName)
 }
 
+// RevokeEphemeralIntegrations mocks base method.
+func (m *MockAuthManager) RevokeEphemeralIntegrations(ctx context.Context, identityName string, globalDefault *bool) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "RevokeEphemeralIntegrations", ctx, identityName, globalDefault)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// RevokeEphemeralIntegrations indicates an expected call of RevokeEphemeralIntegrations.
+func (mr *MockAuthManagerMockRecorder) RevokeEphemeralIntegrations(ctx, identityName, globalDefault any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RevokeEphemeralIntegrations", reflect.TypeOf((*MockAuthManager)(nil).RevokeEphemeralIntegrations), ctx, identityName, globalDefault)
+}
+
 // Validate mocks base method.
 func (m *MockAuthManager) Validate() error {
 	m.ctrl.T.Helper()

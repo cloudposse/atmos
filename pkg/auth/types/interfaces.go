@@ -310,6 +310,11 @@ type AuthManager interface {
 	// GetIntegration returns the integration config by name.
 	GetIntegration(integrationName string) (*schema.Integration, error)
 
+	// RevokeEphemeralIntegrations revokes and cleans up ephemeral integrations (github/sts)
+	// linked to the identity, honoring revoke_on_exit (spec → globalDefault → true).
+	// Intended for command-end teardown in CI. Best-effort; returns joined errors.
+	RevokeEphemeralIntegrations(ctx context.Context, identityName string, globalDefault *bool) error
+
 	// ResolvePrincipalSetting traverses the identity chain and returns the first
 	// non-empty value for the given key in Principal configuration.
 	// The chain is traversed from the target identity backwards through parent identities.
