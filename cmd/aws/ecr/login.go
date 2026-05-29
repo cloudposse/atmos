@@ -159,7 +159,7 @@ func createAuthManager(authConfig *schema.AuthConfig, cliConfigPath string) (aut
 		AuthContext: &schema.AuthContext{},
 	}
 
-	credStore := credentials.NewCredentialStore()
+	credStore := credentials.NewCredentialStoreWithConfig(authConfig)
 	validator := validation.NewValidator()
 	return auth.NewAuthManager(authConfig, credStore, validator, authStackInfo, cliConfigPath)
 }

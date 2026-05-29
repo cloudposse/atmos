@@ -192,7 +192,26 @@ func NewAuthManager(
 		identity.SetRealm(m.realm.Value)
 	}
 
+	// Share the manager's config-aware credential store with identities that
+	// perform their own keyring I/O (e.g. AWS user identities cache/read STS
+	// credentials directly). Without this, those identities would construct a
+	// default "system" keyring and ignore auth.keyring.type — which hangs on a
+	// broken-but-present system keyring (issue #2544). Identities that do not
+	// implement credentialStoreReceiver simply keep their existing behavior.
+	for _, identity := range m.identities {
+		if receiver, ok := identity.(credentialStoreReceiver); ok {
+			receiver.SetCredentialStore(m.credentialStore)
+		}
+	}
+
 	return m, nil
+}
+
+// credentialStoreReceiver is an optional interface implemented by identities
+// that perform their own credential-store I/O and want to reuse the auth
+// manager's config-aware store instead of constructing a default one.
+type credentialStoreReceiver interface {
+	SetCredentialStore(store types.CredentialStore)
 }
 
 // GetStackInfo returns the associated stack info pointer (may be nil).
@@ -207,6 +226,13 @@ func (m *manager) GetRealm() realm.RealmInfo {
 	defer perf.Track(nil, "auth.GetRealm")()
 
 	return m.realm
+}
+
+// CredentialStoreType returns the type of the backing credential store.
+func (m *manager) CredentialStoreType() string {
+	defer perf.Track(nil, "auth.CredentialStoreType")()
+
+	return m.credentialStore.Type()
 }
 
 // Authenticate performs hierarchical authentication for the specified identity.

@@ -249,7 +249,8 @@ func preCustomCommand(
 	if len(args) < requiredNoDefaultCount {
 		sb.WriteString(
 			fmt.Sprintf("Command requires at least %d argument(s) (no defaults provided for them):\n",
-				requiredNoDefaultCount))
+				requiredNoDefaultCount),
+		)
 
 		// List out which arguments are missing
 		missingIndex := 1
@@ -648,7 +649,7 @@ func executeCustomCommand(
 			AuthContext: &schema.AuthContext{},
 		}
 
-		credStore := credentials.NewCredentialStore()
+		credStore := credentials.NewCredentialStoreWithConfig(&atmosConfig.Auth)
 		validator := validation.NewValidator()
 		authManager, err = auth.NewAuthManager(&atmosConfig.Auth, credStore, validator, authStackInfo, atmosConfig.CliConfigPath)
 		if err != nil {
@@ -1128,7 +1129,8 @@ func resolveComponentPath(info *schema.ConfigAndStacksInfo, commandName string) 
 		return handlePathResolutionError(err)
 	}
 
-	log.Debug("Resolved component from path",
+	log.Debug(
+		"Resolved component from path",
 		"original_path", info.ComponentFromArg,
 		"resolved_component", resolvedComponent,
 		"stack", info.Stack,
@@ -1272,7 +1274,8 @@ func StackFlagCompletion(cmd *cobra.Command, args []string, toComplete string) (
 				)
 				if err != nil {
 					// If resolution fails, fall through to list all stacks (graceful degradation)
-					log.Trace("Could not resolve path for stack completion, listing all stacks",
+					log.Trace(
+						"Could not resolve path for stack completion, listing all stacks",
 						"path", component,
 						"error", err,
 					)
@@ -1283,7 +1286,8 @@ func StackFlagCompletion(cmd *cobra.Command, args []string, toComplete string) (
 					return output, cobra.ShellCompDirectiveNoFileComp
 				}
 				component = resolvedComponent
-				log.Trace("Resolved path for stack completion",
+				log.Trace(
+					"Resolved path for stack completion",
 					"original", args[0],
 					"resolved", component,
 				)

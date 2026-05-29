@@ -205,7 +205,7 @@ func TestExchangeRefreshToken_Success(t *testing.T) {
 		},
 	}
 
-	resp, err := exchangeRefreshToken(context.Background(), mockClient, "us-east-2", "my-refresh-token")
+	resp, err := exchangeRefreshToken(context.Background(), mockClient, "us-east-2", "my-refresh-token", mustGenerateDPoPKey(t))
 	require.NoError(t, err)
 	assert.Equal(t, "NEW_AKID", resp.AccessToken.AccessKeyID)
 	assert.Equal(t, "updated-refresh-token", resp.RefreshToken)
@@ -231,7 +231,7 @@ func TestCallTokenEndpoint_InvalidJSON(t *testing.T) {
 	body.Set("grant_type", webflowGrantTypeAuthCode)
 	body.Set("code", "code")
 
-	resp, err := callTokenEndpoint(context.Background(), mockClient, "us-east-2", body)
+	resp, err := callTokenEndpoint(context.Background(), mockClient, "us-east-2", body, mustGenerateDPoPKey(t))
 	assert.Nil(t, resp)
 	assert.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrWebflowTokenExchange)
@@ -257,7 +257,7 @@ func TestCallTokenEndpoint_NonOK_NoErrorBody(t *testing.T) {
 	body.Set("grant_type", webflowGrantTypeAuthCode)
 	body.Set("code", "code")
 
-	resp, err := callTokenEndpoint(context.Background(), mockClient, "us-east-2", body)
+	resp, err := callTokenEndpoint(context.Background(), mockClient, "us-east-2", body, mustGenerateDPoPKey(t))
 	assert.Nil(t, resp)
 	assert.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrWebflowTokenExchange)
@@ -286,7 +286,7 @@ func TestCallTokenEndpoint_NonOK_WithErrorBody(t *testing.T) {
 	body.Set("grant_type", webflowGrantTypeAuthCode)
 	body.Set("code", "expired-code")
 
-	resp, err := callTokenEndpoint(context.Background(), mockClient, "us-east-2", body)
+	resp, err := callTokenEndpoint(context.Background(), mockClient, "us-east-2", body, mustGenerateDPoPKey(t))
 	assert.Nil(t, resp)
 	assert.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrWebflowTokenExchange)
@@ -304,7 +304,7 @@ func TestCallTokenEndpoint_HTTPClientError(t *testing.T) {
 	body.Set("grant_type", webflowGrantTypeAuthCode)
 	body.Set("code", "code")
 
-	resp, err := callTokenEndpoint(context.Background(), mockClient, "us-east-2", body)
+	resp, err := callTokenEndpoint(context.Background(), mockClient, "us-east-2", body, mustGenerateDPoPKey(t))
 	assert.Nil(t, resp)
 	assert.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrWebflowTokenExchange)
@@ -336,7 +336,7 @@ func TestCallTokenEndpoint_MissingCredentials(t *testing.T) {
 	body.Set("grant_type", webflowGrantTypeAuthCode)
 	body.Set("code", "code")
 
-	resp, err := callTokenEndpoint(context.Background(), mockClient, "us-east-2", body)
+	resp, err := callTokenEndpoint(context.Background(), mockClient, "us-east-2", body, mustGenerateDPoPKey(t))
 	assert.Nil(t, resp)
 	assert.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrWebflowTokenExchange)
@@ -350,7 +350,7 @@ func TestExchangeRefreshToken_HTTPError(t *testing.T) {
 		},
 	}
 
-	resp, err := exchangeRefreshToken(context.Background(), mockClient, "us-east-2", "token")
+	resp, err := exchangeRefreshToken(context.Background(), mockClient, "us-east-2", "token", mustGenerateDPoPKey(t))
 	assert.Nil(t, resp)
 	assert.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrWebflowTokenExchange)
@@ -388,7 +388,7 @@ func TestCallTokenEndpoint_Success(t *testing.T) {
 	body.Set("grant_type", webflowGrantTypeAuthCode)
 	body.Set("code", "auth-code")
 
-	resp, err := callTokenEndpoint(context.Background(), mockClient, "us-east-2", body)
+	resp, err := callTokenEndpoint(context.Background(), mockClient, "us-east-2", body, mustGenerateDPoPKey(t))
 	require.NoError(t, err)
 	assert.Equal(t, "AKID_DIRECT", resp.AccessToken.AccessKeyID)
 	assert.Equal(t, "SECRET_DIRECT", resp.AccessToken.SecretAccessKey)

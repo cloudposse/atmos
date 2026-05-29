@@ -1615,7 +1615,9 @@ func (m *mockResolveAuthManager) PrepareShellEnvironment(_ context.Context, _ st
 func (m *mockResolveAuthManager) ExecuteIdentityIntegrations(_ context.Context, _ string) error {
 	return nil
 }
+
 func (m *mockResolveAuthManager) ExecuteIntegration(_ context.Context, _ string) error { return nil }
+
 func (m *mockResolveAuthManager) GetIntegration(_ string) (*schema.Integration, error) {
 	return nil, nil
 }
@@ -1623,6 +1625,8 @@ func (m *mockResolveAuthManager) GetIntegration(_ string) (*schema.Integration, 
 func (m *mockResolveAuthManager) GetRealm() realm.RealmInfo {
 	return realm.RealmInfo{}
 }
+
+func (m *mockResolveAuthManager) CredentialStoreType() string { return "" }
 
 func TestAssumeRoleIdentity_WebIdentityVsStandardAssumeRole_DifferentCredentialHandling(t *testing.T) {
 	// This test documents the difference between standard AssumeRole and AssumeRoleWithWebIdentity

@@ -2555,3 +2555,43 @@ func TestUserIdentity_Authenticate_WebflowDisabledBypassed(t *testing.T) {
 	assert.ErrorIs(t, err, errUtils.ErrAwsUserNotConfigured)
 	assert.False(t, webflowReached, "webflow must not run when webflow_enabled is false")
 }
+
+// TestUserIdentity_SetCredentialStore_HonorsInjectedStore verifies the
+// credential-store injection added for issue #2544: when the auth manager
+// injects its config-aware store, the identity reads from that store rather
+// than constructing a default one.
+func TestUserIdentity_SetCredentialStore_HonorsInjectedStore(t *testing.T) {
+	keyring.MockInit()
+
+	id, err := NewUserIdentity("inject-test", &schema.Identity{Kind: "aws/user"})
+	require.NoError(t, err)
+	identity := id.(*userIdentity)
+	identity.SetRealm("realm-x")
+
+	// Inject a memory-backed store and seed it with credentials.
+	mem := atmosCreds.NewCredentialStoreWithConfig(&schema.AuthConfig{
+		Keyring: schema.KeyringConfig{Type: types.CredentialStoreTypeMemory},
+	})
+	require.Equal(t, types.CredentialStoreTypeMemory, mem.Type())
+	identity.SetCredentialStore(mem)
+
+	seeded := &types.AWSCredentials{AccessKeyID: "AKIAINJECT", SecretAccessKey: "SECRET", Region: "us-east-1"}
+	require.NoError(t, mem.Store("inject-test", seeded, "realm-x"))
+
+	got, err := identity.credentialsFromStore()
+	require.NoError(t, err)
+	require.NotNil(t, got)
+	assert.Equal(t, "AKIAINJECT", got.AccessKeyID,
+		"identity must read from the injected store, not a default one")
+}
+
+// TestUserIdentity_credentialStore_FallsBackWhenNotInjected verifies that an
+// identity with no injected store still returns a usable default store.
+func TestUserIdentity_credentialStore_FallsBackWhenNotInjected(t *testing.T) {
+	id, err := NewUserIdentity("fallback-test", &schema.Identity{Kind: "aws/user"})
+	require.NoError(t, err)
+	identity := id.(*userIdentity)
+
+	assert.NotNil(t, identity.credentialStore(),
+		"credentialStore must fall back to a default store when none is injected")
+}

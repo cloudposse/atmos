@@ -185,6 +185,12 @@ func (a *authContextWrapper) GetRealm() realm.RealmInfo {
 	return realm.RealmInfo{}
 }
 
+func (a *authContextWrapper) CredentialStoreType() string {
+	defer perf.Track(nil, "exec.authContextWrapper.CredentialStoreType")()
+
+	panic("authContextWrapper.CredentialStoreType should not be called")
+}
+
 func (a *authContextWrapper) MaybeOfferAnyProfileFallback(ctx context.Context) error {
 	defer perf.Track(nil, "exec.authContextWrapper.MaybeOfferAnyProfileFallback")()
 

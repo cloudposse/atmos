@@ -5,6 +5,7 @@ package aws
 
 import (
 	"context"
+	"crypto/ecdsa"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -30,11 +31,13 @@ func exchangeCodeForCredentials(ctx context.Context, client HTTPClient, p exchan
 	body.Set("code_verifier", p.codeVerifier)
 	body.Set("redirect_uri", p.redirectURI)
 
-	return callTokenEndpoint(ctx, client, p.region, body)
+	return callTokenEndpoint(ctx, client, p.region, body, p.dpopKey)
 }
 
-// exchangeRefreshToken exchanges a refresh token for new AWS credentials.
-func exchangeRefreshToken(ctx context.Context, client HTTPClient, region, refreshToken string) (*webflowTokenResponse, error) {
+// exchangeRefreshToken exchanges a refresh token for new AWS credentials. The
+// dpopKey is the key the refresh token is bound to and MUST match the key used
+// during the original authorization-code exchange (RFC 9449, issue #2542).
+func exchangeRefreshToken(ctx context.Context, client HTTPClient, region, refreshToken string, dpopKey *ecdsa.PrivateKey) (*webflowTokenResponse, error) {
 	defer perf.Track(nil, "aws.exchangeRefreshToken")()
 
 	body := url.Values{}
@@ -42,14 +45,25 @@ func exchangeRefreshToken(ctx context.Context, client HTTPClient, region, refres
 	body.Set(webflowGrantTypeKey, webflowGrantTypeRefresh)
 	body.Set("refresh_token", refreshToken)
 
-	return callTokenEndpoint(ctx, client, region, body)
+	return callTokenEndpoint(ctx, client, region, body, dpopKey)
+}
+
+// tokenRequestParams bundles the inputs for a single token-endpoint request.
+// Grouped to keep doTokenRequest under the revive argument-limit.
+type tokenRequestParams struct {
+	endpoint string
+	region   string
+	body     url.Values
+	dpopKey  *ecdsa.PrivateKey
 }
 
 // callTokenEndpoint makes a POST request to the AWS signin token endpoint.
-func callTokenEndpoint(ctx context.Context, client HTTPClient, region string, body url.Values) (*webflowTokenResponse, error) {
+func callTokenEndpoint(ctx context.Context, client HTTPClient, region string, body url.Values, dpopKey *ecdsa.PrivateKey) (*webflowTokenResponse, error) {
 	endpoint := fmt.Sprintf("%s/v1/token", getSigninEndpoint(region))
 
-	respBody, statusCode, err := doTokenRequest(ctx, client, endpoint, region, body)
+	respBody, statusCode, err := doTokenRequest(ctx, client, tokenRequestParams{
+		endpoint: endpoint, region: region, body: body, dpopKey: dpopKey,
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -71,18 +85,29 @@ func callTokenEndpoint(ctx context.Context, client HTTPClient, region string, bo
 // exfiltration path for users running `atmos --log-level=debug auth login`.
 // Only non-sensitive metadata (endpoint, grant_type, status code) may be
 // logged. If body-level diagnostics are ever needed, redact first.
-func doTokenRequest(ctx context.Context, client HTTPClient, endpoint, region string, body url.Values) ([]byte, int, error) {
-	encodedBody := body.Encode()
+func doTokenRequest(ctx context.Context, client HTTPClient, p tokenRequestParams) ([]byte, int, error) {
+	encodedBody := p.body.Encode()
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, strings.NewReader(encodedBody))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, p.endpoint, strings.NewReader(encodedBody))
 	if err != nil {
 		return nil, 0, fmt.Errorf("%w: failed to create request: %w", errUtils.ErrWebflowTokenExchange, err)
 	}
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 
-	log.Debug("Token exchange request",
-		"endpoint", endpoint,
-		webflowGrantTypeKey, body.Get(webflowGrantTypeKey),
+	// Attach the RFC 9449 DPoP proof required by AWS signin (issue #2542).
+	// The htu is the token endpoint URL without query/fragment.
+	if p.dpopKey != nil {
+		proof, proofErr := newDPoPProof(p.dpopKey, http.MethodPost, p.endpoint)
+		if proofErr != nil {
+			return nil, 0, proofErr
+		}
+		req.Header.Set("DPoP", proof)
+	}
+
+	log.Debug(
+		"Token exchange request",
+		"endpoint", p.endpoint,
+		webflowGrantTypeKey, p.body.Get(webflowGrantTypeKey),
 	)
 
 	resp, err := client.Do(req)
@@ -91,8 +116,8 @@ func doTokenRequest(ctx context.Context, client HTTPClient, endpoint, region str
 			WithCause(err).
 			WithExplanation("Failed to contact the AWS signin service").
 			WithHint("Check your network connectivity").
-			WithHintf("Ensure the region '%s' is correct", region).
-			WithContext("endpoint", endpoint).
+			WithHintf("Ensure the region '%s' is correct", p.region).
+			WithContext("endpoint", p.endpoint).
 			Err()
 	}
 	defer resp.Body.Close()
@@ -102,8 +127,9 @@ func doTokenRequest(ctx context.Context, client HTTPClient, endpoint, region str
 		return nil, resp.StatusCode, fmt.Errorf("%w: failed to read response: %w", errUtils.ErrWebflowTokenExchange, err)
 	}
 
-	log.Debug("Token exchange response",
-		"endpoint", endpoint,
+	log.Debug(
+		"Token exchange response",
+		"endpoint", p.endpoint,
 		"status", resp.StatusCode,
 	)
 	return respBody, resp.StatusCode, nil

@@ -97,6 +97,11 @@ type webflowRefreshCache struct {
 	RefreshToken string    `json:"refreshToken"` //nolint:gosec // G117: OAuth2 refresh token field name, not a hardcoded secret.
 	Region       string    `json:"region"`
 	ExpiresAt    time.Time `json:"expiresAt"` // Session end time (~12h from initial auth).
+	// DPoPKey is the base64 PKCS#8 DER of the EC key the refresh token is bound
+	// to (RFC 9449). It MUST be reused when exchanging the refresh token; an
+	// empty value means the cache predates DPoP support and is unusable for
+	// refresh (issue #2542).
+	DPoPKey string `json:"dpopKey,omitempty"`
 }
 
 // webflowTokenErrorResponse represents an error response from the token endpoint.
@@ -193,8 +198,20 @@ func (i *userIdentity) refreshWebflowCredentials(ctx context.Context, region str
 		return nil, fmt.Errorf("%w: refresh token session expired", errUtils.ErrWebflowRefreshFailed)
 	}
 
+	// The refresh token is bound to the DPoP key from the original exchange and
+	// cannot be redeemed without it (RFC 9449, issue #2542). A cache written
+	// before DPoP support has no key — treat it as a miss so the caller falls
+	// back to the browser flow.
+	if cache.DPoPKey == "" {
+		return nil, fmt.Errorf("%w: cached refresh token has no DPoP key", errUtils.ErrWebflowRefreshFailed)
+	}
+	dpopKey, err := parseDPoPKey(cache.DPoPKey)
+	if err != nil {
+		return nil, wrapWebflowErr(errUtils.ErrWebflowRefreshFailed, err)
+	}
+
 	// Exchange refresh token for new credentials.
-	tokenResp, err := exchangeRefreshToken(ctx, defaultHTTPClient, region, cache.RefreshToken)
+	tokenResp, err := exchangeRefreshToken(ctx, defaultHTTPClient, region, cache.RefreshToken, dpopKey)
 	if err != nil {
 		// Only delete the cached refresh token when the server definitively rejects it
 		// (HTTP 400 invalid_grant/invalid_token per RFC 6749 §5.2). Transient failures —
@@ -208,12 +225,14 @@ func (i *userIdentity) refreshWebflowCredentials(ctx context.Context, region str
 
 	creds := tokenResponseToCredentials(tokenResp, region)
 
-	// Update refresh cache with new refresh token if provided.
+	// Update refresh cache with new refresh token if provided. Preserve the
+	// DPoP key — the rotated refresh token remains bound to the same key.
 	if tokenResp.RefreshToken != "" {
 		i.saveRefreshCache(&webflowRefreshCache{
 			RefreshToken: tokenResp.RefreshToken,
 			Region:       region,
 			ExpiresAt:    cache.ExpiresAt, // Session end time doesn't change.
+			DPoPKey:      cache.DPoPKey,
 		})
 	}
 
