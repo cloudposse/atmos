@@ -51,7 +51,7 @@ var (
 	atmosRunner         *testhelpers.AtmosRunner // Global runner for executing Atmos with coverage support (lazy initialized)
 	atmosRunnerOnce     sync.Once
 	atmosRunnerErr      error
-	coverDir            string // GOCOVERDIR environment variable value
+	coverDir            string // GOCOVERDIR environment variable value.
 	sandboxRegistry     = make(map[string]*testhelpers.SandboxEnvironment)
 	sandboxMutex        sync.RWMutex
 )
