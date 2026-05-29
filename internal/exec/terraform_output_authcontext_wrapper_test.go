@@ -76,6 +76,18 @@ func TestAuthContextWrapperResolvePrincipalSetting(t *testing.T) {
 	assert.False(t, found, "ResolvePrincipalSetting should return false for any key")
 }
 
+// TestAuthContextWrapperCredentialStoreType verifies CredentialStoreType panics.
+// The wrapper only propagates auth context for nested component resolution and
+// must never be used as a real credential store.
+func TestAuthContextWrapperCredentialStoreType(t *testing.T) {
+	wrapper := newAuthContextWrapper(&schema.AuthContext{})
+	require.NotNil(t, wrapper)
+
+	assert.Panics(t, func() {
+		_ = wrapper.CredentialStoreType()
+	}, "CredentialStoreType should panic; the wrapper is not a real auth manager")
+}
+
 // TestAuthContextWrapperResolveProviderConfig verifies ResolveProviderConfig returns nil, false.
 // The wrapper doesn't have access to provider configuration.
 func TestAuthContextWrapperResolveProviderConfig(t *testing.T) {

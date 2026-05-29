@@ -7,7 +7,10 @@ import (
 	"bytes"
 	"context"
 	"crypto/ecdsa"
+	"crypto/ed25519"
+	"crypto/rand"
 	"crypto/sha256"
+	"crypto/x509"
 	"encoding/base64"
 	"encoding/json"
 	"io"
@@ -214,6 +217,39 @@ func TestParseDPoPKey_Invalid(t *testing.T) {
 
 	_, err = parseDPoPKey(base64.StdEncoding.EncodeToString([]byte("not-a-key")))
 	require.Error(t, err)
+}
+
+// TestParseDPoPKey_NonECKey rejects a valid PKCS#8 key that is not an EC key,
+// exercising the type-assertion branch.
+func TestParseDPoPKey_NonECKey(t *testing.T) {
+	_, priv, err := ed25519.GenerateKey(rand.Reader)
+	require.NoError(t, err)
+	der, err := x509.MarshalPKCS8PrivateKey(priv)
+	require.NoError(t, err)
+
+	_, err = parseDPoPKey(base64.StdEncoding.EncodeToString(der))
+	require.ErrorIs(t, err, errUtils.ErrWebflowDPoP)
+}
+
+// TestLeftPadCoordinate covers the padding, exact-length, and over-length paths.
+func TestLeftPadCoordinate(t *testing.T) {
+	// Short input is left-padded with zeros to the fixed coordinate width.
+	short := []byte{0x01, 0x02}
+	padded := leftPadCoordinate(short)
+	require.Len(t, padded, dpopCoordinateBytes)
+	assert.Equal(t, byte(0x01), padded[dpopCoordinateBytes-2])
+	assert.Equal(t, byte(0x02), padded[dpopCoordinateBytes-1])
+	for i := 0; i < dpopCoordinateBytes-2; i++ {
+		assert.Zero(t, padded[i], "leading bytes must be zero-padded")
+	}
+
+	// Exactly-sized input is returned unchanged.
+	exact := bytes.Repeat([]byte{0xAB}, dpopCoordinateBytes)
+	assert.Equal(t, exact, leftPadCoordinate(exact))
+
+	// Over-length input is returned unchanged (caller guarantees ≤ width).
+	over := bytes.Repeat([]byte{0xCD}, dpopCoordinateBytes+1)
+	assert.Equal(t, over, leftPadCoordinate(over))
 }
 
 // mustDecodeRawURL base64url-decodes s, failing the test on error.
