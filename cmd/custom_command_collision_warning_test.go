@@ -33,19 +33,25 @@ func captureUIStderr(t *testing.T, fn func()) string {
 
 	os.Stderr = w
 	ui.ReinitFormatter()
+	// Restore global stderr/formatter via defer so state is never leaked into later
+	// tests, even when fn() aborts the goroutine via require.*/t.FailNow (Goexit).
+	// The Close calls here are a safety net; on the normal path w is already closed
+	// below (so io.Copy can observe EOF) and a second Close is a harmless no-op.
+	defer func() {
+		os.Stderr = oldStderr
+		ui.ReinitFormatter()
+		_ = w.Close()
+		_ = r.Close()
+	}()
 
 	fn()
 
-	os.Stderr = oldStderr
+	// Close the writer so io.Copy observes EOF, then drain the captured output.
 	require.NoError(t, w.Close(), "closing pipe writer should not error")
 
 	var buf bytes.Buffer
 	_, err = io.Copy(&buf, r)
 	require.NoError(t, err, "reading from pipe should not error")
-	require.NoError(t, r.Close(), "closing pipe reader should not error")
-
-	// Re-initialize against the restored stderr so later code/tests are unaffected.
-	ui.ReinitFormatter()
 
 	return stripANSI(buf.String())
 }
