@@ -328,4 +328,45 @@ func TestPagerHandler_RenderMarkdown(t *testing.T) {
 	})
 }
 
+// TestPagerHandler_ExecuteErrors verifies that Execute surfaces errors that occur
+// before the interactive pager is launched, so it never blocks in a non-TTY run.
+func TestPagerHandler_ExecuteErrors(t *testing.T) {
+	handler, ok := Get("pager")
+	require.True(t, ok)
+	ctx := context.Background()
+
+	t.Run("invalid content template returns error", func(t *testing.T) {
+		step := &schema.WorkflowStep{
+			Name:    "test",
+			Type:    "pager",
+			Content: "{{ .steps.invalid.value", // Invalid template; fails in loadContent.
+		}
+		result, err := handler.Execute(ctx, step, NewVariables())
+		require.Error(t, err)
+		assert.Nil(t, result)
+	})
+
+	t.Run("invalid path template returns error", func(t *testing.T) {
+		step := &schema.WorkflowStep{
+			Name: "test",
+			Type: "pager",
+			Path: "{{ .steps.invalid.value", // Invalid template; fails resolving path.
+		}
+		result, err := handler.Execute(ctx, step, NewVariables())
+		require.Error(t, err)
+		assert.Nil(t, result)
+	})
+
+	t.Run("missing file returns error", func(t *testing.T) {
+		step := &schema.WorkflowStep{
+			Name: "test",
+			Type: "pager",
+			Path: filepath.Join(t.TempDir(), "does-not-exist.txt"),
+		}
+		result, err := handler.Execute(ctx, step, NewVariables())
+		require.Error(t, err)
+		assert.Nil(t, result)
+	})
+}
+
 // Note: PagerHandler validation is tested in output_handlers_test.go.

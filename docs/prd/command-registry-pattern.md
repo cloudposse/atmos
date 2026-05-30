@@ -713,7 +713,8 @@ func processCustomCommands(
 **Key behaviors (shipped):**
 - **Top-level custom command with existing built-in name** → reuses the built-in; may add subcommands under it; custom `steps` are **ignored** (warning). Replacing behavior requires opt-in `override: true` — see the [override PRD](./custom-command-builtin-override.md).
 - **Top-level custom command with new name** → creates new command
-- **Nested custom commands** → always added as subcommands to parent
+- **Nested custom commands, new name** → added as a new subcommand under the parent
+- **Nested custom commands, name collision** → `findSubcommand` runs at every level, so a nested name that collides with an existing subcommand (built-in or one already added) **reuses the existing command**; if the colliding custom command declares `steps`, they are **ignored** (warning emitted). This is the same collision behavior as top-level commands — it is not limited to the top level.
 
 The registry pattern itself needs no changes for this; the override capability is layered on top via the [override PRD](./custom-command-builtin-override.md).
 

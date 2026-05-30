@@ -430,6 +430,7 @@ type WorkflowStep struct {
     Height      int               `yaml:"height,omitempty" json:"height,omitempty" mapstructure:"height"`           // Height for write type (editor lines)
     Viewport    *ViewportConfig   `yaml:"viewport,omitempty" json:"viewport,omitempty" mapstructure:"viewport"`     // Viewport settings for output mode
     Timeout     string            `yaml:"timeout,omitempty" json:"timeout,omitempty" mapstructure:"timeout"`        // Timeout duration
+    Invoke      string            `yaml:"invoke,omitempty" json:"invoke,omitempty" mapstructure:"invoke"`           // How an atmos command runs: exec (default, re-exec subprocess) or built-in (in-process native handler)
 }
 ```
 

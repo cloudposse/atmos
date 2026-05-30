@@ -1,6 +1,7 @@
 package step
 
 import (
+	"context"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -366,5 +367,34 @@ func TestInteractiveHandlersByCategory(t *testing.T) {
 	for _, handler := range interactiveHandlers {
 		assert.True(t, handler.RequiresTTY(),
 			"interactive handler %s should require TTY", handler.GetName())
+	}
+}
+
+// TestInteractiveHandlersExecuteFailFast verifies that interactive handlers fail
+// fast (return an error) instead of blocking on a prompt when they cannot run.
+// The prompt uses an invalid Go template, so Execute errors before reaching the
+// interactive form in both cases: in a non-TTY environment CheckTTY rejects it
+// first, and in a TTY environment ResolvePrompt rejects the bad template. Either
+// way no form is rendered, so this test never hangs.
+func TestInteractiveHandlersExecuteFailFast(t *testing.T) {
+	ctx := context.Background()
+
+	names := []string{"input", "confirm", "choose", "write", "filter", "file"}
+	for _, name := range names {
+		t.Run(name, func(t *testing.T) {
+			handler, ok := Get(name)
+			require.True(t, ok)
+
+			step := &schema.WorkflowStep{
+				Name:    "test",
+				Type:    name,
+				Prompt:  "{{ .steps.invalid.value", // Invalid template; never reaches the interactive prompt.
+				Options: []string{"a", "b"},        // For choose/filter.
+			}
+
+			result, err := handler.Execute(ctx, step, NewVariables())
+			require.Error(t, err)
+			assert.Nil(t, result)
+		})
 	}
 }

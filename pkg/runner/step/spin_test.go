@@ -456,3 +456,91 @@ func TestSpinHandler_RunCommand(t *testing.T) {
 		assert.Error(t, err)
 	})
 }
+
+// TestSpinHandler_Execute exercises the full Execute orchestration. In a non-TTY
+// test environment, ExecWithSpinner runs the operation directly (no animation),
+// so the command actually runs and we can assert on its captured output.
+func TestSpinHandler_Execute(t *testing.T) {
+	initSpinTestIO(t)
+	handler, ok := Get("spin")
+	require.True(t, ok)
+	ctx := context.Background()
+
+	t.Run("successful command captures stdout", func(t *testing.T) {
+		step := &schema.WorkflowStep{
+			Name:    "test",
+			Type:    "spin",
+			Title:   "Running",
+			Command: "echo hello",
+		}
+		result, err := handler.Execute(ctx, step, NewVariables())
+		require.NoError(t, err)
+		require.NotNil(t, result)
+		assert.Contains(t, result.Value, "hello")
+		assert.Contains(t, result.Metadata["stdout"], "hello")
+	})
+
+	t.Run("failing command returns error with captured output", func(t *testing.T) {
+		step := &schema.WorkflowStep{
+			Name:    "test",
+			Type:    "spin",
+			Title:   "Running",
+			Command: "exit 42",
+		}
+		result, err := handler.Execute(ctx, step, NewVariables())
+		require.Error(t, err)
+		require.NotNil(t, result)
+		assert.Empty(t, result.Value)
+	})
+
+	t.Run("invalid title template returns error", func(t *testing.T) {
+		step := &schema.WorkflowStep{
+			Name:    "test",
+			Type:    "spin",
+			Title:   "{{ .steps.invalid.value",
+			Command: "echo hello",
+		}
+		result, err := handler.Execute(ctx, step, NewVariables())
+		require.Error(t, err)
+		assert.Nil(t, result)
+	})
+
+	t.Run("invalid command template returns error", func(t *testing.T) {
+		step := &schema.WorkflowStep{
+			Name:    "test",
+			Type:    "spin",
+			Title:   "Running",
+			Command: "echo {{ .steps.invalid.value",
+		}
+		result, err := handler.Execute(ctx, step, NewVariables())
+		require.Error(t, err)
+		assert.Nil(t, result)
+	})
+
+	t.Run("invalid timeout returns error", func(t *testing.T) {
+		step := &schema.WorkflowStep{
+			Name:    "test",
+			Type:    "spin",
+			Title:   "Running",
+			Command: "echo hello",
+			Timeout: "not-a-duration",
+		}
+		result, err := handler.Execute(ctx, step, NewVariables())
+		require.Error(t, err)
+		assert.Nil(t, result)
+	})
+
+	t.Run("valid timeout completes successfully", func(t *testing.T) {
+		step := &schema.WorkflowStep{
+			Name:    "test",
+			Type:    "spin",
+			Title:   "Running",
+			Command: "echo hello",
+			Timeout: "30s",
+		}
+		result, err := handler.Execute(ctx, step, NewVariables())
+		require.NoError(t, err)
+		require.NotNil(t, result)
+		assert.Contains(t, result.Value, "hello")
+	})
+}

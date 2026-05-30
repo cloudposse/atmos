@@ -321,6 +321,37 @@ func TestAtmosHandler_PrepareExecution(t *testing.T) {
 	})
 }
 
+// TestAtmosHandler_ExecuteResolutionError verifies that Execute surfaces
+// configuration-resolution errors before attempting to re-exec the atmos binary.
+func TestAtmosHandler_ExecuteResolutionError(t *testing.T) {
+	handler, ok := Get("atmos")
+	require.True(t, ok)
+	ctx := context.Background()
+
+	t.Run("invalid command template returns error", func(t *testing.T) {
+		step := &schema.WorkflowStep{
+			Name:    "test",
+			Type:    "atmos",
+			Command: "terraform plan {{ .steps.missing.value",
+		}
+		result, err := handler.Execute(ctx, step, NewVariables())
+		require.Error(t, err)
+		assert.Nil(t, result)
+	})
+
+	t.Run("invalid stack template returns error", func(t *testing.T) {
+		step := &schema.WorkflowStep{
+			Name:    "test",
+			Type:    "atmos",
+			Command: "terraform plan vpc",
+			Stack:   "{{ .steps.invalid.value",
+		}
+		result, err := handler.Execute(ctx, step, NewVariables())
+		require.Error(t, err)
+		assert.Nil(t, result)
+	})
+}
+
 func TestAtmosHandler_BuildAtmosResult(t *testing.T) {
 	handler, ok := Get("atmos")
 	require.True(t, ok)
