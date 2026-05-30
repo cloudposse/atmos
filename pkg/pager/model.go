@@ -583,14 +583,17 @@ func (m *model) statusBarView(b *strings.Builder) {
 		helpNote = statusBarHelpStyle(" ? Help ")
 	}
 
-	note = truncate.StringWithTail(note, uint(max(0, //nolint:gosec
+	noteWidth := max(
+		0,
 		m.common.width-
 			ansi.PrintableRuneWidth(logo)-
 			ansi.PrintableRuneWidth(scrollPercent),
-	)), ellipsis)
+	)
+	note = truncate.StringWithTail(note, uint(noteWidth), ellipsis) //nolint:gosec // noteWidth is clamped to >= 0.
 
 	// Empty space
-	padding := max(0,
+	padding := max(
+		0,
 		m.common.width-
 			ansi.PrintableRuneWidth(logo)-
 			ansi.PrintableRuneWidth(note)-
@@ -607,7 +610,8 @@ func (m *model) statusBarView(b *strings.Builder) {
 		emptySpace = statusBarNoteStyle(emptySpace)
 	}
 
-	fmt.Fprintf(b, "%s%s%s%s%s",
+	fmt.Fprintf(
+		b, "%s%s%s%s%s",
 		logo,
 		note,
 		emptySpace,

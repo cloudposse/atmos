@@ -117,7 +117,7 @@ func isTTYAccessible() bool {
 
 func (p *pageCreator) Run(title, content string) error {
 	// Always print content directly if pager is disabled or no TTY support.
-	if !(p.enablePager) || !p.isTTYSupportForStdout() {
+	if !p.enablePager || !p.isTTYSupportForStdout() {
 		return p.writeContent(content)
 	}
 
