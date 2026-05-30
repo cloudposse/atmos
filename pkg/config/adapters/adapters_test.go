@@ -442,13 +442,16 @@ settings:
 	assert.NotEmpty(t, paths)
 }
 
-// TestMockAdapter_WriteError tests mock adapter when temp directory doesn't exist.
+// TestMockAdapter_WriteError tests mock adapter when the temp directory doesn't exist.
 func TestMockAdapter_WriteError(t *testing.T) {
 	adapter := &MockAdapter{}
 	ctx := context.Background()
 
-	// Use non-existent temp directory.
-	_, err := adapter.Resolve(ctx, "mock://test", "/nonexistent/temp/dir", "/base", 1, 10, nil)
+	// Build a missing path under the test's temp dir (uncreated) so the write fails
+	// the same way on Linux/macOS/Windows. writeConfig joins this tempDir with the
+	// output filename, and os.WriteFile fails because the parent directory is absent.
+	missingTempDir := filepath.Join(t.TempDir(), "nonexistent", "temp", "dir")
+	_, err := adapter.Resolve(ctx, "mock://test", t.TempDir(), missingTempDir, 1, 10, nil)
 	assert.Error(t, err)
 }
 
