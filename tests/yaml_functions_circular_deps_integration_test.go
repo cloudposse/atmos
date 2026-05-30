@@ -54,3 +54,40 @@ func TestYAMLFunctionsCrossComponentCycle(t *testing.T) {
 		"depth safeguard should not be needed when cycle detection works; the visited map is being wiped between nested walks again",
 	)
 }
+
+// TestYAMLFunctionsCrossComponentCycleMixed is a regression test for issue #2005.
+//
+// #2005 reported the same infinite-recursion hang as #2457, but with a cycle
+// that MIXES the two functions: component-a reads component-b via
+// !terraform.state while component-b reads component-a via !terraform.output.
+// The sibling test above exercises the state↔state case; this one guards the
+// mixed state↔output path so a future change can't silently re-break #2005
+// while the state↔state test stays green.
+//
+// The same goroutine-local ResolutionContext fix covers both functions, so the
+// cycle is detected during YAML-function resolution and ErrCircularDependency
+// is returned instead of overflowing the runtime stack.
+func TestYAMLFunctionsCrossComponentCycleMixed(t *testing.T) {
+	t.Chdir(filepath.Join(".", "fixtures", "scenarios", "yaml-functions-circular-deps-mixed"))
+
+	e.ClearResolutionContext()
+	t.Cleanup(e.ClearResolutionContext)
+
+	_, err := e.ExecuteDescribeComponent(&e.ExecuteDescribeComponentParams{
+		Component:            "component-a",
+		Stack:                "test",
+		ProcessTemplates:     true,
+		ProcessYamlFunctions: true,
+	})
+
+	require.Error(t, err, "mixed !terraform.state/!terraform.output cycle must produce an error")
+	assert.ErrorIs(t, err, errUtils.ErrCircularDependency,
+		"expected ErrCircularDependency; got: %v", err,
+	)
+	// The depth safety net (ErrYamlFuncMaxResolutionDepth) is defense-in-depth.
+	// If it fires here, the proper cycle detector regressed and the visited
+	// map is being wiped between nested ProcessCustomYamlTags entries again.
+	assert.NotErrorIs(t, err, errUtils.ErrYamlFuncMaxResolutionDepth,
+		"depth safeguard should not be needed when cycle detection works; the visited map is being wiped between nested walks again",
+	)
+}
