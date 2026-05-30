@@ -1009,6 +1009,9 @@ Execute an Atmos CLI command.
 - `command` (required) - Atmos command to execute
 - `stack` - Stack override
 - `output` - Output mode (viewport, raw, log, none)
+- `invoke` - How the command runs (default `exec`):
+  - `exec` - Re-exec the atmos binary as a subprocess; full command resolution, so custom-command overrides **apply**. Identical to today's behavior.
+  - `built-in` - Call the native built-in handler **in-process**, bypassing command resolution. Used so a custom command that **overrides** a built-in can invoke the original native behavior **without cycling** (the override is never re-entered). See [Overriding Built-in Commands with Step-Based Custom Commands](./custom-command-builtin-override.md).
 
 ---
 
