@@ -1,30 +1,35 @@
 base_path: "./"
 
 # Custom CLI commands
+#
+# This file contains basic custom command examples.
+# See .atmos.d/ for more advanced examples:
+#   - interactive.yaml: Interactive step types (choose, confirm, input, etc.)
+#   - advanced.yaml: Boolean flags, component config, working directory
 
-# No arguments or flags are required
+# No arguments or flags are required.
 commands:
 - name: hello
   description: This command says Hello world
   steps:
     - "echo Hello world!"
 
-# No arguments or flags are required
+# No arguments or flags are required.
 - name: ip
   description: Return my current IP
   steps:
     - curl -s https://ifconfig.me
     - echo
 
-# Use Nested Custom Commands
+# Use Nested Custom Commands.
 - name: "github"
   commands:
   - name: "status"
-    description: This command returns the number of stargazers for a GitHub repository
+    description: This command returns the current GitHub status
     steps:
       - curl -s https://www.githubstatus.com/api/v2/status.json | jq -r .status.description
 
-  # Use positional arguments
+  # Use positional arguments.
   - name: "stargazers"
     description: This command returns the number of stargazers for a GitHub repository
     arguments:
@@ -37,7 +42,7 @@ commands:
     steps:
       - curl -s https://api.github.com/repos/{{ .Arguments.repo }} | jq -r .stargazers_count
 
-# # Use positional arguments with default values
+# Use positional arguments with default values.
 - name: greet
   description: "Displays a personalized greeting. Defaults to 'John Doe' if no name is provided."
   arguments:
@@ -49,7 +54,7 @@ commands:
   steps:
     - "echo Hello, {{ .Arguments.name }}"
 
-# Use flags
+# Use flags.
 - name: weather
   description: This command fetches the weather
   flags:
