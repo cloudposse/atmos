@@ -37,9 +37,10 @@ func proCreds(baseURL string) *types.ProCredentials {
 	return &types.ProCredentials{Token: "session-jwt", BaseURL: baseURL, Endpoint: "api/v1", WorkspaceID: "ws-1"}
 }
 
-// stateFilePath returns the expected state file path for a realm/name under the XDG data dir.
-func stateFilePath(xdgData, realm, name, file string) string {
-	return filepath.Join(xdgData, "atmos", "auth", "github-sts", realm, name, file)
+// stateFilePath returns the expected state file path for the given file under the XDG data dir.
+// All tests in this package use realm "realmA" and integration name "github-sts".
+func stateFilePath(xdgData, file string) string {
+	return filepath.Join(xdgData, "atmos", "auth", "github-sts", "realmA", "github-sts", file)
 }
 
 func TestNewGitHubSTSIntegration_ViaValidation(t *testing.T) {
@@ -113,7 +114,7 @@ func TestGitHubSTSExecuteAndEnvironment_EnvMode(t *testing.T) {
 	require.NoError(t, integ.Execute(context.Background(), proCreds(srv.URL)))
 
 	// State file written with restrictive perms.
-	statePath := stateFilePath(xdg, "realmA", "github-sts", stateFileName)
+	statePath := stateFilePath(xdg, stateFileName)
 	info, err := os.Stat(statePath)
 	require.NoError(t, err)
 	if runtime.GOOS != "windows" {
@@ -152,7 +153,7 @@ func TestGitHubSTSEnvironment_FileMode(t *testing.T) {
 	integ := newIntegration(t, "realmA", &schema.IntegrationSpec{GitConfigMode: GitConfigModeFile}, &schema.IntegrationVia{Provider: "atmos-pro"})
 	require.NoError(t, integ.Execute(context.Background(), proCreds(srv.URL)))
 
-	configPath := stateFilePath(xdg, "realmA", "github-sts", configFileName)
+	configPath := stateFilePath(xdg, configFileName)
 	info, err := os.Stat(configPath)
 	require.NoError(t, err)
 	if runtime.GOOS != "windows" {
@@ -250,7 +251,7 @@ func TestGitHubSTSCleanup_RevokesAndRemoves(t *testing.T) {
 	assert.Equal(t, []string{"Bearer ghs_acme"}, revokedTokens, "the minted token must be revoked exactly once")
 
 	// State file removed; Environment is now empty.
-	_, err := os.Stat(stateFilePath(xdg, "realmA", "github-sts", stateFileName))
+	_, err := os.Stat(stateFilePath(xdg, stateFileName))
 	assert.True(t, os.IsNotExist(err), "state file must be removed after cleanup")
 
 	env, err := integ.Environment()
