@@ -568,8 +568,8 @@ func readSystemConfig(v *viper.Viper) error {
 	if len(configFilePath) > 0 {
 		log.Trace("Checking for atmos.yaml in system config", "path", configFilePath)
 		err := mergeConfig(v, configFilePath, CliConfigFileName, false)
-		var notFoundErr viper.ConfigFileNotFoundError
-		if errors.As(err, &notFoundErr) {
+		var configNotFoundErr viper.ConfigFileNotFoundError
+		if errors.As(err, &configNotFoundErr) {
 			return nil
 		}
 		return err
@@ -592,8 +592,8 @@ func readHomeConfigWithProvider(v *viper.Viper, homeProvider filesystem.HomeDirP
 	log.Trace("Checking for atmos.yaml in home directory", "path", configFilePath)
 	err = mergeConfig(v, configFilePath, CliConfigFileName, true)
 	if err != nil {
-		var notFoundErr viper.ConfigFileNotFoundError
-		if errors.As(err, &notFoundErr) {
+		var configNotFoundErr viper.ConfigFileNotFoundError
+		if errors.As(err, &configNotFoundErr) {
 			return nil
 		}
 		return err
@@ -798,14 +798,12 @@ func readAtmosConfigCli(v *viper.Viper, atmosCliConfigPath string) error {
 		return nil
 	}
 	err := mergeConfig(v, atmosCliConfigPath, CliConfigFileName, true)
-	var notFoundErr viper.ConfigFileNotFoundError
-	if errors.As(err, &notFoundErr) {
+	var configNotFoundErr viper.ConfigFileNotFoundError
+	if errors.As(err, &configNotFoundErr) {
 		log.Debug("config not found", "file", atmosCliConfigPath)
-	} else if err != nil {
-		return err
+		return nil
 	}
-
-	return nil
+	return err
 }
 
 // loadConfigFile reads a configuration file and returns a temporary Viper instance with its contents.
