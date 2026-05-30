@@ -83,9 +83,9 @@ func TestAuthContextWrapperCredentialStoreType(t *testing.T) {
 	wrapper := newAuthContextWrapper(&schema.AuthContext{})
 	require.NotNil(t, wrapper)
 
-	assert.Panics(t, func() {
+	assert.PanicsWithValue(t, "authContextWrapper.CredentialStoreType should not be called", func() {
 		_ = wrapper.CredentialStoreType()
-	}, "CredentialStoreType should panic; the wrapper is not a real auth manager")
+	}, "CredentialStoreType must panic with the explicit guard message; the wrapper is not a real auth manager")
 }
 
 // TestAuthContextWrapperResolveProviderConfig verifies ResolveProviderConfig returns nil, false.
