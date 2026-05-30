@@ -1,0 +1,247 @@
+# Interactive Custom Commands
+#
+# This file demonstrates interactive step types in custom commands.
+# These commands create CLI wizards using choose, confirm, input, filter, and more.
+#
+# Run examples:
+#   atmos deploy-wizard
+#   atmos select-components
+#   atmos create-ticket
+#
+# Note: Interactive step types require a TTY (terminal) and won't work in CI/CD.
+
+commands:
+  # Interactive deployment wizard with environment selection and confirmation.
+  - name: deploy-wizard
+    description: Interactive deployment wizard with environment selection
+    steps:
+      # Welcome message with markdown formatting.
+      - name: welcome
+        type: markdown
+        content: |
+          # Deployment Wizard
+
+          Welcome to the interactive deployment wizard!
+
+          This command will guide you through deploying infrastructure
+          to your selected environment.
+
+      # Single-select environment dropdown.
+      - name: env
+        type: choose
+        prompt: "Select target environment"
+        options:
+          - dev
+          - staging
+          - prod
+        default: dev
+
+      # Show warning for production deployments.
+      - name: prod_warning
+        type: toast
+        level: warning
+        content: "You are about to deploy to {{ .steps.env.value }}!"
+
+      # Confirmation prompt.
+      - name: confirm
+        type: confirm
+        prompt: "Proceed with deployment to {{ .steps.env.value }}?"
+        default: false
+
+      # Collect deployment message.
+      - name: message
+        type: input
+        prompt: "Enter deployment message"
+        placeholder: "e.g., Fix for JIRA-123"
+        default: "Routine deployment"
+
+      # Show deployment summary.
+      - name: summary
+        type: toast
+        level: success
+        content: |
+          Deployment configured!
+          - Environment: {{ .steps.env.value }}
+          - Message: {{ .steps.message.value }}
+
+  # Multi-select component deployment command.
+  - name: select-components
+    description: Select and deploy multiple components
+    steps:
+      # Introduction message.
+      - name: intro
+        type: toast
+        level: info
+        content: "Select the components you want to deploy"
+
+      # Multi-select with filtering.
+      - name: components
+        type: filter
+        prompt: "Choose components (arrow keys to navigate, space to select)"
+        multiple: true
+        limit: 5
+        options:
+          - vpc
+          - eks
+          - rds
+          - s3
+          - lambda
+          - api-gateway
+          - cloudfront
+
+      # Show selection summary using markdown.
+      - name: summary
+        type: markdown
+        content: |
+          ## Deployment Summary
+
+          You selected **{{ len .steps.components.values }}** component(s):
+          {{ range .steps.components.values }}
+          - {{ . }}
+          {{ end }}
+
+      # Confirm selection.
+      - name: confirm
+        type: confirm
+        prompt: "Proceed with deployment?"
+
+      # Display final confirmation.
+      - name: done
+        type: toast
+        level: success
+        content: "Starting deployment of {{ len .steps.components.values }} component(s)..."
+
+  # Ticket creation command with multiple input types.
+  - name: create-ticket
+    description: Create a deployment ticket interactively
+    steps:
+      # Ticket title (single-line input).
+      - name: title
+        type: input
+        prompt: "Ticket title"
+        placeholder: "Brief description of the change"
+
+      # Ticket description (multi-line text editor).
+      - name: description
+        type: write
+        prompt: "Detailed description"
+        placeholder: |
+          Describe the change in detail...
+
+          - What is being changed?
+          - Why is this change needed?
+          - Any risks or dependencies?
+
+      # Priority selection.
+      - name: priority
+        type: choose
+        prompt: "Priority level"
+        options:
+          - low
+          - medium
+          - high
+          - critical
+        default: medium
+
+      # Assignee input.
+      - name: assignee
+        type: input
+        prompt: "Assignee (optional)"
+        placeholder: "username"
+
+      # Show ticket summary with styled box.
+      - name: result
+        type: style
+        border: rounded
+        padding: 1
+        content: |
+          Ticket Created!
+
+          Title: {{ .steps.title.value }}
+          Priority: {{ .steps.priority.value }}
+          Assignee: {{ if .steps.assignee.value }}{{ .steps.assignee.value }}{{ else }}Unassigned{{ end }}
+
+  # Credentials collection with password masking.
+  - name: collect-credentials
+    description: Securely collect credentials
+    steps:
+      # Warning message.
+      - name: warning
+        type: toast
+        level: warning
+        content: "You are about to enter sensitive credentials"
+
+      # Username input.
+      - name: username
+        type: input
+        prompt: "Enter username"
+        placeholder: "admin"
+
+      # Password input (masked).
+      - name: password
+        type: input
+        prompt: "Enter password"
+        password: true
+
+      # Confirmation.
+      - name: done
+        type: toast
+        level: success
+        content: "Credentials collected for user: {{ .steps.username.value }}"
+
+  # File selection command.
+  - name: select-config
+    description: Select a configuration file interactively
+    steps:
+      # File picker.
+      - name: file
+        type: file
+        prompt: "Select a configuration file"
+        path: "."
+        extensions:
+          - yaml
+          - yml
+          - json
+
+      # Show selected file.
+      - name: show
+        type: toast
+        level: info
+        content: "Selected file: {{ .steps.file.value }}"
+
+  # Table display command.
+  - name: show-environments
+    description: Display available environments in a table
+    steps:
+      - name: environments
+        type: table
+        title: "Available Environments"
+        columns:
+          - name
+          - region
+          - status
+        data:
+          - name: dev
+            region: us-east-1
+            status: active
+          - name: staging
+            region: us-west-2
+            status: active
+          - name: prod
+            region: us-east-1
+            status: active
+
+  # Spinner with command execution.
+  - name: build-with-progress
+    description: Build with progress spinner
+    steps:
+      - name: building
+        type: spin
+        title: "Building application..."
+        command: "sleep 2 && echo 'Build complete!'"
+        timeout: 30s
+
+      - name: done
+        type: toast
+        level: success
+        content: "Build completed successfully!"
