@@ -410,6 +410,7 @@ type WorkflowStep struct {
     WorkingDirectory string       `yaml:"working_directory,omitempty" json:"working_directory,omitempty" mapstructure:"working_directory"`
     Retry            *RetryConfig `yaml:"retry,omitempty" json:"retry,omitempty" mapstructure:"retry"`
     Identity         string       `yaml:"identity,omitempty" json:"identity,omitempty" mapstructure:"identity"`
+    Invoke           string       `yaml:"invoke,omitempty" json:"invoke,omitempty" mapstructure:"invoke"` // How an atmos command runs: exec (default) or built-in
 
     // New fields for extended step types
     Prompt      string            `yaml:"prompt,omitempty" json:"prompt,omitempty" mapstructure:"prompt"`           // Prompt text for interactive types

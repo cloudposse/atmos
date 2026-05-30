@@ -355,13 +355,15 @@ func ExecuteWorkflow(
 
 	for stepIdx, step := range steps {
 		// Render step label with optional count prefix and progress bar.
-		// When progress is enabled, combine label + progress on single line (no newline).
-		// When progress is disabled, just show the label with newline.
+		// When progress is enabled, combine label + progress on a single line (no newline).
+		// When progress is disabled, only show the label if show.count is enabled; otherwise
+		// emit nothing so default output stays backward compatible (show features are opt-in).
+		showCfg := stepPkg.GetShowConfig(&step, workflowDefinition)
 		label := stepPkg.FormatStepLabel(&step, workflowDefinition, stepIdx, totalSteps)
 		if progressRenderer.IsEnabled() {
 			progressRenderer.Update(stepIdx+1, step.Name)
 			progressRenderer.RenderWithLabel(label) // No newline - will be cleared.
-		} else {
+		} else if stepPkg.ShowCount(showCfg) {
 			ui.Writeln(label)
 		}
 
