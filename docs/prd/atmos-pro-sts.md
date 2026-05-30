@@ -104,7 +104,7 @@ auth:
       kind: github/sts
       via: { provider: atmos-pro }   # binds to the provider directly; via: { identity: atmos-pro } also works
       spec:
-        auto_provision: true         # mint on login (default true)
+        auto_provision: true         # mint on login AND lazily in CI before the first remote read (default true)
         repos: [acme/modules]        # optional sources[]
         policy_name: default         # optional
         git_config_mode: env         # env | file (overrides settings.pro.git_sts.git_config_mode)
@@ -132,6 +132,31 @@ manager matches a provider-bound integration to any identity whose root provider
 of `via.identity`/`via.provider` must be set. This removes the need to name a redundant passthrough
 identity for the Atmos Pro case (the identity is still defined to authenticate/run as).
 
+### CI auto-provision (no stack claims the identity)
+The `atmos/pro` identity is not a cloud deployment identity, so no stack/component claims it the way
+stacks claim an AWS/Azure/GCP identity. Without a claim, the `github/sts` integration would never be
+provisioned during a normal `atmos terraform`, `atmos vendor pull`, or stack-import run, and Atmos
+itself could not read private repos. To close this gap, Atmos provisions `github/sts` **lazily and
+ambiently** the first time it is about to fetch a remote git source:
+
+- A generic **credential-broker registry** (`pkg/auth/broker`) is consulted at the go-getter choke
+  point (`downloader.NewClient` for remote sources) and just before the terraform/helmfile/packer
+  subprocess env is assembled. It runs registered brokers **at most once per process** (`sync.Once`).
+- The **Atmos Pro broker** (`pkg/auth/providers/atmospro/broker`, registered via blank import in
+  `cmd`) is enabled only when `telemetry.IsCI()` **and** the auth config defines an `atmos/pro`
+  provider + a `github/sts` integration with `auto_provision != false`. It authenticates the
+  `atmos/pro` identity (cached-session-first — the OIDC token is single-use, so it never re-mints
+  OIDC when a session is cached), provisions `github/sts`, and exports the resulting `GIT_CONFIG_*`
+  into the process via `os.Setenv`.
+- Because the in-process `git` subprocess (go-getter's `CustomGitGetter`) and the
+  terraform/helmfile/packer subprocesses all inherit the process env, a single `os.Setenv` makes the
+  per-owner `insteadOf` rewrites apply to **both** Atmos's own reads and Terraform's native git.
+- **Reuse:** the integration's `Execute` short-circuits the network mint when persisted tokens are
+  still fresh (every `expiresAt` in the future), so repeated `atmos` invocations within one CI job
+  reuse the same tokens instead of re-minting.
+
+This is gated purely on config presence + CI — there is no new `settings.pro.enabled` field.
+
 ## Lifecycle
 
 `atmos auth login --identity atmos-pro` → session + auto-provision (mint) →
@@ -140,10 +165,21 @@ identity for the Atmos Pro case (the identity is still defined to authenticate/r
 `revoke_on_exit`) → `atmos auth logout` revokes via `Cleanup`. The workflow declares only
 `permissions: id-token: write`.
 
+In CI, no explicit `atmos auth login` is required: the first remote git read (vendor pull, a
+`source:` component, a remote `import:`, or `terraform init` of a private `git::https://…` module)
+triggers the ambient broker, which authenticates the `atmos/pro` identity and provisions `github/sts`
+transparently — even though no stack claims that identity.
+
 ## Implementation Notes
 
 - New: `pkg/auth/providers/atmospro`, `pkg/auth/identities/atmospro`, `pkg/auth/integrations/github`,
   `pkg/auth/types/pro_credentials.go` (registered in all keyring backends as type `atmos-pro`).
+- New: `pkg/auth/broker` (generic ambient credential-broker registry; depends only on
+  schema/log/perf so `pkg/downloader` can call it cycle-free) and
+  `pkg/auth/providers/atmospro/broker` (the Atmos Pro `github/sts` broker). Wired at
+  `downloader.NewClient` (remote sources only) and in `ExecuteTerraform` before the subprocess env is
+  built. `auth.NewDefaultManager` is the package-level manager constructor the broker uses;
+  `AuthManager.EnsureIdentityEnvironment` is the cached-first authenticate-and-provision primitive.
 - Realm is plumbed into integrations via `integrations.IntegrationConfig.Realm` (populated at the three
   `integrations.Create` call sites); `github/sts` realm-scopes its state under
   `<xdg data>/atmos/auth/github-sts/<realm>/<integration>/`.
@@ -162,9 +198,14 @@ Unit tests cover the provider (mint+exchange, default/override audience, missing
 paths), the passthrough identity, the integration (`Execute` with multiple/empty tokens and 400/403
 errors, `Environment` in both modes, `Cleanup` revocation + idempotency, realm isolation, `0600`
 perms), keyring round-trip, `via.provider` matching, `revoke_on_exit` resolution, and
-`ATMOS_PRO_GITHUB_TOKEN` precedence. E2E is staged on `cloudposse/infra-test`: one PR, one workflow
-with only `id-token: write`, exercising vendor pull + a `source:` component + `terraform init` of a
-private module, then confirming revocation.
+`ATMOS_PRO_GITHUB_TOKEN` precedence. The ambient CI auto-provision path adds: broker registry
+(enabled-only execution, env export, process-once, non-fatal errors), the Atmos Pro broker
+(`Enabled` gating, `findProGitHubSTSIdentity` via.identity/via.provider resolution),
+`EnsureIdentityEnvironment` (cached-first, error wrapping), `hasFreshState` reuse (fresh/expired/
+unparseable/file-mode), and `isRemoteSource` classification. E2E is staged on
+`cloudposse/infra-test`: one PR, one workflow with only `id-token: write`, exercising vendor pull +
+a `source:` component + `terraform init` of a private module with **no stack claiming the atmos/pro
+identity**, then confirming revocation.
 
 ## Future Work (out of scope for the initial PR)
 

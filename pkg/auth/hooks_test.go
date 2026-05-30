@@ -119,6 +119,10 @@ func (s *stubAuthManager) PrepareShellEnvironment(ctx context.Context, identityN
 	return result, nil
 }
 
+func (s *stubAuthManager) EnsureIdentityEnvironment(ctx context.Context, identityName string) (map[string]string, error) {
+	return nil, nil
+}
+
 func (s *stubAuthManager) ExecuteIntegration(ctx context.Context, integrationName string) error {
 	return nil
 }

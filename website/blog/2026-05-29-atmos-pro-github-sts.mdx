@@ -27,6 +27,14 @@ Two new `atmos auth` kinds, modeled on the existing `aws/ecr` and `aws/eks` inte
 We also added **`ATMOS_PRO_GITHUB_TOKEN`**, a convenience env var that Atmos-native git operations
 (vendoring, source provisioning, go-getter) prefer over `ATMOS_GITHUB_TOKEN`/`GITHUB_TOKEN`.
 
+And — because the `atmos/pro` identity isn't something a stack ever "claims" the way it claims an
+AWS/Azure/GCP identity — **in CI, `github/sts` now provisions automatically the first time Atmos is
+about to read a remote git source.** No explicit `atmos auth login` step is required: `atmos vendor
+pull`, a `source:` component, a remote `import:`, or `terraform init` of a private module each
+transparently trigger the mint. It's gated on running in CI plus having the `atmos/pro` + `github/sts`
+config present (`auto_provision`, default `true`), and minted tokens are reused across invocations in
+the same job until they expire.
+
 ## Why This Matters
 
 - **No standing credentials.** Tokens live only for the duration of a run. Nothing long-lived sits in
@@ -65,7 +73,15 @@ auth:
         revoke_on_exit: true       # set false to keep creds for a separate CI step
 ```
 
-Your workflow only needs `permissions: id-token: write`. Then:
+Your workflow only needs `permissions: id-token: write`. In CI you don't even need an explicit login
+— the first remote read provisions tokens for you:
+
+```bash
+atmos vendor pull                         # first remote read → tokens minted automatically
+atmos terraform plan ...                  # terraform init of private modules just works
+```
+
+You can still drive it explicitly (locally, or to control timing/teardown):
 
 ```bash
 atmos auth login --identity atmos-pro    # mints scoped GitHub tokens

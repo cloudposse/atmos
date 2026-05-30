@@ -87,7 +87,7 @@ auth:
 
 ## Integrations
 
-Integrations are client-only credential materializations that derive from identities. They are automatically triggered during `atmos auth login` when `auto_provision` is enabled (the default).
+Integrations are client-only credential materializations that derive from identities. They are automatically triggered during `atmos auth login` when `auto_provision` is enabled (the default). The `github/sts` integration additionally auto-provisions in CI before the first remote git read even when no stack claims its identity — see [GitHub STS](#github-sts-atmos-pro).
 
 **Supported integration kinds:**
 - `aws/ecr` — Login to AWS Elastic Container Registry. See [ECR Authentication Tutorial](/tutorials/ecr-authentication).
@@ -101,6 +101,10 @@ Integrations may bind to an identity (`via.identity`) or, when the provider itse
 The `github/sts` integration uses [Atmos Pro](https://atmos-pro.com) as a just-in-time GitHub token broker for CI. On `atmos auth login` it mints short-lived, scoped GitHub App installation tokens and materializes them as per-owner git URL rewrites in the child environment, so `atmos vendor pull`, Atmos `source:` components, and `terraform init` of private `git::https://…` modules authenticate transparently — with **no `.tf` changes**. Tokens are revoked at command-end (via `atmos auth exec` in CI) and on `atmos auth logout`.
 
 It requires the `atmos/pro` provider (see [Providers](/cli/configuration/auth/providers)). Your GitHub Actions workflow only needs `permissions: id-token: write`.
+
+:::tip Automatic in CI — no stack claim required
+The `atmos/pro` identity isn't claimed by any stack (stacks claim cloud identities like AWS/Azure/GCP). So in CI, Atmos provisions `github/sts` **lazily and automatically** the first time it is about to read a remote git source — `atmos vendor pull`, a `source:` component, a remote `import:`, or `terraform init` of a private module — without an explicit `atmos auth login`. This is gated on running in CI plus having the `atmos/pro` + `github/sts` config present with `auto_provision` enabled (the default). Minted tokens are reused across Atmos invocations within the same job until they expire.
+:::
 
 ```yaml
 auth:
@@ -120,7 +124,7 @@ auth:
       via:
         provider: atmos-pro          # or identity: atmos-pro
       spec:
-        auto_provision: true         # mint on login (default true)
+        auto_provision: true         # mint on login AND lazily in CI before the first remote read (default true)
         repos: [acme/modules]        # optional source repos
         policy_name: default         # optional trust policy name
         git_config_mode: env         # "env" (default, inline GIT_CONFIG_*) or "file" (write a 0600 gitconfig + include.path)
@@ -131,7 +135,7 @@ auth:
 
 <dl>
   <dt>`auto_provision`</dt>
-  <dd>Mint tokens automatically on `atmos auth login`. Defaults to `true`.</dd>
+  <dd>Mint tokens automatically on `atmos auth login`, and — in CI — lazily before the first remote git read even when no stack claims the `atmos/pro` identity. Defaults to `true`. Set to `false` to disable both.</dd>
 
   <dt>`repos`</dt>
   <dd>Optional list of source repositories to request access to. Identity is derived server-side from your workspace trust policies — repos you aren't trusted for are excluded (with a reason logged).</dd>

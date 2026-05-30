@@ -183,16 +183,56 @@ func resolveVia(via *schema.IntegrationVia) (identity, provider string, err erro
 // Kind returns "github/sts".
 func (g *GitHubSTSIntegration) Kind() string { return integrations.KindGitHubSTS }
 
+// tokenExpirySkew is the safety margin applied when judging whether persisted tokens are
+// still fresh enough to reuse, so a token does not expire mid-operation just after the check.
+const tokenExpirySkew = 60 * time.Second
+
+// hasFreshState reports whether the persisted state holds tokens that are all still valid
+// (every token present, parseable, and expiring more than tokenExpirySkew in the future).
+// In file mode the on-disk git.config must also exist (Environment emits include.path to it).
+// When true, Execute reuses the existing tokens instead of minting again.
+func (g *GitHubSTSIntegration) hasFreshState() bool {
+	defer perf.Track(nil, "github.GitHubSTSIntegration.hasFreshState")()
+
+	state, err := g.readState()
+	if err != nil || state == nil || len(state.Tokens) == 0 {
+		return false
+	}
+
+	cutoff := time.Now().Add(tokenExpirySkew)
+	for _, t := range state.Tokens {
+		if t.Token == "" {
+			return false
+		}
+		exp, err := time.Parse(time.RFC3339, t.ExpiresAt)
+		if err != nil || !exp.After(cutoff) {
+			return false
+		}
+	}
+
+	if g.gitConfigMode == GitConfigModeFile {
+		if _, err := os.Stat(filepath.Join(g.stateDir(), configFileName)); err != nil {
+			return false
+		}
+	}
+
+	return true
+}
+
 // Execute mints GitHub STS tokens and persists them for consumption and revocation.
 func (g *GitHubSTSIntegration) Execute(ctx context.Context, creds types.ICredentials) error {
 	defer perf.Track(nil, "github.GitHubSTSIntegration.Execute")()
 
-	pro, ok := creds.(*types.ProCredentials)
-	if !ok || pro == nil {
-		return fmt.Errorf("%w: github/sts requires atmos/pro credentials, got %T", errUtils.ErrProCredentialsType, creds)
+	// Reuse persisted tokens when they are still fresh. This avoids a network mint on every
+	// CI invocation: ambient brokers re-export GIT_CONFIG_* from the existing state instead.
+	if g.hasFreshState() {
+		log.Debug("github/sts: reusing fresh persisted tokens", logKeyIntegration, g.name)
+		return nil
 	}
-	if pro.Token == "" {
-		return fmt.Errorf("%w: empty Atmos Pro session token", errUtils.ErrSTSMintFailed)
+
+	pro, err := proCredentials(creds)
+	if err != nil {
+		return err
 	}
 
 	resp, err := g.mint(ctx, pro)
@@ -200,6 +240,24 @@ func (g *GitHubSTSIntegration) Execute(ctx context.Context, creds types.ICredent
 		return err
 	}
 
+	return g.persistAndReport(resp)
+}
+
+// proCredentials validates and extracts the atmos/pro credentials that github/sts requires.
+func proCredentials(creds types.ICredentials) (*types.ProCredentials, error) {
+	pro, ok := creds.(*types.ProCredentials)
+	if !ok || pro == nil {
+		return nil, fmt.Errorf("%w: github/sts requires atmos/pro credentials, got %T", errUtils.ErrProCredentialsType, creds)
+	}
+	if pro.Token == "" {
+		return nil, fmt.Errorf("%w: empty Atmos Pro session token", errUtils.ErrSTSMintFailed)
+	}
+	return pro, nil
+}
+
+// persistAndReport persists the minted tokens, writes the gitconfig file when in file mode,
+// and reports the deny-by-default outcome (never logging token values).
+func (g *GitHubSTSIntegration) persistAndReport(resp *stsResponse) error {
 	// Surface deny-by-default exclusions verbatim (never log token values).
 	for _, ex := range resp.Excluded {
 		log.Warn("GitHub STS excluded a repository", logKeyIntegration, g.name, "repo", ex.Repo, "reason", ex.Reason)

@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -128,8 +129,8 @@ func TestGitHubSTSExecuteAndEnvironment_EnvMode(t *testing.T) {
 	// Collect key=value pairs into a set for order-independent assertions.
 	pairs := map[string]string{}
 	for i := 0; i < 4; i++ {
-		k := env["GIT_CONFIG_KEY_"+itoa(i)]
-		v := env["GIT_CONFIG_VALUE_"+itoa(i)]
+		k := env["GIT_CONFIG_KEY_"+strconv.Itoa(i)]
+		v := env["GIT_CONFIG_VALUE_"+strconv.Itoa(i)]
 		require.NotEmpty(t, k)
 		pairs[k+" => "+v] = v
 	}
@@ -287,9 +288,4 @@ func TestGitHubSTSRealmIsolation(t *testing.T) {
 	envA, err := integA.Environment()
 	require.NoError(t, err)
 	assert.Equal(t, "2", envA["GIT_CONFIG_COUNT"])
-}
-
-// itoa is a tiny helper to avoid importing strconv in tests just for indices.
-func itoa(i int) string {
-	return string(rune('0' + i))
 }

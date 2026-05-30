@@ -297,6 +297,13 @@ type AuthManager interface {
 	// Use this for all subprocess invocations: Terraform, Helmfile, Packer, workflows, custom commands, auth shell, etc.
 	PrepareShellEnvironment(ctx context.Context, identityName string, currentEnv []string) ([]string, error)
 
+	// EnsureIdentityEnvironment authenticates the identity (preferring cached credentials) and
+	// provisions its auto_provision integrations, then returns the composed integration
+	// environment. Cached credentials are used whenever available (critical for single-use
+	// session tokens such as the atmos/pro provider's). Used by ambient credential brokers
+	// (pkg/auth/broker) to provision integrations whose identity no stack claims.
+	EnsureIdentityEnvironment(ctx context.Context, identityName string) (map[string]string, error)
+
 	// ExecuteIntegration executes a named integration.
 	// This authenticates the integration's linked identity first, then executes the integration.
 	// Use this for explicit integration execution via `atmos aws ecr login <integration>`.

@@ -186,6 +186,10 @@ func (s stubSamlMgr) PrepareShellEnvironment(context.Context, string, []string) 
 	return nil, nil
 }
 
+func (s stubSamlMgr) EnsureIdentityEnvironment(context.Context, string) (map[string]string, error) {
+	return nil, nil
+}
+
 func (s stubSamlMgr) ExecuteIntegration(context.Context, string) error {
 	return nil
 }

@@ -57,6 +57,24 @@ func TestProCredentials_NoExpiration(t *testing.T) {
 	assert.Nil(t, exp2)
 }
 
+func TestProCredentials_MalformedToken(t *testing.T) {
+	// A 3-part token whose payload is not valid base64 fails to decode: GetExpiration
+	// returns an error and IsExpired fails closed (treated as expired).
+	c := &ProCredentials{Token: "aaa.!!!notbase64!!!.sig"}
+	exp, err := c.GetExpiration()
+	require.Error(t, err)
+	assert.Nil(t, exp)
+	assert.True(t, c.IsExpired())
+
+	// A token whose payload decodes but is not valid JSON also fails closed.
+	badJSON := base64.RawURLEncoding.EncodeToString([]byte("not-json"))
+	c2 := &ProCredentials{Token: "aaa." + badJSON + ".sig"}
+	exp2, err := c2.GetExpiration()
+	require.Error(t, err)
+	assert.Nil(t, exp2)
+	assert.True(t, c2.IsExpired())
+}
+
 func TestProCredentials_BuildWhoamiInfo(t *testing.T) {
 	c := &ProCredentials{Token: makeJWT(t, time.Now().Add(time.Hour).Unix()), WorkspaceID: "ws-99"}
 	info := &WhoamiInfo{}

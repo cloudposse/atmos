@@ -82,6 +82,50 @@ func (m *manager) findIntegrationsForIdentity(identityName string, autoProvision
 	return result
 }
 
+// EnsureIdentityEnvironment authenticates the identity (preferring cached credentials) and
+// provisions its auto_provision integrations, then returns the composed integration environment.
+//
+// Cached credentials are used whenever available — this is critical for the atmos/pro provider,
+// whose GitHub Actions OIDC token is single-use server-side: re-running provider authentication
+// would fail. When a valid session is cached, integrations are provisioned using those cached
+// credentials (no second provider authentication); integrations that already hold fresh persisted
+// state short-circuit their own mint. When no cached credentials exist, full authentication runs
+// once and triggers the same auto_provision machinery.
+//
+// This is the generic primitive used by ambient credential brokers (see pkg/auth/broker) to
+// provision integrations whose identity no stack claims.
+func (m *manager) EnsureIdentityEnvironment(ctx context.Context, identityName string) (map[string]string, error) {
+	defer perf.Track(nil, "auth.Manager.EnsureIdentityEnvironment")()
+
+	if identityName == "" {
+		return nil, fmt.Errorf(errFormatWithString, errUtils.ErrNilParam, identityNameKey)
+	}
+
+	// Resolve the identity name case-insensitively so the integration/env lookups below
+	// (which key off the resolved name) match the keyring and config entries.
+	if resolved, found := m.resolveIdentityName(identityName); found {
+		identityName = resolved
+	}
+
+	// Prefer cached credentials; only authenticate when none are valid.
+	whoami, err := m.GetCachedCredentials(ctx, identityName)
+	if err != nil {
+		log.Debug("No valid cached credentials for identity, authenticating", logKeyIdentity, identityName, "error", err)
+		// Authenticate runs login-time integration triggers itself, so the returned whoami
+		// is not needed here (the cached path below uses it only to trigger integrations).
+		if _, err = m.Authenticate(ctx, identityName); err != nil {
+			return nil, fmt.Errorf(errUtils.ErrWrapWithNameAndCauseFormat, errUtils.ErrIdentityAuthFailed, identityName, err)
+		}
+	} else if whoami != nil && whoami.Credentials != nil {
+		// Valid cached session — provision auto_provision integrations using the cached
+		// credentials (no second provider authentication). Non-fatal, like login-time triggers.
+		m.triggerIntegrations(ctx, identityName, whoami.Credentials)
+	}
+
+	// Compose the integration-contributed environment (e.g., github/sts GIT_CONFIG_*).
+	return m.GetEnvironmentVariables(identityName)
+}
+
 // executeIntegration executes a single integration by name.
 func (m *manager) executeIntegration(ctx context.Context, integrationName string, creds types.ICredentials) error {
 	defer perf.Track(nil, "auth.Manager.executeIntegration")()

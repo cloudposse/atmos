@@ -143,6 +143,12 @@ func (a *authContextWrapper) PrepareShellEnvironment(ctx context.Context, identi
 	panic("authContextWrapper.PrepareShellEnvironment should not be called")
 }
 
+func (a *authContextWrapper) EnsureIdentityEnvironment(ctx context.Context, identityName string) (map[string]string, error) {
+	defer perf.Track(nil, "exec.authContextWrapper.EnsureIdentityEnvironment")()
+
+	panic("authContextWrapper.EnsureIdentityEnvironment should not be called")
+}
+
 func (a *authContextWrapper) ExecuteIntegration(ctx context.Context, integrationName string) error {
 	defer perf.Track(nil, "exec.authContextWrapper.ExecuteIntegration")()
 
