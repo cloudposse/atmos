@@ -175,7 +175,8 @@ func TestGetPublicAuthorizationToken(t *testing.T) {
 							AuthorizationToken: &validToken,
 							ExpiresAt:          &validExpiry,
 						},
-					}, nil)
+					}, nil,
+				)
 				return mock
 			},
 			checkResult: func(t *testing.T, result *ECRPublicAuthResult) {
@@ -195,7 +196,8 @@ func TestGetPublicAuthorizationToken(t *testing.T) {
 						AuthorizationData: &ecrpublictypes.AuthorizationData{
 							AuthorizationToken: &validToken,
 						},
-					}, nil)
+					}, nil,
+				)
 				return mock
 			},
 			checkResult: func(t *testing.T, result *ECRPublicAuthResult) {
@@ -226,7 +228,8 @@ func TestGetPublicAuthorizationToken(t *testing.T) {
 			setupMock: func(ctrl *gomock.Controller) *MockECRPublicClient {
 				mock := NewMockECRPublicClient(ctrl)
 				mock.EXPECT().GetAuthorizationToken(gomock.Any(), gomock.Any()).Return(
-					nil, fmt.Errorf("access denied"))
+					nil, fmt.Errorf("access denied"),
+				)
 				return mock
 			},
 			wantErr: true,
@@ -241,7 +244,8 @@ func TestGetPublicAuthorizationToken(t *testing.T) {
 				mock.EXPECT().GetAuthorizationToken(gomock.Any(), gomock.Any()).Return(
 					&ecrpublic.GetAuthorizationTokenOutput{
 						AuthorizationData: nil,
-					}, nil)
+					}, nil,
+				)
 				return mock
 			},
 			wantErr:     true,
@@ -259,7 +263,8 @@ func TestGetPublicAuthorizationToken(t *testing.T) {
 						AuthorizationData: &ecrpublictypes.AuthorizationData{
 							AuthorizationToken: nil,
 						},
-					}, nil)
+					}, nil,
+				)
 				return mock
 			},
 			wantErr:     true,
@@ -278,7 +283,8 @@ func TestGetPublicAuthorizationToken(t *testing.T) {
 						AuthorizationData: &ecrpublictypes.AuthorizationData{
 							AuthorizationToken: &badToken,
 						},
-					}, nil)
+					}, nil,
+				)
 				return mock
 			},
 			wantErr:     true,
@@ -297,7 +303,8 @@ func TestGetPublicAuthorizationToken(t *testing.T) {
 						AuthorizationData: &ecrpublictypes.AuthorizationData{
 							AuthorizationToken: &noColonToken,
 						},
-					}, nil)
+					}, nil,
+				)
 				return mock
 			},
 			wantErr:     true,
