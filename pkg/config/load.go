@@ -11,7 +11,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/mitchellh/mapstructure"
+	"github.com/go-viper/mapstructure/v2"
 	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
 	"gopkg.in/yaml.v3"
@@ -567,12 +567,11 @@ func readSystemConfig(v *viper.Viper) error {
 	if len(configFilePath) > 0 {
 		log.Trace("Checking for atmos.yaml in system config", "path", configFilePath)
 		err := mergeConfig(v, configFilePath, CliConfigFileName, false)
-		switch err.(type) {
-		case viper.ConfigFileNotFoundError:
+		var configNotFoundErr viper.ConfigFileNotFoundError
+		if errors.As(err, &configNotFoundErr) {
 			return nil
-		default:
-			return err
 		}
+		return err
 	}
 	return nil
 }
@@ -592,12 +591,11 @@ func readHomeConfigWithProvider(v *viper.Viper, homeProvider filesystem.HomeDirP
 	log.Trace("Checking for atmos.yaml in home directory", "path", configFilePath)
 	err = mergeConfig(v, configFilePath, CliConfigFileName, true)
 	if err != nil {
-		switch err.(type) {
-		case viper.ConfigFileNotFoundError:
+		var configNotFoundErr viper.ConfigFileNotFoundError
+		if errors.As(err, &configNotFoundErr) {
 			return nil
-		default:
-			return err
 		}
+		return err
 	}
 
 	return nil
@@ -799,14 +797,12 @@ func readAtmosConfigCli(v *viper.Viper, atmosCliConfigPath string) error {
 		return nil
 	}
 	err := mergeConfig(v, atmosCliConfigPath, CliConfigFileName, true)
-	switch err.(type) {
-	case viper.ConfigFileNotFoundError:
+	var configNotFoundErr viper.ConfigFileNotFoundError
+	if errors.As(err, &configNotFoundErr) {
 		log.Debug("config not found", "file", atmosCliConfigPath)
-	default:
-		return err
+		return nil
 	}
-
-	return nil
+	return err
 }
 
 // loadConfigFile reads a configuration file and returns a temporary Viper instance with its contents.

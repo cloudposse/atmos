@@ -189,13 +189,17 @@ Instead of storing credentials in configuration, use `atmos auth user configure`
 
 ### Browser-Based Authentication (Automatic Fallback)
 
-When no static credentials or keyring entries are available, Atmos automatically initiates an OAuth2 PKCE flow via the AWS sign-in service. This provides the same convenient web-based authentication that SSO users already enjoy, without requiring static access keys.
+When neither configuration nor keyring entries provide credentials, Atmos automatically initiates an OAuth2 PKCE flow via the AWS sign-in service. This provides the same convenient web-based authentication that SSO users already enjoy, without requiring static access keys.
 
 **Authentication priority:**
 
-1. Static credentials from configuration or environment variables
+1. Static credentials from `atmos.yaml` (`access_key_id` + `secret_access_key`, including `!env` references)
 2. Credentials stored in the system keyring (via `atmos auth user configure`)
-3. Browser-based OAuth2 PKCE flow (automatic fallback)
+3. Browser-based OAuth2 PKCE flow (when `webflow_enabled` is `true`, which is the default)
+
+Atmos does **not** consult ambient AWS credentials (environment variables, `~/.aws/credentials`, instance profiles) for `aws/user` identities — credentials must be supplied through one of the three sources above.
+
+If the keyring is reachable but the stored entry is unreadable (corrupted, missing fields, permission denied), Atmos reports the keyring read failure directly instead of silently falling back to the browser flow. This makes it possible to diagnose keyring issues rather than guessing why the browser flow opened.
 
 **How it works:**
 
