@@ -384,3 +384,90 @@ func TestAtmosHandler_BuildAtmosResult(t *testing.T) {
 }
 
 // containsStackFlag is already tested in command_handlers_test.go.
+
+// TestAtmosHandler_Execute_Subprocess exercises the full Execute ->
+// runAtmosCommand path by having the test binary impersonate the atmos
+// executable (see TestMain). The sentinel is delivered via the step env, which
+// runAtmosCommand forwards to the subprocess.
+func TestAtmosHandler_Execute_Subprocess(t *testing.T) {
+	handler, ok := Get("atmos")
+	require.True(t, ok)
+	atmosHandler := handler.(*AtmosHandler)
+
+	t.Run("success returns trimmed stdout and zero exit code", func(t *testing.T) {
+		step := &schema.WorkflowStep{
+			Name:    "deploy",
+			Command: "terraform plan",
+			Output:  string(OutputModeNone),
+			Env:     map[string]string{"_ATMOS_STEP_FAKE": "ok"},
+		}
+
+		result, err := atmosHandler.Execute(context.Background(), step, NewVariables())
+		require.NoError(t, err)
+		assert.Equal(t, "fake-atmos-output", result.Value)
+		assert.Equal(t, 0, result.Metadata["exit_code"])
+	})
+
+	t.Run("stack triggers the stack-flag append branch", func(t *testing.T) {
+		// Setting Stack exercises the "-s <stack>" append path in
+		// runAtmosCommand. We can't observe the subprocess args here, but the
+		// branch executes and the command must still succeed.
+		step := &schema.WorkflowStep{
+			Name:    "deploy",
+			Command: "terraform plan",
+			Stack:   "prod",
+			Output:  string(OutputModeNone),
+			Env:     map[string]string{"_ATMOS_STEP_FAKE": "ok"},
+		}
+
+		result, err := atmosHandler.Execute(context.Background(), step, NewVariables())
+		require.NoError(t, err)
+		assert.Equal(t, "fake-atmos-output", result.Value)
+	})
+
+	t.Run("failure captures non-zero exit code and stderr", func(t *testing.T) {
+		step := &schema.WorkflowStep{
+			Name:    "deploy",
+			Command: "terraform apply",
+			Output:  string(OutputModeNone),
+			Env:     map[string]string{"_ATMOS_STEP_FAKE": "fail"},
+		}
+
+		result, err := atmosHandler.Execute(context.Background(), step, NewVariables())
+		require.Error(t, err)
+		assert.Equal(t, 3, result.Metadata["exit_code"])
+		assert.Contains(t, result.Error, "fake-atmos-error")
+	})
+
+	t.Run("invalid command template returns error before execution", func(t *testing.T) {
+		step := &schema.WorkflowStep{
+			Name:    "deploy",
+			Command: "{{ .steps.invalid.value",
+		}
+
+		_, err := atmosHandler.Execute(context.Background(), step, NewVariables())
+		require.Error(t, err)
+	})
+}
+
+// TestAtmosHandler_ExecuteWithWorkflow_Subprocess covers the workflow-aware
+// entry point, which resolves the output mode from the workflow definition.
+func TestAtmosHandler_ExecuteWithWorkflow_Subprocess(t *testing.T) {
+	handler, ok := Get("atmos")
+	require.True(t, ok)
+	atmosHandler := handler.(*AtmosHandler)
+
+	step := &schema.WorkflowStep{
+		Name:    "deploy",
+		Command: "terraform plan",
+		Env:     map[string]string{"_ATMOS_STEP_FAKE": "ok"},
+	}
+	workflow := &schema.WorkflowDefinition{
+		Output: string(OutputModeNone),
+	}
+
+	result, err := atmosHandler.ExecuteWithWorkflow(context.Background(), step, NewVariables(), workflow)
+	require.NoError(t, err)
+	assert.Equal(t, "fake-atmos-output", result.Value)
+	assert.Equal(t, 0, result.Metadata["exit_code"])
+}
