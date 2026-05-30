@@ -374,6 +374,35 @@ These flags are available for every Atmos command:
         export ATMOS_SKIP_HOOKS=true
         ```
     </dd>
+
+    <dt>`--settings-list-merge-strategy`</dt>
+    <dd>
+        Override [`settings.list_merge_strategy`](/cli/configuration/settings#list-merge-strategy)
+        for the current invocation, controlling how lists are merged when Atmos
+        deep-merges stack manifests.
+
+        - Options: `replace` (default), `append`, `merge`
+        - Takes precedence over `settings.list_merge_strategy` in `atmos.yaml`
+        - Per-invocation only — does not propagate to nested commands or workflows
+        - Can also use `ATMOS_SETTINGS_LIST_MERGE_STRATEGY` environment variable
+
+        **Strategies:**
+        - `replace`: Lists from higher-priority manifests replace lists from lower-priority ones.
+        - `append`: Lists are concatenated, with higher-priority items appended after lower-priority ones.
+        - `merge`: Lists are merged element-by-element by index.
+
+        **Examples:**
+        ```bash
+        # Append imported lists instead of replacing them for one run
+        atmos --settings-list-merge-strategy=append describe component vpc -s prod
+
+        # Flag also works after the subcommand
+        atmos describe config --settings-list-merge-strategy=merge
+
+        # Use environment variable
+        ATMOS_SETTINGS_LIST_MERGE_STRATEGY=append atmos terraform plan vpc -s prod
+        ```
+    </dd>
 </dl>
 
 ## Command-Specific Flags
@@ -647,6 +676,15 @@ All global flags can be set using environment variables. The precedence order is
         - CLI flag takes precedence over this environment variable
         - Per-invocation only; does not propagate to nested commands
         - Example: `ATMOS_SKIP_HOOKS=cost,security atmos terraform plan vpc -s prod`
+    </dd>
+
+    <dt>`ATMOS_SETTINGS_LIST_MERGE_STRATEGY`</dt>
+    <dd>
+        Override [`settings.list_merge_strategy`](/cli/configuration/settings#list-merge-strategy) for the current invocation.
+        - Equivalent to the `--settings-list-merge-strategy` flag
+        - Options: `replace` (default), `append`, `merge`
+        - CLI flag takes precedence over this environment variable
+        - Example: `ATMOS_SETTINGS_LIST_MERGE_STRATEGY=append atmos terraform plan vpc -s prod`
     </dd>
 
     <dt>`ATMOS_PROFILER_ENABLED`</dt>
