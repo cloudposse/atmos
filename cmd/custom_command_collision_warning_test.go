@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"bytes"
+	"errors"
 	"io"
 	"os"
 	"runtime"
@@ -15,6 +16,10 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui"
 )
+
+// errBuiltinPreRun is a sentinel returned by a fake built-in PreRunE to verify the
+// deferred-warning wrapper propagates the original handler's error.
+var errBuiltinPreRun = errors.New("built-in prerun error")
 
 // captureUIStderr runs fn while the UI layer writes to a captured pipe and returns the
 // ANSI-stripped stderr produced during fn. The global formatter is re-initialized so
@@ -120,4 +125,63 @@ func TestCustomCommand_StepsConflictWarning_DeferredToInvocation(t *testing.T) {
 		"collision warning must be emitted when the conflicting command runs")
 	assert.Equal(t, 1, bytes.Count([]byte(runOutput), []byte(warningMarker)),
 		"collision warning should be emitted exactly once per invocation")
+}
+
+// TestCustomCommand_StepsConflictWarning_PreservesExistingPreRunE verifies that when the
+// conflicting built-in already defines its own PreRunE (as the real `terraform plan` does),
+// the deferred-warning wrapper still invokes that original PreRunE and propagates its error.
+func TestCustomCommand_StepsConflictWarning_PreservesExistingPreRunE(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Skipping on Windows: pipe/stderr capture interacts poorly with background goroutines")
+	}
+
+	testDir := "../tests/fixtures/scenarios/complete"
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", testDir)
+	t.Setenv("ATMOS_BASE_PATH", testDir)
+
+	_ = NewTestKit(t)
+
+	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+	require.NoError(t, err)
+
+	builtinPreRunRan := false
+
+	builtinNS := &cobra.Command{Use: "builtin-prerun-ns", Short: "A built-in namespace"}
+	builtinLeaf := &cobra.Command{
+		Use:   "leaf",
+		Short: "Built-in leaf with its own PreRunE",
+		PreRunE: func(cmd *cobra.Command, args []string) error {
+			builtinPreRunRan = true
+			return errBuiltinPreRun
+		},
+		RunE: func(cmd *cobra.Command, args []string) error { return nil },
+	}
+	builtinNS.AddCommand(builtinLeaf)
+	RootCmd.AddCommand(builtinNS)
+
+	atmosConfig.Commands = []schema.Command{
+		{
+			Name: "builtin-prerun-ns",
+			Commands: []schema.Command{
+				{
+					Name:        "leaf",
+					Description: "Custom leaf whose steps conflict with the built-in",
+					Steps:       stepsFromStrings("echo custom-leaf"),
+				},
+			},
+		},
+	}
+
+	require.NoError(t, processCustomCommands(atmosConfig, atmosConfig.Commands, RootCmd))
+
+	require.NotNil(t, builtinLeaf.PreRunE, "PreRunE should be installed")
+
+	output := captureUIStderr(t, func() {
+		// The wrapper must propagate the original PreRunE's error.
+		err := builtinLeaf.PreRunE(builtinLeaf, []string{})
+		require.ErrorIs(t, err, errBuiltinPreRun, "original PreRunE error must propagate through the wrapper")
+	})
+
+	assert.True(t, builtinPreRunRan, "the built-in's original PreRunE must still run")
+	assert.Contains(t, output, "conflict with built-in", "warning must still be emitted")
 }
