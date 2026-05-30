@@ -8,6 +8,7 @@ import (
 	"context"
 	"crypto/ecdsa"
 	"crypto/ed25519"
+	"crypto/elliptic"
 	"crypto/rand"
 	"crypto/sha256"
 	"crypto/x509"
@@ -194,6 +195,20 @@ func TestNewDPoPProof_StructureAndSignature(t *testing.T) {
 func TestNewDPoPProof_NilKey(t *testing.T) {
 	_, err := newDPoPProof(nil, http.MethodPost, "https://example.com/v1/token")
 	require.Error(t, err)
+}
+
+// TestNewDPoPProof_NonP256Key verifies the proof builder surfaces an
+// ErrWebflowDPoP error (rather than panicking) when handed an EC key on a curve
+// that crypto/ecdh cannot represent. The JWK coordinates are derived via
+// (*ecdsa.PublicKey).ECDH(), which rejects non-P256/384/521 curves such as
+// P-224, exercising the otherwise-unreached error branch. The htm is GET here
+// (the method is irrelevant to the key-rejection path).
+func TestNewDPoPProof_NonP256Key(t *testing.T) {
+	key, err := ecdsa.GenerateKey(elliptic.P224(), rand.Reader)
+	require.NoError(t, err)
+
+	_, err = newDPoPProof(key, http.MethodGet, "https://example.com/v1/token")
+	require.ErrorIs(t, err, errUtils.ErrWebflowDPoP)
 }
 
 // TestMarshalParseDPoPKey_RoundTrip verifies a DPoP key survives serialization

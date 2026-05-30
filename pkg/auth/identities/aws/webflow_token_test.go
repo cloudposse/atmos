@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -17,6 +18,68 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 )
+
+// errReader is an io.Reader that always fails, used to simulate a response body
+// that errors mid-read so the io.ReadAll path in doTokenRequest is exercised.
+type errReader struct{}
+
+func (errReader) Read([]byte) (int, error) {
+	return 0, fmt.Errorf("simulated body read failure")
+}
+
+// TestDoTokenRequest_RequestBuildError verifies that a malformed endpoint (one
+// http.NewRequestWithContext rejects) is surfaced as ErrWebflowTokenExchange
+// without ever invoking the HTTP client.
+func TestDoTokenRequest_RequestBuildError(t *testing.T) {
+	called := false
+	mockClient := &mockHTTPClient{
+		doFunc: func(_ *http.Request) (*http.Response, error) {
+			called = true
+			return nil, nil
+		},
+	}
+
+	body := url.Values{}
+	body.Set("grant_type", webflowGrantTypeAuthCode)
+
+	resp, _, err := doTokenRequest(context.Background(), mockClient, tokenRequestParams{
+		// A control character makes URL parsing in NewRequestWithContext fail.
+		endpoint: "http://\x7f/v1/token",
+		region:   "us-east-2",
+		body:     body,
+		dpopKey:  mustGenerateDPoPKey(t),
+	})
+	assert.Nil(t, resp)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrWebflowTokenExchange)
+	assert.False(t, called, "client must not be called when the request cannot be built")
+}
+
+// TestCallTokenEndpoint_BodyReadError verifies that a failure while reading the
+// token-endpoint response body is wrapped as ErrWebflowTokenExchange rather than
+// surfacing as a partial/opaque success (doTokenRequest io.ReadAll branch).
+func TestCallTokenEndpoint_BodyReadError(t *testing.T) {
+	mockClient := &mockHTTPClient{
+		doFunc: func(_ *http.Request) (*http.Response, error) {
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Header:     http.Header{"Content-Type": []string{"application/json"}},
+				Body:       io.NopCloser(errReader{}),
+			}, nil
+		},
+	}
+
+	body := url.Values{}
+	body.Set("client_id", webflowOAuthClientID)
+	body.Set("grant_type", webflowGrantTypeAuthCode)
+	body.Set("code", "code")
+
+	resp, err := callTokenEndpoint(context.Background(), mockClient, "us-east-2", body, mustGenerateDPoPKey(t))
+	assert.Nil(t, resp)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrWebflowTokenExchange)
+	assert.Contains(t, err.Error(), "failed to read response")
+}
 
 func TestExchangeCodeForCredentials_Success(t *testing.T) {
 	// Mock token endpoint.

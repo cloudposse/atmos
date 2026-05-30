@@ -4,6 +4,7 @@ package aws
 
 import (
 	"context"
+	"crypto/ecdsa"
 	"encoding/json"
 	"fmt"
 	"net"
@@ -588,6 +589,97 @@ func TestRefreshWebflowCredentials_UpdatesRefreshToken(t *testing.T) {
 	assert.WithinDuration(t, originalExpiresAt, cache.ExpiresAt, time.Second)
 	// The DPoP key the rotated refresh token is bound to must be preserved.
 	assert.Equal(t, seededDPoPKey, cache.DPoPKey)
+}
+
+// TestRefreshWebflowCredentials_UnusableDPoPKey verifies that a non-expired
+// refresh cache whose bound DPoP key is missing (pre-DPoP cache shape) or
+// unparseable fails with ErrWebflowRefreshFailed *before* any network call, so
+// the caller cleanly falls back to the browser flow (RFC 9449, issue #2542).
+func TestRefreshWebflowCredentials_UnusableDPoPKey(t *testing.T) {
+	tests := []struct {
+		name    string
+		dpopKey string
+	}{
+		{name: "missing key (legacy cache)", dpopKey: ""},
+		{name: "unparseable key", dpopKey: "not-base64!!"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tmpDir := t.TempDir()
+			t.Setenv("ATMOS_XDG_CACHE_HOME", tmpDir)
+
+			identity := &userIdentity{
+				name:  "test",
+				realm: "realm",
+				config: &schema.Identity{
+					Kind: "aws/user",
+				},
+			}
+
+			// Non-expired cache so the expiry guard is passed and the DPoP-key
+			// guards are the branch under test.
+			identity.saveRefreshCache(&webflowRefreshCache{
+				RefreshToken: "token",
+				Region:       "us-east-2",
+				ExpiresAt:    time.Now().Add(10 * time.Hour),
+				DPoPKey:      tt.dpopKey,
+			})
+
+			// Fail loudly if the refresh path reaches the network despite the
+			// unusable key.
+			origClient := defaultHTTPClient
+			defaultHTTPClient = &mockHTTPClient{
+				doFunc: func(_ *http.Request) (*http.Response, error) {
+					t.Fatal("refresh must not contact the token endpoint with an unusable DPoP key")
+					return nil, nil
+				},
+			}
+			defer func() { defaultHTTPClient = origClient }()
+
+			creds, err := identity.refreshWebflowCredentials(context.Background(), "us-east-2")
+			assert.Nil(t, creds)
+			require.ErrorIs(t, err, errUtils.ErrWebflowRefreshFailed)
+		})
+	}
+}
+
+// TestProcessTokenResponse_MarshalKeyError verifies that when the per-session
+// DPoP key cannot be serialized, processTokenResponse still returns usable
+// credentials but skips caching the refresh token (so the next run cleanly falls
+// back to the browser flow rather than caching an unusable, key-less refresh
+// token). A nil-curve key makes marshalDPoPKey fail without panicking.
+func TestProcessTokenResponse_MarshalKeyError(t *testing.T) {
+	tmpDir := t.TempDir()
+	t.Setenv("ATMOS_XDG_CACHE_HOME", tmpDir)
+
+	identity := &userIdentity{
+		name:  "test",
+		realm: "realm",
+		config: &schema.Identity{
+			Kind: "aws/user",
+		},
+	}
+
+	tokenResp := &webflowTokenResponse{
+		AccessToken: webflowAccessToken{
+			AccessKeyID:     "AKID",
+			SecretAccessKey: "SECRET",
+			SessionToken:    "TOKEN",
+		},
+		ExpiresIn:    900,
+		RefreshToken: "refresh-token-value",
+	}
+
+	// A zero-value key has a nil curve, so x509.MarshalPKCS8PrivateKey fails.
+	creds := identity.processTokenResponse(tokenResp, "us-east-2", &ecdsa.PrivateKey{})
+	require.NotNil(t, creds)
+	assert.Equal(t, "AKID", creds.AccessKeyID)
+
+	// No refresh cache should have been written.
+	cache, cacheErr := identity.loadRefreshCache()
+	assert.Nil(t, cache)
+	assert.Error(t, cacheErr)
 }
 
 func TestBrowserWebflowInteractive_EndToEnd(t *testing.T) {
