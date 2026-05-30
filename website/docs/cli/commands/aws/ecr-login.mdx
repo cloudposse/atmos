@@ -27,8 +27,11 @@ atmos aws ecr login [integration] [flags]
 # Login using a named integration (private ECR)
 atmos aws ecr login dev/ecr/primary
 
-# Login using a named integration (ECR Public)
-atmos aws ecr login ecr-public
+# Login to ECR Public (public.ecr.aws) using ambient AWS credentials
+atmos aws ecr login --public
+
+# Login to ECR Public using a specific identity
+atmos aws ecr login --public --identity dev-admin
 
 # Login using an identity's linked integrations
 atmos aws ecr login --identity dev-admin
@@ -54,9 +57,14 @@ atmos aws ecr login \
 ## Flags
 
 <dl>
+  <dt>`--public`</dt>
+  <dd>
+    Log in to AWS ECR Public (`public.ecr.aws`) directly, without a named integration. By default this uses ambient AWS credentials (the AWS SDK default credential chain: environment variables, shared config/profile, SSO, IMDS/IRSA/ECS) — ideal for CI, where the runner already has credentials. Combine with `--identity` to use a specific Atmos identity's credentials instead. Authentication is always performed in `us-east-1`. Cannot be combined with an integration argument or `--registry`.
+  </dd>
+
   <dt>`--identity` <em>(alias `-i`)</em></dt>
   <dd>
-    Identity name whose linked integrations should be executed. All `aws/ecr` and `aws/ecr-public` integrations that reference this identity will be triggered. This authenticates the identity first, then executes all its linked integrations.
+    Identity name whose linked integrations should be executed. All `aws/ecr` and `aws/ecr-public` integrations that reference this identity will be triggered. This authenticates the identity first, then executes all its linked integrations. When combined with `--public`, the identity's credentials are used to log in to ECR Public.
   </dd>
 
   <dt>`--registry` <em>(alias `-r`)</em></dt>
@@ -112,7 +120,9 @@ auth:
 
 ### ECR Public Configuration
 
-For authenticating to `public.ecr.aws`, use the `aws/ecr-public` integration kind. No registry block is needed since ECR Public is always `public.ecr.aws`:
+For a one-off ECR Public login, you don't need any configuration — just run `atmos aws ecr login --public`, which uses ambient AWS credentials (or pass `--identity <name>` to use a specific identity). This is the simplest option for CI.
+
+To have ECR Public login happen automatically on `atmos auth login`, configure an `aws/ecr-public` integration kind. No registry block is needed since ECR Public is always `public.ecr.aws`:
 
 ```yaml
 auth:

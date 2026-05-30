@@ -202,3 +202,76 @@ func TestExecuteWithAuthManager_MutuallyExclusiveFlags(t *testing.T) {
 	err := executeWithAuthManager(context.Background(), atmosConfig, "some-identity", "some-integration")
 	assert.ErrorIs(t, err, errUtils.ErrMutuallyExclusiveFlags)
 }
+
+func TestLoginCmd_HasPublicFlag(t *testing.T) {
+	// Verify --public flag exists with a bool false default.
+	publicFlag := loginCmd.Flags().Lookup("public")
+	require.NotNil(t, publicFlag)
+	assert.Equal(t, "bool", publicFlag.Value.Type())
+	assert.Equal(t, "false", publicFlag.DefValue)
+}
+
+func TestLoginCmd_PublicExamplesInLong(t *testing.T) {
+	// Verify --public usage and examples are documented in the long description.
+	assert.Contains(t, loginCmd.Long, "--public")
+	assert.Contains(t, loginCmd.Long, "atmos aws ecr login --public")
+	assert.Contains(t, loginCmd.Long, "atmos aws ecr login --public --identity dev-admin")
+}
+
+func TestValidateLoginModes(t *testing.T) {
+	tests := []struct {
+		name            string
+		public          bool
+		integrationName string
+		registries      []string
+		wantErr         error
+	}{
+		{
+			name:   "not public is always allowed",
+			public: false,
+		},
+		{
+			name:            "not public with integration arg is allowed",
+			public:          false,
+			integrationName: "dev/ecr",
+		},
+		{
+			name:   "public alone (ambient) is allowed",
+			public: true,
+		},
+		{
+			name:            "public with integration arg is rejected",
+			public:          true,
+			integrationName: "ecr-public",
+			wantErr:         errUtils.ErrMutuallyExclusiveFlags,
+		},
+		{
+			name:       "public with registry is rejected",
+			public:     true,
+			registries: []string{"123456789012.dkr.ecr.us-east-2.amazonaws.com"},
+			wantErr:    errUtils.ErrMutuallyExclusiveFlags,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := validateLoginModes(tt.public, tt.integrationName, tt.registries)
+			if tt.wantErr != nil {
+				assert.ErrorIs(t, err, tt.wantErr)
+				return
+			}
+			assert.NoError(t, err)
+		})
+	}
+}
+
+func TestExecutePublicLoginWithIdentity_SelectSentinel(t *testing.T) {
+	// __SELECT__ sentinel should return ErrECRIdentitySelect before any auth occurs.
+	atmosConfig := &schema.AtmosConfiguration{
+		Auth: schema.AuthConfig{
+			Realm: "test",
+		},
+	}
+	err := executePublicLoginWithIdentity(context.Background(), atmosConfig, cfg.IdentityFlagSelectValue)
+	assert.ErrorIs(t, err, errUtils.ErrECRIdentitySelect)
+}

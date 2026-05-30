@@ -3,6 +3,7 @@ slug: ecr-public-authentication
 title: "ECR Public Registry Authentication"
 authors: [osterman]
 tags: [feature]
+date: 2026-05-30
 ---
 
 Atmos now supports authenticated pulls from `public.ecr.aws` via the new `aws/ecr-public` integration kind, eliminating Docker rate limits on public ECR images.
@@ -42,10 +43,10 @@ $ atmos auth login plat-dev/terraform
 ✓ ECR Public login: public.ecr.aws (expires in 12h)
 ```
 
-Or trigger it explicitly:
+Or trigger it explicitly with ambient AWS credentials — no integration config required:
 
 ```bash
-$ atmos aws ecr login ecr-public
+$ atmos aws ecr login --public
 ✓ ECR Public login: public.ecr.aws (expires in 12h)
 ```
 

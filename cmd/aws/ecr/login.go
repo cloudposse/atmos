@@ -13,6 +13,7 @@ import (
 	awsCloud "github.com/cloudposse/atmos/pkg/auth/cloud/aws"
 	"github.com/cloudposse/atmos/pkg/auth/cloud/docker"
 	"github.com/cloudposse/atmos/pkg/auth/credentials"
+	"github.com/cloudposse/atmos/pkg/auth/types"
 	"github.com/cloudposse/atmos/pkg/auth/validation"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -28,7 +29,8 @@ var loginCmd = &cobra.Command{
 
 By default, uses a named integration's ECR config. Use --identity to specify
 a different identity whose linked integrations should be executed. Use --registry
-to override with explicit registry URLs.
+to override with explicit registry URLs. Use --public to log in to ECR Public
+(public.ecr.aws) using ambient AWS credentials, or pair it with --identity.
 
 Examples:
   # Login using a named integration
@@ -36,6 +38,12 @@ Examples:
 
   # Login using an identity's linked integrations
   atmos aws ecr login --identity dev-admin
+
+  # Login to ECR Public using ambient AWS credentials (zero-config)
+  atmos aws ecr login --public
+
+  # Login to ECR Public using a specific identity
+  atmos aws ecr login --public --identity dev-admin
 
   # Override with explicit registry URL
   atmos aws ecr login --registry 123456789012.dkr.ecr.us-east-2.amazonaws.com`,
@@ -56,6 +64,7 @@ func executeLoginCommand(cmd *cobra.Command, args []string) error {
 	// Get flag values (errors are ignored as flags are guaranteed to exist by Cobra).
 	identityName, _ := cmd.Flags().GetString("identity")
 	registries, _ := cmd.Flags().GetStringArray("registry")
+	public, _ := cmd.Flags().GetBool("public")
 
 	// Get integration name from positional argument.
 	var integrationName string
@@ -63,19 +72,117 @@ func executeLoginCommand(cmd *cobra.Command, args []string) error {
 		integrationName = args[0]
 	}
 
+	// Reject mutually exclusive modes before doing any work.
+	if err := validateLoginModes(public, integrationName, registries); err != nil {
+		return err
+	}
+
 	// Case 1: Explicit registries — no Atmos config needed, uses ambient AWS credentials.
 	if len(registries) > 0 {
 		return executeExplicitRegistries(ctx, registries)
 	}
 
-	// Cases 2 & 3 require Atmos config for auth manager.
+	// Case 2: ECR Public with ambient credentials — no Atmos config needed.
+	if public && identityName == "" {
+		return executePublicLoginAmbient(ctx)
+	}
+
+	// Remaining cases require Atmos config for the auth manager.
 	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
 	if err != nil {
 		return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrFailedToInitConfig, err)
 	}
 	defer perf.Track(&atmosConfig, "aws.ecr.executeLoginCommand")()
 
+	// Case 3: ECR Public via a specific identity.
+	if public {
+		return executePublicLoginWithIdentity(ctx, &atmosConfig, identityName)
+	}
+
+	// Case 4: Named integration or identity's linked integrations.
 	return executeWithAuthManager(ctx, &atmosConfig, identityName, integrationName)
+}
+
+// validateLoginModes rejects mutually exclusive login modes.
+func validateLoginModes(public bool, integrationName string, registries []string) error {
+	if !public {
+		return nil
+	}
+	if integrationName != "" {
+		return fmt.Errorf("%w: --public cannot be combined with an integration argument", errUtils.ErrMutuallyExclusiveFlags)
+	}
+	if len(registries) > 0 {
+		return fmt.Errorf("%w: --public cannot be combined with --registry", errUtils.ErrMutuallyExclusiveFlags)
+	}
+	return nil
+}
+
+// executePublicLoginAmbient logs in to ECR Public using ambient AWS credentials
+// (the AWS SDK default credential chain: env vars, shared config, SSO, IMDS/IRSA/ECS).
+func executePublicLoginAmbient(ctx context.Context) error {
+	defer perf.Track(nil, "aws.ecr.executePublicLoginAmbient")()
+
+	creds, err := awsCloud.LoadDefaultAWSCredentials(ctx)
+	if err != nil {
+		return err
+	}
+
+	return publicLogin(ctx, creds)
+}
+
+// executePublicLoginWithIdentity authenticates the given identity, then logs in to
+// ECR Public using that identity's credentials.
+func executePublicLoginWithIdentity(ctx context.Context, atmosConfig *schema.AtmosConfiguration, identityName string) error {
+	defer perf.Track(atmosConfig, "aws.ecr.executePublicLoginWithIdentity")()
+
+	// Reject the interactive selection sentinel; this command requires an explicit name.
+	if identityName == cfg.IdentityFlagSelectValue {
+		return errUtils.ErrECRIdentitySelect
+	}
+
+	authManager, err := createAuthManager(&atmosConfig.Auth, atmosConfig.CliConfigPath)
+	if err != nil {
+		return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrFailedToInitializeAuthManager, err)
+	}
+
+	whoami, err := authManager.Authenticate(ctx, identityName)
+	if err != nil {
+		return fmt.Errorf(errUtils.ErrWrapWithNameAndCauseFormat, errUtils.ErrIdentityAuthFailed, identityName, err)
+	}
+	if whoami.Credentials == nil {
+		return fmt.Errorf(errUtils.ErrWrapWithNameAndCauseFormat, errUtils.ErrIdentityAuthFailed, identityName, errUtils.ErrIdentityCredentialsNone)
+	}
+
+	return publicLogin(ctx, whoami.Credentials)
+}
+
+// publicLogin exchanges AWS credentials for an ECR Public authorization token and
+// writes the resulting Docker credentials for public.ecr.aws.
+func publicLogin(ctx context.Context, creds types.ICredentials) error {
+	defer perf.Track(nil, "aws.ecr.publicLogin")()
+
+	result, err := awsCloud.GetPublicAuthorizationToken(ctx, creds)
+	if err != nil {
+		return fmt.Errorf("%w: %w", errUtils.ErrECRPublicAuthFailed, err)
+	}
+
+	dockerConfig, err := docker.NewConfigManager()
+	if err != nil {
+		return fmt.Errorf("%w: %w", errUtils.ErrIntegrationFailed, err)
+	}
+
+	if err := dockerConfig.WriteAuth(awsCloud.ECRPublicRegistryURL, result.Username, result.Password); err != nil {
+		return fmt.Errorf("%w: %w", errUtils.ErrDockerConfigWrite, err)
+	}
+
+	// Log success with actual expiration time from the ECR Public token.
+	expiresIn := time.Until(result.ExpiresAt).Round(time.Minute)
+	ui.Success(fmt.Sprintf("ECR Public login: %s (expires in %s)", awsCloud.ECRPublicRegistryURL, expiresIn))
+
+	// Set DOCKER_CONFIG so downstream Docker commands use the same config location.
+	_ = os.Setenv("DOCKER_CONFIG", dockerConfig.GetConfigDir())
+
+	return nil
 }
 
 // executeWithAuthManager handles integration and identity-based ECR login modes.
@@ -177,6 +284,10 @@ func init() {
 
 	// Add --registry as a local flag specific to login.
 	loginCmd.Flags().StringArrayP("registry", "r", nil, "ECR registry URL(s) - explicit mode")
+
+	// Add --public to log in to ECR Public (public.ecr.aws). Uses ambient AWS
+	// credentials by default, or the credentials of --identity when provided.
+	loginCmd.Flags().Bool("public", false, "Login to AWS ECR Public (public.ecr.aws)")
 
 	EcrCmd.AddCommand(loginCmd)
 }

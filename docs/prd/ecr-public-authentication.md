@@ -28,8 +28,8 @@ $ atmos auth login dev-admin
 ✓ Authenticated as arn:aws:sts::123456789012:assumed-role/DevRole/user
 ✓ ECR Public login: public.ecr.aws (expires in 12h)
 
-# Or explicit
-$ atmos auth ecr-login ecr-public
+# Or explicit (ambient AWS credentials, no integration config needed)
+$ atmos aws ecr login --public
 ✓ ECR Public login: public.ecr.aws (expires in 12h)
 ```
 
@@ -130,14 +130,20 @@ Integration failures during auto-provision are non-fatal (logged as warnings, do
 
 ### CLI Integration
 
-No new CLI command needed. The existing `atmos auth ecr-login` command routes through the integration registry and handles `aws/ecr-public` automatically:
+The `atmos aws ecr login` command handles `aws/ecr-public` through the integration registry, and a `--public` flag provides a direct, zero-config login path:
 
 ```bash
-# Named integration
-atmos auth ecr-login ecr-public
+# Direct ECR Public login with ambient AWS credentials (no integration config)
+atmos aws ecr login --public
+
+# Direct ECR Public login using a specific identity's credentials
+atmos aws ecr login --public --identity plat-dev/terraform
+
+# Via a named integration
+atmos aws ecr login ecr-public
 
 # Via identity (triggers all auto_provision integrations)
-atmos auth ecr-login --identity plat-dev/terraform
+atmos aws ecr login --identity plat-dev/terraform
 ```
 
 ## Implementation Checklist

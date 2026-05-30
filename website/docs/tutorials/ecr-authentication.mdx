@@ -62,9 +62,24 @@ docker pull 123456789012.dkr.ecr.us-east-2.amazonaws.com/my-app:latest
 docker push 123456789012.dkr.ecr.us-east-2.amazonaws.com/my-app:v1.0.0
 ```
 
-### ECR Public Integration
+### ECR Public Login
 
-For authenticated pulls from `public.ecr.aws` (eliminates rate limits on public images):
+For authenticated pulls from `public.ecr.aws` (eliminates rate limits on public images), the quickest option needs no configuration at all — `--public` logs in using ambient AWS credentials:
+
+```bash
+# Zero-config: uses ambient AWS credentials (env, profile, SSO, IRSA/IMDS)
+atmos aws ecr login --public
+
+# Or use a specific identity's credentials
+atmos aws ecr login --public --identity dev-admin
+
+# Pulls from public.ecr.aws are now authenticated (no rate limits)
+docker pull public.ecr.aws/docker/library/alpine:latest
+```
+
+This is ideal for CI, where the runner already has AWS credentials via OIDC/IRSA.
+
+To have ECR Public login happen automatically on `atmos auth login`, add an `aws/ecr-public` integration:
 
 ```yaml
 auth:
