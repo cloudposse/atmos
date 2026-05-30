@@ -176,6 +176,54 @@ func TestFilterTerraformGraphBySelectionDoesNotTreatDuplicatesAsAllNodes(t *test
 	require.True(t, ok)
 }
 
+func TestFilterTerraformGraphBySelectionEdgeCases(t *testing.T) {
+	graph, err := BuildTerraformGraph(terraformAdapterTestStacks())
+	require.NoError(t, err)
+
+	t.Run("nil graph returns empty graph", func(t *testing.T) {
+		filtered := filterTerraformGraphBySelection(nil, &TerraformSelection{NodeIDs: []string{"database-dev"}})
+		require.NotNil(t, filtered)
+		require.Equal(t, 0, filtered.Size())
+	})
+
+	t.Run("nil selection returns empty graph", func(t *testing.T) {
+		filtered := filterTerraformGraphBySelection(graph, nil)
+		require.NotNil(t, filtered)
+		require.Equal(t, 0, filtered.Size())
+	})
+
+	t.Run("all valid nodes without closure returns original graph", func(t *testing.T) {
+		filtered := filterTerraformGraphBySelection(graph, &TerraformSelection{
+			NodeIDs: []string{"app-dev", "database-dev", "vpc-dev"},
+		})
+		require.Same(t, graph, filtered)
+	})
+
+	t.Run("dependencies closure includes prerequisites", func(t *testing.T) {
+		filtered := filterTerraformGraphBySelection(graph, &TerraformSelection{
+			NodeIDs:             []string{"app-dev"},
+			IncludeDependencies: true,
+		})
+		require.Equal(t, 3, filtered.Size())
+		for _, id := range []string{"app-dev", "database-dev", "vpc-dev"} {
+			_, ok := filtered.GetNode(id)
+			require.True(t, ok, "expected node %s", id)
+		}
+	})
+
+	t.Run("dependents closure includes downstream nodes", func(t *testing.T) {
+		filtered := filterTerraformGraphBySelection(graph, &TerraformSelection{
+			NodeIDs:           []string{"database-dev"},
+			IncludeDependents: true,
+		})
+		require.Equal(t, 2, filtered.Size())
+		for _, id := range []string{"database-dev", "app-dev"} {
+			_, ok := filtered.GetNode(id)
+			require.True(t, ok, "expected node %s", id)
+		}
+	})
+}
+
 func TestExecuteTerraformAffectedDestroyReversesSelectedDependents(t *testing.T) {
 	stacks := terraformAdapterTestStacks()
 	var executed []string
@@ -814,6 +862,82 @@ func TestExecuteTerraformRejectsUnsupportedFailureMode(t *testing.T) {
 
 	require.Error(t, err)
 	require.Contains(t, err.Error(), `unsupported Terraform failure mode "eventually"`)
+}
+
+func TestTerraformFailureModeHelpers(t *testing.T) {
+	tests := []struct {
+		name          string
+		info          *schema.ConfigAndStacksInfo
+		wantMode      string
+		wantFailFast  bool
+		wantErrSubstr string
+	}{
+		{
+			name:         "nil defaults to fail fast",
+			info:         nil,
+			wantMode:     terraformFailureModeFailFast,
+			wantFailFast: true,
+		},
+		{
+			name: "explicit keep going",
+			info: &schema.ConfigAndStacksInfo{
+				TerraformFailureMode: terraformFailureModeKeepGoing,
+			},
+			wantMode:     terraformFailureModeKeepGoing,
+			wantFailFast: false,
+		},
+		{
+			name: "legacy keep going fallback",
+			info: &schema.ConfigAndStacksInfo{
+				KeepGoing: true,
+			},
+			wantMode:     terraformFailureModeKeepGoing,
+			wantFailFast: false,
+		},
+		{
+			name: "explicit mode wins over legacy field",
+			info: &schema.ConfigAndStacksInfo{
+				TerraformFailureMode: terraformFailureModeFailFast,
+				KeepGoing:            true,
+			},
+			wantMode:     terraformFailureModeFailFast,
+			wantFailFast: true,
+		},
+		{
+			name: "conflicting legacy fields are rejected",
+			info: &schema.ConfigAndStacksInfo{
+				FailFast:  true,
+				KeepGoing: true,
+			},
+			wantMode:      terraformFailureModeKeepGoing,
+			wantFailFast:  false,
+			wantErrSubstr: "failure mode cannot be both",
+		},
+		{
+			name: "unsupported explicit mode is rejected",
+			info: &schema.ConfigAndStacksInfo{
+				TerraformFailureMode: "eventually",
+			},
+			wantMode:      "eventually",
+			wantFailFast:  false,
+			wantErrSubstr: "unsupported Terraform failure mode",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			require.Equal(t, tt.wantMode, effectiveTerraformFailureMode(tt.info))
+			require.Equal(t, tt.wantFailFast, effectiveTerraformFailFast(tt.info))
+
+			err := validateTerraformFailureMode(tt.info)
+			if tt.wantErrSubstr == "" {
+				require.NoError(t, err)
+				return
+			}
+			require.Error(t, err)
+			require.Contains(t, err.Error(), tt.wantErrSubstr)
+		})
+	}
 }
 
 func TestExecuteTerraformAcceptsDoubleDashAutoApprove(t *testing.T) {
