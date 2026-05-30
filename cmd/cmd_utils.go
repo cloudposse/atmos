@@ -94,11 +94,14 @@ func processCustomCommands(
 		existing := findSubcommand(parentCommand, commandConfig.Name)
 		if existing != nil {
 			if len(commandConfig.Steps) > 0 {
-				ui.Warningf(
-					"Custom command %q defines steps that conflict with built-in command %q; "+
-						"built-in behavior preserved, custom steps ignored",
-					commandConfig.Name, existing.CommandPath(),
-				)
+				// The custom command collides with a built-in and defines steps, which are
+				// ignored (built-in behavior wins; see PR #2191). Defer the warning until the
+				// conflicting command is actually invoked instead of emitting it here:
+				// processCustomCommands runs during root init for nearly every Atmos invocation,
+				// so emitting at registration printed the warning even for unrelated commands
+				// (e.g. `atmos list stacks`), polluting stderr in scripting and CI.
+				// See https://github.com/cloudposse/atmos/issues/2102.
+				warnStepsConflictOnRun(existing, commandConfig.Name)
 			}
 			command = existing
 		} else {
@@ -304,6 +307,33 @@ func findSubcommand(parent *cobra.Command, name string) *cobra.Command {
 		}
 	}
 	return nil
+}
+
+// warnStepsConflictOnRun arranges for the "custom steps ignored" collision warning to be
+// emitted only when the conflicting built-in command cmd is actually run, rather than at
+// registration time. It wraps cmd.PreRunE (preserving any existing PreRunE/PreRun and honoring
+// Cobra's precedence of PreRunE over PreRun) so the warning surfaces once, at the point the user
+// invokes the colliding command. See https://github.com/cloudposse/atmos/issues/2102.
+func warnStepsConflictOnRun(cmd *cobra.Command, customName string) {
+	commandPath := cmd.CommandPath()
+	prevPreRunE := cmd.PreRunE
+	prevPreRun := cmd.PreRun
+
+	cmd.PreRunE = func(c *cobra.Command, args []string) error {
+		ui.Warningf(
+			"Custom command %q defines steps that conflict with built-in command %q; "+
+				"built-in behavior preserved, custom steps ignored",
+			customName, commandPath,
+		)
+
+		switch {
+		case prevPreRunE != nil:
+			return prevPreRunE(c, args)
+		case prevPreRun != nil:
+			prevPreRun(c, args)
+		}
+		return nil
+	}
 }
 
 // createCustomCommand creates a new cobra command with flags from commandConfig,
