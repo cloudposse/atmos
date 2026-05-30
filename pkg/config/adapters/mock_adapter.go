@@ -11,6 +11,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 // mockConfigFilePerms is the file permission for mock config files.
@@ -71,6 +72,7 @@ func (m *MockAdapter) Resolve(
 	tempDir string,
 	currentDepth int,
 	maxDepth int,
+	atmosConfig *schema.AtmosConfiguration,
 ) ([]config.ResolvedPaths, error) {
 	defer perf.Track(nil, "adapters.MockAdapter.Resolve")()
 
@@ -98,7 +100,7 @@ vars:
 		}
 
 		// Process nested imports.
-		nestedPaths, err := config.ProcessImportsFromAdapter(basePath, []string{"mock://component/base"}, tempDir, currentDepth+1, maxDepth)
+		nestedPaths, err := config.ProcessImportsFromAdapter(atmosConfig, basePath, []string{"mock://component/base"}, tempDir, currentDepth+1, maxDepth)
 		if err != nil {
 			return paths, nil // Return what we have, log error.
 		}
