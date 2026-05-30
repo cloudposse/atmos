@@ -31,6 +31,7 @@ import (
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/reexec"
+	stepPkg "github.com/cloudposse/atmos/pkg/runner/step"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -249,7 +250,8 @@ func preCustomCommand(
 	if len(args) < requiredNoDefaultCount {
 		sb.WriteString(
 			fmt.Sprintf("Command requires at least %d argument(s) (no defaults provided for them):\n",
-				requiredNoDefaultCount))
+				requiredNoDefaultCount),
+		)
 
 		// List out which arguments are missing
 		missingIndex := 1
@@ -686,6 +688,9 @@ func executeCustomCommand(
 		log.Debug("Using working directory for custom command", "command", commandConfig.Name, "working_directory", workDir)
 	}
 
+	// Initialize step executor once before loop - reused across steps to preserve outputs.
+	executor := stepPkg.NewStepExecutor()
+
 	// Execute custom command's steps
 	for i, step := range commandConfig.Steps {
 		// Prepare template data for arguments
@@ -804,11 +809,48 @@ func executeCustomCommand(
 		commandToRun, err := e.ProcessTmpl(&atmosConfig, fmt.Sprintf("step-%d", i), step.Command, data, false)
 		errUtils.CheckErrorPrintAndExit(err, "", "")
 
-		// Execute the command step
-		commandName := fmt.Sprintf("%s-step-%d", commandConfig.Name, i)
+		// Determine step type - default to shell if not specified.
+		stepType := strings.TrimSpace(step.Type)
+		if stepType == "" {
+			stepType = "shell"
+		}
 
-		// Pass the prepared environment with custom variables to the subprocess
-		err = e.ExecuteShell(commandToRun, commandName, workDir, env, false)
+		// Execute the step based on type.
+		switch stepType {
+		case "shell":
+			// Execute shell command (backward compatible).
+			commandName := fmt.Sprintf("%s-step-%d", commandConfig.Name, i)
+			err = e.ExecuteShell(commandToRun, commandName, workDir, env, false)
+		case "atmos":
+			// Execute atmos command.
+			args := strings.Fields(commandToRun)
+			err = e.ExecuteShellCommand(atmosConfig, "atmos", args, workDir, env, false, "")
+		default:
+			// Check if this is an extended step type (input, confirm, choose, etc.).
+			if stepPkg.IsExtendedStepType(stepType) {
+				// Convert Task to WorkflowStep for handler compatibility.
+				workflowStep := step.ToWorkflowStep()
+				// Update command with template-resolved value.
+				workflowStep.Command = commandToRun
+				// Propagate working directory to extended step if not already set.
+				if workflowStep.WorkingDirectory == "" {
+					workflowStep.WorkingDirectory = workDir
+				}
+
+				// Update environment variables for this step (reuse executor to preserve step outputs).
+				for _, envVar := range env {
+					parts := strings.SplitN(envVar, "=", 2)
+					if len(parts) == 2 {
+						executor.SetEnv(parts[0], parts[1])
+					}
+				}
+
+				// Execute the extended step.
+				_, err = executor.Execute(context.Background(), &workflowStep)
+			} else {
+				err = fmt.Errorf("%w: unsupported step type %q for custom command step %d", errUtils.ErrInvalidWorkflowStepType, stepType, i)
+			}
+		}
 		errUtils.CheckErrorPrintAndExit(err, "", "")
 	}
 }
@@ -1128,7 +1170,8 @@ func resolveComponentPath(info *schema.ConfigAndStacksInfo, commandName string) 
 		return handlePathResolutionError(err)
 	}
 
-	log.Debug("Resolved component from path",
+	log.Debug(
+		"Resolved component from path",
 		"original_path", info.ComponentFromArg,
 		"resolved_component", resolvedComponent,
 		"stack", info.Stack,
@@ -1272,7 +1315,8 @@ func StackFlagCompletion(cmd *cobra.Command, args []string, toComplete string) (
 				)
 				if err != nil {
 					// If resolution fails, fall through to list all stacks (graceful degradation)
-					log.Trace("Could not resolve path for stack completion, listing all stacks",
+					log.Trace(
+						"Could not resolve path for stack completion, listing all stacks",
 						"path", component,
 						"error", err,
 					)
@@ -1283,7 +1327,8 @@ func StackFlagCompletion(cmd *cobra.Command, args []string, toComplete string) (
 					return output, cobra.ShellCompDirectiveNoFileComp
 				}
 				component = resolvedComponent
-				log.Trace("Resolved path for stack completion",
+				log.Trace(
+					"Resolved path for stack completion",
 					"original", args[0],
 					"resolved", component,
 				)
