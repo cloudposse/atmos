@@ -2,15 +2,12 @@ package installer
 
 import (
 	"fmt"
-	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
 
 	log "github.com/charmbracelet/log"
 
-	github "github.com/cloudposse/atmos/pkg/github"
-	httpClient "github.com/cloudposse/atmos/pkg/http"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
@@ -87,75 +84,58 @@ func (i *Installer) ListInstalledVersions(owner, repo string) ([]string, error) 
 	return versions, nil
 }
 
-// searchRegistryForTool searches the Aqua registry for a tool by name.
-func searchRegistryForTool(toolName string) (string, string, error) {
-	defer perf.Track(nil, "searchRegistryForTool")()
-
-	commonPaths := buildCommonRegistryPaths(toolName)
-	return tryRegistryPaths(commonPaths, toolName)
+// InstalledTool represents a tool found in the install directory with its versions.
+type InstalledTool struct {
+	Owner    string
+	Repo     string
+	Versions []string
 }
 
-// buildCommonRegistryPaths builds a list of common registry paths to try for a tool.
-func buildCommonRegistryPaths(toolName string) []string {
-	return []string{
-		fmt.Sprintf("https://raw.githubusercontent.com/aquaproj/aqua-registry/main/pkgs/%s/%s/registry.yaml", toolName, toolName),
-		fmt.Sprintf("https://raw.githubusercontent.com/aquaproj/aqua-registry/main/pkgs/hashicorp/%s/registry.yaml", toolName),
-		fmt.Sprintf("https://raw.githubusercontent.com/aquaproj/aqua-registry/main/pkgs/cloudposse/%s/registry.yaml", toolName),
-		fmt.Sprintf("https://raw.githubusercontent.com/aquaproj/aqua-registry/main/pkgs/kubernetes/kubernetes/%s/registry.yaml", toolName),
-		fmt.Sprintf("https://raw.githubusercontent.com/aquaproj/aqua-registry/main/pkgs/helm/%s/registry.yaml", toolName),
-		fmt.Sprintf("https://raw.githubusercontent.com/aquaproj/aqua-registry/main/pkgs/opentofu/%s/registry.yaml", toolName),
-		fmt.Sprintf("https://raw.githubusercontent.com/aquaproj/aqua-registry/main/pkgs/derailed/%s/registry.yaml", toolName),
-		fmt.Sprintf("https://raw.githubusercontent.com/aquaproj/aqua-registry/main/pkgs/%s/registry.yaml", toolName),
-	}
-}
+// ListAllInstalledTools scans the install directory and returns all installed tools.
+// It walks two levels deep: binDir/{owner}/{repo}/ and collects version directories.
+func (i *Installer) ListAllInstalledTools() ([]InstalledTool, error) {
+	defer perf.Track(nil, "toolchain.ListAllInstalledTools")()
 
-// tryRegistryPaths attempts to find a tool in the given registry paths.
-func tryRegistryPaths(paths []string, toolName string) (string, string, error) {
-	defer perf.Track(nil, "tryRegistryPaths")()
-
-	client := httpClient.NewDefaultClient(
-		httpClient.WithGitHubToken(github.GetGitHubToken()),
-	)
-
-	for _, path := range paths {
-		owner, repo, found := tryRegistryPath(client, path)
-		if found {
-			return owner, repo, nil
-		}
+	if _, err := os.Stat(i.binDir); os.IsNotExist(err) {
+		return nil, nil
 	}
 
-	return "", "", fmt.Errorf("%w: '%s' not found in registry", ErrToolNotFound, toolName)
-}
-
-// httpDoer is an interface for making HTTP requests.
-type httpDoer interface {
-	Do(req *http.Request) (*http.Response, error)
-}
-
-// tryRegistryPath attempts to fetch a single registry path.
-func tryRegistryPath(client httpDoer, path string) (owner, repo string, found bool) {
-	req, err := http.NewRequest("GET", path, nil)
+	ownerEntries, err := os.ReadDir(i.binDir)
 	if err != nil {
-		return "", "", false
+		return nil, fmt.Errorf("failed to read install directory %s: %w", i.binDir, err)
 	}
 
-	resp, err := client.Do(req)
-	if err != nil || resp.StatusCode != http.StatusOK {
-		if resp != nil {
-			resp.Body.Close()
+	var tools []InstalledTool
+	for _, ownerEntry := range ownerEntries {
+		if !ownerEntry.IsDir() {
+			continue
 		}
-		return "", "", false
-	}
-	resp.Body.Close()
+		owner := ownerEntry.Name()
+		ownerDir := filepath.Join(i.binDir, owner)
 
-	// Extract owner/repo from the URL.
-	// path format: .../pkgs/owner/repo/registry.yaml
-	parts := strings.Split(path, "/")
-	if len(parts) >= minRegistryPathSegments {
-		owner = parts[len(parts)-3]
-		repo = parts[len(parts)-2]
-		return owner, repo, true
+		repoEntries, err := os.ReadDir(ownerDir)
+		if err != nil {
+			continue
+		}
+
+		for _, repoEntry := range repoEntries {
+			if !repoEntry.IsDir() {
+				continue
+			}
+			repo := repoEntry.Name()
+
+			versions, err := i.ListInstalledVersions(owner, repo)
+			if err != nil || len(versions) == 0 {
+				continue
+			}
+
+			tools = append(tools, InstalledTool{
+				Owner:    owner,
+				Repo:     repo,
+				Versions: versions,
+			})
+		}
 	}
 
-	return "", "", false
+	return tools, nil
 }

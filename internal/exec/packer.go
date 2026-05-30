@@ -10,16 +10,17 @@ import (
 	"time"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/component"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/dependencies"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
-	provSource "github.com/cloudposse/atmos/pkg/provisioner/source"
-	provWorkdir "github.com/cloudposse/atmos/pkg/provisioner/workdir"
 	"github.com/cloudposse/atmos/pkg/schema"
 	tfgenerate "github.com/cloudposse/atmos/pkg/terraform/generate"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
+
+const componentTypePacker = "packer"
 
 // PackerFlags represents Packer command-line flags passed to ExecutePacker and ExecutePackerOutput.
 type PackerFlags struct {
@@ -61,12 +62,16 @@ func ExecutePacker(
 	}
 
 	if info.SubCommand == "version" {
+		tenv, err := dependencies.ForComponent(&atmosConfig, componentTypePacker, nil, nil)
+		if err != nil {
+			return err
+		}
 		return ExecuteShellCommand(
 			atmosConfig,
-			info.Command,
+			tenv.Resolve(info.Command),
 			[]string{info.SubCommand},
 			"",
-			nil,
+			tenv.EnvVars(),
 			false,
 			info.RedirectStdErr,
 		)
@@ -87,7 +92,7 @@ func ExecutePacker(
 	}
 
 	// Check if the component exists as a Packer component.
-	componentPath, err := u.GetComponentPath(&atmosConfig, "packer", info.ComponentFolderPrefix, info.FinalComponent)
+	componentPath, err := u.GetComponentPath(&atmosConfig, componentTypePacker, info.ComponentFolderPrefix, info.FinalComponent)
 	if err != nil {
 		return fmt.Errorf("failed to resolve component path: %w", err)
 	}
@@ -112,40 +117,23 @@ func ExecutePacker(
 		}
 	}
 
-	componentPathExists, err := u.IsDirectory(componentPath)
-	if err != nil || !componentPathExists {
-		// Check if component has source configured for JIT provisioning.
-		if provSource.HasSource(info.ComponentSection) {
-			// Run JIT source provisioning before path validation.
-			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
-			defer cancel()
-			if err := provSource.AutoProvisionSource(ctx, &atmosConfig, cfg.PackerComponentType, info.ComponentSection, info.AuthContext); err != nil {
-				return fmt.Errorf("failed to auto-provision component source: %w", err)
-			}
-
-			// Check if source provisioner set a workdir path (source + workdir case).
-			// If so, use that path instead of the component path.
-			if workdirPath, ok := info.ComponentSection[provWorkdir.WorkdirPathKey].(string); ok {
-				componentPath = workdirPath
-				componentPathExists = true
-				err = nil // Clear any previous error since we have a valid workdir path.
-			} else {
-				// Re-check if component path now exists after provisioning (source only case).
-				componentPathExists, err = u.IsDirectory(componentPath)
-			}
-		}
-
-		// If still doesn't exist, return the error.
-		if err != nil || !componentPathExists {
-			// Get the base path for the error message, respecting the user's actual config.
-			basePath, _ := u.GetComponentBasePath(&atmosConfig, "packer")
-			return fmt.Errorf("%w: '%s' points to the Packer component '%s', but it does not exist in '%s'",
-				errUtils.ErrInvalidComponent,
-				info.ComponentFromArg,
-				info.FinalComponent,
-				basePath,
-			)
-		}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	defer cancel()
+	componentPath, componentPathExists, err := component.ProvisionAndResolveComponentPath(
+		ctx, &atmosConfig, info, cfg.PackerComponentType, componentPath,
+	)
+	if err != nil {
+		return err
+	}
+	if !componentPathExists {
+		basePath, _ := u.GetComponentBasePath(&atmosConfig, componentTypePacker)
+		return fmt.Errorf(
+			"%w: '%s' points to the Packer component '%s', but it does not exist in '%s'",
+			errUtils.ErrInvalidComponent,
+			info.ComponentFromArg,
+			info.FinalComponent,
+			basePath,
+		)
 	}
 
 	// Check if the component is allowed to be provisioned (`metadata.type` attribute).
@@ -165,29 +153,11 @@ func ExecutePacker(
 	}
 
 	// Resolve and install component dependencies.
-	resolver := dependencies.NewResolver(&atmosConfig)
-	deps, err := resolver.ResolveComponentDependencies("packer", info.StackSection, info.ComponentSection)
+	tenv, err := dependencies.ForComponent(&atmosConfig, componentTypePacker, info.StackSection, info.ComponentSection)
 	if err != nil {
-		return fmt.Errorf("failed to resolve component dependencies: %w", err)
+		return err
 	}
-
-	if len(deps) > 0 {
-		log.Debug("Installing component dependencies", "component", info.ComponentFromArg, "stack", info.Stack, "tools", deps)
-		installer := dependencies.NewInstaller(&atmosConfig)
-		if err := installer.EnsureTools(deps); err != nil {
-			return fmt.Errorf("failed to install component dependencies: %w", err)
-		}
-
-		// Build PATH with toolchain binaries and add to component environment.
-		// This does NOT modify the global process environment - only the subprocess environment.
-		toolchainPATH, err := dependencies.BuildToolchainPATH(&atmosConfig, deps)
-		if err != nil {
-			return fmt.Errorf("failed to build toolchain PATH: %w", err)
-		}
-
-		// Propagate toolchain PATH into environment for subprocess.
-		info.ComponentEnvList = append(info.ComponentEnvList, fmt.Sprintf("PATH=%s", toolchainPATH))
-	}
+	info.ComponentEnvList = append(info.ComponentEnvList, tenv.EnvVars()...)
 
 	// Check if the component 'settings.validation' section is specified and validate the component.
 	valid, err := ValidateComponent(
@@ -203,7 +173,8 @@ func ExecutePacker(
 		return err
 	}
 	if !valid {
-		return fmt.Errorf("%w: the component '%s' did not pass the validation policies",
+		return fmt.Errorf(
+			"%w: the component '%s' did not pass the validation policies",
 			errUtils.ErrInvalidComponent,
 			info.ComponentFromArg,
 		)
@@ -262,7 +233,8 @@ func ExecutePacker(
 
 	workingDir := constructPackerComponentWorkingDir(&atmosConfig, info)
 
-	log.Debug("Packer context",
+	log.Debug(
+		"Packer context",
 		"executable", info.Command,
 		"command", info.SubCommand,
 		"atmos component", info.ComponentFromArg,
@@ -301,5 +273,6 @@ func ExecutePacker(
 		envVars,
 		info.DryRun,
 		info.RedirectStdErr,
+		WithEnvironment(info.SanitizedEnv),
 	)
 }

@@ -1,0 +1,113 @@
+{
+  "mcpServers": {
+    "atmos": {
+      "command": "atmos",
+      "args": ["mcp", "start"]
+    },
+    "aws-billing-cost-management": {
+      "command": "atmos",
+      "args": ["mcp", "aws", "start", "billing-cost-management"],
+      "env": { "AWS_REGION": "us-east-2" }
+    },
+    "aws-cost-explorer": {
+      "command": "atmos",
+      "args": ["mcp", "aws", "start", "cost-explorer"],
+      "env": { "AWS_REGION": "us-east-2" }
+    },
+    "aws-pricing": {
+      "command": "atmos",
+      "args": ["mcp", "aws", "start", "pricing"],
+      "env": { "AWS_REGION": "us-east-2" }
+    },
+    "aws-terraform": {
+      "command": "atmos",
+      "args": ["mcp", "aws", "start", "terraform"],
+      "env": { "AWS_REGION": "us-east-2" }
+    },
+    "aws-cfn": {
+      "command": "atmos",
+      "args": ["mcp", "aws", "start", "cfn"],
+      "env": { "AWS_REGION": "us-east-2" }
+    },
+    "aws-cdk": {
+      "command": "atmos",
+      "args": ["mcp", "aws", "start", "cdk"],
+      "env": { "AWS_REGION": "us-east-2" }
+    },
+    "aws-iac": {
+      "command": "atmos",
+      "args": ["mcp", "aws", "start", "iac"],
+      "env": { "AWS_REGION": "us-east-2" }
+    },
+    "aws-ecs": {
+      "command": "atmos",
+      "args": ["mcp", "aws", "start", "ecs"],
+      "env": { "AWS_REGION": "us-east-2" }
+    },
+    "aws-eks": {
+      "command": "atmos",
+      "args": ["mcp", "aws", "start", "eks"],
+      "env": { "AWS_REGION": "us-east-2" }
+    },
+    "aws-serverless": {
+      "command": "atmos",
+      "args": ["mcp", "aws", "start", "serverless"],
+      "env": { "AWS_REGION": "us-east-2" }
+    },
+    "aws-cloudwatch": {
+      "command": "atmos",
+      "args": ["mcp", "aws", "start", "cloudwatch"],
+      "env": { "AWS_REGION": "us-east-2" }
+    },
+    "aws-cloudtrail": {
+      "command": "atmos",
+      "args": ["mcp", "aws", "start", "cloudtrail"],
+      "env": { "AWS_REGION": "us-east-2" }
+    },
+    "aws-iam": {
+      "command": "atmos",
+      "args": ["mcp", "aws", "start", "iam"],
+      "env": { "AWS_REGION": "us-east-2" }
+    },
+    "aws-well-architected-security": {
+      "command": "atmos",
+      "args": ["mcp", "aws", "start", "well-architected-security"],
+      "env": { "AWS_REGION": "us-east-2" }
+    },
+    "aws-network": {
+      "command": "atmos",
+      "args": ["mcp", "aws", "start", "network"],
+      "env": { "AWS_REGION": "us-east-2" }
+    },
+    "aws-dynamodb": {
+      "command": "atmos",
+      "args": ["mcp", "aws", "start", "dynamodb"],
+      "env": { "AWS_REGION": "us-east-2" }
+    },
+    "aws-s3-tables": {
+      "command": "atmos",
+      "args": ["mcp", "aws", "start", "s3-tables"],
+      "env": { "AWS_REGION": "us-east-2" }
+    },
+    "aws-documentation": {
+      "command": "atmos",
+      "args": ["mcp", "aws", "start", "documentation"],
+      "env": { "AWS_REGION": "us-east-2" }
+    },
+    "aws-support": {
+      "command": "atmos",
+      "args": ["mcp", "aws", "start", "support"],
+      "env": { "AWS_REGION": "us-east-2" }
+    },
+    "aws-lambda-tool": {
+      "command": "atmos",
+      "args": ["mcp", "aws", "start", "lambda-tool"],
+      "env": { "AWS_REGION": "us-east-2" }
+    },
+    "aws-stepfunctions-tool": {
+      "command": "atmos",
+      "args": ["mcp", "aws", "start", "stepfunctions-tool"],
+      "env": { "AWS_REGION": "us-east-2" }
+    }
+  }
+}

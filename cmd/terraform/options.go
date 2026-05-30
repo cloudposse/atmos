@@ -27,12 +27,16 @@ type TerraformRunOptions struct {
 	PlanFile         string
 	PlanSkipPlanfile bool
 	DeployRunInit    bool
+	VerifyPlan       bool
 
 	// Multi-component flags.
 	Query      string
 	Components []string
 	All        bool
 	Affected   bool
+
+	// Status upload flag.
+	UploadStatus bool
 }
 
 // ParseTerraformRunOptions parses shared terraform flags from Viper.
@@ -51,9 +55,11 @@ func ParseTerraformRunOptions(v *viper.Viper) *TerraformRunOptions {
 		PlanFile:                v.GetString("planfile"),
 		PlanSkipPlanfile:        v.GetBool("skip-planfile"),
 		DeployRunInit:           v.GetBool("deploy-run-init"),
+		VerifyPlan:              v.GetBool("verify-plan"),
 		Query:                   v.GetString("query"),
 		Components:              v.GetStringSlice("components"),
 		All:                     v.GetBool("all"),
 		Affected:                v.GetBool("affected"),
+		UploadStatus:            v.GetBool("upload-status"),
 	}
 }

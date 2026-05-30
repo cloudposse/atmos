@@ -935,3 +935,23 @@ func TestBuildAffectedSorters_DeletedSort(t *testing.T) {
 		})
 	}
 }
+
+// TestAffectedCommandOptions_IdentityName verifies the IdentityName field is preserved.
+func TestAffectedCommandOptions_IdentityName(t *testing.T) {
+	tests := []struct {
+		name         string
+		identityName string
+	}{
+		{name: "empty identity", identityName: ""},
+		{name: "explicit identity", identityName: "admin-account"},
+		{name: "disabled identity", identityName: "none"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			opts := &AffectedCommandOptions{
+				IdentityName: tt.identityName,
+			}
+			assert.Equal(t, tt.identityName, opts.IdentityName)
+		})
+	}
+}

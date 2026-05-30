@@ -8,6 +8,7 @@ import Intro from '@site/src/components/Intro'
 import Screengrab from '@site/src/components/Screengrab'
 import Terminal from '@site/src/components/Terminal'
 import DemoVideo from '@site/src/components/Video/DemoVideo'
+import Experimental from '@site/src/components/Experimental'
 
 <Intro>
 Use this command to generate a Terraform execution plan for an Atmos component in a stack, showing what changes would be made to your infrastructure.
@@ -210,6 +211,19 @@ components:
         atmos terraform plan vpc -s dev --process-templates=false
         ```
     </dd>
+
+    <dt>`--ci` <em>(optional)</em></dt>
+    <dd>
+        Enable CI mode for automated pipelines. When enabled, Atmos writes job summaries, CI output variables, and status checks based on the [`ci` configuration](/cli/configuration/ci) in `atmos.yaml`.
+
+        CI mode is auto-detected when `CI=true` or `GITHUB_ACTIONS=true` environment variables are set. Use this flag to explicitly enable CI mode in environments where auto-detection is not available.
+
+        **Environment variables:** `ATMOS_CI`, `CI`
+
+        ```shell
+        atmos terraform plan vpc -s dev --ci
+        ```
+    </dd>
 </dl>
 
 ## Native Terraform Flags
@@ -366,13 +380,33 @@ atmos terraform plan --query '.vars.tags.team == "eks"' --stack prod
     <dd>Clone the target reference instead of checking it out locally.</dd>
 </dl>
 
+## CI Integration
+
+<Experimental/>
+
+When running in CI mode (`--ci` flag or auto-detected), Atmos produces rich CI artifacts:
+
+- **Job summaries** with resource badges, collapsible diffs, and warnings written to `$GITHUB_STEP_SUMMARY`
+- **Output variables** (`has_changes`, `has_errors`, `exit_code`, etc.) written to `$GITHUB_OUTPUT`
+- **Status checks** showing plan progress and results (requires `ci.checks.enabled: true`)
+
+```shell
+# In GitHub Actions (auto-detected)
+atmos terraform plan vpc -s dev
+
+# Explicit CI mode
+atmos terraform plan vpc -s dev --ci
+```
+
+:::info
+See [CI Configuration](/cli/configuration/ci) for full configuration options including custom templates, status checks, and output variables.
+:::
+
 ## Related Commands
 
 - [`atmos terraform apply`](/cli/commands/terraform/apply) - Apply the changes from a plan
 - [`atmos terraform deploy`](/cli/commands/terraform/deploy) - Deploy with auto-approval
 - [`atmos terraform plan-diff`](/cli/commands/terraform/plan-diff) - Compare two plan files
-- [`atmos terraform generate planfile`](/cli/commands/terraform/generate/planfile) - Generate a planfile in JSON/YAML format
-
 ## Configuration
 
 Configure default behavior for `terraform plan` in your `atmos.yaml`:

@@ -1,6 +1,7 @@
 package workdir
 
 import (
+	"fmt"
 	"path/filepath"
 	"time"
 
@@ -100,4 +101,34 @@ const (
 	// This is set by the workdir provisioner and checked by terraform execution to override
 	// the component path with the workdir path.
 	WorkdirPathKey = "_workdir_path"
+
+	// WorkdirReprovisionedKey is set in componentConfig when the workdir was actually wiped
+	// and re-provisioned during this command invocation (i.e. the source provisioner ran
+	// vendorToTarget, not just touched LastAccessed). This is the correct signal to use when
+	// deciding whether to pass -reconfigure to terraform init: a re-provisioned workdir has
+	// no .terraform/ cache, so -reconfigure is safe; a preserved workdir has a valid cache
+	// and -reconfigure causes a spurious "migrate all workspaces?" prompt.
+	WorkdirReprovisionedKey = "_workdir_reprovisioned"
 )
+
+// BuildPath constructs the canonical workdir path for a component instance.
+// It uses atmos_component (the instance name) from componentConfig when available,
+// falling back to the provided component name. This ensures all provisioners
+// (workdir, source, JIT) use the same directory for a given component instance.
+//
+// Path format: <basePath>/.workdir/<componentType>/<stack>-<instanceName>.
+func BuildPath(basePath, componentType, component, stack string, componentConfig map[string]any) string {
+	defer perf.Track(nil, "workdir.BuildPath")()
+
+	// Use atmos_component (instance name) for path isolation.
+	// When metadata.component differs from the instance name (e.g., inherited components),
+	// atmos_component contains the unique instance name while component/metadata.component
+	// contains the shared base name.
+	workdirComponent := component
+	if atmosComponent, ok := componentConfig["atmos_component"].(string); ok && atmosComponent != "" {
+		workdirComponent = atmosComponent
+	}
+
+	workdirName := fmt.Sprintf("%s-%s", stack, workdirComponent)
+	return filepath.Join(basePath, WorkdirPath, componentType, workdirName)
+}

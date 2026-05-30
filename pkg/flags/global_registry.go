@@ -2,11 +2,13 @@ package flags
 
 import (
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/flags/global"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 const (
@@ -70,9 +72,64 @@ func ParseGlobalFlags(cmd *cobra.Command, v *viper.Viper) global.Flags {
 		Heatmap:     v.GetBool("heatmap"),
 		HeatmapMode: v.GetString("heatmap-mode"),
 
+		// AI integration.
+		AI:    v.GetBool("ai"),
+		Skill: v.GetStringSlice("skill"),
+
 		// System configuration.
 		RedirectStderr: v.GetString("redirect-stderr"),
 		Version:        v.GetBool("version"),
+	}
+}
+
+func lookupCommandFlag(cmd *cobra.Command, name string) (*pflag.Flag, bool) {
+	if cmd == nil {
+		return nil, false
+	}
+
+	flagSets := []*pflag.FlagSet{
+		cmd.Flags(),
+		cmd.InheritedFlags(),
+		cmd.PersistentFlags(),
+	}
+
+	for parent := cmd.Parent(); parent != nil; parent = parent.Parent() {
+		flagSets = append(flagSets, parent.PersistentFlags())
+	}
+
+	var first *pflag.Flag
+	for _, flagSet := range flagSets {
+		if flagSet == nil {
+			continue
+		}
+
+		flag := flagSet.Lookup(name)
+		if flag == nil {
+			continue
+		}
+		if first == nil {
+			first = flag
+		}
+		if flag.Changed {
+			return flag, true
+		}
+	}
+
+	return first, false
+}
+
+// BuildConfigAndStacksInfo parses global flags and builds ConfigAndStacksInfo.
+// This ensures commands honor global flags like --base-path, --config, --config-path, and --profile.
+// This is a convenience wrapper that extracts global flags and populates ConfigAndStacksInfo in one step.
+func BuildConfigAndStacksInfo(cmd *cobra.Command, v *viper.Viper) schema.ConfigAndStacksInfo {
+	defer perf.Track(nil, "flags.BuildConfigAndStacksInfo")()
+
+	globalFlags := ParseGlobalFlags(cmd, v)
+	return schema.ConfigAndStacksInfo{
+		AtmosBasePath:           globalFlags.BasePath,
+		AtmosConfigFilesFromArg: globalFlags.Config,
+		AtmosConfigDirsFromArg:  globalFlags.ConfigPath,
+		ProfilesFromArg:         globalFlags.Profile,
 	}
 }
 
@@ -87,30 +144,14 @@ func ParseGlobalFlags(cmd *cobra.Command, v *viper.Viper) global.Flags {
 func parseIdentityFlag(cmd *cobra.Command, v *viper.Viper) global.IdentitySelector {
 	defer perf.Track(nil, "flags.parseIdentityFlag")()
 
-	// Check local flags, inherited flags, and persistent flags.
-	// The identity flag is registered as a persistent flag on RootCmd.
-	// - On RootCmd: appears in PersistentFlags()
-	// - On subcommands: appears in InheritedFlags() (inherited from RootCmd)
-	flag := cmd.Flags().Lookup(identityFlagName)
-	if flag == nil {
-		flag = cmd.InheritedFlags().Lookup(identityFlagName)
-	}
-	if flag == nil {
-		flag = cmd.PersistentFlags().Lookup(identityFlagName)
-	}
+	flag, changed := lookupCommandFlag(cmd, identityFlagName)
 	if flag == nil {
 		// Identity flag not registered on this command or its parents.
 		return global.NewIdentitySelector("", false)
 	}
 
-	// Check if flag was explicitly set on command line.
-	// Check all flag sets because cmd.Flags().Changed() doesn't check persistent flags on root.
-	changed := cmd.Flags().Changed(identityFlagName) ||
-		cmd.InheritedFlags().Changed(identityFlagName) ||
-		cmd.PersistentFlags().Changed(identityFlagName)
-
 	if changed {
-		value := v.GetString(identityFlagName)
+		value := flag.Value.String()
 		return global.NewIdentitySelector(normalizeIdentityValue(value), true)
 	}
 
@@ -141,30 +182,14 @@ func normalizeIdentityValue(value string) string {
 func parsePagerFlag(cmd *cobra.Command, v *viper.Viper) global.PagerSelector {
 	defer perf.Track(nil, "flags.parsePagerFlag")()
 
-	// Check local flags, inherited flags, and persistent flags.
-	// The pager flag is registered as a persistent flag on RootCmd.
-	// - On RootCmd: appears in PersistentFlags()
-	// - On subcommands: appears in InheritedFlags() (inherited from RootCmd)
-	flag := cmd.Flags().Lookup(pagerFlagName)
-	if flag == nil {
-		flag = cmd.InheritedFlags().Lookup(pagerFlagName)
-	}
-	if flag == nil {
-		flag = cmd.PersistentFlags().Lookup(pagerFlagName)
-	}
+	flag, changed := lookupCommandFlag(cmd, pagerFlagName)
 	if flag == nil {
 		// Pager flag not registered on this command or its parents.
 		return global.NewPagerSelector("", false)
 	}
 
-	// Check if flag was explicitly set on command line.
-	// Check all flag sets because cmd.Flags().Changed() doesn't check persistent flags on root.
-	changed := cmd.Flags().Changed(pagerFlagName) ||
-		cmd.InheritedFlags().Changed(pagerFlagName) ||
-		cmd.PersistentFlags().Changed(pagerFlagName)
-
 	if changed {
-		value := v.GetString(pagerFlagName)
+		value := flag.Value.String()
 		return global.NewPagerSelector(value, true)
 	}
 
@@ -196,6 +221,7 @@ func GlobalFlagsRegistry() *FlagRegistry {
 	registerAuthenticationFlags(registry)
 	registerProfilingFlags(registry)
 	registerPerformanceFlags(registry)
+	registerAIFlags(registry)
 
 	return registry
 }
@@ -277,7 +303,7 @@ func registerAuthenticationFlags(registry *FlagRegistry) {
 		Shorthand:   "i",
 		Default:     "",
 		Description: "Identity to use for authentication (use without value to select interactively)",
-		EnvVars:     []string{"ATMOS_IDENTITY", "IDENTITY"},
+		EnvVars:     []string{"ATMOS_IDENTITY"},
 		NoOptDefVal: cfg.IdentityFlagSelectValue, // "__SELECT__"
 	})
 
@@ -371,6 +397,25 @@ func registerTerminalFlags(registry *FlagRegistry) {
 		Default:     "",
 		Description: "Redirect stderr to file",
 		EnvVars:     []string{"ATMOS_REDIRECT_STDERR"},
+	})
+}
+
+// registerAIFlags registers AI integration flags.
+func registerAIFlags(registry *FlagRegistry) {
+	defer perf.Track(nil, "flags.registerAIFlags")()
+
+	registry.Register(&BoolFlag{
+		Name:        "ai",
+		Shorthand:   "",
+		Default:     false,
+		Description: "Enable AI-powered analysis of command output",
+		EnvVars:     []string{"ATMOS_AI"},
+	})
+	registry.Register(&StringSliceFlag{
+		Name:        "skill",
+		Default:     []string{},
+		Description: "Specify skills for AI analysis context (comma-separated or repeated flag, requires --ai)",
+		EnvVars:     []string{"ATMOS_SKILL"},
 	})
 }
 

@@ -1,0 +1,8 @@
+# Shared defaults for all stacks.
+# Imported by dev.yaml and prod.yaml.
+
+components:
+  terraform:
+    vpc:
+      vars:
+        enable_dns_hostnames: true

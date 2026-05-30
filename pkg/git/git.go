@@ -3,6 +3,7 @@ package git
 import (
 	"errors"
 	"fmt"
+	"path/filepath"
 
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/config"
@@ -128,11 +129,11 @@ func NewDefaultGitRepo() GitRepoInterface {
 func (d *DefaultGitRepo) GetLocalRepoInfo() (*RepoInfo, error) {
 	repo, err := GetLocalRepo()
 	if err != nil {
-		return nil, fmt.Errorf("%w: failed to get local repository: %s", errUtils.ErrFailedToGetLocalRepo, err)
+		return nil, fmt.Errorf("%w: %w", errUtils.ErrFailedToGetLocalRepo, err)
 	}
 	info, err := GetRepoInfo(repo)
 	if err != nil {
-		return nil, fmt.Errorf("%w: failed to get repository info: %s", errUtils.ErrFailedToGetRepoInfo, err)
+		return nil, fmt.Errorf("%w: %w", errUtils.ErrFailedToGetRepoInfo, err)
 	}
 	return &info, nil
 }
@@ -167,6 +168,55 @@ func (d *DefaultGitRepo) GetCurrentCommitSHA() (string, error) {
 	}
 
 	return ref.Hash().String(), nil
+}
+
+// GetCurrentCommitSHA returns the SHA of the current HEAD commit.
+func GetCurrentCommitSHA() (string, error) {
+	return NewDefaultGitRepo().GetCurrentCommitSHA()
+}
+
+// GetCurrentBranch returns the current Git branch name.
+func GetCurrentBranch() (string, error) {
+	repo, err := GetLocalRepo()
+	if err != nil {
+		return "", fmt.Errorf("%w: failed to get local repository: %w", errUtils.ErrLocalRepoFetch, err)
+	}
+
+	ref, err := repo.Head()
+	if err != nil {
+		return "", fmt.Errorf("%w: failed to get HEAD reference: %w", errUtils.ErrHeadLookup, err)
+	}
+
+	if !ref.Name().IsBranch() {
+		return "", errUtils.ErrDetachedHead
+	}
+
+	branch := ref.Name().Short()
+	if branch == "" {
+		return "", errUtils.ErrEmptyBranchName
+	}
+
+	return branch, nil
+}
+
+// GetRoot returns the absolute root path of the current Git worktree.
+func GetRoot() (string, error) {
+	repo, err := GetLocalRepo()
+	if err != nil {
+		return "", fmt.Errorf("%w: failed to get local repository: %w", errUtils.ErrLocalRepoFetch, err)
+	}
+
+	worktree, err := repo.Worktree()
+	if err != nil {
+		return "", fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrGitWorktree, err)
+	}
+
+	rootPath, err := filepath.Abs(worktree.Filesystem.Root())
+	if err != nil {
+		return "", fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrPathResolution, err)
+	}
+
+	return rootPath, nil
 }
 
 // OpenWorktreeAwareRepo opens a Git repository at the given path,

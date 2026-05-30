@@ -1,0 +1,524 @@
+---
+title: MCP Server Integration
+sidebar_label: MCP Server
+description: Connect Atmos AI tools to any MCP-compatible client
+id: mcp-server
+---
+import Terminal from '@site/src/components/Terminal'
+import File from '@site/src/components/File'
+import Intro from '@site/src/components/Intro'
+import Experimental from '@site/src/components/Experimental'
+import Tabs from '@theme/Tabs'
+import TabItem from '@theme/TabItem'
+
+<Intro>
+The Atmos MCP Server exposes Atmos AI tools through the [Model Context Protocol](https://modelcontextprotocol.io) (MCP),
+an open standard that lets any compatible AI client -- Claude Desktop, Claude Code, VS Code, Cursor, and
+[many others](https://modelcontextprotocol.io/clients) -- connect to your infrastructure tools without custom integrations.
+</Intro>
+
+<Experimental />
+
+**See also:** [MCP Command Reference](/cli/commands/mcp/start) for flag details and transport modes |
+[MCP Configuration](/cli/configuration/mcp) for tool and permission settings in `atmos.yaml`
+
+:::tip Safe by Default
+The default **stdio transport** runs as a local subprocess with no network exposure -- the same security model as running `atmos` from your terminal. No ports are opened and no remote connections are accepted.
+
+If you use [HTTP transport](#http-transport) for remote access, see [Security Considerations](#security-considerations) for recommended safeguards.
+:::
+
+## Quick Start
+
+This walkthrough gets you from zero to querying stacks in Claude Desktop.
+
+**Prerequisites:** Atmos v1.63.0+ and [Claude Desktop](https://claude.ai/download) v0.7.0+.
+
+### 1. Enable MCP and AI in atmos.yaml
+
+<File title="atmos.yaml">
+```yaml
+mcp:
+  enabled: true                 # required — MCP is off by default
+ai:
+  enabled: true
+  tools:
+    enabled: true
+    require_confirmation: false  # optional, smoother experience
+```
+</File>
+
+:::info
+The MCP server is **disabled by default**. You must explicitly set `mcp.enabled: true` in addition to
+enabling AI. This ensures that enabling AI chat features does not inadvertently expose an MCP endpoint.
+:::
+
+### 2. Configure Claude Desktop
+
+Create or edit the config file at `~/.config/claude/claude_desktop_config.json` (macOS/Linux)
+or `%APPDATA%\Claude\claude_desktop_config.json` (Windows):
+
+<File title="claude_desktop_config.json">
+```json
+{
+  "mcpServers": {
+    "atmos": {
+      "command": "atmos",
+      "args": ["mcp", "start"],
+      "cwd": "/path/to/your/atmos/project"
+    }
+  }
+}
+```
+</File>
+
+:::tip Working Directory
+Set `cwd` to the directory containing your `atmos.yaml`. On Windows, use `atmos.exe` as the command
+and double backslashes for paths (e.g., `C:\\Users\\You\\project`).
+:::
+
+### 3. Restart and Verify
+
+Completely quit Claude Desktop and reopen it. After a few seconds, look for the MCP indicator icon in the
+bottom-right corner. Click it to confirm "atmos" is listed with a green dot. Then try asking:
+
+```
+List all my Atmos stacks
+```
+
+Claude will call `atmos_list_stacks` and return your actual stack names.
+
+If something goes wrong, check the [Troubleshooting](#troubleshooting) section.
+
+## Available Tools
+
+When connected, the MCP server exposes all enabled Atmos AI tools. For full details on each tool, its parameters,
+and the permission system, see [AI Tools Configuration](/cli/configuration/ai/tools).
+
+<dl>
+  <dt>`atmos_describe_component`</dt>
+  <dd>Get detailed component configuration for a stack.</dd>
+
+  <dt>`atmos_list_stacks`</dt>
+  <dd>List and filter stacks.</dd>
+
+  <dt>`atmos_validate_stacks`</dt>
+  <dd>Validate stack configurations.</dd>
+
+  <dt>`describe_affected`</dt>
+  <dd>Show components affected by git changes.</dd>
+
+  <dt>`read_component_file`</dt>
+  <dd>Read a component source file.</dd>
+
+  <dt>`read_stack_file`</dt>
+  <dd>Read a stack configuration file.</dd>
+
+  <dt>`write_component_file`</dt>
+  <dd>Modify a component file (requires permission).</dd>
+
+  <dt>`write_stack_file`</dt>
+  <dd>Modify a stack file (requires permission).</dd>
+</dl>
+
+All tools respect your configured [permission settings](/cli/configuration/ai/tools).
+
+## Client Setup
+
+Beyond the [Quick Start](#quick-start) with Claude Desktop, here is how to configure other popular MCP clients.
+Every client uses the same underlying command (`atmos mcp start`); only the config format differs.
+
+### Desktop Apps and IDEs
+
+<Tabs>
+<TabItem value="vscode" label="VS Code" default>
+
+Create `.vscode/mcp.json` in your project:
+
+<File title=".vscode/mcp.json">
+```json
+{
+  "servers": {
+    "atmos": {
+      "type": "stdio",
+      "command": "atmos",
+      "args": ["mcp", "start"],
+      "cwd": "${workspaceFolder}"
+    }
+  }
+}
+```
+</File>
+
+Alternatively, press `Cmd+Shift+P` / `Ctrl+Shift+P` and search "MCP: Add Server".
+
+:::tip
+Enable `chat.mcp.discovery.enabled` in VS Code settings to auto-discover MCP servers from your Claude Desktop config.
+:::
+
+</TabItem>
+<TabItem value="cursor" label="Cursor">
+
+Add to `~/.cursor/mcp.json` (global) or `.cursor/mcp.json` (project):
+
+<File title="~/.cursor/mcp.json">
+```json
+{
+  "mcpServers": {
+    "atmos": {
+      "command": "atmos",
+      "args": ["mcp", "start"],
+      "cwd": "/path/to/your/atmos/project"
+    }
+  }
+}
+```
+</File>
+
+</TabItem>
+<TabItem value="windsurf" label="Windsurf">
+
+<File title="~/.windsurf/mcp.json">
+```json
+{
+  "mcpServers": {
+    "atmos": {
+      "command": "atmos",
+      "args": ["mcp", "start"],
+      "cwd": "/path/to/your/atmos/project"
+    }
+  }
+}
+```
+</File>
+
+</TabItem>
+<TabItem value="cline" label="Cline">
+
+Click the "MCP Servers" icon in Cline's navigation, then "Configure MCP Servers" and add:
+
+<File title="cline_mcp_settings.json">
+```json
+{
+  "mcpServers": {
+    "atmos": {
+      "command": "atmos",
+      "args": ["mcp", "start"],
+      "cwd": "/path/to/your/atmos/project",
+      "disabled": false
+    }
+  }
+}
+```
+</File>
+
+</TabItem>
+<TabItem value="continue" label="Continue.dev">
+
+Create `.continue/mcpServers/atmos.yaml` in your workspace:
+
+<File title=".continue/mcpServers/atmos.yaml">
+```yaml
+name: atmos
+command: atmos
+args:
+  - mcp
+  - start
+cwd: /path/to/your/atmos/project
+```
+</File>
+
+</TabItem>
+</Tabs>
+
+### CLI Tools
+
+<Tabs>
+<TabItem value="claude-code" label="Claude Code" default>
+
+<Terminal title="claude mcp add">
+```bash
+# stdio transport
+claude mcp add --transport stdio atmos -- atmos mcp start
+
+# HTTP transport
+claude mcp add --transport http atmos http://localhost:8080
+
+# With project scope and env vars
+claude mcp add --scope project --transport stdio atmos \
+  --env ATMOS_BASE_PATH=/path/to/project \
+  -- atmos mcp start
+```
+</Terminal>
+
+Or add a `.mcp.json` file to your project root:
+
+<File title=".mcp.json">
+```json
+{
+  "mcpServers": {
+    "atmos": {
+      "type": "stdio",
+      "command": "atmos",
+      "args": ["mcp", "start"]
+    }
+  }
+}
+```
+</File>
+
+Manage servers with `claude mcp list`, `claude mcp get atmos`, and `claude mcp remove atmos`.
+
+</TabItem>
+<TabItem value="gemini" label="Gemini CLI">
+
+<Terminal title="gemini mcp add">
+```bash
+# stdio transport
+gemini mcp add atmos atmos mcp start
+
+# HTTP transport
+gemini mcp add --transport http atmos http://localhost:8080
+```
+</Terminal>
+
+Or configure manually in `~/.gemini/settings.json`:
+
+<File title="~/.gemini/settings.json">
+```json
+{
+  "mcpServers": {
+    "atmos": {
+      "command": "atmos",
+      "args": ["mcp", "start"],
+      "timeout": 30000
+    }
+  }
+}
+```
+</File>
+
+</TabItem>
+<TabItem value="codex" label="OpenAI Codex">
+
+<File title="~/.codex/config.json">
+```json
+{
+  "mcpServers": {
+    "atmos": {
+      "command": "atmos",
+      "args": ["mcp", "start"]
+    }
+  }
+}
+```
+</File>
+
+</TabItem>
+<TabItem value="grok" label="Grok CLI">
+
+<Terminal title="grok mcp">
+```bash
+# Interactive: start grok, then run /mcp add atmos "atmos" "mcp" "start"
+
+# Or via CLI
+grok mcp add atmos --transport stdio --command "atmos" --args "mcp,start"
+```
+</Terminal>
+
+</TabItem>
+</Tabs>
+
+### Client Comparison
+
+<dl>
+  <dt>**Claude Desktop** — `~/.config/claude/claude_desktop_config.json`</dt>
+  <dd>General infrastructure queries.</dd>
+
+  <dt>**VS Code Copilot** — `.vscode/mcp.json`</dt>
+  <dd>Coding with infrastructure context.</dd>
+
+  <dt>**Cursor** — `~/.cursor/mcp.json`</dt>
+  <dd>AI-first development.</dd>
+
+  <dt>**Cline** — GUI + `cline_mcp_settings.json`</dt>
+  <dd>Autonomous coding.</dd>
+
+  <dt>**Continue.dev** — `.continue/mcpServers/atmos.yaml`</dt>
+  <dd>Multi-model workflows.</dd>
+
+  <dt>**Windsurf** — `~/.windsurf/mcp.json`</dt>
+  <dd>AI-powered development.</dd>
+
+  <dt>**Claude Code** — `.mcp.json` or CLI</dt>
+  <dd>Terminal-based workflows.</dd>
+
+  <dt>**Gemini CLI** — `~/.gemini/settings.json`</dt>
+  <dd>Google Cloud users.</dd>
+
+  <dt>**Codex CLI** — `~/.codex/config.json`</dt>
+  <dd>OpenAI ecosystem.</dd>
+
+  <dt>**Grok CLI** — `.grok/settings.json`</dt>
+  <dd>xAI users.</dd>
+</dl>
+
+## Example Queries
+
+Once connected, ask questions in natural language. Claude automatically picks the right tool.
+
+```
+List all my Atmos stacks
+Show me the vpc component configuration in prod-us-east-1
+What stacks use the RDS component?
+Validate all stack configurations
+Generate a Terraform plan for vpc in staging
+Read the stack file for prod-us-east-1
+What are the differences between dev and prod for vpc?
+```
+
+## Security Considerations
+
+### stdio Transport (Default)
+
+Runs as a local subprocess under your user account with no network exposure. This is the recommended
+transport for desktop apps and local development -- no additional security configuration is needed.
+
+### HTTP Transport
+
+:::warning HTTP Transport Security
+HTTP transport has no built-in authentication or encryption. Only use it when you need remote or multi-client access, and always add network-level security.
+:::
+
+For any deployment beyond `localhost`:
+
+<dl>
+  <dt>Network isolation</dt>
+  <dd>Use firewall rules, private networks, or VPN. Bind to `localhost` for single-user scenarios.</dd>
+
+  <dt>Reverse proxy</dt>
+  <dd>Put nginx or Caddy in front with TLS and authentication. See the <a href="#reverse-proxy-with-authentication">nginx example</a> below.</dd>
+
+  <dt>SSH tunneling</dt>
+  <dd>Forward the port over SSH for secure remote access: `ssh -L 8080:localhost:8080 user@server`.</dd>
+
+  <dt>Tool permissions</dt>
+  <dd>Restrict tools in `atmos.yaml` using `allowed_tools` and `blocked_tools`. Disable write operations if not needed.</dd>
+
+  <dt>Monitoring</dt>
+  <dd>Poll `/health` and log all tool executions.</dd>
+</dl>
+
+## Advanced Deployments
+
+### Docker
+
+<File title="Dockerfile">
+```dockerfile
+FROM cloudposse/atmos:latest
+
+COPY atmos.yaml /atmos/atmos.yaml
+COPY stacks/ /atmos/stacks/
+COPY components/ /atmos/components/
+
+WORKDIR /atmos
+EXPOSE 8080
+
+# Binding to 0.0.0.0 inside a container is safe; Docker port mapping controls external access.
+CMD ["atmos", "mcp", "start", "--transport", "http", "--host", "0.0.0.0", "--port", "8080"]
+```
+</File>
+
+<Terminal title="docker">
+```bash
+docker build -t atmos-mcp .
+docker run -p 8080:8080 -e ANTHROPIC_API_KEY="${ANTHROPIC_API_KEY}" atmos-mcp
+```
+</Terminal>
+
+## Troubleshooting
+
+### `stdio` Connection Issues
+
+**Server not appearing in Claude Desktop:**
+
+1. Verify the config file location and JSON syntax. Use the paths listed in [Quick Start](#2-configure-claude-desktop).
+2. Fully quit Claude Desktop (Cmd+Q / Alt+F4), wait a few seconds, and reopen.
+3. Confirm `atmos` is in your PATH:
+
+<Terminal title="verify">
+```bash
+which atmos
+atmos mcp start   # should start without errors; Ctrl+C to exit
+```
+</Terminal>
+
+4. Check Claude Desktop logs for errors mentioning "atmos":
+   - macOS: `~/Library/Logs/Claude/mcp*.log`
+   - Windows: `%APPDATA%\Claude\logs\mcp*.log`
+   - Linux: `~/.config/Claude/logs/mcp*.log`
+
+**Tools not appearing in conversations:**
+
+Make sure `ai.tools.enabled` is `true` in `atmos.yaml` and that you have not added the tools
+to `blocked_tools`. If tools still do not appear, try asking Claude explicitly:
+"Use the atmos_list_stacks tool to show my stacks."
+
+**"Command not found" errors:**
+
+Use the full path to `atmos` in your config. Run `which atmos` to find it, then set
+`"command": "/usr/local/bin/atmos"` (or wherever it is installed).
+
+### HTTP Connection Issues
+
+<Terminal title="debug http">
+```bash
+# Check if the server is running
+curl http://localhost:8080/health
+
+# Check if the port is in use
+lsof -i :8080
+
+# Try a different port
+atmos mcp start --transport http --port 3000
+```
+</Terminal>
+
+If a firewall is blocking connections, allow the port (`sudo ufw allow 8080/tcp` on Linux,
+or add `atmos` to the macOS application firewall).
+
+### Common Configuration Errors
+
+**"AI tools are not enabled"** -- Set `ai.enabled: true` and `ai.tools.enabled: true`
+in `atmos.yaml`.
+
+**Tools not executing** -- Check `allowed_tools` and `blocked_tools` in your AI tool config. Remove overly
+restrictive entries.
+
+**Slow responses** -- Increase `ai.timeout_seconds` (default varies by provider). For HTTP transport,
+check network latency. Monitor resource usage via `/health`.
+
+## Related Documentation
+
+- [MCP Command Reference](/cli/commands/mcp/start) -- Command flags and transport modes
+- [MCP Configuration](/cli/configuration/mcp) -- Configure tools and permissions
+- [AI Tools Configuration](/cli/configuration/ai/tools) -- Tool details and permission system
+- [MCP Specification](https://modelcontextprotocol.io) -- Official protocol documentation
+- [MCP Go SDK](https://github.com/modelcontextprotocol/go-sdk) -- SDK used by the Atmos MCP Server
+- [MCP Clients](https://modelcontextprotocol.io/clients) -- 100+ compatible applications
+
+### Client Setup Guides
+
+- [Claude Desktop](https://claude.ai/desktop)
+- [Claude Code MCP Guide](https://docs.claude.com/en/docs/claude-code/mcp)
+- [VS Code MCP Servers](https://code.visualstudio.com/docs/copilot/chat/mcp-servers)
+- [Cursor MCP](https://docs.cursor.com/context/model-context-protocol)
+- [Cline MCP](https://docs.cline.bot/mcp/configuring-mcp-servers)
+- [Continue.dev Reference](https://docs.continue.dev/reference)
+- [Gemini CLI MCP](https://google-gemini.github.io/gemini-cli/docs/tools/mcp-server.html)
+- [OpenAI Codex CLI](https://developers.openai.com/codex/cli/)
+
+## Feedback and Support
+
+- [GitHub Issues](https://github.com/cloudposse/atmos/issues) -- Report bugs or request features
+- [MCP GitHub](https://github.com/modelcontextprotocol) -- MCP protocol issues

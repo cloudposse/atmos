@@ -21,6 +21,10 @@ spec:
         - "**/*.tf"
         - "**/*.tfvars"
         - "**/*.md"
+      retry:
+        max_attempts: 3
+        initial_delay: 2s
+        backoff_strategy: exponential
 
     - component: "test-components"
       source: "file:///../../../fixtures/components/terraform/mock"
@@ -32,13 +36,17 @@ spec:
         - "components/terraform/{{ .Component }}/{{.Version}}"
 
     - component: "weather"
-      source: "git::https://github.com/cloudposse/atmos.git//examples/demo-library/{{ .Component }}?ref={{.Version}}"
+      source: "git::https://github.com/cloudposse/atmos.git//examples/demo-library/{{ .Component }}?ref={{.Version}}&depth=1"
       version: "main"
       tags:
         - git
         - demo
       targets:
         - "components/terraform/{{ .Component }}/{{.Version}}"
+      retry:
+        max_attempts: 3
+        initial_delay: 2s
+        backoff_strategy: exponential
     - component: "myapp2"
       source: "../../../fixtures/components/terraform/mock" # required for test URI contain path traversal
       tags:

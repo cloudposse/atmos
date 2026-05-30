@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	ambientIdentities "github.com/cloudposse/atmos/pkg/auth/identities/ambient"
 	awsIdentities "github.com/cloudposse/atmos/pkg/auth/identities/aws"
 	azureIdentities "github.com/cloudposse/atmos/pkg/auth/identities/azure"
 	awsProviders "github.com/cloudposse/atmos/pkg/auth/providers/aws"
@@ -149,6 +150,10 @@ func NewIdentity(name string, config *schema.Identity) (types.Identity, error) {
 		return awsIdentities.NewAssumeRoleIdentity(name, config)
 	case "aws/assume-root":
 		return awsIdentities.NewAssumeRootIdentity(name, config)
+	case "ambient":
+		return ambientIdentities.NewAmbientIdentity(name, config)
+	case "aws/ambient":
+		return awsIdentities.NewAWSAmbientIdentity(name, config)
 	case "aws/user":
 		return awsIdentities.NewUserIdentity(name, config)
 	case "azure/subscription":
@@ -158,6 +163,9 @@ func NewIdentity(name string, config *schema.Identity) (types.Identity, error) {
 	case "mock/aws":
 		return mockawsProviders.NewIdentity(name, config), nil
 	default:
+		if config.Kind == "" {
+			return nil, fmt.Errorf("%w: identity is not configured", errUtils.ErrInvalidIdentityKind)
+		}
 		return nil, fmt.Errorf("%w: unsupported identity kind: %s", errUtils.ErrInvalidIdentityKind, config.Kind)
 	}
 }

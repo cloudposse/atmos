@@ -7,6 +7,7 @@ import (
 	"github.com/go-viper/mapstructure/v2"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -477,6 +478,7 @@ func checkSettingsAndDependenciesIndexed(
 
 // checkDependencyChangesIndexed checks if dependent files or folders have changed.
 // This helper reduces cyclomatic complexity of checkSettingsAndDependenciesIndexed.
+// It checks both dependencies.components (preferred) and settings.depends_on (legacy) for file/folder dependencies.
 func checkDependencyChangesIndexed(
 	affected *[]schema.Affected,
 	atmosConfig *schema.AtmosConfiguration,
@@ -490,20 +492,15 @@ func checkDependencyChangesIndexed(
 	currentStacks *map[string]any,
 	includeSettings bool,
 ) error {
-	var stackComponentSettings schema.Settings
-	err := mapstructure.Decode(settingsSection, &stackComponentSettings)
-	if err != nil {
-		return err
-	}
-
-	if reflect.ValueOf(stackComponentSettings).IsZero() ||
-		reflect.ValueOf(stackComponentSettings.DependsOn).IsZero() {
+	// Get file/folder dependencies from dependencies.components or settings.depends_on.
+	deps := getFileFolderDependencies(*componentSection, settingsSection)
+	if len(deps) == 0 {
 		return nil
 	}
 
 	isFolderOrFileChanged, changedType, changedFileOrFolder, err := isComponentDependentFolderOrFileChangedIndexed(
 		filesIndex,
-		stackComponentSettings.DependsOn,
+		deps,
 	)
 	if err != nil {
 		return err
@@ -518,6 +515,99 @@ func checkDependencyChangesIndexed(
 		componentSection, changedType, changedFileOrFolder,
 		includeSpaceliftAdminStacks, currentStacks, includeSettings,
 	)
+}
+
+// getFileFolderDependencies extracts file/folder dependencies from dependencies.components or settings.depends_on.
+// Returns a slice of ComponentDependency with kind="file" or kind="folder".
+func getFileFolderDependencies(componentSection map[string]any, settingsSection map[string]any) []schema.ComponentDependency {
+	// Check dependencies.components first (preferred location).
+	if result := getFileFolderDependenciesFromNewFormat(componentSection); len(result) > 0 {
+		return result
+	}
+
+	// Fall back to settings.depends_on (legacy location).
+	return getFileFolderDependenciesFromLegacyFormat(settingsSection)
+}
+
+// getFileFolderDependenciesFromNewFormat extracts file/folder deps from the
+// `dependencies` section. It accepts both the v2 surface
+// (`dependencies.files` / `dependencies.folders` sibling keys) and the legacy
+// inline shape (`dependencies.components[]` with `kind: file` / `kind: folder`).
+// Both surfaces produce equivalent ComponentDependency entries — Normalize
+// reconciles them.
+func getFileFolderDependenciesFromNewFormat(componentSection map[string]any) []schema.ComponentDependency {
+	depsSection, ok := componentSection[cfg.DependenciesSectionName].(map[string]any)
+	if !ok {
+		return nil
+	}
+
+	// Fast path: nothing to read if none of the entry-bearing keys are present.
+	if !hasDependencyEntries(depsSection) {
+		return nil
+	}
+
+	var deps schema.Dependencies
+	if err := mapstructure.Decode(depsSection, &deps); err != nil {
+		return nil
+	}
+	if err := deps.Normalize(); err != nil {
+		log.Warn("invalid dependencies section; file/folder deps may be silently ignored", "error", err)
+		return nil
+	}
+	if len(deps.Components) == 0 {
+		return nil
+	}
+
+	// Filter to only file/folder dependencies. Normalize has already mirrored
+	// any v2 sibling-key entries into Components, so this single filter
+	// covers both surfaces.
+	var result []schema.ComponentDependency
+	for i := range deps.Components {
+		if deps.Components[i].IsFileDependency() || deps.Components[i].IsFolderDependency() {
+			result = append(result, deps.Components[i])
+		}
+	}
+	return result
+}
+
+// getFileFolderDependenciesFromLegacyFormat extracts file/folder deps from settings.depends_on.
+func getFileFolderDependenciesFromLegacyFormat(settingsSection map[string]any) []schema.ComponentDependency {
+	if settingsSection == nil {
+		return nil
+	}
+
+	var stackComponentSettings schema.Settings
+	if err := mapstructure.Decode(settingsSection, &stackComponentSettings); err != nil {
+		return nil
+	}
+
+	if reflect.ValueOf(stackComponentSettings.DependsOn).IsZero() || len(stackComponentSettings.DependsOn) == 0 {
+		return nil
+	}
+
+	// Filter to only file/folder entries and convert to ComponentDependency.
+	var result []schema.ComponentDependency
+	for key := range stackComponentSettings.DependsOn {
+		dep := stackComponentSettings.DependsOn[key]
+		if dep.File != "" {
+			result = append(result, schema.ComponentDependency{
+				Kind: "file",
+				Path: dep.File,
+			})
+		}
+		if dep.Folder != "" {
+			result = append(result, schema.ComponentDependency{
+				Kind: "folder",
+				Path: dep.Folder,
+			})
+		}
+	}
+
+	if len(result) > 0 {
+		log.Debug("'settings.depends_on' is deprecated, use 'dependencies.components' instead. See: https://atmos.tools/stacks/dependencies/components")
+	}
+
+	return result
 }
 
 // addDependencyAffectedItem adds an affected item for a dependency change.

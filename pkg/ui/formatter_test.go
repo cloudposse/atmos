@@ -137,6 +137,7 @@ func TestFormatter_Success(t *testing.T) {
 }
 
 func TestFormatter_Warning(t *testing.T) {
+	t.Setenv("NO_COLOR", "1")
 	ioCtx := createTestIOContext()
 	term := terminal.New()
 	f := NewFormatter(ioCtx, term)
@@ -151,6 +152,7 @@ func TestFormatter_Warning(t *testing.T) {
 }
 
 func TestFormatter_Error(t *testing.T) {
+	t.Setenv("NO_COLOR", "1")
 	ioCtx := createTestIOContext()
 	term := terminal.New()
 	f := NewFormatter(ioCtx, term)
@@ -165,6 +167,7 @@ func TestFormatter_Error(t *testing.T) {
 }
 
 func TestFormatter_Info(t *testing.T) {
+	t.Setenv("NO_COLOR", "1")
 	ioCtx := createTestIOContext()
 	term := terminal.New()
 	f := NewFormatter(ioCtx, term)
@@ -421,6 +424,10 @@ func (m *mockTerminal) Write(content string) error {
 
 func (m *mockTerminal) IsTTY(stream terminal.Stream) bool {
 	return m.isTTY
+}
+
+func (m *mockTerminal) IsPiped(stream terminal.Stream) bool {
+	return false
 }
 
 func (m *mockTerminal) ColorProfile() terminal.ColorProfile {
@@ -855,6 +862,7 @@ func TestToastf_Integration(t *testing.T) {
 }
 
 func TestFormatter_FormatToast_EdgeCases(t *testing.T) {
+	t.Setenv("NO_COLOR", "1")
 	ioCtx := createTestIOContext()
 	term := createMockTerminal(terminal.ColorNone)
 	f := NewFormatter(ioCtx, term).(*formatter)
@@ -1238,6 +1246,7 @@ func TestFormatter_LipglossWidth(t *testing.T) {
 }
 
 func TestFormatter_Successf_Multiline(t *testing.T) {
+	t.Setenv("NO_COLOR", "1")
 	ioCtx := createTestIOContext()
 	term := createMockTerminal(terminal.ColorNone)
 	f := NewFormatter(ioCtx, term).(*formatter)
@@ -1258,7 +1267,60 @@ func TestFormatter_Successf_Multiline(t *testing.T) {
 	}
 }
 
+// TestFormatter_Successf_ToolSpec verifies that tool specs like owner/repo@version
+// are preserved through the full glamour markdown rendering pipeline.
+// Regression test: glamour's GFM linkify strips tool specs by interpreting
+// the @ as an email autolink (e.g., jq@1.7.1 → mailto:jq@1.7.1 → stripped).
+// The fix is to wrap tool specs in backticks which prevents autolink parsing.
+func TestFormatter_Successf_ToolSpec(t *testing.T) {
+	tests := []struct {
+		name     string
+		format   string
+		args     []interface{}
+		contains string
+	}{
+		{
+			name:     "backtick-wrapped tool spec preserved",
+			format:   "Skipped `%s/%s@%s` (not installed)",
+			args:     []interface{}{"jqlang", "jq", "1.7.1"},
+			contains: "jqlang/jq@1.7.1",
+		},
+		{
+			name:     "backtick-wrapped different org preserved",
+			format:   "Uninstalled `%s/%s@%s`",
+			args:     []interface{}{"mikefarah", "yq", "4.45.1"},
+			contains: "mikefarah/yq@4.45.1",
+		},
+		{
+			name:     "tool spec owner/repo without version preserved",
+			format:   "Tool `%s/%s` is not installed",
+			args:     []interface{}{"opentofu", "opentofu"},
+			contains: "opentofu/opentofu",
+		},
+		{
+			name:     "backtick-wrapped constraint message preserved",
+			format:   "Using `%s` %s (satisfies %s)",
+			args:     []interface{}{"opentofu", "1.11.5", "^1.10.0"},
+			contains: "opentofu",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ioCtx := createTestIOContext()
+			term := createMockTerminal(terminal.ColorNone)
+			f := NewFormatter(ioCtx, term).(*formatter)
+
+			result := f.Successf(tt.format, tt.args...)
+			if !strings.Contains(result, tt.contains) {
+				t.Errorf("Successf() = %q, should contain %q (tool spec was stripped by markdown rendering)", result, tt.contains)
+			}
+		})
+	}
+}
+
 func TestFormatter_Errorf_Multiline(t *testing.T) {
+	t.Setenv("NO_COLOR", "1")
 	ioCtx := createTestIOContext()
 	term := createMockTerminal(terminal.ColorNone)
 	f := NewFormatter(ioCtx, term).(*formatter)
@@ -1280,6 +1342,7 @@ func TestFormatter_Errorf_Multiline(t *testing.T) {
 }
 
 func TestFormatter_Warningf_Multiline(t *testing.T) {
+	t.Setenv("NO_COLOR", "1")
 	ioCtx := createTestIOContext()
 	term := createMockTerminal(terminal.ColorNone)
 	f := NewFormatter(ioCtx, term).(*formatter)
@@ -1301,6 +1364,7 @@ func TestFormatter_Warningf_Multiline(t *testing.T) {
 }
 
 func TestFormatter_Infof_Multiline(t *testing.T) {
+	t.Setenv("NO_COLOR", "1")
 	ioCtx := createTestIOContext()
 	term := createMockTerminal(terminal.ColorNone)
 	f := NewFormatter(ioCtx, term).(*formatter)
@@ -1322,6 +1386,7 @@ func TestFormatter_Infof_Multiline(t *testing.T) {
 }
 
 func TestFormatSuccessAndError(t *testing.T) {
+	t.Setenv("NO_COLOR", "1")
 	tests := []struct {
 		name         string
 		text         string
@@ -2204,6 +2269,7 @@ func TestWriteln_PackageLevel(t *testing.T) {
 
 // TestFormatInline tests the FormatInline package-level function.
 func TestFormatInline(t *testing.T) {
+	t.Setenv("NO_COLOR", "1")
 	t.Run("plain text passes through", func(t *testing.T) {
 		ioCtx := createTestIOContext()
 		term := createMockTerminal(terminal.ColorNone)

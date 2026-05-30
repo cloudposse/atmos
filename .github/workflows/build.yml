@@ -27,14 +27,15 @@ jobs:
     name: "Bump Homebrew formula"
     runs-on: ubuntu-latest
     needs: release
+    environment: release
     steps:
-      - uses: mislav/bump-homebrew-formula-action@v3
+      # mislav/bump-homebrew-formula-action is broken: GitHub now returns HTTP 303
+      # instead of 302 for tarball redirects and the action only accepts 302.
+      # See https://github.com/mislav/bump-homebrew-formula-action/issues/340
+      - uses: dawidd6/action-homebrew-bump-formula@1446dca236b0440c6f02723a3f14f13be2c04ab0 # v7
         with:
-          # A PR will be sent to github.com/Homebrew/homebrew-core to update this formula:
-          formula-name: atmos
-          formula-path: Formula/a/atmos.rb
-        env:
-          COMMITTER_TOKEN: ${{ secrets.GH_BOT_TOKEN }}
+          token: ${{ secrets.GH_BOT_TOKEN }}
+          formula: atmos
 
   docker:
     name: "Build and push Docker image for Atmos CLI"
@@ -43,7 +44,9 @@ jobs:
     if: ${{ github.event.release.prerelease == false }}
     steps:
       - name: "Checkout source code at current commit"
-        uses: actions/checkout@v4
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
 
       - name: "Docker Build"
         id: build
@@ -60,12 +63,18 @@ jobs:
             ATMOS_VERSION=${{ github.event.release.tag_name }}
 
       - name: "Verify Image"
+        env:
+          DOCKER_IMAGE: ${{ steps.build.outputs.image }}
+          DOCKER_TAG: ${{ steps.build.outputs.tag }}
         run: |
-          docker pull ${{ steps.build.outputs.image }}:${{ steps.build.outputs.tag}}
+          docker pull "$DOCKER_IMAGE:$DOCKER_TAG"
 
       - name: "Job Summary"
+        env:
+          DOCKER_IMAGE: ${{ steps.build.outputs.image }}
+          DOCKER_TAG: ${{ steps.build.outputs.tag }}
         run: |
           echo "## Docker Image Summary" >> $GITHUB_STEP_SUMMARY
           echo '```json' >> $GITHUB_STEP_SUMMARY
-          docker inspect ${{ steps.build.outputs.image }}:${{ steps.build.outputs.tag}}  >> $GITHUB_STEP_SUMMARY
+          docker inspect "$DOCKER_IMAGE:$DOCKER_TAG" >> $GITHUB_STEP_SUMMARY
           echo '```' >> $GITHUB_STEP_SUMMARY

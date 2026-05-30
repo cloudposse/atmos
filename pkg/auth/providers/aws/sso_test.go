@@ -9,6 +9,7 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/service/ssooidc"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -122,7 +123,7 @@ func TestSSOProvider_PreAuthenticate_NoOp(t *testing.T) {
 
 func TestSSOProvider_Authenticate_Simple(t *testing.T) {
 	// Prevent browser launch during device auth flow and shorten network timeouts.
-	t.Setenv("GO_TEST", "1") // utils.OpenUrl early-exits when set.
+	t.Setenv("GO_TEST", "1") // browser.Open early-exits when set.
 	t.Setenv("CI", "1")      // promptDeviceAuth avoids opening in CI.
 
 	config := &schema.Provider{
@@ -148,7 +149,7 @@ func TestSSOProvider_promptDeviceAuth_SafeInCI(t *testing.T) {
 	t.Setenv("CI", "1")
 	p, err := NewSSOProvider("sso", &schema.Provider{Kind: testSSOKind, Region: testRegion, StartURL: testStartURL})
 	require.NoError(t, err)
-	// With a full verification URL, OpenUrl is skipped under GO_TEST and CI.
+	// With a full verification URL, browser.Open is skipped under GO_TEST and CI.
 	url := "https://company.awsapps.com/start/#/device?user_code=WDDD-HRQV"
 	p.promptDeviceAuth(&ssooidc.StartDeviceAuthorizationOutput{VerificationUriComplete: &url})
 }
@@ -201,7 +202,7 @@ func TestSSOProvider_NameAndPreAuthenticate_NoOp(t *testing.T) {
 }
 
 func TestSSOProvider_promptDeviceAuth_NonCI_OpensURL(t *testing.T) {
-	t.Setenv("GO_TEST", "1") // ensure OpenUrl returns quickly
+	t.Setenv("GO_TEST", "1") // ensure browser.Open returns quickly.
 	t.Setenv("CI", "")       // not CI
 	p, err := NewSSOProvider("sso", &schema.Provider{Kind: "aws/iam-identity-center", Region: "us-east-1", StartURL: "https://x"})
 	require.NoError(t, err)
@@ -396,9 +397,9 @@ func TestSSOProvider_Logout_ErrorPaths(t *testing.T) {
 
 func TestIsTTY(t *testing.T) {
 	// isTTY checks if stderr is a terminal.
-	// In test environment, this will typically return false.
+	// In test environment, stderr is not a terminal.
 	result := isTTY()
-	assert.IsType(t, false, result)
+	assert.False(t, result, "isTTY should return false in test environment (stderr is not a terminal)")
 }
 
 func TestDisplayVerificationDialog(t *testing.T) {
@@ -806,10 +807,25 @@ func TestPromptDeviceAuth_VariousURLFormats(t *testing.T) {
 }
 
 func TestIsInteractive(t *testing.T) {
-	// Test isInteractive function.
+	// Test isInteractive function without force-tty.
+	// In test environment (no TTY), this returns false via isTTY() fallback.
+	prevForceTTY := viper.GetBool("force-tty")
+	viper.Set("force-tty", false)
+	t.Cleanup(func() { viper.Set("force-tty", prevForceTTY) })
+
 	result := isInteractive()
-	// In test environment, this typically returns false, but we just verify it doesn't panic.
-	assert.IsType(t, false, result)
+	// Test runner has no real TTY, so isTTY() returns false.
+	assert.False(t, result, "isInteractive should return false in non-TTY test environment when force-tty is not set")
+}
+
+func TestIsInteractive_ForceTTY(t *testing.T) {
+	// Test that force-tty viper setting overrides the TTY check.
+	prevForceTTY := viper.GetBool("force-tty")
+	viper.Set("force-tty", true)
+	t.Cleanup(func() { viper.Set("force-tty", prevForceTTY) })
+
+	result := isInteractive()
+	assert.True(t, result, "isInteractive should return true when force-tty is set")
 }
 
 func TestSSOProvider_Paths(t *testing.T) {

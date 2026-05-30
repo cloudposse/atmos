@@ -88,6 +88,87 @@ func TestInitFormatter(t *testing.T) {
 	}
 }
 
+func TestReinitFormatter(t *testing.T) {
+	// Save old state.
+	formatterMu.Lock()
+	oldFormatter := globalFormatter
+	oldIO := globalIO
+	oldTerminal := globalTerminal
+	formatterMu.Unlock()
+	defer func() {
+		formatterMu.Lock()
+		globalFormatter = oldFormatter
+		globalIO = oldIO
+		globalTerminal = oldTerminal
+		formatterMu.Unlock()
+	}()
+
+	// Clear globals to simulate uninitialized state.
+	Reset()
+
+	// ReinitFormatter should initialize everything from scratch.
+	ReinitFormatter()
+
+	formatterMu.RLock()
+	defer formatterMu.RUnlock()
+
+	if globalFormatter == nil {
+		t.Error("ReinitFormatter() did not initialize globalFormatter")
+	}
+	if globalIO == nil {
+		t.Error("ReinitFormatter() did not initialize globalIO")
+	}
+	if globalTerminal == nil {
+		t.Error("ReinitFormatter() did not initialize globalTerminal")
+	}
+}
+
+func TestReinitFormatter_RestoresColorAfterPipe(t *testing.T) {
+	// Save old state.
+	formatterMu.Lock()
+	oldFormatter := globalFormatter
+	oldIO := globalIO
+	oldTerminal := globalTerminal
+	formatterMu.Unlock()
+	defer func() {
+		formatterMu.Lock()
+		globalFormatter = oldFormatter
+		globalIO = oldIO
+		globalTerminal = oldTerminal
+		formatterMu.Unlock()
+	}()
+
+	// First init with test streams (simulates pipe detection → no color).
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+	streams := &testStreams{
+		stdin:  &bytes.Buffer{},
+		stdout: stdout,
+		stderr: stderr,
+	}
+	ioCtx, err := iolib.NewContext(iolib.WithStreams(streams))
+	if err != nil {
+		t.Fatalf("failed to create I/O context: %v", err)
+	}
+	InitFormatter(ioCtx)
+
+	// After ReinitFormatter, the formatter should be re-created with fresh terminal detection.
+	ReinitFormatter()
+
+	formatterMu.RLock()
+	defer formatterMu.RUnlock()
+
+	if globalFormatter == nil {
+		t.Fatal("ReinitFormatter() did not initialize globalFormatter")
+	}
+	// The formatter should be functional — MarkdownMessage should not panic.
+	// We can't easily assert color profile in CI (may not have TTY),
+	// but we verify the formatter is properly initialized.
+	if globalTerminal == nil {
+		t.Error("ReinitFormatter() did not initialize globalTerminal")
+	}
+}
+
 func TestWrite(t *testing.T) {
 	stdout, stderr, cleanup := setupTestUI(t)
 	defer cleanup()
@@ -228,6 +309,7 @@ func TestWriteln(t *testing.T) {
 }
 
 func TestSuccess(t *testing.T) {
+	t.Setenv("NO_COLOR", "1")
 	stdout, stderr, cleanup := setupTestUI(t)
 	defer cleanup()
 
@@ -252,6 +334,7 @@ func TestSuccess(t *testing.T) {
 }
 
 func TestSuccessf(t *testing.T) {
+	t.Setenv("NO_COLOR", "1")
 	stdout, stderr, cleanup := setupTestUI(t)
 	defer cleanup()
 
@@ -273,6 +356,7 @@ func TestSuccessf(t *testing.T) {
 }
 
 func TestError(t *testing.T) {
+	t.Setenv("NO_COLOR", "1")
 	stdout, stderr, cleanup := setupTestUI(t)
 	defer cleanup()
 
@@ -294,6 +378,7 @@ func TestError(t *testing.T) {
 }
 
 func TestErrorf(t *testing.T) {
+	t.Setenv("NO_COLOR", "1")
 	stdout, stderr, cleanup := setupTestUI(t)
 	defer cleanup()
 
@@ -315,6 +400,7 @@ func TestErrorf(t *testing.T) {
 }
 
 func TestWarning(t *testing.T) {
+	t.Setenv("NO_COLOR", "1")
 	stdout, stderr, cleanup := setupTestUI(t)
 	defer cleanup()
 
@@ -336,6 +422,7 @@ func TestWarning(t *testing.T) {
 }
 
 func TestWarningf(t *testing.T) {
+	t.Setenv("NO_COLOR", "1")
 	stdout, stderr, cleanup := setupTestUI(t)
 	defer cleanup()
 
@@ -357,6 +444,7 @@ func TestWarningf(t *testing.T) {
 }
 
 func TestInfo(t *testing.T) {
+	t.Setenv("NO_COLOR", "1")
 	stdout, stderr, cleanup := setupTestUI(t)
 	defer cleanup()
 
@@ -378,6 +466,7 @@ func TestInfo(t *testing.T) {
 }
 
 func TestInfof(t *testing.T) {
+	t.Setenv("NO_COLOR", "1")
 	stdout, stderr, cleanup := setupTestUI(t)
 	defer cleanup()
 

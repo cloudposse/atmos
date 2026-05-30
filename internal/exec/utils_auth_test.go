@@ -149,6 +149,90 @@ func TestBuildGlobalAuthSection(t *testing.T) {
 			},
 		},
 		{
+			name: "realm included when explicitly configured",
+			config: &schema.AtmosConfiguration{
+				Auth: schema.AuthConfig{
+					Realm:       "my-project",
+					RealmSource: "config",
+				},
+			},
+			expected: map[string]any{
+				"realm": "my-project",
+			},
+		},
+		{
+			name: "realm included when set via env",
+			config: &schema.AtmosConfiguration{
+				Auth: schema.AuthConfig{
+					Realm:       "env-realm",
+					RealmSource: "env",
+				},
+			},
+			expected: map[string]any{
+				"realm": "env-realm",
+			},
+		},
+		{
+			name: "realm excluded when auto-computed from config-path",
+			config: &schema.AtmosConfiguration{
+				Auth: schema.AuthConfig{
+					Realm:       "b80ea18be93f8201",
+					RealmSource: "config-path",
+				},
+			},
+			expected: map[string]any{},
+		},
+		{
+			name: "realm excluded when default",
+			config: &schema.AtmosConfiguration{
+				Auth: schema.AuthConfig{
+					Realm:       "default",
+					RealmSource: "default",
+				},
+			},
+			expected: map[string]any{},
+		},
+		{
+			name: "realm excluded when empty",
+			config: &schema.AtmosConfiguration{
+				Auth: schema.AuthConfig{
+					Realm: "",
+				},
+			},
+			expected: map[string]any{},
+		},
+		{
+			name: "all sections including explicit realm",
+			config: &schema.AtmosConfiguration{
+				Auth: schema.AuthConfig{
+					Realm:       "prod-realm",
+					RealmSource: "config",
+					Providers: map[string]schema.Provider{
+						"aws": {Kind: "aws-iam"},
+					},
+					Identities: map[string]schema.Identity{
+						"dev": {Kind: "aws"},
+					},
+					Logs:    schema.Logs{Level: "info"},
+					Keyring: schema.KeyringConfig{Type: "file"},
+				},
+			},
+			expected: map[string]any{
+				"realm": "prod-realm",
+				"providers": map[string]schema.Provider{
+					"aws": {Kind: "aws-iam"},
+				},
+				"identities": map[string]schema.Identity{
+					"dev": {Kind: "aws"},
+				},
+				"logs": map[string]any{
+					"level": "info",
+					"file":  "",
+				},
+				"keyring": schema.KeyringConfig{Type: "file"},
+			},
+		},
+		{
 			name: "empty maps are excluded",
 			config: &schema.AtmosConfiguration{
 				Auth: schema.AuthConfig{
@@ -713,6 +797,144 @@ func TestCreateAndAuthenticateAuthManagerWithDeps_NilAuthManager(t *testing.T) {
 	result, err := createAndAuthenticateAuthManagerWithDeps(atmosConfig, info, mockFetcher, mockCreator)
 	assert.NoError(t, err)
 	assert.Nil(t, result)
+}
+
+func TestGetMergedAuthConfigWithFetcher_RealmPropagated(t *testing.T) {
+	// Verify realm is propagated through CopyGlobalAuthConfig when no component auth exists.
+	// This is the --all path: each component iteration must preserve the realm.
+	atmosConfig := &schema.AtmosConfiguration{
+		Auth: schema.AuthConfig{
+			Realm:       "my-project",
+			RealmSource: "config",
+			Providers: map[string]schema.Provider{
+				"aws": {Kind: "aws-iam"},
+			},
+		},
+	}
+	info := &schema.ConfigAndStacksInfo{
+		Stack:            "dev-us-west-2",
+		ComponentFromArg: "vpc",
+	}
+
+	// Mock fetcher returns component config without auth section.
+	mockFetcher := func(_ *ExecuteDescribeComponentParams) (map[string]any, error) {
+		return map[string]any{
+			"vars": map[string]any{"test": "value"},
+		}, nil
+	}
+
+	result, err := getMergedAuthConfigWithFetcher(atmosConfig, info, mockFetcher)
+	assert.NoError(t, err)
+	assert.NotNil(t, result)
+	assert.Equal(t, "my-project", result.Realm)
+	assert.Equal(t, "config", result.RealmSource)
+}
+
+func TestGetMergedAuthConfigWithFetcher_RealmPropagatedWithEmptyStack(t *testing.T) {
+	// When stack is empty (global auth only path), realm must still be preserved.
+	atmosConfig := &schema.AtmosConfiguration{
+		Auth: schema.AuthConfig{
+			Realm:       "env-realm",
+			RealmSource: "env",
+		},
+	}
+	info := &schema.ConfigAndStacksInfo{
+		Stack:            "",
+		ComponentFromArg: "",
+	}
+
+	mockFetcher := func(_ *ExecuteDescribeComponentParams) (map[string]any, error) {
+		t.Fatal("fetcher should not be called when stack is empty")
+		return nil, nil
+	}
+
+	result, err := getMergedAuthConfigWithFetcher(atmosConfig, info, mockFetcher)
+	assert.NoError(t, err)
+	assert.NotNil(t, result)
+	assert.Equal(t, "env-realm", result.Realm)
+	assert.Equal(t, "env", result.RealmSource)
+}
+
+func TestMergeGlobalAuthConfig_RealmPropagated(t *testing.T) {
+	// Verify explicitly configured realm is included in the merged auth section map.
+	atmosConfig := &schema.AtmosConfiguration{
+		Auth: schema.AuthConfig{
+			Realm:       "my-project",
+			RealmSource: "config",
+			Providers: map[string]schema.Provider{
+				"aws": {Kind: "aws-iam"},
+			},
+		},
+	}
+	componentSection := map[string]any{}
+
+	result := mergeGlobalAuthConfig(atmosConfig, componentSection)
+	assert.Contains(t, result, "realm")
+	assert.Equal(t, "my-project", result["realm"])
+	assert.Contains(t, result, "providers")
+}
+
+func TestMergeGlobalAuthConfig_NoRealmConfigured(t *testing.T) {
+	// When no realm is configured, the merged map should not contain a "realm" key.
+	atmosConfig := &schema.AtmosConfiguration{
+		Auth: schema.AuthConfig{
+			Providers: map[string]schema.Provider{
+				"aws": {Kind: "aws-iam"},
+			},
+		},
+	}
+	componentSection := map[string]any{}
+
+	result := mergeGlobalAuthConfig(atmosConfig, componentSection)
+	assert.NotContains(t, result, "realm")
+	assert.Contains(t, result, "providers")
+}
+
+func TestMergeGlobalAuthConfig_AutoRealmExcluded(t *testing.T) {
+	// Auto-computed realm (from config-path hash) should not appear in merged output.
+	atmosConfig := &schema.AtmosConfiguration{
+		Auth: schema.AuthConfig{
+			Realm:       "b80ea18be93f8201",
+			RealmSource: "config-path",
+			Providers: map[string]schema.Provider{
+				"aws": {Kind: "aws-iam"},
+			},
+		},
+	}
+	componentSection := map[string]any{}
+
+	result := mergeGlobalAuthConfig(atmosConfig, componentSection)
+	assert.NotContains(t, result, "realm")
+	assert.Contains(t, result, "providers")
+}
+
+func TestGetMergedAuthConfigWithFetcher_NoRealmPreservesEmptyRealm(t *testing.T) {
+	// When no realm is configured, the merged config should have empty realm — same as before the fix.
+	atmosConfig := &schema.AtmosConfiguration{
+		Auth: schema.AuthConfig{
+			Providers: map[string]schema.Provider{
+				"aws": {Kind: "aws-iam"},
+			},
+		},
+	}
+	info := &schema.ConfigAndStacksInfo{
+		Stack:            "dev-us-west-2",
+		ComponentFromArg: "vpc",
+	}
+
+	mockFetcher := func(_ *ExecuteDescribeComponentParams) (map[string]any, error) {
+		return map[string]any{
+			"vars": map[string]any{"test": "value"},
+		}, nil
+	}
+
+	result, err := getMergedAuthConfigWithFetcher(atmosConfig, info, mockFetcher)
+	assert.NoError(t, err)
+	assert.NotNil(t, result)
+	assert.Empty(t, result.Realm)
+	assert.Empty(t, result.RealmSource)
+	// Providers should still be present.
+	assert.Len(t, result.Providers, 1)
 }
 
 func TestGetMergedAuthConfigWithFetcher_MergeReturnsError(t *testing.T) {

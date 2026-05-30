@@ -1,0 +1,3 @@
+# JIT workdir is created at runtime by tests (seedStateFile) and terraform operations.
+# It must not be tracked — state files and terraform init artifacts live here.
+.workdir/

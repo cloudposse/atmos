@@ -1,6 +1,5 @@
 {
   "label": "toolchain",
-  "position": 10,
   "link": {
     "type": "generated-index",
     "description": "Configure toolchain management for CLI tools like Terraform, kubectl, and more."

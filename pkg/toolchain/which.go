@@ -39,20 +39,26 @@ func findBinaryPath(toolNameFull string) (string, error) {
 		version = parts[1]
 	}
 
-	versions, exists := toolVersions.Tools[toolName]
-	if !exists || len(versions) == 0 {
+	// Look up the tool using the resolver, so aliases (e.g. "helm") match
+	// entries stored under their canonical owner/repo key ("helm/helm") and
+	// vice versa. The write side already canonicalizes for dedup — this keeps
+	// the read side symmetric.
+	installer := NewInstaller()
+	resolvedKey, _, found := LookupToolVersion(toolName, toolVersions, installer.GetResolver())
+	if !found {
 		return "", fmt.Errorf("%w: tool '%s' not configured in .tool-versions", ErrToolNotFound, toolName)
 	}
 
-	// Use the most recent version if not specified
+	// Use the most recent version if not specified. Read directly from the
+	// resolved key so multi-version entries preserve their ordering semantics.
 	if version == "" {
+		versions := toolVersions.Tools[resolvedKey]
 		version = versions[len(versions)-1]
 	}
 
-	// Now that we know the tool is configured, use the installer to resolve the canonical name
-	// and get the binary path
-	installer := NewInstaller()
-	owner, repo, err := installer.ParseToolSpec(toolName)
+	// Derive owner/repo from the resolved key, not the user input, so a raw
+	// alias lookup finds the correct install path.
+	owner, repo, err := installer.ParseToolSpec(resolvedKey)
 	if err != nil {
 		return "", fmt.Errorf("failed to resolve tool '%s': %w", toolName, err)
 	}

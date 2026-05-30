@@ -36,10 +36,12 @@ import (
 	_ "github.com/cloudposse/atmos/pkg/component/ansible"
 	_ "github.com/cloudposse/atmos/pkg/component/mock"
 
+	"github.com/cloudposse/atmos/pkg/ci"
 	"github.com/cloudposse/atmos/pkg/data"
 	"github.com/cloudposse/atmos/pkg/filesystem"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/flags/compat"
+	"github.com/cloudposse/atmos/pkg/flags/preprocess"
 	iolib "github.com/cloudposse/atmos/pkg/io"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/pager"
@@ -58,13 +60,20 @@ import (
 	// Import built-in command packages for side-effect registration.
 	// The init() function in each package registers the command with the registry.
 	_ "github.com/cloudposse/atmos/cmd/about"
+	_ "github.com/cloudposse/atmos/cmd/ai"
+	aisetup "github.com/cloudposse/atmos/cmd/ai/setup"
+	_ "github.com/cloudposse/atmos/cmd/ai/skill"
 	_ "github.com/cloudposse/atmos/cmd/ansible"
+	_ "github.com/cloudposse/atmos/cmd/auth"
 	_ "github.com/cloudposse/atmos/cmd/aws"
+	_ "github.com/cloudposse/atmos/cmd/ci"
 	"github.com/cloudposse/atmos/cmd/devcontainer"
 	_ "github.com/cloudposse/atmos/cmd/env"
 	_ "github.com/cloudposse/atmos/cmd/helmfile"
 	"github.com/cloudposse/atmos/cmd/internal"
 	_ "github.com/cloudposse/atmos/cmd/list"
+	_ "github.com/cloudposse/atmos/cmd/lsp"
+	_ "github.com/cloudposse/atmos/cmd/mcp"
 	_ "github.com/cloudposse/atmos/cmd/profile"
 	_ "github.com/cloudposse/atmos/cmd/terraform"
 	"github.com/cloudposse/atmos/cmd/terraform/backend"
@@ -587,6 +596,40 @@ var RootCmd = &cobra.Command{
 	},
 }
 
+// debugModePromotion records the outcome of a CI-driven log-level promotion.
+type debugModePromotion struct {
+	// Promoted is true when the log level was actually overridden.
+	Promoted bool
+	// From is the prior atmosConfig.Logs.Level value (only set when Promoted).
+	From string
+	// Provider is the detected CI provider name (only set when Promoted).
+	Provider string
+}
+
+// maybePromoteLogLevelForDebugMode overrides atmosConfig.Logs.Level to
+// "Debug" when (a) atmos config loaded successfully, (b) ci.enabled is true
+// in atmos.yaml, and (c) the detected CI provider reports debug mode is
+// active for the current run. The override is intentional — the CI-side
+// debug toggles outrank --logs-level / ATMOS_LOGS_LEVEL because they are an
+// explicit, repo-/workflow-level "make everything noisy" signal.
+//
+// Knows nothing about specific CI providers: the debug-mode capability is
+// discovered through the provider-agnostic ci.DetectDebugMode helper.
+func maybePromoteLogLevelForDebugMode(atmosConfig *schema.AtmosConfiguration, configLoaded bool) debugModePromotion {
+	defer perf.Track(atmosConfig, "cmd.maybePromoteLogLevelForDebugMode")()
+
+	if !configLoaded || atmosConfig == nil || !atmosConfig.CI.Enabled {
+		return debugModePromotion{}
+	}
+	info := ci.DetectDebugMode()
+	if !info.Active {
+		return debugModePromotion{}
+	}
+	from := atmosConfig.Logs.Level
+	atmosConfig.Logs.Level = utils.LogLevelDebug
+	return debugModePromotion{Promoted: true, From: from, Provider: info.Provider}
+}
+
 // SetupLogger configures the global logger based on the provided Atmos configuration.
 //
 //nolint:revive,cyclop // Function complexity is acceptable for logger configuration.
@@ -881,8 +924,11 @@ func isCompletionCommand(cmd *cobra.Command) bool {
 func findExperimentalParent(cmd *cobra.Command) string {
 	// First pass: Look for registry-based experimental commands.
 	// These are top-level commands like devcontainer, toolchain.
+	// Only match commands that are direct children of the root command,
+	// so custom commands that happen to share a name (e.g., "atmos utils ai")
+	// are not mistakenly flagged as experimental.
 	for c := cmd; c != nil; c = c.Parent() {
-		if internal.IsCommandExperimental(c.Name()) {
+		if internal.IsCommandExperimental(c.Name()) && isTopLevelCommand(c) {
 			return c.Name()
 		}
 	}
@@ -896,6 +942,15 @@ func findExperimentalParent(cmd *cobra.Command) string {
 	}
 
 	return ""
+}
+
+// isTopLevelCommand returns true if cmd is a direct child of the root command.
+// This is used to distinguish built-in registered commands (e.g., "atmos ai")
+// from custom commands that share the same name (e.g., "atmos utils ai").
+func isTopLevelCommand(cmd *cobra.Command) bool {
+	parent := cmd.Parent()
+	// A top-level command's parent is root (whose own parent is nil).
+	return parent != nil && parent.Parent() == nil
 }
 
 // flagStyles holds the lipgloss styles for flag rendering.
@@ -1428,8 +1483,22 @@ func Execute() error {
 		errUtils.InitializeMarkdown(&atmosConfig)
 	}
 
+	// Auto-promote to Debug when the active CI provider has debug mode enabled
+	// and native CI is enabled in atmos.yaml. Overrides any --logs-level /
+	// ATMOS_LOGS_LEVEL the user set, because the CI-side debug toggles are a
+	// higher-priority signal set at the repo/workflow level.
+	debugPromote := maybePromoteLogLevelForDebugMode(&atmosConfig, initErr == nil)
+
 	// Set the log level for the charmbracelet/log package based on the atmosConfig.
 	SetupLogger(&atmosConfig)
+
+	if debugPromote.Promoted {
+		log.Info(
+			"CI provider debug mode detected — using Debug log level for this run",
+			"provider", debugPromote.Provider,
+			"from", debugPromote.From,
+		)
+	}
 
 	// Setup color profile for lipgloss/termenv based rendering.
 	setupColorProfile(&atmosConfig)
@@ -1439,7 +1508,7 @@ func Execute() error {
 	// Skip processing for version command to ensure it always works, even if aliases
 	// reference commands that don't exist in this version of Atmos.
 	if initErr == nil && !isVersionCommand() {
-		err = processCustomCommands(atmosConfig, atmosConfig.Commands, RootCmd, true)
+		err = processCustomCommands(atmosConfig, atmosConfig.Commands, RootCmd)
 		if err != nil {
 			return err
 		}
@@ -1453,15 +1522,28 @@ func Execute() error {
 	// Boa styling is already applied via RootCmd.SetHelpFunc() which is inherited by all subcommands.
 	// No need to recursively set UsageFunc as that would override Boa's handling.
 
-	// Preprocess args for commands with compatibility flags.
-	// This separates Atmos flags from pass-through flags BEFORE Cobra parses.
-	preprocessCompatibilityFlags()
+	// Preprocess args before Cobra parses.
+	// This orchestrates multiple preprocessing steps in the correct order.
+	preprocessArgs()
+
+	// Set up AI output capture if --ai flag is present (flag parsing in cmd/ai,
+	// orchestration in pkg/ai/analyze, skill loading in pkg/ai/skills).
+	aiCtx, aiErr := aisetup.InitAI(&atmosConfig)
+	if aiErr != nil {
+		return aiErr
+	}
+	defer aiCtx.Cleanup()
 
 	// Cobra for some reason handles root command in such a way that custom usage and help command don't work as per expectations.
 	RootCmd.SilenceErrors = true
 	cmd, err := internal.Execute(RootCmd)
 
 	telemetry.CaptureCmd(cmd, err)
+
+	// Run AI analysis on captured output unless this is an "atmos ai" subcommand.
+	if !aisetup.IsAISubcommand(cmd) && aiCtx.RunAnalysis(err) {
+		return nil
+	}
 
 	// Handle sentinel errors with errors.Is().
 	if err != nil {
@@ -1470,7 +1552,47 @@ func Execute() error {
 			showUsageAndExit(RootCmd, []string{command})
 		}
 	}
+
 	return err
+}
+
+// preprocessArgs runs all argument preprocessing before Cobra parses.
+// This orchestrates multiple preprocessing steps in the correct order:
+//  1. NoOptDefVal flags: Rewrites --flag value → --flag=value for native Atmos flags
+//  2. Compatibility flags: Separates Atmos flags from pass-through flags for external tools
+func preprocessArgs() {
+	osArgs := os.Args[1:]
+	if len(osArgs) == 0 {
+		return
+	}
+
+	// Step 1: Preprocess NoOptDefVal flags (native Atmos flags like --identity, --pager).
+	// This rewrites --identity value → --identity=value before Cobra parses.
+	processedArgs := preprocessNoOptDefValFlags(osArgs)
+
+	// Step 2: Preprocess compatibility flags (external tool syntax like -var).
+	// This separates Atmos flags from pass-through flags.
+	// Note: This may call RootCmd.SetArgs() if there are compat flags.
+	hasCompatFlags := preprocessCompatibilityFlags(processedArgs)
+
+	// If no compat flags were processed but NoOptDefVal changed the args,
+	// we need to set the processed args for Cobra to use.
+	if !hasCompatFlags && !slicesEqual(processedArgs, osArgs) {
+		RootCmd.SetArgs(processedArgs)
+	}
+}
+
+// slicesEqual compares two string slices for equality.
+func slicesEqual(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
 }
 
 // preprocessCompatibilityFlags separates Atmos flags from pass-through flags.
@@ -1483,16 +1605,13 @@ func Execute() error {
 //
 // The separated args are stored globally via compat.SetSeparated() and can be
 // retrieved in RunE via compat.GetSeparated().
-func preprocessCompatibilityFlags() {
-	osArgs := os.Args[1:]
-	if len(osArgs) == 0 {
-		return
-	}
-
+//
+// Returns true if compatibility flags were processed and SetArgs was called.
+func preprocessCompatibilityFlags(args []string) bool {
 	// Find target command without parsing flags.
-	targetCmd, _, _ := RootCmd.Find(osArgs)
+	targetCmd, _, _ := RootCmd.Find(args)
 	if targetCmd == nil {
-		return
+		return false
 	}
 
 	// Get the top-level command name (e.g., "terraform").
@@ -1502,42 +1621,54 @@ func preprocessCompatibilityFlags() {
 		cmdName = c.Name()
 	}
 	if cmdName == "" {
-		return
-	}
-
-	// Normalize flags with NoOptDefVal using the command's registered flag registry.
-	// This converts "--identity value" to "--identity=value" so pflag correctly
-	// captures the value instead of using NoOptDefVal and orphaning the value arg.
-	// Uses the same PreprocessNoOptDefValArgs that AtmosFlagParser.Parse() uses,
-	// driven by the flag registry rather than a hardcoded flag map.
-	argsChanged := false
-	if flagRegistry := internal.GetCommandFlagRegistry(cmdName); flagRegistry != nil {
-		normalized := flagRegistry.PreprocessNoOptDefValArgs(osArgs)
-		if len(normalized) != len(osArgs) {
-			osArgs = normalized
-			argsChanged = true
-		}
+		return false
 	}
 
 	// Get compatibility flags from the command registry.
 	compatFlags := internal.GetCompatFlagsForCommand(cmdName)
 	if len(compatFlags) == 0 {
-		// No compat flags, but still apply normalization if args changed.
-		if argsChanged {
-			RootCmd.SetArgs(osArgs)
-		}
-		return
+		return false
 	}
 
 	// Translate args: separate Atmos flags from pass-through flags.
 	translator := compat.NewCompatibilityFlagTranslator(compatFlags)
-	atmosArgs, separatedArgs := translator.Translate(osArgs)
+	atmosArgs, separatedArgs := translator.Translate(args)
 
 	// Give Cobra only the Atmos args.
 	RootCmd.SetArgs(atmosArgs)
 
 	// Store separated args globally via compat package.
 	compat.SetSeparated(separatedArgs)
+
+	return true
+}
+
+// preprocessNoOptDefValFlags rewrites space-separated NoOptDefVal flags to equals syntax.
+// This is necessary because Cobra's NoOptDefVal feature only works with equals syntax:
+//   - --identity=value works correctly
+//   - --identity value treats "value" as a positional argument (broken)
+//
+// This function rewrites: --identity value → --identity=value
+// So that Cobra properly assigns "value" to the identity flag.
+func preprocessNoOptDefValFlags(args []string) []string {
+	registry := flags.GlobalFlagsRegistry()
+	if registry == nil {
+		return args
+	}
+
+	// Convert flags.Flag to preprocess.FlagInfo for the preprocessor.
+	// The flags.Flag interface satisfies preprocess.FlagInfo.
+	allFlags := registry.All()
+	flagInfos := make([]preprocess.FlagInfo, len(allFlags))
+	for i, f := range allFlags {
+		flagInfos[i] = f
+	}
+
+	// Use the preprocess pipeline for native flag preprocessing.
+	pipeline := preprocess.NewPipeline(
+		preprocess.NewNoOptDefValPreprocessor(flagInfos),
+	)
+	return pipeline.Run(args)
 }
 
 // displayPerformanceHeatmap shows the performance heatmap visualization.
@@ -1635,7 +1766,7 @@ func init() {
 	}
 	// Configure viper for automatic environment variable binding.
 	// This must happen before setupColorProfileFromEnv() uses viper.GetBool("FORCE_COLOR").
-	viper.SetEnvPrefix("ATMOS")
+	viper.SetEnvPrefix(cfg.AtmosEnvVarNamespace)
 	viper.AutomaticEnv()
 
 	// Bind both ATMOS_FORCE_COLOR and CLICOLOR_FORCE to the same viper key (they are equivalent).
@@ -1649,6 +1780,12 @@ func init() {
 	// Bind mask flag to environment variable.
 	if err := viper.BindEnv("mask", "ATMOS_MASK"); err != nil {
 		log.Error("Failed to bind ATMOS_MASK environment variable", "error", err)
+	}
+	// Bind interactive flag to Viper so viper.GetBool("interactive") reads the
+	// flag value. Without this, --interactive=false is silently ignored by code
+	// that reads the global viper (e.g. pkg/auth's isInteractive guard).
+	if err := viper.BindPFlag("interactive", RootCmd.PersistentFlags().Lookup("interactive")); err != nil {
+		log.Error("Failed to bind interactive flag to Viper", "error", err)
 	}
 	// Bind verbose flag to environment variable.
 	if err := viper.BindEnv(verboseFlagName, "ATMOS_VERBOSE"); err != nil {

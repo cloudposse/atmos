@@ -1,0 +1,275 @@
+# Atmos MCP Integrations Example
+#
+# This configuration demonstrates how to connect Atmos to external MCP servers
+# from the AWS MCP ecosystem. Each server exposes domain-specific tools that
+# become available in `atmos ai chat`, `atmos ai ask`, and `atmos ai exec`.
+#
+# Prerequisites:
+#   - Python 3.10+ (required by all AWS MCP servers)
+#   - `uv` package manager is auto-installed by Atmos toolchain (see toolchain section below)
+#   - AWS credentials (for servers that need them):
+#       Option A: `aws configure` or `export AWS_PROFILE=...`
+#       Option B: Atmos Auth with `identity` on each server (see auth section below)
+#
+# Quick start:
+#   atmos mcp list          # See configured servers
+#   atmos mcp test aws-docs # Test connectivity (no credentials needed)
+#   atmos mcp tools aws-api # List available tools
+#   atmos ai ask "Search AWS docs for S3 lifecycle rules"
+
+base_path: "."
+
+# ---------------------------------------------------------------------------
+# Atmos Toolchain
+# ---------------------------------------------------------------------------
+# Map `uv` to the aqua registry so the toolchain can resolve and install it.
+# This ensures `uvx` is available before any MCP server starts.
+# Install with: atmos toolchain install astral-sh/uv@0.7.12
+toolchain:
+  aliases:
+    uv: astral-sh/uv
+
+# ---------------------------------------------------------------------------
+# MCP Servers
+# ---------------------------------------------------------------------------
+# Each server follows the standard MCP format (command, args, env) used by
+# Claude Code, Codex CLI, and Gemini CLI. Atmos adds extensions like
+# `description` and `identity` for enhanced functionality.
+#
+# YAML functions work in env values:
+#   !env VAR_NAME          - Read from OS environment (empty string if unset)
+#   !exec "command"        - Execute a shell command
+#   !repo-root             - Git repository root path
+# ---------------------------------------------------------------------------
+
+mcp:
+  servers:
+    # -----------------------------------------------------------------------
+    # AWS Documentation — search and fetch AWS docs
+    # -----------------------------------------------------------------------
+    # No credentials required — accesses public documentation endpoints.
+    # This is the easiest server to test: `atmos mcp test aws-docs`
+    aws-docs:
+      command: uvx
+      args:
+        - "awslabs.aws-documentation-mcp-server@latest"
+      env:
+        FASTMCP_LOG_LEVEL: "ERROR"
+
+      description: "AWS Documentation — search and fetch AWS docs"
+
+    # -----------------------------------------------------------------------
+    # AWS Knowledge — managed remote knowledge base
+    # -----------------------------------------------------------------------
+    # Fully managed remote MCP server providing up-to-date AWS documentation,
+    # code samples, agent SOPs, and regional availability information.
+    # No credentials or local installation needed — runs as a remote service.
+    aws-knowledge:
+      command: uvx
+      args:
+        - "fastmcp"
+        - "run"
+        - "https://knowledge-mcp.global.api.aws"
+      env:
+
+      description: "AWS Knowledge — managed AWS knowledge base (remote)"
+
+    # -----------------------------------------------------------------------
+    # AWS Pricing — real-time pricing and cost analysis
+    # -----------------------------------------------------------------------
+    # Accesses real-time AWS pricing information and provides cost analysis.
+    # All Pricing API calls are free of charge.
+    #
+    # IAM permissions required: pricing:*
+    aws-pricing:
+      command: uvx
+      args:
+        - "awslabs.aws-pricing-mcp-server@latest"
+      env:
+        AWS_REGION: "us-east-1"
+        FASTMCP_LOG_LEVEL: "ERROR"
+
+      description: "AWS Pricing — real-time pricing and cost analysis"
+      identity: "readonly"   # Atmos Auth identity (from the auth section)
+
+    # -----------------------------------------------------------------------
+    # AWS API — direct AWS CLI access via AI
+    # -----------------------------------------------------------------------
+    # Enables AI assistants to interact with AWS services through AWS CLI
+    # commands with built-in security controls.
+    #
+    # Safety controls (enabled by default):
+    #   READ_OPERATIONS_ONLY=true   — only allow read operations
+    #   REQUIRE_MUTATION_CONSENT=true — require approval before mutations
+    aws-api:
+      command: uvx
+      args:
+        - "awslabs.aws-api-mcp-server@latest"
+      env:
+        AWS_REGION: "us-east-1"
+        READ_OPERATIONS_ONLY: "true"
+        REQUIRE_MUTATION_CONSENT: "true"
+
+      description: "AWS API — direct AWS CLI access with security controls"
+      identity: "readonly"   # Atmos Auth identity (from the auth section)
+
+    # -----------------------------------------------------------------------
+    # AWS Security — Well-Architected security posture assessment
+    # -----------------------------------------------------------------------
+    # Monitors and assesses AWS environments against the Well-Architected
+    # Framework Security Pillar. Read-only — no remediation actions.
+    #
+    # IAM permissions required: GuardDuty, Inspector, SecurityHub, Access
+    # Analyzer read access, plus S3/EBS/RDS/ELB read for encryption/TLS checks.
+    aws-security:
+      command: uvx
+      args:
+        - "awslabs.well-architected-security-mcp-server@latest"
+      env:
+        AWS_REGION: "us-east-1"
+        FASTMCP_LOG_LEVEL: "ERROR"
+
+      description: "AWS Security — Well-Architected security posture assessment"
+      identity: "readonly"   # Atmos Auth identity (from the auth section)
+
+    # -----------------------------------------------------------------------
+    # AWS Billing & Cost Management — billing summaries and payment history
+    # -----------------------------------------------------------------------
+    # Provides access to billing summaries, payment history, and cost
+    # allocation tags.
+    #
+    # IAM permissions required: ce:*, billing:*
+    aws-billing:
+      command: uvx
+      args:
+        - "awslabs.billing-cost-management-mcp-server@latest"
+      env:
+        AWS_REGION: "us-east-1"
+        FASTMCP_LOG_LEVEL: "ERROR"
+
+      description: "AWS Billing — billing summaries and payment history"
+      identity: "readonly"   # Atmos Auth identity (from the auth section)
+
+    # -----------------------------------------------------------------------
+    # AWS IAM — role/policy analysis and access patterns
+    # -----------------------------------------------------------------------
+    # Analyzes IAM roles, policies, permission boundaries, and access
+    # patterns. Read-only — no changes to IAM resources.
+    #
+    # IAM permissions required: iam:Get*, iam:List*
+    aws-iam:
+      command: uvx
+      args:
+        - "awslabs.iam-mcp-server@latest"
+      env:
+        AWS_REGION: "us-east-1"
+        FASTMCP_LOG_LEVEL: "ERROR"
+
+      description: "AWS IAM — role/policy analysis and access patterns"
+      identity: "readonly"   # Atmos Auth identity (from the auth section)
+
+    # -----------------------------------------------------------------------
+    # AWS CloudTrail — event history and API call auditing
+    # -----------------------------------------------------------------------
+    # Queries CloudTrail event history for API call auditing, security
+    # investigations, and compliance reporting.
+    #
+    # IAM permissions required: cloudtrail:LookupEvents
+    aws-cloudtrail:
+      command: uvx
+      args:
+        - "awslabs.cloudtrail-mcp-server@latest"
+      env:
+        AWS_REGION: "us-east-1"
+        FASTMCP_LOG_LEVEL: "ERROR"
+
+      description: "AWS CloudTrail — event history and API call auditing"
+      identity: "readonly"   # Atmos Auth identity (from the auth section)
+
+# ---------------------------------------------------------------------------
+# Atmos Auth — automatic credential injection for MCP servers
+# ---------------------------------------------------------------------------
+# Instead of manually configuring AWS_PROFILE, AWS_ACCESS_KEY_ID, or running
+# `aws configure` for each MCP server, Atmos Auth handles authentication once
+# and injects credentials into every MCP server that needs them.
+#
+# How it works:
+#   1. Configure your auth provider (SSO, OIDC, IAM user, etc.)
+#   2. Define identities with the roles/accounts you need
+#   3. Set identity on each MCP server
+#   4. Atmos authenticates once and injects credentials automatically
+#
+# To set up:
+#   1. Update the provider and identity settings below to match your AWS org
+#   2. Run: atmos auth login
+#   3. All MCP servers with identity will get credentials automatically
+#
+auth:
+  providers:
+    aws-sso:
+      kind: aws/iam-identity-center
+      start_url: "https://your-org.awsapps.com/start"   # ← Change this
+      region: "us-east-1"
+  identities:
+    # Read-only identity for cost analysis and security assessment.
+    # Change the permission_set and account id to match your AWS organization.
+    readonly:
+      kind: aws/permission-set
+      provider: aws-sso
+      default: true
+      principal:
+        permission_set: "ReadOnlyAccess"                 # ← Change this
+        account:
+          id: "123456789012"                             # ← Change this
+
+# ---------------------------------------------------------------------------
+# AI Configuration (required for atmos ai chat / atmos ai ask / atmos ai exec)
+# ---------------------------------------------------------------------------
+# Docs: https://atmos.tools/cli/configuration/ai
+ai:
+  enabled: true
+  default_provider: "anthropic"
+  timeout_seconds: 120
+  max_tool_iterations: 25
+
+  providers:
+    anthropic:
+      model: "claude-sonnet-4-6"
+      api_key: !env "ANTHROPIC_API_KEY"
+      max_tokens: 4096
+      cache:
+        enabled: true
+
+    # Uncomment to add more providers:
+    # openai:
+    #   model: "gpt-5.4"
+    #   api_key: !env "OPENAI_API_KEY"
+    # ollama:
+    #   model: "llama4"
+    #   base_url: "http://localhost:11434/v1"
+
+  tools:
+    enabled: true
+    require_confirmation: true
+    # Tools that execute without confirmation:
+    allowed_tools:
+      - atmos_describe_component
+      - atmos_list_stacks
+      - atmos_validate_stacks
+      - read_stack_file
+
+  sessions:
+    enabled: true
+    path: ".atmos/sessions"
+
+# Minimal stacks config (required for atmos to load).
+stacks:
+  base_path: stacks
+  included_paths:
+    - "**/*.yaml"
+  excluded_paths: []
+  name_template: "{{ .vars.stage }}"
+
+components:
+  terraform:
+    base_path: components/terraform

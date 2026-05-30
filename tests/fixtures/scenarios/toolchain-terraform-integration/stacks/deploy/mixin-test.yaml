@@ -1,0 +1,18 @@
+vars:
+  stage: "mixin-test"
+
+# Scope 2: Component-type level dependencies (mixin pattern).
+# These should be propagated to all terraform components in this stack.
+terraform:
+  dependencies:
+    tools:
+      terraform: "1.6.0"
+
+components:
+  terraform:
+    # Component that inherits dependencies from the terraform section (Scope 2).
+    # Does NOT define its own dependencies (Scope 3).
+    test-component-mixin:
+      vars:
+        environment: "mixin-test"
+        test_var: "mixin-value"
