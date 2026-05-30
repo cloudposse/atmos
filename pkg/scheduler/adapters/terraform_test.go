@@ -399,6 +399,22 @@ func TestTerraformOutputConfiguration(t *testing.T) {
 		TerraformPlanLogOrder: "invalid",
 	}, 2)
 	require.Error(t, err)
+
+	output, err = newTerraformOutput(&schema.AtmosConfiguration{BasePathAbsolute: t.TempDir()}, &schema.ConfigAndStacksInfo{
+		SubCommand:        "plan",
+		TerraformPlanHide: []string{terraformPlanHideNoChanges},
+	}, 1)
+	require.NoError(t, err)
+	require.NotNil(t, output)
+	require.True(t, output.hideNoChanges)
+	require.Equal(t, terraformPlanLogOrderGrouped, output.logOrder)
+
+	_, err = newTerraformOutput(&schema.AtmosConfiguration{BasePathAbsolute: t.TempDir()}, &schema.ConfigAndStacksInfo{
+		SubCommand:        "plan",
+		TerraformPlanHide: []string{"refresh"},
+	}, 2)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "unsupported Terraform plan hide option")
 }
 
 func TestTerraformOutputNodeWritersWriteGroupedLogFiles(t *testing.T) {

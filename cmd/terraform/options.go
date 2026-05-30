@@ -1,6 +1,8 @@
 package terraform
 
 import (
+	"strings"
+
 	"github.com/spf13/viper"
 
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -38,6 +40,7 @@ type TerraformRunOptions struct {
 	// Graph-backed Terraform concurrency.
 	MaxConcurrency    int
 	PlanLogOrder      string
+	PlanHide          []string
 	PlanHideNoChanges bool
 	PlanSummaryFile   string
 
@@ -68,8 +71,18 @@ func ParseTerraformRunOptions(v *viper.Viper) *TerraformRunOptions {
 		Affected:                v.GetBool("affected"),
 		MaxConcurrency:          v.GetInt("max-concurrency"),
 		PlanLogOrder:            v.GetString("log-order"),
-		PlanHideNoChanges:       v.GetBool("hide-no-changes"),
+		PlanHide:                v.GetStringSlice("hide"),
+		PlanHideNoChanges:       terraformPlanHideContains(v.GetStringSlice("hide"), "no-changes"),
 		PlanSummaryFile:         v.GetString("execution-summary-file"),
 		UploadStatus:            v.GetBool("upload-status"),
 	}
+}
+
+func terraformPlanHideContains(values []string, target string) bool {
+	for _, value := range values {
+		if strings.EqualFold(strings.TrimSpace(value), target) {
+			return true
+		}
+	}
+	return false
 }

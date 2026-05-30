@@ -37,6 +37,7 @@ const (
 const (
 	terraformPlanLogOrderStream  = "stream"
 	terraformPlanLogOrderGrouped = "grouped"
+	terraformPlanHideNoChanges   = "no-changes"
 )
 
 const (
@@ -829,7 +830,10 @@ type terraformOutput struct {
 
 // newTerraformOutput configures concurrent Terraform output streaming or grouping.
 func newTerraformOutput(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, maxConcurrency int) (*terraformOutput, error) {
-	hideNoChanges := info != nil && info.SubCommand == "plan" && info.TerraformPlanHideNoChanges
+	hideNoChanges, err := terraformPlanHideNoChangesEnabled(info)
+	if err != nil {
+		return nil, err
+	}
 	if maxConcurrency <= 1 && !hideNoChanges {
 		return nil, nil
 	}
@@ -943,6 +947,24 @@ func closeTerraformLogFiles(files ...*os.File) func() error {
 		}
 		return errors.Join(errs...)
 	}
+}
+
+func terraformPlanHideNoChangesEnabled(info *schema.ConfigAndStacksInfo) (bool, error) {
+	if info == nil || info.SubCommand != "plan" {
+		return false, nil
+	}
+	hideNoChanges := info.TerraformPlanHideNoChanges
+	for _, option := range info.TerraformPlanHide {
+		switch normalized := strings.ToLower(strings.TrimSpace(option)); normalized {
+		case "":
+			continue
+		case terraformPlanHideNoChanges:
+			hideNoChanges = true
+		default:
+			return false, fmt.Errorf("%w: unsupported Terraform plan hide option %q", errUtils.ErrInvalidConfig, option)
+		}
+	}
+	return hideNoChanges, nil
 }
 
 // terraformLogDir returns the base directory for Terraform command logs.

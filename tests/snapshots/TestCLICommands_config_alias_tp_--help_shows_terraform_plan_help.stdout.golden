@@ -41,8 +41,7 @@ FLAGS
 
   -h, --help                               help for plan
 
-      --hide-no-changes                    Hide Terraform plan logs for components with no changes. Implies --log-
-                                           order=grouped
+      --hide strings                       Hide Terraform plan output sections. Supported values: no-changes
 
       --init-run-reconfigure string        Override init_run_reconfigure setting from atmos.yaml (true/false)
 

@@ -428,6 +428,7 @@ func applyOptionsToInfo(info *schema.ConfigAndStacksInfo, opts *TerraformRunOpti
 	info.Query = opts.Query
 	info.MaxConcurrency = opts.MaxConcurrency
 	info.TerraformPlanLogOrder = opts.PlanLogOrder
+	info.TerraformPlanHide = opts.PlanHide
 	info.TerraformPlanHideNoChanges = opts.PlanHideNoChanges
 	info.TerraformPlanSummaryFile = opts.PlanSummaryFile
 

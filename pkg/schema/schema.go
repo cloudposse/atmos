@@ -1091,6 +1091,7 @@ type ConfigAndStacksInfo struct {
 	Components                 []string
 	MaxConcurrency             int
 	TerraformPlanLogOrder      string
+	TerraformPlanHide          []string
 	TerraformPlanHideNoChanges bool
 	TerraformPlanSummaryFile   string
 	Identity                   string
