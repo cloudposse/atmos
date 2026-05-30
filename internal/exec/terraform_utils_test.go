@@ -318,6 +318,122 @@ func TestExecuteTerraformQueryRoutesThroughSchedulerAdapter(t *testing.T) {
 	require.True(t, scheduled)
 }
 
+func TestExecuteTerraformAffectedRoutesThroughSchedulerAdapter(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	authManager := authtypes.NewMockAuthManager(ctrl)
+	oldAuthManagerFactory := authManagerFactory
+	authManagerFactory = func(identity string, _ schema.AuthConfig, flagSelectValue string, _ *schema.AtmosConfiguration) (auth.AuthManager, error) {
+		require.Equal(t, "terraform", identity)
+		require.Equal(t, cfg.IdentityFlagSelectValue, flagSelectValue)
+		return authManager, nil
+	}
+	defer func() {
+		authManagerFactory = oldAuthManagerFactory
+	}()
+
+	stacks := map[string]any{
+		"dev": map[string]any{
+			cfg.ComponentsSectionName: map[string]any{
+				cfg.TerraformSectionName: map[string]any{
+					"app": map[string]any{},
+				},
+			},
+		},
+	}
+	var describedAffected bool
+	var describedStacks bool
+	var scheduled bool
+	repoPath := t.TempDir()
+
+	patches := gomonkey.NewPatches()
+	defer patches.Reset()
+	patches.ApplyFunc(cfg.InitCliConfig, func(info schema.ConfigAndStacksInfo, processStacks bool) (schema.AtmosConfiguration, error) {
+		require.Equal(t, "plan", info.SubCommand)
+		require.True(t, processStacks)
+		return schema.AtmosConfiguration{}, nil
+	})
+	patches.ApplyFunc(getAffectedComponents, func(args *DescribeAffectedCmdArgs) ([]schema.Affected, error) {
+		describedAffected = true
+		require.NotNil(t, args.CLIConfig)
+		require.Equal(t, repoPath, args.RepoPath)
+		require.Equal(t, "dev", args.Stack)
+		require.True(t, args.ProcessTemplates)
+		require.True(t, args.ProcessYamlFunctions)
+		require.Equal(t, []string{"skip-me"}, args.Skip)
+		require.Equal(t, authManager, args.AuthManager)
+		require.False(t, args.AuthDisabled)
+		return []schema.Affected{
+			{Component: "app", Stack: "dev", ComponentType: cfg.TerraformComponentType},
+			{Component: "helm", Stack: "dev", ComponentType: "helmfile"},
+			{Component: "deleted", Stack: "dev", ComponentType: cfg.TerraformComponentType, Deleted: true},
+		}, nil
+	})
+	patches.ApplyFunc(ExecuteDescribeStacksWithAuthDisabled, func(
+		atmosConfig *schema.AtmosConfiguration,
+		filterByStack string,
+		components []string,
+		componentTypes []string,
+		sections []string,
+		ignoreMissingFiles bool,
+		processTemplates bool,
+		processYamlFunctions bool,
+		includeEmptyStacks bool,
+		skip []string,
+		gotAuthManager auth.AuthManager,
+		authDisabled bool,
+	) (map[string]any, error) {
+		describedStacks = true
+		require.NotNil(t, atmosConfig)
+		require.Empty(t, filterByStack)
+		require.Nil(t, components)
+		require.Equal(t, []string{cfg.TerraformComponentType}, componentTypes)
+		require.Nil(t, sections)
+		require.False(t, ignoreMissingFiles)
+		require.True(t, processTemplates)
+		require.True(t, processYamlFunctions)
+		require.False(t, includeEmptyStacks)
+		require.Equal(t, []string{"skip-me"}, skip)
+		require.Equal(t, authManager, gotAuthManager)
+		require.False(t, authDisabled)
+		return stacks, nil
+	})
+	patches.ApplyFunc(scheduleradapters.ExecuteTerraform, func(ctx context.Context, opts scheduleradapters.TerraformOptions) error {
+		scheduled = true
+		require.NotNil(t, ctx)
+		require.NotNil(t, opts.AtmosConfig)
+		require.Equal(t, stacks, opts.Stacks)
+		require.NotNil(t, opts.Executor)
+		require.Equal(t, "plan", opts.Info.SubCommand)
+		require.Equal(t, authManager, opts.Info.AuthManager)
+		require.NotNil(t, opts.Selection)
+		require.Equal(t, []string{"app-dev"}, opts.Selection.NodeIDs)
+		require.True(t, opts.Selection.IncludeDependents)
+		require.False(t, opts.Selection.IncludeDependencies)
+		return nil
+	})
+
+	info := &schema.ConfigAndStacksInfo{
+		SubCommand:       "plan",
+		Affected:         true,
+		Identity:         "terraform",
+		ProcessTemplates: true,
+		ProcessFunctions: true,
+		Skip:             []string{"skip-me"},
+	}
+	args := &DescribeAffectedCmdArgs{
+		RepoPath:             repoPath,
+		Stack:                "dev",
+		IncludeDependents:    true,
+		ProcessTemplates:     true,
+		ProcessYamlFunctions: true,
+		Skip:                 []string{"skip-me"},
+	}
+	require.NoError(t, ExecuteTerraformAffectedWithContext(context.Background(), args, info))
+	require.True(t, describedAffected)
+	require.True(t, describedStacks)
+	require.True(t, scheduled)
+}
+
 func TestExecuteTerraformQueryPropagatesSetupErrors(t *testing.T) {
 	t.Run("config init", func(t *testing.T) {
 		expectedErr := errors.New("config failed")

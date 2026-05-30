@@ -340,7 +340,7 @@ func handlePathResolutionError(err error) error {
 }
 
 // executeAffectedCommand handles the --affected flag execution flow.
-func executeAffectedCommand(parentCmd *cobra.Command, args []string, info *schema.ConfigAndStacksInfo) error {
+func executeAffectedCommand(ctx context.Context, parentCmd *cobra.Command, args []string, info *schema.ConfigAndStacksInfo) error {
 	// Add these flags because `atmos describe affected` needs them, but `atmos terraform --affected` does not define them.
 	parentCmd.PersistentFlags().String("file", "", "")
 	parentCmd.PersistentFlags().String("format", "yaml", "")
@@ -359,7 +359,7 @@ func executeAffectedCommand(parentCmd *cobra.Command, args []string, info *schem
 	a.Upload = false
 	a.OutputFile = ""
 
-	return e.ExecuteTerraformAffected(&a, info)
+	return e.ExecuteTerraformAffectedWithContext(ctx, &a, info)
 }
 
 // isMultiComponentExecution checks if the command should be routed to multi-component execution.
@@ -427,6 +427,9 @@ func applyOptionsToInfo(info *schema.ConfigAndStacksInfo, opts *TerraformRunOpti
 	info.Affected = opts.Affected
 	info.Query = opts.Query
 	info.MaxConcurrency = opts.MaxConcurrency
+	info.TerraformFailureMode = opts.FailureMode
+	info.FailFast = opts.FailureMode == terraformFailureModeFailFast
+	info.KeepGoing = opts.FailureMode == terraformFailureModeKeepGoing
 	info.TerraformPlanLogOrder = opts.PlanLogOrder
 	info.TerraformPlanHide = opts.PlanHide
 	info.TerraformPlanHideNoChanges = opts.PlanHideNoChanges
@@ -513,8 +516,11 @@ func terraformRunWithOptions(parentCmd, actualCmd *cobra.Command, args []string,
 
 	// Route to appropriate execution path.
 	if info.Affected {
-		wasMultiComponentExecution = false
-		return executeAffectedCommand(parentCmd, args, &info)
+		wasMultiComponentExecution = true
+		wirePerComponentHook(&info, subCommand, actualCmd)
+		ctx, stop := terraformSignalContext(actualCmd)
+		defer stop()
+		return executeAffectedCommand(ctx, parentCmd, args, &info)
 	}
 	// --all routes to ExecuteTerraformAll for dependency-ordered execution.
 	// --components / --query / bare `-s stack` continue to route to ExecuteTerraformQuery.

@@ -112,6 +112,146 @@ func TestExecuteTerraformDestroyUsesReverseDependencyOrder(t *testing.T) {
 	require.Equal(t, []string{"app@dev", "database@dev", "vpc@dev"}, executed)
 }
 
+func TestExecuteTerraformAffectedSelectionUsesGraphBackedPath(t *testing.T) {
+	stacks := terraformAdapterTestStacks()
+	var executed []string
+
+	err := ExecuteTerraform(context.Background(), TerraformOptions{
+		AtmosConfig: &schema.AtmosConfiguration{},
+		Info: &schema.ConfigAndStacksInfo{
+			Affected:   true,
+			SubCommand: "plan",
+		},
+		Stacks: stacks,
+		Executor: func(execution TerraformExecution) (TerraformExecutionResult, error) {
+			info := execution.Info
+			executed = append(executed, info.Component+"@"+info.Stack)
+			return TerraformExecutionResult{}, nil
+		},
+		Selection: &TerraformSelection{
+			NodeIDs: []string{"database-dev"},
+		},
+	})
+
+	require.NoError(t, err)
+	require.Equal(t, []string{"database@dev"}, executed)
+}
+
+func TestExecuteTerraformAffectedSelectionIncludesDependentsWhenRequested(t *testing.T) {
+	stacks := terraformAdapterTestStacks()
+	var executed []string
+
+	err := ExecuteTerraform(context.Background(), TerraformOptions{
+		AtmosConfig: &schema.AtmosConfiguration{},
+		Info: &schema.ConfigAndStacksInfo{
+			Affected:   true,
+			SubCommand: "plan",
+		},
+		Stacks: stacks,
+		Executor: func(execution TerraformExecution) (TerraformExecutionResult, error) {
+			info := execution.Info
+			executed = append(executed, info.Component+"@"+info.Stack)
+			return TerraformExecutionResult{}, nil
+		},
+		Selection: &TerraformSelection{
+			NodeIDs:           []string{"database-dev"},
+			IncludeDependents: true,
+		},
+	})
+
+	require.NoError(t, err)
+	require.Equal(t, []string{"database@dev", "app@dev"}, executed)
+}
+
+func TestFilterTerraformGraphBySelectionDoesNotTreatDuplicatesAsAllNodes(t *testing.T) {
+	graph, err := BuildTerraformGraph(terraformAdapterTestStacks())
+	require.NoError(t, err)
+
+	filtered := filterTerraformGraphBySelection(graph, &TerraformSelection{
+		NodeIDs: []string{"database-dev", "database-dev", "missing-dev"},
+	})
+
+	require.Equal(t, 1, filtered.Size())
+	_, ok := filtered.GetNode("database-dev")
+	require.True(t, ok)
+}
+
+func TestFilterTerraformGraphBySelectionEdgeCases(t *testing.T) {
+	graph, err := BuildTerraformGraph(terraformAdapterTestStacks())
+	require.NoError(t, err)
+
+	t.Run("nil graph returns empty graph", func(t *testing.T) {
+		filtered := filterTerraformGraphBySelection(nil, &TerraformSelection{NodeIDs: []string{"database-dev"}})
+		require.NotNil(t, filtered)
+		require.Equal(t, 0, filtered.Size())
+	})
+
+	t.Run("nil selection returns empty graph", func(t *testing.T) {
+		filtered := filterTerraformGraphBySelection(graph, nil)
+		require.NotNil(t, filtered)
+		require.Equal(t, 0, filtered.Size())
+	})
+
+	t.Run("all valid nodes without closure returns original graph", func(t *testing.T) {
+		filtered := filterTerraformGraphBySelection(graph, &TerraformSelection{
+			NodeIDs: []string{"app-dev", "database-dev", "vpc-dev"},
+		})
+		require.Same(t, graph, filtered)
+	})
+
+	t.Run("dependencies closure includes prerequisites", func(t *testing.T) {
+		filtered := filterTerraformGraphBySelection(graph, &TerraformSelection{
+			NodeIDs:             []string{"app-dev"},
+			IncludeDependencies: true,
+		})
+		require.Equal(t, 3, filtered.Size())
+		for _, id := range []string{"app-dev", "database-dev", "vpc-dev"} {
+			_, ok := filtered.GetNode(id)
+			require.True(t, ok, "expected node %s", id)
+		}
+	})
+
+	t.Run("dependents closure includes downstream nodes", func(t *testing.T) {
+		filtered := filterTerraformGraphBySelection(graph, &TerraformSelection{
+			NodeIDs:           []string{"database-dev"},
+			IncludeDependents: true,
+		})
+		require.Equal(t, 2, filtered.Size())
+		for _, id := range []string{"database-dev", "app-dev"} {
+			_, ok := filtered.GetNode(id)
+			require.True(t, ok, "expected node %s", id)
+		}
+	})
+}
+
+func TestExecuteTerraformAffectedDestroyReversesSelectedDependents(t *testing.T) {
+	stacks := terraformAdapterTestStacks()
+	var executed []string
+
+	err := ExecuteTerraform(context.Background(), TerraformOptions{
+		AtmosConfig: &schema.AtmosConfiguration{},
+		Info: &schema.ConfigAndStacksInfo{
+			Affected:               true,
+			SubCommand:             "destroy",
+			MaxConcurrency:         2,
+			AdditionalArgsAndFlags: []string{"-auto-approve"},
+		},
+		Stacks: stacks,
+		Executor: func(execution TerraformExecution) (TerraformExecutionResult, error) {
+			info := execution.Info
+			executed = append(executed, info.Component+"@"+info.Stack)
+			return TerraformExecutionResult{}, nil
+		},
+		Selection: &TerraformSelection{
+			NodeIDs:           []string{"database-dev"},
+			IncludeDependents: true,
+		},
+	})
+
+	require.NoError(t, err)
+	require.Equal(t, []string{"app@dev", "database@dev"}, executed)
+}
+
 func TestBuildTerraformGraphPrefersDependenciesComponentsOverSettingsDependsOn(t *testing.T) {
 	stacks := map[string]any{
 		"dev": map[string]any{
@@ -637,6 +777,169 @@ func TestExecuteTerraformRejectsConcurrentApplyWithoutAutoApprove(t *testing.T) 
 	require.Contains(t, err.Error(), "requires -auto-approve")
 }
 
+func TestExecuteTerraformFailsFastByDefault(t *testing.T) {
+	var executed []string
+
+	err := ExecuteTerraform(context.Background(), TerraformOptions{
+		AtmosConfig: &schema.AtmosConfiguration{},
+		Info: &schema.ConfigAndStacksInfo{
+			All:            true,
+			SubCommand:     "plan",
+			MaxConcurrency: 1,
+		},
+		Stacks: terraformAdapterFailureModeStacks(),
+		Executor: func(execution TerraformExecution) (TerraformExecutionResult, error) {
+			executed = append(executed, execution.Info.Component+"@"+execution.Info.Stack)
+			return TerraformExecutionResult{}, errors.New("planned failure")
+		},
+	})
+
+	require.Error(t, err)
+	require.Equal(t, []string{"a-fail@dev"}, executed)
+	require.Contains(t, err.Error(), "planned failure")
+	require.Contains(t, err.Error(), "fail-fast after a-fail-dev failed")
+}
+
+func TestExecuteTerraformKeepGoingRunsIndependentNodes(t *testing.T) {
+	var executed []string
+
+	err := ExecuteTerraform(context.Background(), TerraformOptions{
+		AtmosConfig: &schema.AtmosConfiguration{},
+		Info: &schema.ConfigAndStacksInfo{
+			All:                  true,
+			SubCommand:           "plan",
+			MaxConcurrency:       1,
+			TerraformFailureMode: terraformFailureModeKeepGoing,
+		},
+		Stacks: terraformAdapterFailureModeStacks(),
+		Executor: func(execution TerraformExecution) (TerraformExecutionResult, error) {
+			executed = append(executed, execution.Info.Component+"@"+execution.Info.Stack)
+			if execution.Info.Component == "a-fail" {
+				return TerraformExecutionResult{}, errors.New("planned failure")
+			}
+			return TerraformExecutionResult{}, nil
+		},
+	})
+
+	require.Error(t, err)
+	require.Equal(t, []string{"a-fail@dev", "c-independent@dev"}, executed)
+	require.Contains(t, err.Error(), "planned failure")
+	require.Contains(t, err.Error(), "dependency a-fail-dev failed")
+}
+
+func TestExecuteTerraformRejectsConflictingFailureModes(t *testing.T) {
+	err := ExecuteTerraform(context.Background(), TerraformOptions{
+		AtmosConfig: &schema.AtmosConfiguration{},
+		Info: &schema.ConfigAndStacksInfo{
+			All:        true,
+			SubCommand: "plan",
+			FailFast:   true,
+			KeepGoing:  true,
+		},
+		Stacks: terraformAdapterFailureModeStacks(),
+		Executor: func(execution TerraformExecution) (TerraformExecutionResult, error) {
+			return TerraformExecutionResult{}, nil
+		},
+	})
+
+	require.Error(t, err)
+	require.Contains(t, err.Error(), `failure mode cannot be both "fail-fast" and "keep-going"`)
+}
+
+func TestExecuteTerraformRejectsUnsupportedFailureMode(t *testing.T) {
+	err := ExecuteTerraform(context.Background(), TerraformOptions{
+		AtmosConfig: &schema.AtmosConfiguration{},
+		Info: &schema.ConfigAndStacksInfo{
+			All:                  true,
+			SubCommand:           "plan",
+			TerraformFailureMode: "eventually",
+		},
+		Stacks: terraformAdapterFailureModeStacks(),
+		Executor: func(execution TerraformExecution) (TerraformExecutionResult, error) {
+			return TerraformExecutionResult{}, nil
+		},
+	})
+
+	require.Error(t, err)
+	require.Contains(t, err.Error(), `unsupported Terraform failure mode "eventually"`)
+}
+
+func TestTerraformFailureModeHelpers(t *testing.T) {
+	tests := []struct {
+		name          string
+		info          *schema.ConfigAndStacksInfo
+		wantMode      string
+		wantFailFast  bool
+		wantErrSubstr string
+	}{
+		{
+			name:         "nil defaults to fail fast",
+			info:         nil,
+			wantMode:     terraformFailureModeFailFast,
+			wantFailFast: true,
+		},
+		{
+			name: "explicit keep going",
+			info: &schema.ConfigAndStacksInfo{
+				TerraformFailureMode: terraformFailureModeKeepGoing,
+			},
+			wantMode:     terraformFailureModeKeepGoing,
+			wantFailFast: false,
+		},
+		{
+			name: "legacy keep going fallback",
+			info: &schema.ConfigAndStacksInfo{
+				KeepGoing: true,
+			},
+			wantMode:     terraformFailureModeKeepGoing,
+			wantFailFast: false,
+		},
+		{
+			name: "explicit mode wins over legacy field",
+			info: &schema.ConfigAndStacksInfo{
+				TerraformFailureMode: terraformFailureModeFailFast,
+				KeepGoing:            true,
+			},
+			wantMode:     terraformFailureModeFailFast,
+			wantFailFast: true,
+		},
+		{
+			name: "conflicting legacy fields are rejected",
+			info: &schema.ConfigAndStacksInfo{
+				FailFast:  true,
+				KeepGoing: true,
+			},
+			wantMode:      terraformFailureModeKeepGoing,
+			wantFailFast:  false,
+			wantErrSubstr: "failure mode cannot be both",
+		},
+		{
+			name: "unsupported explicit mode is rejected",
+			info: &schema.ConfigAndStacksInfo{
+				TerraformFailureMode: "eventually",
+			},
+			wantMode:      "eventually",
+			wantFailFast:  false,
+			wantErrSubstr: "unsupported Terraform failure mode",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			require.Equal(t, tt.wantMode, effectiveTerraformFailureMode(tt.info))
+			require.Equal(t, tt.wantFailFast, effectiveTerraformFailFast(tt.info))
+
+			err := validateTerraformFailureMode(tt.info)
+			if tt.wantErrSubstr == "" {
+				require.NoError(t, err)
+				return
+			}
+			require.Error(t, err)
+			require.Contains(t, err.Error(), tt.wantErrSubstr)
+		})
+	}
+}
+
 func TestExecuteTerraformAcceptsDoubleDashAutoApprove(t *testing.T) {
 	err := ExecuteTerraform(context.Background(), TerraformOptions{
 		AtmosConfig: &schema.AtmosConfiguration{},
@@ -807,6 +1110,7 @@ func TestExecuteTerraformDestroyFailureBlocksPrerequisites(t *testing.T) {
 			All:                    true,
 			SubCommand:             "destroy",
 			MaxConcurrency:         2,
+			TerraformFailureMode:   terraformFailureModeKeepGoing,
 			AdditionalArgsAndFlags: []string{"-auto-approve"},
 		},
 		Stacks: terraformAdapterTestStacksWithWorkdir(),
@@ -1192,6 +1496,24 @@ func terraformAdapterTestStacksWithWorkdir() map[string]any {
 		}
 	}
 	return stacks
+}
+
+func terraformAdapterFailureModeStacks() map[string]any {
+	return map[string]any{
+		"dev": map[string]any{
+			cfg.ComponentsSectionName: map[string]any{
+				cfg.TerraformSectionName: map[string]any{
+					"a-fail": terraformAdapterComponent("selected", nil, nil),
+					"b-blocked": terraformAdapterComponent(
+						"selected",
+						[]any{map[string]any{"component": "a-fail"}},
+						nil,
+					),
+					"c-independent": terraformAdapterComponent("selected", nil, nil),
+				},
+			},
+		},
+	}
 }
 
 func terraformAdapterComponent(group string, dependenciesComponents, settingsDependsOn []any) map[string]any {

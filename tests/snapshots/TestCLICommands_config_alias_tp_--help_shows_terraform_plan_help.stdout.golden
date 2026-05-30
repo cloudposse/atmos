@@ -39,6 +39,9 @@ FLAGS
       --execution-summary-file string      Write graph-backed Terraform plan execution summary JSON to the specified
                                            file
 
+      --failure-mode string                Terraform plan failure handling mode. Supported values: fail-fast, keep-going
+                                           (default fail-fast)
+
   -h, --help                               help for plan
 
       --hide strings                       Hide Terraform plan output sections. Supported values: no-changes

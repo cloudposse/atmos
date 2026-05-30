@@ -4,12 +4,15 @@ package tests
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"io/fs"
 	"net"
 	"net/http"
 	"net/url"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -72,6 +75,117 @@ func TestTerraformFlociApplyDestroyDAG(t *testing.T) {
 
 	t.Run("aliases sharing source path are sequential without workdir", func(t *testing.T) {
 		runFlociAliasSequentialProbe(t, endpoint, absWorkdir)
+	})
+}
+
+func TestTerraformFlociAffectedApplyDestroyDAG(t *testing.T) {
+	endpoint := requireFlociEndpoint(t)
+	RequireTerraform(t)
+	RequireExecutable(t, "git", "terraform affected Floci tests")
+
+	ensureFlociAtmosRunner(t)
+
+	workdir := filepath.Join("fixtures", "scenarios", "terraform-floci-dag")
+	absWorkdir, err := filepath.Abs(workdir)
+	require.NoError(t, err)
+
+	t.Run("direct affected apply destroy", func(t *testing.T) {
+		repos := setupFlociAffectedRepos(t, absWorkdir)
+		testID := uniqueFlociTestID(t)
+		env := flociCommandEnv(t, endpoint, repos.HeadDir, nil, testID)
+		client := newFlociSSMClient(t, endpoint)
+		summaryFile := filepath.Join(t.TempDir(), "affected-direct-summary.json")
+
+		defer bestEffortFlociDestroyInDir(t, repos.HeadDir, env)
+
+		_, stderr, err := runFlociAtmosInDir(
+			t, repos.HeadDir, env, 5*time.Minute,
+			"terraform", "plan", "--affected",
+			"--repo-path", repos.BaseDir,
+			"-s", "local",
+			"--max-concurrency", "4",
+			"--execution-summary-file", summaryFile,
+			"-i", "false",
+		)
+		requireTerraformPlanExit(t, err, stderr)
+		requireTerraformSummaryNodes(t, summaryFile, []string{"seed-local"})
+
+		_, stderr, err = runFlociAtmosInDir(
+			t, repos.HeadDir, env, 5*time.Minute,
+			"terraform", "apply", "--affected",
+			"--repo-path", repos.BaseDir,
+			"-s", "local",
+			"--max-concurrency", "4",
+			"-i", "false",
+			"-auto-approve",
+		)
+		require.NoError(t, err, "affected apply failed:\n%s", stderr)
+		requireFlociParametersExist(t, client, flociParameterNamesForKeys(testID, []string{"seed"}))
+		requireFlociParametersGone(t, client, flociParameterNamesForKeys(testID, []string{"bucket-marker", "queue-marker", "topic-marker", "final-marker"}))
+
+		_, stderr, err = runFlociAtmosInDir(
+			t, repos.HeadDir, env, 5*time.Minute,
+			"terraform", "destroy", "--affected",
+			"--repo-path", repos.BaseDir,
+			"-s", "local",
+			"--max-concurrency", "4",
+			"-i", "false",
+			"-auto-approve",
+		)
+		require.NoError(t, err, "affected destroy failed:\n%s", stderr)
+		requireFlociParametersGone(t, client, flociParameterNames(testID))
+	})
+
+	t.Run("include dependents expands affected graph", func(t *testing.T) {
+		repos := setupFlociAffectedRepos(t, absWorkdir)
+		testID := uniqueFlociTestID(t)
+		env := flociCommandEnv(t, endpoint, repos.HeadDir, nil, testID)
+		client := newFlociSSMClient(t, endpoint)
+		summaryFile := filepath.Join(t.TempDir(), "affected-dependents-summary.json")
+
+		defer bestEffortFlociDestroyInDir(t, repos.HeadDir, env)
+
+		_, stderr, err := runFlociAtmosInDir(
+			t, repos.HeadDir, env, 5*time.Minute,
+			"terraform", "plan", "--affected", "--include-dependents",
+			"--repo-path", repos.BaseDir,
+			"-s", "local",
+			"--max-concurrency", "4",
+			"--execution-summary-file", summaryFile,
+			"-i", "false",
+		)
+		requireTerraformPlanExit(t, err, stderr)
+		requireTerraformSummaryNodes(t, summaryFile, []string{
+			"seed-local",
+			"bucket-marker-local",
+			"queue-marker-local",
+			"topic-marker-local",
+			"final-marker-local",
+		})
+
+		_, stderr, err = runFlociAtmosInDir(
+			t, repos.HeadDir, env, 5*time.Minute,
+			"terraform", "apply", "--affected", "--include-dependents",
+			"--repo-path", repos.BaseDir,
+			"-s", "local",
+			"--max-concurrency", "4",
+			"-i", "false",
+			"-auto-approve",
+		)
+		require.NoError(t, err, "affected apply with dependents failed:\n%s", stderr)
+		requireFlociParametersExist(t, client, flociParameterNames(testID))
+
+		_, stderr, err = runFlociAtmosInDir(
+			t, repos.HeadDir, env, 5*time.Minute,
+			"terraform", "destroy", "--affected", "--include-dependents",
+			"--repo-path", repos.BaseDir,
+			"-s", "local",
+			"--max-concurrency", "4",
+			"-i", "false",
+			"-auto-approve",
+		)
+		require.NoError(t, err, "affected destroy with dependents failed:\n%s", stderr)
+		requireFlociParametersGone(t, client, flociParameterNames(testID))
 	})
 }
 
@@ -161,6 +275,93 @@ func setupFlociSandbox(t *testing.T, absWorkdir string) *testhelpers.SandboxEnvi
 	return sandbox
 }
 
+type flociAffectedRepos struct {
+	BaseDir string
+	HeadDir string
+}
+
+func setupFlociAffectedRepos(t *testing.T, absWorkdir string) flociAffectedRepos {
+	t.Helper()
+
+	rootDir := t.TempDir()
+	baseDir := filepath.Join(rootDir, "base")
+	headDir := filepath.Join(rootDir, "head")
+
+	require.NoError(t, copyFlociFixture(absWorkdir, baseDir))
+	require.NoError(t, copyFlociFixture(absWorkdir, headDir))
+	initFlociGitRepo(t, baseDir, "base")
+
+	seedPath := filepath.Join(headDir, "components", "terraform", "seed", "main.tf")
+	seedData, err := os.ReadFile(seedPath)
+	require.NoError(t, err)
+	updatedSeed := string(seedData) + "\n# affected test change\n"
+	require.NoError(t, os.WriteFile(seedPath, []byte(updatedSeed), 0o644))
+	initFlociGitRepo(t, headDir, "head")
+
+	return flociAffectedRepos{
+		BaseDir: baseDir,
+		HeadDir: headDir,
+	}
+}
+
+func copyFlociFixture(srcDir, dstDir string) error {
+	return filepath.WalkDir(srcDir, func(path string, entry fs.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		relPath, err := filepath.Rel(srcDir, path)
+		if err != nil {
+			return err
+		}
+		if relPath == "." {
+			return os.MkdirAll(dstDir, 0o755)
+		}
+		if entry.Name() == ".git" && entry.IsDir() {
+			return filepath.SkipDir
+		}
+
+		targetPath := filepath.Join(dstDir, relPath)
+		info, err := entry.Info()
+		if err != nil {
+			return err
+		}
+		if entry.IsDir() {
+			return os.MkdirAll(targetPath, info.Mode().Perm())
+		}
+		if !info.Mode().IsRegular() {
+			return nil
+		}
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		if err := os.MkdirAll(filepath.Dir(targetPath), 0o755); err != nil {
+			return err
+		}
+		return os.WriteFile(targetPath, data, info.Mode().Perm())
+	})
+}
+
+func initFlociGitRepo(t *testing.T, dir, message string) {
+	t.Helper()
+
+	runFlociGit(t, dir, "init")
+	runFlociGit(t, dir, "config", "user.email", "atmos-floci@example.com")
+	runFlociGit(t, dir, "config", "user.name", "Atmos Floci")
+	runFlociGit(t, dir, "remote", "add", "origin", "https://github.com/example/atmos-floci-fixture.git")
+	runFlociGit(t, dir, "add", ".")
+	runFlociGit(t, dir, "commit", "-m", message)
+}
+
+func runFlociGit(t *testing.T, dir string, args ...string) {
+	t.Helper()
+
+	cmdArgs := append([]string{"-C", dir}, args...)
+	cmd := exec.Command("git", cmdArgs...) //nolint:gosec // Test helper runs fixed git commands against temp fixtures.
+	output, err := cmd.CombinedOutput()
+	require.NoError(t, err, "git %s failed:\n%s", strings.Join(args, " "), string(output))
+}
+
 func requireFlociEndpoint(t *testing.T) string {
 	t.Helper()
 
@@ -232,8 +433,10 @@ func flociCommandEnv(t *testing.T, endpoint, absWorkdir string, sandbox *testhel
 		"ATMOS_FLOCI_ALIAS_LOCK_DIR": t.TempDir(),
 		"TF_IN_AUTOMATION":           "1",
 	}
-	for key, value := range sandbox.GetEnvironmentVariables() {
-		env[key] = value
+	if sandbox != nil {
+		for key, value := range sandbox.GetEnvironmentVariables() {
+			env[key] = value
+		}
 	}
 	return env
 }
@@ -241,10 +444,19 @@ func flociCommandEnv(t *testing.T, endpoint, absWorkdir string, sandbox *testhel
 func runFlociAtmos(t *testing.T, env map[string]string, timeout time.Duration, args ...string) (string, string, error) {
 	t.Helper()
 
+	return runFlociAtmosInDir(t, "", env, timeout, args...)
+}
+
+func runFlociAtmosInDir(t *testing.T, dir string, env map[string]string, timeout time.Duration, args ...string) (string, string, error) {
+	t.Helper()
+
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
 	cmd := atmosRunner.CommandContext(ctx, args...)
+	if dir != "" {
+		cmd.Dir = dir
+	}
 	cmd.Env = mergeCommandEnv(cmd.Env, env)
 
 	var stdout, stderr bytes.Buffer
@@ -295,8 +507,12 @@ func newFlociSSMClient(t *testing.T, endpoint string) *ssm.Client {
 }
 
 func flociParameterNames(testID string) []string {
-	names := make([]string, 0, len(flociMarkerKeys))
-	for _, key := range flociMarkerKeys {
+	return flociParameterNamesForKeys(testID, flociMarkerKeys)
+}
+
+func flociParameterNamesForKeys(testID string, keys []string) []string {
+	names := make([]string, 0, len(keys))
+	for _, key := range keys {
 		names = append(names, "/atmos/pr5/floci/"+testID+"/"+key)
 	}
 	return names
@@ -362,6 +578,21 @@ func bestEffortFlociDestroy(t *testing.T, env map[string]string) {
 	}
 }
 
+func bestEffortFlociDestroyInDir(t *testing.T, dir string, env map[string]string) {
+	t.Helper()
+
+	_, stderr, err := runFlociAtmosInDir(
+		t, dir, env, 3*time.Minute,
+		"terraform", "destroy", "--all", "-s", "local",
+		"--max-concurrency", "4",
+		"-i", "false",
+		"-auto-approve",
+	)
+	if err != nil {
+		t.Logf("best-effort Floci cleanup failed: %v\n%s", err, stderr)
+	}
+}
+
 func bestEffortFlociAliasDestroy(t *testing.T, env map[string]string) {
 	t.Helper()
 
@@ -377,6 +608,42 @@ func bestEffortFlociAliasDestroy(t *testing.T, env map[string]string) {
 	if err != nil {
 		t.Logf("best-effort Floci alias cleanup failed: %v\n%s", err, stderr)
 	}
+}
+
+func requireTerraformPlanExit(t *testing.T, err error, stderr string) {
+	t.Helper()
+
+	if err == nil {
+		return
+	}
+	var exitErr *exec.ExitError
+	if errors.As(err, &exitErr) && exitErr.ExitCode() == 2 {
+		return
+	}
+	require.NoError(t, err, "terraform plan failed:\n%s", stderr)
+}
+
+func requireTerraformSummaryNodes(t *testing.T, summaryFile string, expected []string) {
+	t.Helper()
+
+	data, err := os.ReadFile(summaryFile)
+	require.NoError(t, err)
+
+	var summary struct {
+		Results []struct {
+			NodeID    string `json:"node_id"`
+			Processed bool   `json:"processed"`
+		} `json:"results"`
+	}
+	require.NoError(t, json.Unmarshal(data, &summary))
+
+	actual := make([]string, 0, len(summary.Results))
+	for _, result := range summary.Results {
+		if result.Processed {
+			actual = append(actual, result.NodeID)
+		}
+	}
+	require.ElementsMatch(t, expected, actual)
 }
 
 func uniqueFlociTestID(t *testing.T) string {

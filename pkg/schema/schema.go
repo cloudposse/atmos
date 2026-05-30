@@ -1090,6 +1090,9 @@ type ConfigAndStacksInfo struct {
 	All                        bool
 	Components                 []string
 	MaxConcurrency             int
+	TerraformFailureMode       string
+	FailFast                   bool
+	KeepGoing                  bool
 	TerraformPlanLogOrder      string
 	TerraformPlanHide          []string
 	TerraformPlanHideNoChanges bool
