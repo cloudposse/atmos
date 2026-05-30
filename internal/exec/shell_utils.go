@@ -198,7 +198,8 @@ func ExecuteShellCommand(
 		// Extract exit code from error to preserve it.
 		// This is critical for commands like `terraform plan -detailed-exitcode`
 		// which use exit code 2 to indicate changes detected.
-		if exitError, ok := err.(*exec.ExitError); ok {
+		var exitError *exec.ExitError
+		if errors.As(err, &exitError) {
 			exitCode := exitError.ExitCode()
 			log.Debug("Command exited with non-zero code", "code", exitCode)
 
