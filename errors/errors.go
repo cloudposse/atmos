@@ -69,6 +69,8 @@ var (
 	ErrMissingAtmosConfig                    = errors.New("atmos configuration not found or invalid")
 	ErrNotInGitRepository                    = errors.New("not inside a git repository")
 	ErrCommandNil                            = errors.New("command cannot be nil")
+	ErrProcessStartFailed                    = errors.New("process start failed")
+	ErrProcessWaitFailed                     = errors.New("process wait failed")
 	ErrGitHubRateLimitExceeded               = errors.New("GitHub API rate limit exceeded")
 	ErrInvalidLimit                          = errors.New("limit must be between 1 and 100")
 	ErrInvalidOffset                         = errors.New("offset must be >= 0")
@@ -213,6 +215,15 @@ var (
 	ErrHeadLookup     = errors.New("HEAD not found")
 	ErrInvalidFormat  = errors.New("invalid format")
 	ErrOutputFormat   = errors.New("output format error")
+
+	// Scheduler errors.
+	ErrNilGraph      = errors.New("scheduler graph cannot be nil")
+	ErrNilDispatcher = errors.New("scheduler dispatcher cannot be nil")
+	ErrNodeFailed    = errors.New("scheduler node failed")
+	ErrNodeSkipped   = errors.New("scheduler node skipped")
+	ErrNodeNotFound  = errors.New("scheduler node not found")
+	ErrInvalidGraph  = errors.New("scheduler graph is invalid")
+	ErrInvalidWorker = errors.New("scheduler max concurrency must be greater than zero")
 
 	// Slice utility errors.
 	ErrNilInput         = errors.New("input must not be nil")
