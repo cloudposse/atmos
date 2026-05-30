@@ -2,7 +2,8 @@ package github
 
 import (
 	"context"
-	"fmt"
+	"errors"
+	"net/http"
 	"unicode/utf8"
 
 	"github.com/google/go-github/v59/github"
@@ -35,7 +36,35 @@ func (p *Provider) setCommitStatus(ctx context.Context, owner, repo, sha, status
 	}
 
 	status, _, err := p.client.GitHub().Repositories.CreateStatus(ctx, owner, repo, sha, repoStatus)
-	return status, err
+	if err != nil {
+		return nil, wrapGitHubAPIError(err)
+	}
+	return status, nil
+}
+
+// wrapGitHubAPIError wraps GitHub API errors with actionable hints for common
+// permission-related failures (404, 403).
+func wrapGitHubAPIError(err error) error {
+	var ghErr *github.ErrorResponse
+	if !errors.As(err, &ghErr) || ghErr.Response == nil {
+		return err
+	}
+
+	switch ghErr.Response.StatusCode {
+	case http.StatusNotFound:
+		return errUtils.Build(err).
+			WithHint("A 404 from the GitHub Status API usually means the token lacks permission to create commit statuses.").
+			WithHint("If GITHUB_TOKEN is a GitHub App token, the App must have 'Commit statuses: Read and write' permission. The workflow-level 'permissions: statuses: write' only applies to the default GITHUB_TOKEN.").
+			WithHint("Set ATMOS_CI_GITHUB_TOKEN to use a separate token for CI operations (e.g., the workflow's default token) while keeping GITHUB_TOKEN for Terraform.").
+			Err()
+	case http.StatusForbidden:
+		return errUtils.Build(err).
+			WithHint("The token does not have permission to create commit statuses on this repository.").
+			WithHint("Set ATMOS_CI_GITHUB_TOKEN to use a separate token with 'statuses: write' permission for CI operations.").
+			Err()
+	default:
+		return err
+	}
 }
 
 // createCheckRun sets a commit status on a commit.
@@ -44,7 +73,7 @@ func (p *Provider) createCheckRun(ctx context.Context, opts *provider.CreateChec
 
 	status, err := p.setCommitStatus(ctx, opts.Owner, opts.Repo, opts.SHA, opts.Name, state, opts.Title, opts.DetailsURL)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %w", errUtils.ErrCICheckRunCreateFailed, err)
+		return nil, errUtils.Build(errUtils.ErrCICheckRunCreateFailed).WithCause(err).Err()
 	}
 
 	return &provider.CheckRun{
@@ -62,7 +91,7 @@ func (p *Provider) updateCheckRun(ctx context.Context, opts *provider.UpdateChec
 
 	status, err := p.setCommitStatus(ctx, opts.Owner, opts.Repo, opts.SHA, opts.Name, state, opts.Title, opts.DetailsURL)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %w", errUtils.ErrCICheckRunUpdateFailed, err)
+		return nil, errUtils.Build(errUtils.ErrCICheckRunUpdateFailed).WithCause(err).Err()
 	}
 
 	return &provider.CheckRun{

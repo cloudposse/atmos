@@ -442,7 +442,7 @@ func TestTryResolveWithConfigPath_AllBranches(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result, err := tryResolveWithConfigPath(tt.path, tt.configPath)
+			result, err := tryResolveWithConfigPath(tt.path, tt.configPath, "")
 			require.NoError(t, err)
 			assert.Equal(t, tt.expected, result)
 		})
@@ -473,6 +473,222 @@ func TestResolveAbsolutePath_BarePathNoGitRoot(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, filepath.Join(tmpDir, "stacks"), result,
 		"bare path without git root and config dir should resolve via CWD")
+}
+
+// =============================================================================
+// Bug reproduction tests for: 2026-03-19-failed-to-find-import-no-git-root-fallback
+//
+// These tests reproduce the scenario where ATMOS_BASE_PATH is set to a bare
+// relative path (e.g., ".terraform/modules/monorepo") on a CI worker WITHOUT
+// a .git directory. The v1.210.1 fix added os.Stat + CWD fallback to
+// tryResolveWithGitRoot, but when git root is unavailable, the code falls
+// through to tryResolveWithConfigPath which lacks the same fallback.
+// =============================================================================
+
+// TestTryResolveWithConfigPath_CWDFallback_BarePathExistsAtCWD reproduces the
+// core bug: when cliConfigPath is set but the config-dir-joined path doesn't
+// exist, and the CWD-relative path DOES exist, tryResolveWithConfigPath should
+// fall back to the CWD path. Currently it unconditionally returns the
+// config-dir-joined path (which doesn't exist).
+//
+// This is the exact CI scenario:
+//   - CWD = /workspace/components/terraform/iam-delegated-roles/
+//   - cliConfigPath = /workspace (where atmos.yaml was found walking up)
+//   - path = ".terraform/modules/monorepo"
+//   - /workspace/.terraform/modules/monorepo → DOES NOT EXIST
+//   - /workspace/components/terraform/iam-delegated-roles/.terraform/modules/monorepo → EXISTS
+func TestTryResolveWithConfigPath_CWDFallback_BarePathExistsAtCWD(t *testing.T) {
+	tmpDir := t.TempDir()
+	tmpDir, err := filepath.EvalSymlinks(tmpDir)
+	require.NoError(t, err)
+
+	// Simulate CI layout:
+	// /workspace/
+	// ├── atmos.yaml (config dir = /workspace)
+	// └── components/terraform/iam-delegated-roles/
+	//     └── .terraform/modules/monorepo/  (target — exists only here)
+	workspaceDir := filepath.Join(tmpDir, "workspace")
+	componentDir := filepath.Join(workspaceDir, "components", "terraform", "iam-delegated-roles")
+	targetAtCWD := filepath.Join(componentDir, ".terraform", "modules", "monorepo")
+	require.NoError(t, os.MkdirAll(workspaceDir, 0o755))
+	require.NoError(t, os.MkdirAll(targetAtCWD, 0o755))
+
+	// Verify the path does NOT exist at config dir (workspace root).
+	targetAtConfigDir := filepath.Join(workspaceDir, ".terraform", "modules", "monorepo")
+	_, statErr := os.Stat(targetAtConfigDir)
+	require.True(t, os.IsNotExist(statErr), "path must NOT exist at config dir for this test")
+
+	// CWD is the component directory.
+	t.Chdir(componentDir)
+
+	// tryResolveWithConfigPath should fall back to CWD when config-dir path doesn't exist.
+	// Source is "runtime" because the path comes from ATMOS_BASE_PATH env var.
+	resolved, err := tryResolveWithConfigPath(".terraform/modules/monorepo", workspaceDir, "runtime")
+	require.NoError(t, err)
+
+	// BUG: currently returns /workspace/.terraform/modules/monorepo (doesn't exist).
+	// EXPECTED: /workspace/components/terraform/iam-delegated-roles/.terraform/modules/monorepo
+	assert.Equal(t, targetAtCWD, resolved,
+		"tryResolveWithConfigPath should fall back to CWD when config-dir path doesn't exist")
+}
+
+// TestTryResolveWithConfigPath_ConfigDirPathExists verifies that when the
+// config-dir-joined path DOES exist, it is returned (unchanged behavior).
+func TestTryResolveWithConfigPath_ConfigDirPathExists(t *testing.T) {
+	tmpDir := t.TempDir()
+	tmpDir, err := filepath.EvalSymlinks(tmpDir)
+	require.NoError(t, err)
+
+	configDir := filepath.Join(tmpDir, "config")
+	targetDir := filepath.Join(configDir, "stacks")
+	require.NoError(t, os.MkdirAll(targetDir, 0o755))
+
+	cwdDir := filepath.Join(tmpDir, "cwd")
+	require.NoError(t, os.MkdirAll(cwdDir, 0o755))
+	t.Chdir(cwdDir)
+
+	resolved, err := tryResolveWithConfigPath("stacks", configDir, "")
+	require.NoError(t, err)
+	assert.Equal(t, targetDir, resolved,
+		"should return config-dir-joined path when it exists")
+}
+
+// TestTryResolveWithConfigPath_NeitherExists verifies that when neither the
+// config-dir-joined path nor the CWD-relative path exist, the config-dir-joined
+// path is returned (for consistent error messages).
+func TestTryResolveWithConfigPath_NeitherExists(t *testing.T) {
+	tmpDir := t.TempDir()
+	tmpDir, err := filepath.EvalSymlinks(tmpDir)
+	require.NoError(t, err)
+
+	configDir := filepath.Join(tmpDir, "config")
+	require.NoError(t, os.MkdirAll(configDir, 0o755))
+
+	cwdDir := filepath.Join(tmpDir, "cwd")
+	require.NoError(t, os.MkdirAll(cwdDir, 0o755))
+	t.Chdir(cwdDir)
+
+	resolved, err := tryResolveWithConfigPath("nonexistent-path-xyz", configDir, "")
+	require.NoError(t, err)
+	assert.Equal(t, filepath.Join(configDir, "nonexistent-path-xyz"), resolved,
+		"should return config-dir-joined path when neither location exists")
+}
+
+// TestResolveAbsolutePath_BarePathNoGitRoot_CWDFallback is the end-to-end
+// reproduction of the CI bug. It disables git root discovery and verifies that
+// a bare path resolves to CWD when the config-dir path doesn't exist.
+//
+// This reproduces the exact user scenario:
+//   - ATMOS_GIT_ROOT_BASEPATH=false (no .git on CI)
+//   - ATMOS_BASE_PATH=.terraform/modules/monorepo (bare path, not dot-prefixed)
+//   - CWD = component directory (where .terraform/modules/monorepo exists)
+//   - atmos.yaml found at workspace root (cliConfigPath = workspace root)
+//   - Expected: resolves to CWD/.terraform/modules/monorepo
+//   - Actual (bug): resolves to workspace/.terraform/modules/monorepo (doesn't exist)
+func TestResolveAbsolutePath_BarePathNoGitRoot_CWDFallback(t *testing.T) {
+	tmpDir := t.TempDir()
+	tmpDir, err := filepath.EvalSymlinks(tmpDir)
+	require.NoError(t, err)
+
+	// Layout:
+	// /tmp/workspace/         (config dir — atmos.yaml location)
+	// /tmp/workspace/components/terraform/vpc/  (CWD)
+	// /tmp/workspace/components/terraform/vpc/.terraform/modules/monorepo/  (target)
+	workspaceDir := filepath.Join(tmpDir, "workspace")
+	componentDir := filepath.Join(workspaceDir, "components", "terraform", "vpc")
+	targetDir := filepath.Join(componentDir, ".terraform", "modules", "monorepo")
+	require.NoError(t, os.MkdirAll(workspaceDir, 0o755))
+	require.NoError(t, os.MkdirAll(targetDir, 0o755))
+
+	// Target must NOT exist at workspace root.
+	_, statErr := os.Stat(filepath.Join(workspaceDir, ".terraform", "modules", "monorepo"))
+	require.True(t, os.IsNotExist(statErr))
+
+	t.Chdir(componentDir)
+	t.Setenv("ATMOS_GIT_ROOT_BASEPATH", "false")
+
+	resolved, err := resolveAbsolutePath(".terraform/modules/monorepo", workspaceDir, "runtime")
+	require.NoError(t, err)
+
+	// BUG: returns workspace/.terraform/modules/monorepo (doesn't exist).
+	// EXPECTED: CWD/.terraform/modules/monorepo (exists).
+	assert.Equal(t, targetDir, resolved,
+		"bare path with no git root should fall back to CWD when config-dir path doesn't exist")
+}
+
+// TestInitCliConfig_BareBasePath_NoGitRoot_CWDFallback is the full integration
+// test reproducing the user's CI scenario end-to-end through InitCliConfig.
+//
+// Simulates:
+//   - A Spacelift CI worker with no .git directory
+//   - ATMOS_BASE_PATH=.terraform/modules/monorepo (env var, bare path)
+//   - CWD is a component directory inside the workspace
+//   - atmos.yaml exists at the workspace root AND inside the monorepo
+//   - The monorepo is cloned inside CWD/.terraform/modules/monorepo/
+func TestInitCliConfig_BareBasePath_NoGitRoot_CWDFallback(t *testing.T) {
+	tmpDir := t.TempDir()
+	tmpDir, err := filepath.EvalSymlinks(tmpDir)
+	require.NoError(t, err)
+
+	// Layout:
+	// /workspace/
+	// ├── atmos.yaml              (workspace-level config)
+	// └── components/terraform/iam-delegated-roles/
+	//     └── .terraform/modules/monorepo/
+	//         ├── atmos.yaml      (monorepo config)
+	//         ├── stacks/
+	//         │   └── deploy.yaml
+	//         └── components/terraform/
+	workspaceDir := filepath.Join(tmpDir, "workspace")
+	componentDir := filepath.Join(workspaceDir, "components", "terraform", "iam-delegated-roles")
+	monorepoDir := filepath.Join(componentDir, ".terraform", "modules", "monorepo")
+
+	// Create workspace-level atmos.yaml.
+	require.NoError(t, os.MkdirAll(workspaceDir, 0o755))
+	require.NoError(t, os.WriteFile(
+		filepath.Join(workspaceDir, "atmos.yaml"),
+		[]byte("base_path: ./\nstacks:\n  base_path: stacks\n  included_paths:\n    - \"**/*\"\n  excluded_paths: []\n  name_pattern: \"{stage}\"\n"),
+		0o644,
+	))
+	require.NoError(t, os.MkdirAll(filepath.Join(workspaceDir, "stacks"), 0o755))
+
+	// Create monorepo inside component dir.
+	require.NoError(t, os.MkdirAll(componentDir, 0o755))
+	require.NoError(t, os.MkdirAll(monorepoDir, 0o755))
+	require.NoError(t, os.WriteFile(
+		filepath.Join(monorepoDir, "atmos.yaml"),
+		[]byte("base_path: ./\nstacks:\n  base_path: stacks\n  included_paths:\n    - \"**/*\"\n  excluded_paths: []\n  name_pattern: \"{stage}\"\n"),
+		0o644,
+	))
+	require.NoError(t, os.MkdirAll(filepath.Join(monorepoDir, "stacks"), 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(monorepoDir, "components", "terraform"), 0o755))
+
+	// Create a minimal stack file so processing doesn't fail.
+	require.NoError(t, os.WriteFile(
+		filepath.Join(monorepoDir, "stacks", "deploy.yaml"),
+		[]byte("vars:\n  stage: dev\n"),
+		0o644,
+	))
+
+	// Set up the CI environment.
+	t.Chdir(componentDir)
+	t.Setenv("ATMOS_GIT_ROOT_BASEPATH", "false") // No .git on Spacelift
+	t.Setenv("ATMOS_BASE_PATH", ".terraform/modules/monorepo")
+
+	configAndStacksInfo := schema.ConfigAndStacksInfo{}
+
+	atmosConfig, err := InitCliConfig(configAndStacksInfo, false)
+	require.NoError(t, err)
+
+	// BUG: BasePathAbsolute resolves to workspace/.terraform/modules/monorepo (doesn't exist).
+	// EXPECTED: componentDir/.terraform/modules/monorepo (exists).
+	assert.Equal(t, monorepoDir, atmosConfig.BasePathAbsolute,
+		"ATMOS_BASE_PATH bare relative path should resolve to CWD on CI without .git")
+
+	// Stacks path should be inside the monorepo.
+	expectedStacksPath := filepath.Join(monorepoDir, "stacks")
+	assert.Equal(t, expectedStacksPath, atmosConfig.StacksBaseAbsolutePath,
+		"stacks base path should be inside the resolved monorepo")
 }
 
 // TestInitCliConfig_BasePathSource_SetForStructField verifies that BasePathSource

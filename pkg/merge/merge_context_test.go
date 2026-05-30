@@ -256,10 +256,10 @@ func TestMergeContext_RealWorldErrorScenario(t *testing.T) {
 	ctx = ctx.WithFile("stacks/mixins/region/us-east-1.yaml")
 	ctx = ctx.WithFile("stacks/dev/environment.yaml")
 
-	// Simulate the actual mergo error
-	mergoError := errors.New("cannot override two slices with different type ([]interface {}, string)")
+	// Simulate the type-mismatch error returned by deepMergeNative.
+	mergeError := errors.New("cannot override two slices with different type ([]interface {}, string)")
 
-	formattedErr := ctx.FormatError(mergoError)
+	formattedErr := ctx.FormatError(mergeError)
 	assert.NotNil(t, formattedErr)
 
 	errStr := formattedErr.Error()

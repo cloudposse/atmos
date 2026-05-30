@@ -11,7 +11,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/mitchellh/mapstructure"
+	"github.com/go-viper/mapstructure/v2"
 	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
 	"gopkg.in/yaml.v3"
@@ -21,6 +21,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/config/casemap"
 	"github.com/cloudposse/atmos/pkg/filesystem"
 	log "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/cloudposse/atmos/pkg/version"
@@ -81,6 +82,16 @@ func parseProfilesFromOsArgs(args []string) []string {
 	// Create temporary FlagSet just for parsing --profile.
 	fs := pflag.NewFlagSet("profile-parser", pflag.ContinueOnError)
 	fs.ParseErrorsAllowlist.UnknownFlags = true // Ignore other flags.
+
+	// Suppress pflag's automatic usage printout. When args contain `--help` or
+	// `-h`, pflag implicitly handles those flags and calls `fs.Usage()` (which
+	// writes "Usage of profile-parser: …" to stderr) before returning ErrHelp.
+	// Because LoadConfig may run multiple times during a single command (once
+	// in Execute() and again in PersistentPreRun), the user would otherwise
+	// see duplicate "Usage of profile-parser:" blocks in `atmos … --help`
+	// output. We only use this FlagSet to extract `--profile` values, so its
+	// usage block is never the right thing to display.
+	fs.Usage = func() {}
 
 	// Register profile flag using pflag's StringSlice (handles comma-separated values).
 	profiles := fs.StringSlice(profileKey, []string{}, "Configuration profiles")
@@ -178,16 +189,18 @@ func getProfilesFromFallbacks() ([]string, string) {
 // NOTE: This function reads from Viper's global singleton, which has flag values synced
 // by syncGlobalFlagsToViper() in cmd/root.go PersistentPreRun before InitCliConfig is called.
 //
-// IMPORTANT: For commands with DisableFlagParsing=true (terraform, helmfile, packer),
-// Cobra never parses flags, so we fall back to parseProfilesFromOsArgs() to manually
-// parse the --profile flag from os.Args. This ensures profiles work for all commands.
+// IMPORTANT: For commands with DisableFlagParsing=true (terraform, helmfile, packer,
+// auth exec), Cobra never parses flags, so we fall back to parseProfilesFromOsArgs()
+// to manually parse the --profile flag from os.Args. This ensures profiles work for
+// all commands — including the profile-fallback re-exec path, which inserts
+// `--profile <picked>` into argv but cannot rely on Cobra to parse it.
+//
+// We cannot use viper.IsSet(profileKey) to gate this logic: pflag's BindPFlag marks
+// the key as "set" even when no value was actually parsed (the default empty slice
+// counts as "set"). Instead, we check whether GetStringSlice returns a non-empty
+// value and always fall back to os.Args / env var parsing when it does not.
 func getProfilesFromFlagsOrEnv() ([]string, string) {
 	globalViper := viper.GetViper()
-
-	// Check if profile is set in Viper (from either flag or env var).
-	if !globalViper.IsSet(profileKey) {
-		return getProfilesFromFallbacks()
-	}
 
 	profiles := globalViper.GetStringSlice(profileKey)
 	_, envSet := os.LookupEnv("ATMOS_PROFILE")
@@ -198,15 +211,16 @@ func getProfilesFromFlagsOrEnv() ([]string, string) {
 		if len(parsed) > 0 {
 			return parsed, "env"
 		}
-		return nil, ""
 	}
 
-	// CLI flag path - already parsed correctly by pflag/Cobra.
-	if len(profiles) > 0 {
+	// CLI flag path - already parsed correctly by pflag/Cobra (when parsing happened).
+	if len(profiles) > 0 && !envSet {
 		return profiles, "flag"
 	}
 
-	return nil, ""
+	// Viper did not yield a usable value. Fall back to manual os.Args / env parsing,
+	// which handles the DisableFlagParsing case (terraform, helmfile, packer, auth exec).
+	return getProfilesFromFallbacks()
 }
 
 // LoadConfig loads the Atmos configuration from multiple sources in order of precedence:
@@ -281,18 +295,28 @@ func LoadConfig(configAndStacksInfo *schema.ConfigAndStacksInfo) (schema.AtmosCo
 	}
 	setEnv(v)
 
-	// Load profiles if specified via --profile flag or ATMOS_PROFILE env var.
+	// Load profiles if specified via --profile flag, ATMOS_PROFILE env var, or
+	// the `profiles.default` field in the base atmos.yaml.
 	// Profiles are loaded after base config but before final unmarshaling.
 	// This allows profiles to override base config settings.
-
-	// If profiles weren't passed via ConfigAndStacksInfo, check if they were
-	// specified via --profile flag or ATMOS_PROFILE env var.
+	//
+	// Resolution precedence (highest to lowest):
+	// 1. --profile flag
+	// 2. ATMOS_PROFILE env var
+	// 3. profiles.default from the base atmos.yaml (implicit default)
+	//
 	// Note: Global flags are bound to viper.GetViper() (global singleton), not the local viper instance.
+	// The `profiles.default` field is read from the LOCAL viper `v`, which has the base
+	// atmos.yaml loaded at this point. A default profile's own `profiles.default` is
+	// ignored to avoid cycles and surprise (see PRD: interactive-profile-suggestion).
 	if len(configAndStacksInfo.ProfilesFromArg) == 0 {
 		profiles, source := getProfilesFromFlagsOrEnv()
 		if len(profiles) > 0 {
 			configAndStacksInfo.ProfilesFromArg = profiles
 			log.Debug("Profiles loaded from CLI "+source, "profiles", profiles)
+		} else if defaultProfile := strings.TrimSpace(v.GetString("profiles.default")); defaultProfile != "" {
+			configAndStacksInfo.ProfilesFromArg = []string{defaultProfile}
+			log.Debug("Profile loaded from profiles.default in atmos.yaml", "profile", defaultProfile)
 		}
 	}
 
@@ -337,6 +361,13 @@ func LoadConfig(configAndStacksInfo *schema.ConfigAndStacksInfo) (schema.AtmosCo
 		atmosConfig.Templates.Settings.Env = envMap
 	}
 
+	// Fix auth.identities after Viper unmarshal.
+	// Viper treats dots in map keys as nested paths, which breaks identity names like "product.usa".
+	// We need to re-parse identities directly from YAML to preserve dots in keys.
+	if err := fixAuthIdentities(v, &atmosConfig); err != nil {
+		return atmosConfig, err
+	}
+
 	// Post-process to preserve case-sensitive map keys.
 	// Viper lowercases all YAML map keys, but we need to preserve original case
 	// for identity names and environment variables.
@@ -355,6 +386,23 @@ func LoadConfig(configAndStacksInfo *schema.ConfigAndStacksInfo) (schema.AtmosCo
 		// Don't fail config loading if this step fails, just log it.
 	}
 
+	// Sync profiles.base_path from the loaded atmos.yaml into the global viper.
+	// LoadConfig uses a local viper instance, so values read from atmos.yaml
+	// are not automatically reachable via viper.GetViper(). The auth profile
+	// fallback (pkg/auth/profile_fallback.go) reads profiles.base_path from
+	// the global viper when searching for candidate profiles; without this
+	// sync, custom profile locations configured in atmos.yaml are invisible
+	// to the fallback and no candidates are found.
+	//
+	// NOTE: viper.Set() writes to viper's override layer, which sits ABOVE
+	// any future BindPFlag/BindEnv bindings on the same key. There is no
+	// such binding today, but if a `--profiles-base-path` flag (or
+	// equivalent env binding) is ever added, this sync will silently shadow
+	// it. Either drop this sync at that point or guard with IsSet().
+	if atmosConfig.Profiles.BasePath != "" {
+		viper.GetViper().Set("profiles.base_path", atmosConfig.Profiles.BasePath)
+	}
+
 	return atmosConfig, nil
 }
 
@@ -365,6 +413,7 @@ func setEnv(v *viper.Viper) {
 	// Terraform plugin cache configuration.
 	bindEnv(v, "components.terraform.plugin_cache", "ATMOS_COMPONENTS_TERRAFORM_PLUGIN_CACHE")
 	bindEnv(v, "components.terraform.plugin_cache_dir", "ATMOS_COMPONENTS_TERRAFORM_PLUGIN_CACHE_DIR")
+	bindEnv(v, "components.terraform.auto_provision_workdir_for_outputs", "ATMOS_COMPONENTS_TERRAFORM_AUTO_PROVISION_WORKDIR_FOR_OUTPUTS")
 
 	bindEnv(v, "settings.github_token", "GITHUB_TOKEN")
 	bindEnv(v, "settings.inject_github_token", "ATMOS_INJECT_GITHUB_TOKEN")
@@ -397,7 +446,10 @@ func setEnv(v *viper.Viper) {
 	bindEnv(v, "settings.pro.github_run_id", "GITHUB_RUN_ID")
 	bindEnv(v, "settings.pro.atmos_pro_run_id", AtmosProRunIDEnvVarName)
 
-	// GitHub OIDC for Atmos Pro
+	// GitHub Actions CI context for Atmos Pro.
+	bindEnv(v, "settings.pro.github_head_ref", "GITHUB_HEAD_REF")
+
+	// GitHub OIDC for Atmos Pro.
 	bindEnv(v, "settings.pro.github_oidc.request_url", "ACTIONS_ID_TOKEN_REQUEST_URL")
 	bindEnv(v, "settings.pro.github_oidc.request_token", "ACTIONS_ID_TOKEN_REQUEST_TOKEN")
 
@@ -428,6 +480,7 @@ func setDefaultConfiguration(v *viper.Viper) {
 		fmt.Sprintf("Atmos/%s (Cloud Posse; +https://atmos.tools)", version.Version))
 	// Plugin cache enabled by default for zero-config performance.
 	v.SetDefault("components.terraform.plugin_cache", true)
+	v.SetDefault("components.terraform.auto_provision_workdir_for_outputs", true)
 
 	// Token injection defaults for all supported Git hosting providers.
 	v.SetDefault("settings.inject_github_token", true)
@@ -1356,11 +1409,17 @@ func populateLegacyIdentityCaseMap(caseMaps *casemap.CaseMaps, atmosConfig *sche
 // - Default viper hooks (StringToTimeDurationHookFunc, StringToSliceHookFunc)
 // - Custom TasksDecodeHook for flexible command steps parsing (strings or structs).
 func atmosDecodeHook() viper.DecoderConfigOption {
-	return viper.DecodeHook(mapstructure.ComposeDecodeHookFunc(
+	return viper.DecodeHook(getAtmosDecodeHookFunc())
+}
+
+// getAtmosDecodeHookFunc returns the decode hook function used for Atmos config unmarshaling.
+// Extracted as a separate function to allow reuse in both Viper and mapstructure contexts.
+func getAtmosDecodeHookFunc() mapstructure.DecodeHookFunc {
+	return mapstructure.ComposeDecodeHookFunc(
 		mapstructure.StringToTimeDurationHookFunc(),
 		mapstructure.StringToSliceHookFunc(SliceSeparator),
 		schema.TasksDecodeHook(),
-	))
+	)
 }
 
 // preserveCaseSensitiveMaps extracts original case for registered paths from raw YAML files.
@@ -1382,4 +1441,86 @@ func preserveCaseSensitiveMaps(v *viper.Viper, atmosConfig *schema.AtmosConfigur
 	populateLegacyIdentityCaseMap(mergedCaseMaps, atmosConfig)
 
 	log.Trace("Preserved case-sensitive map keys", "paths", caseSensitivePaths, "files_processed", len(filesToProcess))
+}
+
+// fixAuthIdentities re-parses auth.identities from raw YAML to fix Viper's dot-splitting behavior.
+// Viper treats dots in map keys as nested paths (e.g., "product.usa" becomes "product" -> "usa"),
+// which breaks identity names containing dots. This function reads the raw YAML files directly
+// to extract identities with their original key names preserved.
+func fixAuthIdentities(v *viper.Viper, atmosConfig *schema.AtmosConfiguration) error {
+	defer perf.Track(atmosConfig, "config.fixAuthIdentities")()
+
+	// Get list of all config files that were merged.
+	filesToProcess := collectConfigFilesForCasePreservation(v.ConfigFileUsed())
+	if len(filesToProcess) == 0 {
+		return nil
+	}
+
+	// Parse each file and extract auth.identities directly from YAML.
+	mergedIdentities := make(map[string]schema.Identity)
+
+	for _, configFile := range filesToProcess {
+		rawYAML, err := os.ReadFile(configFile)
+		if err != nil {
+			log.Trace("Skipping identity extraction for unreadable file", "file", configFile, "error", err)
+			continue
+		}
+
+		// Parse raw YAML to get auth.identities without Viper's dot-splitting.
+		var rawConfig map[string]interface{}
+		if err := yaml.Unmarshal(rawYAML, &rawConfig); err != nil {
+			log.Trace("Failed to parse YAML for identity extraction", "file", configFile, "error", err)
+			continue
+		}
+
+		// Navigate to auth.identities.
+		auth, ok := rawConfig["auth"].(map[string]interface{})
+		if !ok {
+			continue
+		}
+
+		identitiesRaw, ok := auth["identities"].(map[string]interface{})
+		if !ok {
+			continue
+		}
+
+		// Convert each identity to schema.Identity and merge with existing.
+		for identityName, identityDataRaw := range identitiesRaw {
+			identityData, ok := identityDataRaw.(map[string]interface{})
+			if !ok {
+				log.Trace("Skipping invalid identity", "name", identityName, "file", configFile)
+				continue
+			}
+
+			// Convert to schema.Identity using mapstructure.
+			var identity schema.Identity
+			decoder, err := mapstructure.NewDecoder(&mapstructure.DecoderConfig{
+				Result:           &identity,
+				WeaklyTypedInput: true,
+				DecodeHook:       getAtmosDecodeHookFunc(),
+			})
+			if err != nil {
+				log.Trace("Failed to create decoder for identity", "name", identityName, "error", err)
+				continue
+			}
+
+			if err := decoder.Decode(identityData); err != nil {
+				log.Trace("Failed to decode identity", "name", identityName, "error", err)
+				continue
+			}
+
+			// Lowercase the identity name for case-insensitive lookup (Viper lowercases all keys).
+			lowercaseName := strings.ToLower(identityName)
+			mergedIdentities[lowercaseName] = identity
+
+			log.Trace("Extracted identity with dots in name", "name", identityName, "lowercaseName", lowercaseName, "file", configFile)
+		}
+	}
+
+	// Replace the incorrectly parsed identities with the correctly parsed ones.
+	if len(mergedIdentities) > 0 {
+		atmosConfig.Auth.Identities = mergedIdentities
+	}
+
+	return nil
 }

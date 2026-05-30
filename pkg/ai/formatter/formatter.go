@@ -36,8 +36,11 @@ type ExecutionResult struct {
 
 // ToolCallResult contains the result of a tool execution.
 type ToolCallResult struct {
-	// Tool is the name of the tool that was called.
+	// Tool is the sanitized name of the tool that was called (used by the AI provider).
 	Tool string `json:"tool"`
+
+	// DisplayName is the human-readable tool name for UI display (e.g., "aws-knowledge → search_documentation").
+	DisplayName string `json:"display_name,omitempty"`
 
 	// Args contains the arguments passed to the tool.
 	Args map[string]interface{} `json:"args,omitempty"`

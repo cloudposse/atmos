@@ -1340,7 +1340,7 @@ func TestTryResolveWithGitRoot(t *testing.T) {
 	t.Run("returns git root when path is empty and git available", func(t *testing.T) {
 		t.Setenv("ATMOS_GIT_ROOT_BASEPATH", "")
 
-		result, err := tryResolveWithGitRoot("", "")
+		result, err := tryResolveWithGitRoot("", "", "")
 		require.NoError(t, err)
 		// We're in a git repo, so should get the git root.
 		assert.NotEmpty(t, result)
@@ -1352,7 +1352,7 @@ func TestTryResolveWithGitRoot(t *testing.T) {
 
 		// Use t.TempDir() for cross-platform compatibility.
 		configPath := t.TempDir()
-		result, err := tryResolveWithGitRoot("", configPath)
+		result, err := tryResolveWithGitRoot("", configPath, "")
 		require.NoError(t, err)
 		assert.Equal(t, configPath, result)
 	})
@@ -1360,7 +1360,7 @@ func TestTryResolveWithGitRoot(t *testing.T) {
 	t.Run("joins simple relative path with git root", func(t *testing.T) {
 		t.Setenv("ATMOS_GIT_ROOT_BASEPATH", "")
 
-		result, err := tryResolveWithGitRoot("stacks", "")
+		result, err := tryResolveWithGitRoot("stacks", "", "")
 		require.NoError(t, err)
 		assert.Contains(t, result, "stacks")
 	})
@@ -1370,7 +1370,7 @@ func TestTryResolveWithConfigPath(t *testing.T) {
 	t.Run("returns config path when path is empty", func(t *testing.T) {
 		// Use t.TempDir() for cross-platform compatibility.
 		configPath := t.TempDir()
-		result, err := tryResolveWithConfigPath("", configPath)
+		result, err := tryResolveWithConfigPath("", configPath, "")
 		require.NoError(t, err)
 		assert.Equal(t, configPath, result)
 	})
@@ -1378,14 +1378,14 @@ func TestTryResolveWithConfigPath(t *testing.T) {
 	t.Run("joins path with config path", func(t *testing.T) {
 		// Use t.TempDir() for cross-platform compatibility.
 		configPath := t.TempDir()
-		result, err := tryResolveWithConfigPath("subdir", configPath)
+		result, err := tryResolveWithConfigPath("subdir", configPath, "")
 		require.NoError(t, err)
 		expected := filepath.Join(configPath, "subdir")
 		assert.Equal(t, expected, result)
 	})
 
 	t.Run("resolves relative to CWD when no config path", func(t *testing.T) {
-		result, err := tryResolveWithConfigPath("subdir", "")
+		result, err := tryResolveWithConfigPath("subdir", "", "")
 		require.NoError(t, err)
 
 		cwd, _ := os.Getwd()
@@ -1394,7 +1394,7 @@ func TestTryResolveWithConfigPath(t *testing.T) {
 	})
 
 	t.Run("handles empty path and empty config path", func(t *testing.T) {
-		result, err := tryResolveWithConfigPath("", "")
+		result, err := tryResolveWithConfigPath("", "", "")
 		require.NoError(t, err)
 
 		cwd, _ := os.Getwd()

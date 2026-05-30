@@ -1,6 +1,8 @@
 package exec
 
 import (
+	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -8,7 +10,10 @@ import (
 	"strings"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/generator"
+	"github.com/cloudposse/atmos/pkg/generator/required_providers"
 	log "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	tfoutput "github.com/cloudposse/atmos/pkg/terraform/output"
 	"github.com/cloudposse/atmos/pkg/ui"
@@ -95,6 +100,50 @@ func cleanTerraformWorkspace(atmosConfig schema.AtmosConfiguration, componentPat
 	}
 }
 
+// isTerraformCurrentWorkspace reports whether the given workspace name matches the workspace
+// recorded in the .terraform/environment file inside componentPath.
+// This is used to detect the edge case where the environment file already names the target
+// workspace but the corresponding state directory was deleted (e.g. by a previous test or a
+// partial cleanup on Windows).  In that scenario `terraform workspace new <name>` returns exit
+// code 1 even though we are already in the right workspace, so we should not treat the failure
+// as a fatal error.
+//
+// TF_DATA_DIR resolution: the envList parameter carries the subprocess env vars (typically
+// info.ComponentEnvList).  If TF_DATA_DIR is set there, it takes precedence over the parent
+// process env, ensuring this helper reads the same data directory that the terraform subprocess
+// would use.  A relative TF_DATA_DIR is joined to componentPath, matching Terraform's own
+// resolution relative to the process working directory.
+func isTerraformCurrentWorkspace(componentPath, workspace string, envList []string) bool {
+	tfDataDir := envVarFromList(envList, "TF_DATA_DIR")
+	if tfDataDir == "" {
+		//nolint:forbidigo // TF_DATA_DIR is a Terraform convention, not an Atmos config var.
+		tfDataDir = os.Getenv("TF_DATA_DIR")
+	}
+	if tfDataDir == "" {
+		tfDataDir = ".terraform"
+	}
+	if !filepath.IsAbs(tfDataDir) {
+		tfDataDir = filepath.Join(componentPath, tfDataDir)
+	}
+	envFile := filepath.Join(filepath.Clean(tfDataDir), "environment")
+	data, err := os.ReadFile(envFile) //nolint:gosec // Path is constructed from componentPath + TF_DATA_DIR, not user input.
+	if err != nil {
+		// Only treat a missing file as "default workspace active".
+		// Other errors (permission denied, I/O error) are not equivalent
+		// to the workspace being "default" and must return false.
+		if errors.Is(err, os.ErrNotExist) && workspace == "default" {
+			return true
+		}
+		return false
+	}
+	// An empty file also indicates the default workspace.
+	recorded := strings.TrimSpace(string(data))
+	if recorded == "" {
+		return workspace == "default"
+	}
+	return recorded == workspace
+}
+
 func generateBackendConfig(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, workingDir string) error {
 	// Auto-generate backend file
 	if atmosConfig.Components.Terraform.AutoGenerateBackendFile {
@@ -119,7 +168,7 @@ func generateBackendConfig(atmosConfig *schema.AtmosConfiguration, info *schema.
 }
 
 func generateProviderOverrides(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, workingDir string) error {
-	// Generate `providers_override.tf.json` file if the `providers` section is configured
+	// Generate `providers_override.tf.json` file if the `providers` section is configured.
 	if len(info.ComponentProvidersSection) > 0 {
 		providerOverrideFileName := filepath.Join(workingDir, "providers_override.tf.json")
 
@@ -132,6 +181,31 @@ func generateProviderOverrides(atmosConfig *schema.AtmosConfiguration, info *sch
 		}
 	}
 	return nil
+}
+
+// generateRequiredProviders generates the terraform_override.tf.json file with required_version
+// and required_providers blocks from stack configuration (DEV-3124).
+func generateRequiredProviders(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, workingDir string) error {
+	defer perf.Track(atmosConfig, "exec.generateRequiredProviders")()
+
+	// Skip if no required_version or required_providers configured.
+	if info.RequiredVersion == "" && len(info.RequiredProviders) == 0 {
+		return nil
+	}
+
+	requiredProvidersFileName := filepath.Join(workingDir, required_providers.DefaultFilenameConst)
+
+	log.Debug("Writing the required_providers to file.", "file", requiredProvidersFileName)
+
+	if info.DryRun {
+		return nil
+	}
+
+	// Create generator context.
+	genCtx := generator.NewGeneratorContext(atmosConfig, info, workingDir)
+
+	// Generate and write using the generator package.
+	return generator.Generate(context.Background(), required_providers.Name, genCtx, generator.NewFileWriter())
 }
 
 // needProcessTemplatesAndYamlFunctions checks if a Terraform command requires the `Go` templates and Atmos YAML functions to be processed.
@@ -279,6 +353,21 @@ func processTerraformComponent(
 	info.Stack = stackName
 	info.StackFromArg = stackName
 
+	// When a per-component hook is registered, capture this component's output
+	// and invoke the hook immediately after execution so each component receives
+	// its own CI summary entry rather than sharing the final global call.
+	if info.PerComponentHook != nil {
+		var stdoutBuf, stderrBuf bytes.Buffer
+		execErr := executeFn(*info, WithStdoutCapture(&stdoutBuf), WithStderrCapture(&stderrBuf))
+		combined := stdoutBuf.String()
+		if s := stderrBuf.String(); s != "" {
+			combined += "\n" + s
+		}
+		compInfo := *info // snapshot with this component's Component/Stack values set.
+		info.PerComponentHook(&compInfo, combined, execErr)
+		return true, execErr
+	}
+
 	if err := executeFn(*info); err != nil {
 		return true, err
 	}
@@ -300,6 +389,15 @@ func shouldProcessDependent(dep *schema.Dependent, affectedList []schema.Affecte
 		return false
 	}
 	return includeDependents || isComponentInStackAffected(affectedList, dep.StackSlug)
+}
+
+// isNonTerraformDependent returns true when dep is a dependent that
+// `atmos terraform` must skip during recursion: a helmfile or packer
+// component, or any other non-terraform type. Dependents with an empty
+// ComponentType are treated as terraform for backward compatibility. See
+// issue #2361.
+func isNonTerraformDependent(dep *schema.Dependent) bool {
+	return dep.ComponentType != "" && dep.ComponentType != cfg.TerraformComponentType
 }
 
 // executeTerraformAffectedComponentInDepOrder recursively processes the affected components in the dependency order.
@@ -331,6 +429,12 @@ func executeTerraformAffectedComponentInDepOrder(
 
 	for i := 0; i < len(params.Dependents); i++ {
 		dep := &params.Dependents[i]
+		// Defense-in-depth: when --include-dependents is set, the dependency graph
+		// may include helmfile/packer dependents. `atmos terraform` must skip those
+		// — they belong to their own subcommands. See issue #2361.
+		if isNonTerraformDependent(dep) {
+			continue
+		}
 		if !shouldProcessDependent(dep, affectedList, args.IncludeDependents) {
 			continue
 		}

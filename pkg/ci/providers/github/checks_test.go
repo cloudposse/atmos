@@ -6,9 +6,11 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strconv"
 	"strings"
 	"testing"
 
+	"github.com/cockroachdb/errors"
 	"github.com/google/go-github/v59/github"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -317,4 +319,64 @@ func TestProvider_UpdateCheckRun(t *testing.T) {
 
 		assert.Equal(t, "failure", capturedRequest["state"])
 	})
+}
+
+// newErrorServer creates a test server that returns the given HTTP status code
+// for all status API requests. Returns the server and a Provider connected to it.
+func newErrorServer(t *testing.T, statusCode int, message string) *Provider {
+	t.Helper()
+	mux := http.NewServeMux()
+	mux.HandleFunc("/repos/owner/repo/statuses/abc123", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(statusCode)
+		_ = json.NewEncoder(w).Encode(map[string]any{"message": message})
+	})
+
+	server := httptest.NewServer(mux)
+	t.Cleanup(server.Close)
+
+	serverURL, err := url.Parse(server.URL + "/")
+	require.NoError(t, err)
+	ghClient := github.NewClient(nil)
+	ghClient.BaseURL = serverURL
+
+	return NewProviderWithClient(&Client{client: ghClient})
+}
+
+func TestUpdateCheckRun_ErrorHints(t *testing.T) {
+	tests := []struct {
+		name       string
+		statusCode int
+		message    string
+		expectHint bool
+	}{
+		{"404 includes permission hint", http.StatusNotFound, "Not Found", true},
+		{"403 includes permission hint", http.StatusForbidden, "Forbidden", true},
+		{"500 has no permission hint", http.StatusInternalServerError, "Internal Server Error", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := newErrorServer(t, tt.statusCode, tt.message)
+
+			_, err := p.UpdateCheckRun(context.Background(), &provider.UpdateCheckRunOptions{
+				Owner:  "owner",
+				Repo:   "repo",
+				SHA:    "abc123",
+				Name:   "atmos/plan/dev/vpc",
+				Status: provider.CheckRunStateSuccess,
+				Title:  "Done",
+			})
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), strconv.Itoa(tt.statusCode))
+
+			hints := errors.GetAllHints(err)
+			allHints := strings.Join(hints, " ")
+			if tt.expectHint {
+				assert.Contains(t, allHints, "ATMOS_CI_GITHUB_TOKEN")
+			} else {
+				assert.NotContains(t, allHints, "ATMOS_CI_GITHUB_TOKEN")
+			}
+		})
+	}
 }

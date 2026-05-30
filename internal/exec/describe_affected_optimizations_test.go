@@ -539,6 +539,23 @@ module "remote_module" {
 		require.NoError(t, err)
 		assert.Empty(t, patterns)
 	})
+
+	t.Run("invalid HCL includes component name and location in error", func(t *testing.T) {
+		badPath := filepath.Join(tempDir, "components", "terraform", "broken")
+		err := os.MkdirAll(badPath, 0o755)
+		require.NoError(t, err)
+
+		invalidHCL := `variable "name" { default = var.other }`
+		err = os.WriteFile(filepath.Join(badPath, "main.tf"), []byte(invalidHCL), 0o644)
+		require.NoError(t, err)
+
+		freshCache := newComponentPathPatternCache()
+		_, err = freshCache.getTerraformModulePatterns("broken", atmosConfig)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, errUtils.ErrFailedToLoadTerraformComponent)
+		assert.Contains(t, err.Error(), "'broken'", "error should include the component name")
+		assert.Contains(t, err.Error(), "main.tf:", "error should include the file name")
+	})
 }
 
 func TestComponentPathPatternCache_ModulePatternsThreadSafety(t *testing.T) {
@@ -2221,6 +2238,25 @@ module "security" {
 		changed, err := areTerraformComponentModulesChanged("multi", atmosConfig, changedFiles)
 		require.NoError(t, err)
 		assert.True(t, changed)
+	})
+
+	t.Run("invalid HCL includes component name and location in error", func(t *testing.T) {
+		componentPath := filepath.Join(tempDir, "components", "terraform", "bad-hcl")
+		err := os.MkdirAll(componentPath, 0o755)
+		require.NoError(t, err)
+
+		// Write syntactically invalid HCL.
+		invalidHCL := `variable "name" { default = var.other }`
+		err = os.WriteFile(filepath.Join(componentPath, "main.tf"), []byte(invalidHCL), 0o644)
+		require.NoError(t, err)
+
+		changedFiles := []string{filepath.Join(componentPath, "main.tf")}
+
+		_, err = areTerraformComponentModulesChanged("bad-hcl", atmosConfig, changedFiles)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, errUtils.ErrFailedToLoadTerraformComponent)
+		assert.Contains(t, err.Error(), "'bad-hcl'", "error should include the component name")
+		assert.Contains(t, err.Error(), "main.tf:", "error should include the file name")
 	})
 }
 

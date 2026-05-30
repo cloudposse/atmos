@@ -98,13 +98,16 @@ func parseMetadataColumnsFlag(columnsFlag []string) ([]column.Config, error) {
 
 // MetadataOptions contains options for list metadata command.
 type MetadataOptions struct {
-	Format      string
-	Columns     []string
-	Sort        string
-	Filter      string
-	Stack       string
-	Delimiter   string
-	AuthManager auth.AuthManager
+	Format           string
+	Columns          []string
+	Sort             string
+	Filter           string
+	Stack            string
+	Delimiter        string
+	AuthManager      auth.AuthManager
+	ProcessTemplates bool
+	ProcessFunctions bool
+	Skip             []string
 }
 
 // ExecuteListMetadataCmd executes the list metadata command using the renderer pipeline.
@@ -116,7 +119,9 @@ func ExecuteListMetadataCmd(info *schema.ConfigAndStacksInfo, cmd *cobra.Command
 	}
 
 	// Process instances (same as list instances, but we'll extract metadata).
-	instances, err := processInstances(&atmosConfig, opts.AuthManager)
+	// authDisabled is false here because `list metadata` doesn't expose
+	// --identity=false yet; parity with `list instances` (#2412) is a follow-up.
+	instances, err := processInstances(&atmosConfig, opts.AuthManager, opts.ProcessTemplates, opts.ProcessFunctions, opts.Skip, opts.Stack, false)
 	if err != nil {
 		return errors.Join(errUtils.ErrProcessInstances, err)
 	}

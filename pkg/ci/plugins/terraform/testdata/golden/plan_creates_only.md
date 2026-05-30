@@ -1,5 +1,5 @@
 
-## Changes Found for `vpc` in `dev-us-east-1`
+## Resource Changes Found for `vpc` in `dev-us-east-1`
 
 <a href="https://cloudposse.com/"><img src="https://cloudposse.com/logo-300x69.svg" width="100px" align="right"/></a> [![create](https://shields.io/badge/PLAN-CREATE-success?style=for-the-badge)](#user-content-create-dev-us-east-1-vpc)
 <details><summary><a id="result-dev-us-east-1-vpc" />Plan: 3 to add, 0 to change, 0 to destroy.</summary>

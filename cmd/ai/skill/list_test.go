@@ -1459,9 +1459,9 @@ func TestListCmd_SkillWithBuiltInStatus(t *testing.T) {
 	assert.Contains(t, output, "Type:         Built-in")
 }
 
-// TestListCmd_StandardParserIntegration tests that the list command uses StandardParser
+// TestListCmd_StandardParserServer tests that the list command uses StandardParser
 // with proper Viper binding for flag precedence (CLI > ENV > defaults).
-func TestListCmd_StandardParserIntegration(t *testing.T) {
+func TestListCmd_StandardParserServer(t *testing.T) {
 	t.Run("listParser is initialized", func(t *testing.T) {
 		require.NotNil(t, listParser, "listParser should be initialized by init()")
 	})

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"path"
 	"path/filepath"
+	"sort"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	perf "github.com/cloudposse/atmos/pkg/perf"
@@ -203,7 +204,19 @@ func UniqueComponents(stacksMap map[string]any, stackPattern string) ([]map[stri
 	// Key: "componentName:componentType" (e.g., "vpc:terraform").
 	seen := make(map[string]map[string]any)
 
-	for stackName, stackData := range stacksMap {
+	// Iterate stacks in sorted order so the aggregated component state
+	// (especially metadata fields taken from the first occurrence) is
+	// deterministic. Go map iteration order is randomized; without this,
+	// `--enabled=false` would return inconsistent results across runs
+	// when a component is defined in multiple stacks (issue #2359).
+	stackNames := make([]string, 0, len(stacksMap))
+	for name := range stacksMap {
+		stackNames = append(stackNames, name)
+	}
+	sort.Strings(stackNames)
+
+	for _, stackName := range stackNames {
+		stackData := stacksMap[stackName]
 		// Apply stack filter if provided.
 		if stackPattern != "" {
 			// Stack names are slash-separated; normalize for cross-platform matching.
@@ -232,10 +245,16 @@ func UniqueComponents(stacksMap map[string]any, stackPattern string) ([]map[stri
 		extractUniqueComponentType("packer", componentsMap, seen)
 	}
 
-	// Convert map to slice.
-	var components []map[string]any
-	for _, comp := range seen {
-		components = append(components, comp)
+	// Convert map to slice in deterministic order, sorted by the
+	// "componentName:componentType" key.
+	keys := make([]string, 0, len(seen))
+	for k := range seen {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	components := make([]map[string]any, 0, len(seen))
+	for _, k := range keys {
+		components = append(components, seen[k])
 	}
 
 	return components, nil
@@ -248,10 +267,18 @@ func extractUniqueComponentType(componentType string, componentsMap map[string]a
 		return
 	}
 
-	for componentName, componentData := range typeComponents {
+	// Iterate component names in sorted order so the first-occurrence
+	// metadata (component_folder, vars, etc.) is deterministic.
+	names := make([]string, 0, len(typeComponents))
+	for name := range typeComponents {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+
+	for _, componentName := range names {
+		componentData := typeComponents[componentName]
 		key := componentName + ":" + componentType
 
-		// If we haven't seen this component, add it.
 		if _, exists := seen[key]; !exists {
 			comp := map[string]any{
 				fieldComponent: componentName,
@@ -262,6 +289,10 @@ func extractUniqueComponentType(componentType string, componentsMap map[string]a
 			// Extract metadata from first occurrence.
 			enrichUniqueComponentMetadata(comp, componentData)
 			seen[key] = comp
+		} else {
+			// Merge enabled/locked across instances so the aggregate
+			// reflects every stack, not just the first one iterated.
+			updateAggregatedState(seen[key], componentData)
 		}
 
 		// Increment stack count.
@@ -269,6 +300,44 @@ func extractUniqueComponentType(componentType string, componentsMap map[string]a
 			seen[key]["stack_count"] = count + 1
 		}
 	}
+}
+
+// updateAggregatedState merges the enabled/locked state of an additional
+// component instance into the unique component aggregate.
+//
+// Policy:
+//   - enabled: any-disabled-wins. If any stack instance has enabled=false,
+//     the unique component is reported as disabled. This makes
+//     `atmos list components --enabled=false` surface every component that
+//     is disabled somewhere, matching user expectations from issue #2359.
+//   - locked: any-locked-wins. If any stack instance has locked=true, the
+//     unique component is reported as locked.
+//
+// status/status_text are recomputed from the resulting aggregated state.
+func updateAggregatedState(comp map[string]any, componentData any) {
+	compMap, ok := componentData.(map[string]any)
+	if !ok {
+		return
+	}
+
+	metadata, hasMetadata := compMap[fieldMetadata].(map[string]any)
+	// Without metadata, the instance is enabled=true, locked=false by
+	// default — neither weakens an existing aggregate, so nothing to do.
+	if !hasMetadata {
+		return
+	}
+
+	if instanceEnabled := getBoolWithDefault(metadata, metadataEnabled, true); !instanceEnabled {
+		comp[metadataEnabled] = false
+	}
+	if instanceLocked := getBoolWithDefault(metadata, metadataLocked, false); instanceLocked {
+		comp[metadataLocked] = true
+	}
+
+	aggEnabled, _ := comp[metadataEnabled].(bool)
+	aggLocked, _ := comp[metadataLocked].(bool)
+	comp["status"] = getStatusIndicator(aggEnabled, aggLocked)
+	comp["status_text"] = getStatusText(aggEnabled, aggLocked)
 }
 
 // enrichUniqueComponentMetadata adds metadata fields to a unique component.

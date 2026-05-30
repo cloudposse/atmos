@@ -73,7 +73,7 @@ func GetPublicAuthorizationToken(ctx context.Context, creds types.ICredentials, 
 	client := cfg.client
 	if client == nil {
 		// Build AWS config from credentials, forcing us-east-1 for auth.
-		awsCfg, err := buildAWSConfigFromCreds(ctx, creds, ECRPublicAuthRegion)
+		awsCfg, err := BuildAWSConfigFromCreds(ctx, creds, ECRPublicAuthRegion)
 		if err != nil {
 			return nil, fmt.Errorf("%w: failed to build AWS config: %w", errUtils.ErrECRPublicAuthFailed, err)
 		}

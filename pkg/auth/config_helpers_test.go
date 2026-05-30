@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -493,4 +494,237 @@ func TestAuthConfigToMap(t *testing.T) {
 			}
 		})
 	}
+}
+
+// ============================================================================
+// Issue #3 — component-level default does not override global default.
+//
+// When a component declares auth.identities.<name>.default: true in its stack
+// config, and the global atmos.yaml also has a different identity with
+// default: true, the raw deep merge preserves BOTH defaults. The user then
+// gets prompted to choose (interactive) or errors out (CI). The fix clears
+// global defaults before merging when the component declares its own.
+// ============================================================================
+
+func TestMergeComponentAuthConfig_ComponentDefaultOverridesGlobalDefault(t *testing.T) {
+	// The core Issue #3 scenario: global has `tf-state.default: true`,
+	// component declares `create-resources.default: true`. After merge,
+	// only `create-resources` should be default.
+	globalAuth := &schema.AuthConfig{
+		Identities: map[string]schema.Identity{
+			"tf-state": {
+				Kind:    "aws/permission-set",
+				Default: true,
+			},
+			"create-resources": {
+				Kind:    "aws/permission-set",
+				Default: false,
+			},
+		},
+	}
+
+	componentAuth := map[string]any{
+		"identities": map[string]any{
+			"create-resources": map[string]any{
+				"default": true,
+			},
+		},
+	}
+
+	result, err := MergeComponentAuthConfig(&schema.AtmosConfiguration{}, globalAuth, componentAuth)
+	require.NoError(t, err)
+
+	// Component default wins — global default must be cleared.
+	assert.False(t, result.Identities["tf-state"].Default,
+		"global default must be cleared when component declares its own default")
+	assert.True(t, result.Identities["create-resources"].Default,
+		"component-level default must survive the merge")
+}
+
+func TestMergeComponentAuthConfig_NoComponentDefault_PreservesGlobalDefault(t *testing.T) {
+	// When the component auth section does NOT declare any default, the
+	// global default must be preserved unchanged.
+	globalAuth := &schema.AuthConfig{
+		Identities: map[string]schema.Identity{
+			"tf-state": {
+				Kind:    "aws/permission-set",
+				Default: true,
+			},
+		},
+	}
+
+	// Component adds an identity but without default: true.
+	componentAuth := map[string]any{
+		"identities": map[string]any{
+			"deploy": map[string]any{
+				"kind": "aws/assume-role",
+			},
+		},
+	}
+
+	result, err := MergeComponentAuthConfig(&schema.AtmosConfiguration{}, globalAuth, componentAuth)
+	require.NoError(t, err)
+
+	assert.True(t, result.Identities["tf-state"].Default,
+		"global default must be preserved when component has no default")
+}
+
+func TestMergeComponentAuthConfig_ComponentDefaultForSameIdentity(t *testing.T) {
+	// Edge case: global has `foo.default: true`, component also declares
+	// `foo.default: true` (same identity). Should still work — no conflict.
+	globalAuth := &schema.AuthConfig{
+		Identities: map[string]schema.Identity{
+			"foo": {Kind: "aws/assume-role", Default: true},
+		},
+	}
+
+	componentAuth := map[string]any{
+		"identities": map[string]any{
+			"foo": map[string]any{
+				"default": true,
+			},
+		},
+	}
+
+	result, err := MergeComponentAuthConfig(&schema.AtmosConfiguration{}, globalAuth, componentAuth)
+	require.NoError(t, err)
+
+	assert.True(t, result.Identities["foo"].Default,
+		"same identity declared as default in both global and component — should stay default")
+}
+
+func TestMergeComponentAuthFromConfig_ComponentDefaultOverridesGlobal(t *testing.T) {
+	// End-to-end via MergeComponentAuthFromConfig (the wrapper used by
+	// the exec-layer in getMergedAuthConfigWithFetcher). Verifies the fix
+	// flows through the full call chain.
+	globalAuth := &schema.AuthConfig{
+		Identities: map[string]schema.Identity{
+			"global-default": {Kind: "aws/assume-role", Default: true},
+			"component-id":   {Kind: "aws/assume-role", Default: false},
+		},
+	}
+
+	componentConfig := map[string]any{
+		"auth": map[string]any{
+			"identities": map[string]any{
+				"component-id": map[string]any{
+					"default": true,
+				},
+			},
+		},
+	}
+
+	result, err := MergeComponentAuthFromConfig(globalAuth, componentConfig, &schema.AtmosConfiguration{}, "auth")
+	require.NoError(t, err)
+
+	assert.False(t, result.Identities["global-default"].Default,
+		"global default cleared by component-level override")
+	assert.True(t, result.Identities["component-id"].Default,
+		"component-level default must win")
+
+	// Isolation: the original globalAuth must NOT be mutated.
+	// MergeComponentAuthFromConfig copies via CopyGlobalAuthConfig before
+	// passing to MergeComponentAuthConfig, so clearExistingIdentityDefaults
+	// operates on the copy, not the caller's original.
+	assert.True(t, globalAuth.Identities["global-default"].Default,
+		"original globalAuth must remain untouched after merge (result→src isolation)")
+
+	// Reverse isolation: mutating the result must not affect globalAuth.
+	mutated := result.Identities["component-id"]
+	mutated.Kind = "MUTATED"
+	result.Identities["component-id"] = mutated
+	assert.Equal(t, "aws/assume-role", globalAuth.Identities["component-id"].Kind,
+		"mutating result must not leak back into globalAuth (src→result isolation)")
+}
+
+func TestMergeComponentAuthConfig_DoesNotMutateInput(t *testing.T) {
+	// MergeComponentAuthConfig copies globalAuthConfig internally, so the
+	// caller's original must remain untouched — even when called directly
+	// (not through the MergeComponentAuthFromConfig wrapper).
+	globalAuth := &schema.AuthConfig{
+		Identities: map[string]schema.Identity{
+			"global-default": {Kind: "aws/assume-role", Default: true},
+		},
+	}
+
+	componentAuth := map[string]any{
+		"identities": map[string]any{
+			"comp-default": map[string]any{"default": true},
+		},
+	}
+
+	result, err := MergeComponentAuthConfig(&schema.AtmosConfiguration{}, globalAuth, componentAuth)
+	require.NoError(t, err)
+
+	// Input must NOT be mutated.
+	assert.True(t, globalAuth.Identities["global-default"].Default,
+		"MergeComponentAuthConfig must not mutate its input globalAuthConfig")
+
+	// Result must have the component default applied.
+	assert.True(t, result.Identities["comp-default"].Default,
+		"component-level default must be applied in the result")
+	assert.False(t, result.Identities["global-default"].Default,
+		"global default must be cleared in the result when component declares its own")
+}
+
+func TestComponentAuthHasDefault_True(t *testing.T) {
+	section := map[string]any{
+		"identities": map[string]any{
+			"foo": map[string]any{"default": true},
+		},
+	}
+	assert.True(t, componentAuthHasDefault(section))
+}
+
+func TestComponentAuthHasDefault_False(t *testing.T) {
+	section := map[string]any{
+		"identities": map[string]any{
+			"foo": map[string]any{"kind": "aws/assume-role"},
+		},
+	}
+	assert.False(t, componentAuthHasDefault(section))
+}
+
+func TestComponentAuthHasDefault_NoIdentities(t *testing.T) {
+	assert.False(t, componentAuthHasDefault(map[string]any{}))
+	assert.False(t, componentAuthHasDefault(map[string]any{"identities": "invalid"}))
+}
+
+func TestComponentAuthHasDefault_InvalidIdentityType(t *testing.T) {
+	// Identity value is not a map — must return false gracefully.
+	section := map[string]any{
+		"identities": map[string]any{
+			"foo": "invalid-string-instead-of-map",
+		},
+	}
+	assert.False(t, componentAuthHasDefault(section))
+}
+
+func TestComponentAuthHasDefault_ExplicitFalse(t *testing.T) {
+	// default: false is NOT a "has default" — it's an explicit opt-out.
+	section := map[string]any{
+		"identities": map[string]any{
+			"foo": map[string]any{"default": false},
+		},
+	}
+	assert.False(t, componentAuthHasDefault(section))
+}
+
+func TestClearExistingIdentityDefaults_Nil(t *testing.T) {
+	// Must not panic on nil.
+	clearExistingIdentityDefaults(nil)
+}
+
+func TestClearExistingIdentityDefaults_ClearsAll(t *testing.T) {
+	authConfig := &schema.AuthConfig{
+		Identities: map[string]schema.Identity{
+			"a": {Kind: "aws/assume-role", Default: true},
+			"b": {Kind: "aws/assume-role", Default: true},
+			"c": {Kind: "aws/assume-role", Default: false},
+		},
+	}
+	clearExistingIdentityDefaults(authConfig)
+	assert.False(t, authConfig.Identities["a"].Default)
+	assert.False(t, authConfig.Identities["b"].Default)
+	assert.False(t, authConfig.Identities["c"].Default)
 }

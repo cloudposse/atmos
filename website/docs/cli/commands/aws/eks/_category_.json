@@ -1,0 +1,8 @@
+{
+  "label": "eks",
+  "className": "command",
+  "link": {
+    "type": "doc",
+    "id": "cli/commands/aws/eks/eks"
+  }
+}

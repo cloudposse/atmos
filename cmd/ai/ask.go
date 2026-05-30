@@ -1,6 +1,7 @@
 package ai
 
 import (
+	"bytes"
 	"context"
 	_ "embed"
 	"fmt"
@@ -13,6 +14,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/ai"
 	"github.com/cloudposse/atmos/pkg/ai/executor"
+	"github.com/cloudposse/atmos/pkg/ai/formatter"
 	"github.com/cloudposse/atmos/pkg/ai/tools"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/flags"
@@ -45,6 +47,7 @@ var askCmd = &cobra.Command{
 		excludePatterns := v.GetStringSlice("exclude")
 		noAutoContext := v.GetBool("no-auto-context")
 		noTools := v.GetBool("no-tools")
+		mcpServers := v.GetStringSlice("mcp")
 
 		// Initialize configuration.
 		configAndStacksInfo := schema.ConfigAndStacksInfo{}
@@ -92,15 +95,19 @@ var askCmd = &cobra.Command{
 			}
 		}
 
-		// Create read-only tool executor (if tools are enabled).
-		// The ask command uses only in-process, read-only tools (no subprocess execution).
+		// Create tool executor (if tools are enabled).
 		var toolExecutor *tools.Executor
 		if !noTools && atmosConfig.AI.Tools.Enabled {
-			_, toolExecutor, err = initializeAIReadOnlyTools(&atmosConfig)
-			if err != nil {
-				log.Warn("Failed to initialize tools", "error", err)
+			toolsResult, toolsErr := initializeAIToolsAndExecutor(&atmosConfig, mcpServers, question)
+			if toolsErr != nil {
+				log.Warn("Failed to initialize tools", "error", toolsErr)
 				// Continue without tools rather than failing.
-				toolExecutor = nil
+			}
+			if toolsResult != nil {
+				toolExecutor = toolsResult.Executor
+				if toolsResult.MCPMgr != nil {
+					defer toolsResult.MCPMgr.StopAll() //nolint:errcheck // Best-effort MCP server cleanup.
+				}
 			}
 		}
 
@@ -129,8 +136,13 @@ var askCmd = &cobra.Command{
 			return errUtils.ErrAIExecutionFailed
 		}
 
-		// Render response as Markdown for rich terminal output.
-		utils.PrintfMarkdown("%s", result.Response)
+		// Render response with tool execution details as Markdown.
+		var buf bytes.Buffer
+		mdFormatter := formatter.NewFormatter(formatter.FormatMarkdown)
+		if err := mdFormatter.Format(&buf, result); err != nil {
+			return fmt.Errorf("failed to format response: %w", err)
+		}
+		utils.PrintfMarkdown("%s", buf.String())
 
 		return nil
 	},
@@ -143,10 +155,12 @@ func init() {
 		flags.WithStringSliceFlag("exclude", "", nil, "Add glob patterns to exclude from context (can be repeated)"),
 		flags.WithBoolFlag("no-auto-context", "", false, "Disable automatic context discovery"),
 		flags.WithBoolFlag("no-tools", "", false, "Disable tool execution"),
+		flags.WithStringSliceFlag("mcp", "", nil, "MCP servers to use (comma-separated, skips auto-routing)"),
 		flags.WithEnvVars("include", "ATMOS_AI_INCLUDE"),
 		flags.WithEnvVars("exclude", "ATMOS_AI_EXCLUDE"),
 		flags.WithEnvVars("no-auto-context", "ATMOS_AI_NO_AUTO_CONTEXT"),
 		flags.WithEnvVars("no-tools", "ATMOS_AI_NO_TOOLS"),
+		flags.WithEnvVars("mcp", "ATMOS_AI_MCP"),
 	)
 
 	// Register flags on the command.

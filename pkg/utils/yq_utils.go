@@ -7,45 +7,38 @@ package utils
 
 import (
 	"fmt"
+	"log/slog"
 	"strings"
 
 	"github.com/mikefarah/yq/v4/pkg/yqlib"
-	"gopkg.in/op/go-logging.v1"
 	yaml "gopkg.in/yaml.v3"
 
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-type logBackend struct{}
-
-func (n logBackend) Log(level logging.Level, i int, record *logging.Record) error {
-	return nil
-}
-
-func (n logBackend) GetLevel(s string) logging.Level {
-	return logging.ERROR
-}
-
-func (n logBackend) SetLevel(level logging.Level, s string) {
-}
-
-func (n logBackend) IsEnabledFor(level logging.Level, s string) bool {
-	return false
-}
+// yqSilentLevel sits above any real slog level so yq's internal
+// IsEnabledFor() gate rejects every message. Using a level (rather
+// than swapping the slog.Logger via SetSlogger) keeps the state
+// reversible across repeated configureYqLogger calls — a later
+// Trace-level call can restore verbosity by setting a normal level.
+// SetSlogger has no getter to recover the original, so it would
+// pin the process-wide yq logger at the first level we chose.
+const yqSilentLevel = slog.Level(1000)
 
 // configureYqLogger configures the yq logger based on Atmos configuration.
-// If atmosConfig is nil or log level is not Trace, use a no-op logging backend.
+// Non-Trace log levels suppress yq's internal diagnostics; Trace
+// restores yq's default verbosity (Debug) so users asking for
+// everything see everything.
 func configureYqLogger(atmosConfig *schema.AtmosConfiguration) {
 	defer perf.Track(atmosConfig, "utils.configureYqLogger")()
 
-	// Only use the default (chatty) logger when atmosConfig is not nil and log level is Trace
-	// In all other cases, use the no-op logging backend
+	logger := yqlib.GetLogger()
 	if atmosConfig == nil || atmosConfig.Logs.Level != LogLevelTrace {
-		logger := yqlib.GetLogger()
-		backend := logBackend{}
-		logger.SetBackend(backend)
+		logger.SetLevel(yqSilentLevel)
+		return
 	}
+	logger.SetLevel(slog.LevelDebug)
 }
 
 func EvaluateYqExpression(atmosConfig *schema.AtmosConfiguration, data any, yq string) (any, error) {
@@ -178,9 +171,23 @@ func isMisinterpretedScalar(node *yaml.Node, originalResult string) bool {
 	return keyMatchesOriginalWithColon(keyNode.Value, originalResult)
 }
 
+// processYAMLNode walks a YAML node tree and adjusts the style of scalar
+// string nodes that start with `#` so they round-trip without YAML
+// re-interpreting them as comments.
+//
+// The perf.Track defer is on this entry point only; the recursive worker
+// (processYAMLNodeInner) deliberately omits it to avoid inflating the
+// metric across every tree node — see processCustomTags /
+// processCustomTagsInner for the same pattern.
 func processYAMLNode(node *yaml.Node) {
 	defer perf.Track(nil, "utils.processYAMLNode")()
+	processYAMLNodeInner(node)
+}
 
+// processYAMLNodeInner is the recursive worker for processYAMLNode. No
+// perf.Track here; the outer call wraps the whole walk with one tracked
+// frame.
+func processYAMLNodeInner(node *yaml.Node) {
 	if node == nil {
 		return
 	}
@@ -190,7 +197,7 @@ func processYAMLNode(node *yaml.Node) {
 	}
 
 	for _, child := range node.Content {
-		processYAMLNode(child)
+		processYAMLNodeInner(child)
 	}
 }
 

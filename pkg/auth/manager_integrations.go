@@ -18,7 +18,7 @@ import (
 func (m *manager) triggerIntegrations(ctx context.Context, identityName string, creds types.ICredentials) {
 	defer perf.Track(nil, "auth.Manager.triggerIntegrations")()
 
-	// Check if integrations should be skipped (when called from ExecuteIntegration).
+	// Check if integrations should be skipped (when called from ExecuteIntegration or eks-token).
 	if ctx.Value(skipIntegrationsKey) != nil {
 		log.Debug("Skipping auto-triggered integrations (explicit execution)", logKeyIdentity, identityName)
 		return
@@ -44,7 +44,7 @@ func (m *manager) triggerIntegrations(ctx context.Context, identityName string, 
 // findIntegrationsForIdentity returns integration names that reference the given identity.
 // If autoProvisionOnly is true, only returns integrations with auto_provision enabled (defaults to true).
 func (m *manager) findIntegrationsForIdentity(identityName string, autoProvisionOnly bool) []string {
-	if m.config.Integrations == nil {
+	if m.config == nil || m.config.Integrations == nil {
 		return nil
 	}
 

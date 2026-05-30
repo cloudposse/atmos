@@ -15,6 +15,9 @@ import (
 	"github.com/cloudposse/atmos/pkg/ui"
 )
 
+// errWrapFmt is the standard "<sentinel>: <cause>" error wrap format.
+const errWrapFmt = "%w: %w"
+
 func init() {
 	integrations.Register(integrations.KindAWSECRPublic, NewECRPublicIntegration)
 }
@@ -73,7 +76,7 @@ func (e *ECRPublicIntegration) Execute(ctx context.Context, creds types.ICredent
 	if writer == nil {
 		dockerConfig, err := docker.NewConfigManager()
 		if err != nil {
-			return fmt.Errorf("%w: %w", errUtils.ErrIntegrationFailed, err)
+			return fmt.Errorf(errWrapFmt, errUtils.ErrIntegrationFailed, err)
 		}
 		writer = dockerConfig
 	}
@@ -96,7 +99,7 @@ func (e *ECRPublicIntegration) Execute(ctx context.Context, creds types.ICredent
 
 	// Write credentials to Docker config.
 	if err := writer.WriteAuth(awsCloud.ECRPublicRegistryURL, result.Username, result.Password); err != nil {
-		return fmt.Errorf("%w: %w", errUtils.ErrDockerConfigWrite, err)
+		return fmt.Errorf(errWrapFmt, errUtils.ErrDockerConfigWrite, err)
 	}
 
 	// Log success with actual expiration time.
@@ -105,6 +108,40 @@ func (e *ECRPublicIntegration) Execute(ctx context.Context, creds types.ICredent
 	log.Debug("ECR Public login successful", "registry", awsCloud.ECRPublicRegistryURL, "expires_at", result.ExpiresAt)
 
 	return nil
+}
+
+// Cleanup removes the Docker auth entry written by Execute for the ECR Public registry.
+// Idempotent — returns nil if there is nothing to clean up.
+func (e *ECRPublicIntegration) Cleanup(_ context.Context) error {
+	defer perf.Track(nil, "aws.ECRPublicIntegration.Cleanup")()
+
+	dockerConfig, err := ecrDockerConfigFactory()
+	if err != nil {
+		return fmt.Errorf(errWrapFmt, errUtils.ErrDockerConfigWrite, err)
+	}
+
+	if err := dockerConfig.RemoveAuth(awsCloud.ECRPublicRegistryURL); err != nil {
+		return fmt.Errorf(errWrapFmt, errUtils.ErrDockerConfigWrite, err)
+	}
+
+	log.Debug("ECR Public cleanup: removed Docker auth", "registry", awsCloud.ECRPublicRegistryURL)
+
+	return nil
+}
+
+// Environment returns environment variables contributed by this integration.
+// Points DOCKER_CONFIG at the Atmos-managed Docker config directory.
+func (e *ECRPublicIntegration) Environment() (map[string]string, error) {
+	defer perf.Track(nil, "aws.ECRPublicIntegration.Environment")()
+
+	dockerConfig, err := ecrDockerConfigFactory()
+	if err != nil {
+		return nil, fmt.Errorf(errWrapFmt, errUtils.ErrDockerConfigWrite, err)
+	}
+
+	return map[string]string{
+		"DOCKER_CONFIG": dockerConfig.GetConfigDir(),
+	}, nil
 }
 
 // GetIdentity returns the identity name this integration uses.
