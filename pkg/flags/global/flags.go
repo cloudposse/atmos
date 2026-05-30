@@ -84,6 +84,11 @@ type Flags struct {
 	// skips only the named hooks. Per-invocation only — does not propagate
 	// to nested commands or workflows.
 	SkipHooks string
+
+	// SettingsListMergeStrategy overrides settings.list_merge_strategy for
+	// this invocation. Controls how lists are merged in Atmos stack manifests
+	// (replace, append, merge).
+	SettingsListMergeStrategy string
 }
 
 // NewFlags creates a Flags with default values.
