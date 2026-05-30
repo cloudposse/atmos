@@ -201,3 +201,70 @@ func TestDefaultEnvironmentSetup_ComponentEnvOverridesParent(t *testing.T) {
 	assert.True(t, ok, "MY_VAR should be present")
 	assert.Equal(t, "component-value", val, "component env should override parent env")
 }
+
+// TestDefaultEnvironmentSetup_PassVars is a regression test for issue #1412:
+// when components.terraform.init.pass_vars is enabled, the component's vars must
+// be exported as TF_VAR_* so the internal `terraform init` run while resolving
+// !terraform.output can satisfy init-time variable dependencies (e.g. a module
+// `version` bound to var.aks_version).
+func TestDefaultEnvironmentSetup_PassVars(t *testing.T) {
+	setup := &defaultEnvironmentSetup{}
+	config := &ComponentConfig{
+		PassVars: true,
+		Vars: map[string]any{
+			"aks_version":   "9.4.1",         // the offending init-time var from #1412
+			"replica_count": 3,               // number -> JSON-encoded
+			"enabled":       true,            // bool -> JSON-encoded
+			"subnet_ids":    []any{"a", "b"}, // list -> JSON-encoded
+		},
+	}
+
+	result, err := setup.SetupEnvironment(config, nil)
+	require.NoError(t, err)
+
+	assert.Equal(t, "9.4.1", result["TF_VAR_aks_version"], "string var passed through verbatim")
+	assert.Equal(t, "3", result["TF_VAR_replica_count"], "number var JSON-encoded")
+	assert.Equal(t, "true", result["TF_VAR_enabled"], "bool var JSON-encoded")
+	assert.Equal(t, `["a","b"]`, result["TF_VAR_subnet_ids"], "list var JSON-encoded")
+}
+
+// TestDefaultEnvironmentSetup_PassVarsDisabled verifies vars are NOT exported as
+// TF_VAR_* when pass_vars is disabled (the default), so the change is a no-op for
+// everyone not opting in.
+func TestDefaultEnvironmentSetup_PassVarsDisabled(t *testing.T) {
+	setup := &defaultEnvironmentSetup{}
+	config := &ComponentConfig{
+		PassVars: false,
+		Vars: map[string]any{
+			"aks_version": "9.4.1",
+		},
+	}
+
+	result, err := setup.SetupEnvironment(config, nil)
+	require.NoError(t, err)
+
+	_, ok := result["TF_VAR_aks_version"]
+	assert.False(t, ok, "vars must not be exported as TF_VAR_* when pass_vars is disabled")
+}
+
+// TestDefaultEnvironmentSetup_PassVarsEnvSectionWins verifies an explicit
+// TF_VAR_* in the component's env section is not clobbered by the pass_vars
+// injection.
+func TestDefaultEnvironmentSetup_PassVarsEnvSectionWins(t *testing.T) {
+	setup := &defaultEnvironmentSetup{}
+	config := &ComponentConfig{
+		PassVars: true,
+		Env: map[string]any{
+			"TF_VAR_aks_version": "override",
+		},
+		Vars: map[string]any{
+			"aks_version": "9.4.1",
+		},
+	}
+
+	result, err := setup.SetupEnvironment(config, nil)
+	require.NoError(t, err)
+
+	assert.Equal(t, "override", result["TF_VAR_aks_version"],
+		"explicit env-section TF_VAR_* should win over pass_vars injection")
+}
