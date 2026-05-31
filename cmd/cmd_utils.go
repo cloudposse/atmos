@@ -102,6 +102,10 @@ func processCustomCommands(
 				// so emitting at registration printed the warning even for unrelated commands
 				// (e.g. `atmos list stacks`), polluting stderr in scripting and CI.
 				// See https://github.com/cloudposse/atmos/issues/2102.
+				//
+				// TODO(#2102): when `override:`/`invoke:` lands (custom-command-builtin-override PRD),
+				// skip this warning for commands that opt into running their steps, since the
+				// "custom steps ignored" message would then be wrong.
 				warnStepsConflictOnRun(existing, commandConfig.Name)
 			}
 			command = existing

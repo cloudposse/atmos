@@ -89,6 +89,9 @@ func TestCustomCommand_StepsConflictWarning_DeferredToInvocation(t *testing.T) {
 	}
 	builtinNS.AddCommand(builtinPlan)
 	RootCmd.AddCommand(builtinNS)
+	// NewTestKit restores flags/args but not added subcommands; remove ours so it
+	// does not leak into the global RootCmd used by other tests.
+	t.Cleanup(func() { RootCmd.RemoveCommand(builtinNS) })
 
 	// Custom command that collides with the built-in "plan" leaf and defines steps.
 	atmosConfig.Commands = []schema.Command{
@@ -164,6 +167,9 @@ func TestCustomCommand_StepsConflictWarning_PreservesExistingPreRunE(t *testing.
 	}
 	builtinNS.AddCommand(builtinLeaf)
 	RootCmd.AddCommand(builtinNS)
+	// NewTestKit restores flags/args but not added subcommands; remove ours so it
+	// does not leak into the global RootCmd used by other tests.
+	t.Cleanup(func() { RootCmd.RemoveCommand(builtinNS) })
 
 	atmosConfig.Commands = []schema.Command{
 		{
