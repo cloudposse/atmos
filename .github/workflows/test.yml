@@ -214,7 +214,7 @@ jobs:
       # Enable this after merging test-cases
       # Only seems to work with remote schema files
       #- name: Validate YAML Schema for Test Cases
-      #  uses: InoUno/yaml-ls-check@v1.4.0
+      #  uses: InoUno/yaml-ls-check@v1.5.1
       #  with:
       #    root: "tests/test-cases"
       #    schemaMapping: |
@@ -281,7 +281,7 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: hadolint/hadolint-action@v3.1.0
+      - uses: hadolint/hadolint-action@v3.3.0
         id: hadolint
         with:
           dockerfile: Dockerfile
@@ -293,7 +293,7 @@ jobs:
           ignore: DL3008
 
       - name: Upload SARIF file
-        uses: github/codeql-action/upload-sarif@v4
+        uses: github/codeql-action/upload-sarif@v4.35.5
         if: always()
         with:
           # Path to SARIF file relative to the root of the repository
@@ -644,7 +644,7 @@ jobs:
           persist-credentials: false
 
       - name: Validate YAML Schema for Stacks
-        uses: InoUno/yaml-ls-check@v1.4.0
+        uses: InoUno/yaml-ls-check@v1.5.1
         with:
           root: "examples/${{ matrix.demo-folder }}/stacks"
           schemaMapping: |
