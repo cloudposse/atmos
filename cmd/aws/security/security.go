@@ -27,10 +27,18 @@ import (
 	"github.com/cloudposse/atmos/pkg/ui"
 )
 
-// defaultMaxFindings is the default maximum number of security findings to fetch.
-// Set high enough to capture findings across all accounts in a multi-account org.
+// defaultMaxFindings is the default maximum number of security findings to fetch
+// when the user has not specified --max-findings, $ATMOS_AWS_SECURITY_MAX_FINDINGS,
+// or aws.security.max_findings in atmos.yaml. Pass 0 (or any non-positive value)
+// to fetch all matching findings — useful for `--format json/sarif/ocsf` exports.
 // AI cost is controlled separately (only mapped findings are sent to AI).
 const defaultMaxFindings = 500
+
+// maxFindingsUnset is the sentinel flag default that signals "user did not pass
+// --max-findings, so fall through to ATMOS_AWS_SECURITY_MAX_FINDINGS, then
+// aws.security.max_findings, then defaultMaxFindings". A user-supplied 0 is
+// preserved and means "unlimited".
+const maxFindingsUnset = -1
 
 //go:embed markdown/atmos_aws_security.md
 var securityLongMarkdown string
@@ -67,6 +75,9 @@ var securityAnalyzeCmd = &cobra.Command{
 		sourceStr := v.GetString("source")
 		formatStr := v.GetString("format")
 		fileOutput := v.GetString("file")
+		// maxFindings is resolved below after atmosConfig is loaded so we can
+		// distinguish "user explicitly set 0" (unlimited) from "flag default,
+		// fall through to config". See resolveMaxFindings.
 		maxFindings := v.GetInt("max-findings")
 		useAI := v.GetBool("ai")
 		region := v.GetString("region")
@@ -123,12 +134,7 @@ var securityAnalyzeCmd = &cobra.Command{
 			return err
 		}
 
-		if maxFindings <= 0 {
-			maxFindings = atmosConfig.AWS.Security.MaxFindings
-			if maxFindings <= 0 {
-				maxFindings = defaultMaxFindings
-			}
-		}
+		maxFindings = resolveMaxFindings(cmd, maxFindings, atmosConfig.AWS.Security.MaxFindings)
 
 		// Resolve region (from --region flag or config).
 		if region == "" {
@@ -190,7 +196,11 @@ var securityAnalyzeCmd = &cobra.Command{
 
 		// Fetch findings.
 		if outputFormat == pkgsecurity.FormatMarkdown {
-			ui.Info("Fetching security findings...")
+			if maxFindings <= 0 {
+				ui.Info("Fetching all security findings (no limit) — this may take a while for large accounts...")
+			} else {
+				ui.Info("Fetching security findings...")
+			}
 		}
 		fetcher := pkgsecurity.NewFindingFetcher(&atmosConfig, authCtx)
 		findings, err := fetcher.FetchFindings(ctx, &opts)
@@ -304,7 +314,7 @@ func init() {
 		flags.WithStringFlag("framework", "", "", "Compliance framework filter"),
 		flags.WithStringFlag("format", "f", "markdown", "Output format: markdown, json, yaml, csv, sarif, ocsf"),
 		flags.WithStringFlag("file", "", "", "Write output to file instead of stdout"),
-		flags.WithIntFlag("max-findings", "", defaultMaxFindings, "Maximum findings to analyze"),
+		flags.WithIntFlag("max-findings", "", maxFindingsUnset, fmt.Sprintf("Maximum findings to fetch (0 = unlimited, default %d)", defaultMaxFindings)),
 		flags.WithStringFlag("region", "", "", "AWS region override"),
 		flags.WithStringFlag("identity", "i", "", "Atmos Auth identity for AWS credentials"),
 		flags.WithBoolFlag("no-group", "", false, "Disable grouping of duplicate findings"),
@@ -414,6 +424,31 @@ func uniqueFindingValues(findings []Finding, valueFn func(*Finding) string) []st
 	}
 	sort.Strings(values)
 	return values
+}
+
+// resolveMaxFindings determines the effective max findings value using flag
+// precedence: an explicit user-supplied value wins, then the config value,
+// then defaultMaxFindings. Critically, a user-supplied 0 (or negative) is
+// preserved and means "unlimited" — the fetcher treats <= 0 as no limit.
+//
+// The flagValue argument is what Viper returned for the flag, which equals
+// maxFindingsUnset (-1) when the user did not pass --max-findings and no env
+// override applied, or the user/env value otherwise.
+func resolveMaxFindings(cmd *cobra.Command, flagValue, configValue int) int {
+	// User explicitly passed --max-findings on the CLI (any value, including 0).
+	if cmd != nil && cmd.Flags().Changed("max-findings") {
+		return flagValue
+	}
+	// User set ATMOS_AWS_SECURITY_MAX_FINDINGS (Viper picked it up via env binding).
+	// Treat any value != maxFindingsUnset as an explicit override, including 0.
+	if flagValue != maxFindingsUnset {
+		return flagValue
+	}
+	// Otherwise fall back to atmos.yaml then to the documented default.
+	if configValue > 0 {
+		return configValue
+	}
+	return defaultMaxFindings
 }
 
 // parseSource validates and returns the finding source.

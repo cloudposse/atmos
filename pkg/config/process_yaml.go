@@ -8,6 +8,7 @@ import (
 	"github.com/spf13/viper"
 	"go.yaml.in/yaml/v3"
 
+	atmosGit "github.com/cloudposse/atmos/pkg/git"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -201,6 +202,10 @@ func hasCustomTag(tag string) bool {
 		strings.HasPrefix(tag, u.AtmosYamlFuncExec) ||
 		strings.HasPrefix(tag, u.AtmosYamlFuncInclude) ||
 		strings.HasPrefix(tag, u.AtmosYamlFuncGitRoot) ||
+		strings.HasPrefix(tag, u.AtmosYamlFuncGitRootAlias) ||
+		strings.HasPrefix(tag, u.AtmosYamlFuncGitSha) ||
+		strings.HasPrefix(tag, u.AtmosYamlFuncGitBranch) ||
+		strings.HasPrefix(tag, u.AtmosYamlFuncGitRef) ||
 		strings.HasPrefix(tag, u.AtmosYamlFuncCwd) ||
 		strings.HasPrefix(tag, u.AtmosYamlFuncRandom)
 }
@@ -264,12 +269,32 @@ func processIncludeTag(nodeTag, nodeValue, strFunc string) (any, error) {
 
 // processGitRootTag processes the !repo-root tag.
 func processGitRootTag(strFunc, nodeValue string) (any, error) {
-	gitRootValue, err := u.ProcessTagGitRoot(strFunc)
+	gitRootValue, err := atmosGit.ProcessTagRoot(strFunc)
 	if err != nil {
 		log.Debug(failedToProcess, functionKey, strFunc, "error", err)
-		return nil, fmt.Errorf(errorFormat, ErrExecuteYamlFunctions, u.AtmosYamlFuncGitRoot, nodeValue, err)
+		return nil, fmt.Errorf(errorFormat, ErrExecuteYamlFunctions, strFunc, nodeValue, err)
 	}
 	return strings.TrimSpace(gitRootValue), nil
+}
+
+// processGitShaTag processes the !git.sha and !git.ref tags.
+func processGitShaTag(strFunc, nodeValue string) (any, error) {
+	gitShaValue, err := atmosGit.ProcessTagSHA(strFunc)
+	if err != nil {
+		log.Debug(failedToProcess, functionKey, strFunc, "error", err)
+		return nil, fmt.Errorf(errorFormat, ErrExecuteYamlFunctions, strFunc, nodeValue, err)
+	}
+	return strings.TrimSpace(gitShaValue), nil
+}
+
+// processGitBranchTag processes the !git.branch tag.
+func processGitBranchTag(strFunc, nodeValue string) (any, error) {
+	gitBranchValue, err := atmosGit.ProcessTagBranch(strFunc)
+	if err != nil {
+		log.Debug(failedToProcess, functionKey, strFunc, "error", err)
+		return nil, fmt.Errorf(errorFormat, ErrExecuteYamlFunctions, strFunc, nodeValue, err)
+	}
+	return strings.TrimSpace(gitBranchValue), nil
 }
 
 // processCwdTag processes the !cwd tag.
@@ -304,8 +329,12 @@ func processScalarNodeValue(node *yaml.Node) (any, error) {
 		return processExecTag(strFunc, node.Value)
 	case strings.HasPrefix(node.Tag, u.AtmosYamlFuncInclude):
 		return processIncludeTag(node.Tag, node.Value, strFunc)
-	case strings.HasPrefix(node.Tag, u.AtmosYamlFuncGitRoot):
+	case strings.HasPrefix(node.Tag, u.AtmosYamlFuncGitRoot), strings.HasPrefix(node.Tag, u.AtmosYamlFuncGitRootAlias):
 		return processGitRootTag(strFunc, node.Value)
+	case strings.HasPrefix(node.Tag, u.AtmosYamlFuncGitSha), strings.HasPrefix(node.Tag, u.AtmosYamlFuncGitRef):
+		return processGitShaTag(strFunc, node.Value)
+	case strings.HasPrefix(node.Tag, u.AtmosYamlFuncGitBranch):
+		return processGitBranchTag(strFunc, node.Value)
 	case strings.HasPrefix(node.Tag, u.AtmosYamlFuncCwd):
 		return processCwdTag(strFunc, node.Value)
 	case strings.HasPrefix(node.Tag, u.AtmosYamlFuncRandom):
@@ -335,8 +364,12 @@ func processScalarNode(node *yaml.Node, v *viper.Viper, currentPath string) erro
 		return handleExec(node, v, currentPath)
 	case strings.HasPrefix(node.Tag, u.AtmosYamlFuncInclude):
 		return handleInclude(node, v, currentPath)
-	case strings.HasPrefix(node.Tag, u.AtmosYamlFuncGitRoot):
+	case strings.HasPrefix(node.Tag, u.AtmosYamlFuncGitRoot), strings.HasPrefix(node.Tag, u.AtmosYamlFuncGitRootAlias):
 		return handleGitRoot(node, v, currentPath)
+	case strings.HasPrefix(node.Tag, u.AtmosYamlFuncGitSha), strings.HasPrefix(node.Tag, u.AtmosYamlFuncGitRef):
+		return handleGitSha(node, v, currentPath)
+	case strings.HasPrefix(node.Tag, u.AtmosYamlFuncGitBranch):
+		return handleGitBranch(node, v, currentPath)
 	case strings.HasPrefix(node.Tag, u.AtmosYamlFuncCwd):
 		return handleCwd(node, v, currentPath)
 	case strings.HasPrefix(node.Tag, u.AtmosYamlFuncRandom):
@@ -397,7 +430,8 @@ func handleInclude(node *yaml.Node, v *viper.Viper, currentPath string) error {
 			// Set the value in Viper.
 			v.Set(currentPath, data)
 		} else {
-			log.Warn("Invalid value returned from the YAML function",
+			log.Warn(
+				"Invalid value returned from the YAML function",
 				functionKey, strFunc,
 				"value", includeValue,
 			)
@@ -413,10 +447,10 @@ func handleInclude(node *yaml.Node, v *viper.Viper, currentPath string) error {
 // If evaluation fails, it returns an error wrapped with ErrExecuteYamlFunctions; if the result is empty it logs a debug warning but still sets the value.
 func handleGitRoot(node *yaml.Node, v *viper.Viper, currentPath string) error {
 	strFunc := fmt.Sprintf(tagValueFormat, node.Tag, node.Value)
-	gitRootValue, err := u.ProcessTagGitRoot(strFunc)
+	gitRootValue, err := atmosGit.ProcessTagRoot(strFunc)
 	if err != nil {
 		log.Debug(failedToProcess, functionKey, strFunc, "error", err)
-		return fmt.Errorf(errorFormat, ErrExecuteYamlFunctions, u.AtmosYamlFuncGitRoot, node.Value, err)
+		return fmt.Errorf(errorFormat, ErrExecuteYamlFunctions, strFunc, node.Value, err)
 	}
 	gitRootValue = strings.TrimSpace(gitRootValue)
 	if gitRootValue == "" {
@@ -425,6 +459,40 @@ func handleGitRoot(node *yaml.Node, v *viper.Viper, currentPath string) error {
 	// Set the value in Viper .
 	v.Set(currentPath, gitRootValue)
 	node.Tag = "" // Avoid re-processing .
+	return nil
+}
+
+// handleGitSha evaluates a `!git.sha` or `!git.ref` YAML tag and stores the resulting commit SHA into Viper.
+func handleGitSha(node *yaml.Node, v *viper.Viper, currentPath string) error {
+	strFunc := fmt.Sprintf(tagValueFormat, node.Tag, node.Value)
+	gitShaValue, err := atmosGit.ProcessTagSHA(strFunc)
+	if err != nil {
+		log.Debug(failedToProcess, functionKey, strFunc, "error", err)
+		return fmt.Errorf(errorFormat, ErrExecuteYamlFunctions, strFunc, node.Value, err)
+	}
+	gitShaValue = strings.TrimSpace(gitShaValue)
+	if gitShaValue == "" {
+		log.Debug(emptyValueWarning, functionKey, strFunc)
+	}
+	v.Set(currentPath, gitShaValue)
+	node.Tag = ""
+	return nil
+}
+
+// handleGitBranch evaluates a `!git.branch` YAML tag and stores the resulting branch name into Viper.
+func handleGitBranch(node *yaml.Node, v *viper.Viper, currentPath string) error {
+	strFunc := fmt.Sprintf(tagValueFormat, node.Tag, node.Value)
+	gitBranchValue, err := atmosGit.ProcessTagBranch(strFunc)
+	if err != nil {
+		log.Debug(failedToProcess, functionKey, strFunc, "error", err)
+		return fmt.Errorf(errorFormat, ErrExecuteYamlFunctions, strFunc, node.Value, err)
+	}
+	gitBranchValue = strings.TrimSpace(gitBranchValue)
+	if gitBranchValue == "" {
+		log.Debug(emptyValueWarning, functionKey, strFunc)
+	}
+	v.Set(currentPath, gitBranchValue)
+	node.Tag = ""
 	return nil
 }
 

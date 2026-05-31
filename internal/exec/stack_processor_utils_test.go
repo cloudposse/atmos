@@ -2,7 +2,10 @@ package exec
 
 import (
 	"errors"
+	"fmt"
+	"net/url"
 	"os"
+	osexec "os/exec"
 	"path/filepath"
 	"sort"
 	"testing"
@@ -3020,6 +3023,172 @@ func TestProcessImportSection_NilElement(t *testing.T) {
 	_, err := ProcessImportSection(stackMap, manifestPath)
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrInvalidImport)
+}
+
+func TestProcessImportSection_NestedImports(t *testing.T) {
+	manifestPath := filepath.Join("test", "path.yaml")
+
+	t.Run("decodes nested imports", func(t *testing.T) {
+		stackMap := map[string]any{
+			"import": []any{
+				map[string]any{
+					"path":           "catalog/base",
+					"nested_imports": "remote",
+				},
+			},
+		}
+
+		imports, err := ProcessImportSection(stackMap, manifestPath)
+		require.NoError(t, err)
+		require.Len(t, imports, 1)
+		assert.Equal(t, schema.StackImportNestedImportsRemote, imports[0].NestedImports)
+	})
+
+	t.Run("normalizes nested imports", func(t *testing.T) {
+		stackMap := map[string]any{
+			"import": []any{
+				map[string]any{
+					"path":           "catalog/base",
+					"nested_imports": " REMOTE ",
+				},
+				map[string]any{
+					"path":           "catalog/local",
+					"nested_imports": " Local ",
+				},
+				map[string]any{
+					"path": "catalog/default",
+				},
+			},
+		}
+
+		imports, err := ProcessImportSection(stackMap, manifestPath)
+		require.NoError(t, err)
+		require.Len(t, imports, 3)
+		assert.Equal(t, schema.StackImportNestedImportsRemote, imports[0].NestedImports)
+		assert.Equal(t, schema.StackImportNestedImportsLocal, imports[1].NestedImports)
+		assert.Empty(t, imports[2].NestedImports)
+		assert.Equal(t, schema.StackImportNestedImportsLocal, normalizeNestedImports(imports[2].NestedImports))
+	})
+
+	t.Run("rejects invalid nested imports", func(t *testing.T) {
+		stackMap := map[string]any{
+			"import": []any{
+				map[string]any{
+					"path":           "catalog/base",
+					"nested_imports": "workspace",
+				},
+			},
+		}
+
+		_, err := ProcessImportSection(stackMap, manifestPath)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, errUtils.ErrInvalidImport)
+	})
+}
+
+func TestProcessYAMLConfigFileWithContext_InheritedNestedRemoteBasePath(t *testing.T) {
+	repoDir := initStackProcessorGitRepo(t, map[string]string{
+		"stacks/orgs/acme/_defaults.yaml": `
+import:
+  - catalog/base
+
+vars:
+  from_remote_parent: true
+`,
+		"stacks/catalog/base.yaml": `
+vars:
+  from_remote_child: true
+`,
+	})
+
+	tempDir := t.TempDir()
+	localStacksDir := filepath.Join(tempDir, "stacks", "deploy")
+	require.NoError(t, os.MkdirAll(localStacksDir, 0o755))
+
+	repoURI := stackProcessorGitFileURI(repoDir)
+	localStackPath := filepath.Join(localStacksDir, "test.yaml")
+	require.NoError(t, os.WriteFile(localStackPath, []byte(fmt.Sprintf(`
+import:
+  - path: "git::%s//stacks/orgs/acme/_defaults.yaml?ref=main"
+    nested_imports: remote
+
+vars:
+  from_local_stack: true
+`, repoURI)), 0o644))
+
+	atmosConfig := &schema.AtmosConfiguration{
+		Stacks: schema.Stacks{BasePath: "stacks"},
+	}
+
+	deepMergedConfig, importsConfig, stackConfigMap, terraformInline, terraformImports, helmfileInline, helmfileImports, mergeContext, err := ProcessYAMLConfigFileWithContext(
+		atmosConfig,
+		filepath.Join(tempDir, "stacks"),
+		localStackPath,
+		map[string]map[string]any{},
+		map[string]any{},
+		false,
+		false,
+		false,
+		false,
+		map[string]any{},
+		map[string]any{},
+		map[string]any{},
+		map[string]any{},
+		"",
+		nil,
+	)
+	require.NoError(t, err)
+	assert.NotNil(t, stackConfigMap)
+	assert.NotNil(t, terraformInline)
+	assert.NotNil(t, terraformImports)
+	assert.NotNil(t, helmfileInline)
+	assert.NotNil(t, helmfileImports)
+	assert.NotNil(t, mergeContext)
+
+	vars, ok := deepMergedConfig["vars"].(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, true, vars["from_remote_parent"])
+	assert.Equal(t, true, vars["from_remote_child"])
+	assert.Equal(t, true, vars["from_local_stack"])
+
+	assert.Contains(t, importsConfig, fmt.Sprintf("git::%s//stacks/orgs/acme/_defaults.yaml?ref=main#stacks/orgs/acme/_defaults.yaml", repoURI))
+	assert.Contains(t, importsConfig, "catalog/base")
+}
+
+func initStackProcessorGitRepo(t *testing.T, files map[string]string) string {
+	t.Helper()
+
+	repoDir := t.TempDir()
+	runStackProcessorGit(t, repoDir, "init")
+	runStackProcessorGit(t, repoDir, "checkout", "-b", "main")
+	runStackProcessorGit(t, repoDir, "config", "user.email", "test@example.com")
+	runStackProcessorGit(t, repoDir, "config", "user.name", "Test User")
+
+	for name, content := range files {
+		path := filepath.Join(repoDir, filepath.FromSlash(name))
+		require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
+		require.NoError(t, os.WriteFile(path, []byte(content), 0o644))
+	}
+
+	runStackProcessorGit(t, repoDir, "add", ".")
+	runStackProcessorGit(t, repoDir, "commit", "-m", "initial")
+	return repoDir
+}
+
+func runStackProcessorGit(t *testing.T, dir string, args ...string) {
+	t.Helper()
+	cmd := osexec.Command("git", args...)
+	cmd.Dir = dir
+	out, err := cmd.CombinedOutput()
+	require.NoError(t, err, "git %v failed: %s", args, string(out))
+}
+
+func stackProcessorGitFileURI(path string) string {
+	cleaned := filepath.ToSlash(filepath.Clean(path))
+	if filepath.VolumeName(path) != "" && cleaned != "" && cleaned[0] != '/' {
+		cleaned = "/" + cleaned
+	}
+	return (&url.URL{Scheme: "file", Path: cleaned}).String()
 }
 
 // TestProcessTemplatesInSection tests the processTemplatesInSection helper function.

@@ -139,6 +139,11 @@ func ExecuteTerraform(ctx context.Context, opts TerraformOptions) error {
 	if graph, err = prepareTerraformGraphForCommand(opts.Info, graph); err != nil {
 		return err
 	}
+	if opts.Info.SubCommand == "destroy" {
+		log.Info("Processing components in reverse dependency order for destroy", "count", graph.Size())
+	} else {
+		log.Info("Processing components in dependency order", "count", graph.Size())
+	}
 
 	if err := validateTerraformFailureMode(opts.Info); err != nil {
 		return err

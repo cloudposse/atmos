@@ -38,6 +38,18 @@ const (
 	// TagRepoRoot returns the git repository root path.
 	TagRepoRoot = "repo-root"
 
+	// TagGitRoot returns the git repository root path.
+	TagGitRoot = "git.root"
+
+	// TagGitSha returns the current Git HEAD commit SHA.
+	TagGitSha = "git.sha"
+
+	// TagGitBranch returns the current Git branch name.
+	TagGitBranch = "git.branch"
+
+	// TagGitRef returns the immutable Git ref used for source pinning.
+	TagGitRef = "git.ref"
+
 	// TagRandom generates a random number.
 	TagRandom = "random"
 
@@ -78,6 +90,10 @@ func AllTags() []string {
 		TagInclude,
 		TagIncludeRaw,
 		TagRepoRoot,
+		TagGitRoot,
+		TagGitSha,
+		TagGitBranch,
+		TagGitRef,
 		TagRandom,
 		TagLiteral,
 		TagAwsAccountID,
@@ -100,6 +116,10 @@ var tagsMap = map[string]bool{
 	TagInclude:                 true,
 	TagIncludeRaw:              true,
 	TagRepoRoot:                true,
+	TagGitRoot:                 true,
+	TagGitSha:                  true,
+	TagGitBranch:               true,
+	TagGitRef:                  true,
 	TagRandom:                  true,
 	TagLiteral:                 true,
 	TagAwsAccountID:            true,

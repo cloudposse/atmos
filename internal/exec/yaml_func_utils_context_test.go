@@ -2,12 +2,20 @@ package exec
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 	"testing"
+	"time"
 
+	git "github.com/go-git/go-git/v5"
+	"github.com/go-git/go-git/v5/plumbing"
+	"github.com/go-git/go-git/v5/plumbing/object"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	provSource "github.com/cloudposse/atmos/pkg/provisioner/source"
 	"github.com/cloudposse/atmos/pkg/schema"
+	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 func TestProcessCustomYamlTagsWithoutContext(t *testing.T) {
@@ -47,6 +55,39 @@ func TestProcessCustomYamlTagsCreatesContext(t *testing.T) {
 	assert.NotNil(t, ctx)
 }
 
+func TestProcessCustomYamlTagsGitRefSourceVersion(t *testing.T) {
+	repoDir, expectedSHA := initExecTestGitRepo(t, "feature/test")
+	t.Chdir(repoDir)
+	expectedRoot, err := filepath.EvalSymlinks(repoDir)
+	require.NoError(t, err)
+
+	atmosConfig := &schema.AtmosConfiguration{}
+	stackYaml := `
+source:
+  uri: github.com/my-org/my-repo//components/terraform/test
+  version: !git.ref
+branch: !git.branch
+root: !git.root
+`
+
+	input, err := u.UnmarshalYAMLFromFile[schema.AtmosSectionMapType](atmosConfig, stackYaml, "test.yaml")
+	require.NoError(t, err)
+
+	result, err := ProcessCustomYamlTags(atmosConfig, input, "test-stack", nil, nil)
+	require.NoError(t, err)
+
+	sourceMap, ok := result["source"].(map[string]any)
+	require.True(t, ok)
+
+	sourceSpec, err := provSource.ExtractSource(map[string]any{"source": sourceMap})
+	require.NoError(t, err)
+	require.NotNil(t, sourceSpec)
+
+	assert.Equal(t, expectedSHA, sourceSpec.Version)
+	assert.Equal(t, "feature/test", result["branch"])
+	assert.Equal(t, expectedRoot, result["root"])
+}
+
 func TestProcessCustomYamlTagsWithContextParameter(t *testing.T) {
 	atmosConfig := &schema.AtmosConfiguration{}
 	ctx := NewResolutionContext()
@@ -71,6 +112,41 @@ func TestProcessCustomYamlTagsWithContextParameter(t *testing.T) {
 
 	// Context should still have the node.
 	assert.Equal(t, 1, len(ctx.CallStack))
+}
+
+func initExecTestGitRepo(t *testing.T, branch string) (string, string) {
+	t.Helper()
+
+	repoDir := t.TempDir()
+	repo, err := git.PlainInit(repoDir, false)
+	require.NoError(t, err)
+
+	worktree, err := repo.Worktree()
+	require.NoError(t, err)
+
+	filePath := filepath.Join(repoDir, "README.md")
+	require.NoError(t, os.WriteFile(filePath, []byte("test\n"), 0o644))
+
+	_, err = worktree.Add("README.md")
+	require.NoError(t, err)
+
+	hash, err := worktree.Commit("initial commit", &git.CommitOptions{
+		Author: &object.Signature{
+			Name:  "Atmos Test",
+			Email: "test@example.com",
+			When:  time.Unix(1, 0),
+		},
+	})
+	require.NoError(t, err)
+
+	if branch != "" && branch != "master" {
+		require.NoError(t, worktree.Checkout(&git.CheckoutOptions{
+			Branch: plumbing.NewBranchReferenceName(branch),
+			Create: true,
+		}))
+	}
+
+	return repoDir, hash.String()
 }
 
 func TestProcessNodesWithContextNestedMaps(t *testing.T) {
