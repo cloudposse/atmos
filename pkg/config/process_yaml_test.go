@@ -7,7 +7,11 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
+	git "github.com/go-git/go-git/v5"
+	"github.com/go-git/go-git/v5/plumbing"
+	"github.com/go-git/go-git/v5/plumbing/object"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -634,6 +638,31 @@ func TestProcessCwdTag(t *testing.T) {
 	}
 }
 
+func TestPreprocessAtmosYamlFuncGitTags(t *testing.T) {
+	repoDir, expectedSHA := initConfigTestGitRepo(t, "feature/test")
+	t.Chdir(repoDir)
+	expectedRoot, err := filepath.EvalSymlinks(repoDir)
+	require.NoError(t, err)
+
+	v := viper.New()
+	yamlStr := `
+root: !git.root
+legacy_root: !repo-root
+sha: !git.sha
+ref: !git.ref
+branch: !git.branch
+`
+
+	err = preprocessAtmosYamlFunc([]byte(yamlStr), v)
+	require.NoError(t, err)
+
+	assert.Equal(t, expectedRoot, v.GetString("root"))
+	assert.Equal(t, expectedRoot, v.GetString("legacy_root"))
+	assert.Equal(t, expectedSHA, v.GetString("sha"))
+	assert.Equal(t, expectedSHA, v.GetString("ref"))
+	assert.Equal(t, "feature/test", v.GetString("branch"))
+}
+
 func TestHandleCwd(t *testing.T) {
 	cwd, err := os.Getwd()
 	require.NoError(t, err)
@@ -685,6 +714,41 @@ func TestHandleCwd(t *testing.T) {
 			assert.Empty(t, node.Tag, "tag should be cleared after processing")
 		})
 	}
+}
+
+func initConfigTestGitRepo(t *testing.T, branch string) (string, string) {
+	t.Helper()
+
+	repoDir := t.TempDir()
+	repo, err := git.PlainInit(repoDir, false)
+	require.NoError(t, err)
+
+	worktree, err := repo.Worktree()
+	require.NoError(t, err)
+
+	filePath := filepath.Join(repoDir, "README.md")
+	require.NoError(t, os.WriteFile(filePath, []byte("test\n"), 0o644))
+
+	_, err = worktree.Add("README.md")
+	require.NoError(t, err)
+
+	hash, err := worktree.Commit("initial commit", &git.CommitOptions{
+		Author: &object.Signature{
+			Name:  "Atmos Test",
+			Email: "test@example.com",
+			When:  time.Unix(1, 0),
+		},
+	})
+	require.NoError(t, err)
+
+	if branch != "" && branch != "master" {
+		require.NoError(t, worktree.Checkout(&git.CheckoutOptions{
+			Branch: plumbing.NewBranchReferenceName(branch),
+			Create: true,
+		}))
+	}
+
+	return repoDir, hash.String()
 }
 
 func TestHandleGitRoot(t *testing.T) {
