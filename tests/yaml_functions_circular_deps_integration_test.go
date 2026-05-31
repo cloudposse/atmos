@@ -44,13 +44,15 @@ func TestYAMLFunctionsCrossComponentCycle(t *testing.T) {
 	})
 
 	require.Error(t, err, "cross-component !terraform.state cycle must produce an error")
-	assert.ErrorIs(t, err, errUtils.ErrCircularDependency,
+	assert.ErrorIs(
+		t, err, errUtils.ErrCircularDependency,
 		"expected ErrCircularDependency; got: %v", err,
 	)
 	// The depth safety net (ErrYamlFuncMaxResolutionDepth) is defense-in-depth.
 	// If it fires here, the proper cycle detector regressed and the visited
 	// map is being wiped between nested ProcessCustomYamlTags entries again.
-	assert.NotErrorIs(t, err, errUtils.ErrYamlFuncMaxResolutionDepth,
+	assert.NotErrorIs(
+		t, err, errUtils.ErrYamlFuncMaxResolutionDepth,
 		"depth safeguard should not be needed when cycle detection works; the visited map is being wiped between nested walks again",
 	)
 }
@@ -81,13 +83,15 @@ func TestYAMLFunctionsCrossComponentCycleMixed(t *testing.T) {
 	})
 
 	require.Error(t, err, "mixed !terraform.state/!terraform.output cycle must produce an error")
-	assert.ErrorIs(t, err, errUtils.ErrCircularDependency,
+	assert.ErrorIs(
+		t, err, errUtils.ErrCircularDependency,
 		"expected ErrCircularDependency; got: %v", err,
 	)
 	// The depth safety net (ErrYamlFuncMaxResolutionDepth) is defense-in-depth.
 	// If it fires here, the proper cycle detector regressed and the visited
 	// map is being wiped between nested ProcessCustomYamlTags entries again.
-	assert.NotErrorIs(t, err, errUtils.ErrYamlFuncMaxResolutionDepth,
+	assert.NotErrorIs(
+		t, err, errUtils.ErrYamlFuncMaxResolutionDepth,
 		"depth safeguard should not be needed when cycle detection works; the visited map is being wiped between nested walks again",
 	)
 }
