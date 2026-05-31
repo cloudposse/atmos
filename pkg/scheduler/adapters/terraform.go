@@ -68,6 +68,9 @@ func ExecuteTerraform(ctx context.Context, opts TerraformOptions) error {
 		if err != nil {
 			return fmt.Errorf("%w: reverse terraform graph: %w", errUtils.ErrBuildDepGraph, err)
 		}
+		log.Info("Processing components in reverse dependency order for destroy", "count", graph.Size())
+	} else {
+		log.Info("Processing components in dependency order", "count", graph.Size())
 	}
 
 	dispatcher := &TerraformDispatcher{
