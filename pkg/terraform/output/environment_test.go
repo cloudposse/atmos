@@ -1,6 +1,7 @@
 package output
 
 import (
+	"encoding/json"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -267,4 +268,44 @@ func TestDefaultEnvironmentSetup_PassVarsEnvSectionWins(t *testing.T) {
 
 	assert.Equal(t, "override", result["TF_VAR_aks_version"],
 		"explicit env-section TF_VAR_* should win over pass_vars injection")
+}
+
+// TestDefaultEnvironmentSetup_PassVarsComplexTypes verifies that map/object and
+// nested var values are JSON-encoded into TF_VAR_* and round-trip back to the
+// original structure. Terraform/OpenTofu parse TF_VAR_* values for complex-typed
+// variables as HCL, and JSON object syntax (quoted keys with `:`) is valid HCL2,
+// so a JSON-encoded map is a correct representation for a map/object variable.
+func TestDefaultEnvironmentSetup_PassVarsComplexTypes(t *testing.T) {
+	setup := &defaultEnvironmentSetup{}
+	mapVar := map[string]any{
+		"region":   "us-east-1",
+		"replicas": float64(3), // float64 so the decoded value compares equal after round-trip
+	}
+	nestedVar := map[string]any{
+		"network": map[string]any{
+			"cidr":    "10.0.0.0/16",
+			"subnets": []any{"a", "b"},
+		},
+	}
+	config := &ComponentConfig{
+		PassVars: true,
+		Vars: map[string]any{
+			"tags":   mapVar,
+			"config": nestedVar,
+		},
+	}
+
+	result, err := setup.SetupEnvironment(config, nil)
+	require.NoError(t, err)
+
+	// The encoded values must be valid JSON that round-trips to the original maps.
+	var decodedMap map[string]any
+	require.NoError(t, json.Unmarshal([]byte(result["TF_VAR_tags"]), &decodedMap),
+		"TF_VAR_tags must be valid JSON")
+	assert.Equal(t, mapVar, decodedMap, "map var should round-trip through TF_VAR_*")
+
+	var decodedNested map[string]any
+	require.NoError(t, json.Unmarshal([]byte(result["TF_VAR_config"]), &decodedNested),
+		"TF_VAR_config must be valid JSON")
+	assert.Equal(t, nestedVar, decodedNested, "nested object var should round-trip through TF_VAR_*")
 }
