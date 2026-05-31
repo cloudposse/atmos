@@ -83,6 +83,12 @@ var runGeneratePlanfileHooks = func(event h.HookEvent, cmd *cobra.Command, args 
 //
 // Declared as a package-level var so tests can stub it to verify the RunE
 // defer-guard contract without invoking real plugin handlers.
+//
+// Unlike runGeneratePlanfileHooks (success path), this deliberately skips
+// internal.ValidateAtmosConfig and silently returns on any setup error. It runs
+// on the already-failing path, where surfacing a secondary error would mask the
+// original command failure the user needs to see; best-effort CI notification is
+// the only goal here.
 var runGeneratePlanfileErrorHook = func(event h.HookEvent, cmd *cobra.Command, args []string, cmdErr error) {
 	finalArgs := append([]string{cmd.Name()}, args...)
 

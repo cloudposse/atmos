@@ -119,7 +119,7 @@ func init() {
 		flags.WithBoolFlag("process-templates", "", true, "Enable Go template processing in Atmos stack manifests"),
 		flags.WithBoolFlag("process-functions", "", true, "Enable YAML functions processing in Atmos stack manifests"),
 		flags.WithStringSliceFlag("skip", "", []string{}, "Skip processing specific Atmos YAML functions"),
-		flags.WithBoolFlag("ci", "", false, "Enable CI mode for automated pipelines (fires before/after.terraform.generate.planfile hooks and writes CI artifacts when configured)"),
+		flags.WithBoolFlag("ci", "", false, "Enable CI mode for automated pipelines (forces CI integration even when no CI provider is detected; hooks fire regardless of this flag)"),
 		flags.WithEnvVars("stack", "ATMOS_STACK"),
 		flags.WithEnvVars("file", "ATMOS_FILE"),
 		flags.WithEnvVars("format", "ATMOS_FORMAT"),
