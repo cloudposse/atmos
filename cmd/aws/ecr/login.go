@@ -2,6 +2,7 @@ package ecr
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"time"
@@ -38,6 +39,9 @@ Examples:
 
   # Login using an identity's linked integrations
   atmos aws ecr login --identity dev-admin
+
+  # Pick an identity interactively (requires a TTY)
+  atmos aws ecr login --identity
 
   # Login to ECR Public using ambient AWS credentials (zero-config)
   atmos aws ecr login --public
@@ -135,14 +139,15 @@ func executePublicLoginAmbient(ctx context.Context) error {
 func executePublicLoginWithIdentity(ctx context.Context, atmosConfig *schema.AtmosConfiguration, identityName string) error {
 	defer perf.Track(atmosConfig, "aws.ecr.executePublicLoginWithIdentity")()
 
-	// Reject the interactive selection sentinel; this command requires an explicit name.
-	if identityName == cfg.IdentityFlagSelectValue {
-		return errUtils.ErrECRIdentitySelect
-	}
-
 	authManager, err := createAuthManager(&atmosConfig.Auth, atmosConfig.CliConfigPath)
 	if err != nil {
 		return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrFailedToInitializeAuthManager, err)
+	}
+
+	// Resolve the interactive-selection sentinel to a concrete identity (prompts if needed).
+	identityName, err = resolveSelectedIdentity(authManager, identityName)
+	if err != nil {
+		return err
 	}
 
 	whoami, err := authManager.Authenticate(ctx, identityName)
@@ -204,9 +209,10 @@ func executeWithAuthManager(ctx context.Context, atmosConfig *schema.AtmosConfig
 
 	// Case 3: Identity's linked integrations.
 	if identityName != "" {
-		// Reject the interactive selection sentinel; this command requires an explicit name.
-		if identityName == cfg.IdentityFlagSelectValue {
-			return errUtils.ErrECRIdentitySelect
+		// Resolve the interactive-selection sentinel to a concrete identity (prompts if needed).
+		identityName, err = resolveSelectedIdentity(authManager, identityName)
+		if err != nil {
+			return err
 		}
 		return authManager.ExecuteIdentityIntegrations(ctx, identityName)
 	}
@@ -258,6 +264,28 @@ func executeExplicitRegistries(ctx context.Context, registries []string) error {
 	_ = os.Setenv("DOCKER_CONFIG", dockerConfig.GetConfigDir())
 
 	return nil
+}
+
+// resolveSelectedIdentity resolves the interactive-selection sentinel ("__SELECT__",
+// produced when --identity is passed without a value) to a concrete identity by
+// prompting the user. Concrete names pass through unchanged. In non-interactive
+// contexts (no TTY / CI), GetDefaultIdentity returns ErrIdentitySelectionRequiresTTY.
+func resolveSelectedIdentity(authManager auth.AuthManager, identityName string) (string, error) {
+	defer perf.Track(nil, "aws.ecr.resolveSelectedIdentity")()
+
+	if identityName != cfg.IdentityFlagSelectValue {
+		return identityName, nil
+	}
+
+	selected, err := authManager.GetDefaultIdentity(true)
+	if err != nil {
+		// User explicitly aborted (Ctrl+C/ESC) — surface a clean SIGINT exit.
+		if errors.Is(err, errUtils.ErrUserAborted) {
+			return "", errUtils.WithExitCode(err, errUtils.ExitCodeSIGINT)
+		}
+		return "", fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrDefaultIdentity, err)
+	}
+	return selected, nil
 }
 
 // createAuthManager creates a new auth manager for ECR operations.

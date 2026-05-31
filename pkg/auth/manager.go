@@ -23,6 +23,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/telemetry"
+	"github.com/cloudposse/atmos/pkg/ui"
 )
 
 const (
@@ -550,6 +551,11 @@ func (m *manager) promptForIdentity(message string, identities []string) (string
 		errUtils.CheckErrorAndPrint(err, "Prompt for Identity", "")
 		return "", fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrUnsupportedInputType, err)
 	}
+
+	// Echo the choice: the huh form clears itself on submit, so without this the
+	// user never sees which identity they picked. Goes to stderr (UI channel) so
+	// it never corrupts machine-readable stdout (e.g. `atmos auth env`).
+	ui.Success(fmt.Sprintf("Selected identity: %s", selectedIdentity))
 
 	return selectedIdentity, nil
 }

@@ -945,7 +945,6 @@ var (
 	ErrECRInvalidRegistry  = errors.New("invalid ECR registry URL")
 	ErrECRLoginNoArgs      = errors.New("specify an server name, --identity, or --registry")
 	ErrECRLoginFailed      = errors.New("ECR login failed")
-	ErrECRIdentitySelect   = errors.New("interactive identity selection is not supported for this command; specify an identity name with --identity=<name>")
 	ErrDockerConfigWrite   = errors.New("failed to write Docker config")
 	ErrDockerConfigRead    = errors.New("failed to read Docker config")
 

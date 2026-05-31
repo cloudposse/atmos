@@ -2,12 +2,16 @@ package ecr
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/auth"
+	authTypes "github.com/cloudposse/atmos/pkg/auth/types"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -181,15 +185,16 @@ func TestExecuteWithAuthManager_NoArgs(t *testing.T) {
 	assert.ErrorIs(t, err, errUtils.ErrECRLoginNoArgs)
 }
 
-func TestExecuteWithAuthManager_SelectSentinel(t *testing.T) {
-	// __SELECT__ sentinel should return ErrECRIdentitySelect.
+func TestExecuteWithAuthManager_SelectSentinelNoTTY(t *testing.T) {
+	// __SELECT__ sentinel now triggers the interactive identity selector. With no
+	// TTY (the test environment), it degrades to ErrIdentitySelectionRequiresTTY.
 	atmosConfig := &schema.AtmosConfiguration{
 		Auth: schema.AuthConfig{
 			Realm: "test",
 		},
 	}
 	err := executeWithAuthManager(context.Background(), atmosConfig, cfg.IdentityFlagSelectValue, "")
-	assert.ErrorIs(t, err, errUtils.ErrECRIdentitySelect)
+	assert.ErrorIs(t, err, errUtils.ErrIdentitySelectionRequiresTTY)
 }
 
 func TestExecuteWithAuthManager_MutuallyExclusiveFlags(t *testing.T) {
@@ -265,13 +270,101 @@ func TestValidateLoginModes(t *testing.T) {
 	}
 }
 
-func TestExecutePublicLoginWithIdentity_SelectSentinel(t *testing.T) {
-	// __SELECT__ sentinel should return ErrECRIdentitySelect before any auth occurs.
+func TestExecutePublicLoginWithIdentity_SelectSentinelNoTTY(t *testing.T) {
+	// __SELECT__ sentinel now triggers the interactive identity selector. With no
+	// TTY (the test environment), it degrades to ErrIdentitySelectionRequiresTTY
+	// before any auth occurs.
 	atmosConfig := &schema.AtmosConfiguration{
 		Auth: schema.AuthConfig{
 			Realm: "test",
 		},
 	}
 	err := executePublicLoginWithIdentity(context.Background(), atmosConfig, cfg.IdentityFlagSelectValue)
-	assert.ErrorIs(t, err, errUtils.ErrECRIdentitySelect)
+	assert.ErrorIs(t, err, errUtils.ErrIdentitySelectionRequiresTTY)
+}
+
+func TestResolveSelectedIdentity(t *testing.T) {
+	tests := []struct {
+		name         string
+		identityName string
+		setupMock    func(*authTypes.MockAuthManager)
+		wantIdentity string
+		wantErrIs    error
+		wantExitCode int // -1 when no exit code is expected.
+	}{
+		{
+			name:         "concrete name passes through without prompting",
+			identityName: "dev-admin",
+			setupMock: func(m *authTypes.MockAuthManager) {
+				// Selector must NOT be invoked for an explicit identity.
+				m.EXPECT().GetDefaultIdentity(gomock.Any()).Times(0)
+			},
+			wantIdentity: "dev-admin",
+			wantExitCode: -1,
+		},
+		{
+			name:         "sentinel resolves to the selected identity",
+			identityName: cfg.IdentityFlagSelectValue,
+			setupMock: func(m *authTypes.MockAuthManager) {
+				m.EXPECT().GetDefaultIdentity(true).Return("picked-id", nil)
+			},
+			wantIdentity: "picked-id",
+			wantExitCode: -1,
+		},
+		{
+			name:         "user abort surfaces a SIGINT exit code",
+			identityName: cfg.IdentityFlagSelectValue,
+			setupMock: func(m *authTypes.MockAuthManager) {
+				m.EXPECT().GetDefaultIdentity(true).Return("", errUtils.ErrUserAborted)
+			},
+			wantErrIs:    errUtils.ErrUserAborted,
+			wantExitCode: errUtils.ExitCodeSIGINT,
+		},
+		{
+			name:         "no TTY wraps ErrDefaultIdentity and the TTY error",
+			identityName: cfg.IdentityFlagSelectValue,
+			setupMock: func(m *authTypes.MockAuthManager) {
+				m.EXPECT().GetDefaultIdentity(true).Return("", errUtils.ErrIdentitySelectionRequiresTTY)
+			},
+			wantErrIs:    errUtils.ErrIdentitySelectionRequiresTTY,
+			wantExitCode: -1,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
+
+			mockManager := authTypes.NewMockAuthManager(ctrl)
+			tt.setupMock(mockManager)
+
+			got, err := resolveSelectedIdentity(auth.AuthManager(mockManager), tt.identityName)
+
+			if tt.wantErrIs != nil {
+				assert.ErrorIs(t, err, tt.wantErrIs)
+				if tt.wantExitCode >= 0 {
+					assert.Equal(t, tt.wantExitCode, errUtils.GetExitCode(err))
+				}
+				return
+			}
+
+			require.NoError(t, err)
+			assert.Equal(t, tt.wantIdentity, got)
+		})
+	}
+}
+
+// errUserAbortedWrapping documents that the SIGINT-coded abort still satisfies
+// errors.Is for ErrUserAborted (guards against future wrapping regressions).
+func TestResolveSelectedIdentity_AbortWrapsSentinel(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockManager := authTypes.NewMockAuthManager(ctrl)
+	mockManager.EXPECT().GetDefaultIdentity(true).Return("", errUtils.ErrUserAborted)
+
+	_, err := resolveSelectedIdentity(auth.AuthManager(mockManager), cfg.IdentityFlagSelectValue)
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, errUtils.ErrUserAborted))
 }

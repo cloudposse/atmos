@@ -36,6 +36,9 @@ atmos aws ecr login --public --identity dev-admin
 # Login using an identity's linked integrations
 atmos aws ecr login --identity dev-admin
 
+# Pick an identity interactively (requires a TTY)
+atmos aws ecr login --identity
+
 # Login with explicit registry URL (uses current AWS credentials)
 atmos aws ecr login --registry 123456789012.dkr.ecr.us-east-1.amazonaws.com
 
@@ -65,6 +68,8 @@ atmos aws ecr login \
   <dt>`--identity` <em>(alias `-i`)</em></dt>
   <dd>
     Identity name whose linked integrations should be executed. All `aws/ecr` and `aws/ecr-public` integrations that reference this identity will be triggered. This authenticates the identity first, then executes all its linked integrations. When combined with `--public`, the identity's credentials are used to log in to ECR Public.
+
+    Passing `--identity` **without a value** opens an interactive picker to choose an identity (the same selector used by `atmos auth login`). This requires an interactive terminal (TTY); in CI or other non-interactive contexts it errors instead of prompting, so pass an explicit name there (`--identity <name>`).
   </dd>
 
   <dt>`--registry` <em>(alias `-r`)</em></dt>
