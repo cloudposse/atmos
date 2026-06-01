@@ -3,7 +3,7 @@
 Configure MCP servers ([Atmos MCP server](https://atmos.tools/ai/mcp-server) plus the
 [AWS MCP server suite](https://github.com/awslabs/mcp)) **once** in `atmos.yaml`, then use
 the same set of tools — with the same AWS credentials managed by Atmos Auth — from
-[Claude Code](https://www.anthropic.com/claude-code),
+[Claude Code](https://claude.com/product/claude-code),
 [OpenAI Codex CLI](https://github.com/openai/codex), and
 [Google Gemini CLI](https://github.com/google-gemini/gemini-cli).
 
