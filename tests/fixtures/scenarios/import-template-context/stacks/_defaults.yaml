@@ -1,0 +1,6 @@
+settings:
+  context:
+    catalog_ref: v1
+
+vars:
+  region: us-east-1
