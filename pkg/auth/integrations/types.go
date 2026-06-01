@@ -9,8 +9,9 @@ import (
 
 // Integration kind constants.
 const (
-	KindAWSECR = "aws/ecr"
-	KindAWSEKS = "aws/eks"
+	KindAWSECR    = "aws/ecr"
+	KindAWSEKS    = "aws/eks"
+	KindGitHubSTS = "github/sts"
 )
 
 // Integration represents a client-only credential materialization.
@@ -40,6 +41,11 @@ type Integration interface {
 type IntegrationConfig struct {
 	Name   string
 	Config *schema.Integration
+	// Realm is the credential isolation realm. Integrations that persist secret
+	// material to disk (e.g., github/sts) use it to scope their state paths so
+	// minted credentials are isolated per repository/customer environment.
+	// Integrations that don't need it (aws/ecr, aws/eks) may ignore it.
+	Realm string
 }
 
 // IntegrationFactory creates integrations from configuration.
