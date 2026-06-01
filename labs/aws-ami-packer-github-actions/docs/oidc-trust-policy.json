@@ -1,0 +1,21 @@
+{
+  "_comment": "Trust policy for the IAM role that GitHub Actions assumes via OIDC. Attach this as the role's trust relationship. Replace 123456789012 with your account ID and YOUR_ORG/YOUR_REPO with your GitHub org/repo. The sub condition restricts which repo/branches may assume the role.",
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Principal": {
+        "Federated": "arn:aws:iam::123456789012:oidc-provider/token.actions.githubusercontent.com"
+      },
+      "Action": "sts:AssumeRoleWithWebIdentity",
+      "Condition": {
+        "StringEquals": {
+          "token.actions.githubusercontent.com:aud": "sts.amazonaws.com"
+        },
+        "StringLike": {
+          "token.actions.githubusercontent.com:sub": "repo:YOUR_ORG/YOUR_REPO:*"
+        }
+      }
+    }
+  ]
+}

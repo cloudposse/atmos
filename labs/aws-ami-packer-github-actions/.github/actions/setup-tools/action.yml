@@ -1,0 +1,33 @@
+name: Setup Tools
+description: Install pinned versions of Atmos and Packer for the AMI pipeline.
+
+inputs:
+  atmos-version:
+    description: Atmos version to install.
+    required: false
+    default: "1.190.0"
+  packer-version:
+    description: Packer version to install.
+    required: false
+    default: "1.15.3"
+
+runs:
+  using: composite
+  steps:
+    - name: Install Atmos
+      uses: cloudposse/github-action-setup-atmos@v2
+      with:
+        atmos-version: ${{ inputs.atmos-version }}
+
+    - name: Install Packer
+      uses: hashicorp/setup-packer@v3
+      with:
+        version: ${{ inputs.packer-version }}
+
+    # The Amazon plugin is declared in the Packer template's required_plugins
+    # block. `atmos packer init` installs it before the build.
+    - name: Show tool versions
+      shell: bash
+      run: |
+        atmos version
+        packer version

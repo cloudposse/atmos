@@ -1,0 +1,165 @@
+name: AMI Pipeline
+
+# Build → launch test instance → health check → [optional scan] → manual approval
+# → tag ScanStatus=approved → share → cleanup.
+#
+# This pipeline is the governed path: an AMI is only tagged `approved` and shared
+# AFTER a human approves it through the GitHub Environment gate. A companion
+# tag-based IAM/SCP policy (docs/) can then restrict EC2 launches to approved AMIs.
+#
+# Setup required before this runs (see README):
+#   - Repository variables: AWS_OIDC_ROLE_ARN, AWS_REGION
+#   - An IAM role trusting GitHub OIDC (docs/iam-policy.json)
+#   - A GitHub Environment named `ami-approval` with required reviewers
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_ami_name:
+        description: "Base AMI name/pattern to build from (e.g. al2023-ami-minimal-2023.7.*-x86_64). Leave blank to use the stack default."
+        required: false
+        default: ""
+      stack:
+        description: "Atmos stack to build."
+        required: true
+        default: "al2023"
+      component:
+        description: "Atmos Packer component to build."
+        required: true
+        default: "al2023"
+      enable_scan:
+        description: "Run the optional vulnerability scan step."
+        type: boolean
+        required: false
+        default: false
+
+# OIDC requires id-token: write. contents: read to checkout.
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  ATMOS_COMPONENT: ${{ inputs.component }}
+  ATMOS_STACK: ${{ inputs.stack }}
+  SOURCE_AMI_NAME: ${{ inputs.source_ami_name }}
+
+jobs:
+  build:
+    name: Build AMI
+    runs-on: ubuntu-latest
+    outputs:
+      ami_id: ${{ steps.get_ami.outputs.ami_id }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ./.github/actions/setup-tools
+
+      - uses: ./.github/actions/setup-aws-credentials
+        with:
+          role-arn: ${{ vars.AWS_OIDC_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Packer init
+        run: atmos packer init "$ATMOS_COMPONENT" -s "$ATMOS_STACK"
+
+      - name: Packer build
+        run: atmos packer build "$ATMOS_COMPONENT" -s "$ATMOS_STACK"
+
+      - name: Resolve AMI ID
+        id: get_ami
+        run: |
+          ami_id="$(atmos ami get-ami-id "$ATMOS_COMPONENT" -s "$ATMOS_STACK")"
+          echo "ami_id=${ami_id}" >> "$GITHUB_OUTPUT"
+          echo "Built AMI: ${ami_id}" >> "$GITHUB_STEP_SUMMARY"
+
+  health-check:
+    name: Launch & Health Check
+    runs-on: ubuntu-latest
+    needs: build
+    outputs:
+      instance_id: ${{ steps.launch.outputs.instance_id }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-tools
+      - uses: ./.github/actions/setup-aws-credentials
+        with:
+          role-arn: ${{ vars.AWS_OIDC_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Launch test instance
+        id: launch
+        run: |
+          instance_id="$(atmos ami launch-instance "$ATMOS_COMPONENT" -s "$ATMOS_STACK")"
+          echo "instance_id=${instance_id}" >> "$GITHUB_OUTPUT"
+
+      - name: Wait for instance to pass status checks
+        run: |
+          aws ec2 wait instance-status-ok \
+            --region "${{ vars.AWS_REGION }}" \
+            --instance-ids "${{ steps.launch.outputs.instance_id }}"
+          echo "Instance ${{ steps.launch.outputs.instance_id }} is healthy" >> "$GITHUB_STEP_SUMMARY"
+
+  scan:
+    name: Vulnerability Scan (optional)
+    runs-on: ubuntu-latest
+    needs: [build, health-check]
+    if: ${{ inputs.enable_scan }}
+    steps:
+      - name: Run scan
+        run: |
+          echo "Optional scan step is enabled."
+          echo "Wire your scanner here (e.g. query results for AMI ${{ needs.build.outputs.ami_id }})."
+          echo "This Lab ships a no-op placeholder so it runs without a scanner subscription."
+
+  approve:
+    name: Approval Gate
+    runs-on: ubuntu-latest
+    # `scan` is skipped when enable_scan is false; always() lets approval proceed,
+    # while the failure() check still blocks if an enabled scan actually failed.
+    needs: [build, health-check, scan]
+    if: ${{ always() && needs.build.result == 'success' && needs.health-check.result == 'success' && needs.scan.result != 'failure' }}
+    # The `ami-approval` Environment requires a human reviewer before this job runs.
+    environment: ami-approval
+    steps:
+      - name: Record approval
+        run: |
+          echo "AMI ${{ needs.build.outputs.ami_id }} approved by ${{ github.actor }}" >> "$GITHUB_STEP_SUMMARY"
+
+  promote:
+    name: Tag & Share
+    runs-on: ubuntu-latest
+    needs: [build, approve]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-tools
+      - uses: ./.github/actions/setup-aws-credentials
+        with:
+          role-arn: ${{ vars.AWS_OIDC_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Tag ScanStatus=approved
+        run: atmos ami tag "$ATMOS_COMPONENT" -s "$ATMOS_STACK" --key ScanStatus --value approved
+
+      - name: Share AMI with target accounts
+        run: atmos ami share "$ATMOS_COMPONENT" -s "$ATMOS_STACK"
+
+      - name: Summary
+        run: |
+          echo "Promoted and shared ${{ needs.build.outputs.ami_id }}" >> "$GITHUB_STEP_SUMMARY"
+
+  cleanup:
+    name: Cleanup Test Instances
+    runs-on: ubuntu-latest
+    # Always clean up the test instance, even if a later job failed.
+    needs: [build, health-check, promote]
+    if: ${{ always() }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-tools
+      - uses: ./.github/actions/setup-aws-credentials
+        with:
+          role-arn: ${{ vars.AWS_OIDC_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Terminate test instances
+        run: atmos ami terminate-instances "$ATMOS_COMPONENT" -s "$ATMOS_STACK"

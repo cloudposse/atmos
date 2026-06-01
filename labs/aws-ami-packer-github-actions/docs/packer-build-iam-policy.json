@@ -1,0 +1,62 @@
+{
+  "_comment": "Reference identity policy for the Packer build role (the role GitHub OIDC assumes). Grants the EC2/AMI permissions Packer needs to build, tag, share, and clean up. Scope it down further for production (e.g. restrict regions, require tag conditions on RunInstances). KMS permissions are only needed when building encrypted AMIs with a customer-managed key.",
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "PackerEC2Build",
+      "Effect": "Allow",
+      "Action": [
+        "ec2:DescribeImages",
+        "ec2:DescribeInstances",
+        "ec2:DescribeInstanceStatus",
+        "ec2:DescribeInstanceTypes",
+        "ec2:DescribeRegions",
+        "ec2:DescribeSecurityGroups",
+        "ec2:DescribeSubnets",
+        "ec2:DescribeVpcs",
+        "ec2:DescribeTags",
+        "ec2:DescribeVolumes",
+        "ec2:DescribeSnapshots",
+        "ec2:CreateKeyPair",
+        "ec2:DeleteKeyPair",
+        "ec2:CreateSecurityGroup",
+        "ec2:DeleteSecurityGroup",
+        "ec2:AuthorizeSecurityGroupIngress",
+        "ec2:RevokeSecurityGroupIngress",
+        "ec2:RunInstances",
+        "ec2:StopInstances",
+        "ec2:TerminateInstances",
+        "ec2:CreateImage",
+        "ec2:RegisterImage",
+        "ec2:DeregisterImage",
+        "ec2:CreateSnapshot",
+        "ec2:DeleteSnapshot",
+        "ec2:CreateTags",
+        "ec2:DeleteTags",
+        "ec2:ModifyImageAttribute",
+        "ec2:ModifySnapshotAttribute",
+        "ec2:GetPasswordData"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "PackerKMSForEncryptedAMIs",
+      "Effect": "Allow",
+      "Action": [
+        "kms:DescribeKey",
+        "kms:CreateGrant",
+        "kms:Encrypt",
+        "kms:Decrypt",
+        "kms:ReEncrypt*",
+        "kms:GenerateDataKey*"
+      ],
+      "Resource": "arn:aws:kms:us-east-2:123456789012:key/EXAMPLE-KEY-ID"
+    },
+    {
+      "Sid": "ReadBaseImageFromSSM",
+      "Effect": "Allow",
+      "Action": ["ssm:GetParameter", "ssm:GetParameters"],
+      "Resource": "arn:aws:ssm:*::parameter/aws/service/ami-amazon-linux-latest/*"
+    }
+  ]
+}

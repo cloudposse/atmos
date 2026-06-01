@@ -50,6 +50,7 @@ const TAGS_MAP = {
   'stack-names': ['Stacks'],
   'demo-ansible': ['Automation'],
   'mcp-with-aws': ['DX', 'Automation'],
+  'aws-ami-packer-github-actions': ['Automation'],
 };
 
 // Documentation pages mapping for examples.
@@ -136,6 +137,12 @@ const DOCS_MAP = {
     { label: 'Custom Commands', url: '/cli/configuration/commands' },
     { label: 'Authentication', url: '/stacks/auth' },
     { label: 'Toolchain', url: '/cli/configuration/toolchain' },
+  ],
+  'aws-ami-packer-github-actions': [
+    { label: 'Lab Walkthrough', url: '/labs/aws-ami-packer-github-actions/guide' },
+    { label: 'Packer Build', url: '/cli/commands/packer/build' },
+    { label: 'Custom Commands', url: '/cli/configuration/commands' },
+    { label: 'GitHub Actions', url: '/integrations/github-actions/setup-atmos' },
   ],
 };
 

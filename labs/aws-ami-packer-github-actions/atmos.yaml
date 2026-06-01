@@ -1,0 +1,315 @@
+# Atmos configuration for the "Build, Scan, Approve & Share AWS AMIs" Lab.
+#
+# This file wires up three things:
+#   1. The Packer component type (so `atmos packer ...` knows where components live).
+#   2. The stacks layout and Go templating.
+#   3. A nested `atmos ami <subcommand>` custom-command tree that operates on the
+#      AMI produced by the Packer build (tag, share, launch test instances, etc.).
+#
+# Docs:
+#   - https://atmos.tools/cli/commands/packer/
+#   - https://atmos.tools/cli/configuration/commands
+#   - https://atmos.tools/core-concepts/stacks/templates
+
+base_path: "./"
+
+components:
+  packer:
+    # The build tool to invoke. Override with ATMOS_COMPONENTS_PACKER_COMMAND or --packer-command.
+    command: packer
+    # Where Packer components live, relative to base_path. Override with --packer-dir.
+    base_path: "components/packer"
+
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "**/*"
+  excluded_paths:
+    - "**/_defaults.yaml"
+  # Single-dimension naming for this Lab: the stack name is the file's `stage` var.
+  name_template: "{{ .vars.stage }}"
+
+logs:
+  file: "/dev/stderr"
+  level: Info
+
+# Go templating in Atmos manifests lets the stack resolve the source AMI name
+# from an environment variable at build time (see stacks/al2023.yaml).
+# https://atmos.tools/core-concepts/stacks/templates
+templates:
+  settings:
+    enabled: true
+    evaluations: 1
+    sprig:
+      enabled: true
+    gomplate:
+      enabled: true
+      timeout: 10
+      datasources: {}
+
+# ---------------------------------------------------------------------------
+# Custom command tree: `atmos ami <subcommand> <component> -s <stack>`.
+#
+# These wrap the AWS CLI to operate on the AMI built by `atmos packer build`.
+# Each subcommand:
+#   - takes the Packer `component` as a positional argument and the `--stack` flag,
+#   - exposes the resolved region/ami_name from the stack via `component_config`,
+#   - delegates the real work to a small, reviewable script in scripts/atmos/.
+#
+# This keeps the command definitions declarative and the logic in shellcheck-able
+# scripts, instead of burying bash inside YAML.
+# ---------------------------------------------------------------------------
+commands:
+  - name: ami
+    description: Operate on the AMI produced by 'atmos packer build' (get id, tag, share, launch/terminate test instances).
+    commands:
+      - name: get-ami-id
+        description: Print the AMI ID of the most recent Packer build (read from the build manifest).
+        arguments:
+          - name: component
+            description: Packer component (e.g. al2023).
+            required: true
+        flags:
+          - name: stack
+            shorthand: s
+            description: Stack to read the build manifest for.
+            required: true
+        env:
+          - key: ATMOS_AMI_COMPONENT
+            value: "{{ .Arguments.component }}"
+          - key: ATMOS_AMI_STACK
+            value: "{{ .Flags.stack }}"
+        steps:
+          - ./scripts/atmos/get-ami-id.sh
+
+      - name: tag
+        description: Add or update a tag on the AMI built for a component/stack.
+        arguments:
+          - name: component
+            description: Packer component (e.g. al2023).
+            required: true
+        flags:
+          - name: stack
+            shorthand: s
+            description: Stack the AMI was built for.
+            required: true
+          - name: key
+            description: Tag key (e.g. ScanStatus).
+            required: true
+          - name: value
+            description: Tag value (e.g. approved).
+            required: true
+        component_config:
+          component: "{{ .Arguments.component }}"
+          stack: "{{ .Flags.stack }}"
+        env:
+          - key: ATMOS_AMI_COMPONENT
+            value: "{{ .Arguments.component }}"
+          - key: ATMOS_AMI_STACK
+            value: "{{ .Flags.stack }}"
+          - key: ATMOS_AMI_REGION
+            value: "{{ .ComponentConfig.vars.region }}"
+          - key: ATMOS_AMI_TAG_KEY
+            value: "{{ .Flags.key }}"
+          - key: ATMOS_AMI_TAG_VALUE
+            value: "{{ .Flags.value }}"
+        steps:
+          - ./scripts/atmos/tag-ami.sh
+
+      - name: list-tags
+        description: List all tags on the AMI built for a component/stack.
+        arguments:
+          - name: component
+            description: Packer component (e.g. al2023).
+            required: true
+        flags:
+          - name: stack
+            shorthand: s
+            description: Stack the AMI was built for.
+            required: true
+        component_config:
+          component: "{{ .Arguments.component }}"
+          stack: "{{ .Flags.stack }}"
+        env:
+          - key: ATMOS_AMI_COMPONENT
+            value: "{{ .Arguments.component }}"
+          - key: ATMOS_AMI_STACK
+            value: "{{ .Flags.stack }}"
+          - key: ATMOS_AMI_REGION
+            value: "{{ .ComponentConfig.vars.region }}"
+        steps:
+          - ./scripts/atmos/list-ami-tags.sh
+
+      - name: get-tag
+        description: Print the value of a single tag on the AMI.
+        arguments:
+          - name: component
+            description: Packer component (e.g. al2023).
+            required: true
+        flags:
+          - name: stack
+            shorthand: s
+            description: Stack the AMI was built for.
+            required: true
+          - name: key
+            description: Tag key to read (e.g. ScanStatus).
+            required: true
+        component_config:
+          component: "{{ .Arguments.component }}"
+          stack: "{{ .Flags.stack }}"
+        env:
+          - key: ATMOS_AMI_COMPONENT
+            value: "{{ .Arguments.component }}"
+          - key: ATMOS_AMI_STACK
+            value: "{{ .Flags.stack }}"
+          - key: ATMOS_AMI_REGION
+            value: "{{ .ComponentConfig.vars.region }}"
+          - key: ATMOS_AMI_TAG_KEY
+            value: "{{ .Flags.key }}"
+        steps:
+          - ./scripts/atmos/get-ami-tag.sh
+
+      - name: launch-instance
+        description: Launch a short-lived EC2 test instance from the built AMI (for health checks).
+        arguments:
+          - name: component
+            description: Packer component (e.g. al2023).
+            required: true
+        flags:
+          - name: stack
+            shorthand: s
+            description: Stack the AMI was built for.
+            required: true
+          - name: type
+            description: EC2 instance type for the test instance.
+            required: false
+            default: t3.small
+        component_config:
+          component: "{{ .Arguments.component }}"
+          stack: "{{ .Flags.stack }}"
+        env:
+          - key: ATMOS_AMI_COMPONENT
+            value: "{{ .Arguments.component }}"
+          - key: ATMOS_AMI_STACK
+            value: "{{ .Flags.stack }}"
+          - key: ATMOS_AMI_REGION
+            value: "{{ .ComponentConfig.vars.region }}"
+          - key: ATMOS_AMI_SUBNET_ID
+            value: "{{ .ComponentConfig.vars.subnet_id }}"
+          - key: ATMOS_AMI_INSTANCE_TYPE
+            value: "{{ .Flags.type }}"
+        steps:
+          - ./scripts/atmos/launch-instance-from-ami.sh
+
+      - name: list-instances
+        description: List EC2 instances launched from the built AMI.
+        arguments:
+          - name: component
+            description: Packer component (e.g. al2023).
+            required: true
+        flags:
+          - name: stack
+            shorthand: s
+            description: Stack the AMI was built for.
+            required: true
+        component_config:
+          component: "{{ .Arguments.component }}"
+          stack: "{{ .Flags.stack }}"
+        env:
+          - key: ATMOS_AMI_COMPONENT
+            value: "{{ .Arguments.component }}"
+          - key: ATMOS_AMI_STACK
+            value: "{{ .Flags.stack }}"
+          - key: ATMOS_AMI_REGION
+            value: "{{ .ComponentConfig.vars.region }}"
+        steps:
+          - ./scripts/atmos/list-instances-by-ami.sh
+
+      - name: terminate-instance
+        description: Terminate a single EC2 instance by ID.
+        arguments:
+          - name: component
+            description: Packer component (e.g. al2023).
+            required: true
+        flags:
+          - name: stack
+            shorthand: s
+            description: Stack the AMI was built for.
+            required: true
+          - name: instance-id
+            description: EC2 instance ID to terminate (e.g. i-0123456789abcdef0).
+            required: true
+        component_config:
+          component: "{{ .Arguments.component }}"
+          stack: "{{ .Flags.stack }}"
+        env:
+          - key: ATMOS_AMI_REGION
+            value: "{{ .ComponentConfig.vars.region }}"
+          - key: ATMOS_AMI_INSTANCE_ID
+            value: "{{ .Flags.instance-id }}"
+        steps:
+          - ./scripts/atmos/terminate-instance.sh
+
+      - name: terminate-instances
+        description: Terminate ALL EC2 instances launched from the built AMI (cleanup).
+        arguments:
+          - name: component
+            description: Packer component (e.g. al2023).
+            required: true
+        flags:
+          - name: stack
+            shorthand: s
+            description: Stack the AMI was built for.
+            required: true
+        component_config:
+          component: "{{ .Arguments.component }}"
+          stack: "{{ .Flags.stack }}"
+        env:
+          - key: ATMOS_AMI_COMPONENT
+            value: "{{ .Arguments.component }}"
+          - key: ATMOS_AMI_STACK
+            value: "{{ .Flags.stack }}"
+          - key: ATMOS_AMI_REGION
+            value: "{{ .ComponentConfig.vars.region }}"
+        steps:
+          - ./scripts/atmos/terminate-instances-by-ami.sh
+
+      - name: share
+        description: Share the built AMI (and its snapshots) with a list of AWS accounts.
+        arguments:
+          - name: component
+            description: Packer component (e.g. al2023).
+            required: true
+        flags:
+          - name: stack
+            shorthand: s
+            description: Stack the AMI was built for.
+            required: true
+          - name: accounts
+            description: Comma-separated AWS account IDs to share the AMI with. Defaults to the stack's share_account_ids var.
+            required: false
+            default: ""
+          - name: kms-grant
+            description: Also create KMS grants so target accounts can use the encryption key.
+            type: bool
+            default: false
+        component_config:
+          component: "{{ .Arguments.component }}"
+          stack: "{{ .Flags.stack }}"
+        env:
+          - key: ATMOS_AMI_COMPONENT
+            value: "{{ .Arguments.component }}"
+          - key: ATMOS_AMI_STACK
+            value: "{{ .Flags.stack }}"
+          - key: ATMOS_AMI_REGION
+            value: "{{ .ComponentConfig.vars.region }}"
+          - key: ATMOS_AMI_KMS_KEY_ARN
+            value: "{{ .ComponentConfig.vars.kms_key_arn }}"
+          - key: ATMOS_AMI_SHARE_ACCOUNTS_FLAG
+            value: "{{ .Flags.accounts }}"
+          - key: ATMOS_AMI_SHARE_ACCOUNTS_DEFAULT
+            value: "{{ .ComponentConfig.vars.share_account_ids }}"
+          - key: ATMOS_AMI_KMS_GRANT
+            value: "{{ .Flags.kms-grant }}"
+        steps:
+          - ./scripts/atmos/share-ami.sh
