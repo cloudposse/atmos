@@ -5,6 +5,8 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+
+	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 // mockTestAdapter is a simple mock adapter for testing the registry.
@@ -23,6 +25,7 @@ func (m *mockTestAdapter) Resolve(
 	_ string,
 	_ int,
 	_ int,
+	_ *schema.AtmosConfiguration,
 ) ([]ResolvedPaths, error) {
 	return []ResolvedPaths{{FilePath: "mock", ImportType: ADAPTER}}, nil
 }
@@ -117,7 +120,7 @@ func TestFindImportAdapter_NoDefaultAdapter(t *testing.T) {
 	assert.Nil(t, adapter.Schemes())
 
 	// noopAdapter.Resolve returns nil, nil.
-	paths, err := adapter.Resolve(context.Background(), "", "", "", 0, 0)
+	paths, err := adapter.Resolve(context.Background(), "", "", "", 0, 0, nil)
 	assert.NoError(t, err)
 	assert.Nil(t, paths)
 }
@@ -221,7 +224,7 @@ func TestNoopAdapter_Schemes(t *testing.T) {
 
 func TestNoopAdapter_Resolve(t *testing.T) {
 	noop := &noopAdapter{}
-	paths, err := noop.Resolve(context.Background(), "path", "base", "temp", 1, 10)
+	paths, err := noop.Resolve(context.Background(), "path", "base", "temp", 1, 10, nil)
 	assert.NoError(t, err)
 	assert.Nil(t, paths)
 }

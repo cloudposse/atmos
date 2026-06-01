@@ -529,6 +529,39 @@ jobs:
 </TabItem>
 </Tabs>
 
+## Atmos Pro
+
+The `atmos/pro` provider authenticates the Atmos CLI **to [Atmos Pro](https://atmos-pro.com)** (not to a cloud), by federating the GitHub Actions runner's OIDC token into an Atmos Pro session. It is the prerequisite for the [`github/sts` integration](/cli/configuration/auth#github-sts-atmos-pro). v1 is OIDC-only and requires a GitHub Actions environment.
+
+<File title="atmos.yaml">
+```yaml
+auth:
+  providers:
+    atmos-pro:
+      kind: atmos/pro
+      spec:
+        workspace_id: <your-workspace-id>   # or ATMOS_PRO_WORKSPACE_ID
+        base_url: https://atmos-pro.com     # optional; or ATMOS_PRO_BASE_URL
+        audience: atmos-pro.com             # optional OIDC audience
+```
+</File>
+
+<dl>
+  <dt>`kind`</dt>
+  <dd>**Required.** Must be `atmos/pro`.</dd>
+
+  <dt>`spec.workspace_id`</dt>
+  <dd>**Required.** Atmos Pro workspace ID. May also be supplied via `ATMOS_PRO_WORKSPACE_ID` (set automatically in most Atmos Pro CI setups).</dd>
+
+  <dt>`spec.base_url`</dt>
+  <dd>Optional. Atmos Pro base URL. Defaults to `https://atmos-pro.com`. May also be supplied via `ATMOS_PRO_BASE_URL`.</dd>
+
+  <dt>`spec.audience`</dt>
+  <dd>Optional. OIDC audience for the Atmos Pro token exchange. Defaults to `atmos-pro.com`.</dd>
+</dl>
+
+Your GitHub Actions workflow only needs `permissions: id-token: write`. Pair this provider with an `atmos/pro` identity and a `github/sts` integration to mint just-in-time GitHub tokens for private module/source/vendor access.
+
 ## Multiple Providers
 
 You can configure multiple providers for different use cases and cloud platforms:

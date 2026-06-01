@@ -223,7 +223,10 @@ func (d *CustomGitDetector) injectToken(parsedURL *url.URL, host string) {
 func (d *CustomGitDetector) resolveToken(host string) (string, string) {
 	switch host {
 	case hostGitHub:
-		// Try ATMOS_GITHUB_TOKEN first, fall back to GITHUB_TOKEN
+		// Prefer ATMOS_PRO_GITHUB_TOKEN (Atmos Pro-brokered), then ATMOS_GITHUB_TOKEN, then GITHUB_TOKEN.
+		if d.atmosConfig.Settings.AtmosProGithubToken != "" {
+			return d.atmosConfig.Settings.AtmosProGithubToken, "ATMOS_PRO_GITHUB_TOKEN"
+		}
 		if d.atmosConfig.Settings.AtmosGithubToken != "" {
 			return d.atmosConfig.Settings.AtmosGithubToken, "ATMOS_GITHUB_TOKEN"
 		}
