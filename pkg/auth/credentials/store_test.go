@@ -102,6 +102,25 @@ func TestStoreRetrieve_OIDC(t *testing.T) {
 	}
 }
 
+func TestStoreRetrieve_Pro(t *testing.T) {
+	t.Setenv("ATMOS_KEYRING_TYPE", "memory")
+	s := NewCredentialStore()
+	alias := "atmos-pro-1"
+	in := &types.ProCredentials{Token: "hdr.payload.", BaseURL: "https://pro", Endpoint: "api/v1", WorkspaceID: "ws-1", Provider: "atmos-pro"}
+	assert.NoError(t, s.Store(alias, in, "realmA"))
+
+	got, err := s.Retrieve(alias, "realmA")
+	assert.NoError(t, err)
+	out, ok := got.(*types.ProCredentials)
+	if assert.True(t, ok) {
+		assert.Equal(t, in.Token, out.Token)
+		assert.Equal(t, in.BaseURL, out.BaseURL)
+		assert.Equal(t, in.Endpoint, out.Endpoint)
+		assert.Equal(t, in.WorkspaceID, out.WorkspaceID)
+		assert.Equal(t, in.Provider, out.Provider)
+	}
+}
+
 // fakeCreds implements types.ICredentials but is not a supported concrete type.
 type fakeCreds struct{}
 

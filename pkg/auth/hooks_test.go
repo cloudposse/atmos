@@ -121,6 +121,10 @@ func (s *stubAuthManager) PrepareShellEnvironment(ctx context.Context, identityN
 	return result, nil
 }
 
+func (s *stubAuthManager) EnsureIdentityEnvironment(ctx context.Context, identityName string) (map[string]string, error) {
+	return nil, nil
+}
+
 func (s *stubAuthManager) ExecuteIntegration(ctx context.Context, integrationName string) error {
 	return nil
 }
@@ -131,6 +135,10 @@ func (s *stubAuthManager) ExecuteIdentityIntegrations(ctx context.Context, ident
 
 func (s *stubAuthManager) GetIntegration(integrationName string) (*schema.Integration, error) {
 	return nil, nil
+}
+
+func (s *stubAuthManager) RevokeEphemeralIntegrations(_ context.Context, _ string, _ *bool) error {
+	return nil
 }
 
 func (s *stubAuthManager) ResolvePrincipalSetting(identityName, key string) (interface{}, bool) {

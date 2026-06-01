@@ -188,6 +188,10 @@ func (s stubSamlMgr) PrepareShellEnvironment(context.Context, string, []string) 
 	return nil, nil
 }
 
+func (s stubSamlMgr) EnsureIdentityEnvironment(context.Context, string) (map[string]string, error) {
+	return nil, nil
+}
+
 func (s stubSamlMgr) ExecuteIntegration(context.Context, string) error {
 	return nil
 }
@@ -198,6 +202,10 @@ func (s stubSamlMgr) ExecuteIdentityIntegrations(context.Context, string) error 
 
 func (s stubSamlMgr) GetIntegration(string) (*schema.Integration, error) {
 	return nil, nil
+}
+
+func (s stubSamlMgr) RevokeEphemeralIntegrations(context.Context, string, *bool) error {
+	return nil
 }
 
 func (s stubSamlMgr) ResolvePrincipalSetting(string, string) (interface{}, bool) {
