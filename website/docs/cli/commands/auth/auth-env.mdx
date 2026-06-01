@@ -110,6 +110,54 @@ In GitHub Actions, use `--format=github` to export credentials directly to `$GIT
 
 The `--format=github` flag writes `KEY=value` pairs directly to the `$GITHUB_ENV` file, making credentials available to subsequent steps in GitHub Actions without shell pipelines.
 
+**Minting a GitHub token in one step and consuming it in the next (Octo-STS style):**
+
+With the [`atmos/pro` provider and `github/sts` integration](/cli/configuration/auth#github-sts-atmos-pro), `atmos auth env --format=github` can mint a short-lived, least-privilege GitHub token in one step and hand it to later steps — the same pattern as the [Octo-STS action](https://github.com/octo-sts/action), but built into the Atmos CLI. Set `token_env` on the integration to choose the variable name the raw token is exported under:
+
+```yaml
+# atmos.yaml
+auth:
+  providers:
+    atmos-pro:
+      kind: atmos/pro
+      spec:
+        workspace_id: <your-workspace-id>   # or ATMOS_PRO_WORKSPACE_ID
+  identities:
+    atmos-pro:
+      kind: atmos/pro
+      via: { provider: atmos-pro }
+  integrations:
+    github-sts:
+      kind: github/sts
+      via: { provider: atmos-pro }
+      spec:
+        token_env: GH_TOKEN                 # export the minted token as $GH_TOKEN
+```
+
+```yaml
+# .github/workflows/example.yml
+permissions:
+  id-token: write                            # the only permission required
+
+steps:
+  - name: Mint a GitHub token
+    # Authenticates to Atmos Pro via OIDC, mints the token, and writes GH_TOKEN to $GITHUB_ENV.
+    run: atmos auth env --identity=atmos-pro --format=github --login
+
+  - name: Check out a private repo with the minted token
+    uses: actions/checkout@v4
+    with:
+      repository: acme/private-repo
+      token: ${{ env.GH_TOKEN }}
+
+  - name: Use the GitHub CLI
+    run: gh repo view acme/private-repo
+    env:
+      GH_TOKEN: ${{ env.GH_TOKEN }}
+```
+
+For Atmos's own git operations (vendoring, `source:` components, `terraform init` of private `git::https://…` modules) no `token_env` is needed — `github/sts` injects per-owner `GIT_CONFIG_*` rewrites automatically. `token_env` is for everything else (`gh`, `actions/checkout`, REST API). For multi-org runs, use a `{owner}` placeholder (e.g. `token_env: GH_TOKEN_{owner}`) to export one variable per owner.
+
 **The commands fail gracefully:** If you run cloud CLI or Terraform commands before logging in, they will fail with standard credential errors, prompting you to run `atmos auth login`.
 
 This separation allows you to add `eval $(atmos auth env)` to your shell profile without triggering login prompts every time you open a terminal.

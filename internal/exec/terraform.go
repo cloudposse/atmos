@@ -1,10 +1,12 @@
 package exec
 
 import (
+	"context"
 	"fmt"
 	"os"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/auth/broker"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/dependencies"
 	log "github.com/cloudposse/atmos/pkg/logger"
@@ -105,6 +107,11 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo, opts ...ShellCommandOptio
 		log.Info("Component is not enabled and skipped", logFieldComponent, info.ComponentFromArg)
 		return nil
 	}
+
+	// Ensure ambient credential brokers (e.g., Atmos Pro github/sts) have provisioned before the
+	// subprocess environment is built, so terraform's own `git::` module fetches can read private
+	// repos via the inherited GIT_CONFIG_* rewrites. Process-once and gated (CI + configured).
+	broker.EnsureCredentials(context.Background(), &atmosConfig)
 
 	// Resolve paths, install toolchain, write varfiles, validate, run hooks, and build env.
 	execCtx, err := prepareComponentExecution(&atmosConfig, &info, shouldProcess)

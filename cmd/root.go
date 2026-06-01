@@ -36,6 +36,10 @@ import (
 	_ "github.com/cloudposse/atmos/pkg/component/ansible"
 	_ "github.com/cloudposse/atmos/pkg/component/mock"
 
+	// Import the Atmos Pro credential broker so it registers itself (init) and is consulted
+	// before the first remote read in CI (lazily provisions the github/sts integration).
+	_ "github.com/cloudposse/atmos/pkg/auth/providers/atmospro/broker"
+
 	"github.com/cloudposse/atmos/pkg/ci"
 	"github.com/cloudposse/atmos/pkg/data"
 	"github.com/cloudposse/atmos/pkg/filesystem"
