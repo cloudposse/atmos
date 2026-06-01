@@ -6,21 +6,13 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-
-	"github.com/cloudposse/atmos/tests/testhelpers"
 )
 
 // TestDoubleHyphenSeparator tests that args after "--" are correctly passed through
 // to the underlying terraform command without being parsed by Atmos.
 // This is the fix for GitHub issue #1967.
 func TestDoubleHyphenSeparator(t *testing.T) {
-	// Initialize atmosRunner if not already done.
-	if atmosRunner == nil {
-		atmosRunner = testhelpers.NewAtmosRunner(coverDir)
-		if err := atmosRunner.Build(); err != nil {
-			t.Skipf("Failed to initialize Atmos: %v", err)
-		}
-	}
+	ensureAtmosRunner(t)
 
 	// Skip if there's a skip reason.
 	if skipReason != "" {
@@ -104,13 +96,7 @@ func TestDoubleHyphenSeparator(t *testing.T) {
 // TestDoubleHyphenWithConsolidateWarnings specifically tests the exact scenario
 // from GitHub issue #1967 where -consolidate-warnings=false caused stack corruption.
 func TestDoubleHyphenWithConsolidateWarnings(t *testing.T) {
-	// Initialize atmosRunner if not already done.
-	if atmosRunner == nil {
-		atmosRunner = testhelpers.NewAtmosRunner(coverDir)
-		if err := atmosRunner.Build(); err != nil {
-			t.Skipf("Failed to initialize Atmos: %v", err)
-		}
-	}
+	ensureAtmosRunner(t)
 
 	if skipReason != "" {
 		t.Skipf("Skipping test: %s", skipReason)
@@ -155,13 +141,7 @@ func TestDoubleHyphenWithConsolidateWarnings(t *testing.T) {
 // TestDoubleHyphenStackNotOverwritten ensures that args after -- don't
 // accidentally overwrite the stack value.
 func TestDoubleHyphenStackNotOverwritten(t *testing.T) {
-	// Initialize atmosRunner if not already done.
-	if atmosRunner == nil {
-		atmosRunner = testhelpers.NewAtmosRunner(coverDir)
-		if err := atmosRunner.Build(); err != nil {
-			t.Skipf("Failed to initialize Atmos: %v", err)
-		}
-	}
+	ensureAtmosRunner(t)
 
 	if skipReason != "" {
 		t.Skipf("Skipping test: %s", skipReason)

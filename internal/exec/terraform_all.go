@@ -13,6 +13,7 @@ import (
 	scheduleradapters "github.com/cloudposse/atmos/pkg/scheduler/adapters"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/store/authbridge"
+	"github.com/cloudposse/atmos/pkg/ui"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -21,7 +22,12 @@ const errWrapFmt = "%w: %w"
 // ExecuteTerraformAll executes terraform commands for all components in dependency order.
 func ExecuteTerraformAll(info *schema.ConfigAndStacksInfo) error {
 	defer perf.Track(nil, "exec.ExecuteTerraformAll")()
+	return ExecuteTerraformAllWithContext(context.Background(), info)
+}
 
+// ExecuteTerraformAllWithContext executes all selected Terraform components through
+// the graph-backed scheduler using the provided cancellation context.
+func ExecuteTerraformAllWithContext(ctx context.Context, info *schema.ConfigAndStacksInfo) error {
 	// Validate inputs for --all flag usage.
 	// When no stack is given, --all processes every stack — matching the documented
 	// behavior of `atmos terraform apply --all` (see website/docs/cli/commands/terraform).
@@ -33,6 +39,7 @@ func ExecuteTerraformAll(info *schema.ConfigAndStacksInfo) error {
 	if err != nil {
 		return fmt.Errorf(errWrapFmt, errUtils.ErrInitializeCLIConfig, err)
 	}
+	defer perf.Track(&atmosConfig, "exec.ExecuteTerraformAllWithContext")()
 
 	log.Debug("Executing terraform command for all components in dependency order", "command", info.SubCommand)
 
@@ -65,7 +72,13 @@ func ExecuteTerraformAll(info *schema.ConfigAndStacksInfo) error {
 		return fmt.Errorf(errWrapFmt, errUtils.ErrExecuteDescribeStacks, err)
 	}
 
-	return scheduleradapters.ExecuteTerraform(context.Background(), scheduleradapters.TerraformOptions{
+	if info.SubCommand == "destroy" {
+		ui.Info("Processing components in reverse dependency order for destroy")
+	} else {
+		ui.Info("Processing components in dependency order")
+	}
+
+	return scheduleradapters.ExecuteTerraform(ctx, scheduleradapters.TerraformOptions{
 		AtmosConfig: &atmosConfig,
 		Info:        info,
 		Stacks:      stacks,

@@ -1,6 +1,8 @@
 package exec
 
 import (
+	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -11,8 +13,12 @@ import (
 	"github.com/agiledragon/gomonkey/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
 
+	"github.com/cloudposse/atmos/pkg/auth"
+	authtypes "github.com/cloudposse/atmos/pkg/auth/types"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	scheduleradapters "github.com/cloudposse/atmos/pkg/scheduler/adapters"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/tests"
 )
@@ -20,6 +26,13 @@ import (
 // Helper function to create a bool pointer for testing.
 func boolPtr(b bool) *bool {
 	return &b
+}
+
+func skipGomonkeyOnDarwinARM64(t testing.TB) {
+	t.Helper()
+	if runtime.GOOS == "darwin" && runtime.GOARCH == "arm64" {
+		t.Skip("gomonkey binary patching is not supported on macOS ARM64")
+	}
 }
 
 func TestIsWorkspacesEnabled(t *testing.T) {
@@ -233,6 +246,441 @@ func TestExecuteTerraformQueryNoMatches(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ExecuteTerraformQuery should succeed when no components match: %v", err)
 	}
+}
+
+func TestExecuteTerraformQueryRoutesThroughSchedulerAdapter(t *testing.T) {
+	skipGomonkeyOnDarwinARM64(t)
+
+	ctrl := gomock.NewController(t)
+	authManager := authtypes.NewMockAuthManager(ctrl)
+	oldAuthManagerFactory := authManagerFactory
+	authManagerFactory = func(identity string, _ schema.AuthConfig, flagSelectValue string, _ *schema.AtmosConfiguration) (auth.AuthManager, error) {
+		require.Equal(t, "terraform", identity)
+		require.Equal(t, cfg.IdentityFlagSelectValue, flagSelectValue)
+		return authManager, nil
+	}
+	defer func() {
+		authManagerFactory = oldAuthManagerFactory
+	}()
+
+	stacks := map[string]any{"dev": map[string]any{}}
+	var described bool
+	var scheduled bool
+
+	patches := gomonkey.NewPatches()
+	defer patches.Reset()
+	patches.ApplyFunc(cfg.InitCliConfig, func(info schema.ConfigAndStacksInfo, processStacks bool) (schema.AtmosConfiguration, error) {
+		require.Equal(t, "dev", info.Stack)
+		require.True(t, processStacks)
+		return schema.AtmosConfiguration{}, nil
+	})
+	patches.ApplyFunc(ExecuteDescribeStacks, func(
+		atmosConfig *schema.AtmosConfiguration,
+		filterByStack string,
+		components []string,
+		componentTypes []string,
+		sections []string,
+		ignoreMissingFiles bool,
+		processTemplates bool,
+		processYamlFunctions bool,
+		includeEmptyStacks bool,
+		skip []string,
+		gotAuthManager auth.AuthManager,
+	) (map[string]any, error) {
+		described = true
+		require.NotNil(t, atmosConfig)
+		require.Equal(t, "dev", filterByStack)
+		require.Equal(t, []string{"app"}, components)
+		require.Equal(t, []string{cfg.TerraformComponentType}, componentTypes)
+		require.Nil(t, sections)
+		require.False(t, ignoreMissingFiles)
+		require.True(t, processTemplates)
+		require.True(t, processYamlFunctions)
+		require.False(t, includeEmptyStacks)
+		require.Equal(t, []string{"skip-me"}, skip)
+		require.Equal(t, authManager, gotAuthManager)
+		return stacks, nil
+	})
+	patches.ApplyFunc(scheduleradapters.ExecuteTerraform, func(ctx context.Context, opts scheduleradapters.TerraformOptions) error {
+		scheduled = true
+		require.NotNil(t, ctx)
+		require.NotNil(t, opts.AtmosConfig)
+		require.Equal(t, stacks, opts.Stacks)
+		require.NotNil(t, opts.Executor)
+		require.Equal(t, "dev", opts.Info.Stack)
+		require.Equal(t, "plan", opts.Info.SubCommand)
+		require.Equal(t, authManager, opts.Info.AuthManager)
+		return nil
+	})
+
+	info := &schema.ConfigAndStacksInfo{
+		Stack:            "dev",
+		Components:       []string{"app"},
+		SubCommand:       "plan",
+		Identity:         "terraform",
+		ProcessTemplates: true,
+		ProcessFunctions: true,
+		Skip:             []string{"skip-me"},
+	}
+	require.NoError(t, ExecuteTerraformQuery(info))
+	require.True(t, described)
+	require.True(t, scheduled)
+}
+
+func TestExecuteTerraformAffectedRoutesThroughSchedulerAdapter(t *testing.T) {
+	skipGomonkeyOnDarwinARM64(t)
+
+	ctrl := gomock.NewController(t)
+	authManager := authtypes.NewMockAuthManager(ctrl)
+	oldAuthManagerFactory := authManagerFactory
+	authManagerFactory = func(identity string, _ schema.AuthConfig, flagSelectValue string, _ *schema.AtmosConfiguration) (auth.AuthManager, error) {
+		require.Equal(t, "terraform", identity)
+		require.Equal(t, cfg.IdentityFlagSelectValue, flagSelectValue)
+		return authManager, nil
+	}
+	defer func() {
+		authManagerFactory = oldAuthManagerFactory
+	}()
+
+	stacks := map[string]any{
+		"dev": map[string]any{
+			cfg.ComponentsSectionName: map[string]any{
+				cfg.TerraformSectionName: map[string]any{
+					"app": map[string]any{},
+				},
+			},
+		},
+	}
+	var describedAffected bool
+	var describedStacks bool
+	var scheduled bool
+	repoPath := t.TempDir()
+
+	patches := gomonkey.NewPatches()
+	defer patches.Reset()
+	patches.ApplyFunc(cfg.InitCliConfig, func(info schema.ConfigAndStacksInfo, processStacks bool) (schema.AtmosConfiguration, error) {
+		require.Equal(t, "plan", info.SubCommand)
+		require.True(t, processStacks)
+		return schema.AtmosConfiguration{}, nil
+	})
+	patches.ApplyFunc(getAffectedComponents, func(args *DescribeAffectedCmdArgs) ([]schema.Affected, error) {
+		describedAffected = true
+		require.NotNil(t, args.CLIConfig)
+		require.Equal(t, repoPath, args.RepoPath)
+		require.Equal(t, "dev", args.Stack)
+		require.True(t, args.ProcessTemplates)
+		require.True(t, args.ProcessYamlFunctions)
+		require.Equal(t, []string{"skip-me"}, args.Skip)
+		require.Equal(t, authManager, args.AuthManager)
+		require.False(t, args.AuthDisabled)
+		return []schema.Affected{
+			{Component: "app", Stack: "dev", ComponentType: cfg.TerraformComponentType},
+			{Component: "helm", Stack: "dev", ComponentType: "helmfile"},
+			{Component: "deleted", Stack: "dev", ComponentType: cfg.TerraformComponentType, Deleted: true},
+		}, nil
+	})
+	patches.ApplyFunc(ExecuteDescribeStacksWithAuthDisabled, func(
+		atmosConfig *schema.AtmosConfiguration,
+		filterByStack string,
+		components []string,
+		componentTypes []string,
+		sections []string,
+		ignoreMissingFiles bool,
+		processTemplates bool,
+		processYamlFunctions bool,
+		includeEmptyStacks bool,
+		skip []string,
+		gotAuthManager auth.AuthManager,
+		authDisabled bool,
+	) (map[string]any, error) {
+		describedStacks = true
+		require.NotNil(t, atmosConfig)
+		require.Empty(t, filterByStack)
+		require.Nil(t, components)
+		require.Equal(t, []string{cfg.TerraformComponentType}, componentTypes)
+		require.Nil(t, sections)
+		require.False(t, ignoreMissingFiles)
+		require.True(t, processTemplates)
+		require.True(t, processYamlFunctions)
+		require.False(t, includeEmptyStacks)
+		require.Equal(t, []string{"skip-me"}, skip)
+		require.Equal(t, authManager, gotAuthManager)
+		require.False(t, authDisabled)
+		return stacks, nil
+	})
+	patches.ApplyFunc(scheduleradapters.ExecuteTerraform, func(ctx context.Context, opts scheduleradapters.TerraformOptions) error {
+		scheduled = true
+		require.NotNil(t, ctx)
+		require.NotNil(t, opts.AtmosConfig)
+		require.Equal(t, stacks, opts.Stacks)
+		require.NotNil(t, opts.Executor)
+		require.Equal(t, "plan", opts.Info.SubCommand)
+		require.Equal(t, authManager, opts.Info.AuthManager)
+		require.NotNil(t, opts.Selection)
+		require.Equal(t, []string{"app-dev"}, opts.Selection.NodeIDs)
+		require.True(t, opts.Selection.IncludeDependents)
+		require.False(t, opts.Selection.IncludeDependencies)
+		return nil
+	})
+
+	info := &schema.ConfigAndStacksInfo{
+		SubCommand:       "plan",
+		Affected:         true,
+		Identity:         "terraform",
+		ProcessTemplates: true,
+		ProcessFunctions: true,
+		Skip:             []string{"skip-me"},
+	}
+	args := &DescribeAffectedCmdArgs{
+		RepoPath:             repoPath,
+		Stack:                "dev",
+		IncludeDependents:    true,
+		ProcessTemplates:     true,
+		ProcessYamlFunctions: true,
+		Skip:                 []string{"skip-me"},
+	}
+	require.NoError(t, ExecuteTerraformAffectedWithContext(context.Background(), args, info))
+	require.True(t, describedAffected)
+	require.True(t, describedStacks)
+	require.True(t, scheduled)
+}
+
+func TestExecuteTerraformQueryPropagatesSetupErrors(t *testing.T) {
+	skipGomonkeyOnDarwinARM64(t)
+
+	t.Run("config init", func(t *testing.T) {
+		expectedErr := errors.New("config failed")
+		patches := gomonkey.NewPatches()
+		defer patches.Reset()
+		patches.ApplyFunc(cfg.InitCliConfig, func(schema.ConfigAndStacksInfo, bool) (schema.AtmosConfiguration, error) {
+			return schema.AtmosConfiguration{}, expectedErr
+		})
+
+		err := ExecuteTerraformQuery(&schema.ConfigAndStacksInfo{})
+		require.ErrorIs(t, err, expectedErr)
+	})
+
+	t.Run("auth manager", func(t *testing.T) {
+		expectedErr := errors.New("auth failed")
+		oldAuthManagerFactory := authManagerFactory
+		authManagerFactory = func(_ string, _ schema.AuthConfig, _ string, _ *schema.AtmosConfiguration) (auth.AuthManager, error) {
+			return nil, expectedErr
+		}
+		defer func() {
+			authManagerFactory = oldAuthManagerFactory
+		}()
+
+		patches := gomonkey.NewPatches()
+		defer patches.Reset()
+		patches.ApplyFunc(cfg.InitCliConfig, func(schema.ConfigAndStacksInfo, bool) (schema.AtmosConfiguration, error) {
+			return schema.AtmosConfiguration{}, nil
+		})
+
+		err := ExecuteTerraformQuery(&schema.ConfigAndStacksInfo{})
+		require.ErrorIs(t, err, expectedErr)
+	})
+
+	t.Run("describe stacks", func(t *testing.T) {
+		expectedErr := errors.New("describe failed")
+		oldAuthManagerFactory := authManagerFactory
+		authManagerFactory = func(_ string, _ schema.AuthConfig, _ string, _ *schema.AtmosConfiguration) (auth.AuthManager, error) {
+			return nil, nil
+		}
+		defer func() {
+			authManagerFactory = oldAuthManagerFactory
+		}()
+
+		patches := gomonkey.NewPatches()
+		defer patches.Reset()
+		patches.ApplyFunc(cfg.InitCliConfig, func(schema.ConfigAndStacksInfo, bool) (schema.AtmosConfiguration, error) {
+			return schema.AtmosConfiguration{}, nil
+		})
+		patches.ApplyFunc(ExecuteDescribeStacks, func(
+			*schema.AtmosConfiguration,
+			string,
+			[]string,
+			[]string,
+			[]string,
+			bool,
+			bool,
+			bool,
+			bool,
+			[]string,
+			auth.AuthManager,
+		) (map[string]any, error) {
+			return nil, expectedErr
+		})
+
+		err := ExecuteTerraformQuery(&schema.ConfigAndStacksInfo{})
+		require.ErrorIs(t, err, expectedErr)
+	})
+
+	t.Run("scheduler", func(t *testing.T) {
+		expectedErr := errors.New("scheduler failed")
+		oldAuthManagerFactory := authManagerFactory
+		authManagerFactory = func(_ string, _ schema.AuthConfig, _ string, _ *schema.AtmosConfiguration) (auth.AuthManager, error) {
+			return nil, nil
+		}
+		defer func() {
+			authManagerFactory = oldAuthManagerFactory
+		}()
+
+		patches := gomonkey.NewPatches()
+		defer patches.Reset()
+		patches.ApplyFunc(cfg.InitCliConfig, func(schema.ConfigAndStacksInfo, bool) (schema.AtmosConfiguration, error) {
+			return schema.AtmosConfiguration{}, nil
+		})
+		patches.ApplyFunc(ExecuteDescribeStacks, func(
+			*schema.AtmosConfiguration,
+			string,
+			[]string,
+			[]string,
+			[]string,
+			bool,
+			bool,
+			bool,
+			bool,
+			[]string,
+			auth.AuthManager,
+		) (map[string]any, error) {
+			return map[string]any{}, nil
+		})
+		patches.ApplyFunc(scheduleradapters.ExecuteTerraform, func(context.Context, scheduleradapters.TerraformOptions) error {
+			return expectedErr
+		})
+
+		err := ExecuteTerraformQuery(&schema.ConfigAndStacksInfo{})
+		require.ErrorIs(t, err, expectedErr)
+	})
+}
+
+func TestCreateQueryAuthManagerPropagatesFactoryError(t *testing.T) {
+	expectedErr := errors.New("auth failed")
+	oldAuthManagerFactory := authManagerFactory
+	authManagerFactory = func(_ string, _ schema.AuthConfig, _ string, _ *schema.AtmosConfiguration) (auth.AuthManager, error) {
+		return nil, expectedErr
+	}
+	defer func() {
+		authManagerFactory = oldAuthManagerFactory
+	}()
+
+	manager, err := createQueryAuthManager(&schema.ConfigAndStacksInfo{}, &schema.AtmosConfiguration{})
+	require.Nil(t, manager)
+	require.ErrorIs(t, err, expectedErr)
+	require.Contains(t, err.Error(), "create query auth manager")
+}
+
+func TestExecuteTerraformQueryComponentStreamsCapturesAndRunsHook(t *testing.T) {
+	skipGomonkeyOnDarwinARM64(t)
+
+	var streamedOut bytes.Buffer
+	var streamedErr bytes.Buffer
+	var hookOutput string
+	var hookErr error
+
+	expectedErr := errors.New("terraform failed")
+	patches := gomonkey.ApplyFunc(ExecuteTerraform, func(info schema.ConfigAndStacksInfo, opts ...ShellCommandOption) error {
+		var cfg shellCommandConfig
+		for _, opt := range opts {
+			opt(&cfg)
+		}
+
+		require.NotNil(t, cfg.streams)
+		require.Equal(t, os.Stdin, cfg.streams.Stdin)
+		require.NotNil(t, cfg.stdoutCapture)
+		require.NotNil(t, cfg.stderrCapture)
+
+		_, err := cfg.streams.Stdout.Write([]byte("streamed stdout"))
+		require.NoError(t, err)
+		_, err = cfg.streams.Stderr.Write([]byte("streamed stderr"))
+		require.NoError(t, err)
+		_, err = cfg.stdoutCapture.Write([]byte("captured stdout"))
+		require.NoError(t, err)
+		_, err = cfg.stderrCapture.Write([]byte("captured stderr"))
+		require.NoError(t, err)
+
+		return expectedErr
+	})
+	defer patches.Reset()
+
+	result, err := executeTerraformQueryComponent(scheduleradapters.TerraformExecution{
+		Info: schema.ConfigAndStacksInfo{
+			Component: "vpc",
+			Stack:     "dev",
+			PerComponentHook: func(info *schema.ConfigAndStacksInfo, output string, err error) {
+				require.Equal(t, "vpc", info.Component)
+				hookOutput = output
+				hookErr = err
+			},
+		},
+		Stdout:        &streamedOut,
+		Stderr:        &streamedErr,
+		CaptureOutput: true,
+	})
+
+	require.ErrorIs(t, err, expectedErr)
+	require.Equal(t, "streamed stdout", streamedOut.String())
+	require.Equal(t, "streamed stderr", streamedErr.String())
+	require.Equal(t, "captured stdout", result.Stdout)
+	require.Equal(t, "captured stderr", result.Stderr)
+	require.Equal(t, "captured stdout\ncaptured stderr", hookOutput)
+	require.ErrorIs(t, hookErr, expectedErr)
+}
+
+func TestExecuteTerraformQueryComponentWithoutHookDoesNotCaptureByDefault(t *testing.T) {
+	skipGomonkeyOnDarwinARM64(t)
+
+	expectedErr := errors.New("terraform failed")
+	patches := gomonkey.ApplyFunc(ExecuteTerraform, func(info schema.ConfigAndStacksInfo, opts ...ShellCommandOption) error {
+		var cfg shellCommandConfig
+		for _, opt := range opts {
+			opt(&cfg)
+		}
+
+		require.Nil(t, cfg.streams)
+		require.Nil(t, cfg.stdoutCapture)
+		require.Nil(t, cfg.stderrCapture)
+		return expectedErr
+	})
+	defer patches.Reset()
+
+	result, err := executeTerraformQueryComponent(scheduleradapters.TerraformExecution{
+		Info: schema.ConfigAndStacksInfo{
+			Component: "vpc",
+			Stack:     "dev",
+		},
+	})
+
+	require.ErrorIs(t, err, expectedErr)
+	require.Empty(t, result.Stdout)
+	require.Empty(t, result.Stderr)
+}
+
+func TestExecuteTerraformQueryComponentCaptureOutputWithoutHook(t *testing.T) {
+	skipGomonkeyOnDarwinARM64(t)
+
+	patches := gomonkey.ApplyFunc(ExecuteTerraform, func(info schema.ConfigAndStacksInfo, opts ...ShellCommandOption) error {
+		var cfg shellCommandConfig
+		for _, opt := range opts {
+			opt(&cfg)
+		}
+
+		require.NotNil(t, cfg.stdoutCapture)
+		require.NotNil(t, cfg.stderrCapture)
+		_, err := cfg.stdoutCapture.Write([]byte("captured stdout"))
+		require.NoError(t, err)
+		return nil
+	})
+	defer patches.Reset()
+
+	result, err := executeTerraformQueryComponent(scheduleradapters.TerraformExecution{
+		Info:          schema.ConfigAndStacksInfo{Component: "vpc", Stack: "dev"},
+		CaptureOutput: true,
+	})
+
+	require.NoError(t, err)
+	require.Equal(t, "captured stdout", result.Stdout)
+	require.Empty(t, result.Stderr)
 }
 
 // TestWalkTerraformComponents verifies that walkTerraformComponents iterates over all components.
@@ -1144,11 +1592,7 @@ func BenchmarkNeedProcessTemplatesAndYamlFunctions(b *testing.B) {
 }
 
 func TestExecuteTerraformAffectedComponentInDepOrder(t *testing.T) {
-	// gomonkey uses unsafe binary patching that causes a fatal SIGBUS on macOS ARM64
-	// (Apple Silicon) because code pages are read-only. Skip on that platform.
-	if runtime.GOOS == "darwin" && runtime.GOARCH == "arm64" {
-		t.Skip("gomonkey binary patching is not supported on macOS ARM64")
-	}
+	skipGomonkeyOnDarwinARM64(t)
 
 	tests := []struct {
 		name               string

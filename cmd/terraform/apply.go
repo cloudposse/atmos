@@ -31,7 +31,7 @@ This will prompt for confirmation before making changes unless -auto-approve is 
 
 For complete Terraform/OpenTofu documentation, see:
   https://developer.hashicorp.com/terraform/cli/commands/apply
-  https://opentofu.org/docs/cli/commands/apply`,
+	https://opentofu.org/docs/cli/commands/apply`,
 	PreRunE: func(cmd *cobra.Command, args []string) error {
 		return runHooks(h.BeforeTerraformApply, cmd, args)
 	},
@@ -121,9 +121,11 @@ func init() {
 		flags.WithStringFlag("planfile", "", "", "Set the plan file to use"),
 		flags.WithBoolFlag("affected", "", false, "Apply the affected components in dependency order"),
 		flags.WithBoolFlag("all", "", false, "Apply all components in all stacks"),
+		flags.WithStringFlag("failure-mode", "", terraformFailureModeFailFast, "Terraform apply failure handling mode. Supported values: fail-fast, keep-going"),
 		flags.WithBoolFlag("ci", "", false, "Enable CI mode for automated pipelines (writes job summary, outputs)"),
 		flags.WithEnvVars("from-plan", "ATMOS_TERRAFORM_APPLY_FROM_PLAN"),
 		flags.WithEnvVars("planfile", "ATMOS_TERRAFORM_APPLY_PLANFILE"),
+		flags.WithEnvVars("failure-mode", "ATMOS_TERRAFORM_APPLY_FAILURE_MODE"),
 		flags.WithEnvVars("ci", "ATMOS_CI", "CI"),
 	)
 

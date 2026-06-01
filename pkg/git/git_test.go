@@ -2,7 +2,10 @@ package git
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
+	"runtime"
+	"strings"
 	"testing"
 
 	"github.com/cloudposse/atmos/tests"
@@ -37,6 +40,52 @@ func createInitialCommit(t *testing.T, repo *git.Repository, tempDir string) {
 		},
 	})
 	require.NoError(t, err)
+}
+
+func initNativeGitRepo(t *testing.T) string {
+	t.Helper()
+
+	tests.RequireExecutable(t, "git", "worktreeConfig regression tests")
+
+	repoDir := t.TempDir()
+	runNativeGit(t, repoDir, "init")
+	runNativeGit(t, repoDir, "remote", "add", "origin", "https://github.com/example/repo.git")
+
+	err := os.WriteFile(filepath.Join(repoDir, "README.md"), []byte("# test\n"), 0o644)
+	require.NoError(t, err)
+	runNativeGit(t, repoDir, "add", "README.md")
+	runNativeGit(t, repoDir, "-c", "user.name=Atmos Test", "-c", "user.email=atmos@example.com", "commit", "-m", "initial")
+
+	return repoDir
+}
+
+func runNativeGit(t *testing.T, dir string, args ...string) {
+	t.Helper()
+
+	cmd := exec.Command("git", args...)
+	cmd.Dir = dir
+	output, err := cmd.CombinedOutput()
+	require.NoError(t, err, string(output))
+}
+
+func runNativeGitOutput(t *testing.T, dir string, args ...string) string {
+	t.Helper()
+
+	cmd := exec.Command("git", args...)
+	cmd.Dir = dir
+	output, err := cmd.CombinedOutput()
+	require.NoError(t, err, string(output))
+	return string(output)
+}
+
+func requireSamePath(t *testing.T, expected, actual string) {
+	t.Helper()
+
+	expectedEval, err := filepath.EvalSymlinks(expected)
+	require.NoError(t, err)
+	actualEval, err := filepath.EvalSymlinks(actual)
+	require.NoError(t, err)
+	require.Equal(t, expectedEval, actualEval)
 }
 
 // Helper function to create a repository with a remote.
@@ -247,6 +296,58 @@ func TestGetRepoConfig(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestGetLocalRepoWithWorktreeConfigExtension(t *testing.T) {
+	repoDir := initNativeGitRepo(t)
+	runNativeGit(t, repoDir, "config", "extensions.worktreeConfig", "true")
+	runNativeGit(t, repoDir, "config", "core.untrackedCache", "true")
+
+	t.Chdir(repoDir)
+
+	repo, err := GetLocalRepo()
+	require.NoError(t, err)
+	require.NotNil(t, repo)
+
+	cfg, err := GetRepoConfig(repo)
+	require.NoError(t, err)
+	require.NotNil(t, cfg)
+	require.Empty(t, cfg.Raw.Section("core").Option("untrackedCache"))
+	require.Equal(t, "true", strings.TrimSpace(runNativeGitOutput(t, repoDir, "config", "--get", "extensions.worktreeConfig")))
+
+	info, err := GetRepoInfo(repo)
+	require.NoError(t, err)
+	requireSamePath(t, repoDir, info.LocalWorktreePath)
+	require.Equal(t, "example", info.RepoOwner)
+	require.Equal(t, "repo", info.RepoName)
+}
+
+func TestOpenWorktreeAwareRepoWithWorktreeConfigExtension(t *testing.T) {
+	repoDir := initNativeGitRepo(t)
+	runNativeGit(t, repoDir, "config", "extensions.worktreeConfig", "true")
+
+	worktreeDir := filepath.Join(t.TempDir(), "linked-worktree")
+	runNativeGit(t, repoDir, "worktree", "add", "--detach", worktreeDir, "HEAD")
+
+	var repo *git.Repository
+	var worktree *git.Worktree
+	t.Cleanup(func() {
+		repo = nil
+		worktree = nil
+		if runtime.GOOS == "windows" {
+			runtime.GC()
+			runtime.Gosched()
+		}
+	})
+
+	var err error
+	repo, err = OpenWorktreeAwareRepo(worktreeDir)
+	require.NoError(t, err)
+	require.NotNil(t, repo)
+
+	worktree, err = repo.Worktree()
+	require.NoError(t, err)
+	requireSamePath(t, worktreeDir, worktree.Filesystem.Root())
 }
 
 func TestGetRepoInfo(t *testing.T) {

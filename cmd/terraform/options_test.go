@@ -33,6 +33,11 @@ func TestParseTerraformRunOptions(t *testing.T) {
 				v.Set("components", []string{"vpc", "eks"})
 				v.Set("all", true)
 				v.Set("affected", true)
+				v.Set("max-concurrency", 4)
+				v.Set("log-order", "grouped")
+				v.Set("hide", []string{"no-changes"})
+				v.Set("execution-summary-file", "/tmp/summary.json")
+				v.Set("failure-mode", terraformFailureModeKeepGoing)
 			},
 			expected: &TerraformRunOptions{
 				ProcessTemplates:        true,
@@ -50,6 +55,12 @@ func TestParseTerraformRunOptions(t *testing.T) {
 				Components:              []string{"vpc", "eks"},
 				All:                     true,
 				Affected:                true,
+				MaxConcurrency:          4,
+				PlanLogOrder:            "grouped",
+				PlanHide:                []string{"no-changes"},
+				PlanHideNoChanges:       true,
+				PlanSummaryFile:         "/tmp/summary.json",
+				FailureMode:             terraformFailureModeKeepGoing,
 			},
 		},
 		{
@@ -90,11 +101,15 @@ func TestParseTerraformRunOptions(t *testing.T) {
 				v.Set("all", true)
 				v.Set("affected", false)
 				v.Set("components", []string{"comp1", "comp2", "comp3"})
+				v.Set("max-concurrency", 2)
+				v.Set("failure-mode", terraformFailureModeKeepGoing)
 			},
 			expected: &TerraformRunOptions{
-				Components: []string{"comp1", "comp2", "comp3"},
-				All:        true,
-				Affected:   false,
+				Components:     []string{"comp1", "comp2", "comp3"},
+				All:            true,
+				Affected:       false,
+				MaxConcurrency: 2,
+				FailureMode:    terraformFailureModeKeepGoing,
 			},
 		},
 		{
@@ -226,6 +241,26 @@ func TestParseTerraformRunOptions(t *testing.T) {
 				InitRunReconfigure:      "false",
 			},
 		},
+		{
+			name: "plan hide no-changes",
+			setup: func(v *viper.Viper) {
+				v.Set("hide", []string{"no-changes"})
+			},
+			expected: &TerraformRunOptions{
+				PlanHide:          []string{"no-changes"},
+				PlanHideNoChanges: true,
+			},
+		},
+		{
+			name: "plan hide no-changes is case and whitespace insensitive",
+			setup: func(v *viper.Viper) {
+				v.Set("hide", []string{" NO-CHANGES "})
+			},
+			expected: &TerraformRunOptions{
+				PlanHide:          []string{" NO-CHANGES "},
+				PlanHideNoChanges: true,
+			},
+		},
 	}
 
 	for _, tt := range tests {
@@ -250,6 +285,12 @@ func TestParseTerraformRunOptions(t *testing.T) {
 			assert.Equal(t, tt.expected.Components, result.Components, "Components should match")
 			assert.Equal(t, tt.expected.All, result.All, "All should match")
 			assert.Equal(t, tt.expected.Affected, result.Affected, "Affected should match")
+			assert.Equal(t, tt.expected.MaxConcurrency, result.MaxConcurrency, "MaxConcurrency should match")
+			assert.Equal(t, tt.expected.PlanLogOrder, result.PlanLogOrder, "PlanLogOrder should match")
+			assert.Equal(t, tt.expected.PlanHide, result.PlanHide, "PlanHide should match")
+			assert.Equal(t, tt.expected.PlanHideNoChanges, result.PlanHideNoChanges, "PlanHideNoChanges should match")
+			assert.Equal(t, tt.expected.PlanSummaryFile, result.PlanSummaryFile, "PlanSummaryFile should match")
+			assert.Equal(t, tt.expected.FailureMode, result.FailureMode, "FailureMode should match")
 		})
 	}
 }
@@ -272,6 +313,12 @@ func TestTerraformRunOptions_Fields(t *testing.T) {
 		Components:              []string{"comp1"},
 		All:                     true,
 		Affected:                true,
+		MaxConcurrency:          4,
+		PlanLogOrder:            "grouped",
+		PlanHide:                []string{"no-changes"},
+		PlanHideNoChanges:       true,
+		PlanSummaryFile:         "/tmp/summary.json",
+		FailureMode:             terraformFailureModeKeepGoing,
 	}
 
 	assert.True(t, opts.ProcessTemplates)
@@ -289,6 +336,12 @@ func TestTerraformRunOptions_Fields(t *testing.T) {
 	assert.Equal(t, []string{"comp1"}, opts.Components)
 	assert.True(t, opts.All)
 	assert.True(t, opts.Affected)
+	assert.Equal(t, 4, opts.MaxConcurrency)
+	assert.Equal(t, "grouped", opts.PlanLogOrder)
+	assert.Equal(t, []string{"no-changes"}, opts.PlanHide)
+	assert.True(t, opts.PlanHideNoChanges)
+	assert.Equal(t, "/tmp/summary.json", opts.PlanSummaryFile)
+	assert.Equal(t, terraformFailureModeKeepGoing, opts.FailureMode)
 }
 
 // TestApplyOptionsToInfo tests that options are correctly applied to ConfigAndStacksInfo.
@@ -380,6 +433,12 @@ func TestApplyOptionsToInfo(t *testing.T) {
 				AutoGenerateBackendFile: "true",
 				InitRunReconfigure:      "false",
 				InitPassVars:            true,
+				MaxConcurrency:          4,
+				PlanLogOrder:            "grouped",
+				PlanHide:                []string{"no-changes"},
+				PlanHideNoChanges:       true,
+				PlanSummaryFile:         "/tmp/summary.json",
+				FailureMode:             terraformFailureModeKeepGoing,
 			},
 			checkInfo: func(t *testing.T, info *schema.ConfigAndStacksInfo) {
 				assert.Equal(t, "/tmp/deploy.tfplan", info.PlanFile)
@@ -388,6 +447,14 @@ func TestApplyOptionsToInfo(t *testing.T) {
 				assert.Equal(t, "true", info.AutoGenerateBackendFile)
 				assert.Equal(t, "false", info.InitRunReconfigure)
 				assert.Equal(t, "true", info.InitPassVars)
+				assert.Equal(t, 4, info.MaxConcurrency)
+				assert.Equal(t, "grouped", info.TerraformPlanLogOrder)
+				assert.Equal(t, []string{"no-changes"}, info.TerraformPlanHide)
+				assert.True(t, info.TerraformPlanHideNoChanges)
+				assert.Equal(t, "/tmp/summary.json", info.TerraformPlanSummaryFile)
+				assert.Equal(t, terraformFailureModeKeepGoing, info.TerraformFailureMode)
+				assert.False(t, info.FailFast)
+				assert.True(t, info.KeepGoing)
 			},
 		},
 	}
