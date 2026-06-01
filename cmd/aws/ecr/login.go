@@ -57,6 +57,14 @@ Examples:
 	RunE:               executeLoginCommand,
 }
 
+// Testing seams: package-level indirection over the external AWS calls so tests
+// can stub them. They default to the real implementations.
+var (
+	loadDefaultAWSCredentials   = awsCloud.LoadDefaultAWSCredentials
+	getPublicAuthorizationToken = awsCloud.GetPublicAuthorizationToken
+	getAuthorizationToken       = awsCloud.GetAuthorizationToken
+)
+
 func executeLoginCommand(cmd *cobra.Command, args []string) error {
 	// Handle positional "help" argument (e.g., "atmos aws ecr login help").
 	if len(args) > 0 && args[0] == "help" {
@@ -126,7 +134,7 @@ func validateLoginModes(public bool, integrationName string, registries []string
 func executePublicLoginAmbient(ctx context.Context) error {
 	defer perf.Track(nil, "aws.ecr.executePublicLoginAmbient")()
 
-	creds, err := awsCloud.LoadDefaultAWSCredentials(ctx)
+	creds, err := loadDefaultAWSCredentials(ctx)
 	if err != nil {
 		return err
 	}
@@ -166,7 +174,7 @@ func executePublicLoginWithIdentity(ctx context.Context, atmosConfig *schema.Atm
 func publicLogin(ctx context.Context, creds types.ICredentials) error {
 	defer perf.Track(nil, "aws.ecr.publicLogin")()
 
-	result, err := awsCloud.GetPublicAuthorizationToken(ctx, creds)
+	result, err := getPublicAuthorizationToken(ctx, creds)
 	if err != nil {
 		return fmt.Errorf("%w: %w", errUtils.ErrECRPublicAuthFailed, err)
 	}
@@ -227,7 +235,7 @@ func executeExplicitRegistries(ctx context.Context, registries []string) error {
 	defer perf.Track(nil, "aws.ecr.executeExplicitRegistries")()
 
 	// Load AWS credentials from environment.
-	creds, err := awsCloud.LoadDefaultAWSCredentials(ctx)
+	creds, err := loadDefaultAWSCredentials(ctx)
 	if err != nil {
 		return err
 	}
@@ -245,7 +253,7 @@ func executeExplicitRegistries(ctx context.Context, registries []string) error {
 			return err // ParseRegistryURL already wraps with ErrECRInvalidRegistry.
 		}
 
-		result, err := awsCloud.GetAuthorizationToken(ctx, creds, accountID, region)
+		result, err := getAuthorizationToken(ctx, creds, accountID, region)
 		if err != nil {
 			return fmt.Errorf("%w: %s: %w", errUtils.ErrECRLoginFailed, registry, err)
 		}
@@ -289,7 +297,8 @@ func resolveSelectedIdentity(authManager auth.AuthManager, identityName string) 
 }
 
 // createAuthManager creates a new auth manager for ECR operations.
-func createAuthManager(authConfig *schema.AuthConfig, cliConfigPath string) (auth.AuthManager, error) {
+// It is a package-level var so tests can inject a mock auth manager.
+var createAuthManager = func(authConfig *schema.AuthConfig, cliConfigPath string) (auth.AuthManager, error) {
 	authStackInfo := &schema.ConfigAndStacksInfo{
 		AuthContext: &schema.AuthContext{},
 	}

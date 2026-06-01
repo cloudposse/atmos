@@ -11,6 +11,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	awsCloud "github.com/cloudposse/atmos/pkg/auth/cloud/aws"
+	"github.com/cloudposse/atmos/pkg/auth/cloud/docker"
 	"github.com/cloudposse/atmos/pkg/auth/integrations"
 	"github.com/cloudposse/atmos/pkg/auth/types"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -298,4 +299,103 @@ func TestECRPublicIntegration_Execute(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestECRPublicIntegration_Cleanup_Success(t *testing.T) {
+	dockerDir := t.TempDir()
+	t.Setenv("DOCKER_CONFIG", dockerDir)
+
+	origDockerFactory := ecrDockerConfigFactory
+	t.Cleanup(func() {
+		ecrDockerConfigFactory = origDockerFactory
+	})
+
+	ecrDockerConfigFactory = docker.NewConfigManager
+
+	// First write an auth entry for the ECR Public registry.
+	mgr, err := docker.NewConfigManager()
+	require.NoError(t, err)
+	err = mgr.WriteAuth(awsCloud.ECRPublicRegistryURL, "AWS", "test-password")
+	require.NoError(t, err)
+
+	// Verify the entry exists.
+	registries, err := mgr.GetAuthenticatedRegistries()
+	require.NoError(t, err)
+	assert.Contains(t, registries, awsCloud.ECRPublicRegistryURL)
+
+	// Now clean up.
+	integration := &ECRPublicIntegration{
+		name:     "test-ecr-public",
+		identity: "dev-admin",
+	}
+
+	err = integration.Cleanup(context.Background())
+	require.NoError(t, err)
+
+	// Verify the entry was removed.
+	registries, err = mgr.GetAuthenticatedRegistries()
+	require.NoError(t, err)
+	assert.NotContains(t, registries, awsCloud.ECRPublicRegistryURL)
+}
+
+func TestECRPublicIntegration_Cleanup_DockerConfigError(t *testing.T) {
+	origDockerFactory := ecrDockerConfigFactory
+	t.Cleanup(func() {
+		ecrDockerConfigFactory = origDockerFactory
+	})
+
+	ecrDockerConfigFactory = func() (*docker.ConfigManager, error) {
+		return nil, fmt.Errorf("docker config not available")
+	}
+
+	integration := &ECRPublicIntegration{
+		name:     "test-ecr-public",
+		identity: "dev-admin",
+	}
+
+	err := integration.Cleanup(context.Background())
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrDockerConfigWrite)
+}
+
+func TestECRPublicIntegration_Environment_Success(t *testing.T) {
+	dockerDir := t.TempDir()
+	t.Setenv("DOCKER_CONFIG", dockerDir)
+
+	origDockerFactory := ecrDockerConfigFactory
+	t.Cleanup(func() {
+		ecrDockerConfigFactory = origDockerFactory
+	})
+
+	ecrDockerConfigFactory = docker.NewConfigManager
+
+	integration := &ECRPublicIntegration{
+		name:     "test-ecr-public",
+		identity: "dev-admin",
+	}
+
+	env, err := integration.Environment()
+	require.NoError(t, err)
+	require.Contains(t, env, "DOCKER_CONFIG")
+	assert.Equal(t, dockerDir, env["DOCKER_CONFIG"])
+}
+
+func TestECRPublicIntegration_Environment_DockerConfigError(t *testing.T) {
+	origDockerFactory := ecrDockerConfigFactory
+	t.Cleanup(func() {
+		ecrDockerConfigFactory = origDockerFactory
+	})
+
+	ecrDockerConfigFactory = func() (*docker.ConfigManager, error) {
+		return nil, fmt.Errorf("docker config not available")
+	}
+
+	integration := &ECRPublicIntegration{
+		name:     "test-ecr-public",
+		identity: "dev-admin",
+	}
+
+	_, err := integration.Environment()
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrDockerConfigWrite)
 }
