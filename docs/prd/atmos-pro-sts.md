@@ -87,6 +87,17 @@ Two materialization modes (configurable; see Configuration):
 - `file`: a `0600` gitconfig is written and an additive `include.path` is emitted via `GIT_CONFIG_*`
   (token values stay off the environment — safer for local dev).
 
+### Raw-token export (`token_env`) — Octo-STS parity
+The `GIT_CONFIG_*` rewrites only authenticate `git`. To use the minted token with non-git consumers
+(`gh` CLI, `actions/checkout`, the GitHub REST API) — the [Octo-STS](https://github.com/octo-sts/action)
+use case — set `spec.token_env` to a name-pattern. `Environment()` then also emits the raw token under
+that name, so `atmos auth env --format github` writes it to `$GITHUB_ENV` (or `$GITHUB_OUTPUT` via
+`--output-file`) for consumption by subsequent workflow steps. Empty (default) keeps the token off the
+environment. A literal name (e.g. `GH_TOKEN`) requires exactly one minted token — multi-owner mints
+`log.Warn` and skip the bare var; a `{owner}` placeholder (e.g. `GH_TOKEN_{owner}`) expands per owner
+(owner sanitized: uppercased, non-alphanumerics → `_`). Spec-only (no global default; see Future Work
+#4). Token values are never logged.
+
 ### Revoke (client-direct)
 `DELETE https://api.github.com/installation/token` with the minted token as Bearer (401/404 treated
 as already-revoked). No server revoke route in v1.
@@ -109,6 +120,7 @@ auth:
         policy_name: default         # optional
         git_config_mode: env         # env | file (overrides settings.pro.git_sts.git_config_mode)
         revoke_on_exit: true         # overrides settings.pro.git_sts.revoke_on_exit
+        token_env: GH_TOKEN          # optional: export raw token as a named env var (Octo-STS parity); empty = off
 
 settings:
   pro:

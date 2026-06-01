@@ -90,6 +90,46 @@ atmos terraform plan ...                  # terraform init of private modules ju
 atmos auth logout                         # revokes the tokens
 ```
 
+### Use it like Octo-STS
+
+Beyond Atmos's own git operations, you can hand the minted token to **anything** that takes a
+GitHub token — `gh`, `actions/checkout`, or the REST API — exactly like the
+[Octo-STS action](https://github.com/octo-sts/action), but built into the CLI. Set `token_env`
+on the integration to pick the variable name, then mint in one step and consume in the next with
+`atmos auth env --format=github`:
+
+```yaml
+# atmos.yaml
+auth:
+  integrations:
+    github-sts:
+      kind: github/sts
+      via: { provider: atmos-pro }
+      spec:
+        token_env: GH_TOKEN          # export the raw token as $GH_TOKEN
+```
+
+```yaml
+# .github/workflows/example.yml — only id-token: write required
+permissions:
+  id-token: write
+
+steps:
+  - name: Mint a GitHub token
+    run: atmos auth env --identity=atmos-pro --format=github --login   # writes GH_TOKEN to $GITHUB_ENV
+
+  - uses: actions/checkout@v4
+    with:
+      repository: acme/private-repo
+      token: ${{ env.GH_TOKEN }}
+
+  - run: gh repo view acme/private-repo
+    env:
+      GH_TOKEN: ${{ env.GH_TOKEN }}
+```
+
+Use `token_env: GH_TOKEN_{owner}` to export one token per owner in multi-org runs.
+
 ## Get Involved
 
 See the [`atmos/pro` provider](/cli/configuration/auth/providers#atmos-pro) and

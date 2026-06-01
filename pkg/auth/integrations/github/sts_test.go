@@ -290,3 +290,107 @@ func TestGitHubSTSRealmIsolation(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "2", envA["GIT_CONFIG_COUNT"])
 }
+
+func TestGitHubSTSTokenEnv_EnvMode(t *testing.T) {
+	singleToken := []stsToken{{Host: "github.com", Owner: "acme", Token: "ghs_acme", ExpiresAt: "2030-01-01T00:00:00Z"}}
+	multiToken := []stsToken{
+		{Host: "github.com", Owner: "acme", Token: "ghs_acme", ExpiresAt: "2030-01-01T00:00:00Z"},
+		{Host: "github.com", Owner: "cloud-posse", Token: "ghs_cp", ExpiresAt: "2030-01-01T00:00:00Z"},
+	}
+
+	tests := []struct {
+		name     string
+		tokenEnv string
+		tokens   []stsToken
+		want     map[string]string // expected token env vars (GIT_CONFIG_* not asserted here)
+		absent   []string          // env keys that must NOT be present
+	}{
+		{
+			name:     "empty token_env keeps token off env",
+			tokenEnv: "",
+			tokens:   singleToken,
+			absent:   []string{"GH_TOKEN"},
+		},
+		{
+			name:     "literal name with single token exports it",
+			tokenEnv: "GH_TOKEN",
+			tokens:   singleToken,
+			want:     map[string]string{"GH_TOKEN": "ghs_acme"},
+		},
+		{
+			name:     "literal name with multiple tokens skips bare var",
+			tokenEnv: "GH_TOKEN",
+			tokens:   multiToken,
+			absent:   []string{"GH_TOKEN"},
+		},
+		{
+			name:     "owner placeholder expands per owner and sanitizes",
+			tokenEnv: "GH_TOKEN_{owner}",
+			tokens:   multiToken,
+			want:     map[string]string{"GH_TOKEN_ACME": "ghs_acme", "GH_TOKEN_CLOUD_POSSE": "ghs_cp"},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			xdg := t.TempDir()
+			t.Setenv("ATMOS_XDG_DATA_HOME", xdg)
+
+			srv := stsServer(t, http.StatusOK, stsResponse{Tokens: tc.tokens})
+			defer srv.Close()
+
+			integ := newIntegration(t, "realmA",
+				&schema.IntegrationSpec{GitConfigMode: GitConfigModeEnv, TokenEnv: tc.tokenEnv},
+				&schema.IntegrationVia{Provider: "atmos-pro"})
+			require.NoError(t, integ.Execute(context.Background(), proCreds(srv.URL)))
+
+			env, err := integ.Environment()
+			require.NoError(t, err)
+
+			for k, v := range tc.want {
+				assert.Equal(t, v, env[k], "env[%q]", k)
+			}
+			for _, k := range tc.absent {
+				_, ok := env[k]
+				assert.False(t, ok, "env[%q] must not be present", k)
+			}
+		})
+	}
+}
+
+func TestGitHubSTSTokenEnv_FileMode(t *testing.T) {
+	xdg := t.TempDir()
+	t.Setenv("ATMOS_XDG_DATA_HOME", xdg)
+
+	srv := stsServer(t, http.StatusOK, stsResponse{
+		Tokens: []stsToken{{Host: "github.com", Owner: "acme", Token: "ghs_acme", ExpiresAt: "2030-01-01T00:00:00Z"}},
+	})
+	defer srv.Close()
+
+	// File mode keeps tokens off env by default, but token_env is an explicit opt-in override.
+	integ := newIntegration(t, "realmA",
+		&schema.IntegrationSpec{GitConfigMode: GitConfigModeFile, TokenEnv: "GH_TOKEN"},
+		&schema.IntegrationVia{Provider: "atmos-pro"})
+	require.NoError(t, integ.Execute(context.Background(), proCreds(srv.URL)))
+
+	env, err := integ.Environment()
+	require.NoError(t, err)
+
+	// include.path is still emitted, and the token var is layered on top.
+	assert.Equal(t, "include.path", env["GIT_CONFIG_KEY_0"])
+	assert.Equal(t, "ghs_acme", env["GH_TOKEN"])
+}
+
+func TestSanitizeEnvName(t *testing.T) {
+	tests := []struct {
+		in, want string
+	}{
+		{"acme", "ACME"},
+		{"cloud-posse", "CLOUD_POSSE"},
+		{"Org.With/Mixed-Chars", "ORG_WITH_MIXED_CHARS"},
+		{"already_ok", "ALREADY_OK"},
+	}
+	for _, tc := range tests {
+		assert.Equal(t, tc.want, sanitizeEnvName(tc.in), "sanitizeEnvName(%q)", tc.in)
+	}
+}

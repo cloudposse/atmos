@@ -166,6 +166,7 @@ type IntegrationSpec struct {
 	PolicyName    string   `yaml:"policy_name,omitempty" json:"policy_name,omitempty" mapstructure:"policy_name"`             // Optional trust policy name (default "default").
 	GitConfigMode string   `yaml:"git_config_mode,omitempty" json:"git_config_mode,omitempty" mapstructure:"git_config_mode"` // "env" (inline GIT_CONFIG_*) or "file" (include.path). Overrides settings.pro default.
 	RevokeOnExit  *bool    `yaml:"revoke_on_exit,omitempty" json:"revoke_on_exit,omitempty" mapstructure:"revoke_on_exit"`    // Auto-revoke minted tokens at command-end. Overrides settings.pro default.
+	TokenEnv      string   `yaml:"token_env,omitempty" json:"token_env,omitempty" mapstructure:"token_env"`                   // Env var name-pattern to export the raw minted token under (e.g. "GH_TOKEN" or "GH_TOKEN_{owner}"). Empty keeps the token off the environment (default).
 }
 
 // ECRRegistry represents an ECR registry configuration for aws/ecr integrations.

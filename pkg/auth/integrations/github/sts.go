@@ -105,6 +105,7 @@ type GitHubSTSIntegration struct {
 	repos         []string
 	policyName    string
 	gitConfigMode string
+	tokenEnv      string
 	realm         string
 }
 
@@ -133,6 +134,7 @@ func NewGitHubSTSIntegration(config *integrations.IntegrationConfig) (integratio
 		repos:         parsed.repos,
 		policyName:    parsed.policyName,
 		gitConfigMode: parsed.gitConfigMode,
+		tokenEnv:      parsed.tokenEnv,
 		realm:         config.Realm,
 	}, nil
 }
@@ -142,6 +144,7 @@ type stsSpec struct {
 	repos         []string
 	policyName    string
 	gitConfigMode string
+	tokenEnv      string
 }
 
 // parseSTSSpec extracts and validates the github/sts spec fields, applying defaults.
@@ -157,6 +160,7 @@ func parseSTSSpec(config *integrations.IntegrationConfig) (*stsSpec, error) {
 		parsed.policyName = spec.PolicyName
 	}
 	parsed.repos = spec.Repos
+	parsed.tokenEnv = spec.TokenEnv
 
 	if spec.GitConfigMode != "" {
 		if spec.GitConfigMode != GitConfigModeEnv && spec.GitConfigMode != GitConfigModeFile {
@@ -364,10 +368,13 @@ func (g *GitHubSTSIntegration) environmentEnvMode() map[string]string {
 			idx++
 		}
 	}
-	if idx == 0 {
-		return map[string]string{}
+	if idx > 0 {
+		env["GIT_CONFIG_COUNT"] = strconv.Itoa(idx)
 	}
-	env["GIT_CONFIG_COUNT"] = strconv.Itoa(idx)
+
+	// Optionally surface the raw token(s) as named env var(s) for consumers beyond git
+	// (gh CLI, actions/checkout, REST API) — the Octo-STS use case.
+	g.addTokenEnv(env, state.Tokens)
 	return env
 }
 
@@ -377,11 +384,20 @@ func (g *GitHubSTSIntegration) environmentFileMode() map[string]string {
 	if _, err := os.Stat(configPath); err != nil {
 		return map[string]string{}
 	}
-	return map[string]string{
+	env := map[string]string{
 		"GIT_CONFIG_COUNT":   "1",
 		"GIT_CONFIG_KEY_0":   "include.path",
 		"GIT_CONFIG_VALUE_0": configPath,
 	}
+
+	// File mode keeps tokens off the env by default, but an explicit token_env is an
+	// opt-in override: read the persisted tokens and surface them as named env var(s).
+	if g.tokenEnv != "" {
+		if state, err := g.readState(); err == nil && state != nil {
+			g.addTokenEnv(env, state.Tokens)
+		}
+	}
+	return env
 }
 
 // Cleanup revokes each minted token directly against GitHub and removes state files.
@@ -520,6 +536,61 @@ func (g *GitHubSTSIntegration) writeGitConfigFile(tokens []stsToken) error {
 		return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrGitSTSStateWrite, err)
 	}
 	return nil
+}
+
+// ownerPlaceholder is the token_env placeholder replaced with each token's (sanitized,
+// uppercased) owner, enabling one mint to populate per-owner env vars in multi-org runs.
+const ownerPlaceholder = "{owner}"
+
+// addTokenEnv surfaces the raw minted token(s) as named env var(s) per the configured
+// token_env name-pattern. A literal name requires exactly one token (multi-owner mints
+// log a warning and are skipped — the GIT_CONFIG_* rewrites still cover them); a pattern
+// containing {owner} is expanded per token. Token values are never logged.
+func (g *GitHubSTSIntegration) addTokenEnv(env map[string]string, tokens []stsToken) {
+	if g.tokenEnv == "" {
+		return
+	}
+
+	valid := make([]stsToken, 0, len(tokens))
+	for _, t := range tokens {
+		if t.Token != "" && t.Owner != "" {
+			valid = append(valid, t)
+		}
+	}
+	if len(valid) == 0 {
+		return
+	}
+
+	if strings.Contains(g.tokenEnv, ownerPlaceholder) {
+		for _, t := range valid {
+			name := strings.ReplaceAll(g.tokenEnv, ownerPlaceholder, sanitizeEnvName(t.Owner))
+			env[name] = t.Token
+		}
+		return
+	}
+
+	if len(valid) > 1 {
+		log.Warn("github/sts: token_env is a literal name but multiple tokens were minted; "+
+			"skipping token export (use a '{owner}' placeholder or narrow repos/policy)",
+			logKeyIntegration, g.name, "token_env", g.tokenEnv, "count", len(valid))
+		return
+	}
+	env[g.tokenEnv] = valid[0].Token
+}
+
+// sanitizeEnvName makes a value safe to embed in an environment variable name:
+// uppercased, with every character outside [A-Z0-9_] replaced by an underscore.
+func sanitizeEnvName(s string) string {
+	var b strings.Builder
+	for _, r := range strings.ToUpper(s) {
+		switch {
+		case r >= 'A' && r <= 'Z', r >= '0' && r <= '9', r == '_':
+			b.WriteRune(r)
+		default:
+			b.WriteByte('_')
+		}
+	}
+	return b.String()
 }
 
 // insteadOfTargets returns the URL forms each owner-scoped token should rewrite:
