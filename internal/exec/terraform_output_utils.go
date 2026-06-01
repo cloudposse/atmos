@@ -143,6 +143,12 @@ func (a *authContextWrapper) PrepareShellEnvironment(ctx context.Context, identi
 	panic("authContextWrapper.PrepareShellEnvironment should not be called")
 }
 
+func (a *authContextWrapper) EnsureIdentityEnvironment(ctx context.Context, identityName string) (map[string]string, error) {
+	defer perf.Track(nil, "exec.authContextWrapper.EnsureIdentityEnvironment")()
+
+	panic("authContextWrapper.EnsureIdentityEnvironment should not be called")
+}
+
 func (a *authContextWrapper) ExecuteIntegration(ctx context.Context, integrationName string) error {
 	defer perf.Track(nil, "exec.authContextWrapper.ExecuteIntegration")()
 
@@ -159,6 +165,12 @@ func (a *authContextWrapper) GetIntegration(integrationName string) (*schema.Int
 	defer perf.Track(nil, "exec.authContextWrapper.GetIntegration")()
 
 	panic("authContextWrapper.GetIntegration should not be called")
+}
+
+func (a *authContextWrapper) RevokeEphemeralIntegrations(_ context.Context, _ string, _ *bool) error {
+	defer perf.Track(nil, "exec.authContextWrapper.RevokeEphemeralIntegrations")()
+
+	panic("authContextWrapper.RevokeEphemeralIntegrations should not be called")
 }
 
 func (a *authContextWrapper) ResolvePrincipalSetting(identityName, key string) (interface{}, bool) {
