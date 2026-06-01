@@ -5,6 +5,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 
 	"github.com/cloudposse/atmos/tests"
@@ -65,6 +66,16 @@ func runNativeGit(t *testing.T, dir string, args ...string) {
 	cmd.Dir = dir
 	output, err := cmd.CombinedOutput()
 	require.NoError(t, err, string(output))
+}
+
+func runNativeGitOutput(t *testing.T, dir string, args ...string) string {
+	t.Helper()
+
+	cmd := exec.Command("git", args...)
+	cmd.Dir = dir
+	output, err := cmd.CombinedOutput()
+	require.NoError(t, err, string(output))
+	return string(output)
 }
 
 func requireSamePath(t *testing.T, expected, actual string) {
@@ -290,6 +301,7 @@ func TestGetRepoConfig(t *testing.T) {
 func TestGetLocalRepoWithWorktreeConfigExtension(t *testing.T) {
 	repoDir := initNativeGitRepo(t)
 	runNativeGit(t, repoDir, "config", "extensions.worktreeConfig", "true")
+	runNativeGit(t, repoDir, "config", "core.untrackedCache", "true")
 
 	t.Chdir(repoDir)
 
@@ -300,6 +312,8 @@ func TestGetLocalRepoWithWorktreeConfigExtension(t *testing.T) {
 	cfg, err := GetRepoConfig(repo)
 	require.NoError(t, err)
 	require.NotNil(t, cfg)
+	require.Empty(t, cfg.Raw.Section("core").Option("untrackedCache"))
+	require.Equal(t, "true", strings.TrimSpace(runNativeGitOutput(t, repoDir, "config", "--get", "extensions.worktreeConfig")))
 
 	info, err := GetRepoInfo(repo)
 	require.NoError(t, err)

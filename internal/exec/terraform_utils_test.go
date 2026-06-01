@@ -28,6 +28,13 @@ func boolPtr(b bool) *bool {
 	return &b
 }
 
+func skipGomonkeyOnDarwinARM64(t testing.TB) {
+	t.Helper()
+	if runtime.GOOS == "darwin" && runtime.GOARCH == "arm64" {
+		t.Skip("gomonkey binary patching is not supported on macOS ARM64")
+	}
+}
+
 func TestIsWorkspacesEnabled(t *testing.T) {
 	// Test cases for isWorkspacesEnabled function.
 	tests := []struct {
@@ -242,6 +249,8 @@ func TestExecuteTerraformQueryNoMatches(t *testing.T) {
 }
 
 func TestExecuteTerraformQueryRoutesThroughSchedulerAdapter(t *testing.T) {
+	skipGomonkeyOnDarwinARM64(t)
+
 	ctrl := gomock.NewController(t)
 	authManager := authtypes.NewMockAuthManager(ctrl)
 	oldAuthManagerFactory := authManagerFactory
@@ -319,6 +328,8 @@ func TestExecuteTerraformQueryRoutesThroughSchedulerAdapter(t *testing.T) {
 }
 
 func TestExecuteTerraformAffectedRoutesThroughSchedulerAdapter(t *testing.T) {
+	skipGomonkeyOnDarwinARM64(t)
+
 	ctrl := gomock.NewController(t)
 	authManager := authtypes.NewMockAuthManager(ctrl)
 	oldAuthManagerFactory := authManagerFactory
@@ -435,6 +446,8 @@ func TestExecuteTerraformAffectedRoutesThroughSchedulerAdapter(t *testing.T) {
 }
 
 func TestExecuteTerraformQueryPropagatesSetupErrors(t *testing.T) {
+	skipGomonkeyOnDarwinARM64(t)
+
 	t.Run("config init", func(t *testing.T) {
 		expectedErr := errors.New("config failed")
 		patches := gomonkey.NewPatches()
@@ -558,6 +571,8 @@ func TestCreateQueryAuthManagerPropagatesFactoryError(t *testing.T) {
 }
 
 func TestExecuteTerraformQueryComponentStreamsCapturesAndRunsHook(t *testing.T) {
+	skipGomonkeyOnDarwinARM64(t)
+
 	var streamedOut bytes.Buffer
 	var streamedErr bytes.Buffer
 	var hookOutput string
@@ -613,6 +628,8 @@ func TestExecuteTerraformQueryComponentStreamsCapturesAndRunsHook(t *testing.T) 
 }
 
 func TestExecuteTerraformQueryComponentWithoutHookDoesNotCaptureByDefault(t *testing.T) {
+	skipGomonkeyOnDarwinARM64(t)
+
 	expectedErr := errors.New("terraform failed")
 	patches := gomonkey.ApplyFunc(ExecuteTerraform, func(info schema.ConfigAndStacksInfo, opts ...ShellCommandOption) error {
 		var cfg shellCommandConfig
@@ -640,6 +657,8 @@ func TestExecuteTerraformQueryComponentWithoutHookDoesNotCaptureByDefault(t *tes
 }
 
 func TestExecuteTerraformQueryComponentCaptureOutputWithoutHook(t *testing.T) {
+	skipGomonkeyOnDarwinARM64(t)
+
 	patches := gomonkey.ApplyFunc(ExecuteTerraform, func(info schema.ConfigAndStacksInfo, opts ...ShellCommandOption) error {
 		var cfg shellCommandConfig
 		for _, opt := range opts {
@@ -1573,11 +1592,7 @@ func BenchmarkNeedProcessTemplatesAndYamlFunctions(b *testing.B) {
 }
 
 func TestExecuteTerraformAffectedComponentInDepOrder(t *testing.T) {
-	// gomonkey uses unsafe binary patching that causes a fatal SIGBUS on macOS ARM64
-	// (Apple Silicon) because code pages are read-only. Skip on that platform.
-	if runtime.GOOS == "darwin" && runtime.GOARCH == "arm64" {
-		t.Skip("gomonkey binary patching is not supported on macOS ARM64")
-	}
+	skipGomonkeyOnDarwinARM64(t)
 
 	tests := []struct {
 		name               string

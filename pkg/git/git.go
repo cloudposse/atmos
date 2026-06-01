@@ -1,6 +1,7 @@
 package git
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"os/exec"
@@ -11,6 +12,7 @@ import (
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/config"
 	"github.com/go-git/go-git/v5/plumbing/cache"
+	formatconfig "github.com/go-git/go-git/v5/plumbing/format/config"
 	"github.com/go-git/go-git/v5/storage"
 	"github.com/go-git/go-git/v5/storage/filesystem"
 	"github.com/go-git/go-git/v5/storage/filesystem/dotgit"
@@ -256,8 +258,39 @@ func (s worktreeConfigTolerantStorer) Config() (*config.Config, error) {
 	if err != nil {
 		return nil, err
 	}
-	removeWorktreeConfigExtension(cfg)
-	return cfg, nil
+
+	cfgCopy, err := cloneGitConfig(cfg)
+	if err != nil {
+		return nil, err
+	}
+	removeWorktreeConfigExtension(cfgCopy)
+	return cfgCopy, nil
+}
+
+// SetConfig preserves worktreeConfig when callers persist a sanitized config.
+func (s worktreeConfigTolerantStorer) SetConfig(cfg *config.Config) error {
+	if cfg == nil {
+		return s.Storer.SetConfig(cfg)
+	}
+
+	current, err := s.Storer.Config()
+	if err != nil {
+		return err
+	}
+	worktreeConfigValue, preserveWorktreeConfig := worktreeConfigExtensionValue(current)
+
+	cfgCopy, err := cloneGitConfig(cfg)
+	if err != nil {
+		return err
+	}
+	if preserveWorktreeConfig && !hasWorktreeConfigExtension(cfgCopy) {
+		if cfgCopy.Raw == nil {
+			cfgCopy.Raw = formatconfig.New()
+		}
+		cfgCopy.Raw.SetOption("extensions", formatconfig.NoSubsection, "worktreeConfig", worktreeConfigValue)
+	}
+
+	return s.Storer.SetConfig(cfgCopy)
 }
 
 // openWorktreeConfigTolerantRepo retries repository open for worktrees using worktreeConfig.
@@ -268,7 +301,7 @@ func openWorktreeConfigTolerantRepo(path string, originalErr error) (*git.Reposi
 
 	repoRoot, gitDir, commonDir, err := gitRepositoryPaths(path)
 	if err != nil {
-		return nil, originalErr
+		return nil, errors.Join(err, originalErr)
 	}
 
 	dotGitFs := osfs.New(gitDir)
@@ -306,6 +339,48 @@ func removeWorktreeConfigExtension(cfg *config.Config) {
 	for _, key := range keys {
 		section.RemoveOption(key)
 	}
+}
+
+func cloneGitConfig(cfg *config.Config) (*config.Config, error) {
+	if cfg == nil {
+		return nil, nil
+	}
+
+	cfgCopy := *cfg
+	if cfg.Raw == nil {
+		cfgCopy.Raw = nil
+		return &cfgCopy, nil
+	}
+
+	var buf bytes.Buffer
+	if err := formatconfig.NewEncoder(&buf).Encode(cfg.Raw); err != nil {
+		return nil, err
+	}
+	rawCopy := formatconfig.New()
+	if err := formatconfig.NewDecoder(&buf).Decode(rawCopy); err != nil {
+		return nil, err
+	}
+	cfgCopy.Raw = rawCopy
+	return &cfgCopy, nil
+}
+
+func hasWorktreeConfigExtension(cfg *config.Config) bool {
+	_, ok := worktreeConfigExtensionValue(cfg)
+	return ok
+}
+
+func worktreeConfigExtensionValue(cfg *config.Config) (string, bool) {
+	if cfg == nil || cfg.Raw == nil || !cfg.Raw.HasSection("extensions") {
+		return "", false
+	}
+
+	section := cfg.Raw.Section("extensions")
+	for _, opt := range section.Options {
+		if strings.EqualFold(opt.Key, "worktreeConfig") {
+			return opt.Value, true
+		}
+	}
+	return "", false
 }
 
 // gitRepositoryPaths returns the repository root, git dir, and common dir for path.
