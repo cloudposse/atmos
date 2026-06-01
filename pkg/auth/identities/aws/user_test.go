@@ -2371,12 +2371,12 @@ func TestUserIdentity_Authenticate_WebflowFallbackSuccess(t *testing.T) {
 	tokenServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]interface{}{
-			"accessToken": map[string]string{
-				"accessKeyId":     "AKID_WF_AUTH",
-				"secretAccessKey": "SECRET_WF_AUTH",
-				"sessionToken":    "TOKEN_WF_AUTH",
+			"access_token": map[string]string{
+				"access_key_id":     "AKID_WF_AUTH",
+				"secret_access_key": "SECRET_WF_AUTH",
+				"session_token":     "TOKEN_WF_AUTH",
 			},
-			"expiresIn": 900,
+			"expires_in": 900,
 		})
 	}))
 	defer tokenServer.Close()

@@ -49,13 +49,13 @@ func testEncodedDPoPKey(t *testing.T) string {
 // /v1/token success body so the exchange helpers parse credentials cleanly.
 func tokenSuccessResponse() *http.Response {
 	body, _ := json.Marshal(map[string]interface{}{
-		"accessToken": map[string]string{
-			"accessKeyId":     "AKIAIOSFODNN7EXAMPLE",
-			"secretAccessKey": "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
-			"sessionToken":    "session-token",
+		"access_token": map[string]string{
+			"access_key_id":     "AKIAIOSFODNN7EXAMPLE",
+			"secret_access_key": "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
+			"session_token":     "session-token",
 		},
-		"expiresIn":    900,
-		"refreshToken": "refresh-token-value",
+		"expires_in":    900,
+		"refresh_token": "refresh-token-value",
 	})
 	return &http.Response{
 		StatusCode: http.StatusOK,

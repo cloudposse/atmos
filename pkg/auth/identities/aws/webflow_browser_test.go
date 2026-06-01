@@ -125,13 +125,13 @@ func TestRefreshWebflowCredentials_Success(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]interface{}{
-			"accessToken": map[string]string{
-				"accessKeyId":     "REFRESHED_AKID",
-				"secretAccessKey": "REFRESHED_SECRET",
-				"sessionToken":    "REFRESHED_TOKEN",
+			"access_token": map[string]string{
+				"access_key_id":     "REFRESHED_AKID",
+				"secret_access_key": "REFRESHED_SECRET",
+				"session_token":     "REFRESHED_TOKEN",
 			},
-			"expiresIn":    900,
-			"refreshToken": "new-refresh-token",
+			"expires_in":    900,
+			"refresh_token": "new-refresh-token",
 		})
 	}))
 	defer server.Close()
@@ -356,13 +356,13 @@ func TestResolveCredentialsViaWebflow_RefreshSuccess(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]interface{}{
-			"accessToken": map[string]string{
-				"accessKeyId":     "REFRESHED_AKID",
-				"secretAccessKey": "REFRESHED_SECRET",
-				"sessionToken":    "REFRESHED_TOKEN",
+			"access_token": map[string]string{
+				"access_key_id":     "REFRESHED_AKID",
+				"secret_access_key": "REFRESHED_SECRET",
+				"session_token":     "REFRESHED_TOKEN",
 			},
-			"expiresIn":    900,
-			"refreshToken": "new-refresh-token",
+			"expires_in":    900,
+			"refresh_token": "new-refresh-token",
 		})
 	}))
 	defer server.Close()
@@ -414,13 +414,13 @@ func TestWaitForCallbackSimple_Success(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]interface{}{
-			"accessToken": map[string]string{
-				"accessKeyId":     "AKID_SIMPLE",
-				"secretAccessKey": "SECRET_SIMPLE",
-				"sessionToken":    "TOKEN_SIMPLE",
+			"access_token": map[string]string{
+				"access_key_id":     "AKID_SIMPLE",
+				"secret_access_key": "SECRET_SIMPLE",
+				"session_token":     "TOKEN_SIMPLE",
 			},
-			"expiresIn":    900,
-			"refreshToken": "refresh",
+			"expires_in":    900,
+			"refresh_token": "refresh",
 		})
 	}))
 	defer server.Close()
@@ -557,13 +557,13 @@ func TestRefreshWebflowCredentials_UpdatesRefreshToken(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]interface{}{
-			"accessToken": map[string]string{
-				"accessKeyId":     "AKID",
-				"secretAccessKey": "SECRET",
-				"sessionToken":    "TOKEN",
+			"access_token": map[string]string{
+				"access_key_id":     "AKID",
+				"secret_access_key": "SECRET",
+				"session_token":     "TOKEN",
 			},
-			"expiresIn":    900,
-			"refreshToken": "rotated-token",
+			"expires_in":    900,
+			"refresh_token": "rotated-token",
 		})
 	}))
 	defer server.Close()
@@ -701,13 +701,13 @@ func TestBrowserWebflowInteractive_EndToEnd(t *testing.T) {
 	tokenServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]interface{}{
-			"accessToken": map[string]string{
-				"accessKeyId":     "AKID_INTERACTIVE",
-				"secretAccessKey": "SECRET_INTERACTIVE",
-				"sessionToken":    "TOKEN_INTERACTIVE",
+			"access_token": map[string]string{
+				"access_key_id":     "AKID_INTERACTIVE",
+				"secret_access_key": "SECRET_INTERACTIVE",
+				"session_token":     "TOKEN_INTERACTIVE",
 			},
-			"expiresIn":    900,
-			"refreshToken": "refresh-interactive",
+			"expires_in":    900,
+			"refresh_token": "refresh-interactive",
 		})
 	}))
 	defer tokenServer.Close()
@@ -766,12 +766,12 @@ func TestWaitForCallbackWithSpinner_NonTTY(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]interface{}{
-			"accessToken": map[string]string{
-				"accessKeyId":     "AKID_SPINNER",
-				"secretAccessKey": "SECRET_SPINNER",
-				"sessionToken":    "TOKEN_SPINNER",
+			"access_token": map[string]string{
+				"access_key_id":     "AKID_SPINNER",
+				"secret_access_key": "SECRET_SPINNER",
+				"session_token":     "TOKEN_SPINNER",
 			},
-			"expiresIn": 900,
+			"expires_in": 900,
 		})
 	}))
 	defer server.Close()
@@ -817,13 +817,13 @@ func TestBrowserWebflow_Interactive(t *testing.T) {
 	tokenServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]interface{}{
-			"accessToken": map[string]string{
-				"accessKeyId":     "AKID_BW",
-				"secretAccessKey": "SECRET_BW",
-				"sessionToken":    "TOKEN_BW",
+			"access_token": map[string]string{
+				"access_key_id":     "AKID_BW",
+				"secret_access_key": "SECRET_BW",
+				"session_token":     "TOKEN_BW",
 			},
-			"expiresIn":    900,
-			"refreshToken": "refresh-bw",
+			"expires_in":    900,
+			"refresh_token": "refresh-bw",
 		})
 	}))
 	defer tokenServer.Close()
@@ -1126,13 +1126,13 @@ func TestBrowserWebflowNonInteractive_CallbackSuccess(t *testing.T) {
 	tokenServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]interface{}{
-			"accessToken": map[string]string{
-				"accessKeyId":     "AKID_NI",
-				"secretAccessKey": "SECRET_NI",
-				"sessionToken":    "TOKEN_NI",
+			"access_token": map[string]string{
+				"access_key_id":     "AKID_NI",
+				"secret_access_key": "SECRET_NI",
+				"session_token":     "TOKEN_NI",
 			},
-			"expiresIn":    900,
-			"refreshToken": "refresh-ni",
+			"expires_in":    900,
+			"refresh_token": "refresh-ni",
 		})
 	}))
 	defer tokenServer.Close()
@@ -1312,12 +1312,12 @@ func TestBrowserWebflow_DispatchesToNonInteractive(t *testing.T) {
 	tokenServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]interface{}{
-			"accessToken": map[string]string{
-				"accessKeyId":     "AKID_DISPATCH",
-				"secretAccessKey": "SECRET_DISPATCH",
-				"sessionToken":    "TOKEN_DISPATCH",
+			"access_token": map[string]string{
+				"access_key_id":     "AKID_DISPATCH",
+				"secret_access_key": "SECRET_DISPATCH",
+				"session_token":     "TOKEN_DISPATCH",
 			},
-			"expiresIn": 900,
+			"expires_in": 900,
 		})
 	}))
 	defer tokenServer.Close()
@@ -1378,12 +1378,12 @@ func TestResolveCredentialsViaWebflow_FallsThroughToBrowser(t *testing.T) {
 	tokenServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]interface{}{
-			"accessToken": map[string]string{
-				"accessKeyId":     "AKID_FT",
-				"secretAccessKey": "SECRET_FT",
-				"sessionToken":    "TOKEN_FT",
+			"access_token": map[string]string{
+				"access_key_id":     "AKID_FT",
+				"secret_access_key": "SECRET_FT",
+				"session_token":     "TOKEN_FT",
 			},
-			"expiresIn": 900,
+			"expires_in": 900,
 		})
 	}))
 	defer tokenServer.Close()
@@ -1449,12 +1449,12 @@ func TestBrowserWebflowNonInteractive_StdinCodeEntry(t *testing.T) {
 		assert.Equal(t, "stdin-entered-code", req.FormValue("code"))
 		rw.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(rw).Encode(map[string]interface{}{
-			"accessToken": map[string]string{
-				"accessKeyId":     "AKID_STDIN",
-				"secretAccessKey": "SECRET_STDIN",
-				"sessionToken":    "TOKEN_STDIN",
+			"access_token": map[string]string{
+				"access_key_id":     "AKID_STDIN",
+				"secret_access_key": "SECRET_STDIN",
+				"session_token":     "TOKEN_STDIN",
 			},
-			"expiresIn": 900,
+			"expires_in": 900,
 		})
 	}))
 	defer tokenServer.Close()
@@ -1655,10 +1655,10 @@ func TestWaitForCallbackWithSpinner_ForceTTYInsideCISuppressesSpinner(t *testing
 	tokenServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]interface{}{
-			"accessToken": map[string]string{
-				"accessKeyId": "AKID_CI_SIMPLE", "secretAccessKey": "S", "sessionToken": "T",
+			"access_token": map[string]string{
+				"access_key_id": "AKID_CI_SIMPLE", "secret_access_key": "S", "session_token": "T",
 			},
-			"expiresIn": 900,
+			"expires_in": 900,
 		})
 	}))
 	defer tokenServer.Close()
@@ -1827,12 +1827,12 @@ func TestWaitForCallbackWithSpinner_SpinnerFallback(t *testing.T) {
 		}
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]interface{}{
-			"accessToken": map[string]string{
-				"accessKeyId":     "AKID_FB",
-				"secretAccessKey": "SECRET_FB",
-				"sessionToken":    "TOKEN_FB",
+			"access_token": map[string]string{
+				"access_key_id":     "AKID_FB",
+				"secret_access_key": "SECRET_FB",
+				"session_token":     "TOKEN_FB",
 			},
-			"expiresIn": 900,
+			"expires_in": 900,
 		})
 		select {
 		case exchangeDone <- struct{}{}:
@@ -1958,10 +1958,10 @@ func TestBrowserWebflowInteractive_OpenURLFailure(t *testing.T) {
 	tokenServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]interface{}{
-			"accessToken": map[string]string{
-				"accessKeyId": "AKID_OPEN_FAIL", "secretAccessKey": "SECRET_OPEN_FAIL", "sessionToken": "TOKEN_OPEN_FAIL",
+			"access_token": map[string]string{
+				"access_key_id": "AKID_OPEN_FAIL", "secret_access_key": "SECRET_OPEN_FAIL", "session_token": "TOKEN_OPEN_FAIL",
 			},
-			"expiresIn": 900,
+			"expires_in": 900,
 		})
 	}))
 	defer tokenServer.Close()
@@ -2043,12 +2043,12 @@ func TestBrowserWebflowNonInteractive_ClosedStdinAllowsCallback(t *testing.T) {
 	tokenServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]interface{}{
-			"accessToken": map[string]string{
-				"accessKeyId":     "AKID_CLOSED_STDIN",
-				"secretAccessKey": "SECRET_CLOSED_STDIN",
-				"sessionToken":    "TOKEN_CLOSED_STDIN",
+			"access_token": map[string]string{
+				"access_key_id":     "AKID_CLOSED_STDIN",
+				"secret_access_key": "SECRET_CLOSED_STDIN",
+				"session_token":     "TOKEN_CLOSED_STDIN",
 			},
-			"expiresIn": 900,
+			"expires_in": 900,
 		})
 	}))
 	defer tokenServer.Close()

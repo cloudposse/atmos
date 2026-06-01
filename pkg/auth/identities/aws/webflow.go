@@ -76,20 +76,26 @@ type webflowResult struct {
 	err   error
 }
 
-// webflowTokenResponse matches the AWS signin /v1/token JSON response.
+// webflowTokenResponse matches the AWS signin /v1/token JSON response. The
+// endpoint returns snake_case keys (e.g. access_token, expires_in,
+// refresh_token), not camelCase — verified against a live mitmproxy capture in
+// issue #2542. Because the JSON decoder silently ignores unknown keys, a casing
+// mismatch here leaves every field empty and surfaces as a misleading
+// "token response missing credentials" error.
 type webflowTokenResponse struct {
-	AccessToken  webflowAccessToken `json:"accessToken"`
-	ExpiresIn    int                `json:"expiresIn"`
-	RefreshToken string             `json:"refreshToken"` //nolint:gosec // G117: OAuth2 refresh token field name, not a hardcoded secret.
-	TokenType    string             `json:"tokenType"`
-	IDToken      string             `json:"idToken"`
+	AccessToken  webflowAccessToken `json:"access_token"`
+	ExpiresIn    int                `json:"expires_in"`
+	RefreshToken string             `json:"refresh_token"` //nolint:gosec // G117: OAuth2 refresh token field name, not a hardcoded secret.
+	TokenType    string             `json:"token_type"`
+	IDToken      string             `json:"id_token"`
 }
 
-// webflowAccessToken holds the nested AWS credential fields.
+// webflowAccessToken holds the nested AWS credential fields. AWS returns these
+// as snake_case (access_key_id, secret_access_key, session_token) — see #2542.
 type webflowAccessToken struct {
-	AccessKeyID     string `json:"accessKeyId"`
-	SecretAccessKey string `json:"secretAccessKey"`
-	SessionToken    string `json:"sessionToken"` //nolint:gosec // G117: AWS STS session token field name, not a hardcoded secret.
+	AccessKeyID     string `json:"access_key_id"`
+	SecretAccessKey string `json:"secret_access_key"`
+	SessionToken    string `json:"session_token"` //nolint:gosec // G117: AWS STS session token field name, not a hardcoded secret.
 }
 
 // webflowRefreshCache stores the refresh token for later use.
