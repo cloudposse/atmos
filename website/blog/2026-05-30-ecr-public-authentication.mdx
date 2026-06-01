@@ -50,6 +50,21 @@ $ atmos aws ecr login --public
 ✓ ECR Public login: public.ecr.aws (expires in 12h)
 ```
 
+To use a specific identity's credentials instead of the ambient ones, pair `--public` with `--identity`:
+
+```bash
+$ atmos aws ecr login --public --identity plat-dev/terraform
+✓ ECR Public login: public.ecr.aws (expires in 12h)
+```
+
+Once you're logged in, pull images directly — no `atmos auth exec` wrapper needed:
+
+```bash
+$ docker pull public.ecr.aws/docker/library/alpine:latest
+```
+
+The login writes credentials to your Docker config (`$DOCKER_CONFIG`, or `~/.docker/config.json` by default), so any subsequent `docker pull` from `public.ecr.aws` is authenticated. Tokens last roughly 12 hours — re-run the login to refresh.
+
 ## Why This Matters
 
 Every Docker build that pulls from `public.ecr.aws` hits rate limits without authentication. This is especially painful in CI, where the `cloudposse/github-action-docker-build-push` action pulls BuildKit and binfmt images from public ECR on every run. Previously, users had to add manual `docker/login-action` steps to their workflows. Now it's a single config block.
