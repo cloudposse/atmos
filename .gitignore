@@ -114,6 +114,7 @@ tools/gomodcheck/.gomodcheck
 .hive-mind/
 .claude/plans/
 .claude/settings.local.json
+.claude/scheduled_tasks.lock
 
 performance-optimization/
 node_modules
