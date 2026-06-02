@@ -1634,6 +1634,8 @@ func (m *mockResolveAuthManager) GetRealm() realm.RealmInfo {
 	return realm.RealmInfo{}
 }
 
+func (m *mockResolveAuthManager) CredentialStoreType() string { return "" }
+
 func TestAssumeRoleIdentity_WebIdentityVsStandardAssumeRole_DifferentCredentialHandling(t *testing.T) {
 	// This test documents the difference between standard AssumeRole and AssumeRoleWithWebIdentity
 	// credential handling. Standard AssumeRole REQUIRES base AWS credentials, while web identity

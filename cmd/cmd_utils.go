@@ -684,7 +684,7 @@ func executeCustomCommand(
 			AuthContext: &schema.AuthContext{},
 		}
 
-		credStore := credentials.NewCredentialStore()
+		credStore := credentials.NewCredentialStoreWithConfig(&atmosConfig.Auth)
 		validator := validation.NewValidator()
 		authManager, err = auth.NewAuthManager(&atmosConfig.Auth, credStore, validator, authStackInfo, atmosConfig.CliConfigPath)
 		if err != nil {
