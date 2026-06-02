@@ -15,34 +15,38 @@ single production-shaped workflow you can clone and adapt.
 This Lab combines, in one project:
 
 - **Packer components in Atmos** — `components.packer` config and `atmos packer init/build/output`.
-- **Stacks for Packer** — every build input (source AMI, networking, encryption, tags, provisioner list) is a stack var, not hardcoded HCL.
+- **Stacks for Packer** — every build input (source AMI, networking, encryption, tags, provisioner list) is a stack var,
+  not hardcoded HCL.
 - **Go templating in stacks** — the source AMI name resolves from an environment variable at build time.
-- **Nested custom commands** — an `atmos ami <subcommand>` command tree (get-ami-id, tag, list-tags, get-tag, launch-instance, list/terminate-instances, share) that wraps small, reviewable scripts.
-- **CI/CD with a governance gate** — a GitHub Actions pipeline using OIDC auth, ephemeral runners, and a manual approval Environment.
-- **Tag-based launch governance** — a reference IAM/SCP policy that restricts EC2 launches to AMIs tagged `ScanStatus=approved`.
+- **Nested custom commands** — an `atmos ami <subcommand>` command tree (get-ami-id, tag, list-tags, get-tag,
+  launch-instance, list/terminate-instances, share) that wraps small, reviewable scripts.
+- **CI/CD with a governance gate** — a GitHub Actions pipeline using OIDC auth, ephemeral runners, and a manual approval
+  Environment.
+- **Tag-based launch governance** — a reference IAM/SCP policy that restricts EC2 launches to AMIs tagged
+  `ScanStatus=approved`.
 
 ## Architecture
 
 ```text
         ┌──────────────────────────────────────────────────────────────┐
-        │ GitHub Actions Pipeline (.github/workflows/ami.yml)           │
+        │ GitHub Actions Pipeline (.github/workflows/ami.yml)          │
         ├──────────────────────────────────────────────────────────────┤
-        │ build (Packer via Atmos) → launch test instance               │
-        │   → health check → [optional] scan                            │
-        │   → ⏸ manual approval gate (GitHub Environment)               │
-        │   → tag ScanStatus=approved → share AMI → cleanup             │
+        │ build (Packer via Atmos) → launch test instance              │
+        │   → health check → [optional] scan                           │
+        │   → ⏸ manual approval gate (GitHub Environment)              │
+        │   → tag ScanStatus=approved → share AMI → cleanup            │
         └───────────────┬──────────────────────────────────────────────┘
                         │ atmos packer build / atmos ami …
         ┌───────────────▼──────────────────────────────────────────────┐
-        │ Atmos                                                         │
-        │  • Packer component (components/packer/al2023/main.pkr.hcl)   │
-        │  • Stack (stacks/al2023.yaml) — all build inputs as vars      │
-        │  • Custom commands (atmos ami …) → scripts/atmos/*.sh         │
+        │ Atmos                                                        │
+        │  • Packer component (components/packer/al2023/main.pkr.hcl)  │
+        │  • Stack (stacks/al2023.yaml) — all build inputs as vars     │
+        │  • Custom commands (atmos ami …) → scripts/atmos/*.sh        │
         └───────────────┬──────────────────────────────────────────────┘
                         │ packer build
         ┌───────────────▼──────────────────────────────────────────────┐
-        │ Packer (amazon-ebs)                                           │
-        │  provisioners: patch-os → harden → [optional] scan agent      │
+        │ Packer (amazon-ebs)                                          │
+        │  provisioners: patch-os → harden → [optional] scan agent     │
         │               → install-packages → finalize                  │
         │  post-processor: manifest.json                               │
         └──────────────────────────────────────────────────────────────┘
@@ -76,11 +80,11 @@ aws-ami-packer-github-actions/
 
 ## Prerequisites
 
-| Tool | Version (pinned in CI) | Purpose |
-|---|---|---|
-| [Atmos](https://atmos.tools/install) | 1.190.0 | Orchestration |
-| [Packer](https://developer.hashicorp.com/packer/install) | 1.15.3 | Image build |
-| [AWS CLI](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html) | v2 | `atmos ami` helpers |
+| Tool                                                                                     | Version (pinned in CI) | Purpose             |
+|------------------------------------------------------------------------------------------|------------------------|---------------------|
+| [Atmos](https://atmos.tools/install)                                                     | 1.190.0                | Orchestration       |
+| [Packer](https://developer.hashicorp.com/packer/install)                                 | 1.15.3                 | Image build         |
+| [AWS CLI](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html) | v2                     | `atmos ami` helpers |
 
 You also need a standard **AWS account** with permission to build AMIs and launch
 EC2 instances. A reference IAM policy is in [`docs/packer-build-iam-policy.json`](docs/packer-build-iam-policy.json).
@@ -117,7 +121,8 @@ atmos ami share al2023 -s al2023 --accounts 123456789012,123456789013
 ## Run the governed pipeline (GitHub Actions)
 
 1. Set repository variables `AWS_OIDC_ROLE_ARN` and `AWS_REGION`.
-2. Create the OIDC build role using [`docs/oidc-trust-policy.json`](docs/oidc-trust-policy.json) and [`docs/packer-build-iam-policy.json`](docs/packer-build-iam-policy.json).
+2. Create the OIDC build role using [`docs/oidc-trust-policy.json`](docs/oidc-trust-policy.json) and [
+   `docs/packer-build-iam-policy.json`](docs/packer-build-iam-policy.json).
 3. Create a GitHub Environment named **`ami-approval`** and add required reviewers.
 4. Run the **AMI Pipeline** workflow (`workflow_dispatch`). It builds, health-checks,
    waits for approval, then tags and shares the AMI.
@@ -129,7 +134,8 @@ The full setup list is in [`docs/customization-checklist.md`](docs/customization
 - **Build steps** — reorder/trim `provisioner_shell_scripts` and edit `install-packages.sh`.
 - **Hardening** — toggle `ENABLE_FIREWALL` / `ENABLE_SELINUX_ENFORCING` via `provisioner_env_vars`.
 - **Scanning** — set `ENABLE_SCAN_AGENT=true` + `SCAN_AGENT_REPO_URL` and fill in `install-scan-agent.sh`.
-- **Governance** — attach [`docs/launch-restriction-scp.json`](docs/launch-restriction-scp.json) to enforce "launch only approved AMIs".
+- **Governance** — attach [`docs/launch-restriction-scp.json`](docs/launch-restriction-scp.json) to enforce "launch only
+  approved AMIs".
 
 ## Clean up
 
