@@ -534,6 +534,33 @@ func TestBuildDownloadHTTPError(t *testing.T) {
 			expectedErr: errUtils.ErrAuthenticationFailed,
 		},
 		{
+			name:       "403 with X-RateLimit-Remaining 0 returns rate limit error",
+			statusCode: 403,
+			token:      "",
+			headers: map[string]string{
+				"X-RateLimit-Remaining": "0",
+			},
+			expectedErr: errUtils.ErrGitHubRateLimitExceeded,
+		},
+		{
+			name:       "403 with Retry-After returns rate limit error",
+			statusCode: 403,
+			token:      "ghp_fake_token",
+			headers: map[string]string{
+				"Retry-After": "60",
+			},
+			expectedErr: errUtils.ErrGitHubRateLimitExceeded,
+		},
+		{
+			name:       "403 with non-zero rate limit remaining returns auth error",
+			statusCode: 403,
+			token:      "",
+			headers: map[string]string{
+				"X-RateLimit-Remaining": "42",
+			},
+			expectedErr: errUtils.ErrAuthenticationFailed,
+		},
+		{
 			name:        "429 without token returns rate limit error",
 			statusCode:  429,
 			token:       "",

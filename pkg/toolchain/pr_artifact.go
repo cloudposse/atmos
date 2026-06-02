@@ -596,39 +596,67 @@ func listFiles(dir string) ([]string, error) {
 // It distinguishes between auth errors, rate limits, and other failures.
 func buildDownloadHTTPError(resp *http.Response, token string) error {
 	switch resp.StatusCode {
-	case http.StatusUnauthorized, http.StatusForbidden:
-		if token == "" {
-			return buildTokenRequiredError()
+	case http.StatusUnauthorized:
+		return buildDownloadAuthError(token)
+
+	case http.StatusForbidden:
+		// GitHub returns rate-limit errors as 403 as well as 429, so inspect the
+		// rate-limit headers before assuming this is an authentication failure.
+		if isRateLimitResponse(resp) {
+			return buildDownloadRateLimitError(resp, token)
 		}
-		// Token was provided but rejected.
-		return errUtils.Build(errUtils.ErrAuthenticationFailed).
-			WithExplanation("GitHub rejected the provided authentication token").
-			WithHint("Your token may be invalid or expired").
-			WithHint("Verify your token: `gh auth status`").
-			WithHint("Try re-authenticating: `gh auth login`").
-			WithExitCode(1).
-			Err()
+		return buildDownloadAuthError(token)
 
 	case http.StatusTooManyRequests:
-		b := errUtils.Build(errUtils.ErrGitHubRateLimitExceeded).
-			WithExplanation("GitHub API rate limit exceeded while downloading artifact")
-		if token == "" {
-			b = b.WithHint("Unauthenticated requests are limited to 60/hour").
-				WithHint("Authenticate to increase limit to 5,000/hour: `gh auth login`").
-				WithHint("Or set `GITHUB_TOKEN` or `ATMOS_GITHUB_TOKEN` environment variable")
-		} else {
-			b = b.WithHint("Authenticated requests are limited to 5,000/hour").
-				WithHint("Wait a few minutes and try again")
-		}
-		// Try to extract reset time from response headers.
-		if resetHeader := resp.Header.Get("X-RateLimit-Reset"); resetHeader != "" {
-			b = b.WithHintf("Rate limit info: X-RateLimit-Reset=%s", resetHeader)
-		}
-		return b.WithExitCode(1).Err()
+		return buildDownloadRateLimitError(resp, token)
 
 	default:
 		return fmt.Errorf("%w: HTTP %d", ErrPRArtifactDownloadFailed, resp.StatusCode)
 	}
+}
+
+// isRateLimitResponse reports whether an HTTP response indicates a GitHub rate
+// limit rather than an authentication failure. Primary rate limits set
+// `X-RateLimit-Remaining: 0`, while secondary rate limits include `Retry-After`.
+func isRateLimitResponse(resp *http.Response) bool {
+	if resp.Header.Get("X-RateLimit-Remaining") == "0" {
+		return true
+	}
+	return resp.Header.Get("Retry-After") != ""
+}
+
+// buildDownloadAuthError creates a user-friendly authentication error for artifact downloads.
+func buildDownloadAuthError(token string) error {
+	if token == "" {
+		return buildTokenRequiredError()
+	}
+	// Token was provided but rejected.
+	return errUtils.Build(errUtils.ErrAuthenticationFailed).
+		WithExplanation("GitHub rejected the provided authentication token").
+		WithHint("Your token may be invalid or expired").
+		WithHint("Verify your token: `gh auth status`").
+		WithHint("Try re-authenticating: `gh auth login`").
+		WithExitCode(1).
+		Err()
+}
+
+// buildDownloadRateLimitError creates a user-friendly rate-limit error for artifact downloads.
+func buildDownloadRateLimitError(resp *http.Response, token string) error {
+	b := errUtils.Build(errUtils.ErrGitHubRateLimitExceeded).
+		WithExplanation("GitHub API rate limit exceeded while downloading artifact")
+	if token == "" {
+		b = b.WithHint("Unauthenticated requests are limited to 60/hour").
+			WithHint("Authenticate to increase limit to 5,000/hour: `gh auth login`").
+			WithHint("Or set `GITHUB_TOKEN` or `ATMOS_GITHUB_TOKEN` environment variable")
+	} else {
+		b = b.WithHint("Authenticated requests are limited to 5,000/hour").
+			WithHint("Wait a few minutes and try again")
+	}
+	// Try to extract reset time from response headers.
+	if resetHeader := resp.Header.Get("X-RateLimit-Reset"); resetHeader != "" {
+		b = b.WithHintf("Rate limit info: X-RateLimit-Reset=%s", resetHeader)
+	}
+	return b.WithExitCode(1).Err()
 }
 
 // buildTokenRequiredError creates a user-friendly error when GitHub token is missing.

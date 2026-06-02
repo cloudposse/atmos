@@ -55,7 +55,8 @@ type PRArtifactInfo struct {
 	ArtifactName string
 	// Size in bytes.
 	SizeInBytes int64
-	// Download URL (requires authentication).
+	// Download URL. Downloads from public repositories work without authentication
+	// (subject to rate limits); private repositories require a token.
 	DownloadURL string
 	// RunStartedAt is when the workflow run started.
 	RunStartedAt time.Time
@@ -73,7 +74,8 @@ type SHAArtifactInfo struct {
 	ArtifactName string
 	// Size in bytes.
 	SizeInBytes int64
-	// Download URL (requires authentication).
+	// Download URL. Downloads from public repositories work without authentication
+	// (subject to rate limits); private repositories require a token.
 	DownloadURL string
 	// RunStartedAt is when the workflow run started.
 	RunStartedAt time.Time
@@ -199,7 +201,8 @@ func (f *ArtifactFetcher) getPRArtifactInfo(ctx context.Context, owner, repo str
 }
 
 // GetArtifactDownloadURL returns the download URL for a specific artifact.
-// The URL requires authentication to download.
+// Downloads from public repositories work without authentication (subject to
+// rate limits); private repositories require a token.
 func GetArtifactDownloadURL(ctx context.Context, owner, repo string, artifactID int64) (string, error) {
 	defer perf.Track(nil, "github.GetArtifactDownloadURL")()
 

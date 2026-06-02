@@ -13,7 +13,7 @@ import (
 // CommandExecutor provides an abstraction for executing system commands.
 // This interface allows for mocking command execution in unit tests.
 //
-//go:generate go run go.uber.org/mock/mockgen@latest -source=exec.go -destination=mock_exec.go -package=exec
+//go:generate go run go.uber.org/mock/mockgen@v0.6.0 -source=exec.go -destination=mock_exec.go -package=exec
 type CommandExecutor interface {
 	// LookPath searches for an executable named file in PATH.
 	LookPath(file string) (string, error)
