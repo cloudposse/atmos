@@ -251,7 +251,17 @@ func executeCommandWithEnv(args []string, envList []string) error {
 	// Look for the command in PATH.
 	cmdPath, err := exec.LookPath(cmdName)
 	if err != nil {
-		return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrCommandNotFound, err)
+		// Use the error builder so the missing executable is reported clearly
+		// (with the command name, the underlying cause, and a PATH hint) and exits
+		// with the conventional shell "command not found" code (127). This keeps the
+		// ErrCommandNotFound sentinel — distinct from ErrUnknownSubcommand — so the
+		// root handler does not mistake it for an unknown Atmos subcommand.
+		return errUtils.Build(errUtils.ErrCommandNotFound).
+			WithCause(err).
+			WithContext("command", cmdName).
+			WithHintf("Ensure %q is installed and available on your PATH", cmdName).
+			WithExitCode(127).
+			Err()
 	}
 
 	// Execute the command.
