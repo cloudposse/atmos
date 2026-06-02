@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -18,6 +19,68 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 )
 
+// errReader is an io.Reader that always fails, used to simulate a response body
+// that errors mid-read so the io.ReadAll path in doTokenRequest is exercised.
+type errReader struct{}
+
+func (errReader) Read([]byte) (int, error) {
+	return 0, fmt.Errorf("simulated body read failure")
+}
+
+// TestDoTokenRequest_RequestBuildError verifies that a malformed endpoint (one
+// http.NewRequestWithContext rejects) is surfaced as ErrWebflowTokenExchange
+// without ever invoking the HTTP client.
+func TestDoTokenRequest_RequestBuildError(t *testing.T) {
+	called := false
+	mockClient := &mockHTTPClient{
+		doFunc: func(_ *http.Request) (*http.Response, error) {
+			called = true
+			return nil, nil
+		},
+	}
+
+	body := url.Values{}
+	body.Set("grant_type", webflowGrantTypeAuthCode)
+
+	resp, _, err := doTokenRequest(context.Background(), mockClient, tokenRequestParams{
+		// A control character makes URL parsing in NewRequestWithContext fail.
+		endpoint: "http://\x7f/v1/token",
+		region:   "us-east-2",
+		body:     body,
+		dpopKey:  mustGenerateDPoPKey(t),
+	})
+	assert.Nil(t, resp)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrWebflowTokenExchange)
+	assert.False(t, called, "client must not be called when the request cannot be built")
+}
+
+// TestCallTokenEndpoint_BodyReadError verifies that a failure while reading the
+// token-endpoint response body is wrapped as ErrWebflowTokenExchange rather than
+// surfacing as a partial/opaque success (doTokenRequest io.ReadAll branch).
+func TestCallTokenEndpoint_BodyReadError(t *testing.T) {
+	mockClient := &mockHTTPClient{
+		doFunc: func(_ *http.Request) (*http.Response, error) {
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Header:     http.Header{"Content-Type": []string{"application/json"}},
+				Body:       io.NopCloser(errReader{}),
+			}, nil
+		},
+	}
+
+	body := url.Values{}
+	body.Set("client_id", webflowOAuthClientID)
+	body.Set("grant_type", webflowGrantTypeAuthCode)
+	body.Set("code", "code")
+
+	resp, err := callTokenEndpoint(context.Background(), mockClient, "us-east-2", body, mustGenerateDPoPKey(t))
+	assert.Nil(t, resp)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrWebflowTokenExchange)
+	assert.Contains(t, err.Error(), "failed to read response")
+}
+
 func TestExchangeCodeForCredentials_Success(t *testing.T) {
 	// Mock token endpoint.
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -27,14 +90,14 @@ func TestExchangeCodeForCredentials_Success(t *testing.T) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 		json.NewEncoder(w).Encode(map[string]interface{}{
-			"accessToken": map[string]string{
-				"accessKeyId":     "AKIAIOSFODNN7EXAMPLE",
-				"secretAccessKey": "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
-				"sessionToken":    "FwoGZXIvYXdzEBYaDH...",
+			"access_token": map[string]string{
+				"access_key_id":     "AKIAIOSFODNN7EXAMPLE",
+				"secret_access_key": "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
+				"session_token":     "FwoGZXIvYXdzEBYaDH...",
 			},
-			"expiresIn":    900,
-			"refreshToken": "refresh-token-value",
-			"tokenType":    "urn:aws:params:oauth:token-type:access_token_sigv4",
+			"expires_in":    900,
+			"refresh_token": "refresh-token-value",
+			"token_type":    "urn:aws:params:oauth:token-type:access_token_sigv4",
 		})
 	}))
 	defer server.Close()
@@ -51,7 +114,7 @@ func TestExchangeCodeForCredentials_Success(t *testing.T) {
 	}
 
 	resp, err := exchangeCodeForCredentials(context.Background(), mockClient, exchangeCodeParams{
-		region: "us-east-2", code: "auth-code-123", codeVerifier: "code-verifier-abc", redirectURI: "http://127.0.0.1:8080/oauth/callback",
+		region: "us-east-2", code: "auth-code-123", codeVerifier: "code-verifier-abc", redirectURI: "http://127.0.0.1:8080/oauth/callback", dpopKey: mustGenerateDPoPKey(t),
 	})
 
 	require.NoError(t, err)
@@ -63,6 +126,40 @@ func TestExchangeCodeForCredentials_Success(t *testing.T) {
 	assert.Equal(t, "refresh-token-value", resp.RefreshToken)
 }
 
+// TestParseTokenSuccessResponse_RealWorldSnakeCase locks the parser to the
+// actual AWS signin /v1/token wire format. AWS returns snake_case keys with a
+// nested `access_token` object — captured from a live mitmproxy session in
+// issue #2542. The earlier camelCase struct tags meant encoding/json dropped
+// every credential field on the floor, so a genuine HTTP 200 surfaced as the
+// misleading "token response missing credentials". This body is the exact
+// shape from the bug report; it must round-trip into populated credentials.
+func TestParseTokenSuccessResponse_RealWorldSnakeCase(t *testing.T) {
+	// Sanitized copy of the real response body from issue #2542 (HTTP 200).
+	body := []byte(`{
+		"access_token": {
+			"access_key_id": "ASIAEXAMPLEKEYID",
+			"secret_access_key": "examplesecretkeyvalue",
+			"session_token": "IQoJEXAMPLESESSIONTOKEN"
+		},
+		"token_type": "urn:aws:params:oauth:token-type:access_token_sigv4",
+		"expires_in": 900,
+		"id_token": "eyJexampleidtoken",
+		"refresh_token": "eyJexamplerefreshtoken"
+	}`)
+
+	resp, err := parseTokenSuccessResponse(body)
+	require.NoError(t, err)
+	require.NotNil(t, resp)
+
+	assert.Equal(t, "ASIAEXAMPLEKEYID", resp.AccessToken.AccessKeyID)
+	assert.Equal(t, "examplesecretkeyvalue", resp.AccessToken.SecretAccessKey)
+	assert.Equal(t, "IQoJEXAMPLESESSIONTOKEN", resp.AccessToken.SessionToken)
+	assert.Equal(t, 900, resp.ExpiresIn)
+	assert.Equal(t, "eyJexamplerefreshtoken", resp.RefreshToken)
+	assert.Equal(t, "urn:aws:params:oauth:token-type:access_token_sigv4", resp.TokenType)
+	assert.Equal(t, "eyJexampleidtoken", resp.IDToken)
+}
+
 func TestExchangeCodeForCredentials_HTTPError(t *testing.T) {
 	mockClient := &mockHTTPClient{
 		doFunc: func(req *http.Request) (*http.Response, error) {
@@ -71,7 +168,7 @@ func TestExchangeCodeForCredentials_HTTPError(t *testing.T) {
 	}
 
 	resp, err := exchangeCodeForCredentials(context.Background(), mockClient, exchangeCodeParams{
-		region: "us-east-2", code: "code", codeVerifier: "verifier", redirectURI: "http://127.0.0.1:8080/oauth/callback",
+		region: "us-east-2", code: "code", codeVerifier: "verifier", redirectURI: "http://127.0.0.1:8080/oauth/callback", dpopKey: mustGenerateDPoPKey(t),
 	})
 
 	assert.Nil(t, resp)
@@ -98,7 +195,7 @@ func TestExchangeCodeForCredentials_ErrorResponse(t *testing.T) {
 	}
 
 	resp, err := exchangeCodeForCredentials(context.Background(), mockClient, exchangeCodeParams{
-		region: "us-east-2", code: "expired-code", codeVerifier: "verifier", redirectURI: "http://127.0.0.1:8080/oauth/callback",
+		region: "us-east-2", code: "expired-code", codeVerifier: "verifier", redirectURI: "http://127.0.0.1:8080/oauth/callback", dpopKey: mustGenerateDPoPKey(t),
 	})
 
 	assert.Nil(t, resp)
@@ -111,12 +208,12 @@ func TestExchangeCodeForCredentials_EmptyCredentials(t *testing.T) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 		json.NewEncoder(w).Encode(map[string]interface{}{
-			"accessToken": map[string]string{
-				"accessKeyId":     "",
-				"secretAccessKey": "",
-				"sessionToken":    "",
+			"access_token": map[string]string{
+				"access_key_id":     "",
+				"secret_access_key": "",
+				"session_token":     "",
 			},
-			"expiresIn": 900,
+			"expires_in": 900,
 		})
 	}))
 	defer server.Close()
@@ -129,7 +226,7 @@ func TestExchangeCodeForCredentials_EmptyCredentials(t *testing.T) {
 	}
 
 	resp, err := exchangeCodeForCredentials(context.Background(), mockClient, exchangeCodeParams{
-		region: "us-east-2", code: "code", codeVerifier: "verifier", redirectURI: "http://127.0.0.1:8080/oauth/callback",
+		region: "us-east-2", code: "code", codeVerifier: "verifier", redirectURI: "http://127.0.0.1:8080/oauth/callback", dpopKey: mustGenerateDPoPKey(t),
 	})
 
 	assert.Nil(t, resp)
@@ -187,13 +284,13 @@ func TestExchangeRefreshToken_Success(t *testing.T) {
 
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]interface{}{
-			"accessToken": map[string]string{
-				"accessKeyId":     "NEW_AKID",
-				"secretAccessKey": "NEW_SECRET",
-				"sessionToken":    "NEW_TOKEN",
+			"access_token": map[string]string{
+				"access_key_id":     "NEW_AKID",
+				"secret_access_key": "NEW_SECRET",
+				"session_token":     "NEW_TOKEN",
 			},
-			"expiresIn":    900,
-			"refreshToken": "updated-refresh-token",
+			"expires_in":    900,
+			"refresh_token": "updated-refresh-token",
 		})
 	}))
 	defer server.Close()
@@ -205,7 +302,7 @@ func TestExchangeRefreshToken_Success(t *testing.T) {
 		},
 	}
 
-	resp, err := exchangeRefreshToken(context.Background(), mockClient, "us-east-2", "my-refresh-token")
+	resp, err := exchangeRefreshToken(context.Background(), mockClient, "us-east-2", "my-refresh-token", mustGenerateDPoPKey(t))
 	require.NoError(t, err)
 	assert.Equal(t, "NEW_AKID", resp.AccessToken.AccessKeyID)
 	assert.Equal(t, "updated-refresh-token", resp.RefreshToken)
@@ -231,7 +328,7 @@ func TestCallTokenEndpoint_InvalidJSON(t *testing.T) {
 	body.Set("grant_type", webflowGrantTypeAuthCode)
 	body.Set("code", "code")
 
-	resp, err := callTokenEndpoint(context.Background(), mockClient, "us-east-2", body)
+	resp, err := callTokenEndpoint(context.Background(), mockClient, "us-east-2", body, mustGenerateDPoPKey(t))
 	assert.Nil(t, resp)
 	assert.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrWebflowTokenExchange)
@@ -257,7 +354,7 @@ func TestCallTokenEndpoint_NonOK_NoErrorBody(t *testing.T) {
 	body.Set("grant_type", webflowGrantTypeAuthCode)
 	body.Set("code", "code")
 
-	resp, err := callTokenEndpoint(context.Background(), mockClient, "us-east-2", body)
+	resp, err := callTokenEndpoint(context.Background(), mockClient, "us-east-2", body, mustGenerateDPoPKey(t))
 	assert.Nil(t, resp)
 	assert.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrWebflowTokenExchange)
@@ -286,7 +383,7 @@ func TestCallTokenEndpoint_NonOK_WithErrorBody(t *testing.T) {
 	body.Set("grant_type", webflowGrantTypeAuthCode)
 	body.Set("code", "expired-code")
 
-	resp, err := callTokenEndpoint(context.Background(), mockClient, "us-east-2", body)
+	resp, err := callTokenEndpoint(context.Background(), mockClient, "us-east-2", body, mustGenerateDPoPKey(t))
 	assert.Nil(t, resp)
 	assert.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrWebflowTokenExchange)
@@ -304,7 +401,7 @@ func TestCallTokenEndpoint_HTTPClientError(t *testing.T) {
 	body.Set("grant_type", webflowGrantTypeAuthCode)
 	body.Set("code", "code")
 
-	resp, err := callTokenEndpoint(context.Background(), mockClient, "us-east-2", body)
+	resp, err := callTokenEndpoint(context.Background(), mockClient, "us-east-2", body, mustGenerateDPoPKey(t))
 	assert.Nil(t, resp)
 	assert.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrWebflowTokenExchange)
@@ -315,11 +412,11 @@ func TestCallTokenEndpoint_MissingCredentials(t *testing.T) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 		json.NewEncoder(w).Encode(map[string]interface{}{
-			"accessToken": map[string]string{
-				"accessKeyId":     "",
-				"secretAccessKey": "",
+			"access_token": map[string]string{
+				"access_key_id":     "",
+				"secret_access_key": "",
 			},
-			"expiresIn": 900,
+			"expires_in": 900,
 		})
 	}))
 	defer server.Close()
@@ -336,7 +433,7 @@ func TestCallTokenEndpoint_MissingCredentials(t *testing.T) {
 	body.Set("grant_type", webflowGrantTypeAuthCode)
 	body.Set("code", "code")
 
-	resp, err := callTokenEndpoint(context.Background(), mockClient, "us-east-2", body)
+	resp, err := callTokenEndpoint(context.Background(), mockClient, "us-east-2", body, mustGenerateDPoPKey(t))
 	assert.Nil(t, resp)
 	assert.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrWebflowTokenExchange)
@@ -350,7 +447,7 @@ func TestExchangeRefreshToken_HTTPError(t *testing.T) {
 		},
 	}
 
-	resp, err := exchangeRefreshToken(context.Background(), mockClient, "us-east-2", "token")
+	resp, err := exchangeRefreshToken(context.Background(), mockClient, "us-east-2", "token", mustGenerateDPoPKey(t))
 	assert.Nil(t, resp)
 	assert.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrWebflowTokenExchange)
@@ -364,14 +461,14 @@ func TestCallTokenEndpoint_Success(t *testing.T) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 		json.NewEncoder(w).Encode(map[string]interface{}{
-			"accessToken": map[string]string{
-				"accessKeyId":     "AKID_DIRECT",
-				"secretAccessKey": "SECRET_DIRECT",
-				"sessionToken":    "TOKEN_DIRECT",
+			"access_token": map[string]string{
+				"access_key_id":     "AKID_DIRECT",
+				"secret_access_key": "SECRET_DIRECT",
+				"session_token":     "TOKEN_DIRECT",
 			},
-			"expiresIn":    900,
-			"refreshToken": "refresh-direct",
-			"tokenType":    "urn:aws:params:oauth:token-type:access_token_sigv4",
+			"expires_in":    900,
+			"refresh_token": "refresh-direct",
+			"token_type":    "urn:aws:params:oauth:token-type:access_token_sigv4",
 		})
 	}))
 	defer server.Close()
@@ -388,7 +485,7 @@ func TestCallTokenEndpoint_Success(t *testing.T) {
 	body.Set("grant_type", webflowGrantTypeAuthCode)
 	body.Set("code", "auth-code")
 
-	resp, err := callTokenEndpoint(context.Background(), mockClient, "us-east-2", body)
+	resp, err := callTokenEndpoint(context.Background(), mockClient, "us-east-2", body, mustGenerateDPoPKey(t))
 	require.NoError(t, err)
 	assert.Equal(t, "AKID_DIRECT", resp.AccessToken.AccessKeyID)
 	assert.Equal(t, "SECRET_DIRECT", resp.AccessToken.SecretAccessKey)
@@ -447,7 +544,7 @@ func TestExchangeCodeForCredentials_InvalidGrantNotWrappedAsRevoked(t *testing.T
 	}
 
 	resp, err := exchangeCodeForCredentials(context.Background(), mockClient, exchangeCodeParams{
-		region: "us-east-2", code: "expired-code", codeVerifier: "verifier", redirectURI: "http://127.0.0.1:8080/oauth/callback",
+		region: "us-east-2", code: "expired-code", codeVerifier: "verifier", redirectURI: "http://127.0.0.1:8080/oauth/callback", dpopKey: mustGenerateDPoPKey(t),
 	})
 
 	require.Error(t, err)

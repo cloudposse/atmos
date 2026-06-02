@@ -489,6 +489,20 @@ func (mr *MockAuthManagerMockRecorder) AuthenticateProvider(ctx, providerName an
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AuthenticateProvider", reflect.TypeOf((*MockAuthManager)(nil).AuthenticateProvider), ctx, providerName)
 }
 
+// CredentialStoreType mocks base method.
+func (m *MockAuthManager) CredentialStoreType() string {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CredentialStoreType")
+	ret0, _ := ret[0].(string)
+	return ret0
+}
+
+// CredentialStoreType indicates an expected call of CredentialStoreType.
+func (mr *MockAuthManagerMockRecorder) CredentialStoreType() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CredentialStoreType", reflect.TypeOf((*MockAuthManager)(nil).CredentialStoreType))
+}
+
 // EnsureIdentityEnvironment mocks base method.
 func (m *MockAuthManager) EnsureIdentityEnvironment(ctx context.Context, identityName string) (map[string]string, error) {
 	m.ctrl.T.Helper()

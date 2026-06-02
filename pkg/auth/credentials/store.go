@@ -57,6 +57,12 @@ type credentialEnvelope struct {
 // 1. ATMOS_KEYRING_TYPE environment variable (highest priority).
 // 2. AuthConfig.Keyring.Type configuration.
 // 3. Default to "system" for backward compatibility.
+//
+// Deprecated: this no-argument form cannot honor auth.keyring.type from
+// atmos.yaml because it passes a nil config to NewCredentialStoreWithConfig.
+// Production code MUST use NewCredentialStoreWithConfig(authConfig) so the
+// configured keyring backend is selected (see issue #2544). This form remains
+// only for tests and other call sites that genuinely have no auth config.
 func NewCredentialStore() types.CredentialStore {
 	defer perf.Track(nil, "credentials.NewCredentialStore")()
 

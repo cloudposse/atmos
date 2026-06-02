@@ -19,7 +19,11 @@ func NewDefaultManager(authConfig *schema.AuthConfig, cliConfigPath string) (typ
 		AuthContext: &schema.AuthContext{},
 	}
 
-	credStore := credentials.NewCredentialStore()
+	// Use NewCredentialStoreWithConfig so auth.keyring.type (e.g. "memory") is
+	// honored when selecting the keyring backend. The no-arg NewCredentialStore
+	// drops authConfig and always probes the system keyring, which hangs in
+	// headless environments with a broken Secret Service (issue #2544).
+	credStore := credentials.NewCredentialStoreWithConfig(authConfig)
 	validator := validation.NewValidator()
 
 	return NewAuthManager(authConfig, credStore, validator, authStackInfo, cliConfigPath)
