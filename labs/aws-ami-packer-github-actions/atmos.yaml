@@ -45,7 +45,7 @@ templates:
     gomplate:
       enabled: true
       timeout: 10
-      datasources: {}
+      datasources: { }
 
 # ---------------------------------------------------------------------------
 # Custom command tree: `atmos ami <subcommand> <component> -s <stack>`.
