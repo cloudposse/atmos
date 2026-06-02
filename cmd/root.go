@@ -483,6 +483,17 @@ var RootCmd = &cobra.Command{
 				}
 			}
 
+			// Honor the public ATMOS_USE_VERSION env var (bound to --use-version)
+			// so version-management commands re-exec on it just like the CLI flag.
+			// An env-populated flag is not marked Changed(), so it isn't caught above.
+			if !explicitVersionRequested {
+				//nolint:forbidigo // Must use os.Getenv: re-exec decision is made before Viper flag binding resolves.
+				if useVersion := os.Getenv(pkgversion.UseVersionEnvVar); useVersion != "" {
+					explicitVersion = useVersion
+					explicitVersionRequested = true
+				}
+			}
+
 			// Set ATMOS_VERSION_USE env var if explicit flag was provided.
 			if explicitVersionRequested {
 				_ = os.Setenv(pkgversion.VersionUseEnvVar, explicitVersion)
@@ -1550,14 +1561,26 @@ func Execute() error {
 	}
 
 	// Handle sentinel errors with errors.Is().
-	if err != nil {
-		if errors.Is(err, errUtils.ErrCommandNotFound) {
-			command, _ := errUtils.GetContext(err, "command")
-			showUsageAndExit(RootCmd, []string{command})
-		}
+	// Only an unknown Atmos subcommand should fall back to root usage. A missing
+	// external executable (ErrCommandNotFound, e.g. `atmos auth exec -- <cmd>`)
+	// must surface its own error, not "the command atmos requires a subcommand".
+	if command, ok := unknownSubcommand(err); ok {
+		showUsageAndExit(RootCmd, []string{command})
 	}
 
 	return err
+}
+
+// unknownSubcommand reports whether err represents an unknown Atmos subcommand
+// (as converted from Cobra in cmd/internal/executor.go) and returns the offending
+// command name. It deliberately does NOT match ErrCommandNotFound, which is used
+// for missing external executables referenced by the user.
+func unknownSubcommand(err error) (string, bool) {
+	if err == nil || !errors.Is(err, errUtils.ErrUnknownSubcommand) {
+		return "", false
+	}
+	command, _ := errUtils.GetContext(err, "command")
+	return command, true
 }
 
 // preprocessArgs runs all argument preprocessing before Cobra parses.

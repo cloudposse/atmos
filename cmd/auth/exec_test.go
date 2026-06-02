@@ -2,6 +2,7 @@ package auth
 
 import (
 	"context"
+	"errors"
 	"os"
 	"testing"
 
@@ -102,6 +103,14 @@ func TestExecuteCommandWithEnv_Validation(t *testing.T) {
 
 			assert.Error(t, err)
 			assert.ErrorIs(t, err, tt.expectedError)
+
+			// Regression guard for the "atmos requires a subcommand" bug: a missing
+			// external executable must report ErrCommandNotFound and must NEVER be
+			// classified as an unknown Atmos subcommand, or the root error handler
+			// masks it with root usage output.
+			if errors.Is(tt.expectedError, errUtils.ErrCommandNotFound) {
+				assert.NotErrorIs(t, err, errUtils.ErrUnknownSubcommand)
+			}
 		})
 	}
 }
