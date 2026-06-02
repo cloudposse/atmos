@@ -57,6 +57,8 @@ func (s *stubAuthManager) GetProviderKindForIdentity(identityName string) (strin
 	return "kind", nil
 }
 func (s *stubAuthManager) GetChain() []string { return []string{"prov", "id"} }
+
+func (s *stubAuthManager) CredentialStoreType() string { return "" }
 func (s *stubAuthManager) GetStackInfo() *schema.ConfigAndStacksInfo {
 	return &schema.ConfigAndStacksInfo{}
 }
