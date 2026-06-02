@@ -1,0 +1,78 @@
+---
+slug: templated-import-paths
+title: "Templated Import Paths: Pin Imports from a Single Variable"
+authors: [osterman]
+tags: [feature]
+date: 2026-06-01
+---
+
+Atmos now renders Go templates in stack **import paths** using `settings`, `vars`, and `env` defined by **earlier imports in the same manifest**. You can pin a remote import's Git `?ref=` — or pick a local catalog — from one variable defined once.
+
+<!--truncate-->
+
+## What Changed
+
+Import paths (local and remote) are now templated against the configuration accumulated from imports that appear **before** them in the same `import:` list:
+
+```yaml title="stacks/deploy/prod/_defaults.yaml"
+settings:
+  context:
+    # Defined once per stage — a tag in prod, a branch in dev.
+    deployment_repo_version: "v1.2.3"
+```
+
+```yaml title="stacks/catalog_prod/customer.yaml"
+import:
+  # The Git ref is pinned from the variable established by the imported _defaults.
+  - "github.com/my-org/my-repo//stacks/catalog/customer?ref={{ .settings.context.deployment_repo_version }}"
+
+components:
+  terraform:
+    customer/base:
+      source:
+        uri: github.com/my-org/my-repo//components/terraform/customer
+        # The same variable also pins the component source version.
+        version: "{{ .settings.context.deployment_repo_version }}"
+```
+
+```yaml title="stacks/deploy/prod/bastille/customers/_defaults.yaml"
+import:
+  - ../_defaults        # establishes settings.context.deployment_repo_version
+  - catalog_prod/customer  # uses it in the templated ?ref=
+```
+
+Previously, the component `source.version` template worked (it resolves late, at component
+processing), but the import `?ref=` had to be hard-coded because imports are resolved before
+that context exists. Now both come from the same variable.
+
+## Why This Matters
+
+This unlocks a clean way to keep `dev` and `prod` in one repository while protecting `prod`:
+
+- **dev** stacks use local catalogs and local component sources, so changes are vetted with a normal PR.
+- **prod** stacks import a *versioned* catalog and pin the component source to an immutable ref — both driven by one `deployment_repo_version`.
+
+A change to component code or catalog files affects only `dev`; `prod` moves only when the
+pinned ref changes (a path you can guard with `CODEOWNERS`).
+
+## How to Use It
+
+Define the value in a `_defaults` (or any file) imported **before** the import that references
+it, then template the path. It works for local paths too:
+
+```yaml
+import:
+  - _defaults  # sets settings.context.catalog_ref
+  - "catalog/{{ .settings.context.catalog_ref }}/service"
+```
+
+Notes:
+
+- Requires [`templates.settings.enabled: true`](/cli/configuration/templates).
+- A missing referenced value is a hard error. Set `ignore_missing_template_values: true` on the
+  import (or globally) to leave unresolved values as-is, or `skip_templates_processing: true` to
+  keep the `{{ ... }}` literal.
+- Only the import **path** sees earlier imports; imported file **content** is still templated with
+  its own `context`.
+
+See the [imports documentation](/stacks/imports#referencing-earlier-imports-in-import-paths) for details.
