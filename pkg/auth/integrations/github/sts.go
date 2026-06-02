@@ -383,7 +383,7 @@ func (g *GitHubSTSIntegration) environmentEnvMode() map[string]string {
 	}
 
 	// Optionally surface the raw token(s) as named env var(s) for consumers beyond git
-	// (gh CLI, actions/checkout, REST API) — the Octo-STS use case.
+	// (gh CLI, actions/checkout, REST API).
 	g.addTokenEnv(env, state.Tokens)
 	return env
 }

@@ -89,10 +89,9 @@ Two materialization modes (configurable; see Configuration):
   `token_env` bridge below still exports `ATMOS_PRO_GITHUB_TOKEN` by default so in-process git reads
   work).
 
-### Raw-token export (`token_env`) — Octo-STS parity
+### Raw-token export (`token_env`)
 The `GIT_CONFIG_*` rewrites only authenticate `git`. To use the minted token with non-git consumers
-(`gh` CLI, `actions/checkout`, the GitHub REST API) — the [Octo-STS](https://github.com/octo-sts/action)
-use case — `Environment()` also emits the raw token under the `spec.token_env` name-pattern, so
+(`gh` CLI, `actions/checkout`, the GitHub REST API), `Environment()` also emits the raw token under the `spec.token_env` name-pattern, so
 `atmos auth env --format github` writes it to `$GITHUB_ENV` (or `$GITHUB_OUTPUT` via `--output-file`)
 for consumption by subsequent workflow steps. **`token_env` defaults to `ATMOS_PRO_GITHUB_TOKEN`**
 (was empty): this bridges the single-owner token to non-git consumers AND to Atmos's own in-process git
@@ -136,7 +135,7 @@ auth:
         policy_name: default         # optional
         git_config_mode: env         # env | file (overrides settings.pro.git_sts.git_config_mode)
         revoke_on_exit: true         # overrides settings.pro.git_sts.revoke_on_exit
-        token_env: GH_TOKEN          # optional: export raw token as a named env var (Octo-STS parity); default ATMOS_PRO_GITHUB_TOKEN
+        token_env: GH_TOKEN          # optional: export raw token as a named env var; default ATMOS_PRO_GITHUB_TOKEN
 
 settings:
   pro:
@@ -261,3 +260,12 @@ These were explicitly deferred:
    renumber/offset indices.
 6. **Surface `excluded[]` in `whoami`/`validate`.** v1 surfaces deny reasons via `log.Warn` at mint
    only.
+
+## References
+
+- The raw-token export (`token_env`) pattern — minting a short-lived, least-privilege GitHub token in
+  one CI step and consuming it in later steps — was inspired by
+  [Octo-STS](https://github.com/octo-sts/action), which provides OIDC-brokered GitHub App tokens in
+  GitHub Actions. Atmos builds the equivalent capability directly into the CLI as part of the
+  `github/sts` integration (exposed via `atmos auth env --format=github`, which writes the raw token to
+  `$GITHUB_ENV` for later workflow steps).

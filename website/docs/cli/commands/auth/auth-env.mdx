@@ -110,9 +110,9 @@ In GitHub Actions, use `--format=github` to export credentials directly to `$GIT
 
 The `--format=github` flag writes `KEY=value` pairs directly to the `$GITHUB_ENV` file, making credentials available to subsequent steps in GitHub Actions without shell pipelines.
 
-**Minting a GitHub token in one step and consuming it in the next (Octo-STS style):**
+**Minting a GitHub token in one step and consuming it in the next:**
 
-With the [`atmos/pro` provider and `github/sts` integration](/cli/configuration/auth#github-sts-atmos-pro), `atmos auth env --format=github` can mint a short-lived, least-privilege GitHub token in one step and hand it to later steps — the same pattern as the [Octo-STS action](https://github.com/octo-sts/action), but built into the Atmos CLI. Set `token_env` on the integration to choose the variable name the raw token is exported under:
+With the [`atmos/pro` provider and `github/sts` integration](/cli/configuration/auth#github-sts-atmos-pro), `atmos auth env --format=github` can mint a short-lived, least-privilege GitHub token in one step and hand it to later steps, all built into the Atmos CLI. Set `token_env` on the integration to choose the variable name the raw token is exported under:
 
 ```yaml
 # atmos.yaml
