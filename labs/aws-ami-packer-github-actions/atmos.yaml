@@ -196,6 +196,8 @@ commands:
             value: "{{ .ComponentConfig.vars.region }}"
           - key: ATMOS_AMI_SUBNET_ID
             value: "{{ .ComponentConfig.vars.subnet_id }}"
+          - key: ATMOS_AMI_SECURITY_GROUP_IDS
+            value: "{{ .ComponentConfig.vars.security_group_ids }}"
           - key: ATMOS_AMI_INSTANCE_TYPE
             value: "{{ .Flags.type }}"
         steps:

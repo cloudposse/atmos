@@ -53,7 +53,7 @@ It combines, in one project:
 - **Packer components in Atmos** — `atmos packer init/build/output`.
 - **Stacks for Packer** — every build input is a stack var, not hardcoded HCL.
 - **Go templating** — the source AMI name resolves from an environment variable at build time.
-- **Nested custom commands** — an `atmos ami <subcommand>` tree (get-id, tag, share, launch/terminate test instances).
+- **Nested custom commands** — an `atmos ami <subcommand>` tree (get-ami-id, tag, share, launch/terminate test instances).
 - **CI/CD with a governance gate** — OIDC auth, ephemeral runners, and a manual approval Environment.
 - **Tag-based launch governance** — a reference IAM/SCP policy restricting launches to approved AMIs.
 
@@ -79,8 +79,6 @@ atmos ami share           al2023 -s al2023 --accounts 123456789012,123456789013
 
 ## Get Involved
 
-More Labs are planned — GitOps pipelines, multi-account baselines, Helmfile on Kubernetes,
-vendoring + component catalogs, and policy/validation gates. Have a use case you'd like to
-see as a Lab? Let us know.
+More Labs are on the way. Have a use case you'd like to see as a Lab? Let us know.
 
 <PrimaryCTA to="/labs">Open the Labs browser</PrimaryCTA>

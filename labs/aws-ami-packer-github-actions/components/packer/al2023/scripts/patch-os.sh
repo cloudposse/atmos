@@ -19,8 +19,13 @@ echo "==> Applying OS updates"
 dnf -y upgrade --refresh
 
 running_kernel="$(uname -r)"
-latest_kernel="$(rpm -q --last kernel | head -n 1 | sed 's/^kernel-//;s/ .*//')"
-if [[ "${running_kernel}" != "${latest_kernel}" ]]; then
+# Best-effort, informational only. `head` closes the pipe early, which would send
+# rpm SIGPIPE and trip `pipefail`; the trailing `|| true` keeps this from aborting
+# the build over a logging line.
+latest_kernel="$(rpm -q --last kernel 2>/dev/null | head -n 1 | sed 's/^kernel-//;s/ .*//' || true)"
+if [[ -z "${latest_kernel}" ]]; then
+  echo "==> Could not determine the latest installed kernel (informational only)"
+elif [[ "${running_kernel}" != "${latest_kernel}" ]]; then
   echo "==> New kernel ${latest_kernel} installed; it activates when instances launch from this AMI"
 else
   echo "==> Kernel is already current (${running_kernel})"

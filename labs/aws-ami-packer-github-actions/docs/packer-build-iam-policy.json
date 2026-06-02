@@ -1,5 +1,5 @@
 {
-  "_comment": "Reference identity policy for the Packer build role (the role GitHub OIDC assumes). Grants the EC2/AMI permissions Packer needs to build, tag, share, and clean up. Scope it down further for production (e.g. restrict regions, require tag conditions on RunInstances). KMS permissions are only needed when building encrypted AMIs with a customer-managed key.",
+  "_comment": "Reference identity policy for the Packer build role (the role GitHub OIDC assumes). Grants the EC2/AMI permissions Packer needs to build, tag, share, and clean up. Scope it down further for production (e.g. restrict regions, require tag conditions on RunInstances). KMS permissions are only needed when building encrypted AMIs with a customer-managed key. The ReadBaseImageFromSSM statement is optional: this template resolves the base AMI by name via ec2:DescribeImages, but it is retained so you can switch to resolving the base AMI from the public AWS SSM parameter (e.g. /aws/service/ami-amazon-linux-latest/*) without editing the policy.",
   "Version": "2012-10-17",
   "Statement": [
     {

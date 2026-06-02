@@ -1,8 +1,8 @@
 # Hands-on Labs - Product Requirements Document
 
-**Status:** Proposed
-**Version:** 1.0
-**Last Updated:** 2026-06-01
+**Status:** Implemented
+**Version:** 1.1
+**Last Updated:** 2026-06-02
 
 ---
 
@@ -135,7 +135,7 @@ labs/                                  # NEW top-level directory (sibling of exa
     ├── stacks/                        # Stack manifests
     ├── scripts/                       # Supporting scripts (provisioners, helpers)
     ├── .github/workflows/             # CI/CD pipeline(s)
-    └── docs/                          # Lab-specific notes, diagrams, TODOs
+    └── docs/                          # Lab-specific reference policies + customization checklist
 
 website/docs/labs/<lab-name>.mdx       # Narrative walkthrough (EmbedFile the real files)
 ```
@@ -187,25 +187,25 @@ Build a hardened Amazon Linux 2023 AMI with Packer orchestrated by Atmos, valida
 
 ```text
         ┌──────────────────────────────────────────────────────────────┐
-        │ GitHub Actions Pipeline (workflow_dispatch / scheduled)       │
+        │ GitHub Actions Pipeline (.github/workflows/ami.yml)          │
         ├──────────────────────────────────────────────────────────────┤
-        │ preflight → validate inputs → build (Packer via Atmos)        │
-        │   → launch test instance → health check → [optional] scan     │
-        │   → ⏸ manual approval gate → tag ScanStatus=approved          │
-        │   → share AMI + snapshots → notify → cleanup                  │
+        │ build (Packer via Atmos) → launch test instance              │
+        │   → health check → [optional] scan                           │
+        │   → ⏸ manual approval gate (GitHub Environment)              │
+        │   → tag ScanStatus=approved → share AMI → cleanup            │
         └───────────────┬──────────────────────────────────────────────┘
                         │ atmos packer build / atmos ami …
         ┌───────────────▼──────────────────────────────────────────────┐
-        │ Atmos                                                         │
+        │ Atmos                                                        │
         │  • Packer component (components/packer/<image>/main.pkr.hcl)  │
         │  • Stack (stacks/<image>.yaml) — all build inputs as vars     │
         │  • Custom commands (atmos ami …) → scripts/atmos/*.sh         │
         └───────────────┬──────────────────────────────────────────────┘
                         │ packer build
         ┌───────────────▼──────────────────────────────────────────────┐
-        │ Packer (amazon-ebs)                                           │
-        │  provisioners: patch → harden → [optional] scan agent install │
-        │               → install packages → finalize/cleanup          │
+        │ Packer (amazon-ebs)                                          │
+        │  provisioners: patch-os → harden → [optional] scan agent     │
+        │               → install-packages → finalize                  │
         │  post-processor: manifest.json                               │
         └──────────────────────────────────────────────────────────────┘
 ```
@@ -215,7 +215,7 @@ Build a hardened Amazon Linux 2023 AMI with Packer orchestrated by Atmos, valida
 **`atmos.yaml`**
 - Configures the Packer component type (`components.packer.command`, `base_path`).
 - Defines the nested `atmos ami` custom command tree. Subcommands delegate to `scripts/atmos/*.sh` and use templated `atmos packer output ... -q <query>` to resolve the built image ID from the Packer manifest.
-- Standard stacks config (`name_pattern`, included/excluded paths) and templating enabled.
+- Standard stacks config (`name_template`, included/excluded paths) and templating enabled.
 
 **`components/packer/<image>/main.pkr.hcl`**
 - `amazon-ebs` builder with a parameterized source-AMI data lookup, instance type, networking (VPC/subnet, temporary security group CIDRs), KMS encryption toggle, block-device sizing, assume-role support, image-sharing attributes, and merged tags.
@@ -227,8 +227,8 @@ Build a hardened Amazon Linux 2023 AMI with Packer orchestrated by Atmos, valida
 - A single stack that sets all build inputs as vars: source AMI name (templated from env), image name, region, instance type, volume size/type, encryption + KMS key, networking, sharing targets, tags (including an initial `ScanStatus: pending`), and the ordered provisioner script list.
 - Placeholder values for all account-specific identifiers, clearly marked.
 
-**`scripts/packer/`** (provisioners, run during the build, in order)
-- `patch-os.sh` — apply OS updates; reboot if required (Packer handles the reconnect).
+**`components/packer/<image>/scripts/`** (provisioners, run during the build, in order)
+- `patch-os.sh` — apply OS updates (no reboot; the new kernel activates when instances launch from the AMI).
 - `harden.sh` — baseline OS hardening (SSH config, sysctl, audit rules, optional firewall/SELinux/integrity tooling), all toggle-driven.
 - `install-scan-agent.sh` *(optional)* — install/activate a vulnerability-scanning agent from a private repository. Disabled by default; documented as the integration point for any scanner.
 - `install-packages.sh` — install and enable the runtime packages/services the image should ship with (presented as an editable list).
@@ -238,10 +238,10 @@ Build a hardened Amazon Linux 2023 AMI with Packer orchestrated by Atmos, valida
 - Get image ID from Packer output, tag image, list/get tags, launch/terminate test instances, list instances by image, and share the image (and its snapshots, with optional KMS grants) to a list of accounts. Account lists and IDs are placeholders/inputs.
 
 **`.github/workflows/`**
-- **`ami.yml`** — the main pipeline (build → launch → health-check → optional scan → approval gate → tag → share → notify → cleanup). Uses OIDC role assumption, ephemeral runners, a GitHub Environment for the manual approval gate, step summaries, and audit logging. Inputs (source AMI name, etc.) via `workflow_dispatch`.
+- **`ami.yml`** — the main pipeline (build → launch → health-check → optional scan → approval gate → tag → share → cleanup). Uses OIDC role assumption, ephemeral runners, a GitHub Environment for the manual approval gate, and step summaries. Inputs (source AMI name, etc.) via `workflow_dispatch`.
 
 **`docs/`** (Lab-specific)
-- Diagram(s), a reference IAM identity policy + org SCP for "launch only `ScanStatus=approved` images", and a TODO/customization checklist.
+- A reference IAM identity policy, an OIDC trust policy, and an org SCP for "launch only `ScanStatus=approved` images", plus a customization checklist.
 
 ### Prerequisites (documented in the Lab README)
 
@@ -292,59 +292,6 @@ Labs are validated to the maximum extent possible **without** cloud credentials:
 6. **Cloud-dependent steps** — clearly marked as not run in CI; the Lab README documents how to run them in a real account.
 
 A Lab CI matrix entry mirrors how Examples are wired for CI (see the Examples testing strategy and the example-creator agent).
-
----
-
-## Rollout Plan
-
-### Phase 1 — Foundation (site plumbing)
-- Add the `labs/` top-level directory and `labs/README.md` index.
-- Add the `file-browser` plugin instance (`id: labs`, `routeBasePath: /labs`) and the **Labs** navbar item.
-- Add `website/docs/labs/` and a Labs landing/walkthrough scaffold.
-- Register Labs in the file-browser `TAGS_MAP`/`DOCS_MAP`.
-
-### Phase 2 — First Lab content
-- Author `labs/aws-ami-packer-github-actions/` (vendor-neutral, parameterized, self-contained).
-- Write `website/docs/labs/aws-ami-packer-github-actions.mdx` using `EmbedFile`.
-- Wire CI static validation for the Lab.
-
-### Phase 3 — Polish & launch
-- Diagrams, reference IAM/SCP policies, customization checklist.
-- Cross-link from relevant Examples and feature docs.
-- Changelog/blog post announcing the Labs tier and the first Lab; roadmap milestone.
-
-### Phase 4 — Expand
-- Add subsequent Labs (see Future Labs).
-- Establish a Lab template and contributor guide (and, if useful, a `lab-creator` companion to the `example-creator` agent).
-
----
-
-## Success Metrics
-
-- **Time-to-first-success** — a new user can clone the first Lab and produce a working build (locally or in CI) by following only the README.
-- **Adoption** — `/labs` page traffic and GitHub "use this as a starting point" signals (forks/copies referencing the Lab).
-- **Maintenance health** — Lab CI checks stay green across Atmos releases.
-- **Reduced support load** — fewer "how do I assemble X end-to-end?" questions for use cases covered by a Lab.
-
----
-
-## Open Questions
-
-1. **Lab vs. separate repos** — keep Labs in the monorepo `labs/` (browsable via file-browser, CI-validated together) vs. publish each as a standalone template repository. Proposal: author in `labs/` first; optionally generate template repos later.
-2. **Naming** — "Hands-on Labs" (navbar label "Labs") vs. alternatives ("Solutions", "Blueprints", "Recipes"). Proposal: "Labs".
-3. **Depth of CI** — should any Lab run real cloud steps in a sandbox account on a schedule, or stay static-only in CI? Proposal: static-only initially.
-4. **Versioning** — pin tool versions per Lab and bump via the existing dependency-update process; decide whether Labs advertise a "tested with Atmos vX" badge.
-5. **Contribution model** — community-contributed Labs (with a maintenance bar) vs. maintainer-curated only.
-
----
-
-## Future Labs (candidate roadmap)
-
-- **GitOps with Atmos + GitHub Actions** — plan/apply/drift-detection pipeline across multiple stacks and accounts.
-- **Multi-account Terraform/OpenTofu baseline** — components + stacks + remote state + backends for a multi-account org.
-- **Helmfile on Kubernetes with Atmos** — deploy and manage workloads on a cluster end-to-end.
-- **Vendoring + component catalog** — pull, version, and compose a reusable component library.
-- **Policy & validation** — OPA/Rego + JSON Schema gates wired into a CI pipeline.
 
 ---
 

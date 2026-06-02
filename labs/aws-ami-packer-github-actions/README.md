@@ -140,8 +140,22 @@ The full setup list is in [`docs/customization-checklist.md`](docs/customization
 # Terminate any test instances launched from the AMI
 atmos ami terminate-instances al2023 -s al2023
 
-# Deregister the AMI and delete its snapshots when you no longer need it
-aws ec2 deregister-image --region <region> --image-id "$(atmos ami get-ami-id al2023 -s al2023)"
+# Capture the AMI ID and region you want to remove
+ami_id="$(atmos ami get-ami-id al2023 -s al2023)"
+region="us-east-2"
+
+# Find the EBS snapshot(s) backing the AMI *before* deregistering it
+snapshot_ids="$(aws ec2 describe-images --region "$region" --image-ids "$ami_id" \
+  --query 'Images[0].BlockDeviceMappings[].Ebs.SnapshotId' --output text)"
+
+# Deregister the AMI
+aws ec2 deregister-image --region "$region" --image-id "$ami_id"
+
+# Delete the backing snapshot(s) — deregistering the AMI does NOT remove them,
+# and leftover snapshots keep incurring EBS storage charges.
+for snap in $snapshot_ids; do
+  aws ec2 delete-snapshot --region "$region" --snapshot-id "$snap"
+done
 ```
 
 ## Learn More
@@ -150,4 +164,4 @@ aws ec2 deregister-image --region <region> --image-id "$(atmos ami get-ami-id al
 - [Custom commands](https://atmos.tools/cli/configuration/commands)
 - [Go templating in stacks](https://atmos.tools/templates)
 - [GitHub Actions integration](https://atmos.tools/integrations/github-actions/setup-atmos)
-- Related Examples: [`custom-commands`](https://atmos.tools/examples), [`demo-stacks`](https://atmos.tools/examples)
+- Related Examples: [`custom-commands`](https://atmos.tools/examples/custom-commands), [`demo-stacks`](https://atmos.tools/examples/demo-stacks)

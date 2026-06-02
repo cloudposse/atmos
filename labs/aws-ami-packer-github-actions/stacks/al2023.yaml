@@ -45,6 +45,11 @@ components:
         # them (PLACEHOLDER) to build inside a specific private subnet.
         vpc_id: "" # e.g. "vpc-0123456789abcdef0"
         subnet_id: "" # e.g. "subnet-0123456789abcdef0"
+        # Security group(s) for the test instance launched by `atmos ami
+        # launch-instance`. Empty uses the VPC's default SG. Set this (space- or
+        # comma-separated IDs) when building into a custom VPC whose default SG is
+        # too restrictive for the instance to reach SSM / perform health checks.
+        security_group_ids: "" # e.g. "sg-0123456789abcdef0"
         associate_public_ip_address: true
         # Restrict SSH to the build instance. Narrow this to your runner's egress
         # CIDR in production instead of the open default.
@@ -58,9 +63,13 @@ components:
 
         # ---- Encryption -------------------------------------------------------
         encrypt_boot: true
-        # Empty string uses the account's default EBS encryption key. Set a CMK
-        # ARN (PLACEHOLDER) to use a customer-managed key you can grant to other
-        # accounts when sharing the AMI.
+        # Empty string uses the account's default EBS encryption key (aws/ebs).
+        #
+        # WARNING: AMIs encrypted with the default AWS-managed key CANNOT be
+        # launched by accounts you share them with — AWS does not allow granting
+        # other accounts access to an AWS-managed key. For cross-account sharing
+        # you MUST use a customer-managed key (CMK): set its ARN below and run
+        # `atmos ami share ... --kms-grant` so the target accounts can decrypt.
         kms_key_arn: "" # e.g. "arn:aws:kms:us-east-2:123456789012:key/EXAMPLE-KEY-ID"
 
         # ---- Authentication ---------------------------------------------------

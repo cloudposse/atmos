@@ -23,6 +23,12 @@ Expert in creating Atmos examples with proper structure, documentation, mock com
 
 **Use when:** Creating new examples/demos, adding mock components, writing test cases for examples, or updating documentation with EmbedFile components.
 
+### hands-on-lab-creator
+
+Expert in creating Atmos Hands-on Labs: complete, copy-and-run reference projects that combine multiple features into a real-world workflow (the Labs content tier).
+
+**Use when:** Creating a new Lab, asking about Lab best practices, wiring a Lab into the docs site (file-browser, navbar, walkthrough mdx), or understanding the difference between Examples and Labs.
+
 ## Strategic Approach
 
 As Atmos grows, we create focused agents for each major subsystem. This scales development velocity through specialized

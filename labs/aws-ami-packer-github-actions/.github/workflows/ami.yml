@@ -76,6 +76,9 @@ jobs:
     name: Launch & Health Check
     runs-on: ubuntu-latest
     needs: build
+    # Pass the AMI ID from the build job; this runner has no manifest.json.
+    env:
+      ATMOS_AMI_ID: ${{ needs.build.outputs.ami_id }}
     outputs:
       instance_id: ${{ steps.launch.outputs.instance_id }}
     steps:
@@ -129,6 +132,9 @@ jobs:
     name: Tag & Share
     runs-on: ubuntu-latest
     needs: [build, approve]
+    # Pass the AMI ID from the build job; this runner has no manifest.json.
+    env:
+      ATMOS_AMI_ID: ${{ needs.build.outputs.ami_id }}
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/setup-tools
@@ -150,9 +156,15 @@ jobs:
   cleanup:
     name: Cleanup Test Instances
     runs-on: ubuntu-latest
-    # Always clean up the test instance, even if a later job failed.
+    # Always clean up the test instance, even if a later job failed — but only if
+    # health-check actually ran (i.e. a test instance may exist). When the build
+    # fails, health-check is skipped, there is nothing to terminate, and there is
+    # no AMI ID to resolve, so skip cleanup entirely instead of failing on it.
     needs: [build, health-check, promote]
-    if: ${{ always() }}
+    if: ${{ always() && needs.health-check.result != 'skipped' }}
+    # Pass the AMI ID from the build job; this runner has no manifest.json.
+    env:
+      ATMOS_AMI_ID: ${{ needs.build.outputs.ami_id }}
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/setup-tools

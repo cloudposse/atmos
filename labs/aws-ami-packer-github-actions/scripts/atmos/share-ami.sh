@@ -37,6 +37,16 @@ IFS=',' read -r -a accounts <<< "${accounts_csv}"
 kms_grant="${ATMOS_AMI_KMS_GRANT:-false}"
 kms_key_arn="${ATMOS_AMI_KMS_KEY_ARN:-}"
 
+# Warn about the default-key sharing trap: if the AMI is encrypted with the
+# account's default AWS-managed key (no CMK set), target accounts will be granted
+# launch permission here but will NOT be able to launch it — AWS does not allow
+# sharing the AWS-managed key. A customer-managed key (kms_key_arn) is required.
+if [[ -z "${kms_key_arn}" ]]; then
+  echo "WARNING: no kms_key_arn set — if this AMI is encrypted with the default" \
+    "AWS-managed key, the target accounts will not be able to launch it. Use a" \
+    "customer-managed key (CMK) for cross-account sharing. See stacks/al2023.yaml." >&2
+fi
+
 echo "==> Sharing ${ami_id} (${ATMOS_AMI_REGION}) with: ${accounts[*]}"
 
 # 1) Launch permission on the AMI.

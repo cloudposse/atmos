@@ -30,11 +30,21 @@ require_env() {
 
 # resolve_ami_id — print the AMI ID of the most recent Packer build.
 #
-# Reads the build manifest via `atmos packer output` and selects the build whose
-# packer_run_uuid matches the manifest's top-level last_run_uuid (the build that
-# ran most recently), then extracts the AMI ID from its "region:ami-id"
+# If ATMOS_AMI_ID is set, it is used verbatim and the manifest is not read. CI
+# uses this to pass the AMI ID from the `build` job to later jobs (health-check,
+# promote, cleanup), which run on separate runners that don't have the build
+# runner's manifest.json. Locally the variable is unset and the manifest is read.
+#
+# Otherwise it reads the build manifest via `atmos packer output` and selects the
+# build whose packer_run_uuid matches the manifest's top-level last_run_uuid (the
+# build that ran most recently), then extracts the AMI ID from its "region:ami-id"
 # artifact_id. Robust to multiple historical builds in the manifest.
 resolve_ami_id() {
+  if [[ -n "${ATMOS_AMI_ID:-}" ]]; then
+    printf '%s' "${ATMOS_AMI_ID}"
+    return 0
+  fi
+
   require_cmd atmos
   require_env ATMOS_AMI_COMPONENT
   require_env ATMOS_AMI_STACK

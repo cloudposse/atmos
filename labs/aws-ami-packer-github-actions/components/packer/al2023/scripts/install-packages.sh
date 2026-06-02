@@ -3,9 +3,8 @@
 # install-packages.sh — install the runtime packages the image should ship with.
 #
 # This is the list you most likely want to edit. It installs a small, generic
-# set of utilities and enables the SSM agent (which ships with AL2023 but is
-# worth enabling explicitly). Replace the PACKAGES list with whatever your
-# workloads need (language runtimes, agents, CLIs, etc.).
+# set of utilities. Replace the PACKAGES list with whatever your workloads need
+# (language runtimes, agents, CLIs, etc.).
 #
 # Executed as root by the Packer shell provisioner (see main.pkr.hcl).
 
@@ -18,16 +17,16 @@ PACKAGES=(
   unzip       # Common archive handling.
   chrony      # Time synchronization.
   cronie      # Cron daemon.
-  amazon-ssm-agent # Remote management without SSH (preinstalled on AL2023).
 )
 
 echo "==> Installing packages: ${PACKAGES[*]}"
 dnf -y install "${PACKAGES[@]}"
 
 echo "==> Enabling baseline services"
-# Enable now so they start on first boot of instances launched from the AMI.
-systemctl enable --now chronyd
-systemctl enable --now crond
-systemctl enable --now amazon-ssm-agent
+# `enable` (without `--now`) registers the units so they start on first boot of
+# instances launched from this AMI. We deliberately do NOT start them on the
+# build instance, to avoid baking runtime state into the image.
+systemctl enable chronyd
+systemctl enable crond
 
 echo "==> Package installation complete"
