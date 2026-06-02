@@ -81,8 +81,10 @@ components:
 
         # ---- Sharing ----------------------------------------------------------
         # Comma-separated AWS account IDs to share the AMI with AFTER approval.
-        # Used by `atmos ami share` as the default target list. PLACEHOLDER values.
-        share_account_ids: "123456789012,123456789013"
+        # Used by `atmos ami share` as the default target list. Empty by default so
+        # sharing FAILS CLOSED until you set real targets here (or pass --accounts) —
+        # this prevents accidentally sharing the AMI with unintended accounts.
+        share_account_ids: "" # e.g. "123456789012,123456789013"
         # AMIs are NOT shared at build time — sharing happens post-approval.
         ami_users: []
         ami_org_arns: []

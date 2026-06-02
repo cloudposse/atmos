@@ -17,7 +17,7 @@ runs:
   using: composite
   steps:
     # Short-lived credentials via OIDC. The IAM role must trust GitHub's OIDC
-    # provider — see docs/iam-policy.json and the README for setup.
+    # provider — see docs/oidc-trust-policy.json and the README for setup.
     - name: Configure AWS credentials
       uses: aws-actions/configure-aws-credentials@v4
       with:

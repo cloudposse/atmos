@@ -421,8 +421,8 @@ shellcheck components/packer/{image}/scripts/*.sh
 # 4. YAML lint (optional but recommended)
 yamllint stacks/
 
-# 5. Website docs build — verify EmbedFile references and file-browser registration
-# NOTE: Only run this when asked; it is slow and requires node_modules installed.
+# 5. Website docs build — REQUIRED for any Lab change (every Lab touches website/).
+# Verify EmbedFile references, file-browser registration, broken links, and MDX rendering.
 cd website && npm run build
 
 # 6. Cloud-dependent steps (NOT run in CI — document in README how to run locally)
@@ -527,8 +527,10 @@ Create `website/docs/labs/{lab-name}.mdx`:
 
 ### 7. Validate
 
-Run the validation workflow (Step 6 of the checklist above). Fix all issues before opening the
-PR. Do not run `cd website && npm run build` unless the user requests it.
+Run the validation workflow (the checklist above). Fix all issues before opening the PR. Because
+every Lab change touches `website/` (the walkthrough mdx, file-browser registration, navbar),
+ALWAYS run `cd website && npm run build` and verify there are no broken links, missing images, or
+MDX rendering issues before opening the PR.
 
 ### 8. Open PR
 

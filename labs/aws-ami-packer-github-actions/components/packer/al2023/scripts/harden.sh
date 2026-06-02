@@ -34,6 +34,10 @@ ClientAliveCountMax 2
 MaxAuthTries 4
 EOF
 chmod 0600 "${sshd_config}"
+# Validate the full SSH config (main file + this drop-in) before it is baked into
+# the AMI. A bad directive would otherwise lock out SSH on every instance launched
+# from the image; `set -e` aborts the build if validation fails.
+sshd -t -f /etc/ssh/sshd_config
 
 echo "==> Applying sysctl network hardening"
 cat > /etc/sysctl.d/99-hardening.conf <<'EOF'

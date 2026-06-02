@@ -34,6 +34,18 @@ fi
 # Split the comma-separated list into an array.
 IFS=',' read -r -a accounts <<< "${accounts_csv}"
 
+# Validate each account ID is a 12-digit number, failing early with a clear
+# message instead of a cryptic AWS API error later. Empty entries (e.g. from a
+# trailing comma) are skipped, consistent with the sharing loops below.
+for acct in "${accounts[@]}"; do
+  acct="${acct// /}" # trim spaces.
+  [[ -z "${acct}" ]] && continue
+  if [[ ! "${acct}" =~ ^[0-9]{12}$ ]]; then
+    echo "ERROR: invalid AWS account ID '${acct}' (must be exactly 12 digits)" >&2
+    exit 1
+  fi
+done
+
 kms_grant="${ATMOS_AMI_KMS_GRANT:-false}"
 kms_key_arn="${ATMOS_AMI_KMS_KEY_ARN:-}"
 

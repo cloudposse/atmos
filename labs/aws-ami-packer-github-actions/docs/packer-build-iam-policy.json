@@ -1,5 +1,5 @@
 {
-  "_comment": "Reference identity policy for the Packer build role (the role GitHub OIDC assumes). Grants the EC2/AMI permissions Packer needs to build, tag, share, and clean up. Scope it down further for production (e.g. restrict regions, require tag conditions on RunInstances). KMS permissions are only needed when building encrypted AMIs with a customer-managed key. The ReadBaseImageFromSSM statement is optional: this template resolves the base AMI by name via ec2:DescribeImages, but it is retained so you can switch to resolving the base AMI from the public AWS SSM parameter (e.g. /aws/service/ami-amazon-linux-latest/*) without editing the policy.",
+  "_comment": "Reference identity policy for the Packer build role (the role GitHub OIDC assumes). Grants the EC2/AMI permissions Packer needs to build, tag, share, and clean up. Scope it down further for production (e.g. restrict regions, require tag conditions on RunInstances). KMS permissions are only needed when building encrypted AMIs with a customer-managed key; kms:CreateGrant is constrained to grants EC2/EBS creates on your behalf (kms:GrantIsForAWSResource=true), the least-privilege pattern for encrypted AMI builds. NOTE: the optional 'atmos ami share --kms-grant' makes a DIRECT kms:CreateGrant to share the key cross-account, which does NOT satisfy that condition — if you enable it, add a separate CreateGrant statement scoped to the target accounts (e.g. with a kms:GranteePrincipal condition). The ReadBaseImageFromSSM statement is optional: this template resolves the base AMI by name via ec2:DescribeImages, but it is retained so you can switch to resolving the base AMI from the public AWS SSM parameter (e.g. /aws/service/ami-amazon-linux-latest/*) without editing the policy.",
   "Version": "2012-10-17",
   "Statement": [
     {
@@ -44,13 +44,23 @@
       "Effect": "Allow",
       "Action": [
         "kms:DescribeKey",
-        "kms:CreateGrant",
         "kms:Encrypt",
         "kms:Decrypt",
         "kms:ReEncrypt*",
         "kms:GenerateDataKey*"
       ],
       "Resource": "arn:aws:kms:us-east-2:123456789012:key/EXAMPLE-KEY-ID"
+    },
+    {
+      "Sid": "PackerKMSCreateGrantForEBS",
+      "Effect": "Allow",
+      "Action": "kms:CreateGrant",
+      "Resource": "arn:aws:kms:us-east-2:123456789012:key/EXAMPLE-KEY-ID",
+      "Condition": {
+        "Bool": {
+          "kms:GrantIsForAWSResource": "true"
+        }
+      }
     },
     {
       "Sid": "ReadBaseImageFromSSM",

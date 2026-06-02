@@ -34,16 +34,24 @@ if [[ -z "${SCAN_AGENT_REPO_URL}" ]]; then
   exit 1
 fi
 
-echo "==> Installing vulnerability scan agent from ${SCAN_AGENT_REPO_URL}"
+# Do not echo SCAN_AGENT_REPO_URL — it may embed credentials (e.g. a token in the
+# URL) that would leak into the build log.
+echo "==> Installing vulnerability scan agent from configured private repository"
 
-# 1) Add a temporary repo pointing at your private package server.
+# 1) Add a temporary repo pointing at your private package server. Remove it on
+#    exit — even if a later step fails — so the private repo URL/credentials are
+#    never baked into the AMI.
 repo_file="/etc/yum.repos.d/scan-agent.repo"
+trap 'rm -f "${repo_file}"' EXIT
 cat > "${repo_file}" <<EOF
 [scan-agent]
 name=Vulnerability Scan Agent
 baseurl=${SCAN_AGENT_REPO_URL}
 enabled=1
-gpgcheck=0
+# Keep signature verification ON. Point gpgkey at your vendor's signing key, or
+# pre-import the key into the image trust store before installing.
+gpgcheck=1
+# gpgkey=https://packages.example.com/keys/RPM-GPG-KEY-scan-agent
 EOF
 
 # 2) Install the agent package. Replace 'scan-agent' with your vendor's package.
@@ -55,7 +63,5 @@ dnf -y install scan-agent
 #    scan-agent-ctl activate --customer-id "${SCAN_CUSTOMER_ID}" \
 #      --activation-id "${SCAN_ACTIVATION_ID}"
 
-# 4) Remove the temporary repo so private repo URLs/credentials are not baked in.
-rm -f "${repo_file}"
-
 echo "==> Scan agent installed"
+# The temporary repo file is removed by the EXIT trap registered above.

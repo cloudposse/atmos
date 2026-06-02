@@ -1,5 +1,5 @@
 {
-  "_comment": "Organization Service Control Policy (SCP) that enforces the governance rule: instances may only be launched from AMIs tagged ScanStatus=approved. Attach to an OU/account in AWS Organizations. The first statement denies RunInstances when the AMI's ScanStatus tag is anything other than 'approved'; the second denies it when the tag is absent entirely. Together they fail closed. The condition keys reference the AMI resource via ec2:ResourceTag on the image. Tune the NotAction/exemptions for your roles (e.g. exempt the Packer build role, which must launch the un-approved build instance).",
+  "_comment": "Organization Service Control Policy (SCP) that enforces the governance rule: instances may only be launched from AMIs tagged ScanStatus=approved. Attach to an OU/account in AWS Organizations. The first statement denies RunInstances when the AMI's ScanStatus tag is anything other than 'approved'; the second denies it when the tag is absent entirely. Together they fail closed. The condition keys reference the AMI resource via ec2:ResourceTag on the image. IMPORTANT: both statements exempt the Packer build/test role via aws:PrincipalArn (ArnNotLike) because this lab's pipeline health-check step must launch the freshly built, NOT-yet-approved AMI — without the exemption a blanket deny breaks the build. Replace YOUR_PACKER_BUILD_ROLE with your build role name (and tighten the account/path) before attaching.",
   "Version": "2012-10-17",
   "Statement": [
     {
@@ -10,6 +10,9 @@
       "Condition": {
         "StringNotEquals": {
           "ec2:ResourceTag/ScanStatus": "approved"
+        },
+        "ArnNotLike": {
+          "aws:PrincipalArn": "arn:aws:iam::*:role/YOUR_PACKER_BUILD_ROLE"
         }
       }
     },
@@ -21,6 +24,9 @@
       "Condition": {
         "Null": {
           "ec2:ResourceTag/ScanStatus": "true"
+        },
+        "ArnNotLike": {
+          "aws:PrincipalArn": "arn:aws:iam::*:role/YOUR_PACKER_BUILD_ROLE"
         }
       }
     }

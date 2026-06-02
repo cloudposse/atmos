@@ -118,8 +118,8 @@ atmos ami share al2023 -s al2023 --accounts 123456789012,123456789013
 ## Run the governed pipeline (GitHub Actions)
 
 1. Set repository variables `AWS_OIDC_ROLE_ARN` and `AWS_REGION`.
-2. Create the OIDC build role using [`docs/oidc-trust-policy.json`](docs/oidc-trust-policy.json) and [
-   `docs/packer-build-iam-policy.json`](docs/packer-build-iam-policy.json).
+2. Create the OIDC build role using [`docs/oidc-trust-policy.json`](docs/oidc-trust-policy.json) and
+   [`docs/packer-build-iam-policy.json`](docs/packer-build-iam-policy.json).
 3. Create a GitHub Environment named **`ami-approval`** and add required reviewers.
 4. Run the **AMI Pipeline** workflow (`workflow_dispatch`). It builds, health-checks,
    waits for approval, then tags and shares the AMI.
@@ -132,7 +132,9 @@ The full setup list is in [`docs/customization-checklist.md`](docs/customization
 - **Hardening** — toggle `ENABLE_FIREWALL` / `ENABLE_SELINUX_ENFORCING` via `provisioner_env_vars`.
 - **Scanning** — set `ENABLE_SCAN_AGENT=true` + `SCAN_AGENT_REPO_URL` and fill in `install-scan-agent.sh`.
 - **Governance** — attach [`docs/launch-restriction-scp.json`](docs/launch-restriction-scp.json) to enforce "launch only
-  approved AMIs".
+  approved AMIs". The SCP **exempts the Packer build/test role** (`aws:PrincipalArn`) so the pipeline's health-check step
+  can still launch the freshly built, not-yet-approved AMI — replace `YOUR_PACKER_BUILD_ROLE` before attaching, or a
+  blanket deny will break the build.
 
 ## Clean up
 

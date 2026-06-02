@@ -28,7 +28,9 @@ setup step. Nothing here is hardcoded in the Packer template or scripts.
 - [ ] Create the build role with `docs/oidc-trust-policy.json` (trust) and
       `docs/packer-build-iam-policy.json` (permissions).
 - [ ] (Optional) Attach `docs/launch-restriction-scp.json` to enforce
-      "launch only approved AMIs" org-wide.
+      "launch only approved AMIs" org-wide. First replace `YOUR_PACKER_BUILD_ROLE`
+      in the SCP so the build/test role is exempt — otherwise the pipeline's
+      health-check step (which launches the not-yet-approved AMI) is denied.
 
 ## 4. One-time GitHub setup
 

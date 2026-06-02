@@ -9,7 +9,8 @@ name: AMI Pipeline
 #
 # Setup required before this runs (see README):
 #   - Repository variables: AWS_OIDC_ROLE_ARN, AWS_REGION
-#   - An IAM role trusting GitHub OIDC (docs/iam-policy.json)
+#   - An IAM role trusting GitHub OIDC (docs/oidc-trust-policy.json) with the
+#     build permissions (docs/packer-build-iam-policy.json)
 #   - A GitHub Environment named `ami-approval` with required reviewers
 
 on:
@@ -154,17 +155,16 @@ jobs:
           echo "Promoted and shared ${{ needs.build.outputs.ami_id }}" >> "$GITHUB_STEP_SUMMARY"
 
   cleanup:
-    name: Cleanup Test Instances
+    name: Cleanup Test Instance
     runs-on: ubuntu-latest
-    # Always clean up the test instance, even if a later job failed — but only if
-    # health-check actually ran (i.e. a test instance may exist). When the build
-    # fails, health-check is skipped, there is nothing to terminate, and there is
-    # no AMI ID to resolve, so skip cleanup entirely instead of failing on it.
+    # Terminate the exact test instance this run launched (by ID), even if a later
+    # job failed. Targeting the specific instance — instead of every instance built
+    # from this AMI — avoids killing unrelated debug/test instances booted from the
+    # same image. Runs only when health-check actually launched an instance (the
+    # instance_id output is set); when the build fails, health-check is skipped, the
+    # output is empty, and cleanup is skipped instead of failing on it.
     needs: [build, health-check, promote]
-    if: ${{ always() && needs.health-check.result != 'skipped' }}
-    # Pass the AMI ID from the build job; this runner has no manifest.json.
-    env:
-      ATMOS_AMI_ID: ${{ needs.build.outputs.ami_id }}
+    if: ${{ always() && needs.health-check.outputs.instance_id != '' }}
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/setup-tools
@@ -173,5 +173,7 @@ jobs:
           role-arn: ${{ vars.AWS_OIDC_ROLE_ARN }}
           aws-region: ${{ vars.AWS_REGION }}
 
-      - name: Terminate test instances
-        run: atmos ami terminate-instances "$ATMOS_COMPONENT" -s "$ATMOS_STACK"
+      - name: Terminate test instance
+        env:
+          INSTANCE_ID: ${{ needs.health-check.outputs.instance_id }}
+        run: atmos ami terminate-instance "$ATMOS_COMPONENT" -s "$ATMOS_STACK" --instance-id "$INSTANCE_ID"
