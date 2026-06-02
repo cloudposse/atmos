@@ -54,7 +54,8 @@ func (s *defaultEnvironmentSetup) SetupEnvironment(config *ComponentConfig, auth
 
 	// Add auth-based environment variables if authContext is provided.
 	if authContext != nil && authContext.AWS != nil {
-		log.Debug("Adding auth-based environment variables",
+		log.Debug(
+			"Adding auth-based environment variables",
 			"profile", authContext.AWS.Profile,
 			"credentials_file", authContext.AWS.CredentialsFile,
 			"config_file", authContext.AWS.ConfigFile,
@@ -71,7 +72,8 @@ func (s *defaultEnvironmentSetup) SetupEnvironment(config *ComponentConfig, auth
 
 	// Add/override environment variables from the component's env section.
 	if len(config.Env) > 0 {
-		log.Debug("Adding environment variables from component",
+		log.Debug(
+			"Adding environment variables from component",
 			"source", "env section",
 			"count", len(config.Env),
 		)
@@ -80,7 +82,8 @@ func (s *defaultEnvironmentSetup) SetupEnvironment(config *ComponentConfig, auth
 		}
 	}
 
-	log.Debug("Resolved final environment variables",
+	log.Debug(
+		"Resolved final environment variables",
 		"count", len(environMap),
 	)
 	return environMap, nil
