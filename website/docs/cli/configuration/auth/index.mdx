@@ -166,7 +166,7 @@ auth:
   </dd>
 </dl>
 
-For Atmos-native git operations (vendoring, `source:` provisioning, go-getter) the minted token is exported as **`ATMOS_PRO_GITHUB_TOKEN`** by default (see `token_env` above); Atmos prefers it over `ATMOS_GITHUB_TOKEN` and `GITHUB_TOKEN`. When a `github/sts` `GIT_CONFIG_*` rewrite already covers a repo's owner, Atmos skips URL token injection for it so git's rewrite (carrying the correct least-privilege token) wins instead of being shadowed — so `settings.inject_github_token` can be left at its default `true`.
+For Atmos-native git operations (vendoring, `source:` provisioning, go-getter), when a single token is minted and `token_env` is left at its default, the token is exported as **`ATMOS_PRO_GITHUB_TOKEN`** (see `token_env` above); Atmos prefers it over `ATMOS_GITHUB_TOKEN` and `GITHUB_TOKEN`. When a `github/sts` `GIT_CONFIG_*` rewrite already covers a repo's owner, Atmos skips URL token injection for it so git's rewrite (carrying the correct least-privilege token) wins instead of being shadowed — so `settings.inject_github_token` can be left at its default `true`.
 
 #### Use it like Octo-STS — mint in one step, consume in the next
 
