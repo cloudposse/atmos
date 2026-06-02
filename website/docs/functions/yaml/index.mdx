@@ -75,6 +75,11 @@ YAML supports three types of data: core, defined, and user-defined.
  - The [__`!repo-root`__](/functions/yaml/repo-root) YAML function is used to retrieve the
    root directory of the Atmos repository.
 
+ - The [__`!git.repository`__](/functions/yaml/git.repository), [__`!git.owner`__](/functions/yaml/git.owner),
+   [__`!git.name`__](/functions/yaml/git.name), [__`!git.host`__](/functions/yaml/git.host), and
+   [__`!git.url`__](/functions/yaml/git.url) YAML functions retrieve repository metadata
+   (the `<owner>/<name>` slug, owner, name, host, and remote URL) from the current Git repository.
+
  - The [__`!cwd`__](/functions/yaml/cwd) YAML function is used to retrieve the current working directory
    where Atmos is executed from. Useful when you need paths relative to where you run Atmos
    rather than relative to the configuration file.

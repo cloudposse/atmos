@@ -8,6 +8,7 @@ import (
 	"time"
 
 	git "github.com/go-git/go-git/v5"
+	"github.com/go-git/go-git/v5/config"
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/object"
 	"github.com/stretchr/testify/assert"
@@ -147,6 +148,39 @@ func initExecTestGitRepo(t *testing.T, branch string) (string, string) {
 	}
 
 	return repoDir, hash.String()
+}
+
+func TestProcessCustomYamlTagsGitRepositoryMetadata(t *testing.T) {
+	repoDir, _ := initExecTestGitRepo(t, "")
+	repo, err := git.PlainOpen(repoDir)
+	require.NoError(t, err)
+	_, err = repo.CreateRemote(&config.RemoteConfig{
+		Name: "origin",
+		URLs: []string{"https://github.com/cloudposse/atmos.git"},
+	})
+	require.NoError(t, err)
+	t.Chdir(repoDir)
+
+	atmosConfig := &schema.AtmosConfiguration{}
+	stackYaml := `
+repository: !git.repository
+owner: !git.owner
+name: !git.name
+host: !git.host
+url: !git.url
+`
+
+	input, err := u.UnmarshalYAMLFromFile[schema.AtmosSectionMapType](atmosConfig, stackYaml, "test.yaml")
+	require.NoError(t, err)
+
+	result, err := ProcessCustomYamlTags(atmosConfig, input, "test-stack", nil, nil)
+	require.NoError(t, err)
+
+	assert.Equal(t, "cloudposse/atmos", result["repository"])
+	assert.Equal(t, "cloudposse", result["owner"])
+	assert.Equal(t, "atmos", result["name"])
+	assert.Equal(t, "github.com", result["host"])
+	assert.Equal(t, "https://github.com/cloudposse/atmos.git", result["url"])
 }
 
 func TestProcessNodesWithContextNestedMaps(t *testing.T) {

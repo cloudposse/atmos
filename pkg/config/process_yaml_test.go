@@ -10,6 +10,7 @@ import (
 	"time"
 
 	git "github.com/go-git/go-git/v5"
+	"github.com/go-git/go-git/v5/config"
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/object"
 	"github.com/spf13/viper"
@@ -714,6 +715,36 @@ func TestHandleCwd(t *testing.T) {
 			assert.Empty(t, node.Tag, "tag should be cleared after processing")
 		})
 	}
+}
+
+func TestPreprocessAtmosYamlFuncGitRepositoryTags(t *testing.T) {
+	repoDir, _ := initConfigTestGitRepo(t, "")
+	repo, err := git.PlainOpen(repoDir)
+	require.NoError(t, err)
+	_, err = repo.CreateRemote(&config.RemoteConfig{
+		Name: "origin",
+		URLs: []string{"https://github.com/cloudposse/atmos.git"},
+	})
+	require.NoError(t, err)
+	t.Chdir(repoDir)
+
+	v := viper.New()
+	yamlStr := `
+repository: !git.repository
+owner: !git.owner
+name: !git.name
+host: !git.host
+url: !git.url
+`
+
+	err = preprocessAtmosYamlFunc([]byte(yamlStr), v)
+	require.NoError(t, err)
+
+	assert.Equal(t, "cloudposse/atmos", v.GetString("repository"))
+	assert.Equal(t, "cloudposse", v.GetString("owner"))
+	assert.Equal(t, "atmos", v.GetString("name"))
+	assert.Equal(t, "github.com", v.GetString("host"))
+	assert.Equal(t, "https://github.com/cloudposse/atmos.git", v.GetString("url"))
 }
 
 func initConfigTestGitRepo(t *testing.T, branch string) (string, string) {
