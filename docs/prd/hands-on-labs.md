@@ -239,7 +239,6 @@ Build a hardened Amazon Linux 2023 AMI with Packer orchestrated by Atmos, valida
 
 **`.github/workflows/`**
 - **`ami.yml`** — the main pipeline (build → launch → health-check → optional scan → approval gate → tag → share → notify → cleanup). Uses OIDC role assumption, ephemeral runners, a GitHub Environment for the manual approval gate, step summaries, and audit logging. Inputs (source AMI name, etc.) via `workflow_dispatch`.
-- **`detect-base-image-update.yml`** *(optional companion)* — scheduled job that polls the latest base AMI (via SSM public parameter), diffs against a tracked state file, and triggers `ami.yml` automatically when a new base image is published.
 
 **`docs/`** (Lab-specific)
 - Diagram(s), a reference IAM identity policy + org SCP for "launch only `ScanStatus=approved` images", and a TODO/customization checklist.
@@ -275,7 +274,7 @@ atmos ami launch-instance <image> -s <stack> --type t3.small
 
 - Stack vars (region, instance type, networking, encryption/KMS, image name, sharing targets, tags).
 - The provisioner script list (which hardening/packages to apply).
-- Whether the optional scan step and the scheduled base-image-detection workflow are enabled.
+- Whether the optional scan step is enabled.
 - The approval gate's GitHub Environment reviewers.
 - The reference tag-based launch-restriction policy.
 

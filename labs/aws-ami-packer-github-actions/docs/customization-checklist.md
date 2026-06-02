@@ -39,5 +39,3 @@ setup step. Nothing here is hardcoded in the Packer template or scripts.
 
 - [ ] Vulnerability scan: set `ENABLE_SCAN_AGENT=true` and `SCAN_AGENT_REPO_URL`
       in the stack, fill in `install-scan-agent.sh`, and pass `enable_scan: true`.
-- [ ] Auto-rebuild on new base images: keep `detect-base-image-update.yml`
-      (grant the workflow `contents: write` + `actions: write`).

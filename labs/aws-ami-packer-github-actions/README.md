@@ -73,8 +73,7 @@ aws-ami-packer-github-actions/
 │   ├── actions/setup-tools/                # Composite action: install Atmos + Packer
 │   ├── actions/setup-aws-credentials/      # Composite action: OIDC role assumption
 │   └── workflows/
-│       ├── ami.yml                         # Main governed pipeline
-│       └── detect-base-image-update.yml    # OPTIONAL: rebuild when a new base AMI ships
+│       └── ami.yml                         # Main governed pipeline
 └── docs/                                   # Reference IAM/SCP policies + customization checklist
 ```
 
