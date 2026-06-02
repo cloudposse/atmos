@@ -6,9 +6,7 @@ promotion behind a **manual approval**, tags the approved image `ScanStatus=appr
 and **shares it across AWS accounts** — all orchestrated by Atmos and driven from a
 GitHub Actions pipeline.
 
-This is a [Hands-on Lab](https://atmos.tools/labs): larger than an
-[Example](https://atmos.tools/examples), it combines several Atmos features into a
-single production-shaped workflow you can clone and adapt.
+This Hands-on Lab combines several Atmos features into a single production-shaped workflow you can clone and adapt.
 
 ## What it teaches
 
@@ -81,7 +79,7 @@ aws-ami-packer-github-actions/
 
 | Tool                                                                                     | Version (pinned in CI) | Purpose             |
 |------------------------------------------------------------------------------------------|------------------------|---------------------|
-| [Atmos](https://atmos.tools/install)                                                     | 1.190.0                | Orchestration       |
+| [Atmos](https://atmos.tools/install)                                                     | 1.220.0                | Orchestration       |
 | [Packer](https://developer.hashicorp.com/packer/install)                                 | 1.15.3                 | Image build         |
 | [AWS CLI](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html) | v2                     | `atmos ami` helpers |
 
