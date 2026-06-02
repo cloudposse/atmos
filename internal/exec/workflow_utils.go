@@ -326,7 +326,7 @@ func ExecuteWorkflow(
 			AuthContext: &schema.AuthContext{},
 		}
 
-		credStore := credentials.NewCredentialStore()
+		credStore := credentials.NewCredentialStoreWithConfig(&atmosConfig.Auth)
 		validator := validation.NewValidator()
 		var err error
 		authManager, err = auth.NewAuthManager(&atmosConfig.Auth, credStore, validator, authStackInfo, atmosConfig.CliConfigPath)

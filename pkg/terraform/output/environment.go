@@ -1,6 +1,7 @@
 package output
 
 import (
+	"encoding/json"
 	"fmt"
 
 	awsCloud "github.com/cloudposse/atmos/pkg/auth/cloud/aws"
@@ -80,8 +81,48 @@ func (s *defaultEnvironmentSetup) SetupEnvironment(config *ComponentConfig, auth
 		}
 	}
 
+	// When components.terraform.init.pass_vars is enabled, export the component's
+	// vars as TF_VAR_* so the internal `terraform init` (run while resolving
+	// !terraform.output) can satisfy init-time variable dependencies — e.g. a
+	// module whose `version`/`source` is bound to var.foo. The main terraform
+	// path passes -var-file on init for this; the output executor runs init via
+	// the terraform-exec library, which cannot pass a var-file to init, so vars
+	// are forwarded through the environment instead. See issue #1412.
+	if config.PassVars && len(config.Vars) > 0 {
+		addTerraformVarsToEnv(environMap, config.Vars)
+	}
+
 	log.Debug("Resolved final environment variables",
 		"count", len(environMap),
 	)
 	return environMap, nil
+}
+
+// addTerraformVarsToEnv writes each component var into environMap as a TF_VAR_*
+// entry. String values are passed through verbatim; all other types (bool,
+// number, list, map) are JSON-encoded, which Terraform/OpenTofu accept for the
+// corresponding variable types. Existing TF_VAR_* entries are not overwritten so
+// that an explicit env-section override always wins.
+func addTerraformVarsToEnv(environMap map[string]string, vars map[string]any) {
+	for name, value := range vars {
+		key := "TF_VAR_" + name
+		if _, exists := environMap[key]; exists {
+			continue
+		}
+		environMap[key] = encodeTerraformVarValue(value)
+	}
+}
+
+// encodeTerraformVarValue renders a single var value for a TF_VAR_* environment
+// variable. Strings are used as-is; everything else is JSON-encoded, falling back
+// to fmt formatting if JSON marshaling fails.
+func encodeTerraformVarValue(value any) string {
+	if s, ok := value.(string); ok {
+		return s
+	}
+	encoded, err := json.Marshal(value)
+	if err != nil {
+		return fmt.Sprintf("%v", value)
+	}
+	return string(encoded)
 }

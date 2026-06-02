@@ -789,6 +789,9 @@ var (
 	ErrWebflowMissingCallbackCode = errors.New("missing authorization code in callback")
 	ErrWebflowStateMismatch       = errors.New("state mismatch: possible CSRF attack")
 	ErrWebflowEmptyCachedToken    = errors.New("cached refresh token is empty")
+	// ErrWebflowDPoP indicates a failure generating or serializing the RFC 9449
+	// DPoP proof required on AWS signin token requests (issue #2542).
+	ErrWebflowDPoP = errors.New("failed to build DPoP proof")
 
 	// Credential errors.
 	ErrCredentialsInvalid = errors.New("credentials are invalid or have been revoked")

@@ -258,6 +258,12 @@ type AuthManager interface {
 	// The realm provides credential isolation between different repositories.
 	GetRealm() realm.RealmInfo
 
+	// CredentialStoreType returns the type of the backing credential store
+	// (e.g., "system-keyring", "memory", "file", "noop"). Used to verify that
+	// the keyring backend selected from configuration is honored and for
+	// diagnostics in commands like `whoami`.
+	CredentialStoreType() string
+
 	// ListProviders returns all available provider names.
 	ListProviders() []string
 
