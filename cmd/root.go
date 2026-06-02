@@ -483,6 +483,17 @@ var RootCmd = &cobra.Command{
 				}
 			}
 
+			// Honor the public ATMOS_USE_VERSION env var (bound to --use-version)
+			// so version-management commands re-exec on it just like the CLI flag.
+			// An env-populated flag is not marked Changed(), so it isn't caught above.
+			if !explicitVersionRequested {
+				//nolint:forbidigo // Must use os.Getenv: re-exec decision is made before Viper flag binding resolves.
+				if useVersion := os.Getenv(pkgversion.UseVersionEnvVar); useVersion != "" {
+					explicitVersion = useVersion
+					explicitVersionRequested = true
+				}
+			}
+
 			// Set ATMOS_VERSION_USE env var if explicit flag was provided.
 			if explicitVersionRequested {
 				_ = os.Setenv(pkgversion.VersionUseEnvVar, explicitVersion)

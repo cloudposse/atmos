@@ -26,6 +26,10 @@ const (
 	// The --use-version flag also sets this env var.
 	VersionUseEnvVar = "ATMOS_VERSION_USE"
 
+	// UseVersionEnvVar is the public env var bound to the --use-version flag.
+	// Documented as the primary way to pin the Atmos version via environment.
+	UseVersionEnvVar = "ATMOS_USE_VERSION"
+
 	// LogFieldPR is the log field name for PR numbers.
 	logFieldPR = "pr"
 
@@ -149,9 +153,16 @@ func CheckAndReexecWithConfig(atmosConfig *schema.AtmosConfiguration, cfg *Reexe
 }
 
 // resolveRequestedVersion determines the version to use with precedence:
-// ATMOS_VERSION_USE > ATMOS_VERSION > version.use in config.
+// ATMOS_VERSION_USE > ATMOS_USE_VERSION > ATMOS_VERSION > version.use in config.
+//
+// ATMOS_VERSION_USE is the internal var set by the --use-version flag.
+// ATMOS_USE_VERSION is the public, documented env var bound to --use-version.
+// ATMOS_VERSION is a convenience alias.
 func resolveRequestedVersion(atmosConfig *schema.AtmosConfiguration, cfg *ReexecConfig) string {
 	if v := cfg.GetEnv(VersionUseEnvVar); v != "" {
+		return v
+	}
+	if v := cfg.GetEnv(UseVersionEnvVar); v != "" {
 		return v
 	}
 	if v := cfg.GetEnv(VersionEnvVar); v != "" {
