@@ -58,4 +58,4 @@ Labs follow a consistent structure so they stay trustworthy:
 - **Vendor-neutral** — neutral placeholders only (e.g., `namespace`, `123456789012`, `arn:aws:...:EXAMPLE`).
 - **Runnable with a standard account** — steps needing proprietary services are optional and clearly gated.
 - **Documented** — `Overview → Architecture → Prerequisites → Run → Customize → Clean up → Learn More`.
-- **CI-validated** — linted and statically validated (`atmos validate stacks`, `atmos describe`).
+- **Validated** — linted and statically validated (`atmos validate stacks`, `atmos describe`).
