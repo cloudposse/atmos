@@ -1619,3 +1619,62 @@ func TestExperimentalModeHandling(t *testing.T) {
 		})
 	}
 }
+
+// TestUnknownSubcommand verifies that only genuine unknown-subcommand errors
+// (ErrUnknownSubcommand, as produced by the registry executor's Cobra-error
+// conversion) are classified as such — and that a missing external executable
+// (ErrCommandNotFound, e.g. from `atmos auth exec -- <cmd>`) is NOT, so it never
+// gets rendered as "the command atmos requires a subcommand".
+func TestUnknownSubcommand(t *testing.T) {
+	tests := []struct {
+		name        string
+		err         error
+		wantCommand string
+		wantOK      bool
+	}{
+		{
+			name:   "nil error is not an unknown subcommand",
+			err:    nil,
+			wantOK: false,
+		},
+		{
+			name: "unknown subcommand with command context",
+			err: errUtils.Build(errUtils.ErrUnknownSubcommand).
+				WithContext("command", "foobar").
+				Err(),
+			wantCommand: "foobar",
+			wantOK:      true,
+		},
+		{
+			name: "wrapped unknown subcommand is still detected",
+			err: fmt.Errorf("wrapped: %w", errUtils.Build(errUtils.ErrUnknownSubcommand).
+				WithContext("command", "terrafrom").
+				Err()),
+			wantCommand: "terrafrom",
+			wantOK:      true,
+		},
+		{
+			// Regression: the reported bug. `atmos auth exec -- <missing-binary>`
+			// returns ErrCommandNotFound, which must NOT be treated as an unknown
+			// Atmos subcommand.
+			name: "missing external executable is not an unknown subcommand",
+			err: errUtils.Build(errUtils.ErrCommandNotFound).
+				WithContext("command", "uvx").
+				Err(),
+			wantOK: false,
+		},
+		{
+			name:   "unrelated error is not an unknown subcommand",
+			err:    errors.New("some other failure"),
+			wantOK: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			command, ok := unknownSubcommand(tt.err)
+			assert.Equal(t, tt.wantOK, ok)
+			assert.Equal(t, tt.wantCommand, command)
+		})
+	}
+}
