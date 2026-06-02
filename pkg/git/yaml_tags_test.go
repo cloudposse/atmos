@@ -222,3 +222,14 @@ func TestProcessTagOwner_DefaultOutsideRepo(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "default-owner", result)
 }
+
+func TestProcessTagOwner_ErrorOutsideRepoNoDefault(t *testing.T) {
+	// Outside any Git repository, GetLocalRepoInfo fails. With no default value, the
+	// error is propagated rather than swallowed. This guards the no-default error path
+	// in processRepoInfoTag (the with-default sibling is covered above).
+	t.Chdir(t.TempDir())
+
+	result, err := ProcessTagOwner(YAMLFuncOwner)
+	require.Error(t, err)
+	assert.Empty(t, result)
+}

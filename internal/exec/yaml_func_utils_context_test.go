@@ -183,6 +183,31 @@ url: !git.url
 	assert.Equal(t, "https://github.com/cloudposse/atmos.git", result["url"])
 }
 
+func TestProcessCustomYamlTagsGitRepositoryMetadataErrorsOutsideRepo(t *testing.T) {
+	// Outside any Git repository, the repository-metadata tags cannot be resolved and,
+	// with no default value provided, must surface an error. This guards the error
+	// branches in processSimpleTags for each of the five tags.
+	t.Chdir(t.TempDir())
+
+	atmosConfig := &schema.AtmosConfiguration{}
+
+	tags := []string{
+		u.AtmosYamlFuncGitRepository,
+		u.AtmosYamlFuncGitOwner,
+		u.AtmosYamlFuncGitName,
+		u.AtmosYamlFuncGitHost,
+		u.AtmosYamlFuncGitUrl,
+	}
+
+	for _, tag := range tags {
+		t.Run(tag, func(t *testing.T) {
+			ctx := NewResolutionContext()
+			_, err := processCustomTagsWithContext(atmosConfig, tag, "test-stack", nil, ctx, nil)
+			require.Error(t, err)
+		})
+	}
+}
+
 func TestProcessNodesWithContextNestedMaps(t *testing.T) {
 	atmosConfig := &schema.AtmosConfiguration{}
 	ctx := NewResolutionContext()
