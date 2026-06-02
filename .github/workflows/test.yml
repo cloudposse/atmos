@@ -281,7 +281,7 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: hadolint/hadolint-action@v3.1.0
+      - uses: hadolint/hadolint-action@v3.3.0
         id: hadolint
         with:
           dockerfile: Dockerfile
