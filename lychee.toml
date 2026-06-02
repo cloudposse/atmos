@@ -54,6 +54,7 @@ exclude = [
   "atmos\\.tools",
   # Root-relative paths converted to file:// URLs (atmos.tools website paths)
   "file://.*/cli/",
+  "file://.*/functions/",
   # Files that don't exist yet (planned documentation)
   "website/docs/cli/errors\\.mdx",
   "website/docs/cli/configuration/mask\\.mdx",
