@@ -61,7 +61,7 @@ jobs:
       matrix: ${{ steps.affected.outputs.matrix }}
       has-affected-stacks: ${{ steps.affected.outputs.has-affected-stacks }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - id: affected
         uses: cloudposse/github-action-atmos-affected-stacks@v3
         with:

@@ -7,15 +7,15 @@ data "context_label" "this" {
 
 # Create tags based on the context. Add the value of the name label to the tags
 data "context_tags" "this" {
-    values = {
+  values = {
     "type" = var.pet
   }
 }
 
 module "pet_set" {
-  source = "./modules/instance"
-  for_each = {for i in range(var.size) : i => var.pet}
+  source   = "./modules/instance"
+  for_each = { for i in range(var.size) : i => var.pet }
 
-  pet = each.value
+  pet      = each.value
   instance = each.key + 1
 }

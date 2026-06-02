@@ -2,10 +2,14 @@ package output
 
 import (
 	"fmt"
+	"path/filepath"
+	"strings"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
+	provWorkdir "github.com/cloudposse/atmos/pkg/provisioner/workdir"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -30,6 +34,17 @@ type ComponentConfig struct {
 	AutoGenerateBackend bool
 	// InitRunReconfigure indicates whether to run init with -reconfigure.
 	InitRunReconfigure bool
+	// AutoProvisionWorkdirForOutputs controls whether the executor auto-provisions
+	// JIT working directories before terraform init.
+	AutoProvisionWorkdirForOutputs bool
+	// PassVars mirrors components.terraform.init.pass_vars. When true, the
+	// component's vars are exported as TF_VAR_* so that `terraform init` can
+	// resolve init-time variable dependencies (e.g. a module `version` bound to
+	// var.foo) while resolving !terraform.output. See issue #1412.
+	PassVars bool
+	// Vars holds the component's resolved vars section, used to build TF_VAR_*
+	// environment variables when PassVars is true.
+	Vars map[string]any
 }
 
 // IsComponentProcessable determines if a component should be processed for terraform output.
@@ -157,6 +172,45 @@ func extractComponentPath(atmosConfig *schema.AtmosConfiguration, sections map[s
 			Err()
 	}
 
+	// When workdir provisioning is active, all terraform operations must target the
+	// workdir, not the base component directory. The workdir path is deterministic
+	// (built from basePath + componentType + stack + instance name) so we can
+	// reconstruct it here even when _workdir_path is absent from freshly-described
+	// sections (e.g. during hook execution where DescribeComponent is called fresh).
+	if provWorkdir.IsWorkdirEnabled(sections) {
+		basePath := atmosConfig.BasePath
+		if basePath == "" {
+			basePath = "."
+		}
+		workdirPath := provWorkdir.BuildPath(basePath, componentType, component, stack, sections)
+		if !filepath.IsAbs(workdirPath) {
+			if abs, absErr := filepath.Abs(workdirPath); absErr == nil {
+				workdirPath = abs
+			}
+		}
+		// Containment guard: reject derived paths that escape the project directory.
+		// atmos_component and atmos_stack come from user-controlled YAML; a value
+		// containing ../ sequences (e.g. "../../../../etc/evil") could otherwise
+		// escape BasePath via filepath.Join resolution inside BuildPath.
+		// Note: symlinks are not resolved — same best-effort scope as the mirror
+		// guard in terraform_backend_local.go:resolveLocalBackendComponentPath.
+		// Uses the already-resolved basePath local (not atmosConfig.BasePath which
+		// may be "") to avoid Abs("") vs Abs(".") inconsistency.
+		absBase, errBase := filepath.Abs(basePath)
+		if errBase == nil {
+			sep := string(filepath.Separator)
+			if strings.HasPrefix(workdirPath, absBase+sep) || workdirPath == absBase {
+				return workdirPath, nil
+			}
+			log.Debug("Derived workdir path escapes project directory; using component path",
+				"derived_path", workdirPath, "base_path", basePath)
+		} else {
+			// filepath.Abs failure is unreachable in practice, but if it somehow
+			// occurs, return the safe fallback rather than an unverified path.
+			return componentPath, nil
+		}
+	}
+
 	return componentPath, nil
 }
 
@@ -174,6 +228,9 @@ func extractOptionalFields(sections map[string]any, config *ComponentConfig) {
 	if env, ok := sections[cfg.EnvSectionName].(map[string]any); ok {
 		config.Env = env
 	}
+	if vars, ok := sections[cfg.VarsSectionName].(map[string]any); ok {
+		config.Vars = vars
+	}
 }
 
 // ExtractComponentConfig extracts and validates component configuration from sections.
@@ -183,8 +240,10 @@ func ExtractComponentConfig(atmosConfig *schema.AtmosConfiguration, sections map
 	defer perf.Track(atmosConfig, "output.ExtractComponentConfig")()
 
 	config := &ComponentConfig{
-		AutoGenerateBackend: atmosConfig.Components.Terraform.AutoGenerateBackendFile,
-		InitRunReconfigure:  atmosConfig.Components.Terraform.InitRunReconfigure,
+		AutoGenerateBackend:            atmosConfig.Components.Terraform.AutoGenerateBackendFile,
+		InitRunReconfigure:             atmosConfig.Components.Terraform.InitRunReconfigure,
+		AutoProvisionWorkdirForOutputs: atmosConfig.Components.Terraform.AutoProvisionWorkdirForOutputs,
+		PassVars:                       atmosConfig.Components.Terraform.Init.PassVars,
 	}
 
 	if err := extractRequiredFields(atmosConfig, sections, component, stack, config); err != nil {

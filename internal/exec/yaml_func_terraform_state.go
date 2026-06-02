@@ -81,7 +81,8 @@ func processTagTerraformStateWithContext(
 		component = strings.TrimSpace(parts[0])
 		stack = currentStack
 		output = strings.TrimSpace(parts[1])
-		log.Debug("Executing Atmos YAML function with component and output parameters; using current stack",
+		log.Debug(
+			"Executing Atmos YAML function with component and output parameters; using current stack",
 			"function", input,
 			"stack", currentStack,
 		)
@@ -113,13 +114,17 @@ func processTagTerraformStateWithContext(
 	if stackInfo != nil {
 		authContext = stackInfo.AuthContext
 		authManager = stackInfo.AuthManager
+		if authManager == nil && stackInfo.AuthDisabled {
+			authManager = &authContextWrapper{stackInfo: stackInfo}
+		}
 	}
 
 	value, err := stateGetter.GetState(atmosConfig, input, stack, component, output, false, authContext, authManager)
 	if err != nil {
 		// Check if this is a recoverable error AND the expression has a YQ default.
 		if isRecoverableTerraformError(err) && hasYqDefault(output) {
-			log.Debug("Evaluating YQ default for recoverable error",
+			log.Debug(
+				"Evaluating YQ default for recoverable error",
 				"function", input,
 				"error", err.Error(),
 			)

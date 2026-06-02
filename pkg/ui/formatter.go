@@ -606,6 +606,22 @@ func (f *formatter) ColorProfile() terminal.ColorProfile {
 	return f.terminal.ColorProfile()
 }
 
+// termenvProfile maps the formatter's terminal color profile to a termenv.Profile.
+func (f *formatter) termenvProfile() termenv.Profile {
+	switch f.terminal.ColorProfile() {
+	case terminal.ColorNone:
+		return termenv.Ascii
+	case terminal.Color16:
+		return termenv.ANSI
+	case terminal.Color256:
+		return termenv.ANSI256
+	case terminal.ColorTrue:
+		return termenv.TrueColor
+	default:
+		return termenv.Ascii
+	}
+}
+
 // StatusMessage formats a message with an icon and color.
 // This is the foundational method used by Success, Error, Warning, and Info.
 //
@@ -736,8 +752,8 @@ func (f *formatter) renderToastMarkdownFromStylesheet(content string, getStylesh
 		opts = append(opts, markdown.WithWordWrap(0))
 	}
 
-	// Set color profile using lipgloss's detected profile.
-	opts = append(opts, markdown.WithColorProfile(lipgloss.DefaultRenderer().ColorProfile()))
+	// Set color profile based on the formatter's terminal detection.
+	opts = append(opts, markdown.WithColorProfile(f.termenvProfile()))
 
 	if f.terminal.ColorProfile() != terminal.ColorNone {
 		themeName := f.ioCtx.Config().AtmosConfig.Settings.Terminal.Theme
@@ -970,7 +986,11 @@ func (f *formatter) renderMarkdown(content string, preserveNewlines bool) (strin
 		opts = append(opts, glamour.WithPreservedNewLines())
 	}
 
-	// Use theme-aware glamour styles
+	// Use atmos-configured color profile (not glamour's auto-detection) to ensure
+	// consistent color rendering across all output paths.
+	opts = append(opts, glamour.WithColorProfile(f.termenvProfile()))
+
+	// Use theme-aware glamour styles.
 	if f.terminal.ColorProfile() != terminal.ColorNone {
 		themeName := f.ioCtx.Config().AtmosConfig.Settings.Terminal.Theme
 		if themeName == "" {
@@ -980,7 +1000,7 @@ func (f *formatter) renderMarkdown(content string, preserveNewlines bool) (strin
 		if err == nil {
 			opts = append(opts, glamour.WithStylesFromJSONBytes(glamourStyle))
 		}
-		// Fallback to notty style if theme conversion fails
+		// Fallback to notty style if theme conversion fails.
 	} else {
 		opts = append(opts, glamour.WithStylePath("notty"))
 	}

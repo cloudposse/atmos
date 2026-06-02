@@ -691,6 +691,68 @@ func TestInitializeAIComponents_ToolsEnabled(t *testing.T) {
 	assert.NotNil(t, executor, "executor should not be nil")
 }
 
+// TestInitializeAIComponents_RegistersDescribeAffected is the headline
+// regression guard for issue #2 in docs/fixes/2026-05-15-mcp-review-fixes.md.
+// Pre-fix, initializeAIComponents hand-rolled seven `registry.Register(...)`
+// calls and omitted describe_affected — even though
+// website/docs/ai/mcp-server.mdx advertised it. Post-fix the function
+// delegates to atmosTools.RegisterTools (pkg/ai/tools/atmos/setup.go) which
+// registers the full Atmos AI tool set.
+func TestInitializeAIComponents_RegistersDescribeAffected(t *testing.T) {
+	atmosConfig := createFullTestAtmosConfig(true, true, false)
+
+	registryRaw, _, err := initializeAIComponents(atmosConfig)
+	require.NoError(t, err)
+	registry, ok := registryRaw.(*tools.Registry)
+	require.True(t, ok, "registry MUST be a *tools.Registry")
+
+	_, getErr := registry.Get("describe_affected")
+	assert.NoError(t, getErr,
+		"describe_affected MUST be registered (it is advertised at "+
+			"website/docs/ai/mcp-server.mdx and was previously missing — issue #2)")
+}
+
+// TestInitializeAIComponents_RegistersSharedFactoryTools verifies a
+// representative subset of the tools that the shared atmosTools.RegisterTools
+// factory exposes — and that the hand-rolled curated list previously
+// omitted. If a future change reverts to the hand-rolled list, this test
+// fails on the first missing tool.
+func TestInitializeAIComponents_RegistersSharedFactoryTools(t *testing.T) {
+	atmosConfig := createFullTestAtmosConfig(true, true, false)
+
+	registryRaw, _, err := initializeAIComponents(atmosConfig)
+	require.NoError(t, err)
+	registry, ok := registryRaw.(*tools.Registry)
+	require.True(t, ok)
+
+	// The set below is intentionally a mix of (a) tools the OLD hand-rolled
+	// list registered — to lock in that we did not regress — and (b) tools
+	// the shared factory adds that the hand-rolled list omitted.
+	//
+	// Note the inconsistent `atmos_` prefix: the `atmos_describe_component`
+	// / `atmos_list_stacks` / `atmos_validate_stacks` names predate the
+	// non-prefixed naming convention used by newer tools. The shared
+	// factory registers both styles.
+	requiredTools := []string{
+		// Old hand-rolled set (must remain registered):
+		"atmos_describe_component",
+		"atmos_list_stacks",
+		"atmos_validate_stacks",
+		"read_component_file",
+		"read_stack_file",
+		"write_component_file",
+		"write_stack_file",
+		// Shared-factory additions (the issue-#2 win):
+		"describe_affected",
+		"search_files",
+		"execute_atmos_command",
+	}
+	for _, name := range requiredTools {
+		_, getErr := registry.Get(name)
+		assert.NoError(t, getErr, "tool %q MUST be registered by initializeAIComponents", name)
+	}
+}
+
 // TestInitializeAIComponents_YOLOMode tests that initializeAIComponents works in YOLO mode.
 func TestInitializeAIComponents_YOLOMode(t *testing.T) {
 	atmosConfig := createFullTestAtmosConfig(true, true, true)
@@ -2363,10 +2425,14 @@ func TestInitializeAIComponents_VerifyToolCount(t *testing.T) {
 
 	registry := registryRaw.(*tools.Registry)
 
-	// Should have exactly 7 tools registered:
-	// describe_component, list_stacks, validate_stacks,
-	// read_component_file, read_stack_file, write_component_file, write_stack_file.
-	assert.Equal(t, 7, registry.Count(), "expected 7 tools to be registered")
+	// initializeAIComponents now delegates to atmosTools.RegisterTools
+	// (the shared factory in pkg/ai/tools/atmos/setup.go), which registers
+	// the full Atmos AI tool set rather than the hand-rolled curated
+	// subset that used to live in start.go. The count is asserted with a
+	// lower bound + presence of representative tools rather than an exact
+	// number so adding a new tool to RegisterTools doesn't churn this test.
+	assert.GreaterOrEqual(t, registry.Count(), 14,
+		"expected at least the 14 core tools from RegisterTools (was 7 hand-rolled before issue #2 fix)")
 }
 
 // TestGetTransportConfig_WithSetFlags tests getTransportConfig when flags are set via command line simulation.
@@ -2868,7 +2934,12 @@ func TestWaitForShutdown_ErrorTypes(t *testing.T) {
 	}
 }
 
-// TestInitializeAIComponents_ToolRegistrationOrder tests that tools are registered in expected order.
+// TestInitializeAIComponents_ToolRegistrationOrder tests that all of the
+// previously hand-rolled tools are still registered after the move to
+// atmosTools.RegisterTools (the shared factory in
+// pkg/ai/tools/atmos/setup.go). The exact ordering is no longer pinned
+// because Registry.List() now reflects whatever order RegisterTools uses,
+// which is implementation detail outside this package's contract.
 func TestInitializeAIComponents_ToolRegistrationOrder(t *testing.T) {
 	atmosConfig := createFullTestAtmosConfig(true, true, false)
 
@@ -2880,8 +2951,10 @@ func TestInitializeAIComponents_ToolRegistrationOrder(t *testing.T) {
 	// Get all tools.
 	toolsList := registry.List()
 
-	// Verify we have the expected number.
-	assert.Equal(t, 7, len(toolsList))
+	// Lower bound: the shared factory registers at least the 14 core tools.
+	// Don't pin the exact count — adding a new tool to the shared factory
+	// shouldn't churn this test.
+	assert.GreaterOrEqual(t, len(toolsList), 14)
 
 	// Create a map of tool names.
 	toolNames := make(map[string]bool)
@@ -2889,7 +2962,9 @@ func TestInitializeAIComponents_ToolRegistrationOrder(t *testing.T) {
 		toolNames[tool.Name()] = true
 	}
 
-	// Verify all expected tools are present.
+	// Verify all of the previously hand-rolled tools are still present.
+	// Issue-#2 additions (describe_affected, search_files, …) are
+	// asserted by TestInitializeAIComponents_RegistersSharedFactoryTools.
 	expectedTools := []string{
 		"atmos_describe_component",
 		"atmos_list_stacks",

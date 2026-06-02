@@ -15,12 +15,13 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	auth "github.com/cloudposse/atmos/pkg/auth"
+	"github.com/cloudposse/atmos/pkg/component"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/dependencies"
 	log "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/provisioner"
 	_ "github.com/cloudposse/atmos/pkg/provisioner/source" // register source provisioner
-	provSource "github.com/cloudposse/atmos/pkg/provisioner/source"
 	provWorkdir "github.com/cloudposse/atmos/pkg/provisioner/workdir"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/store/authbridge"
@@ -56,7 +57,8 @@ func handleVersionSubcommand(atmosConfig *schema.AtmosConfiguration, info *schem
 		"",
 		tenv.EnvVars(),
 		false,
-		info.RedirectStdErr)
+		info.RedirectStdErr,
+	)
 }
 
 // setupTerraformAuth builds the merged auth config (global + component-specific via
@@ -86,7 +88,7 @@ var defaultMergedAuthConfigGetter = getMergedAuthConfig
 
 func setupTerraformAuth(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) (auth.AuthManager, error) {
 	// Log the identity-selection decision point for easy debugging.
-	log.Debug("Resolving auth config for terraform command",
+	log.Debug("Resolving auth config for component command",
 		"stack", info.Stack, "component", info.ComponentFromArg, "subcommand", info.SubCommand)
 
 	// Get merged auth config (global + component-specific if stack/component are set).
@@ -105,7 +107,8 @@ func setupTerraformAuth(atmosConfig *schema.AtmosConfiguration, info *schema.Con
 	// Create and authenticate the AuthManager using the same injectable creator as
 	// createAndAuthenticateAuthManagerWithDeps to keep injection points unified.
 	authManager, err := defaultAuthManagerCreator(
-		info.Identity, mergedAuthConfig, cfg.IdentityFlagSelectValue, atmosConfig)
+		info.Identity, mergedAuthConfig, cfg.IdentityFlagSelectValue, atmosConfig,
+	)
 	if err != nil {
 		if errors.Is(err, errUtils.ErrUserAborted) {
 			errUtils.Exit(errUtils.ExitCodeSIGINT)
@@ -129,6 +132,22 @@ func setupTerraformAuth(atmosConfig *schema.AtmosConfiguration, info *schema.Con
 	return authManager, nil
 }
 
+// SetupTerraformAuthForCLI exposes terraform auth setup to command-layer callers
+// that need the same merged-auth and explicit-identity behavior as ExecuteTerraform.
+func SetupTerraformAuthForCLI(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) (any, error) {
+	defer perf.Track(atmosConfig, "exec.SetupTerraformAuthForCLI")()
+
+	return setupTerraformAuth(atmosConfig, info)
+}
+
+// SetupComponentAuthForCLI exposes the shared component auth setup to non-Terraform
+// command layers that still need authenticated YAML functions such as !terraform.state.
+func SetupComponentAuthForCLI(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) (auth.AuthManager, error) {
+	defer perf.Track(atmosConfig, "exec.SetupComponentAuthForCLI")()
+
+	return setupTerraformAuth(atmosConfig, info)
+}
+
 // resolveAndProvisionComponentPath resolves the filesystem path for a terraform component,
 // optionally auto-generates files, performs JIT source provisioning, and validates
 // that the resulting directory actually exists.
@@ -138,12 +157,19 @@ func resolveAndProvisionComponentPath(atmosConfig *schema.AtmosConfiguration, in
 		return "", fmt.Errorf("failed to resolve component path: %w", err)
 	}
 
-	if err = autoGenerateComponentFiles(atmosConfig, info, componentPath); err != nil {
+	// Provision source before generating files: when provision.workdir.enabled
+	// is true the resolved path is the workdir, and generated files must land
+	// there rather than in the base component directory.
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	defer cancel()
+	componentPath, componentPathExists, err := component.ProvisionAndResolveComponentPath(
+		ctx, atmosConfig, info, cfg.TerraformComponentType, componentPath,
+	)
+	if err != nil {
 		return "", err
 	}
 
-	componentPath, componentPathExists, err := provisionComponentSource(atmosConfig, info, componentPath)
-	if err != nil {
+	if err = autoGenerateComponentFiles(atmosConfig, info, componentPath); err != nil {
 		return "", err
 	}
 
@@ -175,35 +201,6 @@ func autoGenerateComponentFiles(atmosConfig *schema.AtmosConfiguration, info *sc
 		return errors.Join(errUtils.ErrCreateDirectory, fmt.Errorf("auto-generation: %w", mkdirErr))
 	}
 	return GenerateFilesForComponent(atmosConfig, info, componentPath)
-}
-
-// provisionComponentSource performs JIT source provisioning when configured, then
-// checks whether the component directory exists. Returns the (possibly updated)
-// component path, existence flag, and any error.
-func provisionComponentSource(
-	atmosConfig *schema.AtmosConfiguration,
-	info *schema.ConfigAndStacksInfo,
-	componentPath string,
-) (string, bool, error) {
-	exists, err := u.IsDirectory(componentPath)
-
-	if !provSource.HasSource(info.ComponentSection) {
-		return componentPath, exists, err
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
-	defer cancel()
-	if autoErr := provSource.AutoProvisionSource(ctx, atmosConfig, cfg.TerraformComponentType, info.ComponentSection, info.AuthContext); autoErr != nil {
-		return "", false, fmt.Errorf("failed to auto-provision component source: %w", autoErr)
-	}
-
-	if workdirPath, ok := info.ComponentSection[provWorkdir.WorkdirPathKey].(string); ok && workdirPath != "" {
-		return workdirPath, true, nil
-	}
-
-	// Re-check existence after provisioning.
-	exists, err = u.IsDirectory(componentPath)
-	return componentPath, exists, err
 }
 
 // checkComponentRestrictions returns an error when the requested subcommand is not
@@ -328,7 +325,11 @@ func generateConfigFiles(atmosConfig *schema.AtmosConfiguration, info *schema.Co
 	if err := GenerateFilesForComponent(atmosConfig, info, workingDir); err != nil {
 		return err
 	}
-	return generateProviderOverrides(atmosConfig, info, workingDir)
+	if err := generateProviderOverrides(atmosConfig, info, workingDir); err != nil {
+		return err
+	}
+	// Generate required_providers (terraform_override.tf.json) for version pinning (DEV-3124).
+	return generateRequiredProviders(atmosConfig, info, workingDir)
 }
 
 // warnOnConflictingEnvVars inspects the current process environment for variables
@@ -431,10 +432,34 @@ func shouldRunTerraformInit(atmosConfig *schema.AtmosConfiguration, info *schema
 }
 
 // buildInitArgs constructs the argument list for `terraform init`.
-// It adds -reconfigure when the component uses the workspace subcommand or when
-// InitRunReconfigure is enabled, and appends the varfile flag when PassVars is set.
+//
+// For non-workdir components, -reconfigure is added when:
+//   - the component uses the workspace subcommand, or
+//   - InitRunReconfigure is explicitly enabled in atmos.yaml.
+//
+// For workdir components, InitRunReconfigure is intentionally ignored when the workdir
+// was not re-provisioned this invocation. The backend configuration for workdir
+// components is always generated deterministically from the same stack config, so it
+// never changes between runs of a preserved workdir. When -reconfigure is combined
+// with existing workspace state directories (terraform.tfstate.d/), OpenTofu treats
+// init as a fresh backend initialization and prompts "Do you want to migrate all
+// workspaces?" — even when the backend is unchanged. The correct signal to add
+// -reconfigure for workdir components is WorkdirReprovisionedKey, which is set only
+// when the workdir was actually wiped and re-downloaded (TTL expired or TTL=0s).
 func buildInitArgs(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, varFile string) []string {
-	if info.SubCommand == subcommandWorkspace || atmosConfig.Components.Terraform.InitRunReconfigure {
+	_, hasWorkdir := info.ComponentSection[provWorkdir.WorkdirPathKey].(string)
+	_, wasReprovisioned := info.ComponentSection[provWorkdir.WorkdirReprovisionedKey]
+
+	var useReconfigure bool
+	if hasWorkdir {
+		// Workdir component: only reconfigure when the workdir was actually wiped.
+		useReconfigure = wasReprovisioned || info.SubCommand == subcommandWorkspace
+	} else {
+		// Non-workdir component: honour global InitRunReconfigure setting.
+		useReconfigure = info.SubCommand == subcommandWorkspace || atmosConfig.Components.Terraform.InitRunReconfigure
+	}
+
+	if useReconfigure {
 		if atmosConfig.Components.Terraform.Init.PassVars {
 			return []string{subcommandInit, "-reconfigure", varFileFlag, varFile}
 		}
@@ -447,11 +472,25 @@ func buildInitArgs(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAn
 }
 
 // prepareInitExecution performs the pre-init housekeeping:
-//  1. Deletes the .terraform/environment file so Terraform doesn't prompt for workspace selection.
+//  1. Deletes the .terraform/environment file so Terraform doesn't prompt for workspace selection
+//     (skipped for workdir-enabled components — see note below).
 //  2. Executes all provisioners registered for the before.terraform.init hook event.
 //  3. Returns the effective component path (which may be overridden by a workdir provisioner).
+//
+// NOTE on cleanTerraformWorkspace and workdir components:
+// cleanTerraformWorkspace was designed to prevent workspace-selection prompts when different
+// backends are used for the same component across runs.  For workdir-enabled components the
+// backend configuration is always consistent (generated fresh from the same stack config),
+// so deleting .terraform/environment is not only unnecessary — it is actively harmful:
+// when -reconfigure or init_run_reconfigure is also used, OpenTofu sees workspace state
+// directories (terraform.tfstate.d/) but no .terraform/environment file and interprets the
+// situation as a backend migration, producing the "Do you want to migrate all workspaces?"
+// prompt on every apply.  Skipping the cleanup for workdir components avoids this.
 func prepareInitExecution(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, componentPath string) (string, error) {
-	cleanTerraformWorkspace(*atmosConfig, componentPath)
+	_, isWorkdir := info.ComponentSection[provWorkdir.WorkdirPathKey].(string)
+	if !isWorkdir {
+		cleanTerraformWorkspace(*atmosConfig, componentPath)
+	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
@@ -490,16 +529,25 @@ func executeTerraformInitPhase(atmosConfig *schema.AtmosConfiguration, info *sch
 	}
 
 	initArgs := buildInitArgs(atmosConfig, info, varFile)
-	if err = ExecuteShellCommand(
-		*atmosConfig,
-		info.Command,
-		initArgs,
-		newPath,
-		info.ComponentEnvList,
-		info.DryRun,
-		info.RedirectStdErr,
+	err = executeShellCommandWithRetry(
+		atmosConfig,
+		info,
+		"init",
+		func(o ...ShellCommandOption) error {
+			return ExecuteShellCommand(
+				*atmosConfig,
+				info.Command,
+				initArgs,
+				newPath,
+				info.ComponentEnvList,
+				info.DryRun,
+				info.RedirectStdErr,
+				o...,
+			)
+		},
 		opts...,
-	); err != nil {
+	)
+	if err != nil {
 		return newPath, err
 	}
 
@@ -537,7 +585,8 @@ func logTerraformContext(info *schema.ConfigAndStacksInfo, workingDir string) {
 		inheritance = info.ComponentFromArg + " -> " + strings.Join(info.ComponentInheritanceChain, " -> ")
 	}
 
-	log.Debug("Terraform context",
+	log.Debug(
+		"Terraform context",
 		"executable", info.Command,
 		"command", command,
 		logFieldComponent, info.ComponentFromArg,

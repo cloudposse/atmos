@@ -8,6 +8,20 @@ type ProSettings struct {
 	WorkspaceID     string             `yaml:"workspace_id,omitempty" json:"workspace_id,omitempty" mapstructure:"workspace_id"`
 	GithubOIDC      GithubOIDCSettings `yaml:"github_oidc,omitempty" json:"github_oidc,omitempty" mapstructure:"github_oidc"`
 	MaxPayloadBytes int                `yaml:"max_payload_bytes,omitempty" json:"max_payload_bytes,omitempty" mapstructure:"max_payload_bytes"`
+	GitHubHeadRef   string             `yaml:"-" json:"-" mapstructure:"github_head_ref"`
+	// GitSTS holds global defaults for the github/sts auth integration.
+	GitSTS GitSTSSettings `yaml:"git_sts,omitempty" json:"git_sts,omitempty" mapstructure:"git_sts"`
+}
+
+// GitSTSSettings contains global defaults for the github/sts auth integration.
+// Per-integration spec fields override these.
+type GitSTSSettings struct {
+	// GitConfigMode controls how minted tokens reach the child process git config:
+	// "env" (inline GIT_CONFIG_KEY_n/VALUE_n) or "file" (write a 0600 gitconfig and emit include.path).
+	// Defaults to "env" when unset.
+	GitConfigMode string `yaml:"git_config_mode,omitempty" json:"git_config_mode,omitempty" mapstructure:"git_config_mode"`
+	// RevokeOnExit controls command-end auto-revocation of minted tokens (in CI). Defaults to true when unset.
+	RevokeOnExit *bool `yaml:"revoke_on_exit,omitempty" json:"revoke_on_exit,omitempty" mapstructure:"revoke_on_exit"`
 }
 
 // GithubOIDCSettings contains GitHub OIDC token configuration.

@@ -258,6 +258,12 @@ type AuthManager interface {
 	// The realm provides credential isolation between different repositories.
 	GetRealm() realm.RealmInfo
 
+	// CredentialStoreType returns the type of the backing credential store
+	// (e.g., "system-keyring", "memory", "file", "noop"). Used to verify that
+	// the keyring backend selected from configuration is honored and for
+	// diagnostics in commands like `whoami`.
+	CredentialStoreType() string
+
 	// ListProviders returns all available provider names.
 	ListProviders() []string
 
@@ -297,6 +303,13 @@ type AuthManager interface {
 	// Use this for all subprocess invocations: Terraform, Helmfile, Packer, workflows, custom commands, auth shell, etc.
 	PrepareShellEnvironment(ctx context.Context, identityName string, currentEnv []string) ([]string, error)
 
+	// EnsureIdentityEnvironment authenticates the identity (preferring cached credentials) and
+	// provisions its auto_provision integrations, then returns the composed integration
+	// environment. Cached credentials are used whenever available (critical for single-use
+	// session tokens such as the atmos/pro provider's). Used by ambient credential brokers
+	// (pkg/auth/broker) to provision integrations whose identity no stack claims.
+	EnsureIdentityEnvironment(ctx context.Context, identityName string) (map[string]string, error)
+
 	// ExecuteIntegration executes a named integration.
 	// This authenticates the integration's linked identity first, then executes the integration.
 	// Use this for explicit integration execution via `atmos aws ecr login <integration>`.
@@ -309,6 +322,11 @@ type AuthManager interface {
 
 	// GetIntegration returns the integration config by name.
 	GetIntegration(integrationName string) (*schema.Integration, error)
+
+	// RevokeEphemeralIntegrations revokes and cleans up ephemeral integrations (github/sts)
+	// linked to the identity, honoring revoke_on_exit (spec → globalDefault → true).
+	// Intended for command-end teardown in CI. Best-effort; returns joined errors.
+	RevokeEphemeralIntegrations(ctx context.Context, identityName string, globalDefault *bool) error
 
 	// ResolvePrincipalSetting traverses the identity chain and returns the first
 	// non-empty value for the given key in Principal configuration.
@@ -323,6 +341,23 @@ type AuthManager interface {
 	// the specific provider name.
 	// Returns the provider config and true if found, nil and false otherwise.
 	ResolveProviderConfig(identityName string) (*schema.Provider, bool)
+
+	// MaybeOfferAnyProfileFallback offers to switch profiles when the base
+	// configuration has no usable identities or providers. Called by auth
+	// commands (login, exec, shell, env, console, whoami) before returning
+	// their terminal "no identity/provider" error.
+	//
+	// Behavior:
+	//   - Returns nil when no fallback was triggered — caller surfaces the original error.
+	//   - Returns an enriched error (wrapping ErrNoIdentitiesAvailable) when
+	//     non-interactive and at least one profile defines auth config.
+	//   - On successful interactive re-exec, never returns (process is replaced).
+	//
+	// The fallback is suppressed when:
+	//   - ATMOS_REEXEC_DEPTH > 0 (already inside a re-exec'd child).
+	//   - The user has explicitly set --profile or ATMOS_PROFILE.
+	//   - No profile defines auth config.
+	MaybeOfferAnyProfileFallback(ctx context.Context) error
 }
 
 // CredentialStore defines the interface for storing and retrieving credentials.

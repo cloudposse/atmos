@@ -1,6 +1,8 @@
 package exec
 
 import (
+	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -8,7 +10,10 @@ import (
 	"strings"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/generator"
+	"github.com/cloudposse/atmos/pkg/generator/required_providers"
 	log "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	tfoutput "github.com/cloudposse/atmos/pkg/terraform/output"
 	"github.com/cloudposse/atmos/pkg/ui"
@@ -163,7 +168,7 @@ func generateBackendConfig(atmosConfig *schema.AtmosConfiguration, info *schema.
 }
 
 func generateProviderOverrides(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, workingDir string) error {
-	// Generate `providers_override.tf.json` file if the `providers` section is configured
+	// Generate `providers_override.tf.json` file if the `providers` section is configured.
 	if len(info.ComponentProvidersSection) > 0 {
 		providerOverrideFileName := filepath.Join(workingDir, "providers_override.tf.json")
 
@@ -176,6 +181,31 @@ func generateProviderOverrides(atmosConfig *schema.AtmosConfiguration, info *sch
 		}
 	}
 	return nil
+}
+
+// generateRequiredProviders generates the terraform_override.tf.json file with required_version
+// and required_providers blocks from stack configuration (DEV-3124).
+func generateRequiredProviders(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, workingDir string) error {
+	defer perf.Track(atmosConfig, "exec.generateRequiredProviders")()
+
+	// Skip if no required_version or required_providers configured.
+	if info.RequiredVersion == "" && len(info.RequiredProviders) == 0 {
+		return nil
+	}
+
+	requiredProvidersFileName := filepath.Join(workingDir, required_providers.DefaultFilenameConst)
+
+	log.Debug("Writing the required_providers to file.", "file", requiredProvidersFileName)
+
+	if info.DryRun {
+		return nil
+	}
+
+	// Create generator context.
+	genCtx := generator.NewGeneratorContext(atmosConfig, info, workingDir)
+
+	// Generate and write using the generator package.
+	return generator.Generate(context.Background(), required_providers.Name, genCtx, generator.NewFileWriter())
 }
 
 // needProcessTemplatesAndYamlFunctions checks if a Terraform command requires the `Go` templates and Atmos YAML functions to be processed.
@@ -323,6 +353,21 @@ func processTerraformComponent(
 	info.Stack = stackName
 	info.StackFromArg = stackName
 
+	// When a per-component hook is registered, capture this component's output
+	// and invoke the hook immediately after execution so each component receives
+	// its own CI summary entry rather than sharing the final global call.
+	if info.PerComponentHook != nil {
+		var stdoutBuf, stderrBuf bytes.Buffer
+		execErr := executeFn(*info, WithStdoutCapture(&stdoutBuf), WithStderrCapture(&stderrBuf))
+		combined := stdoutBuf.String()
+		if s := stderrBuf.String(); s != "" {
+			combined += "\n" + s
+		}
+		compInfo := *info // snapshot with this component's Component/Stack values set.
+		info.PerComponentHook(&compInfo, combined, execErr)
+		return true, execErr
+	}
+
 	if err := executeFn(*info); err != nil {
 		return true, err
 	}
@@ -344,6 +389,15 @@ func shouldProcessDependent(dep *schema.Dependent, affectedList []schema.Affecte
 		return false
 	}
 	return includeDependents || isComponentInStackAffected(affectedList, dep.StackSlug)
+}
+
+// isNonTerraformDependent returns true when dep is a dependent that
+// `atmos terraform` must skip during recursion: a helmfile or packer
+// component, or any other non-terraform type. Dependents with an empty
+// ComponentType are treated as terraform for backward compatibility. See
+// issue #2361.
+func isNonTerraformDependent(dep *schema.Dependent) bool {
+	return dep.ComponentType != "" && dep.ComponentType != cfg.TerraformComponentType
 }
 
 // executeTerraformAffectedComponentInDepOrder recursively processes the affected components in the dependency order.
@@ -375,6 +429,12 @@ func executeTerraformAffectedComponentInDepOrder(
 
 	for i := 0; i < len(params.Dependents); i++ {
 		dep := &params.Dependents[i]
+		// Defense-in-depth: when --include-dependents is set, the dependency graph
+		// may include helmfile/packer dependents. `atmos terraform` must skip those
+		// — they belong to their own subcommands. See issue #2361.
+		if isNonTerraformDependent(dep) {
+			continue
+		}
 		if !shouldProcessDependent(dep, affectedList, args.IncludeDependents) {
 			continue
 		}

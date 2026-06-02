@@ -336,7 +336,7 @@ jobs:
       id-token: write
       contents: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - run: atmos terraform apply mycomponent -s prod
 ```
 

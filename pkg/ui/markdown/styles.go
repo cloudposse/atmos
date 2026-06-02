@@ -135,8 +135,8 @@ func getBuiltinDefaultStyle() ([]byte, error) {
 		},
 		H1: ansi.StyleBlock{
 			StylePrimitive: ansi.StylePrimitive{
-				Prefix:          " ",
-				Suffix:          " ",
+				Prefix:          "\u00A0", // Non-breaking space for padding.
+				Suffix:          "\u00A0", // Non-breaking space for padding.
 				Color:           stringPtr(White),
 				BackgroundColor: stringPtr(Purple),
 				Bold:            boolPtr(true),

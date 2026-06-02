@@ -21,9 +21,8 @@ func ExecuteTerraformAll(info *schema.ConfigAndStacksInfo) error {
 	defer perf.Track(nil, "exec.ExecuteTerraformAll")()
 
 	// Validate inputs for --all flag usage.
-	if info.Stack == "" {
-		return errUtils.ErrStackRequiredWithAllFlag
-	}
+	// When no stack is given, --all processes every stack — matching the documented
+	// behavior of `atmos terraform apply --all` (see website/docs/cli/commands/terraform).
 	if info.ComponentFromArg != "" {
 		return errUtils.ErrComponentWithAllFlagConflict
 	}
@@ -46,6 +45,18 @@ func ExecuteTerraformAll(info *schema.ConfigAndStacksInfo) error {
 	}
 
 	log.Debug("Executing terraform command for all components in dependency order", "command", info.SubCommand)
+
+	// Create auth manager so YAML functions (e.g. !terraform.state) can use authenticated
+	// credentials when ExecuteDescribeStacks processes stack configurations under --all.
+	// Mirrors the behavior added for --query/--components in ExecuteTerraformQuery (#2081).
+	authManager, err := createQueryAuthManager(info, &atmosConfig)
+	if err != nil {
+		return err
+	}
+	if authManager != nil {
+		resolver := authbridge.NewResolver(authManager, info)
+		atmosConfig.Stores.SetAuthContextResolver(resolver)
+	}
 
 	// Get all stacks with terraform components.
 	stacks, err := ExecuteDescribeStacks(
@@ -225,10 +236,15 @@ func applyFiltersToGraph(graph *dependency.Graph, _ map[string]any, info *schema
 	}
 
 	// Filter the graph.
+	// IncludeDependencies is false to preserve the historical scope of `--all -s <stack>`:
+	// only components in the requested stack are processed. Cross-stack prerequisites are
+	// retained as graph edges within the requested stack (where both endpoints are present)
+	// but components outside the requested stack are not pulled in. A future flag may
+	// opt users in to cross-stack dependency execution.
 	return graph.Filter(dependency.Filter{
 		NodeIDs:             nodeIDs,
-		IncludeDependencies: true,  // Include prerequisites.
-		IncludeDependents:   false, // Exclude reverse deps.
+		IncludeDependencies: false,
+		IncludeDependents:   false,
 	})
 }
 

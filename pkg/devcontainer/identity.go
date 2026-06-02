@@ -81,7 +81,7 @@ func authenticateIdentity(ctx context.Context, identityName string) (*types.Whoa
 	}
 
 	// Create auth manager.
-	credStore := credentials.NewCredentialStore()
+	credStore := credentials.NewCredentialStoreWithConfig(&atmosConfig.Auth)
 	validator := validation.NewValidator()
 	authStackInfo := &schema.ConfigAndStacksInfo{
 		AuthContext: &schema.AuthContext{},

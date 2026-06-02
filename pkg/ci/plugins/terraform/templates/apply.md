@@ -1,8 +1,10 @@
 {{- $target := .Target -}}
 {{- if .Result.HasErrors }}
 ## Apply Failed for `{{.Component}}` in `{{.Stack}}`
-{{- else if .HasChanges }}
+{{- else if .HasResourceChanges }}
 ## Apply Succeeded for `{{.Component}}` in `{{.Stack}}`
+{{- else if .HasOutputChanges }}
+## Output Changes Applied for `{{.Component}}` in `{{.Stack}}`
 {{- else }}
 ## No Changes Applied for `{{.Component}}` in `{{.Stack}}`
 {{- end }}
@@ -12,13 +14,15 @@
 {{- if .Result.HasErrors }}
 [![failed](https://shields.io/badge/APPLY-FAILED-ff0000?style=for-the-badge)](#user-content-result-{{$target}})
 {{- else -}}
+{{- if .HasResourceChanges -}}
 {{- if gt .Resources.Create 0 }} [![create](https://shields.io/badge/APPLY-CREATE-success?style=for-the-badge)](#user-content-create-{{$target}})
 {{- end -}}
 {{- if gt .Resources.Change 0 }} [![change](https://shields.io/badge/APPLY-CHANGE-important?style=for-the-badge)](#user-content-change-{{$target}})
 {{- end -}}
 {{- if gt .Resources.Destroy 0 }} [![destroy](https://shields.io/badge/APPLY-DESTROY-critical?style=for-the-badge)](#user-content-destroy-{{$target}})
 {{- end -}}
-{{- if not .HasChanges }} [![no changes](https://shields.io/badge/-NO_CHANGE-inactive?style=for-the-badge)](#user-content-result-{{$target}})
+{{- else if .HasOutputChanges }} [![output changes](https://shields.io/badge/APPLY-OUTPUT_CHANGE-blue?style=for-the-badge)](#user-content-result-{{$target}})
+{{- else }} [![no changes](https://shields.io/badge/-NO_CHANGE-inactive?style=for-the-badge)](#user-content-result-{{$target}})
 {{- end }}
 {{- end }}
 
@@ -31,8 +35,10 @@
 
 {{- if .Result.HasErrors }}
 <details><summary><a id="result-{{$target}}" />:warning: Error summary</summary>
-{{- else if .HasChanges }}
+{{- else if .HasResourceChanges }}
 <details><summary><a id="result-{{$target}}" />Resources: {{.Resources.Create}} added, {{.Resources.Change}} changed, {{.Resources.Destroy}} destroyed</summary>
+{{- else if .HasOutputChanges }}
+<details><summary><a id="result-{{$target}}" />Output values changed. No infrastructure changes.</summary>
 {{- else }}
 <details><summary><a id="result-{{$target}}" />No changes applied</summary>
 {{- end }}

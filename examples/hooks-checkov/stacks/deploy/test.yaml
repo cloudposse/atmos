@@ -1,0 +1,18 @@
+# yaml-language-server: $schema=https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
+
+vars:
+  stage: test
+
+components:
+  terraform:
+    bucket:
+      vars:
+        environment: test
+      dependencies:
+        tools:
+          checkov: "3.2.529"
+      hooks:
+        security:
+          events:
+            - after-terraform-plan
+          kind: checkov

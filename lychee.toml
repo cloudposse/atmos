@@ -44,6 +44,8 @@ exclude = [
   "refspecs\\.linuxfoundation\\.org",
   # Kubernetes.io (rate limits and connection resets in CI)
   "kubernetes\\.io",
+  # runatlantis.io (connection resets on automated requests)
+  "runatlantis\\.io",
   # GitHub docs (intermittent 503s in CI)
   "docs\\.github\\.com",
   # Cloudinary image resizing proxy
@@ -68,6 +70,12 @@ exclude = [
   "atmos-pro\\.com",
   # LF AI Foundation blog links (may change or be unavailable)
   "lfaidata\\.foundation",
+  # Taskfile.dev (connection resets in CI)
+  "taskfile\\.dev",
+  # regex101.com (intermittent timeouts in CI)
+  "regex101\\.com",
+  # nx.dev (intermittent connection failures in CI)
+  "nx\\.dev",
   # Test data placeholder URLs (intentional)
   "github\\.com/test/",
   # Planned documentation paths (not yet published)
@@ -75,4 +83,9 @@ exclude = [
   "file://.*/ai/skill-marketplace",
   # Example/placeholder URLs in usage documentation
   "github\\.com/user/repo",
+  # Claude Code product page (claude.com edge returns 500 to non-browser/CI requests;
+  # the docs subdomain code.claude.com is reachable and is intentionally not excluded)
+  "claude\\.com/product/",
+  # regex101.com (intermittent 504 Gateway Timeout in CI)
+  "regex101\\.com",
 ]
