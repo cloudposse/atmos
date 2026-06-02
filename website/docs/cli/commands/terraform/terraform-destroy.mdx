@@ -75,6 +75,28 @@ atmos terraform destroy vpc -s dev -auto-approve
 atmos terraform destroy vpc -s dev -target=aws_instance.web
 ```
 
+### Graph-backed Bulk Destroy
+
+Run destroys for multiple components through the Terraform dependency graph:
+
+```shell
+# Destroy every Terraform component, with dependents before dependencies
+atmos terraform destroy --all -s dev
+
+# Destroy only selected components
+atmos terraform destroy --components eks/apps,eks/cluster,vpc -s dev
+```
+
+Destroy reverses the dependency graph so dependents are destroyed before the components they depend on. For example, an application component is destroyed before its cluster, and the cluster is destroyed before the VPC.
+
+Independent destroy nodes can run concurrently when `--max-concurrency` is greater than `1`. Concurrent destroy requires non-interactive approval with `-auto-approve`.
+
+```shell
+atmos terraform destroy --all -s dev --max-concurrency 2 -auto-approve
+```
+
+Use `--failure-mode keep-going` to continue independent graph branches after one component fails. The default is `fail-fast`.
+
 ## Arguments
 
 <dl>

@@ -83,6 +83,25 @@ Apply changes only to specific resources:
 atmos terraform apply vpc -s dev -target=aws_subnet.private
 ```
 
+### Graph-backed Bulk Apply
+
+Run applies for multiple components through the Terraform dependency graph:
+
+```shell
+# Apply every Terraform component in dependency order
+atmos terraform apply --all -s dev
+
+# Apply a named subset, preserving dependency edges between selected components
+atmos terraform apply --components vpc,eks/cluster,eks/apps -s dev
+
+# Apply components selected by query
+atmos terraform apply --query '.settings.tier == "network"' -s dev
+```
+
+The graph is built from [`dependencies.components`](/stacks/dependencies/components) first, with `settings.depends_on` as a fallback. Atmos applies prerequisites before dependents so components that consume another component's outputs run after the component they depend on.
+
+Use `--failure-mode keep-going` to continue independent graph branches after one component fails. The default is `fail-fast`.
+
 ## Planfile Usage
 
 ### Using Atmos-Generated Planfiles

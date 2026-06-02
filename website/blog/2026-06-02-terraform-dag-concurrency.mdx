@@ -1,0 +1,70 @@
+---
+slug: terraform-dag-concurrency
+title: "Terraform bulk commands now run through a dependency graph"
+authors: [atmos]
+tags: [feature]
+---
+
+Atmos Terraform bulk commands now share a graph-backed execution path. The `--all`, `--components`, and `--query` selection modes build a component dependency graph first, then run matching Terraform components in dependency order instead of relying on map iteration or separate code paths.
+
+<!--truncate-->
+
+## What Changed
+
+The Terraform bulk path now routes through the scheduler-backed Terraform adapter. Atmos builds the graph from [`dependencies.components`](/stacks/dependencies/components) first, with the legacy `settings.depends_on` format as a fallback, then applies the same ordering logic to each supported selection mode:
+
+```shell
+# All Terraform components in dependency order
+atmos terraform plan --all -s prod
+
+# A named subset, still respecting edges between selected components
+atmos terraform plan --components vpc,eks/cluster,eks/apps -s prod
+
+# A query-selected subset
+atmos terraform plan --query '.settings.tier == "network"' -s prod
+```
+
+Terraform `destroy` reverses the graph so dependents are destroyed before the dependencies they use:
+
+```shell
+atmos terraform destroy --all -s prod
+```
+
+## Optional Plan Concurrency
+
+Terraform plan can now run independent graph nodes concurrently with `--max-concurrency`. The default remains `1`, so existing command output stays sequential unless you opt in.
+
+```shell
+atmos terraform plan --all -s prod --max-concurrency 4
+```
+
+Concurrent plans keep each component's stdout and stderr isolated, prefix output by component, and can write a machine-readable execution summary:
+
+```shell
+atmos terraform plan --all -s prod \
+  --max-concurrency 4 \
+  --failure-mode keep-going \
+  --log-order grouped \
+  --hide=no-changes \
+  --execution-summary-file /tmp/atmos-plan-summary.json
+```
+
+The new `--hide=no-changes` option suppresses unchanged Terraform plan output while still showing components that create, update, destroy, or fail.
+
+## Why This Matters
+
+Large Atmos projects often have dozens or hundreds of Terraform components. The dependency graph is the source of truth for safe ordering, so every bulk selection path needs to go through the same graph builder. That gives operators predictable ordering for serial runs and a clear path to faster runs when independent components can execute in parallel.
+
+The scheduler also preserves existing auth setup, store resolver behavior, YAML function processing, CI hook capture, and per-component output handling, so the new path is a routing improvement rather than a separate execution mode with different semantics.
+
+## Safety Defaults
+
+- `--max-concurrency` defaults to `1`.
+- `--failure-mode fail-fast` remains the default.
+- `--failure-mode keep-going` lets independent nodes continue after a failure.
+- Interactive identity selection is rejected when concurrency is greater than `1`.
+- Concurrent mutating operations require `-auto-approve` when enabled.
+
+## Get Involved
+
+Try the new graph-backed path on a lower environment first and share feedback in the [Atmos Community Slack](https://cloudposse.com/slack) or [open an issue](https://github.com/cloudposse/atmos/issues) with the command, stack, and dependency shape that produced unexpected behavior.
