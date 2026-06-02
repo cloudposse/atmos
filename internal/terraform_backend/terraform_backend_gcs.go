@@ -244,7 +244,8 @@ func ReadTerraformBackendGCSInternal(
 			if attempt < maxGCSRetryCount {
 				// Exponential backoff: 1s, 2s, 4s for attempts 0, 1, 2.
 				backoff := time.Second * time.Duration(1<<attempt)
-				log.Debug("Failed to read Terraform state file from GCS bucket",
+				log.Debug(
+					"Failed to read Terraform state file from GCS bucket",
 					"attempt", attempt+1,
 					"file", tfStateFilePath,
 					log.FieldBucket, bucket,

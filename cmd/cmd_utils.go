@@ -30,6 +30,8 @@ import (
 	l "github.com/cloudposse/atmos/pkg/list"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/reexec"
+	stepPkg "github.com/cloudposse/atmos/pkg/runner/step"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -93,11 +95,18 @@ func processCustomCommands(
 		existing := findSubcommand(parentCommand, commandConfig.Name)
 		if existing != nil {
 			if len(commandConfig.Steps) > 0 {
-				ui.Warningf(
-					"Custom command %q defines steps that conflict with built-in command %q; "+
-						"built-in behavior preserved, custom steps ignored",
-					commandConfig.Name, existing.CommandPath(),
-				)
+				// The custom command collides with a built-in and defines steps, which are
+				// ignored (built-in behavior wins; see PR #2191). Defer the warning until the
+				// conflicting command is actually invoked instead of emitting it here:
+				// processCustomCommands runs during root init for nearly every Atmos invocation,
+				// so emitting at registration printed the warning even for unrelated commands
+				// (e.g. `atmos list stacks`), polluting stderr in scripting and CI.
+				// See https://github.com/cloudposse/atmos/issues/2102.
+				//
+				// TODO(#2102): when `override:`/`invoke:` lands (custom-command-builtin-override PRD),
+				// skip this warning for commands that opt into running their steps, since the
+				// "custom steps ignored" message would then be wrong.
+				warnStepsConflictOnRun(existing, commandConfig.Name)
 			}
 			command = existing
 		} else {
@@ -117,58 +126,6 @@ func processCustomCommands(
 	}
 
 	return nil
-}
-
-// filterChdirEnv removes ATMOS_CHDIR from environ and optionally adds an empty
-// ATMOS_CHDIR= entry to override any parent value when spawning child processes.
-// This prevents child processes from re-applying the parent's chdir directive.
-func filterChdirEnv(environ []string) []string {
-	filtered := make([]string, 0, len(environ))
-	foundAtmosChdir := false
-	for _, env := range environ {
-		if strings.HasPrefix(env, "ATMOS_CHDIR=") {
-			foundAtmosChdir = true
-			continue
-		}
-		filtered = append(filtered, env)
-	}
-	// Add empty ATMOS_CHDIR to override parent's value in merged environment.
-	if foundAtmosChdir {
-		filtered = append(filtered, "ATMOS_CHDIR=")
-	}
-	return filtered
-}
-
-// filterChdirArgs returns a copy of args with any chdir flags and their values removed.
-// It removes `--chdir`, `--chdir=<value>`, `-C`, `-C=<value>`, and concatenated `-C<value>` forms, preserving the order of all other arguments.
-func filterChdirArgs(args []string) []string {
-	filtered := make([]string, 0, len(args))
-	skipNext := false
-
-	for _, arg := range args {
-		if skipNext {
-			skipNext = false
-			continue
-		}
-
-		// Skip --chdir=value, -C=value, -C<value> (concatenated).
-		if strings.HasPrefix(arg, "--chdir=") ||
-			strings.HasPrefix(arg, "-C=") ||
-			(strings.HasPrefix(arg, "-C") && len(arg) > 2) {
-			continue
-		}
-
-		// Skip --chdir value or -C value (next arg is the value).
-		if arg == "--chdir" || arg == "-C" {
-			skipNext = true
-			continue
-		}
-
-		// Keep all other args.
-		filtered = append(filtered, arg)
-	}
-
-	return filtered
 }
 
 // processCommandAliases registers command aliases from the provided configuration as subcommands of
@@ -217,11 +174,11 @@ func processCommandAliases(
 					// The chdir has already been processed by the parent atmos invocation, and passing
 					// it again would cause the new process to try to chdir to a relative path that's
 					// now invalid (since we already changed directories).
-					filteredArgs := filterChdirArgs(args)
+					filteredArgs := reexec.StripChdirArgs(args)
 
 					// Filter out ATMOS_CHDIR from environment variables to prevent the child process
 					// from re-applying the parent's chdir directive.
-					filteredEnv := filterChdirEnv(os.Environ())
+					filteredEnv := reexec.FilterChdirEnv(os.Environ())
 
 					// Build command arguments: split aliasCmd into parts and append filteredArgs.
 					// Use direct process execution instead of shell to avoid path escaping
@@ -300,7 +257,8 @@ func preCustomCommand(
 	if len(args) < requiredNoDefaultCount {
 		sb.WriteString(
 			fmt.Sprintf("Command requires at least %d argument(s) (no defaults provided for them):\n",
-				requiredNoDefaultCount))
+				requiredNoDefaultCount),
+		)
 
 		// List out which arguments are missing
 		missingIndex := 1
@@ -355,6 +313,33 @@ func findSubcommand(parent *cobra.Command, name string) *cobra.Command {
 		}
 	}
 	return nil
+}
+
+// warnStepsConflictOnRun arranges for the "custom steps ignored" collision warning to be
+// emitted only when the conflicting built-in command cmd is actually run, rather than at
+// registration time. It wraps cmd.PreRunE (preserving any existing PreRunE/PreRun and honoring
+// Cobra's precedence of PreRunE over PreRun) so the warning surfaces once, at the point the user
+// invokes the colliding command. See https://github.com/cloudposse/atmos/issues/2102.
+func warnStepsConflictOnRun(cmd *cobra.Command, customName string) {
+	commandPath := cmd.CommandPath()
+	prevPreRunE := cmd.PreRunE
+	prevPreRun := cmd.PreRun
+
+	cmd.PreRunE = func(c *cobra.Command, args []string) error {
+		ui.Warningf(
+			"Custom command %q defines steps that conflict with built-in command %q; "+
+				"built-in behavior preserved, custom steps ignored",
+			customName, commandPath,
+		)
+
+		switch {
+		case prevPreRunE != nil:
+			return prevPreRunE(c, args)
+		case prevPreRun != nil:
+			prevPreRun(c, args)
+		}
+		return nil
+	}
 }
 
 // createCustomCommand creates a new cobra command with flags from commandConfig,
@@ -699,7 +684,7 @@ func executeCustomCommand(
 			AuthContext: &schema.AuthContext{},
 		}
 
-		credStore := credentials.NewCredentialStore()
+		credStore := credentials.NewCredentialStoreWithConfig(&atmosConfig.Auth)
 		validator := validation.NewValidator()
 		authManager, err = auth.NewAuthManager(&atmosConfig.Auth, credStore, validator, authStackInfo, atmosConfig.CliConfigPath)
 		if err != nil {
@@ -736,6 +721,9 @@ func executeCustomCommand(
 	if commandConfig.WorkingDirectory != "" {
 		log.Debug("Using working directory for custom command", "command", commandConfig.Name, "working_directory", workDir)
 	}
+
+	// Initialize step executor once before loop - reused across steps to preserve outputs.
+	executor := stepPkg.NewStepExecutor()
 
 	// Execute custom command's steps
 	for i, step := range commandConfig.Steps {
@@ -855,11 +843,48 @@ func executeCustomCommand(
 		commandToRun, err := e.ProcessTmpl(&atmosConfig, fmt.Sprintf("step-%d", i), step.Command, data, false)
 		errUtils.CheckErrorPrintAndExit(err, "", "")
 
-		// Execute the command step
-		commandName := fmt.Sprintf("%s-step-%d", commandConfig.Name, i)
+		// Determine step type - default to shell if not specified.
+		stepType := strings.TrimSpace(step.Type)
+		if stepType == "" {
+			stepType = "shell"
+		}
 
-		// Pass the prepared environment with custom variables to the subprocess
-		err = e.ExecuteShell(commandToRun, commandName, workDir, env, false)
+		// Execute the step based on type.
+		switch stepType {
+		case "shell":
+			// Execute shell command (backward compatible).
+			commandName := fmt.Sprintf("%s-step-%d", commandConfig.Name, i)
+			err = e.ExecuteShell(commandToRun, commandName, workDir, env, false)
+		case "atmos":
+			// Execute atmos command.
+			args := strings.Fields(commandToRun)
+			err = e.ExecuteShellCommand(atmosConfig, "atmos", args, workDir, env, false, "")
+		default:
+			// Check if this is an extended step type (input, confirm, choose, etc.).
+			if stepPkg.IsExtendedStepType(stepType) {
+				// Convert Task to WorkflowStep for handler compatibility.
+				workflowStep := step.ToWorkflowStep()
+				// Update command with template-resolved value.
+				workflowStep.Command = commandToRun
+				// Propagate working directory to extended step if not already set.
+				if workflowStep.WorkingDirectory == "" {
+					workflowStep.WorkingDirectory = workDir
+				}
+
+				// Update environment variables for this step (reuse executor to preserve step outputs).
+				for _, envVar := range env {
+					parts := strings.SplitN(envVar, "=", 2)
+					if len(parts) == 2 {
+						executor.SetEnv(parts[0], parts[1])
+					}
+				}
+
+				// Execute the extended step.
+				_, err = executor.Execute(context.Background(), &workflowStep)
+			} else {
+				err = fmt.Errorf("%w: unsupported step type %q for custom command step %d", errUtils.ErrInvalidWorkflowStepType, stepType, i)
+			}
+		}
 		errUtils.CheckErrorPrintAndExit(err, "", "")
 	}
 }
@@ -1179,7 +1204,8 @@ func resolveComponentPath(info *schema.ConfigAndStacksInfo, commandName string) 
 		return handlePathResolutionError(err)
 	}
 
-	log.Debug("Resolved component from path",
+	log.Debug(
+		"Resolved component from path",
 		"original_path", info.ComponentFromArg,
 		"resolved_component", resolvedComponent,
 		"stack", info.Stack,
@@ -1323,7 +1349,8 @@ func StackFlagCompletion(cmd *cobra.Command, args []string, toComplete string) (
 				)
 				if err != nil {
 					// If resolution fails, fall through to list all stacks (graceful degradation)
-					log.Trace("Could not resolve path for stack completion, listing all stacks",
+					log.Trace(
+						"Could not resolve path for stack completion, listing all stacks",
 						"path", component,
 						"error", err,
 					)
@@ -1334,7 +1361,8 @@ func StackFlagCompletion(cmd *cobra.Command, args []string, toComplete string) (
 					return output, cobra.ShellCompDirectiveNoFileComp
 				}
 				component = resolvedComponent
-				log.Trace("Resolved path for stack completion",
+				log.Trace(
+					"Resolved path for stack completion",
 					"original", args[0],
 					"resolved", component,
 				)

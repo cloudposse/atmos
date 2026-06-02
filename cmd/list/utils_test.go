@@ -189,6 +189,53 @@ func TestGetIdentityFromCommand(t *testing.T) {
 			expectedResult: cfg.IdentityFlagDisabledValue,
 		},
 		{
+			name: "normalizes inherited false to disabled sentinel value",
+			setupCmd: func() *cobra.Command {
+				parent := &cobra.Command{Use: "list"}
+				parent.PersistentFlags().String("identity", "", "Identity")
+				child := &cobra.Command{Use: "instances"}
+				parent.AddCommand(child)
+				_ = parent.PersistentFlags().Set("identity", "false")
+				return child
+			},
+			setupViper: func() {
+				viper.Reset()
+			},
+			expectedResult: cfg.IdentityFlagDisabledValue,
+		},
+		{
+			name: "normalizes inherited off to disabled sentinel value",
+			setupCmd: func() *cobra.Command {
+				parent := &cobra.Command{Use: "list"}
+				parent.PersistentFlags().String("identity", "", "Identity")
+				child := &cobra.Command{Use: "instances"}
+				parent.AddCommand(child)
+				_ = parent.PersistentFlags().Set("identity", "off")
+				return child
+			},
+			setupViper: func() {
+				viper.Reset()
+			},
+			expectedResult: cfg.IdentityFlagDisabledValue,
+		},
+		{
+			name: "normalizes parent persistent false to disabled sentinel value",
+			setupCmd: func() *cobra.Command {
+				root := &cobra.Command{Use: "atmos"}
+				parent := &cobra.Command{Use: "list"}
+				parent.PersistentFlags().String("identity", "", "Identity")
+				child := &cobra.Command{Use: "instances"}
+				root.AddCommand(parent)
+				parent.AddCommand(child)
+				_ = parent.PersistentFlags().Set("identity", "false")
+				return child
+			},
+			setupViper: func() {
+				viper.Reset()
+			},
+			expectedResult: cfg.IdentityFlagDisabledValue,
+		},
+		{
 			name: "normalizes no to disabled sentinel value from viper",
 			setupCmd: func() *cobra.Command {
 				cmd := &cobra.Command{Use: "test"}
@@ -211,6 +258,18 @@ func TestGetIdentityFromCommand(t *testing.T) {
 			assert.Equal(t, tc.expectedResult, result)
 		})
 	}
+}
+
+func TestGetIdentityFromCommand_NormalizesIdentityEnvFalse(t *testing.T) {
+	t.Setenv("ATMOS_IDENTITY", "false")
+	viper.Reset()
+	viper.SetEnvPrefix("ATMOS")
+	assert.NoError(t, viper.BindEnv(cfg.IdentityFlagName))
+
+	cmd := &cobra.Command{Use: "test"}
+	cmd.Flags().String("identity", "", "Identity")
+
+	assert.Equal(t, cfg.IdentityFlagDisabledValue, getIdentityFromCommand(cmd))
 }
 
 // TestNormalizeIdentityValue tests the normalizeIdentityValue function.

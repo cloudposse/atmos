@@ -41,17 +41,20 @@ Comments support three modes configured via `ci.comments.behavior`:
 | `update` | Update the existing comment (or create if none exists) |
 | `upsert` | Create or update — default behavior |
 
-## Design Status: Deferred
+## Design Status: Shipped (plan-only)
 
-PR comment design (marker identification, comment granularity, template strategy) is **deferred** until we have more information. Preliminary direction:
+Decisions locked in:
 
-- **Marker-based upsert** using HTML comments (`<!-- atmos:ci:plan:{component}:{stack} -->`) — tfcmt pattern. This allows finding and updating existing comments without scanning comment bodies.
-- **One comment per component+stack** as the starting point.
+- **Marker-based upsert** using HTML comments `<!-- atmos:ci:{command}:{component}:{stack} -->`. The command segment is included so future non-plan comment sources would not collide with plan comments.
+- **One comment per `{command, component, stack}`**. Re-running `terraform plan` on the same PR updates the existing comment rather than stacking new ones.
+- **Plan-only** for now. `apply` and `deploy` do not post comments. The PR thread is the review surface; the apply/deploy run lives in the checks pane. Revisit if users ask.
+- **Template reuse**. The comment body is the same rendered markdown that goes into the GitHub job summary (`ci.templates.terraform.plan` override is honored for both).
+- **Default**: `ci.comments.enabled` is `*bool`. Nil (unset) defaults to `false`. Upgrading installations do not start posting comments until the user opts in via `enabled: true` or `ATMOS_CI_COMMENTS_ENABLED=true`.
 
-These are directional, not final. A dedicated PR comments PRD should be written before implementation begins, covering:
-- Exact marker format and collision avoidance
-- Comment granularity trade-offs (per-component vs. single-comment-per-PR)
-- Template override strategy and user customization
+Still deferred:
+
+- Collision avoidance across multiple concurrent `atmos terraform plan` invocations writing to the same PR. Only plan produces comments in this release (apply/deploy are excluded; describe/affected does not post comments). Concurrent plan runs for **different** `{component, stack}` tuples produce independent comments and never collide. Concurrent plan runs for the **same** `{component, stack}` tuple are last-writer-wins per the `{command, component, stack}` marker key — rare in practice but theoretically possible if a PR is re-pushed before the prior run finishes.
+- Custom template override (`ci.comments.template`) is currently ignored — the comment always reuses the summary template from `ci.templates.terraform.plan`. Wiring a dedicated comment template is a follow-up.
 
 ## Configuration
 

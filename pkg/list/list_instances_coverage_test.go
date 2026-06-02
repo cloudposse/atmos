@@ -2,6 +2,8 @@
 package list
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/spf13/cobra"
@@ -35,24 +37,6 @@ func TestUploadInstances(t *testing.T) {
 	// We expect an error because Pro API is likely not configured in test environment.
 	// The important thing is that the function executes without panic.
 	// The underlying uploadInstancesWithDeps() is already tested at 100% with mocks.
-	_ = err
-}
-
-// TestProcessInstances tests the processInstances() wrapper function.
-func TestProcessInstances(t *testing.T) {
-	// This wrapper calls processInstancesWithDeps which is already tested at 100%.
-	// We just need to execute it to achieve coverage of the wrapper itself.
-	// The underlying processInstancesWithDeps() is already tested at 100% with mocks.
-	atmosConfig := &schema.AtmosConfiguration{
-		BasePath: "/nonexistent",
-	}
-
-	// Call the wrapper - it may return empty list or error depending on config.
-	instances, err := processInstances(atmosConfig, nil)
-
-	// Either result is acceptable - key is the function executes without panic.
-	// The function behavior is fully tested via processInstancesWithDeps tests.
-	_ = instances
 	_ = err
 }
 
@@ -467,10 +451,220 @@ func TestBuildInstanceSorters(t *testing.T) {
 	}
 }
 
-// TestBuildInstanceFilters tests the filter builder placeholder.
-func TestBuildInstanceFilters(t *testing.T) {
-	// Currently buildInstanceFilters is a placeholder that returns nil.
-	result, err := buildInstanceFilters("any-spec")
+// TestExecuteListInstancesCmd_MatrixFormatRejectsUpload tests that matrix format rejects --upload.
+func TestExecuteListInstancesCmd_MatrixFormatRejectsUpload(t *testing.T) {
+	info := &schema.ConfigAndStacksInfo{
+		BasePath: "../../tests/fixtures/scenarios/complete",
+	}
+
+	err := ExecuteListInstancesCmd(&InstancesCommandOptions{
+		Info:   info,
+		Cmd:    &cobra.Command{},
+		Args:   []string{},
+		Format: "matrix",
+		Upload: true,
+	})
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrInvalidFlag)
+	assert.Contains(t, err.Error(), "--upload is not supported with --format=matrix")
+}
+
+// TestExecuteListInstancesCmd_MatrixFormat tests matrix format with valid fixture.
+func TestExecuteListInstancesCmd_MatrixFormat(t *testing.T) {
+	ioCtx, err := iolib.NewContext()
 	require.NoError(t, err)
-	assert.Nil(t, result)
+	ui.InitFormatter(ioCtx)
+	data.InitWriter(ioCtx)
+
+	fixturePath := "../../tests/fixtures/scenarios/complete"
+	tests.RequireFilePath(t, fixturePath, "test fixture directory")
+
+	info := &schema.ConfigAndStacksInfo{
+		BasePath: fixturePath,
+	}
+
+	err = ExecuteListInstancesCmd(&InstancesCommandOptions{
+		Info:   info,
+		Cmd:    &cobra.Command{},
+		Args:   []string{},
+		Format: "matrix",
+	})
+
+	assert.NoError(t, err)
+}
+
+// TestExecuteListInstancesCmd_MatrixFormatWithOutputFile tests matrix format writing to file.
+func TestExecuteListInstancesCmd_MatrixFormatWithOutputFile(t *testing.T) {
+	ioCtx, err := iolib.NewContext()
+	require.NoError(t, err)
+	ui.InitFormatter(ioCtx)
+	data.InitWriter(ioCtx)
+
+	fixturePath := "../../tests/fixtures/scenarios/complete"
+	tests.RequireFilePath(t, fixturePath, "test fixture directory")
+
+	outputFile := filepath.Join(t.TempDir(), "github_output")
+
+	info := &schema.ConfigAndStacksInfo{
+		BasePath: fixturePath,
+	}
+
+	err = ExecuteListInstancesCmd(&InstancesCommandOptions{
+		Info:       info,
+		Cmd:        &cobra.Command{},
+		Args:       []string{},
+		Format:     "matrix",
+		OutputFile: outputFile,
+	})
+	require.NoError(t, err)
+
+	// Verify file was written with expected format.
+	content, err := os.ReadFile(outputFile)
+	require.NoError(t, err)
+	assert.Contains(t, string(content), "matrix=")
+	assert.Contains(t, string(content), "count=")
+	assert.Contains(t, string(content), `"include"`)
+}
+
+// TestExecuteListInstancesCmd_OutputFileRejectsNonMatrix tests that --output-file is rejected for non-matrix formats.
+func TestExecuteListInstancesCmd_OutputFileRejectsNonMatrix(t *testing.T) {
+	info := &schema.ConfigAndStacksInfo{
+		BasePath: "../../tests/fixtures/scenarios/complete",
+	}
+
+	err := ExecuteListInstancesCmd(&InstancesCommandOptions{
+		Info:       info,
+		Cmd:        &cobra.Command{},
+		Args:       []string{},
+		Format:     "json",
+		OutputFile: "/tmp/some-file",
+	})
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrInvalidFlag)
+	assert.Contains(t, err.Error(), "--output-file is only supported with --format=matrix")
+}
+
+// TestBuildInstanceFilters covers the YQ-predicate wiring of `--filter`.
+func TestBuildInstanceFilters(t *testing.T) {
+	t.Run("empty spec returns no filters", func(t *testing.T) {
+		result, err := buildInstanceFilters("", nil)
+		require.NoError(t, err)
+		assert.Nil(t, result)
+	})
+
+	t.Run("non-empty spec yields one YQ filter", func(t *testing.T) {
+		result, err := buildInstanceFilters(".component == \"vpc\"", nil)
+		require.NoError(t, err)
+		require.Len(t, result, 1)
+	})
+}
+
+// TestExecuteListInstancesCmd_TreeFormat exercises the tree-format branch
+// of ExecuteListInstancesCmd — enables provenance tracking, re-processes
+// stacks via ResolveImportTreeFromProvenance, and renders via
+// format.RenderInstancesTree.
+func TestExecuteListInstancesCmd_TreeFormat(t *testing.T) {
+	ioCtx, err := iolib.NewContext()
+	require.NoError(t, err)
+	ui.InitFormatter(ioCtx)
+	data.InitWriter(ioCtx)
+
+	fixturePath := "../../tests/fixtures/scenarios/complete"
+	tests.RequireFilePath(t, fixturePath, "test fixture directory")
+
+	info := &schema.ConfigAndStacksInfo{
+		BasePath: fixturePath,
+	}
+
+	err = ExecuteListInstancesCmd(&InstancesCommandOptions{
+		Info:             info,
+		Cmd:              &cobra.Command{},
+		Args:             []string{},
+		Format:           "tree",
+		ProcessTemplates: true,
+		ProcessFunctions: false,
+	})
+	require.NoError(t, err, "complete fixture should render instances tree cleanly")
+}
+
+// TestExecuteListInstancesCmd_TreeFormatRejectsUpload verifies the
+// tree-format branch rejects `--upload` (mirrors the matrix-format
+// rejection test).
+func TestExecuteListInstancesCmd_TreeFormatRejectsUpload(t *testing.T) {
+	info := &schema.ConfigAndStacksInfo{
+		BasePath: "../../tests/fixtures/scenarios/complete",
+	}
+
+	err := ExecuteListInstancesCmd(&InstancesCommandOptions{
+		Info:   info,
+		Cmd:    &cobra.Command{},
+		Args:   []string{},
+		Format: "tree",
+		Upload: true,
+	})
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrInvalidFlag)
+	assert.Contains(t, err.Error(), "--upload is not supported with --format=tree")
+}
+
+// TestExecuteListInstancesCmd_FilterAndQueryRejectedInTreeMatrix verifies
+// that `--filter` and `--query` are rejected for tree and matrix formats with
+// a consistent error pattern. These transforms are row-shaped and have no
+// meaningful target in those output modes.
+func TestExecuteListInstancesCmd_FilterAndQueryRejectedInTreeMatrix(t *testing.T) {
+	info := &schema.ConfigAndStacksInfo{
+		BasePath: "../../tests/fixtures/scenarios/complete",
+	}
+
+	tests := []struct {
+		name      string
+		format    string
+		filter    string
+		query     string
+		wantMatch string
+	}{
+		{
+			name:      "filter+tree rejected",
+			format:    "tree",
+			filter:    `.component == "vpc"`,
+			wantMatch: "--filter is not supported with --format=tree",
+		},
+		{
+			name:      "query+tree rejected",
+			format:    "tree",
+			query:     ".vars.region",
+			wantMatch: "--query is not supported with --format=tree",
+		},
+		{
+			name:      "filter+matrix rejected",
+			format:    "matrix",
+			filter:    `.component == "vpc"`,
+			wantMatch: "--filter is not supported with --format=matrix",
+		},
+		{
+			name:      "query+matrix rejected",
+			format:    "matrix",
+			query:     ".vars.region",
+			wantMatch: "--query is not supported with --format=matrix",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			err := ExecuteListInstancesCmd(&InstancesCommandOptions{
+				Info:       info,
+				Cmd:        &cobra.Command{},
+				Args:       []string{},
+				Format:     tc.format,
+				FilterSpec: tc.filter,
+				Query:      tc.query,
+			})
+			require.Error(t, err)
+			assert.ErrorIs(t, err, errUtils.ErrInvalidFlag)
+			assert.Contains(t, err.Error(), tc.wantMatch)
+		})
+	}
 }

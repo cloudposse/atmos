@@ -19,6 +19,9 @@ The `version` section configures how Atmos handles version management, including
 <File title="atmos.yaml">
 ```yaml
 version:
+  # Pin project to a specific Atmos version
+  use: "1.199.0"
+
   # Automatic update checking
   check:
     enabled: true
@@ -36,12 +39,22 @@ version:
 
 | Section | Description |
 |---------|-------------|
+| [Use](/cli/configuration/version/use) | Pin project to a specific Atmos version |
 | [Check](/cli/configuration/version/check) | Automatic version checking and update notifications |
 | [Constraint](/cli/configuration/version/constraint) | Enforce Atmos version requirements for your configuration |
 
 ## Environment Variables
 
 <dl>
+  <dt>`ATMOS_USE_VERSION`</dt>
+  <dd>Specify which version of Atmos to use. Env var equivalent of `--use-version` flag.</dd>
+
+  <dt>`ATMOS_VERSION_USE`</dt>
+  <dd>Internal env var set by the `--use-version` flag. Highest precedence in version resolution.</dd>
+
+  <dt>`ATMOS_VERSION`</dt>
+  <dd>Convenience alias matching `tfenv`/`goenv` conventions. Lower precedence than `ATMOS_VERSION_USE`.</dd>
+
   <dt>`ATMOS_VERSION_CHECK_ENABLED`</dt>
   <dd>Enable or disable automatic version checking.</dd>
 
@@ -53,3 +66,4 @@ version:
 
 - [CLI Configuration](/cli/configuration) — Overview of CLI configuration
 - [`atmos version`](/cli/commands/version/usage) — Display version and check for updates
+- [Atmos Version Management](/howto/atmos-version-management) — How-to guide with profiles

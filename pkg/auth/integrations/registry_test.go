@@ -27,6 +27,14 @@ func (m *mockIntegration) Execute(ctx context.Context, creds types.ICredentials)
 	return m.executeErr
 }
 
+func (m *mockIntegration) Cleanup(_ context.Context) error {
+	return nil
+}
+
+func (m *mockIntegration) Environment() (map[string]string, error) {
+	return nil, nil
+}
+
 // setupRegistryTest clears the registry for testing and registers cleanup.
 func setupRegistryTest(t *testing.T) {
 	t.Helper()

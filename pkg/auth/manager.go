@@ -16,18 +16,21 @@ import (
 	"github.com/cloudposse/atmos/internal/tui/templates/term"
 	"github.com/cloudposse/atmos/pkg/auth/factory"
 	"github.com/cloudposse/atmos/pkg/auth/identities/aws"
-	_ "github.com/cloudposse/atmos/pkg/auth/integrations/aws" // Register aws/ecr integration.
+	_ "github.com/cloudposse/atmos/pkg/auth/integrations/aws"    // Register aws/ecr and aws/eks integrations.
+	_ "github.com/cloudposse/atmos/pkg/auth/integrations/github" // Register github/sts integration.
 	"github.com/cloudposse/atmos/pkg/auth/realm"
 	"github.com/cloudposse/atmos/pkg/auth/types"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/telemetry"
+	"github.com/cloudposse/atmos/pkg/ui"
 )
 
 const (
 	logKeyIdentity           = "identity"
 	logKeyProvider           = "provider"
+	logKeyIntegration        = "integration"
 	logKeyChainIndex         = "chainIndex"
 	identityNameKey          = "identityName"
 	buildAuthenticationChain = "buildAuthenticationChain"
@@ -55,6 +58,13 @@ const (
 	skipIntegrationsKey contextKey = "skipIntegrations"
 )
 
+// ContextWithSkipIntegrations returns a context that skips auto-triggered integrations
+// during authentication. Use this when calling Authenticate() for token generation
+// or other operations that should not re-provision integrations (e.g., rewriting kubeconfig).
+func ContextWithSkipIntegrations(ctx context.Context) context.Context {
+	return context.WithValue(ctx, skipIntegrationsKey, true)
+}
+
 // isInteractive checks if interactive prompts should be shown.
 // Interactive mode requires:
 // 1. --interactive flag is true (or ATMOS_INTERACTIVE env var).
@@ -81,6 +91,10 @@ type manager struct {
 	credentialStore types.CredentialStore
 	validator       types.Validator
 	stackInfo       *schema.ConfigAndStacksInfo
+	// cliConfigPath is the directory containing the loaded atmos.yaml.
+	// Used to discover profiles for the interactive identity fallback
+	// (see profile_fallback.go).
+	cliConfigPath string
 	// chain holds the most recently constructed authentication chain.
 	// where index 0 is the provider name, followed by identities in order.
 	chain []string
@@ -155,13 +169,13 @@ func NewAuthManager(
 		credentialStore: credentialStore,
 		validator:       validator,
 		stackInfo:       stackInfo,
+		cliConfigPath:   cliConfigPath,
 		realm:           realmInfo,
 	}
 
 	// Initialize providers.
 	if err := m.initializeProviders(); err != nil {
 		wrappedErr := fmt.Errorf("failed to initialize providers: %w", err)
-		errUtils.CheckErrorAndPrint(wrappedErr, "Initialize Providers", "")
 		return nil, wrappedErr
 	}
 
@@ -173,7 +187,6 @@ func NewAuthManager(
 	// Initialize identities.
 	if err := m.initializeIdentities(); err != nil {
 		wrappedErr := fmt.Errorf("failed to initialize identities: %w", err)
-		errUtils.CheckErrorAndPrint(wrappedErr, "Initialize Identities", "")
 		return nil, wrappedErr
 	}
 
@@ -182,7 +195,26 @@ func NewAuthManager(
 		identity.SetRealm(m.realm.Value)
 	}
 
+	// Share the manager's config-aware credential store with identities that
+	// perform their own keyring I/O (e.g. AWS user identities cache/read STS
+	// credentials directly). Without this, those identities would construct a
+	// default "system" keyring and ignore auth.keyring.type — which hangs on a
+	// broken-but-present system keyring (issue #2544). Identities that do not
+	// implement credentialStoreReceiver simply keep their existing behavior.
+	for _, identity := range m.identities {
+		if receiver, ok := identity.(credentialStoreReceiver); ok {
+			receiver.SetCredentialStore(m.credentialStore)
+		}
+	}
+
 	return m, nil
+}
+
+// credentialStoreReceiver is an optional interface implemented by identities
+// that perform their own credential-store I/O and want to reuse the auth
+// manager's config-aware store instead of constructing a default one.
+type credentialStoreReceiver interface {
+	SetCredentialStore(store types.CredentialStore)
 }
 
 // GetStackInfo returns the associated stack info pointer (may be nil).
@@ -199,6 +231,13 @@ func (m *manager) GetRealm() realm.RealmInfo {
 	return m.realm
 }
 
+// CredentialStoreType returns the type of the backing credential store.
+func (m *manager) CredentialStoreType() string {
+	defer perf.Track(nil, "auth.CredentialStoreType")()
+
+	return m.credentialStore.Type()
+}
+
 // Authenticate performs hierarchical authentication for the specified identity.
 func (m *manager) Authenticate(ctx context.Context, identityName string) (*types.WhoamiInfo, error) {
 	defer perf.Track(nil, "auth.Manager.Authenticate")()
@@ -212,8 +251,25 @@ func (m *manager) Authenticate(ctx context.Context, identityName string) (*types
 	// Resolve identity name case-insensitively
 	resolvedName, found := m.resolveIdentityName(identityName)
 	if !found {
-		errUtils.CheckErrorAndPrint(errUtils.ErrInvalidAuthConfig, identityNameKey, "Identity specified was not found in the auth config.")
-		return nil, fmt.Errorf(errFormatWithString, errUtils.ErrIdentityNotFound, fmt.Sprintf(backtickedFmt, identityName))
+		// If the identity is defined in another profile that hasn't been
+		// loaded, offer to re-exec Atmos with that profile (interactive) or
+		// surface a hint naming the profile (non-interactive). Explicit
+		// --profile / ATMOS_PROFILE selections are never overridden.
+		// See PRD: interactive-profile-suggestion.
+		if fbErr := m.maybeOfferProfileFallback(ctx, identityName); fbErr != nil {
+			return nil, fbErr
+		}
+		// Return a single rich error carrying the explanation and hint.
+		// Callers render it once via CheckErrorPrintAndExit, avoiding the
+		// historical back-to-back CheckErrorAndPrint + CheckErrorPrintAndExit
+		// pattern that produced two nearly-identical error blocks for the
+		// same condition.
+		return nil, errUtils.Build(errUtils.ErrIdentityNotFound).
+			WithExplanationf("Identity `%s` is not defined in the currently loaded auth config.", identityName).
+			WithHint("Run `atmos auth list` to see available identities").
+			WithContext(identityNameKey, identityName).
+			WithExitCode(1).
+			Err()
 	}
 	// Use the resolved lowercase name for internal lookups
 	identityName = resolvedName
@@ -524,6 +580,11 @@ func (m *manager) promptForIdentity(message string, identities []string) (string
 		return "", fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrUnsupportedInputType, err)
 	}
 
+	// Echo the choice: the huh form clears itself on submit, so without this the
+	// user never sees which identity they picked. Goes to stderr (UI channel) so
+	// it never corrupts machine-readable stdout (e.g. `atmos auth env`).
+	ui.Success(fmt.Sprintf("Selected identity: %s", selectedIdentity))
+
 	return selectedIdentity, nil
 }
 
@@ -565,7 +626,6 @@ func (m *manager) initializeProviders() error {
 	for name, providerConfig := range m.config.Providers {
 		provider, err := factory.NewProvider(name, &providerConfig)
 		if err != nil {
-			errUtils.CheckErrorAndPrint(err, "Initialize Providers", "")
 			return fmt.Errorf("%w: provider=%s: %w", errUtils.ErrInvalidProviderConfig, name, err)
 		}
 		m.providers[name] = provider
@@ -599,13 +659,11 @@ func (m *manager) initializeIdentities() error {
 			err := builder.
 				WithHint("Run `atmos profile list` to see available profiles").
 				WithExitCode(1).Err()
-			errUtils.CheckErrorAndPrint(err, "Initialize Identities", "")
 			return err
 		}
 
 		identity, err := factory.NewIdentity(name, &identityConfig)
 		if err != nil {
-			errUtils.CheckErrorAndPrint(err, "Initialize Identities", "")
 			return fmt.Errorf("%w: identity=%s: %w", errUtils.ErrInvalidIdentityConfig, name, err)
 		}
 		m.identities[name] = identity

@@ -54,6 +54,10 @@ var (
 	// Matches "Outputs:" section header in terraform apply stdout.
 	outputsSectionRe = regexp.MustCompile(`(?m)^Outputs:\s*$`)
 
+	// Matches "Changes to Outputs:" section header in terraform plan stdout.
+	// This appears when only output values change (no resource changes).
+	outputChangesRe = regexp.MustCompile(`(?m)^Changes to Outputs:`)
+
 	// Matches simple output lines: 'key = "value"' or 'key = value'.
 	// Captures key and raw value (including quotes).
 	outputLineRe = regexp.MustCompile(`^(\w+)\s*=\s*(.+)$`)
@@ -75,9 +79,11 @@ func ParsePlanJSON(jsonData []byte) (*plugin.OutputResult, error) {
 	processResourceChanges(plan.ResourceChanges, data)
 	processOutputChanges(plan.OutputChanges, data)
 
-	result.HasChanges = hasResourceChanges(data.ResourceCounts)
-	if result.HasChanges {
+	result.HasChanges = hasResourceChanges(data.ResourceCounts) || data.HasOutputChanges
+	if hasResourceChanges(data.ResourceCounts) {
 		data.ChangedResult = buildChangeSummary(data.ResourceCounts)
+	} else if data.HasOutputChanges {
+		data.ChangedResult = buildOutputChangeSummary(len(data.Outputs))
 	}
 
 	return result, nil
@@ -144,6 +150,7 @@ func processOutputChanges(changes map[string]*tfjson.Change, data *plugin.Terraf
 		if output == nil {
 			continue
 		}
+		data.HasOutputChanges = true
 		data.Outputs[name] = plugin.TerraformOutput{
 			Value:     output.After,
 			Sensitive: output.AfterSensitive != nil,
@@ -358,6 +365,13 @@ func ParsePlanOutput(output string) *plugin.OutputResult {
 		if result.HasChanges {
 			data.ChangedResult = buildChangeSummary(data.ResourceCounts)
 		}
+	}
+
+	// Detect output-only changes (no resource changes but outputs changing).
+	if !result.HasChanges && outputChangesRe.MatchString(output) {
+		result.HasChanges = true
+		data.HasOutputChanges = true
+		data.ChangedResult = "Output values will change. No infrastructure changes."
 	}
 
 	// Extract full warning blocks for CI summary display.
@@ -604,6 +618,14 @@ func buildChangeSummary(counts plugin.ResourceCounts) string {
 		return "No changes"
 	}
 	return strings.Join(parts, ", ")
+}
+
+// buildOutputChangeSummary builds a human-readable summary for output-only changes.
+func buildOutputChangeSummary(count int) string {
+	if count == 1 {
+		return "1 output to change"
+	}
+	return strconv.Itoa(count) + " outputs to change"
 }
 
 // resourceCount formats a count of resources with proper pluralization.

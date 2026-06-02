@@ -3,6 +3,7 @@ package output
 import (
 	"errors"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -10,6 +11,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	provWorkdir "github.com/cloudposse/atmos/pkg/provisioner/workdir"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -365,6 +367,101 @@ func TestGetComponentInfo(t *testing.T) {
 	assert.Equal(t, "component 'database' in stack 'prod-eu-central-1'", result)
 }
 
+func TestExtractComponentPath_ContainmentGuard(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{
+		BasePath: t.TempDir(),
+		Components: schema.Components{
+			Terraform: schema.Terraform{BasePath: "components/terraform"},
+		},
+	}
+
+	// Craft sections that enable JIT workdir so BuildPath is called.
+	traversalSections := map[string]any{
+		cfg.CommandSectionName:   "/usr/local/bin/terraform",
+		cfg.WorkspaceSectionName: "test",
+		cfg.ComponentSectionName: "vpc",
+		"component_info": map[string]any{
+			"component_type": "terraform",
+		},
+		"provision": map[string]any{
+			"workdir": map[string]any{"enabled": true},
+		},
+	}
+	// Inject path traversal via the component argument (incorporated into BuildPath).
+	// Use enough ".." repetitions to escape any reasonable t.TempDir() depth.
+	traversalComponent := "../../../../../../../../../../evil"
+
+	path, err := extractComponentPath(atmosConfig, traversalSections, traversalComponent, "dev")
+	require.NoError(t, err, "containment guard must not return an error — it falls back to componentPath")
+
+	// The returned path must not escape BasePath.
+	absBase, _ := filepath.Abs(atmosConfig.BasePath)
+	sep := string(filepath.Separator)
+	escaped := !strings.HasPrefix(path, absBase+sep) && path != absBase
+	assert.False(t, escaped,
+		"extractComponentPath must not return a path outside BasePath; got %q, base %q", path, absBase)
+
+	// The guard must have fired and returned the componentPath fallback, not the
+	// workdir path. Workdir paths contain ".workdir"; the component path does not.
+	assert.NotContains(t, filepath.ToSlash(path), ".workdir",
+		"containment guard must return componentPath (not workdirPath) when traversal escapes BasePath")
+}
+
+func TestExtractComponentPath_ContainmentGuard_AcceptsLegitimate(t *testing.T) {
+	basePath := t.TempDir()
+	atmosConfig := &schema.AtmosConfiguration{
+		BasePath: basePath,
+		Components: schema.Components{
+			Terraform: schema.Terraform{BasePath: "components/terraform"},
+		},
+	}
+
+	legitimateSections := map[string]any{
+		cfg.CommandSectionName:   "/usr/local/bin/terraform",
+		cfg.WorkspaceSectionName: "test",
+		cfg.ComponentSectionName: "vpc",
+		"component_info": map[string]any{
+			"component_type": "terraform",
+		},
+		"provision": map[string]any{
+			"workdir": map[string]any{"enabled": true},
+		},
+	}
+
+	path, err := extractComponentPath(atmosConfig, legitimateSections, "vpc", "dev")
+	require.NoError(t, err)
+
+	// The ACCEPT branch must return the workdir path (inside BasePath), not componentPath.
+	absBase, _ := filepath.Abs(basePath)
+	sep := string(filepath.Separator)
+	assert.True(t, strings.HasPrefix(path, absBase+sep) || path == absBase,
+		"legitimate workdir component must return a path within BasePath; got %q, base %q", path, absBase)
+	assert.NotContains(t, filepath.ToSlash(path), filepath.ToSlash(filepath.Join("components", "terraform")),
+		"workdir path must not point at the static component directory")
+}
+
+func TestExtractComponentConfig_ReadsAutoProvisionWorkdirForOutputs(t *testing.T) {
+	sections := validSections()
+	sections[cfg.ComponentSectionName] = "mock"
+	mockPath := filepath.Join(t.TempDir(), "mock")
+	sections["component_info"] = map[string]any{
+		"component_type": "terraform",
+		"component_path": mockPath,
+	}
+
+	atmosConfig := validAtmosConfig()
+	atmosConfig.Components.Terraform.AutoProvisionWorkdirForOutputs = false
+
+	config, err := ExtractComponentConfig(atmosConfig, sections, "mock", "test")
+	require.NoError(t, err)
+	assert.False(t, config.AutoProvisionWorkdirForOutputs)
+
+	atmosConfig.Components.Terraform.AutoProvisionWorkdirForOutputs = true
+	config, err = ExtractComponentConfig(atmosConfig, sections, "mock", "test")
+	require.NoError(t, err)
+	assert.True(t, config.AutoProvisionWorkdirForOutputs)
+}
+
 func TestExtractOptionalFields(t *testing.T) {
 	sections := map[string]any{
 		cfg.BackendTypeSectionName: "gcs",
@@ -445,6 +542,58 @@ func TestExtractRequiredFields(t *testing.T) {
 	assert.Contains(t, filepath.ToSlash(config.ComponentPath), filepath.ToSlash(expectedSuffix))
 }
 
+func TestIsWorkdirEnabled(t *testing.T) {
+	tests := []struct {
+		name     string
+		sections map[string]any
+		want     bool
+	}{
+		{
+			name:     "no provision section",
+			sections: map[string]any{},
+			want:     false,
+		},
+		{
+			name: "provision section without workdir",
+			sections: map[string]any{
+				"provision": map[string]any{},
+			},
+			want: false,
+		},
+		{
+			name: "workdir.enabled: false",
+			sections: map[string]any{
+				"provision": map[string]any{
+					"workdir": map[string]any{"enabled": false},
+				},
+			},
+			want: false,
+		},
+		{
+			name: "workdir.enabled: true",
+			sections: map[string]any{
+				"provision": map[string]any{
+					"workdir": map[string]any{"enabled": true},
+				},
+			},
+			want: true,
+		},
+		{
+			name: "provision section has wrong type",
+			sections: map[string]any{
+				"provision": "not-a-map",
+			},
+			want: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, provWorkdir.IsWorkdirEnabled(tt.sections))
+		})
+	}
+}
+
 func TestExtractComponentPath(t *testing.T) {
 	tempDir := t.TempDir()
 
@@ -466,6 +615,37 @@ func TestExtractComponentPath(t *testing.T) {
 				},
 			},
 			expectedSuffix: filepath.Join("components", "terraform", "vpc"),
+		},
+		{
+			name:     "workdir enabled uses instance component name in path, not base component",
+			basePath: tempDir,
+			sections: map[string]any{
+				cfg.ComponentSectionName: "null-label",
+				"component_info": map[string]any{
+					"component_type": "terraform",
+				},
+				"provision": map[string]any{
+					"workdir": map[string]any{"enabled": true},
+				},
+			},
+			// extractComponentPath is called with component="comp" (the instance name).
+			// BuildPath falls back to the instance name when atmos_component is absent.
+			expectedSuffix: filepath.Join(".workdir", "terraform", "stack-comp"),
+		},
+		{
+			name:     "workdir enabled with atmos_component uses instance name in path",
+			basePath: tempDir,
+			sections: map[string]any{
+				cfg.ComponentSectionName: "vpc",
+				"atmos_component":        "my-vpc",
+				"component_info": map[string]any{
+					"component_type": "terraform",
+				},
+				"provision": map[string]any{
+					"workdir": map[string]any{"enabled": true},
+				},
+			},
+			expectedSuffix: filepath.Join(".workdir", "terraform", "stack-my-vpc"),
 		},
 		{
 			name:     "component with folder prefix",

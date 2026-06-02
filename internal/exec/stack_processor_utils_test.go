@@ -2,7 +2,10 @@ package exec
 
 import (
 	"errors"
+	"fmt"
+	"net/url"
 	"os"
+	osexec "os/exec"
 	"path/filepath"
 	"sort"
 	"testing"
@@ -12,6 +15,7 @@ import (
 	"go.uber.org/mock/gomock"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -477,6 +481,319 @@ func TestProcessBaseComponentConfig_DiamondInheritance(t *testing.T) {
 		"Base vars should be inherited through right branch")
 }
 
+// TestProcessBaseComponentConfig_MultipleAbstractComponentsCycle reproduces the user's
+// scenario where multiple abstract components with metadata.component cause a stack overflow.
+// The user reported: "I had to do this on 2 iam-delegated-roles, and eks. I think there are
+// some dependencies between the two."
+//
+// This test simulates processed data (Phase 2) where two abstract components both have
+// metadata.component set, and their real counterparts cross-reference through inheritance.
+// The isAbstract check should prevent following the promoted "component" key on both.
+func TestProcessBaseComponentConfig_MultipleAbstractComponentsCycle(t *testing.T) {
+	ClearBaseComponentConfigCache()
+
+	// Simulate processed data with two abstract/real component pairs that have
+	// cross-dependencies. The real components inherit from their respective abstract
+	// defaults, and eks also inherits from iam-delegated-roles-defaults to exercise
+	// coupled dependency traversal paths.
+	// Both abstract components have metadata.component promoted to top-level.
+	allComponentsMap := map[string]any{
+		"iam-delegated-roles-defaults": map[string]any{
+			"component": "iam-delegated-roles", // Promoted by mergeComponentConfigurations.
+			"metadata": map[string]any{
+				"component": "iam-delegated-roles",
+				"type":      "abstract",
+			},
+			"vars": map[string]any{
+				"namespace": "acme",
+			},
+		},
+		"iam-delegated-roles": map[string]any{
+			"component": "iam-delegated-roles",
+			"metadata": map[string]any{
+				"component": "iam-delegated-roles",
+				"type":      "real",
+				"inherits":  []any{"iam-delegated-roles-defaults"},
+			},
+			"vars": map[string]any{
+				"role_name": "admin",
+			},
+		},
+		"eks-defaults": map[string]any{
+			"component": "eks", // Promoted by mergeComponentConfigurations.
+			"metadata": map[string]any{
+				"component": "eks",
+				"type":      "abstract",
+			},
+			"vars": map[string]any{
+				"cluster_name": "main",
+			},
+		},
+		"eks": map[string]any{
+			"component": "eks",
+			"metadata": map[string]any{
+				"component": "eks",
+				"type":      "real",
+				"inherits":  []any{"eks-defaults", "iam-delegated-roles-defaults"}, // Cross-dependency.
+			},
+			"vars": map[string]any{
+				"node_count": 3,
+			},
+		},
+	}
+
+	atmosConfig := &schema.AtmosConfiguration{}
+
+	// Process iam-delegated-roles.
+	baseComponentConfig1 := &schema.BaseComponentConfig{
+		BaseComponentVars:     map[string]any{},
+		BaseComponentSettings: map[string]any{},
+		BaseComponentEnv:      map[string]any{},
+	}
+	baseComponents1 := []string{}
+	err := ProcessBaseComponentConfig(
+		atmosConfig,
+		baseComponentConfig1,
+		allComponentsMap,
+		"iam-delegated-roles",
+		"test-stack",
+		"iam-delegated-roles-defaults",
+		filepath.Join("dummy", "path"),
+		false,
+		&baseComponents1,
+	)
+	require.NoError(t, err, "Should not stack overflow with multiple abstract components")
+
+	// Process eks.
+	ClearBaseComponentConfigCache()
+	baseComponentConfig2 := &schema.BaseComponentConfig{
+		BaseComponentVars:     map[string]any{},
+		BaseComponentSettings: map[string]any{},
+		BaseComponentEnv:      map[string]any{},
+	}
+	baseComponents2 := []string{}
+	err = ProcessBaseComponentConfig(
+		atmosConfig,
+		baseComponentConfig2,
+		allComponentsMap,
+		"eks",
+		"test-stack",
+		"eks-defaults",
+		filepath.Join("dummy", "path"),
+		false,
+		&baseComponents2,
+	)
+	require.NoError(t, err, "Should not stack overflow with eks abstract component")
+}
+
+// TestProcessBaseComponentConfig_AbstractWithInheritsCycle tests the scenario where
+// an abstract component has BOTH metadata.component AND metadata.inherits, creating
+// a potential cycle through the inherits chain. The cycle detection must catch this
+// even with defer delete on the visited set.
+//
+// Pattern: A-defaults (abstract, component: A, inherits: [A])
+// This creates: A → inherits A-defaults → inherits A → inherits A-defaults → ...
+func TestProcessBaseComponentConfig_AbstractWithInheritsCycle(t *testing.T) {
+	ClearBaseComponentConfigCache()
+
+	allComponentsMap := map[string]any{
+		"vpc-defaults": map[string]any{
+			"component": "vpc", // Promoted by mergeComponentConfigurations.
+			"metadata": map[string]any{
+				"component": "vpc",
+				"type":      "abstract",
+				"inherits":  []any{"vpc"}, // Abstract inherits from real — creates cycle.
+			},
+			"vars": map[string]any{
+				"cidr": "10.0.0.0/16",
+			},
+		},
+		"vpc": map[string]any{
+			"component": "vpc",
+			"metadata": map[string]any{
+				"component": "vpc",
+				"type":      "real",
+				"inherits":  []any{"vpc-defaults"},
+			},
+			"vars": map[string]any{
+				"name": "main",
+			},
+		},
+	}
+
+	atmosConfig := &schema.AtmosConfiguration{}
+	baseComponentConfig := &schema.BaseComponentConfig{
+		BaseComponentVars:     map[string]any{},
+		BaseComponentSettings: map[string]any{},
+		BaseComponentEnv:      map[string]any{},
+	}
+	baseComponents := []string{}
+
+	// This MUST NOT cause a stack overflow. It should either:
+	// 1. Return a cycle detection error, OR
+	// 2. Complete successfully by skipping the abstract component chain.
+	err := ProcessBaseComponentConfig(
+		atmosConfig,
+		baseComponentConfig,
+		allComponentsMap,
+		"vpc",
+		"test-stack",
+		"vpc-defaults",
+		filepath.Join("dummy", "path"),
+		false,
+		&baseComponents,
+	)
+	// We accept either no error (skip abstract chain) or a cycle error.
+	// The only unacceptable outcome is a stack overflow (crash).
+	if err != nil {
+		assert.ErrorIs(t, err, errUtils.ErrCircularComponentInheritance,
+			"If error, should be a circular inheritance error, not a stack overflow")
+	}
+}
+
+// TestProcessBaseComponentConfig_RealComponentSelfReferenceViaAbstract tests a
+// more complex cycle where a real component's inheritance chain leads back to
+// itself through an abstract component's inherits list.
+//
+// Pattern (processed data):
+//
+//	comp-A (real, inherits: [comp-B-defaults])
+//	comp-B-defaults (abstract, component: comp-B, inherits: [comp-A])
+//	comp-B (real, inherits: [comp-B-defaults])
+//
+// When processing comp-A → comp-B-defaults → (skip component key, abstract) → inherits comp-A → CYCLE.
+func TestProcessBaseComponentConfig_RealComponentSelfReferenceViaAbstract(t *testing.T) {
+	ClearBaseComponentConfigCache()
+
+	allComponentsMap := map[string]any{
+		"comp-A": map[string]any{
+			"component": "comp-A",
+			"metadata": map[string]any{
+				"type":     "real",
+				"inherits": []any{"comp-B-defaults"},
+			},
+			"vars": map[string]any{"from": "A"},
+		},
+		"comp-B-defaults": map[string]any{
+			"component": "comp-B", // Promoted.
+			"metadata": map[string]any{
+				"component": "comp-B",
+				"type":      "abstract",
+				"inherits":  []any{"comp-A"}, // Abstract inherits from real A — creates cross-cycle.
+			},
+			"vars": map[string]any{"from": "B-defaults"},
+		},
+		"comp-B": map[string]any{
+			"component": "comp-B",
+			"metadata": map[string]any{
+				"component": "comp-B",
+				"type":      "real",
+				"inherits":  []any{"comp-B-defaults"},
+			},
+			"vars": map[string]any{"from": "B"},
+		},
+	}
+
+	atmosConfig := &schema.AtmosConfiguration{}
+	baseComponentConfig := &schema.BaseComponentConfig{
+		BaseComponentVars:     map[string]any{},
+		BaseComponentSettings: map[string]any{},
+		BaseComponentEnv:      map[string]any{},
+	}
+	baseComponents := []string{}
+
+	// Processing comp-A → comp-B-defaults → (abstract, skip component) → inherits comp-A → cycle.
+	// This MUST NOT stack overflow.
+	err := ProcessBaseComponentConfig(
+		atmosConfig,
+		baseComponentConfig,
+		allComponentsMap,
+		"comp-A",
+		"test-stack",
+		"comp-B-defaults",
+		filepath.Join("dummy", "path"),
+		false,
+		&baseComponents,
+	)
+	if err != nil {
+		assert.ErrorIs(t, err, errUtils.ErrCircularComponentInheritance,
+			"If error, should be a circular inheritance error, not a stack overflow")
+	}
+}
+
+// TestProcessBaseComponentConfig_DeferDeleteCycleReentry tests whether the
+// defer delete(visited, visitKey) in processBaseComponentConfigInternal allows
+// cycle re-entry after backtracking. This is the suspected mechanism behind
+// the user's persistent stack overflow.
+//
+// Pattern (processed Phase 2 data):
+//
+//	real-A (component: real-A, inherits: [abstract-A])
+//	abstract-A (abstract, component: real-A, inherits: [shared-base])
+//	shared-base (component: real-A)  ← non-abstract, creates chain back
+//
+// Flow:
+//
+//	real-A → abstract-A → (skip component, abstract) → inherits shared-base
+//	→ shared-base["component"] = "real-A" → follows → real-A
+//	→ real-A["inherits"] = [abstract-A] → BUT abstract-A was already visited
+//	  on the SAME DFS path → cycle detected ✓
+//
+// If defer delete incorrectly removes the entry, the cycle would not be detected.
+func TestProcessBaseComponentConfig_DeferDeleteCycleReentry(t *testing.T) {
+	ClearBaseComponentConfigCache()
+
+	allComponentsMap := map[string]any{
+		"abstract-A": map[string]any{
+			"component": "real-A", // Promoted.
+			"metadata": map[string]any{
+				"component": "real-A",
+				"type":      "abstract",
+				"inherits":  []any{"shared-base"},
+			},
+			"vars": map[string]any{"from": "abstract-A"},
+		},
+		"shared-base": map[string]any{
+			"component": "real-A", // Points back to real-A — non-abstract!
+			"vars":      map[string]any{"from": "shared-base"},
+		},
+		"real-A": map[string]any{
+			"component": "real-A",
+			"metadata": map[string]any{
+				"component": "real-A",
+				"type":      "real",
+				"inherits":  []any{"abstract-A"},
+			},
+			"vars": map[string]any{"from": "real-A"},
+		},
+	}
+
+	atmosConfig := &schema.AtmosConfiguration{}
+	baseComponentConfig := &schema.BaseComponentConfig{
+		BaseComponentVars:     map[string]any{},
+		BaseComponentSettings: map[string]any{},
+		BaseComponentEnv:      map[string]any{},
+	}
+	baseComponents := []string{}
+
+	// This MUST NOT stack overflow. The cycle detection should catch the re-entry.
+	err := ProcessBaseComponentConfig(
+		atmosConfig,
+		baseComponentConfig,
+		allComponentsMap,
+		"real-A",
+		"test-stack",
+		"abstract-A",
+		filepath.Join("dummy", "path"),
+		false,
+		&baseComponents,
+	)
+	if err != nil {
+		assert.ErrorIs(t, err, errUtils.ErrCircularComponentInheritance,
+			"If error, should be a circular inheritance error, not a stack overflow")
+	}
+}
+
 // TestProcessBaseComponentConfig_AbstractMetadataComponentInherited verifies that metadata.component
 // on an abstract component is properly inherited by real components through metadata inheritance.
 // This is the scenario Erik described: metadata.component on abstract components should "do something"
@@ -777,6 +1094,90 @@ func TestProcessYAMLConfigFileMissingFilesReturnError(t *testing.T) {
 	)
 
 	assert.Error(t, err)
+}
+
+// TestProcessYAMLConfigFile_ImportNotFound_ErrorPath exercises the branch where
+// GetGlobMatches returns an error (the import directory does not exist) and the
+// import is not a Go template, so processStackConfigImports propagates the
+// error back to ProcessYAMLConfigFile with the missing-file message.
+func TestProcessYAMLConfigFile_ImportNotFound_ErrorPath(t *testing.T) {
+	stacksBasePath := filepath.Join("..", "..", "tests", "fixtures", "scenarios", "invalid-stacks", "stacks")
+	// missing-import.yaml imports "catalog/this-file-does-not-exist-at-all" which has no
+	// matching files on disk — GetGlobMatches returns ErrFailedToFindImport.
+	filePath := filepath.Join("..", "..", "tests", "fixtures", "scenarios", "invalid-stacks", "stacks", "orgs", "acme", "platform", "missing-import.yaml")
+
+	atmosConfig := schema.AtmosConfiguration{
+		Templates: schema.Templates{
+			Settings: schema.TemplatesSettings{
+				Enabled: true,
+				Sprig: schema.TemplatesSettingsSprig{
+					Enabled: true,
+				},
+				Gomplate: schema.TemplatesSettingsGomplate{
+					Enabled: true,
+				},
+			},
+		},
+	}
+
+	_, _, _, _, _, _, _, err := ProcessYAMLConfigFile( //nolint:dogsled
+		&atmosConfig,
+		stacksBasePath,
+		filePath,
+		map[string]map[string]any{},
+		nil,
+		false,
+		false,
+		true,
+		false,
+		nil,
+		nil,
+		nil,
+		nil,
+		"",
+	)
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrFailedToFindImport)
+}
+
+// TestProcessYAMLConfigFile_InvalidTemplateInImportPath exercises the branch where
+// IsGolangTemplate itself returns an error because the import path contains invalid
+// Go template syntax — covering line 1093 inside processStackConfigImports.
+// Templates must be disabled so that the raw `{{ unclosed` string is preserved as
+// the import path and reaches IsGolangTemplate rather than failing during YAML
+// template pre-processing.
+func TestProcessYAMLConfigFile_InvalidTemplateInImportPath(t *testing.T) {
+	stacksBasePath := filepath.Join("..", "..", "tests", "fixtures", "scenarios", "invalid-stacks", "stacks")
+	// invalid-template-import-path.yaml imports `{{ unclosed` which is syntactically
+	// invalid as a Go template; IsGolangTemplate returns (false, err).
+	filePath := filepath.Join("..", "..", "tests", "fixtures", "scenarios", "invalid-stacks", "stacks", "orgs", "acme", "platform", "invalid-template-import-path.yaml")
+
+	// Disable template pre-processing so the raw `{{ unclosed` string is passed
+	// through YAML parsing unchanged and eventually reaches IsGolangTemplate.
+	atmosConfig := schema.AtmosConfiguration{}
+
+	_, _, _, _, _, _, _, err := ProcessYAMLConfigFile( //nolint:dogsled
+		&atmosConfig,
+		stacksBasePath,
+		filePath,
+		map[string]map[string]any{},
+		nil,
+		false,
+		false,
+		true,
+		false,
+		nil,
+		nil,
+		nil,
+		nil,
+		"",
+	)
+
+	require.Error(t, err)
+	// The error propagates from IsGolangTemplate which calls text/template.Parse on the
+	// import string — the error message contains the template name and parse failure.
+	assert.Contains(t, err.Error(), "unclosed")
 }
 
 func TestProcessYAMLConfigFileEmptyManifest(t *testing.T) {
@@ -1917,6 +2318,112 @@ func TestCacheCompiledSchema(t *testing.T) {
 	assert.Equal(t, compiledSchema, compiledSchema2, "Consistent cache lookups should return same schema")
 }
 
+// TestExtractLocalsFromRawYAML_CacheReturnsIndependentCopies verifies the
+// Phase 4 cache returns deep copies, not shared map references. Without this
+// guarantee, downstream consumers — which store the locals/settings/vars/env
+// maps into shared template contexts and may mutate them later — would
+// corrupt the cache and observe values bleeding across files.
+func TestExtractLocalsFromRawYAML_CacheReturnsIndependentCopies(t *testing.T) {
+	ClearLocalsExtractionCache()
+	defer ClearLocalsExtractionCache()
+
+	atmosConfig := &schema.AtmosConfiguration{}
+	yamlContent := `
+locals:
+  region: us-east-1
+  count: 3
+settings:
+  flavor: prod
+vars:
+  stage: dev
+env:
+  AWS_REGION: us-east-1
+`
+	first, err := extractLocalsFromRawYAML(atmosConfig, yamlContent, "iso-test.yaml")
+	require.NoError(t, err)
+	require.NotNil(t, first)
+	require.True(t, first.hasLocals)
+
+	// Mutate every map on the first result.
+	first.locals["region"] = "MUTATED"
+	first.settings["flavor"] = "MUTATED"
+	first.vars["stage"] = "MUTATED"
+	first.env["AWS_REGION"] = "MUTATED"
+
+	// A second call must NOT see the mutations.
+	second, err := extractLocalsFromRawYAML(atmosConfig, yamlContent, "iso-test.yaml")
+	require.NoError(t, err)
+	require.NotNil(t, second)
+	assert.Equal(t, "us-east-1", second.locals["region"],
+		"cached locals must not reflect post-retrieval mutations to a prior result")
+	assert.Equal(t, "prod", second.settings["flavor"])
+	assert.Equal(t, "dev", second.vars["stage"])
+	assert.Equal(t, "us-east-1", second.env["AWS_REGION"])
+}
+
+// TestExtractLocalsFromRawYAML_CacheKeyIncludesContentHash verifies the
+// cache key encodes both the file path AND a content fingerprint so that
+// callers reusing the same logical file path with different content (a
+// common pattern in unit tests, and a safety property for any future
+// dynamic-content code path) do not see stale results from a prior call.
+func TestExtractLocalsFromRawYAML_CacheKeyIncludesContentHash(t *testing.T) {
+	ClearLocalsExtractionCache()
+	defer ClearLocalsExtractionCache()
+
+	atmosConfig := &schema.AtmosConfiguration{}
+	contentA := `
+locals:
+  marker: "alpha"
+`
+	contentB := `
+locals:
+  marker: "beta"
+`
+	// Same file path, different content — must yield distinct cached results.
+	rA, err := extractLocalsFromRawYAML(atmosConfig, contentA, "same-path.yaml")
+	require.NoError(t, err)
+	rB, err := extractLocalsFromRawYAML(atmosConfig, contentB, "same-path.yaml")
+	require.NoError(t, err)
+	assert.Equal(t, "alpha", rA.locals["marker"])
+	assert.Equal(t, "beta", rB.locals["marker"],
+		"different content under the same path must not return a stale cached result")
+}
+
+// TestExtractAndAddLocalsToContext_DoesNotMutateInputContext locks in the
+// Phase 4 race fix: the function used to call delete() on the parent context
+// map shared across sibling-import goroutines, producing a data race surfaced
+// by TestHierarchicalImports_* under -race. After Phase 4, the input context
+// is cloned before any modification so the caller's map is untouched.
+func TestExtractAndAddLocalsToContext_DoesNotMutateInputContext(t *testing.T) {
+	ClearLocalsExtractionCache()
+	defer ClearLocalsExtractionCache()
+
+	atmosConfig := &schema.AtmosConfiguration{}
+	parent := map[string]any{
+		cfg.LocalsSectionName: map[string]any{"inherited": "should-be-dropped"},
+		"unrelated":           "kept",
+	}
+	yamlContent := `
+locals:
+  region: us-east-1
+`
+	_, err := extractAndAddLocalsToContext(
+		atmosConfig,
+		yamlContent,
+		"iso-context.yaml",
+		"iso-context.yaml",
+		parent,
+	)
+	require.NoError(t, err)
+
+	// Parent context must still contain its original locals key (untouched).
+	gotLocals, ok := parent[cfg.LocalsSectionName].(map[string]any)
+	require.True(t, ok, "parent context locals key must be untouched")
+	assert.Equal(t, "should-be-dropped", gotLocals["inherited"],
+		"extractAndAddLocalsToContext must not mutate the caller's parent context")
+	assert.Equal(t, "kept", parent["unrelated"])
+}
+
 // TestExtractLocalsFromRawYAML_Basic tests basic locals extraction from raw YAML.
 func TestExtractLocalsFromRawYAML_Basic(t *testing.T) {
 	atmosConfig := &schema.AtmosConfiguration{}
@@ -2453,6 +2960,235 @@ func TestBuildLocalsResult_NilLocalsWithHasLocals(t *testing.T) {
 	assert.True(t, result.hasLocals, "hasLocals should be true when HasTerraformLocals is true")
 	// locals should be initialized to empty map, not nil.
 	assert.NotNil(t, result.locals, "locals should be initialized to empty map when hasLocals is true")
+}
+
+func TestProcessImportSection_NoImportSection(t *testing.T) {
+	// Test with no import section present.
+	stackMap := map[string]any{
+		"vars": map[string]any{"stage": "dev"},
+	}
+
+	manifestPath := filepath.Join("test", "path.yaml")
+	imports, err := ProcessImportSection(stackMap, manifestPath)
+	require.NoError(t, err)
+	assert.Nil(t, imports)
+}
+
+func TestProcessImportSection_NilImportSection(t *testing.T) {
+	// Test with nil import section.
+	stackMap := map[string]any{
+		"import": nil,
+	}
+
+	manifestPath := filepath.Join("test", "path.yaml")
+	imports, err := ProcessImportSection(stackMap, manifestPath)
+	require.NoError(t, err)
+	assert.Nil(t, imports)
+}
+
+func TestProcessImportSection_EmptyList(t *testing.T) {
+	// Test with empty import list.
+	stackMap := map[string]any{
+		"import": []any{},
+	}
+
+	manifestPath := filepath.Join("test", "path.yaml")
+	imports, err := ProcessImportSection(stackMap, manifestPath)
+	require.NoError(t, err)
+	assert.Nil(t, imports)
+}
+
+func TestProcessImportSection_InvalidType(t *testing.T) {
+	// Test with invalid import section type (not a list).
+	stackMap := map[string]any{
+		"import": "not-a-list",
+	}
+
+	manifestPath := filepath.Join("test", "path.yaml")
+	_, err := ProcessImportSection(stackMap, manifestPath)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrInvalidImportSection)
+}
+
+func TestProcessImportSection_NilElement(t *testing.T) {
+	// Test with nil element in import list.
+	stackMap := map[string]any{
+		"import": []any{
+			filepath.Join("valid", "path.yaml"),
+			nil,
+		},
+	}
+
+	manifestPath := filepath.Join("test", "path.yaml")
+	_, err := ProcessImportSection(stackMap, manifestPath)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrInvalidImport)
+}
+
+func TestProcessImportSection_NestedImports(t *testing.T) {
+	manifestPath := filepath.Join("test", "path.yaml")
+
+	t.Run("decodes nested imports", func(t *testing.T) {
+		stackMap := map[string]any{
+			"import": []any{
+				map[string]any{
+					"path":           "catalog/base",
+					"nested_imports": "remote",
+				},
+			},
+		}
+
+		imports, err := ProcessImportSection(stackMap, manifestPath)
+		require.NoError(t, err)
+		require.Len(t, imports, 1)
+		assert.Equal(t, schema.StackImportNestedImportsRemote, imports[0].NestedImports)
+	})
+
+	t.Run("normalizes nested imports", func(t *testing.T) {
+		stackMap := map[string]any{
+			"import": []any{
+				map[string]any{
+					"path":           "catalog/base",
+					"nested_imports": " REMOTE ",
+				},
+				map[string]any{
+					"path":           "catalog/local",
+					"nested_imports": " Local ",
+				},
+				map[string]any{
+					"path": "catalog/default",
+				},
+			},
+		}
+
+		imports, err := ProcessImportSection(stackMap, manifestPath)
+		require.NoError(t, err)
+		require.Len(t, imports, 3)
+		assert.Equal(t, schema.StackImportNestedImportsRemote, imports[0].NestedImports)
+		assert.Equal(t, schema.StackImportNestedImportsLocal, imports[1].NestedImports)
+		assert.Empty(t, imports[2].NestedImports)
+		assert.Equal(t, schema.StackImportNestedImportsLocal, normalizeNestedImports(imports[2].NestedImports))
+	})
+
+	t.Run("rejects invalid nested imports", func(t *testing.T) {
+		stackMap := map[string]any{
+			"import": []any{
+				map[string]any{
+					"path":           "catalog/base",
+					"nested_imports": "workspace",
+				},
+			},
+		}
+
+		_, err := ProcessImportSection(stackMap, manifestPath)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, errUtils.ErrInvalidImport)
+	})
+}
+
+func TestProcessYAMLConfigFileWithContext_InheritedNestedRemoteBasePath(t *testing.T) {
+	repoDir := initStackProcessorGitRepo(t, map[string]string{
+		"stacks/orgs/acme/_defaults.yaml": `
+import:
+  - catalog/base
+
+vars:
+  from_remote_parent: true
+`,
+		"stacks/catalog/base.yaml": `
+vars:
+  from_remote_child: true
+`,
+	})
+
+	tempDir := t.TempDir()
+	localStacksDir := filepath.Join(tempDir, "stacks", "deploy")
+	require.NoError(t, os.MkdirAll(localStacksDir, 0o755))
+
+	repoURI := stackProcessorGitFileURI(repoDir)
+	localStackPath := filepath.Join(localStacksDir, "test.yaml")
+	require.NoError(t, os.WriteFile(localStackPath, []byte(fmt.Sprintf(`
+import:
+  - path: "git::%s//stacks/orgs/acme/_defaults.yaml?ref=main"
+    nested_imports: remote
+
+vars:
+  from_local_stack: true
+`, repoURI)), 0o644))
+
+	atmosConfig := &schema.AtmosConfiguration{
+		Stacks: schema.Stacks{BasePath: "stacks"},
+	}
+
+	deepMergedConfig, importsConfig, stackConfigMap, terraformInline, terraformImports, helmfileInline, helmfileImports, mergeContext, err := ProcessYAMLConfigFileWithContext(
+		atmosConfig,
+		filepath.Join(tempDir, "stacks"),
+		localStackPath,
+		map[string]map[string]any{},
+		map[string]any{},
+		false,
+		false,
+		false,
+		false,
+		map[string]any{},
+		map[string]any{},
+		map[string]any{},
+		map[string]any{},
+		"",
+		nil,
+	)
+	require.NoError(t, err)
+	assert.NotNil(t, stackConfigMap)
+	assert.NotNil(t, terraformInline)
+	assert.NotNil(t, terraformImports)
+	assert.NotNil(t, helmfileInline)
+	assert.NotNil(t, helmfileImports)
+	assert.NotNil(t, mergeContext)
+
+	vars, ok := deepMergedConfig["vars"].(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, true, vars["from_remote_parent"])
+	assert.Equal(t, true, vars["from_remote_child"])
+	assert.Equal(t, true, vars["from_local_stack"])
+
+	assert.Contains(t, importsConfig, fmt.Sprintf("git::%s//stacks/orgs/acme/_defaults.yaml?ref=main#stacks/orgs/acme/_defaults.yaml", repoURI))
+	assert.Contains(t, importsConfig, "catalog/base")
+}
+
+func initStackProcessorGitRepo(t *testing.T, files map[string]string) string {
+	t.Helper()
+
+	repoDir := t.TempDir()
+	runStackProcessorGit(t, repoDir, "init")
+	runStackProcessorGit(t, repoDir, "checkout", "-b", "main")
+	runStackProcessorGit(t, repoDir, "config", "user.email", "test@example.com")
+	runStackProcessorGit(t, repoDir, "config", "user.name", "Test User")
+
+	for name, content := range files {
+		path := filepath.Join(repoDir, filepath.FromSlash(name))
+		require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
+		require.NoError(t, os.WriteFile(path, []byte(content), 0o644))
+	}
+
+	runStackProcessorGit(t, repoDir, "add", ".")
+	runStackProcessorGit(t, repoDir, "commit", "-m", "initial")
+	return repoDir
+}
+
+func runStackProcessorGit(t *testing.T, dir string, args ...string) {
+	t.Helper()
+	cmd := osexec.Command("git", args...)
+	cmd.Dir = dir
+	out, err := cmd.CombinedOutput()
+	require.NoError(t, err, "git %v failed: %s", args, string(out))
+}
+
+func stackProcessorGitFileURI(path string) string {
+	cleaned := filepath.ToSlash(filepath.Clean(path))
+	if filepath.VolumeName(path) != "" && cleaned != "" && cleaned[0] != '/' {
+		cleaned = "/" + cleaned
+	}
+	return (&url.URL{Scheme: "file", Path: cleaned}).String()
 }
 
 // TestProcessTemplatesInSection tests the processTemplatesInSection helper function.

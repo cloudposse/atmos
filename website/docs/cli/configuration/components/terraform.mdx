@@ -135,6 +135,8 @@ components:
   <dd>
     When `true`, Atmos passes the generated varfile to `terraform init` using `--var-file`. This is primarily useful with OpenTofu, which supports [passing varfiles to init](https://opentofu.org/docs/cli/commands/init/#general-options) for dynamic backend configuration.
 
+    This also applies to the implicit `init` that Atmos runs while resolving a component referenced through [`!terraform.output`](/functions/yaml/terraform.output) or [`atmos.Component`](/functions/template/atmos.Component) — its vars are forwarded as `TF_VAR_*` environment variables so that modules with init-time variable dependencies (for example, a module `version` bound to a `var`) can initialize.
+
     **Environment variable:** `ATMOS_COMPONENTS_TERRAFORM_INIT_PASS_VARS`
     **Command-line flag:** `--init-pass-vars`
     **Default:** `false`
@@ -167,6 +169,26 @@ components:
 
     **Environment variable:** `ATMOS_COMPONENTS_TERRAFORM_PLUGIN_CACHE_DIR`
     **Default:** `""` (uses XDG cache directory)
+  </dd>
+
+  <dt>`auto_provision_workdir_for_outputs`</dt>
+  <dd>
+    When `true` (default), Atmos automatically provisions the JIT working directory
+    for components with `provision.workdir.enabled: true` before running
+    `terraform init` during `!terraform.output` or `atmos.Component` evaluation.
+    This enables cross-component output references to work on any machine, including
+    fresh CI runners where the workdir has not been created yet.
+
+    Set to `false` to disable auto-provisioning. `terraform init` will still run,
+    but only if the workdir has already been created by a prior deploy; on a fresh
+    machine with no prior workdir it will fail.
+
+    For state-only reads, prefer `!terraform.state` — it reads the state file
+    directly with no `terraform init`, no workdir provisioning step, and no
+    terraform binary required.
+
+    **Environment variable:** `ATMOS_COMPONENTS_TERRAFORM_AUTO_PROVISION_WORKDIR_FOR_OUTPUTS`
+    **Default:** `true`
   </dd>
 
   <dt>`shell.prompt`</dt>

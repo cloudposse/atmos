@@ -487,3 +487,57 @@ func TestPageCreatorInterface(t *testing.T) {
 		assert.NotNil(t, pc)
 	})
 }
+
+func TestNewWithViewport(t *testing.T) {
+	t.Run("creates pager with dimension constraints", func(t *testing.T) {
+		pc := NewWithViewport(true, 30, 100)
+		assert.NotNil(t, pc)
+
+		concretePC, ok := pc.(*pageCreator)
+		assert.True(t, ok)
+		assert.True(t, concretePC.enablePager, "Pager should be enabled")
+		assert.Equal(t, 30, concretePC.maxHeight, "Max height should be set")
+		assert.Equal(t, 100, concretePC.maxWidth, "Max width should be set")
+	})
+
+	t.Run("zero dimensions mean no constraints", func(t *testing.T) {
+		pc := NewWithViewport(true, 0, 0)
+		assert.NotNil(t, pc)
+
+		concretePC, ok := pc.(*pageCreator)
+		assert.True(t, ok)
+		assert.Equal(t, 0, concretePC.maxHeight, "Zero height means no constraint")
+		assert.Equal(t, 0, concretePC.maxWidth, "Zero width means no constraint")
+	})
+
+	t.Run("dimensions passed to model", func(t *testing.T) {
+		setupTestWriter(t)
+
+		var capturedModel *model
+
+		pc := &pageCreator{
+			enablePager: true,
+			maxHeight:   25,
+			maxWidth:    80,
+			newTeaProgram: func(modelObj tea.Model, opts ...tea.ProgramOption) *tea.Program {
+				capturedModel = modelObj.(*model)
+				return tea.NewProgram(&simpleTestModel{}, tea.WithInput(nil), tea.WithOutput(nil))
+			},
+			contentFitsTerminal: func(content string) bool {
+				return false // Force pager usage.
+			},
+			isTTYSupportForStdout: func() bool {
+				return true
+			},
+			isTTYAccessible: func() bool {
+				return true
+			},
+		}
+
+		err := pc.Run("Test", "Content")
+		assert.NoError(t, err)
+		assert.NotNil(t, capturedModel)
+		assert.Equal(t, 25, capturedModel.maxHeight, "Model should have max height")
+		assert.Equal(t, 80, capturedModel.maxWidth, "Model should have max width")
+	})
+}

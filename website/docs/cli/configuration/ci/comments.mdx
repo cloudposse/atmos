@@ -35,6 +35,8 @@ ci:
     **Requires:** `pull-requests: write` permission (GitHub) or API token with MR notes scope (GitLab)
 
     **Default:** `true`
+
+    **Environment variable:** `ATMOS_CI_COMMENTS_ENABLED` — overrides this setting when set.
   </dd>
 
   <dt>`ci.comments.behavior`</dt>
@@ -51,6 +53,12 @@ ci:
     **Default:** `upsert`
   </dd>
 </dl>
+
+## Environment Variables
+
+| Variable | Description |
+|----------|-------------|
+| `ATMOS_CI_COMMENTS_ENABLED` | Override `ci.comments.enabled` (`true`/`false`). Takes precedence over the YAML configuration when set. |
 
 ## GitHub Actions Permissions
 

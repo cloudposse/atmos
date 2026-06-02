@@ -44,12 +44,17 @@ func (r *Resolver) ResolveAWSAuthContext(ctx context.Context, identityName strin
 		return nil, fmt.Errorf("failed to authenticate identity %q for store: %w", identityName, err)
 	}
 
-	// After authentication, the auth context is populated in stackInfo.
-	if r.stackInfo == nil || r.stackInfo.AuthContext == nil || r.stackInfo.AuthContext.AWS == nil {
+	// After authentication, the auth context is populated in the auth manager's own stackInfo.
+	// We read from the manager's stackInfo (via GetStackInfo) rather than r.stackInfo because
+	// the auth manager is constructed with its own *schema.ConfigAndStacksInfo instance in
+	// pkg/auth.createAuthManagerInstance — a different pointer than the one passed to NewResolver.
+	// Using r.stackInfo would always see a nil AuthContext.AWS since the manager never writes there.
+	managerStackInfo := r.authManager.GetStackInfo()
+	if managerStackInfo == nil || managerStackInfo.AuthContext == nil || managerStackInfo.AuthContext.AWS == nil {
 		return nil, fmt.Errorf("%w: AWS auth context not available after authenticating identity %q", store.ErrAuthContextNotAvailable, identityName)
 	}
 
-	aws := r.stackInfo.AuthContext.AWS
+	aws := managerStackInfo.AuthContext.AWS
 
 	return &store.AWSAuthConfig{
 		CredentialsFile: aws.CredentialsFile,
@@ -70,11 +75,13 @@ func (r *Resolver) ResolveAzureAuthContext(ctx context.Context, identityName str
 		return nil, fmt.Errorf("failed to authenticate identity %q for store: %w", identityName, err)
 	}
 
-	if r.stackInfo == nil || r.stackInfo.AuthContext == nil || r.stackInfo.AuthContext.Azure == nil {
+	// Read from the manager's own stackInfo for the same reason as ResolveAWSAuthContext.
+	managerStackInfo := r.authManager.GetStackInfo()
+	if managerStackInfo == nil || managerStackInfo.AuthContext == nil || managerStackInfo.AuthContext.Azure == nil {
 		return nil, fmt.Errorf("%w: Azure auth context not available after authenticating identity %q", store.ErrAuthContextNotAvailable, identityName)
 	}
 
-	azure := r.stackInfo.AuthContext.Azure
+	azure := managerStackInfo.AuthContext.Azure
 
 	return &store.AzureAuthConfig{
 		CredentialsFile: azure.CredentialsFile,
@@ -97,11 +104,13 @@ func (r *Resolver) ResolveGCPAuthContext(ctx context.Context, identityName strin
 		return nil, fmt.Errorf("failed to authenticate identity %q for store: %w", identityName, err)
 	}
 
-	if r.stackInfo == nil || r.stackInfo.AuthContext == nil || r.stackInfo.AuthContext.GCP == nil {
+	// Read from the manager's own stackInfo for the same reason as ResolveAWSAuthContext.
+	managerStackInfo := r.authManager.GetStackInfo()
+	if managerStackInfo == nil || managerStackInfo.AuthContext == nil || managerStackInfo.AuthContext.GCP == nil {
 		return nil, fmt.Errorf("%w: GCP auth context not available after authenticating identity %q", store.ErrAuthContextNotAvailable, identityName)
 	}
 
-	gcpCtx := r.stackInfo.AuthContext.GCP
+	gcpCtx := managerStackInfo.AuthContext.GCP
 
 	return &store.GCPAuthConfig{
 		CredentialsFile: gcpCtx.CredentialsFile,

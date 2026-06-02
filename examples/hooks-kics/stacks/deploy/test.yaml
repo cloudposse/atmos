@@ -1,0 +1,32 @@
+# yaml-language-server: $schema=https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
+
+vars:
+  stage: test
+
+components:
+  terraform:
+    bucket:
+      vars:
+        environment: test
+      # KICS auto-installs via this example's per-project registry
+      # override (see atmos.yaml). The override defines KICS as a
+      # github_release tarball, which gives us both the binary and the
+      # assets/queries/ tree extracted side-by-side in the install dir
+      # — exactly the layout KICS expects at runtime.
+      dependencies:
+        tools:
+          # The `kics` alias resolves to Checkmarx/kics, which is
+          # overridden in the built-in Atmos registry shipped with the
+          # binary (pkg/toolchain/registry/atmos/builtin.yaml). No
+          # per-project registry config needed.
+          kics: "2.1.20"
+      hooks:
+        security:
+          events:
+            - after-terraform-plan
+          kind: kics
+          # KICS doesn't ship its query library alongside the binary in
+          # most installs, so it can't autodetect the path. Tell it where
+          # the query library lives (set KICS_QUERIES_PATH in your shell).
+          env:
+            KICS_QUERIES_PATH: "$KICS_QUERIES_PATH"

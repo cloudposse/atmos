@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -15,6 +16,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/cloudposse/atmos/pkg/toolchain/registry"
+	"github.com/cloudposse/atmos/pkg/toolchain/registry/cache"
 )
 
 // TestHTTPTimeout is the timeout for HTTP requests in tests to prevent hangs.
@@ -498,6 +500,68 @@ func TestAquaRegistry_GetLatestVersion(t *testing.T) {
 	assert.Equal(t, "1.5.0", version) // Should skip draft v1.6.0 and prerelease v2.0.0-beta
 }
 
+func TestAquaRegistry_GetLatestVersion_NoVersionPrefixPreservesTag(t *testing.T) {
+	const packageYAML = `packages:
+  - type: github_release
+    repo_owner: sigstore
+    repo_name: cosign
+    asset: cosign-{{.OS}}-{{.Arch}}
+    format: raw
+`
+
+	version := latestVersionFromAquaFixture(t, "sigstore", "cosign", "v3.0.6", packageYAML)
+	assert.Equal(t, "v3.0.6", version)
+}
+
+func TestAquaRegistry_GetLatestVersion_ExplicitVersionPrefixStripsTag(t *testing.T) {
+	const packageYAML = `packages:
+  - type: github_release
+    repo_owner: opentofu
+    repo_name: opentofu
+    version_prefix: v
+    asset: tofu_{{trimV .Version}}_{{.OS}}_{{.Arch}}.zip
+    format: zip
+`
+
+	version := latestVersionFromAquaFixture(t, "opentofu", "opentofu", "v1.9.1", packageYAML)
+	assert.Equal(t, "1.9.1", version)
+}
+
+func latestVersionFromAquaFixture(t *testing.T, owner, repo, tagName, packageYAML string) string {
+	t.Helper()
+
+	releases := []releaseInfo{
+		{TagName: tagName, Prerelease: false, Draft: false},
+	}
+	indexYAML := "packages:\n  - type: github_release\n    repo_owner: " + owner + "\n    repo_name: " + repo + "\n"
+	packagePath := "/pkgs/" + owner + "/" + repo + "/registry.yaml"
+	releasesPath := "/repos/" + owner + "/" + repo + "/releases"
+
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/registry.yaml":
+			w.Header().Set("Content-Type", "application/yaml")
+			w.Write([]byte(indexYAML))
+		case packagePath:
+			w.Header().Set("Content-Type", "application/yaml")
+			w.Write([]byte(packageYAML))
+		case releasesPath:
+			json.NewEncoder(w).Encode(releases)
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer ts.Close()
+
+	ar := newTestAquaRegistry(t, ts.URL)
+	ar.githubBaseURL = ts.URL
+
+	version, err := ar.GetLatestVersion(owner, repo)
+	require.NoError(t, err)
+	return version
+}
+
 func TestAquaRegistry_GetLatestVersion_NoReleases(t *testing.T) {
 	// Mock GitHub API server that returns empty releases array
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -830,14 +894,16 @@ func TestAquaRegistry_ListAll(t *testing.T) {
 		limit := 5
 
 		// Get first batch.
-		firstBatch, err := ar.ListAll(ctx,
+		firstBatch, err := ar.ListAll(
+			ctx,
 			registry.WithListLimit(limit),
 			registry.WithListOffset(0),
 		)
 		require.NoError(t, err)
 
 		// Get second batch with offset.
-		secondBatch, err := ar.ListAll(ctx,
+		secondBatch, err := ar.ListAll(
+			ctx,
 			registry.WithListLimit(limit),
 			registry.WithListOffset(offset),
 		)
@@ -849,7 +915,8 @@ func TestAquaRegistry_ListAll(t *testing.T) {
 	})
 
 	t.Run("list with sort", func(t *testing.T) {
-		tools, err := ar.ListAll(ctx,
+		tools, err := ar.ListAll(
+			ctx,
 			registry.WithListLimit(10),
 			registry.WithSort("name"),
 		)
@@ -2056,6 +2123,70 @@ func TestEvaluateVersionConstraint_WithVersionPrefix(t *testing.T) {
 	}
 }
 
+func TestResolveVersionOverrides_VerificationMetadata(t *testing.T) {
+	registryYAML := `
+packages:
+  - type: github_release
+    repo_owner: jqlang
+    repo_name: jq
+    asset: jq-{{.OS}}-{{.Arch}}
+    version_constraint: semver(">= 1.8.0")
+    checksum:
+      type: github_release
+      asset: sha256sum.txt
+      file_format: regexp
+      algorithm: sha256
+      pattern:
+        checksum: ^(\b[A-Fa-f0-9]{64}\b)
+        file: "^\\b[A-Fa-f0-9]{64}\\b\\s+(\\S+)$"
+    cosign:
+      opts:
+        - --signature
+        - https://example.com/checksums.sig
+    github_artifact_attestations:
+      signer_workflow: jqlang/jq/.github/workflows/ci.yml
+    version_overrides:
+      - version_constraint: semver("< 1.8.0")
+        checksum:
+          type: github_release
+          asset: old-sha256sum.txt
+          algorithm: sha256
+          cosign:
+            bundle:
+              type: github_release
+              asset: old-sha256sum.txt.sigstore.json
+        minisign:
+          type: github_release
+          asset: old-sha256sum.txt.minisig
+          public_key: RWTOKEN
+`
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/x-yaml")
+		_, _ = w.Write([]byte(registryYAML))
+	}))
+	defer ts.Close()
+
+	ar := NewAquaRegistry()
+	ar.cache.baseDir = t.TempDir()
+
+	tool, err := ar.resolveVersionOverrides(ts.URL+"/registry.yaml", "1.7.1")
+	require.NoError(t, err)
+	require.NotNil(t, tool)
+
+	assert.Equal(t, "old-sha256sum.txt", tool.Checksum.Asset)
+	assert.Equal(t, "old-sha256sum.txt.sigstore.json", tool.Checksum.Cosign.Bundle.Asset)
+	assert.Equal(t, "old-sha256sum.txt.minisig", tool.Minisign.Asset)
+	assert.Equal(t, "RWTOKEN", tool.Minisign.PublicKey)
+
+	baseTool, err := ar.resolveVersionOverrides(ts.URL+"/registry.yaml", "1.8.0")
+	require.NoError(t, err)
+	assert.Equal(t, "sha256sum.txt", baseTool.Checksum.Asset)
+	assert.Equal(t, "regexp", baseTool.Checksum.FileFormat)
+	assert.Equal(t, `^(\b[A-Fa-f0-9]{64}\b)`, baseTool.Checksum.Pattern.Checksum)
+	assert.Equal(t, "https://example.com/checksums.sig", baseTool.Cosign.Opts[1])
+	assert.Equal(t, "jqlang/jq/.github/workflows/ci.yml", baseTool.GitHubArtifactAttestations.SignerWorkflow)
+}
+
 func TestExtractBinaryNameFromPackageName(t *testing.T) {
 	tests := []struct {
 		name        string
@@ -2309,6 +2440,7 @@ func TestGetLatestVersion_GitHubTag(t *testing.T) {
   - type: github_release
     repo_owner: test
     repo_name: tool
+    version_prefix: v
     version_source: github_tag
     asset: "tool-{{.Version}}-{{.OS}}-{{.Arch}}.tar.gz"
     binary_name: tool
@@ -2339,7 +2471,7 @@ func TestGetLatestTag(t *testing.T) {
 		defer ts.Close()
 
 		ar := NewAquaRegistry(WithGitHubBaseURL(ts.URL))
-		version, err := ar.getLatestTag("test", "tool", "")
+		version, err := ar.getLatestTag("test", "tool", "", false)
 		require.NoError(t, err)
 		assert.Equal(t, "2.0.0", version)
 	})
@@ -2352,7 +2484,7 @@ func TestGetLatestTag(t *testing.T) {
 		defer ts.Close()
 
 		ar := NewAquaRegistry(WithGitHubBaseURL(ts.URL))
-		version, err := ar.getLatestTag("jqlang", "jq", "jq-")
+		version, err := ar.getLatestTag("jqlang", "jq", "jq-", true)
 		require.NoError(t, err)
 		assert.Equal(t, "1.7.1", version)
 	})
@@ -2365,7 +2497,7 @@ func TestGetLatestTag(t *testing.T) {
 		defer ts.Close()
 
 		ar := NewAquaRegistry(WithGitHubBaseURL(ts.URL))
-		_, err := ar.getLatestTag("test", "empty", "")
+		_, err := ar.getLatestTag("test", "empty", "", false)
 		require.Error(t, err)
 		assert.ErrorIs(t, err, registry.ErrNoVersionsFound)
 	})
@@ -2377,7 +2509,7 @@ func TestGetLatestTag(t *testing.T) {
 		defer ts.Close()
 
 		ar := NewAquaRegistry(WithGitHubBaseURL(ts.URL))
-		_, err := ar.getLatestTag("test", "tool", "")
+		_, err := ar.getLatestTag("test", "tool", "", false)
 		require.Error(t, err)
 		assert.ErrorIs(t, err, registry.ErrHTTPRequest)
 	})
@@ -2390,7 +2522,7 @@ func TestGetLatestTag(t *testing.T) {
 		defer ts.Close()
 
 		ar := NewAquaRegistry(WithGitHubBaseURL(ts.URL))
-		_, err := ar.getLatestTag("test", "tool", "")
+		_, err := ar.getLatestTag("test", "tool", "", false)
 		require.Error(t, err)
 		assert.ErrorIs(t, err, registry.ErrRegistryParse)
 	})
@@ -2787,4 +2919,172 @@ func TestExecuteAssetTemplate_AssetWithoutExt(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, "tool_v1.0.0_linux_amd64_checksums.txt", result)
 	})
+}
+
+// TestGetTool_ThreeSegmentPackagePath verifies that GetTool correctly resolves packages
+// whose YAML lives at pkgs/<owner>/<repo>/<binary>/registry.yaml (i.e., when the binary
+// name differs from the repo name, like openbao/openbao/bao). This is a regression test
+// for the bug where search found such packages but install failed with "tool not in registry"
+// because the resolver only probed the 2-segment path pkgs/<owner>/<repo>/registry.yaml.
+//
+// See cloudposse/atmos#2383.
+func TestGetTool_ThreeSegmentPackagePath(t *testing.T) {
+	const indexYAML = `packages:
+  - name: openbao/openbao/bao
+    type: github_release
+    repo_owner: openbao
+    repo_name: openbao
+  - type: github_release
+    repo_owner: hashicorp
+    repo_name: terraform
+`
+	const openbaoYAML = `packages:
+  - name: openbao/openbao/bao
+    type: github_release
+    repo_owner: openbao
+    repo_name: openbao
+    asset: "bao_{{trimV .Version}}_{{.OS}}_{{.Arch}}.tar.gz"
+    binary_name: bao
+`
+
+	var hitsMu sync.Mutex
+	var hits []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hitsMu.Lock()
+		hits = append(hits, r.URL.Path)
+		hitsMu.Unlock()
+		switch r.URL.Path {
+		case "/registry.yaml":
+			w.Write([]byte(indexYAML))
+		case "/pkgs/openbao/openbao/bao/registry.yaml":
+			w.Write([]byte(openbaoYAML))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+
+	ar := newTestAquaRegistry(t, srv.URL)
+
+	tool, err := ar.GetTool("openbao", "openbao")
+	require.NoError(t, err)
+	assert.Equal(t, "openbao", tool.RepoOwner)
+	assert.Equal(t, "openbao", tool.RepoName)
+	assert.Equal(t, "bao", tool.BinaryName)
+	assert.Equal(t, "bao_{{trimV .Version}}_{{.OS}}_{{.Arch}}.tar.gz", tool.Asset)
+
+	hitsMu.Lock()
+	observedHits := append([]string(nil), hits...)
+	hitsMu.Unlock()
+
+	// The index path lookup must take precedence over the legacy probe. Confirm we hit
+	// the index and then the 3-segment URL directly — no wasted probes against the
+	// 2-segment path.
+	assert.Contains(t, observedHits, "/registry.yaml")
+	assert.Contains(t, observedHits, "/pkgs/openbao/openbao/bao/registry.yaml")
+	assert.NotContains(t, observedHits, "/pkgs/openbao/openbao/registry.yaml",
+		"resolver should not waste a probe on the 2-segment path when the index gives us the 3-segment one")
+}
+
+// newTestAquaRegistry returns an AquaRegistry pointed at the given fake registry server,
+// with both the file cache and the cache.Store wired to fresh temp dirs so on-disk state
+// from prior tests or real runs can't leak in.
+func newTestAquaRegistry(t *testing.T, registryURL string) *AquaRegistry {
+	t.Helper()
+	ar := NewAquaRegistry(WithRegistryBaseURL(registryURL))
+	ar.cache.baseDir = t.TempDir()
+	ar.cacheStore = cache.NewFileStore(t.TempDir())
+	return ar
+}
+
+// TestGetTool_TwoSegmentPackageStillWorks verifies the regular 2-segment path
+// (pkgs/<owner>/<repo>/registry.yaml) still resolves, both via the index lookup and via
+// the legacy prefix probe when the index entry lacks a `name` field.
+func TestGetTool_TwoSegmentPackageStillWorks(t *testing.T) {
+	const indexYAML = `packages:
+  - type: github_release
+    repo_owner: hashicorp
+    repo_name: terraform
+`
+	const terraformYAML = `packages:
+  - type: http
+    repo_owner: hashicorp
+    repo_name: terraform
+    url: "https://releases.hashicorp.com/terraform/{{.Version}}/terraform_{{.Version}}_{{.OS}}_{{.Arch}}.zip"
+    format: zip
+    binary_name: terraform
+`
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/registry.yaml":
+			w.Write([]byte(indexYAML))
+		case "/pkgs/hashicorp/terraform/registry.yaml":
+			w.Write([]byte(terraformYAML))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+
+	ar := newTestAquaRegistry(t, srv.URL)
+
+	tool, err := ar.GetTool("hashicorp", "terraform")
+	require.NoError(t, err)
+	assert.Equal(t, "terraform", tool.BinaryName)
+	assert.Equal(t, "http", tool.Type)
+}
+
+// TestGetTool_FallsBackWhenIndexUnreachable verifies that if the registry index can't be
+// fetched (e.g., GitHub outage), GetTool falls through to the legacy prefix probe and
+// can still resolve packages that live at the 2-segment path.
+func TestGetTool_FallsBackWhenIndexUnreachable(t *testing.T) {
+	const terraformYAML = `packages:
+  - type: github_release
+    repo_owner: hashicorp
+    repo_name: terraform
+    asset: "terraform_{{.Version}}_{{.OS}}_{{.Arch}}.zip"
+    binary_name: terraform
+`
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/registry.yaml":
+			http.Error(w, "simulated index outage", http.StatusInternalServerError)
+		case "/pkgs/hashicorp/terraform/registry.yaml":
+			w.Write([]byte(terraformYAML))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+
+	ar := newTestAquaRegistry(t, srv.URL)
+
+	tool, err := ar.GetTool("hashicorp", "terraform")
+	require.NoError(t, err)
+	assert.Equal(t, "terraform", tool.BinaryName)
+}
+
+// TestConvertPackagesToTools_PopulatesPathIndex verifies the side effect that
+// convertPackagesToTools rebuilds the path index so 3-segment names are reachable by
+// `<owner>/<repo>` key, and 2-segment packages get a usable default entry.
+func TestConvertPackagesToTools_PopulatesPathIndex(t *testing.T) {
+	ar := NewAquaRegistry()
+	packages := []indexPackage{
+		{Name: "openbao/openbao/bao", Type: "github_release", RepoOwner: "openbao", RepoName: "openbao"},
+		{Type: "github_release", RepoOwner: "hashicorp", RepoName: "terraform"},
+		{Name: "kubernetes/kubernetes/kubectl", Type: "github_release", RepoOwner: "kubernetes", RepoName: "kubernetes"},
+		{Type: "http", RepoOwner: "", RepoName: ""}, // ignored by pathIndex: no owner/repo and no name to parse.
+	}
+
+	ar.convertPackagesToTools(packages)
+
+	ar.pathIndexMu.RLock()
+	idx := ar.pathIndex
+	ar.pathIndexMu.RUnlock()
+
+	assert.Equal(t, "openbao/openbao/bao", idx["openbao/openbao"],
+		"3-segment name must be preserved so the resolver can find pkgs/openbao/openbao/bao/registry.yaml")
+	assert.Equal(t, "hashicorp/terraform", idx["hashicorp/terraform"],
+		"2-segment packages should still get a default <owner>/<repo> entry")
+	assert.Equal(t, "kubernetes/kubernetes/kubectl", idx["kubernetes/kubernetes"])
 }

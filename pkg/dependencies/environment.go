@@ -59,6 +59,13 @@ func ForSections(atmosConfig *schema.AtmosConfiguration, sections map[string]any
 	return newEnvironment(atmosConfig, deps)
 }
 
+// NewEnvironmentFromDeps creates a ToolchainEnvironment from a pre-loaded dependency map.
+// This is used when dependencies are already resolved (e.g., from LoadToolVersionsDependencies).
+func NewEnvironmentFromDeps(atmosConfig *schema.AtmosConfiguration, deps map[string]string) (*ToolchainEnvironment, error) {
+	defer perf.Track(atmosConfig, "dependencies.NewEnvironmentFromDeps")()
+	return newEnvironment(atmosConfig, deps)
+}
+
 // ForWorkflow creates a ToolchainEnvironment for workflow execution.
 // Merges .tool-versions with workflow-specific dependencies.
 func ForWorkflow(atmosConfig *schema.AtmosConfiguration, workflowDef *schema.WorkflowDefinition, opts ...envOption) (*ToolchainEnvironment, error) {

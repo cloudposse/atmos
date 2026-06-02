@@ -1,6 +1,7 @@
 package exec
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"os"
@@ -15,8 +16,35 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	envpkg "github.com/cloudposse/atmos/pkg/env"
+	process "github.com/cloudposse/atmos/pkg/process"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
+
+const shellHelperProcessEnv = "GO_WANT_ATMOS_SHELL_HELPER_PROCESS"
+
+func TestShellHelperProcess(t *testing.T) {
+	if os.Getenv(shellHelperProcessEnv) != "1" {
+		return
+	}
+	args := os.Args
+	for len(args) > 0 && args[0] != "--" {
+		args = args[1:]
+	}
+	if len(args) < 2 {
+		os.Exit(2)
+	}
+
+	switch args[1] {
+	case "stdout-stderr":
+		fmt.Fprint(os.Stdout, "stdout")
+		fmt.Fprint(os.Stderr, "stderr")
+	case "exit":
+		os.Exit(2)
+	default:
+		os.Exit(2)
+	}
+	os.Exit(0)
+}
 
 func TestMergeEnvVars(t *testing.T) {
 	if runtime.GOOS == "windows" {
@@ -183,6 +211,93 @@ func TestDecrementAtmosShellLevel(t *testing.T) {
 			// Clean up.
 			os.Unsetenv(atmosShellLevelEnvVar)
 		})
+	}
+}
+
+func TestExecuteShellCommandUsesInjectedStreamsAndCapture(t *testing.T) {
+	var terminalOut, terminalErr, captureOut, captureErr bytes.Buffer
+	helper := shellHelperCommand(t, "stdout-stderr")
+	err := ExecuteShellCommand(
+		schema.AtmosConfiguration{},
+		helper.command,
+		helper.args,
+		"",
+		helper.env,
+		false,
+		"",
+		WithProcessStreams(process.Streams{
+			Stdout: &terminalOut,
+			Stderr: &terminalErr,
+		}),
+		WithStdoutCapture(&captureOut),
+		WithStderrCapture(&captureErr),
+	)
+
+	require.NoError(t, err)
+	assert.Equal(t, "stdout", terminalOut.String())
+	assert.Equal(t, "stderr", terminalErr.String())
+	assert.Equal(t, "stdout", captureOut.String())
+	assert.Equal(t, "stderr", captureErr.String())
+}
+
+func TestExecuteShellCommandPreservesDetailedExitCode(t *testing.T) {
+	helper := shellHelperCommand(t, "exit")
+	err := ExecuteShellCommand(
+		schema.AtmosConfiguration{},
+		helper.command,
+		helper.args,
+		"",
+		helper.env,
+		false,
+		"",
+	)
+
+	var exitErr errUtils.ExitCodeError
+	require.ErrorAs(t, err, &exitErr)
+	assert.Equal(t, 2, exitErr.Code)
+}
+
+func TestExecuteShellCommandRedirectsStderrToStdoutCapture(t *testing.T) {
+	var terminalOut, terminalErr, captureOut bytes.Buffer
+	helper := shellHelperCommand(t, "stdout-stderr")
+	err := ExecuteShellCommand(
+		schema.AtmosConfiguration{},
+		helper.command,
+		helper.args,
+		"",
+		helper.env,
+		false,
+		"/dev/stdout",
+		WithProcessStreams(process.Streams{
+			Stdout: &terminalOut,
+			Stderr: &terminalErr,
+		}),
+		WithStdoutCapture(&captureOut),
+	)
+
+	require.NoError(t, err)
+	assert.Contains(t, terminalOut.String(), "stdout")
+	assert.Contains(t, terminalOut.String(), "stderr")
+	assert.Empty(t, terminalErr.String())
+	assert.Contains(t, captureOut.String(), "stdout")
+	assert.Contains(t, captureOut.String(), "stderr")
+}
+
+type shellHelperInvocation struct {
+	command string
+	args    []string
+	env     []string
+}
+
+func shellHelperCommand(t *testing.T, command string) shellHelperInvocation {
+	t.Helper()
+	exe, err := os.Executable()
+	require.NoError(t, err)
+
+	return shellHelperInvocation{
+		command: exe,
+		args:    []string{"-test.run=TestShellHelperProcess", "--", command},
+		env:     []string{shellHelperProcessEnv + "=1"},
 	}
 }
 
@@ -463,9 +578,7 @@ func TestExecAuthShellCommand_ExitCodePropagation(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			envVars := map[string]string{
-				"TEST_VAR": "test_value",
-			}
+			envVars := []string{"TEST_VAR=test_value"}
 			atmosConfig := &schema.AtmosConfiguration{}
 
 			err := ExecAuthShellCommand(atmosConfig, "test-identity", "test-provider", envVars, "/bin/sh", tt.shellArgs)

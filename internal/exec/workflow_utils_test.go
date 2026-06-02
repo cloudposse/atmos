@@ -3,6 +3,7 @@ package exec
 import (
 	"errors"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -1131,6 +1132,10 @@ func TestShellFieldsParseErrors(t *testing.T) {
 // TestExecuteWorkflow_ShellFieldsFallback tests that ExecuteWorkflow falls back to
 // strings.Fields when shell.Fields fails to parse the command.
 func TestExecuteWorkflow_ShellFieldsFallback(t *testing.T) {
+	if _, err := exec.LookPath("atmos"); err != nil {
+		t.Skip("skipping: atmos binary not found in PATH (required to execute atmos workflow steps)")
+	}
+
 	stacksPath := "../../tests/fixtures/scenarios/workflows"
 	t.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
 	t.Setenv("ATMOS_BASE_PATH", stacksPath)
@@ -1400,6 +1405,9 @@ func TestExecuteWorkflow_StepIdentityOverridesCommandLine(t *testing.T) {
 func TestExecuteWorkflow_MultipleStepsWithMixedTypes(t *testing.T) {
 	if testing.Short() {
 		t.Skip("Skipping integration test in short mode")
+	}
+	if _, err := exec.LookPath("atmos"); err != nil {
+		t.Skip("skipping: atmos binary not found in PATH (required to execute atmos workflow steps)")
 	}
 
 	stacksPath := "../../tests/fixtures/scenarios/workflows"
