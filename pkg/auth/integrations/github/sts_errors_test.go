@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -144,7 +145,12 @@ func TestGitHubSTSEnvironment_SkipsEmptyHostOwner(t *testing.T) {
 
 	env, err := integ.Environment()
 	require.NoError(t, err)
-	assert.Empty(t, env, "tokens missing host/owner must be skipped, yielding no GIT_CONFIG_*")
+	// Tokens missing host or owner cannot form a valid insteadOf rewrite, so no GIT_CONFIG_* is emitted.
+	// (The default token_env raw-token bridge is a separate concern and may still surface an
+	// owner-bearing token; this test asserts only the GIT_CONFIG_* invariant.)
+	for k := range env {
+		assert.False(t, strings.HasPrefix(k, "GIT_CONFIG_"), "unexpected GIT_CONFIG_* key %q", k)
+	}
 }
 
 func TestOwnersSummary_Dedup(t *testing.T) {

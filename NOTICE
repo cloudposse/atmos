@@ -632,7 +632,7 @@ BSD LICENSED DEPENDENCIES
 
   - dario.cat/mergo
     License: BSD-3-Clause
-    URL: Unknown
+    URL: https://github.com/imdario/mergo/blob/v1.0.2/LICENSE
 
   - github.com/ProtonMail/go-crypto
     License: BSD-3-Clause
@@ -908,7 +908,7 @@ BSD LICENSED DEPENDENCIES
 
   - inet.af/netaddr
     License: BSD-3-Clause
-    URL: Unknown
+    URL: https://github.com/inetaf/netaddr/blob/b8eac61e914a/LICENSE
 
   - k8s.io/apimachinery/third_party/forked/golang/reflect
     License: BSD-3-Clause

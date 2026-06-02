@@ -90,11 +90,10 @@ atmos terraform plan ...                  # terraform init of private modules ju
 atmos auth logout                         # revokes the tokens
 ```
 
-### Use it like Octo-STS
+### Hand the token to any GitHub-token consumer
 
 Beyond Atmos's own git operations, you can hand the minted token to **anything** that takes a
-GitHub token — `gh`, `actions/checkout`, or the REST API — exactly like the
-[Octo-STS action](https://github.com/octo-sts/action), but built into the CLI. Set `token_env`
+GitHub token — `gh`, `actions/checkout`, or the REST API — all built into the CLI. Set `token_env`
 on the integration to pick the variable name, then mint in one step and consume in the next with
 `atmos auth env --format=github`:
 

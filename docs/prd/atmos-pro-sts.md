@@ -85,18 +85,33 @@ url.https://x-access-token:${TOKEN}@github.com/acme/.insteadOf = https://github.
 Two materialization modes (configurable; see Configuration):
 - `env` (default): inline tokens via `GIT_CONFIG_KEY_n`/`GIT_CONFIG_VALUE_n` + `GIT_CONFIG_COUNT`.
 - `file`: a `0600` gitconfig is written and an additive `include.path` is emitted via `GIT_CONFIG_*`
-  (token values stay off the environment — safer for local dev).
+  (the `insteadOf` rewrites stay off the environment — safer for local dev; note the single-owner
+  `token_env` bridge below still exports `ATMOS_PRO_GITHUB_TOKEN` by default so in-process git reads
+  work).
 
-### Raw-token export (`token_env`) — Octo-STS parity
+### Raw-token export (`token_env`)
 The `GIT_CONFIG_*` rewrites only authenticate `git`. To use the minted token with non-git consumers
-(`gh` CLI, `actions/checkout`, the GitHub REST API) — the [Octo-STS](https://github.com/octo-sts/action)
-use case — set `spec.token_env` to a name-pattern. `Environment()` then also emits the raw token under
-that name, so `atmos auth env --format github` writes it to `$GITHUB_ENV` (or `$GITHUB_OUTPUT` via
-`--output-file`) for consumption by subsequent workflow steps. Empty (default) keeps the token off the
-environment. A literal name (e.g. `GH_TOKEN`) requires exactly one minted token — multi-owner mints
-`log.Warn` and skip the bare var; a `{owner}` placeholder (e.g. `GH_TOKEN_{owner}`) expands per owner
-(owner sanitized: uppercased, non-alphanumerics → `_`). Spec-only (no global default; see Future Work
-#4). Token values are never logged.
+(`gh` CLI, `actions/checkout`, the GitHub REST API), `Environment()` also emits the raw token under the `spec.token_env` name-pattern, so
+`atmos auth env --format github` writes it to `$GITHUB_ENV` (or `$GITHUB_OUTPUT` via `--output-file`)
+for consumption by subsequent workflow steps. **`token_env` defaults to `ATMOS_PRO_GITHUB_TOKEN`**
+(was empty): this bridges the single-owner token to non-git consumers AND to Atmos's own in-process git
+detector (`pkg/downloader` `resolveToken` reads `ATMOS_PRO_GITHUB_TOKEN` live), so `github/sts`
+composes with the default `settings.inject_github_token: true` with no workaround. A literal name
+requires exactly one minted token — multi-owner mints skip the bare var (`log.Debug` when the value is
+the implicit default, `log.Warn` when the user set an explicit literal) and rely on the `GIT_CONFIG_*`
+rewrites; a Go-template name referencing `.owner`/`.host` (e.g. `GH_TOKEN_{{ .owner }}`) is rendered
+per owner (result sanitized: uppercased, non-alphanumerics → `_`). An explicit `spec.token_env`
+overrides the default. Token values are never logged.
+
+### Avoiding broker/injection shadowing
+For Atmos-native go-getter reads (vendor pull, `source:`, remote `import:`), `CustomGitDetector` would
+otherwise inject `x-access-token:<TOKEN>@` into the URL; once the URL carries userinfo, git's
+`insteadOf` left-side no longer prefix-matches and the broker's correct least-privilege token is
+silently shadowed by the ambient `GITHUB_TOKEN`. The detector now scans the live `GIT_CONFIG_*` env for
+an `insteadOf` rewrite matching the URL's host/owner and **skips URL injection when one matches**, so
+git's rewrite wins. This is host/owner-scoped: a repo under a non-minted owner still gets the ambient
+token injected as before. (env mode only — file mode keeps its rewrites in the gitconfig file, reached
+via the `ATMOS_PRO_GITHUB_TOKEN` bridge above.)
 
 ### Revoke (client-direct)
 `DELETE https://api.github.com/installation/token` with the minted token as Bearer (401/404 treated
@@ -120,7 +135,7 @@ auth:
         policy_name: default         # optional
         git_config_mode: env         # env | file (overrides settings.pro.git_sts.git_config_mode)
         revoke_on_exit: true         # overrides settings.pro.git_sts.revoke_on_exit
-        token_env: GH_TOKEN          # optional: export raw token as a named env var (Octo-STS parity); empty = off
+        token_env: GH_TOKEN          # optional: export raw token as a named env var; default ATMOS_PRO_GITHUB_TOKEN
 
 settings:
   pro:
@@ -245,3 +260,12 @@ These were explicitly deferred:
    renumber/offset indices.
 6. **Surface `excluded[]` in `whoami`/`validate`.** v1 surfaces deny reasons via `log.Warn` at mint
    only.
+
+## References
+
+- The raw-token export (`token_env`) pattern — minting a short-lived, least-privilege GitHub token in
+  one CI step and consuming it in later steps — was inspired by
+  [Octo-STS](https://github.com/octo-sts/action), which provides OIDC-brokered GitHub App tokens in
+  GitHub Actions. Atmos builds the equivalent capability directly into the CLI as part of the
+  `github/sts` integration (exposed via `atmos auth env --format=github`, which writes the raw token to
+  `$GITHUB_ENV` for later workflow steps).
