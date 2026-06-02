@@ -95,7 +95,7 @@ func processConfigImportsWithFS(source *schema.AtmosConfiguration, dst *viper.Vi
 			log.Debug("Failed to remove temp directory", "path", tempDir, "error", err)
 		}
 	}()
-	resolvedPaths, err := processImports(basePath, importPaths, tempDir, 1, MaximumImportLvL)
+	resolvedPaths, err := processImports(source, basePath, importPaths, tempDir, 1, MaximumImportLvL)
 	if err != nil {
 		return err
 	}
@@ -118,11 +118,16 @@ func processConfigImportsWithFS(source *schema.AtmosConfiguration, dst *viper.Vi
 
 // ProcessImportsFromAdapter is the public entry point for adapters to process nested imports.
 // Adapters should call this when they discover nested import statements in resolved configs.
-func ProcessImportsFromAdapter(basePath string, importPaths []string, tempDir string, currentDepth, maxDepth int) ([]ResolvedPaths, error) {
-	return processImports(basePath, importPaths, tempDir, currentDepth, maxDepth)
+// The atmosConfig parameter is threaded through so nested remote imports honor auth settings
+// (GitHub token injection and the Atmos Pro credential broker); it may be nil.
+//
+//nolint:revive // argument-limit: atmosConfig threaded through for remote-import auth.
+func ProcessImportsFromAdapter(atmosConfig *schema.AtmosConfiguration, basePath string, importPaths []string, tempDir string, currentDepth, maxDepth int) ([]ResolvedPaths, error) {
+	return processImports(atmosConfig, basePath, importPaths, tempDir, currentDepth, maxDepth)
 }
 
-func processImports(basePath string, importPaths []string, tempDir string, currentDepth, maxDepth int) (resolvedPaths []ResolvedPaths, err error) {
+//nolint:revive // argument-limit: atmosConfig threaded through for remote-import auth.
+func processImports(atmosConfig *schema.AtmosConfiguration, basePath string, importPaths []string, tempDir string, currentDepth, maxDepth int) (resolvedPaths []ResolvedPaths, err error) {
 	if basePath == "" {
 		return nil, errUtils.ErrBasePath
 	}
@@ -150,7 +155,7 @@ func processImports(basePath string, importPaths []string, tempDir string, curre
 
 		// Use the adapter registry to find the appropriate adapter.
 		adapter := FindImportAdapter(importPath)
-		paths, resolveErr = adapter.Resolve(ctx, importPath, basePath, tempDir, currentDepth, maxDepth)
+		paths, resolveErr = adapter.Resolve(ctx, importPath, basePath, tempDir, currentDepth, maxDepth, atmosConfig)
 
 		if resolveErr != nil {
 			log.Debug("failed to resolve import", "path", importPath, "error", resolveErr)

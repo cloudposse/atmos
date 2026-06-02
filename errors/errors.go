@@ -69,6 +69,8 @@ var (
 	ErrMissingAtmosConfig                    = errors.New("atmos configuration not found or invalid")
 	ErrNotInGitRepository                    = errors.New("not inside a git repository")
 	ErrCommandNil                            = errors.New("command cannot be nil")
+	ErrProcessStartFailed                    = errors.New("process start failed")
+	ErrProcessWaitFailed                     = errors.New("process wait failed")
 	ErrGitHubRateLimitExceeded               = errors.New("GitHub API rate limit exceeded")
 	ErrInvalidLimit                          = errors.New("limit must be between 1 and 100")
 	ErrInvalidOffset                         = errors.New("offset must be >= 0")
@@ -213,6 +215,15 @@ var (
 	ErrHeadLookup     = errors.New("HEAD not found")
 	ErrInvalidFormat  = errors.New("invalid format")
 	ErrOutputFormat   = errors.New("output format error")
+
+	// Scheduler errors.
+	ErrNilGraph      = errors.New("scheduler graph cannot be nil")
+	ErrNilDispatcher = errors.New("scheduler dispatcher cannot be nil")
+	ErrNodeFailed    = errors.New("scheduler node failed")
+	ErrNodeSkipped   = errors.New("scheduler node skipped")
+	ErrNodeNotFound  = errors.New("scheduler node not found")
+	ErrInvalidGraph  = errors.New("scheduler graph is invalid")
+	ErrInvalidWorker = errors.New("scheduler max concurrency must be greater than zero")
 
 	// Slice utility errors.
 	ErrNilInput         = errors.New("input must not be nil")
@@ -608,9 +619,18 @@ var (
 	ErrWorkflowNoWorkflow            = errors.New("no workflow found")
 	ErrWorkflowFileNotFound          = errors.New("workflow file not found")
 	ErrInvalidWorkflowManifest       = errors.New("invalid workflow manifest")
+	ErrUnknownStepType               = errors.New("unknown step type")
+	ErrStepOptionsRequired           = errors.New("options is required for step")
+	ErrStepContentOrOptionsRequired  = errors.New("either content or options is required for step")
+	ErrStepDataOrContentRequired     = errors.New("either data or content is required for step")
+	ErrStepEmptyCommand              = errors.New("empty command for step")
+	ErrStepNoFilesFound              = errors.New("no files found matching criteria")
+	ErrStepFieldRequired             = errors.New("required field missing for step")
+	ErrStepTTYRequired               = errors.New("interactive terminal required for step")
 	ErrWorkingDirNotFound            = errors.New("working directory does not exist")
 	ErrWorkingDirNotDirectory        = errors.New("working directory path is not a directory")
 	ErrWorkingDirAccessFailed        = errors.New("failed to access working directory")
+	ErrWorkflowExit                  = errors.New("workflow exit requested")
 	ErrAuthProviderNotAvailable      = errors.New("auth provider is not available")
 	ErrInvalidComponentArgument      = errors.New("invalid arguments. The command requires one argument 'componentName'")
 	ErrValidation                    = errors.New("validation failed")
@@ -769,6 +789,9 @@ var (
 	ErrWebflowMissingCallbackCode = errors.New("missing authorization code in callback")
 	ErrWebflowStateMismatch       = errors.New("state mismatch: possible CSRF attack")
 	ErrWebflowEmptyCachedToken    = errors.New("cached refresh token is empty")
+	// ErrWebflowDPoP indicates a failure generating or serializing the RFC 9449
+	// DPoP proof required on AWS signin token requests (issue #2542).
+	ErrWebflowDPoP = errors.New("failed to build DPoP proof")
 
 	// Credential errors.
 	ErrCredentialsInvalid = errors.New("credentials are invalid or have been revoked")
@@ -934,9 +957,12 @@ var (
 	ErrECRInvalidRegistry  = errors.New("invalid ECR registry URL")
 	ErrECRLoginNoArgs      = errors.New("specify an server name, --identity, or --registry")
 	ErrECRLoginFailed      = errors.New("ECR login failed")
-	ErrECRIdentitySelect   = errors.New("interactive identity selection is not supported for this command; specify an identity name with --identity=<name>")
 	ErrDockerConfigWrite   = errors.New("failed to write Docker config")
 	ErrDockerConfigRead    = errors.New("failed to read Docker config")
+
+	// ECR Public authentication errors.
+	ErrECRPublicAuthFailed    = errors.New("ECR Public authentication failed")
+	ErrECRPublicInvalidRegion = errors.New("invalid ECR Public region: only us-east-1 and us-west-2 are supported")
 
 	// EKS server errors.
 	ErrEKSDescribeCluster   = errors.New("failed to describe EKS cluster")
@@ -946,6 +972,23 @@ var (
 	ErrKubeconfigPath       = errors.New("failed to determine kubeconfig path")
 	ErrKubeconfigWrite      = errors.New("failed to write kubeconfig")
 	ErrKubeconfigMerge      = errors.New("failed to merge kubeconfig")
+
+	// Atmos Pro authentication (atmos/pro provider) errors.
+	ErrProAuthFailed         = errors.New("authentication to Atmos Pro failed")
+	ErrProWorkspaceIDMissing = errors.New("workspace ID for Atmos Pro is required (set via auth provider spec.workspace_id, settings.pro.workspace_id, or ATMOS_PRO_WORKSPACE_ID)")
+	ErrProCredentialsType    = errors.New("expected Atmos Pro credentials")
+
+	// GitHub STS integration (github/sts) errors.
+	ErrSTSMintFailed           = errors.New("failed to mint GitHub STS tokens")
+	ErrSTSNoEntitlement        = errors.New("workspace is not entitled to GitHub STS or the feature is disabled")
+	ErrNotGitHubActionsSession = errors.New("GitHub STS requires a GitHub Actions session")
+	ErrGitHubTokenRevokeFailed = errors.New("failed to revoke GitHub installation token")
+	ErrGitSTSStateWrite        = errors.New("failed to write GitHub STS state")
+	ErrGitSTSStateRead         = errors.New("failed to read GitHub STS state")
+
+	// Integration via configuration errors.
+	ErrIntegrationViaMissing   = errors.New("integration must define via.identity or via.provider")
+	ErrIntegrationViaAmbiguous = errors.New("integration must define exactly one of via.identity or via.provider")
 
 	// Identity authentication errors.
 	ErrIdentityAuthFailed      = errors.New("failed to authenticate identity")

@@ -41,6 +41,7 @@ func NewGlobalOptionsBuilder() *GlobalOptionsBuilder {
 	builder.registerProfilingFlags(&defaults)
 	builder.registerPerformanceFlags(&defaults)
 	builder.registerAIFlags(&defaults)
+	builder.registerSettingsFlags(&defaults)
 	builder.registerSystemFlags(&defaults)
 
 	return builder
@@ -182,6 +183,19 @@ func (b *GlobalOptionsBuilder) registerAIFlags(defaults *global.Flags) {
 			EnvVars:     []string{"ATMOS_SKILL"},
 		})
 	})
+}
+
+// registerSettingsFlags registers stack/settings configuration flags.
+func (b *GlobalOptionsBuilder) registerSettingsFlags(defaults *global.Flags) {
+	defer perf.Track(nil, "flags.GlobalOptionsBuilder.registerSettingsFlags")()
+
+	b.options = append(b.options, WithStringFlag(
+		"settings-list-merge-strategy",
+		"",
+		defaults.SettingsListMergeStrategy,
+		"Override settings.list_merge_strategy for this invocation. Controls how lists are merged in Atmos stack manifests (replace, append, merge)",
+	))
+	b.options = append(b.options, WithEnvVars("settings-list-merge-strategy", "ATMOS_SETTINGS_LIST_MERGE_STRATEGY"))
 }
 
 // registerSystemFlags registers system configuration flags.

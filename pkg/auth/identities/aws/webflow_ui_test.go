@@ -235,8 +235,8 @@ func TestHandleSpinnerFallback_DrainedResultReturned(t *testing.T) {
 
 	resp, err := identity.handleSpinnerFallback(&spinnerFallbackParams{
 		cancel: cancel, tokenCh: tokenCh, resultCh: resultCh,
-		region: "us-east-2", verifier: "verifier", redirectURI: "http://127.0.0.1:0/oauth/callback",
-		runErr: errUtils.ErrWebflowAuthFailed,
+		exchange: webflowExchange{region: "us-east-2", verifier: "verifier", redirectURI: "http://127.0.0.1:0/oauth/callback"},
+		runErr:   errUtils.ErrWebflowAuthFailed,
 	})
 	require.NoError(t, err)
 	require.NotNil(t, resp)
@@ -260,8 +260,8 @@ func TestHandleSpinnerFallback_DrainedErrorReturned(t *testing.T) {
 
 	resp, err := identity.handleSpinnerFallback(&spinnerFallbackParams{
 		cancel: cancel, tokenCh: tokenCh, resultCh: resultCh,
-		region: "us-east-2", verifier: "verifier", redirectURI: "http://127.0.0.1:0/oauth/callback",
-		runErr: errUtils.ErrWebflowAuthFailed,
+		exchange: webflowExchange{region: "us-east-2", verifier: "verifier", redirectURI: "http://127.0.0.1:0/oauth/callback"},
+		runErr:   errUtils.ErrWebflowAuthFailed,
 	})
 	assert.Nil(t, resp)
 	require.Error(t, err)

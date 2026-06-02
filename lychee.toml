@@ -83,6 +83,9 @@ exclude = [
   "file://.*/ai/skill-marketplace",
   # Example/placeholder URLs in usage documentation
   "github\\.com/user/repo",
+  # Claude Code product page (claude.com edge returns 500 to non-browser/CI requests;
+  # the docs subdomain code.claude.com is reachable and is intentionally not excluded)
+  "claude\\.com/product/",
   # regex101.com (intermittent 504 Gateway Timeout in CI)
   "regex101\\.com",
 ]
