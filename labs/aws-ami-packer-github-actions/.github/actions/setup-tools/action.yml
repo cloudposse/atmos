@@ -5,7 +5,7 @@ inputs:
   atmos-version:
     description: Atmos version to install.
     required: false
-    default: "1.190.0"
+    default: "1.220.0"
   packer-version:
     description: Packer version to install.
     required: false

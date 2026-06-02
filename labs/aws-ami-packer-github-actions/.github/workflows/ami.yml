@@ -16,7 +16,7 @@ on:
   workflow_dispatch:
     inputs:
       source_ami_name:
-        description: "Base AMI name/pattern to build from (e.g. al2023-ami-minimal-2023.7.*-x86_64). Leave blank to use the stack default."
+        description: "Base AMI name/pattern to build from (e.g. al2023-ami-minimal-2023.7.*-x86_64)."
         required: false
         default: ""
       stack:
