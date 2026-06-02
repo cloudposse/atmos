@@ -9,6 +9,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"go.uber.org/mock/gomock"
+
+	execpkg "github.com/cloudposse/atmos/pkg/exec"
 )
 
 // successCmd returns a command that will exit successfully on any platform.
@@ -45,13 +47,13 @@ func TestIsAvailable_WithMocks(t *testing.T) {
 	tests := []struct {
 		name            string
 		runtimeType     Type
-		setupMock       func(*MockCommandExecutor)
+		setupMock       func(*execpkg.MockCommandExecutor)
 		expectAvailable bool
 	}{
 		{
 			name:        "docker available - binary exists and info succeeds",
 			runtimeType: TypeDocker,
-			setupMock: func(m *MockCommandExecutor) {
+			setupMock: func(m *execpkg.MockCommandExecutor) {
 				// LookPath succeeds.
 				m.EXPECT().
 					LookPath("docker").
@@ -70,7 +72,7 @@ func TestIsAvailable_WithMocks(t *testing.T) {
 		{
 			name:        "docker unavailable - binary missing",
 			runtimeType: TypeDocker,
-			setupMock: func(m *MockCommandExecutor) {
+			setupMock: func(m *execpkg.MockCommandExecutor) {
 				// LookPath fails.
 				m.EXPECT().
 					LookPath("docker").
@@ -82,7 +84,7 @@ func TestIsAvailable_WithMocks(t *testing.T) {
 		{
 			name:        "docker unavailable - binary exists but not running",
 			runtimeType: TypeDocker,
-			setupMock: func(m *MockCommandExecutor) {
+			setupMock: func(m *execpkg.MockCommandExecutor) {
 				// LookPath succeeds.
 				m.EXPECT().
 					LookPath("docker").
@@ -101,7 +103,7 @@ func TestIsAvailable_WithMocks(t *testing.T) {
 		{
 			name:        "podman available - binary exists and info succeeds",
 			runtimeType: TypePodman,
-			setupMock: func(m *MockCommandExecutor) {
+			setupMock: func(m *execpkg.MockCommandExecutor) {
 				// LookPath succeeds.
 				m.EXPECT().
 					LookPath("podman").
@@ -120,7 +122,7 @@ func TestIsAvailable_WithMocks(t *testing.T) {
 		{
 			name:        "podman unavailable - binary missing",
 			runtimeType: TypePodman,
-			setupMock: func(m *MockCommandExecutor) {
+			setupMock: func(m *execpkg.MockCommandExecutor) {
 				// LookPath fails.
 				m.EXPECT().
 					LookPath("podman").
@@ -132,7 +134,7 @@ func TestIsAvailable_WithMocks(t *testing.T) {
 		{
 			name:        "podman unavailable - binary exists but info fails (no auto-start)",
 			runtimeType: TypePodman,
-			setupMock: func(m *MockCommandExecutor) {
+			setupMock: func(m *execpkg.MockCommandExecutor) {
 				// LookPath succeeds.
 				m.EXPECT().
 					LookPath("podman").
@@ -167,7 +169,7 @@ func TestIsAvailable_WithMocks(t *testing.T) {
 			defer ctrl.Finish()
 
 			// Create mock executor.
-			mockExec := NewMockCommandExecutor(ctrl)
+			mockExec := execpkg.NewMockCommandExecutor(ctrl)
 
 			// Setup mock expectations.
 			tt.setupMock(mockExec)
@@ -191,13 +193,13 @@ func TestCheckRuntimeStatus(t *testing.T) {
 	tests := []struct {
 		name           string
 		runtimeType    Type
-		setupMock      func(*MockCommandExecutor)
+		setupMock      func(*execpkg.MockCommandExecutor)
 		expectedStatus RuntimeStatus
 	}{
 		{
 			name:        "podman needs init - no machine exists",
 			runtimeType: TypePodman,
-			setupMock: func(m *MockCommandExecutor) {
+			setupMock: func(m *execpkg.MockCommandExecutor) {
 				m.EXPECT().
 					LookPath("podman").
 					Return("/usr/bin/podman", nil).
@@ -222,7 +224,7 @@ func TestCheckRuntimeStatus(t *testing.T) {
 		{
 			name:        "podman needs start - machine exists but not running",
 			runtimeType: TypePodman,
-			setupMock: func(m *MockCommandExecutor) {
+			setupMock: func(m *execpkg.MockCommandExecutor) {
 				m.EXPECT().
 					LookPath("podman").
 					Return("/usr/bin/podman", nil).
@@ -247,7 +249,7 @@ func TestCheckRuntimeStatus(t *testing.T) {
 		{
 			name:        "docker not responding",
 			runtimeType: TypeDocker,
-			setupMock: func(m *MockCommandExecutor) {
+			setupMock: func(m *execpkg.MockCommandExecutor) {
 				m.EXPECT().
 					LookPath("docker").
 					Return("/usr/bin/docker", nil).
@@ -269,7 +271,7 @@ func TestCheckRuntimeStatus(t *testing.T) {
 			ctrl := gomock.NewController(t)
 			defer ctrl.Finish()
 
-			mockExec := NewMockCommandExecutor(ctrl)
+			mockExec := execpkg.NewMockCommandExecutor(ctrl)
 			tt.setupMock(mockExec)
 
 			setExecutor(mockExec)
@@ -289,7 +291,7 @@ func TestTryRecoverPodmanRuntime(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
 
-		mockExec := NewMockCommandExecutor(ctrl)
+		mockExec := execpkg.NewMockCommandExecutor(ctrl)
 
 		// Initial status check.
 		mockExec.EXPECT().
@@ -337,7 +339,7 @@ func TestTryRecoverPodmanRuntime(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
 
-		mockExec := NewMockCommandExecutor(ctrl)
+		mockExec := execpkg.NewMockCommandExecutor(ctrl)
 
 		// Initial status check.
 		mockExec.EXPECT().
@@ -392,7 +394,7 @@ func TestTryRecoverPodmanRuntime(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
 
-		mockExec := NewMockCommandExecutor(ctrl)
+		mockExec := execpkg.NewMockCommandExecutor(ctrl)
 
 		// Initial status check.
 		mockExec.EXPECT().
