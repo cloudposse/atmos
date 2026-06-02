@@ -84,12 +84,18 @@ func (s *sessionTokenStore) Put(key string, token ssoTokenCache) {
 	s.inMemory[key] = token
 }
 
-// Forget removes both the in-memory entry and the per-session mutex for the given
-// key. Used during logout so a subsequent login starts fresh.
+// Forget drops the in-memory token for the given key so a subsequent login
+// re-authenticates instead of reusing a logged-out session.
+//
+// The per-session mutex in s.locks is intentionally retained. Deleting it would
+// break single-flight: if a logout overlaps an in-flight device-auth flow that
+// holds the mutex, a later Acquire(key) would mint a brand-new mutex and the next
+// login would no longer serialize against the in-flight flow — producing two
+// device-auth flows for the same portal. The mutex is cheap and bounded by the
+// number of distinct portals, so leaking it is harmless.
 func (s *sessionTokenStore) Forget(key string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	delete(s.inMemory, key)
-	delete(s.locks, key)
 }

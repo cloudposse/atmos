@@ -17,6 +17,14 @@ import (
 // was registered with the "refresh_token" grant type.
 const ssoRefreshGrantType = "refresh_token"
 
+// ssoTokenRefresher is the minimal slice of *ssooidc.Client that tryRefreshToken
+// needs. Depending on this interface (rather than the concrete client) lets tests
+// inject a mock and exercise the token-rotation, success, and API-error paths
+// without a live AWS endpoint. The real *ssooidc.Client satisfies it.
+type ssoTokenRefresher interface {
+	CreateToken(ctx context.Context, params *ssooidc.CreateTokenInput, optFns ...func(*ssooidc.Options)) (*ssooidc.CreateTokenOutput, error)
+}
+
 // errRefreshNotSupported indicates the cached token predates refresh-token support
 // (e.g., written by an older atmos version) and cannot be refreshed. Callers should
 // fall through to the device-authorization flow.
@@ -33,7 +41,7 @@ var errRefreshNotSupported = errors.New("cached token has no refresh token; full
 //	"When you sign in, the SSO token configuration uses the refresh token to obtain
 //	 a new SSO token whenever the access token expires, until the maximum session
 //	 duration has been reached."
-func tryRefreshToken(ctx context.Context, client *ssooidc.Client, cached ssoTokenCache) (ssoTokenCache, error) {
+func tryRefreshToken(ctx context.Context, client ssoTokenRefresher, cached ssoTokenCache) (ssoTokenCache, error) {
 	if cached.RefreshToken == "" || cached.ClientID == "" || cached.ClientSecret == "" {
 		return ssoTokenCache{}, errRefreshNotSupported
 	}

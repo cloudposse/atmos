@@ -93,13 +93,19 @@ func TestSessionTokenStore_Forget(t *testing.T) {
 		AccessToken: "tok",
 		ExpiresAt:   time.Now().Add(1 * time.Hour),
 	})
-	// Touch the lock map too.
-	_ = s.Acquire("portal-a")
+	mu := s.Acquire("portal-a")
 
 	s.Forget("portal-a")
 
 	_, ok := s.Get("portal-a")
 	assert.False(t, ok, "Forget must drop the in-memory entry")
+
+	// The per-session mutex must be RETAINED across Forget. Deleting it would let a
+	// logout that overlaps an in-flight device-auth flow break single-flight: the
+	// next Acquire would mint a fresh mutex and a concurrent login would no longer
+	// serialize against the in-flight flow. Same key must still return the same mutex.
+	assert.Same(t, mu, s.Acquire("portal-a"),
+		"Forget must not delete the per-session mutex (single-flight depends on it)")
 }
 
 func TestSessionTokenStore_ConcurrentAcquireIsRaceSafe(t *testing.T) {

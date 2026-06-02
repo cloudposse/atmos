@@ -62,9 +62,9 @@ by the same SSO portal, only one device-auth flow runs and the other two wait on
 
 ## Migration
 
-None required. Existing `atmos.yaml` files keep working. Old per-provider cache files become orphans on first login
-post-upgrade — they're not deleted automatically (another in-flight atmos version might still be using them) but
-get cleared by `atmos auth logout`.
+None required. Existing `atmos.yaml` files keep working. Old per-provider cache files can become orphans on first
+login post-upgrade, and they are not deleted automatically. `atmos auth logout` evicts the in-memory portal session
+and removes the new session-keyed cache file; clearing any leftover legacy per-provider files is a manual step.
 
 If you previously relied on atmos's cache being disjoint from the `aws` CLI's cache, that separation is unchanged
 in this release. Sharing the cache with `aws sso login` directly is tracked as a future opt-in; see the PRD at
