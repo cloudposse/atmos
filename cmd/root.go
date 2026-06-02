@@ -1561,14 +1561,26 @@ func Execute() error {
 	}
 
 	// Handle sentinel errors with errors.Is().
-	if err != nil {
-		if errors.Is(err, errUtils.ErrCommandNotFound) {
-			command, _ := errUtils.GetContext(err, "command")
-			showUsageAndExit(RootCmd, []string{command})
-		}
+	// Only an unknown Atmos subcommand should fall back to root usage. A missing
+	// external executable (ErrCommandNotFound, e.g. `atmos auth exec -- <cmd>`)
+	// must surface its own error, not "the command atmos requires a subcommand".
+	if command, ok := unknownSubcommand(err); ok {
+		showUsageAndExit(RootCmd, []string{command})
 	}
 
 	return err
+}
+
+// unknownSubcommand reports whether err represents an unknown Atmos subcommand
+// (as converted from Cobra in cmd/internal/executor.go) and returns the offending
+// command name. It deliberately does NOT match ErrCommandNotFound, which is used
+// for missing external executables referenced by the user.
+func unknownSubcommand(err error) (string, bool) {
+	if err == nil || !errors.Is(err, errUtils.ErrUnknownSubcommand) {
+		return "", false
+	}
+	command, _ := errUtils.GetContext(err, "command")
+	return command, true
 }
 
 // preprocessArgs runs all argument preprocessing before Cobra parses.

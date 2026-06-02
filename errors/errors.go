@@ -356,6 +356,7 @@ var (
 	ErrStackManifestSchemaValidation              = errors.New("stack manifest schema validation failed")
 	ErrStackImportSelf                            = errors.New("stack manifest imports itself")
 	ErrStackImportNotFound                        = errors.New("stack import not found")
+	ErrImportPathTemplate                         = errors.New("failed to render Go template in import path")
 	ErrStackCircularInheritance                   = errors.New("circular component inheritance detected")
 	ErrInvalidHooksSection                        = errors.New("invalid 'hooks' section in the file")
 	ErrInvalidTerraformHooksSection               = errors.New("invalid 'terraform.hooks' section in the file")
