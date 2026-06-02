@@ -306,10 +306,17 @@ func TestGitHubSTSTokenEnv_EnvMode(t *testing.T) {
 		absent   []string          // env keys that must NOT be present
 	}{
 		{
-			name:     "empty token_env keeps token off env",
+			name:     "empty token_env defaults to ATMOS_PRO_GITHUB_TOKEN for single owner",
 			tokenEnv: "",
 			tokens:   singleToken,
+			want:     map[string]string{"ATMOS_PRO_GITHUB_TOKEN": "ghs_acme"},
 			absent:   []string{"GH_TOKEN"},
+		},
+		{
+			name:     "empty token_env default skips bare var for multiple owners (insteadOf still covers them)",
+			tokenEnv: "",
+			tokens:   multiToken,
+			absent:   []string{"ATMOS_PRO_GITHUB_TOKEN", "GH_TOKEN"},
 		},
 		{
 			name:     "literal name with single token exports it",
@@ -324,10 +331,22 @@ func TestGitHubSTSTokenEnv_EnvMode(t *testing.T) {
 			absent:   []string{"GH_TOKEN"},
 		},
 		{
-			name:     "owner placeholder expands per owner and sanitizes",
-			tokenEnv: "GH_TOKEN_{owner}",
+			name:     "owner template expands per owner and sanitizes",
+			tokenEnv: "GH_TOKEN_{{ .owner }}",
 			tokens:   multiToken,
 			want:     map[string]string{"GH_TOKEN_ACME": "ghs_acme", "GH_TOKEN_CLOUD_POSSE": "ghs_cp"},
+		},
+		{
+			name:     "host template variable is available and sanitized",
+			tokenEnv: "TOKEN_{{ .host }}_{{ .owner }}",
+			tokens:   singleToken,
+			want:     map[string]string{"TOKEN_GITHUB_COM_ACME": "ghs_acme"},
+		},
+		{
+			name:     "invalid template is skipped gracefully",
+			tokenEnv: "GH_{{ .nonexistent }}",
+			tokens:   singleToken,
+			absent:   []string{"GH_", "GH"},
 		},
 	}
 
@@ -367,7 +386,7 @@ func TestGitHubSTSTokenEnv_FileMode(t *testing.T) {
 	})
 	defer srv.Close()
 
-	// File mode keeps tokens off env by default, but token_env is an explicit opt-in override.
+	// File mode emits include.path; an explicit token_env layers the raw token var on top.
 	integ := newIntegration(t, "realmA",
 		&schema.IntegrationSpec{GitConfigMode: GitConfigModeFile, TokenEnv: "GH_TOKEN"},
 		&schema.IntegrationVia{Provider: "atmos-pro"})
@@ -379,6 +398,30 @@ func TestGitHubSTSTokenEnv_FileMode(t *testing.T) {
 	// include.path is still emitted, and the token var is layered on top.
 	assert.Equal(t, "include.path", env["GIT_CONFIG_KEY_0"])
 	assert.Equal(t, "ghs_acme", env["GH_TOKEN"])
+}
+
+// TestGitHubSTSTokenEnv_FileMode_DefaultBridge verifies that in file mode the default token_env
+// still bridges the single-owner token via ATMOS_PRO_GITHUB_TOKEN (the in-process git detector
+// cannot see file-mode include.path, so it relies on this env var).
+func TestGitHubSTSTokenEnv_FileMode_DefaultBridge(t *testing.T) {
+	xdg := t.TempDir()
+	t.Setenv("ATMOS_XDG_DATA_HOME", xdg)
+
+	srv := stsServer(t, http.StatusOK, stsResponse{
+		Tokens: []stsToken{{Host: "github.com", Owner: "acme", Token: "ghs_acme", ExpiresAt: "2030-01-01T00:00:00Z"}},
+	})
+	defer srv.Close()
+
+	integ := newIntegration(t, "realmA",
+		&schema.IntegrationSpec{GitConfigMode: GitConfigModeFile},
+		&schema.IntegrationVia{Provider: "atmos-pro"})
+	require.NoError(t, integ.Execute(context.Background(), proCreds(srv.URL)))
+
+	env, err := integ.Environment()
+	require.NoError(t, err)
+
+	assert.Equal(t, "include.path", env["GIT_CONFIG_KEY_0"])
+	assert.Equal(t, "ghs_acme", env["ATMOS_PRO_GITHUB_TOKEN"])
 }
 
 func TestSanitizeEnvName(t *testing.T) {

@@ -129,7 +129,7 @@ auth:
         policy_name: default         # optional trust policy name
         git_config_mode: env         # "env" (default, inline GIT_CONFIG_*) or "file" (write a 0600 gitconfig + include.path)
         revoke_on_exit: true         # auto-revoke at command-end in CI (default true); set false to keep creds for a separate step
-        token_env: GH_TOKEN          # optional: also export the raw token as $GH_TOKEN (for gh/checkout/API). Empty = off
+        token_env: GH_TOKEN          # optional: also export the raw token as $GH_TOKEN (for gh/checkout/API). Default: ATMOS_PRO_GITHUB_TOKEN
 ```
 
 **`spec` fields:**
@@ -151,10 +151,22 @@ auth:
   <dd>Auto-revoke minted tokens at command-end in CI. Defaults to `true`. Set `false` to keep credentials alive for a separate CI step. Overrides `settings.pro.git_sts.revoke_on_exit`.</dd>
 
   <dt>`token_env`</dt>
-  <dd>Optional env var name to export the **raw** minted token under, for consumers beyond git (`gh` CLI, `actions/checkout`, the REST API) — the [Octo-STS](https://github.com/octo-sts/action) use case. Empty (default) keeps the token off the environment; only the transparent `GIT_CONFIG_*` rewrites are emitted. A literal name (e.g. `GH_TOKEN`) requires exactly one minted token; for multi-org runs use a `{owner}` placeholder (e.g. `GH_TOKEN_{owner}`) to export one variable per owner (the owner is uppercased with non-alphanumerics replaced by `_`).</dd>
+  <dd>
+    Env var name to export the **raw** minted token under, for consumers beyond git (`gh` CLI, `actions/checkout`, the REST API) — the [Octo-STS](https://github.com/octo-sts/action) use case. **Defaults to `ATMOS_PRO_GITHUB_TOKEN`** so the single-owner token also reaches Atmos's own in-process git reads (vendoring, `source:`, remote `import:`) and composes with the default `settings.inject_github_token: true` — no workaround needed.
+
+    The value is either a **literal** name (e.g. `GH_TOKEN`), which requires exactly one minted token, or a **Go template** — the same `{{ .field }}` syntax used elsewhere in Atmos — rendered once per minted token, which is how a single mint populates one variable per owner in multi-org runs. Multi-owner mints under a literal name skip the raw export and rely on the transparent `GIT_CONFIG_*` rewrites. The rendered name is sanitized into a valid environment variable name (uppercased, with every character outside `[A-Z0-9_]` replaced by `_`).
+
+    Template variables:
+    <dl>
+      <dt>`.owner`</dt>
+      <dd>The GitHub org/user the token is scoped to (e.g. `acme`). Example: `token_env: GH_TOKEN_{{ .owner }}` → `GH_TOKEN_ACME`.</dd>
+      <dt>`.host`</dt>
+      <dd>The git host the token is scoped to (e.g. `github.com`). Example: `token_env: TOKEN_{{ .host }}_{{ .owner }}` → `TOKEN_GITHUB_COM_ACME`.</dd>
+    </dl>
+  </dd>
 </dl>
 
-For Atmos-native git operations (vendoring, `source:` provisioning, go-getter) you can also set the **`ATMOS_PRO_GITHUB_TOKEN`** environment variable; Atmos prefers it over `ATMOS_GITHUB_TOKEN` and `GITHUB_TOKEN`.
+For Atmos-native git operations (vendoring, `source:` provisioning, go-getter) the minted token is exported as **`ATMOS_PRO_GITHUB_TOKEN`** by default (see `token_env` above); Atmos prefers it over `ATMOS_GITHUB_TOKEN` and `GITHUB_TOKEN`. When a `github/sts` `GIT_CONFIG_*` rewrite already covers a repo's owner, Atmos skips URL token injection for it so git's rewrite (carrying the correct least-privilege token) wins instead of being shadowed — so `settings.inject_github_token` can be left at its default `true`.
 
 #### Use it like Octo-STS — mint in one step, consume in the next
 

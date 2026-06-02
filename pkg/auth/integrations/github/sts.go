@@ -14,6 +14,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"text/template"
 	"time"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -38,6 +39,12 @@ const (
 
 	defaultPolicyName = "default"
 	gitTokenUser      = "x-access-token"
+
+	// Default env var the minted token is exported under when token_env is unset. It bridges the
+	// single-owner token to non-git consumers (gh/REST) and to Atmos's in-process git detector
+	// (pkg/downloader resolveToken reads ATMOS_PRO_GITHUB_TOKEN live), so github/sts composes with
+	// the default settings.inject_github_token: true without a workaround.
+	defaultTokenEnv = "ATMOS_PRO_GITHUB_TOKEN"
 
 	stateFileName  = "state.json"
 	configFileName = "git.config"
@@ -149,7 +156,7 @@ type stsSpec struct {
 
 // parseSTSSpec extracts and validates the github/sts spec fields, applying defaults.
 func parseSTSSpec(config *integrations.IntegrationConfig) (*stsSpec, error) {
-	parsed := &stsSpec{policyName: defaultPolicyName, gitConfigMode: GitConfigModeEnv}
+	parsed := &stsSpec{policyName: defaultPolicyName, gitConfigMode: GitConfigModeEnv, tokenEnv: defaultTokenEnv}
 
 	spec := config.Config.Spec
 	if spec == nil {
@@ -160,7 +167,10 @@ func parseSTSSpec(config *integrations.IntegrationConfig) (*stsSpec, error) {
 		parsed.policyName = spec.PolicyName
 	}
 	parsed.repos = spec.Repos
-	parsed.tokenEnv = spec.TokenEnv
+	// An explicit token_env (including "{{ .owner }}" templates) overrides the default; empty keeps the default.
+	if spec.TokenEnv != "" {
+		parsed.tokenEnv = spec.TokenEnv
+	}
 
 	if spec.GitConfigMode != "" {
 		if spec.GitConfigMode != GitConfigModeEnv && spec.GitConfigMode != GitConfigModeFile {
@@ -538,14 +548,14 @@ func (g *GitHubSTSIntegration) writeGitConfigFile(tokens []stsToken) error {
 	return nil
 }
 
-// ownerPlaceholder is the token_env placeholder replaced with each token's (sanitized,
-// uppercased) owner, enabling one mint to populate per-owner env vars in multi-org runs.
-const ownerPlaceholder = "{owner}"
+// templateMarker signals that a token_env value is a Go template (e.g. "GH_TOKEN_{{ .owner }}")
+// to be rendered per token, rather than a literal env var name.
+const templateMarker = "{{"
 
 // addTokenEnv surfaces the raw minted token(s) as named env var(s) per the configured
-// token_env name-pattern. A literal name requires exactly one token (multi-owner mints
-// log a warning and are skipped — the GIT_CONFIG_* rewrites still cover them); a pattern
-// containing {owner} is expanded per token. Token values are never logged.
+// token_env name. A literal name requires exactly one token (multi-owner mints log and are
+// skipped — the GIT_CONFIG_* rewrites still cover them); a Go-template name (referencing
+// `.owner`/`.host`, e.g. "GH_TOKEN_{{ .owner }}") is rendered per token. Token values are never logged.
 func (g *GitHubSTSIntegration) addTokenEnv(env map[string]string, tokens []stsToken) {
 	if g.tokenEnv == "" {
 		return
@@ -561,21 +571,48 @@ func (g *GitHubSTSIntegration) addTokenEnv(env map[string]string, tokens []stsTo
 		return
 	}
 
-	if strings.Contains(g.tokenEnv, ownerPlaceholder) {
-		for _, t := range valid {
-			name := strings.ReplaceAll(g.tokenEnv, ownerPlaceholder, sanitizeEnvName(t.Owner))
-			env[name] = t.Token
+	if strings.Contains(g.tokenEnv, templateMarker) {
+		for i := range valid {
+			name, err := renderTokenEnvName(g.tokenEnv, &valid[i])
+			if err != nil || name == "" {
+				log.Debug("github/sts: skipping token_env export; could not render template",
+					logKeyIntegration, g.name, "token_env", g.tokenEnv, "error", err)
+				continue
+			}
+			env[name] = valid[i].Token
 		}
 		return
 	}
 
 	if len(valid) > 1 {
-		log.Warn("github/sts: token_env is a literal name but multiple tokens were minted; "+
-			"skipping token export (use a '{owner}' placeholder or narrow repos/policy)",
-			logKeyIntegration, g.name, "token_env", g.tokenEnv, "count", len(valid))
+		// The GIT_CONFIG_* insteadOf rewrites still cover every owner; only the raw token export is
+		// skipped. When token_env is the implicit default, log at debug to avoid noise on multi-org
+		// runs; when the user explicitly set a literal name, warn so they can switch to a template.
+		msg := "github/sts: token_env is a literal name but multiple tokens were minted; " +
+			"skipping token export (use a '{{ .owner }}' template or narrow repos/policy)"
+		if g.tokenEnv == defaultTokenEnv {
+			log.Debug(msg, logKeyIntegration, g.name, "token_env", g.tokenEnv, "count", len(valid))
+		} else {
+			log.Warn(msg, logKeyIntegration, g.name, "token_env", g.tokenEnv, "count", len(valid))
+		}
 		return
 	}
 	env[g.tokenEnv] = valid[0].Token
+}
+
+// renderTokenEnvName renders a token_env Go template for one minted token (exposing `.owner` and
+// `.host`) and sanitizes the result into a valid env var name. Uses the standard library template
+// engine — the same `{{ .field }}` syntax used elsewhere in Atmos — not an ad-hoc placeholder.
+func renderTokenEnvName(pattern string, t *stsToken) (string, error) {
+	tmpl, err := template.New("token_env").Option("missingkey=error").Parse(pattern)
+	if err != nil {
+		return "", fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrIntegrationFailed, err)
+	}
+	var b strings.Builder
+	if err := tmpl.Execute(&b, map[string]string{"owner": t.Owner, "host": t.Host}); err != nil {
+		return "", fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrIntegrationFailed, err)
+	}
+	return sanitizeEnvName(b.String()), nil
 }
 
 // sanitizeEnvName makes a value safe to embed in an environment variable name:

@@ -156,7 +156,7 @@ steps:
       GH_TOKEN: ${{ env.GH_TOKEN }}
 ```
 
-For Atmos's own git operations (vendoring, `source:` components, `terraform init` of private `git::https://…` modules) no `token_env` is needed — `github/sts` injects per-owner `GIT_CONFIG_*` rewrites automatically. `token_env` is for everything else (`gh`, `actions/checkout`, REST API). For multi-org runs, use a `{owner}` placeholder (e.g. `token_env: GH_TOKEN_{owner}`) to export one variable per owner.
+For Atmos's own git operations (vendoring, `source:` components, `terraform init` of private `git::https://…` modules) `github/sts` injects per-owner `GIT_CONFIG_*` rewrites automatically, and the single-owner token is also exported as `ATMOS_PRO_GITHUB_TOKEN` by default. `token_env` lets you export it under a different name for everything else (`gh`, `actions/checkout`, REST API). For multi-org runs, use a Go template over `.owner` (e.g. `token_env: GH_TOKEN_{{ .owner }}`) to export one variable per owner.
 
 **The commands fail gracefully:** If you run cloud CLI or Terraform commands before logging in, they will fail with standard credential errors, prompting you to run `atmos auth login`.
 
