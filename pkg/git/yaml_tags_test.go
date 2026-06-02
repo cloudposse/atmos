@@ -3,6 +3,7 @@ package git
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/go-git/go-git/v5"
@@ -132,6 +133,15 @@ func TestProcessTagRepository_ErrorOnNoRemoteWithoutDefault(t *testing.T) {
 // opening with EnableDotGitCommonDir. If that flag is dropped, the remote is not
 // visible from the worktree and these assertions fail.
 func TestRepositoryMetadataFromLinkedWorktree(t *testing.T) {
+	// The metadata resolution under test is platform-independent (go-git reads the
+	// shared common config). On Windows, however, linked-worktree teardown is flaky:
+	// `git worktree remove` can fail and go-git retains a file handle on the worktree's
+	// `commondir`, so t.TempDir's strict RemoveAll cleanup fails the test even though the
+	// assertions pass. Skip on Windows; Linux/macOS CI guards the behavior.
+	if runtime.GOOS == "windows" {
+		t.Skip("linked-worktree teardown is flaky on Windows (go-git file-handle retention); behavior is covered on Linux/macOS")
+	}
+
 	tests.RequireGitCommitConfig(t)
 
 	const remoteURL = "https://github.com/cloudposse/atmos.git"
