@@ -644,7 +644,7 @@ jobs:
           persist-credentials: false
 
       - name: Validate YAML Schema for Stacks
-        uses: InoUno/yaml-ls-check@v1.4.0
+        uses: InoUno/yaml-ls-check@v1.5.1
         with:
           root: "examples/${{ matrix.demo-folder }}/stacks"
           schemaMapping: |
