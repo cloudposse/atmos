@@ -92,9 +92,9 @@ components:
         name: mi-multi-level-append-child
 
     # mi-merge-strategy: same two bases but uses the "merge" strategy.
-    # "merge" merges lists by index (element 0 from_a + element 0 from_b → from_b
-    # since from_b is a scalar at the same index).  Both base lists have one element,
-    # so the merged list should be [from_b] (last index wins in merge).
+    # "merge" merges lists by index; for scalar elements at the same index the
+    # earlier (dst) value is preserved.  Both base lists have one element, so the
+    # merged list should be [from_a].
     mi-merge-strategy:
       metadata:
         component: mock
