@@ -204,6 +204,104 @@ func TestManager_ExecuteIntegration_EmptyIdentity(t *testing.T) {
 	assert.Contains(t, err.Error(), "no identity configured")
 }
 
+func TestIntegrationTargetKey(t *testing.T) {
+	tests := []struct {
+		name        string
+		intName     string
+		integration schema.Integration
+		want        string
+	}{
+		{
+			name:    "ECR with registry",
+			intName: "my-ecr",
+			integration: schema.Integration{
+				Kind: "aws/ecr",
+				Spec: &schema.IntegrationSpec{
+					Registry: &schema.ECRRegistry{AccountID: "123456789012", Region: "us-east-1"},
+				},
+			},
+			want: "aws/ecr:123456789012:us-east-1",
+		},
+		{
+			name:    "ECR without spec falls back to name",
+			intName: "my-ecr",
+			integration: schema.Integration{
+				Kind: "aws/ecr",
+			},
+			want: "my-ecr",
+		},
+		{
+			name:    "EKS with cluster",
+			intName: "my-eks",
+			integration: schema.Integration{
+				Kind: "aws/eks",
+				Spec: &schema.IntegrationSpec{
+					Cluster: &schema.EKSCluster{Name: "prod-cluster", Region: "us-west-2"},
+				},
+			},
+			want: "aws/eks:prod-cluster:us-west-2",
+		},
+		{
+			name:    "EKS without spec falls back to name",
+			intName: "my-eks",
+			integration: schema.Integration{
+				Kind: "aws/eks",
+			},
+			want: "my-eks",
+		},
+		{
+			name:    "unknown kind uses name",
+			intName: "custom-integration",
+			integration: schema.Integration{
+				Kind: "custom/type",
+			},
+			want: "custom-integration",
+		},
+		{
+			name:    "two ECR integrations same registry produce same key",
+			intName: "ecr-component",
+			integration: schema.Integration{
+				Kind: "aws/ecr",
+				Spec: &schema.IntegrationSpec{
+					Registry: &schema.ECRRegistry{AccountID: "123456789012", Region: "us-east-1"},
+				},
+			},
+			want: "aws/ecr:123456789012:us-east-1",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := integrationTargetKey(tt.intName, tt.integration)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+// TestIntegrationTargetKey_Deduplication verifies that two ECR integrations pointing at the
+// same registry are treated as one execution (the second is skipped via the process cache).
+func TestIntegrationTargetKey_Deduplication(t *testing.T) {
+	resetProcessIntegrationCache()
+	t.Cleanup(resetProcessIntegrationCache)
+
+	registrySpec := &schema.IntegrationSpec{
+		Registry: &schema.ECRRegistry{AccountID: "123456789012", Region: "us-east-1"},
+	}
+
+	// Two different integration names, same registry.
+	keyA := integrationTargetKey("ecr-global", schema.Integration{Kind: "aws/ecr", Spec: registrySpec})
+	keyB := integrationTargetKey("ecr-component", schema.Integration{Kind: "aws/ecr", Spec: registrySpec})
+	assert.Equal(t, keyA, keyB, "same registry must produce the same cache key")
+
+	// First store: should not already be present.
+	_, alreadyRan := processIntegrationCache.LoadOrStore(keyA, struct{}{})
+	assert.False(t, alreadyRan, "first integration should not be cached yet")
+
+	// Second store with same key: should be skipped.
+	_, alreadyRan = processIntegrationCache.LoadOrStore(keyB, struct{}{})
+	assert.True(t, alreadyRan, "second integration pointing at same registry must be deduplicated")
+}
+
 func TestManager_ExecuteIdentityIntegrations_Errors(t *testing.T) {
 	tests := []struct {
 		name          string

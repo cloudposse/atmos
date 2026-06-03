@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sync"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/auth/integrations"
@@ -13,9 +14,46 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
+// processIntegrationCache tracks integrations already executed in this process.
+// Auto-provisioned integrations (e.g. ECR login, EKS kubeconfig) should run only once per
+// process regardless of how many times Authenticate is called or which AuthManager instance
+// triggers them. The key is the integration's canonical target (e.g. "aws/ecr:account:region")
+// rather than its config name, so two integration entries in a merged config that point to
+// the same ECR registry or EKS cluster are deduplicated to a single execution.
+var processIntegrationCache sync.Map
+
+// resetProcessIntegrationCache clears the integration execution cache.
+// Intended for use in tests to ensure isolation between test cases.
+func resetProcessIntegrationCache() {
+	processIntegrationCache.Range(func(key, _ any) bool {
+		processIntegrationCache.Delete(key)
+		return true
+	})
+}
+
+// integrationTargetKey returns a canonical cache key for an integration.
+// For ECR integrations: "aws/ecr:<account_id>:<region>" — two configs pointing at the same
+// registry (e.g. a global + component-level duplicate) collapse to a single login.
+// For EKS integrations: "aws/eks:<cluster_name>:<region>" — same dedup logic for kubeconfig.
+// All other integration types fall back to the config name to preserve existing behaviour.
+func integrationTargetKey(name string, cfg schema.Integration) string {
+	switch cfg.Kind {
+	case integrations.KindAWSECR:
+		if cfg.Spec != nil && cfg.Spec.Registry != nil {
+			return "aws/ecr:" + cfg.Spec.Registry.AccountID + ":" + cfg.Spec.Registry.Region
+		}
+	case integrations.KindAWSEKS:
+		if cfg.Spec != nil && cfg.Spec.Cluster != nil {
+			return "aws/eks:" + cfg.Spec.Cluster.Name + ":" + cfg.Spec.Cluster.Region
+		}
+	}
+	return name
+}
+
 // triggerIntegrations executes integrations that reference this identity with auto_provision enabled.
 // This is a non-fatal operation - integration failures don't block authentication.
 // Skipped when context contains skipIntegrationsKey (used by ExecuteIntegration to avoid duplicate execution).
+// Each integration target is executed at most once per process (deduplicated via processIntegrationCache).
 func (m *manager) triggerIntegrations(ctx context.Context, identityName string, creds types.ICredentials) {
 	defer perf.Track(nil, "auth.Manager.triggerIntegrations")()
 
@@ -33,10 +71,19 @@ func (m *manager) triggerIntegrations(ctx context.Context, identityName string, 
 
 	log.Debug("Triggering linked integrations", logKeyIdentity, identityName, "count", len(linkedIntegrations))
 
-	// Execute each linked integration.
+	// Execute each linked integration, skipping any whose target has already been provisioned.
+	// cacheKey is based on the integration's effective target (registry URL, cluster name) rather
+	// than its config name so that duplicate entries from merged global+component configs that
+	// point to the same endpoint are collapsed to a single execution.
 	for _, integrationName := range linkedIntegrations {
+		cacheKey := integrationTargetKey(integrationName, m.config.Integrations[integrationName])
+		if _, alreadyRan := processIntegrationCache.LoadOrStore(cacheKey, struct{}{}); alreadyRan {
+			log.Debug("Skipping already-executed integration", "integration", integrationName, "target", cacheKey)
+			continue
+		}
 		if err := m.executeIntegration(ctx, integrationName, creds); err != nil {
-			// Non-fatal: log warning and continue.
+			// Non-fatal: evict the cache entry so a retry on the next command is possible.
+			processIntegrationCache.Delete(cacheKey)
 			log.Warn("Integration failed", "integration", integrationName, "error", err)
 		}
 	}
