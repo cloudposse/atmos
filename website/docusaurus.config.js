@@ -455,19 +455,6 @@ const config = {
                 disclaimer: 'Gists are examples that demonstrate a concept, but are not actively maintained and may not work in your environment or current versions of Atmos without adaptations.',
             },
         ],
-        [
-            path.resolve(__dirname, 'plugins', 'file-browser'),
-            {
-                id: 'labs',
-                sourceDir: '../labs',
-                routeBasePath: '/labs',
-                title: 'Hands-on Labs',
-                description: 'Complete, copy-and-run Atmos projects that combine multiple features into a working solution for a real-world use case.',
-                githubRepo: 'cloudposse/atmos',
-                githubBranch: 'main',
-                githubPath: 'labs',
-            },
-        ],
     ],
 
     presets: [
@@ -569,11 +556,6 @@ const config = {
                         to: '/examples',
                         position: 'left',
                         label: 'Examples'
-                    },
-                    {
-                        to: '/labs',
-                        position: 'left',
-                        label: 'Labs'
                     },
                     {
                         to: '/pro',

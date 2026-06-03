@@ -1,16 +1,19 @@
 # Build, Scan, Approve & Share AWS AMIs with Atmos + Packer + GitHub Actions
 
-A complete, copy-and-run Atmos project that builds a hardened **Amazon Linux 2023**
-AMI with Packer, validates it on a live test instance, optionally scans it, gates
-promotion behind a **manual approval**, tags the approved image `ScanStatus=approved`,
-and **shares it across AWS accounts** — all orchestrated by Atmos and driven from a
-GitHub Actions pipeline.
+Configure and use Atmos with Packer to build, scan, approve, and share a hardened Amazon Linux 2023 AMI — automated end-to-end with a GitHub Actions pipeline and a tree of custom commands.
 
-This Hands-on Lab combines several Atmos features into a single production-shaped workflow you can clone and adapt.
+In detail, this gist builds a hardened **Amazon Linux 2023** AMI with Packer, validates it on a live test instance, optionally scans it, gates promotion behind a **manual approval**, tags the approved image `ScanStatus=approved`, and **shares it across AWS accounts** — all orchestrated by Atmos and driven from a GitHub Actions pipeline.
+
+> **Gist, not a maintained example.** This is a reference recipe shared as-is to
+> demonstrate the pattern. Unlike the CI-tested
+> [examples](https://atmos.tools/examples), gists are not continuously validated, so
+> adapt it to your environment and your current version of Atmos before relying on it.
+
+It combines several Atmos features into a single production-shaped workflow you can clone and adapt.
 
 ## What it teaches
 
-This Lab combines, in one project:
+This gist combines, in one project:
 
 - **Packer components in Atmos** — `components.packer` config and `atmos packer init/build/output`.
 - **Stacks for Packer** — every build input (source AMI, networking, encryption, tags, provisioner list) is a stack var,
@@ -93,8 +96,8 @@ EC2 instances. A reference IAM policy is in [`docs/packer-build-iam-policy.json`
 ## Run it locally
 
 ```bash
-# 1. Copy the Lab into a new repo of your own
-cp -r labs/aws-ami-packer-github-actions/ my-ami-pipeline/
+# 1. Copy the gist into a new repo of your own
+cp -r gists/aws-ami-packer-github-actions/ my-ami-pipeline/
 cd my-ami-pipeline/
 
 # 2. Edit stacks/al2023.yaml — set region, networking, KMS, sharing targets, tags

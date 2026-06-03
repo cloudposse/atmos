@@ -5,7 +5,7 @@
 # This is the integration point for a commercial security scanner (e.g. Qualys,
 # Tenable, Wiz, CrowdStrike). Such agents are distributed from a private package
 # repository and require a subscription, so this step is DISABLED by default and
-# the Lab runs fine without it.
+# the gist runs fine without it.
 #
 # Enable it from the stack by setting these `provisioner_env_vars`:
 #

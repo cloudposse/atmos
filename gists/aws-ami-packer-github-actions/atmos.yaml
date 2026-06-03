@@ -1,4 +1,4 @@
-# Atmos configuration for the "Build, Scan, Approve & Share AWS AMIs" Lab.
+# Atmos configuration for the "Build, Scan, Approve & Share AWS AMIs" gist.
 #
 # This file wires up three things:
 #   1. The Packer component type (so `atmos packer ...` knows where components live).
@@ -26,7 +26,7 @@ stacks:
     - "**/*"
   excluded_paths:
     - "**/_defaults.yaml"
-  # Single-dimension naming for this Lab: the stack name is the file's `stage` var.
+  # Single-dimension naming for this gist: the stack name is the file's `stage` var.
   name_template: "{{ .vars.stage }}"
 
 logs:

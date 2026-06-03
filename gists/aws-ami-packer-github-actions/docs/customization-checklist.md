@@ -1,6 +1,6 @@
 # Customization Checklist
 
-Work through this list when adapting the Lab to your environment. Every item maps
+Work through this list when adapting the gist to your environment. Every item maps
 to a value you set in the stack, a repository variable, or a one-time AWS/GitHub
 setup step. Nothing here is hardcoded in the Packer template or scripts.
 

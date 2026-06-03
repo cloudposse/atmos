@@ -10,7 +10,7 @@
 
 set -euo pipefail
 
-# Edit this list for your image. Kept deliberately small and generic so the Lab
+# Edit this list for your image. Kept deliberately small and generic so the gist
 # builds quickly and has no proprietary dependencies.
 PACKAGES=(
   jq          # JSON processing.

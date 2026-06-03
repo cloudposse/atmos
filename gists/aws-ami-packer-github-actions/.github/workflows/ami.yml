@@ -113,7 +113,7 @@ jobs:
         run: |
           echo "Optional scan step is enabled."
           echo "Wire your scanner here (e.g. query results for AMI ${{ needs.build.outputs.ami_id }})."
-          echo "This Lab ships a no-op placeholder so it runs without a scanner subscription."
+          echo "This gist ships a no-op placeholder so it runs without a scanner subscription."
 
   approve:
     name: Approval Gate

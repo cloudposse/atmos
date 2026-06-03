@@ -139,9 +139,9 @@ const DOCS_MAP = {
     { label: 'Toolchain', url: '/cli/configuration/toolchain' },
   ],
   'aws-ami-packer-github-actions': [
-    { label: 'Lab Walkthrough', url: '/labs/aws-ami-packer-github-actions/guide' },
     { label: 'Packer Build', url: '/cli/commands/packer/build' },
     { label: 'Custom Commands', url: '/cli/configuration/commands' },
+    { label: 'Go Templates', url: '/templates' },
     { label: 'GitHub Actions', url: '/integrations/github-actions/setup-atmos' },
   ],
 };

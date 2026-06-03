@@ -101,7 +101,7 @@ components:
           - "scripts/finalize.sh"
 
         # Feature toggles passed to every provisioner script. All optional steps
-        # are OFF by default so the Lab runs with just a standard AWS account.
+        # are OFF by default so the gist runs with just a standard AWS account.
         provisioner_env_vars:
           - "ENABLE_FIREWALL=false" # Install/enable firewalld in harden.sh.
           - "ENABLE_SELINUX_ENFORCING=false" # Set SELinux to enforcing in harden.sh.

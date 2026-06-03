@@ -12,7 +12,7 @@ require_cmd aws
 require_env ATMOS_AMI_REGION
 require_env ATMOS_AMI_INSTANCE_ID
 
-# Safety guard: only terminate instances this lab launched. `atmos ami
+# Safety guard: only terminate instances this gist launched. `atmos ami
 # launch-instance` tags every test instance with ManagedBy=atmos-packer; refuse
 # to terminate anything missing that tag, so a mistyped instance ID cannot take
 # down an unrelated instance. (A non-existent ID makes describe-instances fail
@@ -26,7 +26,7 @@ managed_by="$(aws ec2 describe-instances \
 if [[ "${managed_by}" != "atmos-packer" ]]; then
   echo "ERROR: refusing to terminate ${ATMOS_AMI_INSTANCE_ID} — it is not tagged" \
     "ManagedBy=atmos-packer (got '${managed_by}'). This guard prevents terminating" \
-    "instances not launched by this lab." >&2
+    "instances not launched by this gist." >&2
   exit 1
 fi
 

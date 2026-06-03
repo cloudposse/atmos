@@ -9,7 +9,7 @@
 # launched from the resulting AMI — the build instance itself does not need to
 # run it. (Rebooting mid-build would drop Packer's SSH connection; handling that
 # would require splitting this into a separate provisioner with
-# `expect_disconnect = true`, which this Lab keeps simple by avoiding.)
+# `expect_disconnect = true`, which this gist keeps simple by avoiding.)
 #
 # Executed as root by the Packer shell provisioner (see main.pkr.hcl).
 
