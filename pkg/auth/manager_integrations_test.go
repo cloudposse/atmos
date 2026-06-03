@@ -250,6 +250,18 @@ func TestIntegrationTargetKey(t *testing.T) {
 			want: "my-eks",
 		},
 		{
+			name:        "ECR Public always returns fixed key",
+			intName:     "my-ecr-public",
+			integration: schema.Integration{Kind: "aws/ecr-public"},
+			want:        "aws/ecr-public",
+		},
+		{
+			name:        "ECR Public with spec also returns fixed key",
+			intName:     "ecr-public-component",
+			integration: schema.Integration{Kind: "aws/ecr-public", Spec: &schema.IntegrationSpec{Registry: &schema.ECRRegistry{Region: "us-east-1"}}},
+			want:        "aws/ecr-public",
+		},
+		{
 			name:    "unknown kind uses name",
 			intName: "custom-integration",
 			integration: schema.Integration{

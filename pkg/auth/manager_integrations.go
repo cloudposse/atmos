@@ -42,6 +42,9 @@ func integrationTargetKey(name string, cfg schema.Integration) string {
 		if cfg.Spec != nil && cfg.Spec.Registry != nil {
 			return "aws/ecr:" + cfg.Spec.Registry.AccountID + ":" + cfg.Spec.Registry.Region
 		}
+	case integrations.KindAWSECRPublic:
+		// ECR Public is a single global registry — no account or region discriminator needed.
+		return integrations.KindAWSECRPublic
 	case integrations.KindAWSEKS:
 		if cfg.Spec != nil && cfg.Spec.Cluster != nil {
 			return "aws/eks:" + cfg.Spec.Cluster.Name + ":" + cfg.Spec.Cluster.Region
