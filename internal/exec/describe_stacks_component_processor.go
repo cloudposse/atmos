@@ -764,6 +764,7 @@ func applyTerraformMetadataInheritance(
 			}
 			if err := ProcessBaseComponentConfig(
 				atmosConfig,
+				atmosConfig,
 				baseComponentConfig,
 				allTerraformComponents,
 				componentName,

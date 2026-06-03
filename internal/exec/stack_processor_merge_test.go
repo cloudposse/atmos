@@ -859,6 +859,132 @@ func TestComponentLevelListMergeStrategy(t *testing.T) {
 	})
 }
 
+// TestListMergeStrategyWithMetadataInherits is an integration test for issue #2396
+// (follow-up to PR #2480): settings.list_merge_strategy set at the component level
+// must govern how lists from inherited base components are merged when the inheritance
+// is declared via metadata.inherits (not just the import/stack merge path).
+//
+// Fixture (tests/fixtures/scenarios/component-list-merge-strategy):
+//   - global list_merge_strategy = "replace"
+//   - mi-base-a: abstract, vars.my_list = [from_a]
+//   - mi-base-b: abstract, vars.my_list = [from_b]
+//   - mi-append: metadata.inherits: [mi-base-a, mi-base-b], settings.list_merge_strategy: append
+//     → expected my_list: [from_a, from_b]
+//   - mi-replace: metadata.inherits: [mi-base-a, mi-base-b], no strategy override
+//     → expected my_list: [from_b]  (last-wins replace, the bug case)
+//   - mi-multi-level-append: inherits mi-middle (which inherits mi-base-a)
+//     → expected my_list: [from_a, from_middle, from_leaf]
+//   - mi-merge-strategy: metadata.inherits: [mi-base-a, mi-base-b], list_merge_strategy: merge
+//     → expected my_list: [from_b]  (index-based merge, last element at each index wins).
+func TestListMergeStrategyWithMetadataInherits(t *testing.T) {
+	workDir := filepath.Join("..", "..", "tests", "fixtures", "scenarios", "component-list-merge-strategy")
+	t.Chdir(workDir)
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", ".")
+	t.Setenv("ATMOS_BASE_PATH", "")
+
+	configInfo := schema.ConfigAndStacksInfo{}
+	atmosConfig, err := cfg.InitCliConfig(configInfo, true)
+	require.NoError(t, err)
+	require.Equal(t, "replace", atmosConfig.Settings.ListMergeStrategy,
+		"global strategy must be 'replace' so the component-level override is meaningful")
+
+	stack := "dev"
+
+	// append strategy: component declares settings.list_merge_strategy = append.
+	// Before the fix, all metadata.inherits merges used the global replace strategy,
+	// so my_list would be [from_b] instead of [from_a, from_b].
+	t.Run("append strategy via metadata.inherits accumulates lists from both bases", func(t *testing.T) {
+		result, err := ExecuteDescribeComponent(&ExecuteDescribeComponentParams{
+			AtmosConfig:          &atmosConfig,
+			Component:            "mi-append",
+			Stack:                stack,
+			ProcessTemplates:     true,
+			ProcessYamlFunctions: true,
+		})
+		require.NoError(t, err)
+
+		vars, ok := result["vars"].(map[string]any)
+		require.True(t, ok, "vars must be a map")
+		myList, ok := vars["my_list"].([]any)
+		require.True(t, ok, "vars.my_list must be a list")
+
+		// Both base lists must be accumulated in inheritance order.
+		require.Len(t, myList, 2, "append must produce two elements")
+		assert.Equal(t, "from_a", myList[0], "first element must come from mi-base-a")
+		assert.Equal(t, "from_b", myList[1], "second element must come from mi-base-b")
+	})
+
+	// replace strategy (no override): my_list should be [from_b] (last-wins).
+	t.Run("replace strategy via metadata.inherits keeps only the last base list", func(t *testing.T) {
+		result, err := ExecuteDescribeComponent(&ExecuteDescribeComponentParams{
+			AtmosConfig:          &atmosConfig,
+			Component:            "mi-replace",
+			Stack:                stack,
+			ProcessTemplates:     true,
+			ProcessYamlFunctions: true,
+		})
+		require.NoError(t, err)
+
+		vars, ok := result["vars"].(map[string]any)
+		require.True(t, ok, "vars must be a map")
+		myList, ok := vars["my_list"].([]any)
+		require.True(t, ok, "vars.my_list must be a list")
+
+		require.Len(t, myList, 1, "replace must keep only the last base list")
+		assert.Equal(t, "from_b", myList[0], "replace keeps the last base's list")
+	})
+
+	// Multi-level inheritance with append: from_a → from_middle → from_leaf.
+	t.Run("multi-level metadata.inherits with append accumulates all levels", func(t *testing.T) {
+		result, err := ExecuteDescribeComponent(&ExecuteDescribeComponentParams{
+			AtmosConfig:          &atmosConfig,
+			Component:            "mi-multi-level-append",
+			Stack:                stack,
+			ProcessTemplates:     true,
+			ProcessYamlFunctions: true,
+		})
+		require.NoError(t, err)
+
+		vars, ok := result["vars"].(map[string]any)
+		require.True(t, ok, "vars must be a map")
+		myList, ok := vars["my_list"].([]any)
+		require.True(t, ok, "vars.my_list must be a list")
+
+		// All three levels must contribute their element.
+		require.Len(t, myList, 3, "three-level append must produce three elements")
+		assert.Equal(t, "from_a", myList[0], "first element from deepest base")
+		assert.Equal(t, "from_middle", myList[1], "second element from middle base")
+		assert.Equal(t, "from_leaf", myList[2], "third element from the leaf component")
+	})
+
+	// merge strategy: element-wise (index-based) merge.
+	// For scalar elements at the same index, mergeSlicesNative preserves the dst
+	// element (the earlier/left value), matching mergo's WithSliceDeepCopy semantics.
+	// Both bases have one element, so the merged list has one element: from_a (from_b
+	// is the src that arrives later in the chain, but scalars are not overwritten).
+	t.Run("merge strategy via metadata.inherits produces index-based merge", func(t *testing.T) {
+		result, err := ExecuteDescribeComponent(&ExecuteDescribeComponentParams{
+			AtmosConfig:          &atmosConfig,
+			Component:            "mi-merge-strategy",
+			Stack:                stack,
+			ProcessTemplates:     true,
+			ProcessYamlFunctions: true,
+		})
+		require.NoError(t, err)
+
+		vars, ok := result["vars"].(map[string]any)
+		require.True(t, ok, "vars must be a map")
+		myList, ok := vars["my_list"].([]any)
+		require.True(t, ok, "vars.my_list must be a list")
+
+		// Index-based merge: both bases have one scalar element.
+		// mergeSlicesNative keeps the dst (earlier) element at each index when
+		// both sides are non-map scalars — matching mergo's WithSliceDeepCopy.
+		require.Len(t, myList, 1, "merge at single-element lists yields one element")
+		assert.Equal(t, "from_a", myList[0], "merge preserves the earlier (dst) element for scalars at the same index")
+	})
+}
+
 // TestEffectiveAtmosConfig_InvalidStrategy verifies two properties:
 //  1. effectiveAtmosConfig passes an invalid strategy value through without
 //     validating it — validation is pkg/merge's responsibility.

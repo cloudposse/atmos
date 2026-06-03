@@ -48,3 +48,60 @@ components:
         tags:
           - child-tag
         name: inherit-strategy-child
+
+    # ── metadata.inherits tests (issue #2396 follow-up) ─────────────────────────
+
+    # mi-append: inherits from two base components via metadata.inherits and opts in
+    # to list appending via settings.list_merge_strategy.
+    # Expected my_list: [from_a, from_b] (append).
+    mi-append:
+      metadata:
+        component: mock
+        inherits:
+          - mi-base-a
+          - mi-base-b
+      settings:
+        list_merge_strategy: append
+      vars:
+        name: mi-append-child
+
+    # mi-replace: same two bases but uses the global replace strategy (no override).
+    # Expected my_list: [from_b] (last-wins replace).
+    mi-replace:
+      metadata:
+        component: mock
+        inherits:
+          - mi-base-a
+          - mi-base-b
+      vars:
+        name: mi-replace-child
+
+    # mi-multi-level-append: inherits from mi-middle which itself inherits from
+    # mi-base-a. Opts in to append so all three list layers accumulate.
+    # Expected my_list: [from_a, from_middle, from_leaf] (append at every level).
+    mi-multi-level-append:
+      metadata:
+        component: mock
+        inherits:
+          - mi-middle
+      settings:
+        list_merge_strategy: append
+      vars:
+        my_list:
+          - from_leaf
+        name: mi-multi-level-append-child
+
+    # mi-merge-strategy: same two bases but uses the "merge" strategy.
+    # "merge" merges lists by index (element 0 from_a + element 0 from_b → from_b
+    # since from_b is a scalar at the same index).  Both base lists have one element,
+    # so the merged list should be [from_b] (last index wins in merge).
+    mi-merge-strategy:
+      metadata:
+        component: mock
+        inherits:
+          - mi-base-a
+          - mi-base-b
+      settings:
+        list_merge_strategy: merge
+      vars:
+        name: mi-merge-strategy-child

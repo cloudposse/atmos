@@ -25,3 +25,39 @@ components:
           - base-tag-1
           - base-tag-2
         name: append-base
+
+    # ── metadata.inherits test fixtures (issue #2396 / PR #2480 follow-up) ──────
+
+    # mi-base-a and mi-base-b: abstract base components used by metadata.inherits
+    # tests. Each defines a list var that should be merged according to the
+    # inheriting component's list_merge_strategy.
+    mi-base-a:
+      metadata:
+        component: mock
+        type: abstract
+      vars:
+        my_list:
+          - from_a
+        name: mi-base-a
+
+    mi-base-b:
+      metadata:
+        component: mock
+        type: abstract
+      vars:
+        my_list:
+          - from_b
+        name: mi-base-b
+
+    # mi-middle: abstract middle layer for multi-level inheritance tests.
+    # Inherits from mi-base-a and adds its own list entry.
+    mi-middle:
+      metadata:
+        component: mock
+        type: abstract
+        inherits:
+          - mi-base-a
+      vars:
+        my_list:
+          - from_middle
+        name: mi-middle
