@@ -350,6 +350,20 @@ func effectiveEnabledState(settings, metadata map[string]any) (proEnabled, drift
 	return proEnabled, driftEnabled
 }
 
+// metadataDisabledPro reports whether metadata.enabled: false is the reason an
+// otherwise Pro-enabled instance collapses to disabled. It is true only when the
+// pro block itself would be enabled (pro.enabled true or defaulted) but
+// metadata.enabled is explicitly false, i.e. the outer metadata disable is what
+// squashes pro.enabled to false in the upload payload. Used only for a debug log
+// so operators can trace why a component is uploaded as disabled.
+func metadataDisabledPro(settings, metadata map[string]any) bool {
+	pro, ok := sanitizeForJSON(settings[proSettingsKey]).(map[string]any)
+	if !ok {
+		return false
+	}
+	return proSettingEnabled(pro) && !metadataEnabled(metadata)
+}
+
 // isProEnabled reports whether an instance is effectively Atmos Pro enabled,
 // honoring the metadata.enabled > pro.enabled precedence.
 func isProEnabled(instance *schema.Instance) bool {
@@ -485,6 +499,10 @@ func uploadInstancesWithDeps(
 	// Sensitive data (vars, env, backend) never leaves this boundary.
 	uploadInstances := make([]dtos.UploadInstance, len(instances))
 	for i, inst := range instances {
+		if metadataDisabledPro(inst.Settings, inst.Metadata) {
+			log.Debug("Collapsing pro.enabled to false for upload: metadata.enabled is false",
+				KeyComponent, inst.Component, KeyStack, inst.Stack)
+		}
 		uploadInstances[i] = dtos.UploadInstance{
 			Component:     inst.Component,
 			Stack:         inst.Stack,

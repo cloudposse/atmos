@@ -509,3 +509,65 @@ func TestExtractProSettingsIsolation(t *testing.T) {
 	srcDrift["enabled"] = "changed-after"
 	assert.Equal(t, "mutated", resultDrift["enabled"], "result drift_detection must be independent of later source mutation")
 }
+
+// TestMetadataDisabledPro verifies detection of the metadata-caused collapse used
+// for the upload debug log: it is true only when the pro block would be enabled
+// but metadata.enabled is explicitly false.
+func TestMetadataDisabledPro(t *testing.T) {
+	testCases := []struct {
+		name     string
+		settings map[string]any
+		metadata map[string]any
+		expected bool
+	}{
+		{
+			name:     "metadata false squashes enabled pro",
+			settings: map[string]any{"pro": map[string]any{"enabled": true}},
+			metadata: map[string]any{"enabled": false},
+			expected: true,
+		},
+		{
+			name:     "metadata false squashes defaulted pro (drift_detection only)",
+			settings: map[string]any{"pro": map[string]any{"drift_detection": map[string]any{"enabled": true}}},
+			metadata: map[string]any{"enabled": false},
+			expected: true,
+		},
+		{
+			name:     "YAML-shaped pro block still detected",
+			settings: map[string]any{"pro": map[interface{}]interface{}{"enabled": true}},
+			metadata: map[string]any{"enabled": false},
+			expected: true,
+		},
+		{
+			name:     "metadata enabled is not a squash",
+			settings: map[string]any{"pro": map[string]any{"enabled": true}},
+			metadata: map[string]any{"enabled": true},
+			expected: false,
+		},
+		{
+			name:     "no metadata is not a squash",
+			settings: map[string]any{"pro": map[string]any{"enabled": true}},
+			metadata: nil,
+			expected: false,
+		},
+		{
+			// pro.enabled is already false, so metadata is not the cause.
+			name:     "pro already disabled is not a metadata squash",
+			settings: map[string]any{"pro": map[string]any{"enabled": false}},
+			metadata: map[string]any{"enabled": false},
+			expected: false,
+		},
+		{
+			name:     "no pro block is not a squash",
+			settings: map[string]any{},
+			metadata: map[string]any{"enabled": false},
+			expected: false,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			assert.Equal(t, tc.expected, metadataDisabledPro(tc.settings, tc.metadata))
+		})
+	}
+}
