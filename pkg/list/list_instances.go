@@ -313,8 +313,11 @@ func proSettingEnabled(pro map[string]any) bool {
 
 // driftSettingEnabled reads settings.pro.drift_detection.enabled, defaulting to
 // false. Only an explicit boolean true enables drift detection.
+// The drift block is normalized with sanitizeForJSON first: nested YAML maps can
+// arrive as map[interface{}]interface{}, which would otherwise fail the
+// map[string]any assertion and read as "no drift block".
 func driftSettingEnabled(pro map[string]any) bool {
-	drift, ok := pro[driftDetectionKey].(map[string]any)
+	drift, ok := sanitizeForJSON(pro[driftDetectionKey]).(map[string]any)
 	if !ok {
 		return false
 	}
@@ -335,7 +338,10 @@ func driftSettingEnabled(pro map[string]any) bool {
 // payload (extractProSettings) and the success-toast counts, so the two can
 // never diverge.
 func effectiveEnabledState(settings, metadata map[string]any) (proEnabled, driftEnabled bool) {
-	pro, ok := settings[proSettingsKey].(map[string]any)
+	// Normalize with sanitizeForJSON first: the pro subtree parsed from YAML can
+	// be map[interface{}]interface{}, which would otherwise fail the
+	// map[string]any assertion and incorrectly read as "no pro block".
+	pro, ok := sanitizeForJSON(settings[proSettingsKey]).(map[string]any)
 	if !ok {
 		return false, false
 	}

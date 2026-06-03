@@ -146,6 +146,23 @@ func TestIsProEnabled(t *testing.T) {
 			},
 			expected: true,
 		},
+		{
+			// Regression: the pro subtree parsed from YAML can be
+			// map[interface{}]interface{}. The effective-state helpers must
+			// normalize it (sanitizeForJSON) before reading enabled, otherwise a
+			// valid Pro config reads as disabled.
+			name: "YAML-shaped pro block (map[interface{}]interface{}) is pro-enabled",
+			instance: &schema.Instance{
+				Component: "vpc",
+				Stack:     "dev",
+				Settings: map[string]interface{}{
+					"pro": map[interface{}]interface{}{
+						"enabled": true,
+					},
+				},
+			},
+			expected: true,
+		},
 	}
 
 	for _, tc := range testCases {
@@ -201,6 +218,15 @@ func TestCountEnabledDisabled(t *testing.T) {
 			"drift_detection": map[string]any{"enabled": true},
 		}},
 		Metadata: map[string]any{"enabled": false},
+	}
+	// Regression: pro and the nested drift_detection block parsed from YAML can
+	// be map[interface{}]interface{}. The helpers must normalize these before
+	// counting, otherwise this enabled+drift instance is miscounted as disabled.
+	yamlShapedDriftInst := schema.Instance{
+		Settings: map[string]any{"pro": map[interface{}]interface{}{
+			"enabled":         true,
+			"drift_detection": map[interface{}]interface{}{"enabled": true},
+		}},
 	}
 
 	testCases := []struct {
@@ -290,6 +316,15 @@ func TestCountEnabledDisabled(t *testing.T) {
 			instances:        []schema.Instance{enabledWithDriftInst, disabledWithDriftInst, enabledInst, noProInst},
 			expectedEnabled:  2,
 			expectedDisabled: 2,
+			expectedDrift:    1,
+		},
+		{
+			// YAML-shaped (map[interface{}]interface{}) pro + drift blocks must be
+			// counted as enabled with drift on.
+			name:             "YAML-shaped pro and drift blocks counted correctly",
+			instances:        []schema.Instance{yamlShapedDriftInst},
+			expectedEnabled:  1,
+			expectedDisabled: 0,
 			expectedDrift:    1,
 		},
 	}
@@ -467,4 +502,10 @@ func TestExtractProSettingsIsolation(t *testing.T) {
 	// Mutating the source after extraction must not affect the already-returned result.
 	srcPro["enabled"] = "changed-after"
 	assert.Equal(t, "mutated", pro["enabled"], "result must be independent of later source mutation")
+
+	// Same reverse-direction check for the nested drift_detection block: mutating
+	// the source drift map must not reach into the already-returned result.
+	resultDrift := pro["drift_detection"].(map[string]any)
+	srcDrift["enabled"] = "changed-after"
+	assert.Equal(t, "mutated", resultDrift["enabled"], "result drift_detection must be independent of later source mutation")
 }
