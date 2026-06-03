@@ -787,6 +787,9 @@ func ProcessYAMLConfigFileWithContext(
 		schema.StackImportNestedImportsLocal,
 		importsConfig,
 		context,
+		// Top-level call: no accumulated import-path context yet. It is built up
+		// from earlier imports as the manifest's import list is processed.
+		nil,
 		ignoreMissingFiles,
 		skipTemplatesProcessingInImports,
 		ignoreMissingTemplateValues,
@@ -826,6 +829,7 @@ func processYAMLConfigFileWithContextInternal(
 	inheritedNestedImports string,
 	importsConfig map[string]map[string]any,
 	context map[string]any,
+	importPathContext map[string]any,
 	ignoreMissingFiles bool,
 	skipTemplatesProcessingInImports bool,
 	ignoreMissingTemplateValues bool,
@@ -1160,6 +1164,18 @@ func processYAMLConfigFileWithContextInternal(
 		}
 	}
 
+	// accumulatedImportContext carries the `settings`/`vars`/`env` sections defined by
+	// EARLIER imports in this manifest so that LATER imports can reference them in their
+	// import path (e.g. a Git `?ref={{ .settings.context.deployment_repo_version }}`).
+	// It is seeded from the context propagated by the parent import and grows as each
+	// import in this manifest is processed (see the accumulation after the merge block).
+	// This context is used ONLY for templating import path strings — it does not affect
+	// file-content template processing/deferral, nor the authoritative deep-merge order.
+	accumulatedImportContext := importPathContext
+	if accumulatedImportContext == nil {
+		accumulatedImportContext = map[string]any{}
+	}
+
 	//nolint:staticcheck // atmosConfig nil check is present.
 	log.Trace("Processing import structs", "count", len(importStructs), "file", relativeFilePath, "track_provenance", atmosConfig != nil && atmosConfig.TrackProvenance)
 	for _, importStruct := range importStructs {
@@ -1173,6 +1189,20 @@ func processYAMLConfigFileWithContextInternal(
 		if imp == "" {
 			return nil, nil, nil, nil, nil, nil, nil, nil, fmt.Errorf("%w in the manifest '%s'", errUtils.ErrInvalidImport, relativeFilePath)
 		}
+
+		// Render Go templates in the import path so an import can reference values
+		// (`settings`/`vars`/`env`) defined by earlier imports in this manifest, plus
+		// this import's own `context`. Only the path string is rendered here; the
+		// imported file's content templating (and its deferral logic) is left untouched.
+		renderedImp, impErr := renderImportPath(atmosConfig, relativeFilePath, imp, accumulatedImportContext, importStruct)
+		if impErr != nil {
+			return nil, nil, nil, nil, nil, nil, nil, nil, impErr
+		}
+		imp = renderedImp
+
+		// Snapshot the accumulated context for the child import. The outer loop is
+		// sequential, so this captures only the sections from earlier siblings.
+		childImportContext := accumulatedImportContext
 
 		var importMatches []stackimports.RemoteImportMatch
 
@@ -1333,6 +1363,7 @@ func processYAMLConfigFileWithContextInternal(
 					nestedImports,
 					importsConfig,
 					mergedContext,
+					childImportContext,
 					ignoreMissingFiles,
 					importStruct.SkipTemplatesProcessing,
 					importStruct.IgnoreMissingTemplateValues || (atmosConfig != nil && atmosConfig.Templates.Settings.IgnoreMissingTemplateValues),
@@ -1448,6 +1479,21 @@ func processYAMLConfigFileWithContextInternal(
 			importsConfigLock.Lock()
 			importsConfig[result.importRelativePathWithoutExt] = result.yamlConfigRaw
 			importsConfigLock.Unlock()
+
+			// Fold this import's resolved `settings`/`vars`/`env` into the running
+			// import-path context so that LATER imports in this manifest can reference
+			// them in their import paths. Template-only: does not change merge order.
+			sections := extractImportPathSections(result.yamlConfig)
+			if len(sections) > 0 {
+				accumulatedImportContext, err = m.MergeWithContext(
+					atmosConfig,
+					[]map[string]any{accumulatedImportContext, sections},
+					mergeContext,
+				)
+				if err != nil {
+					return nil, nil, nil, nil, nil, nil, nil, nil, err
+				}
+			}
 		}
 	}
 
@@ -1522,6 +1568,79 @@ func processYAMLConfigFileWithContextInternal(
 		parentHelmfileOverridesImports,
 		mergeContext,
 		nil
+}
+
+// renderImportPath renders Go templates embedded in a stack import path.
+//
+// This lets an import reference values defined by EARLIER imports in the same manifest,
+// for example pinning a remote import's Git ref from a globally-defined variable:
+//
+//	import:
+//	  - ./_defaults    # sets settings.context.deployment_repo_version
+//	  - "github.com/org/repo//stacks/catalog/foo?ref={{ .settings.context.deployment_repo_version }}"
+//
+// The template data is the accumulated `settings`/`vars`/`env` from earlier imports,
+// overlaid with this import's own explicit `context` (which takes precedence). Only the
+// path string is rendered; the imported file's content templating is untouched.
+//
+// Rendering is skipped when the path has no `{{`, when `skip_templates_processing` is set,
+// or when templating is disabled in `atmos.yaml`. A missing value produces a hard error
+// (with a hint) unless `ignore_missing_template_values` is set on the import or globally.
+func renderImportPath(
+	atmosConfig *schema.AtmosConfiguration,
+	relativeFilePath string,
+	imp string,
+	accumulatedImportContext map[string]any,
+	importStruct schema.StackImport,
+) (string, error) {
+	defer perf.Track(atmosConfig, "exec.renderImportPath")()
+
+	if importStruct.SkipTemplatesProcessing || !strings.Contains(imp, "{{") {
+		return imp, nil
+	}
+	// Honor the global templating switch so disabling templates also disables import-path
+	// templating (and preserves raw `{{ ... }}` paths for callers that rely on that).
+	if atmosConfig != nil && !atmosConfig.Templates.Settings.Enabled {
+		return imp, nil
+	}
+
+	ignoreMissing := importStruct.IgnoreMissingTemplateValues ||
+		(atmosConfig != nil && atmosConfig.Templates.Settings.IgnoreMissingTemplateValues)
+
+	// Overlay the import's explicit `context` on top of the accumulated context.
+	tmplData := accumulatedImportContext
+	if len(importStruct.Context) > 0 {
+		merged, err := m.Merge(atmosConfig, []map[string]any{accumulatedImportContext, importStruct.Context})
+		if err != nil {
+			return "", err
+		}
+		tmplData = merged
+	}
+
+	rendered, err := ProcessTmpl(atmosConfig, fmt.Sprintf("import-path(%s)", relativeFilePath), imp, tmplData, ignoreMissing)
+	if err != nil {
+		wrapped := fmt.Errorf("%w: import path '%s' in file '%s': %w",
+			errUtils.ErrImportPathTemplate, imp, relativeFilePath, err)
+		return "", errUtils.Build(wrapped).
+			WithHint("Define the referenced variable in an earlier import (e.g. a `_defaults` file) or in this import's `context:`.").
+			WithHint("Set `ignore_missing_template_values: true` on the import (or `templates.settings.ignore_missing_template_values` in atmos.yaml) to leave unresolved values as-is.").
+			Err()
+	}
+
+	return rendered, nil
+}
+
+// extractImportPathSections returns a shallow map containing only the `settings`, `vars`,
+// and `env` sections present in an imported manifest's merged config. These are the sections
+// that can be referenced when templating subsequent imports' paths in the same manifest.
+func extractImportPathSections(cfgMap map[string]any) map[string]any {
+	out := map[string]any{}
+	for _, section := range []string{cfg.SettingsSectionName, cfg.VarsSectionName, cfg.EnvSectionName} {
+		if v, ok := cfgMap[section]; ok && v != nil {
+			out[section] = v
+		}
+	}
+	return out
 }
 
 // processSettingsIntegrationsGithub deep-merges the `settings.integrations.github` section from stack manifests with the `integrations.github` section from `atmos.yaml`.

@@ -2371,12 +2371,12 @@ func TestUserIdentity_Authenticate_WebflowFallbackSuccess(t *testing.T) {
 	tokenServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]interface{}{
-			"accessToken": map[string]string{
-				"accessKeyId":     "AKID_WF_AUTH",
-				"secretAccessKey": "SECRET_WF_AUTH",
-				"sessionToken":    "TOKEN_WF_AUTH",
+			"access_token": map[string]string{
+				"access_key_id":     "AKID_WF_AUTH",
+				"secret_access_key": "SECRET_WF_AUTH",
+				"session_token":     "TOKEN_WF_AUTH",
 			},
-			"expiresIn": 900,
+			"expires_in": 900,
 		})
 	}))
 	defer tokenServer.Close()
@@ -2554,4 +2554,57 @@ func TestUserIdentity_Authenticate_WebflowDisabledBypassed(t *testing.T) {
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrAwsUserNotConfigured)
 	assert.False(t, webflowReached, "webflow must not run when webflow_enabled is false")
+}
+
+// TestUserIdentity_SetCredentialStore_HonorsInjectedStore verifies the
+// credential-store injection added for issue #2544: when the auth manager
+// injects its config-aware store, the identity reads from that store rather
+// than constructing a default one.
+func TestUserIdentity_SetCredentialStore_HonorsInjectedStore(t *testing.T) {
+	keyring.MockInit()
+
+	id, err := NewUserIdentity("inject-test", &schema.Identity{Kind: "aws/user"})
+	require.NoError(t, err)
+	identity := id.(*userIdentity)
+	identity.SetRealm("realm-x")
+
+	// Inject a memory-backed store and seed it with credentials.
+	mem := atmosCreds.NewCredentialStoreWithConfig(&schema.AuthConfig{
+		Keyring: schema.KeyringConfig{Type: types.CredentialStoreTypeMemory},
+	})
+	require.Equal(t, types.CredentialStoreTypeMemory, mem.Type())
+	identity.SetCredentialStore(mem)
+
+	seeded := &types.AWSCredentials{AccessKeyID: "AKIAINJECT", SecretAccessKey: "SECRET", Region: "us-east-1"}
+	require.NoError(t, mem.Store("inject-test", seeded, "realm-x"))
+
+	got, err := identity.credentialsFromStore()
+	require.NoError(t, err)
+	require.NotNil(t, got)
+	assert.Equal(t, "AKIAINJECT", got.AccessKeyID,
+		"identity must read from the injected store, not a default one")
+}
+
+// TestUserIdentity_credentialStore_FallsBackWhenNotInjected verifies that an
+// identity with no injected store still returns a usable default store that
+// credentialsFromStore can round-trip through.
+func TestUserIdentity_credentialStore_FallsBackWhenNotInjected(t *testing.T) {
+	keyring.MockInit()
+
+	id, err := NewUserIdentity("fallback-test", &schema.Identity{Kind: "aws/user"})
+	require.NoError(t, err)
+	identity := id.(*userIdentity)
+
+	store := identity.credentialStore()
+	require.NotNil(t, store, "credentialStore must fall back to a default store when none is injected")
+
+	// The fallback store must be usable: seed it and confirm the identity reads
+	// the same credentials back through credentialsFromStore.
+	seeded := &types.AWSCredentials{AccessKeyID: "AKIAFALLBACK", SecretAccessKey: "SECRET", Region: "us-east-1"}
+	require.NoError(t, store.Store("fallback-test", seeded, identity.realm))
+
+	got, err := identity.credentialsFromStore()
+	require.NoError(t, err)
+	require.NotNil(t, got)
+	assert.Equal(t, "AKIAFALLBACK", got.AccessKeyID)
 }

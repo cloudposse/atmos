@@ -164,25 +164,31 @@ func (s stubSamlMgr) AuthenticateProvider(context.Context, string) (*types.Whoam
 	return nil, nil
 }
 func (s stubSamlMgr) Whoami(context.Context, string) (*types.WhoamiInfo, error) { return nil, nil }
-func (s stubSamlMgr) Validate() error                                           { return nil }
-func (s stubSamlMgr) GetDefaultIdentity(_ bool) (string, error)                 { return "", nil }
-func (s stubSamlMgr) ListIdentities() []string                                  { return nil }
-func (s stubSamlMgr) GetProviderForIdentity(string) string                      { return "" }
-func (s stubSamlMgr) GetFilesDisplayPath(string) string                         { return filepath.Join("~", ".aws", "atmos") }
-func (s stubSamlMgr) GetProviderKindForIdentity(string) (string, error)         { return "", nil }
-func (s stubSamlMgr) GetChain() []string                                        { return s.chain }
-func (s stubSamlMgr) GetStackInfo() *schema.ConfigAndStacksInfo                 { return nil }
-func (s stubSamlMgr) ListProviders() []string                                   { return nil }
-func (s stubSamlMgr) GetIdentities() map[string]schema.Identity                 { return s.idmap }
-func (s stubSamlMgr) GetProviders() map[string]schema.Provider                  { return nil }
-func (s stubSamlMgr) Logout(context.Context, string, bool) error                { return nil }
-func (s stubSamlMgr) LogoutProvider(context.Context, string, bool) error        { return nil }
-func (s stubSamlMgr) LogoutAll(context.Context, bool) error                     { return nil }
+
+func (s stubSamlMgr) CredentialStoreType() string                        { return "" }
+func (s stubSamlMgr) Validate() error                                    { return nil }
+func (s stubSamlMgr) GetDefaultIdentity(_ bool) (string, error)          { return "", nil }
+func (s stubSamlMgr) ListIdentities() []string                           { return nil }
+func (s stubSamlMgr) GetProviderForIdentity(string) string               { return "" }
+func (s stubSamlMgr) GetFilesDisplayPath(string) string                  { return filepath.Join("~", ".aws", "atmos") }
+func (s stubSamlMgr) GetProviderKindForIdentity(string) (string, error)  { return "", nil }
+func (s stubSamlMgr) GetChain() []string                                 { return s.chain }
+func (s stubSamlMgr) GetStackInfo() *schema.ConfigAndStacksInfo          { return nil }
+func (s stubSamlMgr) ListProviders() []string                            { return nil }
+func (s stubSamlMgr) GetIdentities() map[string]schema.Identity          { return s.idmap }
+func (s stubSamlMgr) GetProviders() map[string]schema.Provider           { return nil }
+func (s stubSamlMgr) Logout(context.Context, string, bool) error         { return nil }
+func (s stubSamlMgr) LogoutProvider(context.Context, string, bool) error { return nil }
+func (s stubSamlMgr) LogoutAll(context.Context, bool) error              { return nil }
 func (s stubSamlMgr) GetEnvironmentVariables(string) (map[string]string, error) {
 	return make(map[string]string), nil
 }
 
 func (s stubSamlMgr) PrepareShellEnvironment(context.Context, string, []string) ([]string, error) {
+	return nil, nil
+}
+
+func (s stubSamlMgr) EnsureIdentityEnvironment(context.Context, string) (map[string]string, error) {
 	return nil, nil
 }
 
@@ -196,6 +202,10 @@ func (s stubSamlMgr) ExecuteIdentityIntegrations(context.Context, string) error 
 
 func (s stubSamlMgr) GetIntegration(string) (*schema.Integration, error) {
 	return nil, nil
+}
+
+func (s stubSamlMgr) RevokeEphemeralIntegrations(context.Context, string, *bool) error {
+	return nil
 }
 
 func (s stubSamlMgr) ResolvePrincipalSetting(string, string) (interface{}, bool) {

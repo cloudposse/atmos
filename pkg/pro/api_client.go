@@ -570,20 +570,34 @@ func isDriftDetectionError(apiResponse *dtos.AtmosApiResponse) bool {
 		strings.Contains(msg, "detect workflow")
 }
 
-// getGitHubOIDCToken retrieves an OIDC token from GitHub Actions.
-// An optional *http.Client can be passed as the second argument; when omitted,
+// DefaultProAudience is the default OIDC audience for Atmos Pro token exchange.
+const DefaultProAudience = "atmos-pro.com"
+
+// MintGitHubOIDCToken mints a GitHub Actions OIDC token for the given audience.
+// Exported for reuse by the atmos/pro auth provider. When audience is empty,
+// DefaultProAudience is used.
+func MintGitHubOIDCToken(githubOIDCSettings schema.GithubOIDCSettings, audience string) (string, error) {
+	return getGitHubOIDCTokenWithAudience(githubOIDCSettings, audience)
+}
+
+// ExchangeOIDCToken exchanges a GitHub Actions OIDC token for an Atmos Pro session JWT
+// via POST {baseURL}/{baseAPIEndpoint}/auth/github-oidc. Exported for reuse by the
+// atmos/pro auth provider.
+func ExchangeOIDCToken(baseURL, baseAPIEndpoint, oidcToken, workspaceID string) (string, error) {
+	return exchangeOIDCTokenForAtmosToken(baseURL, baseAPIEndpoint, oidcToken, workspaceID)
+}
+
+// getGitHubOIDCToken retrieves an OIDC token from GitHub Actions using the default
+// Atmos Pro audience. An optional *http.Client can be passed; when omitted,
 // getHTTPClientWithTimeout is used. This is primarily for test injection.
 func getGitHubOIDCToken(githubOIDCSettings schema.GithubOIDCSettings, clients ...*http.Client) (string, error) {
-	requestURL := githubOIDCSettings.RequestURL
-	requestToken := githubOIDCSettings.RequestToken
+	return getGitHubOIDCTokenWithAudience(githubOIDCSettings, DefaultProAudience, clients...)
+}
 
-	if requestURL == "" || requestToken == "" {
-		return "", errUtils.ErrNotInGitHubActions
-	}
-
-	// Parse and validate the URL to prevent SSRF: scheme must be https and host must
-	// be non-empty.
-	u, err := url.Parse(requestURL)
+// buildOIDCRequestURL validates the GitHub Actions OIDC request URL (SSRF guard:
+// https scheme + non-empty host) and appends the audience query parameter.
+func buildOIDCRequestURL(rawURL, audience string) (string, error) {
+	u, err := url.Parse(rawURL)
 	if err != nil {
 		return "", fmt.Errorf("%w: invalid ACTIONS_ID_TOKEN_REQUEST_URL: %w", errUtils.ErrFailedToGetGitHubOIDCToken, err)
 	}
@@ -593,12 +607,29 @@ func getGitHubOIDCToken(githubOIDCSettings schema.GithubOIDCSettings, clients ..
 	if u.Hostname() == "" {
 		return "", fmt.Errorf("%w: ACTIONS_ID_TOKEN_REQUEST_URL must have a non-empty host", errUtils.ErrFailedToGetGitHubOIDCToken)
 	}
-
-	// Add audience parameter to the request URL using proper URL manipulation.
 	q := u.Query()
-	q.Set("audience", "atmos-pro.com")
+	q.Set("audience", audience)
 	u.RawQuery = q.Encode()
-	requestOIDCTokenURL := u.String()
+	return u.String(), nil
+}
+
+// getGitHubOIDCTokenWithAudience retrieves an OIDC token from GitHub Actions for the
+// given audience. When audience is empty, DefaultProAudience is used.
+func getGitHubOIDCTokenWithAudience(githubOIDCSettings schema.GithubOIDCSettings, audience string, clients ...*http.Client) (string, error) {
+	if audience == "" {
+		audience = DefaultProAudience
+	}
+	requestURL := githubOIDCSettings.RequestURL
+	requestToken := githubOIDCSettings.RequestToken
+
+	if requestURL == "" || requestToken == "" {
+		return "", errUtils.ErrNotInGitHubActions
+	}
+
+	requestOIDCTokenURL, err := buildOIDCRequestURL(requestURL, audience)
+	if err != nil {
+		return "", err
+	}
 	log.Debug("requestOIDCTokenURL", "requestOIDCTokenURL", requestOIDCTokenURL)
 
 	req, err := http.NewRequest("GET", requestOIDCTokenURL, nil)
@@ -608,21 +639,31 @@ func getGitHubOIDCToken(githubOIDCSettings schema.GithubOIDCSettings, clients ..
 
 	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", requestToken))
 
-	var client *http.Client
-	if len(clients) > 0 && clients[0] != nil {
-		client = clients[0]
-	} else if oidcHTTPClientOverride != nil {
-		client = oidcHTTPClientOverride
-	} else {
-		client = getHTTPClientWithTimeout()
-	}
-	resp, err := client.Do(req)
+	// Request URL is SSRF-validated by buildOIDCRequestURL (https scheme + non-empty host).
+	resp, err := selectOIDCHTTPClient(clients).Do(req) //nolint:gosec
 	if err != nil {
 		log.Debug("getGitHubOIDCToken", "error", err)
 		return "", wrapErr(errUtils.ErrFailedToGetOIDCToken, err)
 	}
 	defer resp.Body.Close()
 
+	return parseOIDCTokenResponse(resp)
+}
+
+// selectOIDCHTTPClient picks the HTTP client for OIDC requests: an explicit test
+// client, then the package-level test override, then a timed default client.
+func selectOIDCHTTPClient(clients []*http.Client) *http.Client {
+	if len(clients) > 0 && clients[0] != nil {
+		return clients[0]
+	}
+	if oidcHTTPClientOverride != nil {
+		return oidcHTTPClientOverride
+	}
+	return getHTTPClientWithTimeout()
+}
+
+// parseOIDCTokenResponse reads, status-checks, and decodes the GitHub OIDC token response.
+func parseOIDCTokenResponse(resp *http.Response) (string, error) {
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return "", wrapErr(errUtils.ErrFailedToReadResponseBody, err)

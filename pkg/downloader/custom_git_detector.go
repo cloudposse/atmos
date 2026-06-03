@@ -3,8 +3,10 @@ package downloader
 import (
 	"fmt"
 	"net/url"
+	"os"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -207,6 +209,15 @@ func (d *CustomGitDetector) injectToken(parsedURL *url.URL, host string) {
 		return
 	}
 
+	// If an auth broker (e.g. github/sts) has already exported a GIT_CONFIG_* insteadOf rewrite that
+	// matches this host/owner, skip URL injection: injecting userinfo here would prevent git's
+	// insteadOf left-side from matching, silently shadowing the broker's correct minted token.
+	if brokerInsteadOfMatchesURL(parsedURL, host) {
+		maskedURL, _ := maskBasicAuth(parsedURL.String())
+		log.Debug("Skipping token injection: a broker GIT_CONFIG insteadOf already covers this host/owner; letting git's rewrite win", keyURL, maskedURL)
+		return
+	}
+
 	token, tokenSource := d.resolveToken(host)
 	if token != "" {
 		defaultUsername := d.getDefaultUsername(host)
@@ -218,12 +229,76 @@ func (d *CustomGitDetector) injectToken(parsedURL *url.URL, host string) {
 	}
 }
 
+// brokerInsteadOfMatchesURL reports whether a live GIT_CONFIG_* insteadOf rewrite (exported by an
+// auth broker, e.g. github/sts) would match this URL's host and owner — "match" being git's own
+// term for insteadOf: any URL beginning with the rewrite's value is rewritten (git help config,
+// url.<base>.insteadOf). When it matches, URL token injection must be skipped so git's rewrite —
+// carrying the correct minted token — wins instead of being shadowed by userinfo in the URL.
+func brokerInsteadOfMatchesURL(parsedURL *url.URL, host string) bool {
+	//nolint:forbidigo // Live env read of broker-exported GIT_CONFIG_*; mirrors pkg/http/client.go.
+	count, err := strconv.Atoi(os.Getenv("GIT_CONFIG_COUNT"))
+	if err != nil || count <= 0 {
+		return false
+	}
+
+	owner := firstPathSegment(parsedURL.Path)
+	if owner == "" {
+		return false
+	}
+
+	for i := 0; i < count; i++ {
+		if gitConfigInsteadOfMatches(i, host, owner) {
+			return true
+		}
+	}
+
+	return false
+}
+
+// gitConfigInsteadOfMatches reports whether the i-th GIT_CONFIG_* entry is an https `insteadOf`
+// rewrite whose host and owner match. Only an https rewrite matches an https clone — an ssh-only
+// rewrite must not suppress injection.
+func gitConfigInsteadOfMatches(i int, host, owner string) bool {
+	//nolint:forbidigo // Live env read of broker-exported GIT_CONFIG_*; mirrors pkg/http/client.go.
+	key := os.Getenv("GIT_CONFIG_KEY_" + strconv.Itoa(i))
+	if !strings.HasPrefix(key, "url.") || !strings.HasSuffix(key, ".insteadOf") {
+		return false
+	}
+
+	//nolint:forbidigo // Live env read of broker-exported GIT_CONFIG_*; mirrors pkg/http/client.go.
+	insteadOf, err := url.Parse(os.Getenv("GIT_CONFIG_VALUE_" + strconv.Itoa(i)))
+	if err != nil || insteadOf.Scheme != "https" {
+		return false
+	}
+
+	return strings.ToLower(insteadOf.Hostname()) == host && firstPathSegment(insteadOf.Path) == owner
+}
+
+// firstPathSegment returns the lowercased first non-empty path segment (the owner/org), or "".
+func firstPathSegment(path string) string {
+	for _, seg := range strings.Split(path, "/") {
+		if seg != "" {
+			return strings.ToLower(seg)
+		}
+	}
+	return ""
+}
+
 // resolveToken returns the token and its source based on the host.
 // It prefers ATMOS_* prefixed tokens but falls back to standard tokens if not set.
 func (d *CustomGitDetector) resolveToken(host string) (string, string) {
 	switch host {
 	case hostGitHub:
-		// Try ATMOS_GITHUB_TOKEN first, fall back to GITHUB_TOKEN
+		// Prefer ATMOS_PRO_GITHUB_TOKEN (Atmos Pro-brokered), then ATMOS_GITHUB_TOKEN, then GITHUB_TOKEN.
+		if d.atmosConfig.Settings.AtmosProGithubToken != "" {
+			return d.atmosConfig.Settings.AtmosProGithubToken, "ATMOS_PRO_GITHUB_TOKEN"
+		}
+		// The broker os.Setenv's the minted token after startup (after Settings is populated), so
+		// read the live env here as well — mirrors pkg/http/client.go.
+		//nolint:forbidigo // Live env fallback for the broker-set token; mirrors pkg/http/client.go.
+		if token := os.Getenv("ATMOS_PRO_GITHUB_TOKEN"); token != "" {
+			return token, "ATMOS_PRO_GITHUB_TOKEN"
+		}
 		if d.atmosConfig.Settings.AtmosGithubToken != "" {
 			return d.atmosConfig.Settings.AtmosGithubToken, "ATMOS_GITHUB_TOKEN"
 		}

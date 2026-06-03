@@ -135,6 +135,8 @@ components:
   <dd>
     When `true`, Atmos passes the generated varfile to `terraform init` using `--var-file`. This is primarily useful with OpenTofu, which supports [passing varfiles to init](https://opentofu.org/docs/cli/commands/init/#general-options) for dynamic backend configuration.
 
+    This also applies to the implicit `init` that Atmos runs while resolving a component referenced through [`!terraform.output`](/functions/yaml/terraform.output) or [`atmos.Component`](/functions/template/atmos.Component) — its vars are forwarded as `TF_VAR_*` environment variables so that modules with init-time variable dependencies (for example, a module `version` bound to a `var`) can initialize.
+
     **Environment variable:** `ATMOS_COMPONENTS_TERRAFORM_INIT_PASS_VARS`
     **Command-line flag:** `--init-pass-vars`
     **Default:** `false`

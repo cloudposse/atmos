@@ -7,6 +7,7 @@ package aws
 import (
 	"bufio"
 	"context"
+	"crypto/ecdsa"
 	"errors"
 	"fmt"
 	"net"
@@ -63,12 +64,12 @@ func (i *userIdentity) browserWebflowInteractive(ctx context.Context, region str
 	}
 
 	// Wait for callback with spinner.
-	tokenResp, err := i.waitForCallbackWithSpinner(ctx, setup.resultCh, setup.region, setup.verifier, setup.redirectURI)
+	tokenResp, err := i.waitForCallbackWithSpinner(ctx, setup.resultCh, setup.exchange())
 	if err != nil {
 		return nil, err
 	}
 
-	return i.processTokenResponse(tokenResp, region), nil
+	return i.processTokenResponse(tokenResp, region, setup.dpopKey), nil
 }
 
 // browserWebflowNonInteractive performs the browser flow with manual code entry.
@@ -111,6 +112,9 @@ type webflowSessionSetup struct {
 	redirectURI string
 	verifier    string
 	region      string
+	// dpopKey is the per-session DPoP key used to sign token-request proofs and
+	// later persisted with the refresh token for reuse on refresh (issue #2542).
+	dpopKey *ecdsa.PrivateKey
 }
 
 // prepareWebflowSession generates PKCE + state, starts the local callback
@@ -127,6 +131,11 @@ func (i *userIdentity) prepareWebflowSession(ctx context.Context, region string)
 		return nil, fmt.Errorf("%w: failed to generate state: %w", errUtils.ErrWebflowAuthFailed, err)
 	}
 
+	dpopKey, err := generateDPoPKey()
+	if err != nil {
+		return nil, fmt.Errorf("%w: %w", errUtils.ErrWebflowAuthFailed, err)
+	}
+
 	listener, resultCh, err := startCallbackServer(ctx, state)
 	if err != nil {
 		return nil, wrapWebflowErr(errUtils.ErrWebflowCallbackServer, err)
@@ -140,6 +149,7 @@ func (i *userIdentity) prepareWebflowSession(ctx context.Context, region string)
 		redirectURI: fmt.Sprintf("http://127.0.0.1:%d%s", port, webflowCallbackPath),
 		verifier:    verifier,
 		region:      region,
+		dpopKey:     dpopKey,
 	}, nil
 }
 
@@ -210,34 +220,54 @@ func (i *userIdentity) awaitNonInteractiveAuthCode(ctx context.Context, setup *w
 // non-interactive select branches.
 func (i *userIdentity) exchangeAndProcess(ctx context.Context, setup *webflowSessionSetup, code string) (*types.AWSCredentials, error) {
 	tokenResp, err := exchangeCodeForCredentials(ctx, defaultHTTPClient, exchangeCodeParams{
-		region: setup.region, code: code, codeVerifier: setup.verifier, redirectURI: setup.redirectURI,
+		region: setup.region, code: code, codeVerifier: setup.verifier, redirectURI: setup.redirectURI, dpopKey: setup.dpopKey,
 	})
 	if err != nil {
 		return nil, err
 	}
-	return i.processTokenResponse(tokenResp, setup.region), nil
+	return i.processTokenResponse(tokenResp, setup.region, setup.dpopKey), nil
+}
+
+// webflowExchange carries the per-session values needed to exchange an
+// authorization code for credentials. Grouped to keep the callback-wait
+// helpers under the revive argument-limit.
+type webflowExchange struct {
+	region      string
+	verifier    string
+	redirectURI string
+	dpopKey     *ecdsa.PrivateKey
+}
+
+// exchange returns the subset of session state needed to exchange the
+// authorization code for credentials.
+func (s *webflowSessionSetup) exchange() webflowExchange {
+	return webflowExchange{
+		region:      s.region,
+		verifier:    s.verifier,
+		redirectURI: s.redirectURI,
+		dpopKey:     s.dpopKey,
+	}
 }
 
 // waitForCallbackWithSpinner waits for the OAuth2 callback with a spinner UI.
-func (i *userIdentity) waitForCallbackWithSpinner(ctx context.Context, resultCh <-chan webflowResult, region, verifier, redirectURI string) (*webflowTokenResponse, error) {
+func (i *userIdentity) waitForCallbackWithSpinner(ctx context.Context, resultCh <-chan webflowResult, ex webflowExchange) (*webflowTokenResponse, error) {
 	// Run the spinner only when we have an interactive terminal (or
 	// --force-tty) AND we are NOT in CI. CI suppression is preserved even
 	// when a real TTY is attached, because spinner escape sequences pollute
 	// CI logs.
 	if !webflowIsInteractive() || telemetry.IsCI() {
-		return i.waitForCallbackSimple(ctx, resultCh, region, verifier, redirectURI)
+		return i.waitForCallbackSimple(ctx, resultCh, ex)
 	}
 
 	ctx, cancel := context.WithTimeout(ctx, webflowCallbackTimeout)
 	defer cancel()
 
-	tokenCh := startSpinnerExchangeGoroutine(ctx, resultCh, region, verifier, redirectURI)
+	tokenCh := startSpinnerExchangeGoroutine(ctx, resultCh, ex)
 
 	finalModel, err := runSpinnerProgramFunc(newWebflowSpinnerModel(tokenCh, cancel))
 	if err != nil {
 		return i.handleSpinnerFallback(&spinnerFallbackParams{
-			cancel: cancel, tokenCh: tokenCh, resultCh: resultCh,
-			region: region, verifier: verifier, redirectURI: redirectURI, runErr: err,
+			cancel: cancel, tokenCh: tokenCh, resultCh: resultCh, exchange: ex, runErr: err,
 		})
 	}
 
@@ -257,7 +287,7 @@ func (i *userIdentity) waitForCallbackWithSpinner(ctx context.Context, resultCh 
 // callback against the context deadline and exchanges the authorization code
 // for tokens when the callback arrives. The returned channel delivers either
 // a successful response or a wrapped error.
-func startSpinnerExchangeGoroutine(ctx context.Context, resultCh <-chan webflowResult, region, verifier, redirectURI string) chan webflowSpinnerTokenResult {
+func startSpinnerExchangeGoroutine(ctx context.Context, resultCh <-chan webflowResult, ex webflowExchange) chan webflowSpinnerTokenResult {
 	tokenCh := make(chan webflowSpinnerTokenResult, 1)
 	go func() {
 		defer close(tokenCh)
@@ -268,7 +298,7 @@ func startSpinnerExchangeGoroutine(ctx context.Context, resultCh <-chan webflowR
 				return
 			}
 			resp, err := exchangeCodeForCredentials(ctx, defaultHTTPClient, exchangeCodeParams{
-				region: region, code: result.code, codeVerifier: verifier, redirectURI: redirectURI,
+				region: ex.region, code: result.code, codeVerifier: ex.verifier, redirectURI: ex.redirectURI, dpopKey: ex.dpopKey,
 			})
 			tokenCh <- webflowSpinnerTokenResult{resp: resp, err: err}
 		case <-ctx.Done():
@@ -282,13 +312,11 @@ func startSpinnerExchangeGoroutine(ctx context.Context, resultCh <-chan webflowR
 // from a failed bubbletea spinner run. Grouped to keep the method under the
 // revive argument-limit.
 type spinnerFallbackParams struct {
-	cancel      context.CancelFunc
-	tokenCh     chan webflowSpinnerTokenResult
-	resultCh    <-chan webflowResult
-	region      string
-	verifier    string
-	redirectURI string
-	runErr      error
+	cancel   context.CancelFunc
+	tokenCh  chan webflowSpinnerTokenResult
+	resultCh <-chan webflowResult
+	exchange webflowExchange
+	runErr   error
 }
 
 // handleSpinnerFallback handles the case where tea.NewProgram.Run returns an
@@ -308,11 +336,11 @@ func (i *userIdentity) handleSpinnerFallback(p *spinnerFallbackParams) (*webflow
 	// Fall back to a blocking wait with a fresh timeout.
 	ctx2, cancel2 := context.WithTimeout(context.Background(), webflowCallbackTimeout)
 	defer cancel2()
-	return i.waitForCallbackSimple(ctx2, p.resultCh, p.region, p.verifier, p.redirectURI)
+	return i.waitForCallbackSimple(ctx2, p.resultCh, p.exchange)
 }
 
 // waitForCallbackSimple waits for callback without spinner (non-TTY environments).
-func (i *userIdentity) waitForCallbackSimple(ctx context.Context, resultCh <-chan webflowResult, region, verifier, redirectURI string) (*webflowTokenResponse, error) {
+func (i *userIdentity) waitForCallbackSimple(ctx context.Context, resultCh <-chan webflowResult, ex webflowExchange) (*webflowTokenResponse, error) {
 	ctx, cancel := context.WithTimeout(ctx, webflowCallbackTimeout)
 	defer cancel()
 
@@ -322,23 +350,33 @@ func (i *userIdentity) waitForCallbackSimple(ctx context.Context, resultCh <-cha
 			return nil, wrapWebflowErr(errUtils.ErrWebflowAuthFailed, result.err)
 		}
 		return exchangeCodeForCredentials(ctx, defaultHTTPClient, exchangeCodeParams{
-			region: region, code: result.code, codeVerifier: verifier, redirectURI: redirectURI,
+			region: ex.region, code: result.code, codeVerifier: ex.verifier, redirectURI: ex.redirectURI, dpopKey: ex.dpopKey,
 		})
 	case <-ctx.Done():
 		return nil, wrapWebflowErr(errUtils.ErrWebflowTimeout, ctx.Err())
 	}
 }
 
-// processTokenResponse converts a token response to AWS credentials and caches the refresh token.
-func (i *userIdentity) processTokenResponse(tokenResp *webflowTokenResponse, region string) *types.AWSCredentials {
+// processTokenResponse converts a token response to AWS credentials and caches
+// the refresh token together with the DPoP key it is bound to, so the key can
+// be reused on refresh (RFC 9449, issue #2542).
+func (i *userIdentity) processTokenResponse(tokenResp *webflowTokenResponse, region string, dpopKey *ecdsa.PrivateKey) *types.AWSCredentials {
 	creds := tokenResponseToCredentials(tokenResp, region)
 
 	// Cache refresh token for future use.
 	if tokenResp.RefreshToken != "" {
+		encodedKey, err := marshalDPoPKey(dpopKey)
+		if err != nil {
+			// Without the DPoP key the refresh grant cannot succeed; skip
+			// caching so the next run cleanly falls back to the browser flow.
+			log.Debug("Failed to serialize DPoP key; not caching refresh token", logKeyIdentity, i.name, "error", err)
+			return creds
+		}
 		i.saveRefreshCache(&webflowRefreshCache{
 			RefreshToken: tokenResp.RefreshToken,
 			Region:       region,
 			ExpiresAt:    time.Now().Add(webflowSessionDuration),
+			DPoPKey:      encodedKey,
 		})
 	}
 

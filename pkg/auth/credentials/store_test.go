@@ -14,6 +14,52 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
+// Compile-time guard: a rename of the Keyring/Type schema fields must break the build.
+var _ = schema.AuthConfig{Keyring: schema.KeyringConfig{Type: "memory"}}
+
+// TestNewCredentialStoreWithConfig_SelectsBackendByPriority verifies the
+// env > config > default priority used to choose the keyring backend. The
+// config-driven case is the regression guard for issue #2544: a non-nil
+// authConfig with Keyring.Type must select that backend.
+func TestNewCredentialStoreWithConfig_SelectsBackendByPriority(t *testing.T) {
+	tests := []struct {
+		name       string
+		envType    string
+		authConfig *schema.AuthConfig
+		wantType   string
+	}{
+		{
+			name:       "config memory is honored (issue #2544)",
+			envType:    "",
+			authConfig: &schema.AuthConfig{Keyring: schema.KeyringConfig{Type: types.CredentialStoreTypeMemory}},
+			wantType:   types.CredentialStoreTypeMemory,
+		},
+		{
+			name:       "env var overrides config",
+			envType:    types.CredentialStoreTypeMemory,
+			authConfig: &schema.AuthConfig{Keyring: schema.KeyringConfig{Type: "system"}},
+			wantType:   types.CredentialStoreTypeMemory,
+		},
+		{
+			name:       "nil config defaults to system in test environment",
+			envType:    "",
+			authConfig: nil,
+			wantType:   types.CredentialStoreTypeSystemKeyring,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Setenv with empty string clears any inherited value for this test.
+			t.Setenv("ATMOS_KEYRING_TYPE", tt.envType)
+
+			store := NewCredentialStoreWithConfig(tt.authConfig)
+			assert.NotNil(t, store)
+			assert.Equal(t, tt.wantType, store.Type())
+		})
+	}
+}
+
 // Ensure the keyring uses an in-memory mock backend for tests.
 func init() {
 	keyring.MockInit()
@@ -54,6 +100,25 @@ func TestStoreRetrieve_OIDC(t *testing.T) {
 		assert.Equal(t, in.Token, out.Token)
 		assert.Equal(t, in.Provider, out.Provider)
 		assert.Equal(t, in.Audience, out.Audience)
+	}
+}
+
+func TestStoreRetrieve_Pro(t *testing.T) {
+	t.Setenv("ATMOS_KEYRING_TYPE", "memory")
+	s := NewCredentialStore()
+	alias := "atmos-pro-1"
+	in := &types.ProCredentials{Token: "hdr.payload.", BaseURL: "https://pro", Endpoint: "api/v1", WorkspaceID: "ws-1", Provider: "atmos-pro"}
+	assert.NoError(t, s.Store(alias, in, "realmA"))
+
+	got, err := s.Retrieve(alias, "realmA")
+	assert.NoError(t, err)
+	out, ok := got.(*types.ProCredentials)
+	if assert.True(t, ok) {
+		assert.Equal(t, in.Token, out.Token)
+		assert.Equal(t, in.BaseURL, out.BaseURL)
+		assert.Equal(t, in.Endpoint, out.Endpoint)
+		assert.Equal(t, in.WorkspaceID, out.WorkspaceID)
+		assert.Equal(t, in.Provider, out.Provider)
 	}
 }
 

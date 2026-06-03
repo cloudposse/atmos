@@ -65,7 +65,7 @@ func TestProcessImports(t *testing.T) {
 	}
 
 	// Step 5: Run the processImports method
-	imported, err := processImports(baseDir, imports, baseDir, 0, 10)
+	imported, err := processImports(nil, baseDir, imports, baseDir, 0, 10)
 
 	// Step 6: Assertions
 	assert.NoError(t, err, "processImports should not return an error")
@@ -113,7 +113,7 @@ import:
 	t.Run("Test local import processing", func(t *testing.T) {
 		tempDir := t.TempDir()
 		importPaths := []string{"local.yaml"}
-		imported, err := processImports(baseDir, importPaths, tempDir, 1, 5)
+		imported, err := processImports(nil, baseDir, importPaths, tempDir, 1, 5)
 		assert.NoError(t, err)
 		var resolvedPaths []string
 		for _, resolvedPath := range imported {
@@ -125,7 +125,7 @@ import:
 	t.Run("Test imports with depth limit", func(t *testing.T) {
 		tempDir := t.TempDir()
 		importPaths := []string{"local.yaml"}
-		resolved, err := processImports(baseDir, importPaths, tempDir, 11, 10)
+		resolved, err := processImports(nil, baseDir, importPaths, tempDir, 11, 10)
 		assert.Error(t, err, "should return an error when maxDepth is exceeded")
 		assert.Nil(t, resolved, "no resolved paths should be returned on depth limit breach")
 	})
@@ -259,7 +259,7 @@ settings:
 	// This simulates the case where .github/atmos.yaml imports ../atmos.yaml.
 	tempDir := t.TempDir()
 
-	resolvedPaths, err := processImports(subDir, []string{"../atmos.yaml"}, tempDir, 1, 10)
+	resolvedPaths, err := processImports(nil, subDir, []string{"../atmos.yaml"}, tempDir, 1, 10)
 
 	// Verify that the import resolves successfully.
 	assert.NoError(t, err)
