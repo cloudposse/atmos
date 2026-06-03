@@ -127,7 +127,10 @@ atmos ami share al2023 -s al2023 --accounts 123456789012,123456789013
 4. Run the **AMI Pipeline** workflow (`workflow_dispatch`). It builds, health-checks,
    waits for approval, then tags and shares the AMI.
 
-The full setup list is in [`docs/customization-checklist.md`](docs/customization-checklist.md).
+The reference policies under [`docs/`](docs/) are paste-ready (no comment keys, which AWS
+rejects). See [`docs/README.md`](docs/README.md) for per-policy notes and the placeholders
+to replace, and [`docs/customization-checklist.md`](docs/customization-checklist.md) for
+the full setup list.
 
 ## Customize
 

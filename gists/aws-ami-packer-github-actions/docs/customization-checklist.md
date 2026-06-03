@@ -24,6 +24,10 @@ setup step. Nothing here is hardcoded in the Packer template or scripts.
 
 ## 3. One-time AWS setup
 
+See [`docs/README.md`](README.md) for per-policy notes (placeholders to replace,
+least-privilege/KMS caveats, and OIDC `sub` scoping). The JSON files are paste-ready —
+they contain no comment keys, since AWS rejects those with `MalformedPolicyDocument`.
+
 - [ ] Create the GitHub OIDC identity provider in your account.
 - [ ] Create the build role with `docs/oidc-trust-policy.json` (trust) and
       `docs/packer-build-iam-policy.json` (permissions).
