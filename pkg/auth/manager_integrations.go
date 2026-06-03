@@ -25,10 +25,7 @@ var processIntegrationCache sync.Map
 // resetProcessIntegrationCache clears the integration execution cache.
 // Intended for use in tests to ensure isolation between test cases.
 func resetProcessIntegrationCache() {
-	processIntegrationCache.Range(func(key, _ any) bool {
-		processIntegrationCache.Delete(key)
-		return true
-	})
+	processIntegrationCache.Clear()
 }
 
 // integrationTargetKey returns a canonical cache key for an integration.
