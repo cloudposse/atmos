@@ -875,7 +875,7 @@ func TestComponentLevelListMergeStrategy(t *testing.T) {
 //   - mi-multi-level-append: inherits mi-middle (which inherits mi-base-a)
 //     → expected my_list: [from_a, from_middle, from_leaf]
 //   - mi-merge-strategy: metadata.inherits: [mi-base-a, mi-base-b], list_merge_strategy: merge
-//     → expected my_list: [from_b]  (index-based merge, last element at each index wins).
+//     → expected my_list: [from_a]  (index-based merge preserves the earlier/dst scalar at each index).
 func TestListMergeStrategyWithMetadataInherits(t *testing.T) {
 	workDir := filepath.Join("..", "..", "tests", "fixtures", "scenarios", "component-list-merge-strategy")
 	t.Chdir(workDir)
