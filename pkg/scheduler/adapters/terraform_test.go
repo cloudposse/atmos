@@ -521,6 +521,31 @@ func TestTerraformExecutionResultCombinedOutput(t *testing.T) {
 	require.Equal(t, "stdout\nstderr", TerraformExecutionResult{Stdout: "stdout", Stderr: "stderr"}.CombinedOutput())
 }
 
+func TestTerraformExecutionErrorIncludesCapturedOutputDetail(t *testing.T) {
+	err := terraformExecutionError(
+		&dependency.Node{Component: "clickhouse-keeper-vm", Stack: "fuecoco-stg"},
+		TerraformExecutionResult{
+			Stderr: strings.Join([]string{
+				"Initializing the backend...",
+				"Error: Error acquiring the state lock",
+				`writing "gs://nxtfwd-tf-state/clickhouse-keeper-vm/fuecoco-stg.tflock" failed`,
+				"Lock Info:",
+				"  ID: 1780498246824576",
+			}, "\n"),
+		},
+		errors.New("subcommand exited with code 1"),
+	)
+
+	require.Error(t, err)
+	require.ErrorIs(t, err, errUtils.ErrTerraformExecFailed)
+	require.Contains(t, err.Error(), "component=clickhouse-keeper-vm stack=fuecoco-stg")
+	require.Contains(t, err.Error(), "subcommand exited with code 1")
+	require.Contains(t, err.Error(), "terraform output:")
+	require.Contains(t, err.Error(), "```text")
+	require.Contains(t, err.Error(), "Error acquiring the state lock")
+	require.Contains(t, err.Error(), "gs://nxtfwd-tf-state/clickhouse-keeper-vm/fuecoco-stg.tflock")
+}
+
 func TestTerraformOutputConfiguration(t *testing.T) {
 	output, err := newTerraformOutput(&schema.AtmosConfiguration{BasePathAbsolute: t.TempDir()}, &schema.ConfigAndStacksInfo{}, 1)
 	require.NoError(t, err)

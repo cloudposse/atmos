@@ -50,6 +50,11 @@ const (
 	terraformCLIArgsEnvPrefix = "TF_CLI_ARGS_"
 )
 
+const (
+	terraformFailureOutputTailLines = 40
+	terraformFailureOutputMaxBytes  = 8 * 1024
+)
+
 // TerraformExecution contains the execution context for one Terraform component.
 type TerraformExecution struct {
 	Context       context.Context
@@ -464,9 +469,40 @@ func (d *TerraformDispatcher) Dispatch(ctx context.Context, node *dependency.Nod
 		return scheduler.Result{NodeID: node.ID, Status: scheduler.StatusSucceeded, Value: outcome}, nil
 	}
 	if err != nil {
-		return scheduler.Result{NodeID: node.ID, Status: scheduler.StatusFailed, Value: outcome}, fmt.Errorf("%w: component=%s stack=%s: %w", errUtils.ErrTerraformExecFailed, node.Component, node.Stack, err)
+		return scheduler.Result{NodeID: node.ID, Status: scheduler.StatusFailed, Value: outcome}, terraformExecutionError(node, execResult, err)
 	}
 	return scheduler.Result{NodeID: node.ID, Status: scheduler.StatusSucceeded, Value: outcome}, nil
+}
+
+func terraformExecutionError(node *dependency.Node, result TerraformExecutionResult, err error) error {
+	baseErr := fmt.Errorf("%w: component=%s stack=%s: %w", errUtils.ErrTerraformExecFailed, node.Component, node.Stack, err)
+	detail := terraformFailureOutputDetail(result)
+	if detail == "" {
+		return baseErr
+	}
+	return fmt.Errorf("%w\n\nterraform output:\n```text\n%s\n```", baseErr, detail)
+}
+
+func terraformFailureOutputDetail(result TerraformExecutionResult) string {
+	output := strings.TrimSpace(ansi.Strip(result.CombinedOutput()))
+	if output == "" {
+		return ""
+	}
+
+	var masked strings.Builder
+	if _, err := io.WriteString(ioLayer.MaskWriter(&masked), output); err == nil {
+		output = masked.String()
+	}
+
+	lines := strings.Split(strings.TrimSpace(output), "\n")
+	if len(lines) > terraformFailureOutputTailLines {
+		lines = lines[len(lines)-terraformFailureOutputTailLines:]
+	}
+	output = strings.TrimSpace(strings.Join(lines, "\n"))
+	if len(output) > terraformFailureOutputMaxBytes {
+		output = "... terraform output truncated ...\n" + output[len(output)-terraformFailureOutputMaxBytes:]
+	}
+	return output
 }
 
 // lockTerraformResource serializes nodes that share the same physical Terraform workdir.
