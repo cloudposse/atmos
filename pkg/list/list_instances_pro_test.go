@@ -363,7 +363,7 @@ func TestExtractProSettings(t *testing.T) {
 		expectDrift bool
 	}{
 		{
-			// The Neon core-gbl-* bug case: component disabled upstream via
+			// The reported bug case: component disabled upstream via
 			// metadata.enabled, but pro.enabled + drift both true.
 			name: "metadata disabled forces pro and drift off",
 			settings: map[string]any{"pro": map[string]any{

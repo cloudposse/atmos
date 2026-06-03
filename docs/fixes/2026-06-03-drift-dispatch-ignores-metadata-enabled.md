@@ -20,8 +20,7 @@ design live here alongside the other regression/fix write-ups.
 
 ## Symptom
 
-Datadog `datadog-configuration` / `datadog-integration` instances in the Cloud Posse demos
-workspace (repo `cloudposse/infra-live`) kept failing scheduled drift detection with
+Components disabled via `metadata.enabled: false` kept failing scheduled drift detection with
 `dispatchError: "missing_plan_result"` and `drift_status: error`, even though multiple upstream PRs
 had "disabled" those components:
 
@@ -58,10 +57,10 @@ crossed the wire to Atmos Pro.
    arriving, a component carrying `settings.pro: {enabled: true, drift_detection: {enabled: true}}`
    was persisted as enabled + drift-enabled and dispatched, regardless of `metadata.enabled: false`.
 
-Neon prod data (project `super-paper-60425112`, table `instances`) confirmed the split was driven
-entirely by the one signal Atmos Pro stored: rows with `enabled:true, drift_enabled:true` were
-dispatched and went to `error`; rows with `drift_enabled:false` were correctly `disabled`. All of
-them carried `metadata.enabled:false` — it moved neither column.
+Inspecting Atmos Pro's persisted instance state confirmed the split was driven entirely by the one
+signal Atmos Pro stored: rows with `enabled:true, drift_enabled:true` were dispatched and went to
+`error`; rows with `drift_enabled:false` were correctly `disabled`. All of them carried
+`metadata.enabled:false` — it moved neither column.
 
 ## Fix
 
@@ -105,10 +104,9 @@ data migration.
 ## Verification
 
 - `go test ./pkg/list/...` — new `TestExtractProSettings*` cases plus the updated toast tests pass.
-- End-to-end against `cloudposse/infra-live`: after this change ships, run
-  `atmos list instances --upload` and confirm in Neon (`super-paper-60425112`, table `instances`)
-  that the `core-gbl-*` / `e98d-*` `datadog-configuration` + `datadog-integration` rows flip to
-  `enabled=false`, `drift_enabled=false`, `drift_status=disabled`, `disabled_at` set.
+- End-to-end: after this change ships, run `atmos list instances --upload` and confirm in Atmos Pro
+  that the previously-stuck disabled instances flip to `enabled=false`, `drift_enabled=false`,
+  `drift_status=disabled`, with `disabled_at` set.
 - Confirm the next scheduled drift cycle no longer dispatches them (no new `missing_plan_result`
   runs for those stack/component pairs).
 
@@ -117,6 +115,6 @@ data migration.
 - **Atmos Pro could also accept `metadata.enabled` defensively.** This fix closes the gap at the
   source (the CLI), but the ingestion contract still has no `metadata` field. Persisting it would
   make the platform robust against older CLIs that predate this fix.
-- **Duplicate-repository rows are a separate issue.** Several `core-gbl-*` stacks have two
-  `datadog-configuration` rows (distinct `repository_id`, both `deleted_at IS NULL`). That is a
-  distinct duplicate-repository question, not addressed here.
+- **Duplicate-repository rows are a separate issue.** A stack can end up with two rows for the same
+  component (distinct `repository_id`, both `deleted_at IS NULL`). That is a distinct
+  duplicate-repository question, not addressed here.
