@@ -765,7 +765,11 @@ func ProcessStackConfig(
 		}
 		componentsMap, ok := components.(map[string]any)
 		if !ok {
-			continue
+			// Surface malformed config rather than silently skipping, matching
+			// the built-in terraform/helmfile/packer handling and the inner
+			// per-component check below.
+			return nil, fmt.Errorf("%w: custom component type '%s' must be a map, got %T in stack '%s'",
+				errUtils.ErrInvalidComponentMapType, componentType, components, stackName)
 		}
 		// For each custom component, merge global vars/settings into component section.
 		processedComponents := make(map[string]any)
@@ -775,43 +779,30 @@ func ProcessStackConfig(
 				return nil, fmt.Errorf("%w: custom component '%s' in type '%s' must be a map, got %T in stack '%s'",
 					errUtils.ErrInvalidComponentMapType, componentName, componentType, componentConfig, stackName)
 			}
-			// Merge global vars into component vars.
-			componentVars := map[string]any{}
-			for k, v := range globalVarsSection {
-				componentVars[k] = v
+			// Deep-merge the global vars/settings/env into the component's own
+			// sections using the same merge helper the built-in terraform/helmfile/
+			// packer types use, so custom types inherit globals with identical
+			// (deep) semantics. All three sections are written uniformly.
+			componentVars, _ := componentMap[cfg.VarsSectionName].(map[string]any)
+			mergedVars, err := m.Merge(atmosConfig, []map[string]any{globalVarsSection, componentVars})
+			if err != nil {
+				return nil, err
 			}
-			if vars, ok := componentMap[cfg.VarsSectionName].(map[string]any); ok {
-				for k, v := range vars {
-					componentVars[k] = v
-				}
+			componentMap[cfg.VarsSectionName] = mergedVars
+
+			componentSettings, _ := componentMap[cfg.SettingsSectionName].(map[string]any)
+			mergedSettings, err := m.Merge(atmosConfig, []map[string]any{globalSettingsSection, componentSettings})
+			if err != nil {
+				return nil, err
 			}
-			componentMap[cfg.VarsSectionName] = componentVars
-			// Merge global settings into component settings.
-			componentSettings := map[string]any{}
-			for k, v := range globalSettingsSection {
-				componentSettings[k] = v
+			componentMap[cfg.SettingsSectionName] = mergedSettings
+
+			componentEnv, _ := componentMap[cfg.EnvSectionName].(map[string]any)
+			mergedEnv, err := m.Merge(atmosConfig, []map[string]any{atmosConfigEnv, globalEnvSection, componentEnv})
+			if err != nil {
+				return nil, err
 			}
-			if settings, ok := componentMap[cfg.SettingsSectionName].(map[string]any); ok {
-				for k, v := range settings {
-					componentSettings[k] = v
-				}
-			}
-			if len(componentSettings) > 0 {
-				componentMap[cfg.SettingsSectionName] = componentSettings
-			}
-			// Merge global env into component env.
-			componentEnv := map[string]any{}
-			for k, v := range globalEnvSection {
-				componentEnv[k] = v
-			}
-			if envMap, ok := componentMap[cfg.EnvSectionName].(map[string]any); ok {
-				for k, v := range envMap {
-					componentEnv[k] = v
-				}
-			}
-			if len(componentEnv) > 0 {
-				componentMap[cfg.EnvSectionName] = componentEnv
-			}
+			componentMap[cfg.EnvSectionName] = mergedEnv
 			// Add metadata fields expected by the template system.
 			componentMap["component"] = componentName
 			componentMap[cfg.ComponentTypeSectionName] = componentType

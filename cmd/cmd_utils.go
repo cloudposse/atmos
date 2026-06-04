@@ -18,6 +18,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
 	tuiUtils "github.com/cloudposse/atmos/internal/tui/utils"
@@ -28,6 +29,7 @@ import (
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/dependencies"
 	envpkg "github.com/cloudposse/atmos/pkg/env"
+	hookspkg "github.com/cloudposse/atmos/pkg/hooks"
 	l "github.com/cloudposse/atmos/pkg/list"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -732,6 +734,55 @@ func executeCustomCommand(
 	// Initialize step executor once before loop - reused across steps to preserve outputs.
 	executor := stepPkg.NewStepExecutor()
 
+	// For commands bound to a custom component type, set up an outputs file
+	// so steps can publish key/value pairs via $ATMOS_OUTPUTS. After all steps
+	// succeed, atmos fires the after-<type>-<subcommand> hook event, which reads
+	// the file when resolving `.foo`-style output references in `store` hooks.
+	var outputsFilePath string
+	if commandConfig.Component != nil && commandConfig.Component.Type != "" {
+		f, err := os.CreateTemp("", "atmos-outputs-*")
+		if err != nil {
+			errUtils.CheckErrorPrintAndExit(
+				errUtils.Build(errUtils.ErrCreateOutputsFile).
+					WithCause(err).
+					WithExplanation("Failed to create ATMOS_OUTPUTS temp file for custom component").
+					Err(),
+				"", "",
+			)
+		}
+		outputsFilePath = f.Name()
+		_ = f.Close()
+		defer func() { _ = os.Remove(outputsFilePath) }()
+		log.Debug("Created outputs file for custom component", "path", outputsFilePath, "type", commandConfig.Component.Type)
+	}
+
+	// Captured from inside the step loop so the hook-firing closure can reuse
+	// the resolved component without re-describing it.
+	var resolvedComponent map[string]any
+	componentTyped := commandConfig.Component != nil && commandConfig.Component.Type != ""
+
+	// fireComponentHook emits a `<phase>.<type>.<subcommand>` lifecycle event for
+	// a custom-component-typed command — e.g. `before.agent.apply` /
+	// `after.agent.apply` for `atmos agent apply ...`. This mirrors the built-in
+	// terraform events (`after.terraform.apply`, …) rather than anchoring custom
+	// types to terraform's `apply` verb. The event name encodes the subcommand,
+	// so `atmos agent describe` fires `after.agent.describe` — a distinct event
+	// that apply-oriented store hooks simply don't subscribe to.
+	//
+	// Hooks are loaded from the already-resolved component (passed through to
+	// RunHooks) so we never re-describe a custom type the built-in describe path
+	// can't resolve.
+	fireComponentHook := func(phase string) {
+		event := hookspkg.ComponentEvent(phase, commandConfig.Component.Type, commandConfig.Name)
+		populate := func(info *schema.ConfigAndStacksInfo) {
+			info.ComponentType = commandConfig.Component.Type
+			info.OutputsFilePath = outputsFilePath
+		}
+		if err := internal.RunHooks(event, cmd, args, "", populate, resolvedComponent); err != nil {
+			log.Warn("Hook event returned an error", "event", event, "error", err)
+		}
+	}
+
 	// Execute custom command's steps
 	for i, step := range commandConfig.Steps {
 		// Prepare template data for arguments
@@ -768,8 +819,16 @@ func executeCustomCommand(
 
 		// If the custom command defines 'component' section with a custom component type,
 		// register the type, resolve component config, and expose it in {{ .Component.* }} Go template variables.
-		if commandConfig.Component != nil && commandConfig.Component.Type != "" {
+		if componentTyped {
 			processCustomComponentType(&atmosConfig, commandConfig, argumentsData, flagsData, data, authManager)
+			if rc, ok := data["Component"].(map[string]any); ok {
+				resolvedComponent = rc
+			}
+			// Fire the before-<type>-<subcommand> event once, after the component
+			// is resolved (so hooks are available) but before any step runs.
+			if i == 0 {
+				fireComponentHook(hookspkg.PhaseBefore)
+			}
 		} else if commandConfig.ComponentConfig.Component != "" && commandConfig.ComponentConfig.Stack != "" {
 			// Legacy: If the custom command defines 'component_config' section with 'component' and 'stack' attributes,
 			// process the component stack config and expose it in {{ .ComponentConfig.xxx.yyy.zzz }} Go template variables.
@@ -806,6 +865,12 @@ func executeCustomCommand(
 		// ENV var values support Go templates and have access to {{ .ComponentConfig.xxx.yyy.zzz }} Go template variables
 		// Start with current environment + global env from atmos.yaml to inherit PATH and other variables.
 		env := envpkg.MergeGlobalEnv(os.Environ(), atmosConfig.Env)
+
+		// For custom component types, expose ATMOS_OUTPUTS so steps can publish
+		// key/value pairs that the after-<type>-<subcommand> hook reads.
+		if outputsFilePath != "" {
+			env = append(env, fmt.Sprintf("ATMOS_OUTPUTS=%s", outputsFilePath))
+		}
 		for _, v := range commandConfig.Env {
 			key := strings.TrimSpace(v.Key)
 			value := v.Value
@@ -901,6 +966,14 @@ func executeCustomCommand(
 			}
 		}
 		errUtils.CheckErrorPrintAndExit(err, "", "")
+	}
+
+	// All steps completed successfully. For custom-component-typed commands, fire
+	// the after-<type>-<subcommand> event (e.g. after.agent.apply) with the
+	// OutputsFilePath and ComponentType populated so the `store` hook can resolve
+	// `.foo` references against the outputs file the steps wrote.
+	if componentTyped {
+		fireComponentHook(hookspkg.PhaseAfter)
 	}
 }
 
@@ -1621,6 +1694,8 @@ func processCustomComponentType(
 	data map[string]any,
 	authManager auth.AuthManager,
 ) {
+	defer perf.Track(nil, "cmd.processCustomComponentType")()
+
 	// Find component name from argument/flag with type: component.
 	componentName := findTypedValue(commandConfig, argumentsData, flagsData, "component")
 	if componentName == "" {

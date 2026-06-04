@@ -1,0 +1,71 @@
+---
+slug: custom-component-hooks
+title: 'Lifecycle Hooks for Custom Component Types'
+authors:
+  - Benbentwo
+tags:
+  - feature
+date: 2026-06-03T00:00:00.000Z
+---
+
+Custom component types can now fire **lifecycle hooks** and publish **outputs** to a store — closing the apply → outputs → next-run loop for non-Terraform components, the same way `after-terraform-apply` + `store` already works for Terraform.
+
+<!--truncate-->
+
+## What Changed
+
+[Custom component types](/cli/configuration/commands) let you operate on anything — agents, Ansible playbooks, Kubernetes manifests, scripts — through Atmos custom commands with full stack configuration. What was missing was a way to persist the *result* of a run and read it back later.
+
+This release adds that:
+
+- **Lifecycle events for custom types**, named `<phase>.<type>.<subcommand>` — e.g. `before.agent.greeting` and `after.agent.greeting` for `atmos agent greeting router`. This mirrors the built-in Terraform events (`after.terraform.apply`, …) exactly, so custom types are first-class citizens of the same taxonomy.
+- **An outputs file mechanism.** Atmos exports `$ATMOS_OUTPUTS` to each step; your command appends `KEY=VALUE` lines or a JSON object, and Atmos reads them once the steps succeed.
+- **Store write-back from hooks.** The `store` hook resolves leading-dot output references (`.agent_id`) against the outputs file and persists them to any configured store (AWS SSM, Google Secret Manager, Redis, …).
+
+## Why This Matters
+
+The event name encodes the subcommand, which makes behavior predictable without any opt-in flag:
+
+```yaml
+components:
+  agent:
+    router:
+      vars:
+        greeting: "hello"
+      hooks:
+        store-runtime:
+          events: [after.agent.greeting]   # runs after `atmos agent greeting`,
+          command: store                    # but NOT after `atmos agent describe`
+          name: prod/ssm
+          outputs:
+            agent-id: .agent_id
+```
+
+Because `atmos agent describe` fires `after.agent.describe` — a different event — read-only commands never trigger write-back by accident. There is no anchoring to Terraform's `apply` verb, and no separate "should this fire?" configuration to get wrong.
+
+## How to Use It
+
+A custom command bound to a `component:` type publishes outputs from its steps:
+
+```yaml
+commands:
+  - name: agent
+    commands:
+      - name: greeting
+        component: { type: agent }
+        arguments:
+          - { name: component, type: component, required: true }
+        flags:
+          - { name: stack, shorthand: s, semantic_type: stack, required: true }
+        steps:
+          - |
+            echo "agent_id=$(create-agent ...)" >> "$ATMOS_OUTPUTS"
+```
+
+After `atmos agent greeting router -s prod` succeeds, the `after.agent.greeting` hook writes `agent_id` to the store. A runnable hello-world (using Redis) lives in [`examples/custom-components`](https://github.com/cloudposse/atmos/tree/main/examples/custom-components).
+
+See the [hooks documentation](/stacks/hooks) for the full event reference.
+
+## Get Involved
+
+Custom component hooks are part of the broader [custom component types](/cli/configuration/commands) initiative. Try them out, and let us know what component types you're modeling — open an issue or join the [Cloud Posse community](https://cloudposse.com/community/).

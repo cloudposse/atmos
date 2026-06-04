@@ -709,6 +709,9 @@ var (
 	// Initialization and configuration errors.
 	ErrInitializeCLIConfig = errors.New("error initializing CLI config")
 	ErrGetHooks            = errors.New("error getting hooks")
+	ErrReadOutputsFile     = errors.New("error reading custom-component outputs file")
+	ErrCreateOutputsFile   = errors.New("error creating custom-component outputs file")
+	ErrCustomOutputMissing = errors.New("custom-component output not found in outputs file")
 	ErrSetFlag             = errors.New("failed to set flag")
 	ErrVersionMismatch     = errors.New("version mismatch")
 

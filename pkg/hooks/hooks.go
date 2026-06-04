@@ -51,6 +51,58 @@ func (h Hooks) HasHooks() bool {
 	return len(h.items) > 0
 }
 
+// HooksFromComponent builds a Hooks struct from an already-resolved component
+// configuration map (the kind returned by e.ExecuteDescribeComponent). It
+// avoids the second describe call that GetHooks performs.
+//
+// Custom component types do not register with the built-in describe path used
+// by GetHooks, so calling GetHooks for them errors with "component not found".
+// The custom command runner already resolves the component to populate
+// {{ .Component.* }} template variables, and we pass that map straight through
+// here.
+//
+// If the resolved map has no `hooks:` section, returns an empty Hooks (no
+// items) — the caller's HasHooks() check short-circuits the firing path
+// cleanly without surfacing an error.
+func HooksFromComponent(
+	atmosConfig *schema.AtmosConfiguration,
+	info *schema.ConfigAndStacksInfo,
+	resolvedComponent map[string]any,
+) (*Hooks, error) {
+	if resolvedComponent == nil {
+		return &Hooks{config: atmosConfig, info: info, items: nil}, nil
+	}
+
+	rawHooks, ok := resolvedComponent["hooks"]
+	if !ok || rawHooks == nil {
+		return &Hooks{config: atmosConfig, info: info, items: nil}, nil
+	}
+
+	hooksSection, ok := rawHooks.(map[string]any)
+	if !ok {
+		return &Hooks{}, fmt.Errorf("hooks section is not a map: got %T", rawHooks)
+	}
+
+	yamlData, err := yaml.Marshal(hooksSection)
+	if err != nil {
+		return &Hooks{}, fmt.Errorf("failed to marshal hooksSection: %w", err)
+	}
+
+	var items map[string]Hook
+	if err := yaml.Unmarshal(yamlData, &items); err != nil {
+		// Return a non-nil &Hooks{} (like the marshal/map-type branches above)
+		// so callers that inspect the result before checking err don't panic on
+		// HasHooks (value receiver).
+		return &Hooks{}, fmt.Errorf("failed to unmarshal to Hooks: %w", err)
+	}
+
+	return &Hooks{
+		config: atmosConfig,
+		info:   info,
+		items:  items,
+	}, nil
+}
+
 func GetHooks(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) (*Hooks, error) {
 	if info.ComponentFromArg == "" || info.Stack == "" {
 		return &Hooks{

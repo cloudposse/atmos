@@ -342,9 +342,12 @@ func (s *SSMStore) Get(stack string, component string, key string) (any, error) 
 		}
 	}
 
-	// Get the parameter from SSM Parameter Store
+	// Get the parameter from SSM Parameter Store. WithDecryption ensures
+	// SecureString parameters are returned as plaintext rather than the
+	// KMS-encrypted blob; for plain String parameters it has no effect.
 	output, err := client.GetParameter(ctx, &ssm.GetParameterInput{
-		Name: aws.String(paramName),
+		Name:           aws.String(paramName),
+		WithDecryption: aws.Bool(true),
 	})
 	if err != nil {
 		return nil, fmt.Errorf(errWrapFormatWithID, ErrGetParameter, paramName, err)
@@ -403,9 +406,12 @@ func (s *SSMStore) GetKey(key string) (any, error) {
 		}
 	}
 
-	// Get the parameter from SSM Parameter Store
+	// Get the parameter from SSM Parameter Store. WithDecryption ensures
+	// SecureString parameters are returned as plaintext rather than the
+	// KMS-encrypted blob; for plain String parameters it has no effect.
 	output, err := client.GetParameter(ctx, &ssm.GetParameterInput{
-		Name: aws.String(paramName),
+		Name:           aws.String(paramName),
+		WithDecryption: aws.Bool(true),
 	})
 	if err != nil {
 		return nil, fmt.Errorf(errWrapFormatWithID, ErrGetParameter, paramName, err)

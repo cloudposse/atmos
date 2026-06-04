@@ -55,6 +55,13 @@ each level merges into the final result so you can keep configuration
 
 ## Supported Lifecycle Events
 
+Lifecycle events are named `<phase>.<type>.<subcommand>`, where `<phase>` is
+`before` or `after`, `<type>` is the component type, and `<subcommand>` is the
+operation acting on it. You can use the dotted form (`after.terraform.plan`) or
+the hyphenated form (`after-terraform-plan`) — they're equivalent.
+
+**Built-in (Terraform):**
+
 | Event | When it fires |
 |---|---|
 | `before-terraform-init` | Before `atmos terraform init` runs |
@@ -66,9 +73,25 @@ each level merges into the final result so you can keep configuration
 | `after-terraform-deploy` | Alias of `after-terraform-apply` |
 
 Hooks with no `events` list fire on every supported event for backward
-compatibility with configs written before event filtering existed. You
-can use the dotted form (`after.terraform.plan`) or the hyphenated form
-(`after-terraform-plan`) — they're equivalent.
+compatibility with configs written before event filtering existed.
+
+**Custom component types:**
+
+Custom component types (defined via [custom commands](/cli/configuration/commands)
+bound to a `component:` block) follow the same taxonomy. For
+`atmos <type> <subcommand>` Atmos fires:
+
+- `before.<type>.<subcommand>` — before the command's steps run.
+- `after.<type>.<subcommand>` — after all steps complete successfully.
+
+For example, `atmos agent greeting slack-knowledge` fires `before.agent.greeting`
+and `after.agent.greeting`. Because the subcommand is part of the event name, a
+hook subscribed to `after.agent.greeting` runs after `greeting` but **not** after
+a read-only command like `atmos agent describe` (which fires `after.agent.describe`).
+This is what lets a custom component publish values to a store — its steps write
+key/value pairs to the file referenced by `$ATMOS_OUTPUTS`, and an
+`after.<type>.<subcommand>` `store` hook reads that file to resolve `.key`
+output references.
 
 ## Built-in Kinds
 

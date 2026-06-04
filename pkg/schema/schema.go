@@ -1001,9 +1001,14 @@ type ConfigAndStacksInfo struct {
 	ComponentOverridesSection     AtmosSectionMapType
 	ComponentProvidersSection     AtmosSectionMapType
 	ComponentHooksSection         AtmosSectionMapType
-	ComponentEnvSection           AtmosSectionMapType
-	ComponentAuthSection          AtmosSectionMapType
-	ComponentEnvList              []string
+	// OutputsFilePath is the path to the temp file ATMOS_OUTPUTS pointed at
+	// during custom-command execution. Set only for custom component types
+	// after their step list completes; consumed by hooks (e.g. `store`) when
+	// resolving `.foo`-style output references for non-terraform components.
+	OutputsFilePath      string
+	ComponentEnvSection  AtmosSectionMapType
+	ComponentAuthSection AtmosSectionMapType
+	ComponentEnvList     []string
 	// SanitizedEnv holds the sanitized process environment from auth.
 	// When set, subprocess execution uses this instead of re-reading os.Environ(),
 	// which would reintroduce problematic vars (e.g., IRSA credentials on EKS pods).

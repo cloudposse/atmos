@@ -55,14 +55,27 @@ type TerraformOutputGetter func(
 	authManager any,
 ) (any, bool, error)
 
+// CustomOutputGetter retrieves an output for a custom-component-type apply.
+// Custom components don't have terraform state; their step list publishes
+// values to a file pointed at by ATMOS_OUTPUTS. This function reads that file
+// (path on the ConfigAndStacksInfo) and looks up the requested key.
+//
+// Returns the same triple as TerraformOutputGetter so the StoreCommand
+// dispatch is symmetric.
+type CustomOutputGetter func(
+	info *schema.ConfigAndStacksInfo,
+	outputKey string,
+) (any, bool, error)
+
 // Assert that StoreCommand implements Command interface.
 var _ Command = &StoreCommand{}
 
 type StoreCommand struct {
-	Name         string
-	atmosConfig  *schema.AtmosConfiguration
-	info         *schema.ConfigAndStacksInfo
-	outputGetter TerraformOutputGetter
+	Name               string
+	atmosConfig        *schema.AtmosConfiguration
+	info               *schema.ConfigAndStacksInfo
+	terraformOutputter TerraformOutputGetter
+	customOutputter    CustomOutputGetter
 }
 
 func NewStoreCommand(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) (*StoreCommand, error) {
@@ -70,9 +83,11 @@ func NewStoreCommand(atmosConfig *schema.AtmosConfiguration, info *schema.Config
 		Name:        "store",
 		atmosConfig: atmosConfig,
 		info:        info,
-		// outputGetter is resolved per-event in RunE: after-events skip init (workdir
-		// already initialized by apply/plan); before-events run init normally.
-		outputGetter: tfoutput.GetOutput,
+		// terraformOutputter is re-selected per-event in RunE: after-events skip
+		// init (workdir already initialized by apply/plan); before-events run init
+		// normally. customOutputter reads ATMOS_OUTPUTS for custom component types.
+		terraformOutputter: tfoutput.GetOutput,
+		customOutputter:    defaultCustomOutputter,
 	}, nil
 }
 
@@ -86,7 +101,7 @@ func (c *StoreCommand) processStoreCommand(hook *Hook, event HookEvent) error {
 		return nil
 	}
 
-	log.Debug("Executing store hook", "hook", hook.Name, "kind", hook.Kind)
+	log.Debug("Executing store hook", "hook", hook.Name, "kind", hook.Kind, "component_type", c.info.ComponentType)
 	for key, value := range hook.Outputs {
 		outputKey, outputValue, err := c.getOutputValue(hook.Name, event, value)
 		if err != nil {
@@ -101,37 +116,74 @@ func (c *StoreCommand) processStoreCommand(hook *Hook, event HookEvent) error {
 	return nil
 }
 
-// getOutputValue gets an output from terraform or returns a literal value.
-// hookName and event are included in error messages so the user can identify
-// which hook triggered the failure.
+// getOutputValue resolves a hook output reference. hookName and event are
+// included in error messages so the user can identify which hook triggered the
+// failure.
+//
+// If `value` begins with a dot, it's an "output reference" — look it up in
+// terraform state (for terraform components) or in the ATMOS_OUTPUTS file
+// (for any other component type). Otherwise it's a literal value, stored as-is.
 func (c *StoreCommand) getOutputValue(hookName string, event HookEvent, value string) (string, any, error) {
-	outputKey := strings.TrimPrefix(value, ".")
-	var outputValue any
+	if !strings.HasPrefix(value, ".") {
+		return value, value, nil
+	}
 
-	if strings.Index(value, ".") == 0 {
-		var exists bool
-		var err error
-		outputValue, exists, err = c.outputGetter(c.atmosConfig, c.info.Stack, c.info.ComponentFromArg, outputKey, true, c.info.AuthContext, c.info.AuthManager)
-		// Handle errors from terraform output retrieval (SDK errors, network issues, etc.).
+	outputKey := strings.TrimPrefix(value, ".")
+
+	// Dispatch on component type. Terraform keeps the existing state-reading
+	// path; everything else reads the outputs file written by the custom
+	// command step(s).
+	if c.isTerraformComponent() {
+		outputValue, exists, err := c.terraformOutputter(
+			c.atmosConfig,
+			c.info.Stack,
+			c.info.ComponentFromArg,
+			outputKey,
+			true,
+			c.info.AuthContext,
+			c.info.AuthManager,
+		)
 		if err != nil {
 			return "", nil, fmt.Errorf("%w: hook %q (event %q) failed to get terraform output %q for component %q in stack %q: %w",
 				errUtils.ErrTerraformOutputFailed, hookName, event, outputKey, c.info.ComponentFromArg, c.info.Stack, err)
 		}
-
-		// Handle missing outputs (key doesn't exist).
-		// This is different from a legitimate null value.
 		if !exists {
 			return "", nil, fmt.Errorf("%w: hook %q (event %q) could not find terraform output %q for component %q in stack %q",
 				errUtils.ErrTerraformOutputNotFound, hookName, event, outputKey, c.info.ComponentFromArg, c.info.Stack)
 		}
+		// outputValue may legitimately be nil here (null output) — that's allowed.
+		return outputKey, outputValue, nil
+	}
 
-		// At this point, exists==true, but outputValue may be nil.
-		// A nil value here is a legitimate Terraform output that is null, which is valid.
-		// We allow it to be stored.
-	} else {
-		outputValue = value
+	// Custom component path.
+	outputValue, exists, err := c.customOutputter(c.info, outputKey)
+	if err != nil {
+		return "", nil, err
+	}
+	if !exists {
+		return "", nil, fmt.Errorf("%w: %s (component %q, stack %q)",
+			errUtils.ErrCustomOutputMissing, outputKey, c.info.ComponentFromArg, c.info.Stack)
 	}
 	return outputKey, outputValue, nil
+}
+
+// isTerraformComponent returns true when the active component is a terraform
+// component. The empty string is treated as terraform for back-compat with
+// older callers that never set ComponentType.
+func (c *StoreCommand) isTerraformComponent() bool {
+	t := c.info.ComponentType
+	return t == "" || t == "terraform"
+}
+
+// defaultCustomOutputter reads ATMOS_OUTPUTS for the active info and looks up
+// the requested key.
+func defaultCustomOutputter(info *schema.ConfigAndStacksInfo, outputKey string) (any, bool, error) {
+	outputs, err := ReadOutputsFile(info.OutputsFilePath)
+	if err != nil {
+		return nil, false, err
+	}
+	val, ok := outputs[outputKey]
+	return val, ok, nil
 }
 
 // storeOutput puts the value of the output in the store
@@ -143,7 +195,7 @@ func (c *StoreCommand) storeOutput(hook *Hook, key string, outputKey string, out
 		return fmt.Errorf("store %q not found in configuration", hook.Name)
 	}
 
-	log.Debug("storing terraform output", "outputKey", outputKey, "store", hook.Name, "key", key, "value", outputValue)
+	log.Debug("storing output", "outputKey", outputKey, "store", hook.Name, "key", key, "value", outputValue)
 
 	return store.Set(c.info.Stack, c.info.ComponentFromArg, key, outputValue)
 }
@@ -153,10 +205,14 @@ func (c *StoreCommand) storeOutput(hook *Hook, key string, outputKey string, out
 // (e.g. after-terraform-apply) skip terraform init because the workdir is already
 // initialized; before-events run init normally since the workdir may not exist yet.
 func (c *StoreCommand) RunE(hook *Hook, event HookEvent, cmd *cobra.Command, args []string) error {
+	// Re-select the terraform getter per-event: after-events skip init (the
+	// workdir is already initialized by apply/plan), before-events run init.
+	// This only affects the terraform path; custom component types resolve
+	// outputs from the ATMOS_OUTPUTS file via customOutputter.
 	if event.IsPostExecution() {
-		c.outputGetter = tfoutput.GetOutputSkipInit
+		c.terraformOutputter = tfoutput.GetOutputSkipInit
 	} else {
-		c.outputGetter = tfoutput.GetOutput
+		c.terraformOutputter = tfoutput.GetOutput
 	}
 	return c.processStoreCommand(hook, event)
 }
