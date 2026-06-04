@@ -211,6 +211,41 @@ func processSimpleTags(
 		}
 		return res, true, nil
 	}
+	if matchesPrefix(input, u.AtmosYamlFuncGitRepository, skip) {
+		res, err := atmosGit.ProcessTagRepository(input)
+		if err != nil {
+			return nil, true, err
+		}
+		return res, true, nil
+	}
+	if matchesPrefix(input, u.AtmosYamlFuncGitOwner, skip) {
+		res, err := atmosGit.ProcessTagOwner(input)
+		if err != nil {
+			return nil, true, err
+		}
+		return res, true, nil
+	}
+	if matchesPrefix(input, u.AtmosYamlFuncGitName, skip) {
+		res, err := atmosGit.ProcessTagName(input)
+		if err != nil {
+			return nil, true, err
+		}
+		return res, true, nil
+	}
+	if matchesPrefix(input, u.AtmosYamlFuncGitHost, skip) {
+		res, err := atmosGit.ProcessTagHost(input)
+		if err != nil {
+			return nil, true, err
+		}
+		return res, true, nil
+	}
+	if matchesPrefix(input, u.AtmosYamlFuncGitUrl, skip) {
+		res, err := atmosGit.ProcessTagURL(input)
+		if err != nil {
+			return nil, true, err
+		}
+		return res, true, nil
+	}
 	// AWS YAML functions - note these check for exact match since they take no arguments.
 	if input == u.AtmosYamlFuncAwsAccountID && !skipFunc(skip, u.AtmosYamlFuncAwsAccountID) {
 		return processTagAwsAccountID(atmosConfig, input, stackInfo), true, nil

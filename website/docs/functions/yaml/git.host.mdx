@@ -1,0 +1,39 @@
+---
+title: "!git.host"
+sidebar_position: 10
+sidebar_label: "!git.host"
+sidebar_class_name: command
+description: Get the host of the current Git repository
+---
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+    The `!git.host` Atmos YAML function returns the host of the current Git repository —
+    for example, `github.com`. The value is derived from the `origin` remote URL and works for
+    GitHub, GitLab, Bitbucket, and Azure DevOps.
+</Intro>
+
+## Usage
+
+```yaml
+  # Get the repository host.
+  # If the repository cannot be resolved, it returns a default value if specified; otherwise, it returns an error.
+  !git.host <default-value>
+```
+
+## Examples
+
+```yaml
+vars:
+  git_host: !git.host
+
+  # With a fallback value when there is no remote.
+  git_host_safe: !git.host github.com
+```
+
+## Related Functions
+
+- [`!git.repository`](/functions/yaml/git.repository) — the full `<owner>/<name>` slug
+- [`!git.owner`](/functions/yaml/git.owner) — the repository owner / organization
+- [`!git.name`](/functions/yaml/git.name) — the bare repository name
+- [`!git.url`](/functions/yaml/git.url) — the remote URL
