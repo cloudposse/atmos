@@ -1,0 +1,80 @@
+---
+slug: git-repository-yaml-functions
+title: "Git Repository Metadata YAML Functions"
+authors: [osterman]
+tags: [feature]
+date: 2026-06-02
+---
+
+Atmos now exposes Git **repository metadata** through dedicated YAML functions:
+`!git.repository`, `!git.owner`, `!git.name`, `!git.host`, and `!git.url`. These join the
+existing `!git.root`, `!git.sha`, `!git.branch`, and `!git.ref` functions.
+
+<!--truncate-->
+
+## What Changed
+
+You no longer need to shell out through `!exec` and `sed` to derive the repository slug. The new
+functions read the `origin` remote and parse it for you, working across GitHub, GitLab, Bitbucket,
+and Azure DevOps:
+
+| Function | Returns |
+|----------|---------|
+| `!git.repository` | The `<owner>/<name>` slug (e.g. `cloudposse/atmos`), matching GitHub's `GITHUB_REPOSITORY` format |
+| `!git.owner` | The repository owner / organization (e.g. `cloudposse`) |
+| `!git.name` | The bare repository name (e.g. `atmos`) |
+| `!git.host` | The repository host (e.g. `github.com`) |
+| `!git.url` | The `origin` remote URL |
+
+All of them support a fallback value, using the same pattern as the other Git functions:
+
+```yaml
+vars:
+  git_repo: !git.repository my-org/my-repo
+  git_owner: !git.owner my-org
+  git_host: !git.host github.com
+```
+
+## Why This Matters
+
+A common pattern is tagging every resource with the repository that produced the plan. Before, this
+meant a brittle shell pipeline:
+
+```yaml
+git_repo: !exec echo ${GITHUB_REPOSITORY:-$(git remote get-url origin | sed -e 's/^.*:// ; s/.git$//')}
+```
+
+Now it's a single, portable function:
+
+```yaml
+terraform:
+  providers:
+    aws:
+      default_tags:
+        tags:
+          atmos_git_repository: !git.repository
+          atmos_git_ref: !git.ref
+```
+
+## How to Use It
+
+The functions work in both stack/component YAML processing and Atmos config preprocessing, so
+repository metadata is available consistently wherever Atmos resolves core YAML functions.
+
+```yaml
+vars:
+  repository: !git.repository   # cloudposse/atmos
+  owner: !git.owner             # cloudposse
+  name: !git.name               # atmos
+  host: !git.host               # github.com
+  url: !git.url                 # https://github.com/cloudposse/atmos.git
+```
+
+A YAML tag owns the entire scalar, so it can't be combined with other text on the same line (for
+example, prefixing a `workspace_key_prefix`). For that, use the new
+[`atmos.Resolve`](/functions/template/atmos.Resolve) template function — see the companion post.
+
+## Get Involved
+
+See the [`!git.repository`](/functions/yaml/git.repository) documentation for the full reference, and
+let us know how you're using repository metadata in your stacks.

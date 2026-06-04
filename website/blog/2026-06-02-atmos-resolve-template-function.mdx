@@ -1,0 +1,67 @@
+---
+slug: atmos-resolve-template-function
+title: "Compose YAML Functions in Templates with atmos.Resolve"
+authors: [osterman]
+tags: [feature]
+date: 2026-06-02
+---
+
+Atmos adds a new template function, `atmos.Resolve`, that evaluates any
+[Atmos YAML function](/functions/yaml) — like `!git.repository`, `!exec`, `!store`, or
+`!terraform.output` — at template-render time. This lets you **compose** a YAML function's result
+with other strings and template variables in a single value.
+
+<!--truncate-->
+
+## What Changed
+
+A YAML tag owns the entire scalar, so you cannot write `"!git.repository/{{ ... }}"`. And because
+Atmos evaluates Go templates **before** YAML functions, referencing a function through an
+intermediate variable in a plain template doesn't work either — at template time the value is still
+the unresolved tag string `"!git.repository"`.
+
+`atmos.Resolve` closes that gap. It runs the YAML-function processor on demand during template
+rendering, so the resolved value is available where you can concatenate it with other text:
+
+```yaml
+key: '{{ atmos.Resolve "!git.repository" }}/something'
+```
+
+## Why This Matters
+
+The motivating use case is prefixing the Terraform `workspace_key_prefix` (or any value) with the
+repository slug, without resorting to `!exec` and shell concatenation:
+
+```yaml
+settings:
+  context:
+    repo: "!git.repository"
+
+components:
+  terraform:
+    vpc:
+      backend:
+        s3:
+          workspace_key_prefix: '{{ atmos.Resolve .settings.context.repo }}/{{ or .metadata.name .metadata.component }}'
+```
+
+In a repository whose `origin` remote is `https://github.com/cloudposse/atmos.git`, this resolves to
+`cloudposse/atmos/vpc`.
+
+## How to Use It
+
+`atmos.Resolve` works with every Atmos YAML function. A plain (untagged) string is returned
+unchanged, so it's safe to pass values that may or may not contain a YAML function:
+
+```yaml
+vars:
+  bucket: '{{ atmos.Resolve "!env BUCKET_PREFIX" }}-state'
+```
+
+It runs during the template phase, giving it the same evaluation semantics as
+[`atmos.Component`](/functions/template/atmos.Component). Reach for a plain YAML tag when you don't
+need composition, and use `atmos.Resolve` when you do.
+
+## Get Involved
+
+See the [`atmos.Resolve`](/functions/template/atmos.Resolve) documentation for the full reference.
