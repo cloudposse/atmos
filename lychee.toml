@@ -42,6 +42,8 @@ exclude = [
   "gnu\\.org",
   # Linux Foundation specs (slow response times)
   "refspecs\\.linuxfoundation\\.org",
+  # OpenBSD man pages (slow response times, intermittent timeouts in CI)
+  "man\\.openbsd\\.org",
   # Kubernetes.io (rate limits and connection resets in CI)
   "kubernetes\\.io",
   # runatlantis.io (connection resets on automated requests)
@@ -54,6 +56,7 @@ exclude = [
   "atmos\\.tools",
   # Root-relative paths converted to file:// URLs (atmos.tools website paths)
   "file://.*/cli/",
+  "file://.*/functions/",
   # Files that don't exist yet (planned documentation)
   "website/docs/cli/errors\\.mdx",
   "website/docs/cli/configuration/mask\\.mdx",
