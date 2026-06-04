@@ -14,7 +14,9 @@ import (
 
 const (
 	// MaskReplacement is the string used to replace masked values.
-	MaskReplacement = "***MASKED***"
+	// Uses angle brackets to be safe in both JSON and YAML output.
+	// (Asterisks would be interpreted as YAML alias references).
+	MaskReplacement = "<MASKED>"
 
 	// AWS access key ID length (AKIA prefix + 16 characters).
 	awsAccessKeyIDLength = 20
@@ -22,18 +24,33 @@ const (
 
 // masker implements the Masker interface.
 type masker struct {
-	mu       sync.RWMutex
-	literals map[string]bool  // Literal values to mask
-	patterns []*regexp.Regexp // Regex patterns to mask
-	enabled  bool
+	mu          sync.RWMutex
+	literals    map[string]bool  // Literal values to mask.
+	patterns    []*regexp.Regexp // Regex patterns to mask.
+	enabled     bool
+	replacement string // Custom replacement string (default: MaskReplacement).
 }
 
 // newMasker creates a new Masker.
 func newMasker(config *Config) Masker {
+	// Determine replacement string from config or use default.
+	replacement := MaskReplacement
+	if config != nil {
+		if r := config.AtmosConfig.Settings.Terminal.Mask.Replacement; r != "" {
+			replacement = r
+		}
+	}
+
+	enabled := true
+	if config != nil {
+		enabled = !config.DisableMasking
+	}
+
 	m := &masker{
-		literals: make(map[string]bool),
-		patterns: make([]*regexp.Regexp, 0),
-		enabled:  !config.DisableMasking,
+		literals:    make(map[string]bool),
+		patterns:    make([]*regexp.Regexp, 0),
+		enabled:     enabled,
+		replacement: replacement,
 	}
 
 	return m
@@ -61,23 +78,27 @@ func (m *masker) RegisterSecret(secret string) {
 
 	m.RegisterValue(secret)
 
-	// Register base64 encoded versions
+	// Register base64 encoded versions.
 	m.RegisterValue(base64.StdEncoding.EncodeToString([]byte(secret)))
 	m.RegisterValue(base64.URLEncoding.EncodeToString([]byte(secret)))
 	m.RegisterValue(base64.RawStdEncoding.EncodeToString([]byte(secret)))
 	m.RegisterValue(base64.RawURLEncoding.EncodeToString([]byte(secret)))
 
-	// Register URL encoded version
+	// Register URL encoded version.
 	m.RegisterValue(url.QueryEscape(secret))
 
-	// Register JSON encoded version (both quoted and unquoted)
+	// Register JSON-escaped version (without quotes to preserve JSON structure).
+	// We only register the inner content, not the full quoted string.
+	// This ensures "secret" becomes "<MASKED>" (valid JSON), not <MASKED> (invalid).
 	if jsonBytes, err := json.Marshal(secret); err == nil {
 		jsonStr := string(jsonBytes)
-		// Register the full quoted JSON string
-		m.RegisterValue(jsonStr)
-		// Also register the unquoted inner text
+		// Only register the escaped inner text (handles special chars like \n, \t, etc.).
 		if len(jsonStr) > 2 {
-			m.RegisterValue(jsonStr[1 : len(jsonStr)-1])
+			escapedInner := jsonStr[1 : len(jsonStr)-1]
+			// Only register if different from plain secret (has escaping).
+			if escapedInner != secret {
+				m.RegisterValue(escapedInner)
+			}
 		}
 	}
 }
@@ -135,9 +156,9 @@ func (m *masker) Mask(input string) string {
 
 	masked := input
 
-	// Mask literals (exact matches)
-	// Sort by length (longest first) to avoid partial replacements
-	// Collect literals into slice
+	// Mask literals (exact matches).
+	// Sort by length (longest first) to avoid partial replacements.
+	// Collect literals into slice.
 	literals := make([]string, 0, len(m.literals))
 	for literal := range m.literals {
 		if literal != "" {
@@ -145,8 +166,8 @@ func (m *masker) Mask(input string) string {
 		}
 	}
 
-	// Sort by length descending (longest first)
-	// This prevents shorter literals from being replaced before longer ones
+	// Sort by length descending (longest first).
+	// This prevents shorter literals from being replaced before longer ones.
 	for i := 0; i < len(literals); i++ {
 		for j := i + 1; j < len(literals); j++ {
 			if len(literals[j]) > len(literals[i]) {
@@ -155,14 +176,16 @@ func (m *masker) Mask(input string) string {
 		}
 	}
 
-	// Replace literals in order (longest first)
+	// Replace literals in order (longest first).
 	for _, literal := range literals {
-		masked = strings.ReplaceAll(masked, literal, MaskReplacement)
+		masked = strings.ReplaceAll(masked, literal, m.replacement)
 	}
 
-	// Mask regex patterns
+	// Mask regex patterns.
+	// Escape $ as $$ to prevent backreference interpretation in replacements.
+	quotedReplacement := strings.ReplaceAll(m.replacement, "$", "$$")
 	for _, pattern := range m.patterns {
-		masked = pattern.ReplaceAllString(masked, MaskReplacement)
+		masked = pattern.ReplaceAllString(masked, quotedReplacement)
 	}
 
 	return masked

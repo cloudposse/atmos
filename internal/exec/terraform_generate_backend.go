@@ -53,13 +53,18 @@ func ExecuteGenerateBackend(opts *GenerateBackendOptions, atmosConfig *schema.At
 		ComponentFromArg: opts.Component,
 		Stack:            opts.Stack,
 		StackFromArg:     opts.Stack,
-		ComponentType:    "terraform",
-		CliArgs:          []string{"terraform", "generate", "backend"},
+		ComponentType:    cfg.TerraformComponentType,
+		CliArgs:          []string{cfg.TerraformComponentType, "generate", "backend"},
 	}
 
 	// Process stacks to get component configuration.
 	info, err := ProcessStacks(atmosConfig, info, true, opts.ProcessTemplates, opts.ProcessFunctions, opts.Skip, nil)
 	if err != nil {
+		return err
+	}
+
+	// Ensure component exists, provisioning via JIT if needed.
+	if err := ensureTerraformComponentExists(atmosConfig, &info); err != nil {
 		return err
 	}
 
@@ -83,11 +88,10 @@ func ExecuteGenerateBackend(opts *GenerateBackendOptions, atmosConfig *schema.At
 
 // writeBackendConfigFile writes the backend config to a file.
 func writeBackendConfigFile(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, config map[string]any) error {
+	// Use constructTerraformComponentWorkingDir to properly handle JIT vendored components
+	// that may have a workdir path set by the source provisioner.
 	backendFilePath := filepath.Join(
-		atmosConfig.BasePath,
-		atmosConfig.Components.Terraform.BasePath,
-		info.ComponentFolderPrefix,
-		info.FinalComponent,
+		constructTerraformComponentWorkingDir(atmosConfig, info),
 		"backend.tf.json",
 	)
 

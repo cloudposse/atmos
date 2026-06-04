@@ -1,4 +1,4 @@
 output "stage" {
-    description = "Stage of deployment"
-    value = var.stage
+  description = "Stage of deployment"
+  value       = var.stage
 }

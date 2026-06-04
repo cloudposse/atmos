@@ -1,0 +1,87 @@
+# yaml-language-server: $schema=schema.json
+# Tests for the demo-ansible example demonstrating Ansible playbook integration.
+# See examples/demo-ansible/ for the example code.
+tests:
+  # Test 1: List stacks shows dev and prod environments
+  - name: demo-ansible list stacks
+    enabled: true
+    snapshot: false
+    description: "Verify demo-ansible example lists dev and prod stacks."
+    workdir: "../examples/demo-ansible"
+    command: "atmos"
+    args:
+      - "list"
+      - "stacks"
+    expect:
+      stdout:
+        - "dev"
+        - "prod"
+      exit_code: 0
+
+  # Test 2: Describe the hello-world component in dev
+  - name: demo-ansible describe component hello-world -s dev
+    enabled: true
+    snapshot: false
+    description: "Verify hello-world component vars are resolved correctly in dev stack."
+    workdir: "../examples/demo-ansible"
+    command: "atmos"
+    args:
+      - "describe"
+      - "component"
+      - "hello-world"
+      - "-s"
+      - "dev"
+      - "--format"
+      - "json"
+    expect:
+      valid:
+        - "json"
+      stdout:
+        - '"app_name": "my-app"'
+        - '"app_version": "1.0.0-dev"'
+        - '"app_port": 8080'
+      exit_code: 0
+
+  # Test 3: Describe the hello-world component in prod (different overrides)
+  - name: demo-ansible describe component hello-world -s prod
+    enabled: true
+    snapshot: false
+    description: "Verify hello-world component vars are resolved correctly in prod stack."
+    workdir: "../examples/demo-ansible"
+    command: "atmos"
+    args:
+      - "describe"
+      - "component"
+      - "hello-world"
+      - "-s"
+      - "prod"
+      - "--format"
+      - "json"
+    expect:
+      valid:
+        - "json"
+      stdout:
+        - '"app_name": "my-app"'
+        - '"app_version": "2.0.0"'
+        - '"app_port": 443'
+      exit_code: 0
+
+  # Test 4: Dry-run shows the ansible-playbook command without executing
+  - name: demo-ansible ansible playbook dry-run
+    enabled: true
+    snapshot: false
+    description: "Verify dry-run prints the ansible-playbook command without executing."
+    workdir: "../examples/demo-ansible"
+    command: "atmos"
+    args:
+      - "ansible"
+      - "playbook"
+      - "hello-world"
+      - "-s"
+      - "dev"
+      - "--dry-run"
+    expect:
+      stdout:
+        - "ansible-playbook"
+        - "site.yml"
+      exit_code: 0

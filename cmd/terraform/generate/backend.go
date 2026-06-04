@@ -36,9 +36,13 @@ var backendCmd = &cobra.Command{
 			return err
 		}
 
+		// Get stack early so we can use it to filter component selection.
+		stack := v.GetString("stack")
+
 		// Prompt for component if missing.
+		// If stack is already provided (via --stack flag), filter components to that stack.
 		if component == "" {
-			prompted, err := shared.PromptForComponent(cmd)
+			prompted, err := shared.PromptForComponent(cmd, stack)
 			if err = shared.HandlePromptError(err, "component"); err != nil {
 				return err
 			}
@@ -50,8 +54,7 @@ var backendCmd = &cobra.Command{
 			return errUtils.ErrMissingComponent
 		}
 
-		// Get flag values from Viper.
-		stack := v.GetString("stack")
+		// Get remaining flag values from Viper.
 		processTemplates := v.GetBool("process-templates")
 		processFunctions := v.GetBool("process-functions")
 		skip := v.GetStringSlice("skip")

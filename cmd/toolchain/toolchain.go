@@ -1,21 +1,16 @@
 package toolchain
 
 import (
-	"fmt"
-
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
 	"github.com/cloudposse/atmos/cmd/internal"
 	registrycmd "github.com/cloudposse/atmos/cmd/toolchain/registry"
-	"github.com/cloudposse/atmos/pkg/data"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/flags/compat"
-	iolib "github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
-	"github.com/cloudposse/atmos/pkg/ui"
-	toolchainpkg "github.com/cloudposse/atmos/toolchain"
+	toolchainpkg "github.com/cloudposse/atmos/pkg/toolchain"
 )
 
 const (
@@ -42,14 +37,14 @@ var toolchainCmd = &cobra.Command{
 	Short: "Manage tool versions and installations",
 	Long:  `A standalone tool to install CLI binaries using registry metadata.`,
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
-		// Initialize I/O context and global formatter (required for ui.* functions).
-		// This must happen before any ui.* calls.
-		ioCtx, ioErr := iolib.NewContext()
-		if ioErr != nil {
-			return fmt.Errorf("failed to initialize I/O context: %w", ioErr)
+		// Call root command's PersistentPreRun first to ensure root command initialization runs.
+		// This includes config loading, I/O initialization, and experimental command checks.
+		// Without this, the toolchain command would bypass the experimental mode handling.
+		// We use cmd.Root() because cmd.Parent() would return the toolchain command (not root)
+		// when running subcommands like "toolchain list".
+		if root := cmd.Root(); root != nil && root.PersistentPreRun != nil {
+			root.PersistentPreRun(cmd, args)
 		}
-		ui.InitFormatter(ioCtx)
-		data.InitWriter(ioCtx)
 
 		// Bind flags to Viper for precedence handling.
 		v := viper.GetViper()
@@ -95,7 +90,10 @@ func init() {
 		flags.WithStringFlag(flagGitHubToken, "", "", "GitHub token for authenticated requests"),
 		flags.WithStringFlag(flagToolVersions, "", ".tool-versions", "Path to tool-versions file"),
 		flags.WithStringFlag(flagToolchainPath, "", ".tools", "Directory to store installed tools"),
-		flags.WithEnvVars(flagGitHubToken, "ATMOS_GITHUB_TOKEN", "GITHUB_TOKEN"),
+		// Prefer the Atmos Pro-brokered token, then ATMOS_GITHUB_TOKEN, then GITHUB_TOKEN.
+		// This matches the go-getter token injector and pkg/http GetGitHubTokenFromEnv so
+		// toolchain installs use the same token as every other GitHub-talking path.
+		flags.WithEnvVars(flagGitHubToken, "ATMOS_PRO_GITHUB_TOKEN", "ATMOS_GITHUB_TOKEN", "GITHUB_TOKEN"),
 		flags.WithEnvVars(flagToolVersions, "ATMOS_TOOL_VERSIONS"),
 		flags.WithEnvVars(flagToolchainPath, "ATMOS_TOOLCHAIN_PATH"),
 	)
@@ -189,4 +187,9 @@ func (t *ToolchainCommandProvider) GetPositionalArgsBuilder() *flags.PositionalA
 // GetCompatibilityFlags returns compatibility flags for this command.
 func (t *ToolchainCommandProvider) GetCompatibilityFlags() map[string]compat.CompatibilityFlag {
 	return nil
+}
+
+// IsExperimental returns whether this command is experimental.
+func (t *ToolchainCommandProvider) IsExperimental() bool {
+	return true
 }

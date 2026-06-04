@@ -9,8 +9,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
-	"github.com/cloudposse/atmos/toolchain"
-	toolchainregistry "github.com/cloudposse/atmos/toolchain/registry"
+	"github.com/cloudposse/atmos/pkg/toolchain"
+	toolchainregistry "github.com/cloudposse/atmos/pkg/toolchain/registry"
 )
 
 // TestValidateSearchFormat tests validateSearchFormat function.

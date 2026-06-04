@@ -10,12 +10,24 @@ import DocCardList from '@theme/DocCardList'
 import File from '@site/src/components/File'
 import Terminal from '@site/src/components/Terminal'
 import Intro from '@site/src/components/Intro'
+import Experimental from '@site/src/components/Experimental'
 import Tabs from '@theme/Tabs'
 import TabItem from '@theme/TabItem'
+import ActionCard from '@site/src/components/ActionCard'
+import PrimaryCTA from '@site/src/components/PrimaryCTA'
 
 <Intro>
 Manage toolchain dependencies for your Atmos components, commands, and workflows with native version control and seamless Aqua registry integration.
 </Intro>
+
+<Experimental />
+
+<ActionCard title="Configure Toolchain">
+    Learn how to configure tool versions, registries, aliases, and package verification in your atmos.yaml.
+    <div>
+      <PrimaryCTA to="/cli/configuration/toolchain">Configuration Reference</PrimaryCTA>
+    </div>
+</ActionCard>
 
 <Screengrab title="atmos toolchain --help" slug="atmos-toolchain--help" />
 
@@ -106,6 +118,7 @@ We support the core Aqua registry features needed for infrastructure tooling whi
 - Format detection
 - Local tool aliases
 - GitHub token authentication
+- Checksum, signature, and attestation verification
 - Platform overrides (different URLs/formats per OS/architecture)
 - OS/architecture replacements (e.g., `amd64` → `x86_64`)
 - Nested archive extraction (extract binaries from specific paths within archives)
@@ -136,16 +149,6 @@ Atmos provides focused Aqua registry support optimized for infrastructure toolin
 - `command_aliases` - Per-package command aliases (use `toolchain.aliases` in atmos.yaml)
 - `tags` - Package tagging for organization
 - `vars` - Template variables (basic templating supported)
-
-**Security Verification:**
-- `cosign` - Sigstore signature verification
-- `minisign` - Minisign signature verification
-- `slsa_provenance` - SLSA attestation checking
-- `github_artifact_attestations` - GitHub attestation verification
-
-:::note
-Checksum fields are parsed but validation is not currently enforced during installation.
-:::
 
 </details>
 
@@ -747,8 +750,9 @@ chmod +x .tools/bin/*/terraform/*/terraform
 ## Related Documentation
 
 - [Aqua Registry](https://github.com/aquaproj/aqua-registry) - Browse available tools
+- [Toolchain Configuration](/cli/configuration/toolchain) - Configure registries, aliases, and verification
+- [Toolchain Verification](/cli/configuration/toolchain/verification) - Configure checksums, signatures, and attestations
 - [Atmos Workflows](/workflows) - Integrate toolchain with workflows
-- [Atmos Configuration](/cli/configuration/) - Configure Atmos behavior
 
 ## Subcommands
 

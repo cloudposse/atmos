@@ -8,9 +8,11 @@ id: mask
 slug: /cli/configuration/settings/mask
 ---
 
+import EmbedExample from '@site/src/components/EmbedExample'
+
 # Secret Masking Configuration
 
-Atmos automatically masks sensitive data (secrets, API keys, tokens) in all terminal output to prevent accidental exposure in logs, screenshots, or CI/CD pipelines.
+Atmos provides provably safe secrets masking—all output channels route through the masking layer to ensure secrets never leak through any path. Sensitive data (secrets, API keys, tokens) is automatically masked in all terminal output to prevent accidental exposure in logs, screenshots, or CI/CD pipelines.
 
 ## Overview
 
@@ -51,7 +53,14 @@ settings:
   terminal:
     mask:
       enabled: true                    # Enable/disable masking (default: true)
-      replacement: "***MASKED***"      # Custom replacement text (default: ***MASKED***)
+      replacement: "[REDACTED]"        # Custom replacement text (default: ***MASKED***)
+      patterns:                        # Custom regex patterns
+        - 'demo-key-[A-Za-z0-9]{16}'
+        - 'internal-[a-f0-9]{32}'
+        - 'tkn_(live|test)_[a-zA-Z0-9]{24}'
+      literals:                        # Exact string matches
+        - "super-secret-demo-value"
+        - "my-api-key-12345"
 ```
 
 ### Configuration Options
@@ -74,7 +83,74 @@ settings:
     - **Default:** `"***MASKED***"`
     - **Example:** `replacement: "[REDACTED]"`
   </dd>
+
+  <dt>`patterns`</dt>
+  <dd>
+    Custom regex patterns to match organization-specific secrets. Patterns are added to the built-in patterns, not replacing them.
+
+    - **Type:** array of strings
+    - **Default:** `[]`
+    - **Example:**
+      ```yaml
+      patterns:
+        - 'mycompany-key-[A-Za-z0-9]{16}'
+        - 'internal-[a-f0-9]{32}'
+      ```
+  </dd>
+
+  <dt>`literals`</dt>
+  <dd>
+    Exact string values to mask. Use for known sensitive values that don't follow a pattern.
+
+    - **Type:** array of strings
+    - **Default:** `[]`
+    - **Example:**
+      ```yaml
+      literals:
+        - "my-hardcoded-secret"
+        - "test-api-key-12345"
+      ```
+  </dd>
 </dl>
+
+## Custom Patterns
+
+Beyond the built-in patterns, you can define organization-specific patterns to mask internal tokens, API keys, or secrets that follow your naming conventions.
+
+### Regex Patterns
+
+Use the `patterns` option to define regex patterns:
+
+```yaml
+settings:
+  terminal:
+    mask:
+      patterns:
+        # Internal API tokens
+        - 'mycompany-api-[A-Za-z0-9]{32}'
+        # Service account keys
+        - 'svc_[a-z]+_[A-Za-z0-9]{24}'
+        # Custom JWT-like tokens
+        - 'tkn_(live|test)_[a-zA-Z0-9]{24}'
+```
+
+### Literal Values
+
+Use the `literals` option for exact string matches:
+
+```yaml
+settings:
+  terminal:
+    mask:
+      literals:
+        - "known-secret-value"
+        - "hardcoded-test-key"
+```
+
+This is useful for:
+- Test secrets that don't follow patterns
+- Known sensitive values from configuration
+- Legacy credentials with unusual formats
 
 ## Built-In Patterns
 
@@ -235,7 +311,9 @@ If legitimate values are incorrectly masked:
 If secrets are NOT being masked:
 
 1. **Check pattern coverage:** Built-in patterns may not cover your secret format
-2. **Custom secret formats:** Consider contributing pattern to Atmos
+2. **Add custom patterns:** Define patterns in `atmos.yaml` for organization-specific secrets
+3. **Use literals:** Add exact values to the `literals` configuration
+4. **Contribute patterns:** Consider contributing common patterns to Atmos
 
 ## Troubleshooting
 
@@ -254,7 +332,18 @@ If secrets are NOT being masked:
 
 2. Check if secret format matches built-in patterns
 
-3. Check environment variables are set correctly
+3. Add custom patterns for organization-specific secrets:
+   ```yaml
+   settings:
+     terminal:
+       mask:
+         patterns:
+           - 'your-secret-pattern-[A-Za-z0-9]+'
+         literals:
+           - "known-secret-value"
+   ```
+
+4. Check environment variables are set correctly
 
 ### Legitimate Values Masked
 
@@ -278,6 +367,10 @@ If secrets are NOT being masked:
    ```bash
    atmos terraform plan --mask=false
    ```
+
+## Example
+
+<EmbedExample example="secrets-masking" />
 
 ## See Also
 

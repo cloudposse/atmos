@@ -1,0 +1,3 @@
+# Developer profile settings.
+logs:
+  level: Debug

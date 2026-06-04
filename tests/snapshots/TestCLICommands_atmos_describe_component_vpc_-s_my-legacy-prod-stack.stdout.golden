@@ -20,7 +20,13 @@
         "plan": {
           "skip_planfile": false
         },
-        "plugin_cache": true
+        "planfiles": {
+          "default": ""
+        },
+        "plugin_cache": true,
+        "auto_provision_workdir_for_outputs": true,
+        "ci": {},
+        "workspace": {}
       },
       "helmfile": {
         "base_path": "",
@@ -28,11 +34,20 @@
         "kubeconfig_path": "",
         "helm_aws_profile_pattern": "",
         "cluster_name_pattern": "",
-        "command": ""
+        "cluster_name_template": "",
+        "cluster_name": "",
+        "command": "",
+        "auto_generate_files": false
       },
       "packer": {
         "base_path": "",
-        "command": ""
+        "command": "",
+        "auto_generate_files": false
+      },
+      "ansible": {
+        "base_path": "",
+        "command": "",
+        "auto_generate_files": false
       },
       "list": {
         "format": "",
@@ -104,6 +119,8 @@
   "provision": {},
   "remote_state_backend": {},
   "remote_state_backend_type": "",
+  "required_providers": {},
+  "required_version": "",
   "settings": {},
   "source": {},
   "sources": {

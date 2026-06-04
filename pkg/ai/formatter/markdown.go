@@ -1,0 +1,57 @@
+package formatter
+
+import (
+	"fmt"
+	"io"
+)
+
+// MarkdownFormatter formats responses as markdown.
+type MarkdownFormatter struct{}
+
+// Format writes the execution result as formatted markdown.
+func (f *MarkdownFormatter) Format(w io.Writer, result *ExecutionResult) error {
+	if result.Error != nil {
+		_, err := fmt.Fprintf(w, "# Error\n\n%s\n", result.Error.Message)
+		return err
+	}
+
+	// Write the AI response.
+	if _, err := fmt.Fprintln(w, result.Response); err != nil {
+		return err
+	}
+
+	// No metadata section if no tool calls.
+	if len(result.ToolCalls) == 0 {
+		return nil
+	}
+
+	if _, err := fmt.Fprint(w, "\n---\n\n"); err != nil {
+		return err
+	}
+	if _, err := fmt.Fprintf(w, "## Tool Executions (%d)\n\n", len(result.ToolCalls)); err != nil {
+		return err
+	}
+	for i, tc := range result.ToolCalls {
+		status := "✅"
+		if !tc.Success {
+			status = "❌"
+		}
+		// Use DisplayName (human-readable) when available, fall back to sanitized Tool name.
+		name := tc.DisplayName
+		if name == "" {
+			name = tc.Tool
+		}
+		if _, err := fmt.Fprintf(w, "%d. %s **%s** (%dms)\n", i+1, status, name, tc.DurationMs); err != nil {
+			return err
+		}
+		// Show error details for failed tool calls so users can diagnose issues
+		// (e.g., missing credentials, permission denied, server timeout).
+		if !tc.Success && tc.Error != "" {
+			if _, err := fmt.Fprintf(w, "   Error: %s\n", tc.Error); err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
+}

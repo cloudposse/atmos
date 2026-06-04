@@ -2,15 +2,17 @@ package terraform_backend
 
 import (
 	"context"
+	"crypto/md5" //nolint:gosec // MD5 is required by S3 SSE-C protocol for key integrity verification.
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"io"
+	"os"
 	"path"
 	"sync"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
-	_ "github.com/aws/aws-sdk-go-v2/feature/s3/manager"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/aws-sdk-go-v2/service/s3/types"
 	"github.com/aws/smithy-go"
@@ -24,6 +26,60 @@ import (
 
 // maxRetryCount defines the max attempts to read a state file from an S3 bucket.
 const maxRetryCount = 2
+
+const (
+	// sseCustomerKeyLength is the expected length of a base64-encoded 32-byte AES-256 key.
+	sseCustomerKeyLength = 44
+	// sseCustomerKeyAlgorithm is the encryption algorithm for SSE-C.
+	sseCustomerKeyAlgorithm = "AES256"
+)
+
+// sseCustomerKeyConfig holds a decoded SSE-C customer-provided encryption key.
+type sseCustomerKeyConfig struct {
+	key []byte
+}
+
+// getSSECustomerKeyMD5 returns the base64-encoded MD5 digest of the raw key,
+// as required by the S3 SSE-C protocol for key integrity verification.
+// This matches the OpenTofu implementation (client.go:599-602).
+func (c *sseCustomerKeyConfig) getSSECustomerKeyMD5() string {
+	sum := md5.Sum(c.key) //nolint:gosec // MD5 is required by S3 SSE-C protocol for key integrity verification.
+	return base64.StdEncoding.EncodeToString(sum[:])
+}
+
+// applyToGetObjectInput sets SSE-C headers on the given S3 GetObjectInput.
+func (c *sseCustomerKeyConfig) applyToGetObjectInput(input *s3.GetObjectInput) {
+	input.SSECustomerKey = aws.String(base64.StdEncoding.EncodeToString(c.key))
+	input.SSECustomerAlgorithm = aws.String(sseCustomerKeyAlgorithm)
+	input.SSECustomerKeyMD5 = aws.String(c.getSSECustomerKeyMD5())
+}
+
+// resolveSSECustomerKey reads the SSE-C customer key from the backend config
+// (`sse_customer_key` attribute) or the `AWS_SSE_CUSTOMER_KEY` environment variable.
+// Returns nil if no key is configured. Returns an error if the key is invalid.
+// This follows the same configuration conventions as OpenTofu (backend.go:701-737).
+func resolveSSECustomerKey(backend *map[string]any) (*sseCustomerKeyConfig, error) {
+	keyB64 := GetBackendAttribute(backend, "sse_customer_key")
+	if keyB64 == "" {
+		keyB64 = os.Getenv("AWS_SSE_CUSTOMER_KEY")
+	}
+	if keyB64 == "" {
+		return nil, nil
+	}
+
+	if len(keyB64) != sseCustomerKeyLength {
+		return nil, fmt.Errorf("%w: expected %d characters, got %d",
+			errUtils.ErrInvalidSSECustomerKey, sseCustomerKeyLength, len(keyB64))
+	}
+
+	decoded, err := base64.StdEncoding.DecodeString(keyB64)
+	if err != nil {
+		return nil, fmt.Errorf("%w: invalid base64 encoding: %v",
+			errUtils.ErrInvalidSSECustomerKey, err)
+	}
+
+	return &sseCustomerKeyConfig{key: decoded}, nil
+}
 
 // GetS3BackendAssumeRoleArn returns the s3 backend role ARN from the S3 backend config.
 // https://developer.hashicorp.com/terraform/language/backend/s3#assume-role-configuration
@@ -55,7 +111,7 @@ type S3API interface {
 // It's a map[string]S3API.
 var s3ClientCache sync.Map
 
-func getCachedS3Client(backend *map[string]any, authContext *schema.AuthContext) (S3API, error) {
+func getCachedS3Client(backend *map[string]any, authContext *schema.AuthContext, envOverlay map[string]string) (S3API, error) {
 	region := GetBackendAttribute(backend, "region")
 	roleArn := GetS3BackendAssumeRoleArn(backend)
 
@@ -63,6 +119,25 @@ func getCachedS3Client(backend *map[string]any, authContext *schema.AuthContext)
 	cacheKey := fmt.Sprintf("region=%s;role_arn=%s", region, roleArn)
 	if authContext != nil && authContext.AWS != nil {
 		cacheKey += fmt.Sprintf(";profile=%s", authContext.AWS.Profile)
+	}
+	if envOverlay != nil {
+		// Two components with different env profiles/credentials/endpoints must
+		// produce distinct cache entries — otherwise cross-namespace or
+		// cross-endpoint reads alias each other in the cache. Include every
+		// whitelisted key that affects client behavior; FIPS, endpoint URL,
+		// and region variants all change which network endpoint the client
+		// targets and therefore must participate in the cache key.
+		cacheKey += fmt.Sprintf(
+			";env_profile=%s;env_region=%s;env_default_region=%s;env_config=%s;env_creds=%s;env_s3_endpoint=%s;env_sts_endpoint=%s;env_fips=%s",
+			envOverlay["AWS_PROFILE"],
+			envOverlay["AWS_REGION"],
+			envOverlay["AWS_DEFAULT_REGION"],
+			envOverlay["AWS_CONFIG_FILE"],
+			envOverlay["AWS_SHARED_CREDENTIALS_FILE"],
+			envOverlay["AWS_ENDPOINT_URL_S3"],
+			envOverlay["AWS_ENDPOINT_URL_STS"],
+			envOverlay["AWS_USE_FIPS_ENDPOINT"],
+		)
 	}
 
 	// Check the cache.
@@ -82,12 +157,21 @@ func getCachedS3Client(backend *map[string]any, authContext *schema.AuthContext)
 	}
 
 	// The minimum `assume role` duration allowed by AWS is 15 minutes.
-	cfg, err := awsIdentity.LoadConfigWithAuth(ctx, region, roleArn, 15*time.Minute, awsAuthContext)
+	cfg, err := awsIdentity.LoadConfigWithAuthAndEnv(ctx, region, roleArn, 15*time.Minute, awsAuthContext, envOverlay)
 	if err != nil {
 		return nil, err
 	}
 
-	s3Client := s3.NewFromConfig(cfg)
+	// Apply per-service S3 overrides from the env overlay. In SDK v2 the
+	// endpoint URL is a per-service option, not a global config setting, so
+	// we set it at client construction rather than inside LoadConfigWithAuth.
+	s3Client := s3.NewFromConfig(cfg, func(o *s3.Options) {
+		if envOverlay != nil {
+			if ep := envOverlay["AWS_ENDPOINT_URL_S3"]; ep != "" {
+				o.BaseEndpoint = aws.String(ep)
+			}
+		}
+	})
 	s3ClientCache.Store(cacheKey, s3Client)
 	return s3Client, nil
 }
@@ -103,7 +187,12 @@ func ReadTerraformBackendS3(
 
 	backend := GetComponentBackend(componentSections)
 
-	s3Client, err := getCachedS3Client(&backend, authContext)
+	// Honor the target component's `env` section for AWS credential resolution,
+	// matching `!terraform.output`'s subprocess behavior. nil overlay preserves
+	// the existing default-credential-chain behavior unchanged.
+	envOverlay := ExtractComponentEnvOverlay(componentSections, ComponentEnvKeysAWS)
+
+	s3Client, err := getCachedS3Client(&backend, authContext, envOverlay)
 	if err != nil {
 		return nil, err
 	}
@@ -144,16 +233,27 @@ func ReadTerraformBackendS3Internal(
 
 	bucket := GetBackendAttribute(backend, "bucket")
 
+	// Resolve SSE-C customer-provided encryption key if configured.
+	sseConfig, err := resolveSSECustomerKey(backend)
+	if err != nil {
+		return nil, err
+	}
+
 	var lastErr error
 	for attempt := 0; attempt <= maxRetryCount; attempt++ {
 		// 30 sec timeout to read the state file from the S3 bucket.
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
 
-		output, err := s3Client.GetObject(ctx, &s3.GetObjectInput{
+		getInput := &s3.GetObjectInput{
 			Bucket: aws.String(bucket),
 			Key:    aws.String(tfStateFilePath),
-		})
+		}
+		if sseConfig != nil {
+			sseConfig.applyToGetObjectInput(getInput)
+		}
+
+		output, err := s3Client.GetObject(ctx, getInput)
 		if err != nil {
 			// Check if the error is because the object doesn't exist.
 			// If the state file does not exist (the component in the stack has not been provisioned yet), return a `nil` result and no error.
@@ -167,7 +267,8 @@ func ReadTerraformBackendS3Internal(
 			if attempt < maxRetryCount {
 				// Exponential backoff: 1s, 2s, 4s for attempts 0, 1, 2.
 				backoff := time.Second * time.Duration(1<<attempt)
-				log.Debug("Failed to read Terraform state file from the S3 bucket",
+				log.Debug(
+					"Failed to read Terraform state file from the S3 bucket",
 					"attempt", attempt+1,
 					"file", tfStateFilePath,
 					log.FieldBucket, bucket,

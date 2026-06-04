@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	awsCloud "github.com/cloudposse/atmos/pkg/auth/cloud/aws"
@@ -34,6 +35,7 @@ var ErrNoStoredCredentials = errors.New("mock identity has no stored credentials
 type Identity struct {
 	name   string
 	config *schema.Identity
+	realm  string // Credential isolation realm set by auth manager.
 }
 
 // NewIdentity creates a new mock identity.
@@ -52,7 +54,9 @@ func (i *Identity) getCredentialsFilePath() string {
 	// Use a temp directory that's cleaned up by the OS.
 	// In production, real providers would use XDG directories like ~/.config/atmos/aws/{provider}/.
 	tmpDir := os.TempDir()
-	return filepath.Join(tmpDir, "atmos-mock-"+i.name+".json")
+	// Sanitize identity name to be filesystem-safe (replace / with -).
+	safeName := strings.ReplaceAll(i.name, "/", "-")
+	return filepath.Join(tmpDir, "atmos-mock-"+safeName+".json")
 }
 
 // Kind returns the identity kind.
@@ -60,6 +64,11 @@ func (i *Identity) Kind() string {
 	defer perf.Track(nil, "mock.Identity.Kind")()
 
 	return i.config.Kind
+}
+
+// SetRealm sets the credential isolation realm for this identity.
+func (i *Identity) SetRealm(realm string) {
+	i.realm = realm
 }
 
 // GetProviderName returns the provider name for this identity.
@@ -163,7 +172,12 @@ func (i *Identity) PostAuthenticate(ctx context.Context, params *types.PostAuthe
 	}
 
 	// Step 1: Write AWS-format credential files (for external tools and SDK).
-	if err := awsCloud.SetupFiles(providerName, i.name, awsCreds, ""); err != nil {
+	// Use realm from params if available for credential isolation.
+	realm := ""
+	if params != nil {
+		realm = params.Realm
+	}
+	if err := awsCloud.SetupFiles(providerName, i.name, awsCreds, "", realm); err != nil {
 		return fmt.Errorf("mock identity failed to setup AWS files: %w", err)
 	}
 
@@ -176,6 +190,7 @@ func (i *Identity) PostAuthenticate(ctx context.Context, params *types.PostAuthe
 			IdentityName: i.name,
 			Credentials:  awsCreds,
 			BasePath:     "",
+			Realm:        realm,
 		}); err != nil {
 			return fmt.Errorf("mock identity failed to set auth context: %w", err)
 		}

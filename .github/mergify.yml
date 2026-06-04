@@ -37,14 +37,14 @@ pull_request_rules:
             - workflow: test.yml
               ref: "{{ head }}"
 
-  - name: Comment when size/xl label is added
+  - name: Comment when size/xxl label is added
     conditions:
-      - label=size/xl
+      - label=size/xxl
     actions:
       comment:
         message: |
           > [!WARNING]
-          > #### This PR exceeds the recommended limit of 1,000 lines.
+          > #### This PR exceeds the recommended limit of 10,000 lines.
           >
           > Large PRs are difficult to review and may be rejected due to their size.
           >

@@ -11,6 +11,9 @@ acme-platform-dev:
         backend_type: ""
         command: terraform
         component: mock
+        component_info:
+          component_path: ../../components/terraform/mock
+          component_type: terraform
         env: {}
         generate: {}
         hooks: {}
@@ -21,6 +24,8 @@ acme-platform-dev:
         provision: {}
         remote_state_backend: {}
         remote_state_backend_type: ""
+        required_providers: {}
+        required_version: ""
         settings: {}
         source: {}
         stack: acme-platform-dev
@@ -45,6 +50,9 @@ acme-platform-prod:
         backend_type: ""
         command: terraform
         component: mock
+        component_info:
+          component_path: ../../components/terraform/mock
+          component_type: terraform
         env: {}
         generate: {}
         hooks: {}
@@ -55,6 +63,8 @@ acme-platform-prod:
         provision: {}
         remote_state_backend: {}
         remote_state_backend_type: ""
+        required_providers: {}
+        required_version: ""
         settings: {}
         source: {}
         stack: acme-platform-prod
@@ -79,6 +89,9 @@ acme-platform-staging:
         backend_type: ""
         command: terraform
         component: mock
+        component_info:
+          component_path: ../../components/terraform/mock
+          component_type: terraform
         env: {}
         generate: {}
         hooks: {}
@@ -89,6 +102,8 @@ acme-platform-staging:
         provision: {}
         remote_state_backend: {}
         remote_state_backend_type: ""
+        required_providers: {}
+        required_version: ""
         settings: {}
         source: {}
         stack: acme-platform-staging

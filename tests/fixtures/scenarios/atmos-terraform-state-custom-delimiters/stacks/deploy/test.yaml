@@ -1,0 +1,33 @@
+vars:
+  stage: test
+
+components:
+  terraform:
+    # Source component with basic settings and vars.
+    component-1:
+      metadata:
+        component: mock
+      settings:
+        config:
+          a: component-1-a
+          b: component-1-b
+          c: component-1-c
+      vars:
+        # Test custom delimiters in regular template expressions.
+        foo: "'{{ .settings.config.a }}'"
+        bar: "'{{ .settings.config.b }}'"
+        baz: "'{{ .settings.config.c }}'"
+
+    # Component that references component-1 via !terraform.state with custom delimiter templates.
+    # This is the core test for GitHub issue #2052.
+    component-2:
+      metadata:
+        component: mock
+      vars:
+        # Static args (no template) - should work regardless.
+        foo: !terraform.state component-1 foo
+        # Templated stack arg using custom delimiters with quotes.
+        # This is the exact pattern that fails in issue #2052.
+        bar: !terraform.state component-1 '{{ .stack }}' bar
+        # Another templated arg.
+        baz: !terraform.state component-1 '{{ .stack }}' baz

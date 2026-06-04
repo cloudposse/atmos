@@ -9,7 +9,7 @@
 
 💡 Available workflows in workflow1.yaml: - terraform-plan-all-tenant1-ue2-dev
 
-• terraform-plan-all-test-components
-• terraform-plan-test-component-override-2-all-stacks
-• terraform-plan-test-component-override-3-all-stacks
-• test-1
+  • terraform-plan-all-test-components
+  • terraform-plan-test-component-override-2-all-stacks
+  • terraform-plan-test-component-override-3-all-stacks
+  • test-1

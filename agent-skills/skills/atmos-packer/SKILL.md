@@ -1,0 +1,445 @@
+---
+name: atmos-packer
+description: "Packer orchestration: init/build/validate/inspect/output, machine image building, template management, source management"
+metadata:
+  copyright: Copyright Cloud Posse, LLC 2026
+  version: "1.0.0"
+---
+
+# Atmos Packer Orchestration
+
+Atmos wraps the Packer CLI to provide stack-aware orchestration of machine image builds. Instead of
+manually managing variable files, template paths, and environment configuration for each Packer component,
+Atmos resolves the full configuration from stack manifests and handles all of these concerns automatically.
+
+## How Atmos Orchestrates Packer
+
+When you run any `atmos packer` command, Atmos performs the following sequence:
+
+1. **Resolves stack configuration** -- Reads and deep-merges all stack manifests to produce the fully resolved
+   configuration for the target component in the target stack.
+2. **Generates variable file** -- Writes a variable file containing all `vars` defined for the component
+   in the stack, making them available to the Packer template.
+3. **Auto-provisions source (if configured)** -- If the component has a `source` field and the target
+   directory does not exist, Atmos downloads the component via JIT vendoring before proceeding.
+4. **Resolves template path** -- Determines the Packer template to use from the `--template` flag,
+   `settings.packer.template` in the stack manifest, or defaults to `.` (all `*.pkr.hcl` files).
+5. **Sets environment variables** -- Applies any `env` values defined in the stack configuration.
+6. **Executes the requested command** -- Runs `packer init`, `build`, `validate`, `inspect`, etc. with
+   the generated variable file and any additional flags.
+
+This means a single command like `atmos packer build ubuntu-base -s ue2-dev` replaces what would normally
+require manually writing variable files, configuring paths, and running packer directly.
+
+## Stack Configuration
+
+Packer components are configured under the `components.packer` section of stack manifests:
+
+```yaml
+components:
+  packer:
+    ubuntu-base:
+      metadata:
+        type: real
+        component: ubuntu-base
+
+      settings: {}
+
+      vars:
+        ami_name: "ubuntu-base"
+        instance_type: "t3.medium"
+        source_ami_filter_name: "ubuntu/images/hvm-ssd/ubuntu-jammy-22.04-amd64-server-*"
+
+      env:
+        PACKER_LOG: "1"
+```
+
+### Configuration Attributes
+
+- **`vars`** -- Variables passed to Packer. These are deep-merged across the stack hierarchy and made
+  available to Packer templates. This is the primary way to parameterize builds per stack.
+
+- **`metadata`** -- Extends component functionality. Supports `type` (real/abstract), `component`
+  (physical component path), and `inherits` (list of parent components for configuration inheritance).
+
+- **`settings`** -- Free-form map for integration configuration. The `settings.packer.template` field
+  controls which template file or directory Packer uses.
+
+- **`env`** -- Environment variables set when running Packer commands. Common examples include
+  `PACKER_LOG`, `AWS_PROFILE`, and `AWS_REGION`.
+
+## Core Commands
+
+### init
+
+Initializes Packer and installs plugins according to an HCL template configuration.
+
+```shell
+atmos packer init <component> -s <stack>
+```
+
+```shell
+# Basic init
+atmos packer init aws/bastion --stack nonprod
+
+# Init with a specific template file
+atmos packer init aws/bastion -s prod --template main.pkr.hcl
+
+# Init with shorthand flags
+atmos packer init aws/bastion -s nonprod -t main.nonprod.pkr.hcl
+```
+
+### build
+
+Processes a Packer template and builds it to generate a set of artifacts. Builds within a template
+execute in parallel by default. A Packer manifest (if configured) is updated with the build results.
+
+```shell
+atmos packer build <component> -s <stack>
+```
+
+```shell
+# Directory mode (default) -- loads all *.pkr.hcl files from the component directory
+atmos packer build aws/bastion --stack nonprod
+
+# Explicit directory mode
+atmos packer build aws/bastion --stack prod --template .
+
+# Single file mode
+atmos packer build aws/bastion -s prod --template main.pkr.hcl
+atmos packer build aws/bastion -s nonprod -t main.nonprod.pkr.hcl
+```
+
+### validate
+
+Validates the syntax and configuration of a Packer template before building.
+
+```shell
+atmos packer validate <component> -s <stack>
+```
+
+```shell
+atmos packer validate aws/bastion --stack prod
+atmos packer validate aws/bastion -s prod --template main.pkr.hcl
+atmos packer validate aws/bastion -s nonprod -t main.nonprod.pkr.hcl
+```
+
+### inspect
+
+Inspects the components of a Packer template, showing variables it accepts, builders it defines,
+provisioners and their execution order, and post-processors.
+
+```shell
+atmos packer inspect <component> -s <stack>
+```
+
+```shell
+atmos packer inspect aws/bastion --stack nonprod
+atmos packer inspect aws/bastion -s prod --template main.pkr.hcl
+```
+
+### output
+
+Retrieves output from a Packer manifest. Manifests are generated by Packer during `build` commands
+when configured with a manifest post-processor. Supports YQ expressions for extracting specific
+sections or attributes.
+
+```shell
+atmos packer output <component> -s <stack> [--query <yq-expression>]
+```
+
+This command is specific to Atmos -- Packer itself does not have an `output` command.
+
+```shell
+# Get full manifest output
+atmos packer output aws/bastion -s prod
+
+# Get a specific attribute using YQ expression
+atmos packer output aws/bastion -s prod --query '.builds[0].artifact_id'
+
+# Extract just the AMI ID from the artifact
+atmos packer output aws/bastion -s prod -q '.builds[0].artifact_id | split(":")[1]'
+```
+
+### version
+
+Displays the currently installed Packer version.
+
+```shell
+atmos packer version
+```
+
+## Template Management
+
+Atmos supports two modes for specifying which Packer template files to use:
+
+### Directory Mode (Default)
+
+When no `--template` flag is specified, Packer loads all `*.pkr.hcl` files from the component
+directory. This is the recommended approach for components with multiple HCL files.
+
+### Single File Mode
+
+Use `--template` (or `-t`) to point to a specific template file. This is useful when a component
+directory contains multiple template variants (e.g., `main.pkr.hcl` and `main.nonprod.pkr.hcl`).
+
+### Template Configuration in Stack Manifests
+
+The template can be set in the stack manifest under `settings.packer.template`. The command-line
+`--template` flag takes precedence over the stack manifest setting.
+
+```yaml
+components:
+  packer:
+    aws/bastion:
+      settings:
+        packer:
+          template: main.pkr.hcl
+```
+
+## Source Management and JIT Vendoring
+
+Atmos supports just-in-time (JIT) vendoring of Packer components using the `source` field. Instead
+of pre-vendoring components or maintaining separate vendoring configuration, you declare the source
+inline in your stack manifest.
+
+### Source Configuration
+
+The `source` field supports two formats:
+
+**String format (simple):**
+
+```yaml
+source: "github.com/cloudposse/packer-templates//ami-builder?ref=1.0.0"
+```
+
+**Map format (full control):**
+
+```yaml
+source:
+  uri: github.com/cloudposse/packer-templates//ami-builder
+  version: 1.0.0
+  included_paths:
+    - "*.pkr.hcl"
+    - "*.pkr.json"
+    - "scripts/**"
+  excluded_paths:
+    - "*.md"
+    - "tests/**"
+```
+
+### Source Fields
+
+- **`uri`** -- Go-getter compatible source URI. Supports git, s3, http, gcs, oci, and other protocols.
+- **`version`** -- Version tag, branch, or commit. Appended as `?ref=<version>` for git sources.
+- **`included_paths`** -- Glob patterns for files to include. If specified, only matching files are copied.
+- **`excluded_paths`** -- Glob patterns for files to exclude. Applied after included_paths filtering.
+- **`retry`** -- Optional retry configuration with `max_attempts`, `initial_delay`, `max_delay`,
+  and `backoff_strategy` (exponential, linear, constant).
+
+### Automatic Provisioning
+
+Sources are automatically provisioned when running any packer command. If a component has `source`
+configured and the target directory does not exist, Atmos downloads the source before running packer:
+
+```shell
+# Source is automatically provisioned on first use
+atmos packer build ami-builder --stack dev
+# -> Auto-provisioning source for component 'ami-builder'
+# -> Auto-provisioned source to components/packer/ami-builder
+# -> Packer runs
+```
+
+### Source Commands
+
+For fine-grained control over source management:
+
+```shell
+# Download and vendor a component source
+atmos packer source pull ami-builder --stack dev
+
+# Force re-vendor (overwrites existing)
+atmos packer source pull ami-builder --stack dev --force
+
+# View source configuration
+atmos packer source describe ami-builder --stack dev
+
+# List all components with source configured
+atmos packer source list --stack dev
+
+# List sources across all stacks
+atmos packer source list
+
+# Delete vendored source (requires --force for safety)
+atmos packer source delete ami-builder --stack dev --force
+```
+
+### Version Pinning per Environment
+
+Use stack inheritance to share base source configuration and override versions per environment:
+
+```yaml
+# stacks/catalog/ami-builder/defaults.yaml
+components:
+  packer:
+    ami-builder/defaults:
+      source:
+        uri: github.com/cloudposse/packer-templates//ami-builder
+        version: 1.0.0
+
+# stacks/dev.yaml
+components:
+  packer:
+    ami-builder:
+      metadata:
+        inherits: [ami-builder/defaults]
+      source:
+        version: 1.1.0  # Override version for dev
+
+# stacks/prod.yaml
+components:
+  packer:
+    ami-builder:
+      metadata:
+        inherits: [ami-builder/defaults]
+      source:
+        version: 1.0.0  # Pin to stable version for prod
+```
+
+### Supported Source Protocols
+
+- **Git** -- `github.com/org/repo//path`, `git::https://...`, `git::ssh://...`
+- **S3** -- `s3::https://s3-us-east-1.amazonaws.com/bucket/path.tar.gz`
+- **HTTP/HTTPS** -- `https://releases.example.com/templates/component.tar.gz`
+- **OCI** -- `oci::registry.example.com/templates/component:v1.0.0`
+
+### Authentication for Sources
+
+Components can specify authentication identity for accessing private sources:
+
+```yaml
+components:
+  packer:
+    ami-builder:
+      source:
+        uri: github.com/my-org/private-templates//ami-builder
+        version: v1.0.0
+      auth:
+        identities:
+          github-deployer:
+            default: true
+            kind: github/app
+            via:
+              provider: github-app
+```
+
+Override identity at the command line:
+
+```shell
+atmos packer source pull ami-builder --stack dev --identity admin
+```
+
+## Path-Based Component Resolution
+
+Atmos supports using filesystem paths instead of component names:
+
+```shell
+# Navigate to component directory and use current directory
+cd components/packer/aws/bastion
+atmos packer validate . -s prod
+atmos packer build . -s prod
+
+# Use relative path
+cd components/packer
+atmos packer init ./aws/bastion -s prod
+
+# Combine with other flags
+cd components/packer/aws/bastion
+atmos packer build . -s prod -t main.nonprod.pkr.hcl
+atmos packer output . -s prod --query '.builds[0].artifact_id'
+```
+
+Supported path formats: `.`, `./component`, `../sibling`, `/absolute/path`.
+
+Path-based resolution requires that the path resolves to a single unique component in the stack.
+If multiple components reference the same component path, use the explicit component name instead.
+
+## Common Flags
+
+| Flag | Short | Description |
+|------|-------|-------------|
+| `--stack` | `-s` | Target Atmos stack (required) |
+| `--template` | `-t` | Packer template file or directory path |
+| `--query` | `-q` | YQ expression for manifest parsing (output command) |
+
+Use `--` to pass flags directly to Packer: `atmos packer build aws/bastion -s dev -- -color=false`.
+
+## Manifest Parsing with YQ
+
+The `atmos packer output` command supports YQ expressions for querying Packer manifests:
+
+```shell
+# Get entire manifest
+atmos packer output aws/bastion -s prod
+
+# Get artifact ID from the first build
+atmos packer output aws/bastion -s prod --query '.builds[0].artifact_id'
+
+# Extract just the AMI ID (second part after colon)
+atmos packer output aws/bastion -s prod -q '.builds[0].artifact_id | split(":")[1]'
+```
+
+## Debugging
+
+### Describe Component
+
+Use `atmos describe component` to see the fully resolved configuration for a Packer component:
+
+```shell
+atmos describe component ubuntu-base -s ue2-dev
+```
+
+This shows all merged vars, metadata, settings, and environment variables.
+
+### Enable Packer Debug Logging
+
+```yaml
+components:
+  packer:
+    ubuntu-base:
+      env:
+        PACKER_LOG: "1"
+```
+
+Or set it at runtime:
+
+```shell
+PACKER_LOG=1 atmos packer build ubuntu-base -s ue2-dev
+```
+
+## Best Practices
+
+1. **Use directory mode for multi-file components.** Omit `--template` to let Packer load all
+   `*.pkr.hcl` files from the component directory.
+
+2. **Validate before building.** Run `atmos packer validate` before `atmos packer build` to catch
+   syntax and configuration errors early.
+
+3. **Use stack inheritance for shared defaults.** Define base image configuration in catalog
+   manifests and override per environment.
+
+4. **Configure manifests for build tracking.** Use Packer's manifest post-processor to track
+   build artifacts, then query them with `atmos packer output`.
+
+5. **Use JIT vendoring for version control per environment.** The `source` field enables different
+   template versions for dev, staging, and production stacks.
+
+6. **Pin production versions.** Keep production stacks on stable, tested versions while allowing
+   development stacks to use newer template versions.
+
+7. **Use `atmos describe component`** to debug configuration resolution issues. It shows the fully
+   merged result of all stack manifest inheritance.
+
+## Additional Resources
+
+- For the complete command reference, see [references/commands-reference.md](references/commands-reference.md)

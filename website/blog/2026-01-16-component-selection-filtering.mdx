@@ -1,0 +1,30 @@
+---
+slug: component-selection-filtering
+title: "Smarter Component Selection in Interactive Prompts"
+authors: [osterman]
+tags: [bugfix]
+---
+
+Interactive component selection now filters out non-deployable components.
+
+{/* truncate */}
+
+## What Changed
+
+When using `atmos terraform plan -s stack-name` without specifying a component, the interactive
+"Choose a component" menu now correctly filters the component list:
+
+- **Abstract components** (`metadata.type: abstract`) are hidden - they're templates, not deployable
+- **Disabled components** (`metadata.enabled: false`) are hidden - they can't be deployed
+- **Stack-scoped filtering** - only components in the specified stack appear
+
+## Why This Matters
+
+Previously, users would see all components from all stacks, including abstract base components
+that serve as templates. This was confusing and could lead to errors when selecting a component
+that couldn't actually be deployed.
+
+## Shell Completion Too
+
+Tab completion for component arguments also uses the same filtering logic, so you'll only see
+valid, deployable components when completing `atmos terraform plan -s stack <TAB>`.

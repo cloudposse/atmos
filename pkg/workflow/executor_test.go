@@ -412,9 +412,10 @@ func TestExecutor_Execute_WithIdentity(t *testing.T) {
 	mockUI := NewMockUIProvider(ctrl)
 
 	// Setup auth expectations.
+	// Note: baseEnv is now []string{} (from workflow/step env) instead of nil.
 	mockAuth.EXPECT().GetCachedCredentials(gomock.Any(), "test-identity").Return(nil, errors.New("no cache"))
 	mockAuth.EXPECT().Authenticate(gomock.Any(), "test-identity").Return(nil)
-	mockAuth.EXPECT().PrepareEnvironment(gomock.Any(), "test-identity", nil).Return([]string{"AWS_PROFILE=test"}, nil)
+	mockAuth.EXPECT().PrepareEnvironment(gomock.Any(), "test-identity", []string{}).Return([]string{"AWS_PROFILE=test"}, nil)
 
 	// Expect shell command with auth env.
 	mockRunner.EXPECT().
@@ -501,9 +502,10 @@ func TestExecutor_Execute_CommandLineIdentity(t *testing.T) {
 	mockUI := NewMockUIProvider(ctrl)
 
 	// Both steps should use the command-line identity.
+	// Note: baseEnv is now []string{} (from workflow/step env) instead of nil.
 	mockAuth.EXPECT().GetCachedCredentials(gomock.Any(), "cli-identity").Return(nil, errors.New("no cache")).Times(2)
 	mockAuth.EXPECT().Authenticate(gomock.Any(), "cli-identity").Return(nil).Times(2)
-	mockAuth.EXPECT().PrepareEnvironment(gomock.Any(), "cli-identity", nil).Return([]string{"IDENTITY=cli"}, nil).Times(2)
+	mockAuth.EXPECT().PrepareEnvironment(gomock.Any(), "cli-identity", []string{}).Return([]string{"IDENTITY=cli"}, nil).Times(2)
 
 	mockRunner.EXPECT().
 		RunShell("echo 'step 1'", "test-workflow-step-0", ".", []string{"IDENTITY=cli"}, false).
@@ -786,8 +788,9 @@ func TestExecutor_Execute_CachedCredentialsSuccess(t *testing.T) {
 	mockUI := NewMockUIProvider(ctrl)
 
 	// Cached credentials are valid - no need to authenticate.
+	// Note: baseEnv is now []string{} (from workflow/step env) instead of nil.
 	mockAuth.EXPECT().GetCachedCredentials(gomock.Any(), "cached-identity").Return("cached-creds", nil)
-	mockAuth.EXPECT().PrepareEnvironment(gomock.Any(), "cached-identity", nil).Return([]string{"CACHED=true"}, nil)
+	mockAuth.EXPECT().PrepareEnvironment(gomock.Any(), "cached-identity", []string{}).Return([]string{"CACHED=true"}, nil)
 
 	mockRunner.EXPECT().
 		RunShell("echo 'hello'", "test-workflow-step-0", ".", []string{"CACHED=true"}, false).
@@ -817,9 +820,10 @@ func TestExecutor_Execute_PrepareEnvironmentFailure(t *testing.T) {
 	mockUI := NewMockUIProvider(ctrl)
 
 	// Auth succeeds but PrepareEnvironment fails.
+	// Note: baseEnv is now []string{} (from workflow/step env) instead of nil.
 	mockAuth.EXPECT().GetCachedCredentials(gomock.Any(), "test-identity").Return(nil, errors.New("no cache"))
 	mockAuth.EXPECT().Authenticate(gomock.Any(), "test-identity").Return(nil)
-	mockAuth.EXPECT().PrepareEnvironment(gomock.Any(), "test-identity", nil).Return(nil, errors.New("prepare failed"))
+	mockAuth.EXPECT().PrepareEnvironment(gomock.Any(), "test-identity", []string{}).Return(nil, errors.New("prepare failed"))
 
 	executor := NewExecutor(mockRunner, mockAuth, mockUI)
 
@@ -1448,4 +1452,318 @@ func TestExecutor_ensureToolchainDependencies_UpdatePathError(t *testing.T) {
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrDependencyResolution)
 	assert.False(t, result.Success)
+}
+
+// TestMergeWorkflowEnv tests the mergeWorkflowEnv helper function.
+func TestMergeWorkflowEnv(t *testing.T) {
+	tests := []struct {
+		name        string
+		workflowEnv map[string]string
+		stepEnv     map[string]string
+		expected    map[string]string
+	}{
+		{
+			name:        "both nil",
+			workflowEnv: nil,
+			stepEnv:     nil,
+			expected:    nil,
+		},
+		{
+			name:        "workflow env only",
+			workflowEnv: map[string]string{"FOO": "bar"},
+			stepEnv:     nil,
+			expected:    map[string]string{"FOO": "bar"},
+		},
+		{
+			name:        "step env only",
+			workflowEnv: nil,
+			stepEnv:     map[string]string{"BAZ": "qux"},
+			expected:    map[string]string{"BAZ": "qux"},
+		},
+		{
+			name:        "different keys merged",
+			workflowEnv: map[string]string{"FOO": "bar"},
+			stepEnv:     map[string]string{"BAZ": "qux"},
+			expected:    map[string]string{"FOO": "bar", "BAZ": "qux"},
+		},
+		{
+			name:        "step overrides workflow",
+			workflowEnv: map[string]string{"FOO": "workflow-value"},
+			stepEnv:     map[string]string{"FOO": "step-value"},
+			expected:    map[string]string{"FOO": "step-value"},
+		},
+		{
+			name:        "mixed override and merge",
+			workflowEnv: map[string]string{"FOO": "workflow", "BAR": "workflow"},
+			stepEnv:     map[string]string{"FOO": "step", "BAZ": "step"},
+			expected:    map[string]string{"FOO": "step", "BAR": "workflow", "BAZ": "step"},
+		},
+		{
+			name:        "both empty",
+			workflowEnv: map[string]string{},
+			stepEnv:     map[string]string{},
+			expected:    nil,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := mergeWorkflowEnv(tt.workflowEnv, tt.stepEnv)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+// TestExecutor_Execute_WorkflowLevelEnv tests workflow-level env vars.
+func TestExecutor_Execute_WorkflowLevelEnv(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockRunner := NewMockCommandRunner(ctrl)
+	mockUI := NewMockUIProvider(ctrl)
+
+	// Expect shell command with workflow env vars.
+	mockRunner.EXPECT().
+		RunShell("echo test", "test-workflow-step-0", ".", []string{"MY_VAR=workflow-value"}, false).
+		Return(nil)
+
+	executor := NewExecutor(mockRunner, nil, mockUI)
+
+	workflowDef := &schema.WorkflowDefinition{
+		Env: map[string]string{"MY_VAR": "workflow-value"},
+		Steps: []schema.WorkflowStep{
+			{Name: "step1", Command: "echo test", Type: "shell"},
+		},
+	}
+
+	result, err := executor.Execute(newTestParams(workflowDef, ExecuteOptions{}))
+
+	require.NoError(t, err)
+	assert.True(t, result.Success)
+}
+
+// TestExecutor_Execute_StepLevelEnv tests step-level env vars.
+func TestExecutor_Execute_StepLevelEnv(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockRunner := NewMockCommandRunner(ctrl)
+	mockUI := NewMockUIProvider(ctrl)
+
+	// Expect shell command with step env vars.
+	mockRunner.EXPECT().
+		RunShell("echo test", "test-workflow-step-0", ".", []string{"STEP_VAR=step-value"}, false).
+		Return(nil)
+
+	executor := NewExecutor(mockRunner, nil, mockUI)
+
+	workflowDef := &schema.WorkflowDefinition{
+		Steps: []schema.WorkflowStep{
+			{
+				Name:    "step1",
+				Command: "echo test",
+				Type:    "shell",
+				Env:     map[string]string{"STEP_VAR": "step-value"},
+			},
+		},
+	}
+
+	result, err := executor.Execute(newTestParams(workflowDef, ExecuteOptions{}))
+
+	require.NoError(t, err)
+	assert.True(t, result.Success)
+}
+
+// TestExecutor_Execute_EnvPrecedence tests that step env overrides workflow env.
+func TestExecutor_Execute_EnvPrecedence(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockRunner := NewMockCommandRunner(ctrl)
+	mockUI := NewMockUIProvider(ctrl)
+
+	// Expect step env value to override workflow env value.
+	// Note: Map iteration order is not guaranteed, so we use gomock.Any()
+	// and verify the content in a custom matcher.
+	mockRunner.EXPECT().
+		RunShell("echo test", "test-workflow-step-0", ".", gomock.Any(), false).
+		DoAndReturn(func(command, name, dir string, env []string, dryRun bool) error {
+			// Verify step value overrides workflow value.
+			found := false
+			for _, e := range env {
+				if e == "MY_VAR=step-value" {
+					found = true
+				}
+				// Should not have workflow value.
+				assert.NotEqual(t, "MY_VAR=workflow-value", e)
+			}
+			assert.True(t, found, "Expected MY_VAR=step-value in env")
+			return nil
+		})
+
+	executor := NewExecutor(mockRunner, nil, mockUI)
+
+	workflowDef := &schema.WorkflowDefinition{
+		Env: map[string]string{"MY_VAR": "workflow-value"},
+		Steps: []schema.WorkflowStep{
+			{
+				Name:    "step1",
+				Command: "echo test",
+				Type:    "shell",
+				Env:     map[string]string{"MY_VAR": "step-value"},
+			},
+		},
+	}
+
+	result, err := executor.Execute(newTestParams(workflowDef, ExecuteOptions{}))
+
+	require.NoError(t, err)
+	assert.True(t, result.Success)
+}
+
+// TestExecutor_Execute_EnvMerge tests that workflow and step env are merged.
+func TestExecutor_Execute_EnvMerge(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockRunner := NewMockCommandRunner(ctrl)
+	mockUI := NewMockUIProvider(ctrl)
+
+	// Expect both workflow and step env vars to be present.
+	mockRunner.EXPECT().
+		RunShell("echo test", "test-workflow-step-0", ".", gomock.Any(), false).
+		DoAndReturn(func(command, name, dir string, env []string, dryRun bool) error {
+			// Verify both vars are present.
+			hasWorkflowVar := false
+			hasStepVar := false
+			for _, e := range env {
+				if e == "WORKFLOW_VAR=from-workflow" {
+					hasWorkflowVar = true
+				}
+				if e == "STEP_VAR=from-step" {
+					hasStepVar = true
+				}
+			}
+			assert.True(t, hasWorkflowVar, "Expected WORKFLOW_VAR=from-workflow in env")
+			assert.True(t, hasStepVar, "Expected STEP_VAR=from-step in env")
+			return nil
+		})
+
+	executor := NewExecutor(mockRunner, nil, mockUI)
+
+	workflowDef := &schema.WorkflowDefinition{
+		Env: map[string]string{"WORKFLOW_VAR": "from-workflow"},
+		Steps: []schema.WorkflowStep{
+			{
+				Name:    "step1",
+				Command: "echo test",
+				Type:    "shell",
+				Env:     map[string]string{"STEP_VAR": "from-step"},
+			},
+		},
+	}
+
+	result, err := executor.Execute(newTestParams(workflowDef, ExecuteOptions{}))
+
+	require.NoError(t, err)
+	assert.True(t, result.Success)
+}
+
+// TestExecutor_Execute_EnvWithIdentity tests env vars combined with identity auth.
+func TestExecutor_Execute_EnvWithIdentity(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockRunner := NewMockCommandRunner(ctrl)
+	mockAuth := NewMockAuthProvider(ctrl)
+	mockUI := NewMockUIProvider(ctrl)
+
+	// The workflow/step env vars are passed to PrepareEnvironment as baseEnv.
+	mockAuth.EXPECT().GetCachedCredentials(gomock.Any(), "test-identity").Return(nil, errors.New("no cache"))
+	mockAuth.EXPECT().Authenticate(gomock.Any(), "test-identity").Return(nil)
+	mockAuth.EXPECT().
+		PrepareEnvironment(gomock.Any(), "test-identity", gomock.Any()).
+		DoAndReturn(func(ctx context.Context, identity string, baseEnv []string) ([]string, error) {
+			// Verify workflow/step env is in baseEnv.
+			hasWorkflowVar := false
+			for _, e := range baseEnv {
+				if e == "MY_VAR=workflow-value" {
+					hasWorkflowVar = true
+				}
+			}
+			assert.True(t, hasWorkflowVar, "Expected workflow env var in baseEnv")
+			// Return auth env vars combined with baseEnv.
+			return append(baseEnv, "AWS_PROFILE=test"), nil
+		})
+
+	// Expect command with both env vars.
+	mockRunner.EXPECT().
+		RunShell("echo test", "test-workflow-step-0", ".", gomock.Any(), false).
+		DoAndReturn(func(command, name, dir string, env []string, dryRun bool) error {
+			hasWorkflowVar := false
+			hasAuthVar := false
+			for _, e := range env {
+				if e == "MY_VAR=workflow-value" {
+					hasWorkflowVar = true
+				}
+				if e == "AWS_PROFILE=test" {
+					hasAuthVar = true
+				}
+			}
+			assert.True(t, hasWorkflowVar, "Expected MY_VAR=workflow-value in env")
+			assert.True(t, hasAuthVar, "Expected AWS_PROFILE=test in env")
+			return nil
+		})
+
+	executor := NewExecutor(mockRunner, mockAuth, mockUI)
+
+	workflowDef := &schema.WorkflowDefinition{
+		Env: map[string]string{"MY_VAR": "workflow-value"},
+		Steps: []schema.WorkflowStep{
+			{Name: "step1", Command: "echo test", Type: "shell", Identity: "test-identity"},
+		},
+	}
+
+	result, err := executor.Execute(newTestParams(workflowDef, ExecuteOptions{}))
+
+	require.NoError(t, err)
+	assert.True(t, result.Success)
+}
+
+// TestExecutor_Execute_AtmosCommandWithEnv tests atmos command type with env vars.
+func TestExecutor_Execute_AtmosCommandWithEnv(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockRunner := NewMockCommandRunner(ctrl)
+	mockUI := NewMockUIProvider(ctrl)
+
+	mockUI.EXPECT().PrintMessage(gomock.Any(), gomock.Any()).AnyTimes()
+	mockRunner.EXPECT().
+		RunAtmos(gomock.Any()).
+		DoAndReturn(func(params *AtmosExecParams) error {
+			// Verify env vars are passed.
+			hasEnvVar := false
+			for _, e := range params.Env {
+				if e == "TF_VAR_enabled=true" {
+					hasEnvVar = true
+				}
+			}
+			assert.True(t, hasEnvVar, "Expected TF_VAR_enabled=true in env")
+			return nil
+		})
+
+	executor := NewExecutor(mockRunner, nil, mockUI)
+
+	workflowDef := &schema.WorkflowDefinition{
+		Env: map[string]string{"TF_VAR_enabled": "true"},
+		Steps: []schema.WorkflowStep{
+			{Name: "step1", Command: "terraform plan vpc", Type: "atmos"},
+		},
+	}
+
+	result, err := executor.Execute(newTestParams(workflowDef, ExecuteOptions{}))
+
+	require.NoError(t, err)
+	assert.True(t, result.Success)
 }

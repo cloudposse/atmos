@@ -5,6 +5,7 @@ vars:
 
 import:
   - catalog/aws/bastion/defaults
+  - catalog/aws/multi-file/defaults
 
 components:
   packer:
@@ -17,3 +18,34 @@ components:
         # assume_role_arn: "arn:aws:iam::NONPROD_ACCOUNT_ID:role/ROLE_NAME"
         ami_tags:
           Stage: nonprod
+
+    # Multi-file component test - uses directory mode (no template specified)
+    aws/multi-file:
+      vars:
+        instance_type: "t3.micro"
+        tags:
+          Stage: nonprod
+
+    # Abstract component test - cannot be built directly
+    aws/bastion-abstract:
+      metadata:
+        type: abstract
+        component: aws/bastion
+      vars:
+        instance_type: "t4g.small"
+
+    # Locked component test - cannot be modified
+    aws/bastion-locked:
+      metadata:
+        locked: true
+        component: aws/bastion
+      vars:
+        instance_type: "t4g.small"
+
+    # Disabled component test - should be skipped
+    aws/bastion-disabled:
+      metadata:
+        enabled: false
+        component: aws/bastion
+      vars:
+        instance_type: "t4g.small"

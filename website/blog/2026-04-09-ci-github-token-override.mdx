@@ -1,0 +1,42 @@
+---
+slug: ci-github-token-override
+title: "Use Multiple GitHub Tokens in CI Workflows"
+authors: [osterman]
+tags: [enhancement]
+date: 2026-04-09T00:00:00.000Z
+---
+
+When you're using a GitHub App token to manage GitHub resources with Terraform, you probably still want CI commit statuses to use the workflow's own token. Now you can — just set `ATMOS_CI_GITHUB_TOKEN`.
+
+<!--truncate-->
+
+## What Changed
+
+A new `ATMOS_CI_GITHUB_TOKEN` environment variable lets you use a separate token for Atmos CI operations (commit statuses, artifacts) while keeping `GITHUB_TOKEN` for Terraform. Token precedence:
+
+```
+ATMOS_CI_GITHUB_TOKEN > GITHUB_TOKEN > GH_TOKEN
+```
+
+Atmos also now gives you actionable hints when the GitHub Status API returns a 404 or 403, instead of a cryptic error with no guidance.
+
+## Why This Matters
+
+If you're Terraforming GitHub repositories, you probably mint a GitHub App token with repo management permissions and set it as `GITHUB_TOKEN`. That works great for Terraform — but that App token likely doesn't have `statuses: write` permission, so CI commit status updates fail with a mysterious 404.
+
+You might think adding `permissions: statuses: write` to your workflow fixes it, but that only applies to the **default** workflow token — not your GitHub App token. Until now, there was no way to use both tokens concurrently: one for Terraform, one for CI.
+
+## How to Use It
+
+Set `ATMOS_CI_GITHUB_TOKEN` to the workflow's default token, and let `GITHUB_TOKEN` stay as your App token for Terraform:
+
+```yaml
+- name: atmos terraform plan
+  env:
+    ATMOS_CI_GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    GITHUB_TOKEN: ${{ steps.github-app-token.outputs.token }}
+  run: |
+    atmos terraform plan "$COMPONENT" --stack "$STACK"
+```
+
+Terraform uses `GITHUB_TOKEN` (the App token with repo permissions), and Atmos CI uses `ATMOS_CI_GITHUB_TOKEN` (the workflow token with `statuses: write`). Both work concurrently without conflict.

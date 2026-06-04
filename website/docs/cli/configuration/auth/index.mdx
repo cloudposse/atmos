@@ -1,6 +1,5 @@
 ---
 title: Authentication
-sidebar_position: 1
 sidebar_label: auth
 sidebar_class_name: command
 id: auth
@@ -15,7 +14,7 @@ import ActionCard from '@site/src/components/ActionCard'
 import PrimaryCTA from '@site/src/components/PrimaryCTA'
 
 <Intro>
-The `auth` section of the `atmos.yaml` configures how Atmos authenticates with cloud providers. It supports AWS SSO, SAML, OIDC, GitHub Actions, and static user credentials with a unified configuration model.
+The `auth` section of the `atmos.yaml` configures how Atmos authenticates with cloud providers. It supports AWS SSO, SAML, OIDC, GitHub Actions, GCP Workload Identity Federation, Azure, and static user credentials with a unified configuration model.
 </Intro>
 
 ## Quick Start
@@ -57,6 +56,9 @@ auth:
     type: system                   # system, file, or memory
     spec: {}                       # Type-specific configuration
 
+  console:
+    isolated_sessions: false       # Enable isolated browser sessions per identity
+
   providers:
     <provider-name>:               # Named provider configurations
       kind: <provider-kind>
@@ -66,15 +68,132 @@ auth:
     <identity-name>:               # Named identity configurations
       kind: <identity-kind>
       # Identity-specific fields...
+
+  integrations:
+    <integration-name>:            # Named integration configurations
+      kind: <integration-kind>     # aws/ecr, aws/eks, github/sts
+      via:
+        identity: <identity-name>  # or provider: <provider-name>
+      spec: {}                     # Kind-specific configuration
 ```
 </File>
 
 ## Subpages
 
-- **[Providers](/cli/configuration/auth/providers)** - Configure authentication providers (AWS SSO, SAML, GitHub OIDC)
+- **[Providers](/cli/configuration/auth/providers)** - Configure authentication providers (AWS SSO, SAML, GitHub OIDC, GCP, Azure)
 - **[Identities](/cli/configuration/auth/identities)** - Configure identities and identity chaining
 - **[Keyring](/cli/configuration/auth/keyring)** - Configure credential storage backends
 - **[Logs](/cli/configuration/auth/logs)** - Configure auth-specific logging
+
+## Integrations
+
+Integrations are client-only credential materializations that derive from identities. They are automatically triggered during `atmos auth login` when `auto_provision` is enabled (the default). The `github/sts` integration additionally auto-provisions in CI before the first remote git read even when no stack claims its identity — see [GitHub STS](#github-sts-atmos-pro).
+
+**Supported integration kinds:**
+- `aws/ecr` — Login to AWS Elastic Container Registry. See [ECR Authentication Tutorial](/tutorials/ecr-authentication).
+- `aws/eks` — Generate EKS kubeconfig for kubectl access. See [EKS Kubeconfig Authentication Tutorial](/tutorials/eks-kubeconfig-authentication).
+- `github/sts` — Mint just-in-time, least-privilege GitHub tokens (via Atmos Pro) for private module/source/vendor access in CI. See [GitHub STS](#github-sts-atmos-pro) below.
+
+Integrations may bind to an identity (`via.identity`) or, when the provider itself yields usable credentials (e.g. `atmos/pro`), directly to a provider (`via.provider`). Exactly one of the two must be set.
+
+### `github/sts` (Atmos Pro) {#github-sts-atmos-pro}
+
+The `github/sts` integration uses [Atmos Pro](https://atmos-pro.com) as a just-in-time GitHub token broker for CI. On `atmos auth login` it mints short-lived, scoped GitHub App installation tokens and materializes them as per-owner git URL rewrites in the child environment, so `atmos vendor pull`, Atmos `source:` components, and `terraform init` of private `git::https://…` modules authenticate transparently — with **no `.tf` changes**. Tokens are revoked at command-end (via `atmos auth exec` in CI) and on `atmos auth logout`.
+
+It requires the `atmos/pro` provider (see [Providers](/cli/configuration/auth/providers)). Your GitHub Actions workflow only needs `permissions: id-token: write`.
+
+:::tip Automatic in CI — no stack claim required
+The `atmos/pro` identity isn't claimed by any stack (stacks claim cloud identities like AWS/Azure/GCP). So in CI, Atmos provisions `github/sts` **lazily and automatically** the first time it is about to read a remote git source — `atmos vendor pull`, a `source:` component, a remote `import:`, or `terraform init` of a private module — without an explicit `atmos auth login`. This is gated on running in CI plus having the `atmos/pro` + `github/sts` config present with `auto_provision` enabled (the default). Minted tokens are reused across Atmos invocations within the same job until they expire.
+:::
+
+```yaml
+auth:
+  providers:
+    atmos-pro:
+      kind: atmos/pro
+      spec:
+        workspace_id: <your-workspace-id>   # or ATMOS_PRO_WORKSPACE_ID
+  identities:
+    atmos-pro:
+      kind: atmos/pro
+      via:
+        provider: atmos-pro
+  integrations:
+    github-sts:
+      kind: github/sts
+      via:
+        provider: atmos-pro          # or identity: atmos-pro
+      spec:
+        auto_provision: true         # mint on login AND lazily in CI before the first remote read (default true)
+        repos: [acme/modules]        # optional source repos
+        policy_name: default         # optional trust policy name
+        git_config_mode: env         # "env" (default, inline GIT_CONFIG_*) or "file" (write a 0600 gitconfig + include.path)
+        revoke_on_exit: true         # auto-revoke at command-end in CI (default true); set false to keep creds for a separate step
+        token_env: GH_TOKEN          # optional: also export the raw token as $GH_TOKEN (for gh/checkout/API). Default: ATMOS_PRO_GITHUB_TOKEN
+```
+
+**`spec` fields:**
+
+<dl>
+  <dt>`auto_provision`</dt>
+  <dd>Mint tokens automatically on `atmos auth login`, and — in CI — lazily before the first remote git read even when no stack claims the `atmos/pro` identity. Defaults to `true`. Set to `false` to disable both.</dd>
+
+  <dt>`repos`</dt>
+  <dd>Optional list of source repositories to request access to. Identity is derived server-side from your workspace trust policies — repos you aren't trusted for are excluded (with a reason logged).</dd>
+
+  <dt>`policy_name`</dt>
+  <dd>Optional trust policy name. Defaults to `default`.</dd>
+
+  <dt>`git_config_mode`</dt>
+  <dd>`env` (default) injects inline `GIT_CONFIG_KEY_n`/`GIT_CONFIG_VALUE_n` rewrites; `file` writes a `0600` gitconfig and emits an additive `include.path` so token values stay off the environment. Overrides `settings.pro.git_sts.git_config_mode`.</dd>
+
+  <dt>`revoke_on_exit`</dt>
+  <dd>Auto-revoke minted tokens at command-end in CI. Defaults to `true`. Set `false` to keep credentials alive for a separate CI step. Overrides `settings.pro.git_sts.revoke_on_exit`.</dd>
+
+  <dt>`token_env`</dt>
+  <dd>
+    Env var name to export the **raw** minted token under, for consumers beyond git (`gh` CLI, `actions/checkout`, the REST API). **Defaults to `ATMOS_PRO_GITHUB_TOKEN`** so the single-owner token also reaches Atmos's own in-process git reads (vendoring, `source:`, remote `import:`) and composes with the default `settings.inject_github_token: true` — no workaround needed.
+
+    The value is either a **literal** name (e.g. `GH_TOKEN`), which requires exactly one minted token, or a **Go template** — the same `{{ .field }}` syntax used elsewhere in Atmos — rendered once per minted token, which is how a single mint populates one variable per owner in multi-org runs. Multi-owner mints under a literal name skip the raw export and rely on the transparent `GIT_CONFIG_*` rewrites. The rendered name is sanitized into a valid environment variable name (uppercased, with every character outside `[A-Z0-9_]` replaced by `_`).
+
+    Template variables:
+    <dl>
+      <dt>`.owner`</dt>
+      <dd>The GitHub org/user the token is scoped to (e.g. `acme`). Example: `token_env: GH_TOKEN_{{ .owner }}` → `GH_TOKEN_ACME`.</dd>
+      <dt>`.host`</dt>
+      <dd>The git host the token is scoped to (e.g. `github.com`). Example: `token_env: TOKEN_{{ .host }}_{{ .owner }}` → `TOKEN_GITHUB_COM_ACME`.</dd>
+    </dl>
+  </dd>
+</dl>
+
+For Atmos-native git operations (vendoring, `source:` provisioning, go-getter), when a single token is minted and `token_env` is left at its default, the token is exported as **`ATMOS_PRO_GITHUB_TOKEN`** (see `token_env` above); Atmos prefers it over `ATMOS_GITHUB_TOKEN` and `GITHUB_TOKEN`. When a `github/sts` `GIT_CONFIG_*` rewrite already covers a repo's owner, Atmos skips URL token injection for it so git's rewrite (carrying the correct least-privilege token) wins instead of being shadowed — so `settings.inject_github_token` can be left at its default `true`.
+
+#### Mint in one step, consume in the next
+
+Set `token_env` and `github/sts` lets you mint a short-lived, least-privilege token in one step, then use it anywhere a GitHub token is accepted. The only workflow permission required is `id-token: write`.
+
+```yaml
+permissions:
+  id-token: write
+
+steps:
+  - name: Mint a GitHub token
+    # OIDC → Atmos Pro → mint; writes GH_TOKEN to $GITHUB_ENV for later steps.
+    run: atmos auth env --identity=atmos-pro --format=github --login
+
+  - name: Check out a private repo
+    uses: actions/checkout@v4
+    with:
+      repository: acme/private-repo
+      token: ${{ env.GH_TOKEN }}
+
+  - name: Use the GitHub CLI
+    run: gh repo view acme/private-repo
+    env:
+      GH_TOKEN: ${{ env.GH_TOKEN }}
+```
+
+See [`atmos auth env`](/cli/commands/auth/env) for the full command reference.
 
 ## Disabling Authentication
 
@@ -112,7 +231,16 @@ When disabled:
   <dd>Override config directory for AWS files.</dd>
 
   <dt>`ATMOS_XDG_DATA_HOME`</dt>
-  <dd>Override data directory for file keyring.</dd>
+  <dd>Override data directory for file keyring (and `github/sts` token state).</dd>
+
+  <dt>`ATMOS_PRO_GITHUB_TOKEN`</dt>
+  <dd>GitHub token preferred by Atmos-native git operations (vendoring, `source:` provisioning, go-getter), ahead of `ATMOS_GITHUB_TOKEN` and `GITHUB_TOKEN`.</dd>
+
+  <dt>`ATMOS_PRO_WORKSPACE_ID`</dt>
+  <dd>Atmos Pro workspace ID for the `atmos/pro` provider (alternative to `spec.workspace_id`).</dd>
+
+  <dt>`ATMOS_PRO_BASE_URL`</dt>
+  <dd>Atmos Pro base URL for the `atmos/pro` provider (alternative to `spec.base_url`).</dd>
 </dl>
 
 ## Complete Example
@@ -125,6 +253,9 @@ auth:
 
   keyring:
     type: system
+
+  console:
+    isolated_sessions: true        # Open each identity in its own browser session
 
   providers:
     company-sso:
@@ -174,62 +305,97 @@ auth:
       credentials:
         region: us-east-1
         mfa_arn: arn:aws:iam::123456789012:mfa/emergency
+
+  # Integrations derive credentials from identities
+  integrations:
+    # ECR login for container workflows
+    dev/ecr:
+      kind: aws/ecr
+      via:
+        identity: dev-admin
+      spec:
+        registry:
+          account_id: "123456789012"
+          region: us-east-2
+
+    # EKS kubeconfig for kubectl access
+    dev/eks:
+      kind: aws/eks
+      via:
+        identity: dev-admin
+      spec:
+        cluster:
+          name: dev-cluster
+          region: us-east-2
+          alias: dev-eks
 ```
 </File>
 
 ## Using Profiles
 
-Use [Atmos profiles](/cli/configuration/profiles) to define different authentication configurations for various use cases:
+Use [Atmos profiles](/cli/configuration/profiles) to define different authentication configurations for various use cases. Each profile is a **directory** containing YAML files.
 
-<File title="atmos.yaml">
+**Profile structure:**
+```
+profiles/
+├── developer/
+│   └── auth.yaml      # Developer auth config
+├── ci/
+│   └── auth.yaml      # CI/CD auth config
+└── platform/
+    └── auth.yaml      # Platform engineer auth config
+```
+
+<File title="profiles/developer/auth.yaml">
 ```yaml
-profiles:
-  # Profile for developers
-  dev:
-    auth:
-      identities:
-        dev-access:
-          kind: aws/permission-set
-          default: true
-          via:
-            provider: company-sso
-          principal:
-            name: DeveloperAccess
-            account:
-              name: development
+auth:
+  identities:
+    dev-access:
+      kind: aws/permission-set
+      default: true
+      via:
+        provider: company-sso
+      principal:
+        name: DeveloperAccess
+        account:
+          name: development
+```
+</File>
 
-  # Profile for CI/CD
-  ci:
-    auth:
-      providers:
-        github-oidc:
-          kind: github/oidc
-          region: us-east-1
-      identities:
-        deploy:
-          kind: aws/assume-role
-          default: true
-          via:
-            provider: github-oidc
-          principal:
-            assume_role: arn:aws:iam::123456789012:role/GitHubActionsRole
+<File title="profiles/ci/auth.yaml">
+```yaml
+auth:
+  providers:
+    github-oidc:
+      kind: github/oidc
+      region: us-east-1
+  identities:
+    deploy:
+      kind: aws/assume-role
+      default: true
+      via:
+        provider: github-oidc
+      principal:
+        assume_role: arn:aws:iam::123456789012:role/GitHubActionsRole
+```
+</File>
 
-  # Profile for platform engineers
-  platform:
-    auth:
-      providers:
-        company-sso:
-          kind: aws/iam-identity-center
-          region: us-east-1
-          start_url: https://company.awsapps.com/start
-          session:
-            duration: 8h
+<File title="profiles/platform/auth.yaml">
+```yaml
+auth:
+  providers:
+    company-sso:
+      kind: aws/iam-identity-center
+      region: us-east-1
+      start_url: https://company.awsapps.com/start
+      session:
+        duration: 8h
 ```
 </File>
 
 ```bash
 # Activate a profile
-atmos --profile dev terraform plan myapp -s dev
+atmos --profile developer terraform plan myapp -s dev
 ATMOS_PROFILE=ci atmos terraform apply myapp -s prod
 ```
 
@@ -242,10 +408,18 @@ ATMOS_PROFILE=ci atmos terraform apply myapp -s prod
   {type: 'link', href: '/cli/commands/auth/shell', label: 'atmos auth shell', description: 'Start a shell with identity credentials'},
   {type: 'link', href: '/cli/commands/auth/exec', label: 'atmos auth exec', description: 'Execute a command with identity credentials'},
   {type: 'link', href: '/cli/commands/auth/env', label: 'atmos auth env', description: 'Export credentials as environment variables'},
-  {type: 'link', href: '/cli/commands/auth/console', label: 'atmos auth console', description: 'Open AWS console in browser'},
+  {type: 'link', href: '/cli/commands/auth/console', label: 'atmos auth console', description: 'Open cloud console in browser'},
   {type: 'link', href: '/cli/commands/auth/list', label: 'atmos auth list', description: 'List available identities and providers'},
   {type: 'link', href: '/cli/commands/auth/logout', label: 'atmos auth logout', description: 'Clear cached credentials'},
+  {type: 'link', href: '/cli/commands/aws/ecr-login', label: 'atmos aws ecr login', description: 'Login to AWS ECR registries'},
+  {type: 'link', href: '/cli/commands/aws/eks-token', label: 'atmos aws eks token', description: 'Generate EKS bearer tokens for kubectl'},
 ]} />
+
+## Tutorials
+
+- [ECR Authentication](/tutorials/ecr-authentication) — Complete guide for authenticating to AWS ECR using Atmos integrations
+- [EKS Kubeconfig Authentication](/tutorials/eks-kubeconfig-authentication) — Complete guide for EKS kubeconfig generation using Atmos integrations
+- [Azure Authentication](/tutorials/azure-authentication) — Complete guide for Azure device code, OIDC, and CLI authentication
 
 ## See Also
 

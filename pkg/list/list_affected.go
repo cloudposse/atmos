@@ -8,6 +8,7 @@ import (
 	"github.com/spf13/cobra"
 
 	e "github.com/cloudposse/atmos/internal/exec"
+	"github.com/cloudposse/atmos/pkg/auth"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/list/column"
 	"github.com/cloudposse/atmos/pkg/list/extract"
@@ -69,6 +70,9 @@ type AffectedCommandOptions struct {
 	ProcessFunctions bool
 	Skip             []string
 	ExcludeLocked    bool
+
+	// Auth options.
+	IdentityName string // Identity name from --identity flag or ATMOS_IDENTITY env var.
 }
 
 // ExecuteListAffectedCmd executes the list affected command.
@@ -81,6 +85,24 @@ func ExecuteListAffectedCmd(opts *AffectedCommandOptions) error {
 	atmosConfig, err := cfg.InitCliConfig(*opts.Info, true)
 	if err != nil {
 		return fmt.Errorf("failed to initialize config: %w", err)
+	}
+
+	// Only create auth manager when YAML functions are enabled or identity is explicitly requested.
+	// When functions are disabled (--process-functions=false), there are no YAML functions
+	// (like !terraform.state) that need auth credentials, so identity resolution is unnecessary.
+	// This matches the gating pattern used by describe stacks/affected/dependents.
+	var authManager auth.AuthManager
+	if opts.ProcessFunctions || opts.IdentityName != "" {
+		// Category B: list affected operates on multiple affected components across stacks without a
+		// single target (component, stack) pair. Use the SCAN variant so stack-level defaults
+		// (including defaults declared in imported _defaults.yaml) are discovered. See
+		// docs/fixes/2026-04-08-atmos-auth-identity-resolution-fixes.md.
+		authManager, err = auth.CreateAndAuthenticateManagerWithStackScan(
+			opts.IdentityName, &atmosConfig.Auth, cfg.IdentityFlagSelectValue, &atmosConfig,
+		)
+		if err != nil {
+			return err
+		}
 	}
 
 	// Get format flag.
@@ -101,7 +123,7 @@ func ExecuteListAffectedCmd(opts *AffectedCommandOptions) error {
 		"Comparing",
 		func() (string, error) {
 			var innerErr error
-			result, innerErr = getAffectedComponents(&atmosConfig, opts)
+			result, innerErr = getAffectedComponents(&atmosConfig, opts, authManager)
 			if innerErr != nil {
 				return "", innerErr
 			}
@@ -110,13 +132,14 @@ func ExecuteListAffectedCmd(opts *AffectedCommandOptions) error {
 				return fmt.Sprintf("Compared `%s`...`%s`", result.RemoteRef, result.LocalRef), nil
 			}
 			return "Compared branches", nil
-		})
+		},
+	)
 	if err != nil {
 		return fmt.Errorf("failed to get affected components: %w", err)
 	}
 
 	if len(result.Affected) == 0 {
-		_ = ui.Success("No affected components found")
+		ui.Success("No affected components found")
 		return nil
 	}
 
@@ -166,10 +189,11 @@ type affectedResult struct {
 }
 
 // getAffectedComponents calls the existing describe affected logic.
-func getAffectedComponents(atmosConfig *schema.AtmosConfiguration, opts *AffectedCommandOptions) (*affectedResult, error) {
+func getAffectedComponents(atmosConfig *schema.AtmosConfiguration, opts *AffectedCommandOptions, authManager auth.AuthManager) (*affectedResult, error) {
 	defer perf.Track(atmosConfig, "list.getAffectedComponents")()
 
-	logicResult, err := executeAffectedLogic(atmosConfig, opts)
+	authDisabled := opts.IdentityName == cfg.IdentityFlagDisabledValue
+	logicResult, err := executeAffectedLogic(atmosConfig, opts, authManager, authDisabled)
 	if err != nil {
 		return nil, err
 	}
@@ -190,63 +214,80 @@ type affectedLogicResult struct {
 }
 
 // executeAffectedLogic calls the appropriate describe affected function based on options.
-func executeAffectedLogic(atmosConfig *schema.AtmosConfiguration, opts *AffectedCommandOptions) (*affectedLogicResult, error) {
-	includeSettings := true
-
+func executeAffectedLogic(atmosConfig *schema.AtmosConfiguration, opts *AffectedCommandOptions, authManager auth.AuthManager, authDisabled bool) (*affectedLogicResult, error) {
 	switch {
 	case opts.RepoPath != "":
-		affected, _, _, repoID, err := e.ExecuteDescribeAffectedWithTargetRepoPath(
-			atmosConfig,
-			opts.RepoPath,
-			false, // includeSpaceliftAdminStacks
-			includeSettings,
-			opts.Stack,
-			opts.ProcessTemplates,
-			opts.ProcessFunctions,
-			opts.Skip,
-			opts.ExcludeLocked,
-		)
-		if err != nil {
-			return nil, err
-		}
-		return &affectedLogicResult{affected: affected, localHead: nil, remoteRepoID: repoID}, nil
+		return executeAffectedWithRepoPath(atmosConfig, opts, authManager, authDisabled)
 	case opts.CloneTargetRef:
-		affected, localHead, _, repoID, err := e.ExecuteDescribeAffectedWithTargetRefClone(
-			atmosConfig,
-			opts.Ref,
-			opts.SHA,
-			opts.SSHKeyPath,
-			opts.SSHKeyPassword,
-			false, // includeSpaceliftAdminStacks
-			includeSettings,
-			opts.Stack,
-			opts.ProcessTemplates,
-			opts.ProcessFunctions,
-			opts.Skip,
-			opts.ExcludeLocked,
-		)
-		if err != nil {
-			return nil, err
-		}
-		return &affectedLogicResult{affected: affected, localHead: localHead, remoteRepoID: repoID}, nil
+		return executeAffectedWithClone(atmosConfig, opts, authManager, authDisabled)
 	default:
-		affected, localHead, _, repoID, err := e.ExecuteDescribeAffectedWithTargetRefCheckout(
-			atmosConfig,
-			opts.Ref,
-			opts.SHA,
-			false, // includeSpaceliftAdminStacks
-			includeSettings,
-			opts.Stack,
-			opts.ProcessTemplates,
-			opts.ProcessFunctions,
-			opts.Skip,
-			opts.ExcludeLocked,
-		)
-		if err != nil {
-			return nil, err
-		}
-		return &affectedLogicResult{affected: affected, localHead: localHead, remoteRepoID: repoID}, nil
+		return executeAffectedWithCheckout(atmosConfig, opts, authManager, authDisabled)
 	}
+}
+
+func executeAffectedWithRepoPath(atmosConfig *schema.AtmosConfiguration, opts *AffectedCommandOptions, authManager auth.AuthManager, authDisabled bool) (*affectedLogicResult, error) {
+	affected, _, _, repoID, err := e.ExecuteDescribeAffectedWithTargetRepoPath(
+		atmosConfig,
+		opts.RepoPath,
+		false, // includeSpaceliftAdminStacks
+		true,  // includeSettings — list affected always wants enabled/locked status.
+		opts.Stack,
+		opts.ProcessTemplates,
+		opts.ProcessFunctions,
+		opts.Skip,
+		opts.ExcludeLocked,
+		authManager,
+		authDisabled,
+	)
+	if err != nil {
+		return nil, err
+	}
+	return &affectedLogicResult{affected: affected, localHead: nil, remoteRepoID: repoID}, nil
+}
+
+func executeAffectedWithClone(atmosConfig *schema.AtmosConfiguration, opts *AffectedCommandOptions, authManager auth.AuthManager, authDisabled bool) (*affectedLogicResult, error) {
+	affected, localHead, _, repoID, err := e.ExecuteDescribeAffectedWithTargetRefClone(
+		atmosConfig,
+		opts.Ref,
+		opts.SHA,
+		opts.SSHKeyPath,
+		opts.SSHKeyPassword,
+		false, // includeSpaceliftAdminStacks
+		true,  // includeSettings — list affected always wants enabled/locked status.
+		opts.Stack,
+		opts.ProcessTemplates,
+		opts.ProcessFunctions,
+		opts.Skip,
+		opts.ExcludeLocked,
+		authManager,
+		authDisabled,
+	)
+	if err != nil {
+		return nil, err
+	}
+	return &affectedLogicResult{affected: affected, localHead: localHead, remoteRepoID: repoID}, nil
+}
+
+func executeAffectedWithCheckout(atmosConfig *schema.AtmosConfiguration, opts *AffectedCommandOptions, authManager auth.AuthManager, authDisabled bool) (*affectedLogicResult, error) {
+	affected, localHead, _, repoID, err := e.ExecuteDescribeAffectedWithTargetRefCheckout(
+		atmosConfig,
+		opts.Ref,
+		opts.SHA,
+		"",    // targetBranch — list affected does not yet plumb CI auto-detection.
+		false, // includeSpaceliftAdminStacks
+		true,  // includeSettings — list affected always wants enabled/locked status.
+		opts.Stack,
+		opts.ProcessTemplates,
+		opts.ProcessFunctions,
+		opts.Skip,
+		opts.ExcludeLocked,
+		authManager,
+		authDisabled,
+	)
+	if err != nil {
+		return nil, err
+	}
+	return &affectedLogicResult{affected: affected, localHead: localHead, remoteRepoID: repoID}, nil
 }
 
 // setRefNames sets the local and remote ref names in the result based on the option type and local repo head.

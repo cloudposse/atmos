@@ -1,0 +1,271 @@
+---
+title: Claude Code Integration
+sidebar_label: Claude Code Integration
+description: Use Claude Code with Atmos via MCP server for development workflows
+id: claude-code-integration
+---
+import Terminal from '@site/src/components/Terminal'
+import File from '@site/src/components/File'
+import Intro from '@site/src/components/Intro'
+import Experimental from '@site/src/components/Experimental'
+
+<Intro>
+Use Claude Code with the Atmos MCP server to access your infrastructure directly from your development environment. Create specialized `atmos-expert` subagents that provide deep infrastructure expertise while you code.
+</Intro>
+
+<Experimental />
+
+## Overview
+
+Claude Code subagents are specialized AI assistants that enhance your development workflow with domain-specific expertise. When you create an `atmos-expert` subagent, it can use the Atmos MCP server to access your infrastructure directly from your IDE.
+
+### Architecture
+
+```text
+┌─────────────────────────────────────────────────┐
+│ Claude Code                                     │
+│                                                 │
+│  You: @atmos-expert "List my stacks"            │
+│         ↓                                       │
+│  ┌──────────────────┐                           │
+│  │ atmos-expert     │ Specialized Context       │
+│  │ Subagent         │ Isolated Conversation     │
+│  └────────┬─────────┘                           │
+│           │                                     │
+└───────────┼─────────────────────────────────────┘
+            │ MCP Protocol
+            ↓
+   ┌────────────────────┐
+   │ Atmos MCP Server   │  Universal Interface
+   │ • describe_stacks  │
+   │ • list_components  │
+   │ • validate_stack   │
+   └────────┬───────────┘
+            │
+            ↓
+   ┌────────────────────┐
+   │ Atmos CLI          │  Your Infrastructure
+   └────────────────────┘
+```
+
+## When to Use Subagents vs Built-in AI
+
+<dl>
+  <dt>Write Terraform code</dt>
+  <dd>Claude Code Subagent (in IDE)</dd>
+
+  <dt>Edit component files</dt>
+  <dd>Claude Code Subagent (in IDE)</dd>
+
+  <dt>Get help while coding</dt>
+  <dd>Claude Code Subagent (in IDE)</dd>
+
+  <dt>Analyze infrastructure</dt>
+  <dd>Built-in Atmos AI (`atmos ai chat`)</dd>
+
+  <dt>Use Ollama/GPT/Gemini</dt>
+  <dd>Built-in Atmos AI (7 providers)</dd>
+
+  <dt>Multi-day project discussion</dt>
+  <dd>Built-in Atmos AI (persistent sessions)</dd>
+
+  <dt>Quick one-off question</dt>
+  <dd>Built-in Atmos AI (`atmos ai ask`)</dd>
+
+  <dt>Team collaboration</dt>
+  <dd>Built-in Atmos AI (shareable sessions)</dd>
+</dl>
+
+## Setup Guide
+
+### Step 1: Configure Atmos MCP Server
+
+Create or edit `~/.config/Claude/claude_desktop_config.json`:
+
+<File title="~/.config/Claude/claude_desktop_config.json">
+```json
+{
+  "mcpServers": {
+    "atmos": {
+      "command": "/usr/local/bin/atmos",
+      "args": ["mcp", "start"],
+      "env": {
+        "ATMOS_BASE_PATH": "/path/to/your/infrastructure"
+      }
+    }
+  }
+}
+```
+</File>
+
+:::tip macOS with Homebrew
+If you installed Atmos via Homebrew, use `/opt/homebrew/bin/atmos` as the command path.
+:::
+
+**Restart Claude Desktop** after editing the config.
+
+### Step 2: Create the Subagent
+
+Create `~/.claude/agents/atmos-expert.md`:
+
+<File title="~/.claude/agents/atmos-expert.md">
+```markdown
+---
+name: atmos-expert
+description: Expert in Atmos infrastructure orchestration, stack management, and Terraform/Helmfile best practices.
+tools:
+  - mcp__atmos__describe_stacks
+  - mcp__atmos__describe_component
+  - mcp__atmos__list_stacks
+  - mcp__atmos__list_components
+  - mcp__atmos__validate_component
+  - mcp__atmos__validate_stack
+  - Read
+  - Glob
+  - Grep
+model: inherit
+---
+
+You are an expert in Cloud Posse's Atmos infrastructure orchestration framework.
+
+## Your Expertise
+
+- **Stack Architecture**: Atmos stack hierarchies, inheritance, and composition
+- **Component Management**: Terraform/Helmfile component design and best practices
+- **Configuration Patterns**: YAML configuration, templating, and variable management
+- **Troubleshooting**: Diagnosing and resolving Atmos configuration issues
+
+## Available Atmos Tools
+
+1. **describe_stacks**: Get detailed stack configurations with inheritance resolved
+2. **describe_component**: Get component configuration for specific stacks
+3. **list_stacks**: List all available stacks
+4. **list_components**: List all available components
+5. **validate_component**: Validate component configuration
+6. **validate_stack**: Validate entire stack configuration
+
+## How to Help Users
+
+1. **Analyze before answering**: Use MCP tools to understand the actual configuration
+2. **Provide context**: Explain why a configuration works a certain way
+3. **Suggest improvements**: Recommend Cloud Posse best practices
+4. **Show examples**: Provide concrete YAML examples when helpful
+5. **Troubleshoot systematically**: Use validation tools to identify issues
+```
+</File>
+
+:::info Project-Specific Subagents
+You can also create `.claude/agents/atmos-expert.md` in your project root for project-specific behavior. Project-level subagents override user-level subagents when names conflict.
+:::
+
+### Step 3: Use the Subagent
+
+In Claude Code, invoke the subagent with `@`:
+
+```
+@atmos-expert List all available stacks in my infrastructure
+```
+
+The subagent will use the MCP server to query your infrastructure and provide expert guidance.
+
+## Example: Stack Troubleshooting
+
+```
+You: @atmos-expert Why is prod-use1-eks failing validation?
+
+atmos-expert:
+[Uses validate_stack and describe_component]
+
+I found 2 issues in prod-use1-eks:
+
+1. Missing required variable `cluster_version`
+   Location: stacks/catalog/eks/defaults.yaml:15
+
+2. Invalid CIDR block format
+   Location: stacks/catalog/eks/prod-use1.yaml:23
+   Current: "10.0.0/16"
+   Should be: "10.0.0.0/16"
+
+[Provides fixes with line numbers]
+```
+
+## Troubleshooting
+
+### Subagent Not Using MCP Tools
+
+**Check MCP server is running**:
+
+<Terminal title="terminal">
+```bash
+# Test MCP server directly
+atmos mcp start
+
+# Should show: Starting Atmos MCP server...
+```
+</Terminal>
+
+**Verify tool names** -- MCP tools require the prefix `mcp__<server-name>__<tool-name>`:
+- Correct: `mcp__atmos__describe_stacks`
+- Wrong: `describe_stacks` (missing prefix)
+
+**Restart Claude Desktop** after config changes.
+
+### Subagent Not Being Invoked
+
+1. Check that the description clearly indicates when to use the agent
+2. Use explicit invocation: `@atmos-expert your question`
+3. Verify file location: `~/.claude/agents/atmos-expert.md` (user-level) or `.claude/agents/atmos-expert.md` (project-level)
+
+### MCP Server Not Found
+
+<Terminal title="terminal">
+```bash
+# Check atmos is in PATH
+which atmos
+
+# Should output: /usr/local/bin/atmos or /opt/homebrew/bin/atmos
+```
+</Terminal>
+
+Update Claude Desktop config to use the correct path.
+
+## Comparison with Built-in Atmos AI
+
+<dl>
+  <dt>Access Method</dt>
+  <dd>**Claude Code Subagent:** `@atmos-expert` in IDE. **Built-in Atmos AI:** `atmos ai chat` in terminal.</dd>
+
+  <dt>Tool Protocol</dt>
+  <dd>**Claude Code Subagent:** MCP (slight overhead). **Built-in Atmos AI:** Direct (faster).</dd>
+
+  <dt>Context</dt>
+  <dd>**Claude Code Subagent:** Independent per subagent. **Built-in Atmos AI:** Persistent SQLite sessions.</dd>
+
+  <dt>AI Provider</dt>
+  <dd>**Claude Code Subagent:** Claude (Sonnet/Opus/Haiku). **Built-in Atmos AI:** 7 providers (Claude, GPT, Gemini, Grok, Ollama, Bedrock, Azure).</dd>
+
+  <dt>IDE Integration</dt>
+  <dd>**Claude Code Subagent:** Full code access. **Built-in Atmos AI:** CLI only.</dd>
+
+  <dt>Code Editing</dt>
+  <dd>**Claude Code Subagent:** Can modify files. **Built-in Atmos AI:** Read-only.</dd>
+
+  <dt>Session Persistence</dt>
+  <dd>**Claude Code Subagent:** Per-conversation. **Built-in Atmos AI:** Across CLI invocations.</dd>
+
+  <dt>Best For</dt>
+  <dd>**Claude Code Subagent:** Development workflow. **Built-in Atmos AI:** Operations workflow.</dd>
+</dl>
+
+## Related Documentation
+
+- [MCP Server Setup](/ai/mcp-server) - Configure the Atmos MCP server
+- [Built-in AI Chat](/cli/commands/ai/chat) - Use the integrated AI assistant
+- [Tool Execution](/cli/configuration/ai/tools) - How AI uses Atmos tools
+- [Configuration](/cli/configuration/ai) - AI configuration options
+
+## External Resources
+
+- [Claude Code Subagents Documentation](https://docs.claude.com/en/docs/claude-code/sub-agents)
+- [Model Context Protocol](https://modelcontextprotocol.io/)
+- [Awesome Claude Code Subagents](https://github.com/VoltAgent/awesome-claude-code-subagents)

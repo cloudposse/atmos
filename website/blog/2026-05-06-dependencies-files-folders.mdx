@@ -1,0 +1,44 @@
+---
+slug: dependencies-files-folders
+title: "File and Folder Dependencies"
+authors: [osterman]
+tags: [feature]
+---
+
+Atmos now supports `dependencies.files` and `dependencies.folders` as first-class sibling keys for declaring path-based dependencies. Use them to mark a component as affected when shared files, generated assets, schemas, Lambda source, or other external paths change.
+
+<!--truncate-->
+
+## What Changed
+
+Previously, path-based dependencies had to be declared inside `dependencies.components` with inline `kind: file` or `kind: folder` entries. That still works for backward compatibility, but the new sibling keys make the intent clearer:
+
+```yaml
+components:
+  terraform:
+    lambda:
+      dependencies:
+        components:
+          - component: vpc
+        files:
+          - configs/lambda-settings.json
+          - schemas/event.json
+        folders:
+          - src/lambda/handler
+```
+
+When any listed file or folder changes, `atmos describe affected` includes the declaring component in its results, even if the component directory and stack manifest did not change.
+
+## Why This Matters
+
+Component dependencies and path watch rules now live in separate lists:
+
+- `dependencies.components` declares component ordering and impact propagation.
+- `dependencies.files` declares individual files that affect the component.
+- `dependencies.folders` declares directories that affect the component.
+
+This makes stack manifests easier to scan and keeps CI/CD change detection rules close to the component they affect.
+
+## Get Started
+
+See the [Dependencies documentation](/stacks/dependencies) and [Component Dependencies reference](/stacks/dependencies/components) for examples and migration details.

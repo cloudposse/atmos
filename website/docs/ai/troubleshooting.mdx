@@ -1,0 +1,566 @@
+---
+title: AI Troubleshooting
+sidebar_label: Troubleshooting
+description: Troubleshoot common issues with the Atmos AI Assistant
+---
+
+import Terminal from '@site/src/components/Terminal'
+import File from '@site/src/components/File'
+import Intro from '@site/src/components/Intro'
+import Experimental from '@site/src/components/Experimental'
+import Tabs from '@theme/Tabs'
+import TabItem from '@theme/TabItem'
+
+<Intro>
+Solutions for common Atmos AI issues, organized by symptom.
+</Intro>
+
+<Experimental />
+
+## Quick Checks
+
+Before diving into specific errors, verify these basics:
+
+```yaml
+ai:
+  enabled: true
+  default_provider: "anthropic"
+```
+
+<Terminal title="Verify your API key is set">
+    ```bash
+    [ -n "$ANTHROPIC_API_KEY" ] && echo "Set" || echo "NOT set"
+    ```
+</Terminal>
+
+<Terminal title="Test connectivity">
+    ```bash
+    atmos ai ask "test"
+    ```
+</Terminal>
+
+## Common Errors
+
+### "AI features are not enabled"
+
+Add `ai.enabled: true` to your `atmos.yaml`.
+
+### "API key not found"
+
+Export the key for your provider:
+
+<Tabs>
+  <TabItem value="anthropic" label="Anthropic" default>
+    ```bash
+    export ANTHROPIC_API_KEY="sk-ant-..."  # From console.anthropic.com
+    ```
+  </TabItem>
+  <TabItem value="openai" label="OpenAI">
+    ```bash
+    export OPENAI_API_KEY="sk-..."  # From platform.openai.com
+    ```
+  </TabItem>
+  <TabItem value="gemini" label="Gemini">
+    ```bash
+    export GEMINI_API_KEY="..."  # From aistudio.google.com
+    ```
+  </TabItem>
+  <TabItem value="xai" label="Grok">
+    ```bash
+    export XAI_API_KEY="xai-..."  # From x.ai/api
+    ```
+  </TabItem>
+  <TabItem value="azure" label="Azure OpenAI">
+    ```bash
+    export AZURE_OPENAI_API_KEY="..."  # From Azure Portal > OpenAI resource > Keys
+    ```
+  </TabItem>
+  <TabItem value="bedrock" label="AWS Bedrock">
+    No API key needed. Uses AWS SDK credentials (IAM roles, profiles, env vars).
+    ```bash
+    aws sts get-caller-identity  # Verify AWS credentials
+    ```
+  </TabItem>
+  <TabItem value="ollama" label="Ollama">
+    No API key needed. Just make sure the server is running:
+    ```bash
+    curl http://localhost:11434/api/version
+    ```
+  </TabItem>
+</Tabs>
+
+### "Failed to create AI client"
+
+Usually means an invalid or revoked API key, or insufficient credits. Test the key directly:
+
+<Terminal title="Test Anthropic API key">
+    ```bash
+    curl https://api.anthropic.com/v1/messages \
+    -H "x-api-key: $ANTHROPIC_API_KEY" \
+    -H "anthropic-version: 2023-06-01" \
+    -H "content-type: application/json" \
+    -d '{"model": "claude-sonnet-4-6", "max_tokens": 1024, "messages": [{"role": "user", "content": "Hello"}]}'
+    ```
+</Terminal>
+
+### "Unsupported AI provider"
+
+Valid provider names:
+- **API providers:** `anthropic`, `openai`, `gemini`, `grok`, `ollama`, `bedrock`, `azureopenai`
+- **CLI providers:** `claude-code`, `codex-cli`, `gemini-cli`
+
+### Rate Limiting (429 Errors)
+
+Long conversations send full history with each request. Reduce it:
+
+```yaml
+ai:
+  max_history_messages: 20
+```
+
+## Provider Issues
+
+### Ollama
+
+**"Connection refused"** — Start the server and verify your config:
+
+<Terminal title="shell">
+    ```bash
+    ollama serve
+    curl http://localhost:11434/api/version
+    ```
+</Terminal>
+
+```yaml
+providers:
+  ollama:
+    base_url: "http://localhost:11434/v1"
+```
+
+**"Model not found"** — Pull the model and use the exact name from `ollama list`:
+
+<Terminal title="shell">
+    ```bash
+    ollama list
+    ollama pull llama4
+    ```
+</Terminal>
+
+**Slow or out of memory** — Use a smaller model (e.g. `llama3.1:8b` needs ~8GB RAM) or reduce `max_tokens`.
+
+### AWS Bedrock
+
+**"Authentication failed"** — Verify AWS credentials:
+
+<Terminal title="shell">
+    ```bash
+    aws sts get-caller-identity
+    ```
+</Terminal>
+
+**"Access denied"** — Your IAM role needs `bedrock:InvokeModel` and `bedrock:InvokeModelWithResponseStream` permissions. Also enable model access in AWS Console under Bedrock > Model access.
+
+**"Model not found"** — Use the full Bedrock model ID and check your region:
+
+```yaml
+providers:
+  bedrock:
+    model: "anthropic.claude-sonnet-4-6"
+    base_url: "us-east-1"
+```
+
+### Azure OpenAI
+
+**"Authentication failed"** — Get the key from Azure Portal > OpenAI resource > Keys and Endpoint.
+
+**"Resource not found"** — Copy the exact endpoint URL from Azure Portal:
+
+```yaml
+providers:
+  azureopenai:
+    base_url: "https://your-resource-name.openai.azure.com"
+```
+
+**"Deployment not found"** — Use your deployment name (not the model name):
+
+```yaml
+providers:
+  azureopenai:
+    model: "gpt-4o"           # Your deployment name
+    api_version: "2025-04-01-preview"
+```
+
+List deployments with `az cognitiveservices account deployment list --name your-resource --resource-group your-rg`.
+
+### Other Providers
+
+<dl>
+  <dt>**Anthropic** — "Authentication error"</dt>
+  <dd>Key must start with `sk-ant-`.</dd>
+
+  <dt>**OpenAI** — "Insufficient quota"</dt>
+  <dd>Add billing info at platform.openai.com.</dd>
+
+  <dt>**Grok** — "Connection failed"</dt>
+  <dd>Set `base_url: "https://api.x.ai/v1"`.</dd>
+</dl>
+
+See [AI Providers](/cli/configuration/ai/providers) for full provider documentation.
+
+## CLI Providers
+
+### "CLI provider binary not found"
+
+The CLI tool isn't installed or not on PATH:
+
+<Tabs>
+  <TabItem value="claude-code" label="Claude Code" default>
+    ```bash
+    brew install --cask claude-code
+    claude auth login
+    ```
+  </TabItem>
+  <TabItem value="codex-cli" label="OpenAI Codex">
+    ```bash
+    npm install -g @openai/codex
+    codex login
+    ```
+  </TabItem>
+  <TabItem value="gemini-cli" label="Gemini CLI">
+    ```bash
+    npm install -g @google/gemini-cli
+    gemini  # Authenticates on first run
+    ```
+  </TabItem>
+</Tabs>
+
+Or set an explicit path:
+
+```yaml
+providers:
+  claude-code:
+    binary: /usr/local/bin/claude
+```
+
+### MCP Servers Not Working with Codex CLI
+
+Codex CLI MCP servers don't inherit the parent process environment. If `atmos auth exec` fails with "identity not found", ensure `ATMOS_PROFILE` is exported:
+
+```bash
+export ATMOS_PROFILE=managers  # Or your profile name
+atmos ai ask "What did we spend on EC2?"
+```
+
+Atmos automatically injects `ATMOS_*` env vars into each MCP server's config, but the env var must be set in the shell.
+
+### Gemini CLI MCP Blocked
+
+Gemini CLI blocks MCP for all personal Google accounts (`oauth-personal` auth) regardless of subscription tier. This is a server-side Google restriction.
+
+**Workaround:** Use `claude-code` or `codex-cli` for MCP workflows. Gemini CLI works for prompt-only queries.
+
+## Sessions
+
+### Sessions Not Persisting
+
+Enable sessions and use named sessions:
+
+```yaml
+ai:
+  sessions:
+    enabled: true
+    path: ".atmos/sessions"
+```
+
+<Terminal title="shell">
+    ```bash
+    atmos ai chat --session my-project
+    ```
+</Terminal>
+
+### Database Errors
+
+If you get "Failed to initialize session storage", back up and recreate:
+
+<Terminal title="shell">
+    ```bash
+    cp .atmos/sessions/sessions.db .atmos/sessions/sessions.db.backup
+    rm .atmos/sessions/sessions.db
+    atmos ai chat  # Creates a new database
+    ```
+</Terminal>
+
+### Conversation Memory Not Working
+
+- Use `--session name` — anonymous sessions don't persist
+- Add `sessions.enabled: true` to atmos.yaml
+- Check directory permissions: `chmod 755 .atmos/sessions`
+
+All seven providers support conversation memory.
+
+### Auto-Compact Not Working
+
+Verify the required settings are all present:
+
+```yaml
+ai:
+  max_history_messages: 50     # Required — threshold is calculated from this
+  sessions:
+    enabled: true
+    auto_compact:
+      enabled: true
+      trigger_threshold: 0.75  # Triggers at 38 messages (50 x 0.75)
+```
+
+If `use_ai_summary: true` and no summaries appear, check that the AI provider is configured and the API key is valid. Test with `use_ai_summary: false` first.
+
+**Triggers too often?** Increase `trigger_threshold` or `max_history_messages`.
+
+**Too expensive?** Set `use_ai_summary: false` to use simple concatenation instead of AI summaries.
+
+See [Auto-Compact](/cli/configuration/ai/sessions#auto-compact-configuration) for details.
+
+## MCP Server
+
+### "MCP server is not enabled"
+
+The MCP server is disabled by default and must be explicitly enabled:
+
+```yaml
+mcp:
+  enabled: true
+ai:
+  enabled: true
+  tools:
+    enabled: true
+```
+
+### Not Starting
+
+Test the MCP server directly:
+
+<Terminal title="shell">
+    ```bash
+    atmos mcp start  # Should output: Starting Atmos MCP server on stdio...
+    ```
+</Terminal>
+
+For Claude Desktop, use the full path to atmos:
+
+```json
+{
+  "mcpServers": {
+    "atmos": {
+      "command": "/usr/local/bin/atmos",
+      "args": ["mcp", "start"]
+    }
+  }
+}
+```
+
+### Tools Not Available
+
+Restart the MCP client and check for errors with debug logging:
+
+<Terminal title="shell">
+    ```bash
+    ATMOS_LOGS_LEVEL=Debug atmos mcp start
+    ```
+</Terminal>
+
+See [MCP Server](/ai/mcp-server) for the complete setup guide.
+
+## LSP Integration
+
+### Server Not Found
+
+Install and verify:
+
+<Terminal title="shell">
+    ```bash
+    npm install -g yaml-language-server && yaml-language-server --version
+    brew install terraform-ls && terraform-ls version
+    ```
+</Terminal>
+
+If installed but not found, use the full path:
+
+```yaml
+lsp:
+  servers:
+    yaml-ls:
+      command: "/usr/local/bin/yaml-language-server"
+```
+
+### Not Validating Files
+
+Verify LSP is enabled and the server config matches your file types:
+
+```yaml
+lsp:
+  enabled: true
+  servers:
+    yaml-ls:
+      filetypes: ["yaml", "yml"]
+```
+
+See [LSP Client](/lsp/lsp-client) for detailed configuration.
+
+## Skills
+
+### Skill Not Appearing
+
+Press `Ctrl+A` in chat to open the skill selector. Skills need all three required fields:
+
+```yaml
+ai:
+  skills:
+    my-skill:
+      display_name: "My Skill"    # Required
+      description: "..."          # Required
+      system_prompt: "..."        # Required
+```
+
+`Ctrl+A` only works in the main chat view — press `Esc` first if you're in another panel.
+
+### Skill Gives Generic Responses
+
+The `system_prompt` needs more detail. Include a role definition, focus areas, and tool usage instructions:
+
+```yaml
+system_prompt: |
+  You are a specialized Atmos stacks analyst.
+  FOCUS: Stack configuration, dependency analysis.
+  APPROACH: Use atmos_describe_component first, then recommend.
+  Always use tools to gather data before answering.
+```
+
+### Tool Access Denied
+
+The tool isn't in the skill's `allowed_tools`. Add it, or switch to the **General** skill (`Ctrl+A`) which has access to all tools.
+
+Tool names use the `atmos_` prefix: `atmos_describe_component`, `atmos_list_stacks`, `atmos_validate_stacks`, etc. See [AI Tools](/cli/configuration/ai/tools) for the full list.
+
+## Claude Code Subagents
+
+### Subagent Not Invoked
+
+Check the file exists and has proper frontmatter:
+
+<Terminal title="shell">
+    ```bash
+    ls -la .claude/agents/atmos-expert.md
+    ```
+</Terminal>
+
+```markdown
+---
+name: atmos-expert
+description: Expert in Atmos infrastructure...
+tools:
+  - mcp__atmos__describe_stacks
+model: inherit
+---
+```
+
+Invoke with `@atmos-expert your question`.
+
+### Can't Access MCP Tools
+
+Tool names need the `mcp__atmos__` prefix. The MCP server must be running and the server name must match:
+
+```yaml
+tools:
+  - mcp__atmos__describe_stacks      # Correct
+  - describe_stacks                   # Wrong
+```
+
+Restart Claude Desktop after changing subagent or MCP configuration.
+
+See [Claude Code Integration](/ai/claude-code-integration) for the complete guide.
+
+## Project Instructions
+
+### AI Not Using Instructions
+
+Verify instructions are enabled and the file exists:
+
+```yaml
+ai:
+  instructions:
+    enabled: true
+    file: "ATMOS.md"
+```
+
+<Terminal title="shell">
+    ```bash
+    ls -la ATMOS.md
+    ```
+</Terminal>
+
+If the file doesn't exist, instructions are silently skipped. Create it manually.
+
+### Large File Performance
+
+Keep `ATMOS.md` under 10KB. Remove outdated content to reduce tokens per request.
+
+## Debugging
+
+When nothing else works:
+
+<Terminal title="1. Enable debug logging">
+    ```bash
+    atmos ai ask "test" --logs-level=Debug
+    ```
+</Terminal>
+
+<Terminal title="2. Inspect configuration">
+    ```bash
+    atmos describe config | grep -A 10 "ai"
+    ```
+</Terminal>
+
+**3. Test network connectivity:**
+
+<Tabs>
+  <TabItem value="anthropic" label="Anthropic" default>
+    ```bash
+    curl -sI https://api.anthropic.com | head -1
+    ```
+  </TabItem>
+  <TabItem value="openai" label="OpenAI">
+    ```bash
+    curl -sI https://api.openai.com | head -1
+    ```
+  </TabItem>
+  <TabItem value="ollama" label="Ollama">
+    ```bash
+    curl http://localhost:11434/api/version
+    ```
+  </TabItem>
+  <TabItem value="bedrock" label="Bedrock">
+    ```bash
+    aws bedrock list-foundation-models --region us-east-1 --max-results 1
+    ```
+  </TabItem>
+</Tabs>
+
+**4. Try a minimal config** to rule out config problems:
+
+```yaml
+ai:
+  enabled: true
+  default_provider: "anthropic"
+```
+
+## Performance
+
+**Slow responses** — Try a faster model (`claude-haiku-4-5-20251001`, `gpt-5-mini`, `gemini-2.5-flash`), go local with Ollama, reduce `max_tokens`, or limit history with `max_history_messages: 20`.
+
+**Timeout errors** — Break complex questions into smaller parts.
+
+## Getting Help
+
+1. Review [AI Configuration](/cli/configuration/ai)
+2. Search [GitHub Issues](https://github.com/cloudposse/atmos/issues)
+3. Open a new issue with: Atmos version, provider/model, error message, and reproduction steps

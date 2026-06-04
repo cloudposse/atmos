@@ -24,7 +24,7 @@ func TestInstallCommandProvider_Extended(t *testing.T) {
 		cmd := provider.GetCommand()
 		require.NotNil(t, cmd)
 		assert.Contains(t, cmd.Use, "install")
-		assert.Contains(t, cmd.Use, "[tool]")
+		assert.Contains(t, cmd.Use, "[tool...]")
 	})
 }
 
@@ -47,7 +47,7 @@ func TestInstallCommand_Flags(t *testing.T) {
 func TestInstallCommand_CommandStructure(t *testing.T) {
 	t.Run("command has correct use string", func(t *testing.T) {
 		assert.Contains(t, installCmd.Use, "install")
-		assert.Contains(t, installCmd.Use, "[tool]")
+		assert.Contains(t, installCmd.Use, "[tool...]")
 	})
 
 	t.Run("command has short description", func(t *testing.T) {
@@ -72,8 +72,12 @@ func TestInstallCommand_CommandStructure(t *testing.T) {
 		assert.True(t, installCmd.SilenceErrors)
 	})
 
-	t.Run("command accepts max 1 argument", func(t *testing.T) {
-		assert.NotNil(t, installCmd.Args)
+	t.Run("command accepts multiple arguments", func(t *testing.T) {
+		require.NotNil(t, installCmd.Args)
+		// Verify the command accepts zero, one, or multiple arguments.
+		assert.NoError(t, installCmd.Args(installCmd, []string{}))
+		assert.NoError(t, installCmd.Args(installCmd, []string{"tool1"}))
+		assert.NoError(t, installCmd.Args(installCmd, []string{"tool1", "tool2", "tool3"}))
 	})
 }
 
@@ -125,19 +129,6 @@ func TestInstallCommand_ViperIntegration(t *testing.T) {
 	}
 }
 
-// TestInstallCommand_EnvVars tests that environment variables are configured.
-func TestInstallCommand_EnvVars(t *testing.T) {
-	t.Run("reinstall env var is configured", func(t *testing.T) {
-		// The parser is configured with WithEnvVars("reinstall", "ATMOS_TOOLCHAIN_REINSTALL").
-		require.NotNil(t, installParser)
-	})
-
-	t.Run("default env var is configured", func(t *testing.T) {
-		// The parser is configured with WithEnvVars("default", "ATMOS_TOOLCHAIN_DEFAULT").
-		require.NotNil(t, installParser)
-	})
-}
-
 // TestInstallCommand_FlagDefaults tests default flag values.
 func TestInstallCommand_FlagDefaults(t *testing.T) {
 	t.Run("reinstall default is false", func(t *testing.T) {
@@ -150,5 +141,34 @@ func TestInstallCommand_FlagDefaults(t *testing.T) {
 		flag := installCmd.Flags().Lookup("default")
 		require.NotNil(t, flag)
 		assert.Equal(t, "false", flag.DefValue)
+	})
+}
+
+// TestInstallCommandProvider_Interface tests the full interface implementation.
+func TestInstallCommandProvider_Interface(t *testing.T) {
+	provider := &InstallCommandProvider{}
+
+	t.Run("GetName returns install", func(t *testing.T) {
+		assert.Equal(t, "install", provider.GetName())
+	})
+
+	t.Run("GetGroup returns Toolchain Commands", func(t *testing.T) {
+		assert.Equal(t, "Toolchain Commands", provider.GetGroup())
+	})
+
+	t.Run("GetFlagsBuilder returns parser", func(t *testing.T) {
+		fb := provider.GetFlagsBuilder()
+		assert.NotNil(t, fb)
+		assert.Equal(t, installParser, fb)
+	})
+
+	t.Run("GetPositionalArgsBuilder returns nil", func(t *testing.T) {
+		pab := provider.GetPositionalArgsBuilder()
+		assert.Nil(t, pab)
+	})
+
+	t.Run("GetCompatibilityFlags returns nil", func(t *testing.T) {
+		cf := provider.GetCompatibilityFlags()
+		assert.Nil(t, cf)
 	})
 }

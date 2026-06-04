@@ -1,0 +1,57 @@
+.experimental-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  margin-bottom: 1.5rem;
+  border-radius: 8px;
+  background-color: rgba(255, 152, 0, 0.15);
+  border: 1px solid rgba(255, 152, 0, 0.4);
+  font-size: 0.9rem;
+  cursor: pointer;
+  text-decoration: none;
+  transition: background-color 0.2s ease, border-color 0.2s ease;
+}
+
+.experimental-badge:hover {
+  background-color: rgba(255, 152, 0, 0.25);
+  border-color: rgba(255, 152, 0, 0.6);
+  text-decoration: none;
+}
+
+.experimental-badge:focus-visible {
+  outline: 2px solid #d97706;
+  outline-offset: 2px;
+}
+
+.experimental-icon {
+  font-size: 1.2rem;
+  color: #d97706;
+}
+
+.experimental-text {
+  font-weight: 600;
+  color: #b45309;
+}
+
+[data-theme='dark'] .experimental-badge {
+  background-color: rgba(255, 152, 0, 0.2);
+  border-color: rgba(255, 152, 0, 0.5);
+}
+
+[data-theme='dark'] .experimental-badge:hover {
+  background-color: rgba(255, 152, 0, 0.3);
+  border-color: rgba(255, 152, 0, 0.7);
+}
+
+[data-theme='dark'] .experimental-badge:focus-visible {
+  outline: 2px solid #ffa726;
+}
+
+[data-theme='dark'] .experimental-icon {
+  color: #ffa726;
+}
+
+[data-theme='dark'] .experimental-text {
+  color: #ffb74d;
+}

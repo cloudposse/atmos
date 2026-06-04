@@ -299,4 +299,4 @@ Supporting all variants ensures Atmos works well in different environments and C
 - [Charmbracelet lipgloss](https://github.com/charmbracelet/lipgloss)
 - [CLICOLOR standard](https://bixense.com/clicolors/)
 - [NO_COLOR standard](https://no-color.org/)
-- [Cobra documentation](https://github.com/spf13/cobra/blob/master/user_guide.md)
+- [Cobra documentation](https://cobra.dev/)

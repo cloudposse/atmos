@@ -9,6 +9,7 @@ import (
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/transport/ssh"
 
+	"github.com/cloudposse/atmos/pkg/auth"
 	g "github.com/cloudposse/atmos/pkg/git"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -38,6 +39,8 @@ func ExecuteDescribeAffectedWithTargetRefClone(
 	processYamlFunctions bool,
 	skip []string,
 	excludeLocked bool,
+	authManager auth.AuthManager,
+	authDisabled bool,
 ) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, string, error) {
 	defer perf.Track(atmosConfig, "exec.ExecuteDescribeAffectedWithTargetRefClone")()
 
@@ -161,6 +164,8 @@ func ExecuteDescribeAffectedWithTargetRefClone(
 		processYamlFunctions,
 		skip,
 		excludeLocked,
+		authManager,
+		authDisabled,
 	)
 	if err != nil {
 		return nil, nil, nil, "", err
@@ -184,10 +189,16 @@ func ExecuteDescribeAffectedWithTargetRefClone(
 // processes stack configs, and returns a list of the affected Atmos components and stacks given two Git commits.
 // This approach uses `git worktree add` to create an isolated worktree that shares the repository's
 // object database but has its own HEAD, allowing checkout operations without affecting the main worktree.
+//
+// TargetBranch, when non-empty, enables a one-shot self-heal: if the worktree
+// cannot be created because the target commit is not in the local object DB
+// (the common case in CI shallow checkouts), Atmos runs a targeted
+// `git fetch origin <targetBranch>` and retries. Empty disables the fetch.
 func ExecuteDescribeAffectedWithTargetRefCheckout(
 	atmosConfig *schema.AtmosConfiguration,
 	ref string,
 	sha string,
+	targetBranch string,
 	includeSpaceliftAdminStacks bool,
 	includeSettings bool,
 	stack string,
@@ -195,6 +206,8 @@ func ExecuteDescribeAffectedWithTargetRefCheckout(
 	processYamlFunctions bool,
 	skip []string,
 	excludeLocked bool,
+	authManager auth.AuthManager,
+	authDisabled bool,
 ) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, string, error) {
 	defer perf.Track(atmosConfig, "exec.ExecuteDescribeAffectedWithTargetRefCheckout")()
 
@@ -222,8 +235,10 @@ func ExecuteDescribeAffectedWithTargetRefCheckout(
 		log.Debug("Creating worktree at", refString, ref)
 	}
 
-	// Create an isolated worktree for the target ref.
-	worktreePath, err := g.CreateWorktree(localRepoInfo.LocalWorktreePath, targetCommit)
+	// Create an isolated worktree for the target ref, with a one-shot
+	// self-heal that fetches the target branch if the commit is missing
+	// from the local object DB (common in CI shallow checkouts).
+	worktreePath, err := g.CreateWorktreeWithFetchRecovery(localRepoInfo.LocalWorktreePath, targetCommit, targetBranch)
 	if err != nil {
 		return nil, nil, nil, "", err
 	}
@@ -256,6 +271,8 @@ func ExecuteDescribeAffectedWithTargetRefCheckout(
 		processYamlFunctions,
 		skip,
 		excludeLocked,
+		authManager,
+		authDisabled,
 	)
 	if err != nil {
 		return nil, nil, nil, "", err
@@ -282,6 +299,8 @@ func ExecuteDescribeAffectedWithTargetRepoPath(
 	processYamlFunctions bool,
 	skip []string,
 	excludeLocked bool,
+	authManager auth.AuthManager,
+	authDisabled bool,
 ) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, string, error) {
 	defer perf.Track(atmosConfig, "exec.ExecuteDescribeAffectedWithTargetRepoPath")()
 
@@ -326,6 +345,8 @@ func ExecuteDescribeAffectedWithTargetRepoPath(
 		processYamlFunctions,
 		skip,
 		excludeLocked,
+		authManager,
+		authDisabled,
 	)
 	if err != nil {
 		return nil, nil, nil, "", err

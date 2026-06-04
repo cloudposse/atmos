@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -302,6 +303,37 @@ func Test_processEnvVars(t *testing.T) {
 			expectError:  true,
 			errorMessage: "strconv.ParseBool: parsing \"not-a-boolean\": invalid syntax",
 		},
+		{
+			name: "ATMOS_CI_COMMENTS_ENABLED=true enables CI comments",
+			envVars: map[string]string{
+				"ATMOS_CI_COMMENTS_ENABLED": "true",
+			},
+			expectedConfig: schema.AtmosConfiguration{
+				CI: schema.CIConfig{
+					Comments: schema.CICommentsConfig{Enabled: ciBoolPtr(true)},
+				},
+			},
+			expectError: false,
+		},
+		{
+			name: "ATMOS_CI_COMMENTS_ENABLED=false disables CI comments",
+			envVars: map[string]string{
+				"ATMOS_CI_COMMENTS_ENABLED": "false",
+			},
+			expectedConfig: schema.AtmosConfiguration{
+				CI: schema.CIConfig{
+					Comments: schema.CICommentsConfig{Enabled: ciBoolPtr(false)},
+				},
+			},
+			expectError: false,
+		},
+		{
+			name: "ATMOS_CI_COMMENTS_ENABLED invalid value logs warning without error",
+			envVars: map[string]string{
+				"ATMOS_CI_COMMENTS_ENABLED": "not-a-bool",
+			},
+			expectError: false,
+		},
 	}
 
 	for _, tt := range tests {
@@ -333,6 +365,128 @@ func Test_processEnvVars(t *testing.T) {
 			}
 		})
 	}
+}
+
+// ciBoolPtr is a test helper for constructing *bool literals.
+func ciBoolPtr(b bool) *bool { return &b }
+
+func TestProcessEnvVars_CICommentsEnabled(t *testing.T) {
+	tests := []struct {
+		name    string
+		envVal  string
+		initial *bool
+		want    *bool
+	}{
+		{
+			name:    "env var true overrides false yaml default",
+			envVal:  "true",
+			initial: ciBoolPtr(false),
+			want:    ciBoolPtr(true),
+		},
+		{
+			name:    "env var false overrides true yaml setting",
+			envVal:  "false",
+			initial: ciBoolPtr(true),
+			want:    ciBoolPtr(false),
+		},
+		{
+			name:    "env var 1 enables CI comments",
+			envVal:  "1",
+			initial: ciBoolPtr(false),
+			want:    ciBoolPtr(true),
+		},
+		{
+			name:    "env var 0 disables CI comments",
+			envVal:  "0",
+			initial: ciBoolPtr(true),
+			want:    ciBoolPtr(false),
+		},
+		{
+			name:    "env var true overrides unset (nil) yaml default",
+			envVal:  "true",
+			initial: nil,
+			want:    ciBoolPtr(true),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv("ATMOS_CI_COMMENTS_ENABLED", tt.envVal)
+
+			config := &schema.AtmosConfiguration{
+				Schemas: make(map[string]interface{}),
+				CI: schema.CIConfig{
+					Comments: schema.CICommentsConfig{Enabled: tt.initial},
+				},
+			}
+
+			err := processEnvVars(config)
+			assert.NoError(t, err)
+			require.NotNil(t, config.CI.Comments.Enabled)
+			assert.Equal(t, *tt.want, *config.CI.Comments.Enabled)
+		})
+	}
+
+	t.Run("env var not set leaves yaml value unchanged", func(t *testing.T) {
+		// Empty string is treated as unset — env var is not processed.
+		t.Setenv("ATMOS_CI_COMMENTS_ENABLED", "")
+
+		config := &schema.AtmosConfiguration{
+			Schemas: make(map[string]interface{}),
+			CI: schema.CIConfig{
+				Comments: schema.CICommentsConfig{Enabled: ciBoolPtr(true)},
+			},
+		}
+
+		err := processEnvVars(config)
+		assert.NoError(t, err)
+		require.NotNil(t, config.CI.Comments.Enabled)
+		assert.True(t, *config.CI.Comments.Enabled)
+	})
+
+	t.Run("env var not set leaves nil (unset) value unchanged", func(t *testing.T) {
+		t.Setenv("ATMOS_CI_COMMENTS_ENABLED", "")
+
+		config := &schema.AtmosConfiguration{
+			Schemas: make(map[string]interface{}),
+		}
+
+		err := processEnvVars(config)
+		assert.NoError(t, err)
+		assert.Nil(t, config.CI.Comments.Enabled, "nil should remain nil when env var is unset")
+	})
+
+	t.Run("invalid env var value logs warning and leaves value unchanged (true)", func(t *testing.T) {
+		t.Setenv("ATMOS_CI_COMMENTS_ENABLED", "not-a-bool")
+
+		config := &schema.AtmosConfiguration{
+			Schemas: make(map[string]interface{}),
+			CI: schema.CIConfig{
+				Comments: schema.CICommentsConfig{Enabled: ciBoolPtr(true)},
+			},
+		}
+
+		err := processEnvVars(config)
+		assert.NoError(t, err)
+		require.NotNil(t, config.CI.Comments.Enabled)
+		assert.True(t, *config.CI.Comments.Enabled)
+	})
+
+	t.Run("invalid env var value logs warning and leaves value unchanged (false)", func(t *testing.T) {
+		t.Setenv("ATMOS_CI_COMMENTS_ENABLED", "not-a-bool")
+
+		config := &schema.AtmosConfiguration{
+			Schemas: make(map[string]interface{}),
+			CI: schema.CIConfig{
+				Comments: schema.CICommentsConfig{Enabled: ciBoolPtr(false)},
+			},
+		}
+
+		err := processEnvVars(config)
+		assert.NoError(t, err)
+		require.NotNil(t, config.CI.Comments.Enabled)
+		assert.False(t, *config.CI.Comments.Enabled)
+	})
 }
 
 func TestFindAllStackConfigsInPathsForStack(t *testing.T) {

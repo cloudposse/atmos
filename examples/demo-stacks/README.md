@@ -2,13 +2,13 @@
 
 Inherit configuration across environments to eliminate duplication.
 
-Learn more about [Stack Inheritance](https://atmos.tools/core-concepts/stacks/inheritance/).
+Learn more about [Stack Inheritance](https://atmos.tools/howto/inheritance).
 
 ## What You'll See
 
-- [Catalog pattern](https://atmos.tools/core-concepts/stacks/catalogs/) with base component defaults
-- [Import](https://atmos.tools/core-concepts/stacks/imports/) to inherit shared configuration
-- Environment-specific [overrides](https://atmos.tools/core-concepts/stacks/overrides/) in deploy stacks
+- [Catalog pattern](https://atmos.tools/howto/catalogs) with base component defaults
+- [Import](https://atmos.tools/stacks/imports) to inherit shared configuration
+- Environment-specific [overrides](https://atmos.tools/stacks/overrides) in deploy stacks
 
 ## Try It
 

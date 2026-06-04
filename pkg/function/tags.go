@@ -38,6 +38,18 @@ const (
 	// TagRepoRoot returns the git repository root path.
 	TagRepoRoot = "repo-root"
 
+	// TagGitRoot returns the git repository root path.
+	TagGitRoot = "git.root"
+
+	// TagGitSha returns the current Git HEAD commit SHA.
+	TagGitSha = "git.sha"
+
+	// TagGitBranch returns the current Git branch name.
+	TagGitBranch = "git.branch"
+
+	// TagGitRef returns the immutable Git ref used for source pinning.
+	TagGitRef = "git.ref"
+
 	// TagRandom generates a random number.
 	TagRandom = "random"
 
@@ -55,6 +67,9 @@ const (
 
 	// TagAwsRegion returns the AWS region.
 	TagAwsRegion = "aws.region"
+
+	// TagAwsOrganizationID returns the AWS Organization ID.
+	TagAwsOrganizationID = "aws.organization_id"
 )
 
 // YAMLTagPrefix is the prefix used for YAML custom tags.
@@ -75,12 +90,17 @@ func AllTags() []string {
 		TagInclude,
 		TagIncludeRaw,
 		TagRepoRoot,
+		TagGitRoot,
+		TagGitSha,
+		TagGitBranch,
+		TagGitRef,
 		TagRandom,
 		TagLiteral,
 		TagAwsAccountID,
 		TagAwsCallerIdentityArn,
 		TagAwsCallerIdentityUserID,
 		TagAwsRegion,
+		TagAwsOrganizationID,
 	}
 }
 
@@ -96,12 +116,17 @@ var tagsMap = map[string]bool{
 	TagInclude:                 true,
 	TagIncludeRaw:              true,
 	TagRepoRoot:                true,
+	TagGitRoot:                 true,
+	TagGitSha:                  true,
+	TagGitBranch:               true,
+	TagGitRef:                  true,
 	TagRandom:                  true,
 	TagLiteral:                 true,
 	TagAwsAccountID:            true,
 	TagAwsCallerIdentityArn:    true,
 	TagAwsCallerIdentityUserID: true,
 	TagAwsRegion:               true,
+	TagAwsOrganizationID:       true,
 }
 
 // IsValidTag checks if the given tag name is registered.

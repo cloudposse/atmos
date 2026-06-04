@@ -1,0 +1,26 @@
+# yaml-language-server: $schema=https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
+#
+# Test fixture for advanced locals features:
+# - Environment variable access via {{ .env.VAR }}
+# - Nested value access {{ .settings.nested.key }}
+# - Helmfile section locals
+# - Packer section locals
+
+base_path: "./"
+
+components:
+  terraform:
+    base_path: "components/terraform"
+  helmfile:
+    base_path: "components/helmfile"
+
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "deploy/**/*"
+  excluded_paths:
+    - "**/_defaults.yaml"
+  name_template: "{{ .vars.stage }}"
+
+logs:
+  level: Info

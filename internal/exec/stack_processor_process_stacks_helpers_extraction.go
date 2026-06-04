@@ -73,6 +73,30 @@ func extractComponentSections(opts *ComponentProcessorOptions, result *Component
 		}
 	}
 
+	// Terraform-specific: extract required_providers section (DEV-3124).
+	if opts.ComponentType == cfg.TerraformComponentType {
+		if i, ok := opts.ComponentMap[cfg.RequiredProvidersSectionName]; ok {
+			componentRequiredProviders, ok := i.(map[string]any)
+			if !ok {
+				return fmt.Errorf("%w: 'components.%s.%s.required_providers' in the file '%s'", errUtils.ErrInvalidComponentRequiredProviders, opts.ComponentType, opts.Component, opts.StackName)
+			}
+			result.ComponentRequiredProviders = componentRequiredProviders
+		} else {
+			result.ComponentRequiredProviders = make(map[string]any, componentSmallMapCapacity)
+		}
+	}
+
+	// Terraform-specific: extract required_version section (DEV-3124).
+	if opts.ComponentType == cfg.TerraformComponentType {
+		if i, ok := opts.ComponentMap[cfg.RequiredVersionSectionName]; ok {
+			componentRequiredVersion, ok := i.(string)
+			if !ok {
+				return fmt.Errorf("%w: 'components.%s.%s.required_version' in the file '%s'", errUtils.ErrInvalidComponentRequiredVersion, opts.ComponentType, opts.Component, opts.StackName)
+			}
+			result.ComponentRequiredVersion = componentRequiredVersion
+		}
+	}
+
 	// Terraform-specific: extract hooks section.
 	if opts.ComponentType == cfg.TerraformComponentType {
 		if i, ok := opts.ComponentMap[cfg.HooksSectionName]; ok {
@@ -95,6 +119,17 @@ func extractComponentSections(opts *ComponentProcessorOptions, result *Component
 		result.ComponentAuth = componentAuth
 	} else {
 		result.ComponentAuth = make(map[string]any, componentSmallMapCapacity)
+	}
+
+	// Extract retry section (component-level).  The value is kept as a raw map here so it
+	// can be deep-merged with any base-component retry config; decoding to the typed
+	// schema.RetryConfig happens after the final merge.
+	if i, ok := opts.ComponentMap[cfg.RetrySectionName]; ok {
+		componentRetry, ok := i.(map[string]any)
+		if !ok {
+			return fmt.Errorf("%w: 'components.%s.%s.retry' in the file '%s'", errUtils.ErrInvalidConfig, opts.ComponentType, opts.Component, opts.StackName)
+		}
+		result.ComponentRetry = componentRetry
 	}
 
 	// Extract provision section (for workdir provisioning) for terraform, helmfile, and packer.

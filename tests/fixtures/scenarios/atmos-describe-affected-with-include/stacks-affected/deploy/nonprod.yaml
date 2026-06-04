@@ -1,0 +1,32 @@
+vars:
+  stage: nonprod
+
+components:
+  terraform:
+    # Same !include directives but different vars to trigger affected detection.
+    app-with-includes:
+      metadata:
+        component: mock
+      vars:
+        json_config: !include config/vars.json
+        app_name: !include config/vars.json .app_name
+        policy_body: !include config/policy.rego
+        settings: !include config/settings.yaml
+        environment: prod-changed
+
+    # Same !include.raw directives but different environment.
+    app-with-raw-includes:
+      metadata:
+        component: mock
+      vars:
+        json_raw: !include.raw config/vars.json
+        policy_raw: !include.raw config/policy.rego
+        environment: prod-changed
+
+    # Simple component with changed var.
+    simple-app:
+      metadata:
+        component: mock
+      vars:
+        name: simple
+        environment: prod-changed

@@ -2,7 +2,12 @@ package github
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
+	"net/url"
 	"os"
 	"strings"
 	"testing"
@@ -688,4 +693,217 @@ func TestApplyPagination(t *testing.T) {
 			}
 		})
 	}
+}
+
+// newTestClient creates a GitHub client pointing at a test server.
+func newTestClient(t *testing.T, serverURL string) *github.Client {
+	t.Helper()
+
+	client := github.NewClient(nil)
+	u, err := url.Parse(serverURL + "/")
+	require.NoError(t, err)
+	client.BaseURL = u
+
+	return client
+}
+
+// makeRelease creates a test github.RepositoryRelease with the given tag.
+func makeRelease(tag string, prerelease bool, publishedAt time.Time) *github.RepositoryRelease {
+	return &github.RepositoryRelease{
+		TagName:     github.String(tag),
+		Prerelease:  github.Bool(prerelease),
+		PublishedAt: &github.Timestamp{Time: publishedAt},
+	}
+}
+
+// TestFetchAllReleases_MockServer tests fetchAllReleases using a mock HTTP server.
+func TestFetchAllReleases_MockServer(t *testing.T) {
+	now := time.Now()
+
+	t.Run("single page of releases", func(t *testing.T) {
+		mux := http.NewServeMux()
+		mux.HandleFunc("/repos/owner/repo/releases", func(w http.ResponseWriter, r *http.Request) {
+			releases := []*github.RepositoryRelease{
+				makeRelease("v1.0.0", false, now),
+				makeRelease("v1.1.0-rc.1", true, now),
+				makeRelease("v1.1.0", false, now),
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(releases)
+		})
+		server := httptest.NewServer(mux)
+		defer server.Close()
+
+		client := newTestClient(t, server.URL)
+		opts := ReleasesOptions{Owner: "owner", Repo: "repo", Limit: 10}
+		releases, err := fetchAllReleases(context.Background(), client, opts)
+
+		require.NoError(t, err)
+		assert.Len(t, releases, 3)
+		assert.Equal(t, "v1.0.0", releases[0].GetTagName())
+		assert.True(t, releases[1].GetPrerelease(), "Second release should be a prerelease")
+		assert.Equal(t, "v1.1.0", releases[2].GetTagName())
+	})
+
+	t.Run("multi-page pagination", func(t *testing.T) {
+		mux := http.NewServeMux()
+		mux.HandleFunc("/repos/owner/repo/releases", func(w http.ResponseWriter, r *http.Request) {
+			page := r.URL.Query().Get("page")
+			if page == "" || page == "1" {
+				releases := []*github.RepositoryRelease{
+					makeRelease("v1.0.0", false, now),
+					makeRelease("v1.1.0", false, now),
+				}
+				// Link header for next page.
+				w.Header().Set("Link", fmt.Sprintf(`<%s/repos/owner/repo/releases?page=2>; rel="next"`, r.URL.Scheme+"://"+r.Host))
+				w.Header().Set("Content-Type", "application/json")
+				_ = json.NewEncoder(w).Encode(releases)
+			} else {
+				releases := []*github.RepositoryRelease{
+					makeRelease("v1.2.0", false, now),
+				}
+				w.Header().Set("Content-Type", "application/json")
+				_ = json.NewEncoder(w).Encode(releases)
+			}
+		})
+		server := httptest.NewServer(mux)
+		defer server.Close()
+
+		// Fix Link header to use server URL.
+		mux2 := http.NewServeMux()
+		mux2.HandleFunc("/repos/owner/repo/releases", func(w http.ResponseWriter, r *http.Request) {
+			page := r.URL.Query().Get("page")
+			if page == "" || page == "1" {
+				releases := []*github.RepositoryRelease{
+					makeRelease("v1.0.0", false, now),
+					makeRelease("v1.1.0", false, now),
+				}
+				w.Header().Set("Link", fmt.Sprintf(`<%s/repos/owner/repo/releases?page=2>; rel="next"`, server.URL))
+				w.Header().Set("Content-Type", "application/json")
+				_ = json.NewEncoder(w).Encode(releases)
+			} else {
+				releases := []*github.RepositoryRelease{
+					makeRelease("v1.2.0", false, now),
+				}
+				w.Header().Set("Content-Type", "application/json")
+				_ = json.NewEncoder(w).Encode(releases)
+			}
+		})
+		server2 := httptest.NewServer(mux2)
+		defer server2.Close()
+
+		client := newTestClient(t, server2.URL)
+		opts := ReleasesOptions{Owner: "owner", Repo: "repo", Limit: 0} // 0 = no limit.
+		releases, err := fetchAllReleases(context.Background(), client, opts)
+
+		require.NoError(t, err)
+		assert.Len(t, releases, 3)
+	})
+
+	t.Run("422 response stops pagination gracefully", func(t *testing.T) {
+		mux := http.NewServeMux()
+		requestCount := 0
+		mux.HandleFunc("/repos/owner/repo/releases", func(w http.ResponseWriter, r *http.Request) {
+			requestCount++
+			if requestCount == 1 {
+				releases := []*github.RepositoryRelease{
+					makeRelease("v1.0.0", false, now),
+				}
+				w.Header().Set("Link", fmt.Sprintf(`<%s/repos/owner/repo/releases?page=2>; rel="next"`, "http://"+r.Host))
+				w.Header().Set("Content-Type", "application/json")
+				_ = json.NewEncoder(w).Encode(releases)
+			} else {
+				// GitHub returns 422 when pagination exceeds 1000 results.
+				w.WriteHeader(http.StatusUnprocessableEntity)
+				_ = json.NewEncoder(w).Encode(map[string]string{"message": "Only the first 1000 results are available"})
+			}
+		})
+		server := httptest.NewServer(mux)
+		defer server.Close()
+
+		client := newTestClient(t, server.URL)
+		opts := ReleasesOptions{Owner: "owner", Repo: "repo", Limit: 0}
+		releases, err := fetchAllReleases(context.Background(), client, opts)
+
+		require.NoError(t, err)
+		assert.Len(t, releases, 1)
+		assert.Equal(t, "v1.0.0", releases[0].GetTagName())
+	})
+
+	t.Run("API error returns wrapped error", func(t *testing.T) {
+		mux := http.NewServeMux()
+		mux.HandleFunc("/repos/owner/repo/releases", func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(http.StatusInternalServerError)
+			_ = json.NewEncoder(w).Encode(map[string]string{"message": "Internal Server Error"})
+		})
+		server := httptest.NewServer(mux)
+		defer server.Close()
+
+		client := newTestClient(t, server.URL)
+		opts := ReleasesOptions{Owner: "owner", Repo: "repo", Limit: 10}
+		releases, err := fetchAllReleases(context.Background(), client, opts)
+
+		assert.Error(t, err)
+		assert.Nil(t, releases)
+	})
+
+	t.Run("empty results", func(t *testing.T) {
+		mux := http.NewServeMux()
+		mux.HandleFunc("/repos/owner/repo/releases", func(w http.ResponseWriter, _ *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode([]*github.RepositoryRelease{})
+		})
+		server := httptest.NewServer(mux)
+		defer server.Close()
+
+		client := newTestClient(t, server.URL)
+		opts := ReleasesOptions{Owner: "owner", Repo: "repo", Limit: 10}
+		releases, err := fetchAllReleases(context.Background(), client, opts)
+
+		require.NoError(t, err)
+		assert.Empty(t, releases)
+	})
+
+	t.Run("early termination when limit satisfied", func(t *testing.T) {
+		requestCount := 0
+		mux := http.NewServeMux()
+		mux.HandleFunc("/repos/owner/repo/releases", func(w http.ResponseWriter, r *http.Request) {
+			requestCount++
+			// Return 100 releases per page (simulating full pages).
+			releases := make([]*github.RepositoryRelease, 0, 5)
+			for i := range 5 {
+				tag := fmt.Sprintf("v%d.%d.0", requestCount, i)
+				releases = append(releases, makeRelease(tag, false, now))
+			}
+			// Always offer a next page.
+			w.Header().Set("Link", fmt.Sprintf(`<%s/repos/owner/repo/releases?page=%d>; rel="next"`, "http://"+r.Host, requestCount+1))
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(releases)
+		})
+		server := httptest.NewServer(mux)
+		defer server.Close()
+
+		client := newTestClient(t, server.URL)
+		opts := ReleasesOptions{Owner: "owner", Repo: "repo", Limit: 3, Offset: 0}
+		releases, err := fetchAllReleases(context.Background(), client, opts)
+
+		require.NoError(t, err)
+		// Should have enough releases to satisfy limit (5 >= 0+3).
+		assert.GreaterOrEqual(t, len(releases), 3)
+		// Should have stopped after first page since 5 >= 0+3.
+		assert.Equal(t, 1, requestCount, "Should stop after first page when limit is satisfied")
+	})
+}
+
+// TestApplyPagination_NegativeOffset tests the negative offset edge case.
+func TestApplyPagination_NegativeOffset(t *testing.T) {
+	now := time.Now()
+	releases := []*github.RepositoryRelease{
+		makeRelease("v1.0.0", false, now),
+		makeRelease("v2.0.0", false, now),
+	}
+
+	result := applyPagination(releases, -5, 1)
+	assert.Len(t, result, 1)
+	assert.Equal(t, "v1.0.0", result[0].GetTagName())
 }

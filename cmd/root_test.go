@@ -834,6 +834,21 @@ func TestParseChdirFromArgs(t *testing.T) {
 			args:     []string{"atmos"},
 			expected: "",
 		},
+		{
+			name:     "--chdir after bare -- is ignored",
+			args:     []string{"atmos", "--", "--chdir=/mydir"},
+			expected: "",
+		},
+		{
+			name:     "-C after bare -- is ignored",
+			args:     []string{"atmos", "--", "-C/mydir"},
+			expected: "",
+		},
+		{
+			name:     "--chdir before bare -- is found",
+			args:     []string{"atmos", "--chdir=/mydir", "--", "terraform", "plan"},
+			expected: "/mydir",
+		},
 	}
 
 	for _, tt := range tests {

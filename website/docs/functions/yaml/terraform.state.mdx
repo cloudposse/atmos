@@ -133,23 +133,23 @@ To avoid conflicting quotes, wrap the entire YQ expression in single quotes whil
 
 ```yaml
 # Use single quotes around the expression to allow double quotes inside brackets
-access_key_id: !terraform.state security '.outputs.users["github-dependabot"].access_key_id'
+access_key_id: !terraform.state security '.users["github-dependabot"].access_key_id'
 ```
 
 Additional examples:
 
 ```yaml
 # Access map keys with special characters
-api_key: !terraform.state config '.outputs.api_keys["service-account-1"]'
+api_key: !terraform.state config '.api_keys["service-account-1"]'
 
 # Access nested maps with special characters in multiple levels
-endpoint: !terraform.state services '.outputs.endpoints["my-service"]["production"]'
+endpoint: !terraform.state services '.endpoints["my-service"]["production"]'
 
 # Combine with stack templating
-token: !terraform.state identity {{ .stack }} '.outputs.tokens["github-actions"]'
+token: !terraform.state identity {{ .stack }} '.tokens["github-actions"]'
 
 # Escape single quotes by doubling them when needed inside the expression
-app_name: !terraform.state config '.outputs.apps["app''s-name"].display_name'
+app_name: !terraform.state config '.apps["app''s-name"].display_name'
 ```
 
 **Quote escaping rules**
@@ -408,6 +408,63 @@ After the first execution, Atmos caches the result in memory,
 and reuses it in the next two calls to the function. The caching makes the stack processing much faster.
 In a production environment where many components are used, the speedup can be significant.
 
+## Using `!terraform.state` with S3 SSE-C Encrypted State
+
+If your S3 backend uses [SSE-C (Server-Side Encryption with Customer-Provided Keys)](https://docs.aws.amazon.com/AmazonS3/latest/userguide/ServerSideEncryptionCustomerKeys.html),
+you need to provide the customer encryption key so that Atmos can decrypt the state file when reading it directly from S3.
+
+This follows the same configuration conventions as [OpenTofu](https://opentofu.org/docs/language/settings/backends/s3/#sse_customer_key)
+and [Terraform](https://developer.hashicorp.com/terraform/language/backend/s3#sse_customer_key).
+
+### Configuration
+
+Provide the SSE-C key using either the `sse_customer_key` backend attribute or the `AWS_SSE_CUSTOMER_KEY` environment variable.
+The key must be a base64-encoded 256-bit (32-byte) encryption key.
+
+<File title="stacks/orgs/acme/_defaults.yaml">
+```yaml
+terraform:
+  backend_type: s3
+  backend:
+    s3:
+      bucket: acme-ue1-root-tfstate
+      region: us-east-1
+      key: "terraform.tfstate"
+      encrypt: true
+      use_lockfile: true
+      sse_customer_key: "base64-encoded-32-byte-key"
+```
+</File>
+
+Alternatively, set the key via an environment variable to avoid storing it in stack configuration:
+
+```shell
+export AWS_SSE_CUSTOMER_KEY="base64-encoded-32-byte-key"
+```
+
+:::tip
+The backend attribute `sse_customer_key` takes precedence over the `AWS_SSE_CUSTOMER_KEY` environment variable.
+:::
+
+### Remote State Backend Override
+
+When using a separate `remote_state_backend` configuration for reading state (e.g., with a read-only role),
+the `sse_customer_key` can also be specified in the `remote_state_backend` section:
+
+```yaml
+terraform:
+  remote_state_backend_type: s3
+  remote_state_backend:
+    s3:
+      role_arn: "arn:aws:iam::xxxxxxxx:role/terraform-backend-read-only"
+      sse_customer_key: "base64-encoded-32-byte-key"
+```
+
+:::note
+SSE-C support only applies to the `!terraform.state` function, which reads state files directly from S3.
+The `!terraform.output` function is unaffected because it delegates to `terraform output`, which handles encryption internally.
+:::
+
 ## Using `!terraform.state` with GCS backend
 
 The GCS backend support allows you to read Terraform state files stored in Google Cloud Storage buckets. Here's an example configuration:
@@ -513,6 +570,93 @@ vars:
     Owner: infra-team
 ```
 </Terminal>
+
+## Switching AWS credentials per component via the `env` section
+
+:::note Advanced — most users do not need this
+This section covers an opt-in behavior used by setups that distribute Terraform state across multiple AWS accounts or organizations and discriminate them by a per-stack `env.AWS_PROFILE` (or similar). If you keep all state in a single account, you can skip this section — the default credential chain handles you correctly.
+:::
+
+When the calling stack and the target stack of `!terraform.state` live in **different AWS accounts**, `!terraform.state` needs to authenticate against the target account's backend. For users on [Atmos auth](/stacks/auth), the configured identity is the canonical source. For users **not yet on Atmos auth**, Atmos also honors a whitelisted subset of the target component's `env` section so that `!terraform.state` matches the credential resolution `!terraform.output` already performs via its subprocess.
+
+This makes the two functions behave symmetrically: anything that works for `!terraform.output` because of the component's `env` (the loop in `pkg/terraform/output/environment.go::SetupEnvironment`) now also works for `!terraform.state`.
+
+### Whitelisted env keys (AWS)
+
+Only credential- and endpoint-related env vars are read from the target component's `env` section — arbitrary env vars are **not** exposed to the in-process backend client:
+
+```
+AWS_PROFILE              AWS_CONFIG_FILE
+AWS_REGION               AWS_SHARED_CREDENTIALS_FILE
+AWS_DEFAULT_REGION       AWS_ENDPOINT_URL_S3
+AWS_USE_FIPS_ENDPOINT    AWS_ENDPOINT_URL_STS
+```
+
+A component with no whitelisted env key produces no overlay and resolves credentials exactly as before. This is a strict no-op for setups that don't use this pattern.
+
+`AWS_STS_REGIONAL_ENDPOINTS` is intentionally not honored — it was a SDK v1 toggle, and SDK v2 always uses regional endpoints by default. Setting it has no effect on the in-process client.
+
+### Precedence
+
+When `!terraform.state` constructs its in-process AWS client, credential sources resolve in this order (lowest wins → highest wins):
+
+1. Process environment (whatever `AWS_PROFILE` etc. is set in the shell running Atmos).
+2. The target component's whitelisted `env` overlay (this section).
+3. Atmos auth (`AWSAuthContext`) — wins outright when configured.
+
+### Example: per-namespace AWS profile
+
+A common SweetOps pattern: each org has its own AWS account, each stack tree declares the matching profile in `env`, and the backend block targets that org's tfstate bucket.
+
+<File title="stacks/orgs/dev/_defaults.yaml">
+```yaml
+env:
+  AWS_PROFILE: "dev-identity"
+vars:
+  namespace: "dev"
+terraform:
+  backend:
+    s3:
+      bucket: dev-tfstate
+      assume_role:
+        role_arn: arn:aws:iam::111111111111:role/dev-tfstate
+      region: us-east-1
+      key: terraform.tfstate
+```
+</File>
+
+<File title="stacks/orgs/prod/_defaults.yaml">
+```yaml
+env:
+  AWS_PROFILE: "prod-identity"
+vars:
+  namespace: "prod"
+terraform:
+  backend:
+    s3:
+      bucket: prod-tfstate
+      assume_role:
+        role_arn: arn:aws:iam::222222222222:role/prod-tfstate
+      region: us-east-1
+      key: terraform.tfstate
+```
+</File>
+
+A component in `dev-...` reading a component in `prod-...`:
+
+```yaml
+peered_vpc_id: !terraform.state vpc prod-tenant-region-stage vpc_id
+```
+
+When Atmos resolves this, it picks up `componentSections.env.AWS_PROFILE = "prod-identity"` from the target component's stack config, uses that profile as the source for `sts:AssumeRole` into the prod-tfstate role, and reads the prod bucket. Without the overlay, the call would use the dev shell's `AWS_PROFILE` and fail with `AccessDenied`.
+
+### When to use Atmos auth instead
+
+If you're rolling out [Atmos auth](/stacks/auth) across components, prefer it. The `env` overlay path is layered **below** Atmos auth and is intended for setups that haven't yet migrated. Setting both is safe: Atmos auth's `AWSAuthContext` wins and the overlay is ignored for that call.
+
+### Coverage
+
+The env overlay applies to the **S3** backend reader. The `gcs` and `azurerm` backend readers do not yet honor `componentSections.env` — track follow-up work in [cloudposse/atmos](https://github.com/cloudposse/atmos/issues) if you need this behavior for those backends.
 
 ## Considerations
 

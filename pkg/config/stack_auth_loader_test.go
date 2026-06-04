@@ -52,8 +52,8 @@ auth:
 	assert.False(t, defaults["other-identity"]) // Not present or false.
 }
 
-func TestLoadStackAuthDefaults_MultipleFiles(t *testing.T) {
-	// Create a temporary directory with multiple stack files.
+func TestLoadStackAuthDefaults_MultipleFilesConflictingDefaults(t *testing.T) {
+	// Create a temporary directory with multiple stack files with DIFFERENT defaults.
 	tmpDir := t.TempDir()
 
 	// Create first stack file with one default identity.
@@ -66,7 +66,7 @@ auth:
 	err := os.WriteFile(filepath.Join(tmpDir, "stack1.yaml"), []byte(stack1Content), 0o644)
 	require.NoError(t, err)
 
-	// Create second stack file with another default identity.
+	// Create second stack file with a DIFFERENT default identity.
 	stack2Content := `
 auth:
   identities:
@@ -84,9 +84,44 @@ auth:
 	defaults, err := LoadStackAuthDefaults(atmosConfig)
 
 	require.NoError(t, err)
-	assert.Len(t, defaults, 2)
+	// Conflicting defaults from different files are discarded to avoid
+	// false "multiple default identities" errors. See issue #2072.
+	assert.Empty(t, defaults, "conflicting defaults from different files should be discarded")
+}
+
+func TestLoadStackAuthDefaults_MultipleFilesAgreeingDefaults(t *testing.T) {
+	// Create a temporary directory with multiple stack files with the SAME default.
+	tmpDir := t.TempDir()
+
+	stack1Content := `
+auth:
+  identities:
+    identity-a:
+      default: true
+`
+	err := os.WriteFile(filepath.Join(tmpDir, "stack1.yaml"), []byte(stack1Content), 0o644)
+	require.NoError(t, err)
+
+	stack2Content := `
+auth:
+  identities:
+    identity-a:
+      default: true
+`
+	err = os.WriteFile(filepath.Join(tmpDir, "stack2.yaml"), []byte(stack2Content), 0o644)
+	require.NoError(t, err)
+
+	atmosConfig := &schema.AtmosConfiguration{
+		IncludeStackAbsolutePaths: []string{filepath.Join(tmpDir, "*.yaml")},
+		ExcludeStackAbsolutePaths: []string{},
+	}
+
+	defaults, err := LoadStackAuthDefaults(atmosConfig)
+
+	require.NoError(t, err)
+	// When all files agree on the same default, it is preserved.
+	assert.Len(t, defaults, 1)
 	assert.True(t, defaults["identity-a"])
-	assert.True(t, defaults["identity-b"])
 }
 
 func TestLoadStackAuthDefaults_ExcludePaths(t *testing.T) {
@@ -469,3 +504,377 @@ auth:
 	// Should have found the default from the valid file.
 	assert.True(t, defaults["valid-identity"])
 }
+
+// ============================================================================
+// Import-following scanner tests — Issue #2293 for Category B commands.
+//
+// These tests cover the new recursive loadAuthWithImports helper that makes
+// LoadStackAuthDefaults follow `import:` chains when scanning for
+// `auth.identities.*.default: true`. Before this fix, the scanner only looked
+// at each top-level stack file's own auth section and missed defaults declared
+// in imported `_defaults.yaml` files — including files that were explicitly
+// excluded from standalone processing via `excluded_paths`.
+//
+// See docs/fixes/2026-04-08-atmos-auth-identity-resolution-fixes.md for the
+// full design rationale (option d+).
+// ============================================================================
+
+func TestLoadStackAuthDefaults_FollowsImports(t *testing.T) {
+	// Top-level stack manifest imports a _defaults.yaml that declares the default.
+	// The scanner must follow the import and surface the default to the loader.
+	tmpDir := t.TempDir()
+	stacksDir := filepath.Join(tmpDir, "stacks")
+	require.NoError(t, os.MkdirAll(stacksDir, 0o755))
+
+	defaultsContent := `
+auth:
+  identities:
+    imported-identity:
+      default: true
+`
+	require.NoError(t, os.WriteFile(filepath.Join(stacksDir, "_defaults.yaml"), []byte(defaultsContent), 0o644))
+
+	manifestContent := `
+import:
+  - _defaults
+vars:
+  stage: dev
+`
+	require.NoError(t, os.WriteFile(filepath.Join(stacksDir, "manifest.yaml"), []byte(manifestContent), 0o644))
+
+	atmosConfig := &schema.AtmosConfiguration{
+		StacksBaseAbsolutePath:    stacksDir,
+		IncludeStackAbsolutePaths: []string{filepath.Join(stacksDir, "manifest.yaml")},
+	}
+
+	defaults, err := LoadStackAuthDefaults(atmosConfig)
+	require.NoError(t, err)
+	assert.True(t, defaults["imported-identity"], "scanner should follow the import: chain and surface the imported default")
+}
+
+func TestLoadStackAuthDefaults_FollowsImportsFromExcludedPath(t *testing.T) {
+	// The real-world Issue #2293 layout: _defaults.yaml is in `excluded_paths`
+	// so `getAllStackFiles` filters it out, but it is still referenced via
+	// `import:` from a top-level manifest. The scanner must resolve that import
+	// through the excluded file's path despite the exclusion.
+	tmpDir := t.TempDir()
+	stacksDir := filepath.Join(tmpDir, "stacks")
+	require.NoError(t, os.MkdirAll(stacksDir, 0o755))
+
+	defaultsContent := `
+auth:
+  identities:
+    excluded-imported-identity:
+      default: true
+`
+	defaultsPath := filepath.Join(stacksDir, "_defaults.yaml")
+	require.NoError(t, os.WriteFile(defaultsPath, []byte(defaultsContent), 0o644))
+
+	manifestContent := `
+import:
+  - _defaults
+`
+	manifestPath := filepath.Join(stacksDir, "manifest.yaml")
+	require.NoError(t, os.WriteFile(manifestPath, []byte(manifestContent), 0o644))
+
+	atmosConfig := &schema.AtmosConfiguration{
+		StacksBaseAbsolutePath:    stacksDir,
+		IncludeStackAbsolutePaths: []string{filepath.Join(stacksDir, "*.yaml")},
+		// _defaults.yaml is explicitly excluded from standalone processing.
+		ExcludeStackAbsolutePaths: []string{defaultsPath},
+	}
+
+	defaults, err := LoadStackAuthDefaults(atmosConfig)
+	require.NoError(t, err)
+	assert.True(t, defaults["excluded-imported-identity"],
+		"scanner must follow imports into excluded_paths files — excluded_paths filters standalone processing, not import resolution")
+}
+
+func TestLoadStackAuthDefaults_ImportCycleProtection(t *testing.T) {
+	// Two files that import each other. The recursive scanner must terminate
+	// and return a sensible result without infinite recursion.
+	tmpDir := t.TempDir()
+	stacksDir := filepath.Join(tmpDir, "stacks")
+	require.NoError(t, os.MkdirAll(stacksDir, 0o755))
+
+	aContent := `
+import:
+  - b
+auth:
+  identities:
+    a-identity:
+      default: true
+`
+	bContent := `
+import:
+  - a
+`
+	require.NoError(t, os.WriteFile(filepath.Join(stacksDir, "a.yaml"), []byte(aContent), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(stacksDir, "b.yaml"), []byte(bContent), 0o644))
+
+	atmosConfig := &schema.AtmosConfiguration{
+		StacksBaseAbsolutePath:    stacksDir,
+		IncludeStackAbsolutePaths: []string{filepath.Join(stacksDir, "a.yaml")},
+	}
+
+	// Must terminate (if cycle protection fails this test hangs / stack-overflows).
+	defaults, err := LoadStackAuthDefaults(atmosConfig)
+	require.NoError(t, err)
+	assert.True(t, defaults["a-identity"], "default from the top-level file must still be returned despite the cycle")
+}
+
+func TestLoadStackAuthDefaults_GlobImports(t *testing.T) {
+	// Glob import should expand and be followed.
+	tmpDir := t.TempDir()
+	stacksDir := filepath.Join(tmpDir, "stacks")
+	mixinsDir := filepath.Join(stacksDir, "mixins")
+	require.NoError(t, os.MkdirAll(mixinsDir, 0o755))
+
+	mixinContent := `
+auth:
+  identities:
+    mixin-identity:
+      default: true
+`
+	require.NoError(t, os.WriteFile(filepath.Join(mixinsDir, "region.yaml"), []byte(mixinContent), 0o644))
+
+	manifestContent := `
+import:
+  - mixins/*
+`
+	require.NoError(t, os.WriteFile(filepath.Join(stacksDir, "manifest.yaml"), []byte(manifestContent), 0o644))
+
+	atmosConfig := &schema.AtmosConfiguration{
+		StacksBaseAbsolutePath:    stacksDir,
+		IncludeStackAbsolutePaths: []string{filepath.Join(stacksDir, "manifest.yaml")},
+	}
+
+	defaults, err := LoadStackAuthDefaults(atmosConfig)
+	require.NoError(t, err)
+	assert.True(t, defaults["mixin-identity"], "scanner should glob-expand import paths and follow the matches")
+}
+
+func TestLoadStackAuthDefaults_TemplatedImportSkipped(t *testing.T) {
+	// Go-template imports cannot be resolved without template context — the
+	// scanner must skip them gracefully rather than erroring.
+	tmpDir := t.TempDir()
+	stacksDir := filepath.Join(tmpDir, "stacks")
+	require.NoError(t, os.MkdirAll(stacksDir, 0o755))
+
+	// The manifest imports a templated path AND declares its own default, so
+	// we can verify: (1) scanner does not crash, (2) scanner still picks up
+	// the static default from the manifest itself.
+	manifestContent := `
+import:
+  - '{{ .stage }}/_defaults'
+auth:
+  identities:
+    manifest-identity:
+      default: true
+`
+	require.NoError(t, os.WriteFile(filepath.Join(stacksDir, "manifest.yaml"), []byte(manifestContent), 0o644))
+
+	atmosConfig := &schema.AtmosConfiguration{
+		StacksBaseAbsolutePath:    stacksDir,
+		IncludeStackAbsolutePaths: []string{filepath.Join(stacksDir, "manifest.yaml")},
+	}
+
+	defaults, err := LoadStackAuthDefaults(atmosConfig)
+	require.NoError(t, err)
+	assert.True(t, defaults["manifest-identity"], "scanner must skip templated imports gracefully and still surface static defaults from the same file")
+}
+
+func TestLoadStackAuthDefaults_ConflictingDefaultsAcrossImportAndFileDiscarded(t *testing.T) {
+	// When the importing file and its imported file declare defaults for
+	// DIFFERENT identities, the merged view of that file contains two
+	// competing defaults. The top-level allAgree check detects the conflict
+	// and discards both — matching Issue #2072 behavior.
+	//
+	// This also serves as a proof that the import WAS followed: if the
+	// scanner had not seen the imported file, only `manifest-identity`
+	// would appear and allAgree would pass (returning a single default).
+	// The empty result proves both were seen and conflicted.
+	tmpDir := t.TempDir()
+	stacksDir := filepath.Join(tmpDir, "stacks")
+	require.NoError(t, os.MkdirAll(stacksDir, 0o755))
+
+	defaultsContent := `
+auth:
+  identities:
+    imported-identity:
+      default: true
+`
+	require.NoError(t, os.WriteFile(filepath.Join(stacksDir, "_defaults.yaml"), []byte(defaultsContent), 0o644))
+
+	manifestContent := `
+import:
+  - _defaults
+auth:
+  identities:
+    manifest-identity:
+      default: true
+`
+	require.NoError(t, os.WriteFile(filepath.Join(stacksDir, "manifest.yaml"), []byte(manifestContent), 0o644))
+
+	atmosConfig := &schema.AtmosConfiguration{
+		StacksBaseAbsolutePath:    stacksDir,
+		IncludeStackAbsolutePaths: []string{filepath.Join(stacksDir, "manifest.yaml")},
+	}
+
+	defaults, err := LoadStackAuthDefaults(atmosConfig)
+	require.NoError(t, err)
+	assert.Empty(t, defaults, "two competing defaults from import + file must be discarded by allAgree (Issue #2072)")
+}
+
+func TestLoadStackAuthDefaults_ExplicitFalseRevokesImportedDefault(t *testing.T) {
+	// An imported _defaults.yaml sets `foo.default: true`. The importing file
+	// overrides it with `foo.default: false`. The scanner must honor the
+	// explicit `false` and NOT report `foo` as a default.
+	//
+	// Before the *bool fix, `default: false` was indistinguishable from "not
+	// mentioned" (both decoded as Go's zero value `false`), so the imported
+	// `true` leaked through — the wrong identity was selected for the stack.
+	tmpDir := t.TempDir()
+	stacksDir := filepath.Join(tmpDir, "stacks")
+	require.NoError(t, os.MkdirAll(stacksDir, 0o755))
+
+	defaultsContent := `
+auth:
+  identities:
+    imported-identity:
+      default: true
+`
+	require.NoError(t, os.WriteFile(filepath.Join(stacksDir, "_defaults.yaml"), []byte(defaultsContent), 0o644))
+
+	// The importing file explicitly revokes the imported default.
+	manifestContent := `
+import:
+  - _defaults
+auth:
+  identities:
+    imported-identity:
+      default: false
+`
+	require.NoError(t, os.WriteFile(filepath.Join(stacksDir, "manifest.yaml"), []byte(manifestContent), 0o644))
+
+	atmosConfig := &schema.AtmosConfiguration{
+		StacksBaseAbsolutePath:    stacksDir,
+		IncludeStackAbsolutePaths: []string{filepath.Join(stacksDir, "manifest.yaml")},
+	}
+
+	defaults, err := LoadStackAuthDefaults(atmosConfig)
+	require.NoError(t, err)
+	assert.Empty(t, defaults, "explicit default: false in the importing file must revoke the imported default: true")
+}
+
+func TestLoadStackAuthDefaults_IdentityWithoutDefaultFieldLeavesImportedDefault(t *testing.T) {
+	// An imported _defaults.yaml sets `foo.default: true`. The importing file
+	// mentions `foo` but without a `default` field at all. The scanner must
+	// treat the nil `default` as "not mentioned" and preserve the imported
+	// default. This is the complementary test to
+	// ExplicitFalseRevokesImportedDefault — it verifies the three-state
+	// distinction between nil (preserve), false (revoke), and true (set).
+	tmpDir := t.TempDir()
+	stacksDir := filepath.Join(tmpDir, "stacks")
+	require.NoError(t, os.MkdirAll(stacksDir, 0o755))
+
+	defaultsContent := `
+auth:
+  identities:
+    imported-identity:
+      default: true
+`
+	require.NoError(t, os.WriteFile(filepath.Join(stacksDir, "_defaults.yaml"), []byte(defaultsContent), 0o644))
+
+	// The importing file mentions the identity but does NOT set `default` at all.
+	manifestContent := `
+import:
+  - _defaults
+auth:
+  identities:
+    imported-identity:
+      kind: aws/assume-role
+`
+	require.NoError(t, os.WriteFile(filepath.Join(stacksDir, "manifest.yaml"), []byte(manifestContent), 0o644))
+
+	atmosConfig := &schema.AtmosConfiguration{
+		StacksBaseAbsolutePath:    stacksDir,
+		IncludeStackAbsolutePaths: []string{filepath.Join(stacksDir, "manifest.yaml")},
+	}
+
+	defaults, err := LoadStackAuthDefaults(atmosConfig)
+	require.NoError(t, err)
+	assert.True(t, defaults["imported-identity"], "identity mentioned without default field must preserve the imported default: true")
+}
+
+func TestLoadStackAuthDefaults_ImportedDefaultAgreesAcrossStacks(t *testing.T) {
+	// Two top-level stacks import the SAME _defaults.yaml that declares a
+	// default. Both should report the same identity, allAgree passes, and
+	// the default is returned. This is the positive happy-path companion to
+	// TestLoadStackAuthDefaults_FollowsImports.
+	tmpDir := t.TempDir()
+	stacksDir := filepath.Join(tmpDir, "stacks")
+	require.NoError(t, os.MkdirAll(stacksDir, 0o755))
+
+	defaultsContent := `
+auth:
+  identities:
+    shared-identity:
+      default: true
+`
+	defaultsPath := filepath.Join(stacksDir, "_defaults.yaml")
+	require.NoError(t, os.WriteFile(defaultsPath, []byte(defaultsContent), 0o644))
+
+	for _, name := range []string{"stack-a.yaml", "stack-b.yaml"} {
+		content := `
+import:
+  - _defaults
+`
+		require.NoError(t, os.WriteFile(filepath.Join(stacksDir, name), []byte(content), 0o644))
+	}
+
+	atmosConfig := &schema.AtmosConfiguration{
+		StacksBaseAbsolutePath:    stacksDir,
+		IncludeStackAbsolutePaths: []string{filepath.Join(stacksDir, "stack-*.yaml")},
+		ExcludeStackAbsolutePaths: []string{defaultsPath},
+	}
+
+	defaults, err := LoadStackAuthDefaults(atmosConfig)
+	require.NoError(t, err)
+	assert.True(t, defaults["shared-identity"], "both stacks agree on the imported default, so allAgree passes and the default is returned")
+}
+
+func TestLoadStackAuthDefaults_RelativeImports(t *testing.T) {
+	// `./` and `../` imports must resolve against the importing file's dir,
+	// not the stacks base path.
+	tmpDir := t.TempDir()
+	stacksDir := filepath.Join(tmpDir, "stacks")
+	subDir := filepath.Join(stacksDir, "orgs", "acme", "dev")
+	require.NoError(t, os.MkdirAll(subDir, 0o755))
+
+	defaultsContent := `
+auth:
+  identities:
+    relative-identity:
+      default: true
+`
+	require.NoError(t, os.WriteFile(filepath.Join(subDir, "_defaults.yaml"), []byte(defaultsContent), 0o644))
+
+	manifestContent := `
+import:
+  - ./_defaults
+`
+	require.NoError(t, os.WriteFile(filepath.Join(subDir, "manifest.yaml"), []byte(manifestContent), 0o644))
+
+	atmosConfig := &schema.AtmosConfiguration{
+		StacksBaseAbsolutePath:    stacksDir,
+		IncludeStackAbsolutePaths: []string{filepath.Join(subDir, "manifest.yaml")},
+	}
+
+	defaults, err := LoadStackAuthDefaults(atmosConfig)
+	require.NoError(t, err)
+	assert.True(t, defaults["relative-identity"], "./ imports must resolve against the importing file's directory")
+}
+
+// Helper edge-case tests for resolveAuthImportPaths, extractImportPathString,
+// and loadAuthWithImports are in stack_auth_helpers_test.go (table-driven).

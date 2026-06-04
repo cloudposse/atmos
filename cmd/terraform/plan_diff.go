@@ -46,6 +46,9 @@ Example usage:
 			return err
 		}
 
+		// Parse base terraform options.
+		opts := ParseTerraformRunOptions(v)
+
 		// Get flag values from Viper
 		stack := v.GetString("stack")
 		orig := v.GetString("orig")
@@ -71,6 +74,9 @@ Example usage:
 			Stack:            stack,
 			SubCommand:       "plan-diff",
 			ComponentType:    cfg.TerraformComponentType,
+			ProcessTemplates: opts.ProcessTemplates,
+			ProcessFunctions: opts.ProcessFunctions,
+			SkipInit:         opts.SkipInit,
 		}
 
 		// Store plan file paths in AdditionalArgsAndFlags for backward compatibility

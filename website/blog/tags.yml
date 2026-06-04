@@ -37,6 +37,14 @@ deprecation:
   label: Deprecation
   description: Deprecated features scheduled for removal
 
+experimental:
+  label: Experimental
+  description: Features that are still being refined and may change
+
+atmos-pro:
+  label: Atmos Pro
+  description: Atmos Pro premium features and integrations
+
 # CONTRIBUTOR TAG
 # Use for internal changes with zero user impact:
 

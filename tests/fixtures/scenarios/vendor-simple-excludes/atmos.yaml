@@ -1,0 +1,21 @@
+base_path: "./"
+
+vendor:
+  # Point to the vendor.yaml file
+  base_path: "./vendor.yaml"
+
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "**/*"
+  excluded_paths:
+    - "**/_defaults.yaml"
+  name_pattern: "{stage}"
+
+components:
+  terraform:
+    base_path: "components/terraform"
+
+logs:
+  file: "/dev/stderr"
+  level: Info

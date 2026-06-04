@@ -1,0 +1,12 @@
+vars:
+  tenant: acme
+  environment: ue2
+  stage: dev
+
+components:
+  terraform:
+    vpc:
+      metadata:
+        component: vpc
+      vars:
+        name: vpc

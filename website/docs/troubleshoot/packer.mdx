@@ -1,0 +1,281 @@
+---
+title: Packer Troubleshooting
+sidebar_label: Packer
+sidebar_position: 10
+description: Common issues and solutions when using Atmos with Packer
+id: packer-troubleshooting
+---
+
+# Packer Troubleshooting
+
+This guide covers common issues you might encounter when using Atmos with Packer and how to resolve them.
+
+## Configuration Errors
+
+### Packer Base Path Not Configured
+
+**Error:**
+```console
+packer base path is required: must be provided in 'components.packer.base_path' config or 'ATMOS_COMPONENTS_PACKER_BASE_PATH' ENV variable
+```
+
+**Cause:** The Packer component base path is not configured in your `atmos.yaml`.
+
+**Solution:** Add the Packer configuration to your `atmos.yaml`:
+
+```yaml
+components:
+  packer:
+    base_path: components/packer
+```
+
+Or set the environment variable:
+```bash
+export ATMOS_COMPONENTS_PACKER_BASE_PATH=components/packer
+```
+
+### Component Not Found
+
+**Error:**
+```console
+invalid component: 'my-component' points to the Packer component 'my-component', but it does not exist in 'components/packer'
+```
+
+**Cause:** The specified component doesn't exist in the Packer components directory.
+
+**Solution:**
+1. Verify the component name matches a directory under your Packer base path
+2. Check for typos in the component name
+3. Ensure the component is defined in your stack configuration
+
+### Stack Not Specified
+
+**Error:**
+```console
+stack is required; specify it on the command line using the flag `--stack <stack>` (shorthand `-s`)
+```
+
+**Cause:** The `--stack` flag was not provided.
+
+**Solution:** Always specify the stack when running Packer commands:
+```bash
+atmos packer build my-ami -s prod
+```
+
+## Build Errors
+
+### Abstract Component Cannot Be Provisioned
+
+**Error:**
+```console
+abstract component cannot be provisioned: the component 'aws/bastion' cannot be provisioned because it's marked as abstract (metadata.type: abstract)
+```
+
+**Cause:** You're trying to build a component marked as abstract in the stack configuration.
+
+**Solution:** Abstract components are templates meant to be inherited, not built directly. Either:
+1. Remove the `metadata.type: abstract` from the component configuration
+2. Create a concrete component that inherits from the abstract one
+3. Use a non-abstract component for building
+
+### Locked Component Cannot Be Modified
+
+**Error:**
+```console
+locked component cannot be modified: component 'aws/bastion' cannot be modified (metadata.locked: true)
+```
+
+**Cause:** You're trying to build a component that has been locked to prevent modifications.
+
+**Solution:**
+1. If the lock is intentional, use a different component
+2. If the lock should be removed, update the stack configuration to set `metadata.locked: false`
+
+### AWS Credentials Not Found
+
+**Error:**
+```console
+no valid credential sources found
+NoCredentialProviders: no valid providers in chain
+```
+
+**Cause:** Packer cannot find AWS credentials to authenticate with AWS.
+
+**Solution:**
+1. Configure AWS credentials using one of these methods:
+   - AWS CLI: `aws configure`
+   - Environment variables: `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY`
+   - IAM role (when running on EC2)
+   - AWS SSO: `aws sso login`
+
+2. Or set credentials in your stack configuration:
+   ```yaml
+   components:
+     packer:
+       my-ami:
+         env:
+           AWS_PROFILE: my-profile
+           AWS_REGION: us-east-1
+   ```
+
+### Plugin Not Installed
+
+**Error:**
+```console
+Missing plugins: amazon
+```
+
+**Cause:** Required Packer plugins haven't been installed.
+
+**Solution:** Run `packer init` before building:
+```bash
+atmos packer init my-ami -s prod
+atmos packer build my-ami -s prod
+```
+
+## Template Errors
+
+### Unsupported Attribute
+
+**Error:**
+```console
+Unsupported attribute: var.my_variable
+```
+
+**Cause:** A variable is referenced in the template but not defined.
+
+**Solution:**
+1. Ensure all variables are defined in `variables.pkr.hcl` or within your template
+2. If using multiple files, ensure Atmos is using directory mode (default)
+3. Check that your `settings.packer.template` is not pointing to a single file when you have multiple files
+
+### Template File Not Found
+
+**Error:**
+```console
+stat template.pkr.hcl: no such file or directory
+```
+
+**Cause:** The specified template file doesn't exist.
+
+**Solution:**
+1. Use the default directory mode by not specifying `--template` (recommended)
+2. If using `--template`, ensure the file exists in the component directory
+3. Use `--template .` to explicitly load all `*.pkr.hcl` files
+
+### Invalid HCL Syntax
+
+**Error:**
+```console
+Error: Invalid block definition
+```
+
+**Cause:** Syntax error in your Packer HCL template.
+
+**Solution:**
+1. Run `atmos packer validate my-ami -s prod` to see detailed error messages
+2. Use `atmos packer fmt my-ami -s prod` to auto-format your templates
+3. Check for missing brackets, quotes, or commas
+
+## Output Errors
+
+### Manifest File Not Found
+
+**Error:**
+```console
+packer manifest is missing: manifest.json does not exist
+```
+
+**Cause:** The Packer manifest file doesn't exist. This happens when:
+1. `packer build` hasn't been run yet
+2. The manifest post-processor isn't configured
+3. A different manifest filename is used
+
+**Solution:**
+1. Run `atmos packer build` first to generate the manifest
+2. Ensure your template includes the manifest post-processor:
+   ```hcl
+   post-processor "manifest" {
+     output = "manifest.json"
+   }
+   ```
+3. If using a custom manifest filename, specify it in vars:
+   ```yaml
+   vars:
+     manifest_file_name: my-manifest.json
+   ```
+
+### Invalid YQ Query
+
+**Error:**
+```console
+yq: Error: Invalid query syntax
+```
+
+**Cause:** The YQ query expression is invalid.
+
+**Solution:**
+1. Test your query with the standalone `yq` tool first
+2. Ensure proper quoting of the query expression
+3. Common queries:
+   ```bash
+   # Get first artifact ID
+   atmos packer output my-ami -s prod --query '.builds[0].artifact_id'
+
+   # Get AMI ID from artifact
+   atmos packer output my-ami -s prod -q '.builds[0].artifact_id | split(":")[1]'
+   ```
+
+## Debugging Tips
+
+### Enable Debug Logging
+
+Add verbose logging to see what Atmos is doing:
+
+```bash
+export ATMOS_LOGS_LEVEL=Debug
+atmos packer build my-ami -s prod
+```
+
+### Enable Packer Logging
+
+Enable Packer's built-in logging for detailed build information:
+
+```yaml
+components:
+  packer:
+    my-ami:
+      env:
+        PACKER_LOG: "1"
+        PACKER_LOG_PATH: "/tmp/packer.log"
+```
+
+### Inspect Component Configuration
+
+View the resolved component configuration:
+
+```bash
+atmos describe component my-ami -s prod
+```
+
+### Validate Before Building
+
+Always validate your templates before building:
+
+```bash
+atmos packer validate my-ami -s prod
+```
+
+### Inspect Template Structure
+
+See what sources, variables, and builders are defined:
+
+```bash
+atmos packer inspect my-ami -s prod
+```
+
+## Related Documentation
+
+- [Packer Components](/stacks/components/packer) - Configure Packer components in stack manifests
+- [Packer Build Command](/cli/commands/packer/build) - Build machine images
+- [Packer Configuration](/cli/configuration/components/packer) - Configure Packer in atmos.yaml

@@ -1,18 +1,63 @@
 package exec
 
 import (
+	"context"
+	"errors"
+	"fmt"
+	"time"
+
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/component"
+	cfg "github.com/cloudposse/atmos/pkg/config"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
+	provWorkdir "github.com/cloudposse/atmos/pkg/provisioner/workdir"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
+
+// ensureTerraformComponentExists checks if a terraform component exists and
+// provisions it via JIT when source.uri is configured. Errors are wrapped
+// with ErrInvalidTerraformComponent.
+func ensureTerraformComponentExists(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) error {
+	componentPath, err := u.GetComponentPath(atmosConfig, cfg.TerraformComponentType, info.ComponentFolderPrefix, info.FinalComponent)
+	if err != nil {
+		return errors.Join(errUtils.ErrInvalidTerraformComponent, fmt.Errorf("failed to resolve component path: %w", err))
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	defer cancel()
+	_, exists, err := component.ProvisionAndResolveComponentPath(
+		ctx, atmosConfig, info, cfg.TerraformComponentType, componentPath,
+	)
+	if err != nil {
+		return errors.Join(errUtils.ErrInvalidTerraformComponent, err)
+	}
+	if exists {
+		return nil
+	}
+
+	// WorkdirPathKey may have been pre-populated by an upstream provisioner
+	// (the orchestrator only sets it for components declaring source.uri).
+	// Trust it as authoritative when present.
+	if workdirPath, ok := info.ComponentSection[provWorkdir.WorkdirPathKey].(string); ok && workdirPath != "" {
+		return nil
+	}
+
+	basePath, err := u.GetComponentBasePath(atmosConfig, cfg.TerraformComponentType)
+	if err != nil {
+		return errors.Join(errUtils.ErrInvalidTerraformComponent, fmt.Errorf("failed to resolve component base path: %w", err))
+	}
+	return fmt.Errorf("%w: '%s' points to '%s', but it does not exist in '%s'",
+		errUtils.ErrInvalidTerraformComponent, info.ComponentFromArg, info.FinalComponent, basePath)
+}
 
 // ExecuteGenerateVarfile generates a varfile for a terraform component.
 func ExecuteGenerateVarfile(opts *VarfileOptions, atmosConfig *schema.AtmosConfiguration) error {
 	defer perf.Track(atmosConfig, "exec.ExecuteGenerateVarfile")()
 
-	log.Debug("ExecuteGenerateVarfile called",
+	log.Debug(
+		"ExecuteGenerateVarfile called",
 		"component", opts.Component,
 		"stack", opts.Stack,
 		"file", opts.File,
@@ -25,13 +70,18 @@ func ExecuteGenerateVarfile(opts *VarfileOptions, atmosConfig *schema.AtmosConfi
 		ComponentFromArg: opts.Component,
 		Stack:            opts.Stack,
 		StackFromArg:     opts.Stack,
-		ComponentType:    "terraform",
-		CliArgs:          []string{"terraform", "generate", "varfile"},
+		ComponentType:    cfg.TerraformComponentType,
+		CliArgs:          []string{cfg.TerraformComponentType, "generate", "varfile"},
 	}
 
 	// Process stacks to get component configuration.
 	info, err := ProcessStacks(atmosConfig, info, true, opts.ProcessTemplates, opts.ProcessFunctions, opts.Skip, nil)
 	if err != nil {
+		return err
+	}
+
+	// Ensure component exists, provisioning via JIT if needed.
+	if err := ensureTerraformComponentExists(atmosConfig, &info); err != nil {
 		return err
 	}
 
@@ -44,7 +94,8 @@ func ExecuteGenerateVarfile(opts *VarfileOptions, atmosConfig *schema.AtmosConfi
 	}
 
 	// Print the component variables
-	log.Debug("Generating varfile for variables",
+	log.Debug(
+		"Generating varfile for variables",
 		"component", info.ComponentFromArg,
 		"stack", info.Stack,
 		"variables", info.ComponentVarsSection,

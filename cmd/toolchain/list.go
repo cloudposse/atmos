@@ -5,13 +5,14 @@ import (
 
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/flags/compat"
-	"github.com/cloudposse/atmos/toolchain"
+	"github.com/cloudposse/atmos/pkg/toolchain"
 )
 
 var listCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List configured tools and their installation status",
 	Long:  `List all tools configured in .tool-versions file, showing their installation status, install date, and file size.`,
+	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return toolchain.RunList()
 	},

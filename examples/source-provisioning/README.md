@@ -1,41 +1,37 @@
 # Source Provisioning
 
-This example demonstrates **source provisioning** - inline source declaration for Just-in-Time (JIT) component vendoring.
+Demonstrates JIT (Just-in-Time) source provisioning from both **local** and **remote** sources.
+
+## Components
+
+| Component | Source Type | URI |
+|-----------|-------------|-----|
+| `weather` | Local | `../demo-library/weather` |
+| `ipinfo` | Remote | `github.com/cloudposse/atmos//examples/demo-library/ipinfo` |
 
 ## Usage
 
 ```bash
 cd examples/source-provisioning
 
-# Describe source configuration
-atmos terraform source describe myapp --stack dev
+# Local source - no network required
+atmos terraform plan weather --stack dev
 
-# Pull (vendor) the component source
-atmos terraform source pull myapp --stack dev
+# Remote source - vendors from GitHub
+atmos terraform plan ipinfo --stack dev
 
-# Run terraform (source is auto-provisioned if missing)
-atmos terraform plan myapp --stack dev
+# List provisioned workdirs
+atmos terraform workdir list
 ```
 
-## Configuration
+## Key Concepts
 
-The `source` field in `stacks/deploy/dev.yaml` specifies where to vendor the component from:
-
-```yaml
-components:
-  terraform:
-    myapp:
-      source:
-        uri: "github.com/cloudposse/terraform-null-label?ref=0.25.0"
-      provision:
-        workdir:
-          enabled: true
-      vars:
-        enabled: true
-```
+1. **Local Paths** - Relative paths like `../demo-library/weather`
+2. **Remote URIs** - GitHub URLs with version pinning
+3. **Workdir Isolation** - Both types provision to `.workdir/`
 
 ## Cleanup
 
 ```bash
-rm -rf components/ .workdir/
+rm -rf .workdir/
 ```

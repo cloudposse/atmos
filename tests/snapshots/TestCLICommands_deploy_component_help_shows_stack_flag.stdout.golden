@@ -23,62 +23,76 @@ FLAGS
 
 GLOBAL FLAGS
 
-      --base-path string        Base path for Atmos project
+      --ai                                   Enable AI-powered analysis of command output
 
-  -C, --chdir string            Change working directory before executing the command (run as if Atmos started in this
-                                directory)
+      --base-path string                     Base path for Atmos project
 
-      --config strings          Paths to configuration files (comma-separated or repeated flag)
+  -C, --chdir string                         Change working directory before executing the command (run as if Atmos
+                                             started in this directory)
 
-      --config-path strings     Paths to search for Atmos configuration (comma-separated or repeated flag)
+      --config strings                       Paths to configuration files (comma-separated or repeated flag)
 
-      --force-color             Force color output even when not a TTY (useful for screenshots)
+      --config-path strings                  Paths to search for Atmos configuration (comma-separated or repeated flag)
 
-      --force-tty               Force TTY mode with sane defaults when terminal detection fails (useful for
-                                screenshots)
+      --force-color                          Force color output even when not a TTY (useful for screenshots)
 
-      --heatmap                 Show performance heatmap visualization after command execution (includes P95 latency)
+      --force-tty                            Force TTY mode with sane defaults when terminal detection fails (useful
+                                             for screenshots)
 
-      --heatmap-mode string     Heatmap visualization mode: bar, sparkline, table (press 1-3 to switch in TUI) (default
-                                bar)
+      --heatmap                              Show performance heatmap visualization after command execution (includes
+                                             P95 latency)
 
-      --interactive             Enable interactive prompts for missing required flags, optional value flags using the
-                                sentinel pattern, and missing positional arguments (requires TTY, disabled in CI)
-                                (default true)
+      --heatmap-mode string                  Heatmap visualization mode: bar, sparkline, table (press 1-3 to switch in
+                                             TUI) (default bar)
 
-      --logs-file string        The file to write Atmos logs to. Logs can be written to any file or any standard file
-                                descriptor, including '/dev/stdout', '/dev/stderr' and '/dev/null' (default
-                                /dev/stderr)
+      --interactive                          Enable interactive prompts for missing required flags, optional value
+                                             flags using the sentinel pattern, and missing positional arguments
+                                             (requires TTY, disabled in CI) (default true)
 
-      --logs-level string       Logs level. Supported log levels are Trace, Debug, Info, Warning, Off. If the log
-                                level is set to Off, Atmos will not log any messages (default Warning)
+      --logs-file string                     The file to write Atmos logs to. Logs can be written to any file or any
+                                             standard file descriptor, including '/dev/stdout', '/dev/stderr' and
+                                             '/dev/null' (default /dev/stderr)
 
-      --mask                    Enable automatic masking of sensitive data in output (use --mask=false to disable)
-                                (default true)
+      --logs-level string                    Logs level. Supported log levels are Trace, Debug, Info, Warning, Off. If
+                                             the log level is set to Off, Atmos will not log any messages (default
+                                             Warning)
 
-      --no-color                Disable color output
+      --mask                                 Enable automatic masking of sensitive data in output (use --mask=false to
+                                             disable) (default true)
 
-      --pager string            Enable pager for output (--pager or --pager=true to enable, --pager=false to disable, --
-                                pager=less to use specific pager)
+      --no-color                             Disable color output
 
-      --profile strings         Activate configuration profiles (comma-separated or repeated flag)
+      --pager string                         Enable pager for output (--pager or --pager=true to enable, --pager=false to
+                                             disable, --pager=less to use specific pager)
 
-      --profile-file string     Write profiling data to file instead of starting server
+      --profile strings                      Activate configuration profiles (comma-separated or repeated flag)
 
-      --profile-type string     Type of profile to collect when using --profile-file. Options: cpu, heap, allocs,
-                                goroutine, block, mutex, threadcreate, trace (default cpu)
+      --profile-file string                  Write profiling data to file instead of starting server
 
-      --profiler-enabled        Enable pprof profiling server
+      --profile-type string                  Type of profile to collect when using --profile-file. Options: cpu, heap,
+                                             allocs, goroutine, block, mutex, threadcreate, trace (default cpu)
 
-      --profiler-host string    Host for pprof profiling server (default localhost)
+      --profiler-enabled                     Enable pprof profiling server
 
-      --profiler-port int       Port for pprof profiling server (default 6060)
+      --profiler-host string                 Host for pprof profiling server (default localhost)
 
-      --redirect-stderr string  File descriptor to redirect stderr to. Errors can be redirected to any file or any
-                                standard file descriptor (including '/dev/null')
+      --profiler-port int                    Port for pprof profiling server (default 6060)
 
-      --use-version string      Use a specific version of Atmos (e.g., --use-version=1.160.0)
+      --redirect-stderr string               File descriptor to redirect stderr to. Errors can be redirected to any
+                                             file or any standard file descriptor (including '/dev/null')
 
-  -v, --verbose                 Enable verbose error output with full context, stack traces, and detailed information
+      --settings-list-merge-strategy string  Override settings.list_merge_strategy for this invocation. Controls how
+                                             lists are merged in Atmos stack manifests (replace, append, merge)
+
+      --skill strings                        Specify skills for AI analysis context (comma-separated or repeated flag,
+                                             requires --ai)
+
+      --skip-hooks string                    Skip lifecycle hooks for this invocation. Use --skip-hooks (no value) to
+                                             skip all, or --skip-hooks=name1,name2 to skip specific hooks by name
+
+      --use-version string                   Use a specific version of Atmos (e.g., --use-version=1.160.0)
+
+  -v, --verbose                              Enable verbose error output with full context, stack traces, and detailed
+                                             information
 
 

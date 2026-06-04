@@ -7,6 +7,7 @@ import (
 	"sync"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
@@ -134,6 +135,36 @@ func registerCommonPatterns(masker Masker) {
 
 	for _, pattern := range patterns {
 		_ = masker.RegisterPattern(pattern)
+	}
+}
+
+// registerCustomMaskPatterns registers user-defined patterns and literals from atmos.yaml.
+// Invalid regex patterns log a warning but don't fail startup.
+func registerCustomMaskPatterns(masker Masker, cfg *Config) {
+	defer perf.Track(nil, "io.registerCustomMaskPatterns")()
+
+	if cfg == nil {
+		return
+	}
+
+	maskSettings := cfg.AtmosConfig.Settings.Terminal.Mask
+
+	// Register custom literal values.
+	for _, literal := range maskSettings.Literals {
+		if literal != "" {
+			masker.RegisterValue(literal)
+		}
+	}
+
+	// Register custom regex patterns (warn on invalid, don't crash).
+	for _, pattern := range maskSettings.Patterns {
+		if pattern == "" {
+			continue
+		}
+		if err := masker.RegisterPattern(pattern); err != nil {
+			log.Warn("Skipping invalid mask pattern from atmos.yaml",
+				"pattern", pattern, "error", err)
+		}
 	}
 }
 

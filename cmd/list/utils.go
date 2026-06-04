@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
 
 	e "github.com/cloudposse/atmos/internal/exec"
@@ -16,7 +17,10 @@ import (
 	l "github.com/cloudposse/atmos/pkg/list"
 	listerrors "github.com/cloudposse/atmos/pkg/list/errors"
 	f "github.com/cloudposse/atmos/pkg/list/format"
+	"github.com/cloudposse/atmos/pkg/list/renderer"
 	listutils "github.com/cloudposse/atmos/pkg/list/utils"
+	"github.com/cloudposse/atmos/pkg/pager"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -155,16 +159,29 @@ func newCommonListParser(additionalOptions ...flags.Option) *flags.StandardParse
 func getIdentityFromCommand(cmd *cobra.Command) string {
 	var value string
 
-	// Check if flag was explicitly set.
-	if cmd.Flags().Changed("identity") {
-		value, _ = cmd.Flags().GetString("identity")
-	} else {
-		// Fall back to environment variable via Viper.
-		value = viper.GetString("identity")
+	if flag := lookupChangedIdentityFlag(cmd); flag != nil {
+		value = flag.Value.String()
+		return normalizeIdentityValue(value)
 	}
 
-	// Normalize boolean false representations to disabled sentinel value.
+	// Fall back to environment variable via Viper.
+	value = viper.GetString(cfg.IdentityFlagName)
 	return normalizeIdentityValue(value)
+}
+
+func lookupChangedIdentityFlag(cmd *cobra.Command) *pflag.Flag {
+	for current := cmd; current != nil; current = current.Parent() {
+		for _, flagSet := range []*pflag.FlagSet{
+			current.Flags(),
+			current.InheritedFlags(),
+			current.PersistentFlags(),
+		} {
+			if flag := flagSet.Lookup(cfg.IdentityFlagName); flag != nil && flag.Changed {
+				return flag
+			}
+		}
+	}
+	return nil
 }
 
 // normalizeIdentityValue converts boolean false representations to the disabled sentinel value.
@@ -178,14 +195,19 @@ func normalizeIdentityValue(value string) string {
 
 // createAuthManagerForList creates an AuthManager for list commands.
 // It uses the identity from --identity flag or ATMOS_IDENTITY env var.
-// If no identity is specified, it loads stack configs for default identity.
+// If no identity is specified, it loads stack configs for default identity via the SCAN variant.
 // Returns nil AuthManager if no auth is configured (which is valid for many use cases).
+//
+// Category B: list commands operate across multiple stacks/components without a single target
+// (component, stack) pair, so they use the SCAN variant to discover stack-level defaults
+// (including defaults declared in imported _defaults.yaml). See
+// docs/fixes/2026-04-08-atmos-auth-identity-resolution-fixes.md.
 func createAuthManagerForList(cmd *cobra.Command, atmosConfig *schema.AtmosConfiguration) (auth.AuthManager, error) {
 	identityName := getIdentityFromCommand(cmd)
 
-	// Create AuthManager with stack-level default identity loading.
-	// When identityName is empty, this loads stack configs for auth.identities.*.default: true.
-	authManager, err := auth.CreateAndAuthenticateManagerWithAtmosConfig(
+	// Scan variant: follows import: chains, discards conflicting defaults, isolates the scan
+	// into a copy of the auth config (no mutation of atmosConfig.Auth).
+	authManager, err := auth.CreateAndAuthenticateManagerWithStackScan(
 		identityName,
 		&atmosConfig.Auth,
 		cfg.IdentityFlagSelectValue,
@@ -249,4 +271,31 @@ func handleNoValuesError(err error, componentFilter string, logFunc func(string)
 		return "", nil
 	}
 	return "", err
+}
+
+// renderWithPager renders data using the renderer, optionally using a pager for interactive display.
+// If pager is enabled in atmosConfig and TTY is available, the output is displayed in a scrollable pager.
+// Otherwise, the output is written directly to stdout.
+func renderWithPager(atmosConfig *schema.AtmosConfiguration, title string, r *renderer.Renderer, data []map[string]any) error {
+	defer perf.Track(atmosConfig, "list.renderWithPager")()
+
+	// Check if pager is enabled in config.
+	if atmosConfig.Settings.Terminal.IsPagerEnabled() {
+		// Get rendered content as string.
+		content, err := r.RenderToString(data)
+		if err != nil {
+			return err
+		}
+
+		// Try to use pager - it handles TTY detection and falls back to direct print.
+		pageCreator := pager.NewWithAtmosConfig(true)
+		if err := pageCreator.Run(title, content); err != nil {
+			// Pager failed, fall back to direct render.
+			return r.Render(data)
+		}
+		return nil
+	}
+
+	// No pager - render directly.
+	return r.Render(data)
 }

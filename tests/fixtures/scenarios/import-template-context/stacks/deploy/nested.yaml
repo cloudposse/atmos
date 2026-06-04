@@ -1,0 +1,5 @@
+# The templated import is nested one level deep: `_defaults` sets the variable,
+# then `catalog_prod/service` (imported after it) uses it in its own import path.
+import:
+  - _defaults
+  - catalog_prod/service

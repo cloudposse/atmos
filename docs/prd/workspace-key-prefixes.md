@@ -386,6 +386,6 @@ This requires careful migration:
 ## References
 
 - [PRD: Metadata Inheritance](./metadata-inheritance.md)
-- [Terraform Backends Documentation](https://atmos.tools/core-concepts/components/terraform/backends)
+- [Terraform Backends Documentation](https://atmos.tools/components/terraform/backends)
 - [Version Management Design Patterns](https://atmos.tools/design-patterns/version-management)
 - Related code: `internal/exec/stack_processor_backend.go`

@@ -12,15 +12,23 @@ import (
 	exec "github.com/cloudposse/atmos/internal/exec"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/data"
+	envfmt "github.com/cloudposse/atmos/pkg/env"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/flags/compat"
+	ghactions "github.com/cloudposse/atmos/pkg/github/actions"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	tfoutput "github.com/cloudposse/atmos/pkg/terraform/output"
+	"github.com/cloudposse/atmos/pkg/ui"
 )
 
 // outputParser handles flag parsing for output command.
 var outputParser *flags.StandardParser
+
+var (
+	outputSetupTerraformAuth  = exec.SetupTerraformAuthForCLI
+	outputGetComponentOutputs = tfoutput.GetComponentOutputs
+)
 
 // outputCmd represents the terraform output command.
 var outputCmd = &cobra.Command{
@@ -57,11 +65,11 @@ func outputRunWithFormat(cmd *cobra.Command, args []string, format string) error
 	if err := validateOutputFormat(format); err != nil {
 		return err
 	}
-	info, atmosConfig, err := prepareOutputContext(cmd, args)
+	info, atmosConfig, authManager, err := prepareOutputContext(cmd, args)
 	if err != nil {
 		return err
 	}
-	return executeOutputWithFormat(atmosConfig, info, format)
+	return executeOutputWithFormat(atmosConfig, info, authManager, format)
 }
 
 // validateOutputFormat checks if the format is supported.
@@ -76,18 +84,22 @@ func validateOutputFormat(format string) error {
 }
 
 // prepareOutputContext validates config and prepares component info.
-func prepareOutputContext(cmd *cobra.Command, args []string) (*schema.ConfigAndStacksInfo, *schema.AtmosConfiguration, error) {
+// Returns the populated info, the initialized Atmos configuration, and the auth manager
+// produced by outputSetupTerraformAuth. The auth manager is returned explicitly (rather
+// than read back off info.AuthManager at the call site) so the handoff to downstream
+// consumers like executeOutputWithFormat is explicit and easy to test.
+func prepareOutputContext(cmd *cobra.Command, args []string) (*schema.ConfigAndStacksInfo, *schema.AtmosConfiguration, any, error) {
 	if err := internal.ValidateAtmosConfig(); err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	separatedArgs := compat.GetSeparated()
 	argsWithSubCommand := append([]string{"output"}, args...)
 	info, err := exec.ProcessCommandLineArgs(cfg.TerraformComponentType, terraformCmd, argsWithSubCommand, separatedArgs)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	if err := resolveAndPromptForArgs(&info, cmd); err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	v := viper.GetViper()
 	globalFlags := flags.ParseGlobalFlags(cmd, v)
@@ -101,20 +113,27 @@ func prepareOutputContext(cmd *cobra.Command, args []string) (*schema.ConfigAndS
 	}
 	atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
 	if err != nil {
-		return nil, nil, errUtils.Build(errUtils.ErrInitializeCLIConfig).WithCause(err).Err()
+		return nil, nil, nil, errUtils.Build(errUtils.ErrInitializeCLIConfig).WithCause(err).Err()
 	}
-	return &info, &atmosConfig, nil
+	authManager, err := outputSetupTerraformAuth(&atmosConfig, &info)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	return &info, &atmosConfig, authManager, nil
 }
 
 // executeOutputWithFormat retrieves and formats terraform outputs.
-func executeOutputWithFormat(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, format string) error {
+// The authManager produced by outputSetupTerraformAuth is passed explicitly rather than
+// read back off info.AuthManager so callers (and tests) do not need to rely on the
+// side-effect wiring performed inside setupTerraformAuth.
+func executeOutputWithFormat(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, authManager any, format string) error {
 	v := viper.GetViper()
 	skipInit := v.GetBool("skip-init")
 	outputFile := v.GetString("output-file")
 	uppercase := v.GetBool("uppercase")
 	flatten := v.GetBool("flatten")
 
-	outputs, err := tfoutput.GetComponentOutputs(atmosConfig, info.ComponentFromArg, info.Stack, skipInit)
+	outputs, err := outputGetComponentOutputs(atmosConfig, info.ComponentFromArg, info.Stack, skipInit, info.AuthContext, authManager)
 	if err != nil {
 		return errUtils.Build(errUtils.ErrTerraformOutputFailed).
 			WithCause(err).
@@ -124,12 +143,18 @@ func executeOutputWithFormat(atmosConfig *schema.AtmosConfiguration, info *schem
 
 	// Build format options.
 	opts := tfoutput.FormatOptions{
-		Uppercase: uppercase,
-		Flatten:   flatten,
+		Uppercase:   uppercase,
+		Flatten:     flatten,
+		AtmosConfig: atmosConfig,
 	}
 
 	// Check if a specific output name was requested (in AdditionalArgsAndFlags).
 	outputName := extractOutputName(info.AdditionalArgsAndFlags)
+
+	// Handle GitHub format special case - always writes to file.
+	if format == "github" {
+		return executeGitHubOutput(outputs, outputFile, outputName, opts)
+	}
 	var formatted string
 	if outputName != "" {
 		formatted, err = formatSingleOutput(outputs, outputName, format, opts)
@@ -143,6 +168,52 @@ func executeOutputWithFormat(atmosConfig *schema.AtmosConfiguration, info *schem
 	if outputFile != "" {
 		return tfoutput.WriteToFile(outputFile, formatted)
 	}
+	return data.Write(formatted)
+}
+
+// executeGitHubOutput handles the special github format that writes to $GITHUB_OUTPUT.
+func executeGitHubOutput(outputs map[string]any, outputFile, outputName string, opts tfoutput.FormatOptions) error {
+	defer perf.Track(nil, "terraform.executeGitHubOutput")()
+
+	// Determine output file - use $GITHUB_OUTPUT if available, otherwise stdout.
+	path := outputFile
+	if path == "" {
+		path = ghactions.GetOutputPath()
+	}
+
+	// Filter to single output if a specific output name was requested.
+	if outputName != "" {
+		value, exists := outputs[outputName]
+		if !exists {
+			return errUtils.Build(errUtils.ErrTerraformOutputFailed).
+				WithExplanationf("Output %q not found.", outputName).
+				WithHint("Use 'atmos terraform output <component> -s <stack>' without an output name to see all available outputs.").
+				Err()
+		}
+		outputs = map[string]any{outputName: value}
+	}
+
+	// Format outputs for GitHub Actions.
+	formatted, err := tfoutput.FormatOutputsWithOptions(outputs, tfoutput.FormatGitHub, opts)
+	if err != nil {
+		return errUtils.Build(errUtils.ErrTerraformOutputFailed).
+			WithCause(err).
+			WithExplanation("Failed to format terraform outputs for GitHub Actions.").
+			Err()
+	}
+
+	// Write to file if path specified, otherwise stdout.
+	if path != "" {
+		if err := envfmt.WriteToFile(path, formatted); err != nil {
+			return errUtils.Build(errUtils.ErrTerraformOutputFailed).
+				WithCause(err).
+				WithExplanationf("Failed to write GitHub Actions outputs to %q.", path).
+				Err()
+		}
+		ui.Successf("Wrote %d outputs to %s", len(outputs), path)
+		return nil
+	}
+
 	return data.Write(formatted)
 }
 
@@ -171,7 +242,7 @@ func formatSingleOutput(outputs map[string]any, outputName, format string, opts 
 
 func init() {
 	outputParser = flags.NewStandardParser(
-		flags.WithStringFlag("format", "f", "", "Output format: json, yaml, hcl, env, dotenv, bash, csv, tsv"),
+		flags.WithStringFlag("format", "f", "", "Output format: json, yaml, hcl, env, dotenv, bash, csv, tsv, table, github"),
 		flags.WithStringFlag("output-file", "o", "", "Write output to file instead of stdout"),
 		flags.WithBoolFlag("uppercase", "u", false, "Convert keys to uppercase (useful for env vars)"),
 		flags.WithBoolFlag("flatten", "", false, "Flatten nested maps into key_subkey format"),

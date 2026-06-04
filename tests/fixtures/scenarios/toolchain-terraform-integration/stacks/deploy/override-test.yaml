@@ -1,0 +1,35 @@
+vars:
+  stage: "override-test"
+
+# Scope 1: Global dependencies (applies to all component types).
+dependencies:
+  tools:
+    jq: "latest"
+
+# Scope 2: Component-type level dependencies.
+# Sets terraform to 1.6.0 as default for all terraform components.
+terraform:
+  dependencies:
+    tools:
+      terraform: "1.6.0"
+      tflint: "^0.54.0"
+
+components:
+  terraform:
+    # Component that overrides terraform version at Scope 3.
+    # Should get terraform=1.10.3 (override), tflint=^0.54.0 (inherited from Scope 2),
+    # jq=latest (inherited from Scope 1), and checkov=latest (added at Scope 3).
+    test-component-override:
+      dependencies:
+        tools:
+          terraform: "1.10.3"
+          checkov: "latest"
+      vars:
+        environment: "override-test"
+        test_var: "override-value"
+
+    # Component that inherits all dependencies from Scope 1 + Scope 2 (no Scope 3).
+    test-component-inherit:
+      vars:
+        environment: "override-test"
+        test_var: "inherit-value"

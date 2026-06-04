@@ -1,8 +1,10 @@
 package gcp
 
 import (
+	"os"
 	"strings"
 
+	"golang.org/x/oauth2"
 	"google.golang.org/api/option"
 )
 
@@ -23,7 +25,8 @@ type AuthOptions struct {
 //
 // Authentication precedence:
 // 1. Explicit credentials (JSON content or file path)
-// 2. Application Default Credentials (ADC) which automatically handles:
+// 2. GOOGLE_OAUTH_ACCESS_TOKEN environment variable (static access token)
+// 3. Application Default Credentials (ADC) which automatically handles:
 //   - GOOGLE_APPLICATION_CREDENTIALS environment variable
 //   - Compute Engine metadata service
 //   - Cloud Shell credentials
@@ -41,9 +44,22 @@ func GetClientOptions(opts AuthOptions) []option.ClientOption {
 			// File path
 			clientOpts = append(clientOpts, option.WithCredentialsFile(opts.Credentials))
 		}
+		return clientOpts
 	}
-	// If no explicit credentials, Google Cloud client libraries will automatically use ADC
 
+	// Check for GOOGLE_OAUTH_ACCESS_TOKEN environment variable.
+	// This is set by Atmos GCP auth when using service account impersonation.
+	// The Google Cloud SDK doesn't automatically use this env var, so we need
+	// to handle it explicitly by creating a static token source.
+	if accessToken := os.Getenv("GOOGLE_OAUTH_ACCESS_TOKEN"); accessToken != "" {
+		token := &oauth2.Token{AccessToken: accessToken}
+		tokenSource := oauth2.StaticTokenSource(token)
+		clientOpts = append(clientOpts, option.WithTokenSource(tokenSource))
+		return clientOpts
+	}
+
+	// If no explicit credentials or access token, Google Cloud client libraries
+	// will automatically use ADC (Application Default Credentials).
 	return clientOpts
 }
 

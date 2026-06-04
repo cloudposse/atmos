@@ -2,13 +2,13 @@
 
 Validate stack configuration against JSON Schema before running Terraform.
 
-Learn more about [Validation](https://atmos.tools/core-concepts/validate/).
+Learn more about [Validation](https://atmos.tools/validation).
 
 ## What You'll See
 
-- [Schema from file](https://atmos.tools/core-concepts/validate/json-schema/) - local JSON Schema
-- [Schema from internet](https://atmos.tools/core-concepts/validate/json-schema/#remote-schemas) - fetch from URL (schemastore.org)
-- [Inline schema](https://atmos.tools/core-concepts/validate/json-schema/#inline-schemas) - embedded in atmos.yaml
+- [Schema from file](https://atmos.tools/validation/json-schema) - local JSON Schema
+- [Schema from internet](https://atmos.tools/validation/json-schema#remote-schemas) - fetch from URL (schemastore.org)
+- [Inline schema](https://atmos.tools/validation/json-schema#inline-schemas) - embedded in atmos.yaml
 
 ## Try It
 

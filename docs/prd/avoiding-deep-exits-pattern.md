@@ -379,7 +379,7 @@ func TestCommandIntegration(t *testing.T) {
 
 - **Command Registry Pattern** - `docs/prd/command-registry-pattern.md`
 - **Error Handling Strategy** - `docs/prd/error-handling-strategy.md`
-- **Testing Strategy** - `docs/prd/testing-strategy.md`
+- **Testing Strategy** - `docs/prd/testability-refactoring-strategy.md`
 
 ## Next Steps
 

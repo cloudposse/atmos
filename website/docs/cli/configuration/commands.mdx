@@ -8,10 +8,15 @@ description: Use the `atmos.yaml` to configure any custom commands you want to a
 
 import File from '@site/src/components/File'
 import Intro from '@site/src/components/Intro'
+import StepTypes from '@site/docs/workflows/_partials/_step-types.mdx'
+import EmbedExample from '@site/src/components/EmbedExample'
+import DemoVideo from '@site/src/components/Video/DemoVideo'
 
 <Intro>
 Atmos can be easily extended to support any number of custom CLI commands. Custom commands are exposed through the `atmos` CLI when you run `atmos help`. It's a great way to centralize the way operational tools are run in order to improve DX.
 </Intro>
+
+<DemoVideo id="commands" title="Atmos Custom Commands" showCaption={false} />
 
 For example, one great way to use custom commands is to tie all the miscellaneous scripts into one consistent CLI interface. Then we can kiss those
 ugly, inconsistent arguments to bash scripts goodbye! Just wire up the commands in atmos to call the script. Then developers can just run `atmos help`
@@ -454,6 +459,100 @@ commands:
             {{ end }}
 ```
 
+## Tool Dependencies
+
+Custom commands can declare tool dependencies that are automatically installed before execution. This ensures that any CLI tools your command requires are available at the correct version, leveraging Atmos's [toolchain management](/cli/configuration/toolchain/) capabilities.
+
+### Basic Usage
+
+Specify tool dependencies using the `dependencies.tools` section within your command:
+
+```yaml
+commands:
+  - name: lint
+    description: Run tflint on terraform components
+    dependencies:
+      tools:
+        tflint: "0.54.0"
+    arguments:
+      - name: component
+        description: Component to lint
+        required: true
+    flags:
+      - name: stack
+        shorthand: s
+        description: Stack name
+        required: true
+    steps:
+      - atmos terraform generate varfile {{ .Arguments.component }} -s {{ .Flags.stack }}
+      - tflint --chdir=components/terraform/{{ .Arguments.component }}
+```
+
+When you run `atmos lint vpc -s plat-ue2-dev`, Atmos will:
+1. Check if tflint 0.54.0 is installed in the toolchain directory
+2. Install it from the [toolchain registry](/cli/configuration/toolchain/registries) if missing
+3. Execute the command steps with the tool available in PATH
+
+### Multiple Tool Dependencies
+
+Commands can declare multiple tool dependencies:
+
+```yaml
+commands:
+  - name: security-scan
+    description: Run security scans on infrastructure code
+    dependencies:
+      tools:
+        tflint: "0.54.0"
+        checkov: "3.0.0"
+        tfsec: "1.28.0"
+    steps:
+      - tflint --chdir=components/terraform
+      - checkov -d components/terraform
+      - tfsec components/terraform
+```
+
+### Version Specification
+
+Tool versions can be specified in several formats:
+
+```yaml
+dependencies:
+  tools:
+    # Exact version
+    terraform: "1.9.8"
+
+    # Latest available version
+    kubectl: "latest"
+```
+
+### Integration with Toolchain Configuration
+
+Tool dependencies in custom commands work with your toolchain configuration in `atmos.yaml`. Tools are installed to the configured `install_path` and resolved using your configured [registries](/cli/configuration/toolchain/registries).
+
+```yaml
+# atmos.yaml
+toolchain:
+  install_path: ".tools"
+  registries:
+    - name: aqua
+      type: aqua
+      source: https://github.com/aquaproj/aqua-registry/tree/main/pkgs
+      priority: 10
+
+commands:
+  - name: lint
+    dependencies:
+      tools:
+        tflint: "0.54.0"  # Installed to .tools/, resolved via aqua registry
+    steps:
+      - tflint --version
+```
+
+:::tip
+Use tool dependencies in custom commands to ensure all team members and CI/CD pipelines use consistent tool versions without manual installation steps.
+:::
+
 ## Working Directory
 
 Custom commands can specify a `working_directory` field to control where the command steps execute. This is useful when commands need to run from a specific location, regardless of where `atmos` was invoked.
@@ -631,6 +730,125 @@ The `--identity` flag is automatically added to all custom commands and takes pr
 :::note
 The `identity` field applies to all steps in the custom command. If you need different identities for different operations, consider using separate custom commands or [workflows](/workflows) with per-step identity configuration.
 :::
+
+## Extended Step Types
+
+Custom commands support the same extended step types as workflows, enabling interactive CLI wizards directly in your custom commands. Use these step types to collect user input, display formatted output, and control execution flow.
+
+### Example: Interactive Deployment Command
+
+```yaml
+commands:
+  - name: deploy-wizard
+    description: Interactive deployment wizard
+    steps:
+      # Collect environment selection
+      - name: env
+        type: choose
+        prompt: "Select target environment"
+        options:
+          - dev
+          - staging
+          - prod
+        default: dev
+
+      # Show warning for production
+      - name: prod_warning
+        type: warn
+        content: "You are about to deploy to PRODUCTION!"
+
+      # Confirm deployment
+      - name: confirm
+        type: confirm
+        prompt: "Deploy to {{ .steps.env.value }}?"
+        default: false
+
+      # Run the deployment
+      - name: deploy
+        type: atmos
+        command: terraform apply vpc -s {{ .steps.env.value }}
+
+      # Show success message
+      - name: done
+        type: success
+        content: "Deployment to {{ .steps.env.value }} completed!"
+```
+
+### Example: Multi-Component Deploy with Selection
+
+```yaml
+commands:
+  - name: deploy-components
+    description: Select and deploy multiple components
+    steps:
+      # Multi-select components
+      - name: components
+        type: filter
+        prompt: "Select components to deploy"
+        multiple: true
+        options:
+          - vpc
+          - eks
+          - rds
+          - s3
+          - lambda
+
+      # Show selected components
+      - name: summary
+        type: markdown
+        content: |
+          ## Deployment Summary
+
+          You selected **{{ len .steps.components.values }}** components:
+          {{ range .steps.components.values }}
+          - {{ . }}
+          {{ end }}
+
+      # Confirm and deploy
+      - name: confirm
+        type: confirm
+        prompt: "Proceed with deployment?"
+
+      # Deploy each component
+      - type: shell
+        command: |
+          {{ range .steps.components.values }}
+          echo "Deploying {{ . }}..."
+          {{ end }}
+```
+
+### Example: Input Collection
+
+```yaml
+commands:
+  - name: create-ticket
+    description: Create a deployment ticket
+    steps:
+      - name: title
+        type: input
+        prompt: "Ticket title"
+        placeholder: "Brief description of the change"
+
+      - name: description
+        type: write
+        prompt: "Detailed description"
+
+      - name: priority
+        type: choose
+        prompt: "Priority level"
+        options: [low, medium, high, critical]
+        default: medium
+
+      - type: success
+        content: |
+          Ticket created:
+          Title: {{ .steps.title.value }}
+          Priority: {{ .steps.priority.value }}
+```
+
+### Available Step Types Reference
+
+<StepTypes />
 
 ## Using Toolchain Tools
 
@@ -888,3 +1106,9 @@ commands:
           {{ if index .Flags "dry-run" }}--dry-run=client{{ end }} \
           -f {{ .Component.vars.manifest_path }}
 ```
+
+## Try It
+
+Explore working examples that demonstrate custom commands in action.
+
+<EmbedExample example="custom-commands" />

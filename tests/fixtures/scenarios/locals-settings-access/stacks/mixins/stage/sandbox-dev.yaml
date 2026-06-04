@@ -1,0 +1,11 @@
+# yaml-language-server: $schema=https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
+#
+# Stage mixin that defines settings for the sandbox-dev environment.
+# This is imported by catalog files and stack files.
+
+settings:
+  substage: dev
+  environment: sandbox
+
+vars:
+  stage: sandbox-dev

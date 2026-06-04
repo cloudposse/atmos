@@ -11,13 +11,14 @@ import (
 )
 
 // aboutCmd represents the about command.
+// Args validator is auto-applied by the command registry for commands without PositionalArgsBuilder.
 var aboutCmd = &cobra.Command{
 	Use:   "about",
 	Short: "Learn about Atmos",
 	Long:  `Display information about Atmos, its features, and benefits.`,
-	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		return ui.Markdown(markdown.AboutMarkdown)
+		ui.Markdown(markdown.AboutMarkdown)
+		return nil
 	},
 }
 
@@ -67,4 +68,9 @@ func (a *AboutCommandProvider) GetCompatibilityFlags() map[string]compat.Compati
 // About command has no aliases.
 func (a *AboutCommandProvider) GetAliases() []internal.CommandAlias {
 	return nil
+}
+
+// IsExperimental returns whether this command is experimental.
+func (a *AboutCommandProvider) IsExperimental() bool {
+	return false
 }

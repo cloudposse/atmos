@@ -138,7 +138,7 @@ To avoid conflicting quotes, wrap the entire YQ expression in single quotes whil
 
 ```yaml
 # Use single quotes around the expression to allow double quotes inside brackets
-access_key_id: !terraform.output security '.security.users["github-dependabot"].access.key.id'
+access_key_id: !terraform.output security '.users["github-dependabot"].access_key_id'
 ```
 
 Additional examples:
@@ -475,6 +475,12 @@ vars:
     Owner: infra-team
 ```
 </Terminal>
+
+## Cross-account reads via the target component's `env` section
+
+Because `!terraform.output` invokes `terraform`/`tofu` as a subprocess, the target component's `env` section (e.g. `env.AWS_PROFILE`) is exported into that subprocess's environment. This lets a single Atmos invocation read state across multiple AWS accounts when each target stack declares its own profile in `env`. No additional configuration is required — this is the default behavior of the subprocess-based reader.
+
+If you're using this pattern and want the **faster** [`!terraform.state`](/functions/yaml/terraform.state) function to behave the same way, see [Switching AWS credentials per component via the `env` section](/functions/yaml/terraform.state#switching-aws-credentials-per-component-via-the-env-section) on the `!terraform.state` page.
 
 ## Considerations
 

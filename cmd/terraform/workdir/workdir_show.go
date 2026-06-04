@@ -70,16 +70,36 @@ func printShowHuman(info *WorkdirInfo) {
 
 	// Display status indicator with colored checkmark.
 	statusIndicator := theme.Styles.Checkmark.String()
-	_ = ui.Writef("%s Workdir Status\n\n", statusIndicator)
+	ui.Writef("%s Workdir Status\n\n", statusIndicator)
+
+	// Determine source type display.
+	sourceType := info.SourceType
+	if sourceType == "" {
+		sourceType = "local"
+	}
 
 	// Build table rows.
 	rows := [][]string{
 		{"Name", info.Name},
 		{"Component", info.Component},
 		{"Stack", info.Stack},
-		{"Source", info.Source},
-		{"Path", info.Path},
+		{"Source Type", sourceType},
 	}
+
+	// Add source URI and version for remote sources.
+	if sourceType == "remote" {
+		if info.SourceURI != "" {
+			rows = append(rows, []string{"Source URI", info.SourceURI})
+		}
+		if info.SourceVersion != "" {
+			rows = append(rows, []string{"Source Version", info.SourceVersion})
+		}
+	} else {
+		// For local sources, show the source path.
+		rows = append(rows, []string{"Source", info.Source})
+	}
+
+	rows = append(rows, []string{"Path", info.Path})
 
 	if info.ContentHash != "" {
 		rows = append(rows, []string{"Content Hash", info.ContentHash})
@@ -87,6 +107,12 @@ func printShowHuman(info *WorkdirInfo) {
 
 	rows = append(rows, []string{"Created", info.CreatedAt.Format("2006-01-02 15:04:05 MST")})
 	rows = append(rows, []string{"Updated", info.UpdatedAt.Format("2006-01-02 15:04:05 MST")})
+
+	// Add last accessed timestamp.
+	lastAccessed := info.LastAccessed
+	if !lastAccessed.IsZero() {
+		rows = append(rows, []string{"Last Accessed", lastAccessed.Format("2006-01-02 15:04:05 MST")})
+	}
 
 	// Create table with lipgloss (like auth whoami).
 	t := table.New().
@@ -106,7 +132,7 @@ func printShowHuman(info *WorkdirInfo) {
 			return lipgloss.NewStyle().Padding(0, 1)
 		})
 
-	_ = ui.Writef("%s\n", t)
+	ui.Writef("%s\n", t)
 }
 
 func init() {

@@ -1,79 +1,53 @@
 # Algolia Search Indexing
 
-This document describes how Algolia search indexing is configured for the atmos.tools documentation site.
+This document describes how Algolia search indexing is configured for the `atmos.tools` documentation site.
 
 ## Overview
 
-The atmos.tools documentation uses [Algolia DocSearch](https://docsearch.algolia.com/) for search functionality. Search indexing is managed via the **Algolia Crawler**, which is triggered automatically on every deployment.
+The `atmos.tools` documentation uses [Algolia DocSearch](https://docsearch.algolia.com/) for search. Search records are produced by the Algolia Crawler. The crawler configuration is managed in this repository, validated on pull requests, and deployed only after changes merge to `main`.
 
 ## Architecture
 
+```text
+┌──────────────────────┐     ┌──────────────────────┐     ┌─────────────────┐
+│ website/algolia      │────▶│   Algolia Crawler    │────▶│  Algolia Index  │
+│ crawler config       │     │   (cloud-hosted)     │     │  (atmos.tools)  │
+└──────────────────────┘     └──────────────────────┘     └─────────────────┘
+           │                             ▲
+           │                             │
+           ▼                             │
+┌──────────────────────┐     ┌──────────────────────┐
+│ Algolia workflow     │     │ Website prod deploy  │
+│ config/settings      │     │ content reindex      │
+└──────────────────────┘     └──────────────────────┘
 ```
-┌─────────────────────┐     ┌──────────────────────┐     ┌─────────────────┐
-│  GitHub Actions     │────▶│   Algolia Crawler    │────▶│  Algolia Index  │
-│  (website-deploy)   │     │   (cloud-hosted)     │     │  (atmos.tools)  │
-└─────────────────────┘     └──────────────────────┘     └─────────────────┘
-```
 
-### Components
+## Responsibilities
 
-1. **GitHub Actions Workflow** (`.github/workflows/website-deploy-prod.yml`)
-   - Triggers the Algolia Crawler after deploying the website to S3.
-   - Uses the official `algolia/algoliasearch-crawler-github-actions` action.
+### Crawler Configuration
 
-2. **Algolia Crawler** (dashboard.algolia.com)
-   - Cloud-hosted crawler that fetches and indexes the documentation.
-   - Uses the official Docusaurus v3 template for optimal indexing.
-   - Runs on-demand (CI-triggered) and weekly (scheduled backup).
+`website/algolia/` owns the crawler configuration, index settings, tests, and deploy script.
 
-3. **Docusaurus Frontend** (`website/docusaurus.config.js`)
-   - Integrates with Algolia via the DocSearch plugin.
-   - Supports DocSearch v4 with Ask AI integration.
+- `atmos-tools.crawler.js`: canonical crawler config.
+- `deploy-crawler-config.mjs`: deploys crawler config and live index settings.
+- `atmos-tools.crawler.test.mjs`: local config mechanics tests.
+- `search-relevance.test.mjs`: opt-in live relevance test.
+- `atmos-tools.crawler.dashboard.js`: paste-ready dashboard fallback.
 
-## Configuration
+### Config Deployment and Reindex
 
-### GitHub Secrets Required
+`.github/workflows/algolia.yaml` validates the crawler config on pull requests and, after every successful production website deploy, deploys the crawler config + index settings AND triggers a content reindex — in that order.
 
-The following secrets must be configured in the GitHub repository:
+- Pull requests run `pnpm run test:algolia` and `pnpm run algolia:deploy:dry-run`. No Algolia secrets are used.
+- The `deploy` job is triggered by GitHub Actions `workflow_run` on completion of `Website Deploy Prod`, gated on `workflow_run.conclusion == 'success'`. This guarantees the site on S3 is fresh **before** any Algolia work begins.
+- The `deploy` job runs in the `algolia` GitHub environment. It PATCHes the crawler config, PUTs the index settings, and then POSTs the reindex — all from a single Node script (`deploy-crawler-config.mjs`) so the reindex cannot race the config update.
+- `workflow_dispatch` is available to manually re-run the deploy from `main` only. Dispatches from pull request branches still run validation, but skip deploy and do not access Algolia secrets.
 
-| Secret | Description | Source |
-|--------|-------------|--------|
-| `ALGOLIA_CRAWLER_USER_ID` | Crawler authentication user ID | Algolia Crawler > Account Settings |
-| `ALGOLIA_CRAWLER_API_KEY` | Crawler authentication API key | Algolia Crawler > Account Settings |
-| `ALGOLIA_API_KEY` | API key for writing to index | Algolia Dashboard > API Keys |
+This split keeps AWS production deployment credentials in the `production` environment and Algolia crawler credentials in the `algolia` environment, while still enforcing strict ordering across the two workflows.
 
-### API Key Permissions (ACL)
+### Frontend Search
 
-The `ALGOLIA_API_KEY` must have the following ACL permissions:
-
-| Permission | Purpose |
-|------------|---------|
-| `addObject` | Add records to the index |
-| `editSettings` | Modify index settings |
-| `deleteIndex` | Delete/recreate the index during full reindex |
-| `browse` | Optional - needed for partial updates |
-
-To create or edit an API key with these permissions:
-
-1. Go to **Algolia Dashboard** → **Settings** → **API Keys** → **All API Keys**.
-2. Click **New API Key** (or edit an existing key).
-3. Under **ACL**, select the permissions listed above.
-4. Under **Indices**, restrict to `atmos.tools` or use `*` for all indices.
-5. Save and copy the key to GitHub secrets.
-
-### Algolia Crawler Configuration
-
-The crawler is configured in the Algolia dashboard (dashboard.algolia.com) with these settings:
-
-- **Template**: Docusaurus v3
-- **Start URL**: `https://atmos.tools/`
-- **Sitemap URL**: `https://atmos.tools/sitemap.xml`
-- **Index Name**: `atmos.tools`
-- **Schedule**: Weekly (as backup to CI-triggered crawls)
-
-### Frontend Configuration
-
-The Docusaurus frontend is configured in `website/docusaurus.config.js`:
+`website/docusaurus.config.js` configures the DocSearch frontend:
 
 ```javascript
 algolia: {
@@ -88,66 +62,61 @@ algolia: {
 }
 ```
 
-## Triggering a Crawl
+The frontend key is search-only and is safe to expose.
 
-### Automatic (CI/CD) - Primary Method
+## GitHub Environment Secrets
 
-Crawls are automatically triggered via the `algolia/algoliasearch-crawler-github-actions` GitHub Action on:
-- Push to `main` branch
-- Release published
-- Manual workflow dispatch
+Configure these secrets in the `algolia` GitHub environment:
 
-This is the primary indexing method. The GitHub Action is configured in `.github/workflows/website-deploy-prod.yml`.
+| Secret                             | Description                                                            | Source                           |
+| ---------------------------------- | ---------------------------------------------------------------------- | -------------------------------- |
+| `ALGOLIA_CRAWLER_ID`               | Crawler UUID used by the config deploy script                          | Algolia Crawler URL              |
+| `ALGOLIA_CRAWLER_USER_ID`          | Crawler authentication user ID                                         | Algolia Crawler account settings |
+| `ALGOLIA_CRAWLER_API_KEY`          | Crawler authentication API key                                         | Algolia Crawler account settings |
+| `ALGOLIA_CRAWLER_INDEXING_API_KEY` | Indexing/Admin API key used to update index settings and write crawler records | Algolia application API keys     |
 
-### Manual (Dashboard)
+The indexing/admin API key must have permission to update index settings and write crawler records for the `atmos.tools` index. Do not use a search-only key here.
 
-For debugging or one-off reindexing:
+## Common Commands
 
-1. Log into dashboard.algolia.com.
-2. Navigate to the Crawler section.
-3. Select the `atmos.tools` crawler.
-4. Click "Start crawl" or "Restart crawling".
+Run from `website/`:
 
-### Manual (API)
-
-For scripting or automation outside of GitHub Actions:
-
-```bash
-curl -X POST "https://crawler.algolia.com/api/1/crawlers/{CRAWLER_ID}/reindex" \
-  -H "Authorization: Basic $(echo -n '{USER_ID}:{API_KEY}' | base64)"
+```shell
+pnpm run test:algolia
+pnpm run algolia:deploy:dry-run
+ALGOLIA_LIVE_RELEVANCE_TESTS=1 pnpm run test:algolia:live
 ```
+
+Use the live relevance test only after the crawler config has been deployed and the crawler has completed a reindex.
+
+## Removed Preview Indexing Path
+
+Preview deployments do not run Algolia indexing. The old preview reindex path has been removed, including the `reindex` label behavior, scraper API key, and stale preview reindex script call.
 
 ## Troubleshooting
 
 ### Search Not Returning Results
 
-1. **Check index status**: Log into Algolia dashboard and verify the index has records.
-2. **Check crawler logs**: Review the crawler run logs for errors.
-3. **Verify sitemap**: Ensure `https://atmos.tools/sitemap.xml` is accessible and complete.
-4. **Test selectors**: Use the URL Tester in the crawler dashboard to verify content extraction.
+1. Check that the `atmos.tools` index exists and has records in Algolia.
+2. Review the latest Algolia Crawler logs.
+3. Verify `https://atmos.tools/sitemap.xml` is accessible.
+4. Use the crawler URL tester to verify selectors and extracted records.
 
-### CI Workflow Failing
+### Config Deployment Failing
 
-1. **Verify secrets**: Ensure all required GitHub secrets are configured.
-2. **Check credentials**: Verify the Crawler User ID and API Key are correct.
-3. **Review action logs**: Check the GitHub Actions logs for specific error messages.
+1. Verify the `algolia` environment secrets are configured.
+2. Run `pnpm run algolia:deploy:dry-run` locally from `website/`.
+3. Check whether the failure is from the crawler config API or the index settings API.
 
-### Low Record Count
+### Ranking Changes Not Visible
 
-If the index has significantly fewer records than expected:
-
-1. **Check sitemap**: Verify all pages are included in the sitemap.
-2. **Review crawler config**: Ensure the start URL and sitemap URL are correct.
-3. **Check for blocked pages**: Review robots.txt for any blocked paths.
-4. **Verify page linking**: Ensure all pages are linked from the sitemap or other indexed pages.
-
-## Migration History
-
-**January 2026**: Migrated from deprecated `algolia/docsearch-scraper` Docker image to the official Algolia Crawler with GitHub Actions integration. The legacy scraper was deprecated in February 2022 and was causing indexing failures.
+1. Confirm `.github/workflows/website-deploy-prod.yml` succeeded on the merge commit (site is on S3).
+2. Confirm the `Algolia` workflow ran via `workflow_run` after that, with both `validate` and `deploy` green. The `deploy` step both PATCHes the crawler config and POSTs the reindex.
+3. Run the opt-in live relevance test from `website/` once the crawler reports the reindex complete.
 
 ## References
 
-- [Algolia Crawler Documentation](https://www.algolia.com/doc/tools/crawler/getting-started/overview/)
-- [Algolia Crawler GitHub Action](https://github.com/algolia/algoliasearch-crawler-github-actions)
+- [Algolia Crawler Documentation](https://www.algolia.com/doc/tools/crawler/getting-started/overview)
+- [Algolia Crawler API](https://www.algolia.com/doc/rest-api/crawler/)
 - [DocSearch Documentation](https://docsearch.algolia.com/)
 - [Docusaurus Search Documentation](https://docusaurus.io/docs/search)

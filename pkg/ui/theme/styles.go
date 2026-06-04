@@ -7,6 +7,9 @@ import (
 	"github.com/spf13/viper"
 )
 
+// DefaultThemeName is the default theme used when no theme is configured.
+const DefaultThemeName = "atmos"
+
 // StyleSet provides pre-configured lipgloss styles for common UI elements.
 type StyleSet struct {
 	// Text styles
@@ -16,13 +19,14 @@ type StyleSet struct {
 	Muted   lipgloss.Style
 
 	// Status styles
-	Success lipgloss.Style
-	Warning lipgloss.Style
-	Error   lipgloss.Style
-	Info    lipgloss.Style
-	Notice  lipgloss.Style
-	Debug   lipgloss.Style
-	Trace   lipgloss.Style
+	Success      lipgloss.Style
+	Warning      lipgloss.Style
+	Error        lipgloss.Style
+	Info         lipgloss.Style
+	Notice       lipgloss.Style
+	Debug        lipgloss.Style
+	Trace        lipgloss.Style
+	Experimental lipgloss.Style // For experimental feature notifications
 
 	// UI element styles
 	Selected    lipgloss.Style
@@ -42,10 +46,11 @@ type StyleSet struct {
 	TableLightType lipgloss.Style // For "Light" theme type
 
 	// Special elements
-	Checkmark lipgloss.Style
-	XMark     lipgloss.Style
-	Footer    lipgloss.Style
-	Border    lipgloss.Style
+	Checkmark         lipgloss.Style
+	XMark             lipgloss.Style
+	Footer            lipgloss.Style
+	Border            lipgloss.Style
+	ExperimentalBadge lipgloss.Style // Badge style for experimental features
 
 	// Version styles
 	VersionNumber lipgloss.Style
@@ -111,13 +116,14 @@ func GetStyles(scheme *ColorScheme) *StyleSet {
 		Muted:   lipgloss.NewStyle().Foreground(lipgloss.Color(scheme.TextMuted)),
 
 		// Status styles
-		Success: lipgloss.NewStyle().Foreground(lipgloss.Color(scheme.Success)),
-		Warning: lipgloss.NewStyle().Foreground(lipgloss.Color(scheme.Warning)),
-		Error:   lipgloss.NewStyle().Foreground(lipgloss.Color(scheme.Error)),
-		Info:    lipgloss.NewStyle().Foreground(lipgloss.Color(scheme.Link)),
-		Notice:  lipgloss.NewStyle().Foreground(lipgloss.Color(scheme.Warning)),
-		Debug:   lipgloss.NewStyle().Foreground(lipgloss.Color(scheme.TextMuted)),
-		Trace:   lipgloss.NewStyle().Foreground(lipgloss.Color(scheme.TextMuted)).Faint(true),
+		Success:      lipgloss.NewStyle().Foreground(lipgloss.Color(scheme.Success)),
+		Warning:      lipgloss.NewStyle().Foreground(lipgloss.Color(scheme.Warning)),
+		Error:        lipgloss.NewStyle().Foreground(lipgloss.Color(scheme.Error)),
+		Info:         lipgloss.NewStyle().Foreground(lipgloss.Color(scheme.Link)),
+		Notice:       lipgloss.NewStyle().Foreground(lipgloss.Color(scheme.Warning)),
+		Debug:        lipgloss.NewStyle().Foreground(lipgloss.Color(scheme.TextMuted)),
+		Trace:        lipgloss.NewStyle().Foreground(lipgloss.Color(scheme.TextMuted)).Faint(true),
+		Experimental: lipgloss.NewStyle().Foreground(lipgloss.Color(scheme.TextMuted)), // Subtle gray for experimental
 
 		// UI element styles
 		Selected:    lipgloss.NewStyle().Foreground(lipgloss.Color(scheme.Selected)),
@@ -141,6 +147,11 @@ func GetStyles(scheme *ColorScheme) *StyleSet {
 		XMark:     lipgloss.NewStyle().Foreground(lipgloss.Color(scheme.Error)).SetString(IconXMark),
 		Footer:    lipgloss.NewStyle().Foreground(lipgloss.Color(scheme.TextMuted)).Italic(true),
 		Border:    getBorderStyle(scheme),
+		ExperimentalBadge: lipgloss.NewStyle().
+			Background(lipgloss.Color(scheme.ExperimentalBadgeBg)).
+			Foreground(lipgloss.Color(scheme.ExperimentalBadgeFg)).
+			Bold(true).
+			Padding(0, 1),
 
 		// Version styles
 		VersionNumber: lipgloss.NewStyle().Foreground(lipgloss.Color(scheme.TextMuted)),
@@ -362,7 +373,7 @@ func GetCurrentStyles() *StyleSet {
 		// Fall back to atmos theme if there's an error
 		registry, _ := NewRegistry()
 		if registry != nil {
-			defaultTheme := registry.GetOrDefault("atmos")
+			defaultTheme := registry.GetOrDefault(DefaultThemeName)
 			tmpScheme := GenerateColorScheme(defaultTheme)
 			scheme = &tmpScheme
 		}
@@ -436,8 +447,8 @@ func getActiveThemeName() string {
 		return theme
 	}
 
-	// Default to "atmos" theme
-	return "atmos"
+	// Default to atmos theme.
+	return DefaultThemeName
 }
 
 // Helper functions for getting theme-aware colors and styles
@@ -564,4 +575,19 @@ func GetBorderColor() string {
 		return "#5F5FD7" // Default border color
 	}
 	return scheme.Border
+}
+
+// GetHeaderTextColor returns the table header text color from the current theme.
+func GetHeaderTextColor() string {
+	// Use cached color scheme if available.
+	if lastColorScheme != nil {
+		return lastColorScheme.HeaderText
+	}
+
+	// Fall back to loading from theme.
+	scheme, err := GetColorSchemeForTheme(getActiveThemeName())
+	if err != nil || scheme == nil {
+		return "#98e024" // Default green (Atmos theme)
+	}
+	return scheme.HeaderText
 }
