@@ -9,6 +9,18 @@ stacks:
 components:
   script:
     base_path: "components/script"
+  hello:
+    base_path: "components/hello"
+
+# A store is where post-apply hooks persist the values a custom command
+# publishes. This example uses Redis because it runs locally with a single
+# `docker run -p 6379:6379 redis` (see README). Swap `type` for
+# aws-ssm-parameter-store, google-secret-manager, etc. in real usage.
+stores:
+  default/redis:
+    type: redis
+    options:
+      url: "redis://localhost:6379"
 
 commands:
   - name: script
@@ -32,3 +44,59 @@ commands:
       - 'echo "App: {{ .Component.vars.app_name }}"'
       - 'echo "Version: {{ .Component.vars.version }}"'
       - 'echo "Replicas: {{ .Component.vars.replicas }}"'
+
+  # Hello-world custom component type demonstrating post-run hooks.
+  #
+  # The subcommand is `greeting` (not `apply`) on purpose: `apply` is a
+  # terraform-flavored verb and could be confused with a built-in. Custom types
+  # are free to name their own verbs — the lifecycle event is derived from them.
+  #
+  #   atmos hello greeting world -s dev -> fires before.hello.greeting, runs steps,
+  #                                        then fires after.hello.greeting, which the
+  #                                        store hook uses to persist outputs.
+  #   atmos hello describe world -s dev -> fires before/after.hello.describe; the
+  #                                        greeting store hook does NOT run, because
+  #                                        the event name encodes the subcommand.
+  - name: hello
+    description: "Hello-world custom component type with a post-run store hook"
+    commands:
+      - name: greeting
+        description: "Generate a greeting for a hello component and publish its outputs to a store"
+        arguments:
+          - name: component
+            description: "Component name"
+            type: component
+            required: true
+        flags:
+          - name: stack
+            shorthand: s
+            description: "Stack name"
+            semantic_type: stack
+            required: true
+        component:
+          type: hello
+        steps:
+          # A real command would create something and capture its IDs. Here we
+          # just publish a couple of key=value outputs to the file Atmos
+          # exported as $ATMOS_OUTPUTS. The after.hello.greeting hook reads them.
+          - |
+            echo "Greeting hello component '{{ .Component.component }}' in stack '{{ .Component.atmos_stack }}'"
+            echo "greeting={{ .Component.vars.greeting }}" >> "$ATMOS_OUTPUTS"
+            echo "greeted_component={{ .Component.component }}" >> "$ATMOS_OUTPUTS"
+      - name: describe
+        description: "Describe a hello component (read-only; does not fire greeting hooks)"
+        arguments:
+          - name: component
+            description: "Component name"
+            type: component
+            required: true
+        flags:
+          - name: stack
+            shorthand: s
+            description: "Stack name"
+            semantic_type: stack
+            required: true
+        component:
+          type: hello
+        steps:
+          - 'echo "greeting for {{ .Component.component }}: {{ .Component.vars.greeting }}"'

@@ -1,0 +1,21 @@
+components:
+  hello:
+    world:
+      vars:
+        greeting: "hello, world"
+      # The store hook runs after `atmos hello greeting world` succeeds. It reads
+      # the values the step wrote to $ATMOS_OUTPUTS (leading-dot entries are
+      # output references) and persists them to the `default/redis` store.
+      #
+      # Note the event is `after.hello.greeting` — scoped to the component type
+      # (`hello`) and subcommand (`greeting`). `atmos hello describe world` fires
+      # `after.hello.describe` instead, so this hook does not run for describes.
+      hooks:
+        store-greeting:
+          events:
+            - after.hello.greeting
+          command: store
+          name: default/redis
+          outputs:
+            greeting: .greeting
+            greeted_component: .greeted_component

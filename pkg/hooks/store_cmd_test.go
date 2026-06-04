@@ -143,7 +143,7 @@ func TestStoreCommand_GetOutputValue_WithMockTerraform(t *testing.T) {
 					ComponentFromArg: "test-component",
 					Stack:            "test-stack",
 				},
-				outputGetter: mockGetter,
+				terraformOutputter: mockGetter,
 			}
 
 			key, value, err := cmd.getOutputValue("test-hook", AfterTerraformApply, tt.value)
@@ -438,7 +438,7 @@ func TestStoreCommand_GetOutputValue_OutputNotFound(t *testing.T) {
 			ComponentFromArg: "test-component",
 			Stack:            "test-stack",
 		},
-		outputGetter: mockGetter,
+		terraformOutputter: mockGetter,
 	}
 
 	_, _, err := cmd.getOutputValue("my-hook", AfterTerraformApply, ".missing_key")
