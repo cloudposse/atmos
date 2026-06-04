@@ -41,6 +41,7 @@ const TAGS_MAP = {
   'custom-commands': ['Automation'],
   'interactive-workflows': ['Automation'],
   'demo-custom-command': ['Automation'],
+  'custom-components': ['Components'],
   'generate-files': ['Automation'],
   toolchain: ['DX'],
   devcontainer: ['DX'],
@@ -102,6 +103,10 @@ const DOCS_MAP = {
   ],
   'custom-commands': [
     { label: 'Custom Commands', url: '/cli/configuration/commands' },
+  ],
+  'custom-components': [
+    { label: 'Custom Commands', url: '/cli/configuration/commands' },
+    { label: 'Custom Component Types', url: '/cli/configuration/commands#custom-component-types' },
   ],
   'interactive-workflows': [
     { label: 'Workflows', url: '/workflows' },
