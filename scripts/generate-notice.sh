@@ -19,6 +19,49 @@ echo "Temporary directory: ${TEMP_DIR}"
 
 cd "${REPO_ROOT}"
 
+# Deterministic license-URL overrides for modules that go-licenses cannot resolve
+# reliably. Vanity import paths (e.g. dario.cat/mergo, inet.af/netaddr) live on a
+# different host than their module path, so go-licenses must do a network fetch to
+# map the path to its source repo — when that fetch fails it emits "URL: Unknown",
+# producing a spurious NOTICE diff. Each entry is "<module> <source-repo>"; the URL
+# is rebuilt from the module's version in the build list (no network), so it is
+# identical on every run regardless of whether go-licenses' resolution succeeded.
+# A plain newline-delimited list (not a bash 4 associative array) keeps this working
+# on macOS's stock bash 3.2.
+REPO_OVERRIDES="
+dario.cat/mergo github.com/imdario/mergo
+inet.af/netaddr github.com/inetaf/netaddr
+"
+
+# git_ref_from_version maps a module version to a ref usable in a GitHub blob URL:
+# a tag (e.g. v1.0.2) is used verbatim; a pseudo-version (v0.0.0-<ts>-<commit>)
+# resolves to its trailing commit hash (the full pseudo-version is not a git ref).
+git_ref_from_version() {
+    local version="$1"
+    if [[ "${version}" =~ -([0-9a-f]{12})$ ]]; then
+        printf '%s' "${BASH_REMATCH[1]}"
+    else
+        printf '%s' "${version}"
+    fi
+}
+
+# apply_url_overrides rewrites the URL (2nd CSV field) for each overridden module to
+# a deterministic, version-pinned LICENSE URL derived from go.mod (no network fetch).
+apply_url_overrides() {
+    local csv="$1" module repo version ref url
+    while read -r module repo; do
+        [ -n "${module}" ] || continue
+        version="$(go list -m -f '{{.Version}}' "${module}" 2>/dev/null || true)"
+        [ -n "${version}" ] || continue
+        ref="$(git_ref_from_version "${version}")"
+        url="https://${repo}/blob/${ref}/LICENSE"
+        awk -F',' -v OFS=',' -v mod="${module}" -v newurl="${url}" \
+            '$1==mod{$2=newurl} {print}' "${csv}" > "${csv}.tmp" && mv "${csv}.tmp" "${csv}"
+    done <<EOF
+${REPO_OVERRIDES}
+EOF
+}
+
 # Check if go-licenses is installed
 if ! command -v go-licenses &> /dev/null; then
     echo "Installing go-licenses..."
@@ -28,6 +71,9 @@ fi
 # Generate license report
 echo "Generating license report..."
 go-licenses report . 2>&1 | grep -v "^W" | grep -v "^E" > "${TEMP_DIR}/license-report.csv" || true
+
+# Replace non-deterministic (vanity-path) URLs with deterministic overrides.
+apply_url_overrides "${TEMP_DIR}/license-report.csv"
 
 # Count dependencies
 TOTAL_DEPS=$(wc -l < "${TEMP_DIR}/license-report.csv" | tr -d ' ')
