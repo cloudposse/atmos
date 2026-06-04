@@ -21,13 +21,14 @@ This separation is fundamental: you write the Terraform module once, then config
 
 ## Component Types
 
-Atmos natively supports three component types:
+Atmos natively supports four component types:
 
 | Type | Implementation Location | Purpose |
 |------|------------------------|---------|
 | Terraform / OpenTofu | `components/terraform/<name>/` | Provision cloud infrastructure resources |
 | Helmfile | `components/helmfile/<name>/` | Deploy Helm charts to Kubernetes clusters |
 | Packer | `components/packer/<name>/` | Build machine images (AMIs, VM images) |
+| Ansible | `components/ansible/<name>/` | Run Ansible playbooks and automation |
 
 Terraform is by far the most common type. Custom commands can extend Atmos to support any tooling.
 
@@ -73,6 +74,30 @@ components:
   terraform:
     base_path: "components/terraform"
 ```
+
+Canonical component types can also declare aliases:
+
+```yaml
+components:
+  terraform:
+    aliases: opentofu
+    base_path: "components/terraform"
+    command: tofu
+```
+
+Stack manifests may then use the alias envelope:
+
+```yaml
+components:
+  opentofu:
+    vpc:
+      vars: {}
+```
+
+Atmos resolves `opentofu` to Terraform semantics internally for provider lookup, execution, dependencies, validation,
+and path resolution. Describe output preserves the authored envelope (`components.opentofu`) and exposes the canonical
+type in `component_info.component_type`. The alias does not change the executable; set `components.terraform.command:
+tofu` to run OpenTofu.
 
 Nested directories are supported. A component at `components/terraform/eks/cluster/` is referenced as `eks/cluster` in stack configurations.
 

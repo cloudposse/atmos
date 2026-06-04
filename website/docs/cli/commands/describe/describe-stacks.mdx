@@ -24,6 +24,8 @@ atmos describe stacks [options]
 
 This command shows configuration for stacks and components in the stacks.
 
+When a stack manifest uses a [component type alias](/cli/configuration/components/aliases), `describe stacks` preserves the authored envelope. For example, a component declared under `components.opentofu` renders under `components.opentofu`, while `component_info.component_type` exposes the canonical type, such as `terraform`.
+
 :::info YAML Functions and Authentication
 By default, `atmos describe stacks` executes YAML template functions (e.g., `!terraform.state`, `!terraform.output`) and Go templates during stack processing. When these functions access remote resources requiring authentication, use the `--identity` flag to authenticate before execution. You can disable function/template processing with `--process-functions=false` or `--process-templates=false` flags.
 :::

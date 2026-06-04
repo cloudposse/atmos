@@ -258,12 +258,14 @@
         },
         {
           "type": "object",
-          "patternProperties": {
-            "^[/a-zA-Z0-9-_{}. ]+$": {
-              "$ref": "#/definitions/terraform_component_manifest"
+          "properties": {
+            "aliases": {
+              "$ref": "#/definitions/component_type_aliases"
             }
           },
-          "additionalProperties": false
+          "additionalProperties": {
+            "$ref": "#/definitions/terraform_component_manifest"
+          }
         }
       ]
     },
@@ -386,12 +388,14 @@
         },
         {
           "type": "object",
-          "patternProperties": {
-            "^[/a-zA-Z0-9-_{}. ]+$": {
-              "$ref": "#/definitions/helmfile_component_manifest"
+          "properties": {
+            "aliases": {
+              "$ref": "#/definitions/component_type_aliases"
             }
           },
-          "additionalProperties": false
+          "additionalProperties": {
+            "$ref": "#/definitions/helmfile_component_manifest"
+          }
         }
       ]
     },
@@ -493,12 +497,14 @@
         },
         {
           "type": "object",
-          "patternProperties": {
-            "^[/a-zA-Z0-9-_{}. ]+$": {
-              "$ref": "#/definitions/packer_component_manifest"
+          "properties": {
+            "aliases": {
+              "$ref": "#/definitions/component_type_aliases"
             }
           },
-          "additionalProperties": false
+          "additionalProperties": {
+            "$ref": "#/definitions/packer_component_manifest"
+          }
         }
       ]
     },
@@ -1630,15 +1636,27 @@
       },
       "anyOf": [
         {
-          "required": ["name"]
+          "required": [
+            "name"
+          ]
         },
         {
-          "required": ["component"]
+          "required": [
+            "component"
+          ]
         },
         {
-          "required": ["kind", "path"],
+          "required": [
+            "kind",
+            "path"
+          ],
           "properties": {
-            "kind": { "enum": ["file", "folder"] }
+            "kind": {
+              "enum": [
+                "file",
+                "folder"
+              ]
+            }
           }
         }
       ],
@@ -1942,6 +1960,21 @@
               "type": "string",
               "description": "Console session duration (e.g., '12h'). Max: 12h for AWS."
             }
+          }
+        }
+      ]
+    },
+    "component_type_aliases": {
+      "title": "aliases",
+      "description": "Component type aliases. May be a single alias or a list of aliases.",
+      "oneOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "array",
+          "items": {
+            "type": "string"
           }
         }
       ]

@@ -2,6 +2,8 @@ package validator
 
 import (
 	"errors"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/goccy/go-yaml"
@@ -115,6 +117,63 @@ key: value
 				assert.NoError(t, err)
 				assert.Equal(t, tt.expectedErrors, len(resultErrors))
 			}
+		})
+	}
+}
+
+func TestValidateYAMLSchema_ComponentTypeAliases(t *testing.T) {
+	schemaData, err := os.ReadFile(filepath.Join("..", "datafetcher", "schema", "atmos", "manifest", "1.0.json"))
+	assert.NoError(t, err)
+
+	tests := []struct {
+		name     string
+		yamlData []byte
+	}{
+		{
+			name: "canonical section aliases scalar",
+			yamlData: []byte(`
+components:
+  terraform:
+    aliases: opentofu
+`),
+		},
+		{
+			name: "canonical section aliases list",
+			yamlData: []byte(`
+components:
+  terraform:
+    aliases: [opentofu, tofu]
+`),
+		},
+		{
+			name: "alias envelope remains schema-compatible",
+			yamlData: []byte(`
+components:
+  opentofu:
+    vpc:
+      vars:
+        name: vpc
+`),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
+
+			mockFetcher := datafetcher.NewMockDataFetcher(ctrl)
+			mockFetcher.EXPECT().GetData("data.yaml").Return(tt.yamlData, nil)
+			mockFetcher.EXPECT().GetData("schema.json").Return(schemaData, nil)
+
+			v := &yamlSchemaValidator{
+				atmosConfig: &schema.AtmosConfiguration{},
+				dataFetcher: mockFetcher,
+			}
+
+			resultErrors, err := v.ValidateYAMLSchema("schema.json", "data.yaml")
+			assert.NoError(t, err)
+			assert.Empty(t, resultErrors)
 		})
 	}
 }

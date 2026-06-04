@@ -383,3 +383,83 @@ func TestProcessStackConfig_ErrorPaths(t *testing.T) {
 		})
 	}
 }
+
+func TestProcessStackConfigComponentAliasResolvesToCanonicalAndTracksEnvelope(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{
+		Components: schema.Components{
+			Terraform: schema.Terraform{Aliases: []string{"opentofu"}},
+		},
+	}
+	config := map[string]any{
+		cfg.ComponentsSectionName: map[string]any{
+			"opentofu": map[string]any{
+				"vpc": map[string]any{
+					cfg.VarsSectionName: map[string]any{"name": "vpc"},
+				},
+			},
+		},
+	}
+
+	result, err := ProcessStackConfig(
+		atmosConfig,
+		"/test/stacks",
+		"/test/components/terraform",
+		"/test/components/helmfile",
+		"/test/components/packer",
+		"/test/components/ansible",
+		"dev.yaml",
+		config,
+		false,
+		false,
+		"opentofu",
+		map[string]map[string][]string{},
+		map[string]map[string]any{},
+		false,
+	)
+	require.NoError(t, err)
+
+	components, ok := result[cfg.ComponentsSectionName].(map[string]any)
+	require.True(t, ok)
+	assert.NotContains(t, components, "opentofu")
+	tf, ok := components[cfg.TerraformComponentType].(map[string]any)
+	require.True(t, ok)
+	vpc, ok := tf["vpc"].(map[string]any)
+	require.True(t, ok)
+	componentInfo, ok := vpc["component_info"].(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, "terraform", componentInfo["component_type"])
+	assert.Equal(t, "opentofu", componentInfo["component_envelope"])
+}
+
+func TestProcessStackConfigComponentAliasRejectsDuplicateCanonicalComponent(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{
+		Components: schema.Components{
+			Terraform: schema.Terraform{Aliases: []string{"opentofu"}},
+		},
+	}
+	config := map[string]any{
+		cfg.ComponentsSectionName: map[string]any{
+			"terraform": map[string]any{"vpc": map[string]any{}},
+			"opentofu":  map[string]any{"vpc": map[string]any{}},
+		},
+	}
+
+	_, err := ProcessStackConfig(
+		atmosConfig,
+		"/test/stacks",
+		"/test/components/terraform",
+		"/test/components/helmfile",
+		"/test/components/packer",
+		"/test/components/ansible",
+		"dev.yaml",
+		config,
+		false,
+		false,
+		"",
+		map[string]map[string][]string{},
+		map[string]map[string]any{},
+		false,
+	)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), `component "vpc" is defined under both`)
+}

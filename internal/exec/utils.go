@@ -17,6 +17,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	auth "github.com/cloudposse/atmos/pkg/auth"
+	componentreg "github.com/cloudposse/atmos/pkg/component"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/env"
 	log "github.com/cloudposse/atmos/pkg/logger"
@@ -109,6 +110,7 @@ func ProcessComponentConfig(
 	if len(componentType) == 0 {
 		return errors.New("component type must be provided and must not be empty")
 	}
+	componentType = componentreg.CanonicalType(atmosConfig, componentType)
 
 	if stackSection, ok = stacksMap[stack].(map[string]any); !ok {
 		return fmt.Errorf("could not find the stack '%s'", stack)

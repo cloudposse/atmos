@@ -848,6 +848,69 @@ func TestProcessStackFile_ProcessComponentTypeSectionError(t *testing.T) {
 	assert.Contains(t, err.Error(), "invalid")
 }
 
+func TestProcessStackFile_ComponentAliasPreservesEnvelope(t *testing.T) {
+	p := newDescribeStacksProcessor(
+		&schema.AtmosConfiguration{
+			Components: schema.Components{
+				Terraform: schema.Terraform{Aliases: []string{"opentofu"}},
+			},
+		},
+		"",
+		nil, nil, nil,
+		false, false, false, nil, nil,
+	)
+	stackMap := map[string]any{
+		"name": "dev",
+		cfg.ComponentsSectionName: map[string]any{
+			"opentofu": map[string]any{
+				"vpc": map[string]any{
+					"vars": map[string]any{"name": "vpc"},
+				},
+			},
+		},
+	}
+
+	err := p.processStackFile("stacks/dev.yaml", stackMap)
+	require.NoError(t, err)
+
+	dev, ok := p.finalStacksMap["dev"].(map[string]any)
+	require.True(t, ok)
+	components, ok := dev[cfg.ComponentsSectionName].(map[string]any)
+	require.True(t, ok)
+	assert.NotContains(t, components, cfg.TerraformSectionName)
+	opentofu, ok := components["opentofu"].(map[string]any)
+	require.True(t, ok)
+	vpc, ok := opentofu["vpc"].(map[string]any)
+	require.True(t, ok)
+	componentInfo, ok := vpc["component_info"].(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, "terraform", componentInfo["component_type"])
+	assert.Equal(t, "opentofu", componentInfo["component_envelope"])
+}
+
+func TestProcessStackFile_ComponentAliasRejectsDuplicateCanonicalComponent(t *testing.T) {
+	p := newDescribeStacksProcessor(
+		&schema.AtmosConfiguration{
+			Components: schema.Components{
+				Terraform: schema.Terraform{Aliases: []string{"opentofu"}},
+			},
+		},
+		"",
+		nil, nil, nil,
+		false, false, false, nil, nil,
+	)
+	stackMap := map[string]any{
+		cfg.ComponentsSectionName: map[string]any{
+			"terraform": map[string]any{"vpc": map[string]any{}},
+			"opentofu":  map[string]any{"vpc": map[string]any{}},
+		},
+	}
+
+	err := p.processStackFile("stacks/dev.yaml", stackMap)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), `component "vpc" is defined under both`)
+}
+
 func TestProcessComponentTypeSection_ComponentSectionNotMap(t *testing.T) {
 	// When a component entry in the type section is not a map, an error is returned.
 	p := newMinimalProcessor()

@@ -46,6 +46,19 @@ The `component` argument and `--stack` flag are required to generate variables a
 
 See individual command pages for detailed options: [plan](/cli/commands/terraform/plan), [apply](/cli/commands/terraform/apply), [deploy](/cli/commands/terraform/deploy), [destroy](/cli/commands/terraform/destroy).
 
+### Component Type Aliases
+
+If `components.terraform.aliases` is configured in `atmos.yaml`, the alias becomes a top-level command that dispatches through Terraform behavior. For example, with `aliases: opentofu`, these commands are equivalent:
+
+<Terminal>
+```shell
+atmos opentofu plan vpc -s dev
+atmos terraform plan vpc -s dev
+```
+</Terminal>
+
+The alias reuses the Terraform command's flags, completions, help, compatibility flags, and execution behavior. The alias does not change the executable; set `components.terraform.command: tofu` when you want Atmos to run OpenTofu.
+
 ### Path-Based Component Resolution
 
 Atmos supports using filesystem paths instead of component names for convenience. This allows you to navigate to a component directory and use `.` to reference it:

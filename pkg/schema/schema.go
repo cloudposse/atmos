@@ -471,12 +471,13 @@ type SourceSettings struct {
 }
 
 type Terraform struct {
-	BasePath                string `yaml:"base_path" json:"base_path" mapstructure:"base_path"`
-	ApplyAutoApprove        bool   `yaml:"apply_auto_approve" json:"apply_auto_approve" mapstructure:"apply_auto_approve"`
-	AppendUserAgent         string `yaml:"append_user_agent" json:"append_user_agent" mapstructure:"append_user_agent"`
-	DeployRunInit           bool   `yaml:"deploy_run_init" json:"deploy_run_init" mapstructure:"deploy_run_init"`
-	InitRunReconfigure      bool   `yaml:"init_run_reconfigure" json:"init_run_reconfigure" mapstructure:"init_run_reconfigure"`
-	AutoGenerateBackendFile bool   `yaml:"auto_generate_backend_file" json:"auto_generate_backend_file" mapstructure:"auto_generate_backend_file"`
+	Aliases                 []string `yaml:"aliases,omitempty" json:"aliases,omitempty" mapstructure:"aliases"`
+	BasePath                string   `yaml:"base_path" json:"base_path" mapstructure:"base_path"`
+	ApplyAutoApprove        bool     `yaml:"apply_auto_approve" json:"apply_auto_approve" mapstructure:"apply_auto_approve"`
+	AppendUserAgent         string   `yaml:"append_user_agent" json:"append_user_agent" mapstructure:"append_user_agent"`
+	DeployRunInit           bool     `yaml:"deploy_run_init" json:"deploy_run_init" mapstructure:"deploy_run_init"`
+	InitRunReconfigure      bool     `yaml:"init_run_reconfigure" json:"init_run_reconfigure" mapstructure:"init_run_reconfigure"`
+	AutoGenerateBackendFile bool     `yaml:"auto_generate_backend_file" json:"auto_generate_backend_file" mapstructure:"auto_generate_backend_file"`
 	// AutoGenerateFiles enables automatic generation of auxiliary configuration files
 	// (e.g., .tf, .json, .yaml) during Terraform operations when set to true.
 	// Generated files are defined in the component's generate section.
@@ -641,14 +642,15 @@ type CITemplatesConfig struct {
 }
 
 type Helmfile struct {
-	BasePath              string `yaml:"base_path" json:"base_path" mapstructure:"base_path"`
-	UseEKS                bool   `yaml:"use_eks" json:"use_eks" mapstructure:"use_eks"`
-	KubeconfigPath        string `yaml:"kubeconfig_path" json:"kubeconfig_path" mapstructure:"kubeconfig_path"`
-	HelmAwsProfilePattern string `yaml:"helm_aws_profile_pattern" json:"helm_aws_profile_pattern" mapstructure:"helm_aws_profile_pattern"` // Deprecated: use --identity flag instead.
-	ClusterNamePattern    string `yaml:"cluster_name_pattern" json:"cluster_name_pattern" mapstructure:"cluster_name_pattern"`             // Deprecated: use ClusterNameTemplate with Go template syntax.
-	ClusterNameTemplate   string `yaml:"cluster_name_template" json:"cluster_name_template" mapstructure:"cluster_name_template"`
-	ClusterName           string `yaml:"cluster_name" json:"cluster_name" mapstructure:"cluster_name"`
-	Command               string `yaml:"command" json:"command" mapstructure:"command"`
+	Aliases               []string `yaml:"aliases,omitempty" json:"aliases,omitempty" mapstructure:"aliases"`
+	BasePath              string   `yaml:"base_path" json:"base_path" mapstructure:"base_path"`
+	UseEKS                bool     `yaml:"use_eks" json:"use_eks" mapstructure:"use_eks"`
+	KubeconfigPath        string   `yaml:"kubeconfig_path" json:"kubeconfig_path" mapstructure:"kubeconfig_path"`
+	HelmAwsProfilePattern string   `yaml:"helm_aws_profile_pattern" json:"helm_aws_profile_pattern" mapstructure:"helm_aws_profile_pattern"` // Deprecated: use --identity flag instead.
+	ClusterNamePattern    string   `yaml:"cluster_name_pattern" json:"cluster_name_pattern" mapstructure:"cluster_name_pattern"`             // Deprecated: use ClusterNameTemplate with Go template syntax.
+	ClusterNameTemplate   string   `yaml:"cluster_name_template" json:"cluster_name_template" mapstructure:"cluster_name_template"`
+	ClusterName           string   `yaml:"cluster_name" json:"cluster_name" mapstructure:"cluster_name"`
+	Command               string   `yaml:"command" json:"command" mapstructure:"command"`
 	// AutoGenerateFiles enables automatic generation of auxiliary configuration files
 	// during Helmfile operations when set to true.
 	// Generated files are defined in the component's generate section.
@@ -658,8 +660,9 @@ type Helmfile struct {
 }
 
 type Packer struct {
-	BasePath string `yaml:"base_path" json:"base_path" mapstructure:"base_path"`
-	Command  string `yaml:"command" json:"command" mapstructure:"command"`
+	Aliases  []string `yaml:"aliases,omitempty" json:"aliases,omitempty" mapstructure:"aliases"`
+	BasePath string   `yaml:"base_path" json:"base_path" mapstructure:"base_path"`
+	Command  string   `yaml:"command" json:"command" mapstructure:"command"`
 	// AutoGenerateFiles enables automatic generation of auxiliary configuration files
 	// during Packer operations when set to true.
 	// Generated files are defined in the component's generate section.
@@ -670,8 +673,9 @@ type Packer struct {
 
 // Ansible defines configuration for Ansible components.
 type Ansible struct {
-	BasePath string `yaml:"base_path" json:"base_path" mapstructure:"base_path"`
-	Command  string `yaml:"command" json:"command" mapstructure:"command"`
+	Aliases  []string `yaml:"aliases,omitempty" json:"aliases,omitempty" mapstructure:"aliases"`
+	BasePath string   `yaml:"base_path" json:"base_path" mapstructure:"base_path"`
+	Command  string   `yaml:"command" json:"command" mapstructure:"command"`
 	// AutoGenerateFiles enables automatic generation of auxiliary configuration files
 	// during Ansible operations when set to true.
 	// Generated files are defined in the component's generate section.

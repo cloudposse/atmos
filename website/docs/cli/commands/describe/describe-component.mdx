@@ -24,6 +24,8 @@ Execute the `atmos describe component` command like this:
 atmos describe component <component> -s <stack>
 ```
 
+When the component was declared under a [component type alias](/cli/configuration/components/aliases), describe output preserves that stack envelope. For example, `components.opentofu.vpc` remains under `components.opentofu`, while `component_info.component_type` identifies the canonical type as `terraform`.
+
 ### Path-Based Component Resolution
 
 Atmos supports using filesystem paths instead of component names for convenience. This allows you to navigate to a component directory and use `.` to reference it:

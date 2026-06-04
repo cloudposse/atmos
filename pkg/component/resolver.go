@@ -72,7 +72,8 @@ func (r *Resolver) ResolveComponentFromPath(
 ) (string, error) {
 	defer perf.Track(atmosConfig, "component.ResolveComponentFromPath")()
 
-	log.Debug("Resolving component from path",
+	log.Debug(
+		"Resolving component from path",
 		"path", path,
 		"stack", stack,
 		"expected_type", expectedComponentType,
@@ -113,7 +114,8 @@ func (r *Resolver) ResolveComponentFromPath(
 		resolvedComponent = componentInfo.FullComponent
 	}
 
-	log.Debug("Successfully resolved component from path",
+	log.Debug(
+		"Successfully resolved component from path",
 		"path", path,
 		"component", resolvedComponent,
 		"type", componentInfo.ComponentType,
@@ -131,7 +133,8 @@ func (r *Resolver) ResolveComponentFromPathWithoutTypeCheck(
 ) (string, error) {
 	defer perf.Track(atmosConfig, "component.ResolveComponentFromPathWithoutTypeCheck")()
 
-	log.Debug("Resolving component from path (without type check)",
+	log.Debug(
+		"Resolving component from path (without type check)",
 		"path", path,
 		"stack", stack,
 	)
@@ -156,7 +159,8 @@ func (r *Resolver) ResolveComponentFromPathWithoutTypeCheck(
 		resolvedComponent = componentInfo.FullComponent
 	}
 
-	log.Debug("Successfully resolved component from path (without type check)",
+	log.Debug(
+		"Successfully resolved component from path (without type check)",
 		"path", path,
 		ComponentKey, resolvedComponent,
 		"detected_type", componentInfo.ComponentType,
@@ -187,7 +191,8 @@ func (r *Resolver) ResolveComponentFromPathWithoutValidation(
 ) (string, error) {
 	defer perf.Track(atmosConfig, "component.ResolveComponentFromPathWithoutValidation")()
 
-	log.Debug("Resolving component from path (without validation)",
+	log.Debug(
+		"Resolving component from path (without validation)",
 		"path", path,
 		"expected_type", expectedComponentType,
 	)
@@ -215,7 +220,8 @@ func (r *Resolver) ResolveComponentFromPathWithoutValidation(
 		return "", err
 	}
 
-	log.Debug("Successfully resolved component from path (without validation)",
+	log.Debug(
+		"Successfully resolved component from path (without validation)",
 		"path", path,
 		"component", componentInfo.FullComponent,
 		"type", componentInfo.ComponentType,
@@ -275,6 +281,15 @@ func extractComponentsSection(
 	componentType string,
 	stack string,
 ) (map[string]any, error) {
+	return extractComponentsSectionWithConfig(nil, stackConfigMap, componentType, stack)
+}
+
+func extractComponentsSectionWithConfig(
+	atmosConfig *schema.AtmosConfiguration,
+	stackConfigMap map[string]any,
+	componentType string,
+	stack string,
+) (map[string]any, error) {
 	// Extract components section.
 	components, ok := stackConfigMap["components"]
 	if !ok {
@@ -285,15 +300,23 @@ func extractComponentsSection(
 	if !ok {
 		return nil, fmt.Errorf("%w: invalid components section in stack '%s'", errUtils.ErrComponentNotInStack, stack)
 	}
+	if atmosConfig != nil {
+		normalizedComponentsMap, _, err := NormalizeComponentSections(atmosConfig, componentsMap)
+		if err != nil {
+			return nil, fmt.Errorf("%w: %w", errUtils.ErrComponentNotInStack, err)
+		}
+		componentsMap = normalizedComponentsMap
+	}
 
+	canonicalType := CanonicalType(atmosConfig, componentType)
 	// Extract component type section (terraform/helmfile/packer).
-	typeComponents, ok := componentsMap[componentType]
+	typeComponents, ok := componentsMap[canonicalType]
 	if !ok {
 		return nil, fmt.Errorf(
 			"%w: stack '%s' has no %s components",
 			errUtils.ErrComponentNotInStack,
 			stack,
-			componentType,
+			canonicalType,
 		)
 	}
 
@@ -302,7 +325,7 @@ func extractComponentsSection(
 		return nil, fmt.Errorf(
 			"%w: invalid %s components section in stack '%s'",
 			errUtils.ErrComponentNotInStack,
-			componentType,
+			canonicalType,
 			stack,
 		)
 	}
@@ -402,7 +425,8 @@ func handleMultipleMatches(matches []string, componentName, stack, componentType
 	}
 
 	// Interactive terminal - prompt user to select.
-	log.Debug("Multiple component matches found, prompting user for selection",
+	log.Debug(
+		"Multiple component matches found, prompting user for selection",
 		"matches", matches,
 		"component", componentName,
 		StackKey, stack,
@@ -415,14 +439,16 @@ func handleMultipleMatches(matches []string, componentName, stack, componentType
 			return "", errUtils.ErrUserAborted
 		}
 		// Other error - fall back to ambiguous path error.
-		log.Debug("Component selection failed, falling back to error",
+		log.Debug(
+			"Component selection failed, falling back to error",
 			"error", err.Error(),
 		)
 		return "", buildAmbiguousComponentError(matches, componentName, stack, componentType)
 	}
 
 	// User made a selection - return it.
-	log.Info("User selected component from interactive prompt",
+	log.Info(
+		"User selected component from interactive prompt",
 		"selected", selected,
 		"matches", matches,
 		StackKey, stack,
@@ -497,7 +523,8 @@ func promptForComponentSelection(
 		return "", fmt.Errorf("component selection failed: %w", err)
 	}
 
-	log.Debug("User selected component",
+	log.Debug(
+		"User selected component",
 		"selected", selected,
 		"from_matches", matches,
 		StackKey, stack,
@@ -514,7 +541,8 @@ func (r *Resolver) validateComponentInStack(
 ) (string, error) {
 	defer perf.Track(atmosConfig, "component.validateComponentInStack")()
 
-	log.Debug("Validating component exists in stack",
+	log.Debug(
+		"Validating component exists in stack",
 		ComponentKey, componentName,
 		StackKey, stack,
 		TypeKey, componentType,
@@ -527,7 +555,7 @@ func (r *Resolver) validateComponentInStack(
 	}
 
 	// Extract the component type section.
-	typeComponentsMap, err := extractComponentsSection(stackConfigMap, componentType, stack)
+	typeComponentsMap, err := extractComponentsSectionWithConfig(atmosConfig, stackConfigMap, componentType, stack)
 	if err != nil {
 		return "", err
 	}
@@ -543,13 +571,15 @@ func (r *Resolver) validateComponentInStack(
 
 	// Log success.
 	if resolvedComponent == componentName {
-		log.Debug("Component validated successfully in stack (direct match)",
+		log.Debug(
+			"Component validated successfully in stack (direct match)",
 			ComponentKey, componentName,
 			StackKey, stack,
 			TypeKey, componentType,
 		)
 	} else {
-		log.Debug("Component validated successfully in stack (alias match)",
+		log.Debug(
+			"Component validated successfully in stack (alias match)",
 			"path_component", componentName,
 			"stack_key", resolvedComponent,
 			StackKey, stack,

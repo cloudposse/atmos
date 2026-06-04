@@ -6,6 +6,7 @@ import (
 
 	"github.com/cloudposse/atmos/internal/tui/templates/term"
 	"github.com/cloudposse/atmos/pkg/auth"
+	"github.com/cloudposse/atmos/pkg/component"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/pager"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -14,7 +15,7 @@ import (
 )
 
 // componentInfoKey is the key used for component info in stack sections.
-const componentInfoKey = "component_info"
+const componentInfoKey = component.ComponentInfoKey
 
 // logFieldStack is the log field key for stack names.
 const logFieldStack = "stack"
@@ -210,6 +211,7 @@ func executeDescribeStacks(
 
 // getComponentBasePath returns the base path for a component kind from atmos config.
 func getComponentBasePath(atmosConfig *schema.AtmosConfiguration, componentKind string) string {
+	componentKind = component.CanonicalType(atmosConfig, componentKind)
 	switch componentKind {
 	case cfg.TerraformSectionName:
 		return atmosConfig.Components.Terraform.BasePath
@@ -231,8 +233,14 @@ func getComponentBasePath(atmosConfig *schema.AtmosConfiguration, componentKind 
 func buildComponentInfo(atmosConfig *schema.AtmosConfiguration, componentSection map[string]any, componentKind string) map[string]any {
 	defer perf.Track(atmosConfig, "exec.buildComponentInfo")()
 
+	canonicalKind := component.CanonicalType(atmosConfig, componentKind)
 	componentInfo := map[string]any{
-		"component_type": componentKind,
+		component.ComponentTypeInfoKey: canonicalKind,
+	}
+	if existing, ok := componentSection[componentInfoKey].(map[string]any); ok {
+		if envelope, ok := existing[component.ComponentEnvelopeKey].(string); ok && envelope != "" && envelope != canonicalKind {
+			componentInfo[component.ComponentEnvelopeKey] = envelope
+		}
 	}
 
 	// Get the actual component name to use for path resolution.
@@ -257,7 +265,7 @@ func buildComponentInfo(atmosConfig *schema.AtmosConfiguration, componentSection
 
 	// Build the relative component path directly from config.
 	// This avoids returning absolute paths which are environment-specific.
-	basePath := getComponentBasePath(atmosConfig, componentKind)
+	basePath := getComponentBasePath(atmosConfig, canonicalKind)
 	if basePath == "" {
 		return componentInfo
 	}
