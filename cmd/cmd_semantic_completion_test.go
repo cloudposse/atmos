@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/spf13/cobra"
@@ -341,10 +342,104 @@ func TestDefaultPromptConfig(t *testing.T) {
 	cfg := DefaultPromptConfig()
 
 	assert.NotNil(t, cfg, "DefaultPromptConfig should return non-nil config")
+	assert.NotNil(t, cfg.LoadStacksMap, "LoadStacksMap should be set")
 	assert.NotNil(t, cfg.ListComponents, "ListComponents should be set")
 	assert.NotNil(t, cfg.ListStacks, "ListStacks should be set")
 	assert.NotNil(t, cfg.PromptArg, "PromptArg should be set")
 	assert.NotNil(t, cfg.PromptFlag, "PromptFlag should be set")
+}
+
+func TestPromptForSemanticValues(t *testing.T) {
+	tests := []struct {
+		name          string
+		commandConfig *schema.Command
+		argumentsData map[string]string
+		flagsData     map[string]any
+		loadStacksErr error
+		wantArguments map[string]string
+		wantFlags     map[string]any
+	}{
+		{
+			name: "fills missing required component/stack arguments",
+			commandConfig: &schema.Command{
+				Component: &schema.CommandComponent{Type: "script"},
+				Arguments: []schema.CommandArgument{
+					{Name: "component", Type: semanticTypeComponent, Required: true},
+					{Name: "stack", Type: semanticTypeStack, Required: true},
+				},
+			},
+			argumentsData: map[string]string{},
+			flagsData:     map[string]any{},
+			wantArguments: map[string]string{"component": "deploy-app", "stack": "dev"},
+			wantFlags:     map[string]any{},
+		},
+		{
+			name: "fills missing required component/stack flags",
+			commandConfig: &schema.Command{
+				Component: &schema.CommandComponent{Type: "script"},
+				Flags: []schema.CommandFlag{
+					{Name: "component", SemanticType: semanticTypeComponent, Required: true},
+					{Name: "stack", SemanticType: semanticTypeStack, Required: true},
+				},
+			},
+			argumentsData: map[string]string{},
+			flagsData:     map[string]any{},
+			wantArguments: map[string]string{},
+			wantFlags:     map[string]any{"component": "deploy-app", "stack": "dev"},
+		},
+		{
+			name: "loadStacksMap error degrades gracefully without prompting",
+			commandConfig: &schema.Command{
+				Component: &schema.CommandComponent{Type: "script"},
+				Arguments: []schema.CommandArgument{
+					{Name: "component", Type: semanticTypeComponent, Required: true},
+				},
+			},
+			argumentsData: map[string]string{},
+			flagsData:     map[string]any{},
+			loadStacksErr: errors.New("failed to load stacks"),
+			wantArguments: map[string]string{},
+			wantFlags:     map[string]any{},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_ = NewTestKit(t)
+
+			var loadCalled bool
+			mockCfg := &PromptConfig{
+				LoadStacksMap: func() (map[string]any, error) {
+					loadCalled = true
+					return map[string]any{"dev": map[string]any{}}, tt.loadStacksErr
+				},
+				ListComponents: func(_ context.Context, _ string, _ map[string]any) ([]string, error) {
+					return []string{"deploy-app"}, nil
+				},
+				ListStacks: func(_ *cobra.Command) ([]string, error) {
+					return []string{"dev"}, nil
+				},
+				PromptArg: func(name, _ string, _ flags.CompletionFunc, _ *cobra.Command, _ []string) (string, error) {
+					if name == "stack" {
+						return "dev", nil
+					}
+					return "deploy-app", nil
+				},
+				PromptFlag: func(name, _ string, _ flags.CompletionFunc, _ *cobra.Command, _ []string) (string, error) {
+					if name == "stack" {
+						return "dev", nil
+					}
+					return "deploy-app", nil
+				},
+			}
+
+			promptForSemanticValues(&cobra.Command{}, tt.commandConfig, tt.argumentsData, tt.flagsData, mockCfg)
+
+			assert.True(t, loadCalled, "LoadStacksMap should be invoked")
+			assert.Equal(t, tt.wantArguments, tt.argumentsData)
+			assert.Equal(t, tt.wantFlags, tt.flagsData)
+		})
+	}
 }
 
 func TestPromptForStackValue(t *testing.T) {

@@ -1621,16 +1621,44 @@ func processCustomComponentType(
 	data map[string]any,
 	authManager auth.AuthManager,
 ) {
+	componentConfig, err := resolveCustomComponentConfig(
+		commandConfig,
+		argumentsData,
+		flagsData,
+		authManager,
+		custom.EnsureRegistered,
+		e.ExecuteDescribeComponent,
+	)
+	errUtils.CheckErrorPrintAndExit(err, "", "")
+	data["Component"] = componentConfig
+}
+
+// resolveCustomComponentConfig finds the component/stack, registers the custom type,
+// and resolves the component config. It returns an error instead of exiting so it is
+// testable; the caller is responsible for handling the error (see processCustomComponentType).
+// The ensureRegisteredFn and describeFn dependencies are injected to enable unit testing.
+//
+//nolint:revive // argument-limit: parameters are necessary for component processing
+func resolveCustomComponentConfig(
+	commandConfig *schema.Command,
+	argumentsData map[string]string,
+	flagsData map[string]any,
+	authManager auth.AuthManager,
+	ensureRegisteredFn func(typeName, basePath string) error,
+	describeFn func(*e.ExecuteDescribeComponentParams) (map[string]any, error),
+) (map[string]any, error) {
+	defer perf.Track(nil, "cmd.resolveCustomComponentConfig")()
+
 	// Find component name from argument/flag with type: component.
-	componentName := findTypedValue(commandConfig, argumentsData, flagsData, "component")
+	componentName := findTypedValue(commandConfig, argumentsData, flagsData, semanticTypeComponent)
 	if componentName == "" {
-		errUtils.CheckErrorPrintAndExit(errUtils.ErrComponentArgumentNotFound, "", "")
+		return nil, errUtils.ErrComponentArgumentNotFound
 	}
 
 	// Find stack name from argument/flag with type: stack (or semantic_type: stack for flags).
-	stackName := findTypedValue(commandConfig, argumentsData, flagsData, "stack")
+	stackName := findTypedValue(commandConfig, argumentsData, flagsData, semanticTypeStack)
 	if stackName == "" {
-		errUtils.CheckErrorPrintAndExit(errUtils.ErrStackArgumentNotFound, "", "")
+		return nil, errUtils.ErrStackArgumentNotFound
 	}
 
 	// Register the custom component type if not already registered.
@@ -1638,12 +1666,12 @@ func processCustomComponentType(
 	if basePath == "" {
 		basePath = fmt.Sprintf("components/%s", commandConfig.Component.Type)
 	}
-	if err := custom.EnsureRegistered(commandConfig.Component.Type, basePath); err != nil {
-		errUtils.CheckErrorPrintAndExit(err, "", "")
+	if err := ensureRegisteredFn(commandConfig.Component.Type, basePath); err != nil {
+		return nil, err
 	}
 
 	// Get the config for the component in the stack.
-	componentConfig, err := e.ExecuteDescribeComponent(&e.ExecuteDescribeComponentParams{
+	return describeFn(&e.ExecuteDescribeComponentParams{
 		Component:            componentName,
 		Stack:                stackName,
 		ComponentType:        commandConfig.Component.Type,
@@ -1652,6 +1680,4 @@ func processCustomComponentType(
 		Skip:                 nil,
 		AuthManager:          authManager,
 	})
-	errUtils.CheckErrorPrintAndExit(err, "", "")
-	data["Component"] = componentConfig
 }

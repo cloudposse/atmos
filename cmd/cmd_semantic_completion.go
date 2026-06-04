@@ -103,6 +103,7 @@ func setSemanticArgCompletion(cmd *cobra.Command, commandConfig *schema.Command)
 // PromptConfig holds dependencies for interactive prompting.
 // This enables testability by allowing mock implementations.
 type PromptConfig struct {
+	LoadStacksMap  func() (map[string]any, error)
 	ListComponents func(ctx context.Context, componentType string, stacksMap map[string]any) ([]string, error)
 	ListStacks     func(cmd *cobra.Command) ([]string, error)
 	PromptArg      func(name, title string, completionFunc flags.CompletionFunc, cmd *cobra.Command, args []string) (string, error)
@@ -114,6 +115,7 @@ func DefaultPromptConfig() *PromptConfig {
 	defer perf.Track(nil, "cmd.DefaultPromptConfig")()
 
 	return &PromptConfig{
+		LoadStacksMap:  loadStacksMapForCompletion,
 		ListComponents: component.ListAllComponents,
 		ListStacks:     listStacks,
 		PromptArg:      flags.PromptForPositionalArg,
@@ -139,7 +141,7 @@ func promptForSemanticValues(
 		promptCfg = DefaultPromptConfig()
 	}
 
-	stacksMap, err := loadStacksMapForCompletion()
+	stacksMap, err := promptCfg.LoadStacksMap()
 	if err != nil {
 		return // Graceful degradation.
 	}

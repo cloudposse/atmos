@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	e "github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/reexec"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -2045,6 +2046,167 @@ func TestFindTypedValue(t *testing.T) {
 			_ = NewTestKit(t)
 			got := findTypedValue(tt.cmd, tt.argumentsData, tt.flagsData, tt.semanticType)
 			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+// errEnsureRegistered is a sentinel error used to verify ensureRegisteredFn error propagation.
+var errEnsureRegistered = errors.New("ensure registered failed")
+
+// errDescribe is a sentinel error used to verify describeFn error propagation.
+var errDescribe = errors.New("describe failed")
+
+func TestResolveCustomComponentConfig(t *testing.T) {
+	// okEnsure is a no-op registration stub that records the basePath it received.
+	type ensureCall struct {
+		typeName string
+		basePath string
+	}
+
+	tests := []struct {
+		name          string
+		commandConfig *schema.Command
+		argumentsData map[string]string
+		flagsData     map[string]any
+		ensureErr     error
+		describeRet   map[string]any
+		describeErr   error
+		wantErr       error
+		wantConfig    map[string]any
+		wantBasePath  string // expected basePath passed to ensureRegisteredFn (when registration is reached).
+	}{
+		{
+			name: "missing component argument returns ErrComponentArgumentNotFound",
+			commandConfig: &schema.Command{
+				Component: &schema.CommandComponent{Type: "script"},
+				Arguments: []schema.CommandArgument{{Name: "component", Type: semanticTypeComponent}},
+			},
+			argumentsData: map[string]string{},
+			flagsData:     map[string]any{},
+			wantErr:       errUtils.ErrComponentArgumentNotFound,
+		},
+		{
+			name: "component present but missing stack returns ErrStackArgumentNotFound",
+			commandConfig: &schema.Command{
+				Component: &schema.CommandComponent{Type: "script"},
+				Arguments: []schema.CommandArgument{
+					{Name: "component", Type: semanticTypeComponent},
+					{Name: "stack", Type: semanticTypeStack},
+				},
+			},
+			argumentsData: map[string]string{"component": "deploy-app"},
+			flagsData:     map[string]any{},
+			wantErr:       errUtils.ErrStackArgumentNotFound,
+		},
+		{
+			name: "ensureRegisteredFn error propagates",
+			commandConfig: &schema.Command{
+				Component: &schema.CommandComponent{Type: "script"},
+				Arguments: []schema.CommandArgument{
+					{Name: "component", Type: semanticTypeComponent},
+					{Name: "stack", Type: semanticTypeStack},
+				},
+			},
+			argumentsData: map[string]string{"component": "deploy-app", "stack": "dev"},
+			flagsData:     map[string]any{},
+			ensureErr:     errEnsureRegistered,
+			wantErr:       errEnsureRegistered,
+			wantBasePath:  "components/script", // default basePath derived from type.
+		},
+		{
+			name: "describeFn error propagates",
+			commandConfig: &schema.Command{
+				Component: &schema.CommandComponent{Type: "script"},
+				Arguments: []schema.CommandArgument{
+					{Name: "component", Type: semanticTypeComponent},
+					{Name: "stack", Type: semanticTypeStack},
+				},
+			},
+			argumentsData: map[string]string{"component": "deploy-app", "stack": "dev"},
+			flagsData:     map[string]any{},
+			describeErr:   errDescribe,
+			wantErr:       errDescribe,
+			wantBasePath:  "components/script",
+		},
+		{
+			name: "success with default basePath returns component config",
+			commandConfig: &schema.Command{
+				Component: &schema.CommandComponent{Type: "script"},
+				Arguments: []schema.CommandArgument{
+					{Name: "component", Type: semanticTypeComponent},
+					{Name: "stack", Type: semanticTypeStack},
+				},
+			},
+			argumentsData: map[string]string{"component": "deploy-app", "stack": "dev"},
+			flagsData:     map[string]any{},
+			describeRet:   map[string]any{"vars": map[string]any{"foo": "bar"}},
+			wantConfig:    map[string]any{"vars": map[string]any{"foo": "bar"}},
+			wantBasePath:  "components/script",
+		},
+		{
+			name: "success with explicit basePath and semantic flags",
+			commandConfig: &schema.Command{
+				Component: &schema.CommandComponent{Type: "script", BasePath: "custom/path"},
+				Flags: []schema.CommandFlag{
+					{Name: "component", SemanticType: semanticTypeComponent},
+					{Name: "stack", SemanticType: semanticTypeStack},
+				},
+			},
+			argumentsData: map[string]string{},
+			flagsData:     map[string]any{"component": "deploy-app", "stack": "dev"},
+			describeRet:   map[string]any{"component": "deploy-app"},
+			wantConfig:    map[string]any{"component": "deploy-app"},
+			wantBasePath:  "custom/path", // explicit basePath is preserved.
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_ = NewTestKit(t)
+
+			var gotEnsure *ensureCall
+			ensureFn := func(typeName, basePath string) error {
+				gotEnsure = &ensureCall{typeName: typeName, basePath: basePath}
+				return tt.ensureErr
+			}
+
+			var gotParams *e.ExecuteDescribeComponentParams
+			describeFn := func(params *e.ExecuteDescribeComponentParams) (map[string]any, error) {
+				gotParams = params
+				return tt.describeRet, tt.describeErr
+			}
+
+			got, err := resolveCustomComponentConfig(
+				tt.commandConfig,
+				tt.argumentsData,
+				tt.flagsData,
+				nil, // authManager not needed for these paths.
+				ensureFn,
+				describeFn,
+			)
+
+			if tt.wantErr != nil {
+				require.Error(t, err)
+				assert.ErrorIs(t, err, tt.wantErr)
+				assert.Nil(t, got)
+				return
+			}
+
+			require.NoError(t, err)
+			assert.Equal(t, tt.wantConfig, got)
+
+			// Verify the custom type was registered with the expected basePath.
+			require.NotNil(t, gotEnsure)
+			assert.Equal(t, tt.commandConfig.Component.Type, gotEnsure.typeName)
+			assert.Equal(t, tt.wantBasePath, gotEnsure.basePath)
+
+			// Verify component/stack were threaded through to describeFn.
+			require.NotNil(t, gotParams)
+			assert.Equal(t, "deploy-app", gotParams.Component)
+			assert.Equal(t, "dev", gotParams.Stack)
+			assert.Equal(t, tt.commandConfig.Component.Type, gotParams.ComponentType)
+			assert.True(t, gotParams.ProcessTemplates)
+			assert.True(t, gotParams.ProcessYamlFunctions)
 		})
 	}
 }
