@@ -22,6 +22,14 @@ describe:
   settings:
     # Include empty values in the describe output
     include_empty: false
+  affected:
+    # Override which component sections `atmos describe affected` evaluates.
+    # When set, this list fully replaces the built-in defaults.
+    sections:
+      - vars
+      - env
+      - providers
+      - hooks
 ```
 </File>
 
@@ -32,6 +40,14 @@ describe:
   <dd>
     When set to `true`, includes fields with empty values (empty strings, empty arrays, null values) in the describe command output.
     Default: `false` (empty values are omitted for cleaner output).
+  </dd>
+
+  <dt>`affected.sections`</dt>
+  <dd>
+    The authoritative list of top-level component sections that [`atmos describe affected`](/cli/commands/describe/affected#evaluated-sections)
+    compares when computing affected components. When set, it **fully replaces** the built-in defaults (it is not additive) — to add a custom
+    section, copy the [default list](/cli/commands/describe/affected#evaluated-sections) and append your section; to drop one, omit it.
+    `metadata` and `settings` are always evaluated regardless of this list. When empty or unset, the built-in defaults are used.
   </dd>
 </dl>
 
