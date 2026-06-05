@@ -75,10 +75,19 @@ boolean, the provider must persist the sensitivity flag explicitly:
 - **GCP Secret Manager** — write the reserved label `atmos-sensitive=true` on the
   secret; read labels on access.
 
+> **Why the separator differs:** AWS Secrets Manager tag keys permit a colon, so the
+> colon form `atmos:sensitive=true` is used there. Azure Key Vault and GCP Secret
+> Manager use the hyphen form `atmos-sensitive=true` because GCP label keys allow only
+> lowercase letters, digits, `_`, and `-` (no colon), and Azure follows the same
+> convention for consistency.
+
 **Fallback when metadata is absent:** if the reserved tag/label is missing (e.g. the
 value pre-dates this feature or was written out-of-band), the provider defaults to
 `sensitive=true` for the dedicated secret managers (fail safe — mask rather than leak)
-and `sensitive=false` for SSM `String` parameters. A `secret: true` store (see the
+and `sensitive=false` for SSM `String` parameters. The SSM asymmetry is intentional: its
+`Type` field is authoritative and self-describing — `SecureString` has always been the
+documented mechanism for sensitive data, so a `String` parameter has never been a place
+secrets were stored. A `secret: true` store (see the
 [Secrets Management PRD](../secrets-management.md)) always writes the sensitive variant.
 
 ### Retrieval-Side Masking

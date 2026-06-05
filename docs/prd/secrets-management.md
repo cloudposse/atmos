@@ -423,7 +423,7 @@ atmos secret list --stack prod --verbose
 ```
 
 Output:
-```
+```text
 STACK       COMPONENT  SECRET            PROVIDER   STATUS
 prod        (global)   ARTIFACTORY_TOKEN aws/ssm    initialized
 prod        api        DATADOG_API_KEY   aws/ssm    initialized
@@ -751,7 +751,7 @@ stores:
 
 **Identity precedence** (most specific wins):
 
-```
+```text
 store/provider `identity:`                 # explicit backend identity (pins it)
   → component instance's effective identity # inherited when resolved in a component scope
   → --identity / ATMOS_IDENTITY            # standalone invocations (no component scope)
@@ -777,6 +777,13 @@ Notes:
   (see [Describe / List Behavior](#describe--list-behavior-mask-secrets-by-default)),
   no identity is resolved and **no credentials are required** to `describe`/`list`.
 - `atmos secret get/set/...` accept the existing `--identity` flag / `ATMOS_IDENTITY`.
+- **Observability (Phase 2):** because the precedence chain above is a cascade, the
+  resolved identity must be observable. The retrieval pipeline logs the selected
+  identity and the source that pinned it at INFO (e.g. `Using identity 'aws/prod-secrets'
+  (store.identity) for secret 'DATADOG_API_KEY'`), surfaces it in `--dry-run` output, and
+  explains the full 4-level chain (including nested-component inheritance) via
+  `atmos secret get --explain`. This answers both "why can't I access this secret?"
+  (debugging) and "which identity read which secret?" (security audit).
 
 ### Deployments Integration
 
@@ -794,7 +801,7 @@ This addresses the "secrets sprawl" problem from the deployments PRD.
 
 ## Package Structure
 
-```
+```text
 pkg/secrets/
     secrets.go           # Service interface, types
     service.go           # SecretService implementation
@@ -854,6 +861,8 @@ pkg/schema/
 - `init` command (interactive prompts for missing secrets)
 - `set`, `get`, `delete` commands (with `add`/`rm` aliases)
 - `--path` flag for structured secret extraction
+- Identity-resolution observability: INFO log of the resolved identity + its source,
+  `--dry-run` surfacing, and `--explain` to print the full precedence chain
 
 ### Phase 3: YAML Integration
 - `!secret` YAML function in `pkg/function/`
@@ -881,7 +890,7 @@ pkg/schema/
 
 Location: `website/docs/cli/commands/secret/`
 
-```
+```text
 website/docs/cli/commands/secret/
     _category_.json           # Sidebar category config
     index.mdx                 # Overview: atmos secret
