@@ -1,11 +1,14 @@
 package secret
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/cloudposse/atmos/pkg/secrets"
 )
 
 func TestParseEnvSecrets(t *testing.T) {
@@ -31,14 +34,62 @@ func TestSortedKeys(t *testing.T) {
 	assert.Equal(t, []string{"a", "b", "c"}, sortedKeys(map[string]string{"c": "", "a": "", "b": ""}))
 }
 
-func TestFormatTable(t *testing.T) {
-	out := formatTable([][]string{
-		{"SECRET", "STATUS"},
-		{"API_KEY", "initialized"},
+func TestStatusLabel(t *testing.T) {
+	t.Run("initialized", func(t *testing.T) {
+		st := &secrets.Status{Initialized: true}
+		assert.Equal(t, "initialized", statusLabel(st))
 	})
-	lines := strings.Split(out, "\n")
-	require.Len(t, lines, 2)
-	assert.True(t, strings.HasPrefix(lines[0], "SECRET"))
-	assert.Contains(t, lines[1], "API_KEY")
-	assert.Contains(t, lines[1], "initialized")
+	t.Run("missing", func(t *testing.T) {
+		st := &secrets.Status{Initialized: false}
+		assert.Equal(t, "missing", statusLabel(st))
+	})
+	t.Run("error", func(t *testing.T) {
+		st := &secrets.Status{Err: fmt.Errorf("access denied")}
+		assert.Equal(t, "error", statusLabel(st))
+	})
+}
+
+func TestBackendLabel(t *testing.T) {
+	t.Run("no name", func(t *testing.T) {
+		decl := secrets.Declaration{}
+		assert.Equal(t, "(none)", backendLabel(decl))
+	})
+	t.Run("sops backend", func(t *testing.T) {
+		decl := secrets.Declaration{BackendType: secrets.BackendSops, BackendName: "dev-sops"}
+		assert.Equal(t, "sops:dev-sops", backendLabel(decl))
+	})
+}
+
+func TestStatusesToData(t *testing.T) {
+	scope := secretScope{Stack: "dev", Component: "api"}
+	statuses := []secrets.Status{
+		{
+			Declaration: secrets.Declaration{
+				Name:        "DATADOG_API_KEY",
+				Description: "Datadog API key",
+				BackendType: secrets.BackendSops,
+				BackendName: "dev-sops",
+			},
+			Initialized: true,
+		},
+	}
+	rows := statusesToData(scope, statuses)
+	require.Len(t, rows, 1)
+	assert.Equal(t, "dev", rows[0]["stack"])
+	assert.Equal(t, "api", rows[0]["component"])
+	assert.Equal(t, "DATADOG_API_KEY", rows[0]["secret"])
+	assert.Equal(t, "sops:dev-sops", rows[0]["provider"])
+	assert.Equal(t, "initialized", rows[0]["status"])
+	assert.Equal(t, "Datadog API key", rows[0]["description"])
+}
+
+func TestSecretListColumns(t *testing.T) {
+	cols := secretListColumns(false)
+	require.Len(t, cols, 5)
+	assert.Equal(t, "Stack", cols[0].Name)
+	assert.Equal(t, "Status", cols[4].Name)
+
+	verboseCols := secretListColumns(true)
+	require.Len(t, verboseCols, 6)
+	assert.Equal(t, "Description", verboseCols[5].Name)
 }
