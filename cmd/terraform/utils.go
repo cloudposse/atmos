@@ -419,7 +419,10 @@ func terraformRun(parentCmd, actualCmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	opts := ParseTerraformRunOptions(v)
+	opts, err := ParseTerraformRunOptions(v)
+	if err != nil {
+		return err
+	}
 	return terraformRunWithOptions(parentCmd, actualCmd, args, opts)
 }
 

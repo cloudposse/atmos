@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/tests"
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/config"
@@ -86,6 +87,15 @@ func requireSamePath(t *testing.T, expected, actual string) {
 	actualEval, err := filepath.EvalSymlinks(actual)
 	require.NoError(t, err)
 	require.Equal(t, expectedEval, actualEval)
+}
+
+func TestGitRepositoryPathsWrapsRevParseExitError(t *testing.T) {
+	tests.RequireExecutable(t, "git", "git rev-parse error classification")
+
+	_, _, _, err := gitRepositoryPaths(t.TempDir())
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrGitCommandExited)
 }
 
 // Helper function to create a repository with a remote.

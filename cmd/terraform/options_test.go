@@ -268,7 +268,8 @@ func TestParseTerraformRunOptions(t *testing.T) {
 			v := viper.New()
 			tt.setup(v)
 
-			result := ParseTerraformRunOptions(v)
+			result, err := ParseTerraformRunOptions(v)
+			assert.NoError(t, err)
 
 			assert.Equal(t, tt.expected.ProcessTemplates, result.ProcessTemplates, "ProcessTemplates should match")
 			assert.Equal(t, tt.expected.ProcessFunctions, result.ProcessFunctions, "ProcessFunctions should match")
@@ -293,6 +294,53 @@ func TestParseTerraformRunOptions(t *testing.T) {
 			assert.Equal(t, tt.expected.FailureMode, result.FailureMode, "FailureMode should match")
 		})
 	}
+}
+
+func TestParseTerraformRunOptionsRejectsInvalidValues(t *testing.T) {
+	tests := []struct {
+		name    string
+		setup   func(*viper.Viper)
+		wantErr string
+	}{
+		{
+			name: "invalid failure mode",
+			setup: func(v *viper.Viper) {
+				v.Set("failure-mode", "eventually")
+			},
+			wantErr: `invalid --failure-mode "eventually": supported values are "fail-fast", "keep-going"`,
+		},
+		{
+			name: "invalid log order",
+			setup: func(v *viper.Viper) {
+				v.Set("log-order", "interleaved")
+			},
+			wantErr: `invalid --log-order "interleaved": supported values are "stream", "grouped"`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			v := viper.New()
+			tt.setup(v)
+
+			result, err := ParseTerraformRunOptions(v)
+
+			assert.Nil(t, result)
+			assert.EqualError(t, err, tt.wantErr)
+		})
+	}
+}
+
+func TestParseTerraformRunOptionsNormalizesValidatedValues(t *testing.T) {
+	v := viper.New()
+	v.Set("failure-mode", " KEEP-GOING ")
+	v.Set("log-order", " GROUPED ")
+
+	result, err := ParseTerraformRunOptions(v)
+
+	assert.NoError(t, err)
+	assert.Equal(t, terraformFailureModeKeepGoing, result.FailureMode)
+	assert.Equal(t, terraformPlanLogOrderGrouped, result.PlanLogOrder)
 }
 
 func TestTerraformRunOptions_Fields(t *testing.T) {

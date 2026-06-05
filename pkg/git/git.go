@@ -315,6 +315,8 @@ func openWorktreeConfigTolerantRepo(path string, originalErr error) (*git.Reposi
 }
 
 // isUnsupportedWorktreeConfigError reports go-git failures caused by worktreeConfig.
+// go-git does not expose typed errors for unsupported extension failures, so
+// this checks for the repositoryformatversion and worktreeconfig fragments.
 func isUnsupportedWorktreeConfigError(err error) bool {
 	if err == nil {
 		return false
@@ -387,7 +389,11 @@ func worktreeConfigExtensionValue(cfg *config.Config) (string, bool) {
 func gitRepositoryPaths(path string) (repoRoot, gitDir, commonDir string, err error) {
 	out, err := exec.Command("git", "-C", path, "rev-parse", "--path-format=absolute", "--show-toplevel", "--git-dir", "--git-common-dir").Output()
 	if err != nil {
-		return "", "", "", err
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) {
+			return "", "", "", fmt.Errorf("%w: %w", errUtils.ErrGitCommandExited, err)
+		}
+		return "", "", "", fmt.Errorf("%w: %w", errUtils.ErrGitCommandFailed, err)
 	}
 
 	lines := strings.Split(strings.TrimSpace(string(out)), "\n")

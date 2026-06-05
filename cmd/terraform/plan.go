@@ -63,7 +63,10 @@ For complete Terraform/OpenTofu documentation, see:
 		}
 
 		// Parse base terraform options.
-		opts := ParseTerraformRunOptions(v)
+		opts, err := ParseTerraformRunOptions(v)
+		if err != nil {
+			return err
+		}
 
 		// Plan-specific flags (upload-status, skip-planfile) flow through the
 		// legacy ProcessCommandLineArgs which sets info.PlanSkipPlanfile.
@@ -90,7 +93,7 @@ For complete Terraform/OpenTofu documentation, see:
 			shellOpts = append(shellOpts, e.WithStderrCapture(&stderrBuf))
 		}
 
-		err := terraformRunWithOptions(terraformCmd, cmd, args, opts, shellOpts...)
+		err = terraformRunWithOptions(terraformCmd, cmd, args, opts, shellOpts...)
 
 		// Strip ANSI escape codes so CI templates get clean text.
 		// Combine stdout and stderr so that error messages (which terraform
