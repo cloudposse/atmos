@@ -1221,12 +1221,13 @@ $XDG_CACHE_HOME/atmos/     # ~/.cache/atmos/ by default
 components:
   terraform:
     vpc:
-      metadata:
-        source:
-          type: git-worktree           # NEW: Use git clone + worktree strategy
-          uri: "github.com/cloudposse/terraform-aws-components"
-          path: "modules/vpc"          # Subdirectory within repo
-          version: "1.2.3"             # Tag, branch, or commit SHA
+      # `source` is a top-level component section (sibling of vars/settings/metadata).
+      # It is NOT nested under `metadata` — `metadata.source` is silently ignored.
+      source:
+        type: git-worktree           # NEW: Use git clone + worktree strategy
+        uri: "github.com/cloudposse/terraform-aws-components"
+        path: "modules/vpc"          # Subdirectory within repo
+        version: "1.2.3"             # Tag, branch, or commit SHA
 ```
 
 ### Implementation Flow
