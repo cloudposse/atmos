@@ -3,6 +3,7 @@ package terraform
 import (
 	"testing"
 
+	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -43,6 +44,39 @@ func TestInitCmd_HookWiring(t *testing.T) {
 		// Returns nil early without invoking runHooksWithOutput.
 		assert.NoError(t, initCmd.PostRunE(newHookTestCmd(), args))
 	})
+}
+
+// TestInitCmd_RunE_FiresAfterInitErrorHookOnFailure covers the init RunE body
+// and its deferred error hook: when RunE fails (here, no atmos stacks directory
+// in an empty working dir, so ValidateAtmosConfig errors), the deferred
+// after-terraform-init hook must fire with the run error so CI check runs are
+// updated to failure. The wrapper is stubbed to record the invocation without
+// performing real hook work.
+func TestInitCmd_RunE_FiresAfterInitErrorHookOnFailure(t *testing.T) {
+	// Empty dir with no atmos.yaml/stacks — RunE fails fast in
+	// terraformRunWithOptions before any terraform binary is needed.
+	t.Chdir(t.TempDir())
+
+	var (
+		fired     bool
+		gotEvent  hooks.HookEvent
+		gotCmdErr error
+	)
+	orig := runHooksOnErrorWithOutput
+	runHooksOnErrorWithOutput = func(event hooks.HookEvent, _ *cobra.Command, _ []string, cmdErr error, _ string) {
+		fired = true
+		gotEvent = event
+		gotCmdErr = cmdErr
+	}
+	t.Cleanup(func() { runHooksOnErrorWithOutput = orig })
+
+	wasMultiComponentExecution = false
+	err := initCmd.RunE(newHookTestCmd(), []string{"--stack", "dev", "myapp"})
+
+	require.Error(t, err, "RunE must fail when there is no stacks directory")
+	assert.True(t, fired, "deferred after-terraform-init error hook must fire on RunE failure")
+	assert.Equal(t, hooks.AfterTerraformInit, gotEvent)
+	require.Error(t, gotCmdErr, "the run error must be forwarded to the error hook")
 }
 
 // Compile-time guard: the init command fires these specific events. If either
