@@ -147,12 +147,16 @@ func (m *masker) RegisterAWSAccessKey(accessKeyID string) {
 func (m *masker) Mask(input string) string {
 	defer perf.Track(nil, "io.masker.Mask")()
 
-	if !m.enabled || input == "" {
+	if input == "" {
 		return input
 	}
 
 	m.mu.RLock()
 	defer m.mu.RUnlock()
+
+	if !m.enabled {
+		return input
+	}
 
 	masked := input
 
@@ -213,7 +217,17 @@ func (m *masker) Count() int {
 func (m *masker) Enabled() bool {
 	defer perf.Track(nil, "io.masker.Enabled")()
 
+	m.mu.RLock()
+	defer m.mu.RUnlock()
 	return m.enabled
+}
+
+func (m *masker) SetEnabled(enabled bool) {
+	defer perf.Track(nil, "io.masker.SetEnabled")()
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.enabled = enabled
 }
 
 func (m *masker) Replacement() string {

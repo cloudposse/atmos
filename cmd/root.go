@@ -539,6 +539,10 @@ var RootCmd = &cobra.Command{
 		if ioErr := iolib.Initialize(); ioErr != nil {
 			errUtils.CheckErrorPrintAndExit(fmt.Errorf("failed to initialize I/O context: %w", ioErr), "", "")
 		}
+		// The global masker may have been created before CLI flags were parsed (e.g. by early
+		// output), so its enabled state reflects the `--mask` default, not the parsed flag.
+		// Reconcile it now that flags are available so `--mask=false` reliably disables masking.
+		iolib.ReconcileMasking()
 		ioCtx := iolib.GetContext()
 		ui.InitFormatter(ioCtx)
 		data.InitWriter(ioCtx)

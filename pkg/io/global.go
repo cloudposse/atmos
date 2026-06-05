@@ -294,6 +294,22 @@ func RegisterPattern(pattern string) error {
 	return ctx.Masker().RegisterPattern(pattern)
 }
 
+// ReconcileMasking re-reads the masking configuration (CLI flags → env → atmos.yaml → default)
+// and updates the global masker's enabled state to match. This is necessary because the global
+// masker may be created early (before CLI flags are parsed), at which point the `--mask` flag
+// value is not yet available — only its default. Call this from PersistentPreRun AFTER flags
+// are parsed so `--mask=false` reliably disables masking (matching `ATMOS_MASK=false`).
+func ReconcileMasking() {
+	defer perf.Track(nil, "io.ReconcileMasking")()
+
+	ctx := GetContext()
+	if ctx == nil {
+		return
+	}
+	cfg := buildConfig()
+	ctx.Masker().SetEnabled(!cfg.DisableMasking)
+}
+
 // MaskingEnabled reports whether the global masker is currently enabled. Inspection commands
 // (describe/list) use this to decide whether to resolve `!secret` to the mask replacement
 // without retrieving (and thus without requiring credentials).

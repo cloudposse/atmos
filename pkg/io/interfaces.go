@@ -101,6 +101,10 @@ type Masker interface {
 	// Enabled returns whether masking is enabled.
 	Enabled() bool
 
+	// SetEnabled updates whether masking is enabled. Used to reconcile the masker with the
+	// resolved `--mask` flag after CLI flags are parsed (the masker may be created before then).
+	SetEnabled(enabled bool)
+
 	// Replacement returns the configured mask replacement string.
 	Replacement() string
 }
