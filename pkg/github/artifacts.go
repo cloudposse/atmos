@@ -19,8 +19,8 @@ var (
 	// ErrPRNotFound indicates the PR does not exist.
 	ErrPRNotFound = errors.New("pull request not found")
 
-	// ErrNoWorkflowRunFound indicates no completed workflow run was found for the PR.
-	ErrNoWorkflowRunFound = errors.New("no completed workflow run found")
+	// ErrNoWorkflowRunFound indicates no workflow run was found for the PR.
+	ErrNoWorkflowRunFound = errors.New("no workflow run found")
 
 	// ErrNoArtifactFound indicates the requested artifact was not found.
 	ErrNoArtifactFound = errors.New("artifact not found")
@@ -184,20 +184,13 @@ func (f *ArtifactFetcher) getPRArtifactInfo(ctx context.Context, owner, repo str
 
 	log.Debug("Found PR head SHA", "sha", headSHA)
 
-	// Step 2: Find the latest completed workflow run for this SHA.
-	runInfo, err := findCompletedWorkflowRun(ctx, f.actions, owner, repo, headSHA)
+	// Step 2: Find the latest workflow run for this SHA that has the platform artifact.
+	runInfo, artifact, err := findRunWithArtifact(ctx, f.actions, owner, repo, headSHA, artifactName)
 	if err != nil {
 		return nil, err
 	}
 
-	log.Debug("Found completed workflow run", "runID", runInfo.ID, "startedAt", runInfo.RunStartedAt)
-
-	// Step 3: Find the artifact for the current platform.
-	artifact, err := findArtifactByName(ctx, f.actions, owner, repo, runInfo.ID, artifactName)
-	if err != nil {
-		return nil, err
-	}
-
+	log.Debug("Found workflow run", "runID", runInfo.ID, "startedAt", runInfo.RunStartedAt)
 	log.Debug("Found artifact", "name", artifact.GetName(), "size", artifact.GetSizeInBytes())
 
 	return &PRArtifactInfo{
@@ -295,16 +288,29 @@ func getPRHeadSHA(ctx context.Context, prs PullRequestService, owner, repo strin
 	return *pr.Head.SHA, nil
 }
 
-// findCompletedWorkflowRun finds the most recent completed workflow run for a commit SHA.
-// It does not require the workflow to have succeeded — only that it completed and produced artifacts.
-// This allows downloading build artifacts even when unrelated jobs (e.g., Windows tests) failed.
-func findCompletedWorkflowRun(ctx context.Context, actions ActionsService, owner, repo, headSHA string) (*workflowRunInfo, error) {
-	defer perf.Track(nil, "github.findCompletedWorkflowRun")()
+// findRunWithArtifact finds the most recent "Tests" workflow run for a commit SHA
+// that already has the requested platform artifact available, and returns both the
+// run metadata and the artifact.
+//
+// It intentionally does NOT filter on Status: "completed". GitHub only marks a run
+// "completed" once every job finishes, so requiring completion would force callers to
+// wait for slow jobs (e.g., the multi-platform acceptance-test matrix) even though the
+// Build job already uploaded the binary. By gating on artifact availability instead, a
+// PR/SHA/ref build becomes installable the moment its Build job finishes uploading.
+//
+// We accept any conclusion (success, failure, in-progress) because the build artifact
+// may exist even when unrelated jobs in the run failed. Iterating newest-first and
+// checking artifact presence also handles re-runs: a fresh in-progress re-run whose
+// Build has not uploaded yet falls back to the prior run that still has the artifact.
+//
+//nolint:revive // All parameters are necessary for this GitHub API function.
+func findRunWithArtifact(ctx context.Context, actions ActionsService, owner, repo, headSHA, artifactName string) (*workflowRunInfo, *github.Artifact, error) {
+	defer perf.Track(nil, "github.findRunWithArtifact")()
 
-	// List completed workflow runs for the commit SHA.
+	// List workflow runs for the commit SHA. No Status filter: include in-progress
+	// runs so the build artifact can be used as soon as the Build job uploads it.
 	opts := &github.ListWorkflowRunsOptions{
 		HeadSHA: headSHA,
-		Status:  "completed",
 		ListOptions: github.ListOptions{
 			PerPage: perPage,
 		},
@@ -312,27 +318,47 @@ func findCompletedWorkflowRun(ctx context.Context, actions ActionsService, owner
 
 	runs, resp, err := actions.ListRepositoryWorkflowRuns(ctx, owner, repo, opts)
 	if err != nil {
-		return nil, handleGitHubAPIError(err, resp)
+		return nil, nil, handleGitHubAPIError(err, resp)
 	}
 
 	// Guard against nil response or empty workflow runs.
 	if runs == nil || len(runs.WorkflowRuns) == 0 {
-		return nil, fmt.Errorf("%w: no completed '%s' workflow run for SHA %s", ErrNoWorkflowRunFound, workflowName, headSHA)
+		return nil, nil, fmt.Errorf("%w: no '%s' workflow run for SHA %s", ErrNoWorkflowRunFound, workflowName, headSHA)
 	}
 
-	// Find the workflow run with the correct name ("Tests").
-	// We accept any conclusion (success, failure, etc.) because the build artifact
-	// may have been produced even if other jobs in the workflow failed.
+	// Walk runs newest-first, returning the first "Tests" run that has the artifact.
+	var sawRun bool
+	var noArtifactErr error
 	for _, run := range runs.WorkflowRuns {
-		if run.GetName() == workflowName {
-			return &workflowRunInfo{
-				ID:           run.GetID(),
-				RunStartedAt: run.GetRunStartedAt().Time,
-			}, nil
+		if run.GetName() != workflowName {
+			continue
 		}
+		sawRun = true
+
+		info := &workflowRunInfo{
+			ID:           run.GetID(),
+			RunStartedAt: run.GetRunStartedAt().Time,
+		}
+
+		artifact, artErr := findArtifactByName(ctx, actions, owner, repo, info.ID, artifactName)
+		if artErr == nil {
+			return info, artifact, nil
+		}
+		if !errors.Is(artErr, ErrNoArtifactFound) {
+			// A real API error (auth, rate limit, etc.) — surface it immediately.
+			return nil, nil, artErr
+		}
+		// Artifact not uploaded in this run yet (Build still running or skipped);
+		// remember the reason and try the next (older) run.
+		noArtifactErr = artErr
 	}
 
-	return nil, fmt.Errorf("%w: no completed '%s' workflow run for SHA %s", ErrNoWorkflowRunFound, workflowName, headSHA)
+	if !sawRun {
+		return nil, nil, fmt.Errorf("%w: no '%s' workflow run for SHA %s", ErrNoWorkflowRunFound, workflowName, headSHA)
+	}
+
+	// Runs exist but none has the platform artifact yet.
+	return nil, nil, noArtifactErr
 }
 
 // findArtifactByName finds an artifact by name within a workflow run.
@@ -428,20 +454,13 @@ func (f *ArtifactFetcher) getSHAArtifactInfo(ctx context.Context, owner, repo, s
 		return nil, err
 	}
 
-	// Find the latest completed workflow run for this SHA.
-	runInfo, err := findCompletedWorkflowRun(ctx, f.actions, owner, repo, sha)
+	// Find the latest workflow run for this SHA that has the platform artifact.
+	runInfo, artifact, err := findRunWithArtifact(ctx, f.actions, owner, repo, sha, artifactName)
 	if err != nil {
 		return nil, err
 	}
 
-	log.Debug("Found completed workflow run", "runID", runInfo.ID, "startedAt", runInfo.RunStartedAt)
-
-	// Find the artifact for the current platform.
-	artifact, err := findArtifactByName(ctx, f.actions, owner, repo, runInfo.ID, artifactName)
-	if err != nil {
-		return nil, err
-	}
-
+	log.Debug("Found workflow run", "runID", runInfo.ID, "startedAt", runInfo.RunStartedAt)
 	log.Debug("Found artifact", "name", artifact.GetName(), "size", artifact.GetSizeInBytes())
 
 	return &SHAArtifactInfo{
