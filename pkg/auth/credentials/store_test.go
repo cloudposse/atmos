@@ -181,6 +181,8 @@ func TestResolveKeyringType(t *testing.T) {
 	})
 
 	t.Run("auth config overrides default", func(t *testing.T) {
+		t.Setenv("ATMOS_KEYRING_TYPE", "")
+
 		authConfig := &schema.AuthConfig{
 			Keyring: schema.KeyringConfig{Type: "file"},
 		}
@@ -189,6 +191,8 @@ func TestResolveKeyringType(t *testing.T) {
 	})
 
 	t.Run("default remains system", func(t *testing.T) {
+		t.Setenv("ATMOS_KEYRING_TYPE", "")
+
 		assert.Equal(t, "system", resolveKeyringType(nil))
 	})
 }

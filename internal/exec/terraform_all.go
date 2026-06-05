@@ -4,11 +4,10 @@ import (
 	"context"
 	"fmt"
 
-	log "github.com/charmbracelet/log"
-
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/dependency"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	scheduleradapters "github.com/cloudposse/atmos/pkg/scheduler/adapters"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -87,6 +86,9 @@ func ExecuteTerraformAllWithContext(ctx context.Context, info *schema.ConfigAndS
 }
 
 // executeInDependencyOrder executes terraform commands in dependency order.
+//
+// Deprecated: production Terraform bulk execution uses the scheduler adapter.
+// Keep this helper only while legacy dependency-order tests still cover it.
 func executeInDependencyOrder(graph *dependency.Graph, info *schema.ConfigAndStacksInfo) error {
 	// Get execution order.
 	executionOrder, err := graph.TopologicalSort()
@@ -206,6 +208,9 @@ func shouldSkipComponentForGraph(componentSection map[string]any, componentName 
 }
 
 // applyFiltersToGraph applies query and component filters to the graph.
+//
+// Deprecated: production Terraform bulk filtering uses the scheduler adapter.
+// Keep this helper only while legacy graph-filter tests still cover it.
 func applyFiltersToGraph(graph *dependency.Graph, _ map[string]any, info *schema.ConfigAndStacksInfo) *dependency.Graph {
 	// Determine base set: components/stack if provided; otherwise all nodes.
 	nodeIDs := collectFilteredNodeIDs(graph, info)
