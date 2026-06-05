@@ -511,3 +511,120 @@ func TestAffected_MultipleAffectedWithDependents(t *testing.T) {
 	assert.Equal(t, "rds", result[2]["component"])
 	assert.Equal(t, "app", result[3]["component"])
 }
+
+func TestAffected_DeletedComponent(t *testing.T) {
+	// Test that deleted fields are properly extracted.
+	affected := []schema.Affected{
+		{
+			Component:     "prometheus",
+			ComponentType: "terraform",
+			Stack:         "dev-us-east-1",
+			Affected:      "deleted",
+			AffectedAll:   []string{"deleted"},
+			Deleted:       true,
+			DeletionType:  "component",
+		},
+	}
+
+	result := Affected(affected, false)
+
+	assert.Len(t, result, 1)
+	assert.Equal(t, "prometheus", result[0]["component"])
+	assert.Equal(t, "deleted", result[0]["affected"])
+	assert.Equal(t, true, result[0]["deleted"])
+	assert.Equal(t, "component", result[0]["deletion_type"])
+}
+
+func TestAffected_DeletedStack(t *testing.T) {
+	// Test that stack-level deletion is properly extracted.
+	affected := []schema.Affected{
+		{
+			Component:     "vpc",
+			ComponentType: "terraform",
+			Stack:         "staging-us-west-2",
+			Affected:      "deleted.stack",
+			AffectedAll:   []string{"deleted.stack"},
+			Deleted:       true,
+			DeletionType:  "stack",
+		},
+		{
+			Component:     "eks",
+			ComponentType: "terraform",
+			Stack:         "staging-us-west-2",
+			Affected:      "deleted.stack",
+			AffectedAll:   []string{"deleted.stack"},
+			Deleted:       true,
+			DeletionType:  "stack",
+		},
+	}
+
+	result := Affected(affected, false)
+
+	assert.Len(t, result, 2)
+	// Both should have deleted=true and deletion_type=stack.
+	for _, item := range result {
+		assert.Equal(t, true, item["deleted"])
+		assert.Equal(t, "stack", item["deletion_type"])
+		assert.Equal(t, "deleted.stack", item["affected"])
+	}
+}
+
+func TestAffected_MixedDeletedAndModified(t *testing.T) {
+	// Test that both modified and deleted components are properly extracted.
+	affected := []schema.Affected{
+		{
+			Component:     "vpc",
+			ComponentType: "terraform",
+			Stack:         "dev-us-east-1",
+			Affected:      "component",
+			AffectedAll:   []string{"component"},
+			Deleted:       false,
+			DeletionType:  "",
+		},
+		{
+			Component:     "prometheus",
+			ComponentType: "terraform",
+			Stack:         "dev-us-east-1",
+			Affected:      "deleted",
+			AffectedAll:   []string{"deleted"},
+			Deleted:       true,
+			DeletionType:  "component",
+		},
+	}
+
+	result := Affected(affected, false)
+
+	assert.Len(t, result, 2)
+
+	// First item is modified (not deleted).
+	assert.Equal(t, "vpc", result[0]["component"])
+	assert.Equal(t, false, result[0]["deleted"])
+	assert.Equal(t, "", result[0]["deletion_type"])
+
+	// Second item is deleted.
+	assert.Equal(t, "prometheus", result[1]["component"])
+	assert.Equal(t, true, result[1]["deleted"])
+	assert.Equal(t, "component", result[1]["deletion_type"])
+}
+
+func TestAffected_DeletedFieldsInAllFieldsCheck(t *testing.T) {
+	// Verify that deleted and deletion_type are included in the expected fields.
+	affected := []schema.Affected{
+		{
+			Component:     "vpc",
+			ComponentType: "terraform",
+			Stack:         "dev",
+			Affected:      "deleted",
+			Deleted:       true,
+			DeletionType:  "component",
+		},
+	}
+
+	result := Affected(affected, false)
+
+	assert.Len(t, result, 1)
+
+	// Verify deleted fields are present.
+	assert.Contains(t, result[0], "deleted", "Missing field: deleted")
+	assert.Contains(t, result[0], "deletion_type", "Missing field: deletion_type")
+}

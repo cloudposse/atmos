@@ -1,0 +1,117 @@
+base_path: "./"
+
+components:
+  terraform:
+    base_path: "components/terraform"
+    apply_auto_approve: false
+    deploy_run_init: true
+    init_run_reconfigure: true
+    auto_generate_backend_file: false
+
+    # Planfile storage backends (registry pattern)
+    planfiles:
+      # Stores are tried in priority order; if unavailable, fall through to next
+      priority:
+        - "github"
+        - "s3"
+        - "local"
+
+      # Named stores
+      stores:
+        s3:
+          type: aws/s3
+          options:
+            bucket: "my-terraform-planfiles"
+            prefix: "atmos/"
+            region: "us-east-1"
+            key_pattern: "{{ .Stack }}/{{ .Component }}/{{ .SHA }}.tfplan"
+
+        github:
+          type: github/artifacts
+          options:
+            retention_days: 7
+            owner: cloudposse
+            repo: github-action-atmos-terraform-plan
+            # GitHub uses the artifact name from the implementation layer directly
+
+        azure:
+          type: azure/blob
+          options:
+            account: "mystorageaccount"
+            container: "planfiles"
+            key_pattern: "{{ .Stack }}/{{ .Component }}/{{ .SHA }}.tfplan"
+
+        gcs:
+          type: google/gcs
+          options:
+            bucket: "my-gcs-bucket"
+            prefix: "planfiles/"
+            key_pattern: "{{ .Stack }}/{{ .Component }}/{{ .SHA }}.tfplan"
+
+        local:
+          type: local/dir
+          options:
+            path: ".atmos/planfiles"
+            key_pattern: "{{ .Stack }}/{{ .Component }}/{{ .SHA }}.tfplan"
+
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "deploy/**/*"
+  name_pattern: "{stage}"
+
+settings:
+  experimental: silence
+
+logs:
+  file: "/dev/stderr"
+  level: Info
+
+# Empty auth configuration (no identities configured).
+# This allows commands to run without authentication.
+auth:
+
+# # CI-specific settings (provider-agnostic naming)
+ci:
+  # Auto-enabled when CI detected, or explicit
+  enabled: true
+
+  # Output variables for downstream jobs
+  # GitHub: $GITHUB_OUTPUT, GitLab: dotenv artifacts
+  output:
+    enabled: true
+    variables:
+      - has_changes
+      - has_additions
+      - has_destructions
+      - has_errors
+      - exit_code
+      - artifact_key
+      - plan_summary
+      - summary
+
+  # Job summary with plan/apply results
+  # GitHub: $GITHUB_STEP_SUMMARY, GitLab: job artifacts
+  summary:
+    enabled: true
+    # template: "custom-summary.md"
+
+  # Commit status checks
+  # GitHub: Check Runs API, GitLab: Commit Status API
+  checks:
+    enabled: true  # Disabled by default (requires additional permissions)
+    context_prefix: "atmos"
+
+  # PR/MR comments
+  # GitHub: PR comments, GitLab: MR notes
+  comments:
+    enabled: true
+    behavior: upsert  # create, update, upsert
+    # template: "custom-comment.md"
+
+  # Template overrides (shared across all features)
+  templates:
+    base_path: ".atmos/ci/templates"
+    terraform:
+      plan: "plan.md"
+      apply: "apply.md"

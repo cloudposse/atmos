@@ -1,5 +1,6 @@
 {
-  "label": "Registry",
+  "label": "registry",
+  "className": "command",
   "position": 20,
   "link": {
     "type": "doc",

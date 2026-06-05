@@ -1,0 +1,57 @@
+# Demonstrates using Atmos auth identities with stores.
+# Each store references an identity for credential resolution.
+
+auth:
+  providers:
+    acme-sso:
+      kind: aws/iam-identity-center
+      start_url: https://acme.awsapps.com/start
+      region: us-east-1
+
+    azure-oidc:
+      kind: azure/oidc
+      tenant_id: "00000000-0000-0000-0000-000000000000"
+      client_id: "11111111-1111-1111-1111-111111111111"
+
+    gcp-adc:
+      kind: gcp/adc
+
+  identities:
+    prod-admin:
+      kind: aws/assume-role
+      via:
+        provider: acme-sso
+      principal:
+        assume_role: arn:aws:iam::111111111111:role/ProdAdmin
+
+    azure-prod:
+      kind: azure/workload-identity
+      via:
+        provider: azure-oidc
+
+    gcp-prod:
+      kind: gcp/adc
+      via:
+        provider: gcp-adc
+
+# Stores with identity-based authentication.
+# Each store uses a named identity instead of the default credential chain.
+stores:
+  prod/ssm:
+    type: aws-ssm-parameter-store
+    identity: prod-admin
+    options:
+      region: us-east-1
+      prefix: /atmos/prod
+
+  prod/keyvault:
+    type: azure-key-vault
+    identity: azure-prod
+    options:
+      vault_url: https://prod-secrets.vault.azure.net
+
+  prod/gsm:
+    type: google-secret-manager
+    identity: gcp-prod
+    options:
+      project_id: acme-prod-123456

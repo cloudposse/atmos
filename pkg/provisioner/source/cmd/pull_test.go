@@ -26,7 +26,7 @@ func TestPullCommand(t *testing.T) {
 	cmd := PullCommand(cfg)
 
 	require.NotNil(t, cmd)
-	assert.Equal(t, "pull <component>", cmd.Use)
+	assert.Equal(t, "pull [component]", cmd.Use)
 	assert.Contains(t, cmd.Short, "Terraform")
 }
 

@@ -1,0 +1,74 @@
+---
+slug: global-ignore-missing-template-values
+title: "Global `ignore_missing_template_values` for Stack Imports"
+authors: [osterman]
+tags: [feature, dx]
+---
+
+Atmos now supports a global `templates.settings.ignore_missing_template_values` option in `atmos.yaml`, eliminating the need to set `ignore_missing_template_values: true` on every individual catalog import.
+
+<!--truncate-->
+
+## What Changed
+
+Previously, if you used Go templates in imported stack manifests (e.g. for dynamic component generation or external systems like Datadog), you had to annotate every import:
+
+```yaml
+import:
+  - path: "catalog/datadog-monitors"
+    ignore_missing_template_values: true
+  - path: "catalog/eks-cluster-tmpl"
+    ignore_missing_template_values: true
+  - path: "catalog/rds-cluster-tmpl"
+    ignore_missing_template_values: true
+  # ... repeat for every catalog import
+```
+
+For teams with hundreds of catalog imports, this was a maintenance burden.
+
+## The Fix
+
+Set it once, globally, in `atmos.yaml`:
+
+```yaml
+templates:
+  settings:
+    ignore_missing_template_values: true
+```
+
+That's it. All imports across your entire project will now silently skip missing template values instead of failing.
+
+## Why This Matters
+
+Many teams use Go templates in stack manifests to dynamically generate Atmos components (e.g. multi-flavor clusters, per-region replicas), or to pass configuration to external monitoring/observability systems (e.g. Datadog, Grafana). In these cases, not every template variable needs to be provided by Atmos — some are resolved later by the external system.
+
+The `ignore_missing_template_values` setting instructs Atmos to replace any missing template variable with an empty string rather than returning an error. Setting this globally removes the friction of adding it to every import.
+
+## Per-Import Override Still Works
+
+The global setting is a default. Individual imports can still override it in either direction:
+
+```yaml
+# atmos.yaml
+templates:
+  settings:
+    ignore_missing_template_values: true  # global default
+
+# stacks/prod.yaml
+import:
+  - path: "catalog/strict-config"
+    ignore_missing_template_values: false  # override: fail on missing values for this import
+```
+
+## Difference from `skip_templates_processing`
+
+| Setting | Behavior |
+|---|---|
+| `skip_templates_processing: true` | Skips template processing entirely — templates are preserved as-is |
+| `ignore_missing_template_values: true` | Processes templates but silently ignores missing variables |
+
+Use `skip_templates_processing` when an import contains Go template syntax meant for another system. Use `ignore_missing_template_values` when you want Atmos to process your templates but tolerate missing variables.
+
+## Get Involved
+
+We'd love to hear your feedback! Please [open an issue](https://github.com/cloudposse/atmos/issues) if you have questions or suggestions.

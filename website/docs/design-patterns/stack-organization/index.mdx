@@ -22,6 +22,8 @@ These patterns show how to organize your stack files as your infrastructure grow
 |---------|----------|
 | [Basic Stack Organization](/design-patterns/stack-organization/basic-stack-organization) | Single region, dev/staging/prod environments |
 | [Multi-Region Configuration](/design-patterns/stack-organization/multi-region-configuration) | Deploying to multiple AWS regions |
+| [Multi-Cloud Configuration](/design-patterns/stack-organization/multi-cloud-configuration) | Organizing stacks for AWS, Azure, or GCP |
+| [Application SDLC Environments](/design-patterns/stack-organization/application-sdlc) | Application repos with co-located infrastructure |
 | [Organizational Hierarchy](/design-patterns/stack-organization/organizational-hierarchy-configuration) | Enterprise with multiple teams, accounts, regions |
 
 ## Building Blocks
@@ -42,6 +44,8 @@ Most teams follow this progression as they grow:
 Basic (dev/staging/prod)
     ↓
 Multi-Region (add regions)
+    ↓
+Multi-Cloud (organize for AWS/Azure/GCP)
     ↓
 Organizational Hierarchy (add teams/accounts)
 ```

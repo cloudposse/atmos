@@ -47,6 +47,7 @@ func isRemoteImport(importPath string) bool {
 3. **Maintain backward compatibility** - Existing local and HTTP/HTTPS imports must work unchanged
 4. **Support testing** - Mock adapter for unit tests without external dependencies
 5. **Preserve recursive imports** - Nested imports continue to work across all schemes
+6. **Make nested import resolution explicit** - Remote stack imports must support both consumer-local nested imports and self-contained remote import trees
 
 ## Functional Requirements
 
@@ -114,6 +115,25 @@ func isRemoteImport(importPath string) bool {
 | FR-6.2 | Existing HTTP/HTTPS imports SHALL continue to work unchanged |
 | FR-6.3 | Nested/recursive imports SHALL continue to work across all schemes |
 | FR-6.4 | The `ResolvedPaths` struct SHALL support a new `ADAPTER` import type |
+
+### FR-7: Nested Remote Import Resolution
+
+| ID | Requirement |
+|----|-------------|
+| FR-7.1 | Map-form imports SHALL support `nested_imports` with values `local` and `remote` |
+| FR-7.2 | `nested_imports: local` SHALL preserve current behavior by resolving imports inside the imported file from the consumer repository's stack base path |
+| FR-7.3 | `nested_imports: remote` SHALL resolve imports inside a git/go-getter remote file from the remote source's stack base path |
+| FR-7.4 | Plain string imports and map imports without `nested_imports` SHALL default to `local` for backward compatibility |
+| FR-7.5 | Nested imports SHALL inherit the parent import's `nested_imports` mode unless a nested map import overrides it |
+| FR-7.6 | Atmos SHALL return an actionable error when `nested_imports: remote` is requested for a remote source where the remote stack base path cannot be inferred |
+
+Example:
+
+```yaml
+import:
+  - path: git::https://github.com/org/hub.git//stacks/orgs/l360/_defaults.yaml?ref=v1
+    nested_imports: remote
+```
 
 ## Solution: Two-Layer Architecture
 

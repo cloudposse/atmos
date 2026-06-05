@@ -58,3 +58,36 @@ func (d *DefaultStacksProcessor) ExecuteDescribeStacks(
 		authManager,
 	)
 }
+
+// ExecuteDescribeStacksWithAuthDisabled delegates to the package-level auth-disabled variant.
+//
+//nolint:revive // Signature matches ExecuteDescribeStacksWithAuthDisabled.
+func (d *DefaultStacksProcessor) ExecuteDescribeStacksWithAuthDisabled(
+	atmosConfig *schema.AtmosConfiguration,
+	filterByStack string,
+	components []string,
+	componentTypes []string,
+	sections []string,
+	ignoreMissingFiles bool,
+	processTemplates bool,
+	processYamlFunctions bool,
+	includeEmptyStacks bool,
+	skip []string,
+	authManager auth.AuthManager,
+	authDisabled bool,
+) (map[string]any, error) {
+	return ExecuteDescribeStacksWithAuthDisabled(
+		atmosConfig,
+		filterByStack,
+		components,
+		componentTypes,
+		sections,
+		ignoreMissingFiles,
+		processTemplates,
+		processYamlFunctions,
+		includeEmptyStacks,
+		skip,
+		authManager,
+		authDisabled,
+	)
+}

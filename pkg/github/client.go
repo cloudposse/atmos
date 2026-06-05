@@ -48,11 +48,20 @@ const (
 func newGitHubClient(ctx context.Context) *github.Client {
 	defer perf.Track(nil, "github.newGitHubClient")()
 
-	// Get GitHub token using the standard Atmos precedence order:
+	// Get GitHub token using the full resolution chain:
 	// 1. --github-token CLI flag
 	// 2. ATMOS_GITHUB_TOKEN environment variable
 	// 3. GITHUB_TOKEN environment variable
-	githubToken := httpClient.GetGitHubTokenFromEnv()
+	// 4. `gh auth token` CLI fallback
+	githubToken := GetGitHubToken()
+
+	return newGitHubClientWithToken(ctx, githubToken)
+}
+
+// newGitHubClientWithToken creates a new GitHub client with an explicit token.
+// If token is empty, it returns an unauthenticated client.
+func newGitHubClientWithToken(ctx context.Context, token string) *github.Client {
+	defer perf.Track(nil, "github.newGitHubClientWithToken")()
 
 	// Create HTTP client with timeout to prevent hangs in CI environments
 	// when network is unavailable or DNS resolution fails.
@@ -60,13 +69,13 @@ func newGitHubClient(ctx context.Context) *github.Client {
 		Timeout: defaultHTTPTimeout,
 	}
 
-	if githubToken == "" {
+	if token == "" {
 		return github.NewClient(baseClient)
 	}
 
 	// Token found, create an authenticated client with timeout.
 	ts := oauth2.StaticTokenSource(
-		&oauth2.Token{AccessToken: githubToken},
+		&oauth2.Token{AccessToken: token},
 	)
 	// Create oauth2 client with our timeout-configured base transport.
 	tc := oauth2.NewClient(ctx, ts)
@@ -80,15 +89,46 @@ func newGitHubClient(ctx context.Context) *github.Client {
 func handleGitHubAPIError(err error, resp *github.Response) error {
 	defer perf.Track(nil, "github.handleGitHubAPIError")()
 
-	if resp != nil && resp.Rate.Remaining == 0 {
+	// A 401 means the credentials were rejected (bad or expired token), not a rate limit.
+	// GitHub returns X-RateLimit-Remaining: 0 on 401 responses, so this must be checked
+	// before the rate-limit heuristic below to avoid misreporting bad credentials.
+	if resp != nil && resp.StatusCode == http.StatusUnauthorized {
+		return errUtils.Build(errUtils.ErrAuthenticationFailed).
+			WithCause(err).
+			WithExplanation("GitHub rejected the provided credentials (bad or expired token)").
+			WithHint("Verify your token: `gh auth status`").
+			WithHint("Try re-authenticating: `gh auth login`").
+			WithHint("Or set a valid `ATMOS_GITHUB_TOKEN` or `GITHUB_TOKEN`").
+			WithExitCode(1).
+			Err()
+	}
+
+	// Genuine rate limiting is signalled with HTTP 403 (primary) or 429 (secondary),
+	// always alongside X-RateLimit-Remaining: 0. Requiring the status code prevents
+	// other zero-remaining responses (e.g. 401) from being misclassified.
+	if resp != nil && resp.Rate.Remaining == 0 &&
+		(resp.StatusCode == http.StatusForbidden || resp.StatusCode == http.StatusTooManyRequests) {
 		resetTime := resp.Rate.Reset.Time
 		waitDuration := time.Until(resetTime)
 
-		return fmt.Errorf("%w: rate limit exceeded, resets at %s (in %s). Consider setting ATMOS_GITHUB_TOKEN or GITHUB_TOKEN for higher limits",
-			errUtils.ErrGitHubRateLimitExceeded,
-			resetTime.Format(time.RFC3339),
-			waitDuration.Round(time.Second),
-		)
+		builder := errUtils.Build(errUtils.ErrGitHubRateLimitExceeded).
+			WithCause(err).
+			WithExplanation(fmt.Sprintf("Rate limit exceeded, resets at %s (in %s)",
+				resetTime.Format(time.RFC3339),
+				waitDuration.Round(time.Second)))
+
+		if httpClient.GetGitHubTokenFromEnv() != "" {
+			builder.
+				WithHint("Your GitHub token may be invalid or expired").
+				WithHint("Verify your token: `gh auth status`").
+				WithHint("Try re-authenticating: `gh auth login`")
+		} else {
+			builder.
+				WithHint("Authenticate with GitHub CLI: `gh auth login`").
+				WithHint("Or set `ATMOS_GITHUB_TOKEN` or `GITHUB_TOKEN` environment variable")
+		}
+
+		return builder.Err()
 	}
 
 	return err

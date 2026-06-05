@@ -134,7 +134,7 @@ func ConvertToJSON(data any) (string, error) {
 	defer perf.Track(nil, "utils.ConvertToJSON")()
 
 	jc := jsoniter.Config{
-		EscapeHTML:                    true,
+		EscapeHTML:                    false,
 		ObjectFieldMustBeSimpleString: false,
 		SortMapKeys:                   true,
 		ValidateJsonRawMessage:        true,

@@ -13,6 +13,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	e "github.com/cloudposse/atmos/internal/exec"
+	"github.com/cloudposse/atmos/pkg/reexec"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -621,7 +623,9 @@ func TestListStacksForComponentEmptyComponent(t *testing.T) {
 	assert.NotEmpty(t, stacks, "Empty component filter returns all stacks")
 }
 
-// TestFilterChdirArgs tests the filterChdirArgs function.
+// TestFilterChdirArgs verifies the chdir-strip behavior used by alias re-exec.
+// The implementation now lives in pkg/reexec.StripChdirArgs; this test
+// remains as an integration guard for the alias path.
 func TestFilterChdirArgs(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -712,8 +716,8 @@ func TestFilterChdirArgs(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := filterChdirArgs(tt.input)
-			assert.Equal(t, tt.expected, result, "filterChdirArgs should correctly filter chdir arguments")
+			result := reexec.StripChdirArgs(tt.input)
+			assert.Equal(t, tt.expected, result, "reexec.StripChdirArgs should correctly filter chdir arguments")
 		})
 	}
 }
@@ -1577,4 +1581,632 @@ func TestProcessCommandAliases_NonTopLevel(t *testing.T) {
 		}
 	}
 	assert.False(t, hasAliases, "Non-top-level aliases should not be added")
+}
+
+// TestFilterChdirEnv verifies the ATMOS_CHDIR env-filter behavior used by
+// alias re-exec. The implementation now lives in pkg/reexec.FilterChdirEnv;
+// this test remains as an integration guard for the alias path.
+func TestFilterChdirEnv(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    []string
+		expected []string
+	}{
+		{
+			name:     "no ATMOS_CHDIR",
+			input:    []string{"PATH=/usr/bin", "HOME=/home/user"},
+			expected: []string{"PATH=/usr/bin", "HOME=/home/user"},
+		},
+		{
+			name:     "contains ATMOS_CHDIR",
+			input:    []string{"PATH=/usr/bin", "ATMOS_CHDIR=/some/path", "HOME=/home/user"},
+			expected: []string{"PATH=/usr/bin", "HOME=/home/user", "ATMOS_CHDIR="},
+		},
+		{
+			name:     "ATMOS_CHDIR at beginning",
+			input:    []string{"ATMOS_CHDIR=/path", "PATH=/usr/bin"},
+			expected: []string{"PATH=/usr/bin", "ATMOS_CHDIR="},
+		},
+		{
+			name:     "ATMOS_CHDIR at end",
+			input:    []string{"PATH=/usr/bin", "ATMOS_CHDIR=/path"},
+			expected: []string{"PATH=/usr/bin", "ATMOS_CHDIR="},
+		},
+		{
+			name:     "empty value ATMOS_CHDIR",
+			input:    []string{"PATH=/usr/bin", "ATMOS_CHDIR=", "HOME=/home"},
+			expected: []string{"PATH=/usr/bin", "HOME=/home", "ATMOS_CHDIR="},
+		},
+		{
+			name:     "empty input",
+			input:    []string{},
+			expected: []string{},
+		},
+		{
+			name:     "only ATMOS_CHDIR",
+			input:    []string{"ATMOS_CHDIR=/path"},
+			expected: []string{"ATMOS_CHDIR="},
+		},
+		{
+			name:     "similar but not matching",
+			input:    []string{"ATMOS_CHDIR_OTHER=/path", "NOT_ATMOS_CHDIR=/other"},
+			expected: []string{"ATMOS_CHDIR_OTHER=/path", "NOT_ATMOS_CHDIR=/other"},
+		},
+		{
+			name:     "duplicate ATMOS_CHDIR entries",
+			input:    []string{"PATH=/usr/bin", "ATMOS_CHDIR=/first", "HOME=/home", "ATMOS_CHDIR=/second"},
+			expected: []string{"PATH=/usr/bin", "HOME=/home", "ATMOS_CHDIR="},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := reexec.FilterChdirEnv(tt.input)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+// TestIsVersionManagementCommand tests the isVersionManagementCommand function.
+func TestIsVersionManagementCommand(t *testing.T) {
+	tests := []struct {
+		name     string
+		setup    func() *cobra.Command
+		expected bool
+	}{
+		{
+			name: "nil command",
+			setup: func() *cobra.Command {
+				return nil
+			},
+			expected: false,
+		},
+		{
+			name: "version install command",
+			setup: func() *cobra.Command {
+				root := &cobra.Command{Use: "atmos"}
+				version := &cobra.Command{Use: "version"}
+				install := &cobra.Command{Use: "install"}
+				root.AddCommand(version)
+				version.AddCommand(install)
+				return install
+			},
+			expected: true,
+		},
+		{
+			name: "version uninstall command",
+			setup: func() *cobra.Command {
+				root := &cobra.Command{Use: "atmos"}
+				version := &cobra.Command{Use: "version"}
+				uninstall := &cobra.Command{Use: "uninstall"}
+				root.AddCommand(version)
+				version.AddCommand(uninstall)
+				return uninstall
+			},
+			expected: true,
+		},
+		{
+			name: "version list command - not management",
+			setup: func() *cobra.Command {
+				root := &cobra.Command{Use: "atmos"}
+				version := &cobra.Command{Use: "version"}
+				list := &cobra.Command{Use: "list"}
+				root.AddCommand(version)
+				version.AddCommand(list)
+				return list
+			},
+			expected: false,
+		},
+		{
+			name: "version command itself",
+			setup: func() *cobra.Command {
+				root := &cobra.Command{Use: "atmos"}
+				version := &cobra.Command{Use: "version"}
+				root.AddCommand(version)
+				return version
+			},
+			expected: true,
+		},
+		{
+			name: "other command",
+			setup: func() *cobra.Command {
+				root := &cobra.Command{Use: "atmos"}
+				terraform := &cobra.Command{Use: "terraform"}
+				root.AddCommand(terraform)
+				return terraform
+			},
+			expected: false,
+		},
+		{
+			name: "standalone command",
+			setup: func() *cobra.Command {
+				return &cobra.Command{Use: "standalone"}
+			},
+			expected: false,
+		},
+		{
+			name: "version command with non-atmos parent",
+			setup: func() *cobra.Command {
+				root := &cobra.Command{Use: "other"}
+				version := &cobra.Command{Use: "version"}
+				root.AddCommand(version)
+				return version
+			},
+			expected: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cmd := tt.setup()
+			result := isVersionManagementCommand(cmd)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+// TestWithStackValidation tests the WithStackValidation option function.
+func TestWithStackValidation(t *testing.T) {
+	tests := []struct {
+		name     string
+		check    bool
+		expected bool
+	}{
+		{
+			name:     "enable stack validation",
+			check:    true,
+			expected: true,
+		},
+		{
+			name:     "disable stack validation",
+			check:    false,
+			expected: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := &ValidateConfig{CheckStack: !tt.expected} // Start with opposite.
+			opt := WithStackValidation(tt.check)
+			opt(cfg)
+			assert.Equal(t, tt.expected, cfg.CheckStack)
+		})
+	}
+}
+
+func TestProcessCustomCommands(t *testing.T) {
+	tests := []struct {
+		name          string
+		commands      []schema.Command
+		expectedCmds  []string
+		expectedError bool
+	}{
+		{
+			name: "single command with no flags",
+			commands: []schema.Command{
+				{
+					Name:        "deploy",
+					Description: "Deploy the application",
+				},
+			},
+			expectedCmds: []string{"deploy"},
+		},
+		{
+			name: "command with bool flag",
+			commands: []schema.Command{
+				{
+					Name:        "build",
+					Description: "Build the application",
+					Flags: []schema.CommandFlag{
+						{Name: "verbose", Type: "bool", Usage: "Enable verbose output"},
+					},
+				},
+			},
+			expectedCmds: []string{"build"},
+		},
+		{
+			name: "command with string flag",
+			commands: []schema.Command{
+				{
+					Name:        "test",
+					Description: "Run tests",
+					Flags: []schema.CommandFlag{
+						{Name: "filter", Type: "string", Usage: "Filter pattern"},
+					},
+				},
+			},
+			expectedCmds: []string{"test"},
+		},
+		{
+			name: "command with flag shorthand",
+			commands: []schema.Command{
+				{
+					Name:        "run",
+					Description: "Run the application",
+					Flags: []schema.CommandFlag{
+						{Name: "config", Shorthand: "c", Type: "string", Usage: "Config file"},
+					},
+				},
+			},
+			expectedCmds: []string{"run"},
+		},
+		{
+			name: "command with bool flag shorthand",
+			commands: []schema.Command{
+				{
+					Name:        "check",
+					Description: "Check status",
+					Flags: []schema.CommandFlag{
+						{Name: "quiet", Shorthand: "q", Type: "bool", Usage: "Quiet mode"},
+					},
+				},
+			},
+			expectedCmds: []string{"check"},
+		},
+		{
+			name: "command with default values",
+			commands: []schema.Command{
+				{
+					Name:        "configure",
+					Description: "Configure settings",
+					Flags: []schema.CommandFlag{
+						{Name: "timeout", Type: "string", Default: "30s", Usage: "Timeout duration"},
+						{Name: "debug", Type: "bool", Default: true, Usage: "Debug mode"},
+					},
+				},
+			},
+			expectedCmds: []string{"configure"},
+		},
+		{
+			name: "multiple commands",
+			commands: []schema.Command{
+				{
+					Name:        "start",
+					Description: "Start the service",
+				},
+				{
+					Name:        "stop",
+					Description: "Stop the service",
+				},
+			},
+			expectedCmds: []string{"start", "stop"},
+		},
+		{
+			name: "nested subcommands",
+			commands: []schema.Command{
+				{
+					Name:        "service",
+					Description: "Service commands",
+					Commands: []schema.Command{
+						{
+							Name:        "start",
+							Description: "Start the service",
+						},
+					},
+				},
+			},
+			expectedCmds: []string{"service"},
+		},
+		{
+			name: "command with component",
+			commands: []schema.Command{
+				{
+					Name:        "deploy-app",
+					Description: "Deploy application",
+					Component: &schema.CommandComponent{
+						Type: "script",
+					},
+				},
+			},
+			expectedCmds: []string{"deploy-app"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_ = NewTestKit(t)
+
+			parentCmd := &cobra.Command{
+				Use:   "atmos",
+				Short: "Atmos CLI",
+			}
+
+			err := processCustomCommands(
+				schema.AtmosConfiguration{},
+				tt.commands,
+				parentCmd,
+			)
+
+			if tt.expectedError {
+				assert.Error(t, err)
+				return
+			}
+
+			require.NoError(t, err)
+
+			// Verify expected commands were added.
+			for _, expectedCmd := range tt.expectedCmds {
+				found := false
+				for _, cmd := range parentCmd.Commands() {
+					if cmd.Name() == expectedCmd {
+						found = true
+						break
+					}
+				}
+				assert.True(t, found, "Expected command %q to be added", expectedCmd)
+			}
+		})
+	}
+}
+
+func TestFindTypedValue(t *testing.T) {
+	tests := []struct {
+		name          string
+		cmd           *schema.Command
+		argumentsData map[string]string
+		flagsData     map[string]any
+		semanticType  string
+		want          string
+	}{
+		{
+			name: "finds value in arguments by type",
+			cmd: &schema.Command{
+				Arguments: []schema.CommandArgument{
+					{Name: "component", Type: "component"},
+					{Name: "stack", Type: "stack"},
+				},
+			},
+			argumentsData: map[string]string{
+				"component": "vpc",
+				"stack":     "dev",
+			},
+			flagsData:    map[string]any{},
+			semanticType: "component",
+			want:         "vpc",
+		},
+		{
+			name: "finds value in flags by semantic type",
+			cmd: &schema.Command{
+				Flags: []schema.CommandFlag{
+					{Name: "stack", SemanticType: "stack"},
+					{Name: "component", SemanticType: "component"},
+				},
+			},
+			argumentsData: map[string]string{},
+			flagsData: map[string]any{
+				"stack":     "prod",
+				"component": "eks",
+			},
+			semanticType: "stack",
+			want:         "prod",
+		},
+		{
+			name: "returns empty when not found in arguments",
+			cmd: &schema.Command{
+				Arguments: []schema.CommandArgument{
+					{Name: "name", Type: "string"},
+				},
+			},
+			argumentsData: map[string]string{"name": "test"},
+			flagsData:     map[string]any{},
+			semanticType:  "component",
+			want:          "",
+		},
+		{
+			name: "returns empty when not found in flags",
+			cmd: &schema.Command{
+				Flags: []schema.CommandFlag{
+					{Name: "verbose", SemanticType: "bool"},
+				},
+			},
+			argumentsData: map[string]string{},
+			flagsData:     map[string]any{"verbose": true},
+			semanticType:  "stack",
+			want:          "",
+		},
+		{
+			name: "handles non-string flag values",
+			cmd: &schema.Command{
+				Flags: []schema.CommandFlag{
+					{Name: "count", SemanticType: "component"},
+				},
+			},
+			argumentsData: map[string]string{},
+			flagsData:     map[string]any{"count": 42},
+			semanticType:  "component",
+			want:          "",
+		},
+		{
+			name: "arguments take precedence over flags",
+			cmd: &schema.Command{
+				Arguments: []schema.CommandArgument{
+					{Name: "comp", Type: "component"},
+				},
+				Flags: []schema.CommandFlag{
+					{Name: "component", SemanticType: "component"},
+				},
+			},
+			argumentsData: map[string]string{"comp": "from-arg"},
+			flagsData:     map[string]any{"component": "from-flag"},
+			semanticType:  "component",
+			want:          "from-arg",
+		},
+		{
+			name:          "handles empty command",
+			cmd:           &schema.Command{},
+			argumentsData: map[string]string{},
+			flagsData:     map[string]any{},
+			semanticType:  "component",
+			want:          "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_ = NewTestKit(t)
+			got := findTypedValue(tt.cmd, tt.argumentsData, tt.flagsData, tt.semanticType)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+// errEnsureRegistered is a sentinel error used to verify ensureRegisteredFn error propagation.
+var errEnsureRegistered = errors.New("ensure registered failed")
+
+// errDescribe is a sentinel error used to verify describeFn error propagation.
+var errDescribe = errors.New("describe failed")
+
+func TestResolveCustomComponentConfig(t *testing.T) {
+	// okEnsure is a no-op registration stub that records the basePath it received.
+	type ensureCall struct {
+		typeName string
+		basePath string
+	}
+
+	tests := []struct {
+		name          string
+		commandConfig *schema.Command
+		argumentsData map[string]string
+		flagsData     map[string]any
+		ensureErr     error
+		describeRet   map[string]any
+		describeErr   error
+		wantErr       error
+		wantConfig    map[string]any
+		wantBasePath  string // expected basePath passed to ensureRegisteredFn (when registration is reached).
+	}{
+		{
+			name: "missing component argument returns ErrComponentArgumentNotFound",
+			commandConfig: &schema.Command{
+				Component: &schema.CommandComponent{Type: "script"},
+				Arguments: []schema.CommandArgument{{Name: "component", Type: semanticTypeComponent}},
+			},
+			argumentsData: map[string]string{},
+			flagsData:     map[string]any{},
+			wantErr:       errUtils.ErrComponentArgumentNotFound,
+		},
+		{
+			name: "component present but missing stack returns ErrStackArgumentNotFound",
+			commandConfig: &schema.Command{
+				Component: &schema.CommandComponent{Type: "script"},
+				Arguments: []schema.CommandArgument{
+					{Name: "component", Type: semanticTypeComponent},
+					{Name: "stack", Type: semanticTypeStack},
+				},
+			},
+			argumentsData: map[string]string{"component": "deploy-app"},
+			flagsData:     map[string]any{},
+			wantErr:       errUtils.ErrStackArgumentNotFound,
+		},
+		{
+			name: "ensureRegisteredFn error propagates",
+			commandConfig: &schema.Command{
+				Component: &schema.CommandComponent{Type: "script"},
+				Arguments: []schema.CommandArgument{
+					{Name: "component", Type: semanticTypeComponent},
+					{Name: "stack", Type: semanticTypeStack},
+				},
+			},
+			argumentsData: map[string]string{"component": "deploy-app", "stack": "dev"},
+			flagsData:     map[string]any{},
+			ensureErr:     errEnsureRegistered,
+			wantErr:       errEnsureRegistered,
+			wantBasePath:  "components/script", // default basePath derived from type.
+		},
+		{
+			name: "describeFn error propagates",
+			commandConfig: &schema.Command{
+				Component: &schema.CommandComponent{Type: "script"},
+				Arguments: []schema.CommandArgument{
+					{Name: "component", Type: semanticTypeComponent},
+					{Name: "stack", Type: semanticTypeStack},
+				},
+			},
+			argumentsData: map[string]string{"component": "deploy-app", "stack": "dev"},
+			flagsData:     map[string]any{},
+			describeErr:   errDescribe,
+			wantErr:       errDescribe,
+			wantBasePath:  "components/script",
+		},
+		{
+			name: "success with default basePath returns component config",
+			commandConfig: &schema.Command{
+				Component: &schema.CommandComponent{Type: "script"},
+				Arguments: []schema.CommandArgument{
+					{Name: "component", Type: semanticTypeComponent},
+					{Name: "stack", Type: semanticTypeStack},
+				},
+			},
+			argumentsData: map[string]string{"component": "deploy-app", "stack": "dev"},
+			flagsData:     map[string]any{},
+			describeRet:   map[string]any{"vars": map[string]any{"foo": "bar"}},
+			wantConfig:    map[string]any{"vars": map[string]any{"foo": "bar"}},
+			wantBasePath:  "components/script",
+		},
+		{
+			name: "success with explicit basePath and semantic flags",
+			commandConfig: &schema.Command{
+				Component: &schema.CommandComponent{Type: "script", BasePath: "custom/path"},
+				Flags: []schema.CommandFlag{
+					{Name: "component", SemanticType: semanticTypeComponent},
+					{Name: "stack", SemanticType: semanticTypeStack},
+				},
+			},
+			argumentsData: map[string]string{},
+			flagsData:     map[string]any{"component": "deploy-app", "stack": "dev"},
+			describeRet:   map[string]any{"component": "deploy-app"},
+			wantConfig:    map[string]any{"component": "deploy-app"},
+			wantBasePath:  "custom/path", // explicit basePath is preserved.
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_ = NewTestKit(t)
+
+			var gotEnsure *ensureCall
+			ensureFn := func(typeName, basePath string) error {
+				gotEnsure = &ensureCall{typeName: typeName, basePath: basePath}
+				return tt.ensureErr
+			}
+
+			var gotParams *e.ExecuteDescribeComponentParams
+			describeFn := func(params *e.ExecuteDescribeComponentParams) (map[string]any, error) {
+				gotParams = params
+				return tt.describeRet, tt.describeErr
+			}
+
+			got, err := resolveCustomComponentConfig(
+				tt.commandConfig,
+				tt.argumentsData,
+				tt.flagsData,
+				nil, // authManager not needed for these paths.
+				ensureFn,
+				describeFn,
+			)
+
+			if tt.wantErr != nil {
+				require.Error(t, err)
+				assert.ErrorIs(t, err, tt.wantErr)
+				assert.Nil(t, got)
+				return
+			}
+
+			require.NoError(t, err)
+			assert.Equal(t, tt.wantConfig, got)
+
+			// Verify the custom type was registered with the expected basePath.
+			require.NotNil(t, gotEnsure)
+			assert.Equal(t, tt.commandConfig.Component.Type, gotEnsure.typeName)
+			assert.Equal(t, tt.wantBasePath, gotEnsure.basePath)
+
+			// Verify component/stack were threaded through to describeFn.
+			require.NotNil(t, gotParams)
+			assert.Equal(t, "deploy-app", gotParams.Component)
+			assert.Equal(t, "dev", gotParams.Stack)
+			assert.Equal(t, tt.commandConfig.Component.Type, gotParams.ComponentType)
+			assert.True(t, gotParams.ProcessTemplates)
+			assert.True(t, gotParams.ProcessYamlFunctions)
+		})
+	}
 }

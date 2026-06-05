@@ -3,6 +3,7 @@ package terraform
 import (
 	"testing"
 
+	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -190,4 +191,32 @@ func TestCleanCommandIsSubcommand(t *testing.T) {
 	parent := cleanCmd.Parent()
 	assert.NotNil(t, parent)
 	assert.Equal(t, "terraform", parent.Name())
+}
+
+// TestCleanPromptHandling tests the prompt handling in the clean command.
+// When neither component nor stack is provided, the command prompts for both.
+// In non-TTY environment, the prompts return errors which are swallowed.
+func TestCleanPromptHandling(t *testing.T) {
+	t.Run("prompts are triggered when component and stack are empty", func(t *testing.T) {
+		// Reset viper to avoid state pollution.
+		v := viper.New()
+
+		// Bind the parser to the fresh viper instance.
+		err := cleanParser.BindToViper(v)
+		require.NoError(t, err)
+
+		// Create a test command.
+		cmd := &cobra.Command{Use: "clean"}
+		cleanParser.RegisterPersistentFlags(cmd)
+
+		// Execute RunE with no component or stack.
+		// In non-TTY environment, the prompts return ErrInteractiveModeNotAvailable.
+		// The errors are swallowed, and the command continues with empty component/stack.
+		// This test just verifies the code path doesn't panic.
+		err = cleanCmd.RunE(cmd, []string{})
+
+		// The command will fail at config initialization because we're not in a valid atmos project.
+		// This is expected behavior - we just want to verify the prompt handling path is exercised.
+		assert.Error(t, err)
+	})
 }

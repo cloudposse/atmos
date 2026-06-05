@@ -1,0 +1,37 @@
+# yaml-language-server: $schema=https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
+
+# Vars with LITERAL values (not templates) so name_template can derive logical stack name.
+# This results in logical stack name: "prod-us-west-2" (from name_template).
+vars:
+  environment: prod
+  stage: us-west-2
+
+# File-scoped locals.
+locals:
+  namespace: acme
+  env_prefix: "{{ .locals.namespace }}-prod"
+  full_prefix: "{{ .locals.env_prefix }}-us-west-2"
+
+terraform:
+  locals:
+    backend_bucket: "{{ .locals.namespace }}-prod-tfstate"
+    tf_only: terraform-specific-prod
+
+helmfile:
+  locals:
+    release_name: "{{ .locals.namespace }}-prod-release"
+    hf_only: helmfile-specific-prod
+
+components:
+  terraform:
+    vpc:
+      metadata:
+        component: mock
+      vars:
+        name: "{{ .locals.full_prefix }}-vpc"
+        bucket: "{{ .locals.backend_bucket }}"
+
+  helmfile:
+    nginx:
+      vars:
+        release: "{{ .locals.release_name }}"

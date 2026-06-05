@@ -79,14 +79,15 @@ func GetMarkdownRenderer() *markdown.Renderer {
 // printPlainError writes a plain-text error to stderr without Markdown formatting.
 // This is used as a fallback when the markdown renderer is not available.
 func printPlainError(title string, err error, suggestion string) {
+	maskedStderr := os.Stderr
 	if title != "" {
 		title = cases.Title(language.English).String(title)
-		fmt.Fprintf(os.Stderr, "\n%s: %v\n", title, err)
+		fmt.Fprintf(maskedStderr, "\n%s: %v\n", title, err)
 	} else {
-		fmt.Fprintf(os.Stderr, "\nError: %v\n", err)
+		fmt.Fprintf(maskedStderr, "\nError: %v\n", err)
 	}
 	if suggestion != "" {
-		fmt.Fprintf(os.Stderr, "%s\n", suggestion)
+		fmt.Fprintf(maskedStderr, "%s\n", suggestion)
 	}
 }
 
@@ -98,9 +99,10 @@ func printStructuredPlainError(err error, title string, suggestion string) {
 		title = "Error"
 	}
 	title = cases.Title(language.English).String(title)
+	maskedStderr := os.Stderr
 
 	// Print title and base error message.
-	fmt.Fprintf(os.Stderr, "\n%s: %v\n", title, err)
+	fmt.Fprintf(maskedStderr, "\n%s: %v\n", title, err)
 
 	// Extract and print explanations (from WithDetail/WithExplanation).
 	printErrorDetails(err)
@@ -113,7 +115,7 @@ func printStructuredPlainError(err error, title string, suggestion string) {
 
 	// Legacy suggestion fallback.
 	if suggestion != "" {
-		fmt.Fprintf(os.Stderr, "\n%s\n", suggestion)
+		fmt.Fprintf(maskedStderr, "\n%s\n", suggestion)
 	}
 }
 
@@ -123,9 +125,10 @@ func printErrorDetails(err error) {
 	if len(details) == 0 {
 		return
 	}
-	fmt.Fprintf(os.Stderr, "\nExplanation:\n")
+	maskedStderr := os.Stderr
+	fmt.Fprintf(maskedStderr, "\nExplanation:\n")
 	for _, d := range details {
-		fmt.Fprintf(os.Stderr, "  • %s\n", d)
+		fmt.Fprintf(maskedStderr, "  • %s\n", d)
 	}
 }
 
@@ -141,9 +144,10 @@ func printErrorHints(err error) {
 	if len(userHints) == 0 {
 		return
 	}
-	fmt.Fprintf(os.Stderr, "\nHints:\n")
+	maskedStderr := os.Stderr
+	fmt.Fprintf(maskedStderr, "\nHints:\n")
 	for _, h := range userHints {
-		fmt.Fprintf(os.Stderr, "  • %s\n", h)
+		fmt.Fprintf(maskedStderr, "  • %s\n", h)
 	}
 }
 
@@ -153,11 +157,12 @@ func printErrorContext(err error) {
 	if len(contextPairs) == 0 {
 		return
 	}
-	fmt.Fprintf(os.Stderr, "\nContext:\n")
+	maskedStderr := os.Stderr
+	fmt.Fprintf(maskedStderr, "\nContext:\n")
 	for _, pair := range contextPairs {
 		parts := strings.SplitN(pair, "=", 2)
 		if len(parts) == 2 {
-			fmt.Fprintf(os.Stderr, "  %s: %s\n", parts[0], parts[1])
+			fmt.Fprintf(maskedStderr, "  %s: %s\n", parts[0], parts[1])
 		}
 	}
 }
@@ -275,6 +280,7 @@ func printFormattedError(err error, title string, suggestion string) {
 	//    and independent, ensuring errors can always be reported regardless of system state
 	//
 	// The formatted output is already rendered markdown, so writing to stderr is correct.
+	// Note: Error output is not masked to avoid import cycles with pkg/io.
 	_, printErr := os.Stderr.WriteString(formatted + "\n")
 	if printErr != nil {
 		log.Error(printErr)

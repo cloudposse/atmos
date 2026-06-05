@@ -79,8 +79,9 @@ type AzureFileManager struct {
 }
 
 // NewAzureFileManager creates a new Azure file manager.
-// If basePath is empty, uses default ~/.azure/atmos path.
-func NewAzureFileManager(basePath string) (*AzureFileManager, error) {
+// If basePath is empty, uses default ~/.azure/atmos/{realm} path.
+// The realm parameter provides credential isolation between different repositories.
+func NewAzureFileManager(basePath string, realm string) (*AzureFileManager, error) {
 	defer perf.Track(nil, "azure.NewAzureFileManager")()
 
 	var baseDir string
@@ -91,7 +92,12 @@ func NewAzureFileManager(basePath string) (*AzureFileManager, error) {
 		if err != nil {
 			return nil, errors.Join(ErrGetHomeDir, err)
 		}
-		baseDir = filepath.Join(homeDir, ".azure", "atmos")
+		// Include realm in path for credential isolation.
+		if realm != "" {
+			baseDir = filepath.Join(homeDir, ".azure", "atmos", realm)
+		} else {
+			baseDir = filepath.Join(homeDir, ".azure", "atmos")
+		}
 	}
 
 	return &AzureFileManager{

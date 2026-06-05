@@ -18,6 +18,11 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
+// Helper functions for creating pointer values in tests.
+func intPtr(i int) *int                          { return &i }
+func durationPtr(d time.Duration) *time.Duration { return &d }
+func float64Ptr(f float64) *float64              { return &f }
+
 func TestIsRetryableGitError(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -362,7 +367,7 @@ func TestGetRunCommandWithRetry_MaxAttemptsOne(t *testing.T) {
 
 	getter := &CustomGitGetter{
 		RetryConfig: &schema.RetryConfig{
-			MaxAttempts: 1,
+			MaxAttempts: intPtr(1),
 		},
 	}
 
@@ -380,10 +385,10 @@ func TestGetRunCommandWithRetry_SucceedsAfterRetry(t *testing.T) {
 
 	getter := &CustomGitGetter{
 		RetryConfig: &schema.RetryConfig{
-			MaxAttempts:     3,
-			InitialDelay:    10 * time.Millisecond,
-			MaxDelay:        100 * time.Millisecond,
-			MaxElapsedTime:  30 * time.Second,
+			MaxAttempts:     intPtr(3),
+			InitialDelay:    durationPtr(10 * time.Millisecond),
+			MaxDelay:        durationPtr(100 * time.Millisecond),
+			MaxElapsedTime:  durationPtr(30 * time.Second),
 			BackoffStrategy: schema.BackoffConstant,
 		},
 	}
@@ -406,10 +411,10 @@ func TestGetRunCommandWithRetry_SucceedsAfterMultipleRetries(t *testing.T) {
 
 	getter := &CustomGitGetter{
 		RetryConfig: &schema.RetryConfig{
-			MaxAttempts:     5,
-			InitialDelay:    10 * time.Millisecond,
-			MaxDelay:        100 * time.Millisecond,
-			MaxElapsedTime:  30 * time.Second,
+			MaxAttempts:     intPtr(5),
+			InitialDelay:    durationPtr(10 * time.Millisecond),
+			MaxDelay:        durationPtr(100 * time.Millisecond),
+			MaxElapsedTime:  durationPtr(30 * time.Second),
 			BackoffStrategy: schema.BackoffConstant,
 		},
 	}
@@ -432,10 +437,10 @@ func TestGetRunCommandWithRetry_ExhaustsAllAttempts(t *testing.T) {
 
 	getter := &CustomGitGetter{
 		RetryConfig: &schema.RetryConfig{
-			MaxAttempts:     3,
-			InitialDelay:    10 * time.Millisecond,
-			MaxDelay:        100 * time.Millisecond,
-			MaxElapsedTime:  30 * time.Second,
+			MaxAttempts:     intPtr(3),
+			InitialDelay:    durationPtr(10 * time.Millisecond),
+			MaxDelay:        durationPtr(100 * time.Millisecond),
+			MaxElapsedTime:  durationPtr(30 * time.Second),
 			BackoffStrategy: schema.BackoffConstant,
 		},
 	}
@@ -458,10 +463,10 @@ func TestGetRunCommandWithRetry_NonRetryableError(t *testing.T) {
 
 	getter := &CustomGitGetter{
 		RetryConfig: &schema.RetryConfig{
-			MaxAttempts:     5,
-			InitialDelay:    10 * time.Millisecond,
-			MaxDelay:        100 * time.Millisecond,
-			MaxElapsedTime:  30 * time.Second,
+			MaxAttempts:     intPtr(5),
+			InitialDelay:    durationPtr(10 * time.Millisecond),
+			MaxDelay:        durationPtr(100 * time.Millisecond),
+			MaxElapsedTime:  durationPtr(30 * time.Second),
 			BackoffStrategy: schema.BackoffConstant,
 		},
 	}
@@ -484,10 +489,10 @@ func TestGetRunCommandWithRetry_ContextCancelled(t *testing.T) {
 
 	getter := &CustomGitGetter{
 		RetryConfig: &schema.RetryConfig{
-			MaxAttempts:     5,
-			InitialDelay:    100 * time.Millisecond, // Longer delay to allow cancellation.
-			MaxDelay:        1 * time.Second,
-			MaxElapsedTime:  30 * time.Second,
+			MaxAttempts:     intPtr(5),
+			InitialDelay:    durationPtr(100 * time.Millisecond), // Longer delay to allow cancellation.
+			MaxDelay:        durationPtr(1 * time.Second),
+			MaxElapsedTime:  durationPtr(30 * time.Second),
 			BackoffStrategy: schema.BackoffConstant,
 		},
 	}
@@ -522,10 +527,10 @@ func TestGetRunCommandWithRetry_ImmediateSuccess(t *testing.T) {
 
 	getter := &CustomGitGetter{
 		RetryConfig: &schema.RetryConfig{
-			MaxAttempts:     3,
-			InitialDelay:    10 * time.Millisecond,
-			MaxDelay:        100 * time.Millisecond,
-			MaxElapsedTime:  30 * time.Second,
+			MaxAttempts:     intPtr(3),
+			InitialDelay:    durationPtr(10 * time.Millisecond),
+			MaxDelay:        durationPtr(100 * time.Millisecond),
+			MaxElapsedTime:  durationPtr(30 * time.Second),
 			BackoffStrategy: schema.BackoffConstant,
 		},
 	}
@@ -545,12 +550,12 @@ func TestGetRunCommandWithRetry_ImmediateSuccess(t *testing.T) {
 func TestCustomGitGetterWithRetryConfig(t *testing.T) {
 	// Test that CustomGitGetter properly holds and uses RetryConfig.
 	retryConfig := &schema.RetryConfig{
-		MaxAttempts:     5,
-		InitialDelay:    2 * time.Second,
-		MaxDelay:        30 * time.Second,
+		MaxAttempts:     intPtr(5),
+		InitialDelay:    durationPtr(2 * time.Second),
+		MaxDelay:        durationPtr(30 * time.Second),
 		BackoffStrategy: schema.BackoffExponential,
-		Multiplier:      2.0,
-		RandomJitter:    0.1,
+		Multiplier:      float64Ptr(2.0),
+		RandomJitter:    float64Ptr(0.1),
 	}
 
 	getter := &CustomGitGetter{
@@ -558,10 +563,10 @@ func TestCustomGitGetterWithRetryConfig(t *testing.T) {
 	}
 
 	assert.NotNil(t, getter.RetryConfig)
-	assert.Equal(t, 5, getter.RetryConfig.MaxAttempts)
-	assert.Equal(t, 2*time.Second, getter.RetryConfig.InitialDelay)
-	assert.Equal(t, 30*time.Second, getter.RetryConfig.MaxDelay)
+	assert.Equal(t, 5, *getter.RetryConfig.MaxAttempts)
+	assert.Equal(t, 2*time.Second, *getter.RetryConfig.InitialDelay)
+	assert.Equal(t, 30*time.Second, *getter.RetryConfig.MaxDelay)
 	assert.Equal(t, schema.BackoffExponential, getter.RetryConfig.BackoffStrategy)
-	assert.Equal(t, 2.0, getter.RetryConfig.Multiplier)
-	assert.Equal(t, 0.1, getter.RetryConfig.RandomJitter)
+	assert.Equal(t, 2.0, *getter.RetryConfig.Multiplier)
+	assert.Equal(t, 0.1, *getter.RetryConfig.RandomJitter)
 }

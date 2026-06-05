@@ -41,6 +41,18 @@ builds:
       - 'arm64'
       - '386'
       - 'arm'
+    ignore:
+      # Go 1.24+ dropped support for windows/arm (32-bit ARM).
+      # https://go.dev/doc/go1.24#ports
+      - goos: windows
+        goarch: arm
+      # modernc.org/libc (dependency of modernc.org/sqlite used by pkg/ai/session)
+      # has type mismatch bugs on 32-bit FreeBSD that are unresolved upstream.
+      # https://gitlab.com/cznic/libc/-/issues
+      - goos: freebsd
+        goarch: '386'
+      - goos: freebsd
+        goarch: arm
     binary: atmos
     ldflags:
       # Set `atmos` version to the GitHub release tag using Go `ldflags`

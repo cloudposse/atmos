@@ -6,16 +6,18 @@ import (
 
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/flags/compat"
-	"github.com/cloudposse/atmos/toolchain"
+	"github.com/cloudposse/atmos/pkg/toolchain"
 )
 
 var infoParser *flags.StandardParser
 
 var infoCmd = &cobra.Command{
-	Use:   "info <tool>",
-	Short: "Show information about a tool",
-	Long:  `Display detailed information about a tool from the registry.`,
-	Args:  cobra.ExactArgs(1),
+	Use:           "info <tool>",
+	Short:         "Show information about a tool",
+	Long:          `Display detailed information about a tool from the registry.`,
+	Args:          cobra.ExactArgs(1),
+	SilenceUsage:  true, // Don't show usage on error.
+	SilenceErrors: true, // Don't show errors twice.
 	RunE: func(cmd *cobra.Command, args []string) error {
 		// Bind flags to Viper for precedence handling.
 		v := viper.GetViper()

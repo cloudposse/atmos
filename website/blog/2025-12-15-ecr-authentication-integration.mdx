@@ -94,13 +94,13 @@ You can also trigger ECR login independently:
 
 ```bash
 # Using a named integration
-atmos auth ecr-login dev/ecr/primary
+atmos aws ecr login dev/ecr/primary
 
 # Using an identity's linked integrations (all integrations referencing that identity)
-atmos auth ecr-login --identity dev-admin
+atmos aws ecr login --identity dev-admin
 
 # Explicit registries (ad-hoc)
-atmos auth ecr-login --registry 123456789012.dkr.ecr.us-east-1.amazonaws.com
+atmos aws ecr login --registry 123456789012.dkr.ecr.us-east-1.amazonaws.com
 ```
 
 ## Design Decisions

@@ -270,7 +270,8 @@ nested:
 
 			// All goroutines parse the same file with the same content
 			result, _, err := UnmarshalYAMLFromFileWithPositions[map[string]any](
-				atmosConfig, input, "concurrent-test.yaml")
+				atmosConfig, input, "concurrent-test.yaml",
+			)
 			if err != nil {
 				errors <- err
 				return
@@ -356,7 +357,8 @@ func TestUnmarshalYAMLFromFileWithPositions_ConcurrentAccessDifferentFiles(t *te
 				<-start
 
 				result, _, err := UnmarshalYAMLFromFileWithPositions[map[string]any](
-					atmosConfig, content, name)
+					atmosConfig, content, name,
+				)
 				if err != nil {
 					errors <- err
 					return
@@ -764,6 +766,16 @@ func TestAtmosYamlTagsMap_ContainsAllTags(t *testing.T) {
 		AtmosYamlFuncTerraformOutput,
 		AtmosYamlFuncTerraformState,
 		AtmosYamlFuncEnv,
+		AtmosYamlFuncGitRoot,
+		AtmosYamlFuncGitRootAlias,
+		AtmosYamlFuncGitSha,
+		AtmosYamlFuncGitBranch,
+		AtmosYamlFuncGitRef,
+		AtmosYamlFuncGitRepository,
+		AtmosYamlFuncGitOwner,
+		AtmosYamlFuncGitName,
+		AtmosYamlFuncGitHost,
+		AtmosYamlFuncGitUrl,
 		AtmosYamlFuncCwd,
 		AtmosYamlFuncRandom,
 		AtmosYamlFuncLiteral,
@@ -771,6 +783,7 @@ func TestAtmosYamlTagsMap_ContainsAllTags(t *testing.T) {
 		AtmosYamlFuncAwsCallerIdentityArn,
 		AtmosYamlFuncAwsCallerIdentityUserID,
 		AtmosYamlFuncAwsRegion,
+		AtmosYamlFuncAwsOrganizationID,
 	}
 
 	for _, tag := range expectedTags {
@@ -798,6 +811,16 @@ func TestAtmosYamlTagsMap_O1Lookup(t *testing.T) {
 		{AtmosYamlFuncTerraformOutput, true},
 		{AtmosYamlFuncTerraformState, true},
 		{AtmosYamlFuncEnv, true},
+		{AtmosYamlFuncGitRoot, true},
+		{AtmosYamlFuncGitRootAlias, true},
+		{AtmosYamlFuncGitSha, true},
+		{AtmosYamlFuncGitBranch, true},
+		{AtmosYamlFuncGitRef, true},
+		{AtmosYamlFuncGitRepository, true},
+		{AtmosYamlFuncGitOwner, true},
+		{AtmosYamlFuncGitName, true},
+		{AtmosYamlFuncGitHost, true},
+		{AtmosYamlFuncGitUrl, true},
 		{AtmosYamlFuncRandom, true},
 		{"!unknown", false},
 		{"!invalid", false},
@@ -1460,4 +1483,196 @@ func TestLongString_MarshalYAML(t *testing.T) {
 
 	// The result should be a yaml.Node with FoldedStyle.
 	require.NotNil(t, node)
+}
+
+// TestUnmarshalYAMLFromFileWithPositions_ProvenanceReparse tests that when a file
+// is first cached without provenance tracking, then requested with provenance enabled,
+// the file is re-parsed to extract position information.
+func TestUnmarshalYAMLFromFileWithPositions_ProvenanceReparse(t *testing.T) {
+	yamlContent := `name: test
+value: 42
+nested:
+  key: value`
+	fileName := "test-provenance-reparse.yaml"
+
+	// Clear cache before and after test for isolation.
+	clearParsedYAMLCache()
+	t.Cleanup(clearParsedYAMLCache)
+
+	// First parse WITHOUT provenance tracking.
+	configNoProvenance := &schema.AtmosConfiguration{
+		TrackProvenance: false,
+	}
+
+	result1, positions1, err := UnmarshalYAMLFromFileWithPositions[map[string]any](configNoProvenance, yamlContent, fileName)
+	require.NoError(t, err)
+	require.NotNil(t, result1)
+	assert.Equal(t, "test", result1["name"])
+
+	// Positions should be empty when provenance is disabled.
+	assert.Empty(t, positions1, "Positions should be empty when provenance is disabled")
+
+	// Second parse WITH provenance tracking - should re-parse to get positions.
+	configWithProvenance := &schema.AtmosConfiguration{
+		TrackProvenance: true,
+	}
+
+	result2, positions2, err := UnmarshalYAMLFromFileWithPositions[map[string]any](configWithProvenance, yamlContent, fileName)
+	require.NoError(t, err)
+	require.NotNil(t, result2)
+	assert.Equal(t, "test", result2["name"])
+
+	// Positions should now be populated.
+	assert.NotEmpty(t, positions2, "Positions should be populated when provenance is enabled and file is re-parsed")
+
+	// Verify positions contain expected keys.
+	assert.Contains(t, positions2, "name", "Positions should contain 'name' key")
+	assert.Contains(t, positions2, "value", "Positions should contain 'value' key")
+	assert.Contains(t, positions2, "nested", "Positions should contain 'nested' key")
+}
+
+// TestUnmarshalYAMLFromFileWithPositions_NilConfigReturnsError tests that nil atmosConfig
+// returns an error (by design - config is required).
+func TestUnmarshalYAMLFromFileWithPositions_NilConfigReturnsError(t *testing.T) {
+	yamlContent := `name: test`
+	fileName := "test-nil-config-error.yaml"
+
+	// Call with nil config - should return error (not panic).
+	_, _, err := UnmarshalYAMLFromFileWithPositions[map[string]any](nil, yamlContent, fileName)
+	require.Error(t, err, "Nil config should return an error")
+	assert.Contains(t, err.Error(), "nil", "Error should mention nil config")
+}
+
+// TestHandleCacheMiss_NilConfigSafe tests that handleCacheMiss handles nil atmosConfig safely.
+// This tests the nil checks we added to prevent panics.
+func TestHandleCacheMiss_NilConfigSafe(t *testing.T) {
+	// Clear cache before and after test for isolation.
+	clearParsedYAMLCache()
+	t.Cleanup(clearParsedYAMLCache)
+
+	yamlContent := `name: test`
+
+	// Call handleCacheMiss with nil config - should NOT panic.
+	// This tests the nil check we added in parseAndCacheYAML.
+	node, positions, err := handleCacheMiss(nil, "test-file.yaml", yamlContent)
+	require.NoError(t, err)
+	require.NotNil(t, node)
+
+	// Positions should be empty since config is nil (TrackProvenance defaults to false).
+	assert.Empty(t, positions, "Positions should be empty when config is nil")
+}
+
+// TestUnmarshalYAMLFromFileWithPositions_CacheHitWithProvenance tests that
+// a cache hit with provenance already populated doesn't re-parse.
+func TestUnmarshalYAMLFromFileWithPositions_CacheHitWithProvenance(t *testing.T) {
+	yamlContent := `name: cached
+value: 123`
+	fileName := "test-cache-hit-provenance.yaml"
+
+	// Save stats and restore after test.
+	parsedYAMLCacheStats.Lock()
+	oldHits := parsedYAMLCacheStats.hits
+	oldMisses := parsedYAMLCacheStats.misses
+	parsedYAMLCacheStats.Unlock()
+	t.Cleanup(func() {
+		clearParsedYAMLCache()
+		parsedYAMLCacheStats.Lock()
+		parsedYAMLCacheStats.hits = oldHits
+		parsedYAMLCacheStats.misses = oldMisses
+		parsedYAMLCacheStats.Unlock()
+	})
+
+	// Clear cache to ensure clean state.
+	clearParsedYAMLCache()
+
+	// Reset stats.
+	parsedYAMLCacheStats.Lock()
+	parsedYAMLCacheStats.hits = 0
+	parsedYAMLCacheStats.misses = 0
+	parsedYAMLCacheStats.Unlock()
+
+	// First parse WITH provenance tracking.
+	configWithProvenance := &schema.AtmosConfiguration{
+		TrackProvenance: true,
+	}
+
+	result1, positions1, err := UnmarshalYAMLFromFileWithPositions[map[string]any](configWithProvenance, yamlContent, fileName)
+	require.NoError(t, err)
+	require.NotNil(t, result1)
+	assert.NotEmpty(t, positions1, "First call should have positions")
+
+	// Get cache stats before second call.
+	parsedYAMLCacheStats.RLock()
+	hitsBefore := parsedYAMLCacheStats.hits
+	parsedYAMLCacheStats.RUnlock()
+
+	// Second parse WITH provenance - should be a cache HIT (not re-parsed).
+	result2, positions2, err := UnmarshalYAMLFromFileWithPositions[map[string]any](configWithProvenance, yamlContent, fileName)
+	require.NoError(t, err)
+	require.NotNil(t, result2)
+	assert.NotEmpty(t, positions2, "Second call should also have positions")
+
+	// Get cache stats after second call.
+	parsedYAMLCacheStats.RLock()
+	hitsAfter := parsedYAMLCacheStats.hits
+	parsedYAMLCacheStats.RUnlock()
+
+	// Verify cache hit (hits should increase).
+	assert.Greater(t, hitsAfter, hitsBefore, "Cache hits should increase on second call")
+}
+
+// TestClearParsedYAMLCache_Public exercises the exported ClearParsedYAMLCache
+// helper so tests in other packages can rely on it. The internal
+// clearParsedYAMLCache is already covered by other tests via the t.Cleanup
+// pattern, but the public wrapper itself needs its own coverage so the
+// "all exported APIs have a behavioral test" convention holds.
+func TestClearParsedYAMLCache_Public(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{}
+	// Seed an entry into the parsed cache via the public API.
+	_, _, err := UnmarshalYAMLFromFileWithPositions[map[string]any](atmosConfig, "key: value", "public-clear-test.yaml")
+	require.NoError(t, err)
+
+	// Confirm at least one entry is present.
+	var beforeCount int
+	parsedYAMLCache.Range(func(_, _ any) bool {
+		beforeCount++
+		return true
+	})
+	require.Positive(t, beforeCount, "cache should have at least one entry before clearing")
+
+	ClearParsedYAMLCache()
+
+	var afterCount int
+	parsedYAMLCache.Range(func(_, _ any) bool {
+		afterCount++
+		return true
+	})
+	assert.Equal(t, 0, afterCount, "ClearParsedYAMLCache should empty the cache")
+}
+
+// TestClearDecodedYAMLCache_Public exercises the exported ClearDecodedYAMLCache
+// helper. The decoded-result cache is populated by UnmarshalYAMLFromFileWithPositions
+// when T == map[string]any (the production fast path); this test seeds an entry
+// and then verifies the public clear API empties it.
+func TestClearDecodedYAMLCache_Public(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{}
+	// Seed an entry into the decoded cache via the public API.
+	_, _, err := UnmarshalYAMLFromFileWithPositions[map[string]any](atmosConfig, "key: value", "public-decoded-clear-test.yaml")
+	require.NoError(t, err)
+
+	var beforeCount int
+	decodedYAMLCache.Range(func(_, _ any) bool {
+		beforeCount++
+		return true
+	})
+	require.Positive(t, beforeCount, "decoded cache should have at least one entry before clearing")
+
+	ClearDecodedYAMLCache()
+
+	var afterCount int
+	decodedYAMLCache.Range(func(_, _ any) bool {
+		afterCount++
+		return true
+	})
+	assert.Equal(t, 0, afterCount, "ClearDecodedYAMLCache should empty the cache")
 }

@@ -1,0 +1,111 @@
+---
+slug: git-yaml-functions
+title: "Git YAML Functions for Source Pinning"
+authors: [osterman]
+tags: [feature]
+date: 2026-05-28
+---
+
+Atmos now includes core Git YAML functions for resolving repository metadata directly in stack and config processing: `!git.root`, `!git.sha`, `!git.branch`, and `!git.ref`.
+
+<!--truncate-->
+
+## What Changed
+
+The new Git function family exposes common repository values without shelling out through `!exec`:
+
+| Function | Returns |
+|----------|---------|
+| `!git.root` | The current repository root, with the same behavior as `!repo-root` |
+| `!git.sha` | The full current `HEAD` commit SHA |
+| `!git.ref` | The same full current `HEAD` commit SHA, intended for immutable source pinning |
+| `!git.branch` | The current branch name |
+
+All four functions support fallback values using the same pattern as `!repo-root`:
+
+```yaml
+vars:
+  root: !git.root /fallback/path
+  sha: !git.sha unknown
+  ref: !git.ref unknown
+  branch: !git.branch detached
+```
+
+## Source Pinning
+
+The primary use case is development source pinning. Dev stacks can point component source versions at the current commit:
+
+```yaml
+components:
+  terraform:
+    vpc:
+      source:
+        uri: github.com/my-org/my-repo//components/terraform/vpc
+        version: !git.ref
+```
+
+Production stacks can stay explicit:
+
+```yaml
+components:
+  terraform:
+    vpc:
+      source:
+        uri: github.com/my-org/my-repo//components/terraform/vpc
+        version: "1.2.3"
+```
+
+This lets pull requests exercise local component changes in development environments while production remains controlled by explicit pins in protected stack or catalog files.
+
+## Tagging Terraform Resources
+
+Git functions also combine with Atmos provider generation. For AWS, define `default_tags` in the generated provider override and include both the Atmos component identity and the Git ref that produced the plan:
+
+```yaml
+terraform:
+  providers:
+    aws:
+      region: us-east-1
+      default_tags:
+        tags:
+          atmos_stack: !template '{{ .atmos_stack }}'
+          atmos_component: !template '{{ .atmos_component }}'
+          atmos_git_ref: !git.ref
+          atmos_git_branch: !git.branch unknown
+```
+
+When you run an `atmos terraform` command, Atmos writes the provider override for the component:
+
+```json
+{
+  "provider": {
+    "aws": {
+      "region": "us-east-1",
+      "default_tags": {
+        "tags": {
+          "atmos_stack": "plat-ue1-dev",
+          "atmos_component": "vpc",
+          "atmos_git_ref": "9f3c8b0d2a4e9c7a6f1e0d5c4b3a291817161514",
+          "atmos_git_branch": "feature/source-pinning"
+        }
+      }
+    }
+  }
+}
+```
+
+This tags every resource supported by the AWS provider with the Atmos stack, Atmos component, and exact Git commit used for the run. The commit tag is especially useful when dev environments use `source.version: !git.ref`, because the component source and resource provenance point at the same immutable revision.
+
+:::note
+Dedicated `!atmos.stack` and `!atmos.component` YAML functions would make this pattern a little cleaner, but they are not required for this workflow today. The current template context already exposes `{{ .atmos_stack }}` and `{{ .atmos_component }}` for the Atmos identity, and `!git.ref` covers the immutable Git side.
+:::
+
+## Repository Metadata in Config
+
+The same functions work in both stack/component YAML processing and Atmos config preprocessing, so repository metadata can be used consistently wherever Atmos already resolves core YAML functions.
+
+`!git.root` is also available as an alias for `!repo-root`, and the function registry exposes `git.root` alongside the existing `git-root` alias.
+
+## Detached HEAD Behavior
+
+`!git.sha` and `!git.ref` continue to work in detached HEAD checkouts because `HEAD` still resolves to a commit. `!git.branch` returns an error when no branch name exists unless a fallback value is provided.

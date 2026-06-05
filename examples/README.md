@@ -35,10 +35,13 @@ Think of each demo folder as representing an example of a standalone repository.
 4.  ├── demo-validation/          # Validate your configurations to ensure correctness and compliance.
 5.  ├── demo-localstack/          # Leverage LocalStack to provision an S3 bucket using Atmos and Terraform.
 6.  ├── demo-helmfile/            # Deploy NGINX on a local lightweight Kubernetes cluster (k3s) using Helm.
-7.  ├── demo-custom-command/      # Learn how to extend Atmos with your own custom CLI commands.
+7.  ├── custom-commands/          # Learn how to extend Atmos with your own custom CLI commands.
 8.  ├── demo-component-versions/  # Discover how to manage and use multiple versions of components effectively.
 9.  ├── demo-context/             # Simplify resource naming and tagging with our Terraform context provider.
-10. └── demo-workflows/           # Automate repetitive tasks with streamlined workflows.
+10. ├── demo-workflows/           # Automate repetitive tasks with streamlined workflows.
+11. ├── secrets-masking/          # Configure custom patterns and literals for automatic secrets masking in output.
+12. ├── stack-names/              # Demonstrate imperative stack naming with explicit 'name' field.
+13. └── remote-stack-imports/     # Import stack configurations from remote URLs (HTTP, Git, S3, GCS).
 ```
 
 ## Playground
@@ -46,12 +49,12 @@ Think of each demo folder as representing an example of a standalone repository.
 
 ## Quick Start (Simple)
 
-The [`demo-stacks`](demo-stacks/) contains code for the [simple quick start](https://atmos.tools/quick-start/advanced). This requires no special permissions and is the fastest way to grasp [atmos concepts](https://atmos.tools/core-concepts).
+The [`quick-start-simple`](quick-start-simple/) contains code for the [simple quick start](https://atmos.tools/quick-start/simple). This requires no special permissions and is the fastest way to grasp [atmos concepts](https://atmos.tools).
 
 ## Quick Start (Advanced)
 
-The [`quick-start`](quick-start/) contains code for the [advanced quick start](https://atmos.tools/quick-start/advanced). Please note that it requires an AWS organization with administrative credentials.
+The [`quick-start-advanced`](quick-start-advanced/) contains code for the [advanced quick start](https://atmos.tools/quick-start/advanced). Please note that it requires an AWS organization with administrative credentials.
 
 ## Tests
 
-The [`tests/`](tests/) folder includes a variety of patterns and configurations that we use for CI tests. They are not intended to serve as examples or best practices. We deliberately break some of them for testing purposes. These configurations implement every function of Atmos in some shape or form, but they are not necessarily exemplars of design.
+The [`tests/`](../tests/) folder includes a variety of patterns and configurations that we use for CI tests. They are not intended to serve as examples or best practices. We deliberately break some of them for testing purposes. These configurations implement every function of Atmos in some shape or form, but they are not necessarily exemplars of design.

@@ -10,14 +10,15 @@ import (
 	"github.com/cloudposse/atmos/pkg/config/homedir"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/flags/compat"
+	"github.com/cloudposse/atmos/pkg/toolchain"
 	"github.com/cloudposse/atmos/pkg/xdg"
-	"github.com/cloudposse/atmos/toolchain"
 )
 
 var cleanCmd = &cobra.Command{
 	Use:   "clean",
 	Short: "Clean tools and cache directories",
 	Long:  `Remove all installed tools and cached downloads.`,
+	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		toolsDir := toolchain.GetInstallPath()
 

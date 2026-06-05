@@ -1,0 +1,200 @@
+# yaml-language-server: $schema=schema.json
+# Integration tests for Packer commands
+# Tests directory-based template support (GitHub Issue #1937)
+#
+# Note: Tests requiring `packer init` (like validate/build) are covered in unit tests
+# because they require network access to download plugins. Integration tests here
+# focus on commands that work without plugin initialization.
+
+tests:
+  # Basic version command
+  - name: "packer version"
+    enabled: true
+    snapshot: false
+    description: "Verify atmos packer version command works."
+    workdir: "fixtures/scenarios/packer"
+    command: "atmos"
+    args:
+      - "packer"
+      - "version"
+    preconditions:
+      - packer
+    expect:
+      stdout:
+        - "Packer v"
+      exit_code: 0
+
+  # Inspect command with single-file mode (existing behavior)
+  - name: "packer inspect single-file"
+    enabled: true
+    snapshot: false
+    description: "Inspect Packer component with explicit template file (backward compatibility)."
+    workdir: "fixtures/scenarios/packer"
+    command: "atmos"
+    args:
+      - "packer"
+      - "inspect"
+      - "aws/bastion"
+      - "-s"
+      - "prod"
+    preconditions:
+      - packer
+    expect:
+      stdout:
+        # Verify variables are shown from the template
+        - "var.region"
+        - "var.source_ami"
+        - "var.instance_type"
+        # Verify source is loaded
+        - "amazon-ebs.al2023"
+      exit_code: 0
+
+  # Inspect command with directory mode (new default behavior)
+  - name: "packer inspect directory-mode"
+    enabled: true
+    snapshot: false
+    description: "Inspect Packer component using directory mode to verify all files are loaded."
+    workdir: "fixtures/scenarios/packer"
+    command: "atmos"
+    args:
+      - "packer"
+      - "inspect"
+      - "aws/multi-file"
+      - "-s"
+      - "prod"
+    preconditions:
+      - packer
+    expect:
+      stdout:
+        # Verify variables from variables.pkr.hcl are loaded
+        - "var.region"
+        - "var.ami_name"
+        - "var.instance_type"
+        # Verify source from main.pkr.hcl is loaded
+        - "amazon-ebs.test"
+      exit_code: 0
+
+  # Inspect command with explicit dot template
+  - name: "packer inspect explicit-dot"
+    enabled: true
+    snapshot: false
+    description: "Inspect Packer component with explicit --template . flag."
+    workdir: "fixtures/scenarios/packer"
+    command: "atmos"
+    args:
+      - "packer"
+      - "inspect"
+      - "aws/multi-file"
+      - "-s"
+      - "nonprod"
+      - "--template"
+      - "."
+    preconditions:
+      - packer
+    expect:
+      stdout:
+        - "var.region"
+        - "amazon-ebs.test"
+      exit_code: 0
+
+  # Output command with directory mode
+  - name: "packer output directory-mode"
+    enabled: true
+    snapshot: false
+    description: "Get output from Packer manifest for multi-file component."
+    workdir: "fixtures/scenarios/packer"
+    command: "atmos"
+    args:
+      - "packer"
+      - "output"
+      - "aws/multi-file"
+      - "-s"
+      - "prod"
+    preconditions:
+      - packer
+    expect:
+      stdout:
+        - "artifact_id"
+        - "us-east-2:ami-0123456789abcdef0"
+      exit_code: 0
+
+  # Output command with YQ query
+  - name: "packer output with query"
+    enabled: true
+    snapshot: false
+    description: "Get specific output from Packer manifest using YQ query."
+    workdir: "fixtures/scenarios/packer"
+    command: "atmos"
+    args:
+      - "packer"
+      - "output"
+      - "aws/multi-file"
+      - "-s"
+      - "prod"
+      - "--query"
+      - ".builds[0].artifact_id"
+    preconditions:
+      - packer
+    expect:
+      stdout:
+        - "us-east-2:ami-0123456789abcdef0"
+      exit_code: 0
+
+  # Describe component - verify settings don't require template
+  - name: "describe component directory-mode"
+    enabled: true
+    snapshot: false
+    description: "Describe Packer component that uses directory mode (no template in settings)."
+    workdir: "fixtures/scenarios/packer"
+    command: "atmos"
+    args:
+      - "describe"
+      - "component"
+      - "aws/multi-file"
+      - "-s"
+      - "prod"
+    expect:
+      stdout:
+        # Should show component info without errors
+        - "aws/multi-file"
+        - "region"
+      exit_code: 0
+
+  # Error case: invalid component
+  - name: "packer validate invalid-component"
+    enabled: true
+    snapshot: false
+    description: "Verify error handling for invalid Packer component."
+    workdir: "fixtures/scenarios/packer"
+    command: "atmos"
+    args:
+      - "packer"
+      - "validate"
+      - "invalid/component"
+      - "-s"
+      - "prod"
+    preconditions:
+      - packer
+    expect:
+      stderr:
+        - "invalid component"
+        - "Could not find the component invalid/component"
+      exit_code: 1
+
+  # Error case: missing stack
+  - name: "packer validate missing-stack"
+    enabled: true
+    snapshot: false
+    description: "Verify error handling when stack is not specified."
+    workdir: "fixtures/scenarios/packer"
+    command: "atmos"
+    args:
+      - "packer"
+      - "validate"
+      - "aws/bastion"
+    preconditions:
+      - packer
+    expect:
+      stderr:
+        - "stack"
+      exit_code: 1

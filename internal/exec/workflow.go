@@ -31,9 +31,18 @@ func ExecuteWorkflowCmd(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
+	// Check if --stack flag is provided to determine if stacks should be processed.
+	// Workflows only require stacks configuration when --stack is explicitly passed.
+	flags := cmd.Flags()
+	commandLineStack, err := flags.GetString("stack")
+	if err != nil {
+		return err
+	}
+	processStacks := commandLineStack != ""
+
 	// InitCliConfig finds and merges CLI configurations in the following order:
 	// system dir, home dir, current dir, ENV vars, command-line arguments
-	atmosConfig, err := cfg.InitCliConfig(info, true)
+	atmosConfig, err := cfg.InitCliConfig(info, processStacks)
 	if err != nil {
 		return err
 	}
@@ -52,8 +61,6 @@ func ExecuteWorkflowCmd(cmd *cobra.Command, args []string) error {
 	if workflowName == "" {
 		workflowName = args[0]
 	}
-
-	flags := cmd.Flags()
 
 	if workflowFile == "" {
 		workflowFile, err = flags.GetString("file")
@@ -107,11 +114,6 @@ func ExecuteWorkflowCmd(cmd *cobra.Command, args []string) error {
 	}
 
 	dryRun, err := flags.GetBool("dry-run")
-	if err != nil {
-		return err
-	}
-
-	commandLineStack, err := flags.GetString("stack")
 	if err != nil {
 		return err
 	}

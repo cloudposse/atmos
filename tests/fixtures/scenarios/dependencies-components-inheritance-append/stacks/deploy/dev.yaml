@@ -1,0 +1,44 @@
+# Dev stack that imports base and adds its own dependencies.
+# Tests that child dependencies are APPENDED to parent dependencies.
+import:
+  - catalog/base
+
+vars:
+  stage: dev
+
+components:
+  terraform:
+    # Provide minimal config for the base dependencies.
+    account-settings:
+      metadata:
+        component: mock
+
+    iam-baseline:
+      metadata:
+        component: mock
+
+    # VPC inherits base dependencies AND adds its own.
+    vpc:
+      # Child dependencies are appended to parent.
+      dependencies:
+        components:
+          - component: network-baseline
+          - component: security-group
+            stack: shared
+
+    # Subnet depends on vpc in the same stack.
+    subnet:
+      metadata:
+        component: mock
+      dependencies:
+        components:
+          - component: vpc
+
+    # RDS depends on vpc and subnet with no inheritance.
+    rds:
+      metadata:
+        component: mock
+      dependencies:
+        components:
+          - component: vpc
+          - component: subnet

@@ -90,24 +90,38 @@ func TestReadHomeConfig_ConfigFileNotFound(t *testing.T) {
 }
 
 // TestReadWorkDirConfig_GetwdError tests os.Getwd() error path at load.go:236-239.
+// Note: This error path is difficult to trigger reliably across platforms.
+// On macOS, os.Getwd() may still succeed even after removing the directory.
+// On Linux, behavior varies by filesystem. This test documents the error path exists.
 func TestReadWorkDirConfig_GetwdError(t *testing.T) {
-	// Create and change to a temp directory
+	// Skip on Windows - directory removal while inside is Unix-specific.
+	if runtime.GOOS == "windows" {
+		t.Skip("Skipping Getwd error test on Windows - directory removal behavior differs")
+	}
+
+	// Create and change to a temp directory.
 	tempDir := t.TempDir()
 	t.Chdir(tempDir)
 
-	// Remove the directory while we're in it (Unix-specific behavior)
-	if runtime.GOOS != "windows" {
-		err := os.Remove(tempDir)
-		if err == nil {
-			// Only test if we successfully removed the directory
-			v := viper.New()
-			v.SetConfigType("yaml")
+	// Remove the directory while we're in it (Unix-specific behavior).
+	err := os.Remove(tempDir)
+	if err != nil {
+		t.Skip("Could not remove current directory - skipping Getwd error path test")
+	}
 
-			err = readWorkDirConfig(v)
-			// On some systems this may error, on others it may still work
-			// This tests the error path without asserting specific behavior
-			_ = err
-		}
+	// Directory removed successfully - test that readWorkDirConfig handles this gracefully.
+	v := viper.New()
+	v.SetConfigType("yaml")
+
+	err = readWorkDirConfig(v)
+	// Behavior is OS-specific:
+	// - On some systems, os.Getwd() fails and readWorkDirConfig returns an error.
+	// - On others (e.g., macOS), os.Getwd() still succeeds with the removed path.
+	// Either outcome is acceptable - the test verifies no panic occurs.
+	if err != nil {
+		t.Logf("readWorkDirConfig returned error as expected: %v", err)
+	} else {
+		t.Log("readWorkDirConfig succeeded (os.Getwd still works on this platform)")
 	}
 }
 
@@ -128,8 +142,8 @@ func TestReadWorkDirConfig_ConfigFileNotFound(t *testing.T) {
 
 // TestReadEnvAmosConfigPath_EmptyEnv tests early return at load.go:253-256.
 func TestReadEnvAmosConfigPath_EmptyEnv(t *testing.T) {
-	// Ensure ATMOS_CLI_CONFIG_PATH is not set
-	os.Unsetenv("ATMOS_CLI_CONFIG_PATH")
+	// Ensure ATMOS_CLI_CONFIG_PATH is not set (empty string clears it for this test).
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", "")
 
 	v := viper.New()
 	v.SetConfigType("yaml")
@@ -140,12 +154,11 @@ func TestReadEnvAmosConfigPath_EmptyEnv(t *testing.T) {
 
 // TestReadEnvAmosConfigPath_ConfigFileNotFound tests viper.ConfigFileNotFoundError at load.go:258-266.
 func TestReadEnvAmosConfigPath_ConfigFileNotFound(t *testing.T) {
-	// Create temp directory without atmos.yaml
+	// Create temp directory without atmos.yaml.
 	tempDir := t.TempDir()
 
-	// Set ATMOS_CLI_CONFIG_PATH to temp directory
+	// Set ATMOS_CLI_CONFIG_PATH to temp directory (t.Setenv handles cleanup).
 	t.Setenv("ATMOS_CLI_CONFIG_PATH", tempDir)
-	defer os.Unsetenv("ATMOS_CLI_CONFIG_PATH")
 
 	v := viper.New()
 	v.SetConfigType("yaml")
@@ -209,8 +222,8 @@ func TestLoadConfigFile_ConfigFileNotFoundError(t *testing.T) {
 
 // TestReadConfigFileContent_ReadError tests error path at load.go:308-312.
 func TestReadConfigFileContent_ReadError(t *testing.T) {
-	// Try to read a nonexistent file
-	_, err := readConfigFileContent("/nonexistent/path/atmos.yaml")
+	// Try to read a nonexistent file.
+	_, err := readConfigFileContent(filepath.Join(string(os.PathSeparator), "nonexistent", "path", "atmos.yaml"))
 	assert.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrReadConfig)
 }
@@ -428,8 +441,8 @@ func TestMergeConfigFile_ReadFileError(t *testing.T) {
 	v := viper.New()
 	v.SetConfigType("yaml")
 
-	// Try to read non-existent file
-	err := mergeConfigFile("/nonexistent/path/config.yaml", v)
+	// Try to read non-existent file.
+	err := mergeConfigFile(filepath.Join(string(os.PathSeparator), "nonexistent", "path", "config.yaml"), v)
 	assert.Error(t, err)
 }
 
@@ -457,3 +470,132 @@ func TestMergeConfigFile_ReadConfigError(t *testing.T) {
 // 2. loadEmbeddedConfig uses hardcoded valid YAML that shouldn't fail to merge
 // If these error paths need explicit coverage, the functions would need refactoring to accept
 // injectable dependencies (e.g., a ConfigMerger interface) to allow controlled failure simulation.
+
+// TestLoadAtmosDFromDirectory_NotFoundPath tests the "not found" path for atmos.d directories.
+func TestLoadAtmosDFromDirectory_NotFoundPath(t *testing.T) {
+	tempDir := t.TempDir()
+
+	v := viper.New()
+	v.SetConfigType("yaml")
+
+	// Call loadAtmosDFromDirectory with a directory that has no atmos.d or .atmos.d
+	// This should hit the "No atmos.d directory found" and "No .atmos.d directory found" paths.
+	loadAtmosDFromDirectory(tempDir, v)
+
+	// Function should complete without panic - the directories don't exist
+	// which is handled gracefully by logging at Trace level.
+}
+
+// TestLoadAtmosDFromDirectory_DirectoryExists tests when atmos.d directory exists.
+func TestLoadAtmosDFromDirectory_DirectoryExists(t *testing.T) {
+	tempDir := t.TempDir()
+
+	// Create atmos.d directory with a valid config file.
+	atmosDPath := filepath.Join(tempDir, "atmos.d")
+	err := os.MkdirAll(atmosDPath, 0o755)
+	assert.NoError(t, err)
+
+	configContent := `
+settings:
+  test_value: from_atmos_d
+`
+	err = os.WriteFile(filepath.Join(atmosDPath, "test.yaml"), []byte(configContent), 0o644)
+	assert.NoError(t, err)
+
+	v := viper.New()
+	v.SetConfigType("yaml")
+
+	// Call loadAtmosDFromDirectory - should find and process the atmos.d directory.
+	loadAtmosDFromDirectory(tempDir, v)
+
+	// Verify the config was actually loaded into viper.
+	assert.Equal(t, "from_atmos_d", v.GetString("settings.test_value"))
+}
+
+// TestLoadAtmosDFromDirectory_DotAtmosDExists tests when .atmos.d directory exists.
+func TestLoadAtmosDFromDirectory_DotAtmosDExists(t *testing.T) {
+	tempDir := t.TempDir()
+
+	// Create .atmos.d directory with a valid config file.
+	dotAtmosDPath := filepath.Join(tempDir, ".atmos.d")
+	err := os.MkdirAll(dotAtmosDPath, 0o755)
+	assert.NoError(t, err)
+
+	configContent := `
+settings:
+  test_value: from_dot_atmos_d
+`
+	err = os.WriteFile(filepath.Join(dotAtmosDPath, "test.yaml"), []byte(configContent), 0o644)
+	assert.NoError(t, err)
+
+	v := viper.New()
+	v.SetConfigType("yaml")
+
+	// Call loadAtmosDFromDirectory - should find and process the .atmos.d directory.
+	loadAtmosDFromDirectory(tempDir, v)
+
+	// Verify the config was actually loaded into viper.
+	assert.Equal(t, "from_dot_atmos_d", v.GetString("settings.test_value"))
+}
+
+// TestLoadAtmosDFromDirectory_BothDirectoriesExist tests when both atmos.d and .atmos.d exist.
+func TestLoadAtmosDFromDirectory_BothDirectoriesExist(t *testing.T) {
+	tempDir := t.TempDir()
+
+	// Create both directories.
+	atmosDPath := filepath.Join(tempDir, "atmos.d")
+	dotAtmosDPath := filepath.Join(tempDir, ".atmos.d")
+	err := os.MkdirAll(atmosDPath, 0o755)
+	assert.NoError(t, err)
+	err = os.MkdirAll(dotAtmosDPath, 0o755)
+	assert.NoError(t, err)
+
+	// Add config files to both with different values.
+	configContent1 := `
+settings:
+  test_value: from_atmos_d
+  atmos_d_only: true
+`
+	configContent2 := `
+settings:
+  test_value: from_dot_atmos_d
+  dot_atmos_d_only: true
+`
+	err = os.WriteFile(filepath.Join(atmosDPath, "test.yaml"), []byte(configContent1), 0o644)
+	assert.NoError(t, err)
+	err = os.WriteFile(filepath.Join(dotAtmosDPath, "test.yaml"), []byte(configContent2), 0o644)
+	assert.NoError(t, err)
+
+	v := viper.New()
+	v.SetConfigType("yaml")
+
+	// Call loadAtmosDFromDirectory - should process both directories.
+	// atmos.d is processed first, then .atmos.d, so .atmos.d values should win for overlapping keys.
+	loadAtmosDFromDirectory(tempDir, v)
+
+	// Verify both configs were loaded and merged correctly.
+	// .atmos.d is processed after atmos.d, so its value should win for test_value.
+	assert.Equal(t, "from_dot_atmos_d", v.GetString("settings.test_value"))
+	// Both unique keys should be present from their respective configs.
+	assert.True(t, v.GetBool("settings.atmos_d_only"))
+	assert.True(t, v.GetBool("settings.dot_atmos_d_only"))
+}
+
+// TestLoadAtmosDFromDirectory_FileNotDirectory tests when atmos.d is a file, not a directory.
+func TestLoadAtmosDFromDirectory_FileNotDirectory(t *testing.T) {
+	tempDir := t.TempDir()
+
+	// Create atmos.d as a file, not a directory.
+	atmosDPath := filepath.Join(tempDir, "atmos.d")
+	err := os.WriteFile(atmosDPath, []byte("not a directory"), 0o644)
+	assert.NoError(t, err)
+
+	v := viper.New()
+	v.SetConfigType("yaml")
+
+	// Call loadAtmosDFromDirectory - should handle file gracefully.
+	// Since it's not a directory, it should skip processing (stat.IsDir() returns false).
+	loadAtmosDFromDirectory(tempDir, v)
+
+	// Function should complete without panic.
+}

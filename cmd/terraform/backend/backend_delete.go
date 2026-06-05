@@ -1,68 +1,70 @@
 package backend
 
 import (
+	"context"
+
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
+	"github.com/cloudposse/atmos/cmd/terraform/shared"
 	"github.com/cloudposse/atmos/pkg/flags"
-	"github.com/cloudposse/atmos/pkg/perf"
 )
 
 var deleteParser *flags.StandardParser
 
 var deleteCmd = &cobra.Command{
-	Use:   "delete <component>",
+	Use:   "delete [component]",
 	Short: "Delete backend infrastructure",
 	Long: `Permanently delete backend infrastructure.
 
 Requires the --force flag for safety. The backend must be empty
 (no state files) before it can be deleted.`,
 	Example: `  atmos terraform backend delete vpc --stack dev --force`,
-	Args:    cobra.ExactArgs(1),
+	// Args validator is auto-set by parser via SetPositionalArgs with prompt-aware validation.
 	RunE: func(cmd *cobra.Command, args []string) error {
-		defer perf.Track(atmosConfigPtr, "backend.delete.RunE")()
-
-		component := args[0]
-
-		v := viper.GetViper()
-		opts, err := ParseCommonFlags(cmd, deleteParser)
+		ctx := context.Background()
+		result, err := deleteParser.Parse(ctx, args)
 		if err != nil {
 			return err
 		}
 
+		// Get force flag from Viper (not a standard StandardOptions field).
+		v := viper.GetViper()
 		force := v.GetBool("force")
 
-		// Initialize config and auth using injected dependency.
-		atmosConfig, authContext, err := configInit.InitConfigAndAuth(component, opts.Stack, opts.Identity)
-		if err != nil {
-			return err
-		}
-
-		// Create describe component callback.
-		describeFunc := CreateDescribeComponentFunc(nil) // Auth already handled in InitConfigAndAuth
-
-		// Execute delete command using injected provisioner.
-		return prov.DeleteBackend(&DeleteBackendParams{
-			AtmosConfig:  atmosConfig,
-			Component:    component,
-			Stack:        opts.Stack,
-			Force:        force,
-			DescribeFunc: describeFunc,
-			AuthContext:  authContext,
-		})
+		return executeDeleteCommandWithValues(result.Component, result.Stack, result.Identity.Value(), force)
 	},
 }
 
 func init() {
 	deleteCmd.DisableFlagParsing = false
 
-	// Create parser with functional options.
+	// Build positional args with prompting.
+	argsBuilder := flags.NewPositionalArgsBuilder()
+	argsBuilder.AddArg(&flags.PositionalArgSpec{
+		Name:           "component",
+		Description:    "Component name",
+		Required:       true,
+		TargetField:    "Component",
+		CompletionFunc: shared.ComponentsArgCompletion,
+		PromptTitle:    "Choose a component",
+	})
+	specs, _, usage := argsBuilder.Build()
+
+	// Create parser with prompting options.
 	deleteParser = flags.NewStandardParser(
 		flags.WithStackFlag(),
 		flags.WithIdentityFlag(),
 		flags.WithBoolFlag("force", "", false, "Force deletion without confirmation"),
 		flags.WithEnvVars("force", "ATMOS_FORCE"),
+		// Enable prompting for missing stack flag.
+		flags.WithCompletionPrompt("stack", "Choose a stack", shared.StackFlagCompletion),
+		// Enable prompting for missing component positional arg.
+		flags.WithPositionalArgPrompt("component", "Choose a component", shared.ComponentsArgCompletion),
 	)
+
+	// Configure positional args (auto-sets prompt-aware validator).
+	deleteParser.SetPositionalArgs(specs, nil, usage)
 
 	// Register flags with the command.
 	deleteParser.RegisterFlags(deleteCmd)

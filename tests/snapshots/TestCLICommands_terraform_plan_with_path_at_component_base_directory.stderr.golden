@@ -6,4 +6,9 @@ match command
 
 ## Hints
 
+💡 Path resolves to packer component but command expects terraform component You
+ran: atmos terraform <command> . The path points to: packer component
+
+💡 Run the correct command for this component type
+
 💡 Make sure the path is within your component directories

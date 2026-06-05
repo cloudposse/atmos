@@ -191,8 +191,8 @@ func createPasswordPrompt(passwordEnv string) keyring.PromptFunc {
 	}
 }
 
-// Store stores credentials for the given alias.
-func (s *fileKeyringStore) Store(alias string, creds types.ICredentials) error {
+// Store stores credentials for the given alias within the specified realm.
+func (s *fileKeyringStore) Store(alias string, creds types.ICredentials, realm string) error {
 	defer perf.Track(nil, "credentials.fileKeyringStore.Store")()
 
 	var (
@@ -205,8 +205,14 @@ func (s *fileKeyringStore) Store(alias string, creds types.ICredentials) error {
 	case *types.AWSCredentials:
 		typ = "aws"
 		raw, err = json.Marshal(c)
+	case *types.GCPCredentials:
+		typ = "gcp"
+		raw, err = json.Marshal(c)
 	case *types.OIDCCredentials:
 		typ = "oidc"
+		raw, err = json.Marshal(c)
+	case *types.ProCredentials:
+		typ = "atmos-pro"
 		raw, err = json.Marshal(c)
 	case *mock.Credentials:
 		typ = "mock"
@@ -224,9 +230,10 @@ func (s *fileKeyringStore) Store(alias string, creds types.ICredentials) error {
 		return errors.Join(ErrCredentialStore, fmt.Errorf("failed to marshal credential envelope: %w", err))
 	}
 
-	// Store in keyring.
+	// Store in keyring with realm-scoped key.
+	key := buildKeyringKey(alias, realm)
 	if err := s.ring.Set(keyring.Item{
-		Key:  alias,
+		Key:  key,
 		Data: data,
 	}); err != nil {
 		return errors.Join(ErrCredentialStore, fmt.Errorf("failed to store credentials in file keyring: %w", err))
@@ -235,11 +242,12 @@ func (s *fileKeyringStore) Store(alias string, creds types.ICredentials) error {
 	return nil
 }
 
-// Retrieve retrieves credentials for the given alias.
-func (s *fileKeyringStore) Retrieve(alias string) (types.ICredentials, error) {
+// Retrieve retrieves credentials for the given alias within the specified realm.
+func (s *fileKeyringStore) Retrieve(alias string, realm string) (types.ICredentials, error) {
 	defer perf.Track(nil, "credentials.fileKeyringStore.Retrieve")()
 
-	item, err := s.ring.Get(alias)
+	key := buildKeyringKey(alias, realm)
+	item, err := s.ring.Get(key)
 	if err != nil {
 		// Map keyring's not-found error to our sentinel error for consistent handling.
 		if errors.Is(err, keyring.ErrKeyNotFound) {
@@ -260,10 +268,22 @@ func (s *fileKeyringStore) Retrieve(alias string) (types.ICredentials, error) {
 			return nil, errors.Join(ErrCredentialStore, fmt.Errorf("failed to unmarshal AWS credentials: %w", err))
 		}
 		return &c, nil
+	case "gcp":
+		var c types.GCPCredentials
+		if err := json.Unmarshal(env.Data, &c); err != nil {
+			return nil, errors.Join(ErrCredentialStore, fmt.Errorf("failed to unmarshal GCP credentials: %w", err))
+		}
+		return &c, nil
 	case "oidc":
 		var c types.OIDCCredentials
 		if err := json.Unmarshal(env.Data, &c); err != nil {
 			return nil, errors.Join(ErrCredentialStore, fmt.Errorf("failed to unmarshal OIDC credentials: %w", err))
+		}
+		return &c, nil
+	case "atmos-pro":
+		var c types.ProCredentials
+		if err := json.Unmarshal(env.Data, &c); err != nil {
+			return nil, errors.Join(ErrCredentialStore, fmt.Errorf("failed to unmarshal Atmos Pro credentials: %w", err))
 		}
 		return &c, nil
 	case "mock":
@@ -277,13 +297,15 @@ func (s *fileKeyringStore) Retrieve(alias string) (types.ICredentials, error) {
 	}
 }
 
-// Delete deletes credentials for the given alias.
-func (s *fileKeyringStore) Delete(alias string) error {
+// Delete deletes credentials for the given alias within the specified realm.
+func (s *fileKeyringStore) Delete(alias string, realm string) error {
 	defer perf.Track(nil, "credentials.fileKeyringStore.Delete")()
 
-	if err := s.ring.Remove(alias); err != nil {
+	key := buildKeyringKey(alias, realm)
+	if err := s.ring.Remove(key); err != nil {
 		// Treat "not found" as success - credential already removed (idempotent).
-		if errors.Is(err, keyring.ErrKeyNotFound) {
+		// Check both keyring.ErrKeyNotFound and os.ErrNotExist for filesystem errors.
+		if errors.Is(err, keyring.ErrKeyNotFound) || os.IsNotExist(err) {
 			return nil
 		}
 		return errors.Join(ErrCredentialStore, fmt.Errorf("failed to delete credentials from file keyring: %w", err))
@@ -292,8 +314,10 @@ func (s *fileKeyringStore) Delete(alias string) error {
 	return nil
 }
 
-// List returns all stored credential aliases.
-func (s *fileKeyringStore) List() ([]string, error) {
+// List returns all stored credential aliases within the specified realm.
+// Note: The file keyring stores keys with realm prefix, so this returns all keys
+// and callers should filter by realm prefix if needed.
+func (s *fileKeyringStore) List(realm string) ([]string, error) {
 	defer perf.Track(nil, "credentials.fileKeyringStore.List")()
 
 	keys, err := s.ring.Keys()
@@ -301,14 +325,35 @@ func (s *fileKeyringStore) List() ([]string, error) {
 		return nil, errors.Join(ErrCredentialStore, fmt.Errorf("failed to list credentials from file keyring: %w", err))
 	}
 
-	return keys, nil
+	// Filter keys by realm prefix if realm is specified.
+	if realm != "" {
+		prefix := KeyringRealmPrefix + KeyringSeparator + realm + KeyringSeparator
+		var filtered []string
+		for _, key := range keys {
+			if len(key) > len(prefix) && key[:len(prefix)] == prefix {
+				// Return the alias without the prefix.
+				filtered = append(filtered, key[len(prefix):])
+			}
+		}
+		return filtered, nil
+	}
+
+	// When realm is empty, return all keys but strip the "atmos_" prefix.
+	basePrefix := KeyringRealmPrefix + KeyringSeparator
+	var aliases []string
+	for _, key := range keys {
+		if len(key) > len(basePrefix) && key[:len(basePrefix)] == basePrefix {
+			aliases = append(aliases, key[len(basePrefix):])
+		}
+	}
+	return aliases, nil
 }
 
-// IsExpired checks if credentials for the given alias are expired.
-func (s *fileKeyringStore) IsExpired(alias string) (bool, error) {
+// IsExpired checks if credentials for the given alias are expired within the specified realm.
+func (s *fileKeyringStore) IsExpired(alias string, realm string) (bool, error) {
 	defer perf.Track(nil, "credentials.fileKeyringStore.IsExpired")()
 
-	creds, err := s.Retrieve(alias)
+	creds, err := s.Retrieve(alias, realm)
 	if err != nil {
 		return true, err
 	}

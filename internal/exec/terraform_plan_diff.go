@@ -12,8 +12,11 @@ import (
 	"github.com/pkg/errors"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/component"
+	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/data"
 	"github.com/cloudposse/atmos/pkg/perf"
+	provWorkdir "github.com/cloudposse/atmos/pkg/provisioner/workdir"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -22,6 +25,16 @@ var (
 	// ErrNoJSONOutput is returned when no JSON output is found in terraform show output.
 	ErrNoJSONOutput = errors.New("no JSON output found in terraform show output")
 )
+
+type terraformPlanDiffExecutor interface {
+	ExecuteTerraform(schema.ConfigAndStacksInfo, ...ShellCommandOption) error
+}
+
+type terraformPlanDiffExecutorFunc func(schema.ConfigAndStacksInfo, ...ShellCommandOption) error
+
+func (f terraformPlanDiffExecutorFunc) ExecuteTerraform(info schema.ConfigAndStacksInfo, opts ...ShellCommandOption) error {
+	return f(info, opts...)
+}
 
 // PlanFileOptions contains parameters for plan file operations.
 type PlanFileOptions struct {
@@ -35,8 +48,17 @@ type PlanFileOptions struct {
 func TerraformPlanDiff(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) error {
 	defer perf.Track(atmosConfig, "exec.TerraformPlanDiff")()
 
+	// Process stacks to resolve component metadata (metadata.component, component_folder_prefix).
+	// This is required to get the correct FinalComponent and ComponentFolderPrefix.
+	// Without this, plan-diff would look in the wrong directory when the component instance
+	// name differs from the actual component (e.g., "foobar-atmos-pro" with metadata.component: "foobar").
+	processedInfo, err := ProcessStacks(atmosConfig, *info, true, true, true, nil, nil)
+	if err != nil {
+		return fmt.Errorf("error processing stacks for plan-diff: %w", err)
+	}
+
 	// Extract flags and setup paths
-	origPlanFile, newPlanFile, err := parsePlanDiffFlags(info.AdditionalArgsAndFlags)
+	origPlanFile, newPlanFile, err := parsePlanDiffFlags(processedInfo.AdditionalArgsAndFlags)
 	if err != nil {
 		return err
 	}
@@ -48,8 +70,21 @@ func TerraformPlanDiff(atmosConfig *schema.AtmosConfiguration, info *schema.Conf
 	}
 	defer os.RemoveAll(tmpDir)
 
-	// Get the component path
-	componentPath := filepath.Join(atmosConfig.TerraformDirAbsolutePath, info.ComponentFolderPrefix, info.FinalComponent)
+	// Get the component path using the resolved FinalComponent from ProcessStacks.
+	componentPath := filepath.Join(atmosConfig.TerraformDirAbsolutePath, processedInfo.ComponentFolderPrefix, processedInfo.FinalComponent)
+
+	// For workdir-enabled components, compute the workdir path from first principles
+	// because ProcessStacks builds a fresh ComponentSection that does not include
+	// WorkdirPathKey (only set by AutoProvisionSource at execution time).
+	if provWorkdir.IsWorkdirEnabled(processedInfo.ComponentSection) {
+		candidate, exists, resolveErr := component.BuildAndResolveWorkdirPath(atmosConfig, &processedInfo, cfg.TerraformComponentType)
+		if resolveErr != nil {
+			return resolveErr
+		}
+		if exists {
+			componentPath = candidate
+		}
+	}
 
 	// Ensure original plan file exists and is absolute
 	origPlanFile, err = validateOriginalPlanFile(origPlanFile, componentPath)
@@ -64,12 +99,12 @@ func TerraformPlanDiff(atmosConfig *schema.AtmosConfiguration, info *schema.Conf
 		NewPlanFile:   newPlanFile,
 		TmpDir:        tmpDir,
 	}
-	newPlanFile, err = prepareNewPlanFile(atmosConfig, info, opts)
+	newPlanFile, err = prepareNewPlanFile(atmosConfig, &processedInfo, opts)
 	if err != nil {
 		return err
 	}
 	// Compare the plans and generate diff
-	return comparePlansAndGenerateDiff(atmosConfig, info, componentPath, origPlanFile, newPlanFile)
+	return comparePlansAndGenerateDiff(atmosConfig, &processedInfo, componentPath, origPlanFile, newPlanFile)
 }
 
 // parsePlanDiffFlags extracts the orig and new plan file paths from command arguments.
@@ -247,25 +282,11 @@ func copyPlanFileIfNeeded(planFile, componentPath string) (string, func(), error
 
 // runTerraformShow runs the terraform show command and captures its output.
 func runTerraformShow(info *schema.ConfigAndStacksInfo, planFile string) (string, error) {
-	r, w, err := os.Pipe()
-	if err != nil {
-		return "", fmt.Errorf("error creating pipe: %w", err)
-	}
-	defer r.Close()
-	defer w.Close()
+	return runTerraformShowWithExecutor(info, planFile, terraformPlanDiffExecutorFunc(ExecuteTerraform))
+}
 
-	// Save original stdout and replace it with the pipe
-	origStdout := os.Stdout
-	os.Stdout = w
-	defer func() { os.Stdout = origStdout }()
-
-	// Use a goroutine to read from the pipe
+func runTerraformShowWithExecutor(info *schema.ConfigAndStacksInfo, planFile string, executor terraformPlanDiffExecutor) (string, error) {
 	var outputBuf bytes.Buffer
-	readDone := make(chan error)
-	go func() {
-		_, err := io.Copy(&outputBuf, r)
-		readDone <- err
-	}()
 
 	// Set up the show command
 	showInfo := *info
@@ -273,19 +294,8 @@ func runTerraformShow(info *schema.ConfigAndStacksInfo, planFile string) (string
 	showInfo.AdditionalArgsAndFlags = []string{"-json", planFile}
 
 	// Run the command
-	execErr := ExecuteTerraform(showInfo)
-
-	// Close writer to signal EOF to reader
-	w.Close()
-
-	// Wait for reader to finish
-	readErr := <-readDone
-
-	if execErr != nil {
+	if execErr := executor.ExecuteTerraform(showInfo, WithStdoutOverride(&outputBuf)); execErr != nil {
 		return "", fmt.Errorf("error running terraform show: %w", execErr)
-	}
-	if readErr != nil {
-		return "", fmt.Errorf("error reading output: %w", readErr)
 	}
 
 	return outputBuf.String(), nil

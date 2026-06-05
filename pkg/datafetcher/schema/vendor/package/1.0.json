@@ -68,9 +68,30 @@
                 },
                 "targets": {
                   "type": "array",
-                  "description": "List of target paths where the component will be vendored",
+                  "description": "List of target paths where the component will be vendored. Each target can be a simple string path or an object with 'path' and optional 'version' override.",
                   "items": {
-                    "type": "string"
+                    "oneOf": [
+                      {
+                        "type": "string",
+                        "description": "Target path (supports Go template syntax with {{.Version}}, {{.Component}})"
+                      },
+                      {
+                        "type": "object",
+                        "description": "Target with optional version override",
+                        "properties": {
+                          "path": {
+                            "type": "string",
+                            "description": "Target path (supports Go template syntax with {{.Version}}, {{.Component}})"
+                          },
+                          "version": {
+                            "type": "string",
+                            "description": "Version override for this target. Overrides the source-level version for both the source URL and target path templates."
+                          }
+                        },
+                        "required": ["path"],
+                        "additionalProperties": false
+                      }
+                    ]
                   }
                 },
                 "included_paths": {

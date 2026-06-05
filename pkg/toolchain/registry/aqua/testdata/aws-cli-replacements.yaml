@@ -1,0 +1,9 @@
+packages:
+  - type: http
+    repo_owner: aws
+    repo_name: aws-cli
+    url: https://awscli.amazonaws.com/awscli-exe-{{.OS}}-{{.Arch}}-{{.Version}}.zip
+    format: zip
+    replacements:
+      amd64: x86_64
+      arm64: aarch64

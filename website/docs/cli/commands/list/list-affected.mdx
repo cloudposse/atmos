@@ -8,10 +8,13 @@ description: Use this command to list affected components and stacks between Git
 import Screengrab from '@site/src/components/Screengrab'
 import Terminal from '@site/src/components/Terminal'
 import Intro from '@site/src/components/Intro'
+import Experimental from '@site/src/components/Experimental'
 
 <Intro>
 Use this command to list affected Atmos components and stacks between Git commits. View results in multiple formats including tables, JSON, YAML, CSV, or hierarchical trees with custom column selection, filtering, and sorting.
 </Intro>
+
+<Experimental />
 
 <Screengrab title="atmos list affected --help" slug="atmos-list-affected--help" />
 
@@ -77,6 +80,15 @@ Include dependent components:
 ```shell
 # Show components that depend on affected components
 atmos list affected --include-dependents
+```
+
+Filter by deletion status:
+```shell
+# Show only deleted components (for destroy workflows)
+atmos list affected --format json | jq '[.[] | select(.deleted == true)]'
+
+# Show only modified components (for apply workflows)
+atmos list affected --format json | jq '[.[] | select(.deleted != true)]'
 ```
 
 Custom columns:
@@ -187,6 +199,21 @@ All fields from [`atmos describe affected`](/cli/commands/describe/affected) are
 - `is_dependent` - Whether component is a dependent
 - `depth` - Dependency nesting depth
 - `dependents_count` - Number of dependent components
+- `deleted` - Whether the component was deleted (boolean)
+- `deletion_type` - Type of deletion: `component` or `stack`
+
+## Detecting Deleted Components
+
+The `list affected` command automatically detects components and stacks that exist in the BASE branch
+but have been deleted in HEAD. This enables CI/CD pipelines to trigger `terraform destroy` for removed infrastructure.
+
+Deleted components are identified by:
+- `affected: deleted` - Component was removed from a stack
+- `affected: deleted.stack` - Entire stack was deleted
+- `deleted: true` - Boolean flag for easy filtering
+- `deletion_type: component` or `deletion_type: stack` - Type of deletion
+
+See [`atmos describe affected`](/cli/commands/describe/affected#detecting-deleted-components-in-affected-stacks) for detailed documentation on deleted detection.
 
 ## Comparison with `atmos describe affected`
 

@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"errors"
 	"fmt"
 	"os"
 
@@ -14,6 +15,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/provisioner/source"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui"
+	"github.com/cloudposse/atmos/pkg/ui/spinner"
 )
 
 // DeleteCommand creates a delete command for the given component type.
@@ -24,15 +26,19 @@ func DeleteCommand(config *Config) *cobra.Command {
 	)
 
 	cmd := &cobra.Command{
-		Use:   "delete <component>",
+		Use:   "delete [component]",
 		Short: fmt.Sprintf("Remove vendored %s source directory", config.TypeLabel),
 		Long: fmt.Sprintf(`Delete the vendored source directory for a %s component.
 
 This command removes the component directory that was created by 'atmos %s source pull'.
-Requires --force flag for safety.`, config.TypeLabel, config.ComponentType),
+
+If component is not specified, prompts interactively for selection.`, config.TypeLabel, config.ComponentType),
 		Example: fmt.Sprintf(`  # Delete vendored source
-  atmos %s source delete vpc --stack dev --force`, config.ComponentType),
-		Args: cobra.ExactArgs(1),
+  atmos %s source delete vpc --stack dev --force
+
+  # Interactive: prompts for component and stack
+  atmos %s source delete`, config.ComponentType, config.ComponentType),
+		Args: cobra.RangeArgs(0, 1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return executeDelete(cmd, args, config, parser)
 		},
@@ -51,16 +57,34 @@ Requires --force flag for safety.`, config.TypeLabel, config.ComponentType),
 // deleteOptions holds parsed delete command options.
 type deleteOptions struct {
 	Stack       string
+	Force       bool
 	GlobalFlags global.Flags
 }
 
 func executeDelete(cmd *cobra.Command, args []string, config *Config, parser *flags.StandardParser) error {
 	defer perf.Track(nil, fmt.Sprintf("source.%s.delete.RunE", config.ComponentType))()
 
-	component := args[0]
+	// Get component from args or prompt.
+	var component string
+	if len(args) > 0 {
+		component = args[0]
+	} else {
+		var promptErr error
+		component, promptErr = PromptForComponent(cmd)
+		if err := HandlePromptError(promptErr, "component"); err != nil {
+			return err
+		}
+	}
 
-	// Parse flags and get delete options.
-	deleteOpts, err := parseDeleteFlags(cmd, parser)
+	// Validate component is provided.
+	if component == "" {
+		return errUtils.Build(errUtils.ErrInvalidPositionalArgs).
+			WithExplanation("component argument is required").
+			Err()
+	}
+
+	// Parse flags and get delete options (with prompting).
+	deleteOpts, err := parseDeleteFlags(cmd, parser, component)
 	if err != nil {
 		return err
 	}
@@ -72,11 +96,11 @@ func executeDelete(cmd *cobra.Command, args []string, config *Config, parser *fl
 	}
 
 	// Determine and delete the target directory.
-	return deleteSourceDirectory(atmosConfig, config.ComponentType, component, componentConfig)
+	return deleteSourceDirectory(atmosConfig, config.ComponentType, component, componentConfig, deleteOpts.Force)
 }
 
 // parseDeleteFlags parses delete command flags and validates them.
-func parseDeleteFlags(cmd *cobra.Command, parser *flags.StandardParser) (*deleteOptions, error) {
+func parseDeleteFlags(cmd *cobra.Command, parser *flags.StandardParser, component string) (*deleteOptions, error) {
 	v := viper.GetViper()
 	if err := parser.BindFlagsToViper(cmd, v); err != nil {
 		return nil, err
@@ -84,21 +108,28 @@ func parseDeleteFlags(cmd *cobra.Command, parser *flags.StandardParser) (*delete
 
 	globalFlags := flags.ParseGlobalFlags(cmd, v)
 	stack := v.GetString("stack")
+
+	// Prompt for stack if not provided.
+	if stack == "" {
+		var promptErr error
+		stack, promptErr = PromptForStack(cmd, component)
+		if err := HandlePromptError(promptErr, "stack"); err != nil {
+			return nil, err
+		}
+	}
+
+	// Validate stack is provided.
 	if stack == "" {
 		return nil, errUtils.Build(errUtils.ErrRequiredFlagNotProvided).
 			WithExplanation("--stack flag is required").
 			Err()
 	}
 
-	force := v.GetBool("force")
-	if !force {
-		return nil, errUtils.Build(errUtils.ErrForceRequired).
-			WithExplanation("Deletion requires --force flag for safety").
-			WithHint("Use --force to confirm deletion").
-			Err()
-	}
-
-	return &deleteOptions{Stack: stack, GlobalFlags: globalFlags}, nil
+	return &deleteOptions{
+		Stack:       stack,
+		Force:       v.GetBool("force"),
+		GlobalFlags: globalFlags,
+	}, nil
 }
 
 // initDeleteContext initializes config and retrieves component configuration.
@@ -143,28 +174,45 @@ func initDeleteContext(component, stack string, globalFlags *global.Flags) (*sch
 }
 
 // deleteSourceDirectory deletes the vendored source directory.
-func deleteSourceDirectory(atmosConfig *schema.AtmosConfiguration, componentType, component string, componentConfig map[string]any) error {
+func deleteSourceDirectory(atmosConfig *schema.AtmosConfiguration, componentType, component string, componentConfig map[string]any, force bool) error {
 	targetDir, err := source.DetermineTargetDirectory(atmosConfig, componentType, component, componentConfig)
 	if err != nil {
 		return errUtils.Build(errUtils.ErrSourceProvision).
 			WithCause(err).
-			WithExplanation("Failed to determine target directory").
+			WithContext("component", component).
 			Err()
 	}
 
 	if _, err := os.Stat(targetDir); os.IsNotExist(err) {
-		_ = ui.Warning(fmt.Sprintf("Directory does not exist: %s", targetDir))
+		ui.Warning(fmt.Sprintf("Directory does not exist: %s", targetDir))
 		return nil
 	}
 
-	_ = ui.Info(fmt.Sprintf("Deleting directory: %s", targetDir))
-	if err := os.RemoveAll(targetDir); err != nil {
-		return errUtils.Build(errUtils.ErrRemoveDirectory).
-			WithCause(err).
-			WithContext("path", targetDir).
-			Err()
+	// Prompt for confirmation unless --force.
+	confirmed, err := flags.PromptForConfirmation(fmt.Sprintf("Delete directory: %s?", targetDir), force)
+	if err != nil {
+		if errors.Is(err, errUtils.ErrInteractiveNotAvailable) {
+			ui.Warning("Use --force to delete in non-interactive mode")
+		}
+		return err
+	}
+	if !confirmed {
+		ui.Info("Deletion cancelled")
+		return nil
 	}
 
-	_ = ui.Success(fmt.Sprintf("Successfully deleted: %s", targetDir))
-	return nil
+	// Delete with spinner.
+	return spinner.ExecWithSpinner(
+		fmt.Sprintf("Deleting %s", targetDir),
+		fmt.Sprintf("Deleted %s", targetDir),
+		func() error {
+			if err := os.RemoveAll(targetDir); err != nil {
+				return errUtils.Build(errUtils.ErrRemoveDirectory).
+					WithCause(err).
+					WithContext("path", targetDir).
+					Err()
+			}
+			return nil
+		},
+	)
 }

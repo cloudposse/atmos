@@ -1,0 +1,163 @@
+# yaml-language-server: $schema=schema.json
+# Tests for the generate-files example in examples/generate-files/
+# These tests verify the user-facing example works correctly
+tests:
+  # Test generating files for the demo component (dry-run)
+  - name: "generate files demo component dry-run"
+    enabled: true
+    tty: false
+    description: "Generate files for demo component in dev stack (dry-run)"
+    workdir: "../examples/generate-files/"
+    command: "atmos"
+    args:
+      - "terraform"
+      - "generate"
+      - "files"
+      - "demo"
+      - "-s"
+      - "dev"
+      - "--dry-run"
+    expect:
+      exit_code: 0
+      stderr:
+        - "Would generate"
+        - "versions.tf"
+        - "locals.tf"
+        - "variables.tf"
+        - "outputs.tf"
+        - "terraform.tfvars"
+        - "config.json"
+        - "README.md"
+
+  # Test --all flag with dry-run
+  - name: "generate files --all dry-run"
+    enabled: true
+    tty: false
+    description: "Generate files for all components (dry-run)"
+    workdir: "../examples/generate-files/"
+    command: "atmos"
+    args:
+      - "terraform"
+      - "generate"
+      - "files"
+      - "--all"
+      - "--dry-run"
+    env:
+      ATMOS_LOGS_LEVEL: Info
+    expect:
+      exit_code: 0
+      stderr:
+        - "Would generate"
+        - "Processing component"
+
+  # Test prod stack works too
+  - name: "generate files prod stack dry-run"
+    enabled: true
+    tty: false
+    description: "Generate files for demo component in prod stack (dry-run)"
+    workdir: "../examples/generate-files/"
+    command: "atmos"
+    args:
+      - "terraform"
+      - "generate"
+      - "files"
+      - "demo"
+      - "-s"
+      - "prod"
+      - "--dry-run"
+    expect:
+      exit_code: 0
+      stderr:
+        - "Would generate"
+        - "locals.tf"
+
+  # Test describe component works for demo
+  - name: "describe component demo"
+    enabled: true
+    tty: false
+    description: "Verify demo component can be described"
+    workdir: "../examples/generate-files/"
+    command: "atmos"
+    args:
+      - "describe"
+      - "component"
+      - "demo"
+      - "-s"
+      - "dev"
+    expect:
+      exit_code: 0
+      stdout:
+        - "generate"
+        - "versions.tf"
+
+  # Test actual file generation (not dry-run) and validate files created
+  - name: "generate files creates files"
+    enabled: true
+    tty: false
+    clean: true
+    description: "Generate files and verify they are created with correct content"
+    workdir: "../examples/generate-files/"
+    command: "atmos"
+    args:
+      - "terraform"
+      - "generate"
+      - "files"
+      - "demo"
+      - "-s"
+      - "dev"
+    expect:
+      exit_code: 0
+      stderr:
+        - "Created"
+      file_exists:
+        - "components/terraform/demo/versions.tf"
+        - "components/terraform/demo/locals.tf"
+        - "components/terraform/demo/variables.tf"
+        - "components/terraform/demo/outputs.tf"
+        - "components/terraform/demo/terraform.tfvars"
+        - "components/terraform/demo/config.json"
+        - "components/terraform/demo/README.md"
+      file_contains:
+        "components/terraform/demo/versions.tf":
+          - "required_version"
+          - ">= 1.0.0"
+        "components/terraform/demo/locals.tf":
+          - "locals"
+          - "environment"
+          - "dev"
+        "components/terraform/demo/variables.tf":
+          - 'variable "stage"'
+          - 'variable "app_name"'
+        "components/terraform/demo/config.json":
+          - '"app"'
+          - '"stage"'
+          - '"dev"'
+        "components/terraform/demo/README.md":
+          - "demo"
+          - "atmos terraform generate files"
+
+  # Test --clean removes generated files
+  - name: "generate files --clean removes files"
+    enabled: true
+    tty: false
+    description: "Verify --clean removes generated files"
+    workdir: "../examples/generate-files/"
+    command: "atmos"
+    args:
+      - "terraform"
+      - "generate"
+      - "files"
+      - "demo"
+      - "-s"
+      - "dev"
+      - "--clean"
+    expect:
+      exit_code: 0
+      file_not_exists:
+        - "components/terraform/demo/versions.tf"
+        - "components/terraform/demo/locals.tf"
+        - "components/terraform/demo/variables.tf"
+        - "components/terraform/demo/outputs.tf"
+        - "components/terraform/demo/terraform.tfvars"
+        - "components/terraform/demo/config.json"
+        - "components/terraform/demo/README.md"

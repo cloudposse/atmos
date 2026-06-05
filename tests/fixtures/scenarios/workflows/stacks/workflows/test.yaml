@@ -105,3 +105,244 @@ workflows:
       Test multi-component with double-quoted query expression.
     steps:
       - command: terraform plan --query ".metadata.component == \"mock\"" -s nonprod
+
+  # Test cases for -var flag with quoted values
+  # This reproduces the issue reported by users where -var="key=value" is incorrectly parsed
+  # Fixed in PR #1961
+
+  # Test -var with double quotes (the exact pattern from user report)
+  terraform-var-double-quotes:
+    description: |
+      Test terraform -var flag with double-quoted value.
+      This reproduces the issue where strings.Fields() keeps quotes as literal characters,
+      causing Terraform to see the variable name as "enabled instead of enabled.
+    steps:
+      # The command should pass -var=enabled=false to terraform
+      # But with strings.Fields(), it passes -var="enabled=false" (with literal quotes)
+      - command: terraform plan mock -var="enabled=false" -s nonprod
+
+  # Test -var with single quotes
+  terraform-var-single-quotes:
+    description: |
+      Test terraform -var flag with single-quoted value.
+    steps:
+      - command: terraform plan mock -var='enabled=false' -s nonprod
+
+  # Test multiple -var flags with different quote styles
+  terraform-var-multiple:
+    description: |
+      Test multiple -var flags with various quote styles.
+    steps:
+      - command: terraform plan mock -var="enabled=false" -var='foo=bar' -s nonprod
+
+  # Test -var with value containing spaces (must be quoted)
+  terraform-var-with-spaces:
+    description: |
+      Test terraform -var flag with value containing spaces.
+    steps:
+      - command: terraform plan mock -var="message=hello world" -s nonprod
+
+  # Test -var with equals sign in value
+  terraform-var-equals-in-value:
+    description: |
+      Test terraform -var flag with equals sign in the value.
+    steps:
+      - command: terraform plan mock -var="message=key=value" -s nonprod
+
+  # Test shell command to verify quote parsing
+  shell-var-echo:
+    description: |
+      Shell command to verify quote parsing produces correct arguments.
+    steps:
+      - command: echo -var="enabled=false" -var='foo=bar'
+        type: shell
+
+  # Test cases for double-hyphen (--) separator parsing
+  # This reproduces GitHub issue #1967 where commands with -- separator
+  # were incorrectly parsed, causing stack value corruption.
+  #
+  # The POSIX convention is that -- separates command options from positional arguments.
+  # Everything after -- should be passed through to terraform without being parsed by atmos.
+
+  # Test double-hyphen with stack in command
+  # This is the exact pattern from the bug report
+  double-hyphen-with-stack:
+    description: |
+      Test command with -- separator and --stack flag.
+      Reproduces issue #1967 where stack value gets corrupted.
+    steps:
+      # The command includes --stack and then -- followed by terraform flags
+      - command: terraform plan mock --stack nonprod -- -consolidate-warnings=false
+
+  # Test double-hyphen with workflow-level stack override
+  double-hyphen-workflow-stack:
+    description: |
+      Test double-hyphen with workflow-level stack.
+      Stack from workflow should be inserted before --.
+    stack: nonprod
+    steps:
+      - command: terraform plan mock -- -consolidate-warnings=false
+
+  # Test double-hyphen with step-level stack override
+  double-hyphen-step-stack:
+    description: |
+      Test double-hyphen with step-level stack.
+      Stack from step should be inserted before --.
+    steps:
+      - command: terraform plan mock -- -consolidate-warnings=false
+        stack: nonprod
+
+  # Test double-hyphen with both command stack and workflow stack
+  # Workflow stack should override command stack
+  double-hyphen-stack-precedence:
+    description: |
+      Test stack precedence with double-hyphen.
+      Workflow stack should override inline stack.
+    stack: nonprod
+    steps:
+      # This has --stack wrongstack but workflow says nonprod
+      - command: terraform plan mock --stack wrongstack -- -consolidate-warnings=false
+
+  # Test double-hyphen with multiple terraform flags after separator
+  double-hyphen-multiple-flags:
+    description: |
+      Test multiple terraform flags after -- separator.
+    steps:
+      - command: terraform plan mock -s nonprod -- -var="foo=bar" -var="baz=qux"
+
+  # Test shell command to verify parsing of -- separator
+  shell-double-hyphen-echo:
+    description: |
+      Shell command to verify -- separator parsing.
+    steps:
+      - command: echo "before --" -- "after --"
+        type: shell
+
+  # Test cases for workflow step retries
+  # These test the retry configuration feature added in GitHub issue #2034
+
+  # Simple retry test - command succeeds on first attempt
+  retry-success:
+    description: |
+      Test retry configuration with a command that succeeds immediately.
+      Verifies that retry config doesn't break normal execution.
+    steps:
+      - command: echo "Success on first try"
+        type: shell
+        retry:
+          max_attempts: 3
+          initial_delay: 100ms
+          backoff_strategy: constant
+
+  # Retry with all options configured
+  retry-full-config:
+    description: |
+      Test retry with all configuration options specified.
+    steps:
+      - command: echo "Testing full retry config"
+        type: shell
+        retry:
+          max_attempts: 2
+          initial_delay: 50ms
+          max_delay: 200ms
+          backoff_strategy: exponential
+          multiplier: 2.0
+          random_jitter: 0.1
+
+  # Test cases for environment variable support
+  # These test the new env map feature at workflow and step levels
+
+  # Test workflow-level env vars
+  env-workflow-level:
+    description: |
+      Test workflow-level environment variables.
+    env:
+      MY_WORKFLOW_VAR: workflow-value
+    steps:
+      - command: env | grep MY_WORKFLOW_VAR
+        type: shell
+
+  # Test step-level env vars
+  env-step-level:
+    description: |
+      Test step-level environment variables.
+    steps:
+      - command: env | grep MY_STEP_VAR
+        type: shell
+        env:
+          MY_STEP_VAR: step-value
+
+  # Test env var precedence (step overrides workflow)
+  env-precedence:
+    description: |
+      Test that step env overrides workflow env.
+    env:
+      MY_VAR: workflow-value
+    steps:
+      - command: test "$MY_VAR" = "step-value"
+        type: shell
+        env:
+          MY_VAR: step-value
+
+  # Test env var merge (different keys from workflow and step)
+  env-merge:
+    description: |
+      Test that workflow and step env vars are merged.
+    env:
+      WORKFLOW_VAR: from-workflow
+    steps:
+      - command: |
+          test "$WORKFLOW_VAR" = "from-workflow" && \
+          test "$STEP_VAR" = "from-step"
+        type: shell
+        env:
+          STEP_VAR: from-step
+
+  # Test env vars with inheritance and override (the user's example)
+  env-inheritance-example:
+    description: |
+      Test the user's example: FOO inherited, BAZ overridden.
+      Expected output: bar - baz
+    env:
+      FOO: bar
+      BAZ: foo
+    steps:
+      - command: echo "$FOO - $BAZ"
+        type: shell
+        env:
+          BAZ: baz
+
+  # Test environment variable scoping
+  # Demonstrates that:
+  # - Workflow env applies to all steps
+  # - Step env only applies to that specific step
+  # - Step env does NOT persist to subsequent steps
+  # - Shell exports do NOT persist to subsequent steps (each step runs in isolation)
+  env-scoping:
+    description: |
+      Test environment variable scoping behavior.
+      Demonstrates that step-level env and shell exports are scoped to individual steps.
+    env:
+      FOO: workflow
+    steps:
+      # Step 1: Should see workflow-level FOO
+      - command: test "$FOO" = "workflow"
+        type: shell
+
+      # Step 2: Override FOO at step level
+      - command: test "$FOO" = "stepEnv"
+        type: shell
+        env:
+          FOO: stepEnv
+
+      # Step 3: Step env should NOT persist - back to workflow value
+      - command: test "$FOO" = "workflow"
+        type: shell
+
+      # Step 4: Export FOO in shell (this only affects the current step's process)
+      - command: export FOO=exported && test "$FOO" = "exported"
+        type: shell
+
+      # Step 5: Shell export should NOT persist - back to workflow value
+      - command: test "$FOO" = "workflow"
+        type: shell

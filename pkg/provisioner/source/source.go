@@ -10,6 +10,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/provisioner/workdir"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui"
 	"github.com/cloudposse/atmos/pkg/ui/spinner"
@@ -67,13 +68,19 @@ func Provision(ctx context.Context, params *ProvisionParams) error {
 
 	// Check if vendoring is needed.
 	if !params.Force && !needsVendoring(targetDir) {
-		_ = ui.Info(fmt.Sprintf("Component already exists at %s (use --force to re-vendor)", targetDir))
+		ui.Info(fmt.Sprintf("Component already exists at `%s` (use --force to re-vendor)", targetDir))
 		return nil
 	}
 
+	// Build component identifier with optional version.
+	componentID := params.Component
+	if sourceSpec.Version != "" {
+		componentID = fmt.Sprintf("%s@%s", params.Component, sourceSpec.Version)
+	}
+
 	// Vendor the source with spinner feedback.
-	progressMsg := fmt.Sprintf("Vendoring %s from %s", params.Component, sourceSpec.Uri)
-	completedMsg := fmt.Sprintf("Vendored %s to %s", params.Component, targetDir)
+	progressMsg := fmt.Sprintf("Vendoring `%s` from `%s`", componentID, sourceSpec.Uri)
+	completedMsg := fmt.Sprintf("Vendored `%s` to `%s`", componentID, targetDir)
 	err = spinner.ExecWithSpinner(progressMsg, completedMsg, func() error {
 		return VendorSource(ctx, params.AtmosConfig, sourceSpec, targetDir)
 	})
@@ -133,7 +140,7 @@ func DetermineTargetDirectory(
 	}
 
 	// Check if workdir is enabled - if so, use workdir path.
-	if isWorkdirEnabled(componentConfig) {
+	if workdir.IsWorkdirEnabled(componentConfig) {
 		return buildWorkdirPath(atmosConfig, componentType, component, componentConfig)
 	}
 
@@ -255,7 +262,5 @@ func buildWorkdirPath(
 		basePath = "."
 	}
 
-	// Build workdir path: .workdir/<componentType>/<stack>-<component>/
-	workdirName := fmt.Sprintf("%s-%s", stack, component)
-	return filepath.Join(basePath, WorkdirPath, componentType, workdirName), nil
+	return workdir.BuildPath(basePath, componentType, component, stack, componentConfig), nil
 }

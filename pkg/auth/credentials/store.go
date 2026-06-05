@@ -26,7 +26,25 @@ var ErrListNotSupported = errors.New("listing credentials is not supported with 
 const (
 	// KeyringUser is the "account" used to store credentials in the keyring. Here we use atmos-auth to provide a consistent way to search for atmos credentials.
 	KeyringUser = "atmos-auth"
+
+	// KeyringRealmPrefix is the prefix used for realm-scoped keyring keys.
+	KeyringRealmPrefix = "atmos"
+
+	// KeyringSeparator is the separator used between key components.
+	// Uses underscore instead of colon for Windows compatibility (colons not allowed in filenames).
+	KeyringSeparator = "_"
 )
+
+// buildKeyringKey creates a realm-scoped keyring key.
+// Format: "atmos_realm_alias" when realm is provided.
+// Falls back to "atmos_alias" for backward compatibility when realm is empty.
+func buildKeyringKey(alias, realm string) string {
+	log.Debug("Building keyring key", "alias", alias, "realm", realm)
+	if realm != "" {
+		return KeyringRealmPrefix + KeyringSeparator + realm + KeyringSeparator + alias
+	}
+	return KeyringRealmPrefix + KeyringSeparator + alias
+}
 
 // credentialEnvelope is used to persist interface credentials with type information.
 type credentialEnvelope struct {
@@ -39,6 +57,12 @@ type credentialEnvelope struct {
 // 1. ATMOS_KEYRING_TYPE environment variable (highest priority).
 // 2. AuthConfig.Keyring.Type configuration.
 // 3. Default to "system" for backward compatibility.
+//
+// Deprecated: this no-argument form cannot honor auth.keyring.type from
+// atmos.yaml because it passes a nil config to NewCredentialStoreWithConfig.
+// Production code MUST use NewCredentialStoreWithConfig(authConfig) so the
+// configured keyring backend is selected (see issue #2544). This form remains
+// only for tests and other call sites that genuinely have no auth config.
 func NewCredentialStore() types.CredentialStore {
 	defer perf.Track(nil, "credentials.NewCredentialStore")()
 

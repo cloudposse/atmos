@@ -1,0 +1,60 @@
+tests:
+  # Test that custom commands can define their own --version flag (string type).
+  # This verifies the fix for the issue where --version was a persistent global flag
+  # and prevented custom commands from defining their own --version flag.
+  - name: custom command with string version flag
+    enabled: true
+    description: "Custom commands can define their own --version flag with string type"
+    workdir: "fixtures/scenarios/custom-version-flag"
+    command: "atmos"
+    args:
+      - "install"
+      - "--version"
+      - "1.2.3"
+    expect:
+      stdout:
+        - "Installing version 1\\.2\\.3"
+      exit_code: 0
+
+  # Test using shorthand -V for version flag (not -v, which conflicts with --verbose).
+  - name: custom command with version flag shorthand
+    enabled: true
+    description: "Custom commands can use shorthand for their --version flag"
+    workdir: "fixtures/scenarios/custom-version-flag"
+    command: "atmos"
+    args:
+      - "install"
+      - "-V"
+      - "2.0.0"
+    expect:
+      stdout:
+        - "Installing version 2\\.0\\.0"
+      exit_code: 0
+
+  # Test help output shows the custom --version flag.
+  - name: custom command help shows version flag
+    enabled: true
+    description: "Custom command help output shows the --version flag"
+    workdir: "fixtures/scenarios/custom-version-flag"
+    command: "atmos"
+    args:
+      - "install"
+      - "--help"
+    expect:
+      stdout:
+        - "--version"
+        - "Version to install"
+      exit_code: 0
+
+  # Test that atmos --version still works at root level.
+  - name: atmos version flag still works
+    enabled: true
+    description: "atmos --version at root level still works"
+    workdir: "fixtures/scenarios/custom-version-flag"
+    command: "atmos"
+    args:
+      - "--version"
+    expect:
+      stdout:
+        - "(?i)atmos"
+      exit_code: 0

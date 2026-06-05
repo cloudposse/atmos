@@ -80,3 +80,8 @@ atmos list profiles --format yaml`,
 		},
 	}
 }
+
+// IsExperimental returns whether this command is experimental.
+func (p *ProfileCommandProvider) IsExperimental() bool {
+	return false
+}
