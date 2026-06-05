@@ -21,11 +21,16 @@ func processComponentInheritance(opts *ComponentProcessorOptions, result *Compon
 	result.BaseComponentEnv = make(map[string]any, componentSmallMapCapacity)
 	result.BaseComponentAuth = make(map[string]any, componentSmallMapCapacity)
 	result.BaseComponentMetadata = make(map[string]any, componentSmallMapCapacity)
+	result.BaseComponentDependencies = make(map[string]any, componentSmallMapCapacity)
+	result.BaseComponentLocals = make(map[string]any, componentSmallMapCapacity)
 	if opts.ComponentType == cfg.TerraformComponentType {
 		result.BaseComponentProviders = make(map[string]any, componentSmallMapCapacity)
+		result.BaseComponentRequiredProviders = make(map[string]any, componentSmallMapCapacity)
 		result.BaseComponentHooks = make(map[string]any, componentSmallMapCapacity)
+		result.BaseComponentGenerate = make(map[string]any, componentSmallMapCapacity)
 		result.BaseComponentBackendSection = make(map[string]any, componentSmallMapCapacity)
 		result.BaseComponentRemoteStateBackendSection = make(map[string]any, componentSmallMapCapacity)
+		result.BaseComponentProvisionSection = make(map[string]any, componentSmallMapCapacity)
 	}
 
 	var baseComponentConfig schema.BaseComponentConfig
@@ -159,7 +164,8 @@ func processInheritedComponent(opts *ComponentProcessorOptions, result *Componen
 
 	if _, ok := opts.AllComponentsMap[baseComponentFromInheritList]; !ok {
 		if opts.CheckBaseComponentExists {
-			return fmt.Errorf("%w: the component '%s' in the stack manifest '%s' inherits from '%s' (using 'metadata.inherits'), but '%s' is not defined in any of the config files for the stack '%s'",
+			return fmt.Errorf(
+				"%w: the component '%s' in the stack manifest '%s' inherits from '%s' (using 'metadata.inherits'), but '%s' is not defined in any of the config files for the stack '%s'",
 				errUtils.ErrComponentNotDefined,
 				opts.Component,
 				opts.StackName,
@@ -197,17 +203,27 @@ func applyBaseComponentConfig(opts *ComponentProcessorOptions, result *Component
 	result.BaseComponentEnv = baseComponentConfig.BaseComponentEnv
 	result.BaseComponentAuth = baseComponentConfig.BaseComponentAuth
 	result.BaseComponentMetadata = baseComponentConfig.BaseComponentMetadata
+	result.BaseComponentDependencies = baseComponentConfig.BaseComponentDependencies
+	result.BaseComponentLocals = baseComponentConfig.BaseComponentLocals
 	result.BaseComponentName = baseComponentConfig.FinalBaseComponentName
 	result.BaseComponentCommand = baseComponentConfig.BaseComponentCommand
+	// BaseComponentRetry flows from the inheritance chain through to merge — see
+	// mergeComponentConfigurations for the final deep-merge with concrete + overrides.
+	result.BaseComponentRetry = baseComponentConfig.BaseComponentRetry
 	*componentInheritanceChain = baseComponentConfig.ComponentInheritanceChain
 
-	// Terraform-specific: extract base component providers, hooks, and backend.
+	// Terraform-specific: extract base component providers, hooks, generate, backend, source, and provision.
 	if opts.ComponentType == cfg.TerraformComponentType {
 		result.BaseComponentProviders = baseComponentConfig.BaseComponentProviders
+		result.BaseComponentRequiredProviders = baseComponentConfig.BaseComponentRequiredProviders
+		result.BaseComponentRequiredVersion = baseComponentConfig.BaseComponentRequiredVersion
 		result.BaseComponentHooks = baseComponentConfig.BaseComponentHooks
+		result.BaseComponentGenerate = baseComponentConfig.BaseComponentGenerate
 		result.BaseComponentBackendType = baseComponentConfig.BaseComponentBackendType
 		result.BaseComponentBackendSection = baseComponentConfig.BaseComponentBackendSection
 		result.BaseComponentRemoteStateBackendType = baseComponentConfig.BaseComponentRemoteStateBackendType
 		result.BaseComponentRemoteStateBackendSection = baseComponentConfig.BaseComponentRemoteStateBackendSection
+		result.BaseComponentSourceSection = baseComponentConfig.BaseComponentSourceSection
+		result.BaseComponentProvisionSection = baseComponentConfig.BaseComponentProvisionSection
 	}
 }

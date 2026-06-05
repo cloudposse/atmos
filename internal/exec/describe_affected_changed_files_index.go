@@ -26,7 +26,9 @@ type changedFilesIndex struct {
 // newChangedFilesIndex creates an index of changed files organized by base path.
 // This enables efficient filtering of relevant files for each component type.
 // All file paths are normalized to absolute paths to ensure consistent matching with absolute patterns.
-func newChangedFilesIndex(atmosConfig *schema.AtmosConfiguration, changedFiles []string) *changedFilesIndex {
+// The gitRepoRoot parameter is the absolute path to the git repository root, used to resolve
+// relative file paths from git diff (which are relative to the repo root, not the current working directory).
+func newChangedFilesIndex(atmosConfig *schema.AtmosConfiguration, changedFiles []string, gitRepoRoot string) *changedFilesIndex {
 	defer perf.Track(atmosConfig, "exec.newChangedFilesIndex")()
 
 	index := &changedFilesIndex{
@@ -38,13 +40,27 @@ func newChangedFilesIndex(atmosConfig *schema.AtmosConfiguration, changedFiles [
 	normalizedBasePaths := buildNormalizedBasePaths(atmosConfig)
 
 	// Normalize all changed files to absolute paths once.
-	// This ensures allFiles is consistent with bucketed entries and eliminates redundant conversions.
+	// Changed files from git diff are relative to the git repository root, not the current working directory.
+	// We must resolve them relative to gitRepoRoot to ensure correct path matching.
+	// This fixes issue #1978 where component changes were not detected when atmos.yaml
+	// is in a subdirectory of the git repository.
 	absAllFiles := make([]string, 0, len(changedFiles))
 	for _, f := range changedFiles {
-		absF, err := filepath.Abs(f)
-		if err != nil {
-			// If conversion fails, use original path.
+		var absF string
+		switch {
+		case filepath.IsAbs(f):
+			// Already absolute, use as-is.
 			absF = f
+		case gitRepoRoot != "":
+			// Resolve relative path against git repo root.
+			absF = filepath.Join(gitRepoRoot, f)
+		default:
+			// Fallback to current working directory if no git repo root provided.
+			var err error
+			absF, err = filepath.Abs(f)
+			if err != nil {
+				absF = f
+			}
 		}
 		absAllFiles = append(absAllFiles, absF)
 	}

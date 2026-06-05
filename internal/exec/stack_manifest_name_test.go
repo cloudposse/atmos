@@ -3,9 +3,11 @@ package exec
 import (
 	"testing"
 
+	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -402,6 +404,79 @@ func TestDescribeStacks_NamePatternWorkspace(t *testing.T) {
 	assert.Equal(t, "dev-uw2", workspace, "Workspace should be based on the pattern-derived stack name")
 }
 
+// TestProcessStacks_FindsComponentByManifestName verifies that ProcessStacks can find
+// a component when the user specifies the manifest-level 'name' field as the stack argument.
+//
+// Scenario:
+// - atmos.yaml has: name_template: "{{ .vars.environment }}-{{ .vars.stage }}"
+// - Stack file: with-explicit-name.yaml has: name: "my-explicit-stack"
+// - Stack vars: environment=prod, stage=ue1 (so template produces "prod-ue1")
+// - User runs: atmos tf plan vpc -s my-explicit-stack (using manifest name, not template result)
+//
+// The manifest 'name' field should take precedence and allow the user to reference the stack
+// by that name in all commands (terraform, helmfile, describe, etc.).
+func TestProcessStacks_FindsComponentByManifestName(t *testing.T) {
+	// Change to the test fixture directory with name_template configured.
+	testDir := "../../tests/fixtures/scenarios/stack-manifest-name-template"
+	t.Chdir(testDir)
+
+	// Set ATMOS_CLI_CONFIG_PATH to CWD to isolate from repo's atmos.yaml.
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", ".")
+
+	// Initialize the CLI config with the manifest name as the stack argument.
+	// This simulates: atmos tf plan vpc -s my-explicit-stack
+	configAndStacksInfo := schema.ConfigAndStacksInfo{
+		ComponentFromArg: "vpc",
+		Stack:            "my-explicit-stack", // User specifies the manifest name override
+		ComponentType:    cfg.TerraformComponentType,
+	}
+	atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
+	require.NoError(t, err)
+
+	// Verify the fixture is configured correctly.
+	require.NotEmpty(t, atmosConfig.Stacks.NameTemplate, "name_template should be configured in atmos.yaml")
+
+	// ProcessStacks should find the vpc component when user specifies the manifest name.
+	result, err := ProcessStacks(&atmosConfig, configAndStacksInfo, true, false, false, nil, nil)
+
+	// The component should be found when using the manifest 'name' field.
+	require.NoError(t, err, "ProcessStacks should find component when using manifest 'name' field; got error: %v", err)
+
+	// Verify we found the correct component and stack.
+	assert.Equal(t, "vpc", result.ComponentFromArg, "Component should be 'vpc'")
+	// The Stack field should reflect what the user requested or the resolved stack name.
+	assert.NotEmpty(t, result.StackFile, "StackFile should be set after finding the component")
+}
+
+// TestProcessStacks_FindsComponentByTemplateName verifies that ProcessStacks can find
+// a component when the user specifies the template-derived name as the stack argument.
+func TestProcessStacks_FindsComponentByTemplateName(t *testing.T) {
+	// Change to the test fixture directory.
+	testDir := "../../tests/fixtures/scenarios/stack-manifest-name-template"
+	t.Chdir(testDir)
+
+	// Set ATMOS_CLI_CONFIG_PATH to CWD to isolate from repo's atmos.yaml.
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", ".")
+
+	// Use the template-derived name "prod-ue2" (from environment=prod, stage=ue2).
+	// This tests the "without-explicit-name" stack which has no 'name' field,
+	// so its logical name IS "prod-ue2" (environment=prod, stage=ue2).
+	configAndStacksInfo := schema.ConfigAndStacksInfo{
+		ComponentFromArg: "vpc",
+		Stack:            "prod-ue2", // Template-derived name for without-explicit-name stack
+		ComponentType:    cfg.TerraformComponentType,
+	}
+	atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
+	require.NoError(t, err)
+
+	// This should work - using the template-derived name is the current behavior.
+	result, err := ProcessStacks(&atmosConfig, configAndStacksInfo, true, false, false, nil, nil)
+
+	require.NoError(t, err, "ProcessStacks should find component when using template name; got error: %v", err)
+	assert.Equal(t, "vpc", result.ComponentFromArg, "Component should be 'vpc'")
+	assert.NotEmpty(t, result.StackFile, "StackFile should be set after finding the component")
+}
+
 // TestBuildTerraformWorkspace_Precedence verifies the full precedence order:
 // name (manifest) > name_template > name_pattern > filename.
 func TestBuildTerraformWorkspace_Precedence(t *testing.T) {
@@ -481,4 +556,707 @@ func TestBuildTerraformWorkspace_Precedence(t *testing.T) {
 			assert.Equal(t, tt.expectedWorkspace, workspace)
 		})
 	}
+}
+
+// =============================================================================
+// Stack Name Identity Tests
+// =============================================================================
+// These tests verify that each stack has exactly ONE valid identifier.
+// When an explicit 'name' field is set, only that name should work.
+// When name_template/name_pattern is set (without explicit name), only the
+// generated name should work. The filename is only valid when nothing else
+// is configured.
+//
+// See docs/prd/stack-name-identity.md for the full specification.
+// =============================================================================
+
+// TestProcessStacks_RejectsGeneratedNameWhenExplicitNameSet verifies that when a stack
+// has an explicit 'name' field, using the template-generated name should FAIL.
+//
+// Scenario:
+// - Stack file: with-explicit-name.yaml
+// - Manifest has: name: "my-explicit-stack"
+// - name_template produces: "prod-ue1" (from environment=prod, stage=ue1)
+// - User runs: atmos tf plan vpc -s prod-ue1 (using generated name)
+//
+// Expected: FAIL - only "my-explicit-stack" should be valid.
+func TestProcessStacks_RejectsGeneratedNameWhenExplicitNameSet(t *testing.T) {
+	// Change to the test fixture directory with name_template configured.
+	testDir := "../../tests/fixtures/scenarios/stack-manifest-name-template"
+	t.Chdir(testDir)
+
+	// Set ATMOS_CLI_CONFIG_PATH to CWD to isolate from repo's atmos.yaml.
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", ".")
+
+	// Try to use the template-generated name "prod-ue1" for a stack that has
+	// explicit name "my-explicit-stack". This should FAIL.
+	configAndStacksInfo := schema.ConfigAndStacksInfo{
+		ComponentFromArg: "vpc",
+		Stack:            "prod-ue1", // Generated name - should be rejected
+		ComponentType:    cfg.TerraformComponentType,
+	}
+	atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
+	require.NoError(t, err)
+
+	// Verify fixture is configured correctly.
+	require.NotEmpty(t, atmosConfig.Stacks.NameTemplate, "name_template should be configured")
+
+	// ProcessStacks should NOT find the component when using generated name
+	// for a stack with explicit name.
+	_, err = ProcessStacks(&atmosConfig, configAndStacksInfo, true, false, false, nil, nil)
+
+	// This should fail because "prod-ue1" is not the canonical name.
+	// The canonical name is "my-explicit-stack".
+	assert.Error(t, err, "ProcessStacks should reject generated name when explicit name is set")
+}
+
+// TestProcessStacks_RejectsFilenameWhenExplicitNameSet verifies that when a stack
+// has an explicit 'name' field, using the filename should FAIL.
+//
+// Scenario:
+// - Stack file: with-explicit-name.yaml
+// - Manifest has: name: "my-explicit-stack"
+// - User runs: atmos tf plan vpc -s with-explicit-name (using filename)
+//
+// Expected: FAIL - only "my-explicit-stack" should be valid.
+func TestProcessStacks_RejectsFilenameWhenExplicitNameSet(t *testing.T) {
+	// Change to the test fixture directory with name_template configured.
+	testDir := "../../tests/fixtures/scenarios/stack-manifest-name-template"
+	t.Chdir(testDir)
+
+	// Set ATMOS_CLI_CONFIG_PATH to CWD to isolate from repo's atmos.yaml.
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", ".")
+
+	// Try to use the filename "with-explicit-name" for a stack that has
+	// explicit name "my-explicit-stack". This should FAIL.
+	configAndStacksInfo := schema.ConfigAndStacksInfo{
+		ComponentFromArg: "vpc",
+		Stack:            "with-explicit-name", // Filename - should be rejected
+		ComponentType:    cfg.TerraformComponentType,
+	}
+	atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
+	require.NoError(t, err)
+
+	// ProcessStacks should NOT find the component when using filename
+	// for a stack with explicit name.
+	_, err = ProcessStacks(&atmosConfig, configAndStacksInfo, true, false, false, nil, nil)
+
+	// This should fail because "with-explicit-name" is not the canonical name.
+	// The canonical name is "my-explicit-stack".
+	assert.Error(t, err, "ProcessStacks should reject filename when explicit name is set")
+}
+
+// TestProcessStacks_RejectsFilenameWhenTemplateSet verifies that when name_template
+// is configured (and no explicit name), using the filename should FAIL.
+//
+// Scenario:
+// - Stack file: without-explicit-name.yaml
+// - No 'name' field in manifest
+// - name_template produces: "prod-ue2" (from environment=prod, stage=ue2)
+// - User runs: atmos tf plan vpc -s without-explicit-name (using filename)
+//
+// Expected: FAIL - only "prod-ue2" should be valid.
+func TestProcessStacks_RejectsFilenameWhenTemplateSet(t *testing.T) {
+	// Change to the test fixture directory with name_template configured.
+	testDir := "../../tests/fixtures/scenarios/stack-manifest-name-template"
+	t.Chdir(testDir)
+
+	// Set ATMOS_CLI_CONFIG_PATH to CWD to isolate from repo's atmos.yaml.
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", ".")
+
+	// Try to use the filename "without-explicit-name" when name_template is set.
+	// The canonical name should be "prod-ue2" (from template).
+	configAndStacksInfo := schema.ConfigAndStacksInfo{
+		ComponentFromArg: "vpc",
+		Stack:            "without-explicit-name", // Filename - should be rejected
+		ComponentType:    cfg.TerraformComponentType,
+	}
+	atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
+	require.NoError(t, err)
+
+	// Verify fixture is configured correctly.
+	require.NotEmpty(t, atmosConfig.Stacks.NameTemplate, "name_template should be configured")
+
+	// ProcessStacks should NOT find the component when using filename
+	// when name_template is configured.
+	_, err = ProcessStacks(&atmosConfig, configAndStacksInfo, true, false, false, nil, nil)
+
+	// This should fail because "without-explicit-name" is not the canonical name.
+	// The canonical name is "prod-ue2" (from name_template).
+	assert.Error(t, err, "ProcessStacks should reject filename when name_template is set")
+}
+
+// TestProcessStacks_AcceptsFilenameWhenNoNamingConfigured verifies that when no
+// name, name_template, or name_pattern is configured, the filename is the valid identifier.
+//
+// Scenario:
+// - Stack file: no-name-prod.yaml
+// - No 'name' field in manifest
+// - No name_template in atmos.yaml
+// - No name_pattern in atmos.yaml
+// - User runs: atmos tf plan vpc -s no-name-prod (using filename)
+//
+// Expected: SUCCESS - filename is the only valid identifier.
+func TestProcessStacks_AcceptsFilenameWhenNoNamingConfigured(t *testing.T) {
+	// Change to the test fixture directory with NO name_template or name_pattern.
+	testDir := "../../tests/fixtures/scenarios/stack-manifest-name"
+	t.Chdir(testDir)
+
+	// Set ATMOS_CLI_CONFIG_PATH to CWD to isolate from repo's atmos.yaml.
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", ".")
+
+	// Use the filename "no-name-prod" for a stack with no naming configuration.
+	configAndStacksInfo := schema.ConfigAndStacksInfo{
+		ComponentFromArg: "vpc",
+		Stack:            "no-name-prod", // Filename - should work
+		ComponentType:    cfg.TerraformComponentType,
+	}
+	atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
+	require.NoError(t, err)
+
+	// Verify fixture is configured correctly - no naming config.
+	require.Empty(t, atmosConfig.Stacks.NameTemplate, "name_template should NOT be configured")
+	require.Empty(t, GetStackNamePattern(&atmosConfig), "name_pattern should NOT be configured")
+
+	// ProcessStacks should find the component when using filename
+	// and no naming configuration exists.
+	result, err := ProcessStacks(&atmosConfig, configAndStacksInfo, true, false, false, nil, nil)
+
+	require.NoError(t, err, "ProcessStacks should accept filename when no naming is configured")
+	assert.Equal(t, "vpc", result.ComponentFromArg, "Component should be 'vpc'")
+	assert.Equal(t, "no-name-prod", result.StackFile, "StackFile should be 'no-name-prod'")
+}
+
+// TestDescribeStacks_FilenameAsKeyWhenNoNamingConfigured verifies that ExecuteDescribeStacks
+// returns the filename as the map key when no naming configuration exists.
+//
+// This test ensures that `atmos list stacks` and similar commands show the correct
+// stack identifiers based on the naming precedence rules.
+func TestDescribeStacks_FilenameAsKeyWhenNoNamingConfigured(t *testing.T) {
+	// Change to the test fixture directory with NO name_template or name_pattern.
+	testDir := "../../tests/fixtures/scenarios/stack-manifest-name"
+	t.Chdir(testDir)
+
+	// Set ATMOS_CLI_CONFIG_PATH to CWD to isolate from repo's atmos.yaml.
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", ".")
+
+	// Initialize the CLI config.
+	configAndStacksInfo := schema.ConfigAndStacksInfo{}
+	atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
+	require.NoError(t, err)
+
+	// Verify fixture is configured correctly - no naming config.
+	require.Empty(t, atmosConfig.Stacks.NameTemplate, "name_template should NOT be configured")
+
+	result := describeStacksHelper(t, &atmosConfig)
+
+	// Stack with explicit 'name' field should use that name as the key.
+	_, hasExplicitName := result["my-legacy-prod-stack"]
+	assert.True(t, hasExplicitName, "Stack with 'name: my-legacy-prod-stack' should use explicit name as key")
+
+	// Stack with explicit 'name' should NOT appear under filename.
+	_, hasFilename := result["legacy-prod"]
+	assert.False(t, hasFilename, "Stack with explicit 'name' should NOT appear under filename 'legacy-prod'")
+
+	// Stack without 'name' field should use filename as the key.
+	_, hasNoNameStack := result["no-name-prod"]
+	assert.True(t, hasNoNameStack, "Stack without 'name' field should use filename 'no-name-prod' as key")
+}
+
+// TestProcessStacks_InvalidStackErrorWithSuggestion verifies that when a user provides
+// a filename for a stack that has an explicit name, the error message suggests the
+// correct canonical name.
+//
+// Scenario:
+// - Stack file: legacy-prod.yaml
+// - Manifest has: name: "my-legacy-prod-stack"
+// - User runs: atmos tf plan vpc -s legacy-prod (using filename)
+//
+// Expected: Error message should say "invalid stack" and suggest "my-legacy-prod-stack".
+func TestProcessStacks_InvalidStackErrorWithSuggestion(t *testing.T) {
+	// Change to the test fixture directory with NO name_template or name_pattern.
+	testDir := "../../tests/fixtures/scenarios/stack-manifest-name"
+	t.Chdir(testDir)
+
+	// Set ATMOS_CLI_CONFIG_PATH to CWD to isolate from repo's atmos.yaml.
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", ".")
+
+	// Try to use the filename "legacy-prod" for a stack that has
+	// explicit name "my-legacy-prod-stack". This should FAIL with a helpful suggestion.
+	configAndStacksInfo := schema.ConfigAndStacksInfo{
+		ComponentFromArg: "vpc",
+		Stack:            "legacy-prod", // Filename - should be rejected with suggestion
+		ComponentType:    cfg.TerraformComponentType,
+	}
+	atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
+	require.NoError(t, err)
+
+	// ProcessStacks should fail with ErrInvalidStack (not ErrInvalidComponent).
+	_, err = ProcessStacks(&atmosConfig, configAndStacksInfo, true, false, false, nil, nil)
+
+	// Verify error is ErrInvalidStack, not ErrInvalidComponent.
+	assert.ErrorIs(t, err, errUtils.ErrInvalidStack, "Error should be ErrInvalidStack when filename is used for stack with explicit name")
+
+	// Verify the hints suggest the correct canonical name and list stacks command.
+	hints := errors.GetAllHints(err)
+	require.Len(t, hints, 2, "Error should have exactly 2 hints")
+
+	// Check for the "Did you mean" hint.
+	assert.Equal(t, "Did you mean `my-legacy-prod-stack`?", hints[0], "First hint should suggest the canonical name")
+
+	// Check for the "list stacks" hint.
+	assert.Equal(t, "Run `atmos list stacks` to see all available stacks.", hints[1], "Second hint should suggest listing stacks")
+}
+
+// =============================================================================
+// Unit Tests for getStackManifestName Helper
+// =============================================================================
+
+// TestGetStackManifestName_ValidMapWithName tests that getStackManifestName
+// correctly extracts the name field from a valid stack section.
+func TestGetStackManifestName_ValidMapWithName(t *testing.T) {
+	stackSection := map[string]any{
+		"name": "my-stack-name",
+		"vars": map[string]any{
+			"environment": "prod",
+		},
+	}
+
+	result := getStackManifestName(stackSection)
+	assert.Equal(t, "my-stack-name", result)
+}
+
+// TestGetStackManifestName_MapWithoutName tests that getStackManifestName
+// returns empty string when the name field is absent.
+func TestGetStackManifestName_MapWithoutName(t *testing.T) {
+	stackSection := map[string]any{
+		"vars": map[string]any{
+			"environment": "prod",
+		},
+	}
+
+	result := getStackManifestName(stackSection)
+	assert.Empty(t, result)
+}
+
+// TestGetStackManifestName_NameNotString tests that getStackManifestName
+// returns empty string when the name field is not a string.
+func TestGetStackManifestName_NameNotString(t *testing.T) {
+	stackSection := map[string]any{
+		"name": 123, // Not a string.
+		"vars": map[string]any{},
+	}
+
+	result := getStackManifestName(stackSection)
+	assert.Empty(t, result)
+}
+
+// TestGetStackManifestName_NotAMap tests that getStackManifestName
+// returns empty string when the stack section is not a map.
+func TestGetStackManifestName_NotAMap(t *testing.T) {
+	// Test with various non-map types.
+	testCases := []struct {
+		name         string
+		stackSection any
+	}{
+		{"nil", nil},
+		{"string", "not-a-map"},
+		{"int", 42},
+		{"slice", []string{"a", "b"}},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			result := getStackManifestName(tc.stackSection)
+			assert.Empty(t, result, "Should return empty string for non-map input")
+		})
+	}
+}
+
+// TestGetStackManifestName_EmptyMap tests that getStackManifestName
+// returns empty string for an empty map.
+func TestGetStackManifestName_EmptyMap(t *testing.T) {
+	stackSection := map[string]any{}
+
+	result := getStackManifestName(stackSection)
+	assert.Empty(t, result)
+}
+
+// TestGetStackManifestName_EmptyStringName tests that getStackManifestName
+// returns empty string when the name field is an empty string.
+func TestGetStackManifestName_EmptyStringName(t *testing.T) {
+	stackSection := map[string]any{
+		"name": "",
+	}
+
+	result := getStackManifestName(stackSection)
+	assert.Empty(t, result)
+}
+
+// =============================================================================
+// Additional Stack Identity Tests
+// =============================================================================
+
+// TestProcessStacks_RejectsFilenameWhenPatternSet verifies that when name_pattern
+// is configured (and no explicit name), using the filename should FAIL.
+//
+// This is the pattern equivalent of TestProcessStacks_RejectsFilenameWhenTemplateSet.
+func TestProcessStacks_RejectsFilenameWhenPatternSet(t *testing.T) {
+	// Change to the test fixture directory with name_pattern configured.
+	testDir := "../../tests/fixtures/scenarios/stack-manifest-name-pattern"
+	t.Chdir(testDir)
+
+	// Set ATMOS_CLI_CONFIG_PATH to CWD to isolate from repo's atmos.yaml.
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", ".")
+
+	// Try to use the filename "without-explicit-name" when name_pattern is set.
+	// The canonical name should be "dev-uw2" (from pattern: environment=dev, stage=uw2).
+	configAndStacksInfo := schema.ConfigAndStacksInfo{
+		ComponentFromArg: "vpc",
+		Stack:            "without-explicit-name", // Filename - should be rejected
+		ComponentType:    cfg.TerraformComponentType,
+	}
+	atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
+	require.NoError(t, err)
+
+	// Verify fixture is configured correctly.
+	require.Empty(t, atmosConfig.Stacks.NameTemplate, "name_template should NOT be configured")
+	require.NotEmpty(t, GetStackNamePattern(&atmosConfig), "name_pattern should be configured")
+
+	// ProcessStacks should NOT find the component when using filename
+	// when name_pattern is configured.
+	_, err = ProcessStacks(&atmosConfig, configAndStacksInfo, true, false, false, nil, nil)
+
+	// This should fail because "without-explicit-name" is not the canonical name.
+	// The canonical name is "dev-uw2" (from name_pattern).
+	assert.Error(t, err, "ProcessStacks should reject filename when name_pattern is set")
+}
+
+// TestProcessStacks_AcceptsPatternNameWhenPatternConfigured verifies that when name_pattern
+// is configured (and no explicit name), the pattern-derived name works.
+func TestProcessStacks_AcceptsPatternNameWhenPatternConfigured(t *testing.T) {
+	// Change to the test fixture directory with name_pattern configured.
+	testDir := "../../tests/fixtures/scenarios/stack-manifest-name-pattern"
+	t.Chdir(testDir)
+
+	// Set ATMOS_CLI_CONFIG_PATH to CWD to isolate from repo's atmos.yaml.
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", ".")
+
+	// Use the pattern-derived name "dev-uw2" for the stack without explicit name.
+	configAndStacksInfo := schema.ConfigAndStacksInfo{
+		ComponentFromArg: "vpc",
+		Stack:            "dev-uw2", // Pattern-derived name - should work
+		ComponentType:    cfg.TerraformComponentType,
+	}
+	atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
+	require.NoError(t, err)
+
+	// Verify fixture is configured correctly.
+	require.Empty(t, atmosConfig.Stacks.NameTemplate, "name_template should NOT be configured")
+	require.NotEmpty(t, GetStackNamePattern(&atmosConfig), "name_pattern should be configured")
+
+	// ProcessStacks should find the component when using pattern-derived name.
+	result, err := ProcessStacks(&atmosConfig, configAndStacksInfo, true, false, false, nil, nil)
+
+	require.NoError(t, err, "ProcessStacks should accept pattern-derived name")
+	assert.Equal(t, "vpc", result.ComponentFromArg, "Component should be 'vpc'")
+	assert.NotEmpty(t, result.StackFile, "StackFile should be set")
+}
+
+// TestProcessStacks_RejectsGeneratedNameWhenExplicitNameSet_Pattern verifies that
+// when a stack has explicit name and name_pattern is configured, the pattern-derived
+// name should be rejected.
+func TestProcessStacks_RejectsGeneratedNameWhenExplicitNameSet_Pattern(t *testing.T) {
+	// Change to the test fixture directory with name_pattern configured.
+	testDir := "../../tests/fixtures/scenarios/stack-manifest-name-pattern"
+	t.Chdir(testDir)
+
+	// Set ATMOS_CLI_CONFIG_PATH to CWD to isolate from repo's atmos.yaml.
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", ".")
+
+	// The "with-explicit-name" stack has name: "my-explicit-stack" and
+	// vars that would produce pattern name "prod-ue1".
+	// Try to use the pattern-derived name - this should fail.
+	configAndStacksInfo := schema.ConfigAndStacksInfo{
+		ComponentFromArg: "vpc",
+		Stack:            "prod-ue1", // Pattern-derived name - should be rejected
+		ComponentType:    cfg.TerraformComponentType,
+	}
+	atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
+	require.NoError(t, err)
+
+	// ProcessStacks should NOT find when using pattern name for stack with explicit name.
+	_, err = ProcessStacks(&atmosConfig, configAndStacksInfo, true, false, false, nil, nil)
+
+	// This should fail because "prod-ue1" is not the canonical name.
+	// The canonical name is "my-explicit-stack".
+	assert.Error(t, err, "ProcessStacks should reject pattern name when explicit name is set")
+}
+
+// TestProcessStacks_ExplicitNameWorksWhenPatternVarsMissing verifies that stacks with
+// explicit name field work even when they don't have vars required by name_pattern.
+//
+// Scenario (regression test for bug where stacks were silently skipped):
+// - name_pattern: "{tenant}-{environment}-{stage}" (requires tenant)
+// - Stack has: name: "my-explicit-stack" but NO tenant var
+// - User runs: atmos tf plan vpc -s my-explicit-stack
+//
+// Expected: SUCCESS - explicit name should bypass pattern validation.
+func TestProcessStacks_ExplicitNameWorksWhenPatternVarsMissing(t *testing.T) {
+	// Change to the test fixture with pattern requiring vars the stack doesn't have.
+	testDir := "../../tests/fixtures/scenarios/stack-name-pattern-missing-vars"
+	t.Chdir(testDir)
+
+	// Set ATMOS_CLI_CONFIG_PATH to CWD to isolate from repo's atmos.yaml.
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", ".")
+
+	// Try to use the explicit name for a stack that doesn't have tenant var.
+	// Before the fix, this would fail because processStackContextPrefix would
+	// try to validate name_pattern requirements before checking the explicit name.
+	configAndStacksInfo := schema.ConfigAndStacksInfo{
+		ComponentFromArg: "vpc",
+		Stack:            "my-explicit-stack", // Explicit name
+		ComponentType:    cfg.TerraformComponentType,
+	}
+	atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
+	require.NoError(t, err)
+
+	// Verify fixture is configured correctly.
+	require.NotEmpty(t, atmosConfig.Stacks.NamePattern, "name_pattern should be configured")
+	require.Contains(t, atmosConfig.Stacks.NamePattern, "{tenant}", "pattern should require tenant")
+
+	// ProcessStacks should find the component using the explicit name,
+	// even though the stack doesn't have tenant var required by name_pattern.
+	result, err := ProcessStacks(&atmosConfig, configAndStacksInfo, true, false, false, nil, nil)
+	require.NoError(t, err, "ProcessStacks should succeed for stack with explicit name")
+	assert.Equal(t, "my-explicit-stack", result.Stack)
+	assert.Equal(t, "vpc", result.ComponentFromArg)
+}
+
+// TestDescribeStacks_PatternValidationFallsBackToFilename verifies that when name_pattern
+// validation fails (missing required vars), ExecuteDescribeStacks falls back to using
+// the filename as the stack name instead of returning an error.
+//
+// Scenario:
+// - name_pattern: "{tenant}-{environment}-{stage}" (requires tenant)
+// - Stack "no-explicit-name.yaml" has NO tenant var and NO explicit name
+// - Expected: Stack is processed using "no-explicit-name" as its name (fallback to filename).
+func TestDescribeStacks_PatternValidationFallsBackToFilename(t *testing.T) {
+	// Change to the test fixture with pattern requiring vars the stack doesn't have.
+	testDir := "../../tests/fixtures/scenarios/stack-name-pattern-missing-vars"
+	t.Chdir(testDir)
+
+	// Set ATMOS_CLI_CONFIG_PATH to CWD to isolate from repo's atmos.yaml.
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", ".")
+
+	// Initialize the CLI config.
+	configAndStacksInfo := schema.ConfigAndStacksInfo{}
+	atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
+	require.NoError(t, err)
+
+	// Verify fixture is configured correctly.
+	require.NotEmpty(t, atmosConfig.Stacks.NamePattern, "name_pattern should be configured")
+	require.Contains(t, atmosConfig.Stacks.NamePattern, "{tenant}", "pattern should require tenant")
+
+	// Call ExecuteDescribeStacks - this exercises the fallback path in describe_stacks.go
+	// when pattern validation fails for a stack without explicit name.
+	result, err := ExecuteDescribeStacks(
+		&atmosConfig,
+		"",         // filterByStack
+		[]string{}, // components
+		[]string{}, // componentTypes
+		[]string{}, // sections
+		false,      // ignoreMissingFiles
+		false,      // processTemplates
+		false,      // processYamlFunctions
+		false,      // includeEmptyStacks
+		[]string{}, // skip
+		nil,        // authManager
+	)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	// The stack "no-explicit-name.yaml" should be processed using its filename as the stack name
+	// because pattern validation fails (missing tenant var).
+	_, hasFilenameStack := result["no-explicit-name"]
+	assert.True(t, hasFilenameStack, "Stack without explicit name should fall back to filename when pattern validation fails")
+
+	// The stack with explicit name should still work.
+	_, hasExplicitStack := result["my-explicit-stack"]
+	assert.True(t, hasExplicitStack, "Stack with explicit name should still be processed")
+}
+
+// TestDescribeStacks_IncludeEmptyStacks verifies that includeEmptyStacks parameter works.
+func TestDescribeStacks_IncludeEmptyStacks(t *testing.T) {
+	// Change to the test fixture directory.
+	testDir := "../../tests/fixtures/scenarios/stack-manifest-name"
+	t.Chdir(testDir)
+
+	// Set ATMOS_CLI_CONFIG_PATH to CWD to isolate from repo's atmos.yaml.
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", ".")
+
+	// Initialize the CLI config.
+	configAndStacksInfo := schema.ConfigAndStacksInfo{}
+	atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
+	require.NoError(t, err)
+
+	// Call with includeEmptyStacks = true.
+	result, err := ExecuteDescribeStacks(
+		&atmosConfig,
+		"",         // filterByStack
+		[]string{}, // components
+		[]string{}, // componentTypes
+		[]string{}, // sections
+		false,      // ignoreMissingFiles
+		false,      // processTemplates
+		false,      // processYamlFunctions
+		true,       // includeEmptyStacks - changed from false
+		[]string{}, // skip
+		nil,        // authManager
+	)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	// Should still have the expected stacks.
+	_, hasExplicitName := result["my-legacy-prod-stack"]
+	assert.True(t, hasExplicitName, "Should have stack with explicit name")
+}
+
+// TestDescribeStacks_FilterByStack verifies that filterByStack parameter works.
+func TestDescribeStacks_FilterByStack(t *testing.T) {
+	// Change to the test fixture directory.
+	testDir := "../../tests/fixtures/scenarios/stack-manifest-name"
+	t.Chdir(testDir)
+
+	// Set ATMOS_CLI_CONFIG_PATH to CWD to isolate from repo's atmos.yaml.
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", ".")
+
+	// Initialize the CLI config.
+	configAndStacksInfo := schema.ConfigAndStacksInfo{}
+	atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
+	require.NoError(t, err)
+
+	// Call with filterByStack to get only one stack.
+	result, err := ExecuteDescribeStacks(
+		&atmosConfig,
+		"my-legacy-prod-stack", // filterByStack - only this stack
+		[]string{},             // components
+		[]string{},             // componentTypes
+		[]string{},             // sections
+		false,                  // ignoreMissingFiles
+		false,                  // processTemplates
+		false,                  // processYamlFunctions
+		false,                  // includeEmptyStacks
+		[]string{},             // skip
+		nil,                    // authManager
+	)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	// Should only have the filtered stack.
+	assert.Len(t, result, 1, "Should have exactly one stack after filtering")
+	_, hasExplicitName := result["my-legacy-prod-stack"]
+	assert.True(t, hasExplicitName, "Should have the filtered stack")
+}
+
+// TestDescribeStacks_FilterByComponent verifies that component filter works.
+func TestDescribeStacks_FilterByComponent(t *testing.T) {
+	// Change to the test fixture directory.
+	testDir := "../../tests/fixtures/scenarios/stack-manifest-name"
+	t.Chdir(testDir)
+
+	// Set ATMOS_CLI_CONFIG_PATH to CWD to isolate from repo's atmos.yaml.
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", ".")
+
+	// Initialize the CLI config.
+	configAndStacksInfo := schema.ConfigAndStacksInfo{}
+	atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
+	require.NoError(t, err)
+
+	// Call with component filter.
+	result, err := ExecuteDescribeStacks(
+		&atmosConfig,
+		"",              // filterByStack
+		[]string{"vpc"}, // components - filter to vpc only
+		[]string{},      // componentTypes
+		[]string{},      // sections
+		false,           // ignoreMissingFiles
+		false,           // processTemplates
+		false,           // processYamlFunctions
+		false,           // includeEmptyStacks
+		[]string{},      // skip
+		nil,             // authManager
+	)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	// All returned stacks should have only vpc component.
+	for stackName, stackData := range result {
+		stackMap, ok := stackData.(map[string]any)
+		require.True(t, ok, "Stack %s should be a map", stackName)
+
+		components, ok := stackMap["components"].(map[string]any)
+		if ok {
+			terraform, ok := components["terraform"].(map[string]any)
+			if ok {
+				// Should only have vpc if terraform section exists.
+				for compName := range terraform {
+					assert.Equal(t, "vpc", compName, "Should only have vpc component")
+				}
+			}
+		}
+	}
+}
+
+// TestProcessStacks_NonExistentComponent verifies error handling when component doesn't exist.
+func TestProcessStacks_NonExistentComponent(t *testing.T) {
+	// Change to the test fixture directory.
+	testDir := "../../tests/fixtures/scenarios/stack-manifest-name"
+	t.Chdir(testDir)
+
+	// Set ATMOS_CLI_CONFIG_PATH to CWD to isolate from repo's atmos.yaml.
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", ".")
+
+	// Try to find a component that doesn't exist.
+	configAndStacksInfo := schema.ConfigAndStacksInfo{
+		ComponentFromArg: "non-existent-component",
+		Stack:            "my-legacy-prod-stack",
+		ComponentType:    cfg.TerraformComponentType,
+	}
+	atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
+	require.NoError(t, err)
+
+	// ProcessStacks should fail because the component doesn't exist.
+	_, err = ProcessStacks(&atmosConfig, configAndStacksInfo, true, false, false, nil, nil)
+
+	assert.Error(t, err, "ProcessStacks should fail for non-existent component")
+}
+
+// TestProcessStacks_NonExistentStack verifies error handling when stack doesn't exist.
+func TestProcessStacks_NonExistentStack(t *testing.T) {
+	// Change to the test fixture directory.
+	testDir := "../../tests/fixtures/scenarios/stack-manifest-name"
+	t.Chdir(testDir)
+
+	// Set ATMOS_CLI_CONFIG_PATH to CWD to isolate from repo's atmos.yaml.
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", ".")
+
+	// Try to find a stack that doesn't exist at all.
+	configAndStacksInfo := schema.ConfigAndStacksInfo{
+		ComponentFromArg: "vpc",
+		Stack:            "completely-non-existent-stack",
+		ComponentType:    cfg.TerraformComponentType,
+	}
+	atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
+	require.NoError(t, err)
+
+	// ProcessStacks should fail because the stack doesn't exist.
+	_, err = ProcessStacks(&atmosConfig, configAndStacksInfo, true, false, false, nil, nil)
+
+	assert.Error(t, err, "ProcessStacks should fail for non-existent stack")
+	// Note: When a stack doesn't exist at all (vs. using wrong name for existing stack),
+	// the error is ErrInvalidComponent because no component was found in any matching stack.
+	// ErrInvalidStack is specifically for when the user provides a filename for a stack
+	// that has a different canonical name.
+	assert.ErrorIs(t, err, errUtils.ErrInvalidComponent, "Should be ErrInvalidComponent when stack doesn't exist")
 }

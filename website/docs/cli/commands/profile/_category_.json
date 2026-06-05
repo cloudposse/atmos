@@ -1,6 +1,5 @@
 {
   "label": "profile",
-  "position": 13,
   "className": "command",
   "collapsible": true,
   "collapsed": true,

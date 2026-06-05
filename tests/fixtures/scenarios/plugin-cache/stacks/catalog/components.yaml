@@ -1,0 +1,14 @@
+# yaml-language-server: $schema=https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
+
+components:
+  terraform:
+    component-a:
+      metadata:
+        component: component-a
+      vars:
+        value: "default-a"
+    component-b:
+      metadata:
+        component: component-b
+      vars:
+        value: "default-b"

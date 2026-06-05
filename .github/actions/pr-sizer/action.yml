@@ -37,8 +37,20 @@ inputs:
     description: 'Label for extra large PRs'
     required: false
     default: 'size/xl'
+  xl_max_size:
+    description: 'Maximum number of lines changed for XL'
+    required: false
+    default: '10000'
+  xxl_label:
+    description: 'Label for extra extra large PRs'
+    required: false
+    default: 'size/xxl'
   fail_if_xl:
     description: 'Fail the action if the PR is XL'
+    required: false
+    default: 'false'
+  fail_if_xxl:
+    description: 'Fail the action if the PR is XXL'
     required: false
     default: 'false'
   files_to_ignore:
@@ -75,7 +87,10 @@ runs:
           const l_label = '${{ inputs.l_label }}';
           const l_max_size = parseInt('${{ inputs.l_max_size }}');
           const xl_label = '${{ inputs.xl_label }}';
+          const xl_max_size = parseInt('${{ inputs.xl_max_size }}');
+          const xxl_label = '${{ inputs.xxl_label }}';
           const fail_if_xl = '${{ inputs.fail_if_xl }}' === 'true';
+          const fail_if_xxl = '${{ inputs.fail_if_xxl }}' === 'true';
           const ignore_line_deletions = '${{ inputs.ignore_line_deletions }}' === 'true';
           const ignore_file_deletions = '${{ inputs.ignore_file_deletions }}' === 'true';
 
@@ -140,14 +155,16 @@ runs:
             newLabel = m_label;
           } else if (totalChanges <= l_max_size) {
             newLabel = l_label;
-          } else {
+          } else if (totalChanges <= xl_max_size) {
             newLabel = xl_label;
+          } else {
+            newLabel = xxl_label;
           }
 
           console.log(`Assigning label: ${newLabel}`);
 
           // Get all size labels
-          const allSizeLabels = [xs_label, s_label, m_label, l_label, xl_label];
+          const allSizeLabels = [xs_label, s_label, m_label, l_label, xl_label, xxl_label];
 
           // Get current labels on the PR
           const { data: currentLabels } = await github.rest.issues.listLabelsOnIssue({
@@ -188,5 +205,10 @@ runs:
 
           // Fail if XL and configured to do so
           if (newLabel === xl_label && fail_if_xl) {
+            core.setFailed(`PR is too large (${totalChanges} changes). Please consider breaking it up into smaller PRs.`);
+          }
+
+          // Fail if XXL and configured to do so
+          if (newLabel === xxl_label && fail_if_xxl) {
             core.setFailed(`PR is too large (${totalChanges} changes). Please consider breaking it up into smaller PRs.`);
           }

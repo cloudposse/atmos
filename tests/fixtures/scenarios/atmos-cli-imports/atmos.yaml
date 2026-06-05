@@ -4,6 +4,8 @@
 # The configurations are loaded in the order they are defined in the import section.
 base_path: "./"
 import:
-  - "https://raw.githubusercontent.com/cloudposse/atmos/refs/heads/main/atmos.yaml"  # Load from a remote URL
-  - "configs.d/**/*"                                                                 # Recursively load configurations from a directory
-  - "./logs.yaml"                                                                    # Load a specific file
+  # Note: Remote URL import removed because main branch atmos.yaml has custom commands
+  # with flags that conflict with built-in commands. The local imports below demonstrate
+  # the import functionality without causing flag conflicts.
+  - "configs.d/**/*"   # Recursively load configurations from a directory
+  - "./logs.yaml"      # Load a specific file

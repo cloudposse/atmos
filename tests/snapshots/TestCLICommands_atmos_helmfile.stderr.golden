@@ -1,19 +1,17 @@
-
 # Incorrect Usage
 
 **Error:** The command atmos helmfile requires a subcommand
 
 Valid subcommands are:
 
-• apply
-• destroy
-• diff
-• generate
-• sync
-• version
+  • apply
+  • destroy
+  • diff
+  • generate
+  • source
+  • sync
+  • version
 
 ## Hints
 
 💡 Run atmos helmfile --help for usage
-
-

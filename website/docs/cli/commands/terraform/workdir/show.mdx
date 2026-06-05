@@ -1,0 +1,92 @@
+---
+title: atmos terraform workdir show
+sidebar_label: workdir show
+sidebar_class_name: command
+id: show
+description: Display detailed information about a specific component's workdir.
+---
+import Intro from '@site/src/components/Intro'
+import Screengrab from '@site/src/components/Screengrab'
+
+<Intro>
+Use this command to display detailed information about a specific component's workdir, including its path, metadata, and current state.
+</Intro>
+
+<Screengrab title="atmos terraform workdir show --help" slug="atmos-terraform-workdir-show--help" />
+
+## Usage
+
+```shell
+atmos terraform workdir show <component> --stack <stack> [flags]
+```
+
+## Arguments
+
+<dl>
+    <dt>`component`</dt>
+    <dd>The name of the Terraform component whose workdir you want to inspect.</dd>
+</dl>
+
+## Flags
+
+<dl>
+    <dt>`-s, --stack`</dt>
+    <dd>**Required.** The stack name for the component.</dd>
+</dl>
+
+## Examples
+
+### Show Workdir Details
+
+```shell
+# Show details for the vpc component in the dev stack
+atmos terraform workdir show vpc --stack dev
+```
+
+Example output:
+
+```
+✓ Workdir Status
+
+  Name          dev-vpc
+  Component     vpc
+  Stack         dev
+  Source        components/terraform/vpc
+  Path          .workdir/terraform/dev-vpc
+  Content Hash  abc123def456...
+  Created       2025-12-28 15:31:47 EST
+  Updated       2025-12-28 15:31:47 EST
+```
+
+## Understanding the Output
+
+The command displays:
+
+- **Name** - The workdir name (format: `<stack>-<component>`)
+- **Component** - The Terraform component name
+- **Stack** - The stack this workdir belongs to
+- **Source** - Original component location
+- **Path** - Relative path to the workdir
+- **Content Hash** - Hash of the workdir contents (partially masked for security)
+- **Created** - Timestamp when the workdir was first created
+- **Updated** - Timestamp of the last update
+
+## Error Handling
+
+If the workdir doesn't exist, the command will display an error:
+
+```shell
+$ atmos terraform workdir show vpc --stack dev
+Error: workdir not found for component 'vpc' in stack 'dev'
+```
+
+This typically means:
+- The component hasn't been initialized yet (run `atmos terraform init`)
+- The workdir was cleaned (run `atmos terraform init` to recreate)
+- The `provision.workdir.enabled` setting is not enabled for this component
+
+## Related Commands
+
+- [`atmos terraform workdir list`](/cli/commands/terraform/workdir/list) - List all workdirs
+- [`atmos terraform workdir describe`](/cli/commands/terraform/workdir/describe) - Output workdir as stack manifest
+- [`atmos terraform workdir clean`](/cli/commands/terraform/workdir/clean) - Remove workdirs

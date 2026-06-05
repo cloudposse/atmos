@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"strings"
 
+	atmosGit "github.com/cloudposse/atmos/pkg/git"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -23,12 +25,18 @@ func ProcessCustomYamlTags(
 ) (schema.AtmosSectionMapType, error) {
 	defer perf.Track(atmosConfig, "exec.ProcessCustomYamlTags")()
 
-	// Create a scoped resolution context to prevent memory leaks and cross-call contamination.
-	// Save any existing context, install a fresh one, and restore on exit.
-	restoreCtx := scopedResolutionContext()
-	defer restoreCtx()
-
-	// Get the fresh context we just installed.
+	// Reuse the goroutine-local ResolutionContext so that cycle detection survives
+	// across nested ProcessCustomYamlTags entries triggered by !terraform.state /
+	// !terraform.output (where resolving the function recurses into a fresh
+	// ExecuteDescribeComponent → ProcessStacks → ProcessCustomYamlTags pass on the
+	// referenced component). Installing a fresh, scoped context here — as a prior
+	// implementation did — wiped the Visited map of the outer walk and made A↔B
+	// component cycles unrecoverable; see #2457.
+	//
+	// Cleanup is owned by the Push/Pop discipline in processTagTerraformState* /
+	// processTagTerraformOutput*: every successful Push has a matching deferred Pop,
+	// so the context is empty when the top-level walk returns. Callers that need a
+	// hard reset (e.g., test isolation) can call ClearResolutionContext explicitly.
 	resolutionCtx := GetOrCreateResolutionContext()
 	return processNodesWithContext(atmosConfig, input, currentStack, skip, resolutionCtx, stackInfo)
 }
@@ -78,6 +86,12 @@ func processNodesWithContext(
 		case string:
 			result, err := processCustomTagsWithContext(atmosConfig, v, currentStack, skip, resolutionCtx, stackInfo)
 			if err != nil {
+				log.Debug(
+					"Error processing YAML function",
+					"value", v,
+					"stack", currentStack,
+					"error", err.Error(),
+				)
 				firstErr = err
 				return v
 			}
@@ -218,6 +232,62 @@ func processSimpleTags(
 		}
 		return res, true, nil
 	}
+	if matchesPrefix(input, u.AtmosYamlFuncGitRoot, skip) || matchesPrefix(input, u.AtmosYamlFuncGitRootAlias, skip) {
+		res, err := atmosGit.ProcessTagRoot(input)
+		if err != nil {
+			return nil, true, err
+		}
+		return res, true, nil
+	}
+	if matchesPrefix(input, u.AtmosYamlFuncGitSha, skip) || matchesPrefix(input, u.AtmosYamlFuncGitRef, skip) {
+		res, err := atmosGit.ProcessTagSHA(input)
+		if err != nil {
+			return nil, true, err
+		}
+		return res, true, nil
+	}
+	if matchesPrefix(input, u.AtmosYamlFuncGitBranch, skip) {
+		res, err := atmosGit.ProcessTagBranch(input)
+		if err != nil {
+			return nil, true, err
+		}
+		return res, true, nil
+	}
+	if matchesPrefix(input, u.AtmosYamlFuncGitRepository, skip) {
+		res, err := atmosGit.ProcessTagRepository(input)
+		if err != nil {
+			return nil, true, err
+		}
+		return res, true, nil
+	}
+	if matchesPrefix(input, u.AtmosYamlFuncGitOwner, skip) {
+		res, err := atmosGit.ProcessTagOwner(input)
+		if err != nil {
+			return nil, true, err
+		}
+		return res, true, nil
+	}
+	if matchesPrefix(input, u.AtmosYamlFuncGitName, skip) {
+		res, err := atmosGit.ProcessTagName(input)
+		if err != nil {
+			return nil, true, err
+		}
+		return res, true, nil
+	}
+	if matchesPrefix(input, u.AtmosYamlFuncGitHost, skip) {
+		res, err := atmosGit.ProcessTagHost(input)
+		if err != nil {
+			return nil, true, err
+		}
+		return res, true, nil
+	}
+	if matchesPrefix(input, u.AtmosYamlFuncGitUrl, skip) {
+		res, err := atmosGit.ProcessTagURL(input)
+		if err != nil {
+			return nil, true, err
+		}
+		return res, true, nil
+	}
 	// AWS YAML functions - note these check for exact match since they take no arguments.
 	if input == u.AtmosYamlFuncAwsAccountID && !skipFunc(skip, u.AtmosYamlFuncAwsAccountID) {
 		return processTagAwsAccountID(atmosConfig, input, stackInfo), true, nil
@@ -230,6 +300,9 @@ func processSimpleTags(
 	}
 	if input == u.AtmosYamlFuncAwsRegion && !skipFunc(skip, u.AtmosYamlFuncAwsRegion) {
 		return processTagAwsRegion(atmosConfig, input, stackInfo), true, nil
+	}
+	if input == u.AtmosYamlFuncAwsOrganizationID && !skipFunc(skip, u.AtmosYamlFuncAwsOrganizationID) {
+		return processTagAwsOrganizationID(atmosConfig, input, stackInfo), true, nil
 	}
 	return nil, false, nil
 }

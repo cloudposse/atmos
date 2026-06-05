@@ -1,0 +1,5 @@
+aliases:
+  atmos: cloudposse/atmos
+  tf: opentofu/opentofu
+  tofu: opentofu/opentofu
+  k9s: derailed/k9s

@@ -52,10 +52,52 @@ func TestNewProvider_Factory(t *testing.T) {
 			expectError: false,
 		},
 		{
+			name:         "azure-oidc-valid",
+			providerName: "azure-oidc",
+			config: &schema.Provider{
+				Kind: "azure/oidc",
+				Spec: map[string]interface{}{
+					"tenant_id": "test-tenant-id",
+					"client_id": "test-client-id",
+				},
+			},
+			expectError: false,
+		},
+		{
 			name:         "github-oidc-valid",
 			providerName: "github-oidc",
 			config:       &schema.Provider{Kind: "github/oidc", Region: "us-east-1"},
 			expectError:  false,
+		},
+		{
+			name:         "gcp-adc-valid",
+			providerName: "gcp-adc",
+			config: &schema.Provider{
+				Kind: "gcp/adc",
+				Spec: map[string]interface{}{
+					"project_id": "test-project",
+					"region":     "us-central1",
+				},
+			},
+			expectError: false,
+		},
+		{
+			name:         "gcp-wif-valid",
+			providerName: "gcp-wif",
+			config: &schema.Provider{
+				Kind: "gcp/workload-identity-federation",
+				Spec: map[string]interface{}{
+					"project_id":                    "wif-project",
+					"project_number":                "123456789",
+					"workload_identity_pool_id":     "my-pool",
+					"workload_identity_provider_id": "my-provider",
+					"token_source": map[string]interface{}{
+						"type":                 "environment",
+						"environment_variable": "OIDC_TOKEN",
+					},
+				},
+			},
+			expectError: false,
 		},
 		{
 			name:         "mock-provider",
@@ -65,8 +107,8 @@ func TestNewProvider_Factory(t *testing.T) {
 		},
 		{
 			name:         "mock-aws-provider",
-			providerName: "mock-aws",
-			config:       &schema.Provider{Kind: "mock-aws"},
+			providerName: "mock/aws",
+			config:       &schema.Provider{Kind: "mock/aws"},
 			expectError:  false,
 		},
 		{
@@ -123,6 +165,7 @@ func TestNewIdentity_Factory(t *testing.T) {
 		config       *schema.Identity
 		expectError  bool
 		errorType    error
+		errorMsg     string
 	}{
 		{
 			name:         "aws-permission-set-valid",
@@ -134,6 +177,12 @@ func TestNewIdentity_Factory(t *testing.T) {
 			name:         "aws-assume-role-valid",
 			identityName: "role",
 			config:       &schema.Identity{Kind: "aws/assume-role"},
+			expectError:  false,
+		},
+		{
+			name:         "aws-assume-root-valid",
+			identityName: "root-access",
+			config:       &schema.Identity{Kind: "aws/assume-root"},
 			expectError:  false,
 		},
 		{
@@ -154,6 +203,42 @@ func TestNewIdentity_Factory(t *testing.T) {
 			expectError: false,
 		},
 		{
+			name:         "gcp-service-account-valid",
+			identityName: "gcp-sa",
+			config: &schema.Identity{
+				Kind: "gcp/service-account",
+				Principal: map[string]interface{}{
+					"service_account_email": "deployer@my-project.iam.gserviceaccount.com",
+					"scopes":                []interface{}{"https://www.googleapis.com/auth/cloud-platform"},
+				},
+			},
+			expectError: false,
+		},
+		{
+			name:         "gcp-project-valid",
+			identityName: "gcp-project",
+			config: &schema.Identity{
+				Kind: "gcp/project",
+				Principal: map[string]interface{}{
+					"project_id": "my-project",
+					"region":     "us-west1",
+				},
+			},
+			expectError: false,
+		},
+		{
+			name:         "ambient-valid",
+			identityName: "passthrough",
+			config:       &schema.Identity{Kind: "ambient"},
+			expectError:  false,
+		},
+		{
+			name:         "aws-ambient-valid",
+			identityName: "eks-deployer",
+			config:       &schema.Identity{Kind: "aws/ambient"},
+			expectError:  false,
+		},
+		{
 			name:         "mock-identity",
 			identityName: "mock",
 			config:       &schema.Identity{Kind: "mock"},
@@ -161,8 +246,8 @@ func TestNewIdentity_Factory(t *testing.T) {
 		},
 		{
 			name:         "mock-aws-identity",
-			identityName: "mock-aws",
-			config:       &schema.Identity{Kind: "mock-aws"},
+			identityName: "mock/aws",
+			config:       &schema.Identity{Kind: "mock/aws"},
 			expectError:  false,
 		},
 		{
@@ -185,6 +270,7 @@ func TestNewIdentity_Factory(t *testing.T) {
 			config:       &schema.Identity{Kind: ""},
 			expectError:  true,
 			errorType:    errUtils.ErrInvalidIdentityKind,
+			errorMsg:     "identity is not configured",
 		},
 		{
 			name:         "empty-name-allowed",
@@ -202,6 +288,9 @@ func TestNewIdentity_Factory(t *testing.T) {
 				assert.Error(t, err)
 				if tt.errorType != nil {
 					assert.ErrorIs(t, err, tt.errorType)
+				}
+				if tt.errorMsg != "" && err != nil {
+					assert.Contains(t, err.Error(), tt.errorMsg)
 				}
 				assert.Nil(t, identity)
 			} else {

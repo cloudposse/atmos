@@ -1,0 +1,41 @@
+# Atmos curated registry overrides.
+#
+# This file ships baked into the atmos binary via go:embed in builtin.go.
+# It defines tool entries that the upstream Aqua registry doesn't model
+# well — most commonly tools with `type: go_build` entries that the
+# Atmos toolchain installer doesn't support yet, or tools whose release
+# artifacts don't match Aqua's template conventions.
+#
+# Loaded by pkg/toolchain/registry/atmos/builtin.go and registered as a
+# high-priority registry by pkg/toolchain/registry/loader.go, so user
+# projects get the override automatically — no atmos.yaml configuration
+# required. Users can still add their own higher-priority registry in
+# atmos.yaml to override a built-in entry.
+#
+# When adding a tool here, prefer a tightly-scoped justification comment
+# above the entry: which Aqua entry does this replace, why, and what
+# upstream issue (if any) would let us remove this override.
+tools:
+  # KICS — Checkmarx's IaC scanner.
+  #
+  # The upstream Aqua entry uses `type: go_build` (build from source),
+  # which the Atmos toolchain installer doesn't support yet. KICS does
+  # publish per-platform release tarballs at
+  # https://github.com/Checkmarx/kics/releases — `github_release`
+  # tarballs cover macOS/Linux/Windows × amd64/arm64.
+  #
+  # Caveat: the tarball ships ONLY the binary. KICS's query library
+  # lives in the source tree, so users still need KICS_QUERIES_PATH
+  # set at runtime to point at queries (homebrew puts them under
+  # $(brew --prefix kics)/share/kics/assets/queries; a source clone
+  # has them under ./assets/queries). That's an upstream KICS
+  # distribution choice, not something this override can solve.
+  #
+  # Track upstream: if Aqua adds a binary install type, or if KICS
+  # bundles queries into release artifacts, this override goes away.
+  Checkmarx/kics:
+    type: github_release
+    version_prefix: "v"
+    asset: "kics_{{trimV .Version}}_{{.OS}}_{{.Arch}}.tar.gz"
+    format: tar.gz
+    binary_name: kics

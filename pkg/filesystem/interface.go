@@ -51,6 +51,11 @@ type FileSystem interface {
 
 	// Getwd returns the current working directory.
 	Getwd() (string, error)
+
+	// WriteFileAtomic writes data to a file atomically.
+	// On Unix: Uses renameio (write temp + fsync + atomic rename).
+	// On Windows: Uses temp file + rename approach.
+	WriteFileAtomic(name string, data []byte, perm os.FileMode) error
 }
 
 // GlobMatcher defines glob pattern matching operations.

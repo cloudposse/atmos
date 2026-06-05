@@ -194,13 +194,13 @@ sources:
                   stack_file_section: components.terraform.vars
                   variable_value: ""
         lang:
-            final_value: se
+            final_value: sv
             name: lang
             stack_dependencies:
                 - dependency_type: inline
                   stack_file: deploy/dev
                   stack_file_section: components.terraform.vars
-                  variable_value: se
+                  variable_value: sv
                 - dependency_type: import
                   stack_file: catalog/myapp
                   stack_file_section: components.terraform.vars
@@ -243,7 +243,7 @@ sources:
                   variable_value: m
 stack: dev
 vars:
-    lang: se
+    lang: sv
     location: Stockholm
     options: "0"
     stage: dev

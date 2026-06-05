@@ -253,6 +253,63 @@ components:
 ```
 </File>
 
+## Template Configuration
+
+Atmos supports two ways to specify Packer templates:
+
+### Directory Mode (Default)
+
+By default, Atmos passes the component directory to Packer, which automatically loads all `*.pkr.hcl` files.
+This is the recommended approach for organizing Packer configurations:
+
+```yaml
+components:
+  packer:
+    my-ami:
+      # No settings.packer.template - uses directory mode
+      # Packer loads all *.pkr.hcl files from the component directory
+      vars:
+        region: us-east-1
+```
+
+This allows you to organize your Packer component with multiple files:
+
+```
+components/packer/my-ami/
+├── variables.pkr.hcl    # Variable declarations
+├── main.pkr.hcl         # Source and build blocks
+├── locals.pkr.hcl       # Local values (optional)
+└── plugins.pkr.hcl      # Required plugins (optional)
+```
+
+### Single File Mode
+
+For simple components or when you need to specify a particular template file:
+
+```yaml
+components:
+  packer:
+    my-ami:
+      settings:
+        packer:
+          template: main.pkr.hcl  # Use specific file
+      vars:
+        region: us-east-1
+```
+
+You can also use the `--template` (or `-t`) flag on the command line to override the template:
+
+```bash
+atmos packer validate my-ami -s prod --template main.pkr.hcl
+```
+
+:::tip Directory Mode Benefits
+Directory mode is recommended because it:
+- Follows Packer best practices for organizing configurations
+- Allows separation of variables, sources, and builds into logical files
+- Simplifies stack manifests by not requiring explicit template configuration
+:::
+
 ## Running Packer Commands
 
 Atmos provides commands that wrap Packer operations:

@@ -1,12 +1,9 @@
-
 # Incorrect Usage
 
 **Error:** Unknown command non-existent for atmos about
 
 ## Usage Examples:
 
-• Learn about atmos
+  • Learn about atmos
 
   $ atmos about
-
-

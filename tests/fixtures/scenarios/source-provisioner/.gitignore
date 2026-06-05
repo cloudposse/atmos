@@ -1,0 +1,3 @@
+# Ignore vendored source directories created during tests
+# Keep only the mock component which is needed for testing
+components/terraform/vpc-*

@@ -3,8 +3,9 @@ package store
 import "github.com/go-viper/mapstructure/v2"
 
 type StoreConfig struct {
-	Type    string                 `yaml:"type"`
-	Options map[string]interface{} `yaml:"options"`
+	Type     string                 `yaml:"type"`
+	Identity string                 `yaml:"identity,omitempty"`
+	Options  map[string]interface{} `yaml:"options"`
 }
 
 type StoresConfig = map[string]StoreConfig

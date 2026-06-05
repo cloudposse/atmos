@@ -1,0 +1,783 @@
+package output
+
+import (
+	"encoding/json"
+	"errors"
+	"os"
+	"path/filepath"
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/schema"
+)
+
+func TestGenerateBackendConfig(t *testing.T) {
+	tests := []struct {
+		name          string
+		backendType   string
+		backendConfig map[string]any
+		workspace     string
+		authContext   *schema.AuthContext
+		expectError   bool
+		expectedErr   error
+		expectedType  string
+		verifyResult  func(t *testing.T, result map[string]any) // Custom verification function
+	}{
+		{
+			name:        "s3 backend",
+			backendType: "s3",
+			backendConfig: map[string]any{
+				"bucket":         "my-terraform-state",
+				"key":            "terraform.tfstate",
+				"region":         "us-west-2",
+				"dynamodb_table": "terraform-locks",
+				"encrypt":        true,
+			},
+			workspace:    "dev",
+			authContext:  nil,
+			expectError:  false,
+			expectedType: "s3",
+		},
+		{
+			name:        "local backend",
+			backendType: "local",
+			backendConfig: map[string]any{
+				"path": "/tmp/terraform.tfstate",
+			},
+			workspace:    "default",
+			authContext:  nil,
+			expectError:  false,
+			expectedType: "local",
+		},
+		{
+			name:        "gcs backend",
+			backendType: "gcs",
+			backendConfig: map[string]any{
+				"bucket": "my-gcs-bucket",
+				"prefix": "terraform/state",
+			},
+			workspace:    "prod",
+			authContext:  nil,
+			expectError:  false,
+			expectedType: "gcs",
+		},
+		{
+			name:          "azurerm backend",
+			backendType:   "azurerm",
+			backendConfig: map[string]any{},
+			workspace:     "staging",
+			authContext:   nil,
+			expectError:   false,
+			expectedType:  "azurerm",
+		},
+		{
+			name:          "empty backend type",
+			backendType:   "",
+			backendConfig: map[string]any{"bucket": "test"},
+			workspace:     "dev",
+			authContext:   nil,
+			expectError:   true,
+			expectedErr:   errUtils.ErrBackendTypeRequired,
+		},
+		{
+			name:        "with auth context",
+			backendType: "s3",
+			backendConfig: map[string]any{
+				"bucket": "my-bucket",
+			},
+			workspace: "dev",
+			authContext: &schema.AuthContext{
+				AWS: &schema.AWSAuthContext{
+					Profile: "my-profile",
+					Region:  "us-east-1",
+				},
+			},
+			expectError:  false,
+			expectedType: "s3",
+		},
+		{
+			name:        "cloud backend with workspace token",
+			backendType: "cloud",
+			backendConfig: map[string]any{
+				"organization": "my-org",
+				"workspaces": map[string]any{
+					"name": "my-workspace-{terraform_workspace}",
+				},
+			},
+			workspace:   "prod",
+			authContext: nil,
+			expectError: false,
+			verifyResult: func(t *testing.T, result map[string]any) {
+				terraform, ok := result["terraform"].(map[string]any)
+				require.True(t, ok, "expected terraform key in result")
+
+				// For cloud backend, should be terraform.cloud not terraform.backend.cloud
+				cloud, ok := terraform["cloud"].(map[string]any)
+				require.True(t, ok, "expected cloud key in terraform (not backend.cloud)")
+
+				assert.Equal(t, "my-org", cloud["organization"])
+
+				// Workspace name should have token replaced
+				workspaces, ok := cloud["workspaces"].(map[string]any)
+				require.True(t, ok)
+				assert.Equal(t, "my-workspace-prod", workspaces["name"], "workspace token should be replaced")
+			},
+		},
+		{
+			name:        "cloud backend without workspace",
+			backendType: "cloud",
+			backendConfig: map[string]any{
+				"organization": "my-org",
+				"workspaces": map[string]any{
+					"name": "my-workspace",
+				},
+			},
+			workspace:   "",
+			authContext: nil,
+			expectError: false,
+			verifyResult: func(t *testing.T, result map[string]any) {
+				terraform, ok := result["terraform"].(map[string]any)
+				require.True(t, ok)
+
+				cloud, ok := terraform["cloud"].(map[string]any)
+				require.True(t, ok, "expected cloud key in terraform")
+
+				workspaces, ok := cloud["workspaces"].(map[string]any)
+				require.True(t, ok)
+
+				// Should remain unchanged without workspace token
+				assert.Equal(t, "my-workspace", workspaces["name"])
+			},
+		},
+		{
+			name:        "cloud backend with multiple workspace tokens",
+			backendType: "cloud",
+			backendConfig: map[string]any{
+				"organization": "my-org-{terraform_workspace}",
+				"workspaces": map[string]any{
+					"name": "{terraform_workspace}-workspace",
+					"tags": []any{
+						"{terraform_workspace}",
+						"production",
+					},
+				},
+			},
+			workspace:   "staging",
+			authContext: nil,
+			expectError: false,
+			verifyResult: func(t *testing.T, result map[string]any) {
+				terraform, ok := result["terraform"].(map[string]any)
+				require.True(t, ok)
+
+				cloud, ok := terraform["cloud"].(map[string]any)
+				require.True(t, ok)
+
+				assert.Equal(t, "my-org-staging", cloud["organization"])
+
+				workspaces, ok := cloud["workspaces"].(map[string]any)
+				require.True(t, ok)
+				assert.Equal(t, "staging-workspace", workspaces["name"])
+
+				tags, ok := workspaces["tags"].([]any)
+				require.True(t, ok)
+				assert.Equal(t, "staging", tags[0])
+				assert.Equal(t, "production", tags[1])
+			},
+		},
+		{
+			name:        "cloud backend with workspace token causing invalid  after replacement - UnmarshalYAML fails",
+			backendType: "cloud",
+			backendConfig: map[string]any{
+				"organization": "my-org",
+				"workspaces": map[string]any{
+					"name": "workspace-{terraform_workspace}",
+				},
+			},
+			workspace:   "prod: [invalid",
+			authContext: nil,
+			expectError: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := generateBackendConfig(tt.backendType, tt.backendConfig, tt.workspace, tt.authContext)
+
+			if tt.expectError {
+				require.Error(t, err)
+				if tt.expectedErr != nil {
+					assert.True(t, errors.Is(err, tt.expectedErr), "expected %v, got %v", tt.expectedErr, err)
+				}
+				return
+			}
+
+			require.NoError(t, err)
+			require.NotNil(t, result)
+
+			if tt.verifyResult != nil {
+				tt.verifyResult(t, result)
+				return
+			}
+
+			terraform, ok := result["terraform"].(map[string]any)
+			require.True(t, ok, "expected terraform key in result")
+
+			backend, ok := terraform["backend"].(map[string]any)
+			require.True(t, ok, "expected backend key in terraform")
+
+			backendTypeConfig, ok := backend[tt.expectedType]
+			require.True(t, ok, "expected backend type %s in backend config", tt.expectedType)
+
+			// Verify the backend config is passed through.
+			assert.Equal(t, tt.backendConfig, backendTypeConfig)
+		})
+	}
+}
+
+func TestGenerateProviderOverrides(t *testing.T) {
+	tests := []struct {
+		name           string
+		providers      map[string]any
+		authContext    *schema.AuthContext
+		expectedResult map[string]any
+	}{
+		{
+			name: "single aws provider",
+			providers: map[string]any{
+				"aws": map[string]any{
+					"region": "us-west-2",
+				},
+			},
+			authContext: nil,
+			expectedResult: map[string]any{
+				"provider": map[string]any{
+					"aws": map[string]any{
+						"region": "us-west-2",
+					},
+				},
+			},
+		},
+		{
+			name: "multiple providers",
+			providers: map[string]any{
+				"aws": map[string]any{
+					"region": "us-west-2",
+				},
+				"google": map[string]any{
+					"project": "my-project",
+					"region":  "us-central1",
+				},
+			},
+			authContext: nil,
+			expectedResult: map[string]any{
+				"provider": map[string]any{
+					"aws": map[string]any{
+						"region": "us-west-2",
+					},
+					"google": map[string]any{
+						"project": "my-project",
+						"region":  "us-central1",
+					},
+				},
+			},
+		},
+		{
+			name:        "empty providers",
+			providers:   map[string]any{},
+			authContext: nil,
+			expectedResult: map[string]any{
+				"provider": map[string]any{},
+			},
+		},
+		{
+			name: "with auth context",
+			providers: map[string]any{
+				"aws": map[string]any{
+					"region": "us-east-1",
+				},
+			},
+			authContext: &schema.AuthContext{
+				AWS: &schema.AWSAuthContext{
+					Profile: "prod-profile",
+				},
+			},
+			expectedResult: map[string]any{
+				"provider": map[string]any{
+					"aws": map[string]any{
+						"region": "us-east-1",
+					},
+				},
+			},
+		},
+		{
+			name: "multi-region with provider aliases",
+			providers: map[string]any{
+				"aws": map[string]any{
+					"region": "us-east-2",
+				},
+				"aws.use1": map[string]any{
+					"region": "us-east-1",
+					"alias":  "use1",
+				},
+			},
+			authContext: nil,
+			expectedResult: map[string]any{
+				"provider": map[string]any{
+					"aws": []any{
+						map[string]any{"region": "us-east-2"},
+						map[string]any{"region": "us-east-1", "alias": "use1"},
+					},
+				},
+			},
+		},
+		{
+			name: "multi-region with multiple aliases",
+			providers: map[string]any{
+				"aws": map[string]any{
+					"region": "us-east-1",
+				},
+				"aws.uswest2": map[string]any{
+					"region": "us-west-2",
+					"alias":  "uswest2",
+				},
+				"aws.euwest1": map[string]any{
+					"region": "eu-west-1",
+					"alias":  "euwest1",
+				},
+			},
+			authContext: nil,
+			expectedResult: map[string]any{
+				"provider": map[string]any{
+					"aws": []any{
+						map[string]any{"region": "us-east-1"},
+						map[string]any{"region": "eu-west-1", "alias": "euwest1"},
+						map[string]any{"region": "us-west-2", "alias": "uswest2"},
+					},
+				},
+			},
+		},
+		{
+			// Regression test for issue #2208: alias should be derived from the dot
+			// suffix when the user omits it from the provider block.
+			name: "alias auto-derived from dot-suffix",
+			providers: map[string]any{
+				"aws": map[string]any{
+					"region": "us-east-2",
+				},
+				"aws.use1": map[string]any{
+					"region": "us-east-1",
+				},
+			},
+			authContext: nil,
+			expectedResult: map[string]any{
+				"provider": map[string]any{
+					"aws": []any{
+						map[string]any{"region": "us-east-2"},
+						map[string]any{"region": "us-east-1", "alias": "use1"},
+					},
+				},
+			},
+		},
+		{
+			// Explicit alias values must be preserved even when they differ from
+			// the dot suffix — user intent wins over Atmos auto-derivation.
+			name: "explicit alias preserved over auto-derive",
+			providers: map[string]any{
+				"aws.use1": map[string]any{
+					"region": "us-east-1",
+					"alias":  "primary",
+				},
+			},
+			authContext: nil,
+			expectedResult: map[string]any{
+				"provider": map[string]any{
+					"aws": []any{
+						map[string]any{"region": "us-east-1", "alias": "primary"},
+					},
+				},
+			},
+		},
+		{
+			// Aliased providers without a bare base provider must still produce
+			// an array; aliases are auto-derived when absent.
+			name: "aliased without base with auto-derive",
+			providers: map[string]any{
+				"aws.use1": map[string]any{
+					"region": "us-east-1",
+				},
+				"aws.use2": map[string]any{
+					"region": "us-east-2",
+				},
+			},
+			authContext: nil,
+			expectedResult: map[string]any{
+				"provider": map[string]any{
+					"aws": []any{
+						map[string]any{"region": "us-east-1", "alias": "use1"},
+						map[string]any{"region": "us-east-2", "alias": "use2"},
+					},
+				},
+			},
+		},
+		{
+			// Standalone non-aliased providers must still pass through verbatim
+			// when an aliased group is also present. Covers the
+			// copyNonAliasedProviders path that forwards providers that are
+			// neither dot-notation nor a base of an aliased group.
+			name: "standalone provider alongside aliased group",
+			providers: map[string]any{
+				"aws": map[string]any{
+					"region": "us-east-2",
+				},
+				"aws.use1": map[string]any{
+					"region": "us-east-1",
+				},
+				"google": map[string]any{
+					"project": "my-project",
+					"region":  "us-central1",
+				},
+			},
+			authContext: nil,
+			expectedResult: map[string]any{
+				"provider": map[string]any{
+					"aws": []any{
+						map[string]any{"region": "us-east-2"},
+						map[string]any{"region": "us-east-1", "alias": "use1"},
+					},
+					"google": map[string]any{
+						"project": "my-project",
+						"region":  "us-central1",
+					},
+				},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := generateProviderOverrides(tt.providers, tt.authContext)
+
+			assert.Equal(t, tt.expectedResult, result)
+		})
+	}
+}
+
+// TestProcessProviderAliases_FirstDotSplit locks the contract that the split
+// between `<base>` and `<alias>` happens at the FIRST dot: a key like
+// `aws.use1.primary` must yield base `aws` and derived alias `use1.primary`,
+// not base `aws.use1` and alias `primary`. The docstring on ProcessProviderAliases
+// commits to this behavior; this test keeps a future refactor from silently
+// changing it to e.g. last-dot semantics.
+func TestProcessProviderAliases_FirstDotSplit(t *testing.T) {
+	input := map[string]any{
+		"aws": map[string]any{
+			"region": "us-east-2",
+		},
+		"aws.use1.primary": map[string]any{
+			"region": "us-east-1",
+		},
+	}
+
+	result := ProcessProviderAliases(input)
+
+	awsEntries, ok := result["aws"].([]any)
+	require.True(t, ok, "aws must be grouped into an array, got %T", result["aws"])
+	require.Len(t, awsEntries, 2)
+
+	aliased, ok := awsEntries[1].(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, "use1.primary", aliased["alias"],
+		"alias must be derived from the suffix after the FIRST dot, preserving any remaining dots verbatim")
+
+	// `aws.use1.primary` must not surface as a top-level key, and `aws.use1`
+	// must not appear as a separate base (it's just part of the suffix).
+	_, stillDotKey := result["aws.use1.primary"]
+	assert.False(t, stillDotKey, "deep dot-key must not leak as a top-level result key")
+	_, intermediateBase := result["aws.use1"]
+	assert.False(t, intermediateBase, "intermediate `aws.use1` must not be synthesized as a separate base")
+}
+
+// TestProcessProviderAliases_DoesNotMutateInput guards against accidental mutation
+// of the input map when auto-deriving the `alias` field — callers expect their
+// provider-overrides map to be unchanged after processing.
+func TestProcessProviderAliases_DoesNotMutateInput(t *testing.T) {
+	input := map[string]any{
+		"aws.use1": map[string]any{
+			"region": "us-east-1",
+		},
+	}
+
+	_ = ProcessProviderAliases(input)
+
+	// The inner block must not have been populated with an `alias` key by the
+	// auto-derive logic — the transformation operates on a clone.
+	innerBlock, ok := input["aws.use1"].(map[string]any)
+	assert.True(t, ok, "inner block should still be a map after processing")
+	_, hasAlias := innerBlock["alias"]
+	assert.False(t, hasAlias, "input block must not be mutated with a derived alias")
+}
+
+// TestProcessProviderAliases_NonMapAliasedBlock verifies that non-map values in
+// aliased keys pass through unchanged instead of panicking the auto-derive logic.
+func TestProcessProviderAliases_NonMapAliasedBlock(t *testing.T) {
+	input := map[string]any{
+		"aws.use1": "not-a-map",
+	}
+
+	result := ProcessProviderAliases(input)
+
+	assert.Equal(t, map[string]any{
+		"aws": []any{"not-a-map"},
+	}, result)
+}
+
+func TestDefaultBackendGenerator_GenerateBackendIfNeeded(t *testing.T) {
+	tests := []struct {
+		name                string
+		config              *ComponentConfig
+		component           string
+		stack               string
+		authContext         *schema.AuthContext
+		expectError         bool
+		expectedErr         error
+		expectFileCreated   bool
+		expectedBackendType string
+	}{
+		{
+			name: "auto-generate disabled - no file created",
+			config: &ComponentConfig{
+				AutoGenerateBackend: false,
+				BackendType:         "s3",
+				Backend:             map[string]any{"bucket": "test"},
+			},
+			component:         "vpc",
+			stack:             "dev",
+			authContext:       nil,
+			expectError:       false,
+			expectFileCreated: false,
+		},
+		{
+			name: "successful backend generation",
+			config: &ComponentConfig{
+				AutoGenerateBackend: true,
+				BackendType:         "s3",
+				Backend: map[string]any{
+					"bucket": "test-bucket",
+					"key":    "state.tfstate",
+				},
+				Workspace: "dev-workspace",
+			},
+			component:           "vpc",
+			stack:               "dev-us-west-2",
+			authContext:         nil,
+			expectError:         false,
+			expectFileCreated:   true,
+			expectedBackendType: "s3",
+		},
+		{
+			name: "validation error - missing backend type",
+			config: &ComponentConfig{
+				AutoGenerateBackend: true,
+				BackendType:         "",
+				Backend:             map[string]any{"bucket": "test"},
+			},
+			component:   "vpc",
+			stack:       "dev",
+			authContext: nil,
+			expectError: true,
+			expectedErr: errUtils.ErrBackendFileGeneration,
+		},
+		{
+			name: "validation error - missing backend config",
+			config: &ComponentConfig{
+				AutoGenerateBackend: true,
+				BackendType:         "s3",
+				Backend:             nil,
+			},
+			component:   "vpc",
+			stack:       "dev",
+			authContext: nil,
+			expectError: true,
+			expectedErr: errUtils.ErrBackendFileGeneration,
+		},
+		{
+			name: "cloud backend generation with workspace token",
+			config: &ComponentConfig{
+				AutoGenerateBackend: true,
+				BackendType:         "cloud",
+				Backend: map[string]any{
+					"organization": "my-org",
+					"workspaces": map[string]any{
+						"name": "workspace-{terraform_workspace}",
+					},
+				},
+				Workspace: "prod",
+			},
+			component:           "app",
+			stack:               "prod-us-east-1",
+			authContext:         nil,
+			expectError:         false,
+			expectFileCreated:   true,
+			expectedBackendType: "cloud",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Create a temp directory for the component path.
+			tempDir := t.TempDir()
+			tt.config.ComponentPath = tempDir
+
+			generator := &defaultBackendGenerator{}
+			err := generator.GenerateBackendIfNeeded(tt.config, tt.component, tt.stack, tt.authContext)
+
+			if tt.expectError {
+				require.Error(t, err)
+				if tt.expectedErr != nil {
+					assert.True(t, errors.Is(err, tt.expectedErr), "expected %v, got %v", tt.expectedErr, err)
+				}
+				return
+			}
+
+			require.NoError(t, err)
+
+			// Check if file was created.
+			backendFile := filepath.Join(tempDir, "backend.tf.json")
+			if tt.expectFileCreated {
+				data, err := os.ReadFile(backendFile)
+				require.NoError(t, err, "backend file should exist")
+
+				// Verify JSON structure.
+				var backendConfig map[string]any
+				err = json.Unmarshal(data, &backendConfig)
+				require.NoError(t, err, "backend file should be valid JSON")
+
+				terraform, ok := backendConfig["terraform"].(map[string]any)
+				require.True(t, ok, "should have terraform key")
+
+				if tt.expectedBackendType == "cloud" {
+					cloud, ok := terraform["cloud"].(map[string]any)
+					require.True(t, ok, "should have cloud key in terraform (not backend.cloud)")
+
+					if tt.config.Workspace != "" {
+						workspaces, ok := cloud["workspaces"].(map[string]any)
+						require.True(t, ok, "should have workspaces in cloud config")
+						name, ok := workspaces["name"].(string)
+						require.True(t, ok, "should have name in workspaces")
+						assert.Equal(t, "workspace-prod", name, "workspace token should be replaced")
+					}
+				} else {
+					backend, ok := terraform["backend"].(map[string]any)
+					require.True(t, ok, "should have backend key")
+
+					_, ok = backend[tt.expectedBackendType]
+					assert.True(t, ok, "should have backend type %s", tt.expectedBackendType)
+				}
+			} else {
+				_, err := os.Stat(backendFile)
+				assert.True(t, os.IsNotExist(err), "backend file should not exist")
+			}
+		})
+	}
+}
+
+func TestDefaultBackendGenerator_GenerateProvidersIfNeeded(t *testing.T) {
+	tests := []struct {
+		name              string
+		config            *ComponentConfig
+		authContext       *schema.AuthContext
+		expectError       bool
+		expectFileCreated bool
+	}{
+		{
+			name: "no providers - no file created",
+			config: &ComponentConfig{
+				Providers: nil,
+			},
+			authContext:       nil,
+			expectError:       false,
+			expectFileCreated: false,
+		},
+		{
+			name: "empty providers - no file created",
+			config: &ComponentConfig{
+				Providers: map[string]any{},
+			},
+			authContext:       nil,
+			expectError:       false,
+			expectFileCreated: false,
+		},
+		{
+			name: "successful provider override generation",
+			config: &ComponentConfig{
+				Providers: map[string]any{
+					"aws": map[string]any{
+						"region": "us-west-2",
+					},
+				},
+			},
+			authContext:       nil,
+			expectError:       false,
+			expectFileCreated: true,
+		},
+		{
+			name: "multiple providers",
+			config: &ComponentConfig{
+				Providers: map[string]any{
+					"aws": map[string]any{
+						"region": "us-west-2",
+					},
+					"google": map[string]any{
+						"project": "my-project",
+					},
+				},
+			},
+			authContext: &schema.AuthContext{
+				AWS: &schema.AWSAuthContext{
+					Profile: "prod-profile",
+				},
+			},
+			expectError:       false,
+			expectFileCreated: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Create a temp directory for the component path.
+			tempDir := t.TempDir()
+			tt.config.ComponentPath = tempDir
+
+			generator := &defaultBackendGenerator{}
+			err := generator.GenerateProvidersIfNeeded(tt.config, tt.authContext)
+
+			if tt.expectError {
+				require.Error(t, err)
+				return
+			}
+
+			require.NoError(t, err)
+
+			// Check if file was created.
+			providerFile := filepath.Join(tempDir, "providers_override.tf.json")
+			if tt.expectFileCreated {
+				data, err := os.ReadFile(providerFile)
+				require.NoError(t, err, "provider file should exist")
+
+				// Verify JSON structure.
+				var providerConfig map[string]any
+				err = json.Unmarshal(data, &providerConfig)
+				require.NoError(t, err, "provider file should be valid JSON")
+
+				_, ok := providerConfig["provider"]
+				assert.True(t, ok, "should have provider key")
+			} else {
+				_, err := os.Stat(providerFile)
+				assert.True(t, os.IsNotExist(err), "provider file should not exist")
+			}
+		})
+	}
+}

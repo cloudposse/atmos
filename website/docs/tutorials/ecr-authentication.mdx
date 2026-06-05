@@ -1,0 +1,544 @@
+---
+title: ECR Authentication
+sidebar_label: ECR Authentication
+sidebar_position: 11
+id: ecr-authentication
+description: Complete guide for authenticating to AWS ECR using Atmos integrations for seamless container workflows.
+---
+
+This guide shows you how to configure AWS Elastic Container Registry (ECR) authentication using Atmos integrations for automatic Docker login.
+
+## Overview
+
+Atmos provides native ECR authentication through the **integrations** system. Integrations are client-only credential materializations that derive credentials from your AWS identity for service-specific access.
+
+**Key benefits:**
+- **Automatic login**: ECR credentials are provisioned when you authenticate with an identity
+- **Multi-registry support**: Configure multiple ECR registries across accounts and regions
+- **Zero configuration**: Credentials are written to `~/.docker/config.json` and work immediately with Docker
+- **CI/CD ready**: Works seamlessly in GitHub Actions, GitLab CI, and other pipelines
+
+## Quick Start
+
+### Basic ECR Integration (Private)
+
+The simplest ECR setup links an integration to an existing AWS identity:
+
+```yaml
+auth:
+  providers:
+    company-sso:
+      kind: aws/iam-identity-center
+      region: us-east-1
+      start_url: https://company.awsapps.com/start/
+
+  identities:
+    dev-admin:
+      kind: aws/permission-set
+      via:
+        provider: company-sso
+      principal:
+        name: AdministratorAccess
+        account: dev
+
+  integrations:
+    dev/ecr:
+      kind: aws/ecr
+      via:
+        identity: dev-admin
+      spec:
+        registry:
+          account_id: "123456789012"
+          region: us-east-2
+```
+
+**Authenticate and use Docker:**
+```bash
+# Login triggers ECR automatically (auto_provision defaults to true)
+atmos auth login dev-admin
+
+# Docker commands now work
+docker pull 123456789012.dkr.ecr.us-east-2.amazonaws.com/my-app:latest
+docker push 123456789012.dkr.ecr.us-east-2.amazonaws.com/my-app:v1.0.0
+```
+
+### ECR Public Login
+
+For authenticated pulls from `public.ecr.aws` (eliminates rate limits on public images), the quickest option needs no configuration at all — `--public` logs in using ambient AWS credentials:
+
+```bash
+# Zero-config: uses ambient AWS credentials (env, profile, SSO, IRSA/IMDS)
+atmos aws ecr login --public
+
+# Or use a specific identity's credentials
+atmos aws ecr login --public --identity dev-admin
+
+# Pulls from public.ecr.aws are now authenticated (no rate limits)
+docker pull public.ecr.aws/docker/library/alpine:latest
+```
+
+This is ideal for CI, where the runner already has AWS credentials via OIDC/IRSA.
+
+To have ECR Public login happen automatically on `atmos auth login`, add an `aws/ecr-public` integration:
+
+```yaml
+auth:
+  integrations:
+    ecr-public:
+      kind: aws/ecr-public
+      via:
+        identity: dev-admin
+      spec:
+        auto_provision: true
+```
+
+No `registry` block is needed — ECR Public is always `public.ecr.aws` and authentication is always performed in `us-east-1`.
+
+```bash
+# Login triggers ECR Public automatically
+atmos auth login dev-admin
+
+# Pulls from public.ecr.aws are now authenticated (no rate limits)
+docker pull public.ecr.aws/docker/library/alpine:latest
+```
+
+:::tip
+Unauthenticated pulls from `public.ecr.aws` are rate-limited. Adding an `aws/ecr-public` integration is especially useful in CI, where builds pulling BuildKit, binfmt, or other public images can hit these limits.
+:::
+
+## Understanding Integrations
+
+### Why Integrations vs Identities?
+
+ECR login is fundamentally different from AWS identities:
+
+| Concept | IAM User/Role | Docker Login (ECR) |
+|---------|---------------|-------------------|
+| Stored identity object | Yes | No |
+| Policy attachment | Yes | No |
+| Server-side lifecycle | Yes | No |
+| Client-only materialization | No | Yes |
+
+Integrations are things that **use** an identity to materialize client-side credentials. This separation keeps your configuration clean and explicit.
+
+### Integration Configuration
+
+Atmos supports two ECR integration kinds:
+
+**Private ECR** (`aws/ecr`) — requires registry configuration:
+
+```yaml
+integrations:
+  my-ecr-integration:           # Unique name for this integration
+    kind: aws/ecr               # Integration type
+    via:
+      identity: my-identity     # Which identity provides AWS credentials
+    spec:
+      auto_provision: true      # Auto-trigger on identity login (default)
+      registry:
+        account_id: "123456789012"
+        region: us-east-2
+```
+
+**ECR Public** (`aws/ecr-public`) — no registry configuration needed:
+
+```yaml
+integrations:
+  ecr-public:
+    kind: aws/ecr-public
+    via:
+      identity: my-identity
+    spec:
+      auto_provision: true
+```
+
+## Common Patterns
+
+### Multi-Environment Setup
+
+Configure separate integrations for each environment:
+
+```yaml
+auth:
+  identities:
+    dev-admin:
+      kind: aws/permission-set
+      via:
+        provider: company-sso
+      principal:
+        name: AdministratorAccess
+        account: dev
+
+    prod-deployer:
+      kind: aws/permission-set
+      via:
+        provider: company-sso
+      principal:
+        name: ContainerDeploy
+        account: production
+
+  integrations:
+    # Dev environment ECR
+    dev/ecr:
+      kind: aws/ecr
+      via:
+        identity: dev-admin
+      spec:
+        registry:
+          account_id: "111111111111"
+          region: us-east-2
+
+    # Production ECR
+    prod/ecr:
+      kind: aws/ecr
+      via:
+        identity: prod-deployer
+      spec:
+        registry:
+          account_id: "222222222222"
+          region: us-east-1
+```
+
+**Usage:**
+```bash
+# Development work
+atmos auth login dev-admin
+docker pull 111111111111.dkr.ecr.us-east-2.amazonaws.com/my-app:dev
+
+# Production deployment
+atmos auth login prod-deployer
+docker push 222222222222.dkr.ecr.us-east-1.amazonaws.com/my-app:v1.0.0
+```
+
+### Multi-Region Registries
+
+One identity can link to multiple ECR registries across regions:
+
+```yaml
+auth:
+  identities:
+    platform-admin:
+      kind: aws/permission-set
+      via:
+        provider: company-sso
+      principal:
+        name: PlatformAdmin
+        account: platform
+
+  integrations:
+    platform/ecr/us-east:
+      kind: aws/ecr
+      via:
+        identity: platform-admin
+      spec:
+        registry:
+          account_id: "333333333333"
+          region: us-east-1
+
+    platform/ecr/us-west:
+      kind: aws/ecr
+      via:
+        identity: platform-admin
+      spec:
+        registry:
+          account_id: "333333333333"
+          region: us-west-2
+
+    platform/ecr/eu-west:
+      kind: aws/ecr
+      via:
+        identity: platform-admin
+      spec:
+        registry:
+          account_id: "333333333333"
+          region: eu-west-1
+```
+
+**Login to all regions at once:**
+```bash
+atmos auth login platform-admin
+# ✓ ECR login: 333333333333.dkr.ecr.us-east-1.amazonaws.com (expires in 11h59m)
+# ✓ ECR login: 333333333333.dkr.ecr.us-west-2.amazonaws.com (expires in 11h59m)
+# ✓ ECR login: 333333333333.dkr.ecr.eu-west-1.amazonaws.com (expires in 11h59m)
+```
+
+### Cross-Account Access
+
+Access ECR registries in different AWS accounts:
+
+```yaml
+auth:
+  integrations:
+    # Your account's ECR
+    my-account/ecr:
+      kind: aws/ecr
+      via:
+        identity: dev-admin
+      spec:
+        registry:
+          account_id: "111111111111"
+          region: us-east-2
+
+    # Shared services account ECR (requires cross-account permissions)
+    shared/ecr:
+      kind: aws/ecr
+      via:
+        identity: dev-admin
+      spec:
+        registry:
+          account_id: "999999999999"
+          region: us-east-1
+```
+
+### Optional Integrations
+
+Disable auto-provisioning for integrations you only need occasionally:
+
+```yaml
+auth:
+  integrations:
+    # Always provision on login
+    dev/ecr/primary:
+      kind: aws/ecr
+      via:
+        identity: dev-admin
+      spec:
+        registry:
+          account_id: "123456789012"
+          region: us-east-2
+
+    # Only provision when explicitly requested
+    dev/ecr/legacy:
+      kind: aws/ecr
+      via:
+        identity: dev-admin
+      spec:
+        auto_provision: false    # Don't auto-trigger
+        registry:
+          account_id: "123456789012"
+          region: eu-west-1
+```
+
+**Usage:**
+```bash
+# Normal login only provisions primary ECR
+atmos auth login dev-admin
+
+# Explicitly login to legacy ECR when needed
+atmos aws ecr login dev/ecr/legacy
+```
+
+## Standalone ECR Login
+
+You can trigger ECR login independently of identity authentication:
+
+### By Integration Name
+
+```bash
+atmos aws ecr login dev/ecr
+```
+
+### By Identity
+
+Trigger all integrations linked to an identity:
+
+```bash
+atmos aws ecr login --identity dev-admin
+```
+
+### By Explicit Registry URL
+
+Use current AWS credentials from the environment:
+
+```bash
+# Single registry
+atmos aws ecr login --registry 123456789012.dkr.ecr.us-east-2.amazonaws.com
+
+# Multiple registries
+atmos aws ecr login \
+  --registry 123456789012.dkr.ecr.us-east-2.amazonaws.com \
+  --registry 987654321098.dkr.ecr.us-west-2.amazonaws.com
+```
+
+## CI/CD Integration
+
+### GitHub Actions
+
+```yaml
+# .github/workflows/build.yaml
+name: Build and Push
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install Atmos
+        uses: cloudposse/github-action-setup-atmos@v2
+
+      - name: Authenticate and Login to ECR
+        run: |
+          # Identity login triggers all auto-provisioned integrations
+          # (both aws/ecr and aws/ecr-public)
+          atmos auth login ci-deployer
+
+          # Option B: Explicit integration
+          # atmos aws ecr login ci/ecr
+
+      - name: Build and Push
+        run: |
+          docker build -t 123456789012.dkr.ecr.us-east-2.amazonaws.com/my-app:${{ github.sha }} .
+          docker push 123456789012.dkr.ecr.us-east-2.amazonaws.com/my-app:${{ github.sha }}
+```
+
+:::tip
+Add an `aws/ecr-public` integration with `auto_provision: true` to your CI identity. This authenticates to `public.ecr.aws` automatically, preventing rate-limit failures when pulling BuildKit, binfmt, or other public images during Docker builds.
+:::
+
+### GitLab CI
+
+```yaml
+# .gitlab-ci.yml
+build:
+  image: docker:24
+  services:
+    - docker:24-dind
+  before_script:
+    - apk add --no-cache curl
+    - curl -fsSL https://atmos.tools/install.sh | bash
+    - atmos auth login ci-deployer
+  script:
+    - docker build -t 123456789012.dkr.ecr.us-east-2.amazonaws.com/my-app:$CI_COMMIT_SHA .
+    - docker push 123456789012.dkr.ecr.us-east-2.amazonaws.com/my-app:$CI_COMMIT_SHA
+```
+
+## IAM Permissions
+
+### Private ECR (`aws/ecr`)
+
+The identity used for private ECR login needs the `ecr:GetAuthorizationToken` permission:
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": "ecr:GetAuthorizationToken",
+      "Resource": "*"
+    },
+    {
+      "Effect": "Allow",
+      "Action": [
+        "ecr:BatchCheckLayerAvailability",
+        "ecr:GetDownloadUrlForLayer",
+        "ecr:BatchGetImage",
+        "ecr:PutImage",
+        "ecr:InitiateLayerUpload",
+        "ecr:UploadLayerPart",
+        "ecr:CompleteLayerUpload"
+      ],
+      "Resource": "arn:aws:ecr:*:123456789012:repository/*"
+    }
+  ]
+}
+```
+
+### ECR Public (`aws/ecr-public`)
+
+The identity used for ECR Public login needs `ecr-public:GetAuthorizationToken` and `sts:GetServiceBearerToken`:
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": [
+        "ecr-public:GetAuthorizationToken",
+        "sts:GetServiceBearerToken"
+      ],
+      "Resource": "*"
+    }
+  ]
+}
+```
+
+:::note
+ECR Public authentication is always performed in `us-east-1`, regardless of where your workloads run. ECR Public is only available in `us-east-1` and `us-west-2`.
+:::
+
+## Credential Storage
+
+### Location
+
+ECR credentials are stored in `~/.docker/config.json` by default. This is the standard Docker config location, which means:
+
+- No additional environment variables required
+- Docker commands work immediately after login
+- Credentials are merged with existing Docker config entries
+- Has restricted permissions (0600)
+
+If you need to use a custom location, set the `DOCKER_CONFIG` environment variable before running `atmos aws ecr login`:
+
+```bash
+export DOCKER_CONFIG=/custom/path
+atmos aws ecr login dev/ecr
+```
+
+## Troubleshooting
+
+### Token Expired
+
+ECR tokens expire after approximately 12 hours. Re-authenticate to refresh:
+
+```bash
+atmos auth login dev-admin
+# or
+atmos aws ecr login dev/ecr
+```
+
+### Permission Denied
+
+Ensure your identity has `ecr:GetAuthorizationToken` permission:
+
+```bash
+# Test with AWS CLI
+aws ecr get-authorization-token --region us-east-2
+```
+
+### Wrong Credentials Used
+
+Check that `~/.docker/config.json` contains the ECR registry:
+
+```bash
+cat ~/.docker/config.json | jq '.auths | keys'
+```
+
+If using a custom `DOCKER_CONFIG`, verify it's set correctly:
+
+```bash
+echo $DOCKER_CONFIG
+```
+
+### Registry Not Found
+
+Verify the registry URL format:
+- Private ECR: `{account_id}.dkr.ecr.{region}.amazonaws.com`
+- ECR Public: use `kind: aws/ecr-public` integration instead of `--registry`
+- China/GovCloud regions are not supported for either kind
+
+## Next Steps
+
+- [Auth Login Command](/cli/commands/auth/login) - Full login command reference
+- [ECR Login Command](/cli/commands/aws/ecr-login) - ECR-specific command reference
+- [Auth Configuration](/cli/configuration/auth) - Complete configuration reference

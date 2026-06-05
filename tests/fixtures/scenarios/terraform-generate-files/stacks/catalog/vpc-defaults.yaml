@@ -1,0 +1,32 @@
+# yaml-language-server: $schema=https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
+
+# Base component with default generate section
+# Other VPC components can inherit from this
+
+components:
+  terraform:
+    vpc-defaults:
+      metadata:
+        type: abstract
+        component: vpc
+      vars:
+        vpc_name: "default-vpc"
+        environment: "default"
+        region: "us-east-1"
+        cidr_block: "10.0.0.0/16"
+      # Level 1: Base component generate section (inherited by derived components)
+      generate:
+        # Common locals file for all VPC components
+        "locals.tf":
+          locals:
+            environment: "{{ .vars.environment }}"
+            vpc_name: "{{ .vars.vpc_name }}"
+            atmos_component: "{{ .atmos_component }}"
+            atmos_stack: "{{ .atmos_stack }}"
+            # This will be overridden by derived components
+            source: "base-component"
+        # Common metadata for all VPC components
+        "metadata.json":
+          component: "{{ .component }}"
+          stack: "{{ .atmos_stack }}"
+          source: "base-component"

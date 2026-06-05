@@ -8,6 +8,7 @@ import (
 	"github.com/spf13/pflag"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/flags/compat"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
@@ -93,7 +94,23 @@ func RegisterAll(root *cobra.Command) error {
 			return fmt.Errorf("%w: provider %s", errUtils.ErrCommandNil, name)
 		}
 
+		// Mark experimental commands with an annotation for later rendering.
+		// The actual styled badge is added in formatCommandLine during help rendering
+		// when the color profile is available.
+		if provider.IsExperimental() {
+			markCommandExperimental(cmd)
+		}
+
 		root.AddCommand(cmd)
+
+		// Apply default NoArgs validator for commands that:
+		// 1. Don't already have Args set (explicit validation)
+		// 2. Don't have a PositionalArgsBuilder registered (structured args)
+		// This prevents commands from silently ignoring unexpected arguments.
+		// Commands that need positional args must explicitly declare them.
+		if cmd.Args == nil && provider.GetPositionalArgsBuilder() == nil {
+			cmd.Args = cobra.NoArgs
+		}
 	}
 
 	// Phase 2: Register command aliases.
@@ -181,6 +198,19 @@ func RegisterAll(root *cobra.Command) error {
 	return nil
 }
 
+// markCommandExperimental sets the experimental annotation on a command and all its subcommands.
+func markCommandExperimental(cmd *cobra.Command) {
+	if cmd.Annotations == nil {
+		cmd.Annotations = make(map[string]string)
+	}
+	cmd.Annotations["experimental"] = "true"
+
+	// Recursively mark all subcommands.
+	for _, sub := range cmd.Commands() {
+		markCommandExperimental(sub)
+	}
+}
+
 // GetProvider returns a built-in command provider by name.
 //
 // This function is primarily used for testing and diagnostics.
@@ -191,6 +221,16 @@ func GetProvider(name string) (CommandProvider, bool) {
 
 	provider, ok := registry.providers[name]
 	return provider, ok
+}
+
+// IsCommandExperimental returns true if the named command is experimental.
+// Returns false if the command is not found or is not experimental.
+func IsCommandExperimental(name string) bool {
+	provider, ok := GetProvider(name)
+	if !ok {
+		return false
+	}
+	return provider.IsExperimental()
 }
 
 // ListProviders returns all registered providers grouped by category.
@@ -296,4 +336,38 @@ func GetSubcommandCompatFlags(providerName, subcommand string) map[string]compat
 		return nil
 	}
 	return providerFlags[subcommand]
+}
+
+// commandFlagRegistries stores FlagRegistry instances per command provider.
+// This allows preprocessCompatibilityFlags to use PreprocessNoOptDefValArgs
+// from the registered flag registries instead of hardcoded flag maps.
+var commandFlagRegistries = struct {
+	mu         sync.RWMutex
+	registries map[string]*flags.FlagRegistry // provider name -> flag registry
+}{
+	registries: make(map[string]*flags.FlagRegistry),
+}
+
+// RegisterCommandFlagRegistry registers a FlagRegistry for a command provider.
+// The providerName is the top-level command (e.g., "terraform").
+// This enables preprocessCompatibilityFlags to use the registry's
+// PreprocessNoOptDefValArgs for normalizing NoOptDefVal flags.
+func RegisterCommandFlagRegistry(providerName string, registry *flags.FlagRegistry) {
+	defer perf.Track(nil, "internal.RegisterCommandFlagRegistry")()
+
+	commandFlagRegistries.mu.Lock()
+	defer commandFlagRegistries.mu.Unlock()
+
+	commandFlagRegistries.registries[providerName] = registry
+}
+
+// GetCommandFlagRegistry returns the FlagRegistry for a command provider.
+// Returns nil if no registry is registered for the provider.
+func GetCommandFlagRegistry(providerName string) *flags.FlagRegistry {
+	defer perf.Track(nil, "internal.GetCommandFlagRegistry")()
+
+	commandFlagRegistries.mu.RLock()
+	defer commandFlagRegistries.mu.RUnlock()
+
+	return commandFlagRegistries.registries[providerName]
 }

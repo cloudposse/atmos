@@ -3,6 +3,7 @@ package cmd
 import (
 	"github.com/spf13/cobra"
 
+	packersource "github.com/cloudposse/atmos/cmd/packer/source"
 	e "github.com/cloudposse/atmos/internal/exec"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -25,6 +26,9 @@ func init() {
 
 	AddStackCompletion(packerCmd)
 	RootCmd.AddCommand(packerCmd)
+
+	// Add source subcommand from the source subpackage.
+	packerCmd.AddCommand(packersource.GetSourceCommand())
 }
 
 func packerRun(cmd *cobra.Command, commandName string, args []string) error {

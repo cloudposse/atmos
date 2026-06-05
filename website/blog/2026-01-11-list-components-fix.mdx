@@ -1,0 +1,146 @@
+---
+slug: list-components-behavior-clarification
+title: "New List Configuration and Stack Filtering"
+authors: [atmos]
+tags: [enhancement, bugfix]
+---
+
+The `atmos list components` command now correctly shows unique component definitions, supports stack filtering, and uses a new dedicated configuration namespace.
+
+<!--truncate-->
+
+## What Changed
+
+The `atmos list components` command behavior has been restored to its original intent:
+
+- **`list components`** - Shows unique component definitions (deduplicated across all stacks)
+- **`list instances`** - Shows all component instances (one entry per component+stack pair)
+
+Previously, both commands were returning the same data (component instances), which was confusing.
+
+## New: Filter Components by Stack
+
+You can now filter which stacks to consider when listing unique components using the `--stack` flag with glob patterns:
+
+```bash
+# List components that exist in any dev stack
+atmos list components --stack "*-dev"
+
+# List components in a specific environment
+atmos list components --stack "plat-ue2-*"
+
+# List components across all production stacks
+atmos list components --stack "*-prod"
+```
+
+This is useful when you want to see what components are defined for a particular environment or stage without seeing the full list across all stacks.
+
+## New Configuration Namespace
+
+We've introduced a cleaner configuration structure for list commands with separate settings for `list components` and `list instances`:
+
+```yaml
+# atmos.yaml
+list:
+  # Configuration for "atmos list components"
+  # Shows unique component definitions (deduplicated)
+  components:
+    format: table
+    columns:
+      - name: Component
+        value: "{{ .component }}"
+      - name: Type
+        value: "{{ .type }}"
+      - name: Stacks
+        value: "{{ .stack_count }}"
+
+  # Configuration for "atmos list instances"
+  # Shows component instances (one per component+stack pair)
+  instances:
+    format: table
+    columns:
+      - name: Stack
+        value: "{{ .stack }}"
+      - name: Component
+        value: "{{ .component }}"
+      - name: Type
+        value: "{{ .type }}"
+      - name: Tenant
+        value: "{{ .vars.tenant }}"
+      - name: Environment
+        value: "{{ .vars.environment }}"
+```
+
+### Available Fields
+
+**For `list components` (unique component fields):**
+- `{{ .component }}` - Component name
+- `{{ .type }}` - Component type (terraform, helmfile, packer)
+- `{{ .stack_count }}` - Number of stacks using this component
+- `{{ .component_folder }}` - Path to component folder
+
+**For `list instances` (per-instance fields):**
+- All unique component fields above, plus:
+- `{{ .stack }}` - Stack name
+- `{{ .vars.* }}` - Any variable from the component (tenant, environment, stage, region, etc.)
+- `{{ .status }}` - Component status indicator
+
+## Backward Compatibility
+
+Existing configurations using `components.list.columns` continue to work for `list instances`. The precedence is:
+
+**For `list instances`:**
+1. `--columns` CLI flag
+2. `list.instances.columns` (new)
+3. `components.list.columns` (deprecated, backward compat)
+4. Default columns
+
+**For `list components`:**
+1. `--columns` CLI flag
+2. `list.components.columns` (new)
+3. Default columns (Component, Type, Stacks)
+
+Note: The old `components.list.columns` does **not** fall back for `list components` because those columns were designed for per-instance data (with stack-specific fields).
+
+## Example Output
+
+**`atmos list components`** now shows unique components:
+```
+Component             Type        Stacks
+vpc                   terraform   6
+vpc-flow-logs-bucket  terraform   6
+```
+
+**`atmos list components --stack "*-dev"`** filters to dev stacks:
+```
+Component             Type        Stacks
+vpc                   terraform   2
+vpc-flow-logs-bucket  terraform   2
+```
+
+**`atmos list instances`** continues to show all instances:
+```
+Stack           Component             Type        ...
+plat-ue2-dev    vpc                   terraform   ...
+plat-ue2-dev    vpc-flow-logs-bucket  terraform   ...
+plat-ue2-prod   vpc                   terraform   ...
+...
+```
+
+## Migration
+
+Update your `atmos.yaml` from:
+```yaml
+components:
+  list:
+    columns: [...]
+```
+
+To:
+```yaml
+list:
+  instances:
+    columns: [...]
+```
+
+And optionally add a `list.components` section to customize the unique components output.

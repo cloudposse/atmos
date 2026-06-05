@@ -1,0 +1,77 @@
+---
+slug: pr-artifact-installation
+title: "Test PR Features with --use-version"
+authors:
+  - osterman
+tags:
+  - feature
+  - dx
+date: 2026-02-17T00:00:00.000Z
+---
+
+Test features from any Atmos pull request or commit SHA without compiling from source or manually downloading artifacts.
+
+<!--truncate-->
+
+## What's New
+
+The `--use-version` flag now accepts PR numbers and commit SHAs, making it trivial to test features from any open pull request or specific commit:
+
+```bash
+# Test a feature from PR #2040
+atmos --use-version pr:2040 terraform plan
+
+# Numbers are auto-detected as PRs
+atmos --use-version 2040 describe stacks
+
+# Test a specific commit by SHA
+atmos --use-version sha:ceb7526 version
+
+# SHAs are auto-detected (7-40 hex chars)
+atmos --use-version ceb7526be terraform plan
+```
+
+## How It Works
+
+When you specify a PR number or SHA, Atmos:
+
+1. **Fetches the artifact** - Downloads the correct platform binary (Linux, macOS, Windows) from GitHub Actions
+2. **Caches locally** - Stores the binary in `~/.local/share/atmos/toolchain/bin/` with metadata for fast subsequent runs
+3. **Re-executes** - Runs your command using the specified version of Atmos
+
+For PR versions, the cache uses a 1-minute TTL before checking for new commits, so repeated runs within that window are instant.
+
+For SHA versions, the cache is permanent since commits are immutable - once installed, a SHA version is always ready to use.
+
+## Clear Error Messages
+
+When things go wrong, you get actionable guidance:
+
+- **Invalid version format**: Clear message showing valid formats (PR number, pr:NNNN, sha:XXXXXXX, or semver)
+- **Missing GitHub token**: Instructions for authenticating via `gh` CLI or environment variable
+- **PR/commit not found**: Direct link to the PR or commit page
+- **CI workflow failing**: Explanation of why artifacts might be missing
+- **Unsupported platform**: Suggests alternatives
+
+## Requirements
+
+PR artifact installation requires GitHub authentication. The feature checks for tokens in this order:
+
+1. `ATMOS_GITHUB_TOKEN` environment variable
+2. `GITHUB_TOKEN` environment variable
+3. GitHub CLI (`gh`) authentication
+
+## Getting Started
+
+```bash
+# Authenticate with GitHub CLI (if not already)
+gh auth login
+
+# Test a PR
+atmos --use-version pr:2040 version
+
+# Test a specific commit
+atmos --use-version sha:ceb7526 version
+```
+
+This feature complements our existing PR feature releases infrastructure, making it even easier to validate changes before they merge.

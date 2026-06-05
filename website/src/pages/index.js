@@ -8,6 +8,9 @@ import TypingAnimation from '@site/src/components/TypingAnimation'
 import LazyDemo from '@site/src/components/LazyDemo'
 import ScrollFadeIn from '@site/src/components/ScrollFadeIn'
 import { RiLockLine, RiBox3Line, RiFlashlightLine, RiStackLine } from 'react-icons/ri';
+import { SiAmazonwebservices, SiGooglecloud } from 'react-icons/si';
+import { VscAzure } from 'react-icons/vsc';
+import AISection from '@site/src/components/AISection'
 import '../css/landing-page.css';
 
 function Home() {
@@ -20,21 +23,39 @@ function Home() {
         <Layout title={`Hello from ${siteConfig.title}`} description="Atmos: Sanity for the Modern Platform Engineer - An IaC Framework that unifies your toolchain">
           <header className="hero hero--full-height">
             <div className="intro">
-              <p className="hero__eyebrow">Infrastructure as Code Framework</p>
+              <p className="hero__eyebrow">
+                <span className="hero__eyebrow-desktop">Infrastructure as Code Framework</span>
+                <span className="hero__eyebrow-mobile">IaC Framework</span>
+              </p>
               <h1>
                 <span className="hero__title-line">One Tool to Orchestrate</span>
                 <span className="typing-container" aria-hidden="true">
-                  <TypingAnimation words={['Terraform', 'OpenTofu', 'Packer', 'Helmfile']} />
+                  <TypingAnimation words={['Terraform', 'OpenTofu', 'Packer', 'Helmfile', 'Ansible', 'Devcontainers']} />
                 </span>
-                <span className="visually-hidden">Terraform, OpenTofu, Packer, Helmfile</span>
+                <span className="visually-hidden">Terraform, OpenTofu, Packer, Helmfile, Ansible, and Devcontainers</span>
               </h1>
             <p className="hero__description">Treat environments as configuration and eliminate code duplication, custom bash scripts, and complicated tooling with one tool to rule them all</p>
+            <Link to="/multi-cloud" className="hero__cloud-logos">
+              <div className="hero__cloud-logo">
+                <SiAmazonwebservices />
+                <span>AWS</span>
+              </div>
+              <div className="hero__cloud-logo">
+                <VscAzure />
+                <span>Azure</span>
+              </div>
+              <div className="hero__cloud-logo">
+                <SiGooglecloud />
+                <span>GCP</span>
+              </div>
+            </Link>
             <div className="hero__cta">
               <Link to="/install" className="button button--lg button--primary"><p>Install Atmos</p></Link>
               <Link to="/intro" className="hero__link">Learn More</Link>
             </div>
           </div>
         </header>
+        <AISection />
         <section className="hero-demo">
           <motion.div
             className="hero-demo-intro"
@@ -144,7 +165,7 @@ function Home() {
         </main>
         <footer>
             <h2>What are you waiting for? <strong className="atmos__text">It's FREE and Open Source</strong></h2>
-            <h3><strong className="underline">Your team can succeed</strong> with Terraform/OpenTofu and Packer today.</h3>
+            <h3><strong className="underline">Your team can succeed</strong> with Terraform/OpenTofu, Packer, Ansible, and more today.</h3>
             <section className="cta-section">
               <Link to="/install" className="button button--lg button--primary"><p>Install Atmos</p></Link>
             </section>

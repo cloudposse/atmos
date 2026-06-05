@@ -1,19 +1,40 @@
 package extract
 
 import (
+	"sync"
+
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/terminal"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
+
+// isTTYCached caches the TTY check to avoid repeated allocations when processing many instances.
+var isTTYCached = sync.OnceValue(func() bool {
+	term := terminal.New()
+	return term.IsTTY(terminal.Stdout)
+})
 
 // getStatusIndicator returns a colored dot indicator based on enabled/locked state.
 // - Gray (●) if enabled: false (disabled).
 // - Red (●) if locked: true.
 // - Green (●) if enabled: true and not locked.
+// When output is piped (non-TTY), returns the semantic status text instead.
 func getStatusIndicator(enabled, locked bool) string {
+	return getStatusIndicatorWithTTY(enabled, locked, isTTYCached())
+}
+
+// getStatusIndicatorWithTTY is the internal implementation that accepts the TTY state.
+// This allows testing both TTY and non-TTY code paths.
+func getStatusIndicatorWithTTY(enabled, locked, isTTY bool) string {
 	const statusDot = "●"
+
+	// If not a TTY, return semantic status text for machine-readable output.
+	if !isTTY {
+		return getStatusText(enabled, locked)
+	}
 
 	switch {
 	case locked:
@@ -28,6 +49,19 @@ func getStatusIndicator(enabled, locked bool) string {
 	}
 }
 
+// getStatusText returns a semantic status string for machine-readable output.
+// Returns "locked", "enabled", or "disabled" based on the component state.
+func getStatusText(enabled, locked bool) string {
+	switch {
+	case locked:
+		return "locked"
+	case enabled:
+		return "enabled"
+	default:
+		return "disabled"
+	}
+}
+
 // instanceMetadata holds extracted metadata fields from a schema.Instance.
 type instanceMetadata struct {
 	metadataType    string
@@ -38,6 +72,7 @@ type instanceMetadata struct {
 	description     string
 	componentFolder string
 	status          string
+	statusText      string
 }
 
 // Metadata transforms a slice of schema.Instance into []map[string]any for the renderer.
@@ -69,6 +104,7 @@ func extractInstanceMetadata(instance *schema.Instance) instanceMetadata {
 
 	metadata.componentFolder = determineComponentFolder(instance.Component, metadata.componentVal)
 	metadata.status = getStatusIndicator(metadata.enabled, metadata.locked)
+	metadata.statusText = getStatusText(metadata.enabled, metadata.locked)
 
 	return metadata
 }
@@ -163,20 +199,21 @@ func determineComponentFolder(component, componentVal string) string {
 // buildMetadataMap creates a flat map with all fields accessible to templates.
 func buildMetadataMap(instance *schema.Instance, metadata *instanceMetadata) map[string]any {
 	return map[string]any{
-		"status":           metadata.status, // Colored status dot (●)
+		"status":           metadata.status,     // Colored status dot (●) for table display.
+		"status_text":      metadata.statusText, // Semantic status ("enabled", "disabled", "locked") for JSON/YAML/CSV.
 		"stack":            instance.Stack,
 		"component":        instance.Component,
 		"component_type":   instance.ComponentType,
-		"component_folder": metadata.componentFolder, // The actual component folder name
+		"component_folder": metadata.componentFolder, // The actual component folder name.
 		"type":             metadata.metadataType,
 		"enabled":          metadata.enabled,
 		"locked":           metadata.locked,
 		"component_base":   metadata.componentVal,
 		"inherits":         metadata.inherits,
 		"description":      metadata.description,
-		"metadata":         instance.Metadata, // Full metadata for advanced filtering
-		"vars":             instance.Vars,     // Expose vars for template access
-		"settings":         instance.Settings, // Expose settings for template access
-		"env":              instance.Env,      // Expose env for template access
+		"metadata":         instance.Metadata, // Full metadata for advanced filtering.
+		"vars":             instance.Vars,     // Expose vars for template access.
+		"settings":         instance.Settings, // Expose settings for template access.
+		"env":              instance.Env,      // Expose env for template access.
 	}
 }

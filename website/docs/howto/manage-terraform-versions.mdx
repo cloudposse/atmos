@@ -1,0 +1,153 @@
+---
+title: Manage Multiple Terraform/OpenTofu Versions
+sidebar_label: Terraform Versions
+sidebar_position: 10
+description: How to manage multiple versions of Terraform and OpenTofu using Atmos toolchain
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Learn how to install and manage multiple versions of Terraform and OpenTofu using the Atmos toolchain manager.
+</Intro>
+
+## Overview
+
+Atmos includes a built-in toolchain manager that can install and manage multiple versions of Terraform, OpenTofu, and other infrastructure tools. This is useful when:
+
+- Different projects require different Terraform versions
+- You need to test compatibility with newer versions
+- Your team needs consistent tool versions across machines
+
+## Installing Tool Versions
+
+### Install a Specific Version
+
+```bash
+# Install a specific Terraform version
+atmos toolchain install terraform@1.9.0
+
+# Install a specific OpenTofu version
+atmos toolchain install opentofu@1.8.0
+```
+
+### Install the Latest Version
+
+```bash
+# Install the latest Terraform
+atmos toolchain install terraform@latest
+
+# Install the latest OpenTofu
+atmos toolchain install opentofu@latest
+```
+
+## Using .tool-versions
+
+The `.tool-versions` file (compatible with asdf) allows you to pin tool versions per project:
+
+```bash title=".tool-versions"
+terraform 1.9.0
+opentofu 1.8.0
+```
+
+When you run `atmos terraform plan`, Atmos will automatically use the version specified in `.tool-versions`.
+
+### Setting Versions
+
+```bash
+# Set Terraform version for current project
+atmos toolchain set terraform@1.9.0
+
+# This creates or updates .tool-versions
+```
+
+## Listing Installed Versions
+
+```bash
+# List all installed tools
+atmos toolchain list
+
+# Search for available Terraform versions
+atmos toolchain registry search terraform
+```
+
+## Component-Level Versions in Stacks
+
+Different Terraform components can use different versions. This is useful when:
+- Legacy components require older Terraform versions
+- New components need features from newer versions
+- Gradual upgrades without breaking existing infrastructure
+
+### Global Tool Dependencies
+
+Define default versions at the root level of your stack:
+
+```yaml title="stacks/orgs/acme/_defaults.yaml"
+# Global tool dependencies - applies to all components
+dependencies:
+  tools:
+    terraform: "1.9.8"
+    kubectl: "1.28.0"
+```
+
+### Component-Type Dependencies
+
+Override for all Terraform components:
+
+```yaml title="stacks/orgs/acme/plat/prod/_defaults.yaml"
+terraform:
+  dependencies:
+    tools:
+      terraform: "1.9.8"
+      tflint: "0.44.1"
+```
+
+### Per-Component Override
+
+Specify versions for individual components:
+
+```yaml title="stacks/orgs/acme/plat/prod/us-east-1.yaml"
+components:
+  terraform:
+    vpc:
+      dependencies:
+        tools:
+          terraform: "1.9.8"   # Use current version
+          aws-cli: "2.13.0"
+
+    legacy-app:
+      dependencies:
+        tools:
+          terraform: "1.5.0"   # Legacy component needs older version
+          aws-cli: "2.10.0"
+```
+
+### How It Works
+
+When you run a component, Atmos automatically:
+1. Resolves the tool version from the most specific level
+2. Installs the tool if not already cached
+3. Executes the command with that version
+
+```bash
+# Uses terraform 1.9.8 (from vpc component config)
+atmos terraform plan vpc -s prod/us-east-1
+
+# Uses terraform 1.5.0 (from legacy-app component config)
+atmos terraform plan legacy-app -s prod/us-east-1
+```
+
+For complete documentation on component dependencies, see [Configure Dependencies](/stacks/dependencies).
+
+## Best Practices
+
+1. **Pin exact versions in CI/CD**: Use exact versions (e.g., `1.9.0`) in pipelines for reproducibility
+2. **Use constraints in development**: Allow minor version flexibility (e.g., `>=1.9.0, <1.10.0`) for local development
+3. **Commit .tool-versions**: Include `.tool-versions` in version control so the team uses consistent versions
+4. **Test upgrades in isolation**: Install new versions and test before updating `.tool-versions`
+
+## See Also
+
+- [Configure Dependencies](/stacks/dependencies) - Component-level tool version configuration
+- [Toolchain Commands](/cli/commands/toolchain/usage)
+- [Toolchain Configuration](/cli/configuration/toolchain/)

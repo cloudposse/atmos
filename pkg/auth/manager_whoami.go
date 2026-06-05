@@ -13,9 +13,28 @@ func (m *manager) buildWhoamiInfo(identityName string, creds types.ICredentials)
 	providerName := m.getProviderForIdentity(identityName)
 
 	info := &types.WhoamiInfo{
+		Realm:       m.realm.Value,
+		RealmSource: m.realm.Source,
 		Provider:    providerName,
 		Identity:    identityName,
 		LastUpdated: time.Now(),
+	}
+
+	// Populate environment from the identity regardless of credentials.
+	// Callers (e.g. `atmos auth whoami`) rely on the environment surface
+	// even when Atmos is a pure passthrough (generic ambient kind).
+	if identity, exists := m.identities[identityName]; exists {
+		if env, err := identity.Environment(); err == nil {
+			info.Environment = env
+		}
+	}
+
+	// Generic ambient identities return nil credentials by design — they
+	// do not manage credentials; the cloud SDK resolves them at subprocess
+	// runtime. There is nothing to populate on WhoamiInfo from creds and
+	// nothing to cache in the keystore.
+	if creds == nil {
+		return info
 	}
 
 	// Populate high-level fields from the concrete credential type.
@@ -24,20 +43,27 @@ func (m *manager) buildWhoamiInfo(identityName string, creds types.ICredentials)
 	if expTime, err := creds.GetExpiration(); err == nil && expTime != nil {
 		info.Expiration = expTime
 	}
-	// Get environment variables.
-	if identity, exists := m.identities[identityName]; exists {
-		if env, err := identity.Environment(); err == nil {
-			info.Environment = env
-		}
-	}
 
 	// Store credentials in the keystore and set a reference handle.
 	// Use the identity name as the opaque handle for retrieval.
-	if err := m.credentialStore.Store(identityName, creds); err == nil {
+	// CRITICAL: Skip caching session tokens to avoid overwriting long-lived credentials.
+	// Session tokens have a SessionToken field set and are temporary (short-lived).
+	// Long-lived credentials (access key + secret key) are needed for future authentication.
+	// Caching session tokens would overwrite the long-lived credentials in keyring,
+	// causing "keyring contains session credentials" errors on subsequent runs.
+	if !isSessionToken(creds) {
+		if err := m.credentialStore.Store(identityName, creds, m.realm.Value); err == nil {
+			info.CredentialsRef = identityName
+			// Note: We keep info.Credentials populated for validation purposes.
+			// The Credentials field is marked with json:"-" yaml:"-" tags to prevent
+			// accidental serialization, so there's no security risk in keeping it.
+			// Clean up legacy (pre-realm) keyring entry to prevent realm mismatch warnings.
+			m.deleteLegacyKeyringEntry(identityName)
+		}
+	} else {
+		log.Debug("Skipping keyring cache for session tokens in WhoamiInfo", logKeyIdentity, identityName)
+		// Still set the reference for credential lookups - credentials can be loaded from identity storage.
 		info.CredentialsRef = identityName
-		// Note: We keep info.Credentials populated for validation purposes.
-		// The Credentials field is marked with json:"-" yaml:"-" tags to prevent
-		// accidental serialization, so there's no security risk in keeping it.
 	}
 
 	return info
@@ -51,6 +77,8 @@ func (m *manager) buildWhoamiInfoFromEnvironment(identityName string) *types.Who
 	providerName := m.getProviderForIdentity(identityName)
 
 	info := &types.WhoamiInfo{
+		Realm:       m.realm.Value,
+		RealmSource: m.realm.Source,
 		Provider:    providerName,
 		Identity:    identityName,
 		LastUpdated: time.Now(),

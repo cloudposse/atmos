@@ -254,6 +254,27 @@ func TestSubscriptionIdentity_Authenticate(t *testing.T) {
 			expectError: false,
 		},
 		{
+			name: "preserves OIDC fields for service principal",
+			identity: &subscriptionIdentity{
+				name:           "azure-oidc",
+				subscriptionID: "identity-sub-789",
+				location:       "centralus",
+			},
+			baseCreds: &types.AzureCredentials{
+				AccessToken:        "sp-access-token",
+				TokenType:          "Bearer",
+				Expiration:         now.Add(1 * time.Hour).Format(time.RFC3339),
+				TenantID:           "tenant-123",
+				SubscriptionID:     "provider-sub-456",
+				Location:           "eastus",
+				ClientID:           "oidc-client-id",
+				IsServicePrincipal: true,
+				TokenFilePath:      "/path/to/token",
+				FederatedToken:     "federated-jwt-token-xyz",
+			},
+			expectError: false,
+		},
+		{
 			name: "identity with no location uses provider location",
 			identity: &subscriptionIdentity{
 				name:           "azure-dev",
@@ -266,6 +287,24 @@ func TestSubscriptionIdentity_Authenticate(t *testing.T) {
 				SubscriptionID: "provider-sub-456",
 				Location:       "provider-location", // Should be preserved.
 				Expiration:     now.Add(1 * time.Hour).Format(time.RFC3339),
+			},
+			expectError: false,
+		},
+		{
+			name: "preserves cloud environment from provider",
+			identity: &subscriptionIdentity{
+				name:           "azure-gov",
+				subscriptionID: "gov-sub-123",
+				location:       "usgovvirginia",
+			},
+			baseCreds: &types.AzureCredentials{
+				AccessToken:      "gov-token",
+				TokenType:        "Bearer",
+				Expiration:       now.Add(1 * time.Hour).Format(time.RFC3339),
+				TenantID:         "gov-tenant-456",
+				SubscriptionID:   "provider-sub",
+				Location:         "eastus",
+				CloudEnvironment: "usgovernment",
 			},
 			expectError: false,
 		},
@@ -328,6 +367,15 @@ func TestSubscriptionIdentity_Authenticate(t *testing.T) {
 			assert.Equal(t, baseCreds.TenantID, azureCreds.TenantID)
 			assert.Equal(t, baseCreds.GraphAPIToken, azureCreds.GraphAPIToken)
 			assert.Equal(t, baseCreds.KeyVaultToken, azureCreds.KeyVaultToken)
+
+			// Verify OIDC fields are preserved.
+			assert.Equal(t, baseCreds.ClientID, azureCreds.ClientID)
+			assert.Equal(t, baseCreds.IsServicePrincipal, azureCreds.IsServicePrincipal)
+			assert.Equal(t, baseCreds.TokenFilePath, azureCreds.TokenFilePath)
+			assert.Equal(t, baseCreds.FederatedToken, azureCreds.FederatedToken)
+
+			// Verify cloud environment is preserved.
+			assert.Equal(t, baseCreds.CloudEnvironment, azureCreds.CloudEnvironment)
 		})
 	}
 }
@@ -551,6 +599,84 @@ func TestSubscriptionIdentity_Logout(t *testing.T) {
 	ctx := context.Background()
 	err := identity.Logout(ctx)
 	assert.NoError(t, err, "Logout should always succeed")
+}
+
+func TestSubscriptionIdentity_SetRealm(t *testing.T) {
+	config := &schema.Identity{
+		Kind: "azure/subscription",
+		Principal: map[string]interface{}{
+			"subscription_id": "sub-123",
+		},
+		Via: &schema.IdentityVia{
+			Provider: "azure-provider",
+		},
+	}
+
+	identity, err := NewSubscriptionIdentity("test", config)
+	require.NoError(t, err)
+
+	// Initially realm should be empty.
+	assert.Empty(t, identity.realm)
+
+	// Set a realm.
+	identity.SetRealm("test-realm-123")
+	assert.Equal(t, "test-realm-123", identity.realm)
+
+	// Update realm.
+	identity.SetRealm("new-realm-456")
+	assert.Equal(t, "new-realm-456", identity.realm)
+
+	// Set empty realm.
+	identity.SetRealm("")
+	assert.Empty(t, identity.realm)
+}
+
+func TestSubscriptionIdentity_Paths(t *testing.T) {
+	config := &schema.Identity{
+		Kind: "azure/subscription",
+		Principal: map[string]interface{}{
+			"subscription_id": "sub-123",
+		},
+		Via: &schema.IdentityVia{
+			Provider: "azure-provider",
+		},
+	}
+
+	identity, err := NewSubscriptionIdentity("test", config)
+	require.NoError(t, err)
+
+	// Paths should return a list with credentials file path.
+	paths, err := identity.Paths()
+	assert.NoError(t, err)
+	assert.Len(t, paths, 1)
+	assert.Equal(t, types.PathTypeFile, paths[0].Type)
+	assert.True(t, paths[0].Required)
+	assert.Contains(t, paths[0].Location, "azure-provider")
+	assert.Contains(t, paths[0].Location, "credentials.json")
+}
+
+func TestSubscriptionIdentity_Paths_WithRealm(t *testing.T) {
+	config := &schema.Identity{
+		Kind: "azure/subscription",
+		Principal: map[string]interface{}{
+			"subscription_id": "sub-123",
+		},
+		Via: &schema.IdentityVia{
+			Provider: "azure-provider",
+		},
+	}
+
+	identity, err := NewSubscriptionIdentity("test", config)
+	require.NoError(t, err)
+
+	// Set a realm.
+	identity.SetRealm("test-realm")
+
+	// Paths should include realm in the path.
+	paths, err := identity.Paths()
+	assert.NoError(t, err)
+	assert.Len(t, paths, 1)
+	assert.Contains(t, paths[0].Location, "test-realm")
 }
 
 func TestSubscriptionIdentity_PrincipalFieldTypes(t *testing.T) {

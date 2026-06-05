@@ -1,0 +1,39 @@
+---
+title: "!git.name"
+sidebar_position: 10
+sidebar_label: "!git.name"
+sidebar_class_name: command
+description: Get the bare repository name of the current Git repository
+---
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+    The `!git.name` Atmos YAML function returns the bare name of the current Git repository —
+    for example, `atmos`. The value is derived from the `origin` remote URL and works for GitHub,
+    GitLab, Bitbucket, and Azure DevOps.
+</Intro>
+
+## Usage
+
+```yaml
+  # Get the bare repository name.
+  # If the repository cannot be resolved, it returns a default value if specified; otherwise, it returns an error.
+  !git.name <default-value>
+```
+
+## Examples
+
+```yaml
+vars:
+  git_name: !git.name
+
+  # With a fallback value when there is no remote.
+  git_name_safe: !git.name my-repo
+```
+
+## Related Functions
+
+- [`!git.repository`](/functions/yaml/git.repository) — the full `<owner>/<name>` slug
+- [`!git.owner`](/functions/yaml/git.owner) — the repository owner / organization
+- [`!git.host`](/functions/yaml/git.host) — the repository host (e.g. `github.com`)
+- [`!git.url`](/functions/yaml/git.url) — the remote URL

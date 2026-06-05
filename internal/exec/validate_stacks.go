@@ -19,7 +19,7 @@ import (
 	m "github.com/cloudposse/atmos/pkg/merge"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
-	"github.com/cloudposse/atmos/pkg/ui"
+	"github.com/cloudposse/atmos/pkg/ui/spinner"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -29,29 +29,27 @@ const atmosManifestDefaultFileName = "schemas/atmos/atmos-manifest/1.0/atmos-man
 func ExecuteValidateStacksCmd(cmd *cobra.Command, args []string) error {
 	defer perf.Track(nil, "exec.ExecuteValidateStacksCmd")()
 
-	// Initialize spinner
-	message := "Validating Atmos Stacks..."
-	p := NewSpinner(message)
-	spinnerDone := make(chan struct{})
-	// Run spinner in a goroutine
-	RunSpinner(p, spinnerDone, message)
-	// Ensure the spinner is stopped before returning
-	defer StopSpinner(p, spinnerDone)
+	// Initialize spinner.
+	s := spinner.New("Validating Atmos Stacks...")
+	s.Start()
 
-	// Process CLI arguments
+	// Process CLI arguments.
 	info, err := ProcessCommandLineArgs("", cmd, args, nil)
 	if err != nil {
+		s.Stop()
 		return err
 	}
 
 	atmosConfig, err := cfg.InitCliConfig(info, true)
 	if err != nil {
+		s.Stop()
 		return err
 	}
 
 	flags := cmd.Flags()
 	schemasAtmosManifestFlag, err := flags.GetString("schemas-atmos-manifest")
 	if err != nil {
+		s.Stop()
 		return err
 	}
 
@@ -63,12 +61,10 @@ func ExecuteValidateStacksCmd(cmd *cobra.Command, args []string) error {
 
 	err = ValidateStacks(&atmosConfig)
 	if err != nil {
-		_ = ui.ClearLine()
-		_ = ui.Error("Stack validation failed")
+		s.Error("Stack validation failed")
 		return err
 	}
-	_ = ui.ClearLine()
-	_ = ui.Success("All stacks validated successfully")
+	s.Success("All stacks validated successfully")
 	log.Debug("Stack validation completed")
 	return nil
 }
@@ -146,13 +142,16 @@ func ValidateStacks(atmosConfig *schema.AtmosConfiguration) error {
 
 	// Include (process and validate) all YAML files in the `stacks` folder in all subfolders
 	includedPaths := []string{"**/*"}
-	// Don't exclude any YAML files for validation except template files
+	// Don't exclude any YAML files for validation except template files and user-configured exclusions
 	excludedPaths := []string{
 		// Exclude template files from validation since they may contain invalid YAML before being rendered
 		"**/*.tmpl",
 		"**/*.yaml.tmpl",
 		"**/*.yml.tmpl",
 	}
+	// Also exclude paths specified in the atmos.yaml stacks.excluded_paths config
+	// This prevents non-Atmos YAML files (e.g., Helm Chart.yaml) from being validated as stack manifests
+	excludedPaths = append(excludedPaths, atmosConfig.Stacks.ExcludedPaths...)
 
 	includeStackAbsPaths, err := u.JoinPaths(atmosConfig.StacksBaseAbsolutePath, includedPaths)
 	if err != nil {
@@ -182,7 +181,7 @@ func ValidateStacks(atmosConfig *schema.AtmosConfiguration) error {
 			nil,
 			true, // ignoreMissingFiles for first pass
 			false,
-			false,
+			atmosConfig.Templates.Settings.IgnoreMissingTemplateValues,
 			false,
 			map[string]any{},
 			map[string]any{},
@@ -226,7 +225,7 @@ func ValidateStacks(atmosConfig *schema.AtmosConfiguration) error {
 			nil,
 			false,
 			false,
-			false,
+			atmosConfig.Templates.Settings.IgnoreMissingTemplateValues,
 			false,
 			map[string]any{},
 			map[string]any{},
@@ -247,6 +246,7 @@ func ValidateStacks(atmosConfig *schema.AtmosConfiguration) error {
 				atmosConfig.TerraformDirAbsolutePath,
 				atmosConfig.HelmfileDirAbsolutePath,
 				atmosConfig.PackerDirAbsolutePath,
+				atmosConfig.AnsibleDirAbsolutePath,
 				filePath,
 				stackConfig,
 				false,
@@ -443,18 +443,19 @@ func checkComponentStackMap(componentStackMap map[string]map[string][]string) ([
 						m1 = m1 + "\n" + fmt.Sprintf("- atmos describe component %s -s %s", componentName, stackManifestName)
 					}
 
-					m := fmt.Sprintf("The Atmos component '%[1]s' in the stack '%[2]s' is defined in more than one top-level stack manifest file: %[3]s.\n\n"+
-						"The component configurations in the stack manifests are different.\n\n"+
-						"To check and compare the component configurations in the stack manifests, run the following commands: %[4]s\n\n"+
-						"You can use the '--file' flag to write the results of the above commands to files (refer to https://atmos.tools/cli/commands/describe/component).\n"+
-						"You can then use the Linux 'diff' command to compare the files line by line and show the differences (refer to https://man7.org/linux/man-pages/man1/diff.1.html)\n\n"+
-						"When searching for the component '%[1]s' in the stack '%[2]s', Atmos can't decide which stack "+
-						"manifest file to use to get configuration for the component.\n"+
-						"This is a stack misconfiguration.\n\n"+
-						"Consider the following solutions to fix the issue:\n"+
-						"- Ensure that the same instance of the Atmos '%[1]s' component in the stack '%[2]s' is only defined once (in one YAML stack manifest file)\n"+
-						"- When defining multiple instances of the same component in the stack, ensure each has a unique name\n"+
-						"- Use multiple-inheritance to combine multiple configurations together (refer to https://atmos.tools/core-concepts/stacks/inheritance)\n\n",
+					m := fmt.Sprintf(
+						"The Atmos component '%[1]s' in the stack '%[2]s' is defined in more than one top-level stack manifest file: %[3]s.\n\n"+
+							"The component configurations in the stack manifests are different.\n\n"+
+							"To check and compare the component configurations in the stack manifests, run the following commands: %[4]s\n\n"+
+							"You can use the '--file' flag to write the results of the above commands to files (refer to https://atmos.tools/cli/commands/describe/component).\n"+
+							"You can then use the Linux 'diff' command to compare the files line by line and show the differences (refer to https://man7.org/linux/man-pages/man1/diff.1.html)\n\n"+
+							"When searching for the component '%[1]s' in the stack '%[2]s', Atmos can't decide which stack "+
+							"manifest file to use to get configuration for the component.\n"+
+							"This is a stack misconfiguration.\n\n"+
+							"Consider the following solutions to fix the issue:\n"+
+							"- Ensure that the same instance of the Atmos '%[1]s' component in the stack '%[2]s' is only defined once (in one YAML stack manifest file)\n"+
+							"- When defining multiple instances of the same component in the stack, ensure each has a unique name\n"+
+							"- Use multiple-inheritance to combine multiple configurations together (refer to https://atmos.tools/core-concepts/stacks/inheritance)\n\n",
 						componentName,
 						stackName,
 						strings.Join(stackManifests, ", "),

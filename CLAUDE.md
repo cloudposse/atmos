@@ -19,6 +19,18 @@ This repository uses git worktrees for parallel development. When working in a w
 
 **For Task agents:** When searching for files, always use the current working directory (`.`) or relative paths. Never construct absolute paths that might escape the worktree.
 
+## Concurrent Sessions (MANDATORY)
+
+Multiple Claude sessions may be working on the same branch or worktree simultaneously. To avoid destroying other sessions' work:
+
+- **NEVER delete, reset, or discard files you didn't create** - Other sessions may have created them
+- **NEVER run `git reset`, `git checkout --`, or `git clean`** without explicit user approval
+- **ALWAYS ask the user before removing untracked files** - They may be work-in-progress from another session
+- **When you see unfamiliar files**, assume another session created them - ask the user what to do
+- **If pre-commit hooks fail due to files you didn't touch**, ask the user how to proceed rather than trying to fix or remove them
+
+**Why this matters:** The user may have multiple Claude sessions working in parallel on different aspects of a feature. Deleting “unknown” files destroys that work.
+
 ## Essential Commands
 
 ```bash
@@ -38,6 +50,28 @@ make lint                    # golangci-lint on changed files
 **Stack Pipeline**: Load atmos.yaml → process imports/inheritance → apply overrides → render templates → generate config.
 
 **Templates and YAML functions**: Go templates + Gomplate with `atmos.Component()`, `!terraform.state`, `!terraform.output`, store integration.
+
+## Working with Atmos Agents (RECOMMENDED)
+
+Atmos has **specialized domain experts** in `.claude/agents/` for focused subsystems. **Use agents instead of inline work** for their areas of expertise.
+
+**Available Agents:**
+- **`@agent-developer`** - Creating/maintaining agents, agent architecture
+- **`@tui-expert`** - Terminal UI, theme system, output formatting
+- **`@atmos-errors`** - Error handling patterns, error builder usage
+- **`@flag-handler`** - CLI commands, flag parsing, CommandProvider pattern
+- **`@example-creator`** - Creating examples, mock components, test cases, EmbedFile docs
+
+**When to delegate:**
+- TUI/theme changes → `@tui-expert`
+- New CLI commands → `@flag-handler`
+- Error handling refactoring → `@atmos-errors`
+- Creating new agents → `@agent-developer`
+- Creating examples/demos → `@example-creator`
+
+**Benefits:** Agents are domain experts with deep knowledge of patterns, PRDs, and subsystem architecture. They ensure consistency and best practices.
+
+See `.claude/agents/README.md` for full list and `docs/prd/claude-agent-architecture.md` for architecture.
 
 ## Architectural Patterns (MANDATORY)
 
@@ -127,6 +161,13 @@ Maintain aliases: `cfg`, `log`, `u`, `errUtils`
 ### Performance Tracking (MANDATORY)
 Add `defer perf.Track(atmosConfig, "pkg.FuncName")()` + blank line to all public functions. Use `nil` if no atmosConfig param.
 
+**Exceptions (do NOT add perf.Track):**
+- Trivial getters/setters (e.g., `GetName()`, `SetValue()`)
+- Command constructor functions (e.g., `DescribeCommand()`, `ListCommand()`)
+- Simple factory functions that just return structs
+- Functions that only delegate to another tracked function
+- Pure validation/lookup functions with no I/O (e.g., `ValidateCloudEnvironment()`, `ResolveDestination()`)
+
 ### Configuration Loading
 Precedence: CLI flags → ENV vars → config files → defaults (use Viper)
 
@@ -166,6 +207,18 @@ ALWAYS use `cmd.NewTestKit(t)` for cmd tests. Auto-cleans RootCmd state (flags, 
 - No coverage theater
 - Remove always-skipped tests
 - Use `errors.Is()` for error checking
+- **For aliasing/isolation tests, verify BOTH directions:** after a merge, mutate the result and confirm the original inputs are unchanged (result→src isolation); also mutate a source map before the merge and confirm the result is unaffected (src→result isolation).
+- **For slice-result tests, assert element contents, not just length:** `require.Len` alone allows regressions that drop or corrupt contents. Assert at least the first and last element by value.
+- **Never use platform-specific binaries in tests** (e.g., `false`, `true`, `sh` on Unix): these don't exist on Windows. Use Go-native test helpers: subprocess via `os.Executable()` + `TestMain`, temp files with cross-platform scripts, or DI to inject a fake command runner.
+- **Safety guards must fail loudly:** any check that counts fixture files or validates test preconditions must use `require.Positive` (or equivalent) — never `if count > 0 { ... }` which silently disables the check when misconfigured.
+- **Use absolute paths for fixture counting:** any `filepath.WalkDir` or file-count assertion must use an already-resolved absolute path (not a relative one) to be CWD-independent.
+- **Add compile-time sentinels for schema field references in tests:** when a test uses a specific struct field (e.g., `schema.Provider{Kind: "azure"}`), add `var _ = schema.Provider{Kind: "azure"}` as a compile guard so a field rename immediately fails the build.
+- **Add prerequisite sub-tests for subprocess behavior:** when a test depends on implicit env propagation (e.g., `ComponentEnvList` reaching a subprocess), add an explicit sub-test that confirms the behavior before the main test runs.
+- **Contract vs. legacy behavior:** if a test says "matches mergo" (or any other library), add an opt-in cross-validation test behind a build tag (e.g., `//go:build compare_mergo`); otherwise state "defined contract" explicitly so it's clear the native implementation owns the behavior. Run cross-validation tests with: `go test -tags compare_mergo ./pkg/merge/... -run CompareMergo -v` (requires mergo v1.0.x installed).
+- **Include negative-path tests for recovery logic:** whenever a test verifies that a recovery/fallback triggers under condition X, add a corresponding test that verifies the recovery does NOT trigger when condition X is absent (e.g., mismatched workspace name).
+
+### Follow-up Tracking (MANDATORY)
+When a PR defers work to a follow-up (e.g., migration, cleanup, refactor), **open a GitHub issue and link it by number** in the blog post, roadmap, and/or PR description before merging. Blog posts with "a follow-up issue will..." with no `#number` are incomplete — the work will never be tracked.
 
 ### Mock Generation (MANDATORY)
 Use `go.uber.org/mock/mockgen` with `//go:generate` directives. Never manual mocks.
@@ -248,6 +301,9 @@ ALWAYS build after doc changes: `cd website && npm run build`. Verify: no broken
 All Product Requirement Documents (PRDs) MUST be placed in `docs/prd/`. Use kebab-case filenames.
 
 ### Pull Requests (MANDATORY)
+
+**Use the `pull-request` skill** (`/pull-request`) before opening or updating any PR. It encodes the label decision tree (`no-release` / `patch` / `minor` / `major`), when a blog post is required, when a roadmap update is required, and how to do each without violating the `featured[]`-is-curated rule. Skipping this skill is how unlabeled PRs and missing changelog entries land in CI.
+
 Follow template (what/why/references).
 
 **Blog Posts (CI Enforced):**
@@ -273,6 +329,14 @@ Brief intro.
 - User-facing: `feature`, `enhancement`, `bugfix`, `dx`, `breaking-change`, `security`, `documentation`, `deprecation`
 - Internal: `core` (for contributor-only changes with zero user impact)
 
+**Roadmap Updates (CI Enforced):**
+- PRs labeled `minor`/`major` MUST also update `website/src/data/roadmap.js`
+- For new features: Add milestone to relevant initiative with `status: 'shipped'`
+- Link to changelog: Add `changelog: 'your-blog-slug'` to the milestone
+- Link to PR: Add `pr: <pr-number>` to the milestone
+- Update initiative `progress` percentage: `(shipped milestones / total milestones) * 100`
+- See `.claude/agents/roadmap.md` for detailed update instructions
+
 Use `no-release` label for docs-only changes.
 
 ### PR Tools
@@ -284,7 +348,7 @@ Reply to threads: Use `gh api graphql` with `addPullRequestReviewThreadReply`
 - Use definition lists `<dl>` instead of tables for arguments and flags
 - Follow Docusaurus conventions from existing files
 - File location: `website/docs/cli/commands/<command>/<subcommand>.mdx`
-- Link to core concepts using `/core-concepts/` paths
+- Link to documentation using current URL paths (e.g., `/stacks`, `/components`, `/cli/configuration`)
 - Include purpose note and help screengrab
 - Use consistent section ordering: Usage → Examples → Arguments → Flags
 
@@ -302,8 +366,24 @@ ALWAYS build the website after documentation changes: `cd website && npm run bui
 ### Git (MANDATORY)
 Don't commit: todos, research, scratch files. Do commit: code, tests, requested docs, schemas. Update `.gitignore` for patterns only.
 
+**NEVER run destructive git commands without explicit user confirmation:**
+- `git reset HEAD` or `git reset --hard` - discards staged/committed changes
+- `git checkout HEAD -- .` or `git checkout -- .` - discards all working changes
+- `git clean -fd` - deletes untracked files
+- `git stash drop` - permanently deletes stashed changes
+
+Always ask first: "This will discard uncommitted changes. Proceed? [y/N]"
+
 ### Test Coverage (MANDATORY)
 80% minimum (CodeCov enforced). All features need tests. `make testacc-coverage` for reports.
+
+### Cyclomatic Complexity (MANDATORY)
+golangci-lint enforces `cyclop: max-complexity: 15` and `funlen: lines: 60, statements: 40`.
+When refactoring high-complexity functions:
+1. Extract blocks with clear single responsibilities into named helper functions.
+2. Use the pattern: `buildXSubcommandArgs`, `resolveX`, `checkX`, `assembleX`, `handleX`.
+3. Keep the orchestrator function as a flat linear pipeline of named steps (see `ExecuteTerraform`).
+4. Previously high-complexity functions: `ExecuteTerraform` (160→26, see `internal/exec/terraform.go`), `ExecuteDescribeStacks` (247→10), `processArgsAndFlags`.
 
 ### Environment Variables (MANDATORY)
 Use `viper.BindEnv("ATMOS_VAR", "ATMOS_VAR", "FALLBACK")` - ATMOS_ prefix required.
@@ -324,7 +404,38 @@ New configs support Go templating with `FuncMap()` from `internal/exec/template_
 Search `internal/exec/` and `pkg/` before implementing. Extend, don't duplicate.
 
 ### Cross-Platform (MANDATORY)
-Linux/macOS/Windows compatible. Use SDKs over binaries. Use `filepath.Join()`, not hardcoded separators.
+Linux/macOS/Windows compatible. Use SDKs over binaries. Use `filepath.Join()` instead of hardcoded path separators.
+
+**Subprocess helpers in tests (cross-platform):**
+Instead of `exec.LookPath("false")` or other Unix-only binaries, use the test binary itself.
+**Important:** If your package already has a `TestMain`, add the env-gate check **inside the existing `TestMain`** — do not add a second `TestMain` function (Go does not allow two in the same package).
+
+```go
+// In testmain_test.go — merge this check into the existing TestMain:
+func TestMain(m *testing.M) {
+    // If _ATMOS_TEST_EXIT_ONE is set, exit immediately with code 1.
+    // This lets tests use the test binary itself as a cross-platform "exit 1" command.
+    if os.Getenv("_ATMOS_TEST_EXIT_ONE") == "1" { os.Exit(1) }
+    os.Exit(m.Run())
+}
+// NOTE: If your package already defines TestMain, insert the _ATMOS_TEST_EXIT_ONE
+// check at the top of the existing function rather than copying the whole snippet.
+
+// In the test itself:
+exePath, _ := os.Executable()
+info.Command = exePath
+info.ComponentEnvList = []string{"_ATMOS_TEST_EXIT_ONE=1"}
+```
+
+**Path handling in tests:**
+- **NEVER use forward slash concatenation** like `tempDir + "/components/terraform/vpc"`
+- **ALWAYS use `filepath.Join()`** with separate arguments: `filepath.Join(tempDir, "components", "terraform", "vpc")`
+- **NEVER use forward slashes in `filepath.Join()`** like `filepath.Join(dir, "a/b/c")` - use `filepath.Join(dir, "a", "b", "c")`
+- **NEVER hardcode Unix paths in expected values** like `assert.Equal(t, "/project/components/vpc", path)` - build expected paths with `filepath.Join()`
+- **For path suffix checks**, use `filepath.ToSlash()` to normalize: `strings.HasSuffix(filepath.ToSlash(path), "expected/suffix")`
+- **NEVER use bash/shell commands in tests** - use Go stdlib (`os`, `filepath`, `io`) for file operations
+
+**Why:** Windows uses backslash (`\`) as path separator, Unix uses forward slash (`/`). Hardcoded paths fail on Windows CI.
 
 ### Multi-Provider Registry (MANDATORY)
 Follow registry pattern: define interface, implement per provider, register implementations, generate mocks. Example: `pkg/store/`
@@ -334,7 +445,9 @@ Auto-enabled via `RootCmd.ExecuteC()`. Non-standard paths use `telemetry.Capture
 
 ## Development Environment
 
-**Prerequisites**: Go 1.24+, golangci-lint, Make. See `.cursor/rules/atmos-rules.mdc`.
+**Prerequisites**: Go 1.26+, golangci-lint, Make. See `.cursor/rules/atmos-rules.mdc`.
+
+> **Minimum Go version**: `go.mod` requires Go 1.26. Test helpers use `sync.Map.Clear` (added in Go 1.23) and range-over-int (Go 1.22). CI pins the Go version via `go-version-file: go.mod`. Local development with an older toolchain will fail to compile test-only files.
 
 **Build**: CGO disabled, cross-platform, version via ldflags, output to `./build/`
 

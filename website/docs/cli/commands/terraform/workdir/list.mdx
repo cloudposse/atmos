@@ -1,0 +1,95 @@
+---
+title: atmos terraform workdir list
+sidebar_label: workdir list
+sidebar_class_name: command
+id: list
+description: List all workdirs in the project with their status and metadata.
+---
+import Intro from '@site/src/components/Intro'
+import Screengrab from '@site/src/components/Screengrab'
+
+<Intro>
+Use this command to list all existing workdirs in your project. The output includes metadata about each workdir such as the component name, stack, source type, and timestamps.
+</Intro>
+
+<Screengrab title="atmos terraform workdir list --help" slug="atmos-terraform-workdir-list--help" />
+
+## Usage
+
+```shell
+atmos terraform workdir list [flags]
+```
+
+## Flags
+
+<dl>
+    <dt>`--format`</dt>
+    <dd>Output format: `table`, `json`, or `yaml`. Defaults to `table`.</dd>
+</dl>
+
+## Examples
+
+### List All Workdirs
+
+```shell
+# List all workdirs in table format (default)
+atmos terraform workdir list
+```
+
+Example output:
+
+```
+WORKDIR              COMPONENT    STACK    SOURCE    CREATED              UPDATED
+dev-vpc              vpc          dev      local     2024-01-15 10:30:00  2024-01-15 10:30:00
+staging-vpc          vpc          staging  local     2024-01-15 11:00:00  2024-01-15 11:00:00
+prod-vpc             vpc          prod     local     2024-01-15 12:00:00  2024-01-15 12:00:00
+dev-s3-bucket        s3-bucket    dev      local     2024-01-15 10:35:00  2024-01-15 10:35:00
+```
+
+### Output as JSON
+
+```shell
+# List workdirs in JSON format for scripting
+atmos terraform workdir list --format json
+```
+
+Example output:
+
+```json
+[
+  {
+    "name": "dev-vpc",
+    "component": "vpc",
+    "stack": "dev",
+    "source_type": "local",
+    "source": "components/terraform/vpc",
+    "created_at": "2024-01-15T10:30:00Z",
+    "updated_at": "2024-01-15T10:30:00Z",
+    "content_hash": "abc123"
+  }
+]
+```
+
+### Output as YAML
+
+```shell
+# List workdirs in YAML format
+atmos terraform workdir list --format yaml
+```
+
+## Understanding the Output
+
+Each workdir entry includes:
+
+- **WORKDIR** - The workdir directory name (format: `<stack>-<component>`)
+- **COMPONENT** - The Terraform component name
+- **STACK** - The stack name where this workdir is used
+- **SOURCE** - The source type (`local` for local components)
+- **CREATED** - When the workdir was first created
+- **UPDATED** - When the workdir was last updated
+
+## Related Commands
+
+- [`atmos terraform workdir show`](/cli/commands/terraform/workdir/show) - Show details for a specific workdir
+- [`atmos terraform workdir describe`](/cli/commands/terraform/workdir/describe) - Output workdir as stack manifest
+- [`atmos terraform workdir clean`](/cli/commands/terraform/workdir/clean) - Remove workdirs

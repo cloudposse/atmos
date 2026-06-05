@@ -1,0 +1,10 @@
+# Production stack for terraform flags testing
+vars:
+  stage: prod
+
+components:
+  terraform:
+    testcomponent:
+      vars:
+        environment: "production"
+        enabled: true

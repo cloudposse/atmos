@@ -1,0 +1,48 @@
+/* Animated Atmos Logo - exact copy of navbar animation from custom.css
+   This uses the same technique as div.navbar__logo in dark mode */
+.atmos-logo-animated {
+  position: relative;
+  display: inline-block;
+  overflow: hidden;
+  background: var(--ifm-background-color);
+  border-radius: 14px;
+}
+
+.atmos-logo-animated::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  right: 0;
+  /* Exact gradient from custom.css */
+  background: -webkit-linear-gradient(-45deg, rgba(235, 26, 26, 0.5), rgba(88, 60, 231, 0.5), rgba(46, 200, 255, 0.5), rgba(35, 213, 171, 0.5));
+  background: linear-gradient(-45deg, rgba(235, 26, 26, 0.5), rgba(88, 60, 231, 0.5), rgba(46, 200, 255, 0.5), rgba(35, 213, 171, 0.5));
+  background-size: 300% 300%;
+  mix-blend-mode: color;
+  animation: gradient 15s ease infinite;
+  pointer-events: none;
+}
+
+/* Use existing gradient keyframes from custom.css */
+@keyframes gradient {
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
+}
+
+.atmos-logo-animated img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+  /* Add padding so alien isn't flush against edges */
+  padding: 1rem;
+  box-sizing: border-box;
+}

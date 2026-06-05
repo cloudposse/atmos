@@ -48,25 +48,33 @@ type FormatterConfig struct {
 }
 
 // DefaultFormatterConfig returns default formatting configuration.
+// Checks viper for the --verbose flag to enable verbose mode.
 func DefaultFormatterConfig() FormatterConfig {
+	verbose := viper.GetBool("verbose")
 	return FormatterConfig{
-		Verbose:       false,
+		Verbose:       verbose,
 		MaxLineLength: DefaultMaxLineLength,
 	}
 }
 
 // formatContextTable creates a styled 2-column table for error context.
 // Context is extracted from cockroachdb/errors safe details and displayed
-// as key-value pairs in verbose mode.
+// as key-value pairs only in verbose mode. Uses GetAllSafeDetails to traverse
+// the entire error chain and collect context from wrapped errors.
 func formatContextTable(err error, useColor bool) string {
-	details := errors.GetSafeDetails(err)
-	if len(details.SafeDetails) == 0 {
+	// Get all safe details from entire error chain, not just top-level.
+	allDetails := errors.GetAllSafeDetails(err)
+	var allSafeDetails []string
+	for _, payload := range allDetails {
+		allSafeDetails = append(allSafeDetails, payload.SafeDetails...)
+	}
+	if len(allSafeDetails) == 0 {
 		return ""
 	}
 
 	// Parse "component=vpc stack=prod" format into key-value pairs.
 	var rows [][]string
-	for _, detail := range details.SafeDetails {
+	for _, detail := range allSafeDetails {
 		str := fmt.Sprintf("%v", detail)
 		pairs := strings.Split(str, " ")
 		for _, pair := range pairs {
@@ -178,8 +186,10 @@ func buildMarkdownSections(err error, config FormatterConfig, useColor bool) str
 	// Section 4.5: Command Output (for ExecError with stderr).
 	addCommandOutputSection(&md, err)
 
-	// Section 5: Context.
-	addContextSection(&md, err, useColor)
+	// Section 5: Context (verbose mode only).
+	if config.Verbose {
+		addContextSection(&md, err, useColor)
+	}
 
 	// Section 6: Stack trace (verbose mode only).
 	if config.Verbose {
@@ -345,7 +355,7 @@ func addCommandOutputSection(md *strings.Builder, err error) {
 	}
 }
 
-// addContextSection adds the context section if context exists.
+// addContextSection adds the context section if context exists (shown only in verbose mode).
 func addContextSection(md *strings.Builder, err error, useColor bool) {
 	// Context is rendered as a markdown table, so we use formatContextForMarkdown.
 	// The useColor parameter is available for future use if we need color-aware context rendering.
@@ -410,15 +420,21 @@ func renderMarkdown(md string, maxLineLength int) string {
 }
 
 // formatContextForMarkdown formats context as a markdown table.
+// Uses GetAllSafeDetails to traverse the entire error chain.
 func formatContextForMarkdown(err error) string {
-	details := errors.GetSafeDetails(err)
-	if len(details.SafeDetails) == 0 {
+	// Get all safe details from entire error chain, not just top-level.
+	allDetails := errors.GetAllSafeDetails(err)
+	var allSafeDetails []string
+	for _, payload := range allDetails {
+		allSafeDetails = append(allSafeDetails, payload.SafeDetails...)
+	}
+	if len(allSafeDetails) == 0 {
 		return ""
 	}
 
 	// Parse "component=vpc stack=prod" format into key-value pairs.
 	var rows []string
-	for _, detail := range details.SafeDetails {
+	for _, detail := range allSafeDetails {
 		str := fmt.Sprintf("%v", detail)
 		pairs := strings.Split(str, " ")
 		for _, pair := range pairs {

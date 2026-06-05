@@ -1,0 +1,101 @@
+---
+slug: faster-deep-merge
+title: "3.5× Faster Deep Merge for Stack Processing"
+authors:
+  - nitrocode
+tags:
+  - enhancement
+  - core
+date: 2026-03-15T00:00:00.000Z
+---
+
+Atmos stack processing is now up to **3.5× faster** for deep-merge operations — the hot path
+executed thousands of times per `atmos describe component`, `atmos terraform plan`, and every
+other command that reads stack configuration.
+
+<!--truncate-->
+
+## What Changed
+
+Every time Atmos resolves a component — merging globals, imports, overrides, base-component
+settings, environment variables, vars, and backend config — it performs a series of *deep merge*
+operations on `map[string]any` trees.  The previous implementation called `mergo.Merge` on a
+**pre-copied** duplicate of every input map, paying two costs per merge step:
+
+1. **Full deep-copy** of the source map (even keys that would never conflict with the destination).
+2. **Reflection-based traversal** inside mergo to walk the copied map and assign values.
+
+The new implementation replaces this pattern with a single-pass, reflection-free **native Go
+merge**:
+
+* The first input is deep-copied once to create the initial accumulator.
+* Each subsequent input is merged directly — values are copied into the accumulator *only* when
+  they are stored as leaves (new keys, scalar overrides, or slice results).  Shared intermediate
+  `map[string]any` containers are recursed into without any allocation.
+
+This reduces **N full pre-copies** (one per input) down to **1 pre-copy** plus **O(changed
+leaves)** incremental copies for a typical N-input merge.
+
+## Benchmark Results
+
+```
+# Micro-benchmark (5 inputs, 3 top-level keys)
+Before  BenchmarkMerge-4             682 k iter /  5062 ns/op   ← original mergo
+After   BenchmarkMerge-4            2514 k iter /  1427 ns/op   ← 3.5× faster
+
+# Production-scale (10 inputs, 25 top-level sections, nested maps + list-of-map-of-list)
+After   BenchmarkMerge_ProductionScale-4   27K iter / 44000 ns/op / 10952 B/op / 189 allocs/op
+```
+
+The 3.5× improvement is from the 5-input micro-benchmark.  The production-scale benchmark
+(10 inheritance layers, 25 top-level sections including nested maps, tags, providers, backend,
+lists, scalars, and deeply nested `node_groups` with per-group subnet lists — a
+list-of-map-of-list pattern common in EKS and network stacks) shows ~44 µs per full stack
+merge on a typical CI/CD server — well under any practical latency budget even for large
+configurations with many stacks.
+
+Run the production benchmark locally:
+```bash
+go test -run=^$ -bench=BenchmarkMerge_ProductionScale -benchmem ./pkg/merge/...
+```
+
+The improvement scales with the number of inputs and the depth of the configuration tree —
+exactly the shapes that matter most in production stacks with multiple layers of inheritance.
+
+## Semantic Compatibility
+
+The new implementation preserves the same merge semantics as the mergo-based code for the
+common cases, including all three list merge strategies (`replace`, `append`, `merge`) and the
+`WithSliceDeepCopy` / `WithAppendSlice` behaviours.
+
+Cross-validation tests (opt-in via `go test -tags compare_mergo ./pkg/merge/...`) verify
+the native implementation matches mergo for the core cases.  Where behavior intentionally
+differs, the tests document it as a **defined contract** (see below).
+
+### Edge case: `sliceDeepCopy` result length
+
+When `sliceDeepCopy` is active and the source list is **longer** than the destination list,
+the merged result keeps the overlapping merged positions and appends deep-copied source tail
+elements, so the result length grows to `max(len(dst), len(src))`.  This matches mergo's
+`WithSliceDeepCopy` behavior and is cross-validated against mergo in
+[`merge_compare_mergo_test.go`](https://github.com/cloudposse/atmos/blob/main/pkg/merge/merge_compare_mergo_test.go)
+(run with `go test -tags compare_mergo ./pkg/merge/...`).
+See [`docs/fixes/2026-03-19-deep-merge-native-fixes.md`](https://github.com/cloudposse/atmos/blob/main/docs/fixes/2026-03-19-deep-merge-native-fixes.md)
+for full edge-case documentation.
+
+### Partial mergo replacement
+
+This change replaces the hot-path deep merge in `pkg/merge/merge.go`.  The `mergo` library is
+still used in two lower-traffic call sites:
+
+- `pkg/merge/merge_yaml_functions.go` — YAML function merge helpers
+- `pkg/devcontainer/config_loader.go` — devcontainer config loading
+
+Migration of these remaining sites is tracked in [issue #2242](https://github.com/cloudposse/atmos/issues/2242); the dependency will be
+removed once those two call sites are ported.  Until then, a future CVE in mergo could
+still affect atmos.  Follow [#2242](https://github.com/cloudposse/atmos/issues/2242) for progress.
+
+## How to Use It
+
+No action required — the improvement is automatic from this release onward.  If you notice
+any difference in merge results, please open an issue.

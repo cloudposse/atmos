@@ -11,6 +11,7 @@ import Intro from '@site/src/components/Intro'
 import ActionCard from '@site/src/components/ActionCard'
 import PrimaryCTA from '@site/src/components/PrimaryCTA'
 import SecondaryCTA from '@site/src/components/SecondaryCTA'
+import DemoVideo from '@site/src/components/Video/DemoVideo'
 
 <PillBox>Advanced</PillBox>
 
@@ -19,6 +20,8 @@ import SecondaryCTA from '@site/src/components/SecondaryCTA'
     [Atmos Functions](/functions/yaml) are insufficient.
     Atmos supports [Go templates](https://pkg.go.dev/text/template) in stack manifests and functions to customize Stack configurations.
 </Intro>
+
+<DemoVideo id="config-template-functions" title="Template Functions" showCaption={false} />
 
 :::note Template File Validation
 Template files (`.yaml.tmpl`, `.yml.tmpl`, `.tmpl`) are automatically detected and processed during normal operations (imports, etc.).
@@ -41,7 +44,7 @@ Templating in Atmos stack manifests is configured in the `atmos.yaml` [CLI confi
   </dd>
 
   <dt>`templates.settings.enabled`</dt>
-  <dd>A boolean flag to enable/disable the processing of `Go` templates in Atmos stack manifests. If set to `false`, Atmos will not process `Go` templates in stack manifests.</dd>
+  <dd>A boolean flag to enable/disable the processing of `Go` templates in Atmos stack manifests. Defaults to `true`. If set to `false`, Atmos will not process `Go` templates in stack manifests.</dd>
 </dl>
 
 
@@ -59,10 +62,10 @@ Templating in Atmos stack manifests is configured in the `atmos.yaml` [CLI confi
   <dd>A list of left and right delimiters to use to process the templates. If not defined, the default `Go` template delimiters `["{{", "}}"]` will be used.</dd>
 
   <dt>`templates.settings.sprig.enabled`</dt>
-  <dd>A boolean flag to enable/disable the [Sprig Functions](https://masterminds.github.io/sprig/) in Atmos stack manifests.</dd>
+  <dd>A boolean flag to enable/disable the [Sprig Functions](https://masterminds.github.io/sprig/) in Atmos stack manifests. Defaults to `true`.</dd>
 
   <dt>`templates.settings.gomplate.enabled`</dt>
-  <dd>A boolean flag to enable/disable the [Gomplate Functions](https://docs.gomplate.ca/functions/) and [Gomplate Datasources](https://docs.gomplate.ca/datasources) in Atmos stack manifests.</dd>
+  <dd>A boolean flag to enable/disable the [Gomplate Functions](https://docs.gomplate.ca/functions/) and [Gomplate Datasources](https://docs.gomplate.ca/datasources) in Atmos stack manifests. Defaults to `true`.</dd>
 
   <dt>`templates.settings.gomplate.timeout`</dt>
   <dd>Timeout in seconds to execute [Gomplate Datasources](https://docs.gomplate.ca/datasources).</dd>
@@ -408,7 +411,7 @@ These templates are processed in different phases and use different context:
   are processed when the CLI command [`atmos vendor pull`](/cli/commands/vendor/pull) is executed. The templates in
   the vendoring manifests support the `{{.Version}}` variable, and the execution context is provided in the `version` attribute
 
-- [`Go` Templates in Imports](/stacks/imports#go-templates-in-imports) are used in imported stack
+- [`Go` Templates in Imports](/stacks/imports#templated-imports) are used in imported stack
   manifests to make them DRY and reusable. The context (variables) for the `Go` templates is provided via the static
   `context` section. Atmos processes `Go` templates in imports as the **very first** phase of the stack processing pipeline.
   When executing the [CLI commands](/cli/commands), Atmos parses and executes the templates using the provided static
@@ -424,7 +427,7 @@ in different phases of the stack processing pipeline.
 
 For more details, refer to:
 
-- [`Go` Templates in Imports](/stacks/imports#go-templates-in-imports)
+- [`Go` Templates in Imports](/stacks/imports#templated-imports)
 - [Excluding templates in imports from processing by Atmos](#excluding-templates-in-stack-manifest-from-processing-by-atmos)
 
 ### Processing Pipelines
@@ -580,7 +583,7 @@ chart_values:
 
 ## Excluding Templates in Imports
 
-If you are using [`Go` Templates in Imports](/stacks/imports#go-templates-in-imports) and `Go` templates
+If you are using [`Go` Templates in Imports](/stacks/imports#templated-imports) and `Go` templates
 in stack manifests in the same Atmos manifest, take into account that in this case Atmos will do `Go`
 template processing two times (two passes):
 

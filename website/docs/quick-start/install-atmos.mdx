@@ -136,6 +136,72 @@ Atmos has native packages for macOS and every major Linux distribution. We also 
 Atmos has a few other ways to install, including using Go, asdf, mise, aqua, building from source, or using the automatic installer.
 
 <Tabs>
+  <TabItem value="native" label="Native Version Manager" default>
+    #### Install with Atmos Version Manager
+
+    Atmos includes a built-in version manager that can install and manage multiple versions of Atmos. This is particularly useful for:
+
+    - Teams that need to pin specific versions per project
+    - Switching between different versions for different projects
+    - Auto-updating when a new version is available
+
+    Install a specific version:
+
+    <CodeBlock language="shell">atmos version install <LatestRelease /></CodeBlock>
+
+    List available versions on GitHub:
+
+    ```shell
+    atmos version list
+    ```
+
+    List locally installed versions:
+
+    ```shell
+    atmos version list --installed
+    ```
+
+    Uninstall a specific version:
+
+    <CodeBlock language="shell">atmos version uninstall <LatestRelease /></CodeBlock>
+
+    #### Pin Version Per Project
+
+    You can pin a specific version of Atmos for your project by adding the following to your `atmos.yaml`:
+
+    <File title="atmos.yaml">
+    <pre><code>version:
+      use: <LatestRelease /></code></pre>
+    </File>
+
+    When `version.use` is configured, Atmos will automatically use the specified version, installing it if needed.
+
+    #### Command-Line Flag
+
+    Use the `--use-version` global flag to run a specific version for a single command:
+
+    ```shell
+    # Run terraform plan with Atmos 1.160.0
+    atmos --use-version=1.160.0 terraform plan myapp -s dev
+    ```
+
+    #### Environment Variables
+
+    You can also specify the version using environment variables:
+
+    ```shell
+    # Set the Atmos version to use (matches version.use config path)
+    export ATMOS_VERSION_USE=1.160.0
+
+    # Or use the convenience alias
+    export ATMOS_VERSION=1.160.0
+    ```
+
+    **Precedence order:** `--use-version` flag / `ATMOS_VERSION_USE` > `ATMOS_VERSION` > `version.use` in config file
+
+    __NOTE:__ You need an initial installation of Atmos to bootstrap the version manager. Use any installation method above to get started.
+  </TabItem>
+
   <TabItem value="go" label="Go">
     #### Install with Go
 
@@ -325,9 +391,6 @@ We recommend the "Fira Code" NerdFont version, which is what all our screenshots
     Paste the following into a macOS Terminal window.
 
     ```shell
-    brew tap homebrew/cask-fonts     # You only need to do this once!
-    brew search nerd-font            # Search for font packages
-
     # Install the NerdFont version of Fira Code
     brew install --cask font-fira-code-nerd-font
     ```

@@ -25,6 +25,7 @@ If a workflow name is provided without --file, Atmos will auto-discover the work
 from all available workflow files. If multiple files contain a workflow with the same
 name, an interactive selector will prompt you to choose which one to run.`,
 
+	Args:               cobra.MaximumNArgs(1), // Allow optional workflow name.
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
 	RunE: func(cmd *cobra.Command, args []string) error {
 		// Handle "atmos workflow help" - show help and return.
@@ -118,4 +119,9 @@ func (w *WorkflowCommandProvider) GetCompatibilityFlags() map[string]compat.Comp
 // GetAliases returns command aliases (none for workflow).
 func (w *WorkflowCommandProvider) GetAliases() []internal.CommandAlias {
 	return nil
+}
+
+// IsExperimental returns whether this command is experimental.
+func (w *WorkflowCommandProvider) IsExperimental() bool {
+	return false
 }

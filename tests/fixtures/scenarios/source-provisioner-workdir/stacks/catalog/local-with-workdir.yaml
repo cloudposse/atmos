@@ -1,0 +1,19 @@
+# yaml-language-server: $schema=https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
+
+# Local component with workdir enabled (no source)
+# This demonstrates workdir isolation for local components:
+# 1. Component exists at components/terraform/mock/
+# 2. Workdir provisioner copies to .workdir/terraform/<stack>-mock-workdir/
+# 3. Terraform runs in the isolated workdir
+
+components:
+  terraform:
+    mock-workdir:
+      metadata:
+        component: mock
+      provision:
+        workdir:
+          enabled: true
+      vars:
+        enabled: true
+        environment: "local-with-workdir"

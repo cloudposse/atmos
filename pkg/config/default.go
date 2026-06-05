@@ -39,19 +39,26 @@ var (
 				InitRunReconfigure:      true,
 				AutoGenerateBackendFile: true,
 				AppendUserAgent:         fmt.Sprintf("Atmos/%s (Cloud Posse; +https://atmos.tools)", version.Version),
+				PluginCache:             true, // Enabled by default for zero-config performance.
+				PluginCacheDir:          "",   // Empty = use XDG default (~/.cache/atmos/terraform/plugins).
 				Init: schema.TerraformInit{
 					PassVars: false,
 				},
 				Plan: schema.TerraformPlan{
 					SkipPlanfile: false,
 				},
+				Workspace: schema.WorkspaceConfig{
+					PrefixSeparator: "-", // Character used in place of '/' in auto-generated backend key prefixes.
+				},
 			},
 			Helmfile: schema.Helmfile{
 				BasePath:              "components/helmfile",
 				KubeconfigPath:        "",
-				HelmAwsProfilePattern: "{namespace}-{tenant}-gbl-{stage}-helm",
-				ClusterNamePattern:    "{namespace}-{tenant}-{environment}-{stage}-eks-cluster",
-				UseEKS:                true,
+				HelmAwsProfilePattern: "", // Deprecated: kept for backward compatibility, use --identity flag.
+				ClusterNamePattern:    "", // Deprecated: kept for backward compatibility, use ClusterNameTemplate.
+				ClusterNameTemplate:   "",
+				ClusterName:           "",
+				UseEKS:                false, // Changed from true to false - EKS is now opt-in.
 			},
 			Packer: schema.Packer{
 				BasePath: "components/packer",

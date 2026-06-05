@@ -23,6 +23,15 @@ func extractComponentSections(opts *ComponentProcessorOptions, result *Component
 		result.ComponentVars = componentVars
 	}
 
+	// Extract locals section (for template processing, not passed to terraform/helmfile).
+	if i, ok := opts.ComponentMap[cfg.LocalsSectionName]; ok {
+		componentLocals, ok := i.(map[string]any)
+		if !ok {
+			return fmt.Errorf("%w: 'components.%s.%s.locals' in the file '%s'", errUtils.ErrInvalidComponentLocals, opts.ComponentType, opts.Component, opts.StackName)
+		}
+		result.ComponentLocals = componentLocals
+	}
+
 	// Extract settings section.
 	if i, ok := opts.ComponentMap[cfg.SettingsSectionName]; ok {
 		componentSettings, ok := i.(map[string]any)
@@ -64,6 +73,30 @@ func extractComponentSections(opts *ComponentProcessorOptions, result *Component
 		}
 	}
 
+	// Terraform-specific: extract required_providers section (DEV-3124).
+	if opts.ComponentType == cfg.TerraformComponentType {
+		if i, ok := opts.ComponentMap[cfg.RequiredProvidersSectionName]; ok {
+			componentRequiredProviders, ok := i.(map[string]any)
+			if !ok {
+				return fmt.Errorf("%w: 'components.%s.%s.required_providers' in the file '%s'", errUtils.ErrInvalidComponentRequiredProviders, opts.ComponentType, opts.Component, opts.StackName)
+			}
+			result.ComponentRequiredProviders = componentRequiredProviders
+		} else {
+			result.ComponentRequiredProviders = make(map[string]any, componentSmallMapCapacity)
+		}
+	}
+
+	// Terraform-specific: extract required_version section (DEV-3124).
+	if opts.ComponentType == cfg.TerraformComponentType {
+		if i, ok := opts.ComponentMap[cfg.RequiredVersionSectionName]; ok {
+			componentRequiredVersion, ok := i.(string)
+			if !ok {
+				return fmt.Errorf("%w: 'components.%s.%s.required_version' in the file '%s'", errUtils.ErrInvalidComponentRequiredVersion, opts.ComponentType, opts.Component, opts.StackName)
+			}
+			result.ComponentRequiredVersion = componentRequiredVersion
+		}
+	}
+
 	// Terraform-specific: extract hooks section.
 	if opts.ComponentType == cfg.TerraformComponentType {
 		if i, ok := opts.ComponentMap[cfg.HooksSectionName]; ok {
@@ -88,6 +121,32 @@ func extractComponentSections(opts *ComponentProcessorOptions, result *Component
 		result.ComponentAuth = make(map[string]any, componentSmallMapCapacity)
 	}
 
+	// Extract retry section (component-level).  The value is kept as a raw map here so it
+	// can be deep-merged with any base-component retry config; decoding to the typed
+	// schema.RetryConfig happens after the final merge.
+	if i, ok := opts.ComponentMap[cfg.RetrySectionName]; ok {
+		componentRetry, ok := i.(map[string]any)
+		if !ok {
+			return fmt.Errorf("%w: 'components.%s.%s.retry' in the file '%s'", errUtils.ErrInvalidConfig, opts.ComponentType, opts.Component, opts.StackName)
+		}
+		result.ComponentRetry = componentRetry
+	}
+
+	// Extract provision section (for workdir provisioning) for terraform, helmfile, and packer.
+	if opts.ComponentType == cfg.TerraformComponentType ||
+		opts.ComponentType == cfg.HelmfileComponentType ||
+		opts.ComponentType == cfg.PackerComponentType {
+		if i, ok := opts.ComponentMap[cfg.ProvisionSectionName]; ok {
+			componentProvision, ok := i.(map[string]any)
+			if !ok {
+				return fmt.Errorf("%w: 'components.%s.%s.provision' in the file '%s'", errUtils.ErrInvalidComponentProvision, opts.ComponentType, opts.Component, opts.StackName)
+			}
+			result.ComponentProvision = componentProvision
+		} else {
+			result.ComponentProvision = make(map[string]any, componentSmallMapCapacity)
+		}
+	}
+
 	// Extract metadata section.
 	if i, ok := opts.ComponentMap[cfg.MetadataSectionName]; ok {
 		componentMetadata, ok := i.(map[string]any)
@@ -95,6 +154,15 @@ func extractComponentSections(opts *ComponentProcessorOptions, result *Component
 			return fmt.Errorf("%w: 'components.%s.%s.metadata' in the file '%s'", errUtils.ErrInvalidComponentMetadata, opts.ComponentType, opts.Component, opts.StackName)
 		}
 		result.ComponentMetadata = componentMetadata
+	}
+
+	// Extract dependencies section (for toolchain tool dependencies).
+	if i, ok := opts.ComponentMap[cfg.DependenciesSectionName]; ok {
+		componentDependencies, ok := i.(map[string]any)
+		if !ok {
+			return fmt.Errorf("%w: 'components.%s.%s.dependencies' in the file '%s'", errUtils.ErrInvalidComponentDependencies, opts.ComponentType, opts.Component, opts.StackName)
+		}
+		result.ComponentDependencies = componentDependencies
 	}
 
 	// Terraform-specific: extract backend configuration.
@@ -139,6 +207,21 @@ func extractComponentSections(opts *ComponentProcessorOptions, result *Component
 		}
 	}
 
+	// Extract source configuration for terraform, helmfile, and packer components.
+	if opts.ComponentType == cfg.TerraformComponentType ||
+		opts.ComponentType == cfg.HelmfileComponentType ||
+		opts.ComponentType == cfg.PackerComponentType {
+		if i, ok := opts.ComponentMap[cfg.SourceSectionName]; ok {
+			componentSourceSection, ok := i.(map[string]any)
+			if !ok {
+				return fmt.Errorf("%w: 'components.%s.%s.source' in the file '%s'", errUtils.ErrInvalidComponentSource, opts.ComponentType, opts.Component, opts.StackName)
+			}
+			result.ComponentSourceSection = componentSourceSection
+		} else {
+			result.ComponentSourceSection = make(map[string]any, componentSmallMapCapacity)
+		}
+	}
+
 	// Extract the executable command.
 	if i, ok := opts.ComponentMap[cfg.CommandSectionName]; ok {
 		componentCommand, ok := i.(string)
@@ -146,6 +229,19 @@ func extractComponentSections(opts *ComponentProcessorOptions, result *Component
 			return fmt.Errorf("%w: 'components.%s.%s.command' in the file '%s'", errUtils.ErrInvalidComponentCommand, opts.ComponentType, opts.Component, opts.StackName)
 		}
 		result.ComponentCommand = componentCommand
+	}
+
+	// Terraform-specific: extract generate section for file generation.
+	if opts.ComponentType == cfg.TerraformComponentType {
+		if i, ok := opts.ComponentMap[cfg.GenerateSectionName]; ok {
+			componentGenerate, ok := i.(map[string]any)
+			if !ok {
+				return fmt.Errorf("%w: 'components.%s.%s.generate' in the file '%s'", errUtils.ErrInvalidComponentGenerate, opts.ComponentType, opts.Component, opts.StackName)
+			}
+			result.ComponentGenerate = componentGenerate
+		} else {
+			result.ComponentGenerate = make(map[string]any, componentSmallMapCapacity)
+		}
 	}
 
 	return nil

@@ -2,11 +2,13 @@ package flags
 
 import (
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/flags/global"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 const (
@@ -70,9 +72,67 @@ func ParseGlobalFlags(cmd *cobra.Command, v *viper.Viper) global.Flags {
 		Heatmap:     v.GetBool("heatmap"),
 		HeatmapMode: v.GetString("heatmap-mode"),
 
+		// AI integration.
+		AI:    v.GetBool("ai"),
+		Skill: v.GetStringSlice("skill"),
+
 		// System configuration.
 		RedirectStderr: v.GetString("redirect-stderr"),
 		Version:        v.GetBool("version"),
+
+		// Settings overrides.
+		SettingsListMergeStrategy: v.GetString("settings-list-merge-strategy"),
+	}
+}
+
+func lookupCommandFlag(cmd *cobra.Command, name string) (*pflag.Flag, bool) {
+	if cmd == nil {
+		return nil, false
+	}
+
+	flagSets := []*pflag.FlagSet{
+		cmd.Flags(),
+		cmd.InheritedFlags(),
+		cmd.PersistentFlags(),
+	}
+
+	for parent := cmd.Parent(); parent != nil; parent = parent.Parent() {
+		flagSets = append(flagSets, parent.PersistentFlags())
+	}
+
+	var first *pflag.Flag
+	for _, flagSet := range flagSets {
+		if flagSet == nil {
+			continue
+		}
+
+		flag := flagSet.Lookup(name)
+		if flag == nil {
+			continue
+		}
+		if first == nil {
+			first = flag
+		}
+		if flag.Changed {
+			return flag, true
+		}
+	}
+
+	return first, false
+}
+
+// BuildConfigAndStacksInfo parses global flags and builds ConfigAndStacksInfo.
+// This ensures commands honor global flags like --base-path, --config, --config-path, and --profile.
+// This is a convenience wrapper that extracts global flags and populates ConfigAndStacksInfo in one step.
+func BuildConfigAndStacksInfo(cmd *cobra.Command, v *viper.Viper) schema.ConfigAndStacksInfo {
+	defer perf.Track(nil, "flags.BuildConfigAndStacksInfo")()
+
+	globalFlags := ParseGlobalFlags(cmd, v)
+	return schema.ConfigAndStacksInfo{
+		AtmosBasePath:           globalFlags.BasePath,
+		AtmosConfigFilesFromArg: globalFlags.Config,
+		AtmosConfigDirsFromArg:  globalFlags.ConfigPath,
+		ProfilesFromArg:         globalFlags.Profile,
 	}
 }
 
@@ -81,28 +141,40 @@ func ParseGlobalFlags(cmd *cobra.Command, v *viper.Viper) global.Flags {
 //  1. Not provided → IdentitySelector{provided: false}
 //  2. --identity (alone) → IdentitySelector{value: "__SELECT__", provided: true}
 //  3. --identity=value → IdentitySelector{value: "value", provided: true}
+//
+// Values like "false", "0", "no", "off" are normalized to the disabled sentinel
+// value to allow users to disable authentication via --identity=false or ATMOS_IDENTITY=false.
 func parseIdentityFlag(cmd *cobra.Command, v *viper.Viper) global.IdentitySelector {
 	defer perf.Track(nil, "flags.parseIdentityFlag")()
 
-	flag := cmd.Flags().Lookup(identityFlagName)
+	flag, changed := lookupCommandFlag(cmd, identityFlagName)
 	if flag == nil {
-		// Identity flag not registered on this command.
+		// Identity flag not registered on this command or its parents.
 		return global.NewIdentitySelector("", false)
 	}
 
-	// Check if flag was explicitly set on command line.
-	if cmd.Flags().Changed(identityFlagName) {
-		value := v.GetString(identityFlagName)
-		return global.NewIdentitySelector(value, true)
+	if changed {
+		value := flag.Value.String()
+		return global.NewIdentitySelector(normalizeIdentityValue(value), true)
 	}
 
 	// Fall back to env/config via Viper.
 	if v.IsSet(identityFlagName) {
 		value := v.GetString(identityFlagName)
-		return global.NewIdentitySelector(value, true)
+		return global.NewIdentitySelector(normalizeIdentityValue(value), true)
 	}
 
 	return global.NewIdentitySelector("", false)
+}
+
+// normalizeIdentityValue converts boolean false representations to the disabled sentinel value.
+// Recognizes: false, False, FALSE, 0, no, No, NO, off, Off, OFF.
+// All other values are returned unchanged.
+// This allows users to disable authentication via --identity=false or ATMOS_IDENTITY=false.
+//
+// Deprecated: Use cfg.NormalizeIdentityValue() instead. This wrapper exists for backward compatibility.
+func normalizeIdentityValue(value string) string {
+	return cfg.NormalizeIdentityValue(value)
 }
 
 // parsePagerFlag handles the pager flag's NoOptDefVal pattern.
@@ -113,24 +185,28 @@ func parseIdentityFlag(cmd *cobra.Command, v *viper.Viper) global.IdentitySelect
 func parsePagerFlag(cmd *cobra.Command, v *viper.Viper) global.PagerSelector {
 	defer perf.Track(nil, "flags.parsePagerFlag")()
 
-	flag := cmd.Flags().Lookup(pagerFlagName)
+	flag, changed := lookupCommandFlag(cmd, pagerFlagName)
 	if flag == nil {
-		// Pager flag not registered on this command.
+		// Pager flag not registered on this command or its parents.
 		return global.NewPagerSelector("", false)
 	}
 
-	// Check if flag was explicitly set on command line.
-	if cmd.Flags().Changed(pagerFlagName) {
-		value := v.GetString(pagerFlagName)
+	if changed {
+		value := flag.Value.String()
 		return global.NewPagerSelector(value, true)
 	}
 
-	// Fall back to env/config via Viper.
+	// Check if value is set via environment variable or other Viper source.
+	// We check v.IsSet() to catch env vars, but config values in atmos.yaml
+	// are handled separately by the pager package.
 	if v.IsSet(pagerFlagName) {
 		value := v.GetString(pagerFlagName)
-		return global.NewPagerSelector(value, true)
+		if value != "" {
+			return global.NewPagerSelector(value, true)
+		}
 	}
 
+	// Pager flag not explicitly set - return as not provided.
 	return global.NewPagerSelector("", false)
 }
 
@@ -148,6 +224,8 @@ func GlobalFlagsRegistry() *FlagRegistry {
 	registerAuthenticationFlags(registry)
 	registerProfilingFlags(registry)
 	registerPerformanceFlags(registry)
+	registerAIFlags(registry)
+	registerSettingsFlags(registry)
 
 	return registry
 }
@@ -229,7 +307,7 @@ func registerAuthenticationFlags(registry *FlagRegistry) {
 		Shorthand:   "i",
 		Default:     "",
 		Description: "Identity to use for authentication (use without value to select interactively)",
-		EnvVars:     []string{"ATMOS_IDENTITY", "IDENTITY"},
+		EnvVars:     []string{"ATMOS_IDENTITY"},
 		NoOptDefVal: cfg.IdentityFlagSelectValue, // "__SELECT__"
 	})
 
@@ -323,6 +401,38 @@ func registerTerminalFlags(registry *FlagRegistry) {
 		Default:     "",
 		Description: "Redirect stderr to file",
 		EnvVars:     []string{"ATMOS_REDIRECT_STDERR"},
+	})
+}
+
+// registerAIFlags registers AI integration flags.
+func registerAIFlags(registry *FlagRegistry) {
+	defer perf.Track(nil, "flags.registerAIFlags")()
+
+	registry.Register(&BoolFlag{
+		Name:        "ai",
+		Shorthand:   "",
+		Default:     false,
+		Description: "Enable AI-powered analysis of command output",
+		EnvVars:     []string{"ATMOS_AI"},
+	})
+	registry.Register(&StringSliceFlag{
+		Name:        "skill",
+		Default:     []string{},
+		Description: "Specify skills for AI analysis context (comma-separated or repeated flag, requires --ai)",
+		EnvVars:     []string{"ATMOS_SKILL"},
+	})
+}
+
+// registerSettingsFlags registers stack/settings configuration flags.
+func registerSettingsFlags(registry *FlagRegistry) {
+	defer perf.Track(nil, "flags.registerSettingsFlags")()
+
+	registry.Register(&StringFlag{
+		Name:        "settings-list-merge-strategy",
+		Shorthand:   "",
+		Default:     "",
+		Description: "Override settings.list_merge_strategy for this invocation (replace, append, merge)",
+		EnvVars:     []string{"ATMOS_SETTINGS_LIST_MERGE_STRATEGY"},
 	})
 }
 

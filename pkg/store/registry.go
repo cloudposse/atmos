@@ -2,6 +2,8 @@ package store
 
 import (
 	"fmt"
+
+	log "github.com/cloudposse/atmos/pkg/logger"
 )
 
 type StoreRegistry map[string]Store
@@ -16,6 +18,11 @@ func NewStoreRegistry(config *StoresConfig) (StoreRegistry, error) {
 				return nil, fmt.Errorf("%w: %v", ErrParseArtifactoryOptions, err)
 			}
 
+			if storeConfig.Identity != "" {
+				log.Warn("Identity-based authentication is not supported for Artifactory stores, identity will be ignored",
+					"store", key, "identity", storeConfig.Identity)
+			}
+
 			store, err := NewArtifactoryStore(opts)
 			if err != nil {
 				return nil, err
@@ -28,7 +35,7 @@ func NewStoreRegistry(config *StoresConfig) (StoreRegistry, error) {
 				return nil, fmt.Errorf("failed to parse Key Vault store options: %w", err)
 			}
 
-			store, err := NewAzureKeyVaultStore(opts)
+			store, err := NewAzureKeyVaultStore(opts, storeConfig.Identity)
 			if err != nil {
 				return nil, err
 			}
@@ -40,7 +47,7 @@ func NewStoreRegistry(config *StoresConfig) (StoreRegistry, error) {
 				return nil, fmt.Errorf("%w: %v", ErrParseSSMOptions, err)
 			}
 
-			store, err := NewSSMStore(opts)
+			store, err := NewSSMStore(opts, storeConfig.Identity)
 			if err != nil {
 				return nil, err
 			}
@@ -52,7 +59,7 @@ func NewStoreRegistry(config *StoresConfig) (StoreRegistry, error) {
 				return nil, fmt.Errorf("failed to parse Google Secret Manager store options: %w", err)
 			}
 
-			store, err := NewGSMStore(opts)
+			store, err := NewGSMStore(opts, storeConfig.Identity)
 			if err != nil {
 				return nil, err
 			}
@@ -62,6 +69,11 @@ func NewStoreRegistry(config *StoresConfig) (StoreRegistry, error) {
 			var opts RedisStoreOptions
 			if err := parseOptions(storeConfig.Options, &opts); err != nil {
 				return nil, fmt.Errorf("%w: %v", ErrParseRedisOptions, err)
+			}
+
+			if storeConfig.Identity != "" {
+				log.Warn("Identity-based authentication is not supported for Redis stores, identity will be ignored",
+					"store", key, "identity", storeConfig.Identity)
 			}
 
 			store, err := NewRedisStore(opts)
@@ -76,4 +88,17 @@ func NewStoreRegistry(config *StoresConfig) (StoreRegistry, error) {
 	}
 
 	return registry, nil
+}
+
+// SetAuthContextResolver injects an auth context resolver into all identity-aware stores
+// that have an identity configured. This should be called after authentication is complete
+// and before stores are accessed.
+func (r StoreRegistry) SetAuthContextResolver(resolver AuthContextResolver) {
+	for _, s := range r {
+		if ias, ok := s.(IdentityAwareStore); ok {
+			// Pass empty identity name — the store already has its identity name from construction.
+			// SetAuthContext will only update the resolver, not override a non-empty identity.
+			ias.SetAuthContext(resolver, "")
+		}
+	}
 }

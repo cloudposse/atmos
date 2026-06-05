@@ -4,18 +4,28 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/cloudposse/atmos/pkg/perf"
-
-	log "github.com/cloudposse/atmos/pkg/logger"
-
 	errUtils "github.com/cloudposse/atmos/errors"
 	tb "github.com/cloudposse/atmos/internal/terraform_backend"
 	"github.com/cloudposse/atmos/pkg/auth"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	log "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+	tfoutput "github.com/cloudposse/atmos/pkg/terraform/output"
 )
 
 var terraformStateCache = sync.Map{}
+
+// ResetStateCache clears the terraform state cache.
+// This is exported for use in tests to ensure cache isolation between test functions.
+func ResetStateCache() {
+	defer perf.Track(nil, "exec.ResetStateCache")()
+
+	terraformStateCache.Range(func(key, _ any) bool {
+		terraformStateCache.Delete(key)
+		return true
+	})
+}
 
 // GetTerraformState retrieves a specified Terraform output variable for a given component within a stack.
 // It optionally uses a cache to avoid redundant state retrievals and supports both static and dynamic backends.
@@ -48,7 +58,8 @@ func GetTerraformState(
 	if !skipCache {
 		backend, found := terraformStateCache.Load(stackSlug)
 		if found && backend != nil {
-			log.Debug("Cache hit",
+			log.Debug(
+				"Cache hit",
 				"function", yamlFunc,
 				cfg.ComponentStr, component,
 				cfg.StackStr, stack,
@@ -73,31 +84,58 @@ func GetTerraformState(
 		}
 	}
 
+	authDisabled := false
+	if parentAuthMgr != nil {
+		if stackInfo := parentAuthMgr.GetStackInfo(); stackInfo != nil {
+			authDisabled = stackInfo.AuthDisabled
+		}
+	}
+
 	// Resolve AuthManager for this nested component.
 	// Checks if component has auth config defined:
 	//   - If yes: creates component-specific AuthManager with merged auth config
 	//   - If no: uses parent AuthManager (inherits authentication)
 	// This enables each nested level to optionally override auth settings.
-	resolvedAuthMgr, err := resolveAuthManagerForNestedComponent(atmosConfig, component, stack, parentAuthMgr)
-	if err != nil {
-		log.Debug("Auth does not exist for nested component, using parent AuthManager",
-			"component", component,
-			"stack", stack,
-			"error", err,
-		)
-		resolvedAuthMgr = parentAuthMgr
+	resolvedAuthMgr := parentAuthMgr
+	if !authDisabled {
+		var err error
+		resolvedAuthMgr, err = resolveAuthManagerForNestedComponent(atmosConfig, component, stack, parentAuthMgr)
+		if err != nil {
+			log.Debug(
+				"Auth does not exist for nested component, using parent AuthManager",
+				"component", component,
+				"stack", stack,
+				"error", err,
+			)
+			resolvedAuthMgr = parentAuthMgr
+		}
+	}
+
+	// Derive the effective AuthContext for backend reads.
+	// If we resolved a component-specific AuthManager, use its AuthContext instead of the
+	// passed-in one (which may be nil when the parent didn't propagate auth).
+	resolvedAuthContext := authContext
+	if resolvedAuthMgr != nil {
+		if si := resolvedAuthMgr.GetStackInfo(); si != nil && si.AuthContext != nil {
+			resolvedAuthContext = si.AuthContext
+		}
 	}
 
 	componentSections, err := ExecuteDescribeComponent(&ExecuteDescribeComponentParams{
+		AtmosConfig:          atmosConfig,
 		Component:            component,
 		Stack:                stack,
 		ProcessTemplates:     true,
 		ProcessYamlFunctions: true,
 		Skip:                 nil,
 		AuthManager:          resolvedAuthMgr, // Use resolved AuthManager (may be component-specific or inherited)
+		AuthDisabled:         authDisabled,
 	})
 	if err != nil {
-		er := fmt.Errorf("%w `%s` in stack `%s`\nin YAML function: `%s`\n%v", errUtils.ErrDescribeComponent, component, stack, yamlFunc, err)
+		// Use double %w so that errors.Is can match both ErrDescribeComponent and
+		// any sentinel propagated from the inner describe (e.g., ErrCircularDependency
+		// from a !terraform.state cycle — see #2457).
+		er := fmt.Errorf("%w `%s` in stack `%s`\nin YAML function: `%s`\n%w", errUtils.ErrDescribeComponent, component, stack, yamlFunc, err)
 		return nil, er
 	}
 
@@ -109,7 +147,7 @@ func GetTerraformState(
 	if remoteStateBackendStaticTypeOutputs != nil {
 		// Cache the result
 		terraformStateCache.Store(stackSlug, remoteStateBackendStaticTypeOutputs)
-		result, exists, err := GetStaticRemoteStateOutput(atmosConfig, component, stack, remoteStateBackendStaticTypeOutputs, output)
+		result, exists, err := tfoutput.GetStaticRemoteStateOutput(atmosConfig, component, stack, remoteStateBackendStaticTypeOutputs, output)
 		if err != nil {
 			return nil, fmt.Errorf("%w for component `%s` in stack `%s`\nin YAML function: `%s`\n%v", errUtils.ErrReadTerraformState, component, stack, yamlFunc, err)
 		}
@@ -120,8 +158,8 @@ func GetTerraformState(
 		return result, nil
 	}
 
-	// Read Terraform backend.
-	backend, err := tb.GetTerraformBackend(atmosConfig, &componentSections, authContext)
+	// Read Terraform backend using resolved auth context.
+	backend, err := tb.GetTerraformBackend(atmosConfig, &componentSections, resolvedAuthContext)
 	if err != nil {
 		er := fmt.Errorf("%w for component `%s` in stack `%s`\nin YAML function: `%s`\n%v", errUtils.ErrReadTerraformState, component, stack, yamlFunc, err)
 		return nil, er

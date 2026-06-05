@@ -1,0 +1,36 @@
+vars:
+  stage: nonprod
+
+components:
+  terraform:
+    # Component with multiple !include directives (issue #2090 scenario).
+    app-with-includes:
+      metadata:
+        component: mock
+      vars:
+        # Include entire JSON file.
+        json_config: !include config/vars.json
+        # Include specific field from JSON.
+        app_name: !include config/vars.json .app_name
+        # Include raw .rego policy file.
+        policy_body: !include config/policy.rego
+        # Include entire YAML settings.
+        settings: !include config/settings.yaml
+        environment: nonprod
+
+    # Component with !include.raw.
+    app-with-raw-includes:
+      metadata:
+        component: mock
+      vars:
+        json_raw: !include.raw config/vars.json
+        policy_raw: !include.raw config/policy.rego
+        environment: nonprod
+
+    # Simple component without includes for baseline comparison.
+    simple-app:
+      metadata:
+        component: mock
+      vars:
+        name: simple
+        environment: nonprod

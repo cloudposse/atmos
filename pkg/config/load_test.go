@@ -1,6 +1,8 @@
 package config
 
 import (
+	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -1036,6 +1038,206 @@ base_path: /test/parent-should-not-find
 	}
 }
 
+// TestReadParentDirConfig_SkipsWhenLocalConfigExists verifies that parent directory
+// search is skipped when CWD has local Atmos config (per PRD constraint).
+func TestReadParentDirConfig_SkipsWhenLocalConfigExists(t *testing.T) {
+	tests := []struct {
+		name             string
+		setupDirs        func(t *testing.T, tempDir string) string
+		expectParentLoad bool
+	}{
+		{
+			name: "skips parent search when CWD has atmos.yaml",
+			setupDirs: func(t *testing.T, tempDir string) string {
+				// Create child dir with its own config.
+				childDir := filepath.Join(tempDir, "child")
+				require.NoError(t, os.MkdirAll(childDir, 0o755))
+
+				// Create config in parent.
+				createTestConfig(t, tempDir, `base_path: /from/parent`)
+
+				// Create config in child.
+				createTestConfig(t, childDir, `base_path: /from/child`)
+
+				return childDir
+			},
+			expectParentLoad: false,
+		},
+		{
+			name: "skips parent search when CWD has .atmos.yaml",
+			setupDirs: func(t *testing.T, tempDir string) string {
+				childDir := filepath.Join(tempDir, "child")
+				require.NoError(t, os.MkdirAll(childDir, 0o755))
+
+				// Create config in parent.
+				createTestConfig(t, tempDir, `base_path: /from/parent`)
+
+				// Create hidden config in child.
+				err := os.WriteFile(filepath.Join(childDir, ".atmos.yaml"), []byte(`base_path: /from/child`), 0o644)
+				require.NoError(t, err)
+
+				return childDir
+			},
+			expectParentLoad: false,
+		},
+		{
+			name: "skips parent search when CWD has .atmos.d directory",
+			setupDirs: func(t *testing.T, tempDir string) string {
+				childDir := filepath.Join(tempDir, "child")
+				require.NoError(t, os.MkdirAll(childDir, 0o755))
+
+				// Create config in parent.
+				createTestConfig(t, tempDir, `base_path: /from/parent`)
+
+				// Create .atmos.d directory in child (no config file).
+				require.NoError(t, os.MkdirAll(filepath.Join(childDir, ".atmos.d"), 0o755))
+
+				return childDir
+			},
+			expectParentLoad: false,
+		},
+		{
+			name: "searches parent when CWD has no config",
+			setupDirs: func(t *testing.T, tempDir string) string {
+				childDir := filepath.Join(tempDir, "child")
+				require.NoError(t, os.MkdirAll(childDir, 0o755))
+
+				// Create config in parent only.
+				createTestConfig(t, tempDir, `base_path: /from/parent`)
+
+				return childDir
+			},
+			expectParentLoad: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tempDir := t.TempDir()
+			workDir := tt.setupDirs(t, tempDir)
+
+			t.Chdir(workDir)
+
+			v := viper.New()
+			v.SetConfigType("yaml")
+
+			err := readParentDirConfig(v)
+			require.NoError(t, err)
+
+			if tt.expectParentLoad {
+				assert.Equal(t, "/from/parent", v.GetString("base_path"),
+					"Should load parent config when CWD has no local config")
+			} else {
+				assert.Empty(t, v.GetString("base_path"),
+					"Should NOT load parent config when CWD has local config")
+			}
+		})
+	}
+}
+
+// TestReadGitRootConfig_SkipsWhenLocalConfigExists verifies that git root
+// search is skipped when CWD has local Atmos config (per PRD constraint).
+// This test uses TEST_GIT_ROOT to mock a git root with config that WOULD be loaded
+// if not for the hasLocalAtmosConfig() gating.
+func TestReadGitRootConfig_SkipsWhenLocalConfigExists(t *testing.T) {
+	tests := []struct {
+		name              string
+		setupDirs         func(t *testing.T, cwdDir, gitRootDir string)
+		expectGitRootLoad bool
+	}{
+		{
+			name: "skips git root search when CWD has atmos.yaml",
+			setupDirs: func(t *testing.T, cwdDir, gitRootDir string) {
+				// Create config at mock git root that WOULD be loaded.
+				createTestConfig(t, gitRootDir, `base_path: /from/git-root`)
+				// Create local config in CWD - should prevent git root loading.
+				createTestConfig(t, cwdDir, `base_path: /from/local`)
+			},
+			expectGitRootLoad: false,
+		},
+		{
+			name: "skips git root search when CWD has .atmos directory",
+			setupDirs: func(t *testing.T, cwdDir, gitRootDir string) {
+				createTestConfig(t, gitRootDir, `base_path: /from/git-root`)
+				require.NoError(t, os.MkdirAll(filepath.Join(cwdDir, ".atmos"), 0o755))
+			},
+			expectGitRootLoad: false,
+		},
+		{
+			name: "skips git root search when CWD has atmos.d directory",
+			setupDirs: func(t *testing.T, cwdDir, gitRootDir string) {
+				createTestConfig(t, gitRootDir, `base_path: /from/git-root`)
+				require.NoError(t, os.MkdirAll(filepath.Join(cwdDir, "atmos.d"), 0o755))
+			},
+			expectGitRootLoad: false,
+		},
+		{
+			name: "loads git root config when CWD has no local config",
+			setupDirs: func(t *testing.T, cwdDir, gitRootDir string) {
+				// Create config at mock git root.
+				createTestConfig(t, gitRootDir, `base_path: /from/git-root`)
+				// CWD has no local config - git root should be loaded.
+			},
+			expectGitRootLoad: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Create separate directories for CWD and mock git root.
+			cwdDir := t.TempDir()
+			gitRootDir := t.TempDir()
+
+			tt.setupDirs(t, cwdDir, gitRootDir)
+
+			t.Chdir(cwdDir)
+
+			// Point TEST_GIT_ROOT to our mock git root with config.
+			t.Setenv("TEST_GIT_ROOT", gitRootDir)
+
+			v := viper.New()
+			v.SetConfigType("yaml")
+
+			err := readGitRootConfig(v)
+			require.NoError(t, err)
+
+			if tt.expectGitRootLoad {
+				assert.Equal(t, "/from/git-root", v.GetString("base_path"),
+					"Should load git root config when CWD has no local config")
+			} else {
+				assert.Empty(t, v.GetString("base_path"),
+					"Should NOT load git root config when CWD has local config")
+			}
+		})
+	}
+}
+
+// TestReadGitRootConfig_GetwdError verifies that readGitRootConfig gracefully handles
+// os.Getwd failure by falling through to git root detection instead of failing.
+func TestReadGitRootConfig_GetwdError(t *testing.T) {
+	// Override osGetwd to simulate failure.
+	originalGetwd := osGetwd
+	osGetwd = func() (string, error) {
+		return "", fmt.Errorf("simulated getwd failure")
+	}
+	t.Cleanup(func() { osGetwd = originalGetwd })
+
+	// Set up a mock git root with config.
+	gitRootDir := t.TempDir()
+	createTestConfig(t, gitRootDir, `base_path: /from/git-root`)
+	t.Setenv("TEST_GIT_ROOT", gitRootDir)
+
+	v := viper.New()
+	v.SetConfigType("yaml")
+
+	err := readGitRootConfig(v)
+	require.NoError(t, err)
+
+	// When os.Getwd fails, the function should still proceed and load git root config.
+	assert.Equal(t, "/from/git-root", v.GetString("base_path"),
+		"Should load git root config when os.Getwd fails (fallthrough behavior)")
+}
+
 // TestLoadConfig_DefaultConfigWithGitRootAtmosD tests that .atmos.d at git root is loaded
 // even when no atmos.yaml config file is found (using default config).
 func TestLoadConfig_DefaultConfigWithGitRootAtmosD(t *testing.T) {
@@ -1517,6 +1719,51 @@ func TestParseProfilesFromOsArgs(t *testing.T) {
 	}
 }
 
+// TestParseProfilesFromOsArgs_HelpFlagIsSilent is a regression guard:
+// parseProfilesFromOsArgs creates a temporary pflag.FlagSet that pflag would,
+// by default, print a "Usage of profile-parser:" block from to stderr whenever
+// args contain --help or -h. Because LoadConfig runs more than once during a
+// command's lifecycle (Execute + PersistentPreRun), this caused 2–4 duplicate
+// "Usage of profile-parser:" blocks to leak into the stderr of any
+// `atmos … --help` invocation. The fix is `fs.Usage = func() {}` in
+// parseProfilesFromOsArgs; this test makes sure nobody removes it.
+func TestParseProfilesFromOsArgs_HelpFlagIsSilent(t *testing.T) {
+	cases := []struct {
+		name string
+		args []string
+	}{
+		{name: "long --help", args: []string{"atmos", "auth", "validate", "--help"}},
+		{name: "short -h", args: []string{"atmos", "auth", "validate", "-h"}},
+		{name: "help with profile", args: []string{"atmos", "--profile=dev", "auth", "validate", "--help"}},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			// Redirect stderr so we can assert pflag wrote nothing to it.
+			origStderr := os.Stderr
+			r, w, err := os.Pipe()
+			require.NoError(t, err)
+			os.Stderr = w
+			t.Cleanup(func() { os.Stderr = origStderr })
+
+			// Run in a goroutine so a full pipe buffer can't deadlock the test.
+			done := make(chan struct{})
+			var captured []byte
+			go func() {
+				defer close(done)
+				captured, _ = io.ReadAll(r)
+			}()
+
+			_ = parseProfilesFromOsArgs(tc.args)
+			require.NoError(t, w.Close())
+			<-done
+
+			assert.NotContains(t, string(captured), "Usage of profile-parser:",
+				"parseProfilesFromOsArgs must not leak its temp FlagSet's usage block to stderr when --help is in args")
+		})
+	}
+}
+
 func TestParseViperProfilesFromEnv(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -1622,4 +1869,17 @@ func TestParseProfilesFromEnvString(t *testing.T) {
 			assert.Equal(t, tt.expected, result)
 		})
 	}
+}
+
+func TestAutoProvisionWorkdirForOutputsEnvVarBinding(t *testing.T) {
+	t.Setenv("ATMOS_COMPONENTS_TERRAFORM_AUTO_PROVISION_WORKDIR_FOR_OUTPUTS", "false")
+	tempDir := t.TempDir()
+	configPath := createTestConfig(t, tempDir, "base_path: .")
+	configInfo := &schema.ConfigAndStacksInfo{
+		AtmosConfigFilesFromArg: []string{configPath},
+	}
+	cfg, err := LoadConfig(configInfo)
+	require.NoError(t, err)
+	assert.False(t, cfg.Components.Terraform.AutoProvisionWorkdirForOutputs,
+		"ATMOS_COMPONENTS_TERRAFORM_AUTO_PROVISION_WORKDIR_FOR_OUTPUTS=false should override default true")
 }

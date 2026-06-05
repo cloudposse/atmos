@@ -35,7 +35,56 @@ settings:
     color: true           # Enable colored output (default: true)
     unicode: true         # Use Unicode characters in output
     tab_width: 2          # Number of spaces for YAML indentation (default: 2)
+    theme: atmos          # Terminal color theme (default: atmos)
 ```
+
+## Terminal Theme
+
+Atmos supports customizable terminal themes that control the appearance of CLI output, including tables, markdown rendering, help text, and status messages. Themes provide consistent color schemes optimized for either dark or light terminal backgrounds.
+
+### Setting a Theme
+
+Configure the theme in your `atmos.yaml`:
+
+```yaml
+settings:
+  terminal:
+    theme: atmos  # Use the default Atmos theme
+```
+
+Or use an environment variable:
+
+```bash
+export ATMOS_THEME=dracula
+atmos describe config
+```
+
+### Available Themes
+
+Atmos includes hundreds of pre-configured themes. To browse available themes:
+
+```bash
+# List all available themes
+atmos theme list
+
+# Show only recommended themes
+atmos theme list --recommended
+
+# Preview a specific theme
+atmos theme show dracula
+```
+
+Popular themes include:
+- **atmos** (default) - Cloud Posse's optimized theme for Atmos
+- **dracula** - Dark theme with vibrant colors
+- **github** - Light theme matching GitHub's style
+- **monokai** - Dark theme popular in code editors
+- **solarized-dark** / **solarized-light** - Precision colors designed for long-term use
+
+For a complete list of themes and detailed previews, see:
+- [`atmos theme list`](/cli/commands/theme/list) - List available themes
+- [`atmos theme show`](/cli/commands/theme/show) - Preview a specific theme
+- [`atmos list themes`](/cli/commands/list/themes) - Alternative list command
 
 ## Configuration Precedence
 
@@ -171,6 +220,15 @@ settings:
 
   <dt>`tab_width`</dt>
   <dd>Number of spaces for YAML indentation (default: `2`)</dd>
+
+  <dt>`theme`</dt>
+  <dd>
+    Terminal color theme for Atmos CLI output (default: `atmos`). Controls colors for tables, markdown, help text, and status messages.
+    - Environment variable: `ATMOS_THEME`
+    - List available themes: `atmos theme list`
+    - Preview themes: `atmos theme show <theme-name>`
+    - Popular options: `atmos`, `dracula`, `github`, `monokai`, `solarized-dark`, `solarized-light`
+  </dd>
 </dl>
 
 ### Syntax Highlighting Configuration Options

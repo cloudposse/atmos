@@ -1,0 +1,104 @@
+---
+title: atmos terraform source delete
+sidebar_label: source delete
+sidebar_class_name: command
+id: delete
+description: Remove vendored source directory
+---
+import Intro from '@site/src/components/Intro'
+import Screengrab from '@site/src/components/Screengrab'
+import ActionCard from '@site/src/components/ActionCard'
+import PrimaryCTA from '@site/src/components/PrimaryCTA'
+
+<Intro>
+Use this command to delete the vendored source directory for a Terraform component. This removes the component directory that was created by `atmos terraform source pull`.
+</Intro>
+
+<ActionCard title="Source-Based Version Pinning">
+    Learn how to configure the `source` field for per-environment version control.
+    <div>
+      <PrimaryCTA to="/design-patterns/version-management/source-based-versioning">Design Pattern</PrimaryCTA>
+    </div>
+</ActionCard>
+
+<Screengrab title="atmos terraform source delete --help" slug="atmos-terraform-source-delete--help" />
+
+## Usage
+
+```shell
+atmos terraform source delete <component> --stack <stack> --force
+```
+
+## Description
+
+The `delete` command removes the vendored component directory. For safety, this command requires the `--force` flag to confirm deletion.
+
+This is useful for:
+- Cleaning up vendored components before re-vendoring
+- Removing components that are no longer needed
+- Resetting to a clean state for troubleshooting
+
+## Examples
+
+### Delete Vendored Component
+
+Remove a vendored component directory:
+
+```shell
+atmos terraform source delete vpc --stack dev --force
+```
+
+Output:
+```
+Deleting directory: components/terraform/vpc
+✓ Successfully deleted: components/terraform/vpc
+```
+
+### Without Force Flag
+
+Attempting to delete without `--force` shows an error:
+
+```shell
+atmos terraform source delete vpc --stack dev
+```
+
+Output:
+```
+Error: --force flag is required
+
+Explanation: Deletion requires --force flag for safety
+
+Hint: Use --force to confirm deletion
+```
+
+## Arguments
+
+<dl>
+  <dt>`component`</dt>
+  <dd>**Required.** The name of the Atmos component to delete.</dd>
+</dl>
+
+## Flags
+
+<dl>
+  <dt>`--stack` / `-s`</dt>
+  <dd>**Required.** The Atmos stack name. Can also be set via `ATMOS_STACK` environment variable.</dd>
+
+  <dt>`--force` / `-f`</dt>
+  <dd>**Required.** Confirm deletion. Without this flag, the command fails for safety.</dd>
+</dl>
+
+## Safety
+
+The `delete` command has several safety features:
+
+1. **Requires --force** - Prevents accidental deletion
+2. **Only deletes source-managed components** - Only works on components with `source` configured
+3. **Non-destructive on missing directories** - Shows a warning if the directory doesn't exist instead of failing
+
+## See Also
+
+- [Source-Based Version Pinning](/design-patterns/version-management/source-based-versioning) — Design pattern for per-environment version control
+- [`atmos terraform source`](/cli/commands/terraform/source) — Parent command overview
+- [`atmos terraform source pull`](/cli/commands/terraform/source/pull) — Vendor component source
+- [`atmos terraform source list`](/cli/commands/terraform/source/list) — List components with sources

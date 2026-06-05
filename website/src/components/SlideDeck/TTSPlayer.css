@@ -1,0 +1,200 @@
+.tts-player {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  background: var(--ifm-background-surface-color);
+  border-top: 1px solid var(--ifm-color-emphasis-200);
+}
+
+html[data-theme='dark'] .tts-player,
+.slide-deck--fullscreen .tts-player {
+  background: rgba(26, 26, 46, 0.95);
+  border-top-color: rgba(255, 255, 255, 0.1);
+}
+
+.tts-player__btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: none;
+  border-radius: 50%;
+  background: var(--ifm-color-emphasis-200);
+  color: var(--ifm-font-color-base);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  flex-shrink: 0;
+}
+
+.tts-player__btn:hover:not(:disabled) {
+  background: var(--ifm-color-primary);
+  color: white;
+}
+
+.tts-player__btn--play {
+  width: 40px;
+  height: 40px;
+  background: var(--ifm-color-primary);
+  color: white;
+}
+
+.tts-player__btn--play:hover:not(:disabled) {
+  background: var(--ifm-color-primary-dark);
+}
+
+.tts-player__btn:disabled {
+  opacity: 0.5;
+  cursor: wait;
+}
+
+.tts-player__btn--muted {
+  color: var(--ifm-color-danger);
+}
+
+.tts-player__btn--muted:hover:not(:disabled) {
+  background: var(--ifm-color-danger);
+  color: white;
+}
+
+html[data-theme='dark'] .tts-player__btn,
+.slide-deck--fullscreen .tts-player__btn {
+  background: rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.9);
+}
+
+html[data-theme='dark'] .tts-player__btn:hover:not(:disabled),
+.slide-deck--fullscreen .tts-player__btn:hover:not(:disabled) {
+  background: var(--ifm-color-primary);
+  color: white;
+}
+
+html[data-theme='dark'] .tts-player__btn--play,
+.slide-deck--fullscreen .tts-player__btn--play {
+  background: var(--ifm-color-primary);
+  color: white;
+}
+
+.tts-player__spin {
+  animation: tts-spin 1s linear infinite;
+}
+
+@keyframes tts-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.tts-player__progress {
+  flex: 1;
+  height: 6px;
+  min-width: 80px;
+  background: var(--ifm-color-emphasis-200);
+  border-radius: 3px;
+  cursor: pointer;
+  overflow: hidden;
+  position: relative;
+}
+
+html[data-theme='dark'] .tts-player__progress,
+.slide-deck--fullscreen .tts-player__progress {
+  background: rgba(255, 255, 255, 0.15);
+}
+
+.tts-player__progress:hover {
+  height: 8px;
+}
+
+.tts-player__progress-fill {
+  height: 100%;
+  background: var(--ifm-color-primary);
+  transition: width 0.1s linear;
+  border-radius: 3px;
+}
+
+.tts-player__time {
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--ifm-color-emphasis-600);
+  min-width: 70px;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+html[data-theme='dark'] .tts-player__time,
+.slide-deck--fullscreen .tts-player__time {
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.tts-player__select {
+  padding: 0.25rem 0.5rem;
+  border: 1px solid var(--ifm-color-emphasis-300);
+  border-radius: 4px;
+  background: var(--ifm-background-color);
+  color: var(--ifm-font-color-base);
+  font-size: 0.75rem;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.tts-player__select:focus {
+  outline: 2px solid var(--ifm-color-primary);
+  outline-offset: 1px;
+}
+
+html[data-theme='dark'] .tts-player__select,
+.slide-deck--fullscreen .tts-player__select {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.2);
+  color: white;
+}
+
+.tts-player__error {
+  color: var(--ifm-color-danger);
+  font-size: 0.75rem;
+  flex-shrink: 0;
+}
+
+/* Mobile adjustments */
+@media (max-width: 768px) {
+  .tts-player {
+    flex-wrap: wrap;
+    gap: 0.375rem;
+    padding: 0.375rem 0.5rem;
+  }
+
+  .tts-player__btn--play {
+    width: 36px;
+    height: 36px;
+  }
+
+  .tts-player__btn {
+    width: 28px;
+    height: 28px;
+  }
+
+  .tts-player__progress {
+    order: 5;
+    flex-basis: 100%;
+    margin: 0.25rem 0;
+  }
+
+  .tts-player__time {
+    order: 6;
+    flex-basis: 100%;
+    text-align: center;
+    min-width: auto;
+  }
+
+  .tts-player__select {
+    font-size: 0.7rem;
+    padding: 0.2rem 0.4rem;
+  }
+}
+
+/* Very small screens */
+@media (max-width: 480px) {
+  .tts-player__select {
+    max-width: 60px;
+  }
+}

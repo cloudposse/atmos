@@ -24,6 +24,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/downloader"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
+	"github.com/cloudposse/atmos/pkg/vendor"
 )
 
 const ociScheme = "oci://"
@@ -130,101 +131,29 @@ func ExecuteStackVendorInternal(
 	return ErrStackPullNotSupported
 }
 
-func copyComponentToDestination(tempDir, componentPath string, vendorComponentSpec *schema.VendorComponentSpec, sourceIsLocalFile bool, uri string) error {
-	// Copy from the temp folder to the destination folder and skip the excluded files
-	copyOptions := cp.Options{
-		// Skip specifies which files should be skipped
-		Skip: createComponentSkipFunc(tempDir, vendorComponentSpec),
-
-		// Preserve the atime and the mtime of the entries
-		// On linux we can preserve only up to 1 millisecond accuracy
-		PreserveTimes: false,
-
-		// Preserve the uid and the gid of all entries
-		PreserveOwner: false,
-
-		// OnSymlink specifies what to do on symlink
-		// Override the destination file if it already exists
-		OnSymlink: func(src string) cp.SymlinkAction {
-			return cp.Deep
-		},
-	}
-
-	componentPath2 := componentPath
-	if sourceIsLocalFile {
-		if filepath.Ext(componentPath) == "" {
-			componentPath2 = filepath.Join(componentPath, SanitizeFileName(uri))
-		}
-	}
-
-	if err := cp.Copy(tempDir, componentPath2, copyOptions); err != nil {
-		return err
-	}
-	return nil
+func copyComponentToDestination(tempDir, componentPath string, vendorComponentSpec *schema.VendorComponentSpec) error {
+	return vendor.CopyToTarget(tempDir, componentPath, vendor.CopyOptions{
+		IncludedPaths: vendorComponentSpec.Source.IncludedPaths,
+		ExcludedPaths: vendorComponentSpec.Source.ExcludedPaths,
+	})
 }
 
+// createComponentSkipFunc creates a skip function for component vendoring.
+// Delegates to pkg/vendor for the shared implementation.
 func createComponentSkipFunc(tempDir string, vendorComponentSpec *schema.VendorComponentSpec) ComponentSkipFunc {
-	return func(srcInfo os.FileInfo, src, dest string) (bool, error) {
-		if filepath.Base(src) == ".git" {
-			return true, nil
-		}
-
-		trimmedSrc := u.TrimBasePathFromPath(tempDir+"/", src)
-
-		// Exclude the files that match the 'excluded_paths' patterns
-		// It supports POSIX-style Globs for file names/paths (double-star `**` is supported)
-		// https://en.wikipedia.org/wiki/Glob_(programming)
-		// https://github.com/bmatcuk/doublestar#patterns
-		if len(vendorComponentSpec.Source.ExcludedPaths) > 0 {
-			return checkComponentExcludes(vendorComponentSpec.Source.ExcludedPaths, src, trimmedSrc)
-		}
-		// Only include the files that match the 'included_paths' patterns (if any pattern is specified)
-		if len(vendorComponentSpec.Source.IncludedPaths) > 0 {
-			return checkComponentIncludes(vendorComponentSpec.Source.IncludedPaths, src, trimmedSrc)
-		}
-
-		// If 'included_paths' is not provided, include all files that were not excluded
-		log.Debug("Including", u.TrimBasePathFromPath(tempDir+"/", src))
-		return false, nil
-	}
+	return vendor.CreateSkipFunc(tempDir, vendorComponentSpec.Source.IncludedPaths, vendorComponentSpec.Source.ExcludedPaths)
 }
 
+// checkComponentExcludes checks if the file matches any of the excluded patterns.
+// Delegates to pkg/vendor for the shared implementation.
 func checkComponentExcludes(excludePaths []string, src, trimmedSrc string) (bool, error) {
-	for _, excludePath := range excludePaths {
-		excludePath := filepath.Clean(excludePath)
-		excludeMatch, err := u.PathMatch(excludePath, src)
-		if err != nil {
-			return true, err
-		} else if excludeMatch {
-			// If the file matches ANY of the 'excluded_paths' patterns, exclude the file
-			log.Debug("Excluding the file since it matches the '%s' pattern from 'excluded_paths'", "path", trimmedSrc, "excluded_paths", excludePath)
-			return true, nil
-		}
-	}
-	return false, nil
+	return vendor.ShouldExcludeFile(excludePaths, trimmedSrc)
 }
 
+// checkComponentIncludes checks if the file matches any of the included patterns.
+// Delegates to pkg/vendor for the shared implementation.
 func checkComponentIncludes(includePaths []string, src, trimmedSrc string) (bool, error) {
-	anyMatches := false
-	for _, includePath := range includePaths {
-		includePath := filepath.Clean(includePath)
-		includeMatch, err := u.PathMatch(includePath, src)
-		if err != nil {
-			return true, err
-		} else if includeMatch {
-			// If the file matches ANY of the 'included_paths' patterns, include the file
-			log.Debug("Including path since it matches the pattern from 'included_paths'\n", "path", trimmedSrc, "included_paths", includePath)
-			anyMatches = true
-			break
-		}
-	}
-
-	if anyMatches {
-		return false, nil
-	} else {
-		log.Debug("Excluding since it does not match any pattern from 'included_paths'", "path", trimmedSrc)
-		return true, nil
-	}
+	return vendor.ShouldIncludeFile(includePaths, trimmedSrc)
 }
 
 func ExecuteComponentVendorInternal(
@@ -465,7 +394,11 @@ func installComponent(p *pkgComponentVendor, atmosConfig *schema.AtmosConfigurat
 	case pkgTypeRemote:
 		tempDir = filepath.Join(tempDir, SanitizeFileName(p.uri))
 
-		if err := downloader.NewGoGetterDownloader(atmosConfig).Fetch(p.uri, tempDir, downloader.ClientModeAny, 10*time.Minute); err != nil {
+		opts := []downloader.GoGetterOption{}
+		if p.vendorComponentSpec != nil && p.vendorComponentSpec.Source.Retry != nil {
+			opts = append(opts, downloader.WithRetryConfig(p.vendorComponentSpec.Source.Retry))
+		}
+		if err := downloader.NewGoGetterDownloader(atmosConfig, opts...).Fetch(p.uri, tempDir, downloader.ClientModeAny, 10*time.Minute); err != nil {
 			return fmt.Errorf("failed to download package %s error %w", p.name, err)
 		}
 
@@ -482,7 +415,7 @@ func installComponent(p *pkgComponentVendor, atmosConfig *schema.AtmosConfigurat
 	default:
 		return fmt.Errorf("%w %s for package %s", errUtils.ErrUnknownPackageType, p.pkgType.String(), p.name)
 	}
-	if err := copyComponentToDestination(tempDir, p.componentPath, p.vendorComponentSpec, p.sourceIsLocalFile, p.uri); err != nil {
+	if err := copyComponentToDestination(tempDir, p.componentPath, p.vendorComponentSpec); err != nil {
 		return fmt.Errorf("failed to copy package %s error %w", p.name, err)
 	}
 
@@ -521,7 +454,11 @@ func installMixin(p *pkgComponentVendor, atmosConfig *schema.AtmosConfiguration)
 
 	switch p.pkgType {
 	case pkgTypeRemote:
-		if err = downloader.NewGoGetterDownloader(atmosConfig).Fetch(p.uri, filepath.Join(tempDir, p.mixinFilename), downloader.ClientModeFile, 10*time.Minute); err != nil {
+		opts := []downloader.GoGetterOption{}
+		if p.vendorComponentSpec != nil && p.vendorComponentSpec.Source.Retry != nil {
+			opts = append(opts, downloader.WithRetryConfig(p.vendorComponentSpec.Source.Retry))
+		}
+		if err = downloader.NewGoGetterDownloader(atmosConfig, opts...).Fetch(p.uri, filepath.Join(tempDir, p.mixinFilename), downloader.ClientModeFile, 10*time.Minute); err != nil {
 			return fmt.Errorf("failed to download package %s error %w", p.name, err)
 		}
 
@@ -557,6 +494,17 @@ func installMixin(p *pkgComponentVendor, atmosConfig *schema.AtmosConfiguration)
 		// symlink components/terraform/mixins/context.tf components/terraform/infra/vpc-flow-logs-bucket/context.tf: file exists
 		OnSymlink: func(src string) cp.SymlinkAction {
 			return cp.Deep
+		},
+
+		// OnDirExists handles existing directories at the destination.
+		// If the destination already has a .git directory (from a previous vendor run),
+		// we need to leave it untouched to avoid permission errors on git packfiles
+		// which often have restrictive permissions.
+		OnDirExists: func(src, dest string) cp.DirExistsAction {
+			if filepath.Base(dest) == ".git" {
+				return cp.Untouchable
+			}
+			return cp.Merge
 		},
 	}
 

@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+import useGlobalData from '@docusaurus/useGlobalData';
 import FilterBar from './FilterBar';
 import TimelineRelease from './TimelineRelease';
 import {
@@ -20,6 +21,13 @@ export default function ChangelogTimeline({
   const [selectedYears, setSelectedYears] = useState<string[]>([]);
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
 
+  // Get release map from blog-release-data plugin (computed at build time via git).
+  const globalData = useGlobalData();
+  const releaseData = globalData['blog-release-data']?.default as
+    | { releaseMap: Record<string, string> }
+    | undefined;
+  const releaseMap = releaseData?.releaseMap;
+
   // Extract available years and tags for the filters.
   const years = useMemo(() => extractYears(items), [items]);
   const tags = useMemo(() => extractTags(items), [items]);
@@ -31,8 +39,8 @@ export default function ChangelogTimeline({
   );
 
   const groupedItems = useMemo(
-    () => groupBlogPostsByRelease(filteredItems),
-    [filteredItems]
+    () => groupBlogPostsByRelease(filteredItems, releaseMap),
+    [filteredItems, releaseMap]
   );
 
   const hasResults = groupedItems.length > 0;

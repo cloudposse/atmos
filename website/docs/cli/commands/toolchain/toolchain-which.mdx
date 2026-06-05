@@ -1,0 +1,44 @@
+---
+title: atmos toolchain which
+sidebar_label: which
+sidebar_class_name: command
+id: which
+description: Locate the exact file path of a toolchain-managed tool binary.
+---
+import Screengrab from '@site/src/components/Screengrab'
+import Terminal from '@site/src/components/Terminal'
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Locate the exact file path of a toolchain-managed tool to verify which version will be executed by your components, commands, and workflows. This is essential for troubleshooting version conflicts.
+</Intro>
+
+<Screengrab title="atmos toolchain which --help" slug="atmos-toolchain-which--help" />
+
+## Usage
+
+Execute the `atmos toolchain which` command like this:
+
+```shell
+atmos toolchain which <tool>[@version]
+```
+
+## Examples
+
+```shell
+atmos toolchain which terraform@1.9.8
+atmos toolchain which hashicorp/terraform
+atmos toolchain which kubectl
+```
+
+## Arguments
+
+<dl>
+    <dt>`tool` <em>(required)</em></dt>
+    <dd>
+        Tool to locate in the toolchain. Can be a short name (alias) or full `owner/repo` format.
+        Optionally include `@version` to locate a specific version.
+
+        Examples: `terraform`, `hashicorp/terraform`, `terraform@1.9.8`
+    </dd>
+</dl>

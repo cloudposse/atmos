@@ -33,13 +33,14 @@ function BlogListPageMetadata({ metadata }: { metadata: Props['metadata'] }): Re
 }
 
 function BlogListPageContent({ items, metadata }: Props): ReactNode {
-  const { blogTitle, blogDescription } = metadata;
-
   return (
     <Layout wrapperClassName={styles.changelogPageFullWidth}>
       <div className={clsx('container', styles.changelogContainer)}>
         <header className={styles.changelogHeader}>
-          <h1 className={styles.changelogTitle}>{blogTitle}</h1>
+          <h1 className={styles.changelogTitle}>
+            <span className={styles.titlePrefix}>Atmos </span>
+            Changelog
+          </h1>
         </header>
 
         <ChangelogTimeline items={items} />

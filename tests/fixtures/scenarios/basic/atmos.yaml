@@ -17,3 +17,7 @@ stacks:
 logs:
   file: "/dev/stderr"
   level: Info
+
+# Empty auth configuration (no identities configured).
+# This allows commands to run without authentication.
+auth:

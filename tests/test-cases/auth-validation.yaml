@@ -12,7 +12,13 @@ tests:
       - "auth"
       - "validate"
     expect:
-      diff: []
+      # Ignore lines that wrap differently based on terminal width
+      diff:
+        - "Authentication configuration validation failed"
+        - "invalid-provider"
+        - "unsupported provider kind"
+        - "^\\s+provider$"  # Orphaned continuation line from wrapping
+        - "^\\s+kind:"  # Orphaned continuation line from wrapping
       stderr:
         - "invalid auth config"
       exit_code: 1
@@ -29,7 +35,7 @@ tests:
       - "--verbose"
     expect:
       diff: []
-      stdout:
+      stderr:
         - "Validating authentication configuration"
         - "Authentication configuration is valid"
       exit_code: 0
@@ -48,7 +54,7 @@ tests:
       ATMOS_AUTH_TEST_MISSING_PROVIDER: "true"
     expect:
       diff: []
-      stdout:
+      stderr:
         - "Authentication configuration is valid"
       exit_code: 0
 
@@ -66,6 +72,6 @@ tests:
       ATMOS_AUTH_TEST_CIRCULAR: "true"
     expect:
       diff: []
-      stdout:
+      stderr:
         - "Authentication configuration is valid"
       exit_code: 0

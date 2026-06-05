@@ -1,9 +1,8 @@
 ---
 title: Manage Lifecycle Events with Hooks
-sidebar_position: 6
 sidebar_label: hooks
 sidebar_class_name: command
-description: Use lifecycle hooks to take action at various points in the lifecycle of your components.
+description: Run scanners, cost estimators, custom commands, and store outputs at component lifecycle events.
 id: hooks
 ---
 import Terminal from '@site/src/components/Terminal'
@@ -11,202 +10,516 @@ import Intro from '@site/src/components/Intro'
 import File from '@site/src/components/File'
 
 <Intro>
-Atmos supports the ability to take action at various points in the lifecycle of your components. This is done by
-configuring the `hooks` section in your stack manifest for the component that you want to take action on.
+Atmos hooks run automated actions at specific points in a component's
+lifecycle — before/after `terraform plan`, `apply`, `deploy`, or `init`.
+Built-in kinds cover the common cases (cost analysis, security scanning,
+storing outputs) and the generic `command` kind plugs in any binary you
+need. Tools auto-install through the Atmos toolchain and their output
+renders identically in your terminal and on Atmos Pro.
 </Intro>
-
 
 ## Hooks Schema
 
-The `hooks` section schema is as follows:
+Each hook has a `kind` that selects an engine and a set of defaults. The
+generic `command` kind runs any binary; named kinds like `infracost` and
+`trivy` ship sane defaults so you don't need to write any wiring.
 
 ```yaml
-hooks:
-  store-outputs:
-    events:
-      - after-terraform-apply
-    command: store
-    name: prod/ssm
-    outputs:
-      vpc_id: .id
-```
-
-This schema can be specified at the top level of the stack configuration (global), within the `terraform` section,
-inside individual components, or in the `overrides` section. Partial config can also be specified at various levels
-to help keep the configuration [DRY](https://en.wikipedia.org/wiki/Don%27t_repeat_yourself).
-
-#### An example demonstrating this concept is below:
-
-At the global level, set that the store command will run after terraform apply:
-
-```yaml
-# stacks/catalog/vpc/_defaults.yaml (global)
-hooks:
-  store-outputs:
-    events:
-      - after-terraform-apply
-    command: store
-```
-In the production account, use the `prod/ssm` store (configured in atmos.yaml):
-
-```yaml
-# stacks/orgs/acme/plat/prod/_defaults.yaml (terraform)
-terraform:
-  hooks:
-    store-outputs:
-      name: prod/ssm
-```
-
-At the component level, specify that the `id` output of the component should be stored in the store as the `vpc_id` key:
-
-```yaml
-# stacks/orgs/acme/plat/prod/us-east-2.yaml (component)
 components:
   terraform:
     vpc:
       hooks:
-        store-outputs:
+        # Cost diff after every plan — zero config.
+        cost:
+          events: [after-terraform-plan]
+          kind: infracost
+
+        # Security scan after every plan.
+        security:
+          events: [after-terraform-plan]
+          kind: trivy
+
+        # Store outputs after apply (the original hook use case).
+        outputs:
+          events: [after-terraform-apply]
+          kind: store
+          name: prod/ssm
           outputs:
             vpc_id: .id
 ```
 
+Hooks can be declared at the global level, the `terraform` section, an
+individual component, or in the `overrides` section. Partial config at
+each level merges into the final result so you can keep configuration
+[DRY](https://en.wikipedia.org/wiki/Don%27t_repeat_yourself).
+
 ## Supported Lifecycle Events
 
-Atmos supports the following lifecycle events:
+| Event | When it fires |
+|---|---|
+| `before-terraform-init` | Before `atmos terraform init` runs |
+| `before-terraform-plan` | Before `atmos terraform plan` runs (after init has completed) |
+| `after-terraform-plan` | After `atmos terraform plan` finishes |
+| `before-terraform-apply` | Before `atmos terraform apply` runs |
+| `after-terraform-apply` | After `atmos terraform apply` finishes |
+| `before-terraform-deploy` | Alias of `before-terraform-apply` (deploy is apply with `-auto-approve`) |
+| `after-terraform-deploy` | Alias of `after-terraform-apply` |
 
-- `after-terraform-apply` (this event is triggered after the `atmos terraform apply` or `atmos terraform deploy` command is run)
+Hooks with no `events` list fire on every supported event for backward
+compatibility with configs written before event filtering existed. You
+can use the dotted form (`after.terraform.plan`) or the hyphenated form
+(`after-terraform-plan`) — they're equivalent.
 
-## Supported Functions
+## Built-in Kinds
 
-### store
+Each named kind below ships defaults for `command`, `args`, `env`, and
+`on_failure` so the minimal config (just `events` and `kind`) does the
+right thing. Every default is overridable — set the field on your hook
+and your value wins. See [Overriding Kind Defaults](#overriding-kind-defaults)
+for the override rules (notably: `args` and `env` are full replacement,
+not merge).
 
-The `store` function writes data to an external store after Terraform operations complete. This enables sharing Terraform outputs with other components via the [`!store` function](/stacks/sharing-state/stores).
+### `kind: infracost`
 
-#### Configuring Stores
+Runs [Infracost](https://www.infracost.io/) to compute monthly cloud cost
+estimates from your Terraform plan. Renders a cost diff card with the
+top resources by monthly cost.
 
-Before using the `store` function, you must define stores in your `atmos.yaml`:
-
-<File title="atmos.yaml">
 ```yaml
-stores:
-  # AWS SSM Parameter Store
-  prod/ssm:
-    backend: aws/ssm
-    config:
-      region: us-east-1
-
-  dev/ssm:
-    backend: aws/ssm
-    config:
-      region: us-west-2
-
-  # HashiCorp Vault
-  vault/secrets:
-    backend: vault
-    config:
-      address: https://vault.example.com
-```
-</File>
-
-The store `name` in your hook configuration (e.g., `prod/ssm`) must match one of the stores defined in `atmos.yaml`.
-
-#### Supported Store Backends
-
-<dl>
-  <dt>`aws/ssm`</dt>
-  <dd>AWS Systems Manager Parameter Store.</dd>
-
-  <dt>`aws/secretsmanager`</dt>
-  <dd>AWS Secrets Manager.</dd>
-
-  <dt>`vault`</dt>
-  <dd>HashiCorp Vault.</dd>
-
-  <dt>`redis`</dt>
-  <dd>Redis key-value store.</dd>
-
-  <dt>`artifactory`</dt>
-  <dd>JFrog Artifactory.</dd>
-</dl>
-
-#### Store Function Reference
-
-<dl>
-  <dt>`hooks.[hook_name]`</dt>
-  <dd>This map key is the name you want to give to the hook. This must be unique for each hook in the component.</dd>
-
-  <dt>`hooks.[hook_name].events`</dt>
-  <dd>
-  This is a list of [Supported Lifecycle Events](#supported-lifecycle-events) that should trigger running the command.
-  </dd>
-
-  <dt>`hooks.[hook_name].command`</dt>
-  <dd>Must be set to `store`</dd>
-
-  <dt>`hooks.[hook_name].name`</dt>
-  <dd>The name of the store to use (must match a store defined in `atmos.yaml`).</dd>
-
-  <dt>`hooks.[hook_name].outputs`</dt>
-  <dd>
-  A map of values that will be written to the store under the key for this component. The key is the name of the key in
-  the store. The value is the value to write to the store. If the value begins with a dot (`.`), it will be treated as a
-  [Terraform output](https://developer.hashicorp.com/terraform/language/values/outputs) and the value will be retrieved
-  from the Terraform state for the current component.
-  </dd>
-</dl>
-
-#### Complete Example
-
-This example shows the full workflow: configuring stores, setting up hooks, and reading stored values.
-
-<File title="atmos.yaml">
-```yaml
-stores:
-  prod/ssm:
-    backend: aws/ssm
-    config:
-      region: us-east-1
-```
-</File>
-
-<File title="stacks/catalog/vpc/_defaults.yaml">
-```yaml
-# Define the hook at the catalog level
 hooks:
-  store-outputs:
-    events:
-      - after-terraform-apply
-    command: store
+  cost:
+    events: [after-terraform-plan]
+    kind: infracost
+```
+
+Requires `INFRACOST_API_KEY` to be set in the shell or on the hook
+(free at [infracost.io](https://www.infracost.io)).
+
+### `kind: trivy`
+
+[Trivy](https://trivy.dev/) is an open-source security and misconfiguration
+scanner from [Aqua Security](https://www.aquasec.com/). The `trivy` kind
+runs Trivy in `config` mode against the component's Terraform sources and
+feeds the SARIF output through Atmos's shared scanner result handler.
+
+```yaml
+hooks:
+  security:
+    events: [after-terraform-plan]
+    kind: trivy
+```
+
+<dl>
+  <dt>`command` (default)</dt>
+  <dd>`trivy`.</dd>
+
+  <dt>`args` (default)</dt>
+  <dd>`config --format sarif --output $ATMOS_OUTPUT_FILE --quiet $ATMOS_COMPONENT_PATH`.</dd>
+
+  <dt>Output</dt>
+  <dd>Single SARIF file written directly to `$ATMOS_OUTPUT_FILE`.</dd>
+
+  <dt>`on_failure` (default)</dt>
+  <dd>`warn` — a scanner finding does not block your plan unless you override this.</dd>
+
+  <dt>Runtime requirements</dt>
+  <dd>The `trivy` binary on PATH. Declare it in `dependencies.tools` to have Atmos auto-install through the toolchain.</dd>
+
+  <dt>Authentication</dt>
+  <dd>None required for `config` scans.</dd>
+</dl>
+
+### `kind: checkov`
+
+[Checkov](https://www.checkov.io/) is an open-source policy-as-code scanner
+maintained by [Bridgecrew / Prisma Cloud](https://www.paloaltonetworks.com/prisma/cloud)
+(Palo Alto Networks). The `checkov` kind runs Checkov over the component's
+Terraform sources and feeds the SARIF output through Atmos's shared scanner
+result handler.
+
+```yaml
+hooks:
+  policy:
+    events: [after-terraform-plan]
+    kind: checkov
+```
+
+<dl>
+  <dt>`command` (default)</dt>
+  <dd>`checkov`.</dd>
+
+  <dt>`args` (default)</dt>
+  <dd>`-d $ATMOS_COMPONENT_PATH -o sarif --output-file-path $ATMOS_OUTPUT_DIR --quiet --soft-fail`. Note: Checkov's `--output-file-path` takes a *directory* and writes `results_sarif.sarif` inside it.</dd>
+
+  <dt>Output</dt>
+  <dd>SARIF file written to `$ATMOS_OUTPUT_DIR/results_sarif.sarif`; the kind's result handler reads from that nested path.</dd>
+
+  <dt>`on_failure` (default)</dt>
+  <dd>`warn`.</dd>
+
+  <dt>Runtime requirements</dt>
+  <dd>The `checkov` binary on PATH. Declare it in `dependencies.tools` to have Atmos auto-install through the toolchain.</dd>
+
+  <dt>Default env additions</dt>
+  <dd>Atmos sets `SSL_CERT_FILE` from the host CA bundle when one is detected. The PyInstaller-packaged Checkov release ships a frozen `certifi` bundle that often cannot validate the TLS chain serving `api0.prismacloud.io` (the API Checkov hits at startup to fetch guideline mappings); pointing `SSL_CERT_FILE` at the host bundle is the official PyInstaller workaround. On hosts where Atmos cannot detect a CA bundle, the kind makes no env change and Checkov falls back to its bundled `certifi`.</dd>
+</dl>
+
+### `kind: kics`
+
+[KICS](https://kics.io/) (Keeping Infrastructure as Code Secure) is an
+open-source IaC scanner from [Checkmarx](https://checkmarx.com/). The
+`kics` kind runs KICS over the component's Terraform sources and feeds
+the SARIF output through Atmos's shared scanner result handler.
+
+```yaml
+hooks:
+  iac-scan:
+    events: [after-terraform-plan]
+    kind: kics
+```
+
+<dl>
+  <dt>`command` (default)</dt>
+  <dd>`kics`.</dd>
+
+  <dt>`args` (default)</dt>
+  <dd>`scan -p $ATMOS_COMPONENT_PATH -o $ATMOS_OUTPUT_DIR --report-formats sarif --no-progress`.</dd>
+
+  <dt>Output</dt>
+  <dd>SARIF file written to `$ATMOS_OUTPUT_DIR/results.sarif`.</dd>
+
+  <dt>`on_failure` (default)</dt>
+  <dd>`warn`.</dd>
+
+  <dt>Runtime requirements</dt>
+  <dd>The `kics` binary on PATH. Declare it in `dependencies.tools` to have Atmos auto-install through the toolchain — Atmos ships a curated registry override so `kics: "<version>"` resolves correctly even though the upstream Aqua entry uses an unsupported `go_build` type.</dd>
+
+  <dt>`KICS_QUERIES_PATH`</dt>
+  <dd>Required at runtime. The KICS release tarball does not include the query library. Homebrew install: `export KICS_QUERIES_PATH=$(brew --prefix kics)/share/kics/assets/queries`. For toolchain installs, point at the unpacked `assets/queries` directory shipped alongside the release archive.</dd>
+</dl>
+
+All three scanner kinds emit SARIF and share a result handler that renders
+findings as a compact markdown table — severity, rule ID (linked to the
+upstream remediation guide when available), short description, and
+`file:line` location. The same markdown body flows to your terminal, the
+Atmos Pro run page, and PR comments.
+
+### `kind: store`
+
+Reads Terraform outputs and writes them to an external store (SSM,
+Secrets Manager, Azure Key Vault, etc.). Use this to share state between
+components without backend wiring — paired with the [`!store`
+function](/stacks/sharing-state/stores) for reading.
+
+```yaml
+hooks:
+  outputs:
+    events: [after-terraform-apply]
+    kind: store
     name: prod/ssm
     outputs:
-      vpc_id: .vpc_id
+      vpc_id: .id
       private_subnet_ids: .private_subnet_ids
-      public_subnet_ids: .public_subnet_ids
 ```
-</File>
 
-<File title="stacks/orgs/acme/plat/prod/us-east-1.yaml">
+See [Store function reference](#store-function-reference) below for
+configuration details.
+
+### `kind: command` (generic engine)
+
+The escape hatch — runs any toolchain-resolved binary with Atmos's
+standard `ATMOS_*` env-var contract. Use when no built-in kind fits
+your tool.
+
 ```yaml
-import:
-  - catalog/vpc/_defaults
+hooks:
+  custom-scan:
+    events: [after-terraform-plan]
+    kind: command
+    command: my-internal-scanner
+    args:
+      - "--component"
+      - "{{ .atmos_component }}"
+      - "--source"
+      - "$ATMOS_COMPONENT_PATH"
+      - "--out"
+      - "$ATMOS_OUTPUT_FILE"
+    format: markdown     # optional; tells Atmos to render the output file as markdown
+    on_failure: warn     # warn | fail | ignore
+```
 
+The subprocess receives these environment variables:
+
+<dl>
+  <dt>`ATMOS_COMPONENT_PATH`</dt>
+  <dd>On-disk path to the component's Terraform module (honors workdir resolution).</dd>
+
+  <dt>`ATMOS_PLANFILE`</dt>
+  <dd>Planfile path on after-plan events (when threaded — currently a stub).</dd>
+
+  <dt>`ATMOS_OUTPUT_DIR`</dt>
+  <dd>A fresh temp directory created by Atmos before the subprocess starts (via `os.MkdirTemp("", "atmos-hook-*")`). **Unique per hook invocation** — two hooks firing on the same event get separate directories and do not share state through these env vars. The directory and everything inside it is deleted automatically when the hook returns. Use this for tools that write to a directory rather than a single file (e.g., KICS, Checkov).</dd>
+
+  <dt>`ATMOS_OUTPUT_FILE`</dt>
+  <dd>`$ATMOS_OUTPUT_DIR/output`. Write structured output here for the kind's result handler to read. Same lifetime as `ATMOS_OUTPUT_DIR`.</dd>
+
+  <dt>`ATMOS_STACK`</dt>
+  <dd>The stack name.</dd>
+
+  <dt>`ATMOS_COMPONENT`</dt>
+  <dd>The component name.</dd>
+</dl>
+
+Atmos creates a fresh temp directory per hook invocation, points
+`ATMOS_OUTPUT_DIR` and `ATMOS_OUTPUT_FILE` at it, and deletes the entire
+directory after the hook returns. Custom commands can write any
+additional files they need into `$ATMOS_OUTPUT_DIR` — sibling hooks won't
+collide, and cleanup is automatic.
+
+Tool stdout/stderr stream through Atmos's I/O layer so you see them in
+real time — same UX as Terraform plan output.
+
+## Overriding Kind Defaults
+
+Every named kind (`infracost`, `trivy`, `checkov`, `kics`, `store`)
+ships defaults for `command`, `args`, `env`, and `on_failure`. Any
+field you set on the hook overrides the kind's default for that field.
+
+:::caution Override is replace, not merge
+`args` and `env` are **full replacement** — if you set `args` on the
+hook, the kind's default arg list is discarded entirely (you must
+restate every arg you want). Same for `env`. If you only need to tweak
+one flag, use `kind: command` directly and pass the full command line.
+:::
+
+A common case is bumping a scanner's severity threshold or adding a
+config file. Because override replaces the entire arg list, copy the
+default args from the [kind's reference section above](#kind-trivy) and
+add your overrides:
+
+```yaml
+hooks:
+  security:
+    events: [after-terraform-plan]
+    kind: trivy
+    args:
+      - config
+      - --format
+      - sarif
+      - --output
+      - $ATMOS_OUTPUT_FILE
+      - --severity
+      - HIGH,CRITICAL          # added
+      - --quiet
+      - $ATMOS_COMPONENT_PATH
+```
+
+You can also override just `on_failure` (independent of args/env) to
+make a scanner finding block the run:
+
+```yaml
+hooks:
+  security:
+    events: [after-terraform-plan]
+    kind: trivy
+    on_failure: fail            # default is warn
+```
+
+Or override `env` to inject a tool-specific config path:
+
+```yaml
+hooks:
+  policy:
+    events: [after-terraform-plan]
+    kind: checkov
+    env:
+      CHECKOV_CONFIG_FILE: $ATMOS_COMPONENT_PATH/.checkov.yaml
+```
+
+Setting `env` on the hook replaces the kind's `DefaultEnv` map
+entirely. For `kind: checkov` specifically, that means losing the
+default `SSL_CERT_FILE` workaround (see [`kind: checkov`](#kind-checkov))
+— restate it if you still need it.
+
+## Tool Auto-Install via `dependencies.tools`
+
+Declare which tools a hook needs and Atmos installs them automatically
+through the toolchain before the hook fires. Same syntax used by
+[component dependencies](/stacks/dependencies/components):
+
+```yaml
 components:
   terraform:
     vpc:
-      vars:
-        vpc_cidr: "10.0.0.0/16"
-
-    # Another component can read from the store
-    eks:
-      vars:
-        vpc_id: !store prod/ssm vpc vpc_id
-        subnet_ids: !store prod/ssm vpc private_subnet_ids
+      dependencies:
+        tools:
+          infracost: "0.10.44"
+          checkov: "3.2.529"
+      hooks:
+        cost:     { events: [after-terraform-plan], kind: infracost }
+        security: { events: [after-terraform-plan], kind: checkov }
 ```
-</File>
 
-For more information on reading from stores, see [External Stores](/stacks/sharing-state/stores).
+A **pre-flight check** runs once per command invocation:
+
+1. Resolve every tool the component declares.
+2. Install any that aren't already present.
+3. Build a PATH augmentation that points at the installed pinned versions.
+4. Verify each hook's binary is resolvable.
+
+If any binary is missing, the run aborts **before** Terraform with a
+clear error including a hint to declare it in `dependencies.tools`. You
+won't lose a 90-second plan to find out a hook is misconfigured.
+
+Pin a concrete version (`"3.2.529"`) or use a SemVer constraint
+(`"~> 3.2"`). `"latest"` is accepted but the resulting PATH may not match
+what the toolchain installed — pin a version for reliable behavior.
+
+### Curated Atmos Registry
+
+Atmos ships a small curated registry baked into the binary that
+overrides upstream Aqua registry entries for tools that don't model
+cleanly with Aqua's defaults. Today this covers **KICS** (the upstream
+entry uses `type: go_build` which the Atmos installer doesn't support
+yet). The override is invisible to users — you just write `kics:
+"2.1.20"` in `dependencies.tools` and it works.
+
+You can override even the built-in overrides with your own registry
+entry at higher priority — see [Toolchain
+Configuration](/cli/configuration/toolchain) for the registry syntax.
+
+## Skipping Hooks at Runtime
+
+Set `--skip-hooks` (or the `ATMOS_SKIP_HOOKS` environment variable) to
+bypass hooks for a single invocation without editing stack config.
+Useful for emergency operations, local iteration, or when a scanner is
+producing noisy false positives you want to ignore for one run.
+
+```bash
+atmos terraform plan vpc -s prod --skip-hooks                  # skip all
+atmos terraform plan vpc -s prod --skip-hooks=cost,security    # skip specific hooks by name
+ATMOS_SKIP_HOOKS=true atmos terraform apply vpc -s prod        # via env var
+```
+
+Skipped hooks are logged at `INFO` level so it stays visible in CI
+output. The flag is **per-invocation only** — it doesn't propagate to
+nested commands or workflows. See [Global Flags](/cli/global-flags) for
+all options.
+
+## Hooks with `--all`
+
+`atmos terraform plan --all` / `atmos terraform apply --all` walks every
+terraform component in the selected stack(s) in dependency order and runs
+the command for each. Hooks fire just like a single-component invocation,
+with these specifics:
+
+- **Hooks fire per component**, in dependency order. `destroy --all`
+  reverses the order so dependents tear down before their dependencies.
+- **Tool auto-install runs per component.** Each component's
+  `dependencies.tools` is resolved on its own, so different components in
+  the same `--all` run can pin different versions of the same tool —
+  the toolchain PATH is rebuilt per component.
+- **`--skip-hooks` propagates across the whole run.** The flag is set on
+  the shared invocation state and applies uniformly to every component
+  `--all` visits.
+- **`on_failure: fail` aborts the remaining traversal.** A failing hook
+  on component K stops `--all` before it visits any downstream node.
+  Components already processed stay processed — there is no rollback.
+
+## Failure Modes
+
+Every hook can declare an `on_failure` mode:
+
+<dl>
+  <dt>`warn` (default)</dt>
+  <dd>Log a warning if the hook fails, continue. Built-in scanner kinds default to `warn` so a security or cost issue doesn't block your plan unless you explicitly want it to.</dd>
+
+  <dt>`fail`</dt>
+  <dd>Propagate the subprocess error — the terraform command aborts. Use when a hook finding should block the operation (e.g., critical security violations).</dd>
+
+  <dt>`ignore`</dt>
+  <dd>Silently swallow failures. Useful for opportunistic notifications you don't want to ever break a run.</dd>
+</dl>
+
+## Format Symmetry
+
+When a hook's kind produces a markdown summary (every built-in kind
+does), Atmos renders **the same bytes** in:
+
+- Your terminal (via `ui.MarkdownMessage`)
+- The Atmos Pro run page (when Pro is connected)
+
+No separate "terminal-friendly" vs "Pro-friendly" variants — write
+markdown once, get it everywhere.
+
+## Backwards Compatibility
+
+The pre-rename `command:` YAML key is still accepted as an alias for
+`kind:`. Existing stack manifests like:
+
+```yaml
+hooks:
+  vpc-id:
+    events: [after-terraform-apply]
+    command: store      # legacy form — still works
+    name: vpc/id
+    outputs:
+      id: .vpc_id
+```
+
+…parse identically post-upgrade. No migration required.
+
+## Store Function Reference
+
+For complete details on the `store` kind (configuring stores, supported
+backends, output mapping, etc.), see [Sharing State with
+Stores](/stacks/sharing-state/stores).
+
+<dl>
+  <dt>`hooks.<name>`</dt>
+  <dd>Map key is the hook's name (unique per component).</dd>
+
+  <dt>`hooks.<name>.events`</dt>
+  <dd>List of [lifecycle events](#supported-lifecycle-events) that trigger this hook.</dd>
+
+  <dt>`hooks.<name>.kind`</dt>
+  <dd>Which engine runs the hook. One of `store`, `command`, `infracost`, `checkov`, `trivy`, `kics`. Aliased from legacy `command:` field.</dd>
+
+  <dt>`hooks.<name>.command`</dt>
+  <dd>For `kind: command`: the binary to execute (resolved via the toolchain or PATH). Named kinds default this.</dd>
+
+  <dt>`hooks.<name>.args`</dt>
+  <dd>For `kind: command`: arguments passed to the binary. Supports Go template syntax (`{{ .atmos_component }}`) for stack metadata and `$ATMOS_*` env-var substitution at exec time.</dd>
+
+  <dt>`hooks.<name>.env`</dt>
+  <dd>Additional env vars exported to the subprocess. Supports the same templating as `args`.</dd>
+
+  <dt>`hooks.<name>.format`</dt>
+  <dd>Optional rendering hint. v1 supports `markdown` — tells Atmos to render the tool's output file as markdown in the terminal.</dd>
+
+  <dt>`hooks.<name>.on_failure`</dt>
+  <dd>`warn` (default), `fail`, or `ignore`.</dd>
+
+  <dt>`hooks.<name>.name` / `hooks.<name>.outputs`</dt>
+  <dd>Store-kind specific. See [store function reference](/stacks/sharing-state/stores).</dd>
+</dl>
+
+## Examples
+
+Five working examples live in the [Examples gallery](/examples):
+
+- [`hooks-infracost`](/examples/hooks-infracost) — cost analysis with `kind: infracost`
+- [`hooks-trivy`](/examples/hooks-trivy) — security scanning with `kind: trivy`
+- [`hooks-checkov`](/examples/hooks-checkov) — policy scanning with `kind: checkov`
+- [`hooks-kics`](/examples/hooks-kics) — IaC scanning with `kind: kics`
+- [`hooks-custom-command`](/examples/hooks-custom-command) — custom Python script via `kind: command`
+
+Each uses dummy AWS provider config so `tofu plan` succeeds offline.
 
 ## Related
 
-- [External Stores](/stacks/sharing-state/stores) - Reading data from stores with `!store`
-- [Terraform State](/stacks/sharing-state/terraform-state) - Alternative method using `!terraform.state`
+- [Global Flags](/cli/global-flags) — `--skip-hooks` and friends
+- [Component Dependencies](/stacks/dependencies/components) — `dependencies.tools` syntax used for auto-install
+- [Toolchain Configuration](/cli/configuration/toolchain) — registry overrides
+- [External Stores](/stacks/sharing-state/stores) — reading data written by `kind: store`
+- [Terraform State](/stacks/sharing-state/terraform-state) — alternative state-sharing pattern via `!terraform.state`

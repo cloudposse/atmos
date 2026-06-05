@@ -15,7 +15,7 @@ repos:
         name: Tidy go.mod
         description: Ensure go.mod and go.sum are clean
 
-  # Run golangci-lint using system binary to avoid Go 1.25 compatibility issues
+  # Run golangci-lint using system binary to avoid Go version compatibility issues
   - repo: local
     hooks:
       - id: golangci-lint-config-verify

@@ -17,14 +17,20 @@ type msalCache struct {
 }
 
 // NewMSALCache creates a new MSAL cache instance.
-// If cachePath is empty, uses the default Azure CLI location (~/.azure/msal_token_cache.json).
-func NewMSALCache(cachePath string) (cache.ExportReplace, error) {
+// If cachePath is empty, uses the default Azure CLI location (~/.azure/atmos/{realm}/msal_token_cache.json).
+// The realm parameter provides credential isolation between different repositories.
+func NewMSALCache(cachePath string, realm string) (cache.ExportReplace, error) {
 	if cachePath == "" {
 		homeDir, err := os.UserHomeDir()
 		if err != nil {
 			return nil, fmt.Errorf("failed to get user home directory: %w", err)
 		}
-		cachePath = filepath.Join(homeDir, ".azure", "msal_token_cache.json")
+		// Include realm in path for credential isolation.
+		if realm != "" {
+			cachePath = filepath.Join(homeDir, ".azure", "atmos", realm, "msal_token_cache.json")
+		} else {
+			cachePath = filepath.Join(homeDir, ".azure", "msal_token_cache.json")
+		}
 	}
 
 	// Ensure cache directory exists.

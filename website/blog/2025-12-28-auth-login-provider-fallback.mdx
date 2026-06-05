@@ -1,0 +1,57 @@
+---
+slug: auth-login-provider-fallback
+title: 'Seamless First Login with Provider Fallback'
+authors: [osterman]
+tags: [enhancement, dx]
+---
+
+`atmos auth login` now automatically falls back to provider authentication when no identities are configured, enabling seamless first-time login with `auto_provision_identities`.
+
+<!--truncate-->
+
+## What Changed
+
+Previously, running `atmos auth login` with only a provider configured (no static identities) would fail with "no identities available". Users had to know to use `--provider <name>` explicitly.
+
+Now Atmos automatically detects this scenario and falls back to provider-level authentication:
+
+- **Single provider**: Auto-selected without prompting
+- **Multiple providers**: Interactive selection (or use `--provider` flag)
+- **Non-interactive/CI**: Requires explicit `--provider` flag with helpful error message
+
+## Why This Matters
+
+With `auto_provision_identities: true`, providers discover and cache available identities after SSO login. But on first login (or after `atmos auth logout` clears the cache), there are no identities yet. This change eliminates the friction:
+
+```shell
+# Before: Required knowledge of the --provider flag
+atmos auth login --provider my-sso  # Had to know this
+
+# After: Just works
+atmos auth login  # Automatically uses the configured provider
+```
+
+## How to Use It
+
+No configuration changes needed. If you have a provider configured with `auto_provision_identities: true`, `atmos auth login` now works out of the box:
+
+```yaml
+auth:
+  providers:
+    my-sso:
+      type: aws-sso
+      auto_provision_identities: true
+      config:
+        sso_region: us-east-1
+        sso_start_url: https://my-org.awsapps.com/start
+```
+
+```shell
+# First login - automatically uses my-sso provider
+atmos auth login
+
+# After login, identities are discovered and cached
+# Subsequent logins use cached identities as before
+```
+
+The `--provider` flag remains available for explicit control when needed.

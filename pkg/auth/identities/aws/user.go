@@ -13,6 +13,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/sts"
+	"github.com/aws/smithy-go"
 	"github.com/charmbracelet/huh"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -32,6 +33,7 @@ const (
 	minSessionSeconds         = 900    // 15 minutes - AWS minimum
 	awsUserProviderName       = "aws-user"
 	logKeyIdentity            = "identity"
+	logKeyErrorCode           = "error_code"
 	defaultRegion             = "us-east-1"
 )
 
@@ -39,6 +41,11 @@ const (
 type userIdentity struct {
 	name   string
 	config *schema.Identity
+	realm  string // Credential isolation realm set by auth manager.
+	// credStore is the config-aware credential store injected by the auth
+	// manager via SetCredentialStore. When nil (e.g. identity constructed
+	// directly in tests), credentialStore() falls back to the default store.
+	credStore types.CredentialStore
 }
 
 // NewUserIdentity creates a new AWS user identity.
@@ -61,6 +68,30 @@ func (i *userIdentity) Kind() string {
 	return "aws/user"
 }
 
+// SetRealm sets the credential isolation realm for this identity.
+func (i *userIdentity) SetRealm(realm string) {
+	i.realm = realm
+}
+
+// SetCredentialStore injects the auth manager's config-aware credential store.
+// Implements the manager's optional credentialStoreReceiver interface so that
+// keyring I/O performed by this identity honors auth.keyring.type (issue #2544).
+func (i *userIdentity) SetCredentialStore(store types.CredentialStore) {
+	i.credStore = store
+}
+
+// credentialStore returns the injected config-aware store, falling back to the
+// default store when none was injected (e.g. identity constructed directly in
+// tests).
+func (i *userIdentity) credentialStore() types.CredentialStore {
+	if i.credStore != nil {
+		return i.credStore
+	}
+	// No config available in this construction path; nil selects the default
+	// keyring backend (same behavior as the deprecated no-arg constructor).
+	return atmosCredentials.NewCredentialStoreWithConfig(nil)
+}
+
 // GetProviderName returns the provider name for this identity.
 // AWS user identities always return "aws-user" as they are standalone.
 func (i *userIdentity) GetProviderName() (string, error) {
@@ -70,6 +101,8 @@ func (i *userIdentity) GetProviderName() (string, error) {
 // Authenticate performs authentication by checking for existing valid session credentials
 // or generating new session tokens if needed.
 func (i *userIdentity) Authenticate(ctx context.Context, _ types.ICredentials) (types.ICredentials, error) {
+	defer perf.Track(nil, "aws.userIdentity.Authenticate")()
+
 	// First, try to load existing session credentials from AWS files.
 	// This prevents unnecessary GetSessionToken API calls when valid credentials already exist.
 	existingCreds, err := i.LoadCredentials(ctx)
@@ -85,8 +118,36 @@ func (i *userIdentity) Authenticate(ctx context.Context, _ types.ICredentials) (
 	}
 
 	// No valid existing credentials - resolve base credentials and generate new session tokens.
-	longLivedCreds, err := i.resolveLongLivedCredentials()
+	longLivedCreds, err := i.resolveLongLivedCredentials(ctx)
 	if err != nil {
+		// Only try browser webflow when credentials are genuinely absent.
+		// Skip webflow for:
+		//   - ErrInvalidAuthConfig: partial access_key_id/secret_access_key in YAML; surfacing
+		//     this immediately avoids silently authenticating as a different principal.
+		//   - ErrAwsUserKeyringReadFailed: the user configured credentials but the keyring
+		//     is unreadable (locked keychain, permission denial, corrupted entry). Falling
+		//     through to webflow would mask the real problem and ignore configured creds.
+		if i.shouldFallBackToWebflow(err) {
+			log.Info(
+				"No AWS credentials in YAML or keyring; starting browser-based authentication",
+				logKeyIdentity, i.name,
+				"reason", err.Error(),
+				"hint", fmt.Sprintf("Run 'atmos auth user configure --identity %s' to store credentials, or set credentials.webflow_enabled: false to disable browser auth", i.name),
+			)
+			webflowCreds, webflowErr := i.resolveCredentialsViaWebflow(ctx)
+			if webflowErr == nil {
+				region := i.resolveRegion()
+				if webflowCreds.Region == "" {
+					webflowCreds.Region = region
+				}
+				if writeErr := i.writeAWSFiles(webflowCreds, region); writeErr != nil {
+					return nil, fmt.Errorf("%w: failed to write AWS files: %w", errUtils.ErrAwsAuth, writeErr)
+				}
+				return webflowCreds, nil
+			}
+			log.Debug("Browser webflow failed", logKeyIdentity, i.name, "error", webflowErr)
+			return nil, webflowErr
+		}
 		return nil, err
 	}
 
@@ -101,13 +162,30 @@ func (i *userIdentity) Authenticate(ctx context.Context, _ types.ICredentials) (
 	return i.generateSessionToken(ctx, longLivedCreds, region)
 }
 
+// shouldFallBackToWebflow reports whether a credential-resolution error is
+// recoverable via browser-based authentication. Webflow is appropriate only
+// when the user has NOT supplied credentials anywhere; it must never bypass
+// configured credentials that simply could not be read.
+func (i *userIdentity) shouldFallBackToWebflow(err error) bool {
+	if !i.isWebflowEnabled() {
+		return false
+	}
+	// Partial / invalid YAML config — surface the real error.
+	if errors.Is(err, errUtils.ErrInvalidAuthConfig) {
+		return false
+	}
+	// Keyring read failed — user likely has credentials but we can't read them.
+	if errors.Is(err, errUtils.ErrAwsUserKeyringReadFailed) {
+		return false
+	}
+	return true
+}
+
 // resolveLongLivedCredentials returns long-lived credentials with deep merge precedence.
 // Precedence order (per field): YAML config > Keyring store.
 // This allows users to store credentials in keyring but override specific fields (e.g., MFA ARN) in YAML.
-func (i *userIdentity) resolveLongLivedCredentials() (*types.AWSCredentials, error) {
-	// Start with keyring credentials as base (if available).
-	keystoreCreds, keystoreErr := i.credentialsFromStore()
-
+// The context is used to check if interactive prompts are allowed.
+func (i *userIdentity) resolveLongLivedCredentials(ctx context.Context) (*types.AWSCredentials, error) {
 	// Get YAML config values (may be empty or !env that resolved to empty).
 	yamlAccessKeyID, _ := i.config.Credentials["access_key_id"].(string)
 	yamlSecretAccessKey, _ := i.config.Credentials["secret_access_key"].(string)
@@ -129,25 +207,71 @@ func (i *userIdentity) resolveLongLivedCredentials() (*types.AWSCredentials, err
 	}
 
 	// YAML has no credentials, fall back to keyring.
+	return i.resolveCredentialsFromKeyring(ctx, yamlMfaArn)
+}
+
+// resolveCredentialsFromKeyring resolves credentials from keyring with prompting fallback.
+// It validates that keyring contains long-lived credentials (not session tokens).
+// When browser webflow is enabled, credential prompts are skipped so the caller
+// can fall through to browser-based authentication instead.
+func (i *userIdentity) resolveCredentialsFromKeyring(ctx context.Context, yamlMfaArn string) (*types.AWSCredentials, error) {
+	keystoreCreds, keystoreErr := i.credentialsFromStore()
+	allowPrompts := types.AllowPrompts(ctx) && !i.isWebflowEnabled()
+
 	if keystoreErr != nil {
-		return nil, fmt.Errorf("%w: AWS User credentials not found for identity %q. Please configure credentials by running: atmos auth user configure --identity %s", errUtils.ErrAwsUserNotConfigured, i.name, i.name)
+		// A real keyring read failure (corrupted entry, deserialization error,
+		// permission denial) must propagate as-is so Authenticate skips the
+		// webflow fallback — otherwise webflow would silently bypass the
+		// credentials the user has already configured.
+		if errors.Is(keystoreErr, errUtils.ErrAwsUserKeyringReadFailed) {
+			return nil, keystoreErr
+		}
+		// "Not found" - prompt for new ones if allowed, else return
+		// ErrAwsUserNotConfigured so Authenticate may try webflow.
+		return i.promptOrError(allowPrompts, yamlMfaArn, "No credentials found",
+			fmt.Sprintf("AWS User credentials not found for identity %q", i.name),
+			fmt.Sprintf("atmos auth user configure --identity %s", i.name))
 	}
 
-	// Deep merge: Start with keyring, override with non-empty YAML fields.
+	// Validate keyring has long-lived credentials (not session tokens).
+	if keystoreCreds.SessionToken != "" {
+		log.Warn("Keyring contains session credentials instead of long-lived credentials",
+			logKeyIdentity, i.name, "hint", "Re-configuring will fix this.")
+		return i.promptOrError(allowPrompts, yamlMfaArn, "Replacing session credentials",
+			fmt.Sprintf("keyring contains session credentials (not long-lived) for identity %q", i.name),
+			fmt.Sprintf("atmos auth user configure --identity %s", i.name))
+	}
+
+	return i.mergeCredentialsWithYAML(keystoreCreds, yamlMfaArn), nil
+}
+
+// promptOrError prompts for credentials if allowed, otherwise returns an error with guidance.
+func (i *userIdentity) promptOrError(allowPrompts bool, yamlMfaArn, logReason, errContext, configureCmd string) (*types.AWSCredentials, error) {
+	if PromptCredentialsFunc != nil && allowPrompts {
+		log.Debug(logReason+", prompting for new credentials", logKeyIdentity, i.name)
+		newCreds, promptErr := PromptCredentialsFunc(i.name, yamlMfaArn)
+		if promptErr != nil {
+			return nil, fmt.Errorf("%w: %s and prompting failed: %w", errUtils.ErrAwsUserNotConfigured, errContext, promptErr)
+		}
+		return newCreds, nil
+	}
+	return nil, fmt.Errorf("%w: %s. Please configure credentials by running: %s", errUtils.ErrAwsUserNotConfigured, errContext, configureCmd)
+}
+
+// mergeCredentialsWithYAML creates credentials from keyring with YAML overrides.
+func (i *userIdentity) mergeCredentialsWithYAML(keystoreCreds *types.AWSCredentials, yamlMfaArn string) *types.AWSCredentials {
 	result := &types.AWSCredentials{
 		AccessKeyID:     keystoreCreds.AccessKeyID,
 		SecretAccessKey: keystoreCreds.SecretAccessKey,
-		MfaArn:          keystoreCreds.MfaArn, // Start with keyring MFA ARN
+		MfaArn:          keystoreCreds.MfaArn,
+		SessionDuration: keystoreCreds.SessionDuration,
 	}
-
-	// Override MFA ARN from YAML if present (allows version-controlled MFA config).
 	if yamlMfaArn != "" {
 		log.Debug("Overriding MFA ARN from YAML config", logKeyIdentity, i.name, "yaml_mfa_arn", yamlMfaArn, "keyring_mfa_arn", keystoreCreds.MfaArn)
 		result.MfaArn = yamlMfaArn
 	}
-
 	log.Debug("Using credentials from keyring", logKeyIdentity, i.name, "mfa_source", map[bool]string{true: "yaml", false: "keyring"}[yamlMfaArn != ""])
-	return result, nil
+	return result
 }
 
 // credentialsFromConfig builds AWS credentials from identity config if present.
@@ -174,19 +298,33 @@ func (i *userIdentity) credentialsFromConfig() (*types.AWSCredentials, error) {
 }
 
 // credentialsFromStore retrieves AWS credentials from the keyring store.
+// Distinguishes "credentials not configured" (ErrAwsUserNotConfigured) from
+// "keyring read failed" (ErrAwsUserKeyringReadFailed) so callers can decide
+// whether webflow is an appropriate fallback. A read failure means the user
+// likely DID configure credentials but the keyring is unreadable — falling
+// through to webflow would mask the real problem.
 func (i *userIdentity) credentialsFromStore() (*types.AWSCredentials, error) {
-	credStore := atmosCredentials.NewCredentialStore()
-	retrieved, err := credStore.Retrieve(i.name)
+	// Use realm for credential isolation between different repositories.
+	credStore := i.credentialStore()
+	retrieved, err := credStore.Retrieve(i.name, i.realm)
 	if err != nil {
-		return nil, fmt.Errorf("%w: failed to retrieve AWS User credentials for %q: %w", errUtils.ErrAwsUserNotConfigured, i.name, err)
+		// Only "not found" maps to "not configured" — every other keyring error
+		// (locked keychain, permission denial, deserialization failure, etc.) is
+		// a real read failure and must not trigger webflow fallback.
+		if errors.Is(err, atmosCredentials.ErrCredentialsNotFound) {
+			return nil, fmt.Errorf("%w: AWS User credentials not found in keyring for identity %q: %w", errUtils.ErrAwsUserNotConfigured, i.name, err)
+		}
+		return nil, fmt.Errorf("%w: identity %q: %w", errUtils.ErrAwsUserKeyringReadFailed, i.name, err)
 	}
 
 	longLivedCreds, ok := retrieved.(*types.AWSCredentials)
 	if !ok {
-		return nil, fmt.Errorf("%w: stored credentials are not AWS credentials", errUtils.ErrAwsAuth)
+		// Stored value exists but is the wrong type — keyring is corrupted, not "missing".
+		return nil, fmt.Errorf("%w: identity %q: stored credentials are not AWS credentials", errUtils.ErrAwsUserKeyringReadFailed, i.name)
 	}
 	if longLivedCreds.AccessKeyID == "" || longLivedCreds.SecretAccessKey == "" {
-		return nil, fmt.Errorf("%w: stored AWS user credentials for %q are incomplete (missing access key or secret)", errUtils.ErrAwsUserNotConfigured, i.name)
+		// Entry exists but is incomplete — also a read failure, not "not configured".
+		return nil, fmt.Errorf("%w: identity %q: stored credentials are incomplete (missing access key or secret)", errUtils.ErrAwsUserKeyringReadFailed, i.name)
 	}
 
 	log.Debug("Using credentials from keyring", logKeyIdentity, i.name)
@@ -203,7 +341,8 @@ func (i *userIdentity) resolveRegion() string {
 
 // writeAWSFiles writes credentials to AWS config files using "aws-user" as mock provider.
 func (i *userIdentity) writeAWSFiles(creds *types.AWSCredentials, region string) error {
-	awsFileManager, err := awsCloud.NewAWSFileManager("")
+	// User identity writes files with realm for credential isolation.
+	awsFileManager, err := awsCloud.NewAWSFileManager("", i.realm)
 	if err != nil {
 		return errors.Join(errUtils.ErrAuthAwsFileManagerFailed, err)
 	}
@@ -223,74 +362,246 @@ func (i *userIdentity) writeAWSFiles(creds *types.AWSCredentials, region string)
 
 // generateSessionToken generates session tokens for AWS User identities (with or without MFA).
 func (i *userIdentity) generateSessionToken(ctx context.Context, longLivedCreds *types.AWSCredentials, region string) (types.ICredentials, error) {
-	// Build config options
+	return i.generateSessionTokenWithRetry(ctx, longLivedCreds, region, false)
+}
+
+// generateSessionTokenWithRetry is the internal implementation that supports retrying with new credentials.
+func (i *userIdentity) generateSessionTokenWithRetry(ctx context.Context, longLivedCreds *types.AWSCredentials, region string, isRetry bool) (types.ICredentials, error) {
+	// Call STS to get session token.
+	result, err := i.callGetSessionToken(ctx, longLivedCreds, region)
+	if err != nil {
+		return i.handleSTSErrorWithRetry(ctx, err, longLivedCreds, region, isRetry)
+	}
+
+	// Convert STS result to session credentials and write to AWS files.
+	return i.processSTSResult(result, region)
+}
+
+// callGetSessionToken makes the STS GetSessionToken API call.
+func (i *userIdentity) callGetSessionToken(ctx context.Context, longLivedCreds *types.AWSCredentials, region string) (*sts.GetSessionTokenOutput, error) {
+	// Build config options.
 	configOpts := []func(*config.LoadOptions) error{
 		config.WithRegion(region),
 		config.WithCredentialsProvider(credentials.NewStaticCredentialsProvider(
-			longLivedCreds.AccessKeyID,
-			longLivedCreds.SecretAccessKey,
-			"", // no session token for long-lived credentials.
+			longLivedCreds.AccessKeyID, longLivedCreds.SecretAccessKey, "",
 		)),
 	}
-
-	// Add custom endpoint resolver if configured
 	if resolverOpt := awsCloud.GetResolverConfigOption(i.config, nil); resolverOpt != nil {
 		configOpts = append(configOpts, resolverOpt)
 	}
 
-	// Create AWS config with long-lived credentials.
-	// Use isolated environment to avoid conflicts with external AWS env vars.
-	// Note: We provide explicit credentials via configOpts, so we don't need shared config loading.
 	cfg, err := awsCloud.LoadIsolatedAWSConfig(ctx, configOpts...)
 	if err != nil {
 		return nil, fmt.Errorf("%w: failed to load AWS config: %w", errUtils.ErrAwsAuth, err)
 	}
 
-	// Create STS client.
-	stsClient := sts.NewFromConfig(cfg)
-
-	// Build GetSessionToken input (handles MFA prompt if configured).
 	input, err := i.buildGetSessionTokenInput(longLivedCreds)
 	if err != nil {
 		return nil, err
 	}
 
-	result, err := stsClient.GetSessionToken(ctx, input)
-	if err != nil {
-		return nil, errors.Join(errUtils.ErrAuthenticationFailed, err)
-	}
+	return sts.NewFromConfig(cfg).GetSessionToken(ctx, input)
+}
 
-	// Validate result and safely construct session credentials.
+// handleSTSErrorWithRetry handles STS errors and optionally retries with new credentials.
+func (i *userIdentity) handleSTSErrorWithRetry(ctx context.Context, err error, longLivedCreds *types.AWSCredentials, region string, isRetry bool) (types.ICredentials, error) {
+	newCreds, stsErr := i.handleSTSError(ctx, err, longLivedCreds, isRetry)
+	if stsErr != nil {
+		return nil, stsErr
+	}
+	if newCreds != nil {
+		log.Debug("Retrying STS call with new credentials", logKeyIdentity, i.name)
+		if newCreds.Region == "" {
+			newCreds.Region = region
+		}
+		return i.generateSessionTokenWithRetry(ctx, newCreds, region, true)
+	}
+	return nil, fmt.Errorf("%w: unexpected state in credential retry", errUtils.ErrAuthenticationFailed)
+}
+
+// processSTSResult converts STS result to credentials and writes to AWS files.
+func (i *userIdentity) processSTSResult(result *sts.GetSessionTokenOutput, region string) (*types.AWSCredentials, error) {
 	if result == nil || result.Credentials == nil {
 		return nil, fmt.Errorf("%w: STS returned empty credentials", errUtils.ErrAuthenticationFailed)
 	}
 
-	accessKeyID := aws.ToString(result.Credentials.AccessKeyId)
-	secretAccessKey := aws.ToString(result.Credentials.SecretAccessKey)
-	sessionToken := aws.ToString(result.Credentials.SessionToken)
 	expiration := ""
 	if result.Credentials.Expiration != nil {
 		expiration = result.Credentials.Expiration.Format(time.RFC3339)
 	}
 
-	// Create session credentials (temporary tokens for AWS files).
 	sessionCreds := &types.AWSCredentials{
-		AccessKeyID:     accessKeyID,
-		SecretAccessKey: secretAccessKey,
-		SessionToken:    sessionToken,
+		AccessKeyID:     aws.ToString(result.Credentials.AccessKeyId),
+		SecretAccessKey: aws.ToString(result.Credentials.SecretAccessKey),
+		SessionToken:    aws.ToString(result.Credentials.SessionToken),
 		Region:          region,
 		Expiration:      expiration,
 	}
 
-	// Write session credentials to AWS files using "aws-user" as mock provider.
 	if err := i.writeAWSFiles(sessionCreds, region); err != nil {
 		return nil, fmt.Errorf("%w: failed to write AWS files: %w", errUtils.ErrAwsAuth, err)
 	}
 
-	// Note: We keep the long-lived credentials in the keystore unchanged.
-	// Only the session tokens are written to AWS config/credentials files.
-
 	return sessionCreds, nil
+}
+
+// handleSTSError processes errors from STS API calls and returns appropriate user-friendly errors.
+// It detects specific AWS error codes like InvalidClientTokenId and provides actionable guidance.
+// The ctx parameter is used to check if interactive prompts are allowed.
+// The longLivedCreds parameter allows MFA token re-prompting when the error is MFA-related.
+// The isRetry parameter indicates if this is a retry attempt after credential prompting.
+// Returns: (new credentials if prompting succeeded, error if prompting failed/disabled or on retry).
+func (i *userIdentity) handleSTSError(ctx context.Context, err error, longLivedCreds *types.AWSCredentials, isRetry bool) (*types.AWSCredentials, error) {
+	var apiErr smithy.APIError
+	if !errors.As(err, &apiErr) {
+		return nil, errors.Join(errUtils.ErrAuthenticationFailed, err)
+	}
+
+	switch apiErr.ErrorCode() {
+	case "InvalidClientTokenId":
+		return i.handleInvalidClientTokenId(ctx, apiErr, isRetry)
+	case "ExpiredTokenException":
+		return i.handleExpiredToken(apiErr)
+	case "AccessDenied":
+		return i.handleAccessDenied(ctx, apiErr, longLivedCreds, isRetry)
+	default:
+		return nil, errors.Join(errUtils.ErrAuthenticationFailed, err)
+	}
+}
+
+// handleInvalidClientTokenId handles the case where AWS access keys have been rotated or revoked.
+// It clears stale credentials and optionally prompts for new ones (only on first attempt).
+// The ctx parameter is used to check if interactive prompts are allowed.
+// The isRetry parameter prevents duplicate prompting when the newly-entered credentials also fail.
+func (i *userIdentity) handleInvalidClientTokenId(ctx context.Context, apiErr smithy.APIError, isRetry bool) (*types.AWSCredentials, error) {
+	log.Error("AWS credentials are invalid or have been revoked",
+		logKeyIdentity, i.name, logKeyErrorCode, apiErr.ErrorCode(), "suggestion", "reconfigure credentials")
+
+	i.clearStaleCredentials()
+
+	// Only prompt for credentials on the first attempt, not on retry, and only if prompts are allowed.
+	// If this is a retry, the user already provided credentials that also failed.
+	allowPrompts := types.AllowPrompts(ctx)
+	if PromptCredentialsFunc != nil && !isRetry && allowPrompts {
+		return i.promptForNewCredentials(apiErr.ErrorCode())
+	}
+
+	// Build appropriate error message based on whether this is a retry.
+	builder := errUtils.Build(errUtils.ErrCredentialsInvalid).
+		WithContext("identity", i.name).
+		WithContext(logKeyErrorCode, apiErr.ErrorCode())
+
+	if isRetry {
+		builder = builder.
+			WithExplanation("The newly-entered AWS credentials are also invalid").
+			WithHint("Please verify your access key ID and secret access key are correct").
+			WithHintf("Run: atmos auth user configure --identity %s", i.name)
+	} else {
+		builder = builder.
+			WithExplanation("Your AWS access keys have been rotated or revoked on the AWS side").
+			WithExplanation("Stale credentials have been automatically cleared from keychain").
+			WithHintf("Run: atmos auth user configure --identity %s", i.name)
+	}
+
+	return nil, builder.Err()
+}
+
+// clearStaleCredentials removes stale credentials from the keyring.
+func (i *userIdentity) clearStaleCredentials() {
+	// Use realm for credential isolation between different repositories.
+	credStore := i.credentialStore()
+	if delErr := credStore.Delete(i.name, i.realm); delErr != nil {
+		log.Debug("Failed to clear stale credentials from keyring", logKeyIdentity, i.name, "error", delErr)
+	} else {
+		log.Debug("Cleared stale credentials from keyring", logKeyIdentity, i.name)
+	}
+}
+
+// promptForNewCredentials prompts the user for new credentials and returns them.
+func (i *userIdentity) promptForNewCredentials(errorCode string) (*types.AWSCredentials, error) {
+	yamlMfaArn, _ := i.config.Credentials["mfa_arn"].(string)
+	newCreds, promptErr := PromptCredentialsFunc(i.name, yamlMfaArn)
+	if promptErr != nil {
+		log.Debug("Credential prompting failed", logKeyIdentity, i.name, "error", promptErr)
+		return nil, errUtils.Build(errUtils.ErrCredentialsInvalid).
+			WithExplanation("Your AWS access keys have been rotated or revoked on the AWS side").
+			WithExplanation("Credential prompting was cancelled or failed").
+			WithHintf("Run: atmos auth user configure --identity %s", i.name).
+			WithContext("identity", i.name).
+			WithContext(logKeyErrorCode, errorCode).
+			Err()
+	}
+	log.Debug("New credentials provided via prompt", logKeyIdentity, i.name)
+	return newCreds, nil
+}
+
+// handleExpiredToken handles the case where the session token has expired.
+func (i *userIdentity) handleExpiredToken(apiErr smithy.APIError) (*types.AWSCredentials, error) {
+	log.Error("AWS session token expired", logKeyIdentity, i.name, logKeyErrorCode, apiErr.ErrorCode())
+	return nil, errUtils.Build(errUtils.ErrAuthenticationFailed).
+		WithExplanation("AWS session token has expired").
+		WithHintf("Run: atmos auth login --identity %s", i.name).
+		WithContext("identity", i.name).
+		WithContext(logKeyErrorCode, apiErr.ErrorCode()).
+		Err()
+}
+
+// handleAccessDenied handles the case where the user doesn't have permission to call GetSessionToken.
+// It also detects MFA-related failures and re-prompts for the MFA token.
+// The ctx parameter is used to check if interactive prompts are allowed.
+func (i *userIdentity) handleAccessDenied(ctx context.Context, apiErr smithy.APIError, longLivedCreds *types.AWSCredentials, isRetry bool) (*types.AWSCredentials, error) {
+	errorMsg := apiErr.ErrorMessage()
+
+	// Check if this is an MFA-related failure (invalid/expired token).
+	// AWS returns AccessDenied with specific messages for MFA failures.
+	if isMfaRelatedError(errorMsg) {
+		// Don't re-prompt for MFA if this is already a retry (prevents infinite loop).
+		if isRetry {
+			log.Error("MFA token invalid on retry attempt", logKeyIdentity, i.name, logKeyErrorCode, apiErr.ErrorCode())
+			return nil, errUtils.Build(errUtils.ErrAuthenticationFailed).
+				WithExplanation("The MFA token you entered is invalid or has expired").
+				WithHint("MFA tokens are time-based and typically valid for 30 seconds").
+				WithHintf("Wait for a new token and run: atmos auth login --identity %s", i.name).
+				WithContext("identity", i.name).
+				WithContext(logKeyErrorCode, apiErr.ErrorCode()).
+				Err()
+		}
+
+		// MFA is configured and we have long-lived credentials - just re-prompt for MFA token.
+		// Only prompt if prompts are allowed in this context.
+		allowPrompts := types.AllowPrompts(ctx)
+		if longLivedCreds != nil && longLivedCreds.MfaArn != "" && promptMfaTokenFunc != nil && allowPrompts {
+			log.Warn("MFA token was invalid, prompting for new token", logKeyIdentity, i.name)
+			// Return the same long-lived credentials - the retry will prompt for a new MFA token.
+			return longLivedCreds, nil
+		}
+	}
+
+	// Generic AccessDenied - likely a permission issue.
+	log.Error("Access denied when calling GetSessionToken", logKeyIdentity, i.name, logKeyErrorCode, apiErr.ErrorCode())
+	return nil, errUtils.Build(errUtils.ErrAuthenticationFailed).
+		WithExplanation("Your IAM user does not have permission to call sts:GetSessionToken").
+		WithHint("Ensure your IAM user has the sts:GetSessionToken permission").
+		WithContext("identity", i.name).
+		WithContext(logKeyErrorCode, apiErr.ErrorCode()).
+		Err()
+}
+
+// isMfaRelatedError checks if an AccessDenied error message indicates an MFA token issue.
+func isMfaRelatedError(errorMsg string) bool {
+	mfaPatterns := []string{
+		"MultiFactorAuthentication failed",
+		"invalid MFA",
+		"MFA token",
+		"one time pass code",
+	}
+	lowerMsg := strings.ToLower(errorMsg)
+	for _, pattern := range mfaPatterns {
+		if strings.Contains(lowerMsg, strings.ToLower(pattern)) {
+			return true
+		}
+	}
+	return false
 }
 
 // PromptMfaTokenFunc is a helper indirection to allow tests to stub MFA prompting.
@@ -436,7 +747,8 @@ func (i *userIdentity) Environment() (map[string]string, error) {
 	env := make(map[string]string)
 
 	// Get AWS file environment variables using "aws-user" as mock provider.
-	awsFileManager, err := awsCloud.NewAWSFileManager("")
+	// Uses realm for credential isolation between different repositories.
+	awsFileManager, err := awsCloud.NewAWSFileManager("", i.realm)
 	if err != nil {
 		return nil, errors.Join(errUtils.ErrAuthAwsFileManagerFailed, err)
 	}
@@ -445,6 +757,13 @@ func (i *userIdentity) Environment() (map[string]string, error) {
 	// Convert to map format.
 	for _, envVar := range awsEnvVars {
 		env[envVar.Key] = envVar.Value
+	}
+
+	// Include region ONLY if explicitly configured (not default fallback).
+	// This enables users to reference AWS_REGION via !env in stack configurations.
+	if r, ok := i.config.Credentials["region"].(string); ok && r != "" {
+		env["AWS_REGION"] = r
+		env["AWS_DEFAULT_REGION"] = r
 	}
 
 	// Add environment variables from identity config.
@@ -467,7 +786,8 @@ func (i *userIdentity) Paths() ([]types.Path, error) {
 func (i *userIdentity) PrepareEnvironment(ctx context.Context, environ map[string]string) (map[string]string, error) {
 	defer perf.Track(nil, "aws.userIdentity.PrepareEnvironment")()
 
-	awsFileManager, err := awsCloud.NewAWSFileManager("")
+	// Uses realm for credential isolation between different repositories.
+	awsFileManager, err := awsCloud.NewAWSFileManager("", i.realm)
 	if err != nil {
 		return environ, fmt.Errorf("failed to create AWS file manager: %w", err)
 	}
@@ -533,7 +853,8 @@ func (i *userIdentity) PostAuthenticate(ctx context.Context, params *types.PostA
 	identityName := i.name
 
 	// Setup AWS files using shared AWS cloud package.
-	if err := awsCloud.SetupFiles(providerName, identityName, params.Credentials, ""); err != nil {
+	// Use realm from params for credential isolation.
+	if err := awsCloud.SetupFiles(providerName, identityName, params.Credentials, "", params.Realm); err != nil {
 		return errors.Join(errUtils.ErrAwsAuth, err)
 	}
 
@@ -545,6 +866,7 @@ func (i *userIdentity) PostAuthenticate(ctx context.Context, params *types.PostA
 		IdentityName: identityName,
 		Credentials:  params.Credentials,
 		BasePath:     "",
+		Realm:        params.Realm,
 	}); err != nil {
 		return errors.Join(errUtils.ErrAwsAuth, err)
 	}
@@ -561,7 +883,8 @@ func (i *userIdentity) PostAuthenticate(ctx context.Context, params *types.PostA
 func (i *userIdentity) CredentialsExist() (bool, error) {
 	defer perf.Track(nil, "aws.userIdentity.CredentialsExist")()
 
-	mgr, err := awsCloud.NewAWSFileManager("")
+	// Uses realm for credential isolation between different repositories.
+	mgr, err := awsCloud.NewAWSFileManager("", i.realm)
 	if err != nil {
 		return false, err
 	}
@@ -617,8 +940,9 @@ func (i *userIdentity) Logout(ctx context.Context) error {
 	defer perf.Track(nil, "aws.userIdentity.Logout")()
 
 	// AWS user identities use "aws-user" as their provider name.
-	// Clean up files under XDG config directory (e.g., ~/.config/atmos/aws/aws-user/ on Linux).
-	fileManager, err := awsCloud.NewAWSFileManager("")
+	// Clean up files under XDG config directory (e.g., ~/.config/atmos/{realm}/aws/aws-user/ on Linux).
+	// Uses realm for credential isolation between different repositories.
+	fileManager, err := awsCloud.NewAWSFileManager("", i.realm)
 	if err != nil {
 		return errors.Join(errUtils.ErrLogoutFailed, err)
 	}

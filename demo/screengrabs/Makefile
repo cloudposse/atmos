@@ -28,10 +28,10 @@ docker-build:
 		set -e && \
 		apt-get update -qq && \
 		DEBIAN_FRONTEND=noninteractive apt-get install -y -qq aha make wget tar tree && \
-		echo "Installing Go 1.25..." && \
+		echo "Installing Go 1.26..." && \
 		ARCH=$$(uname -m | sed "s/x86_64/amd64/; s/aarch64/arm64/") && \
-		wget -q https://go.dev/dl/go1.25.0.linux-$$ARCH.tar.gz && \
-		tar -C /usr/local -xzf go1.25.0.linux-$$ARCH.tar.gz && \
+		wget -q https://go.dev/dl/go1.26.0.linux-$$ARCH.tar.gz && \
+		tar -C /usr/local -xzf go1.26.0.linux-$$ARCH.tar.gz && \
 		export PATH=/usr/local/go/bin:$$PATH && \
 		go version && \
 		echo "Building atmos from source..." && \

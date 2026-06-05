@@ -1,0 +1,7 @@
+# Mock Helmfile component for testing helmfile section locals
+
+releases:
+  - name: {{ .Values.release_name | default "mock-release" }}
+    namespace: {{ .Values.namespace | default "default" }}
+    chart: {{ .Values.chart_repo | default "https://charts.example.com" }}/mock-chart
+    version: "1.0.0"

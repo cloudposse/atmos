@@ -44,10 +44,15 @@ var problematicAzureEnvVars = []string{
 
 // PrepareEnvironmentConfig holds configuration for Azure environment preparation.
 type PrepareEnvironmentConfig struct {
-	Environ        map[string]string // Current environment variables
-	SubscriptionID string            // Azure subscription ID
-	TenantID       string            // Azure tenant ID
-	Location       string            // Azure location/region (optional)
+	Environ          map[string]string // Current environment variables
+	SubscriptionID   string            // Azure subscription ID
+	TenantID         string            // Azure tenant ID
+	Location         string            // Azure location/region (optional)
+	CloudEnvironment string            // Azure cloud environment name ("public", "usgovernment", "china")
+	// OIDC-specific configuration for Terraform ARM_USE_OIDC support.
+	UseOIDC       bool   // Use OIDC instead of CLI authentication
+	ClientID      string // Azure AD application (client) ID
+	TokenFilePath string // Path to OIDC token file (optional)
 }
 
 // PrepareEnvironment configures environment variables for Azure SDK when using Atmos auth.
@@ -56,10 +61,15 @@ type PrepareEnvironmentConfig struct {
 //  1. Clears direct Azure credential env vars to prevent conflicts with Atmos-managed credentials
 //  2. Sets AZURE_SUBSCRIPTION_ID, AZURE_TENANT_ID, AZURE_LOCATION
 //  3. Sets ARM_* variables for Terraform provider compatibility
-//  4. Sets ARM_USE_CLI=true to enable Azure CLI authentication
+//  4. Sets ARM_USE_CLI=true (for CLI/device-code auth) or ARM_USE_OIDC=true (for OIDC auth)
 //
-// This matches how 'az login' works - Atmos updates the MSAL cache and Azure profile,
-// then Terraform providers automatically detect and use those credentials via ARM_USE_CLI.
+// For OIDC authentication (service principal with federated credentials), it sets:
+//   - ARM_USE_OIDC=true
+//   - ARM_CLIENT_ID
+//   - AZURE_FEDERATED_TOKEN_FILE (if token file path is provided)
+//
+// For CLI/device-code authentication, it sets ARM_USE_CLI=true which tells Terraform
+// to use the MSAL cache populated by Atmos.
 //
 // Note: Other cloud provider credentials (AWS, GCP) are NOT cleared to support multi-cloud
 // scenarios such as using S3 backend for Terraform state while deploying to Azure.
@@ -72,6 +82,7 @@ func PrepareEnvironment(cfg PrepareEnvironmentConfig) map[string]string {
 		"subscription", cfg.SubscriptionID,
 		"tenant", cfg.TenantID,
 		"location", cfg.Location,
+		"useOIDC", cfg.UseOIDC,
 	)
 
 	// Create a copy to avoid mutating the input.
@@ -107,18 +118,51 @@ func PrepareEnvironment(cfg PrepareEnvironmentConfig) map[string]string {
 		result["ARM_LOCATION"] = cfg.Location
 	}
 
-	// Always use Azure CLI authentication for Terraform providers.
-	// This matches how 'az login' works - it updates the MSAL cache and Azure profile,
-	// then the providers automatically detect and use those credentials.
-	// This approach works for all three providers: azurerm, azapi, and azuread.
-	result["ARM_USE_CLI"] = "true"
-	log.Debug("Set ARM_USE_CLI=true for Azure CLI authentication",
-		"note", "Providers will use MSAL cache populated by Atmos")
+	// Set cloud environment for sovereign clouds (GCC High, China).
+	// Only set when non-public to avoid unnecessary env vars for the default case.
+	if cfg.CloudEnvironment != "" && cfg.CloudEnvironment != "public" {
+		result["ARM_ENVIRONMENT"] = cfg.CloudEnvironment
+		result["AZURE_ENVIRONMENT"] = cfg.CloudEnvironment
+		log.Debug("Set ARM_ENVIRONMENT for sovereign cloud", "environment", cfg.CloudEnvironment)
+	}
 
-	log.Debug("Azure auth active - Terraform will use Azure CLI credentials from MSAL cache",
-		"subscription", cfg.SubscriptionID,
-		"tenant", cfg.TenantID,
-	)
+	// Set authentication method based on provider type.
+	if cfg.UseOIDC {
+		// OIDC authentication (service principal with federated credentials).
+		// This is used for GitHub Actions, Azure DevOps, and other CI/CD systems.
+		result["ARM_USE_OIDC"] = "true"
+		log.Debug("Set ARM_USE_OIDC=true for OIDC authentication")
+
+		// Set client ID for OIDC.
+		if cfg.ClientID != "" {
+			result["ARM_CLIENT_ID"] = cfg.ClientID
+			result["AZURE_CLIENT_ID"] = cfg.ClientID
+		}
+
+		// Set token file path if available.
+		if cfg.TokenFilePath != "" {
+			result["AZURE_FEDERATED_TOKEN_FILE"] = cfg.TokenFilePath
+			result["ARM_OIDC_TOKEN_FILE_PATH"] = cfg.TokenFilePath
+		}
+
+		log.Debug("Azure OIDC auth active - Terraform will use federated credentials",
+			"subscription", cfg.SubscriptionID,
+			"tenant", cfg.TenantID,
+			"client_id", cfg.ClientID,
+		)
+	} else {
+		// CLI/device-code authentication.
+		// This matches how 'az login' works - it updates the MSAL cache and Azure profile,
+		// then the providers automatically detect and use those credentials.
+		result["ARM_USE_CLI"] = "true"
+		log.Debug("Set ARM_USE_CLI=true for Azure CLI authentication",
+			"note", "Providers will use MSAL cache populated by Atmos")
+
+		log.Debug("Azure CLI auth active - Terraform will use MSAL cache credentials",
+			"subscription", cfg.SubscriptionID,
+			"tenant", cfg.TenantID,
+		)
+	}
 
 	return result
 }

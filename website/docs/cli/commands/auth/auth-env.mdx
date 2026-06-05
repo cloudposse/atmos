@@ -8,17 +8,22 @@ description: Export temporary cloud credentials as environment variables for the
 ---
 import Screengrab from '@site/src/components/Screengrab'
 import Intro from '@site/src/components/Intro'
+import DemoVideo from '@site/src/components/Video/DemoVideo'
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
 
 <Intro>
 Quickly generate temporary cloud credentials as environment variables so you can run tools like Terraform, AWS CLI, or SDKs without manually copying and pasting access keys. This makes it seamless to switch between identities, integrate with scripts, and keep your sessions secure and short-lived.
 </Intro>
+
+<DemoVideo id="auth-env" title="atmos auth env" showCaption={false} />
 
 <Screengrab title="atmos auth env --help" slug="atmos-auth-env--help" />
 
 ## Usage
 
 ```shell
-atmos auth env [--identity <name>] [--format bash|json|dotenv] [--login]
+atmos auth env [--identity <name>] [--format bash|json|dotenv|github] [--output-file <file>] [--login]
 ```
 
 ## How It Works
@@ -27,21 +32,133 @@ atmos auth env [--identity <name>] [--format bash|json|dotenv] [--login]
 
 **Important:** This command **outputs environment variables** and does **not perform authentication by default**. It generates export statements pointing to credential files that are populated during login events. Use the `--login` flag to trigger authentication if credentials are missing or expired. Since commands cannot modify their parent shell's environment, you must use `eval` to apply these variables to your current shell.
 
-**Typical Workflow:**
+**Typical Workflow (AWS):**
 
-```bash
-# 1. Set environment variables for an identity
-eval $(atmos auth env --identity prod-admin)
+<Tabs>
+  <TabItem value="bash" label="Bash/Zsh" default>
+    ```bash
+    # 1. Set environment variables for an identity
+    eval $(atmos auth env --identity prod-admin)
 
-# 2. Authenticate (when needed) - opens browser for SSO
-atmos auth login --identity prod-admin
+    # 2. Authenticate (when needed) - opens browser for SSO
+    atmos auth login --identity prod-admin
 
-# 3. Use AWS CLI, Terraform, or other tools
-aws s3 ls
-terraform plan vpc -s prod
+    # 3. Use AWS CLI, Terraform, or other tools
+    aws s3 ls
+    terraform plan vpc -s prod
+    ```
+  </TabItem>
+  <TabItem value="powershell" label="PowerShell">
+    ```powershell
+    # 1. Set environment variables for an identity
+    $envVars = atmos auth env --identity prod-admin --format json | ConvertFrom-Json
+    $envVars.PSObject.Properties | ForEach-Object { Set-Item -Path "Env:$($_.Name)" -Value $_.Value }
+
+    # 2. Authenticate (when needed) - opens browser for SSO
+    atmos auth login --identity prod-admin
+
+    # 3. Use AWS CLI, Terraform, or other tools
+    aws s3 ls
+    terraform plan vpc -s prod
+    ```
+  </TabItem>
+</Tabs>
+
+**Typical Workflow (Azure with device-code):**
+
+<Tabs>
+  <TabItem value="bash" label="Bash/Zsh" default>
+    ```bash
+    # 1. Set environment variables for an Azure identity
+    eval $(atmos auth env --identity azure-dev)
+
+    # 2. Authenticate (when needed) - displays device code for browser login
+    atmos auth login --identity azure-dev
+
+    # 3. Use Azure CLI, Terraform, or other tools
+    az group list
+    terraform plan -var-file=azure.tfvars
+    ```
+  </TabItem>
+  <TabItem value="powershell" label="PowerShell">
+    ```powershell
+    # 1. Set environment variables for an Azure identity
+    $envVars = atmos auth env --identity azure-dev --format json | ConvertFrom-Json
+    $envVars.PSObject.Properties | ForEach-Object { Set-Item -Path "Env:$($_.Name)" -Value $_.Value }
+
+    # 2. Authenticate (when needed) - displays device code for browser login
+    atmos auth login --identity azure-dev
+
+    # 3. Use Azure CLI, Terraform, or other tools
+    az group list
+    terraform plan -var-file=azure.tfvars
+    ```
+  </TabItem>
+</Tabs>
+
+**CI/CD Workflow (GitHub Actions):**
+
+In GitHub Actions, use `--format=github` to export credentials directly to `$GITHUB_ENV`:
+
+```yaml
+- name: Authenticate
+  run: atmos auth env --identity azure-prod --format=github --login
+
+- name: Deploy
+  run: atmos terraform apply mycomponent -s prod
 ```
 
-**The commands fail gracefully:** If you run AWS CLI or Terraform commands before logging in, they will fail with standard credential errors, prompting you to run `atmos auth login`.
+The `--format=github` flag writes `KEY=value` pairs directly to the `$GITHUB_ENV` file, making credentials available to subsequent steps in GitHub Actions without shell pipelines.
+
+**Minting a GitHub token in one step and consuming it in the next:**
+
+With the [`atmos/pro` provider and `github/sts` integration](/cli/configuration/auth#github-sts-atmos-pro), `atmos auth env --format=github` can mint a short-lived, least-privilege GitHub token in one step and hand it to later steps, all built into the Atmos CLI. Set `token_env` on the integration to choose the variable name the raw token is exported under:
+
+```yaml
+# atmos.yaml
+auth:
+  providers:
+    atmos-pro:
+      kind: atmos/pro
+      spec:
+        workspace_id: <your-workspace-id>   # or ATMOS_PRO_WORKSPACE_ID
+  identities:
+    atmos-pro:
+      kind: atmos/pro
+      via: { provider: atmos-pro }
+  integrations:
+    github-sts:
+      kind: github/sts
+      via: { provider: atmos-pro }
+      spec:
+        token_env: GH_TOKEN                 # export the minted token as $GH_TOKEN
+```
+
+```yaml
+# .github/workflows/example.yml
+permissions:
+  id-token: write                            # the only permission required
+
+steps:
+  - name: Mint a GitHub token
+    # Authenticates to Atmos Pro via OIDC, mints the token, and writes GH_TOKEN to $GITHUB_ENV.
+    run: atmos auth env --identity=atmos-pro --format=github --login
+
+  - name: Check out a private repo with the minted token
+    uses: actions/checkout@v4
+    with:
+      repository: acme/private-repo
+      token: ${{ env.GH_TOKEN }}
+
+  - name: Use the GitHub CLI
+    run: gh repo view acme/private-repo
+    env:
+      GH_TOKEN: ${{ env.GH_TOKEN }}
+```
+
+For Atmos's own git operations (vendoring, `source:` components, `terraform init` of private `git::https://…` modules) `github/sts` injects per-owner `GIT_CONFIG_*` rewrites automatically, and the single-owner token is also exported as `ATMOS_PRO_GITHUB_TOKEN` by default. `token_env` lets you export it under a different name for everything else (`gh`, `actions/checkout`, REST API). For multi-org runs, use a Go template over `.owner` (e.g. `token_env: GH_TOKEN_{{ .owner }}`) to export one variable per owner.
+
+**The commands fail gracefully:** If you run cloud CLI or Terraform commands before logging in, they will fail with standard credential errors, prompting you to run `atmos auth login`.
 
 This separation allows you to add `eval $(atmos auth env)` to your shell profile without triggering login prompts every time you open a terminal.
 
@@ -51,7 +168,7 @@ This separation allows you to add `eval $(atmos auth env)` to your shell profile
 - Adding authentication to your shell profile (`.zshrc`, `.bashrc`) for automatic configuration
 - Integrating with CI/CD pipelines that need environment variables
 - Writing scripts that source credentials
-- You need credentials in a specific format (bash, json, dotenv)
+- You need credentials in a specific format (bash, json, dotenv, github)
 - Working primarily in a single identity and want persistent configuration
 
 **Use `atmos auth shell` instead when:**
@@ -78,6 +195,12 @@ atmos auth env --identity prod-admin --format json
 # Dotenv format
 atmos auth env --format dotenv
 
+# GitHub Actions format (writes to $GITHUB_ENV)
+atmos auth env --identity prod-admin --format github
+
+# GitHub Actions format with explicit output file
+atmos auth env --identity prod-admin --format github --output-file /path/to/env/file
+
 # Automatically login if credentials don't exist or are expired
 atmos auth env --login
 
@@ -89,12 +212,23 @@ atmos auth env --identity prod-admin --login
 
 ### Adding to Your Shell Profile
 
-A key advantage of `atmos auth env` is that it outputs environment variables for an identity **without requiring immediate authentication**. This makes it safe to add to your shell profile (e.g., `.zshrc`, `.bashrc`) without triggering a login prompt on every new shell session:
+A key advantage of `atmos auth env` is that it outputs environment variables for an identity **without requiring immediate authentication**. This makes it safe to add to your shell profile without triggering a login prompt on every new shell session:
 
-```bash
-# Add to ~/.zshrc or ~/.bashrc
-eval $(atmos auth env)
-```
+<Tabs>
+  <TabItem value="bash" label="Bash/Zsh" default>
+    Add to `~/.bashrc` or `~/.zshrc`:
+    ```bash
+    eval $(atmos auth env)
+    ```
+  </TabItem>
+  <TabItem value="powershell" label="PowerShell">
+    Add to `$PROFILE`:
+    ```powershell
+    $envVars = atmos auth env --format json | ConvertFrom-Json
+    $envVars.PSObject.Properties | ForEach-Object { Set-Item -Path "Env:$($_.Name)" -Value $_.Value }
+    ```
+  </TabItem>
+</Tabs>
 
 <details>
 <summary>Helper Function for Identity Switching</summary>
@@ -193,6 +327,14 @@ Adding `eval $(atmos auth env)` to your shell profile (`.zshrc`, `.bashrc`) ensu
     - **`bash`** (default): Prints `export KEY='value'` lines suitable for shell evaluation
     - **`json`**: Prints a JSON object of environment variables
     - **`dotenv`**: Prints `KEY='value'` lines in dotenv format
+    - **`github`**: Prints `KEY=value` lines for GitHub Actions `$GITHUB_ENV` file. Multiline values use GitHub's heredoc syntax.
+  </dd>
+
+  <dt>`--output-file` <em>(alias `-o`)</em></dt>
+  <dd>
+    Write output to a file instead of stdout. When used with `--format=github`, this specifies the target file for environment variables.
+
+    If `--format=github` is used without `--output-file`, the command automatically writes to the file specified by the `$GITHUB_ENV` environment variable (set automatically in GitHub Actions).
   </dd>
 
   <dt>`--login`</dt>
@@ -215,7 +357,10 @@ Adding `eval $(atmos auth env)` to your shell profile (`.zshrc`, `.bashrc`) ensu
   <dd>Default identity when `--identity` is not provided.</dd>
 
   <dt>`ATMOS_AUTH_ENV_FORMAT`</dt>
-  <dd>Sets the default output style for exported credentials. Supported values: `bash`, `json`, `dotenv`.</dd>
+  <dd>Sets the default output style for exported credentials. Supported values: `bash`, `json`, `dotenv`, `github`.</dd>
+
+  <dt>`ATMOS_AUTH_ENV_OUTPUT_FILE`</dt>
+  <dd>Default output file path when `--output-file` is not provided. For `--format=github`, this defaults to the value of `$GITHUB_ENV` if set.</dd>
 </dl>
 
 ### Output Variables (Exported by this command)
@@ -239,6 +384,18 @@ AWS_PROFILE                  # Profile name for the identity
 AWS_REGION                   # Default region (if configured)
 ```
 
+**Azure identities:**
+```bash
+AZURE_SUBSCRIPTION_ID        # Azure subscription ID
+AZURE_TENANT_ID              # Azure AD tenant ID
+AZURE_LOCATION               # Azure region (if configured)
+ARM_SUBSCRIPTION_ID          # Terraform provider subscription ID
+ARM_TENANT_ID                # Terraform provider tenant ID
+ARM_USE_OIDC                 # Set to "true" for OIDC authentication
+ARM_USE_CLI                  # Set to "true" for CLI/device-code authentication
+ARM_CLIENT_ID                # Azure AD application (client) ID for OIDC
+```
+
 **GitHub OIDC identities:**
 ```bash
 GITHUB_TOKEN                 # GitHub authentication token
@@ -246,7 +403,7 @@ GITHUB_APP_ID                # GitHub App ID (if applicable)
 GITHUB_INSTALLATION_ID       # GitHub App installation ID (if applicable)
 ```
 
-These environment variables configure cloud provider SDKs and tools (Terraform, AWS CLI, GitHub CLI, kubectl) to use the correct credentials without exposing them directly in the environment.
+These environment variables configure cloud provider SDKs and tools (Terraform, AWS CLI, Azure CLI, GitHub CLI, kubectl) to use the correct credentials without exposing them directly in the environment.
 
 ## Notes
 

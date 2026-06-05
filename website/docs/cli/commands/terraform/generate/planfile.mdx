@@ -1,0 +1,138 @@
+---
+title: atmos terraform generate planfile
+sidebar_label: generate planfile
+sidebar_class_name: command
+id: planfile
+---
+import Intro from '@site/src/components/Intro'
+import Screengrab from '@site/src/components/Screengrab'
+
+<Intro>
+Use this command to generate a Terraform planfile for an Atmos [component](/components) in a [stack](/stacks) and convert it to JSON or YAML format for review.
+</Intro>
+
+<Screengrab title="atmos terraform generate planfile --help" slug="atmos-terraform-generate-planfile--help" />
+
+## Usage
+
+Execute the `terraform generate planfile` command like this:
+
+```shell
+atmos terraform generate planfile <component> -s <stack> [options]
+```
+
+This command generates a Terraform planfile for a specified Atmos component in a stack.
+
+Under the hood, Atmos executes `terraform plan` to create a binary planfile, then uses `terraform show` to convert it into a human-readable format (YAML or JSON). This enables easy integration with other tooling like `checkov`.
+
+:::tip
+Run `atmos terraform generate planfile --help` to see all the available options
+:::
+
+## Examples
+
+```shell
+atmos terraform generate planfile component1 -s plat-ue2-dev
+atmos terraform generate planfile component1 -s plat-ue2-prod --format=json
+atmos terraform generate planfile component1 -s plat-ue2-prod --format=yaml
+atmos terraform generate planfile <component> -s <stack> --file=planfile.json
+atmos terraform generate planfile <component> -s <stack> --format=yaml --file=planfiles/planfile.yaml
+atmos terraform generate planfile <component> -s <stack> --file=/Users/me/Documents/atmos/infra/planfile.json
+```
+
+## Arguments
+
+<dl>
+    <dt>`component` <em>(required)</em></dt>
+    <dd>
+        Atmos terraform component.
+    </dd>
+</dl>
+
+## Flags
+
+<dl>
+    <dt>`--stack` <em>(alias `-s`)</em> <em>(required)</em></dt>
+    <dd>
+        Atmos stack.
+    </dd>
+
+    <dt>`--format` <em>(optional)</em></dt>
+    <dd>
+        Output format (`json` or `yaml`, `json` is default).
+
+        ```shell
+        atmos terraform generate planfile <component> -s <stack> --format=json
+        atmos terraform generate planfile <component> -s <stack> --format=yaml
+        ```
+    </dd>
+
+    <dt>`--file` <em>(alias `-f`)</em> <em>(optional)</em></dt>
+    <dd>
+        Planfile name.
+        Supports absolute and relative paths.
+
+        If not provided, Atmos generates the planfile in the Terraform component directory with the name
+        `<stack>-<component>.planfile.json` or `<stack>-<component>.planfile.yaml`, depending on the format specified
+        with `--format` flag (`json` is default).
+
+        If an absolute path is provided, the file will be created in the specified directory:
+
+        ```shell
+        atmos terraform generate planfile <component> -s <stack> --file=/Users/me/Documents/atmos/infra/planfile.json
+        ```
+
+        If a relative path is specified, the file will be created in the Terraform component directory:
+
+        ```shell
+        atmos terraform generate planfile <component> -s <stack> --file=planfile.json
+        atmos terraform generate planfile <component> -s <stack> --format=yaml --file=planfiles/planfile.yaml
+        ```
+    </dd>
+
+    <dt>`--process-templates` <em>(optional)</em></dt>
+    <dd>
+        Enable/disable Go template processing in Atmos stack manifests when executing terraform commands.
+
+        If the flag is not passed, template processing is enabled by default.
+
+        ```shell
+        atmos terraform generate planfile <component> -s <stack> --process-templates=false
+        ```
+    </dd>
+
+    <dt>`--process-functions` <em>(optional)</em></dt>
+    <dd>
+        Enable/disable YAML functions processing in Atmos stack manifests<br/>when executing terraform commands.
+
+        If the flag is not passed, YAML function processing is enabled by default.
+
+        ```shell
+        atmos terraform generate planfile <component> -s <stack> --process-functions=false
+        ```
+    </dd>
+
+    <dt>`--skip` <em>(optional)</em></dt>
+    <dd>
+        Skip processing a specific Atmos YAML function in Atmos stacks manifests when executing terraform commands.
+
+        To specify more than one function, use multiple `--skip` flags, or separate the functions with a comma.
+
+        ```shell
+        atmos terraform generate planfile <component> -s <stack> --skip=eval --skip=include
+        atmos terraform generate planfile <component> -s <stack> --skip=terraform.output,include
+        ```
+    </dd>
+</dl>
+
+## Validate Terraform/OpenTofu planfiles using Checkov
+
+You can generate a planfile for a component in a stack and validate it using [Checkov](https://www.checkov.io/).
+
+```shell
+atmos terraform generate planfile <component> -s <stack>
+checkov --file components/terraform/<component>/<stack>-<component>.planfile.json --framework terraform_plan
+```
+
+Refer to [Evaluate Checkov Policies on Terraform Plan](https://www.checkov.io/7.Scan%20Examples/Terraform%20Plan%20Scanning.html)
+for more information.

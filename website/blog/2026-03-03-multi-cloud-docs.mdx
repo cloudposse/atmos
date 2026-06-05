@@ -1,0 +1,46 @@
+---
+slug: multi-cloud-docs
+title: "Multi-Cloud Documentation and Design Patterns"
+authors: [osterman]
+tags: [documentation]
+---
+
+Atmos has always been cloud agnostic, but our documentation hasn't always reflected that. This release adds comprehensive multi-cloud documentation including a new design pattern for organizing stacks across different cloud providers.
+
+<!--truncate-->
+
+## What Changed
+
+### Multi-Cloud Overview Page
+
+A new [Multi-Cloud](/multi-cloud) page explains how Atmos works with any cloud provider that Terraform supports. It includes a cloud concept mapping table that translates equivalent concepts across AWS, Azure, and GCP — from organizational hierarchy (Organizations vs Management Groups vs Folders) to networking (VPC vs VNet vs VPC Network) to identity (IAM Roles vs Managed Identities vs Service Accounts).
+
+The page also includes tabbed configuration examples showing how to set up [authentication](/cli/configuration/auth) and [stores](/cli/configuration/stores) for each provider.
+
+### Multi-Cloud Configuration Design Pattern
+
+A new [Multi-Cloud Configuration](/design-patterns/stack-organization/multi-cloud-configuration) design pattern shows how to organize your stacks so the directory layout mirrors how your cloud provider organizes its resources. The guiding principle: what you see on disk should match how resources are deployed.
+
+Each cloud gets its own example with native terminology in folder names:
+
+- **AWS**: `accounts/dev/us-east-1.yaml`
+- **Azure**: `subscriptions/dev/eastus.yaml`
+- **GCP**: `projects/dev/us-central1.yaml`
+
+### Application SDLC Environments Design Pattern
+
+Not every repository needs deep organizational hierarchy. A new [Application SDLC Environments](/design-patterns/stack-organization/application-sdlc) design pattern shows how application repositories can co-locate infrastructure alongside application code with a minimal flat structure: `dev.yaml`, `staging.yaml`, `prod.yaml`, and optionally `preview.yaml` for ephemeral PR environments.
+
+This pattern makes it easy for developers to get up and running with Atmos in their application repositories without being overwhelmed by organizational taxonomy. The directory structure exposes only what the team needs to care about — the SDLC environment — while keeping everything else as inherited defaults. The result is a clean architecture where infrastructure ships with the application in the same repo and the same pull request.
+
+For a working example of this pattern, see the [app-on-ecs](https://github.com/cloudposse-examples/app-on-ecs) reference architecture on GitHub.
+
+### Azure and GCP Auth Documentation
+
+The [auth usage page](/cli/commands/auth/usage), [providers reference](/cli/configuration/auth/providers), and [identities reference](/cli/configuration/auth/identities) now include Azure and GCP alongside AWS, with tabbed examples for each cloud.
+
+## Why This Matters
+
+Teams deploying to Azure or GCP can now find documentation that speaks their cloud's language instead of translating from AWS-centric examples. The concept mapping table helps engineers working across multiple clouds quickly find equivalent services.
+
+For application developers, the SDLC pattern provides a low-friction on-ramp to Atmos — co-locate your Terraform next to your app code, define one file per environment, and let Atmos handle the rest.

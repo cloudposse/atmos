@@ -56,22 +56,22 @@ func TestMaskedWriter_Write(t *testing.T) {
 		{
 			name:  "contains secret",
 			input: "The secret is secret123",
-			want:  "The secret is ***MASKED***",
+			want:  "The secret is <MASKED>",
 		},
 		{
 			name:  "multiple secrets",
 			input: "secret123 and password456",
-			want:  "***MASKED*** and ***MASKED***",
+			want:  "<MASKED> and <MASKED>",
 		},
 		{
 			name:  "secret at start",
 			input: "secret123 is the value",
-			want:  "***MASKED*** is the value",
+			want:  "<MASKED> is the value",
 		},
 		{
 			name:  "secret at end",
 			input: "The value is secret123",
-			want:  "The value is ***MASKED***",
+			want:  "The value is <MASKED>",
 		},
 	}
 

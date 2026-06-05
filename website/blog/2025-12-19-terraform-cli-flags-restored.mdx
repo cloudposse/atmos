@@ -1,0 +1,80 @@
+---
+slug: terraform-cli-flags-restored
+title: 'Fixed: Terraform CLI Flags Restored After Registry Migration'
+authors:
+  - goruha
+tags:
+  - bugfix
+date: 2025-12-19T00:00:00.000Z
+---
+
+Several terraform CLI flags that were not working after version 1.202.0 have been restored. These flags were inadvertently broken during the command registry migration.
+
+<!--truncate-->
+
+## The Problem
+
+Starting in version 1.202.0, several terraform flags were not recognized or not functioning correctly:
+
+```bash
+# These flags were returning "unknown flag" errors or being ignored:
+atmos terraform workspace mycomponent -s mystack --auto-generate-backend-file=false
+atmos terraform output mycomponent -s mystack --skip-init
+atmos terraform deploy mycomponent -s mystack --deploy-run-init=false
+```
+
+This was problematic for CI/CD pipelines and workflows that relied on these flags for controlling Atmos behavior.
+
+## Fixed Flags
+
+The following flags are now properly registered and working:
+
+| Flag                           | Description                                                                |
+|--------------------------------|----------------------------------------------------------------------------|
+| `--skip-init`                  | Skip terraform init before running command                                 |
+| `--auto-generate-backend-file` | Override auto_generate_backend_file setting from atmos.yaml                |
+| `--deploy-run-init`            | Override deploy_run_init setting from atmos.yaml                           |
+| `--init-run-reconfigure`       | Override init_run_reconfigure setting from atmos.yaml                      |
+| `--init-pass-vars`             | Pass the generated varfile to terraform init (OpenTofu feature)           |
+| `--planfile`                   | Path to a terraform plan file to use                                       |
+| `--skip-planfile`              | Skip writing the plan to a planfile                                        |
+
+## Flag Availability by Command
+
+The `--skip-init` and `--init-pass-vars` flags are available on **all** terraform commands.
+
+The following flags are registered only on the commands that use them:
+
+| Command     | Available Flags                                                                             |
+|-------------|---------------------------------------------------------------------------------------------|
+| `init`      | `--auto-generate-backend-file`, `--init-run-reconfigure`                                    |
+| `workspace` | `--auto-generate-backend-file`, `--init-run-reconfigure`                                    |
+| `plan`      | `--auto-generate-backend-file`, `--init-run-reconfigure`, `--skip-planfile`                 |
+| `apply`     | `--auto-generate-backend-file`, `--init-run-reconfigure`, `--planfile`                      |
+| `deploy`    | `--auto-generate-backend-file`, `--init-run-reconfigure`, `--deploy-run-init`, `--planfile` |
+
+## Example Usage
+
+```bash
+# Skip init for output commands (useful when already initialized)
+atmos terraform output mycomponent -s mystack --skip-init
+
+# Override backend file generation
+atmos terraform workspace mycomponent -s mystack --auto-generate-backend-file=false
+
+# Control init behavior during deploy
+atmos terraform deploy mycomponent -s mystack --deploy-run-init=false
+```
+
+## Root Cause
+
+During the terraform command registry migration in version 1.202.0, these flags had two issues:
+
+1. **Flag registration**: Flags were registered in the old parsing code but not in the new flag registry, causing "unknown flag" errors
+2. **Flag value propagation**: Even when flags were recognized, their values weren't being properly applied to the execution context, causing them to be silently ignored
+
+The fix registers these flags on the specific commands that use them and ensures the values are properly parsed and applied during command execution.
+
+## Upgrade
+
+Upgrade Atmos to get this fix. No configuration changes are required.

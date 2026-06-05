@@ -403,14 +403,15 @@ func TestOSGlobMatcher_GetGlobMatches(t *testing.T) {
 		assert.Len(t, matches, 2)
 	})
 
-	t.Run("returns error for no matches", func(t *testing.T) {
+	t.Run("returns empty slice for no matches", func(t *testing.T) {
 		tmpDir := t.TempDir()
 
-		// The underlying GetGlobMatches returns an error when no files match.
+		// The underlying GetGlobMatches returns an empty slice (not an error) when no files match.
+		// Per glob.go lines 75-79: empty results are not an error condition.
 		pattern := filepath.Join(tmpDir, "*.nonexistent")
-		_, err := gm.GetGlobMatches(pattern)
-		// This function returns an error when no matches found.
-		assert.Error(t, err)
+		matches, err := gm.GetGlobMatches(pattern)
+		require.NoError(t, err)
+		assert.Empty(t, matches)
 	})
 }
 

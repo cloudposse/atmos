@@ -1,0 +1,11 @@
+# yaml-language-server: $schema=https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
+#
+# Stack file that imports both the stage mixin and the catalog component.
+# The settings.substage from the mixin should be accessible to templates in this file.
+
+import:
+  - mixins/stage/sandbox-dev
+  - catalog/my-component
+
+vars:
+  stage: test

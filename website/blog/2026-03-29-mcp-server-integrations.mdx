@@ -1,0 +1,550 @@
+---
+slug: mcp-server-integrations
+title: "Connect Atmos to MCP Servers — Use Cloud Tools Without Reimplementing Them"
+authors: [aknysh]
+tags: [feature]
+---
+
+import File from '@site/src/components/File'
+import ActionCard from '@site/src/components/ActionCard'
+import PrimaryCTA from '@site/src/components/PrimaryCTA'
+
+Atmos can now connect to external MCP servers and use their tools directly in AI conversations.
+Configure any MCP server in `atmos.yaml`, and its tools appear alongside native Atmos tools
+in `atmos ai chat`, `atmos ai ask`, and `atmos ai exec` — no custom integration code needed.
+
+<!--truncate-->
+
+## Why This Matters
+
+The MCP ecosystem has hundreds of servers — [20+ from AWS](https://github.com/awslabs/mcp) for pricing,
+security, documentation, and API access; GCP and Azure servers for their respective clouds; plus
+community servers for databases, monitoring, CI/CD, and custom internal APIs.
+
+Instead of waiting for each cloud integration to be built into Atmos, you can now install any
+stdio-based MCP server and use it from the Atmos CLI. One `atmos.yaml` section, zero glue code.
+Any MCP server that accepts `command`, `args`, and `env` works — AWS, GCP, Azure, or your own
+custom server.
+
+## Quick Start
+
+Add servers to your `atmos.yaml`:
+
+<File title="atmos.yaml">
+```yaml
+mcp:
+  servers:
+    # Cost Analysis & FinOps
+    aws-billing:
+      command: uvx
+      args: ["awslabs.billing-cost-management-mcp-server@latest"]
+      env: { AWS_REGION: "us-east-1" }
+      description: "AWS Billing — billing summaries and payment history"
+      identity: "readonly"   # Atmos Auth identity (from the auth section)
+    aws-pricing:
+      command: uvx
+      args: ["awslabs.aws-pricing-mcp-server@latest"]
+      env: { AWS_REGION: "us-east-1" }
+      description: "AWS Pricing — real-time pricing and cost analysis"
+      identity: "readonly"   # Atmos Auth identity (from the auth section)
+
+    # Security & Compliance
+    aws-security:
+      command: uvx
+      args: ["awslabs.well-architected-security-mcp-server@latest"]
+      env: { AWS_REGION: "us-east-1" }
+      description: "AWS Security — Well-Architected security posture assessment"
+      identity: "readonly"   # Atmos Auth identity (from the auth section)
+    aws-iam:
+      command: uvx
+      args: ["awslabs.iam-mcp-server@latest"]
+      env: { AWS_REGION: "us-east-1" }
+      description: "AWS IAM — role/policy analysis and access patterns"
+      identity: "readonly"   # Atmos Auth identity (from the auth section)
+    aws-cloudtrail:
+      command: uvx
+      args: ["awslabs.cloudtrail-mcp-server@latest"]
+      env: { AWS_REGION: "us-east-1" }
+      description: "AWS CloudTrail — event history and API call auditing"
+      identity: "readonly"   # Atmos Auth identity (from the auth section)
+
+    # Documentation (no credentials needed)
+    aws-docs:
+      command: uvx
+      args: ["awslabs.aws-documentation-mcp-server@latest"]
+      description: "AWS Documentation — search and fetch AWS docs"
+```
+</File>
+
+Then use them:
+
+```bash
+# Check what you've configured
+atmos mcp list
+
+# Verify a server works
+atmos mcp test aws-docs
+
+# See what tools a server exposes
+atmos mcp tools aws-pricing
+
+# Cost analysis (uses aws-pricing)
+atmos ai ask "What's the on-demand price for m7i.xlarge in us-east-1?"
+
+# Spend breakdown (uses aws-billing)
+atmos ai ask "What did we spend on EC2 last month?"
+
+# Billing history (uses aws-billing)
+atmos ai ask "Show our billing summary for the past 3 months"
+
+# Security posture (uses aws-security)
+atmos ai ask "Is GuardDuty enabled in all regions?"
+
+# IAM analysis (uses aws-iam)
+atmos ai ask "List all IAM roles with admin access"
+
+# Audit trail (uses aws-cloudtrail)
+atmos ai ask "Show recent API calls from the root account"
+
+# Documentation (uses aws-docs, no credentials needed)
+atmos ai ask "How do I configure S3 bucket lifecycle rules?"
+```
+
+## Smart Server Routing
+
+When multiple MCP servers are configured, Atmos automatically selects only the servers
+relevant to your question using a lightweight routing call to your configured AI provider.
+This keeps tool payloads small and responses fast, even with dozens of servers configured:
+
+```text
+$ atmos ai ask "List all IAM roles with admin access"
+ℹ MCP routing selected 1 of 8 servers: aws-iam
+ℹ MCP server "aws-iam" started (29 tools)
+ℹ Registered 29 tools from 1 MCP server(s)
+ℹ AI tools initialized: 39
+```
+
+Use `--mcp` to override and specify servers directly:
+
+```bash
+# Specify one server
+atmos ai ask --mcp aws-iam "List all admin roles"
+
+# Comma-separated or repeated flags
+atmos ai ask --mcp aws-iam,aws-cloudtrail "Who accessed the admin role?"
+
+# Works with all AI commands
+atmos ai chat --mcp aws-billing
+atmos ai exec --mcp aws-security,aws-iam "audit our security posture"
+```
+
+## Visibility
+
+Atmos shows which MCP servers are active and which tools the AI uses:
+
+```text
+ℹ MCP routing selected 2 of 8 servers: aws-docs, aws-pricing
+ℹ MCP server "aws-docs" started (4 tools)
+ℹ MCP server "aws-pricing" started (7 tools)
+ℹ Registered 11 tools from 2 MCP server(s)
+ℹ AI tools initialized: 26 total
+```
+
+After the AI responds, tool executions are listed:
+
+```text
+---
+## Tool Executions (2)
+1. ✅ aws-docs → aws.search_documentation (234ms)
+2. ✅ aws-pricing → get_pricing (456ms)
+```
+
+Tool usage is not inferred — the AI provider explicitly declares which tools it wants to call
+via the API protocol (`tool_use` stop reason with a `tool_calls` array). Atmos executes the
+requested tools, sends results back to the AI for the final answer, and records every call.
+If no tool executions appear, the AI genuinely chose not to use any tools for that question.
+
+## CLI Commands
+
+```bash
+atmos mcp list            # List configured external servers
+atmos mcp tools <name>    # List tools from a server
+atmos mcp test <name>     # Test server connectivity
+atmos mcp status          # Show all server statuses
+atmos mcp restart <name>  # Restart a server
+atmos mcp export # Generate .mcp.json for Claude Code / IDE
+```
+
+## Standard Config Format
+
+The `command`, `args`, `env` fields follow the same format used by Claude Code, Codex CLI, and
+Gemini CLI. Atmos adds `description`, `identity`, and `timeout` as extensions:
+
+```yaml
+mcp:
+  servers:
+    my-server:
+      command: "uvx"                          # Standard
+      args: ["package@latest"]                # Standard
+      env:                                    # Standard
+        AWS_REGION: "us-east-1"
+      description: "What this server does"    # Atmos extension
+      identity: "my-identity"                 # Atmos Auth identity (from the auth section)
+      timeout: "30s"                          # Connection timeout
+```
+
+## Atmos Auth Integration
+
+Use [Atmos Auth](/cli/configuration/auth) to inject credentials automatically — no manual
+`AWS_PROFILE` setup:
+
+```yaml
+mcp:
+  servers:
+    aws-security:
+      command: uvx
+      args: ["awslabs.well-architected-security-mcp-server@latest"]
+      identity: "security-audit"   # Atmos Auth identity (from the auth section)
+```
+
+Atmos authenticates through the identity chain, writes isolated credential files, and sets
+`AWS_SHARED_CREDENTIALS_FILE` + `AWS_PROFILE` on the subprocess.
+
+## Toolchain Integration
+
+Map `uv` to the aqua registry and install via the [Atmos Toolchain](/cli/configuration/toolchain):
+
+```yaml
+toolchain:
+  aliases:
+    uv: astral-sh/uv
+```
+
+```bash
+atmos toolchain install astral-sh/uv@0.7.12
+```
+
+## IDE Integration
+
+Use the same servers from Claude Code, Cursor, or any MCP-compatible IDE:
+
+```bash
+# Generate .mcp.json from your atmos.yaml config
+atmos mcp export
+```
+
+Servers with `identity` are automatically wrapped with `atmos auth exec` for
+credential injection. The generated `.mcp.json` works with Claude Code out of the box.
+
+## Atmos YAML Functions
+
+Atmos YAML functions work in env values:
+
+```yaml
+mcp:
+  servers:
+    my-server:
+      command: uvx
+      args: ["my-server@latest"]
+      env:
+        AWS_REGION: !env AWS_DEFAULT_REGION    # Read OS env var
+        API_KEY: !exec "vault kv get -field=key secret/mcp"  # Run command
+        PROJECT_ROOT: !repo-root               # Git root path
+```
+
+## See It in Action
+
+> All outputs below are from real AWS accounts. Account IDs, resource identifiers,
+> and internal names have been redacted. Cost figures represent an example of real-world spending.
+
+List configured servers:
+
+```text
+$ atmos mcp list
+       NAME         STATUS                           DESCRIPTION
+─────────────────────────────────────────────────────────────────────────────────────────
+ aws-api            stopped  AWS API — direct AWS CLI access with security controls
+ aws-billing        stopped  AWS Billing — billing summaries and payment history
+ aws-cloudtrail     stopped  AWS CloudTrail — event history and API call auditing
+ aws-docs           stopped  AWS Documentation — search and fetch AWS docs
+ aws-iam            stopped  AWS IAM — role/policy analysis and access patterns
+ aws-knowledge      stopped  AWS Knowledge — managed AWS knowledge base (remote)
+ aws-pricing        stopped  AWS Pricing — real-time pricing and cost analysis
+ aws-security       stopped  AWS Security — Well-Architected security posture assessment
+```
+
+Explore tools from a security server:
+
+```text
+$ atmos mcp tools aws-security
+           TOOL                                                         DESCRIPTION
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ CheckSecurityServices     Verify if selected AWS security services are enabled in the specified region and account.
+ GetSecurityFindings       Retrieve security findings from AWS security services.
+ GetStoredSecurityContext  Retrieve security services data that was stored in context from a previous CheckSecurityServices call.
+ CheckStorageEncryption    Check if AWS storage resources have encryption enabled.
+ ListServicesInRegion      List all AWS services being used in a specific region.
+ CheckNetworkSecurity      Check if AWS network resources are configured for secure data-in-transit.
+```
+
+Test server connectivity:
+
+```text
+$ atmos mcp test aws-docs
+✓ Server started successfully
+✓ Initialization handshake complete
+✓ 4 tools available
+✓ Server responds to ping
+```
+
+Ask AI with MCP tools:
+
+```text
+$ atmos ai ask "How do I configure S3 bucket lifecycle rules?"
+
+ℹ MCP routing selected 1 of 8 servers: aws-knowledge
+ℹ MCP server "aws-knowledge" started (6 tools)
+ℹ Registered 6 tools from 1 MCP server(s)
+ℹ AI tools initialized: 16
+👽 Thinking...
+
+   Configuring S3 Bucket Lifecycle Rules
+
+   S3 lifecycle rules automate object management by transitioning objects between
+   storage classes, archiving, or expiring them. Here's a comprehensive guide:
+
+  --------
+
+  ## 📋 Lifecycle Rule Structure
+
+   Each rule contains 3 key components:
+
+   Component │ Description
+  ───────────┼────────────────────────────────────────────────────────
+   Metadata  │ Rule ID and Status (Enabled/Disabled)
+   Filter    │ Which objects the rule applies to (prefix, tags, size)
+   Actions   │ What to do (transition, expire, delete)
+
+  │  A bucket can have up to 1,000 rules per lifecycle configuration.
+
+  --------
+
+  ## 🔧 Available Actions
+
+   Action                           │ Description
+  ──────────────────────────────────┼────────────────────────────────────────────────────────
+    Transition                      │ Move objects to a different storage class after N days
+    Expiration                      │ Permanently delete current object versions
+    NoncurrentVersionTransition     │ Transition old versions in versioned buckets
+    NoncurrentVersionExpiration     │ Delete noncurrent versions in versioned buckets
+    AbortIncompleteMultipartUpload  │ Cancel incomplete uploads after N days
+    ExpiredObjectDeleteMarker       │ Remove expired delete markers
+
+  ---
+
+  ## Tool Executions (1)
+
+  1. ✅ aws-knowledge → aws.search_documentation (2874ms)
+```
+
+Ask AI about billing with MCP tools:
+
+```text
+$ atmos ai ask "Show our billing summary for the past 2 months"
+ℹ MCP routing selected 1 of 8 servers: aws-billing
+ℹ MCP server "aws-billing" started (25 tools)
+ℹ Registered 25 tools from 1 MCP server(s)
+ℹ AI tools initialized: 35
+👽 Thinking...
+
+   I'll retrieve your billing summary for the past 2 months right away!
+
+   Here's your billing summary for the past 2 months (February–March 2026):
+
+  --------
+
+  ## 📊 AWS Billing Summary — February & March 2026
+
+  ### 💰 Monthly Totals
+
+   Service                                  │ Feb 2026 │ Mar 2026 │ Change
+  ──────────────────────────────────────────┼──────────┼───────────┼──────────
+   Amazon Virtual Private Cloud             │ $309.53  │ $261.17   │ ▼ $48.36
+   Amazon Elastic Container Registry Public │ $103.63  │ $103.66   │ ▲ $0.03
+   EC2 - Other                              │ $88.12   │ $123.39   │ ▲ $35.27
+   AWS Key Management Service               │ $50.94   │ $47.98    │ ▼ $2.96
+   Amazon Redshift                          │ $50.87   │ $0.30     │ ▼ $50.57
+   Tax                                      │ $47.80   │ $40.98    │ ▼ $6.82
+   Amazon Relational Database Service       │ $43.99   │ $0.11     │ ▼ $43.88
+   AWS App Runner                           │ $28.42   │ $27.55    │ ▼ $0.87
+   AWS WAF                                  │ $18.00   │ $18.00    │ —
+   Amazon EC2 Compute                       │ $5.03    │ $15.30    │ ▲ $10.27
+   AmazonCloudWatch                         │ $10.08   │ $10.45    │ ▲ $0.37
+   Amazon Simple Storage Service            │ $10.08   │ $9.35     │ ▼ $0.73
+   Amazon Route 53                          │ $5.61    │ $5.68     │ ▲ $0.07
+   Amazon Elastic File System               │ $3.65    │ —         │ ▼ $3.65
+   Amazon EC2 Container Registry (ECR)      │ $2.69    │ $2.75     │ ▲ $0.06
+   Amazon EKS                               │ —        │ $1.86     │ ▲ $1.86
+   Amazon Registrar                         │ —        │ $14.00    │ ▲ $14.00
+   AWS Cost Explorer                        │ $2.07    │ $1.91     │ ▼ $0.16
+   Other services                           │ ~$1.65   │ ~$1.41    │ ▼ $0.24
+
+  --------
+
+  ### 📈 Grand Totals
+
+   Month      │ Total Cost
+  ────────────┼──────────────────
+   Feb 2026   │ ~$782.16
+   Mar 2026   │ ~$745.26
+   Difference │ ▼ $36.90 (-4.7%)
+
+  --------
+
+  ### 🔍 Key Observations
+
+    1. Amazon VPC is the largest cost at ~$261–$310/month (NAT Gateway data
+       transfer is typically the main driver). Costs dropped notably in March.
+    2. Redshift & RDS dropped sharply in March ($50.87 → $0.30 and
+       $43.99 → $0.11), suggesting those resources were stopped or deleted.
+    3. EC2 - Other increased by $35 in March — worth investigating if this
+       correlates with EBS, data transfer, or Elastic IP costs.
+    4. Amazon EC2 Compute tripled in March ($5.03 → $15.30), possibly linked
+       to the appearance of EKS ($1.86), indicating new compute workloads.
+    5. Amazon Registrar appeared as a new $14 charge in March (domain renewal).
+
+  │  ⚠️ Note: Credits and refunds are excluded from these figures.
+
+  --------
+
+  ## Tool Executions (1)
+
+  1. ✅ aws-billing → cost-explorer (381ms)
+```
+
+Check security posture with MCP tools:
+
+```text
+$ atmos ai ask "Is GuardDuty enabled in all regions?"
+ℹ MCP routing selected 2 of 8 servers: aws-api, aws-security
+ℹ MCP server "aws-api" started (2 tools)
+ℹ MCP server "aws-security" started (6 tools)
+ℹ Registered 8 tools from 2 MCP server(s)
+ℹ AI tools initialized: 18
+👽 Thinking...
+
+  ## ❌ GuardDuty is NOT Enabled in All Regions
+
+   GuardDuty is only enabled in 1 out of 34 regions checked.
+
+  ### ✅ Enabled (1 region)
+
+   Region    │ Detector ID
+  ───────────┼────────────────────────────────────
+   us-east-2 │  <detector-id-redacted>
+
+  ### ❌ Not Enabled (33 regions)
+
+   Region         │ Region         │ Region
+  ────────────────┼────────────────┼────────────────
+   ap-south-1     │ ap-south-2     │ ap-southeast-1
+   ap-southeast-2 │ ap-southeast-3 │ ap-southeast-4
+   ap-northeast-1 │ ap-northeast-2 │ ap-northeast-3
+   ap-east-1      │ ca-central-1   │ ca-west-1
+   eu-central-1   │ eu-central-2   │ eu-north-1
+   eu-south-1     │ eu-south-2     │ eu-west-1
+   eu-west-2      │ eu-west-3      │ me-central-1
+   me-south-1     │ il-central-1   │ af-south-1
+   sa-east-1      │ us-east-1      │ us-west-1
+   us-west-2      │ mx-central-1   │ ...
+
+  --------
+
+  ### 🔒 Recommendations
+
+    1. Enable GuardDuty in all active regions — even regions where you don't
+       actively deploy can be targeted by attackers.
+    2. Use a GuardDuty delegated administrator (via AWS Organizations) to
+       centrally enable and manage across all accounts and regions.
+    3. Consider AWS Security Hub to aggregate findings from all regions.
+    4. Prioritize us-east-1, us-west-2, eu-west-1 immediately.
+
+  --------
+
+  ## Tool Executions (4)
+
+  1. ✅ aws-api → call_aws (400ms)
+  2. ✅ aws-api → call_aws (14ms)
+  3. ✅ aws-api → call_aws (7ms)
+  4. ✅ aws-api → call_aws (9450ms)
+```
+
+Audit IAM roles with smart routing:
+
+```text
+$ atmos ai ask "List all IAM roles with admin access"
+ℹ MCP routing selected 1 of 8 servers: aws-iam
+ℹ MCP server "aws-iam" started (29 tools)
+ℹ Registered 29 tools from 1 MCP server(s)
+ℹ AI tools initialized: 39
+👽 Thinking...
+
+   I'll help you find all IAM roles with admin access. Let me fetch the
+   list of IAM roles and policies simultaneously.
+
+  --------
+
+  ## 🔐 IAM Roles with Admin Access
+
+  ### 1. ✅ Direct AdministratorAccess Policy (4 attachments)
+
+   Role Name                                        │ Description                                    │ Trust Principal
+  ──────────────────────────────────────────────────┼────────────────────────────────────────────────┼───────────────────────────
+    AWSReservedSSO_AdministratorAccess_...          │ Allow Full Administrator access to the account │ AWS SSO (SAML Federation)
+    AWSReservedSSO_RootAccess_...                   │ Centralized root access to member accounts     │ AWS SSO (SAML Federation)
+    AWSReservedSSO_TerraformApplyAccess_...         │ Full Terraform state and account access        │ AWS SSO (SAML Federation)
+    AWSReservedSSO_TerraformApplyAccess-Core_...    │ Full Terraform access (core backend)           │ AWS SSO (SAML Federation)
+
+  --------
+
+  ## 📋 Summary
+
+   Category                                  │ Count
+  ───────────────────────────────────────────┼──────────
+   Full Admin (AdministratorAccess policy)   │ 4 roles
+   Broad Terraform/State access (elevated)   │ 4 roles
+   AWS Service-Linked Roles (scoped)         │ 13 roles
+
+  --------
+
+  ### 🛡️ Security Recommendations
+
+    1. Review SSO assignments for AdministratorAccess and RootAccess roles.
+    2. Audit TerraformApplyAccess roles — ensure MFA/session policies are enforced.
+    3. Monitor tfstate roles — cross-account trust across 14 accounts.
+    4. Enable CloudTrail for AssumeRole calls on high-privilege roles.
+
+  --------
+
+  ## Tool Executions (2)
+
+  1. ✅ aws-iam → list_roles (314ms)
+  2. ✅ aws-iam → list_policies (174ms)
+```
+
+## Try It
+
+<ActionCard title="Explore the MCP Example">
+    Try a complete example with pre-configured AWS MCP servers — documentation, knowledge base,
+    pricing, API access, and security assessment.
+    <div>
+      <PrimaryCTA to="/examples/mcp">Browse Example</PrimaryCTA>
+    </div>
+</ActionCard>
+
+## Learn More
+
+- [MCP Configuration](/cli/configuration/mcp) — Full configuration reference
+- [MCP Commands](/cli/commands/mcp/list) — CLI command reference
+- [AWS MCP Servers](https://github.com/awslabs/mcp) — All available AWS servers
+- [Atmos AI](/ai) — AI features overview

@@ -794,7 +794,7 @@ func TestWorkflowError_Chain(t *testing.T) {
 
 ### Related PRDs
 - [Command Registry Pattern](./command-registry-pattern.md) - Error handling in commands
-- [Testing Strategy](./testing-strategy.md) - Testing error handling
+- [Testing Strategy](./testability-refactoring-strategy.md) - Testing error handling
 
 ## Conclusion
 

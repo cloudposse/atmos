@@ -1,0 +1,96 @@
+---
+slug: terraform-state-workspaces-disabled-fix
+title: 'Fixed: !terraform.state with Disabled Workspaces'
+authors:
+  - aknysh
+tags:
+  - bugfix
+date: 2026-01-02T00:00:00.000Z
+---
+
+The `!terraform.state` YAML function now correctly reads Terraform state when workspaces are disabled
+(`components.terraform.workspaces_enabled: false` in `atmos.yaml`).
+Previously, Atmos looked for state files in the wrong location, causing the function to fail.
+
+<!--truncate-->
+
+## The Problem
+
+When `workspaces_enabled: false` is set in `atmos.yaml`, Atmos sets the workspace name to `default`.
+However, Terraform stores state differently for the default workspace compared to named workspaces:
+
+| Backend   | Default Workspace   | Named Workspace                                     |
+|-----------|---------------------|-----------------------------------------------------|
+| **S3**    | `<key>`             | `<workspace_key_prefix>/<workspace>/<key>`          |
+| **Local** | `terraform.tfstate` | `terraform.tfstate.d/<workspace>/terraform.tfstate` |
+| **Azure** | `<key>`             | `<key>env:<workspace>`                              |
+
+Atmos was incorrectly looking for state at the named workspace path even when using the default workspace. For example:
+
+```yaml
+# atmos.yaml
+components:
+  terraform:
+    workspaces_enabled: false  # Uses "default" workspace
+```
+
+```yaml
+# Stack manifest
+components:
+  terraform:
+    my-component:
+      vars:
+        vpc_id: !terraform.state vpc output_id  # Failed to find state!
+```
+
+The `!terraform.state` function would look for state at `workspace_key_prefix/default/key` (S3)
+or `terraform.tfstate.d/default/terraform.tfstate` (local) instead of the correct location.
+
+## The Fix
+
+Atmos now correctly handles the default workspace for all backend types:
+
+- **S3 backend**: Uses `<key>` directly instead of `<workspace_key_prefix>/default/<key>`
+- **Local backend**: Uses `terraform.tfstate` instead of `terraform.tfstate.d/default/terraform.tfstate`
+- **Azure backend**: Already worked correctly
+
+## Example
+
+With workspaces disabled, the `!terraform.state` function now works as expected:
+
+```yaml
+# atmos.yaml
+components:
+  terraform:
+    workspaces_enabled: false
+
+# Stack manifest
+components:
+  terraform:
+    networking:
+      metadata:
+        component: vpc
+      vars:
+        cidr: "10.0.0.0/16"
+
+    application:
+      metadata:
+        component: app
+      vars:
+        # Now correctly reads from terraform.tfstate (not terraform.tfstate.d/default/terraform.tfstate)
+        vpc_id: !terraform.state networking vpc_id
+        subnet_ids: !terraform.state networking private_subnet_ids
+```
+
+## Upgrade
+
+Upgrade Atmos to get this fix. No configuration changes are required.
+The `!terraform.state` function will automatically use the correct state file paths based on your workspace configuration.
+
+## References
+
+- [GitHub Issue #1920](https://github.com/cloudposse/atmos/issues/1920)
+- [Terraform S3 Backend Documentation](https://developer.hashicorp.com/terraform/language/backend/s3)
+- [Terraform Local Backend Documentation](https://developer.hashicorp.com/terraform/language/backend/local)
+- [Terraform Azure Backend Documentation](https://developer.hashicorp.com/terraform/language/backend/azurerm)
+- [Terraform GCS Backend Documentation](https://developer.hashicorp.com/terraform/language/backend/gcs)

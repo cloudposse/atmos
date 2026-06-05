@@ -421,6 +421,11 @@
   color: #ffc107;
 }
 
+.tagExperimental {
+  background: rgba(255, 152, 0, 0.12);
+  color: #b45309;
+}
+
 .tagDefault {
   background: rgba(158, 158, 158, 0.15);
   color: #757575;
@@ -528,6 +533,11 @@
   background: rgba(255, 193, 7, 0.25);
 }
 
+:global([data-theme='dark']) .tagExperimental {
+  background: rgba(255, 152, 0, 0.2);
+  color: #ffb74d;
+}
+
 :global([data-theme='dark']) .tagRelease {
   background: var(--ifm-color-primary-dark);
   color: var(--ifm-color-white);
@@ -556,8 +566,14 @@
 /* ==================== */
 
 @media (max-width: 768px) {
+  .changelogTimeline {
+    padding: 0 0.5rem;
+    margin-left: -0.5rem;
+    margin-right: -0.5rem;
+  }
+
   .timelineLine {
-    left: 24px;
+    left: 12px;
   }
 
   .entry {
@@ -570,16 +586,16 @@
 
   .entryLeft .entryNode,
   .entryRight .entryNode {
-    left: -32px;
+    left: -40px;
     right: auto;
     transform: none;
   }
 
   .entryLeft .entryConnector,
   .entryRight .entryConnector {
-    left: -24px;
+    left: -36px;
     right: auto;
-    width: 24px;
+    width: 36px;
   }
 
   .yearText {

@@ -1,0 +1,55 @@
+---
+slug: auth-env-region-export
+title: "AWS Region Now Exported by atmos auth env"
+authors: [osterman]
+tags: [enhancement]
+---
+
+The `atmos auth env` command now exports `AWS_REGION` and `AWS_DEFAULT_REGION`
+when region is configured in your identity settings.
+
+<!--truncate-->
+
+## What Changed
+
+The `atmos auth env` command exports AWS credentials to your shell for use with
+**external tools** (AWS CLI, direct terraform runs, etc.). Previously it only
+exported credential file paths:
+- `AWS_SHARED_CREDENTIALS_FILE`
+- `AWS_CONFIG_FILE`
+- `AWS_PROFILE`
+
+Now it also exports region when configured:
+- `AWS_REGION`
+- `AWS_DEFAULT_REGION`
+
+## When You Need This
+
+Use `atmos auth env` when you want to run external tools that need AWS credentials
+exported to the shell:
+
+```bash
+# Export auth environment for external tools
+eval $(atmos auth env --identity my-identity)
+
+# Now external tools have access to AWS credentials and region
+aws s3 ls
+terraform plan  # running terraform directly, not via atmos
+```
+
+## When You Don't Need This
+
+For atmos commands (`atmos terraform plan`, `atmos terraform apply`, etc.),
+region is **automatically injected** - no sourcing required. The `!env AWS_REGION`
+YAML function works automatically in stack configurations when using atmos commands.
+
+## Important Notes
+
+- Region is only exported when **explicitly configured** in your identity or provider
+- No default region is assumed - if you don't configure region, it won't be exported
+- This is purely additive and doesn't break existing scripts
+
+## Get Involved
+
+Found an issue or have a feature request?
+[Open an issue on GitHub](https://github.com/cloudposse/atmos/issues).

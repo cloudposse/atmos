@@ -6,12 +6,15 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/google/go-containerregistry/pkg/authn"
 	"github.com/google/go-containerregistry/pkg/name"
 	v1 "github.com/google/go-containerregistry/pkg/v1"
 	"github.com/google/go-containerregistry/pkg/v1/remote"
+	"github.com/google/go-containerregistry/pkg/v1/remote/transport"
 	"github.com/google/uuid"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 
@@ -28,6 +31,11 @@ const (
 )
 
 var defaultOCIFileSystem = filesystem.NewOSFileSystem()
+
+// remoteGet is the package-level indirection over remote.Get used by pullImage.
+// Tests override this to simulate registry responses without spinning up an
+// httptest server. Production code must not reassign it.
+var remoteGet = remote.Get
 
 // processOciImage processes an OCI image and extracts its layers to the specified destination directory.
 func processOciImage(atmosConfig *schema.AtmosConfiguration, imageName string, destDir string) error {
@@ -54,7 +62,10 @@ func processOciImageWithFS(atmosConfig *schema.AtmosConfiguration, imageName str
 
 	descriptor, err := pullImage(atmosConfig, ref)
 	if err != nil {
-		return errors.Join(errUtils.ErrPullImage, err)
+		// pullImage already wraps the error with errUtils.ErrPullImage via the
+		// builder, so errors.Is(err, ErrPullImage) is true. Returning it directly
+		// preserves the rich hints/context without double-wrapping the sentinel.
+		return err
 	}
 
 	img, err := descriptor.Image()
@@ -118,15 +129,72 @@ func pullImage(atmosConfig *schema.AtmosConfiguration, ref name.Reference) (*rem
 		authSource = "anonymous"
 	}
 
-	log.Debug("Authenticating to OCI registry", "registry", registry, "method", authSource)
+	log.Info("Authenticating to OCI registry", "registry", registry, "method", authSource)
 
-	descriptor, err := remote.Get(ref, remote.WithAuth(authMethod))
-	if err != nil {
-		log.Error("Failed to pull OCI image", "image", ref.Name(), "registry", registry, "auth", authSource, "error", err)
-		return nil, fmt.Errorf("failed to pull image '%s': %w", ref.Name(), err)
+	descriptor, err := remoteGet(ref, remote.WithAuth(authMethod))
+	if err == nil {
+		return descriptor, nil
 	}
 
-	return descriptor, nil
+	// If credentials were rejected (401/403/DENIED) and we used non-anonymous auth,
+	// retry once with anonymous to recover public-image pulls when the configured
+	// credentials lack the required scope. Non-auth errors (DNS, TLS, timeouts,
+	// 5xx) skip retry — they need a different remediation.
+	if authMethod != authn.Anonymous && isOCIAuthRejection(err) {
+		anonDescriptor, anonErr := remoteGet(ref, remote.WithAuth(authn.Anonymous))
+		if anonErr == nil {
+			log.Warn("OCI auth rejected, succeeded with anonymous fallback",
+				"registry", registry, "auth_attempted", authSource)
+			return anonDescriptor, nil
+		}
+		// Anonymous also failed; fall through and report the original authed
+		// error, which carries the more diagnostic status/body for scope problems.
+	}
+
+	log.Error("Failed to pull OCI image", "image", ref.Name(), "registry", registry, "auth", authSource, "error", err)
+	return nil, buildPullImageError(err, ref, registry, authSource)
+}
+
+// buildPullImageError wraps a remote.Get failure with the project's enriched
+// error builder: sentinel ErrPullImage, structured context (image, registry,
+// auth_attempted, status when available), and three self-contained hints
+// (each renders as its own lightbulb line).
+func buildPullImageError(cause error, ref name.Reference, registry, authSource string) error {
+	builder := errUtils.Build(errUtils.ErrPullImage).
+		WithCause(cause).
+		WithContext("image", ref.Name()).
+		WithContext("registry", registry).
+		WithContext("auth_attempted", authSource).
+		WithHint("If pulling from ghcr.io in GitHub Actions, grant the workflow 'packages: read' permission.").
+		WithHint("Set ATMOS_GITHUB_USERNAME to override the default 'GITHUB_ACTOR' identity used for ghcr.io auth.").
+		WithHint("For public images, remove stale credentials for this registry from ~/.docker/config.json (or run 'docker logout ghcr.io').")
+
+	var transportErr *transport.Error
+	if errors.As(cause, &transportErr) {
+		// Stringify the status here: the ErrorBuilder's SafeDetails formatter
+		// always formats context values with %s, so passing an int yields a
+		// malformed "status=%!s(int=403)" payload.
+		builder = builder.WithContext("status", strconv.Itoa(transportErr.StatusCode))
+	}
+
+	return builder.Err()
+}
+
+// isOCIAuthRejection reports whether err signals a registry auth rejection that
+// is safe to retry anonymously: HTTP 401/403, or a token-endpoint error whose
+// message contains "DENIED" (which is not always a *transport.Error).
+func isOCIAuthRejection(err error) bool {
+	if err == nil {
+		return false
+	}
+	var transportErr *transport.Error
+	if errors.As(err, &transportErr) {
+		if transportErr.StatusCode == http.StatusUnauthorized ||
+			transportErr.StatusCode == http.StatusForbidden {
+			return true
+		}
+	}
+	return strings.Contains(err.Error(), "DENIED")
 }
 
 // getGHCRAuth returns authentication credentials for GitHub Container Registry (ghcr.io).
@@ -156,7 +224,7 @@ func getGHCRAuth(atmosConfig *schema.AtmosConfiguration) (authn.Authenticator, s
 	username := githubUsername
 	if username == "" {
 		// No safe implicit fallback here; return nil to allow caller to choose anon/fail.
-		log.Debug("GHCR token found but no username provided; set settings.github_username or ATMOS_GITHUB_USERNAME/GITHUB_ACTOR.")
+		log.Warn("GHCR token found but no username provided; set settings.github_username or ATMOS_GITHUB_USERNAME/GITHUB_ACTOR.")
 		return nil, ""
 	}
 
