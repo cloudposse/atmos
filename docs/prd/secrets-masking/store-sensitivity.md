@@ -51,14 +51,35 @@ if ss, ok := store.(SensitiveStore); ok {
 
 Each store provider maps sensitivity to its native equivalent:
 
-| Provider | Sensitive | Non-sensitive |
-|----------|-----------|---------------|
-| AWS SSM Parameter Store | `SecureString` (KMS-encrypted) | `String` |
-| AWS Secrets Manager | Already encrypted by default | Already encrypted by default |
-| Azure Key Vault | Already a secrets store | Already a secrets store |
-| GCP Secret Manager | Already a secrets store | Already a secrets store |
+| Provider | Encryption-at-rest for sensitive | Sensitivity metadata source (for `GetWithSensitivity`) |
+|----------|----------------------------------|--------------------------------------------------------|
+| AWS SSM Parameter Store | `SecureString` (KMS-encrypted); `String` when non-sensitive | Parameter `Type` (`SecureString` ⇒ sensitive) |
+| AWS Secrets Manager | Encrypted by default | Reserved resource **Tag** `atmos:sensitive=true` |
+| Azure Key Vault | Encrypted by default | Reserved secret **Tag** `atmos-sensitive=true` |
+| GCP Secret Manager | Encrypted by default | Reserved secret **Label** `atmos-sensitive=true` |
 
-For SSM specifically, the provider already interacts with the SSM API — this is a matter of setting the `Type` parameter to `SecureString` based on sensitivity metadata. On retrieval, the provider reads the parameter type back and returns the sensitivity flag.
+#### Why a metadata source is required
+
+For SSM, sensitivity is self-describing: the parameter `Type` (`SecureString` vs
+`String`) tells `GetWithSensitivity` whether a value is sensitive. For the dedicated
+secret managers (ASM, Azure Key Vault, GCP Secret Manager) everything is encrypted at
+rest, so encryption alone **cannot** tell us whether a given value originated from a
+sensitive Terraform output. To make `GetWithSensitivity(...)` return a *reliable*
+boolean, the provider must persist the sensitivity flag explicitly:
+
+- **AWS SSM** — set `Type=SecureString` on write; read `Type` back on retrieval.
+- **AWS Secrets Manager** — write the reserved tag `atmos:sensitive=true`; read tags on
+  retrieval (`DescribeSecret`).
+- **Azure Key Vault** — write the reserved tag `atmos-sensitive=true` on the secret;
+  read tags on `GetSecret`.
+- **GCP Secret Manager** — write the reserved label `atmos-sensitive=true` on the
+  secret; read labels on access.
+
+**Fallback when metadata is absent:** if the reserved tag/label is missing (e.g. the
+value pre-dates this feature or was written out-of-band), the provider defaults to
+`sensitive=true` for the dedicated secret managers (fail safe — mask rather than leak)
+and `sensitive=false` for SSM `String` parameters. A `secret: true` store (see the
+[Secrets Management PRD](../secrets-management.md)) always writes the sensitive variant.
 
 ### Retrieval-Side Masking
 
@@ -67,13 +88,15 @@ When `!store` resolves a value from a sensitivity-aware store, it checks the sen
 ```go
 value, sensitive, err := store.GetWithSensitivity(stack, component, key)
 if sensitive {
-    if s, ok := value.(string); ok {
-        io.RegisterSecret(s)
-    }
+    // Register all secret-bearing representations, not only plain strings.
+    // Shares the recursive helper defined in the Sensitive Terraform Outputs PRD
+    // (Phase 2a): registers scalar strings and walks maps/slices to register nested
+    // string leaves, so structured store values (objects/lists) cannot leak.
+    registerSensitiveValue(value)
 }
 ```
 
-This ensures that sensitive values flowing through stores get the same automatic masking as values resolved directly via `!terraform.output`.
+This ensures that sensitive values flowing through stores get the same automatic masking as values resolved directly via `!terraform.output`. The `registerSensitiveValue` helper is the single shared implementation referenced by both PRDs — see [Sensitive Terraform Outputs PRD](sensitive-terraform-outputs.md) (Phase 2a).
 
 ## Key Files
 

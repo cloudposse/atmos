@@ -133,7 +133,36 @@ When `GetOutput()` or `GetAllOutputs()` returns values, register sensitive ones:
 // After processing outputs with sensitivity metadata
 for _, ov := range sensitiveOutputs {
     if ov.Sensitive {
-        if s, ok := ov.Value.(string); ok {
+        registerSensitiveValue(ov.Value)
+    }
+}
+```
+
+A sensitive output is not always a plain string — it can be a map or list (e.g. an
+object output containing a `password` field). Registering only `string` values would
+let nested secrets leak through formatted output. `registerSensitiveValue` handles
+all shapes:
+
+```go
+// registerSensitiveValue registers every secret-bearing representation of a value,
+// not only plain strings.
+func registerSensitiveValue(v any) {
+    switch t := v.(type) {
+    case string:
+        io.RegisterSecret(t)
+    case map[string]any:
+        for _, child := range t {
+            registerSensitiveValue(child)
+        }
+    case []any:
+        for _, child := range t {
+            registerSensitiveValue(child)
+        }
+    default:
+        // Scalars (numbers/bools) are registered via their canonical string form;
+        // structured values may additionally be registered as canonical JSON so the
+        // serialized representation is masked too.
+        if s := fmt.Sprintf("%v", t); s != "" {
             io.RegisterSecret(s)
         }
     }
@@ -148,9 +177,7 @@ In `internal/exec/yaml_func_terraform_output.go`, after line 118 where the value
 value, exists, err := outputGetter.GetOutput(...)
 // ... error handling ...
 if exists && isSensitive {
-    if s, ok := value.(string); ok {
-        io.RegisterSecret(s)
-    }
+    registerSensitiveValue(value) // handles strings, maps, and lists (see Phase 2a)
 }
 ```
 
@@ -170,7 +197,17 @@ However, for the `atmos terraform output` command specifically, the `--format` f
 
 - **Default (human):** Sensitive values shown as `(sensitive)` (matching Terraform's own behavior).
 - **`--format json`:** Values included but masked via I/O layer.
-- **`--format raw`:** Bypass masking (explicit opt-in for automation that needs raw values, e.g., piping to another tool). This requires the user to explicitly request unmasked output.
+- **Bypassing masking:** No format value silently bypasses masking. Revealing raw
+  secret values requires the shared, explicit **`--mask=false`** opt-in (the same
+  global control used everywhere else — we do not introduce a separate
+  `--unsafe-allow-raw`/`--secrets` flag). When masking is disabled, the CLI **must
+  emit a warning to stderr** stating that secret values will be printed unmasked and
+  that this is unsafe in CI or shared logs.
+
+  > **Note:** `atmos terraform output` does not currently have a `raw` format — its
+  > formats are `json`, `yaml`, `hcl`, `env`, `dotenv`, `bash`, `csv`, `tsv`. If a raw
+  > passthrough is ever added for automation (e.g. piping a single value to another
+  > tool), it inherits the same rule: masked unless `--mask=false`, with the warning.
 
 ### Store Sensitivity Awareness
 

@@ -25,9 +25,15 @@ Additionally:
 5. **Works with deployments** - Scoped to avoid secrets sprawl
 6. **Works with component registry** - Not just Terraform, but all component types
 
-## Stores vs Secrets - Clear Separation
+## Stores vs Secrets - Two Concepts, One Backend Layer
 
-Atmos maintains **two distinct systems** for managing external state:
+Atmos exposes **two user-facing concepts** for external state — but they share a single
+backend layer (the store registry) rather than forking a second one:
+
+- **Stores** — the backend layer and the machine-to-machine concept.
+- **Secrets** — a declarative/policy layer on top, gated to the `!secret` function and
+  the `atmos secret` CLI. A store can be marked `secret: true` to make it a secret
+  backend (see [Secret stores](#secret-stores-secret-true)).
 
 ### Stores (`pkg/store/`)
 
@@ -48,16 +54,18 @@ vars:
 Secrets are designed for **human-managed configuration** - API keys, tokens, passwords that users provision and manage through CLI operations. They require explicit declaration (GitOps-friendly) and provide full CRUD operations.
 
 ```yaml
-# Declare what secrets exist (committed to git)
-secrets:
-  vars:
-    DATADOG_API_KEY:
-      provider: aws/ssm
-      required: true
-
-# Use the secret (value resolved at runtime, never in git)
-vars:
-  api_key: !secret DATADOG_API_KEY
+# Declare what secrets exist (committed to git, in stack config)
+components:
+  terraform:
+    api:
+      secrets:
+        vars:
+          DATADOG_API_KEY:
+            store: app-secrets       # backend a secret resolves from
+            required: true
+      # Use the secret (value resolved at runtime, never in git)
+      vars:
+        api_key: !secret DATADOG_API_KEY
 ```
 
 ### Comparison
@@ -69,58 +77,83 @@ vars:
 | Scope | Terraform components | All component types |
 | Listing | Not supported (opaque) | Required (declarative registry) |
 | Interface | `!store`/`!store.get` functions | `!secret` function + CRUD CLI |
-| Provider config | `stores:` in atmos.yaml | `secrets.providers:` in atmos.yaml |
-| Declaration | Implicit (write creates key) | Explicit (must declare before use) |
+| Backend config | `stores:` in atmos.yaml | `stores:` with `secret: true` (track 1) or `secrets.providers:` for SOPS (track 2) |
+| Declaration | Implicit (write creates key) | Explicit (must declare before use, in stack config) |
 | Validation | None (opaque) | Pre-flight validation of declarations |
 | Masking | Manual | Automatic via I/O layer |
 
-### Why Two Systems?
+### Why Two Concepts (Not Two Backends)?
+
+The two concepts differ in **lifecycle and tooling**, not in where bytes are stored:
 
 1. **Different lifecycles** - Store values are populated by Terraform outputs and tied to Terraform workflow; secrets are provisioned manually and change rarely
-2. **Different access patterns** - Stores need stack/component scoping for outputs; secrets may be global or scoped
-3. **Different security models** - Store values are infrastructure state; secrets need audit trails and rotation policies
-4. **Different tooling** - Stores integrate with Terraform workflow; secrets need dedicated CRUD commands
-5. **Different providers** - Stores optimize for Terraform state backends; secrets optimize for secret managers with rotation/auditing
+2. **Different tooling** - Stores integrate with the Terraform workflow and the hooks system; secrets need a dedicated declarative registry + CRUD commands
+3. **Different access** - `!store` reads any non-secret store; `!secret` is the *only* accessor for a `secret: true` store, enforcing the declarative registry
+
+But the **backend layer is shared**: the store registry already implements
+`Set/Get(stack, component, key)` against AWS SSM/ASM, Azure Key Vault, GCP Secret
+Manager, Vault, Redis, and Artifactory. Secrets reuse it rather than maintaining a
+parallel provider registry — see [Backend Architecture](#backend-architecture-two-tracks).
 
 ## Configuration Schema
 
-### Provider Configuration (atmos.yaml only)
+### Backend Architecture (Two Tracks)
+
+Not every secret backend fits a key-value store interface, so the backend layer has
+two tracks. The imperative CRUD layer (`atmos secret …`) and the `!secret` function sit
+on top of both — only the backend implementation differs.
+
+| | Track 1 — store-backed | Track 2 — non-store |
+|---|---|---|
+| Backends | AWS SSM, AWS ASM, HashiCorp Vault, Azure Key Vault, GCP Secret Manager | SOPS (`age`/`aws-kms`/`gcp-kms`/`gpg`); vals-style loaders later |
+| Shape | Remote KV, fits `Set/Get(stack, component, key)` | Git-committed encrypted **file**, edited imperatively |
+| Config | `stores:` entry with `secret: true` | `secrets.providers:` entry |
+| Resolution | Runtime; can participate in the hooks system | Decrypt-in-place; local file workflow |
+| Implementation | One store-adapter in `pkg/secrets` over `pkg/store` | Native provider (`pkg/secrets/providers/sops.go`) |
+
+#### Secret stores (`secret: true`)
+
+A **store** becomes a secret backend by setting `secret: true`. This is *subsystem
+membership*, distinct from the per-value `sensitive` data-handling mechanism (Terraform
+`sensitive = true` / `SensitiveStore`) that a `secret: true` store uses internally to
+encrypt and mask.
 
 ```yaml
-# atmos.yaml
+# atmos.yaml — one registry; regular and secret stores side by side
+stores:
+  terraform-outputs:                   # regular store (machine outputs)
+    type: aws-ssm-parameter-store
+    options:
+      region: us-east-1
+
+  app-secrets:                         # TRACK 1: store-backed secret
+    type: aws-secrets-manager
+    secret: true                       # subsystem membership
+    identity: aws/prod-secrets         # optional auth identity (top-level; resolved via pkg/auth)
+    options:
+      region: us-east-1
+      prefix: atmos/secrets
+
+# TRACK 2: non-store backend (SOPS) — defined under secrets.providers
 secrets:
-  defaults:
-    provider: aws/ssm                  # Selected default provider
-
   providers:
-    aws/ssm:
-      kind: aws/ssm                    # cloud/thing format (consistent with auth)
-      identity: aws/prod-admin         # Optional: use this auth identity
-      spec:
-        region: us-east-1
-        prefix: "/atmos/secrets"
-
-    aws/asm:
-      kind: aws/asm                    # AWS Secrets Manager
-      identity: aws/prod-secrets       # Optional: different identity for ASM
-      spec:
-        region: us-east-1
-
-    sops:
+    dev-sops:
       kind: sops/age                   # or: sops/aws-kms, sops/gcp-kms, sops/gpg
       spec:
-        file: secrets.enc.yaml
-
-    vault:
-      kind: hashicorp/vault
-      spec:
-        url: https://vault.example.com
-
-  # Global secret declarations
-  vars: !include secrets/global.yaml
+        file: secrets/dev.enc.yaml
 ```
 
+**Access rule:** `!store` against a `secret: true` store is an **error** ("use
+`!secret`"). `!secret NAME` resolves via the declared registry to its backend. This
+makes declarations mandatory-by-construction for secret stores and removes any
+`!store`-vs-`!secret` ambiguity about whether a value is sensitive.
+
 ### Provider Kind Constants
+
+The `cloud/thing` kinds below are the shared vocabulary. The store-backed kinds
+(`aws/ssm`, `aws/asm`, `azure/keyvault`, `gcp/secretmanager`, `hashicorp/vault`)
+correspond to **store types** in the registry (track 1); only the `sops/*` kinds are
+**secrets-native provider** kinds (track 2).
 
 ```go
 // pkg/secrets/kinds/kinds.go
@@ -148,21 +181,22 @@ const (
 )
 ```
 
-### Store Migration (Legacy Compatibility)
+### Store `type`/`kind` Compatibility
 
-The existing `pkg/store/` uses `type` field. For backwards compatibility:
+The existing `pkg/store/` uses a `type` field. The store registry accepts both the
+legacy `type` and the new `cloud/thing` `kind` so all backends share one vocabulary
+(track 1 stores and track 2 SOPS providers alike):
 
 ```yaml
-# Old format (stores) - continue to work
+# Legacy `type` — continues to work
 stores:
   mystore:
-    type: aws-ssm-parameter-store  # Legacy format
+    type: aws-ssm-parameter-store
 
-# New format (secrets) - uses kind
-secrets:
-  providers:
-    aws/ssm:
-      kind: aws/ssm                 # New cloud/thing format
+# New `kind` (cloud/thing) — equivalent
+stores:
+  mystore:
+    kind: aws/ssm
 ```
 
 Update `pkg/store/registry.go` to support both:
@@ -174,20 +208,39 @@ if kind == "" {
 }
 ```
 
-### Global Secret Declarations
+### Declarations Live in Stack Config ("global" = shared import)
+
+For v1, secrets are declared **only in stack/component config** — there is no
+`atmos.yaml`-level global `secrets.vars` block. This guarantees every secret has a
+real `(stack, component, key)` coordinate, so the existing
+`Store.Set(stack, component, key)` fits unchanged (no key-only write path needed).
+
+A "global" secret is just a shared declaration **imported** wherever it is needed:
 
 ```yaml
-# secrets/global.yaml (or inline under secrets.vars)
-ARTIFACTORY_TOKEN:
-  description: "Artifactory access token for private packages"
-  provider: aws/ssm
-  required: true
+# stacks/catalog/secrets/shared.yaml — a reusable declaration fragment
+components:
+  terraform:
+    api:
+      secrets:
+        vars:
+          ARTIFACTORY_TOKEN:
+            description: "Artifactory access token for private packages"
+            store: app-secrets       # track 1 (store-backed)
+            required: true
+          GITHUB_APP_KEY:
+            description: "GitHub App private key for CI"
+            sops: dev-sops           # track 2 (SOPS)
+            required: true
 
-GITHUB_APP_KEY:
-  description: "GitHub App private key for CI"
-  provider: sops
-  required: true
+# stacks/prod/api.yaml
+import:
+  - catalog/secrets/shared           # "global" = imported everywhere it is needed
 ```
+
+Each declaration references its backend by name: `store: <name>` for a `secret: true`
+store (track 1), or `sops: <name>` for a SOPS provider (track 2). The referenced
+backend carries provider/region/prefix/identity, so the declaration stays terse.
 
 ### Component-Level Secrets (Stack Files)
 
@@ -200,11 +253,11 @@ components:
         vars:
           DATADOG_API_KEY:
             description: "Datadog API key for monitoring"
-            provider: aws/ssm
+            store: app-secrets
             required: true
           REDIS_URL:
             description: "Redis connection string"
-            provider: aws/ssm
+            store: app-secrets
       vars:
         datadog_api_key: !secret DATADOG_API_KEY
         redis_url: !secret REDIS_URL
@@ -212,10 +265,16 @@ components:
 
 ### Flexible Organization with `!include`
 
+Declarations live in stack config, but the `vars` map can be pulled in from a file for
+organization (and a shared file is how "global" declarations are reused):
+
 ```yaml
-# atmos.yaml - include from files
-secrets:
-  vars: !include secrets/global.yaml
+# stacks/catalog/secrets/shared.yaml - reusable, imported where needed
+components:
+  terraform:
+    api:
+      secrets:
+        vars: !include secrets/shared.yaml
 
 # stacks/prod/api.yaml - per-component includes
 components:
@@ -229,7 +288,7 @@ components:
 
 **Secrets follow standard Atmos inheritance** with these considerations:
 
-1. **Provider config** - Only in `atmos.yaml`, not inheritable
+1. **Backend config** - The `stores:` (incl. `secret: true`) and `secrets.providers:` blocks live only in `atmos.yaml`, not inheritable
 2. **Secret declarations** - Inherit through stack hierarchy
 3. **Scope awareness** - Deployments can restrict which secrets are loaded (addressing secrets sprawl)
 
@@ -238,14 +297,14 @@ components:
 secrets:
   vars:
     SHARED_TOKEN:
-      provider: aws/ssm
+      store: app-secrets
 
 # prod/_defaults.yaml (inherits)
 secrets:
   vars:
     # Inherits SHARED_TOKEN
     PROD_DB_PASSWORD:
-      provider: aws/ssm
+      store: app-secrets
 
 # prod/api.yaml (inherits both)
 components:
@@ -255,7 +314,7 @@ components:
         vars:
           # Inherits SHARED_TOKEN, PROD_DB_PASSWORD
           API_SPECIFIC_KEY:
-            provider: aws/ssm
+            store: app-secrets
 ```
 
 ## CLI Commands
@@ -486,92 +545,164 @@ atmos secret get DATABASE_CONFIG --path ".credentials.password"
 atmos secret get DATABASE_CONFIG --format json
 ```
 
+## Describe / List Behavior: Mask Secrets by Default
+
+`atmos describe` (`component`, `stacks`, `affected`, `dependents`) and the `atmos list` family
+(`values`, `vars`, `settings`, ...) are **inspection** commands. Today they resolve every YAML
+function by default, which means resolving `!secret` requires live credentials for the configured
+provider. This couples *inspecting a stack's shape* to *being able to authenticate to the secret
+backend* — one of Atmos's most common friction points (e.g. you cannot diff or review a stack in
+CI, or on a laptop without cloud access, without it failing on secret resolution).
+
+**Behavior:** This behavior is driven by the **existing global `--mask` flag** (default
+`true`) — no separate `--secrets` flag is introduced. The insight: in an *inspection*
+command, if `--mask=true` the value would be redacted in the output anyway, so there is
+no reason to retrieve it. So when `--mask=true` (the default), `describe`/`list` resolve
+`!secret` to the existing `***MASKED***` placeholder **without contacting the provider** —
+no credential acquisition is attempted, and the command succeeds with zero cloud access.
+With `--mask=false`, real values are retrieved and revealed (requires access).
+
+```bash
+# Default (--mask=true) — no credentials needed; secrets render as ***MASKED***
+atmos describe component api --stack=prod
+atmos list values api --stack=prod
+
+# Reveal real values (requires access to the secret provider)
+atmos describe component api --stack=prod --mask=false
+```
+
+**The mask ⇒ skip-retrieval rule applies only to inspection commands** —
+`describe` (`component`, `stacks`, `affected`, `dependents`) and the `list` family.
+
+| Command class | `--mask=true` (default) | `--mask=false` |
+|---------------|-------------------------|----------------|
+| **Inspection** (`describe`, `list`) | `!secret` → `***MASKED***`, **no retrieval, no credentials** | Retrieve + reveal |
+| **Value-producing** (`secret get`/`pull`/`push`, `terraform plan`/`apply`/`output`) | **Always retrieve** real values (needed to function); output is redacted | Retrieve + reveal |
+
+`secret get`/`pull`/`push` and `terraform plan`/`apply`/`output` must produce the actual
+value to do their job, so they always retrieve regardless of `--mask`; `--mask` only
+controls whether the value is redacted in *display* output.
+
+**Scope:** Only `!secret` (secret-bearing resolution) is masked-without-retrieval. Non-secret
+functions (`!template`, `!env`, `!exec`, and plain `!terraform.output` / `!store` of non-secret
+values) keep resolving normally. Values that are only *discovered* to be sensitive after
+retrieval (sensitive Terraform outputs, SecureString stores) cannot be known to be sensitive
+without retrieving, so they remain covered by their masking-after-retrieval PRDs
+([sensitive-terraform-outputs](secrets-masking/sensitive-terraform-outputs.md),
+[store-sensitivity](secrets-masking/store-sensitivity.md)).
+
+### `--mask` (the single control)
+
+`--mask` is the existing global boolean flag (default `true`, env `ATMOS_MASK`, config
+`settings.terminal.mask.enabled`). It now carries the skip-retrieval semantics above for
+inspection commands. There is no `--secrets` flag, no `ATMOS_SECRETS` env var, and no
+`settings.secrets.reveal` config — those were folded into `--mask`.
+
+- **Precedence:** CLI flag → ENV (`ATMOS_MASK`) → config (`settings.terminal.mask.enabled`) → default (`true`).
+- **Composes with `--identity`:** `--identity` selects *which* credentials to use when you do want
+  retrieval; `--mask=false --identity=<name>` authenticates and reveals.
+- **Trade-off vs. a dedicated flag:** there is no longer a way to reveal a value in *one*
+  command while keeping the global masker on elsewhere — to reveal, you disable masking
+  with `--mask=false`.
+
+### How it differs from existing controls
+
+The mask ⇒ skip-retrieval behavior is distinct from the two pre-existing function controls:
+
+| Control | Effect on `!secret` |
+|---------|---------------------|
+| `--process-functions=false` | Disables **all** YAML functions, not just secrets. |
+| `--skip secret` | Leaves the **raw literal** `!secret NAME` in the output (no resolution). |
+| `--mask=true` on inspection cmds *(this PRD)* | Resolves the function but substitutes `***MASKED***` **without retrieval**. |
+
+### Implementation notes
+
+- Reuse the existing `--mask` global flag (already wired through `pkg/flags` →
+  `pkg/io`); no new flag registration. The `!secret` resolver reads the resolved mask
+  state plus the command class (inspection vs value-producing).
+- Thread the resolution mode into YAML-function processing
+  (`ProcessCustomYamlTags` in `internal/exec/yaml_func_utils.go`) — carry it on the processing
+  context (`schema.ConfigAndStacksInfo` / a resolution option) rather than a new positional
+  param, consistent with the Options pattern.
+- The `!secret` resolver (`pkg/secrets/` / `pkg/function/secret.go`) checks **first**: on an
+  inspection command with masking enabled it returns `io.MaskReplacement` and returns early,
+  before any provider or auth call.
+
+**Testing:** unit test that an inspection command with `--mask=true` returns `***MASKED***` and
+the provider mock is **never called** (proves the no-credentials path); unit test that
+`--mask=false` resolves and registers with the masker; unit test that `secret get`/`terraform
+output` retrieve even with `--mask=true`; precedence tests (flag > env > config > default);
+golden-snapshot for `describe component` with a `!secret` var rendering masked output without
+credentials.
+
 ## Provider Implementations
 
-### AWS SSM Parameter Store (`aws/ssm`)
+### Track 1: Store-backed (`secret: true` stores)
+
+These backends fit the store interface (`Set/Get(stack, component, key)`), so they are
+configured as `stores:` entries with `secret: true` and reused by the secrets layer via
+a single store-adapter. The store types AWS SSM / Azure Key Vault / GCP Secret Manager
+already exist in `pkg/store/`; **AWS Secrets Manager and HashiCorp Vault are added** as
+new store types.
 
 ```yaml
-secrets:
-  providers:
-    aws/ssm:
-      kind: aws/ssm
-      identity: aws/prod-admin           # Optional auth identity
-      spec:
-        region: us-east-1
-        prefix: "/atmos/secrets"
+stores:
+  # AWS SSM Parameter Store — simple, cost-effective; SecureString when secret
+  ssm-secrets:
+    type: aws-ssm-parameter-store
+    secret: true
+    identity: aws/prod-admin
+    options: { region: us-east-1, prefix: /atmos/secrets }
+
+  # AWS Secrets Manager — structured/JSON secrets, rotation, larger values (NEW store type)
+  asm-secrets:
+    type: aws-secrets-manager
+    secret: true
+    identity: aws/prod-secrets
+    options: { region: us-east-1, prefix: atmos/secrets }
+
+  # HashiCorp Vault (NEW store type)
+  vault-secrets:
+    type: hashicorp-vault
+    secret: true
+    options: { url: https://vault.example.com, path: secret/data/atmos, auth_method: token }
+
+  # Azure Key Vault
+  azure-secrets:
+    type: azure-key-vault
+    secret: true
+    identity: azure/prod-subscription
+    options: { vault_url: https://myvault.vault.azure.net/ }
+
+  # GCP Secret Manager
+  gcp-secrets:
+    type: google-secret-manager
+    secret: true
+    options: { project_id: my-project }
 ```
 
-- Path generation: `/{prefix}/{stack}/{component}/{secret_name}`
-- Best for: Simple key-value secrets, cost-effective
-- Limitations: 10KB max value size, no automatic rotation
+- Path generation reuses the store's existing namespacing: `{prefix}/{stack}/{component}/{secret_name}`.
+- Encryption-at-rest + the sensitivity flag follow the [Store Sensitivity PRD](secrets-masking/store-sensitivity.md) — a `secret: true` store always writes the sensitive variant (e.g. SSM `SecureString`).
 
-### AWS Secrets Manager (`aws/asm`)
+### Track 2: Non-store (SOPS)
 
-```yaml
-secrets:
-  providers:
-    aws/asm:
-      kind: aws/asm
-      identity: aws/prod-secrets         # Optional auth identity
-      spec:
-        region: us-east-1
-        prefix: "atmos/secrets"
-```
-
-- Path generation: `{prefix}/{stack}/{component}/{secret_name}`
-- Best for: Structured/JSON secrets, rotation, larger values
-- Features: Automatic rotation, cross-account access, up to 64KB
-
-### SOPS Encrypted File (`sops/*`)
+SOPS is a git-committed encrypted **file** edited imperatively — it does not fit the
+store interface, so it is configured under `secrets.providers:` and implemented as a
+native provider (`pkg/secrets/providers/sops.go`).
 
 ```yaml
 secrets:
   providers:
-    sops-dev:
+    dev-sops:
       kind: sops/age                     # or: sops/aws-kms, sops/gcp-kms, sops/gpg
       spec:
-        file: secrets.enc.yaml           # or: secrets/{stack}.enc.yaml
+        file: secrets/dev.enc.yaml       # or: secrets/{stack}.enc.yaml
         age_recipients: age1...          # or from SOPS_AGE_RECIPIENTS env
 ```
 
-- Best for: Git-committed secrets, local development
-- Encryption options: age (recommended), AWS KMS, GCP KMS, GPG
-
-### HashiCorp Vault (`hashicorp/vault`)
-
-```yaml
-secrets:
-  providers:
-    vault:
-      kind: hashicorp/vault
-      spec:
-        url: https://vault.example.com
-        path: secret/data/atmos
-        auth_method: token               # or: kubernetes, aws-iam
-```
-
-### Azure Key Vault (`azure/keyvault`)
-
-```yaml
-secrets:
-  providers:
-    azure:
-      kind: azure/keyvault
-      identity: azure/prod-subscription  # Optional auth identity
-      spec:
-        vault_url: https://myvault.vault.azure.net/
-```
-
-### Google Secret Manager (`gcp/secretmanager`)
-
-```yaml
-secrets:
-  providers:
-    gcp:
-      kind: gcp/secretmanager
-      spec:
-        project_id: my-project
-```
+- Best for: Git-committed secrets, local development.
+- Encryption options: age (recommended), AWS KMS, GCP KMS, GPG.
+- `atmos secret set/get` against a SOPS provider decrypts the file, mutates the key, and re-encrypts in place (vs. an API call for track 1).
 
 ## Integration Points
 
@@ -583,25 +714,69 @@ All secret values are automatically registered with the masker:
 // When resolving !secret
 value, err := provider.Get(secretPath)
 if err == nil {
-    io.RegisterSecret(value)  // Masks in all output
+    // Registers strings and walks structured values (maps/lists) — shared with the
+    // sensitive-terraform-outputs / store-sensitivity PRDs. Masks in all output.
+    registerSensitiveValue(value)
 }
 ```
 
-### Auth Integration
+### Auth Identity Integration
 
-Secrets can use component's auth identity:
+Store-backed secrets (track 1) authenticate through the Atmos auth system
+(`pkg/auth`) instead of raw role ARNs. A `secret: true` store carries a top-level
+`identity:` naming an entry in `auth.identities`; the secrets store-adapter resolves it
+to credentials at the operation boundary:
+
+```go
+// secrets store-adapter, before a backend Get/Set
+creds, err := authManager.GetCachedCredentials(ctx, store.Identity) // passive; Authenticate() if interactive
+awsCfg := creds.ToAWSConfig()                                       // inject into the ASM/SSM/Vault client
+```
 
 ```yaml
-components:
-  terraform:
-    api:
-      settings:
-        identity: aws/prod-admin
-      secrets:
-        vars:
-          API_KEY:
-            provider: aws/ssm  # Uses aws/prod-admin credentials
+# atmos.yaml
+auth:
+  identities:
+    aws/prod-secrets:
+      kind: aws/assume-role
+      # ...principal, via, etc.
+
+stores:
+  app-secrets:
+    type: aws-secrets-manager
+    secret: true
+    identity: aws/prod-secrets    # ← top-level; resolved via pkg/auth (NOT under options)
+    options: { region: us-east-1 }
 ```
+
+**Identity precedence** (most specific wins):
+
+```
+store/provider `identity:`                 # explicit backend identity (pins it)
+  → component instance's effective identity # inherited when resolved in a component scope
+  → --identity / ATMOS_IDENTITY            # standalone invocations (no component scope)
+  → default identity (auth.identities.<name>.default: true)
+```
+
+**Inheritance:** when a store/provider does **not** pin an `identity:` and the secret is
+resolved within a component instance (e.g. `!secret` in a component's vars, or
+`atmos secret get NAME -s <stack> -c <component>`), it **inherits the component's
+effective identity** — the same credentials the component runs under. The right scope's
+secrets are read with the right scope's credentials by default, with no extra config.
+
+Notes:
+- `identity:` supersedes the stores' legacy `read_role_arn` / `write_role_arn`
+  (which remain for back-compat, equivalent to an implicit `aws/assume-role` identity).
+- There is **no** separate `settings.identity` field — the inherited identity *is* the
+  component's runtime identity (itself derived from a component-level `auth:` override →
+  `--identity` / `ATMOS_IDENTITY` → default identity). Standalone resolutions with no
+  component scope fall back to `--identity` / `ATMOS_IDENTITY`, then the default identity.
+- **SOPS (track 2):** only KMS-backed kinds (`sops/aws-kms`, `sops/gcp-kms`) take an
+  `identity:` (to call KMS); `sops/age` and `sops/gpg` use local keys and need none.
+- **No-auth inspection:** because `--mask=true` skips retrieval on inspection commands
+  (see [Describe / List Behavior](#describe--list-behavior-mask-secrets-by-default)),
+  no identity is resolved and **no credentials are required** to `describe`/`list`.
+- `atmos secret get/set/...` accept the existing `--identity` flag / `ATMOS_IDENTITY`.
 
 ### Deployments Integration
 
@@ -627,13 +802,15 @@ pkg/secrets/
     resolver.go          # Secret value resolution
     validator.go         # Declaration validation
     providers/
-        provider.go      # Provider interface
-        ssm.go           # AWS SSM (wraps pkg/store)
-        sops.go          # SOPS encrypted files
-        vault.go         # HashiCorp Vault
-        ...
+        provider.go      # Provider interface (Set/Get/Delete/List-status)
+        store.go         # Track 1: adapter fronting any `secret: true` store (pkg/store)
+        sops.go          # Track 2: SOPS encrypted files (native, non-store)
+        ...              # future non-store providers (e.g. vals-style loaders)
     errors.go            # Sentinel errors
     *_test.go
+
+# Track 1 backends are NOT re-implemented here — SSM/ASM/Vault/Azure-KV/GCP-SM
+# live in pkg/store/ as store types; providers/store.go adapts them.
 
 cmd/secret/
     secret.go            # Main command, subcommand registration
@@ -656,17 +833,19 @@ pkg/schema/
 
 ## Implementation Phases
 
-### Phase 1: Core Infrastructure + AWS Providers
-- Schema additions in `pkg/schema/` for secrets config
-- `pkg/secrets/kinds/` package with kind constants
-- `pkg/secrets/` package with service interface and provider abstraction
-- **AWS SSM provider** (`aws/ssm`) - reusing/extending `pkg/store/` code
-- **AWS Secrets Manager provider** (`aws/asm`) - new implementation
+### Phase 1: Core Infrastructure + Store-backed secrets (Track 1)
+- Schema additions in `pkg/schema/` for secrets config + the `secret: true` store flag
+- `pkg/store/`: add the top-level `secret: true` and `identity:` fields to `StoreConfig`,
+  the `!store`-refusal access rule, identity resolution via `pkg/auth` (superseding
+  `read_role_arn`/`write_role_arn`), and a `Delete(stack, component, key)` extension
+  (`DeletableStore`)
+- `pkg/store/`: add **AWS Secrets Manager** and **HashiCorp Vault** as store types
+- `pkg/secrets/` package: service interface + the **store-adapter provider** over `pkg/store` (track 1)
 - Path extraction for structured JSON secrets
 - Update `pkg/store/registry.go` for `kind` field (legacy `type` compatibility)
-- Secret declaration parsing from atmos.yaml and stacks
+- Secret declaration parsing from **stack config** (global = shared import)
 - Basic validation
-- Integration with auth identities for provider access
+- Integration with auth identities for store access
 
 ### Phase 2: CLI Commands
 - `cmd/secret/` command structure following **command registry pattern**
@@ -681,6 +860,8 @@ pkg/schema/
 - `path` modifier for JSON extraction
 - `default` modifier for fallback values
 - Auto-registration with I/O masker
+- `--mask`-driven secret resolution on `describe`/`list` (mask without retrieval by default; see
+  [Describe / List Behavior](#describe--list-behavior-mask-secrets-by-default))
 - Pre-command validation hooks
 
 ### Phase 4: Developer Experience
@@ -689,10 +870,10 @@ pkg/schema/
 - `validate` command for CI
 - Deployments integration (scoped secrets)
 
-### Phase 5: Additional Providers
-- SOPS encrypted file providers (`sops/age`, `sops/aws-kms`, etc.)
-- HashiCorp Vault provider
-- Azure Key Vault, GCP Secret Manager
+### Phase 5: Non-store backends (Track 2) + remaining store types
+- **SOPS** native provider (`pkg/secrets/providers/sops.go`): `sops/age`, `sops/aws-kms`, `sops/gcp-kms`, `sops/gpg`
+- Wire Azure Key Vault and GCP Secret Manager (existing store types) for `secret: true` use
+- Future: vals-style read-only loaders as additional non-store providers
 
 ## Documentation Deliverables
 
@@ -729,11 +910,11 @@ Each file follows the mandatory documentation requirements:
 Location: `website/docs/core-concepts/configuration/secrets.mdx`
 
 Contents:
-- `secrets.defaults.provider` configuration
-- `secrets.providers` with all supported kinds
-- `secrets.vars` for global declarations
+- `secret: true` store flag and the `!store`-refusal access rule (track 1)
+- `secrets.providers` for non-store backends like SOPS (track 2)
+- Stack-config secret declarations (`store:` / `sops:` references); "global" via import
 - `identity` integration with auth
-- Examples for each provider type
+- Examples for each backend track
 
 **Stack secrets config:**
 Location: `website/docs/core-concepts/stacks/secrets.mdx`
@@ -751,8 +932,8 @@ Location: `website/docs/tutorials/secrets-aws-ssm.mdx`
 
 Contents:
 1. Prerequisites (AWS account, IAM permissions)
-2. Configure provider in atmos.yaml
-3. Declare secrets in stack config
+2. Configure a `secret: true` store in atmos.yaml
+3. Declare secrets in stack config (`store:` reference)
 4. Initialize secrets with `atmos secret init`
 5. Use `!secret` in component vars
 6. Verify with `atmos secret list`
@@ -789,12 +970,15 @@ Location: `pkg/datafetcher/schema/`
 
 1. **Schema collision** - Using `secrets.vars:` pattern (like Copilot's approach)
 2. **Inheritance** - Follow standard Atmos inheritance, deployments scope to avoid sprawl
-3. **Stores relationship** - Keep both; stores for outputs, secrets for user config
+3. **Stores relationship** - **One backend layer, two concepts.** Store-backed secrets are `secret: true` stores in the shared store registry (track 1); only non-store backends like SOPS get a native secrets provider (track 2). `!store` is blocked on a `secret: true` store; `!secret` is the only accessor.
 4. **File organization** - Support `!include` for flexible organization
 5. **Component type ambiguity** - Auto-detect -> interactive selector -> `--type` flag
 6. **Provider naming** - Use `kind` field with `cloud/thing` format (consistent with auth)
 7. **Structured secrets** - Path extraction via `| path ".foo.bar"` modifier and `--path` CLI flag
-8. **Provider auth** - Optional `identity` field on provider config
+8. **Provider auth** - Optional `identity` field on provider/store config
+9. **Declaration scope** - Stack/component config only for v1; "global" is a shared import (every secret keeps a real `(stack, component, key)` coordinate, so `Store.Set` fits unchanged)
+10. **Masking control** - No separate `--secrets` flag; the existing `--mask` drives it. On inspection commands `--mask=true` skips retrieval entirely (no credentials); value-producing commands always retrieve
+11. **Flag vocabulary** - `secret: true` = subsystem membership (aligns with `!secret`); `sensitive` = the per-value data-handling mechanism it uses internally (Terraform `sensitive`, `SensitiveStore`)
 
 ## Alternatives Considered
 
