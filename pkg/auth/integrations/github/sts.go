@@ -22,6 +22,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/auth/types"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
+	proapi "github.com/cloudposse/atmos/pkg/pro"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui"
 	"github.com/cloudposse/atmos/pkg/xdg"
@@ -340,11 +341,19 @@ func (g *GitHubSTSIntegration) mint(ctx context.Context, pro *types.ProCredentia
 		return nil, fmt.Errorf("%w: STS endpoint returned status %s", errUtils.ErrSTSMintFailed, resp.Status)
 	}
 
-	var out stsResponse
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+	// Every Atmos Pro API route returns the canonical envelope ({success, status, data}),
+	// so the tokens are nested under `data` — decode through the shared Pro envelope
+	// helper instead of a flat decode that would silently drop them.
+	env, err := proapi.DecodeEnvelope[stsResponse](resp.Body)
+	if err != nil {
 		return nil, fmt.Errorf("%w: failed to decode STS response: %w", errUtils.ErrSTSMintFailed, err)
 	}
-	return &out, nil
+	// The server returns HTTP 200 with success=false on application-level failures;
+	// surface the message instead of silently treating it as "no tokens granted".
+	if !env.Success {
+		return nil, fmt.Errorf("%w: %s", errUtils.ErrSTSMintFailed, env.EffectiveErrorMessage())
+	}
+	return &env.Data, nil
 }
 
 // Environment returns the GIT_CONFIG_* variables that route git over the minted tokens.

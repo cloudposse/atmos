@@ -3,6 +3,7 @@ package github
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -83,6 +84,9 @@ func TestNewGitHubSTSIntegration_InvalidGitConfigMode(t *testing.T) {
 }
 
 // stsServer returns an httptest server that serves POST /api/v1/sts with the given response.
+// The 200 body is wrapped in the canonical Atmos Pro envelope ({success, status, data})
+// exactly as the real server sends it — the prior raw {tokens,excluded} shape masked the
+// envelope-unwrap bug, so the fixture must match reality.
 func stsServer(t *testing.T, status int, resp stsResponse) *httptest.Server {
 	t.Helper()
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -91,7 +95,11 @@ func stsServer(t *testing.T, status int, resp stsResponse) *httptest.Server {
 		assert.Equal(t, "Bearer session-jwt", r.Header.Get("Authorization"))
 		w.WriteHeader(status)
 		if status == http.StatusOK {
-			_ = json.NewEncoder(w).Encode(resp)
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"success": true,
+				"status":  status,
+				"data":    resp,
+			})
 		}
 	}))
 }
@@ -189,6 +197,33 @@ func TestGitHubSTSExecute_EmptyTokensIsSuccess(t *testing.T) {
 	env, err := integ.Environment()
 	require.NoError(t, err)
 	assert.Empty(t, env, "no tokens means no GIT_CONFIG_* output")
+}
+
+// TestGitHubSTSMint_DecodesCanonicalEnvelope is the regression guard for the
+// envelope-unwrap bug. It bypasses the stsServer helper and serves the EXACT wire shape
+// the Atmos Pro server sends (tokens nested under "data"), then asserts mint/persist sees
+// 1 token — not 0. The bug decoded this flat into stsResponse and dropped every token.
+func TestGitHubSTSMint_DecodesCanonicalEnvelope(t *testing.T) {
+	xdg := t.TempDir()
+	t.Setenv("ATMOS_XDG_DATA_HOME", xdg)
+
+	const payload = `{"success":true,"status":200,"data":{"tokens":[{"host":"github.com","owner":"o","token":"t","expiresAt":"2030-01-01T00:00:00Z","repositories":["o/r"],"permissions":{"contents":"read"}}],"excluded":[]}}`
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = io.WriteString(w, payload)
+	}))
+	defer srv.Close()
+
+	integ := newIntegration(t, "realmA", nil, &schema.IntegrationVia{Provider: "atmos-pro"})
+	require.NoError(t, integ.Execute(context.Background(), proCreds(srv.URL)))
+
+	// The bug persisted 0 tokens; assert the envelope was unwrapped to 1.
+	state, err := integ.readState()
+	require.NoError(t, err)
+	require.Len(t, state.Tokens, 1)
+	assert.Equal(t, "o", state.Tokens[0].Owner)
+	assert.Equal(t, "t", state.Tokens[0].Token)
+	assert.Equal(t, []string{"o/r"}, state.Tokens[0].Repositories)
 }
 
 func TestGitHubSTSExecute_StatusErrors(t *testing.T) {
