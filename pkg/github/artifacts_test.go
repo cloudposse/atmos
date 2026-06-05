@@ -1052,6 +1052,85 @@ func TestNewArtifactFetcher(t *testing.T) {
 	assert.NotNil(t, fetcher)
 }
 
+func TestArtifactFetcherGetRefSHA_Success(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockRepos := NewMockRepositoriesService(ctrl)
+
+	fullSHA := "ef725b83ded66da561cd47dc5a0c1c7ed1c2bd0b"
+	mockRepos.EXPECT().
+		GetCommitSHA1(gomock.Any(), "owner", "repo", "main", "").
+		Return(fullSHA, nil, nil)
+
+	ctx := context.Background()
+	fetcher := &ArtifactFetcher{repositories: mockRepos}
+	result, err := fetcher.GetRefSHA(ctx, "owner", "repo", "main")
+
+	assert.NoError(t, err)
+	assert.Equal(t, fullSHA, result)
+}
+
+func TestArtifactFetcherGetRefSHA_QualifiedRef(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockRepos := NewMockRepositoriesService(ctrl)
+
+	fullSHA := "ceb752612345678901234567890123456789abcd"
+	mockRepos.EXPECT().
+		GetCommitSHA1(gomock.Any(), "owner", "repo", "tags/v1.199.0", "").
+		Return(fullSHA, nil, nil)
+
+	ctx := context.Background()
+	fetcher := &ArtifactFetcher{repositories: mockRepos}
+	result, err := fetcher.GetRefSHA(ctx, "owner", "repo", "tags/v1.199.0")
+
+	assert.NoError(t, err)
+	assert.Equal(t, fullSHA, result)
+}
+
+func TestArtifactFetcherGetRefSHA_NotFound(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockRepos := NewMockRepositoriesService(ctrl)
+
+	resp := &github.Response{
+		Response: &http.Response{StatusCode: 404},
+	}
+	mockRepos.EXPECT().
+		GetCommitSHA1(gomock.Any(), "owner", "repo", "does-not-exist", "").
+		Return("", resp, errors.New("not found"))
+
+	ctx := context.Background()
+	fetcher := &ArtifactFetcher{repositories: mockRepos}
+	result, err := fetcher.GetRefSHA(ctx, "owner", "repo", "does-not-exist")
+
+	assert.Error(t, err)
+	assert.Empty(t, result)
+	assert.ErrorIs(t, err, ErrRefNotFound)
+}
+
+func TestArtifactFetcherGetRefSHA_EmptySHA(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockRepos := NewMockRepositoriesService(ctrl)
+
+	mockRepos.EXPECT().
+		GetCommitSHA1(gomock.Any(), "owner", "repo", "main", "").
+		Return("", nil, nil)
+
+	ctx := context.Background()
+	fetcher := &ArtifactFetcher{repositories: mockRepos}
+	result, err := fetcher.GetRefSHA(ctx, "owner", "repo", "main")
+
+	assert.Error(t, err)
+	assert.Empty(t, result)
+	assert.ErrorIs(t, err, ErrRefNotFound)
+}
+
 // Note: Full integration tests for GetPRArtifactInfo require a real GitHub token
 // and network access. Those would be in an integration test file with appropriate
 // skip conditions.

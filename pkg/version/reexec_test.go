@@ -77,6 +77,9 @@ func testReexecConfig(finder *mockVersionFinder, installer *mockVersionInstaller
 		InstallFromSHA: func(_ string, _ bool) (string, error) {
 			return "", errors.New("mock: SHA install not configured")
 		},
+		ResolveRef: func(_ context.Context, _ string) (string, error) {
+			return "", errors.New("mock: ref resolution not configured")
+		},
 	}
 }
 
@@ -968,6 +971,18 @@ func TestShouldSkipReexec(t *testing.T) {
 			expected:         false,
 		},
 		{
+			name:             "ref version never skips when depth=0",
+			requestedVersion: "ref:main",
+			depth:            "",
+			expected:         false,
+		},
+		{
+			name:             "ref version skipped when depth=1 (prevents loop)",
+			requestedVersion: "ref:main",
+			depth:            "1",
+			expected:         true,
+		},
+		{
 			name:             "depth=1 skips semver switch",
 			requestedVersion: "1.160.0",
 			depth:            "1",
@@ -1226,6 +1241,146 @@ func TestFindOrInstallVersionWithConfig_AutoDetectSHA(t *testing.T) {
 	assert.Equal(t, 0, finder.callCount, "Should not use semver finder for SHA version")
 }
 
+func TestFindOrInstallVersionWithConfig_RefVersion(t *testing.T) {
+	finder := &mockVersionFinder{}
+	installer := &mockVersionInstaller{}
+	cfg := testReexecConfig(finder, installer)
+
+	resolveCalledWith := ""
+	fullSHA := "ef725b83ded66da561cd47dc5a0c1c7ed1c2bd0b"
+	cfg.ResolveRef = func(_ context.Context, ref string) (string, error) {
+		resolveCalledWith = ref
+		return fullSHA, nil
+	}
+	// After resolution, the SHA path is reused; serve a cache hit for the resolved SHA.
+	cfg.CheckSHACache = func(sha string) (bool, string) {
+		assert.Equal(t, fullSHA, sha, "ref should resolve to the full SHA passed to the SHA cache")
+		return true, "/path/to/sha-ef725b8/atmos"
+	}
+
+	// "ref:main" is a valid ref version specifier.
+	path, err := findOrInstallVersionWithConfig("ref:main", cfg)
+
+	require.NoError(t, err)
+	assert.Equal(t, "/path/to/sha-ef725b8/atmos", path)
+	assert.Equal(t, "main", resolveCalledWith, "ResolveRef should be called with the ref name")
+	// Should not use the semver finder/installer.
+	assert.Equal(t, 0, finder.callCount, "Should not use semver finder for ref version")
+	assert.Equal(t, 0, installer.callCount, "Should not use semver installer for ref version")
+}
+
+func TestFindOrInstallVersionWithConfig_RefVersionFreshInstall(t *testing.T) {
+	finder := &mockVersionFinder{}
+	installer := &mockVersionInstaller{}
+	cfg := testReexecConfig(finder, installer)
+
+	fullSHA := "ceb752612345678901234567890123456789abcd"
+	cfg.ResolveRef = func(_ context.Context, ref string) (string, error) {
+		assert.Equal(t, "v1.199.0", ref)
+		return fullSHA, nil
+	}
+	cfg.CheckSHACache = func(_ string) (bool, string) { return false, "" }
+	cfg.InstallFromSHA = func(sha string, _ bool) (string, error) {
+		assert.Equal(t, fullSHA, sha)
+		return "/installed/sha-ceb7526/atmos", nil
+	}
+
+	// "ref:v1.199.0" resolves a tag to its commit, then installs the SHA artifact.
+	path, err := findOrInstallVersionWithConfig("ref:v1.199.0", cfg)
+
+	require.NoError(t, err)
+	assert.Equal(t, "/installed/sha-ceb7526/atmos", path)
+}
+
+func TestFindOrInstallVersionWithConfig_RefResolveFails(t *testing.T) {
+	finder := &mockVersionFinder{}
+	installer := &mockVersionInstaller{}
+	cfg := testReexecConfig(finder, installer)
+
+	cfg.ResolveRef = func(_ context.Context, _ string) (string, error) {
+		return "", errUtils.Build(errUtils.ErrToolNotFound).
+			WithExplanation("Git ref 'does-not-exist' not found").
+			Err()
+	}
+	// SHA path must never be reached when ref resolution fails.
+	cfg.CheckSHACache = func(_ string) (bool, string) {
+		t.Fatal("CheckSHACache should not be called when ref resolution fails")
+		return false, ""
+	}
+
+	path, err := findOrInstallVersionWithConfig("ref:does-not-exist", cfg)
+
+	assert.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrToolNotFound)
+	assert.Empty(t, path)
+	assert.Equal(t, 0, finder.callCount, "Should not use semver finder for ref version")
+}
+
+// A SHA version must NOT take the ref path: ResolveRef must never be called.
+func TestFindOrInstallVersionWithConfig_SHADoesNotResolveRef(t *testing.T) {
+	finder := &mockVersionFinder{}
+	installer := &mockVersionInstaller{}
+	cfg := testReexecConfig(finder, installer)
+
+	cfg.ResolveRef = func(_ context.Context, _ string) (string, error) {
+		t.Fatal("ResolveRef should not be called for a SHA version")
+		return "", nil
+	}
+	cfg.CheckSHACache = func(_ string) (bool, string) {
+		return true, "/path/to/sha-ceb7526/atmos"
+	}
+
+	path, err := findOrInstallVersionWithConfig("sha:ceb7526", cfg)
+
+	require.NoError(t, err)
+	assert.Equal(t, "/path/to/sha-ceb7526/atmos", path)
+}
+
+func TestCheckAndReexecWithConfig_RefVersionReexec(t *testing.T) {
+	// Test that a ref version triggers the full re-exec path: resolve -> SHA install -> exec.
+	originalVersion := Version
+	Version = "1.150.0"
+	defer func() { Version = originalVersion }()
+
+	finder := &mockVersionFinder{}
+	installer := &mockVersionInstaller{}
+
+	fullSHA := "ef725b83ded66da561cd47dc5a0c1c7ed1c2bd0b"
+	var execCalledWith string
+	cfg := &ReexecConfig{
+		Finder:    finder,
+		Installer: installer,
+		ExecFn: func(argv0 string, argv []string, envv []string) error {
+			execCalledWith = argv0
+			return nil
+		},
+		GetEnv:         func(key string) string { return "" },
+		SetEnv:         func(key, value string) error { return nil },
+		Args:           []string{"atmos", "version"},
+		Environ:        func() []string { return []string{} },
+		CheckPRCache:   func(_ int) (toolchain.PRCacheStatus, string) { return toolchain.PRCacheNeedsInstall, "" },
+		CheckPRUpdate:  func(_ context.Context, _ int, _ bool) (bool, error) { return false, nil },
+		InstallFromPR:  func(_ int, _ bool) (string, error) { return "", errors.New("not used") },
+		CheckSHACache:  func(_ string) (bool, string) { return true, "/path/to/sha-ef725b8/atmos" },
+		InstallFromSHA: func(_ string, _ bool) (string, error) { return "", errors.New("not used") },
+		ResolveRef: func(_ context.Context, ref string) (string, error) {
+			assert.Equal(t, "main", ref)
+			return fullSHA, nil
+		},
+	}
+
+	atmosConfig := &schema.AtmosConfiguration{
+		Version: schema.Version{
+			Use: "ref:main",
+		},
+	}
+
+	result := CheckAndReexecWithConfig(atmosConfig, cfg)
+
+	assert.True(t, result, "Should return true when ref re-exec is triggered")
+	assert.Equal(t, "/path/to/sha-ef725b8/atmos", execCalledWith)
+}
+
 func TestCheckAndReexecWithConfig_PRVersionReexec(t *testing.T) {
 	// Test that PR version triggers full re-exec path with mocked install.
 	originalVersion := Version
@@ -1330,6 +1485,7 @@ func TestDefaultReexecConfig(t *testing.T) {
 	assert.NotNil(t, cfg.InstallFromPR)
 	assert.NotNil(t, cfg.CheckSHACache)
 	assert.NotNil(t, cfg.InstallFromSHA)
+	assert.NotNil(t, cfg.ResolveRef)
 }
 
 // TestFindOrInstallPRVersionWithConfig_CacheValid tests that a valid cached PR binary is returned immediately.

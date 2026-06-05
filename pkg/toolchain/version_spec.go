@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"unicode"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -19,6 +20,9 @@ const (
 	VersionTypePR
 	// VersionTypeSHA represents a commit SHA (e.g., "sha:ceb7526", "ceb7526be").
 	VersionTypeSHA
+	// VersionTypeRef represents a git ref — a branch or tag name resolved to its
+	// latest commit's build artifact (e.g., "ref:main", "ref:v1.2.3", "ref:heads/main").
+	VersionTypeRef
 	// VersionTypeInvalid represents an invalid version format.
 	VersionTypeInvalid
 )
@@ -27,6 +31,7 @@ const (
 	// Prefixes for explicit version specifiers.
 	prPrefix  = "pr:"
 	shaPrefix = "sha:"
+	refPrefix = "ref:"
 
 	// Minimum length for auto-detected SHAs (short SHA).
 	minSHALength = 7
@@ -38,10 +43,11 @@ const (
 )
 
 // ParseVersionSpec detects the version type from an input string.
-// Supports explicit prefixes (pr:, sha:) and auto-detection.
+// Supports explicit prefixes (pr:, sha:, ref:) and auto-detection.
 //   - All digits -> PR number.
 //   - Hex string 7-40 chars with at least one letter a-f -> SHA.
 //   - Valid semver pattern (X.Y.Z or vX.Y.Z) -> semver.
+//   - ref:<name> -> git ref (branch or tag), resolved at install time.
 //   - Everything else -> error.
 //
 // Returns the version type, normalized value (prefix stripped), and any error.
@@ -63,7 +69,12 @@ func ParseVersionSpec(version string) (VersionType, string, error) {
 		return parseSHAPrefix(version)
 	}
 
-	// 3. All digits -> PR number.
+	// 3. Explicit ref prefix (branch or tag).
+	if strings.HasPrefix(version, refPrefix) {
+		return parseRefPrefix(version)
+	}
+
+	// 4. All digits -> PR number.
 	if isAllDigits(version) {
 		prNum, _ := strconv.Atoi(version)
 		if prNum <= 0 {
@@ -72,17 +83,17 @@ func ParseVersionSpec(version string) (VersionType, string, error) {
 		return VersionTypePR, version, nil
 	}
 
-	// 4. Valid semver pattern -> semver.
+	// 5. Valid semver pattern -> semver.
 	if isValidSemver(version) {
 		return VersionTypeSemver, version, nil
 	}
 
-	// 5. Auto-detect SHA (hex string 7-40 chars with at least one letter a-f).
+	// 6. Auto-detect SHA (hex string 7-40 chars with at least one letter a-f).
 	if isValidSHA(version) {
 		return VersionTypeSHA, version, nil
 	}
 
-	// 6. Invalid format.
+	// 7. Invalid format.
 	return VersionTypeInvalid, "", fmt.Errorf(versionErrorFormat, errUtils.ErrVersionFormatInvalid, version)
 }
 
@@ -106,6 +117,19 @@ func parseSHAPrefix(version string) (VersionType, string, error) {
 		return VersionTypeInvalid, "", fmt.Errorf(versionErrorFormat, errUtils.ErrVersionFormatInvalid, version)
 	}
 	return VersionTypeSHA, shaValue, nil
+}
+
+// parseRefPrefix handles explicit "ref:<name>" version specifiers.
+// The ref is a git branch or tag name (e.g. "main", "v1.2.3", "heads/main", "tags/v1.2.3")
+// that is resolved to its latest commit SHA at install time. Validation is intentionally
+// light because git refs permit a wide range of characters; only clearly-invalid input
+// (empty, or containing whitespace/control characters) is rejected here.
+func parseRefPrefix(version string) (VersionType, string, error) {
+	refValue := strings.TrimPrefix(version, refPrefix)
+	if !isValidRef(refValue) {
+		return VersionTypeInvalid, "", fmt.Errorf(versionErrorFormat, errUtils.ErrVersionFormatInvalid, version)
+	}
+	return VersionTypeRef, refValue, nil
 }
 
 // IsPRVersion checks if the version resolves to a PR.
@@ -138,6 +162,20 @@ func IsSHAVersion(version string) (string, bool) {
 
 	// Validate SHA format.
 	if !isValidSHA(value) {
+		return "", false
+	}
+
+	return value, true
+}
+
+// IsRefVersion checks if the version resolves to a git ref (branch or tag).
+// Returns the ref name and true if it's a ref version, otherwise "" and false.
+// Only the explicit "ref:" prefix produces a ref — refs are never auto-detected.
+func IsRefVersion(version string) (string, bool) {
+	defer perf.Track(nil, "toolchain.IsRefVersion")()
+
+	vType, value, err := ParseVersionSpec(version)
+	if err != nil || vType != VersionTypeRef {
 		return "", false
 	}
 
@@ -188,6 +226,22 @@ func isValidSemver(s string) bool {
 			if r < '0' || r > '9' {
 				return false
 			}
+		}
+	}
+	return true
+}
+
+// isValidRef checks if a string is a plausible git ref name (branch or tag).
+// Git refs permit a wide range of characters, so this only rejects clearly-invalid
+// input: empty/whitespace-only refs and refs containing any whitespace or control
+// characters. The actual existence of the ref is validated remotely at resolve time.
+func isValidRef(s string) bool {
+	if strings.TrimSpace(s) == "" {
+		return false
+	}
+	for _, r := range s {
+		if unicode.IsSpace(r) || unicode.IsControl(r) {
+			return false
 		}
 	}
 	return true

@@ -27,6 +27,9 @@ var (
 
 	// ErrNoArtifactForPlatform indicates no artifact exists for the current platform.
 	ErrNoArtifactForPlatform = errors.New("no artifact available for current platform")
+
+	// ErrRefNotFound indicates the git ref (branch or tag) does not exist.
+	ErrRefNotFound = errors.New("git ref not found")
 )
 
 const (
@@ -103,11 +106,18 @@ type ActionsService interface {
 	GetArtifact(ctx context.Context, owner, repo string, artifactID int64) (*github.Artifact, *github.Response, error)
 }
 
+// RepositoriesService defines the interface for repository operations.
+// This allows for mocking in tests.
+type RepositoriesService interface {
+	GetCommitSHA1(ctx context.Context, owner, repo, ref, lastSHA string) (string, *github.Response, error)
+}
+
 // ArtifactFetcher wraps the artifact fetching logic with injectable services.
 // Use NewArtifactFetcher to create an instance with custom services for testing.
 type ArtifactFetcher struct {
 	pullRequests PullRequestService
 	actions      ActionsService
+	repositories RepositoriesService
 }
 
 // NewArtifactFetcher creates an ArtifactFetcher with custom services.
@@ -124,6 +134,7 @@ func defaultArtifactFetcher(ctx context.Context) *ArtifactFetcher {
 	return &ArtifactFetcher{
 		pullRequests: client.PullRequests,
 		actions:      client.Actions,
+		repositories: client.Repositories,
 	}
 }
 
@@ -133,6 +144,7 @@ func defaultArtifactFetcherWithToken(ctx context.Context, token string) *Artifac
 	return &ArtifactFetcher{
 		pullRequests: client.PullRequests,
 		actions:      client.Actions,
+		repositories: client.Repositories,
 	}
 }
 
@@ -441,6 +453,46 @@ func (f *ArtifactFetcher) getSHAArtifactInfo(ctx context.Context, owner, repo, s
 		DownloadURL:  artifact.GetArchiveDownloadURL(),
 		RunStartedAt: runInfo.RunStartedAt,
 	}, nil
+}
+
+// GetRefSHA resolves a git ref (branch or tag name) to its full commit SHA.
+// It accepts bare names ("main", "v1.2.3") as well as qualified refs
+// ("heads/main", "tags/v1.2.3") for disambiguation. The returned SHA is the
+// full 40-character commit SHA, which is what the artifact lookup requires.
+// Works without authentication for public repositories (subject to rate limits).
+func GetRefSHA(ctx context.Context, owner, repo, ref string) (string, error) {
+	defer perf.Track(nil, "github.GetRefSHA")()
+
+	fetcher := defaultArtifactFetcher(ctx)
+	return fetcher.getRefSHA(ctx, owner, repo, ref)
+}
+
+// GetRefSHA resolves a git ref to its full commit SHA using custom services.
+func (f *ArtifactFetcher) GetRefSHA(ctx context.Context, owner, repo, ref string) (string, error) {
+	defer perf.Track(nil, "github.ArtifactFetcher.GetRefSHA")()
+
+	return f.getRefSHA(ctx, owner, repo, ref)
+}
+
+// getRefSHA contains the core logic for resolving a ref to a commit SHA.
+func (f *ArtifactFetcher) getRefSHA(ctx context.Context, owner, repo, ref string) (string, error) {
+	log.Debug("Resolving git ref to SHA", logFieldOwner, owner, logFieldRepo, repo, "ref", ref)
+
+	// lastSHA is empty: we always want the current SHA, not a conditional request.
+	sha, resp, err := f.repositories.GetCommitSHA1(ctx, owner, repo, ref, "")
+	if err != nil {
+		if resp != nil && resp.StatusCode == statusNotFound {
+			return "", fmt.Errorf("%w: '%s' in %s/%s", ErrRefNotFound, ref, owner, repo)
+		}
+		return "", handleGitHubAPIError(err, resp)
+	}
+
+	if sha == "" {
+		return "", fmt.Errorf("%w: '%s' resolved to an empty SHA in %s/%s", ErrRefNotFound, ref, owner, repo)
+	}
+
+	log.Debug("Resolved git ref", "ref", ref, "sha", sha)
+	return sha, nil
 }
 
 // Error predicate functions are trivial one-liners — perf.Track omitted per guidelines.

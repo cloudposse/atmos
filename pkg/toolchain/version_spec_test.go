@@ -145,6 +145,59 @@ func TestParseVersionSpec(t *testing.T) {
 			wantErr:   false,
 		},
 
+		// Explicit ref prefix (branch or tag).
+		{
+			name:      "ref branch name",
+			input:     "ref:main",
+			wantType:  VersionTypeRef,
+			wantValue: "main",
+			wantErr:   false,
+		},
+		{
+			name:      "ref tag name",
+			input:     "ref:v1.2.3",
+			wantType:  VersionTypeRef,
+			wantValue: "v1.2.3",
+			wantErr:   false,
+		},
+		{
+			name:      "ref qualified branch heads/",
+			input:     "ref:heads/main",
+			wantType:  VersionTypeRef,
+			wantValue: "heads/main",
+			wantErr:   false,
+		},
+		{
+			name:      "ref qualified tag tags/",
+			input:     "ref:tags/v1.199.0",
+			wantType:  VersionTypeRef,
+			wantValue: "tags/v1.199.0",
+			wantErr:   false,
+		},
+		{
+			name:      "ref release branch with slash",
+			input:     "ref:release/v1.199",
+			wantType:  VersionTypeRef,
+			wantValue: "release/v1.199",
+			wantErr:   false,
+		},
+
+		// Invalid ref formats.
+		{
+			name:      "ref: - empty ref value",
+			input:     "ref:",
+			wantType:  VersionTypeInvalid,
+			wantValue: "",
+			wantErr:   true,
+		},
+		{
+			name:      "ref with whitespace",
+			input:     "ref:my branch",
+			wantType:  VersionTypeInvalid,
+			wantValue: "",
+			wantErr:   true,
+		},
+
 		// Invalid formats (should error).
 		{
 			name:      "empty string",
@@ -470,6 +523,81 @@ func TestIsSHAVersion(t *testing.T) {
 			gotSHA, gotIsSHA := IsSHAVersion(tt.version)
 			assert.Equal(t, tt.wantSHA, gotSHA, "SHA mismatch")
 			assert.Equal(t, tt.wantIsSHA, gotIsSHA, "isSHA mismatch")
+		})
+	}
+}
+
+func TestIsRefVersion(t *testing.T) {
+	tests := []struct {
+		name      string
+		version   string
+		wantRef   string
+		wantIsRef bool
+	}{
+		// Valid ref versions (explicit prefix only).
+		{
+			name:      "ref branch",
+			version:   "ref:main",
+			wantRef:   "main",
+			wantIsRef: true,
+		},
+		{
+			name:      "ref tag",
+			version:   "ref:v1.199.0",
+			wantRef:   "v1.199.0",
+			wantIsRef: true,
+		},
+		{
+			name:      "ref qualified branch",
+			version:   "ref:heads/main",
+			wantRef:   "heads/main",
+			wantIsRef: true,
+		},
+
+		// Not ref versions — refs are never auto-detected.
+		{
+			name:      "bare branch name (no prefix)",
+			version:   "main",
+			wantRef:   "",
+			wantIsRef: false,
+		},
+		{
+			name:      "semver",
+			version:   "1.2.3",
+			wantRef:   "",
+			wantIsRef: false,
+		},
+		{
+			name:      "PR number",
+			version:   "2040",
+			wantRef:   "",
+			wantIsRef: false,
+		},
+		{
+			name:      "SHA",
+			version:   "ceb7526",
+			wantRef:   "",
+			wantIsRef: false,
+		},
+		{
+			name:      "empty ref",
+			version:   "ref:",
+			wantRef:   "",
+			wantIsRef: false,
+		},
+		{
+			name:      "empty string",
+			version:   "",
+			wantRef:   "",
+			wantIsRef: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			gotRef, gotIsRef := IsRefVersion(tt.version)
+			assert.Equal(t, tt.wantRef, gotRef, "ref mismatch")
+			assert.Equal(t, tt.wantIsRef, gotIsRef, "isRef mismatch")
 		})
 	}
 }
