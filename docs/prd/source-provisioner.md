@@ -53,6 +53,14 @@ components:
           - "**/*_test.go"
 ```
 
+> **`source` is a top-level component section — not under `metadata`.** It is a sibling of
+> `vars`, `settings`, and `metadata`. `metadata.source` is **not** a schema field: it is silently
+> dropped during decoding, so JIT provisioning never runs and the component fails to resolve with a
+> confusing "Terraform component does not exist" error. To catch this, Atmos emits a warning when a
+> component nests `source` under `metadata` (see `pkg/component/workdir_path.go`
+> `warnIfSourceMisplacedUnderMetadata`). Do **not** confuse this with `metadata.component` (a base
+> component to inherit from), which *is* valid and unrelated to source provisioning.
+
 ### How It Works
 
 The source provisioner operates in two modes:
