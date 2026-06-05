@@ -9,6 +9,7 @@ import (
 	"github.com/cloudposse/atmos/cmd/internal"
 	"github.com/cloudposse/atmos/cmd/terraform/backend"
 	"github.com/cloudposse/atmos/cmd/terraform/generate"
+	"github.com/cloudposse/atmos/cmd/terraform/migrate"
 	"github.com/cloudposse/atmos/cmd/terraform/planfile"
 	"github.com/cloudposse/atmos/cmd/terraform/source"
 	"github.com/cloudposse/atmos/cmd/terraform/workdir"
@@ -75,12 +76,16 @@ func init() {
 	// Add planfile subcommand from the planfile subpackage.
 	terraformCmd.AddCommand(planfile.PlanfileCmd)
 
+	// Add migrate subcommand from the migrate subpackage.
+	terraformCmd.AddCommand(migrate.GetCommand(migrate.Options{ParentCommand: terraformCmd, TerraformParser: terraformParser}))
+
 	// Register other completion functions (component args, identity).
 	RegisterTerraformCompletions(terraformCmd)
 
 	// Register global compat flags for terraform command itself (not just subcommands).
 	// This enables the COMPATIBILITY FLAGS section in help output.
 	internal.RegisterCommandCompatFlags("terraform", "terraform", TerraformGlobalCompatFlags())
+	internal.RegisterCommandCompatFlags("terraform", "migrate", migrate.CompatFlags())
 
 	// Register the flag registry for NoOptDefVal preprocessing in preprocessCompatibilityFlags.
 	// This enables the existing FlagRegistry.PreprocessNoOptDefValArgs to normalize

@@ -31,6 +31,12 @@ type Hook struct {
 	// "fail" (propagate non-zero exit), or "ignore" (swallow).
 	OnFailure string `yaml:"on_failure,omitempty"`
 
+	// Tfmigrate-kind specific fields.
+	Migration     string   `yaml:"migration,omitempty"`
+	Config        string   `yaml:"config,omitempty"`
+	BackendConfig []string `yaml:"backend_config,omitempty"`
+	Mode          string   `yaml:"mode,omitempty"`
+
 	// Store-kind specific (existing, unchanged semantics).
 	Name    string            `yaml:"name,omitempty"`
 	Outputs map[string]string `yaml:"outputs,omitempty"`

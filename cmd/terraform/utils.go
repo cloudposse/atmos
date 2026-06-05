@@ -15,7 +15,6 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/ansi"
-	"github.com/cloudposse/atmos/pkg/auth"
 	"github.com/cloudposse/atmos/pkg/ci/plugins/terraform/planfile"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/flags/compat"
@@ -387,7 +386,7 @@ func executeAffectedCommand(parentCmd *cobra.Command, args []string, info *schem
 
 // isMultiComponentExecution checks if the command should be routed to multi-component execution.
 func isMultiComponentExecution(info *schema.ConfigAndStacksInfo) bool {
-	return info.All || len(info.Components) > 0 || info.Query != "" || (info.Stack != "" && info.ComponentFromArg == "")
+	return shared.IsMultiComponentExecution(info)
 }
 
 // executeSingleComponent executes terraform for a single component.
@@ -438,40 +437,7 @@ func terraformRun(parentCmd *cobra.Command, actualCmd *cobra.Command, args []str
 
 // applyOptionsToInfo transfers parsed options to the info struct.
 func applyOptionsToInfo(info *schema.ConfigAndStacksInfo, opts *TerraformRunOptions) {
-	info.ProcessTemplates = opts.ProcessTemplates
-	info.ProcessFunctions = opts.ProcessFunctions
-	info.Skip = opts.Skip
-	info.Components = opts.Components
-	info.DryRun = opts.DryRun
-	info.SkipInit = opts.SkipInit
-	info.UploadStatus = opts.UploadStatus
-	info.All = opts.All
-	info.Affected = opts.Affected
-	info.Query = opts.Query
-
-	// Backend execution flags (only apply if set via CLI).
-	if opts.AutoGenerateBackendFile != "" {
-		info.AutoGenerateBackendFile = opts.AutoGenerateBackendFile
-	}
-	if opts.InitRunReconfigure != "" {
-		info.InitRunReconfigure = opts.InitRunReconfigure
-	}
-	if opts.InitPassVars {
-		info.InitPassVars = "true"
-	}
-
-	// Plan/Apply/Deploy specific flags.
-	if opts.PlanFile != "" {
-		info.PlanFile = opts.PlanFile
-		info.UseTerraformPlan = true
-	}
-	if opts.PlanSkipPlanfile {
-		info.PlanSkipPlanfile = "true"
-	}
-	if opts.DeployRunInit {
-		info.DeployRunInit = "true"
-	}
-	info.VerifyPlan = opts.VerifyPlan
+	shared.ApplyRunOptions(info, opts)
 }
 
 // terraformRunWithOptions is the shared execution logic for terraform subcommands.
@@ -570,92 +536,32 @@ func terraformRunWithOptions(parentCmd, actualCmd *cobra.Command, args []string,
 
 // hasMultiComponentFlags checks if any multi-component flags are set.
 func hasMultiComponentFlags(info *schema.ConfigAndStacksInfo) bool {
-	return info.All || info.Affected || len(info.Components) > 0 || info.Query != ""
+	return shared.HasMultiComponentFlags(info)
 }
 
 // hasNonAffectedMultiFlags checks if multi-component flags (excluding --affected) are set.
 func hasNonAffectedMultiFlags(info *schema.ConfigAndStacksInfo) bool {
-	return info.All || len(info.Components) > 0 || info.Query != ""
+	return shared.HasNonAffectedMultiFlags(info)
 }
 
 // hasSingleComponentFlags checks if single-component flags are set.
 func hasSingleComponentFlags(info *schema.ConfigAndStacksInfo) bool {
-	return info.PlanFile != "" || info.UseTerraformPlan
+	return shared.HasSingleComponentFlags(info)
 }
 
 // checkTerraformFlags checks the usage of the Single-Component and Multi-Component flags.
 func checkTerraformFlags(info *schema.ConfigAndStacksInfo) error {
-	// Check Multi-Component flags.
-	// 1. Specifying the `component` argument is not allowed with the Multi-Component flags.
-	if info.ComponentFromArg != "" && hasMultiComponentFlags(info) {
-		return fmt.Errorf("component `%s`: %w", info.ComponentFromArg, errUtils.ErrInvalidTerraformComponentWithMultiComponentFlags)
-	}
-	// 2. `--affected` is not allowed with the other Multi-Component flags.
-	if info.Affected && hasNonAffectedMultiFlags(info) {
-		return errUtils.ErrInvalidTerraformFlagsWithAffectedFlag
-	}
-
-	// Single-Component and Multi-Component flags are not allowed together.
-	if hasSingleComponentFlags(info) && hasMultiComponentFlags(info) {
-		return errUtils.ErrInvalidTerraformSingleComponentAndMultiComponentFlags
-	}
-
-	return nil
+	return shared.CheckTerraformFlags(info)
 }
 
 // handleInteractiveIdentitySelection handles the case where --identity was used without a value.
 func handleInteractiveIdentitySelection(info *schema.ConfigAndStacksInfo) error {
-	// Initialize CLI config to get auth configuration.
-	// Use false to skip stack processing - only auth config is needed.
-	atmosConfig, err := cfg.InitCliConfig(*info, false)
-	if err != nil {
-		return fmt.Errorf(errWrapFormat, errUtils.ErrInitializeCLIConfig, err)
-	}
-
-	// Check if auth is configured. If not, we can't select an identity.
-	if len(atmosConfig.Auth.Providers) == 0 && len(atmosConfig.Auth.Identities) == 0 {
-		// User explicitly requested identity selection (--identity or --identity=)
-		// but no authentication is configured. This is an error.
-		return fmt.Errorf("%w: no authentication configured", errUtils.ErrNoIdentitiesAvailable)
-	}
-
-	// Create auth manager to enable identity selection.
-	// Use auth.CreateAndAuthenticateManager directly to avoid import cycle.
-	authManager, err := auth.CreateAndAuthenticateManager(
-		cfg.IdentityFlagSelectValue,
-		&atmosConfig.Auth,
-		cfg.IdentityFlagSelectValue,
-	)
-	if err != nil {
-		return fmt.Errorf(errWrapFormat, errUtils.ErrFailedToInitializeAuthManager, err)
-	}
-
-	// Get default identity with forced interactive selection.
-	// GetDefaultIdentity() handles TTY and CI detection via isInteractive().
-	selectedIdentity, err := authManager.GetDefaultIdentity(true)
-	if err != nil {
-		// Check if user explicitly aborted (Ctrl+C, ESC, etc.).
-		if errors.Is(err, errUtils.ErrUserAborted) {
-			log.Debug("User aborted identity selection, exiting with SIGINT code")
-			return errUtils.WithExitCode(err, errUtils.ExitCodeSIGINT)
-		}
-		return fmt.Errorf(errWrapFormat, errUtils.ErrDefaultIdentity, err)
-	}
-
-	info.Identity = selectedIdentity
-	return nil
+	return shared.HandleInteractiveIdentitySelection(info)
 }
 
 // resolveAndPromptForArgs handles path resolution and interactive prompts for component/stack.
 func resolveAndPromptForArgs(info *schema.ConfigAndStacksInfo, cmd *cobra.Command) error {
-	// Resolve path-based component arguments (e.g., ".", "./vpc", absolute paths).
-	if info.NeedsPathResolution && info.ComponentFromArg != "" {
-		if err := resolveComponentPath(info, cfg.TerraformComponentType); err != nil {
-			return err
-		}
-	}
-	// Handle interactive component/stack selection (skipped for multi-component ops).
-	return handleInteractiveComponentStackSelection(info, cmd)
+	return shared.ResolveAndPromptForArgs(info, cmd)
 }
 
 // handleInteractiveComponentStackSelection prompts for missing component and stack
