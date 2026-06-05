@@ -89,6 +89,40 @@ func TestInjectDefaultArgs(t *testing.T) {
 		assert.Equal(t, []string{"describe", "component", "--process-functions=true"}, got)
 	})
 
+	t.Run("split-token default is fully removed when CLI sets the flag", func(t *testing.T) {
+		rawSplit := map[string]any{
+			"describe": map[string]any{
+				"args": []any{"--identity", "default"},
+			},
+		}
+		// Both the flag and its paired value token must be dropped; otherwise "default"
+		// is left orphaned as a positional argument.
+		got := InjectDefaultArgs(root, rawSplit, []string{"describe", "component", "--identity=cli"})
+		assert.Equal(t, []string{"describe", "component", "--identity=cli"}, got)
+	})
+
+	t.Run("split-token default is fully removed when ENV sets the flag", func(t *testing.T) {
+		t.Setenv("ATMOS_IDENTITY", "me")
+		rawSplit := map[string]any{
+			"describe": map[string]any{
+				"args": []any{"--identity", "default"},
+			},
+		}
+		got := InjectDefaultArgs(root, rawSplit, []string{"describe", "component", "vpc"})
+		assert.Equal(t, []string{"describe", "component", "vpc"}, got)
+	})
+
+	t.Run("split-token default is injected (flag and value adjacent) when not suppressed", func(t *testing.T) {
+		rawSplit := map[string]any{
+			"describe": map[string]any{
+				"args": []any{"--identity", "default"},
+			},
+		}
+		// Tokens stay adjacent so the NoOptDefVal preprocessor can later pair them.
+		got := InjectDefaultArgs(root, rawSplit, []string{"describe", "component", "vpc"})
+		assert.Equal(t, []string{"describe", "component", "--identity", "default", "vpc"}, got)
+	})
+
 	t.Run("ENV var suppresses the default (ENV wins)", func(t *testing.T) {
 		t.Setenv("ATMOS_PROCESS_FUNCTIONS", "true")
 		got := InjectDefaultArgs(root, raw, []string{"describe", "component", "vpc"})
@@ -112,8 +146,56 @@ func TestInjectDefaultArgs(t *testing.T) {
 		assert.Equal(t, []string{"describe", "component", "--help"}, got)
 	})
 
+	t.Run("help short form -h is never mutated", func(t *testing.T) {
+		got := InjectDefaultArgs(root, raw, []string{"describe", "component", "-h"})
+		assert.Equal(t, []string{"describe", "component", "-h"}, got)
+	})
+
+	t.Run("unknown command is a no-op", func(t *testing.T) {
+		in := []string{"nonexistent", "sub"}
+		assert.Equal(t, in, InjectDefaultArgs(root, raw, in))
+	})
+
 	t.Run("empty raw config is a no-op", func(t *testing.T) {
 		in := []string{"describe", "component", "vpc"}
 		assert.Equal(t, in, InjectDefaultArgs(root, nil, in))
+	})
+}
+
+func TestSkipDefaultArgsForCommand(t *testing.T) {
+	assert.True(t, skipDefaultArgsForCommand(nil, nil), "empty command path is skipped")
+	assert.True(t, skipDefaultArgsForCommand([]string{"help"}, nil), "help is skipped")
+	assert.True(t, skipDefaultArgsForCommand([]string{"completion", "bash"}, nil), "completion is skipped")
+	assert.True(t, skipDefaultArgsForCommand([]string{"__complete"}, nil), "cobra completion command is skipped")
+	assert.True(t, skipDefaultArgsForCommand([]string{"describe", "component"}, []string{"--help"}), "--help in rest is skipped")
+	assert.True(t, skipDefaultArgsForCommand([]string{"describe", "component"}, []string{"-h"}), "-h in rest is skipped")
+	assert.False(t, skipDefaultArgsForCommand([]string{"describe", "component"}, []string{"-s", "dev"}), "normal command is not skipped")
+}
+
+func TestDefaultArgHasSeparateValue(t *testing.T) {
+	// Attached value (--flag=value): nothing separate to drop.
+	assert.False(t, defaultArgHasSeparateValue([]string{"--identity=admin", "default"}, 0))
+	// Bare flag followed by a positional value: the value pairs with the flag.
+	assert.True(t, defaultArgHasSeparateValue([]string{"--identity", "default"}, 0))
+	// Bare flag at the end of the list: no following token to pair with.
+	assert.False(t, defaultArgHasSeparateValue([]string{"--identity"}, 0))
+	// Bare flag followed by another flag: the next token is not a value.
+	assert.False(t, defaultArgHasSeparateValue([]string{"--identity", "--process-functions"}, 0))
+}
+
+func TestFilterDefaultArgs(t *testing.T) {
+	t.Run("nothing suppressed passes through unchanged", func(t *testing.T) {
+		got := filterDefaultArgs([]string{"--identity", "default", "--skip=x"}, nil)
+		assert.Equal(t, []string{"--identity", "default", "--skip=x"}, got)
+	})
+
+	t.Run("split-token suppression drops both flag and value", func(t *testing.T) {
+		got := filterDefaultArgs([]string{"--identity", "default", "--skip=x"}, []string{"--identity=cli"})
+		assert.Equal(t, []string{"--skip=x"}, got)
+	})
+
+	t.Run("attached-value suppression drops only the flag token", func(t *testing.T) {
+		got := filterDefaultArgs([]string{"--skip=x", "positional"}, []string{"--skip=y"})
+		assert.Equal(t, []string{"positional"}, got)
 	})
 }

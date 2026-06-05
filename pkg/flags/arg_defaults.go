@@ -114,18 +114,33 @@ func collectDefaultArgs(rawConfig map[string]any, cmdPath []string) []string {
 	return out
 }
 
-// filterDefaultArgs drops default args whose flag is already set on the command line or via
-// its environment variable.
+// filterDefaultArgs drops default args whose flag is already set on the command line or via its
+// environment variable. When a suppressed flag carries a space-separated value token, that token
+// is dropped too, so it is not left orphaned as a positional argument.
 func filterDefaultArgs(defaults, userArgs []string) []string {
 	var out []string
-	for _, arg := range defaults {
+	for i := 0; i < len(defaults); i++ {
+		arg := defaults[i]
 		name := flagNameFromArg(arg)
 		if name != "" && (flagPresentInArgs(name, userArgs) || flagEnvIsSet(name)) {
+			if defaultArgHasSeparateValue(defaults, i) {
+				i++ // drop the paired value token along with the suppressed flag.
+			}
 			continue
 		}
 		out = append(out, arg)
 	}
 	return out
+}
+
+// defaultArgHasSeparateValue reports whether the default arg at index i is a bare flag whose value
+// is the following token (space-separated form, e.g. "--identity" "default"). It mirrors the
+// pairing the NoOptDefVal preprocessor applies, so suppression drops both tokens together.
+func defaultArgHasSeparateValue(defaults []string, i int) bool {
+	if strings.Contains(defaults[i], "=") {
+		return false // value attached (--flag=value); nothing separate to drop.
+	}
+	return i+1 < len(defaults) && flagNameFromArg(defaults[i+1]) == ""
 }
 
 // flagNameFromArg extracts the flag name from a default-arg token (e.g. "--skip=x" → "skip",
