@@ -20,7 +20,36 @@ const (
 	DefaultVendorTimeout = 10 * time.Minute
 	// TargetDirPermissions is the permissions for created target directories.
 	TargetDirPermissions = 0o755
+
+	// Defaults for auto-provision retry policy when the user has not configured
+	// sourceSpec.Retry. Tuned to absorb transient remote failures (504s, DNS
+	// blips, dropped connections) without dragging out the wall-clock budget.
+	defaultProvisionRetryMaxAttempts  = 3
+	defaultProvisionRetryInitialDelay = 2 * time.Second
+	defaultProvisionRetryMaxDelay     = 30 * time.Second
+	defaultProvisionRetryMultiplier   = 2.0
+	defaultProvisionRetryJitter       = 0.1
 )
+
+// defaultProvisionRetryConfig returns a conservative retry policy for
+// auto-provisioned sources when the user has not explicitly configured one.
+// Transient remote failures (504s, DNS blips, dropped connections) should not
+// fail an entire terraform apply on the first attempt.
+func defaultProvisionRetryConfig() *schema.RetryConfig {
+	maxAttempts := defaultProvisionRetryMaxAttempts
+	initialDelay := defaultProvisionRetryInitialDelay
+	maxDelay := defaultProvisionRetryMaxDelay
+	multiplier := defaultProvisionRetryMultiplier
+	jitter := defaultProvisionRetryJitter
+	return &schema.RetryConfig{
+		MaxAttempts:     &maxAttempts,
+		BackoffStrategy: schema.BackoffExponential,
+		InitialDelay:    &initialDelay,
+		MaxDelay:        &maxDelay,
+		Multiplier:      &multiplier,
+		RandomJitter:    &jitter,
+	}
+}
 
 // VendorSource vendors a component source to the target directory.
 // It uses go-getter via the existing downloader infrastructure.
@@ -81,11 +110,15 @@ func VendorSource(
 	}
 	defer os.RemoveAll(tempDir)
 
-	// Download using go-getter.
+	// Download using go-getter. Apply a conservative default retry policy when
+	// the source spec doesn't specify one — transient 5xx/DNS failures should
+	// not fail the whole apply on the first attempt.
 	opts := []downloader.GoGetterOption{}
-	if sourceSpec.Retry != nil {
-		opts = append(opts, downloader.WithRetryConfig(sourceSpec.Retry))
+	retryCfg := sourceSpec.Retry
+	if retryCfg == nil {
+		retryCfg = defaultProvisionRetryConfig()
 	}
+	opts = append(opts, downloader.WithRetryConfig(retryCfg))
 	dl := downloader.NewGoGetterDownloader(atmosConfig, opts...)
 	err = dl.Fetch(uri, tempDir, downloader.ClientModeAny, DefaultVendorTimeout)
 	if err != nil {
