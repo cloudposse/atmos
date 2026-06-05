@@ -44,10 +44,19 @@ describe:
 
   <dt>`affected.sections`</dt>
   <dd>
-    The authoritative list of top-level component sections that [`atmos describe affected`](/cli/commands/describe/affected#evaluated-sections)
-    compares when computing affected components. When set, it **fully replaces** the built-in defaults (it is not additive) — to add a custom
-    section, copy the [default list](/cli/commands/describe/affected#evaluated-sections) and append your section; to drop one, omit it.
-    `metadata` and `settings` are always evaluated regardless of this list. When empty or unset, the built-in defaults are used.
+    The authoritative list of top-level component sections that `atmos describe affected` compares when computing
+    affected components. When empty or unset, Atmos uses the built-in defaults below.
+
+    **Default sections:** `vars`, `env`, `providers`, `required_providers`, `required_version`, `hooks`, `generate`,
+    `backend`, `backend_type`, `remote_state_backend`, `remote_state_backend_type`, `auth`, `command`, `dependencies`,
+    `source`, `provision`.
+
+    When set, this list **fully replaces** those defaults — it is not additive. To add a custom section, list every
+    default you still want plus your custom section name; to stop evaluating a default, omit it from the list. A custom
+    section is reported as `stack.<name>` when it changes.
+
+    `metadata` and `settings` are **always** evaluated and cannot be disabled with this list: `metadata` gates whether a
+    component is skipped, and `settings` also drives dependency change detection.
   </dd>
 </dl>
 
