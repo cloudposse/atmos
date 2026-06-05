@@ -69,6 +69,43 @@ This is useful when you want to import files that are co-located with the curren
 
 Atmos supports importing stack configurations from remote sources using [go-getter](https://github.com/hashicorp/go-getter) URL schemes. This enables sharing configurations across repositories, teams, or organizations.
 
+:::warning Remote imports bring configuration, not component code
+
+A remote import pulls **stack configuration** (the YAML manifests) — it does **not** pull the **component source code** (the Terraform/OpenTofu/Helmfile root modules) those manifests reference.
+
+If a remote catalog defines a component, e.g.:
+
+```yaml
+# Imported remotely from the hub repo
+components:
+  terraform:
+    vpc:
+      metadata:
+        component: vpc   # references components/terraform/vpc — the CODE, not in this import
+      vars:
+        cidr_block: 10.0.0.0/16
+```
+
+then the configuration resolves and commands like `atmos describe`, `atmos list`, and `atmos validate` work — but `atmos terraform plan/apply vpc` **fails with "component not found"** unless the `components/terraform/vpc` directory actually exists in the consuming repository. The remote import does not materialize it.
+
+To pull the component code from the same (or another) remote repo, give the component a [`source`](/cli/commands/terraform/source) so Atmos vendors the root module just-in-time at plan/apply time:
+
+```yaml
+components:
+  terraform:
+    vpc:
+      metadata:
+        component: vpc
+      source:
+        uri: github.com/my-org/hub//components/terraform/vpc?ref=v1.2.3
+      vars:
+        cidr_block: 10.0.0.0/16
+```
+
+Alternatively, [vendor](/cli/commands/vendor/pull) the component into the repo ahead of time with `atmos vendor pull`. In short: **remote imports + remote components are two separate mechanisms** — importing the config does not bring the code; you must provision the source (or vendor it) explicitly.
+
+:::
+
 ### Supported Schemes
 
 <dl>
