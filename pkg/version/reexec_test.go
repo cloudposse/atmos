@@ -1241,6 +1241,7 @@ func TestFindOrInstallVersionWithConfig_AutoDetectSHA(t *testing.T) {
 	assert.Equal(t, 0, finder.callCount, "Should not use semver finder for SHA version")
 }
 
+// TestFindOrInstallVersionWithConfig_RefVersion verifies a ref resolves to a SHA that hits the SHA cache, bypassing the semver path.
 func TestFindOrInstallVersionWithConfig_RefVersion(t *testing.T) {
 	finder := &mockVersionFinder{}
 	installer := &mockVersionInstaller{}
@@ -1269,6 +1270,7 @@ func TestFindOrInstallVersionWithConfig_RefVersion(t *testing.T) {
 	assert.Equal(t, 0, installer.callCount, "Should not use semver installer for ref version")
 }
 
+// TestFindOrInstallVersionWithConfig_RefVersionFreshInstall verifies a ref with no cached SHA installs the SHA artifact.
 func TestFindOrInstallVersionWithConfig_RefVersionFreshInstall(t *testing.T) {
 	finder := &mockVersionFinder{}
 	installer := &mockVersionInstaller{}
@@ -1292,6 +1294,7 @@ func TestFindOrInstallVersionWithConfig_RefVersionFreshInstall(t *testing.T) {
 	assert.Equal(t, "/installed/sha-ceb7526/atmos", path)
 }
 
+// TestFindOrInstallVersionWithConfig_RefResolveFails verifies a ref-resolution failure propagates and never reaches the SHA path.
 func TestFindOrInstallVersionWithConfig_RefResolveFails(t *testing.T) {
 	finder := &mockVersionFinder{}
 	installer := &mockVersionInstaller{}
@@ -1316,7 +1319,7 @@ func TestFindOrInstallVersionWithConfig_RefResolveFails(t *testing.T) {
 	assert.Equal(t, 0, finder.callCount, "Should not use semver finder for ref version")
 }
 
-// A SHA version must NOT take the ref path: ResolveRef must never be called.
+// TestFindOrInstallVersionWithConfig_SHADoesNotResolveRef verifies a SHA version never invokes ref resolution.
 func TestFindOrInstallVersionWithConfig_SHADoesNotResolveRef(t *testing.T) {
 	finder := &mockVersionFinder{}
 	installer := &mockVersionInstaller{}
@@ -1336,8 +1339,8 @@ func TestFindOrInstallVersionWithConfig_SHADoesNotResolveRef(t *testing.T) {
 	assert.Equal(t, "/path/to/sha-ceb7526/atmos", path)
 }
 
+// TestCheckAndReexecWithConfig_RefVersionReexec verifies a ref version triggers the full re-exec path: resolve -> SHA install -> exec.
 func TestCheckAndReexecWithConfig_RefVersionReexec(t *testing.T) {
-	// Test that a ref version triggers the full re-exec path: resolve -> SHA install -> exec.
 	originalVersion := Version
 	Version = "1.150.0"
 	defer func() { Version = originalVersion }()

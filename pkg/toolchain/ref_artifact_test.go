@@ -12,8 +12,8 @@ import (
 	"github.com/cloudposse/atmos/pkg/github"
 )
 
+// TestHandleRefResolveError_NotFound verifies a ref-not-found error maps to a friendly ErrToolNotFound.
 func TestHandleRefResolveError_NotFound(t *testing.T) {
-	// A ref-not-found error maps to a friendly ErrToolNotFound.
 	cause := fmt.Errorf("%w: 'does-not-exist' in cloudposse/atmos", github.ErrRefNotFound)
 
 	err := handleRefResolveError(cause, "does-not-exist")
@@ -23,8 +23,8 @@ func TestHandleRefResolveError_NotFound(t *testing.T) {
 	assert.NotErrorIs(t, err, errUtils.ErrToolInstall, "should not be classified as an install failure")
 }
 
+// TestHandleRefResolveError_Generic verifies a non-not-found error (e.g. rate limit / network) maps to ErrToolInstall and preserves the cause.
 func TestHandleRefResolveError_Generic(t *testing.T) {
-	// A non-not-found error (e.g. rate limit / network) maps to ErrToolInstall and preserves the cause.
 	cause := errors.New("rate limit exceeded")
 
 	err := handleRefResolveError(cause, "main")

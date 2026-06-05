@@ -1251,6 +1251,7 @@ func TestNewArtifactFetcher(t *testing.T) {
 	assert.NotNil(t, fetcher)
 }
 
+// TestArtifactFetcherGetRefSHA_Success verifies a bare branch ref resolves to its full commit SHA.
 func TestArtifactFetcherGetRefSHA_Success(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
@@ -1270,6 +1271,7 @@ func TestArtifactFetcherGetRefSHA_Success(t *testing.T) {
 	assert.Equal(t, fullSHA, result)
 }
 
+// TestArtifactFetcherGetRefSHA_QualifiedRef verifies a qualified tags/ ref resolves to its full commit SHA.
 func TestArtifactFetcherGetRefSHA_QualifiedRef(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
@@ -1289,6 +1291,7 @@ func TestArtifactFetcherGetRefSHA_QualifiedRef(t *testing.T) {
 	assert.Equal(t, fullSHA, result)
 }
 
+// TestArtifactFetcherGetRefSHA_NotFound verifies a 404 response maps to ErrRefNotFound.
 func TestArtifactFetcherGetRefSHA_NotFound(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
@@ -1311,6 +1314,7 @@ func TestArtifactFetcherGetRefSHA_NotFound(t *testing.T) {
 	assert.ErrorIs(t, err, ErrRefNotFound)
 }
 
+// TestArtifactFetcherGetRefSHA_EmptySHA verifies an empty resolved SHA maps to ErrRefNotFound.
 func TestArtifactFetcherGetRefSHA_EmptySHA(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()

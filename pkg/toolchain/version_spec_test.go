@@ -527,6 +527,7 @@ func TestIsSHAVersion(t *testing.T) {
 	}
 }
 
+// TestIsRefVersion verifies IsRefVersion detects ref: specifiers and rejects non-ref inputs.
 func TestIsRefVersion(t *testing.T) {
 	tests := []struct {
 		name      string
