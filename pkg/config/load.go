@@ -350,6 +350,10 @@ func LoadConfig(configAndStacksInfo *schema.ConfigAndStacksInfo) (schema.AtmosCo
 		return atmosConfig, err
 	}
 
+	// Capture the fully merged settings (profiles applied) for path-derived lookups the
+	// typed struct can't express — e.g. per-command default args (`<command>.args`).
+	atmosConfig.RawConfig = v.AllSettings()
+
 	// Manually extract top-level env fields to avoid mapstructure tag collision.
 	// Both AtmosConfiguration.Env and Command.Env use "env" but with different types
 	// (map[string]string vs []CommandEnv), causing mapstructure to silently drop Commands.
