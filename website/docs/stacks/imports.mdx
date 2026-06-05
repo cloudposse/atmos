@@ -158,6 +158,36 @@ The supported values are:
 
 `nested_imports: remote` is supported for Git/go-getter sources where Atmos can infer the remote stack base path from the import path. Plain string imports and map imports without `nested_imports` use `local`.
 
+### Caching Remote Imports
+
+When stacks import a catalog from a remote Git repository, Atmos clones each unique source repository **at most once per invocation** and resolves every subdirectory import from that single shared clone. This happens automatically, with no configuration, and a single run always sees one consistent snapshot of each source. Shallow clones (`depth=1`) are used by default.
+
+By default the clone is refreshed once per invocation, so mutable refs (e.g. `?ref=main`) always stay current. To reuse the clone **across invocations** — for example, with a warm CI cache — set a `ttl`:
+
+```yaml
+import:
+  - path: "git::https://github.com/acme/infrastructure.git//stacks/catalog/vpc?ref=main"
+    ttl: 5m
+```
+
+Set a default for every import in `atmos.yaml`:
+
+```yaml title="atmos.yaml"
+imports:
+  ttl: 5m
+```
+
+Cached sources live under the XDG cache directory (`~/.cache/atmos/stack-imports/`, honoring `XDG_CACHE_HOME`). In CI, cache that directory between runs so a fresh clone within the `ttl` window is skipped:
+
+```yaml title=".github/workflows/atmos.yaml"
+- uses: actions/cache@v4
+  with:
+    path: ~/.cache/atmos/stack-imports
+    key: atmos-stack-imports-${{ runner.os }}
+```
+
+`ttl` accepts durations like `0s` (always re-fetch), `5m`, `1h`, `7d`, or keywords like `daily`. Pin to an immutable `?ref=<tag>` (or commit SHA) with a longer `ttl` for maximum reuse; keep `ttl` short for mutable refs like `main` so the catalog stays fresh.
+
 ### Best Practices for Remote Imports
 
 1. **Pin Versions:** Always use `?ref=` with a specific tag or commit SHA for Git imports to ensure reproducible builds.
@@ -283,6 +313,9 @@ The `import` section supports the following fields:
 
   <dt>`nested_imports` - (string)</dt>
   <dd>Controls how imports inside the imported file are resolved. Use `local` to resolve nested imports from the consuming repository's stack base path, or `remote` to resolve them from the remote source's stack base path. Defaults to `local`.</dd>
+
+  <dt>`ttl` - (string)</dt>
+  <dd>Cache duration for the cloned source repository of a remote (Git) import. When set, the clone is reused across Atmos invocations until it expires (e.g. with a warm CI cache), skipping the re-clone. Within a single invocation a source repo is always cloned at most once regardless of `ttl`. When unset, the source is re-cloned once per invocation. Accepts durations like `0s`, `5m`, `1h`, `7d`, or keywords like `daily`. Set a default for all imports with the top-level `imports.ttl` setting in `atmos.yaml`. See [Caching Remote Imports](#caching-remote-imports).</dd>
 
 </dl>
 

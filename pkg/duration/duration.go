@@ -170,3 +170,41 @@ func ParseDuration(s string) (time.Duration, error) {
 
 	return time.Duration(seconds) * time.Second, nil
 }
+
+// IsZeroTTL reports whether the TTL string represents a zero duration.
+//
+// ParseDuration rejects "0" (a zero duration is not a valid period for cleanup
+// scheduling), but for cache TTLs a zero value is a legitimate, common case meaning
+// "always expired / never reuse". Callers detect it with this helper before parsing.
+func IsZeroTTL(ttl string) bool {
+	defer perf.Track(nil, "duration.IsZeroTTL")()
+
+	switch ttl {
+	case "0", "0s", "0m", "0h", "0d":
+		return true
+	default:
+		return false
+	}
+}
+
+// IsExpired reports whether a cache entry last refreshed at updatedAt has exceeded ttl.
+//
+// A zero TTL (see IsZeroTTL) is always expired. A non-zero TTL is parsed with
+// ParseDuration; on a parse error the error is returned and callers should fail safe
+// by treating the entry as expired to avoid serving stale data. This helper makes no
+// decision for an empty ttl (""). The meaning of "no TTL configured" differs between
+// subsystems (reuse-forever versus refresh-each-run), so callers handle "" explicitly.
+func IsExpired(updatedAt time.Time, ttl string) (bool, error) {
+	defer perf.Track(nil, "duration.IsExpired")()
+
+	if IsZeroTTL(ttl) {
+		return true, nil
+	}
+
+	ttlDuration, err := ParseDuration(ttl)
+	if err != nil {
+		return false, err
+	}
+
+	return time.Since(updatedAt) > ttlDuration, nil
+}

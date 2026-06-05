@@ -44,8 +44,12 @@ type RemoteImporter struct {
 	cache       *cache.FileCache
 	memCache    map[string]string // In-memory cache for session.
 	matchCache  map[string][]RemoteImportMatch
-	memMu       sync.RWMutex
-	sourceMu    sync.Mutex
+	// sessionFetched tracks source repos already fetched in this process so that a
+	// repo shared by many subdir imports is cloned at most once per invocation,
+	// regardless of TTL. Guarded by sourceMu.
+	sessionFetched map[string]bool
+	memMu          sync.RWMutex
+	sourceMu       sync.Mutex
 }
 
 // RemoteImporterOption is a functional option for configuring RemoteImporter.
@@ -83,11 +87,12 @@ func NewRemoteImporter(atmosConfig *schema.AtmosConfiguration, opts ...RemoteImp
 	fd := downloader.NewGoGetterDownloader(atmosConfig)
 
 	r := &RemoteImporter{
-		atmosConfig: atmosConfig,
-		downloader:  fd,
-		cache:       fileCache,
-		memCache:    make(map[string]string),
-		matchCache:  make(map[string][]RemoteImportMatch),
+		atmosConfig:    atmosConfig,
+		downloader:     fd,
+		cache:          fileCache,
+		memCache:       make(map[string]string),
+		matchCache:     make(map[string][]RemoteImportMatch),
+		sessionFetched: make(map[string]bool),
 	}
 
 	// Apply options.
@@ -167,8 +172,20 @@ func (r *RemoteImporter) Download(uri string) (string, error) {
 }
 
 // Resolve fetches a remote import and returns all local stack files it resolves to.
+//
+// The cached source clone is refreshed on every invocation (no cross-run reuse); use
+// ResolveRemoteImportNested with a TTL when cross-run cache reuse is desired.
 func (r *RemoteImporter) Resolve(uri string) ([]RemoteImportMatch, error) {
 	defer perf.Track(nil, "imports.RemoteImporter.Resolve")()
+
+	return r.resolve(uri, "")
+}
+
+// resolve fetches a remote import and returns all local stack files it resolves to.
+// The ttl controls cross-run reuse of the cloned source repo for git subdir imports
+// (see ensureSourceDir); an empty ttl refreshes the clone once per invocation.
+func (r *RemoteImporter) resolve(uri, ttl string) ([]RemoteImportMatch, error) {
+	defer perf.Track(nil, "imports.RemoteImporter.resolve")()
 
 	if !IsRemote(uri) {
 		return nil, errUtils.Build(errUtils.ErrInvalidRemoteImport).
@@ -202,7 +219,7 @@ func (r *RemoteImporter) Resolve(uri string) ([]RemoteImportMatch, error) {
 		return matches, nil
 	}
 
-	matches, err := r.resolveGitSubdir(uri, sourceURI, subdir)
+	matches, err := r.resolveGitSubdir(uri, sourceURI, subdir, ttl)
 	if err != nil {
 		return nil, err
 	}
@@ -245,26 +262,26 @@ func cloneMatches(matches []RemoteImportMatch) []RemoteImportMatch {
 	return cloned
 }
 
-func (r *RemoteImporter) resolveGitSubdir(originalURI, sourceURI, subdir string) ([]RemoteImportMatch, error) {
-	sourceURI = r.detectGitSource(sourceURI)
-	tempDir, err := os.MkdirTemp(r.cache.BaseDir(), uriToTempName(originalURI)+".dir-")
+// resolveGitSubdir resolves a git import that targets a subdirectory (or glob) within
+// a repo. It sources files from the shared, deduplicated clone produced by
+// ensureSourceDir (cloned once per source repo per invocation, persisted across runs
+// when a TTL is set) rather than re-cloning into a throwaway temp dir per import. The
+// resolved files are copied into the file cache so the returned paths stay stable and
+// the default ("local" nested imports) semantics are unchanged.
+func (r *RemoteImporter) resolveGitSubdir(originalURI, sourceURI, subdir, ttl string) ([]RemoteImportMatch, error) {
+	sourceRoot, err := r.ensureSourceDir(sourceURI, ttl)
 	if err != nil {
 		return nil, err
 	}
-	defer os.RemoveAll(tempDir)
 
-	if err := r.downloader.Fetch(sourceURI, tempDir, downloader.ClientModeDir, defaultDownloadTimeout); err != nil {
-		return nil, err
-	}
-
-	files, err := resolveStackFiles(tempDir, subdir)
+	files, err := resolveStackFiles(sourceRoot, subdir)
 	if err != nil {
 		return nil, err
 	}
 
 	matches := make([]RemoteImportMatch, 0, len(files))
 	for _, file := range files {
-		rel, err := filepath.Rel(tempDir, file)
+		rel, err := filepath.Rel(sourceRoot, file)
 		if err != nil {
 			return nil, err
 		}
@@ -445,6 +462,10 @@ func (r *RemoteImporter) ClearCache() error {
 	// Clear in-memory cache.
 	r.memCache = make(map[string]string)
 	r.matchCache = make(map[string][]RemoteImportMatch)
+
+	r.sourceMu.Lock()
+	r.sessionFetched = make(map[string]bool)
+	r.sourceMu.Unlock()
 
 	// Clear persistent cache.
 	return r.cache.Clear()

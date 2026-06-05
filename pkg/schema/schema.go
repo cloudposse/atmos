@@ -62,6 +62,7 @@ type AtmosConfiguration struct {
 	BasePathSource                string             `yaml:"-" json:"-" mapstructure:"-"` // "runtime" if from env var/CLI/provider, "" if from config file.
 	Components                    Components         `yaml:"components" json:"components" mapstructure:"components"`
 	Stacks                        Stacks             `yaml:"stacks" json:"stacks" mapstructure:"stacks"`
+	Imports                       ImportsSettings    `yaml:"imports,omitempty" json:"imports,omitempty" mapstructure:"imports"`
 	Workflows                     Workflows          `yaml:"workflows,omitempty" json:"workflows,omitempty" mapstructure:"workflows"`
 	Logs                          Logs               `yaml:"logs,omitempty" json:"logs,omitempty" mapstructure:"logs"`
 	Errors                        ErrorsConfig       `yaml:"errors,omitempty" json:"errors,omitempty" mapstructure:"errors"`
@@ -1254,6 +1255,14 @@ const (
 	StackImportNestedImportsRemote = "remote"
 )
 
+// ImportsSettings holds global defaults applied when processing stack imports.
+type ImportsSettings struct {
+	// TTL is the default cache duration for the cloned source repos of remote (git)
+	// imports, applied when a per-import `ttl` is not set. See StackImport.TTL for the
+	// caching semantics and accepted formats.
+	TTL string `yaml:"ttl,omitempty" json:"ttl,omitempty" mapstructure:"ttl"`
+}
+
 type StackImport struct {
 	Path                        string              `yaml:"path" json:"path" mapstructure:"path"`
 	Context                     AtmosSectionMapType `yaml:"context" json:"context" mapstructure:"context"`
@@ -1261,6 +1270,13 @@ type StackImport struct {
 	IgnoreMissingTemplateValues bool                `yaml:"ignore_missing_template_values,omitempty" json:"ignore_missing_template_values,omitempty" mapstructure:"ignore_missing_template_values"`
 	SkipIfMissing               bool                `yaml:"skip_if_missing,omitempty" json:"skip_if_missing,omitempty" mapstructure:"skip_if_missing"`
 	NestedImports               string              `yaml:"nested_imports,omitempty" json:"nested_imports,omitempty" mapstructure:"nested_imports"`
+	// TTL is the cache duration for the cloned source repo of a remote (git) import.
+	// When set, the cloned source is reused across Atmos invocations until it expires,
+	// so a warm cache (e.g. GitHub Actions cache of the imports cache dir) skips the
+	// re-clone. Within a single invocation a source repo is always cloned at most once,
+	// regardless of TTL. When unset, the source is re-cloned once per invocation.
+	// Examples: "0s" (always re-fetch), "5m", "1h", "7d", or keywords like "daily".
+	TTL string `yaml:"ttl,omitempty" json:"ttl,omitempty" mapstructure:"ttl"`
 }
 
 // Dependencies
