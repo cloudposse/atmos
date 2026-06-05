@@ -34,5 +34,27 @@ func TestMain(m *testing.M) {
 	if os.Getenv("_ATMOS_TEST_EXIT_ONE") == "1" {
 		os.Exit(1)
 	}
-	os.Exit(m.Run())
+
+	// Isolate the Terraform provider plugin cache for this package's tests.
+	// Terraform's plugin cache is NOT safe for concurrent use, and `go test ./...`
+	// runs package test binaries in parallel. Sharing the global XDG plugin cache
+	// (TF_PLUGIN_CACHE_DIR -> ~/.cache/atmos/terraform/plugins) with other packages'
+	// concurrent terraform invocations races on Windows, surfacing as
+	// "plugin cache dir cannot be opened" / "Required plugins are not installed".
+	// Redirecting XDG_CACHE_HOME to a per-binary temp dir removes the contention.
+	// The real-terraform tests in this package run serially, so they safely share
+	// this private cache (isolated and faster: a single provider download).
+	// TestMain only has *testing.M, so t.TempDir/t.Setenv are unavailable here;
+	// os.MkdirTemp/os.Setenv with explicit cleanup below is the only option.
+	cacheDir, err := os.MkdirTemp("", "atmos-exec-xdg-cache-") //nolint:lintroller // no *testing.T in TestMain; cleaned up below.
+	if err == nil {
+		_ = os.Setenv("XDG_CACHE_HOME", cacheDir) //nolint:lintroller // no *testing.T in TestMain; process-level isolation for the whole binary.
+	}
+
+	code := m.Run()
+
+	if cacheDir != "" {
+		_ = os.RemoveAll(cacheDir) // os.Exit skips defers; clean up explicitly.
+	}
+	os.Exit(code)
 }
