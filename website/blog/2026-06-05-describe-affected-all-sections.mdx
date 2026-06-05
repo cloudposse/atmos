@@ -9,17 +9,17 @@ tags:
 date: 2026-06-05T00:00:00.000Z
 ---
 
-`atmos describe affected` now compares **every** provisioned component section between refs — including `providers`, `required_providers` (provider versions), `hooks`, `generate`, `backend`, `auth`, and `command`. Previously, changes to these sections were silently missed.
+The `atmos describe affected` command now compares **every** provisioned component section between refs — including `providers`, `required_providers` (provider versions), `hooks`, `generate`, `backend`, `auth`, and `command`. Previously, changes to these sections were silently missed.
 
 <!--truncate-->
 
 ## What Changed
 
-`atmos describe affected` works by deep-merging the stack configuration on both refs and comparing each component's resulting sections. The comparison ran against a hand-maintained list of section names — and that list had drifted out of sync with what Atmos actually merges into a component. As a result, a change that only touched, say, a component's `providers` or `hooks` block was **not** reported as affected, so CI pipelines built on `describe affected` could skip a component that genuinely changed.
+The `atmos describe affected` command works by deep-merging the stack configuration on both refs and comparing each component's resulting sections. The comparison ran against a hand-maintained list of section names — and that list had drifted out of sync with what Atmos actually merges into a component. As a result, a change that only touched, say, a component's `providers` or `hooks` block was **not** reported as affected, so CI pipelines built on `describe affected` could skip a component that genuinely changed.
 
 The comparison now covers the full set of provisioned sections:
 
-`vars`, `env`, `settings`, `metadata`, `providers`, `required_providers`, `required_version`, `hooks`, `generate`, `backend`, `backend_type`, `remote_state_backend`, `remote_state_backend_type`, `auth`, `command`, `dependencies`, `source`, `provision`.
+The evaluated sections are now `vars`, `env`, `settings`, `metadata`, `providers`, `required_providers`, `required_version`, `hooks`, `generate`, `backend`, `backend_type`, `remote_state_backend`, `remote_state_backend_type`, `auth`, `command`, `dependencies`, `source`, and `provision`.
 
 Scalar sections such as `backend_type`, `required_version`, and `command` are now compared too (previously only map-valued sections were).
 
