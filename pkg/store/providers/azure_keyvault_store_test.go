@@ -1,4 +1,4 @@
-package store
+package providers
 
 import (
 	"context"
@@ -6,6 +6,7 @@ import (
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/security/keyvault/azsecrets"
+	storepkg "github.com/cloudposse/atmos/pkg/store"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -58,7 +59,7 @@ func TestAzureKeyVaultStore_Set(t *testing.T) {
 			component: "app",
 			key:       "secret",
 			value:     "value",
-			wantErr:   ErrEmptyStack,
+			wantErr:   storepkg.ErrEmptyStack,
 		},
 		{
 			name:      "empty component",
@@ -66,7 +67,7 @@ func TestAzureKeyVaultStore_Set(t *testing.T) {
 			component: "",
 			key:       "secret",
 			value:     "value",
-			wantErr:   ErrEmptyComponent,
+			wantErr:   storepkg.ErrEmptyComponent,
 		},
 		{
 			name:      "empty key",
@@ -74,7 +75,7 @@ func TestAzureKeyVaultStore_Set(t *testing.T) {
 			component: "app",
 			key:       "",
 			value:     "value",
-			wantErr:   ErrEmptyKey,
+			wantErr:   storepkg.ErrEmptyKey,
 		},
 		{
 			name:      "permission denied",
@@ -85,7 +86,7 @@ func TestAzureKeyVaultStore_Set(t *testing.T) {
 			mockFunc: func(ctx context.Context, name string, parameters azsecrets.SetSecretParameters, options *azsecrets.SetSecretOptions) (azsecrets.SetSecretResponse, error) {
 				return azsecrets.SetSecretResponse{}, &azcore.ResponseError{StatusCode: statusCodeForbidden}
 			},
-			wantErr: ErrPermissionDenied,
+			wantErr: storepkg.ErrPermissionDenied,
 		},
 	}
 
@@ -155,21 +156,21 @@ func TestAzureKeyVaultStore_Get(t *testing.T) {
 			stack:     "",
 			component: "app",
 			key:       "secret",
-			wantErr:   ErrEmptyStack,
+			wantErr:   storepkg.ErrEmptyStack,
 		},
 		{
 			name:      "empty component",
 			stack:     "dev",
 			component: "",
 			key:       "secret",
-			wantErr:   ErrEmptyComponent,
+			wantErr:   storepkg.ErrEmptyComponent,
 		},
 		{
 			name:      "empty key",
 			stack:     "dev",
 			component: "app",
 			key:       "",
-			wantErr:   ErrEmptyKey,
+			wantErr:   storepkg.ErrEmptyKey,
 		},
 		{
 			name:      "not found",
@@ -179,7 +180,7 @@ func TestAzureKeyVaultStore_Get(t *testing.T) {
 			mockFunc: func(ctx context.Context, name string, version string, options *azsecrets.GetSecretOptions) (azsecrets.GetSecretResponse, error) {
 				return azsecrets.GetSecretResponse{}, &azcore.ResponseError{StatusCode: statusCodeNotFound}
 			},
-			wantErr: ErrResourceNotFound,
+			wantErr: storepkg.ErrResourceNotFound,
 		},
 		{
 			name:      "permission denied",
@@ -189,7 +190,7 @@ func TestAzureKeyVaultStore_Get(t *testing.T) {
 			mockFunc: func(ctx context.Context, name string, version string, options *azsecrets.GetSecretOptions) (azsecrets.GetSecretResponse, error) {
 				return azsecrets.GetSecretResponse{}, &azcore.ResponseError{StatusCode: statusCodeForbidden}
 			},
-			wantErr: ErrPermissionDenied,
+			wantErr: storepkg.ErrPermissionDenied,
 		},
 	}
 

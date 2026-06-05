@@ -12,7 +12,7 @@ import (
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
-	"github.com/cloudposse/atmos/pkg/store"
+	"github.com/cloudposse/atmos/pkg/store/providers"
 	"github.com/cloudposse/atmos/pkg/ui"
 	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/cloudposse/atmos/pkg/version"
@@ -748,7 +748,7 @@ func processStoreConfig(atmosConfig *schema.AtmosConfiguration) error {
 		log.Debug("processStoreConfig", "atmosConfig.StoresConfig", fmt.Sprintf("%v", atmosConfig.StoresConfig))
 	}
 
-	storeRegistry, err := store.NewStoreRegistry(&atmosConfig.StoresConfig)
+	storeRegistry, err := providers.NewStoreRegistry(&atmosConfig.StoresConfig)
 	if err != nil {
 		return err
 	}

@@ -1,4 +1,4 @@
-package store
+package providers
 
 import (
 	"context"
@@ -15,6 +15,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 
+	storepkg "github.com/cloudposse/atmos/pkg/store"
 	"github.com/cloudposse/atmos/tests"
 )
 
@@ -628,13 +629,13 @@ func TestSSMStore_BuildAuthConfigOpts(t *testing.T) {
 	tests := []struct {
 		name        string
 		region      string
-		authContext *AWSAuthConfig
+		authContext *storepkg.AWSAuthConfig
 		wantLen     int
 	}{
 		{
 			name:   "all fields populated",
 			region: "us-east-1",
-			authContext: &AWSAuthConfig{
+			authContext: &storepkg.AWSAuthConfig{
 				CredentialsFile: "/path/to/creds",
 				ConfigFile:      "/path/to/config",
 				Profile:         "prod",
@@ -645,7 +646,7 @@ func TestSSMStore_BuildAuthConfigOpts(t *testing.T) {
 		{
 			name:   "empty credentials file",
 			region: "us-east-1",
-			authContext: &AWSAuthConfig{
+			authContext: &storepkg.AWSAuthConfig{
 				ConfigFile: "/path/to/config",
 				Profile:    "prod",
 			},
@@ -654,7 +655,7 @@ func TestSSMStore_BuildAuthConfigOpts(t *testing.T) {
 		{
 			name:   "region fallback from auth context",
 			region: "",
-			authContext: &AWSAuthConfig{
+			authContext: &storepkg.AWSAuthConfig{
 				CredentialsFile: "/path/to/creds",
 				Region:          "eu-west-1",
 			},
@@ -663,19 +664,19 @@ func TestSSMStore_BuildAuthConfigOpts(t *testing.T) {
 		{
 			name:        "all empty auth context with store region",
 			region:      "us-east-1",
-			authContext: &AWSAuthConfig{},
+			authContext: &storepkg.AWSAuthConfig{},
 			wantLen:     1, // just store region
 		},
 		{
 			name:        "both regions empty",
 			region:      "",
-			authContext: &AWSAuthConfig{},
+			authContext: &storepkg.AWSAuthConfig{},
 			wantLen:     0,
 		},
 		{
 			name:   "only profile set",
 			region: "",
-			authContext: &AWSAuthConfig{
+			authContext: &storepkg.AWSAuthConfig{
 				Profile: "prod-admin",
 			},
 			wantLen: 1, // just profile

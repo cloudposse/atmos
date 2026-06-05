@@ -1,4 +1,4 @@
-package store
+package providers
 
 import (
 	"context"
@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cloudposse/atmos/pkg/store"
 	"github.com/redis/go-redis/v9"
 )
 
@@ -31,13 +32,13 @@ type RedisClient interface {
 }
 
 // Ensure RedisStore implements the store.Store interface.
-var _ Store = (*RedisStore)(nil)
+var _ store.Store = (*RedisStore)(nil)
 
 func getRedisOptions(options *RedisStoreOptions) (*redis.Options, error) {
 	if options.URL != nil {
 		opts, err := redis.ParseURL(*options.URL)
 		if err != nil {
-			return &redis.Options{}, fmt.Errorf(errFormat, ErrParseRedisURL, err)
+			return &redis.Options{}, fmt.Errorf(errFormat, store.ErrParseRedisURL, err)
 		}
 
 		return opts, nil
@@ -47,10 +48,10 @@ func getRedisOptions(options *RedisStoreOptions) (*redis.Options, error) {
 		return redis.ParseURL(os.Getenv("ATMOS_REDIS_URL"))
 	}
 
-	return &redis.Options{}, ErrMissingRedisURL
+	return &redis.Options{}, store.ErrMissingRedisURL
 }
 
-func NewRedisStore(options RedisStoreOptions) (Store, error) {
+func NewRedisStore(options RedisStoreOptions) (store.Store, error) {
 	prefix := ""
 	if options.Prefix != nil {
 		prefix = *options.Prefix
@@ -63,7 +64,7 @@ func NewRedisStore(options RedisStoreOptions) (Store, error) {
 
 	opts, err := getRedisOptions(&options)
 	if err != nil {
-		return nil, fmt.Errorf(errFormat, ErrParseRedisURL, err)
+		return nil, fmt.Errorf(errFormat, store.ErrParseRedisURL, err)
 	}
 
 	redisClient := redis.NewClient(opts)
@@ -77,7 +78,7 @@ func NewRedisStore(options RedisStoreOptions) (Store, error) {
 
 func (s *RedisStore) getKey(stack string, component string, key string) (string, error) {
 	if s.stackDelimiter == nil {
-		return "", ErrStackDelimiterNotSet
+		return "", store.ErrStackDelimiterNotSet
 	}
 
 	prefixParts := []string{s.prefix}
@@ -88,26 +89,26 @@ func (s *RedisStore) getKey(stack string, component string, key string) (string,
 
 func (s *RedisStore) Get(stack string, component string, key string) (interface{}, error) {
 	if stack == "" {
-		return nil, ErrEmptyStack
+		return nil, store.ErrEmptyStack
 	}
 
 	if component == "" {
-		return nil, ErrEmptyComponent
+		return nil, store.ErrEmptyComponent
 	}
 
 	if key == "" {
-		return nil, ErrEmptyKey
+		return nil, store.ErrEmptyKey
 	}
 
 	paramName, err := s.getKey(stack, component, key)
 	if err != nil {
-		return nil, fmt.Errorf(errFormat, ErrGetKey, err)
+		return nil, fmt.Errorf(errFormat, store.ErrGetKey, err)
 	}
 
 	ctx := context.Background()
 	jsonData, err := s.redisClient.Get(ctx, paramName).Result()
 	if err != nil {
-		return nil, fmt.Errorf(errFormat, ErrGetRedisKey, err)
+		return nil, fmt.Errorf(errFormat, store.ErrGetRedisKey, err)
 	}
 
 	// First try to unmarshal as JSON
@@ -122,29 +123,29 @@ func (s *RedisStore) Get(stack string, component string, key string) (interface{
 
 func (s *RedisStore) Set(stack string, component string, key string, value interface{}) error {
 	if stack == "" {
-		return ErrEmptyStack
+		return store.ErrEmptyStack
 	}
 
 	if component == "" {
-		return ErrEmptyComponent
+		return store.ErrEmptyComponent
 	}
 
 	if key == "" {
-		return ErrEmptyKey
+		return store.ErrEmptyKey
 	}
 	if value == nil {
-		return fmt.Errorf("%w for key %s in stack %s component %s", ErrNilValue, key, stack, component)
+		return fmt.Errorf("%w for key %s in stack %s component %s", store.ErrNilValue, key, stack, component)
 	}
 
 	// Construct the full parameter name using getKey
 	paramName, err := s.getKey(stack, component, key)
 	if err != nil {
-		return fmt.Errorf(errFormat, ErrGetKey, err)
+		return fmt.Errorf(errFormat, store.ErrGetKey, err)
 	}
 
 	jsonData, err := json.Marshal(value)
 	if err != nil {
-		return fmt.Errorf(errFormat, ErrMarshalValue, err)
+		return fmt.Errorf(errFormat, store.ErrMarshalValue, err)
 	}
 
 	ctx := context.Background()
@@ -155,7 +156,7 @@ func (s *RedisStore) Set(stack string, component string, key string, value inter
 
 func (s *RedisStore) GetKey(key string) (interface{}, error) {
 	if key == "" {
-		return nil, ErrEmptyKey
+		return nil, store.ErrEmptyKey
 	}
 
 	// Use the key directly as the Redis key
@@ -170,9 +171,9 @@ func (s *RedisStore) GetKey(key string) (interface{}, error) {
 	resp := s.redisClient.Get(context.Background(), redisKey)
 	if err := resp.Err(); err != nil {
 		if errors.Is(err, redis.Nil) {
-			return nil, fmt.Errorf(errWrapFormatWithID, ErrResourceNotFound, redisKey, err)
+			return nil, fmt.Errorf(errWrapFormatWithID, store.ErrResourceNotFound, redisKey, err)
 		}
-		return nil, fmt.Errorf(errFormat, ErrGetParameter, err)
+		return nil, fmt.Errorf(errFormat, store.ErrGetParameter, err)
 	}
 
 	value := resp.Val()

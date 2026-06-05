@@ -1,4 +1,4 @@
-package store
+package providers
 
 import (
 	"bytes"
@@ -19,7 +19,7 @@ func TestNoopLoggerMethods(t *testing.T) {
 	})
 
 	t.Run("SetLogLevel", func(t *testing.T) {
-		// Store original level
+		// store.Store original level
 		originalLevel := logger.GetLogLevel()
 
 		// Try to change it

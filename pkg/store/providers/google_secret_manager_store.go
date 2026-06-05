@@ -1,4 +1,4 @@
-package store
+package providers
 
 import (
 	"context"
@@ -16,6 +16,7 @@ import (
 
 	"github.com/cloudposse/atmos/internal/gcp"
 	log "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/store"
 )
 
 const (
@@ -31,18 +32,18 @@ type GSMClient interface {
 	Close() error
 }
 
-// GSMStore is an implementation of the Store interface for Google Secret Manager.
+// GSMStore is an implementation of the store.Store interface for Google Secret Manager.
 type GSMStore struct {
 	client         GSMClient
 	projectID      string
 	prefix         string
 	stackDelimiter *string
 	replication    *secretmanagerpb.Replication
-	credentials    *string // Store-level credentials (from options).
+	credentials    *string // store.Store-level credentials (from options).
 
 	// Identity-based authentication fields.
 	identityName string
-	authResolver AuthContextResolver
+	authResolver store.AuthContextResolver
 	initOnce     sync.Once
 	initErr      error
 }
@@ -56,19 +57,19 @@ type GSMStoreOptions struct {
 	Locations      *[]string `mapstructure:"locations"`   // Optional replication locations
 }
 
-// Verify that GSMStore implements the Store and IdentityAwareStore interfaces.
+// Verify that GSMStore implements the store.Store and store.IdentityAwareStore interfaces.
 var (
-	_ Store              = (*GSMStore)(nil)
-	_ IdentityAwareStore = (*GSMStore)(nil)
+	_ store.Store              = (*GSMStore)(nil)
+	_ store.IdentityAwareStore = (*GSMStore)(nil)
 )
 
-// NewGSMStore initializes a new Google Secret Manager Store.
+// NewGSMStore initializes a new Google Secret Manager store.Store.
 // Client initialization is always deferred to first use via ensureClient().
 // This allows auth credentials (e.g., GOOGLE_OAUTH_ACCESS_TOKEN) to be
 // established after config loading but before the store is actually used.
-func NewGSMStore(options GSMStoreOptions, identityName string) (Store, error) {
+func NewGSMStore(options GSMStoreOptions, identityName string) (store.Store, error) {
 	if options.ProjectID == "" {
-		return nil, ErrProjectIDRequired
+		return nil, store.ErrProjectIDRequired
 	}
 
 	store := &GSMStore{
@@ -93,9 +94,9 @@ func NewGSMStore(options GSMStoreOptions, identityName string) (Store, error) {
 	return store, nil
 }
 
-// SetAuthContext implements IdentityAwareStore.
+// SetAuthContext implements store.IdentityAwareStore.
 // If identityName is non-empty, it overrides the store's identity. Otherwise, the existing identity is preserved.
-func (s *GSMStore) SetAuthContext(resolver AuthContextResolver, identityName string) {
+func (s *GSMStore) SetAuthContext(resolver store.AuthContextResolver, identityName string) {
 	s.authResolver = resolver
 	if identityName != "" {
 		s.identityName = identityName
@@ -117,7 +118,7 @@ func (s *GSMStore) initDefaultClient() error {
 				log.Trace("Failed to close Google Secret Manager client after creation error", "error", closeErr)
 			}
 		}
-		return fmt.Errorf(errWrapFormat, ErrCreateClient, err)
+		return fmt.Errorf(errWrapFormat, store.ErrCreateClient, err)
 	}
 
 	s.client = client
@@ -128,13 +129,13 @@ func (s *GSMStore) initDefaultClient() error {
 // initIdentityClient initializes the GCP client using identity-based credentials.
 func (s *GSMStore) initIdentityClient() error {
 	if s.authResolver == nil {
-		return fmt.Errorf("%w: store requires identity %q but no auth resolver was injected", ErrIdentityNotConfigured, s.identityName)
+		return fmt.Errorf("%w: store requires identity %q but no auth resolver was injected", store.ErrIdentityNotConfigured, s.identityName)
 	}
 
 	ctx := context.Background()
 	authContext, err := s.authResolver.ResolveGCPAuthContext(ctx, s.identityName)
 	if err != nil {
-		return fmt.Errorf("%w: failed to resolve GCP auth context for identity %q: %w", ErrAuthContextNotAvailable, s.identityName, err)
+		return fmt.Errorf("%w: failed to resolve GCP auth context for identity %q: %w", store.ErrAuthContextNotAvailable, s.identityName, err)
 	}
 
 	// Use credentials file from GCP auth context if available, otherwise fall back to store credentials.
@@ -154,7 +155,7 @@ func (s *GSMStore) initIdentityClient() error {
 				log.Trace("Failed to close Google Secret Manager client after creation error", "error", closeErr)
 			}
 		}
-		return fmt.Errorf(errWrapFormat, ErrCreateClient, err)
+		return fmt.Errorf(errWrapFormat, store.ErrCreateClient, err)
 	}
 
 	s.client = client
@@ -209,12 +210,12 @@ func createReplicationFromLocations(locations *[]string) *secretmanagerpb.Replic
 // getKey generates a key for the Google Secret Manager.
 func (s *GSMStore) getKey(stack string, component string, key string) (string, error) {
 	if s.stackDelimiter == nil {
-		return "", ErrStackDelimiterNotSet
+		return "", store.ErrStackDelimiterNotSet
 	}
 
 	baseKey, err := getKey(s.prefix, *s.stackDelimiter, stack, component, key, gsmKeySeparator)
 	if err != nil {
-		return "", fmt.Errorf(errWrapFormat, ErrGetKey, err)
+		return "", fmt.Errorf(errWrapFormat, store.ErrGetKey, err)
 	}
 
 	// Replace any remaining slashes with underscores as Secret Manager doesn't allow slashes
@@ -247,12 +248,12 @@ func (s *GSMStore) createSecret(ctx context.Context, secretID string) (*secretma
 					Name: fmt.Sprintf("projects/%s/secrets/%s", s.projectID, secretID),
 				}, nil
 			case codes.NotFound:
-				return nil, fmt.Errorf(errWrapFormatWithID, ErrResourceNotFound, fmt.Sprintf("projects/%s/secrets/%s", s.projectID, secretID), err)
+				return nil, fmt.Errorf(errWrapFormatWithID, store.ErrResourceNotFound, fmt.Sprintf("projects/%s/secrets/%s", s.projectID, secretID), err)
 			case codes.PermissionDenied:
-				return nil, fmt.Errorf(errWrapFormatWithID, ErrPermissionDenied, fmt.Sprintf("project %s", s.projectID), err)
+				return nil, fmt.Errorf(errWrapFormatWithID, store.ErrPermissionDenied, fmt.Sprintf("project %s", s.projectID), err)
 			}
 		}
-		return nil, fmt.Errorf(errWrapFormat, ErrCreateSecret, err)
+		return nil, fmt.Errorf(errWrapFormat, store.ErrCreateSecret, err)
 	}
 	return secret, nil
 }
@@ -271,12 +272,12 @@ func (s *GSMStore) addSecretVersion(ctx context.Context, secret *secretmanagerpb
 		if st, ok := status.FromError(err); ok {
 			switch st.Code() {
 			case codes.NotFound:
-				return fmt.Errorf(errWrapFormatWithID, ErrResourceNotFound, secret.GetName(), err)
+				return fmt.Errorf(errWrapFormatWithID, store.ErrResourceNotFound, secret.GetName(), err)
 			case codes.PermissionDenied:
-				return fmt.Errorf(errWrapFormatWithID, ErrPermissionDenied, secret.GetName(), err)
+				return fmt.Errorf(errWrapFormatWithID, store.ErrPermissionDenied, secret.GetName(), err)
 			}
 		}
-		return fmt.Errorf(errWrapFormat, ErrAddSecretVersion, err)
+		return fmt.Errorf(errWrapFormat, store.ErrAddSecretVersion, err)
 	}
 	return nil
 }
@@ -284,16 +285,16 @@ func (s *GSMStore) addSecretVersion(ctx context.Context, secret *secretmanagerpb
 // Set stores a key-value pair in Google Secret Manager.
 func (s *GSMStore) Set(stack string, component string, key string, value any) error {
 	if stack == "" {
-		return ErrEmptyStack
+		return store.ErrEmptyStack
 	}
 	if component == "" {
-		return ErrEmptyComponent
+		return store.ErrEmptyComponent
 	}
 	if key == "" {
-		return ErrEmptyKey
+		return store.ErrEmptyKey
 	}
 	if value == nil {
-		return fmt.Errorf("%w for key %s in stack %s component %s", ErrNilValue, key, stack, component)
+		return fmt.Errorf("%w for key %s in stack %s component %s", store.ErrNilValue, key, stack, component)
 	}
 
 	if err := s.ensureClient(); err != nil {
@@ -306,14 +307,14 @@ func (s *GSMStore) Set(stack string, component string, key string, value any) er
 	// Convert value to JSON string
 	jsonValue, err := json.Marshal(value)
 	if err != nil {
-		return fmt.Errorf(errWrapFormat, ErrSerializeJSON, err)
+		return fmt.Errorf(errWrapFormat, store.ErrSerializeJSON, err)
 	}
 	strValue := string(jsonValue)
 
 	// Get the secret ID using getKey
 	secretID, err := s.getKey(stack, component, key)
 	if err != nil {
-		return fmt.Errorf(errWrapFormat, ErrGetKey, err)
+		return fmt.Errorf(errWrapFormat, store.ErrGetKey, err)
 	}
 
 	secret, err := s.createSecret(ctx, secretID)
@@ -331,13 +332,13 @@ func (s *GSMStore) Set(stack string, component string, key string, value any) er
 // Get retrieves a value by key from Google Secret Manager.
 func (s *GSMStore) Get(stack string, component string, key string) (any, error) {
 	if stack == "" {
-		return nil, ErrEmptyStack
+		return nil, store.ErrEmptyStack
 	}
 	if component == "" {
-		return nil, ErrEmptyComponent
+		return nil, store.ErrEmptyComponent
 	}
 	if key == "" {
-		return nil, ErrEmptyKey
+		return nil, store.ErrEmptyKey
 	}
 
 	if err := s.ensureClient(); err != nil {
@@ -350,7 +351,7 @@ func (s *GSMStore) Get(stack string, component string, key string) (any, error) 
 	// Get the secret ID using getKey
 	secretID, err := s.getKey(stack, component, key)
 	if err != nil {
-		return nil, fmt.Errorf(errWrapFormat, ErrGetKey, err)
+		return nil, fmt.Errorf(errWrapFormat, store.ErrGetKey, err)
 	}
 
 	// Build the resource name for the latest version
@@ -365,12 +366,12 @@ func (s *GSMStore) Get(stack string, component string, key string) (any, error) 
 		if ok {
 			switch st.Code() {
 			case codes.NotFound:
-				return nil, fmt.Errorf(errWrapFormatWithID, ErrResourceNotFound, secretID, err)
+				return nil, fmt.Errorf(errWrapFormatWithID, store.ErrResourceNotFound, secretID, err)
 			case codes.PermissionDenied:
-				return nil, fmt.Errorf(errWrapFormatWithID, ErrPermissionDenied, fmt.Sprintf("secret %s", secretID), err)
+				return nil, fmt.Errorf(errWrapFormatWithID, store.ErrPermissionDenied, fmt.Sprintf("secret %s", secretID), err)
 			}
 		}
-		return nil, fmt.Errorf(errWrapFormat, ErrAccessSecret, err)
+		return nil, fmt.Errorf(errWrapFormat, store.ErrAccessSecret, err)
 	}
 
 	var unmarshalled interface{}
@@ -385,7 +386,7 @@ func (s *GSMStore) Get(stack string, component string, key string) (any, error) 
 // GetKey retrieves a secret value directly by its key name, without stack/component scoping.
 func (s *GSMStore) GetKey(key string) (interface{}, error) {
 	if key == "" {
-		return nil, ErrEmptyKey
+		return nil, store.ErrEmptyKey
 	}
 
 	if err := s.ensureClient(); err != nil {
@@ -412,9 +413,9 @@ func (s *GSMStore) GetKey(key string) (interface{}, error) {
 	})
 	if err != nil {
 		if status.Code(err) == codes.NotFound {
-			return nil, fmt.Errorf(errWrapFormatWithID, ErrResourceNotFound, secretName, err)
+			return nil, fmt.Errorf(errWrapFormatWithID, store.ErrResourceNotFound, secretName, err)
 		}
-		return nil, fmt.Errorf(errWrapFormat, ErrAccessSecret, err)
+		return nil, fmt.Errorf(errWrapFormat, store.ErrAccessSecret, err)
 	}
 
 	if resp.Payload == nil || resp.Payload.Data == nil {

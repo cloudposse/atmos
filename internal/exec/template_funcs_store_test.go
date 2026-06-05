@@ -10,6 +10,7 @@ import (
 
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/store"
+	"github.com/cloudposse/atmos/pkg/store/providers"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -23,7 +24,7 @@ func TestStoreTemplateFunc(t *testing.T) {
 	t.Setenv("ATMOS_REDIS_URL", redisUrl)
 
 	// Create a new Redis store
-	redisStore, err := store.NewRedisStore(store.RedisStoreOptions{
+	redisStore, err := providers.NewRedisStore(providers.RedisStoreOptions{
 		URL: &redisUrl,
 	})
 	assert.NoError(t, err)
@@ -106,7 +107,7 @@ func TestComponentConfigWithStoreTemplateFunc(t *testing.T) {
 	t.Setenv("ATMOS_REDIS_URL", redisUrl)
 
 	// Create a new Redis store
-	redisStore, err := store.NewRedisStore(store.RedisStoreOptions{
+	redisStore, err := providers.NewRedisStore(providers.RedisStoreOptions{
 		URL: &redisUrl,
 	})
 	assert.NoError(t, err)

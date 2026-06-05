@@ -1,4 +1,4 @@
-package store
+package providers
 
 import (
 	"context"
@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	secretmanagerpb "cloud.google.com/go/secretmanager/apiv1/secretmanagerpb"
+	storepkg "github.com/cloudposse/atmos/pkg/store"
 	"github.com/google/go-cmp/cmp"
 	"github.com/googleapis/gax-go/v2"
 	"github.com/stretchr/testify/assert"
@@ -606,7 +607,7 @@ func TestGSMStore_GetKey(t *testing.T) {
 			if tt.wantErr {
 				assert.Error(t, err)
 				if tt.name == "empty stack delimiter" {
-					assert.ErrorIs(t, err, ErrStackDelimiterNotSet)
+					assert.ErrorIs(t, err, storepkg.ErrStackDelimiterNotSet)
 				}
 				return
 			}

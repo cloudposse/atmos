@@ -2,13 +2,6 @@ package store
 
 import "errors"
 
-// Error format constants.
-const (
-	errFormat           = "%w: %v"
-	errWrapFormat       = "%w: %s"
-	errWrapFormatWithID = "%w '%s': %s"
-)
-
 // Common errors shared across store implementations.
 var (
 	// Common validation errors.

@@ -1,4 +1,4 @@
-package store
+package providers
 
 import (
 	"errors"
@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	storepkg "github.com/cloudposse/atmos/pkg/store"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
@@ -15,7 +16,7 @@ func TestSetAuthContextResolver_MixedStores(t *testing.T) {
 	ctrl := gomock.NewController(t)
 
 	// Create a registry with a mix of identity-aware and non-identity-aware stores.
-	registry := make(StoreRegistry)
+	registry := make(storepkg.StoreRegistry)
 
 	// Create an SSM store with identity (identity-aware).
 	ssmStore := &SSMStore{
@@ -33,7 +34,7 @@ func TestSetAuthContextResolver_MixedStores(t *testing.T) {
 	registry["default-ssm"] = noIdentityStore
 
 	// Set the resolver.
-	resolver := NewMockAuthContextResolver(ctrl)
+	resolver := storepkg.NewMockAuthContextResolver(ctrl)
 	registry.SetAuthContextResolver(resolver)
 
 	// Verify that identity-aware stores got the resolver.
@@ -54,7 +55,7 @@ func TestSetAuthContext_DoesNotOverrideExistingIdentity(t *testing.T) {
 		stackDelimiter: stringPtr("-"),
 	}
 
-	resolver := NewMockAuthContextResolver(ctrl)
+	resolver := storepkg.NewMockAuthContextResolver(ctrl)
 
 	// Calling SetAuthContext with empty identity should NOT override the existing one.
 	store.SetAuthContext(resolver, "")
@@ -80,13 +81,13 @@ func TestSSMStore_LazyInit_WithIdentity(t *testing.T) {
 	// Without a resolver, ensureClient should fail.
 	err := store.ensureClient()
 	assert.Error(t, err)
-	assert.True(t, errors.Is(err, ErrIdentityNotConfigured))
+	assert.True(t, errors.Is(err, storepkg.ErrIdentityNotConfigured))
 }
 
 func TestSSMStore_LazyInit_ResolverError(t *testing.T) {
 	ctrl := gomock.NewController(t)
 
-	resolver := NewMockAuthContextResolver(ctrl)
+	resolver := storepkg.NewMockAuthContextResolver(ctrl)
 	resolver.EXPECT().
 		ResolveAWSAuthContext(gomock.Any(), "bad-identity").
 		Return(nil, errors.New("identity not found"))
@@ -100,17 +101,17 @@ func TestSSMStore_LazyInit_ResolverError(t *testing.T) {
 
 	err := store.ensureClient()
 	assert.Error(t, err)
-	assert.True(t, errors.Is(err, ErrAuthContextNotAvailable))
+	assert.True(t, errors.Is(err, storepkg.ErrAuthContextNotAvailable))
 }
 
 func TestSSMStore_LazyInit_WithResolver(t *testing.T) {
 	ctrl := gomock.NewController(t)
 
-	resolver := NewMockAuthContextResolver(ctrl)
+	resolver := storepkg.NewMockAuthContextResolver(ctrl)
 	// Simulate realm-scoped credential paths.
 	resolver.EXPECT().
 		ResolveAWSAuthContext(gomock.Any(), "prod-admin").
-		Return(&AWSAuthConfig{
+		Return(&storepkg.AWSAuthConfig{
 			CredentialsFile: filepath.Join(".config", "atmos", "my-realm", "aws", "aws-sso", "credentials"),
 			ConfigFile:      filepath.Join(".config", "atmos", "my-realm", "aws", "aws-sso", "config"),
 			Profile:         "prod",
@@ -138,7 +139,7 @@ func TestAzureKeyVaultStore_SetAuthContext_PreservesIdentity(t *testing.T) {
 		vaultURL:     "https://vault.example.com",
 	}
 
-	resolver := NewMockAuthContextResolver(ctrl)
+	resolver := storepkg.NewMockAuthContextResolver(ctrl)
 	store.SetAuthContext(resolver, "")
 	assert.Equal(t, "azure-prod", store.identityName)
 	assert.NotNil(t, store.authResolver)
@@ -152,7 +153,7 @@ func TestGSMStore_SetAuthContext_PreservesIdentity(t *testing.T) {
 		projectID:    "my-project",
 	}
 
-	resolver := NewMockAuthContextResolver(ctrl)
+	resolver := storepkg.NewMockAuthContextResolver(ctrl)
 	store.SetAuthContext(resolver, "")
 	assert.Equal(t, "gcp-prod", store.identityName)
 	assert.NotNil(t, store.authResolver)
@@ -168,13 +169,13 @@ func TestGSMStore_LazyInit_WithIdentity_NoResolver(t *testing.T) {
 
 	err := store.ensureClient()
 	assert.Error(t, err)
-	assert.True(t, errors.Is(err, ErrIdentityNotConfigured))
+	assert.True(t, errors.Is(err, storepkg.ErrIdentityNotConfigured))
 }
 
 func TestGSMStore_LazyInit_ResolverError(t *testing.T) {
 	ctrl := gomock.NewController(t)
 
-	resolver := NewMockAuthContextResolver(ctrl)
+	resolver := storepkg.NewMockAuthContextResolver(ctrl)
 	resolver.EXPECT().
 		ResolveGCPAuthContext(gomock.Any(), "bad-identity").
 		Return(nil, errors.New("identity not found"))
@@ -187,7 +188,7 @@ func TestGSMStore_LazyInit_ResolverError(t *testing.T) {
 
 	err := store.ensureClient()
 	assert.Error(t, err)
-	assert.True(t, errors.Is(err, ErrAuthContextNotAvailable))
+	assert.True(t, errors.Is(err, storepkg.ErrAuthContextNotAvailable))
 }
 
 func TestAzureKeyVaultStore_LazyInit_NoResolver(t *testing.T) {
@@ -200,13 +201,13 @@ func TestAzureKeyVaultStore_LazyInit_NoResolver(t *testing.T) {
 
 	err := store.ensureClient()
 	assert.Error(t, err)
-	assert.True(t, errors.Is(err, ErrIdentityNotConfigured))
+	assert.True(t, errors.Is(err, storepkg.ErrIdentityNotConfigured))
 }
 
 func TestAzureKeyVaultStore_LazyInit_ResolverError(t *testing.T) {
 	ctrl := gomock.NewController(t)
 
-	resolver := NewMockAuthContextResolver(ctrl)
+	resolver := storepkg.NewMockAuthContextResolver(ctrl)
 	resolver.EXPECT().
 		ResolveAzureAuthContext(gomock.Any(), "bad-identity").
 		Return(nil, errors.New("identity not found"))
@@ -219,11 +220,11 @@ func TestAzureKeyVaultStore_LazyInit_ResolverError(t *testing.T) {
 
 	err := store.ensureClient()
 	assert.Error(t, err)
-	assert.True(t, errors.Is(err, ErrAuthContextNotAvailable))
+	assert.True(t, errors.Is(err, storepkg.ErrAuthContextNotAvailable))
 }
 
 func TestStoreConfig_IdentityField(t *testing.T) {
-	config := StoreConfig{
+	config := storepkg.StoreConfig{
 		Type:     "aws-ssm-parameter-store",
 		Identity: "prod-admin",
 		Options:  map[string]interface{}{"region": "us-east-1"},
@@ -234,7 +235,7 @@ func TestStoreConfig_IdentityField(t *testing.T) {
 }
 
 func TestStoreConfig_IdentityEmpty(t *testing.T) {
-	config := StoreConfig{
+	config := storepkg.StoreConfig{
 		Type:    "aws-ssm-parameter-store",
 		Options: map[string]interface{}{"region": "us-east-1"},
 	}
@@ -243,10 +244,10 @@ func TestStoreConfig_IdentityEmpty(t *testing.T) {
 }
 
 func TestIdentityAwareStore_InterfaceCompliance(t *testing.T) {
-	// Verify that all cloud stores implement IdentityAwareStore.
-	var _ IdentityAwareStore = (*SSMStore)(nil)
-	var _ IdentityAwareStore = (*AzureKeyVaultStore)(nil)
-	var _ IdentityAwareStore = (*GSMStore)(nil)
+	// Verify that all cloud stores implement storepkg.IdentityAwareStore.
+	var _ storepkg.IdentityAwareStore = (*SSMStore)(nil)
+	var _ storepkg.IdentityAwareStore = (*AzureKeyVaultStore)(nil)
+	var _ storepkg.IdentityAwareStore = (*GSMStore)(nil)
 }
 
 // --- Constructor tests: verify lazy init when identity is configured ---
@@ -347,7 +348,7 @@ func TestAzureKeyVaultStore_SetAuthContext_OverridesIdentity(t *testing.T) {
 		vaultURL:     "https://vault.example.com",
 	}
 
-	resolver := NewMockAuthContextResolver(ctrl)
+	resolver := storepkg.NewMockAuthContextResolver(ctrl)
 
 	// Calling with non-empty identity should override.
 	store.SetAuthContext(resolver, "new-azure-identity")
@@ -363,7 +364,7 @@ func TestGSMStore_SetAuthContext_OverridesIdentity(t *testing.T) {
 		projectID:    "my-project",
 	}
 
-	resolver := NewMockAuthContextResolver(ctrl)
+	resolver := storepkg.NewMockAuthContextResolver(ctrl)
 
 	// Calling with non-empty identity should override.
 	store.SetAuthContext(resolver, "new-gcp-identity")
@@ -376,11 +377,11 @@ func TestGSMStore_SetAuthContext_OverridesIdentity(t *testing.T) {
 func TestAzureKeyVaultStore_LazyInit_WithResolver(t *testing.T) {
 	ctrl := gomock.NewController(t)
 
-	resolver := NewMockAuthContextResolver(ctrl)
+	resolver := storepkg.NewMockAuthContextResolver(ctrl)
 	// Simulate realm-scoped credential paths.
 	resolver.EXPECT().
 		ResolveAzureAuthContext(gomock.Any(), "azure-prod").
-		Return(&AzureAuthConfig{
+		Return(&storepkg.AzureAuthConfig{
 			CredentialsFile: filepath.Join(".azure", "atmos", "my-realm", "azure-oidc", "credentials.json"),
 			SubscriptionID:  "sub-789",
 			TenantID:        "tenant-123",
@@ -405,11 +406,11 @@ func TestAzureKeyVaultStore_LazyInit_WithResolver(t *testing.T) {
 func TestGSMStore_LazyInit_WithResolver(t *testing.T) {
 	ctrl := gomock.NewController(t)
 
-	resolver := NewMockAuthContextResolver(ctrl)
+	resolver := storepkg.NewMockAuthContextResolver(ctrl)
 	// Simulate realm-scoped credential paths.
 	resolver.EXPECT().
 		ResolveGCPAuthContext(gomock.Any(), "gcp-prod").
-		Return(&GCPAuthConfig{
+		Return(&storepkg.GCPAuthConfig{
 			CredentialsFile: filepath.Join(".config", "atmos", "my-realm", "gcp", "gcp-adc", "adc", "gcp-prod", "application_default_credentials.json"),
 			ProjectID:       "my-gcp-project",
 		}, nil)
@@ -432,7 +433,7 @@ func TestGSMStore_LazyInit_WithResolver(t *testing.T) {
 func TestSetAuthContextResolver_AllCloudStoreTypes(t *testing.T) {
 	ctrl := gomock.NewController(t)
 
-	registry := make(StoreRegistry)
+	registry := make(storepkg.StoreRegistry)
 
 	ssmStore := &SSMStore{
 		identityName:   "prod-admin",
@@ -453,7 +454,7 @@ func TestSetAuthContextResolver_AllCloudStoreTypes(t *testing.T) {
 	registry["azure"] = azStore
 	registry["gsm"] = gsmStore
 
-	resolver := NewMockAuthContextResolver(ctrl)
+	resolver := storepkg.NewMockAuthContextResolver(ctrl)
 	registry.SetAuthContextResolver(resolver)
 
 	// Verify resolver was injected into all identity-aware stores.
@@ -522,7 +523,7 @@ func TestNewGSMStore_WithoutIdentity_LazyInit(t *testing.T) {
 // --- ensureClient default-client path: exercises initDefaultClient through ensureClient ---
 
 func TestSSMStore_EnsureClient_DefaultClientPath(t *testing.T) {
-	// Store with no identity and no client — ensureClient calls initDefaultClient.
+	// storepkg.Store with no identity and no client — ensureClient calls initDefaultClient.
 	store := &SSMStore{
 		region:         "us-east-1",
 		stackDelimiter: stringPtr("-"),
@@ -584,10 +585,10 @@ func TestSSMStore_InitIdentityClient_FullSuccess(t *testing.T) {
 	err = os.WriteFile(configFile, []byte("[profile prod]\nregion = us-east-1\n"), 0o600)
 	assert.NoError(t, err)
 
-	resolver := NewMockAuthContextResolver(ctrl)
+	resolver := storepkg.NewMockAuthContextResolver(ctrl)
 	resolver.EXPECT().
 		ResolveAWSAuthContext(gomock.Any(), "prod-admin").
-		Return(&AWSAuthConfig{
+		Return(&storepkg.AWSAuthConfig{
 			CredentialsFile: credsFile,
 			ConfigFile:      configFile,
 			Profile:         "prod",
@@ -610,10 +611,10 @@ func TestSSMStore_InitIdentityClient_FullSuccess(t *testing.T) {
 func TestAzureKeyVaultStore_InitIdentityClient_FullPath(t *testing.T) {
 	ctrl := gomock.NewController(t)
 
-	resolver := NewMockAuthContextResolver(ctrl)
+	resolver := storepkg.NewMockAuthContextResolver(ctrl)
 	resolver.EXPECT().
 		ResolveAzureAuthContext(gomock.Any(), "azure-prod").
-		Return(&AzureAuthConfig{
+		Return(&storepkg.AzureAuthConfig{
 			TenantID:       "tenant-123",
 			SubscriptionID: "sub-456",
 		}, nil)
@@ -646,10 +647,10 @@ func TestGSMStore_InitIdentityClient_FullPath(t *testing.T) {
 	err := os.WriteFile(credsFile, []byte(`{"type":"authorized_user","client_id":"test","client_secret":"test","refresh_token":"test"}`), 0o600)
 	assert.NoError(t, err)
 
-	resolver := NewMockAuthContextResolver(ctrl)
+	resolver := storepkg.NewMockAuthContextResolver(ctrl)
 	resolver.EXPECT().
 		ResolveGCPAuthContext(gomock.Any(), "gcp-prod").
-		Return(&GCPAuthConfig{
+		Return(&storepkg.GCPAuthConfig{
 			CredentialsFile: credsFile,
 			ProjectID:       "my-project",
 		}, nil)
@@ -684,7 +685,7 @@ func TestSSMStore_Get_EnsureClientError(t *testing.T) {
 
 	_, err := store.Get("stack", "component", "key")
 	assert.Error(t, err)
-	assert.True(t, errors.Is(err, ErrIdentityNotConfigured))
+	assert.True(t, errors.Is(err, storepkg.ErrIdentityNotConfigured))
 }
 
 func TestSSMStore_Set_EnsureClientError(t *testing.T) {
@@ -696,7 +697,7 @@ func TestSSMStore_Set_EnsureClientError(t *testing.T) {
 
 	err := store.Set("stack", "component", "key", "value")
 	assert.Error(t, err)
-	assert.True(t, errors.Is(err, ErrIdentityNotConfigured))
+	assert.True(t, errors.Is(err, storepkg.ErrIdentityNotConfigured))
 }
 
 func TestSSMStore_GetKey_EnsureClientError(t *testing.T) {
@@ -708,7 +709,7 @@ func TestSSMStore_GetKey_EnsureClientError(t *testing.T) {
 
 	_, err := store.GetKey("some-key")
 	assert.Error(t, err)
-	assert.True(t, errors.Is(err, ErrIdentityNotConfigured))
+	assert.True(t, errors.Is(err, storepkg.ErrIdentityNotConfigured))
 }
 
 func TestAzureKeyVaultStore_Get_EnsureClientError(t *testing.T) {
@@ -720,7 +721,7 @@ func TestAzureKeyVaultStore_Get_EnsureClientError(t *testing.T) {
 
 	_, err := store.Get("stack", "component", "key")
 	assert.Error(t, err)
-	assert.True(t, errors.Is(err, ErrIdentityNotConfigured))
+	assert.True(t, errors.Is(err, storepkg.ErrIdentityNotConfigured))
 }
 
 func TestAzureKeyVaultStore_Set_EnsureClientError(t *testing.T) {
@@ -732,7 +733,7 @@ func TestAzureKeyVaultStore_Set_EnsureClientError(t *testing.T) {
 
 	err := store.Set("stack", "component", "key", "value")
 	assert.Error(t, err)
-	assert.True(t, errors.Is(err, ErrIdentityNotConfigured))
+	assert.True(t, errors.Is(err, storepkg.ErrIdentityNotConfigured))
 }
 
 func TestAzureKeyVaultStore_GetKey_EnsureClientError(t *testing.T) {
@@ -744,7 +745,7 @@ func TestAzureKeyVaultStore_GetKey_EnsureClientError(t *testing.T) {
 
 	_, err := store.GetKey("some-key")
 	assert.Error(t, err)
-	assert.True(t, errors.Is(err, ErrIdentityNotConfigured))
+	assert.True(t, errors.Is(err, storepkg.ErrIdentityNotConfigured))
 }
 
 func TestGSMStore_Get_EnsureClientError(t *testing.T) {
@@ -756,7 +757,7 @@ func TestGSMStore_Get_EnsureClientError(t *testing.T) {
 
 	_, err := store.Get("stack", "component", "key")
 	assert.Error(t, err)
-	assert.True(t, errors.Is(err, ErrIdentityNotConfigured))
+	assert.True(t, errors.Is(err, storepkg.ErrIdentityNotConfigured))
 }
 
 func TestGSMStore_Set_EnsureClientError(t *testing.T) {
@@ -768,7 +769,7 @@ func TestGSMStore_Set_EnsureClientError(t *testing.T) {
 
 	err := store.Set("stack", "component", "key", "value")
 	assert.Error(t, err)
-	assert.True(t, errors.Is(err, ErrIdentityNotConfigured))
+	assert.True(t, errors.Is(err, storepkg.ErrIdentityNotConfigured))
 }
 
 func TestGSMStore_GetKey_EnsureClientError(t *testing.T) {
@@ -780,5 +781,5 @@ func TestGSMStore_GetKey_EnsureClientError(t *testing.T) {
 
 	_, err := store.GetKey("some-key")
 	assert.Error(t, err)
-	assert.True(t, errors.Is(err, ErrIdentityNotConfigured))
+	assert.True(t, errors.Is(err, storepkg.ErrIdentityNotConfigured))
 }

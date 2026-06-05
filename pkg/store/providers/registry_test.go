@@ -1,14 +1,15 @@
-package store
+package providers
 
 import (
 	"testing"
 
+	"github.com/cloudposse/atmos/pkg/store"
 	"github.com/stretchr/testify/assert"
 )
 
 func TestNewStoreRegistry_SSMWithIdentity(t *testing.T) {
-	config := &StoresConfig{
-		"prod-ssm": StoreConfig{
+	config := &store.StoresConfig{
+		"prod-ssm": store.StoreConfig{
 			Type:     "aws-ssm-parameter-store",
 			Identity: "prod-admin",
 			Options:  map[string]interface{}{"region": "us-east-1"},
@@ -27,8 +28,8 @@ func TestNewStoreRegistry_SSMWithIdentity(t *testing.T) {
 }
 
 func TestNewStoreRegistry_AzureWithIdentity(t *testing.T) {
-	config := &StoresConfig{
-		"prod-azure": StoreConfig{
+	config := &store.StoresConfig{
+		"prod-azure": store.StoreConfig{
 			Type:     "azure-key-vault",
 			Identity: "azure-prod",
 			Options:  map[string]interface{}{"vault_url": "https://prod.vault.azure.net"},
@@ -47,8 +48,8 @@ func TestNewStoreRegistry_AzureWithIdentity(t *testing.T) {
 }
 
 func TestNewStoreRegistry_GSMWithIdentity(t *testing.T) {
-	config := &StoresConfig{
-		"prod-gsm": StoreConfig{
+	config := &store.StoresConfig{
+		"prod-gsm": store.StoreConfig{
 			Type:     "google-secret-manager",
 			Identity: "gcp-prod",
 			Options:  map[string]interface{}{"project_id": "my-project"},
@@ -67,8 +68,8 @@ func TestNewStoreRegistry_GSMWithIdentity(t *testing.T) {
 }
 
 func TestNewStoreRegistry_RedisWithIdentityWarning(t *testing.T) {
-	config := &StoresConfig{
-		"cache": StoreConfig{
+	config := &store.StoresConfig{
+		"cache": store.StoreConfig{
 			Type:     "redis",
 			Identity: "prod-admin",
 			Options:  map[string]interface{}{"url": "redis://localhost:6379"},
@@ -86,8 +87,8 @@ func TestNewStoreRegistry_RedisWithIdentityWarning(t *testing.T) {
 }
 
 func TestNewStoreRegistry_ArtifactoryWithIdentityWarning(t *testing.T) {
-	config := &StoresConfig{
-		"artifacts": StoreConfig{
+	config := &store.StoresConfig{
+		"artifacts": store.StoreConfig{
 			Type:     "artifactory",
 			Identity: "prod-admin",
 			Options: map[string]interface{}{
@@ -108,8 +109,8 @@ func TestNewStoreRegistry_ArtifactoryWithIdentityWarning(t *testing.T) {
 }
 
 func TestNewStoreRegistry_GSMAliasWithIdentity(t *testing.T) {
-	config := &StoresConfig{
-		"prod-gsm": StoreConfig{
+	config := &store.StoresConfig{
+		"prod-gsm": store.StoreConfig{
 			Type:     "gsm", // Test the alias.
 			Identity: "gcp-prod",
 			Options:  map[string]interface{}{"project_id": "my-project"},
@@ -127,18 +128,18 @@ func TestNewStoreRegistry_GSMAliasWithIdentity(t *testing.T) {
 }
 
 func TestNewStoreRegistry_MixedIdentityStores(t *testing.T) {
-	config := &StoresConfig{
-		"identity-ssm": StoreConfig{
+	config := &store.StoresConfig{
+		"identity-ssm": store.StoreConfig{
 			Type:     "aws-ssm-parameter-store",
 			Identity: "prod-admin",
 			Options:  map[string]interface{}{"region": "us-east-1"},
 		},
-		"identity-azure": StoreConfig{
+		"identity-azure": store.StoreConfig{
 			Type:     "azure-key-vault",
 			Identity: "azure-prod",
 			Options:  map[string]interface{}{"vault_url": "https://vault.azure.net"},
 		},
-		"identity-gsm": StoreConfig{
+		"identity-gsm": store.StoreConfig{
 			Type:     "google-secret-manager",
 			Identity: "gcp-prod",
 			Options:  map[string]interface{}{"project_id": "my-project"},
@@ -149,10 +150,10 @@ func TestNewStoreRegistry_MixedIdentityStores(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Len(t, registry, 3)
 
-	// All stores should implement IdentityAwareStore and have nil clients.
+	// All stores should implement store.IdentityAwareStore and have nil clients.
 	for name, s := range registry {
-		ias, ok := s.(IdentityAwareStore)
-		assert.True(t, ok, "store %q should implement IdentityAwareStore", name)
+		ias, ok := s.(store.IdentityAwareStore)
+		assert.True(t, ok, "store %q should implement store.IdentityAwareStore", name)
 		_ = ias
 	}
 }

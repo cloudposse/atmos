@@ -1,4 +1,4 @@
-package store
+package providers
 
 import (
 	"fmt"

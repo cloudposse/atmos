@@ -1,4 +1,4 @@
-package store
+package providers
 
 import (
 	"context"
@@ -12,6 +12,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/azidentity"
 	"github.com/Azure/azure-sdk-for-go/sdk/security/keyvault/azsecrets"
+	"github.com/cloudposse/atmos/pkg/store"
 )
 
 const (
@@ -30,7 +31,7 @@ type AzureKeyVaultClient interface {
 	GetSecret(ctx context.Context, name string, version string, options *azsecrets.GetSecretOptions) (azsecrets.GetSecretResponse, error)
 }
 
-// AzureKeyVaultStore is an implementation of the Store interface for Azure Key Vault.
+// AzureKeyVaultStore is an implementation of the store.Store interface for Azure Key Vault.
 type AzureKeyVaultStore struct {
 	client         AzureKeyVaultClient
 	vaultURL       string
@@ -39,7 +40,7 @@ type AzureKeyVaultStore struct {
 
 	// Identity-based authentication fields.
 	identityName string
-	authResolver AuthContextResolver
+	authResolver store.AuthContextResolver
 	initOnce     sync.Once
 	initErr      error
 }
@@ -50,17 +51,17 @@ type AzureKeyVaultStoreOptions struct {
 	StackDelimiter *string `mapstructure:"stack_delimiter"`
 }
 
-// Ensure AzureKeyVaultStore implements the store.Store and IdentityAwareStore interfaces.
+// Ensure AzureKeyVaultStore implements the store.Store and store.IdentityAwareStore interfaces.
 var (
-	_ Store              = (*AzureKeyVaultStore)(nil)
-	_ IdentityAwareStore = (*AzureKeyVaultStore)(nil)
+	_ store.Store              = (*AzureKeyVaultStore)(nil)
+	_ store.IdentityAwareStore = (*AzureKeyVaultStore)(nil)
 )
 
 // NewAzureKeyVaultStore creates a new Azure Key Vault store.
 // If identityName is non-empty, client initialization is deferred until first use (lazy init).
-func NewAzureKeyVaultStore(options AzureKeyVaultStoreOptions, identityName string) (Store, error) {
+func NewAzureKeyVaultStore(options AzureKeyVaultStoreOptions, identityName string) (store.Store, error) {
 	if options.VaultURL == "" {
-		return nil, ErrVaultURLRequired
+		return nil, store.ErrVaultURLRequired
 	}
 
 	stackDelimiter := AzureKeyVaultHyphen
@@ -90,9 +91,9 @@ func NewAzureKeyVaultStore(options AzureKeyVaultStoreOptions, identityName strin
 	return store, nil
 }
 
-// SetAuthContext implements IdentityAwareStore.
+// SetAuthContext implements store.IdentityAwareStore.
 // If identityName is non-empty, it overrides the store's identity. Otherwise, the existing identity is preserved.
-func (s *AzureKeyVaultStore) SetAuthContext(resolver AuthContextResolver, identityName string) {
+func (s *AzureKeyVaultStore) SetAuthContext(resolver store.AuthContextResolver, identityName string) {
 	s.authResolver = resolver
 	if identityName != "" {
 		s.identityName = identityName
@@ -103,12 +104,12 @@ func (s *AzureKeyVaultStore) SetAuthContext(resolver AuthContextResolver, identi
 func (s *AzureKeyVaultStore) initDefaultClient() error {
 	cred, err := azidentity.NewDefaultAzureCredential(nil)
 	if err != nil {
-		return fmt.Errorf(errWrapFormat, ErrCreateClient, err)
+		return fmt.Errorf(errWrapFormat, store.ErrCreateClient, err)
 	}
 
 	client, err := azsecrets.NewClient(s.vaultURL, cred, nil)
 	if err != nil {
-		return fmt.Errorf(errWrapFormat, ErrCreateClient, err)
+		return fmt.Errorf(errWrapFormat, store.ErrCreateClient, err)
 	}
 
 	s.client = client
@@ -119,13 +120,13 @@ func (s *AzureKeyVaultStore) initDefaultClient() error {
 // initIdentityClient initializes the Azure client using identity-based credentials.
 func (s *AzureKeyVaultStore) initIdentityClient() error {
 	if s.authResolver == nil {
-		return fmt.Errorf("%w: store requires identity %q but no auth resolver was injected", ErrIdentityNotConfigured, s.identityName)
+		return fmt.Errorf("%w: store requires identity %q but no auth resolver was injected", store.ErrIdentityNotConfigured, s.identityName)
 	}
 
 	ctx := context.TODO()
 	authContext, err := s.authResolver.ResolveAzureAuthContext(ctx, s.identityName)
 	if err != nil {
-		return fmt.Errorf("%w: failed to resolve Azure auth context for identity %q: %w", ErrAuthContextNotAvailable, s.identityName, err)
+		return fmt.Errorf("%w: failed to resolve Azure auth context for identity %q: %w", store.ErrAuthContextNotAvailable, s.identityName, err)
 	}
 
 	// Create credentials from the Azure auth context with tenant hint if available.
@@ -136,12 +137,12 @@ func (s *AzureKeyVaultStore) initIdentityClient() error {
 
 	cred, err := azidentity.NewDefaultAzureCredential(options)
 	if err != nil {
-		return fmt.Errorf(errWrapFormat, ErrCreateClient, err)
+		return fmt.Errorf(errWrapFormat, store.ErrCreateClient, err)
 	}
 
 	client, err := azsecrets.NewClient(s.vaultURL, cred, nil)
 	if err != nil {
-		return fmt.Errorf(errWrapFormat, ErrCreateClient, err)
+		return fmt.Errorf(errWrapFormat, store.ErrCreateClient, err)
 	}
 
 	s.client = client
@@ -185,12 +186,12 @@ func (s *AzureKeyVaultStore) normalizeSecretName(key string) string {
 
 func (s *AzureKeyVaultStore) getKey(stack string, component string, key string) (string, error) {
 	if s.stackDelimiter == nil {
-		return "", ErrStackDelimiterNotSet
+		return "", store.ErrStackDelimiterNotSet
 	}
 
 	baseKey, err := getKey(s.prefix, *s.stackDelimiter, stack, component, key, AzureKeyVaultHyphen)
 	if err != nil {
-		return "", fmt.Errorf(errWrapFormat, ErrGetKey, err)
+		return "", fmt.Errorf(errWrapFormat, store.ErrGetKey, err)
 	}
 
 	// Normalize the key to comply with Azure Key Vault naming restrictions.
@@ -199,16 +200,16 @@ func (s *AzureKeyVaultStore) getKey(stack string, component string, key string) 
 
 func (s *AzureKeyVaultStore) Set(stack string, component string, key string, value interface{}) error {
 	if stack == "" {
-		return ErrEmptyStack
+		return store.ErrEmptyStack
 	}
 	if component == "" {
-		return ErrEmptyComponent
+		return store.ErrEmptyComponent
 	}
 	if key == "" {
-		return ErrEmptyKey
+		return store.ErrEmptyKey
 	}
 	if value == nil {
-		return fmt.Errorf("%w for key %s in stack %s component %s", ErrNilValue, key, stack, component)
+		return fmt.Errorf("%w for key %s in stack %s component %s", store.ErrNilValue, key, stack, component)
 	}
 
 	if err := s.ensureClient(); err != nil {
@@ -217,13 +218,13 @@ func (s *AzureKeyVaultStore) Set(stack string, component string, key string, val
 
 	secretName, err := s.getKey(stack, component, key)
 	if err != nil {
-		return fmt.Errorf(errWrapFormat, ErrGetKey, err)
+		return fmt.Errorf(errWrapFormat, store.ErrGetKey, err)
 	}
 
 	// Convert value to JSON string like other stores.
 	jsonValue, err := json.Marshal(value)
 	if err != nil {
-		return fmt.Errorf(errWrapFormat, ErrSerializeJSON, err)
+		return fmt.Errorf(errWrapFormat, store.ErrSerializeJSON, err)
 	}
 	strValue := string(jsonValue)
 
@@ -235,9 +236,9 @@ func (s *AzureKeyVaultStore) Set(stack string, component string, key string, val
 	if err != nil {
 		var respErr *azcore.ResponseError
 		if errors.As(err, &respErr) && respErr.StatusCode == statusCodeForbidden {
-			return fmt.Errorf(errWrapFormatWithID, ErrPermissionDenied, fmt.Sprintf("secret %s", secretName), err)
+			return fmt.Errorf(errWrapFormatWithID, store.ErrPermissionDenied, fmt.Sprintf("secret %s", secretName), err)
 		}
-		return fmt.Errorf(errWrapFormat, ErrSetParameter, err)
+		return fmt.Errorf(errWrapFormat, store.ErrSetParameter, err)
 	}
 
 	return nil
@@ -245,13 +246,13 @@ func (s *AzureKeyVaultStore) Set(stack string, component string, key string, val
 
 func (s *AzureKeyVaultStore) Get(stack string, component string, key string) (interface{}, error) {
 	if stack == "" {
-		return nil, ErrEmptyStack
+		return nil, store.ErrEmptyStack
 	}
 	if component == "" {
-		return nil, ErrEmptyComponent
+		return nil, store.ErrEmptyComponent
 	}
 	if key == "" {
-		return nil, ErrEmptyKey
+		return nil, store.ErrEmptyKey
 	}
 
 	if err := s.ensureClient(); err != nil {
@@ -260,7 +261,7 @@ func (s *AzureKeyVaultStore) Get(stack string, component string, key string) (in
 
 	secretName, err := s.getKey(stack, component, key)
 	if err != nil {
-		return nil, fmt.Errorf(errWrapFormat, ErrGetKey, err)
+		return nil, fmt.Errorf(errWrapFormat, store.ErrGetKey, err)
 	}
 
 	resp, err := s.client.GetSecret(context.Background(), secretName, "", nil)
@@ -269,12 +270,12 @@ func (s *AzureKeyVaultStore) Get(stack string, component string, key string) (in
 		if errors.As(err, &respErr) {
 			switch respErr.StatusCode {
 			case statusCodeNotFound:
-				return nil, fmt.Errorf(errWrapFormatWithID, ErrResourceNotFound, secretName, err)
+				return nil, fmt.Errorf(errWrapFormatWithID, store.ErrResourceNotFound, secretName, err)
 			case statusCodeForbidden:
-				return nil, fmt.Errorf(errWrapFormatWithID, ErrPermissionDenied, fmt.Sprintf("secret %s", secretName), err)
+				return nil, fmt.Errorf(errWrapFormatWithID, store.ErrPermissionDenied, fmt.Sprintf("secret %s", secretName), err)
 			}
 		}
-		return nil, fmt.Errorf(errWrapFormat, ErrAccessSecret, err)
+		return nil, fmt.Errorf(errWrapFormat, store.ErrAccessSecret, err)
 	}
 
 	if resp.Value == nil {
@@ -292,7 +293,7 @@ func (s *AzureKeyVaultStore) Get(stack string, component string, key string) (in
 
 func (s *AzureKeyVaultStore) GetKey(key string) (interface{}, error) {
 	if key == "" {
-		return nil, ErrEmptyKey
+		return nil, store.ErrEmptyKey
 	}
 
 	if err := s.ensureClient(); err != nil {
@@ -308,12 +309,12 @@ func (s *AzureKeyVaultStore) GetKey(key string) (interface{}, error) {
 		if errors.As(err, &respErr) {
 			switch respErr.StatusCode {
 			case statusCodeNotFound:
-				return nil, fmt.Errorf(errWrapFormatWithID, ErrResourceNotFound, secretName, err)
+				return nil, fmt.Errorf(errWrapFormatWithID, store.ErrResourceNotFound, secretName, err)
 			case statusCodeForbidden:
-				return nil, fmt.Errorf(errWrapFormatWithID, ErrPermissionDenied, fmt.Sprintf("secret %s", secretName), err)
+				return nil, fmt.Errorf(errWrapFormatWithID, store.ErrPermissionDenied, fmt.Sprintf("secret %s", secretName), err)
 			}
 		}
-		return nil, fmt.Errorf(errWrapFormat, ErrAccessSecret, err)
+		return nil, fmt.Errorf(errWrapFormat, store.ErrAccessSecret, err)
 	}
 
 	if resp.Value == nil {

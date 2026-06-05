@@ -1,4 +1,4 @@
-package store
+package providers
 
 import (
 	"context"
@@ -11,6 +11,7 @@ import (
 	"time"
 
 	log "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/store"
 	"github.com/jfrog/jfrog-client-go/artifactory"
 	"github.com/jfrog/jfrog-client-go/artifactory/auth"
 	"github.com/jfrog/jfrog-client-go/artifactory/services"
@@ -40,7 +41,7 @@ type ArtifactoryClient interface {
 }
 
 // Ensure ArtifactoryStore implements the store.Store interface.
-var _ Store = (*ArtifactoryStore)(nil)
+var _ store.Store = (*ArtifactoryStore)(nil)
 
 func getAccessKey(options *ArtifactoryStoreOptions) (string, error) {
 	if options.AccessToken != nil {
@@ -55,7 +56,7 @@ func getAccessKey(options *ArtifactoryStoreOptions) (string, error) {
 		return os.Getenv("JFROG_ACCESS_TOKEN"), nil
 	}
 
-	return "", ErrMissingArtifactoryToken
+	return "", store.ErrMissingArtifactoryToken
 }
 
 // setupArtifactoryLogger configures the JFrog SDK logger based on the current Atmos log level.
@@ -76,7 +77,7 @@ func setupArtifactoryLogger() {
 	}
 }
 
-func NewArtifactoryStore(options ArtifactoryStoreOptions) (Store, error) {
+func NewArtifactoryStore(options ArtifactoryStoreOptions) (store.Store, error) {
 	ctx := context.TODO()
 
 	prefix := ""
@@ -132,7 +133,7 @@ func NewArtifactoryStore(options ArtifactoryStoreOptions) (Store, error) {
 
 func (s *ArtifactoryStore) getKey(stack string, component string, key string) (string, error) {
 	if s.stackDelimiter == nil {
-		return "", ErrStackDelimiterNotSet
+		return "", store.ErrStackDelimiterNotSet
 	}
 
 	prefixParts := []string{s.repoName, s.prefix}
@@ -143,15 +144,15 @@ func (s *ArtifactoryStore) getKey(stack string, component string, key string) (s
 
 func (s *ArtifactoryStore) validateGetParams(stack, component, key string) error {
 	if stack == "" {
-		return ErrEmptyStack
+		return store.ErrEmptyStack
 	}
 
 	if component == "" {
-		return ErrEmptyComponent
+		return store.ErrEmptyComponent
 	}
 
 	if key == "" {
-		return ErrEmptyKey
+		return store.ErrEmptyKey
 	}
 
 	return nil
@@ -160,13 +161,13 @@ func (s *ArtifactoryStore) validateGetParams(stack, component, key string) error
 func (s *ArtifactoryStore) processDownloadedFile(tempDir, paramName string) (interface{}, error) {
 	fileData, err := os.ReadFile(filepath.Join(tempDir, filepath.Base(paramName)))
 	if err != nil {
-		return nil, fmt.Errorf(errWrapFormat, ErrReadFile, err)
+		return nil, fmt.Errorf(errWrapFormat, store.ErrReadFile, err)
 	}
 
 	// First try to unmarshal as JSON
 	var result interface{}
 	if err := json.Unmarshal(fileData, &result); err != nil {
-		return nil, fmt.Errorf(errWrapFormat, ErrUnmarshalFile, err)
+		return nil, fmt.Errorf(errWrapFormat, store.ErrUnmarshalFile, err)
 	}
 
 	return result, nil
@@ -179,12 +180,12 @@ func (s *ArtifactoryStore) Get(stack string, component string, key string) (inte
 
 	paramName, err := s.getKey(stack, component, key)
 	if err != nil {
-		return nil, fmt.Errorf(errWrapFormat, ErrGetKey, err)
+		return nil, fmt.Errorf(errWrapFormat, store.ErrGetKey, err)
 	}
 
 	tempDir, err := os.MkdirTemp("", "atmos-artifactory")
 	if err != nil {
-		return nil, fmt.Errorf(errWrapFormat, ErrCreateTempDir, err)
+		return nil, fmt.Errorf(errWrapFormat, store.ErrCreateTempDir, err)
 	}
 	defer func() {
 		if err := os.RemoveAll(tempDir); err != nil {
@@ -206,16 +207,16 @@ func (s *ArtifactoryStore) Get(stack string, component string, key string) (inte
 
 	totalDownloaded, totalExpected, err := s.rtManager.DownloadFiles(downloadParams)
 	if err != nil {
-		return nil, fmt.Errorf(errWrapFormat, ErrDownloadFile, err)
+		return nil, fmt.Errorf(errWrapFormat, store.ErrDownloadFile, err)
 	}
 
 	// Only check for mismatch if there was an error
 	if err != nil && totalDownloaded != totalExpected {
-		return nil, fmt.Errorf(errWrapFormat, ErrDownloadFile, err)
+		return nil, fmt.Errorf(errWrapFormat, store.ErrDownloadFile, err)
 	}
 
 	if totalDownloaded == 0 {
-		return nil, ErrNoFilesDownloaded
+		return nil, store.ErrNoFilesDownloaded
 	}
 
 	return s.processDownloadedFile(tempDir, paramName)
@@ -223,29 +224,29 @@ func (s *ArtifactoryStore) Get(stack string, component string, key string) (inte
 
 func (s *ArtifactoryStore) Set(stack string, component string, key string, value interface{}) error {
 	if stack == "" {
-		return ErrEmptyStack
+		return store.ErrEmptyStack
 	}
 
 	if component == "" {
-		return ErrEmptyComponent
+		return store.ErrEmptyComponent
 	}
 
 	if key == "" {
-		return ErrEmptyKey
+		return store.ErrEmptyKey
 	}
 	if value == nil {
-		return fmt.Errorf("%w for key %s in stack %s component %s", ErrNilValue, key, stack, component)
+		return fmt.Errorf("%w for key %s in stack %s component %s", store.ErrNilValue, key, stack, component)
 	}
 
 	// Construct the full parameter name using getKey
 	paramName, err := s.getKey(stack, component, key)
 	if err != nil {
-		return fmt.Errorf(errWrapFormat, ErrGetKey, err)
+		return fmt.Errorf(errWrapFormat, store.ErrGetKey, err)
 	}
 
 	tempFile, err := os.CreateTemp("", "atmos-artifactory")
 	if err != nil {
-		return fmt.Errorf(errWrapFormat, ErrCreateTempFile, err)
+		return fmt.Errorf(errWrapFormat, store.ErrCreateTempFile, err)
 	}
 	defer func() {
 		if err := os.Remove(tempFile.Name()); err != nil && !os.IsNotExist(err) {
@@ -266,14 +267,14 @@ func (s *ArtifactoryStore) Set(stack string, component string, key string, value
 		// Otherwise, marshal it to JSON
 		jsonData, err := json.Marshal(value)
 		if err != nil {
-			return fmt.Errorf(errWrapFormat, ErrMarshalValue, err)
+			return fmt.Errorf(errWrapFormat, store.ErrMarshalValue, err)
 		}
 		dataToWrite = jsonData
 	}
 
 	_, err = tempFile.Write(dataToWrite)
 	if err != nil {
-		return fmt.Errorf(errWrapFormat, ErrWriteTempFile, err)
+		return fmt.Errorf(errWrapFormat, store.ErrWriteTempFile, err)
 	}
 
 	uploadParams := services.NewUploadParams()
@@ -284,7 +285,7 @@ func (s *ArtifactoryStore) Set(stack string, component string, key string, value
 
 	_, _, err = s.rtManager.UploadFiles(artifactory.UploadServiceOptions{FailFast: true}, uploadParams)
 	if err != nil {
-		return fmt.Errorf(errWrapFormat, ErrUploadFile, err)
+		return fmt.Errorf(errWrapFormat, store.ErrUploadFile, err)
 	}
 
 	return nil
@@ -292,7 +293,7 @@ func (s *ArtifactoryStore) Set(stack string, component string, key string, value
 
 func (s *ArtifactoryStore) GetKey(key string) (interface{}, error) {
 	if key == "" {
-		return nil, ErrEmptyKey
+		return nil, store.ErrEmptyKey
 	}
 
 	// Use the key directly as the file path
@@ -316,7 +317,7 @@ func (s *ArtifactoryStore) GetKey(key string) (interface{}, error) {
 	// Create a temporary directory to download the file
 	tempDir, err := os.MkdirTemp("", "atmos-artifactory-*")
 	if err != nil {
-		return nil, fmt.Errorf(errWrapFormat, ErrCreateTempDir, err)
+		return nil, fmt.Errorf(errWrapFormat, store.ErrCreateTempDir, err)
 	}
 	defer func() {
 		if err := os.RemoveAll(tempDir); err != nil {
@@ -340,14 +341,14 @@ func (s *ArtifactoryStore) GetKey(key string) (interface{}, error) {
 
 	_, _, err = s.rtManager.DownloadFiles(downloadParams)
 	if err != nil {
-		return nil, fmt.Errorf(errWrapFormat, ErrDownloadFile, err)
+		return nil, fmt.Errorf(errWrapFormat, store.ErrDownloadFile, err)
 	}
 
 	// Read the downloaded file
 	localFilePath := filepath.Join(tempDir, filepath.Base(repoPath))
 	data, err := os.ReadFile(localFilePath)
 	if err != nil {
-		return nil, fmt.Errorf(errWrapFormat, ErrReadFile, err)
+		return nil, fmt.Errorf(errWrapFormat, store.ErrReadFile, err)
 	}
 
 	if len(data) == 0 {

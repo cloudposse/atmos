@@ -1,4 +1,4 @@
-package store
+package providers
 
 import (
 	"context"
@@ -13,9 +13,10 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/ssm"
 	"github.com/aws/aws-sdk-go-v2/service/ssm/types"
 	"github.com/aws/aws-sdk-go-v2/service/sts"
+	"github.com/cloudposse/atmos/pkg/store"
 )
 
-// SSMStore is an implementation of the Store interface for AWS SSM Parameter Store.
+// SSMStore is an implementation of the store.Store interface for AWS SSM Parameter store.Store.
 type SSMStore struct {
 	client         SSMClient
 	prefix         string
@@ -28,7 +29,7 @@ type SSMStore struct {
 
 	// Identity-based authentication fields.
 	identityName string
-	authResolver AuthContextResolver
+	authResolver store.AuthContextResolver
 	region       string
 	initOnce     sync.Once
 	initErr      error
@@ -42,10 +43,10 @@ type SSMStoreOptions struct {
 	WriteRoleArn   *string `mapstructure:"write_role_arn"`
 }
 
-// Ensure SSMStore implements the store.Store and IdentityAwareStore interfaces.
+// Ensure SSMStore implements the store.Store and store.IdentityAwareStore interfaces.
 var (
-	_ Store              = (*SSMStore)(nil)
-	_ IdentityAwareStore = (*SSMStore)(nil)
+	_ store.Store              = (*SSMStore)(nil)
+	_ store.IdentityAwareStore = (*SSMStore)(nil)
 )
 
 // SSMClient interface allows us to mock the AWS SSM client.
@@ -61,9 +62,9 @@ type STSClient interface {
 
 // NewSSMStore initializes a new SSMStore.
 // If identityName is non-empty, client initialization is deferred until first use (lazy init).
-func NewSSMStore(options SSMStoreOptions, identityName string) (Store, error) {
+func NewSSMStore(options SSMStoreOptions, identityName string) (store.Store, error) {
 	if options.Region == "" {
-		return nil, ErrRegionRequired
+		return nil, store.ErrRegionRequired
 	}
 
 	store := &SSMStore{
@@ -104,9 +105,9 @@ func NewSSMStore(options SSMStoreOptions, identityName string) (Store, error) {
 	return store, nil
 }
 
-// SetAuthContext implements IdentityAwareStore.
+// SetAuthContext implements store.IdentityAwareStore.
 // If identityName is non-empty, it overrides the store's identity. Otherwise, the existing identity is preserved.
-func (s *SSMStore) SetAuthContext(resolver AuthContextResolver, identityName string) {
+func (s *SSMStore) SetAuthContext(resolver store.AuthContextResolver, identityName string) {
 	s.authResolver = resolver
 	if identityName != "" {
 		s.identityName = identityName
@@ -118,7 +119,7 @@ func (s *SSMStore) initDefaultClient() error {
 	ctx := context.TODO()
 	awsConfig, err := config.LoadDefaultConfig(ctx)
 	if err != nil {
-		return fmt.Errorf(errWrapFormat, ErrLoadAWSConfig, err)
+		return fmt.Errorf(errWrapFormat, store.ErrLoadAWSConfig, err)
 	}
 
 	awsConfig.Region = s.region
@@ -131,13 +132,13 @@ func (s *SSMStore) initDefaultClient() error {
 // initIdentityClient initializes the AWS client using identity-based credentials.
 func (s *SSMStore) initIdentityClient() error {
 	if s.authResolver == nil {
-		return fmt.Errorf("%w: store requires identity %q but no auth resolver was injected", ErrIdentityNotConfigured, s.identityName)
+		return fmt.Errorf("%w: store requires identity %q but no auth resolver was injected", store.ErrIdentityNotConfigured, s.identityName)
 	}
 
 	ctx := context.TODO()
 	authContext, err := s.authResolver.ResolveAWSAuthContext(ctx, s.identityName)
 	if err != nil {
-		return fmt.Errorf("%w: failed to resolve AWS auth context for identity %q: %w", ErrAuthContextNotAvailable, s.identityName, err)
+		return fmt.Errorf("%w: failed to resolve AWS auth context for identity %q: %w", store.ErrAuthContextNotAvailable, s.identityName, err)
 	}
 
 	// Build AWS config options from the auth context credentials.
@@ -145,7 +146,7 @@ func (s *SSMStore) initIdentityClient() error {
 
 	awsConfig, err := config.LoadDefaultConfig(ctx, cfgOpts...)
 	if err != nil {
-		return fmt.Errorf(errWrapFormat, ErrLoadAWSConfig, err)
+		return fmt.Errorf(errWrapFormat, store.ErrLoadAWSConfig, err)
 	}
 
 	s.awsConfig = &awsConfig
@@ -155,7 +156,7 @@ func (s *SSMStore) initIdentityClient() error {
 }
 
 // buildAuthConfigOpts constructs AWS SDK config options from the auth context.
-func (s *SSMStore) buildAuthConfigOpts(authContext *AWSAuthConfig) []func(*config.LoadOptions) error {
+func (s *SSMStore) buildAuthConfigOpts(authContext *store.AWSAuthConfig) []func(*config.LoadOptions) error {
 	var cfgOpts []func(*config.LoadOptions) error
 	if authContext.CredentialsFile != "" {
 		cfgOpts = append(cfgOpts, config.WithSharedCredentialsFiles([]string{authContext.CredentialsFile}))
@@ -200,7 +201,7 @@ func (s *SSMStore) ensureClient() error {
 
 func (s *SSMStore) getKey(stack string, component string, key string) (string, error) {
 	if s.stackDelimiter == nil {
-		return "", ErrStackDelimiterNotSet
+		return "", store.ErrStackDelimiterNotSet
 	}
 
 	return getKey(s.prefix, *s.stackDelimiter, stack, component, key, "/")
@@ -236,19 +237,19 @@ func (s *SSMStore) assumeRole(ctx context.Context, roleArn *string) (*aws.Config
 	return &cfg, nil
 }
 
-// Set stores a key-value pair in AWS SSM Parameter Store.
+// Set stores a key-value pair in AWS SSM Parameter store.Store.
 func (s *SSMStore) Set(stack string, component string, key string, value any) error {
 	if stack == "" {
-		return ErrEmptyStack
+		return store.ErrEmptyStack
 	}
 	if component == "" {
-		return ErrEmptyComponent
+		return store.ErrEmptyComponent
 	}
 	if key == "" {
-		return ErrEmptyKey
+		return store.ErrEmptyKey
 	}
 	if value == nil {
-		return fmt.Errorf("%w for key %s in stack %s component %s", ErrNilValue, key, stack, component)
+		return fmt.Errorf("%w for key %s in stack %s component %s", store.ErrNilValue, key, stack, component)
 	}
 
 	if err := s.ensureClient(); err != nil {
@@ -260,14 +261,14 @@ func (s *SSMStore) Set(stack string, component string, key string, value any) er
 	// Convert value to JSON string
 	jsonValue, err := json.Marshal(value)
 	if err != nil {
-		return fmt.Errorf(errWrapFormat, ErrSerializeJSON, err)
+		return fmt.Errorf(errWrapFormat, store.ErrSerializeJSON, err)
 	}
 	strValue := string(jsonValue)
 
 	// Construct the full parameter name using getKey
 	paramName, err := s.getKey(stack, component, key)
 	if err != nil {
-		return fmt.Errorf(errWrapFormat, ErrGetKey, err)
+		return fmt.Errorf(errWrapFormat, store.ErrGetKey, err)
 	}
 
 	// Assume write role if specified
@@ -287,7 +288,7 @@ func (s *SSMStore) Set(stack string, component string, key string, value any) er
 		}
 	}
 
-	// Put the parameter in SSM Parameter Store
+	// Put the parameter in SSM Parameter store.Store
 	_, err = client.PutParameter(ctx, &ssm.PutParameterInput{
 		Name:      aws.String(paramName),
 		Value:     aws.String(strValue),
@@ -295,22 +296,22 @@ func (s *SSMStore) Set(stack string, component string, key string, value any) er
 		Overwrite: aws.Bool(true), // Allow overwriting existing keys
 	})
 	if err != nil {
-		return fmt.Errorf(errWrapFormatWithID, ErrSetParameter, paramName, err)
+		return fmt.Errorf(errWrapFormatWithID, store.ErrSetParameter, paramName, err)
 	}
 
 	return nil
 }
 
-// Get retrieves a value by key for an Atmos component in a stack from AWS SSM Parameter Store.
+// Get retrieves a value by key for an Atmos component in a stack from AWS SSM Parameter store.Store.
 func (s *SSMStore) Get(stack string, component string, key string) (any, error) {
 	if stack == "" {
-		return nil, ErrEmptyStack
+		return nil, store.ErrEmptyStack
 	}
 	if component == "" {
-		return nil, ErrEmptyComponent
+		return nil, store.ErrEmptyComponent
 	}
 	if key == "" {
-		return nil, ErrEmptyKey
+		return nil, store.ErrEmptyKey
 	}
 
 	if err := s.ensureClient(); err != nil {
@@ -322,7 +323,7 @@ func (s *SSMStore) Get(stack string, component string, key string) (any, error) 
 	// Construct the full parameter name using getKey
 	paramName, err := s.getKey(stack, component, key)
 	if err != nil {
-		return nil, fmt.Errorf(errWrapFormat, ErrGetKey, err)
+		return nil, fmt.Errorf(errWrapFormat, store.ErrGetKey, err)
 	}
 
 	// Assume the read role if specified
@@ -342,12 +343,12 @@ func (s *SSMStore) Get(stack string, component string, key string) (any, error) 
 		}
 	}
 
-	// Get the parameter from SSM Parameter Store
+	// Get the parameter from SSM Parameter store.Store
 	output, err := client.GetParameter(ctx, &ssm.GetParameterInput{
 		Name: aws.String(paramName),
 	})
 	if err != nil {
-		return nil, fmt.Errorf(errWrapFormatWithID, ErrGetParameter, paramName, err)
+		return nil, fmt.Errorf(errWrapFormatWithID, store.ErrGetParameter, paramName, err)
 	}
 
 	// Try to unmarshal the value as JSON
@@ -361,10 +362,10 @@ func (s *SSMStore) Get(stack string, component string, key string) (any, error) 
 	return result, nil
 }
 
-// GetKey retrieves a value by key from AWS SSM Parameter Store.
+// GetKey retrieves a value by key from AWS SSM Parameter store.Store.
 func (s *SSMStore) GetKey(key string) (any, error) {
 	if key == "" {
-		return nil, ErrEmptyKey
+		return nil, store.ErrEmptyKey
 	}
 
 	if err := s.ensureClient(); err != nil {
@@ -403,12 +404,12 @@ func (s *SSMStore) GetKey(key string) (any, error) {
 		}
 	}
 
-	// Get the parameter from SSM Parameter Store
+	// Get the parameter from SSM Parameter store.Store
 	output, err := client.GetParameter(ctx, &ssm.GetParameterInput{
 		Name: aws.String(paramName),
 	})
 	if err != nil {
-		return nil, fmt.Errorf(errWrapFormatWithID, ErrGetParameter, paramName, err)
+		return nil, fmt.Errorf(errWrapFormatWithID, store.ErrGetParameter, paramName, err)
 	}
 
 	// Try to unmarshal the value as JSON
