@@ -286,7 +286,8 @@ func getRunCommand(cmd *exec.Cmd) error {
 				errUtils.ErrGitCommandExited,
 				cmd.Path,
 				status.ExitStatus(),
-				buf.String())
+				buf.String(),
+			)
 		}
 	}
 
@@ -494,6 +495,15 @@ func (g *CustomGitGetter) update(params *gitOperationParams) error {
 	u := params.u
 	ref := params.ref
 	depth := params.depth
+
+	// An unspecified ref means "the remote's default branch". Resolve it the same way clone() does
+	// (findRemoteDefaultBranch never returns ""). Without this, the empty ref flows into
+	// `git fetch -- ""` and `git checkout ""`, which fail with "empty string is not a valid pathspec".
+	// This path is reached whenever the destination already exists — e.g. stack-import resolution
+	// (RemoteImporter.resolveGitSubdir) pre-creates the temp dir, so a ref-less remote import lands here.
+	if ref == "" {
+		ref = findRemoteDefaultBranch(ctx, u)
+	}
 
 	// Remove all variations of .git directories
 	err := removeCaseInsensitiveGitDirectory(dst)
