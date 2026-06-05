@@ -699,6 +699,29 @@ func TestRunAll_EventFiltering(t *testing.T) {
 		assert.Equal(t, "literal-value", data["stack/comp/label_id"], "store must be called when event matches")
 	})
 
+	t.Run("before-init hook runs on before-init event", func(t *testing.T) {
+		h := makeHooks([]string{"before-terraform-init"})
+		err := h.RunAll(BeforeTerraformInit, h.config, h.info, nil, nil)
+		require.NoError(t, err)
+		data := getStore(h).GetData()
+		assert.Equal(t, "literal-value", data["stack/comp/label_id"], "before-init hook must fire on before-init event")
+	})
+
+	t.Run("after-init hook runs on after-init event", func(t *testing.T) {
+		h := makeHooks([]string{"after-terraform-init"})
+		err := h.RunAll(AfterTerraformInit, h.config, h.info, nil, nil)
+		require.NoError(t, err)
+		data := getStore(h).GetData()
+		assert.Equal(t, "literal-value", data["stack/comp/label_id"], "after-init hook must fire on after-init event")
+	})
+
+	t.Run("after-init hook does not run on before-init event", func(t *testing.T) {
+		h := makeHooks([]string{"after-terraform-init"})
+		err := h.RunAll(BeforeTerraformInit, h.config, h.info, nil, nil)
+		require.NoError(t, err)
+		assert.Empty(t, getStore(h).GetData(), "after-init hook must not fire on before-init event")
+	})
+
 	t.Run("hook with dot-format event matches correctly", func(t *testing.T) {
 		h := makeHooks([]string{"after.terraform.apply"})
 		err := h.RunAll(AfterTerraformApply, h.config, h.info, nil, nil)
