@@ -19,7 +19,7 @@ turns an existing silent failure into an actionable message. No net-new user-fac
 command, flag, or config surface. Per the repo's label decision tree that is a `patch`/`no-release`
 docs concern, not a `minor`. The rationale and the design notes are captured here.
 
-These fixes are **separate** from the github/sts envelope + import token-shadowing chain documented in
+These fixes are **separate** from the GitHub/sts envelope + import token-shadowing chain documented in
 `2026-06-04-github-sts-envelope-and-import-token-shadowing.md`; they happened to ride along in the same
 PR (#2568).
 
