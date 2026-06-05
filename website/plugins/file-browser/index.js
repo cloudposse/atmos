@@ -41,6 +41,7 @@ const TAGS_MAP = {
   'custom-commands': ['Automation'],
   'interactive-workflows': ['Automation'],
   'demo-custom-command': ['Automation'],
+  'custom-components': ['Components'],
   'generate-files': ['Automation'],
   toolchain: ['DX'],
   devcontainer: ['DX'],
@@ -50,6 +51,7 @@ const TAGS_MAP = {
   'stack-names': ['Stacks'],
   'demo-ansible': ['Automation'],
   'mcp-with-aws': ['DX', 'Automation'],
+  'aws-ami-packer-github-actions': ['Automation'],
 };
 
 // Documentation pages mapping for examples.
@@ -102,6 +104,10 @@ const DOCS_MAP = {
   'custom-commands': [
     { label: 'Custom Commands', url: '/cli/configuration/commands' },
   ],
+  'custom-components': [
+    { label: 'Custom Commands', url: '/cli/configuration/commands' },
+    { label: 'Custom Component Types', url: '/cli/configuration/commands#custom-component-types' },
+  ],
   'interactive-workflows': [
     { label: 'Workflows', url: '/workflows' },
     { label: 'CLI Configuration', url: '/cli/configuration/workflows' },
@@ -136,6 +142,12 @@ const DOCS_MAP = {
     { label: 'Custom Commands', url: '/cli/configuration/commands' },
     { label: 'Authentication', url: '/stacks/auth' },
     { label: 'Toolchain', url: '/cli/configuration/toolchain' },
+  ],
+  'aws-ami-packer-github-actions': [
+    { label: 'Packer Build', url: '/cli/commands/packer/build' },
+    { label: 'Custom Commands', url: '/cli/configuration/commands' },
+    { label: 'Go Templates', url: '/templates' },
+    { label: 'GitHub Actions', url: '/integrations/github-actions/setup-atmos' },
   ],
 };
 

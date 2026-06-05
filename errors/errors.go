@@ -412,6 +412,11 @@ var (
 	ErrInvalidTerraformRemoteStateBackend = errors.New("invalid terraform.remote_state_backend section")
 	ErrUnsupportedComponentType           = errors.New("unsupported component type")
 
+	// Custom component errors.
+	ErrCustomComponentTypeRegistration = errors.New("failed to register custom component type")
+	ErrComponentArgumentNotFound       = errors.New("no argument or flag with type 'component' found")
+	ErrStackArgumentNotFound           = errors.New("no argument or flag with type 'stack' found")
+
 	// Generator errors.
 	ErrGeneratorNotFound     = errors.New("generator not found")
 	ErrInvalidGeneratorCtx   = errors.New("invalid generator context")
