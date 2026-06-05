@@ -179,7 +179,7 @@ func ParseDuration(s string) (time.Duration, error) {
 func IsZeroTTL(ttl string) bool {
 	defer perf.Track(nil, "duration.IsZeroTTL")()
 
-	switch ttl {
+	switch strings.TrimSpace(ttl) {
 	case "0", "0s", "0m", "0h", "0d":
 		return true
 	default:
