@@ -496,15 +496,6 @@ func (g *CustomGitGetter) update(params *gitOperationParams) error {
 	ref := params.ref
 	depth := params.depth
 
-	// An unspecified ref means "the remote's default branch". Resolve it the same way clone() does
-	// (findRemoteDefaultBranch never returns ""). Without this, the empty ref flows into
-	// `git fetch -- ""` and `git checkout ""`, which fail with "empty string is not a valid pathspec".
-	// This path is reached whenever the destination already exists — e.g. stack-import resolution
-	// (RemoteImporter.resolveGitSubdir) pre-creates the temp dir, so a ref-less remote import lands here.
-	if ref == "" {
-		ref = findRemoteDefaultBranch(ctx, u)
-	}
-
 	// Remove all variations of .git directories
 	err := removeCaseInsensitiveGitDirectory(dst)
 	if err != nil {
@@ -536,20 +527,36 @@ func (g *CustomGitGetter) update(params *gitOperationParams) error {
 		return err
 	}
 
-	// Fetch the remote ref
-	cmd = exec.CommandContext(ctx, gitCommand, "fetch", originRemote, gitArgSeparator, ref)
+	// Fetch the requested ref. An unspecified ref means the remote's default branch, fetched via the
+	// symbolic "HEAD". This runs in dst (clean repo config + the broker's GIT_CONFIG_* insteadOf, so
+	// the minted token applies) — deliberately NOT a `git ls-remote` in the caller's CWD, whose
+	// actions/checkout `http.<host>.extraheader` (the ambient repo-scoped token) would shadow the
+	// minted token and mis-resolve the branch. It also avoids `git fetch -- ""`/`git checkout ""`,
+	// which fail with "empty string is not a valid pathspec".
+	fetchRef := ref
+	if fetchRef == "" {
+		fetchRef = "HEAD"
+	}
+	cmd = exec.CommandContext(ctx, gitCommand, "fetch", originRemote, gitArgSeparator, fetchRef)
 	cmd.Dir = dst
 	err = g.getRunCommandWithRetry(ctx, cmd)
 	if err != nil {
 		return err
 	}
 
-	// Reset the branch to the fetched ref
+	// Reset the working tree to the fetched ref (the default branch when ref was unspecified).
 	cmd = exec.CommandContext(ctx, gitCommand, "reset", "--hard", "FETCH_HEAD")
 	cmd.Dir = dst
 	err = g.getRunCommandWithRetry(ctx, cmd)
 	if err != nil {
 		return err
+	}
+
+	// With an unspecified ref, the reset above already placed the working tree on the default branch's
+	// HEAD; there is no named branch to check out or pull, so we're done (and `git checkout ""` would
+	// fail anyway).
+	if ref == "" {
+		return nil
 	}
 
 	// Checkout ref branch

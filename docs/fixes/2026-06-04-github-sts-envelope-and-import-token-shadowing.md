@@ -106,16 +106,27 @@ keys. In file mode the broker instead emits `GIT_CONFIG_KEY_0=include.path` (the
 live *inside* the referenced gitconfig), so the guard never matched and ambient injection always won.
 Narrow (only bites multi-owner + file mode — see analysis below), but a real latent gap.
 
-### 4. Empty ref → `git checkout ""` in the getter's `update` path (unmasked by the auth fix)
+### 4. Empty ref in the getter's `update` path (unmasked by the auth fix)
 
 Once auth worked, the clone surfaced a **pre-existing** bug in `pkg/downloader/get_git.go`
 `CustomGitGetter`. `resolveGitSubdir` pre-creates the destination temp dir (`os.MkdirTemp`), so
-go-getter's `os.Stat(dst)` succeeds and it takes the **`update`** path, not `clone`. `clone` defaults
-an empty ref to the remote's default branch (`if ref == "" { ref = findRemoteDefaultBranch(...) }`);
-**`update` did not**. The reproducer import has no `?ref=`, so `update` ran `git fetch -- ""` and
-`git checkout ""` → `fatal: empty string is not a valid pathspec`. This was masked for years because
-(a) every existing git-subdir test pins `?ref=main`, and (b) on this path the clone previously 404'd
+go-getter's `os.Stat(dst)` succeeds and it takes the **`update`** path, not `clone`. `update` did not
+handle an unspecified ref at all. The reproducer import has no `?ref=`, so `update` ran
+`git fetch -- ""` and `git checkout ""` → `fatal: empty string is not a valid pathspec`. Masked for
+years because (a) every existing git-subdir test pins `?ref=main`, and (b) the clone previously 404'd
 on auth before ever reaching checkout. It also affects **ref-less public** git-subdir imports.
+
+**4a — the subtle follow-on.** The first attempt mirrored `clone`'s
+`if ref == "" { ref = findRemoteDefaultBranch(ctx, u) }`, but that surfaced a *second* CI-only failure:
+`fatal: couldn't find remote ref master`. `findRemoteDefaultBranch` runs `git ls-remote` in the
+process **CWD** — the `actions/checkout` repo, whose **local** `http.<host>.extraheader` carries the
+ambient repo-scoped token. That extraheader shadows the minted token for the *cross-repo* `ls-remote`,
+so it fails and falls back to `"master"` — but the repo's default branch is `main`. (Tellingly, the
+real fetch runs in the clean temp dir and authenticates fine via the insteadOf — hence a
+"couldn't find remote ref" error, not an auth error.) The fix therefore must **not** resolve the
+branch name in the CWD: `update` now fetches the symbolic `HEAD` directly in the temp dir
+(`git fetch origin HEAD` → `git reset --hard FETCH_HEAD`), where the broker insteadOf applies, and
+skips checkout/pull entirely when no ref was given.
 
 ---
 
@@ -134,9 +145,11 @@ on auth before ever reaching checkout. It also affects **ref-less public** git-s
    (`fileInsteadOfMatches`/`insteadOfValueMatches`/`cutInsteadOfDirective`).
 4. **Test seam** — `pkg/auth/broker/broker.go` adds `SwapRegistryForTest()` (mirrors
    `ci.SwapRegistryForTest`) so cross-package tests can register a fake broker in isolation.
-5. **Empty-ref default** — `pkg/downloader/get_git.go` `update()` now defaults an empty ref to
-   `findRemoteDefaultBranch(ctx, u)`, mirroring `clone()`, so a ref-less git-subdir import checks out
-   the default branch instead of running `git checkout ""`.
+5. **Empty-ref handling** — `pkg/downloader/get_git.go` `update()` now fetches the remote's symbolic
+   `HEAD` in the clean temp dir (`git fetch origin HEAD` → `git reset --hard FETCH_HEAD`) and skips
+   checkout/pull when no ref was given. This resolves the default branch via the broker insteadOf
+   (minted token), deliberately avoiding a CWD `git ls-remote` whose `actions/checkout` extraheader
+   would shadow the token and mis-resolve the branch — and avoiding `git checkout ""` entirely.
 
 ---
 
