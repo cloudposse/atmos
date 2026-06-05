@@ -13,9 +13,13 @@ var importParser *flags.StandardParser
 var importCmd = &cobra.Command{
 	Use:   "import FILE",
 	Short: "Import secret values from a file, skipping undeclared keys.",
-	Long:  "Import secret values from a .env or JSON file. Declared keys are set; undeclared keys are warned about and skipped (unlike `push`, which fails). Use - to read from stdin.",
-	Args:  cobra.ExactArgs(1),
-	RunE:  runSecretImport,
+	Long: "Import secret values from a .env or JSON file. Each key is written to the backend named " +
+		"in its declaration (the `store:` or `sops:` of the matching secrets.vars entry) — there is no " +
+		"single destination to choose, and keys backed by different stores/providers are routed " +
+		"automatically. Declared keys are set; undeclared keys are warned about and skipped (unlike " +
+		"`push`, which fails). Use - to read from stdin.",
+	Args: cobra.ExactArgs(1),
+	RunE: runSecretImport,
 }
 
 func init() {
