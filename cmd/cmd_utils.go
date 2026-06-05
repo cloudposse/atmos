@@ -806,6 +806,13 @@ func executeCustomCommand(
 		// ENV var values support Go templates and have access to {{ .ComponentConfig.xxx.yyy.zzz }} Go template variables
 		// Start with current environment + global env from atmos.yaml to inherit PATH and other variables.
 		env := envpkg.MergeGlobalEnv(os.Environ(), atmosConfig.Env)
+
+		// Expose the absolute path of the running atmos binary so custom command steps can
+		// re-invoke the SAME binary (e.g. `"${ATMOS_CLI_PATH:-atmos}" describe ...`) instead of
+		// relying on a possibly-stale or absent `atmos` on PATH.
+		if execPath, execErr := os.Executable(); execErr == nil {
+			env = envpkg.UpdateEnvVar(env, "ATMOS_CLI_PATH", execPath)
+		}
 		for _, v := range commandConfig.Env {
 			key := strings.TrimSpace(v.Key)
 			value := v.Value
