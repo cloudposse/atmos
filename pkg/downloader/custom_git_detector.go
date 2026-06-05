@@ -256,22 +256,83 @@ func brokerInsteadOfMatchesURL(parsedURL *url.URL, host string) bool {
 }
 
 // gitConfigInsteadOfMatches reports whether the i-th GIT_CONFIG_* entry is an https `insteadOf`
-// rewrite whose host and owner match. Only an https rewrite matches an https clone — an ssh-only
-// rewrite must not suppress injection.
+// rewrite whose host and owner match. It covers both broker materialization modes:
+//   - env mode:  an inline `url.<base>.insteadOf` key whose value is the rewrite target.
+//   - file mode: an `include.path` key pointing at a gitconfig file whose `[url ...] insteadOf`
+//     rewrites live inside the file (so the inline-key check below can never see them).
+//
+// Only an https rewrite matches an https clone — an ssh-only rewrite must not suppress injection.
 func gitConfigInsteadOfMatches(i int, host, owner string) bool {
+	idx := strconv.Itoa(i)
 	//nolint:forbidigo // Live env read of broker-exported GIT_CONFIG_*; mirrors pkg/http/client.go.
-	key := os.Getenv("GIT_CONFIG_KEY_" + strconv.Itoa(i))
+	key := os.Getenv("GIT_CONFIG_KEY_" + idx)
+	//nolint:forbidigo // Live env read of broker-exported GIT_CONFIG_*; mirrors pkg/http/client.go.
+	value := os.Getenv("GIT_CONFIG_VALUE_" + idx)
+
+	// File mode: the rewrites are inside the included gitconfig, not in this env entry.
+	if key == gitConfigIncludePath {
+		return fileInsteadOfMatches(value, host, owner)
+	}
+
+	// Env mode: an inline `url.<base>.insteadOf` rewrite whose value is the target URL.
 	if !strings.HasPrefix(key, "url.") || !strings.HasSuffix(key, ".insteadOf") {
 		return false
 	}
+	return insteadOfValueMatches(value, host, owner)
+}
 
-	//nolint:forbidigo // Live env read of broker-exported GIT_CONFIG_*; mirrors pkg/http/client.go.
-	insteadOf, err := url.Parse(os.Getenv("GIT_CONFIG_VALUE_" + strconv.Itoa(i)))
+// gitConfigIncludePath is the GIT_CONFIG key the broker emits in file mode (GitConfigModeFile) to
+// pull in the on-disk gitconfig that carries the `insteadOf` rewrites.
+const gitConfigIncludePath = "include.path"
+
+// insteadOfValueMatches reports whether an `insteadOf` value is an https rewrite target whose host
+// and owner match. Only https matches an https clone — an ssh-only rewrite must not suppress injection.
+func insteadOfValueMatches(value, host, owner string) bool {
+	insteadOf, err := url.Parse(value)
 	if err != nil || insteadOf.Scheme != "https" {
 		return false
 	}
-
 	return strings.ToLower(insteadOf.Hostname()) == host && firstPathSegment(insteadOf.Path) == owner
+}
+
+// fileInsteadOfMatches scans the gitconfig referenced by a GIT_CONFIG include.path entry for an
+// https `insteadOf` rewrite whose host and owner match. File mode keeps the broker's rewrites off
+// the environment and inside this file, so the inline-key guard cannot see them; without this the
+// guard would always miss a file-mode rewrite and let ambient injection shadow the minted token.
+func fileInsteadOfMatches(path, host, owner string) bool {
+	if path == "" {
+		return false
+	}
+	// The path is the broker-exported GIT_CONFIG include.path (trusted config, mirrors the other
+	// broker-env reads here), not user input.
+	data, err := os.ReadFile(path) //nolint:gosec // G703: path is the trusted broker include.path.
+	if err != nil {
+		return false
+	}
+
+	for _, line := range strings.Split(string(data), "\n") {
+		value, ok := cutInsteadOfDirective(strings.TrimSpace(line))
+		if !ok {
+			continue
+		}
+		if insteadOfValueMatches(value, host, owner) {
+			return true
+		}
+	}
+	return false
+}
+
+// cutInsteadOfDirective extracts the value of a gitconfig `insteadOf = <value>` line, or reports
+// false when the line is not an insteadOf directive. Git config keys are case-insensitive.
+func cutInsteadOfDirective(line string) (string, bool) {
+	eq := strings.IndexByte(line, '=')
+	if eq < 0 {
+		return "", false
+	}
+	if !strings.EqualFold(strings.TrimSpace(line[:eq]), "insteadOf") {
+		return "", false
+	}
+	return strings.TrimSpace(line[eq+1:]), true
 }
 
 // firstPathSegment returns the lowercased first non-empty path segment (the owner/org), or "".
