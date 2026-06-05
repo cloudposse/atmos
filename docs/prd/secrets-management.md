@@ -6,7 +6,7 @@ A GitOps-friendly, multi-cloud secrets management system for Atmos that provides
 
 ## Problem Statement
 
-From the [Deployments PRD](docs/prd/deployments/problem-statement.md):
+From the Deployments PRD (`docs/prd/deployments/problem-statement.md`, on the `origin/deployments-prd` branch):
 
 > **Secrets sprawl:** Deploying to prod loads secrets from dev (because inheritance), staging (because inheritance), and prod (what we actually need). Result: Prod pipeline has dev secrets. Security audit: CRITICAL FINDING.
 
