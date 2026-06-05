@@ -100,6 +100,9 @@ type Masker interface {
 
 	// Enabled returns whether masking is enabled.
 	Enabled() bool
+
+	// Replacement returns the configured mask replacement string.
+	Replacement() string
 }
 
 // Config holds I/O configuration for channels and masking.

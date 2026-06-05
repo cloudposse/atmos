@@ -217,6 +217,25 @@ func mergeComponentConfigurations(atmosConfig *schema.AtmosConfiguration, opts *
 		}
 	}
 
+	// Merge secrets declarations (global stack → base → component → overrides). Available for
+	// all component types; inherits through the stack hierarchy like other sections. The
+	// stack-level (global) `secrets:` block lets providers/declarations be defined once per stack.
+	var finalComponentSecrets map[string]any
+	if len(opts.GlobalSecrets) > 0 || len(result.BaseComponentSecrets) > 0 || len(result.ComponentSecrets) > 0 || len(result.ComponentOverridesSecrets) > 0 {
+		finalComponentSecrets, err = m.Merge(
+			mergeConfig,
+			[]map[string]any{
+				opts.GlobalSecrets,
+				result.BaseComponentSecrets,
+				result.ComponentSecrets,
+				result.ComponentOverridesSecrets,
+			},
+		)
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	// Terraform-specific: merge generate section using deferred merge.
 	// Merge order (lowest to highest priority):
 	// 1. Global + Terraform-level generate (stack-level `generate:` + `terraform.generate:`)
@@ -377,6 +396,11 @@ func mergeComponentConfigurations(atmosConfig *schema.AtmosConfiguration, opts *
 	// Add retry config if present.
 	if len(finalComponentRetry) > 0 {
 		comp[cfg.RetrySectionName] = finalComponentRetry
+	}
+
+	// Add secrets declarations if present (all component types).
+	if len(finalComponentSecrets) > 0 {
+		comp[cfg.SecretsSectionName] = finalComponentSecrets
 	}
 
 	// Terraform-specific: process backends and add Terraform-specific fields.

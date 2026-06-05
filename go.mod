@@ -183,7 +183,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/internal/checksum v1.9.15 // indirect
 	github.com/aws/aws-sdk-go-v2/service/internal/presigned-url v1.13.23 // indirect
 	github.com/aws/aws-sdk-go-v2/service/internal/s3shared v1.19.23 // indirect
-	github.com/aws/aws-sdk-go-v2/service/secretsmanager v1.41.7 // indirect
+	github.com/aws/aws-sdk-go-v2/service/secretsmanager v1.41.7
 	github.com/aws/aws-sdk-go-v2/service/signin v1.0.11 // indirect
 	github.com/aymanbagabas/go-osc52/v2 v2.0.1 // indirect
 	github.com/aymerick/douceur v0.2.0 // indirect
@@ -291,7 +291,7 @@ require (
 	github.com/hashicorp/go-uuid v1.0.3 // indirect
 	github.com/hashicorp/golang-lru v1.0.2 // indirect
 	github.com/hashicorp/serf v0.10.2 // indirect
-	github.com/hashicorp/vault/api v1.23.0 // indirect
+	github.com/hashicorp/vault/api v1.23.0
 	github.com/hashicorp/vault/api/auth/approle v0.12.0 // indirect
 	github.com/hashicorp/vault/api/auth/aws v0.12.0 // indirect
 	github.com/hashicorp/vault/api/auth/userpass v0.12.0 // indirect

@@ -52,6 +52,7 @@ const TAGS_MAP = {
   'demo-ansible': ['Automation'],
   'mcp-with-aws': ['DX', 'Automation'],
   'aws-ami-packer-github-actions': ['Automation'],
+  'sops-secrets': ['Stacks'],
 };
 
 // Documentation pages mapping for examples.

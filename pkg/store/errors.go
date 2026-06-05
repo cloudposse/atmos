@@ -7,6 +7,9 @@ const (
 	errFormat           = "%w: %v"
 	errWrapFormat       = "%w: %s"
 	errWrapFormatWithID = "%w '%s': %s"
+	// The errParseFmt format wraps an option-parsing error so callers can use errors.Is on
+	// both the sentinel and the underlying error.
+	errParseFmt = "%w: %w"
 )
 
 // Common errors shared across store implementations.
@@ -19,10 +22,14 @@ var (
 	ErrGetKey               = errors.New("failed to get key")
 
 	// AWS SSM specific errors.
-	ErrRegionRequired = errors.New("region is required in ssm store configuration")
-	ErrLoadAWSConfig  = errors.New("failed to load AWS config")
-	ErrSetParameter   = errors.New("failed to set parameter")
-	ErrGetParameter   = errors.New("failed to get parameter")
+	ErrRegionRequired  = errors.New("region is required in ssm store configuration")
+	ErrLoadAWSConfig   = errors.New("failed to load AWS config")
+	ErrSetParameter    = errors.New("failed to set parameter")
+	ErrGetParameter    = errors.New("failed to get parameter")
+	ErrDeleteParameter = errors.New("failed to delete parameter")
+
+	// ErrDeleteNotSupported is returned by stores that do not support deletion.
+	ErrDeleteNotSupported = errors.New("delete is not supported by this store")
 
 	// Azure Key Vault specific errors.
 	ErrVaultURLRequired = errors.New("vault_url is required in azure key vault store configuration")
@@ -54,10 +61,27 @@ var (
 	ErrAddSecretVersion  = errors.New("failed to add secret version")
 
 	// Registry specific errors.
-	ErrParseArtifactoryOptions = errors.New("failed to parse Artifactory store options")
-	ErrParseSSMOptions         = errors.New("failed to parse SSM store options")
-	ErrParseRedisOptions       = errors.New("failed to parse Redis store options")
-	ErrStoreTypeNotFound       = errors.New("store type not found")
+	ErrParseArtifactoryOptions    = errors.New("failed to parse Artifactory store options")
+	ErrParseAzureKeyVaultOptions  = errors.New("failed to parse Azure Key Vault store options")
+	ErrParseSSMOptions            = errors.New("failed to parse SSM store options")
+	ErrParseSecretsManagerOptions = errors.New("failed to parse AWS Secrets Manager store options")
+	ErrParseGSMOptions            = errors.New("failed to parse Google Secret Manager store options")
+	ErrParseVaultOptions          = errors.New("failed to parse HashiCorp Vault store options")
+	ErrParseRedisOptions          = errors.New("failed to parse Redis store options")
+	ErrStoreTypeNotFound          = errors.New("store type not found")
+
+	// AWS Secrets Manager specific errors.
+	ErrSetSecret    = errors.New("failed to set secret")
+	ErrGetSecret    = errors.New("failed to get secret")
+	ErrDeleteSecret = errors.New("failed to delete secret")
+
+	// HashiCorp Vault specific errors.
+	ErrVaultAddressRequired = errors.New("address is required in hashicorp vault store configuration")
+	ErrVaultMountRequired   = errors.New("mount is required in hashicorp vault store configuration")
+	ErrVaultWrite           = errors.New("failed to write secret to vault")
+	ErrVaultRead            = errors.New("failed to read secret from vault")
+	ErrVaultDelete          = errors.New("failed to delete secret from vault")
+	ErrVaultEmptyData       = errors.New("vault returned empty data for secret")
 
 	// Identity errors.
 	ErrIdentityNotConfigured   = errors.New("store identity is configured but auth resolver is not set")

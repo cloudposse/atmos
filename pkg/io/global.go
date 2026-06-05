@@ -294,6 +294,46 @@ func RegisterPattern(pattern string) error {
 	return ctx.Masker().RegisterPattern(pattern)
 }
 
+// MaskingEnabled reports whether the global masker is currently enabled. Inspection commands
+// (describe/list) use this to decide whether to resolve `!secret` to the mask replacement
+// without retrieving (and thus without requiring credentials).
+func MaskingEnabled() bool {
+	defer perf.Track(nil, "io.MaskingEnabled")()
+
+	ctx := GetContext()
+	if ctx == nil {
+		return true // Fail safe: assume masking is on if I/O isn't initialized.
+	}
+	return ctx.Masker().Enabled()
+}
+
+// RegisterSecretValue registers every secret-bearing representation of a value with the
+// masker, not only plain strings. Scalars are registered via their string form; maps and
+// slices are walked so nested string leaves (e.g. a `password` field of an object output)
+// are masked too. Shared by the secrets resolver and sensitive-Terraform-output handling.
+func RegisterSecretValue(v any) {
+	defer perf.Track(nil, "io.RegisterSecretValue")()
+
+	switch t := v.(type) {
+	case nil:
+		return
+	case string:
+		RegisterSecret(t)
+	case map[string]any:
+		for _, child := range t {
+			RegisterSecretValue(child)
+		}
+	case []any:
+		for _, child := range t {
+			RegisterSecretValue(child)
+		}
+	default:
+		if s := fmt.Sprintf("%v", t); s != "" {
+			RegisterSecret(s)
+		}
+	}
+}
+
 // GetContext returns the global I/O context for advanced usage.
 // Most code should use io.Data and io.UI instead.
 func GetContext() Context {

@@ -1,0 +1,18 @@
+# yaml-language-server: $schema=https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
+
+vars:
+  stage: dev
+
+# Track 2: a non-store SOPS secret backend defined globally for the whole stack (not under a
+# component, and not in atmos.yaml). The global `secrets:` block merges into every component
+# in this stack. The `file` path may use the {stack} token. Requires `sops` on PATH and the
+# age private key (SOPS_AGE_KEY_FILE).
+secrets:
+  providers:
+    dev-sops:
+      kind: sops/age
+      spec:
+        file: secrets/dev.enc.yaml
+
+import:
+  - catalog/api

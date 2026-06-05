@@ -215,3 +215,9 @@ func (m *masker) Enabled() bool {
 
 	return m.enabled
 }
+
+func (m *masker) Replacement() string {
+	defer perf.Track(nil, "io.masker.Replacement")()
+
+	return m.replacement
+}

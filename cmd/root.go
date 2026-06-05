@@ -79,6 +79,7 @@ import (
 	_ "github.com/cloudposse/atmos/cmd/lsp"
 	_ "github.com/cloudposse/atmos/cmd/mcp"
 	_ "github.com/cloudposse/atmos/cmd/profile"
+	_ "github.com/cloudposse/atmos/cmd/secret"
 	_ "github.com/cloudposse/atmos/cmd/terraform"
 	"github.com/cloudposse/atmos/cmd/terraform/backend"
 	"github.com/cloudposse/atmos/cmd/terraform/workdir"

@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"sync"
@@ -32,6 +33,10 @@ type SSMStore struct {
 	region       string
 	initOnce     sync.Once
 	initErr      error
+
+	// secret indicates this store is used as a secret backend; when true, writes use the
+	// SecureString (KMS-encrypted) parameter type and reads request decryption.
+	secret bool
 }
 
 type SSMStoreOptions struct {
@@ -42,16 +47,20 @@ type SSMStoreOptions struct {
 	WriteRoleArn   *string `mapstructure:"write_role_arn"`
 }
 
-// Ensure SSMStore implements the store.Store and IdentityAwareStore interfaces.
+// Ensure SSMStore implements the store.Store and related interfaces.
 var (
 	_ Store              = (*SSMStore)(nil)
 	_ IdentityAwareStore = (*SSMStore)(nil)
+	_ DeletableStore     = (*SSMStore)(nil)
+	_ StatusStore        = (*SSMStore)(nil)
+	_ SecretAwareStore   = (*SSMStore)(nil)
 )
 
 // SSMClient interface allows us to mock the AWS SSM client.
 type SSMClient interface {
 	PutParameter(ctx context.Context, params *ssm.PutParameterInput, optFns ...func(*ssm.Options)) (*ssm.PutParameterOutput, error)
 	GetParameter(ctx context.Context, params *ssm.GetParameterInput, optFns ...func(*ssm.Options)) (*ssm.GetParameterOutput, error)
+	DeleteParameter(ctx context.Context, params *ssm.DeleteParameterInput, optFns ...func(*ssm.Options)) (*ssm.DeleteParameterOutput, error)
 }
 
 // STSClient interface allows us to mock the AWS STS client.
@@ -111,6 +120,19 @@ func (s *SSMStore) SetAuthContext(resolver AuthContextResolver, identityName str
 	if identityName != "" {
 		s.identityName = identityName
 	}
+}
+
+// SetSecret implements SecretAwareStore. When true, writes use the SecureString type.
+func (s *SSMStore) SetSecret(secret bool) {
+	s.secret = secret
+}
+
+// paramType returns the SSM parameter type to use for writes based on the secret flag.
+func (s *SSMStore) paramType() types.ParameterType {
+	if s.secret {
+		return types.ParameterTypeSecureString
+	}
+	return types.ParameterTypeString
 }
 
 // initDefaultClient initializes the AWS client using the default credential chain.
@@ -291,7 +313,7 @@ func (s *SSMStore) Set(stack string, component string, key string, value any) er
 	_, err = client.PutParameter(ctx, &ssm.PutParameterInput{
 		Name:      aws.String(paramName),
 		Value:     aws.String(strValue),
-		Type:      types.ParameterTypeString,
+		Type:      s.paramType(),
 		Overwrite: aws.Bool(true), // Allow overwriting existing keys
 	})
 	if err != nil {
@@ -344,7 +366,8 @@ func (s *SSMStore) Get(stack string, component string, key string) (any, error) 
 
 	// Get the parameter from SSM Parameter Store
 	output, err := client.GetParameter(ctx, &ssm.GetParameterInput{
-		Name: aws.String(paramName),
+		Name:           aws.String(paramName),
+		WithDecryption: aws.Bool(true),
 	})
 	if err != nil {
 		return nil, fmt.Errorf(errWrapFormatWithID, ErrGetParameter, paramName, err)
@@ -405,7 +428,8 @@ func (s *SSMStore) GetKey(key string) (any, error) {
 
 	// Get the parameter from SSM Parameter Store
 	output, err := client.GetParameter(ctx, &ssm.GetParameterInput{
-		Name: aws.String(paramName),
+		Name:           aws.String(paramName),
+		WithDecryption: aws.Bool(true),
 	})
 	if err != nil {
 		return nil, fmt.Errorf(errWrapFormatWithID, ErrGetParameter, paramName, err)
@@ -420,4 +444,70 @@ func (s *SSMStore) GetKey(key string) (any, error) {
 	}
 
 	return result, nil
+}
+
+// Delete removes a parameter for an Atmos component in a stack from AWS SSM Parameter Store.
+func (s *SSMStore) Delete(stack string, component string, key string) error {
+	if stack == "" {
+		return ErrEmptyStack
+	}
+	if component == "" {
+		return ErrEmptyComponent
+	}
+	if key == "" {
+		return ErrEmptyKey
+	}
+
+	if err := s.ensureClient(); err != nil {
+		return err
+	}
+
+	ctx := context.TODO()
+
+	paramName, err := s.getKey(stack, component, key)
+	if err != nil {
+		return fmt.Errorf(errWrapFormat, ErrGetKey, err)
+	}
+
+	cfg, err := s.assumeRole(ctx, s.writeRoleArn)
+	if err != nil {
+		return fmt.Errorf("failed to assume write role: %w", err)
+	}
+
+	client := s.client
+	if s.writeRoleArn != nil {
+		if s.newSSMClient != nil {
+			client = s.newSSMClient(*cfg)
+		} else {
+			client = ssm.NewFromConfig(*cfg)
+		}
+	}
+
+	_, err = client.DeleteParameter(ctx, &ssm.DeleteParameterInput{
+		Name: aws.String(paramName),
+	})
+	if err != nil {
+		return fmt.Errorf(errWrapFormatWithID, ErrDeleteParameter, paramName, err)
+	}
+
+	return nil
+}
+
+// Has reports whether a parameter exists for an Atmos component in a stack. It uses Get and
+// treats a not-found error as a non-existent (uninitialized) value.
+func (s *SSMStore) Has(stack string, component string, key string) (bool, error) {
+	_, err := s.Get(stack, component, key)
+	if err != nil {
+		if isParameterNotFound(err) {
+			return false, nil
+		}
+		return false, err
+	}
+	return true, nil
+}
+
+// isParameterNotFound reports whether the error indicates a missing SSM parameter.
+func isParameterNotFound(err error) bool {
+	var notFound *types.ParameterNotFound
+	return errors.As(err, &notFound)
 }

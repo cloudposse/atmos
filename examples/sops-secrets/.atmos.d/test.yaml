@@ -1,0 +1,61 @@
+# `atmos test` — end-to-end proof for the SOPS secrets example.
+#
+# Proves the full declarative-secrets lifecycle against a git-committed, age-encrypted
+# SOPS file with NO cloud credentials. Requires `sops` and `age` on PATH.
+#
+# Run:
+#   atmos test
+commands:
+  - name: test
+    description: Run the end-to-end SOPS secrets proof (set/get/list/validate + masking).
+    steps:
+      - |
+        set -euo pipefail
+
+        export ATMOS_CLI_CONFIG_PATH="$(pwd)"
+        export SOPS_AGE_KEY_FILE="$(pwd)/secrets/keys.txt"
+        RECIPIENT="$(grep '^# public key:' secrets/keys.txt | sed 's/# public key: //')"
+
+        echo "==> Reset encrypted store to a clean (placeholder-only) state"
+        printf 'PLACEHOLDER: changeme\n' > secrets/dev.enc.yaml
+        sops encrypt --age "$RECIPIENT" --in-place secrets/dev.enc.yaml
+
+        echo
+        echo "==> 1) describe with NO key: !secret resolves to <MASKED>, no retrieval"
+        env -u SOPS_AGE_KEY_FILE atmos describe component api --stack dev \
+          | grep -E '^  (datadog_api_key|redis_url):'
+
+        echo
+        echo "==> 2) set values (encrypted in place)"
+        atmos secret set DATADOG_API_KEY=dd-abc123secret --stack dev --component api
+        atmos secret set REDIS_URL=redis://prod:6379 --stack dev --component api
+        echo "    encrypted at rest:"
+        grep -E 'DATADOG_API_KEY|REDIS_URL' secrets/dev.enc.yaml | sed 's/,iv:.*//'
+
+        echo
+        echo "==> 3) list status"
+        atmos secret list --stack dev --component api
+
+        echo
+        echo "==> 4) reveal real value (needs key)"
+        ATMOS_MASK=false atmos secret get DATADOG_API_KEY --stack dev --component api
+
+        echo
+        echo "==> 5) validate (CI gate)"
+        atmos secret validate --stack dev --component api
+
+        echo
+        echo "==> 6) reveal WITHOUT key must FAIL (retrieval genuinely decrypts)"
+        if env -u SOPS_AGE_KEY_FILE ATMOS_MASK=false atmos describe component api --stack dev >/dev/null 2>&1; then
+          echo "UNEXPECTED: reveal without key succeeded"; exit 1
+        else
+          echo "OK: reveal without key failed as expected"
+        fi
+
+        echo
+        echo "==> Reset to clean committed state"
+        printf 'PLACEHOLDER: changeme\n' > secrets/dev.enc.yaml
+        sops encrypt --age "$RECIPIENT" --in-place secrets/dev.enc.yaml
+
+        echo
+        echo "All proofs passed."
