@@ -98,6 +98,11 @@ func NewGSMStore(options GSMStoreOptions, identityName string) (Store, error) {
 func (s *GSMStore) SetAuthContext(resolver AuthContextResolver, identityName string) {
 	s.authResolver = resolver
 	if identityName != "" && s.identityName != identityName {
+		if s.client != nil {
+			if err := s.client.Close(); err != nil {
+				log.Trace("Failed to close Google Secret Manager client during identity switch", "error", err)
+			}
+		}
 		s.identityName = identityName
 		s.client = nil
 		s.initOnce = sync.Once{}

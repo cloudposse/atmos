@@ -367,7 +367,7 @@ func TestExecuteTerraformAll_AuthManagerResolverWired(t *testing.T) {
 		// ExecuteDescribeStacks calls GetStackInfo while processing each stack.
 		// The fixture has no auth-dependent YAML functions, so no other
 		// AuthManager methods should be invoked.
-		mgr.EXPECT().GetChain().Return([]string{"terraform"}).AnyTimes()
+		mgr.EXPECT().GetChain().Return([]string{"terraform"}).MinTimes(1)
 		mgr.EXPECT().GetStackInfo().Return(nil).AnyTimes()
 		return mgr, nil
 	}

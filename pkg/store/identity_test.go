@@ -130,13 +130,16 @@ func TestSetAuthContext_IdentityOverrideClearsDefaultClients(t *testing.T) {
 	assert.Equal(t, "terraform-ci", azureStore.identityName)
 	assert.Nil(t, azureStore.client)
 
+	mockGSMClient := new(MockGSMClient)
+	mockGSMClient.On("Close").Return(nil).Once()
 	gsmStore := &GSMStore{
-		client:       new(MockGSMClient),
+		client:       mockGSMClient,
 		identityName: "",
 	}
 	gsmStore.SetAuthContext(resolver, "terraform-ci")
 	assert.Equal(t, "terraform-ci", gsmStore.identityName)
 	assert.Nil(t, gsmStore.client)
+	mockGSMClient.AssertExpectations(t)
 }
 
 func TestSSMStore_LazyInit_WithIdentity(t *testing.T) {
