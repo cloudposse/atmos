@@ -33,6 +33,9 @@ var (
 	// ErrAmbiguousBackend indicates a declaration references more than one backend.
 	ErrAmbiguousBackend = errors.New("secret declaration must set exactly one of `store:` or `sops:`")
 
+	// ErrKeygenUnsupported indicates the referenced vault's backend cannot generate a key.
+	ErrKeygenUnsupported = errors.New("vault backend does not support key generation")
+
 	// ErrInvalidSecretArgs indicates the !secret function received invalid arguments.
 	ErrInvalidSecretArgs = errors.New("invalid !secret arguments")
 

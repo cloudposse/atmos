@@ -53,9 +53,9 @@ func (f *fakeGitHubActionsClient) DeleteSecret(_ context.Context, name string) e
 }
 
 // newTestStore builds a store wired to a fake client and an explicit CI predicate.
-func newTestStore(client gitHubActionsClient, opts GitHubActionsStoreOptions, ci bool) *GitHubActionsStore {
+func newTestStore(client gitHubActionsClient, opts *GitHubActionsStoreOptions, ci bool) *GitHubActionsStore {
 	return &GitHubActionsStore{
-		options: opts,
+		options: *opts,
 		prefix:  opts.Prefix,
 		isCI:    func() bool { return ci },
 		client:  client,
@@ -74,7 +74,7 @@ func TestNewGitHubActionsStore_RequiresOwnerRepo(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			_, err := NewGitHubActionsStore(tt.opts)
+			_, err := NewGitHubActionsStore(&tt.opts)
 			if tt.wantErr {
 				require.ErrorIs(t, err, ErrGitHubOwnerRepoRequired)
 				return
@@ -114,7 +114,7 @@ func TestGitHubSecretName(t *testing.T) {
 
 func TestGitHubActionsStore_Set_WritesEncodedValue(t *testing.T) {
 	fake := newFakeGitHubActionsClient()
-	store := newTestStore(fake, GitHubActionsStoreOptions{Owner: "acme", Repo: "infra", Prefix: "atmos"}, false)
+	store := newTestStore(fake, &GitHubActionsStoreOptions{Owner: "acme", Repo: "infra", Prefix: "atmos"}, false)
 
 	// String passes through.
 	require.NoError(t, store.Set("dev", "vpc", "db_password", "s3cr3t"))
@@ -136,7 +136,7 @@ func TestGitHubActionsStore_Set_WritesEncodedValue(t *testing.T) {
 func TestGitHubActionsStore_Has(t *testing.T) {
 	fake := newFakeGitHubActionsClient()
 	fake.secrets["DB_PASSWORD"] = "x"
-	store := newTestStore(fake, GitHubActionsStoreOptions{Owner: "acme", Repo: "infra"}, false)
+	store := newTestStore(fake, &GitHubActionsStoreOptions{Owner: "acme", Repo: "infra"}, false)
 
 	has, err := store.Has("dev", "vpc", "db_password")
 	require.NoError(t, err)
@@ -155,7 +155,7 @@ func TestGitHubActionsStore_Has(t *testing.T) {
 func TestGitHubActionsStore_Delete_Idempotent(t *testing.T) {
 	fake := newFakeGitHubActionsClient()
 	fake.secrets["DB_PASSWORD"] = "x"
-	store := newTestStore(fake, GitHubActionsStoreOptions{Owner: "acme", Repo: "infra"}, false)
+	store := newTestStore(fake, &GitHubActionsStoreOptions{Owner: "acme", Repo: "infra"}, false)
 
 	require.NoError(t, store.Delete("dev", "vpc", "db_password"))
 	_, ok := fake.secrets["DB_PASSWORD"]
@@ -167,7 +167,7 @@ func TestGitHubActionsStore_Delete_Idempotent(t *testing.T) {
 
 func TestGitHubActionsStore_Get_CIGating(t *testing.T) {
 	t.Run("blocked outside CI", func(t *testing.T) {
-		store := newTestStore(newFakeGitHubActionsClient(), GitHubActionsStoreOptions{Owner: "acme", Repo: "infra"}, false)
+		store := newTestStore(newFakeGitHubActionsClient(), &GitHubActionsStoreOptions{Owner: "acme", Repo: "infra"}, false)
 		_, err := store.Get("dev", "vpc", "db_password")
 		require.ErrorIs(t, err, ErrGitHubSecretValueCIOnly)
 	})
@@ -176,7 +176,7 @@ func TestGitHubActionsStore_Get_CIGating(t *testing.T) {
 		t.Setenv("DB_PASSWORD", "from-env")
 		opts := GitHubActionsStoreOptions{Owner: "acme", Repo: "infra"}
 		opts.CI.Enabled = true
-		store := newTestStore(newFakeGitHubActionsClient(), opts, false)
+		store := newTestStore(newFakeGitHubActionsClient(), &opts, false)
 		got, err := store.Get("dev", "vpc", "db_password")
 		require.NoError(t, err)
 		assert.Equal(t, "from-env", got)
@@ -184,21 +184,21 @@ func TestGitHubActionsStore_Get_CIGating(t *testing.T) {
 
 	t.Run("allowed when detected as a runner", func(t *testing.T) {
 		t.Setenv("DB_PASSWORD", "from-env")
-		store := newTestStore(newFakeGitHubActionsClient(), GitHubActionsStoreOptions{Owner: "acme", Repo: "infra"}, true)
+		store := newTestStore(newFakeGitHubActionsClient(), &GitHubActionsStoreOptions{Owner: "acme", Repo: "infra"}, true)
 		got, err := store.Get("dev", "vpc", "db_password")
 		require.NoError(t, err)
 		assert.Equal(t, "from-env", got)
 	})
 
 	t.Run("missing env value reports not-initialized", func(t *testing.T) {
-		store := newTestStore(newFakeGitHubActionsClient(), GitHubActionsStoreOptions{Owner: "acme", Repo: "infra"}, true)
+		store := newTestStore(newFakeGitHubActionsClient(), &GitHubActionsStoreOptions{Owner: "acme", Repo: "infra"}, true)
 		_, err := store.Get("dev", "vpc", "db_password")
 		require.ErrorIs(t, err, ErrGitHubSecretNotInEnv)
 	})
 
 	t.Run("structured JSON value round-trips", func(t *testing.T) {
 		t.Setenv("CONFIG", `{"a":1}`)
-		store := newTestStore(newFakeGitHubActionsClient(), GitHubActionsStoreOptions{Owner: "acme", Repo: "infra"}, true)
+		store := newTestStore(newFakeGitHubActionsClient(), &GitHubActionsStoreOptions{Owner: "acme", Repo: "infra"}, true)
 		got, err := store.Get("dev", "vpc", "config")
 		require.NoError(t, err)
 		assert.Equal(t, map[string]any{"a": float64(1)}, got)
@@ -207,12 +207,12 @@ func TestGitHubActionsStore_Get_CIGating(t *testing.T) {
 
 func TestGitHubActionsStore_EnvHint(t *testing.T) {
 	withEnv := newTestStore(newFakeGitHubActionsClient(),
-		GitHubActionsStoreOptions{Owner: "acme", Repo: "infra", Environment: "production"}, false)
+		&GitHubActionsStoreOptions{Owner: "acme", Repo: "infra", Environment: "production"}, false)
 	assert.Contains(t, withEnv.envHint("DB_PASSWORD"), "environment: production")
 	assert.Contains(t, withEnv.envHint("DB_PASSWORD"), "secrets.DB_PASSWORD")
 
 	noEnv := newTestStore(newFakeGitHubActionsClient(),
-		GitHubActionsStoreOptions{Owner: "acme", Repo: "infra"}, false)
+		&GitHubActionsStoreOptions{Owner: "acme", Repo: "infra"}, false)
 	assert.NotContains(t, noEnv.envHint("DB_PASSWORD"), "environment:")
 	assert.Contains(t, noEnv.envHint("DB_PASSWORD"), "secrets.DB_PASSWORD")
 }
@@ -223,7 +223,7 @@ func TestGitHubActionsStore_Get_EnrichedErrors(t *testing.T) {
 	t.Setenv("GITHUB_REPOSITORY", "")
 
 	opts := GitHubActionsStoreOptions{Owner: "acme", Repo: "infra", Environment: "production"}
-	store := newTestStore(newFakeGitHubActionsClient(), opts, true) // ci=true allows the read path.
+	store := newTestStore(newFakeGitHubActionsClient(), &opts, true) // ci=true allows the read path.
 
 	_, err := store.Get("dev", "vpc", "db_password")
 	require.ErrorIs(t, err, ErrGitHubSecretNotInEnv)
@@ -231,7 +231,7 @@ func TestGitHubActionsStore_Get_EnrichedErrors(t *testing.T) {
 	assert.Contains(t, err.Error(), "secrets.DB_PASSWORD")
 
 	// CI-only error (reads not allowed) also names the environment + mapping requirement.
-	blocked := newTestStore(newFakeGitHubActionsClient(), opts, false)
+	blocked := newTestStore(newFakeGitHubActionsClient(), &opts, false)
 	_, err = blocked.Get("dev", "vpc", "db_password")
 	require.ErrorIs(t, err, ErrGitHubSecretValueCIOnly)
 	assert.Contains(t, err.Error(), "environment: production")

@@ -5,6 +5,7 @@ import (
 
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/secrets"
 	"github.com/cloudposse/atmos/pkg/ui"
 )
 
@@ -41,12 +42,33 @@ func runSecretInit(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
+	// First-time DX: offer to generate key material for any key-generating vault (e.g. SOPS) that
+	// lacks it, so the value prompts below can actually encrypt/store.
+	if err := offerKeygen(svc, dryRun); err != nil {
+		return err
+	}
+
+	initialized, err := initDeclaredSecrets(svc, force, dryRun)
+	if err != nil {
+		return err
+	}
+
+	if dryRun {
+		ui.Infof("Dry run: %d secret(s) would be initialized", initialized)
+		return nil
+	}
+	ui.Successf("Initialized %d secret(s) for component `%s` in stack `%s`", initialized, scope.Component, scope.Stack)
+	return nil
+}
+
+// initDeclaredSecrets walks the declared secrets and provisions each that is missing (or all, with
+// force), prompting for values. In dry-run mode it only reports. Returns the count handled.
+func initDeclaredSecrets(svc *secrets.Service, force, dryRun bool) (int, error) {
 	statuses := svc.Status()
 	initialized := 0
 	for i := range statuses {
 		st := &statuses[i]
-		needs := force || !st.Initialized
-		if !needs {
+		if !force && st.Initialized {
 			continue
 		}
 		if dryRun {
@@ -58,18 +80,45 @@ func runSecretInit(cmd *cobra.Command, args []string) error {
 		ui.Infof("Initializing `%s` (%s)", st.Declaration.Name, backendLabel(&st.Declaration))
 		value, promptErr := promptForSecretValue()
 		if promptErr != nil {
-			return promptErr
+			return initialized, promptErr
 		}
 		if err := svc.Set(st.Declaration.Name, value); err != nil {
-			return err
+			return initialized, err
 		}
 		initialized++
 	}
+	return initialized, nil
+}
 
-	if dryRun {
-		ui.Infof("Dry run: %d secret(s) would be initialized", initialized)
-		return nil
+// offerKeygen detects vaults whose backend can generate key material but has none yet, and offers
+// to generate before the value-prompt loop. Backend-agnostic (any provider implementing the keygen
+// capability). In dry-run mode it only reports what it would generate.
+func offerKeygen(svc *secrets.Service, dryRun bool) error {
+	missing, err := svc.VaultsMissingKeys()
+	if err != nil {
+		return err
 	}
-	ui.Successf("Initialized %d secret(s) for component `%s` in stack `%s`", initialized, scope.Component, scope.Stack)
+	for _, vault := range missing {
+		if dryRun {
+			ui.Infof("Would generate key material for vault `%s`", vault.Name)
+			continue
+		}
+		confirmed, confirmErr := confirmAction("Vault `" + vault.Name + "` has no key material. Generate it now?")
+		if confirmErr != nil {
+			return confirmErr
+		}
+		if !confirmed {
+			ui.Warningf("Skipping key generation for `%s`; setting its secrets may fail until it has a key.", vault.Name)
+			continue
+		}
+		res, genErr := svc.GenerateKeyForVault(vault)
+		if genErr != nil {
+			return genErr
+		}
+		ui.Successf("Vault `%s` (%s): %s", res.Vault, res.Kind, res.Summary)
+		for _, out := range res.Outputs {
+			ui.Infof("%s → %s", out.Label, out.Location)
+		}
+	}
 	return nil
 }

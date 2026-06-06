@@ -13,7 +13,7 @@ import (
 func newTestKeychainStore(t *testing.T) Store {
 	t.Helper()
 
-	s, err := NewKeychainStore(KeychainStoreOptions{Backend: keyring.TypeMemory})
+	s, err := NewKeychainStore(&KeychainStoreOptions{Backend: keyring.TypeMemory})
 	require.NoError(t, err)
 	return s
 }
@@ -83,7 +83,7 @@ func TestKeychainStore_Delete(t *testing.T) {
 }
 
 func TestKeychainStore_KeyComposition(t *testing.T) {
-	s, err := NewKeychainStore(KeychainStoreOptions{Backend: keyring.TypeMemory, Prefix: "atmos"})
+	s, err := NewKeychainStore(&KeychainStoreOptions{Backend: keyring.TypeMemory, Prefix: "atmos"})
 	require.NoError(t, err)
 
 	// Store via the composed key, then read the same value back by the raw key to pin the layout.

@@ -9,13 +9,13 @@ import (
 )
 
 const (
-	// defaultKeychainService namespaces keychain entries (OS-keychain service / file ServiceName).
+	// Namespaces keychain entries (OS-keychain service / file ServiceName).
 	defaultKeychainService = "atmos-secrets"
-	// defaultKeychainPrefix is prepended to every composed key.
+	// Prepended to every composed key.
 	defaultKeychainPrefix = "atmos"
-	// defaultKeychainStackDelimiter splits a stack name into key segments.
+	// Splits a stack name into key segments.
 	defaultKeychainStackDelimiter = "-"
-	// keychainKeyDelimiter joins the composed key segments.
+	// Joins the composed key segments.
 	keychainKeyDelimiter = "/"
 )
 
@@ -58,7 +58,7 @@ var (
 // NewKeychainStore initializes a keychain store. Constructing the system backend probes keyring
 // availability, so an unusable keychain (e.g. a headless container) fails here rather than
 // silently dropping writes.
-func NewKeychainStore(options KeychainStoreOptions) (Store, error) {
+func NewKeychainStore(options *KeychainStoreOptions) (Store, error) {
 	backend := options.Backend
 	if backend == "" {
 		backend = keyring.TypeSystem

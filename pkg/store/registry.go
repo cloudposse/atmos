@@ -48,33 +48,30 @@ func ApplySecretDefaults(config StoresConfig) {
 	}
 }
 
+// legacyTypeToKind maps each legacy `type` value to its canonical `kind`.
+var legacyTypeToKind = map[string]string{
+	"artifactory":             KindArtifactory,
+	"azure-key-vault":         KindAzureKeyVault,
+	"aws-ssm-parameter-store": KindAWSSSM,
+	"aws-secrets-manager":     KindAWSASM,
+	"google-secret-manager":   KindGCPSecret,
+	"gsm":                     KindGCPSecret,
+	"hashicorp-vault":         KindHashicorpVault,
+	"redis":                   KindRedis,
+	"1password":               KindOnePassword,
+	"onepassword":             KindOnePassword,
+	"keychain":                KindKeychain,
+	"keyring":                 KindKeychain,
+	"github-actions":          KindGitHubActions,
+}
+
 // mapLegacyType translates a legacy `type` value to its canonical `kind`. Unknown values are
-// returned unchanged so the switch can still match a kind passed directly via `type`.
+// returned unchanged so the caller can still match a kind passed directly via `type`.
 func mapLegacyType(legacyType string) string {
-	switch legacyType {
-	case "artifactory":
-		return KindArtifactory
-	case "azure-key-vault":
-		return KindAzureKeyVault
-	case "aws-ssm-parameter-store":
-		return KindAWSSSM
-	case "aws-secrets-manager":
-		return KindAWSASM
-	case "google-secret-manager", "gsm":
-		return KindGCPSecret
-	case "hashicorp-vault":
-		return KindHashicorpVault
-	case "redis":
-		return KindRedis
-	case "1password", "onepassword":
-		return KindOnePassword
-	case "keychain", "keyring":
-		return KindKeychain
-	case "github-actions":
-		return KindGitHubActions
-	default:
-		return legacyType
+	if kind, ok := legacyTypeToKind[legacyType]; ok {
+		return kind
 	}
+	return legacyType
 }
 
 // resolveKind returns the normalized backend kind for a store config. An explicit `kind`
@@ -196,7 +193,7 @@ func buildKeychainStore(key string, storeConfig StoreConfig) (Store, error) {
 		return nil, fmt.Errorf(errParseFmt, ErrParseKeychainOptions, err)
 	}
 	warnIdentityIgnored(key, storeConfig, "Keychain")
-	return NewKeychainStore(opts)
+	return NewKeychainStore(&opts)
 }
 
 func buildGitHubActionsStore(key string, storeConfig StoreConfig) (Store, error) {
@@ -205,7 +202,7 @@ func buildGitHubActionsStore(key string, storeConfig StoreConfig) (Store, error)
 		return nil, fmt.Errorf(errParseFmt, ErrParseGitHubActionsOptions, err)
 	}
 	warnIdentityIgnored(key, storeConfig, "GitHub Actions")
-	return NewGitHubActionsStore(opts)
+	return NewGitHubActionsStore(&opts)
 }
 
 func buildRedisStore(key string, storeConfig StoreConfig) (Store, error) {

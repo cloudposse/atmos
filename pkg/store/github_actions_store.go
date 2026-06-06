@@ -60,9 +60,8 @@ type GitHubActionsStore struct {
 
 	// The client is built lazily on first API use so that merely declaring a store does not require
 	// a token at config-load time. Tests inject a client directly, which the lazy initializer preserves.
-	once    sync.Once
-	client  gitHubActionsClient
-	initErr error
+	once   sync.Once
+	client gitHubActionsClient
 
 	// alignOnce guards the one-time, best-effort runner/store alignment warning emitted on first read.
 	alignOnce sync.Once
@@ -77,12 +76,12 @@ var (
 
 // NewGitHubActionsStore initializes a GitHub Actions secrets store. The GitHub client is built
 // lazily on first API call, so this only validates required addressing options.
-func NewGitHubActionsStore(options GitHubActionsStoreOptions) (Store, error) {
+func NewGitHubActionsStore(options *GitHubActionsStoreOptions) (Store, error) {
 	if options.Owner == "" || options.Repo == "" {
 		return nil, ErrGitHubOwnerRepoRequired
 	}
 	return &GitHubActionsStore{
-		options: options,
+		options: *options,
 		prefix:  options.Prefix,
 		isCI:    isGitHubActionsRunner,
 	}, nil
@@ -98,13 +97,13 @@ func isGitHubActionsRunner() bool {
 }
 
 // getClient lazily builds the GitHub client, preserving an already-injected client (tests).
-func (s *GitHubActionsStore) getClient() (gitHubActionsClient, error) {
+func (s *GitHubActionsStore) getClient() gitHubActionsClient {
 	s.once.Do(func() {
 		if s.client == nil {
-			s.client, s.initErr = newGitHubActionsAPIClient(&s.options)
+			s.client = newGitHubActionsAPIClient(&s.options)
 		}
 	})
-	return s.client, s.initErr
+	return s.client
 }
 
 // readAllowed reports whether secret values may be read from the environment: true inside a GitHub
@@ -113,8 +112,8 @@ func (s *GitHubActionsStore) readAllowed() bool {
 	return s.options.CI.Enabled || s.isCI()
 }
 
-// Set encrypts and writes a secret value via the GitHub API. stack and component do not affect the
-// secret name (GitHub secrets are a flat, repo-global namespace).
+// Set encrypts and writes a secret value via the GitHub API. The stack and component do not affect
+// the secret name (GitHub secrets are a flat, repo-global namespace).
 func (s *GitHubActionsStore) Set(_ string, _ string, key string, value any) error {
 	if key == "" {
 		return ErrEmptyKey
@@ -130,11 +129,7 @@ func (s *GitHubActionsStore) Set(_ string, _ string, key string, value any) erro
 	if err != nil {
 		return err
 	}
-	client, err := s.getClient()
-	if err != nil {
-		return err
-	}
-	return client.PutSecret(context.TODO(), name, strValue)
+	return s.getClient().PutSecret(context.TODO(), name, strValue)
 }
 
 // Get returns the secret value from the process environment. This only works inside a GitHub
@@ -188,10 +183,15 @@ func (s *GitHubActionsStore) verifyAlignment() {
 			"store_repo", wantRepo, "github_repository", repo)
 	}
 
-	if s.options.Environment == "" {
-		return
+	if s.options.Environment != "" {
+		s.verifyEnvironmentAlignment(wantRepo)
 	}
+}
 
+// verifyEnvironmentAlignment best-effort verifies the OIDC token's repository/environment claims
+// against the store config (used only when an environment is configured). It needs the job to grant
+// `id-token: write`; when no token is available the check is skipped silently. Warn-only.
+func (s *GitHubActionsStore) verifyEnvironmentAlignment(wantRepo string) {
 	claims, available, err := oidc.RequestClaims(context.TODO())
 	if err != nil {
 		log.Debug("could not verify GitHub environment via OIDC", "error", err)
@@ -206,10 +206,10 @@ func (s *GitHubActionsStore) verifyAlignment() {
 		log.Warn("github/actions store repository does not match the OIDC token repository claim",
 			"store_repo", wantRepo, "oidc_repository", claims.Repository)
 	}
-	switch {
-	case claims.Environment == s.options.Environment:
+	switch claims.Environment {
+	case s.options.Environment:
 		// Aligned: nothing to warn about.
-	case claims.Environment == "":
+	case "":
 		log.Warn("github/actions store targets an environment but the job is not bound to one; environment secrets will not be injected",
 			"store_environment", s.options.Environment)
 	default:
@@ -232,11 +232,7 @@ func (s *GitHubActionsStore) Has(_ string, _ string, key string) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	client, err := s.getClient()
-	if err != nil {
-		return false, err
-	}
-	return client.HasSecret(context.TODO(), name)
+	return s.getClient().HasSecret(context.TODO(), name)
 }
 
 // Delete removes the secret via the GitHub API. It is idempotent: a missing secret is not an error.
@@ -245,18 +241,12 @@ func (s *GitHubActionsStore) Delete(_ string, _ string, key string) error {
 	if err != nil {
 		return err
 	}
-	client, err := s.getClient()
-	if err != nil {
-		return err
-	}
-	return client.DeleteSecret(context.TODO(), name)
+	return s.getClient().DeleteSecret(context.TODO(), name)
 }
 
-// lookupGitHubSecretEnv reads a GitHub-injected secret from the process environment.
+// lookupGitHubSecretEnv reads a GitHub-injected secret from the process environment. The secret
+// arrives as a workflow-mapped environment variable (secrets.NAME → env NAME), not as Atmos config.
 func lookupGitHubSecretEnv(name string) (string, bool) {
-	// The secret arrives as a workflow-mapped environment variable (secrets.NAME → env NAME),
-	// not as Atmos configuration, so os.LookupEnv is appropriate here.
-	//nolint:forbidigo // GitHub injects the secret as an external environment variable, not Atmos config.
 	return os.LookupEnv(name)
 }
 

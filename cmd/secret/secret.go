@@ -50,6 +50,7 @@ func init() {
 	secretCmd.AddCommand(listCmd)
 	secretCmd.AddCommand(validateCmd)
 	secretCmd.AddCommand(initCmd)
+	secretCmd.AddCommand(keygenCmd)
 	secretCmd.AddCommand(pullCmd)
 	secretCmd.AddCommand(pushCmd)
 	secretCmd.AddCommand(importCmd)

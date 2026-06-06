@@ -27,6 +27,7 @@ import (
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/store"
 )
 
 // init self-registers the SOPS track (track 2) so backend selection is a registry
@@ -38,10 +39,17 @@ func init() {
 const (
 	// Format string wrapping a sentinel error, a file path, and an underlying error.
 	errFmtWrapFile = "%w: %q: %w"
+	// Format string wrapping a sentinel error and a quoted identifier.
+	errFmtWrapQuoted = "%w: %q"
 	// Permission for SOPS-encrypted files (owner read/write only).
 	secretFileMode os.FileMode = 0o600
 	// Permission for directories created to hold SOPS files.
 	secretDirMode os.FileMode = 0o755
+	// Reserved `age_key.store` value selecting the local file backend.
+	ageKeyStoreFile = "file"
+	// Fixed component segment for the store key under which the age
+	// private key is written/read (the store triple is stack=<vault>, component=<this>, key=<path>).
+	ageKeyStoreComponent = "age-key"
 )
 
 // sopsProvider implements the Provider interface over a SOPS-encrypted file (track 2). It uses
@@ -54,11 +62,22 @@ type sopsProvider struct {
 	file          string // Go-template file path (e.g. `secrets/{{ .atmos_stack }}.enc.yaml`).
 	ageRecipients string // Optional explicit age recipients for creating a fresh file.
 	ageKeyFile    string // Optional path to the age private key (supports `~`/`$ENV`); falls back to SOPS_AGE_KEY_FILE/SOPS_AGE_KEY when empty.
-	// ageKey is inline age private-key material. Unlike ageKeyFile (a path), this is the key text
-	// itself, so it can be populated by any YAML function — `age_key: !env …` / `!exec …` / a
-	// lazily-resolved `!store.get <store> <KEY>` — keeping the key out of a plain env var. It takes
-	// precedence over ageKeyFile.
+	// ageKey is inline age private-key material (from `age_key.value` or a bare-string `age_key`).
+	// It is the key text itself, so it can be populated by any YAML function — `!env …` / `!exec …`
+	// / a `!store.get <store> <KEY>` — keeping the key out of a plain env var. Highest precedence.
 	ageKey string
+	// ageKeyStore names a configured store (e.g. the `keychain` store) that holds the age private
+	// key, from `age_key.store`. When set (and not the reserved value "file"), the key is read from
+	// — and `atmos secret keygen` writes it to — that store at ageKeyPath. Takes precedence over ageKeyFile.
+	ageKeyStore string
+	// ageKeyPath is the location of the key within ageKeyStore (a store key) or, in file mode, the
+	// key file path (from `age_key.path`). Optional; defaults to the vault name for stores.
+	ageKeyPath string
+	// recipientsFile is where `atmos secret keygen` records this vault's public recipient. Defaults
+	// to `.sops.yaml` (a creation rule) at the Atmos base path. Read at keygen time only.
+	recipientsFile string
+	// stores is the configured store registry (atmosConfig.Stores), used to resolve ageKeyStore.
+	stores store.StoreRegistry
 }
 
 // newSopsProvider builds a SOPS provider. The provider definition is resolved from the
@@ -71,7 +90,7 @@ func newSopsProvider(atmosConfig *schema.AtmosConfiguration, name string, sectio
 	if !ok {
 		cfg, found := atmosConfig.Secrets.Providers[name]
 		if !found {
-			return nil, fmt.Errorf("%w: %q", ErrProviderNotFound, name)
+			return nil, fmt.Errorf(errFmtWrapQuoted, ErrProviderNotFound, name)
 		}
 		kind = cfg.Kind
 		spec = cfg.Spec
@@ -83,16 +102,23 @@ func newSopsProvider(atmosConfig *schema.AtmosConfiguration, name string, sectio
 	}
 
 	ageRecipients, _ := spec["age_recipients"].(string)
-	ageKeyFile, _ := spec["age_key_file"].(string)
-	ageKey, _ := spec["age_key"].(string)
+	recipientsFile, _ := spec["recipients_file"].(string)
+
+	// age_key may be a nested object ({store,path,value}) or a bare string (inline material).
+	// age_key_file remains a back-compat shorthand for file-mode at an explicit path.
+	ak := parseAgeKeySpec(spec)
 
 	return &sopsProvider{
-		name:          name,
-		kind:          kind,
-		file:          file,
-		ageRecipients: ageRecipients,
-		ageKeyFile:    ageKeyFile,
-		ageKey:        ageKey,
+		name:           name,
+		kind:           kind,
+		file:           file,
+		ageRecipients:  ageRecipients,
+		ageKeyFile:     ak.file,
+		ageKey:         ak.value,
+		ageKeyStore:    ak.storeName,
+		ageKeyPath:     ak.path,
+		recipientsFile: recipientsFile,
+		stores:         atmosConfig.Stores,
 	}, nil
 }
 
@@ -165,7 +191,7 @@ func (p *sopsProvider) Get(coord Coordinate) (any, error) {
 	}
 	value, ok := doc[coord.Key]
 	if !ok {
-		return nil, fmt.Errorf("%w: %q", ErrSecretNotInitialized, coord.Key)
+		return nil, fmt.Errorf(errFmtWrapQuoted, ErrSecretNotInitialized, coord.Key)
 	}
 	return value, nil
 }
@@ -373,7 +399,7 @@ func (p *sopsProvider) keyGroups(file string) ([]sops.KeyGroup, error) {
 // to initialize it. The errors.Is(result, ErrSecretFileNotFound) check still holds.
 func fileNotFoundErr(file string) error {
 	return errUtils.Build(ErrSecretFileNotFound).
-		WithCause(fmt.Errorf("%w: %q", ErrSecretFileNotFound, file)).
+		WithCause(fmt.Errorf(errFmtWrapQuoted, ErrSecretFileNotFound, file)).
 		WithHint("Initialize secrets to create the encrypted file: `atmos secret set <NAME>=<value> --stack <stack> --component <component>` (or `atmos secret init`).").
 		WithHint("On first write Atmos creates and encrypts the file in-process using `spec.age_recipients` or a matching .sops.yaml creation rule — no `sops` binary required.").
 		Err()
@@ -421,7 +447,9 @@ func (p *sopsProvider) decryptErr(file string, cause error) error {
 func (p *sopsProvider) keyClient() (keyservice.KeyServiceClient, error) {
 	switch {
 	case p.ageKey != "":
-		return ageClientFromKeyMaterial(p.ageKey, func(e error) error { return ageKeyErr(e) })
+		return ageClientFromKeyMaterial(p.ageKey, ageKeyErr)
+	case p.ageKeyStore != "":
+		return p.ageKeyStoreClient()
 	case p.ageKeyFile != "":
 		return p.ageKeyFileClient()
 	default:

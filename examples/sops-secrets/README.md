@@ -32,6 +32,24 @@ secrets:
         age_key_file: secrets/keys.txt
 ```
 
+> **Prefer the OS keychain?** Configure a `keychain` store and point the key at it instead of a file —
+> then `atmos secret keygen dev-sops` writes the private key into the keychain and decryption reads it
+> back, with nothing on disk or in the environment:
+>
+> ```yaml
+> stores:
+>   keychain:
+>     type: keychain
+> secrets:
+>   providers:
+>     dev-sops:
+>       kind: sops/age
+>       spec:
+>         file: secrets/dev.enc.yaml
+>         age_key:
+>           store: keychain     # "file" (default) | a configured store name
+> ```
+
 `stacks/catalog/api.yaml` declares two secrets and consumes them via `!secret`:
 
 ```yaml

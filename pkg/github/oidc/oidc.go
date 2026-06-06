@@ -19,6 +19,9 @@ import (
 // requestTimeout bounds the OIDC token request to avoid hanging a runner with a stuck network.
 const requestTimeout = 10 * time.Second
 
+// errFmtWrap wraps a sentinel error and an underlying error.
+const errFmtWrap = "%w: %w"
+
 var (
 	// ErrInvalidRequestURL indicates ACTIONS_ID_TOKEN_REQUEST_URL is malformed or unsafe.
 	ErrInvalidRequestURL = errors.New("invalid ACTIONS_ID_TOKEN_REQUEST_URL")
@@ -38,10 +41,10 @@ type Claims struct {
 
 // RequestClaims mints (or reads) the GitHub Actions OIDC token and returns its claims.
 //
-// available is false (with a nil error) when the token is unobtainable because the process is not
-// a GitHub Actions runner, or the job lacks `id-token: write` permission — callers treat that as
-// "unknown context", not a failure. A non-nil error means the token was obtainable but the
-// request or decoding failed.
+// The available return is false (with a nil error) when the token is unobtainable because the
+// process is not a GitHub Actions runner, or the job lacks `id-token: write` permission — callers
+// treat that as "unknown context", not a failure. A non-nil error means the token was obtainable
+// but the request or decoding failed.
 func RequestClaims(ctx context.Context) (claims *Claims, available bool, err error) {
 	jwt, available, err := requestToken(ctx)
 	if err != nil || !available {
@@ -55,7 +58,7 @@ func RequestClaims(ctx context.Context) (claims *Claims, available bool, err err
 }
 
 // requestToken returns the OIDC JWT. It prefers a pre-injected ACTIONS_ID_TOKEN, otherwise mints
-// one from the request token/URL. available reflects whether a token could be obtained at all.
+// one from the request token/URL. The available result reflects whether a token could be obtained.
 func requestToken(ctx context.Context) (jwt string, available bool, err error) {
 	if getenv("GITHUB_ACTIONS") != "true" {
 		return "", false, nil
@@ -85,7 +88,7 @@ func requestToken(ctx context.Context) (jwt string, available bool, err error) {
 func validateRequestURL(raw string) error {
 	u, err := url.Parse(raw)
 	if err != nil {
-		return fmt.Errorf("%w: %w", ErrInvalidRequestURL, err)
+		return fmt.Errorf(errFmtWrap, ErrInvalidRequestURL, err)
 	}
 	if u.Scheme != "https" {
 		return fmt.Errorf("%w: scheme must be https, got %q", ErrInvalidRequestURL, u.Scheme)
@@ -100,14 +103,16 @@ func validateRequestURL(raw string) error {
 func fetchToken(ctx context.Context, requestURL, requestToken string) (string, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, requestURL, nil)
 	if err != nil {
-		return "", fmt.Errorf("%w: %w", ErrTokenRequest, err)
+		return "", fmt.Errorf(errFmtWrap, ErrTokenRequest, err)
 	}
 	req.Header.Set("Authorization", "bearer "+requestToken)
 	req.Header.Set("Accept", "application/json")
 
+	// requestURL is validated by validateRequestURL (https + non-empty host) before reaching here.
+	//nolint:gosec // SSRF-guarded: the request URL is validated (https scheme, non-empty host) upstream.
 	resp, err := (&http.Client{Timeout: requestTimeout}).Do(req)
 	if err != nil {
-		return "", fmt.Errorf("%w: %w", ErrTokenRequest, err)
+		return "", fmt.Errorf(errFmtWrap, ErrTokenRequest, err)
 	}
 	defer resp.Body.Close()
 
@@ -119,7 +124,7 @@ func fetchToken(ctx context.Context, requestURL, requestToken string) (string, e
 		Value string `json:"value"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
-		return "", fmt.Errorf("%w: %w", ErrTokenRequest, err)
+		return "", fmt.Errorf(errFmtWrap, ErrTokenRequest, err)
 	}
 	if out.Value == "" {
 		return "", fmt.Errorf("%w: empty token in response", ErrTokenRequest)
@@ -136,11 +141,11 @@ func decodeClaims(jwt string) (*Claims, error) {
 	}
 	payload, err := base64.RawURLEncoding.DecodeString(parts[1])
 	if err != nil {
-		return nil, fmt.Errorf("%w: %w", ErrTokenDecode, err)
+		return nil, fmt.Errorf(errFmtWrap, ErrTokenDecode, err)
 	}
 	var c Claims
 	if err := json.Unmarshal(payload, &c); err != nil {
-		return nil, fmt.Errorf("%w: %w", ErrTokenDecode, err)
+		return nil, fmt.Errorf(errFmtWrap, ErrTokenDecode, err)
 	}
 	return &c, nil
 }

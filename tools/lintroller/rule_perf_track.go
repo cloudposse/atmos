@@ -15,52 +15,53 @@ type PerfTrackRule struct{}
 
 // Packages to exclude from perf.Track() checks (avoid infinite recursion or overhead).
 var excludedPackages = []string{
-	"/logger",        // Avoid infinite recursion.
-	"/profiler",      // Profiling code shouldn't track itself.
-	"/perf",          // Performance tracking shouldn't track itself.
-	"/store",         // Store interfaces have many implementations.
-	"/ui/theme",      // UI theme constants and helpers.
-	"/ui",            // UI/TUI components and models.
-	"/tui",           // Terminal UI components.
-	"/schema",        // Schema data structures and simple getters/setters.
-	"/terminal",      // Terminal utilities and TTY detection.
-	"/atmos/errors",  // Error handling utilities to avoid overhead (root errors package only).
-	"/filetype",      // Simple file type detection utilities.
-	"/cmd/internal",  // Command registry initialization functions.
-	"/pkg/utils",     // Simple utility functions (avoid bloat per CLAUDE.md).
-	"/pkg/hcl",       // HCL parsing utilities.
-	"/downloader",    // File/git downloading infrastructure.
-	"/filesystem",    // Low-level filesystem abstraction.
-	"/telemetry",     // Telemetry code shouldn't track itself.
-	"/xdg",           // XDG directory utilities.
-	"/homedir",       // Home directory utilities.
-	"/cmd",           // Command providers and root cmd package are just CLI wiring/glue code.
-	"/tests",         // Test packages and helpers.
-	"/pkg/auth",      // Auth runs once per command, not in hot path.
-	"/pkg/config",    // Config loading runs once per command, not in hot path.
-	"/pkg/merge",     // Merge happens during config loading, not in hot path.
-	"/pkg/list",      // List commands are one-shot operations.
-	"/pkg/pager",     // Pager is UI concern, one-shot operation.
-	"/pkg/retry",     // Retry logic, not in hot path.
-	"/pkg/pro",       // Pro features, not in hot path.
-	"/pkg/hooks",     // Hooks run once per command, not in hot path.
-	"/pkg/git",       // Git operations are one-shot, not in hot path.
-	"/datafetcher",   // Data fetching is one-time operation.
-	"/filematch",     // File matching is one-time operation.
-	"/pkg/aws",       // AWS operations are one-shot, not in hot path.
-	"/pkg/convert",   // Simple conversion utilities.
-	"/spinner",       // UI spinner utilities.
-	"/vendor",        // Vendor operations are one-shot.
-	"/workflow",      // Workflow utilities are one-shot.
-	"/mock",          // Mock/test utilities.
-	"/pkg/spacelift", // Spacelift generation is one-shot per command.
-	"/pkg/validator", // Validation runs once per command.
-	"/internal/gcp",  // GCP utilities would create import cycle with pkg/perf (used by pkg/perf).
-	"/pkg/ai",        // AI operations are external API calls, not in hot path.
-	"/pkg/mcp",       // MCP protocol implementation, AI infrastructure, not in hot path.
-	"/pkg/lsp",       // LSP protocol implementation, performance-critical JSON-RPC communication.
-	"/internal/gcp",  // GCP utilities would create import cycle with pkg/perf (used by pkg/store).
-	"/pkg/keyring",   // Low-level keyring backends would create import cycle with pkg/perf (used by pkg/store).
+	"/logger",          // Avoid infinite recursion.
+	"/profiler",        // Profiling code shouldn't track itself.
+	"/perf",            // Performance tracking shouldn't track itself.
+	"/store",           // Store interfaces have many implementations.
+	"/ui/theme",        // UI theme constants and helpers.
+	"/ui",              // UI/TUI components and models.
+	"/tui",             // Terminal UI components.
+	"/schema",          // Schema data structures and simple getters/setters.
+	"/terminal",        // Terminal utilities and TTY detection.
+	"/atmos/errors",    // Error handling utilities to avoid overhead (root errors package only).
+	"/filetype",        // Simple file type detection utilities.
+	"/cmd/internal",    // Command registry initialization functions.
+	"/pkg/utils",       // Simple utility functions (avoid bloat per CLAUDE.md).
+	"/pkg/hcl",         // HCL parsing utilities.
+	"/downloader",      // File/git downloading infrastructure.
+	"/filesystem",      // Low-level filesystem abstraction.
+	"/telemetry",       // Telemetry code shouldn't track itself.
+	"/xdg",             // XDG directory utilities.
+	"/homedir",         // Home directory utilities.
+	"/cmd",             // Command providers and root cmd package are just CLI wiring/glue code.
+	"/tests",           // Test packages and helpers.
+	"/pkg/auth",        // Auth runs once per command, not in hot path.
+	"/pkg/config",      // Config loading runs once per command, not in hot path.
+	"/pkg/merge",       // Merge happens during config loading, not in hot path.
+	"/pkg/list",        // List commands are one-shot operations.
+	"/pkg/pager",       // Pager is UI concern, one-shot operation.
+	"/pkg/retry",       // Retry logic, not in hot path.
+	"/pkg/pro",         // Pro features, not in hot path.
+	"/pkg/hooks",       // Hooks run once per command, not in hot path.
+	"/pkg/git",         // Git operations are one-shot, not in hot path.
+	"/datafetcher",     // Data fetching is one-time operation.
+	"/filematch",       // File matching is one-time operation.
+	"/pkg/aws",         // AWS operations are one-shot, not in hot path.
+	"/pkg/convert",     // Simple conversion utilities.
+	"/spinner",         // UI spinner utilities.
+	"/vendor",          // Vendor operations are one-shot.
+	"/workflow",        // Workflow utilities are one-shot.
+	"/mock",            // Mock/test utilities.
+	"/pkg/spacelift",   // Spacelift generation is one-shot per command.
+	"/pkg/validator",   // Validation runs once per command.
+	"/internal/gcp",    // GCP utilities would create import cycle with pkg/perf (used by pkg/perf).
+	"/pkg/ai",          // AI operations are external API calls, not in hot path.
+	"/pkg/mcp",         // MCP protocol implementation, AI infrastructure, not in hot path.
+	"/pkg/lsp",         // LSP protocol implementation, performance-critical JSON-RPC communication.
+	"/internal/gcp",    // GCP utilities would create import cycle with pkg/perf (used by pkg/store).
+	"/pkg/keyring",     // Low-level keyring backends would create import cycle with pkg/perf (used by pkg/store).
+	"/pkg/github/oidc", // Stdlib-only OIDC leaf would create import cycle with pkg/perf (used by pkg/store).
 }
 
 // Receiver types to exclude from perf.Track() checks.

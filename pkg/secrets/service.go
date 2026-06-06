@@ -48,6 +48,58 @@ func (s *Service) Declarations() []Declaration {
 	return out
 }
 
+// GenerableVault identifies a vault whose backend supports key generation (the registry-pattern
+// keygen capability). Track is the backend track (e.g. "sops"); Name is the vault name.
+type GenerableVault struct {
+	Track string
+	Name  string
+}
+
+// VaultsMissingKeys returns the vaults referenced by this scope's declarations whose backend
+// supports key generation but has no key material yet, so callers can offer to generate one. It is
+// backend-agnostic: any provider implementing providers.KeyGenerator participates. Results are
+// de-duplicated and sorted by name.
+func (s *Service) VaultsMissingKeys() ([]GenerableVault, error) {
+	defer perf.Track(s.atmosConfig, "secrets.Service.VaultsMissingKeys")()
+
+	seen := map[string]bool{}
+	var missing []GenerableVault
+	for _, decl := range s.Declarations() {
+		d := decl
+		key := string(d.BackendType) + "\x00" + d.BackendName
+		if d.BackendName == "" || seen[key] {
+			continue
+		}
+		seen[key] = true
+		prov, err := providerFor(s.atmosConfig, &d, s.componentSection)
+		if err != nil {
+			return nil, err
+		}
+		if kg, ok := prov.(providers.KeyGenerator); ok && !kg.HasKey() {
+			missing = append(missing, GenerableVault{Track: string(d.BackendType), Name: d.BackendName})
+		}
+	}
+	sort.Slice(missing, func(i, j int) bool { return missing[i].Name < missing[j].Name })
+	return missing, nil
+}
+
+// GenerateKeyForVault generates key material for a vault referenced by this scope and returns what
+// the backend produced.
+func (s *Service) GenerateKeyForVault(v GenerableVault) (*providers.KeygenResult, error) {
+	defer perf.Track(s.atmosConfig, "secrets.Service.GenerateKeyForVault")()
+
+	decl := Declaration{BackendType: BackendType(v.Track), BackendName: v.Name}
+	prov, err := providerFor(s.atmosConfig, &decl, s.componentSection)
+	if err != nil {
+		return nil, err
+	}
+	kg, ok := prov.(providers.KeyGenerator)
+	if !ok {
+		return nil, fmt.Errorf("%w: vault %q", ErrKeygenUnsupported, v.Name)
+	}
+	return kg.GenerateKey(s.atmosConfig.BasePath)
+}
+
 // declarationFor returns the declaration for a name or an error if undeclared.
 func (s *Service) declarationFor(name string) (Declaration, error) {
 	decl, ok := LookupDeclaration(s.componentSection, name)

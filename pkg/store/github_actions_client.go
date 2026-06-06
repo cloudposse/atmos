@@ -75,9 +75,9 @@ type githubActionsAPIClient struct {
 }
 
 // newGitHubActionsAPIClient builds a go-github client using an explicit token (options.Token) or
-// the standard Atmos GitHub token resolution chain (--github-token → ATMOS_GITHUB_TOKEN →
-// GITHUB_TOKEN → `gh auth token`).
-func newGitHubActionsAPIClient(options *GitHubActionsStoreOptions) (gitHubActionsClient, error) {
+// the standard GitHub token environment variables (ATMOS_PRO_GITHUB_TOKEN, ATMOS_GITHUB_TOKEN,
+// GITHUB_TOKEN). Construction cannot fail, so it returns no error.
+func newGitHubActionsAPIClient(options *GitHubActionsStoreOptions) gitHubActionsClient {
 	token := resolveGitHubToken(options.Token)
 
 	baseClient := &http.Client{Timeout: githubAPITimeout}
@@ -96,7 +96,7 @@ func newGitHubActionsAPIClient(options *GitHubActionsStoreOptions) (gitHubAction
 		owner:       options.Owner,
 		repo:        options.Repo,
 		environment: options.Environment,
-	}, nil
+	}
 }
 
 // repoIDFor resolves the numeric repository ID required by the environment-secret endpoints.
@@ -223,8 +223,8 @@ func ghIsNotFound(resp *github.Response, err error) bool {
 
 // sealSecret encrypts plaintext for a GitHub Actions secret using the repo/environment public key.
 // GitHub requires libsodium "sealed box" (anonymous) encryption; nacl/box.SealAnonymous is the
-// pure-Go equivalent. publicKeyB64 is the base64-encoded Curve25519 public key returned by the
-// public-key endpoint; the result is the base64-encoded ciphertext expected by EncryptedValue.
+// pure-Go equivalent. The publicKeyB64 argument is the base64-encoded Curve25519 public key from
+// the public-key endpoint; the result is the base64-encoded ciphertext expected by EncryptedValue.
 func sealSecret(publicKeyB64, plaintext string) (string, error) {
 	pkBytes, err := base64.StdEncoding.DecodeString(publicKeyB64)
 	if err != nil {

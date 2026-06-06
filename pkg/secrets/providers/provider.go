@@ -53,6 +53,10 @@ var (
 	ErrSopsAgeKeyFile = errors.New("failed to load SOPS age key file (`spec.age_key_file`)")
 	// ErrSopsAgeKey indicates the inline `spec.age_key` material could not be parsed.
 	ErrSopsAgeKey = errors.New("failed to parse SOPS age key (`spec.age_key`)")
+	// ErrKeygenNotSupported indicates a provider implements the keygen capability but cannot
+	// generate for this particular vault/kind (e.g. a KMS/GPG-backed SOPS vault). Callers should
+	// surface it as a friendly "not implemented" message, not a hard failure.
+	ErrKeygenNotSupported = errors.New("key generation is not supported for this vault")
 	// ErrSecretFileNotFound indicates the referenced SOPS file does not exist.
 	ErrSecretFileNotFound = errors.New("SOPS file not found")
 	// ErrSecretNotInitialized indicates the secret key is absent from its backend.

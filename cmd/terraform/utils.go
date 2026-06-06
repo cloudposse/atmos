@@ -28,6 +28,15 @@ import (
 // errWrapFormat is the format string for wrapping errors with a cause.
 const errWrapFormat = "%w: %w"
 
+// ciHookFailedMsg is the log message emitted when a CI hook fails to execute.
+const ciHookFailedMsg = "CI hook execution failed"
+
+// logKeyComponent is the structured-log key for a component name.
+const logKeyComponent = "component"
+
+// ciHookConfigInitFailedMsg is the log message emitted when CI-hook config init fails.
+const ciHookConfigInitFailedMsg = "CI hook config init failed"
+
 // wasMultiComponentExecution records whether the most recent terraformRunWithOptions call
 // was routed to ExecuteTerraformQuery. Read in plan.go and deploy.go PostRunE to suppress
 // the global CI hook call when per-component hooks already fired inside the component walker.
@@ -77,7 +86,7 @@ var runHooksOnErrorWithOutput = func(event h.HookEvent, cmd_ *cobra.Command, arg
 		CommandError: cmdErr,
 		ExitCode:     errUtils.GetExitCode(cmdErr),
 	}); err != nil {
-		log.Warn("CI hook execution failed", "error", err)
+		log.Warn(ciHookFailedMsg, "error", err)
 	}
 }
 
@@ -165,7 +174,7 @@ func runHooksWithOutput(event h.HookEvent, cmd_ *cobra.Command, args []string, o
 		Output:      output,
 		ForceCIMode: forceCIMode,
 	}); err != nil {
-		log.Warn("CI hook execution failed", "error", err)
+		log.Warn(ciHookFailedMsg, "error", err)
 		// Don't fail the command on CI hook errors.
 	}
 
@@ -179,7 +188,7 @@ func runHooksWithOutput(event h.HookEvent, cmd_ *cobra.Command, args []string, o
 func runCIHooksForDeploy(event h.HookEvent, cmd_ *cobra.Command, _ []string, info *schema.ConfigAndStacksInfo, output string) {
 	atmosConfig, err := cfg.InitCliConfig(*info, true)
 	if err != nil {
-		log.Warn("CI hook config init failed", "error", err)
+		log.Warn(ciHookConfigInitFailedMsg, "error", err)
 		return
 	}
 
@@ -197,7 +206,7 @@ func runCIHooksForDeploy(event h.HookEvent, cmd_ *cobra.Command, _ []string, inf
 		Output:      output,
 		ForceCIMode: forceCIMode,
 	}); err != nil {
-		log.Warn("CI hook execution failed", "error", err)
+		log.Warn(ciHookFailedMsg, "error", err)
 	}
 }
 
@@ -206,7 +215,7 @@ func runCIHooksForDeploy(event h.HookEvent, cmd_ *cobra.Command, _ []string, inf
 func runCIHooksForDeployComponent(actualCmd *cobra.Command, info *schema.ConfigAndStacksInfo, rawOutput string, execErr error) {
 	atmosConfig, err := cfg.InitCliConfig(*info, true)
 	if err != nil {
-		log.Warn("CI hook config init failed", "component", info.Component, "error", err)
+		log.Warn(ciHookConfigInitFailedMsg, logKeyComponent, info.Component, "error", err)
 		return
 	}
 
@@ -224,7 +233,7 @@ func runCIHooksForDeployComponent(actualCmd *cobra.Command, info *schema.ConfigA
 		CommandError: execErr,
 		ExitCode:     errUtils.GetExitCode(execErr),
 	}); err != nil {
-		log.Warn("CI hook execution failed", "component", info.Component, "error", err)
+		log.Warn(ciHookFailedMsg, logKeyComponent, info.Component, "error", err)
 	}
 }
 
@@ -235,7 +244,7 @@ func runCIHooksForDeployComponent(actualCmd *cobra.Command, info *schema.ConfigA
 func runCIHooksForPlanComponent(actualCmd *cobra.Command, info *schema.ConfigAndStacksInfo, rawOutput string, execErr error) {
 	atmosConfig, err := cfg.InitCliConfig(*info, true)
 	if err != nil {
-		log.Warn("CI hook config init failed", "component", info.Component, "error", err)
+		log.Warn(ciHookConfigInitFailedMsg, logKeyComponent, info.Component, "error", err)
 		return
 	}
 
@@ -253,7 +262,7 @@ func runCIHooksForPlanComponent(actualCmd *cobra.Command, info *schema.ConfigAnd
 		CommandError: execErr,
 		ExitCode:     errUtils.GetExitCode(execErr),
 	}); err != nil {
-		log.Warn("CI hook execution failed", "component", info.Component, "error", err)
+		log.Warn(ciHookFailedMsg, logKeyComponent, info.Component, "error", err)
 	}
 }
 
@@ -262,7 +271,7 @@ func runCIHooksForPlanComponent(actualCmd *cobra.Command, info *schema.ConfigAnd
 func runCIHooksForApplyComponent(actualCmd *cobra.Command, info *schema.ConfigAndStacksInfo, rawOutput string, execErr error) {
 	atmosConfig, err := cfg.InitCliConfig(*info, true)
 	if err != nil {
-		log.Warn("CI hook config init failed", "component", info.Component, "error", err)
+		log.Warn(ciHookConfigInitFailedMsg, logKeyComponent, info.Component, "error", err)
 		return
 	}
 
@@ -280,7 +289,7 @@ func runCIHooksForApplyComponent(actualCmd *cobra.Command, info *schema.ConfigAn
 		CommandError: execErr,
 		ExitCode:     errUtils.GetExitCode(execErr),
 	}); err != nil {
-		log.Warn("CI hook execution failed", "component", info.Component, "error", err)
+		log.Warn(ciHookFailedMsg, logKeyComponent, info.Component, "error", err)
 	}
 }
 
