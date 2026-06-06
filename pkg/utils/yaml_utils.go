@@ -892,6 +892,16 @@ func processCustomTagsInner(atmosConfig *schema.AtmosConfiguration, node *yaml.N
 			continue
 		}
 
+		// Handle !append tag - wrap the sequence in the append metadata so the merge
+		// phase (pkg/merge) appends it to the inherited list instead of replacing it.
+		// This mirrors handleAppend in pkg/config for atmos.yaml, but for stack manifests.
+		if tag == AtmosYamlFuncAppend {
+			if err := rewriteAppendNode(atmosConfig, n, file); err != nil {
+				return err
+			}
+			continue
+		}
+
 		// Use O(1) map lookup instead of O(n) slice search for performance.
 		// This optimization reduces 75M+ linear searches to constant-time lookups.
 		if atmosYamlTagsMap[tag] {
@@ -933,6 +943,41 @@ func getValueWithTag(n *yaml.Node) string {
 	return strings.TrimSpace(tag + " " + val)
 }
 
+// rewriteAppendNode rewrites an !append-tagged sequence node in place into a mapping node
+// of the form { AppendTagMetadataKey: <sequence> }. After the node tree is decoded, that
+// wrapper is carried in the resulting map[string]any and the merge phase (pkg/merge)
+// detects it via ExtractAppendListValue and appends the list instead of replacing it.
+//
+// The !append directive is only meaningful on sequences (lists). For any other node kind
+// the tag is simply cleared so the value decodes normally (a graceful no-op rather than a
+// decode error on the unknown tag).
+func rewriteAppendNode(atmosConfig *schema.AtmosConfiguration, n *yaml.Node, file string) error {
+	if n.Kind != yaml.SequenceNode {
+		n.Tag = ""
+		return nil
+	}
+
+	// Copy the original sequence to use as the wrapped list, clearing the !append tag.
+	inner := *n
+	inner.Tag = ""
+
+	// Process any custom tags inside the list items before wrapping.
+	if err := processCustomTagsInner(atmosConfig, &inner, file); err != nil {
+		return err
+	}
+
+	keyNode := &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: AppendTagMetadataKey}
+
+	// Rewrite n in place as a single-entry mapping wrapping the sequence.
+	n.Kind = yaml.MappingNode
+	n.Tag = ""
+	n.Value = ""
+	n.Style = 0
+	n.Content = []*yaml.Node{keyNode, &inner}
+
+	return nil
+}
+
 // hasCustomTags performs a fast scan to check if a node or any of its children contain custom Atmos tags.
 // This enables early exit optimization in processCustomTags, avoiding expensive recursive processing
 // for YAML subtrees that don't use custom tags (which is the majority of YAML content).
@@ -943,7 +988,7 @@ func hasCustomTags(node *yaml.Node) bool {
 
 	// Check if this node has a custom tag.
 	tag := strings.TrimSpace(node.Tag)
-	if atmosYamlTagsMap[tag] || tag == AtmosYamlFuncInclude || tag == AtmosYamlFuncIncludeRaw {
+	if atmosYamlTagsMap[tag] || tag == AtmosYamlFuncInclude || tag == AtmosYamlFuncIncludeRaw || tag == AtmosYamlFuncAppend {
 		return true
 	}
 
