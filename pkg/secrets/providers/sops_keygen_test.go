@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -32,10 +33,13 @@ func TestAppendIdentityToKeysFile(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "AGE-SECRET-KEY-1AAA\n", string(data))
 
-	// Mode is owner-only.
+	// Mode is owner-only. Windows does not honor Unix permission bits (Go reports 0o666
+	// for any writable file), so the perm assertion only applies on Unix-like platforms.
 	info, err := os.Stat(path)
 	require.NoError(t, err)
-	assert.Equal(t, os.FileMode(0o600), info.Mode().Perm())
+	if runtime.GOOS != "windows" {
+		assert.Equal(t, os.FileMode(0o600), info.Mode().Perm())
+	}
 
 	// Appending a second identity keeps the first (multi-identity pool).
 	require.NoError(t, appendIdentityToKeysFile(path, "AGE-SECRET-KEY-1BBB"))
