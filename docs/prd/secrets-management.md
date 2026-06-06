@@ -152,15 +152,24 @@ makes declarations mandatory-by-construction for secret stores and removes any
 
 The `cloud/thing` kinds below are the shared **config-level** vocabulary used in
 stack manifests (e.g. `kind: sops/age`). The store-backed kinds (`aws/ssm`,
-`aws/asm`, `azure/keyvault`, `gcp/secretmanager`, `hashicorp/vault`) correspond to
-**store types** in the store registry (track 1); only the `sops/*` kinds are
-**secrets-native provider** kinds (track 2):
+`aws/asm`, `azure/keyvault`, `gcp/secretmanager`, `hashicorp/vault`, `onepassword`,
+`keychain`, `github/actions`) correspond to **store types** in the store registry
+(track 1); only the `sops/*` kinds are **secrets-native provider** kinds (track 2):
 
 - AWS: `aws/ssm` (Systems Manager Parameter Store), `aws/asm` (Secrets Manager)
 - Azure: `azure/keyvault`
 - GCP: `gcp/secretmanager`
 - HashiCorp: `hashicorp/vault`
+- Secret managers (treated as `secret: true` automatically — see below): `onepassword`
+  (1Password and 1Password Connect), `keychain` (OS keychain), `github/actions`
+  (GitHub Actions secrets)
 - SOPS (by encryption type): `sops/age`, `sops/aws-kms`, `sops/gcp-kms`, `sops/gpg`
+
+**Secret-by-default kinds.** Most stores are general-purpose and only become secret
+backends when you set `secret: true`. The dedicated secret managers — `onepassword`,
+`keychain`, and `github/actions` — are secret managers by nature, so a store of one of
+these kinds is treated as `secret: true` even when the config omits it
+(`secretByDefaultKinds` in `pkg/store/registry.go`).
 
 These strings live in configuration only; at runtime a provider reports its kind via
 `providers.Provider.Kind()` (for display/observability), and backend selection is
@@ -374,6 +383,9 @@ atmos secret get DATADOG_API_KEY --stack prod --component api
 # Output formats
 atmos secret get DATADOG_API_KEY --format json
 atmos secret get DATADOG_API_KEY --format env
+
+# Raw value, no trailing newline — ideal for piping (text only; conflicts with non-text --format)
+atmos secret get DATADOG_API_KEY --raw | pbcopy
 ```
 
 ### `atmos secret delete`
@@ -490,6 +502,45 @@ atmos secret validate --stack prod --component api
 # Exit codes for CI
 # 0 = all required secrets initialized
 # 1 = missing required secrets
+```
+
+### `atmos secret keygen`
+
+Generate key material **in-process** for a named secrets vault (a `secrets.providers.<name>`
+entry) whose backend supports it — currently SOPS `age`. The key is written wherever the
+provider's `age_key` points: a file, or a store such as the OS keychain (so nothing sensitive
+lands on disk). Use `--force` to generate new material when the vault already has a key.
+
+```bash
+# Generate an age key for the `dev-sops` provider
+atmos secret keygen dev-sops
+
+# Regenerate even if key material already exists
+atmos secret keygen dev-sops --force
+```
+
+### `atmos secret exec`
+
+Resolve a component's declared secrets and run **any** command with them injected as environment
+variables — a script, a local server, a one-off CLI, not just Terraform. Components that consume
+`!secret` are injected automatically, so there is no need to wrap Atmos in itself
+(`atmos secret exec -- atmos …`); `exec` is for everything else.
+
+```bash
+# Run a command with the component's secrets in its environment
+atmos secret exec --stack prod --component api -- ./scripts/migrate.sh
+```
+
+> The child process's own output is **not** masked by Atmos; masking applies to what Atmos prints.
+
+### `atmos secret shell`
+
+Resolve a component's declared secrets and launch an **interactive shell** with them set in the
+environment.
+
+```bash
+# Drop into a shell with the component's secrets loaded
+atmos secret shell --stack dev --component api
 ```
 
 ## YAML Function: `!secret`
@@ -628,8 +679,10 @@ credentials.
 These backends fit the store interface (`Set/Get(stack, component, key)`), so they are
 configured as `stores:` entries with `secret: true` and reused by the secrets layer via
 a single store-adapter. The store types AWS SSM / Azure Key Vault / GCP Secret Manager
-already exist in `pkg/store/`; **AWS Secrets Manager and HashiCorp Vault are added** as
-new store types.
+already exist in `pkg/store/`; **AWS Secrets Manager and HashiCorp Vault** were added as
+new store types, alongside the dedicated secret managers **1Password** (and 1Password
+Connect), the **OS keychain**, and **GitHub Actions secrets** — which are `secret: true`
+by default and so can omit the flag.
 
 ```yaml
 stores:
@@ -665,6 +718,22 @@ stores:
     type: google-secret-manager
     secret: true
     options: { project_id: my-project }
+
+  # 1Password — local dev (service account) or 1Password Connect for services inside a VPC.
+  # Secret-by-default: `secret: true` is implied.
+  onepassword-secrets:
+    type: onepassword
+    options: { mode: service-account, vault: Atmos }   # or mode: connect with connect_host/connect_token
+
+  # OS keychain — native keychain for local development. Secret-by-default.
+  keychain-secrets:
+    type: keychain
+    options: { service: atmos-secrets }
+
+  # GitHub Actions secrets — manage the secrets your CI already uses. Secret-by-default.
+  github-secrets:
+    type: github-actions
+    options: { owner: cloudposse, repo: atmos }        # or environment: prod for env-level secrets
 ```
 
 - Path generation reuses the store's existing namespacing: `{prefix}/{stack}/{component}/{secret_name}`.
