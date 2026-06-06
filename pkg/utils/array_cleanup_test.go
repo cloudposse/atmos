@@ -239,3 +239,29 @@ func TestRebuildArrayFromIndexedKeys(t *testing.T) {
 		})
 	}
 }
+
+func TestIsArrayOrSlice(t *testing.T) {
+	tests := []struct {
+		name string
+		val  interface{}
+		want bool
+	}{
+		{"[]interface{} is a slice", []interface{}{1, "two"}, true},
+		{"[]string is a slice", []string{"a", "b"}, true},
+		{"[]int is a slice", []int{1, 2}, true},
+		{"[]float64 is a slice", []float64{1.5}, true},
+		{"[]bool is a slice", []bool{true, false}, true},
+		{"string is not a slice", "value", false},
+		{"map is not a slice", map[string]interface{}{"k": "v"}, false},
+		{"int is not a slice", 42, false},
+		{"nil is not a slice", nil, false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := isArrayOrSlice(tt.val); got != tt.want {
+				t.Errorf("isArrayOrSlice(%v) = %v, want %v", tt.val, got, tt.want)
+			}
+		})
+	}
+}

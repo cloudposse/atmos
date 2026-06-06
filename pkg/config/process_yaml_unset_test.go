@@ -291,6 +291,56 @@ func TestDeleteNestedKey(t *testing.T) {
 	}
 }
 
+// TestDeleteNestedKeyEdgeCases covers the early-return branches of deleteNestedKey that
+// the happy-path table above does not reach: empty segments, descending through a
+// non-map value, and a missing intermediate segment.
+func TestDeleteNestedKeyEdgeCases(t *testing.T) {
+	t.Run("empty segments returns false", func(t *testing.T) {
+		assert.False(t, deleteNestedKey(map[string]any{"a": 1}, nil))
+	})
+
+	t.Run("descend through a non-map value returns false", func(t *testing.T) {
+		m := map[string]any{"scalar": "value"}
+		// "scalar.child" tries to traverse into a string, which is not a map.
+		assert.False(t, deleteNestedKey(m, []string{"scalar", "child"}))
+		_, exists := m["scalar"]
+		assert.True(t, exists, "the scalar key must be left untouched")
+	})
+
+	t.Run("missing intermediate segment returns false", func(t *testing.T) {
+		m := map[string]any{"a": map[string]any{"b": 1}}
+		assert.False(t, deleteNestedKey(m, []string{"x", "y", "z"}))
+	})
+}
+
+// TestDeleteViperKeyEdgeCases covers deleteViperKey's guard branches: an empty path, an
+// empty Viper store, and deleting a key that does not exist (which must short-circuit
+// before re-reading the config and must leave existing keys intact).
+func TestDeleteViperKeyEdgeCases(t *testing.T) {
+	t.Run("empty path is a no-op", func(t *testing.T) {
+		v := viper.New()
+		loadYAMLIntoViper(t, v, "key: value")
+		deleteViperKey(v, "")
+		assert.True(t, v.IsSet("key"), "empty path must not delete anything")
+		assert.Equal(t, "value", v.Get("key"))
+	})
+
+	t.Run("empty Viper store is a no-op", func(t *testing.T) {
+		v := viper.New()
+		// No config loaded -> AllSettings() is empty.
+		deleteViperKey(v, "anything")
+		assert.False(t, v.IsSet("anything"))
+	})
+
+	t.Run("deleting a non-existent key leaves config untouched", func(t *testing.T) {
+		v := viper.New()
+		loadYAMLIntoViper(t, v, "parent:\n  child: value")
+		deleteViperKey(v, "parent.does_not_exist")
+		assert.True(t, v.IsSet("parent.child"), "existing sibling must be preserved")
+		assert.Equal(t, "value", v.Get("parent.child"))
+	})
+}
+
 // nestedKeyExists checks if a key exists in a nested map.
 func nestedKeyExists(m map[string]any, segments []string) bool {
 	if len(segments) == 0 {
