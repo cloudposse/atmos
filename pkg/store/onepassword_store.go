@@ -92,6 +92,9 @@ type opCredentials struct {
 }
 
 // resolveOPCredentials reads credentials from options, falling back to the canonical OP_* vars.
+// Precedence for the service-account token: explicit options.token > OP_SERVICE_ACCOUNT_TOKEN.
+// To source the token from another store (e.g. the keychain) without an env var, set
+// `options.token: !store.get <store> <KEY>` — resolved lazily via the store-reference resolver.
 func resolveOPCredentials(options *OnePasswordStoreOptions) opCredentials {
 	return opCredentials{
 		connectHost:  firstNonEmpty(options.ConnectHost, opEnv("OP_CONNECT_HOST")),

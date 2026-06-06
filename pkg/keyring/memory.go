@@ -2,8 +2,6 @@ package keyring
 
 import (
 	"sync"
-
-	"github.com/cloudposse/atmos/pkg/perf"
 )
 
 // memoryKeyring is an in-memory backend for tests and ephemeral use. It does not persist.
@@ -17,8 +15,6 @@ func newMemoryKeyring() *memoryKeyring {
 }
 
 func (s *memoryKeyring) Get(key string) (string, error) {
-	defer perf.Track(nil, "keyring.memoryKeyring.Get")()
-
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -30,8 +26,6 @@ func (s *memoryKeyring) Get(key string) (string, error) {
 }
 
 func (s *memoryKeyring) Set(key string, value string) error {
-	defer perf.Track(nil, "keyring.memoryKeyring.Set")()
-
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -40,8 +34,6 @@ func (s *memoryKeyring) Set(key string, value string) error {
 }
 
 func (s *memoryKeyring) Delete(key string) error {
-	defer perf.Track(nil, "keyring.memoryKeyring.Delete")()
-
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -50,8 +42,6 @@ func (s *memoryKeyring) Delete(key string) error {
 }
 
 func (s *memoryKeyring) Has(key string) (bool, error) {
-	defer perf.Track(nil, "keyring.memoryKeyring.Has")()
-
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -60,8 +50,6 @@ func (s *memoryKeyring) Has(key string) (bool, error) {
 }
 
 func (s *memoryKeyring) List() ([]string, error) {
-	defer perf.Track(nil, "keyring.memoryKeyring.List")()
-
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -73,7 +61,5 @@ func (s *memoryKeyring) List() ([]string, error) {
 }
 
 func (s *memoryKeyring) Type() string {
-	defer perf.Track(nil, "keyring.memoryKeyring.Type")()
-
 	return TypeMemory
 }

@@ -54,6 +54,11 @@ type sopsProvider struct {
 	file          string // Go-template file path (e.g. `secrets/{{ .atmos_stack }}.enc.yaml`).
 	ageRecipients string // Optional explicit age recipients for creating a fresh file.
 	ageKeyFile    string // Optional path to the age private key (supports `~`/`$ENV`); falls back to SOPS_AGE_KEY_FILE/SOPS_AGE_KEY when empty.
+	// ageKey is inline age private-key material. Unlike ageKeyFile (a path), this is the key text
+	// itself, so it can be populated by any YAML function — `age_key: !env …` / `!exec …` / a
+	// lazily-resolved `!store.get <store> <KEY>` — keeping the key out of a plain env var. It takes
+	// precedence over ageKeyFile.
+	ageKey string
 }
 
 // newSopsProvider builds a SOPS provider. The provider definition is resolved from the
@@ -79,8 +84,16 @@ func newSopsProvider(atmosConfig *schema.AtmosConfiguration, name string, sectio
 
 	ageRecipients, _ := spec["age_recipients"].(string)
 	ageKeyFile, _ := spec["age_key_file"].(string)
+	ageKey, _ := spec["age_key"].(string)
 
-	return &sopsProvider{name: name, kind: kind, file: file, ageRecipients: ageRecipients, ageKeyFile: ageKeyFile}, nil
+	return &sopsProvider{
+		name:          name,
+		kind:          kind,
+		file:          file,
+		ageRecipients: ageRecipients,
+		ageKeyFile:    ageKeyFile,
+		ageKey:        ageKey,
+	}, nil
 }
 
 // lookupSopsProvider reads a provider definition from a stack/component `secrets.providers`
@@ -376,6 +389,16 @@ func ageKeyFileErr(path string, cause error) error {
 		Err()
 }
 
+// ageKeyErr reports inline `spec.age_key` material that could not be parsed as ErrSopsAgeKey, with
+// actionable hints. The errors.Is(result, ErrSopsAgeKey) check holds.
+func ageKeyErr(cause error) error {
+	return errUtils.Build(ErrSopsAgeKey).
+		WithCause(cause).
+		WithHint("`spec.age_key` must be age PRIVATE key material (the line starting with `AGE-SECRET-KEY-1...`).").
+		WithHint("Populate it from a source instead of inline plaintext, e.g. `age_key: !exec atmos secret get SOPS_AGE_KEY` or a `!store.get <store> <KEY>` reference.").
+		Err()
+}
+
 // decryptErr wraps a SOPS data-key/MAC decryption failure as ErrSopsDecrypt with actionable hints
 // about the age private key. The errors.Is(result, ErrSopsDecrypt) check still holds.
 func (p *sopsProvider) decryptErr(file string, cause error) error {
@@ -389,15 +412,25 @@ func (p *sopsProvider) decryptErr(file string, cause error) error {
 	return b.Err()
 }
 
-// keyClient returns the key service used to decrypt the SOPS data key. When `spec.age_key_file`
-// is set, it parses that age private key and injects it for age decrypts; otherwise it returns the
-// default local client, which resolves the key from SOPS_AGE_KEY_FILE/SOPS_AGE_KEY (unchanged,
-// backward-compatible behavior).
+// keyClient returns the key service used to decrypt the SOPS data key. The age private key is
+// sourced, in precedence order, from inline material (`spec.age_key` — populated by any YAML
+// function such as `!env`/`!exec`/a lazily-resolved `!store.get`), a key file (`spec.age_key_file`),
+// or — when neither is set — the default local client, which resolves the key from
+// SOPS_AGE_KEY_FILE/SOPS_AGE_KEY (unchanged, backward-compatible behavior). The key text is
+// injected via an identity-aware key service (no process-environment mutation).
 func (p *sopsProvider) keyClient() (keyservice.KeyServiceClient, error) {
-	if p.ageKeyFile == "" {
+	switch {
+	case p.ageKey != "":
+		return ageClientFromKeyMaterial(p.ageKey, func(e error) error { return ageKeyErr(e) })
+	case p.ageKeyFile != "":
+		return p.ageKeyFileClient()
+	default:
 		return keyservice.NewLocalClient(), nil
 	}
+}
 
+// ageKeyFileClient builds a key service from the age private key in `spec.age_key_file`.
+func (p *sopsProvider) ageKeyFileClient() (keyservice.KeyServiceClient, error) {
 	path, err := expandKeyPath(p.ageKeyFile)
 	if err != nil {
 		return nil, ageKeyFileErr(p.ageKeyFile, err)
@@ -406,9 +439,14 @@ func (p *sopsProvider) keyClient() (keyservice.KeyServiceClient, error) {
 	if err != nil {
 		return nil, ageKeyFileErr(path, err)
 	}
+	return ageClientFromKeyMaterial(string(content), func(e error) error { return ageKeyFileErr(path, e) })
+}
+
+// ageClientFromKeyMaterial parses age private-key text into an identity-injecting key service.
+func ageClientFromKeyMaterial(material string, wrapErr func(error) error) (keyservice.KeyServiceClient, error) {
 	var identities sopsage.ParsedIdentities
-	if err := identities.Import(string(content)); err != nil {
-		return nil, ageKeyFileErr(path, err)
+	if err := identities.Import(material); err != nil {
+		return nil, wrapErr(err)
 	}
 	return ageKeyServiceClient{fallback: keyservice.NewLocalClient(), identities: identities}, nil
 }

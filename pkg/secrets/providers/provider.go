@@ -51,6 +51,8 @@ var (
 	ErrSopsRecipients = errors.New("failed to resolve SOPS recipients (set `spec.age_recipients` or add a matching .sops.yaml creation rule)")
 	// ErrSopsAgeKeyFile indicates the configured `spec.age_key_file` could not be read or parsed.
 	ErrSopsAgeKeyFile = errors.New("failed to load SOPS age key file (`spec.age_key_file`)")
+	// ErrSopsAgeKey indicates the inline `spec.age_key` material could not be parsed.
+	ErrSopsAgeKey = errors.New("failed to parse SOPS age key (`spec.age_key`)")
 	// ErrSecretFileNotFound indicates the referenced SOPS file does not exist.
 	ErrSecretFileNotFound = errors.New("SOPS file not found")
 	// ErrSecretNotInitialized indicates the secret key is absent from its backend.

@@ -18,12 +18,16 @@ const (
 	KindHashicorpVault = "hashicorp/vault"
 	KindRedis          = "redis"
 	KindOnePassword    = "onepassword"
+	KindKeychain       = "keychain"
+	KindGitHubActions  = "github/actions"
 )
 
 // secretByDefaultKinds are backends that are secret managers by nature: a store of one of these
 // kinds is treated as `secret: true` even when the config omits it (see ApplySecretDefaults).
 var secretByDefaultKinds = map[string]bool{
-	KindOnePassword: true,
+	KindOnePassword:   true,
+	KindKeychain:      true,
+	KindGitHubActions: true,
 }
 
 // isSecretByDefaultKind reports whether a backend kind defaults to a secret store.
@@ -64,6 +68,10 @@ func mapLegacyType(legacyType string) string {
 		return KindRedis
 	case "1password", "onepassword":
 		return KindOnePassword
+	case "keychain", "keyring":
+		return KindKeychain
+	case "github-actions":
+		return KindGitHubActions
 	default:
 		return legacyType
 	}
@@ -111,6 +119,8 @@ var storeBuilders = map[string]storeBuilder{
 	KindHashicorpVault: buildVaultStore,
 	KindRedis:          buildRedisStore,
 	KindOnePassword:    buildOnePasswordStore,
+	KindKeychain:       buildKeychainStore,
+	KindGitHubActions:  buildGitHubActionsStore,
 }
 
 // newStore constructs a single store from its configuration, dispatching on the normalized kind.
@@ -178,6 +188,24 @@ func buildOnePasswordStore(key string, storeConfig StoreConfig) (Store, error) {
 	}
 	warnIdentityIgnored(key, storeConfig, "1Password")
 	return NewOnePasswordStore(&opts)
+}
+
+func buildKeychainStore(key string, storeConfig StoreConfig) (Store, error) {
+	var opts KeychainStoreOptions
+	if err := parseOptions(storeConfig.Options, &opts); err != nil {
+		return nil, fmt.Errorf(errParseFmt, ErrParseKeychainOptions, err)
+	}
+	warnIdentityIgnored(key, storeConfig, "Keychain")
+	return NewKeychainStore(opts)
+}
+
+func buildGitHubActionsStore(key string, storeConfig StoreConfig) (Store, error) {
+	var opts GitHubActionsStoreOptions
+	if err := parseOptions(storeConfig.Options, &opts); err != nil {
+		return nil, fmt.Errorf(errParseFmt, ErrParseGitHubActionsOptions, err)
+	}
+	warnIdentityIgnored(key, storeConfig, "GitHub Actions")
+	return NewGitHubActionsStore(opts)
 }
 
 func buildRedisStore(key string, storeConfig StoreConfig) (Store, error) {

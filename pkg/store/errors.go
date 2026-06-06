@@ -95,6 +95,28 @@ var (
 	ErrOnePasswordNotFound          = errors.New("1Password reference not found")
 	ErrParseOnePasswordOptions      = errors.New("failed to parse 1Password store options")
 
+	// GitHub Actions specific errors.
+	ErrParseGitHubActionsOptions = errors.New("failed to parse GitHub Actions store options")
+	ErrGitHubOwnerRepoRequired   = errors.New("owner and repo are required in GitHub Actions store configuration")
+	ErrGitHubInvalidSecretName   = errors.New("invalid GitHub Actions secret name")
+	ErrGitHubSecretValueCIOnly   = errors.New("GitHub Actions secret value is not readable outside a GitHub Actions runner")
+	ErrGitHubSecretNotInEnv      = errors.New("GitHub Actions secret is not present in the environment")
+	ErrGitHubSealSecret          = errors.New("failed to encrypt GitHub Actions secret")
+	ErrGitHubPublicKeySize       = errors.New("GitHub Actions public key has unexpected size")
+	ErrGitHubGetPublicKey        = errors.New("failed to get GitHub Actions public key")
+	ErrGitHubPutSecret           = errors.New("failed to write GitHub Actions secret")
+	ErrGitHubGetSecret           = errors.New("failed to get GitHub Actions secret")
+	ErrGitHubDeleteSecret        = errors.New("failed to delete GitHub Actions secret")
+	ErrGitHubResolveRepoID       = errors.New("failed to resolve GitHub repository ID")
+
+	// Keychain specific errors.
+	ErrParseKeychainOptions = errors.New("failed to parse keychain store options")
+	ErrKeychainInit         = errors.New("failed to initialize keychain store")
+	ErrKeychainWrite        = errors.New("failed to write keychain secret")
+	ErrKeychainRead         = errors.New("failed to read keychain secret")
+	ErrKeychainDelete       = errors.New("failed to delete keychain secret")
+	ErrKeychainNotFound     = errors.New("keychain secret not found")
+
 	// Identity errors.
 	ErrIdentityNotConfigured   = errors.New("store identity is configured but auth resolver is not set")
 	ErrAuthContextNotAvailable = errors.New("auth context not available for identity")

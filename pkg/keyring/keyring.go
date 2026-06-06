@@ -7,8 +7,6 @@ package keyring
 
 import (
 	"fmt"
-
-	"github.com/cloudposse/atmos/pkg/perf"
 )
 
 //go:generate go run go.uber.org/mock/mockgen@v0.6.0 -source=$GOFILE -destination=mock_keyring.go -package=keyring
@@ -66,8 +64,6 @@ type Config struct {
 // that want resilience (e.g. system->noop in containers) implement that policy themselves, so a
 // store that needs durable writes can surface a hard error instead of silently using noop.
 func New(cfg Config) (Keyring, error) {
-	defer perf.Track(nil, "keyring.New")()
-
 	switch cfg.Type {
 	case "", TypeSystem:
 		return newSystemKeyring(cfg)

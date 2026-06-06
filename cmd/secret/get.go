@@ -26,6 +26,7 @@ func init() {
 	getParser = flags.NewStandardParser(
 		flags.WithStringFlag("format", "", "text", "Output format: text, json, env"),
 		flags.WithStringFlag("path", "", "", "Extract a nested value from a structured secret (YQ path, e.g. .host)"),
+		flags.WithBoolFlag("raw", "r", false, "Print the raw value with no trailing newline (text only; ideal for piping, e.g. | pbcopy)"),
 	)
 	getParser.RegisterFlags(getCmd)
 }
@@ -40,6 +41,11 @@ func runSecretGet(cmd *cobra.Command, args []string) error {
 	name := args[0]
 	format, _ := cmd.Flags().GetString("format")
 	path, _ := cmd.Flags().GetString("path")
+	raw, _ := cmd.Flags().GetBool("raw")
+
+	if err := validateGetFlags(raw, cmd.Flags().Changed("format"), format); err != nil {
+		return err
+	}
 
 	svc, err := loadService(scope)
 	if err != nil {
@@ -51,22 +57,48 @@ func runSecretGet(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	return writeSecretValue(name, value, format)
+	return writeSecretValue(name, value, format, raw)
 }
 
-// writeSecretValue renders a single secret value in the requested format. Output goes through
-// the masked data channel; the value is revealed only when masking is disabled (--mask=false).
-func writeSecretValue(name string, value any, format string) error {
+// validateGetFlags rejects mutually exclusive flag combinations. --raw is text-only, so an
+// explicit non-text --format is a conflict (rather than silently ignored).
+func validateGetFlags(raw, formatChanged bool, format string) error {
+	if raw && formatChanged && format != "text" {
+		return ErrRawFormatConflict
+	}
+	return nil
+}
+
+// renderSecretValue formats a secret value for output. When raw is set, it returns the bare value
+// with newline=false (no trailing newline, text only) so piping it (e.g. `| pbcopy`) does not
+// capture a newline; otherwise it renders per format with newline=true.
+func renderSecretValue(name string, value any, format string, raw bool) (content string, newline bool, err error) {
+	if raw {
+		return fmt.Sprintf("%v", value), false, nil
+	}
 	switch format {
 	case "json":
-		b, err := json.Marshal(value)
-		if err != nil {
-			return err
+		b, marshalErr := json.Marshal(value)
+		if marshalErr != nil {
+			return "", false, marshalErr
 		}
-		return data.Writeln(string(b))
+		return string(b), true, nil
 	case "env":
-		return data.Writeln(fmt.Sprintf("%s=%v", name, value))
+		return fmt.Sprintf("%s=%v", name, value), true, nil
 	default:
-		return data.Writeln(fmt.Sprintf("%v", value))
+		return fmt.Sprintf("%v", value), true, nil
 	}
+}
+
+// writeSecretValue renders a single secret value and writes it to the masked data channel; the
+// value is revealed only when masking is disabled (--mask=false).
+func writeSecretValue(name string, value any, format string, raw bool) error {
+	content, newline, err := renderSecretValue(name, value, format, raw)
+	if err != nil {
+		return err
+	}
+	if newline {
+		return data.Writeln(content)
+	}
+	return data.Write(content)
 }

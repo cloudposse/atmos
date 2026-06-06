@@ -10,7 +10,6 @@ import (
 	"github.com/charmbracelet/huh"
 	"golang.org/x/term"
 
-	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/xdg"
 )
 
@@ -30,8 +29,6 @@ type fileKeyring struct {
 
 // newFileKeyring opens (creating if needed) an encrypted file keyring under cfg.FileDir.
 func newFileKeyring(cfg Config) (*fileKeyring, error) {
-	defer perf.Track(nil, "keyring.newFileKeyring")()
-
 	dir := cfg.FileDir
 	if dir == "" {
 		defaultDir, err := xdg.GetXDGDataDir("keyring", dirPermissions)
@@ -80,8 +77,6 @@ func newFileKeyring(cfg Config) (*fileKeyring, error) {
 }
 
 func (s *fileKeyring) Get(key string) (string, error) {
-	defer perf.Track(nil, "keyring.fileKeyring.Get")()
-
 	item, err := s.ring.Get(key)
 	if err != nil {
 		if errors.Is(err, keyringlib.ErrKeyNotFound) {
@@ -93,14 +88,10 @@ func (s *fileKeyring) Get(key string) (string, error) {
 }
 
 func (s *fileKeyring) Set(key string, value string) error {
-	defer perf.Track(nil, "keyring.fileKeyring.Set")()
-
 	return s.ring.Set(keyringlib.Item{Key: key, Data: []byte(value)})
 }
 
 func (s *fileKeyring) Delete(key string) error {
-	defer perf.Track(nil, "keyring.fileKeyring.Delete")()
-
 	if err := s.ring.Remove(key); err != nil {
 		// Treat "not found" as success (idempotent), covering both the library sentinel and a
 		// missing-file error from the filesystem.
@@ -113,8 +104,6 @@ func (s *fileKeyring) Delete(key string) error {
 }
 
 func (s *fileKeyring) Has(key string) (bool, error) {
-	defer perf.Track(nil, "keyring.fileKeyring.Has")()
-
 	_, err := s.Get(key)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
@@ -126,8 +115,6 @@ func (s *fileKeyring) Has(key string) (bool, error) {
 }
 
 func (s *fileKeyring) List() ([]string, error) {
-	defer perf.Track(nil, "keyring.fileKeyring.List")()
-
 	keys, err := s.ring.Keys()
 	if err != nil {
 		return nil, err
@@ -136,8 +123,6 @@ func (s *fileKeyring) List() ([]string, error) {
 }
 
 func (s *fileKeyring) Type() string {
-	defer perf.Track(nil, "keyring.fileKeyring.Type")()
-
 	return TypeFile
 }
 
