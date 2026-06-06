@@ -92,6 +92,7 @@ require (
 	github.com/mattn/go-runewidth v0.0.23
 	github.com/mikefarah/yq/v4 v4.53.2
 	github.com/mitchellh/go-wordwrap v1.0.1
+	github.com/mitchellh/mapstructure v1.5.0
 	github.com/modelcontextprotocol/go-sdk v1.6.1
 	github.com/muesli/ansi v0.0.0-20230316100256-276c6243b2f6
 	github.com/muesli/reflow v0.3.0
@@ -241,7 +242,7 @@ require (
 	github.com/fsnotify/fsnotify v1.10.1 // indirect
 	github.com/fxamacker/cbor/v2 v2.9.2 // indirect
 	github.com/go-git/gcfg v1.5.1-0.20230307220236-3a3c6141e376 // indirect
-	github.com/go-git/go-billy/v5 v5.9.0 // indirect
+	github.com/go-git/go-billy/v5 v5.9.0
 	github.com/go-ini/ini v1.67.0 // indirect
 	github.com/go-jose/go-jose/v3 v3.0.5 // indirect
 	github.com/go-jose/go-jose/v4 v4.1.4 // indirect
@@ -460,7 +461,6 @@ require (
 require (
 	github.com/bytecodealliance/wasmtime-go/v43 v43.0.2 // indirect
 	github.com/containerd/ttrpc v1.2.8 // indirect
-	github.com/mitchellh/mapstructure v1.5.0 // indirect
 	github.com/standard-webhooks/standard-webhooks/libraries v0.0.1 // indirect
 	go.opencensus.io v0.24.0 // indirect
 )

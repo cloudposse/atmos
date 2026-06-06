@@ -57,7 +57,10 @@ This ensures that the changes defined in your Terraform configuration are applie
 		}
 
 		// Parse base terraform options.
-		opts := ParseTerraformRunOptions(v)
+		opts, err := ParseTerraformRunOptions(v)
+		if err != nil {
+			return err
+		}
 
 		// Deploy-specific flags (deploy-run-init, from-plan, planfile) flow through
 		// the legacy ProcessCommandLineArgs which sets info.DeployRunInit, etc.
@@ -81,7 +84,7 @@ This ensures that the changes defined in your Terraform configuration are applie
 			shellOpts = append(shellOpts, e.WithStderrCapture(&stderrBuf))
 		}
 
-		err := terraformRunWithOptions(terraformCmd, cmd, args, opts, shellOpts...)
+		err = terraformRunWithOptions(terraformCmd, cmd, args, opts, shellOpts...)
 
 		// Strip ANSI escape codes so CI templates get clean text.
 		// Combine stdout and stderr so that error messages (which terraform
