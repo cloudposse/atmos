@@ -194,6 +194,23 @@ func TestMergeAppend_ChainedAcrossThreeInputs(t *testing.T) {
 	assert.Equal(t, map[string]any{"items": []any{"a", "b", "c", "d"}}, result)
 }
 
+// TestMergeAppend_SingleInputResolvesWrapper verifies that a lone !append (the single-input
+// fast path) resolves to a plain list rather than leaking the __atmos_append__ wrapper.
+func TestMergeAppend_SingleInputResolvesWrapper(t *testing.T) {
+	atmosConfig := schema.AtmosConfiguration{
+		Settings: schema.AtmosSettings{ListMergeStrategy: ListMergeStrategyReplace},
+	}
+
+	inputs := []map[string]any{
+		{"items": u.WrapWithAppendTag([]any{"a", "b"})},
+	}
+
+	result, err := Merge(&atmosConfig, inputs)
+	require.NoError(t, err)
+	assert.Equal(t, map[string]any{"items": []any{"a", "b"}}, result,
+		"a single-input !append must resolve to a plain list, not leak the wrapper")
+}
+
 // TestMergeAppend_BaseInputAppendTag verifies that an !append tag in the first (base)
 // input has nothing to append to and therefore resolves to a plain list, which a later
 // override then appends to.

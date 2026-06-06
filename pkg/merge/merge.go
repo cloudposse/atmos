@@ -344,8 +344,15 @@ func MergeWithOptions(
 	}
 
 	// Fast-path: only one non-empty input, return a deep copy to maintain immutability.
+	// Still resolve any !append wrappers against an empty accumulator — a lone !append
+	// has nothing to append to, so it becomes a plain list — otherwise the wrapper would
+	// leak into the result instead of being resolved.
 	if len(nonEmptyInputs) == 1 {
-		return DeepCopyMap(nonEmptyInputs[0])
+		copied, err := DeepCopyMap(nonEmptyInputs[0])
+		if err != nil {
+			return nil, fmt.Errorf("%w: failed to deep copy map: %w", errUtils.ErrMerge, err)
+		}
+		return processAppendTags(copied, map[string]any{}, appendSlice), nil
 	}
 
 	// Standard merge path for multiple non-empty inputs.
