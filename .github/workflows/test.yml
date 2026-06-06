@@ -260,6 +260,12 @@ jobs:
           fail_ci_if_error: true
           flags: unittests
           verbose: true
+          # Skip GPG signature verification of the downloaded Codecov CLI.
+          # Codecov's keyserver is intermittently unreachable, causing
+          # "gpg: Can't check signature: No public key" -> "Could not verify
+          # signature. Exiting..." which fails the job even when all tests pass.
+          # The CLI is still fetched over HTTPS from cli.codecov.io.
+          skip_validation: true
 
   docker:
     name: "[lint] Dockerfile"
