@@ -352,6 +352,12 @@ func TestRedisStore_getRedisOptions(t *testing.T) {
 		assert.Equal(t, "localhost:6379", opts.Addr)
 	})
 
+	t.Run("invalid ATMOS_REDIS_URL returns parse error", func(t *testing.T) {
+		t.Setenv("ATMOS_REDIS_URL", "not-a-valid-redis-url")
+		_, err := getRedisOptions(&RedisStoreOptions{})
+		assert.ErrorIs(t, err, storepkg.ErrParseRedisURL)
+	})
+
 	t.Run("missing url returns error", func(t *testing.T) {
 		// Ensure the env fallback is empty so the missing-URL branch is taken.
 		t.Setenv("ATMOS_REDIS_URL", "")
@@ -474,4 +480,92 @@ func TestRedisStore_GetKey(t *testing.T) {
 			mockClient.AssertExpectations(t)
 		})
 	}
+}
+
+func TestNewRedisStore_InvalidURL(t *testing.T) {
+	_, err := NewRedisStore(RedisStoreOptions{URL: ptr("not-a-valid-redis-url")})
+	assert.ErrorIs(t, err, storepkg.ErrParseRedisURL)
+}
+
+func TestRedisStore_getKey_NilDelimiter(t *testing.T) {
+	s := &RedisStore{prefix: "p"} // stackDelimiter is nil.
+	_, err := s.getKey("dev", "app", "k")
+	assert.ErrorIs(t, err, storepkg.ErrStackDelimiterNotSet)
+}
+
+func TestRedisStore_Get_Validation(t *testing.T) {
+	s := &RedisStore{stackDelimiter: ptr("/")}
+
+	tests := []struct {
+		name      string
+		stack     string
+		component string
+		key       string
+		want      error
+	}{
+		{"empty stack", "", "app", "k", storepkg.ErrEmptyStack},
+		{"empty component", "dev", "", "k", storepkg.ErrEmptyComponent},
+		{"empty key", "dev", "app", "", storepkg.ErrEmptyKey},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := s.Get(tt.stack, tt.component, tt.key)
+			assert.ErrorIs(t, err, tt.want)
+		})
+	}
+
+	t.Run("getKey error on nil delimiter", func(t *testing.T) {
+		nilDelim := &RedisStore{} // nil delimiter.
+		_, err := nilDelim.Get("dev", "app", "k")
+		assert.ErrorIs(t, err, storepkg.ErrGetKey)
+	})
+}
+
+func TestRedisStore_Set_Validation(t *testing.T) {
+	s := &RedisStore{stackDelimiter: ptr("/")}
+
+	tests := []struct {
+		name      string
+		stack     string
+		component string
+		key       string
+		value     interface{}
+		want      error
+	}{
+		{"empty stack", "", "app", "k", "v", storepkg.ErrEmptyStack},
+		{"empty component", "dev", "", "k", "v", storepkg.ErrEmptyComponent},
+		{"empty key", "dev", "app", "", "v", storepkg.ErrEmptyKey},
+		{"nil value", "dev", "app", "k", nil, storepkg.ErrNilValue},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.ErrorIs(t, s.Set(tt.stack, tt.component, tt.key, tt.value), tt.want)
+		})
+	}
+
+	t.Run("getKey error on nil delimiter", func(t *testing.T) {
+		nilDelim := &RedisStore{} // nil delimiter.
+		assert.ErrorIs(t, nilDelim.Set("dev", "app", "k", "v"), storepkg.ErrGetKey)
+	})
+}
+
+func TestRedisStore_Set_ClientError(t *testing.T) {
+	mockClient := new(MockRedisClient)
+	s := &RedisStore{prefix: "p", redisClient: mockClient, stackDelimiter: ptr("/")}
+
+	mockClient.On("Set", context.Background(), "p/dev/app/k", mock.Anything, time.Duration(0)).
+		Return("", fmt.Errorf("set boom"))
+
+	err := s.Set("dev", "app", "k", "v")
+	assert.Error(t, err)
+	mockClient.AssertExpectations(t)
+}
+
+func TestBuildRedisStore_ParseError(t *testing.T) {
+	_, err := buildRedisStore("n", storepkg.StoreConfig{
+		Options: map[string]interface{}{"prefix": []string{"x"}},
+	})
+	assert.ErrorIs(t, err, storepkg.ErrParseRedisOptions)
 }

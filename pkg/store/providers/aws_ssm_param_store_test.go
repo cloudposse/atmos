@@ -985,3 +985,96 @@ func TestSSMStore_GetKey(t *testing.T) {
 		})
 	}
 }
+
+func TestNewSSMStore_EmptyRegion(t *testing.T) {
+	_, err := NewSSMStore(SSMStoreOptions{}, "")
+	assert.ErrorIs(t, err, storepkg.ErrRegionRequired)
+}
+
+func TestNewSSMStore_WithRolesAndDelimiter(t *testing.T) {
+	// Empty identity triggers eager initDefaultClient; AWS config loading
+	// typically succeeds without real credentials. Both paths are acceptable.
+	store, err := NewSSMStore(SSMStoreOptions{
+		Region:         "us-east-1",
+		StackDelimiter: stringPtr("|"),
+		ReadRoleArn:    stringPtr("arn:aws:iam::123456789012:role/read"),
+		WriteRoleArn:   stringPtr("arn:aws:iam::123456789012:role/write"),
+	}, "")
+	if err != nil {
+		return // initDefaultClient error path is covered elsewhere.
+	}
+
+	ssmStore := store.(*SSMStore)
+	assert.Equal(t, "|", *ssmStore.stackDelimiter)
+	assert.Equal(t, "arn:aws:iam::123456789012:role/read", *ssmStore.readRoleArn)
+	assert.Equal(t, "arn:aws:iam::123456789012:role/write", *ssmStore.writeRoleArn)
+}
+
+func TestSSMStore_assumeRole_Error(t *testing.T) {
+	mockSTS := new(MockSTSClient)
+	mockSTS.On("AssumeRole", mock.Anything, mock.Anything).Return(nil, errors.New("assume boom"))
+
+	stackDelimiter := "/"
+	store := &SSMStore{
+		client:         new(MockSSMClient),
+		stackDelimiter: &stackDelimiter,
+		awsConfig:      &aws.Config{Region: "us-west-2"},
+		writeRoleArn:   aws.String("arn:aws:iam::123456789012:role/test"),
+		newSTSClient:   func(_ aws.Config) STSClient { return mockSTS },
+		newSSMClient:   func(_ aws.Config) SSMClient { return new(MockSSMClient) },
+	}
+
+	err := store.Set("dev", "app", "k", "v")
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to assume")
+	mockSTS.AssertExpectations(t)
+}
+
+func TestSSMStore_Set_MoreErrors(t *testing.T) {
+	newStore := func() *SSMStore {
+		delimiter := "/"
+		return &SSMStore{
+			client:         new(MockSSMClient),
+			stackDelimiter: &delimiter,
+			awsConfig:      &aws.Config{Region: "us-west-2"},
+		}
+	}
+
+	t.Run("nil value", func(t *testing.T) {
+		assert.ErrorIs(t, newStore().Set("dev", "app", "k", nil), storepkg.ErrNilValue)
+	})
+
+	t.Run("marshal error", func(t *testing.T) {
+		assert.ErrorIs(t, newStore().Set("dev", "app", "k", make(chan int)), storepkg.ErrSerializeJSON)
+	})
+}
+
+func TestSSMStore_GetKey_PrefixAddsLeadingSlash(t *testing.T) {
+	delimiter := "/"
+	mockSSM := new(MockSSMClient)
+	// Prefix without a leading slash exercises the "/"-prepend branch.
+	mockSSM.On("GetParameter", mock.Anything, mock.MatchedBy(func(in *ssm.GetParameterInput) bool {
+		return *in.Name == "/myprefix/k"
+	})).Return(&ssm.GetParameterOutput{
+		Parameter: &types.Parameter{Value: aws.String(`"val"`)},
+	}, nil)
+
+	store := &SSMStore{
+		client:         mockSSM,
+		prefix:         "myprefix",
+		stackDelimiter: &delimiter,
+		awsConfig:      &aws.Config{Region: "us-west-2"},
+	}
+
+	v, err := store.GetKey("k")
+	assert.NoError(t, err)
+	assert.Equal(t, "val", v)
+	mockSSM.AssertExpectations(t)
+}
+
+func TestBuildSSMStore_ParseError(t *testing.T) {
+	_, err := buildSSMStore("n", storepkg.StoreConfig{
+		Options: map[string]interface{}{"region": []string{"x"}},
+	})
+	assert.ErrorIs(t, err, storepkg.ErrParseSSMOptions)
+}

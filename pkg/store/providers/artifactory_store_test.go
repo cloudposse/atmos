@@ -14,6 +14,7 @@ import (
 	al "github.com/jfrog/jfrog-client-go/utils/log"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
 )
 
 // Define log levels for testing using atmos logger constants.
@@ -26,6 +27,10 @@ var (
 
 type MockArtifactoryClient struct {
 	mock.Mock
+	// downloadData, when non-nil, overrides the bytes written for a successful
+	// download (default is `{"test":"value"}`). Used to exercise GetKey's
+	// empty-data and non-JSON fallback branches.
+	downloadData *[]byte
 }
 
 func (m *MockArtifactoryClient) DownloadFiles(params ...services.DownloadParams) (int, int, error) {
@@ -57,6 +62,9 @@ func (m *MockArtifactoryClient) DownloadFiles(params ...services.DownloadParams)
 	}
 
 	data := []byte(`{"test":"value"}`)
+	if m.downloadData != nil {
+		data = *m.downloadData
+	}
 	fullPath := filepath.Join(targetDir, filename)
 	if err := os.WriteFile(fullPath, data, 0o600); err != nil {
 		return 0, 0, err
@@ -490,4 +498,176 @@ func TestArtifactoryStore_LoggingConfiguration(t *testing.T) {
 				tt.atmosLogLevel, noopLoggerCreated, tt.expectNoopLogger)
 		})
 	}
+}
+
+func TestGetAccessKey(t *testing.T) {
+	t.Run("explicit access token", func(t *testing.T) {
+		tok, err := getAccessKey(&ArtifactoryStoreOptions{AccessToken: aws.String("explicit")})
+		assert.NoError(t, err)
+		assert.Equal(t, "explicit", tok)
+	})
+
+	t.Run("ARTIFACTORY_ACCESS_TOKEN env", func(t *testing.T) {
+		t.Setenv("JFROG_ACCESS_TOKEN", "")
+		t.Setenv("ARTIFACTORY_ACCESS_TOKEN", "art-env")
+		tok, err := getAccessKey(&ArtifactoryStoreOptions{})
+		assert.NoError(t, err)
+		assert.Equal(t, "art-env", tok)
+	})
+
+	t.Run("JFROG_ACCESS_TOKEN env", func(t *testing.T) {
+		t.Setenv("ARTIFACTORY_ACCESS_TOKEN", "")
+		t.Setenv("JFROG_ACCESS_TOKEN", "jfrog-env")
+		tok, err := getAccessKey(&ArtifactoryStoreOptions{})
+		assert.NoError(t, err)
+		assert.Equal(t, "jfrog-env", tok)
+	})
+
+	t.Run("missing token", func(t *testing.T) {
+		t.Setenv("ARTIFACTORY_ACCESS_TOKEN", "")
+		t.Setenv("JFROG_ACCESS_TOKEN", "")
+		_, err := getAccessKey(&ArtifactoryStoreOptions{})
+		assert.ErrorIs(t, err, storepkg.ErrMissingArtifactoryToken)
+	})
+}
+
+func TestArtifactoryStore_getKey_NilDelimiter(t *testing.T) {
+	store := &ArtifactoryStore{prefix: "p", repoName: "r"} // stackDelimiter is nil.
+	_, err := store.getKey("dev", "app", "k")
+	assert.ErrorIs(t, err, storepkg.ErrStackDelimiterNotSet)
+}
+
+func TestArtifactoryStore_Get_Validation(t *testing.T) {
+	delimiter := "/"
+	store := &ArtifactoryStore{prefix: "p", repoName: "r", stackDelimiter: &delimiter}
+
+	tests := []struct {
+		name      string
+		stack     string
+		component string
+		key       string
+		want      error
+	}{
+		{"empty stack", "", "app", "k", storepkg.ErrEmptyStack},
+		{"empty component", "dev", "", "k", storepkg.ErrEmptyComponent},
+		{"empty key", "dev", "app", "", storepkg.ErrEmptyKey},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := store.Get(tt.stack, tt.component, tt.key)
+			assert.ErrorIs(t, err, tt.want)
+		})
+	}
+}
+
+func TestArtifactoryStore_processDownloadedFile(t *testing.T) {
+	store := &ArtifactoryStore{}
+
+	t.Run("read error on missing file", func(t *testing.T) {
+		_, err := store.processDownloadedFile(t.TempDir(), "nonexistent.json")
+		assert.ErrorIs(t, err, storepkg.ErrReadFile)
+	})
+
+	t.Run("unmarshal error on non-JSON", func(t *testing.T) {
+		dir := t.TempDir()
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "bad.json"), []byte("not json"), 0o600))
+		_, err := store.processDownloadedFile(dir, "bad.json")
+		assert.ErrorIs(t, err, storepkg.ErrUnmarshalFile)
+	})
+
+	t.Run("valid JSON", func(t *testing.T) {
+		dir := t.TempDir()
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "ok.json"), []byte(`{"a":1}`), 0o600))
+		result, err := store.processDownloadedFile(dir, "ok.json")
+		assert.NoError(t, err)
+		assert.Equal(t, map[string]interface{}{"a": float64(1)}, result)
+	})
+}
+
+func TestArtifactoryStore_Set_Errors(t *testing.T) {
+	delimiter := "/"
+	newStore := func() (*ArtifactoryStore, *MockArtifactoryClient) {
+		mc := new(MockArtifactoryClient)
+		return &ArtifactoryStore{prefix: "p", repoName: "r", rtManager: mc, stackDelimiter: &delimiter}, mc
+	}
+
+	t.Run("empty stack", func(t *testing.T) {
+		s, _ := newStore()
+		assert.ErrorIs(t, s.Set("", "app", "k", "v"), storepkg.ErrEmptyStack)
+	})
+
+	t.Run("empty component", func(t *testing.T) {
+		s, _ := newStore()
+		assert.ErrorIs(t, s.Set("dev", "", "k", "v"), storepkg.ErrEmptyComponent)
+	})
+
+	t.Run("empty key", func(t *testing.T) {
+		s, _ := newStore()
+		assert.ErrorIs(t, s.Set("dev", "app", "", "v"), storepkg.ErrEmptyKey)
+	})
+
+	t.Run("nil value", func(t *testing.T) {
+		s, _ := newStore()
+		assert.ErrorIs(t, s.Set("dev", "app", "k", nil), storepkg.ErrNilValue)
+	})
+
+	t.Run("getKey error on nil delimiter", func(t *testing.T) {
+		mc := new(MockArtifactoryClient)
+		s := &ArtifactoryStore{prefix: "p", repoName: "r", rtManager: mc} // nil delimiter.
+		assert.ErrorIs(t, s.Set("dev", "app", "k", "v"), storepkg.ErrGetKey)
+	})
+
+	t.Run("marshal error", func(t *testing.T) {
+		s, _ := newStore()
+		// A channel cannot be marshaled to JSON.
+		assert.ErrorIs(t, s.Set("dev", "app", "k", make(chan int)), storepkg.ErrMarshalValue)
+	})
+
+	t.Run("upload error", func(t *testing.T) {
+		s, mc := newStore()
+		// A non-[]byte value exercises the json.Marshal branch before upload.
+		mc.On("UploadFiles", mock.Anything, mock.Anything).Return(0, 1, fmt.Errorf("upload boom"))
+		err := s.Set("dev", "app", "k", "string-value")
+		assert.ErrorIs(t, err, storepkg.ErrUploadFile)
+		mc.AssertExpectations(t)
+	})
+}
+
+func TestArtifactoryStore_GetKey_DataVariants(t *testing.T) {
+	delimiter := "/"
+
+	t.Run("empty data returns empty string", func(t *testing.T) {
+		mc := new(MockArtifactoryClient)
+		empty := []byte{}
+		mc.downloadData = &empty
+		s := &ArtifactoryStore{prefix: "prefix", repoName: "repo", rtManager: mc, stackDelimiter: &delimiter}
+		mc.On("DownloadFiles", mock.Anything).Return(1, 0, nil)
+
+		v, err := s.GetKey("config")
+		assert.NoError(t, err)
+		assert.Equal(t, "", v)
+		mc.AssertExpectations(t)
+	})
+
+	t.Run("non-JSON data returns string", func(t *testing.T) {
+		mc := new(MockArtifactoryClient)
+		raw := []byte("plain text")
+		mc.downloadData = &raw
+		s := &ArtifactoryStore{prefix: "prefix", repoName: "repo", rtManager: mc, stackDelimiter: &delimiter}
+		mc.On("DownloadFiles", mock.Anything).Return(1, 0, nil)
+
+		v, err := s.GetKey("config")
+		assert.NoError(t, err)
+		assert.Equal(t, "plain text", v)
+		mc.AssertExpectations(t)
+	})
+}
+
+func TestBuildArtifactoryStore_ParseError(t *testing.T) {
+	// A slice cannot decode into the *string Prefix field.
+	_, err := buildArtifactoryStore("n", storepkg.StoreConfig{
+		Options: map[string]interface{}{"prefix": []string{"x"}},
+	})
+	assert.ErrorIs(t, err, storepkg.ErrParseArtifactoryOptions)
 }

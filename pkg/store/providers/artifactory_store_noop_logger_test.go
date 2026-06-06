@@ -73,6 +73,11 @@ func TestNoopLoggerMethods(t *testing.T) {
 		logger.Output("test output message")
 		// No way to verify, but we've executed the method for coverage
 	})
+
+	t.Run("Verbose", func(t *testing.T) {
+		logger.Verbose("test verbose message")
+		// No way to verify, but we've executed the method for coverage
+	})
 }
 
 func TestCreateNoopLogger(t *testing.T) {

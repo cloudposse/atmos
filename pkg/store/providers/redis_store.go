@@ -45,8 +45,14 @@ func getRedisOptions(options *RedisStoreOptions) (*redis.Options, error) {
 		return opts, nil
 	}
 
-	if os.Getenv("ATMOS_REDIS_URL") != "" {
-		return redis.ParseURL(os.Getenv("ATMOS_REDIS_URL"))
+	//nolint:forbidigo // ATMOS_REDIS_URL is a pre-existing documented env var read at store-build time, not a new one.
+	if envURL := os.Getenv("ATMOS_REDIS_URL"); envURL != "" {
+		opts, err := redis.ParseURL(envURL)
+		if err != nil {
+			return &redis.Options{}, fmt.Errorf(errFormat, store.ErrParseRedisURL, err)
+		}
+
+		return opts, nil
 	}
 
 	return &redis.Options{}, store.ErrMissingRedisURL

@@ -28,6 +28,16 @@ import (
 // errWrapFormat is the format string for wrapping errors with a cause.
 const errWrapFormat = "%w: %w"
 
+// CI hook log keys, flag names, and warning messages, extracted as constants
+// because they recur across the hook-execution helpers below.
+const (
+	logKeyComponent           = "component"
+	logKeyError               = "error"
+	flagCI                    = "ci"
+	msgCIHookExecutionFailed  = "CI hook execution failed"
+	msgCIHookConfigInitFailed = "CI hook config init failed"
+)
+
 // wasMultiComponentExecution records whether the most recent terraformRunWithOptions call
 // was routed to ExecuteTerraformQuery. Read in plan.go and deploy.go PostRunE to suppress
 // the global CI hook call when per-component hooks already fired inside the component walker.
@@ -60,9 +70,9 @@ var runHooksOnErrorWithOutput = func(event h.HookEvent, cmd_ *cobra.Command, arg
 		return
 	}
 
-	forceCIMode, _ := cmd_.Flags().GetBool("ci")
+	forceCIMode, _ := cmd_.Flags().GetBool(flagCI)
 	if !forceCIMode {
-		forceCIMode = viper.GetBool("ci")
+		forceCIMode = viper.GetBool(flagCI)
 	}
 
 	// Extract the exit code from the command error. errUtils.GetExitCode unwraps
@@ -77,7 +87,7 @@ var runHooksOnErrorWithOutput = func(event h.HookEvent, cmd_ *cobra.Command, arg
 		CommandError: cmdErr,
 		ExitCode:     errUtils.GetExitCode(cmdErr),
 	}); err != nil {
-		log.Warn("CI hook execution failed", "error", err)
+		log.Warn(msgCIHookExecutionFailed, logKeyError, err)
 	}
 }
 
@@ -140,10 +150,10 @@ func runHooksWithOutput(event h.HookEvent, cmd_ *cobra.Command, args []string, o
 	// Read directly from Cobra flag (not Viper) because pflags are only bound
 	// to Viper in RunE via BindFlagsToViper. During PreRunE, Viper doesn't
 	// yet see the Cobra flag value — only env vars and defaults.
-	forceCIMode, _ := cmd_.Flags().GetBool("ci")
+	forceCIMode, _ := cmd_.Flags().GetBool(flagCI)
 	if !forceCIMode {
 		// Fall back to Viper for env var support (ATMOS_CI, CI).
-		forceCIMode = viper.GetBool("ci")
+		forceCIMode = viper.GetBool(flagCI)
 	}
 
 	// Read --verify-plan flag early (same pattern as --ci above).
@@ -165,7 +175,7 @@ func runHooksWithOutput(event h.HookEvent, cmd_ *cobra.Command, args []string, o
 		Output:      output,
 		ForceCIMode: forceCIMode,
 	}); err != nil {
-		log.Warn("CI hook execution failed", "error", err)
+		log.Warn(msgCIHookExecutionFailed, logKeyError, err)
 		// Don't fail the command on CI hook errors.
 	}
 
@@ -179,13 +189,13 @@ func runHooksWithOutput(event h.HookEvent, cmd_ *cobra.Command, args []string, o
 func runCIHooksForDeploy(event h.HookEvent, cmd_ *cobra.Command, _ []string, info *schema.ConfigAndStacksInfo, output string) {
 	atmosConfig, err := cfg.InitCliConfig(*info, true)
 	if err != nil {
-		log.Warn("CI hook config init failed", "error", err)
+		log.Warn(msgCIHookConfigInitFailed, logKeyError, err)
 		return
 	}
 
-	forceCIMode, _ := cmd_.Flags().GetBool("ci")
+	forceCIMode, _ := cmd_.Flags().GetBool(flagCI)
 	if !forceCIMode {
-		forceCIMode = viper.GetBool("ci")
+		forceCIMode = viper.GetBool(flagCI)
 	}
 
 	// Before-event hook (e.g., before.terraform.deploy): no command has run yet,
@@ -197,7 +207,7 @@ func runCIHooksForDeploy(event h.HookEvent, cmd_ *cobra.Command, _ []string, inf
 		Output:      output,
 		ForceCIMode: forceCIMode,
 	}); err != nil {
-		log.Warn("CI hook execution failed", "error", err)
+		log.Warn(msgCIHookExecutionFailed, logKeyError, err)
 	}
 }
 
@@ -206,13 +216,13 @@ func runCIHooksForDeploy(event h.HookEvent, cmd_ *cobra.Command, _ []string, inf
 func runCIHooksForDeployComponent(actualCmd *cobra.Command, info *schema.ConfigAndStacksInfo, rawOutput string, execErr error) {
 	atmosConfig, err := cfg.InitCliConfig(*info, true)
 	if err != nil {
-		log.Warn("CI hook config init failed", "component", info.Component, "error", err)
+		log.Warn(msgCIHookConfigInitFailed, logKeyComponent, info.Component, logKeyError, err)
 		return
 	}
 
-	forceCIMode, _ := actualCmd.Flags().GetBool("ci")
+	forceCIMode, _ := actualCmd.Flags().GetBool(flagCI)
 	if !forceCIMode {
-		forceCIMode = viper.GetBool("ci")
+		forceCIMode = viper.GetBool(flagCI)
 	}
 
 	if err := h.RunCIHooks(&h.RunCIHooksOptions{
@@ -224,7 +234,7 @@ func runCIHooksForDeployComponent(actualCmd *cobra.Command, info *schema.ConfigA
 		CommandError: execErr,
 		ExitCode:     errUtils.GetExitCode(execErr),
 	}); err != nil {
-		log.Warn("CI hook execution failed", "component", info.Component, "error", err)
+		log.Warn(msgCIHookExecutionFailed, logKeyComponent, info.Component, logKeyError, err)
 	}
 }
 
@@ -235,13 +245,13 @@ func runCIHooksForDeployComponent(actualCmd *cobra.Command, info *schema.ConfigA
 func runCIHooksForPlanComponent(actualCmd *cobra.Command, info *schema.ConfigAndStacksInfo, rawOutput string, execErr error) {
 	atmosConfig, err := cfg.InitCliConfig(*info, true)
 	if err != nil {
-		log.Warn("CI hook config init failed", "component", info.Component, "error", err)
+		log.Warn(msgCIHookConfigInitFailed, logKeyComponent, info.Component, logKeyError, err)
 		return
 	}
 
-	forceCIMode, _ := actualCmd.Flags().GetBool("ci")
+	forceCIMode, _ := actualCmd.Flags().GetBool(flagCI)
 	if !forceCIMode {
-		forceCIMode = viper.GetBool("ci")
+		forceCIMode = viper.GetBool(flagCI)
 	}
 
 	if err := h.RunCIHooks(&h.RunCIHooksOptions{
@@ -253,7 +263,7 @@ func runCIHooksForPlanComponent(actualCmd *cobra.Command, info *schema.ConfigAnd
 		CommandError: execErr,
 		ExitCode:     errUtils.GetExitCode(execErr),
 	}); err != nil {
-		log.Warn("CI hook execution failed", "component", info.Component, "error", err)
+		log.Warn(msgCIHookExecutionFailed, logKeyComponent, info.Component, logKeyError, err)
 	}
 }
 
@@ -262,13 +272,13 @@ func runCIHooksForPlanComponent(actualCmd *cobra.Command, info *schema.ConfigAnd
 func runCIHooksForApplyComponent(actualCmd *cobra.Command, info *schema.ConfigAndStacksInfo, rawOutput string, execErr error) {
 	atmosConfig, err := cfg.InitCliConfig(*info, true)
 	if err != nil {
-		log.Warn("CI hook config init failed", "component", info.Component, "error", err)
+		log.Warn(msgCIHookConfigInitFailed, logKeyComponent, info.Component, logKeyError, err)
 		return
 	}
 
-	forceCIMode, _ := actualCmd.Flags().GetBool("ci")
+	forceCIMode, _ := actualCmd.Flags().GetBool(flagCI)
 	if !forceCIMode {
-		forceCIMode = viper.GetBool("ci")
+		forceCIMode = viper.GetBool(flagCI)
 	}
 
 	if err := h.RunCIHooks(&h.RunCIHooksOptions{
@@ -280,7 +290,7 @@ func runCIHooksForApplyComponent(actualCmd *cobra.Command, info *schema.ConfigAn
 		CommandError: execErr,
 		ExitCode:     errUtils.GetExitCode(execErr),
 	}); err != nil {
-		log.Warn("CI hook execution failed", "component", info.Component, "error", err)
+		log.Warn(msgCIHookExecutionFailed, logKeyComponent, info.Component, logKeyError, err)
 	}
 }
 
@@ -682,7 +692,7 @@ func handleInteractiveComponentStackSelection(info *schema.ConfigAndStacksInfo, 
 	// If stack is already provided (via --stack flag), filter components to that stack.
 	if info.ComponentFromArg == "" {
 		component, err := promptForComponent(cmd, info.Stack)
-		if err = handlePromptError(err, "component"); err != nil {
+		if err = handlePromptError(err, logKeyComponent); err != nil {
 			return err
 		}
 		info.ComponentFromArg = component
@@ -756,7 +766,7 @@ func addIdentityCompletion(cmd *cobra.Command) {
 	}
 	if flag != nil {
 		if err := cmd.RegisterFlagCompletionFunc("identity", identityFlagCompletion); err != nil {
-			log.Trace("Failed to register identity flag completion", "error", err)
+			log.Trace("Failed to register identity flag completion", logKeyError, err)
 		}
 	}
 }

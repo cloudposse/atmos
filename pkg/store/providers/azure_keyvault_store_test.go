@@ -2,6 +2,7 @@ package providers
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
@@ -390,4 +391,111 @@ func TestAzureKeyVaultStore_GetKey(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestNewAzureKeyVaultStore_EmptyVaultURL(t *testing.T) {
+	_, err := NewAzureKeyVaultStore(AzureKeyVaultStoreOptions{}, "")
+	assert.ErrorIs(t, err, storepkg.ErrVaultURLRequired)
+}
+
+func TestAzureKeyVaultStore_getKey_NilDelimiter(t *testing.T) {
+	s := &AzureKeyVaultStore{vaultURL: "https://test.vault.azure.net"} // nil delimiter.
+	_, err := s.getKey("dev", "app", "k")
+	assert.ErrorIs(t, err, storepkg.ErrStackDelimiterNotSet)
+}
+
+func TestAzureKeyVaultStore_Set_MoreErrors(t *testing.T) {
+	t.Run("nil value", func(t *testing.T) {
+		s := &AzureKeyVaultStore{client: &mockClient{}, vaultURL: "https://v", stackDelimiter: stringPtr("-")}
+		assert.ErrorIs(t, s.Set("dev", "app", "k", nil), storepkg.ErrNilValue)
+	})
+
+	t.Run("marshal error", func(t *testing.T) {
+		s := &AzureKeyVaultStore{client: &mockClient{}, vaultURL: "https://v", stackDelimiter: stringPtr("-")}
+		assert.ErrorIs(t, s.Set("dev", "app", "k", make(chan int)), storepkg.ErrSerializeJSON)
+	})
+
+	t.Run("getKey error on nil delimiter", func(t *testing.T) {
+		s := &AzureKeyVaultStore{client: &mockClient{}, vaultURL: "https://v"} // nil delimiter.
+		assert.ErrorIs(t, s.Set("dev", "app", "k", "v"), storepkg.ErrGetKey)
+	})
+
+	t.Run("generic set error", func(t *testing.T) {
+		client := &mockClient{
+			setSecretFunc: func(_ context.Context, _ string, _ azsecrets.SetSecretParameters, _ *azsecrets.SetSecretOptions) (azsecrets.SetSecretResponse, error) {
+				return azsecrets.SetSecretResponse{}, errors.New("set boom")
+			},
+		}
+		s := &AzureKeyVaultStore{client: client, vaultURL: "https://v", stackDelimiter: stringPtr("-")}
+		assert.ErrorIs(t, s.Set("dev", "app", "k", "v"), storepkg.ErrSetParameter)
+	})
+}
+
+func TestAzureKeyVaultStore_Get_MoreCases(t *testing.T) {
+	t.Run("getKey error on nil delimiter", func(t *testing.T) {
+		s := &AzureKeyVaultStore{client: &mockClient{}, vaultURL: "https://v"} // nil delimiter.
+		_, err := s.Get("dev", "app", "k")
+		assert.ErrorIs(t, err, storepkg.ErrGetKey)
+	})
+
+	t.Run("generic access error", func(t *testing.T) {
+		client := &mockClient{
+			getSecretFunc: func(_ context.Context, _ string, _ string, _ *azsecrets.GetSecretOptions) (azsecrets.GetSecretResponse, error) {
+				return azsecrets.GetSecretResponse{}, errors.New("get boom")
+			},
+		}
+		s := &AzureKeyVaultStore{client: client, vaultURL: "https://v", stackDelimiter: stringPtr("-")}
+		_, err := s.Get("dev", "app", "k")
+		assert.ErrorIs(t, err, storepkg.ErrAccessSecret)
+	})
+
+	t.Run("nil value returns empty string", func(t *testing.T) {
+		client := &mockClient{
+			getSecretFunc: func(_ context.Context, _ string, _ string, _ *azsecrets.GetSecretOptions) (azsecrets.GetSecretResponse, error) {
+				return azsecrets.GetSecretResponse{}, nil // Value is nil.
+			},
+		}
+		s := &AzureKeyVaultStore{client: client, vaultURL: "https://v", stackDelimiter: stringPtr("-")}
+		v, err := s.Get("dev", "app", "k")
+		assert.NoError(t, err)
+		assert.Equal(t, "", v)
+	})
+}
+
+func TestAzureKeyVaultStore_GetKey_MoreCases(t *testing.T) {
+	t.Run("empty key", func(t *testing.T) {
+		s := &AzureKeyVaultStore{client: &mockClient{}, vaultURL: "https://v", stackDelimiter: stringPtr("-")}
+		_, err := s.GetKey("")
+		assert.ErrorIs(t, err, storepkg.ErrEmptyKey)
+	})
+
+	t.Run("generic access error", func(t *testing.T) {
+		client := &mockClient{
+			getSecretFunc: func(_ context.Context, _ string, _ string, _ *azsecrets.GetSecretOptions) (azsecrets.GetSecretResponse, error) {
+				return azsecrets.GetSecretResponse{}, errors.New("get boom")
+			},
+		}
+		s := &AzureKeyVaultStore{client: client, vaultURL: "https://v", stackDelimiter: stringPtr("-")}
+		_, err := s.GetKey("k")
+		assert.ErrorIs(t, err, storepkg.ErrAccessSecret)
+	})
+
+	t.Run("nil value returns empty string", func(t *testing.T) {
+		client := &mockClient{
+			getSecretFunc: func(_ context.Context, _ string, _ string, _ *azsecrets.GetSecretOptions) (azsecrets.GetSecretResponse, error) {
+				return azsecrets.GetSecretResponse{}, nil // Value is nil.
+			},
+		}
+		s := &AzureKeyVaultStore{client: client, vaultURL: "https://v", stackDelimiter: stringPtr("-")}
+		v, err := s.GetKey("k")
+		assert.NoError(t, err)
+		assert.Equal(t, "", v)
+	})
+}
+
+func TestBuildAzureKeyVaultStore_ParseError(t *testing.T) {
+	_, err := buildAzureKeyVaultStore("n", storepkg.StoreConfig{
+		Options: map[string]interface{}{"prefix": []string{"x"}},
+	})
+	assert.ErrorIs(t, err, storepkg.ErrParseAzureKeyVaultOptions)
 }

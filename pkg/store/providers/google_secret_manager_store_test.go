@@ -792,3 +792,105 @@ func TestGSMStore_GetKeyDirect(t *testing.T) {
 		})
 	}
 }
+
+func TestNewGSMStore_EmptyProjectID(t *testing.T) {
+	_, err := NewGSMStore(GSMStoreOptions{}, "")
+	assert.ErrorIs(t, err, storepkg.ErrProjectIDRequired)
+}
+
+func TestGSMStore_addSecretVersion_Errors(t *testing.T) {
+	tests := []struct {
+		name string
+		code codes.Code
+		want error
+	}{
+		{"not found", codes.NotFound, storepkg.ErrResourceNotFound},
+		{"permission denied", codes.PermissionDenied, storepkg.ErrPermissionDenied},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mc := new(MockGSMClient)
+			mc.On("CreateSecret", mock.Anything, mock.Anything).
+				Return(&secretmanagerpb.Secret{Name: "projects/p/secrets/s"}, nil)
+			mc.On("AddSecretVersion", mock.Anything, mock.Anything).
+				Return(nil, status.Error(tt.code, "boom"))
+
+			s := newGSMStoreWithClient(mc, GSMStoreOptions{ProjectID: "p"})
+			err := s.Set("dev", "app", "k", "v")
+			assert.ErrorIs(t, err, tt.want)
+			mc.AssertExpectations(t)
+		})
+	}
+}
+
+func TestGSMStore_Set_MoreErrors(t *testing.T) {
+	t.Run("nil value", func(t *testing.T) {
+		mc := new(MockGSMClient)
+		s := newGSMStoreWithClient(mc, GSMStoreOptions{ProjectID: "p"})
+		assert.ErrorIs(t, s.Set("dev", "app", "k", nil), storepkg.ErrNilValue)
+	})
+
+	t.Run("marshal error", func(t *testing.T) {
+		mc := new(MockGSMClient)
+		s := newGSMStoreWithClient(mc, GSMStoreOptions{ProjectID: "p"})
+		assert.ErrorIs(t, s.Set("dev", "app", "k", make(chan int)), storepkg.ErrSerializeJSON)
+	})
+
+	t.Run("createSecret error", func(t *testing.T) {
+		mc := new(MockGSMClient)
+		mc.On("CreateSecret", mock.Anything, mock.Anything).
+			Return(nil, status.Error(codes.PermissionDenied, "boom"))
+		s := newGSMStoreWithClient(mc, GSMStoreOptions{ProjectID: "p"})
+		assert.ErrorIs(t, s.Set("dev", "app", "k", "v"), storepkg.ErrPermissionDenied)
+		mc.AssertExpectations(t)
+	})
+}
+
+func TestGSMStore_Get_GenericError(t *testing.T) {
+	mc := new(MockGSMClient)
+	mc.On("AccessSecretVersion", mock.Anything, mock.Anything).Return(nil, errors.New("boom"))
+	s := newGSMStoreWithClient(mc, GSMStoreOptions{ProjectID: "p"})
+
+	_, err := s.Get("dev", "app", "k")
+	assert.ErrorIs(t, err, storepkg.ErrAccessSecret)
+	mc.AssertExpectations(t)
+}
+
+func TestGSMStore_GetKey_MoreCases(t *testing.T) {
+	t.Run("empty key", func(t *testing.T) {
+		mc := new(MockGSMClient)
+		s := newGSMStoreWithClient(mc, GSMStoreOptions{ProjectID: "p"})
+		_, err := s.GetKey("")
+		assert.ErrorIs(t, err, storepkg.ErrEmptyKey)
+	})
+
+	t.Run("not found", func(t *testing.T) {
+		mc := new(MockGSMClient)
+		mc.On("AccessSecretVersion", mock.Anything, mock.Anything).
+			Return(nil, status.Error(codes.NotFound, "nope"))
+		s := newGSMStoreWithClient(mc, GSMStoreOptions{ProjectID: "p"})
+		_, err := s.GetKey("k")
+		assert.ErrorIs(t, err, storepkg.ErrResourceNotFound)
+		mc.AssertExpectations(t)
+	})
+
+	t.Run("prefix prepended and nil payload returns empty string", func(t *testing.T) {
+		mc := new(MockGSMClient)
+		mc.On("AccessSecretVersion", mock.Anything, mock.MatchedBy(func(req *secretmanagerpb.AccessSecretVersionRequest) bool {
+			return req.Name == "projects/p/secrets/myprefix_k/versions/latest"
+		})).Return(&secretmanagerpb.AccessSecretVersionResponse{}, nil) // Payload is nil.
+		s := newGSMStoreWithClient(mc, GSMStoreOptions{ProjectID: "p", Prefix: stringPtr("myprefix")})
+		v, err := s.GetKey("k")
+		assert.NoError(t, err)
+		assert.Equal(t, "", v)
+		mc.AssertExpectations(t)
+	})
+}
+
+func TestBuildGSMStore_ParseError(t *testing.T) {
+	_, err := buildGSMStore("n", storepkg.StoreConfig{
+		Options: map[string]interface{}{"project_id": []string{"x"}},
+	})
+	assert.ErrorIs(t, err, storepkg.ErrParseGSMOptions)
+}
