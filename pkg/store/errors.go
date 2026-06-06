@@ -47,10 +47,12 @@ var (
 	ErrAddSecretVersion  = errors.New("failed to add secret version")
 
 	// Registry specific errors.
-	ErrParseArtifactoryOptions = errors.New("failed to parse Artifactory store options")
-	ErrParseSSMOptions         = errors.New("failed to parse SSM store options")
-	ErrParseRedisOptions       = errors.New("failed to parse Redis store options")
-	ErrStoreTypeNotFound       = errors.New("store type not found")
+	ErrParseArtifactoryOptions   = errors.New("failed to parse Artifactory store options")
+	ErrParseSSMOptions           = errors.New("failed to parse SSM store options")
+	ErrParseRedisOptions         = errors.New("failed to parse Redis store options")
+	ErrParseGSMOptions           = errors.New("failed to parse Google Secret Manager store options")
+	ErrParseAzureKeyVaultOptions = errors.New("failed to parse Key Vault store options")
+	ErrStoreTypeNotFound         = errors.New("store type not found")
 
 	// Identity errors.
 	ErrIdentityNotConfigured   = errors.New("store identity is configured but auth resolver is not set")

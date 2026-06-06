@@ -440,7 +440,7 @@ func init() {
 func buildGSMStore(_ string, config store.StoreConfig) (store.Store, error) {
 	var opts GSMStoreOptions
 	if err := parseOptions(config.Options, &opts); err != nil {
-		return nil, fmt.Errorf("failed to parse Google Secret Manager store options: %w", err)
+		return nil, fmt.Errorf(errFormat, store.ErrParseGSMOptions, err)
 	}
 
 	return NewGSMStore(opts, config.Identity)

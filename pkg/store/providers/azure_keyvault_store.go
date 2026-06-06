@@ -338,7 +338,7 @@ func init() {
 func buildAzureKeyVaultStore(_ string, config store.StoreConfig) (store.Store, error) {
 	var opts AzureKeyVaultStoreOptions
 	if err := parseOptions(config.Options, &opts); err != nil {
-		return nil, fmt.Errorf("failed to parse Key Vault store options: %w", err)
+		return nil, fmt.Errorf(errFormat, store.ErrParseAzureKeyVaultOptions, err)
 	}
 
 	return NewAzureKeyVaultStore(opts, config.Identity)

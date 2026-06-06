@@ -1,6 +1,9 @@
 package store
 
-import "fmt"
+import (
+	"fmt"
+	"sync"
+)
 
 // StoreRegistry is a map of store name to a live store implementation.
 type StoreRegistry map[string]Store
@@ -13,7 +16,13 @@ type StoreFactory func(name string, config StoreConfig) (Store, error)
 
 // storeFactories holds the registered factory for each store type. It is
 // populated at init time by provider packages and read at registry-build time.
-var storeFactories = map[string]StoreFactory{}
+// The storeFactoriesMu mutex guards it because Register is exported and may be
+// called concurrently with NewStoreRegistry (e.g. late registration from tests
+// or optional providers).
+var (
+	storeFactoriesMu sync.RWMutex
+	storeFactories   = map[string]StoreFactory{}
+)
 
 // Register associates a store type identifier (e.g. "redis") with the factory
 // that builds it. Provider packages call this from their init() functions, so
@@ -23,6 +32,9 @@ var storeFactories = map[string]StoreFactory{}
 // It panics if the same type is registered twice, which indicates a programming
 // error (two factories claiming the same type).
 func Register(storeType string, factory StoreFactory) {
+	storeFactoriesMu.Lock()
+	defer storeFactoriesMu.Unlock()
+
 	if _, exists := storeFactories[storeType]; exists {
 		panic(fmt.Sprintf("store: factory already registered for type %q", storeType))
 	}
@@ -37,7 +49,9 @@ func Register(storeType string, factory StoreFactory) {
 func NewStoreRegistry(config *StoresConfig) (StoreRegistry, error) {
 	registry := make(StoreRegistry)
 	for name, storeConfig := range *config {
+		storeFactoriesMu.RLock()
 		factory, ok := storeFactories[storeConfig.Type]
+		storeFactoriesMu.RUnlock()
 		if !ok {
 			return nil, fmt.Errorf("%w: %s", ErrStoreTypeNotFound, storeConfig.Type)
 		}
