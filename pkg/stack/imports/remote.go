@@ -268,6 +268,9 @@ func cloneMatches(matches []RemoteImportMatch) []RemoteImportMatch {
 // when a TTL is set) rather than re-cloning into a throwaway temp dir per import. The
 // resolved files are copied into the file cache so the returned paths stay stable and
 // the default ("local" nested imports) semantics are unchanged.
+//
+// Ambient credential brokers (e.g. Atmos Pro github/sts) are provisioned inside
+// ensureSourceDir, before its detectGitSource call — see the note there.
 func (r *RemoteImporter) resolveGitSubdir(originalURI, sourceURI, subdir, ttl string) ([]RemoteImportMatch, error) {
 	sourceRoot, err := r.ensureSourceDir(sourceURI, ttl)
 	if err != nil {

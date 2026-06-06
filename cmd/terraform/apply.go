@@ -31,7 +31,7 @@ This will prompt for confirmation before making changes unless -auto-approve is 
 
 For complete Terraform/OpenTofu documentation, see:
   https://developer.hashicorp.com/terraform/cli/commands/apply
-  https://opentofu.org/docs/cli/commands/apply`,
+	https://opentofu.org/docs/cli/commands/apply`,
 	PreRunE: func(cmd *cobra.Command, args []string) error {
 		return runHooks(h.BeforeTerraformApply, cmd, args)
 	},
@@ -62,7 +62,10 @@ For complete Terraform/OpenTofu documentation, see:
 		}
 
 		// Parse base terraform options.
-		opts := ParseTerraformRunOptions(v)
+		opts, err := ParseTerraformRunOptions(v)
+		if err != nil {
+			return err
+		}
 
 		// Apply-specific flags (from-plan, planfile) flow through the
 		// legacy ProcessCommandLineArgs which sets info.UseTerraformPlan, info.PlanFile.
@@ -86,7 +89,7 @@ For complete Terraform/OpenTofu documentation, see:
 			shellOpts = append(shellOpts, e.WithStderrCapture(&stderrBuf))
 		}
 
-		err := terraformRunWithOptions(terraformCmd, cmd, args, opts, shellOpts...)
+		err = terraformRunWithOptions(terraformCmd, cmd, args, opts, shellOpts...)
 
 		// Strip ANSI escape codes so CI templates get clean text.
 		// Combine stdout and stderr so that error messages (which terraform
@@ -121,9 +124,13 @@ func init() {
 		flags.WithStringFlag("planfile", "", "", "Set the plan file to use"),
 		flags.WithBoolFlag("affected", "", false, "Apply the affected components in dependency order"),
 		flags.WithBoolFlag("all", "", false, "Apply all components in all stacks"),
+		flags.WithStringFlag("failure-mode", "", terraformFailureModeFailFast, "Terraform apply failure handling mode. Supported values: fail-fast, keep-going"),
+		flags.WithIntFlag("max-concurrency", "", 1, "Maximum number of Terraform apply components to execute concurrently"),
 		flags.WithBoolFlag("ci", "", false, "Enable CI mode for automated pipelines (writes job summary, outputs)"),
 		flags.WithEnvVars("from-plan", "ATMOS_TERRAFORM_APPLY_FROM_PLAN"),
 		flags.WithEnvVars("planfile", "ATMOS_TERRAFORM_APPLY_PLANFILE"),
+		flags.WithEnvVars("failure-mode", "ATMOS_TERRAFORM_APPLY_FAILURE_MODE"),
+		flags.WithEnvVars("max-concurrency", "ATMOS_TERRAFORM_APPLY_MAX_CONCURRENCY"),
 		flags.WithEnvVars("ci", "ATMOS_CI", "CI"),
 	)
 

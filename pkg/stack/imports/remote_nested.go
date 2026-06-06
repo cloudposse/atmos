@@ -1,6 +1,7 @@
 package imports
 
 import (
+	"context"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -8,6 +9,7 @@ import (
 	"time"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/auth/broker"
 	"github.com/cloudposse/atmos/pkg/downloader"
 	"github.com/cloudposse/atmos/pkg/duration"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -131,6 +133,16 @@ func (r *RemoteImporter) resolveGitSubdirWithRemoteBase(originalURI, sourceURI, 
 //     still fresh per its recorded UpdatedAt. With no ttl, the clone is re-fetched once
 //     per run (mutable refs like `main` stay fresh) while still deduped within the run.
 func (r *RemoteImporter) ensureSourceDir(sourceURI, ttl string) (string, error) {
+	// Provision ambient credential brokers (e.g. Atmos Pro github/sts) before the eager detect below.
+	// detectGitSource runs CustomGitDetector.Detect directly — not through the downloader — so unlike
+	// downloader.Fetch it does not itself trigger the broker. Without provisioning here, the detector
+	// runs before the broker has exported its GIT_CONFIG_* insteadOf rewrite into the process env,
+	// misses the rewrite, and injects the ambient GITHUB_TOKEN — shadowing the minted least-privilege
+	// token and 404ing a cross-repo import. EnsureCredentials is process-once and gated (CI + config).
+	if r.atmosConfig != nil {
+		broker.EnsureCredentials(context.Background(), r.atmosConfig)
+	}
+
 	sourceURI = r.detectGitSource(sourceURI)
 	destDir := filepath.Join(r.cache.BaseDir(), uriToTempName(sourceURI)+".source")
 
