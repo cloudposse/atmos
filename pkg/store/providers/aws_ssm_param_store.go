@@ -422,3 +422,17 @@ func (s *SSMStore) GetKey(key string) (any, error) {
 
 	return result, nil
 }
+
+func init() {
+	store.Register("aws-ssm-parameter-store", buildSSMStore)
+}
+
+// buildSSMStore is the store.StoreFactory for AWS SSM Parameter Store stores.
+func buildSSMStore(_ string, config store.StoreConfig) (store.Store, error) {
+	var opts SSMStoreOptions
+	if err := parseOptions(config.Options, &opts); err != nil {
+		return nil, fmt.Errorf(errFormat, store.ErrParseSSMOptions, err)
+	}
+
+	return NewSSMStore(opts, config.Identity)
+}

@@ -11,6 +11,3 @@ type Store interface {
 	// GetKey retrieves a value directly by key without stack or component context.
 	GetKey(key string) (any, error)
 }
-
-// StoreFactory is a function type to initialize a new store.
-type StoreFactory func(options map[string]any) (Store, error)

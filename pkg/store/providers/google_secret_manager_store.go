@@ -430,3 +430,18 @@ func (s *GSMStore) GetKey(key string) (interface{}, error) {
 	}
 	return result, nil
 }
+
+func init() {
+	store.Register("google-secret-manager", buildGSMStore)
+	store.Register("gsm", buildGSMStore)
+}
+
+// buildGSMStore is the store.StoreFactory for Google Secret Manager stores.
+func buildGSMStore(_ string, config store.StoreConfig) (store.Store, error) {
+	var opts GSMStoreOptions
+	if err := parseOptions(config.Options, &opts); err != nil {
+		return nil, fmt.Errorf("failed to parse Google Secret Manager store options: %w", err)
+	}
+
+	return NewGSMStore(opts, config.Identity)
+}

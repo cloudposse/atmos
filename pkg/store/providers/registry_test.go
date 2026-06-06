@@ -16,7 +16,7 @@ func TestNewStoreRegistry_SSMWithIdentity(t *testing.T) {
 		},
 	}
 
-	registry, err := NewStoreRegistry(config)
+	registry, err := store.NewStoreRegistry(config)
 	assert.NoError(t, err)
 	assert.Len(t, registry, 1)
 
@@ -36,7 +36,7 @@ func TestNewStoreRegistry_AzureWithIdentity(t *testing.T) {
 		},
 	}
 
-	registry, err := NewStoreRegistry(config)
+	registry, err := store.NewStoreRegistry(config)
 	assert.NoError(t, err)
 	assert.Len(t, registry, 1)
 
@@ -56,7 +56,7 @@ func TestNewStoreRegistry_GSMWithIdentity(t *testing.T) {
 		},
 	}
 
-	registry, err := NewStoreRegistry(config)
+	registry, err := store.NewStoreRegistry(config)
 	assert.NoError(t, err)
 	assert.Len(t, registry, 1)
 
@@ -77,7 +77,7 @@ func TestNewStoreRegistry_RedisWithIdentityWarning(t *testing.T) {
 	}
 
 	// Redis stores log a warning for identity (unsupported) but still create successfully.
-	registry, err := NewStoreRegistry(config)
+	registry, err := store.NewStoreRegistry(config)
 	assert.NoError(t, err)
 	assert.Len(t, registry, 1)
 
@@ -100,7 +100,7 @@ func TestNewStoreRegistry_ArtifactoryWithIdentityWarning(t *testing.T) {
 	}
 
 	// Artifactory stores log a warning for identity (unsupported) but still create successfully.
-	registry, err := NewStoreRegistry(config)
+	registry, err := store.NewStoreRegistry(config)
 	assert.NoError(t, err)
 	assert.Len(t, registry, 1)
 
@@ -117,7 +117,7 @@ func TestNewStoreRegistry_GSMAliasWithIdentity(t *testing.T) {
 		},
 	}
 
-	registry, err := NewStoreRegistry(config)
+	registry, err := store.NewStoreRegistry(config)
 	assert.NoError(t, err)
 	assert.Len(t, registry, 1)
 
@@ -146,7 +146,7 @@ func TestNewStoreRegistry_MixedIdentityStores(t *testing.T) {
 		},
 	}
 
-	registry, err := NewStoreRegistry(config)
+	registry, err := store.NewStoreRegistry(config)
 	assert.NoError(t, err)
 	assert.Len(t, registry, 3)
 

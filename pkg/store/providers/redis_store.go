@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/store"
 	"github.com/redis/go-redis/v9"
 )
@@ -195,4 +196,23 @@ func (s *RedisStore) GetKey(key string) (interface{}, error) {
 // RedisClient returns the underlying Redis client for testing purposes.
 func (s *RedisStore) RedisClient() RedisClient {
 	return s.redisClient
+}
+
+func init() {
+	store.Register("redis", buildRedisStore)
+}
+
+// buildRedisStore is the store.StoreFactory for Redis stores.
+func buildRedisStore(name string, config store.StoreConfig) (store.Store, error) {
+	var opts RedisStoreOptions
+	if err := parseOptions(config.Options, &opts); err != nil {
+		return nil, fmt.Errorf(errFormat, store.ErrParseRedisOptions, err)
+	}
+
+	if config.Identity != "" {
+		log.Warn("Identity-based authentication is not supported for Redis stores, identity will be ignored",
+			"store", name, "identity", config.Identity)
+	}
+
+	return NewRedisStore(opts)
 }

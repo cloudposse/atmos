@@ -329,3 +329,17 @@ func (s *AzureKeyVaultStore) GetKey(key string) (interface{}, error) {
 	}
 	return result, nil
 }
+
+func init() {
+	store.Register("azure-key-vault", buildAzureKeyVaultStore)
+}
+
+// buildAzureKeyVaultStore is the store.StoreFactory for Azure Key Vault stores.
+func buildAzureKeyVaultStore(_ string, config store.StoreConfig) (store.Store, error) {
+	var opts AzureKeyVaultStoreOptions
+	if err := parseOptions(config.Options, &opts); err != nil {
+		return nil, fmt.Errorf("failed to parse Key Vault store options: %w", err)
+	}
+
+	return NewAzureKeyVaultStore(opts, config.Identity)
+}

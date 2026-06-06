@@ -363,3 +363,22 @@ func (s *ArtifactoryStore) GetKey(key string) (interface{}, error) {
 	}
 	return result, nil
 }
+
+func init() {
+	store.Register("artifactory", buildArtifactoryStore)
+}
+
+// buildArtifactoryStore is the store.StoreFactory for Artifactory stores.
+func buildArtifactoryStore(name string, config store.StoreConfig) (store.Store, error) {
+	var opts ArtifactoryStoreOptions
+	if err := parseOptions(config.Options, &opts); err != nil {
+		return nil, fmt.Errorf(errFormat, store.ErrParseArtifactoryOptions, err)
+	}
+
+	if config.Identity != "" {
+		log.Warn("Identity-based authentication is not supported for Artifactory stores, identity will be ignored",
+			"store", name, "identity", config.Identity)
+	}
+
+	return NewArtifactoryStore(opts)
+}
