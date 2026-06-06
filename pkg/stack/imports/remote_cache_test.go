@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -12,6 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/cache"
 	"github.com/cloudposse/atmos/pkg/downloader"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -151,6 +153,82 @@ func backdateSourceMetadata(t *testing.T, destDir string, age time.Duration) {
 	data, err := json.Marshal(meta)
 	require.NoError(t, err)
 	require.NoError(t, os.WriteFile(filepath.Join(destDir, sourceReadyFileName), data, sourceReadyFilePerm))
+}
+
+// setGlobalImporter installs imp as the package global importer for the duration of a
+// test. It consumes globalImporterOnce so getGlobalImporter returns imp unchanged (a
+// fresh sync.Once would otherwise run and overwrite imp with a real, default-downloader
+// importer). The global state is reset on cleanup.
+func setGlobalImporter(t *testing.T, imp *RemoteImporter) {
+	t.Helper()
+	globalImporterOnce = sync.Once{}
+	globalImporterOnce.Do(func() {})
+	globalImporter = imp
+	globalImporterErr = nil
+	t.Cleanup(func() {
+		globalImporterOnce = sync.Once{}
+		globalImporter = nil
+		globalImporterErr = nil
+	})
+}
+
+// TestResolveRemoteImportNested_GlobalImporter covers the public ResolveRemoteImportNested
+// convenience wrapper end-to-end through the global importer, including within-run dedup of
+// the shared source clone across two subdir imports of the same repo.
+func TestResolveRemoteImportNested_GlobalImporter(t *testing.T) {
+	var count atomic.Int32
+	setGlobalImporter(t, newImporterWithCache(t, t.TempDir(), &count))
+
+	cfg := &schema.AtmosConfiguration{}
+	aMatches, err := ResolveRemoteImportNested(cfg, "git::https://example.com/acme/infrastructure.git//stacks/a.yaml?ref=main", "", "1h")
+	require.NoError(t, err)
+	require.Len(t, aMatches, 1)
+	aData, err := os.ReadFile(aMatches[0].Path)
+	require.NoError(t, err)
+	assert.Contains(t, string(aData), "a: true")
+
+	// A second subdir import of the same source repo reuses the within-run clone.
+	bMatches, err := ResolveRemoteImportNested(cfg, "git::https://example.com/acme/infrastructure.git//stacks/b.yaml?ref=main", "", "1h")
+	require.NoError(t, err)
+	require.Len(t, bMatches, 1)
+	bData, err := os.ReadFile(bMatches[0].Path)
+	require.NoError(t, err)
+	assert.Contains(t, string(bData), "b: true")
+
+	assert.Equal(t, int32(1), count.Load(), "the global importer should clone the shared source once per run")
+}
+
+// TestReadSourceMetadata covers the parse/validation paths of the cross-run freshness
+// marker reader: a missing marker, malformed JSON, a legacy marker with no timestamp, and
+// a valid marker.
+func TestReadSourceMetadata(t *testing.T) {
+	t.Run("missing marker", func(t *testing.T) {
+		_, err := readSourceMetadata(t.TempDir())
+		require.Error(t, err)
+	})
+
+	t.Run("malformed JSON", func(t *testing.T) {
+		dir := t.TempDir()
+		require.NoError(t, os.WriteFile(filepath.Join(dir, sourceReadyFileName), []byte("not-json"), sourceReadyFilePerm))
+		_, err := readSourceMetadata(dir)
+		require.Error(t, err)
+	})
+
+	t.Run("legacy marker without timestamp", func(t *testing.T) {
+		dir := t.TempDir()
+		require.NoError(t, os.WriteFile(filepath.Join(dir, sourceReadyFileName), []byte(`{"source_uri":"x"}`), sourceReadyFilePerm))
+		_, err := readSourceMetadata(dir)
+		require.ErrorIs(t, err, errUtils.ErrInvalidRemoteImport)
+	})
+
+	t.Run("valid marker", func(t *testing.T) {
+		dir := t.TempDir()
+		backdateSourceMetadata(t, dir, 0)
+		meta, err := readSourceMetadata(dir)
+		require.NoError(t, err)
+		assert.Equal(t, testSourceURI, meta.SourceURI)
+		assert.False(t, meta.UpdatedAt.IsZero())
+	})
 }
 
 // TestSourceCacheFresh covers the freshness predicate directly.
