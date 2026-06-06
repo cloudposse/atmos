@@ -1853,7 +1853,17 @@
               "type": "boolean",
               "description": "Marks the secret as required; validation fails if it is not initialized."
             }
-          }
+          },
+          "oneOf": [
+            {
+              "required": ["store"],
+              "not": { "required": ["sops"] }
+            },
+            {
+              "required": ["sops"],
+              "not": { "required": ["store"] }
+            }
+          ]
         }
       ]
     },

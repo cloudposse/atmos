@@ -134,6 +134,45 @@ func TestManifestSchema_ValidSecretsConfig(t *testing.T) {
 			},
 			expectErr: true,
 		},
+		{
+			name: "secret declaration with both store and sops is rejected",
+			manifest: map[string]any{
+				"components": map[string]any{
+					"terraform": map[string]any{
+						"api": map[string]any{
+							"secrets": map[string]any{
+								"vars": map[string]any{
+									"BAD": map[string]any{
+										"store": "op",
+										"sops":  "dev-sops", // XOR: store and sops are mutually exclusive.
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			expectErr: true,
+		},
+		{
+			name: "secret declaration with no backend is rejected",
+			manifest: map[string]any{
+				"components": map[string]any{
+					"terraform": map[string]any{
+						"api": map[string]any{
+							"secrets": map[string]any{
+								"vars": map[string]any{
+									"BAD": map[string]any{
+										"description": "missing backend", // XOR: exactly one of store/sops is required.
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			expectErr: true,
+		},
 	}
 
 	for _, tt := range tests {
