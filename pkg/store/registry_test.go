@@ -13,6 +13,8 @@ import (
 func TestRegisterConcurrentWithNewStoreRegistry(t *testing.T) {
 	const goroutines = 50
 
+	t.Cleanup(Reset)
+
 	factory := func(_ string, _ StoreConfig) (Store, error) {
 		return nil, nil //nolint:nilnil // Dummy factory; never invoked in this test.
 	}

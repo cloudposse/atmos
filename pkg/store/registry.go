@@ -42,6 +42,17 @@ func Register(storeType string, factory StoreFactory) {
 	storeFactories[storeType] = factory
 }
 
+// Reset clears all registered store factories.
+//
+// WARNING: This function is for TESTING ONLY. It should never be called in
+// production code. It lets tests start from a clean registry state.
+func Reset() {
+	storeFactoriesMu.Lock()
+	defer storeFactoriesMu.Unlock()
+
+	storeFactories = map[string]StoreFactory{}
+}
+
 // NewStoreRegistry builds a registry of live stores from the provided config,
 // looking up each configured store's type in the factories registered by the
 // provider packages. Import the provider package (e.g. with a blank import of
