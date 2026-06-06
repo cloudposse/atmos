@@ -163,11 +163,12 @@ func ExecuteTerraform(ctx context.Context, opts TerraformOptions) error {
 	}
 
 	dispatcher := &TerraformDispatcher{
-		atmosConfig: opts.AtmosConfig,
-		info:        opts.Info,
-		executor:    opts.Executor,
-		locks:       newTerraformResourceLocks(),
-		output:      output,
+		atmosConfig:        opts.AtmosConfig,
+		info:               opts.Info,
+		executor:           opts.Executor,
+		locks:              newTerraformResourceLocks(),
+		output:             output,
+		disablePluginCache: disableTerraformPluginCacheForConcurrentRun(opts.Info),
 	}
 	timings := newTerraformNodeTimings()
 	result := scheduler.New(
@@ -337,6 +338,17 @@ func cloneTerraformNodeMetadata(metadata map[string]any) map[string]any {
 	return cloned
 }
 
+func cloneTerraformAtmosSectionMap(section schema.AtmosSectionMapType) schema.AtmosSectionMapType {
+	if section == nil {
+		return nil
+	}
+	cloned := make(schema.AtmosSectionMapType, len(section))
+	for key, value := range section {
+		cloned[key] = value
+	}
+	return cloned
+}
+
 // validateTerraformConcurrentExecution enforces constraints for concurrent Terraform runs.
 func validateTerraformConcurrentExecution(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, _ *dependency.Graph) error {
 	if effectiveTerraformMaxConcurrency(info) <= 1 {
@@ -404,11 +416,12 @@ func containsTerraformFlag(args []string, flag string) bool {
 
 // TerraformDispatcher adapts scheduler nodes to Terraform component execution.
 type TerraformDispatcher struct {
-	atmosConfig *schema.AtmosConfiguration
-	info        *schema.ConfigAndStacksInfo
-	executor    TerraformExecutor
-	locks       *terraformResourceLocks
-	output      *terraformOutput
+	atmosConfig        *schema.AtmosConfiguration
+	info               *schema.ConfigAndStacksInfo
+	executor           TerraformExecutor
+	locks              *terraformResourceLocks
+	output             *terraformOutput
+	disablePluginCache bool
 }
 
 // Dispatch executes one Terraform scheduler node.
@@ -432,10 +445,16 @@ func (d *TerraformDispatcher) Dispatch(ctx context.Context, node *dependency.Nod
 	}
 
 	nodeInfo := *d.info
+	nodeInfo.ComponentEnvSection = cloneTerraformAtmosSectionMap(nodeInfo.ComponentEnvSection)
+	nodeInfo.ComponentEnvList = append([]string(nil), nodeInfo.ComponentEnvList...)
+	nodeInfo.SanitizedEnv = append([]string(nil), nodeInfo.SanitizedEnv...)
 	nodeInfo.Component = node.Component
 	nodeInfo.ComponentFromArg = node.Component
 	nodeInfo.Stack = node.Stack
 	nodeInfo.StackFromArg = node.Stack
+	if d.disablePluginCache {
+		nodeInfo.DisablePluginCache = true
+	}
 
 	unlock := d.lockTerraformResource(node)
 	defer unlock()
@@ -1398,6 +1417,14 @@ func effectiveTerraformMaxConcurrency(info *schema.ConfigAndStacksInfo) int {
 		return 1
 	}
 	return info.MaxConcurrency
+}
+
+// disableTerraformPluginCacheForConcurrentRun reports whether worker subprocesses
+// should avoid Terraform/OpenTofu provider plugin caches. The shared plugin cache
+// is not safe for concurrent terraform init, so concurrent graph execution favors
+// parallelism over cache reuse.
+func disableTerraformPluginCacheForConcurrentRun(info *schema.ConfigAndStacksInfo) bool {
+	return effectiveTerraformMaxConcurrency(info) > 1
 }
 
 // validateTerraformFailureMode rejects mutually exclusive Terraform failure flags.

@@ -1131,6 +1131,7 @@ type ConfigAndStacksInfo struct {
 	TerraformFailureMode       string
 	FailFast                   bool
 	KeepGoing                  bool
+	DisablePluginCache         bool
 	TerraformPlanLogOrder      string
 	TerraformPlanHide          []string
 	TerraformPlanHideNoChanges bool

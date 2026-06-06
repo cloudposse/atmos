@@ -785,6 +785,62 @@ func TestExecuteTerraformAllowsParallelApplyWithAutoApprove(t *testing.T) {
 	require.Greater(t, maxActive.Load(), int32(1))
 }
 
+func TestExecuteTerraformDisablesPluginCacheForConcurrentGraph(t *testing.T) {
+	var mu sync.Mutex
+	disabled := make(map[string]bool)
+
+	err := ExecuteTerraform(context.Background(), TerraformOptions{
+		AtmosConfig: &schema.AtmosConfiguration{},
+		Info: &schema.ConfigAndStacksInfo{
+			All:            true,
+			SubCommand:     "plan",
+			MaxConcurrency: 2,
+		},
+		Stacks: terraformAdapterTestStacks(),
+		Executor: func(execution TerraformExecution) (TerraformExecutionResult, error) {
+			info := execution.Info
+			mu.Lock()
+			disabled[info.Component+"@"+info.Stack] = info.DisablePluginCache
+			mu.Unlock()
+			return TerraformExecutionResult{}, nil
+		},
+	})
+
+	require.NoError(t, err)
+	require.NotEmpty(t, disabled)
+	for nodeID, gotDisabled := range disabled {
+		require.True(t, gotDisabled, "expected plugin cache disabled for %s", nodeID)
+	}
+}
+
+func TestExecuteTerraformKeepsPluginCacheForSequentialGraph(t *testing.T) {
+	var mu sync.Mutex
+	disabled := make(map[string]bool)
+
+	err := ExecuteTerraform(context.Background(), TerraformOptions{
+		AtmosConfig: &schema.AtmosConfiguration{},
+		Info: &schema.ConfigAndStacksInfo{
+			All:            true,
+			SubCommand:     "plan",
+			MaxConcurrency: 1,
+		},
+		Stacks: terraformAdapterTestStacks(),
+		Executor: func(execution TerraformExecution) (TerraformExecutionResult, error) {
+			info := execution.Info
+			mu.Lock()
+			disabled[info.Component+"@"+info.Stack] = info.DisablePluginCache
+			mu.Unlock()
+			return TerraformExecutionResult{}, nil
+		},
+	})
+
+	require.NoError(t, err)
+	require.NotEmpty(t, disabled)
+	for nodeID, gotDisabled := range disabled {
+		require.False(t, gotDisabled, "expected plugin cache preserved for %s", nodeID)
+	}
+}
+
 func TestExecuteTerraformRejectsConcurrentApplyWithoutAutoApprove(t *testing.T) {
 	err := ExecuteTerraform(context.Background(), TerraformOptions{
 		AtmosConfig: &schema.AtmosConfiguration{},
