@@ -3,6 +3,7 @@ package credentials
 import (
 	"context"
 	"errors"
+	"sync"
 	"testing"
 	"time"
 
@@ -167,6 +168,69 @@ func TestDefaultStore_Suite(t *testing.T) {
 	}
 
 	RunCredentialStoreTests(t, factory)
+}
+
+func TestResolveKeyringType(t *testing.T) {
+	t.Run("environment overrides auth config", func(t *testing.T) {
+		t.Setenv("ATMOS_KEYRING_TYPE", "memory")
+		authConfig := &schema.AuthConfig{
+			Keyring: schema.KeyringConfig{Type: "file"},
+		}
+
+		assert.Equal(t, "memory", resolveKeyringType(authConfig))
+	})
+
+	t.Run("auth config overrides default", func(t *testing.T) {
+		t.Setenv("ATMOS_KEYRING_TYPE", "")
+
+		authConfig := &schema.AuthConfig{
+			Keyring: schema.KeyringConfig{Type: "file"},
+		}
+
+		assert.Equal(t, "file", resolveKeyringType(authConfig))
+	})
+
+	t.Run("default remains system", func(t *testing.T) {
+		t.Setenv("ATMOS_KEYRING_TYPE", "")
+
+		assert.Equal(t, "system", resolveKeyringType(nil))
+	})
+}
+
+func TestNewCredentialStoreWithConfig_ConcurrentInitialization(t *testing.T) {
+	t.Setenv("ATMOS_KEYRING_TYPE", "memory")
+
+	authConfig := &schema.AuthConfig{
+		Keyring: schema.KeyringConfig{Type: "system"},
+	}
+
+	const (
+		workers    = 32
+		iterations = 50
+	)
+
+	errs := make(chan error, workers*iterations)
+	var wg sync.WaitGroup
+
+	for i := 0; i < workers; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for j := 0; j < iterations; j++ {
+				store := NewCredentialStoreWithConfig(authConfig)
+				if store == nil {
+					errs <- errors.New("credential store is nil")
+				}
+			}
+		}()
+	}
+
+	wg.Wait()
+	close(errs)
+
+	for err := range errs {
+		assert.NoError(t, err)
+	}
 }
 
 // TestNewCredentialStoreWithConfig_NoopFallback tests that credential store uses no-op keyring when system keyring is unavailable.

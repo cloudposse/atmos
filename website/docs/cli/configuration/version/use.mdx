@@ -72,6 +72,32 @@ Versions are cached in `~/.atmos/bin/cloudposse/atmos/{version}/`.
       use: "sha:ceb7526"
     ```
   </dd>
+
+  <dt>`ref:<name>`</dt>
+  <dd>
+    Install from the latest commit of a **branch or tag**, using that commit's CI build artifacts.
+    The ref is resolved to its current commit on every run, so a mutable branch like `main` always
+    tracks the latest build; the resolved commit is cached, so unchanged refs do not reinstall.
+
+    ```yaml
+    version:
+      use: "ref:main"        # latest main build
+    ```
+
+    Accepts branch names, tag names, and slash-qualified refs:
+
+    ```bash
+    atmos --use-version=ref:main             # branch
+    atmos --use-version=ref:release/v1.199    # branch with a slash
+    atmos --use-version=ref:v1.199.0          # tag (the tag's commit artifact, not the release)
+    atmos --use-version=ref:heads/main        # explicit branch (disambiguation)
+    atmos --use-version=ref:tags/v1.199.0     # explicit tag (disambiguation)
+    ```
+
+    Like `pr:` and `sha:`, this installs **CI build artifacts** (retained for 90 days), not released
+    binaries. For an older tag whose artifacts have expired, use the plain semver form (e.g.
+    `1.199.0`) to install the release instead.
+  </dd>
 </dl>
 
 ## Command-Line Override
