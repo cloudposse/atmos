@@ -41,6 +41,34 @@ func newAgeProvider(t *testing.T) (Provider, string) {
 	return p, file
 }
 
+// newAgeProviderWithFile is like newAgeProvider but lets the caller control the spec.file
+// template (joined under a temp dir), so tests can exercise stack-scoped (no component in the
+// path) vs component-scoped (component in the path) storage layouts.
+func newAgeProviderWithFile(t *testing.T, nameTemplate string) Provider {
+	t.Helper()
+
+	identity, err := age.GenerateX25519Identity()
+	require.NoError(t, err)
+
+	dir := t.TempDir()
+	keyFile := filepath.Join(dir, "keys.txt")
+	require.NoError(t, os.WriteFile(keyFile, []byte(identity.String()+"\n"), 0o600))
+	t.Setenv("SOPS_AGE_KEY_FILE", keyFile)
+
+	section := map[string]any{
+		"dev-sops": map[string]any{
+			"kind": "sops/age",
+			"spec": map[string]any{
+				"file":           filepath.Join(dir, nameTemplate),
+				"age_recipients": identity.Recipient().String(),
+			},
+		},
+	}
+	p, err := newSopsProvider(&schema.AtmosConfiguration{}, "dev-sops", section)
+	require.NoError(t, err)
+	return p
+}
+
 func TestSopsProvider_RoundTrip(t *testing.T) {
 	p, file := newAgeProvider(t)
 	datadog := Coordinate{Stack: "dev", Component: "api", Key: "DATADOG_API_KEY"}
@@ -124,4 +152,60 @@ func TestSopsProvider_FilePathTemplate(t *testing.T) {
 	bad := &sopsProvider{file: "secrets/{{ .not_a_var }}.enc.yaml"}
 	_, err = bad.resolveFile(Coordinate{Stack: "dev", Component: "api"})
 	require.ErrorIs(t, err, ErrSopsFilePathTemplate)
+}
+
+// TestSopsProvider_StackScopedSharing proves that when the file template omits the component,
+// all components in a stack share one encrypted file: a second component writing the same key
+// overwrites the first (stack-scoped storage).
+func TestSopsProvider_StackScopedSharing(t *testing.T) {
+	p := newAgeProviderWithFile(t, "{{ .atmos_stack }}.enc.yaml")
+	sp := p.(*sopsProvider)
+
+	api := Coordinate{Stack: "dev", Component: "api", Key: "SHARED_TOKEN"}
+	web := Coordinate{Stack: "dev", Component: "web", Key: "SHARED_TOKEN"}
+
+	apiFile, err := sp.resolveFile(api)
+	require.NoError(t, err)
+	webFile, err := sp.resolveFile(web)
+	require.NoError(t, err)
+	assert.Equal(t, apiFile, webFile, "no component in template => one shared file per stack")
+
+	require.NoError(t, p.Set(api, "from-api"))
+	require.NoError(t, p.Set(web, "from-web"))
+
+	// Same key in a shared file => the second write overwrote the first.
+	got, err := p.Get(api)
+	require.NoError(t, err)
+	assert.Equal(t, "from-web", got, "shared file: web's write overwrites api's value")
+}
+
+// TestSopsProvider_ComponentScopedIsolation proves that when the file template includes the
+// component, each component gets its own encrypted file with independent values
+// (component-scoped storage) and cannot read a sibling component's secret.
+func TestSopsProvider_ComponentScopedIsolation(t *testing.T) {
+	p := newAgeProviderWithFile(t, "{{ .atmos_stack }}.{{ .atmos_component }}.enc.yaml")
+	sp := p.(*sopsProvider)
+
+	api := Coordinate{Stack: "dev", Component: "api", Key: "API_KEY"}
+	web := Coordinate{Stack: "dev", Component: "web", Key: "WEB_KEY"}
+
+	apiFile, err := sp.resolveFile(api)
+	require.NoError(t, err)
+	webFile, err := sp.resolveFile(web)
+	require.NoError(t, err)
+	assert.NotEqual(t, apiFile, webFile, "component in template => distinct files per component")
+
+	require.NoError(t, p.Set(api, "api-secret"))
+	require.NoError(t, p.Set(web, "web-secret"))
+
+	gotAPI, err := p.Get(api)
+	require.NoError(t, err)
+	assert.Equal(t, "api-secret", gotAPI)
+	gotWeb, err := p.Get(web)
+	require.NoError(t, err)
+	assert.Equal(t, "web-secret", gotWeb)
+
+	// Component isolation: web's file exists but does not contain api's key.
+	_, err = p.Get(Coordinate{Stack: "dev", Component: "web", Key: "API_KEY"})
+	require.ErrorIs(t, err, ErrSecretNotInitialized)
 }
