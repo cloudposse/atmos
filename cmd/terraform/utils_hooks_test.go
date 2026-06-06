@@ -15,10 +15,12 @@ package terraform
 
 import (
 	"errors"
+	"os"
 	"reflect"
 	"testing"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -78,6 +80,20 @@ func withGitHubActionsDetection(t *testing.T) {
 	t.Setenv("GITHUB_ACTIONS", "true")
 	t.Setenv("CI", "")
 	t.Setenv("ATMOS_CI", "")
+}
+
+func resetViperCI(t *testing.T) {
+	t.Helper()
+
+	previous := viper.Get("ci")
+	t.Cleanup(func() {
+		if previous == nil {
+			viper.Set("ci", false)
+			return
+		}
+		viper.Set("ci", previous)
+	})
+	viper.Set("ci", false)
 }
 
 // TestRunHooksOnError_PreservesCommandError verifies the failure-path
@@ -566,6 +582,93 @@ func TestWirePerComponentHook(t *testing.T) {
 		assert.NotEqual(t, hookPointer(plan), hookPointer(apply), "plan and apply must call different CI hook functions")
 		assert.NotEqual(t, hookPointer(plan), hookPointer(deploy), "plan and deploy must call different CI hook functions")
 		assert.NotEqual(t, hookPointer(apply), hookPointer(deploy), "apply and deploy must call different CI hook functions")
+	})
+}
+
+func TestTerraformCIModeEnabledSources(t *testing.T) {
+	t.Run("nil command and no CI detection is false", func(t *testing.T) {
+		withoutCIDetection(t)
+		resetViperCI(t)
+
+		assert.False(t, terraformCIModeEnabled(nil))
+	})
+
+	t.Run("cobra flag wins", func(t *testing.T) {
+		withoutCIDetection(t)
+		resetViperCI(t)
+		cmd := newHookTestCmd()
+		require.NoError(t, cmd.Flags().Set("ci", "true"))
+
+		assert.True(t, terraformCIModeEnabled(cmd))
+	})
+
+	t.Run("viper ci enables mode", func(t *testing.T) {
+		withoutCIDetection(t)
+		resetViperCI(t)
+		viper.Set("ci", true)
+
+		assert.True(t, terraformCIModeEnabled(newHookTestCmd()))
+	})
+
+	t.Run("native GitHub Actions detection enables mode", func(t *testing.T) {
+		withGitHubActionsDetection(t)
+		resetViperCI(t)
+
+		assert.True(t, terraformCIModeEnabled(newHookTestCmd()))
+	})
+}
+
+func TestTerraformPlanCIResultHandler(t *testing.T) {
+	t.Run("nil and incomplete handlers are no-ops", func(t *testing.T) {
+		var nilHandler *terraformPlanCIResultHandler
+		require.NoError(t, nilHandler.HandleTerraformPlanCIResults(schema.TerraformPlanCIResultSet{}))
+		require.NoError(t, (&terraformPlanCIResultHandler{}).HandleTerraformPlanCIResults(schema.TerraformPlanCIResultSet{}))
+		require.NoError(t, (&terraformPlanCIResultHandler{cmd: newHookTestCmd()}).HandleTerraformPlanCIResults(schema.TerraformPlanCIResultSet{}))
+		require.NoError(t, (&terraformPlanCIResultHandler{info: &schema.ConfigAndStacksInfo{}}).HandleTerraformPlanCIResults(schema.TerraformPlanCIResultSet{}))
+	})
+
+	t.Run("runs aggregate CI hook wrapper", func(t *testing.T) {
+		t.Chdir("../../examples/demo-stacks")
+		resetViperCI(t)
+		cmd := newHookTestCmd()
+		require.NoError(t, cmd.Flags().Set("ci", "true"))
+		info := &schema.ConfigAndStacksInfo{
+			Stack:            "dev",
+			Component:        "myapp",
+			ComponentFromArg: "myapp",
+			ComponentType:    "terraform",
+		}
+
+		handler := &terraformPlanCIResultHandler{
+			cmd:  cmd,
+			info: info,
+		}
+
+		err := handler.HandleTerraformPlanCIResults(schema.TerraformPlanCIResultSet{Results: []schema.TerraformPlanCIResult{
+			{
+				NodeID:    "myapp-dev",
+				Stack:     "dev",
+				Component: "myapp",
+				Status:    "succeeded",
+				Processed: true,
+				Output:    "No changes. Your infrastructure matches the configuration.",
+			},
+		}})
+		require.NoError(t, err)
+	})
+
+	t.Run("returns config init errors", func(t *testing.T) {
+		t.Chdir(t.TempDir())
+		require.NoError(t, os.WriteFile("atmos.yaml", []byte("invalid: yaml: content:\n  - this is: [broken\n"), 0o644))
+		handler := &terraformPlanCIResultHandler{
+			cmd:  newHookTestCmd(),
+			info: &schema.ConfigAndStacksInfo{},
+		}
+
+		err := handler.HandleTerraformPlanCIResults(schema.TerraformPlanCIResultSet{})
+
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "CI hook config init failed")
 	})
 }
 

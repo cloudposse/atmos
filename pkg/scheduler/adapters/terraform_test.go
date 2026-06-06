@@ -1431,12 +1431,13 @@ func TestWriteTerraformSummaryIncludesNodeTimings(t *testing.T) {
 type capturingTerraformPlanCIResultHandler struct {
 	resultSet schema.TerraformPlanCIResultSet
 	calls     int
+	err       error
 }
 
 func (h *capturingTerraformPlanCIResultHandler) HandleTerraformPlanCIResults(resultSet schema.TerraformPlanCIResultSet) error {
 	h.calls++
 	h.resultSet = resultSet
-	return nil
+	return h.err
 }
 
 func TestExecuteTerraformPlanCIResultHandlerReceivesCapturedSchedulerResults(t *testing.T) {
@@ -1496,6 +1497,50 @@ func TestExecuteTerraformPlanCIResultHandlerReceivesCapturedSchedulerResults(t *
 	require.False(t, app.Processed)
 	require.Equal(t, 1, app.ExitCode)
 	require.Contains(t, app.Error, "dependency vpc-dev failed")
+}
+
+func TestFinalizeTerraformPlanCIResultsGuardsAndHandlerError(t *testing.T) {
+	finalizeTerraformPlanCIResults(nil, nil, nil)
+	finalizeTerraformPlanCIResults(&schema.ConfigAndStacksInfo{SubCommand: "apply"}, nil, nil)
+	finalizeTerraformPlanCIResults(&schema.ConfigAndStacksInfo{SubCommand: "plan"}, nil, nil)
+	require.Nil(t, cloneStringMap(nil))
+
+	handler := &capturingTerraformPlanCIResultHandler{err: errors.New("handler failed")}
+	finalizeTerraformPlanCIResults(
+		&schema.ConfigAndStacksInfo{
+			SubCommand:                   "plan",
+			TerraformPlanCIResultHandler: handler,
+		},
+		&scheduler.AggregateResult{
+			Results: []scheduler.Result{
+				{
+					NodeID: "vpc-dev",
+					Node: dependency.Node{
+						ID:        "vpc-dev",
+						Stack:     "dev",
+						Component: "vpc",
+					},
+					Status: scheduler.StatusFailed,
+					Value: TerraformNodeOutcome{
+						Processed: true,
+						LogFiles: map[string]string{
+							"stdout": "/tmp/stdout.log",
+						},
+					},
+					Err: errors.New("terraform failed"),
+				},
+			},
+		},
+		nil,
+	)
+
+	require.Equal(t, 1, handler.calls)
+	require.Len(t, handler.resultSet.Results, 1)
+	entry := handler.resultSet.Results[0]
+	require.Equal(t, "vpc-dev", entry.NodeID)
+	require.Equal(t, "terraform failed", entry.Error)
+	require.Equal(t, 1, entry.ExitCode, "node errors without explicit exit code default to failure")
+	require.Equal(t, map[string]string{"stdout": "/tmp/stdout.log"}, entry.LogFiles)
 }
 
 func TestTerraformNodeTimingsHandlesNilInputs(t *testing.T) {

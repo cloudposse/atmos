@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -16,6 +17,32 @@ import (
 	"github.com/cloudposse/atmos/pkg/ci/templates"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
+
+type nilOutputProvider struct {
+	*mockProvider
+}
+
+func (p *nilOutputProvider) OutputWriter() provider.OutputWriter {
+	return nil
+}
+
+type failingOutputProvider struct {
+	*mockProvider
+}
+
+func (p *failingOutputProvider) OutputWriter() provider.OutputWriter {
+	return failingOutputWriter{}
+}
+
+type failingOutputWriter struct{}
+
+func (f failingOutputWriter) WriteSummary(string) error {
+	return errors.New("summary failed")
+}
+
+func (f failingOutputWriter) WriteOutput(string, string) error {
+	return errors.New("output failed")
+}
 
 func TestOnAfterPlanAggregateRendersSummaryOutputsCommentAndChecks(t *testing.T) {
 	p := &Plugin{}
@@ -270,4 +297,197 @@ func TestOnAfterPlanAggregateSkipsInvalidAggregate(t *testing.T) {
 	assert.Empty(t, mp.writer.outputs)
 	assert.Empty(t, mp.commentCalls)
 	assert.Empty(t, mp.updateRunCalls)
+}
+
+func TestOnAfterPlanAggregateWriterErrorsAreWarnOnly(t *testing.T) {
+	p := &Plugin{}
+	ctx := newAggregateHookContext()
+	ctx.Provider = &failingOutputProvider{mockProvider: newMockProvider()}
+	ctx.Config.CI.Checks.Enabled = boolPtr(false)
+	ctx.Config.CI.Comments.Enabled = boolPtr(false)
+
+	err := p.onAfterPlanAggregate(ctx)
+	require.NoError(t, err)
+}
+
+func TestOnAfterPlanAggregateReturnsPlanfileUploadError(t *testing.T) {
+	p := &Plugin{}
+	ctx := newAggregateHookContext()
+	planfilePath := filepath.Join(t.TempDir(), "plan.tfplan")
+	require.NoError(t, os.WriteFile(planfilePath, []byte("plan"), 0o644))
+	ctx.Info.PlanFile = planfilePath
+	ctx.Config.CI.Summary.Enabled = boolPtr(false)
+	ctx.Config.CI.Output.Enabled = boolPtr(false)
+	ctx.Config.CI.Checks.Enabled = boolPtr(false)
+	ctx.Config.CI.Comments.Enabled = boolPtr(false)
+	ctx.Config.Components.Terraform.Planfiles.Default = "local"
+	ctx.Config.Components.Terraform.Planfiles.Stores = map[string]schema.PlanfileStoreSpec{
+		"local": {Type: "local/dir"},
+	}
+	ctx.CreatePlanfileStore = func() (any, error) {
+		return nil, errors.New("store unavailable")
+	}
+
+	err := p.onAfterPlanAggregate(ctx)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "store unavailable")
+}
+
+func TestAggregateHelpersCoverFallbacks(t *testing.T) {
+	p := &Plugin{}
+
+	nilResultSet, ok := normalizeTerraformPlanAggregate((*schema.TerraformPlanCIResultSet)(nil))
+	assert.False(t, ok)
+	assert.Empty(t, nilResultSet.Results)
+
+	resultSet := &schema.TerraformPlanCIResultSet{Results: []schema.TerraformPlanCIResult{
+		{NodeID: "b", Stack: "dev", Component: "database", Status: "succeeded", Processed: true},
+		{NodeID: "a", Stack: "dev", Component: "vpc", Status: "succeeded", Processed: true, Changed: true},
+	}}
+	normalized, ok := normalizeTerraformPlanAggregate(resultSet)
+	require.True(t, ok)
+	require.Len(t, normalized.Results, 2)
+
+	aggregate := p.buildPlanAggregate(*resultSet)
+	require.Len(t, aggregate.Components, 2)
+	assert.Equal(t, "database", aggregate.Components[0].Result.Component, "components are sorted by stack/component/node")
+
+	assert.Equal(t, "provider error", componentSummaryText(
+		schema.TerraformPlanCIResult{},
+		&plugin.OutputResult{Errors: []string{"provider error"}},
+		nil,
+		"failed",
+	))
+	assert.Equal(t, "failed", componentSummaryText(schema.TerraformPlanCIResult{}, nil, nil, "failed"))
+	assert.Equal(t, "skipped", componentSummaryText(schema.TerraformPlanCIResult{}, nil, nil, "skipped"))
+	assert.Equal(t, "Changes detected", componentSummaryText(
+		schema.TerraformPlanCIResult{},
+		&plugin.OutputResult{HasChanges: true},
+		nil,
+		"changed",
+	))
+
+	assert.Empty(t, truncateAggregateDetail(""))
+	longValue := strings.Repeat("x", aggregateDetailOutputMaxBytes+4)
+	assert.True(t, strings.HasPrefix(truncateAggregateDetail(longValue), "... output truncated ..."))
+
+	assert.Equal(t, plugin.ResourceCounts{}, resourceCounts(nil))
+	assert.Equal(t, plugin.ResourceCounts{Replace: 2}, resourceCounts(&plugin.TerraformOutputData{
+		ReplacedResources: []string{"aws_instance.a", "aws_instance.b"},
+	}))
+
+	assert.Equal(t, "-", markdownTableCell(" \n "))
+	assert.Equal(t, "a \\| b", markdownTableCell("a | b"))
+	assert.Equal(t, "-", markdownInline("\n"))
+
+	now := time.Date(2026, 6, 6, 12, 0, 0, 0, time.UTC)
+	assert.Equal(t, "1500ms", formatAggregateDuration(schema.TerraformPlanCIResult{
+		StartedAt:  now,
+		FinishedAt: now.Add(1500 * time.Millisecond),
+	}))
+	assert.Equal(t, "-", formatAggregateDuration(schema.TerraformPlanCIResult{}))
+
+	assert.Equal(t, "all", aggregateStackValue(nil))
+	assert.Equal(t, "all", aggregateStackValue(&schema.ConfigAndStacksInfo{}))
+	assert.Equal(t, "<!-- atmos:ci:plan:aggregate:all -->", buildAggregateCommentMarker("plan", ""))
+}
+
+func TestAggregateSummaryAndOutputsHandleProviderWithoutWriter(t *testing.T) {
+	p := &Plugin{}
+	ctx := newAggregateHookContext()
+	ctx.Provider = &nilOutputProvider{mockProvider: newMockProvider()}
+	aggregate := p.buildPlanAggregate(ctx.Aggregate.(schema.TerraformPlanCIResultSet))
+
+	require.NoError(t, p.writeAggregateSummary(ctx, aggregate.Markdown))
+	require.NoError(t, p.writeAggregateOutputs(ctx, aggregate))
+}
+
+func TestWriteAggregateOutputsFiltersVariables(t *testing.T) {
+	p := &Plugin{}
+	ctx := newAggregateHookContext()
+	ctx.Config.CI.Output.Variables = []string{"has_changes", "exit_code"}
+	mp := ctx.Provider.(*mockProvider)
+	aggregate := p.buildPlanAggregate(ctx.Aggregate.(schema.TerraformPlanCIResultSet))
+
+	require.NoError(t, p.writeAggregateOutputs(ctx, aggregate))
+	assert.Equal(t, map[string]string{
+		"has_changes": "true",
+		"exit_code":   "1",
+	}, mp.writer.outputs)
+}
+
+func TestUploadAggregatePlanfilesSkipsFailedAndReturnsDelegateError(t *testing.T) {
+	p := &Plugin{}
+	ctx := newAggregateHookContext()
+	planfilePath := filepath.Join(t.TempDir(), "plan.tfplan")
+	require.NoError(t, os.WriteFile(planfilePath, []byte("plan"), 0o644))
+	ctx.Info.PlanFile = planfilePath
+	ctx.CreatePlanfileStore = func() (any, error) {
+		return nil, errors.New("store unavailable")
+	}
+
+	aggregate := terraformPlanAggregate{
+		Components: []terraformPlanAggregateComponent{
+			{
+				Result: schema.TerraformPlanCIResult{
+					Stack:     "dev",
+					Component: "skipped",
+					Status:    "skipped",
+				},
+				Skipped: true,
+			},
+			{
+				Result: schema.TerraformPlanCIResult{
+					Stack:     "dev",
+					Component: "failed",
+					Status:    "failed",
+				},
+				HasErrors: true,
+			},
+			{
+				Result: schema.TerraformPlanCIResult{
+					Stack:     "dev",
+					Component: "vpc",
+					Status:    "changed",
+				},
+				HasChanges: true,
+			},
+		},
+	}
+
+	err := p.uploadAggregatePlanfiles(ctx, aggregate)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "store unavailable")
+}
+
+func TestPostAggregateCommentSkipsAndReturnsErrors(t *testing.T) {
+	p := &Plugin{}
+
+	t.Run("skips without PR context", func(t *testing.T) {
+		ctx := newAggregateHookContext()
+		ctx.CICtx.PullRequest = nil
+		mp := ctx.Provider.(*mockProvider)
+
+		require.NoError(t, p.postAggregateComment(ctx, "summary"))
+		assert.Empty(t, mp.commentCalls)
+	})
+
+	t.Run("invalid behavior returns error", func(t *testing.T) {
+		ctx := newAggregateHookContext()
+		ctx.Config.CI.Comments.Behavior = "garbage"
+
+		err := p.postAggregateComment(ctx, "summary")
+		require.Error(t, err)
+	})
+
+	t.Run("provider error is returned", func(t *testing.T) {
+		ctx := newAggregateHookContext()
+		mp := ctx.Provider.(*mockProvider)
+		mp.commentErr = errors.New("api error")
+
+		err := p.postAggregateComment(ctx, "summary")
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "api error")
+		assert.Len(t, mp.commentCalls, 1)
+	})
 }
