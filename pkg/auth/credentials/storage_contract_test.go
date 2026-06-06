@@ -5,7 +5,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/99designs/keyring"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	zkeyring "github.com/zalando/go-keyring"
@@ -128,20 +127,20 @@ func TestCredentialEnvelope_JSONSchema(t *testing.T) {
 	}
 	require.NoError(t, store.Store(alias, creds, realm))
 
-	// Read the raw stored item directly from the underlying ring (bypassing Retrieve).
-	item, err := store.ring.Get(buildKeyringKey(alias, realm))
+	// Read the raw stored value directly from the underlying keyring (bypassing Retrieve).
+	raw, err := store.kr.Get(buildKeyringKey(alias, realm))
 	require.NoError(t, err)
 
 	awsJSON, err := json.Marshal(creds)
 	require.NoError(t, err)
-	assert.JSONEq(t, `{"type":"aws","data":`+string(awsJSON)+`}`, string(item.Data))
+	assert.JSONEq(t, `{"type":"aws","data":`+string(awsJSON)+`}`, raw)
 
 	// The envelope must have exactly the two contract fields.
 	var env struct {
 		Type string          `json:"type"`
 		Data json.RawMessage `json:"data"`
 	}
-	require.NoError(t, json.Unmarshal(item.Data, &env))
+	require.NoError(t, json.Unmarshal([]byte(raw), &env))
 	assert.Equal(t, "aws", env.Type)
 	assert.NotEmpty(t, env.Data)
 }
@@ -189,11 +188,11 @@ func TestFileKeyring_StoreRetrieve_GCP(t *testing.T) {
 	require.NoError(t, store.Store(alias, creds, realm))
 
 	// The stored envelope kind is "gcp".
-	item, err := store.ring.Get(buildKeyringKey(alias, realm))
+	raw, err := store.kr.Get(buildKeyringKey(alias, realm))
 	require.NoError(t, err)
 	gcpJSON, err := json.Marshal(creds)
 	require.NoError(t, err)
-	assert.JSONEq(t, `{"type":"gcp","data":`+string(gcpJSON)+`}`, string(item.Data))
+	assert.JSONEq(t, `{"type":"gcp","data":`+string(gcpJSON)+`}`, raw)
 
 	got, err := store.Retrieve(alias, realm)
 	require.NoError(t, err)
@@ -225,5 +224,4 @@ var (
 	_ = types.AWSCredentials{}
 	_ = types.GCPCredentials{}
 	_ = types.OIDCCredentials{}
-	_ = keyring.Item{}
 )
