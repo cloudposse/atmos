@@ -141,7 +141,6 @@ func getConfigFiles(path string) ([]string, error) {
 	}
 
 	if fileInfo.IsDir() {
-		path = filepath.ToSlash(path)
 		matches, err := doublestar.Glob(os.DirFS(path), "*.{yaml,yml}")
 		if err != nil {
 			return nil, err
@@ -465,7 +464,8 @@ func processVendorImports(
 	var mergedSources []schema.AtmosVendorSource
 	for _, imp := range imports {
 		if u.SliceContainsString(allImports, imp) {
-			return nil, nil, fmt.Errorf("%w '%s' in the vendor config file '%s'. It was already imported in the import chain",
+			return nil, nil, fmt.Errorf(
+				"%w '%s' in the vendor config file '%s'. It was already imported in the import chain",
 				ErrDuplicateImport,
 				imp,
 				vendorConfigFile,
@@ -547,7 +547,7 @@ func determineSourceType(uri *string, vendorConfigFilePath string) (bool, bool, 
 		return useOciScheme, useLocalFileSystem, sourceIsLocalFile, nil
 	}
 
-	absPath, err := u.JoinPathAndValidate(filepath.ToSlash(vendorConfigFilePath), *uri)
+	absPath, err := u.JoinPathAndValidate(vendorConfigFilePath, *uri)
 	// if URI contain path traversal is path should be resolved
 	if err != nil && strings.Contains(*uri, "..") && !strings.HasPrefix(*uri, "file://") {
 		return useOciScheme, useLocalFileSystem, sourceIsLocalFile, fmt.Errorf("invalid source path '%s': %w", *uri, err)

@@ -278,7 +278,7 @@ func componentEnvSectionToList(envSection map[string]any) []string {
 
 func newAuthManager(authConfig *schema.AuthConfig, stackInfo *schema.ConfigAndStacksInfo, cliConfigPath string) (types.AuthManager, error) {
 	// Create auth manager components.
-	credStore := credentials.NewCredentialStore()
+	credStore := credentials.NewCredentialStoreWithConfig(authConfig)
 	validator := validation.NewValidator()
 
 	// Create auth manager with merged configuration and stack info (so identities can mutate it).

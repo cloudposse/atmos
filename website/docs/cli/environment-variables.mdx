@@ -385,9 +385,23 @@ These environment variables configure Atmos behavior and can override settings i
     Automatically injected into Terraform environments when `ATMOS_INJECT_GITHUB_TOKEN=true` (default).
   </dd>
 
+  <dt>`ATMOS_PRO_GITHUB_TOKEN`</dt>
+  <dd>
+    GitHub token for private module downloads and Atmos-native git operations (vendoring, `source:` provisioning, go-getter), preferred ahead of `ATMOS_GITHUB_TOKEN` and `GITHUB_TOKEN`. Typically a token brokered by [Atmos Pro](/cli/configuration/auth#github-sts-atmos-pro).
+  </dd>
+
   <dt>`ATMOS_INJECT_GITHUB_TOKEN`</dt>
   <dd>
     Inject the GitHub token into component environments. Default: `true`. Set to `false` to prevent token injection.
+  </dd>
+
+  <dt>`ATMOS_GITHUB_CLI`</dt>
+  <dd>
+    Name (or path) of the GitHub CLI used to obtain a token when no `GITHUB_TOKEN` / `ATMOS_GITHUB_TOKEN` is set.
+    Defaults to `gh`. Atmos runs `<cli> auth token` only as a last resort, after the flag and environment variables.
+    Set it to an empty value to disable the CLI fallback entirely, or to a nonexistent binary to force anonymous
+    (unauthenticated) GitHub access — useful for testing the public artifact/download paths (subject to GitHub's
+    60 requests/hour unauthenticated rate limit).
   </dd>
 
   <dt>`GITHUB_USERNAME` / `GITHUB_ACTOR` / `ATMOS_GITHUB_USERNAME`</dt>

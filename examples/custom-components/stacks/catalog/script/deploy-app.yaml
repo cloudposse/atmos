@@ -1,0 +1,7 @@
+components:
+  script:
+    deploy-app:
+      vars:
+        app_name: "myapp"
+        version: "1.0.0"
+        replicas: 3

@@ -176,7 +176,8 @@ func TestSubcommandParseOptions(t *testing.T) {
 			v.Set("skip-init", tc.skipInitVal)
 			v.Set("dry-run", true)
 
-			opts := ParseTerraformRunOptions(v)
+			opts, err := ParseTerraformRunOptions(v)
+			require.NoError(t, err)
 
 			assert.Equal(t, tc.backendFileVal, opts.AutoGenerateBackendFile)
 			assert.Equal(t, tc.reconfigureVal, opts.InitRunReconfigure)
@@ -226,7 +227,8 @@ func TestSubcommandRunEFlagBinding(t *testing.T) {
 			require.NoError(t, err, "%sParser.BindFlagsToViper should succeed", tc.name)
 
 			// Parse options (simulating what RunE does).
-			opts := ParseTerraformRunOptions(v)
+			opts, err := ParseTerraformRunOptions(v)
+			require.NoError(t, err)
 
 			// Verify the options were parsed correctly.
 			assert.Equal(t, tc.backendFileVal, opts.AutoGenerateBackendFile)
@@ -258,7 +260,8 @@ func TestSubcommandRunEWithDryRun(t *testing.T) {
 			require.NoError(t, err)
 
 			// Parse options.
-			opts := ParseTerraformRunOptions(v)
+			opts, err := ParseTerraformRunOptions(v)
+			require.NoError(t, err)
 
 			// Verify the flag binding and parsing worked correctly.
 			assert.True(t, opts.DryRun)

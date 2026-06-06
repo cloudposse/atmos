@@ -509,6 +509,66 @@ vars:
 Templated imports are powerful but make configurations harder to read and debug. Prefer plain imports and [inheritance](/howto/inheritance) when possible. Reserve templates for cases where the duplication would be excessive — such as generating many similar components from a single definition.
 :::
 
+## Referencing Earlier Imports in Import Paths
+
+Import **paths** are rendered as `Go` templates, and the template data includes the
+`settings`, `vars`, and `env` defined by **imports listed earlier in the same manifest**
+(and any explicit `context` on the import). This lets a later import reference a value
+that an earlier import established — for both local paths and the `?ref=` of a
+[remote import](#remote-imports).
+
+A common use case is keeping `dev` and `prod` in one repository while pinning everything
+`prod` consumes to an immutable Git ref, driven by a **single** variable defined once per
+stage:
+
+```yaml title="stacks/deploy/prod/_defaults.yaml"
+settings:
+  context:
+    # Define the pinned version once for the whole prod tree (a tag in prod, a branch in dev).
+    deployment_repo_version: "v1.2.3"
+```
+
+```yaml title="stacks/catalog_prod/customer.yaml"
+import:
+  # The Git ref is pinned from the variable defined in the imported `_defaults` above.
+  - "github.com/my-org/my-repo//stacks/catalog/customer?ref={{ .settings.context.deployment_repo_version }}"
+
+components:
+  terraform:
+    customer/base:
+      source:
+        uri: github.com/my-org/my-repo//components/terraform/customer
+        # The same variable also pins the component source version.
+        version: "{{ .settings.context.deployment_repo_version }}"
+```
+
+```yaml title="stacks/deploy/prod/bastille/customers/_defaults.yaml"
+import:
+  - ../_defaults        # establishes settings.context.deployment_repo_version
+  - catalog_prod/customer  # uses it in the templated `?ref=`
+```
+
+Because imports are evaluated **in order**, the value must be defined by an import that
+appears **before** the import that references it.
+
+<dl>
+  <dt>Requires templating enabled</dt>
+  <dd>Import-path templating only runs when [`templates.settings.enabled`](/cli/configuration/templates) is `true`. When disabled, `{{ ... }}` in an import path is left literal.</dd>
+
+  <dt>`skip_templates_processing`</dt>
+  <dd>Leaves `{{ ... }}` in the path literal (the import is not rendered).</dd>
+
+  <dt>Missing values</dt>
+  <dd>If a referenced value is not defined by an earlier import (or the import's `context`), Atmos fails with an error. Set `ignore_missing_template_values: true` on the import (or [`templates.settings.ignore_missing_template_values`](/cli/configuration/templates) globally) to leave unresolved values as-is instead.</dd>
+</dl>
+
+:::note Import paths vs. file content
+Only the import **path** sees values from earlier imports. The **content** of an imported
+file is still templated with its own `context` (and component-level values are resolved
+later, when the component is processed), so patterns like `version: "{{ .settings.context.deployment_repo_version }}"`
+above continue to resolve at component time.
+:::
+
 ## Conditional Variables in Templates
 
 Use [Sprig functions](http://masterminds.github.io/sprig/) like `hasKey` to conditionally include variables based on the provided `context`:

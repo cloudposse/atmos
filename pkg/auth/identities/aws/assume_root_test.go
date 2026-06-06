@@ -1485,12 +1485,20 @@ func (m *mockAuthManager) ExecuteIdentityIntegrations(_ context.Context, _ strin
 	return nil
 }
 
+func (m *mockAuthManager) EnsureIdentityEnvironment(_ context.Context, _ string) (map[string]string, error) {
+	return nil, nil
+}
+
 func (m *mockAuthManager) ExecuteIntegration(_ context.Context, _ string) error {
 	return nil
 }
 
 func (m *mockAuthManager) GetIntegration(_ string) (*schema.Integration, error) {
 	return nil, nil
+}
+
+func (m *mockAuthManager) RevokeEphemeralIntegrations(_ context.Context, _ string, _ *bool) error {
+	return nil
 }
 
 func (m *mockAuthManager) ResolvePrincipalSetting(_ string, _ string) (interface{}, bool) {
@@ -1508,6 +1516,8 @@ func (m *mockAuthManager) MaybeOfferAnyProfileFallback(_ context.Context) error 
 func (m *mockAuthManager) GetRealm() realm.RealmInfo {
 	return realm.RealmInfo{}
 }
+
+func (m *mockAuthManager) CredentialStoreType() string { return "" }
 
 func TestAssumeRootIdentity_CredentialsExist_ProviderResolutionError(t *testing.T) {
 	// Test when we can't resolve the provider name.

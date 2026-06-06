@@ -182,30 +182,31 @@ var (
 	ErrBackendConfigEmpty          = errors.New("'backend' section is empty but 'backend_type' requires configuration")
 
 	// Git-related errors.
-	ErrGitNotAvailable      = errors.New("git must be available and on the PATH")
-	ErrGitRoot              = errors.New("failed to get git repository root")
-	ErrGitSHA               = errors.New("failed to get git SHA")
-	ErrGitBranch            = errors.New("failed to get git branch")
-	ErrGitRef               = errors.New("failed to get git ref")
-	ErrGitWorktree          = errors.New("failed to get git worktree")
-	ErrDetachedHead         = errors.New("git HEAD is detached")
-	ErrEmptyBranchName      = errors.New("git branch name is empty")
-	ErrInvalidGitPort       = errors.New("invalid port number")
-	ErrSSHKeyUsage          = errors.New("error using SSH key")
-	ErrGitCommandExited     = errors.New("git command exited with non-zero status")
-	ErrGitCommandFailed     = errors.New("failed to execute git command")
-	ErrReadDestDir          = errors.New("failed to read the destination directory during git update")
-	ErrRemoveGitDir         = errors.New("failed to remove the .git directory in the destination directory during git update")
-	ErrUnexpectedGitOutput  = errors.New("unexpected 'git version' output")
-	ErrGitVersionMismatch   = errors.New("git version requirement not met")
-	ErrRemoteRepoNotGitRepo = errors.New("target remote repository is not a git repository")
-	ErrFailedToGetLocalRepo = errors.New("failed to get local repository")
-	ErrFailedToGetRepoInfo  = errors.New("failed to get repository info")
-	ErrLocalRepoFetch       = errors.New("local repo unavailable")
-	ErrGitRefNotFound       = errors.New("git reference not found on local filesystem")
-	ErrGitWorktreeAdd       = errors.New("failed to create git worktree")
-	ErrFetchOrigin          = errors.New("failed to fetch from origin")
-	ErrDeepenOrigin         = errors.New("failed to deepen fetch from origin")
+	ErrGitNotAvailable             = errors.New("git must be available and on the PATH")
+	ErrGitRoot                     = errors.New("failed to get git repository root")
+	ErrGitSHA                      = errors.New("failed to get git SHA")
+	ErrGitBranch                   = errors.New("failed to get git branch")
+	ErrGitRef                      = errors.New("failed to get git ref")
+	ErrGitWorktree                 = errors.New("failed to get git worktree")
+	ErrDetachedHead                = errors.New("git HEAD is detached")
+	ErrEmptyBranchName             = errors.New("git branch name is empty")
+	ErrInvalidGitPort              = errors.New("invalid port number")
+	ErrSSHKeyUsage                 = errors.New("error using SSH key")
+	ErrGitCommandExited            = errors.New("git command exited with non-zero status")
+	ErrGitCommandFailed            = errors.New("failed to execute git command")
+	ErrReadDestDir                 = errors.New("failed to read the destination directory during git update")
+	ErrRemoveGitDir                = errors.New("failed to remove the .git directory in the destination directory during git update")
+	ErrUnexpectedGitOutput         = errors.New("unexpected 'git version' output")
+	ErrUnexpectedGitRevParseOutput = errors.New("unexpected 'git rev-parse' output")
+	ErrGitVersionMismatch          = errors.New("git version requirement not met")
+	ErrRemoteRepoNotGitRepo        = errors.New("target remote repository is not a git repository")
+	ErrFailedToGetLocalRepo        = errors.New("failed to get local repository")
+	ErrFailedToGetRepoInfo         = errors.New("failed to get repository info")
+	ErrLocalRepoFetch              = errors.New("local repo unavailable")
+	ErrGitRefNotFound              = errors.New("git reference not found on local filesystem")
+	ErrGitWorktreeAdd              = errors.New("failed to create git worktree")
+	ErrFetchOrigin                 = errors.New("failed to fetch from origin")
+	ErrDeepenOrigin                = errors.New("failed to deepen fetch from origin")
 
 	// I/O and output errors.
 	ErrBuildIOConfig  = errors.New("failed to build I/O config")
@@ -356,6 +357,7 @@ var (
 	ErrStackManifestSchemaValidation              = errors.New("stack manifest schema validation failed")
 	ErrStackImportSelf                            = errors.New("stack manifest imports itself")
 	ErrStackImportNotFound                        = errors.New("stack import not found")
+	ErrImportPathTemplate                         = errors.New("failed to render Go template in import path")
 	ErrStackCircularInheritance                   = errors.New("circular component inheritance detected")
 	ErrInvalidHooksSection                        = errors.New("invalid 'hooks' section in the file")
 	ErrInvalidTerraformHooksSection               = errors.New("invalid 'terraform.hooks' section in the file")
@@ -410,6 +412,11 @@ var (
 	ErrInvalidTerraformBackend            = errors.New("invalid terraform.backend section")
 	ErrInvalidTerraformRemoteStateBackend = errors.New("invalid terraform.remote_state_backend section")
 	ErrUnsupportedComponentType           = errors.New("unsupported component type")
+
+	// Custom component errors.
+	ErrCustomComponentTypeRegistration = errors.New("failed to register custom component type")
+	ErrComponentArgumentNotFound       = errors.New("no argument or flag with type 'component' found")
+	ErrStackArgumentNotFound           = errors.New("no argument or flag with type 'stack' found")
 
 	// Generator errors.
 	ErrGeneratorNotFound     = errors.New("generator not found")
@@ -789,6 +796,9 @@ var (
 	ErrWebflowMissingCallbackCode = errors.New("missing authorization code in callback")
 	ErrWebflowStateMismatch       = errors.New("state mismatch: possible CSRF attack")
 	ErrWebflowEmptyCachedToken    = errors.New("cached refresh token is empty")
+	// ErrWebflowDPoP indicates a failure generating or serializing the RFC 9449
+	// DPoP proof required on AWS signin token requests (issue #2542).
+	ErrWebflowDPoP = errors.New("failed to build DPoP proof")
 
 	// Credential errors.
 	ErrCredentialsInvalid = errors.New("credentials are invalid or have been revoked")
@@ -954,9 +964,12 @@ var (
 	ErrECRInvalidRegistry  = errors.New("invalid ECR registry URL")
 	ErrECRLoginNoArgs      = errors.New("specify an server name, --identity, or --registry")
 	ErrECRLoginFailed      = errors.New("ECR login failed")
-	ErrECRIdentitySelect   = errors.New("interactive identity selection is not supported for this command; specify an identity name with --identity=<name>")
 	ErrDockerConfigWrite   = errors.New("failed to write Docker config")
 	ErrDockerConfigRead    = errors.New("failed to read Docker config")
+
+	// ECR Public authentication errors.
+	ErrECRPublicAuthFailed    = errors.New("ECR Public authentication failed")
+	ErrECRPublicInvalidRegion = errors.New("invalid ECR Public region: only us-east-1 and us-west-2 are supported")
 
 	// EKS server errors.
 	ErrEKSDescribeCluster   = errors.New("failed to describe EKS cluster")
@@ -966,6 +979,23 @@ var (
 	ErrKubeconfigPath       = errors.New("failed to determine kubeconfig path")
 	ErrKubeconfigWrite      = errors.New("failed to write kubeconfig")
 	ErrKubeconfigMerge      = errors.New("failed to merge kubeconfig")
+
+	// Atmos Pro authentication (atmos/pro provider) errors.
+	ErrProAuthFailed         = errors.New("authentication to Atmos Pro failed")
+	ErrProWorkspaceIDMissing = errors.New("workspace ID for Atmos Pro is required (set via auth provider spec.workspace_id, settings.pro.workspace_id, or ATMOS_PRO_WORKSPACE_ID)")
+	ErrProCredentialsType    = errors.New("expected Atmos Pro credentials")
+
+	// GitHub STS integration (github/sts) errors.
+	ErrSTSMintFailed           = errors.New("failed to mint GitHub STS tokens")
+	ErrSTSNoEntitlement        = errors.New("workspace is not entitled to GitHub STS or the feature is disabled")
+	ErrNotGitHubActionsSession = errors.New("GitHub STS requires a GitHub Actions session")
+	ErrGitHubTokenRevokeFailed = errors.New("failed to revoke GitHub installation token")
+	ErrGitSTSStateWrite        = errors.New("failed to write GitHub STS state")
+	ErrGitSTSStateRead         = errors.New("failed to read GitHub STS state")
+
+	// Integration via configuration errors.
+	ErrIntegrationViaMissing   = errors.New("integration must define via.identity or via.provider")
+	ErrIntegrationViaAmbiguous = errors.New("integration must define exactly one of via.identity or via.provider")
 
 	// Identity authentication errors.
 	ErrIdentityAuthFailed      = errors.New("failed to authenticate identity")

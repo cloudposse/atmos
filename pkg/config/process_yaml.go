@@ -206,6 +206,11 @@ func hasCustomTag(tag string) bool {
 		strings.HasPrefix(tag, u.AtmosYamlFuncGitSha) ||
 		strings.HasPrefix(tag, u.AtmosYamlFuncGitBranch) ||
 		strings.HasPrefix(tag, u.AtmosYamlFuncGitRef) ||
+		strings.HasPrefix(tag, u.AtmosYamlFuncGitRepository) ||
+		strings.HasPrefix(tag, u.AtmosYamlFuncGitOwner) ||
+		strings.HasPrefix(tag, u.AtmosYamlFuncGitName) ||
+		strings.HasPrefix(tag, u.AtmosYamlFuncGitHost) ||
+		strings.HasPrefix(tag, u.AtmosYamlFuncGitUrl) ||
 		strings.HasPrefix(tag, u.AtmosYamlFuncCwd) ||
 		strings.HasPrefix(tag, u.AtmosYamlFuncRandom)
 }
@@ -297,6 +302,17 @@ func processGitBranchTag(strFunc, nodeValue string) (any, error) {
 	return strings.TrimSpace(gitBranchValue), nil
 }
 
+// processGitRepoInfoTag processes the repository-metadata tags (!git.repository,
+// !git.owner, !git.name, !git.host, !git.url) using the supplied processor.
+func processGitRepoInfoTag(strFunc, nodeValue string, process func(string) (string, error)) (any, error) {
+	value, err := process(strFunc)
+	if err != nil {
+		log.Debug(failedToProcess, functionKey, strFunc, "error", err)
+		return nil, fmt.Errorf(errorFormat, ErrExecuteYamlFunctions, strFunc, nodeValue, err)
+	}
+	return strings.TrimSpace(value), nil
+}
+
 // processCwdTag processes the !cwd tag.
 func processCwdTag(strFunc, nodeValue string) (any, error) {
 	cwdValue, err := u.ProcessTagCwd(strFunc)
@@ -335,6 +351,16 @@ func processScalarNodeValue(node *yaml.Node) (any, error) {
 		return processGitShaTag(strFunc, node.Value)
 	case strings.HasPrefix(node.Tag, u.AtmosYamlFuncGitBranch):
 		return processGitBranchTag(strFunc, node.Value)
+	case strings.HasPrefix(node.Tag, u.AtmosYamlFuncGitRepository):
+		return processGitRepoInfoTag(strFunc, node.Value, atmosGit.ProcessTagRepository)
+	case strings.HasPrefix(node.Tag, u.AtmosYamlFuncGitOwner):
+		return processGitRepoInfoTag(strFunc, node.Value, atmosGit.ProcessTagOwner)
+	case strings.HasPrefix(node.Tag, u.AtmosYamlFuncGitName):
+		return processGitRepoInfoTag(strFunc, node.Value, atmosGit.ProcessTagName)
+	case strings.HasPrefix(node.Tag, u.AtmosYamlFuncGitHost):
+		return processGitRepoInfoTag(strFunc, node.Value, atmosGit.ProcessTagHost)
+	case strings.HasPrefix(node.Tag, u.AtmosYamlFuncGitUrl):
+		return processGitRepoInfoTag(strFunc, node.Value, atmosGit.ProcessTagURL)
 	case strings.HasPrefix(node.Tag, u.AtmosYamlFuncCwd):
 		return processCwdTag(strFunc, node.Value)
 	case strings.HasPrefix(node.Tag, u.AtmosYamlFuncRandom):
@@ -370,6 +396,16 @@ func processScalarNode(node *yaml.Node, v *viper.Viper, currentPath string) erro
 		return handleGitSha(node, v, currentPath)
 	case strings.HasPrefix(node.Tag, u.AtmosYamlFuncGitBranch):
 		return handleGitBranch(node, v, currentPath)
+	case strings.HasPrefix(node.Tag, u.AtmosYamlFuncGitRepository):
+		return handleGitRepoInfo(node, v, currentPath, atmosGit.ProcessTagRepository)
+	case strings.HasPrefix(node.Tag, u.AtmosYamlFuncGitOwner):
+		return handleGitRepoInfo(node, v, currentPath, atmosGit.ProcessTagOwner)
+	case strings.HasPrefix(node.Tag, u.AtmosYamlFuncGitName):
+		return handleGitRepoInfo(node, v, currentPath, atmosGit.ProcessTagName)
+	case strings.HasPrefix(node.Tag, u.AtmosYamlFuncGitHost):
+		return handleGitRepoInfo(node, v, currentPath, atmosGit.ProcessTagHost)
+	case strings.HasPrefix(node.Tag, u.AtmosYamlFuncGitUrl):
+		return handleGitRepoInfo(node, v, currentPath, atmosGit.ProcessTagURL)
 	case strings.HasPrefix(node.Tag, u.AtmosYamlFuncCwd):
 		return handleCwd(node, v, currentPath)
 	case strings.HasPrefix(node.Tag, u.AtmosYamlFuncRandom):
@@ -493,6 +529,25 @@ func handleGitBranch(node *yaml.Node, v *viper.Viper, currentPath string) error 
 	}
 	v.Set(currentPath, gitBranchValue)
 	node.Tag = ""
+	return nil
+}
+
+// handleGitRepoInfo evaluates a repository-metadata YAML tag (!git.repository,
+// !git.owner, !git.name, !git.host, !git.url) using the supplied processor and
+// stores the resulting string into Viper at the given path.
+func handleGitRepoInfo(node *yaml.Node, v *viper.Viper, currentPath string, process func(string) (string, error)) error {
+	strFunc := fmt.Sprintf(tagValueFormat, node.Tag, node.Value)
+	value, err := process(strFunc)
+	if err != nil {
+		log.Debug(failedToProcess, functionKey, strFunc, "error", err)
+		return fmt.Errorf(errorFormat, ErrExecuteYamlFunctions, strFunc, node.Value, err)
+	}
+	value = strings.TrimSpace(value)
+	if value == "" {
+		log.Debug(emptyValueWarning, functionKey, strFunc)
+	}
+	v.Set(currentPath, value)
+	node.Tag = "" // Avoid re-processing.
 	return nil
 }
 

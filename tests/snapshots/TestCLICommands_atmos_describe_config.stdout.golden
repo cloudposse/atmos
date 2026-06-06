@@ -162,6 +162,7 @@
     "InjectGithubToken": true,
     "GithubToken": "",
     "AtmosGithubToken": "",
+    "AtmosProGithubToken": "",
     "GithubUsername": "",
     "InjectBitbucketToken": true,
     "BitbucketToken": "",
@@ -173,7 +174,8 @@
     "pro": {
       "base_url": "https://atmos-pro.com",
       "endpoint": "api/v1",
-      "github_oidc": {}
+      "github_oidc": {},
+      "git_sts": {}
     },
     "telemetry": {
       "enabled": true,

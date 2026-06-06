@@ -35,6 +35,11 @@ const (
 	AtmosYamlFuncGitSha                  = atmosGit.YAMLFuncSHA
 	AtmosYamlFuncGitBranch               = atmosGit.YAMLFuncBranch
 	AtmosYamlFuncGitRef                  = atmosGit.YAMLFuncRef
+	AtmosYamlFuncGitRepository           = atmosGit.YAMLFuncRepository
+	AtmosYamlFuncGitOwner                = atmosGit.YAMLFuncOwner
+	AtmosYamlFuncGitName                 = atmosGit.YAMLFuncName
+	AtmosYamlFuncGitHost                 = atmosGit.YAMLFuncHost
+	AtmosYamlFuncGitUrl                  = atmosGit.YAMLFuncURL
 	AtmosYamlFuncCwd                     = "!cwd"
 	AtmosYamlFuncRandom                  = "!random"
 	AtmosYamlFuncLiteral                 = "!literal"
@@ -65,6 +70,11 @@ var (
 		AtmosYamlFuncGitSha,
 		AtmosYamlFuncGitBranch,
 		AtmosYamlFuncGitRef,
+		AtmosYamlFuncGitRepository,
+		AtmosYamlFuncGitOwner,
+		AtmosYamlFuncGitName,
+		AtmosYamlFuncGitHost,
+		AtmosYamlFuncGitUrl,
 		AtmosYamlFuncCwd,
 		AtmosYamlFuncRandom,
 		AtmosYamlFuncLiteral,
@@ -91,6 +101,11 @@ var (
 		AtmosYamlFuncGitSha:                  true,
 		AtmosYamlFuncGitBranch:               true,
 		AtmosYamlFuncGitRef:                  true,
+		AtmosYamlFuncGitRepository:           true,
+		AtmosYamlFuncGitOwner:                true,
+		AtmosYamlFuncGitName:                 true,
+		AtmosYamlFuncGitHost:                 true,
+		AtmosYamlFuncGitUrl:                  true,
 		AtmosYamlFuncCwd:                     true,
 		AtmosYamlFuncRandom:                  true,
 		AtmosYamlFuncLiteral:                 true,
