@@ -1,0 +1,78 @@
+---
+title: atmos ci cache list
+sidebar_label: list
+sidebar_class_name: command
+sidebar_position: 3
+id: list
+description: List CI cache entries.
+---
+import Intro from '@site/src/components/Intro'
+import Screengrab from '@site/src/components/Screengrab'
+import Experimental from '@site/src/components/Experimental'
+import ActionCard from '@site/src/components/ActionCard'
+import PrimaryCTA from '@site/src/components/PrimaryCTA'
+
+<Intro>
+List CI cache entries, optionally filtered by key prefix. Newest entries are listed first. Supports table, JSON, YAML, CSV, and TSV output.
+</Intro>
+
+<Experimental/>
+
+<ActionCard title="Configure the CI Cache">
+    Configure the cache in your `atmos.yaml`.
+    <div>
+      <PrimaryCTA to="/cli/configuration/ci/cache">CI Cache Configuration Reference</PrimaryCTA>
+    </div>
+</ActionCard>
+
+<Screengrab title="atmos ci cache list" slug="atmos-ci-cache-list" />
+
+## Usage
+
+```shell
+atmos ci cache list [flags]
+```
+
+## Examples
+
+```shell
+# List all cache entries
+atmos ci cache list
+
+# Filter by key prefix
+atmos ci cache list --key="atmos-cache-linux-"
+
+# JSON output for scripting
+atmos ci cache list --format=json
+```
+
+## Flags
+
+<dl>
+  <dt>`--key` / `-k`</dt>
+  <dd>Filter entries by key prefix.</dd>
+
+  <dt>`--format`</dt>
+  <dd>Output format: `table` (default), `json`, `yaml`, `csv`, or `tsv`.</dd>
+
+  <dt>`--delimiter`</dt>
+  <dd>Delimiter for `csv`/`tsv` output.</dd>
+
+  <dt>`--max-columns`</dt>
+  <dd>Maximum number of columns to display in table format (`0` = no limit).</dd>
+</dl>
+
+## Environment Variables
+
+<dl>
+  <dt>`ATMOS_CI_CACHE_ENABLED`</dt>
+  <dd>Must be `true` (or `ci.cache.enabled: true` in `atmos.yaml`) for the command to run.</dd>
+
+  <dt>`ATMOS_CI_CACHE_FORMAT`</dt>
+  <dd>Overrides `--format`.</dd>
+</dl>
+
+## Related
+
+- [`atmos ci cache delete`](/cli/commands/ci/cache/delete) - Delete a cache entry
+- [CI Cache Configuration](/cli/configuration/ci/cache) - Configure the cache

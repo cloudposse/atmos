@@ -1,0 +1,151 @@
+---
+title: CI Cache Configuration
+sidebar_label: cache
+sidebar_class_name: command
+id: cache
+description: Configure the CI build cache that restores and saves the toolchain and other regenerable artifacts across CI jobs.
+---
+
+import Intro from '@site/src/components/Intro'
+import File from '@site/src/components/File'
+import Experimental from '@site/src/components/Experimental'
+
+<Intro>
+The `ci.cache` section of `atmos.yaml` configures the CI build cache. The cache restores a
+well-known cache directory (the toolchain install path and anything else under the Atmos
+cache root) at the start of a step and saves it back at the end, using the active CI
+provider's cache store — the same store that `actions/cache` uses.
+</Intro>
+
+<Experimental />
+
+## Quick Start
+
+<File title="atmos.yaml">
+```yaml
+ci:
+  cache:
+    enabled: true     # master switch (required)
+    auto: both        # restore on start AND save on end automatically
+```
+</File>
+
+With this configuration, Atmos automatically restores the cache when it starts and saves it
+when it exits (including on `SIGINT`/`SIGTERM`). You can also drive the cache explicitly with
+the [`atmos ci cache`](/cli/commands/ci/cache) subcommands regardless of the `auto` setting.
+
+## How It Works
+
+The cache operates on a single well-known directory — the Atmos XDG cache root
+(`~/.cache/atmos` by default). The toolchain is installed as a sub-path of this root, so a
+single cache captures it. The cache key defaults to a value derived from the toolchain
+lockfile (`toolchain.lock.yaml`) plus the OS and architecture, with a prefix restore-key
+fallback — mirroring `actions/cache`.
+
+Cache entries are **write-once**. To keep automatic and manual usage from conflicting, Atmos
+records how each key was restored and whether it was saved: a save is skipped when the exact
+key was an exact hit at restore time (content unchanged) or has already been saved. This is
+the same `cache-hit ⇒ skip save` behavior as `actions/cache`.
+
+:::note Requirements
+Saving and restoring content require running inside a supported CI provider (GitHub Actions
+today), which provides the runtime cache credentials (`ACTIONS_RUNTIME_TOKEN` and
+`ACTIONS_RESULTS_URL`). Outside a supported CI provider, the cache is a no-op.
+:::
+
+## Configuration Reference
+
+<dl>
+  <dt>`ci.cache.enabled`</dt>
+  <dd>
+    Master switch for the CI cache. The automatic hooks and the `atmos ci cache` subcommands
+    only run when this is `true`.
+
+    **Default:** `false`
+  </dd>
+
+  <dt>`ci.cache.auto`</dt>
+  <dd>
+    Automatic behavior. One of:
+
+    - `off` — no automatic behavior; use the subcommands manually.
+    - `restore` — restore on startup only.
+    - `save` — save on exit only.
+    - `both` — restore on startup and save on exit.
+
+    **Default:** `off`
+  </dd>
+
+  <dt>`ci.cache.root`</dt>
+  <dd>
+    Override the well-known cache directory that is archived. Honors
+    `ATMOS_XDG_CACHE_HOME` / `XDG_CACHE_HOME` when unset.
+
+    **Default:** the Atmos XDG cache directory (e.g. `~/.cache/atmos`)
+  </dd>
+
+  <dt>`ci.cache.paths`</dt>
+  <dd>
+    Root-relative subpaths to include in the cache. When empty, the entire cache root is
+    cached.
+
+    **Default:** the entire cache root
+  </dd>
+
+  <dt>`ci.cache.key`</dt>
+  <dd>
+    The cache key. Supports Go templates with `{{.OS}}`, `{{.Arch}}`, and a `hashFiles`
+    function (e.g. `{{ hashFiles ".tool-versions" }}`).
+
+    **Default:** a key derived from the `toolchain.lock.yaml` hash plus OS/arch
+  </dd>
+
+  <dt>`ci.cache.restore_keys`</dt>
+  <dd>
+    Prefix fallback keys tried (in order) when the exact key is absent, mirroring
+    `actions/cache` restore-keys. Each entry also supports template syntax.
+
+    **Default:** the default key's prefix (without the lockfile hash)
+  </dd>
+
+  <dt>`ci.cache.compression`</dt>
+  <dd>
+    Archive compression. Currently only `gzip` is supported.
+
+    **Default:** `gzip`
+  </dd>
+</dl>
+
+## Full Example
+
+<File title="atmos.yaml">
+```yaml
+ci:
+  cache:
+    enabled: true
+    auto: both
+    key: "atmos-toolchain-{{.OS}}-{{.Arch}}-{{ hashFiles \"toolchain.lock.yaml\" }}"
+    restore_keys:
+      - "atmos-toolchain-{{.OS}}-{{.Arch}}-"
+    paths:
+      - toolchain
+    compression: gzip
+```
+</File>
+
+## Environment Variables
+
+| Variable | Description |
+|----------|-------------|
+| `ATMOS_CI_CACHE_ENABLED` | Override `ci.cache.enabled` (`true`/`false`) |
+| `ATMOS_CI_CACHE_AUTO` | Override `ci.cache.auto` (`off`/`restore`/`save`/`both`) |
+| `ATMOS_CI_CACHE_KEY` | Override the cache key (`--key`) |
+| `ATMOS_CI_CACHE_ROOT` | Override the cache root (`--root`) |
+| `ATMOS_CI_CACHE_PATHS` | Override the cached paths (`--path`) |
+| `ACTIONS_RUNTIME_TOKEN` / `ACTIONS_RESULTS_URL` | Provided automatically inside a GitHub Actions runner; required for the GitHub Actions cache backend |
+
+## Related
+
+- [`atmos ci cache`](/cli/commands/ci/cache) - Restore, save, list, and delete cache entries
+- [CI Configuration](/cli/configuration/ci) - Configure CI integration
+- [`atmos toolchain`](/cli/commands/toolchain/usage) - The toolchain that the cache warm-starts

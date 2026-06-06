@@ -1,0 +1,84 @@
+---
+title: atmos ci cache restore
+sidebar_label: restore
+sidebar_class_name: command
+sidebar_position: 1
+id: restore
+description: Restore the CI cache into the well-known cache directory.
+---
+import Intro from '@site/src/components/Intro'
+import Screengrab from '@site/src/components/Screengrab'
+import Experimental from '@site/src/components/Experimental'
+import ActionCard from '@site/src/components/ActionCard'
+import PrimaryCTA from '@site/src/components/PrimaryCTA'
+
+<Intro>
+Restore the CI cache into the well-known cache directory. The exact key is looked up first, then the configured restore-keys (prefix matches) are tried in order. On a hit, the archive is extracted into the cache root. Restore is idempotent within a lifecycle — once a key has been restored, repeat restores are no-ops.
+</Intro>
+
+<Experimental/>
+
+<ActionCard title="Configure the CI Cache">
+    Configure the cache key, restore-keys, and paths used by this command in your `atmos.yaml`.
+    <div>
+      <PrimaryCTA to="/cli/configuration/ci/cache">CI Cache Configuration Reference</PrimaryCTA>
+    </div>
+</ActionCard>
+
+<Screengrab title="atmos ci cache restore" slug="atmos-ci-cache-restore" />
+
+## Usage
+
+```shell
+atmos ci cache restore [flags]
+```
+
+With no flags, the cache key and paths come from the [`ci.cache`](/cli/configuration/ci/cache) configuration (the default key is derived from the toolchain lockfile).
+
+## Examples
+
+```shell
+# Restore using the configured (or default) key
+atmos ci cache restore
+
+# Restore an explicit key with prefix fallbacks
+atmos ci cache restore --key="toolchain-linux-amd64-abc123" \
+  --restore-key="toolchain-linux-amd64-"
+
+# Restore only specific root-relative subpaths
+atmos ci cache restore --path=toolchain
+```
+
+## Flags
+
+<dl>
+  <dt>`--key` / `-k`</dt>
+  <dd>Exact cache key to restore. Defaults to a key derived from the toolchain lockfile plus OS/arch.</dd>
+
+  <dt>`--restore-key`</dt>
+  <dd>Prefix fallback keys tried in order when the exact key is absent. Repeatable.</dd>
+
+  <dt>`--path` / `-p`</dt>
+  <dd>Root-relative subpaths to restore. Defaults to the entire cache root. Repeatable.</dd>
+
+  <dt>`--root`</dt>
+  <dd>Override the cache root directory (defaults to the Atmos XDG cache directory, e.g. `~/.cache/atmos`).</dd>
+</dl>
+
+## Environment Variables
+
+<dl>
+  <dt>`ATMOS_CI_CACHE_ENABLED`</dt>
+  <dd>Must be `true` (or `ci.cache.enabled: true` in `atmos.yaml`) for the command to run.</dd>
+
+  <dt>`ATMOS_CI_CACHE_KEY`</dt>
+  <dd>Overrides `--key`.</dd>
+
+  <dt>`ACTIONS_RUNTIME_TOKEN` / `ACTIONS_RESULTS_URL`</dt>
+  <dd>Provided automatically inside a GitHub Actions runner; required for the GitHub Actions cache backend.</dd>
+</dl>
+
+## Related
+
+- [`atmos ci cache save`](/cli/commands/ci/cache/save) - Save the cache
+- [CI Cache Configuration](/cli/configuration/ci/cache) - Configure the cache

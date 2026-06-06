@@ -563,6 +563,44 @@ type CIConfig struct {
 	Checks    CIChecksConfig    `yaml:"checks,omitempty" json:"checks,omitempty" mapstructure:"checks"`
 	Comments  CICommentsConfig  `yaml:"comments,omitempty" json:"comments,omitempty" mapstructure:"comments"`
 	Templates CITemplatesConfig `yaml:"templates,omitempty" json:"templates,omitempty" mapstructure:"templates"`
+	Cache     CICacheConfig     `yaml:"cache,omitempty" json:"cache,omitempty" mapstructure:"cache"`
+}
+
+// CICacheConfig configures the CI build cache, which restores a well-known
+// cache directory (the toolchain install path and anything else under the XDG
+// cache root) at Atmos startup and saves it at exit, using the active CI
+// provider's cache store (e.g. the GitHub Actions cache). All operations are
+// no-ops when no cache-capable CI provider is detected (i.e. outside CI).
+type CICacheConfig struct {
+	// Enabled is the master switch for the CI cache (env: ATMOS_CI_CACHE_ENABLED).
+	Enabled bool `yaml:"enabled,omitempty" json:"enabled,omitempty" mapstructure:"enabled"`
+
+	// Auto controls automatic behavior: "off" (default), "restore", "save", or "both".
+	// "restore" restores on startup; "save" saves on exit; "both" does both. The
+	// explicit `atmos ci cache` subcommands are always available regardless.
+	Auto string `yaml:"auto,omitempty" json:"auto,omitempty" mapstructure:"auto"`
+
+	// Root overrides the well-known cache directory that is archived. Defaults
+	// to the Atmos XDG cache directory (~/.cache/atmos), of which the toolchain
+	// is a sub-path. Honors ATMOS_XDG_CACHE_HOME / XDG_CACHE_HOME when unset.
+	Root string `yaml:"root,omitempty" json:"root,omitempty" mapstructure:"root"`
+
+	// Paths are root-relative subpaths to include in the cache. Empty means the
+	// entire root is cached.
+	Paths []string `yaml:"paths,omitempty" json:"paths,omitempty" mapstructure:"paths"`
+
+	// Key is the cache key. Supports Go templates with {{.OS}}, {{.Arch}} and a
+	// hashFiles function. Defaults to a key derived from the toolchain lockfile
+	// hash plus OS/arch when unset.
+	Key string `yaml:"key,omitempty" json:"key,omitempty" mapstructure:"key"`
+
+	// RestoreKeys are prefix fallbacks tried (in order) when the exact key is
+	// absent, mirroring actions/cache restore-keys.
+	RestoreKeys []string `yaml:"restore_keys,omitempty" json:"restore_keys,omitempty" mapstructure:"restore_keys"`
+
+	// Compression selects the archive compression. Currently only "gzip" (the
+	// default) is supported.
+	Compression string `yaml:"compression,omitempty" json:"compression,omitempty" mapstructure:"compression"`
 }
 
 // CIOutputConfig configures CI output variables for downstream jobs.

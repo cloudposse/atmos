@@ -1,0 +1,79 @@
+---
+slug: ci-build-cache
+title: "CI Build Cache: Warm Toolchain and Artifacts Across GitHub Actions Runs"
+authors: [osterman]
+tags: [feature, dx]
+date: 2026-06-06
+---
+
+Atmos can now cache its toolchain and downloaded artifacts in the **GitHub Actions Cache** — the same store [`actions/cache`](https://github.com/actions/cache) writes to — so your jobs stop re-downloading everything from upstream on every run. Turn it on with two settings and Atmos handles the cache key, the paths, and the restore/save lifecycle for you.
+
+<!--truncate-->
+
+## What Changed
+
+Atmos installs a toolchain (via `atmos toolchain`) and downloads other regenerable artifacts — vendored components, remote stack-import clones, provider and plugin caches — into a well-known cache root (`~/.cache/atmos`, honoring `XDG_CACHE_HOME`). In CI, every job re-fetches all of it from scratch.
+
+The new `ci.cache` feature persists that cache root **across jobs and runs**. At startup Atmos restores the root from the GitHub Actions Cache; at exit it saves it back. Everything under the root is captured as a single archive, so the toolchain binaries, vendored components, import clones, and provider caches all warm up together.
+
+Under the hood it uses the GitHub Actions **Cache Service v2** — the runner-native cache API that `actions/cache` itself uses — so there are no extra tokens or services to wire up.
+
+## Virtually No Extra Config
+
+Caching the Atmos toolchain by hand means adding an `actions/cache` step and owning the `key` and `path` logic yourself. Atmos already knows its cache root and can derive a stable key from `toolchain.lock.yaml` plus the runner's OS/arch — so turning this on is two settings:
+
+```yaml title="atmos.yaml"
+ci:
+  cache:
+    enabled: true
+    auto: both   # restore on start, save on exit (off | restore | save | both)
+```
+
+That's it. The cache key is computed for you, the whole cache root is archived, and saves are write-once and idempotent — if the key was a hit on restore, Atmos skips the save instead of re-uploading unchanged content.
+
+Need more control? Every default is overridable:
+
+```yaml title="atmos.yaml"
+ci:
+  cache:
+    enabled: true
+    auto: both
+    key: "atmos-{{.OS}}-{{.Arch}}-{{ hashFiles \"toolchain.lock.yaml\" }}"
+    restore_keys:
+      - "atmos-{{.OS}}-{{.Arch}}-"
+    root: ""        # override the well-known cache root
+    paths: []       # cache only specific root-relative subpaths
+    compression: gzip
+```
+
+## Manual Control When You Want It
+
+The same operations are available as explicit subcommands, so you can split the lifecycle across workflow steps — restore early, do work, save at the end:
+
+```bash
+atmos ci cache restore   # restore the cache root from the GitHub Actions Cache
+atmos ci cache save      # archive the root and upload it under the key
+atmos ci cache list      # list cache entries (optionally by key prefix)
+atmos ci cache delete    # delete a cache entry by exact key
+```
+
+Automatic mode and the subcommands share one idempotent implementation — "automatic" is just these same operations invoked by the process lifecycle, with a state marker that prevents double restores or redundant saves.
+
+## Why This Matters
+
+Every CI job that starts cold re-downloads the same tools, providers, and modules from the same upstream sources — `releases.hashicorp.com`, the Go module proxy, GitHub releases and the GitHub API, OCI registries, and more. That cold start is invisible until it isn't: a registry has a bad minute, GitHub rate-limits your token, a download stalls, and a pipeline that "just works" locally goes red in CI. Warming the cache changes that for you directly:
+
+- **Your jobs run faster.** Install and vendor once, then reuse across jobs and runs. The slow part of most Atmos runs is fetching things you already have — skip it.
+- **Fewer flaky failures.** The majority of transient CI errors are upstream network blips. A warm cache simply doesn't make those requests, so there's nothing to flake.
+- **Less traffic to external sites.** You stop hammering HashiCorp, GitHub, and registry mirrors on every run — gentler on the services you depend on and on any egress/bandwidth budgets you pay for.
+- **Fewer hits to the GitHub API — and less rate-limit risk.** When you fan out across many concurrent jobs, repeated upstream and GitHub API calls are exactly what trips rate limits. Caching collapses thousands of redundant requests into a handful, so you stop burning quota on downloads.
+- **You reuse immutable, already-verified artifacts.** Cache entries are write-once, and the key is derived from `toolchain.lock.yaml` plus the runner's OS/arch — so a cache hit gives you back the exact bytes you pulled and verified before, instead of re-pulling from the internet on every run. That's a smaller supply-chain attack surface, not just a speedup.
+
+None of this requires you to think about cache keys, paths, or eviction. You flip two settings; Atmos handles the rest. And at fleet scale — hundreds to thousands of Terraform jobs per hour — these add up from "nice" to "the difference between a pipeline that scales and one that fights the platforms it runs on."
+
+## How to Use It
+
+- Set `ci.cache.enabled: true` and `ci.cache.auto: both` in `atmos.yaml` to restore on start and save on exit automatically.
+- Or wire `atmos ci cache restore` / `save` into separate workflow steps for explicit control.
+- The cache is **off by default** — opt in per repository.
+- The live backend is **GitHub Actions** today: outside a cache-capable CI provider, all cache operations gracefully no-op (with a debug log), so the same config is safe to run locally. A generic backend for other providers is planned.

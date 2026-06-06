@@ -4,6 +4,7 @@ import (
 	"sync"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/ci/cache"
 	"github.com/cloudposse/atmos/pkg/ci/internal/provider"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -150,4 +151,22 @@ func DetectDebugMode() DebugModeInfo {
 		info.Active = d.IsDebugMode()
 	}
 	return info
+}
+
+// DetectCache returns the cache backend exposed by the active CI provider.
+// It returns errUtils.ErrCacheUnavailable when no CI provider is detected or the
+// detected provider does not implement the cache capability. This keeps callers
+// (CLI subcommands and lifecycle hooks) provider-agnostic.
+func DetectCache() (cache.Backend, error) {
+	defer perf.Track(nil, "ci.DetectCache")()
+
+	p := Detect()
+	if p == nil {
+		return nil, errUtils.ErrCacheUnavailable
+	}
+	cp, ok := p.(provider.CacheProvider)
+	if !ok {
+		return nil, errUtils.ErrCacheUnavailable
+	}
+	return cp.Cache()
 }
