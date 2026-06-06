@@ -3,6 +3,7 @@ package merge
 import (
 	"errors"
 	"fmt"
+	"math"
 	"reflect"
 	"strings"
 
@@ -432,16 +433,18 @@ func processAppendList(key string, list []any, merged map[string]any, appendNewO
 	}
 
 	// Create a new slice to avoid modifying the original.
-	// Guard against an oversize/overflowing capacity before computing it: if either
-	// length alone exceeds the cap, or their sum would exceed it, fall back to just the
-	// new list. Computing totalLen only after the guard proves existingLen+newLen is
-	// within bounds for int, so the make() below cannot overflow.
+	// Overflow guard: ensure existingLen+newLen stays within int range before computing
+	// it, so the make() below cannot overflow. Falling back to just the new list is safe.
 	existingLen := len(existingList)
 	newLen := len(list)
-	if newLen > maxSliceCapacity || existingLen > maxSliceCapacity-newLen {
+	if newLen > math.MaxInt-existingLen {
 		return list
 	}
 	totalLen := existingLen + newLen
+	// Sanity cap: avoid absurdly large allocations even when within int range.
+	if totalLen > maxSliceCapacity {
+		return list
+	}
 	result := make([]any, existingLen, totalLen)
 	copy(result, existingList)
 	result = append(result, list...)
