@@ -873,51 +873,6 @@ func TestFetchSubmodules_WithSSHKey(t *testing.T) {
 	require.NoError(t, err)
 }
 
-// Test findRemoteDefaultBranch.
-func TestFindRemoteDefaultBranch(t *testing.T) {
-	tests := []struct {
-		name           string
-		gitOutput      string
-		exitCode       int
-		expectedBranch string
-	}{
-		{
-			name:           "finds main branch",
-			gitOutput:      "ref: refs/heads/main\tHEAD",
-			exitCode:       0,
-			expectedBranch: "main",
-		},
-		{
-			name:           "finds develop branch",
-			gitOutput:      "ref: refs/heads/develop\tHEAD",
-			exitCode:       0,
-			expectedBranch: "develop",
-		},
-		{
-			name:           "returns master on error",
-			gitOutput:      "",
-			exitCode:       1,
-			expectedBranch: "master",
-		},
-		{
-			name:           "returns master on invalid output",
-			gitOutput:      "invalid output",
-			exitCode:       0,
-			expectedBranch: "master",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			writeFakeGit(t, tt.gitOutput, tt.exitCode)
-
-			u := mustURL(t, "https://example.com/repo.git")
-			branch := findRemoteDefaultBranch(context.Background(), u)
-			require.Equal(t, tt.expectedBranch, branch)
-		})
-	}
-}
-
 // Test GetCustom with timeout.
 func TestGetCustom_WithTimeout(t *testing.T) {
 	writeFakeGit(t, "git version 2.30.0", 0)
@@ -974,4 +929,26 @@ func TestGetCustom_Integration_Update(t *testing.T) {
 	// Verify .git was removed during update.
 	_, statErr := os.Stat(gitDir)
 	require.True(t, os.IsNotExist(statErr))
+}
+
+// TestCloneFlagArgs verifies that a ref-less shallow clone does NOT pin --branch (it gets the
+// remote default branch natively), while an explicit ref does. Regression for clones of repos whose
+// default branch is "main" failing with "Remote branch master not found".
+func TestCloneFlagArgs(t *testing.T) {
+	tests := []struct {
+		name  string
+		ref   string
+		depth int
+		want  []string
+	}{
+		{name: "no ref, shallow: no --branch", ref: "", depth: 1, want: []string{"clone", "--depth", "1"}},
+		{name: "explicit ref, shallow: pins --branch", ref: "v1.2.3", depth: 1, want: []string{"clone", "--depth", "1", "--branch", "v1.2.3"}},
+		{name: "no ref, full clone", ref: "", depth: 0, want: []string{"clone"}},
+		{name: "explicit ref, full clone: no --branch (checked out after)", ref: "main", depth: 0, want: []string{"clone"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			require.Equal(t, tt.want, cloneFlagArgs(tt.ref, tt.depth))
+		})
+	}
 }
