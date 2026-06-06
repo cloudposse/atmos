@@ -271,11 +271,13 @@ func runCIHooksForTerraformComponent(actualCmd *cobra.Command, event h.HookEvent
 	}
 }
 
+// terraformPlanCIResultHandler forwards scheduler results into the aggregate CI hook.
 type terraformPlanCIResultHandler struct {
 	cmd  *cobra.Command
 	info *schema.ConfigAndStacksInfo
 }
 
+// HandleTerraformPlanCIResults initializes config and runs the aggregate plan CI hook.
 func (handler *terraformPlanCIResultHandler) HandleTerraformPlanCIResults(resultSet schema.TerraformPlanCIResultSet) error {
 	if handler == nil || handler.cmd == nil || handler.info == nil {
 		return nil
@@ -298,6 +300,7 @@ func (handler *terraformPlanCIResultHandler) HandleTerraformPlanCIResults(result
 	return nil
 }
 
+// terraformCIModeEnabled returns true when CLI, config, or native provider detection enables CI mode.
 func terraformCIModeEnabled(cmd *cobra.Command) bool {
 	forceCIMode := false
 	if cmd != nil {

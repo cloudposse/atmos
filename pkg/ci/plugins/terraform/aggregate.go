@@ -22,6 +22,7 @@ const (
 	aggregateDetailOutputMaxBytes = 12 * 1024
 )
 
+// terraformPlanAggregate is the complete rendered model for one graph-backed plan run.
 type terraformPlanAggregate struct {
 	Components []terraformPlanAggregateComponent
 	Counts     terraformPlanAggregateCounts
@@ -30,6 +31,7 @@ type terraformPlanAggregate struct {
 	Markdown   string
 }
 
+// terraformPlanAggregateCounts tracks aggregate component and resource totals.
 type terraformPlanAggregateCounts struct {
 	Total              int
 	Succeeded          int
@@ -43,6 +45,7 @@ type terraformPlanAggregateCounts struct {
 	ResourcesToDestroy int
 }
 
+// terraformPlanAggregateComponent is the rendered CI model for one component.
 type terraformPlanAggregateComponent struct {
 	Result        schema.TerraformPlanCIResult
 	Parsed        *plugin.OutputResult
@@ -102,6 +105,7 @@ func (p *Plugin) onAfterPlanAggregate(ctx *plugin.HookContext) error {
 	return nil
 }
 
+// normalizeTerraformPlanAggregate extracts a Terraform plan result set from hook payload data.
 func normalizeTerraformPlanAggregate(value any) (schema.TerraformPlanCIResultSet, bool) {
 	switch v := value.(type) {
 	case schema.TerraformPlanCIResultSet:
@@ -116,6 +120,7 @@ func normalizeTerraformPlanAggregate(value any) (schema.TerraformPlanCIResultSet
 	}
 }
 
+// buildPlanAggregate sorts scheduler results and calculates aggregate plan totals.
 func (p *Plugin) buildPlanAggregate(resultSet schema.TerraformPlanCIResultSet) terraformPlanAggregate {
 	results := append([]schema.TerraformPlanCIResult(nil), resultSet.Results...)
 	sort.SliceStable(results, func(i, j int) bool {
@@ -166,6 +171,7 @@ func (p *Plugin) buildPlanAggregate(resultSet schema.TerraformPlanCIResultSet) t
 	return aggregate
 }
 
+// buildPlanAggregateComponent parses one scheduler result into its CI rendering model.
 func (p *Plugin) buildPlanAggregateComponent(result schema.TerraformPlanCIResult) terraformPlanAggregateComponent {
 	output := ansi.Strip(result.Output)
 	commandErr := error(nil)
@@ -210,6 +216,7 @@ func (p *Plugin) buildPlanAggregateComponent(result schema.TerraformPlanCIResult
 	}
 }
 
+// aggregateExitCode applies Terraform plan exit-code semantics across all components.
 func aggregateExitCode(counts terraformPlanAggregateCounts) int {
 	if counts.Failed > 0 {
 		return 1
@@ -220,6 +227,7 @@ func aggregateExitCode(counts terraformPlanAggregateCounts) int {
 	return 0
 }
 
+// aggregateSummaryText formats the compact aggregate status line.
 func aggregateSummaryText(counts terraformPlanAggregateCounts) string {
 	return fmt.Sprintf(
 		"%d components: %d changed, %d failed, %d skipped",
@@ -230,6 +238,7 @@ func aggregateSummaryText(counts terraformPlanAggregateCounts) string {
 	)
 }
 
+// componentSummaryText chooses the per-component summary shown in CI tables.
 func componentSummaryText(result schema.TerraformPlanCIResult, parsed *plugin.OutputResult, data *plugin.TerraformOutputData, status string) string {
 	switch status {
 	case "failed":
@@ -255,6 +264,7 @@ func componentSummaryText(result schema.TerraformPlanCIResult, parsed *plugin.Ou
 	return "No changes"
 }
 
+// renderAggregatePlanMarkdown builds the deterministic CI job summary body.
 func renderAggregatePlanMarkdown(aggregate terraformPlanAggregate) string {
 	var b strings.Builder
 	counts := aggregate.Counts
@@ -342,6 +352,7 @@ func renderAggregatePlanMarkdown(aggregate terraformPlanAggregate) string {
 	return b.String()
 }
 
+// writeAggregateGroup renders one summary-table row for a component status group.
 func writeAggregateGroup(b *strings.Builder, label string, components []terraformPlanAggregateComponent, include func(terraformPlanAggregateComponent) bool) {
 	values := make([]string, 0)
 	for _, component := range components {
@@ -359,6 +370,7 @@ func writeAggregateGroup(b *strings.Builder, label string, components []terrafor
 	b.WriteString(" |\n")
 }
 
+// writeAggregateDetails renders collapsible output sections for selected components.
 func writeAggregateDetails(b *strings.Builder, title string, components []terraformPlanAggregateComponent, include func(terraformPlanAggregateComponent) bool) {
 	var selected []terraformPlanAggregateComponent
 	for _, component := range components {
@@ -401,6 +413,7 @@ func writeAggregateDetails(b *strings.Builder, title string, components []terraf
 	}
 }
 
+// resourceCounts returns parsed Terraform resource counts with replace fallbacks.
 func resourceCounts(data *plugin.TerraformOutputData) plugin.ResourceCounts {
 	if data == nil {
 		return plugin.ResourceCounts{}
@@ -412,6 +425,7 @@ func resourceCounts(data *plugin.TerraformOutputData) plugin.ResourceCounts {
 	return counts
 }
 
+// truncateAggregateDetail caps long Terraform output while preserving the tail.
 func truncateAggregateDetail(value string) string {
 	value = strings.TrimSpace(value)
 	if len(value) <= aggregateDetailOutputMaxBytes {
@@ -420,6 +434,7 @@ func truncateAggregateDetail(value string) string {
 	return "... output truncated ...\n" + value[len(value)-aggregateDetailOutputMaxBytes:]
 }
 
+// markdownTableCell escapes text for a Markdown table cell.
 func markdownTableCell(value string) string {
 	value = strings.ReplaceAll(value, "\n", " ")
 	value = strings.ReplaceAll(value, "|", "\\|")
@@ -430,6 +445,7 @@ func markdownTableCell(value string) string {
 	return value
 }
 
+// markdownInline normalizes text used inside inline Markdown elements.
 func markdownInline(value string) string {
 	value = strings.ReplaceAll(value, "\n", " ")
 	value = strings.TrimSpace(value)
@@ -439,6 +455,7 @@ func markdownInline(value string) string {
 	return value
 }
 
+// formatAggregateDuration formats captured scheduler timing for CI output.
 func formatAggregateDuration(result schema.TerraformPlanCIResult) string {
 	if result.DurationMS > 0 {
 		return strconv.FormatInt(result.DurationMS, 10) + "ms"
@@ -449,6 +466,7 @@ func formatAggregateDuration(result schema.TerraformPlanCIResult) string {
 	return "-"
 }
 
+// writeAggregateSummary writes the rendered aggregate summary through the CI provider.
 func (p *Plugin) writeAggregateSummary(ctx *plugin.HookContext, rendered string) error {
 	writer := ctx.Provider.OutputWriter()
 	if writer == nil {
@@ -458,6 +476,7 @@ func (p *Plugin) writeAggregateSummary(ctx *plugin.HookContext, rendered string)
 	return writer.WriteSummary(rendered)
 }
 
+// writeAggregateOutputs writes deterministic aggregate output variables through the CI provider.
 func (p *Plugin) writeAggregateOutputs(ctx *plugin.HookContext, aggregate terraformPlanAggregate) error {
 	writer := ctx.Provider.OutputWriter()
 	if writer == nil {
@@ -504,6 +523,7 @@ func (p *Plugin) writeAggregateOutputs(ctx *plugin.HookContext, aggregate terraf
 	return errors.Join(writeErrs...)
 }
 
+// aggregateStackValue returns the requested stack or the aggregate all-stacks marker.
 func aggregateStackValue(info *schema.ConfigAndStacksInfo) string {
 	if info != nil && info.Stack != "" {
 		return info.Stack
@@ -511,6 +531,7 @@ func aggregateStackValue(info *schema.ConfigAndStacksInfo) string {
 	return aggregateStackAll
 }
 
+// uploadAggregatePlanfiles uploads planfiles only for completed, non-failed components.
 func (p *Plugin) uploadAggregatePlanfiles(ctx *plugin.HookContext, aggregate terraformPlanAggregate) error {
 	for _, component := range aggregate.Components {
 		if component.Skipped || component.HasErrors {
@@ -524,6 +545,7 @@ func (p *Plugin) uploadAggregatePlanfiles(ctx *plugin.HookContext, aggregate ter
 	return nil
 }
 
+// updateAggregateCheckRuns serializes per-component status context updates.
 func (p *Plugin) updateAggregateCheckRuns(ctx *plugin.HookContext, aggregate terraformPlanAggregate) {
 	for _, component := range aggregate.Components {
 		componentCtx := p.aggregateComponentContext(ctx, component)
@@ -537,6 +559,7 @@ func (p *Plugin) updateAggregateCheckRuns(ctx *plugin.HookContext, aggregate ter
 	}
 }
 
+// aggregateComponentContext builds a component-scoped hook context from aggregate data.
 func (p *Plugin) aggregateComponentContext(ctx *plugin.HookContext, component terraformPlanAggregateComponent) *plugin.HookContext {
 	info := schema.ConfigAndStacksInfo{}
 	if ctx.Info != nil {
@@ -567,6 +590,7 @@ func (p *Plugin) aggregateComponentContext(ctx *plugin.HookContext, component te
 	}
 }
 
+// postAggregateComment creates or updates the aggregate PR comment through the CI provider.
 func (p *Plugin) postAggregateComment(ctx *plugin.HookContext, renderedSummary string) error {
 	if reason := shouldSkipComment(ctx, renderedSummary); reason != "" {
 		log.Debug("Skipping aggregate PR comment", "reason", reason)
@@ -597,6 +621,7 @@ func (p *Plugin) postAggregateComment(ctx *plugin.HookContext, renderedSummary s
 	return nil
 }
 
+// buildAggregateCommentMarker returns the stable marker for aggregate PR comments.
 func buildAggregateCommentMarker(command, stack string) string {
 	if stack == "" {
 		stack = aggregateStackAll

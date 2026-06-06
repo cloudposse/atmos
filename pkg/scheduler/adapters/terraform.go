@@ -1206,6 +1206,7 @@ func terraformPlanChanged(result *scheduler.AggregateResult) bool {
 	return false
 }
 
+// finalizeTerraformPlanCIResults converts scheduler outcomes into aggregate CI plan results.
 func finalizeTerraformPlanCIResults(info *schema.ConfigAndStacksInfo, result *scheduler.AggregateResult, timings *terraformNodeTimings) {
 	if info == nil || info.SubCommand != "plan" || info.TerraformPlanCIResultHandler == nil || result == nil {
 		return
@@ -1248,6 +1249,7 @@ func finalizeTerraformPlanCIResults(info *schema.ConfigAndStacksInfo, result *sc
 	}
 }
 
+// cloneStringMap returns an independent copy of captured node log paths.
 func cloneStringMap(values map[string]string) map[string]string {
 	if values == nil {
 		return nil
