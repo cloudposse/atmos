@@ -509,7 +509,15 @@ func sanitizeOutput(output string, opts ...sanitizeOption) (string, error) {
 	credentialStoreRegex := regexp.MustCompile(`credential_store=(system-keyring|noop|file)`)
 	result = credentialStoreRegex.ReplaceAllString(result, "credential_store=keyring-placeholder")
 
-	// 15. Apply custom replacements if provided.
+	// 15. Drop the test-harness-injected terraform-command env var from debug logs.
+	// The suite forces OpenTofu via ATMOS_COMPONENTS_TERRAFORM_COMMAND=tofu (see runCLICommandTest),
+	// which Atmos echoes at debug level as "Found ENV variable ATMOS_COMPONENTS_TERRAFORM_COMMAND=tofu".
+	// That line is a test-setup artifact, not product behavior under test, so remove it entirely to keep
+	// debug-level snapshots stable and independent of how the suite selects the terraform binary.
+	terraformCommandEnvLogRegex := regexp.MustCompile(`(?m)^.*Found ENV variable ATMOS_COMPONENTS_TERRAFORM_COMMAND=[^\n]*\n?`)
+	result = terraformCommandEnvLogRegex.ReplaceAllString(result, "")
+
+	// 16. Apply custom replacements if provided.
 	// These are test-specific patterns that don't need to be part of the global sanitization.
 	// IMPORTANT: This must run LAST so it can override any built-in sanitization results.
 	for pattern, replacement := range config.customReplacements {
@@ -757,11 +765,13 @@ func checkPreconditions(t *testing.T, preconditions []string) {
 
 	// Map of precondition names to their check functions
 	preconditionChecks := map[string]func(*testing.T){
-		"github_token":    RequireOCIAuthentication,
-		"aws_credentials": RequireAWSCredentials,
-		"terraform":       RequireTerraform,
-		"packer":          RequirePacker,
-		"helmfile":        RequireHelmfile,
+		"github_token":      RequireOCIAuthentication,
+		"aws_credentials":   RequireAWSCredentials,
+		"terraform":         RequireTerraform,
+		"tofu":              RequireTofu,
+		"terraform_or_tofu": RequireTerraformOrTofu,
+		"packer":            RequirePacker,
+		"helmfile":          RequireHelmfile,
 	}
 
 	// Check each precondition
@@ -1041,6 +1051,19 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 	if _, exists := tc.Env["COLUMNS"]; !exists {
 		tc.Env["COLUMNS"] = "80" // Force consistent terminal width for table rendering
 	}
+
+	// Standardize the terraform binary on OpenTofu for the whole suite so the
+	// runtime is deterministic and host-independent (a dev box may have
+	// terraform, tofu, both, or neither). The product default stays "terraform"
+	// (pkg/config/const.go); this only affects tests. ATMOS_COMPONENTS_TERRAFORM_COMMAND
+	// is read in pkg/config/utils.go and overrides each fixture's
+	// components.terraform.command. Tests that specifically need terraform (e.g.
+	// the atmos-terraform-version parity test) opt out by setting this var to
+	// "terraform" in their own test-case env block.
+	if _, exists := tc.Env["ATMOS_COMPONENTS_TERRAFORM_COMMAND"]; !exists {
+		tc.Env["ATMOS_COMPONENTS_TERRAFORM_COMMAND"] = "tofu"
+	}
+
 	// Set any environment variables defined in the test case using t.Setenv for proper isolation.
 	for key, value := range tc.Env {
 		t.Setenv(key, value)
