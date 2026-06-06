@@ -283,7 +283,7 @@ func (handler *terraformPlanCIResultHandler) HandleTerraformPlanCIResults(result
 
 	atmosConfig, err := cfg.InitCliConfig(*handler.info, true)
 	if err != nil {
-		return fmt.Errorf("CI hook config init failed: %w", err)
+		return fmt.Errorf(errWrapFormat, errUtils.ErrInitializeCLIConfig, err)
 	}
 
 	if err := h.RunCIHooks(&h.RunCIHooksOptions{

@@ -495,12 +495,13 @@ func (p *Plugin) writeAggregateOutputs(ctx *plugin.HookContext, aggregate terraf
 		keys = append(keys, key)
 	}
 	sort.Strings(keys)
+	writeErrs := make([]error, 0)
 	for _, key := range keys {
 		if err := writer.WriteOutput(key, vars[key]); err != nil {
-			log.Warn("Failed to write aggregate CI output", "key", key, "error", err)
+			writeErrs = append(writeErrs, fmt.Errorf("failed to write aggregate CI output %q: %w", key, err))
 		}
 	}
-	return nil
+	return errors.Join(writeErrs...)
 }
 
 func aggregateStackValue(info *schema.ConfigAndStacksInfo) string {

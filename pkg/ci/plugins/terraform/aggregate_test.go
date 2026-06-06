@@ -44,6 +44,21 @@ func (f failingOutputWriter) WriteOutput(string, string) error {
 	return errors.New("output failed")
 }
 
+var _ = schema.TerraformPlanCIResult{
+	NodeID:     "",
+	Stack:      "",
+	Component:  "",
+	Status:     "",
+	Processed:  false,
+	Changed:    false,
+	ExitCode:   0,
+	Output:     "",
+	Error:      "",
+	StartedAt:  time.Time{},
+	FinishedAt: time.Time{},
+	DurationMS: 0,
+}
+
 func TestOnAfterPlanAggregateRendersSummaryOutputsCommentAndChecks(t *testing.T) {
 	p := &Plugin{}
 	ctx := newAggregateHookContext()
@@ -100,56 +115,75 @@ func TestOnAfterPlanAggregateRendersSummaryOutputsCommentAndChecks(t *testing.T)
 
 func TestBuildPlanAggregateExitCodeRules(t *testing.T) {
 	p := &Plugin{}
+	tests := []struct {
+		name     string
+		input    schema.TerraformPlanCIResultSet
+		wantCode int
+	}{
+		{
+			name: "no changes",
+			input: schema.TerraformPlanCIResultSet{Results: []schema.TerraformPlanCIResult{
+				{
+					NodeID:    "vpc-dev",
+					Stack:     "dev",
+					Component: "vpc",
+					Status:    "succeeded",
+					Processed: true,
+					Output:    "No changes. Your infrastructure matches the configuration.",
+				},
+			}},
+			wantCode: 0,
+		},
+		{
+			name: "changes",
+			input: schema.TerraformPlanCIResultSet{Results: []schema.TerraformPlanCIResult{
+				{
+					NodeID:    "vpc-dev",
+					Stack:     "dev",
+					Component: "vpc",
+					Status:    "succeeded",
+					Processed: true,
+					Changed:   true,
+					ExitCode:  2,
+					Output:    "Plan: 1 to add, 0 to change, 0 to destroy.",
+				},
+			}},
+			wantCode: 2,
+		},
+		{
+			name: "failed dominates changes",
+			input: schema.TerraformPlanCIResultSet{Results: []schema.TerraformPlanCIResult{
+				{
+					NodeID:    "vpc-dev",
+					Stack:     "dev",
+					Component: "vpc",
+					Status:    "failed",
+					Processed: true,
+					ExitCode:  1,
+					Output:    "Error: invalid value",
+					Error:     "terraform failed",
+				},
+				{
+					NodeID:    "database-dev",
+					Stack:     "dev",
+					Component: "database",
+					Status:    "succeeded",
+					Processed: true,
+					Changed:   true,
+					ExitCode:  2,
+					Output:    "Plan: 1 to add, 0 to change, 0 to destroy.",
+				},
+			}},
+			wantCode: 1,
+		},
+	}
 
-	noChanges := p.buildPlanAggregate(schema.TerraformPlanCIResultSet{Results: []schema.TerraformPlanCIResult{
-		{
-			NodeID:    "vpc-dev",
-			Stack:     "dev",
-			Component: "vpc",
-			Status:    "succeeded",
-			Processed: true,
-			Output:    "No changes. Your infrastructure matches the configuration.",
-		},
-	}})
-	assert.Equal(t, 0, noChanges.ExitCode)
-
-	changes := p.buildPlanAggregate(schema.TerraformPlanCIResultSet{Results: []schema.TerraformPlanCIResult{
-		{
-			NodeID:    "vpc-dev",
-			Stack:     "dev",
-			Component: "vpc",
-			Status:    "succeeded",
-			Processed: true,
-			Changed:   true,
-			ExitCode:  2,
-			Output:    "Plan: 1 to add, 0 to change, 0 to destroy.",
-		},
-	}})
-	assert.Equal(t, 2, changes.ExitCode)
-
-	failed := p.buildPlanAggregate(schema.TerraformPlanCIResultSet{Results: []schema.TerraformPlanCIResult{
-		{
-			NodeID:    "vpc-dev",
-			Stack:     "dev",
-			Component: "vpc",
-			Status:    "failed",
-			Processed: true,
-			ExitCode:  1,
-			Output:    "Error: invalid value",
-			Error:     "terraform failed",
-		},
-		{
-			NodeID:    "database-dev",
-			Stack:     "dev",
-			Component: "database",
-			Status:    "succeeded",
-			Processed: true,
-			Changed:   true,
-			ExitCode:  2,
-			Output:    "Plan: 1 to add, 0 to change, 0 to destroy.",
-		},
-	}})
-	assert.Equal(t, 1, failed.ExitCode)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := p.buildPlanAggregate(tt.input)
+			assert.Equal(t, tt.wantCode, got.ExitCode)
+		})
+	}
 }
 
 func TestOnAfterPlanAggregateWritesGitHubOutputFiles(t *testing.T) {
@@ -190,7 +224,7 @@ func newAggregateHookContext() *plugin.HookContext {
 	return &plugin.HookContext{
 		Event:          "after.terraform.plan.aggregate",
 		Command:        "plan",
-		EventPrefix:    "terraform",
+		EventPrefix:    "after",
 		Config:         newAggregateTestConfig(),
 		Provider:       newMockProvider(),
 		TemplateLoader: templates.NewLoader(&schema.AtmosConfiguration{}),
@@ -414,6 +448,20 @@ func TestWriteAggregateOutputsFiltersVariables(t *testing.T) {
 		"has_changes": "true",
 		"exit_code":   "1",
 	}, mp.writer.outputs)
+}
+
+func TestWriteAggregateOutputsReturnsJoinedWriterErrors(t *testing.T) {
+	p := &Plugin{}
+	ctx := newAggregateHookContext()
+	ctx.Provider = &failingOutputProvider{mockProvider: newMockProvider()}
+	ctx.Config.CI.Output.Variables = []string{"has_changes", "exit_code"}
+	aggregate := p.buildPlanAggregate(ctx.Aggregate.(schema.TerraformPlanCIResultSet))
+
+	err := p.writeAggregateOutputs(ctx, aggregate)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), `failed to write aggregate CI output "exit_code"`)
+	assert.Contains(t, err.Error(), `failed to write aggregate CI output "has_changes"`)
 }
 
 func TestUploadAggregatePlanfilesSkipsFailedAndReturnsDelegateError(t *testing.T) {

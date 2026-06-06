@@ -36,10 +36,11 @@ import (
 // fields by name. If any field is renamed upstream, this declaration fails
 // to compile so the rename surfaces before the tests would silently drift.
 var _ = schema.ConfigAndStacksInfo{
-	Stack:            "",
-	Component:        "",
-	ComponentFromArg: "",
-	ComponentType:    "",
+	Stack:                        "",
+	Component:                    "",
+	ComponentFromArg:             "",
+	ComponentType:                "",
+	TerraformPlanCIResultHandler: nil,
 }
 
 // newHookTestCmd constructs a cobra.Command with all the flags
@@ -497,7 +498,9 @@ func TestWirePerComponentHook(t *testing.T) {
 	t.Run("plan/deploy/apply install a non-nil hook", func(t *testing.T) {
 		for _, sub := range []string{"plan", "deploy", "apply"} {
 			t.Run(sub, func(t *testing.T) {
-				info := &schema.ConfigAndStacksInfo{}
+				info := &schema.ConfigAndStacksInfo{
+					TerraformPlanCIResultHandler: nil,
+				}
 				wirePerComponentHook(info, sub, newHookTestCmd())
 				assert.NotNil(t, info.PerComponentHook,
 					"%q subcommand must install a per-component hook", sub)
@@ -509,7 +512,9 @@ func TestWirePerComponentHook(t *testing.T) {
 		cmd := newHookTestCmd()
 		require.NoError(t, cmd.Flags().Set("ci", "true"))
 
-		info := &schema.ConfigAndStacksInfo{}
+		info := &schema.ConfigAndStacksInfo{
+			TerraformPlanCIResultHandler: nil,
+		}
 		wirePerComponentHook(info, "plan", cmd)
 
 		assert.Nil(t, info.PerComponentHook)
@@ -519,7 +524,9 @@ func TestWirePerComponentHook(t *testing.T) {
 	t.Run("plan native CI installs aggregate handler instead of per-component hook", func(t *testing.T) {
 		withGitHubActionsDetection(t)
 
-		info := &schema.ConfigAndStacksInfo{}
+		info := &schema.ConfigAndStacksInfo{
+			TerraformPlanCIResultHandler: nil,
+		}
 		wirePerComponentHook(info, "plan", newHookTestCmd())
 
 		assert.Nil(t, info.PerComponentHook)
@@ -668,7 +675,7 @@ func TestTerraformPlanCIResultHandler(t *testing.T) {
 		err := handler.HandleTerraformPlanCIResults(schema.TerraformPlanCIResultSet{})
 
 		require.Error(t, err)
-		assert.Contains(t, err.Error(), "CI hook config init failed")
+		assert.ErrorIs(t, err, errUtils.ErrInitializeCLIConfig)
 	})
 }
 

@@ -1442,6 +1442,7 @@ func (h *capturingTerraformPlanCIResultHandler) HandleTerraformPlanCIResults(res
 
 func TestExecuteTerraformPlanCIResultHandlerReceivesCapturedSchedulerResults(t *testing.T) {
 	handler := &capturingTerraformPlanCIResultHandler{}
+	var captureFlagsMu sync.Mutex
 	var captureFlags []bool
 
 	err := ExecuteTerraform(context.Background(), TerraformOptions{
@@ -1455,7 +1456,9 @@ func TestExecuteTerraformPlanCIResultHandlerReceivesCapturedSchedulerResults(t *
 		},
 		Stacks: terraformAdapterTestStacks(),
 		Executor: func(execution TerraformExecution) (TerraformExecutionResult, error) {
+			captureFlagsMu.Lock()
 			captureFlags = append(captureFlags, execution.CaptureOutput)
+			captureFlagsMu.Unlock()
 			if execution.Info.Component == "vpc" {
 				return TerraformExecutionResult{
 					Stdout: "Error: invalid reference",
@@ -1471,7 +1474,10 @@ func TestExecuteTerraformPlanCIResultHandlerReceivesCapturedSchedulerResults(t *
 	require.Error(t, err)
 	require.Equal(t, 1, handler.calls)
 	require.Len(t, handler.resultSet.Results, 3)
-	require.Equal(t, []bool{true}, captureFlags)
+	captureFlagsMu.Lock()
+	gotCaptureFlags := append([]bool(nil), captureFlags...)
+	captureFlagsMu.Unlock()
+	require.Equal(t, []bool{true}, gotCaptureFlags)
 
 	vpc := handler.resultSet.Results[0]
 	require.Equal(t, "vpc-dev", vpc.NodeID)
