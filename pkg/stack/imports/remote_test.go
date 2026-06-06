@@ -48,6 +48,9 @@ func initGitRepo(t *testing.T, files map[string]string) string {
 	runGit(t, repoDir, "checkout", "-b", "main")
 	runGit(t, repoDir, "config", "user.email", "test@example.com")
 	runGit(t, repoDir, "config", "user.name", "Test User")
+	// Never sign commits in throwaway test repos: signing is slow, needs no verification here, and
+	// flakes on dev machines whose global git config enables commit.gpgsign (e.g. a 1Password agent).
+	runGit(t, repoDir, "config", "commit.gpgsign", "false")
 
 	for name, content := range files {
 		path := filepath.Join(repoDir, filepath.FromSlash(name))
@@ -236,6 +239,32 @@ func TestRemoteImporter_Resolve_GitNoSubdirDownloadsAsFile(t *testing.T) {
 	data, err := os.ReadFile(matches[0].Path)
 	require.NoError(t, err)
 	assert.Equal(t, "vars:\n  from_git_file: true\n", string(data))
+}
+
+// TestRemoteImporter_Resolve_GitSubdir_NoRef_DefaultsToBranch regression-tests a ref-less git-subdir
+// import. Because resolveGitSubdir pre-creates the temp dir, the go-getter git getter takes the
+// "update" path; without a ref, update previously ran `git checkout ""` and failed with
+// "empty string is not a valid pathspec". The fix defaults an empty ref to the remote's default
+// branch, the same as clone(). This was masked for private repos by an earlier auth failure (the
+// clone 404'd before checkout) and also affects ref-less public imports. Every other git-subdir test
+// pins `?ref=main`.
+func TestRemoteImporter_Resolve_GitSubdir_NoRef_DefaultsToBranch(t *testing.T) {
+	repoDir := initGitRepo(t, map[string]string{
+		"stacks/orgs/acme/plat/dev.yaml": "vars:\n  imported: true\n",
+	})
+
+	atmosConfig := &schema.AtmosConfiguration{}
+	importer := newTestRemoteImporter(t, atmosConfig)
+
+	// No `?ref=` — the empty ref must resolve to the remote default branch instead of failing.
+	uri := fmt.Sprintf("git::%s//stacks/orgs/acme/plat/dev", gitFileURI(repoDir))
+	matches, err := importer.Resolve(uri)
+	require.NoError(t, err)
+	require.Len(t, matches, 1)
+
+	data, err := os.ReadFile(matches[0].Path)
+	require.NoError(t, err)
+	assert.Equal(t, "vars:\n  imported: true\n", normalizeLineEndings(string(data)))
 }
 
 func TestRemoteImporter_Resolve_GitSubdirNoExtension(t *testing.T) {
