@@ -131,7 +131,7 @@ tests:
     sandbox: true
     clean: true
     snapshot: false
-    description: "Runs 'atmos terraform plan mycomponent -s prod' without --ci flag but with GITHUB_ACTIONS=true to verify automatic GitHub provider detection."
+    description: "Runs 'atmos terraform plan mycomponent -s prod' without --ci flag but with GITHUB_ACTIONS=true to verify automatic GitHub provider detection on a plan that detects changes (1 resource to add)."
     workdir: "fixtures/scenarios/native-ci"
     command: "atmos"
     env:
@@ -155,11 +155,11 @@ tests:
         - "CI hook"
       file_contains:
         "github-output.txt":
-          - "has_changes=false"
+          - "has_changes=true"
           - "has_errors=false"
           - "exit_code=0"
           - "summary<<EOF"
         "github-step-summary.txt":
-          - "No Changes for"
+          - "Resource Changes Found for"
           - "mycomponent"
           - "prod"
