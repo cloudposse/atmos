@@ -1,11 +1,15 @@
 package exec
 
 import (
+	"context"
+
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
+	scheduleradapters "github.com/cloudposse/atmos/pkg/scheduler/adapters"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/store/authbridge"
 	"github.com/cloudposse/atmos/pkg/ui"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -95,6 +99,13 @@ func getAffectedComponents(args *DescribeAffectedCmdArgs) ([]schema.Affected, er
 // ExecuteTerraformAffected executes `atmos terraform <command> --affected`.
 func ExecuteTerraformAffected(args *DescribeAffectedCmdArgs, info *schema.ConfigAndStacksInfo) error {
 	defer perf.Track(nil, "exec.ExecuteTerraformAffected")()
+	return ExecuteTerraformAffectedWithContext(context.Background(), args, info)
+}
+
+// ExecuteTerraformAffectedWithContext executes affected Terraform components through
+// the shared graph-backed scheduler path.
+func ExecuteTerraformAffectedWithContext(ctx context.Context, args *DescribeAffectedCmdArgs, info *schema.ConfigAndStacksInfo) error {
+	defer perf.Track(nil, "exec.ExecuteTerraformAffectedWithContext")()
 
 	if args == nil {
 		return errUtils.ErrNilParam
@@ -102,6 +113,30 @@ func ExecuteTerraformAffected(args *DescribeAffectedCmdArgs, info *schema.Config
 	if info == nil {
 		return errUtils.ErrNilParam
 	}
+
+	authDisabled := args.AuthDisabled || info.AuthDisabled || info.Identity == cfg.IdentityFlagDisabledValue
+	if authDisabled {
+		info.Identity = cfg.IdentityFlagDisabledValue
+		info.AuthDisabled = true
+	}
+
+	atmosConfig, err := cfg.InitCliConfig(*info, true)
+	if err != nil {
+		return err
+	}
+
+	authManager, err := createQueryAuthManager(info, &atmosConfig)
+	if err != nil {
+		return err
+	}
+	if authManager != nil {
+		resolver := authbridge.NewResolver(authManager, info)
+		atmosConfig.Stores.SetAuthContextResolver(resolver)
+	}
+
+	args.CLIConfig = &atmosConfig
+	args.AuthManager = authManager
+	args.AuthDisabled = authDisabled
 
 	affectedList, err := getAffectedComponents(args)
 	if err != nil {
@@ -113,25 +148,45 @@ func ExecuteTerraformAffected(args *DescribeAffectedCmdArgs, info *schema.Config
 	// is no reason to walk dependency graphs for items we will not execute.
 	affectedList = filterTerraformAffected(affectedList)
 
-	// Add dependent components for each directly affected component.
-	if len(affectedList) > 0 {
-		err = addDependentsToAffected(
-			args.CLIConfig,
-			&affectedList,
-			args.IncludeSettings,
-			args.ProcessTemplates,
-			args.ProcessYamlFunctions,
-			args.Skip,
-			"",
-			args.AuthManager,
-			args.AuthDisabled,
-		)
-		if err != nil {
-			return err
-		}
+	if len(affectedList) == 0 {
+		ui.Success("No components affected")
+		return nil
 	}
 
-	return executeAffectedComponents(affectedList, info, args)
+	affectedYaml, err := u.ConvertToYAML(affectedList)
+	if err != nil {
+		return err
+	}
+	log.Debug("Affected", "components", affectedYaml)
+
+	stacks, err := ExecuteDescribeStacksWithAuthDisabled(
+		&atmosConfig,
+		"",  // all stacks; the affected selector already constrains direct matches
+		nil, // all components; graph filtering applies the selected affected set
+		[]string{cfg.TerraformComponentType},
+		nil,
+		false,
+		info.ProcessTemplates,
+		info.ProcessFunctions,
+		false,
+		info.Skip,
+		authManager,
+		authDisabled,
+	)
+	if err != nil {
+		return err
+	}
+
+	return scheduleradapters.ExecuteTerraform(ctx, scheduleradapters.TerraformOptions{
+		AtmosConfig: &atmosConfig,
+		Info:        info,
+		Stacks:      stacks,
+		Executor:    executeTerraformQueryComponent,
+		Selection: &scheduleradapters.TerraformSelection{
+			NodeIDs:           extractAffectedNodeIDs(affectedList),
+			IncludeDependents: args.IncludeDependents,
+		},
+	})
 }
 
 // executeAffectedComponents processes each affected component in dependency order.
