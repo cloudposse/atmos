@@ -8,6 +8,15 @@ import (
 	"github.com/cloudposse/atmos/pkg/store"
 )
 
+// init self-registers the store-backed track (track 1) so backend selection is a
+// registry lookup rather than a central switch. The store track ignores the
+// stack/component `secrets.providers` map.
+func init() {
+	Register(TrackStore, func(atmosConfig *schema.AtmosConfiguration, name string, _ map[string]any) (Provider, error) {
+		return newStoreProvider(atmosConfig, name)
+	})
+}
+
 // storeProvider adapts a `secret: true` store (track 1) to the Provider interface.
 type storeProvider struct {
 	name  string

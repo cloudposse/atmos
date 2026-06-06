@@ -39,7 +39,7 @@ func runSecretValidate(cmd *cobra.Command, args []string) error {
 
 	for i := range result.MissingRequired {
 		st := &result.MissingRequired[i]
-		ui.Errorf("Missing required secret `%s` (%s)", st.Declaration.Name, backendLabel(st.Declaration))
+		ui.Errorf("Missing required secret `%s` (%s)", st.Declaration.Name, backendLabel(&st.Declaration))
 	}
 	for i := range result.Errored {
 		st := &result.Errored[i]

@@ -812,6 +812,10 @@ func executeCustomCommand(
 		// relying on a possibly-stale or absent `atmos` on PATH.
 		if execPath, execErr := os.Executable(); execErr == nil {
 			env = envpkg.UpdateEnvVar(env, "ATMOS_CLI_PATH", execPath)
+			// Also prepend the running binary's directory to PATH so custom command steps can
+			// invoke a bare `atmos` and resolve to the SAME binary — even when atmos isn't on
+			// the caller's PATH (e.g. `./build/atmos <cmd>`). Keeps example steps readable.
+			env = envpkg.EnsureBinaryInPath(env, execPath)
 		}
 		for _, v := range commandConfig.Env {
 			key := strings.TrimSpace(v.Key)

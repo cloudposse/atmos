@@ -11,16 +11,17 @@ import (
 var deleteParser *flags.StandardParser
 
 var deleteCmd = &cobra.Command{
-	Use:     "delete NAME",
+	Use:     "delete [NAME]",
 	Aliases: []string{"rm"},
-	Short:   "Remove a declared secret's value from its backend.",
-	Args:    cobra.ExactArgs(1),
+	Short:   "Remove a declared secret's value from its backend (or all with --all).",
+	Args:    cobra.MaximumNArgs(1),
 	RunE:    runSecretDelete,
 }
 
 func init() {
 	deleteParser = flags.NewStandardParser(
 		flags.WithBoolFlag("force", "f", false, "Delete without confirmation"),
+		flags.WithBoolFlag("all", "", false, "Delete all declared secrets for the scope (resets a SOPS file to a clean state)"),
 	)
 	deleteParser.RegisterFlags(deleteCmd)
 }
@@ -31,6 +32,15 @@ func runSecretDelete(cmd *cobra.Command, args []string) error {
 	scope, err := parseScope(cmd)
 	if err != nil {
 		return err
+	}
+
+	all, _ := cmd.Flags().GetBool("all")
+	if all {
+		return runSecretDeleteAll(cmd, scope)
+	}
+
+	if len(args) != 1 {
+		return ErrSecretNameRequired
 	}
 	name := args[0]
 
@@ -56,5 +66,33 @@ func runSecretDelete(cmd *cobra.Command, args []string) error {
 	}
 
 	ui.Successf("Deleted secret `%s` for component `%s` in stack `%s`", name, scope.Component, scope.Stack)
+	return nil
+}
+
+// runSecretDeleteAll clears every declared secret's value for the scope (used to reset a SOPS file).
+func runSecretDeleteAll(cmd *cobra.Command, scope secretScope) error {
+	force, _ := cmd.Flags().GetBool("force")
+	if !force {
+		confirmed, confErr := confirmAction("Delete ALL declared secrets for component `" + scope.Component + "` in stack `" + scope.Stack + "`?")
+		if confErr != nil {
+			return confErr
+		}
+		if !confirmed {
+			ui.Warning("Aborted")
+			return nil
+		}
+	}
+
+	svc, err := loadService(scope)
+	if err != nil {
+		return err
+	}
+
+	count, err := svc.DeleteAll()
+	if err != nil {
+		return err
+	}
+
+	ui.Successf("Deleted %d declared secret(s) for component `%s` in stack `%s`", count, scope.Component, scope.Stack)
 	return nil
 }

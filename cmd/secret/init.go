@@ -50,12 +50,12 @@ func runSecretInit(cmd *cobra.Command, args []string) error {
 			continue
 		}
 		if dryRun {
-			ui.Infof("Would initialize `%s` (%s)", st.Declaration.Name, backendLabel(st.Declaration))
+			ui.Infof("Would initialize `%s` (%s)", st.Declaration.Name, backendLabel(&st.Declaration))
 			initialized++
 			continue
 		}
 
-		ui.Infof("Initializing `%s` (%s)", st.Declaration.Name, backendLabel(st.Declaration))
+		ui.Infof("Initializing `%s` (%s)", st.Declaration.Name, backendLabel(&st.Declaration))
 		value, promptErr := promptForSecretValue()
 		if promptErr != nil {
 			return promptErr

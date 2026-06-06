@@ -48,12 +48,12 @@ func Resolve(atmosConfig *schema.AtmosConfiguration, input, currentStack string,
 		return nil, fmt.Errorf("%w: %q (declare it under the component's secrets.vars)", ErrSecretNotDeclared, name)
 	}
 
-	provider, err := providerFor(atmosConfig, decl, componentSection)
+	provider, err := providerFor(atmosConfig, &decl, componentSection)
 	if err != nil {
 		return nil, fmt.Errorf("%w (secret %q)", err, name)
 	}
 
-	coord := coordinateForDeclaration(decl, currentStack, component)
+	coord := coordinateForDeclaration(&decl, currentStack, component)
 	return retrieveAndMask(atmosConfig, provider, coord, name, opts)
 }
 

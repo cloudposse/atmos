@@ -111,7 +111,7 @@ func statusesToData(scope secretScope, statuses []secrets.Status) []map[string]a
 			"stack":       scope.Stack,
 			"component":   scope.Component,
 			"secret":      st.Declaration.Name,
-			"provider":    backendLabel(st.Declaration),
+			"provider":    backendLabel(&st.Declaration),
 			"status":      statusLabel(st),
 			"description": st.Declaration.Description,
 		})
@@ -136,7 +136,7 @@ func secretListColumns(verbose bool) []column.Config {
 }
 
 // backendLabel returns a short backend identifier for display.
-func backendLabel(decl secrets.Declaration) string {
+func backendLabel(decl *secrets.Declaration) string {
 	if decl.BackendName == "" {
 		return "(none)"
 	}

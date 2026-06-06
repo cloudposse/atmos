@@ -2,23 +2,58 @@ package providers
 
 import (
 	"bytes"
-	"encoding/json"
+	"context"
+	"errors"
 	"fmt"
-	"os/exec"
-	"strings"
+	"io/fs"
+	"os"
+	"path/filepath"
+	"text/template"
+	"time"
 
+	"github.com/Masterminds/sprig/v3"
+	"github.com/getsops/sops/v3"
+	sopsaes "github.com/getsops/sops/v3/aes"
+	sopsage "github.com/getsops/sops/v3/age"
+	sopsconfig "github.com/getsops/sops/v3/config"
+	"github.com/getsops/sops/v3/keyservice"
+	sopsyaml "github.com/getsops/sops/v3/stores/yaml"
+	sopsversion "github.com/getsops/sops/v3/version"
+	"google.golang.org/grpc"
+	"gopkg.in/yaml.v3"
+
+	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/config/homedir"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-// sopsProvider implements the Provider interface over a SOPS-encrypted file (track 2). It
-// shells out to the `sops` binary because SOPS has no stable public encrypt API in Go; the
-// binary is the canonical way to mutate an encrypted file in place.
+// init self-registers the SOPS track (track 2) so backend selection is a registry
+// lookup rather than a central switch. Its constructor already matches Constructor.
+func init() {
+	Register(TrackSops, newSopsProvider)
+}
+
+const (
+	// Format string wrapping a sentinel error, a file path, and an underlying error.
+	errFmtWrapFile = "%w: %q: %w"
+	// Permission for SOPS-encrypted files (owner read/write only).
+	secretFileMode os.FileMode = 0o600
+	// Permission for directories created to hold SOPS files.
+	secretDirMode os.FileMode = 0o755
+)
+
+// sopsProvider implements the Provider interface over a SOPS-encrypted file (track 2). It uses
+// the getsops/sops Go SDK in-process — it does NOT shell out to the `sops` binary. Reads use the
+// stable `decrypt` package; mutations load the encrypted tree, decrypt the data key via the age
+// keysource (SOPS_AGE_KEY_FILE/SOPS_AGE_KEY), edit a top-level key, and re-encrypt in place.
 type sopsProvider struct {
-	name string
-	kind string
-	file string
+	name          string
+	kind          string
+	file          string // Go-template file path (e.g. `secrets/{{ .atmos_stack }}.enc.yaml`).
+	ageRecipients string // Optional explicit age recipients for creating a fresh file.
+	ageKeyFile    string // Optional path to the age private key (supports `~`/`$ENV`); falls back to SOPS_AGE_KEY_FILE/SOPS_AGE_KEY when empty.
 }
 
 // newSopsProvider builds a SOPS provider. The provider definition is resolved from the
@@ -42,7 +77,10 @@ func newSopsProvider(atmosConfig *schema.AtmosConfiguration, name string, sectio
 		return nil, fmt.Errorf("%w: provider %q has no `spec.file`", ErrProviderNotFound, name)
 	}
 
-	return &sopsProvider{name: name, kind: kind, file: file}, nil
+	ageRecipients, _ := spec["age_recipients"].(string)
+	ageKeyFile, _ := spec["age_key_file"].(string)
+
+	return &sopsProvider{name: name, kind: kind, file: file, ageRecipients: ageRecipients, ageKeyFile: ageKeyFile}, nil
 }
 
 // lookupSopsProvider reads a provider definition from a stack/component `secrets.providers`
@@ -69,51 +107,70 @@ func (p *sopsProvider) Kind() string {
 	return p.kind
 }
 
-// resolveFile substitutes {stack}/{component} tokens in the configured file path.
-func (p *sopsProvider) resolveFile(coord Coordinate) string {
-	f := strings.ReplaceAll(p.file, "{stack}", coord.Stack)
-	f = strings.ReplaceAll(f, "{component}", coord.Component)
-	return f
-}
+// resolveFile renders the configured file path as a Go template, exposing `{{ .atmos_stack }}`
+// and `{{ .atmos_component }}` (consistent with the rest of Atmos templating) plus sprig functions.
+func (p *sopsProvider) resolveFile(coord Coordinate) (string, error) {
+	tmpl, err := template.New("sops-file").Funcs(sprig.FuncMap()).Option("missingkey=error").Parse(p.file)
+	if err != nil {
+		return "", fmt.Errorf("%w: invalid `spec.file` template %q: %w", ErrSopsFilePathTemplate, p.file, err)
+	}
 
-// sopsIndexPath builds a SOPS index path for a single top-level key, e.g. `["NAME"]`.
-func sopsIndexPath(key string) string {
-	return fmt.Sprintf("[%q]", key)
+	data := map[string]any{
+		"atmos_stack":     coord.Stack,
+		"atmos_component": coord.Component,
+	}
+
+	var buf bytes.Buffer
+	if err := tmpl.Execute(&buf, data); err != nil {
+		return "", fmt.Errorf("%w: rendering `spec.file` %q: %w", ErrSopsFilePathTemplate, p.file, err)
+	}
+	return buf.String(), nil
 }
 
 func (p *sopsProvider) Set(coord Coordinate, value any) error {
 	defer perf.Track(nil, "providers.sopsProvider.Set")()
 
-	encoded, err := json.Marshal(value)
+	file, err := p.resolveFile(coord)
 	if err != nil {
-		return fmt.Errorf("%w: %w", ErrSerialize, err)
+		return err
 	}
-	_, err = p.runSops("set", p.resolveFile(coord), sopsIndexPath(coord.Key), string(encoded))
-	return err
+	return p.editFile(file, true, func(branch sops.TreeBranch) sops.TreeBranch {
+		return setBranchValue(branch, coord.Key, value)
+	})
 }
 
 func (p *sopsProvider) Get(coord Coordinate) (any, error) {
 	defer perf.Track(nil, "providers.sopsProvider.Get")()
 
-	out, err := p.runSops("decrypt", "--extract", sopsIndexPath(coord.Key), p.resolveFile(coord))
+	file, err := p.resolveFile(coord)
 	if err != nil {
 		return nil, err
 	}
-	trimmed := strings.TrimRight(out, "\n")
-
-	// Prefer structured decoding; fall back to the raw string for plain scalars.
-	var decoded any
-	if jsonErr := json.Unmarshal([]byte(trimmed), &decoded); jsonErr == nil {
-		return decoded, nil
+	doc, err := p.decryptDoc(file)
+	if err != nil {
+		return nil, err
 	}
-	return trimmed, nil
+	value, ok := doc[coord.Key]
+	if !ok {
+		return nil, fmt.Errorf("%w: %q", ErrSecretNotInitialized, coord.Key)
+	}
+	return value, nil
 }
 
 func (p *sopsProvider) Delete(coord Coordinate) error {
 	defer perf.Track(nil, "providers.sopsProvider.Delete")()
 
-	_, err := p.runSops("unset", p.resolveFile(coord), sopsIndexPath(coord.Key))
-	return err
+	file, err := p.resolveFile(coord)
+	if err != nil {
+		return err
+	}
+	// Deleting from a non-existent file (or a missing key) is idempotently "done".
+	if _, statErr := os.Stat(file); errors.Is(statErr, fs.ErrNotExist) {
+		return nil
+	}
+	return p.editFile(file, false, func(branch sops.TreeBranch) sops.TreeBranch {
+		return removeBranchKey(branch, coord.Key)
+	})
 }
 
 func (p *sopsProvider) Status(coord Coordinate) (bool, error) {
@@ -121,28 +178,340 @@ func (p *sopsProvider) Status(coord Coordinate) (bool, error) {
 
 	_, err := p.Get(coord)
 	if err != nil {
-		// Treat extraction failure as "not initialized" rather than a hard error.
+		// Treat a missing key or undecryptable file as "not initialized" rather than a hard error.
 		return false, nil
 	}
 	return true, nil
 }
 
-// runSops invokes the sops binary with the given arguments and returns stdout.
-func (p *sopsProvider) runSops(args ...string) (string, error) {
-	bin, err := exec.LookPath("sops")
+// Reset overwrites the encrypted file with a clean, empty document (creating it if missing),
+// re-using the file's recipients (from `spec.age_recipients` or the matching `.sops.yaml`
+// creation rule). It implements the FileResettable capability.
+func (p *sopsProvider) Reset(coord Coordinate) error {
+	defer perf.Track(nil, "providers.sopsProvider.Reset")()
+
+	file, err := p.resolveFile(coord)
 	if err != nil {
-		return "", ErrSopsBinaryNotFound
+		return err
+	}
+	return p.writeNewFile(file, sops.TreeBranch{})
+}
+
+// decryptDoc decrypts the whole SOPS file and returns its top-level document as a map. It loads
+// the encrypted tree, decrypts the data key via the provider's key service (which honors
+// `spec.age_key_file` when set, otherwise SOPS_AGE_KEY_FILE/SOPS_AGE_KEY), verifies the file MAC,
+// and emits the cleartext YAML to unmarshal — mirroring the structure of the on-disk document.
+func (p *sopsProvider) decryptDoc(file string) (map[string]any, error) {
+	enc, err := os.ReadFile(file)
+	if err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return nil, fileNotFoundErr(file)
+		}
+		return nil, fmt.Errorf(errFmtWrapFile, ErrSopsDecrypt, file, err)
 	}
 
-	cmd := exec.Command(bin, args...)
-	var stdout, stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
-
-	log.Debug("Running sops", "args", strings.Join(args, " "))
-
-	if runErr := cmd.Run(); runErr != nil {
-		return "", fmt.Errorf("%w: %w: %s", ErrSopsOperation, runErr, strings.TrimSpace(stderr.String()))
+	store := sopsyaml.NewStore(&sopsconfig.YAMLStoreConfig{})
+	tree, err := store.LoadEncryptedFile(enc)
+	if err != nil {
+		return nil, fmt.Errorf(errFmtWrapFile, ErrSopsDecrypt, file, err)
 	}
-	return stdout.String(), nil
+
+	client, err := p.keyClient()
+	if err != nil {
+		return nil, err
+	}
+	if _, err := decryptTree(&tree, sopsaes.NewCipher(), client); err != nil {
+		return nil, p.decryptErr(file, err)
+	}
+
+	clear, err := store.EmitPlainFile(tree.Branches)
+	if err != nil {
+		return nil, fmt.Errorf(errFmtWrapFile, ErrSopsDecrypt, file, err)
+	}
+	var doc map[string]any
+	if err := yaml.Unmarshal(clear, &doc); err != nil {
+		return nil, fmt.Errorf(errFmtWrapFile, ErrSopsDecrypt, file, err)
+	}
+	if doc == nil {
+		doc = map[string]any{}
+	}
+	return doc, nil
+}
+
+// editFile loads an encrypted file, decrypts it, applies mutate to the top-level branch, and
+// re-encrypts in place with the same data key. When createIfMissing is set and the file does not
+// exist, it is created fresh from the mutation applied to an empty document.
+func (p *sopsProvider) editFile(file string, createIfMissing bool, mutate func(sops.TreeBranch) sops.TreeBranch) error {
+	enc, err := os.ReadFile(file)
+	if errors.Is(err, fs.ErrNotExist) {
+		if !createIfMissing {
+			return fileNotFoundErr(file)
+		}
+		return p.writeNewFile(file, mutate(sops.TreeBranch{}))
+	}
+	if err != nil {
+		return fmt.Errorf(errFmtWrapFile, ErrSopsDecrypt, file, err)
+	}
+
+	store := sopsyaml.NewStore(&sopsconfig.YAMLStoreConfig{})
+	tree, err := store.LoadEncryptedFile(enc)
+	if err != nil {
+		return fmt.Errorf(errFmtWrapFile, ErrSopsDecrypt, file, err)
+	}
+
+	client, err := p.keyClient()
+	if err != nil {
+		return err
+	}
+	cipher := sopsaes.NewCipher()
+	dataKey, err := decryptTree(&tree, cipher, client)
+	if err != nil {
+		return p.decryptErr(file, err)
+	}
+
+	if len(tree.Branches) == 0 {
+		tree.Branches = sops.TreeBranches{sops.TreeBranch{}}
+	}
+	tree.Branches[0] = mutate(tree.Branches[0])
+
+	if err := encryptTree(&tree, dataKey, cipher); err != nil {
+		return fmt.Errorf(errFmtWrapFile, ErrSopsEncrypt, file, err)
+	}
+
+	out, err := store.EmitEncryptedFile(tree)
+	if err != nil {
+		return fmt.Errorf(errFmtWrapFile, ErrSopsEncrypt, file, err)
+	}
+	log.Debug("Wrote SOPS-encrypted file in-process", "file", file)
+	return os.WriteFile(file, out, secretFileMode)
+}
+
+// writeNewFile encrypts a brand-new document (one top-level branch) and writes it to file,
+// generating a fresh data key from the resolved recipients.
+func (p *sopsProvider) writeNewFile(file string, branch sops.TreeBranch) error {
+	keyGroups, err := p.keyGroups(file)
+	if err != nil {
+		return err
+	}
+
+	tree := sops.Tree{
+		Branches: sops.TreeBranches{branch},
+		Metadata: sops.Metadata{
+			KeyGroups: keyGroups,
+			Version:   sopsversion.Version,
+		},
+		FilePath: file,
+	}
+
+	dataKey, errs := tree.GenerateDataKey()
+	if len(errs) > 0 {
+		return fmt.Errorf(errFmtWrapFile, ErrSopsEncrypt, file, errors.Join(errs...))
+	}
+	if err := encryptTree(&tree, dataKey, sopsaes.NewCipher()); err != nil {
+		return fmt.Errorf(errFmtWrapFile, ErrSopsEncrypt, file, err)
+	}
+
+	store := sopsyaml.NewStore(&sopsconfig.YAMLStoreConfig{})
+	out, err := store.EmitEncryptedFile(tree)
+	if err != nil {
+		return fmt.Errorf(errFmtWrapFile, ErrSopsEncrypt, file, err)
+	}
+	if err := os.MkdirAll(filepath.Dir(file), secretDirMode); err != nil {
+		return fmt.Errorf(errFmtWrapFile, ErrSopsEncrypt, file, err)
+	}
+	log.Debug("Created SOPS-encrypted file in-process", "file", file)
+	return os.WriteFile(file, out, secretFileMode)
+}
+
+// keyGroups resolves the encryption recipients for a fresh file: explicit `spec.age_recipients`
+// first, otherwise the matching creation rule in the nearest `.sops.yaml`.
+func (p *sopsProvider) keyGroups(file string) ([]sops.KeyGroup, error) {
+	if p.ageRecipients != "" {
+		masterKeys, err := sopsage.MasterKeysFromRecipients(p.ageRecipients)
+		if err != nil {
+			return nil, fmt.Errorf("%w: %w", ErrSopsRecipients, err)
+		}
+		var group sops.KeyGroup
+		for _, mk := range masterKeys {
+			group = append(group, mk)
+		}
+		return []sops.KeyGroup{group}, nil
+	}
+
+	abs, err := filepath.Abs(file)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %w", ErrSopsRecipients, err)
+	}
+	confPath, err := sopsconfig.FindConfigFile(filepath.Dir(abs))
+	if err != nil {
+		return nil, fmt.Errorf("%w: no `spec.age_recipients` and no .sops.yaml found for %q: %w", ErrSopsRecipients, file, err)
+	}
+	conf, err := sopsconfig.LoadCreationRuleForFile(confPath, abs, nil)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %w", ErrSopsRecipients, err)
+	}
+	if conf == nil || len(conf.KeyGroups) == 0 {
+		return nil, fmt.Errorf("%w: no creation rule in %q matches %q", ErrSopsRecipients, confPath, file)
+	}
+	return conf.KeyGroups, nil
+}
+
+// fileNotFoundErr reports a missing SOPS file as ErrSecretFileNotFound with actionable hints on how
+// to initialize it. The errors.Is(result, ErrSecretFileNotFound) check still holds.
+func fileNotFoundErr(file string) error {
+	return errUtils.Build(ErrSecretFileNotFound).
+		WithCause(fmt.Errorf("%w: %q", ErrSecretFileNotFound, file)).
+		WithHint("Initialize secrets to create the encrypted file: `atmos secret set <NAME>=<value> --stack <stack> --component <component>` (or `atmos secret init`).").
+		WithHint("On first write Atmos creates and encrypts the file in-process using `spec.age_recipients` or a matching .sops.yaml creation rule — no `sops` binary required.").
+		Err()
+}
+
+// ageKeyFileErr reports a `spec.age_key_file` that could not be read/parsed as ErrSopsAgeKeyFile with
+// actionable hints on how to provide/generate the key. The errors.Is(result, ErrSopsAgeKeyFile) check holds.
+func ageKeyFileErr(path string, cause error) error {
+	return errUtils.Build(ErrSopsAgeKeyFile).
+		WithCause(fmt.Errorf("%q: %w", path, cause)).
+		WithHint("Point `spec.age_key_file` at your age PRIVATE key file (the line starting with `AGE-SECRET-KEY-1...`).").
+		WithHint("No key yet? Generate one with `age-keygen -o keys.txt`; its `# public key:` line is the `spec.age_recipients` used to encrypt.").
+		Err()
+}
+
+// decryptErr wraps a SOPS data-key/MAC decryption failure as ErrSopsDecrypt with actionable hints
+// about the age private key. The errors.Is(result, ErrSopsDecrypt) check still holds.
+func (p *sopsProvider) decryptErr(file string, cause error) error {
+	b := errUtils.Build(ErrSopsDecrypt).WithCause(fmt.Errorf("%q: %w", file, cause))
+	if p.ageKeyFile != "" {
+		b = b.WithHintf("Ensure `spec.age_key_file` (%s) holds the age private key matching this file's recipients.", p.ageKeyFile)
+	} else {
+		b = b.WithHint("Provide the age private key: set `spec.age_key_file` in the provider config, or export SOPS_AGE_KEY_FILE / SOPS_AGE_KEY.")
+	}
+	b = b.WithHint("Generate an age key with `age-keygen -o keys.txt`; its `# public key:` line is the `spec.age_recipients` used to encrypt.")
+	return b.Err()
+}
+
+// keyClient returns the key service used to decrypt the SOPS data key. When `spec.age_key_file`
+// is set, it parses that age private key and injects it for age decrypts; otherwise it returns the
+// default local client, which resolves the key from SOPS_AGE_KEY_FILE/SOPS_AGE_KEY (unchanged,
+// backward-compatible behavior).
+func (p *sopsProvider) keyClient() (keyservice.KeyServiceClient, error) {
+	if p.ageKeyFile == "" {
+		return keyservice.NewLocalClient(), nil
+	}
+
+	path, err := expandKeyPath(p.ageKeyFile)
+	if err != nil {
+		return nil, ageKeyFileErr(p.ageKeyFile, err)
+	}
+	content, err := os.ReadFile(path)
+	if err != nil {
+		return nil, ageKeyFileErr(path, err)
+	}
+	var identities sopsage.ParsedIdentities
+	if err := identities.Import(string(content)); err != nil {
+		return nil, ageKeyFileErr(path, err)
+	}
+	return ageKeyServiceClient{fallback: keyservice.NewLocalClient(), identities: identities}, nil
+}
+
+// expandKeyPath expands `$ENV`/`${ENV}` references and a leading `~` in the configured key path.
+func expandKeyPath(path string) (string, error) {
+	expanded, err := homedir.Expand(os.ExpandEnv(path))
+	if err != nil {
+		return "", err
+	}
+	return expanded, nil
+}
+
+// ageKeyServiceClient is a keyservice client that injects config-provided age identities for age
+// decrypt requests and delegates everything else (encrypt, and non-age key types) to the default
+// local key service. This is the getsops-recommended, thread-safe way to supply identities without
+// mutating process environment variables.
+type ageKeyServiceClient struct {
+	fallback   keyservice.KeyServiceClient
+	identities sopsage.ParsedIdentities
+}
+
+func (c ageKeyServiceClient) Decrypt(ctx context.Context, req *keyservice.DecryptRequest, opts ...grpc.CallOption) (*keyservice.DecryptResponse, error) {
+	defer perf.Track(nil, "providers.ageKeyServiceClient.Decrypt")()
+
+	if k, ok := req.Key.KeyType.(*keyservice.Key_AgeKey); ok {
+		mk := sopsage.MasterKey{Recipient: k.AgeKey.Recipient}
+		mk.EncryptedKey = string(req.Ciphertext)
+		c.identities.ApplyToMasterKey(&mk)
+		plaintext, err := mk.Decrypt()
+		if err != nil {
+			return nil, err
+		}
+		return &keyservice.DecryptResponse{Plaintext: plaintext}, nil
+	}
+	return c.fallback.Decrypt(ctx, req, opts...)
+}
+
+func (c ageKeyServiceClient) Encrypt(ctx context.Context, req *keyservice.EncryptRequest, opts ...grpc.CallOption) (*keyservice.EncryptResponse, error) {
+	defer perf.Track(nil, "providers.ageKeyServiceClient.Encrypt")()
+
+	return c.fallback.Encrypt(ctx, req, opts...)
+}
+
+// decryptTree decrypts the data key (via the supplied key service) and the tree's values in place,
+// verifying the file MAC. Inlined from getsops/sops to avoid importing the heavy cmd/sops/common
+// package (which pulls in urfave/cli and every store format). The key service honors
+// `spec.age_key_file` when configured, otherwise the age keysource's env vars.
+func decryptTree(tree *sops.Tree, cipher sops.Cipher, client keyservice.KeyServiceClient) ([]byte, error) {
+	dataKey, err := tree.Metadata.GetDataKeyWithKeyServices(
+		[]keyservice.KeyServiceClient{client}, nil,
+	)
+	if err != nil {
+		return nil, err
+	}
+	computedMac, err := tree.Decrypt(dataKey, cipher)
+	if err != nil {
+		return nil, err
+	}
+	fileMac, err := cipher.Decrypt(
+		tree.Metadata.MessageAuthenticationCode, dataKey, tree.Metadata.LastModified.Format(time.RFC3339),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("cannot decrypt MAC: %w", err)
+	}
+	if fileMac != computedMac {
+		return nil, fmt.Errorf("%w: file has %v, computed %v", ErrSopsMacMismatch, fileMac, computedMac)
+	}
+	return dataKey, nil
+}
+
+// encryptTree encrypts the tree's values in place and recomputes the file MAC. Inlined from
+// getsops/sops (see decryptTree).
+func encryptTree(tree *sops.Tree, dataKey []byte, cipher sops.Cipher) error {
+	unencryptedMac, err := tree.Encrypt(dataKey, cipher)
+	if err != nil {
+		return err
+	}
+	tree.Metadata.LastModified = time.Now().UTC()
+	tree.Metadata.MessageAuthenticationCode, err = cipher.Encrypt(
+		unencryptedMac, dataKey, tree.Metadata.LastModified.Format(time.RFC3339),
+	)
+	return err
+}
+
+// setBranchValue sets (or inserts) a top-level key in a tree branch.
+func setBranchValue(branch sops.TreeBranch, key string, value any) sops.TreeBranch {
+	for i := range branch {
+		if fmt.Sprint(branch[i].Key) == key {
+			branch[i].Value = value
+			return branch
+		}
+	}
+	return append(branch, sops.TreeItem{Key: key, Value: value})
+}
+
+// removeBranchKey returns a branch with the given top-level key removed.
+func removeBranchKey(branch sops.TreeBranch, key string) sops.TreeBranch {
+	result := make(sops.TreeBranch, 0, len(branch))
+	for _, item := range branch {
+		if fmt.Sprint(item.Key) != key {
+			result = append(result, item)
+		}
+	}
+	return result
 }

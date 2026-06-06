@@ -10,19 +10,17 @@ git-committed, encrypted file.
 
 ## Prerequisites
 
-- [`sops`](https://github.com/getsops/sops) and [`age`](https://github.com/FiloSottile/age) on
-  your `PATH` (`brew install sops age`).
-- Export the key file and config path so `sops` can decrypt:
+**No external tools.** Atmos encrypts/decrypts in-process via the getsops/sops Go SDK — no `sops`
+or `age` binary is required. This example declares the age key in the stack via `age_key_file`, so
+it works **out of the box** — no environment variable to export.
 
-  ```shell
-  export SOPS_AGE_KEY_FILE="$PWD/secrets/keys.txt"
-  export ATMOS_CLI_CONFIG_PATH="$PWD"
-  ```
+> Prefer the env var? It still works as a fallback: `export SOPS_AGE_KEY_FILE="$PWD/secrets/keys.txt"`.
 
 ## What's configured
 
 `stacks/deploy/dev.yaml` defines the SOPS provider **globally for the stack** (not in `atmos.yaml`,
-and not under a component) — it merges into every component in the stack:
+and not under a component) — it merges into every component in the stack. `age_key_file` points at
+the (throwaway) private key so decryption needs no env var (it supports `~` and `$ENV` expansion):
 
 ```yaml
 secrets:
@@ -31,6 +29,7 @@ secrets:
       kind: sops/age
       spec:
         file: secrets/dev.enc.yaml
+        age_key_file: secrets/keys.txt
 ```
 
 `stacks/catalog/api.yaml` declares two secrets and consumes them via `!secret`:
@@ -64,14 +63,16 @@ atmos test
 The two telling cases it exercises:
 
 ```shell
-# Inspect with NO key — masked, no retrieval, no credentials:
-$ env -u SOPS_AGE_KEY_FILE atmos describe component api --stack dev | grep -E 'datadog_api_key:|redis_url:'
+# Inspect with masking on — !secret resolves to <MASKED>, no retrieval, no decryption:
+$ atmos describe component api --stack dev | grep -E 'datadog_api_key:|redis_url:'
   datadog_api_key: <MASKED>
   redis_url: <MASKED>
 
-# Reveal without the key FAILS — retrieval genuinely decrypts:
-$ env -u SOPS_AGE_KEY_FILE ATMOS_MASK=false atmos describe component api --stack dev
-Error: secret is not initialized in its backend: "DATADOG_API_KEY": sops ...
+# Reveal with the key removed FAILS — retrieval genuinely decrypts:
+$ mv secrets/keys.txt /tmp/keys.txt   # take the age key away
+$ ATMOS_MASK=false atmos describe component api --stack dev
+Error: failed to decrypt SOPS file ...
+$ mv /tmp/keys.txt secrets/keys.txt   # put it back
 ```
 
 ## The masking matrix

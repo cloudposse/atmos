@@ -100,6 +100,6 @@ func TestProviderFor_StoreNotSecret(t *testing.T) {
 		Stores: store.StoreRegistry{"plain": store.NewMockStore(ctrl)},
 	}
 	decl := Declaration{Name: "API_KEY", BackendType: BackendStore, BackendName: "plain"}
-	_, err := providerFor(cfg, decl, nil)
+	_, err := providerFor(cfg, &decl, nil)
 	require.ErrorIs(t, err, ErrStoreNotSecret)
 }

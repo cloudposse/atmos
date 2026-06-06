@@ -31,6 +31,11 @@ type SecretDeclaration struct {
 	Store string `yaml:"store,omitempty" json:"store,omitempty" mapstructure:"store"`
 	// Sops names a `secrets.providers` SOPS provider (track 2) this secret resolves from.
 	Sops string `yaml:"sops,omitempty" json:"sops,omitempty" mapstructure:"sops"`
+	// Reference is an optional backend-specific address for the secret. Reference-based backends
+	// (e.g. a 1Password store) resolve it directly instead of composing a key from the secret
+	// name; it may contain Go-template vars ({{ .atmos_stack }}, {{ .atmos_component }}). Example:
+	// "op://Production/{{ .atmos_component }}/password". Name-keyed backends ignore it.
+	Reference string `yaml:"reference,omitempty" json:"reference,omitempty" mapstructure:"reference"`
 	// Required marks the secret as required; validation fails if it is not initialized.
 	Required bool `yaml:"required,omitempty" json:"required,omitempty" mapstructure:"required"`
 }

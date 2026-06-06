@@ -17,7 +17,32 @@ const (
 	KindGCPSecret      = "gcp/secretmanager"
 	KindHashicorpVault = "hashicorp/vault"
 	KindRedis          = "redis"
+	KindOnePassword    = "onepassword"
 )
+
+// secretByDefaultKinds are backends that are secret managers by nature: a store of one of these
+// kinds is treated as `secret: true` even when the config omits it (see ApplySecretDefaults).
+var secretByDefaultKinds = map[string]bool{
+	KindOnePassword: true,
+}
+
+// isSecretByDefaultKind reports whether a backend kind defaults to a secret store.
+func isSecretByDefaultKind(kind string) bool {
+	return secretByDefaultKinds[kind]
+}
+
+// ApplySecretDefaults marks secret-by-default backends (e.g. 1Password) as `secret: true` when
+// the config didn't set it. It mutates the config in place so both the store registry and the
+// secrets subsystem (which reads StoreConfig.Secret) agree on subsystem membership. Call it once
+// after loading the stores config and before building the registry.
+func ApplySecretDefaults(config StoresConfig) {
+	for key, cfg := range config {
+		if !cfg.Secret && isSecretByDefaultKind(resolveKind(cfg)) {
+			cfg.Secret = true
+			config[key] = cfg
+		}
+	}
+}
 
 // mapLegacyType translates a legacy `type` value to its canonical `kind`. Unknown values are
 // returned unchanged so the switch can still match a kind passed directly via `type`.
@@ -37,6 +62,8 @@ func mapLegacyType(legacyType string) string {
 		return KindHashicorpVault
 	case "redis":
 		return KindRedis
+	case "1password", "onepassword":
+		return KindOnePassword
 	default:
 		return legacyType
 	}
@@ -83,6 +110,7 @@ var storeBuilders = map[string]storeBuilder{
 	KindGCPSecret:      buildGSMStore,
 	KindHashicorpVault: buildVaultStore,
 	KindRedis:          buildRedisStore,
+	KindOnePassword:    buildOnePasswordStore,
 }
 
 // newStore constructs a single store from its configuration, dispatching on the normalized kind.
@@ -141,6 +169,15 @@ func buildVaultStore(_ string, storeConfig StoreConfig) (Store, error) {
 		return nil, fmt.Errorf(errParseFmt, ErrParseVaultOptions, err)
 	}
 	return NewVaultStore(&opts, storeConfig.Identity)
+}
+
+func buildOnePasswordStore(key string, storeConfig StoreConfig) (Store, error) {
+	var opts OnePasswordStoreOptions
+	if err := parseOptions(storeConfig.Options, &opts); err != nil {
+		return nil, fmt.Errorf(errParseFmt, ErrParseOnePasswordOptions, err)
+	}
+	warnIdentityIgnored(key, storeConfig, "1Password")
+	return NewOnePasswordStore(&opts)
 }
 
 func buildRedisStore(key string, storeConfig StoreConfig) (Store, error) {

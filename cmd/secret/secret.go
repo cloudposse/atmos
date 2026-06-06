@@ -20,9 +20,9 @@ var secretCmd = &cobra.Command{
 	Use:   "secret",
 	Short: "Manage declarative secrets across stacks and components.",
 	Long: "Declare, provision, and resolve secrets backed by cloud secret stores (AWS SSM, " +
-		"AWS Secrets Manager, HashiCorp Vault, Azure Key Vault, GCP Secret Manager) or SOPS-encrypted " +
-		"files. Secrets must be declared under a component's secrets.vars before they can be set, read, " +
-		"or resolved via the !secret YAML function.",
+		"AWS Secrets Manager, HashiCorp Vault, Azure Key Vault, GCP Secret Manager, 1Password) or " +
+		"SOPS-encrypted files. Secrets must be declared under a component's secrets.vars before they " +
+		"can be set, read, or resolved via the !secret YAML function.",
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
 }
 
@@ -53,6 +53,8 @@ func init() {
 	secretCmd.AddCommand(pullCmd)
 	secretCmd.AddCommand(pushCmd)
 	secretCmd.AddCommand(importCmd)
+	secretCmd.AddCommand(execCmd)
+	secretCmd.AddCommand(shellCmd)
 
 	internal.Register(&SecretCommandProvider{})
 }

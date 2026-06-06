@@ -13,7 +13,7 @@ import (
 
 func TestNewStore_NotConfigured(t *testing.T) {
 	cfg := &schema.AtmosConfiguration{}
-	_, err := NewStore(cfg, "missing")
+	_, err := newStoreProvider(cfg, "missing")
 	require.ErrorIs(t, err, ErrStoreNotFound)
 }
 
@@ -27,7 +27,7 @@ func TestNewStore_NotSecret(t *testing.T) {
 		},
 		Stores: store.StoreRegistry{"plain": store.NewMockStore(ctrl)},
 	}
-	_, err := NewStore(cfg, "plain")
+	_, err := newStoreProvider(cfg, "plain")
 	require.ErrorIs(t, err, ErrStoreNotSecret)
 }
 
@@ -43,7 +43,7 @@ func TestStoreProvider_SetGet(t *testing.T) {
 		StoresConfig: store.StoresConfig{"app": store.StoreConfig{Type: "aws-ssm-parameter-store", Secret: true}},
 		Stores:       store.StoreRegistry{"app": mockStore},
 	}
-	p, err := NewStore(cfg, "app")
+	p, err := newStoreProvider(cfg, "app")
 	require.NoError(t, err)
 
 	coord := Coordinate{Stack: "prod", Component: "api", Key: "API_KEY"}
@@ -64,7 +64,7 @@ func TestStoreProvider_DeleteUnsupported(t *testing.T) {
 		StoresConfig: store.StoresConfig{"app": store.StoreConfig{Type: "aws-ssm-parameter-store", Secret: true}},
 		Stores:       store.StoreRegistry{"app": mockStore},
 	}
-	p, err := NewStore(cfg, "app")
+	p, err := newStoreProvider(cfg, "app")
 	require.NoError(t, err)
 
 	err = p.Delete(Coordinate{Stack: "prod", Component: "api", Key: "API_KEY"})
@@ -79,13 +79,13 @@ func TestNewSops_FromSection(t *testing.T) {
 			"spec": map[string]any{"file": "secrets/dev.enc.yaml"},
 		},
 	}
-	p, err := NewSops(cfg, "dev-sops", section)
+	p, err := newSopsProvider(cfg, "dev-sops", section)
 	require.NoError(t, err)
 	assert.Equal(t, "sops/age", p.Kind())
 }
 
 func TestNewSops_NotFound(t *testing.T) {
 	cfg := &schema.AtmosConfiguration{}
-	_, err := NewSops(cfg, "missing", nil)
+	_, err := newSopsProvider(cfg, "missing", nil)
 	require.ErrorIs(t, err, ErrProviderNotFound)
 }

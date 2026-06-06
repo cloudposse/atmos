@@ -190,6 +190,7 @@
   "describe": {
     "settings": {}
   },
+  "secrets": {},
   "vendor": {
     "base_path": "",
     "list": {

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"sort"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -62,11 +63,11 @@ func (s *Service) providerAndCoord(name string) (providers.Provider, providers.C
 	if err != nil {
 		return nil, providers.Coordinate{}, err
 	}
-	provider, err := providerFor(s.atmosConfig, decl, s.componentSection)
+	provider, err := providerFor(s.atmosConfig, &decl, s.componentSection)
 	if err != nil {
 		return nil, providers.Coordinate{}, fmt.Errorf("%w (secret %q)", err, name)
 	}
-	return provider, coordinateForDeclaration(decl, s.stack, s.component), nil
+	return provider, coordinateForDeclaration(&decl, s.stack, s.component), nil
 }
 
 // Set stores a value for a declared secret.
@@ -94,7 +95,11 @@ func (s *Service) Get(name string, opts ResolveOptions) (any, error) {
 		if opts.Default != nil {
 			return *opts.Default, nil
 		}
-		return nil, fmt.Errorf("%w: %q: %w", ErrSecretMissing, name, err)
+		// Build via the error builder (not multi-%w fmt.Errorf) so any actionable hints the
+		// provider attached (e.g. how to initialize the file or supply the age key) are lifted
+		// to the top-level error and rendered; errors.Is still matches ErrSecretMissing and the
+		// provider's sentinels.
+		return nil, errUtils.Build(ErrSecretMissing).WithCausef("%q: %w", name, err).Err()
 	}
 
 	if opts.Path != "" {
@@ -119,6 +124,52 @@ func (s *Service) Delete(name string) error {
 	return provider.Delete(coord)
 }
 
+// DeleteAll removes every declared secret's value from its backend, returning the number of
+// declarations processed. Delete is idempotent (it no-ops on values that are not initialized),
+// so this also serves as a clean "reset" of a SOPS file's declared keys.
+func (s *Service) DeleteAll() (int, error) {
+	defer perf.Track(s.atmosConfig, "secrets.Service.DeleteAll")()
+
+	decls := s.Declarations()
+	for _, decl := range decls {
+		if err := s.Delete(decl.Name); err != nil {
+			return 0, err
+		}
+	}
+	return len(decls), nil
+}
+
+// Reset overwrites a file-based provider's backing file (e.g. SOPS) with a clean, empty document
+// for this scope, creating it if missing. It is a no-op for backends that are not file-based
+// (they have no whole-file state to reset). Returns whether any provider was reset.
+func (s *Service) Reset() (bool, error) {
+	defer perf.Track(s.atmosConfig, "secrets.Service.Reset")()
+
+	seen := make(map[string]bool)
+	didReset := false
+	for _, decl := range s.Declarations() {
+		provider, coord, err := s.providerAndCoord(decl.Name)
+		if err != nil {
+			return didReset, err
+		}
+		resettable, ok := provider.(providers.FileResettable)
+		if !ok {
+			continue
+		}
+		// Reset each distinct backing provider once (multiple secrets may share one file).
+		key := fmt.Sprintf("%s/%s", coord.Stack, coord.Component)
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		if err := resettable.Reset(coord); err != nil {
+			return didReset, err
+		}
+		didReset = true
+	}
+	return didReset, nil
+}
+
 // Status reports whether each declared secret is initialized in its backend. It never
 // registers values with the masker (uses the backend status check, not Get).
 func (s *Service) Status() []Status {
@@ -129,9 +180,9 @@ func (s *Service) Status() []Status {
 	for _, decl := range decls {
 		st := Status{
 			Declaration: decl,
-			Coordinate:  coordinateForDeclaration(decl, s.stack, s.component),
+			Coordinate:  coordinateForDeclaration(&decl, s.stack, s.component),
 		}
-		provider, err := providerFor(s.atmosConfig, decl, s.componentSection)
+		provider, err := providerFor(s.atmosConfig, &decl, s.componentSection)
 		if err != nil {
 			st.Err = err
 			out = append(out, st)

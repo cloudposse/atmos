@@ -1,0 +1,392 @@
+package store
+
+import (
+	"context"
+	"fmt"
+	"strings"
+	"sync"
+
+	connect "github.com/1Password/connect-sdk-go/connect"
+	connectop "github.com/1Password/connect-sdk-go/onepassword"
+	onepassword "github.com/1password/onepassword-sdk-go"
+)
+
+// opNotFoundMarkers are substrings the native SDK includes in resolve errors for missing
+// vaults/items/fields. The SDK surfaces these as plain messages (no typed error), so a
+// substring match is the only way to distinguish "not found" from auth/transport failures.
+var opNotFoundMarkers = []string{
+	"not found",
+	"isn't a field",
+	"no item",
+	"couldn't find",
+	"doesn't exist",
+	"no matching",
+}
+
+// onePasswordClient abstracts the operations the store needs against 1Password, keyed by a
+// secret reference ("op://vault/item[/section]/field"). Both the native SDK and 1Password
+// Connect satisfy it, and tests inject an in-memory fake. Created items use the API Credential
+// category and store the value in a Concealed field named after the reference's field segment.
+type onePasswordClient interface {
+	// Resolve returns the value the reference points to.
+	Resolve(ctx context.Context, reference string) (string, error)
+	// Set creates or updates the field the reference points to (creating the item if needed).
+	Set(ctx context.Context, reference, value string) error
+	// Delete removes the field the reference points to, deleting the item if it becomes empty.
+	// It is idempotent: a missing vault/item/field is not an error.
+	Delete(ctx context.Context, reference string) error
+}
+
+// sdkClient resolves references via the native 1Password SDK using a service-account token.
+// The underlying client embeds a WASM core that is expensive to initialize, so it is built
+// lazily on first use.
+type sdkClient struct {
+	token string
+
+	once    sync.Once
+	client  *onepassword.Client
+	initErr error
+}
+
+func newSDKClient(token string) *sdkClient {
+	return &sdkClient{token: token}
+}
+
+// get lazily builds the underlying SDK client.
+func (c *sdkClient) get(ctx context.Context) (*onepassword.Client, error) {
+	c.once.Do(func() {
+		c.client, c.initErr = onepassword.NewClient(
+			ctx,
+			onepassword.WithServiceAccountToken(c.token),
+			onepassword.WithIntegrationInfo(opIntegrationName, opIntegrationVersion),
+		)
+	})
+	if c.initErr != nil {
+		return nil, fmt.Errorf("%w: %w", ErrOnePasswordClientInit, c.initErr)
+	}
+	return c.client, nil
+}
+
+func (c *sdkClient) Resolve(ctx context.Context, reference string) (string, error) {
+	client, err := c.get(ctx)
+	if err != nil {
+		return "", err
+	}
+	value, err := client.Secrets().Resolve(ctx, reference)
+	if err != nil {
+		if isOPNotFound(err.Error()) {
+			return "", ErrOnePasswordNotFound
+		}
+		return "", err
+	}
+	return value, nil
+}
+
+func (c *sdkClient) Set(ctx context.Context, reference, value string) error {
+	client, err := c.get(ctx)
+	if err != nil {
+		return err
+	}
+	ref, err := parseOPReference(reference)
+	if err != nil {
+		return err
+	}
+
+	vaultID, found, err := c.resolveVaultID(ctx, client, ref.vault)
+	if err != nil {
+		return err
+	}
+	if !found {
+		return fmt.Errorf("%w: vault %q", ErrOnePasswordNotFound, ref.vault)
+	}
+
+	itemID, found, err := c.resolveItemID(ctx, client, vaultID, ref.item)
+	if err != nil {
+		return err
+	}
+	if !found {
+		return c.createItem(ctx, client, vaultID, ref, value)
+	}
+	return c.updateField(ctx, client, opItemLoc{vaultID: vaultID, itemID: itemID}, ref.field, value)
+}
+
+func (c *sdkClient) createItem(ctx context.Context, client *onepassword.Client, vaultID string, ref opReference, value string) error {
+	_, err := client.Items().Create(ctx, onepassword.ItemCreateParams{
+		VaultID:  vaultID,
+		Title:    ref.item,
+		Category: onepassword.ItemCategoryAPICredentials,
+		Fields: []onepassword.ItemField{{
+			Title:     ref.field,
+			FieldType: onepassword.ItemFieldTypeConcealed,
+			Value:     value,
+		}},
+	})
+	return err
+}
+
+func (c *sdkClient) updateField(ctx context.Context, client *onepassword.Client, loc opItemLoc, field, value string) error {
+	item, err := client.Items().Get(ctx, loc.vaultID, loc.itemID)
+	if err != nil {
+		return err
+	}
+	if idx := indexOfSDKField(item.Fields, field); idx >= 0 {
+		item.Fields[idx].Value = value
+	} else {
+		item.Fields = append(item.Fields, onepassword.ItemField{
+			Title:     field,
+			FieldType: onepassword.ItemFieldTypeConcealed,
+			Value:     value,
+		})
+	}
+	_, err = client.Items().Put(ctx, item)
+	return err
+}
+
+func (c *sdkClient) Delete(ctx context.Context, reference string) error {
+	client, err := c.get(ctx)
+	if err != nil {
+		return err
+	}
+	ref, err := parseOPReference(reference)
+	if err != nil {
+		return err
+	}
+	// A missing vault or item means there is nothing to delete (idempotent).
+	vaultID, found, err := c.resolveVaultID(ctx, client, ref.vault)
+	if err != nil || !found {
+		return err
+	}
+	itemID, found, err := c.resolveItemID(ctx, client, vaultID, ref.item)
+	if err != nil || !found {
+		return err
+	}
+	return c.deleteItemField(ctx, client, opItemLoc{vaultID: vaultID, itemID: itemID}, ref.field)
+}
+
+func (c *sdkClient) deleteItemField(ctx context.Context, client *onepassword.Client, loc opItemLoc, field string) error {
+	item, err := client.Items().Get(ctx, loc.vaultID, loc.itemID)
+	if err != nil {
+		return err
+	}
+	idx := indexOfSDKField(item.Fields, field)
+	if idx < 0 {
+		return nil // field absent: idempotent.
+	}
+	item.Fields = append(item.Fields[:idx], item.Fields[idx+1:]...)
+	if len(item.Fields) == 0 {
+		return client.Items().Delete(ctx, loc.vaultID, loc.itemID)
+	}
+	_, err = client.Items().Put(ctx, item)
+	return err
+}
+
+// resolveVaultID finds a vault's ID by title (case-insensitive) or ID.
+func (c *sdkClient) resolveVaultID(ctx context.Context, client *onepassword.Client, vaultQuery string) (string, bool, error) {
+	vaults, err := client.Vaults().List(ctx)
+	if err != nil {
+		return "", false, err
+	}
+	for i := range vaults {
+		if strings.EqualFold(vaults[i].Title, vaultQuery) || vaults[i].ID == vaultQuery {
+			return vaults[i].ID, true, nil
+		}
+	}
+	return "", false, nil
+}
+
+// resolveItemID finds an item's ID within a vault by title (case-insensitive) or ID.
+func (c *sdkClient) resolveItemID(ctx context.Context, client *onepassword.Client, vaultID, itemQuery string) (string, bool, error) {
+	items, err := client.Items().List(ctx, vaultID)
+	if err != nil {
+		return "", false, err
+	}
+	for i := range items {
+		if strings.EqualFold(items[i].Title, itemQuery) || items[i].ID == itemQuery {
+			return items[i].ID, true, nil
+		}
+	}
+	return "", false, nil
+}
+
+// opItemLoc identifies a resolved 1Password item by vault and item ID.
+type opItemLoc struct {
+	vaultID string
+	itemID  string
+}
+
+// indexOfSDKField returns the index of the native-SDK field whose title or ID matches, or -1.
+func indexOfSDKField(fields []onepassword.ItemField, field string) int {
+	for i := range fields {
+		if fieldMatches(fields[i].Title, fields[i].ID, field) {
+			return i
+		}
+	}
+	return -1
+}
+
+// connectClient resolves references against a 1Password Connect server. Connect has no native
+// reference resolver, so the `op://vault/item[/section]/field` reference is parsed and resolved
+// via the item/field REST API.
+type connectClient struct {
+	client connect.Client
+}
+
+func newConnectClient(host, token string) *connectClient {
+	return &connectClient{client: connect.NewClientWithUserAgent(host, token, opIntegrationName+"/"+opIntegrationVersion)}
+}
+
+func (c *connectClient) Resolve(_ context.Context, reference string) (string, error) {
+	ref, err := parseOPReference(reference)
+	if err != nil {
+		return "", err
+	}
+
+	opItem, err := c.client.GetItem(ref.item, ref.vault)
+	if err != nil {
+		if isOPNotFound(err.Error()) {
+			return "", ErrOnePasswordNotFound
+		}
+		return "", err
+	}
+
+	for _, f := range opItem.Fields {
+		if f != nil && fieldMatches(f.Label, f.ID, ref.field) {
+			return f.Value, nil
+		}
+	}
+	return "", ErrOnePasswordNotFound
+}
+
+func (c *connectClient) Set(_ context.Context, reference, value string) error {
+	ref, err := parseOPReference(reference)
+	if err != nil {
+		return err
+	}
+
+	item, err := c.client.GetItem(ref.item, ref.vault)
+	if err != nil {
+		if isOPNotFound(err.Error()) {
+			return c.createItem(ref, value)
+		}
+		return err
+	}
+
+	for _, f := range item.Fields {
+		if f != nil && fieldMatches(f.Label, f.ID, ref.field) {
+			f.Value = value
+			_, err = c.client.UpdateItem(item, ref.vault)
+			return err
+		}
+	}
+	item.Fields = append(item.Fields, &connectop.ItemField{
+		Label: ref.field,
+		Type:  connectop.FieldTypeConcealed,
+		Value: value,
+	})
+	_, err = c.client.UpdateItem(item, ref.vault)
+	return err
+}
+
+func (c *connectClient) createItem(ref opReference, value string) error {
+	vaultID, err := c.resolveVaultID(ref.vault)
+	if err != nil {
+		return err
+	}
+	item := &connectop.Item{
+		Title:    ref.item,
+		Vault:    connectop.ItemVault{ID: vaultID},
+		Category: connectop.ApiCredential,
+		Fields: []*connectop.ItemField{{
+			Label: ref.field,
+			Type:  connectop.FieldTypeConcealed,
+			Value: value,
+		}},
+	}
+	_, err = c.client.CreateItem(item, ref.vault)
+	return err
+}
+
+func (c *connectClient) Delete(_ context.Context, reference string) error {
+	ref, err := parseOPReference(reference)
+	if err != nil {
+		return err
+	}
+
+	item, err := c.client.GetItem(ref.item, ref.vault)
+	if err != nil {
+		if isOPNotFound(err.Error()) {
+			return nil // idempotent.
+		}
+		return err
+	}
+
+	idx := -1
+	for i, f := range item.Fields {
+		if f != nil && fieldMatches(f.Label, f.ID, ref.field) {
+			idx = i
+			break
+		}
+	}
+	if idx == -1 {
+		return nil // field absent: idempotent.
+	}
+	item.Fields = append(item.Fields[:idx], item.Fields[idx+1:]...)
+	if len(item.Fields) == 0 {
+		return c.client.DeleteItem(item, ref.vault)
+	}
+	_, err = c.client.UpdateItem(item, ref.vault)
+	return err
+}
+
+// resolveVaultID resolves a Connect vault query (title or UUID) to its UUID, needed when
+// creating an item.
+func (c *connectClient) resolveVaultID(vaultQuery string) (string, error) {
+	if v, err := c.client.GetVault(vaultQuery); err == nil {
+		return v.ID, nil
+	}
+	v, err := c.client.GetVaultByTitle(vaultQuery)
+	if err != nil {
+		return "", fmt.Errorf("%w: vault %q: %w", ErrOnePasswordNotFound, vaultQuery, err)
+	}
+	return v.ID, nil
+}
+
+// opReference is an `op://vault/item[/section]/field` reference split into its addressing parts.
+type opReference struct {
+	vault string
+	item  string
+	field string
+}
+
+// parseOPReference splits an `op://vault/item[/section]/field` reference. The optional section
+// segment is not needed for field lookup (fields are matched by label/ID) and is ignored.
+func parseOPReference(reference string) (opReference, error) {
+	trimmed := strings.TrimPrefix(reference, opReferenceScheme)
+	parts := strings.Split(trimmed, "/")
+	if len(parts) < 3 || len(parts) > 4 {
+		return opReference{}, fmt.Errorf("%w: %q", ErrOnePasswordInvalidReference, reference)
+	}
+	for _, p := range parts {
+		if strings.TrimSpace(p) == "" {
+			return opReference{}, fmt.Errorf("%w: %q", ErrOnePasswordInvalidReference, reference)
+		}
+	}
+	// parts is [vault, item, field] or [vault, item, section, field]; the field is always last.
+	return opReference{vault: parts[0], item: parts[1], field: parts[len(parts)-1]}, nil
+}
+
+// fieldMatches reports whether a field's label or ID matches the reference's field segment.
+func fieldMatches(label, id, field string) bool {
+	return strings.EqualFold(label, field) || strings.EqualFold(id, field)
+}
+
+// isOPNotFound reports whether a 1Password error message indicates a missing vault/item/field.
+func isOPNotFound(message string) bool {
+	lower := strings.ToLower(message)
+	for _, marker := range opNotFoundMarkers {
+		if strings.Contains(lower, marker) {
+			return true
+		}
+	}
+	return false
+}

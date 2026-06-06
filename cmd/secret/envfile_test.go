@@ -52,11 +52,11 @@ func TestStatusLabel(t *testing.T) {
 func TestBackendLabel(t *testing.T) {
 	t.Run("no name", func(t *testing.T) {
 		decl := secrets.Declaration{}
-		assert.Equal(t, "(none)", backendLabel(decl))
+		assert.Equal(t, "(none)", backendLabel(&decl))
 	})
 	t.Run("sops backend", func(t *testing.T) {
 		decl := secrets.Declaration{BackendType: secrets.BackendSops, BackendName: "dev-sops"}
-		assert.Equal(t, "sops:dev-sops", backendLabel(decl))
+		assert.Equal(t, "sops:dev-sops", backendLabel(&decl))
 	})
 }
 

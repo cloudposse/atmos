@@ -57,17 +57,27 @@ func parseScope(cmd *cobra.Command) (secretScope, error) {
 func loadService(scope secretScope) (*secrets.Service, error) {
 	defer perf.Track(nil, "secret.loadService")()
 
+	svc, _, err := loadServiceAndConfig(scope)
+	return svc, err
+}
+
+// loadServiceAndConfig is loadService plus the resolved AtmosConfiguration. Callers that
+// need atmosConfig (e.g. `secret exec`/`secret shell`, which merge atmosConfig.Env into the
+// child environment) use this variant; loadService wraps it for the common case.
+func loadServiceAndConfig(scope secretScope) (*secrets.Service, *schema.AtmosConfiguration, error) {
+	defer perf.Track(nil, "secret.loadServiceAndConfig")()
+
 	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{
 		ComponentFromArg: scope.Component,
 		Stack:            scope.Stack,
 	}, true)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %w", errUtils.ErrFailedToInitConfig, err)
+		return nil, nil, fmt.Errorf("%w: %w", errUtils.ErrFailedToInitConfig, err)
 	}
 
 	authManager, err := buildAuthManager(&atmosConfig, scope)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	// Bridge auth credentials into identity-aware secret stores (lazy resolution).
@@ -87,10 +97,10 @@ func loadService(scope secretScope) (*secrets.Service, error) {
 		AuthManager:          authManager,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("failed to load component config: %w", err)
+		return nil, nil, fmt.Errorf("failed to load component config: %w", err)
 	}
 
-	return secrets.NewService(&atmosConfig, scope.Stack, scope.Component, section), nil
+	return secrets.NewService(&atmosConfig, scope.Stack, scope.Component, section), &atmosConfig, nil
 }
 
 // buildAuthManager merges component auth and creates an authenticated manager for the scope.

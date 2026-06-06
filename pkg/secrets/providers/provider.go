@@ -5,9 +5,6 @@ package providers
 
 import (
 	"errors"
-
-	"github.com/cloudposse/atmos/pkg/perf"
-	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 // Coordinate identifies a single secret value within a backend's namespace.
@@ -42,26 +39,28 @@ var (
 	ErrProviderNotFound = errors.New("referenced secrets provider is not configured")
 	// ErrDeleteNotSupported indicates the backend cannot delete values.
 	ErrDeleteNotSupported = errors.New("backend does not support delete")
-	// ErrSopsBinaryNotFound indicates the sops binary is required but not on PATH.
-	ErrSopsBinaryNotFound = errors.New("sops binary not found on PATH (install via the Atmos toolchain or your package manager)")
-	// ErrSopsOperation indicates a sops binary invocation failed.
-	ErrSopsOperation = errors.New("sops operation failed")
-	// ErrSerialize indicates a value could not be serialized for a backend.
-	ErrSerialize = errors.New("failed to serialize secret value")
+	// ErrSopsFilePathTemplate indicates the SOPS `spec.file` Go template could not be rendered.
+	ErrSopsFilePathTemplate = errors.New("failed to render SOPS file path template")
+	// ErrSopsDecrypt indicates the SOPS file could not be decrypted in-process.
+	ErrSopsDecrypt = errors.New("failed to decrypt SOPS file")
+	// ErrSopsMacMismatch indicates the SOPS file MAC did not match the computed MAC.
+	ErrSopsMacMismatch = errors.New("SOPS MAC mismatch")
+	// ErrSopsEncrypt indicates the SOPS file could not be encrypted in-process.
+	ErrSopsEncrypt = errors.New("failed to encrypt SOPS file")
+	// ErrSopsRecipients indicates encryption recipients could not be resolved for a fresh file.
+	ErrSopsRecipients = errors.New("failed to resolve SOPS recipients (set `spec.age_recipients` or add a matching .sops.yaml creation rule)")
+	// ErrSopsAgeKeyFile indicates the configured `spec.age_key_file` could not be read or parsed.
+	ErrSopsAgeKeyFile = errors.New("failed to load SOPS age key file (`spec.age_key_file`)")
+	// ErrSecretFileNotFound indicates the referenced SOPS file does not exist.
+	ErrSecretFileNotFound = errors.New("SOPS file not found")
+	// ErrSecretNotInitialized indicates the secret key is absent from its backend.
+	ErrSecretNotInitialized = errors.New("secret is not initialized in its backend")
 )
 
-// NewStore builds a store-backed provider (track 1) for a `secret: true` store named `name`.
-func NewStore(atmosConfig *schema.AtmosConfiguration, name string) (Provider, error) {
-	defer perf.Track(atmosConfig, "providers.NewStore")()
-
-	return newStoreProvider(atmosConfig, name)
-}
-
-// NewSops builds a SOPS provider (track 2) named `name`. Provider definitions are resolved
-// from `sectionProviders` (a stack/component `secrets.providers` map) first, then from the
-// top-level `secrets.providers` in atmos.yaml.
-func NewSops(atmosConfig *schema.AtmosConfiguration, name string, sectionProviders map[string]any) (Provider, error) {
-	defer perf.Track(atmosConfig, "providers.NewSops")()
-
-	return newSopsProvider(atmosConfig, name, sectionProviders)
+// FileResettable is an optional capability for file-based providers (e.g. SOPS) that can rewrite
+// their whole backing file to a clean, empty state (creating it if missing). Store-backed
+// providers do not implement it. Callers type-assert for this capability.
+type FileResettable interface {
+	// Reset overwrites the provider's backing file with an empty document for the coordinate's scope.
+	Reset(coord Coordinate) error
 }

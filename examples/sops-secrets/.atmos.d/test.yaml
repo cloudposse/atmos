@@ -1,16 +1,15 @@
 # `atmos test` — end-to-end proof for the SOPS secrets example.
 #
-# Proves the full declarative-secrets lifecycle against a git-committed, age-encrypted
-# SOPS file with NO cloud credentials. Requires `sops` and `age` on PATH.
+# Proves the full declarative-secrets lifecycle against a git-committed, age-encrypted SOPS
+# file with NO cloud credentials and NO `sops` binary — Atmos encrypts/decrypts in-process via
+# the getsops/sops Go SDK. Only an age key (SOPS_AGE_KEY_FILE) is required.
 #
-# This command dogfoods Atmos structured custom-command step types: `style` for the
-# section headers and `toast` for the final status, with the shared environment hoisted
-# into a command-level `env:` block (resolved once, via `valueCommand`). The steps that
-# stay `type: shell` are the ones with no typed-step equivalent — SOPS encryption, the
-# `grep`-based at-rest proof, key un-setting (`env -u`), and the failure assertion.
+# This command dogfoods Atmos structured custom-command step types: `style` for the section
+# headers, `toast` for the final status, with the shared environment hoisted into a
+# command-level `env:` block. `atmos secret delete --all` resets the encrypted store in-process.
 #
-# atmos injects $ATMOS_CLI_PATH (the absolute path of the running binary), so the shell
-# steps re-invoke the SAME atmos binary — `./build/atmos test` works without atmos on PATH.
+# Atmos prepends its own binary dir to PATH for custom-command steps, so bare `atmos` resolves to
+# the SAME binary — `./build/atmos test` works without atmos on PATH.
 #
 # Run:
 #   atmos test
@@ -19,35 +18,27 @@ commands:
     description: Run the end-to-end SOPS secrets proof (set/get/list/validate + masking).
     # Shared environment for every step — resolved once here instead of re-exported per step.
     env:
-      # Silence the `secret` experimental-feature notice in this proof's output
-      # (settings.experimental: silence; bound to ATMOS_EXPERIMENTAL).
+      # Silence the `secret` experimental-feature notice in this proof's output.
       - key: ATMOS_EXPERIMENTAL
         value: silence
-      - key: ATMOS_CLI_CONFIG_PATH
-        valueCommand: pwd
-      - key: SOPS_AGE_KEY_FILE
-        valueCommand: "echo \"$(pwd)/secrets/keys.txt\""
-      - key: RECIPIENT
-        valueCommand: "grep '^# public key:' secrets/keys.txt | sed 's/# public key: //'"
+      # NOTE: no SOPS_AGE_KEY_FILE here — the age key is declared in the stack via
+      # `spec.age_key_file: secrets/keys.txt`, so this proof needs no env setup at all.
     steps:
-      # Reset the encrypted store to a clean (placeholder-only) state.
+      # Reset the encrypted store to a clean state (clears declared secrets, in-process).
       - name: reset-before
         type: shell
-        command: |
-          set -euo pipefail
-          printf 'PLACEHOLDER: changeme\n' > secrets/dev.enc.yaml
-          sops encrypt --age "$RECIPIENT" --in-place secrets/dev.enc.yaml
+        command: 'atmos secret delete --all --force --stack dev --component api'
 
       - name: header-describe
         type: style
         bold: true
         foreground: "4"
-        content: "[1/6] describe with NO key: !secret resolves to <MASKED>, no retrieval"
-      - name: describe-no-key
+        content: "[1/6] describe (masking on): !secret resolves to <MASKED>, no retrieval"
+      - name: describe-masked
         type: shell
         command: |
           set -euo pipefail
-          env -u SOPS_AGE_KEY_FILE "$ATMOS_CLI_PATH" describe component api --stack dev \
+          atmos describe component api --stack dev \
             | grep -E '^  (datadog_api_key|redis_url):'
 
       - name: header-set
@@ -59,8 +50,8 @@ commands:
         type: shell
         command: |
           set -euo pipefail
-          "$ATMOS_CLI_PATH" secret set DATADOG_API_KEY=dd-abc123secret --stack dev --component api
-          "$ATMOS_CLI_PATH" secret set REDIS_URL=redis://prod:6379 --stack dev --component api
+          atmos secret set DATADOG_API_KEY=dd-abc123secret --stack dev --component api
+          atmos secret set REDIS_URL=redis://prod:6379 --stack dev --component api
           echo "    encrypted at rest:"
           grep -E 'DATADOG_API_KEY|REDIS_URL' secrets/dev.enc.yaml | sed 's/,iv:.*//'
 
@@ -71,7 +62,7 @@ commands:
         content: "[3/6] list status"
       - name: list-status
         type: shell
-        command: '"$ATMOS_CLI_PATH" secret list --stack dev --component api'
+        command: 'atmos secret list --stack dev --component api'
 
       - name: header-reveal
         type: style
@@ -80,7 +71,7 @@ commands:
         content: "[4/6] reveal real value (needs key)"
       - name: reveal-value
         type: shell
-        command: 'ATMOS_MASK=false "$ATMOS_CLI_PATH" secret get DATADOG_API_KEY --stack dev --component api'
+        command: 'atmos secret get DATADOG_API_KEY --stack dev --component api --mask=false'
 
       - name: header-validate
         type: style
@@ -89,29 +80,31 @@ commands:
         content: "[5/6] validate (CI gate)"
       - name: validate
         type: shell
-        command: '"$ATMOS_CLI_PATH" secret validate --stack dev --component api'
+        command: 'atmos secret validate --stack dev --component api'
 
       - name: header-fail
         type: style
         bold: true
         foreground: "4"
-        content: "[6/6] reveal WITHOUT key must FAIL (retrieval genuinely decrypts)"
+        content: "[6/6] reveal with the key removed must FAIL (retrieval genuinely decrypts)"
       - name: reveal-no-key-fails
         type: shell
+        # Temporarily move the age key aside (restored on exit via trap) to prove that revealing
+        # real values genuinely decrypts and cannot succeed without the key.
         command: |
-          if env -u SOPS_AGE_KEY_FILE ATMOS_MASK=false "$ATMOS_CLI_PATH" describe component api --stack dev >/dev/null 2>&1; then
+          set -euo pipefail
+          mv secrets/keys.txt secrets/keys.txt.bak
+          trap 'mv -f secrets/keys.txt.bak secrets/keys.txt' EXIT
+          if env -u SOPS_AGE_KEY_FILE atmos describe component api --stack dev --mask=false >/dev/null 2>&1; then
             echo "UNEXPECTED: reveal without key succeeded"; exit 1
           else
             echo "OK: reveal without key failed as expected"
           fi
 
-      # Reset to the clean committed state.
+      # Reset to a clean state (clears declared secrets, in-process).
       - name: reset-after
         type: shell
-        command: |
-          set -euo pipefail
-          printf 'PLACEHOLDER: changeme\n' > secrets/dev.enc.yaml
-          sops encrypt --age "$RECIPIENT" --in-place secrets/dev.enc.yaml
+        command: 'atmos secret delete --all --force --stack dev --component api'
 
       - name: done
         type: toast

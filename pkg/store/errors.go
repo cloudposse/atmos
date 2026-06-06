@@ -83,6 +83,18 @@ var (
 	ErrVaultDelete          = errors.New("failed to delete secret from vault")
 	ErrVaultEmptyData       = errors.New("vault returned empty data for secret")
 
+	// 1Password specific errors.
+	ErrOnePasswordNoAuth            = errors.New("no 1Password credentials found: set OP_SERVICE_ACCOUNT_TOKEN (or options.token), or OP_CONNECT_HOST + OP_CONNECT_TOKEN (or options.connect_host/connect_token)")
+	ErrOnePasswordUnknownMode       = errors.New("unknown 1Password mode (expected auto, connect, or service-account)")
+	ErrOnePasswordClientInit        = errors.New("failed to initialize 1Password client")
+	ErrOnePasswordResolve           = errors.New("failed to resolve 1Password reference")
+	ErrOnePasswordWrite             = errors.New("failed to write 1Password secret")
+	ErrOnePasswordDelete            = errors.New("failed to delete 1Password secret")
+	ErrOnePasswordReferenceTemplate = errors.New("failed to render 1Password reference template")
+	ErrOnePasswordInvalidReference  = errors.New("invalid 1Password secret reference")
+	ErrOnePasswordNotFound          = errors.New("1Password reference not found")
+	ErrParseOnePasswordOptions      = errors.New("failed to parse 1Password store options")
+
 	// Identity errors.
 	ErrIdentityNotConfigured   = errors.New("store identity is configured but auth resolver is not set")
 	ErrAuthContextNotAvailable = errors.New("auth context not available for identity")

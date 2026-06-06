@@ -148,38 +148,24 @@ secrets:
 makes declarations mandatory-by-construction for secret stores and removes any
 `!store`-vs-`!secret` ambiguity about whether a value is sensitive.
 
-### Provider Kind Constants
+### Provider Kind Vocabulary
 
-The `cloud/thing` kinds below are the shared vocabulary. The store-backed kinds
-(`aws/ssm`, `aws/asm`, `azure/keyvault`, `gcp/secretmanager`, `hashicorp/vault`)
-correspond to **store types** in the registry (track 1); only the `sops/*` kinds are
-**secrets-native provider** kinds (track 2).
+The `cloud/thing` kinds below are the shared **config-level** vocabulary used in
+stack manifests (e.g. `kind: sops/age`). The store-backed kinds (`aws/ssm`,
+`aws/asm`, `azure/keyvault`, `gcp/secretmanager`, `hashicorp/vault`) correspond to
+**store types** in the store registry (track 1); only the `sops/*` kinds are
+**secrets-native provider** kinds (track 2):
 
-```go
-// pkg/secrets/kinds/kinds.go
-package kinds
+- AWS: `aws/ssm` (Systems Manager Parameter Store), `aws/asm` (Secrets Manager)
+- Azure: `azure/keyvault`
+- GCP: `gcp/secretmanager`
+- HashiCorp: `hashicorp/vault`
+- SOPS (by encryption type): `sops/age`, `sops/aws-kms`, `sops/gcp-kms`, `sops/gpg`
 
-const (
-    // AWS providers
-    AWSSSM = "aws/ssm"    // AWS Systems Manager Parameter Store
-    AWSASM = "aws/asm"    // AWS Secrets Manager
-
-    // Azure providers
-    AzureKeyVault = "azure/keyvault"
-
-    // GCP providers
-    GCPSecretManager = "gcp/secretmanager"
-
-    // HashiCorp providers
-    HashicorpVault = "hashicorp/vault"
-
-    // SOPS providers (by encryption type)
-    SOPSAge    = "sops/age"
-    SOPSAwsKms = "sops/aws-kms"
-    SOPSGcpKms = "sops/gcp-kms"
-    SOPSGPG    = "sops/gpg"
-)
-```
+These strings live in configuration only; at runtime a provider reports its kind via
+`providers.Provider.Kind()` (for display/observability), and backend selection is
+driven by the per-track registry in `pkg/secrets/providers` — there is no central
+kind constants package.
 
 ### Store `type`/`kind` Compatibility
 
@@ -690,19 +676,31 @@ SOPS is a git-committed encrypted **file** edited imperatively — it does not f
 store interface, so it is configured under `secrets.providers:` and implemented as a
 native provider (`pkg/secrets/providers/sops.go`).
 
+The provider uses the **getsops/sops Go SDK in-process** — it does **not** shell out to the
+`sops` binary (shelling out was never the intended design; it imposed an external tool
+dependency and was cross-platform-fragile). No external tools are required: only an age
+identity (`SOPS_AGE_KEY_FILE`/`SOPS_AGE_KEY`) for `age` providers, or cloud credentials for the
+KMS-backed kinds.
+
 ```yaml
 secrets:
   providers:
     dev-sops:
       kind: sops/age                     # or: sops/aws-kms, sops/gcp-kms, sops/gpg
       spec:
-        file: secrets/dev.enc.yaml       # or: secrets/{stack}.enc.yaml
-        age_recipients: age1...          # or from SOPS_AGE_RECIPIENTS env
+        # The file path is a Go template (atmos_stack / atmos_component in scope), e.g.
+        # secrets/{{ .atmos_stack }}.{{ .atmos_component }}.enc.yaml for per-component files.
+        file: secrets/dev.enc.yaml
+        age_recipients: age1...          # optional; otherwise read from the matching .sops.yaml creation rule
 ```
 
 - Best for: Git-committed secrets, local development.
 - Encryption options: age (recommended), AWS KMS, GCP KMS, GPG.
-- `atmos secret set/get` against a SOPS provider decrypts the file, mutates the key, and re-encrypts in place (vs. an API call for track 1).
+- `atmos secret set/get/delete` decrypts the file, mutates the key, and re-encrypts in place
+  (all in-process; vs. an API call for track 1). For a brand-new file, recipients come from
+  `spec.age_recipients` or the nearest `.sops.yaml` creation rule.
+- `atmos secret delete --all` clears every declared secret for a scope — a clean in-process
+  reset of the encrypted file with no `sops` binary.
 
 ## Integration Points
 
