@@ -41,7 +41,11 @@ jobs:
   # ensure the code builds...
   build:
     name: Build (${{ matrix.target }})
-    timeout-minutes: 15
+    # The Windows runner spends several minutes in the post-job Go cache save
+    # (tar + zstd of GOMODCACHE/GOCACHE); with the large dependency set this
+    # pushes the job past a 15-minute limit and the run gets cancelled. Allow
+    # enough headroom for build + cache save on the slowest (Windows) target.
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
