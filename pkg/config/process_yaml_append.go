@@ -15,13 +15,16 @@ import (
 func handleAppend(node *yaml.Node, v *viper.Viper, currentPath string) error {
 	log.Debug("Processing !append tag", "path", currentPath)
 
-	// Build the list from the sequence node.
+	// Build the list from the sequence node. Each item is run through
+	// processScalarNodeValue so custom scalar tags inside the list (e.g. !env,
+	// !exec, !cwd) are resolved here, matching the stack-manifest path
+	// (rewriteAppendNode) instead of being silently left unevaluated.
 	var list []any
 	for _, child := range node.Content {
-		var value any
-		if err := child.Decode(&value); err != nil {
-			log.Debug("Failed to decode list item", "error", err)
-			return fmt.Errorf("%w: failed to decode list item in !append: %w", ErrExecuteYamlFunctions, err)
+		value, err := processScalarNodeValue(child)
+		if err != nil {
+			log.Debug("Failed to process list item", "error", err)
+			return fmt.Errorf("%w: failed to process list item in !append: %w", ErrExecuteYamlFunctions, err)
 		}
 		list = append(list, value)
 	}

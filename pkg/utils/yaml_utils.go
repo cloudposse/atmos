@@ -77,6 +77,7 @@ var (
 		AtmosYamlFuncGitName,
 		AtmosYamlFuncGitHost,
 		AtmosYamlFuncGitUrl,
+		AtmosYamlFuncAppend,
 		AtmosYamlFuncCwd,
 		AtmosYamlFuncUnset,
 		AtmosYamlFuncRandom,
@@ -109,6 +110,7 @@ var (
 		AtmosYamlFuncGitName:                 true,
 		AtmosYamlFuncGitHost:                 true,
 		AtmosYamlFuncGitUrl:                  true,
+		AtmosYamlFuncAppend:                  true,
 		AtmosYamlFuncCwd:                     true,
 		AtmosYamlFuncUnset:                   true,
 		AtmosYamlFuncRandom:                  true,
@@ -988,7 +990,7 @@ func hasCustomTags(node *yaml.Node) bool {
 
 	// Check if this node has a custom tag.
 	tag := strings.TrimSpace(node.Tag)
-	if atmosYamlTagsMap[tag] || tag == AtmosYamlFuncInclude || tag == AtmosYamlFuncIncludeRaw || tag == AtmosYamlFuncAppend {
+	if atmosYamlTagsMap[tag] || tag == AtmosYamlFuncInclude || tag == AtmosYamlFuncIncludeRaw {
 		return true
 	}
 

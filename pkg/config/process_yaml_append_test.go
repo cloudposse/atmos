@@ -72,6 +72,23 @@ func TestHandleAppend_EmptyList(t *testing.T) {
 	assert.Empty(t, list)
 }
 
+// TestHandleAppend_ResolvesInnerScalarTags verifies that custom scalar tags inside an
+// !append list (e.g. !env) are resolved during atmos.yaml preprocessing, matching the
+// stack-manifest path, instead of being left as unevaluated "!env ..." strings.
+func TestHandleAppend_ResolvesInnerScalarTags(t *testing.T) {
+	t.Setenv("APPEND_INNER_TAG_TEST", "resolved-value")
+
+	yamlContent := "items: !append\n  - !env APPEND_INNER_TAG_TEST\n  - static-item"
+
+	v := viper.New()
+	require.NoError(t, preprocessAtmosYamlFunc([]byte(yamlContent), v))
+
+	list, isAppend := u.ExtractAppendListValue(v.Get("items"))
+	require.True(t, isAppend, "items should carry the append wrapper, got %#v", v.Get("items"))
+	assert.Equal(t, []any{"resolved-value", "static-item"}, list,
+		"the inner !env tag must be resolved, not left as a literal string")
+}
+
 // TestHandleAppend_RoundTripsThroughMergeContract ties the preprocessing output to the
 // merge-side contract: HasAppendTag must recognize what handleAppend produces.
 func TestHandleAppend_RoundTripsThroughMergeContract(t *testing.T) {

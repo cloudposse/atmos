@@ -425,14 +425,17 @@ func processAppendList(key string, list []any, merged map[string]any, appendNewO
 	}
 
 	// Create a new slice to avoid modifying the original.
-	// Check for potential overflow before allocation.
+	// Guard against an oversize/overflowing capacity before computing it: if either
+	// length alone exceeds the cap, or their sum would exceed it, fall back to just the
+	// new list. Computing totalLen only after the guard proves existingLen+newLen is
+	// within bounds for int, so the make() below cannot overflow.
 	existingLen := len(existingList)
 	newLen := len(list)
-	if existingLen > 0 && newLen > 0 && existingLen > maxSliceCapacity-newLen {
-		// Overflow would occur; return just the new list to avoid panic.
+	if newLen > maxSliceCapacity || existingLen > maxSliceCapacity-newLen {
 		return list
 	}
-	result := make([]any, existingLen, existingLen+newLen)
+	totalLen := existingLen + newLen
+	result := make([]any, existingLen, totalLen)
 	copy(result, existingList)
 	result = append(result, list...)
 	return result
