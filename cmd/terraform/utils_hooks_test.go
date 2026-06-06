@@ -20,6 +20,7 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
@@ -459,6 +460,17 @@ func TestWirePerComponentHook(t *testing.T) {
 					"%q subcommand must install a per-component hook", sub)
 			})
 		}
+	})
+
+	t.Run("plan CI installs aggregate handler instead of per-component hook", func(t *testing.T) {
+		cmd := newHookTestCmd()
+		require.NoError(t, cmd.Flags().Set("ci", "true"))
+
+		info := &schema.ConfigAndStacksInfo{}
+		wirePerComponentHook(info, "plan", cmd)
+
+		assert.Nil(t, info.PerComponentHook)
+		assert.NotNil(t, info.TerraformPlanCIResultHandler)
 	})
 
 	t.Run("unknown subcommand leaves the hook unset", func(t *testing.T) {

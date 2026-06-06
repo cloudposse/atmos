@@ -92,6 +92,7 @@ type TerraformNodeOutcome struct {
 	Changed   bool              `json:"changed"`
 	ExitCode  int               `json:"exit_code"`
 	LogFiles  map[string]string `json:"log_files,omitempty"`
+	Output    string            `json:"-"`
 }
 
 // TerraformOptions configures graph-backed Terraform bulk execution.
@@ -180,6 +181,7 @@ func ExecuteTerraform(ctx context.Context, opts TerraformOptions) error {
 	if err := writeTerraformSummary(opts.Info, result, timings); err != nil {
 		return err
 	}
+	finalizeTerraformPlanCIResults(opts.Info, result, timings)
 	if result.Err != nil {
 		return result.Err
 	}
@@ -451,10 +453,14 @@ func (d *TerraformDispatcher) Dispatch(ctx context.Context, node *dependency.Nod
 		execution.CaptureOutput = d.output.captureOutput()
 		outcome.LogFiles = logFiles
 	}
+	if d.info != nil && d.info.TerraformPlanCIResultHandler != nil {
+		execution.CaptureOutput = true
+	}
 
 	execResult, err := d.executor(execution)
 	outcome.ExitCode = terraformExitCode(err)
 	outcome.Changed = terraformPlanChangedError(d.info, err)
+	outcome.Output = execResult.CombinedOutput()
 	if execution.Flush != nil {
 		if flushErr := execution.Flush(); flushErr != nil && err == nil {
 			err = flushErr
@@ -1198,6 +1204,59 @@ func terraformPlanChanged(result *scheduler.AggregateResult) bool {
 		}
 	}
 	return false
+}
+
+func finalizeTerraformPlanCIResults(info *schema.ConfigAndStacksInfo, result *scheduler.AggregateResult, timings *terraformNodeTimings) {
+	if info == nil || info.SubCommand != "plan" || info.TerraformPlanCIResultHandler == nil || result == nil {
+		return
+	}
+
+	resultSet := schema.TerraformPlanCIResultSet{
+		Results: make([]schema.TerraformPlanCIResult, 0, len(result.Results)),
+	}
+	for _, nodeResult := range result.Results {
+		outcome, _ := nodeResult.Value.(TerraformNodeOutcome)
+		entry := schema.TerraformPlanCIResult{
+			NodeID:    nodeResult.NodeID,
+			Stack:     nodeResult.Node.Stack,
+			Component: nodeResult.Node.Component,
+			Status:    string(nodeResult.Status),
+			Processed: outcome.Processed,
+			Changed:   outcome.Changed,
+			ExitCode:  outcome.ExitCode,
+			Output:    outcome.Output,
+			LogFiles:  cloneStringMap(outcome.LogFiles),
+		}
+		if timing, ok := timings.Get(nodeResult.NodeID); ok {
+			entry.StartedAt = timing.startedAt
+			entry.FinishedAt = timing.finishedAt
+			if !timing.startedAt.IsZero() && !timing.finishedAt.IsZero() {
+				entry.DurationMS = timing.finishedAt.Sub(timing.startedAt).Milliseconds()
+			}
+		}
+		if nodeResult.Err != nil {
+			entry.Error = nodeResult.Err.Error()
+			if entry.ExitCode == 0 {
+				entry.ExitCode = 1
+			}
+		}
+		resultSet.Results = append(resultSet.Results, entry)
+	}
+
+	if err := info.TerraformPlanCIResultHandler.HandleTerraformPlanCIResults(resultSet); err != nil {
+		log.Warn("Terraform plan CI aggregate hook failed", "error", err)
+	}
+}
+
+func cloneStringMap(values map[string]string) map[string]string {
+	if values == nil {
+		return nil
+	}
+	cloned := make(map[string]string, len(values))
+	for key, value := range values {
+		cloned[key] = value
+	}
+	return cloned
 }
 
 type terraformSummary struct {

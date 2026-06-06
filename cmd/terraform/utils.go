@@ -19,6 +19,7 @@ import (
 	e "github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/ansi"
 	"github.com/cloudposse/atmos/pkg/auth"
+	"github.com/cloudposse/atmos/pkg/ci"
 	"github.com/cloudposse/atmos/pkg/ci/plugins/terraform/planfile"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/flags/compat"
@@ -270,6 +271,47 @@ func runCIHooksForTerraformComponent(actualCmd *cobra.Command, event h.HookEvent
 	}
 }
 
+type terraformPlanCIResultHandler struct {
+	cmd  *cobra.Command
+	info *schema.ConfigAndStacksInfo
+}
+
+func (handler *terraformPlanCIResultHandler) HandleTerraformPlanCIResults(resultSet schema.TerraformPlanCIResultSet) error {
+	if handler == nil || handler.cmd == nil || handler.info == nil {
+		return nil
+	}
+
+	atmosConfig, err := cfg.InitCliConfig(*handler.info, true)
+	if err != nil {
+		return fmt.Errorf("CI hook config init failed: %w", err)
+	}
+
+	if err := h.RunCIHooks(&h.RunCIHooksOptions{
+		Event:       h.AfterTerraformPlanAggregate,
+		AtmosConfig: &atmosConfig,
+		Info:        handler.info,
+		ForceCIMode: terraformCIModeEnabled(handler.cmd),
+		Aggregate:   resultSet,
+	}); err != nil {
+		return err
+	}
+	return nil
+}
+
+func terraformCIModeEnabled(cmd *cobra.Command) bool {
+	forceCIMode := false
+	if cmd != nil {
+		forceCIMode, _ = cmd.Flags().GetBool("ci")
+	}
+	if forceCIMode {
+		return true
+	}
+	if viper.GetBool("ci") {
+		return true
+	}
+	return ci.IsCI()
+}
+
 // wirePerComponentHook installs the per-component CI hook on info so each
 // component in a multi-component run (`--all`, `--components`, `--query`) gets
 // its own summary entry instead of a single misattributed global call from
@@ -279,6 +321,13 @@ func runCIHooksForTerraformComponent(actualCmd *cobra.Command, event h.HookEvent
 func wirePerComponentHook(info *schema.ConfigAndStacksInfo, subCommand string, actualCmd *cobra.Command) {
 	switch subCommand {
 	case "plan":
+		if terraformCIModeEnabled(actualCmd) {
+			info.TerraformPlanCIResultHandler = &terraformPlanCIResultHandler{
+				cmd:  actualCmd,
+				info: info,
+			}
+			return
+		}
 		info.PerComponentHook = func(compInfo *schema.ConfigAndStacksInfo, output string, execErr error) {
 			runCIHooksForPlanComponent(actualCmd, compInfo, output, execErr)
 		}

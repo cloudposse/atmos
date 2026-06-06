@@ -5,13 +5,14 @@ import "strings"
 type HookEvent string
 
 const (
-	BeforeTerraformInit   HookEvent = "before.terraform.init"
-	AfterTerraformApply   HookEvent = "after.terraform.apply"
-	BeforeTerraformApply  HookEvent = "before.terraform.apply"
-	AfterTerraformPlan    HookEvent = "after.terraform.plan"
-	BeforeTerraformPlan   HookEvent = "before.terraform.plan"
-	BeforeTerraformDeploy HookEvent = "before.terraform.deploy"
-	AfterTerraformDeploy  HookEvent = "after.terraform.deploy"
+	BeforeTerraformInit         HookEvent = "before.terraform.init"
+	AfterTerraformApply         HookEvent = "after.terraform.apply"
+	BeforeTerraformApply        HookEvent = "before.terraform.apply"
+	AfterTerraformPlan          HookEvent = "after.terraform.plan"
+	AfterTerraformPlanAggregate HookEvent = "after.terraform.plan.aggregate"
+	BeforeTerraformPlan         HookEvent = "before.terraform.plan"
+	BeforeTerraformDeploy       HookEvent = "before.terraform.deploy"
+	AfterTerraformDeploy        HookEvent = "after.terraform.deploy"
 )
 
 // Normalize returns the canonical form of a HookEvent, collapsing deploy aliases

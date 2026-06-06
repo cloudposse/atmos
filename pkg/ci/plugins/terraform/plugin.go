@@ -54,6 +54,10 @@ func (p *Plugin) GetHookBindings() []plugin.HookBinding {
 			Handler: p.onAfterPlan,
 		},
 		{
+			Event:   "after.terraform.plan.aggregate",
+			Handler: p.onAfterPlanAggregate,
+		},
+		{
 			Event:   "before.terraform.apply",
 			Handler: p.onBeforeApply,
 		},
