@@ -1,6 +1,9 @@
 package store
 
-import "context"
+import (
+	"context"
+	"time"
+)
 
 // AWSAuthConfig holds the AWS-specific authentication configuration resolved from an identity.
 // This mirrors the relevant fields from schema.AWSAuthContext without importing pkg/schema
@@ -28,6 +31,8 @@ type AzureAuthConfig struct {
 type GCPAuthConfig struct {
 	CredentialsFile string
 	ProjectID       string
+	AccessToken     string
+	TokenExpiry     time.Time
 }
 
 // AuthContextResolver resolves an identity name to a cloud-specific auth configuration.

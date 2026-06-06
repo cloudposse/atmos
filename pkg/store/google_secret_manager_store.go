@@ -140,15 +140,7 @@ func (s *GSMStore) initIdentityClient() error {
 		return fmt.Errorf("%w: failed to resolve GCP auth context for identity %q: %w", ErrAuthContextNotAvailable, s.identityName, err)
 	}
 
-	// Use credentials file from GCP auth context if available, otherwise fall back to store credentials.
-	credentials := gcp.GetCredentialsFromStore(s.credentials)
-	if authContext.CredentialsFile != "" {
-		credentials = authContext.CredentialsFile
-	}
-
-	clientOpts := gcp.GetClientOptions(gcp.AuthOptions{
-		Credentials: credentials,
-	})
+	clientOpts := gcp.GetClientOptions(s.identityAuthOptions(authContext))
 
 	client, err := secretmanager.NewClient(ctx, clientOpts...)
 	if err != nil {
@@ -163,6 +155,25 @@ func (s *GSMStore) initIdentityClient() error {
 	s.client = client
 
 	return nil
+}
+
+func (s *GSMStore) identityAuthOptions(authContext *GCPAuthConfig) gcp.AuthOptions {
+	opts := gcp.AuthOptions{
+		Credentials: gcp.GetCredentialsFromStore(s.credentials),
+	}
+	if authContext == nil {
+		return opts
+	}
+	if authContext.AccessToken != "" {
+		opts.Credentials = ""
+		opts.AccessToken = authContext.AccessToken
+		opts.TokenExpiry = authContext.TokenExpiry
+		return opts
+	}
+	if authContext.CredentialsFile != "" {
+		opts.Credentials = authContext.CredentialsFile
+	}
+	return opts
 }
 
 // ensureClient lazily initializes the GCP client if it hasn't been initialized yet.

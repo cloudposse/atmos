@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/stretchr/testify/assert"
@@ -497,6 +498,41 @@ func TestGSMStore_LazyInit_WithResolver(t *testing.T) {
 	// called and credentials file path processed. Actual client creation may
 	// fail in test (no real GCP credentials).
 	_ = store.ensureClient()
+}
+
+func TestGSMStore_IdentityAuthOptions_AccessTokenOverridesCredentialsFile(t *testing.T) {
+	expiry := time.Now().Add(time.Hour).UTC()
+	store := &GSMStore{
+		credentials: stringPtr("/store/credentials.json"),
+		projectID:   "my-project",
+	}
+
+	opts := store.identityAuthOptions(&GCPAuthConfig{
+		CredentialsFile: "/atmos/application_default_credentials.json",
+		AccessToken:     "ya29.identity-token",
+		TokenExpiry:     expiry,
+	})
+
+	assert.Empty(t, opts.Credentials)
+	assert.Equal(t, "ya29.identity-token", opts.AccessToken)
+	assert.Equal(t, expiry, opts.TokenExpiry)
+}
+
+func TestGSMStore_IdentityAuthOptions_CredentialsFallbacks(t *testing.T) {
+	store := &GSMStore{
+		credentials: stringPtr("/store/credentials.json"),
+		projectID:   "my-project",
+	}
+
+	opts := store.identityAuthOptions(&GCPAuthConfig{
+		CredentialsFile: "/atmos/application_default_credentials.json",
+	})
+	assert.Equal(t, "/atmos/application_default_credentials.json", opts.Credentials)
+	assert.Empty(t, opts.AccessToken)
+
+	opts = store.identityAuthOptions(&GCPAuthConfig{})
+	assert.Equal(t, "/store/credentials.json", opts.Credentials)
+	assert.Empty(t, opts.AccessToken)
 }
 
 // --- SetAuthContextResolver with all cloud store types ---
