@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	cfg "github.com/cloudposse/atmos/pkg/config"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	provSource "github.com/cloudposse/atmos/pkg/provisioner/source"
@@ -216,6 +217,10 @@ func ProvisionAndResolveComponentPath(
 	// a local component dir, not a workdir, so stat failures wrap
 	// ErrInvalidComponent rather than ErrWorkdirProvision.
 	if !provSource.HasSource(info.ComponentSection) {
+		// A common footgun: declaring the JIT source under `metadata` instead of at the top level.
+		// `metadata.source` is silently ignored (not a schema field), so the component then fails to
+		// resolve with a confusing "does not exist" error. Warn so the misconfiguration is actionable.
+		warnIfSourceMisplacedUnderMetadata(info)
 		exists, err := componentDirExists(fallbackComponentPath, "check component path", errUtils.ErrInvalidComponent)
 		return fallbackComponentPath, exists, err
 	}
@@ -240,4 +245,36 @@ func ProvisionAndResolveComponentPath(
 	// fallback is again a local component dir, so wrap with ErrInvalidComponent.
 	exists, err := componentDirExists(fallbackComponentPath, "re-check component path after provisioning", errUtils.ErrInvalidComponent)
 	return fallbackComponentPath, exists, err
+}
+
+// sourceMisplacedUnderMetadata reports whether a component nests `source` under `metadata`, where
+// JIT source provisioning never reads it. The provisioner reads a top-level `source:` (a sibling of
+// `vars`/`settings`/`metadata`); `metadata.source` is not a schema field, so it is silently dropped
+// and the component then fails to resolve. An empty-string `source` is treated as absent, matching
+// HasSource.
+func sourceMisplacedUnderMetadata(componentSection schema.AtmosSectionMapType) bool {
+	metadata, ok := componentSection[cfg.MetadataSectionName].(map[string]any)
+	if !ok {
+		return false
+	}
+	source, ok := metadata[cfg.SourceSectionName]
+	if !ok || source == nil {
+		return false
+	}
+	if s, isStr := source.(string); isStr {
+		return s != ""
+	}
+	return true
+}
+
+// warnIfSourceMisplacedUnderMetadata warns when a component declares `source` under `metadata`
+// instead of at the top level, turning an otherwise-silent misconfiguration into an actionable hint.
+func warnIfSourceMisplacedUnderMetadata(info *schema.ConfigAndStacksInfo) {
+	if !sourceMisplacedUnderMetadata(info.ComponentSection) {
+		return
+	}
+	log.Warn("Ignoring `source` nested under `metadata`: JIT source provisioning reads a top-level "+
+		"`source:` on the component (a sibling of `vars`/`settings`/`metadata`), not `metadata.source`. "+
+		"Move `source` up one level to vendor this component on demand.",
+		"component", info.ComponentFromArg)
 }
