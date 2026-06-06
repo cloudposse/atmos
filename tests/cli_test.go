@@ -745,6 +745,13 @@ func TestMain(m *testing.M) {
 	// Define the base directory for snapshots relative to startingDir
 	snapshotBaseDir = filepath.Join(startingDir, "snapshots")
 
+	// Provision the external tool binaries (terraform/tofu/packer/helmfile/helm)
+	// via the Atmos toolchain so the suite is self-contained and deterministic,
+	// instead of depending on host-installed binaries. Only missing tools are
+	// installed; best-effort, so failures leave per-test preconditions to skip
+	// the affected tests.
+	testhelpers.ProvisionToolchain(logger, testhelpers.DefaultTools)
+
 	exitCode := m.Run() // ALWAYS run tests so they can skip properly
 
 	// Clean up sandboxes.
