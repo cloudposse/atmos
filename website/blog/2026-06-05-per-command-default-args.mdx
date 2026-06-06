@@ -40,17 +40,8 @@ terraform:
 `args` is the global list; `<command-path>.args` is per command (`describe.args`,
 `describe.component.args`, `terraform.args`, …), with the most-specific path winning.
 
-## Why Args Instead of a Typed Map
-
-We deliberately chose raw argument tokens over a typed `flag: value` map. The map is tidy, but it's not
-generic — it only covers flags Atmos models a specific way, and it needs new wiring as commands gain new
-flags. Default **args** are the "plain stupid" option that's future-proof: any flag, any repeated flag,
-even positionals, work with **zero per-command code**. It's exactly what you'd type, just remembered for
-you.
-
-This also means the mechanism is uniform — it works the same for `terraform`, `describe`, `list`,
-`validate`, and everything else, because Atmos simply splices your default args onto the command line
-before parsing.
+Args are raw, pass-through tokens — flags, repeated flags (like `--skip`), and positional arguments
+all work, exactly as you'd type them on the command line.
 
 ## Precedence and Profiles
 

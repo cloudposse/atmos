@@ -74,6 +74,49 @@ The key is derived from the **command line**, most-specific wins:
 command line, not where a command's other configuration happens to live.
 </Note>
 
+### Overriding a broader default at a deeper path
+
+Args from every matching level are applied together, least-specific first, so a more-specific path
+overrides a broader one by re-declaring the same flag (the later value wins):
+
+<File title="atmos.yaml">
+```yaml
+# Global: disable identity everywhere.
+args:
+  - --identity=false
+
+describe:
+  component:
+    args:
+      # `atmos describe component` re-enables it with a specific identity.
+      - --identity=admin
+```
+</File>
+
+Running `atmos describe component vpc -s prod` resolves to `--identity=false --identity=admin`, and
+the most-specific value (`admin`) wins. Passing `--identity=...` on the command line still overrides
+both.
+
+### Flags and positional arguments
+
+Default args are **raw tokens**, not a typed flag map — so flags (`--skip=x`), repeated flags, and
+positional arguments are all passed straight through. They are spliced in right after the command
+path, before the arguments you type.
+
+Flags get full override semantics: a more-specific path wins, and an explicit flag on the command
+line (or its environment variable) suppresses the default. Positionals behave differently — they are
+not flags, so they are never suppressed, and because they are inserted *before* what you type, a
+defaulted positional is **added to** your positional arguments rather than replacing them. For that
+reason, defaults are best suited to flags.
+
+<File title="atmos.yaml">
+```yaml
+terraform:
+  args:
+    - -input=false   # passed straight through to terraform
+```
+</File>
+
 ## Precedence
 
 Default args sit below the command line and environment variables:
