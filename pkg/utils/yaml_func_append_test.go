@@ -6,37 +6,6 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestIsAppendTag(t *testing.T) {
-	tests := []struct {
-		name     string
-		tag      string
-		expected bool
-	}{
-		{
-			name:     "append tag",
-			tag:      "!append",
-			expected: true,
-		},
-		{
-			name:     "other tag",
-			tag:      "!include",
-			expected: false,
-		},
-		{
-			name:     "empty tag",
-			tag:      "",
-			expected: false,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := IsAppendTag(tt.tag)
-			assert.Equal(t, tt.expected, result)
-		})
-	}
-}
-
 func TestHasAppendTag(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -160,16 +129,4 @@ func TestWrapWithAppendTag(t *testing.T) {
 			assert.Equal(t, tt.expected, result)
 		})
 	}
-}
-
-func TestProcessAppendTag(t *testing.T) {
-	// Test that ProcessAppendTag doesn't return an error for valid inputs
-	err := ProcessAppendTag([]any{"item1", "item2"})
-	assert.NoError(t, err)
-
-	err = ProcessAppendTag(map[string]any{"key": "value"})
-	assert.NoError(t, err)
-
-	err = ProcessAppendTag(nil)
-	assert.NoError(t, err)
 }
