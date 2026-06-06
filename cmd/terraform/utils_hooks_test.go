@@ -24,6 +24,8 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
+	"github.com/cloudposse/atmos/pkg/ci"
+	githubCI "github.com/cloudposse/atmos/pkg/ci/providers/github"
 	"github.com/cloudposse/atmos/pkg/hooks"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -53,6 +55,29 @@ func newHookTestCmd() *cobra.Command {
 	cmd.Flags().Bool("ci", false, "ci flag")
 	cmd.Flags().Bool("verify-plan", false, "verify-plan flag")
 	return cmd
+}
+
+func withoutCIDetection(t *testing.T) {
+	t.Helper()
+
+	restoreRegistry := ci.SwapRegistryForTest()
+	t.Cleanup(restoreRegistry)
+
+	t.Setenv("GITHUB_ACTIONS", "")
+	t.Setenv("CI", "")
+	t.Setenv("ATMOS_CI", "")
+}
+
+func withGitHubActionsDetection(t *testing.T) {
+	t.Helper()
+
+	restoreRegistry := ci.SwapRegistryForTest()
+	t.Cleanup(restoreRegistry)
+	ci.Register(githubCI.NewProvider())
+
+	t.Setenv("GITHUB_ACTIONS", "true")
+	t.Setenv("CI", "")
+	t.Setenv("ATMOS_CI", "")
 }
 
 // TestRunHooksOnError_PreservesCommandError verifies the failure-path
@@ -451,6 +476,8 @@ func TestRunCIHooksForApplyComponent_ExitCodeForwarding(t *testing.T) {
 // drop per-component CI summary entries for one of plan/apply/deploy — which
 // is exactly the bug CodeRabbit caught on an earlier revision of this PR.
 func TestWirePerComponentHook(t *testing.T) {
+	withoutCIDetection(t)
+
 	t.Run("plan/deploy/apply install a non-nil hook", func(t *testing.T) {
 		for _, sub := range []string{"plan", "deploy", "apply"} {
 			t.Run(sub, func(t *testing.T) {
@@ -468,6 +495,16 @@ func TestWirePerComponentHook(t *testing.T) {
 
 		info := &schema.ConfigAndStacksInfo{}
 		wirePerComponentHook(info, "plan", cmd)
+
+		assert.Nil(t, info.PerComponentHook)
+		assert.NotNil(t, info.TerraformPlanCIResultHandler)
+	})
+
+	t.Run("plan native CI installs aggregate handler instead of per-component hook", func(t *testing.T) {
+		withGitHubActionsDetection(t)
+
+		info := &schema.ConfigAndStacksInfo{}
+		wirePerComponentHook(info, "plan", newHookTestCmd())
 
 		assert.Nil(t, info.PerComponentHook)
 		assert.NotNil(t, info.TerraformPlanCIResultHandler)
