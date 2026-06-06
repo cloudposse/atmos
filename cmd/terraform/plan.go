@@ -63,7 +63,10 @@ For complete Terraform/OpenTofu documentation, see:
 		}
 
 		// Parse base terraform options.
-		opts := ParseTerraformRunOptions(v)
+		opts, err := ParseTerraformRunOptions(v)
+		if err != nil {
+			return err
+		}
 
 		// Plan-specific flags (upload-status, skip-planfile) flow through the
 		// legacy ProcessCommandLineArgs which sets info.PlanSkipPlanfile.
@@ -90,7 +93,7 @@ For complete Terraform/OpenTofu documentation, see:
 			shellOpts = append(shellOpts, e.WithStderrCapture(&stderrBuf))
 		}
 
-		err := terraformRunWithOptions(terraformCmd, cmd, args, opts, shellOpts...)
+		err = terraformRunWithOptions(terraformCmd, cmd, args, opts, shellOpts...)
 
 		// Strip ANSI escape codes so CI templates get clean text.
 		// Combine stdout and stderr so that error messages (which terraform
@@ -125,9 +128,19 @@ func init() {
 		flags.WithBoolFlag("upload-status", "", false, "If set atmos will upload the plan result to the pro API"),
 		flags.WithBoolFlag("affected", "", false, "Plan the affected components in dependency order"),
 		flags.WithBoolFlag("all", "", false, "Plan all components in all stacks"),
+		flags.WithIntFlag("max-concurrency", "", 1, "Maximum number of Terraform plan components to execute concurrently"),
+		flags.WithStringFlag("failure-mode", "", terraformFailureModeFailFast, "Terraform plan failure handling mode. Supported values: fail-fast, keep-going"),
+		flags.WithStringFlag("log-order", "", "stream", "Order concurrent Terraform plan logs. Supported values: stream, grouped"),
+		flags.WithStringSliceFlag("hide", "", nil, "Hide Terraform plan output sections. Supported values: no-changes"),
+		flags.WithStringFlag("execution-summary-file", "", "", "Write graph-backed Terraform plan execution summary JSON to the specified file"),
 		flags.WithBoolFlag("skip-planfile", "", false, "Skip writing the plan to a file by not passing the `-out` flag to Terraform when executing the command. Set it to true when using Terraform Cloud since the `-out` flag is not supported. Terraform Cloud automatically stores plans in its backend"),
 		flags.WithBoolFlag("ci", "", false, "Enable CI mode for automated pipelines (writes job summary, outputs)"),
 		flags.WithEnvVars("upload-status", "ATMOS_TERRAFORM_PLAN_UPLOAD_STATUS"),
+		flags.WithEnvVars("max-concurrency", "ATMOS_TERRAFORM_PLAN_MAX_CONCURRENCY"),
+		flags.WithEnvVars("failure-mode", "ATMOS_TERRAFORM_PLAN_FAILURE_MODE"),
+		flags.WithEnvVars("log-order", "ATMOS_TERRAFORM_PLAN_LOG_ORDER"),
+		flags.WithEnvVars("hide", "ATMOS_TERRAFORM_PLAN_HIDE"),
+		flags.WithEnvVars("execution-summary-file", "ATMOS_TERRAFORM_PLAN_EXECUTION_SUMMARY_FILE"),
 		flags.WithEnvVars("skip-planfile", "ATMOS_TERRAFORM_PLAN_SKIP_PLANFILE"),
 		flags.WithEnvVars("ci", "ATMOS_CI", "CI"),
 	)

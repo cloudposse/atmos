@@ -72,6 +72,7 @@ type AtmosConfiguration struct {
 	BasePathSource                string             `yaml:"-" json:"-" mapstructure:"-"` // "runtime" if from env var/CLI/provider, "" if from config file.
 	Components                    Components         `yaml:"components" json:"components" mapstructure:"components"`
 	Stacks                        Stacks             `yaml:"stacks" json:"stacks" mapstructure:"stacks"`
+	Imports                       ImportsSettings    `yaml:"imports,omitempty" json:"imports,omitempty" mapstructure:"imports"`
 	Workflows                     Workflows          `yaml:"workflows,omitempty" json:"workflows,omitempty" mapstructure:"workflows"`
 	Logs                          Logs               `yaml:"logs,omitempty" json:"logs,omitempty" mapstructure:"logs"`
 	Errors                        ErrorsConfig       `yaml:"errors,omitempty" json:"errors,omitempty" mapstructure:"errors"`
@@ -1046,68 +1047,76 @@ type ConfigAndStacksInfo struct {
 	// RequiredProviders maps provider names to their configuration.
 	// Example: {"aws": {"source": "hashicorp/aws", "version": "~> 5.0"}}.
 	// This is extracted from terraform.required_providers or components.terraform.<name>.required_providers.
-	RequiredProviders         map[string]map[string]any
-	AdditionalArgsAndFlags    []string
-	GlobalOptions             []string
-	BasePath                  string
-	VendorBasePathFlag        string
-	TerraformCommand          string
-	TerraformDir              string
-	HelmfileCommand           string
-	HelmfileDir               string
-	PackerCommand             string
-	PackerDir                 string
-	AnsibleCommand            string
-	AnsibleDir                string
-	ConfigDir                 string
-	StacksDir                 string
-	WorkflowsDir              string
-	Context                   Context
-	ContextPrefix             string
-	DeployRunInit             string
-	InitRunReconfigure        string
-	InitPassVars              string
-	PlanSkipPlanfile          string
-	AutoGenerateBackendFile   string
-	UseTerraformPlan          bool
-	PlanFile                  string
-	StoredPlanFile            string
-	VerifyPlan                bool
-	DryRun                    bool
-	SkipInit                  bool
-	UploadStatus              bool
-	ComponentInheritanceChain []string
-	ComponentImportsSection   []string
-	NeedHelp                  bool
-	ComponentIsAbstract       bool
-	ComponentIsEnabled        bool
-	ComponentIsLocked         bool
-	ComponentMetadataSection  AtmosSectionMapType
-	TerraformWorkspace        string
-	JsonSchemaDir             string
-	OpaDir                    string
-	CueDir                    string
-	AtmosManifestJsonSchema   string
-	AtmosCliConfigPath        string
-	AtmosBasePath             string
-	ProfilesFromArg           []string
-	RedirectStdErr            string
-	LogsLevel                 string
-	LogsFile                  string
-	SettingsListMergeStrategy string
-	Query                     string
-	AtmosConfigFilesFromArg   []string
-	AtmosConfigDirsFromArg    []string
-	ProcessTemplates          bool
-	ProcessFunctions          bool
-	Skip                      []string
-	CliArgs                   []string
-	Affected                  bool
-	All                       bool
-	Components                []string
-	Identity                  string
-	ClusterName               string // EKS cluster name from --cluster-name flag.
-	NeedsPathResolution       bool   // True if ComponentFromArg is a path that needs resolution.
+	RequiredProviders          map[string]map[string]any
+	AdditionalArgsAndFlags     []string
+	GlobalOptions              []string
+	BasePath                   string
+	VendorBasePathFlag         string
+	TerraformCommand           string
+	TerraformDir               string
+	HelmfileCommand            string
+	HelmfileDir                string
+	PackerCommand              string
+	PackerDir                  string
+	AnsibleCommand             string
+	AnsibleDir                 string
+	ConfigDir                  string
+	StacksDir                  string
+	WorkflowsDir               string
+	Context                    Context
+	ContextPrefix              string
+	DeployRunInit              string
+	InitRunReconfigure         string
+	InitPassVars               string
+	PlanSkipPlanfile           string
+	AutoGenerateBackendFile    string
+	UseTerraformPlan           bool
+	PlanFile                   string
+	StoredPlanFile             string
+	VerifyPlan                 bool
+	DryRun                     bool
+	SkipInit                   bool
+	UploadStatus               bool
+	ComponentInheritanceChain  []string
+	ComponentImportsSection    []string
+	NeedHelp                   bool
+	ComponentIsAbstract        bool
+	ComponentIsEnabled         bool
+	ComponentIsLocked          bool
+	ComponentMetadataSection   AtmosSectionMapType
+	TerraformWorkspace         string
+	JsonSchemaDir              string
+	OpaDir                     string
+	CueDir                     string
+	AtmosManifestJsonSchema    string
+	AtmosCliConfigPath         string
+	AtmosBasePath              string
+	ProfilesFromArg            []string
+	RedirectStdErr             string
+	LogsLevel                  string
+	LogsFile                   string
+	SettingsListMergeStrategy  string
+	Query                      string
+	AtmosConfigFilesFromArg    []string
+	AtmosConfigDirsFromArg     []string
+	ProcessTemplates           bool
+	ProcessFunctions           bool
+	Skip                       []string
+	CliArgs                    []string
+	Affected                   bool
+	All                        bool
+	Components                 []string
+	MaxConcurrency             int
+	TerraformFailureMode       string
+	FailFast                   bool
+	KeepGoing                  bool
+	TerraformPlanLogOrder      string
+	TerraformPlanHide          []string
+	TerraformPlanHideNoChanges bool
+	TerraformPlanSummaryFile   string
+	Identity                   string
+	ClusterName                string // EKS cluster name from --cluster-name flag.
+	NeedsPathResolution        bool   // True if ComponentFromArg is a path that needs resolution.
 
 	// PerComponentHook is called after each component executes in multi-component mode
 	// (--all, --query, --components). Receives a snapshot of info with Component/Stack
@@ -1264,6 +1273,14 @@ const (
 	StackImportNestedImportsRemote = "remote"
 )
 
+// ImportsSettings holds global defaults applied when processing stack imports.
+type ImportsSettings struct {
+	// TTL is the default cache duration for the cloned source repos of remote (git)
+	// imports, applied when a per-import `ttl` is not set. See StackImport.TTL for the
+	// caching semantics and accepted formats.
+	TTL string `yaml:"ttl,omitempty" json:"ttl,omitempty" mapstructure:"ttl"`
+}
+
 type StackImport struct {
 	Path                        string              `yaml:"path" json:"path" mapstructure:"path"`
 	Context                     AtmosSectionMapType `yaml:"context" json:"context" mapstructure:"context"`
@@ -1271,6 +1288,13 @@ type StackImport struct {
 	IgnoreMissingTemplateValues bool                `yaml:"ignore_missing_template_values,omitempty" json:"ignore_missing_template_values,omitempty" mapstructure:"ignore_missing_template_values"`
 	SkipIfMissing               bool                `yaml:"skip_if_missing,omitempty" json:"skip_if_missing,omitempty" mapstructure:"skip_if_missing"`
 	NestedImports               string              `yaml:"nested_imports,omitempty" json:"nested_imports,omitempty" mapstructure:"nested_imports"`
+	// TTL is the cache duration for the cloned source repo of a remote (git) import.
+	// When set, the cloned source is reused across Atmos invocations until it expires,
+	// so a warm cache (e.g. GitHub Actions cache of the imports cache dir) skips the
+	// re-clone. Within a single invocation a source repo is always cloned at most once,
+	// regardless of TTL. When unset, the source is re-cloned once per invocation.
+	// Examples: "0s" (always re-fetch), "5m", "1h", "7d", or keywords like "daily".
+	TTL string `yaml:"ttl,omitempty" json:"ttl,omitempty" mapstructure:"ttl"`
 }
 
 // Dependencies
