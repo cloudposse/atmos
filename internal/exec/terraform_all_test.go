@@ -363,11 +363,11 @@ func TestExecuteTerraformAll_AuthManagerResolverWired(t *testing.T) {
 	authManagerFactory = func(_ string, _ schema.AuthConfig, _ string, _ *schema.AtmosConfiguration) (auth.AuthManager, error) {
 		ctrl := gomock.NewController(t)
 		mgr := types.NewMockAuthManager(ctrl)
-		// ExecuteDescribeStacks calls GetStackInfo on the auth manager while
-		// processing each stack. The fixture has no auth-dependent YAML
-		// functions, so no other AuthManager methods get invoked — gomock
-		// will surface that explicitly via "unexpected call" failures if
-		// that ever changes.
+		// The bridge records the selected identity via GetChain, and
+		// ExecuteDescribeStacks calls GetStackInfo while processing each stack.
+		// The fixture has no auth-dependent YAML functions, so no other
+		// AuthManager methods should be invoked.
+		mgr.EXPECT().GetChain().Return([]string{"terraform"}).AnyTimes()
 		mgr.EXPECT().GetStackInfo().Return(nil).AnyTimes()
 		return mgr, nil
 	}
