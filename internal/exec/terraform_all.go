@@ -1,16 +1,18 @@
 package exec
 
 import (
+	"context"
 	"fmt"
-
-	log "github.com/charmbracelet/log"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/dependency"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
+	scheduleradapters "github.com/cloudposse/atmos/pkg/scheduler/adapters"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/store/authbridge"
+	"github.com/cloudposse/atmos/pkg/ui"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -19,7 +21,12 @@ const errWrapFmt = "%w: %w"
 // ExecuteTerraformAll executes terraform commands for all components in dependency order.
 func ExecuteTerraformAll(info *schema.ConfigAndStacksInfo) error {
 	defer perf.Track(nil, "exec.ExecuteTerraformAll")()
+	return ExecuteTerraformAllWithContext(context.Background(), info)
+}
 
+// ExecuteTerraformAllWithContext executes all selected Terraform components through
+// the graph-backed scheduler using the provided cancellation context.
+func ExecuteTerraformAllWithContext(ctx context.Context, info *schema.ConfigAndStacksInfo) error {
 	// Validate inputs for --all flag usage.
 	// When no stack is given, --all processes every stack — matching the documented
 	// behavior of `atmos terraform apply --all` (see website/docs/cli/commands/terraform).
@@ -31,6 +38,7 @@ func ExecuteTerraformAll(info *schema.ConfigAndStacksInfo) error {
 	if err != nil {
 		return fmt.Errorf(errWrapFmt, errUtils.ErrInitializeCLIConfig, err)
 	}
+	defer perf.Track(&atmosConfig, "exec.ExecuteTerraformAllWithContext")()
 
 	log.Debug("Executing terraform command for all components in dependency order", "command", info.SubCommand)
 
@@ -46,10 +54,9 @@ func ExecuteTerraformAll(info *schema.ConfigAndStacksInfo) error {
 		atmosConfig.Stores.SetAuthContextResolver(resolver)
 	}
 
-	// Get all stacks with terraform components.
 	stacks, err := ExecuteDescribeStacks(
 		&atmosConfig,
-		"",  // all stacks
+		info.Stack,
 		nil, // all components
 		[]string{cfg.TerraformComponentType},
 		nil,
@@ -64,26 +71,24 @@ func ExecuteTerraformAll(info *schema.ConfigAndStacksInfo) error {
 		return fmt.Errorf(errWrapFmt, errUtils.ErrExecuteDescribeStacks, err)
 	}
 
-	// Build dependency graph.
-	graph, err := buildTerraformDependencyGraph(
-		&atmosConfig,
-		stacks,
-		info,
-	)
-	if err != nil {
-		return fmt.Errorf(errWrapFmt, errUtils.ErrBuildDepGraph, err)
+	if info.SubCommand == "destroy" {
+		ui.Info("Processing components in reverse dependency order for destroy")
+	} else {
+		ui.Info("Processing components in dependency order")
 	}
 
-	// Apply filters if specified.
-	if info.Query != "" || len(info.Components) > 0 || info.Stack != "" {
-		graph = applyFiltersToGraph(graph, stacks, info)
-	}
-
-	// Execute components in dependency order.
-	return executeInDependencyOrder(graph, info)
+	return scheduleradapters.ExecuteTerraform(ctx, scheduleradapters.TerraformOptions{
+		AtmosConfig: &atmosConfig,
+		Info:        info,
+		Stacks:      stacks,
+		Executor:    executeTerraformQueryComponent,
+	})
 }
 
 // executeInDependencyOrder executes terraform commands in dependency order.
+//
+// Deprecated: production Terraform bulk execution uses the scheduler adapter.
+// Keep this helper only while legacy dependency-order tests still cover it.
 func executeInDependencyOrder(graph *dependency.Graph, info *schema.ConfigAndStacksInfo) error {
 	// Get execution order.
 	executionOrder, err := graph.TopologicalSort()
@@ -203,6 +208,9 @@ func shouldSkipComponentForGraph(componentSection map[string]any, componentName 
 }
 
 // applyFiltersToGraph applies query and component filters to the graph.
+//
+// Deprecated: production Terraform bulk filtering uses the scheduler adapter.
+// Keep this helper only while legacy graph-filter tests still cover it.
 func applyFiltersToGraph(graph *dependency.Graph, _ map[string]any, info *schema.ConfigAndStacksInfo) *dependency.Graph {
 	// Determine base set: components/stack if provided; otherwise all nodes.
 	nodeIDs := collectFilteredNodeIDs(graph, info)

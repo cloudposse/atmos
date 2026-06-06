@@ -360,12 +360,6 @@ jobs:
           tofu_version: ${{ env.OPEN_TOFU_VERSION }}
           tofu_wrapper: false
 
-      # https://github.com/hashicorp/setup-packer
-      - name: Install Packer
-        uses: hashicorp/setup-packer@main
-        with:
-          version: ${{ env.PACKER_VERSION }}
-
       - name: Run tests for ${{ matrix.demo-folder }}
         run: |
           cd examples/${{ matrix.demo-folder }}
@@ -516,12 +510,6 @@ jobs:
           tofu_version: ${{ env.OPEN_TOFU_VERSION }}
           tofu_wrapper: false
 
-      # https://github.com/hashicorp/setup-packer
-      - name: Install Packer
-        uses: hashicorp/setup-packer@main
-        with:
-          version: ${{ env.PACKER_VERSION }}
-
       - name: Run tests in ${{ matrix.demo-folder }} for ${{ matrix.flavor.target }}
         working-directory: ${{ matrix.demo-folder }}
         if: matrix.flavor.target == 'linux' || matrix.flavor.target == 'macos'
@@ -600,12 +588,6 @@ jobs:
         with:
           tofu_version: ${{ env.OPEN_TOFU_VERSION }}
           tofu_wrapper: false
-
-      # https://github.com/hashicorp/setup-packer
-      - name: Install Packer
-        uses: hashicorp/setup-packer@main
-        with:
-          version: ${{ env.PACKER_VERSION }}
 
       - name: Lint examples/${{ matrix.demo-folder }}/components/terraform
         uses: reviewdog/action-tflint@v1

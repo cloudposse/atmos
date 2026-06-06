@@ -91,4 +91,7 @@ exclude = [
   "claude\\.com/product/",
   # regex101.com (intermittent 504 Gateway Timeout in CI)
   "regex101\\.com",
+  # Anthropic's clau.de URL shortener is Cloudflare-fronted and returns 525
+  # (SSL handshake failed) to non-browser/CI requests; it resolves in a real browser.
+  "clau\\.de",
 ]
