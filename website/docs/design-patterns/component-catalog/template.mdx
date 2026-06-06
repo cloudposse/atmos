@@ -14,7 +14,7 @@ import PillBox from '@site/src/components/PillBox'
 The **Configuration Catalog Template** Design Pattern is used when you have an unbounded number of a component's instances provisioned in one environment (the same organization, OU/tenant, account and region). New instances with different settings can be configured and provisioned anytime. The old instances must be kept unchanged and never destroyed.
 </Intro>
 
-This is achieved by using [`Go` Templates in Imports](/stacks/imports#go-templates-in-imports) and
+This is achieved by using [`Go` Templates in Imports](/stacks/imports#templated-imports) and
 [Hierarchical Imports with Context](/stacks/imports#hierarchical-imports-with-context).
 
 ## Use-cases
@@ -46,7 +46,7 @@ The **Component Catalog Template** pattern provides the following benefits:
 The **Component Catalog Template** pattern recommends the following:
 
 - In the component's catalog folder, create a [`Go` template](https://pkg.go.dev/text/template) manifest with all the configurations for the
-  component (refer to [`Go` Templates in Imports](/stacks/imports#go-templates-in-imports) for more details)
+  component (refer to [`Go` Templates in Imports](/stacks/imports#templated-imports) for more details)
 
 - Import the `Go` template manifest into a top-level stack many times to configure the component's instances
   using [Hierarchical Imports with Context](/stacks/imports#hierarchical-imports-with-context) and providing different template values

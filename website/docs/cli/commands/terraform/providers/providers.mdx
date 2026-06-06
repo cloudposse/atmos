@@ -1,0 +1,104 @@
+---
+title: atmos terraform providers
+sidebar_label: providers
+sidebar_class_name: command
+id: providers
+description: Display provider requirements and configurations for an Atmos component's Terraform configuration in a stack.
+---
+import Intro from '@site/src/components/Intro'
+import Screengrab from '@site/src/components/Screengrab'
+import DocCardList from '@theme/DocCardList'
+
+<Intro>
+Use this command to display provider requirements and configurations for an Atmos component's Terraform configuration in a stack.
+</Intro>
+
+<Screengrab title="atmos terraform providers --help" slug="atmos-terraform-providers--help" />
+
+## Usage
+
+```shell
+atmos terraform providers <component> -s <stack> [subcommand] [options]
+```
+
+This command shows information about the provider requirements of the configuration in the current working directory.
+
+:::info Atmos Behavior
+Atmos provides standard setup for this command including automatic `terraform init` and workspace selection. The provider information display is handled by native Terraform.
+:::
+
+## Subcommands
+
+<DocCardList />
+
+## Examples
+
+### Show Providers
+
+```shell
+# Display provider requirements
+atmos terraform providers vpc -s dev
+```
+
+### Show Provider Schema
+
+```shell
+# Show schemas for providers used in the configuration
+atmos terraform providers schema vpc -s dev
+```
+
+### Lock Provider Versions
+
+```shell
+# Generate dependency lock file
+atmos terraform providers lock vpc -s dev -platform=linux_amd64 -platform=darwin_amd64
+```
+
+### Mirror Providers
+
+```shell
+# Save local copies of all required provider plugins
+atmos terraform providers mirror vpc -s dev /path/to/mirror
+```
+
+## Arguments
+
+<dl>
+    <dt>`component` <em>(required)</em></dt>
+    <dd>
+        Atmos component name.
+    </dd>
+</dl>
+
+## Flags
+
+<dl>
+    <dt>`--stack` / `-s` <em>(required)</em></dt>
+    <dd>
+        Atmos stack name where the component is defined.
+    </dd>
+
+    <dt>`--skip-init` <em>(optional)</em></dt>
+    <dd>
+        Skip running `terraform init` before executing the command.
+
+        ```shell
+        atmos terraform providers vpc -s dev --skip-init
+        ```
+    </dd>
+
+    <dt>`--dry-run` <em>(optional)</em></dt>
+    <dd>
+        Show what would be executed without actually running the command.
+
+        ```shell
+        atmos terraform providers vpc -s dev --dry-run
+        ```
+    </dd>
+</dl>
+
+## Related Commands
+
+- [`atmos terraform plan`](/cli/commands/terraform/plan) - Generate execution plan
+- [`atmos terraform apply`](/cli/commands/terraform/apply) - Apply changes
+- [`atmos terraform init`](/cli/commands/terraform/init) - Initialize working directory

@@ -29,11 +29,14 @@ type ComponentProcessorOptions struct {
 	GlobalSettings     map[string]any
 	GlobalEnv          map[string]any
 	GlobalAuth         map[string]any
+	GlobalDependencies map[string]any
 	GlobalCommand      string
 	AtmosGlobalAuthMap map[string]any // Pre-converted atmosConfig.Auth to prevent race conditions
 
 	// Terraform-specific options.
 	TerraformProviders              map[string]any
+	TerraformRequiredProviders      map[string]any
+	TerraformRequiredVersion        string
 	GlobalAndTerraformHooks         map[string]any
 	GlobalAndTerraformGenerate      map[string]any
 	GlobalBackendType               string
@@ -41,6 +44,7 @@ type ComponentProcessorOptions struct {
 	GlobalRemoteStateBackendType    string
 	GlobalRemoteStateBackendSection map[string]any
 	GlobalSourceSection             map[string]any
+	GlobalProvisionSection          map[string]any
 
 	// Atmos configuration.
 	AtmosConfig *schema.AtmosConfiguration
@@ -53,6 +57,7 @@ type ComponentProcessorResult struct {
 	ComponentEnv               map[string]any
 	ComponentMetadata          map[string]any
 	ComponentDependencies      map[string]any
+	ComponentLocals            map[string]any // Component-level locals for template processing.
 	ComponentCommand           string
 	ComponentOverrides         map[string]any
 	ComponentOverridesVars     map[string]any
@@ -67,15 +72,18 @@ type ComponentProcessorResult struct {
 	BaseComponentAuth          map[string]any
 	BaseComponentMetadata      map[string]any
 	BaseComponentDependencies  map[string]any
+	BaseComponentLocals        map[string]any // Base component locals for inheritance.
 	BaseComponentCommand       string
 	ComponentInheritanceChain  []string
 	BaseComponents             []string
 
 	// Terraform-specific fields.
-	ComponentProviders map[string]any
-	ComponentHooks     map[string]any
-	ComponentGenerate  map[string]any
-	ComponentAuth      map[string]any
+	ComponentProviders         map[string]any
+	ComponentRequiredProviders map[string]any
+	ComponentRequiredVersion   string
+	ComponentHooks             map[string]any
+	ComponentGenerate          map[string]any
+	ComponentAuth              map[string]any
 	// ComponentProvision holds provisioning configuration for the component (e.g., workdir settings).
 	ComponentProvision                     map[string]any
 	ComponentBackendType                   string
@@ -83,9 +91,13 @@ type ComponentProcessorResult struct {
 	ComponentRemoteStateBackendType        string
 	ComponentRemoteStateBackendSection     map[string]any
 	ComponentOverridesProviders            map[string]any
+	ComponentOverridesRequiredProviders    map[string]any
+	ComponentOverridesRequiredVersion      string
 	ComponentOverridesHooks                map[string]any
 	ComponentOverridesGenerate             map[string]any
 	BaseComponentProviders                 map[string]any
+	BaseComponentRequiredProviders         map[string]any
+	BaseComponentRequiredVersion           string
 	BaseComponentHooks                     map[string]any
 	BaseComponentGenerate                  map[string]any
 	BaseComponentBackendType               string
@@ -94,6 +106,16 @@ type ComponentProcessorResult struct {
 	BaseComponentRemoteStateBackendSection map[string]any
 	ComponentSourceSection                 map[string]any
 	BaseComponentSourceSection             map[string]any
+	BaseComponentProvisionSection          map[string]any
+	// ComponentRetry holds the raw retry configuration from the concrete component
+	// (decoded to a typed *schema.RetryConfig only after deep-merge with base + overrides).
+	ComponentRetry map[string]any
+	// ComponentOverridesRetry holds the retry section from the component's `overrides:`
+	// block, which wins over both base and concrete component retry config.
+	ComponentOverridesRetry map[string]any
+	// BaseComponentRetry holds the retry configuration inherited from base components
+	// (deep-merged across the full inheritance chain by ProcessBaseComponentConfig).
+	BaseComponentRetry map[string]any
 }
 
 // processComponent processes a component extracting common configuration sections.

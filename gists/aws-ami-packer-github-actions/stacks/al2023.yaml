@@ -1,0 +1,129 @@
+# yaml-language-server: $schema=https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
+
+# Stack for the hardened Amazon Linux 2023 AMI.
+#
+# Everything the build needs is configuration here — no values are hardcoded in
+# the Packer template. Replace the PLACEHOLDER values marked below with your own.
+#
+# The stack name is derived from `vars.stage` (see `name_template` in atmos.yaml),
+# so this stack is addressed as `-s al2023`.
+
+vars:
+  stage: al2023
+
+components:
+  packer:
+    al2023:
+      settings:
+        packer:
+          # Packer template file within the component directory.
+          template: "main.pkr.hcl"
+
+      vars:
+        # ---- Identity ---------------------------------------------------------
+        # A unique, sortable AMI name. `now | unixEpoch` keeps each build distinct.
+        # https://masterminds.github.io/sprig/date.html
+        ami_name: "al2023-hardened-{{ now | unixEpoch }}"
+
+        # ---- Base image -------------------------------------------------------
+        # Discover the latest base AMI by name pattern. In CI, SOURCE_AMI_NAME is
+        # pinned to an exact image so the build is reproducible; locally it falls
+        # back to the latest minimal AL2023 x86_64 image.
+        source_ami_name: '{{ getenv "SOURCE_AMI_NAME" "al2023-ami-minimal-2023.*-x86_64" }}'
+        source_ami_owner: "137112412989" # Amazon — owner of Amazon Linux AMIs.
+        source_ami_architecture: "x86_64"
+        ssh_username: "ec2-user"
+
+        # ---- Build instance ---------------------------------------------------
+        # Instance type used to build the AMI (separate from the test instance
+        # launched later by `atmos ami launch-instance`).
+        instance_type: "t3.small"
+
+        # ---- Region & networking ---------------------------------------------
+        region: "us-east-2"
+        # Leave vpc_id/subnet_id empty to use the account's default VPC, or set
+        # them (PLACEHOLDER) to build inside a specific private subnet.
+        vpc_id: "" # e.g. "vpc-0123456789abcdef0"
+        subnet_id: "" # e.g. "subnet-0123456789abcdef0"
+        # Security group(s) for the test instance launched by `atmos ami
+        # launch-instance`. Empty uses the VPC's default SG. Set this (space- or
+        # comma-separated IDs) when building into a custom VPC whose default SG is
+        # too restrictive for the instance to reach SSM / perform health checks.
+        security_group_ids: "" # e.g. "sg-0123456789abcdef0"
+        associate_public_ip_address: true
+        # Restrict SSH to the build instance. Narrow this to your runner's egress
+        # CIDR in production instead of the open default.
+        temporary_security_group_source_cidrs:
+          - "0.0.0.0/0"
+
+        # ---- Storage ----------------------------------------------------------
+        volume_size: 20
+        volume_type: "gp3"
+        device_name: "/dev/xvda"
+
+        # ---- Encryption -------------------------------------------------------
+        encrypt_boot: true
+        # Empty string uses the account's default EBS encryption key (aws/ebs).
+        #
+        # WARNING: AMIs encrypted with the default AWS-managed key CANNOT be
+        # launched by accounts you share them with — AWS does not allow granting
+        # other accounts access to an AWS-managed key. For cross-account sharing
+        # you MUST use a customer-managed key (CMK): set its ARN below and run
+        # `atmos ami share ... --kms-grant` so the target accounts can decrypt.
+        kms_key_arn: "" # e.g. "arn:aws:kms:us-east-2:123456789012:key/EXAMPLE-KEY-ID"
+
+        # ---- Authentication ---------------------------------------------------
+        # Empty in CI: the GitHub Actions OIDC role provides credentials. Set an
+        # ARN (PLACEHOLDER) to assume a build role explicitly when running locally.
+        assume_role_arn: "" # e.g. "arn:aws:iam::123456789012:role/packer-build"
+        assume_role_session_name: "atmos-packer"
+        assume_role_duration_seconds: 3600
+
+        # ---- Sharing ----------------------------------------------------------
+        # Comma-separated AWS account IDs to share the AMI with AFTER approval.
+        # Used by `atmos ami share` as the default target list. Empty by default so
+        # sharing FAILS CLOSED until you set real targets here (or pass --accounts) —
+        # this prevents accidentally sharing the AMI with unintended accounts.
+        share_account_ids: "" # e.g. "123456789012,123456789013"
+        # AMIs are NOT shared at build time — sharing happens post-approval.
+        ami_users: []
+        ami_org_arns: []
+        ami_ou_arns: []
+
+        # ---- Provisioners -----------------------------------------------------
+        # Ordered list of scripts to run inside the image, relative to the Packer
+        # component directory (components/packer/al2023/). Reorder/trim to taste.
+        provisioner_shell_scripts:
+          - "scripts/patch-os.sh"
+          - "scripts/harden.sh"
+          - "scripts/install-scan-agent.sh" # No-op unless ENABLE_SCAN_AGENT=true.
+          - "scripts/install-packages.sh"
+          - "scripts/finalize.sh"
+
+        # Feature toggles passed to every provisioner script. All optional steps
+        # are OFF by default so the gist runs with just a standard AWS account.
+        provisioner_env_vars:
+          - "ENABLE_FIREWALL=false" # Install/enable firewalld in harden.sh.
+          - "ENABLE_SELINUX_ENFORCING=false" # Set SELinux to enforcing in harden.sh.
+          - "ENABLE_SCAN_AGENT=false" # Install a vulnerability scan agent (needs a private repo).
+          - "SCAN_AGENT_REPO_URL=" # Package repo URL for the scan agent (when enabled).
+
+        # ---- Build behavior ---------------------------------------------------
+        skip_create_ami: false
+        force_deregister: false
+        force_delete_snapshot: false
+        manifest_file_name: "manifest.json"
+
+        # ---- Tags -------------------------------------------------------------
+        # Tags applied to the AMI and snapshots. ScanStatus starts as `pending`;
+        # the pipeline flips it to `approved` only after the manual approval gate.
+        # A tag-based IAM/SCP policy (see docs/) can then restrict launches to
+        # AMIs tagged ScanStatus=approved.
+        ami_tags:
+          Name: "al2023-hardened"
+          BaseImage: "amazon-linux-2023"
+          ManagedBy: "atmos-packer"
+          ScanStatus: "pending"
+        run_tags:
+          Name: "packer-build-al2023"
+          ManagedBy: "atmos-packer"

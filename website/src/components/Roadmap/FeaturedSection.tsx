@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { motion } from 'framer-motion';
 import Link from '@docusaurus/Link';
 import * as Icons from 'react-icons/ri';
-import { RiExternalLinkLine, RiBookOpenLine, RiMegaphoneLine, RiGitPullRequestLine, RiFileTextLine } from 'react-icons/ri';
+import { RiExternalLinkLine, RiBookOpenLine, RiMegaphoneLine, RiGitPullRequestLine, RiFileTextLine, RiFlaskLine } from 'react-icons/ri';
 import FeaturedDrawer, { FeaturedItem } from './FeaturedDrawer';
 import styles from './styles.module.css';
 
@@ -102,6 +102,16 @@ export default function FeaturedSection({ items }: FeaturedSectionProps): JSX.El
                   {item.quarter.replace('q', 'Q').replace('-', ' ')}
                 </span>
                 <div className={styles.featuredLinks}>
+                  {item.experimental && (
+                    <Link
+                      to="/experimental"
+                      className={`${styles.featuredLink} ${styles.featuredLinkExperimental}`}
+                      title="This feature is experimental"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <RiFlaskLine />
+                    </Link>
+                  )}
                   {item.changelog && (
                     <Link
                       to={`/changelog/${item.changelog}`}

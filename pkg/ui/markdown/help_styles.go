@@ -109,6 +109,9 @@ func GetHelpStyle() ([]byte, error) {
 			Color:  stringPtr(DefaultPurple),
 			Italic: boolPtr(true),
 		},
+		Strikethrough: ansi.StylePrimitive{
+			Color: stringPtr(DefaultMidGray), // Restyle strikethrough as muted gray text.
+		},
 		HorizontalRule: ansi.StylePrimitive{
 			Color:  stringPtr(DefaultMidGray),
 			Format: "\n--------\n",

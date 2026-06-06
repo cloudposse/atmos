@@ -27,7 +27,9 @@
 
 -->
 
-## Use Atmos to break your architecture into reusable [Components](https://atmos.tools/core-concepts/components) that you implement using [Terraform "root modules"](https://atmos.tools/core-concepts/components/terraform). Then tie everything together using [Stack](https://atmos.tools/core-concepts/stacks) configurations defined in YAML.
+Atmos is a framework for orchestrating and operating infrastructure workflows across multiple cloud and DevOps toolchains.
+
+## Use Atmos to break your architecture into reusable [Components](https://atmos.tools/components) that you implement using [Terraform "root modules"](https://atmos.tools/components/terraform). Then tie everything together using [Stack](https://atmos.tools/stacks) configurations defined in YAML.
 
 Atmos can change how you think about the Terraform code you write to build your infrastructure. Atmos is a framework that simplifies complex cloud architectures and DevOps workflows into intuitive CLI commands.
 Its strength in managing DRY configurations at scale for Terraform and is supported by robust design patterns, comprehensive documentation, and a passionate community, making it a versatile tool for both startups and enterprises.
@@ -50,6 +52,7 @@ Atmos is extensible to accommodate any tooling, including enterprise-scale Terra
 
 
 ## Introduction
+
 
 [Atmos](https://atmos.tools) centralizes the DevOps chain and cloud automation/orchestration into a robust command-line tool,
 streamlining environments and workflows into straightforward CLI commands. Leveraging advanced hierarchical configurations,
@@ -79,11 +82,11 @@ indispensable asset for managing complex infrastructures with confidence.
 
 - [**Terminal UI**](https://atmos.tools/cli) Polished interface for easier interaction with Terraform, workflows, and commands.
 - [**Native Terraform Support:**](https://atmos.tools/cli/commands/terraform/usage) Orchestration, backend generation, varfile generation, ensuring compatibility with vanilla Terraform.
-- [**Stacks:**](https://atmos.tools/core-concepts/stacks) Powerful abstraction layer defined in YAML for orchestrating and deploying components.
-- [**Components:**](https://atmos.tools/core-concepts/components) A generic abstraction for deployable units, such as Terraform "root" modules.
-- [**Vendoring:**](https://atmos.tools/core-concepts/vendor) Pulls dependencies from remote sources, supporting immutable infrastructure practices.
-- [**Custom Commands:**](https://atmos.tools/core-concepts/custom-commands) Extends Atmos's functionality, allowing integration of any command with stack configurations.
-- [**Workflow Orchestration:**](https://atmos.tools/core-concepts/workflows) Comprehensive support for managing the lifecycle of cloud infrastructure from initiation to maintenance.
+- [**Stacks:**](https://atmos.tools/stacks) Powerful abstraction layer defined in YAML for orchestrating and deploying components.
+- [**Components:**](https://atmos.tools/components) A generic abstraction for deployable units, such as Terraform "root" modules.
+- [**Vendoring:**](https://atmos.tools/vendor) Pulls dependencies from remote sources, supporting immutable infrastructure practices.
+- [**Custom Commands:**](https://atmos.tools/cli/configuration/commands) Extends Atmos's functionality, allowing integration of any command with stack configurations.
+- [**Workflow Orchestration:**](https://atmos.tools/workflows) Comprehensive support for managing the lifecycle of cloud infrastructure from initiation to maintenance.
 
 See [all features of Atmos](https://atmos.tools/features).
 
@@ -100,12 +103,12 @@ strength in the cloud infrastructure and DevOps domains:
   Simply define a baseline tenant configuration once, and then seamlessly onboard new tenants by reusing this baseline through pure
   configuration, bypassing the need for further code development.
 - **Efficient Multi-Region Deployments:** Atmos facilitates streamlined multi-region deployments by enabling businesses to define baseline
-  configurations with [stacks](https://atmos.tools/core-concepts/stacks/) and extend them across regions with DRY principles through
-  [imports](https://atmos.tools/core-concepts/stacks/imports) and [inheritance](https://atmos.tools/core-concepts/stacks/inheritance).
+  configurations with [stacks](https://atmos.tools/stacks) and extend them across regions with DRY principles through
+  [imports](https://atmos.tools/stacks/imports) and [inheritance](https://atmos.tools/howto/inheritance).
 - **Compliant Infrastructure for Regulated Industries:** Atmos empowers DevOps and SecOps teams to create vetted configurations that comply
   with SOC2, HIPAA, HITRUST, PCI, and other regulatory standards. These configurations can then be efficiently shared and reused across the
-  organization via [service catalogs](https://atmos.tools/core-concepts/stacks/catalogs), [component libraries](https://atmos.tools/core-concepts/components/library),
-  [vendoring](https://atmos.tools/core-concepts/vendor), and [OPA policies](https://atmos.tools/core-concepts/validate/opa),
+  organization via [service catalogs](https://atmos.tools/howto/catalogs), [component libraries](https://atmos.tools/components),
+  [vendoring](https://atmos.tools/vendor), and [OPA policies](https://atmos.tools/validation/opa),
   simplifying the process of achieving and maintaining rigorous compliance.
 - **Empowering Teams with Self-Service Infrastructure:** Allows teams to manage their infrastructure needs independently, using
   predefined templates and policies.
@@ -153,32 +156,6 @@ Find all documentation at: [atmos.tools](https://atmos.tools)
 
 
 
-
-## Developer Tools
-
-### Testing Atmos in Geodesic
-
-The `scripts/test-geodesic-prebuilt.sh` script allows you to quickly test Atmos changes inside a Geodesic container without rebuilding the entire Geodesic image.
-
-**Usage:**
-```bash
-./scripts/test-geodesic-prebuilt.sh <path-to-infrastructure>
-```
-
-**Example:**
-```bash
-./scripts/test-geodesic-prebuilt.sh ~/Dev/cloudposse/infra/infra-live
-```
-
-**What it does:**
-1. Builds Atmos for Linux (cross-compiles if needed for your architecture)
-2. Launches a Geodesic container with:
-   - The pre-built Atmos binary mounted to `/usr/local/bin/atmos`
-   - Your infrastructure directory mounted to `/workspace`
-   - Atmos-managed AWS credentials from `~/.config/atmos/` (following XDG conventions)
-   - Standard XDG environment variables configured
-
-This workflow is much faster than rebuilding Geodesic images during development and allows you to iterate quickly on Atmos changes while testing in a realistic containerized environment.
 
 ## ✨ Contributing
 
@@ -254,7 +231,7 @@ All other trademarks referenced herein are the property of their respective owne
 
 
 ---
-Copyright © 2017-2025 [Cloud Posse, LLC](https://cpco.io/copyright)
+Copyright © 2017-2026 [Cloud Posse, LLC](https://cpco.io/copyright)
 
 
 <a href="https://cloudposse.com/readme/footer/link?utm_source=github&utm_medium=readme&utm_campaign=cloudposse/atmos&utm_content=readme_footer_link"><img alt="README footer" src="https://cloudposse.com/readme/footer/img"/></a>

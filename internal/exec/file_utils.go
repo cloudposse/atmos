@@ -40,9 +40,11 @@ func printOrWriteToFile(
 	defer perf.Track(atmosConfig, "exec.printOrWriteToFile")()
 
 	// Determine if we should use expensive formatting (syntax highlighting).
-	// Only use highlighting when outputting to a TTY (terminal).
-	// For files or pipes, use simple formatting without highlighting.
-	isTTY := file == "" && tuiTerm.IsTTYSupportForStdout()
+	// Only use highlighting when outputting to a TTY (terminal), or when
+	// ForceColor is set via ATMOS_FORCE_COLOR.
+	// For files or pipes (without force), use simple formatting without highlighting.
+	forceColor := atmosConfig != nil && atmosConfig.Settings.Terminal.ForceColor
+	isTTY := file == "" && (tuiTerm.IsTTYSupportForStdout() || forceColor)
 
 	switch format {
 	case "yaml":

@@ -1,0 +1,8 @@
+# Sandbox VPC stack — triggers list→scalar type override.
+import:
+  - orgs/acme/sandbox/_defaults
+  - catalog/vpc-sandbox
+
+vars:
+  environment: use1
+  stage: sandbox

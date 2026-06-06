@@ -80,6 +80,7 @@ func TestRenderer(t *testing.T) {
 }
 
 func TestRenderErrorf(t *testing.T) {
+	t.Setenv("NO_COLOR", "1")
 	tests := []struct {
 		name     string
 		input    string
@@ -95,7 +96,7 @@ func TestRenderErrorf(t *testing.T) {
 		{
 			name:     "Test with color",
 			input:    "## Hello **world**",
-			expected: "\x1b[;1m\x1b[0m\x1b[;1m\x1b[0m\x1b[;1m## \x1b[0m\x1b[;1mHello \x1b[0m\x1b[;1m**\x1b[0m\x1b[;1mworld\x1b[0m\x1b[;1m**\x1b[0m",
+			expected: "  \x1b[;1m## \x1b[0m\x1b[;1mHello \x1b[0m\x1b[;1m**\x1b[0m\x1b[;1mworld\x1b[0m\x1b[;1m**\x1b[0m",
 			isColor:  true,
 		},
 	}
@@ -171,6 +172,7 @@ func TestTrimTrailingSpaces(t *testing.T) {
 }
 
 func TestRenderer_NonTTY_ASCII(t *testing.T) {
+	t.Setenv("NO_COLOR", "1")
 	r, _ := NewRenderer(schema.AtmosConfiguration{})
 	r.isTTYSupportForStdout = func() bool { return false }
 	defer func() {

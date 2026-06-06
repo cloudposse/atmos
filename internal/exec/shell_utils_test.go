@@ -1,7 +1,9 @@
 package exec
 
 import (
+	"bytes"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -14,8 +16,35 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	envpkg "github.com/cloudposse/atmos/pkg/env"
+	process "github.com/cloudposse/atmos/pkg/process"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
+
+const shellHelperProcessEnv = "GO_WANT_ATMOS_SHELL_HELPER_PROCESS"
+
+func TestShellHelperProcess(t *testing.T) {
+	if os.Getenv(shellHelperProcessEnv) != "1" {
+		return
+	}
+	args := os.Args
+	for len(args) > 0 && args[0] != "--" {
+		args = args[1:]
+	}
+	if len(args) < 2 {
+		os.Exit(2)
+	}
+
+	switch args[1] {
+	case "stdout-stderr":
+		fmt.Fprint(os.Stdout, "stdout")
+		fmt.Fprint(os.Stderr, "stderr")
+	case "exit":
+		os.Exit(2)
+	default:
+		os.Exit(2)
+	}
+	os.Exit(0)
+}
 
 func TestMergeEnvVars(t *testing.T) {
 	if runtime.GOOS == "windows" {
@@ -182,6 +211,93 @@ func TestDecrementAtmosShellLevel(t *testing.T) {
 			// Clean up.
 			os.Unsetenv(atmosShellLevelEnvVar)
 		})
+	}
+}
+
+func TestExecuteShellCommandUsesInjectedStreamsAndCapture(t *testing.T) {
+	var terminalOut, terminalErr, captureOut, captureErr bytes.Buffer
+	helper := shellHelperCommand(t, "stdout-stderr")
+	err := ExecuteShellCommand(
+		schema.AtmosConfiguration{},
+		helper.command,
+		helper.args,
+		"",
+		helper.env,
+		false,
+		"",
+		WithProcessStreams(process.Streams{
+			Stdout: &terminalOut,
+			Stderr: &terminalErr,
+		}),
+		WithStdoutCapture(&captureOut),
+		WithStderrCapture(&captureErr),
+	)
+
+	require.NoError(t, err)
+	assert.Equal(t, "stdout", terminalOut.String())
+	assert.Equal(t, "stderr", terminalErr.String())
+	assert.Equal(t, "stdout", captureOut.String())
+	assert.Equal(t, "stderr", captureErr.String())
+}
+
+func TestExecuteShellCommandPreservesDetailedExitCode(t *testing.T) {
+	helper := shellHelperCommand(t, "exit")
+	err := ExecuteShellCommand(
+		schema.AtmosConfiguration{},
+		helper.command,
+		helper.args,
+		"",
+		helper.env,
+		false,
+		"",
+	)
+
+	var exitErr errUtils.ExitCodeError
+	require.ErrorAs(t, err, &exitErr)
+	assert.Equal(t, 2, exitErr.Code)
+}
+
+func TestExecuteShellCommandRedirectsStderrToStdoutCapture(t *testing.T) {
+	var terminalOut, terminalErr, captureOut bytes.Buffer
+	helper := shellHelperCommand(t, "stdout-stderr")
+	err := ExecuteShellCommand(
+		schema.AtmosConfiguration{},
+		helper.command,
+		helper.args,
+		"",
+		helper.env,
+		false,
+		"/dev/stdout",
+		WithProcessStreams(process.Streams{
+			Stdout: &terminalOut,
+			Stderr: &terminalErr,
+		}),
+		WithStdoutCapture(&captureOut),
+	)
+
+	require.NoError(t, err)
+	assert.Contains(t, terminalOut.String(), "stdout")
+	assert.Contains(t, terminalOut.String(), "stderr")
+	assert.Empty(t, terminalErr.String())
+	assert.Contains(t, captureOut.String(), "stdout")
+	assert.Contains(t, captureOut.String(), "stderr")
+}
+
+type shellHelperInvocation struct {
+	command string
+	args    []string
+	env     []string
+}
+
+func shellHelperCommand(t *testing.T, command string) shellHelperInvocation {
+	t.Helper()
+	exe, err := os.Executable()
+	require.NoError(t, err)
+
+	return shellHelperInvocation{
+		command: exe,
+		args:    []string{"-test.run=TestShellHelperProcess", "--", command},
+		env:     []string{shellHelperProcessEnv + "=1"},
 	}
 }
 
@@ -462,9 +578,7 @@ func TestExecAuthShellCommand_ExitCodePropagation(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			envVars := map[string]string{
-				"TEST_VAR": "test_value",
-			}
+			envVars := []string{"TEST_VAR=test_value"}
 			atmosConfig := &schema.AtmosConfiguration{}
 
 			err := ExecAuthShellCommand(atmosConfig, "test-identity", "test-provider", envVars, "/bin/sh", tt.shellArgs)
@@ -589,6 +703,162 @@ func TestExecuteShellCommand(t *testing.T) {
 		)
 		assert.NoError(t, err)
 	})
+
+	t.Run("ATMOS_FORCE_TTY preserved when explicitly set in step env", func(t *testing.T) {
+		// When ATMOS_FORCE_TTY is explicitly set in the step environment, ExecuteShellCommand
+		// must not add a second copy. envKeyIsSet guards the auto-injection.
+		// We verify the subprocess sees the explicit value, not a duplicate.
+		outFile := filepath.Join(t.TempDir(), "force_tty.txt")
+
+		// Ensure ATMOS_FORCE_TTY is absent from parent env. t.Setenv("ATMOS_FORCE_TTY", "")
+		// leaves the key present, which causes envKeyIsSet to suppress auto-injection for
+		// the wrong reason (key present rather than because the step env set it explicitly).
+		if orig, wasSet := os.LookupEnv("ATMOS_FORCE_TTY"); wasSet {
+			require.NoError(t, os.Unsetenv("ATMOS_FORCE_TTY"))
+			t.Cleanup(func() { os.Setenv("ATMOS_FORCE_TTY", orig) })
+		}
+		err := ExecuteShellCommand(
+			atmosConfig,
+			"sh",
+			[]string{"-c", fmt.Sprintf(`printenv ATMOS_FORCE_TTY > %s`, outFile)},
+			".",
+			[]string{"ATMOS_FORCE_TTY=explicit-value"},
+			false,
+			"",
+		)
+		require.NoError(t, err)
+
+		content, readErr := os.ReadFile(outFile)
+		require.NoError(t, readErr)
+		assert.Equal(t, "explicit-value\n", string(content),
+			"ATMOS_FORCE_TTY should not be overridden by auto-injection")
+	})
+
+	t.Run("ATMOS_FORCE_TTY from parent env suppresses auto-injection", func(t *testing.T) {
+		// When ATMOS_FORCE_TTY is already in the parent environment (os.Environ()),
+		// auto-injection must not add a duplicate. The subprocess should see the parent value.
+		outFile := filepath.Join(t.TempDir(), "force_tty_parent.txt")
+
+		t.Setenv("ATMOS_FORCE_TTY", "from-parent")
+		err := ExecuteShellCommand(
+			atmosConfig,
+			"sh",
+			[]string{"-c", fmt.Sprintf(`printenv ATMOS_FORCE_TTY > %s`, outFile)},
+			".",
+			nil, // no step-level env
+			false,
+			"",
+		)
+		require.NoError(t, err)
+
+		content, readErr := os.ReadFile(outFile)
+		require.NoError(t, readErr)
+		assert.Equal(t, "from-parent\n", string(content),
+			"ATMOS_FORCE_TTY from parent env should be preserved, not duplicated")
+	})
+
+	t.Run("ATMOS_FORCE_TTY not auto-injected in non-TTY environment", func(t *testing.T) {
+		// In a non-TTY test environment, ATMOS_FORCE_TTY must not be auto-injected.
+		// The subprocess should not see it unless explicitly provided.
+		outFile := filepath.Join(t.TempDir(), "force_tty_absent.txt")
+
+		// Ensure ATMOS_FORCE_TTY is truly absent from parent env. t.Setenv("ATMOS_FORCE_TTY", "")
+		// leaves the key present: envKeyIsSet matches it and suppresses injection for the wrong
+		// reason (key present rather than no TTY), yielding a false positive — ${VAR:-default}
+		// expands to default for both unset and empty, hiding the incorrect skip path.
+		if orig, wasSet := os.LookupEnv("ATMOS_FORCE_TTY"); wasSet {
+			require.NoError(t, os.Unsetenv("ATMOS_FORCE_TTY"))
+			t.Cleanup(func() { os.Setenv("ATMOS_FORCE_TTY", orig) })
+		}
+		err := ExecuteShellCommand(
+			atmosConfig,
+			"sh",
+			// Print "not-set" if ATMOS_FORCE_TTY is absent, otherwise print its value.
+			[]string{"-c", fmt.Sprintf(`echo "${ATMOS_FORCE_TTY:-not-set}" > %s`, outFile)},
+			".",
+			nil, // no explicit ATMOS_FORCE_TTY
+			false,
+			"",
+		)
+		require.NoError(t, err)
+
+		content, readErr := os.ReadFile(outFile)
+		require.NoError(t, readErr)
+		// Test runner has no real TTY (stderr is not a terminal), so auto-injection is skipped.
+		assert.Equal(t, "not-set\n", string(content),
+			"ATMOS_FORCE_TTY should not be auto-injected when parent has no TTY")
+	})
+}
+
+func TestEnvKeyIsSet(t *testing.T) {
+	tests := []struct {
+		name     string
+		env      []string
+		key      string
+		expected bool
+	}{
+		{
+			name:     "key present with value",
+			env:      []string{"FOO=bar", "BAZ=qux"},
+			key:      "FOO",
+			expected: true,
+		},
+		{
+			name:     "key present empty value",
+			env:      []string{"FOO=", "BAZ=qux"},
+			key:      "FOO",
+			expected: true,
+		},
+		{
+			name:     "key not present",
+			env:      []string{"FOO=bar", "BAZ=qux"},
+			key:      "MISSING",
+			expected: false,
+		},
+		{
+			name:     "partial key match does not count",
+			env:      []string{"ATMOS_FORCE_TTY_EXTRA=true"},
+			key:      "ATMOS_FORCE_TTY",
+			expected: false,
+		},
+		{
+			name:     "ATMOS_FORCE_TTY present",
+			env:      []string{"ATMOS_FORCE_TTY=true"},
+			key:      "ATMOS_FORCE_TTY",
+			expected: true,
+		},
+		{
+			name:     "empty env",
+			env:      nil,
+			key:      "ANY_KEY",
+			expected: false,
+		},
+		{
+			name:     "duplicate keys returns true on first match",
+			env:      []string{"FOO=first", "FOO=second"},
+			key:      "FOO",
+			expected: true,
+		},
+		{
+			name:     "key as value does not match",
+			env:      []string{"OTHER=ATMOS_FORCE_TTY"},
+			key:      "ATMOS_FORCE_TTY",
+			expected: false,
+		},
+		{
+			name:     "key with equals in value",
+			env:      []string{"FOO=bar=baz"},
+			key:      "FOO",
+			expected: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := envKeyIsSet(tt.env, tt.key)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
 }
 
 func TestExecuteShell(t *testing.T) {

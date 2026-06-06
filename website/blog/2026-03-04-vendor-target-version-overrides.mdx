@@ -1,0 +1,57 @@
+---
+slug: vendor-target-version-overrides
+title: "Per-Target Version Overrides in Vendor Manifests"
+authors: [osterman]
+tags: [feature]
+---
+
+Vendor targets now accept optional version overrides, enabling multiple versions of the same component from a single source entry.
+
+<!--truncate-->
+
+## What Changed
+
+The `targets` field in vendor manifests now supports both the original string syntax and a new map syntax with `path` and `version` keys. When a target specifies its own `version`, the source URL template is re-resolved with that version.
+
+**Before** (still works):
+
+```yaml
+targets:
+  - "components/terraform/vpc"
+```
+
+**New map syntax with per-target version override:**
+
+```yaml
+targets:
+  - path: "components/terraform/vpc/{{.Version}}"
+    version: "2.1.0"
+  - path: "components/terraform/vpc/{{.Version}}"
+    version: "3.0.0"
+```
+
+Both syntaxes can be mixed freely within the same targets list.
+
+## Why This Matters
+
+Previously, vendoring multiple versions of the same component required duplicating the entire source entry for each version. With per-target version overrides, a single source entry can vendor the same component to multiple paths with different versions:
+
+```yaml
+spec:
+  sources:
+    - component: vpc
+      source: "github.com/cloudposse/terraform-aws-vpc.git///?ref={{.Version}}"
+      version: "2.1.0"
+      targets:
+        - "components/terraform/vpc"
+        - path: "components/terraform/vpc/{{.Version}}"
+          version: "3.0.0"
+```
+
+This vendors version 2.1.0 to `components/terraform/vpc` and version 3.0.0 to `components/terraform/vpc/3.0.0`, all from a single source definition.
+
+## How to Use It
+
+Update your `vendor.yaml` to use the map syntax for any targets that need a different version than the source-level default. The `path` field is required; the `version` field is optional. When `version` is omitted, the target inherits the source-level version as before.
+
+See the [vendoring documentation](/design-patterns/version-management/vendoring-components) for more details and examples.

@@ -1,0 +1,50 @@
+# Dev stack: two components inheriting from base-component.
+# - append-component: opts into list appending via settings.list_merge_strategy
+# - replace-component: uses the global "replace" strategy (no override)
+import:
+  - catalog/base
+
+vars:
+  stage: dev
+
+components:
+  terraform:
+    # This component requests append-merge for its lists via component-level settings.
+    # After the fix for issue #2396, the tags list should be [base-tag-1, base-tag-2, child-tag].
+    append-component:
+      metadata:
+        component: mock
+        inherits:
+          - base-component
+      settings:
+        list_merge_strategy: append
+      vars:
+        tags:
+          - child-tag
+        name: append-child
+
+    # This component uses the global "replace" strategy (no override).
+    # The tags list should be [child-tag] (replace semantics).
+    replace-component:
+      metadata:
+        component: mock
+        inherits:
+          - base-component
+      vars:
+        tags:
+          - child-tag
+        name: replace-child
+
+    # This component inherits from append-base (which sets list_merge_strategy: append
+    # in its own settings) but does NOT set list_merge_strategy in its own settings.
+    # After the fix for issue #2396, the strategy from BaseComponentSettings must be
+    # honoured, so tags should be [base-tag-1, base-tag-2, child-tag].
+    inherit-strategy-component:
+      metadata:
+        component: mock
+        inherits:
+          - append-base
+      vars:
+        tags:
+          - child-tag
+        name: inherit-strategy-child

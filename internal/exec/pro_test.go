@@ -135,9 +135,21 @@ func TestShouldUploadStatus(t *testing.T) {
 			expected: false,
 		},
 		{
-			name: "should return false for non-plan command",
+			name: "should return true for apply command with pro enabled",
 			info: &schema.ConfigAndStacksInfo{
 				SubCommand: "apply",
+				ComponentSettingsSection: map[string]interface{}{
+					"pro": map[string]interface{}{
+						"enabled": true,
+					},
+				},
+			},
+			expected: true,
+		},
+		{
+			name: "should return false for destroy command",
+			info: &schema.ConfigAndStacksInfo{
+				SubCommand: "destroy",
 				ComponentSettingsSection: map[string]interface{}{
 					"pro": map[string]interface{}{
 						"enabled": true,
@@ -165,75 +177,55 @@ func TestUploadStatus(t *testing.T) {
 		RepoHost:  "github.com",
 	}
 
-	// Test cases
+	// Test cases — all exit codes now upload.
 	testCases := []struct {
 		name          string
 		exitCode      int
 		proEnabled    bool
 		expectedError bool
-		expectedDrift bool
 	}{
 		{
-			name:          "drift detected",
+			name:          "drift detected (exit code 2)",
 			exitCode:      2,
 			proEnabled:    true,
 			expectedError: false,
-			expectedDrift: true,
 		},
 		{
-			name:          "no drift",
+			name:          "no drift (exit code 0)",
 			exitCode:      0,
 			proEnabled:    true,
 			expectedError: false,
-			expectedDrift: false,
 		},
 		{
 			name:          "error exit code",
 			exitCode:      1,
 			proEnabled:    true,
 			expectedError: false,
-			expectedDrift: false,
-		},
-		{
-			name:          "pro disabled",
-			exitCode:      2,
-			proEnabled:    false,
-			expectedError: false,
-			expectedDrift: false,
 		},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			// Create fresh mock clients for each subtest
 			mockProClient := new(MockProAPIClient)
 			mockGitRepo := new(MockGitRepo)
 
-			// Create test info
 			info := createTestInfo(tc.proEnabled)
 
-			// Set up mock expectations based on exit code
-			// The function only processes exit codes 0 and 2
-			if tc.exitCode == 0 || tc.exitCode == 2 {
-				// Set up mock expectations for git functions
-				mockGitRepo.On("GetLocalRepoInfo").Return(testRepoInfo, nil)
-				mockGitRepo.On("GetCurrentCommitSHA").Return("abc123def456", nil)
+			// All exit codes now upload.
+			mockGitRepo.On("GetLocalRepoInfo").Return(testRepoInfo, nil)
+			mockGitRepo.On("GetCurrentCommitSHA").Return("abc123def456", nil)
+			mockProClient.On("UploadInstanceStatus", mock.MatchedBy(func(dto *dtos.InstanceStatusUploadRequest) bool {
+				return dto.Command == "plan" && dto.ExitCode == tc.exitCode
+			})).Return(nil)
 
-				// Set up mock expectations for pro client
-				mockProClient.On("UploadInstanceStatus", mock.AnythingOfType("*dtos.InstanceStatusUploadRequest")).Return(nil)
-			}
-
-			// Call the function
 			err := uploadStatus(&info, tc.exitCode, mockProClient, mockGitRepo)
 
-			// Check results
 			if tc.expectedError {
 				assert.Error(t, err)
 			} else {
 				assert.NoError(t, err)
 			}
 
-			// Verify mock expectations
 			mockProClient.AssertExpectations(t)
 			mockGitRepo.AssertExpectations(t)
 		})
@@ -284,34 +276,24 @@ func TestUploadStatusWithDifferentExitCodes(t *testing.T) {
 	}
 
 	testCases := []struct {
-		name             string
-		exitCode         int
-		shouldUpload     bool
-		expectedHasDrift bool
+		name     string
+		exitCode int
 	}{
 		{
-			name:             "exit code 0 - no changes",
-			exitCode:         0,
-			shouldUpload:     true,
-			expectedHasDrift: false,
+			name:     "exit code 0 - no changes",
+			exitCode: 0,
 		},
 		{
-			name:             "exit code 1 - error",
-			exitCode:         1,
-			shouldUpload:     false,
-			expectedHasDrift: false,
+			name:     "exit code 1 - error",
+			exitCode: 1,
 		},
 		{
-			name:             "exit code 2 - changes detected",
-			exitCode:         2,
-			shouldUpload:     true,
-			expectedHasDrift: true,
+			name:     "exit code 2 - changes detected",
+			exitCode: 2,
 		},
 		{
-			name:             "exit code 3 - unknown",
-			exitCode:         3,
-			shouldUpload:     false,
-			expectedHasDrift: false,
+			name:     "exit code 3 - unknown",
+			exitCode: 3,
 		},
 	}
 
@@ -322,11 +304,12 @@ func TestUploadStatusWithDifferentExitCodes(t *testing.T) {
 
 			info := createTestInfo(true)
 
-			if tc.shouldUpload {
-				mockGitRepo.On("GetLocalRepoInfo").Return(testRepoInfo, nil)
-				mockGitRepo.On("GetCurrentCommitSHA").Return("abc123", nil)
-				mockProClient.On("UploadInstanceStatus", mock.AnythingOfType("*dtos.InstanceStatusUploadRequest")).Return(nil)
-			}
+			// All exit codes now upload with raw command + exit_code.
+			mockGitRepo.On("GetLocalRepoInfo").Return(testRepoInfo, nil)
+			mockGitRepo.On("GetCurrentCommitSHA").Return("abc123", nil)
+			mockProClient.On("UploadInstanceStatus", mock.MatchedBy(func(dto *dtos.InstanceStatusUploadRequest) bool {
+				return dto.Command == "plan" && dto.ExitCode == tc.exitCode
+			})).Return(nil)
 
 			err := uploadStatus(&info, tc.exitCode, mockProClient, mockGitRepo)
 			assert.NoError(t, err)
@@ -392,7 +375,8 @@ func TestUploadStatusDTO(t *testing.T) {
 			RepoHost:      "github.com",
 			Stack:         "dev",
 			Component:     "vpc",
-			HasDrift:      true,
+			Command:       "plan",
+			ExitCode:      2,
 		}
 
 		assert.Equal(t, "run-123", dto.AtmosProRunID)
@@ -403,7 +387,8 @@ func TestUploadStatusDTO(t *testing.T) {
 		assert.Equal(t, "github.com", dto.RepoHost)
 		assert.Equal(t, "dev", dto.Stack)
 		assert.Equal(t, "vpc", dto.Component)
-		assert.True(t, dto.HasDrift)
+		assert.Equal(t, "plan", dto.Command)
+		assert.Equal(t, 2, dto.ExitCode)
 	})
 }
 

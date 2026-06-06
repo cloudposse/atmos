@@ -194,3 +194,101 @@ func TestHelperFunctions(t *testing.T) {
 	assert.NotNil(t, uPtr)
 	assert.Equal(t, u, *uPtr)
 }
+
+func TestConvertToGlamourStyleInline(t *testing.T) {
+	testTheme := &Theme{
+		Name:        "test-inline",
+		Blue:        "#0000FF",
+		Magenta:     "#FF00FF",
+		Cyan:        "#00FFFF",
+		Background:  "#1A1A1A",
+		Foreground:  "#E0E0E0",
+		BrightBlack: "#808080",
+	}
+
+	styleBytes, err := ConvertToGlamourStyleInline(testTheme)
+	assert.NoError(t, err)
+	assert.NotNil(t, styleBytes)
+
+	var style ansi.StyleConfig
+	err = json.Unmarshal(styleBytes, &style)
+	assert.NoError(t, err)
+
+	// Inline style should have empty block suffix (no trailing newline).
+	assert.Equal(t, "", style.Document.BlockSuffix)
+
+	// Document margin should be 0.
+	assert.NotNil(t, style.Document.Margin)
+	assert.Equal(t, uint(0), *style.Document.Margin)
+
+	// Code styling should use accent color (cyan).
+	assert.NotNil(t, style.Code.Color)
+	assert.Equal(t, "#00FFFF", *style.Code.Color)
+
+	// Paragraph should have no block suffix.
+	assert.Equal(t, "", style.Paragraph.BlockSuffix)
+}
+
+func TestCreateGlamourStyleInlineFromTheme(t *testing.T) {
+	theme := &Theme{
+		Background: "#1A1A1A",
+		Foreground: "#E0E0E0",
+		Blue:       "#6495ED",
+		Magenta:    "#DA70D6",
+		Cyan:       "#48D1CC",
+	}
+
+	style := createGlamourStyleInlineFromTheme(theme)
+	assert.NotNil(t, style)
+
+	// Verify no block prefixes/suffixes for inline rendering.
+	assert.Equal(t, "", style.Document.BlockPrefix)
+	assert.Equal(t, "", style.Document.BlockSuffix)
+
+	// Paragraph should have no block suffix.
+	assert.Equal(t, "", style.Paragraph.BlockSuffix)
+
+	// All headings should have empty prefixes (no "##" etc).
+	assert.Equal(t, "", style.H1.Prefix)
+	assert.Equal(t, "", style.H2.Prefix)
+	assert.Equal(t, "", style.H3.Prefix)
+
+	// Verify margins are zero.
+	assert.NotNil(t, style.Document.Margin)
+	assert.Equal(t, uint(0), *style.Document.Margin)
+	assert.NotNil(t, style.Paragraph.Margin)
+	assert.Equal(t, uint(0), *style.Paragraph.Margin)
+
+	// Verify colors are applied correctly.
+	assert.NotNil(t, style.Document.Color)
+	assert.Equal(t, "#E0E0E0", *style.Document.Color)
+	assert.NotNil(t, style.Code.Color)
+	assert.Equal(t, "#48D1CC", *style.Code.Color)
+}
+
+func TestGetGlamourStyleForInline(t *testing.T) {
+	// Test with existing theme.
+	styleBytes, err := GetGlamourStyleForInline("atmos")
+	assert.NoError(t, err)
+	assert.NotNil(t, styleBytes)
+
+	var style ansi.StyleConfig
+	err = json.Unmarshal(styleBytes, &style)
+	assert.NoError(t, err)
+
+	// Verify it's an inline style (no trailing newline).
+	assert.Equal(t, "", style.Document.BlockSuffix)
+
+	// Test with non-existent theme (should fall back to default).
+	styleBytes, err = GetGlamourStyleForInline("NonExistentTheme")
+	assert.NoError(t, err)
+	assert.NotNil(t, styleBytes)
+
+	err = json.Unmarshal(styleBytes, &style)
+	assert.NoError(t, err)
+
+	// Test with empty theme name (should fall back to default).
+	styleBytes, err = GetGlamourStyleForInline("")
+	assert.NoError(t, err)
+	assert.NotNil(t, styleBytes)
+}

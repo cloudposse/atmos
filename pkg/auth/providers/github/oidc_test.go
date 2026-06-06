@@ -152,12 +152,16 @@ func TestOIDCProvider_Authenticate(t *testing.T) {
 			// Test.
 			ctx := context.Background()
 			// Local OIDC endpoint.
-			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				_, _ = w.Write([]byte(`{"value":"eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.test-jwt-token"}`))
 			}))
 			defer srv.Close()
 			if tt.setOidcUrl {
 				t.Setenv("ACTIONS_ID_TOKEN_REQUEST_URL", srv.URL)
+				// Inject TLS-aware client so the test server certificate is trusted.
+				if p, ok := provider.(*oidcProvider); ok {
+					p.httpClient = srv.Client()
+				}
 			}
 
 			creds, err := provider.Authenticate(ctx)
@@ -284,4 +288,76 @@ func TestOIDCProvider_GetFilesDisplayPath(t *testing.T) {
 	path := p.GetFilesDisplayPath()
 	// GitHub OIDC provider doesn't use file-based credentials.
 	assert.Equal(t, "", path)
+}
+
+func TestValidateGitHubActionsURL(t *testing.T) {
+	tests := []struct {
+		name        string
+		rawURL      string
+		expectError bool
+		errorMsg    string
+	}{
+		{
+			name:        "valid https URL",
+			rawURL:      "https://token.actions.githubusercontent.com/api/v1/token",
+			expectError: false,
+		},
+		{
+			name:        "http scheme rejected",
+			rawURL:      "http://token.actions.githubusercontent.com/api/v1/token",
+			expectError: true,
+			errorMsg:    "must use https scheme",
+		},
+		{
+			name:        "empty host rejected",
+			rawURL:      "https:///api/v1/token",
+			expectError: true,
+			errorMsg:    "non-empty host",
+		},
+		{
+			name:        "invalid URL rejected",
+			rawURL:      "://bad-url",
+			expectError: true,
+			errorMsg:    "invalid ACTIONS_ID_TOKEN_REQUEST_URL",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := validateGitHubActionsURL(tt.rawURL)
+			if tt.expectError {
+				assert.Error(t, err)
+				assert.Contains(t, err.Error(), tt.errorMsg)
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}
+
+func TestOIDCProvider_getHTTPClient(t *testing.T) {
+	// Default client returned when no custom client is set.
+	p := &oidcProvider{}
+	client := p.getHTTPClient()
+	assert.NotNil(t, client)
+
+	// Custom client returned when httpClient field is set.
+	custom := &http.Client{}
+	p.httpClient = custom
+	assert.Equal(t, custom, p.getHTTPClient())
+}
+
+func TestOIDCProvider_Authenticate_URLValidation(t *testing.T) {
+	config := validOidcSpec()
+	provider, err := NewOIDCProvider("github-oidc", config)
+	require.NoError(t, err)
+
+	t.Run("http scheme in OIDC URL rejected", func(t *testing.T) {
+		t.Setenv("GITHUB_ACTIONS", "true")
+		t.Setenv("ACTIONS_ID_TOKEN_REQUEST_TOKEN", "test-token")
+		t.Setenv("ACTIONS_ID_TOKEN_REQUEST_URL", "http://token.actions.githubusercontent.com")
+
+		_, err := provider.Authenticate(context.Background())
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "must use https scheme")
+	})
 }

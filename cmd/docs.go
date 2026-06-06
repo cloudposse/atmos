@@ -11,6 +11,7 @@ import (
 	"golang.org/x/term"
 
 	termUtils "github.com/cloudposse/atmos/internal/tui/templates/term"
+	"github.com/cloudposse/atmos/pkg/browser"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -119,7 +120,7 @@ var docsCmd = &cobra.Command{
 		}
 
 		// Opens atmos.tools docs if no component argument is provided
-		if err := u.OpenUrl(atmosDocsURL); err != nil {
+		if err := browser.New().Open(atmosDocsURL); err != nil {
 			return fmt.Errorf("open Atmos docs: %w", err)
 		}
 

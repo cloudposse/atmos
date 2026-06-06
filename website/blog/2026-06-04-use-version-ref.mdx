@@ -1,0 +1,64 @@
+---
+slug: use-version-ref
+title: "Install Atmos from a Branch or Tag with ref:"
+authors:
+  - osterman
+tags:
+  - feature
+  - dx
+date: 2026-06-04T00:00:00.000Z
+---
+
+`--use-version` now accepts a `ref:` prefix, so you can run the latest build of any branch or tag — like `ref:main` — without looking up a commit SHA.
+
+<!--truncate-->
+
+## What's New
+
+[`--use-version`](/cli/configuration/version/use) already let you install Atmos from a pull request (`pr:2040`) or a specific commit (`sha:ceb7526`). The new `ref:` prefix adds branches and tags:
+
+```bash
+# Latest build of main
+atmos --use-version=ref:main version
+
+# Latest build on a release branch
+atmos --use-version=ref:release/v1.199 terraform plan -s mystack
+
+# A tag's commit build
+atmos --use-version=ref:v1.199.0 version
+
+# Disambiguate a branch vs a tag of the same name
+atmos --use-version=ref:heads/main version
+atmos --use-version=ref:tags/v1.199.0 version
+```
+
+It works everywhere `--use-version` does, including `version.use` in `atmos.yaml` and the `ATMOS_USE_VERSION` environment variable:
+
+```yaml title="atmos.yaml"
+version:
+  use: "ref:main"
+```
+
+## How It Works
+
+When you pass a `ref:`, Atmos:
+
+1. **Resolves the ref** — asks GitHub for the ref's current commit SHA (one lightweight API call).
+2. **Reuses the SHA install path** — downloads that commit's CI build artifact for your platform, caches it, and re-executes — exactly like `sha:`.
+
+Because the ref is resolved on every run, a mutable branch like `main` always tracks the latest build. The resolved commit is cached by SHA, so if the branch hasn't moved, there's no reinstall — and when it does move, the new build installs automatically.
+
+This also means `ref:` is the most reliable way to pin a "moving target": you write `ref:main` once instead of chasing a new `sha:` after every merge.
+
+## When to Use Which
+
+- **`ref:main`** — always run the newest build of a branch (great for trying unreleased fixes on `main`).
+- **`pr:2040`** — test the exact changes in an open pull request.
+- **`sha:ceb7526`** — pin to one immutable commit.
+- **`1.199.0`** — install a released, versioned binary.
+
+Like `pr:` and `sha:`, the `ref:` form installs **CI build artifacts** (retained for 90 days), not released binaries. For an older tag whose artifacts have expired, install the release with the plain semver form (`1.199.0`) instead.
+
+## Get Involved
+
+Try it with `atmos --use-version=ref:main version` and let us know how it goes. As always, [join us in the Cloud Posse community](https://cloudposse.com/slack) if you have questions or feedback.

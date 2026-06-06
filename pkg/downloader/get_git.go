@@ -97,8 +97,6 @@ type gitOperationParams struct {
 	depth      int
 }
 
-var lsRemoteSymRefRegexp = regexp.MustCompile(`ref: refs/heads/([^\s]+).*`)
-
 // gitCommitIDRegex is a pattern intended to match strings that seem
 // "likely to be" git commit IDs, rather than named refs. This cannot be
 // an exact decision because it's valid to name a branch or tag after a series
@@ -286,7 +284,8 @@ func getRunCommand(cmd *exec.Cmd) error {
 				errUtils.ErrGitCommandExited,
 				cmd.Path,
 				status.ExitStatus(),
-				buf.String())
+				buf.String(),
+			)
 		}
 	}
 
@@ -295,7 +294,9 @@ func getRunCommand(cmd *exec.Cmd) error {
 
 // getRunCommandWithRetry wraps getRunCommand with retry logic for transient errors.
 func (g *CustomGitGetter) getRunCommandWithRetry(ctx context.Context, cmd *exec.Cmd) error {
-	if g.RetryConfig == nil || g.RetryConfig.MaxAttempts <= 1 {
+	// Skip retry if no config, or if MaxAttempts is explicitly set to 1 (single attempt).
+	// nil MaxAttempts means unlimited retries, so we should proceed with retry logic.
+	if g.RetryConfig == nil || (g.RetryConfig.MaxAttempts != nil && *g.RetryConfig.MaxAttempts == 1) {
 		return getRunCommand(cmd)
 	}
 
@@ -370,20 +371,6 @@ func removeCaseInsensitiveGitDirectory(dst string) error {
 	return nil
 }
 
-// findRemoteDefaultBranch checks the remote repo's HEAD symref to return the remote repo's default branch. "master" is returned if no HEAD symref exists.
-func findRemoteDefaultBranch(ctx context.Context, u *url.URL) string {
-	var stdoutbuf bytes.Buffer
-	// #nosec G204 -- The URL is validated and we use "--" separator to prevent command injection.
-	cmd := exec.CommandContext(ctx, gitCommand, "ls-remote", "--symref", gitArgSeparator, u.String(), "HEAD")
-	cmd.Stdout = &stdoutbuf
-	err := cmd.Run()
-	matches := lsRemoteSymRefRegexp.FindStringSubmatch(stdoutbuf.String())
-	if err != nil || matches == nil {
-		return "master"
-	}
-	return matches[len(matches)-1]
-}
-
 // checkGitVersion is used to check the version of git installed on the system
 // against a known minimum version. Returns an error if the installed version
 // is older than the given minimum.
@@ -432,6 +419,23 @@ func (g *CustomGitGetter) checkout(ctx context.Context, dst string, ref string) 
 	return g.getRunCommandWithRetry(ctx, cmd)
 }
 
+// cloneFlagArgs builds the flag portion of a `git clone` invocation (everything before the URL and
+// destination). With no ref, a shallow clone gets the remote's default branch (HEAD) natively, so
+// `--branch` is added ONLY when a specific ref was requested. This deliberately avoids resolving the
+// default branch name ourselves via `git ls-remote` — that runs in the caller's CWD, where an
+// actions/checkout `http.<host>.extraheader` shadows the brokered token and yields the wrong default
+// ("master"), breaking clones of repos whose default branch is "main".
+func cloneFlagArgs(ref string, depth int) []string {
+	args := []string{"clone"}
+	if depth > 0 {
+		args = append(args, "--depth", strconv.Itoa(depth))
+		if ref != "" {
+			args = append(args, "--branch", ref)
+		}
+	}
+	return args
+}
+
 func (g *CustomGitGetter) clone(params *gitOperationParams) error {
 	ctx := params.ctx
 	dst := params.dst
@@ -440,42 +444,25 @@ func (g *CustomGitGetter) clone(params *gitOperationParams) error {
 	ref := params.ref
 	depth := params.depth
 
-	args := []string{"clone"}
-
-	originalRef := ref // we handle an unspecified ref differently than explicitly selecting the default branch below
-	if ref == "" {
-		ref = findRemoteDefaultBranch(ctx, u)
-	}
-	if depth > 0 {
-		args = append(args, "--depth", strconv.Itoa(depth))
-		args = append(args, "--branch", ref)
-	}
-	args = append(args, gitArgSeparator, u.String(), dst)
+	args := append(cloneFlagArgs(ref, depth), gitArgSeparator, u.String(), dst)
 
 	cmd := exec.CommandContext(ctx, gitCommand, args...)
 	setupGitEnv(cmd, sshKeyFile)
 	err := g.getRunCommandWithRetry(ctx, cmd)
 	if err != nil {
-		if depth > 0 && originalRef != "" {
-			// If we're creating a shallow clone then the given ref must be
-			// a named ref (branch or tag) rather than a commit directly.
-			// We can't accurately recognize the resulting error here without
-			// hard-coding assumptions about git's human-readable output, but
-			// we can at least try a heuristic.
-			if gitCommitIDRegex.MatchString(originalRef) {
-				return fmt.Errorf("%w (note that setting 'depth' requires 'ref' to be a branch or tag name)", err)
-			}
+		// A shallow clone of a specific ref requires a named ref (branch or tag) rather than a
+		// commit SHA; flag that case with a clearer hint. We can't recognize it precisely without
+		// hard-coding git's human-readable output, so this is a heuristic.
+		if depth > 0 && ref != "" && gitCommitIDRegex.MatchString(ref) {
+			return fmt.Errorf("%w (note that setting 'depth' requires 'ref' to be a branch or tag name)", err)
 		}
 		return err
 	}
 
-	if depth < 1 && originalRef != "" {
-		// If we didn't add --depth and --branch above then we will now be
-		// on the remote repository's default branch, rather than the selected
-		// ref, so we'll need to fix that before we return.
-		err := g.checkout(ctx, dst, originalRef)
-		if err != nil {
-			// Clean up git repository on disk
+	if depth < 1 && ref != "" {
+		// A full clone leaves us on the remote's default branch; check out the requested ref.
+		if err := g.checkout(ctx, dst, ref); err != nil {
+			// Clean up git repository on disk.
 			if removeErr := os.RemoveAll(dst); removeErr != nil {
 				log.Trace("Failed to remove git repository during cleanup", "error", removeErr, "dir", dst)
 			}
@@ -524,20 +511,36 @@ func (g *CustomGitGetter) update(params *gitOperationParams) error {
 		return err
 	}
 
-	// Fetch the remote ref
-	cmd = exec.CommandContext(ctx, gitCommand, "fetch", originRemote, gitArgSeparator, ref)
+	// Fetch the requested ref. An unspecified ref means the remote's default branch, fetched via the
+	// symbolic "HEAD". This runs in dst (clean repo config + the broker's GIT_CONFIG_* insteadOf, so
+	// the minted token applies) — deliberately NOT a `git ls-remote` in the caller's CWD, whose
+	// actions/checkout `http.<host>.extraheader` (the ambient repo-scoped token) would shadow the
+	// minted token and mis-resolve the branch. It also avoids `git fetch -- ""`/`git checkout ""`,
+	// which fail with "empty string is not a valid pathspec".
+	fetchRef := ref
+	if fetchRef == "" {
+		fetchRef = "HEAD"
+	}
+	cmd = exec.CommandContext(ctx, gitCommand, "fetch", originRemote, gitArgSeparator, fetchRef)
 	cmd.Dir = dst
 	err = g.getRunCommandWithRetry(ctx, cmd)
 	if err != nil {
 		return err
 	}
 
-	// Reset the branch to the fetched ref
+	// Reset the working tree to the fetched ref (the default branch when ref was unspecified).
 	cmd = exec.CommandContext(ctx, gitCommand, "reset", "--hard", "FETCH_HEAD")
 	cmd.Dir = dst
 	err = g.getRunCommandWithRetry(ctx, cmd)
 	if err != nil {
 		return err
+	}
+
+	// With an unspecified ref, the reset above already placed the working tree on the default branch's
+	// HEAD; there is no named branch to check out or pull, so we're done (and `git checkout ""` would
+	// fail anyway).
+	if ref == "" {
+		return nil
 	}
 
 	// Checkout ref branch

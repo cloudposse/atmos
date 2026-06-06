@@ -1,0 +1,113 @@
+---
+slug: automatic-backend-provisioning-on-init
+title: "Backends Auto-Provisioned on Terraform Init"
+authors: [osterman]
+tags: [enhancement, dx]
+---
+
+Atmos now automatically provisions backends during `terraform init`, eliminating the need for a separate `backend create` command. When `provision.backend.enabled: true` is set, backends are created just-in-time during your first Terraform operation.
+
+<!--truncate-->
+
+## What Changed
+
+Previously, automatic backend provisioning required running `atmos terraform backend create` explicitly before initializing Terraform. Now, backends are provisioned automatically when you run any Terraform command that triggers initialization:
+
+```bash
+# Before: Two commands required
+atmos terraform backend create vpc -s dev
+atmos terraform plan vpc -s dev
+
+# After: Single command - backend auto-provisioned on init
+atmos terraform plan vpc -s dev
+# ⠋ Provisioning S3 backend `my-terraform-state` for `vpc` in stack `dev`...
+# ✓ Provisioned S3 backend `my-terraform-state` for `vpc` in stack `dev`
+# ... terraform init continues automatically
+```
+
+## How It Works
+
+When `provision.backend.enabled: true` is configured, Atmos registers a hook that runs before `terraform init`:
+
+1. **Check if enabled** - Silent skip if `provision.backend.enabled` is not `true`
+2. **Check if exists** - Silent skip if backend already exists (idempotent)
+3. **Provision with feedback** - Create backend with spinner showing progress
+4. **Continue init** - Terraform initialization proceeds automatically
+
+This behavior is completely opt-in. Without the provision configuration, nothing changes.
+
+## Configuration
+
+The configuration remains the same - just add `provision.backend.enabled: true`:
+
+```yaml
+components:
+  terraform:
+    vpc:
+      backend_type: s3
+      backend:
+        bucket: my-terraform-state
+        key: vpc/terraform.tfstate
+        region: us-east-1
+      provision:
+        backend:
+          enabled: true
+```
+
+You can also set this at the global terraform level for all components:
+
+```yaml
+terraform:
+  provision:
+    backend:
+      enabled: true
+
+components:
+  terraform:
+    vpc:
+      # Inherits provision.backend.enabled: true from above
+      backend_type: s3
+      backend:
+        bucket: my-terraform-state
+        key: vpc/terraform.tfstate
+        region: us-east-1
+```
+
+## UX Improvements
+
+This release also includes improved output formatting:
+
+- **Spinner feedback** - Visual progress indicator during provisioning
+- **Consolidated messages** - Single line output instead of multiple status messages
+- **Backend type and name** - Shows backend type (S3, GCS, etc.) and resource name (bucket)
+- **Markdown-friendly formatting** - Backticks around names render correctly in terminals
+
+## Idempotent Behavior
+
+The auto-provisioning is idempotent:
+
+- **First run**: Backend is created with spinner feedback
+- **Subsequent runs**: Silent skip (backend already exists)
+- **After Terraform import**: Safe to leave enabled - no conflicts
+
+This means you can safely leave `provision.backend.enabled: true` in your configuration permanently.
+
+## Explicit Command Still Available
+
+The explicit `backend create` command remains available for CI/CD pipelines or manual provisioning:
+
+```bash
+atmos terraform backend create vpc -s dev
+```
+
+## Getting Started
+
+Enable automatic backend provisioning in your stack configuration and run any Terraform command:
+
+```bash
+atmos terraform plan vpc -s dev
+```
+
+That's it - no separate provisioning step required.
+
+For more details, see our [original announcement](/changelog/automatic-backend-provisioning) and [CLI documentation](/cli/commands/terraform/terraform-backend).

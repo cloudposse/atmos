@@ -48,7 +48,7 @@ func TestNewWorkflowCommandRunner(t *testing.T) {
 		{
 			name: "with retry config",
 			retryConfig: &schema.RetryConfig{
-				MaxAttempts: 3,
+				MaxAttempts: intPtr(3),
 			},
 		},
 	}
@@ -264,9 +264,22 @@ func TestWorkflowAuthProvider_PrepareEnvironment(t *testing.T) {
 			identity: "test-identity",
 			baseEnv:  []string{"EXISTING=value"},
 			setupMock: func(m *types.MockAuthManager, baseEnv []string) {
+				// Adapter now always merges baseEnv with os.Environ().
 				m.EXPECT().
-					PrepareShellEnvironment(gomock.Any(), "test-identity", baseEnv).
-					Return([]string{"EXISTING=value", "AWS_PROFILE=test"}, nil)
+					PrepareShellEnvironment(gomock.Any(), "test-identity", gomock.Any()).
+					DoAndReturn(func(ctx context.Context, identity string, env []string) ([]string, error) {
+						// Verify baseEnv vars are present in the merged env.
+						hasExisting := false
+						for _, e := range env {
+							if e == "EXISTING=value" {
+								hasExisting = true
+							}
+						}
+						if !hasExisting {
+							return nil, errors.New("expected EXISTING=value in env")
+						}
+						return append(env, "AWS_PROFILE=test"), nil
+					})
 			},
 			expectedError: false,
 			checkResult: func(t *testing.T, result []string) {
@@ -302,8 +315,9 @@ func TestWorkflowAuthProvider_PrepareEnvironment(t *testing.T) {
 			identity: "bad-identity",
 			baseEnv:  []string{},
 			setupMock: func(m *types.MockAuthManager, baseEnv []string) {
+				// Adapter now always merges baseEnv with os.Environ().
 				m.EXPECT().
-					PrepareShellEnvironment(gomock.Any(), "bad-identity", baseEnv).
+					PrepareShellEnvironment(gomock.Any(), "bad-identity", gomock.Any()).
 					Return(nil, errors.New("failed to prepare environment"))
 			},
 			expectedError: true,
@@ -528,18 +542,34 @@ func TestWorkflowUIProvider_PrintMessage_MultipleArgs(t *testing.T) {
 }
 
 // TestWorkflowAuthProvider_PrepareEnvironment_EmptyBaseEnv tests with empty (not nil) base env.
+// The adapter always merges with os.Environ() to ensure auth can clear conflicting credentials.
 func TestWorkflowAuthProvider_PrepareEnvironment_EmptyBaseEnv(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
 	mockManager := types.NewMockAuthManager(ctrl)
+	// Adapter now always merges baseEnv with os.Environ(), so we use gomock.Any().
+	// and verify the behavior rather than exact env slice.
 	mockManager.EXPECT().
-		PrepareShellEnvironment(gomock.Any(), "test-identity", []string{}).
-		Return([]string{"AWS_PROFILE=test"}, nil)
+		PrepareShellEnvironment(gomock.Any(), "test-identity", gomock.Any()).
+		DoAndReturn(func(_ context.Context, _ string, env []string) ([]string, error) {
+			// With empty baseEnv, the env should still contain system environment
+			// (os.Environ() is always included by the adapter).
+			if len(env) == 0 {
+				return nil, errors.New("expected non-empty env from os.Environ()")
+			}
+			return append(env, "AWS_PROFILE=test"), nil
+		})
 
 	provider := NewWorkflowAuthProvider(mockManager)
 	result, err := provider.PrepareEnvironment(context.Background(), "test-identity", []string{})
 
 	assert.NoError(t, err)
-	assert.Equal(t, []string{"AWS_PROFILE=test"}, result)
+	// Result should contain system env plus the AWS_PROFILE added by auth.
+	assert.Contains(t, result, "AWS_PROFILE=test")
+}
+
+// intPtr returns a pointer to the given int value.
+func intPtr(i int) *int {
+	return &i
 }

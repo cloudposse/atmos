@@ -12,7 +12,7 @@ export default function Terminal({ title, command, className, children }) {
                         <div className="control-dot minimize-dot"></div>
                         <div className="control-dot maximize-dot"></div>
                     </div>
-                    <h1>{title}</h1>
+                    <div className="window-title">{title}</div>
                 </div>
                 <div className="viewport">{command && <div className="command"><span className="prompt">&gt;</span><Typewriter>{command}</Typewriter></div>}<div>{children}</div></div>
             </div>

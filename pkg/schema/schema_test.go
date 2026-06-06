@@ -180,4 +180,56 @@ func TestGetCaseSensitiveMap(t *testing.T) {
 		result := atmosConfig.GetCaseSensitiveMap("env")
 		assert.Nil(t, result)
 	})
+
+	templateEnvTests := []struct {
+		name     string
+		config   *AtmosConfiguration
+		expected map[string]string
+	}{
+		{
+			name: "returns templates.settings.env map when no CaseMaps",
+			config: &AtmosConfiguration{
+				Templates: Templates{
+					Settings: TemplatesSettings{
+						Env: map[string]string{
+							"aws_profile": "my-profile",
+						},
+					},
+				},
+			},
+			expected: map[string]string{"aws_profile": "my-profile"},
+		},
+		{
+			name: "returns templates.settings.env with case restored",
+			config: func() *AtmosConfiguration {
+				cm := casemap.New()
+				cm.Set("templates.settings.env", casemap.CaseMap{
+					"aws_profile": "AWS_PROFILE",
+					"aws_region":  "AWS_REGION",
+				})
+				return &AtmosConfiguration{
+					Templates: Templates{
+						Settings: TemplatesSettings{
+							Env: map[string]string{
+								"aws_profile": "production",
+								"aws_region":  "us-east-1",
+							},
+						},
+					},
+					CaseMaps: cm,
+				}
+			}(),
+			expected: map[string]string{
+				"AWS_PROFILE": "production",
+				"AWS_REGION":  "us-east-1",
+			},
+		},
+	}
+
+	for _, tt := range templateEnvTests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := tt.config.GetCaseSensitiveMap("templates.settings.env")
+			assert.Equal(t, tt.expected, result)
+		})
+	}
 }

@@ -1,0 +1,6 @@
+vars:
+  stage: dev
+  environment: development
+
+components:
+  terraform: {}

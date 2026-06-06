@@ -7,9 +7,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cloudposse/atmos/toolchain"
-	toolchainregistry "github.com/cloudposse/atmos/toolchain/registry"
-	"github.com/cloudposse/atmos/toolchain/registry/cache"
+	"github.com/cloudposse/atmos/pkg/toolchain"
+	toolchainregistry "github.com/cloudposse/atmos/pkg/toolchain/registry"
+	"github.com/cloudposse/atmos/pkg/toolchain/registry/cache"
 )
 
 // TestSearchTotalProvider verifies the registry implements SearchTotalProvider interface.

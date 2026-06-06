@@ -24,6 +24,9 @@ func RegisterDefaults() {
 		mustRegister(registry, NewRandomFunction())
 		mustRegister(registry, NewTemplateFunction())
 		mustRegister(registry, NewGitRootFunction())
+		mustRegister(registry, NewGitShaFunction())
+		mustRegister(registry, NewGitBranchFunction())
+		mustRegister(registry, NewGitRefFunction())
 		mustRegister(registry, NewIncludeFunction())
 		mustRegister(registry, NewIncludeRawFunction())
 		mustRegister(registry, NewLiteralFunction())
@@ -37,6 +40,7 @@ func RegisterDefaults() {
 		mustRegister(registry, NewAwsCallerIdentityArnFunction())
 		mustRegister(registry, NewAwsCallerIdentityUserIDFunction())
 		mustRegister(registry, NewAwsRegionFunction())
+		mustRegister(registry, NewAwsOrganizationIDFunction())
 	})
 }
 

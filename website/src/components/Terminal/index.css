@@ -16,7 +16,7 @@ html[data-theme="dark"] .terminal {
     color: #ccc;
     background: #070e12;
     border: 1px solid #cccccc36;
-    box-shadow: 0 0 20px 3px rgb(8 115 115 / 29%);
+    box-shadow: 0 0 20px 3px rgb(75 25 132 / 29%);
 }
 
 .markdown .terminal {
@@ -30,7 +30,7 @@ html[data-theme="dark"] .terminal {
     background-size: 9px 20px;
 }
 
-.terminal h1 {
+.terminal .window-title {
     text-align: center;
     font-size: 1em;
     font-family: monospace;
@@ -52,7 +52,7 @@ html[data-theme="dark"] .terminal {
     text-overflow: ellipsis;
 }
 
-html[data-theme="dark"] .terminal h1 {
+html[data-theme="dark"] .terminal .window-title {
     color: #fff;
 }
 
@@ -109,6 +109,15 @@ html[data-theme="dark"] .terminal h1 {
     --prism-background-color: transparent !important;
     background-color: transparent !important;
     background: transparent !important;
+}
+
+.terminal .language-bash.theme-code-block,
+.terminal pre.prism-code.language-bash,
+.terminal .language-sh.theme-code-block,
+.terminal pre.prism-code.language-sh {
+    --prism-background-color: transparent !important;
+
+    background-color: transparent !important;
 }
 
 .terminal .viewport {

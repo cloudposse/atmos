@@ -91,4 +91,4 @@ hooks-component-scoped/
 
 - Test implementation: `/pkg/hooks/hooks_component_scope_test.go`
 - Hooks implementation: `/pkg/hooks/`
-- Documentation: https://atmos.tools/core-concepts/stacks/hooks
+- Documentation: https://atmos.tools/stacks/hooks

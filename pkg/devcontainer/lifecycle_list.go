@@ -30,7 +30,7 @@ func (m *Manager) List(atmosConfig *schema.AtmosConfiguration) error {
 	}
 
 	if len(configs) == 0 {
-		_ = ui.Infof("No devcontainers configured")
+		ui.Infof("No devcontainers configured")
 		return nil
 	}
 

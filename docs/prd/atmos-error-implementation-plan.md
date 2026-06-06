@@ -446,7 +446,7 @@ docs/
   errors.md              # Developer how-to guide (NEW)
 
   prd/
-    atmos-error-handling.md              # Architecture PRD (NEW)
+    error-handling.md              # Architecture PRD (NEW)
     atmos-error-implementation-plan.md   # This file
     error-handling-strategy.md           # Updated
 

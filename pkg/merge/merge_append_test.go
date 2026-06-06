@@ -163,8 +163,10 @@ func TestMergeWithAppendTagGlobalStrategy(t *testing.T) {
 	}
 
 	expected := map[string]any{
-		"global_append_list": []any{"a", "b", "c", "d"},           // Uses global append strategy
-		"tagged_append_list": []any{"1", "2", "1", "2", "3", "4"}, // Both global and tag append apply
+		"global_append_list": []any{"a", "b", "c", "d"}, // Uses global append strategy.
+		// With the global append strategy on, processAppendTags returns only the new !append
+		// items so the append happens exactly once (no duplication of the base list).
+		"tagged_append_list": []any{"1", "2", "3", "4"},
 	}
 
 	result, err := Merge(&atmosConfig, inputs)

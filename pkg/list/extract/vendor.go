@@ -1,6 +1,8 @@
 package extract
 
 import (
+	"strings"
+
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -18,6 +20,7 @@ type VendorInfo struct {
 	Type      string
 	Manifest  string
 	Folder    string
+	Tags      []string
 }
 
 // Vendor transforms vendorInfos into structured data.
@@ -28,16 +31,24 @@ func Vendor(vendorInfos []VendorInfo) ([]map[string]any, error) {
 	var vendors []map[string]any
 
 	for _, vi := range vendorInfos {
+		// Format tags as comma-separated string for display.
+		tagsStr := ""
+		if len(vi.Tags) > 0 {
+			tagsStr = strings.Join(vi.Tags, ", ")
+		}
+
 		vendor := map[string]any{
 			"atmos_component":     vi.Component,
 			"atmos_vendor_type":   vi.Type,
 			"atmos_vendor_file":   vi.Manifest,
 			"atmos_vendor_target": vi.Folder,
+			"atmos_vendor_tags":   tagsStr,
 			// Also add simple column names for easier templates.
 			"component": vi.Component,
 			"type":      vi.Type,
 			"manifest":  vi.Manifest,
 			"folder":    vi.Folder,
+			"tags":      tagsStr,
 		}
 
 		vendors = append(vendors, vendor)

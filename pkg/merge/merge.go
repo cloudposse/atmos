@@ -6,8 +6,6 @@ import (
 	"reflect"
 	"strings"
 
-	"dario.cat/mergo"
-
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -29,7 +27,7 @@ const (
 // and uses reflection-based normalization for rare complex types (typed slices/maps).
 // Preserves numeric types (unlike JSON which converts all numbers to float64) and is faster than
 // generic reflection-based copying. The data is already in Go map format with custom tags already processed,
-// so we only need structural copying to work around mergo's pointer mutation bug.
+// so structural copying is needed to ensure accumulated merge results are independent of their inputs.
 // Uses properly-sized allocations to reduce GC pressure during high-volume operations (118k+ calls per run).
 func DeepCopyMap(m map[string]any) (map[string]any, error) {
 	defer perf.Track(nil, "merge.DeepCopyMap")()
@@ -351,44 +349,30 @@ func MergeWithOptions(
 	}
 
 	// Standard merge path for multiple non-empty inputs.
-	merged := map[string]any{}
+	//
+	// Strategy: deep-copy the first input to create the initial accumulator, then
+	// merge each subsequent input into it using deepMergeNative.  deepMergeNative
+	// only copies values that are placed as leaves in the accumulator, so it avoids
+	// the full pre-copy that the old mergo-based loop required on every iteration.
+	// This reduces the number of full DeepCopyMap calls from N to 1 and eliminates
+	// reflection overhead from mergo for every subsequent merge.
+	merged, err := DeepCopyMap(nonEmptyInputs[0])
+	if err != nil {
+		return nil, fmt.Errorf("%w: failed to deep copy map: %w", errUtils.ErrMerge, err)
+	}
 
-	for index := range nonEmptyInputs {
-		current := nonEmptyInputs[index]
+	// Resolve !append-tagged lists in the base input. At the base there is nothing
+	// to append to, so an !append list simply becomes a plain list.
+	merged = processAppendTags(merged, map[string]any{}, appendSlice)
 
-		// Process !append tagged lists before merging.
-		// When appendSlice is true (global append strategy), pass appendNewOnly=true
-		// so !append returns only new items and mergo.WithAppendSlice performs the append without duplication.
+	for _, current := range nonEmptyInputs[1:] {
+		// Resolve !append-tagged lists against the accumulator before merging.
+		// With the global append strategy (appendSlice), processAppendTags returns only
+		// the new items so deepMergeNative's append adds them without duplication; otherwise
+		// it returns existing+new concatenated so the override replaces with the appended list.
 		current = processAppendTags(current, merged, appendSlice)
-
-		// Due to a bug in `mergo.Merge`
-		// (Note: in the `for` loop, it DOES modify the source of the previous loop iteration if it's a complex map and `mergo` gets a pointer to it,
-		// not only the destination of the current loop iteration),
-		// we don't give it our maps directly; we deep copy them using our custom DeepCopyMap (faster than YAML serialization),
-		// so `mergo` does not have access to the original pointers.
-		// Deep copy preserves types and is sufficient because the data is already in Go map format with custom tags already processed.
-		dataCurrent, err := DeepCopyMap(current)
-		if err != nil {
-			return nil, fmt.Errorf("%w: failed to deep copy map: %w", errUtils.ErrMerge, err)
-		}
-
-		var opts []func(*mergo.Config)
-		opts = append(opts, mergo.WithOverride, mergo.WithTypeCheck)
-
-		// This was fixed/broken in https://github.com/imdario/mergo/pull/231/files
-		// It was released in https://github.com/imdario/mergo/releases/tag/v0.3.14
-		// It was not working before in `github.com/imdario/mergo` so we need to disable it in our code
-		// opts = append(opts, mergo.WithOverwriteWithEmptyValue)
-
-		if sliceDeepCopy {
-			opts = append(opts, mergo.WithSliceDeepCopy)
-		} else if appendSlice {
-			opts = append(opts, mergo.WithAppendSlice)
-		}
-
-		if err := mergo.Merge(&merged, dataCurrent, opts...); err != nil {
-			// Return the error without debug logging.
-			return nil, fmt.Errorf("%w: mergo merge failed: %w", errUtils.ErrMerge, err)
+		if err := deepMergeNative(merged, current, appendSlice, sliceDeepCopy); err != nil {
+			return nil, fmt.Errorf("%w: %w", errUtils.ErrMerge, err)
 		}
 	}
 
@@ -398,7 +382,7 @@ func MergeWithOptions(
 // processAppendTags handles special !append tagged lists during merging.
 // It processes any values wrapped with __atmos_append__ metadata and appends them to existing lists.
 // When appendNewOnly is true (global append strategy), it returns only the new items so that
-// mergo.WithAppendSlice performs the append without duplication.
+// deepMergeNative's append strategy performs the append without duplication.
 func processAppendTags(current map[string]any, merged map[string]any, appendNewOnly bool) map[string]any {
 	result := make(map[string]any)
 
@@ -426,8 +410,8 @@ func processValue(key string, value any, merged map[string]any, appendNewOnly bo
 }
 
 // processAppendList handles appending a list to existing values.
-// If appendNewOnly is true, return only the new items so mergo.WithAppendSlice can append
-// them to the existing list without duplication.
+// If appendNewOnly is true, return only the new items so deepMergeNative's append strategy
+// can append them to the existing list without duplication.
 func processAppendList(key string, list []any, merged map[string]any, appendNewOnly bool) []any {
 	if appendNewOnly {
 		return list

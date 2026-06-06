@@ -1,0 +1,18 @@
+
+│ Warning: Argument is deprecated
+│
+│   with aws_s3_bucket.example,
+│   on main.tf line 10, in resource "aws_s3_bucket" "example":
+│   10:   acl = "private"
+│
+│ Use the aws_s3_bucket_acl resource instead
+
+│ Warning: Applied changes may be incomplete
+│
+│ The plan was created with the -target option in effect, so some changes
+│ requested in the configuration may have been ignored and the output values may
+│ not be fully updated. Run the following command to verify that no other
+│ changes are pending:
+│     terraform plan
+
+Plan: 2 to add, 1 to change, 0 to destroy.

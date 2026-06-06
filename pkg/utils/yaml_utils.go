@@ -13,6 +13,7 @@ import (
 	yaml "gopkg.in/yaml.v3"
 
 	"github.com/cloudposse/atmos/pkg/config/homedir"
+	atmosGit "github.com/cloudposse/atmos/pkg/git"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -29,15 +30,26 @@ const (
 	AtmosYamlFuncEnv                     = "!env"
 	AtmosYamlFuncInclude                 = "!include"
 	AtmosYamlFuncIncludeRaw              = "!include.raw"
-	AtmosYamlFuncGitRoot                 = "!repo-root"
+	AtmosYamlFuncGitRoot                 = atmosGit.YAMLFuncRepoRoot
+	AtmosYamlFuncGitRootAlias            = atmosGit.YAMLFuncRoot
+	AtmosYamlFuncGitSha                  = atmosGit.YAMLFuncSHA
+	AtmosYamlFuncGitBranch               = atmosGit.YAMLFuncBranch
+	AtmosYamlFuncGitRef                  = atmosGit.YAMLFuncRef
+	AtmosYamlFuncGitRepository           = atmosGit.YAMLFuncRepository
+	AtmosYamlFuncGitOwner                = atmosGit.YAMLFuncOwner
+	AtmosYamlFuncGitName                 = atmosGit.YAMLFuncName
+	AtmosYamlFuncGitHost                 = atmosGit.YAMLFuncHost
+	AtmosYamlFuncGitUrl                  = atmosGit.YAMLFuncURL
 	AtmosYamlFuncAppend                  = "!append"
 	AtmosYamlFuncCwd                     = "!cwd"
+	AtmosYamlFuncUnset                   = "!unset"
 	AtmosYamlFuncRandom                  = "!random"
 	AtmosYamlFuncLiteral                 = "!literal"
 	AtmosYamlFuncAwsAccountID            = "!aws.account_id"
 	AtmosYamlFuncAwsCallerIdentityArn    = "!aws.caller_identity_arn"
 	AtmosYamlFuncAwsCallerIdentityUserID = "!aws.caller_identity_user_id"
 	AtmosYamlFuncAwsRegion               = "!aws.region"
+	AtmosYamlFuncAwsOrganizationID       = "!aws.organization_id"
 
 	DefaultYAMLIndent = 2
 
@@ -55,13 +67,25 @@ var (
 		AtmosYamlFuncTerraformOutput,
 		AtmosYamlFuncTerraformState,
 		AtmosYamlFuncEnv,
+		AtmosYamlFuncGitRoot,
+		AtmosYamlFuncGitRootAlias,
+		AtmosYamlFuncGitSha,
+		AtmosYamlFuncGitBranch,
+		AtmosYamlFuncGitRef,
+		AtmosYamlFuncGitRepository,
+		AtmosYamlFuncGitOwner,
+		AtmosYamlFuncGitName,
+		AtmosYamlFuncGitHost,
+		AtmosYamlFuncGitUrl,
 		AtmosYamlFuncCwd,
+		AtmosYamlFuncUnset,
 		AtmosYamlFuncRandom,
 		AtmosYamlFuncLiteral,
 		AtmosYamlFuncAwsAccountID,
 		AtmosYamlFuncAwsCallerIdentityArn,
 		AtmosYamlFuncAwsCallerIdentityUserID,
 		AtmosYamlFuncAwsRegion,
+		AtmosYamlFuncAwsOrganizationID,
 	}
 
 	// AtmosYamlTagsMap provides O(1) lookup for custom tag checking.
@@ -75,20 +99,58 @@ var (
 		AtmosYamlFuncTerraformOutput:         true,
 		AtmosYamlFuncTerraformState:          true,
 		AtmosYamlFuncEnv:                     true,
+		AtmosYamlFuncGitRoot:                 true,
+		AtmosYamlFuncGitRootAlias:            true,
+		AtmosYamlFuncGitSha:                  true,
+		AtmosYamlFuncGitBranch:               true,
+		AtmosYamlFuncGitRef:                  true,
+		AtmosYamlFuncGitRepository:           true,
+		AtmosYamlFuncGitOwner:                true,
+		AtmosYamlFuncGitName:                 true,
+		AtmosYamlFuncGitHost:                 true,
+		AtmosYamlFuncGitUrl:                  true,
 		AtmosYamlFuncCwd:                     true,
+		AtmosYamlFuncUnset:                   true,
 		AtmosYamlFuncRandom:                  true,
 		AtmosYamlFuncLiteral:                 true,
 		AtmosYamlFuncAwsAccountID:            true,
 		AtmosYamlFuncAwsCallerIdentityArn:    true,
 		AtmosYamlFuncAwsCallerIdentityUserID: true,
 		AtmosYamlFuncAwsRegion:               true,
+		AtmosYamlFuncAwsOrganizationID:       true,
 	}
 
-	// ParsedYAMLCache stores parsed yaml.Node objects and their position information
-	// to avoid re-parsing the same files multiple times.
-	// Cache key: file path + content hash.
-	parsedYAMLCache   = make(map[string]*parsedYAMLCacheEntry)
-	parsedYAMLCacheMu sync.RWMutex
+	// ParsedYAML cache stores parsed yaml.Node objects and their position
+	// information to avoid re-parsing the same files multiple times. Cache key
+	// is file path + content hash. Values are *parsedYAMLCacheEntry and are
+	// treated as immutable post-insert; readers receive deep copies (the
+	// underlying yaml.Node tree has pointer-sharing aliases that would
+	// otherwise corrupt the cache if mutated).
+	//
+	// Uses sync.Map (not a RWMutex-protected map) because the write path is
+	// highly contended at scale: in a large-stack workload (~22k
+	// UnmarshalYAMLFromFileWithPositions calls), the prior RWMutex.Lock()
+	// inside cacheParsedYAML serialized every write across goroutines while
+	// holding the lock during the expensive deepCopyYAMLNode work. The
+	// lock-free sync.Map removes the global lock and optimizes for the
+	// disjoint-key write pattern this cache exhibits.
+	parsedYAMLCache sync.Map // map[string]*parsedYAMLCacheEntry (immutable post-insert).
+
+	// DecodedYAMLCache stores the post-Decode + post-Intern result of
+	// UnmarshalYAMLFromFileWithPositions[map[string]any] so that repeat callers
+	// (transitively imported files in describe-affected, ~22k calls in the
+	// reference workload) skip the per-call yaml.Node.Decode and
+	// InternStringsInMap walks. The parsedYAMLCache above only avoids re-parsing;
+	// Decode + Intern still ran on every call and accounted for ~500-700µs per
+	// invocation, dominating the function's cost once the parsed-node cache hit.
+	//
+	// Cache key: file path + content hash (same as parsedYAMLCache). Values are
+	// *decodedYAMLCacheEntry with both the decoded map and its positions; readers
+	// receive deep copies (DeepCopyMap + clonePositions) to preserve the
+	// immutable-post-insert contract. Only the map[string]any generic
+	// instantiation populates this cache; other generic T fall through to the
+	// existing Decode path.
+	decodedYAMLCache sync.Map // map[string]*decodedYAMLCacheEntry (immutable post-insert).
 
 	// Per-key locks to prevent race conditions when multiple goroutines
 	// try to parse the same file simultaneously. This prevents 156+ goroutines
@@ -130,6 +192,105 @@ var (
 type parsedYAMLCacheEntry struct {
 	node      yaml.Node
 	positions PositionMap
+}
+
+// decodedYAMLCacheEntry stores the post-Decode + post-Intern result for the
+// map[string]any specialization of UnmarshalYAMLFromFileWithPositions, plus
+// the matching position map. Both are deep-copied on retrieval to keep the
+// cached value immutable.
+type decodedYAMLCacheEntry struct {
+	data      map[string]any
+	positions PositionMap
+}
+
+// deepCopyDecodedMap is a local deep-copy for the decoded-YAML cache. It
+// covers the value types produced by yaml.Node.Decode + InternStringsInMap:
+// nested map[string]any, []any, and immutable primitives (string, numbers,
+// bool). Atmos custom tags are pre-processed into strings before this point,
+// so no exotic types appear. We can't use pkg/merge.DeepCopyMap here because
+// pkg/merge imports pkg/utils.
+func deepCopyDecodedMap(m map[string]any) map[string]any {
+	if m == nil {
+		return nil
+	}
+	out := make(map[string]any, len(m))
+	for k, v := range m {
+		out[k] = deepCopyDecodedValue(v)
+	}
+	return out
+}
+
+func deepCopyDecodedValue(v any) any {
+	switch val := v.(type) {
+	case map[string]any:
+		out := make(map[string]any, len(val))
+		for k, vv := range val {
+			out[k] = deepCopyDecodedValue(vv)
+		}
+		return out
+	case []any:
+		out := make([]any, len(val))
+		for i, vv := range val {
+			out[i] = deepCopyDecodedValue(vv)
+		}
+		return out
+	default:
+		// Primitives (string, int*, uint*, float*, bool) and nil are
+		// immutable in Go's value model — sharing the reference is safe.
+		return val
+	}
+}
+
+// getCachedDecodedYAML retrieves a cached decoded+interned result for the
+// given file and content. Returns deep copies so the cache remains immutable
+// across concurrent readers. The sync.Map.Load is non-blocking; the deep copy
+// runs outside any critical section.
+func getCachedDecodedYAML(file, content string) (map[string]any, PositionMap, bool) {
+	cacheKey := generateParsedYAMLCacheKey(file, content)
+	if cacheKey == "" {
+		return nil, nil, false
+	}
+	raw, found := decodedYAMLCache.Load(cacheKey)
+	if !found {
+		return nil, nil, false
+	}
+	entry, ok := raw.(*decodedYAMLCacheEntry)
+	if !ok {
+		return nil, nil, false
+	}
+	dataCopy := deepCopyDecodedMap(entry.data)
+	return dataCopy, clonePositions(entry.positions), true
+}
+
+// cacheDecodedYAML stores a decoded+interned result. The deep copy runs
+// BEFORE the sync.Map.Store so the cache's critical section is only the
+// atomic store, not the expensive recursive map copy.
+func cacheDecodedYAML(file, content string, data map[string]any, positions PositionMap) {
+	cacheKey := generateParsedYAMLCacheKey(file, content)
+	if cacheKey == "" || data == nil {
+		return
+	}
+	dataCopy := deepCopyDecodedMap(data)
+	decodedYAMLCache.Store(cacheKey, &decodedYAMLCacheEntry{
+		data:      dataCopy,
+		positions: clonePositions(positions),
+	})
+}
+
+// clearDecodedYAMLCache empties the decoded YAML cache. Exported indirectly
+// via ClearDecodedYAMLCache for tests that need to reset state between subtests.
+func clearDecodedYAMLCache() {
+	decodedYAMLCache.Range(func(key, _ any) bool {
+		decodedYAMLCache.Delete(key)
+		return true
+	})
+}
+
+// ClearDecodedYAMLCache clears the decoded YAML result cache. Call between
+// independent operations (like tests) to ensure fresh processing of files
+// whose on-disk content may have changed.
+func ClearDecodedYAMLCache() {
+	clearDecodedYAMLCache()
 }
 
 // generateParsedYAMLCacheKey generates a cache key from file path and content.
@@ -214,6 +375,12 @@ func clonePositions(positions PositionMap) PositionMap {
 
 // getCachedParsedYAML retrieves a cached parsed YAML node if it exists.
 // Returns a copy of the node and positions to prevent external mutations.
+//
+// The sync.Map.Load is non-blocking and the deep-copy of the cached entry runs
+// outside any critical section: cached values are treated as immutable
+// post-insert (see cacheParsedYAML), so concurrent goroutines may safely
+// deep-copy them without coordination.
+//
 // Note: Statistics tracking is done by the caller to avoid double-counting.
 // Note: perf.Track() removed from this hot path to reduce overhead.
 func getCachedParsedYAML(file string, content string) (*yaml.Node, PositionMap, bool) {
@@ -222,11 +389,12 @@ func getCachedParsedYAML(file string, content string) (*yaml.Node, PositionMap, 
 		return nil, nil, false
 	}
 
-	parsedYAMLCacheMu.RLock()
-	defer parsedYAMLCacheMu.RUnlock()
-
-	entry, found := parsedYAMLCache[cacheKey]
+	raw, found := parsedYAMLCache.Load(cacheKey)
 	if !found {
+		return nil, nil, false
+	}
+	entry, ok := raw.(*parsedYAMLCacheEntry)
+	if !ok {
 		return nil, nil, false
 	}
 
@@ -238,6 +406,14 @@ func getCachedParsedYAML(file string, content string) (*yaml.Node, PositionMap, 
 
 // cacheParsedYAML stores a parsed YAML node in the cache.
 // Stores copies to prevent external mutations from affecting the cache.
+//
+// The deep copy of node + positions runs BEFORE the sync.Map.Store so the
+// cache's critical section is only the atomic store, not the expensive
+// recursive yaml.Node copy. Combined with sync.Map's lock-free read path,
+// this removes the global write-lock that previously serialized every cache
+// write across the ~22k UnmarshalYAMLFromFileWithPositions calls produced by
+// a large-stack describe-affected run.
+//
 // Note: perf.Track() removed from this hot path to reduce overhead.
 func cacheParsedYAML(file string, content string, node *yaml.Node, positions PositionMap) {
 	cacheKey := generateParsedYAMLCacheKey(file, content)
@@ -245,16 +421,29 @@ func cacheParsedYAML(file string, content string, node *yaml.Node, positions Pos
 		return
 	}
 
-	parsedYAMLCacheMu.Lock()
-	defer parsedYAMLCacheMu.Unlock()
-
 	// Store copies to prevent external mutations from affecting the cache.
 	nodeCopy := deepCopyYAMLNode(node)
 	positionsCopy := clonePositions(positions)
-	parsedYAMLCache[cacheKey] = &parsedYAMLCacheEntry{
+	parsedYAMLCache.Store(cacheKey, &parsedYAMLCacheEntry{
 		node:      *nodeCopy,
 		positions: positionsCopy,
-	}
+	})
+}
+
+// clearParsedYAMLCache empties the parsed YAML cache. Exported indirectly via
+// ClearParsedYAMLCache for tests that need to reset state between subtests.
+func clearParsedYAMLCache() {
+	parsedYAMLCache.Range(func(key, _ any) bool {
+		parsedYAMLCache.Delete(key)
+		return true
+	})
+}
+
+// ClearParsedYAMLCache clears the parsed YAML cache.
+// This should be called between independent operations (like tests) to ensure
+// fresh processing of files whose on-disk content may have changed.
+func ClearParsedYAMLCache() {
+	clearParsedYAMLCache()
 }
 
 // parseAndCacheYAML parses YAML content and caches the result.
@@ -271,7 +460,7 @@ func parseAndCacheYAML(atmosConfig *schema.AtmosConfiguration, input string, fil
 
 	// Extract positions if provenance tracking is enabled.
 	var positions PositionMap
-	if atmosConfig.TrackProvenance {
+	if atmosConfig != nil && atmosConfig.TrackProvenance {
 		positions = ExtractYAMLPositions(&parsedNode, true)
 	}
 
@@ -297,14 +486,20 @@ func handleCacheMiss(atmosConfig *schema.AtmosConfiguration, file string, input 
 	// Double-check: another goroutine may have cached it while we waited for the lock.
 	node, positions, found := getCachedParsedYAML(file, input)
 	if found {
-		// Another goroutine cached it while we waited - cache hit!
-		parsedYAMLCacheStats.Lock()
-		parsedYAMLCacheStats.hits++
-		parsedYAMLCacheStats.Unlock()
-		return node, positions, nil
+		// Check if we need positions but the cached entry lacks them.
+		// This can happen if the file was first parsed without provenance tracking.
+		needsPositions := atmosConfig != nil && atmosConfig.TrackProvenance && len(positions) == 0
+		if !needsPositions {
+			// Another goroutine cached it while we waited - valid cache hit!
+			parsedYAMLCacheStats.Lock()
+			parsedYAMLCacheStats.hits++
+			parsedYAMLCacheStats.Unlock()
+			return node, positions, nil
+		}
+		// Fall through to re-parse with position tracking.
 	}
 
-	// Still not in cache - we're the first goroutine to parse this file.
+	// Still not in cache (or needs re-parsing for positions).
 	// Track cache miss.
 	parsedYAMLCacheStats.Lock()
 	parsedYAMLCacheStats.misses++
@@ -344,7 +539,8 @@ func PrintParsedYAMLCacheStats() {
 		callsPerHash = float64(totalCalls) / float64(uniqueHashes)
 	}
 
-	log.Info("YAML Cache Statistics",
+	log.Info(
+		"YAML Cache Statistics",
 		"totalCalls", totalCalls,
 		"cacheHits", hits,
 		"cacheMisses", misses,
@@ -607,6 +803,12 @@ func ObfuscateSensitivePaths(data any, homeDir string) any {
 func ConvertToYAML(data any, opts ...YAMLOptions) (string, error) {
 	defer perf.Track(nil, "utils.ConvertToYAML")()
 
+	// Clean up duplicate array index keys created by Viper.
+	// Viper sometimes creates both array entries and indexed map keys (e.g., both "steps" array
+	// and "steps[0]", "steps[1]" keys) when merging configurations. This cleanup removes the
+	// indexed keys when an array exists to prevent duplicate output in YAML.
+	cleanedData := CleanupArrayIndexKeys(data)
+
 	// Get a buffer from the pool to reduce allocations.
 	buf := yamlBufferPool.Get().(*bytes.Buffer)
 	buf.Reset() // Ensure buffer is clean.
@@ -625,13 +827,25 @@ func ConvertToYAML(data any, opts ...YAMLOptions) (string, error) {
 	}
 	encoder.SetIndent(indent)
 
-	if err := encoder.Encode(data); err != nil {
+	if err := encoder.Encode(cleanedData); err != nil {
 		return "", err
 	}
 	return buf.String(), nil
 }
 
-//nolint:gocognit,revive
+// processCustomTags walks a YAML node tree and processes any custom Atmos
+// tags it contains. The entry point performs the fast hasCustomTags scan
+// ONCE; if the tree contains no custom tags anywhere, it returns immediately.
+// If any custom tag is found, processCustomTagsInner does the actual walk
+// without re-checking subtrees — saving O(depth) redundant tree scans that
+// the prior implementation incurred by re-running hasCustomTags on every
+// recursive call.
+//
+// Background: in a large describe-affected run (~9k processCustomTags
+// invocations) the redundant per-recursion hasCustomTags walks accounted
+// for the bulk of the 31s cumulative CPU time. Hoisting the check to the
+// top eliminates that overhead without changing behavior for tag-free
+// subtrees (which still benefit from the early exit).
 func processCustomTags(atmosConfig *schema.AtmosConfiguration, node *yaml.Node, file string) error {
 	defer perf.Track(atmosConfig, "utils.processCustomTags")()
 
@@ -647,6 +861,23 @@ func processCustomTags(atmosConfig *schema.AtmosConfiguration, node *yaml.Node, 
 		return nil
 	}
 
+	// We've established there IS a custom tag somewhere in this subtree;
+	// walk it once via the inner helper which skips the (now redundant)
+	// hasCustomTags check on every recursion.
+	return processCustomTagsInner(atmosConfig, node, file)
+}
+
+// processCustomTagsInner is the recursive worker for processCustomTags.
+// Callers must have already established that the input tree contains at
+// least one custom tag (via hasCustomTags); this function does not perform
+// that check on each call, which is the key optimization vs the prior
+// implementation. The perf.Track on the outer processCustomTags wraps the
+// entire walk with one tracked frame, so per-recursion tracking is
+// intentionally omitted here to avoid inflating the metric (recursive
+// calls would be counted in addition to the top-level invocation).
+//
+//nolint:gocognit
+func processCustomTagsInner(atmosConfig *schema.AtmosConfiguration, node *yaml.Node, file string) error {
 	for _, n := range node.Content {
 		tag := strings.TrimSpace(n.Tag)
 		val := strings.TrimSpace(n.Value)
@@ -688,7 +919,7 @@ func processCustomTags(atmosConfig *schema.AtmosConfiguration, node *yaml.Node, 
 
 		// Recursively process the child nodes
 		if len(n.Content) > 0 {
-			if err := processCustomTags(atmosConfig, n, file); err != nil {
+			if err := processCustomTagsInner(atmosConfig, n, file); err != nil {
 				return err
 			}
 		}
@@ -788,14 +1019,49 @@ func UnmarshalYAMLFromFileWithPositions[T any](atmosConfig *schema.AtmosConfigur
 	parsedYAMLCacheStats.uniqueHashes[contentHash]++
 	parsedYAMLCacheStats.Unlock()
 
+	// Fast path: when callers want map[string]any (the production hot path
+	// — schema.AtmosSectionMapType is `map[string]any`), try the post-Decode
+	// + post-Intern cache first. A hit lets us skip yaml.Node.Decode and
+	// InternStringsInMap, which together cost ~500-700µs per call and dominate
+	// the function once the parsedYAMLCache (yaml.Node) is hot. Provenance
+	// requires positions, which the decoded cache stores alongside the data.
+	if _, ok := any(zeroValue).(map[string]any); ok {
+		if cachedMap, cachedPositions, found := getCachedDecodedYAML(file, input); found {
+			// If the caller needs positions but the cached entry has none
+			// (entry inserted by a non-provenance caller), fall through to
+			// re-decode via the slow path which will repopulate positions.
+			if !atmosConfig.TrackProvenance || len(cachedPositions) > 0 {
+				// Count decoded-cache hits in the same counter as parsed-node
+				// cache hits; both represent successful avoidance of work.
+				parsedYAMLCacheStats.Lock()
+				parsedYAMLCacheStats.hits++
+				parsedYAMLCacheStats.Unlock()
+				// Safe by construction: zeroValue's type proves T == map[string]any.
+				typed, _ := any(cachedMap).(T)
+				return typed, cachedPositions, nil
+			}
+		}
+	}
+
 	// Try to get cached parsed YAML first (fast path with read lock).
 	node, positions, found := getCachedParsedYAML(file, input)
 	if found {
-		// Cache hit on first check.
-		parsedYAMLCacheStats.Lock()
-		parsedYAMLCacheStats.hits++
-		parsedYAMLCacheStats.Unlock()
-	} else {
+		// Cache hit - but check if we need positions and don't have them.
+		// This can happen if the file was first parsed without provenance tracking,
+		// then later requested with provenance enabled.
+		if atmosConfig.TrackProvenance && len(positions) == 0 {
+			// Need to re-parse with position tracking.
+			// Force a cache miss to re-parse and update the cache with positions.
+			found = false
+		} else {
+			// Valid cache hit.
+			parsedYAMLCacheStats.Lock()
+			parsedYAMLCacheStats.hits++
+			parsedYAMLCacheStats.Unlock()
+		}
+	}
+
+	if !found {
 		// Cache miss - use per-key locking to prevent multiple goroutines
 		// from parsing the same file simultaneously.
 		var err error
@@ -820,6 +1086,13 @@ func UnmarshalYAMLFromFileWithPositions[T any](atmosConfig *schema.AtmosConfigur
 	if m, ok := any(data).(map[string]any); ok && m != nil && len(m) > 0 {
 		interned := InternStringsInMap(atmosConfig, m)
 		data = interned.(T)
+
+		// Populate the decoded-result cache so subsequent calls for the same
+		// (file, content) skip the Decode + Intern walks. Storing the
+		// post-Intern value lets future hits return ready-to-use maps.
+		if internedMap, ok := interned.(map[string]any); ok {
+			cacheDecodedYAML(file, input, internedMap, positions)
+		}
 	}
 
 	return data, positions, nil
