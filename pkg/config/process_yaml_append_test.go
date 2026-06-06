@@ -89,6 +89,28 @@ func TestHandleAppend_ResolvesInnerScalarTags(t *testing.T) {
 		"the inner !env tag must be resolved, not left as a literal string")
 }
 
+// TestHandleAppend_ResolvesNestedTagInMapItem verifies that a custom scalar tag nested
+// inside a map item of an !append list is also resolved (not just top-level scalar items).
+func TestHandleAppend_ResolvesNestedTagInMapItem(t *testing.T) {
+	t.Setenv("APPEND_NESTED_MAP_TEST", "resolved-ami")
+
+	yamlContent := "node_groups: !append\n  - name: spot\n    ami: !env APPEND_NESTED_MAP_TEST"
+
+	v := viper.New()
+	require.NoError(t, preprocessAtmosYamlFunc([]byte(yamlContent), v))
+
+	list, isAppend := u.ExtractAppendListValue(v.Get("node_groups"))
+	require.True(t, isAppend, "node_groups should carry the append wrapper, got %#v", v.Get("node_groups"))
+	require.Len(t, list, 1)
+	assert.Equal(t, map[string]any{"name": "spot", "ami": "resolved-ami"}, list[0],
+		"the !env nested inside the map item must be resolved")
+
+	// No indexed keys (e.g. node_groups[0]) should leak into Viper.
+	for _, k := range v.AllKeys() {
+		assert.NotContains(t, k, "[", "no indexed array keys should leak, found %q", k)
+	}
+}
+
 // TestHandleAppend_RoundTripsThroughMergeContract ties the preprocessing output to the
 // merge-side contract: HasAppendTag must recognize what handleAppend produces.
 func TestHandleAppend_RoundTripsThroughMergeContract(t *testing.T) {

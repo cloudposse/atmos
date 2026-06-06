@@ -307,10 +307,14 @@ func TestMergeAppend_DoesNotMutateInputs(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, []any{"a", "b"}, result["items"])
 
-	// Mutate the merged result; inputs must be unaffected.
+	// result -> src isolation: mutating the merged result must not affect the inputs.
 	result["items"].([]any)[0] = "MUTATED"
 	assert.Equal(t, []any{"a"}, base["items"], "base input must not be mutated by the merge")
 	assert.Equal(t, []any{"b"}, overlayList, "overlay input list must not be mutated by the merge")
+
+	// src -> result isolation: mutating a source input after the merge must not affect the result.
+	overlayList[0] = "SOURCE_MUTATED"
+	assert.Equal(t, []any{"MUTATED", "b"}, result["items"], "merged result must not alias source slices")
 }
 
 // TestMergeAppend_EndToEndFromStackManifests is the full-path test: it unmarshals two stack

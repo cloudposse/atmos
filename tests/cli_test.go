@@ -749,14 +749,14 @@ func TestMain(m *testing.M) {
 		logger.Info("Coverage collection enabled", "GOCOVERDIR", coverDir)
 	}
 
-	// Check for the atmos binary.
-	var binaryPath string
-	binaryPath, skipReason = validateAtmosBinary(repoRoot)
-	if skipReason != "" {
-		logger.Info("Tests will be skipped", "reason", skipReason)
+	// Check for the atmos binary. This is informational only: CLI tests execute via
+	// AtmosRunner, which builds atmos from source, so a missing or external PATH binary
+	// must NOT skip the suite (doing so silently reduces coverage on clean machines/CI).
+	binaryPath, binaryWarning := validateAtmosBinary(repoRoot)
+	if binaryWarning != "" {
+		logger.Info("Atmos binary check warning", "reason", binaryWarning)
 	}
-
-	if skipReason == "" {
+	if binaryPath != "" {
 		logger.Info("Atmos binary for tests", "binary", binaryPath)
 	}
 
