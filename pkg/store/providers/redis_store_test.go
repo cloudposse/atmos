@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	storepkg "github.com/cloudposse/atmos/pkg/store"
 	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -336,6 +337,34 @@ func TestRedisStore_Get_GetKeyError(t *testing.T) {
 	assert.Nil(t, result)
 	assert.Contains(t, err.Error(), "failed to get key")
 	mockClient.AssertExpectations(t)
+}
+
+func TestRedisStore_getRedisOptions(t *testing.T) {
+	t.Run("invalid url returns parse error", func(t *testing.T) {
+		_, err := getRedisOptions(&RedisStoreOptions{URL: ptr("not-a-valid-redis-url")})
+		assert.ErrorIs(t, err, storepkg.ErrParseRedisURL)
+	})
+
+	t.Run("url from ATMOS_REDIS_URL env", func(t *testing.T) {
+		t.Setenv("ATMOS_REDIS_URL", "redis://localhost:6379")
+		opts, err := getRedisOptions(&RedisStoreOptions{})
+		assert.NoError(t, err)
+		assert.Equal(t, "localhost:6379", opts.Addr)
+	})
+
+	t.Run("missing url returns error", func(t *testing.T) {
+		// Ensure the env fallback is empty so the missing-URL branch is taken.
+		t.Setenv("ATMOS_REDIS_URL", "")
+		_, err := getRedisOptions(&RedisStoreOptions{})
+		assert.ErrorIs(t, err, storepkg.ErrMissingRedisURL)
+	})
+}
+
+func TestRedisStore_RedisClient(t *testing.T) {
+	mockClient := new(MockRedisClient)
+	s := &RedisStore{redisClient: mockClient}
+
+	assert.Equal(t, mockClient, s.RedisClient())
 }
 
 func TestRedisStore_GetKey(t *testing.T) {

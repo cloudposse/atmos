@@ -8,6 +8,7 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	log "github.com/cloudposse/atmos/pkg/logger"
+	storepkg "github.com/cloudposse/atmos/pkg/store"
 	"github.com/jfrog/jfrog-client-go/artifactory"
 	"github.com/jfrog/jfrog-client-go/artifactory/services"
 	al "github.com/jfrog/jfrog-client-go/utils/log"
@@ -336,6 +337,87 @@ func TestArtifactoryStore_GetWithMockErrors(t *testing.T) {
 			} else {
 				assert.NoError(t, err)
 				assert.NotNil(t, result)
+			}
+			mockClient.AssertExpectations(t)
+		})
+	}
+}
+
+func TestArtifactoryStore_GetKey(t *testing.T) {
+	mockClient := new(MockArtifactoryClient)
+	delimiter := "/"
+	store := &ArtifactoryStore{
+		prefix:         "prefix",
+		repoName:       "repo",
+		rtManager:      mockClient,
+		stackDelimiter: &delimiter,
+	}
+
+	tests := []struct {
+		name        string
+		key         string
+		mockSetup   func()
+		expectError bool
+		// errIs, when non-nil, is matched against the returned error with errors.Is.
+		errIs error
+		// errMsg, when non-empty, is matched against the returned error with Contains.
+		errMsg   string
+		expected interface{}
+	}{
+		{
+			name:        "empty key",
+			key:         "",
+			mockSetup:   func() {},
+			expectError: true,
+			errIs:       storepkg.ErrEmptyKey,
+		},
+		{
+			name: "download error",
+			key:  "config.json",
+			mockSetup: func() {
+				mockClient.On("DownloadFiles", mock.MatchedBy(func(params services.DownloadParams) bool {
+					return params.Pattern == "repo/prefix/config.json"
+				})).Return(0, 1, fmt.Errorf("download failed"))
+			},
+			expectError: true,
+			errMsg:      "download failed",
+		},
+		{
+			name: "successful download appends json extension and parses JSON",
+			// No ".json" suffix; GetKey appends it before building the repo path.
+			key: "config",
+			mockSetup: func() {
+				mockClient.On("DownloadFiles", mock.MatchedBy(func(params services.DownloadParams) bool {
+					return params.Pattern == "repo/prefix/config.json"
+				})).Return(1, 0, nil)
+			},
+			expectError: false,
+			// MockArtifactoryClient writes `{"test":"value"}` on a successful download.
+			expected: map[string]interface{}{"test": "value"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Clear any previous mock expectations.
+			mockClient.ExpectedCalls = nil
+			mockClient.Calls = nil
+
+			tt.mockSetup()
+			result, err := store.GetKey(tt.key)
+
+			if tt.expectError {
+				assert.Error(t, err)
+				if tt.errIs != nil {
+					assert.ErrorIs(t, err, tt.errIs)
+				}
+				if tt.errMsg != "" {
+					assert.Contains(t, err.Error(), tt.errMsg)
+				}
+				assert.Nil(t, result)
+			} else {
+				assert.NoError(t, err)
+				assert.Equal(t, tt.expected, result)
 			}
 			mockClient.AssertExpectations(t)
 		})

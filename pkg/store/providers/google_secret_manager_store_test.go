@@ -151,6 +151,56 @@ func gsmClientSecretCreationMock(projectID string, secretId string, secretPayloa
 	}
 }
 
+func TestGSMStore_createSecret(t *testing.T) {
+	tests := []struct {
+		name       string
+		returnErr  error
+		expectErr  error  // sentinel matched with errors.Is; nil means success expected.
+		expectName string // expected secret name on success.
+	}{
+		{
+			name:       "already exists returns existing secret",
+			returnErr:  status.Error(codes.AlreadyExists, "exists"),
+			expectName: "projects/test-project/secrets/my-secret",
+		},
+		{
+			name:      "not found",
+			returnErr: status.Error(codes.NotFound, "missing"),
+			expectErr: storepkg.ErrResourceNotFound,
+		},
+		{
+			name:      "permission denied",
+			returnErr: status.Error(codes.PermissionDenied, "denied"),
+			expectErr: storepkg.ErrPermissionDenied,
+		},
+		{
+			name:      "generic error",
+			returnErr: fmt.Errorf("boom"),
+			expectErr: storepkg.ErrCreateSecret,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mockClient := &MockGSMClient{}
+			store := newGSMStoreWithClient(mockClient, GSMStoreOptions{ProjectID: "test-project"})
+
+			mockClient.On("CreateSecret", mock.Anything, mock.Anything).Return(nil, tt.returnErr)
+
+			secret, err := store.createSecret(context.Background(), "my-secret")
+
+			if tt.expectErr != nil {
+				assert.ErrorIs(t, err, tt.expectErr)
+				assert.Nil(t, secret)
+			} else {
+				assert.NoError(t, err)
+				assert.Equal(t, tt.expectName, secret.GetName())
+			}
+			mockClient.AssertExpectations(t)
+		})
+	}
+}
+
 func TestGSMStore_Set(t *testing.T) {
 	testPrefix := "test-prefix"
 	testDelimiter := "-"
