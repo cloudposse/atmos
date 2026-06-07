@@ -14,6 +14,7 @@ import (
 	ststypes "github.com/aws/aws-sdk-go-v2/service/sts/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
 
 	storepkg "github.com/cloudposse/atmos/pkg/store"
 	"github.com/cloudposse/atmos/tests"
@@ -992,22 +993,23 @@ func TestNewSSMStore_EmptyRegion(t *testing.T) {
 }
 
 func TestNewSSMStore_WithRolesAndDelimiter(t *testing.T) {
-	// Empty identity triggers eager initDefaultClient; AWS config loading
-	// typically succeeds without real credentials. Both paths are acceptable.
+	// Pass a non-empty identity so client initialization is deferred (lazy):
+	// the constructor skips initDefaultClient when an identity is set, so this
+	// test is fully deterministic with no AWS dependency while still exercising
+	// the option-to-field assignment branches (delimiter, read/write role ARNs).
 	store, err := NewSSMStore(SSMStoreOptions{
 		Region:         "us-east-1",
 		StackDelimiter: stringPtr("|"),
 		ReadRoleArn:    stringPtr("arn:aws:iam::123456789012:role/read"),
 		WriteRoleArn:   stringPtr("arn:aws:iam::123456789012:role/write"),
-	}, "")
-	if err != nil {
-		return // initDefaultClient error path is covered elsewhere.
-	}
+	}, "test-identity")
+	require.NoError(t, err)
 
 	ssmStore := store.(*SSMStore)
 	assert.Equal(t, "|", *ssmStore.stackDelimiter)
 	assert.Equal(t, "arn:aws:iam::123456789012:role/read", *ssmStore.readRoleArn)
 	assert.Equal(t, "arn:aws:iam::123456789012:role/write", *ssmStore.writeRoleArn)
+	assert.Nil(t, ssmStore.client) // Lazy init — no client created when an identity is configured.
 }
 
 func TestSSMStore_assumeRole_Error(t *testing.T) {

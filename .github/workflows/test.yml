@@ -252,7 +252,12 @@ jobs:
 
       - name: Upload coverage report to Codecov
         if: matrix.flavor.target == 'linux' && (success() || failure())
-        uses: codecov/codecov-action@v5
+        # v6 ships a newer Codecov CLI wrapper with retry logic around the GPG
+        # key import, which fixes the intermittent "gpg: Can't check signature:
+        # No public key" -> "Could not verify signature. Exiting..." failures
+        # seen on v5 (wrapper 0.2.7). This keeps GPG integrity verification on
+        # (preferred over skip_validation, which runs an unverified binary).
+        uses: codecov/codecov-action@v6
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           slug: ${{ github.repository }}
@@ -260,12 +265,6 @@ jobs:
           fail_ci_if_error: true
           flags: unittests
           verbose: true
-          # Skip GPG signature verification of the downloaded Codecov CLI.
-          # Codecov's keyserver is intermittently unreachable, causing
-          # "gpg: Can't check signature: No public key" -> "Could not verify
-          # signature. Exiting..." which fails the job even when all tests pass.
-          # The CLI is still fetched over HTTPS from cli.codecov.io.
-          skip_validation: true
 
   docker:
     name: "[lint] Dockerfile"
