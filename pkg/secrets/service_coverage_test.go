@@ -8,8 +8,31 @@ import (
 	"go.uber.org/mock/gomock"
 
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/secrets/providers"
 	"github.com/cloudposse/atmos/pkg/store"
 )
+
+// scopeRejectingProvider is a minimal Provider whose SupportsScope always returns false. No real
+// backend rejects a valid scope today, so it is the only way to exercise checkScopeSupported's
+// rejection branch.
+type scopeRejectingProvider struct{}
+
+func (scopeRejectingProvider) Set(providers.Coordinate, any) error       { return nil }
+func (scopeRejectingProvider) Get(providers.Coordinate) (any, error)     { return nil, nil }
+func (scopeRejectingProvider) Delete(providers.Coordinate) error         { return nil }
+func (scopeRejectingProvider) Status(providers.Coordinate) (bool, error) { return false, nil }
+func (scopeRejectingProvider) Kind() string                              { return "test/rejecting" }
+func (scopeRejectingProvider) SupportsScope(providers.Scope) bool        { return false }
+
+// TestCheckScopeSupported_Rejected proves checkScopeSupported surfaces ErrScopeUnsupported when a
+// backend cannot represent a declaration's resolved scope.
+func TestCheckScopeSupported_Rejected(t *testing.T) {
+	decl := &Declaration{Name: "API_KEY", BackendName: "rejecting"}
+	coord := providers.Coordinate{Stack: "prod", Component: "api", Scope: providers.ScopeStack}
+
+	err := checkScopeSupported(scopeRejectingProvider{}, decl, coord)
+	require.ErrorIs(t, err, providers.ErrScopeUnsupported)
+}
 
 // bareSection builds a component section declaring the given store-backed secret names (no provider
 // resolution needed — Declarations/ScopeOf read the raw map).

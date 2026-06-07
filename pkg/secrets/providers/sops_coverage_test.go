@@ -16,6 +16,17 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
+// TestSopsProvider_SupportsScope proves the SOPS provider accepts the empty (instance default),
+// stack, and instance scopes, and rejects an unknown scope value.
+func TestSopsProvider_SupportsScope(t *testing.T) {
+	p, _ := newAgeProvider(t)
+
+	assert.True(t, p.SupportsScope(""), "empty scope (instance default) must always be supported")
+	assert.True(t, p.SupportsScope(ScopeStack))
+	assert.True(t, p.SupportsScope(ScopeInstance))
+	assert.False(t, p.SupportsScope(Scope("environment")), "an unknown scope is not supported")
+}
+
 // TestSopsProvider_KeyGroups_NoRecipientsNoSopsConfig proves that creating a fresh file with
 // neither `spec.age_recipients` nor a discoverable .sops.yaml creation rule surfaces
 // ErrSopsRecipients (the FindConfigFile-not-found branch of keyGroups).

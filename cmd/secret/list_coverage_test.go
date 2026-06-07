@@ -6,6 +6,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/cloudposse/atmos/pkg/secrets"
 )
 
 // listScopeSection builds a component section declaring the given secrets, where each entry maps a
@@ -62,4 +64,46 @@ func TestEmptyListMessage(t *testing.T) {
 	assert.Contains(t, emptyListMessage(secretScope{Stack: "prod"}), `stack "prod"`)
 	assert.Contains(t, emptyListMessage(secretScope{Component: "api"}), `component "api"`)
 	assert.Contains(t, emptyListMessage(secretScope{}), "any stack")
+}
+
+// TestRunSecretList_SingleScope drives runSecretList's fast path (both facets set): it loads the
+// scoped service, converts its statuses to rows, and renders them — covering statusRow and the
+// scope/backend/status label helpers.
+func TestRunSecretList_SingleScope(t *testing.T) {
+	setupIO(t)
+
+	svc := newFakeSecretService()
+	svc.statuses = []secrets.Status{
+		{Declaration: secrets.Declaration{Name: "API_KEY", Scope: secrets.ScopeInstance}, Initialized: true},
+		{Declaration: secrets.Declaration{Name: "SHARED", Scope: secrets.ScopeStack}, Initialized: false},
+	}
+	installService(t, svc, nil)
+
+	err := runSecretSubcommand(t, "list", "--stack", "dev", "--component", "api")
+	require.NoError(t, err)
+}
+
+// TestRunSecretList_SingleScope_LoadError proves a service-load failure on the fast path is
+// returned to the caller.
+func TestRunSecretList_SingleScope_LoadError(t *testing.T) {
+	setupIO(t)
+
+	sentinel := errors.New("load failed")
+	installService(t, newFakeSecretService(), sentinel)
+
+	err := runSecretSubcommand(t, "list", "--stack", "dev", "--component", "api")
+	require.ErrorIs(t, err, sentinel)
+}
+
+// TestRunSecretList_Enumerated drives the enumerated path (facets not fully specified): it walks
+// every declaring instance via the enumerate seam and renders the resulting rows.
+func TestRunSecretList_Enumerated(t *testing.T) {
+	setupIO(t)
+
+	overrideEnumerateScopes(t, []scopeEntry{
+		{Stack: "prod", Component: "api", Section: listScopeSection(map[string]string{"API_KEY": ""})},
+	}, nil)
+
+	err := runSecretSubcommand(t, "list", "--stack", "prod")
+	require.NoError(t, err)
 }
