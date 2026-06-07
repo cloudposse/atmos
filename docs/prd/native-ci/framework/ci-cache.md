@@ -157,7 +157,7 @@ atmos ci cache delete    # delete a cache entry by key
 | Provider capability | `pkg/ci/internal/provider/types.go` (`CacheProvider`), `pkg/ci/registry_provider.go` (`DetectCache`) |
 | GitHub provider wiring | `pkg/ci/providers/github/cache.go` |
 | CLI commands | `cmd/ci/cache/*.go` (mounted under `cmd/ci/ci.go`) |
-| Lifecycle hooks | `cmd/ci_cache_lifecycle.go`, call sites in `cmd/root.go` (PreRun restore, `Cleanup()` save) |
+| Lifecycle hooks | `cmd/ci/cache/lifecycle.go`, call sites in `cmd/root.go` (PreRun restore, `Cleanup()` save) |
 | Schema | `pkg/schema/schema.go` (`CICacheConfig`), env binding in `pkg/config/load.go` |
 | Toolchain consolidation | `pkg/toolchain/setup.go` (`GetInstallPath` → XDG cache sub-path) |
 | Errors | `errors/errors.go` (`ErrCache*`) |

@@ -7,8 +7,9 @@ import (
 )
 
 // Cache implements the provider.CacheProvider capability for GitHub Actions.
-// It returns the GitHub Actions cache backend, or errUtils.ErrCacheUnavailable
-// when not running inside a runner (the runtime cache token/URL are absent).
+// It returns the GitHub Actions cache backend, or an error wrapping
+// errUtils.ErrCacheUnavailable (from githubcache.NewBackend) when not running
+// inside a runner (the runtime cache token/URL are absent).
 func (p *Provider) Cache() (cache.Backend, error) {
 	defer perf.Track(nil, "github.Provider.Cache")()
 

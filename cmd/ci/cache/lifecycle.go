@@ -9,6 +9,7 @@ import (
 	cipkg "github.com/cloudposse/atmos/pkg/ci"
 	cachepkg "github.com/cloudposse/atmos/pkg/ci/cache"
 	log "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -27,6 +28,8 @@ var (
 // save is configured. All paths are no-ops (with a debug log) outside a
 // supported CI provider, so this is safe to call for every invocation.
 func AutoRestore(cmd *cobra.Command, atmosConfig *schema.AtmosConfiguration) {
+	defer perf.Track(atmosConfig, "cache.AutoRestore")()
+
 	// The explicit `atmos ci cache` subcommands manage the lifecycle themselves,
 	// so skip the automatic hooks for them to avoid redundant work.
 	if atmosConfig == nil || !atmosConfig.CI.Cache.Enabled || isCICacheCommand(cmd) {
@@ -81,6 +84,8 @@ func registerPendingSave(manager *cachepkg.Manager) {
 // invoked from the CLI Cleanup path so it runs on normal exit and on signal
 // termination.
 func RunPendingSave() {
+	defer perf.Track(nil, "cache.RunPendingSave")()
+
 	pendingSaveMu.Lock()
 	manager := pendingSave
 	pendingSave = nil
