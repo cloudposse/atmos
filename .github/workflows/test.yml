@@ -264,6 +264,15 @@ jobs:
           fail_ci_if_error: true
           flags: unittests
           verbose: true
+          # Install the Codecov CLI from PyPI instead of cli.codecov.io. The
+          # default path fetches Codecov's GPG public key from Keybase
+          # (https://keybase.io/codecovsecurity/pgp_keys.asc) to verify the CLI
+          # binary; that URL is currently returning 404 ("SELF-SIGNED PUBLIC KEY
+          # NOT FOUND"), so the import yields "no valid OpenPGP data found" and
+          # the run fails with "Could not verify signature". The PyPI path avoids
+          # the broken keyserver fetch. See codecov/codecov-action#1955. Safe to
+          # remove once Codecov restores the Keybase key.
+          use_pypi: true
 
   docker:
     name: "[lint] Dockerfile"
