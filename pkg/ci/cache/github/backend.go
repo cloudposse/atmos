@@ -2,9 +2,14 @@
 // cache (Cache Service v2). It speaks the Twirp JSON API at ACTIONS_RESULTS_URL
 // (authenticated with ACTIONS_RUNTIME_TOKEN) for save/restore, uploads/downloads
 // content through the returned Azure Blob SAS URLs, and uses the public REST
-// caches API for list/delete. Because the runtime token and results URL are only
-// present inside a GitHub Actions runner, NewBackend returns
-// errUtils.ErrCacheUnavailable elsewhere.
+// caches API for list/delete.
+//
+// Save/restore of content require the Actions runtime token and results URL,
+// which are only present inside a GitHub Actions runner; outside a runner those
+// operations return errUtils.ErrCacheUnavailable. List/delete are pure cache
+// administration over the public REST API and work anywhere a GitHub token and
+// the repository (owner/repo) can be resolved, so NewBackend constructs an
+// admin-capable backend even outside a runner.
 package github
 
 import (
@@ -27,7 +32,9 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/ci/cache"
+	"github.com/cloudposse/atmos/pkg/git"
 	ghtoken "github.com/cloudposse/atmos/pkg/github"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
@@ -123,18 +130,19 @@ type Backend struct {
 	version    string
 }
 
-// NewBackend constructs the GitHub Actions cache backend. It requires running
-// inside a GitHub Actions runner (ACTIONS_RUNTIME_TOKEN + ACTIONS_RESULTS_URL).
+// NewBackend constructs the GitHub Actions cache backend.
+//
+// List/delete (cache administration) work anywhere: they use the public REST
+// caches API authenticated with an ordinary GitHub token and the repository's
+// owner/repo (resolved from GITHUB_REPOSITORY or the local git remote). Save and
+// restore of content additionally require the Actions runtime token and results
+// URL (ACTIONS_RUNTIME_TOKEN + ACTIONS_RESULTS_URL), which are only present
+// inside a GitHub Actions runner; when they are absent the returned backend has
+// no runtime client and Save/Restore report errUtils.ErrCacheUnavailable.
 func NewBackend(opts cache.Options) (cache.Backend, error) {
 	defer perf.Track(opts.AtmosConfig, "githubcache.NewBackend")()
 
-	runtimeToken := os.Getenv("ACTIONS_RUNTIME_TOKEN")
-	resultsURL := os.Getenv("ACTIONS_RESULTS_URL")
-	if runtimeToken == "" || resultsURL == "" {
-		return nil, fmt.Errorf("%w: GitHub Actions cache requires ACTIONS_RUNTIME_TOKEN and ACTIONS_RESULTS_URL (only present inside a runner)", errUtils.ErrCacheUnavailable)
-	}
-
-	owner, repo := repoFromEnv(opts.Options)
+	owner, repo := resolveOwnerRepo(opts.Options)
 
 	// Resolve the GitHub token for the REST list/delete operations using the
 	// canonical Atmos resolver, so the cache respects the same precedence as the
@@ -147,15 +155,34 @@ func NewBackend(opts cache.Options) (cache.Backend, error) {
 	sum := sha256.Sum256([]byte(cacheVersionSalt))
 	version := hex.EncodeToString(sum[:])
 
-	return &Backend{
-		client:     newTwirpClient(resultsURL, runtimeToken),
+	b := &Backend{
 		blobClient: &http.Client{Timeout: blobTimeout},
 		restClient: restClient,
 		baseURL:    "https://api.github.com",
 		owner:      owner,
 		repo:       repo,
 		version:    version,
-	}, nil
+	}
+
+	// The runtime client (used only by save/restore) is available solely inside a
+	// runner. When the token/URL are absent, leave it nil so the admin operations
+	// (list/delete) still work; Save/Restore guard on the nil client.
+	runtimeToken := os.Getenv("ACTIONS_RUNTIME_TOKEN")
+	resultsURL := os.Getenv("ACTIONS_RESULTS_URL")
+	if runtimeToken != "" && resultsURL != "" {
+		b.client = newTwirpClient(resultsURL, runtimeToken)
+	}
+
+	return b, nil
+}
+
+// errRuntimeUnavailable builds the error returned when a save/restore operation
+// is attempted outside a GitHub Actions runner (no runtime cache client).
+func errRuntimeUnavailable() error {
+	return errUtils.Build(errUtils.ErrCacheUnavailable).
+		WithExplanation("Saving and restoring cache content runs only inside a GitHub Actions runner").
+		WithHint("ACTIONS_RUNTIME_TOKEN and ACTIONS_RESULTS_URL are only set inside a runner; use `atmos ci cache list` and `atmos ci cache delete` to administer the cache locally").
+		Err()
 }
 
 // Name returns the backend type name.
@@ -168,6 +195,10 @@ func (b *Backend) Name() string {
 // Save uploads data under key. Returns ErrCacheAlreadyExists when the key exists.
 func (b *Backend) Save(ctx context.Context, key string, data io.Reader, size int64) error {
 	defer perf.Track(nil, "githubcache.Save")()
+
+	if b.client == nil {
+		return errRuntimeUnavailable()
+	}
 
 	createResp, err := b.client.CreateCacheEntry(ctx, &createCacheEntryRequest{Key: key, Version: b.version})
 	if err != nil {
@@ -200,6 +231,10 @@ func (b *Backend) Save(ctx context.Context, key string, data io.Reader, size int
 // ErrCacheNotFound when nothing matches.
 func (b *Backend) Restore(ctx context.Context, key string, restoreKeys []string) (string, io.ReadCloser, error) {
 	defer perf.Track(nil, "githubcache.Restore")()
+
+	if b.client == nil {
+		return "", nil, errRuntimeUnavailable()
+	}
 
 	resp, err := b.client.GetCacheEntryDownloadURL(ctx, &getCacheEntryDownloadURLRequest{
 		Key:         key,
@@ -459,6 +494,42 @@ func newRESTClient(token string) *http.Client {
 	client := oauth2.NewClient(context.Background(), ts)
 	client.Timeout = httpTimeout
 	return client
+}
+
+// resolveOwnerRepo resolves owner/repo from options/GITHUB_REPOSITORY, falling
+// back to the local git remote (a github.com repository) when neither is set.
+// The git fallback is what lets `atmos ci cache list`/`delete` administer the
+// cache locally, outside a runner where GITHUB_REPOSITORY is unset.
+func resolveOwnerRepo(options map[string]any) (string, string) {
+	defer perf.Track(nil, "githubcache.resolveOwnerRepo")()
+
+	owner, repo := repoFromEnv(options)
+	if owner != "" && repo != "" {
+		return owner, repo
+	}
+	return ownerRepoFromLocalGit()
+}
+
+// ownerRepoFromLocalGit resolves owner/repo from the local git remote when the
+// remote is hosted on github.com. It returns empty strings on any failure
+// (not a git repo, no remote, non-github host); callers surface a friendly
+// error when owner/repo end up empty.
+func ownerRepoFromLocalGit() (string, string) {
+	repo, err := git.GetLocalRepo()
+	if err != nil {
+		log.Debug("CI cache: could not open local git repo for owner/repo resolution", "error", err)
+		return "", ""
+	}
+	info, err := git.GetRepoInfo(repo)
+	if err != nil {
+		log.Debug("CI cache: could not read local git remote for owner/repo resolution", "error", err)
+		return "", ""
+	}
+	if info.RepoHost != "github.com" {
+		log.Debug("CI cache: local git remote is not hosted on github.com", "host", info.RepoHost)
+		return "", ""
+	}
+	return info.RepoOwner, info.RepoName
 }
 
 // repoFromEnv resolves owner/repo from options or GITHUB_REPOSITORY.

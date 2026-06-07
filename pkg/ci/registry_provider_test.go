@@ -129,6 +129,50 @@ func TestDetectCache_CapableProvider(t *testing.T) {
 	assert.Same(t, want, got)
 }
 
+func TestResolveAdminCache_NoCacheProvider(t *testing.T) {
+	backup := testSaveAndClearRegistry()
+	defer testRestoreRegistry(backup)
+
+	// No cache-capable provider registered → unavailable.
+	_, err := ResolveAdminCache()
+	assert.True(t, errors.Is(err, errUtils.ErrCacheUnavailable))
+
+	// A registered, non-cache provider does not satisfy admin resolution.
+	Register(&mockProvider{name: "no-cache", detected: false})
+	_, err = ResolveAdminCache()
+	assert.True(t, errors.Is(err, errUtils.ErrCacheUnavailable))
+}
+
+func TestResolveAdminCache_FallsBackToUndetectedProvider(t *testing.T) {
+	backup := testSaveAndClearRegistry()
+	defer testRestoreRegistry(backup)
+
+	// A cache-capable provider that is NOT detected (e.g. github outside a runner)
+	// is still resolvable for administration (list/delete).
+	want := &fakeCacheBackend{}
+	Register(&cacheMockProvider{
+		mockProvider: mockProvider{name: "with-cache", detected: false},
+		backend:      want,
+	})
+	got, err := ResolveAdminCache()
+	assert.NoError(t, err)
+	assert.Same(t, want, got)
+}
+
+func TestResolveAdminCache_PrefersDetectedProvider(t *testing.T) {
+	backup := testSaveAndClearRegistry()
+	defer testRestoreRegistry(backup)
+
+	detected := &fakeCacheBackend{}
+	Register(&cacheMockProvider{
+		mockProvider: mockProvider{name: "detected-cache", detected: true},
+		backend:      detected,
+	})
+	got, err := ResolveAdminCache()
+	assert.NoError(t, err)
+	assert.Same(t, detected, got)
+}
+
 func TestDetect(t *testing.T) {
 	backup := testSaveAndClearRegistry()
 	defer testRestoreRegistry(backup)

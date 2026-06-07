@@ -5,6 +5,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/dustin/go-humanize"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
@@ -19,8 +20,14 @@ import (
 
 var cacheListParser *flags.StandardParser
 
-// tableHeaders defines the columns shown in table/csv/tsv output.
-var tableHeaders = []string{"Key", "Size", "Created"}
+// tableHeaders defines the columns shown in the human-readable (TTY) table.
+// Size and Age are humanized for readability.
+var tableHeaders = []string{"Key", "Size", "Age"}
+
+// delimitedHeaders defines the columns for the machine-readable CSV/TSV output.
+// These stay raw (exact bytes and an absolute timestamp) so the output is
+// pipeline-friendly.
+var delimitedHeaders = []string{"Key", "Size", "Created"}
 
 // cacheListCmd lists cache entries.
 var cacheListCmd = &cobra.Command{
@@ -50,7 +57,7 @@ func runCacheList(cmd *cobra.Command, _ []string) error {
 		return err
 	}
 
-	manager, _, err := cacheSetup(cmd, cacheOverrides{})
+	manager, _, err := cacheAdminSetup(cmd, cacheOverrides{})
 	if err != nil {
 		return err
 	}
@@ -121,14 +128,15 @@ func formatCacheOutput(entries []cachepkg.Entry, formatStr, delimiter string, ma
 	}
 }
 
-// buildCacheTableRows converts entries to string rows for the Key/Size/Created table.
+// buildCacheTableRows converts entries to string rows for the human-readable
+// Key/Size/Age table. Size and age are humanized (e.g. "1.5 GB", "2 hours ago").
 func buildCacheTableRows(entries []cachepkg.Entry) [][]string {
 	rows := make([][]string, 0, len(entries))
 	for _, e := range entries {
 		rows = append(rows, []string{
 			e.Key,
-			fmt.Sprintf("%d", e.Size),
-			formatCreatedAt(e.CreatedAt),
+			humanizeSize(e.Size),
+			humanizeAge(e.CreatedAt),
 		})
 	}
 	return rows
@@ -162,12 +170,13 @@ func buildCacheDataMap(rows []map[string]interface{}) map[string]interface{} {
 	return m
 }
 
-// buildCacheCSVTSV builds a delimited string (CSV or TSV) from entries.
+// buildCacheCSVTSV builds a delimited string (CSV or TSV) from entries. Output
+// stays raw (exact bytes and an absolute timestamp) for pipeline use.
 func buildCacheCSVTSV(entries []cachepkg.Entry, delimiter string) string {
 	var b strings.Builder
 	lineEnding := utils.GetLineEnding()
 	// Header row.
-	b.WriteString(strings.Join(tableHeaders, delimiter) + lineEnding)
+	b.WriteString(strings.Join(delimitedHeaders, delimiter) + lineEnding)
 	// Data rows.
 	for _, e := range entries {
 		b.WriteString(e.Key + delimiter +
@@ -183,6 +192,23 @@ func formatCreatedAt(t time.Time) string {
 		return ""
 	}
 	return t.Format("2006-01-02 15:04:05")
+}
+
+// humanizeSize formats a byte count as a human-readable string (e.g. "1.5 GB").
+func humanizeSize(b int64) string {
+	if b < 0 {
+		return fmt.Sprintf("%d", b)
+	}
+	return humanize.Bytes(uint64(b))
+}
+
+// humanizeAge formats a timestamp as a human-readable relative age (e.g.
+// "2 hours ago"). It returns an empty string for the zero time.
+func humanizeAge(t time.Time) string {
+	if t.IsZero() {
+		return ""
+	}
+	return humanize.Time(t)
 }
 
 func init() {

@@ -18,6 +18,10 @@ List CI cache entries, optionally filtered by key prefix. Newest entries are lis
 
 <Experimental/>
 
+:::info Runs locally
+`list` administers the cache over the provider's public API (the GitHub Actions caches REST API), so it works from your workstation as well as inside CI — you do not need to be running in a CI runner. It only needs a GitHub token (`GITHUB_TOKEN` / `ATMOS_GITHUB_TOKEN`, or `gh auth login`) and a GitHub repository (resolved from `GITHUB_REPOSITORY` or your local `git` remote). This is in contrast to [`save`](/cli/commands/ci/cache/save) and [`restore`](/cli/commands/ci/cache/restore), which transfer cache content and run only inside a runner.
+:::
+
 <ActionCard title="Configure the CI Cache">
     Configure the cache in your `atmos.yaml`.
     <div>
@@ -45,6 +49,10 @@ atmos ci cache list --key="atmos-cache-linux-"
 # JSON output for scripting
 atmos ci cache list --format=json
 ```
+
+## Output
+
+In an interactive terminal, the `table` format shows a human-readable **Size** (e.g. `1.5 GB`) and **Age** (e.g. `2 hours ago`) for each entry. The machine-readable formats (`json`, `yaml`, `csv`, `tsv`) — and the `table` format when piped — keep the raw byte count and an absolute timestamp so the output stays easy to parse in scripts.
 
 ## Flags
 

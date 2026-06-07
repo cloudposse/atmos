@@ -112,6 +112,24 @@ func TestRepoFromEnv(t *testing.T) {
 	})
 }
 
+func TestResolveOwnerRepo(t *testing.T) {
+	// Options take precedence and short-circuit the git fallback.
+	t.Run("from options", func(t *testing.T) {
+		t.Setenv("GITHUB_REPOSITORY", "")
+		owner, repo := resolveOwnerRepo(map[string]any{"owner": "o", "repo": "r"})
+		assert.Equal(t, "o", owner)
+		assert.Equal(t, "r", repo)
+	})
+
+	// GITHUB_REPOSITORY is used when options are absent.
+	t.Run("from GITHUB_REPOSITORY", func(t *testing.T) {
+		t.Setenv("GITHUB_REPOSITORY", "envowner/envrepo")
+		owner, repo := resolveOwnerRepo(nil)
+		assert.Equal(t, "envowner", owner)
+		assert.Equal(t, "envrepo", repo)
+	})
+}
+
 func TestNewRESTClient(t *testing.T) {
 	// Empty token returns a plain client.
 	plain := newRESTClient("")

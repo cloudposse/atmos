@@ -101,11 +101,20 @@ func newStubSetup(t *testing.T, key string) (*fakeBackend, *cachepkg.Config) {
 	fake := newFakeBackend()
 	mgr := cachepkg.NewManager(fake, cfg)
 
-	orig := cacheSetup
-	t.Cleanup(func() { cacheSetup = orig })
-	cacheSetup = func(_ *cobra.Command, _ cacheOverrides) (*cachepkg.Manager, *cachepkg.Config, error) {
+	// Stub both setup seams so the same fake manager is used whether a command
+	// takes the in-runner path (save/restore → cacheSetup) or the admin path
+	// (list/delete → cacheAdminSetup).
+	origSetup := cacheSetup
+	origAdmin := cacheAdminSetup
+	t.Cleanup(func() {
+		cacheSetup = origSetup
+		cacheAdminSetup = origAdmin
+	})
+	stub := func(_ *cobra.Command, _ cacheOverrides) (*cachepkg.Manager, *cachepkg.Config, error) {
 		return mgr, cfg, nil
 	}
+	cacheSetup = stub
+	cacheAdminSetup = stub
 	return fake, cfg
 }
 
@@ -298,10 +307,10 @@ func TestRunCacheList_InvalidFormat(t *testing.T) {
 }
 
 func TestRunCacheList_SetupError(t *testing.T) {
-	orig := cacheSetup
-	t.Cleanup(func() { cacheSetup = orig })
+	orig := cacheAdminSetup
+	t.Cleanup(func() { cacheAdminSetup = orig })
 	wantErr := errUtils.ErrCacheUnavailable
-	cacheSetup = func(_ *cobra.Command, _ cacheOverrides) (*cachepkg.Manager, *cachepkg.Config, error) {
+	cacheAdminSetup = func(_ *cobra.Command, _ cacheOverrides) (*cachepkg.Manager, *cachepkg.Config, error) {
 		return nil, nil, wantErr
 	}
 	err := runCacheList(cacheListCmd, nil)

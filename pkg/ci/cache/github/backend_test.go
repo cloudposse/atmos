@@ -168,11 +168,22 @@ func TestBackend_ListAndDelete(t *testing.T) {
 	require.NoError(t, b.Delete(context.Background(), "atmos-cache-a"))
 }
 
-func TestNewBackend_UnavailableOutsideRunner(t *testing.T) {
+func TestNewBackend_AdminCapableOutsideRunner(t *testing.T) {
+	// Outside a runner (no runtime token/URL), NewBackend still constructs an
+	// admin-capable backend so list/delete work; only save/restore are gated.
 	t.Setenv("ACTIONS_RUNTIME_TOKEN", "")
 	t.Setenv("ACTIONS_RESULTS_URL", "")
+	t.Setenv("GITHUB_REPOSITORY", "octo/cat")
 
-	_, err := NewBackend(cache.Options{})
+	b, err := NewBackend(cache.Options{})
+	require.NoError(t, err)
+	require.NotNil(t, b)
+
+	// Save and restore report the cache as unavailable without a runtime client.
+	err = b.Save(context.Background(), "k1", strings.NewReader("x"), 1)
+	require.ErrorIs(t, err, errUtils.ErrCacheUnavailable)
+
+	_, _, err = b.Restore(context.Background(), "k1", nil)
 	require.ErrorIs(t, err, errUtils.ErrCacheUnavailable)
 }
 

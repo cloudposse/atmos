@@ -112,9 +112,17 @@ A single deterministic version (SHA-256 of a namespace constant) is used for all
 caches so restore-key prefix matching works across entries. A format change bumps the
 namespace to invalidate old caches without key collisions.
 
-**Provider-determined availability.** The GitHub backend requires the runtime
-token/results URL and is therefore runtime-scoped. Outside a runner the capability returns
-`ErrCacheUnavailable` and all hooks/commands degrade to clear no-ops.
+**Provider-determined availability — split by operation.** Saving and restoring cache
+*content* go through the runtime cache API (Twirp) and require `ACTIONS_RUNTIME_TOKEN` +
+`ACTIONS_RESULTS_URL`, which exist only inside a runner; outside a runner `save`/`restore`
+and the automatic lifecycle hooks degrade to clear `ErrCacheUnavailable` no-ops. Cache
+*administration* (`list`/`delete`) uses the public REST caches API with an ordinary GitHub
+token and so works from a workstation too: `NewBackend` builds an admin-capable backend
+whenever a token + repository (from `GITHUB_REPOSITORY` or the local `git` remote) are
+resolvable, and the runtime client is built lazily — only `Save`/`Restore` require it.
+`ci.ResolveAdminCache` resolves the cache-capable provider for admin commands without
+requiring the provider to be the actively-detected one (the github provider registers
+unconditionally; `Detect()` still gates the in-runner lifecycle on `GITHUB_ACTIONS`).
 
 **Reuse over duplication.** Archive uses `compress/gzip` + `archive/tar`; blob transfer
 mirrors the artifact `runtimeUploader` (single-PUT BlockBlob); REST list/delete use the

@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/dustin/go-humanize"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -27,8 +28,28 @@ func TestFormatCreatedAt(t *testing.T) {
 func TestBuildCacheTableRows(t *testing.T) {
 	rows := buildCacheTableRows(sampleEntries())
 	require.Len(t, rows, 2)
-	assert.Equal(t, []string{"atmos-a", "10", "2024-01-02 03:04:05"}, rows[0])
-	assert.Equal(t, []string{"atmos-b", "20", ""}, rows[1])
+
+	// Key and humanized size are deterministic; age is relative to now, so assert
+	// only that a dated entry yields a non-empty age and a zero-time entry yields "".
+	assert.Equal(t, "atmos-a", rows[0][0])
+	assert.Equal(t, humanize.Bytes(10), rows[0][1])
+	assert.NotEmpty(t, rows[0][2])
+
+	assert.Equal(t, "atmos-b", rows[1][0])
+	assert.Equal(t, humanize.Bytes(20), rows[1][1])
+	assert.Empty(t, rows[1][2])
+}
+
+func TestHumanizeSize(t *testing.T) {
+	assert.Equal(t, humanize.Bytes(0), humanizeSize(0))
+	assert.Equal(t, humanize.Bytes(1500000), humanizeSize(1_500_000))
+	// Negative sizes (should not occur) fall back to the raw integer.
+	assert.Equal(t, "-1", humanizeSize(-1))
+}
+
+func TestHumanizeAge(t *testing.T) {
+	assert.Empty(t, humanizeAge(time.Time{}))
+	assert.NotEmpty(t, humanizeAge(time.Date(2024, 1, 2, 3, 4, 5, 0, time.UTC)))
 }
 
 func TestBuildCacheFullRows(t *testing.T) {

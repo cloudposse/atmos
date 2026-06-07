@@ -94,11 +94,12 @@ var resolveCacheConfig = func(cmd *cobra.Command, overrides cacheOverrides) (*ca
 	return cachepkg.ResolveConfig(&atmosConfig)
 }
 
-// cacheSetup resolves the cache configuration and additionally detects the
-// provider's cache backend, returning a ready Manager. It is shared by the
-// restore/save/list/delete subcommands and the automatic lifecycle hooks so
-// they operate on identical inputs. It is a package-level var so tests can stub
-// it to exercise the command bodies without a live CI runner.
+// cacheSetup resolves the cache configuration and detects the active CI
+// provider's cache backend, returning a ready Manager. It is the in-runner path
+// used by the save/restore subcommands: it requires an actively-detected CI
+// provider, so running `atmos ci cache save`/`restore` outside a runner reports a
+// clear, actionable error. It is a package-level var so tests can stub it to
+// exercise the command bodies without a live CI runner.
 var cacheSetup = func(cmd *cobra.Command, overrides cacheOverrides) (*cachepkg.Manager, *cachepkg.Config, error) {
 	resolved, err := resolveCacheConfig(cmd, overrides)
 	if err != nil {
@@ -108,8 +109,30 @@ var cacheSetup = func(cmd *cobra.Command, overrides cacheOverrides) (*cachepkg.M
 	backend, err := cipkg.DetectCache()
 	if err != nil {
 		return nil, nil, errUtils.Build(errUtils.ErrCacheUnavailable).
-			WithExplanation("No CI provider with a cache backend was detected").
-			WithHint("The cache requires running inside a supported CI provider (e.g. GitHub Actions)").
+			WithExplanation("Saving and restoring cache content runs only inside a supported CI runner (e.g. GitHub Actions)").
+			WithHint("Run save/restore from a CI workflow; to manage the cache from your workstation use `atmos ci cache list` and `atmos ci cache delete`").
+			Err()
+	}
+
+	return cachepkg.NewManager(backend, resolved), resolved, nil
+}
+
+// cacheAdminSetup resolves the cache configuration and an admin-capable cache
+// backend (list/delete) that works outside a CI runner. Cache administration
+// uses the provider's public API plus a token, so it must be usable locally —
+// it does not require an active CI runtime. It is shared by the list/delete
+// subcommands and is a package-level var so tests can stub it.
+var cacheAdminSetup = func(cmd *cobra.Command, overrides cacheOverrides) (*cachepkg.Manager, *cachepkg.Config, error) {
+	resolved, err := resolveCacheConfig(cmd, overrides)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	backend, err := cipkg.ResolveAdminCache()
+	if err != nil {
+		return nil, nil, errUtils.Build(errUtils.ErrCacheUnavailable).
+			WithExplanation("No cache-capable CI provider could be resolved for this repository").
+			WithHint("Run inside a GitHub repository with a token available (GITHUB_TOKEN/ATMOS_GITHUB_TOKEN or `gh auth login`) so the cache can be administered").
 			Err()
 	}
 

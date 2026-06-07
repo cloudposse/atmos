@@ -18,6 +18,10 @@ Delete a CI cache entry by its exact key. Deleting a key that does not exist is 
 
 <Experimental/>
 
+:::info Runs locally
+Like [`list`](/cli/commands/ci/cache/list), `delete` administers the cache over the provider's public API and works from your workstation as well as inside CI. It needs a GitHub token (`GITHUB_TOKEN` / `ATMOS_GITHUB_TOKEN`, or `gh auth login`) and a GitHub repository (resolved from `GITHUB_REPOSITORY` or your local `git` remote).
+:::
+
 <ActionCard title="Configure the CI Cache">
     Configure the cache in your `atmos.yaml`.
     <div>

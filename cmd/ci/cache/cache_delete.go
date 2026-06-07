@@ -35,7 +35,7 @@ func runCacheDelete(cmd *cobra.Command, _ []string) error {
 			Err()
 	}
 
-	manager, _, err := cacheSetup(cmd, cacheOverrides{})
+	manager, _, err := cacheAdminSetup(cmd, cacheOverrides{})
 	if err != nil {
 		return err
 	}

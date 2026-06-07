@@ -55,12 +55,16 @@ func TestProvider_Name(t *testing.T) {
 }
 
 func TestProvider_Cache(t *testing.T) {
-	t.Run("unavailable outside a runner", func(t *testing.T) {
+	t.Run("returns an admin-capable backend outside a runner", func(t *testing.T) {
+		// Outside a runner the backend is still constructed so cache
+		// administration (list/delete) works; only save/restore are gated.
 		t.Setenv("ACTIONS_RUNTIME_TOKEN", "")
 		t.Setenv("ACTIONS_RESULTS_URL", "")
+		t.Setenv("GITHUB_REPOSITORY", "octo/cat")
 		p := NewProvider()
-		_, err := p.Cache()
-		require.Error(t, err)
+		backend, err := p.Cache()
+		require.NoError(t, err)
+		assert.Equal(t, "github/actions", backend.Name())
 	})
 
 	t.Run("returns a backend inside a runner", func(t *testing.T) {
