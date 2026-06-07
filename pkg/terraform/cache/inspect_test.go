@@ -2,6 +2,7 @@ package cache
 
 import (
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -9,6 +10,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	errUtils "github.com/cloudposse/atmos/errors"
 )
 
 // seedObject writes a cache object and its sidecar under root.
@@ -95,6 +98,39 @@ func TestDelete(t *testing.T) {
 	assert.True(t, os.IsNotExist(err))
 	// Idempotent.
 	assert.NoError(t, Delete(root, key))
+}
+
+// TestDelete_RejectsNonArtifactKeys proves Delete enforces the same artifact-only
+// contract as List/Prune: user-supplied keys can never remove proxy infrastructure
+// (the TLS cert under tls/) or escape the cache root via traversal. Without the guard,
+// `atmos terraform cache delete tls/proxy.pem` would break the cache's TLS state.
+func TestDelete_RejectsNonArtifactKeys(t *testing.T) {
+	root := t.TempDir()
+	// Proxy TLS material that must never be deletable through Delete.
+	seedObject(t, root, "tls/proxy.pem", 4096, "", time.Now())
+
+	rejected := []string{
+		"tls/proxy.pem", // non-artifact infrastructure.
+		"objects/stray", // outside providers/ and modules/.
+		"../escape",     // path traversal.
+		"..",            // path traversal.
+	}
+	for _, key := range rejected {
+		err := Delete(root, key)
+		require.Error(t, err, "Delete(%q) must be rejected", key)
+		assert.ErrorIs(t, err, errUtils.ErrInvalidConfig)
+	}
+
+	// The TLS cert must still be on disk after the rejected delete.
+	_, statErr := os.Stat(filepath.Join(root, "tls", "proxy.pem"))
+	assert.NoError(t, statErr, "tls/ material must not be removed by Delete")
+
+	// A valid artifact key is still deletable (negative-path complement).
+	validKey := "providers/registry.terraform.io/hashicorp/aws/index.json"
+	seedObject(t, root, validKey, 100, "metadata", time.Now())
+	require.NoError(t, Delete(root, validKey))
+	_, statErr = os.Stat(filepath.Join(root, filepath.FromSlash(validKey)))
+	assert.True(t, errors.Is(statErr, os.ErrNotExist))
 }
 
 func TestPrune_RetainsArtifactsByDefault(t *testing.T) {

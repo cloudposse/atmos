@@ -31,7 +31,7 @@ var listCmd = &cobra.Command{
 		}
 		format := v.GetString("format")
 
-		root, err := resolveCacheRoot()
+		root, err := resolveCacheRoot(cmd)
 		if err != nil {
 			return err
 		}

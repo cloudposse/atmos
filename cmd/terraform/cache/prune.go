@@ -43,7 +43,7 @@ artifacts (provider zips, module archives) are kept unless --all is given.`,
 		includeArtifacts := v.GetBool("all")
 		dryRun := v.GetBool("dry-run")
 
-		root, err := resolveCacheRoot()
+		root, err := resolveCacheRoot(cmd)
 		if err != nil {
 			return err
 		}

@@ -8,7 +8,6 @@ package mirror
 import (
 	"bytes"
 	"fmt"
-	"os"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/progress"
@@ -18,6 +17,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/internal/tui/templates/term"
+	"github.com/cloudposse/atmos/pkg/io"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	tfcache "github.com/cloudposse/atmos/pkg/terraform/cache"
@@ -304,9 +304,11 @@ func executeMirrorModel(targets []Target, args []string, cacheSetup *tfcache.Set
 
 	// In TTY mode the TUI owns the screen, so suppress mid-render UI writes (e.g. the
 	// per-component toolchain "Using ..." line) that would corrupt the sticky spinner.
-	// The proxy "listening"/"cert" lines are emitted once before this, by the caller.
+	// This scopes the suppression to the pkg/io UI stream only — os.Stderr, the logger,
+	// and other goroutines' direct stderr writes are untouched. The proxy
+	// "listening"/"cert" lines are emitted once before this, by the caller.
 	if isTTY {
-		restore := suppressStderr()
+		restore := io.SuppressUI()
 		defer restore()
 	}
 
@@ -331,21 +333,4 @@ func executeMirrorModel(targets []Target, args []string, cacheSetup *tfcache.Set
 			Err()
 	}
 	return nil
-}
-
-// suppressStderr temporarily redirects os.Stderr to the null device, returning a
-// restore func. The io layer's RawError() returns os.Stderr live, so this silences
-// ui.* writes for the duration. TTY-only — the non-TTY path needs stderr for its
-// per-item log lines.
-func suppressStderr() func() {
-	old := os.Stderr
-	devnull, err := os.OpenFile(os.DevNull, os.O_WRONLY, 0)
-	if err != nil {
-		return func() {}
-	}
-	os.Stderr = devnull
-	return func() {
-		os.Stderr = old
-		_ = devnull.Close()
-	}
 }

@@ -68,6 +68,17 @@ Providers are stored in the canonical `filesystem_mirror` layout, so the on-disk
 atmos terraform cache <subcommand> [flags]
 ```
 
+## Flags
+
+`cache` is a parent command group and has no flags of its own. Each subcommand documents its own flags.
+
+<dl>
+  <dt>No command-specific flags</dt>
+  <dd>
+    Run one of the subcommands below (`list`, `stats`, `prune`, `delete`, `mirror`, `trust`, `untrust`); each page documents its own flags. Atmos global flags (`--base-path`, `--config`, `--config-path`, `--profile`) are honored and select which configuration resolves the cache location.
+  </dd>
+</dl>
+
 ## Subcommands
 
 <DocCardList />

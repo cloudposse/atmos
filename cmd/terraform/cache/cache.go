@@ -6,10 +6,13 @@ import (
 	"encoding/json"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 	"gopkg.in/yaml.v3"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/data"
+	"github.com/cloudposse/atmos/pkg/flags"
+	"github.com/cloudposse/atmos/pkg/flags/global"
 	"github.com/cloudposse/atmos/pkg/schema"
 	tfcache "github.com/cloudposse/atmos/pkg/terraform/cache"
 )
@@ -50,10 +53,32 @@ func GetCacheCommand() *cobra.Command {
 	return cacheCmd
 }
 
-// resolveCacheRoot loads the Atmos config and resolves the cache root.
-func resolveCacheRoot() (string, error) {
-	configInfo := schema.ConfigAndStacksInfo{}
-	atmosConfig, err := cfg.InitCliConfig(configInfo, false)
+// buildConfigAndStacksInfo builds a ConfigAndStacksInfo from the global selection
+// flags (--base-path, --config, --config-path, --profile) so they are honored when
+// initializing the CLI config. Without this, cfg.InitCliConfig receives an empty
+// struct and silently ignores those flags.
+func buildConfigAndStacksInfo(cmd *cobra.Command) schema.ConfigAndStacksInfo {
+	globalFlags := flags.ParseGlobalFlags(cmd, viper.GetViper())
+	return configAndStacksInfoFromGlobalFlags(&globalFlags)
+}
+
+// configAndStacksInfoFromGlobalFlags maps parsed global flags onto ConfigAndStacksInfo.
+func configAndStacksInfoFromGlobalFlags(globalFlags *global.Flags) schema.ConfigAndStacksInfo {
+	if globalFlags == nil {
+		return schema.ConfigAndStacksInfo{}
+	}
+	return schema.ConfigAndStacksInfo{
+		AtmosBasePath:           globalFlags.BasePath,
+		AtmosConfigFilesFromArg: globalFlags.Config,
+		AtmosConfigDirsFromArg:  globalFlags.ConfigPath,
+		ProfilesFromArg:         globalFlags.Profile,
+	}
+}
+
+// resolveCacheRoot loads the Atmos config (honoring global selection flags) and
+// resolves the cache root.
+func resolveCacheRoot(cmd *cobra.Command) (string, error) {
+	atmosConfig, err := cfg.InitCliConfig(buildConfigAndStacksInfo(cmd), false)
 	if err != nil {
 		return "", err
 	}

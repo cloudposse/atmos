@@ -152,9 +152,21 @@ func Summarize(root string) (Summary, error) {
 func Delete(root, key string) error {
 	defer perf.Track(nil, "tfcache.Delete")()
 
-	objPath := filepath.Join(root, filepath.FromSlash(key))
+	// Enforce the same artifact-only contract as List/Prune: only provider and module
+	// objects are deletable. Reject path traversal and non-artifact keys (e.g. the
+	// proxy's tls/ certificate) so user-supplied keys can never remove cache
+	// infrastructure or escape the root.
+	normalized := filepath.ToSlash(filepath.Clean(filepath.FromSlash(key)))
+	if filepath.IsAbs(normalized) || normalized == ".." || strings.HasPrefix(normalized, "../") {
+		return fmt.Errorf("%w: invalid cache key %q", errUtils.ErrInvalidConfig, key)
+	}
+	if classifyGroup(normalized) == groupOther {
+		return fmt.Errorf("%w: unsupported cache key %q", errUtils.ErrInvalidConfig, key)
+	}
+
+	objPath := filepath.Join(root, filepath.FromSlash(normalized))
 	if err := os.Remove(objPath); err != nil && !os.IsNotExist(err) {
-		return fmt.Errorf("%w: deleting %q: %w", errUtils.ErrInvalidConfig, key, err)
+		return fmt.Errorf("%w: deleting %q: %w", errUtils.ErrInvalidConfig, normalized, err)
 	}
 	_ = os.Remove(objPath + metadataSuffix)
 	_ = os.Remove(objPath + lockSuffix)

@@ -21,7 +21,7 @@ shown by 'atmos terraform cache list'.`,
 		defer perf.Track(atmosConfigPtr, "cache.delete.RunE")()
 
 		key := args[0]
-		root, err := resolveCacheRoot()
+		root, err := resolveCacheRoot(cmd)
 		if err != nil {
 			return err
 		}

@@ -435,7 +435,11 @@ func configureTerraformRC(atmosConfig *schema.AtmosConfiguration, info *schema.C
 
 	if rcCfg := atmosConfig.Components.Terraform.RC; rcCfg != nil && rcCfg.Enabled {
 		for k, v := range rcCfg.Config {
-			rcMap[k] = v
+			// Deep-copy nested values: mergeCacheContribution mutates the "host" map in
+			// place, and a shallow copy would leak cache loopback overrides back into
+			// atmosConfig.Components.Terraform.RC.Config for later components/commands in
+			// the same process.
+			rcMap[k] = cloneRCValue(v)
 		}
 	}
 
@@ -483,6 +487,29 @@ func mergeCacheContribution(rcMap, contribution map[string]any) {
 			existing[host] = services
 		}
 		rcMap[hostKey] = existing
+	}
+}
+
+// cloneRCValue deep-copies a CLI-config value so callers can mutate the result without
+// affecting the source. Maps and slices are cloned recursively; scalars are returned
+// as-is. This protects atmosConfig.Components.Terraform.RC.Config from in-place mutation
+// when the registry cache contribution is merged.
+func cloneRCValue(v any) any {
+	switch val := v.(type) {
+	case map[string]any:
+		out := make(map[string]any, len(val))
+		for k, item := range val {
+			out[k] = cloneRCValue(item)
+		}
+		return out
+	case []any:
+		out := make([]any, len(val))
+		for i, item := range val {
+			out[i] = cloneRCValue(item)
+		}
+		return out
+	default:
+		return val
 	}
 }
 

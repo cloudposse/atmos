@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
@@ -336,7 +337,23 @@ func ListTerraformComponentTargets(atmosConfig *schema.AtmosConfiguration, filte
 	if walkErr != nil {
 		return nil, walkErr
 	}
+
+	// targets are built from map iteration, whose order varies across processes. Sort
+	// them so mirror execution order and --format json|yaml output are deterministic
+	// (and snapshot-stable).
+	sortComponentStacks(targets)
+
 	return targets, nil
+}
+
+// sortComponentStacks orders targets deterministically by stack, then component.
+func sortComponentStacks(targets []ComponentStack) {
+	sort.Slice(targets, func(i, j int) bool {
+		if targets[i].Stack != targets[j].Stack {
+			return targets[i].Stack < targets[j].Stack
+		}
+		return targets[i].Component < targets[j].Component
+	})
 }
 
 // mirrorTargetIncluded reports whether a component should be a mirror target: it must
