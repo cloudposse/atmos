@@ -2,6 +2,7 @@ package cache
 
 import (
 	"errors"
+	"path/filepath"
 	"testing"
 
 	"github.com/spf13/cobra"
@@ -46,7 +47,7 @@ func TestTrustUntrustArgs(t *testing.T) {
 
 func TestTrustCmd_NotRequired(t *testing.T) {
 	applyTrustSeams(t, trustSeams{
-		certPath: "/tmp/proxy.pem",
+		certPath: filepath.Join(t.TempDir(), "proxy.pem"),
 		required: false,
 		note:     "not required here",
 		installFn: func(string) error {
@@ -61,20 +62,21 @@ func TestTrustCmd_NotRequired(t *testing.T) {
 
 func TestTrustCmd_Success(t *testing.T) {
 	var got string
+	certPath := filepath.Join(t.TempDir(), "proxy.pem")
 	applyTrustSeams(t, trustSeams{
-		certPath:  "/tmp/proxy.pem",
+		certPath:  certPath,
 		required:  true,
 		installFn: func(p string) error { got = p; return nil },
 	})
 
 	cacheCmd.SetArgs([]string{"trust"})
 	require.NoError(t, cacheCmd.Execute())
-	assert.Equal(t, "/tmp/proxy.pem", got)
+	assert.Equal(t, certPath, got)
 }
 
 func TestTrustCmd_InstallErrorWrapsTrustStore(t *testing.T) {
 	applyTrustSeams(t, trustSeams{
-		certPath:  "/tmp/proxy.pem",
+		certPath:  filepath.Join(t.TempDir(), "proxy.pem"),
 		required:  true,
 		installFn: func(string) error { return errors.New("keychain denied") },
 	})
@@ -93,20 +95,21 @@ func TestTrustCmd_CertPathError(t *testing.T) {
 
 func TestUntrustCmd_Success(t *testing.T) {
 	var got string
+	certPath := filepath.Join(t.TempDir(), "proxy.pem")
 	applyTrustSeams(t, trustSeams{
-		certPath: "/tmp/proxy.pem",
+		certPath: certPath,
 		required: true,
 		removeFn: func(p string) error { got = p; return nil },
 	})
 
 	cacheCmd.SetArgs([]string{"untrust"})
 	require.NoError(t, cacheCmd.Execute())
-	assert.Equal(t, "/tmp/proxy.pem", got)
+	assert.Equal(t, certPath, got)
 }
 
 func TestUntrustCmd_RemoveErrorWrapsTrustStore(t *testing.T) {
 	applyTrustSeams(t, trustSeams{
-		certPath: "/tmp/proxy.pem",
+		certPath: filepath.Join(t.TempDir(), "proxy.pem"),
 		required: true,
 		removeFn: func(string) error { return errors.New("certutil failed") },
 	})
