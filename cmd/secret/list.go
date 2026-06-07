@@ -60,7 +60,7 @@ func runSecretList(cmd *cobra.Command, args []string) error {
 	verbose := v.GetBool("verbose")
 	outputFormat := format.Format(v.GetString(flagFormat))
 
-	svc, err := loadService(scope)
+	svc, err := loadServiceFn(scope)
 	if err != nil {
 		return err
 	}

@@ -45,7 +45,7 @@ func runSecretImport(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	svc, err := loadService(scope)
+	svc, err := loadServiceFn(scope)
 	if err != nil {
 		return err
 	}

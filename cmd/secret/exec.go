@@ -9,7 +9,6 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/perf"
-	"github.com/cloudposse/atmos/pkg/shell"
 )
 
 var execParser *flags.StandardParser
@@ -54,7 +53,7 @@ func runSecretExec(cmd *cobra.Command, _ []string) error {
 		return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrNoCommandSpecified, errUtils.ErrInvalidSubcommand)
 	}
 
-	svc, atmosConfig, err := loadServiceAndConfig(scope)
+	svc, atmosConfig, err := loadServiceAndConfigFn(scope)
 	if err != nil {
 		return err
 	}
@@ -64,7 +63,7 @@ func runSecretExec(cmd *cobra.Command, _ []string) error {
 		return err
 	}
 
-	return shell.RunCommand(commandArgs, env)
+	return runCommandFn(commandArgs, env)
 }
 
 // getSeparatedArgs returns the args after the "--" separator, using Cobra's

@@ -44,7 +44,7 @@ func runSecretPull(cmd *cobra.Command, args []string) error {
 	output, _ := cmd.Flags().GetString("output")
 	format, _ := cmd.Flags().GetString("format")
 
-	svc, err := loadService(scope)
+	svc, err := loadServiceFn(scope)
 	if err != nil {
 		return err
 	}

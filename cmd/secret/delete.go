@@ -46,7 +46,7 @@ func runSecretDelete(cmd *cobra.Command, args []string) error {
 
 	force, _ := cmd.Flags().GetBool("force")
 	if !force {
-		confirmed, confErr := confirmAction("Delete secret `" + name + "` from its backend?")
+		confirmed, confErr := confirmActionFn("Delete secret `" + name + "` from its backend?")
 		if confErr != nil {
 			return confErr
 		}
@@ -56,7 +56,7 @@ func runSecretDelete(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	svc, err := loadService(scope)
+	svc, err := loadServiceFn(scope)
 	if err != nil {
 		return err
 	}
@@ -73,7 +73,7 @@ func runSecretDelete(cmd *cobra.Command, args []string) error {
 func runSecretDeleteAll(cmd *cobra.Command, scope secretScope) error {
 	force, _ := cmd.Flags().GetBool("force")
 	if !force {
-		confirmed, confErr := confirmAction("Delete ALL declared secrets for component `" + scope.Component + "` in stack `" + scope.Stack + "`?")
+		confirmed, confErr := confirmActionFn("Delete ALL declared secrets for component `" + scope.Component + "` in stack `" + scope.Stack + "`?")
 		if confErr != nil {
 			return confErr
 		}
@@ -83,7 +83,7 @@ func runSecretDeleteAll(cmd *cobra.Command, scope secretScope) error {
 		}
 	}
 
-	svc, err := loadService(scope)
+	svc, err := loadServiceFn(scope)
 	if err != nil {
 		return err
 	}

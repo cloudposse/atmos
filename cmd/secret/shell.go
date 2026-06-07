@@ -67,7 +67,7 @@ func runSecretShell(cmd *cobra.Command, _ []string) error {
 	shellOverride := v.GetString(shellFlagName)
 	shellArgs := getSeparatedArgs(cmd)
 
-	svc, atmosConfig, err := loadServiceAndConfig(scope)
+	svc, atmosConfig, err := loadServiceAndConfigFn(scope)
 	if err != nil {
 		return err
 	}
@@ -89,7 +89,7 @@ func runSecretShell(cmd *cobra.Command, _ []string) error {
 		count, scope.Component, scope.Stack))
 
 	shellCommand, shellCommandArgs := shell.Determine(shellOverride, shellArgs)
-	runErr := shell.StartInteractive(shellCommand, shellCommandArgs, env)
+	runErr := startShellFn(shellCommand, shellCommandArgs, env)
 
 	ui.Info(fmt.Sprintf("Exited shell for component %q in stack %q.", scope.Component, scope.Stack))
 	return runErr

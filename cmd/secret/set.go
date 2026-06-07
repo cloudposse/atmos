@@ -55,7 +55,7 @@ func runSecretSet(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	svc, err := loadService(scope)
+	svc, err := loadServiceFn(scope)
 	if err != nil {
 		return err
 	}
@@ -80,5 +80,5 @@ func resolveSetValue(inlineValue string, hasInline, useStdin bool) (string, erro
 	if hasInline {
 		return inlineValue, nil
 	}
-	return promptForSecretValue()
+	return promptForValueFn()
 }

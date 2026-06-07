@@ -27,7 +27,7 @@ type secretEnvPair struct {
 // the operation (same behavior as `secret pull`). Secret values are registered
 // with the masker by svc.Get, so Atmos's own stderr stays masked — but values
 // handed to the child process are NOT masked in that child's output.
-func resolveSecretEnv(svc *secrets.Service, atmosConfig *schema.AtmosConfiguration) ([]string, int, error) {
+func resolveSecretEnv(svc secretService, atmosConfig *schema.AtmosConfiguration) ([]string, int, error) {
 	defer perf.Track(nil, "secret.resolveSecretEnv")()
 
 	// Declarations() is sorted, so the injected order is deterministic.

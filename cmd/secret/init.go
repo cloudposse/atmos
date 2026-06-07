@@ -5,7 +5,6 @@ import (
 
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/perf"
-	"github.com/cloudposse/atmos/pkg/secrets"
 	"github.com/cloudposse/atmos/pkg/ui"
 )
 
@@ -37,7 +36,7 @@ func runSecretInit(cmd *cobra.Command, args []string) error {
 	force, _ := cmd.Flags().GetBool("force")
 	dryRun, _ := cmd.Flags().GetBool("dry-run")
 
-	svc, err := loadService(scope)
+	svc, err := loadServiceFn(scope)
 	if err != nil {
 		return err
 	}
@@ -63,7 +62,7 @@ func runSecretInit(cmd *cobra.Command, args []string) error {
 
 // initDeclaredSecrets walks the declared secrets and provisions each that is missing (or all, with
 // force), prompting for values. In dry-run mode it only reports. Returns the count handled.
-func initDeclaredSecrets(svc *secrets.Service, force, dryRun bool) (int, error) {
+func initDeclaredSecrets(svc secretService, force, dryRun bool) (int, error) {
 	statuses := svc.Status()
 	initialized := 0
 	for i := range statuses {
@@ -78,7 +77,7 @@ func initDeclaredSecrets(svc *secrets.Service, force, dryRun bool) (int, error) 
 		}
 
 		ui.Infof("Initializing `%s` (%s)", st.Declaration.Name, backendLabel(&st.Declaration))
-		value, promptErr := promptForSecretValue()
+		value, promptErr := promptForValueFn()
 		if promptErr != nil {
 			return initialized, promptErr
 		}
@@ -93,7 +92,7 @@ func initDeclaredSecrets(svc *secrets.Service, force, dryRun bool) (int, error) 
 // offerKeygen detects vaults whose backend can generate key material but has none yet, and offers
 // to generate before the value-prompt loop. Backend-agnostic (any provider implementing the keygen
 // capability). In dry-run mode it only reports what it would generate.
-func offerKeygen(svc *secrets.Service, dryRun bool) error {
+func offerKeygen(svc secretService, dryRun bool) error {
 	missing, err := svc.VaultsMissingKeys()
 	if err != nil {
 		return err
@@ -103,7 +102,7 @@ func offerKeygen(svc *secrets.Service, dryRun bool) error {
 			ui.Infof("Would generate key material for vault `%s`", vault.Name)
 			continue
 		}
-		confirmed, confirmErr := confirmAction("Vault `" + vault.Name + "` has no key material. Generate it now?")
+		confirmed, confirmErr := confirmActionFn("Vault `" + vault.Name + "` has no key material. Generate it now?")
 		if confirmErr != nil {
 			return confirmErr
 		}
