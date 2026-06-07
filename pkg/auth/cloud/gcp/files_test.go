@@ -1,10 +1,13 @@
 package gcp
 
 import (
+	"context"
 	"encoding/json"
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -328,6 +331,82 @@ func TestWriteADCFile_Overwrite(t *testing.T) {
 	var parsed AuthorizedUserContent
 	require.NoError(t, json.Unmarshal(data, &parsed))
 	assert.Equal(t, "second-token", parsed.AccessToken)
+}
+
+func TestWriteADCFile_ConcurrentReadersNeverSeePartialJSON(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows atomic write fallback can briefly remove the target before rename")
+	}
+
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmp)
+
+	const (
+		providerName = "gcp-adc"
+		identityName = "concurrent-id"
+		writers      = 4
+		writes       = 8
+		readers      = 8
+		reads        = writers * writes * 4
+	)
+
+	_, err := WriteADCFile(testRealm, providerName, identityName, &AuthorizedUserContent{
+		Type:        "authorized_user",
+		AccessToken: "seed-token",
+		TokenExpiry: time.Now().Add(time.Hour).UTC().Format(time.RFC3339),
+	})
+	require.NoError(t, err)
+
+	start := make(chan struct{})
+	errCh := make(chan error, writers+readers)
+	var wg sync.WaitGroup
+
+	for writer := 0; writer < writers; writer++ {
+		wg.Add(1)
+		go func(writerID int) {
+			defer wg.Done()
+			<-start
+			for i := 0; i < writes; i++ {
+				token := strings.Repeat("x", 64*1024) + string(rune('a'+writerID)) + string(rune('0'+i))
+				_, writeErr := WriteADCFile(testRealm, providerName, identityName, &AuthorizedUserContent{
+					Type:        "authorized_user",
+					AccessToken: token,
+					TokenExpiry: time.Now().Add(time.Hour).UTC().Format(time.RFC3339),
+				})
+				if writeErr != nil {
+					errCh <- writeErr
+					return
+				}
+			}
+		}(writer)
+	}
+
+	for reader := 0; reader < readers; reader++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			<-start
+			for i := 0; i < reads; i++ {
+				creds, readErr := LoadCredentialsFromFiles(context.Background(), testRealm, providerName, identityName)
+				if readErr != nil {
+					errCh <- readErr
+					return
+				}
+				if creds == nil || creds.AccessToken == "" {
+					errCh <- assert.AnError
+					return
+				}
+			}
+		}()
+	}
+
+	close(start)
+	wg.Wait()
+	close(errCh)
+
+	for err := range errCh {
+		require.NoError(t, err)
+	}
 }
 
 func TestGetConfigDir_InvalidIdentity(t *testing.T) {
