@@ -260,6 +260,11 @@ jobs:
           fail_ci_if_error: true
           flags: unittests
           verbose: true
+          # Install the Codecov CLI from PyPI instead of cli.codecov.io. The
+          # default path fetches Codecov's GPG public key from Keybase, which is
+          # currently returning 404 ("SELF-SIGNED PUBLIC KEY NOT FOUND").
+          # See codecov/codecov-action#1955. Safe to remove once Codecov restores the key.
+          use_pypi: true
 
   docker:
     name: "[lint] Dockerfile"
