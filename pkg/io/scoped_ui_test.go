@@ -18,6 +18,7 @@ func TestPushUIWriter_RedirectsUIStream(t *testing.T) {
 
 	var buf bytes.Buffer
 	restore := PushUIWriter(&buf)
+	t.Cleanup(restore) // Guard against leaking the global override if a require below fails before restore().
 	require.NotNil(t, uiWriterOverride(), "override must be active")
 
 	require.NoError(t, ctx.Write(UIStream, "to-buffer"))
