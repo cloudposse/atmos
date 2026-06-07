@@ -1,77 +1,65 @@
 package registry
 
-import "strings"
+import (
+	"crypto/sha256"
+	"encoding/base64"
+	"encoding/hex"
+	"fmt"
 
-// archiveExtensions are the HTTP(S) archive suffixes the module mirror can cache.
-var archiveExtensions = []string{".tar.gz", ".tgz", ".tar.bz2", ".tar", ".zip"}
+	getter "github.com/hashicorp/go-getter"
+)
 
-// getterPrefixes are go-getter forced-protocol prefixes that the HTTP proxy cannot
-// cache (git, mercurial, object stores). These pass through unchanged.
-var getterPrefixes = []string{"git::", "hg::", "s3::", "gcs::", "git@", "ssh://"}
+// moduleSourceDigestLen is the hex-digest length used to key cached module sources.
+const moduleSourceDigestLen = 32
 
-// classifyXTerraformGet decides whether a module's X-Terraform-Get value is a plain
-// HTTP(S) archive the proxy can cache. It is deliberately conservative: anything with
-// a go-getter forced protocol, a git source, a "//" subdir selector, or a
-// non-archive target is treated as non-cacheable (passthrough) so behavior is
-// identical to no-cache. The git:: case — the common one for the public registry and
-// mono-repos — is completed later by the git mirror.
-func classifyXTerraformGet(value string) (archiveURL string, cacheable bool) {
-	v := strings.TrimSpace(value)
-	if v == "" || hasGetterPrefix(v) {
-		return "", false
-	}
+// sourceExt is the archive extension appended to the _source path so the Terraform-side
+// go-getter detects an archive and unpacks it. An extension is more reliable than the
+// ?archive= query param: go-getter forces file+decompress mode off the path suffix even
+// when the module installer requests directory mode (a bare URL would instead be parsed
+// as HTML looking for a <meta> redirect, which chokes on binary archive bytes). It must
+// be ".tar.gz" specifically — Terraform/OpenTofu's module installer registers a limited
+// decompressor set that includes tar.gz/tgz/zip but NOT a bare ".tar", so an uncompressed
+// tar is not recognized and falls through to the (failing) HTML path.
+const sourceExt = ".tar.gz"
 
-	scheme := schemeOf(v)
-	if scheme == "" {
-		return "", false
-	}
-
-	// A go-getter "//" subdir selector after the scheme means the archive contains a
-	// subdirectory to extract — not handled in V1; pass through.
-	if strings.Contains(v[len(scheme):], "//") {
-		return "", false
-	}
-
-	if !hasArchiveExtension(v) {
-		return "", false
-	}
-	return v, true
+// splitModuleSource separates a go-getter source string into its base source (forced
+// protocol + URL + query, e.g. "git::https://github.com/org/repo.git?ref=v1") and its
+// optional "//subdir" selector. It delegates to go-getter so the split matches exactly
+// what the Terraform-side go-getter does when it later reattaches the subdir.
+func splitModuleSource(source string) (base, subdir string) {
+	return getter.SourceDirSubdir(source)
 }
 
-// hasGetterPrefix reports whether v begins with a go-getter forced-protocol prefix.
-func hasGetterPrefix(v string) bool {
-	for _, p := range getterPrefixes {
-		if strings.HasPrefix(v, p) {
-			return true
-		}
+// moduleSourceProxyURL builds the X-Terraform-Get value that routes a module download
+// back through the proxy's _source sub-route. The base source (with its pinned ref) is
+// encoded into the path so the mirror can resolve it on a miss; any //subdir is
+// reattached so the Terraform-side go-getter extracts it from the unpacked tar. Because
+// the subdir is carried client-side and stripped from the cache key, a mono-repo
+// referenced by several modules at different subdirs is fetched and cached once.
+func moduleSourceProxyURL(proxyBaseURL, base, subdir string) string {
+	url := proxyBaseURL + "modules/" + moduleSourceSegment + "/" + encodeModuleSource(base) + sourceExt
+	if subdir != "" {
+		url += "//" + subdir
 	}
-	return false
+	return url
 }
 
-// schemeOf returns the HTTP(S) scheme prefix of v, or "" if it has none.
-func schemeOf(v string) string {
-	switch {
-	case strings.HasPrefix(v, "https://"):
-		return "https://"
-	case strings.HasPrefix(v, "http://"):
-		return "http://"
-	default:
-		return ""
-	}
+// encodeModuleSource encodes a base source string for use as a single URL path segment.
+func encodeModuleSource(base string) string {
+	return base64.RawURLEncoding.EncodeToString([]byte(base))
 }
 
-// hasArchiveExtension reports whether v (ignoring any query string) ends in a known
-// archive extension.
-func hasArchiveExtension(v string) bool {
-	pathPart := v
-	if i := strings.IndexByte(pathPart, '?'); i >= 0 {
-		pathPart = pathPart[:i]
+// decodeModuleSource reverses encodeModuleSource.
+func decodeModuleSource(encoded string) (string, error) {
+	raw, err := base64.RawURLEncoding.DecodeString(encoded)
+	if err != nil {
+		return "", fmt.Errorf("%w: undecodable source ref: %w", ErrInvalidModulePath, err)
 	}
-	lower := strings.ToLower(pathPart)
-	for _, ext := range archiveExtensions {
-		if strings.HasSuffix(lower, ext) {
-			return true
-		}
-	}
-	return false
+	return string(raw), nil
+}
+
+// moduleSourceDigest derives a stable cache-key digest from a base source string.
+func moduleSourceDigest(base string) string {
+	sum := sha256.Sum256([]byte(base))
+	return hex.EncodeToString(sum[:])[:moduleSourceDigestLen]
 }

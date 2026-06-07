@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/cloudposse/atmos/pkg/downloader"
 	httppkg "github.com/cloudposse/atmos/pkg/http"
 	"github.com/cloudposse/atmos/pkg/http/proxy"
 	log "github.com/cloudposse/atmos/pkg/logger"
@@ -24,7 +25,26 @@ import (
 const (
 	defaultMetadataTTL          = 24 * time.Hour
 	defaultStaleWhileRevalidate = 168 * time.Hour
+	// The moduleSourceFetchTimeout bounds a single module source resolution (git clone /
+	// archive download). Generous because a cold mono-repo clone can be large; the
+	// resolution is cached, so it is paid at most once per source.
+	moduleSourceFetchTimeout = 10 * time.Minute
 )
+
+// goGetterResolver adapts pkg/downloader's go-getter client to the module mirror's
+// registry.SourceResolver, so module sources resolve through the same getter — and the
+// same insteadOf/credential-broker plumbing — that Terraform itself uses.
+type goGetterResolver struct {
+	downloader downloader.FileDownloader
+}
+
+// Resolve fetches source into destDir. The downloader manages its own timeout, so the
+// context is accepted for interface compatibility but not threaded into go-getter.
+func (r goGetterResolver) Resolve(_ context.Context, source, destDir string) error {
+	defer perf.Track(nil, "tfcache.goGetterResolver.Resolve")()
+
+	return r.downloader.Fetch(source, destDir, downloader.ClientModeAny, moduleSourceFetchTimeout)
+}
 
 // publicModuleHosts are the registry hosts whose modules.v1 service the cache
 // overrides so module registry traffic routes through the proxy. Provider caching
@@ -93,9 +113,10 @@ func Start(ctx context.Context, atmosConfig *schema.AtmosConfiguration) (*Setup,
 
 	client := httppkg.NewDefaultClient(httppkg.WithGitHubToken(httppkg.GetGitHubTokenFromEnv()))
 	store := proxy.NewFileStore(root)
+	resolver := goGetterResolver{downloader: downloader.NewGoGetterDownloader(atmosConfig)}
 	mirrors := []proxy.Mirror{
 		registry.NewProviderMirror(client),
-		registry.NewModuleMirror(),
+		registry.NewModuleMirror(resolver),
 	}
 
 	server := proxy.NewServer(proxy.Options{

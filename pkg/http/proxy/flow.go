@@ -159,6 +159,12 @@ func (s *Server) servable(kind ArtifactKind, meta Meta) bool {
 // client. On a non-2xx upstream it buffers the response into a fillResult to replay
 // without caching. Runs under the per-key file lock.
 func (s *Server) fetchVerifyCommit(r *http.Request, route *Route) (fillResult, error) {
+	// Generated artifact: the mirror streams the body from an operation rather than a
+	// single upstream GET (e.g. taring a go-getter resolved module source tree).
+	if route.ProduceArtifact != nil {
+		return s.produceArtifactCommit(route)
+	}
+
 	// Composite metadata: the mirror produces the body from one or more propagated
 	// upstream calls (e.g. building a provider <version>.json).
 	if route.Produce != nil {
@@ -241,6 +247,31 @@ func (s *Server) produceCommit(r *http.Request, route *Route) (fillResult, error
 	return fillResult{cached: true}, nil
 }
 
+// produceArtifactCommit streams a mirror-generated artifact body into the cache as a
+// KindArtifact. It does not write to any client. Runs under the per-key file lock, so
+// the (potentially slow) generation — e.g. a git clone + tar — collapses the herd for
+// the key while never blocking serving of other keys.
+func (s *Server) produceArtifactCommit(route *Route) (fillResult, error) {
+	body, contentType, err := route.ProduceArtifact(s.baseCtx)
+	if err != nil {
+		return fillResult{}, err
+	}
+	defer body.Close()
+
+	meta, err := s.opts.Store.Commit(s.baseCtx, CommitRequest{
+		Key:         route.Key,
+		Data:        body,
+		Kind:        route.Kind,
+		ContentType: resolveContentType(route.ContentType, contentType),
+		Verify:      route.Verify,
+	})
+	if err != nil {
+		return fillResult{}, err
+	}
+	s.stats.RecordCached(meta.Size)
+	return fillResult{cached: true}, nil
+}
+
 // writeUpstreamResponse replays a non-cacheable upstream response (status, headers,
 // body) captured during the fill to a waiting client.
 func (s *Server) writeUpstreamResponse(w http.ResponseWriter, fr fillResult) {
@@ -309,6 +340,11 @@ func (s *Server) fetchUpstream(ctx context.Context, inbound *http.Request, route
 // It returns the number of bytes copied to the client and any copy error (which occurs
 // after the status line is sent, so it cannot change the response status).
 func (s *Server) writeObject(w http.ResponseWriter, route *Route, meta Meta, body io.Reader) (int64, error) {
+	if route.Serve != nil {
+		// The mirror renders the response from the cached object, rewriting any cached
+		// proxy URL to the current run's base (the ephemeral port changes per run).
+		return 0, route.Serve(w, body, s.baseURL)
+	}
 	if ct := resolveContentType(route.ContentType, meta.ContentType); ct != "" {
 		w.Header().Set("Content-Type", ct)
 	}

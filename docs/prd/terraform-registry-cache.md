@@ -22,11 +22,13 @@ and caches registry content on disk. It covers **both providers (via the Provide
 modules (via the module registry protocol)**. No Terraform code, provider declarations, or module sources
 change.
 
-The one thing explicitly **out of scope right now (but on our radar)** is a **git mirror**. This matters for
-modules: Terraform's module registry typically resolves a module's download to a `git::` source
-(`X-Terraform-Get`), and most mono-repo modules are git sources directly. The module registry mirror below
-caches the registry protocol and HTTP-served module archives now; caching the **git-sourced** module content
-(the mono-repo case) is the future git mirror.
+For **registry-sourced modules** (`source = "cloudposse/label/null"`), the module mirror below caches the
+download *whatever it resolves to* — including the common `git::` case. It rewrites `X-Terraform-Get` back
+through the proxy, resolves the source with the same go-getter Terraform uses, and caches it as a single tar
+artifact. The one thing explicitly **out of scope right now (but on our radar)** is a **git mirror** for
+modules sourced **directly** from git (`source = "git::https://…"` or `source = "github.com/org/repo"`):
+those bypass the registry protocol entirely, so the proxy never sees them. Caching that content reuses the
+same `GIT_CONFIG_*` `insteadOf` injection Atmos already has, and is the future git mirror.
 
 The design is intentionally broader than Terraform: a **generic caching proxy** is the core, with thin
 **registry-mirror adapters** on top. Terraform registry caching is simply the first consumer of a generic
@@ -88,8 +90,9 @@ Upstream registry (registry.terraform.io / registry.opentofu.org)
    Dynamic localhost port, no persistent daemon; the cache persists on disk after the process exits.
 2. **Provider registry mirror** — an adapter implementing the *Provider Network Mirror Protocol*. **V1.**
 3. **Module registry mirror** — an adapter implementing Terraform's *module registry protocol*, redirected via
-   a `host` service-discovery block in the generated CLI config. **V1** for the registry protocol and
-   HTTP-served module archives; caching git-sourced module content is the future git mirror (see Non-Goals).
+   a `host` service-discovery block in the generated CLI config. **V1** caches the registry protocol and the
+   resolved module source for every download (`git::` or HTTP archive) as a tar artifact; only modules sourced
+   directly from git (not via the registry) await the git mirror (see Non-Goals).
 4. **Cache implementation** — pluggable backend adapters (filesystem in V1; object storage later) plus a lock
    manager, both reusing existing Atmos infrastructure. The backend implements the authoritative keyspace; the
    filesystem is V1's implementation of it.
@@ -97,7 +100,8 @@ Upstream registry (registry.terraform.io / registry.opentofu.org)
 ## Goals
 
 - **Performance** — reduce repeated provider downloads across runs by **>90%**, and cut module registry
-  round-trips and HTTP-archive module downloads (the git-sourced/mono-repo case follows with the git mirror).
+  round-trips and module source downloads (registry-sourced modules, `git::` or HTTP archive; modules sourced
+  directly from git follow with the git mirror).
 - **Reliability** — Terraform runs succeed during upstream outages when artifacts are already cached.
 - **Reproducibility** — previously resolved versions remain available even if upstream content disappears.
 - **Supply-chain control** — restrict and audit approved provider sources (via native CLI config; see
@@ -107,13 +111,15 @@ Upstream registry (registry.terraform.io / registry.opentofu.org)
 
 ## Non-Goals (V1)
 
-- **A git mirror** — *out of scope right now, but on our radar and on the critical path to the air-gapped
-  North Star (see below).* Caching git-sourced content (`git::` module sources, including mono-repo modules,
-  and the git targets of `X-Terraform-Get`) cannot be done by the HTTP registry proxy — git fetches don't flow
-  through it. It is **not**, however, a from-scratch git-protocol server: it is local **bare mirrors**
-  (`git clone --mirror`) plus **`insteadOf`** URL rewriting, reusing the `GIT_CONFIG_*` `insteadOf` plumbing
-  Atmos already injects (`pkg/auth/providers/atmospro/broker`) and the go-getter git downloader
-  (`pkg/downloader`). Tractable, well-trodden, and the highest-value follow-up.
+- **A git mirror for directly-declared git module sources** — *out of scope right now, but on our radar.*
+  Modules sourced **directly** from git (`source = "git::https://…"`, `source = "github.com/org/repo"`)
+  bypass the module registry protocol, so the HTTP registry proxy never sees them and cannot cache them.
+  (Registry-sourced modules that *resolve* to a `git::` `X-Terraform-Get` **are** cached now — the module
+  mirror resolves and packs them; see Scope.) Closing the direct-git gap is **not** a from-scratch
+  git-protocol server: it is local **bare mirrors** (`git clone --mirror`) plus **`insteadOf`** URL rewriting,
+  reusing the `GIT_CONFIG_*` `insteadOf` plumbing Atmos already injects
+  (`pkg/auth/providers/atmospro/broker`) and the go-getter git downloader (`pkg/downloader`). Tractable,
+  well-trodden, and the highest-value follow-up.
 - **OCI artifacts** — future phase.
 - **Object-storage backends** — **V1 is filesystem-only, end-to-end.** The backend adapter pattern is in place
   (and the `pkg/ci/artifact` `s3`/`github` backends already exist), but no object-storage backend is required
@@ -130,12 +136,12 @@ V1 caches **both** providers and modules through the proxy:
 - **Providers** — the **Provider Network Mirror Protocol** is small, clean, and fully proxyable over HTTP. All
   provider downloads (metadata + zips) are cached.
 - **Modules** — the **module registry protocol** is redirected via a `host` service-discovery override. Version
-  listings and download resolution are cached; modules whose download is an **HTTP(S) archive** are cached in
-  full.
-- **The boundary** — Terraform's module registry typically returns `X-Terraform-Get: git::https://…`, and
-  mono-repo modules are git sources directly. Caching that **git-sourced content** is the **git mirror** on our
-  radar (Non-Goals). Until then, the module mirror still removes registry round-trips and caches HTTP-archive
-  modules; the git mirror will complete the picture for the mono-repo case.
+  listings and download resolution are cached, and the resolved source is cached **in full regardless of what
+  `X-Terraform-Get` points to** — `git::` (the common case for the public registry and Cloud Posse modules) or
+  HTTP archive. The module mirror rewrites `X-Terraform-Get` back through the proxy, resolves the source with
+  go-getter, and stores it as a single `.tar.gz` artifact.
+- **The boundary** — only modules sourced **directly** from git (`source = "git::…"` / `"github.com/org/repo"`,
+  not via the registry) still bypass the proxy. Caching those is the **git mirror** on our radar (Non-Goals).
 
 ## User Experience
 
@@ -254,12 +260,19 @@ speak the same provider-mirror content model. The reproducible-build bundle (bel
 The module mirror adapter implements the module registry protocol, redirected via a CLI-config `host`
 service-discovery override (`services = { "modules.v1" = "http://127.0.0.1:<port>/..." }`):
 
-- Caches module **version listings** and **download resolution** metadata, removing registry round-trips.
-- Caches the module **archive** when `X-Terraform-Get` resolves to an HTTP(S) archive (e.g. a `.tar.gz`/`.zip`).
-- **Git boundary:** when `X-Terraform-Get` resolves to a `git::` source — the common case for the public
-  registry and for mono-repo modules — the proxy cannot cache the git fetch. Those downloads pass through, and
-  full caching arrives with the **git mirror** (Non-Goals; on the radar). The module mirror is built so the git
-  mirror slots in behind it without changing the Terraform-facing contract.
+- Caches module **version listings** and **download resolution** metadata, removing registry round-trips. The
+  download resolution caches the *upstream* source string and rewrites it to the proxy at **serve time**, so a
+  value cached in a prior run stays valid even though the proxy binds a different ephemeral port each run — and
+  a fully warm cache resolves a download with no upstream call.
+- Caches the **resolved source** for every download by rewriting `X-Terraform-Get` to a `_source` sub-route.
+  On a miss the mirror resolves the source with go-getter (`pkg/downloader`, reusing its `insteadOf`/credential
+  plumbing) and stores it as a single **`.tar.gz`** artifact (immutable, keyed by the resolved source minus
+  its `//subdir` so a mono-repo referenced by several modules is fetched once). This covers `git::` sources
+  (the common case) and HTTP archives uniformly. The rewritten `X-Terraform-Get`/`location` carries a `.tar.gz`
+  extension so the Terraform-side go-getter detects and unpacks it — a bare `.tar` is **not** in Terraform's
+  module decompressor set, so gzip is required, not just a size optimization.
+- **Boundary:** only modules sourced **directly** from git (not via the registry protocol) bypass the proxy;
+  caching those is the **git mirror** (Non-Goals; on the radar). The Terraform-facing contract is unchanged.
 
 ## Cache Implementation
 
@@ -395,21 +408,22 @@ What this PRD delivers gets us most of the way and is the foundation for the res
 
 - **Providers** — fully captured (Provider Network Mirror Protocol) and replayable offline via the proxy or
   `filesystem_mirror`. ✅ in V1.
-- **Registry / HTTP-archive modules** — registry metadata + HTTP-served archives captured. ✅ in V1.
-- **Git-sourced modules** (the common case — Cloud Posse modules, mono-repos, and most `X-Terraform-Get`
-  targets) — **require the git mirror** (Non-Goals; on the radar). This is the remaining gap to a *complete*
-  air-gapped closure, and it is on the critical path, **not** optional polish. The good news: it reuses
-  Atmos's existing `GIT_CONFIG_*` `insteadOf` injection and go-getter git downloader, so it is local bare
-  mirrors + URL rewriting — not a git-protocol server.
+- **Registry-sourced modules** — registry metadata, download resolution, and the **resolved source captured in
+  full** (whether `X-Terraform-Get` is `git::` or an HTTP archive — Cloud Posse modules and mono-repos
+  included), stored as tar artifacts. ✅ in V1.
+- **Directly-declared git modules** (`source = "git::…"` / `"github.com/org/repo"`, not via the registry) —
+  **require the git mirror** (Non-Goals; on the radar). This is the remaining gap to a *complete* air-gapped
+  closure. The good news: it reuses Atmos's existing `GIT_CONFIG_*` `insteadOf` injection and go-getter git
+  downloader, so it is local bare mirrors + URL rewriting — not a git-protocol server.
 
-In short: this PRD is necessary but **not sufficient** for the air-gapped North Star on its own; the git
-mirror completes it. The design is sequenced so the git mirror slots in behind the module mirror without
-changing the Terraform-facing contract.
+In short: this PRD captures providers and all registry-sourced modules; the git mirror completes the closure
+for modules sourced directly from git. The design is sequenced so the git mirror slots in without changing the
+Terraform-facing contract.
 
 ## Reproducible-Build Bundles
 
 Once warm, the cache directory is the build closure. That directory (providers in canonical mirror layout,
-cached module archives, and — once the git mirror lands — local bare git mirrors) is exportable as a
+cached module source tars, and — once the git mirror lands — local bare git mirrors) is exportable as a
 **bundle** — reusing `pkg/ci/artifact` tar bundling — for air-gapped or reproducible distribution. **The
 bundle format and distribution are owned by the separate atmos-bundles PRD**; this PRD exposes the cache as
 the bundle's source of truth and provides the future `atmos terraform cache export` / `import` hooks.
@@ -439,7 +453,7 @@ the bundle's source of truth and provides the future `atmos terraform cache expo
   in canonical layout + cache management commands.
 - **Phase 3** — Shared object-storage backends (`s3`, `github`); shared CI/team caches; `cache warm` /
   `export` / `import`.
-- **Phase 4** — **Git mirror** (git-sourced modules incl. mono-repos); OCI; Atmos CI integration; air-gapped
+- **Phase 4** — **Git mirror** (modules sourced directly from git, not via the registry); OCI; Atmos CI integration; air-gapped
   packaging.
 
 ## Long-Term Vision

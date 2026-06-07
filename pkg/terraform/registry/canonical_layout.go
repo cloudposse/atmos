@@ -1,9 +1,10 @@
 // Package registry implements Terraform provider and module registry mirrors as
 // adapters for the generic caching proxy (pkg/http/proxy). The provider mirror
 // translates the Provider Network Mirror Protocol (what Terraform speaks to the
-// proxy) into the upstream Provider Registry Protocol; the module mirror caches
-// the module registry protocol and routes module archives through the proxy while
-// passing git:: sources through unchanged (the future git mirror completes those).
+// proxy) into the upstream Provider Registry Protocol; the module mirror caches the
+// module registry protocol and routes every module download — git:: sources
+// included — back through the proxy, resolving the source with go-getter and caching
+// it as a single servable tar artifact.
 package registry
 
 import (
@@ -24,9 +25,11 @@ const (
 	// The modulePrefix namespaces module registry requests. The cache wires each host's
 	// modules.v1 service to "<proxy>/modules/<host>/".
 	modulePrefix = "/modules/"
-	// The moduleArchiveSegment is the sub-route under which the module mirror serves and
-	// caches HTTP-archive modules whose X-Terraform-Get was rewritten back to the proxy.
-	moduleArchiveSegment = "_archive"
+	// The moduleSourceSegment is the sub-route under which the module mirror serves and
+	// caches a resolved module source. Every module download's X-Terraform-Get is
+	// rewritten back to this sub-route; the mirror resolves the source with go-getter and
+	// caches it as a single tar artifact.
+	moduleSourceSegment = "_source"
 )
 
 // providerIndexKey is the canonical cache key (and filesystem_mirror path) for a
@@ -52,10 +55,18 @@ func moduleVersionsKey(host, namespace, name, provider string) string {
 	return keyJoin("modules", host, namespace, name, provider, "versions.json")
 }
 
-// moduleArchiveKey is the canonical key for a cached HTTP-archive module, keyed by a
-// stable digest of the upstream archive URL.
-func moduleArchiveKey(digest string) string {
-	return keyJoin("modules", moduleArchiveSegment, digest)
+// moduleDownloadKey is the canonical key for a cached module download resolution (the
+// version → source mapping carried by X-Terraform-Get). It is immutable for a released
+// version, so caching it lets a warm cache resolve a download with no upstream call.
+func moduleDownloadKey(host, namespace, name, provider, version string) string {
+	return keyJoin("modules", host, namespace, name, provider, version, "download")
+}
+
+// moduleSourceKey is the canonical key for a cached module source tar, keyed by a
+// stable digest of the resolved go-getter source (without its //subdir, so a mono-repo
+// referenced by several modules is fetched and cached once).
+func moduleSourceKey(digest string) string {
+	return keyJoin("modules", moduleSourceSegment, digest)
 }
 
 // providerArchiveRef identifies a provider zip's version and platform parsed from

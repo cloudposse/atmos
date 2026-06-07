@@ -89,6 +89,11 @@ type Route struct {
 	// cannot express the translation (e.g. building a provider <version>.json from
 	// per-platform registry download calls). Returns the body and its content type.
 	Produce func(ctx context.Context, fetch Fetcher, proxyBaseURL string) (body []byte, contentType string, err error)
+	// ProduceArtifact, when non-nil, streams a generated KindArtifact body produced by
+	// an operation rather than a single upstream HTTP GET (e.g. taring a go-getter
+	// resolved module source tree). The returned reader is committed to the cache and
+	// closed by the proxy. Takes precedence over Upstream and Produce.
+	ProduceArtifact func(ctx context.Context) (body io.ReadCloser, contentType string, err error)
 	// Rewrite, when non-nil, post-processes a KindMetadata body before it is cached
 	// and served — e.g. rewriting provider download URLs back through the proxy.
 	// proxyBaseURL is the proxy's own base URL ("http://127.0.0.1:<port>/").
@@ -102,6 +107,14 @@ type Route struct {
 	// HTTP-archive X-Terraform-Get to route the archive back through the proxy while
 	// leaving git:: sources untouched.
 	HeaderRewrite func(h http.Header, proxyBaseURL string)
+	// Serve, when non-nil, fully renders the served response from a cached object
+	// instead of the default (200 + body). The mirror receives the cached body and the
+	// live proxy base URL, so a value cached in a prior run (when the proxy bound a
+	// different ephemeral port) is rewritten to the current run's URL at serve time —
+	// e.g. a module download resolution caches the upstream source and emits
+	// 204 + X-Terraform-Get pointing at the current-run _source route. Invoked on both
+	// the hit and post-fill serve paths.
+	Serve func(w http.ResponseWriter, body io.Reader, proxyBaseURL string) error
 	// ContentType for the served response. Falls back to the upstream Content-Type.
 	ContentType string
 }
