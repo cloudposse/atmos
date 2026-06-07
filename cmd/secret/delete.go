@@ -29,7 +29,7 @@ func init() {
 func runSecretDelete(cmd *cobra.Command, args []string) error {
 	defer perf.Track(nil, "secret.runSecretDelete")()
 
-	scope, err := parseScope(cmd)
+	scope, err := parseScope(cmd, args)
 	if err != nil {
 		return err
 	}

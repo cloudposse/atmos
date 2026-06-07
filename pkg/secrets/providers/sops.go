@@ -45,6 +45,10 @@ const (
 	secretFileMode os.FileMode = 0o600
 	// Permission for directories created to hold SOPS files.
 	secretDirMode os.FileMode = 0o755
+	// Default base directory for scope-derived SOPS files when `spec.file` is not set.
+	defaultSopsPath = "secrets"
+	// Extension for scope-derived SOPS files.
+	sopsFileExt = ".enc.yaml"
 	// Reserved `age_key.store` value selecting the local file backend.
 	ageKeyStoreFile = "file"
 	// Fixed component segment for the store key under which the age
@@ -57,9 +61,15 @@ const (
 // stable `decrypt` package; mutations load the encrypted tree, decrypt the data key via the age
 // keysource (SOPS_AGE_KEY_FILE/SOPS_AGE_KEY), edit a top-level key, and re-encrypt in place.
 type sopsProvider struct {
-	name          string
-	kind          string
-	file          string // Go-template file path (e.g. `secrets/{{ .atmos_stack }}.enc.yaml`).
+	name string
+	kind string
+	// file is the advanced override: a Go-template file path (e.g.
+	// `secrets/{{ .atmos_stack }}.enc.yaml`). When empty, the path is derived in code from the
+	// coordinate's scope under `path` (see derivePath), which is collision-safe by construction.
+	file string
+	// path is the base directory for scope-derived files (`spec.path`, default `secrets`). Used
+	// only when `file` is empty.
+	path          string
 	ageRecipients string // Optional explicit age recipients for creating a fresh file.
 	ageKeyFile    string // Optional path to the age private key (supports `~`/`$ENV`); falls back to SOPS_AGE_KEY_FILE/SOPS_AGE_KEY when empty.
 	// ageKey is inline age private-key material (from `age_key.value` or a bare-string `age_key`).
@@ -96,9 +106,13 @@ func newSopsProvider(atmosConfig *schema.AtmosConfiguration, name string, sectio
 		spec = cfg.Spec
 	}
 
+	// `spec.file` is the advanced template override. When it is omitted, the file path is derived
+	// in code from each secret's scope under `spec.path` (default `secrets`), which is
+	// collision-safe by construction (stack and instance secrets land in distinct files).
 	file, _ := spec["file"].(string)
-	if file == "" {
-		return nil, fmt.Errorf("%w: provider %q has no `spec.file`", ErrProviderNotFound, name)
+	path, _ := spec["path"].(string)
+	if file == "" && path == "" {
+		path = defaultSopsPath
 	}
 
 	ageRecipients, _ := spec["age_recipients"].(string)
@@ -112,6 +126,7 @@ func newSopsProvider(atmosConfig *schema.AtmosConfiguration, name string, sectio
 		name:           name,
 		kind:           kind,
 		file:           file,
+		path:           path,
 		ageRecipients:  ageRecipients,
 		ageKeyFile:     ak.file,
 		ageKey:         ak.value,
@@ -146,9 +161,31 @@ func (p *sopsProvider) Kind() string {
 	return p.kind
 }
 
-// resolveFile renders the configured file path as a Go template, exposing `{{ .atmos_stack }}`
-// and `{{ .atmos_component }}` (consistent with the rest of Atmos templating) plus sprig functions.
+// SupportsScope reports the scopes SOPS can represent. Both work: the backing file path encodes
+// the scope (a stack file shared by every instance, or a per-instance file).
+func (p *sopsProvider) SupportsScope(scope Scope) bool {
+	defer perf.Track(nil, "providers.sopsProvider.SupportsScope")()
+
+	return scope == "" || scope == ScopeStack || scope == ScopeInstance
+}
+
+// FilePath reports the backing file a coordinate resolves to, satisfying FilePathProvider so
+// `describe affected` can treat it as an implicit dependency.
+func (p *sopsProvider) FilePath(coord Coordinate) (string, error) {
+	defer perf.Track(nil, "providers.sopsProvider.FilePath")()
+
+	return p.resolveFile(coord)
+}
+
+// resolveFile returns the backing file for a coordinate. When `spec.file` is empty the path is
+// derived in code from the coordinate's scope (collision-safe); otherwise the configured
+// `spec.file` Go template is rendered, exposing `{{ .atmos_stack }}` / `{{ .atmos_component }}`
+// (consistent with the rest of Atmos templating) plus sprig functions.
 func (p *sopsProvider) resolveFile(coord Coordinate) (string, error) {
+	if p.file == "" {
+		return p.derivePath(coord), nil
+	}
+
 	tmpl, err := template.New("sops-file").Funcs(sprig.FuncMap()).Option("missingkey=error").Parse(p.file)
 	if err != nil {
 		return "", fmt.Errorf("%w: invalid `spec.file` template %q: %w", ErrSopsFilePathTemplate, p.file, err)
@@ -164,6 +201,26 @@ func (p *sopsProvider) resolveFile(coord Coordinate) (string, error) {
 		return "", fmt.Errorf("%w: rendering `spec.file` %q: %w", ErrSopsFilePathTemplate, p.file, err)
 	}
 	return buf.String(), nil
+}
+
+// derivePath computes the scope-aware file path under `spec.path` (default `secrets`):
+//
+//	stack scope    → <path>/<stack>.enc.yaml          (shared by every instance in the stack)
+//	instance scope → <path>/<stack>.<instance>.enc.yaml
+//
+// The instance id may contain `/` (e.g. `vpc/primary`), which renders as nested subdirs. The two
+// scopes can never collide because a stack file has exactly the stack segment while an instance
+// file always carries an additional component segment.
+func (p *sopsProvider) derivePath(coord Coordinate) string {
+	base := p.path
+	if base == "" {
+		base = defaultSopsPath
+	}
+	name := coord.Stack
+	if coord.Scope != ScopeStack && coord.Component != "" {
+		name = coord.Stack + "." + coord.Component
+	}
+	return filepath.Join(base, name+sopsFileExt)
 }
 
 func (p *sopsProvider) Set(coord Coordinate, value any) error {

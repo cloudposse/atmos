@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/secrets"
 )
 
 func TestResolveSetValue_Inline(t *testing.T) {
@@ -55,6 +56,29 @@ func TestRunSecretSet_Inline(t *testing.T) {
 	require.Len(t, svc.setCalls, 1)
 	assert.Equal(t, "API_KEY", svc.setCalls[0].name)
 	assert.Equal(t, "v1", svc.setCalls[0].value)
+}
+
+// TestRunSecretSet_OverrideGuard proves setting an instance value for a stack-scoped secret is a
+// hard error (the instance must declare it to override), while an instance-scoped secret succeeds.
+func TestRunSecretSet_OverrideGuard(t *testing.T) {
+	// Negative path: SHARED is stack-scoped at component api → reject, no write.
+	svc := newFakeSecretService()
+	svc.scopes = map[string]secrets.Scope{"SHARED": secrets.ScopeStack}
+	installService(t, svc, nil)
+
+	err := runSecretSubcommand(t, "set", "SHARED=v1", "--stack", "dev", "--component", "api")
+	require.ErrorIs(t, err, secrets.ErrSecretNotOverridable)
+	assert.Empty(t, svc.setCalls, "a rejected override must not write")
+
+	// Positive path: once api declares it as instance-scoped, the same set succeeds.
+	svc2 := newFakeSecretService()
+	svc2.scopes = map[string]secrets.Scope{"SHARED": secrets.ScopeInstance}
+	installService(t, svc2, nil)
+
+	err = runSecretSubcommand(t, "set", "SHARED=v1", "--stack", "dev", "--component", "api")
+	require.NoError(t, err)
+	require.Len(t, svc2.setCalls, 1)
+	assert.Equal(t, "SHARED", svc2.setCalls[0].name)
 }
 
 func TestRunSecretSet_Prompt(t *testing.T) {

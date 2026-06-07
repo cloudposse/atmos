@@ -48,14 +48,14 @@ func init() {
 	}
 }
 
-func runSecretShell(cmd *cobra.Command, _ []string) error {
+func runSecretShell(cmd *cobra.Command, args []string) error {
 	defer perf.Track(nil, "secret.runSecretShell")()
 
 	if err := validateShellArgs(cmd); err != nil {
 		return err
 	}
 
-	scope, err := parseScope(cmd)
+	scope, err := parseScope(cmd, args)
 	if err != nil {
 		return err
 	}

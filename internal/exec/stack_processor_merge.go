@@ -8,7 +8,35 @@ import (
 	m "github.com/cloudposse/atmos/pkg/merge"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/secrets"
 )
+
+// tagSecretsScopes stamps the position-derived scope onto each secrets layer before merging: the
+// stack-level (global) layer is `stack`-scoped, every component-level layer (base, component,
+// overrides) is `instance`-scoped. It returns the layers in merge order (lowest→highest priority).
+// A declaration whose explicit `scope` conflicts with its position is rejected as invalid secrets.
+func tagSecretsScopes(global, base, component, overrides map[string]any) ([]map[string]any, error) {
+	defer perf.Track(nil, "exec.tagSecretsScopes")()
+
+	layers := []struct {
+		section map[string]any
+		scope   secrets.Scope
+	}{
+		{global, secrets.ScopeStack},
+		{base, secrets.ScopeInstance},
+		{component, secrets.ScopeInstance},
+		{overrides, secrets.ScopeInstance},
+	}
+	out := make([]map[string]any, 0, len(layers))
+	for _, l := range layers {
+		tagged, err := secrets.TagScope(l.section, l.scope)
+		if err != nil {
+			return nil, fmt.Errorf("%w: %w", errUtils.ErrInvalidComponentSecrets, err)
+		}
+		out = append(out, tagged)
+	}
+	return out, nil
+}
 
 // effectiveAtmosConfig returns an *AtmosConfiguration suitable for merging this
 // component's sections. If any settings layer overrides list_merge_strategy, a
@@ -220,17 +248,18 @@ func mergeComponentConfigurations(atmosConfig *schema.AtmosConfiguration, opts *
 	// Merge secrets declarations (global stack → base → component → overrides). Available for
 	// all component types; inherits through the stack hierarchy like other sections. The
 	// stack-level (global) `secrets:` block lets providers/declarations be defined once per stack.
+	//
+	// Scope is derived from position and stamped onto each declaration BEFORE the merge: the
+	// global (stack-level) layer is `stack`-scoped, every component-level layer is `instance`-scoped.
+	// "Most-specific wins" then resolves overrides — a component re-declaring a stack secret pulls it
+	// to instance scope — and enforces the one-way rule, with no merge-engine changes.
 	var finalComponentSecrets map[string]any
 	if len(opts.GlobalSecrets) > 0 || len(result.BaseComponentSecrets) > 0 || len(result.ComponentSecrets) > 0 || len(result.ComponentOverridesSecrets) > 0 {
-		finalComponentSecrets, err = m.Merge(
-			mergeConfig,
-			[]map[string]any{
-				opts.GlobalSecrets,
-				result.BaseComponentSecrets,
-				result.ComponentSecrets,
-				result.ComponentOverridesSecrets,
-			},
-		)
+		scopedSecrets, err := tagSecretsScopes(opts.GlobalSecrets, result.BaseComponentSecrets, result.ComponentSecrets, result.ComponentOverridesSecrets)
+		if err != nil {
+			return nil, err
+		}
+		finalComponentSecrets, err = m.Merge(mergeConfig, scopedSecrets)
 		if err != nil {
 			return nil, err
 		}

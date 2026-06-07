@@ -32,7 +32,7 @@ func init() {
 func runSecretPush(cmd *cobra.Command, args []string) error {
 	defer perf.Track(nil, "secret.runSecretPush")()
 
-	scope, err := parseScope(cmd)
+	scope, err := parseScope(cmd, args)
 	if err != nil {
 		return err
 	}

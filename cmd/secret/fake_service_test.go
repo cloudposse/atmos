@@ -32,6 +32,7 @@ type fakeSecretService struct {
 	getErrs        map[string]error
 	missingVaults  []secrets.GenerableVault
 	keygenResults  map[string]*providers.KeygenResult
+	scopes         map[string]secrets.Scope
 	deleteAllCount int
 
 	// Configurable errors.
@@ -92,6 +93,18 @@ func (f *fakeSecretService) Status() []secrets.Status { return f.statuses }
 
 func (f *fakeSecretService) IsDeclared(name string) bool { return f.declared[name] }
 
+// ScopeOf reports the configured scope for a name. An entry in `scopes` makes the name declared;
+// a name present in `declared` but absent from `scopes` defaults to instance scope.
+func (f *fakeSecretService) ScopeOf(name string) (secrets.Scope, bool) {
+	if sc, ok := f.scopes[name]; ok {
+		return sc, true
+	}
+	if f.declared[name] {
+		return secrets.ScopeInstance, true
+	}
+	return "", false
+}
+
 func (f *fakeSecretService) Validate() secrets.ValidationResult { return f.validation }
 
 func (f *fakeSecretService) VaultsMissingKeys() ([]secrets.GenerableVault, error) {
@@ -144,6 +157,19 @@ func installServiceAndConfig(t *testing.T, svc secretService, atmosConfig *schem
 		return svc, atmosConfig, nil
 	}
 	t.Cleanup(func() { loadServiceAndConfigFn = orig })
+}
+
+// overrideEnumerateScopes overrides enumerateScopesFn and restores it via t.Cleanup. It lets tests
+// that exercise commands which enumerate the stack (e.g. validate's SOPS collision guard, list)
+// avoid real stack processing. The returned config is used as the atmosConfig for built services.
+func overrideEnumerateScopes(t *testing.T, entries []scopeEntry, err error) {
+	t.Helper()
+
+	orig := enumerateScopesFn
+	enumerateScopesFn = func(_ secretScope) ([]scopeEntry, *schema.AtmosConfiguration, error) {
+		return entries, &schema.AtmosConfiguration{}, err
+	}
+	t.Cleanup(func() { enumerateScopesFn = orig })
 }
 
 // overridePromptForValue overrides promptForValueFn and restores it via t.Cleanup.

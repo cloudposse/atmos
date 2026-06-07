@@ -18,6 +18,7 @@ type secretService interface {
 	DeleteAll() (int, error)
 	Status() []secrets.Status
 	IsDeclared(name string) bool
+	ScopeOf(name string) (secrets.Scope, bool)
 	Validate() secrets.ValidationResult
 	VaultsMissingKeys() ([]secrets.GenerableVault, error)
 	GenerateKeyForVault(v secrets.GenerableVault) (*providers.KeygenResult, error)

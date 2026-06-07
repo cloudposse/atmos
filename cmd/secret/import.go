@@ -33,7 +33,7 @@ func init() {
 func runSecretImport(cmd *cobra.Command, args []string) error {
 	defer perf.Track(nil, "secret.runSecretImport")()
 
-	scope, err := parseScope(cmd)
+	scope, err := parseScope(cmd, args)
 	if err != nil {
 		return err
 	}

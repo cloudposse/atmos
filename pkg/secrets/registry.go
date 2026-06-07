@@ -33,11 +33,12 @@ func ExtractDeclarations(componentSection map[string]any) map[string]Declaration
 	}
 
 	for name, raw := range varsSection {
-		decl := Declaration{Name: name}
+		decl := Declaration{Name: name, Scope: ScopeInstance}
 		if spec, ok := raw.(map[string]any); ok {
 			decl.Description = stringField(spec, "description")
 			decl.Reference = stringField(spec, "reference")
 			decl.Required = boolField(spec, "required")
+			decl.Scope = scopeField(spec)
 			if store := stringField(spec, "store"); store != "" {
 				decl.BackendType = BackendStore
 				decl.BackendName = store
@@ -76,4 +77,15 @@ func boolField(spec map[string]any, key string) bool {
 		return v
 	}
 	return false
+}
+
+// scopeField reads the derived `scope` tag stamped onto a declaration by the stack processor,
+// defaulting to ScopeInstance when absent or unrecognized. The tag is normally injected by
+// position (top-level `secrets:` → stack; component `secrets:` → instance), but a directly
+// constructed section may carry an explicit value.
+func scopeField(spec map[string]any) Scope {
+	if stringField(spec, "scope") == string(ScopeStack) {
+		return ScopeStack
+	}
+	return ScopeInstance
 }

@@ -61,7 +61,6 @@ func TestBackendLabel(t *testing.T) {
 }
 
 func TestStatusesToData(t *testing.T) {
-	scope := secretScope{Stack: "dev", Component: "api"}
 	statuses := []secrets.Status{
 		{
 			Declaration: secrets.Declaration{
@@ -69,15 +68,17 @@ func TestStatusesToData(t *testing.T) {
 				Description: "Datadog API key",
 				BackendType: secrets.BackendSops,
 				BackendName: "dev-sops",
+				Scope:       secrets.ScopeStack,
 			},
 			Initialized: true,
 		},
 	}
-	rows := statusesToData(scope, statuses)
+	rows := statusesToData("dev", "api", statuses)
 	require.Len(t, rows, 1)
 	assert.Equal(t, "dev", rows[0]["stack"])
 	assert.Equal(t, "api", rows[0]["component"])
 	assert.Equal(t, "DATADOG_API_KEY", rows[0]["secret"])
+	assert.Equal(t, "stack", rows[0]["scope"])
 	assert.Equal(t, "sops:dev-sops", rows[0]["provider"])
 	assert.Equal(t, "initialized", rows[0]["status"])
 	assert.Equal(t, "Datadog API key", rows[0]["description"])
@@ -85,11 +86,12 @@ func TestStatusesToData(t *testing.T) {
 
 func TestSecretListColumns(t *testing.T) {
 	cols := secretListColumns(false)
-	require.Len(t, cols, 5)
+	require.Len(t, cols, 6)
 	assert.Equal(t, "Stack", cols[0].Name)
-	assert.Equal(t, "Status", cols[4].Name)
+	assert.Equal(t, "Scope", cols[3].Name)
+	assert.Equal(t, "Status", cols[5].Name)
 
 	verboseCols := secretListColumns(true)
-	require.Len(t, verboseCols, 6)
-	assert.Equal(t, "Description", verboseCols[5].Name)
+	require.Len(t, verboseCols, 7)
+	assert.Equal(t, "Description", verboseCols[6].Name)
 }

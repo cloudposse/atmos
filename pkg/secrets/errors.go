@@ -41,4 +41,18 @@ var (
 
 	// ErrEmptyName indicates an empty secret name.
 	ErrEmptyName = errors.New("secret name cannot be empty")
+
+	// ErrScopeConflict indicates a declaration carries an explicit `scope` that conflicts with the
+	// scope implied by its position (the one-way rule: an instance-declared secret can never be
+	// stack-scoped, and a stack-level declaration can't be instance-scoped).
+	ErrScopeConflict = errors.New("secret scope conflicts with declaration position")
+
+	// ErrSecretNotOverridable indicates an attempt to set an instance-level value for a secret that
+	// is stack-scoped at the targeted component. Overriding requires the instance to opt in by
+	// declaring the secret under the component; otherwise the write is rejected (no silent shadow).
+	ErrSecretNotOverridable = errors.New("secret is stack-scoped and not overridable at this instance")
+
+	// ErrSopsCollision indicates two scopes resolve to a colliding SOPS file: distinct instances
+	// sharing a file (no isolation), or a stack-scoped secret resolving per-component (not shared).
+	ErrSopsCollision = errors.New("SOPS secret files collide across scopes")
 )

@@ -119,7 +119,24 @@ func (s *Service) providerAndCoord(name string) (providers.Provider, providers.C
 	if err != nil {
 		return nil, providers.Coordinate{}, fmt.Errorf("%w (secret %q)", err, name)
 	}
-	return provider, coordinateForDeclaration(&decl, s.stack, s.component), nil
+	coord := coordinateForDeclaration(&decl, s.stack, s.component)
+	if err := checkScopeSupported(provider, &decl, coord); err != nil {
+		return nil, providers.Coordinate{}, err
+	}
+	return provider, coord, nil
+}
+
+// checkScopeSupported rejects a declaration whose resolved scope its backend cannot represent,
+// before any read or write (e.g. an instance-scoped secret on a backend that only scopes by
+// environment). Returns ErrScopeUnsupported with actionable context.
+func checkScopeSupported(provider providers.Provider, decl *Declaration, coord providers.Coordinate) error {
+	if provider.SupportsScope(coord.Scope) {
+		return nil
+	}
+	return errUtils.Build(providers.ErrScopeUnsupported).
+		WithCausef("secret %q is %s-scoped but backend %q (%s) does not support that scope",
+			decl.Name, coord.Scope, decl.BackendName, provider.Kind()).
+		Err()
 }
 
 // Set stores a value for a declared secret.
@@ -240,12 +257,64 @@ func (s *Service) Status() []Status {
 			out = append(out, st)
 			continue
 		}
+		if err := checkScopeSupported(provider, &decl, st.Coordinate); err != nil {
+			st.Err = err
+			out = append(out, st)
+			continue
+		}
 		initialized, err := provider.Status(st.Coordinate)
 		st.Initialized = initialized
 		st.Err = err
 		out = append(out, st)
 	}
 	return out
+}
+
+// FileDependencies returns the distinct backing files this scope's file-based declared secrets
+// (currently SOPS) resolve to, for `describe affected` to treat as implicit dependencies: a
+// changed secret file then marks every component that consumes it. Secrets whose backend is not
+// file-based (store-backed) contribute nothing. It is best-effort — declarations whose provider
+// or path cannot be resolved are skipped rather than failing the whole computation. Results are
+// de-duplicated and sorted.
+func (s *Service) FileDependencies() []string {
+	defer perf.Track(s.atmosConfig, "secrets.Service.FileDependencies")()
+
+	seen := make(map[string]bool)
+	var files []string
+	for _, decl := range s.Declarations() {
+		d := decl
+		provider, err := providerFor(s.atmosConfig, &d, s.componentSection)
+		if err != nil {
+			continue
+		}
+		fp, ok := provider.(providers.FilePathProvider)
+		if !ok {
+			continue
+		}
+		path, err := fp.FilePath(coordinateForDeclaration(&d, s.stack, s.component))
+		if err != nil || path == "" || seen[path] {
+			continue
+		}
+		seen[path] = true
+		files = append(files, path)
+	}
+	sort.Strings(files)
+	return files
+}
+
+// ScopeOf returns the resolved scope of a declared secret and whether it is declared. An undeclared
+// name returns ("", false). A declaration with no explicit scope defaults to ScopeInstance.
+func (s *Service) ScopeOf(name string) (Scope, bool) {
+	defer perf.Track(s.atmosConfig, "secrets.Service.ScopeOf")()
+
+	decl, ok := LookupDeclaration(s.componentSection, name)
+	if !ok {
+		return "", false
+	}
+	if decl.Scope == "" {
+		return ScopeInstance, true
+	}
+	return decl.Scope, true
 }
 
 // IsDeclared reports whether a key is declared as a secret in this scope.

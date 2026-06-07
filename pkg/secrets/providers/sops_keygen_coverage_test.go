@@ -240,6 +240,9 @@ func TestWriteRecipient_WriteError(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("directory write permissions are not enforced the same way on Windows")
 	}
+	if os.Geteuid() == 0 {
+		t.Skip("root bypasses directory write permissions")
+	}
 	dir := t.TempDir()
 	require.NoError(t, os.Chmod(dir, 0o500)) // r-x: dir exists (MkdirAll is a no-op) but WriteFile fails.
 	t.Cleanup(func() { _ = os.Chmod(dir, 0o700) })

@@ -55,6 +55,14 @@ func (p *storeProvider) Kind() string {
 	return p.kind
 }
 
+// SupportsScope reports the scopes a KV store can represent. Stores compose the key path, so both
+// scopes work: stack scope omits the component segment (a shared key), instance scope includes it.
+func (p *storeProvider) SupportsScope(scope Scope) bool {
+	defer perf.Track(nil, "providers.storeProvider.SupportsScope")()
+
+	return scope == "" || scope == ScopeStack || scope == ScopeInstance
+}
+
 func (p *storeProvider) Set(coord Coordinate, value any) error {
 	defer perf.Track(nil, "providers.storeProvider.Set")()
 

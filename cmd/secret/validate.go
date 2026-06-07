@@ -21,8 +21,14 @@ var validateCmd = &cobra.Command{
 func runSecretValidate(cmd *cobra.Command, args []string) error {
 	defer perf.Track(nil, "secret.runSecretValidate")()
 
-	scope, err := parseScope(cmd)
+	scope, err := parseScope(cmd, args)
 	if err != nil {
+		return err
+	}
+
+	// Guard the advanced SOPS `spec.file` path: a hand-written template that doesn't discriminate by
+	// component would silently collide instance secrets or break stack-secret sharing.
+	if err := checkStackSopsCollisions(scope.Stack); err != nil {
 		return err
 	}
 

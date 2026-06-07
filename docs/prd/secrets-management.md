@@ -312,6 +312,83 @@ components:
             store: app-secrets
 ```
 
+## Secret Scopes (stack vs instance)
+
+Secrets have an explicit **scope** that controls where the *value* is stored — this is the fix for
+the **secrets sprawl** problem above. Two scopes ship today (global/cross-stack is deferred —
+multi-region makes its semantics messy):
+
+- **`stack`** — declared at the top level of a stack (`secrets:` sibling of `vars:`). Stored **once
+  per stack** and shared by every component instance. Rotate once, every instance sees it.
+- **`instance`** (default) — declared under a component (`components.<type>.<c>.secrets:`). Stored
+  **per component instance** (the current behavior).
+
+### Scope is derived from position (one-way)
+
+Scope is **inferred from where the secret is declared**, not written by hand:
+
+```yaml
+# stack manifest — top-level: SHARED_TOKEN is stack-scoped (one value for the whole stack)
+secrets:
+  vars:
+    SHARED_TOKEN: { sops: default }
+
+components:
+  terraform:
+    api:
+      secrets:
+        vars:
+          # Re-declaring SHARED_TOKEN here pulls it to INSTANCE scope for `api` only — api now
+          # owns its own value. Other components keep using the shared stack value.
+          SHARED_TOKEN: { sops: default }
+          # API_KEY is declared only here → always instance-scoped.
+          API_KEY: { sops: default }
+```
+
+The rule is **one-way**: a stack-level secret can be pulled down to instance scope by re-declaring
+it under a component, but an instance-declared secret can never become stack-scoped. Implementation:
+a derived `scope` tag is stamped onto each declaration by position **before** the standard
+deep-merge (`internal/exec/stack_processor_merge.go`), so "most-specific wins" resolves overrides
+and enforces the one-way rule with no merge-engine changes. An explicit `scope:` that conflicts with
+position is an error (`ErrScopeConflict`).
+
+### Override is opt-in (no silent shadow)
+
+The override has **no fallback**: an instance that re-declares a secret owns its value (validation
+flags it if unset). Conversely, attempting to set an instance value for a secret that is *still*
+stack-scoped at that component is a **hard error** (`ErrSecretNotOverridable`) — you must declare it
+under the component first, or omit `--component` to set the shared stack value.
+
+### Scope is provider-relative (a capability)
+
+Scope is an abstract intent; each backend maps it to its native primitive and **declares which
+scopes it supports** (`Provider.SupportsScope`). A declaration whose resolved scope a backend can't
+represent is rejected with `ErrScopeUnsupported` before any write.
+
+| provider | native primitive | stack scope | instance scope |
+|---|---|---|---|
+| SOPS (files) | file path | `<spec.path>/<stack>.enc.yaml` | `<spec.path>/<stack>.<instance>.enc.yaml` |
+| KV stores (SSM / Vault / Azure KV / GCP SM) | key path | key without component segment | key with component segment |
+| GitHub Actions *(future)* | Environment | environment = `<stack>` | *(reject or per-instance env)* |
+
+### SOPS path derivation (collision-safe by default)
+
+For SOPS, the backing file is **derived in code** from scope under `spec.path` (default `secrets/`):
+stack-scoped → `secrets/<stack>.enc.yaml`, instance-scoped →
+`secrets/<stack>.<instance>.enc.yaml`. There is nothing to mis-template, so stack and instance
+secrets can never collide. The legacy `spec.file` Go-template (`{{ .atmos_stack }}` /
+`{{ .atmos_component }}`) remains supported as an advanced override; a planned collision lookup
+guards that path by erroring if two instances resolve to the same file (or a stack secret resolves
+per-component).
+
+### `describe affected` integration
+
+SOPS secret files are **implicit file dependencies**: a changed `secrets/*.enc.yaml` marks every
+component that consumes it as affected (reason `secret.file`). A stack-scoped file fans out to all
+consumers; an instance file marks only its instance. The path is derived via the *same*
+`pkg/secrets` function the provider uses, so detection and storage can't drift. Store-backed secrets
+are not files and contribute nothing here.
+
 ## CLI Commands
 
 ### `atmos secret init`
@@ -407,26 +484,34 @@ atmos secret delete DATADOG_API_KEY --force
 
 ### `atmos secret list`
 
-List declared secrets and their status.
+List declared secrets and their status. `--stack` and `--component` are **facets** (optional
+filters), not required: with neither, every `(stack, component, secret)` is listed across all
+stacks; either one narrows the result. Stack-scoped secrets are shown once (component `*`) since
+they are stored once and shared. A `SCOPE` column distinguishes stack vs instance.
 
 ```bash
-# List all secrets for a stack
+# List ALL secrets across every stack (facets omitted)
+atmos secret list
+
+# Narrow by facet
 atmos secret list --stack prod
+atmos secret list --component api
+atmos secret list --stack prod --component api   # fully scoped (fast path, honors --identity)
 
-# List secrets for a component
-atmos secret list --stack prod --component api
-
-# Show detailed status
+# Show declaration descriptions
 atmos secret list --stack prod --verbose
 ```
 
 Output:
 ```text
-STACK       COMPONENT  SECRET            PROVIDER   STATUS
-prod        (global)   ARTIFACTORY_TOKEN aws/ssm    initialized
-prod        api        DATADOG_API_KEY   aws/ssm    initialized
-prod        api        REDIS_URL         aws/ssm    missing
+STACK   COMPONENT  SECRET             SCOPE     PROVIDER     STATUS
+prod    *          ARTIFACTORY_TOKEN  stack     sops:default initialized
+prod    api        DATADOG_API_KEY    instance  aws/ssm      initialized
+prod    api        REDIS_URL          instance  aws/ssm      missing
 ```
+
+In all-stacks mode, status is resolved best-effort using each component instance's own identity; a
+row whose backend can't be reached renders as `error` rather than aborting the listing.
 
 ### `atmos secret pull`
 

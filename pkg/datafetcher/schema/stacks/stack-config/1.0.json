@@ -32,6 +32,10 @@
     "settings": {
       "$ref": "#/definitions/settings"
     },
+    "secrets": {
+      "description": "Stack-level (global) secret declarations and providers. Declared here, a secret is stack-scoped: stored once and shared by every component instance in the stack, unless a component re-declares it (which pulls it to instance scope).",
+      "type": "object"
+    },
     "components": {
       "$ref": "#/definitions/components"
     },

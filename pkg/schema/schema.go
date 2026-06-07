@@ -1238,6 +1238,7 @@ type BaseComponentConfig struct {
 	BaseComponentSettings          AtmosSectionMapType
 	BaseComponentEnv               AtmosSectionMapType
 	BaseComponentAuth              AtmosSectionMapType
+	BaseComponentSecrets           AtmosSectionMapType
 	BaseComponentDependencies      AtmosSectionMapType
 	BaseComponentLocals            AtmosSectionMapType // Component-level locals for template processing.
 	BaseComponentMetadata          AtmosSectionMapType

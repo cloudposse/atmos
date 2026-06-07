@@ -20,6 +20,7 @@ func processComponentInheritance(opts *ComponentProcessorOptions, result *Compon
 	result.BaseComponentSettings = make(map[string]any, componentSmallMapCapacity)
 	result.BaseComponentEnv = make(map[string]any, componentSmallMapCapacity)
 	result.BaseComponentAuth = make(map[string]any, componentSmallMapCapacity)
+	result.BaseComponentSecrets = make(map[string]any, componentSmallMapCapacity)
 	result.BaseComponentMetadata = make(map[string]any, componentSmallMapCapacity)
 	result.BaseComponentDependencies = make(map[string]any, componentSmallMapCapacity)
 	result.BaseComponentLocals = make(map[string]any, componentSmallMapCapacity)
@@ -202,6 +203,7 @@ func applyBaseComponentConfig(opts *ComponentProcessorOptions, result *Component
 	result.BaseComponentSettings = baseComponentConfig.BaseComponentSettings
 	result.BaseComponentEnv = baseComponentConfig.BaseComponentEnv
 	result.BaseComponentAuth = baseComponentConfig.BaseComponentAuth
+	result.BaseComponentSecrets = baseComponentConfig.BaseComponentSecrets
 	result.BaseComponentMetadata = baseComponentConfig.BaseComponentMetadata
 	result.BaseComponentDependencies = baseComponentConfig.BaseComponentDependencies
 	result.BaseComponentLocals = baseComponentConfig.BaseComponentLocals

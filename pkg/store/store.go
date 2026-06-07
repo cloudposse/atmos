@@ -50,12 +50,16 @@ type StoreFactory func(options map[string]any) (Store, error)
 // then it splits the component if it contains a "/",
 // then it appends the key to the parts,
 // then it joins the parts with the final delimiter.
+//
+// An empty component (a stack-scoped secret) is omitted entirely, so the key collapses to
+// `prefix<delim>stack<delim>key` with no component segment — independent of the final delimiter.
 func getKey(prefix string, stackDelimiter string, stack string, component string, key string, finalDelimiter string) (string, error) { //nolint
 	stackParts := strings.Split(stack, stackDelimiter)
-	componentParts := strings.Split(component, "/")
 
 	parts := append([]string{prefix}, stackParts...)
-	parts = append(parts, componentParts...)
+	if component != "" {
+		parts = append(parts, strings.Split(component, "/")...)
+	}
 	parts = append(parts, key)
 
 	joinedKey := strings.Join(parts, finalDelimiter)

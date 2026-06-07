@@ -16,6 +16,18 @@ const (
 	BackendSops BackendType = BackendType(providers.TrackSops)
 )
 
+// Scope is the addressing level at which a secret value is stored (see providers.Scope). It is
+// re-exported here so the secrets service and CLI can branch on a declaration's scope without
+// importing the providers package directly.
+type Scope = providers.Scope
+
+const (
+	// ScopeInstance stores a value per component instance (stack + component). Default.
+	ScopeInstance = providers.ScopeInstance
+	// ScopeStack stores a single value shared by every instance in a stack.
+	ScopeStack = providers.ScopeStack
+)
+
 // Declaration is a single declared secret resolved from a component's secrets.vars.
 type Declaration struct {
 	// Name is the secret name (the key used by `!secret NAME`).
@@ -33,6 +45,15 @@ type Declaration struct {
 	Reference string
 	// Required marks the secret as required for validation.
 	Required bool
+	// Scope is the addressing level (stack vs instance). It is derived from declaration position
+	// during stack processing (top-level `secrets:` → stack; component `secrets:` → instance) and
+	// stamped onto the declaration; an empty Scope is treated as ScopeInstance.
+	Scope Scope
+}
+
+// IsStackScoped reports whether the declaration is stored once per stack (shared by all instances).
+func (d *Declaration) IsStackScoped() bool { //nolint:lintroller // trivial pure getter; perf.Track overhead is unwarranted.
+	return d.Scope == ScopeStack
 }
 
 // Status describes whether a declared secret is initialized in its backend.
@@ -52,7 +73,9 @@ type ResolveOptions struct {
 	Default *string
 }
 
-// coordinateForDeclaration builds the backend coordinate for a declaration in a scope.
+// coordinateForDeclaration builds the backend coordinate for a declaration in a scope. A
+// stack-scoped declaration omits the component segment so its value is stored once per stack and
+// shared by every instance; an instance-scoped declaration (the default) keeps the component.
 func coordinateForDeclaration(decl *Declaration, stack, component string) providers.Coordinate {
 	defer perf.Track(nil, "secrets.coordinateForDeclaration")()
 
@@ -62,5 +85,13 @@ func coordinateForDeclaration(decl *Declaration, stack, component string) provid
 	if decl.Reference != "" {
 		key = decl.Reference
 	}
-	return providers.Coordinate{Stack: stack, Component: component, Key: key}
+	scope := decl.Scope
+	if scope == "" {
+		scope = ScopeInstance
+	}
+	coord := providers.Coordinate{Stack: stack, Key: key, Scope: scope}
+	if scope != ScopeStack {
+		coord.Component = component
+	}
+	return coord
 }

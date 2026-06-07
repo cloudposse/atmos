@@ -176,10 +176,11 @@ func TestSopsProvider_WriteNewFile_WriteFileFails(t *testing.T) {
 
 // TestExpandKeyPath_EnvExpansion proves `$ENV` references are expanded by expandKeyPath.
 func TestExpandKeyPath_EnvExpansion(t *testing.T) {
-	t.Setenv("ATMOS_TEST_KEYPATH", "/secret/place")
+	base := filepath.Join(t.TempDir(), "secret", "place")
+	t.Setenv("ATMOS_TEST_KEYPATH", base)
 	got, err := expandKeyPath("$ATMOS_TEST_KEYPATH/keys.txt")
 	require.NoError(t, err)
-	assert.Equal(t, "/secret/place/keys.txt", got)
+	assert.Equal(t, filepath.ToSlash(filepath.Join(base, "keys.txt")), filepath.ToSlash(got))
 }
 
 // TestExpandKeyPath_TildeExpansion proves a leading `~` is expanded to the home directory.
@@ -248,14 +249,27 @@ func TestNewSopsProvider_NotFound(t *testing.T) {
 	require.ErrorIs(t, err, ErrProviderNotFound)
 }
 
-// TestNewSopsProvider_NoFileSpec proves a provider declared without `spec.file` is rejected with
-// ErrProviderNotFound (the empty-file branch of newSopsProvider).
+// TestNewSopsProvider_NoFileSpec proves a provider declared without `spec.file` is now valid: the
+// file path is derived in code from each secret's scope under the default `spec.path` (`secrets`).
+// Stack-scoped secrets land in `secrets/<stack>.enc.yaml`, instance-scoped in
+// `secrets/<stack>.<component>.enc.yaml`, which is collision-safe by construction.
 func TestNewSopsProvider_NoFileSpec(t *testing.T) {
 	section := map[string]any{
 		"dev-sops": map[string]any{"kind": "sops/age", "spec": map[string]any{}},
 	}
-	_, err := newSopsProvider(&schema.AtmosConfiguration{}, "dev-sops", section)
-	require.ErrorIs(t, err, ErrProviderNotFound)
+	prov, err := newSopsProvider(&schema.AtmosConfiguration{}, "dev-sops", section)
+	require.NoError(t, err)
+
+	sp, ok := prov.(*sopsProvider)
+	require.True(t, ok)
+
+	stackFile, err := sp.FilePath(Coordinate{Stack: "dev", Scope: ScopeStack})
+	require.NoError(t, err)
+	assert.Equal(t, filepath.Join("secrets", "dev"+sopsFileExt), stackFile)
+
+	instanceFile, err := sp.FilePath(Coordinate{Stack: "dev", Component: "api", Scope: ScopeInstance})
+	require.NoError(t, err)
+	assert.Equal(t, filepath.Join("secrets", "dev.api"+sopsFileExt), instanceFile)
 }
 
 // TestNewSopsProvider_TopLevelProviders proves the fallback to atmos.yaml's top-level

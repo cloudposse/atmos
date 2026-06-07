@@ -7,11 +7,27 @@ import (
 	"errors"
 )
 
+// Scope identifies the addressing level at which a secret value is stored. Atmos exposes two
+// scopes today; each provider maps a scope to its native primitive (file path, key path,
+// environment) and declares which scopes it supports via Provider.SupportsScope. An empty Scope
+// is treated as ScopeInstance for back-compat.
+type Scope string
+
+const (
+	// ScopeInstance stores a value per component instance (stack + component). Default.
+	ScopeInstance Scope = "instance"
+	// ScopeStack stores a single value shared by every instance in a stack (no component segment).
+	ScopeStack Scope = "stack"
+)
+
 // Coordinate identifies a single secret value within a backend's namespace.
 type Coordinate struct {
 	Stack     string
 	Component string
 	Key       string
+	// Scope is the addressing level (stack vs instance). Providers interpret it in their own
+	// terms. Empty is treated as ScopeInstance. For ScopeStack, Component is empty.
+	Scope Scope
 }
 
 // Provider is the backend-agnostic CRUD interface the secrets service operates against.
@@ -27,6 +43,10 @@ type Provider interface {
 	Status(coord Coordinate) (bool, error)
 	// Kind returns the provider kind (e.g. aws/ssm, sops/age) for display/observability.
 	Kind() string
+	// SupportsScope reports whether the provider can represent the given scope. A declared
+	// secret whose resolved scope is unsupported is rejected with ErrScopeUnsupported before any
+	// write. An empty scope (ScopeInstance) must always be supported.
+	SupportsScope(scope Scope) bool
 }
 
 // Provider-construction errors.
@@ -61,6 +81,9 @@ var (
 	ErrSecretFileNotFound = errors.New("SOPS file not found")
 	// ErrSecretNotInitialized indicates the secret key is absent from its backend.
 	ErrSecretNotInitialized = errors.New("secret is not initialized in its backend")
+	// ErrScopeUnsupported indicates a declared secret's resolved scope is not supported by its
+	// backend (e.g. an instance-scoped secret on a backend that only scopes by environment).
+	ErrScopeUnsupported = errors.New("secret scope not supported by backend")
 )
 
 // FileResettable is an optional capability for file-based providers (e.g. SOPS) that can rewrite
@@ -69,4 +92,13 @@ var (
 type FileResettable interface {
 	// Reset overwrites the provider's backing file with an empty document for the coordinate's scope.
 	Reset(coord Coordinate) error
+}
+
+// FilePathProvider is an optional capability for file-backed providers (e.g. SOPS) that can
+// report the on-disk path a coordinate resolves to. `describe affected` uses it to treat the
+// backing file as an automatic dependency of every component that consumes the secret, so a
+// changed secret file marks its consumers affected. Store-backed providers do not implement it.
+type FilePathProvider interface {
+	// FilePath returns the backing file path the coordinate resolves to.
+	FilePath(coord Coordinate) (string, error)
 }

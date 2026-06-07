@@ -47,7 +47,7 @@ func init() {
 func runSecretList(cmd *cobra.Command, args []string) error {
 	defer perf.Track(nil, "secret.runSecretList")()
 
-	scope, err := parseScope(cmd)
+	facet, err := parseFacets(cmd)
 	if err != nil {
 		return err
 	}
@@ -60,29 +60,78 @@ func runSecretList(cmd *cobra.Command, args []string) error {
 	verbose := v.GetBool("verbose")
 	outputFormat := format.Format(v.GetString(flagFormat))
 
-	svc, err := loadServiceFn(scope)
+	// Fully scoped (both facets) → fast single-scope path, honoring --identity.
+	if facet.Stack != "" && facet.Component != "" {
+		svc, err := loadServiceFn(facet)
+		if err != nil {
+			return err
+		}
+		rows := statusesToData(facet.Stack, facet.Component, svc.Status())
+		empty := fmt.Sprintf("No secrets declared for component %q in stack %q.", facet.Component, facet.Stack)
+		return renderSecretRows(rows, verbose, outputFormat, empty)
+	}
+
+	// Otherwise enumerate across every matching (stack, component) instance (best-effort status).
+	rows, err := enumeratedSecretRows(facet)
 	if err != nil {
 		return err
 	}
-
-	statuses := svc.Status()
-	return renderSecretStatuses(scope, statuses, verbose, outputFormat)
+	return renderSecretRows(rows, verbose, outputFormat, emptyListMessage(facet))
 }
 
-// renderSecretStatuses renders secret statuses via the pkg/list rendering pipeline.
-// It is TTY-aware: styled table on TTY, plain/delimited when piped.
-func renderSecretStatuses(scope secretScope, statuses []secrets.Status, verbose bool, outputFormat format.Format) error {
-	defer perf.Track(nil, "secret.renderSecretStatuses")()
+// enumeratedSecretRows builds list rows across all (stack, component) instances matching the
+// facets. Stack-scoped secrets are de-duplicated to a single row per (stack, secret) — they are
+// inherited into every component but stored once — and shown with a `*` component.
+func enumeratedSecretRows(facet secretScope) ([]map[string]any, error) {
+	entries, atmosConfig, err := enumerateScopesFn(facet)
+	if err != nil {
+		return nil, err
+	}
 
-	if len(statuses) == 0 {
-		ui.Info(fmt.Sprintf("No secrets declared for component %q in stack %q.", scope.Component, scope.Stack))
+	var rows []map[string]any
+	seenStackScoped := make(map[string]bool)
+	for _, entry := range entries {
+		svc := secrets.NewService(atmosConfig, entry.Stack, entry.Component, entry.Section)
+		statuses := svc.Status()
+		for i := range statuses {
+			st := &statuses[i]
+			if st.Declaration.IsStackScoped() {
+				key := entry.Stack + "\x00" + st.Declaration.Name
+				if seenStackScoped[key] {
+					continue
+				}
+				seenStackScoped[key] = true
+				rows = append(rows, statusRow(entry.Stack, "*", st))
+				continue
+			}
+			rows = append(rows, statusRow(entry.Stack, entry.Component, st))
+		}
+	}
+	return rows, nil
+}
+
+// emptyListMessage returns the "nothing found" message scoped to the active facets.
+func emptyListMessage(facet secretScope) string {
+	switch {
+	case facet.Stack != "":
+		return fmt.Sprintf("No secrets declared in stack %q.", facet.Stack)
+	case facet.Component != "":
+		return fmt.Sprintf("No secrets declared for component %q in any stack.", facet.Component)
+	default:
+		return "No secrets declared in any stack."
+	}
+}
+
+// renderSecretRows renders secret rows via the pkg/list rendering pipeline.
+// It is TTY-aware: styled table on TTY, plain/delimited when piped.
+func renderSecretRows(rows []map[string]any, verbose bool, outputFormat format.Format, emptyMessage string) error {
+	defer perf.Track(nil, "secret.renderSecretRows")()
+
+	if len(rows) == 0 {
+		ui.Info(emptyMessage)
 		return nil
 	}
 
-	// Convert statuses to []map[string]any for the rendering pipeline.
-	data := statusesToData(scope, statuses)
-
-	// Build column configuration (with optional Description when --verbose).
 	columns := secretListColumns(verbose)
 
 	selector, err := column.NewSelector(columns, column.BuildColumnFuncMap())
@@ -99,24 +148,37 @@ func renderSecretStatuses(scope secretScope, statuses []secrets.Status, verbose 
 	var filters []filter.Filter
 
 	r := renderer.New(filters, selector, sorters, outputFormat, "")
-	return r.Render(data)
+	return r.Render(rows)
 }
 
-// statusesToData converts []secrets.Status to the generic map slice expected by the renderer.
-func statusesToData(scope secretScope, statuses []secrets.Status) []map[string]any {
+// statusesToData converts []secrets.Status for a single (stack, component) to renderer rows.
+func statusesToData(stack, component string, statuses []secrets.Status) []map[string]any {
 	rows := make([]map[string]any, 0, len(statuses))
 	for i := range statuses {
-		st := &statuses[i]
-		rows = append(rows, map[string]any{
-			"stack":       scope.Stack,
-			"component":   scope.Component,
-			"secret":      st.Declaration.Name,
-			"provider":    backendLabel(&st.Declaration),
-			"status":      statusLabel(st),
-			"description": st.Declaration.Description,
-		})
+		rows = append(rows, statusRow(stack, component, &statuses[i]))
 	}
 	return rows
+}
+
+// statusRow converts a single status into a renderer row.
+func statusRow(stack, component string, st *secrets.Status) map[string]any {
+	return map[string]any{
+		"stack":       stack,
+		"component":   component,
+		"secret":      st.Declaration.Name,
+		"scope":       scopeLabel(st.Declaration.Scope),
+		"provider":    backendLabel(&st.Declaration),
+		"status":      statusLabel(st),
+		"description": st.Declaration.Description,
+	}
+}
+
+// scopeLabel returns the display scope for a declaration, defaulting empty to "instance".
+func scopeLabel(scope secrets.Scope) string {
+	if scope == secrets.ScopeStack {
+		return string(secrets.ScopeStack)
+	}
+	return string(secrets.ScopeInstance)
 }
 
 // secretListColumns returns column configuration for secret list output.
@@ -126,6 +188,7 @@ func secretListColumns(verbose bool) []column.Config {
 		{Name: "Stack", Value: "{{ .stack }}"},
 		{Name: "Component", Value: "{{ .component }}"},
 		{Name: "Secret", Value: "{{ .secret }}"},
+		{Name: "Scope", Value: "{{ .scope }}"},
 		{Name: "Provider", Value: "{{ .provider }}"},
 		{Name: "Status", Value: "{{ .status }}"},
 	}

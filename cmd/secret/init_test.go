@@ -15,18 +15,38 @@ func TestRunSecretInit_PromptsMissing(t *testing.T) {
 	svc := newFakeSecretService()
 	svc.statuses = []secrets.Status{
 		{Declaration: secrets.Declaration{Name: "API_KEY"}, Initialized: false},
-		{Declaration: secrets.Declaration{Name: "DB"}, Initialized: true}, // Already initialized → skipped.
+		{Declaration: secrets.Declaration{Name: "DB"}, Initialized: true}, // Already set → decline the update prompt.
 	}
 	installService(t, svc, nil)
 	overridePromptForValue(t, "entered", nil)
+	overrideConfirmAction(t, false, nil) // decline rotating the already-initialized secret.
 
 	err := runSecretSubcommand(t, "init", "--stack", "dev", "--component", "api")
 	require.NoError(t, err)
 
-	// Only the missing secret is set.
+	// The missing secret is set; the already-initialized one is skipped (update declined).
 	require.Len(t, svc.setCalls, 1)
 	assert.Equal(t, "API_KEY", svc.setCalls[0].name)
 	assert.Equal(t, "entered", svc.setCalls[0].value)
+}
+
+// TestRunSecretInit_RotateUpdate proves an already-initialized secret is rotated when the user
+// accepts the update prompt (the manual-rotation flow).
+func TestRunSecretInit_RotateUpdate(t *testing.T) {
+	svc := newFakeSecretService()
+	svc.statuses = []secrets.Status{
+		{Declaration: secrets.Declaration{Name: "DB"}, Initialized: true},
+	}
+	installService(t, svc, nil)
+	overridePromptForValue(t, "rotated", nil)
+	overrideConfirmAction(t, true, nil) // accept the update (rotate).
+
+	err := runSecretSubcommand(t, "init", "--stack", "dev", "--component", "api")
+	require.NoError(t, err)
+
+	require.Len(t, svc.setCalls, 1)
+	assert.Equal(t, "DB", svc.setCalls[0].name)
+	assert.Equal(t, "rotated", svc.setCalls[0].value)
 }
 
 func TestRunSecretInit_Force(t *testing.T) {

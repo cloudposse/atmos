@@ -756,6 +756,7 @@ func applyTerraformMetadataInheritance(
 			BaseComponentSettings:  make(map[string]any),
 			BaseComponentEnv:       make(map[string]any),
 			BaseComponentAuth:      make(map[string]any),
+			BaseComponentSecrets:   make(map[string]any),
 			BaseComponentMetadata:  make(map[string]any),
 			BaseComponentProviders: make(map[string]any),
 			BaseComponentHooks:     make(map[string]any),
