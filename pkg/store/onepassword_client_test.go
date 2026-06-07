@@ -19,8 +19,10 @@ type fakeConnectClient struct {
 
 	// items is keyed by "vault/item" and holds the stored item.
 	items map[string]*connectop.Item
-	// vaults maps a vault title/UUID query to its resolved UUID.
-	vaults map[string]string
+	// vaultsByID maps a vault UUID query to its resolved UUID (read by GetVault).
+	vaultsByID map[string]string
+	// vaultsByTitle maps a vault title query to its resolved UUID (read by GetVaultByTitle).
+	vaultsByTitle map[string]string
 
 	getErr    error // returned by GetItem when set.
 	updateErr error // returned by UpdateItem when set.
@@ -34,8 +36,9 @@ type fakeConnectClient struct {
 
 func newFakeConnectClient() *fakeConnectClient {
 	return &fakeConnectClient{
-		items:  map[string]*connectop.Item{},
-		vaults: map[string]string{},
+		items:         map[string]*connectop.Item{},
+		vaultsByID:    map[string]string{},
+		vaultsByTitle: map[string]string{},
 	}
 }
 
@@ -80,14 +83,14 @@ func (f *fakeConnectClient) DeleteItem(item *connectop.Item, vaultQuery string) 
 }
 
 func (f *fakeConnectClient) GetVault(uuid string) (*connectop.Vault, error) {
-	if id, ok := f.vaults[uuid]; ok {
+	if id, ok := f.vaultsByID[uuid]; ok {
 		return &connectop.Vault{ID: id}, nil
 	}
 	return nil, errors.New("vault not found")
 }
 
 func (f *fakeConnectClient) GetVaultByTitle(title string) (*connectop.Vault, error) {
-	if id, ok := f.vaults[title]; ok {
+	if id, ok := f.vaultsByTitle[title]; ok {
 		return &connectop.Vault{ID: id}, nil
 	}
 	return nil, errors.New("vault not found")
@@ -172,7 +175,7 @@ func TestConnectClient_Set_AppendsNewField(t *testing.T) {
 
 func TestConnectClient_Set_CreatesItemWhenMissing(t *testing.T) {
 	fake := newFakeConnectClient()
-	fake.vaults["Shared"] = "vault-uuid"
+	fake.vaultsByID["Shared"] = "vault-uuid"
 	c := newTestConnectClient(fake)
 
 	require.NoError(t, c.Set(context.Background(), "op://Shared/Datadog/api_key", "dd-key"))
@@ -187,8 +190,8 @@ func TestConnectClient_Set_CreatesItemWhenMissing(t *testing.T) {
 
 func TestConnectClient_Set_CreateItemVaultResolveFallsBackToTitle(t *testing.T) {
 	fake := newFakeConnectClient()
-	// GetVault fails (not a UUID) but GetVaultByTitle resolves.
-	fake.vaults["Shared"] = "title-uuid"
+	// GetVault fails (not a UUID) but GetVaultByTitle resolves, forcing the fallback branch.
+	fake.vaultsByTitle["Shared"] = "title-uuid"
 	c := newTestConnectClient(fake)
 
 	require.NoError(t, c.Set(context.Background(), "op://Shared/Datadog/api_key", "dd-key"))

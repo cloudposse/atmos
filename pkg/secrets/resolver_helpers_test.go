@@ -12,6 +12,15 @@ import (
 	"github.com/cloudposse/atmos/pkg/store"
 )
 
+// Compile-time guard: a rename of any referenced field fails the build.
+var _ = schema.ConfigAndStacksInfo{
+	Component:        "",
+	ComponentFromArg: "",
+	FinalComponent:   "",
+	Stack:            "",
+	ComponentSection: nil,
+}
+
 // TestComponentName covers every fallback branch of componentName.
 func TestComponentName(t *testing.T) {
 	tests := []struct {

@@ -30,7 +30,10 @@ func TestResolveSetValue_Stdin(t *testing.T) {
 	require.NoError(t, err)
 	orig := os.Stdin
 	os.Stdin = r
-	t.Cleanup(func() { os.Stdin = orig })
+	t.Cleanup(func() {
+		_ = r.Close()
+		os.Stdin = orig
+	})
 
 	// A trailing newline must be trimmed.
 	_, writeErr := w.WriteString("piped-secret\n")

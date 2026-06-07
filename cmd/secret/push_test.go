@@ -72,6 +72,7 @@ func TestRunSecretPush_JSONFormat(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, svc.setCalls, 1)
 	assert.Equal(t, "A", svc.setCalls[0].name)
+	assert.Equal(t, "1", svc.setCalls[0].value)
 }
 
 func TestRunSecretPush_MissingFile(t *testing.T) {

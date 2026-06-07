@@ -2,6 +2,7 @@ package secret
 
 import (
 	"errors"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -50,7 +51,8 @@ func TestRunSecretImport_MissingFile(t *testing.T) {
 	svc := newFakeSecretService()
 	installService(t, svc, nil)
 
-	err := runSecretSubcommand(t, "import", "/nonexistent/secrets.env", "--stack", "dev", "--component", "api")
+	missingPath := filepath.Join(t.TempDir(), "does-not-exist.env")
+	err := runSecretSubcommand(t, "import", missingPath, "--stack", "dev", "--component", "api")
 	require.Error(t, err)
 	assert.Empty(t, svc.setCalls)
 }

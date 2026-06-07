@@ -30,10 +30,10 @@ func TestRunSecretExec_Happy(t *testing.T) {
 	installServiceAndConfig(t, svc, &schema.AtmosConfiguration{}, nil)
 	gotArgs, gotEnv := overrideRunCommand(t, nil)
 
-	err := runSecretSubcommand(t, "exec", "--stack", "dev", "--component", "api", "--", "env", "-i")
+	err := runSecretSubcommand(t, "exec", "--stack", "dev", "--component", "api", "--", "dummy-cmd", "--flag")
 	require.NoError(t, err)
 
-	assert.Equal(t, []string{"env", "-i"}, *gotArgs)
+	assert.Equal(t, []string{"dummy-cmd", "--flag"}, *gotArgs)
 	// Injected secrets are present in the child environment.
 	assert.Contains(t, *gotEnv, "API_KEY=s3cr3t")
 	assert.Contains(t, *gotEnv, "DB=pw")
@@ -48,7 +48,7 @@ func TestRunSecretExec_RunCommandError(t *testing.T) {
 	runErr := errors.New("command failed")
 	overrideRunCommand(t, runErr)
 
-	err := runSecretSubcommand(t, "exec", "--stack", "dev", "--component", "api", "--", "false")
+	err := runSecretSubcommand(t, "exec", "--stack", "dev", "--component", "api", "--", "dummy-cmd")
 	require.ErrorIs(t, err, runErr)
 }
 
@@ -56,6 +56,6 @@ func TestRunSecretExec_LoadServiceError(t *testing.T) {
 	loadErr := errors.New("load failed")
 	installServiceAndConfig(t, nil, nil, loadErr)
 
-	err := runSecretSubcommand(t, "exec", "--stack", "dev", "--component", "api", "--", "env")
+	err := runSecretSubcommand(t, "exec", "--stack", "dev", "--component", "api", "--", "dummy-cmd")
 	require.ErrorIs(t, err, loadErr)
 }
