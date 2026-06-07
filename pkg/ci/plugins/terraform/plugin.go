@@ -36,6 +36,7 @@ func init() {
 
 // GetType returns the component type.
 func (p *Plugin) GetType() string {
+	defer perf.Track(nil, "terraform.Plugin.GetType")()
 	return "terraform"
 }
 

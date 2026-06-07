@@ -74,6 +74,7 @@ type TerraformExecutionResult struct {
 
 // CombinedOutput returns stdout and stderr in the order hooks expect.
 func (r TerraformExecutionResult) CombinedOutput() string {
+	defer perf.Track(nil, "adapters.TerraformExecutionResult.CombinedOutput")()
 	if r.Stderr == "" {
 		return r.Stdout
 	}
@@ -426,6 +427,7 @@ type TerraformDispatcher struct {
 
 // Dispatch executes one Terraform scheduler node.
 func (d *TerraformDispatcher) Dispatch(ctx context.Context, node *dependency.Node) (scheduler.Result, error) {
+	defer perf.Track(nil, "adapters.TerraformDispatcher.Dispatch")()
 	if node == nil {
 		return scheduler.Result{}, fmt.Errorf("%w: node is nil", errUtils.ErrInvalidConfig)
 	}
@@ -892,6 +894,7 @@ func newTerraformResourceLocks() *terraformResourceLocks {
 
 // Lock acquires the mutex for key and returns its unlock function.
 func (l *terraformResourceLocks) Lock(key string) func() {
+	defer perf.Track(nil, "adapters.terraformResourceLocks.Lock")()
 	l.mu.Lock()
 	lock, ok := l.locks[key]
 	if !ok {
@@ -1234,37 +1237,53 @@ func finalizeTerraformPlanCIResults(info *schema.ConfigAndStacksInfo, result *sc
 	resultSet := schema.TerraformPlanCIResultSet{
 		Results: make([]schema.TerraformPlanCIResult, 0, len(result.Results)),
 	}
-	for _, nodeResult := range result.Results {
-		outcome, _ := nodeResult.Value.(TerraformNodeOutcome)
-		entry := schema.TerraformPlanCIResult{
-			NodeID:    nodeResult.NodeID,
-			Stack:     nodeResult.Node.Stack,
-			Component: nodeResult.Node.Component,
-			Status:    string(nodeResult.Status),
-			Processed: outcome.Processed,
-			Changed:   outcome.Changed,
-			ExitCode:  outcome.ExitCode,
-			Output:    outcome.Output,
-			LogFiles:  cloneStringMap(outcome.LogFiles),
-		}
-		if timing, ok := timings.Get(nodeResult.NodeID); ok {
-			entry.StartedAt = timing.startedAt
-			entry.FinishedAt = timing.finishedAt
-			if !timing.startedAt.IsZero() && !timing.finishedAt.IsZero() {
-				entry.DurationMS = timing.finishedAt.Sub(timing.startedAt).Milliseconds()
-			}
-		}
-		if nodeResult.Err != nil {
-			entry.Error = nodeResult.Err.Error()
-			if entry.ExitCode == 0 {
-				entry.ExitCode = 1
-			}
-		}
-		resultSet.Results = append(resultSet.Results, entry)
+	for i := range result.Results {
+		resultSet.Results = append(resultSet.Results, terraformPlanCIResultFromNode(&result.Results[i], timings))
 	}
 
 	if err := info.TerraformPlanCIResultHandler.HandleTerraformPlanCIResults(resultSet); err != nil {
 		log.Warn("Terraform plan CI aggregate hook failed", "error", err)
+	}
+}
+
+// terraformPlanCIResultFromNode converts one scheduler node result into aggregate CI data.
+func terraformPlanCIResultFromNode(nodeResult *scheduler.Result, timings *terraformNodeTimings) schema.TerraformPlanCIResult {
+	outcome, _ := nodeResult.Value.(TerraformNodeOutcome)
+	entry := schema.TerraformPlanCIResult{
+		NodeID:    nodeResult.NodeID,
+		Stack:     nodeResult.Node.Stack,
+		Component: nodeResult.Node.Component,
+		Status:    string(nodeResult.Status),
+		Processed: outcome.Processed,
+		Changed:   outcome.Changed,
+		ExitCode:  outcome.ExitCode,
+		Output:    outcome.Output,
+		LogFiles:  cloneStringMap(outcome.LogFiles),
+	}
+	applyTerraformPlanCITiming(&entry, nodeResult.NodeID, timings)
+	applyTerraformPlanCIError(&entry, nodeResult.Err)
+	return entry
+}
+
+// applyTerraformPlanCITiming adds captured scheduler timings to one CI result.
+func applyTerraformPlanCITiming(entry *schema.TerraformPlanCIResult, nodeID string, timings *terraformNodeTimings) {
+	if timing, ok := timings.Get(nodeID); ok {
+		entry.StartedAt = timing.startedAt
+		entry.FinishedAt = timing.finishedAt
+		if !timing.startedAt.IsZero() && !timing.finishedAt.IsZero() {
+			entry.DurationMS = timing.finishedAt.Sub(timing.startedAt).Milliseconds()
+		}
+	}
+}
+
+// applyTerraformPlanCIError records node errors with default failed exit-code semantics.
+func applyTerraformPlanCIError(entry *schema.TerraformPlanCIResult, nodeErr error) {
+	if nodeErr == nil {
+		return
+	}
+	entry.Error = nodeErr.Error()
+	if entry.ExitCode == 0 {
+		entry.ExitCode = 1
 	}
 }
 
@@ -1318,6 +1337,7 @@ func newTerraformNodeTimings() *terraformNodeTimings {
 
 // Start records the UTC start time for a node.
 func (t *terraformNodeTimings) Start(node *dependency.Node) {
+	defer perf.Track(nil, "adapters.terraformNodeTimings.Start")()
 	if t == nil || node == nil {
 		return
 	}
@@ -1330,6 +1350,7 @@ func (t *terraformNodeTimings) Start(node *dependency.Node) {
 
 // Complete records the UTC finish time for a node.
 func (t *terraformNodeTimings) Complete(node *dependency.Node, _ scheduler.Result) {
+	defer perf.Track(nil, "adapters.terraformNodeTimings.Complete")()
 	if t == nil || node == nil {
 		return
 	}
@@ -1342,6 +1363,7 @@ func (t *terraformNodeTimings) Complete(node *dependency.Node, _ scheduler.Resul
 
 // Get returns the recorded timing for nodeID.
 func (t *terraformNodeTimings) Get(nodeID string) (terraformNodeTiming, bool) {
+	defer perf.Track(nil, "adapters.terraformNodeTimings.Get")()
 	if t == nil {
 		return terraformNodeTiming{}, false
 	}

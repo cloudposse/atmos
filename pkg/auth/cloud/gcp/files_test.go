@@ -3,6 +3,7 @@ package gcp
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -13,6 +14,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	errUtils "github.com/cloudposse/atmos/errors"
 )
 
 const testRealm = "test-realm"
@@ -155,6 +158,22 @@ func TestWriteADCFile_NilContent(t *testing.T) {
 	_, err := WriteADCFile(testRealm, "gcp-adc", "id", nil)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "nil")
+}
+
+func TestWriteADCFile_PathResolutionErrorPreservesSentinels(t *testing.T) {
+	tmp := t.TempDir()
+	blockedConfigHome := filepath.Join(tmp, "blocked-config-home")
+	require.NoError(t, os.WriteFile(blockedConfigHome, []byte("not a directory"), 0o600))
+	t.Setenv("XDG_CONFIG_HOME", blockedConfigHome)
+
+	_, err := WriteADCFile(testRealm, "gcp-adc", "id", &AuthorizedUserContent{
+		Type:        "authorized_user",
+		AccessToken: "ya29.token",
+	})
+
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, errUtils.ErrWriteADCFile), "error should match ADC write sentinel")
+	assert.True(t, errors.Is(err, errUtils.ErrInvalidAuthConfig), "error should preserve underlying auth config sentinel")
 }
 
 func TestWritePropertiesFile(t *testing.T) {

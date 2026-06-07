@@ -51,6 +51,14 @@ const (
 
 var credentialFileSystem = filesystem.NewOSFileSystem()
 
+func credentialFileError(sentinel error, explanation string, cause error) error {
+	builder := errUtils.Build(sentinel).WithExplanation(explanation)
+	if cause != nil {
+		builder = builder.WithCause(cause)
+	}
+	return builder.Err()
+}
+
 // acquireFileLock attempts to acquire an exclusive file lock with timeout and retries.
 func acquireFileLock(lockPath string) (*flock.Flock, error) {
 	lock := flock.New(lockPath)
@@ -104,7 +112,7 @@ func GetGCPBaseDir() (string, error) {
 
 	dir, err := xdg.GetXDGConfigDir("", permDir)
 	if err != nil {
-		return "", fmt.Errorf("%w: %w", errUtils.ErrInvalidAuthConfig, err)
+		return "", credentialFileError(errUtils.ErrInvalidAuthConfig, "Failed to resolve Atmos GCP credential directory", err)
 	}
 	return dir, nil
 }
@@ -129,7 +137,7 @@ func GetProviderDir(realm, providerName string) (string, error) {
 	}
 	dir := filepath.Join(base, realm, GCPSubdir, providerName)
 	if err := os.MkdirAll(dir, permDir); err != nil {
-		return "", fmt.Errorf("%w: failed to create provider directory: %w", errUtils.ErrInvalidAuthConfig, err)
+		return "", credentialFileError(errUtils.ErrInvalidAuthConfig, "Failed to create GCP provider directory", err)
 	}
 	return dir, nil
 }
@@ -148,7 +156,7 @@ func GetADCDir(realm, providerName, identityName string) (string, error) {
 	}
 	dir := filepath.Join(providerDir, ADCSubdir, identityName)
 	if err := os.MkdirAll(dir, permDir); err != nil {
-		return "", fmt.Errorf("%w: failed to create ADC directory: %w", errUtils.ErrInvalidAuthConfig, err)
+		return "", credentialFileError(errUtils.ErrInvalidAuthConfig, "Failed to create GCP ADC directory", err)
 	}
 	return dir, nil
 }
@@ -179,7 +187,7 @@ func GetConfigDir(realm, providerName, identityName string) (string, error) {
 	}
 	dir := filepath.Join(providerDir, ConfigSubdir, identityName)
 	if err := os.MkdirAll(dir, permDir); err != nil {
-		return "", fmt.Errorf("%w: failed to create config directory: %w", errUtils.ErrInvalidAuthConfig, err)
+		return "", credentialFileError(errUtils.ErrInvalidAuthConfig, "Failed to create GCP config directory", err)
 	}
 	return dir, nil
 }
@@ -218,14 +226,14 @@ func WriteADCFile(realm, providerName, identityName string, content *AuthorizedU
 	}
 	path, err := GetADCFilePath(realm, providerName, identityName)
 	if err != nil {
-		return "", fmt.Errorf("%w: resolve ADC file path: %w", errUtils.ErrWriteADCFile, err)
+		return "", credentialFileError(errUtils.ErrWriteADCFile, "Failed to resolve ADC file path", err)
 	}
 
 	// Acquire file lock to prevent concurrent modifications.
 	lockPath := path + ".lock"
 	lock, err := acquireFileLock(lockPath)
 	if err != nil {
-		return "", fmt.Errorf("%w: %w", errUtils.ErrWriteADCFile, err)
+		return "", credentialFileError(errUtils.ErrWriteADCFile, "Failed to acquire ADC file lock", err)
 	}
 	defer func() {
 		if unlockErr := lock.Unlock(); unlockErr != nil {
@@ -235,10 +243,10 @@ func WriteADCFile(realm, providerName, identityName string, content *AuthorizedU
 
 	data, err := json.MarshalIndent(content, "", "  ")
 	if err != nil {
-		return "", fmt.Errorf("%w: marshal ADC content: %w", errUtils.ErrWriteADCFile, err)
+		return "", credentialFileError(errUtils.ErrWriteADCFile, "Failed to marshal ADC content", err)
 	}
 	if err := credentialFileSystem.WriteFileAtomic(path, data, permFile); err != nil {
-		return "", fmt.Errorf("%w: write ADC file: %w", errUtils.ErrWriteADCFile, err)
+		return "", credentialFileError(errUtils.ErrWriteADCFile, "Failed to write ADC file", err)
 	}
 	return path, nil
 }
@@ -251,14 +259,14 @@ func WritePropertiesFile(realm, providerName, identityName string, projectID str
 
 	path, err := GetPropertiesFilePath(realm, providerName, identityName)
 	if err != nil {
-		return "", fmt.Errorf("%w: resolve properties file path: %w", errUtils.ErrWritePropertiesFile, err)
+		return "", credentialFileError(errUtils.ErrWritePropertiesFile, "Failed to resolve GCP properties file path", err)
 	}
 
 	// Acquire file lock to prevent concurrent modifications.
 	lockPath := path + ".lock"
 	lock, err := acquireFileLock(lockPath)
 	if err != nil {
-		return "", fmt.Errorf("%w: %w", errUtils.ErrWritePropertiesFile, err)
+		return "", credentialFileError(errUtils.ErrWritePropertiesFile, "Failed to acquire GCP properties file lock", err)
 	}
 	defer func() {
 		if unlockErr := lock.Unlock(); unlockErr != nil {
@@ -272,32 +280,32 @@ func WritePropertiesFile(realm, providerName, identityName string, projectID str
 	// [core] section.
 	coreSection, err := cfg.NewSection("core")
 	if err != nil {
-		return "", fmt.Errorf("%w: create core section: %w", errUtils.ErrWritePropertiesFile, err)
+		return "", credentialFileError(errUtils.ErrWritePropertiesFile, "Failed to create GCP properties core section", err)
 	}
 	if projectID != "" {
 		if _, err := coreSection.NewKey("project", projectID); err != nil {
-			return "", fmt.Errorf("%w: set project key: %w", errUtils.ErrWritePropertiesFile, err)
+			return "", credentialFileError(errUtils.ErrWritePropertiesFile, "Failed to set GCP project property", err)
 		}
 	}
 
 	// [compute] section.
 	computeSection, err := cfg.NewSection("compute")
 	if err != nil {
-		return "", fmt.Errorf("%w: create compute section: %w", errUtils.ErrWritePropertiesFile, err)
+		return "", credentialFileError(errUtils.ErrWritePropertiesFile, "Failed to create GCP properties compute section", err)
 	}
 	if region != "" {
 		if _, err := computeSection.NewKey("region", region); err != nil {
-			return "", fmt.Errorf("%w: set region key: %w", errUtils.ErrWritePropertiesFile, err)
+			return "", credentialFileError(errUtils.ErrWritePropertiesFile, "Failed to set GCP region property", err)
 		}
 	}
 
 	var buf bytes.Buffer
 	if _, err := cfg.WriteTo(&buf); err != nil {
-		return "", fmt.Errorf("%w: write properties file: %w", errUtils.ErrWritePropertiesFile, err)
+		return "", credentialFileError(errUtils.ErrWritePropertiesFile, "Failed to serialize GCP properties file", err)
 	}
 
 	if err := credentialFileSystem.WriteFileAtomic(path, buf.Bytes(), permFile); err != nil {
-		return "", fmt.Errorf("%w: write properties file: %w", errUtils.ErrWritePropertiesFile, err)
+		return "", credentialFileError(errUtils.ErrWritePropertiesFile, "Failed to write GCP properties file", err)
 	}
 
 	return path, nil
@@ -314,14 +322,14 @@ func WriteAccessTokenFile(realm, providerName, identityName string, accessToken 
 	}
 	path, err := GetAccessTokenFilePath(realm, providerName, identityName)
 	if err != nil {
-		return "", fmt.Errorf("%w: resolve access token file path: %w", errUtils.ErrWriteAccessTokenFile, err)
+		return "", credentialFileError(errUtils.ErrWriteAccessTokenFile, "Failed to resolve GCP access token file path", err)
 	}
 
 	// Acquire file lock to prevent concurrent modifications.
 	lockPath := path + ".lock"
 	lock, err := acquireFileLock(lockPath)
 	if err != nil {
-		return "", fmt.Errorf("%w: %w", errUtils.ErrWriteAccessTokenFile, err)
+		return "", credentialFileError(errUtils.ErrWriteAccessTokenFile, "Failed to acquire GCP access token file lock", err)
 	}
 	defer func() {
 		if unlockErr := lock.Unlock(); unlockErr != nil {
@@ -334,7 +342,7 @@ func WriteAccessTokenFile(realm, providerName, identityName string, accessToken 
 		content += expiry.Format(time.RFC3339) + "\n"
 	}
 	if err := credentialFileSystem.WriteFileAtomic(path, []byte(content), permFile); err != nil {
-		return "", fmt.Errorf("%w: write access token file: %w", errUtils.ErrWriteAccessTokenFile, err)
+		return "", credentialFileError(errUtils.ErrWriteAccessTokenFile, "Failed to write GCP access token file", err)
 	}
 	return path, nil
 }
@@ -364,7 +372,9 @@ func CleanupIdentityFiles(realm, providerName, identityName string) error {
 			log.Debug("Failed to release file lock", "lock_file", lockPath, "error", unlockErr)
 		}
 		// Clean up the lock file itself after releasing the lock.
-		os.Remove(lockPath)
+		if removeErr := os.Remove(lockPath); removeErr != nil && !os.IsNotExist(removeErr) {
+			log.Debug("Failed to remove cleanup lock file", "lock_file", lockPath, "error", removeErr)
+		}
 	}()
 
 	adcDir := filepath.Join(providerDir, ADCSubdir, identityName)

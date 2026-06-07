@@ -7,7 +7,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
@@ -114,7 +113,6 @@ func TestSetAuthContext_IdentityOverrideClearsDefaultClients(t *testing.T) {
 
 	ssmStore := &SSMStore{
 		client:       new(MockSSMClient),
-		awsConfig:    &aws.Config{},
 		identityName: "",
 	}
 	ssmStore.SetAuthContext(resolver, "terraform-ci")

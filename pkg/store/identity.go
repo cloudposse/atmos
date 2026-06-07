@@ -31,7 +31,7 @@ type AzureAuthConfig struct {
 type GCPAuthConfig struct {
 	CredentialsFile string
 	ProjectID       string
-	AccessToken     string
+	AccessToken     string //nolint:gosec // Intentional credential field resolved from Atmos identity context.
 	TokenExpiry     time.Time
 }
 

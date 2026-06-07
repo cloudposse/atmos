@@ -387,18 +387,18 @@ func TestAggregateHelpersCoverFallbacks(t *testing.T) {
 	assert.Equal(t, "database", aggregate.Components[0].Result.Component, "components are sorted by stack/component/node")
 
 	assert.Equal(t, "provider error", componentSummaryText(
-		schema.TerraformPlanCIResult{},
+		&schema.TerraformPlanCIResult{},
 		&plugin.OutputResult{Errors: []string{"provider error"}},
 		nil,
-		"failed",
+		aggregateStatusFailed,
 	))
-	assert.Equal(t, "failed", componentSummaryText(schema.TerraformPlanCIResult{}, nil, nil, "failed"))
-	assert.Equal(t, "skipped", componentSummaryText(schema.TerraformPlanCIResult{}, nil, nil, "skipped"))
+	assert.Equal(t, aggregateStatusFailed, componentSummaryText(&schema.TerraformPlanCIResult{}, nil, nil, aggregateStatusFailed))
+	assert.Equal(t, aggregateStatusSkipped, componentSummaryText(&schema.TerraformPlanCIResult{}, nil, nil, aggregateStatusSkipped))
 	assert.Equal(t, "Changes detected", componentSummaryText(
-		schema.TerraformPlanCIResult{},
+		&schema.TerraformPlanCIResult{},
 		&plugin.OutputResult{HasChanges: true},
 		nil,
-		"changed",
+		aggregateStatusChanged,
 	))
 
 	assert.Empty(t, truncateAggregateDetail(""))
@@ -420,11 +420,11 @@ func TestAggregateHelpersCoverFallbacks(t *testing.T) {
 	assert.Equal(t, "-", markdownInline("\n"))
 
 	now := time.Date(2026, 6, 6, 12, 0, 0, 0, time.UTC)
-	assert.Equal(t, "1500ms", formatAggregateDuration(schema.TerraformPlanCIResult{
+	assert.Equal(t, "1500ms", formatAggregateDuration(&schema.TerraformPlanCIResult{
 		StartedAt:  now,
 		FinishedAt: now.Add(1500 * time.Millisecond),
 	}))
-	assert.Equal(t, "-", formatAggregateDuration(schema.TerraformPlanCIResult{}))
+	assert.Equal(t, "-", formatAggregateDuration(&schema.TerraformPlanCIResult{}))
 
 	assert.Equal(t, "all", aggregateStackValue(nil))
 	assert.Equal(t, "all", aggregateStackValue(&schema.ConfigAndStacksInfo{}))
@@ -438,7 +438,7 @@ func TestAggregateSummaryAndOutputsHandleProviderWithoutWriter(t *testing.T) {
 	aggregate := p.buildPlanAggregate(ctx.Aggregate.(schema.TerraformPlanCIResultSet))
 
 	require.NoError(t, p.writeAggregateSummary(ctx, aggregate.Markdown))
-	require.NoError(t, p.writeAggregateOutputs(ctx, aggregate))
+	require.NoError(t, p.writeAggregateOutputs(ctx, &aggregate))
 }
 
 func TestWriteAggregateOutputsFiltersVariables(t *testing.T) {
@@ -448,7 +448,7 @@ func TestWriteAggregateOutputsFiltersVariables(t *testing.T) {
 	mp := ctx.Provider.(*mockProvider)
 	aggregate := p.buildPlanAggregate(ctx.Aggregate.(schema.TerraformPlanCIResultSet))
 
-	require.NoError(t, p.writeAggregateOutputs(ctx, aggregate))
+	require.NoError(t, p.writeAggregateOutputs(ctx, &aggregate))
 	assert.Equal(t, map[string]string{
 		"has_changes": "true",
 		"exit_code":   "1",
@@ -462,7 +462,7 @@ func TestWriteAggregateOutputsReturnsJoinedWriterErrors(t *testing.T) {
 	ctx.Config.CI.Output.Variables = []string{"has_changes", "exit_code"}
 	aggregate := p.buildPlanAggregate(ctx.Aggregate.(schema.TerraformPlanCIResultSet))
 
-	err := p.writeAggregateOutputs(ctx, aggregate)
+	err := p.writeAggregateOutputs(ctx, &aggregate)
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), `failed to write aggregate CI output "exit_code"`)
@@ -508,7 +508,7 @@ func TestUploadAggregatePlanfilesSkipsFailedAndReturnsDelegateError(t *testing.T
 		},
 	}
 
-	err := p.uploadAggregatePlanfiles(ctx, aggregate)
+	err := p.uploadAggregatePlanfiles(ctx, &aggregate)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "store unavailable")
 }
