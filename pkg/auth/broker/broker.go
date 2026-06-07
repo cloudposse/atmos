@@ -100,6 +100,27 @@ func runEnabledBrokers(ctx context.Context, atmosConfig *schema.AtmosConfigurati
 	}
 }
 
+// SwapRegistryForTest clears the broker registry and the once guard, returning a restore function
+// that puts the previous state back when invoked. Intended for use in tests (including tests in
+// other packages, such as pkg/stack/imports) that exercise broker-triggering code paths and need to
+// register a fake provider in isolation. Because EnsureCredentials runs brokers at most once per
+// process, resetting the once is required for a test to observe a freshly registered broker.
+// Production code must never call this.
+func SwapRegistryForTest() func() {
+	registryMu.Lock()
+	prev := registry
+	registry = nil
+	ensureOnce = sync.Once{}
+	registryMu.Unlock()
+
+	return func() {
+		registryMu.Lock()
+		registry = prev
+		ensureOnce = sync.Once{}
+		registryMu.Unlock()
+	}
+}
+
 // snapshot returns a copy of the registry so brokers run without holding the lock.
 func snapshot() []Provider {
 	registryMu.Lock()

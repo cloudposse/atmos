@@ -1214,9 +1214,14 @@ func processYAMLConfigFileWithContextInternal(
 
 		// Check if the import is a remote URL.
 		if isRemote {
+			// Resolve the per-import cache TTL, falling back to the global default.
+			importTTL := importStruct.TTL
+			if importTTL == "" && atmosConfig != nil {
+				importTTL = atmosConfig.Imports.TTL
+			}
 			// Download the remote import.
-			log.Debug("Downloading remote stack import", "uri", imp, "file", relativeFilePath, "nested_imports", nestedImports)
-			remoteMatches, err := stackimports.ResolveRemoteImportNested(atmosConfig, imp, nestedImports)
+			log.Debug("Downloading remote stack import", "uri", imp, "file", relativeFilePath, "nested_imports", nestedImports, "ttl", importTTL)
+			remoteMatches, err := stackimports.ResolveRemoteImportNested(atmosConfig, imp, nestedImports, importTTL)
 			if err != nil {
 				if importStruct.SkipIfMissing {
 					log.Debug("Skipping missing remote import", "uri", imp)
@@ -2264,7 +2269,7 @@ func processBaseComponentConfigInternal(
 		// Base component source (when source inheritance is enabled).
 		if atmosConfig.Stacks.Inherit.IsSourceInheritanceEnabled() {
 			if i, ok2 := baseComponentMap[cfg.SourceSectionName]; ok2 {
-				baseComponentSourceSection, ok = i.(map[string]any)
+				baseComponentSourceSection, ok = normalizeComponentSourceSection(i)
 				if !ok {
 					return fmt.Errorf("%w '%s.source' in the stack '%s'", errUtils.ErrInvalidComponentSource, baseComponent, stack)
 				}

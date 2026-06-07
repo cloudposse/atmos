@@ -70,6 +70,7 @@
     },
     "inherit": {}
   },
+  "imports": {},
   "workflows": {
     "base_path": "",
     "list": {
