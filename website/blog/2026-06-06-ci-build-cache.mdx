@@ -6,7 +6,7 @@ tags: [feature, dx]
 date: 2026-06-06
 ---
 
-Atmos can now cache its toolchain and downloaded artifacts in the **GitHub Actions Cache** — the same store [`actions/cache`](https://github.com/actions/cache) writes to — so your jobs stop re-downloading everything from upstream on every run. Turn it on with two settings and Atmos handles the cache key, the paths, and the restore/save lifecycle for you.
+Atmos now derives the cache **key and paths** for its toolchain and downloaded artifacts from your `atmos.yaml` — so you can warm them across CI runs with GitHub's [`actions/cache`](https://github.com/actions/cache) in a single step, or let Atmos manage restore/save directly. Either way, your jobs stop re-downloading everything from upstream on every run.
 
 <!--truncate-->
 
@@ -14,50 +14,42 @@ Atmos can now cache its toolchain and downloaded artifacts in the **GitHub Actio
 
 Atmos installs a toolchain (via `atmos toolchain`) and downloads other regenerable artifacts — vendored components, remote stack-import clones, provider and plugin caches — into a well-known cache root (`~/.cache/atmos`, honoring `XDG_CACHE_HOME`). In CI, every job re-fetches all of it from scratch.
 
-The new `ci.cache` feature persists that cache root **across jobs and runs**. At startup Atmos restores the root from the GitHub Actions Cache; at exit it saves it back. Everything under the root is captured as a single archive, so the toolchain binaries, vendored components, import clones, and provider caches all warm up together.
-
-Under the hood it uses the GitHub Actions **Cache Service v2** — the runner-native cache API that `actions/cache` itself uses — so there are no extra tokens or services to wire up.
-
-## Virtually No Extra Config
-
-Caching the Atmos toolchain by hand means adding an `actions/cache` step and owning the `key` and `path` logic yourself. Atmos already knows its cache root and can derive a stable key from `toolchain.lock.yaml` plus the runner's OS/arch — so turning this on is two settings:
+The new `ci.cache` configuration lets Atmos compute *what* to cache — a stable key derived from `toolchain.lock.yaml` plus the runner's OS/arch, the cache root, and restore-key fallbacks — so a native cache can persist it across jobs and runs. Define it once:
 
 ```yaml title="atmos.yaml"
 ci:
   cache:
     enabled: true
-    auto: both   # restore on start, save on exit (off | restore | save | both)
-```
-
-That's it. The cache key is computed for you, the whole cache root is archived, and saves are write-once and idempotent — if the key was a hit on restore, Atmos skips the save instead of re-uploading unchanged content.
-
-Need more control? Every default is overridable:
-
-```yaml title="atmos.yaml"
-ci:
-  cache:
-    enabled: true
-    auto: both
-    key: "atmos-{{.OS}}-{{.Arch}}-{{ hashFiles \"toolchain.lock.yaml\" }}"
+    key: "atmos-toolchain-{{.OS}}-{{.Arch}}-v1"
     restore_keys:
-      - "atmos-{{.OS}}-{{.Arch}}-"
-    root: ""        # override the well-known cache root
-    paths: []       # cache only specific root-relative subpaths
-    compression: gzip
+      - "atmos-toolchain-{{.OS}}-{{.Arch}}-"
 ```
 
-## Manual Control When You Want It
+## One Step in GitHub Actions
 
-The same operations are available as explicit subcommands, so you can split the lifecycle across workflow steps — restore early, do work, save at the end:
+The recommended way to use it is the Atmos-provided composite action — Atmos supplies the key and paths, native `actions/cache` does the storage, and it exposes **no runtime token** to your job:
+
+```yaml
+- uses: cloudposse/atmos/actions/cache@v1
+- run: atmos toolchain install --default helm/helm@v3.16.0
+```
+
+Prefer to wire it yourself? `atmos ci cache paths --format=github` emits the `key`, `path`, and `restore-keys` as step outputs for a plain `actions/cache` step.
+
+## Atmos-Managed Restore/Save
+
+Atmos can also *own* the storage with its own backend against the GitHub Actions **Cache Service v2** (the same service `actions/cache` uses):
 
 ```bash
-atmos ci cache restore   # restore the cache root from the GitHub Actions Cache
+atmos ci cache restore   # restore the cache root from the cache service
 atmos ci cache save      # archive the root and upload it under the key
 atmos ci cache list      # list cache entries (optionally by key prefix)
 atmos ci cache delete    # delete a cache entry by exact key
 ```
 
-Automatic mode and the subcommands share one idempotent implementation — "automatic" is just these same operations invoked by the process lifecycle, with a state marker that prevents double restores or redundant saves.
+These — and the automatic `auto: both` lifecycle — need the runner's cache credentials (`ACTIONS_RUNTIME_TOKEN` / `ACTIONS_RESULTS_URL`), which GitHub withholds from `run:` steps. The Atmos [`github-runtime`](https://github.com/cloudposse/atmos/tree/main/actions/github-runtime) action exposes them (as scoped step outputs, or optionally as ambient env). Saves are write-once and idempotent — a cache hit on restore skips the save instead of re-uploading unchanged content.
+
+**Which should you use?** The `actions/cache` path exposes no token and is the most secure; the Atmos-managed path hands you the cache-service credentials when you want Atmos in control. See the [four documented options and security ranking](/cli/configuration/ci/cache#github-actions-integration).
 
 ## Why This Matters
 
@@ -73,7 +65,8 @@ None of this requires you to think about cache keys, paths, or eviction. You fli
 
 ## How to Use It
 
-- Set `ci.cache.enabled: true` and `ci.cache.auto: both` in `atmos.yaml` to restore on start and save on exit automatically.
-- Or wire `atmos ci cache restore` / `save` into separate workflow steps for explicit control.
-- The cache is **off by default** — opt in per repository.
+- **Recommended:** add `cloudposse/atmos/actions/cache@v1` (one step) — no runtime token, native `actions/cache` storage.
+- **Explicit:** `atmos ci cache paths --format=github` → your own `actions/cache` step.
+- **Atmos-managed:** `cloudposse/atmos/actions/github-runtime@v1` + `atmos ci cache restore`/`save` (or `auto: both`).
+- The cache is **off by default** — opt in per repository with `ci.cache.enabled: true`.
 - The live backend is **GitHub Actions** today: outside a cache-capable CI provider, all cache operations gracefully no-op (with a debug log), so the same config is safe to run locally. A generic backend for other providers is planned.

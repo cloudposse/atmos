@@ -1,0 +1,21 @@
+name: Major Release Tag
+
+# Re-point the moving major tag (e.g. `v1`) at each newly published stable
+# release so the in-repo actions can be referenced as
+# `cloudposse/atmos/actions/<name>@v1` and track the latest Atmos release.
+# Prereleases are skipped.
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+
+jobs:
+  major-tag:
+    name: Update major version tag
+    if: ${{ ! github.event.release.prerelease }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Update major version tag
+        uses: cloudposse/github-action-major-release-tagger@853c309982b8cd78c46a4cdc17cca6720d52541a # v2.0.0

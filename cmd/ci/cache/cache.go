@@ -49,6 +49,7 @@ func init() {
 	cacheCmd.AddCommand(cacheSaveCmd)
 	cacheCmd.AddCommand(cacheListCmd)
 	cacheCmd.AddCommand(cacheDeleteCmd)
+	cacheCmd.AddCommand(cachePathsCmd)
 }
 
 // buildConfigAndStacksInfo creates ConfigAndStacksInfo from global flags so the
@@ -65,24 +66,23 @@ func buildConfigAndStacksInfo(globalFlags *global.Flags) schema.ConfigAndStacksI
 	}
 }
 
-// cacheSetup loads config, validates that the cache is enabled, resolves the
-// cache configuration (applying CLI overrides), detects the provider's cache
-// backend, and returns a ready Manager. It is shared by all subcommands so the
-// CLI and the automatic lifecycle hooks operate on identical inputs. It is a
-// package-level var so tests can stub it to exercise the command bodies without
-// a live CI runner.
-var cacheSetup = func(cmd *cobra.Command, overrides cacheOverrides) (*cachepkg.Manager, *cachepkg.Config, error) {
+// resolveCacheConfig loads config, validates that the cache is enabled, applies
+// CLI overrides, and resolves the cache configuration. It does NOT detect a
+// backend or require a CI runtime token, so it is usable by `atmos ci cache
+// paths` (which only needs the key/paths) as well as forming the first half of
+// cacheSetup. It is a package-level var so tests can stub it.
+var resolveCacheConfig = func(cmd *cobra.Command, overrides cacheOverrides) (*cachepkg.Config, error) {
 	globalFlags := flags.ParseGlobalFlags(cmd, viper.GetViper())
 
 	atmosConfig, err := cfg.InitCliConfig(buildConfigAndStacksInfo(&globalFlags), false)
 	if err != nil {
-		return nil, nil, errUtils.Build(err).
+		return nil, errUtils.Build(err).
 			WithHint("Verify your atmos.yaml syntax and configuration").
 			Err()
 	}
 
 	if !atmosConfig.CI.Cache.Enabled {
-		return nil, nil, errUtils.Build(errUtils.ErrCacheUnavailable).
+		return nil, errUtils.Build(errUtils.ErrCacheUnavailable).
 			WithExplanation("The CI cache is disabled in configuration").
 			WithHint("Set ci.cache.enabled: true in atmos.yaml (or ATMOS_CI_CACHE_ENABLED=true) to use the cache").
 			Err()
@@ -91,7 +91,16 @@ var cacheSetup = func(cmd *cobra.Command, overrides cacheOverrides) (*cachepkg.M
 	// Apply CLI overrides onto a local copy of the cache config before resolving.
 	overrides.apply(&atmosConfig.CI.Cache)
 
-	resolved, err := cachepkg.ResolveConfig(&atmosConfig)
+	return cachepkg.ResolveConfig(&atmosConfig)
+}
+
+// cacheSetup resolves the cache configuration and additionally detects the
+// provider's cache backend, returning a ready Manager. It is shared by the
+// restore/save/list/delete subcommands and the automatic lifecycle hooks so
+// they operate on identical inputs. It is a package-level var so tests can stub
+// it to exercise the command bodies without a live CI runner.
+var cacheSetup = func(cmd *cobra.Command, overrides cacheOverrides) (*cachepkg.Manager, *cachepkg.Config, error) {
+	resolved, err := resolveCacheConfig(cmd, overrides)
 	if err != nil {
 		return nil, nil, err
 	}

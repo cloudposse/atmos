@@ -9,6 +9,8 @@ description: Configure the CI build cache that restores and saves the toolchain 
 import Intro from '@site/src/components/Intro'
 import File from '@site/src/components/File'
 import Experimental from '@site/src/components/Experimental'
+import Tabs from '@theme/Tabs'
+import TabItem from '@theme/TabItem'
 
 <Intro>
 The `ci.cache` section of `atmos.yaml` configures the CI build cache. The cache restores a
@@ -132,6 +134,101 @@ ci:
     compression: gzip
 ```
 </File>
+
+## GitHub Actions Integration
+
+There are two ways to use the cache in GitHub Actions, and they answer a single question: **who stores the cache?**
+
+- **Native `actions/cache`** (Options 1 and 4) — Atmos only computes *what* to cache (the key and paths from `ci.cache`); `actions/cache` does the storage. This exposes **no** runtime token to your job.
+- **Atmos-managed** (Options 2 and 3) — Atmos's own backend (`atmos ci cache restore`/`save`) does the storage via the GitHub Actions cache service. That requires the runtime credentials, which GitHub withholds from `run:` steps, so the [`github-runtime`](https://github.com/cloudposse/atmos/tree/main/actions/github-runtime) action exposes them.
+
+:::tip Recommended (most secure)
+Prefer **Option 4** (the `actions/cache` composite) or **Option 1** — both expose **no** runtime token. Security ranking: **Option 1 ≈ 4 (no token) > 2 (scoped token) > 3 (ambient token)**. If you need Atmos to own restore/save, prefer `mode: output` (scoped) over `mode: env` (ambient).
+:::
+
+<Tabs>
+  <TabItem value="actions-cache" label="4. Composite (recommended)" default>
+
+One `uses:` — Atmos derives the key/paths, native `actions/cache` stores them, **no runtime token**.
+
+```yaml
+- uses: cloudposse/atmos/actions/cache@v1   # pin to a release or SHA
+- run: |
+    atmos toolchain install --default helm/helm@${{ env.HELM_VERSION }}
+    atmos toolchain env --format=github
+```
+
+**Pros:** no token; native isolation/eviction/cross-OS; least boilerplate.
+**Cons:** one more Atmos action in the chain (it pins `actions/cache` internally).
+
+  </TabItem>
+  <TabItem value="paths" label="1. paths + actions/cache">
+
+The same as the composite, written out — useful when you want explicit control.
+
+```yaml
+- name: Resolve Atmos cache key & paths
+  id: atmos-cache
+  run: atmos ci cache paths --format=github
+
+- name: Cache Atmos toolchain
+  uses: actions/cache@v4
+  with:
+    key:          ${{ steps.atmos-cache.outputs.key }}
+    path:         ${{ steps.atmos-cache.outputs.path }}
+    restore-keys: ${{ steps.atmos-cache.outputs.restore-keys }}
+
+- run: atmos toolchain install --default helm/helm@${{ env.HELM_VERSION }}
+```
+
+**Pros:** no token; full control over the `actions/cache` step.
+**Cons:** three steps to wire by hand.
+
+  </TabItem>
+  <TabItem value="output" label="2. Atmos backend (scoped token)">
+
+Atmos owns restore/save. `github-runtime` `mode: output` returns masked credentials as step outputs that you thread only into the cache steps.
+
+```yaml
+- uses: cloudposse/atmos/actions/github-runtime@v1
+  id: ghr
+- run: atmos ci cache restore
+  env:
+    ACTIONS_RUNTIME_TOKEN: ${{ steps.ghr.outputs.runtime-token }}
+    ACTIONS_RESULTS_URL:   ${{ steps.ghr.outputs.results-url }}
+- run: atmos toolchain install --default helm/helm@${{ env.HELM_VERSION }}
+- if: always()
+  run: atmos ci cache save
+  env:
+    ACTIONS_RUNTIME_TOKEN: ${{ steps.ghr.outputs.runtime-token }}
+    ACTIONS_RESULTS_URL:   ${{ steps.ghr.outputs.results-url }}
+```
+
+**Pros:** Atmos fully owns restore/save; token masked and scoped to the cache steps.
+**Cons:** the token still enters those steps; more YAML.
+
+  </TabItem>
+  <TabItem value="env" label="3. Atmos backend (ambient token)">
+
+The simplest Atmos-managed form. `github-runtime` `mode: env` exports `ACTIONS_*` to `$GITHUB_ENV` for every later step.
+
+```yaml
+- uses: cloudposse/atmos/actions/github-runtime@v1
+  with:
+    mode: env
+- run: atmos ci cache restore
+- run: atmos toolchain install --default helm/helm@${{ env.HELM_VERSION }}
+- if: always()
+  run: atmos ci cache save
+```
+
+**Pros:** least YAML for the Atmos-managed path; works for any `atmos ci cache` subcommand.
+**Cons:** the runtime token is **ambient** to every later `run:` step in the job (largest blast radius).
+
+  </TabItem>
+</Tabs>
+
+The actions ship inside the Atmos repository, so pin them to an Atmos release (`@v1` moving major tag, `@vX.Y.Z`, or a commit SHA). Both actions' full sources are in [`actions/`](https://github.com/cloudposse/atmos/tree/main/actions) — audit them before pinning.
 
 ## Environment Variables
 
