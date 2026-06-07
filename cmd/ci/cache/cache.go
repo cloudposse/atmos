@@ -68,8 +68,10 @@ func buildConfigAndStacksInfo(globalFlags *global.Flags) schema.ConfigAndStacksI
 // cacheSetup loads config, validates that the cache is enabled, resolves the
 // cache configuration (applying CLI overrides), detects the provider's cache
 // backend, and returns a ready Manager. It is shared by all subcommands so the
-// CLI and the automatic lifecycle hooks operate on identical inputs.
-func cacheSetup(cmd *cobra.Command, overrides cacheOverrides) (*cachepkg.Manager, *cachepkg.Config, error) {
+// CLI and the automatic lifecycle hooks operate on identical inputs. It is a
+// package-level var so tests can stub it to exercise the command bodies without
+// a live CI runner.
+var cacheSetup = func(cmd *cobra.Command, overrides cacheOverrides) (*cachepkg.Manager, *cachepkg.Config, error) {
 	globalFlags := flags.ParseGlobalFlags(cmd, viper.GetViper())
 
 	atmosConfig, err := cfg.InitCliConfig(buildConfigAndStacksInfo(&globalFlags), false)

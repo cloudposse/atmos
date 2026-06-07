@@ -176,6 +176,190 @@ func TestNewBackend_UnavailableOutsideRunner(t *testing.T) {
 	require.ErrorIs(t, err, errUtils.ErrCacheUnavailable)
 }
 
+func TestBackend_SaveBlobUploadFails(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/twirp/github.actions.results.api.v1.CacheService/CreateCacheEntry", func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(createCacheEntryResponse{OK: true, SignedUploadURL: srvURL(r) + "/upload"})
+	})
+	mux.HandleFunc("/upload", func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+		_, _ = w.Write([]byte("boom"))
+	})
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	b := testBackend(srv)
+	err := b.Save(context.Background(), "k1", strings.NewReader("x"), 1)
+	require.ErrorIs(t, err, errUtils.ErrCacheSaveFailed)
+}
+
+func TestBackend_SaveFinalizeRejected(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/twirp/github.actions.results.api.v1.CacheService/CreateCacheEntry", func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(createCacheEntryResponse{OK: true, SignedUploadURL: srvURL(r) + "/upload"})
+	})
+	mux.HandleFunc("/upload", func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusCreated)
+	})
+	mux.HandleFunc("/twirp/github.actions.results.api.v1.CacheService/FinalizeCacheEntryUpload", func(w http.ResponseWriter, _ *http.Request) {
+		_ = json.NewEncoder(w).Encode(finalizeCacheEntryResponse{OK: false})
+	})
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	b := testBackend(srv)
+	err := b.Save(context.Background(), "k1", strings.NewReader("x"), 1)
+	require.ErrorIs(t, err, errUtils.ErrCacheSaveFailed)
+}
+
+func TestBackend_SaveTwirpStatusError(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/twirp/github.actions.results.api.v1.CacheService/CreateCacheEntry", func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = w.Write([]byte("bad request"))
+	})
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	b := testBackend(srv)
+	err := b.Save(context.Background(), "k1", strings.NewReader("x"), 1)
+	require.ErrorIs(t, err, errUtils.ErrCacheBackendRequest)
+}
+
+func TestBackend_RestoreDownloadFails(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/twirp/github.actions.results.api.v1.CacheService/GetCacheEntryDownloadURL", func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(getCacheEntryDownloadURLResponse{
+			OK:                true,
+			SignedDownloadURL: srvURL(r) + "/download",
+			MatchedKey:        "k1",
+		})
+	})
+	mux.HandleFunc("/download", func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+		_, _ = w.Write([]byte("gone"))
+	})
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	b := testBackend(srv)
+	_, _, err := b.Restore(context.Background(), "k1", nil)
+	require.ErrorIs(t, err, errUtils.ErrCacheRestoreFailed)
+}
+
+func TestBackend_RestoreTwirpError(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/twirp/github.actions.results.api.v1.CacheService/GetCacheEntryDownloadURL", func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	})
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	b := testBackend(srv)
+	_, _, err := b.Restore(context.Background(), "k1", nil)
+	require.ErrorIs(t, err, errUtils.ErrCacheBackendRequest)
+}
+
+func TestBackend_ListPagination(t *testing.T) {
+	var pagesSeen []string
+	mux := http.NewServeMux()
+	mux.HandleFunc("/repos/o/r/actions/caches", func(w http.ResponseWriter, r *http.Request) {
+		page := r.URL.Query().Get("page")
+		pagesSeen = append(pagesSeen, page)
+		switch page {
+		case "1":
+			w.Header().Set("Link", `<`+srvURL(r)+`/repos/o/r/actions/caches?per_page=100&page=2>; rel="next"`)
+			_ = json.NewEncoder(w).Encode(listCachesResponse{
+				TotalCount:   2,
+				ActionsCache: []githubCache{{ID: 1, Key: "atmos-a", SizeInBytes: 10}},
+			})
+		case "2":
+			_ = json.NewEncoder(w).Encode(listCachesResponse{
+				TotalCount:   2,
+				ActionsCache: []githubCache{{ID: 2, Key: "atmos-b", SizeInBytes: 20}},
+			})
+		}
+	})
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	b := testBackend(srv)
+	entries, err := b.List(context.Background(), cache.ListOptions{KeyPrefix: "atmos-"})
+	require.NoError(t, err)
+	require.Len(t, entries, 2)
+	assert.Equal(t, []string{"1", "2"}, pagesSeen)
+	// Newest first sort; both have zero CreatedAt so order is stable by insertion.
+	keys := []string{entries[0].Key, entries[1].Key}
+	assert.Contains(t, keys, "atmos-a")
+	assert.Contains(t, keys, "atmos-b")
+}
+
+func TestBackend_ListStatusError(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/repos/o/r/actions/caches", func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusForbidden)
+		_, _ = w.Write([]byte("forbidden"))
+	})
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	b := testBackend(srv)
+	_, err := b.List(context.Background(), cache.ListOptions{})
+	require.ErrorIs(t, err, errUtils.ErrCacheListFailed)
+}
+
+func TestBackend_ListRequiresOwnerRepo(t *testing.T) {
+	b := &Backend{}
+	_, err := b.List(context.Background(), cache.ListOptions{})
+	require.ErrorIs(t, err, errUtils.ErrCacheListFailed)
+}
+
+func TestBackend_DeleteRequiresOwnerRepo(t *testing.T) {
+	b := &Backend{}
+	err := b.Delete(context.Background(), "k1")
+	require.ErrorIs(t, err, errUtils.ErrCacheDeleteFailed)
+}
+
+func TestBackend_DeleteNotFoundIsNoOp(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/repos/o/r/actions/caches", func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+	})
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	b := testBackend(srv)
+	require.NoError(t, b.Delete(context.Background(), "missing"))
+}
+
+func TestBackend_DeleteStatusError(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/repos/o/r/actions/caches", func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+		_, _ = w.Write([]byte("server error"))
+	})
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	b := testBackend(srv)
+	err := b.Delete(context.Background(), "k1")
+	require.ErrorIs(t, err, errUtils.ErrCacheDeleteFailed)
+}
+
+func TestTwirpCall_DecodeError(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/twirp/github.actions.results.api.v1.CacheService/CreateCacheEntry", func(w http.ResponseWriter, _ *http.Request) {
+		// Valid 200 but non-JSON body forces a decode error.
+		_, _ = w.Write([]byte("not json"))
+	})
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	c := newTwirpClient(srv.URL+"/", "tok")
+	_, err := c.CreateCacheEntry(context.Background(), &createCacheEntryRequest{Key: "k", Version: "v"})
+	require.Error(t, err)
+}
+
 // srvURL reconstructs the base URL of the test server from a request.
 func srvURL(r *http.Request) string {
 	scheme := "http"

@@ -231,3 +231,35 @@ func TestManager_DeleteRequiresKey(t *testing.T) {
 	err := m.Delete(context.Background(), "")
 	require.ErrorIs(t, err, errUtils.ErrCacheKeyRequired)
 }
+
+func TestManager_Config(t *testing.T) {
+	cfg := newTestConfig(t, "k1")
+	m := NewManager(newFakeBackend(), cfg)
+	assert.Same(t, cfg, m.Config())
+}
+
+func TestManager_List(t *testing.T) {
+	cfg := newTestConfig(t, "k1")
+	fake := newFakeBackend()
+	fake.blobs["alpha"] = []byte("a")
+	fake.blobs["beta"] = []byte("b")
+	m := NewManager(fake, cfg)
+
+	entries, err := m.List(context.Background(), "")
+	require.NoError(t, err)
+	require.Len(t, entries, 2)
+	keys := []string{entries[0].Key, entries[1].Key}
+	assert.Contains(t, keys, "alpha")
+	assert.Contains(t, keys, "beta")
+}
+
+func TestManager_DeleteSuccess(t *testing.T) {
+	cfg := newTestConfig(t, "k1")
+	fake := newFakeBackend()
+	fake.blobs["gone"] = []byte("x")
+	m := NewManager(fake, cfg)
+
+	require.NoError(t, m.Delete(context.Background(), "gone"))
+	_, ok := fake.blobs["gone"]
+	assert.False(t, ok, "entry should be removed from the backend")
+}

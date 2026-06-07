@@ -3,13 +3,32 @@ package ci
 import (
 	"context"
 	"errors"
+	"io"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/ci/cache"
 	"github.com/cloudposse/atmos/pkg/ci/internal/provider"
 )
+
+// fakeCacheBackend is a no-op cache.Backend for DetectCache tests.
+type fakeCacheBackend struct{}
+
+func (fakeCacheBackend) Name() string { return "fake" }
+
+func (fakeCacheBackend) Save(_ context.Context, _ string, _ io.Reader, _ int64) error { return nil }
+
+func (fakeCacheBackend) Restore(_ context.Context, _ string, _ []string) (string, io.ReadCloser, error) {
+	return "", nil, nil
+}
+
+func (fakeCacheBackend) List(_ context.Context, _ cache.ListOptions) ([]cache.Entry, error) {
+	return nil, nil
+}
+
+func (fakeCacheBackend) Delete(_ context.Context, _ string) error { return nil }
 
 // mockProvider is a mock CI provider for testing.
 type mockProvider struct {
@@ -72,6 +91,42 @@ func TestRegisterAndGet(t *testing.T) {
 	_, err = Get("nonexistent")
 	assert.Error(t, err)
 	assert.True(t, errors.Is(err, errUtils.ErrCIProviderNotFound))
+}
+
+// cacheMockProvider is a mockProvider that also implements the cache capability.
+type cacheMockProvider struct {
+	mockProvider
+	backend cache.Backend
+}
+
+func (m *cacheMockProvider) Cache() (cache.Backend, error) { return m.backend, nil }
+
+func TestDetectCache(t *testing.T) {
+	backup := testSaveAndClearRegistry()
+	defer testRestoreRegistry(backup)
+
+	// No provider detected → unavailable.
+	_, err := DetectCache()
+	assert.True(t, errors.Is(err, errUtils.ErrCacheUnavailable))
+
+	// Detected provider without the cache capability → unavailable.
+	Register(&mockProvider{name: "no-cache", detected: true})
+	_, err = DetectCache()
+	assert.True(t, errors.Is(err, errUtils.ErrCacheUnavailable))
+}
+
+func TestDetectCache_CapableProvider(t *testing.T) {
+	backup := testSaveAndClearRegistry()
+	defer testRestoreRegistry(backup)
+
+	want := &fakeCacheBackend{}
+	Register(&cacheMockProvider{
+		mockProvider: mockProvider{name: "with-cache", detected: true},
+		backend:      want,
+	})
+	got, err := DetectCache()
+	assert.NoError(t, err)
+	assert.Same(t, want, got)
 }
 
 func TestDetect(t *testing.T) {

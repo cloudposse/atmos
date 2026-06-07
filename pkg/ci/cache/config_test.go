@@ -2,6 +2,7 @@ package cache
 
 import (
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -84,6 +85,45 @@ func TestResolveConfig_RootOverride(t *testing.T) {
 
 	abs, _ := filepath.Abs(override)
 	assert.Equal(t, abs, cfg.Root)
+}
+
+func TestNormalizeIncludes(t *testing.T) {
+	assert.Nil(t, normalizeIncludes(nil))
+	assert.Nil(t, normalizeIncludes([]string{}))
+
+	got := normalizeIncludes([]string{"", ".", "a", filepath.FromSlash("./b/")})
+	assert.Equal(t, []string{"a", "b"}, got)
+}
+
+func TestResolveConfig_WithIncludes(t *testing.T) {
+	useTempCacheHome(t)
+	ac := &schema.AtmosConfiguration{}
+	ac.CI.Cache.Paths = []string{"toolchain", "."}
+	cfg, err := ResolveConfig(ac)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"toolchain"}, cfg.Includes)
+}
+
+func TestDefaultLockfilePath(t *testing.T) {
+	root := t.TempDir()
+
+	t.Run("explicit relative lockfile resolves to absolute", func(t *testing.T) {
+		ac := &schema.AtmosConfiguration{}
+		ac.Toolchain.LockFile = filepath.Join("sub", "toolchain.lock.yaml")
+		got := defaultLockfilePath(ac, root)
+		assert.True(t, filepath.IsAbs(got))
+		assert.True(t, strings.HasSuffix(filepath.ToSlash(got), "sub/toolchain.lock.yaml"))
+	})
+
+	t.Run("nil config falls back to root toolchain path", func(t *testing.T) {
+		got := defaultLockfilePath(nil, root)
+		assert.Equal(t, filepath.Join(root, "toolchain", toolchainLockFilename), got)
+	})
+
+	t.Run("empty lockfile falls back to root toolchain path", func(t *testing.T) {
+		got := defaultLockfilePath(&schema.AtmosConfiguration{}, root)
+		assert.Equal(t, filepath.Join(root, "toolchain", toolchainLockFilename), got)
+	})
 }
 
 func TestConfig_Validate(t *testing.T) {
