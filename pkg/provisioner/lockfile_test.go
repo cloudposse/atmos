@@ -50,5 +50,5 @@ func TestLockCoordPath_StableAndOutsideWorkingDir(t *testing.T) {
 	a := LockCoordPath(lockPath)
 	b := LockCoordPath(lockPath)
 	assert.Equal(t, a, b, "coord path must be deterministic for the same lock path")
-	assert.Equal(t, os.TempDir(), filepath.Dir(a), "coord path must live under the temp dir, not the component dir")
+	assert.Equal(t, filepath.Clean(os.TempDir()), filepath.Dir(a), "coord path must live under the temp dir, not the component dir")
 }
