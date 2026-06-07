@@ -508,35 +508,43 @@ func TestWirePerComponentHook(t *testing.T) {
 		}
 	})
 
-	t.Run("plan CI installs aggregate handler instead of per-component hook", func(t *testing.T) {
+	t.Run("plan/apply/destroy CI installs aggregate handler instead of per-component hook", func(t *testing.T) {
 		cmd := newHookTestCmd()
 		require.NoError(t, cmd.Flags().Set("ci", "true"))
 
-		info := &schema.ConfigAndStacksInfo{
-			TerraformPlanCIResultHandler: nil,
-		}
-		wirePerComponentHook(info, "plan", cmd)
+		for _, sub := range []string{"plan", "apply", "destroy"} {
+			t.Run(sub, func(t *testing.T) {
+				info := &schema.ConfigAndStacksInfo{
+					TerraformPlanCIResultHandler: nil,
+				}
+				wirePerComponentHook(info, sub, cmd)
 
-		assert.Nil(t, info.PerComponentHook)
-		assert.NotNil(t, info.TerraformPlanCIResultHandler)
+				assert.Nil(t, info.PerComponentHook)
+				assert.NotNil(t, info.TerraformPlanCIResultHandler)
+			})
+		}
 	})
 
-	t.Run("plan native CI installs aggregate handler instead of per-component hook", func(t *testing.T) {
+	t.Run("plan/apply/destroy native CI installs aggregate handler instead of per-component hook", func(t *testing.T) {
 		withGitHubActionsDetection(t)
 
-		info := &schema.ConfigAndStacksInfo{
-			TerraformPlanCIResultHandler: nil,
-		}
-		wirePerComponentHook(info, "plan", newHookTestCmd())
+		for _, sub := range []string{"plan", "apply", "destroy"} {
+			t.Run(sub, func(t *testing.T) {
+				info := &schema.ConfigAndStacksInfo{
+					TerraformPlanCIResultHandler: nil,
+				}
+				wirePerComponentHook(info, sub, newHookTestCmd())
 
-		assert.Nil(t, info.PerComponentHook)
-		assert.NotNil(t, info.TerraformPlanCIResultHandler)
+				assert.Nil(t, info.PerComponentHook)
+				assert.NotNil(t, info.TerraformPlanCIResultHandler)
+			})
+		}
 	})
 
 	t.Run("unknown subcommand leaves the hook unset", func(t *testing.T) {
-		// `destroy`, `init`, etc. are valid terraform subcommands but they do
+		// `init`, `validate`, etc. are valid terraform subcommands but they do
 		// not have a per-component CI hook today. The helper must be a no-op
-		// for anything outside the {plan, deploy, apply} set so other
+		// for anything outside the {plan, deploy, apply} non-CI set so other
 		// subcommands don't accidentally start firing hooks.
 		for _, sub := range []string{"destroy", "init", "validate", ""} {
 			t.Run(sub, func(t *testing.T) {
@@ -647,8 +655,9 @@ func TestTerraformPlanCIResultHandler(t *testing.T) {
 		}
 
 		handler := &terraformPlanCIResultHandler{
-			cmd:  cmd,
-			info: info,
+			cmd:     cmd,
+			info:    info,
+			command: "apply",
 		}
 
 		err := handler.HandleTerraformPlanCIResults(schema.TerraformPlanCIResultSet{Results: []schema.TerraformPlanCIResult{
@@ -658,7 +667,7 @@ func TestTerraformPlanCIResultHandler(t *testing.T) {
 				Component: "myapp",
 				Status:    "succeeded",
 				Processed: true,
-				Output:    "No changes. Your infrastructure matches the configuration.",
+				Output:    "Apply complete! Resources: 0 added, 0 changed, 0 destroyed.",
 			},
 		}})
 		require.NoError(t, err)

@@ -183,7 +183,7 @@ func ExecuteTerraform(ctx context.Context, opts TerraformOptions) error {
 	if err := writeTerraformSummary(opts.Info, result, timings); err != nil {
 		return err
 	}
-	finalizeTerraformPlanCIResults(opts.Info, result, timings)
+	finalizeTerraformCIResults(opts.Info, result, timings)
 	if result.Err != nil {
 		return result.Err
 	}
@@ -191,7 +191,7 @@ func ExecuteTerraform(ctx context.Context, opts TerraformOptions) error {
 	if processedCount(result) == 0 {
 		ui.Success("No components matched")
 	}
-	if terraformPlanChanged(result) {
+	if opts.Info.SubCommand == "plan" && terraformPlanChanged(result) {
 		return errUtils.ExitCodeError{Code: 2}
 	}
 	return nil
@@ -1228,13 +1228,14 @@ func terraformPlanChanged(result *scheduler.AggregateResult) bool {
 	return false
 }
 
-// finalizeTerraformPlanCIResults converts scheduler outcomes into aggregate CI plan results.
-func finalizeTerraformPlanCIResults(info *schema.ConfigAndStacksInfo, result *scheduler.AggregateResult, timings *terraformNodeTimings) {
-	if info == nil || info.SubCommand != "plan" || info.TerraformPlanCIResultHandler == nil || result == nil {
+// finalizeTerraformCIResults converts scheduler outcomes into aggregate CI results.
+func finalizeTerraformCIResults(info *schema.ConfigAndStacksInfo, result *scheduler.AggregateResult, timings *terraformNodeTimings) {
+	if info == nil || !supportsTerraformConcurrency(info.SubCommand) || info.TerraformPlanCIResultHandler == nil || result == nil {
 		return
 	}
 
 	resultSet := schema.TerraformPlanCIResultSet{
+		Command: info.SubCommand,
 		Results: make([]schema.TerraformPlanCIResult, 0, len(result.Results)),
 	}
 	for i := range result.Results {
@@ -1242,7 +1243,7 @@ func finalizeTerraformPlanCIResults(info *schema.ConfigAndStacksInfo, result *sc
 	}
 
 	if err := info.TerraformPlanCIResultHandler.HandleTerraformPlanCIResults(resultSet); err != nil {
-		log.Warn("Terraform plan CI aggregate hook failed", "error", err)
+		log.Warn("Terraform CI aggregate hook failed", "command", info.SubCommand, "error", err)
 	}
 }
 

@@ -56,7 +56,7 @@ func (p *Plugin) GetHookBindings() []plugin.HookBinding {
 		},
 		{
 			Event:   "after.terraform.plan.aggregate",
-			Handler: p.onAfterPlanAggregate,
+			Handler: p.onAfterTerraformAggregate,
 		},
 		{
 			Event:   "before.terraform.apply",
@@ -67,12 +67,20 @@ func (p *Plugin) GetHookBindings() []plugin.HookBinding {
 			Handler: p.onAfterApply,
 		},
 		{
+			Event:   "after.terraform.apply.aggregate",
+			Handler: p.onAfterTerraformAggregate,
+		},
+		{
 			Event:   "before.terraform.deploy",
 			Handler: p.onBeforeDeploy,
 		},
 		{
 			Event:   "after.terraform.deploy",
 			Handler: p.onAfterDeploy,
+		},
+		{
+			Event:   "after.terraform.destroy.aggregate",
+			Handler: p.onAfterTerraformAggregate,
 		},
 	}
 }
@@ -211,7 +219,7 @@ var multiBlankLinesRe = regexp.MustCompile(`\n{3,}`)
 // For plan: strips data source reads and state refreshes, returns empty for no-changes.
 // For apply: strips preamble and progress lines, keeps plan diffs and apply result.
 func cleanOutput(output, command string) string {
-	if command == "apply" {
+	if command == "apply" || command == "destroy" {
 		return cleanApplyOutput(output)
 	}
 	return cleanPlanOutput(output)

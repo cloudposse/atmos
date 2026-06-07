@@ -273,15 +273,25 @@ func runCIHooksForTerraformComponent(actualCmd *cobra.Command, event h.HookEvent
 
 // terraformPlanCIResultHandler forwards scheduler results into the aggregate CI hook.
 type terraformPlanCIResultHandler struct {
-	cmd  *cobra.Command
-	info *schema.ConfigAndStacksInfo
+	cmd     *cobra.Command
+	info    *schema.ConfigAndStacksInfo
+	command string
 }
 
-// HandleTerraformPlanCIResults initializes config and runs the aggregate plan CI hook.
+// HandleTerraformPlanCIResults initializes config and runs the aggregate CI hook.
 func (handler *terraformPlanCIResultHandler) HandleTerraformPlanCIResults(resultSet schema.TerraformPlanCIResultSet) error {
 	if handler == nil || handler.cmd == nil || handler.info == nil {
 		return nil
 	}
+
+	command := handler.command
+	if command == "" {
+		command = resultSet.Command
+	}
+	if command == "" {
+		command = handler.info.SubCommand
+	}
+	resultSet.Command = command
 
 	atmosConfig, err := cfg.InitCliConfig(*handler.info, true)
 	if err != nil {
@@ -289,7 +299,7 @@ func (handler *terraformPlanCIResultHandler) HandleTerraformPlanCIResults(result
 	}
 
 	if err := h.RunCIHooks(&h.RunCIHooksOptions{
-		Event:       h.AfterTerraformPlanAggregate,
+		Event:       terraformAggregateEvent(command),
 		AtmosConfig: &atmosConfig,
 		Info:        handler.info,
 		ForceCIMode: terraformCIModeEnabled(handler.cmd),
@@ -298,6 +308,18 @@ func (handler *terraformPlanCIResultHandler) HandleTerraformPlanCIResults(result
 		return err
 	}
 	return nil
+}
+
+// terraformAggregateEvent returns the aggregate CI hook event for a Terraform command.
+func terraformAggregateEvent(command string) h.HookEvent {
+	switch command {
+	case "apply":
+		return h.AfterTerraformApplyAggregate
+	case "destroy":
+		return h.AfterTerraformDestroyAggregate
+	default:
+		return h.AfterTerraformPlanAggregate
+	}
 }
 
 // terraformCIModeEnabled returns true when CLI, config, or native provider detection enables CI mode.
@@ -322,15 +344,20 @@ func terraformCIModeEnabled(cmd *cobra.Command) bool {
 // ExecuteTerraformQuery dispatch paths; keep it in one place so a new
 // subcommand only needs to be added once.
 func wirePerComponentHook(info *schema.ConfigAndStacksInfo, subCommand string, actualCmd *cobra.Command) {
-	switch subCommand {
-	case "plan":
-		if terraformCIModeEnabled(actualCmd) {
+	if terraformCIModeEnabled(actualCmd) {
+		switch subCommand {
+		case "plan", "apply", "destroy":
 			info.TerraformPlanCIResultHandler = &terraformPlanCIResultHandler{
-				cmd:  actualCmd,
-				info: info,
+				cmd:     actualCmd,
+				info:    info,
+				command: subCommand,
 			}
 			return
 		}
+	}
+
+	switch subCommand {
+	case "plan":
 		info.PerComponentHook = func(compInfo *schema.ConfigAndStacksInfo, output string, execErr error) {
 			runCIHooksForPlanComponent(actualCmd, compInfo, output, execErr)
 		}

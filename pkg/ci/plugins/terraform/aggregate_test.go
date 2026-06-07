@@ -59,12 +59,12 @@ var _ = schema.TerraformPlanCIResult{
 	DurationMS: 0,
 }
 
-func TestOnAfterPlanAggregateRendersSummaryOutputsCommentAndChecks(t *testing.T) {
+func TestOnAfterTerraformAggregateRendersSummaryOutputsCommentAndChecks(t *testing.T) {
 	p := &Plugin{}
 	ctx := newAggregateHookContext()
 	mp := ctx.Provider.(*mockProvider)
 
-	err := p.onAfterPlanAggregate(ctx)
+	err := p.onAfterTerraformAggregate(ctx)
 	require.NoError(t, err)
 
 	require.Len(t, mp.writer.summaries, 1)
@@ -111,6 +111,86 @@ func TestOnAfterPlanAggregateRendersSummaryOutputsCommentAndChecks(t *testing.T)
 	assert.Equal(t, "atmos/plan/dev/outputs", mp.updateRunCalls[2].Name)
 	assert.Equal(t, "atmos/plan/dev/vpc", mp.updateRunCalls[3].Name)
 	assert.Equal(t, "atmos/plan/dev/worker", mp.updateRunCalls[4].Name)
+}
+
+func TestOnAfterTerraformAggregateUsesCommandSpecificRendering(t *testing.T) {
+	p := &Plugin{}
+	tests := []struct {
+		command          string
+		output           string
+		wantHeading      string
+		wantExitCode     string
+		wantCreateCount  string
+		wantDestroyCount string
+		wantSummary      string
+	}{
+		{
+			command:         "apply",
+			output:          "Apply complete! Resources: 1 added, 0 changed, 0 destroyed.",
+			wantHeading:     "## Terraform Apply Summary",
+			wantExitCode:    "0",
+			wantCreateCount: "1",
+			wantSummary:     "Apply complete! Resources: 1 added, 0 changed, 0 destroyed",
+		},
+		{
+			command:          "destroy",
+			output:           "Destroy complete! Resources: 2 destroyed.",
+			wantHeading:      "## Terraform Destroy Summary",
+			wantExitCode:     "0",
+			wantDestroyCount: "2",
+			wantSummary:      "Destroy complete! Resources: 2 destroyed",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.command, func(t *testing.T) {
+			ctx := newAggregateHookContext()
+			ctx.Config.Components.Terraform.Planfiles.Default = "local"
+			ctx.Config.Components.Terraform.Planfiles.Stores = map[string]schema.PlanfileStoreSpec{
+				"local": {Type: "local/dir"},
+			}
+			ctx.CreatePlanfileStore = func() (any, error) {
+				return nil, errors.New("planfile store should not be used")
+			}
+			ctx.Aggregate = schema.TerraformPlanCIResultSet{
+				Command: tt.command,
+				Results: []schema.TerraformPlanCIResult{
+					{
+						NodeID:    "vpc-dev",
+						Stack:     "dev",
+						Component: "vpc",
+						Status:    "succeeded",
+						Processed: true,
+						Changed:   true,
+						ExitCode:  0,
+						Output:    tt.output,
+					},
+				},
+			}
+			mp := ctx.Provider.(*mockProvider)
+
+			err := p.onAfterTerraformAggregate(ctx)
+			require.NoError(t, err)
+
+			require.Len(t, mp.writer.summaries, 1)
+			assert.Contains(t, mp.writer.summaries[0], tt.wantHeading)
+			assert.Contains(t, mp.writer.summaries[0], tt.wantSummary)
+			assert.Equal(t, tt.command, mp.writer.outputs["command"])
+			assert.Equal(t, tt.wantExitCode, mp.writer.outputs["exit_code"])
+			assert.Equal(t, "true", mp.writer.outputs["has_changes"])
+			if tt.wantCreateCount != "" {
+				assert.Equal(t, tt.wantCreateCount, mp.writer.outputs["resources_to_create"])
+			}
+			if tt.wantDestroyCount != "" {
+				assert.Equal(t, tt.wantDestroyCount, mp.writer.outputs["resources_to_destroy"])
+			}
+
+			require.Len(t, mp.commentCalls, 1)
+			assert.Equal(t, "<!-- atmos:ci:"+tt.command+":aggregate:dev -->", mp.commentCalls[0].Marker)
+			require.Len(t, mp.updateRunCalls, 1)
+			assert.Equal(t, "atmos/"+tt.command+"/dev/vpc", mp.updateRunCalls[0].Name)
+		})
+	}
 }
 
 func TestBuildPlanAggregateExitCodeRules(t *testing.T) {
@@ -176,6 +256,54 @@ func TestBuildPlanAggregateExitCodeRules(t *testing.T) {
 			}},
 			wantCode: 1,
 		},
+		{
+			name: "apply changes exit zero",
+			input: schema.TerraformPlanCIResultSet{Command: "apply", Results: []schema.TerraformPlanCIResult{
+				{
+					NodeID:    "vpc-dev",
+					Stack:     "dev",
+					Component: "vpc",
+					Status:    "succeeded",
+					Processed: true,
+					Changed:   true,
+					ExitCode:  0,
+					Output:    "Apply complete! Resources: 1 added, 0 changed, 0 destroyed.",
+				},
+			}},
+			wantCode: 0,
+		},
+		{
+			name: "destroy changes exit zero",
+			input: schema.TerraformPlanCIResultSet{Command: "destroy", Results: []schema.TerraformPlanCIResult{
+				{
+					NodeID:    "vpc-dev",
+					Stack:     "dev",
+					Component: "vpc",
+					Status:    "succeeded",
+					Processed: true,
+					Changed:   true,
+					ExitCode:  0,
+					Output:    "Destroy complete! Resources: 2 destroyed.",
+				},
+			}},
+			wantCode: 0,
+		},
+		{
+			name: "apply failure still exits one",
+			input: schema.TerraformPlanCIResultSet{Command: "apply", Results: []schema.TerraformPlanCIResult{
+				{
+					NodeID:    "vpc-dev",
+					Stack:     "dev",
+					Component: "vpc",
+					Status:    "failed",
+					Processed: true,
+					ExitCode:  1,
+					Output:    "Error: apply failed",
+					Error:     "terraform apply failed",
+				},
+			}},
+			wantCode: 1,
+		},
 	}
 
 	for _, tt := range tests {
@@ -186,7 +314,7 @@ func TestBuildPlanAggregateExitCodeRules(t *testing.T) {
 	}
 }
 
-func TestOnAfterPlanAggregateWritesGitHubOutputFiles(t *testing.T) {
+func TestOnAfterTerraformAggregateWritesGitHubOutputFiles(t *testing.T) {
 	tmpDir := t.TempDir()
 	outputFile := filepath.Join(tmpDir, "github-output")
 	summaryFile := filepath.Join(tmpDir, "github-step-summary")
@@ -204,7 +332,7 @@ func TestOnAfterPlanAggregateWritesGitHubOutputFiles(t *testing.T) {
 	}
 	ctx.Provider = githubprovider.NewProvider()
 
-	err := p.onAfterPlanAggregate(ctx)
+	err := p.onAfterTerraformAggregate(ctx)
 	require.NoError(t, err)
 
 	outputData, err := os.ReadFile(outputFile)
@@ -319,13 +447,13 @@ func newAggregateTestConfig() *schema.AtmosConfiguration {
 	}
 }
 
-func TestOnAfterPlanAggregateSkipsInvalidAggregate(t *testing.T) {
+func TestOnAfterTerraformAggregateSkipsInvalidAggregate(t *testing.T) {
 	p := &Plugin{}
 	ctx := newAggregateHookContext()
 	ctx.Aggregate = errors.New("not a result set")
 	mp := ctx.Provider.(*mockProvider)
 
-	err := p.onAfterPlanAggregate(ctx)
+	err := p.onAfterTerraformAggregate(ctx)
 	require.NoError(t, err)
 	assert.Empty(t, mp.writer.summaries)
 	assert.Empty(t, mp.writer.outputs)
@@ -333,18 +461,18 @@ func TestOnAfterPlanAggregateSkipsInvalidAggregate(t *testing.T) {
 	assert.Empty(t, mp.updateRunCalls)
 }
 
-func TestOnAfterPlanAggregateWriterErrorsAreWarnOnly(t *testing.T) {
+func TestOnAfterTerraformAggregateWriterErrorsAreWarnOnly(t *testing.T) {
 	p := &Plugin{}
 	ctx := newAggregateHookContext()
 	ctx.Provider = &failingOutputProvider{mockProvider: newMockProvider()}
 	ctx.Config.CI.Checks.Enabled = boolPtr(false)
 	ctx.Config.CI.Comments.Enabled = boolPtr(false)
 
-	err := p.onAfterPlanAggregate(ctx)
+	err := p.onAfterTerraformAggregate(ctx)
 	require.NoError(t, err)
 }
 
-func TestOnAfterPlanAggregateReturnsPlanfileUploadError(t *testing.T) {
+func TestOnAfterTerraformAggregateReturnsPlanfileUploadError(t *testing.T) {
 	p := &Plugin{}
 	ctx := newAggregateHookContext()
 	planfilePath := filepath.Join(t.TempDir(), "plan.tfplan")
@@ -362,7 +490,7 @@ func TestOnAfterPlanAggregateReturnsPlanfileUploadError(t *testing.T) {
 		return nil, errors.New("store unavailable")
 	}
 
-	err := p.onAfterPlanAggregate(ctx)
+	err := p.onAfterTerraformAggregate(ctx)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "store unavailable")
 }

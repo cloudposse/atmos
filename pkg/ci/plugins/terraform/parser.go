@@ -29,6 +29,10 @@ var (
 	// Used as fallback when JSON is not available.
 	applySummaryRe = regexp.MustCompile(`Apply complete!\s*Resources:\s*(\d+)\s+added,\s*(\d+)\s+changed,\s*(\d+)\s+destroyed`)
 
+	// Matches destroy summary: "Destroy complete! Resources: X destroyed."
+	// Used as fallback when JSON is not available.
+	destroySummaryRe = regexp.MustCompile(`Destroy complete!\s*Resources:\s*(\d+)\s+destroyed`)
+
 	// Matches "Plan: X to add, Y to change, Z to destroy."
 	// Used as fallback when JSON is not available.
 	planSummaryRe = regexp.MustCompile(`Plan:\s*(\d+)\s+to add,\s*(\d+)\s+to change,\s*(\d+)\s+to destroy`)
@@ -453,6 +457,27 @@ func ParseApplyOutput(output string) *plugin.OutputResult {
 	return result
 }
 
+// ParseDestroyOutput parses terraform destroy stdout.
+func ParseDestroyOutput(output string) *plugin.OutputResult {
+	defer perf.Track(nil, "terraform.ParseDestroyOutput")()
+
+	result := ParseApplyOutput(output)
+	data, _ := result.Data.(*plugin.TerraformOutputData)
+	if data == nil {
+		return result
+	}
+
+	if matches := destroySummaryRe.FindStringSubmatch(output); len(matches) == 2 {
+		data.ResourceCounts.Create = 0
+		data.ResourceCounts.Change = 0
+		data.ResourceCounts.Destroy = parseIntOrZero(matches[1])
+		result.HasChanges = data.ResourceCounts.Destroy > 0
+		data.ChangedResult = matches[0]
+	}
+
+	return result
+}
+
 // extractApplyOutputs extracts terraform outputs from apply stdout.
 // After a successful apply, terraform prints outputs in the format:
 //
@@ -555,6 +580,8 @@ func ParseOutput(output string, command string) *plugin.OutputResult {
 		return ParsePlanOutput(output)
 	case "apply":
 		return ParseApplyOutput(output)
+	case "destroy":
+		return ParseDestroyOutput(output)
 	default:
 		// For unknown commands, return minimal result.
 		return &plugin.OutputResult{

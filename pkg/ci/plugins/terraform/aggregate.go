@@ -15,6 +15,8 @@ import (
 
 const (
 	aggregateComponentName               = "aggregate"
+	aggregateCommandApply                = "apply"
+	aggregateCommandDestroy              = "destroy"
 	aggregateCommandPlan                 = "plan"
 	aggregateStackAll                    = "all"
 	aggregateDetailOutputMaxBytes        = 12 * 1024
@@ -25,8 +27,9 @@ const (
 	aggregateStatusSkipped               = "skipped"
 )
 
-// terraformPlanAggregate is the complete rendered model for one graph-backed plan run.
+// terraformPlanAggregate is the complete rendered model for one graph-backed Terraform run.
 type terraformPlanAggregate struct {
+	Command    string
 	Components []terraformPlanAggregateComponent
 	Counts     terraformPlanAggregateCounts
 	Summary    string
@@ -62,19 +65,22 @@ type terraformPlanAggregateComponent struct {
 	DurationLabel string
 }
 
-// onAfterPlanAggregate handles the after.terraform.plan.aggregate event for
-// graph-backed multi-component plan runs. It writes GitHub/GitLab CI artifacts
+// onAfterTerraformAggregate handles aggregate Terraform CI events for
+// graph-backed multi-component runs. It writes GitHub/GitLab CI artifacts
 // once after the scheduler completes, avoiding concurrent writes from worker
 // goroutines.
-func (p *Plugin) onAfterPlanAggregate(ctx *plugin.HookContext) error {
-	defer perf.Track(ctx.Config, "terraform.Plugin.onAfterPlanAggregate")()
+func (p *Plugin) onAfterTerraformAggregate(ctx *plugin.HookContext) error {
+	defer perf.Track(ctx.Config, "terraform.Plugin.onAfterTerraformAggregate")()
 
 	resultSet, ok := normalizeTerraformPlanAggregate(ctx.Aggregate)
 	if !ok || len(resultSet.Results) == 0 {
-		log.Debug("Skipping aggregate Terraform plan CI hook: no results")
+		log.Debug("Skipping aggregate Terraform CI hook: no results")
 		return nil
 	}
 
+	command := aggregateCommand(ctx, resultSet)
+	resultSet.Command = command
+	ctx.Command = command
 	aggregate := p.buildPlanAggregate(resultSet)
 
 	if err := p.writeAggregateArtifacts(ctx, &aggregate); err != nil {
@@ -84,7 +90,7 @@ func (p *Plugin) onAfterPlanAggregate(ctx *plugin.HookContext) error {
 	return nil
 }
 
-// writeAggregateArtifacts serializes all CI provider side effects for an aggregate plan.
+// writeAggregateArtifacts serializes all CI provider side effects for an aggregate run.
 func (p *Plugin) writeAggregateArtifacts(ctx *plugin.HookContext, aggregate *terraformPlanAggregate) error {
 	if isSummaryEnabled(ctx.Config) {
 		if err := p.writeAggregateSummary(ctx, aggregate.Markdown); err != nil {
@@ -98,10 +104,8 @@ func (p *Plugin) writeAggregateArtifacts(ctx *plugin.HookContext, aggregate *ter
 		}
 	}
 
-	if isPlanfileStorageEnabled(ctx.Config) {
-		if err := p.uploadAggregatePlanfiles(ctx, aggregate); err != nil {
-			return err
-		}
+	if err := p.uploadAggregatePlanfilesIfEnabled(ctx, aggregate); err != nil {
+		return err
 	}
 
 	if isCheckEnabled(ctx.Config) {
@@ -115,6 +119,36 @@ func (p *Plugin) writeAggregateArtifacts(ctx *plugin.HookContext, aggregate *ter
 	}
 
 	return nil
+}
+
+// uploadAggregatePlanfilesIfEnabled uploads planfiles for plan aggregates only.
+func (p *Plugin) uploadAggregatePlanfilesIfEnabled(ctx *plugin.HookContext, aggregate *terraformPlanAggregate) error {
+	if aggregate.Command != aggregateCommandPlan || !isPlanfileStorageEnabled(ctx.Config) {
+		return nil
+	}
+	return p.uploadAggregatePlanfiles(ctx, aggregate)
+}
+
+// aggregateCommand returns the normalized Terraform command for aggregate rendering.
+func aggregateCommand(ctx *plugin.HookContext, resultSet schema.TerraformPlanCIResultSet) string {
+	switch {
+	case resultSet.Command != "":
+		return normalizeAggregateCommand(resultSet.Command)
+	case ctx != nil && ctx.Command != "":
+		return normalizeAggregateCommand(ctx.Command)
+	default:
+		return aggregateCommandPlan
+	}
+}
+
+// normalizeAggregateCommand limits aggregate behavior to supported Terraform commands.
+func normalizeAggregateCommand(command string) string {
+	switch command {
+	case aggregateCommandApply, aggregateCommandDestroy, aggregateCommandPlan:
+		return command
+	default:
+		return aggregateCommandPlan
+	}
 }
 
 // normalizeTerraformPlanAggregate extracts a Terraform plan result set from hook payload data.
@@ -132,8 +166,9 @@ func normalizeTerraformPlanAggregate(value any) (schema.TerraformPlanCIResultSet
 	}
 }
 
-// buildPlanAggregate sorts scheduler results and calculates aggregate plan totals.
+// buildPlanAggregate sorts scheduler results and calculates aggregate totals.
 func (p *Plugin) buildPlanAggregate(resultSet schema.TerraformPlanCIResultSet) terraformPlanAggregate {
+	command := normalizeAggregateCommand(resultSet.Command)
 	results := append([]schema.TerraformPlanCIResult(nil), resultSet.Results...)
 	sort.SliceStable(results, func(i, j int) bool {
 		left := &results[i]
@@ -148,15 +183,16 @@ func (p *Plugin) buildPlanAggregate(resultSet schema.TerraformPlanCIResultSet) t
 	})
 
 	aggregate := terraformPlanAggregate{
+		Command:    command,
 		Components: make([]terraformPlanAggregateComponent, 0, len(results)),
 	}
 
 	for i := range results {
-		component := p.buildPlanAggregateComponent(&results[i])
+		component := p.buildPlanAggregateComponent(command, &results[i])
 		aggregate.addComponent(&component)
 	}
 
-	aggregate.ExitCode = aggregateExitCode(&aggregate.Counts)
+	aggregate.ExitCode = aggregateExitCode(command, &aggregate.Counts)
 	aggregate.Summary = aggregateSummaryText(&aggregate.Counts)
 	aggregate.Markdown = renderAggregatePlanMarkdown(&aggregate)
 	return aggregate
@@ -195,10 +231,10 @@ func (a *terraformPlanAggregate) addResourceCounts(component *terraformPlanAggre
 }
 
 // buildPlanAggregateComponent parses one scheduler result into its CI rendering model.
-func (p *Plugin) buildPlanAggregateComponent(result *schema.TerraformPlanCIResult) terraformPlanAggregateComponent {
+func (p *Plugin) buildPlanAggregateComponent(command string, result *schema.TerraformPlanCIResult) terraformPlanAggregateComponent {
 	output := ansi.Strip(result.Output)
 	parsed := p.parseOutputWithError(&plugin.HookContext{
-		Command:      aggregateCommandPlan,
+		Command:      command,
 		Output:       output,
 		CommandError: aggregateCommandError(result.Error),
 		ExitCode:     result.ExitCode,
@@ -217,7 +253,7 @@ func (p *Plugin) buildPlanAggregateComponent(result *schema.TerraformPlanCIResul
 		Data:          data,
 		Status:        status,
 		Summary:       componentSummaryText(result, parsed, data, status),
-		CleanOutput:   cleanPlanOutput(output),
+		CleanOutput:   cleanOutput(output, command),
 		HasChanges:    hasChanges,
 		HasErrors:     hasErrors,
 		Skipped:       skipped,
@@ -255,12 +291,12 @@ func aggregateComponentStatus(skipped, hasErrors, hasChanges bool) string {
 	}
 }
 
-// aggregateExitCode applies Terraform plan exit-code semantics across all components.
-func aggregateExitCode(counts *terraformPlanAggregateCounts) int {
+// aggregateExitCode applies Terraform command exit-code semantics across all components.
+func aggregateExitCode(command string, counts *terraformPlanAggregateCounts) int {
 	if counts.Failed > 0 {
 		return 1
 	}
-	if counts.Changed > 0 {
+	if command == aggregateCommandPlan && counts.Changed > 0 {
 		return 2
 	}
 	return 0

@@ -1496,7 +1496,7 @@ func (h *capturingTerraformPlanCIResultHandler) HandleTerraformPlanCIResults(res
 	return h.err
 }
 
-func TestExecuteTerraformPlanCIResultHandlerReceivesCapturedSchedulerResults(t *testing.T) {
+func TestExecuteTerraformCIResultHandlerReceivesCapturedSchedulerResults(t *testing.T) {
 	handler := &capturingTerraformPlanCIResultHandler{}
 	var captureFlagsMu sync.Mutex
 	var captureFlags []bool
@@ -1529,6 +1529,7 @@ func TestExecuteTerraformPlanCIResultHandlerReceivesCapturedSchedulerResults(t *
 
 	require.Error(t, err)
 	require.Equal(t, 1, handler.calls)
+	require.Equal(t, "plan", handler.resultSet.Command)
 	require.Len(t, handler.resultSet.Results, 3)
 	captureFlagsMu.Lock()
 	gotCaptureFlags := append([]bool(nil), captureFlags...)
@@ -1561,16 +1562,16 @@ func TestExecuteTerraformPlanCIResultHandlerReceivesCapturedSchedulerResults(t *
 	require.Contains(t, app.Error, "dependency vpc-dev failed")
 }
 
-func TestFinalizeTerraformPlanCIResultsGuardsAndHandlerError(t *testing.T) {
-	finalizeTerraformPlanCIResults(nil, nil, nil)
-	finalizeTerraformPlanCIResults(&schema.ConfigAndStacksInfo{SubCommand: "apply"}, nil, nil)
-	finalizeTerraformPlanCIResults(&schema.ConfigAndStacksInfo{SubCommand: "plan"}, nil, nil)
+func TestFinalizeTerraformCIResultsGuardsAndHandlerError(t *testing.T) {
+	finalizeTerraformCIResults(nil, nil, nil)
+	finalizeTerraformCIResults(&schema.ConfigAndStacksInfo{SubCommand: "output"}, nil, nil)
+	finalizeTerraformCIResults(&schema.ConfigAndStacksInfo{SubCommand: "plan"}, nil, nil)
 	require.Nil(t, cloneStringMap(nil))
 
 	handler := &capturingTerraformPlanCIResultHandler{err: errors.New("handler failed")}
-	finalizeTerraformPlanCIResults(
+	finalizeTerraformCIResults(
 		&schema.ConfigAndStacksInfo{
-			SubCommand:                   "plan",
+			SubCommand:                   "destroy",
 			TerraformPlanCIResultHandler: handler,
 		},
 		&scheduler.AggregateResult{
@@ -1597,6 +1598,7 @@ func TestFinalizeTerraformPlanCIResultsGuardsAndHandlerError(t *testing.T) {
 	)
 
 	require.Equal(t, 1, handler.calls)
+	require.Equal(t, "destroy", handler.resultSet.Command)
 	require.Len(t, handler.resultSet.Results, 1)
 	entry := handler.resultSet.Results[0]
 	require.Equal(t, "vpc-dev", entry.NodeID)

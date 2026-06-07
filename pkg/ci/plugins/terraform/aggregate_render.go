@@ -21,7 +21,9 @@ const (
 // renderAggregatePlanMarkdown builds the deterministic CI job summary body.
 func renderAggregatePlanMarkdown(aggregate *terraformPlanAggregate) string {
 	var b strings.Builder
-	b.WriteString("## Terraform Plan Summary\n\n")
+	b.WriteString("## Terraform ")
+	b.WriteString(aggregateCommandLabel(aggregate.Command))
+	b.WriteString(" Summary\n\n")
 	b.WriteString(aggregate.Summary)
 	b.WriteString("\n\n")
 	writeAggregateResultTable(&b, &aggregate.Counts)
@@ -35,6 +37,18 @@ func renderAggregatePlanMarkdown(aggregate *terraformPlanAggregate) string {
 		return c.HasChanges
 	})
 	return b.String()
+}
+
+// aggregateCommandLabel formats the Terraform command for summary headings.
+func aggregateCommandLabel(command string) string {
+	switch command {
+	case aggregateCommandApply:
+		return "Apply"
+	case aggregateCommandDestroy:
+		return "Destroy"
+	default:
+		return "Plan"
+	}
 }
 
 // writeAggregateResultTable renders component status totals.

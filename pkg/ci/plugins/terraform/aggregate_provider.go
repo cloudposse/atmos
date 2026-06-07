@@ -57,7 +57,7 @@ func aggregateOutputVariables(ctx *plugin.HookContext, aggregate *terraformPlanA
 		"components_no_changes": strconv.Itoa(counts.NoChanges),
 		"components_skipped":    strconv.Itoa(counts.Skipped),
 		"summary":               aggregate.Markdown,
-		"command":               aggregateCommandPlan,
+		"command":               aggregate.Command,
 		"stack":                 aggregateStackValue(ctx.Info),
 		"component":             aggregateComponentName,
 	}
@@ -128,10 +128,14 @@ func (p *Plugin) aggregateComponentContext(ctx *plugin.HookContext, component *t
 	info.StackFromArg = component.Result.Stack
 	info.Component = component.Result.Component
 	info.ComponentFromArg = component.Result.Component
+	command := aggregateCommandPlan
+	if ctx != nil {
+		command = normalizeAggregateCommand(ctx.Command)
+	}
 
 	return &plugin.HookContext{
 		Event:               ctx.Event,
-		Command:             aggregateCommandPlan,
+		Command:             command,
 		EventPrefix:         ctx.EventPrefix,
 		Config:              ctx.Config,
 		Info:                &info,

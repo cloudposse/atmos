@@ -555,15 +555,16 @@ type ShellConfig struct {
 }
 
 // TerraformPlanCIResultHandler receives the complete result set for one
-// graph-backed Terraform plan run and can emit CI artifacts after scheduling
-// has fully completed.
+// graph-backed Terraform run and can emit CI artifacts after scheduling has
+// fully completed.
 type TerraformPlanCIResultHandler interface {
 	HandleTerraformPlanCIResults(TerraformPlanCIResultSet) error
 }
 
-// TerraformPlanCIResultSet contains deterministic per-node Terraform plan
-// results for CI rendering.
+// TerraformPlanCIResultSet contains deterministic per-node Terraform results
+// for CI rendering.
 type TerraformPlanCIResultSet struct {
+	Command string
 	Results []TerraformPlanCIResult
 }
 
@@ -1147,9 +1148,9 @@ type ConfigAndStacksInfo struct {
 	PerComponentHook func(info *ConfigAndStacksInfo, output string, execErr error)
 
 	// TerraformPlanCIResultHandler is called once after a graph-backed
-	// multi-component Terraform plan run completes. It centralizes CI output
-	// writes for concurrent plan execution so GitHub summary/output files are
-	// not written by worker goroutines.
+	// multi-component Terraform plan/apply/destroy run completes. It
+	// centralizes CI output writes for concurrent execution so GitHub
+	// summary/output files are not written by worker goroutines.
 	TerraformPlanCIResultHandler TerraformPlanCIResultHandler
 }
 
