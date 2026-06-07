@@ -94,4 +94,6 @@ exclude = [
   # Anthropic's clau.de URL shortener is Cloudflare-fronted and returns 525
   # (SSL handshake failed) to non-browser/CI requests; it resolves in a real browser.
   "clau\\.de",
+  # luigi.readthedocs.io (intermittent 502 Bad Gateway to CI/automated requests)
+  "luigi\\.readthedocs\\.io",
 ]
