@@ -76,8 +76,10 @@ func configAndStacksInfoFromGlobalFlags(globalFlags *global.Flags) schema.Config
 }
 
 // resolveCacheRoot loads the Atmos config (honoring global selection flags) and
-// resolves the cache root.
-func resolveCacheRoot(cmd *cobra.Command) (string, error) {
+// resolves the cache root. It is a variable (not a direct func) so tests can point the
+// cache subcommands at a temporary, seeded cache root without initializing a real
+// Atmos configuration from the filesystem.
+var resolveCacheRoot = func(cmd *cobra.Command) (string, error) {
 	atmosConfig, err := cfg.InitCliConfig(buildConfigAndStacksInfo(cmd), false)
 	if err != nil {
 		return "", err

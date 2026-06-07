@@ -10,6 +10,16 @@ import (
 	"github.com/cloudposse/atmos/pkg/ui"
 )
 
+// Seams for testing: the trust commands wrap OS trust-store operations and config
+// loading that are impractical to exercise directly in unit tests, so they are
+// indirected through variables a test can substitute.
+var (
+	resolveCertPath   = cacheCertPath
+	trustInstructions = tfcache.TrustInstructions
+	installTrust      = tfcache.InstallTrust
+	removeTrust       = tfcache.RemoveTrust
+)
+
 var trustCmd = &cobra.Command{
 	Use:   "trust",
 	Short: "Trust the cache proxy certificate in the OS trust store",
@@ -25,17 +35,17 @@ password).`,
 	RunE: func(cmd *cobra.Command, _ []string) error {
 		defer perf.Track(atmosConfigPtr, "cache.trust.RunE")()
 
-		certPath, err := cacheCertPath(cmd)
+		certPath, err := resolveCertPath(cmd)
 		if err != nil {
 			return err
 		}
 
-		required, note := tfcache.TrustInstructions()
+		required, note := trustInstructions()
 		if !required {
 			ui.Info(note)
 			return nil
 		}
-		if err := tfcache.InstallTrust(certPath); err != nil {
+		if err := installTrust(certPath); err != nil {
 			return errUtils.Build(errUtils.ErrTrustStore).
 				WithCause(err).
 				WithExplanation("Failed to install the registry cache certificate into the OS trust store.").
@@ -56,17 +66,17 @@ var untrustCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, _ []string) error {
 		defer perf.Track(atmosConfigPtr, "cache.untrust.RunE")()
 
-		certPath, err := cacheCertPath(cmd)
+		certPath, err := resolveCertPath(cmd)
 		if err != nil {
 			return err
 		}
 
-		required, note := tfcache.TrustInstructions()
+		required, note := trustInstructions()
 		if !required {
 			ui.Info(note)
 			return nil
 		}
-		if err := tfcache.RemoveTrust(certPath); err != nil {
+		if err := removeTrust(certPath); err != nil {
 			return errUtils.Build(errUtils.ErrTrustStore).
 				WithCause(err).
 				WithExplanation("Failed to remove the registry cache certificate from the OS trust store.").

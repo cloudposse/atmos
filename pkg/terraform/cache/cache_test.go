@@ -1,14 +1,18 @@
 package cache
 
 import (
+	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
 
+	"github.com/cloudposse/atmos/pkg/downloader"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -79,4 +83,65 @@ func TestContribute_Shape(t *testing.T) {
 func TestClose_NilSafe(t *testing.T) {
 	var setup *Setup
 	assert.NoError(t, setup.Close(t.Context()))
+}
+
+func TestStart_EnabledStartsProxy(t *testing.T) {
+	root := t.TempDir()
+	cfg := &schema.AtmosConfiguration{}
+	cfg.Components.Terraform.Cache = &schema.TerraformCacheConfig{Enabled: true, Location: root}
+
+	setup, err := Start(t.Context(), cfg)
+	require.NoError(t, err)
+	require.NotNil(t, setup)
+	t.Cleanup(func() { _ = setup.Close(context.Background()) })
+
+	// A TLS certificate was generated under the cache root.
+	assert.Equal(t, filepath.Join(root, tlsDirName, tlsCertFile), setup.CertPath())
+	_, statErr := os.Stat(setup.CertPath())
+	require.NoError(t, statErr)
+
+	// The proxy is listening and Contribute reflects the live (ephemeral-port) URL.
+	require.NotEmpty(t, setup.proxyURL)
+	contrib := setup.Contribute()
+	pi := contrib["provider_installation"].([]any)
+	nm := pi[0].(map[string]any)["network_mirror"].(map[string]any)
+	assert.Equal(t, setup.proxyURL+"providers/", nm["url"])
+	assert.True(t, strings.HasPrefix(setup.proxyURL, "https://"), "proxy serves TLS")
+}
+
+func TestSetup_CertPathAndTrustEnv(t *testing.T) {
+	// Nil setup is safe and yields empty/nil.
+	var nilSetup *Setup
+	assert.Empty(t, nilSetup.CertPath())
+	env, err := nilSetup.TrustEnv()
+	require.NoError(t, err)
+	assert.Nil(t, env)
+
+	// Real cert + a deterministic system bundle via SSL_CERT_FILE.
+	dir := filepath.Join(t.TempDir(), tlsDirName)
+	certPath := filepath.Join(dir, tlsCertFile)
+	keyPath := filepath.Join(dir, tlsKeyFile)
+	_, err = generateAndWriteProxyCert(dir, certPath, keyPath)
+	require.NoError(t, err)
+	sysRoots := filepath.Join(t.TempDir(), "roots.pem")
+	require.NoError(t, os.WriteFile(sysRoots, []byte("ROOTS\n"), tlsCertPerm))
+	t.Setenv("SSL_CERT_FILE", sysRoots)
+
+	setup := &Setup{certPath: certPath}
+	assert.Equal(t, certPath, setup.CertPath())
+	env, err = setup.TrustEnv()
+	require.NoError(t, err)
+	require.Len(t, env, 1)
+	assert.True(t, strings.HasPrefix(env[0], "SSL_CERT_FILE="))
+}
+
+func TestGoGetterResolver_Resolve(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	md := downloader.NewMockFileDownloader(ctrl)
+	md.EXPECT().
+		Fetch("git::https://example.com/repo.git", "/dest/dir", downloader.ClientModeAny, moduleSourceFetchTimeout).
+		Return(nil)
+
+	r := goGetterResolver{downloader: md}
+	require.NoError(t, r.Resolve(context.Background(), "git::https://example.com/repo.git", "/dest/dir"))
 }

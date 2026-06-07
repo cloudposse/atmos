@@ -40,6 +40,11 @@ const mirrorDirPerm = 0o755
 // It matches the canonical layout used by the proxy (pkg/terraform/registry).
 const providersDirName = "providers"
 
+// executeTerraform is the seam through which the mirror drives the standard Atmos
+// terraform execution pipeline. It is a variable (not a direct call) so tests can
+// substitute a fake without spawning a real terraform/tofu subprocess.
+var executeTerraform = e.ExecuteTerraform
+
 // Options configures a mirror run. Targeting mirrors the multi-component flags of
 // `atmos terraform plan`: a single component, --all, --components, or --query, with
 // an optional --stack scope.
@@ -243,7 +248,7 @@ func mirrorComponent(t Target, args []string, cacheSetup *tfcache.Setup, stdout 
 		// terminal directly — it is parsed (TUI) or discarded (structured output).
 		shellOpts = append(shellOpts, e.WithStdoutOverride(stdout))
 	}
-	return e.ExecuteTerraform(info, shellOpts...)
+	return executeTerraform(info, shellOpts...)
 }
 
 // Print the run summary: a human cache-size line, or a structured Result for
