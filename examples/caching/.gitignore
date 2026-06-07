@@ -6,6 +6,9 @@
 **/.terraform.lock.hcl
 # Always keep per-instance locks tracked, even if a broader rule above would ignore them.
 !**/.*-*.terraform.lock.hcl
+# ...except the `dev` stack, which is a local scratch instance, not a committed example
+# fixture, so its per-instance lock is not tracked.
+**/.dev-*.terraform.lock.hcl
 **/.terraform.tfstate/**
 **/.terraform.tfstate.backup/**
 **/*.tfvars.json
