@@ -218,8 +218,14 @@ func extractToRoot(r io.Reader, root string) error {
 
 // safeJoin joins root and a tar entry name, rejecting paths that escape root.
 func safeJoin(root, name string) (string, error) {
-	target := filepath.Join(root, filepath.FromSlash(name))
-	if target != root && !strings.HasPrefix(target, root+string(os.PathSeparator)) {
+	cleanRoot := filepath.Clean(root)
+	target := filepath.Join(cleanRoot, filepath.FromSlash(name))
+	// The HasPrefix guard (with trailing separator) is the canonical Zip Slip
+	// barrier that CodeQL's go/zipslip query recognizes as a sanitizer. A bare
+	// (non-disjunctive) guard is required so the continuing branch implies the
+	// prefix holds. archiveRoot never emits an entry equal to the root itself
+	// (it skips rel == "."), so rejecting a root-equal target is always safe.
+	if !strings.HasPrefix(target, cleanRoot+string(os.PathSeparator)) {
 		return "", fmt.Errorf("%w: entry %q escapes cache root", errUtils.ErrCacheExtractFailed, name)
 	}
 	return target, nil

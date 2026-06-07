@@ -75,10 +75,22 @@ func TestArchiveRoot_IncludesFilter(t *testing.T) {
 func TestSafeJoin_RejectsEscape(t *testing.T) {
 	root := filepath.Join(string(filepath.Separator), "tmp", "root")
 
-	_, err := safeJoin(root, "../escape")
-	require.Error(t, err)
+	// Hostile entry names that attempt to escape the root must be rejected.
+	for _, name := range []string{
+		"../escape",
+		filepath.Join("..", "..", "etc", "passwd"),
+		filepath.Join("sub", "..", "..", "escape"),
+	} {
+		_, err := safeJoin(root, name)
+		require.Error(t, err, "entry %q must be rejected", name)
+	}
 
+	// Legitimate nested entries resolve within the root.
 	ok, err := safeJoin(root, filepath.Join("sub", "file"))
 	require.NoError(t, err)
 	assert.Equal(t, filepath.Join(root, "sub", "file"), ok)
+
+	okNested, err := safeJoin(root, filepath.Join("a", "b", "c.txt"))
+	require.NoError(t, err)
+	assert.Equal(t, filepath.Join(root, "a", "b", "c.txt"), okNested)
 }
