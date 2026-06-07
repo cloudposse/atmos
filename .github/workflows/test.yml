@@ -250,6 +250,11 @@ jobs:
           RUN_PLAYWRIGHT_INTEGRATION: 1
         run: make testacc
 
+      - name: Import Codecov verification key
+        if: matrix.flavor.target == 'linux' && (success() || failure())
+        run: |
+          curl -fsSL https://uploader.codecov.io/verification.gpg | gpg --no-default-keyring --import
+
       - name: Upload coverage report to Codecov
         if: matrix.flavor.target == 'linux' && (success() || failure())
         uses: codecov/codecov-action@v5
