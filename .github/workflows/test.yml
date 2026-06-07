@@ -252,14 +252,14 @@ jobs:
 
       - name: Upload coverage report to Codecov
         if: matrix.flavor.target == 'linux' && (success() || failure())
-        # v6.0.2 bumps the Codecov CLI wrapper to fetch the uploader PGP key from
+        # v7.0.0 bumps the Codecov CLI wrapper to fetch the uploader PGP key from
         # Keybase, fixing the intermittent "gpg: Can't check signature: No public
         # key" -> "Could not verify signature. Exiting..." failures seen on v5
         # (wrapper 0.2.7). This keeps GPG integrity verification on (preferred
         # over skip_validation, which runs an unverified binary).
-        # Pinned to the v6.0.2 commit SHA (supply-chain hardening; the fix is not
-        # in v6.0.0/v6.0.1, so an older v6 pin would reintroduce the failure).
-        uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v6.0.2
+        # Pinned to the v7.0.0 commit SHA for supply-chain hardening. Note this
+        # is the same commit as v6.0.2; the fix is absent from v6.0.0/v6.0.1.
+        uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v7.0.0
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           slug: ${{ github.repository }}
