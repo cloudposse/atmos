@@ -17,9 +17,10 @@ import (
 )
 
 const (
-	aggregateComponentName        = "aggregate"
-	aggregateStackAll             = "all"
-	aggregateDetailOutputMaxBytes = 12 * 1024
+	aggregateComponentName               = "aggregate"
+	aggregateStackAll                    = "all"
+	aggregateDetailOutputMaxBytes        = 12 * 1024
+	aggregateDetailLineBacktrackMaxBytes = 4 * 1024
 )
 
 // terraformPlanAggregate is the complete rendered model for one graph-backed plan run.
@@ -431,7 +432,13 @@ func truncateAggregateDetail(value string) string {
 	if len(value) <= aggregateDetailOutputMaxBytes {
 		return value
 	}
-	return "... output truncated ...\n" + value[len(value)-aggregateDetailOutputMaxBytes:]
+	start := len(value) - aggregateDetailOutputMaxBytes
+	if prev := strings.LastIndexByte(value[:start], '\n'); prev >= 0 && start-prev <= aggregateDetailLineBacktrackMaxBytes {
+		start = prev + 1
+	} else if next := strings.IndexByte(value[start:], '\n'); next >= 0 {
+		start += next + 1
+	}
+	return "... output truncated ...\n" + strings.TrimLeft(value[start:], "\r\n")
 }
 
 // markdownTableCell escapes text for a Markdown table cell.
