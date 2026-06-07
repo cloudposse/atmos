@@ -1,7 +1,9 @@
 package cache
 
 import (
+	"archive/tar"
 	"bytes"
+	"compress/gzip"
 	"os"
 	"path/filepath"
 	"testing"
@@ -143,6 +145,73 @@ func TestArchiveSkipDecision(t *testing.T) {
 func TestExtractToRoot_InvalidGzip(t *testing.T) {
 	err := extractToRoot(bytes.NewReader([]byte("not gzip data")), t.TempDir())
 	require.ErrorIs(t, err, errUtils.ErrCacheExtractFailed)
+}
+
+func TestArchiveRoot_NonExistentRoot(t *testing.T) {
+	// WalkDir on a missing root surfaces as an archive failure.
+	var buf bytes.Buffer
+	err := archiveRoot(&buf, filepath.Join(t.TempDir(), "missing"), nil)
+	require.ErrorIs(t, err, errUtils.ErrCacheArchiveFailed)
+}
+
+// writeGzippedTar builds a gzip-compressed tar from the given entries so extract
+// edge cases can be exercised with hand-crafted headers.
+func writeGzippedTar(t *testing.T, entries []*tar.Header, bodies [][]byte) []byte {
+	t.Helper()
+	var buf bytes.Buffer
+	gw := gzip.NewWriter(&buf)
+	tw := tar.NewWriter(gw)
+	for i, h := range entries {
+		require.NoError(t, tw.WriteHeader(h))
+		if len(bodies[i]) > 0 {
+			_, err := tw.Write(bodies[i])
+			require.NoError(t, err)
+		}
+	}
+	require.NoError(t, tw.Close())
+	require.NoError(t, gw.Close())
+	return buf.Bytes()
+}
+
+func TestExtractToRoot_RejectsPathEscape(t *testing.T) {
+	// A hostile entry name that escapes the root must be rejected at extraction.
+	body := []byte("pwned")
+	data := writeGzippedTar(
+		t,
+		[]*tar.Header{{
+			Name:     "../escape.txt",
+			Typeflag: tar.TypeReg,
+			Mode:     0o644,
+			Size:     int64(len(body)),
+		}},
+		[][]byte{body},
+	)
+
+	err := extractToRoot(bytes.NewReader(data), t.TempDir())
+	require.ErrorIs(t, err, errUtils.ErrCacheExtractFailed)
+}
+
+func TestExtractToRoot_DefaultPermFallback(t *testing.T) {
+	// A regular entry with a zero mode must still extract, falling back to the
+	// default file permission rather than creating an unwritable/zero-mode file.
+	body := []byte("zero-mode content")
+	data := writeGzippedTar(
+		t,
+		[]*tar.Header{{
+			Name:     "zero.txt",
+			Typeflag: tar.TypeReg,
+			Mode:     0,
+			Size:     int64(len(body)),
+		}},
+		[][]byte{body},
+	)
+
+	dst := t.TempDir()
+	require.NoError(t, extractToRoot(bytes.NewReader(data), dst))
+
+	got, err := os.ReadFile(filepath.Join(dst, "zero.txt"))
+	require.NoError(t, err)
+	assert.Equal(t, string(body), string(got))
 }
 
 func TestArchiveRoot_SkipsSymlink(t *testing.T) {

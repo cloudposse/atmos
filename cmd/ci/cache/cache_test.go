@@ -14,6 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	cipkg "github.com/cloudposse/atmos/pkg/ci"
 	cachepkg "github.com/cloudposse/atmos/pkg/ci/cache"
 	"github.com/cloudposse/atmos/pkg/data"
 	"github.com/cloudposse/atmos/pkg/flags/global"
@@ -305,4 +306,67 @@ func TestRunCacheList_SetupError(t *testing.T) {
 	}
 	err := runCacheList(cacheListCmd, nil)
 	require.ErrorIs(t, err, wantErr)
+}
+
+// stubResolveOK stubs the resolveCacheConfig seam to return cfg, restoring the
+// original on cleanup. It lets tests drive the real cacheSetup without loading
+// Atmos config.
+func stubResolveOK(t *testing.T, cfg *cachepkg.Config) {
+	t.Helper()
+	orig := resolveCacheConfig
+	t.Cleanup(func() { resolveCacheConfig = orig })
+	resolveCacheConfig = func(_ *cobra.Command, _ cacheOverrides) (*cachepkg.Config, error) {
+		return cfg, nil
+	}
+}
+
+func TestCacheSetup_ResolveError(t *testing.T) {
+	// When resolveCacheConfig fails, cacheSetup surfaces that error unchanged.
+	orig := resolveCacheConfig
+	t.Cleanup(func() { resolveCacheConfig = orig })
+	resolveCacheConfig = func(_ *cobra.Command, _ cacheOverrides) (*cachepkg.Config, error) {
+		return nil, errUtils.ErrCacheUnavailable
+	}
+
+	_, _, err := cacheSetup(&cobra.Command{}, cacheOverrides{})
+	require.ErrorIs(t, err, errUtils.ErrCacheUnavailable)
+}
+
+func TestCacheSetup_NoBackendDetected(t *testing.T) {
+	// Config resolves fine, but with an empty provider registry no CI cache
+	// backend is detected, so cacheSetup reports the cache as unavailable.
+	stubResolveOK(t, &cachepkg.Config{Enabled: true, Root: t.TempDir(), Key: "k"})
+	restore := cipkg.SwapRegistryForTest()
+	t.Cleanup(restore)
+
+	_, _, err := cacheSetup(&cobra.Command{}, cacheOverrides{})
+	require.ErrorIs(t, err, errUtils.ErrCacheUnavailable)
+}
+
+// isolateAtmosConfig points config discovery at an empty temp dir so the real
+// resolveCacheConfig does not pick up the repository's atmos.yaml.
+func isolateAtmosConfig(t *testing.T) {
+	t.Helper()
+	dir := t.TempDir()
+	t.Chdir(dir)
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", dir)
+}
+
+func TestResolveCacheConfig_DisabledByDefault(t *testing.T) {
+	isolateAtmosConfig(t)
+	// Cache is off by default, so resolveCacheConfig reports it as unavailable.
+	_, err := resolveCacheConfig(&cobra.Command{}, cacheOverrides{})
+	require.ErrorIs(t, err, errUtils.ErrCacheUnavailable)
+}
+
+func TestResolveCacheConfig_EnabledSuccess(t *testing.T) {
+	isolateAtmosConfig(t)
+	t.Setenv("ATMOS_CI_CACHE_ENABLED", "true")
+	t.Setenv("ATMOS_XDG_CACHE_HOME", t.TempDir())
+
+	cfg, err := resolveCacheConfig(&cobra.Command{}, cacheOverrides{})
+	require.NoError(t, err)
+	require.NotNil(t, cfg)
+	assert.True(t, cfg.Enabled)
+	assert.NotEmpty(t, cfg.Key)
 }

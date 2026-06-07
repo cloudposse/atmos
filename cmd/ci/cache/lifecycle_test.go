@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	cachepkg "github.com/cloudposse/atmos/pkg/ci/cache"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -99,6 +100,37 @@ func TestRegisterAndRunPendingSave(t *testing.T) {
 	// Pending save is cleared after running.
 	RunPendingSave()
 	require.Len(t, fake.blobs, 1, "second run must be a no-op")
+}
+
+// newPendingSaveManager builds a real Manager over the cmd fakeBackend rooted at
+// a temp dir holding one file, so RunPendingSave exercises a genuine Save.
+func newPendingSaveManager(t *testing.T, fake *fakeBackend) *cachepkg.Manager {
+	t.Helper()
+	root := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(root, "toolchain", "bin"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "toolchain", "bin", "tool"), []byte("bin"), 0o644))
+	cfg := &cachepkg.Config{Enabled: true, Auto: "both", Root: root, Key: "k1", Compression: "gzip"}
+	return cachepkg.NewManager(fake, cfg)
+}
+
+func TestRunPendingSave_SaveError(t *testing.T) {
+	fake := newFakeBackend()
+	fake.saveErr = errUtils.ErrCacheSaveFailed
+	registerPendingSave(newPendingSaveManager(t, fake))
+
+	// A failing save is logged (warn branch) and must not panic.
+	RunPendingSave()
+	// Pending save is cleared even on failure.
+	RunPendingSave()
+}
+
+func TestRunPendingSave_Skipped(t *testing.T) {
+	fake := newFakeBackend()
+	// "Already exists remotely" makes Save report Skipped.
+	fake.saveErr = errUtils.ErrCacheAlreadyExists
+	registerPendingSave(newPendingSaveManager(t, fake))
+
+	RunPendingSave()
 }
 
 func TestAutoRestoreHelper_LogsOutcome(t *testing.T) {
