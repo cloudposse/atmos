@@ -100,7 +100,7 @@ func Run(opts Options) error { //nolint:gocritic // Options is the public comman
 		return err
 	}
 
-	platforms := ResolvePlatforms(opts.PlatformsFlag, atmosConfig.Components.Terraform.Cache)
+	platforms := ResolvePlatforms(opts.PlatformsFlag, atmosConfig.Components.Terraform.Platforms)
 
 	root, err := tfcache.ResolveRoot(&atmosConfig)
 	if err != nil {
@@ -275,15 +275,16 @@ func emitResult(format, root string, targets []Target, platforms []string) error
 }
 
 // ResolvePlatforms applies the platform precedence: the CLI flag wins, then the
-// configured mirror platforms, then the current host platform (<os>_<arch>).
-func ResolvePlatforms(flag []string, c *schema.TerraformCacheConfig) []string {
+// configured components.terraform.platforms, then the current host platform
+// (<os>_<arch>).
+func ResolvePlatforms(flag, configured []string) []string {
 	defer perf.Track(nil, "mirror.ResolvePlatforms")()
 
 	if len(flag) > 0 {
 		return flag
 	}
-	if c != nil && c.Mirror != nil && len(c.Mirror.Platforms) > 0 {
-		return c.Mirror.Platforms
+	if len(configured) > 0 {
+		return configured
 	}
 	return []string{runtime.GOOS + "_" + runtime.GOARCH}
 }

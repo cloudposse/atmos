@@ -23,8 +23,8 @@ var mirrorCmd = &cobra.Command{
 	Short:   "Pre-seed the cache with providers for multiple platforms",
 	Long: `Eagerly mirror the providers required by one or more components into the cache
 for multiple platforms, using 'terraform/tofu providers mirror'. Platforms come
-from components.terraform.cache.mirror.platforms, overridable with --platform;
-with no platforms configured, the current host platform is used.
+from components.terraform.platforms, overridable with --platform; with no
+platforms configured, the current host platform is used.
 
 Target components like 'atmos terraform plan': a single component with --stack,
 or a fleet with --all, --components, or --query (optionally scoped with --stack).

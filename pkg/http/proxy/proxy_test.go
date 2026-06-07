@@ -82,6 +82,66 @@ func TestProxy_HitAndMiss(t *testing.T) {
 	assert.Equal(t, int64(len(payload)), snap.BytesCached)
 }
 
+// faultyResponseWriter accepts the first limit bytes, then fails every subsequent
+// Write. It simulates a client that disconnects mid-stream so the savings report
+// counts only the bytes actually delivered.
+type faultyResponseWriter struct {
+	header  http.Header
+	written int
+	limit   int
+}
+
+func (w *faultyResponseWriter) Header() http.Header { return w.header }
+
+func (w *faultyResponseWriter) WriteHeader(int) {}
+
+func (w *faultyResponseWriter) Write(p []byte) (int, error) {
+	remaining := w.limit - w.written
+	if remaining <= 0 {
+		return 0, fmt.Errorf("client disconnected")
+	}
+	if len(p) <= remaining {
+		w.written += len(p)
+		return len(p), nil
+	}
+	w.written += remaining
+	return remaining, fmt.Errorf("client disconnected")
+}
+
+// TestProxy_HitPartialWriteCountsRealBytes verifies the savings report records the
+// bytes actually streamed to the client on a hit, not the full on-disk object size,
+// when the transfer is interrupted mid-stream.
+func TestProxy_HitPartialWriteCountsRealBytes(t *testing.T) {
+	payload := []byte("0123456789abcdefghijklmnopqrstuvwxyz") // 36 bytes.
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write(payload)
+	}))
+	defer upstream.Close()
+
+	mirror := &artifactMirror{upstreamBase: upstream.URL}
+	srv := startProxy(t, []Mirror{mirror}, Options{})
+
+	// First request: miss, commits the object to cache. Not counted as a hit.
+	body := httpGet(t, srv.BaseURL()+"obj/partial.zip")
+	assert.Equal(t, payload, body)
+	require.Equal(t, 0, srv.Stats().Hits)
+
+	// Serve the cached object through a writer that fails after the first k bytes.
+	const k = 10
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, srv.BaseURL()+"obj/partial.zip", nil)
+	require.NoError(t, err)
+	route, err := mirror.Route(req)
+	require.NoError(t, err)
+
+	fw := &faultyResponseWriter{header: make(http.Header), limit: k}
+	require.True(t, srv.tryServeHit(fw, &route), "the cached object must be a servable hit")
+
+	snap := srv.Stats()
+	assert.Equal(t, 1, snap.Hits, "an interrupted transfer is still a hit")
+	assert.Equal(t, int64(k), snap.BytesSaved, "only the bytes actually delivered are counted, not the full object size")
+	assert.Less(t, snap.BytesSaved, int64(len(payload)), "a partial transfer must record fewer bytes than the object size")
+}
+
 func TestProxy_ConcurrentSingleDownloader(t *testing.T) {
 	var upstreamHits int64
 	payload := []byte("the-only-download")

@@ -137,11 +137,11 @@ func (s *Server) tryServeHit(w http.ResponseWriter, route *Route) bool {
 		return false
 	}
 
-	m, err := s.serveStored(w, route)
+	n, err := s.serveStored(w, route)
 	if err != nil {
 		return false
 	}
-	s.stats.RecordHit(m.Size)
+	s.stats.RecordHit(n)
 	return true
 }
 
@@ -255,16 +255,23 @@ func (s *Server) writeUpstreamResponse(w http.ResponseWriter, fr fillResult) {
 	_, _ = w.Write(fr.body)
 }
 
-// serveStored opens a committed object, writes it to the response, and returns its
-// metadata (so the hit path can record bytes served).
-func (s *Server) serveStored(w http.ResponseWriter, route *Route) (Meta, error) {
+// serveStored opens a committed object, writes it to the response, and returns the
+// number of bytes actually written to the client (so the hit path can record real
+// bytes served, not the on-disk object size).
+func (s *Server) serveStored(w http.ResponseWriter, route *Route) (int64, error) {
 	rc, m, err := s.opts.Store.Open(route.Key)
 	if err != nil {
-		return Meta{}, err
+		return 0, err
 	}
 	defer rc.Close()
-	s.writeObject(w, route, m, rc)
-	return m, nil
+	n, copyErr := s.writeObject(w, route, m, rc)
+	if copyErr != nil {
+		// Post-header failure (e.g. the client disconnected mid-stream): the status is
+		// already sent, so we cannot surface a 502. Log it and report the bytes actually
+		// delivered.
+		log.Debug("Registry cache: client write interrupted", "key", route.Key, "bytes", n, "error", copyErr)
+	}
+	return n, nil
 }
 
 // boundFetcher returns a Fetcher that applies the same propagation as the main
@@ -299,12 +306,14 @@ func (s *Server) fetchUpstream(ctx context.Context, inbound *http.Request, route
 }
 
 // writeObject writes a cached object to the response with the resolved Content-Type.
-func (s *Server) writeObject(w http.ResponseWriter, route *Route, meta Meta, body io.Reader) {
+// It returns the number of bytes copied to the client and any copy error (which occurs
+// after the status line is sent, so it cannot change the response status).
+func (s *Server) writeObject(w http.ResponseWriter, route *Route, meta Meta, body io.Reader) (int64, error) {
 	if ct := resolveContentType(route.ContentType, meta.ContentType); ct != "" {
 		w.Header().Set("Content-Type", ct)
 	}
 	w.WriteHeader(http.StatusOK)
-	_, _ = io.Copy(w, body)
+	return io.Copy(w, body)
 }
 
 // resolveContentType prefers the route's content type, falling back to upstream's.

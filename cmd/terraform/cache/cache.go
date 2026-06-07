@@ -26,7 +26,12 @@ func SetAtmosConfig(config *schema.AtmosConfiguration) {
 var cacheCmd = &cobra.Command{
 	Use:   "cache",
 	Short: "Manage the Terraform registry cache",
-	Long:  `List, inspect, prune, and delete cached Terraform providers and modules.`,
+	Long: `List, inspect, prune, and delete providers and modules cached by the Terraform registry cache.
+
+The registry cache is the ephemeral proxy that intercepts traffic to provider and
+module registries and stores the fetched artifacts on disk. It is distinct from
+Terraform's own provider plugin cache (the 'plugin_cache' setting / TF_PLUGIN_CACHE_DIR),
+which is a separate caching layer that Terraform manages itself.`,
 }
 
 func init() {

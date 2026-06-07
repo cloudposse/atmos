@@ -155,6 +155,8 @@ components:
   <dd>
     When `true`, Atmos enables Terraform provider plugin caching by automatically setting `TF_PLUGIN_CACHE_DIR`. This improves performance by reusing downloaded providers across components, reducing init times and network bandwidth.
 
+    This is Terraform's **own** provider cache and is independent of the [registry cache](#cache) (`cache`). The plugin cache stores provider plugins that Terraform manages itself; the registry cache is an Atmos-managed proxy that caches both provider *and* module registry traffic. The two are separate layers and can be used together.
+
     When caching is enabled, Atmos also sets `TF_PLUGIN_CACHE_MAY_BREAK_DEPENDENCY_LOCK_FILE=true` as required by Terraform.
 
     If `TF_PLUGIN_CACHE_DIR` is already set in your environment or via the global `env:` section in `atmos.yaml`, Atmos does not override it—you manage your own cache.
@@ -251,6 +253,8 @@ If you already manage your own CLI config (via `TF_CLI_CONFIG_FILE`, `TOFU_CLI_C
 ## Registry Cache (`cache`) {#cache}
 
 The `cache` section enables the [Terraform registry cache](/cli/commands/terraform/cache) — transparent provider and module caching via an ephemeral local network-mirror proxy. It is execution-environment (runner) configuration that merges through the stack hierarchy.
+
+This is **not** the same as Terraform's [`plugin_cache`](#configuration-reference): the registry cache is an Atmos-managed proxy that caches both provider *and* module registry traffic (default root `~/.cache/atmos/terraform/registry`), whereas `plugin_cache` is Terraform's own provider plugin cache (`~/.cache/atmos/terraform/plugins`). They are independent layers.
 
 <dl>
   <dt><code>enabled</code></dt>

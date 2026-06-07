@@ -16,6 +16,12 @@ The Terraform registry cache transparently caches providers and modules behind a
 
 <Experimental />
 
+:::info Registry cache vs. provider plugin cache
+The **registry cache** described here is the ephemeral proxy that intercepts traffic to provider *and* module **registries** and stores the fetched artifacts on disk (default `~/.cache/atmos/terraform/registry`). Providers and modules both belong here because both are fetched from registries.
+
+This is a **separate** layer from Terraform's own **provider plugin cache** — the [`plugin_cache`](/cli/configuration/components/terraform) setting (`TF_PLUGIN_CACHE_DIR`), stored at `~/.cache/atmos/terraform/plugins`, which Terraform manages itself. The two are independent and can be used together.
+:::
+
 <Screengrab title="atmos terraform cache --help" slug="atmos-terraform-cache--help" />
 
 ## Enable the cache

@@ -513,6 +513,12 @@ type Terraform struct {
 	// Cache holds the Terraform registry cache configuration (provider + module
 	// caching via an ephemeral network-mirror proxy). Disabled by default.
 	Cache *TerraformCacheConfig `yaml:"cache,omitempty" json:"cache,omitempty" mapstructure:"cache"`
+	// Platforms lists the target platforms a project builds for, as <os>_<arch>
+	// (e.g. linux_amd64, darwin_arm64). It is consumed by `atmos terraform cache
+	// mirror` (eager multi-platform pre-seeding) and by the automatic post-init
+	// `providers lock` that keeps .terraform.lock.hcl complete across platforms.
+	// Empty defaults to the current host platform.
+	Platforms []string `yaml:"platforms,omitempty" json:"platforms,omitempty" mapstructure:"platforms"`
 }
 
 // TerraformRCConfig is a near-opaque passthrough rendered into Terraform's native
@@ -561,13 +567,13 @@ type TerraformCacheBackend struct {
 // using `terraform/tofu providers mirror`. The mirror writes the canonical
 // filesystem_mirror layout the lazy proxy already serves, so the same cache
 // directory works lazily (proxy), eagerly (mirror), and offline (filesystem_mirror).
+//
+// The target platforms live at components.terraform.platforms (a project-level
+// property shared with the automatic post-init `providers lock`), not here.
 type TerraformCacheMirror struct {
 	// Enabled expresses fleet pre-seeding policy; the `cache mirror` command runs
 	// regardless of this value. Defaults to false.
 	Enabled bool `yaml:"enabled,omitempty" json:"enabled,omitempty" mapstructure:"enabled"`
-	// Platforms lists target platforms as <os>_<arch> (e.g. linux_amd64,
-	// darwin_arm64). Each becomes a `-platform=` flag. Empty defaults to the host.
-	Platforms []string `yaml:"platforms,omitempty" json:"platforms,omitempty" mapstructure:"platforms"`
 }
 
 // WorkspaceConfig holds workspace-related configuration.

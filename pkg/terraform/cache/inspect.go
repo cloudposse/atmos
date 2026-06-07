@@ -74,8 +74,12 @@ func ResolveRoot(atmosConfig *schema.AtmosConfiguration) (string, error) {
 	return resolveRoot(cfg)
 }
 
-// List walks the cache root and returns every cached object (excluding metadata
-// sidecars, lock files, and in-flight temp files).
+// List walks the cache root and returns every cached artifact: provider and module
+// objects only. It excludes metadata sidecars, lock files, in-flight temp files, and
+// proxy infrastructure that is co-located in the cache root but is not a cached
+// artifact — notably the self-signed TLS certificate under tls/ (see tls.go) and the
+// vestigial layout directories. Because Summarize/Delete/Prune all build on List, the
+// TLS material is never counted in stats and never pruned or deleted.
 func List(root string) ([]Entry, error) {
 	defer perf.Track(nil, "tfcache.List")()
 
@@ -96,6 +100,12 @@ func List(root string) ([]Entry, error) {
 			return err
 		}
 		key := filepath.ToSlash(rel)
+		// Only provider and module artifacts are cached objects. Anything else under
+		// the root (e.g. the proxy's tls/ certificate) is infrastructure, not a
+		// cached artifact, and must not inflate counts or be eligible for pruning.
+		if classifyGroup(key) == groupOther {
+			return nil
+		}
 		entries = append(entries, newEntry(key, path, info))
 		return nil
 	})

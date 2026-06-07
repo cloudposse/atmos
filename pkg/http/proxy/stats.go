@@ -29,7 +29,9 @@ type StatsSnapshot struct {
 	BytesCached   int64
 }
 
-// RecordHit records a cache hit that served size bytes from cache.
+// RecordHit records a cache hit, adding size (the bytes actually streamed to the
+// client, not the on-disk object size) to the bandwidth-saved total. A hit is still
+// counted when a transfer is interrupted; size then reflects only the bytes delivered.
 func (s *Stats) RecordHit(size int64) {
 	defer perf.Track(nil, "proxy.Stats.RecordHit")()
 

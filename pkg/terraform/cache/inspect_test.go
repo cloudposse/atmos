@@ -51,6 +51,38 @@ func TestListAndSummarize(t *testing.T) {
 	assert.Equal(t, int64(5000), summary.Largest.Size)
 }
 
+// TestListAndSummarize_ExcludesNonArtifacts proves that proxy infrastructure
+// co-located in the cache root (the TLS certificate under tls/, and any stray file
+// outside providers/ and modules/) is not counted as a cached object. This guards the
+// fix for the stats reporting the cert as an object and surfacing tls/proxy.pem as the
+// "Oldest" entry.
+func TestListAndSummarize_ExcludesNonArtifacts(t *testing.T) {
+	root := t.TempDir()
+	now := time.Now()
+	// Real cached artifacts.
+	seedObject(t, root, "providers/registry.terraform.io/hashicorp/aws/index.json", 100, "metadata", now)
+	seedObject(t, root, "modules/registry.terraform.io/cloudposse/vpc/aws/versions.json", 200, "metadata", now)
+
+	// Proxy infrastructure that lives in the same root but is NOT a cached artifact.
+	// The cert is the oldest file on disk, so a naive walk would report it as "Oldest".
+	seedObject(t, root, "tls/proxy.pem", 4096, "", now.Add(-72*time.Hour))
+	seedObject(t, root, "tls/proxy-key.pem", 2048, "", now.Add(-72*time.Hour))
+	seedObject(t, root, "objects/stray", 999, "", now.Add(-48*time.Hour))
+
+	entries, err := List(root)
+	require.NoError(t, err)
+	require.Len(t, entries, 2, "only provider and module artifacts are listed")
+
+	summary, err := Summarize(root)
+	require.NoError(t, err)
+	assert.Equal(t, 2, summary.ObjectCount)
+	assert.Equal(t, 1, summary.Providers)
+	assert.Equal(t, 1, summary.Modules)
+	assert.Equal(t, int64(300), summary.TotalSize, "tls/ and stray files excluded from size")
+	require.NotNil(t, summary.Oldest)
+	assert.NotContains(t, summary.Oldest.Key, "tls/", "the TLS cert must not be reported as the oldest object")
+}
+
 func TestDelete(t *testing.T) {
 	root := t.TempDir()
 	key := "providers/registry.terraform.io/hashicorp/aws/index.json"
