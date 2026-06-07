@@ -262,6 +262,9 @@
             },
             "cache": {
               "$ref": "#/definitions/terraform_cache"
+            },
+            "platforms": {
+              "$ref": "#/definitions/terraform_platforms"
             }
           },
           "required": []
@@ -352,6 +355,9 @@
             },
             "cache": {
               "$ref": "#/definitions/terraform_cache"
+            },
+            "platforms": {
+              "$ref": "#/definitions/terraform_platforms"
             }
           },
           "required": []
@@ -1084,18 +1090,27 @@
                 "enabled": {
                   "type": "boolean",
                   "description": "Express fleet pre-seeding policy. The `cache mirror` command runs regardless. Defaults to false."
-                },
-                "platforms": {
-                  "type": "array",
-                  "items": {
-                    "type": "string"
-                  },
-                  "description": "Target platforms as <os>_<arch> (e.g. linux_amd64, darwin_arm64). Empty defaults to the host platform."
                 }
               }
             }
           },
           "required": []
+        }
+      ]
+    },
+    "terraform_platforms": {
+      "title": "terraform_platforms",
+      "description": "Target platforms a project builds for, as <os>_<arch> (e.g. linux_amd64, darwin_arm64). Consumed by `atmos terraform cache mirror` for eager pre-seeding and by the automatic post-init `providers lock` that keeps .terraform.lock.hcl complete across platforms. Empty defaults to the host platform.",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
         }
       ]
     },

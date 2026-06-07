@@ -10,18 +10,17 @@ providers via `atmos terraform cache mirror`.
   `null`, `local`, `tls`), so real providers flow through the cache on `init`/`plan`.
 - The same component consumes a registry-sourced module
   (`cloudposse/label/null`), so module-registry traffic flows through the cache too.
-- `atmos.yaml` with the cache enabled and `cache.mirror.platforms` declared:
+- `atmos.yaml` with the cache enabled and target `platforms` declared:
 
   ```yaml
   components:
     terraform:
+      platforms:
+        - linux_amd64
+        - darwin_arm64
+        - windows_amd64
       cache:
         enabled: true
-        mirror:
-          platforms:
-            - linux_amd64
-            - darwin_arm64
-            - windows_amd64
   ```
 
 ## Try it
@@ -78,7 +77,7 @@ pre-seed the cache for every target platform with `cache mirror`, which wraps
 `terraform providers mirror` into the same cache directory:
 
 ```shell
-# Uses cache.mirror.platforms from atmos.yaml
+# Uses components.terraform.platforms from atmos.yaml
 atmos terraform cache mirror random-pet -s dev
 
 # Or override the platforms for a one-off

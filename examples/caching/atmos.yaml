@@ -32,26 +32,26 @@ components:
     # the "saved" vs "downloaded and cached" report observable.
     plugin_cache: false
 
+    # Target platforms this project builds for. A single list drives BOTH eager
+    # multi-platform pre-seeding (atmos terraform cache mirror random-pet -s dev)
+    # AND the automatic post-init `providers lock` that keeps .terraform.lock.hcl
+    # complete across platforms, so a committed lock installs cleanly on every
+    # platform in a fleet. Empty defaults to the host platform.
+    platforms:
+      - linux_amd64
+      - darwin_arm64
+      - windows_amd64
+
     # Enable the transparent Terraform registry cache. Providers and modules are
     # cached behind an ephemeral local network-mirror proxy, so repeated and CI
     # runs stop re-downloading the same artifacts, keep working through registry
     # outages, and preserve the exact versions a deployment used. Modules are
     # cached lazily through the proxy on `init` (registry metadata always, archive
-    # content when the registry serves an HTTP archive).
+    # content when the registry serves an HTTP archive). The lazy proxy alone only
+    # caches the host platform; `atmos terraform cache mirror` pre-fetches every
+    # platform in `platforms` above into the same canonical filesystem_mirror layout.
     cache:
       enabled: true
-      # Eager, multi-platform pre-seeding of PROVIDERS for mixed CI/developer
-      # fleets and air-gapped bundles. The platforms below are used by:
-      #   atmos terraform cache mirror random-pet -s dev
-      # The lazy proxy alone only caches the host platform; mirror pre-fetches
-      # every platform into the same canonical filesystem_mirror layout.
-      # (mirror wraps `providers mirror` and is providers-only; modules are not
-      # pre-seeded here — they cache lazily through the proxy.)
-      mirror:
-        platforms:
-          - linux_amd64
-          - darwin_arm64
-          - windows_amd64
 
 stacks:
   base_path: "stacks"

@@ -19,7 +19,7 @@ The mirror writes the canonical `filesystem_mirror` layout the proxy already ser
 Platforms are resolved with the following precedence:
 
 1. The `--platform` flag (repeatable).
-2. [`components.terraform.cache.mirror.platforms`](/cli/configuration/components/terraform#cache) in your stack configuration.
+2. [`components.terraform.platforms`](/cli/configuration/components/terraform#platforms) in your stack configuration.
 3. The current host platform (`<os>_<arch>`).
 
 ## Usage
@@ -59,7 +59,7 @@ Target components the same way as `atmos terraform plan`: a single component wit
 ## Examples
 
 ```shell
-# Mirror one component for the platforms declared in cache.mirror.platforms
+# Mirror one component for the platforms declared in components.terraform.platforms
 atmos terraform cache mirror vpc -s plat-ue2-prod
 
 # Override the configured platforms for a one-off

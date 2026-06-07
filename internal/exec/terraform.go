@@ -25,6 +25,12 @@ const (
 	// See pkg/hooks/event.go (hooks.BeforeTerraformInit) for the canonical definition.
 	beforeTerraformInitEvent = "before.terraform.init"
 
+	// AfterTerraformInitEvent is the hook event name for provisioners that run after a
+	// successful terraform init (e.g. the multi-platform providers-lock hook in
+	// pkg/provisioner/lock). It is dispatched with a TerraformExecContext so the provisioner
+	// can run a terraform subcommand against the live env, RC, and working directory.
+	afterTerraformInitEvent = "after.terraform.init"
+
 	subcommandApply     = "apply"
 	subcommandDeploy    = "deploy"
 	subcommandInit      = "init"

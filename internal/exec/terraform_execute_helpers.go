@@ -21,6 +21,7 @@ import (
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/provisioner"
+	_ "github.com/cloudposse/atmos/pkg/provisioner/lock"   // register after.terraform.init providers-lock provisioner
 	_ "github.com/cloudposse/atmos/pkg/provisioner/source" // register source provisioner
 	provWorkdir "github.com/cloudposse/atmos/pkg/provisioner/workdir"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -623,7 +624,46 @@ func executeTerraformInitPhase(atmosConfig *schema.AtmosConfiguration, info *sch
 		return newPath, err
 	}
 
+	dispatchAfterInit(atmosConfig, info, newPath)
+
 	return newPath, nil
+}
+
+// dispatchAfterInit fires the after.terraform.init provisioners (e.g. the multi-platform
+// providers-lock hook) once init has succeeded. It hands them a TerraformExecContext whose
+// runner reuses the same binary, env (incl. TF_CLI_CONFIG_FILE pointing at the live proxy),
+// and working directory as init, so a `providers lock` runs against the already-warm cache.
+// Lock completion is best-effort: a failure is logged, not propagated, so it never fails the
+// user's plan/apply.
+func dispatchAfterInit(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, componentPath string) {
+	execCtx := &provisioner.TerraformExecContext{
+		WorkingDir: componentPath,
+		Run: func(args []string) error {
+			return ExecuteShellCommand(
+				*atmosConfig,
+				info.Command,
+				args,
+				componentPath,
+				info.ComponentEnvList,
+				info.DryRun,
+				info.RedirectStdErr,
+			)
+		},
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	defer cancel()
+
+	if err := provisioner.ExecuteProvisioners(
+		ctx,
+		provisioner.HookEvent(afterTerraformInitEvent),
+		atmosConfig,
+		info.ComponentSection,
+		info.AuthContext,
+		execCtx,
+	); err != nil {
+		log.Warn("Failed to complete multi-platform provider lock", "error", err)
+	}
 }
 
 // handleDeploySubcommand converts `deploy` into `apply` and ensures -auto-approve is

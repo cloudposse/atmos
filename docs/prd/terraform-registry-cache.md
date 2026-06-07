@@ -449,13 +449,49 @@ same primitives — cache backend, lock manager, TTL policy, stale-while-revalid
 storage — later serve git mirrors, OCI artifacts, CI caches, and reusable package downloads. Terraform
 registry caching is the first frontend built on that foundation.
 
+## Multi-platform lock files (`.terraform.lock.hcl`)
+
+A network mirror — and the default provider plugin cache (`TF_PLUGIN_CACHE_DIR`, on by default) — is a
+"customized provider installation method", so `terraform/tofu init` can no longer record the registry's signed
+cross-platform checksums and writes a `.terraform.lock.hcl` with hashes for only the **current** platform. It
+then prints *"Incomplete lock file information for providers … only includes checksums for `<host>`"* (see #2150),
+which breaks any other platform in a fleet that shares the committed lock.
+
+**Resolution.** Declare the platforms a project targets once, at `components.terraform.platforms` (a first-class
+list of `<os>_<arch>`). A single list drives **both** eager `atmos terraform cache mirror` pre-seeding **and**
+automatic lock completion. A built-in `after.terraform.init` provisioner (`pkg/provisioner/lock`, registered like
+the backend/source/workdir hooks) runs `providers lock -platform=…` for the declared platforms once init succeeds,
+reusing the same binary, env (incl. `TF_CLI_CONFIG_FILE` → the live proxy), and working dir. It is a silent no-op
+unless platforms are declared (beyond the host) **and** a customized install method is active — so non-adopters
+see no change, and projects with neither cache native-complete their locks already. Writes are serialized with
+`pkg/cache.FileLock` (sidecar kept under the temp dir, never in a committed component directory).
+
+**Per-instance locks for ephemeral/vendored components.** One Terraform root module is shared by N
+`(stack, component)` instances whose `required_providers` can resolve to different versions; a single
+`.terraform.lock.hcl` cannot hold two versions of one provider, and merging N locks could never *expunge* a
+no-longer-required provider. So for **plain in-repo** components the canonical lock is completed in place and
+committed as usual. For **ephemeral or vendored** components (`provision.workdir.enabled` or a `source:`) the
+canonical lock has no committable home, so Atmos keeps the committed source of truth in a per-instance dotfile,
+`.<stack>-<component>.terraform.lock.hcl` (the same disambiguation used for varfiles/planfiles), with this
+lifecycle:
+
+1. **Restore** (source/workdir provisioner, `before.terraform.init`): copy the per-instance lock → canonical
+   `.terraform.lock.hcl` in the working dir, so init honors the instance's pinned providers.
+2. **Complete** (`after.terraform.init`): `providers lock -platform=…` fills in every platform.
+3. **Persist**: copy the completed canonical lock → the per-instance dotfile (whole-file, no merge → stale
+   providers vanish), `FileLock`-guarded; the destination is the workdir's recorded source dir, else the vendored
+   working dir.
+
+The source→workdir sync preserves the workdir's managed lock and never drags a source lock in (`shouldSkipSyncFile`).
+Gitignore convention: keep canonical `**/.terraform.lock.hcl` ignored (scratch) and **un-ignore**
+`!**/.*-*.terraform.lock.hcl` so per-instance locks commit even inside vendored dirs.
+
 ## Open Questions / Risks
 
 - Whether to promote `pkg/ci/artifact` → `pkg/artifact`, since it is now consumed by CI artifacts, the registry
   cache, *and* bundles — its `ci` namespacing no longer fits.
 - Exact canonical-mirror-layout alignment (packed vs. unpacked; generated `index.json` / `<version>.json`) so
   that `providers mirror` / `filesystem_mirror` interchange holds.
-- Interplay with the existing `TF_PLUGIN_CACHE_DIR` plugin cache and `.terraform.lock.hcl` hash pinning.
 - Precedence/merge with a user-supplied `TF_CLI_CONFIG_FILE`.
 - Terraform vs. OpenTofu registry hosts and `providers mirror` command differences.
 - Windows file-lock degradation (shared-cache concurrency guarantees are weaker on Windows).

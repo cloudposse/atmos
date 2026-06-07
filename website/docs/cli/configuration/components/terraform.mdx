@@ -269,27 +269,46 @@ This is **not** the same as Terraform's [`plugin_cache`](#configuration-referenc
   <dd>Window during which stale metadata may be served while revalidating (Go duration). Defaults to <code>168h</code>.</dd>
   <dt><code>mirror.enabled</code></dt>
   <dd>Express fleet pre-seeding policy. The <a href="/cli/commands/terraform/cache/mirror"><code>cache mirror</code></a> command runs regardless. Defaults to <code>false</code>.</dd>
-  <dt><code>mirror.platforms</code></dt>
-  <dd>Target platforms (<code>&lt;os&gt;_&lt;arch&gt;</code>, e.g. <code>linux_amd64</code>, <code>darwin_arm64</code>) for eager multi-platform pre-seeding via <a href="/cli/commands/terraform/cache/mirror"><code>atmos terraform cache mirror</code></a>. Empty defaults to the host platform.</dd>
+</dl>
+
+Target platforms are configured at the project level via [`platforms`](#platforms) (not under `cache`), since the same list also drives multi-platform lock completion.
+
+```yaml
+components:
+  terraform:
+    platforms:
+      - linux_amd64
+      - darwin_arm64
+      - windows_amd64
+    cache:
+      enabled: true
+      metadata_ttl: 24h
+      stale_while_revalidate: 168h
+```
+
+Manage the cache with [`atmos terraform cache list|stats|prune|delete|mirror`](/cli/commands/terraform/cache).
+
+## Platforms (`platforms`) {#platforms}
+
+`components.terraform.platforms` is the list of target platforms a project builds for, as `<os>_<arch>` (e.g. `linux_amd64`, `darwin_arm64`). A single list drives two things:
+
+<dl>
+  <dt>Eager pre-seeding</dt>
+  <dd>The lazy proxy only caches the platform Terraform requests at run time (your host's). Run <a href="/cli/commands/terraform/cache/mirror"><code>atmos terraform cache mirror</code></a> to pre-fetch every platform in <code>platforms</code> into the same cache directory — for mixed CI/developer fleets or air-gapped bundles.</dd>
+  <dt>Complete lock files</dt>
+  <dd>When a customized provider installation method is active (Terraform's default <a href="#configuration-reference"><code>plugin_cache</code></a>, or the registry <a href="#cache"><code>cache</code></a>), <code>init</code> writes a <code>.terraform.lock.hcl</code> with checksums for only the host platform and warns <em>"Incomplete lock file information for providers"</em>. With <code>platforms</code> declared, Atmos runs <code>providers lock</code> after init to complete the lock for every platform, so a committed lock installs cleanly across a fleet.</dd>
 </dl>
 
 ```yaml
 components:
   terraform:
-    cache:
-      enabled: true
-      metadata_ttl: 24h
-      stale_while_revalidate: 168h
-      mirror:
-        platforms:
-          - linux_amd64
-          - darwin_arm64
-          - windows_amd64
+    platforms:
+      - linux_amd64
+      - darwin_arm64
+      - windows_amd64
 ```
 
-The lazy proxy only caches the platform Terraform requests at run time (your host's). To pre-seed the cache for **multiple** platforms — for mixed CI/developer fleets or air-gapped bundles — declare `mirror.platforms` and run [`atmos terraform cache mirror`](/cli/commands/terraform/cache/mirror), which wraps `terraform providers mirror` into the same cache directory.
-
-Manage the cache with [`atmos terraform cache list|stats|prune|delete|mirror`](/cli/commands/terraform/cache).
+For **ephemeral or vendored** components ([`provision.workdir`](/cli/commands/terraform/workdir) or a [`source:`](/core-concepts/components/vendoring)) the canonical `.terraform.lock.hcl` has no committable home, so Atmos keeps the committed lock per instance as `.<stack>-<component>.terraform.lock.hcl` — restored into the working directory before `init` and persisted after. Keep canonical `**/.terraform.lock.hcl` ignored and un-ignore `!**/.*-*.terraform.lock.hcl` in `.gitignore`. Plain in-repo components keep committing the canonical lock as usual.
 
 ## Generated Files
 

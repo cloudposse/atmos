@@ -45,7 +45,7 @@ components:
           - darwin_arm64
 ```
 
-The proxy caches lazily — only the platform Terraform requests at run time. To pre-seed the cache for **multiple** platforms (mixed CI/developer fleets, air-gapped bundles), declare `mirror.platforms` and run [`atmos terraform cache mirror`](/cli/commands/terraform/cache/mirror).
+The proxy caches lazily — only the platform Terraform requests at run time. To pre-seed the cache for **multiple** platforms (mixed CI/developer fleets, air-gapped bundles), declare [`components.terraform.platforms`](/cli/configuration/components/terraform#platforms) and run [`atmos terraform cache mirror`](/cli/commands/terraform/cache/mirror).
 
 No Terraform code, provider declarations, or module sources change. Both Terraform and OpenTofu are supported, including private registries.
 
