@@ -256,6 +256,12 @@
             },
             "retry": {
               "$ref": "#/definitions/retry"
+            },
+            "rc": {
+              "$ref": "#/definitions/terraform_rc"
+            },
+            "cache": {
+              "$ref": "#/definitions/terraform_cache"
             }
           },
           "required": []
@@ -340,6 +346,12 @@
             },
             "retry": {
               "$ref": "#/definitions/retry"
+            },
+            "rc": {
+              "$ref": "#/definitions/terraform_rc"
+            },
+            "cache": {
+              "$ref": "#/definitions/terraform_cache"
             }
           },
           "required": []
@@ -994,6 +1006,93 @@
                 "type": "string"
               },
               "description": "Regex patterns matched against captured stdout/stderr. Only errors whose output matches at least one pattern are retried. Patterns may be wrapped in `/.../` for readability."
+            }
+          },
+          "required": []
+        }
+      ]
+    },
+    "terraform_rc": {
+      "title": "terraform_rc",
+      "description": "Terraform/OpenTofu CLI configuration (.terraformrc / .tofurc) rendered by Atmos and exposed to the subprocess via TF_CLI_CONFIG_FILE and TOFU_CLI_CONFIG_FILE. A near-opaque passthrough: keys map directly to CLI-config directives (provider_installation, host, credentials, plugin_cache_dir, ...), so new directives need no Atmos schema change.",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "description": "Enable rendering of the Terraform CLI configuration. Defaults to false."
+            }
+          },
+          "required": []
+        }
+      ]
+    },
+    "terraform_cache": {
+      "title": "terraform_cache",
+      "description": "Terraform registry cache configuration. Transparently caches providers and modules through an ephemeral local network-mirror proxy. Execution-environment (runner) configuration, not stack data.",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "description": "Enable the registry cache. Defaults to false."
+            },
+            "location": {
+              "type": "string",
+              "description": "Cache root. Defaults to the XDG cache directory under terraform/registry (e.g. ~/.cache/atmos/terraform/registry)."
+            },
+            "backend": {
+              "type": "object",
+              "additionalProperties": false,
+              "description": "Storage backend for cached artifacts.",
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "description": "Storage backend type. 'filesystem' (default) in V1."
+                },
+                "options": {
+                  "type": "object",
+                  "description": "Backend-specific options."
+                }
+              }
+            },
+            "metadata_ttl": {
+              "type": "string",
+              "description": "Time-to-live for registry metadata as a Go duration string. Defaults to 24h."
+            },
+            "stale_while_revalidate": {
+              "type": "string",
+              "description": "Window during which stale metadata may be served while revalidating, as a Go duration string. Defaults to 168h."
+            },
+            "mirror": {
+              "type": "object",
+              "additionalProperties": false,
+              "description": "Eager multi-platform pre-seeding via `atmos terraform cache mirror` (wraps `terraform providers mirror`).",
+              "properties": {
+                "enabled": {
+                  "type": "boolean",
+                  "description": "Express fleet pre-seeding policy. The `cache mirror` command runs regardless. Defaults to false."
+                },
+                "platforms": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "description": "Target platforms as <os>_<arch> (e.g. linux_amd64, darwin_arm64). Empty defaults to the host platform."
+                }
+              }
             }
           },
           "required": []

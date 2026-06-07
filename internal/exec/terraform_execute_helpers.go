@@ -25,7 +25,9 @@ import (
 	provWorkdir "github.com/cloudposse/atmos/pkg/provisioner/workdir"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/store/authbridge"
+	tfcache "github.com/cloudposse/atmos/pkg/terraform/cache"
 	tfgenerate "github.com/cloudposse/atmos/pkg/terraform/generate"
+	"github.com/cloudposse/atmos/pkg/terraform/rc"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -398,6 +400,15 @@ func assembleComponentEnvVars(atmosConfig *schema.AtmosConfiguration, info *sche
 	// Plugin cache directory.
 	info.ComponentEnvList = append(info.ComponentEnvList, configurePluginCache(atmosConfig)...)
 
+	// Terraform CLI configuration (.terraformrc) rendered by Atmos and exposed via
+	// TF_CLI_CONFIG_FILE / TOFU_CLI_CONFIG_FILE. Also the injection point for the
+	// registry cache's network_mirror/host directives. The cleanup closer is stashed
+	// on info and run (deferred) after the whole terraform pipeline so the temp file
+	// survives every subprocess (init, workspace, plan/apply).
+	if err := configureTerraformRC(atmosConfig, info); err != nil {
+		return err
+	}
+
 	// Toolchain PATH must come last so it takes precedence over all other PATH entries.
 	if tenv != nil {
 		info.ComponentEnvList = append(info.ComponentEnvList, tenv.EnvVars()...)
@@ -411,6 +422,67 @@ func assembleComponentEnvVars(atmosConfig *schema.AtmosConfiguration, info *sche
 	}
 
 	return nil
+}
+
+// configureTerraformRC builds the effective Terraform CLI-config map from the
+// user's components.terraform.rc plus any registry-cache contribution (network
+// mirror + module host overrides), renders it to a temp file, and appends
+// TF_CLI_CONFIG_FILE / TOFU_CLI_CONFIG_FILE. The cleanup closer is stashed on info
+// and deferred at the ExecuteTerraform level so the file outlives every subprocess.
+func configureTerraformRC(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) error {
+	rcMap := map[string]any{}
+
+	if rcCfg := atmosConfig.Components.Terraform.RC; rcCfg != nil && rcCfg.Enabled {
+		for k, v := range rcCfg.Config {
+			rcMap[k] = v
+		}
+	}
+
+	if setup, ok := info.TerraformCache.(*tfcache.Setup); ok && setup != nil {
+		mergeCacheContribution(rcMap, setup.Contribute())
+
+		// Make the terraform/tofu subprocess trust the proxy's self-signed cert.
+		trustEnv, err := setup.TrustEnv()
+		if err != nil {
+			return err
+		}
+		info.ComponentEnvList = append(info.ComponentEnvList, trustEnv...)
+	}
+
+	if len(rcMap) == 0 {
+		return nil
+	}
+
+	rcEnv, rcCleanup, err := rc.Generate(rcMap, atmosConfig, info)
+	if err != nil {
+		return err
+	}
+	info.ComponentEnvList = append(info.ComponentEnvList, rcEnv...)
+	info.RCCleanup = rcCleanup
+	return nil
+}
+
+// mergeCacheContribution merges the registry cache's CLI-config directives into
+// rcMap. The cache owns provider_installation (it must be the single network-mirror
+// egress); host overrides are merged per-host so user-declared hosts are preserved.
+func mergeCacheContribution(rcMap, contribution map[string]any) {
+	const hostKey = "host"
+	for key, value := range contribution {
+		if key != hostKey {
+			rcMap[key] = value
+			continue
+		}
+		add, _ := value.(map[string]any)
+		existing, _ := rcMap[hostKey].(map[string]any)
+		if existing == nil {
+			rcMap[hostKey] = add
+			continue
+		}
+		for host, services := range add {
+			existing[host] = services
+		}
+		rcMap[hostKey] = existing
+	}
 }
 
 // shouldRunTerraformInit returns true when a `terraform init` should be executed as a

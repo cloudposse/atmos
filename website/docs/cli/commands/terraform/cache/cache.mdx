@@ -1,0 +1,91 @@
+---
+title: atmos terraform cache
+sidebar_label: cache
+sidebar_class_name: command
+id: cache
+description: Transparently cache Terraform/OpenTofu providers and modules, and manage the cache.
+---
+import Intro from '@site/src/components/Intro'
+import Experimental from '@site/src/components/Experimental'
+import Screengrab from '@site/src/components/Screengrab'
+import DocCardList from '@theme/DocCardList'
+
+<Intro>
+The Terraform registry cache transparently caches providers and modules behind a single flag, so repeated and CI runs stop re-downloading the same artifacts, keep working through registry outages, and preserve the exact versions a deployment used. These commands inspect and manage the cache.
+</Intro>
+
+<Experimental />
+
+<Screengrab title="atmos terraform cache --help" slug="atmos-terraform-cache--help" />
+
+## Enable the cache
+
+The cache is configured under `components.terraform.cache` and merges through the stack hierarchy, so an organization can set it once and components inherit it:
+
+```yaml
+components:
+  terraform:
+    cache:
+      enabled: true
+      # Optional:
+      location: ~/.cache/atmos        # defaults to the XDG cache directory
+      backend:
+        type: filesystem              # default
+      metadata_ttl: 24h               # registry metadata freshness
+      stale_while_revalidate: 168h    # serve stale metadata while revalidating
+      mirror:                         # optional: eager multi-platform pre-seeding
+        platforms:
+          - linux_amd64
+          - darwin_arm64
+```
+
+The proxy caches lazily — only the platform Terraform requests at run time. To pre-seed the cache for **multiple** platforms (mixed CI/developer fleets, air-gapped bundles), declare `mirror.platforms` and run [`atmos terraform cache mirror`](/cli/commands/terraform/cache/mirror).
+
+No Terraform code, provider declarations, or module sources change. Both Terraform and OpenTofu are supported, including private registries.
+
+## How it works
+
+There is no daemon. For each `terraform`/`tofu` invocation, Atmos:
+
+1. **Resolves the cache** location and ensures the on-disk layout (`providers/ modules/ metadata/ objects/ locks/`).
+2. **Starts an ephemeral proxy** on `127.0.0.1` (dynamic port) — a generic caching HTTP proxy with thin Terraform mirror adapters.
+3. **Generates the CLI config** pointing Terraform at the proxy (a `provider_installation { network_mirror { … } direct {} }` block plus a `modules.v1` host override) and exposes it via `TF_CLI_CONFIG_FILE` / `TOFU_CLI_CONFIG_FILE`. See [Terraform CLI config management](/cli/commands/terraform/usage).
+4. **Routes requests through the proxy.** Each request maps to a canonical cache key; a per-key lock gives one downloader and many readers across concurrent runs.
+5. **Serves hits from disk; fetches misses once** (no hidden retries — Atmos owns retry), verifies integrity (provider zips against their `zh:` SHA-256), and atomically stores the result.
+6. **Tears down on exit.** The proxy stops, the temp CLI config is removed, the cache persists on disk, and a one-line savings report prints when bytes were served from cache.
+
+Providers are stored in the canonical `filesystem_mirror` layout, so the on-disk path **is** the cache key — there is no separate database or index. Module sources that resolve to `git::` pass through unchanged today; a future git mirror will cache those.
+
+## Usage
+
+```shell
+atmos terraform cache <subcommand> [flags]
+```
+
+## Subcommands
+
+<DocCardList />
+
+## Examples
+
+```shell
+# List cached providers and modules
+atmos terraform cache list
+
+# Show cache size and object counts
+atmos terraform cache stats
+
+# Drop stale metadata (immutable artifacts are kept)
+atmos terraform cache prune
+
+# Remove a specific cached object by key
+atmos terraform cache delete providers/registry.terraform.io/hashicorp/aws/index.json
+
+# Pre-seed providers for multiple platforms (air-gapped / mixed fleets)
+atmos terraform cache mirror vpc -s plat-ue2-prod --platform=linux_amd64 --platform=darwin_arm64
+```
+
+## Related
+
+- [Terraform CLI config management](/cli/commands/terraform/usage) — the `components.terraform.rc` section the cache builds on.
+- [Terraform Registry Cache (blog)](/changelog/terraform-registry-cache)

@@ -40,8 +40,8 @@ type Formatter interface {
 	Warningf(format string, a ...interface{}) string // Returns "⚠ {formatted}" in yellow
 	Error(text string) string                        // Returns "✗ {text}" in red
 	Errorf(format string, a ...interface{}) string   // Returns "✗ {formatted}" in red
-	Info(text string) string                         // Returns "ℹ {text}" in cyan
-	Infof(format string, a ...interface{}) string    // Returns "ℹ {formatted}" in cyan
+	Info(text string) string                         // Returns "▶ {text}" in cyan
+	Infof(format string, a ...interface{}) string    // Returns "▶ {formatted}" in cyan
 	Hint(text string) string                         // Returns "💡 {text}" in muted color
 	Hintf(format string, a ...interface{}) string    // Returns "💡 {formatted}" in muted color
 	Muted(text string) string                        // Returns muted text (gray, no icon)

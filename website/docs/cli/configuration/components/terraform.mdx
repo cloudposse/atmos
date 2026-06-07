@@ -222,6 +222,71 @@ components:
 ```
 </File>
 
+## CLI Configuration (`rc`) {#rc}
+
+The `rc` section declares the Terraform/OpenTofu CLI configuration (`.terraformrc` / `.tofurc`). Atmos renders it and exposes it to the subprocess via `TF_CLI_CONFIG_FILE` and `TOFU_CLI_CONFIG_FILE` — no hand-managed dotfiles. It is a **near-opaque passthrough**: keys map directly to CLI-config directives, so new directives work without an Atmos release.
+
+<dl>
+  <dt><code>enabled</code></dt>
+  <dd>Enable rendering of the CLI configuration. Defaults to <code>false</code>.</dd>
+  <dt>(remaining keys)</dt>
+  <dd>Rendered verbatim into Terraform's native CLI config (HCL): <code>provider_installation</code>, <code>host</code>, <code>credentials</code>, <code>plugin_cache_dir</code>, etc.</dd>
+</dl>
+
+```yaml
+components:
+  terraform:
+    rc:
+      enabled: true
+      provider_installation:
+        - network_mirror:
+            url: "https://terraform-mirror.example.com/"
+        - direct:
+            exclude:
+              - "registry.terraform.io/hashicorp/*"
+```
+
+If you already manage your own CLI config (via `TF_CLI_CONFIG_FILE`, `TOFU_CLI_CONFIG_FILE`, or the legacy `TERRAFORM_CONFIG`), Atmos detects it and defers to you.
+
+## Registry Cache (`cache`) {#cache}
+
+The `cache` section enables the [Terraform registry cache](/cli/commands/terraform/cache) — transparent provider and module caching via an ephemeral local network-mirror proxy. It is execution-environment (runner) configuration that merges through the stack hierarchy.
+
+<dl>
+  <dt><code>enabled</code></dt>
+  <dd>Enable the registry cache. Defaults to <code>false</code>.</dd>
+  <dt><code>location</code></dt>
+  <dd>Cache root. Defaults to the XDG cache directory under <code>terraform/registry</code>.</dd>
+  <dt><code>backend.type</code></dt>
+  <dd>Storage backend. <code>filesystem</code> (default).</dd>
+  <dt><code>metadata_ttl</code></dt>
+  <dd>Time-to-live for registry metadata (Go duration). Defaults to <code>24h</code>.</dd>
+  <dt><code>stale_while_revalidate</code></dt>
+  <dd>Window during which stale metadata may be served while revalidating (Go duration). Defaults to <code>168h</code>.</dd>
+  <dt><code>mirror.enabled</code></dt>
+  <dd>Express fleet pre-seeding policy. The <a href="/cli/commands/terraform/cache/mirror"><code>cache mirror</code></a> command runs regardless. Defaults to <code>false</code>.</dd>
+  <dt><code>mirror.platforms</code></dt>
+  <dd>Target platforms (<code>&lt;os&gt;_&lt;arch&gt;</code>, e.g. <code>linux_amd64</code>, <code>darwin_arm64</code>) for eager multi-platform pre-seeding via <a href="/cli/commands/terraform/cache/mirror"><code>atmos terraform cache mirror</code></a>. Empty defaults to the host platform.</dd>
+</dl>
+
+```yaml
+components:
+  terraform:
+    cache:
+      enabled: true
+      metadata_ttl: 24h
+      stale_while_revalidate: 168h
+      mirror:
+        platforms:
+          - linux_amd64
+          - darwin_arm64
+          - windows_amd64
+```
+
+The lazy proxy only caches the platform Terraform requests at run time (your host's). To pre-seed the cache for **multiple** platforms — for mixed CI/developer fleets or air-gapped bundles — declare `mirror.platforms` and run [`atmos terraform cache mirror`](/cli/commands/terraform/cache/mirror), which wraps `terraform providers mirror` into the same cache directory.
+
+Manage the cache with [`atmos terraform cache list|stats|prune|delete|mirror`](/cli/commands/terraform/cache).
+
 ## Generated Files
 
 When `auto_generate_backend_file` is enabled, Atmos generates a `backend.tf.json` file in each component directory. Add this to your `.gitignore`:

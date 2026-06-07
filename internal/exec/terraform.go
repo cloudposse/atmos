@@ -12,6 +12,7 @@ import (
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+	tfcache "github.com/cloudposse/atmos/pkg/terraform/cache"
 	"github.com/cloudposse/atmos/pkg/xdg"
 
 	// Import backend provisioner to register S3 provisioner.
@@ -51,6 +52,35 @@ func resolveAndInstallToolchainDeps(atmosConfig *schema.AtmosConfiguration, info
 	}
 
 	return tenv, nil
+}
+
+// startManagedTerraformCache starts the registry cache for this execution and returns
+// the Setup whose Close the caller must defer. It returns (nil, nil) when caching is
+// disabled or when the caller owns the cache lifecycle (info.TerraformCacheExternal,
+// e.g. `cache mirror` sharing one proxy across components) — in which case the pre-set
+// info.TerraformCache is reused as-is. On a trust failure the proxy is closed before
+// returning so it does not leak.
+func startManagedTerraformCache(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) (*tfcache.Setup, error) {
+	defer perf.Track(atmosConfig, "exec.startManagedTerraformCache")()
+
+	if info.TerraformCacheExternal {
+		return nil, nil
+	}
+	setup, err := tfcache.Start(context.Background(), atmosConfig)
+	if err != nil {
+		return nil, err
+	}
+	if setup == nil {
+		return nil, nil
+	}
+	info.TerraformCache = setup
+	// Fail fast with an actionable message when the OS does not trust the cache
+	// certificate (macOS/Windows), instead of a raw x509 error from terraform.
+	if trustErr := setup.VerifyTrust(context.Background()); trustErr != nil {
+		_ = setup.Close(context.Background())
+		return nil, trustErr
+	}
+	return setup, nil
 }
 
 // ExecuteTerraform executes terraform commands.
@@ -113,10 +143,36 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo, opts ...ShellCommandOptio
 	// repos via the inherited GIT_CONFIG_* rewrites. Process-once and gated (CI + configured).
 	broker.EnsureCredentials(context.Background(), &atmosConfig)
 
+	// Start the Terraform registry cache (no-op when disabled or caller-owned). The
+	// ephemeral proxy must outlive the whole pipeline, so its Close is deferred here.
+	// Env assembly merges its CLI-config contribution into the generated RC.
+	cacheSetup, err := startManagedTerraformCache(&atmosConfig, &info)
+	if err != nil {
+		return err
+	}
+	if cacheSetup != nil {
+		defer func() {
+			if closeErr := cacheSetup.Close(context.Background()); closeErr != nil {
+				log.Debug("Failed to shut down Terraform registry cache", "error", closeErr)
+			}
+		}()
+	}
+
 	// Resolve paths, install toolchain, write varfiles, validate, run hooks, and build env.
 	execCtx, err := prepareComponentExecution(&atmosConfig, &info, shouldProcess)
 	if err != nil {
 		return err
+	}
+
+	// Remove the temporary Terraform CLI config (TF_CLI_CONFIG_FILE) after the whole
+	// pipeline (init, workspace, plan/apply) completes. Registered here, not inside the
+	// pipeline, so the file survives every subprocess and is cleaned up on early errors.
+	if info.RCCleanup != nil {
+		defer func() {
+			if cleanupErr := info.RCCleanup(); cleanupErr != nil {
+				log.Debug("Failed to remove temporary Terraform CLI config", "error", cleanupErr)
+			}
+		}()
 	}
 
 	// Persist auth context so PostRunE hooks (e.g. store hooks that read
