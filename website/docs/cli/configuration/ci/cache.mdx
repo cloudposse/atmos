@@ -52,7 +52,10 @@ the same `cache-hit ⇒ skip save` behavior as `actions/cache`.
 :::note Requirements
 Saving and restoring content require running inside a supported CI provider (GitHub Actions
 today), which provides the runtime cache credentials (`ACTIONS_RUNTIME_TOKEN` and
-`ACTIONS_RESULTS_URL`). Outside a supported CI provider, the cache is a no-op.
+`ACTIONS_RESULTS_URL`). GitHub **withholds these credentials from `run:` steps**, so
+`atmos ci cache` can't reach the cache API directly from a `run:` step — wiring it up inside a
+job always takes one of the [approaches below](#github-actions-integration). Outside a
+supported CI provider, the cache is a no-op.
 :::
 
 ## Configuration Reference
@@ -137,17 +140,17 @@ ci:
 
 ## GitHub Actions Integration
 
-There are two ways to use the cache in GitHub Actions, and they answer a single question: **who stores the cache?**
+GitHub's Actions cache service needs runtime credentials (`ACTIONS_RUNTIME_TOKEN` and `ACTIONS_RESULTS_URL`) that GitHub **withholds from `run:` steps**, so `atmos ci cache restore`/`save` can't reach the cache API directly from a `run:` step. Every approach below is a workaround for that, and they split on a single decision: **do you let a native action store the cache, or use one of our actions to surface the credentials so Atmos's backend stores it?**
 
-- **Native `actions/cache`** (Options 1 and 4) — Atmos only computes *what* to cache (the key and paths from `ci.cache`); `actions/cache` does the storage. This exposes **no** runtime token to your job.
-- **Atmos-managed** (Options 2 and 3) — Atmos's own backend (`atmos ci cache restore`/`save`) does the storage via the GitHub Actions cache service. That requires the runtime credentials, which GitHub withholds from `run:` steps, so the [`github-runtime`](https://github.com/cloudposse/atmos/tree/main/actions/github-runtime) action exposes them.
+- **Native `actions/cache`** (the *composite* and *explicit* tabs) — Atmos only computes *what* to cache (the key and paths from `ci.cache`); `actions/cache` already holds the credentials internally and does the storage. This exposes **no** runtime token to your job.
+- **Atmos-managed** (the *scoped-token* and *ambient-token* tabs) — Atmos's own backend (`atmos ci cache restore`/`save`) does the storage via the GitHub Actions cache service. The [`github-runtime`](https://github.com/cloudposse/atmos/tree/main/actions/github-runtime) action surfaces the withheld credentials so those `run:` steps can reach it.
 
 :::tip Recommended (most secure)
-Prefer **Option 4** (the `actions/cache` composite) or **Option 1** — both expose **no** runtime token. Security ranking: **Option 1 ≈ 4 (no token) > 2 (scoped token) > 3 (ambient token)**. If you need Atmos to own restore/save, prefer `mode: output` (scoped) over `mode: env` (ambient).
+Prefer the **`actions/cache` composite** (or the **explicit** form) — both expose **no** runtime token. Security ranking: **no token (composite/explicit) > scoped token > ambient token**. If you need Atmos to own restore/save, prefer `mode: output` (scoped) over `mode: env` (ambient).
 :::
 
 <Tabs>
-  <TabItem value="actions-cache" label="4. Composite (recommended)" default>
+  <TabItem value="actions-cache" label="actions/cache · composite (recommended)" default>
 
 One `uses:` — Atmos derives the key/paths, native `actions/cache` stores them, **no runtime token**.
 
@@ -162,7 +165,7 @@ One `uses:` — Atmos derives the key/paths, native `actions/cache` stores them,
 **Cons:** one more Atmos action in the chain (it pins `actions/cache` internally).
 
   </TabItem>
-  <TabItem value="paths" label="1. paths + actions/cache">
+  <TabItem value="paths" label="actions/cache · explicit">
 
 The same as the composite, written out — useful when you want explicit control.
 
@@ -185,7 +188,7 @@ The same as the composite, written out — useful when you want explicit control
 **Cons:** three steps to wire by hand.
 
   </TabItem>
-  <TabItem value="output" label="2. Atmos backend (scoped token)">
+  <TabItem value="output" label="Atmos backend · scoped token">
 
 Atmos owns restore/save. `github-runtime` `mode: output` returns masked credentials as step outputs that you thread only into the cache steps.
 
@@ -208,7 +211,7 @@ Atmos owns restore/save. `github-runtime` `mode: output` returns masked credenti
 **Cons:** the token still enters those steps; more YAML.
 
   </TabItem>
-  <TabItem value="env" label="3. Atmos backend (ambient token)">
+  <TabItem value="env" label="Atmos backend · ambient token">
 
 The simplest Atmos-managed form. `github-runtime` `mode: env` exports `ACTIONS_*` to `$GITHUB_ENV` for every later step.
 
