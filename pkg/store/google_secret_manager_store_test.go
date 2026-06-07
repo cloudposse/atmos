@@ -53,6 +53,12 @@ func (m *MockGSMClient) AccessSecretVersion(ctx context.Context, req *secretmana
 	return args.Get(0).(*secretmanagerpb.AccessSecretVersionResponse), args.Error(1)
 }
 
+// DeleteSecret mocks the GSM DeleteSecret API call.
+func (m *MockGSMClient) DeleteSecret(ctx context.Context, req *secretmanagerpb.DeleteSecretRequest, opts ...gax.CallOption) error {
+	args := m.Called(mock.Anything, req)
+	return args.Error(0)
+}
+
 // Close mocks the GSM client Close method.
 func (m *MockGSMClient) Close() error {
 	args := m.Called()
@@ -458,6 +464,171 @@ func TestGSMStore_Get(t *testing.T) {
 				assert.NoError(t, err)
 				assert.Equal(t, tt.want, got)
 			}
+			mockClient.AssertExpectations(t)
+		})
+	}
+}
+
+func TestGSMStore_Delete(t *testing.T) {
+	testPrefix := "test-prefix"
+	testDelimiter := "-"
+	const secretName = "projects/test-project/secrets/test-prefix_dev_usw2_app_service_config-key"
+
+	matchDelete := func(m *MockGSMClient, err error) {
+		m.On("DeleteSecret", mock.Anything, mock.MatchedBy(func(req *secretmanagerpb.DeleteSecretRequest) bool {
+			return req.Name == secretName
+		})).Return(err)
+	}
+
+	tests := []struct {
+		name      string
+		stack     string
+		component string
+		key       string
+		mockFn    func(*MockGSMClient)
+		wantErr   error
+	}{
+		{
+			name:      "success",
+			stack:     "dev-usw2",
+			component: "app/service",
+			key:       "config-key",
+			mockFn:    func(m *MockGSMClient) { matchDelete(m, nil) },
+		},
+		{
+			name:      "not found",
+			stack:     "dev-usw2",
+			component: "app/service",
+			key:       "config-key",
+			mockFn:    func(m *MockGSMClient) { matchDelete(m, status.Error(codes.NotFound, "resource not found")) },
+			wantErr:   ErrResourceNotFound,
+		},
+		{
+			name:      "permission denied",
+			stack:     "dev-usw2",
+			component: "app/service",
+			key:       "config-key",
+			mockFn:    func(m *MockGSMClient) { matchDelete(m, status.Error(codes.PermissionDenied, "permission denied")) },
+			wantErr:   ErrPermissionDenied,
+		},
+		{
+			name:      "generic error wrapped as delete failure",
+			stack:     "dev-usw2",
+			component: "app/service",
+			key:       "config-key",
+			mockFn:    func(m *MockGSMClient) { matchDelete(m, ErrInternalError) },
+			wantErr:   ErrDeleteSecret,
+		},
+		{
+			name:      "empty stack",
+			stack:     "",
+			component: "app/service",
+			key:       "config-key",
+			mockFn:    func(m *MockGSMClient) {},
+			wantErr:   ErrEmptyStack,
+		},
+		{
+			name:      "empty component",
+			stack:     "dev-usw2",
+			component: "",
+			key:       "config-key",
+			mockFn:    func(m *MockGSMClient) {},
+			wantErr:   ErrEmptyComponent,
+		},
+		{
+			name:      "empty key",
+			stack:     "dev-usw2",
+			component: "app/service",
+			key:       "",
+			mockFn:    func(m *MockGSMClient) {},
+			wantErr:   ErrEmptyKey,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mockClient := new(MockGSMClient)
+			tt.mockFn(mockClient)
+
+			store := newGSMStoreWithClient(mockClient, GSMStoreOptions{
+				ProjectID:      "test-project",
+				Prefix:         &testPrefix,
+				StackDelimiter: &testDelimiter,
+			})
+
+			err := store.Delete(tt.stack, tt.component, tt.key)
+			if tt.wantErr != nil {
+				assert.ErrorIs(t, err, tt.wantErr)
+			} else {
+				assert.NoError(t, err)
+			}
+			mockClient.AssertExpectations(t)
+		})
+	}
+}
+
+func TestGSMStore_Has(t *testing.T) {
+	testPrefix := "test-prefix"
+	testDelimiter := "-"
+	const accessName = "projects/test-project/secrets/test-prefix_dev_usw2_app_service_config-key/versions/latest"
+
+	matchAccess := func(m *MockGSMClient, resp *secretmanagerpb.AccessSecretVersionResponse, err error) {
+		call := m.On("AccessSecretVersion", mock.Anything, mock.MatchedBy(func(req *secretmanagerpb.AccessSecretVersionRequest) bool {
+			return req.Name == accessName
+		}))
+		if err != nil {
+			call.Return(nil, err)
+		} else {
+			call.Return(resp, nil)
+		}
+	}
+
+	tests := []struct {
+		name    string
+		mockFn  func(*MockGSMClient)
+		want    bool
+		wantErr error
+	}{
+		{
+			name: "present",
+			mockFn: func(m *MockGSMClient) {
+				matchAccess(m, &secretmanagerpb.AccessSecretVersionResponse{
+					Payload: &secretmanagerpb.SecretPayload{Data: []byte(`"test-value"`)},
+				}, nil)
+			},
+			want: true,
+		},
+		{
+			name:   "absent",
+			mockFn: func(m *MockGSMClient) { matchAccess(m, nil, status.Error(codes.NotFound, "resource not found")) },
+			want:   false,
+		},
+		{
+			name:    "other error propagated",
+			mockFn:  func(m *MockGSMClient) { matchAccess(m, nil, status.Error(codes.PermissionDenied, "permission denied")) },
+			want:    false,
+			wantErr: ErrPermissionDenied,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mockClient := new(MockGSMClient)
+			tt.mockFn(mockClient)
+
+			store := newGSMStoreWithClient(mockClient, GSMStoreOptions{
+				ProjectID:      "test-project",
+				Prefix:         &testPrefix,
+				StackDelimiter: &testDelimiter,
+			})
+
+			got, err := store.Has("dev-usw2", "app/service", "config-key")
+			if tt.wantErr != nil {
+				assert.ErrorIs(t, err, tt.wantErr)
+			} else {
+				assert.NoError(t, err)
+			}
+			assert.Equal(t, tt.want, got)
 			mockClient.AssertExpectations(t)
 		})
 	}

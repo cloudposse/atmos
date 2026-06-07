@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
@@ -9,9 +10,14 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+// errTestBackend is a generic (non-*azcore.ResponseError) backend error used to exercise the
+// fallback error-wrapping path.
+var errTestBackend = errors.New("backend failure")
+
 type mockClient struct {
-	getSecretFunc func(ctx context.Context, name string, version string, options *azsecrets.GetSecretOptions) (azsecrets.GetSecretResponse, error)
-	setSecretFunc func(ctx context.Context, name string, parameters azsecrets.SetSecretParameters, options *azsecrets.SetSecretOptions) (azsecrets.SetSecretResponse, error)
+	getSecretFunc    func(ctx context.Context, name string, version string, options *azsecrets.GetSecretOptions) (azsecrets.GetSecretResponse, error)
+	setSecretFunc    func(ctx context.Context, name string, parameters azsecrets.SetSecretParameters, options *azsecrets.SetSecretOptions) (azsecrets.SetSecretResponse, error)
+	deleteSecretFunc func(ctx context.Context, name string, options *azsecrets.DeleteSecretOptions) (azsecrets.DeleteSecretResponse, error)
 }
 
 func (m *mockClient) GetSecret(ctx context.Context, name string, version string, options *azsecrets.GetSecretOptions) (azsecrets.GetSecretResponse, error) {
@@ -20,6 +26,10 @@ func (m *mockClient) GetSecret(ctx context.Context, name string, version string,
 
 func (m *mockClient) SetSecret(ctx context.Context, name string, parameters azsecrets.SetSecretParameters, options *azsecrets.SetSecretOptions) (azsecrets.SetSecretResponse, error) {
 	return m.setSecretFunc(ctx, name, parameters, options)
+}
+
+func (m *mockClient) DeleteSecret(ctx context.Context, name string, options *azsecrets.DeleteSecretOptions) (azsecrets.DeleteSecretResponse, error) {
+	return m.deleteSecretFunc(ctx, name, options)
 }
 
 func TestAzureKeyVaultStore_Set(t *testing.T) {
@@ -211,6 +221,152 @@ func TestAzureKeyVaultStore_Get(t *testing.T) {
 				assert.NoError(t, err)
 				assert.Equal(t, tt.want, got)
 			}
+		})
+	}
+}
+
+func TestAzureKeyVaultStore_Delete(t *testing.T) {
+	tests := []struct {
+		name      string
+		stack     string
+		component string
+		key       string
+		mockFunc  func(ctx context.Context, name string, options *azsecrets.DeleteSecretOptions) (azsecrets.DeleteSecretResponse, error)
+		wantErr   error
+	}{
+		{
+			name:      "success",
+			stack:     "dev",
+			component: "app",
+			key:       "secret",
+			mockFunc: func(ctx context.Context, name string, options *azsecrets.DeleteSecretOptions) (azsecrets.DeleteSecretResponse, error) {
+				return azsecrets.DeleteSecretResponse{}, nil
+			},
+		},
+		{
+			name:      "empty stack",
+			stack:     "",
+			component: "app",
+			key:       "secret",
+			wantErr:   ErrEmptyStack,
+		},
+		{
+			name:      "empty component",
+			stack:     "dev",
+			component: "",
+			key:       "secret",
+			wantErr:   ErrEmptyComponent,
+		},
+		{
+			name:      "empty key",
+			stack:     "dev",
+			component: "app",
+			key:       "",
+			wantErr:   ErrEmptyKey,
+		},
+		{
+			name:      "not found",
+			stack:     "dev",
+			component: "app",
+			key:       "secret",
+			mockFunc: func(ctx context.Context, name string, options *azsecrets.DeleteSecretOptions) (azsecrets.DeleteSecretResponse, error) {
+				return azsecrets.DeleteSecretResponse{}, &azcore.ResponseError{StatusCode: statusCodeNotFound}
+			},
+			wantErr: ErrResourceNotFound,
+		},
+		{
+			name:      "permission denied",
+			stack:     "dev",
+			component: "app",
+			key:       "secret",
+			mockFunc: func(ctx context.Context, name string, options *azsecrets.DeleteSecretOptions) (azsecrets.DeleteSecretResponse, error) {
+				return azsecrets.DeleteSecretResponse{}, &azcore.ResponseError{StatusCode: statusCodeForbidden}
+			},
+			wantErr: ErrPermissionDenied,
+		},
+		{
+			name:      "generic error wrapped as delete failure",
+			stack:     "dev",
+			component: "app",
+			key:       "secret",
+			mockFunc: func(ctx context.Context, name string, options *azsecrets.DeleteSecretOptions) (azsecrets.DeleteSecretResponse, error) {
+				return azsecrets.DeleteSecretResponse{}, errTestBackend
+			},
+			wantErr: ErrDeleteSecret,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			client := &mockClient{
+				deleteSecretFunc: tt.mockFunc,
+			}
+			store := &AzureKeyVaultStore{
+				client:         client,
+				vaultURL:       "https://test.vault.azure.net",
+				stackDelimiter: stringPtr("-"),
+			}
+
+			err := store.Delete(tt.stack, tt.component, tt.key)
+			if tt.wantErr != nil {
+				assert.ErrorIs(t, err, tt.wantErr)
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}
+
+func TestAzureKeyVaultStore_Has(t *testing.T) {
+	tests := []struct {
+		name     string
+		mockFunc func(ctx context.Context, name string, version string, options *azsecrets.GetSecretOptions) (azsecrets.GetSecretResponse, error)
+		want     bool
+		wantErr  error
+	}{
+		{
+			name: "present",
+			mockFunc: func(ctx context.Context, name string, version string, options *azsecrets.GetSecretOptions) (azsecrets.GetSecretResponse, error) {
+				value := "test-value"
+				return azsecrets.GetSecretResponse{Secret: azsecrets.Secret{Value: &value}}, nil
+			},
+			want: true,
+		},
+		{
+			name: "absent",
+			mockFunc: func(ctx context.Context, name string, version string, options *azsecrets.GetSecretOptions) (azsecrets.GetSecretResponse, error) {
+				return azsecrets.GetSecretResponse{}, &azcore.ResponseError{StatusCode: statusCodeNotFound}
+			},
+			want: false,
+		},
+		{
+			name: "other error propagated",
+			mockFunc: func(ctx context.Context, name string, version string, options *azsecrets.GetSecretOptions) (azsecrets.GetSecretResponse, error) {
+				return azsecrets.GetSecretResponse{}, &azcore.ResponseError{StatusCode: statusCodeForbidden}
+			},
+			want:    false,
+			wantErr: ErrPermissionDenied,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			client := &mockClient{
+				getSecretFunc: tt.mockFunc,
+			}
+			store := &AzureKeyVaultStore{
+				client:         client,
+				vaultURL:       "https://test.vault.azure.net",
+				stackDelimiter: stringPtr("-"),
+			}
+
+			got, err := store.Has("dev", "app", "secret")
+			if tt.wantErr != nil {
+				assert.ErrorIs(t, err, tt.wantErr)
+			} else {
+				assert.NoError(t, err)
+			}
+			assert.Equal(t, tt.want, got)
 		})
 	}
 }

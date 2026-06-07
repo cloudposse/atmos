@@ -37,14 +37,63 @@ type onePasswordClient interface {
 	Delete(ctx context.Context, reference string) error
 }
 
+// opSDKAPI is the narrow subset of the native 1Password SDK that sdkClient depends on. It exists
+// so sdkClient operates against an interface, letting tests inject an in-memory fake instead of
+// the WASM-backed *onepassword.Client. The production adapter (sdkAPIAdapter) delegates to the
+// real client's nested API (Secrets/Vaults/Items).
+type opSDKAPI interface {
+	Resolve(ctx context.Context, reference string) (string, error)
+	ListVaults(ctx context.Context) ([]onepassword.VaultOverview, error)
+	ListItems(ctx context.Context, vaultID string) ([]onepassword.ItemOverview, error)
+	GetItem(ctx context.Context, vaultID, itemID string) (onepassword.Item, error)
+	PutItem(ctx context.Context, item *onepassword.Item) error
+	CreateItem(ctx context.Context, params *onepassword.ItemCreateParams) error
+	DeleteItem(ctx context.Context, vaultID, itemID string) error
+}
+
+// sdkAPIAdapter adapts the native *onepassword.Client to opSDKAPI by flattening its nested API.
+type sdkAPIAdapter struct {
+	client *onepassword.Client
+}
+
+func (a sdkAPIAdapter) Resolve(ctx context.Context, reference string) (string, error) {
+	return a.client.Secrets().Resolve(ctx, reference)
+}
+
+func (a sdkAPIAdapter) ListVaults(ctx context.Context) ([]onepassword.VaultOverview, error) {
+	return a.client.Vaults().List(ctx)
+}
+
+func (a sdkAPIAdapter) ListItems(ctx context.Context, vaultID string) ([]onepassword.ItemOverview, error) {
+	return a.client.Items().List(ctx, vaultID)
+}
+
+func (a sdkAPIAdapter) GetItem(ctx context.Context, vaultID, itemID string) (onepassword.Item, error) {
+	return a.client.Items().Get(ctx, vaultID, itemID)
+}
+
+func (a sdkAPIAdapter) PutItem(ctx context.Context, item *onepassword.Item) error {
+	_, err := a.client.Items().Put(ctx, *item)
+	return err
+}
+
+func (a sdkAPIAdapter) CreateItem(ctx context.Context, params *onepassword.ItemCreateParams) error {
+	_, err := a.client.Items().Create(ctx, *params)
+	return err
+}
+
+func (a sdkAPIAdapter) DeleteItem(ctx context.Context, vaultID, itemID string) error {
+	return a.client.Items().Delete(ctx, vaultID, itemID)
+}
+
 // sdkClient resolves references via the native 1Password SDK using a service-account token.
 // The underlying client embeds a WASM core that is expensive to initialize, so it is built
-// lazily on first use.
+// lazily on first use. Tests pre-seed api to bypass the WASM build entirely.
 type sdkClient struct {
 	token string
 
 	once    sync.Once
-	client  *onepassword.Client
+	api     opSDKAPI
 	initErr error
 }
 
@@ -52,27 +101,35 @@ func newSDKClient(token string) *sdkClient {
 	return &sdkClient{token: token}
 }
 
-// get lazily builds the underlying SDK client.
-func (c *sdkClient) get(ctx context.Context) (*onepassword.Client, error) {
+// get lazily builds the underlying SDK API. When api is already set (tests), the build is skipped.
+func (c *sdkClient) get(ctx context.Context) (opSDKAPI, error) {
 	c.once.Do(func() {
-		c.client, c.initErr = onepassword.NewClient(
+		if c.api != nil {
+			return
+		}
+		client, err := onepassword.NewClient(
 			ctx,
 			onepassword.WithServiceAccountToken(c.token),
 			onepassword.WithIntegrationInfo(opIntegrationName, opIntegrationVersion),
 		)
+		if err != nil {
+			c.initErr = err
+			return
+		}
+		c.api = sdkAPIAdapter{client: client}
 	})
 	if c.initErr != nil {
 		return nil, fmt.Errorf("%w: %w", ErrOnePasswordClientInit, c.initErr)
 	}
-	return c.client, nil
+	return c.api, nil
 }
 
 func (c *sdkClient) Resolve(ctx context.Context, reference string) (string, error) {
-	client, err := c.get(ctx)
+	api, err := c.get(ctx)
 	if err != nil {
 		return "", err
 	}
-	value, err := client.Secrets().Resolve(ctx, reference)
+	value, err := api.Resolve(ctx, reference)
 	if err != nil {
 		if isOPNotFound(err.Error()) {
 			return "", ErrOnePasswordNotFound
@@ -83,7 +140,7 @@ func (c *sdkClient) Resolve(ctx context.Context, reference string) (string, erro
 }
 
 func (c *sdkClient) Set(ctx context.Context, reference, value string) error {
-	client, err := c.get(ctx)
+	api, err := c.get(ctx)
 	if err != nil {
 		return err
 	}
@@ -92,7 +149,7 @@ func (c *sdkClient) Set(ctx context.Context, reference, value string) error {
 		return err
 	}
 
-	vaultID, found, err := c.resolveVaultID(ctx, client, ref.vault)
+	vaultID, found, err := c.resolveVaultID(ctx, api, ref.vault)
 	if err != nil {
 		return err
 	}
@@ -100,18 +157,18 @@ func (c *sdkClient) Set(ctx context.Context, reference, value string) error {
 		return fmt.Errorf("%w: vault %q", ErrOnePasswordNotFound, ref.vault)
 	}
 
-	itemID, found, err := c.resolveItemID(ctx, client, vaultID, ref.item)
+	itemID, found, err := c.resolveItemID(ctx, api, vaultID, ref.item)
 	if err != nil {
 		return err
 	}
 	if !found {
-		return c.createItem(ctx, client, vaultID, ref, value)
+		return c.createItem(ctx, api, vaultID, ref, value)
 	}
-	return c.updateField(ctx, client, opItemLoc{vaultID: vaultID, itemID: itemID}, ref.field, value)
+	return c.updateField(ctx, api, opItemLoc{vaultID: vaultID, itemID: itemID}, ref.field, value)
 }
 
-func (c *sdkClient) createItem(ctx context.Context, client *onepassword.Client, vaultID string, ref opReference, value string) error {
-	_, err := client.Items().Create(ctx, onepassword.ItemCreateParams{
+func (c *sdkClient) createItem(ctx context.Context, api opSDKAPI, vaultID string, ref opReference, value string) error {
+	params := onepassword.ItemCreateParams{
 		VaultID:  vaultID,
 		Title:    ref.item,
 		Category: onepassword.ItemCategoryAPICredentials,
@@ -120,12 +177,12 @@ func (c *sdkClient) createItem(ctx context.Context, client *onepassword.Client, 
 			FieldType: onepassword.ItemFieldTypeConcealed,
 			Value:     value,
 		}},
-	})
-	return err
+	}
+	return api.CreateItem(ctx, &params)
 }
 
-func (c *sdkClient) updateField(ctx context.Context, client *onepassword.Client, loc opItemLoc, field, value string) error {
-	item, err := client.Items().Get(ctx, loc.vaultID, loc.itemID)
+func (c *sdkClient) updateField(ctx context.Context, api opSDKAPI, loc opItemLoc, field, value string) error {
+	item, err := api.GetItem(ctx, loc.vaultID, loc.itemID)
 	if err != nil {
 		return err
 	}
@@ -138,12 +195,11 @@ func (c *sdkClient) updateField(ctx context.Context, client *onepassword.Client,
 			Value:     value,
 		})
 	}
-	_, err = client.Items().Put(ctx, item)
-	return err
+	return api.PutItem(ctx, &item)
 }
 
 func (c *sdkClient) Delete(ctx context.Context, reference string) error {
-	client, err := c.get(ctx)
+	api, err := c.get(ctx)
 	if err != nil {
 		return err
 	}
@@ -152,19 +208,19 @@ func (c *sdkClient) Delete(ctx context.Context, reference string) error {
 		return err
 	}
 	// A missing vault or item means there is nothing to delete (idempotent).
-	vaultID, found, err := c.resolveVaultID(ctx, client, ref.vault)
+	vaultID, found, err := c.resolveVaultID(ctx, api, ref.vault)
 	if err != nil || !found {
 		return err
 	}
-	itemID, found, err := c.resolveItemID(ctx, client, vaultID, ref.item)
+	itemID, found, err := c.resolveItemID(ctx, api, vaultID, ref.item)
 	if err != nil || !found {
 		return err
 	}
-	return c.deleteItemField(ctx, client, opItemLoc{vaultID: vaultID, itemID: itemID}, ref.field)
+	return c.deleteItemField(ctx, api, opItemLoc{vaultID: vaultID, itemID: itemID}, ref.field)
 }
 
-func (c *sdkClient) deleteItemField(ctx context.Context, client *onepassword.Client, loc opItemLoc, field string) error {
-	item, err := client.Items().Get(ctx, loc.vaultID, loc.itemID)
+func (c *sdkClient) deleteItemField(ctx context.Context, api opSDKAPI, loc opItemLoc, field string) error {
+	item, err := api.GetItem(ctx, loc.vaultID, loc.itemID)
 	if err != nil {
 		return err
 	}
@@ -174,15 +230,14 @@ func (c *sdkClient) deleteItemField(ctx context.Context, client *onepassword.Cli
 	}
 	item.Fields = append(item.Fields[:idx], item.Fields[idx+1:]...)
 	if len(item.Fields) == 0 {
-		return client.Items().Delete(ctx, loc.vaultID, loc.itemID)
+		return api.DeleteItem(ctx, loc.vaultID, loc.itemID)
 	}
-	_, err = client.Items().Put(ctx, item)
-	return err
+	return api.PutItem(ctx, &item)
 }
 
 // resolveVaultID finds a vault's ID by title (case-insensitive) or ID.
-func (c *sdkClient) resolveVaultID(ctx context.Context, client *onepassword.Client, vaultQuery string) (string, bool, error) {
-	vaults, err := client.Vaults().List(ctx)
+func (c *sdkClient) resolveVaultID(ctx context.Context, api opSDKAPI, vaultQuery string) (string, bool, error) {
+	vaults, err := api.ListVaults(ctx)
 	if err != nil {
 		return "", false, err
 	}
@@ -195,8 +250,8 @@ func (c *sdkClient) resolveVaultID(ctx context.Context, client *onepassword.Clie
 }
 
 // resolveItemID finds an item's ID within a vault by title (case-insensitive) or ID.
-func (c *sdkClient) resolveItemID(ctx context.Context, client *onepassword.Client, vaultID, itemQuery string) (string, bool, error) {
-	items, err := client.Items().List(ctx, vaultID)
+func (c *sdkClient) resolveItemID(ctx context.Context, api opSDKAPI, vaultID, itemQuery string) (string, bool, error) {
+	items, err := api.ListItems(ctx, vaultID)
 	if err != nil {
 		return "", false, err
 	}

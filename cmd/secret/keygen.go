@@ -39,13 +39,19 @@ func init() {
 	keygenParser.RegisterFlags(keygenCmd)
 }
 
+// loadKeygenConfig loads the global atmos config for keygen. It is a seam so tests can inject a
+// fixture configuration instead of reading atmos.yaml from disk. Keygen operates on the global
+// `secrets.providers` config and needs no stack processing.
+var loadKeygenConfig = func() (schema.AtmosConfiguration, error) {
+	return cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+}
+
 func runSecretKeygen(cmd *cobra.Command, args []string) error {
 	defer perf.Track(nil, "secret.runSecretKeygen")()
 
 	force, _ := cmd.Flags().GetBool("force")
 
-	// keygen operates on the global `secrets.providers` config; it needs no stack processing.
-	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+	atmosConfig, err := loadKeygenConfig()
 	if err != nil {
 		return fmt.Errorf("%w: %w", errUtils.ErrFailedToInitConfig, err)
 	}

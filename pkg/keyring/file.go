@@ -126,6 +126,17 @@ func (s *fileKeyring) Type() string {
 	return TypeFile
 }
 
+// Seams for testing the interactive password path without a live TTY. Production wiring reads the
+// real stdin terminal state and runs the form; tests override these to drive the form in
+// accessible mode with scripted IO. Restore overrides via t.Cleanup.
+var (
+	// Reports whether stdin is an interactive terminal.
+	stdinIsTerminal = func() bool { return term.IsTerminal(int(os.Stdin.Fd())) }
+
+	// Executes the built password form.
+	runPasswordForm = func(f *huh.Form) error { return f.Run() }
+)
+
 // newPasswordPrompt returns a password function that reads the named environment variable, then
 // falls back to an interactive TTY prompt, then errors. Passwords must meet minPasswordLength.
 func newPasswordPrompt(passwordEnv string) keyringlib.PromptFunc {
@@ -140,10 +151,9 @@ func newPasswordPrompt(passwordEnv string) keyringlib.PromptFunc {
 		}
 
 		// 2. Interactive prompt if a TTY is available.
-		//nolint:gosec // os.Stdin.Fd() returns a valid descriptor; the int conversion is safe.
-		if term.IsTerminal(int(os.Stdin.Fd())) {
+		if stdinIsTerminal() {
 			var password string
-			err := huh.NewForm(
+			form := huh.NewForm(
 				huh.NewGroup(
 					huh.NewInput().
 						Title(prompt).
@@ -157,8 +167,8 @@ func newPasswordPrompt(passwordEnv string) keyringlib.PromptFunc {
 							return nil
 						}),
 				),
-			).Run()
-			if err != nil {
+			)
+			if err := runPasswordForm(form); err != nil {
 				return "", fmt.Errorf("password prompt failed: %w", err)
 			}
 			return password, nil
