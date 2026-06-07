@@ -11,6 +11,7 @@ import (
 	"github.com/arsham/figurine/figurine"
 	"github.com/charmbracelet/glamour"
 	"github.com/charmbracelet/huh"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/jwalton/go-supportscolor"
 	"github.com/spf13/viper"
 	xterm "golang.org/x/term"
@@ -159,6 +160,13 @@ func RenderMarkdown(markdownText string, style string) (string, error) {
 	}
 
 	return out, nil
+}
+
+// NewAtmosConfirm returns a huh Confirm field pre-configured with Atmos conventions.
+// Buttons are left-aligned (huh defaults to centered) so they line up with the title
+// and footer. Callers chain Title/Affirmative/Negative/Value/etc. as usual.
+func NewAtmosConfirm() *huh.Confirm {
+	return huh.NewConfirm().WithButtonAlignment(lipgloss.Left)
 }
 
 // NewAtmosHuhTheme returns the Atmos-styled Huh theme for interactive prompts.

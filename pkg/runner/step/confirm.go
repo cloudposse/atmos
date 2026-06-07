@@ -59,7 +59,7 @@ func (h *ConfirmHandler) Execute(ctx context.Context, step *schema.WorkflowStep,
 
 	form := huh.NewForm(
 		huh.NewGroup(
-			huh.NewConfirm().
+			uiutils.NewAtmosConfirm().
 				Title(prompt).
 				Affirmative("Yes").
 				Negative("No").

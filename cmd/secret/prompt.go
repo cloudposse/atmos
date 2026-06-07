@@ -44,7 +44,7 @@ func confirmAction(title string) (bool, error) {
 
 	var confirmed bool
 	form := huh.NewForm(
-		huh.NewGroup(huh.NewConfirm().Title(title).Value(&confirmed)),
+		huh.NewGroup(uiutils.NewAtmosConfirm().Title(title).Value(&confirmed)),
 	).WithTheme(uiutils.NewAtmosHuhTheme())
 	if err := runForm(form); err != nil {
 		return false, fmt.Errorf("confirmation prompt failed: %w", err)
