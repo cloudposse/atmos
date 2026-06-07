@@ -69,7 +69,7 @@ func autoLockProviders(
 	if err := fl.WithLock(func() error {
 		return execCtx.Run(append([]string{"providers", "lock"}, platformFlags(platforms)...))
 	}); err != nil {
-		return err
+		return fmt.Errorf("complete provider lock for platforms %v: %w", platforms, err)
 	}
 
 	return persist(componentConfig, execCtx.WorkingDir, lockPath)
@@ -124,9 +124,12 @@ func persist(componentConfig map[string]any, workingDir, lockPath string) error 
 	}
 	destFile := filepath.Join(dest, provisioner.InstanceLockFilename(componentConfig))
 	fl := cache.NewFileLock(provisioner.LockCoordPath(destFile))
-	return fl.WithLock(func() error {
+	if err := fl.WithLock(func() error {
 		return copyLock(lockPath, destFile)
-	})
+	}); err != nil {
+		return fmt.Errorf("persist per-instance lock %q: %w", destFile, err)
+	}
+	return nil
 }
 
 // persistDir resolves the committable destination directory for the per-instance lock, or

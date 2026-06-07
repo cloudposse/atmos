@@ -1,9 +1,9 @@
 package provisioner
 
 import (
-	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"hash/fnv"
 	"os"
 	"path/filepath"
 
@@ -29,8 +29,11 @@ func LockCoordPath(lockPath string) string {
 	if err != nil {
 		abs = lockPath
 	}
-	sum := sha256.Sum256([]byte(abs))
-	return filepath.Join(os.TempDir(), "atmos-tflock-"+hex.EncodeToString(sum[:8]))
+	// Non-cryptographic hash: this only derives a stable temp-file name from a
+	// path, never hashes anything security-sensitive.
+	h := fnv.New64a()
+	_, _ = h.Write([]byte(abs))
+	return filepath.Join(os.TempDir(), "atmos-tflock-"+hex.EncodeToString(h.Sum(nil)))
 }
 
 // RestorePerInstanceLock seeds workingDir's canonical .terraform.lock.hcl from the committed

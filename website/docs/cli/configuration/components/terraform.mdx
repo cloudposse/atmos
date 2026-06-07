@@ -308,7 +308,7 @@ components:
       - windows_amd64
 ```
 
-For **ephemeral or vendored** components ([`provision.workdir`](/cli/commands/terraform/workdir) or a [`source:`](/core-concepts/components/vendoring)) the canonical `.terraform.lock.hcl` has no committable home, so Atmos keeps the committed lock per instance as `.<stack>-<component>.terraform.lock.hcl` — restored into the working directory before `init` and persisted after. Keep canonical `**/.terraform.lock.hcl` ignored and un-ignore `!**/.*-*.terraform.lock.hcl` in `.gitignore`. Plain in-repo components keep committing the canonical lock as usual.
+For **ephemeral or vendored** components ([`provision.workdir`](/cli/commands/terraform/workdir) or a [`source:`](/vendor/)) the canonical `.terraform.lock.hcl` has no committable home, so Atmos keeps the committed lock per instance as `.<stack>-<component>.terraform.lock.hcl` — restored into the working directory before `init` and persisted after. Keep canonical `**/.terraform.lock.hcl` ignored and un-ignore `!**/.*-*.terraform.lock.hcl` in `.gitignore`. Plain in-repo components keep committing the canonical lock as usual.
 
 ## Generated Files
 
