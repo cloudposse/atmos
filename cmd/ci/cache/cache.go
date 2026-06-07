@@ -109,6 +109,7 @@ var cacheSetup = func(cmd *cobra.Command, overrides cacheOverrides) (*cachepkg.M
 	backend, err := cipkg.DetectCache()
 	if err != nil {
 		return nil, nil, errUtils.Build(errUtils.ErrCacheUnavailable).
+			WithCause(err).
 			WithExplanation("Saving and restoring cache content runs only inside a supported CI runner (e.g. GitHub Actions)").
 			WithHint("Run save/restore from a CI workflow; to manage the cache from your workstation use `atmos ci cache list` and `atmos ci cache delete`").
 			Err()
@@ -131,6 +132,7 @@ var cacheAdminSetup = func(cmd *cobra.Command, overrides cacheOverrides) (*cache
 	backend, err := cipkg.ResolveAdminCache()
 	if err != nil {
 		return nil, nil, errUtils.Build(errUtils.ErrCacheUnavailable).
+			WithCause(err).
 			WithExplanation("No cache-capable CI provider could be resolved for this repository").
 			WithHint("Run inside a GitHub repository with a token available (GITHUB_TOKEN/ATMOS_GITHUB_TOKEN or `gh auth login`) so the cache can be administered").
 			Err()
