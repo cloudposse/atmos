@@ -10,7 +10,7 @@ Automatically detect and mask sensitive Terraform outputs as they flow between c
 
 ## Problem Statement
 
-The [Secrets Management PRD](../secrets-management.md) covers **human-provisioned secrets** — API keys, tokens, and passwords managed through `atmos secret set/get`. It explicitly scopes stores as "machine-written, machine-read state" and secrets as "human-managed configuration."
+The [Secrets Management PRD](../secrets-management.md) covers **human-provisioned secrets** — API keys, tokens, and passwords declared in stack config and managed through `atmos secret set/get` (optionally backed by a store marked `secret: true`). That concept is about the declaration/CRUD/masking interface, not the storage substrate.
 
 This leaves a gap: **sensitive Terraform outputs that flow between components are never masked.** A database component that outputs a `password` marked `sensitive = true` in Terraform will have that password appear in cleartext when:
 

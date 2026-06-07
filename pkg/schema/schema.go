@@ -1006,6 +1006,14 @@ type ConfigAndStacksInfo struct {
 	ComponentEnvSection           AtmosSectionMapType
 	ComponentAuthSection          AtmosSectionMapType
 	ComponentEnvList              []string
+	// TerraformSecretVarKeys holds the set of top-level keys in ComponentVarsSection
+	// whose value contains a resolved secret (detected via the masker). These variables
+	// are excluded from the on-disk Terraform varfile and injected at runtime as
+	// TF_VAR_<name> environment variables instead, so plaintext secrets never hit disk.
+	// Computed once early in the execution pipeline (right after secret resolution,
+	// before auth credentials are registered) to keep the varfile-write and env-assembly
+	// steps consistent.
+	TerraformSecretVarKeys map[string]bool
 	// SanitizedEnv holds the sanitized process environment from auth.
 	// When set, subprocess execution uses this instead of re-reading os.Environ(),
 	// which would reintroduce problematic vars (e.g., IRSA credentials on EKS pods).

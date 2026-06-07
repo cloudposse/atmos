@@ -14,7 +14,7 @@ Additionally:
 - No unified CLI for secret CRUD operations (`init`, `set`, `get`, `delete`, `pull`, `push`, `import`)
 - No declarative registry of what secrets exist and where they're stored
 - Chamber (historical solution) is AWS-only
-- Stores are designed for terraform output persistence, not user-managed secrets
+- Stores held shared backend data but had no secret semantics — no way to mark a store sensitive, no masking, and no declarative registry of what secrets exist
 
 ## Design Principles
 
@@ -37,7 +37,7 @@ backend layer (the store registry) rather than forking a second one:
 
 ### Stores (`pkg/store/`)
 
-Stores are designed for **machine-written, machine-read state** - primarily Terraform outputs that need to be shared between components. They're opaque key-value stores where Terraform writes values and other components read them.
+Stores are the **shared backend layer** for external state. The classic use is machine-written, machine-read data — primarily Terraform outputs that need to be shared between components, where Terraform writes values and other components read them via `!store`. The same backend is also an excellent home for secrets: mark a store `secret: true` and it becomes a secret backend (see [Secret stores](#secret-stores-secret-true)), writing the sensitive at-rest variant (e.g. SSM `SecureString`) and resolving only through `!secret`.
 
 ```yaml
 # Terraform component writes to store
@@ -72,7 +72,7 @@ components:
 
 | Aspect | Stores | Secrets |
 |--------|--------|---------|
-| Purpose | State/output persistence | User configuration secrets |
+| Purpose | Shared backend (outputs, config, and secrets when marked `secret: true`) | User configuration secrets |
 | Updated by | Terraform outputs (`!terraform.output`) | Users via CLI (`atmos secret set`) |
 | Scope | Terraform components | All component types |
 | Listing | Not supported (opaque) | Required (declarative registry) |
@@ -86,7 +86,7 @@ components:
 
 The two concepts differ in **lifecycle and tooling**, not in where bytes are stored:
 
-1. **Different lifecycles** - Store values are populated by Terraform outputs and tied to Terraform workflow; secrets are provisioned manually and change rarely
+1. **Different lifecycles** - Store values are typically populated by Terraform outputs and tied to the Terraform workflow; secrets live on the same backend but are provisioned manually and change rarely. The distinction is the interface and policy (`!secret` + CRUD + masking), not the storage substrate
 2. **Different tooling** - Stores integrate with the Terraform workflow and the hooks system; secrets need a dedicated declarative registry + CRUD commands
 3. **Different access** - `!store` reads any non-secret store; `!secret` is the *only* accessor for a `secret: true` store, enforcing the declarative registry
 
@@ -756,6 +756,72 @@ the provider mock is **never called** (proves the no-credentials path); unit tes
 output` retrieve even with `--mask=true`; precedence tests (flag > env > config > default);
 golden-snapshot for `describe component` with a `!secret` var rendering masked output without
 credentials.
+
+## Keeping Secrets Off Disk (Runtime Injection)
+
+Resolving `!secret` into a component's `vars` is only half the job. Atmos generates a
+Terraform varfile (`<context>-<component>.terraform.tfvars.json`) and passes it to Terraform
+with `-var-file`. If resolved secrets were written into that varfile, **plaintext secrets
+would be left orphaned on disk** (the file persists after the run, world-readable). That is a
+leak regardless of how well output is masked.
+
+Atmos therefore **never writes secret-bearing variables to the varfile**. Instead it injects
+them at runtime as `TF_VAR_<name>` environment variables on the Terraform subprocess — present
+only for the lifetime of the process, never on disk.
+
+### Detecting which variables carry a secret
+
+A secret rarely sits alone in its own variable. It is often composed into a larger string
+(`db_url: "postgres://user:<secret>@host/db"`) or nested inside a map or list. So detection is
+**value-based, not tag-based**: a top-level variable is treated as secret-bearing if any string
+leaf reachable from its value contains a registered secret.
+
+This reuses the masker that secret resolution already populates. Every resolved secret is
+registered with the masker (`io.RegisterSecretValue` → `RegisterSecret`, including encoding
+variants) **before** any varfile is written. A new query, `io.ContainsSecret(value)`, reports
+whether a value contains any registered secret literal as a substring. Crucially, it is
+**independent of the `--mask` display flag** — off-disk protection holds even with
+`--mask=false` (only *display* masking is disabled by that flag, not registration).
+
+The partitioning and `TF_VAR_` rendering live in a dedicated package,
+[`pkg/terraform/tfvars`](../../pkg/terraform/tfvars):
+
+- `Partition(vars, isSecret) (safe, secret)` — splits top-level keys; the predicate is injected
+  (`io.ContainsSecret`) so the package has no import cycle and is unit-testable.
+- `SecretEnv(secret) []string` — renders `TF_VAR_<name>=<value>` entries. Strings pass through
+  verbatim; complex types (maps/lists/numbers/bools) are JSON-encoded, which is valid HCL for
+  Terraform's `TF_VAR_` complex-type parsing.
+
+The partition is computed once per execution, right after secret resolution and **before** the
+auth pre-hook registers cloud credentials with the masker, so the varfile-write and
+env-assembly steps partition identically (see `computeTerraformSecretVarKeys` in
+`internal/exec/terraform_execute_helpers.go`).
+
+> **Precedence:** Terraform ranks `-var-file` (CLI) **above** `TF_VAR_` env vars. A
+> secret-bearing variable must therefore be **removed** from the varfile (not merely
+> duplicated) for the env value to take effect — which is exactly what the partition does.
+
+### Behavior by command
+
+| Command | On-disk varfile | Secret injection |
+|---|---|---|
+| `terraform plan` / `apply` / `deploy` / `destroy` / … | secrets excluded (always) | `TF_VAR_*` on the subprocess env (always) |
+| `terraform shell` | secrets excluded (always) | `TF_VAR_*` exported into the interactive shell **only** with `--with-secrets` (default off) |
+| `terraform generate varfile` | secrets excluded by default; included with `--with-secrets` | n/a (file generation) |
+| `terraform generate varfiles` (batch) | secrets excluded (always) | n/a (batch file generation; no env target) |
+| `describe` / `list` | n/a (never writes varfiles) | n/a (renders masked placeholder; see above) |
+
+The `--with-secrets` flag (env: `ATMOS_WITH_SECRETS`) is the single opt-in for the two cases
+where a human deliberately wants secrets materialized: exporting them into an interactive shell,
+or writing a varfile to hand off elsewhere. Both emit a warning when secrets are present.
+
+### Limitations / follow-ups
+
+- **Complex-typed secret variables** are injected as JSON via `TF_VAR_`. Terraform parses these
+  as HCL; JSON literals are valid HCL, but exotic HCL-only constructs cannot round-trip through
+  a varfile-free path.
+- **Helmfile and Packer** write resolved vars to disk too, but have no `TF_VAR_` equivalent.
+  This is **out of scope** for the Terraform fix and tracked as a follow-up.
 
 ## Provider Implementations
 

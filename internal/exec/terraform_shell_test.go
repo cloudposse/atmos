@@ -333,3 +333,45 @@ func TestPrintShellDryRunInfo(t *testing.T) {
 		})
 	}
 }
+
+func TestApplyShellSecretEnv(t *testing.T) {
+	const secret = "shell-secret-value-9f8e7d"
+	iolib.RegisterSecret(secret)
+
+	newInfo := func() *schema.ConfigAndStacksInfo {
+		info := &schema.ConfigAndStacksInfo{
+			ComponentVarsSection: map[string]any{
+				"token":  secret,
+				"region": "us-east-1-shellsecret",
+			},
+		}
+		computeTerraformSecretVarKeys(info)
+		require.True(t, info.TerraformSecretVarKeys["token"], "secret var should be flagged")
+		require.False(t, info.TerraformSecretVarKeys["region"], "non-secret var should not be flagged")
+		return info
+	}
+
+	t.Run("with-secrets exports TF_VAR_", func(t *testing.T) {
+		info := newInfo()
+		require.NoError(t, applyShellSecretEnv(info, true))
+
+		var found bool
+		for _, e := range info.ComponentEnvList {
+			if e == "TF_VAR_token="+secret {
+				found = true
+			}
+			// The non-secret var must never be exported via env here.
+			assert.NotContains(t, e, "TF_VAR_region")
+		}
+		assert.True(t, found, "expected TF_VAR_token to be exported into the shell env")
+	})
+
+	t.Run("without-secrets withholds TF_VAR_", func(t *testing.T) {
+		info := newInfo()
+		require.NoError(t, applyShellSecretEnv(info, false))
+
+		for _, e := range info.ComponentEnvList {
+			assert.NotContains(t, e, "TF_VAR_token", "secret must not be exported without --with-secrets")
+		}
+	})
+}

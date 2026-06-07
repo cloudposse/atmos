@@ -323,6 +323,28 @@ func MaskingEnabled() bool {
 	return ctx.Masker().Enabled()
 }
 
+// ContainsSecret reports whether value contains any registered secret literal as a
+// substring, using the global masker. It is independent of the --mask display flag and
+// is used to keep secret-bearing values off disk (e.g. out of Terraform varfiles).
+// Returns false if the I/O context isn't initialized (no secrets could have been registered).
+func ContainsSecret(value string) bool {
+	defer perf.Track(nil, "io.ContainsSecret")()
+
+	if value == "" {
+		return false
+	}
+
+	globalMu.RLock()
+	ctx := globalContext
+	globalMu.RUnlock()
+
+	if ctx == nil {
+		return false
+	}
+
+	return ctx.Masker().ContainsSecret(value)
+}
+
 // RegisterSecretValue registers every secret-bearing representation of a value with the
 // masker, not only plain strings. Scalars are registered via their string form; maps and
 // slices are walked so nested string leaves (e.g. a `password` field of an object output)
