@@ -37,8 +37,8 @@ func TestMainHooksAndKeychainStoreIntegration(t *testing.T) {
 	t.Setenv("ATMOS_KEYRING_PASSWORD", "atmos-test-pass") // >= 8 chars, read non-interactively.
 
 	// Disable CI auto-detection so deploy hooks don't try to download planfiles from GitHub
-	// Artifacts during tests.
-	os.Unsetenv("GITHUB_ACTIONS")
+	// Artifacts during tests. t.Setenv restores the prior value automatically at test end.
+	t.Setenv("GITHUB_ACTIONS", "")
 
 	origDir, err := os.Getwd()
 	if err != nil {
