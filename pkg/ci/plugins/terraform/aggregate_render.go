@@ -215,7 +215,7 @@ func writeAggregateSummaryTruncationNotice(b *strings.Builder, omittedDetails in
 		return
 	}
 
-	notice := "\n\n> Summary truncated to stay below GitHub Actions' 1 MB job summary limit. Omitted " +
+	notice := "\n\n> [!WARNING]\n> Summary truncated to stay below GitHub Actions' 1 MB job summary limit. Omitted " +
 		strconv.Itoa(omittedDetails) +
 		" component detail section(s); use component logs or plan artifacts for full output.\n"
 	if b.Len()+len(notice) > aggregateMarkdownMaxBytes {
@@ -231,7 +231,7 @@ func enforceAggregateMarkdownLimit(markdown string) string {
 		return markdown
 	}
 
-	notice := "\n\n> Summary truncated to stay below GitHub Actions' 1 MB job summary limit. Some table rows or detail sections were omitted; use component logs or plan artifacts for full output.\n"
+	notice := "\n\n> [!WARNING]\n> Summary truncated to stay below GitHub Actions' 1 MB job summary limit. Some table rows or detail sections were omitted; use component logs or plan artifacts for full output.\n"
 	return trimAggregateMarkdownToLimit(markdown, aggregateMarkdownMaxBytes-len(notice)) + notice
 }
 
