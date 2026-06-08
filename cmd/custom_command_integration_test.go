@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -272,14 +273,14 @@ func TestCustomCommandIntegration_ComponentEnvExported(t *testing.T) {
 	tmpDir := t.TempDir()
 	envOutputFile := filepath.Join(tmpDir, "component-env.txt")
 
-	var dumpEnvCmd string
-	if runtime.GOOS == "windows" {
-		dumpEnvCmd = "cmd /c set > \"" + envOutputFile + "\""
-	} else {
-		dumpEnvCmd = "env > " + envOutputFile
-	}
+	// Use the test binary itself (in env-dump helper mode via TestMain) as a cross-platform
+	// substitute for `env` / `cmd /c set`: the step runs the binary, and TestMain writes the step
+	// subprocess environment to the file named by _ATMOS_TEST_DUMP_ENV, then exits. This keeps the
+	// test free of platform-specific binaries (see testing_main_test.go).
+	exePath, err := os.Executable()
+	require.NoError(t, err)
 
-	// A custom command bound to the `script` component type that dumps its environment.
+	// A custom command bound to the `script` component type whose step dumps its environment.
 	testCommand := schema.Command{
 		Name:        "test-component-env",
 		Description: "Dump the environment of a custom component step",
@@ -290,7 +291,8 @@ func TestCustomCommandIntegration_ComponentEnvExported(t *testing.T) {
 			{Name: "stack", Shorthand: "s", SemanticType: "stack", Required: true},
 		},
 		Component: &schema.CommandComponent{Type: "script"},
-		Steps:     stepsFromStrings(dumpEnvCmd),
+		Env:       []schema.CommandEnv{{Key: "_ATMOS_TEST_DUMP_ENV", Value: envOutputFile}},
+		Steps:     stepsFromStrings(fmt.Sprintf("%q", exePath)),
 	}
 
 	atmosConfig.Commands = []schema.Command{testCommand}
@@ -305,7 +307,9 @@ func TestCustomCommandIntegration_ComponentEnvExported(t *testing.T) {
 	envContent, err := os.ReadFile(envOutputFile)
 	require.NoError(t, err, "should be able to read environment output file")
 	envVars := string(envContent)
-	t.Logf("Captured environment from custom component step:\n%s", envVars)
+	// Log only the asserted keys, never the whole environment (which can leak CI secrets/tokens).
+	t.Logf("Captured component env: DEPLOY_REGION=%q APP_VERSION=%q",
+		extractEnvVar(envVars, "DEPLOY_REGION"), extractEnvVar(envVars, "APP_VERSION"))
 
 	// The component `env` section values must be exported as real environment variables.
 	assert.Equal(t, "us-east-1", extractEnvVar(envVars, "DEPLOY_REGION"),
