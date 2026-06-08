@@ -61,10 +61,15 @@ func (s *Server) serveCacheable(w http.ResponseWriter, r *http.Request, route *R
 
 	// Tier 2: collapse the in-process herd. The fill runs on s.baseCtx (not
 	// r.Context()) so one client disconnecting cannot abort the shared fetch — each
-	// waiter independently stops waiting via the select below.
-	ch := s.group.DoChan(route.Key, func() (any, error) {
+	// waiter independently stops waiting via the select below. The fill goroutine is
+	// tracked so Shutdown can wait for it to finish.
+	ch, ok := s.startFill(route.Key, func() (any, error) {
 		return s.fillIfStale(r, route)
 	})
+	if !ok {
+		http.Error(w, "server shutting down", http.StatusServiceUnavailable)
+		return
+	}
 
 	var res singleflight.Result
 	select {

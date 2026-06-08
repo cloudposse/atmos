@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"sync"
 	"time"
 
 	"golang.org/x/sync/singleflight"
@@ -61,6 +62,14 @@ type Server struct {
 	// fetch). baseCtx is canceled on Shutdown so in-flight fills stop with the server.
 	baseCtx    context.Context
 	baseCancel context.CancelFunc
+	// fills tracks detached fill goroutines so Shutdown can wait for them to finish.
+	// Without this, a background fill could still be touching the cache directory
+	// (committing, or releasing a per-key lock file) after Shutdown returns.
+	fills sync.WaitGroup
+	// mu guards closed and serializes it against fill goroutine registration so a fill
+	// never starts (and registers with fills) after Shutdown begins waiting.
+	mu     sync.Mutex
+	closed bool
 }
 
 // NewServer constructs a Server. Call Start to bind and serve.
@@ -139,18 +148,55 @@ func (s *Server) Stats() StatsSnapshot {
 }
 
 // Shutdown gracefully stops the proxy. Safe to call once.
+//
+// It marks the server closed (so no new fill is started), cancels in-flight fills,
+// drains active HTTP handlers, then waits for the detached fill goroutines to finish.
+// Waiting for the fills guarantees no background goroutine touches the cache directory
+// after Shutdown returns — important for callers that delete the cache dir afterwards.
 func (s *Server) Shutdown(ctx context.Context) error {
 	defer perf.Track(nil, "proxy.Server.Shutdown")()
+
+	s.mu.Lock()
+	s.closed = true
+	s.mu.Unlock()
 
 	if s.baseCancel != nil {
 		s.baseCancel() // Stop any in-flight fills bound to the server lifetime.
 	}
-	if s.httpSrv == nil {
-		return nil
+
+	var shutdownErr error
+	if s.httpSrv != nil {
+		shutdownCtx, cancel := context.WithTimeout(ctx, defaultShutdownTimeout)
+		defer cancel()
+		shutdownErr = s.httpSrv.Shutdown(shutdownCtx)
 	}
-	shutdownCtx, cancel := context.WithTimeout(ctx, defaultShutdownTimeout)
-	defer cancel()
-	return s.httpSrv.Shutdown(shutdownCtx)
+
+	// Wait after canceling baseCtx and draining handlers so detached fills (which the
+	// HTTP server does not track) have fully unwound, including releasing lock files.
+	s.fills.Wait()
+	return shutdownErr
+}
+
+// startFill runs fn in a tracked goroutine, collapsing concurrent cold-key fills via
+// singleflight, and returns a channel delivering the shared result. The goroutine is
+// registered with s.fills so Shutdown can wait for it. It returns ok=false when the
+// server is already shutting down, in which case no fill is started.
+func (s *Server) startFill(key string, fn func() (any, error)) (<-chan singleflight.Result, bool) {
+	s.mu.Lock()
+	if s.closed {
+		s.mu.Unlock()
+		return nil, false
+	}
+	s.fills.Add(1)
+	s.mu.Unlock()
+
+	ch := make(chan singleflight.Result, 1)
+	go func() {
+		defer s.fills.Done()
+		v, err, shared := s.group.Do(key, fn)
+		ch <- singleflight.Result{Val: v, Err: err, Shared: shared}
+	}()
+	return ch, true
 }
 
 // ServeHTTP routes the request to the first mirror that handles it, then runs the
