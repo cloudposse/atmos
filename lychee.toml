@@ -96,4 +96,7 @@ exclude = [
   "clau\\.de",
   # luigi.readthedocs.io (intermittent 502 Bad Gateway to CI/automated requests)
   "luigi\\.readthedocs\\.io",
+  # tldp.org (The Linux Documentation Project intermittently returns 502 Bad
+  # Gateway to CI/automated requests; the page is valid and resolves in a browser).
+  "tldp\\.org",
 ]
