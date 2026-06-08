@@ -186,10 +186,19 @@ jobs:
           helmfile version
 
       - name: Install helm-diff plugin
-        if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
+        if: ${{ matrix.flavor.target != 'windows' }}
         # Dogfood Atmos's own retry mechanism: the install is defined as a custom command
         # (atmos.yaml -> `helm plugins install`) whose step retries on transient registry 5xx errors.
+        # Scoped to non-Windows: running an Atmos custom command eagerly installs every tool in
+        # the repo's .tool-versions (e.g. gofumpt), and gofumpt has no Windows build at the pinned
+        # version, so the toolchain install 404s on Windows. The transient registry flake this
+        # guards against was only ever observed on Linux, so Windows uses the plain install below.
         run: atmos helm plugins install
+
+      - name: Install helm-diff plugin (Windows)
+        if: ${{ matrix.flavor.target == 'windows' && ! github.event.pull_request.draft }}
+        # Plain install on Windows (no Atmos toolchain side effects); see the note above.
+        run: helm plugin install https://github.com/databus23/helm-diff
 
       - name: Check atmos.exe integrity
         if: matrix.flavor.target == 'windows' && ! github.event.pull_request.draft
