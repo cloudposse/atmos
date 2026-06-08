@@ -164,17 +164,43 @@ func (s *Server) Shutdown(ctx context.Context) error {
 		s.baseCancel() // Stop any in-flight fills bound to the server lifetime.
 	}
 
+	shutdownCtx, cancel := context.WithTimeout(ctx, defaultShutdownTimeout)
+	defer cancel()
+
 	var shutdownErr error
 	if s.httpSrv != nil {
-		shutdownCtx, cancel := context.WithTimeout(ctx, defaultShutdownTimeout)
-		defer cancel()
-		shutdownErr = s.httpSrv.Shutdown(shutdownCtx)
+		if err := s.httpSrv.Shutdown(shutdownCtx); err != nil {
+			shutdownErr = fmt.Errorf("%w: shutting down proxy server: %w", errUtils.ErrHTTPRequestFailed, err)
+		}
 	}
 
 	// Wait after canceling baseCtx and draining handlers so detached fills (which the
 	// HTTP server does not track) have fully unwound, including releasing lock files.
-	s.fills.Wait()
+	// Bound the wait by the same shutdown deadline so a stalled fill cannot hang
+	// Shutdown past its context.
+	if err := s.waitForFills(shutdownCtx); err != nil {
+		if shutdownErr != nil {
+			return errors.Join(shutdownErr, err)
+		}
+		return err
+	}
 	return shutdownErr
+}
+
+// waitForFills blocks until all detached fill goroutines finish or ctx expires,
+// returning a wrapped error on expiry so Shutdown never outlives its context.
+func (s *Server) waitForFills(ctx context.Context) error {
+	done := make(chan struct{})
+	go func() {
+		s.fills.Wait()
+		close(done)
+	}()
+	select {
+	case <-done:
+		return nil
+	case <-ctx.Done():
+		return fmt.Errorf("%w: waiting for in-flight cache fills to finish: %w", errUtils.ErrHTTPRequestFailed, ctx.Err())
+	}
 }
 
 // startFill runs fn in a tracked goroutine, collapsing concurrent cold-key fills via

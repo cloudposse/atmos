@@ -123,13 +123,16 @@ func TestTrustE2E_PlatformDivergence(t *testing.T) {
 }
 
 // childEnvWithout returns env with every "KEY=..." entry for the given keys removed, so
-// the caller can append authoritative values without duplicate-key ambiguity.
+// the caller can append authoritative values without duplicate-key ambiguity. Keys are
+// matched case-insensitively because environment variable names are case-insensitive on
+// Windows, so a case-sensitive prefix match could leave a duplicate behind.
 func childEnvWithout(env []string, keys ...string) []string {
 	out := make([]string, 0, len(env))
 	for _, kv := range env {
+		name, _, _ := strings.Cut(kv, "=")
 		drop := false
 		for _, k := range keys {
-			if strings.HasPrefix(kv, k+"=") {
+			if strings.EqualFold(name, k) {
 				drop = true
 				break
 			}
