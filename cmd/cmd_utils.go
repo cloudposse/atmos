@@ -32,6 +32,7 @@ import (
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/reexec"
+	"github.com/cloudposse/atmos/pkg/retry"
 	stepPkg "github.com/cloudposse/atmos/pkg/runner/step"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui"
@@ -864,43 +865,93 @@ func executeCustomCommand(
 			stepType = "shell"
 		}
 
-		// Execute the step based on type.
-		switch stepType {
-		case "shell":
-			// Execute shell command (backward compatible).
-			commandName := fmt.Sprintf("%s-step-%d", commandConfig.Name, i)
-			err = e.ExecuteShell(commandToRun, commandName, workDir, env, false)
-		case "atmos":
-			// Execute atmos command.
-			args := strings.Fields(commandToRun)
-			err = e.ExecuteShellCommand(atmosConfig, "atmos", args, workDir, env, false, "")
-		default:
-			// Check if this is an extended step type (input, confirm, choose, etc.).
-			if stepPkg.IsExtendedStepType(stepType) {
-				// Convert Task to WorkflowStep for handler compatibility.
-				workflowStep := step.ToWorkflowStep()
-				// Update command with template-resolved value.
-				workflowStep.Command = commandToRun
-				// Propagate working directory to extended step if not already set.
-				if workflowStep.WorkingDirectory == "" {
-					workflowStep.WorkingDirectory = workDir
-				}
-
-				// Update environment variables for this step (reuse executor to preserve step outputs).
-				for _, envVar := range env {
-					parts := strings.SplitN(envVar, "=", 2)
-					if len(parts) == 2 {
-						executor.SetEnv(parts[0], parts[1])
-					}
-				}
-
-				// Execute the extended step.
-				_, err = executor.Execute(context.Background(), &workflowStep)
-			} else {
-				err = fmt.Errorf("%w: unsupported step type %q for custom command step %d", errUtils.ErrInvalidWorkflowStepType, stepType, i)
-			}
-		}
+		// Execute the step based on type, honoring any per-step retry configuration.
+		err = executeCustomCommandStep(&customCommandStepParams{
+			atmosConfig:   &atmosConfig,
+			executor:      executor,
+			commandConfig: commandConfig,
+			step:          step,
+			stepType:      stepType,
+			commandToRun:  commandToRun,
+			workDir:       workDir,
+			env:           env,
+			index:         i,
+		})
 		errUtils.CheckErrorPrintAndExit(err, "", "")
+	}
+}
+
+// runStepWithOptionalRetry runs fn under retry.Do when a retry config is present, and otherwise runs fn
+// directly. Running directly when no retry is configured preserves the original (unwrapped) error message
+// for the common case — retry.Do wraps a single-attempt failure as "max attempts (1) exceeded, last error:
+// ...", which would be confusing noise for steps that never opted into retries.
+func runStepWithOptionalRetry(retryConfig *schema.RetryConfig, fn func() error) error {
+	if retryConfig == nil {
+		return fn()
+	}
+	return retry.Do(context.Background(), retryConfig, fn)
+}
+
+// customCommandStepParams bundles everything needed to execute a single custom command step. It is passed
+// by pointer to executeCustomCommandStep to avoid copying the embedded Task and AtmosConfiguration.
+type customCommandStepParams struct {
+	atmosConfig   *schema.AtmosConfiguration
+	executor      *stepPkg.StepExecutor
+	commandConfig *schema.Command
+	step          schema.Task
+	stepType      string
+	commandToRun  string
+	workDir       string
+	env           []string
+	index         int
+}
+
+// executeCustomCommandStep runs a single custom command step based on its type, honoring the step's retry
+// configuration. It mirrors the workflow step executor (`internal/exec/workflow_utils.go`): `shell` and
+// `atmos` steps are retried per `step.Retry` (via runStepWithOptionalRetry) so a transient failure is
+// retried, while extended step types are delegated to the step executor unchanged. Steps without a `retry`
+// block run exactly once with no change to their behavior or error output.
+func executeCustomCommandStep(p *customCommandStepParams) error {
+	defer perf.Track(p.atmosConfig, "cmd.executeCustomCommandStep")()
+
+	switch p.stepType {
+	case "shell":
+		// Execute shell command (backward compatible).
+		commandName := fmt.Sprintf("%s-step-%d", p.commandConfig.Name, p.index)
+		return runStepWithOptionalRetry(p.step.Retry, func() error {
+			return e.ExecuteShell(p.commandToRun, commandName, p.workDir, p.env, false)
+		})
+	case "atmos":
+		// Execute atmos command.
+		args := strings.Fields(p.commandToRun)
+		return runStepWithOptionalRetry(p.step.Retry, func() error {
+			return e.ExecuteShellCommand(*p.atmosConfig, "atmos", args, p.workDir, p.env, false, "")
+		})
+	default:
+		// Check if this is an extended step type (input, confirm, choose, etc.).
+		if stepPkg.IsExtendedStepType(p.stepType) {
+			// Convert Task to WorkflowStep for handler compatibility.
+			workflowStep := p.step.ToWorkflowStep()
+			// Update command with template-resolved value.
+			workflowStep.Command = p.commandToRun
+			// Propagate working directory to extended step if not already set.
+			if workflowStep.WorkingDirectory == "" {
+				workflowStep.WorkingDirectory = p.workDir
+			}
+
+			// Update environment variables for this step (reuse executor to preserve step outputs).
+			for _, envVar := range p.env {
+				parts := strings.SplitN(envVar, "=", 2)
+				if len(parts) == 2 {
+					p.executor.SetEnv(parts[0], parts[1])
+				}
+			}
+
+			// Execute the extended step.
+			_, err := p.executor.Execute(context.Background(), &workflowStep)
+			return err
+		}
+		return fmt.Errorf("%w: unsupported step type %q for custom command step %d", errUtils.ErrInvalidWorkflowStepType, p.stepType, p.index)
 	}
 }
 

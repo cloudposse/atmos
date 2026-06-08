@@ -2,11 +2,14 @@ package cmd
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"sort"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
@@ -2207,6 +2210,80 @@ func TestResolveCustomComponentConfig(t *testing.T) {
 			assert.Equal(t, tt.commandConfig.Component.Type, gotParams.ComponentType)
 			assert.True(t, gotParams.ProcessTemplates)
 			assert.True(t, gotParams.ProcessYamlFunctions)
+		})
+	}
+}
+
+// intPtr returns a pointer to the given int (test helper for RetryConfig).
+func intPtr(i int) *int { return &i }
+
+// durationPtr returns a pointer to the given duration (test helper for RetryConfig).
+func durationPtr(d time.Duration) *time.Duration { return &d }
+
+// countLines returns the number of newline-terminated lines written to a file.
+func countLines(t *testing.T, path string) int {
+	t.Helper()
+	content, err := os.ReadFile(path)
+	require.NoError(t, err)
+	return strings.Count(string(content), "\n")
+}
+
+// TestExecuteCustomCommandStep_ShellRetry verifies that a custom command's `shell` step honors its
+// per-step `retry` configuration: a deterministically-failing command is invoked `max_attempts` times
+// when retry is configured, and exactly once when it is not (negative path).
+//
+// The failing command appends one line to a counter file on every invocation, then exits non-zero.
+// `shell` steps run through `ExecuteShell` -> `ShellRunner`, which uses the pure-Go `mvdan.cc/sh`
+// interpreter, so POSIX syntax is portable across Linux/macOS/Windows without a runtime.GOOS switch.
+func TestExecuteCustomCommandStep_ShellRetry(t *testing.T) {
+	tests := []struct {
+		name             string
+		retry            *schema.RetryConfig
+		expectedAttempts int
+	}{
+		{
+			name: "retry max_attempts is honored",
+			retry: &schema.RetryConfig{
+				MaxAttempts:     intPtr(3),
+				BackoffStrategy: schema.BackoffConstant,
+				InitialDelay:    durationPtr(time.Millisecond),
+			},
+			expectedAttempts: 3,
+		},
+		{
+			// Negative path: without a retry config the step must run exactly once.
+			name:             "no retry runs exactly once",
+			retry:            nil,
+			expectedAttempts: 1,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			counterFile := filepath.Join(t.TempDir(), "attempts.log")
+			// Append one line per invocation, then fail deterministically.
+			commandToRun := fmt.Sprintf("echo x >> %q; exit 1", counterFile)
+
+			step := schema.Task{Type: "shell", Command: commandToRun, Retry: tt.retry}
+
+			// `shell` steps do not use the step executor, so a nil executor is fine here.
+			atmosConfig := schema.AtmosConfiguration{}
+			err := executeCustomCommandStep(&customCommandStepParams{
+				atmosConfig:   &atmosConfig,
+				executor:      nil,
+				commandConfig: &schema.Command{Name: "test-cmd"},
+				step:          step,
+				stepType:      "shell",
+				commandToRun:  commandToRun,
+				workDir:       ".",
+				env:           nil,
+				index:         0,
+			})
+
+			// The command always fails, so an error is expected in both cases.
+			require.Error(t, err)
+			assert.Equal(t, tt.expectedAttempts, countLines(t, counterFile),
+				"command should be invoked exactly %d time(s)", tt.expectedAttempts)
 		})
 	}
 }

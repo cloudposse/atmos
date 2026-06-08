@@ -187,7 +187,9 @@ jobs:
 
       - name: Install helm-diff plugin
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
-        run: helm plugin install https://github.com/databus23/helm-diff
+        # Dogfood Atmos's own retry mechanism: the install is defined as a custom command
+        # (atmos.yaml -> `helm plugins install`) whose step retries on transient registry 5xx errors.
+        run: atmos helm plugins install
 
       - name: Check atmos.exe integrity
         if: matrix.flavor.target == 'windows' && ! github.event.pull_request.draft
@@ -419,7 +421,9 @@ jobs:
           version: ${{ env.HELM_VERSION }}
 
       - name: Install helm-diff plugin
-        run: helm plugin install https://github.com/databus23/helm-diff
+        # Dogfood Atmos's own retry mechanism: the install is defined as a custom command
+        # (atmos.yaml -> `helm plugins install`) whose step retries on transient registry 5xx errors.
+        run: atmos helm plugins install
 
       - name: Write a default AWS profile to the AWS config file
         run: |
