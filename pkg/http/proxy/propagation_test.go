@@ -8,6 +8,17 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestBuildUpstreamRequest_ExportedWrapper(t *testing.T) {
+	inbound, err := http.NewRequest(http.MethodGet, "http://127.0.0.1:1234/obj/aws.zip", nil)
+	require.NoError(t, err)
+	inbound.Header.Set("User-Agent", "Terraform/1.9.0 Atmos/1.2.3")
+
+	req, err := BuildUpstreamRequest(t.Context(), inbound, UpstreamRequest{URL: "https://registry.example.com/aws.zip"})
+	require.NoError(t, err)
+	assert.Equal(t, "https://registry.example.com/aws.zip", req.URL.String())
+	assert.Equal(t, "Terraform/1.9.0 Atmos/1.2.3", req.Header.Get("User-Agent"))
+}
+
 func TestBuildUpstreamRequest_ForwardsHeadersAndUserAgent(t *testing.T) {
 	inbound, err := http.NewRequest(http.MethodGet, "http://127.0.0.1:1234/obj/aws.zip", nil)
 	require.NoError(t, err)

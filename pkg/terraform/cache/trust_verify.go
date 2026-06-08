@@ -15,6 +15,12 @@ import (
 // trustProbeTimeout bounds the pre-flight TLS probe of the proxy.
 const trustProbeTimeout = 5 * time.Second
 
+// trustInstructionsFn reports whether OS trust-store installation is required on this
+// platform. It is a package-level seam so tests can force the macOS/Windows probe path
+// (the body of VerifyTrust) on any OS, including the Linux CI runner where the real
+// TrustInstructions returns false and the probe would otherwise be unreachable.
+var trustInstructionsFn = TrustInstructions
+
 // VerifyTrust checks, before terraform/tofu runs, whether the OS trust store trusts
 // the proxy's certificate, so the user gets an actionable message instead of a raw
 // x509 error from the subprocess. It only probes on platforms where trust is
@@ -26,7 +32,7 @@ func (s *Setup) VerifyTrust(ctx context.Context) error {
 	if s == nil || s.proxyURL == "" {
 		return nil
 	}
-	if required, _ := TrustInstructions(); !required {
+	if required, _ := trustInstructionsFn(); !required {
 		return nil
 	}
 

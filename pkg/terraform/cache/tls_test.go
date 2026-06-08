@@ -165,6 +165,105 @@ func TestProxyCertPath(t *testing.T) {
 	assert.Equal(t, filepath.Join(dir, tlsDirName, tlsCertFile), path)
 }
 
+func TestReadSystemCertBundle_NoBundleFound(t *testing.T) {
+	// With SSL_CERT_FILE empty and every candidate path absent, no bundle is found.
+	t.Setenv("SSL_CERT_FILE", "")
+	prev := systemCertFileCandidates
+	systemCertFileCandidates = []string{filepath.Join(t.TempDir(), "absent.pem")}
+	t.Cleanup(func() { systemCertFileCandidates = prev })
+
+	got, ok := readSystemCertBundle()
+	assert.False(t, ok)
+	assert.Nil(t, got)
+}
+
+func TestBuildTrustBundle_NoSystemBundleSkipsTrustEnv(t *testing.T) {
+	// When no system bundle is found, trust env is skipped rather than risk dropping
+	// the system roots for the subprocess.
+	t.Setenv("SSL_CERT_FILE", "")
+	prev := systemCertFileCandidates
+	systemCertFileCandidates = []string{filepath.Join(t.TempDir(), "absent.pem")}
+	t.Cleanup(func() { systemCertFileCandidates = prev })
+
+	dir := filepath.Join(t.TempDir(), tlsDirName)
+	certPath := filepath.Join(dir, tlsCertFile)
+	keyPath := filepath.Join(dir, tlsKeyFile)
+	_, err := generateAndWriteProxyCert(dir, certPath, keyPath)
+	require.NoError(t, err)
+
+	env, err := buildTrustBundle(certPath)
+	require.NoError(t, err)
+	assert.Nil(t, env)
+}
+
+func TestLoadProxyCert_KeyMissing(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), tlsDirName)
+	certPath := filepath.Join(dir, tlsCertFile)
+	keyPath := filepath.Join(dir, tlsKeyFile)
+	_, err := generateAndWriteProxyCert(dir, certPath, keyPath)
+	require.NoError(t, err)
+	require.NoError(t, os.Remove(keyPath))
+
+	_, ok := loadProxyCert(certPath, keyPath)
+	assert.False(t, ok)
+}
+
+func TestGenerateAndWriteProxyCert_WriteErrors(t *testing.T) {
+	t.Run("cert path occupied by a directory", func(t *testing.T) {
+		dir := t.TempDir()
+		certPath := filepath.Join(dir, tlsCertFile)
+		require.NoError(t, os.Mkdir(certPath, tlsDirPerm))
+		keyPath := filepath.Join(dir, tlsKeyFile)
+		_, err := generateAndWriteProxyCert(dir, certPath, keyPath)
+		require.Error(t, err)
+	})
+
+	t.Run("key path occupied by a directory", func(t *testing.T) {
+		dir := t.TempDir()
+		certPath := filepath.Join(dir, tlsCertFile)
+		keyPath := filepath.Join(dir, tlsKeyFile)
+		require.NoError(t, os.Mkdir(keyPath, tlsDirPerm))
+		_, err := generateAndWriteProxyCert(dir, certPath, keyPath)
+		require.Error(t, err)
+	})
+}
+
+func TestGenerateAndWriteProxyCert_MkdirError(t *testing.T) {
+	if runtime.GOOS == "windows" || os.Geteuid() == 0 {
+		t.Skip("requires enforced non-root POSIX directory permissions")
+	}
+	parent := t.TempDir()
+	require.NoError(t, os.Chmod(parent, 0o500))
+	t.Cleanup(func() { _ = os.Chmod(parent, tlsDirPerm) })
+
+	dir := filepath.Join(parent, "sub", tlsDirName)
+	_, err := generateAndWriteProxyCert(dir, filepath.Join(dir, tlsCertFile), filepath.Join(dir, tlsKeyFile))
+	require.Error(t, err)
+}
+
+func TestBuildTrustBundle_WriteError(t *testing.T) {
+	if runtime.GOOS == "windows" || os.Geteuid() == 0 {
+		t.Skip("requires enforced non-root POSIX directory permissions")
+	}
+	sysRoots := filepath.Join(t.TempDir(), "roots.pem")
+	require.NoError(t, os.WriteFile(sysRoots, []byte("SYSTEM_ROOTS_MARKER\n"), tlsCertPerm))
+	t.Setenv("SSL_CERT_FILE", sysRoots)
+
+	dir := filepath.Join(t.TempDir(), tlsDirName)
+	certPath := filepath.Join(dir, tlsCertFile)
+	keyPath := filepath.Join(dir, tlsKeyFile)
+	_, err := generateAndWriteProxyCert(dir, certPath, keyPath)
+	require.NoError(t, err)
+
+	// Make the cert directory read-only so writing the sibling bundle fails while the
+	// existing cert remains readable.
+	require.NoError(t, os.Chmod(dir, 0o500))
+	t.Cleanup(func() { _ = os.Chmod(dir, tlsDirPerm) })
+
+	_, err = buildTrustBundle(certPath)
+	require.Error(t, err)
+}
+
 // containsIP reports whether ips contains target.
 func containsIP(ips []net.IP, target net.IP) bool {
 	for _, ip := range ips {

@@ -235,6 +235,75 @@ func TestRender_ScalarTypes(t *testing.T) {
 	assert.Contains(t, s, "null_attr = null")
 }
 
+func TestRender_EmptyAndNilCollections(t *testing.T) {
+	// Exercises asStringMap(nil), sliceToCty(empty)→EmptyTupleVal, and
+	// mapToCty(empty)→EmptyObjectVal through nested labeled-block attributes.
+	rc := map[string]any{
+		"host": map[string]any{
+			"nil-body": nil, // asStringMap(nil) → empty block body.
+			"registry.terraform.io": map[string]any{
+				"empty_list": []any{},
+				"empty_obj":  map[string]any{},
+			},
+		},
+	}
+	out, err := Render(rc)
+	require.NoError(t, err)
+	s := strings.Join(strings.Fields(string(out)), " ")
+	assert.Contains(t, s, `host "nil-body" { }`)
+	assert.Contains(t, s, "empty_list = []")
+	assert.Contains(t, s, "empty_obj = {}")
+}
+
+func TestRender_NestedErrorPropagation(t *testing.T) {
+	// Every case threads an unsupported scalar (struct{}) or a bad type through a
+	// distinct nesting path so the error surfaces from the corresponding helper.
+	bad := struct{}{}
+	tests := []struct {
+		name string
+		rc   map[string]any
+	}{
+		{
+			name: "provider_installation list element not a map",
+			rc:   map[string]any{"provider_installation": []any{"not-a-map"}},
+		},
+		{
+			name: "provider_installation method body not a map",
+			rc:   map[string]any{"provider_installation": []any{map[string]any{"direct": "not-a-map"}}},
+		},
+		{
+			name: "provider_installation method attribute unsupported",
+			rc:   map[string]any{"provider_installation": []any{map[string]any{"direct": map[string]any{"k": bad}}}},
+		},
+		{
+			name: "labeled block value not a map",
+			rc:   map[string]any{"host": "not-a-map"},
+		},
+		{
+			name: "labeled block attribute unsupported",
+			rc:   map[string]any{"host": map[string]any{"r": map[string]any{"k": bad}}},
+		},
+		{
+			name: "list attribute element unsupported",
+			rc:   map[string]any{"host": map[string]any{"r": map[string]any{"l": []any{bad}}}},
+		},
+		{
+			name: "nested map attribute unsupported",
+			rc:   map[string]any{"host": map[string]any{"r": map[string]any{"m": map[string]any{"k": bad}}}},
+		},
+		{
+			name: "unknown block attribute unsupported",
+			rc:   map[string]any{"some_future_block": map[string]any{"k": bad}},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := Render(tt.rc)
+			require.Error(t, err)
+		})
+	}
+}
+
 func TestRender_Errors(t *testing.T) {
 	tests := []struct {
 		name string

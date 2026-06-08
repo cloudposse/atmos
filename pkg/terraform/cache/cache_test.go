@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -57,6 +58,19 @@ func TestEnsureLayout(t *testing.T) {
 		require.NoError(t, err)
 		assert.True(t, info.IsDir())
 	}
+}
+
+func TestEnsureLayout_Error(t *testing.T) {
+	if runtime.GOOS == "windows" || os.Geteuid() == 0 {
+		t.Skip("requires enforced non-root POSIX directory permissions")
+	}
+	parent := t.TempDir()
+	require.NoError(t, os.Chmod(parent, 0o500))
+	t.Cleanup(func() { _ = os.Chmod(parent, 0o700) })
+
+	// A read-only parent makes MkdirAll fail for the layout subdirectories.
+	err := ensureLayout(filepath.Join(parent, "cache-root"))
+	require.Error(t, err)
 }
 
 func TestContribute_Shape(t *testing.T) {

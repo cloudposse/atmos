@@ -108,6 +108,33 @@ func TestStartSharedCache_DisabledNoop(t *testing.T) {
 	cleanup()
 }
 
+func TestStartSharedCache_EnabledStartsAndCloses(t *testing.T) {
+	// With caching enabled, startSharedCache starts the loopback proxy, returns a live
+	// Setup, and the cleanup closes it. Trust verification is a no-op on Linux/BSD.
+	atmosConfig := &schema.AtmosConfiguration{}
+	atmosConfig.Components.Terraform.Cache = &schema.TerraformCacheConfig{
+		Enabled:  true,
+		Location: t.TempDir(),
+	}
+
+	setup, cleanup, err := startSharedCache(t.Context(), atmosConfig)
+	require.NotNil(t, cleanup)
+	t.Cleanup(cleanup)
+
+	if err != nil {
+		// On platforms that install trust in the OS store (macOS/Windows), the freshly
+		// generated loopback cert is not yet trusted, so VerifyTrust rejects it and the
+		// proxy is torn down. On Linux/BSD trust comes from SSL_CERT_FILE, so this path
+		// is not taken and the happy path below runs (the case Codecov's Linux runner hits).
+		require.ErrorIs(t, err, errUtils.ErrCacheCertUntrusted)
+		assert.Nil(t, setup)
+		return
+	}
+
+	require.NotNil(t, setup)
+	assert.NotEmpty(t, setup.CertPath())
+}
+
 func TestEmitResult(t *testing.T) {
 	// emitResult writes structured output via the data package, which needs a writer.
 	ioCtx, err := iolib.NewContext()
