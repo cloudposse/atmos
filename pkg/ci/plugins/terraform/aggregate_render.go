@@ -30,13 +30,14 @@ func renderAggregatePlanMarkdown(aggregate *terraformPlanAggregate) string {
 	writeAggregateResourceTable(&b, &aggregate.Counts)
 	writeAggregateGroupTable(&b, aggregate.Components)
 	writeAggregateComponentTable(&b, aggregate.Components)
-	writeAggregateDetails(&b, "Failed Components", aggregate.Components, func(c *terraformPlanAggregateComponent) bool {
+	omittedDetails := writeAggregateDetailsWithinLimit(&b, "Failed Components", aggregate.Components, func(c *terraformPlanAggregateComponent) bool {
 		return c.HasErrors
 	})
-	writeAggregateDetails(&b, "Changed Components", aggregate.Components, func(c *terraformPlanAggregateComponent) bool {
+	omittedDetails += writeAggregateDetailsWithinLimit(&b, "Changed Components", aggregate.Components, func(c *terraformPlanAggregateComponent) bool {
 		return c.HasChanges
 	})
-	return b.String()
+	writeAggregateSummaryTruncationNotice(&b, omittedDetails)
+	return enforceAggregateMarkdownLimit(b.String())
 }
 
 // aggregateCommandLabel formats the Terraform command for summary headings.
@@ -168,6 +169,35 @@ func writeAggregateDetails(b *strings.Builder, title string, components []terraf
 	}
 }
 
+// writeAggregateDetailsWithinLimit renders detail sections without exceeding
+// the GitHub Actions 1 MB step-summary limit. Overview tables are preserved
+// first; verbose Terraform output details are omitted when the budget is tight.
+func writeAggregateDetailsWithinLimit(b *strings.Builder, title string, components []terraformPlanAggregateComponent, include func(*terraformPlanAggregateComponent) bool) int {
+	selected := selectedAggregateComponents(components, include)
+	if len(selected) == 0 {
+		return 0
+	}
+
+	omitted := 0
+	wroteHeader := false
+	for _, component := range selected {
+		var detail strings.Builder
+		if !wroteHeader {
+			detail.WriteString("\n### ")
+			detail.WriteString(title)
+			detail.WriteString(markdownLineBreak)
+		}
+		writeAggregateDetail(&detail, component)
+		if b.Len()+detail.Len()+aggregateMarkdownNoticeReserveBytes > aggregateMarkdownMaxBytes {
+			omitted++
+			continue
+		}
+		b.WriteString(detail.String())
+		wroteHeader = true
+	}
+	return omitted
+}
+
 // selectedAggregateComponents returns components selected for detailed rendering.
 func selectedAggregateComponents(components []terraformPlanAggregateComponent, include func(*terraformPlanAggregateComponent) bool) []*terraformPlanAggregateComponent {
 	selected := make([]*terraformPlanAggregateComponent, 0)
@@ -178,6 +208,46 @@ func selectedAggregateComponents(components []terraformPlanAggregateComponent, i
 		}
 	}
 	return selected
+}
+
+func writeAggregateSummaryTruncationNotice(b *strings.Builder, omittedDetails int) {
+	if omittedDetails <= 0 {
+		return
+	}
+
+	notice := "\n\n> Summary truncated to stay below GitHub Actions' 1 MB job summary limit. Omitted " +
+		strconv.Itoa(omittedDetails) +
+		" component detail section(s); use component logs or plan artifacts for full output.\n"
+	if b.Len()+len(notice) > aggregateMarkdownMaxBytes {
+		trimmed := trimAggregateMarkdownToLimit(b.String(), aggregateMarkdownMaxBytes-len(notice))
+		b.Reset()
+		b.WriteString(trimmed)
+	}
+	b.WriteString(notice)
+}
+
+func enforceAggregateMarkdownLimit(markdown string) string {
+	if len(markdown) <= aggregateMarkdownMaxBytes {
+		return markdown
+	}
+
+	notice := "\n\n> Summary truncated to stay below GitHub Actions' 1 MB job summary limit. Some table rows or detail sections were omitted; use component logs or plan artifacts for full output.\n"
+	return trimAggregateMarkdownToLimit(markdown, aggregateMarkdownMaxBytes-len(notice)) + notice
+}
+
+func trimAggregateMarkdownToLimit(markdown string, maxBytes int) string {
+	if maxBytes <= 0 {
+		return ""
+	}
+	if len(markdown) <= maxBytes {
+		return markdown
+	}
+
+	end := maxBytes
+	if lineEnd := strings.LastIndexByte(markdown[:maxBytes], '\n'); lineEnd > 0 {
+		end = lineEnd
+	}
+	return strings.TrimRight(markdown[:end], "\r\n")
 }
 
 // writeAggregateDetail renders one collapsible component detail section.

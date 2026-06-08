@@ -18,6 +18,8 @@ const (
 	aggregateCommandApply                = "apply"
 	aggregateCommandDestroy              = "destroy"
 	aggregateCommandPlan                 = "plan"
+	aggregateMarkdownMaxBytes            = 960 * 1024
+	aggregateMarkdownNoticeReserveBytes  = 512
 	aggregateStackAll                    = "all"
 	aggregateDetailOutputMaxBytes        = 12 * 1024
 	aggregateDetailLineBacktrackMaxBytes = 4 * 1024

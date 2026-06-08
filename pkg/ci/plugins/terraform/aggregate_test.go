@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -557,6 +558,38 @@ func TestAggregateHelpersCoverFallbacks(t *testing.T) {
 	assert.Equal(t, "all", aggregateStackValue(nil))
 	assert.Equal(t, "all", aggregateStackValue(&schema.ConfigAndStacksInfo{}))
 	assert.Equal(t, "<!-- atmos:ci:plan:aggregate:all -->", buildAggregateCommentMarker("plan", ""))
+}
+
+func TestAggregateMarkdownStaysBelowGitHubSummaryLimit(t *testing.T) {
+	p := &Plugin{}
+	const components = 120
+	longOutput := strings.Repeat(`resource "google_cloud_run_v2_job" "run_job" {
+  name = "bulk"
+}
+`, 250)
+
+	results := make([]schema.TerraformPlanCIResult, 0, components)
+	for i := 0; i < components; i++ {
+		component := "component-" + strconv.Itoa(i)
+		results = append(results, schema.TerraformPlanCIResult{
+			NodeID:    component + "-bulk",
+			Stack:     "bulk",
+			Component: component,
+			Status:    "succeeded",
+			Processed: true,
+			Changed:   true,
+			ExitCode:  2,
+			Output:    longOutput + "\nPlan: 1 to add, 0 to change, 0 to destroy.",
+		})
+	}
+
+	aggregate := p.buildPlanAggregate(schema.TerraformPlanCIResultSet{Command: "plan", Results: results})
+
+	assert.LessOrEqual(t, len(aggregate.Markdown), aggregateMarkdownMaxBytes)
+	assert.Contains(t, aggregate.Markdown, "Summary truncated to stay below GitHub Actions' 1 MB job summary limit")
+	assert.Contains(t, aggregate.Markdown, "| bulk | component-0 | changed |")
+	assert.Contains(t, aggregate.Markdown, "| bulk | component-119 | changed |")
+	assert.Less(t, strings.Count(aggregate.Markdown, "<details><summary>"), components)
 }
 
 func TestAggregateSummaryAndOutputsHandleProviderWithoutWriter(t *testing.T) {
