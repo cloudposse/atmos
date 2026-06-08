@@ -85,7 +85,14 @@ func parseKeyValueOutputs(raw []byte) (map[string]any, error) {
 		}
 		key := strings.TrimSpace(trimmed[:eq])
 		val := strings.TrimSpace(trimmed[eq+1:])
-		val = strings.Trim(val, `"'`)
+		// Strip exactly one pair of surrounding quotes (double or single) so an
+		// intentionally-quoted inner quote survives, e.g. "'hello'" -> 'hello'
+		// (strings.Trim would greedily strip both kinds from each end).
+		if len(val) >= 2 &&
+			((val[0] == '"' && val[len(val)-1] == '"') ||
+				(val[0] == '\'' && val[len(val)-1] == '\'')) {
+			val = val[1 : len(val)-1]
+		}
 		out[key] = val
 	}
 	return out, nil

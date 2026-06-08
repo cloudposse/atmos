@@ -75,6 +75,26 @@ func TestReadOutputsFile_KeyValueWithQuotes(t *testing.T) {
 	assert.Equal(t, "single-quoted", out["env_id"])
 }
 
+func TestReadOutputsFile_KeyValueCRLF(t *testing.T) {
+	// Windows CRLF line endings: TrimSpace strips the trailing \r from each line,
+	// so the KEY=VALUE parser sees clean values.
+	path := writeTemp(t, "agent_id=agent_abc\r\nenv_id=env_xyz\r\n")
+	out, err := ReadOutputsFile(path)
+	require.NoError(t, err)
+	assert.Equal(t, "agent_abc", out["agent_id"], "trailing CR must not survive on the value")
+	assert.Equal(t, "env_xyz", out["env_id"])
+}
+
+func TestReadOutputsFile_KeyValueNestedQuotes(t *testing.T) {
+	// Only the outer pair of matching quotes is stripped; an inner quote of the
+	// other kind is preserved (strings.Trim would greedily remove both).
+	path := writeTemp(t, `a="'hello'"`+"\n"+`b='"world"'`)
+	out, err := ReadOutputsFile(path)
+	require.NoError(t, err)
+	assert.Equal(t, "'hello'", out["a"])
+	assert.Equal(t, `"world"`, out["b"])
+}
+
 func TestReadOutputsFile_KeyValueWithCommentsAndBlanks(t *testing.T) {
 	path := writeTemp(t, "# this is a comment\n\nagent_id=abc\n\n# another\nenv_id=xyz\n")
 	out, err := ReadOutputsFile(path)

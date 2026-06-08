@@ -1,6 +1,6 @@
 # Hooks + Outputs for Custom Component Types
 
-**Status:** Implemented (PR #2469, stacked on and pending merge into #1904)
+**Status:** Implemented (PR #2584, against `main`; builds on custom component types from #1904, now merged)
 **Depends on:** #1904 (custom component types for custom commands)
 
 ## Summary
