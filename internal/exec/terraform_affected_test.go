@@ -9,6 +9,7 @@ import (
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/stretchr/testify/assert"
 
+	"github.com/cloudposse/atmos/pkg/auth"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -103,6 +104,7 @@ func TestGetAffectedComponents(t *testing.T) {
 						cliConfig *schema.AtmosConfiguration,
 						ref string,
 						sha string,
+						targetBranch string,
 						includeSpaceliftAdminStacks bool,
 						includeSettings bool,
 						stack string,
@@ -110,6 +112,7 @@ func TestGetAffectedComponents(t *testing.T) {
 						processYamlFunctions bool,
 						skip []string,
 						excludeLocked bool,
+						authManager auth.AuthManager,
 					) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, string, error) {
 						return []schema.Affected{
 							{Component: "rds", Stack: "test-stack"},
@@ -190,6 +193,7 @@ func TestGetAffectedComponents(t *testing.T) {
 						cliConfig *schema.AtmosConfiguration,
 						ref string,
 						sha string,
+						targetBranch string,
 						includeSpaceliftAdminStacks bool,
 						includeSettings bool,
 						stack string,
@@ -197,6 +201,7 @@ func TestGetAffectedComponents(t *testing.T) {
 						processYamlFunctions bool,
 						skip []string,
 						excludeLocked bool,
+						authManager auth.AuthManager,
 					) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, string, error) {
 						return nil, nil, nil, "", errors.New("failed to checkout ref")
 					})

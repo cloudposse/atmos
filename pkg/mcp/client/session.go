@@ -84,10 +84,18 @@ func (s *Session) LastError() error {
 }
 
 // Tools returns the cached list of tools from the MCP server.
+//
+// The returned slice is a defensive copy of the cache. Callers can freely
+// reorder, append, or nil out entries without affecting the next Tools()
+// call or other consumers. The pointers themselves are NOT cloned —
+// mutating an *mcpsdk.Tool's fields is still observable across calls.
 func (s *Session) Tools() []*mcpsdk.Tool {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	return s.tools
+	if s.tools == nil {
+		return nil
+	}
+	return append([]*mcpsdk.Tool(nil), s.tools...)
 }
 
 const logFieldName = "name"

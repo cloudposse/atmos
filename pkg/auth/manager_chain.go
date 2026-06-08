@@ -82,9 +82,21 @@ func (m *manager) authenticateChain(ctx context.Context, _ string) (types.ICrede
 	}
 
 	// Cache the successfully authenticated credentials for this process.
-	processCredentialCache.Store(cacheKey, &processCachedCreds{
-		credentials: creds,
-	})
+	//
+	// Skip caching for nil credentials. Generic ambient identities
+	// (`kind: ambient`) return (nil, nil) from Authenticate by design — they
+	// do not manage credentials. Storing nil here would cause the fast-path
+	// cache hit on the next call to invoke isCredentialValid(_, nil), which
+	// historically dereferenced a nil ICredentials interface and panicked.
+	// Defense-in-depth nil check also lives in isCredentialValid; this skip
+	// avoids the redundant cache lookup entirely. Re-authentication for
+	// ambient is a no-op, so the savings the cache provides are immaterial
+	// for this kind.
+	if creds != nil {
+		processCredentialCache.Store(cacheKey, &processCachedCreds{
+			credentials: creds,
+		})
+	}
 
 	return creds, nil
 }
@@ -159,6 +171,16 @@ func (m *manager) findFirstValidCachedCredentials() int {
 // isCredentialValid checks if the cached credentials are valid and not expired.
 // Returns whether the credentials are valid and, if AWS expiration is present and valid, the parsed expiration time.
 func (m *manager) isCredentialValid(identityName string, cachedCreds types.ICredentials) (bool, *time.Time) {
+	// Guard against a nil ICredentials interface. Generic ambient identities
+	// (`kind: ambient`) return (nil, nil) from Authenticate by design — they
+	// do not manage credentials. Calling GetExpiration on a nil interface
+	// would panic, so treat nil as "not valid for cache reuse" and let the
+	// caller fall through to re-authentication. The ambient re-auth path is
+	// a no-op, so this is cheap.
+	if cachedCreds == nil {
+		log.Debug("Cached credentials are nil; treating as invalid", logKeyIdentity, identityName)
+		return false, nil
+	}
 	// Check expiration from the credentials object itself, not the keyring.
 	// This allows us to validate credentials loaded from any source (keyring, files, etc.).
 	if expTime, err := cachedCreds.GetExpiration(); err == nil && expTime != nil {

@@ -1,10 +1,12 @@
 package exec
 
 import (
+	"context"
 	"fmt"
 	"os"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/auth/broker"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/dependencies"
 	log "github.com/cloudposse/atmos/pkg/logger"
@@ -56,7 +58,8 @@ func resolveAndInstallToolchainDeps(atmosConfig *schema.AtmosConfiguration, info
 func ExecuteTerraform(info schema.ConfigAndStacksInfo, opts ...ShellCommandOption) error {
 	defer perf.Track(nil, "exec.ExecuteTerraform")()
 
-	log.Debug("ExecuteTerraform entry",
+	log.Debug(
+		"ExecuteTerraform entry",
 		"SubCommand", info.SubCommand,
 		"ComponentFromArg", info.ComponentFromArg,
 		"FinalComponent", info.FinalComponent,
@@ -105,11 +108,21 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo, opts ...ShellCommandOptio
 		return nil
 	}
 
+	// Ensure ambient credential brokers (e.g., Atmos Pro github/sts) have provisioned before the
+	// subprocess environment is built, so terraform's own `git::` module fetches can read private
+	// repos via the inherited GIT_CONFIG_* rewrites. Process-once and gated (CI + configured).
+	broker.EnsureCredentials(context.Background(), &atmosConfig)
+
 	// Resolve paths, install toolchain, write varfiles, validate, run hooks, and build env.
 	execCtx, err := prepareComponentExecution(&atmosConfig, &info, shouldProcess)
 	if err != nil {
 		return err
 	}
+
+	// Persist auth context so PostRunE hooks (e.g. store hooks that read
+	// terraform outputs) can reuse the credentials established during this
+	// execution. Without this, hooks create a fresh info with no auth.
+	SetLastAuthContext(info.AuthContext, info.AuthManager)
 
 	// Run the full command pipeline: init, arg build, workspace, execute, cleanup.
 	// Forward caller-provided options (e.g. CI stdout/stderr capture) alongside the environment option.

@@ -1,11 +1,17 @@
 package exec
 
 import (
+	"errors"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
 
+	"github.com/cloudposse/atmos/pkg/auth"
+	"github.com/cloudposse/atmos/pkg/auth/types"
 	"github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/dependency"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -242,21 +248,14 @@ func TestApplyFiltersToGraph(t *testing.T) {
 }
 
 func TestExecuteTerraformAll_Validation(t *testing.T) {
+	// --all without a stack is allowed: it processes every stack
+	// (see website/docs/cli/commands/terraform/terraform-apply.mdx).
 	tests := []struct {
 		name        string
 		info        *schema.ConfigAndStacksInfo
 		expectError bool
 		errorMsg    string
 	}{
-		{
-			name: "no stack specified",
-			info: &schema.ConfigAndStacksInfo{
-				ComponentFromArg: "",
-				Stack:            "",
-			},
-			expectError: true,
-			errorMsg:    "stack is required",
-		},
 		{
 			name: "component specified with --all",
 			info: &schema.ConfigAndStacksInfo{
@@ -284,6 +283,166 @@ func TestExecuteTerraformAll_Validation(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestExecuteTerraformAll_DryRunHappyPath exercises the full ExecuteTerraformAll
+// pipeline against a real fixture in dry-run mode. The existing validation tests
+// short-circuit on the very first guard (component-with-all), so the auth-manager
+// bootstrap, ExecuteDescribeStacks, dependency graph build, applyFiltersToGraph,
+// and executeInDependencyOrder branches had no unit-test coverage — codecov
+// flagged 7 missing lines on terraform_all.go for that reason.
+//
+// DryRun=true short-circuits inside executeNodeCommand so terraform itself is
+// never invoked; this means the test runs without requiring the terraform binary
+// and on every CI matrix entry. The fixture `terraform-apply-affected` defines
+// a `vpc → eks/cluster → eks/external-dns → …` dependency chain, which gives
+// us a non-trivial graph to walk so the topological-sort path is also covered.
+func TestExecuteTerraformAll_DryRunHappyPath(t *testing.T) {
+	// ATMOS_* env leak from earlier tests would silently shadow the fixture's
+	// atmos.yaml; clear them up-front so the fixture is the sole source of truth.
+	t.Setenv("ATMOS_BASE_PATH", "")
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", "")
+	os.Unsetenv("ATMOS_BASE_PATH")
+	os.Unsetenv("ATMOS_CLI_CONFIG_PATH")
+
+	t.Chdir(filepath.Join("..", "..", "tests", "fixtures", "scenarios", "terraform-apply-affected"))
+
+	t.Run("no stack filter walks every stack", func(t *testing.T) {
+		info := &schema.ConfigAndStacksInfo{
+			ComponentType: "terraform",
+			SubCommand:    "plan",
+			DryRun:        true,
+		}
+		// Validation has been dropped for the no-stack case; the call should
+		// proceed end-to-end and short-circuit at the dry-run boundary.
+		assert.NoError(t, ExecuteTerraformAll(info))
+	})
+
+	t.Run("stack filter scopes execution to the requested stack", func(t *testing.T) {
+		info := &schema.ConfigAndStacksInfo{
+			Stack:         "prod",
+			ComponentType: "terraform",
+			SubCommand:    "plan",
+			DryRun:        true,
+		}
+		assert.NoError(t, ExecuteTerraformAll(info))
+	})
+
+	t.Run("destroy reverses order and still completes", func(t *testing.T) {
+		info := &schema.ConfigAndStacksInfo{
+			Stack:         "prod",
+			ComponentType: "terraform",
+			SubCommand:    "destroy",
+			DryRun:        true,
+		}
+		assert.NoError(t, ExecuteTerraformAll(info))
+	})
+}
+
+// TestExecuteTerraformAll_AuthManagerResolverWired exercises the
+// `if authManager != nil` branch that was added in this PR to mirror the
+// #2081 fix for `--query`/`--components`. The existing happy-path test
+// hits the nil-authManager branch (the fixture has no auth config), so
+// without this stub the resolver-creation lines were uncovered.
+//
+// We swap authManagerFactory for a stub that returns a gomock-generated
+// AuthManager. The fixture's stacks have no auth-dependent YAML functions,
+// so no AuthManager methods should be invoked downstream — if a future
+// change starts invoking the resolver during describe-stacks, this test
+// will fail loudly with an "unexpected call" message, which is the
+// signal we want.
+func TestExecuteTerraformAll_AuthManagerResolverWired(t *testing.T) {
+	t.Setenv("ATMOS_BASE_PATH", "")
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", "")
+	os.Unsetenv("ATMOS_BASE_PATH")
+	os.Unsetenv("ATMOS_CLI_CONFIG_PATH")
+
+	t.Chdir(filepath.Join("..", "..", "tests", "fixtures", "scenarios", "terraform-apply-affected"))
+
+	original := authManagerFactory
+	authManagerFactory = func(_ string, _ schema.AuthConfig, _ string, _ *schema.AtmosConfiguration) (auth.AuthManager, error) {
+		ctrl := gomock.NewController(t)
+		mgr := types.NewMockAuthManager(ctrl)
+		// ExecuteDescribeStacks calls GetStackInfo on the auth manager while
+		// processing each stack. The fixture has no auth-dependent YAML
+		// functions, so no other AuthManager methods get invoked — gomock
+		// will surface that explicitly via "unexpected call" failures if
+		// that ever changes.
+		mgr.EXPECT().GetStackInfo().Return(nil).AnyTimes()
+		return mgr, nil
+	}
+	t.Cleanup(func() { authManagerFactory = original })
+
+	info := &schema.ConfigAndStacksInfo{
+		Stack:         "prod",
+		ComponentType: "terraform",
+		SubCommand:    "plan",
+		DryRun:        true,
+	}
+	require.NoError(t, ExecuteTerraformAll(info))
+	// The factory above stored the AuthManager on info via createQueryAuthManager;
+	// this confirms the non-nil path actually ran rather than silently skipping.
+	assert.NotNil(t, info.AuthManager, "non-nil factory should populate info.AuthManager")
+}
+
+// TestExecuteTerraformAll_AuthManagerCreationError verifies that a failure in
+// createQueryAuthManager short-circuits ExecuteTerraformAll with the wrapped
+// error — i.e. we don't silently proceed to ExecuteDescribeStacks with a nil
+// auth manager when the user has clearly configured auth that we couldn't
+// resolve. This pins the error-propagation branch at terraform_all.go:41-43.
+func TestExecuteTerraformAll_AuthManagerCreationError(t *testing.T) {
+	t.Setenv("ATMOS_BASE_PATH", "")
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", "")
+	os.Unsetenv("ATMOS_BASE_PATH")
+	os.Unsetenv("ATMOS_CLI_CONFIG_PATH")
+
+	t.Chdir(filepath.Join("..", "..", "tests", "fixtures", "scenarios", "terraform-apply-affected"))
+
+	sentinel := errors.New("simulated auth manager init failure")
+	original := authManagerFactory
+	authManagerFactory = func(string, schema.AuthConfig, string, *schema.AtmosConfiguration) (auth.AuthManager, error) {
+		return nil, sentinel
+	}
+	t.Cleanup(func() { authManagerFactory = original })
+
+	info := &schema.ConfigAndStacksInfo{
+		Stack:         "prod",
+		ComponentType: "terraform",
+		SubCommand:    "plan",
+		DryRun:        true,
+	}
+	err := ExecuteTerraformAll(info)
+	require.Error(t, err)
+	// createQueryAuthManager wraps its own error in `create query auth manager: %w`,
+	// which then bubbles up unchanged. Use errors.Is to stay robust against
+	// future re-wrapping in either layer.
+	assert.ErrorIs(t, err, sentinel,
+		"auth manager init failure must propagate from ExecuteTerraformAll")
+}
+
+// TestApplyFiltersToGraph_NoCrossStackPullIn pins the new IncludeDependencies:false
+// contract: when a user asks for `--all -s <stack>`, components in *other* stacks
+// must NOT be pulled in even if they are prerequisites — that would broaden the
+// scope of an existing invocation in a way users would feel as a regression. A
+// future opt-in flag can re-enable cross-stack execution.
+func TestApplyFiltersToGraph_NoCrossStackPullIn(t *testing.T) {
+	graph := dependency.NewGraph()
+	vpcDev := &dependency.Node{ID: "vpc-dev", Component: "vpc", Stack: "dev", Type: config.TerraformComponentType}
+	appProd := &dependency.Node{ID: "app-prod", Component: "app", Stack: "prod", Type: config.TerraformComponentType}
+	require.NoError(t, graph.AddNode(vpcDev))
+	require.NoError(t, graph.AddNode(appProd))
+	// Cross-stack edge: prod's app depends on dev's vpc. With IncludeDependencies=true
+	// this would historically have pulled vpc-dev into a `--all -s prod` run.
+	require.NoError(t, graph.AddDependency("app-prod", "vpc-dev"))
+
+	info := &schema.ConfigAndStacksInfo{Stack: "prod"}
+	filtered := applyFiltersToGraph(graph, nil, info)
+
+	require.Equal(t, 1, filtered.Size(), "only the requested stack's components should remain")
+	_, hasApp := filtered.GetNode("app-prod")
+	assert.True(t, hasApp, "the requested-stack component must still be present")
+	_, hasVPC := filtered.GetNode("vpc-dev")
+	assert.False(t, hasVPC, "cross-stack prerequisite must NOT be pulled in (IncludeDependencies:false)")
 }
 
 // Renamed to avoid conflict.
@@ -642,18 +801,23 @@ func TestApplyFiltersToGraph_DependencyChain(t *testing.T) {
 		assert.Equal(t, g.Size(), filtered.Size())
 	})
 
-	t.Run("stack filter includes dependencies", func(t *testing.T) {
+	t.Run("stack filter limits scope to stack", func(t *testing.T) {
 		info := &schema.ConfigAndStacksInfo{Stack: "dev"}
 		filtered := applyFiltersToGraph(g, nil, info)
 		// dev has 3 nodes: vpc-dev, rds-dev, app-dev.
 		assert.Equal(t, 3, filtered.Size())
 	})
 
-	t.Run("component filter includes dependencies", func(t *testing.T) {
+	t.Run("component filter limits scope to listed components", func(t *testing.T) {
+		// IncludeDependencies is intentionally false in applyFiltersToGraph
+		// so that --components matches the historical production scope
+		// (only the listed components are planned/applied, no transitive pull-in).
+		// Topological order is still applied to whatever is in scope.
 		info := &schema.ConfigAndStacksInfo{Components: []string{"app"}, Stack: "dev"}
 		filtered := applyFiltersToGraph(g, nil, info)
-		// app-dev depends on rds-dev depends on vpc-dev — all 3 included.
-		assert.Equal(t, 3, filtered.Size())
+		assert.Equal(t, 1, filtered.Size())
+		_, has := filtered.GetNode("app-dev")
+		assert.True(t, has)
 	})
 }
 
@@ -754,9 +918,12 @@ func TestApplyFiltersToGraph_ComponentFilter(t *testing.T) {
 
 	result := applyFiltersToGraph(graph, nil, info)
 	assert.NotNil(t, result)
-	// rds-dev and its dependency vpc-dev should be included.
+	// rds-dev is the only component in scope. Its prerequisite (vpc-dev) is
+	// not pulled in — applyFiltersToGraph preserves the historical scope of
+	// the --components flag (no transitive expansion). The dependency edge
+	// from rds-dev to vpc-dev is dropped because the target node is filtered out.
 	_, hasRDS := result.GetNode("rds-dev")
 	assert.True(t, hasRDS)
 	_, hasVPC := result.GetNode("vpc-dev")
-	assert.True(t, hasVPC)
+	assert.False(t, hasVPC)
 }

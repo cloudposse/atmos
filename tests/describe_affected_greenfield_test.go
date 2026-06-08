@@ -77,6 +77,7 @@ func TestDescribeAffectedGreenfieldBase(t *testing.T) {
 			nil,   // skip
 			false, // excludeLocked
 			nil,   // authManager
+			false, // authDisabled
 		)
 
 		require.NoError(t, err,

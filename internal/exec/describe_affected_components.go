@@ -529,23 +529,38 @@ func getFileFolderDependencies(componentSection map[string]any, settingsSection 
 	return getFileFolderDependenciesFromLegacyFormat(settingsSection)
 }
 
-// getFileFolderDependenciesFromNewFormat extracts file/folder deps from dependencies.components.
+// getFileFolderDependenciesFromNewFormat extracts file/folder deps from the
+// `dependencies` section. It accepts both the v2 surface
+// (`dependencies.files` / `dependencies.folders` sibling keys) and the legacy
+// inline shape (`dependencies.components[]` with `kind: file` / `kind: folder`).
+// Both surfaces produce equivalent ComponentDependency entries — Normalize
+// reconciles them.
 func getFileFolderDependenciesFromNewFormat(componentSection map[string]any) []schema.ComponentDependency {
 	depsSection, ok := componentSection[cfg.DependenciesSectionName].(map[string]any)
 	if !ok {
 		return nil
 	}
 
-	if _, hasComponents := depsSection["components"]; !hasComponents {
+	// Fast path: nothing to read if none of the entry-bearing keys are present.
+	if !hasDependencyEntries(depsSection) {
 		return nil
 	}
 
 	var deps schema.Dependencies
-	if err := mapstructure.Decode(depsSection, &deps); err != nil || len(deps.Components) == 0 {
+	if err := mapstructure.Decode(depsSection, &deps); err != nil {
+		return nil
+	}
+	if err := deps.Normalize(); err != nil {
+		log.Warn("invalid dependencies section; file/folder deps may be silently ignored", "error", err)
+		return nil
+	}
+	if len(deps.Components) == 0 {
 		return nil
 	}
 
-	// Filter to only file/folder dependencies.
+	// Filter to only file/folder dependencies. Normalize has already mirrored
+	// any v2 sibling-key entries into Components, so this single filter
+	// covers both surfaces.
 	var result []schema.ComponentDependency
 	for i := range deps.Components {
 		if deps.Components[i].IsFileDependency() || deps.Components[i].IsFolderDependency() {

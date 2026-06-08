@@ -118,7 +118,7 @@ func init() {
 		WithExcludeLockedFlag,
 		WithProcessTemplatesFlag,
 		WithProcessFunctionsFlag,
-		WithSkipFlag,
+		WithAffectedSkipFlag,
 	)
 
 	// Register flags.

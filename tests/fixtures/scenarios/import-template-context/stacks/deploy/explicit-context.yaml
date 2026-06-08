@@ -1,0 +1,6 @@
+# The import's own `context` drives the templated path (takes precedence over
+# any accumulated context).
+import:
+  - path: "catalog/{{ .catalog_ref }}/service"
+    context:
+      catalog_ref: v2

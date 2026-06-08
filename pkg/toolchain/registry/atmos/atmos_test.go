@@ -333,6 +333,24 @@ func TestNewAtmosRegistry(t *testing.T) {
 	})
 }
 
+func TestNewBuiltinRegistry_LoadsKICSOverride(t *testing.T) {
+	reg, err := NewBuiltinRegistry()
+	require.NoError(t, err)
+	require.NotNil(t, reg)
+
+	tool, err := reg.GetTool("Checkmarx", "kics")
+	require.NoError(t, err)
+	require.NotNil(t, tool)
+
+	assert.Equal(t, "kics", tool.Name)
+	assert.Equal(t, "github_release", tool.Type)
+	assert.Equal(t, "v", tool.VersionPrefix)
+	assert.Equal(t, "kics_{{trimV .Version}}_{{.OS}}_{{.Arch}}.tar.gz", tool.Asset)
+	assert.Equal(t, "tar.gz", tool.Format)
+	assert.Equal(t, "kics", tool.BinaryName)
+	assert.Equal(t, "atmos-inline", tool.Registry)
+}
+
 // TestAtmosRegistry_GetTool tests tool retrieval.
 func TestAtmosRegistry_GetTool(t *testing.T) {
 	toolsConfig := map[string]any{

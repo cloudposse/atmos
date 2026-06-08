@@ -360,19 +360,21 @@ func checkMetadataChanges(metadata *workdir.WorkdirMetadata, sourceSpec *schema.
 }
 
 // isSourceCacheExpired checks if the source cache has expired based on TTL.
-// A TTL of "0" or "0s" means always expired (always re-pull).
+// A TTL of "0" or "0s" means always expired (always re-pull). The expiry decision
+// is delegated to the shared duration.IsExpired helper; this wrapper adds the
+// source-provisioning-specific human-readable reason strings.
 func isSourceCacheExpired(ttl string, updatedAt time.Time) (bool, string) {
-	// Handle zero TTL explicitly (always expired).
+	// Handle zero TTL explicitly (always expired) so we can tailor the reason.
 	if isZeroTTL(ttl) {
 		return true, fmt.Sprintf("Source cache expired (TTL: %s, always re-pull)", ttl)
 	}
 
-	ttlDuration, err := duration.ParseDuration(ttl)
+	expired, err := duration.IsExpired(updatedAt, ttl)
 	if err != nil {
 		return true, fmt.Sprintf("Invalid source TTL %q; forcing re-provision to avoid stale cache", ttl)
 	}
 
-	if time.Since(updatedAt) > ttlDuration {
+	if expired {
 		return true, fmt.Sprintf("Source cache expired (TTL: %s, last updated: %s)",
 			ttl, updatedAt.Format(time.RFC3339))
 	}
@@ -381,7 +383,7 @@ func isSourceCacheExpired(ttl string, updatedAt time.Time) (bool, string) {
 
 // isZeroTTL checks if the TTL string represents a zero duration.
 func isZeroTTL(ttl string) bool {
-	return ttl == "0" || ttl == "0s" || ttl == "0m" || ttl == "0h" || ttl == "0d"
+	return duration.IsZeroTTL(ttl)
 }
 
 // isLocalSource determines if a source URI refers to a local path.
@@ -457,7 +459,7 @@ func writeWorkdirMetadata(workdirPath, component, stack string, sourceSpec *sche
 }
 
 // extractComponentName extracts the component name from config.
-// Priority: componentConfig["component"] > componentConfig["metadata"]["component"].
+// Priority: componentConfig["component"] > componentConfig["metadata"]["component"] > componentConfig["atmos_component"].
 func extractComponentName(componentConfig map[string]any) string {
 	// Try component field first (highest priority).
 	if component, ok := componentConfig["component"].(string); ok && component != "" {
@@ -469,6 +471,13 @@ func extractComponentName(componentConfig map[string]any) string {
 		if component, ok := metadata["component"].(string); ok && component != "" {
 			return component
 		}
+	}
+
+	// Fall back to atmos_component (instance name, set by atmos stack processing).
+	// This handles components that have no base component override — the instance name
+	// (e.g. "producer-from-source") is the canonical name for source resolution.
+	if component, ok := componentConfig["atmos_component"].(string); ok && component != "" {
+		return component
 	}
 
 	return ""

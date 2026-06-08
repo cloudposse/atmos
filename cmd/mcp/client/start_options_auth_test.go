@@ -101,12 +101,7 @@ func TestBuildAuthOption_ReturnsWiredWithAuthManagerOption(t *testing.T) {
 // TestBuildAuthOption_ReturnsWiredWithAuthManagerOption (which proves the
 // wiring is in place) — together they cover both halves of the contract.
 func TestBuildAuthOption_ProviderImplementsRequiredInterfaces(t *testing.T) {
-	cfg := &schema.AtmosConfiguration{}
-	cfg.MCP.Servers = map[string]schema.MCPServerConfig{
-		"a": {Command: "echo", Identity: "ci"},
-	}
-
-	provider := mcpclient.NewScopedAuthProvider(cfg)
+	provider := mcpclient.NewScopedAuthProvider()
 	var _ mcpclient.AuthEnvProvider = provider
 	var _ mcpclient.PerServerAuthProvider = provider
 }

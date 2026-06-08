@@ -6,6 +6,7 @@ import (
 
 	"github.com/hairyhenderson/gomplate/v3/data"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -74,4 +75,37 @@ func TestAtmosFuncs_GomplateDatasource(t *testing.T) {
 	// Test with invalid alias - should return error.
 	_, err := atmosFuncs.GomplateDatasource("nonexistent-alias")
 	assert.Error(t, err, "GomplateDatasource() should return error for invalid alias")
+}
+
+func TestAtmosFuncs_Resolve(t *testing.T) {
+	atmosFuncs := &AtmosFuncs{
+		atmosConfig:         &schema.AtmosConfiguration{},
+		configAndStacksInfo: &schema.ConfigAndStacksInfo{},
+		ctx:                 context.TODO(),
+		gomplateData:        &data.Data{},
+	}
+
+	t.Run("plain untagged string is returned unchanged", func(t *testing.T) {
+		result, err := atmosFuncs.Resolve("just-a-string")
+		require.NoError(t, err)
+		assert.Equal(t, "just-a-string", result)
+	})
+
+	t.Run("resolves an !env YAML function at template time", func(t *testing.T) {
+		t.Setenv("ATMOS_RESOLVE_TEST_VAR", "resolved-value")
+		result, err := atmosFuncs.Resolve("!env ATMOS_RESOLVE_TEST_VAR")
+		require.NoError(t, err)
+		assert.Equal(t, "resolved-value", result)
+	})
+
+	t.Run("does not panic with nil configAndStacksInfo", func(t *testing.T) {
+		funcs := &AtmosFuncs{
+			atmosConfig:  &schema.AtmosConfiguration{},
+			ctx:          context.TODO(),
+			gomplateData: &data.Data{},
+		}
+		result, err := funcs.Resolve("plain")
+		require.NoError(t, err)
+		assert.Equal(t, "plain", result)
+	})
 }

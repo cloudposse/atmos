@@ -2,6 +2,7 @@ package exec
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -11,6 +12,7 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"sync"
 	"text/template"
 
 	"github.com/charmbracelet/lipgloss"
@@ -22,6 +24,7 @@ import (
 	ioLayer "github.com/cloudposse/atmos/pkg/io"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
+	process "github.com/cloudposse/atmos/pkg/process"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -41,6 +44,8 @@ type shellCommandConfig struct {
 	stdoutCapture  io.Writer
 	stderrCapture  io.Writer
 	stdoutOverride io.Writer
+	streams        *process.Streams
+	ctx            context.Context
 	// processEnv replaces os.Environ() as the process environment.
 	// When set, ExecuteShellCommand uses this instead of re-reading os.Environ().
 	// This is used when auth has already sanitized the environment (e.g., removed IRSA vars).
@@ -69,6 +74,20 @@ func WithStderrCapture(w io.Writer) ShellCommandOption {
 func WithStdoutOverride(w io.Writer) ShellCommandOption {
 	return func(c *shellCommandConfig) {
 		c.stdoutOverride = w
+	}
+}
+
+// WithProcessStreams provides the subprocess standard streams.
+func WithProcessStreams(streams process.Streams) ShellCommandOption {
+	return func(c *shellCommandConfig) {
+		c.streams = &streams
+	}
+}
+
+// WithProcessContext provides the context used for subprocess execution.
+func WithProcessContext(ctx context.Context) ShellCommandOption {
+	return func(c *shellCommandConfig) {
+		c.ctx = ctx
 	}
 }
 
@@ -107,7 +126,6 @@ func ExecuteShellCommand(
 		return err
 	}
 
-	cmd := exec.Command(command, args...)
 	// Build environment: process env + global env (atmos.yaml) + command-specific env.
 	// When auth has sanitized the environment, cfg.processEnv is used instead of
 	// os.Environ() to avoid reintroducing problematic vars (e.g., IRSA credentials).
@@ -128,48 +146,63 @@ func ExecuteShellCommand(
 		cmdEnv = append(cmdEnv, "ATMOS_FORCE_TTY=true")
 	}
 
-	cmd.Env = cmdEnv
-	cmd.Dir = dir
-	cmd.Stdin = os.Stdin
+	streams := process.OSStreams()
+	if cfg.streams != nil {
+		streams = *cfg.streams
+		if streams.Stdin == nil {
+			streams.Stdin = os.Stdin
+		}
+		if streams.Stdout == nil {
+			streams.Stdout = os.Stdout
+		}
+		if streams.Stderr == nil {
+			streams.Stderr = os.Stderr
+		}
+	}
 
 	// Set up stdout: masked output to terminal, optionally tee'd to a capture writer.
 	// When stdoutOverride is set, use it instead of os.Stdout (e.g., redirect to stderr
 	// for workspace select so it doesn't pollute data-producing commands like output).
-	var stdoutTarget io.Writer = os.Stdout
+	var stdoutTarget io.Writer = streams.Stdout
 	if cfg.stdoutOverride != nil {
 		stdoutTarget = cfg.stdoutOverride
 	}
 	maskedStdout := ioLayer.MaskWriter(stdoutTarget)
+	var stdout io.Writer
 	if cfg.stdoutCapture != nil {
-		cmd.Stdout = io.MultiWriter(maskedStdout, cfg.stdoutCapture)
+		stdout = io.MultiWriter(maskedStdout, cfg.stdoutCapture)
 	} else {
-		cmd.Stdout = maskedStdout
+		stdout = maskedStdout
 	}
 
 	if runtime.GOOS == "windows" && redirectStdError == "/dev/null" {
 		redirectStdError = "NUL"
 	}
+	if redirectStdError == "/dev/stdout" {
+		stdout = &synchronizedWriter{w: stdout}
+	}
 
+	var stderr io.Writer
 	if redirectStdError == "/dev/stderr" {
-		maskedStderr := ioLayer.MaskWriter(os.Stderr)
+		maskedStderr := ioLayer.MaskWriter(streams.Stderr)
 		if cfg.stderrCapture != nil {
-			cmd.Stderr = io.MultiWriter(maskedStderr, cfg.stderrCapture)
+			stderr = io.MultiWriter(maskedStderr, cfg.stderrCapture)
 		} else {
-			cmd.Stderr = maskedStderr
+			stderr = maskedStderr
 		}
 	} else if redirectStdError == "/dev/stdout" {
-		maskedStderr := ioLayer.MaskWriter(os.Stdout)
+		maskedStderr := ioLayer.MaskWriter(stdout)
 		if cfg.stderrCapture != nil {
-			cmd.Stderr = io.MultiWriter(maskedStderr, cfg.stderrCapture)
+			stderr = io.MultiWriter(maskedStderr, cfg.stderrCapture)
 		} else {
-			cmd.Stderr = maskedStderr
+			stderr = maskedStderr
 		}
 	} else if redirectStdError == "" {
-		maskedStderr := ioLayer.MaskWriter(os.Stderr)
+		maskedStderr := ioLayer.MaskWriter(streams.Stderr)
 		if cfg.stderrCapture != nil {
-			cmd.Stderr = io.MultiWriter(maskedStderr, cfg.stderrCapture)
+			stderr = io.MultiWriter(maskedStderr, cfg.stderrCapture)
 		} else {
-			cmd.Stderr = maskedStderr
+			stderr = maskedStderr
 		}
 	} else {
 		f, err := os.OpenFile(redirectStdError, os.O_WRONLY|os.O_CREATE, 0o644)
@@ -185,31 +218,54 @@ func ExecuteShellCommand(
 			}
 		}(f)
 
-		cmd.Stderr = ioLayer.MaskWriter(f)
+		stderr = ioLayer.MaskWriter(f)
 	}
-	log.Debug("Executing", "command", cmd.String())
+	log.Debug("Executing", "command", command, "args", args)
 
 	if dryRun {
 		return nil
 	}
 
-	err = cmd.Run()
-	if err != nil {
-		// Extract exit code from error to preserve it.
-		// This is critical for commands like `terraform plan -detailed-exitcode`
-		// which use exit code 2 to indicate changes detected.
-		if exitError, ok := err.(*exec.ExitError); ok {
-			exitCode := exitError.ExitCode()
-			log.Debug("Command exited with non-zero code", "code", exitCode)
-
-			// Return a typed error that preserves the exit code.
-			// main.go will check for this type and exit with the correct code.
-			return errUtils.ExitCodeError{Code: exitCode}
-		}
-		// If we can't extract exit code, return the original error.
-		return err
+	ctx := cfg.ctx
+	if ctx == nil {
+		ctx = context.Background()
 	}
-	return nil
+
+	result := process.DefaultRunner{}.Run(ctx, process.TaskSpec{
+		Command: command,
+		Args:    args,
+		Dir:     dir,
+		Env:     cmdEnv,
+		Streams: process.Streams{
+			Stdin:  streams.Stdin,
+			Stdout: stdout,
+			Stderr: stderr,
+		},
+	})
+	if result.Err == nil {
+		return nil
+	}
+
+	if result.Canceled {
+		return result.Err
+	}
+
+	if result.ExitCode >= 0 {
+		log.Debug("Command exited with non-zero code", "code", result.ExitCode)
+		return errUtils.ExitCodeError{Code: result.ExitCode}
+	}
+	return result.Err
+}
+
+type synchronizedWriter struct {
+	mu sync.Mutex
+	w  io.Writer
+}
+
+func (w *synchronizedWriter) Write(p []byte) (int, error) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return w.w.Write(p)
 }
 
 // ExecuteShell runs a shell script.

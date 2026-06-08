@@ -24,6 +24,8 @@ acme-platform-dev:
         provision: {}
         remote_state_backend: {}
         remote_state_backend_type: ""
+        required_providers: {}
+        required_version: ""
         settings: {}
         source: {}
         stack: acme-platform-dev
@@ -61,6 +63,8 @@ acme-platform-prod:
         provision: {}
         remote_state_backend: {}
         remote_state_backend_type: ""
+        required_providers: {}
+        required_version: ""
         settings: {}
         source: {}
         stack: acme-platform-prod
@@ -98,6 +102,8 @@ acme-platform-staging:
         provision: {}
         remote_state_backend: {}
         remote_state_backend_type: ""
+        required_providers: {}
+        required_version: ""
         settings: {}
         source: {}
         stack: acme-platform-staging

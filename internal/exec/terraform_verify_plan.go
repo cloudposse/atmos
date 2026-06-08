@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/component"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -43,9 +44,17 @@ func VerifyPlanfile(info *schema.ConfigAndStacksInfo, storedPlanFile string) err
 	// Resolve the component path.
 	componentPath := filepath.Join(atmosConfig.TerraformDirAbsolutePath, processedInfo.ComponentFolderPrefix, processedInfo.FinalComponent)
 
-	// Check if workdir is enabled (source + workdir or workdir only).
-	if workdirPath, ok := processedInfo.ComponentSection[provWorkdir.WorkdirPathKey].(string); ok && workdirPath != "" {
-		componentPath = workdirPath
+	// For workdir-enabled components, compute the workdir path from first principles
+	// because ProcessStacks builds a fresh ComponentSection that does not include
+	// WorkdirPathKey (only set by AutoProvisionSource at execution time).
+	if provWorkdir.IsWorkdirEnabled(processedInfo.ComponentSection) {
+		candidate, exists, resolveErr := component.BuildAndResolveWorkdirPath(&atmosConfig, &processedInfo, cfg.TerraformComponentType)
+		if resolveErr != nil {
+			return resolveErr
+		}
+		if exists {
+			componentPath = candidate
+		}
 	}
 
 	// Get JSON representation of the stored plan.

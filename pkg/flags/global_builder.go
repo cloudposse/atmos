@@ -41,6 +41,7 @@ func NewGlobalOptionsBuilder() *GlobalOptionsBuilder {
 	builder.registerProfilingFlags(&defaults)
 	builder.registerPerformanceFlags(&defaults)
 	builder.registerAIFlags(&defaults)
+	builder.registerSettingsFlags(&defaults)
 	builder.registerSystemFlags(&defaults)
 
 	return builder
@@ -184,6 +185,19 @@ func (b *GlobalOptionsBuilder) registerAIFlags(defaults *global.Flags) {
 	})
 }
 
+// registerSettingsFlags registers stack/settings configuration flags.
+func (b *GlobalOptionsBuilder) registerSettingsFlags(defaults *global.Flags) {
+	defer perf.Track(nil, "flags.GlobalOptionsBuilder.registerSettingsFlags")()
+
+	b.options = append(b.options, WithStringFlag(
+		"settings-list-merge-strategy",
+		"",
+		defaults.SettingsListMergeStrategy,
+		"Override settings.list_merge_strategy for this invocation. Controls how lists are merged in Atmos stack manifests (replace, append, merge)",
+	))
+	b.options = append(b.options, WithEnvVars("settings-list-merge-strategy", "ATMOS_SETTINGS_LIST_MERGE_STRATEGY"))
+}
+
 // registerSystemFlags registers system configuration flags.
 func (b *GlobalOptionsBuilder) registerSystemFlags(defaults *global.Flags) {
 	defer perf.Track(nil, "flags.GlobalOptionsBuilder.registerSystemFlags")()
@@ -204,6 +218,13 @@ func (b *GlobalOptionsBuilder) registerSystemFlags(defaults *global.Flags) {
 	// Note: ATMOS_VERSION and ATMOS_VERSION_USE env vars are also checked in reexec.go.
 	b.options = append(b.options, WithStringFlag("use-version", "", defaults.UseVersion, "Use a specific version of Atmos (e.g., --use-version=1.160.0)"))
 	b.options = append(b.options, WithEnvVars("use-version", "ATMOS_USE_VERSION"))
+
+	// Skip hooks at runtime. --skip-hooks (no value) skips all hooks for the
+	// current invocation; --skip-hooks=name1,name2 skips only the named
+	// hooks. Per-invocation only — does not propagate to nested commands.
+	b.options = append(b.options, WithStringFlag("skip-hooks", "", defaults.SkipHooks, "Skip lifecycle hooks for this invocation. Use --skip-hooks (no value) to skip all, or --skip-hooks=name1,name2 to skip specific hooks by name"))
+	b.options = append(b.options, WithEnvVars("skip-hooks", "ATMOS_SKIP_HOOKS"))
+	b.options = append(b.options, WithNoOptDefVal("skip-hooks", "*"))
 }
 
 // Build creates a StandardParser with all global flags configured.

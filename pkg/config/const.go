@@ -108,6 +108,8 @@ const (
 	AnsibleInventorySectionName       = "inventory"
 	WorkspaceSectionName              = "workspace"
 	AuthSectionName                   = "auth"
+	RequiredVersionSectionName        = "required_version"
+	RequiredProvidersSectionName      = "required_providers"
 	GenerateSectionName               = "generate"
 	ProvisionSectionName              = "provision"
 	InheritanceSectionName            = "inheritance"
@@ -115,6 +117,7 @@ const (
 	GithubSectionName                 = "github"
 	ProcessEnvSectionName             = "process_env"
 	CliArgsSectionName                = "cli_args"
+	RetrySectionName                  = "retry"
 	TerraformCliVarsSectionName       = "tf_cli_vars"
 	TerraformCliArgsEnvSectionName    = "env_tf_cli_args"
 	TerraformCliVarsEnvSectionName    = "env_tf_cli_vars"
@@ -161,6 +164,8 @@ const (
 	// Auth flags.
 	IdentityFlagName          = "identity" // Flag name without prefix.
 	IdentityFlag              = "--identity"
+	IdentityFlagShortName     = "i"
+	IdentityFlagShort         = "-i"
 	IdentityFlagSelectValue   = "__SELECT__"   // Special value when --identity is used without argument.
 	IdentityFlagDisabledValue = "__DISABLED__" // Special value when --identity=false (skip authentication).
 

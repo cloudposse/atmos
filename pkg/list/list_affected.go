@@ -132,7 +132,8 @@ func ExecuteListAffectedCmd(opts *AffectedCommandOptions) error {
 				return fmt.Sprintf("Compared `%s`...`%s`", result.RemoteRef, result.LocalRef), nil
 			}
 			return "Compared branches", nil
-		})
+		},
+	)
 	if err != nil {
 		return fmt.Errorf("failed to get affected components: %w", err)
 	}
@@ -191,7 +192,8 @@ type affectedResult struct {
 func getAffectedComponents(atmosConfig *schema.AtmosConfiguration, opts *AffectedCommandOptions, authManager auth.AuthManager) (*affectedResult, error) {
 	defer perf.Track(atmosConfig, "list.getAffectedComponents")()
 
-	logicResult, err := executeAffectedLogic(atmosConfig, opts, authManager)
+	authDisabled := opts.IdentityName == cfg.IdentityFlagDisabledValue
+	logicResult, err := executeAffectedLogic(atmosConfig, opts, authManager, authDisabled)
 	if err != nil {
 		return nil, err
 	}
@@ -212,66 +214,80 @@ type affectedLogicResult struct {
 }
 
 // executeAffectedLogic calls the appropriate describe affected function based on options.
-func executeAffectedLogic(atmosConfig *schema.AtmosConfiguration, opts *AffectedCommandOptions, authManager auth.AuthManager) (*affectedLogicResult, error) {
-	includeSettings := true
-
+func executeAffectedLogic(atmosConfig *schema.AtmosConfiguration, opts *AffectedCommandOptions, authManager auth.AuthManager, authDisabled bool) (*affectedLogicResult, error) {
 	switch {
 	case opts.RepoPath != "":
-		affected, _, _, repoID, err := e.ExecuteDescribeAffectedWithTargetRepoPath(
-			atmosConfig,
-			opts.RepoPath,
-			false, // includeSpaceliftAdminStacks
-			includeSettings,
-			opts.Stack,
-			opts.ProcessTemplates,
-			opts.ProcessFunctions,
-			opts.Skip,
-			opts.ExcludeLocked,
-			authManager,
-		)
-		if err != nil {
-			return nil, err
-		}
-		return &affectedLogicResult{affected: affected, localHead: nil, remoteRepoID: repoID}, nil
+		return executeAffectedWithRepoPath(atmosConfig, opts, authManager, authDisabled)
 	case opts.CloneTargetRef:
-		affected, localHead, _, repoID, err := e.ExecuteDescribeAffectedWithTargetRefClone(
-			atmosConfig,
-			opts.Ref,
-			opts.SHA,
-			opts.SSHKeyPath,
-			opts.SSHKeyPassword,
-			false, // includeSpaceliftAdminStacks
-			includeSettings,
-			opts.Stack,
-			opts.ProcessTemplates,
-			opts.ProcessFunctions,
-			opts.Skip,
-			opts.ExcludeLocked,
-			authManager,
-		)
-		if err != nil {
-			return nil, err
-		}
-		return &affectedLogicResult{affected: affected, localHead: localHead, remoteRepoID: repoID}, nil
+		return executeAffectedWithClone(atmosConfig, opts, authManager, authDisabled)
 	default:
-		affected, localHead, _, repoID, err := e.ExecuteDescribeAffectedWithTargetRefCheckout(
-			atmosConfig,
-			opts.Ref,
-			opts.SHA,
-			false, // includeSpaceliftAdminStacks
-			includeSettings,
-			opts.Stack,
-			opts.ProcessTemplates,
-			opts.ProcessFunctions,
-			opts.Skip,
-			opts.ExcludeLocked,
-			authManager,
-		)
-		if err != nil {
-			return nil, err
-		}
-		return &affectedLogicResult{affected: affected, localHead: localHead, remoteRepoID: repoID}, nil
+		return executeAffectedWithCheckout(atmosConfig, opts, authManager, authDisabled)
 	}
+}
+
+func executeAffectedWithRepoPath(atmosConfig *schema.AtmosConfiguration, opts *AffectedCommandOptions, authManager auth.AuthManager, authDisabled bool) (*affectedLogicResult, error) {
+	affected, _, _, repoID, err := e.ExecuteDescribeAffectedWithTargetRepoPath(
+		atmosConfig,
+		opts.RepoPath,
+		false, // includeSpaceliftAdminStacks
+		true,  // includeSettings — list affected always wants enabled/locked status.
+		opts.Stack,
+		opts.ProcessTemplates,
+		opts.ProcessFunctions,
+		opts.Skip,
+		opts.ExcludeLocked,
+		authManager,
+		authDisabled,
+	)
+	if err != nil {
+		return nil, err
+	}
+	return &affectedLogicResult{affected: affected, localHead: nil, remoteRepoID: repoID}, nil
+}
+
+func executeAffectedWithClone(atmosConfig *schema.AtmosConfiguration, opts *AffectedCommandOptions, authManager auth.AuthManager, authDisabled bool) (*affectedLogicResult, error) {
+	affected, localHead, _, repoID, err := e.ExecuteDescribeAffectedWithTargetRefClone(
+		atmosConfig,
+		opts.Ref,
+		opts.SHA,
+		opts.SSHKeyPath,
+		opts.SSHKeyPassword,
+		false, // includeSpaceliftAdminStacks
+		true,  // includeSettings — list affected always wants enabled/locked status.
+		opts.Stack,
+		opts.ProcessTemplates,
+		opts.ProcessFunctions,
+		opts.Skip,
+		opts.ExcludeLocked,
+		authManager,
+		authDisabled,
+	)
+	if err != nil {
+		return nil, err
+	}
+	return &affectedLogicResult{affected: affected, localHead: localHead, remoteRepoID: repoID}, nil
+}
+
+func executeAffectedWithCheckout(atmosConfig *schema.AtmosConfiguration, opts *AffectedCommandOptions, authManager auth.AuthManager, authDisabled bool) (*affectedLogicResult, error) {
+	affected, localHead, _, repoID, err := e.ExecuteDescribeAffectedWithTargetRefCheckout(
+		atmosConfig,
+		opts.Ref,
+		opts.SHA,
+		"",    // targetBranch — list affected does not yet plumb CI auto-detection.
+		false, // includeSpaceliftAdminStacks
+		true,  // includeSettings — list affected always wants enabled/locked status.
+		opts.Stack,
+		opts.ProcessTemplates,
+		opts.ProcessFunctions,
+		opts.Skip,
+		opts.ExcludeLocked,
+		authManager,
+		authDisabled,
+	)
+	if err != nil {
+		return nil, err
+	}
+	return &affectedLogicResult{affected: affected, localHead: localHead, remoteRepoID: repoID}, nil
 }
 
 // setRefNames sets the local and remote ref names in the result based on the option type and local repo head.

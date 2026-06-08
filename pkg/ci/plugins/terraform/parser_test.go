@@ -170,6 +170,7 @@ func TestParsePlanJSON_OutputOnlyChanges(t *testing.T) {
 
 	tfData, ok := result.Data.(*plugin.TerraformOutputData)
 	require.True(t, ok)
+	assert.True(t, tfData.HasOutputChanges, "HasOutputChanges should be true for output-only changes")
 
 	// No resource changes.
 	assert.Equal(t, 0, tfData.ResourceCounts.Create)
@@ -428,18 +429,19 @@ Second details
 // Legacy tests for stdout parsing (fallback behavior).
 func TestParsePlanOutput(t *testing.T) {
 	tests := []struct {
-		name            string
-		output          string
-		hasChanges      bool
-		hasErrors       bool
-		create          int
-		change          int
-		destroy         int
-		wantCreatedRes  []string
-		wantUpdatedRes  []string
-		wantDeletedRes  []string
-		wantWarnings    int
-		wantWarningText []string
+		name             string
+		output           string
+		hasChanges       bool
+		hasErrors        bool
+		hasOutputChanges bool
+		create           int
+		change           int
+		destroy          int
+		wantCreatedRes   []string
+		wantUpdatedRes   []string
+		wantDeletedRes   []string
+		wantWarnings     int
+		wantWarningText  []string
 	}{
 		{
 			name: "plan with changes",
@@ -558,8 +560,9 @@ Changes to Outputs:
 
 You can apply this plan to save these new output values to the Terraform state,
 without changing any real infrastructure.
-`,
-			hasChanges: true,
+			`,
+			hasChanges:       true,
+			hasOutputChanges: true,
 		},
 		{
 			name: "plan with errors",
@@ -584,6 +587,7 @@ Error: Reference to undeclared resource
 			assert.Equal(t, tt.hasErrors, result.HasErrors, "HasErrors mismatch")
 
 			if data, ok := result.Data.(*plugin.TerraformOutputData); ok {
+				assert.Equal(t, tt.hasOutputChanges, data.HasOutputChanges, "HasOutputChanges mismatch")
 				assert.Equal(t, tt.create, data.ResourceCounts.Create, "Create count mismatch")
 				assert.Equal(t, tt.change, data.ResourceCounts.Change, "Change count mismatch")
 				assert.Equal(t, tt.destroy, data.ResourceCounts.Destroy, "Destroy count mismatch")

@@ -83,7 +83,7 @@ func TestProcessConfigImports_MkdirTempError_WithMock(t *testing.T) {
 func TestProcessImports_EmptyBasePath(t *testing.T) {
 	tempDir := t.TempDir()
 
-	_, err := processImports("", []string{"test.yaml"}, tempDir, 1, MaximumImportLvL)
+	_, err := processImports(nil, "", []string{"test.yaml"}, tempDir, 1, MaximumImportLvL)
 	assert.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrBasePath)
 }
@@ -92,7 +92,7 @@ func TestProcessImports_EmptyBasePath(t *testing.T) {
 func TestProcessImports_EmptyTempDir(t *testing.T) {
 	tempDir := t.TempDir()
 
-	_, err := processImports(tempDir, []string{"test.yaml"}, "", 1, MaximumImportLvL)
+	_, err := processImports(nil, tempDir, []string{"test.yaml"}, "", 1, MaximumImportLvL)
 	assert.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrTempDir)
 }
@@ -101,7 +101,7 @@ func TestProcessImports_EmptyTempDir(t *testing.T) {
 func TestProcessImports_MaxDepthExceeded(t *testing.T) {
 	tempDir := t.TempDir()
 
-	_, err := processImports(tempDir, []string{"test.yaml"}, tempDir, 11, 10)
+	_, err := processImports(nil, tempDir, []string{"test.yaml"}, tempDir, 11, 10)
 	assert.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrMaxImportDepth)
 }
@@ -114,7 +114,7 @@ func TestProcessImports_MaxDepthExceeded(t *testing.T) {
 func TestProcessImports_EmptyImportPath(t *testing.T) {
 	tempDir := t.TempDir()
 
-	paths, err := processImports(tempDir, []string{""}, tempDir, 1, MaximumImportLvL)
+	paths, err := processImports(nil, tempDir, []string{""}, tempDir, 1, MaximumImportLvL)
 	assert.NoError(t, err)
 	assert.Empty(t, paths) // Empty import path should be skipped
 }

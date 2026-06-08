@@ -2,14 +2,18 @@ package client
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
+	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -120,6 +124,94 @@ func TestWriteMCPConfigToTempFile(t *testing.T) {
 	}
 }
 
+// TestWriteMCPConfigToTempFile_ConcurrentWritesGetDistinctPaths is the
+// regression guard for issue #4 in docs/fixes/2026-05-15-mcp-review-fixes.md.
+//
+// Pre-fix, WriteMCPConfigToTempFile used a fixed path
+// (os.TempDir()/atmos-mcp-config.json) and two concurrent invocations
+// raced on the same file — the slower writer's content silently
+// overwrote the faster's, and a slower reader could see partial JSON.
+// Post-fix the function uses os.CreateTemp with the pattern
+// "atmos-mcp-config-*.json", so each invocation gets a unique path.
+//
+// The test drives 16 concurrent writes (each with a distinct, identifiable
+// server name) and asserts:
+//
+//  1. All 16 writes succeed.
+//  2. All 16 returned paths are pairwise distinct.
+//  3. Each file on disk contains the server name the goroutine wrote —
+//     proving no cross-talk (i.e., no writer clobbered another's content).
+func TestWriteMCPConfigToTempFile_ConcurrentWritesGetDistinctPaths(t *testing.T) {
+	const goroutines = 16
+
+	// Pre-size the result slices and write by goroutine index so the
+	// assertion-side code can correlate path[i] with "server-i". An
+	// append-based approach loses that mapping because goroutines finish
+	// in arbitrary order — leading to false "content was clobbered"
+	// failures even when nothing was actually clobbered.
+	var (
+		wg    sync.WaitGroup
+		paths = make([]string, goroutines)
+		errs  = make([]error, goroutines)
+	)
+
+	for i := 0; i < goroutines; i++ {
+		wg.Add(1)
+		go func(idx int) {
+			defer wg.Done()
+			serverName := fmt.Sprintf("server-%d", idx)
+			servers := map[string]schema.MCPServerConfig{
+				serverName: {Command: "echo", Args: []string{fmt.Sprintf("%d", idx)}},
+			}
+
+			path, err := WriteMCPConfigToTempFile(servers, "")
+			// Each goroutine writes to its own slot — no mutex needed,
+			// and -race stays clean.
+			paths[idx] = path
+			errs[idx] = err
+		}(i)
+	}
+
+	wg.Wait()
+
+	// Cleanup every successfully-written file at the end.
+	t.Cleanup(func() {
+		for _, p := range paths {
+			if p != "" {
+				_ = os.Remove(p)
+			}
+		}
+	})
+
+	for i, err := range errs {
+		require.NoError(t, err, "goroutine %d failed to write", i)
+	}
+
+	// All paths must be distinct — the headline assertion.
+	seen := make(map[string]int, len(paths))
+	for i, p := range paths {
+		if prev, ok := seen[p]; ok {
+			t.Fatalf("concurrent writes returned the same path twice: goroutines %d and %d both wrote %q", prev, i, p)
+		}
+		seen[p] = i
+	}
+
+	// Every file must contain the server name its goroutine wrote — proves
+	// no goroutine's content was clobbered by another.
+	for i, p := range paths {
+		data, err := os.ReadFile(p)
+		require.NoError(t, err, "could not read file from goroutine %d", i)
+
+		var config MCPJSONConfig
+		require.NoError(t, json.Unmarshal(data, &config), "file from goroutine %d is not valid JSON: %s", i, string(data))
+
+		wantServer := fmt.Sprintf("server-%d", i)
+		require.Contains(t, config.MCPServers, wantServer,
+			"file from goroutine %d (path=%s) is missing its own server %q — content was clobbered by another writer",
+			i, p, wantServer)
+	}
+}
+
 func TestCopyEnv(t *testing.T) {
 	original := map[string]string{"A": "1", "B": "2"}
 	copied := copyEnv(original)
@@ -150,6 +242,73 @@ func TestCopyEnv_Nil(t *testing.T) {
 	result := copyEnv(nil)
 	assert.NotNil(t, result)
 	assert.Empty(t, result)
+}
+
+// TestWriteMCPConfigToTempFile_CreateTempFailure exercises the
+// os.CreateTemp failure branch in WriteMCPConfigToTempFile by pointing
+// TMPDIR at a path that doesn't exist. Without this test the CreateTemp
+// error wrap is unreachable from the existing happy-path / concurrent
+// tests, leaving the wrapped sentinel (errUtils.ErrMCPConfigWriteFailed)
+// untested.
+func TestWriteMCPConfigToTempFile_CreateTempFailure(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		// On Windows, os.TempDir resolution differs and TMP/TEMP env
+		// vars interact with the OS API in ways that aren't trivially
+		// portable. The Unix path covers the contract; Windows-specific
+		// failure modes are tested by the OS, not this test suite.
+		t.Skip("TMPDIR override semantics differ on Windows")
+	}
+
+	// Point TMPDIR at a path that doesn't exist. os.CreateTemp uses
+	// os.TempDir() which honors TMPDIR; CreateTemp will fail on the
+	// underlying open(2) because the dir doesn't exist.
+	t.Setenv("TMPDIR", filepath.Join(t.TempDir(), "does-not-exist"))
+
+	servers := map[string]schema.MCPServerConfig{
+		"test-server": {Command: "echo", Args: []string{"hello"}},
+	}
+	path, err := WriteMCPConfigToTempFile(servers, "")
+	require.Error(t, err,
+		"CreateTemp must fail when TMPDIR points at a missing directory")
+	assert.Empty(t, path,
+		"failed write must return empty path so callers don't try to clean up a non-existent file")
+	assert.ErrorIs(t, err, errUtils.ErrMCPConfigWriteFailed,
+		"the CreateTemp failure must be wrapped with ErrMCPConfigWriteFailed for errors.Is matching")
+}
+
+// TestWriteMCPConfigToTempFile_TempDirHonored verifies the cooperative
+// contract with os.TempDir — when TMPDIR is set to a writable directory,
+// WriteMCPConfigToTempFile creates the temp file IN that directory (not
+// the system default). This is what makes the concurrent test work in
+// CI runners and matters for users who set TMPDIR to redirect writes
+// onto a faster volume.
+func TestWriteMCPConfigToTempFile_TempDirHonored(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("TMPDIR override semantics differ on Windows")
+	}
+
+	overrideDir := t.TempDir()
+	t.Setenv("TMPDIR", overrideDir)
+
+	servers := map[string]schema.MCPServerConfig{
+		"test-server": {Command: "echo", Args: []string{"hello"}},
+	}
+	path, err := WriteMCPConfigToTempFile(servers, "")
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = os.Remove(path) })
+
+	// Resolve symlinks for both — macOS tends to symlink /tmp → /private/tmp
+	// and t.Setenv("TMPDIR", ...) sometimes lands either side of that link
+	// depending on whether t.TempDir() already resolved it. Resolving both
+	// sides makes the assertion robust to that platform quirk.
+	resolvedOverride, err := filepath.EvalSymlinks(overrideDir)
+	require.NoError(t, err)
+	resolvedPath, err := filepath.EvalSymlinks(path)
+	require.NoError(t, err)
+
+	assert.True(t, strings.HasPrefix(resolvedPath, resolvedOverride),
+		"WriteMCPConfigToTempFile must respect TMPDIR; got path %q (resolved %q), expected prefix %q (resolved %q)",
+		path, resolvedPath, overrideDir, resolvedOverride)
 }
 
 func TestDeduplicatePATH(t *testing.T) {

@@ -16,6 +16,12 @@ type BaseResolution struct {
 	// Empty for non-PR events (push, merge_group, etc.).
 	HeadSHA string
 
+	// TargetBranch is the PR target branch name (e.g., "main") when known.
+	// Used by callers to recover from missing local refs by running a
+	// targeted git fetch. Empty when the event has no notion of a target
+	// branch (e.g., push events on the default branch).
+	TargetBranch string
+
 	// Source describes where the base was resolved from (for logging).
 	Source string
 
@@ -43,12 +49,30 @@ type Provider interface {
 	// UpdateCheckRun updates an existing check run.
 	UpdateCheckRun(ctx context.Context, opts *UpdateCheckRunOptions) (*CheckRun, error)
 
+	// PostComment posts or upserts a PR/MR comment. Providers that do not
+	// support comments should return errUtils.ErrCIOperationNotSupported.
+	// Implementations use the marker string to find and update existing
+	// comments on repeat runs (upsert); callers embed the marker in Body.
+	PostComment(ctx context.Context, opts *PostCommentOptions) (*Comment, error)
+
 	// OutputWriter returns a writer for CI outputs ($GITHUB_OUTPUT, etc.).
 	OutputWriter() OutputWriter
 
 	// ResolveBase returns the base commit for affected detection.
 	// Returns nil if the provider cannot determine the base.
 	ResolveBase() (*BaseResolution, error)
+}
+
+// DebugModeDetector is an optional capability for providers that expose a
+// "debug mode" signal set at the runner / step / job level (for example,
+// GitHub Actions' ACTIONS_RUNNER_DEBUG and ACTIONS_STEP_DEBUG). Providers
+// implement this when their platform has a documented way for users to opt
+// into verbose diagnostic logging for a run.
+type DebugModeDetector interface {
+	// IsDebugMode reports whether the current run has debug logging enabled
+	// at the CI provider level. Callers use this to auto-promote their own
+	// log level.
+	IsDebugMode() bool
 }
 
 // OutputWriter writes CI outputs (environment variables, job summaries, etc.).

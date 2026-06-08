@@ -288,7 +288,7 @@ func resolveAuthProvider(atmosConfig *schema.AtmosConfiguration) mcpclient.AuthE
 	if !serversNeedAuth(atmosConfig.MCP.Servers) {
 		return nil
 	}
-	return mcpclient.NewScopedAuthProvider(atmosConfig)
+	return mcpclient.NewScopedAuthProvider()
 }
 
 // cliProviders lists providers that invoke a local CLI binary as a subprocess.

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -22,6 +23,7 @@ func TestResolveBase_PullRequest_OpenSync(t *testing.T) {
 			},
 			"base": map[string]any{
 				"ref": "main",
+				"sha": "basesha123456789012345678901234567890ab",
 			},
 		},
 	}
@@ -34,13 +36,97 @@ func TestResolveBase_PullRequest_OpenSync(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, res)
 	// merge-base may or may not succeed depending on git state in test env.
-	// Either way, we get a valid resolution.
+	// Either way, we MUST end up with a SHA — never the origin/<target> tip
+	// ref, which is the path that produces false positives for out-of-date PRs.
 	assert.Equal(t, "pull_request", res.EventType)
 	assert.Equal(t, "headsha123456789012345678901234567890ab", res.HeadSHA)
-	// If merge-base failed, falls back to GITHUB_BASE_REF.
-	if res.SHA == "" {
-		assert.Equal(t, "refs/remotes/origin/main", res.Ref)
+	assert.Equal(t, "main", res.TargetBranch)
+	assert.NotEmpty(t, res.SHA, "must populate a SHA — payload base.sha is the worst-case fallback")
+	assert.Empty(t, res.Ref, "must not fall back to refs/remotes/origin/<target> (compares to current tip and causes false positives for out-of-date PRs)")
+}
+
+// TestResolveBase_PullRequest_OutOfDate_FallsBackToPayloadSHA covers the
+// customer-reported scenario at the unit-test level: merge-base fails (no
+// `origin/<target>` locally, shallow clone) and the PR is out of date with
+// the target branch. The fix must NOT fall back to
+// `refs/remotes/origin/<target>` (which compares to current tip and
+// includes every commit on `<target>` since the fork point as a "diff").
+// Instead we use `event.pull_request.base.sha`, which is at worst stale
+// by however many `<target>` commits have landed since the last PR sync.
+//
+// We use a deliberately non-existent branch name so the test is
+// deterministic regardless of the host repo's branch state. The bug
+// pattern is identical for any target branch.
+func TestResolveBase_PullRequest_OutOfDate_FallsBackToPayloadSHA(t *testing.T) {
+	const target = "nonexistent-target-for-pr2380"
+
+	t.Setenv("GITHUB_EVENT_NAME", "pull_request")
+	t.Setenv("GITHUB_BASE_REF", target)
+
+	eventPayload := map[string]any{
+		"action": "synchronize",
+		"pull_request": map[string]any{
+			"head": map[string]any{
+				"sha": "headsha123456789012345678901234567890ab",
+			},
+			"base": map[string]any{
+				"ref": target,
+				"sha": "stalebasesha789012345678901234567890abcd",
+			},
+		},
 	}
+	eventPath := writeEventPayload(t, eventPayload)
+	t.Setenv("GITHUB_EVENT_PATH", eventPath)
+
+	p := NewProvider()
+	res, err := p.ResolveBase()
+
+	require.NoError(t, err)
+	require.NotNil(t, res)
+	assert.NotEmpty(t, res.SHA)
+	assert.Empty(t, res.Ref, "must not return a ref to current tip of target branch — that path causes false positives")
+	assert.Equal(t, "stalebasesha789012345678901234567890abcd", res.SHA)
+	assert.Equal(t, "event.pull_request.base.sha", res.Source)
+	assert.Equal(t, target, res.TargetBranch)
+}
+
+// TestResolveBase_PullRequest_NoPayloadBaseSHA_LastResortRef confirms the
+// last-resort branch still works when the event payload has no base.sha
+// (degenerate or hand-crafted payloads). We do still log a warning, but
+// the resolution is non-empty so callers can proceed.
+//
+// Uses a non-existent target branch so merge-base cannot succeed and we
+// reach the last-resort path deterministically.
+func TestResolveBase_PullRequest_NoPayloadBaseSHA_LastResortRef(t *testing.T) {
+	const target = "nonexistent-target-for-pr2380"
+
+	t.Setenv("GITHUB_EVENT_NAME", "pull_request")
+	t.Setenv("GITHUB_BASE_REF", target)
+
+	eventPayload := map[string]any{
+		"action": "synchronize",
+		"pull_request": map[string]any{
+			"head": map[string]any{
+				"sha": "headsha123456789012345678901234567890ab",
+			},
+			"base": map[string]any{
+				"ref": target,
+				// NOTE: no "sha" field — degenerate payload.
+			},
+		},
+	}
+	eventPath := writeEventPayload(t, eventPayload)
+	t.Setenv("GITHUB_EVENT_PATH", eventPath)
+
+	p := NewProvider()
+	res, err := p.ResolveBase()
+
+	require.NoError(t, err)
+	require.NotNil(t, res)
+	// Last-resort path: ref to current tip. Caller has been warned.
+	assert.Equal(t, "refs/remotes/origin/"+target, res.Ref)
+	assert.Empty(t, res.SHA)
+	assert.Equal(t, target, res.TargetBranch)
 }
 
 func TestResolveBase_PullRequest_Opened(t *testing.T) {
@@ -91,10 +177,34 @@ func TestResolveBase_PullRequest_Closed(t *testing.T) {
 	require.NotNil(t, res)
 	assert.Equal(t, "pull_request", res.EventType)
 	assert.Equal(t, "headsha123456789012345678901234567890ab", res.HeadSHA)
-	// In test env, merge-base and HEAD~1 may or may not work.
-	// Either way we get a valid resolution through the fallback chain.
+	// In test env, merge-base and HEAD~1 may or may not work; any of the
+	// three documented fallbacks produces a valid resolution. Whichever
+	// branch fires depends on the CI runner's checkout depth and whether
+	// origin/<base> has been fetched: PR runs typically reach merge-base
+	// or HEAD~1, but post-merge runs on main commonly hit the payload-SHA
+	// fallback, where Source = "event.pull_request.base.sha".
+	//
+	// Bug history: the original assertion was
+	//   assert.Contains(t, res.Source, "merge-base", "HEAD~1")
+	// which testify treats as a single Contains check with "HEAD~1" as
+	// the failure-message argument -- it never matched the payload-SHA
+	// path. Symptom: green on the PR (HEAD~1 reachable), red on main
+	// (only the payload SHA is available).
 	if res.SHA != "" {
-		assert.Contains(t, res.Source, "merge-base", "HEAD~1")
+		validSources := []string{
+			"merge-base",
+			"HEAD~1",
+			"event.pull_request.base.sha",
+		}
+		matched := false
+		for _, want := range validSources {
+			if strings.Contains(res.Source, want) {
+				matched = true
+				break
+			}
+		}
+		assert.True(t, matched,
+			"Source %q must contain one of %v", res.Source, validSources)
 	} else {
 		assert.Equal(t, "refs/remotes/origin/main", res.Ref)
 	}
@@ -161,8 +271,73 @@ func TestResolveBase_Push_NewBranch(t *testing.T) {
 	assert.Contains(t, res.Source, "no before SHA")
 }
 
+// TestResolveBase_MergeGroup verifies that a merge_group event with a full
+// payload resolves to event.merge_group.base_sha (the target-branch commit
+// the synthetic merge commit was built on top of), populates HeadSHA from
+// merge_group.head_sha, and strips refs/heads/ from base_ref to derive the
+// target branch.
 func TestResolveBase_MergeGroup(t *testing.T) {
 	t.Setenv("GITHUB_EVENT_NAME", "merge_group")
+	t.Setenv("GITHUB_BASE_REF", "main")
+
+	eventPayload := map[string]any{
+		"action": "checks_requested",
+		"merge_group": map[string]any{
+			"base_sha": "basesha123456789012345678901234567890ab",
+			"head_sha": "synthsha123456789012345678901234567890ab",
+			"base_ref": "refs/heads/main",
+			"head_ref": "refs/heads/gh-readonly-queue/main/pr-42-headsha",
+		},
+	}
+	eventPath := writeEventPayload(t, eventPayload)
+	t.Setenv("GITHUB_EVENT_PATH", eventPath)
+
+	p := NewProvider()
+	res, err := p.ResolveBase()
+
+	require.NoError(t, err)
+	require.NotNil(t, res)
+	assert.Equal(t, "merge_group", res.EventType)
+	assert.Equal(t, "basesha123456789012345678901234567890ab", res.SHA)
+	assert.Equal(t, "synthsha123456789012345678901234567890ab", res.HeadSHA)
+	assert.Equal(t, "main", res.TargetBranch)
+	assert.Equal(t, "event.merge_group.base_sha", res.Source)
+	assert.Empty(t, res.Ref, "should resolve to a SHA, not fall back to a ref")
+}
+
+// TestResolveBase_MergeGroup_PayloadHeadSHAOnly verifies that when the payload
+// has head_sha but no base_sha (an unlikely-but-possible truncated payload),
+// we fall back to env-based ref resolution while still populating HeadSHA.
+func TestResolveBase_MergeGroup_PayloadHeadSHAOnly(t *testing.T) {
+	t.Setenv("GITHUB_EVENT_NAME", "merge_group")
+	t.Setenv("GITHUB_BASE_REF", "main")
+
+	eventPayload := map[string]any{
+		"merge_group": map[string]any{
+			"head_sha": "synthsha123456789012345678901234567890ab",
+			"base_ref": "refs/heads/main",
+		},
+	}
+	eventPath := writeEventPayload(t, eventPayload)
+	t.Setenv("GITHUB_EVENT_PATH", eventPath)
+
+	p := NewProvider()
+	res, err := p.ResolveBase()
+
+	require.NoError(t, err)
+	require.NotNil(t, res)
+	assert.Equal(t, "merge_group", res.EventType)
+	assert.Equal(t, "refs/remotes/origin/main", res.Ref, "no base_sha → fall back to ref")
+	assert.Equal(t, "synthsha123456789012345678901234567890ab", res.HeadSHA)
+	assert.Equal(t, "main", res.TargetBranch)
+}
+
+// TestResolveBase_MergeGroup_NoEventPath verifies graceful degradation when
+// GITHUB_EVENT_PATH is unset (e.g., test environments without a real event
+// file). We must not error out — fall back to env-only resolution.
+func TestResolveBase_MergeGroup_NoEventPath(t *testing.T) {
+	t.Setenv("GITHUB_EVENT_NAME", "merge_group")
+	t.Setenv("GITHUB_EVENT_PATH", "")
 	t.Setenv("GITHUB_BASE_REF", "main")
 
 	p := NewProvider()
@@ -170,9 +345,9 @@ func TestResolveBase_MergeGroup(t *testing.T) {
 
 	require.NoError(t, err)
 	require.NotNil(t, res)
+	assert.Equal(t, "merge_group", res.EventType)
 	assert.Equal(t, "refs/remotes/origin/main", res.Ref)
 	assert.Equal(t, "GITHUB_BASE_REF", res.Source)
-	assert.Equal(t, "merge_group", res.EventType)
 }
 
 func TestResolveBase_UnknownEvent(t *testing.T) {
@@ -198,9 +373,13 @@ func TestResolveBase_MissingEventPath(t *testing.T) {
 	assert.Contains(t, err.Error(), "GITHUB_EVENT_PATH")
 }
 
+// TestResolveBase_MergeGroup_NoBaseRef verifies that with no event payload
+// and no GITHUB_BASE_REF, we still gracefully degrade to the default ref
+// rather than erroring out.
 func TestResolveBase_MergeGroup_NoBaseRef(t *testing.T) {
 	t.Setenv("GITHUB_EVENT_NAME", "merge_group")
 	t.Setenv("GITHUB_BASE_REF", "")
+	t.Setenv("GITHUB_EVENT_PATH", "")
 
 	p := NewProvider()
 	res, err := p.ResolveBase()
@@ -208,6 +387,35 @@ func TestResolveBase_MergeGroup_NoBaseRef(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, res)
 	assert.Equal(t, "refs/remotes/origin/HEAD", res.Ref)
+}
+
+// TestResolveBase_MergeGroup_PayloadBaseRefNoEnv verifies that when the payload
+// supplies merge_group.base_ref but GITHUB_BASE_REF is empty (and base_sha is
+// absent), the payload base_ref is promoted to res.Ref instead of defaulting
+// to refs/remotes/origin/HEAD.
+func TestResolveBase_MergeGroup_PayloadBaseRefNoEnv(t *testing.T) {
+	t.Setenv("GITHUB_EVENT_NAME", "merge_group")
+	t.Setenv("GITHUB_BASE_REF", "")
+
+	eventPayload := map[string]any{
+		"merge_group": map[string]any{
+			"head_sha": "synthsha123456789012345678901234567890ab",
+			"base_ref": "refs/heads/main",
+		},
+	}
+	eventPath := writeEventPayload(t, eventPayload)
+	t.Setenv("GITHUB_EVENT_PATH", eventPath)
+
+	p := NewProvider()
+	res, err := p.ResolveBase()
+
+	require.NoError(t, err)
+	require.NotNil(t, res)
+	assert.Equal(t, "merge_group", res.EventType)
+	assert.Equal(t, "refs/remotes/origin/main", res.Ref, "payload base_ref should be promoted when env is empty")
+	assert.Equal(t, "event.merge_group.base_ref", res.Source)
+	assert.Equal(t, "synthsha123456789012345678901234567890ab", res.HeadSHA)
+	assert.Equal(t, "main", res.TargetBranch)
 }
 
 // TestReadEventPayload tests the readEventPayload helper function.

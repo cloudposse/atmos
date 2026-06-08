@@ -15,12 +15,15 @@ import (
 func ApplyPlatformOverrides(tool *registry.Tool) {
 	defer perf.Track(nil, "installer.ApplyPlatformOverrides")()
 
+	ApplyPlatformOverridesForPlatform(tool, runtime.GOOS, runtime.GOARCH)
+}
+
+func ApplyPlatformOverridesForPlatform(tool *registry.Tool, goos, goarch string) {
+	defer perf.Track(nil, "installer.ApplyPlatformOverridesForPlatform")()
+
 	if len(tool.Overrides) == 0 {
 		return
 	}
-
-	goos := runtime.GOOS
-	goarch := runtime.GOARCH
 
 	for i := range tool.Overrides {
 		override := &tool.Overrides[i]
@@ -81,5 +84,20 @@ func applyOverride(tool *registry.Tool, override *registry.Override) {
 		for k, v := range override.Replacements {
 			tool.Replacements[k] = v
 		}
+	}
+	if registry.HasChecksumConfig(&override.Checksum) {
+		tool.Checksum = override.Checksum
+	}
+	if registry.HasCosignConfig(&override.Cosign) {
+		tool.Cosign = override.Cosign
+	}
+	if registry.HasSLSAProvenance(&override.SLSAProvenance) {
+		tool.SLSAProvenance = override.SLSAProvenance
+	}
+	if registry.HasMinisignConfig(&override.Minisign) {
+		tool.Minisign = override.Minisign
+	}
+	if registry.HasGitHubArtifactAttestations(&override.GitHubArtifactAttestations) {
+		tool.GitHubArtifactAttestations = override.GitHubArtifactAttestations
 	}
 }

@@ -79,10 +79,10 @@ func ParsePlanJSON(jsonData []byte) (*plugin.OutputResult, error) {
 	processResourceChanges(plan.ResourceChanges, data)
 	processOutputChanges(plan.OutputChanges, data)
 
-	result.HasChanges = hasResourceChanges(data.ResourceCounts) || len(data.Outputs) > 0
+	result.HasChanges = hasResourceChanges(data.ResourceCounts) || data.HasOutputChanges
 	if hasResourceChanges(data.ResourceCounts) {
 		data.ChangedResult = buildChangeSummary(data.ResourceCounts)
-	} else if len(data.Outputs) > 0 {
+	} else if data.HasOutputChanges {
 		data.ChangedResult = buildOutputChangeSummary(len(data.Outputs))
 	}
 
@@ -150,6 +150,7 @@ func processOutputChanges(changes map[string]*tfjson.Change, data *plugin.Terraf
 		if output == nil {
 			continue
 		}
+		data.HasOutputChanges = true
 		data.Outputs[name] = plugin.TerraformOutput{
 			Value:     output.After,
 			Sensitive: output.AfterSensitive != nil,
@@ -369,6 +370,7 @@ func ParsePlanOutput(output string) *plugin.OutputResult {
 	// Detect output-only changes (no resource changes but outputs changing).
 	if !result.HasChanges && outputChangesRe.MatchString(output) {
 		result.HasChanges = true
+		data.HasOutputChanges = true
 		data.ChangedResult = "Output values will change. No infrastructure changes."
 	}
 

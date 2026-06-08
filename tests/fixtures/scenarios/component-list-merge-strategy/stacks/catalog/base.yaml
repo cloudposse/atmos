@@ -1,0 +1,27 @@
+# Base catalog: abstract component with list vars that get extended by inheritors.
+components:
+  terraform:
+    base-component:
+      metadata:
+        component: mock
+        type: abstract
+      vars:
+        tags:
+          - base-tag-1
+          - base-tag-2
+        name: base
+
+    # append-base: abstract component that sets list_merge_strategy: append in its
+    # own settings. Components that inherit from it should pick up the strategy via
+    # result.BaseComponentSettings even when they don't set it themselves.
+    append-base:
+      metadata:
+        component: mock
+        type: abstract
+      settings:
+        list_merge_strategy: append
+      vars:
+        tags:
+          - base-tag-1
+          - base-tag-2
+        name: append-base

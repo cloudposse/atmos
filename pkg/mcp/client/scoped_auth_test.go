@@ -10,7 +10,6 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/auth"
-	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 // The ScopedAuthProvider is a thin MCP adapter over
@@ -61,7 +60,7 @@ func withStubbedBuilder(
 }
 
 func TestScopedAuthProvider_ForServer_PlumbsServerEnvToBuilder(t *testing.T) {
-	p := NewScopedAuthProvider(&schema.AtmosConfiguration{})
+	p := NewScopedAuthProvider()
 	var captured map[string]string
 	withStubbedBuilder(p, &captured, &fakeMgrImpl{}, nil)
 
@@ -82,7 +81,7 @@ func TestScopedAuthProvider_ForServer_PlumbsServerEnvToBuilder(t *testing.T) {
 }
 
 func TestScopedAuthProvider_ForServer_NilManager_ReturnsSentinel(t *testing.T) {
-	p := NewScopedAuthProvider(&schema.AtmosConfiguration{})
+	p := NewScopedAuthProvider()
 	// (nil, nil) simulates auth disabled or no identity resolved.
 	withStubbedBuilder(p, nil, nil, nil)
 
@@ -103,7 +102,7 @@ func TestScopedAuthProvider_ForServer_BuilderError_PassesThrough(t *testing.T) {
 	// Contract: the adapter passes underlying builder errors through unchanged.
 	// Higher layers (Session.Start) add ErrMCPServerStartFailed and the server
 	// name, so the adapter must not duplicate that context.
-	p := NewScopedAuthProvider(&schema.AtmosConfiguration{})
+	p := NewScopedAuthProvider()
 	withStubbedBuilder(p, nil, nil, errTestScopedBuilderInit)
 
 	cfg := &ParsedConfig{
@@ -124,7 +123,7 @@ func TestScopedAuthProvider_ForServer_BuilderError_PassesThrough(t *testing.T) {
 func TestScopedAuthProvider_ForServer_NilConfig_ReturnsSentinel(t *testing.T) {
 	// PerServerAuthProvider is a public interface; passing nil from an
 	// external caller must surface a typed error rather than panic.
-	p := NewScopedAuthProvider(&schema.AtmosConfiguration{})
+	p := NewScopedAuthProvider()
 	// Spy on the builder so we can prove it was never called when config is nil.
 	builderInvoked := false
 	withStubbedBuilder(p, nil, &fakeMgrImpl{}, nil)
@@ -143,7 +142,7 @@ func TestScopedAuthProvider_ForServer_NilConfig_ReturnsSentinel(t *testing.T) {
 }
 
 func TestScopedAuthProvider_PrepareShellEnvironment_FallbackPath(t *testing.T) {
-	p := NewScopedAuthProvider(&schema.AtmosConfiguration{})
+	p := NewScopedAuthProvider()
 	var captured map[string]string
 	withStubbedBuilder(p, &captured, &fakeMgrImpl{}, nil)
 
@@ -159,7 +158,7 @@ func TestScopedAuthProvider_PrepareShellEnvironment_FallbackPath(t *testing.T) {
 }
 
 func TestScopedAuthProvider_PrepareShellEnvironment_NilManager_ReturnsSentinel(t *testing.T) {
-	p := NewScopedAuthProvider(&schema.AtmosConfiguration{})
+	p := NewScopedAuthProvider()
 	withStubbedBuilder(p, nil, nil, nil)
 
 	out, err := p.PrepareShellEnvironment(
@@ -174,7 +173,7 @@ func TestScopedAuthProvider_PrepareShellEnvironment_NilManager_ReturnsSentinel(t
 }
 
 func TestScopedAuthProvider_PrepareShellEnvironment_BuilderError(t *testing.T) {
-	p := NewScopedAuthProvider(&schema.AtmosConfiguration{})
+	p := NewScopedAuthProvider()
 	withStubbedBuilder(p, nil, nil, errTestScopedBuilderInit)
 
 	_, err := p.PrepareShellEnvironment(

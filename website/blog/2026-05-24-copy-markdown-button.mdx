@@ -1,0 +1,43 @@
+---
+slug: copy-markdown-button
+title: "Copy any docs page as Markdown — atmos.tools now serves a raw .md alternate for every page"
+authors: [osterman]
+tags: [feature, documentation]
+---
+
+Every page on atmos.tools is now available as raw Markdown. Append `.md` to any docs URL and you'll get a clean, MDX-component-aware Markdown file ready to paste into an LLM, a ticket, or another doc.
+
+<!--truncate-->
+
+## What Changed
+
+- **Per-page `.md` routes.** Every doc page is now mirrored to `<page-url>.md`. For example, [`/cli/commands/terraform/apply`](https://atmos.tools/cli/commands/terraform/apply) is also served as [`/cli/commands/terraform/apply.md`](https://atmos.tools/cli/commands/terraform/apply.md) with `Content-Type: text/markdown`.
+- **"Copy Markdown" / "View Markdown" buttons** on every doc page. One click copies the raw Markdown to your clipboard; the other opens the `.md` source in a new tab.
+- **`<link rel="alternate" type="text/markdown">` in every page's `<head>`** so crawlers, LLM tools, and other automation can discover the Markdown alternate without scraping HTML.
+- **MDX components are normalized**, not stripped. Custom components like `<Intro>`, `<Tabs>`/`<TabItem>`, `<Terminal>`, `<File>`, `<Note>`, `<Step>`, and definition lists round-trip into portable Markdown: tabs become headings, code blocks stay fenced, flag tables become bulleted lists.
+- **`llms-full.txt` got a quality bump too.** The same MDX→Markdown normalizer now powers the LLM corpus file, so previously-stripped content (tabs, flag definitions, intros) is preserved.
+
+## Why This Matters
+
+When you're debugging with an AI assistant, pasting in screenshots of docs is awkward and a HTML copy is even worse (full of layout chrome and broken inline components). A raw Markdown alternate makes our docs first-class context for any LLM workflow — and gives the docs themselves a more durable, portable surface area.
+
+The `rel="alternate"` link also lets agentic crawlers and indexers find the Markdown source without HTML scraping heuristics.
+
+## How to Use It
+
+On any doc page, click **Copy Markdown** above the title — or just append `.md` to the URL:
+
+```text
+https://atmos.tools/cli/commands/terraform/apply
+https://atmos.tools/cli/commands/terraform/apply.md   ← the same page, raw Markdown
+```
+
+You can fetch it programmatically too:
+
+```shell
+curl https://atmos.tools/cli/commands/terraform/apply.md
+```
+
+## Get Involved
+
+The MDX-component normalizer is open source under [`website/plugins/docusaurus-plugin-llms-txt/`](https://github.com/cloudposse/atmos/tree/main/website/plugins/docusaurus-plugin-llms-txt). If you spot a component that renders awkwardly in the `.md` output — or if you want richer handling for a particular Atmos component — open an issue or PR with the page URL and the expected Markdown.

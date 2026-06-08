@@ -126,18 +126,27 @@ func (e *EKSIntegration) Execute(ctx context.Context, creds types.ICredentials) 
 	}
 
 	// Write cluster config.
-	if err := mgr.WriteClusterConfig(info, e.cluster.Alias, e.identity, updateMode); err != nil {
+	changed, err := mgr.WriteClusterConfig(info, e.cluster.Alias, e.identity, updateMode)
+	if err != nil {
 		return fmt.Errorf("%w: %w", errUtils.ErrEKSIntegrationFailed, err)
 	}
 
-	// Determine display name for success message.
+	// Determine display name for success/debug message.
 	displayName := e.cluster.Alias
 	if displayName == "" {
 		displayName = info.ARN
 	}
 
-	ui.Success(fmt.Sprintf("EKS kubeconfig: %s → %s", displayName, mgr.GetPath()))
-	log.Debug("EKS kubeconfig written", "cluster", e.cluster.Name, "context", displayName, "path", mgr.GetPath())
+	// Only surface the success line when something actually changed.
+	// Auto-provisioned integrations re-run on every identity resolution, so
+	// suppressing no-op writes keeps the output readable in long-running
+	// commands (workflows, templates, !terraform.output lookups, ...).
+	if changed {
+		ui.Success(fmt.Sprintf("EKS kubeconfig: %s → %s", displayName, mgr.GetPath()))
+		log.Debug("EKS kubeconfig written", "cluster", e.cluster.Name, "context", displayName, "path", mgr.GetPath())
+	} else {
+		log.Debug("EKS kubeconfig already up to date", "cluster", e.cluster.Name, "context", displayName, "path", mgr.GetPath())
+	}
 
 	return nil
 }

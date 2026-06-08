@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -309,7 +310,7 @@ func Test_processEnvVars(t *testing.T) {
 			},
 			expectedConfig: schema.AtmosConfiguration{
 				CI: schema.CIConfig{
-					Comments: schema.CICommentsConfig{Enabled: true},
+					Comments: schema.CICommentsConfig{Enabled: ciBoolPtr(true)},
 				},
 			},
 			expectError: false,
@@ -321,7 +322,7 @@ func Test_processEnvVars(t *testing.T) {
 			},
 			expectedConfig: schema.AtmosConfiguration{
 				CI: schema.CIConfig{
-					Comments: schema.CICommentsConfig{Enabled: false},
+					Comments: schema.CICommentsConfig{Enabled: ciBoolPtr(false)},
 				},
 			},
 			expectError: false,
@@ -366,36 +367,45 @@ func Test_processEnvVars(t *testing.T) {
 	}
 }
 
+// ciBoolPtr is a test helper for constructing *bool literals.
+func ciBoolPtr(b bool) *bool { return &b }
+
 func TestProcessEnvVars_CICommentsEnabled(t *testing.T) {
 	tests := []struct {
 		name    string
 		envVal  string
-		initial bool
-		want    bool
+		initial *bool
+		want    *bool
 	}{
 		{
 			name:    "env var true overrides false yaml default",
 			envVal:  "true",
-			initial: false,
-			want:    true,
+			initial: ciBoolPtr(false),
+			want:    ciBoolPtr(true),
 		},
 		{
 			name:    "env var false overrides true yaml setting",
 			envVal:  "false",
-			initial: true,
-			want:    false,
+			initial: ciBoolPtr(true),
+			want:    ciBoolPtr(false),
 		},
 		{
 			name:    "env var 1 enables CI comments",
 			envVal:  "1",
-			initial: false,
-			want:    true,
+			initial: ciBoolPtr(false),
+			want:    ciBoolPtr(true),
 		},
 		{
 			name:    "env var 0 disables CI comments",
 			envVal:  "0",
-			initial: true,
-			want:    false,
+			initial: ciBoolPtr(true),
+			want:    ciBoolPtr(false),
+		},
+		{
+			name:    "env var true overrides unset (nil) yaml default",
+			envVal:  "true",
+			initial: nil,
+			want:    ciBoolPtr(true),
 		},
 	}
 
@@ -412,7 +422,8 @@ func TestProcessEnvVars_CICommentsEnabled(t *testing.T) {
 
 			err := processEnvVars(config)
 			assert.NoError(t, err)
-			assert.Equal(t, tt.want, config.CI.Comments.Enabled)
+			require.NotNil(t, config.CI.Comments.Enabled)
+			assert.Equal(t, *tt.want, *config.CI.Comments.Enabled)
 		})
 	}
 
@@ -423,13 +434,26 @@ func TestProcessEnvVars_CICommentsEnabled(t *testing.T) {
 		config := &schema.AtmosConfiguration{
 			Schemas: make(map[string]interface{}),
 			CI: schema.CIConfig{
-				Comments: schema.CICommentsConfig{Enabled: true},
+				Comments: schema.CICommentsConfig{Enabled: ciBoolPtr(true)},
 			},
 		}
 
 		err := processEnvVars(config)
 		assert.NoError(t, err)
-		assert.True(t, config.CI.Comments.Enabled)
+		require.NotNil(t, config.CI.Comments.Enabled)
+		assert.True(t, *config.CI.Comments.Enabled)
+	})
+
+	t.Run("env var not set leaves nil (unset) value unchanged", func(t *testing.T) {
+		t.Setenv("ATMOS_CI_COMMENTS_ENABLED", "")
+
+		config := &schema.AtmosConfiguration{
+			Schemas: make(map[string]interface{}),
+		}
+
+		err := processEnvVars(config)
+		assert.NoError(t, err)
+		assert.Nil(t, config.CI.Comments.Enabled, "nil should remain nil when env var is unset")
 	})
 
 	t.Run("invalid env var value logs warning and leaves value unchanged (true)", func(t *testing.T) {
@@ -438,13 +462,14 @@ func TestProcessEnvVars_CICommentsEnabled(t *testing.T) {
 		config := &schema.AtmosConfiguration{
 			Schemas: make(map[string]interface{}),
 			CI: schema.CIConfig{
-				Comments: schema.CICommentsConfig{Enabled: true},
+				Comments: schema.CICommentsConfig{Enabled: ciBoolPtr(true)},
 			},
 		}
 
 		err := processEnvVars(config)
 		assert.NoError(t, err)
-		assert.True(t, config.CI.Comments.Enabled)
+		require.NotNil(t, config.CI.Comments.Enabled)
+		assert.True(t, *config.CI.Comments.Enabled)
 	})
 
 	t.Run("invalid env var value logs warning and leaves value unchanged (false)", func(t *testing.T) {
@@ -453,13 +478,14 @@ func TestProcessEnvVars_CICommentsEnabled(t *testing.T) {
 		config := &schema.AtmosConfiguration{
 			Schemas: make(map[string]interface{}),
 			CI: schema.CIConfig{
-				Comments: schema.CICommentsConfig{Enabled: false},
+				Comments: schema.CICommentsConfig{Enabled: ciBoolPtr(false)},
 			},
 		}
 
 		err := processEnvVars(config)
 		assert.NoError(t, err)
-		assert.False(t, config.CI.Comments.Enabled)
+		require.NotNil(t, config.CI.Comments.Enabled)
+		assert.False(t, *config.CI.Comments.Enabled)
 	})
 }
 

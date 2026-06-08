@@ -73,6 +73,30 @@ func extractComponentSections(opts *ComponentProcessorOptions, result *Component
 		}
 	}
 
+	// Terraform-specific: extract required_providers section (DEV-3124).
+	if opts.ComponentType == cfg.TerraformComponentType {
+		if i, ok := opts.ComponentMap[cfg.RequiredProvidersSectionName]; ok {
+			componentRequiredProviders, ok := i.(map[string]any)
+			if !ok {
+				return fmt.Errorf("%w: 'components.%s.%s.required_providers' in the file '%s'", errUtils.ErrInvalidComponentRequiredProviders, opts.ComponentType, opts.Component, opts.StackName)
+			}
+			result.ComponentRequiredProviders = componentRequiredProviders
+		} else {
+			result.ComponentRequiredProviders = make(map[string]any, componentSmallMapCapacity)
+		}
+	}
+
+	// Terraform-specific: extract required_version section (DEV-3124).
+	if opts.ComponentType == cfg.TerraformComponentType {
+		if i, ok := opts.ComponentMap[cfg.RequiredVersionSectionName]; ok {
+			componentRequiredVersion, ok := i.(string)
+			if !ok {
+				return fmt.Errorf("%w: 'components.%s.%s.required_version' in the file '%s'", errUtils.ErrInvalidComponentRequiredVersion, opts.ComponentType, opts.Component, opts.StackName)
+			}
+			result.ComponentRequiredVersion = componentRequiredVersion
+		}
+	}
+
 	// Terraform-specific: extract hooks section.
 	if opts.ComponentType == cfg.TerraformComponentType {
 		if i, ok := opts.ComponentMap[cfg.HooksSectionName]; ok {
@@ -95,6 +119,17 @@ func extractComponentSections(opts *ComponentProcessorOptions, result *Component
 		result.ComponentAuth = componentAuth
 	} else {
 		result.ComponentAuth = make(map[string]any, componentSmallMapCapacity)
+	}
+
+	// Extract retry section (component-level).  The value is kept as a raw map here so it
+	// can be deep-merged with any base-component retry config; decoding to the typed
+	// schema.RetryConfig happens after the final merge.
+	if i, ok := opts.ComponentMap[cfg.RetrySectionName]; ok {
+		componentRetry, ok := i.(map[string]any)
+		if !ok {
+			return fmt.Errorf("%w: 'components.%s.%s.retry' in the file '%s'", errUtils.ErrInvalidConfig, opts.ComponentType, opts.Component, opts.StackName)
+		}
+		result.ComponentRetry = componentRetry
 	}
 
 	// Extract provision section (for workdir provisioning) for terraform, helmfile, and packer.
@@ -177,7 +212,7 @@ func extractComponentSections(opts *ComponentProcessorOptions, result *Component
 		opts.ComponentType == cfg.HelmfileComponentType ||
 		opts.ComponentType == cfg.PackerComponentType {
 		if i, ok := opts.ComponentMap[cfg.SourceSectionName]; ok {
-			componentSourceSection, ok := i.(map[string]any)
+			componentSourceSection, ok := normalizeComponentSourceSection(i)
 			if !ok {
 				return fmt.Errorf("%w: 'components.%s.%s.source' in the file '%s'", errUtils.ErrInvalidComponentSource, opts.ComponentType, opts.Component, opts.StackName)
 			}
@@ -210,4 +245,27 @@ func extractComponentSections(opts *ComponentProcessorOptions, result *Component
 	}
 
 	return nil
+}
+
+// sourceURIKey is the field name for the go-getter URI within a component `source` map.
+const sourceURIKey = "uri"
+
+// normalizeComponentSourceSection coerces a component `source` value into the map form used
+// throughout stack processing. It accepts the documented "simple form" — a bare go-getter URI
+// string, normalized to `{uri: <string>}` — as well as the full map form. An empty string means no
+// source (empty map). It returns ok=false for any other type so callers can raise
+// ErrInvalidComponentSource. This keeps the stack processor consistent with the JIT source
+// provisioner (pkg/provisioner/source), which has always accepted both forms.
+func normalizeComponentSourceSection(raw any) (map[string]any, bool) {
+	switch v := raw.(type) {
+	case map[string]any:
+		return v, true
+	case string:
+		if v == "" {
+			return map[string]any{}, true
+		}
+		return map[string]any{sourceURIKey: v}, true
+	default:
+		return nil, false
+	}
 }

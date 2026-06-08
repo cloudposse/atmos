@@ -128,15 +128,15 @@ func TestDescribeAffected(t *testing.T) {
 		return false
 	}
 
-	d.executeDescribeAffectedWithTargetRepoPath = func(atmosConfig *schema.AtmosConfiguration, targetRefPath string, includeSpaceliftAdminStacks, includeSettings bool, stack string, processTemplates, processYamlFunctions bool, skip []string, excludeLocked bool, authManager auth.AuthManager) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, string, error) {
+	d.executeDescribeAffectedWithTargetRepoPath = func(atmosConfig *schema.AtmosConfiguration, targetRefPath string, includeSpaceliftAdminStacks, includeSettings bool, stack string, processTemplates, processYamlFunctions bool, skip []string, excludeLocked bool, authManager auth.AuthManager, authDisabled bool) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, string, error) {
 		return []schema.Affected{}, nil, nil, "", nil
 	}
 
-	d.executeDescribeAffectedWithTargetRefClone = func(atmosConfig *schema.AtmosConfiguration, ref, sha, sshKeyPath, sshKeyPassword string, includeSpaceliftAdminStacks, includeSettings bool, stack string, processTemplates, processYamlFunctions bool, skip []string, excludeLocked bool, authManager auth.AuthManager) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, string, error) {
+	d.executeDescribeAffectedWithTargetRefClone = func(atmosConfig *schema.AtmosConfiguration, ref, sha, sshKeyPath, sshKeyPassword string, includeSpaceliftAdminStacks, includeSettings bool, stack string, processTemplates, processYamlFunctions bool, skip []string, excludeLocked bool, authManager auth.AuthManager, authDisabled bool) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, string, error) {
 		return []schema.Affected{}, nil, nil, "", nil
 	}
 
-	d.executeDescribeAffectedWithTargetRefCheckout = func(atmosConfig *schema.AtmosConfiguration, ref, sha string, includeSpaceliftAdminStacks, includeSettings bool, stack string, processTemplates, processYamlFunctions bool, skip []string, excludeLocked bool, authManager auth.AuthManager) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, string, error) {
+	d.executeDescribeAffectedWithTargetRefCheckout = func(atmosConfig *schema.AtmosConfiguration, ref, sha, targetBranch string, includeSpaceliftAdminStacks, includeSettings bool, stack string, processTemplates, processYamlFunctions bool, skip []string, excludeLocked bool, authManager auth.AuthManager, authDisabled bool) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, string, error) {
 		return []schema.Affected{
 			{
 				Stack: "test-stack",
@@ -145,7 +145,7 @@ func TestDescribeAffected(t *testing.T) {
 	}
 
 	d.atmosConfig = &schema.AtmosConfiguration{}
-	d.addDependentsToAffected = func(atmosConfig *schema.AtmosConfiguration, affected *[]schema.Affected, includeSettings bool, processTemplates bool, processFunctions bool, skip []string, onlyInStack string, authManager auth.AuthManager) error {
+	d.addDependentsToAffected = func(atmosConfig *schema.AtmosConfiguration, affected *[]schema.Affected, includeSettings bool, processTemplates bool, processFunctions bool, skip []string, onlyInStack string, authManager auth.AuthManager, authDisabled bool) error {
 		return nil
 	}
 	d.printOrWriteToFile = func(atmosConfig *schema.AtmosConfiguration, format, file string, data any) error {
@@ -246,6 +246,7 @@ func TestExecuteDescribeAffectedWithTargetRepoPath(t *testing.T) {
 		nil,
 		false,
 		nil,
+		false,
 	)
 	assert.Nil(t, err)
 
@@ -330,6 +331,7 @@ func TestDescribeAffectedWithTemplatesAndFunctions(t *testing.T) {
 		nil,
 		false,
 		nil,
+		false,
 	)
 	require.NoError(t, err)
 	// Order-agnostic equality on struct slices.
@@ -353,6 +355,7 @@ func TestDescribeAffectedWithoutTemplatesAndFunctions(t *testing.T) {
 		nil,
 		false,
 		nil,
+		false,
 	)
 	require.NoError(t, err)
 	// Order-agnostic equality on struct slices.
@@ -411,6 +414,7 @@ func TestDescribeAffectedWithExcludeLocked(t *testing.T) {
 		nil,
 		true,
 		nil,
+		false,
 	)
 	require.NoError(t, err)
 	// Order-agnostic equality on struct slices.
@@ -591,6 +595,7 @@ func TestDescribeAffectedWithDependents(t *testing.T) {
 		nil,
 		false,
 		nil,
+		false,
 	)
 	require.NoError(t, err)
 	err = addDependentsToAffected(
@@ -602,6 +607,7 @@ func TestDescribeAffectedWithDependents(t *testing.T) {
 		nil,
 		"",
 		nil,
+		false,
 	)
 	require.NoError(t, err)
 	// Order-agnostic equality on struct slices.
@@ -732,6 +738,7 @@ func TestDescribeAffectedWithDependentsWithoutTemplates(t *testing.T) {
 		nil,
 		false,
 		nil,
+		false,
 	)
 	require.NoError(t, err)
 	err = addDependentsToAffected(
@@ -743,6 +750,7 @@ func TestDescribeAffectedWithDependentsWithoutTemplates(t *testing.T) {
 		nil,
 		"",
 		nil,
+		false,
 	)
 	require.NoError(t, err)
 	// Order-agnostic equality on struct slices.
@@ -925,6 +933,7 @@ func TestDescribeAffectedWithDependentsFilteredByStack(t *testing.T) {
 		nil,
 		false,
 		nil,
+		false,
 	)
 	require.NoError(t, err)
 	err = addDependentsToAffected(
@@ -936,6 +945,7 @@ func TestDescribeAffectedWithDependentsFilteredByStack(t *testing.T) {
 		nil,
 		onlyInStack, // Filter dependents to only show those in "ue1-network" stack.,
 		nil,
+		false,
 	)
 	require.NoError(t, err)
 	// Order-agnostic equality on struct slices.
@@ -1036,6 +1046,7 @@ func TestDescribeAffectedWithDisabledDependents(t *testing.T) {
 		nil,
 		false,
 		nil,
+		false,
 	)
 	require.NoError(t, err)
 	err = addDependentsToAffected(
@@ -1047,6 +1058,7 @@ func TestDescribeAffectedWithDisabledDependents(t *testing.T) {
 		nil,
 		onlyInStack, // Filter dependents to only show those in "uw2-network" stack.,
 		nil,
+		false,
 	)
 	require.NoError(t, err)
 	// Order-agnostic equality on struct slices.
@@ -1083,6 +1095,7 @@ func TestDescribeAffectedWithDependentsStackFilterYamlFunctions(t *testing.T) {
 		nil,
 		false,
 		nil,
+		false,
 	)
 	require.NoError(t, err)
 
@@ -1096,6 +1109,7 @@ func TestDescribeAffectedWithDependentsStackFilterYamlFunctions(t *testing.T) {
 		nil,
 		onlyInStack,
 		nil,
+		false,
 	)
 	require.NoError(t, err)
 
@@ -1242,6 +1256,7 @@ func TestDescribeAffectedNewComponentInBase(t *testing.T) {
 		nil,
 		false,
 		nil,
+		false,
 	)
 
 	// The test should pass - new components in BASE should be handled gracefully.
@@ -1296,6 +1311,7 @@ func TestDescribeAffectedNewComponentInBaseWithYamlFunctions(t *testing.T) {
 		nil,
 		false,
 		nil,
+		false,
 	)
 	// FIXED BEHAVIOR: The fix passes atmosConfig through the YAML function chain to
 	// ExecuteDescribeComponent, so component lookups use BASE paths correctly.
@@ -1362,6 +1378,7 @@ func TestDescribeAffectedSourceVersionChange(t *testing.T) {
 		nil,
 		false,
 		nil,
+		false,
 	)
 	// Check if there was an error.
 	require.NoError(t, err)
@@ -1444,6 +1461,7 @@ func TestDescribeAffectedDeletedComponentDetection(t *testing.T) {
 		nil,
 		false,
 		nil,
+		false,
 	)
 	require.NoError(t, err)
 
@@ -1546,6 +1564,7 @@ func TestDescribeAffectedDeletedComponentFiltering(t *testing.T) {
 		nil,
 		false,
 		nil,
+		false,
 	)
 	require.NoError(t, err)
 
@@ -1657,7 +1676,8 @@ func TestResolveBaseFromCI(t *testing.T) {
 					"sha": "headsha123456789012345678901234567890ab"
 				},
 				"base": {
-					"ref": "main"
+					"ref": "main",
+					"sha": "abc123def456789012345678901234567890abcd"
 				}
 			}
 		}`
@@ -1672,11 +1692,12 @@ func TestResolveBaseFromCI(t *testing.T) {
 		resolveBaseFromCI(describe)
 		assert.Equal(t, "pull_request", describe.CIEventType)
 		assert.Equal(t, "headsha123456789012345678901234567890ab", describe.HeadSHAOverride)
-		if describe.SHA == "" {
-			assert.Equal(t, "refs/remotes/origin/main", describe.Ref)
-		} else {
-			assert.NotEmpty(t, describe.SHA)
-		}
+		assert.Equal(t, "main", describe.TargetBranch)
+		// merge-base may or may not succeed depending on the test repo state.
+		// Either way we MUST end up with a SHA — never the origin/<target> tip ref,
+		// which is the path that produces false positives for out-of-date PRs.
+		assert.NotEmpty(t, describe.SHA, "auto-detect must populate SHA, never just a ref to current target tip")
+		assert.Empty(t, describe.Ref, "auto-detect must not fall back to refs/remotes/origin/<target> (causes false positives)")
 	})
 
 	t.Run("GitHub Actions push event with before SHA", func(t *testing.T) {
@@ -1836,11 +1857,12 @@ func TestExecute_MatrixFormat(t *testing.T) {
 	}
 	d.executeDescribeAffectedWithTargetRefCheckout = func(
 		atmosConfig *schema.AtmosConfiguration,
-		ref, sha string,
+		ref, sha, targetBranch string,
 		includeSpaceliftAdminStacks, includeSettings bool,
 		stack string, processTemplates, processYamlFunctions bool,
 		skip []string, excludeLocked bool,
 		authManager auth.AuthManager,
+		authDisabled bool,
 	) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, string, error) {
 		return []schema.Affected{
 			{
@@ -1851,7 +1873,7 @@ func TestExecute_MatrixFormat(t *testing.T) {
 			},
 		}, nil, nil, "", nil
 	}
-	d.addDependentsToAffected = func(atmosConfig *schema.AtmosConfiguration, affected *[]schema.Affected, includeSettings, processTemplates, processFunctions bool, skip []string, onlyInStack string, authManager auth.AuthManager) error {
+	d.addDependentsToAffected = func(atmosConfig *schema.AtmosConfiguration, affected *[]schema.Affected, includeSettings, processTemplates, processFunctions bool, skip []string, onlyInStack string, authManager auth.AuthManager, authDisabled bool) error {
 		return nil
 	}
 	d.printOrWriteToFile = func(atmosConfig *schema.AtmosConfiguration, format, file string, data any) error {
@@ -1879,6 +1901,73 @@ func TestExecute_MatrixFormat(t *testing.T) {
 		require.NoError(t, err)
 		assert.Contains(t, string(content), "matrix=")
 		assert.Contains(t, string(content), "count=1")
+	})
+
+	t.Run("matrix auto-detects GITHUB_OUTPUT when CI is enabled", func(t *testing.T) {
+		// When ci.enabled=true and no explicit --output-file is given,
+		// the matrix output should be written to $GITHUB_OUTPUT automatically.
+		autoFile := filepath.Join(t.TempDir(), "auto_output")
+		t.Setenv("GITHUB_OUTPUT", autoFile)
+
+		dCI := d
+		dCI.atmosConfig = &schema.AtmosConfiguration{CI: schema.CIConfig{Enabled: true}}
+
+		err := dCI.Execute(&DescribeAffectedCmdArgs{
+			Format:    "matrix",
+			CLIConfig: &schema.AtmosConfiguration{CI: schema.CIConfig{Enabled: true}},
+		})
+		require.NoError(t, err)
+
+		content, err := os.ReadFile(autoFile)
+		require.NoError(t, err)
+		assert.Contains(t, string(content), "matrix=")
+		assert.Contains(t, string(content), "count=1")
+	})
+
+	t.Run("explicit --output-file wins over CI auto-detect", func(t *testing.T) {
+		// When both --output-file and CI auto-detect would apply, the explicit
+		// flag must win. The GITHUB_OUTPUT path should be left untouched.
+		explicitFile := filepath.Join(t.TempDir(), "explicit_output")
+		ghOutputFile := filepath.Join(t.TempDir(), "github_output")
+		t.Setenv("GITHUB_OUTPUT", ghOutputFile)
+
+		dCI := d
+		dCI.atmosConfig = &schema.AtmosConfiguration{CI: schema.CIConfig{Enabled: true}}
+
+		err := dCI.Execute(&DescribeAffectedCmdArgs{
+			Format:           "matrix",
+			GithubOutputFile: explicitFile,
+			CLIConfig:        &schema.AtmosConfiguration{CI: schema.CIConfig{Enabled: true}},
+		})
+		require.NoError(t, err)
+
+		content, err := os.ReadFile(explicitFile)
+		require.NoError(t, err)
+		assert.Contains(t, string(content), "matrix=")
+
+		// The GITHUB_OUTPUT path must NOT have been written to.
+		_, err = os.Stat(ghOutputFile)
+		assert.True(t, os.IsNotExist(err), "GITHUB_OUTPUT file should not exist when --output-file is set explicitly")
+	})
+
+	t.Run("no auto-detect when CI is disabled", func(t *testing.T) {
+		// When ci.enabled=false, GITHUB_OUTPUT should be ignored even if it's
+		// set in the environment. Output goes to stdout (unverifiable here, but
+		// we assert the GITHUB_OUTPUT file remains untouched).
+		ghOutputFile := filepath.Join(t.TempDir(), "github_output")
+		t.Setenv("GITHUB_OUTPUT", ghOutputFile)
+
+		dNoCI := d
+		dNoCI.atmosConfig = &schema.AtmosConfiguration{CI: schema.CIConfig{Enabled: false}}
+
+		err := dNoCI.Execute(&DescribeAffectedCmdArgs{
+			Format:    "matrix",
+			CLIConfig: &schema.AtmosConfiguration{CI: schema.CIConfig{Enabled: false}},
+		})
+		require.NoError(t, err)
+
+		_, err = os.Stat(ghOutputFile)
+		assert.True(t, os.IsNotExist(err), "GITHUB_OUTPUT file should not exist when CI is disabled")
 	})
 }
 
@@ -1919,6 +2008,7 @@ func TestDescribeAffectedDeletedComponentWithDependents(t *testing.T) {
 		nil,
 		false,
 		nil,
+		false,
 	)
 	require.NoError(t, err)
 
@@ -1944,6 +2034,7 @@ func TestDescribeAffectedDeletedComponentWithDependents(t *testing.T) {
 		nil,
 		"",
 		nil,
+		false,
 	)
 	require.NoError(t, err, "addDependentsToAffected should not crash on deleted components")
 
@@ -2005,7 +2096,7 @@ func TestUploadAllowsPullRequestEvent(t *testing.T) {
 	baseRef := plumbing.NewHashReference("refs/heads/main", plumbing.NewHash("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"))
 
 	// This will fail at the API client creation step (no env vars set), but the event
-	// validation should pass — it should NOT return ErrUploadRequiresPullRequestEvent.
+	// validation should pass — it should NOT return ErrUploadRequiresSupportedEvent.
 	err := d.uploadableQuery(
 		&DescribeAffectedCmdArgs{
 			Upload:          true,
@@ -2022,6 +2113,44 @@ func TestUploadAllowsPullRequestEvent(t *testing.T) {
 	// Should NOT be an event validation error — it should fail at API client creation instead.
 	require.Error(t, err)
 	assert.NotContains(t, err.Error(), "pull_request event")
+	assert.ErrorIs(t, err, errUtils.ErrFailedToCreateAPIClient)
+}
+
+// TestUploadAllowsMergeGroupEvent verifies that --upload does not error for merge_group events
+// (GitHub merge queue). Atmos Pro creates check runs on the synthetic merge-queue commits, and
+// the CLI must allow the upload to flow through under GITHUB_EVENT_NAME=merge_group.
+// Note: the actual upload call requires an API client, so we only verify the event validation passes.
+func TestUploadAllowsMergeGroupEvent(t *testing.T) {
+	d := describeAffectedExec{
+		atmosConfig: &schema.AtmosConfiguration{},
+		printOrWriteToFile: func(atmosConfig *schema.AtmosConfiguration, format, file string, data any) error {
+			return nil
+		},
+		IsTTYSupportForStdout: func() bool { return false },
+		pageCreator:           pager.New(),
+	}
+
+	headRef := plumbing.NewHashReference("refs/heads/gh-readonly-queue/main/pr-42-headsha", plumbing.NewHash("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"))
+	baseRef := plumbing.NewHashReference("refs/heads/main", plumbing.NewHash("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"))
+
+	// This will fail at the API client creation step (no env vars set), but the event
+	// validation should pass — it should NOT return ErrUploadRequiresSupportedEvent.
+	err := d.uploadableQuery(
+		&DescribeAffectedCmdArgs{
+			Upload:          true,
+			Format:          "json",
+			CIEventType:     "merge_group",
+			HeadSHAOverride: "synthsha123456789012345678901234567890ab",
+			CLIConfig:       &schema.AtmosConfiguration{},
+		},
+		"https://github.com/example/repo.git",
+		headRef,
+		baseRef,
+		[]schema.Affected{},
+	)
+	// Should NOT be an event validation error — it should fail at API client creation instead.
+	require.Error(t, err)
+	assert.NotErrorIs(t, err, errUtils.ErrUploadRequiresSupportedEvent)
 	assert.ErrorIs(t, err, errUtils.ErrFailedToCreateAPIClient)
 }
 

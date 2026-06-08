@@ -118,7 +118,8 @@ func validateAuth(atmosConfig *schema.AtmosConfiguration) error {
 	oidc := atmosConfig.Settings.Pro.GithubOIDC
 	if oidc.RequestURL == "" || oidc.RequestToken == "" {
 		return errUtils.Build(errUtils.ErrNotInGitHubActions).
-			WithHint("Set ATMOS_PRO_TOKEN for local/CI usage, or run in a GitHub Actions workflow with `id-token: write` permission for OIDC authentication.").
+			WithHint("Atmos Pro authenticates via GitHub OIDC — run this command from a GitHub Actions workflow with `id-token: write` permission.").
+			WithHint("Set `ATMOS_PRO_WORKSPACE_ID` (or `settings.pro.workspace_id`) to your Atmos Pro workspace ID.").
 			WithHint("See https://atmos-pro.com/docs/configure/github-workflows for setup instructions.").
 			Err()
 	}

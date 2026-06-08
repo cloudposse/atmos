@@ -53,13 +53,13 @@ atmos aws security analyze [flags]
   <dd>Filter findings by source service: `security-hub`, `config`, `inspector`, `guardduty`, `macie`, `access-analyzer`, `all` (default: `all`).</dd>
 
   <dt>`--format, -f`</dt>
-  <dd>Output format: `markdown`, `json`, `yaml`, `csv` (default: `markdown`).</dd>
+  <dd>Output format: `markdown`, `json`, `yaml`, `csv`, `sarif`, `ocsf` (default: `markdown`). `sarif` emits a SARIF 2.1.0 document compatible with GitHub code scanning and other SARIF viewers. `ocsf` emits OCSF 1.4.0 Detection Findings (cloud + vulnerability profiles) for ingestion into SIEM and security data lake platforms — Splunk, Elastic, Sumo Logic, Panther, Snowflake.</dd>
 
   <dt>`--file`</dt>
   <dd>Write output to a file instead of stdout. Creates parent directories if they don't exist.</dd>
 
   <dt>`--max-findings`</dt>
-  <dd>Maximum number of findings to retrieve and analyze (default: `500`).</dd>
+  <dd>Maximum number of findings to retrieve and analyze (default: `500`). Set to `0` to fetch **all** matching findings — recommended when exporting to `--format json`, `sarif`, or `ocsf` so downstream tooling (SIEM, dashboards) sees complete data. When the limit is reached and more findings exist, a warning is logged so truncation is never silent.</dd>
 
   <dt>`--ai`</dt>
   <dd>Enable AI-powered analysis and remediation suggestions. Requires `ai.enabled: true` in your `atmos.yaml`.</dd>
@@ -118,6 +118,12 @@ atmos aws security analyze --format csv > findings.csv
 
 # Markdown report for documentation
 atmos aws security analyze --stack prod-us-east-1 --format markdown --severity critical,high
+
+# SARIF 2.1.0 for GitHub code scanning, Defender, and SARIF viewers
+atmos aws security analyze --stack prod-us-east-1 --format sarif --file findings.sarif
+
+# OCSF 1.4.0 Detection Findings for SIEM / security data lake ingestion
+atmos aws security analyze --stack prod-us-east-1 --format ocsf --file findings.ocsf.json
 ```
 </Terminal>
 

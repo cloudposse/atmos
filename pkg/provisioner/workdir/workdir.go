@@ -141,6 +141,7 @@ func (s *Service) Provision(
 			Err()
 	}
 
+	ui.ClearLine()
 	ui.Info(fmt.Sprintf("Provisioning workdir for component '%s'", workdirComponent))
 
 	// 1. Create .workdir/terraform/<stack>-<workdirComponent>/ directory.
@@ -170,8 +171,10 @@ func (s *Service) Provision(
 	// is still intact and -reconfigure is not needed.
 	if changed {
 		componentConfig[WorkdirReprovisionedKey] = struct{}{}
+		ui.ClearLine()
 		ui.Success(fmt.Sprintf("Workdir provisioned: %s", workdirPath))
 	} else {
+		ui.ClearLine()
 		ui.Success(fmt.Sprintf("Workdir ready (no changes): %s", workdirPath))
 	}
 	return nil
@@ -231,6 +234,7 @@ func (s *Service) syncLocalToWorkdir(
 	}
 
 	if changed {
+		ui.ClearLine()
 		ui.Info(fmt.Sprintf("Local component files synced: %s", componentPath))
 	}
 

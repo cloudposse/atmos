@@ -1,0 +1,137 @@
+---
+slug: atmos-pro-github-sts
+title: "Just-in-time GitHub tokens for CI with Atmos Pro STS"
+authors: [osterman]
+tags: [feature, atmos-pro]
+---
+
+Fetching private Terraform modules, Atmos `source:` components, and vendored artifacts in CI has
+always meant handing a long-lived, over-privileged GitHub credential to your pipeline — a PAT, a
+machine user, or a deploy key, sitting in a CI secret. Atmos Pro **STS** replaces that with
+just-in-time, least-privilege, short-lived GitHub tokens that are minted at the start of a run and
+revoked at the end — with **zero `.tf` changes**.
+
+<!--truncate-->
+
+## What Changed
+
+Two new `atmos auth` kinds, modeled on the existing `aws/ecr` and `aws/eks` integrations:
+
+- **Provider `kind: atmos/pro`** — authenticates the Atmos CLI *to Atmos Pro* by federating the
+  GitHub Actions runner's OIDC token (no secrets required) into an Atmos Pro session. v1 is OIDC-only,
+  so it works out of the box in GitHub Actions.
+- **Integration `kind: github/sts`** — on login it asks Atmos Pro to mint scoped, short-lived GitHub
+  App installation tokens, materializes them as per-owner git URL rewrites for child processes, and
+  revokes them when the command finishes (in CI) and on `atmos auth logout`.
+
+We also added **`ATMOS_PRO_GITHUB_TOKEN`**, a convenience env var that Atmos-native git operations
+(vendoring, source provisioning, go-getter) prefer over `ATMOS_GITHUB_TOKEN`/`GITHUB_TOKEN`.
+
+And — because the `atmos/pro` identity isn't something a stack ever "claims" the way it claims an
+AWS/Azure/GCP identity — **in CI, `github/sts` now provisions automatically the first time Atmos is
+about to read a remote git source.** No explicit `atmos auth login` step is required: `atmos vendor
+pull`, a `source:` component, a remote `import:`, or `terraform init` of a private module each
+transparently trigger the mint. It's gated on running in CI plus having the `atmos/pro` + `github/sts`
+config present (`auto_provision`, default `true`), and minted tokens are reused across invocations in
+the same job until they expire.
+
+## Why This Matters
+
+- **No standing credentials.** Tokens live only for the duration of a run. Nothing long-lived sits in
+  a CI secret waiting to be leaked.
+- **Least privilege, deny-by-default.** Identity is derived server-side from your workspace's trust
+  policies — the CLI never asks for a specific repo. Repos you aren't trusted for are simply excluded
+  (with a clear reason in the logs).
+- **Zero `.tf` changes.** The same minted token transparently authenticates `atmos vendor pull`, an
+  Atmos `source:` component, and `terraform init` of a private `git::https://…` module. Terraform's
+  native `git` honors the injected `GIT_CONFIG_*` rewrites, so nothing in your Terraform code changes.
+- **Multi-org by design.** Because tokens are minted per `(installation, permission-set)`, a single run
+  can pull from several orgs at once — something a single token env var can't express.
+
+## How to Use It
+
+Declare the provider, a passthrough identity, and the integration. The integration binds directly to
+the provider via `via.provider`:
+
+```yaml
+auth:
+  providers:
+    atmos-pro:
+      kind: atmos/pro
+      spec:
+        workspace_id: <your-workspace-id>   # or ATMOS_PRO_WORKSPACE_ID
+  identities:
+    atmos-pro:
+      kind: atmos/pro
+      via: { provider: atmos-pro }
+  integrations:
+    github-sts:
+      kind: github/sts
+      via: { provider: atmos-pro }
+      spec:
+        git_config_mode: env       # or "file" to keep tokens off the environment
+        revoke_on_exit: true       # set false to keep creds for a separate CI step
+```
+
+Your workflow only needs `permissions: id-token: write`. In CI you don't even need an explicit login
+— the first remote read provisions tokens for you:
+
+```bash
+atmos vendor pull                         # first remote read → tokens minted automatically
+atmos terraform plan ...                  # terraform init of private modules just works
+```
+
+You can still drive it explicitly (locally, or to control timing/teardown):
+
+```bash
+atmos auth login --identity atmos-pro    # mints scoped GitHub tokens
+atmos vendor pull                         # private repos just work
+atmos terraform plan ...                  # terraform init of private modules just works
+atmos auth logout                         # revokes the tokens
+```
+
+### Hand the token to any GitHub-token consumer
+
+Beyond Atmos's own git operations, you can hand the minted token to **anything** that takes a
+GitHub token — `gh`, `actions/checkout`, or the REST API — all built into the CLI. Set `token_env`
+on the integration to pick the variable name, then mint in one step and consume in the next with
+`atmos auth env --format=github`:
+
+```yaml
+# atmos.yaml
+auth:
+  integrations:
+    github-sts:
+      kind: github/sts
+      via: { provider: atmos-pro }
+      spec:
+        token_env: GH_TOKEN          # export the raw token as $GH_TOKEN
+```
+
+```yaml
+# .github/workflows/example.yml — only id-token: write required
+permissions:
+  id-token: write
+
+steps:
+  - name: Mint a GitHub token
+    run: atmos auth env --identity=atmos-pro --format=github --login   # writes GH_TOKEN to $GITHUB_ENV
+
+  - uses: actions/checkout@v4
+    with:
+      repository: acme/private-repo
+      token: ${{ env.GH_TOKEN }}
+
+  - run: gh repo view acme/private-repo
+    env:
+      GH_TOKEN: ${{ env.GH_TOKEN }}
+```
+
+Use `token_env: GH_TOKEN_{owner}` to export one token per owner in multi-org runs.
+
+## Get Involved
+
+See the [`atmos/pro` provider](/cli/configuration/auth/providers#atmos-pro) and
+[`github/sts` integration](/cli/configuration/auth#github-sts-atmos-pro) docs for the full configuration reference, and the
+[Atmos Pro STS PRD](https://github.com/cloudposse/atmos/blob/main/docs/prd/atmos-pro-sts.md) for the
+design and roadmap. Questions or ideas? Join us in the [Cloud Posse community](https://cloudposse.com/slack).

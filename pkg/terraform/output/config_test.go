@@ -3,6 +3,7 @@ package output
 import (
 	"errors"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -364,6 +365,101 @@ func TestGetComponentInfo(t *testing.T) {
 
 	result = GetComponentInfo("database", "prod-eu-central-1")
 	assert.Equal(t, "component 'database' in stack 'prod-eu-central-1'", result)
+}
+
+func TestExtractComponentPath_ContainmentGuard(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{
+		BasePath: t.TempDir(),
+		Components: schema.Components{
+			Terraform: schema.Terraform{BasePath: "components/terraform"},
+		},
+	}
+
+	// Craft sections that enable JIT workdir so BuildPath is called.
+	traversalSections := map[string]any{
+		cfg.CommandSectionName:   "/usr/local/bin/terraform",
+		cfg.WorkspaceSectionName: "test",
+		cfg.ComponentSectionName: "vpc",
+		"component_info": map[string]any{
+			"component_type": "terraform",
+		},
+		"provision": map[string]any{
+			"workdir": map[string]any{"enabled": true},
+		},
+	}
+	// Inject path traversal via the component argument (incorporated into BuildPath).
+	// Use enough ".." repetitions to escape any reasonable t.TempDir() depth.
+	traversalComponent := "../../../../../../../../../../evil"
+
+	path, err := extractComponentPath(atmosConfig, traversalSections, traversalComponent, "dev")
+	require.NoError(t, err, "containment guard must not return an error — it falls back to componentPath")
+
+	// The returned path must not escape BasePath.
+	absBase, _ := filepath.Abs(atmosConfig.BasePath)
+	sep := string(filepath.Separator)
+	escaped := !strings.HasPrefix(path, absBase+sep) && path != absBase
+	assert.False(t, escaped,
+		"extractComponentPath must not return a path outside BasePath; got %q, base %q", path, absBase)
+
+	// The guard must have fired and returned the componentPath fallback, not the
+	// workdir path. Workdir paths contain ".workdir"; the component path does not.
+	assert.NotContains(t, filepath.ToSlash(path), ".workdir",
+		"containment guard must return componentPath (not workdirPath) when traversal escapes BasePath")
+}
+
+func TestExtractComponentPath_ContainmentGuard_AcceptsLegitimate(t *testing.T) {
+	basePath := t.TempDir()
+	atmosConfig := &schema.AtmosConfiguration{
+		BasePath: basePath,
+		Components: schema.Components{
+			Terraform: schema.Terraform{BasePath: "components/terraform"},
+		},
+	}
+
+	legitimateSections := map[string]any{
+		cfg.CommandSectionName:   "/usr/local/bin/terraform",
+		cfg.WorkspaceSectionName: "test",
+		cfg.ComponentSectionName: "vpc",
+		"component_info": map[string]any{
+			"component_type": "terraform",
+		},
+		"provision": map[string]any{
+			"workdir": map[string]any{"enabled": true},
+		},
+	}
+
+	path, err := extractComponentPath(atmosConfig, legitimateSections, "vpc", "dev")
+	require.NoError(t, err)
+
+	// The ACCEPT branch must return the workdir path (inside BasePath), not componentPath.
+	absBase, _ := filepath.Abs(basePath)
+	sep := string(filepath.Separator)
+	assert.True(t, strings.HasPrefix(path, absBase+sep) || path == absBase,
+		"legitimate workdir component must return a path within BasePath; got %q, base %q", path, absBase)
+	assert.NotContains(t, filepath.ToSlash(path), filepath.ToSlash(filepath.Join("components", "terraform")),
+		"workdir path must not point at the static component directory")
+}
+
+func TestExtractComponentConfig_ReadsAutoProvisionWorkdirForOutputs(t *testing.T) {
+	sections := validSections()
+	sections[cfg.ComponentSectionName] = "mock"
+	mockPath := filepath.Join(t.TempDir(), "mock")
+	sections["component_info"] = map[string]any{
+		"component_type": "terraform",
+		"component_path": mockPath,
+	}
+
+	atmosConfig := validAtmosConfig()
+	atmosConfig.Components.Terraform.AutoProvisionWorkdirForOutputs = false
+
+	config, err := ExtractComponentConfig(atmosConfig, sections, "mock", "test")
+	require.NoError(t, err)
+	assert.False(t, config.AutoProvisionWorkdirForOutputs)
+
+	atmosConfig.Components.Terraform.AutoProvisionWorkdirForOutputs = true
+	config, err = ExtractComponentConfig(atmosConfig, sections, "mock", "test")
+	require.NoError(t, err)
+	assert.True(t, config.AutoProvisionWorkdirForOutputs)
 }
 
 func TestExtractOptionalFields(t *testing.T) {

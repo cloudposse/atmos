@@ -91,7 +91,7 @@ jobs:
   size-check:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: ./.github/actions/check-claude-md-size
         with:
           file-patterns: 'CLAUDE.md'
@@ -114,7 +114,7 @@ jobs:
   agent-size-check:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: ./.github/actions/check-claude-md-size
         with:
           file-patterns: '.claude/agents/*.md'
