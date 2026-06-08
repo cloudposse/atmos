@@ -262,6 +262,12 @@ jobs:
           fail_ci_if_error: true
           flags: unittests
           verbose: true
+          # Skip GPG signature-integrity verification of the downloaded Codecov CLI.
+          # Codecov's keyserver intermittently fails to serve the public key
+          # ("gpg: Can't check signature: No public key"), which aborts the upload and
+          # — with fail_ci_if_error — fails the whole job even when tests passed.
+          # Real upload errors (bad token, network) still fail the job via fail_ci_if_error.
+          skip_validation: true
 
   docker:
     name: "[lint] Dockerfile"
