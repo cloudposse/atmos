@@ -32,7 +32,6 @@ const (
 	affectedReasonStackProviders              = "stack.providers"
 	affectedReasonStackRequiredProviders      = "stack.required_providers"
 	affectedReasonStackRequiredVersion        = "stack.required_version"
-	affectedReasonStackHooks                  = "stack.hooks"
 	affectedReasonStackGenerate               = "stack.generate"
 	affectedReasonStackBackend                = "stack.backend"
 	affectedReasonStackBackendType            = "stack.backend_type"
@@ -131,7 +130,11 @@ type sectionCheck struct {
 // final component map (the comp[...] assignments in stack_processor_merge.go) and with
 // the "Evaluated sections" list in
 // website/docs/cli/commands/describe/describe-affected.mdx. `locals`, `overrides`,
-// `inheritance`, and `retry` are deliberately excluded (see that doc for rationale).
+// `inheritance`, `retry`, and `hooks` are deliberately excluded (see that doc for
+// rationale): in particular `hooks` is operational/execution-time behavior (what runs
+// before/after a command), not provisioned infrastructure, so it does not mark a
+// component as affected by default. Users who want it can add `hooks` to
+// `describe.affected.sections`, where it reports as `stack.hooks`.
 //
 // Order is significant: the first changed section becomes the headline `affected`
 // reason (all changed sections are still recorded in `affected_all`).
@@ -141,7 +144,6 @@ var componentSectionChecks = []sectionCheck{
 	{cfg.ProvidersSectionName, affectedReasonStackProviders},
 	{cfg.RequiredProvidersSectionName, affectedReasonStackRequiredProviders},
 	{cfg.RequiredVersionSectionName, affectedReasonStackRequiredVersion},
-	{cfg.HooksSectionName, affectedReasonStackHooks},
 	{cfg.GenerateSectionName, affectedReasonStackGenerate},
 	{cfg.BackendSectionName, affectedReasonStackBackend},
 	{cfg.BackendTypeSectionName, affectedReasonStackBackendType},

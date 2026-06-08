@@ -75,7 +75,6 @@ func TestFindAffected_EvaluatedSections(t *testing.T) {
 		{"providers", "providers", map[string]any{"aws": map[string]any{"region": "us-east-1"}}, map[string]any{"aws": map[string]any{"region": "us-west-2"}}, affectedReasonStackProviders},
 		{"required_providers", "required_providers", map[string]any{"aws": map[string]any{"version": "5.0"}}, map[string]any{"aws": map[string]any{"version": "6.0"}}, affectedReasonStackRequiredProviders},
 		{"required_version (scalar)", "required_version", "1.5.0", "1.6.0", affectedReasonStackRequiredVersion},
-		{"hooks", "hooks", map[string]any{"policy": map[string]any{"kind": "checkov"}}, map[string]any{"policy": map[string]any{"kind": "trivy"}}, affectedReasonStackHooks},
 		{"generate", "generate", map[string]any{"backend": map[string]any{"enabled": true}}, map[string]any{"backend": map[string]any{"enabled": false}}, affectedReasonStackGenerate},
 		{"backend", "backend", map[string]any{"bucket": "a"}, map[string]any{"bucket": "b"}, affectedReasonStackBackend},
 		{"backend_type (scalar)", "backend_type", "s3", "local", affectedReasonStackBackendType},
@@ -143,6 +142,16 @@ func TestFindAffected_NoFalsePositives(t *testing.T) {
 		affected := runFindAffectedTF(t, nil, local, remote)
 		assert.Empty(t, affected)
 	})
+
+	t.Run("hooks section is not evaluated by default", func(t *testing.T) {
+		// `hooks` is operational/execution-time behavior, not provisioned infrastructure,
+		// so a change to it must not mark a component as affected by default.
+		local := map[string]any{"hooks": map[string]any{"policy": map[string]any{"kind": "checkov"}}}
+		remote := map[string]any{"hooks": map[string]any{"policy": map[string]any{"kind": "trivy"}}}
+
+		affected := runFindAffectedTF(t, nil, local, remote)
+		assert.Empty(t, affected)
+	})
 }
 
 // TestFindAffected_SectionsOverride proves describe.affected.sections fully replaces the
@@ -155,7 +164,7 @@ func TestFindAffected_SectionsOverride(t *testing.T) {
 		},
 		Describe: schema.Describe{
 			Affected: schema.DescribeAffected{
-				Sections: []string{"providers", "my_custom_section"},
+				Sections: []string{"providers", "hooks", "my_custom_section"},
 			},
 		},
 	}
@@ -167,6 +176,17 @@ func TestFindAffected_SectionsOverride(t *testing.T) {
 		affected := runFindAffectedTF(t, atmosConfig, local, remote)
 		require.Len(t, affected, 1)
 		assert.Equal(t, affectedReasonStackProviders, affected[0].Affected)
+	})
+
+	t.Run("hooks is evaluated when explicitly listed", func(t *testing.T) {
+		// `hooks` is not a default, but opting in via the list evaluates it and reports
+		// the `stack.hooks` reason (via the generic `stack.<name>` fallback).
+		local := map[string]any{"hooks": map[string]any{"policy": map[string]any{"kind": "checkov"}}}
+		remote := map[string]any{"hooks": map[string]any{"policy": map[string]any{"kind": "trivy"}}}
+
+		affected := runFindAffectedTF(t, atmosConfig, local, remote)
+		require.Len(t, affected, 1)
+		assert.Equal(t, "stack.hooks", affected[0].Affected)
 	})
 
 	t.Run("listed custom section is evaluated with generic reason", func(t *testing.T) {

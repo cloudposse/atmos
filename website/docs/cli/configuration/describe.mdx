@@ -47,13 +47,17 @@ describe:
     The authoritative list of top-level component sections that `atmos describe affected` compares when computing
     affected components. When empty or unset, Atmos uses the built-in defaults below.
 
-    **Default sections:** `vars`, `env`, `providers`, `required_providers`, `required_version`, `hooks`, `generate`,
+    **Default sections:** `vars`, `env`, `providers`, `required_providers`, `required_version`, `generate`,
     `backend`, `backend_type`, `remote_state_backend`, `remote_state_backend_type`, `auth`, `command`, `dependencies`,
     `source`, `provision`.
 
-    When set, this list **fully replaces** those defaults — it is not additive. To add a custom section, list every
-    default you still want plus your custom section name; to stop evaluating a default, omit it from the list. A custom
-    section is reported as `stack.<name>` when it changes.
+    `hooks` is **not** a default — it is operational/execution-time behavior (commands that run before/after an
+    operation), not provisioned infrastructure. Add it to this list if you want hook changes to mark a component as
+    affected (reported as `stack.hooks`).
+
+    When set, this list **fully replaces** those defaults — it is not additive. To add a custom section (or `hooks`),
+    list every default you still want plus the extra section name; to stop evaluating a default, omit it from the list.
+    A custom section is reported as `stack.<name>` when it changes.
 
     `metadata` and `settings` are **always** evaluated and cannot be disabled with this list: `metadata` gates whether a
     component is skipped, and `settings` also drives dependency change detection.

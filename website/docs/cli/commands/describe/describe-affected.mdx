@@ -89,7 +89,7 @@ When comparing the deep-merged configuration of each component between the two r
 top-level component sections. A change in any of them marks the component as affected (with the corresponding
 [`affected`](#output) reason):
 
-`vars`, `env`, `settings`, `metadata`, `providers`, `required_providers`, `required_version`, `hooks`, `generate`,
+`vars`, `env`, `settings`, `metadata`, `providers`, `required_providers`, `required_version`, `generate`,
 `backend`, `backend_type`, `remote_state_backend`, `remote_state_backend_type`, `auth`, `command`, `dependencies`,
 `source`, `provision`.
 
@@ -110,6 +110,14 @@ The following sections are **intentionally not** evaluated:
 
   <dt>`retry`</dt>
   <dd>Operational/execution-time behavior (how a run is retried), not provisioned infrastructure configuration.</dd>
+
+  <dt>`hooks`</dt>
+  <dd>
+    Operational/execution-time behavior (commands that run before/after an operation, e.g. policy or cost checks),
+    not provisioned infrastructure — so a hook change does not mark a component as affected by default. If you want
+    hook changes to count, add `hooks` to [`describe.affected.sections`](/cli/configuration/describe); it then reports
+    as `stack.hooks`.
+  </dd>
 </dl>
 
 :::tip Customize the evaluated sections
@@ -621,7 +629,8 @@ where:
 
             <dt>`stack.hooks`</dt>
             <dd>
-                The `hooks` component section in the stack config has been modified.
+                The `hooks` component section in the stack config has been modified. Only reported when `hooks` is
+                added to [`describe.affected.sections`](/cli/configuration/describe) — it is not evaluated by default.
             </dd>
 
             <dt>`stack.generate`</dt>

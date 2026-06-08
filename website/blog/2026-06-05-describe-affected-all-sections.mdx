@@ -1,6 +1,6 @@
 ---
 slug: describe-affected-all-sections
-title: "atmos describe affected now detects providers, hooks, generate, and more"
+title: "atmos describe affected now detects providers, generate, backend changes, and more"
 authors:
   - osterman
 tags:
@@ -9,7 +9,7 @@ tags:
 date: 2026-06-05T00:00:00.000Z
 ---
 
-The `atmos describe affected` command now compares **every** provisioned component section between refs — including `providers`, `required_providers` (provider versions), `hooks`, `generate`, `backend`, `auth`, and `command`. Previously, changes to these sections were silently missed.
+The `atmos describe affected` command now compares **every** provisioned component section between refs — including `providers`, `required_providers` (provider versions), `generate`, `backend`, `auth`, and `command`. Previously, changes to these sections were silently missed.
 
 <!--truncate-->
 
@@ -19,15 +19,15 @@ The `atmos describe affected` command works by deep-merging the stack configurat
 
 The comparison now covers the full set of provisioned sections:
 
-The evaluated sections are now `vars`, `env`, `settings`, `metadata`, `providers`, `required_providers`, `required_version`, `hooks`, `generate`, `backend`, `backend_type`, `remote_state_backend`, `remote_state_backend_type`, `auth`, `command`, `dependencies`, `source`, and `provision`.
+The evaluated sections are now `vars`, `env`, `settings`, `metadata`, `providers`, `required_providers`, `required_version`, `generate`, `backend`, `backend_type`, `remote_state_backend`, `remote_state_backend_type`, `auth`, `command`, `dependencies`, `source`, and `provision`.
 
 Scalar sections such as `backend_type`, `required_version`, and `command` are now compared too (previously only map-valued sections were).
 
 ## Why This Matters
 
-If you use `describe affected` to drive plan/apply in CI, you were exposed to false negatives: bump a provider version in `required_providers`, add a `hooks` block, or change a `backend` setting, and the affected component might not show up. Those changes are now detected and reported with a precise reason (`stack.providers`, `stack.required_providers`, `stack.hooks`, …).
+If you use `describe affected` to drive plan/apply in CI, you were exposed to false negatives: bump a provider version in `required_providers` or change a `backend` setting, and the affected component might not show up. Those changes are now detected and reported with a precise reason (`stack.providers`, `stack.required_providers`, `stack.backend`, …).
 
-A few sections are intentionally **not** evaluated because they can't change what gets provisioned: `locals` (folds into rendered `vars`/`env`), `overrides` (folds into the merged sections), `inheritance` (a derived chain), and `retry` (execution-time behavior).
+A few sections are intentionally **not** evaluated because they can't change what gets provisioned: `locals` (folds into rendered `vars`/`env`), `overrides` (folds into the merged sections), `inheritance` (a derived chain), and `retry` and `hooks` (execution-time behavior — `hooks` defines commands that run before/after an operation, such as policy or cost checks, not the infrastructure itself). If you do want hook changes to count as affected, opt in via `describe.affected.sections` (see below) and they report as `stack.hooks`.
 
 ## How to Use It
 
