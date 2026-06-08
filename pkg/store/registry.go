@@ -35,6 +35,21 @@ func isSecretByDefaultKind(kind string) bool {
 	return secretByDefaultKinds[kind]
 }
 
+// secretIncapableKinds are backends that cannot encrypt values at rest (e.g. Redis is an
+// in-memory cache, Artifactory is an artifact repo). Marking a store of one of these kinds
+// `secret: true` is a configuration error: it would store secrets in plaintext. Add a kind
+// here when it has no at-rest encryption.
+var secretIncapableKinds = map[string]bool{
+	KindRedis:       true,
+	KindArtifactory: true,
+}
+
+// isSecretIncapableKind reports whether a backend kind cannot be used as a secret store
+// because it does not encrypt values at rest.
+func isSecretIncapableKind(kind string) bool {
+	return secretIncapableKinds[kind]
+}
+
 // ApplySecretDefaults marks secret-by-default backends (e.g. 1Password) as `secret: true` when
 // the config didn't set it. It mutates the config in place so both the store registry and the
 // secrets subsystem (which reads StoreConfig.Secret) agree on subsystem membership. Call it once
@@ -92,6 +107,9 @@ func NewStoreRegistry(config *StoresConfig) (StoreRegistry, error) {
 		}
 		// A `secret: true` store writes the sensitive at-rest variant when supported.
 		if storeConfig.Secret {
+			if kind := resolveKind(storeConfig); isSecretIncapableKind(kind) {
+				return nil, fmt.Errorf("%w: store %q uses backend %q", ErrSecretBackendNotEncrypted, key, kind)
+			}
 			if sas, ok := s.(SecretAwareStore); ok {
 				sas.SetSecret(true)
 			}

@@ -817,6 +817,19 @@ func executeCustomCommand(
 			// the caller's PATH (e.g. `./build/atmos <cmd>`). Keeps example steps readable.
 			env = envpkg.EnsureBinaryInPath(env, execPath)
 		}
+
+		// Export the custom component's resolved `env` section into the step subprocess
+		// environment, mirroring the built-in terraform/helmfile/packer providers. Without this,
+		// a custom component's `env` section (including resolved `!secret` values) would only be
+		// available as `{{ .Component.env.* }}` template data and never reach the step subprocess.
+		// This runs before the command-level `env:` loop below so command-defined vars take
+		// precedence on key collisions.
+		if commandConfig.Component != nil && commandConfig.Component.Type != "" {
+			if componentConfig, ok := data["Component"].(map[string]any); ok {
+				env = appendComponentEnvVars(env, componentConfig)
+			}
+		}
+
 		for _, v := range commandConfig.Env {
 			key := strings.TrimSpace(v.Key)
 			value := v.Value
@@ -1642,6 +1655,39 @@ func processCustomComponentType(
 	)
 	errUtils.CheckErrorPrintAndExit(err, "", "")
 	data["Component"] = componentConfig
+}
+
+// appendComponentEnvVars exports a custom component's resolved `env` section (from the
+// describe-component result) into the step subprocess environment, mirroring how the built-in
+// terraform/helmfile/packer/ansible providers export `ComponentEnvSection`. Without this, a custom
+// component's `env` section (including resolved `!secret` values) would only be available as
+// `{{ .Component.env.* }}` template data and never reach the step subprocess. Null and "null"
+// values are skipped (same convention as pkg/env.ConvertEnvVars). Existing entries are overwritten,
+// so callers can layer the command-level `env:` on top for higher precedence. Keys are applied in
+// sorted order for deterministic output.
+func appendComponentEnvVars(env []string, componentConfig map[string]any) []string {
+	defer perf.Track(nil, "cmd.appendComponentEnvVars")()
+
+	envSection, ok := componentConfig[cfg.EnvSectionName].(map[string]any)
+	if !ok {
+		return env
+	}
+
+	keys := make([]string, 0, len(envSection))
+	for k := range envSection {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+
+	for _, k := range keys {
+		v := envSection[k]
+		if v == nil || v == "null" {
+			continue
+		}
+		env = envpkg.UpdateEnvVar(env, k, fmt.Sprint(v))
+	}
+
+	return env
 }
 
 // resolveCustomComponentConfig finds the component/stack, registers the custom type,

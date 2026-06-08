@@ -249,6 +249,71 @@ func TestCustomCommandIntegration_MultipleSteps(t *testing.T) {
 	assert.Equal(t, step1Identity, step2Identity, "Both steps should use the same identity")
 }
 
+// TestCustomCommandIntegration_ComponentEnvExported verifies that a custom component's `env`
+// section is exported as real environment variables to the command's step subprocess (mirroring
+// the built-in terraform/helmfile/packer/ansible providers). This is the behavior that lets a
+// `!secret` placed in a custom component's `env` section reach the step as `$VAR` instead of being
+// inlined into the command string.
+func TestCustomCommandIntegration_ComponentEnvExported(t *testing.T) {
+	if testing.Short() {
+		t.Skipf("Skipping integration test in short mode: resolves a component from stack config")
+	}
+
+	// Use the custom-components example, whose `deploy-app` component declares an `env` section.
+	testDir := "../examples/custom-components"
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", testDir)
+	t.Setenv("ATMOS_BASE_PATH", testDir)
+
+	_ = NewTestKit(t)
+
+	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+	require.NoError(t, err)
+
+	tmpDir := t.TempDir()
+	envOutputFile := filepath.Join(tmpDir, "component-env.txt")
+
+	var dumpEnvCmd string
+	if runtime.GOOS == "windows" {
+		dumpEnvCmd = "cmd /c set > \"" + envOutputFile + "\""
+	} else {
+		dumpEnvCmd = "env > " + envOutputFile
+	}
+
+	// A custom command bound to the `script` component type that dumps its environment.
+	testCommand := schema.Command{
+		Name:        "test-component-env",
+		Description: "Dump the environment of a custom component step",
+		Arguments: []schema.CommandArgument{
+			{Name: "component", Type: "component", Required: true},
+		},
+		Flags: []schema.CommandFlag{
+			{Name: "stack", Shorthand: "s", SemanticType: "stack", Required: true},
+		},
+		Component: &schema.CommandComponent{Type: "script"},
+		Steps:     stepsFromStrings(dumpEnvCmd),
+	}
+
+	atmosConfig.Commands = []schema.Command{testCommand}
+
+	err = processCustomCommands(atmosConfig, atmosConfig.Commands, RootCmd)
+	require.NoError(t, err)
+
+	RootCmd.SetArgs([]string{"test-component-env", "deploy-app", "-s", "dev"})
+	err = RootCmd.Execute()
+	require.NoError(t, err, "custom command execution should succeed")
+
+	envContent, err := os.ReadFile(envOutputFile)
+	require.NoError(t, err, "should be able to read environment output file")
+	envVars := string(envContent)
+	t.Logf("Captured environment from custom component step:\n%s", envVars)
+
+	// The component `env` section values must be exported as real environment variables.
+	assert.Equal(t, "us-east-1", extractEnvVar(envVars, "DEPLOY_REGION"),
+		"component env section must export DEPLOY_REGION to the step subprocess")
+	assert.Equal(t, "1.0.0", extractEnvVar(envVars, "APP_VERSION"),
+		"component env section must export APP_VERSION to the step subprocess")
+}
+
 // extractEnvVar extracts the value of an environment variable from env output.
 func extractEnvVar(envOutput, varName string) string {
 	lines := strings.Split(envOutput, "\n")

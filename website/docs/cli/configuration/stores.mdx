@@ -118,6 +118,10 @@ A `secret: true` store:
 
 Some backends are secret managers by nature (1Password, the OS keychain, GitHub Actions) and default to `secret: true` even when you omit it. For declaring, provisioning, and reading secrets, see [Secrets Configuration](/cli/configuration/secrets).
 
+:::caution Only backends that encrypt at rest can be secret stores
+`secret: true` is rejected at startup for backends that store values in plaintext — currently **Redis** (an in-memory cache) and **Artifactory** (an artifact repository). Marking one of these sensitive would give a false sense of security, so Atmos fails fast with a clear error rather than writing secrets in the clear. Use an encrypted backend instead: AWS SSM (`SecureString`), AWS Secrets Manager, Azure Key Vault, Google Secret Manager, HashiCorp Vault, 1Password, the OS keychain, or GitHub Actions.
+:::
+
 ## Store Type Configuration
 
 ### AWS SSM Parameter Store

@@ -69,6 +69,7 @@ var (
 	ErrParseVaultOptions          = errors.New("failed to parse HashiCorp Vault store options")
 	ErrParseRedisOptions          = errors.New("failed to parse Redis store options")
 	ErrStoreTypeNotFound          = errors.New("store type not found")
+	ErrSecretBackendNotEncrypted  = errors.New("store cannot be marked secret: backend does not encrypt values at rest")
 
 	// AWS Secrets Manager specific errors.
 	ErrSetSecret    = errors.New("failed to set secret")

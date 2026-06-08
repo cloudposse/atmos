@@ -174,7 +174,15 @@ func TestMergeComponentConfigurations_Secrets(t *testing.T) {
 	})
 
 	t.Run("available-for-all-component-types", func(t *testing.T) {
-		for _, ct := range []string{cfg.TerraformComponentType, cfg.HelmfileComponentType, cfg.PackerComponentType} {
+		// Includes a custom component type ("script") to lock in that secrets work for
+		// custom-component stack config, not just the built-in types.
+		for _, ct := range []string{
+			cfg.TerraformComponentType,
+			cfg.HelmfileComponentType,
+			cfg.PackerComponentType,
+			cfg.AnsibleComponentType,
+			"script",
+		} {
 			opts := ComponentProcessorOptions{
 				ComponentType: ct,
 				Component:     "vpc",
