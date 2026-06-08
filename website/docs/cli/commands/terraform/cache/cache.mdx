@@ -62,6 +62,10 @@ There is no daemon. For each `terraform`/`tofu` invocation, Atmos:
 
 Providers are stored in the canonical `filesystem_mirror` layout, so the on-disk path **is** the cache key — there is no separate database or index. Module sources that resolve to `git::` pass through unchanged today; a future git mirror will cache those.
 
+:::caution One-time trust step on macOS and Windows
+The proxy serves over HTTPS with a self-signed certificate. On **macOS and Windows**, `terraform`/`tofu` use the OS platform verifier (which ignores `SSL_CERT_FILE`), so you must trust the certificate **once** with [`atmos terraform cache trust`](/cli/commands/terraform/cache/trust). The first cache-enabled run on those platforms stops with an actionable message telling you to do this. On **Linux/BSD** no trust step is required — Atmos trusts the certificate automatically via `SSL_CERT_FILE`.
+:::
+
 ## Usage
 
 ```shell
