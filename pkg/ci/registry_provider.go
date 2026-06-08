@@ -1,6 +1,7 @@
 package ci
 
 import (
+	"sort"
 	"sync"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -197,7 +198,13 @@ func ResolveAdminCache() (cache.Backend, error) {
 
 	providersMu.RLock()
 	defer providersMu.RUnlock()
-	for _, p := range providers {
+	names := make([]string, 0, len(providers))
+	for name := range providers {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	for _, name := range names {
+		p := providers[name]
 		cp, ok := p.(provider.CacheProvider)
 		if !ok {
 			continue

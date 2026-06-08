@@ -73,4 +73,4 @@ atmos ci cache delete    # delete a cache entry by exact key
 - **Explicit:** `atmos ci cache paths --format=github` → your own `actions/cache` step.
 - **Atmos-managed:** `cloudposse/atmos/actions/github-runtime@v1` + `atmos ci cache restore`/`save` (or `auto: both`).
 - The cache is **off by default** — opt in per repository with `ci.cache.enabled: true`.
-- The live backend is **GitHub Actions** today: outside a cache-capable CI provider, all cache operations gracefully no-op (with a debug log), so the same config is safe to run locally. A generic backend for other providers is planned.
+- The live backend is **GitHub Actions** today. Outside a cache-capable CI provider, the automatic cache lifecycle (`auto`) is a graceful no-op (with a debug log), so the same config is safe to run locally — but explicit commands like `save` and `restore` return a cache-unavailable error when not running in a supported CI runner. A generic backend for other providers is planned.
