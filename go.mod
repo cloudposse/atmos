@@ -461,6 +461,8 @@ require (
 require (
 	github.com/bytecodealliance/wasmtime-go/v43 v43.0.2 // indirect
 	github.com/containerd/ttrpc v1.2.8 // indirect
+	github.com/hashicorp/logutils v1.0.0 // indirect
+	github.com/pact-foundation/pact-go/v2 v2.5.1 // indirect
 	github.com/standard-webhooks/standard-webhooks/libraries v0.0.1 // indirect
 	go.opencensus.io v0.24.0 // indirect
 )

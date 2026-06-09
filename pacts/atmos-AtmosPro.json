@@ -1,0 +1,480 @@
+{
+  "consumer": {
+    "name": "atmos"
+  },
+  "interactions": [
+    {
+      "description": "a request to create a commit via Atmos Pro GitHub App",
+      "providerState": "workspace exists and GitHub App is authorized",
+      "request": {
+        "body": {
+          "branch": "main",
+          "changes": {
+            "additions": [
+              {
+                "contents": "dGVzdA==",
+                "path": "file.txt"
+              }
+            ],
+            "deletions": [
+              {
+                "path": "old.txt"
+              }
+            ]
+          },
+          "commitMessage": "test: pact contract verification"
+        },
+        "headers": {
+          "Authorization": "Bearer test-token",
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "$.body.branch": {
+            "match": "type"
+          },
+          "$.body.changes.additions": {
+            "match": "type",
+            "min": 1
+          },
+          "$.body.changes.additions[*].contents": {
+            "match": "type"
+          },
+          "$.body.changes.additions[*].path": {
+            "match": "type"
+          },
+          "$.body.changes.deletions": {
+            "match": "type",
+            "min": 1
+          },
+          "$.body.changes.deletions[*].path": {
+            "match": "type"
+          },
+          "$.body.commitMessage": {
+            "match": "type"
+          },
+          "$.headers.Authorization": {
+            "match": "type"
+          }
+        },
+        "method": "POST",
+        "path": "/api/v1/git/commit"
+      },
+      "response": {
+        "body": {
+          "data": {
+            "sha": "abc123def456789"
+          },
+          "success": true
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "$.body.data.sha": {
+            "match": "type"
+          },
+          "$.body.success": {
+            "match": "type"
+          }
+        },
+        "status": 200
+      }
+    },
+    {
+      "description": "a request to exchange a GitHub OIDC token for an Atmos Pro token",
+      "providerState": "OIDC token is valid and workspace exists",
+      "request": {
+        "body": {
+          "token": "eyJhbGciOiJSUzI1NiJ9.oidcpayload",
+          "workspaceId": "workspace-uuid-1234"
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "$.body.token": {
+            "match": "type"
+          },
+          "$.body.workspaceId": {
+            "match": "type"
+          }
+        },
+        "method": "POST",
+        "path": "/api/v1/auth/github-oidc"
+      },
+      "response": {
+        "body": {
+          "data": {
+            "token": "atmos-jwt-session-token"
+          },
+          "success": true
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "$.body.data.token": {
+            "match": "type"
+          },
+          "$.body.success": {
+            "match": "type"
+          }
+        },
+        "status": 200
+      }
+    },
+    {
+      "description": "a request to lock a stack",
+      "providerState": "workspace exists and stack is unlocked",
+      "request": {
+        "body": {
+          "key": "org/repo/dev/vpc",
+          "ttl": 3600
+        },
+        "headers": {
+          "Authorization": "Bearer test-token",
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "$.body.key": {
+            "match": "type"
+          },
+          "$.body.ttl": {
+            "match": "type"
+          },
+          "$.headers.Authorization": {
+            "match": "type"
+          }
+        },
+        "method": "POST",
+        "path": "/api/v1/locks"
+      },
+      "response": {
+        "body": {
+          "data": {
+            "expiresAt": "2026-06-09T10:00:00Z",
+            "id": "lock-id-uuid",
+            "key": "org/repo/dev/vpc"
+          },
+          "success": true
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "$.body.data.expiresAt": {
+            "match": "regex",
+            "regex": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}Z$"
+          },
+          "$.body.data.id": {
+            "match": "type"
+          },
+          "$.body.data.key": {
+            "match": "type"
+          },
+          "$.body.success": {
+            "match": "type"
+          }
+        },
+        "status": 200
+      }
+    },
+    {
+      "description": "a request to retrieve a GitHub OIDC token",
+      "providerState": "GitHub Actions OIDC endpoint is available",
+      "request": {
+        "headers": {
+          "Authorization": "Bearer test-request-token"
+        },
+        "matchingRules": {
+          "$.headers.Authorization": {
+            "match": "type"
+          }
+        },
+        "method": "GET",
+        "path": "/token",
+        "query": "audience=atmos-pro%2ecom"
+      },
+      "response": {
+        "body": {
+          "value": "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.oidc"
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "$.body.value": {
+            "match": "type"
+          }
+        },
+        "status": 200
+      }
+    },
+    {
+      "description": "a request to unlock a stack",
+      "providerState": "workspace exists and stack is locked",
+      "request": {
+        "body": {
+          "key": "org/repo/dev/vpc"
+        },
+        "headers": {
+          "Authorization": "Bearer test-token",
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "$.body.key": {
+            "match": "type"
+          },
+          "$.headers.Authorization": {
+            "match": "type"
+          }
+        },
+        "method": "DELETE",
+        "path": "/api/v1/locks"
+      },
+      "response": {
+        "body": {
+          "success": true
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "$.body.success": {
+            "match": "type"
+          }
+        },
+        "status": 200
+      }
+    },
+    {
+      "description": "a request to upload affected stacks",
+      "providerState": "workspace exists and accepts affected stacks",
+      "request": {
+        "body": {
+          "base_sha": "111222333444",
+          "head_sha": "abc123def456",
+          "repo_host": "github.com",
+          "repo_name": "repo",
+          "repo_owner": "org",
+          "repo_url": "https://github.com/org/repo",
+          "stacks": [
+            {
+              "affected": "component",
+              "affected_all": [
+                "component"
+              ],
+              "component": "vpc",
+              "component_path": "components/terraform/vpc",
+              "component_type": "terraform",
+              "dependents": null,
+              "included_in_dependents": false,
+              "settings": null,
+              "stack": "dev-us-east-1",
+              "stack_slug": ""
+            }
+          ]
+        },
+        "headers": {
+          "Authorization": "Bearer test-token",
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "$.body.base_sha": {
+            "match": "type"
+          },
+          "$.body.head_sha": {
+            "match": "type"
+          },
+          "$.body.repo_host": {
+            "match": "type"
+          },
+          "$.body.repo_name": {
+            "match": "type"
+          },
+          "$.body.repo_owner": {
+            "match": "type"
+          },
+          "$.body.repo_url": {
+            "match": "type"
+          },
+          "$.body.stacks": {
+            "match": "type",
+            "min": 1
+          },
+          "$.body.stacks[*].affected": {
+            "match": "type"
+          },
+          "$.body.stacks[*].affected_all": {
+            "match": "type",
+            "min": 1
+          },
+          "$.body.stacks[*].component": {
+            "match": "type"
+          },
+          "$.body.stacks[*].component_path": {
+            "match": "type"
+          },
+          "$.body.stacks[*].component_type": {
+            "match": "type"
+          },
+          "$.body.stacks[*].included_in_dependents": {
+            "match": "type"
+          },
+          "$.body.stacks[*].stack": {
+            "match": "type"
+          },
+          "$.body.stacks[*].stack_slug": {
+            "match": "type"
+          },
+          "$.headers.Authorization": {
+            "match": "type"
+          }
+        },
+        "method": "POST",
+        "path": "/api/v1/affected-stacks"
+      },
+      "response": {
+        "body": {
+          "success": true
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "$.body.success": {
+            "match": "type"
+          }
+        },
+        "status": 200
+      }
+    },
+    {
+      "description": "a request to upload drift detection instances",
+      "providerState": "workspace exists and accepts drift detection instances",
+      "request": {
+        "body": {
+          "instances": [
+            {
+              "component": "vpc",
+              "component_type": "terraform",
+              "stack": "dev-us-east-1"
+            }
+          ],
+          "repo_host": "github.com",
+          "repo_name": "repo",
+          "repo_owner": "org",
+          "repo_url": "https://github.com/org/repo"
+        },
+        "headers": {
+          "Authorization": "Bearer test-token",
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "$.body.instances": {
+            "match": "type",
+            "min": 1
+          },
+          "$.body.instances[*].component": {
+            "match": "type"
+          },
+          "$.body.instances[*].component_type": {
+            "match": "type"
+          },
+          "$.body.instances[*].stack": {
+            "match": "type"
+          },
+          "$.body.repo_host": {
+            "match": "type"
+          },
+          "$.body.repo_name": {
+            "match": "type"
+          },
+          "$.body.repo_owner": {
+            "match": "type"
+          },
+          "$.body.repo_url": {
+            "match": "type"
+          },
+          "$.headers.Authorization": {
+            "match": "type"
+          }
+        },
+        "method": "POST",
+        "path": "/api/v1/instances"
+      },
+      "response": {
+        "body": {
+          "success": true
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "$.body.success": {
+            "match": "type"
+          }
+        },
+        "status": 200
+      }
+    },
+    {
+      "description": "a request to upload instance drift status",
+      "providerState": "workspace exists and instance exists for owner/repo",
+      "request": {
+        "body": {
+          "command": "terraform plan",
+          "exit_code": 0
+        },
+        "headers": {
+          "Authorization": "Bearer test-token",
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "$.body.command": {
+            "match": "type"
+          },
+          "$.body.exit_code": {
+            "match": "type"
+          },
+          "$.headers.Authorization": {
+            "match": "type"
+          }
+        },
+        "method": "PATCH",
+        "path": "/api/v1/repos/org/repo/instances",
+        "query": "component=vpc&stack=dev-us-east-1"
+      },
+      "response": {
+        "body": {
+          "success": true
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "$.body.success": {
+            "match": "type"
+          }
+        },
+        "status": 200
+      }
+    }
+  ],
+  "metadata": {
+    "pact-go": {
+      "version": "2.5.1"
+    },
+    "pactRust": {
+      "ffi": "0.4.28",
+      "mockserver": "1.2.16",
+      "models": "1.3.5"
+    },
+    "pactSpecification": {
+      "version": "2.0.0"
+    }
+  },
+  "provider": {
+    "name": "AtmosPro"
+  }
+}

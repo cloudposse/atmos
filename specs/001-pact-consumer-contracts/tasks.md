@@ -31,8 +31,8 @@ description: "Task list for Pact Consumer Contract Testing for Atmos Pro API"
 
 **Purpose**: Add the pact-go dependency and create the pact output directory.
 
-- [ ] T001 Add `github.com/pact-foundation/pact-go/v2` as a dev dependency by running `go get github.com/pact-foundation/pact-go/v2` and committing the updated `go.mod` and `go.sum`
-- [ ] T002 [P] Create `pacts/.gitkeep` at repo root to track the pact output directory in git; add `pacts/*.json` to `.gitignore` only if JSON files should NOT be committed (per spec: they SHOULD be committed — do not gitignore them)
+- [x] T001 Add `github.com/pact-foundation/pact-go/v2` as a dev dependency by running `go get github.com/pact-foundation/pact-go/v2` and committing the updated `go.mod` and `go.sum`
+- [x] T002 [P] Create `pacts/.gitkeep` at repo root to track the pact output directory in git; add `pacts/*.json` to `.gitignore` only if JSON files should NOT be committed (per spec: they SHOULD be committed — do not gitignore them)
 
 ---
 
@@ -42,7 +42,7 @@ description: "Task list for Pact Consumer Contract Testing for Atmos Pro API"
 
 **⚠️ CRITICAL**: No pact interaction tasks can be written until this phase is complete.
 
-- [ ] T003 Create `pkg/pro/pact_helpers_test.go` with `//go:build pact` tag and `package pro` — implement:
+- [x] T003 Create `pkg/pro/pact_helpers_test.go` with `//go:build pact` tag and `package pro` — implement:
   - `newHTTPMockProvider(t *testing.T) *consumer.V2HTTPMockProvider` using `consumer.NewV2Pact(consumer.MockHTTPProviderConfig{Consumer: "atmos", Provider: "AtmosPro", PactDir: pactDir()})` where `pactDir()` resolves to `<repo_root>/pacts`
   - `newTLSMockProvider(t *testing.T) *consumer.V2HTTPMockProvider` using `consumer.NewV2Pact` with TLS enabled (for the GitHub OIDC GET interaction)
   - `pactDir() string` helper that returns the absolute path to `pacts/` at the repository root (use `runtime.Caller(0)` or `filepath.Join` relative to the test file location)
@@ -59,54 +59,54 @@ description: "Task list for Pact Consumer Contract Testing for Atmos Pro API"
 
 ### Implementation for User Story 1
 
-- [ ] T004 [US1] Create `pkg/pro/consumer_pact_test.go` with `//go:build pact` build tag, `package pro` declaration, and required imports (`consumer`, `matchers` from `github.com/pact-foundation/pact-go/v2`, plus existing `pkg/pro` deps)
+- [x] T004 [US1] Create `pkg/pro/consumer_pact_test.go` with `//go:build pact` build tag, `package pro` declaration, and required imports (`consumer`, `matchers` from `github.com/pact-foundation/pact-go/v2`, plus existing `pkg/pro` deps)
 
-- [ ] T005 [US1] Add `TestPact_UploadAffectedStacks(t *testing.T)` to `pkg/pro/consumer_pact_test.go`:
+- [x] T005 [US1] Add `TestPact_UploadAffectedStacks(t *testing.T)` to `pkg/pro/consumer_pact_test.go`:
   - Use `newHTTPMockProvider(t)`
   - State: `"workspace exists and accepts affected stacks"`
   - Request: POST `/api/v1/affected-stacks`, headers `Authorization: Like("Bearer test-token")` + `Content-Type: application/json`, body with `Like()` matchers for `head_sha`, `base_sha`, `repo_url`, `repo_name`, `repo_owner`, `repo_host`, and `EachLike` for `stacks` array
   - Response: 200, body `{"success": true}`
   - Test body: create `AtmosProAPIClient` pointing to mock server URL, call `UploadAffectedStacks` with a minimal `dtos.UploadAffectedStacksRequest`, assert no error
 
-- [ ] T006 [US1] Add `TestPact_LockStack(t *testing.T)` to `pkg/pro/consumer_pact_test.go`:
+- [x] T006 [US1] Add `TestPact_LockStack(t *testing.T)` to `pkg/pro/consumer_pact_test.go`:
   - State: `"workspace exists and stack is unlocked"`
   - Request: POST `/api/v1/locks`, `Like()` matchers for `key` (string) and `ttl` (int32)
   - Response: 200, body `success: true`, `data.id: Like("lock-id")`, `data.key: Like("key")`, `data.expiresAt: Term(regex, generate)`
   - Test body: call `LockStack` with `dtos.LockStackRequest{Key: "test/key", TTL: 3600}`, assert no error and response `Data.ID` is non-empty
 
-- [ ] T007 [US1] Add `TestPact_UnlockStack(t *testing.T)` to `pkg/pro/consumer_pact_test.go`:
+- [x] T007 [US1] Add `TestPact_UnlockStack(t *testing.T)` to `pkg/pro/consumer_pact_test.go`:
   - State: `"workspace exists and stack is locked"`
   - Request: DELETE `/api/v1/locks`, body `{"key": Like("test/key")}`
   - Response: 200, body `{"success": true, "data": {}}`
   - Test body: call `UnlockStack` with `dtos.UnlockStackRequest{Key: "test/key"}`, assert no error
 
-- [ ] T008 [US1] Add `TestPact_ExchangeOIDCToken(t *testing.T)` to `pkg/pro/consumer_pact_test.go`:
+- [x] T008 [US1] Add `TestPact_ExchangeOIDCToken(t *testing.T)` to `pkg/pro/consumer_pact_test.go`:
   - Use `newHTTPMockProvider(t)` (standard HTTP, not TLS — `exchangeOIDCTokenForAtmosToken` does not enforce https)
   - State: `"OIDC token is valid and workspace exists"`
   - Request: POST `/api/v1/auth/github-oidc`, `Content-Type: application/json`, `User-Agent: Term(regex "^atmos/", generate "atmos/1.0.0 (linux; amd64)")`, body `{"token": Like("oidc-token"), "workspaceId": Like("workspace-uuid")}`
   - Response: 200, body `{"success": true, "data": {"token": Like("jwt-token")}}`
   - Test body: call `exchangeOIDCTokenForAtmosToken(mockURL, "api/v1", "oidc-token", "workspace-uuid")` (package-private function, accessible within `package pro`), assert no error
 
-- [ ] T009 [US1] Add `TestPact_UploadInstances(t *testing.T)` to `pkg/pro/consumer_pact_test.go`:
+- [x] T009 [US1] Add `TestPact_UploadInstances(t *testing.T)` to `pkg/pro/consumer_pact_test.go`:
   - State: `"workspace exists and accepts drift detection instances"`
   - Request: POST `/api/v1/instances`, body with `Like()` for `repo_url/name/owner/host`, `EachLike` for `instances` array with `{component, stack, component_type}`
   - Response: 200, body `{"success": true}`
   - Test body: call `UploadInstances` with a single-instance `dtos.InstancesUploadRequest`, assert no error
 
-- [ ] T010 [US1] Add `TestPact_UploadInstanceStatus(t *testing.T)` to `pkg/pro/consumer_pact_test.go`:
+- [x] T010 [US1] Add `TestPact_UploadInstanceStatus(t *testing.T)` to `pkg/pro/consumer_pact_test.go`:
   - State: `"workspace exists and instance exists for owner/repo"`
   - Request: PATCH `/api/v1/repos/org/repo/instances` with query `stack=dev-us-east-1&component=vpc`, body `{"command": Like("terraform plan"), "exit_code": Like(0)}`
   - Response: 200, body `{"success": true}`
   - Test body: create `AtmosProAPIClient` pointing at mock server; call `UploadInstanceStatus` with `dtos.InstanceStatusUploadRequest{RepoOwner:"org", RepoName:"repo", Stack:"dev-us-east-1", Component:"vpc", Command:"terraform plan", ExitCode:0}`; assert no error
   - Note: pact V2 path matching is exact-string; use literal `"/api/v1/repos/org/repo/instances"` as the path and set `r.Query` for `stack` and `component` separately
 
-- [ ] T011 [US1] Add `TestPact_CreateCommit(t *testing.T)` to `pkg/pro/consumer_pact_test.go`:
+- [x] T011 [US1] Add `TestPact_CreateCommit(t *testing.T)` to `pkg/pro/consumer_pact_test.go`:
   - State: `"workspace exists and GitHub App is authorized"`
   - Request: POST `/api/v1/git/commit`, body with `Like()` for `branch` (string), `commitMessage` (string), `changes.additions` (`EachLike({path: Like("file.txt"), contents: Like("base64...")})`), `changes.deletions` (`EachLike({path: Like("old.txt")})`)
   - Response: 200, body `{"success": true, "data": {"sha": Like("abc123")}}`
   - Test body: call `CreateCommit` with a minimal `dtos.CommitRequest{Branch:"main", CommitMessage:"test", Changes: dtos.CommitChanges{Additions: []dtos.CommitFileAddition{{Path:"f.txt", Contents:"dGVzdA=="}}}}`, assert no error and response `Data.SHA` non-empty
 
-- [ ] T012 [US1] Add `TestPact_GetGitHubOIDCToken(t *testing.T)` to `pkg/pro/consumer_pact_test.go`:
+- [x] T012 [US1] Add `TestPact_GetGitHubOIDCToken(t *testing.T)` to `pkg/pro/consumer_pact_test.go`:
   - Use `newTLSMockProvider(t)` (TLS required — `buildOIDCRequestURL` enforces https scheme)
   - State: `"GitHub Actions OIDC endpoint is available"`
   - Request: GET `/token?audience=atmos-pro.com`, header `Authorization: Like("Bearer test-request-token")`
@@ -127,7 +127,7 @@ description: "Task list for Pact Consumer Contract Testing for Atmos Pro API"
 
 **Independent Test**: Temporarily rename a field in `dtos.UploadAffectedStacksRequest` (e.g., `head_sha` → `headSha`), run pact tests, confirm `TestPact_UploadAffectedStacks` fails, then revert.
 
-- [ ] T013 [US2] Run `go test -tags pact ./pkg/pro/... -v` from the repo root and verify:
+- [x] T013 [US2] Run `go test -tags pact ./pkg/pro/... -v` from the repo root and verify:
   - All 8 `TestPact_*` functions pass
   - File `pacts/atmos-AtmosPro.json` exists and contains exactly 8 interactions
   - Consumer is `"atmos"` and provider is `"AtmosPro"` in the generated file
@@ -141,7 +141,7 @@ description: "Task list for Pact Consumer Contract Testing for Atmos Pro API"
 
 **Independent Test**: Follow the README instructions on a fresh checkout; confirm all pact tests run and produce output.
 
-- [ ] T014 [US3] Add "Pact Contract Testing" section to `README.md` using the content from `specs/001-pact-consumer-contracts/quickstart.md`. Place it in the Contributing / Development section (or just before the Testing section if one exists). Preserve existing README formatting and do not reorder other sections.
+- [x] T014 [US3] Add "Pact Contract Testing" section to `README.md` using the content from `specs/001-pact-consumer-contracts/quickstart.md`. Place it in the Contributing / Development section (or just before the Testing section if one exists). Preserve existing README formatting and do not reorder other sections.
 
 ---
 
@@ -149,9 +149,9 @@ description: "Task list for Pact Consumer Contract Testing for Atmos Pro API"
 
 **Purpose**: Verify no regressions, no lint violations, no binary size impact.
 
-- [ ] T015 [P] Run `go build .` and confirm the binary compiles cleanly — pact-go must be test-only and must not appear in the production binary
-- [ ] T016 [P] Run `go test ./pkg/pro/...` (without `-tags pact`) and confirm all existing unit tests still pass — pact build tag must fully isolate the new test files
-- [ ] T017 [P] Run `make lint` and fix any `golangci-lint` violations in `pkg/pro/pact_helpers_test.go` and `pkg/pro/consumer_pact_test.go` — pay attention to `godot` (comment periods), import grouping, and `funlen`
+- [x] T015 [P] Run `go build .` and confirm the binary compiles cleanly — pact-go must be test-only and must not appear in the production binary
+- [x] T016 [P] Run `go test ./pkg/pro/...` (without `-tags pact`) and confirm all existing unit tests still pass — pact build tag must fully isolate the new test files
+- [x] T017 [P] Run `make lint` and fix any `golangci-lint` violations in `pkg/pro/pact_helpers_test.go` and `pkg/pro/consumer_pact_test.go` — pay attention to `godot` (comment periods), import grouping, and `funlen`
 
 ---
 
