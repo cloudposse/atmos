@@ -73,6 +73,7 @@ jobs:
 
       - name: Set up Go
         if: ${{ ! ( matrix.target == 'windows' && github.event.pull_request.draft  ) }}
+        # setup-go v6 requires runner v2.327.1+ and can affect toolchain handling.
         uses: actions/setup-go@v6
         with:
           go-version-file: "go.mod"
@@ -200,6 +201,7 @@ jobs:
           atmos version
 
       - name: Set up Go
+        # setup-go v6 requires runner v2.327.1+ and can affect toolchain handling.
         uses: actions/setup-go@v6
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
         with:
