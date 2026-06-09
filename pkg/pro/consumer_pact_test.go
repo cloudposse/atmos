@@ -38,19 +38,19 @@ func TestPact_UploadAffectedStacks(t *testing.T) {
 					"repo_owner": matchers.Like("org"),
 					"repo_host":  matchers.Like("github.com"),
 					// All non-omitempty fields from schema.Affected are always serialized
-				// and must be included for pact V2 strict body matching.
-				"stacks": matchers.EachLike(body{
-					"component":              matchers.Like("vpc"),
-					"stack":                  matchers.Like("dev-us-east-1"),
-					"component_type":         matchers.Like("terraform"),
-					"component_path":         matchers.Like("components/terraform/vpc"),
-					"stack_slug":             matchers.Like(""),
-					"affected":               matchers.Like("component"),
-					"affected_all":           matchers.EachLike("component", 1),
-					"dependents":             nil,
-					"included_in_dependents": matchers.Like(false),
-					"settings":               nil,
-				}, 1),
+					// and must be included for pact V2 strict body matching.
+					"stacks": matchers.EachLike(body{
+						"component":              matchers.Like("vpc"),
+						"stack":                  matchers.Like("dev-us-east-1"),
+						"component_type":         matchers.Like("terraform"),
+						"component_path":         matchers.Like("components/terraform/vpc"),
+						"stack_slug":             matchers.Like(""),
+						"affected":               matchers.Like("component"),
+						"affected_all":           matchers.EachLike("component", 1),
+						"dependents":             nil,
+						"included_in_dependents": matchers.Like(false),
+						"settings":               nil,
+					}, 1),
 				})
 		}).
 		WillRespondWith(200, func(b *consumer.V2ResponseBuilder) {

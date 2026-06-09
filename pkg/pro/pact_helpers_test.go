@@ -15,7 +15,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-
 // pactDir returns the absolute path to the pacts/ output directory at the repo root.
 // Uses the source file path embedded at compile time so the path is always correct
 // regardless of which directory go test is invoked from.
