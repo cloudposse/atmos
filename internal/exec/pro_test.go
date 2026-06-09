@@ -485,8 +485,8 @@ func TestUploadStatusPreservesInvokedSubCommand(t *testing.T) {
 			Stack:             "test-stack",
 			Component:         "test-component",
 			ComponentType:     "terraform",
-			SubCommand:        "apply",          // converted by handleDeploySubcommand
-			InvokedSubCommand: "deploy",         // original invocation
+			SubCommand:        "apply",  // converted by handleDeploySubcommand
+			InvokedSubCommand: "deploy", // original invocation
 			ComponentSettingsSection: map[string]interface{}{
 				"pro": map[string]interface{}{"enabled": true},
 			},
