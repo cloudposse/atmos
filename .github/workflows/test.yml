@@ -257,7 +257,14 @@ jobs:
           token: ${{ secrets.CODECOV_TOKEN }}
           slug: ${{ github.repository }}
           files: coverage.out
-          fail_ci_if_error: true
+          # Codecov's uploader downloads its CLI and verifies the binary's GPG
+          # signature. Transient Codecov-side issues (e.g. an empty public-key
+          # import: "gpg: no valid OpenPGP data found" / "Can't check signature:
+          # No public key") make verification exit 1, which would hard-fail this
+          # job even when every test passed. Don't let a coverage-upload/infra
+          # flake fail a green test run — the 80% coverage gate is still enforced
+          # by Codecov's own PR status check, independent of this step's exit code.
+          fail_ci_if_error: false
           flags: unittests
           verbose: true
 
