@@ -199,7 +199,8 @@ var applyProgressLineRe = regexp.MustCompile(
 		`|(?:Creation|Modifications|Destruction|Read) complete` +
 		`|Refreshing state` +
 		`|Provisioning with` +
-		`).*\n?`)
+		`).*\n?`,
+)
 
 // multiBlankLinesRe matches 3 or more consecutive newlines for collapsing.
 var multiBlankLinesRe = regexp.MustCompile(`\n{3,}`)
