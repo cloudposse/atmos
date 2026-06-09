@@ -12,17 +12,15 @@ terraform:
       region: "us-east-1"
       access_key: "test"
       secret_key: "test"
-      s3_use_path_style: false
+      s3_use_path_style: true
       skip_credentials_validation: true
       skip_metadata_api_check: true
+      skip_requesting_account_id: true
       endpoints:
         # An alias for the default LocalStack URL
-        sts: &localstack_url "https://localhost.localstack.cloud:4566"
+        sts: &localstack_url "http://localhost:4566"
 
-        # S3 is an exception, and requires a TLS endpoint
-        s3: "https://localhost.localstack.cloud:4566"
-
-        # Everything else can use HTTP on localhost
+        # Use the LocalStack edge endpoint for all services.
         apigateway: *localstack_url
         apigatewayv2: *localstack_url
         cloudformation: *localstack_url
@@ -35,6 +33,7 @@ terraform:
         lambda: *localstack_url
         rds: *localstack_url
         route53: *localstack_url
+        s3: *localstack_url
         secretsmanager: *localstack_url
         ses: *localstack_url
         sns: *localstack_url
