@@ -1,0 +1,5 @@
+# Atmos configuration.
+# For full reference, see: https://atmos.tools/cli/configuration
+#
+# Drop-in configuration files in .atmos.d/ are automatically merged
+# with this file at startup. See .atmos.d/ for CI and Atmos Pro settings.

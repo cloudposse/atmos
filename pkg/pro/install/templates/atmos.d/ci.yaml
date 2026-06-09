@@ -1,0 +1,23 @@
+# Enable native CI/CD support for Atmos Pro.
+# This configuration is automatically loaded from .atmos.d/ at startup.
+#
+# When enabled, Atmos auto-detects CI environments and produces rich output:
+# - Plan summaries written to $GITHUB_STEP_SUMMARY
+# - Output variables exported to $GITHUB_OUTPUT
+# - Commit status checks for each component
+#
+# See: https://atmos.tools/cli/configuration/ci
+ci:
+  enabled: true
+  output:
+    enabled: true
+  summary:
+    enabled: true
+  checks:
+    enabled: true
+    context_prefix: ""
+    statuses:
+      component: true
+      add: true
+      change: true
+      destroy: true

@@ -26,6 +26,12 @@ import (
 func TestExecuteTerraform_ExportEnvVar(t *testing.T) {
 	// Skip if terraform is not installed
 	tests.RequireTerraform(t)
+	tfDataDir := filepath.Join(t.TempDir(), "tfdata")
+	pluginCacheDir := filepath.Join(t.TempDir(), "plugin-cache")
+	require.NoError(t, os.MkdirAll(pluginCacheDir, 0o755))
+	t.Setenv("TF_DATA_DIR", tfDataDir)
+	t.Setenv("TF_PLUGIN_CACHE_DIR", pluginCacheDir)
+
 	// Clean up any leftover terraform files from previous test runs to avoid conflicts
 	startingDir, err := os.Getwd()
 	if err != nil {
@@ -41,23 +47,23 @@ func TestExecuteTerraform_ExportEnvVar(t *testing.T) {
 
 	// Clean before test
 	for _, path := range cleanupFiles {
-		os.RemoveAll(path)
+		require.NoError(t, os.RemoveAll(path))
 	}
 
 	// Also look for and remove any .tfvars.json files
 	matches, _ := filepath.Glob(filepath.Join(componentPath, "*.terraform.tfvars.json"))
 	for _, match := range matches {
-		os.Remove(match)
+		require.NoError(t, os.Remove(match))
 	}
 
 	defer func() {
 		// Clean up after test
 		for _, path := range cleanupFiles {
-			os.RemoveAll(path)
+			require.NoError(t, os.RemoveAll(path))
 		}
 		matches, _ := filepath.Glob(filepath.Join(componentPath, "*.terraform.tfvars.json"))
 		for _, match := range matches {
-			os.Remove(match)
+			require.NoError(t, os.Remove(match))
 		}
 	}()
 
@@ -366,7 +372,8 @@ func TestExecuteTerraform_TerraformPlanWithInvalidTemplates(t *testing.T) {
 	// was brittle and only passed when Linux/Windows happened to hit a file
 	// whose error contained "invalid".
 	errMsg := strings.ToLower(err.Error())
-	assert.True(t,
+	assert.True(
+		t,
 		strings.Contains(errMsg, "invalid") ||
 			strings.Contains(errMsg, "unclosed") ||
 			strings.Contains(errMsg, "no matches found") ||
