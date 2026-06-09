@@ -456,3 +456,8 @@ ALWAYS compile after changes: `go build . && go test ./...`. Fix errors immediat
 
 ### Pre-commit (MANDATORY)
 NEVER use `--no-verify`. Run `make lint` before committing. Hooks run go-fumpt, golangci-lint, go mod tidy.
+
+<!-- SPECKIT START -->
+For additional context about technologies to be used, project structure,
+shell commands, and other important information, read the current plan
+<!-- SPECKIT END -->
