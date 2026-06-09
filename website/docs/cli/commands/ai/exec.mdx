@@ -70,7 +70,7 @@ The prompt can be provided as:
   <dd>Include stack context in the prompt</dd>
 
   <dt>`--provider, -p`</dt>
-  <dd>Override AI provider (anthropic, openai, gemini, grok, ollama, bedrock, azureopenai)</dd>
+  <dd>Override AI provider. API: `anthropic`, `openai`, `gemini`, `grok`, `ollama`, `bedrock`, `azureopenai`. CLI: `claude-code`, `codex-cli`, `gemini-cli`.</dd>
 
   <dt>`--session, -s`</dt>
   <dd>Session ID for conversation context (enables multi-turn execution)</dd>
@@ -83,7 +83,14 @@ The prompt can be provided as:
 
   <dt>`--no-auto-context`</dt>
   <dd>Disable automatic context discovery</dd>
+
+  <dt>`--mcp <servers>`</dt>
+  <dd>MCP servers to use (comma-separated). Skips automatic server routing and starts only the specified servers. Can be repeated: `--mcp aws-iam --mcp aws-billing`. Use [`atmos mcp list`](/cli/commands/mcp/list) to see available server names. Environment variable: `ATMOS_AI_MCP`</dd>
 </dl>
+
+:::tip Smart MCP Routing
+When multiple MCP servers are configured with API providers, Atmos automatically selects only the servers relevant to your prompt using a lightweight routing call. Use `--mcp` to bypass routing and specify servers directly. CLI providers (`claude-code`, `codex-cli`, `gemini-cli`) skip routing — all servers are passed to the CLI tool, which handles selection internally.
+:::
 
 ## Exit Codes
 
@@ -249,6 +256,22 @@ done
   run: |
     result=$(atmos ai exec "Review changes" --format json)
     echo "$result" | jq -r '.response' >> $GITHUB_STEP_SUMMARY
+```
+</Terminal>
+
+### MCP Server Integration
+
+<Terminal title="mcp examples">
+```bash
+# Auto-routing selects the right server
+atmos ai exec "Check security posture in us-east-1" --format json
+
+# Specify servers directly
+atmos ai exec --mcp aws-iam "List all admin roles" --format json
+atmos ai exec --mcp aws-security,aws-iam "Audit our security posture" --format markdown
+
+# Environment variable
+ATMOS_AI_MCP=aws-billing atmos ai exec "Monthly cost report" --format json > costs.json
 ```
 </Terminal>
 

@@ -47,6 +47,9 @@ var (
 				Plan: schema.TerraformPlan{
 					SkipPlanfile: false,
 				},
+				Workspace: schema.WorkspaceConfig{
+					PrefixSeparator: "-", // Character used in place of '/' in auto-generated backend key prefixes.
+				},
 			},
 			Helmfile: schema.Helmfile{
 				BasePath:              "components/helmfile",

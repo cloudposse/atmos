@@ -3,6 +3,7 @@
  */
 import React from 'react';
 import CodeBlock from '@theme/CodeBlock';
+import Mermaid from '@theme/Mermaid';
 import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import SourceLink from './SourceLink';
@@ -100,11 +101,18 @@ export default function FileViewer({ file }: FileViewerProps): JSX.Element {
               code({ className, children, ...props }) {
                 const match = /language-(\w+)/.exec(className || '');
                 const isInline = !match;
-                return isInline ? (
-                  <code className={className} {...props}>
-                    {children}
-                  </code>
-                ) : (
+                if (isInline) {
+                  return (
+                    <code className={className} {...props}>
+                      {children}
+                    </code>
+                  );
+                }
+                // Render mermaid diagrams using the Docusaurus Mermaid component.
+                if (match[1] === 'mermaid') {
+                  return <Mermaid value={String(children).replace(/\n$/, '')} />;
+                }
+                return (
                   <CodeBlock language={match[1]}>
                     {String(children).replace(/\n$/, '')}
                   </CodeBlock>

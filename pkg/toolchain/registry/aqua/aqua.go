@@ -1,12 +1,14 @@
 package aqua
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"text/template"
 
 	sprig "github.com/Masterminds/sprig/v3"
@@ -51,13 +53,32 @@ func init() {
 	})
 }
 
+// defaultAquaRegistryBaseURL is the upstream aqua-registry raw content base URL.
+// It serves both the top-level registry.yaml index and the per-package pkgs/<name>/registry.yaml files.
+const defaultAquaRegistryBaseURL = "https://raw.githubusercontent.com/aquaproj/aqua-registry/main"
+
 // AquaRegistry represents the Aqua registry structure.
 type AquaRegistry struct {
 	client          httpClient.Client
 	cache           *RegistryCache
 	cacheStore      cache.Store
 	githubBaseURL   string
-	lastSearchTotal int // Total number of search results before pagination.
+	registryBaseURL string // Base URL of the aqua-registry repo (raw content). See defaultAquaRegistryBaseURL.
+	lastSearchTotal int    // Total number of search results before pagination.
+	pathIndexMu     sync.RWMutex
+	pathIndex       map[string]string  // "owner/repo" -> registry path of one package under that owner/repo. Monorepo packages (e.g., kubernetes/kubernetes/{kubectl,kubeadm,...}) collide here — last wins. Use packageList for full enumeration.
+	packageList     []indexPackageInfo // One entry per index package, preserving the (owner, repo, binary) triple. Used by ResolveShortName so monorepo binaries aren't lost to map collisions.
+}
+
+// indexPackageInfo captures the minimal data ResolveShortName needs from each
+// index package: the canonical owner/repo (from repo_owner/repo_name) plus the
+// binary name (last segment of the package's `name` when 3-segment, else
+// repo_name). Stored as a list because multiple packages can share owner/repo
+// (kubernetes/kubernetes/{kubectl,kubeadm,...}) and a map would lose them.
+type indexPackageInfo struct {
+	owner  string
+	repo   string
+	binary string
 }
 
 // RegistryCache handles caching of registry files.
@@ -83,6 +104,16 @@ func WithGitHubBaseURL(url string) RegistryOption {
 	}
 }
 
+// WithRegistryBaseURL sets the aqua-registry raw content base URL (primarily for testing).
+// The URL must serve registry.yaml at its root and per-package files under pkgs/<name>/registry.yaml.
+func WithRegistryBaseURL(url string) RegistryOption {
+	defer perf.Track(nil, "aqua.WithRegistryBaseURL")()
+
+	return func(ar *AquaRegistry) {
+		ar.registryBaseURL = strings.TrimRight(url, "/")
+	}
+}
+
 // NewAquaRegistry creates a new Aqua registry client.
 func NewAquaRegistry(opts ...RegistryOption) *AquaRegistry {
 	defer perf.Track(nil, "aqua.NewAquaRegistry")()
@@ -103,8 +134,9 @@ func NewAquaRegistry(opts ...RegistryOption) *AquaRegistry {
 		cache: &RegistryCache{
 			baseDir: filepath.Join(cacheBaseDir, "registry"),
 		},
-		cacheStore:    cache.NewFileStore(cacheBaseDir),
-		githubBaseURL: "https://api.github.com", // default
+		cacheStore:      cache.NewFileStore(cacheBaseDir),
+		githubBaseURL:   "https://api.github.com", // default
+		registryBaseURL: defaultAquaRegistryBaseURL,
 	}
 
 	// Apply options.
@@ -140,18 +172,29 @@ func (ar *AquaRegistry) LoadLocalConfig(configPath string) error {
 }
 
 // GetTool fetches tool metadata from the Aqua registry.
+//
+// Resolution order:
+//  1. Index-driven lookup: consult the cached aqua-registry index for the package's full
+//     registry path (e.g., "openbao/openbao/bao") and fetch pkgs/<path>/registry.yaml directly.
+//     This is the only path that handles packages whose binary subdir differs from the
+//     repo name (3-segment layouts).
+//  2. Generic 2-segment probe: fall back to pkgs/<owner>/<repo>/registry.yaml for the
+//     standard layout, so installs still work when the index endpoint is transiently
+//     unreachable. We intentionally do NOT enumerate specific orgs here — 3-segment
+//     layouts are the index's responsibility, not a hardcoded allowlist's.
 func (ar *AquaRegistry) GetTool(owner, repo string) (*registry.Tool, error) {
 	defer perf.Track(nil, "aqua.AquaRegistry.GetTool")()
 
-	// Fall back to remote registry
-	// Try multiple registry sources
+	if tool, err := ar.fetchByIndexPath(owner, repo); err == nil {
+		return tool, nil
+	}
+
+	// Generic 2-segment fallback for when the index is unreachable.
+	// The refs/heads/main variant is kept so previously-cached entries (whose disk cache key
+	// embeds the old URL) continue to resolve without a fresh network fetch.
 	registries := []string{
+		ar.registryBaseURL + "/pkgs",
 		"https://raw.githubusercontent.com/aquaproj/aqua-registry/refs/heads/main/pkgs",
-		"https://raw.githubusercontent.com/aquaproj/aqua-registry/main/pkgs/kubernetes/kubernetes",
-		"https://raw.githubusercontent.com/aquaproj/aqua-registry/main/pkgs/hashicorp",
-		"https://raw.githubusercontent.com/aquaproj/aqua-registry/main/pkgs/helm",
-		"https://raw.githubusercontent.com/aquaproj/aqua-registry/main/pkgs/opentofu",
-		"https://raw.githubusercontent.com/aquaproj/aqua-registry/main/pkgs",
 	}
 
 	for _, registry := range registries {
@@ -165,6 +208,51 @@ func (ar *AquaRegistry) GetTool(owner, repo string) (*registry.Tool, error) {
 	}
 
 	return nil, fmt.Errorf("%w: %s/%s not found in any registry", registry.ErrToolNotFound, owner, repo)
+}
+
+// fetchByIndexPath looks up the package's full registry path in the cached index and
+// fetches its registry.yaml directly. This is the only resolution path that works for
+// packages whose YAML lives at pkgs/<owner>/<repo>/<binary>/registry.yaml (i.e., when the
+// binary name differs from the repo name, like openbao/openbao/bao).
+func (ar *AquaRegistry) fetchByIndexPath(owner, repo string) (*registry.Tool, error) {
+	defer perf.Track(nil, "aqua.AquaRegistry.fetchByIndexPath")()
+
+	path, ok := ar.lookupRegistryPath(owner, repo)
+	if !ok {
+		return nil, fmt.Errorf("%w: no index entry for %s/%s", registry.ErrToolNotFound, owner, repo)
+	}
+
+	url := fmt.Sprintf("%s/pkgs/%s/registry.yaml", ar.registryBaseURL, path)
+	log.Debug("Fetching package via index path", "path", path, "url", url)
+	return ar.fetchRegistryFile(url)
+}
+
+// lookupRegistryPath returns the full registry path (e.g., "openbao/openbao/bao") for a
+// given owner/repo, loading the index lazily if not yet cached. Returns ok=false when the
+// index can't be loaded or the package isn't listed.
+func (ar *AquaRegistry) lookupRegistryPath(owner, repo string) (string, bool) {
+	defer perf.Track(nil, "aqua.AquaRegistry.lookupRegistryPath")()
+
+	ar.pathIndexMu.RLock()
+	idx := ar.pathIndex
+	ar.pathIndexMu.RUnlock()
+
+	if idx == nil {
+		// Trigger lazy load via fetchRegistryIndex, which populates ar.pathIndex as a side effect.
+		if _, err := ar.fetchRegistryIndex(context.Background()); err != nil {
+			log.Debug("Failed to load registry index for path lookup", "error", err)
+			return "", false
+		}
+		ar.pathIndexMu.RLock()
+		idx = ar.pathIndex
+		ar.pathIndexMu.RUnlock()
+	}
+
+	if idx == nil {
+		return "", false
+	}
+	path, ok := idx[owner+"/"+repo]
+	return path, ok
 }
 
 // GetToolWithVersion fetches tool metadata and resolves version-specific overrides.
@@ -191,24 +279,28 @@ func (ar *AquaRegistry) GetToolWithVersion(owner, repo, version string) (*regist
 // versionOverride holds version override data from Aqua registry.
 // Fields mirror Aqua's VersionOverride to handle all real-world registry YAML patterns.
 type versionOverride struct {
-	VersionConstraint   string                    `yaml:"version_constraint"`
-	Type                string                    `yaml:"type"`
-	RepoOwner           string                    `yaml:"repo_owner"`
-	RepoName            string                    `yaml:"repo_name"`
-	Asset               string                    `yaml:"asset"`
-	URL                 string                    `yaml:"url"` // Alternative to Asset for http type tools.
-	Format              string                    `yaml:"format"`
-	FormatOverrides     []registry.FormatOverride `yaml:"format_overrides"`
-	VersionPrefix       string                    `yaml:"version_prefix"`
-	Replacements        map[string]string         `yaml:"replacements"`
-	Overrides           []registry.AquaOverride   `yaml:"overrides"`
-	Files               []registry.File           `yaml:"files"`
-	SupportedEnvs       []string                  `yaml:"supported_envs"`
-	Rosetta2            *bool                     `yaml:"rosetta2"`
-	WindowsArmEmulation *bool                     `yaml:"windows_arm_emulation"`
-	NoAsset             bool                      `yaml:"no_asset"`
-	Checksum            registry.ChecksumConfig   `yaml:"checksum"`
-	ErrorMessage        string                    `yaml:"error_message"`
+	VersionConstraint          string                              `yaml:"version_constraint"`
+	Type                       string                              `yaml:"type"`
+	RepoOwner                  string                              `yaml:"repo_owner"`
+	RepoName                   string                              `yaml:"repo_name"`
+	Asset                      string                              `yaml:"asset"`
+	URL                        string                              `yaml:"url"` // Alternative to Asset for http type tools.
+	Format                     string                              `yaml:"format"`
+	FormatOverrides            []registry.FormatOverride           `yaml:"format_overrides"`
+	VersionPrefix              string                              `yaml:"version_prefix"`
+	Replacements               map[string]string                   `yaml:"replacements"`
+	Overrides                  []registry.AquaOverride             `yaml:"overrides"`
+	Files                      []registry.File                     `yaml:"files"`
+	SupportedEnvs              []string                            `yaml:"supported_envs"`
+	Rosetta2                   *bool                               `yaml:"rosetta2"`
+	WindowsArmEmulation        *bool                               `yaml:"windows_arm_emulation"`
+	NoAsset                    bool                                `yaml:"no_asset"`
+	Checksum                   registry.ChecksumConfig             `yaml:"checksum"`
+	Cosign                     registry.CosignConfig               `yaml:"cosign"`
+	SLSAProvenance             registry.SLSAProvenance             `yaml:"slsa_provenance"`
+	Minisign                   registry.MinisignConfig             `yaml:"minisign"`
+	GitHubArtifactAttestations registry.GitHubArtifactAttestations `yaml:"github_artifact_attestations"`
+	ErrorMessage               string                              `yaml:"error_message"`
 }
 
 // applyVersionOverride applies a version override to the tool.
@@ -268,10 +360,38 @@ func applyVersionOverride(tool *registry.Tool, override *versionOverride, versio
 	if override.Checksum.Type != "" || override.Checksum.Asset != "" {
 		tool.Checksum = override.Checksum
 	}
+	if hasCosignConfig(&override.Cosign) {
+		tool.Cosign = override.Cosign
+	}
+	if hasSLSAProvenance(&override.SLSAProvenance) {
+		tool.SLSAProvenance = override.SLSAProvenance
+	}
+	if hasMinisignConfig(&override.Minisign) {
+		tool.Minisign = override.Minisign
+	}
+	if hasGitHubArtifactAttestations(&override.GitHubArtifactAttestations) {
+		tool.GitHubArtifactAttestations = override.GitHubArtifactAttestations
+	}
 	if override.ErrorMessage != "" {
 		tool.ErrorMessage = override.ErrorMessage
 	}
 	log.Debug("Applied version override", versionLogKey, version, "constraint", override.VersionConstraint, "asset", tool.Asset, "format", tool.Format, "replacements", tool.Replacements)
+}
+
+func hasCosignConfig(c *registry.CosignConfig) bool {
+	return registry.HasCosignConfig(c)
+}
+
+func hasSLSAProvenance(s *registry.SLSAProvenance) bool {
+	return registry.HasSLSAProvenance(s)
+}
+
+func hasMinisignConfig(m *registry.MinisignConfig) bool {
+	return registry.HasMinisignConfig(m)
+}
+
+func hasGitHubArtifactAttestations(g *registry.GitHubArtifactAttestations) bool {
+	return registry.HasGitHubArtifactAttestations(g)
 }
 
 // resetByPkgType clears fields not applicable when changing to a new package type.
@@ -291,28 +411,33 @@ func resetByPkgType(tool *registry.Tool, newType string) {
 // registryPackage holds package data from Aqua registry file.
 // This struct must include all fields that need to be preserved when resolving version overrides.
 type registryPackage struct {
-	Name                string                    `yaml:"name"` // Package name (e.g., "kubernetes/kubernetes/kubectl").
-	Type                string                    `yaml:"type"`
-	RepoOwner           string                    `yaml:"repo_owner"`
-	RepoName            string                    `yaml:"repo_name"`
-	Asset               string                    `yaml:"asset"` // Used by github_release types.
-	URL                 string                    `yaml:"url"`   // Used by http types.
-	Format              string                    `yaml:"format"`
-	FormatOverrides     []registry.FormatOverride `yaml:"format_overrides"`
-	BinaryName          string                    `yaml:"binary_name"`
-	Description         string                    `yaml:"description"`
-	VersionPrefix       string                    `yaml:"version_prefix"`
-	VersionConstraint   string                    `yaml:"version_constraint"` // Top-level version constraint.
-	Rosetta2            bool                      `yaml:"rosetta2"`           // Allow arm64 to fall back to amd64 on macOS.
-	WindowsArmEmulation bool                      `yaml:"windows_arm_emulation"`
-	Replacements        map[string]string         `yaml:"replacements"`
-	Overrides           []registry.AquaOverride   `yaml:"overrides"`
-	Files               []registry.File           `yaml:"files"`
-	VersionOverrides    []versionOverride         `yaml:"version_overrides"`
-	SupportedEnvs       []string                  `yaml:"supported_envs"` // Supported platforms (e.g., "darwin", "linux").
-	ErrorMessage        string                    `yaml:"error_message"`
-	VersionSource       string                    `yaml:"version_source"` // Version source: "github_release" (default) or "github_tag".
-	NoAsset             bool                      `yaml:"no_asset"`
+	Name                       string                              `yaml:"name"` // Package name (e.g., "kubernetes/kubernetes/kubectl").
+	Type                       string                              `yaml:"type"`
+	RepoOwner                  string                              `yaml:"repo_owner"`
+	RepoName                   string                              `yaml:"repo_name"`
+	Asset                      string                              `yaml:"asset"` // Used by github_release types.
+	URL                        string                              `yaml:"url"`   // Used by http types.
+	Format                     string                              `yaml:"format"`
+	FormatOverrides            []registry.FormatOverride           `yaml:"format_overrides"`
+	BinaryName                 string                              `yaml:"binary_name"`
+	Description                string                              `yaml:"description"`
+	VersionPrefix              string                              `yaml:"version_prefix"`
+	VersionConstraint          string                              `yaml:"version_constraint"` // Top-level version constraint.
+	Rosetta2                   bool                                `yaml:"rosetta2"`           // Allow arm64 to fall back to amd64 on macOS.
+	WindowsArmEmulation        bool                                `yaml:"windows_arm_emulation"`
+	Replacements               map[string]string                   `yaml:"replacements"`
+	Overrides                  []registry.AquaOverride             `yaml:"overrides"`
+	Files                      []registry.File                     `yaml:"files"`
+	VersionOverrides           []versionOverride                   `yaml:"version_overrides"`
+	SupportedEnvs              []string                            `yaml:"supported_envs"` // Supported platforms (e.g., "darwin", "linux").
+	ErrorMessage               string                              `yaml:"error_message"`
+	VersionSource              string                              `yaml:"version_source"` // Version source: "github_release" (default) or "github_tag".
+	NoAsset                    bool                                `yaml:"no_asset"`
+	Checksum                   registry.ChecksumConfig             `yaml:"checksum"`
+	Cosign                     registry.CosignConfig               `yaml:"cosign"`
+	SLSAProvenance             registry.SLSAProvenance             `yaml:"slsa_provenance"`
+	Minisign                   registry.MinisignConfig             `yaml:"minisign"`
+	GitHubArtifactAttestations registry.GitHubArtifactAttestations `yaml:"github_artifact_attestations"`
 }
 
 // resolveVersionOverrides fetches the full registry file and resolves version-specific overrides.
@@ -341,25 +466,30 @@ func (ar *AquaRegistry) resolveVersionOverrides(sourceURL, version string) (*reg
 	}
 
 	tool := &registry.Tool{
-		Name:                resolveBinaryName(pkgDef.BinaryName, pkgDef.Name, pkgDef.RepoName),
-		Type:                pkgDef.Type,
-		RepoOwner:           pkgDef.RepoOwner,
-		RepoName:            pkgDef.RepoName,
-		Asset:               asset,
-		Format:              pkgDef.Format,
-		FormatOverrides:     pkgDef.FormatOverrides,
-		BinaryName:          pkgDef.BinaryName,
-		VersionPrefix:       pkgDef.VersionPrefix,
-		Replacements:        pkgDef.Replacements,
-		Overrides:           convertAquaOverrides(pkgDef.Overrides),
-		Files:               pkgDef.Files,
-		SourceURL:           sourceURL,
-		SupportedEnvs:       pkgDef.SupportedEnvs,
-		Rosetta2:            pkgDef.Rosetta2,
-		WindowsArmEmulation: pkgDef.WindowsArmEmulation,
-		ErrorMessage:        pkgDef.ErrorMessage,
-		VersionSource:       pkgDef.VersionSource,
-		NoAsset:             pkgDef.NoAsset,
+		Name:                       resolveBinaryName(pkgDef.BinaryName, pkgDef.Name, pkgDef.RepoName),
+		Type:                       pkgDef.Type,
+		RepoOwner:                  pkgDef.RepoOwner,
+		RepoName:                   pkgDef.RepoName,
+		Asset:                      asset,
+		Format:                     pkgDef.Format,
+		FormatOverrides:            pkgDef.FormatOverrides,
+		BinaryName:                 pkgDef.BinaryName,
+		VersionPrefix:              pkgDef.VersionPrefix,
+		Replacements:               pkgDef.Replacements,
+		Overrides:                  convertAquaOverrides(pkgDef.Overrides),
+		Files:                      pkgDef.Files,
+		SourceURL:                  sourceURL,
+		SupportedEnvs:              pkgDef.SupportedEnvs,
+		Rosetta2:                   pkgDef.Rosetta2,
+		WindowsArmEmulation:        pkgDef.WindowsArmEmulation,
+		ErrorMessage:               pkgDef.ErrorMessage,
+		VersionSource:              pkgDef.VersionSource,
+		NoAsset:                    pkgDef.NoAsset,
+		Checksum:                   pkgDef.Checksum,
+		Cosign:                     pkgDef.Cosign,
+		SLSAProvenance:             pkgDef.SLSAProvenance,
+		Minisign:                   pkgDef.Minisign,
+		GitHubArtifactAttestations: pkgDef.GitHubArtifactAttestations,
 	}
 
 	// Phase 1: If no top-level constraint, return base (no overrides checked).
@@ -538,20 +668,25 @@ func (ar *AquaRegistry) parseRegistryFile(data []byte) (*registry.Tool, error) {
 
 		// Convert AquaPackage to Tool.
 		tool := &registry.Tool{
-			Name:                resolveBinaryName(pkg.BinaryName, pkg.Name, pkg.RepoName),
-			RepoOwner:           pkg.RepoOwner,
-			RepoName:            pkg.RepoName,
-			Asset:               asset,
-			Format:              pkg.Format,
-			FormatOverrides:     pkg.FormatOverrides,
-			Type:                pkg.Type,
-			BinaryName:          pkg.BinaryName,
-			VersionPrefix:       pkg.VersionPrefix,
-			Rosetta2:            pkg.Rosetta2,
-			WindowsArmEmulation: pkg.WindowsArmEmulation,
-			ErrorMessage:        pkg.ErrorMessage,
-			VersionSource:       pkg.VersionSource,
-			NoAsset:             pkg.NoAsset,
+			Name:                       resolveBinaryName(pkg.BinaryName, pkg.Name, pkg.RepoName),
+			RepoOwner:                  pkg.RepoOwner,
+			RepoName:                   pkg.RepoName,
+			Asset:                      asset,
+			Format:                     pkg.Format,
+			FormatOverrides:            pkg.FormatOverrides,
+			Type:                       pkg.Type,
+			BinaryName:                 pkg.BinaryName,
+			VersionPrefix:              pkg.VersionPrefix,
+			Rosetta2:                   pkg.Rosetta2,
+			WindowsArmEmulation:        pkg.WindowsArmEmulation,
+			ErrorMessage:               pkg.ErrorMessage,
+			VersionSource:              pkg.VersionSource,
+			NoAsset:                    pkg.NoAsset,
+			Checksum:                   pkg.Checksum,
+			Cosign:                     pkg.Cosign,
+			SLSAProvenance:             pkg.SLSAProvenance,
+			Minisign:                   pkg.Minisign,
+			GitHubArtifactAttestations: pkg.GitHubArtifactAttestations,
 			// Copy Aqua-specific fields for nested file extraction and platform overrides.
 			Files:         pkg.Files,
 			Replacements:  pkg.Replacements,
@@ -578,15 +713,20 @@ func convertAquaOverrides(aquaOverrides []registry.AquaOverride) []registry.Over
 	overrides := make([]registry.Override, len(aquaOverrides))
 	for i, ao := range aquaOverrides {
 		overrides[i] = registry.Override{
-			GOOS:         ao.GOOS,
-			GOARCH:       ao.GOARCH,
-			Envs:         ao.Envs,
-			Type:         ao.Type,
-			Asset:        ao.Asset,
-			URL:          ao.URL,
-			Format:       ao.Format,
-			Files:        ao.Files,
-			Replacements: ao.Replacements,
+			GOOS:                       ao.GOOS,
+			GOARCH:                     ao.GOARCH,
+			Envs:                       ao.Envs,
+			Type:                       ao.Type,
+			Asset:                      ao.Asset,
+			URL:                        ao.URL,
+			Format:                     ao.Format,
+			Files:                      ao.Files,
+			Replacements:               ao.Replacements,
+			Checksum:                   ao.Checksum,
+			Cosign:                     ao.Cosign,
+			SLSAProvenance:             ao.SLSAProvenance,
+			Minisign:                   ao.Minisign,
+			GitHubArtifactAttestations: ao.GitHubArtifactAttestations,
 		}
 		// If URL is set in Aqua override and Asset is not, use URL as Asset.
 		if ao.URL != "" && ao.Asset == "" {

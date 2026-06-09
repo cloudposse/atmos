@@ -1,4 +1,4 @@
-## Changes Found for `foobar/changes` in `plat-ue2-sandbox`
+## Resource Changes Found for `foobar/changes` in `plat-ue2-sandbox`
 
 <a href="https://cloudposse.com/"><img src="https://cloudposse.com/logo-300x69.svg" width="100px" align="right"/></a>
 [![create](https://shields.io/badge/PLAN-CREATE-success?style=for-the-badge)](#user-content-create-plat-ue2-sandbox-foobar_changes)

@@ -1,0 +1,33 @@
+base_path: "./"
+
+settings:
+  experimental: warn
+
+components:
+  terraform:
+    base_path: "components/terraform"
+    command: tofu
+    apply_auto_approve: false
+    deploy_run_init: true
+    init_run_reconfigure: true
+    auto_generate_backend_file: false
+
+# KICS auto-installs out of the box via the curated Atmos registry
+# (pkg/toolchain/registry/atmos/builtin.yaml), which is baked into the
+# atmos binary and prepended to the registry composite at high priority.
+# Users don't need to add `toolchain.registries` here — the override
+# happens automatically. If you want to override the override (e.g.,
+# pin a different asset template), add a registry entry with priority
+# above 100 in your own atmos.yaml.
+
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "deploy/**/*"
+  excluded_paths:
+    - "**/_defaults.yaml"
+  name_pattern: "{stage}"
+
+logs:
+  level: Info
+  file: "/dev/stderr"

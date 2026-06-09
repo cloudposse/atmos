@@ -1240,7 +1240,7 @@ If a component folder is used by multiple component instances in a stack (e.g., 
 - [ ] Update `website/docs/core-concepts/components.mdx`
 - [ ] Add inline godoc comments
 - [ ] Create blog post for release notes
-- [ ] Update CHANGELOG.md
+- [ ] Update `website/src/data/roadmap.js` when user-visible
 
 ### Release
 - [ ] PR description following template

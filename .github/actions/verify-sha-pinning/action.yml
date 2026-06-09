@@ -1,0 +1,326 @@
+name: Verify SHA Pinning
+description: >
+  Verifies that SHA-pinned GitHub Actions in workflow files match
+  the tag claimed in their version comment. Prevents supply chain
+  attacks where tags are force-pushed to malicious commits.
+
+inputs:
+  github-token:
+    description: 'GitHub token for API calls to resolve tags and post PR comments'
+    required: true
+  workflow-dir:
+    description: 'Directory containing workflow files to scan'
+    required: false
+    default: '.github/workflows'
+
+outputs:
+  verified-count:
+    description: 'Number of SHA-pinned actions verified'
+    value: ${{ steps.verify.outputs.verified_count }}
+  failed-count:
+    description: 'Number of mismatches found'
+    value: ${{ steps.verify.outputs.failed_count }}
+  status:
+    description: 'Overall result: pass or fail'
+    value: ${{ steps.verify.outputs.status }}
+
+runs:
+  using: composite
+  steps:
+    - name: Verify SHA pins against upstream tags
+      id: verify
+      uses: actions/github-script@v7
+      env:
+        WORKFLOW_DIR: ${{ inputs.workflow-dir }}
+      with:
+        github-token: ${{ inputs.github-token }}
+        script: |
+          const fs = require('fs');
+          const path = require('path');
+
+          const workflowDir = process.env.WORKFLOW_DIR;
+
+          // Find all workflow files
+          const files = fs.readdirSync(workflowDir)
+            .filter(f => f.endsWith('.yml') || f.endsWith('.yaml'))
+            .map(f => path.join(workflowDir, f));
+
+          if (files.length === 0) {
+            core.info('No workflow files found');
+            core.setOutput('verified_count', 0);
+            core.setOutput('failed_count', 0);
+            core.setOutput('status', 'pass');
+            core.setOutput('results_json', '[]');
+            return;
+          }
+
+          // Match: uses: owner/repo[/sub]@<40-char-sha> # <tag>
+          const pattern = /uses:\s*([^\/\s]+)\/([^@\/\s]+)(?:\/[^@\s]+)?@([a-f0-9]{40})\s*#\s*(v\S+)/g;
+
+          // Collect all pinned references
+          const refs = [];
+          for (const file of files) {
+            const content = fs.readFileSync(file, 'utf8');
+            const lines = content.split('\n');
+            for (let i = 0; i < lines.length; i++) {
+              let match;
+              pattern.lastIndex = 0;
+              while ((match = pattern.exec(lines[i])) !== null) {
+                refs.push({
+                  file: path.basename(file),
+                  line: i + 1,
+                  owner: match[1],
+                  repo: match[2],
+                  pinnedSha: match[3],
+                  tag: match[4],
+                });
+              }
+            }
+          }
+
+          if (refs.length === 0) {
+            core.info('No SHA-pinned actions found');
+            core.setOutput('verified_count', 0);
+            core.setOutput('failed_count', 0);
+            core.setOutput('status', 'pass');
+            core.setOutput('results_json', '[]');
+            return;
+          }
+
+          core.info(`Found ${refs.length} SHA-pinned action(s) to verify\n`);
+
+          // Resolve a tag to its commit SHA, handling annotated tags
+          async function resolveTagSha(owner, repo, tag) {
+            try {
+              const ref = await github.rest.git.getRef({
+                owner,
+                repo,
+                ref: `tags/${tag}`,
+              });
+
+              const obj = ref.data.object;
+
+              // Lightweight tag — points directly to a commit
+              if (obj.type === 'commit') {
+                return obj.sha;
+              }
+
+              // Annotated tag — dereference to get the commit
+              if (obj.type === 'tag') {
+                const tagObj = await github.rest.git.getTag({
+                  owner,
+                  repo,
+                  tag_sha: obj.sha,
+                });
+                return tagObj.data.object.sha;
+              }
+
+              throw new Error(`Unexpected ref object type: ${obj.type}`);
+            } catch (err) {
+              if (err.status === 404) {
+                throw new Error(`Tag "${tag}" not found in ${owner}/${repo}`);
+              }
+              throw err;
+            }
+          }
+
+          // Investigate a mismatched SHA: check if it exists in the repo and find matching tags
+          async function investigateMismatch(owner, repo, pinnedSha) {
+            const details = { existsInRepo: false, matchingTags: [] };
+
+            // Check if the pinned SHA exists in this repo at all
+            try {
+              await github.rest.repos.getCommit({ owner, repo, ref: pinnedSha });
+              details.existsInRepo = true;
+            } catch (err) {
+              details.existsInRepo = (err.status !== 404 && err.status !== 422);
+            }
+
+            // Find which tags (if any) point to this SHA
+            if (details.existsInRepo) {
+              try {
+                const tags = await github.paginate(github.rest.repos.listTags, {
+                  owner, repo, per_page: 100,
+                });
+                details.matchingTags = tags
+                  .filter(t => t.commit.sha === pinnedSha)
+                  .map(t => t.name);
+              } catch {
+                // Non-fatal — we still have the existence check
+              }
+            }
+
+            return details;
+          }
+
+          let verified = 0;
+          let failed = 0;
+          const errors = [];
+          const results = [];
+
+          for (const ref of refs) {
+            const label = `${ref.owner}/${ref.repo}@${ref.tag}`;
+            try {
+              const resolvedSha = await resolveTagSha(ref.owner, ref.repo, ref.tag);
+
+              if (resolvedSha === ref.pinnedSha) {
+                core.info(`✅ ${label} — SHA verified (${ref.file}:${ref.line})`);
+                verified++;
+                results.push({
+                  action: label, file: ref.file, line: ref.line,
+                  status: 'verified',
+                });
+              } else {
+                const info = await investigateMismatch(ref.owner, ref.repo, ref.pinnedSha);
+
+                let msg = `❌ ${label} — SHA mismatch (${ref.file}:${ref.line})\n` +
+                  `   Pinned:   ${ref.pinnedSha}\n` +
+                  `   Expected: ${resolvedSha}`;
+
+                let detail = '';
+                if (!info.existsInRepo) {
+                  detail = `Pinned SHA does not exist in ${ref.owner}/${ref.repo} — possible fork or typosquat`;
+                  msg += `\n   ⚠️  ${detail}`;
+                } else if (info.matchingTags.length > 0) {
+                  detail = `Pinned SHA corresponds to: ${info.matchingTags.join(', ')}`;
+                  msg += `\n   ℹ️  ${detail}`;
+                } else {
+                  detail = 'Pinned SHA exists in repo but has no matching tags';
+                  msg += `\n   ℹ️  ${detail}`;
+                }
+
+                core.error(msg);
+                errors.push(msg);
+                failed++;
+                results.push({
+                  action: label, file: ref.file, line: ref.line,
+                  status: 'mismatch', pinnedSha: ref.pinnedSha,
+                  expectedSha: resolvedSha, detail,
+                });
+              }
+            } catch (err) {
+              const detail = err.message;
+              const msg = `❌ ${label} — ${detail} (${ref.file}:${ref.line})`;
+              core.error(msg);
+              errors.push(msg);
+              failed++;
+              results.push({
+                action: label, file: ref.file, line: ref.line,
+                status: 'error', detail,
+              });
+            }
+          }
+
+          core.info(`\n${'─'.repeat(60)}`);
+          core.info(`Verified: ${verified}  Failed: ${failed}  Total: ${refs.length}`);
+
+          core.setOutput('verified_count', verified);
+          core.setOutput('failed_count', failed);
+          core.setOutput('status', failed > 0 ? 'fail' : 'pass');
+          core.setOutput('results_json', JSON.stringify(results));
+
+          if (failed > 0) {
+            core.setFailed(
+              `${failed} SHA-pinned action(s) failed verification:\n\n` +
+              errors.join('\n\n')
+            );
+          }
+
+    - name: Post or update PR comment
+      if: always() && github.event_name == 'pull_request'
+      uses: actions/github-script@v7
+      env:
+        RESULTS_JSON: ${{ steps.verify.outputs.results_json }}
+        VERIFIED_COUNT: ${{ steps.verify.outputs.verified_count }}
+        FAILED_COUNT: ${{ steps.verify.outputs.failed_count }}
+        STATUS: ${{ steps.verify.outputs.status }}
+      with:
+        github-token: ${{ inputs.github-token }}
+        script: |
+          const marker = '<!-- verify-sha-pinning -->';
+          const prNumber = context.issue.number;
+          if (!prNumber) {
+            core.info('Not a PR context — skipping comment');
+            return;
+          }
+
+          const results = JSON.parse(process.env.RESULTS_JSON || '[]');
+          const verified = parseInt(process.env.VERIFIED_COUNT || '0', 10);
+          const failed = parseInt(process.env.FAILED_COUNT || '0', 10);
+          const total = verified + failed;
+          const status = process.env.STATUS || 'pass';
+
+          // Find existing comment
+          const { data: comments } = await github.rest.issues.listComments({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            issue_number: prNumber,
+          });
+          const existing = comments.find(c => c.body?.includes(marker));
+
+          let body;
+          if (status === 'fail') {
+            // Build failure table
+            const rows = results.map(r => {
+              const loc = `\`${r.file}:${r.line}\``;
+              if (r.status === 'verified') {
+                return `| \`${r.action}\` | ${loc} | ✅ Verified | |`;
+              } else {
+                return `| \`${r.action}\` | ${loc} | ❌ ${r.status === 'error' ? 'Error' : 'Mismatch'} | ${r.detail || ''} |`;
+              }
+            }).join('\n');
+
+            body = `${marker}
+          > [!WARNING]
+          > #### SHA Pin Verification Failed
+          >
+          > **${failed} of ${total}** SHA-pinned action(s) failed verification.
+
+          | Action | Location | Status | Details |
+          |--------|----------|--------|---------|
+          ${rows}
+
+          See the [action run](${'https://github.com/' + context.repo.owner + '/' + context.repo.repo + '/actions/runs/' + context.runId}) for full details.`;
+          } else if (total === 0) {
+            // No SHA-pinned actions found — only update if there was a previous warning
+            if (!existing) return;
+            body = `${marker}
+          > [!NOTE]
+          > #### SHA Pin Verification — No Pins Found
+          >
+          > No SHA-pinned actions detected in workflow files.`;
+          } else {
+            // All passed — only post if updating a previous warning
+            if (!existing) {
+              core.info('All SHA pins verified — no previous comment to update');
+              return;
+            }
+            // Skip update if already showing success
+            if (existing.body?.includes('Passed ✅')) {
+              core.info('Comment already shows success — no update needed');
+              return;
+            }
+            body = `${marker}
+          > [!NOTE]
+          > #### SHA Pin Verification Passed ✅
+          >
+          > All **${total}** SHA-pinned action(s) verified against upstream tags.`;
+          }
+
+          if (existing) {
+            await github.rest.issues.updateComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              comment_id: existing.id,
+              body,
+            });
+            core.info(`Updated existing comment #${existing.id}`);
+          } else {
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: prNumber,
+              body,
+            });
+            core.info('Created new PR comment');
+          }

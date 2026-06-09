@@ -10,6 +10,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/auth"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -1340,6 +1341,76 @@ func TestBuildConfigAndStacksInfo(t *testing.T) {
 		result := buildConfigAndStacksInfo(cmd)
 		// Result may have empty values since we didn't bind to viper.
 		_ = result
+	})
+}
+
+// TestPromptForStack_FlagPersistence verifies that PromptForStack writes the
+// selected stack back to the Cobra "stack" flag so PostRunE hooks can read it.
+func TestPromptForStack_FlagPersistence(t *testing.T) {
+	original := promptForMissing
+	defer func() { promptForMissing = original }()
+
+	t.Run("selected stack is persisted to flag", func(t *testing.T) {
+		promptForMissing = func(_, _ string, _ flags.CompletionFunc, _ *cobra.Command, _ []string) (string, error) {
+			return "dev-us-east-1", nil
+		}
+
+		cmd := &cobra.Command{Use: "test"}
+		cmd.Flags().String("stack", "", "Stack flag")
+
+		stack, err := PromptForStack(cmd, "vpc")
+
+		assert.NoError(t, err)
+		assert.Equal(t, "dev-us-east-1", stack)
+
+		flagVal, _ := cmd.Flags().GetString("stack")
+		assert.Equal(t, "dev-us-east-1", flagVal, "stack flag should be set to the selected value")
+	})
+
+	t.Run("empty stack does not modify flag", func(t *testing.T) {
+		promptForMissing = func(_, _ string, _ flags.CompletionFunc, _ *cobra.Command, _ []string) (string, error) {
+			return "", nil
+		}
+
+		cmd := &cobra.Command{Use: "test"}
+		cmd.Flags().String("stack", "original", "Stack flag")
+
+		stack, err := PromptForStack(cmd, "")
+
+		assert.NoError(t, err)
+		assert.Empty(t, stack)
+
+		flagVal, _ := cmd.Flags().GetString("stack")
+		assert.Equal(t, "original", flagVal, "stack flag should not be modified when selection is empty")
+	})
+
+	t.Run("prompt error skips flag persistence", func(t *testing.T) {
+		promptForMissing = func(_, _ string, _ flags.CompletionFunc, _ *cobra.Command, _ []string) (string, error) {
+			return "", errors.New("prompt failed")
+		}
+
+		cmd := &cobra.Command{Use: "test"}
+		cmd.Flags().String("stack", "original", "Stack flag")
+
+		_, err := PromptForStack(cmd, "")
+
+		assert.Error(t, err)
+
+		flagVal, _ := cmd.Flags().GetString("stack")
+		assert.Equal(t, "original", flagVal, "stack flag should not be modified on error")
+	})
+
+	t.Run("works when cmd has no stack flag", func(t *testing.T) {
+		promptForMissing = func(_, _ string, _ flags.CompletionFunc, _ *cobra.Command, _ []string) (string, error) {
+			return "dev", nil
+		}
+
+		cmd := &cobra.Command{Use: "test"}
+
+		stack, err := PromptForStack(cmd, "")
+
+		assert.NoError(t, err)
+		assert.Equal(t, "dev", stack, "should still return the selected value")
 	})
 }
 

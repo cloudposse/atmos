@@ -60,6 +60,22 @@ type YAMLLineInfo struct {
 	IsContinuation bool   // true if this is a continuation of a multi-line value
 }
 
+// isProvenanceColorEnabled checks whether provenance output should include color.
+// Follows the same pattern as HighlightCodeWithConfig: NoColor wins, then ForceColor,
+// then fall back to stdout TTY detection (not stderr, since provenance goes to stdout).
+func isProvenanceColorEnabled(atmosConfig *schema.AtmosConfiguration) bool {
+	if atmosConfig == nil {
+		return false
+	}
+	if atmosConfig.Settings.Terminal.NoColor {
+		return false
+	}
+	if atmosConfig.Settings.Terminal.ForceColor {
+		return true
+	}
+	return termUtils.IsTTYSupportForStdout()
+}
+
 // RenderTree renders provenance information as a tree structure.
 func RenderTree(ctx *m.MergeContext, atmosConfig *schema.AtmosConfiguration, allowedPaths map[string]bool) string {
 	defer perf.Track(atmosConfig, "provenance.RenderTree")()
@@ -67,6 +83,8 @@ func RenderTree(ctx *m.MergeContext, atmosConfig *schema.AtmosConfiguration, all
 	if ctx == nil || !ctx.IsProvenanceEnabled() {
 		return ""
 	}
+
+	useColor := isProvenanceColorEnabled(atmosConfig)
 
 	var buf strings.Builder
 
@@ -79,7 +97,7 @@ func RenderTree(ctx *m.MergeContext, atmosConfig *schema.AtmosConfiguration, all
 	buf.WriteString(newlineChar)
 
 	// Render tree structure
-	renderFileTree(&buf, fileTree)
+	renderFileTree(&buf, fileTree, useColor)
 
 	return buf.String()
 }
@@ -136,7 +154,7 @@ func buildFileTree(ctx *m.MergeContext, allowedPaths map[string]bool) []FileTree
 }
 
 // renderFileTree renders the file tree with box drawing characters.
-func renderFileTree(buf *strings.Builder, tree []FileTreeNode) {
+func renderFileTree(buf *strings.Builder, tree []FileTreeNode, useColor bool) {
 	if len(tree) == 0 {
 		buf.WriteString("No provenance data available.\n")
 		return
@@ -153,13 +171,13 @@ func renderFileTree(buf *strings.Builder, tree []FileTreeNode) {
 			prefix = "   "
 		}
 
-		// File path (colored)
+		// File path (colored).
 		buf.WriteString(connector)
 		buf.WriteString(" ")
-		buf.WriteString(colorize(node.File, lipgloss.Color(theme.ColorSelectedItem)))
+		buf.WriteString(colorize(node.File, lipgloss.Color(theme.ColorSelectedItem), useColor))
 		buf.WriteString(newlineChar)
 
-		// Items
+		// Items.
 		for j, item := range node.Items {
 			itemLast := j == len(node.Items)-1
 			itemConn := "├─"
@@ -171,19 +189,19 @@ func renderFileTree(buf *strings.Builder, tree []FileTreeNode) {
 			buf.WriteString(itemConn)
 			buf.WriteString(" ")
 
-			// Symbol (colored)
-			symbol := colorize(item.Symbol, getSymbolColor(item.Symbol))
+			// Symbol (colored).
+			symbol := colorize(item.Symbol, getSymbolColor(item.Symbol), useColor)
 			buf.WriteString(symbol)
 			buf.WriteString(" ")
 
-			// Line number
+			// Line number.
 			if item.Line > 0 {
 				lineNum := fmt.Sprintf(":%d", item.Line)
-				buf.WriteString(colorize(lineNum, lipgloss.Color(theme.ColorCyan)))
+				buf.WriteString(colorize(lineNum, lipgloss.Color(theme.ColorCyan), useColor))
 				buf.WriteString("   ")
 			}
 
-			// Path
+			// Path.
 			buf.WriteString(item.Path)
 			buf.WriteString(newlineChar)
 		}
@@ -219,7 +237,11 @@ func getSymbolColor(symbol string) lipgloss.Color {
 }
 
 // colorize applies a color to text using lipgloss.
-func colorize(text string, color lipgloss.Color) string {
+// When useColor is false, it returns the text unchanged.
+func colorize(text string, color lipgloss.Color, useColor bool) string {
+	if !useColor {
+		return text
+	}
 	style := lipgloss.NewStyle().Foreground(color)
 	return style.Render(text)
 }
@@ -283,8 +305,8 @@ func findProvenance(ctx *m.MergeContext, normalizedPath string) *m.ProvenanceEnt
 	return nil
 }
 
-// formatProvenanceComment creates an inline comment for provenance.
-func formatProvenanceCommentWithStackFile(entry *m.ProvenanceEntry) string {
+// formatProvenanceCommentWithStackFile creates an inline comment for provenance.
+func formatProvenanceCommentWithStackFile(entry *m.ProvenanceEntry, useColor bool) string {
 	defer perf.Track(nil, "provenance.formatProvenanceCommentWithStackFile")()
 
 	if entry == nil {
@@ -303,6 +325,10 @@ func formatProvenanceCommentWithStackFile(entry *m.ProvenanceEntry) string {
 	}
 
 	file := shortenFilePath(entry.File)
+
+	if !useColor {
+		return fmt.Sprintf("# %s [%d] %s:%d", symbol, entry.Depth, file, entry.Line)
+	}
 
 	// Color code the depth based on inheritance level.
 	// Depth 1-2: green (parent + first import), 3: orange, 4+: red.
@@ -417,11 +443,12 @@ func addProvenanceToLine(
 	line string,
 	entry *m.ProvenanceEntry,
 	commentColumn int,
+	useColor bool,
 ) {
 	plainLine := stripANSI(line)
 	lineLen := len(plainLine)
 
-	comment := formatProvenanceCommentWithStackFile(entry)
+	comment := formatProvenanceCommentWithStackFile(entry, useColor)
 	if comment == "" {
 		result.WriteString(line)
 		result.WriteString(newlineChar)
@@ -447,19 +474,29 @@ func addProvenanceToLine(
 }
 
 // renderProvenanceLegend renders the provenance legend and stack file header.
-func renderProvenanceLegend(result *strings.Builder, stackFile string) {
-	legendStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorDarkGray))
+func renderProvenanceLegend(result *strings.Builder, stackFile string, useColor bool) {
 	legend := "# Provenance Legend:" + newlineChar +
 		"#   ● [1] Defined in parent stack" + newlineChar +
 		"#   ○ [N] Inherited/imported (N=2+ levels deep)" + newlineChar +
 		"#   ∴ Computed/templated" + newlineChar
-	result.WriteString(legendStyle.Render(legend))
+
+	if useColor {
+		legendStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorDarkGray))
+		result.WriteString(legendStyle.Render(legend))
+	} else {
+		result.WriteString(legend)
+	}
 	result.WriteString(newlineChar)
 
-	// Add stack file comment to show which file is being described
+	// Add stack file comment to show which file is being described.
 	if stackFile != "" {
 		stackComment := fmt.Sprintf("# Stack: %s%s", stackFile, newlineChar)
-		result.WriteString(legendStyle.Render(stackComment))
+		if useColor {
+			legendStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorDarkGray))
+			result.WriteString(legendStyle.Render(stackComment))
+		} else {
+			result.WriteString(stackComment)
+		}
 		result.WriteString(newlineChar)
 	}
 }
@@ -469,6 +506,7 @@ type lineProvenanceContext struct {
 	pathMap       map[int]YAMLLineInfo
 	ctx           *m.MergeContext
 	commentColumn int
+	useColor      bool
 }
 
 // processYAMLLineWithProvenance processes a single line and adds provenance comment if applicable.
@@ -497,7 +535,7 @@ func processYAMLLineWithProvenance(result *strings.Builder, line string, lineNum
 		return
 	}
 
-	addProvenanceToLine(result, line, entry, lpCtx.commentColumn)
+	addProvenanceToLine(result, line, entry, lpCtx.commentColumn, lpCtx.useColor)
 }
 
 // RenderInlineProvenanceWithStackFile renders YAML with provenance as inline comments.
@@ -514,11 +552,13 @@ func RenderInlineProvenanceWithStackFile(yamlData any, ctx *m.MergeContext, atmo
 		}
 	}()
 
+	useColor := isProvenanceColorEnabled(atmosConfig)
+
 	var result strings.Builder
 
 	// Add legend at top only if provenance is enabled.
 	if ctx != nil && ctx.IsProvenanceEnabled() {
-		renderProvenanceLegend(&result, stackFile)
+		renderProvenanceLegend(&result, stackFile, useColor)
 	}
 
 	// Prepare YAML with provenance.
@@ -537,6 +577,7 @@ func RenderInlineProvenanceWithStackFile(yamlData any, ctx *m.MergeContext, atmo
 		pathMap:       pathMap,
 		ctx:           ctx,
 		commentColumn: commentColumn,
+		useColor:      useColor,
 	}
 
 	// Process each line with provenance.

@@ -14,12 +14,15 @@ import Experimental from '@site/src/components/Experimental'
 
 <Intro>
 Atmos works with your existing AI tools and brings its own native, built-in capabilities.
-Bring your own credentials for supported providers — OpenAI, Anthropic, Bedrock, Azure OpenAI, Gemini, Grok, and Ollama — and Atmos handles provider-specific auth styles automatically.
+Use **API providers** with purchased tokens (Anthropic, OpenAI, Bedrock, Azure OpenAI, Gemini, Grok, Ollama),
+or use **CLI providers** that reuse your existing subscription (Claude Code, OpenAI Codex, Gemini CLI) — no API keys needed.
 </Intro>
 
 <Experimental />
 
 ## Quick Start
+
+### With API Tokens
 
 <File title="atmos.yaml">
 ```yaml
@@ -33,6 +36,34 @@ ai:
 ```
 </File>
 
+### With Your Existing Subscription (No API Key)
+
+Use your locally installed Claude Code, OpenAI Codex, or Gemini CLI binary. The CLI tool handles auth via its own subscription — no API key configuration needed.
+
+<File title="atmos.yaml">
+```yaml
+ai:
+  enabled: true
+  default_provider: "claude-code"  # or "codex-cli" or "gemini-cli"
+  providers:
+    claude-code:
+      max_turns: 10
+```
+</File>
+
+<Terminal title="Install and authenticate">
+```bash
+# Claude Code
+brew install --cask claude-code && claude auth login
+
+# OpenAI Codex
+npm install -g @openai/codex && codex login
+
+# Gemini CLI (authenticates on first run)
+npm install -g @google/gemini-cli && gemini
+```
+</Terminal>
+
 <Terminal title="shell">
 ```bash
 export ANTHROPIC_API_KEY="your-api-key"
@@ -41,8 +72,8 @@ atmos ai ask "What stacks do we have?"               # Single question
 atmos ai exec "validate stacks" --format json        # CI/CD automation
 atmos ai sessions list                               # List sessions
 atmos ai skill list                                  # List installed skills
-atmos terraform plan vpc -s prod --ai                              # AI analysis of any command
-atmos terraform plan vpc -s prod --ai --skill atmos-terraform      # With domain expertise
+atmos terraform plan vpc -s prod --ai                                       # AI analysis of any command
+atmos terraform plan vpc -s prod --ai --skill atmos-terraform               # With domain expertise
 atmos terraform plan vpc -s prod --ai --skill atmos-terraform,atmos-stacks  # Multiple skills
 ```
 </Terminal>
@@ -54,14 +85,53 @@ atmos terraform plan vpc -s prod --ai --skill atmos-terraform,atmos-stacks  # Mu
     </div>
 </ActionCard>
 
-## Example
+## Examples
 
-<ActionCard title="Try the Example">
-    Explore a complete multi-region infrastructure example with Atmos AI, skills, sessions, and tool execution.
+<ActionCard title="AI with API Providers">
+    Multi-provider AI configuration with sessions, tools, and custom skills using API tokens.
     <div>
       <PrimaryCTA to="/examples/ai">Browse Example</PrimaryCTA>
     </div>
 </ActionCard>
+
+<ActionCard title="AI with Claude Code CLI">
+    Use your Claude Pro/Max subscription with MCP server pass-through for AWS tools. No API keys needed.
+    <div>
+      <PrimaryCTA to="/examples/ai-claude-code">Browse Example</PrimaryCTA>
+    </div>
+</ActionCard>
+
+## AI Providers
+
+Atmos supports two types of AI providers:
+
+**API providers** call the provider's API directly with purchased tokens. Atmos manages the tool execution loop in-process.
+
+| Provider      | Config Key    | Auth                   |
+|---------------|---------------|------------------------|
+| Anthropic     | `anthropic`   | `ANTHROPIC_API_KEY`    |
+| OpenAI        | `openai`      | `OPENAI_API_KEY`       |
+| Google Gemini | `gemini`      | `GEMINI_API_KEY`       |
+| Grok (xAI)    | `grok`        | `XAI_API_KEY`          |
+| AWS Bedrock   | `bedrock`     | AWS IAM credentials    |
+| Azure OpenAI  | `azureopenai` | `AZURE_OPENAI_API_KEY` |
+| Ollama        | `ollama`      | None (local)           |
+
+**CLI providers** invoke a locally installed AI tool as a subprocess, reusing your existing subscription.
+The CLI tool manages its own tool execution loop, and MCP servers are passed through for tool access.
+
+| Provider     | Config Key    | Binary   | Auth                          | MCP                           |
+|--------------|---------------|----------|-------------------------------|-------------------------------|
+| Claude Code  | `claude-code` | `claude` | Claude Pro/Max subscription   | Full                          |
+| OpenAI Codex | `codex-cli`   | `codex`  | ChatGPT Plus/Pro subscription | Full                          |
+| Gemini CLI   | `gemini-cli`  | `gemini` | Google account (free tier)    | Blocked for personal accounts |
+
+:::tip When to use which
+- **Interactive development with MCP** — `claude-code` or `codex-cli` (subscription, full MCP), or any of the API providers
+- **CI/CD pipelines** — API providers (env var auth, no interactive login)
+- **Cost-conscious** — `gemini-cli` (free tier, prompt-only)
+- **Enterprise** — `bedrock` or `azureopenai` (compliance, audit trails)
+:::
 
 ## AI-Powered Command Analysis
 
@@ -115,10 +185,25 @@ ATMOS_AI=true ATMOS_SKILL=atmos-terraform,atmos-stacks atmos terraform plan vpc 
   <dd>Add `--ai` flag to any command for AI-powered output analysis. Use `--skill` flag for domain-specific expertise (supports multiple skills via commas or repeated flag).</dd>
 
   <dt>[`atmos mcp start`](/cli/commands/mcp/start)</dt>
-  <dd>Start the MCP server with stdio (default) or HTTP transport.</dd>
+  <dd>Start the Atmos MCP server for external AI clients.</dd>
 
-  <dt>[`atmos lsp start`](/cli/commands/lsp/start)</dt>
-  <dd>Start the LSP server with stdio, TCP, or WebSocket transport.</dd>
+  <dt>[`atmos mcp list`](/cli/commands/mcp/list)</dt>
+  <dd>List configured external MCP servers.</dd>
+
+  <dt>[`atmos mcp tools`](/cli/commands/mcp/tools)</dt>
+  <dd>List tools from an external MCP server.</dd>
+
+  <dt>[`atmos mcp test`](/cli/commands/mcp/test)</dt>
+  <dd>Test connectivity to an external MCP server.</dd>
+
+  <dt>[`atmos mcp status`](/cli/commands/mcp/status)</dt>
+  <dd>Show live connection status of all configured MCP servers.</dd>
+
+  <dt>[`atmos mcp restart`](/cli/commands/mcp/restart)</dt>
+  <dd>Restart an external MCP server.</dd>
+
+  <dt>[`atmos mcp export`](/cli/commands/mcp/export)</dt>
+  <dd>Export `.mcp.json` from `atmos.yaml` for Claude Code / Cursor / IDE integration.</dd>
 </dl>
 
 ## AI Assistants
@@ -157,17 +242,92 @@ Install and share community skills from GitHub.
 
 Configure skills in `atmos.yaml`.
 
-## MCP Server
+## MCP
 
-The [Model Context Protocol](https://modelcontextprotocol.io) (MCP) server exposes Atmos AI tools
-to any compatible client -- Claude Desktop, Claude Code, VS Code, Cursor, Gemini CLI, and
-[many others](https://modelcontextprotocol.io/clients). This lets you use Atmos tools inside your
-preferred AI assistant without custom integrations.
+Atmos supports the [Model Context Protocol](https://modelcontextprotocol.io) (MCP) in both directions:
 
-<ActionCard title="MCP Setup">
-    Configure MCP clients and manage tool permissions.
+**Atmos as MCP Server** — Exposes Atmos AI tools to external clients (Claude Desktop, Claude Code,
+VS Code, Cursor, Gemini CLI). Use Atmos tools inside your preferred AI assistant.
+
+**External MCP Servers** — Connect to AWS, GCP, Azure, and custom MCP servers. Their tools become available
+in `atmos ai chat`, `atmos ai ask`, and `atmos ai exec` alongside native Atmos tools.
+
+**Smart Routing** — When multiple MCP servers are configured with API providers, Atmos automatically selects
+only the servers relevant to your question using a lightweight routing call. This keeps tool payloads small
+and responses fast. Use the `--mcp` flag to override and specify servers directly.
+
+**MCP Pass-Through** — With CLI AI providers (`claude-code`, `codex-cli`), all configured MCP servers are
+passed to the CLI tool via its native config format. The CLI tool decides which servers to use.
+Smart routing is skipped — the AI model handles server selection internally.
+
+:::note CLI Provider MCP
+- **Claude Code**: MCP servers passed via `--mcp-config` temp file
+- **Codex CLI**: MCP servers written to `~/.codex/config.toml` (backup/restore)
+- **Gemini CLI**: MCP blocked for personal Google accounts (`oauth-personal` auth)
+:::
+
+```bash
+# Manage external MCP servers
+atmos mcp list                    # See configured servers
+atmos mcp test aws-docs           # Test connectivity
+atmos mcp tools aws-security      # List available tools
+atmos mcp status                  # Show live status of all servers
+atmos mcp export                  # Export .mcp.json for Claude Code / IDE
+
+# Ask questions — AI auto-routes to the right MCP server
+atmos ai ask "What did we spend on EC2 last month?"     # routes to aws-billing
+atmos ai ask "Is GuardDuty enabled in us-east-1?"       # routes to aws-security
+atmos ai ask "How do I configure S3 lifecycle rules?"   # routes to aws-docs
+
+# Manual MCP server(s) selection (skip auto-routing)
+atmos ai ask --mcp aws-iam "List all admin roles"
+atmos ai ask --mcp aws-iam,aws-cloudtrail "Who accessed the admin role?"
+atmos ai chat --mcp aws-billing
+```
+
+<File title="atmos.yaml">
+```yaml
+mcp:
+  servers:
+    # FinOps
+    aws-billing:
+      command: uvx
+      args: ["awslabs.billing-cost-management-mcp-server@latest"]
+      env: { AWS_REGION: "us-east-1" }
+      description: "AWS Billing — billing summaries and payment history"
+      identity: "readonly"   # Atmos Auth identity (from the auth section)
+
+    # Security & Compliance
+    aws-security:
+      command: uvx
+      args: ["awslabs.well-architected-security-mcp-server@latest"]
+      env: { AWS_REGION: "us-east-1" }
+      description: "AWS Security — Well-Architected security posture assessment"
+      identity: "readonly"   # Atmos Auth identity (from the auth section)
+
+    # Documentation (no credentials needed)
+    aws-docs:
+      command: uvx
+      args: ["awslabs.aws-documentation-mcp-server@latest"]
+      description: "AWS Documentation — search and fetch AWS docs"
+
+  # Smart routing (enabled by default, uses your configured AI provider)
+  routing:
+    enabled: true
+```
+</File>
+
+<ActionCard title="MCP Configuration">
+    Configure the Atmos MCP server and external MCP server connections.
     <div>
-        <PrimaryCTA to="/ai/mcp-server">MCP Server Setup</PrimaryCTA>
+        <PrimaryCTA to="/cli/configuration/mcp">Configuration Reference</PrimaryCTA>
+    </div>
+</ActionCard>
+
+<ActionCard title="Try the MCP Example">
+    Explore a complete example with pre-configured AWS MCP servers for cost analysis, security, IAM, and documentation.
+    <div>
+        <PrimaryCTA to="/examples/mcp">Browse Example</PrimaryCTA>
     </div>
 </ActionCard>
 

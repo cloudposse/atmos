@@ -206,22 +206,22 @@ func TestSetEnvironmentVariables_ClearsConflictingCredentials(t *testing.T) {
 	err := SetEnvironmentVariables(authContext, stack)
 	require.NoError(t, err)
 
-	// Verify conflicting credential environment variables were cleared.
+	// Verify conflicting credential environment variables were deleted (not present).
+	// Scrubbing from subprocess env happens at the WithEnvironment level.
 	_, hasAccessKey := stack.ComponentEnvSection["AWS_ACCESS_KEY_ID"]
+	assert.False(t, hasAccessKey, "AWS_ACCESS_KEY_ID should be absent")
 	_, hasSecretKey := stack.ComponentEnvSection["AWS_SECRET_ACCESS_KEY"]
+	assert.False(t, hasSecretKey, "AWS_SECRET_ACCESS_KEY should be absent")
 	_, hasSessionToken := stack.ComponentEnvSection["AWS_SESSION_TOKEN"]
+	assert.False(t, hasSessionToken, "AWS_SESSION_TOKEN should be absent")
 	_, hasSecurityToken := stack.ComponentEnvSection["AWS_SECURITY_TOKEN"]
-	_, hasWebIdentityToken := stack.ComponentEnvSection["AWS_WEB_IDENTITY_TOKEN_FILE"]
-	_, hasRoleArn := stack.ComponentEnvSection["AWS_ROLE_ARN"]
-	_, hasRoleSessionName := stack.ComponentEnvSection["AWS_ROLE_SESSION_NAME"]
-
-	assert.False(t, hasAccessKey, "AWS_ACCESS_KEY_ID should be cleared")
-	assert.False(t, hasSecretKey, "AWS_SECRET_ACCESS_KEY should be cleared")
-	assert.False(t, hasSessionToken, "AWS_SESSION_TOKEN should be cleared")
-	assert.False(t, hasSecurityToken, "AWS_SECURITY_TOKEN should be cleared")
-	assert.False(t, hasWebIdentityToken, "AWS_WEB_IDENTITY_TOKEN_FILE should be cleared")
-	assert.False(t, hasRoleArn, "AWS_ROLE_ARN should be cleared")
-	assert.False(t, hasRoleSessionName, "AWS_ROLE_SESSION_NAME should be cleared")
+	assert.False(t, hasSecurityToken, "AWS_SECURITY_TOKEN should be absent")
+	_, hasWebIdentity := stack.ComponentEnvSection["AWS_WEB_IDENTITY_TOKEN_FILE"]
+	assert.False(t, hasWebIdentity, "AWS_WEB_IDENTITY_TOKEN_FILE should be absent")
+	_, hasRoleARN := stack.ComponentEnvSection["AWS_ROLE_ARN"]
+	assert.False(t, hasRoleARN, "AWS_ROLE_ARN should be absent")
+	_, hasRoleSession := stack.ComponentEnvSection["AWS_ROLE_SESSION_NAME"]
+	assert.False(t, hasRoleSession, "AWS_ROLE_SESSION_NAME should be absent")
 
 	// Verify non-AWS environment variables were preserved.
 	assert.Equal(t, "/home/user", stack.ComponentEnvSection["HOME"])

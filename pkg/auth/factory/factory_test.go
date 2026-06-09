@@ -227,6 +227,18 @@ func TestNewIdentity_Factory(t *testing.T) {
 			expectError: false,
 		},
 		{
+			name:         "ambient-valid",
+			identityName: "passthrough",
+			config:       &schema.Identity{Kind: "ambient"},
+			expectError:  false,
+		},
+		{
+			name:         "aws-ambient-valid",
+			identityName: "eks-deployer",
+			config:       &schema.Identity{Kind: "aws/ambient"},
+			expectError:  false,
+		},
+		{
 			name:         "mock-identity",
 			identityName: "mock",
 			config:       &schema.Identity{Kind: "mock"},

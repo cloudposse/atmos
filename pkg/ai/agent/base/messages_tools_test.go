@@ -433,6 +433,42 @@ func TestExtractAllToolInfo_CapacityOptimized(t *testing.T) {
 	assert.Len(t, result, toolCount)
 }
 
+// FormatMessagesAsPrompt tests.
+
+func TestFormatMessagesAsPrompt(t *testing.T) {
+	messages := []types.Message{
+		{Role: types.RoleUser, Content: "What stacks?"},
+		{Role: types.RoleAssistant, Content: "You have 4."},
+		{Role: types.RoleUser, Content: "Describe vpc."},
+	}
+	result := FormatMessagesAsPrompt(messages)
+	assert.Contains(t, result, "What stacks?")
+	assert.Contains(t, result, "Assistant: You have 4.")
+	assert.Contains(t, result, "Describe vpc.")
+}
+
+func TestFormatMessagesAsPrompt_Empty(t *testing.T) {
+	result := FormatMessagesAsPrompt(nil)
+	assert.Empty(t, result)
+}
+
+func TestFormatMessagesAsPrompt_SingleUser(t *testing.T) {
+	messages := []types.Message{{Role: types.RoleUser, Content: "Hello"}}
+	assert.Equal(t, "Hello", FormatMessagesAsPrompt(messages))
+}
+
+func TestFormatMessagesAsPrompt_SkipsUnknownRoles(t *testing.T) {
+	messages := []types.Message{
+		{Role: types.RoleUser, Content: "Hello"},
+		{Role: "system", Content: "ignored"},
+		{Role: types.RoleAssistant, Content: "Hi"},
+	}
+	result := FormatMessagesAsPrompt(messages)
+	assert.Contains(t, result, "Hello")
+	assert.Contains(t, result, "Assistant: Hi")
+	assert.NotContains(t, result, "ignored")
+}
+
 // ToolPropertySchema and ToolParameterSchema struct tests.
 
 func TestToolPropertySchema_Fields(t *testing.T) {

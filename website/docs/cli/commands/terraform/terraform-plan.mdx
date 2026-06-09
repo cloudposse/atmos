@@ -87,6 +87,38 @@ Generate a plan to destroy infrastructure:
 atmos terraform plan vpc -s dev -destroy
 ```
 
+### Graph-backed Multi-component Planning
+
+Run plans for multiple components through the Terraform dependency graph:
+
+```shell
+# Plan every Terraform component in dependency order
+atmos terraform plan --all -s dev
+
+# Plan a named subset, preserving dependency edges between selected components
+atmos terraform plan --components vpc,eks/cluster,eks/apps -s dev
+
+# Plan components selected by query
+atmos terraform plan --query '.settings.tier == "network"' -s dev
+```
+
+The graph is built from [`dependencies.components`](/stacks/dependencies/components) first, with `settings.depends_on` as a fallback. Components that are independent at the same point in the graph can run concurrently when `--max-concurrency` is greater than `1`.
+
+```shell
+atmos terraform plan --all -s dev --max-concurrency 4
+```
+
+Concurrent plan output is isolated per component. Use `--log-order grouped` to print each component's logs together after it finishes, or keep the default `stream` mode to see logs as they arrive. To reduce noise from unchanged components, use `--hide=no-changes`.
+
+```shell
+atmos terraform plan --all -s dev \
+  --max-concurrency 4 \
+  --failure-mode keep-going \
+  --log-order grouped \
+  --hide=no-changes \
+  --execution-summary-file /tmp/atmos-plan-summary.json
+```
+
 ## Planfile Management
 
 ### Default Behavior

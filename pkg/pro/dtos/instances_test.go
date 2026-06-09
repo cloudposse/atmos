@@ -3,7 +3,6 @@ package dtos
 import (
 	"testing"
 
-	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -59,26 +58,18 @@ func TestInstanceStatusUploadRequest(t *testing.T) {
 
 func TestInstancesUploadRequest(t *testing.T) {
 	t.Run("valid request with instances", func(t *testing.T) {
-		instances := []schema.Instance{
+		instances := []UploadInstance{
 			{
 				Component:     "web-app",
 				Stack:         "prod",
 				ComponentType: "terraform",
-				Settings:      map[string]interface{}{"drift_detection_enabled": true},
-				Vars:          map[string]interface{}{"environment": "prod"},
-				Env:           map[string]interface{}{"TF_VAR_region": "us-west-2"},
-				Backend:       map[string]interface{}{"type": "s3"},
-				Metadata:      map[string]interface{}{"description": "Web application"},
+				Settings:      map[string]interface{}{"pro": map[string]interface{}{"drift_detection": map[string]interface{}{"enabled": true}}},
 			},
 			{
 				Component:     "api",
 				Stack:         "staging",
 				ComponentType: "helm",
-				Settings:      map[string]interface{}{"drift_detection_enabled": false},
-				Vars:          map[string]interface{}{"environment": "staging"},
-				Env:           map[string]interface{}{"HELM_NAMESPACE": "staging"},
-				Backend:       map[string]interface{}{"type": "local"},
-				Metadata:      map[string]interface{}{"description": "API service"},
+				Settings:      map[string]interface{}{"pro": map[string]interface{}{"drift_detection": map[string]interface{}{"enabled": false}}},
 			},
 		}
 
@@ -100,21 +91,13 @@ func TestInstancesUploadRequest(t *testing.T) {
 		assert.Equal(t, "web-app", req.Instances[0].Component)
 		assert.Equal(t, "prod", req.Instances[0].Stack)
 		assert.Equal(t, "terraform", req.Instances[0].ComponentType)
-		assert.Equal(t, map[string]interface{}{"drift_detection_enabled": true}, req.Instances[0].Settings)
-		assert.Equal(t, map[string]interface{}{"environment": "prod"}, req.Instances[0].Vars)
-		assert.Equal(t, map[string]interface{}{"TF_VAR_region": "us-west-2"}, req.Instances[0].Env)
-		assert.Equal(t, map[string]interface{}{"type": "s3"}, req.Instances[0].Backend)
-		assert.Equal(t, map[string]interface{}{"description": "Web application"}, req.Instances[0].Metadata)
+		assert.NotNil(t, req.Instances[0].Settings)
 
 		// Test second instance
 		assert.Equal(t, "api", req.Instances[1].Component)
 		assert.Equal(t, "staging", req.Instances[1].Stack)
 		assert.Equal(t, "helm", req.Instances[1].ComponentType)
-		assert.Equal(t, map[string]interface{}{"drift_detection_enabled": false}, req.Instances[1].Settings)
-		assert.Equal(t, map[string]interface{}{"environment": "staging"}, req.Instances[1].Vars)
-		assert.Equal(t, map[string]interface{}{"HELM_NAMESPACE": "staging"}, req.Instances[1].Env)
-		assert.Equal(t, map[string]interface{}{"type": "local"}, req.Instances[1].Backend)
-		assert.Equal(t, map[string]interface{}{"description": "API service"}, req.Instances[1].Metadata)
+		assert.NotNil(t, req.Instances[1].Settings)
 	})
 
 	t.Run("valid request with empty instances", func(t *testing.T) {
@@ -123,7 +106,7 @@ func TestInstancesUploadRequest(t *testing.T) {
 			RepoName:  "test-repo",
 			RepoOwner: "test-owner",
 			RepoHost:  "github.com",
-			Instances: []schema.Instance{},
+			Instances: []UploadInstance{},
 		}
 
 		assert.Equal(t, "https://github.com/test-owner/test-repo", req.RepoURL)

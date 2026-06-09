@@ -185,6 +185,7 @@ func TestCheckErrorPrintAndExit_ExitCodeZero(t *testing.T) {
 }
 
 func TestCheckErrorAndPrint(t *testing.T) {
+	t.Setenv("NO_COLOR", "1")
 	// Save original logger
 	originalLogger := log.Default()
 	defer log.SetDefault(originalLogger)

@@ -178,11 +178,52 @@ auth:
 
   <dt>`credentials.mfa_arn`</dt>
   <dd>Optional. MFA device ARN. When set, Atmos prompts for TOTP code during authentication.</dd>
+
+  <dt>`credentials.webflow_enabled`</dt>
+  <dd>Optional. Defaults to `true`. Set to `false` to disable browser-based authentication fallback.</dd>
 </dl>
 
 :::tip
 Instead of storing credentials in configuration, use `atmos auth user configure` to store them securely in the system keyring.
 :::
+
+### Browser-Based Authentication (Automatic Fallback)
+
+When neither configuration nor keyring entries provide credentials, Atmos automatically initiates an OAuth2 PKCE flow via the AWS sign-in service. This provides the same convenient web-based authentication that SSO users already enjoy, without requiring static access keys.
+
+**Authentication priority:**
+
+1. Static credentials from `atmos.yaml` (`access_key_id` + `secret_access_key`, including `!env` references)
+2. Credentials stored in the system keyring (via `atmos auth user configure`)
+3. Browser-based OAuth2 PKCE flow (when `webflow_enabled` is `true`, which is the default)
+
+Atmos does **not** consult ambient AWS credentials (environment variables, `~/.aws/credentials`, instance profiles) for `aws/user` identities — credentials must be supplied through one of the three sources above.
+
+If the keyring is reachable but the stored entry is unreadable (corrupted, missing fields, permission denied), Atmos reports the keyring read failure directly instead of silently falling back to the browser flow. This makes it possible to diagnose keyring issues rather than guessing why the browser flow opened.
+
+**How it works:**
+
+1. Atmos starts a local callback server on an ephemeral port
+2. Opens your default browser to the AWS sign-in authorization endpoint
+3. Exchanges the authorization code for temporary credentials using PKCE
+4. Caches a refresh token for 12-hour session reuse
+
+Subsequent authentications within the 12-hour window reuse the cached refresh token, avoiding repeated browser prompts. Credentials refresh automatically every 15 minutes.
+
+In non-interactive environments (CI/CD), Atmos displays a URL that can be opened manually.
+
+**Disabling browser authentication:**
+
+<File title="atmos.yaml">
+```yaml
+auth:
+  identities:
+    my-user:
+      kind: aws/user
+      credentials:
+        webflow_enabled: false  # Disable browser-based auth fallback
+```
+</File>
 
 </TabItem>
 <TabItem value="azure" label="Azure">
@@ -319,6 +360,31 @@ The project identity sets environment variables (`GOOGLE_CLOUD_PROJECT`, `CLOUDS
 
 </TabItem>
 </Tabs>
+
+## Atmos Pro
+
+The `atmos/pro` identity is a passthrough over the [`atmos/pro` provider](/cli/configuration/auth/providers#atmos-pro): it forwards the provider's Atmos Pro session so linked integrations (e.g. [`github/sts`](/cli/configuration/auth#github-sts-atmos-pro)) can use it. It requires `via.provider`.
+
+<File title="atmos.yaml">
+```yaml
+auth:
+  identities:
+    atmos-pro:
+      kind: atmos/pro
+      via:
+        provider: atmos-pro
+```
+</File>
+
+<dl>
+  <dt>`kind`</dt>
+  <dd>**Required.** Must be `atmos/pro`.</dd>
+
+  <dt>`via.provider`</dt>
+  <dd>**Required.** Name of the `atmos/pro` provider this identity authenticates through.</dd>
+</dl>
+
+You authenticate and run as this identity (`atmos auth login --identity atmos-pro`). The `github/sts` integration can reference it via `via.identity`, or bind to the provider directly via `via.provider`.
 
 ## Identity Chaining
 

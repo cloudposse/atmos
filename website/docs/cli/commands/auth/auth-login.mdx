@@ -137,7 +137,7 @@ Successfully authenticated as dev-admin
 ✓ EKS kubeconfig: dev-eks → ~/.config/atmos/kube/config
 ```
 
-Integration failures are non-blocking - your identity authentication succeeds even if an integration fails. You can retry integrations separately using [`atmos auth ecr-login`](/cli/commands/auth/ecr-login) or [`atmos aws eks update-kubeconfig --integration`](/cli/commands/aws/eks-update-kubeconfig).
+Integration failures are non-blocking - your identity authentication succeeds even if an integration fails. You can retry integrations separately using [`atmos aws ecr login`](/cli/commands/aws/ecr-login) or [`atmos aws eks update-kubeconfig --integration`](/cli/commands/aws/eks/update-kubeconfig).
 
 See [ECR Authentication Tutorial](/tutorials/ecr-authentication) and [EKS Kubeconfig Authentication Tutorial](/tutorials/eks-kubeconfig-authentication) for detailed configuration examples.
 
@@ -162,6 +162,7 @@ Atmos supports multiple authentication methods for different cloud providers:
 - IAM Roles Anywhere (certificate-based)
 - OIDC (GitHub Actions, GitLab CI)
 - Static credentials
+- Browser-based OAuth2 PKCE (automatic fallback for `aws/user` identities)
 
 See [Migrating from Leapp](/tutorials/migrating-from-leapp) for AWS examples.
 
@@ -174,7 +175,7 @@ See [Azure Authentication](/tutorials/azure-authentication) for detailed Azure c
 
 ## See Also
 
-- [Auth ECR Login Command](/cli/commands/auth/ecr-login) — Login to AWS ECR registries
+- [AWS ECR Login Command](/cli/commands/aws/ecr-login) — Login to AWS ECR registries
 - [AWS EKS Token Command](/cli/commands/aws/eks-token) — Generate EKS bearer tokens for kubectl
 - [ECR Authentication Tutorial](/tutorials/ecr-authentication) — Step-by-step ECR setup guide
 - [EKS Kubeconfig Authentication Tutorial](/tutorials/eks-kubeconfig-authentication) — Step-by-step EKS setup guide

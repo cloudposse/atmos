@@ -943,7 +943,7 @@ func TestParseDuration_EdgeCases(t *testing.T) {
 	})
 }
 
-func TestSessionsCommand_CobraIntegration(t *testing.T) {
+func TestSessionsCommand_CobraServer(t *testing.T) {
 	t.Run("list command can be found by name", func(t *testing.T) {
 		found := false
 		for _, cmd := range sessionsCmd.Commands() {
@@ -1542,7 +1542,7 @@ func TestSessionsCommand_UnsupportedFormat(t *testing.T) {
 	})
 }
 
-func TestCheckpointCreation_Integration(t *testing.T) {
+func TestCheckpointCreation_Server(t *testing.T) {
 	// Test creating and validating a checkpoint file with various content.
 	tempDir := t.TempDir()
 
@@ -2398,8 +2398,8 @@ func TestImportSessionCommand_FlagDefaults(t *testing.T) {
 	})
 }
 
-// TestSessionsIntegration tests the session commands with a proper test fixture that has AI enabled.
-func TestSessionsIntegration(t *testing.T) {
+// TestSessionsServer tests the session commands with a proper test fixture that has AI enabled.
+func TestSessionsServer(t *testing.T) {
 	// Get the absolute path to the test fixture.
 	fixtureDir, err := filepath.Abs(filepath.Join("..", "..", "tests", "fixtures", "scenarios", "atmos-describe-affected-with-dependents-and-locked"))
 	require.NoError(t, err)
@@ -3824,9 +3824,9 @@ ai:
 	})
 }
 
-// TestSessionsCommand_StandardParserIntegration tests that session subcommands use StandardParser
+// TestSessionsCommand_StandardParserServer tests that session subcommands use StandardParser
 // with proper Viper binding for flag precedence (CLI > ENV > defaults).
-func TestSessionsCommand_StandardParserIntegration(t *testing.T) {
+func TestSessionsCommand_StandardParserServer(t *testing.T) {
 	t.Run("parsers are initialized", func(t *testing.T) {
 		require.NotNil(t, cleanParser, "cleanParser should be initialized by init()")
 		require.NotNil(t, exportParser, "exportParser should be initialized by init()")

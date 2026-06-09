@@ -35,6 +35,14 @@ var problematicAWSEnvVars = []string{
 	"AWS_CONFIG_FILE",
 	"AWS_SHARED_CREDENTIALS_FILE",
 
+	// Web identity / IRSA (EKS pod-injected variables).
+	// On EKS pods with IRSA, these are injected by the pod identity webhook.
+	// They must be cleared during Atmos auth to prevent the AWS SDK from using
+	// pod credentials instead of Atmos-managed credentials.
+	"AWS_WEB_IDENTITY_TOKEN_FILE",
+	"AWS_ROLE_ARN",
+	"AWS_ROLE_SESSION_NAME",
+
 	// Note: AWS_REGION is intentionally NOT in this list as it's safe to inherit.
 }
 
@@ -229,7 +237,8 @@ var environmentVarsToClear = []string{
 func PrepareEnvironment(environ map[string]string, profile, credentialsFile, configFile, region string) map[string]string {
 	defer perf.Track(nil, "pkg/auth/cloud/aws.PrepareEnvironment")()
 
-	log.Debug("Preparing AWS environment for Atmos-managed credentials",
+	log.Debug(
+		"Preparing AWS environment for Atmos-managed credentials",
 		"profile", profile,
 		"credentials_file", credentialsFile,
 		"config_file", configFile,
@@ -246,6 +255,11 @@ func PrepareEnvironment(environ map[string]string, profile, credentialsFile, con
 	// Clear problematic credential environment variables.
 	// When using profile-based authentication, these variables would override
 	// the credentials from AWS_SHARED_CREDENTIALS_FILE, causing auth to fail.
+	//
+	// This deletes keys from the map. Callers that pass os.Environ() as input will
+	// get a sanitized result with IRSA/credential vars removed. The sanitized env
+	// should be passed to subprocess execution via WithEnvironment to avoid re-reading
+	// os.Environ() (which would reintroduce the problematic vars).
 	for _, key := range environmentVarsToClear {
 		if _, exists := result[key]; exists {
 			log.Debug("Clearing AWS credential environment variable", "key", key)

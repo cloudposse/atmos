@@ -44,8 +44,16 @@ func (m *mockProvider) UpdateCheckRun(_ context.Context, _ *provider.UpdateCheck
 	return &provider.CheckRun{ID: 1}, nil
 }
 
+func (m *mockProvider) PostComment(_ context.Context, _ *provider.PostCommentOptions) (*provider.Comment, error) {
+	return &provider.Comment{ID: 1}, nil
+}
+
 func (m *mockProvider) OutputWriter() provider.OutputWriter {
 	return nil
+}
+
+func (m *mockProvider) ResolveBase() (*provider.BaseResolution, error) {
+	return nil, nil
 }
 
 func TestRegisterAndGet(t *testing.T) {
@@ -135,19 +143,68 @@ func TestIsCI(t *testing.T) {
 	assert.True(t, IsCI())
 }
 
-// testSaveAndClearRegistry clears the provider registry and returns the previous
-// map. For use in tests only. Restore with testRestoreRegistry.
-func testSaveAndClearRegistry() map[string]provider.Provider {
-	providersMu.Lock()
-	defer providersMu.Unlock()
-	prev := providers
-	providers = make(map[string]provider.Provider)
-	return prev
+// debugMockProvider extends mockProvider with the optional
+// DebugModeDetector capability for DetectDebugMode tests.
+type debugMockProvider struct {
+	mockProvider
+	debug bool
 }
 
-// TestRestoreRegistry restores the provider registry from a previous snapshot.
-func testRestoreRegistry(m map[string]provider.Provider) {
-	providersMu.Lock()
-	defer providersMu.Unlock()
-	providers = m
+func (m *debugMockProvider) IsDebugMode() bool { return m.debug }
+
+func TestDetectDebugMode(t *testing.T) {
+	t.Run("no provider detected -> zero value", func(t *testing.T) {
+		backup := testSaveAndClearRegistry()
+		defer testRestoreRegistry(backup)
+
+		info := DetectDebugMode()
+		assert.False(t, info.Active)
+		assert.Empty(t, info.Provider)
+	})
+
+	t.Run("detected provider without capability -> Active=false, Provider set", func(t *testing.T) {
+		backup := testSaveAndClearRegistry()
+		defer testRestoreRegistry(backup)
+
+		Register(&mockProvider{name: "plain-ci", detected: true})
+		info := DetectDebugMode()
+		assert.False(t, info.Active)
+		assert.Equal(t, "plain-ci", info.Provider)
+	})
+
+	t.Run("detected provider with capability, debug off -> Active=false", func(t *testing.T) {
+		backup := testSaveAndClearRegistry()
+		defer testRestoreRegistry(backup)
+
+		Register(&debugMockProvider{
+			mockProvider: mockProvider{name: "debug-ci", detected: true},
+			debug:        false,
+		})
+		info := DetectDebugMode()
+		assert.False(t, info.Active)
+		assert.Equal(t, "debug-ci", info.Provider)
+	})
+
+	t.Run("detected provider with capability, debug on -> Active=true", func(t *testing.T) {
+		backup := testSaveAndClearRegistry()
+		defer testRestoreRegistry(backup)
+
+		Register(&debugMockProvider{
+			mockProvider: mockProvider{name: "debug-ci", detected: true},
+			debug:        true,
+		})
+		info := DetectDebugMode()
+		assert.True(t, info.Active)
+		assert.Equal(t, "debug-ci", info.Provider)
+	})
+}
+
+// testSaveAndClearRegistry clears the provider registry and returns a restore function.
+func testSaveAndClearRegistry() func() {
+	return SwapRegistryForTest()
+}
+
+// testRestoreRegistry restores the provider registry from a previous snapshot.
+func testRestoreRegistry(restore func()) {
+	restore()
 }

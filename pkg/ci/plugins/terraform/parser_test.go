@@ -94,6 +94,11 @@ func TestParsePlanJSON(t *testing.T) {
 			wantHasChanges:  false,
 			wantImportedRes: []string{"aws_instance.imported"},
 		},
+		{
+			name:           "output-only changes",
+			inputFile:      "testdata/plan_json/success_output_only.json",
+			wantHasChanges: true,
+		},
 	}
 
 	for _, tt := range tests {
@@ -150,6 +155,38 @@ func TestParsePlanJSON_WithOutputs(t *testing.T) {
 	assert.Contains(t, tfData.Outputs, "bucket_name")
 	assert.Equal(t, "arn:aws:s3:::my-bucket", tfData.Outputs["bucket_arn"].Value)
 	assert.Equal(t, "my-bucket", tfData.Outputs["bucket_name"].Value)
+}
+
+func TestParsePlanJSON_OutputOnlyChanges(t *testing.T) {
+	data, err := os.ReadFile("testdata/plan_json/success_output_only.json")
+	require.NoError(t, err)
+
+	result, err := ParsePlanJSON(data)
+	require.NoError(t, err)
+
+	// Output-only changes should be detected as changes.
+	assert.True(t, result.HasChanges, "HasChanges should be true for output-only changes")
+	assert.False(t, result.HasErrors)
+
+	tfData, ok := result.Data.(*plugin.TerraformOutputData)
+	require.True(t, ok)
+	assert.True(t, tfData.HasOutputChanges, "HasOutputChanges should be true for output-only changes")
+
+	// No resource changes.
+	assert.Equal(t, 0, tfData.ResourceCounts.Create)
+	assert.Equal(t, 0, tfData.ResourceCounts.Change)
+	assert.Equal(t, 0, tfData.ResourceCounts.Replace)
+	assert.Equal(t, 0, tfData.ResourceCounts.Destroy)
+
+	// But outputs were parsed.
+	assert.Len(t, tfData.Outputs, 2)
+	assert.Contains(t, tfData.Outputs, "environment")
+	assert.Contains(t, tfData.Outputs, "app_version")
+	assert.Equal(t, "production", tfData.Outputs["environment"].Value)
+	assert.Equal(t, "2.0.0", tfData.Outputs["app_version"].Value)
+
+	// ChangedResult should describe output changes.
+	assert.Equal(t, "2 outputs to change", tfData.ChangedResult)
 }
 
 func TestParsePlanJSON_InvalidJSON(t *testing.T) {
@@ -392,18 +429,19 @@ Second details
 // Legacy tests for stdout parsing (fallback behavior).
 func TestParsePlanOutput(t *testing.T) {
 	tests := []struct {
-		name            string
-		output          string
-		hasChanges      bool
-		hasErrors       bool
-		create          int
-		change          int
-		destroy         int
-		wantCreatedRes  []string
-		wantUpdatedRes  []string
-		wantDeletedRes  []string
-		wantWarnings    int
-		wantWarningText []string
+		name             string
+		output           string
+		hasChanges       bool
+		hasErrors        bool
+		hasOutputChanges bool
+		create           int
+		change           int
+		destroy          int
+		wantCreatedRes   []string
+		wantUpdatedRes   []string
+		wantDeletedRes   []string
+		wantWarnings     int
+		wantWarningText  []string
 	}{
 		{
 			name: "plan with changes",
@@ -514,6 +552,19 @@ Test warning details
 			},
 		},
 		{
+			name: "plan with output-only changes",
+			output: `
+Changes to Outputs:
+  + environment = "production"
+  ~ app_version = "1.0.0" -> "2.0.0"
+
+You can apply this plan to save these new output values to the Terraform state,
+without changing any real infrastructure.
+			`,
+			hasChanges:       true,
+			hasOutputChanges: true,
+		},
+		{
 			name: "plan with errors",
 			output: `
 Error: Invalid provider configuration
@@ -536,6 +587,7 @@ Error: Reference to undeclared resource
 			assert.Equal(t, tt.hasErrors, result.HasErrors, "HasErrors mismatch")
 
 			if data, ok := result.Data.(*plugin.TerraformOutputData); ok {
+				assert.Equal(t, tt.hasOutputChanges, data.HasOutputChanges, "HasOutputChanges mismatch")
 				assert.Equal(t, tt.create, data.ResourceCounts.Create, "Create count mismatch")
 				assert.Equal(t, tt.change, data.ResourceCounts.Change, "Change count mismatch")
 				assert.Equal(t, tt.destroy, data.ResourceCounts.Destroy, "Destroy count mismatch")
@@ -915,6 +967,12 @@ func TestBuildChangeSummary(t *testing.T) {
 			assert.Equal(t, tt.want, got)
 		})
 	}
+}
+
+func TestBuildOutputChangeSummary(t *testing.T) {
+	assert.Equal(t, "1 output to change", buildOutputChangeSummary(1))
+	assert.Equal(t, "2 outputs to change", buildOutputChangeSummary(2))
+	assert.Equal(t, "5 outputs to change", buildOutputChangeSummary(5))
 }
 
 func TestFormatType(t *testing.T) {

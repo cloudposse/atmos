@@ -1,0 +1,151 @@
+# Atmos MCP for AI Coding Assistants
+#
+# Configure once in atmos.yaml, then use the same MCP servers from
+# Claude Code, OpenAI Codex CLI, and Google Gemini CLI. Atmos handles
+# toolchain (uvx/npx) and AWS credential injection — your AI coding
+# assistant just calls tools.
+#
+# Docs:
+#   https://atmos.tools/cli/configuration/mcp
+#   https://atmos.tools/cli/configuration/auth
+#   https://atmos.tools/cli/configuration/toolchain
+
+base_path: "."
+
+# ---------------------------------------------------------------------------
+# Atmos Toolchain
+# ---------------------------------------------------------------------------
+# Map `uv` to the aqua registry so the toolchain can resolve and install it.
+# This ensures `uvx` is available to spawn AWS MCP servers from the AI CLIs.
+toolchain:
+  aliases:
+    uv: astral-sh/uv
+
+# ---------------------------------------------------------------------------
+# MCP
+# ---------------------------------------------------------------------------
+# enabled: true allows `atmos mcp start` to run, so this Atmos project's own
+# AI tools can be exposed to AI coding assistants as a regular MCP server.
+#
+# servers: configures external MCP servers Atmos manages.
+#  `atmos mcp export` writes these to .mcp.json.
+mcp:
+  enabled: true
+
+  servers:
+    # =======================================================================
+    # Atmos MCP server
+    # =======================================================================
+    atmos:
+      command: atmos
+      args: ["mcp", "start"]
+      description: "Atmos AI tools — describe/list/validate stacks and components"
+
+    # =======================================================================
+    # AWS MCP servers — credentials injected via Atmos Auth
+    # =======================================================================
+
+    # AWS Documentation — search and fetch AWS docs.
+    # No credentials needed — accesses public documentation endpoints.
+    aws-docs:
+      command: uvx
+      args: ["awslabs.aws-documentation-mcp-server@latest"]
+      env:
+        FASTMCP_LOG_LEVEL: "ERROR"
+      description: "AWS Documentation — search and fetch AWS docs"
+
+    # AWS Knowledge — managed remote knowledge base.
+    # Fully managed remote MCP server providing up-to-date AWS documentation,
+    # code samples, agent SOPs, and regional availability information.
+    aws-knowledge:
+      command: uvx
+      args:
+        - "fastmcp"
+        - "run"
+        - "https://knowledge-mcp.global.api.aws"
+      description: "AWS Knowledge — managed AWS knowledge base (remote)"
+
+    # AWS Pricing — real-time pricing and cost analysis.
+    aws-pricing:
+      command: uvx
+      args: ["awslabs.aws-pricing-mcp-server@latest"]
+      env:
+        AWS_REGION: "us-east-1"
+        FASTMCP_LOG_LEVEL: "ERROR"
+      description: "AWS Pricing — real-time pricing and cost analysis"
+      identity: "readonly"
+
+    # AWS Billing & Cost Management — billing summaries, payment history,
+    # cost allocation tags.
+    aws-billing:
+      command: uvx
+      args: ["awslabs.billing-cost-management-mcp-server@latest"]
+      env:
+        AWS_REGION: "us-east-1"
+        FASTMCP_LOG_LEVEL: "ERROR"
+      description: "AWS Billing — billing summaries and payment history"
+      identity: "readonly"
+
+    # AWS IAM — role/policy analysis and access patterns.
+    aws-iam:
+      command: uvx
+      args: ["awslabs.iam-mcp-server@latest"]
+      env:
+        AWS_REGION: "us-east-1"
+        FASTMCP_LOG_LEVEL: "ERROR"
+      description: "AWS IAM — role/policy analysis and access patterns"
+      identity: "readonly"
+
+    # AWS CloudTrail — event history and API call auditing.
+    aws-cloudtrail:
+      command: uvx
+      args: ["awslabs.cloudtrail-mcp-server@latest"]
+      env:
+        AWS_REGION: "us-east-1"
+        FASTMCP_LOG_LEVEL: "ERROR"
+      description: "AWS CloudTrail — event history and API call auditing"
+      identity: "readonly"
+
+    # AWS Security — Well-Architected security posture assessment.
+    # GuardDuty, SecurityHub, Inspector, Access Analyzer.
+    aws-security:
+      command: uvx
+      args: ["awslabs.well-architected-security-mcp-server@latest"]
+      env:
+        AWS_REGION: "us-east-1"
+        FASTMCP_LOG_LEVEL: "ERROR"
+      description: "AWS Security — Well-Architected security posture assessment"
+      identity: "readonly"
+
+    # AWS API — direct AWS CLI access via AI, with built-in safety controls.
+    aws-api:
+      command: uvx
+      args: ["awslabs.aws-api-mcp-server@latest"]
+      env:
+        AWS_REGION: "us-east-1"
+        READ_OPERATIONS_ONLY: "true"
+        REQUIRE_MUTATION_CONSENT: "true"
+      description: "AWS API — direct AWS CLI access with security controls"
+      identity: "readonly"
+
+# ---------------------------------------------------------------------------
+# Atmos Auth — automatic credential injection for AWS MCP servers
+# ---------------------------------------------------------------------------
+# Update the `start_url` to your AWS IAM Identity Center start URL,
+# then: atmos auth login
+auth:
+  providers:
+    sso:
+      kind: aws/iam-identity-center
+      start_url: "https://your-org.awsapps.com/start"
+      region: "us-east-1"
+  identities:
+    readonly:
+      kind: aws/permission-set
+      default: true
+      via:
+        provider: sso
+      principal:
+        name: ReadOnlyAccess
+        account:
+          id: "123456789012"

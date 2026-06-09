@@ -1,8 +1,10 @@
 {{- $target := .Target -}}
 {{- if .Result.HasErrors }}
 ## Plan Failed for `{{.Component}}` in `{{.Stack}}`
-{{- else if .HasChanges }}
-## Changes Found for `{{.Component}}` in `{{.Stack}}`
+{{- else if .HasResourceChanges }}
+## Resource Changes Found for `{{.Component}}` in `{{.Stack}}`
+{{- else if .HasOutputChanges }}
+## Output Changes Found for `{{.Component}}` in `{{.Stack}}`
 {{- else }}
 ## No Changes for `{{.Component}}` in `{{.Stack}}`
 {{- end }}
@@ -12,6 +14,7 @@
 {{- if .Result.HasErrors }}
 [![failed](https://shields.io/badge/PLAN-FAILED-ff0000?style=for-the-badge)](#user-content-result-{{$target}})
 {{- else -}}
+{{- if .HasResourceChanges -}}
 {{- if gt .Resources.Create 0 }} [![create](https://shields.io/badge/PLAN-CREATE-success?style=for-the-badge)](#user-content-create-{{$target}})
 {{- end -}}
 {{- if gt .Resources.Change 0 }} [![change](https://shields.io/badge/PLAN-CHANGE-important?style=for-the-badge)](#user-content-change-{{$target}})
@@ -20,7 +23,8 @@
 {{- end -}}
 {{- if gt .Resources.Destroy 0 }} [![destroy](https://shields.io/badge/PLAN-DESTROY-critical?style=for-the-badge)](#user-content-destroy-{{$target}})
 {{- end -}}
-{{- if not .HasChanges }} [![no changes](https://shields.io/badge/-NO_CHANGE-inactive?style=for-the-badge)](#user-content-result-{{$target}})
+{{- else if .HasOutputChanges }} [![output changes](https://shields.io/badge/PLAN-OUTPUT_CHANGE-blue?style=for-the-badge)](#user-content-result-{{$target}})
+{{- else }} [![no changes](https://shields.io/badge/-NO_CHANGE-inactive?style=for-the-badge)](#user-content-result-{{$target}})
 {{- end }}
 {{- end }}
 
@@ -33,8 +37,10 @@
 
 {{- if .Result.HasErrors }}
 <details><summary><a id="result-{{$target}}" />:warning: Error summary</summary>
-{{- else if .HasChanges }}
+{{- else if .HasResourceChanges }}
 <details><summary><a id="result-{{$target}}" />Plan: {{.Resources.Create}} to add, {{.Resources.Change}} to change, {{.Resources.Destroy}} to destroy.</summary>
+{{- else if .HasOutputChanges }}
+<details><summary><a id="result-{{$target}}" />Output values will change. No infrastructure changes.</summary>
 {{- else if .ChangedResult }}
 <details><summary><a id="result-{{$target}}" />{{.ChangedResult}}</summary>
 {{- else }}

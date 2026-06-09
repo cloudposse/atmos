@@ -471,54 +471,63 @@ func TestFillRepoFromEnv(t *testing.T) {
 func TestGetGitHubToken(t *testing.T) {
 	tests := []struct {
 		name        string
+		ciToken     string
 		githubToken string
 		ghToken     string
-		expectedLen int
-		expectEmpty bool
+		expected    string
 	}{
 		{
-			name:        "GITHUB_TOKEN set",
+			name:        "ATMOS_CI_GITHUB_TOKEN takes highest precedence",
+			ciToken:     "ci-token-value",
+			githubToken: "github-token-value",
+			ghToken:     "gh-token-value",
+			expected:    "ci-token-value",
+		},
+		{
+			name:        "ATMOS_CI_GITHUB_TOKEN alone",
+			ciToken:     "ci-token-value",
+			githubToken: "",
+			ghToken:     "",
+			expected:    "ci-token-value",
+		},
+		{
+			name:        "GITHUB_TOKEN fallback",
+			ciToken:     "",
 			githubToken: "github-token-value",
 			ghToken:     "",
-			expectEmpty: false,
+			expected:    "github-token-value",
 		},
 		{
 			name:        "GH_TOKEN fallback",
+			ciToken:     "",
 			githubToken: "",
 			ghToken:     "gh-token-value",
-			expectEmpty: false,
+			expected:    "gh-token-value",
 		},
 		{
-			name:        "GITHUB_TOKEN takes precedence",
+			name:        "GITHUB_TOKEN takes precedence over GH_TOKEN",
+			ciToken:     "",
 			githubToken: "github-token-value",
 			ghToken:     "gh-token-value",
-			expectEmpty: false,
+			expected:    "github-token-value",
 		},
 		{
 			name:        "no token",
+			ciToken:     "",
 			githubToken: "",
 			ghToken:     "",
-			expectEmpty: true,
+			expected:    "",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv("ATMOS_CI_GITHUB_TOKEN", tt.ciToken)
 			t.Setenv("GITHUB_TOKEN", tt.githubToken)
 			t.Setenv("GH_TOKEN", tt.ghToken)
 
 			result := getGitHubToken()
-			if tt.expectEmpty {
-				assert.Empty(t, result)
-			} else {
-				assert.NotEmpty(t, result)
-				// If GITHUB_TOKEN is set, it should be returned.
-				if tt.githubToken != "" {
-					assert.Equal(t, tt.githubToken, result)
-				} else {
-					assert.Equal(t, tt.ghToken, result)
-				}
-			}
+			assert.Equal(t, tt.expected, result)
 		})
 	}
 }

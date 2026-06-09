@@ -30,6 +30,12 @@ type ProfilesConfig struct {
 	// If relative, resolved from atmos.yaml directory.
 	// If absolute, used as-is.
 	BasePath string `yaml:"base_path,omitempty" json:"base_path,omitempty" mapstructure:"base_path"`
+
+	// Default is the name of a profile loaded automatically when neither the
+	// --profile flag nor the ATMOS_PROFILE environment variable is set.
+	// The default is treated as implicit: an explicit --profile or ATMOS_PROFILE
+	// always wins, and it does not suppress the interactive identity fallback.
+	Default string `yaml:"default,omitempty" json:"default,omitempty" mapstructure:"default"`
 }
 
 // ConfigMetadata contains metadata about a configuration file or profile.
@@ -56,6 +62,7 @@ type AtmosConfiguration struct {
 	BasePathSource                string             `yaml:"-" json:"-" mapstructure:"-"` // "runtime" if from env var/CLI/provider, "" if from config file.
 	Components                    Components         `yaml:"components" json:"components" mapstructure:"components"`
 	Stacks                        Stacks             `yaml:"stacks" json:"stacks" mapstructure:"stacks"`
+	Imports                       ImportsSettings    `yaml:"imports,omitempty" json:"imports,omitempty" mapstructure:"imports"`
 	Workflows                     Workflows          `yaml:"workflows,omitempty" json:"workflows,omitempty" mapstructure:"workflows"`
 	Logs                          Logs               `yaml:"logs,omitempty" json:"logs,omitempty" mapstructure:"logs"`
 	Errors                        ErrorsConfig       `yaml:"errors,omitempty" json:"errors,omitempty" mapstructure:"errors"`
@@ -104,6 +111,8 @@ type AtmosConfiguration struct {
 	CI   CIConfig           `yaml:"ci,omitempty" json:"ci,omitempty" mapstructure:"ci"`
 	// AI settings.
 	AI AISettings `yaml:"ai,omitempty" json:"ai,omitempty" mapstructure:"ai"`
+	// AWS settings.
+	AWS AWSSettings `yaml:"aws,omitempty" json:"aws,omitempty" mapstructure:"aws"`
 	// MCP (Model Context Protocol) server settings.
 	MCP MCPSettings `yaml:"mcp,omitempty" json:"mcp,omitempty" mapstructure:"mcp"`
 	// LSP settings.
@@ -273,15 +282,23 @@ type EditorConfig struct {
 
 // Toolchain configures the built-in CLI toolchain management system for installing and managing external tools.
 type Toolchain struct {
-	InstallPath     string              `yaml:"install_path" json:"install_path" mapstructure:"install_path"`
-	FilePath        string              `yaml:"file_path" json:"file_path" mapstructure:"file_path"`
-	ToolsDir        string              `yaml:"tools_dir" json:"tools_dir" mapstructure:"tools_dir"`
-	VersionsFile    string              `yaml:"versions_file" json:"versions_file" mapstructure:"versions_file"`
-	LockFile        string              `yaml:"lock_file,omitempty" json:"lock_file,omitempty" mapstructure:"lock_file"`
-	UseToolVersions bool                `yaml:"use_tool_versions" json:"use_tool_versions" mapstructure:"use_tool_versions"`
-	UseLockFile     bool                `yaml:"use_lock_file" json:"use_lock_file" mapstructure:"use_lock_file"`
-	Registries      []ToolchainRegistry `yaml:"registries,omitempty" json:"registries,omitempty" mapstructure:"registries"`
-	Aliases         map[string]string   `yaml:"aliases,omitempty" json:"aliases,omitempty" mapstructure:"aliases"`
+	InstallPath     string                 `yaml:"install_path" json:"install_path" mapstructure:"install_path"`
+	FilePath        string                 `yaml:"file_path" json:"file_path" mapstructure:"file_path"`
+	ToolsDir        string                 `yaml:"tools_dir" json:"tools_dir" mapstructure:"tools_dir"`
+	VersionsFile    string                 `yaml:"versions_file" json:"versions_file" mapstructure:"versions_file"`
+	LockFile        string                 `yaml:"lock_file,omitempty" json:"lock_file,omitempty" mapstructure:"lock_file"`
+	UseToolVersions bool                   `yaml:"use_tool_versions" json:"use_tool_versions" mapstructure:"use_tool_versions"`
+	UseLockFile     bool                   `yaml:"use_lock_file" json:"use_lock_file" mapstructure:"use_lock_file"`
+	Verification    *ToolchainVerification `yaml:"verification,omitempty" json:"verification,omitempty" mapstructure:"verification"`
+	Registries      []ToolchainRegistry    `yaml:"registries,omitempty" json:"registries,omitempty" mapstructure:"registries"`
+	Aliases         map[string]string      `yaml:"aliases,omitempty" json:"aliases,omitempty" mapstructure:"aliases"`
+}
+
+// ToolchainVerification configures package integrity and signature checks.
+type ToolchainVerification struct {
+	Checksums       string `yaml:"checksums,omitempty" json:"checksums,omitempty" mapstructure:"checksums"`
+	Signatures      string `yaml:"signatures,omitempty" json:"signatures,omitempty" mapstructure:"signatures"`
+	VerifierInstall string `yaml:"verifier_install,omitempty" json:"verifier_install,omitempty" mapstructure:"verifier_install"`
 }
 
 // ToolchainRegistry defines a registry source for tool metadata.
@@ -367,6 +384,7 @@ type AtmosSettings struct {
 	InjectGithubToken    bool             `yaml:"inject_github_token,omitempty" mapstructure:"inject_github_token"`
 	GithubToken          string           `yaml:"github_token,omitempty" mapstructure:"github_token"`
 	AtmosGithubToken     string           `yaml:"atmos_github_token,omitempty" mapstructure:"atmos_github_token"`
+	AtmosProGithubToken  string           `yaml:"atmos_pro_github_token,omitempty" mapstructure:"atmos_pro_github_token"`
 	GithubUsername       string           `yaml:"github_username,omitempty" mapstructure:"github_username"`
 	InjectBitbucketToken bool             `yaml:"inject_bitbucket_token,omitempty" mapstructure:"inject_bitbucket_token"`
 	BitbucketToken       string           `yaml:"bitbucket_token,omitempty" mapstructure:"bitbucket_token"`
@@ -477,11 +495,29 @@ type Terraform struct {
 	// PluginCacheDir is an optional custom path for the plugin cache.
 	// If empty and PluginCache is true, uses XDG cache: ~/.cache/atmos/terraform/plugins.
 	PluginCacheDir string `yaml:"plugin_cache_dir,omitempty" json:"plugin_cache_dir,omitempty" mapstructure:"plugin_cache_dir"`
+	// AutoProvisionWorkdirForOutputs controls whether Atmos automatically provisions
+	// JIT working directories before running terraform output.
+	// When true (default), output fetching transparently provisions the workdir
+	// if provision.workdir.enabled is set on the referenced component.
+	AutoProvisionWorkdirForOutputs bool `yaml:"auto_provision_workdir_for_outputs" json:"auto_provision_workdir_for_outputs" mapstructure:"auto_provision_workdir_for_outputs"`
 	// Source holds global source configuration defaults for JIT-vendored components.
 	Source *SourceSettings `yaml:"source,omitempty" json:"source,omitempty" mapstructure:"source"`
 	// CI holds terraform-specific CI configuration (e.g., exit code mapping).
 	// Only active when the global ci.enabled is true.
 	CI TerraformCI `yaml:"ci,omitempty" json:"ci,omitempty" mapstructure:"ci"`
+	// Workspace holds workspace-related configuration for backend key generation.
+	Workspace WorkspaceConfig `yaml:"workspace,omitempty" json:"workspace,omitempty" mapstructure:"workspace"`
+}
+
+// WorkspaceConfig holds workspace-related configuration.
+type WorkspaceConfig struct {
+	// PrefixSeparator controls how '/' in component names is handled when
+	// auto-generating backend key prefixes (workspace_key_prefix for S3,
+	// prefix for GCS, key for Azure).
+	//
+	// "-" (default): Replace '/' with '-' → services/consul becomes services-consul.
+	// "/": Preserve '/' as-is → services/consul stays services/consul.
+	PrefixSeparator string `yaml:"prefix_separator,omitempty" json:"prefix_separator,omitempty" mapstructure:"prefix_separator"`
 }
 
 // TerraformCI holds CI-specific configuration for terraform components.
@@ -581,8 +617,11 @@ type CIChecksStatusesConfig struct {
 
 // CICommentsConfig configures PR/MR comment integration.
 // GitHub: PR comments, GitLab: MR notes.
+//
+// Enabled is *bool so callers can distinguish "unset" (nil, default applies)
+// from explicit false. Default is true when omitted; see `isCommentsEnabled`.
 type CICommentsConfig struct {
-	Enabled  bool   `yaml:"enabled,omitempty" json:"enabled,omitempty" mapstructure:"enabled"`
+	Enabled  *bool  `yaml:"enabled,omitempty" json:"enabled,omitempty" mapstructure:"enabled"`
 	Behavior string `yaml:"behavior,omitempty" json:"behavior,omitempty" mapstructure:"behavior"` // create, update, upsert
 	Template string `yaml:"template,omitempty" json:"template,omitempty" mapstructure:"template"`
 }
@@ -966,7 +1005,16 @@ type ConfigAndStacksInfo struct {
 	ComponentEnvSection           AtmosSectionMapType
 	ComponentAuthSection          AtmosSectionMapType
 	ComponentEnvList              []string
-	ComponentBackendSection       AtmosSectionMapType
+	// SanitizedEnv holds the sanitized process environment from auth.
+	// When set, subprocess execution uses this instead of re-reading os.Environ(),
+	// which would reintroduce problematic vars (e.g., IRSA credentials on EKS pods).
+	SanitizedEnv            []string
+	ComponentBackendSection AtmosSectionMapType
+	// ComponentRetrySection holds the per-component `retry:` block parsed from stack
+	// manifests. When non-nil and `Conditions` is populated, each subprocess invocation
+	// in the terraform execution pipeline (init, workspace, main) is retried independently
+	// on errors whose captured output matches a `Conditions` regex.
+	ComponentRetrySection *RetryConfig
 	// AuthContext holds active authentication credentials for cloud providers.
 	// This is the SINGLE SOURCE OF TRUTH for auth credentials.
 	// ComponentEnvSection/ComponentEnvList are derived from this context.
@@ -980,69 +1028,91 @@ type ConfigAndStacksInfo struct {
 	//   - pkg/auth already imports pkg/schema (for ConfigAndStacksInfo)
 	//   - This would create: schema → auth → schema (circular dependency error)
 	//   - Type assertions are used at usage sites to recover type safety
-	AuthManager               any
-	ComponentBackendType      string
-	AdditionalArgsAndFlags    []string
-	GlobalOptions             []string
-	BasePath                  string
-	VendorBasePathFlag        string
-	TerraformCommand          string
-	TerraformDir              string
-	HelmfileCommand           string
-	HelmfileDir               string
-	PackerCommand             string
-	PackerDir                 string
-	AnsibleCommand            string
-	AnsibleDir                string
-	ConfigDir                 string
-	StacksDir                 string
-	WorkflowsDir              string
-	Context                   Context
-	ContextPrefix             string
-	DeployRunInit             string
-	InitRunReconfigure        string
-	InitPassVars              string
-	PlanSkipPlanfile          string
-	AutoGenerateBackendFile   string
-	UseTerraformPlan          bool
-	PlanFile                  string
-	StoredPlanFile            string
-	VerifyPlan                bool
-	DryRun                    bool
-	SkipInit                  bool
-	UploadStatus              bool
-	ComponentInheritanceChain []string
-	ComponentImportsSection   []string
-	NeedHelp                  bool
-	ComponentIsAbstract       bool
-	ComponentIsEnabled        bool
-	ComponentIsLocked         bool
-	ComponentMetadataSection  AtmosSectionMapType
-	TerraformWorkspace        string
-	JsonSchemaDir             string
-	OpaDir                    string
-	CueDir                    string
-	AtmosManifestJsonSchema   string
-	AtmosCliConfigPath        string
-	AtmosBasePath             string
-	ProfilesFromArg           []string
-	RedirectStdErr            string
-	LogsLevel                 string
-	LogsFile                  string
-	SettingsListMergeStrategy string
-	Query                     string
-	AtmosConfigFilesFromArg   []string
-	AtmosConfigDirsFromArg    []string
-	ProcessTemplates          bool
-	ProcessFunctions          bool
-	Skip                      []string
-	CliArgs                   []string
-	Affected                  bool
-	All                       bool
-	Components                []string
-	Identity                  string
-	ClusterName               string // EKS cluster name from --cluster-name flag.
-	NeedsPathResolution       bool   // True if ComponentFromArg is a path that needs resolution.
+	AuthManager          any
+	AuthDisabled         bool
+	ComponentBackendType string
+	// RequiredVersion is the Terraform version constraint (e.g., ">= 1.10.1").
+	// This is extracted from terraform.required_version or components.terraform.<name>.required_version.
+	RequiredVersion string
+	// RequiredProviders maps provider names to their configuration.
+	// Example: {"aws": {"source": "hashicorp/aws", "version": "~> 5.0"}}.
+	// This is extracted from terraform.required_providers or components.terraform.<name>.required_providers.
+	RequiredProviders          map[string]map[string]any
+	AdditionalArgsAndFlags     []string
+	GlobalOptions              []string
+	BasePath                   string
+	VendorBasePathFlag         string
+	TerraformCommand           string
+	TerraformDir               string
+	HelmfileCommand            string
+	HelmfileDir                string
+	PackerCommand              string
+	PackerDir                  string
+	AnsibleCommand             string
+	AnsibleDir                 string
+	ConfigDir                  string
+	StacksDir                  string
+	WorkflowsDir               string
+	Context                    Context
+	ContextPrefix              string
+	DeployRunInit              string
+	InitRunReconfigure         string
+	InitPassVars               string
+	PlanSkipPlanfile           string
+	AutoGenerateBackendFile    string
+	UseTerraformPlan           bool
+	PlanFile                   string
+	StoredPlanFile             string
+	VerifyPlan                 bool
+	DryRun                     bool
+	SkipInit                   bool
+	UploadStatus               bool
+	ComponentInheritanceChain  []string
+	ComponentImportsSection    []string
+	NeedHelp                   bool
+	ComponentIsAbstract        bool
+	ComponentIsEnabled         bool
+	ComponentIsLocked          bool
+	ComponentMetadataSection   AtmosSectionMapType
+	TerraformWorkspace         string
+	JsonSchemaDir              string
+	OpaDir                     string
+	CueDir                     string
+	AtmosManifestJsonSchema    string
+	AtmosCliConfigPath         string
+	AtmosBasePath              string
+	ProfilesFromArg            []string
+	RedirectStdErr             string
+	LogsLevel                  string
+	LogsFile                   string
+	SettingsListMergeStrategy  string
+	Query                      string
+	AtmosConfigFilesFromArg    []string
+	AtmosConfigDirsFromArg     []string
+	ProcessTemplates           bool
+	ProcessFunctions           bool
+	Skip                       []string
+	CliArgs                    []string
+	Affected                   bool
+	All                        bool
+	Components                 []string
+	MaxConcurrency             int
+	TerraformFailureMode       string
+	FailFast                   bool
+	KeepGoing                  bool
+	TerraformPlanLogOrder      string
+	TerraformPlanHide          []string
+	TerraformPlanHideNoChanges bool
+	TerraformPlanSummaryFile   string
+	Identity                   string
+	ClusterName                string // EKS cluster name from --cluster-name flag.
+	NeedsPathResolution        bool   // True if ComponentFromArg is a path that needs resolution.
+
+	// PerComponentHook is called after each component executes in multi-component mode
+	// (--all, --query, --components). Receives a snapshot of info with Component/Stack
+	// set to the executed component, combined stdout+stderr output, and the execution
+	// error (nil on success). Nil means no per-component callback.
+	PerComponentHook func(info *ConfigAndStacksInfo, output string, execErr error)
 }
 
 // GetComponentEnvSection returns the component's env section map.
@@ -1075,6 +1145,11 @@ type RetryConfig struct {
 	RandomJitter    *float64        `yaml:"random_jitter,omitempty" json:"random_jitter,omitempty" mapstructure:"random_jitter"`
 	Multiplier      *float64        `yaml:"multiplier,omitempty" json:"multiplier,omitempty" mapstructure:"multiplier"`
 	MaxElapsedTime  *time.Duration  `yaml:"max_elapsed_time,omitempty" json:"max_elapsed_time,omitempty" mapstructure:"max_elapsed_time"`
+	// Conditions is a list of regex patterns matched against captured subprocess output
+	// to decide whether an error is recoverable and the command should be retried.
+	// When empty or nil, no pattern-based retry is performed (all failures are terminal).
+	// Patterns may be wrapped in optional /.../ delimiters for readability.
+	Conditions []string `yaml:"conditions,omitempty" json:"conditions,omitempty" mapstructure:"conditions"`
 }
 
 // EKS update-kubeconfig
@@ -1153,15 +1228,17 @@ type Affected struct {
 }
 
 type BaseComponentConfig struct {
-	BaseComponentVars         AtmosSectionMapType
-	BaseComponentSettings     AtmosSectionMapType
-	BaseComponentEnv          AtmosSectionMapType
-	BaseComponentAuth         AtmosSectionMapType
-	BaseComponentDependencies AtmosSectionMapType
-	BaseComponentLocals       AtmosSectionMapType // Component-level locals for template processing.
-	BaseComponentMetadata     AtmosSectionMapType
-	BaseComponentProviders    AtmosSectionMapType
-	BaseComponentHooks        AtmosSectionMapType
+	BaseComponentVars              AtmosSectionMapType
+	BaseComponentSettings          AtmosSectionMapType
+	BaseComponentEnv               AtmosSectionMapType
+	BaseComponentAuth              AtmosSectionMapType
+	BaseComponentDependencies      AtmosSectionMapType
+	BaseComponentLocals            AtmosSectionMapType // Component-level locals for template processing.
+	BaseComponentMetadata          AtmosSectionMapType
+	BaseComponentProviders         AtmosSectionMapType
+	BaseComponentRequiredProviders AtmosSectionMapType
+	BaseComponentRequiredVersion   string
+	BaseComponentHooks             AtmosSectionMapType
 	// BaseComponentGenerate holds the generate section configuration from the base component,
 	// defining auxiliary files to be generated for this component.
 	BaseComponentGenerate                  AtmosSectionMapType
@@ -1173,10 +1250,26 @@ type BaseComponentConfig struct {
 	BaseComponentRemoteStateBackendSection AtmosSectionMapType
 	BaseComponentSourceSection             AtmosSectionMapType
 	BaseComponentProvisionSection          AtmosSectionMapType
-	ComponentInheritanceChain              []string
+	// BaseComponentRetry holds the raw retry configuration inherited from base components.
+	// It is deep-merged with the child component's retry block by mergeComponentConfigurations.
+	BaseComponentRetry        AtmosSectionMapType
+	ComponentInheritanceChain []string
 }
 
 // Stack imports (`import` section)
+
+const (
+	StackImportNestedImportsLocal  = "local"
+	StackImportNestedImportsRemote = "remote"
+)
+
+// ImportsSettings holds global defaults applied when processing stack imports.
+type ImportsSettings struct {
+	// TTL is the default cache duration for the cloned source repos of remote (git)
+	// imports, applied when a per-import `ttl` is not set. See StackImport.TTL for the
+	// caching semantics and accepted formats.
+	TTL string `yaml:"ttl,omitempty" json:"ttl,omitempty" mapstructure:"ttl"`
+}
 
 type StackImport struct {
 	Path                        string              `yaml:"path" json:"path" mapstructure:"path"`
@@ -1184,6 +1277,14 @@ type StackImport struct {
 	SkipTemplatesProcessing     bool                `yaml:"skip_templates_processing,omitempty" json:"skip_templates_processing,omitempty" mapstructure:"skip_templates_processing"`
 	IgnoreMissingTemplateValues bool                `yaml:"ignore_missing_template_values,omitempty" json:"ignore_missing_template_values,omitempty" mapstructure:"ignore_missing_template_values"`
 	SkipIfMissing               bool                `yaml:"skip_if_missing,omitempty" json:"skip_if_missing,omitempty" mapstructure:"skip_if_missing"`
+	NestedImports               string              `yaml:"nested_imports,omitempty" json:"nested_imports,omitempty" mapstructure:"nested_imports"`
+	// TTL is the cache duration for the cloned source repo of a remote (git) import.
+	// When set, the cloned source is reused across Atmos invocations until it expires,
+	// so a warm cache (e.g. GitHub Actions cache of the imports cache dir) skips the
+	// re-clone. Within a single invocation a source repo is always cloned at most once,
+	// regardless of TTL. When unset, the source is re-cloned once per invocation.
+	// Examples: "0s" (always re-fetch), "5m", "1h", "7d", or keywords like "daily".
+	TTL string `yaml:"ttl,omitempty" json:"ttl,omitempty" mapstructure:"ttl"`
 }
 
 // Dependencies

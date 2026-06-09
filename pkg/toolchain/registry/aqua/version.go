@@ -23,16 +23,15 @@ import (
 func (ar *AquaRegistry) GetLatestVersion(owner, repo string) (string, error) {
 	defer perf.Track(nil, "aqua.AquaRegistry.GetLatestVersion")()
 
-	// Check if the tool uses github_tag version source.
-	tool, err := ar.GetTool(owner, repo)
-	if err == nil && tool.VersionSource == "github_tag" {
-		return ar.getLatestTag(owner, repo, tool.VersionPrefix)
+	versionPrefix, metadataAvailable, versionSource := ar.versionMetadata(owner, repo)
+	if versionSource == "github_tag" {
+		return ar.getLatestTag(owner, repo, versionPrefix, metadataAvailable)
 	}
 
 	apiURL := fmt.Sprintf("%s/repos/%s/%s/releases?per_page=%d", ar.githubBaseURL, owner, repo, githubPerPage)
 
 	for apiURL != "" {
-		version, nextURL, err := ar.fetchVersionFromPage(apiURL)
+		version, nextURL, err := ar.fetchVersionFromPage(apiURL, versionPrefix, metadataAvailable)
 		if err != nil {
 			return "", err
 		}
@@ -45,10 +44,28 @@ func (ar *AquaRegistry) GetLatestVersion(owner, repo string) (string, error) {
 	return "", fmt.Errorf("%w: no non-prerelease, non-draft versions found for %s/%s", registry.ErrNoVersionsFound, owner, repo)
 }
 
+func (ar *AquaRegistry) versionMetadata(owner, repo string) (prefix string, available bool, versionSource string) {
+	tool, err := ar.GetTool(owner, repo)
+	if err != nil {
+		return "", false, ""
+	}
+	return tool.VersionPrefix, true, tool.VersionSource
+}
+
+func normalizeGitHubVersion(tagName, prefix string, metadataAvailable bool) string {
+	if !metadataAvailable {
+		return strings.TrimPrefix(tagName, versionPrefix)
+	}
+	if prefix != "" {
+		return strings.TrimPrefix(tagName, prefix)
+	}
+	return tagName
+}
+
 // getLatestTag fetches the latest tag from GitHub tags API.
 // The prefix parameter specifies the version prefix to strip (e.g., "v", "jq-").
-// If empty, falls back to the default "v" prefix.
-func (ar *AquaRegistry) getLatestTag(owner, repo, prefix string) (string, error) {
+// If package metadata is unavailable, falls back to stripping the default "v" prefix.
+func (ar *AquaRegistry) getLatestTag(owner, repo, prefix string, metadataAvailable bool) (string, error) {
 	apiURL := fmt.Sprintf("%s/repos/%s/%s/tags?per_page=1", ar.githubBaseURL, owner, repo)
 
 	resp, err := ar.get(apiURL)
@@ -78,14 +95,11 @@ func (ar *AquaRegistry) getLatestTag(owner, repo, prefix string) (string, error)
 		return "", fmt.Errorf("%w: no tags found for %s/%s", registry.ErrNoVersionsFound, owner, repo)
 	}
 
-	if prefix == "" {
-		prefix = versionPrefix
-	}
-	return strings.TrimPrefix(tags[0].Name, prefix), nil
+	return normalizeGitHubVersion(tags[0].Name, prefix, metadataAvailable), nil
 }
 
 // fetchVersionFromPage fetches releases from a single page and returns the first valid version.
-func (ar *AquaRegistry) fetchVersionFromPage(apiURL string) (version, nextURL string, err error) {
+func (ar *AquaRegistry) fetchVersionFromPage(apiURL, prefix string, metadataAvailable bool) (version, nextURL string, err error) {
 	resp, err := ar.get(apiURL)
 	if err != nil {
 		return "", "", fmt.Errorf("%w: failed to fetch releases from GitHub: %w", registry.ErrHTTPRequest, err)
@@ -110,7 +124,7 @@ func (ar *AquaRegistry) fetchVersionFromPage(apiURL string) (version, nextURL st
 
 	for _, release := range releases {
 		if !release.Prerelease && !release.Draft {
-			return strings.TrimPrefix(release.TagName, versionPrefix), "", nil
+			return normalizeGitHubVersion(release.TagName, prefix, metadataAvailable), "", nil
 		}
 	}
 
@@ -137,11 +151,12 @@ func parseReleasesJSON(body []byte) ([]releaseInfo, error) {
 func (ar *AquaRegistry) GetAvailableVersions(owner, repo string) ([]string, error) {
 	defer perf.Track(nil, "aqua.AquaRegistry.GetAvailableVersions")()
 
+	versionPrefix, metadataAvailable, _ := ar.versionMetadata(owner, repo)
 	apiURL := fmt.Sprintf("%s/repos/%s/%s/releases?per_page=%d", ar.githubBaseURL, owner, repo, githubPerPage)
 
 	var versions []string
 	for apiURL != "" {
-		pageVersions, nextURL, err := ar.fetchVersionsFromPage(apiURL)
+		pageVersions, nextURL, err := ar.fetchVersionsFromPage(apiURL, versionPrefix, metadataAvailable)
 		if err != nil {
 			return nil, err
 		}
@@ -157,7 +172,7 @@ func (ar *AquaRegistry) GetAvailableVersions(owner, repo string) ([]string, erro
 }
 
 // fetchVersionsFromPage fetches all versions from a single page.
-func (ar *AquaRegistry) fetchVersionsFromPage(apiURL string) (versions []string, nextURL string, err error) {
+func (ar *AquaRegistry) fetchVersionsFromPage(apiURL, prefix string, metadataAvailable bool) (versions []string, nextURL string, err error) {
 	resp, err := ar.get(apiURL)
 	if err != nil {
 		return nil, "", fmt.Errorf("%w: failed to fetch releases from GitHub: %w", registry.ErrHTTPRequest, err)
@@ -182,7 +197,7 @@ func (ar *AquaRegistry) fetchVersionsFromPage(apiURL string) (versions []string,
 
 	for _, release := range releases {
 		if !release.Prerelease && !release.Draft {
-			versions = append(versions, strings.TrimPrefix(release.TagName, versionPrefix))
+			versions = append(versions, normalizeGitHubVersion(release.TagName, prefix, metadataAvailable))
 		}
 	}
 

@@ -301,6 +301,9 @@ ALWAYS build after doc changes: `cd website && npm run build`. Verify: no broken
 All Product Requirement Documents (PRDs) MUST be placed in `docs/prd/`. Use kebab-case filenames.
 
 ### Pull Requests (MANDATORY)
+
+**Use the `pull-request` skill** (`/pull-request`) before opening or updating any PR. It encodes the label decision tree (`no-release` / `patch` / `minor` / `major`), when a blog post is required, when a roadmap update is required, and how to do each without violating the `featured[]`-is-curated rule. Skipping this skill is how unlabeled PRs and missing changelog entries land in CI.
+
 Follow template (what/why/references).
 
 **Blog Posts (CI Enforced):**
@@ -443,6 +446,8 @@ Auto-enabled via `RootCmd.ExecuteC()`. Non-standard paths use `telemetry.Capture
 ## Development Environment
 
 **Prerequisites**: Go 1.26+, golangci-lint, Make. See `.cursor/rules/atmos-rules.mdc`.
+
+> **Minimum Go version**: `go.mod` requires Go 1.26. Test helpers use `sync.Map.Clear` (added in Go 1.23) and range-over-int (Go 1.22). CI pins the Go version via `go-version-file: go.mod`. Local development with an older toolchain will fail to compile test-only files.
 
 **Build**: CGO disabled, cross-platform, version via ldflags, output to `./build/`
 

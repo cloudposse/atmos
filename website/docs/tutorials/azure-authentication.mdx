@@ -156,7 +156,7 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Install Atmos
         uses: cloudposse/github-action-setup-atmos@v2
@@ -545,7 +545,7 @@ jobs:
       id-token: write
       contents: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Deploy to Azure Government
         run: atmos terraform apply mycomponent -s prod
         env:

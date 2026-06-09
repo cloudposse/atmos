@@ -49,7 +49,9 @@ var (
 	repoRoot            string                   // Repository root directory for path normalization
 	skipReason          string                   // Package-level variable to track why tests should be skipped
 	atmosRunner         *testhelpers.AtmosRunner // Global runner for executing Atmos with coverage support (lazy initialized)
-	coverDir            string                   // GOCOVERDIR environment variable value
+	atmosRunnerOnce     sync.Once
+	atmosRunnerErr      error
+	coverDir            string // GOCOVERDIR environment variable value.
 	sandboxRegistry     = make(map[string]*testhelpers.SandboxEnvironment)
 	sandboxMutex        sync.RWMutex
 )
@@ -684,6 +686,22 @@ func loadTestSuites(testCasesDir string) (*TestSuite, error) {
 	return &mergedSuite, nil
 }
 
+// validateAtmosBinary checks if the atmos binary is available.
+// Returns the binary path and a skip reason if the binary is not suitable for testing.
+func validateAtmosBinary(repoRoot string) (string, string) {
+	binaryPath, err := exec.LookPath("atmos")
+	if err != nil {
+		return "", fmt.Sprintf("Atmos binary not found in PATH: %s. Run 'make build' to build the binary.", os.Getenv("PATH"))
+	}
+
+	rel, err := filepath.Rel(repoRoot, binaryPath)
+	if err == nil && strings.HasPrefix(rel, "..") {
+		return binaryPath, fmt.Sprintf("Atmos binary found outside repository at %s", binaryPath)
+	}
+
+	return binaryPath, ""
+}
+
 // Entry point for tests to parse flags and handle setup/teardown.
 func TestMain(m *testing.M) {
 	// Parse flags first to get -v status
@@ -725,10 +743,21 @@ func TestMain(m *testing.M) {
 		logger.Fatal("failed to locate git repository", "dir", startingDir)
 	}
 
-	// Check if we should collect coverage
+	// Check if we should collect coverage.
 	coverDir = os.Getenv("GOCOVERDIR")
 	if coverDir != "" {
 		logger.Info("Coverage collection enabled", "GOCOVERDIR", coverDir)
+	}
+
+	// Check for the atmos binary. This is informational only: CLI tests execute via
+	// AtmosRunner, which builds atmos from source, so a missing or external PATH binary
+	// must NOT skip the suite (doing so silently reduces coverage on clean machines/CI).
+	binaryPath, binaryWarning := validateAtmosBinary(repoRoot)
+	if binaryWarning != "" {
+		logger.Info("Atmos binary check warning", "reason", binaryWarning)
+	}
+	if binaryPath != "" {
+		logger.Info("Atmos binary for tests", "binary", binaryPath)
 	}
 
 	logger.Info("Starting directory", "dir", startingDir)
@@ -781,6 +810,24 @@ func prepareAtmosCommand(t *testing.T, ctx context.Context, args ...string) *exe
 	return atmosRunner.CommandContext(ctx, args...)
 }
 
+func ensureAtmosRunner(t *testing.T) {
+	t.Helper()
+
+	atmosRunnerOnce.Do(func() {
+		if atmosRunner != nil {
+			return
+		}
+		atmosRunner = testhelpers.NewAtmosRunner(coverDir)
+		atmosRunnerErr = atmosRunner.Build()
+		if atmosRunnerErr == nil {
+			logger.Info("Atmos runner initialized for test", "coverageEnabled", coverDir != "")
+		}
+	})
+	if atmosRunnerErr != nil {
+		t.Skipf("Failed to initialize Atmos: %v", atmosRunnerErr)
+	}
+}
+
 func runCLICommandTest(t *testing.T, tc TestCase) {
 	// Skip long tests in short mode
 	if testing.Short() && tc.Short != nil && !*tc.Short {
@@ -791,12 +838,8 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 	checkPreconditions(t, tc.Preconditions)
 
 	// Initialize AtmosRunner early, before any directory changes, so it can build from the git repo
-	if tc.Command == "atmos" && atmosRunner == nil {
-		atmosRunner = testhelpers.NewAtmosRunner(coverDir)
-		if err := atmosRunner.Build(); err != nil {
-			t.Skipf("Failed to initialize Atmos: %v", err)
-		}
-		logger.Info("Atmos runner initialized for test", "coverageEnabled", coverDir != "")
+	if tc.Command == "atmos" {
+		ensureAtmosRunner(t)
 	}
 
 	// Create a context with timeout if specified, defaulting to 10 minutes
@@ -1217,6 +1260,12 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 	// Validate outputs
 	if !verifyExitCode(t, tc.Expect.ExitCode, exitCode) {
 		t.Errorf("Description: %s", tc.Description)
+		if stdout.Len() > 0 {
+			t.Errorf("Captured stdout:\n%s", stdout.String())
+		}
+		if stderr.Len() > 0 {
+			t.Errorf("Captured stderr:\n%s", stderr.String())
+		}
 	}
 
 	// Validate output based on TTY mode

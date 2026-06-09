@@ -4,10 +4,12 @@ import (
 	"encoding/json"
 	stderrors "errors"
 	"fmt"
+	"hash/fnv"
 	"os"
 	"path/filepath"
 	"reflect"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -22,6 +24,7 @@ import (
 	m "github.com/cloudposse/atmos/pkg/merge"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+	stackimports "github.com/cloudposse/atmos/pkg/stack/imports"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -37,6 +40,91 @@ type extractLocalsResult struct {
 	hasLocals bool           // Whether any locals section exists in the file (including empty locals).
 }
 
+// localsExtractionCache memoizes extractLocalsFromRawYAML results keyed by a
+// composite of the file path and a content fingerprint. Within a single command
+// execution against a real filesystem, file content is immutable (and is itself
+// cached via getFileContentSyncMap), so the parse + locals resolution is fully
+// deterministic and may be served from cache on repeat imports of the same file.
+//
+// On the customer workload, extractLocalsFromRawYAML was called 22,181 times for
+// ~836 unique files (~26 calls per file via transitive imports), accumulating 13s
+// of cumulative CPU time. ~7s of that was UnmarshalYAMLFromFile re-parsing the
+// same YAML content for the same file path. This cache eliminates the repeat work.
+//
+// The cache key includes a 64-bit FNV-1a hash of the YAML content so that test
+// callers reusing the same logical file path with different content (a common
+// pattern in stack_processor_utils_test.go) do not see stale results, and so that
+// a future caller doing dynamic content generation cannot trip on a stale parse.
+// FNV-1a was chosen for speed and stdlib availability; collisions on map-key
+// strings are not a security concern here because the cache only feeds back to
+// the same function under the same atmosConfig.
+//
+// Cached entries are deep-copied on retrieval (the result struct contains four
+// maps: locals/settings/vars/env, all of which downstream consumers store into
+// shared template contexts; mutating them would corrupt the cache). Deep-copy
+// cost is dominated by map allocation and is typically <50µs per call — well
+// below the 533µs avg of the un-cached path.
+var localsExtractionCache sync.Map // map[string]*extractLocalsResult (immutable post-insert).
+
+// hexBase is the base argument passed to strconv.FormatUint when building the
+// hex-encoded portion of localsCacheKey.
+const hexBase = 16
+
+// localsCacheKey builds a stable cache key from the absolute file path and a
+// content fingerprint. The fingerprint is a 64-bit FNV-1a hash of yamlContent
+// so that the same file path used with two different contents (mostly a test
+// pattern) yields two distinct cache entries.
+func localsCacheKey(filePath, yamlContent string) string {
+	h := fnv.New64a()
+	_, _ = h.Write([]byte(yamlContent))
+	return filePath + "@" + strconv.FormatUint(h.Sum64(), hexBase)
+}
+
+// cloneExtractLocalsResult deep-copies an extractLocalsResult so the cache value
+// remains immutable across concurrent retrievals. Returns the same nil hint when
+// the source is nil.
+func cloneExtractLocalsResult(src *extractLocalsResult) *extractLocalsResult {
+	if src == nil {
+		return nil
+	}
+	dst := &extractLocalsResult{
+		hasLocals: src.hasLocals,
+	}
+	if src.locals != nil {
+		if cloned, err := m.DeepCopyMap(src.locals); err == nil {
+			dst.locals = cloned
+		}
+	}
+	if src.settings != nil {
+		if cloned, err := m.DeepCopyMap(src.settings); err == nil {
+			dst.settings = cloned
+		}
+	}
+	if src.vars != nil {
+		if cloned, err := m.DeepCopyMap(src.vars); err == nil {
+			dst.vars = cloned
+		}
+	}
+	if src.env != nil {
+		if cloned, err := m.DeepCopyMap(src.env); err == nil {
+			dst.env = cloned
+		}
+	}
+	return dst
+}
+
+// ClearLocalsExtractionCache clears the locals extraction cache.
+// This should be called between independent operations (like tests) to ensure
+// fresh processing of files whose on-disk content may have changed.
+func ClearLocalsExtractionCache() {
+	defer perf.Track(nil, "exec.ClearLocalsExtractionCache")()
+
+	localsExtractionCache.Range(func(key, _ any) bool {
+		localsExtractionCache.Delete(key)
+		return true
+	})
+}
+
 // extractLocalsFromRawYAML parses raw YAML content and extracts/resolves file-scoped locals.
 // This function is called BEFORE template processing to make locals available during template execution.
 // The raw YAML may contain unresolved templates like {{ .locals.X }}, which YAML treats as strings.
@@ -49,8 +137,21 @@ type extractLocalsResult struct {
 //
 // Section-specific locals inherit from and can override global locals.
 // All resolved locals are flattened into a single map for template processing.
+//
+// Results are memoized in localsExtractionCache keyed by filePath. See the cache
+// declaration for rationale and the deep-copy contract.
 func extractLocalsFromRawYAML(atmosConfig *schema.AtmosConfiguration, yamlContent string, filePath string) (*extractLocalsResult, error) {
 	defer perf.Track(atmosConfig, "exec.extractLocalsFromRawYAML")()
+
+	// Fast path: result is cached for this (file path, content fingerprint)
+	// pair. Deep-copy on retrieval to keep the cache value immutable across
+	// concurrent callers.
+	cacheKey := localsCacheKey(filePath, yamlContent)
+	if raw, found := localsExtractionCache.Load(cacheKey); found {
+		if cached, ok := raw.(*extractLocalsResult); ok {
+			return cloneExtractLocalsResult(cached), nil
+		}
+	}
 
 	// Parse raw YAML to extract the structure.
 	// YAML treats template expressions like {{ .locals.X }} as plain strings,
@@ -75,7 +176,9 @@ func extractLocalsFromRawYAML(atmosConfig *schema.AtmosConfiguration, yamlConten
 	}
 
 	if rawConfig == nil {
-		return &extractLocalsResult{}, nil
+		empty := &extractLocalsResult{}
+		localsExtractionCache.Store(cacheKey, empty)
+		return cloneExtractLocalsResult(empty), nil
 	}
 
 	// Derive the stack name from the file path so that YAML functions like
@@ -89,7 +192,14 @@ func extractLocalsFromRawYAML(atmosConfig *schema.AtmosConfiguration, yamlConten
 		return nil, fmt.Errorf("%w: failed to process stack locals: %w", errUtils.ErrInvalidStackManifest, err)
 	}
 
-	return buildLocalsResult(rawConfig, localsCtx), nil
+	result := buildLocalsResult(rawConfig, localsCtx)
+	// Cache the canonical result and return a deep copy so the cache remains
+	// the single immutable source of truth. Concurrent goroutines that race
+	// on the first cache miss for a given file path will both run the parse
+	// (cheap given the cache hit on subsequent calls), and the later Store
+	// silently wins — both results are identical for the same input.
+	localsExtractionCache.Store(cacheKey, result)
+	return cloneExtractLocalsResult(result), nil
 }
 
 // deriveStackNameForLocals derives the stack name from the file path and raw config
@@ -253,12 +363,25 @@ func extractAndAddLocalsToContext(
 ) (map[string]any, error) {
 	defer perf.Track(atmosConfig, "exec.extractAndAddLocalsToContext")()
 
-	// Enforce file-scoped locals: clear any inherited locals from parent context.
-	// Locals are file-scoped and should NOT inherit across file boundaries.
-	// This ensures that each file only has access to its own locals.
-	if context != nil {
-		delete(context, cfg.LocalsSectionName)
+	// Clone the input context so concurrent goroutines processing sibling imports
+	// (in processYAMLConfigFileWithContextInternal, which fans out to one goroutine
+	// per import while sharing mergedContext) cannot race on the file-scoped
+	// delete + assign below. Without the clone, the parent context was mutated
+	// directly, producing a data race surfaced by `go test -race` on
+	// TestHierarchicalImports_*. Cloning is a shallow copy: the values are shared
+	// references but the map header is per-goroutine, which is the only mutation
+	// surface inside this function.
+	clonedContext := make(map[string]any, len(context))
+	for k, v := range context {
+		if k == cfg.LocalsSectionName {
+			// Enforce file-scoped locals: drop inherited locals during the
+			// clone. This replaces the previous in-place delete on the shared
+			// parent context.
+			continue
+		}
+		clonedContext[k] = v
 	}
+	context = clonedContext
 
 	extractResult, localsErr := extractLocalsFromRawYAML(atmosConfig, yamlContent, filePath)
 	if localsErr != nil {
@@ -293,10 +416,9 @@ func extractAndAddLocalsToContext(
 		return context, nil
 	}
 
-	// Initialize context if nil.
-	if context == nil {
-		context = make(map[string]any)
-	}
+	// context is never nil here: the clone above always allocates a fresh map
+	// (make returns a non-nil empty map when len(input)==0). The historical
+	// `if context == nil { context = make(...) }` initializer is now dead.
 
 	// Add resolved locals to the template context first.
 	// This allows settings/vars/env templates to reference locals.
@@ -433,7 +555,8 @@ func ProcessYAMLConfigFiles(
 			stackFileName := strings.TrimSuffix(
 				strings.TrimSuffix(
 					u.TrimBasePathFromPath(stackBasePath+"/", p),
-					u.DefaultStackConfigFileExtension),
+					u.DefaultStackConfigFileExtension,
+				),
 				".yml",
 			)
 
@@ -499,7 +622,8 @@ func ProcessYAMLConfigFiles(
 				"",
 				componentStackMap,
 				importsConfig,
-				true)
+				true,
+			)
 			if err != nil {
 				results <- stackProcessResult{index: i, err: err}
 				return
@@ -659,8 +783,13 @@ func ProcessYAMLConfigFileWithContext(
 		atmosConfig,
 		basePath,
 		filePath,
+		basePath,
+		schema.StackImportNestedImportsLocal,
 		importsConfig,
 		context,
+		// Top-level call: no accumulated import-path context yet. It is built up
+		// from earlier imports as the manifest's import list is processed.
+		nil,
 		ignoreMissingFiles,
 		skipTemplatesProcessingInImports,
 		ignoreMissingTemplateValues,
@@ -691,13 +820,16 @@ type importFileResult struct {
 
 // processYAMLConfigFileWithContextInternal is the internal recursive implementation.
 //
-//nolint:gocognit,revive,cyclop,funlen
+//nolint:gocognit,revive,cyclop,funlen,nestif
 func processYAMLConfigFileWithContextInternal(
 	atmosConfig *schema.AtmosConfiguration,
 	basePath string,
 	filePath string,
+	localBasePath string,
+	inheritedNestedImports string,
 	importsConfig map[string]map[string]any,
 	context map[string]any,
+	importPathContext map[string]any,
 	ignoreMissingFiles bool,
 	skipTemplatesProcessingInImports bool,
 	ignoreMissingTemplateValues bool,
@@ -720,6 +852,10 @@ func processYAMLConfigFileWithContextInternal(
 	error,
 ) {
 	var stackConfigs []map[string]any
+	inheritedNestedImports = normalizeNestedImports(inheritedNestedImports)
+	if localBasePath == "" {
+		localBasePath = basePath
+	}
 	relativeFilePath := u.TrimBasePathFromPath(basePath+"/", filePath)
 
 	log.Trace("Processing YAML config file", "file", relativeFilePath)
@@ -1028,88 +1164,154 @@ func processYAMLConfigFileWithContextInternal(
 		}
 	}
 
+	// accumulatedImportContext carries the `settings`/`vars`/`env` sections defined by
+	// EARLIER imports in this manifest so that LATER imports can reference them in their
+	// import path (e.g. a Git `?ref={{ .settings.context.deployment_repo_version }}`).
+	// It is seeded from the context propagated by the parent import and grows as each
+	// import in this manifest is processed (see the accumulation after the merge block).
+	// This context is used ONLY for templating import path strings — it does not affect
+	// file-content template processing/deferral, nor the authoritative deep-merge order.
+	accumulatedImportContext := importPathContext
+	if accumulatedImportContext == nil {
+		accumulatedImportContext = map[string]any{}
+	}
+
 	//nolint:staticcheck // atmosConfig nil check is present.
 	log.Trace("Processing import structs", "count", len(importStructs), "file", relativeFilePath, "track_provenance", atmosConfig != nil && atmosConfig.TrackProvenance)
 	for _, importStruct := range importStructs {
 		imp := importStruct.Path
+		nestedImports := importStruct.NestedImports
+		if nestedImports == "" {
+			nestedImports = inheritedNestedImports
+		}
+		nestedImports = normalizeNestedImports(nestedImports)
 
 		if imp == "" {
 			return nil, nil, nil, nil, nil, nil, nil, nil, fmt.Errorf("%w in the manifest '%s'", errUtils.ErrInvalidImport, relativeFilePath)
 		}
 
-		// If the import file is specified without extension, use `.yaml` as default
-		impWithExt := imp
-		ext := filepath.Ext(imp)
-		if ext == "" {
-			extensions := []string{
-				u.YamlFileExtension,
-				u.YmlFileExtension,
-				u.YamlTemplateExtension,
-				u.YmlTemplateExtension,
-			}
+		// Render Go templates in the import path so an import can reference values
+		// (`settings`/`vars`/`env`) defined by earlier imports in this manifest, plus
+		// this import's own `context`. Only the path string is rendered here; the
+		// imported file's content templating (and its deferral logic) is left untouched.
+		renderedImp, impErr := renderImportPath(atmosConfig, relativeFilePath, imp, accumulatedImportContext, importStruct)
+		if impErr != nil {
+			return nil, nil, nil, nil, nil, nil, nil, nil, impErr
+		}
+		imp = renderedImp
 
-			found := false
-			for _, extension := range extensions {
-				testPath := filepath.Join(basePath, imp+extension)
-				if _, err := os.Stat(testPath); err == nil {
-					impWithExt = imp + extension
-					found = true
-					break
+		// Snapshot the accumulated context for the child import. The outer loop is
+		// sequential, so this captures only the sections from earlier siblings.
+		childImportContext := accumulatedImportContext
+
+		var importMatches []stackimports.RemoteImportMatch
+
+		// Capture remote status and original import key before resolution.
+		// For remote imports, the original URI must be preserved as the import key
+		// so that downstream lookups and imports output use the user-specified URI
+		// rather than the local cache path.
+		isRemote := stackimports.IsRemote(imp)
+
+		// Check if the import is a remote URL.
+		if isRemote {
+			// Resolve the per-import cache TTL, falling back to the global default.
+			importTTL := importStruct.TTL
+			if importTTL == "" && atmosConfig != nil {
+				importTTL = atmosConfig.Imports.TTL
+			}
+			// Download the remote import.
+			log.Debug("Downloading remote stack import", "uri", imp, "file", relativeFilePath, "nested_imports", nestedImports, "ttl", importTTL)
+			remoteMatches, err := stackimports.ResolveRemoteImportNested(atmosConfig, imp, nestedImports, importTTL)
+			if err != nil {
+				if importStruct.SkipIfMissing {
+					log.Debug("Skipping missing remote import", "uri", imp)
+					continue
 				}
+				return nil, nil, nil, nil, nil, nil, nil, nil, fmt.Errorf("%w '%s' in file '%s': %w",
+					errUtils.ErrDownloadRemoteImport, imp, relativeFilePath, err)
 			}
-
-			if !found {
-				// Default to .yaml if no file is found
-				impWithExt = imp + u.DefaultStackConfigFileExtension
-			}
-		} else if ext == u.YamlFileExtension || ext == u.YmlFileExtension {
-			// Check if there's a template version of this file
-			templatePath := impWithExt + u.TemplateExtension
-			if _, err := os.Stat(filepath.Join(basePath, templatePath)); err == nil {
-				impWithExt = templatePath
-			}
-		}
-
-		impWithExtPath := filepath.Join(basePath, impWithExt)
-
-		if impWithExtPath == filePath {
-			errorMessage := fmt.Sprintf("invalid import in the manifest '%s'\nThe file imports itself in '%s'",
-				relativeFilePath,
-				imp)
-			return nil, nil, nil, nil, nil, nil, nil, nil, errors.New(errorMessage)
-		}
-
-		// Find all import matches in the glob
-		importMatches, err := u.GetGlobMatches(impWithExtPath)
-		if err != nil || len(importMatches) == 0 {
-			// Retry (b/c we are using `doublestar` library and it sometimes has issues reading many files in a Docker container)
-			// TODO: review `doublestar` library
-
-			importMatches, err = u.GetGlobMatches(impWithExtPath)
-			if err != nil || len(importMatches) == 0 {
-				// The import was not found -> check if the import is a Go template; if not, return the error
-				isGolangTemplate, err2 := IsGolangTemplate(atmosConfig, imp)
-				if err2 != nil {
-					return nil, nil, nil, nil, nil, nil, nil, nil, err2
+			importMatches = remoteMatches
+		} else {
+			// Local import - handle extension resolution and glob matching.
+			impWithExt := imp
+			ext := filepath.Ext(imp)
+			if ext == "" {
+				extensions := []string{
+					u.YamlFileExtension,
+					u.YmlFileExtension,
+					u.YamlTemplateExtension,
+					u.YmlTemplateExtension,
 				}
 
-				// If the import is not a Go template and SkipIfMissing is false, return the error
-				if !isGolangTemplate && !importStruct.SkipIfMissing {
-					if err != nil {
-						errorMessage := fmt.Sprintf("no matches found for the import '%s' in the file '%s'\nError: %s",
-							imp,
-							relativeFilePath,
-							err,
-						)
-						return nil, nil, nil, nil, nil, nil, nil, nil, errors.New(errorMessage)
-					} else if importMatches == nil {
-						errorMessage := fmt.Sprintf("no matches found for the import '%s' in the file '%s'",
-							imp,
-							relativeFilePath,
-						)
-						return nil, nil, nil, nil, nil, nil, nil, nil, errors.New(errorMessage)
+				found := false
+				for _, extension := range extensions {
+					testPath := filepath.Join(basePath, imp+extension)
+					if _, err := os.Stat(testPath); err == nil {
+						impWithExt = imp + extension
+						found = true
+						break
 					}
 				}
+
+				if !found {
+					// Default to .yaml if no file is found.
+					impWithExt = imp + u.DefaultStackConfigFileExtension
+				}
+			} else if ext == u.YamlFileExtension || ext == u.YmlFileExtension {
+				// Check if there's a template version of this file.
+				templatePath := impWithExt + u.TemplateExtension
+				if _, err := os.Stat(filepath.Join(basePath, templatePath)); err == nil {
+					impWithExt = templatePath
+				}
+			}
+
+			impWithExtPath := filepath.Join(basePath, impWithExt)
+
+			if impWithExtPath == filePath {
+				return nil, nil, nil, nil, nil, nil, nil, nil, fmt.Errorf("%w: manifest '%s' imports itself via '%s'",
+					errUtils.ErrStackImportSelf, relativeFilePath, imp)
+			}
+
+			// Find all import matches in the glob.
+			var err error
+			localMatches, err := u.GetGlobMatches(impWithExtPath)
+			if err != nil || len(localMatches) == 0 {
+				// Retry (b/c we are using `doublestar` library and it sometimes has issues reading many files in a Docker container).
+				// TODO: review `doublestar` library.
+
+				localMatches, err = u.GetGlobMatches(impWithExtPath)
+				if err != nil || len(localMatches) == 0 {
+					// The import was not found -> check if the import is a Go template; if not, return the error.
+					isGolangTemplate, err2 := IsGolangTemplate(atmosConfig, imp)
+					if err2 != nil {
+						return nil, nil, nil, nil, nil, nil, nil, nil, err2
+					}
+
+					// If the import is not a Go template and SkipIfMissing is false, return the error.
+					// The wrapped `err` from GetGlobMatches already carries ErrFailedToFindImport, so
+					// callers using errors.Is (see describe_affected_utils.go) keep matching. When
+					// err is nil but localMatches is empty (defensive guard for unexpected empty/nil
+					// results from u.GetGlobMatches), we wrap ErrFailedToFindImport explicitly.
+					if !isGolangTemplate && !importStruct.SkipIfMissing {
+						if err != nil {
+							return nil, nil, nil, nil, nil, nil, nil, nil, fmt.Errorf("%w: import '%s' in file '%s': %w",
+								errUtils.ErrStackImportNotFound, imp, relativeFilePath, err)
+						}
+						if len(localMatches) == 0 {
+							return nil, nil, nil, nil, nil, nil, nil, nil, fmt.Errorf(
+								"%w: import '%s' in file '%s': %w",
+								errUtils.ErrStackImportNotFound,
+								imp,
+								relativeFilePath,
+								errUtils.ErrFailedToFindImport,
+							)
+						}
+					}
+				}
+			}
+			importMatches = make([]stackimports.RemoteImportMatch, len(localMatches))
+			for i, match := range localMatches {
+				importMatches[i] = stackimports.RemoteImportMatch{Path: match}
 			}
 		}
 
@@ -1136,10 +1338,18 @@ func processYAMLConfigFileWithContextInternal(
 		results := make([]importFileResult, len(importMatches))
 		var wg sync.WaitGroup
 
-		for i, importFile := range importMatches {
+		for i, importMatch := range importMatches {
 			wg.Add(1)
-			go func(index int, file string) {
+			go func(index int, match stackimports.RemoteImportMatch) {
 				defer wg.Done()
+				file := match.Path
+				childBasePath := basePath
+				if nestedImports == schema.StackImportNestedImportsLocal {
+					childBasePath = localBasePath
+				}
+				if nestedImports == schema.StackImportNestedImportsRemote && match.BasePath != "" {
+					childBasePath = match.BasePath
+				}
 
 				// Process the import file (expensive I/O + parsing + recursive imports).
 				yamlConfig,
@@ -1152,10 +1362,13 @@ func processYAMLConfigFileWithContextInternal(
 					importMergeContext,
 					processErr := processYAMLConfigFileWithContextInternal(
 					atmosConfig,
-					basePath,
+					childBasePath,
 					file,
+					localBasePath,
+					nestedImports,
 					importsConfig,
 					mergedContext,
+					childImportContext,
 					ignoreMissingFiles,
 					importStruct.SkipTemplatesProcessing,
 					importStruct.IgnoreMissingTemplateValues || (atmosConfig != nil && atmosConfig.Templates.Settings.IgnoreMissingTemplateValues),
@@ -1180,6 +1393,12 @@ func processYAMLConfigFileWithContextInternal(
 				}
 				importRelativePathWithoutExt := strings.TrimSuffix(importRelativePathWithExt, ext2)
 
+				// For remote imports, use the original URI as the import key
+				// instead of the cache-derived path.
+				if match.Key != "" {
+					importRelativePathWithoutExt = match.Key
+				}
+
 				// Store result with all necessary data for sequential merging.
 				results[index] = importFileResult{
 					index:                        index,
@@ -1194,7 +1413,7 @@ func processYAMLConfigFileWithContextInternal(
 					mergeContext:                 importMergeContext,
 					err:                          nil,
 				}
-			}(i, importFile)
+			}(i, importMatch)
 		}
 
 		// Wait for all parallel processing to complete.
@@ -1265,6 +1484,21 @@ func processYAMLConfigFileWithContextInternal(
 			importsConfigLock.Lock()
 			importsConfig[result.importRelativePathWithoutExt] = result.yamlConfigRaw
 			importsConfigLock.Unlock()
+
+			// Fold this import's resolved `settings`/`vars`/`env` into the running
+			// import-path context so that LATER imports in this manifest can reference
+			// them in their import paths. Template-only: does not change merge order.
+			sections := extractImportPathSections(result.yamlConfig)
+			if len(sections) > 0 {
+				accumulatedImportContext, err = m.MergeWithContext(
+					atmosConfig,
+					[]map[string]any{accumulatedImportContext, sections},
+					mergeContext,
+				)
+				if err != nil {
+					return nil, nil, nil, nil, nil, nil, nil, nil, err
+				}
+			}
 		}
 	}
 
@@ -1341,6 +1575,79 @@ func processYAMLConfigFileWithContextInternal(
 		nil
 }
 
+// renderImportPath renders Go templates embedded in a stack import path.
+//
+// This lets an import reference values defined by EARLIER imports in the same manifest,
+// for example pinning a remote import's Git ref from a globally-defined variable:
+//
+//	import:
+//	  - ./_defaults    # sets settings.context.deployment_repo_version
+//	  - "github.com/org/repo//stacks/catalog/foo?ref={{ .settings.context.deployment_repo_version }}"
+//
+// The template data is the accumulated `settings`/`vars`/`env` from earlier imports,
+// overlaid with this import's own explicit `context` (which takes precedence). Only the
+// path string is rendered; the imported file's content templating is untouched.
+//
+// Rendering is skipped when the path has no `{{`, when `skip_templates_processing` is set,
+// or when templating is disabled in `atmos.yaml`. A missing value produces a hard error
+// (with a hint) unless `ignore_missing_template_values` is set on the import or globally.
+func renderImportPath(
+	atmosConfig *schema.AtmosConfiguration,
+	relativeFilePath string,
+	imp string,
+	accumulatedImportContext map[string]any,
+	importStruct schema.StackImport,
+) (string, error) {
+	defer perf.Track(atmosConfig, "exec.renderImportPath")()
+
+	if importStruct.SkipTemplatesProcessing || !strings.Contains(imp, "{{") {
+		return imp, nil
+	}
+	// Honor the global templating switch so disabling templates also disables import-path
+	// templating (and preserves raw `{{ ... }}` paths for callers that rely on that).
+	if atmosConfig != nil && !atmosConfig.Templates.Settings.Enabled {
+		return imp, nil
+	}
+
+	ignoreMissing := importStruct.IgnoreMissingTemplateValues ||
+		(atmosConfig != nil && atmosConfig.Templates.Settings.IgnoreMissingTemplateValues)
+
+	// Overlay the import's explicit `context` on top of the accumulated context.
+	tmplData := accumulatedImportContext
+	if len(importStruct.Context) > 0 {
+		merged, err := m.Merge(atmosConfig, []map[string]any{accumulatedImportContext, importStruct.Context})
+		if err != nil {
+			return "", err
+		}
+		tmplData = merged
+	}
+
+	rendered, err := ProcessTmpl(atmosConfig, fmt.Sprintf("import-path(%s)", relativeFilePath), imp, tmplData, ignoreMissing)
+	if err != nil {
+		wrapped := fmt.Errorf("%w: import path '%s' in file '%s': %w",
+			errUtils.ErrImportPathTemplate, imp, relativeFilePath, err)
+		return "", errUtils.Build(wrapped).
+			WithHint("Define the referenced variable in an earlier import (e.g. a `_defaults` file) or in this import's `context:`.").
+			WithHint("Set `ignore_missing_template_values: true` on the import (or `templates.settings.ignore_missing_template_values` in atmos.yaml) to leave unresolved values as-is.").
+			Err()
+	}
+
+	return rendered, nil
+}
+
+// extractImportPathSections returns a shallow map containing only the `settings`, `vars`,
+// and `env` sections present in an imported manifest's merged config. These are the sections
+// that can be referenced when templating subsequent imports' paths in the same manifest.
+func extractImportPathSections(cfgMap map[string]any) map[string]any {
+	out := map[string]any{}
+	for _, section := range []string{cfg.SettingsSectionName, cfg.VarsSectionName, cfg.EnvSectionName} {
+		if v, ok := cfgMap[section]; ok && v != nil {
+			out[section] = v
+		}
+	}
+	return out
+}
+
 // processSettingsIntegrationsGithub deep-merges the `settings.integrations.github` section from stack manifests with the `integrations.github` section from `atmos.yaml`.
 func processSettingsIntegrationsGithub(atmosConfig *schema.AtmosConfiguration, settings map[string]any) (map[string]any, error) {
 	defer perf.Track(atmosConfig, "exec.processSettingsIntegrationsGithub")()
@@ -1367,7 +1674,8 @@ func processSettingsIntegrationsGithub(atmosConfig *schema.AtmosConfiguration, s
 		[]map[string]any{
 			atmosConfig.Integrations.GitHub,
 			settingsIntegrationsGithubSection,
-		})
+		},
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -1568,6 +1876,12 @@ func ProcessImportSection(stackMap map[string]any, filePath string) ([]schema.St
 		var importObj schema.StackImport
 		err := mapstructure.Decode(imp, &importObj)
 		if err == nil {
+			if importObj.NestedImports != "" {
+				importObj.NestedImports = normalizeNestedImports(importObj.NestedImports)
+				if err := validateNestedImports(importObj.NestedImports); err != nil {
+					return nil, fmt.Errorf("%w in the file '%s'", err, filePath)
+				}
+			}
 			importObj.Path = u.ResolveRelativePath(importObj.Path, filePath)
 			result = append(result, importObj)
 			continue
@@ -1589,6 +1903,22 @@ func ProcessImportSection(stackMap map[string]any, filePath string) ([]schema.St
 	return result, nil
 }
 
+func normalizeNestedImports(value string) string {
+	if value == "" {
+		return schema.StackImportNestedImportsLocal
+	}
+	return strings.ToLower(strings.TrimSpace(value))
+}
+
+func validateNestedImports(value string) error {
+	switch normalizeNestedImports(value) {
+	case schema.StackImportNestedImportsLocal, schema.StackImportNestedImportsRemote:
+		return nil
+	default:
+		return fmt.Errorf("%w: nested_imports must be either 'local' or 'remote'", errUtils.ErrInvalidImport)
+	}
+}
+
 // sectionContainsAnyNotEmptySections checks if a section contains any of the provided low-level sections, and it's not empty.
 func sectionContainsAnyNotEmptySections(section map[string]any, sectionsToCheck []string) bool {
 	for _, s := range sectionsToCheck {
@@ -1607,8 +1937,15 @@ func sectionContainsAnyNotEmptySections(section map[string]any, sectionsToCheck 
 }
 
 // ProcessBaseComponentConfig processes base component(s) config.
+//
+// initialMergeConfig is the effective AtmosConfiguration for the target component, pre-computed
+// from the component's own settings layers (including settings.list_merge_strategy). When nil,
+// the global atmosConfig is used. Passing an effective config here ensures that
+// settings.list_merge_strategy set at the component level governs how base-component
+// lists are merged across the metadata.inherits chain (issue #2396, see also PR #2480).
 func ProcessBaseComponentConfig(
 	atmosConfig *schema.AtmosConfiguration,
+	initialMergeConfig *schema.AtmosConfiguration,
 	baseComponentConfig *schema.BaseComponentConfig,
 	allComponentsMap map[string]any,
 	component string,
@@ -1620,8 +1957,14 @@ func ProcessBaseComponentConfig(
 ) error {
 	defer perf.Track(atmosConfig, "exec.ProcessBaseComponentConfig")()
 
-	// Create cache key from stack + component + baseComponent.
-	cacheKey := fmt.Sprintf("%s:%s:%s", stack, component, baseComponent)
+	if initialMergeConfig == nil {
+		initialMergeConfig = atmosConfig
+	}
+
+	// Include the effective list_merge_strategy in the cache key so that components
+	// with different per-component strategies do not share a cache entry whose merged
+	// list values were produced with a different strategy.
+	cacheKey := fmt.Sprintf("%s:%s:%s:%s", stack, component, baseComponent, initialMergeConfig.Settings.ListMergeStrategy)
 
 	// Skip cache when provenance tracking is enabled, as we need to record provenance entries during processing.
 	if !atmosConfig.TrackProvenance {
@@ -1637,6 +1980,7 @@ func ProcessBaseComponentConfig(
 	visited := make(map[string]bool)
 	err := processBaseComponentConfigInternal(
 		atmosConfig,
+		initialMergeConfig,
 		baseComponentConfig,
 		allComponentsMap,
 		component,
@@ -1658,9 +2002,15 @@ func ProcessBaseComponentConfig(
 
 // processBaseComponentConfigInternal is the internal recursive implementation.
 //
+// initialMergeConfig carries the effective AtmosConfiguration for the target component.
+// At each level the function updates it with the current base component's settings so
+// that settings.list_merge_strategy declared on any component in the inheritance chain
+// is applied when merging that component's lists (issue #2396).
+//
 //nolint:gocognit,revive,cyclop,funlen
 func processBaseComponentConfigInternal(
 	atmosConfig *schema.AtmosConfiguration,
+	initialMergeConfig *schema.AtmosConfiguration,
 	baseComponentConfig *schema.BaseComponentConfig,
 	allComponentsMap map[string]any,
 	component string,
@@ -1703,6 +2053,7 @@ func processBaseComponentConfigInternal(
 	var baseComponentRemoteStateBackendSection map[string]any
 	var baseComponentSourceSection map[string]any
 	var baseComponentProvisionSection map[string]any
+	var baseComponentRetry map[string]any
 	var baseComponentMap map[string]any
 	var ok bool
 
@@ -1737,6 +2088,7 @@ func processBaseComponentConfigInternal(
 
 				err := processBaseComponentConfigInternal(
 					atmosConfig,
+					initialMergeConfig,
 					baseComponentConfig,
 					allComponentsMap,
 					baseComponent,
@@ -1771,8 +2123,9 @@ func processBaseComponentConfigInternal(
 
 					if _, ok := allComponentsMap[baseComponentFromInheritList]; !ok {
 						if checkBaseComponentExists {
-							errorMessage := fmt.Sprintf("The component '%[1]s' in the stack manifest '%[2]s' inherits from '%[3]s' "+
-								"(using 'metadata.inherits'), but '%[3]s' is not defined in any of the config files for the stack '%[2]s'",
+							errorMessage := fmt.Sprintf(
+								"The component '%[1]s' in the stack manifest '%[2]s' inherits from '%[3]s' "+
+									"(using 'metadata.inherits'), but '%[3]s' is not defined in any of the config files for the stack '%[2]s'",
 								component,
 								stack,
 								baseComponentFromInheritList,
@@ -1781,9 +2134,10 @@ func processBaseComponentConfigInternal(
 						}
 					}
 
-					// Process the baseComponentFromInheritList components recursively to find `componentInheritanceChain`
+					// Process the baseComponentFromInheritList components recursively to find `componentInheritanceChain`.
 					err := processBaseComponentConfigInternal(
 						atmosConfig,
+						initialMergeConfig,
 						baseComponentConfig,
 						allComponentsMap,
 						component,
@@ -1850,6 +2204,24 @@ func processBaseComponentConfigInternal(
 			}
 		}
 
+		// Base component required_providers (DEV-3124).
+		var baseComponentRequiredProviders map[string]any
+		if baseComponentRequiredProvidersSection, baseComponentRequiredProvidersSectionExist := baseComponentMap[cfg.RequiredProvidersSectionName]; baseComponentRequiredProvidersSectionExist {
+			baseComponentRequiredProviders, ok = baseComponentRequiredProvidersSection.(map[string]any)
+			if !ok {
+				return fmt.Errorf("%w '%s.required_providers' in the stack '%s'", errUtils.ErrInvalidComponentRequiredProviders, baseComponent, stack)
+			}
+		}
+
+		// Base component required_version (DEV-3124).
+		var baseComponentRequiredVersion string
+		if baseComponentRequiredVersionSection, baseComponentRequiredVersionSectionExist := baseComponentMap[cfg.RequiredVersionSectionName]; baseComponentRequiredVersionSectionExist {
+			baseComponentRequiredVersion, ok = baseComponentRequiredVersionSection.(string)
+			if !ok {
+				return fmt.Errorf("%w '%s.required_version' in the stack '%s'", errUtils.ErrInvalidComponentRequiredVersion, baseComponent, stack)
+			}
+		}
+
 		if baseComponentHooksSection, baseComponentHooksSectionExist := baseComponentMap[cfg.HooksSectionName]; baseComponentHooksSectionExist {
 			baseComponentHooks, ok = baseComponentHooksSection.(map[string]any)
 			if !ok {
@@ -1897,7 +2269,7 @@ func processBaseComponentConfigInternal(
 		// Base component source (when source inheritance is enabled).
 		if atmosConfig.Stacks.Inherit.IsSourceInheritanceEnabled() {
 			if i, ok2 := baseComponentMap[cfg.SourceSectionName]; ok2 {
-				baseComponentSourceSection, ok = i.(map[string]any)
+				baseComponentSourceSection, ok = normalizeComponentSourceSection(i)
 				if !ok {
 					return fmt.Errorf("%w '%s.source' in the stack '%s'", errUtils.ErrInvalidComponentSource, baseComponent, stack)
 				}
@@ -1923,47 +2295,65 @@ func processBaseComponentConfigInternal(
 			}
 		}
 
+		// Base component `retry` — abstract components can define defaults that concrete
+		// components inherit and override.
+		if i, ok2 := baseComponentMap[cfg.RetrySectionName]; ok2 {
+			baseComponentRetry, ok = i.(map[string]any)
+			if !ok {
+				return fmt.Errorf("%w '%s.retry' in the stack '%s'", errUtils.ErrInvalidConfig, baseComponent, stack)
+			}
+		}
+
 		if len(baseComponentConfig.FinalBaseComponentName) == 0 {
 			baseComponentConfig.FinalBaseComponentName = baseComponent
 		}
 
+		// Determine the effective merge config for this inheritance level.
+		// settings.list_merge_strategy declared on the base component (or passed in via
+		// initialMergeConfig from the target component) controls how list-valued sections
+		// are merged when accumulating the inheritance chain (issue #2396, PR #2480).
+		// The raw baseComponentSettings are consulted here — before they are themselves
+		// merged — so the strategy always comes from the original YAML, not a previously
+		// merged value that may have been overwritten.
+		levelMergeConfig := effectiveAtmosConfig(initialMergeConfig, baseComponentSettings)
+
 		// Base component `vars`
-		merged, err := m.Merge(atmosConfig, []map[string]any{baseComponentConfig.BaseComponentVars, baseComponentVars})
+		merged, err := m.Merge(levelMergeConfig, []map[string]any{baseComponentConfig.BaseComponentVars, baseComponentVars})
 		if err != nil {
 			return err
 		}
 		baseComponentConfig.BaseComponentVars = merged
 
 		// Base component `settings`
-		merged, err = m.Merge(atmosConfig, []map[string]any{baseComponentConfig.BaseComponentSettings, baseComponentSettings})
+		merged, err = m.Merge(levelMergeConfig, []map[string]any{baseComponentConfig.BaseComponentSettings, baseComponentSettings})
 		if err != nil {
 			return err
 		}
 		baseComponentConfig.BaseComponentSettings = merged
 
 		// Base component `env`
-		merged, err = m.Merge(atmosConfig, []map[string]any{baseComponentConfig.BaseComponentEnv, baseComponentEnv})
+		merged, err = m.Merge(levelMergeConfig, []map[string]any{baseComponentConfig.BaseComponentEnv, baseComponentEnv})
 		if err != nil {
 			return err
 		}
 		baseComponentConfig.BaseComponentEnv = merged
 
 		// Base component `auth`
-		merged, err = m.Merge(atmosConfig, []map[string]any{baseComponentConfig.BaseComponentAuth, baseComponentAuth})
+		merged, err = m.Merge(levelMergeConfig, []map[string]any{baseComponentConfig.BaseComponentAuth, baseComponentAuth})
 		if err != nil {
 			return err
 		}
 		baseComponentConfig.BaseComponentAuth = merged
 
 		// Base component `dependencies`
-		merged, err = m.Merge(atmosConfig, []map[string]any{baseComponentConfig.BaseComponentDependencies, baseComponentDependencies})
+		merged, err = m.Merge(levelMergeConfig, []map[string]any{baseComponentConfig.BaseComponentDependencies, baseComponentDependencies})
 		if err != nil {
 			return err
 		}
 		baseComponentConfig.BaseComponentDependencies = merged
 
 		// Base component `locals` (for template processing, not passed to terraform/helmfile).
-		merged, err = m.Merge(atmosConfig, []map[string]any{baseComponentConfig.BaseComponentLocals, baseComponentLocals})
+		merged, err = m.Merge(levelMergeConfig, []map[string]any{baseComponentConfig.BaseComponentLocals, baseComponentLocals})
 		if err != nil {
 			return err
 		}
@@ -1986,7 +2376,7 @@ func processBaseComponentConfigInternal(
 				}
 				baseMetadataForMerge[k] = v
 			}
-			merged, err = m.Merge(atmosConfig, []map[string]any{baseComponentConfig.BaseComponentMetadata, baseMetadataForMerge})
+			merged, err = m.Merge(levelMergeConfig, []map[string]any{baseComponentConfig.BaseComponentMetadata, baseMetadataForMerge})
 			if err != nil {
 				return err
 			}
@@ -1994,21 +2384,34 @@ func processBaseComponentConfigInternal(
 		}
 
 		// Base component `providers`
-		merged, err = m.Merge(atmosConfig, []map[string]any{baseComponentConfig.BaseComponentProviders, baseComponentProviders})
+		merged, err = m.Merge(levelMergeConfig, []map[string]any{baseComponentConfig.BaseComponentProviders, baseComponentProviders})
 		if err != nil {
 			return err
 		}
 		baseComponentConfig.BaseComponentProviders = merged
 
+		// Base component `required_providers` (DEV-3124).
+		merged, err = m.Merge(levelMergeConfig, []map[string]any{baseComponentConfig.BaseComponentRequiredProviders, baseComponentRequiredProviders})
+		if err != nil {
+			return err
+		}
+		baseComponentConfig.BaseComponentRequiredProviders = merged
+
+		// Base component `required_version` (DEV-3124).
+		// String values are not merged - the most specific value wins.
+		if baseComponentRequiredVersion != "" {
+			baseComponentConfig.BaseComponentRequiredVersion = baseComponentRequiredVersion
+		}
+
 		// Base component `hooks`
-		merged, err = m.Merge(atmosConfig, []map[string]any{baseComponentConfig.BaseComponentHooks, baseComponentHooks})
+		merged, err = m.Merge(levelMergeConfig, []map[string]any{baseComponentConfig.BaseComponentHooks, baseComponentHooks})
 		if err != nil {
 			return err
 		}
 		baseComponentConfig.BaseComponentHooks = merged
 
 		// Base component `generate`
-		merged, err = m.Merge(atmosConfig, []map[string]any{baseComponentConfig.BaseComponentGenerate, baseComponentGenerate})
+		merged, err = m.Merge(levelMergeConfig, []map[string]any{baseComponentConfig.BaseComponentGenerate, baseComponentGenerate})
 		if err != nil {
 			return err
 		}
@@ -2021,7 +2424,7 @@ func processBaseComponentConfigInternal(
 		baseComponentConfig.BaseComponentBackendType = baseComponentBackendType
 
 		// Base component `backend`
-		merged, err = m.Merge(atmosConfig, []map[string]any{baseComponentConfig.BaseComponentBackendSection, baseComponentBackendSection})
+		merged, err = m.Merge(levelMergeConfig, []map[string]any{baseComponentConfig.BaseComponentBackendSection, baseComponentBackendSection})
 		if err != nil {
 			return err
 		}
@@ -2031,7 +2434,7 @@ func processBaseComponentConfigInternal(
 		baseComponentConfig.BaseComponentRemoteStateBackendType = baseComponentRemoteStateBackendType
 
 		// Base component `remote_state_backend`
-		merged, err = m.Merge(atmosConfig, []map[string]any{baseComponentConfig.BaseComponentRemoteStateBackendSection, baseComponentRemoteStateBackendSection})
+		merged, err = m.Merge(levelMergeConfig, []map[string]any{baseComponentConfig.BaseComponentRemoteStateBackendSection, baseComponentRemoteStateBackendSection})
 		if err != nil {
 			return err
 		}
@@ -2039,7 +2442,7 @@ func processBaseComponentConfigInternal(
 
 		// Base component `source` (when source inheritance is enabled).
 		if atmosConfig.Stacks.Inherit.IsSourceInheritanceEnabled() {
-			merged, err = m.Merge(atmosConfig, []map[string]any{baseComponentConfig.BaseComponentSourceSection, baseComponentSourceSection})
+			merged, err = m.Merge(levelMergeConfig, []map[string]any{baseComponentConfig.BaseComponentSourceSection, baseComponentSourceSection})
 			if err != nil {
 				return err
 			}
@@ -2049,12 +2452,19 @@ func processBaseComponentConfigInternal(
 		// Base component `provision` (when source inheritance is enabled).
 		// Provision follows the same inheritance rules as source.
 		if atmosConfig.Stacks.Inherit.IsSourceInheritanceEnabled() {
-			merged, err = m.Merge(atmosConfig, []map[string]any{baseComponentConfig.BaseComponentProvisionSection, baseComponentProvisionSection})
+			merged, err = m.Merge(levelMergeConfig, []map[string]any{baseComponentConfig.BaseComponentProvisionSection, baseComponentProvisionSection})
 			if err != nil {
 				return err
 			}
 			baseComponentConfig.BaseComponentProvisionSection = merged
 		}
+
+		// Base component `retry` — deep-merge so multi-level inheritance composes correctly.
+		merged, err = m.Merge(levelMergeConfig, []map[string]any{baseComponentConfig.BaseComponentRetry, baseComponentRetry})
+		if err != nil {
+			return err
+		}
+		baseComponentConfig.BaseComponentRetry = merged
 
 		baseComponentConfig.ComponentInheritanceChain = u.UniqueStrings(append([]string{baseComponent}, baseComponentConfig.ComponentInheritanceChain...))
 	} else {

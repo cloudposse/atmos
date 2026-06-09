@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
@@ -100,6 +101,57 @@ func TestPostProcessTemplatesAndYamlFunctions(t *testing.T) {
 	}
 }
 
+// TestPostProcessTemplatesAndYamlFunctions_RetrySection covers the retry decode path
+// added to postProcessTemplatesAndYamlFunctions, including the nil-clears-stale-config
+// fix where a retry section removed by a template/!terraform.output must clear any
+// previously populated ComponentRetrySection.
+func TestPostProcessTemplatesAndYamlFunctions_RetrySection(t *testing.T) {
+	t.Run("retry-section-present-populates", func(t *testing.T) {
+		input := schema.ConfigAndStacksInfo{
+			ComponentSection: map[string]any{
+				cfg.RetrySectionName: map[string]any{
+					"max_attempts": 3,
+					"conditions":   []any{"/Bad Gateway/"},
+				},
+			},
+		}
+		postProcessTemplatesAndYamlFunctions(&input)
+		require.NotNil(t, input.ComponentRetrySection)
+		require.NotNil(t, input.ComponentRetrySection.MaxAttempts)
+		assert.Equal(t, 3, *input.ComponentRetrySection.MaxAttempts)
+		assert.Equal(t, []string{"/Bad Gateway/"}, input.ComponentRetrySection.Conditions)
+	})
+
+	t.Run("retry-section-absent-clears-stale", func(t *testing.T) {
+		// Pre-populate ComponentRetrySection to simulate a value decoded at extraction
+		// time, then run post-processing on a section where retry was removed via a
+		// template. The post-processor must reset the field to nil so stale retry
+		// settings don't keep firing.
+		stale := &schema.RetryConfig{MaxAttempts: intPtr(5)}
+		input := schema.ConfigAndStacksInfo{
+			ComponentRetrySection: stale,
+			ComponentSection:      map[string]any{},
+		}
+		postProcessTemplatesAndYamlFunctions(&input)
+		assert.Nil(t, input.ComponentRetrySection, "stale retry config must be cleared when section is absent")
+	})
+
+	t.Run("retry-section-invalid-keeps-prior", func(t *testing.T) {
+		// A decode error here is logged but must not overwrite the prior value (the
+		// extraction stage in ProcessStackConfig is the authoritative validator).
+		stale := &schema.RetryConfig{MaxAttempts: intPtr(2)}
+		input := schema.ConfigAndStacksInfo{
+			ComponentRetrySection: stale,
+			ComponentSection: map[string]any{
+				cfg.RetrySectionName: "not-a-map", // triggers ErrInvalidRetryConfig.
+			},
+		}
+		postProcessTemplatesAndYamlFunctions(&input)
+		require.NotNil(t, input.ComponentRetrySection, "decode error must not overwrite prior config")
+		assert.Same(t, stale, input.ComponentRetrySection)
+	})
+}
+
 func TestGenerateComponentProviderOverrides(t *testing.T) {
 	tests := []struct {
 		name              string
@@ -158,6 +210,118 @@ func TestGenerateComponentProviderOverrides(t *testing.T) {
 			providerOverrides: nil,
 			expected: map[string]any{
 				"provider": map[string]any(nil),
+			},
+		},
+		{
+			name: "multi-region-with-aliases",
+			providerOverrides: map[string]any{
+				"aws": map[string]any{
+					"region": "us-east-2",
+				},
+				"aws.use1": map[string]any{
+					"region": "us-east-1",
+					"alias":  "use1",
+				},
+			},
+			expected: map[string]any{
+				"provider": map[string]any{
+					"aws": []any{
+						map[string]any{"region": "us-east-2"},
+						map[string]any{"region": "us-east-1", "alias": "use1"},
+					},
+				},
+			},
+		},
+		{
+			name: "multi-region-multiple-aliases",
+			providerOverrides: map[string]any{
+				"aws": map[string]any{
+					"region": "us-east-1",
+				},
+				"aws.uswest2": map[string]any{
+					"region": "us-west-2",
+					"alias":  "uswest2",
+				},
+				"aws.euwest1": map[string]any{
+					"region": "eu-west-1",
+					"alias":  "euwest1",
+				},
+			},
+			expected: map[string]any{
+				"provider": map[string]any{
+					"aws": []any{
+						map[string]any{"region": "us-east-1"},
+						map[string]any{"region": "eu-west-1", "alias": "euwest1"},
+						map[string]any{"region": "us-west-2", "alias": "uswest2"},
+					},
+				},
+			},
+		},
+		{
+			name: "mixed-providers-with-aliases",
+			providerOverrides: map[string]any{
+				"aws": map[string]any{
+					"region": "us-east-1",
+				},
+				"aws.use2": map[string]any{
+					"region": "us-east-2",
+					"alias":  "use2",
+				},
+				"google": map[string]any{
+					"project": "my-project",
+					"region":  "us-central1",
+				},
+			},
+			expected: map[string]any{
+				"provider": map[string]any{
+					"aws": []any{
+						map[string]any{"region": "us-east-1"},
+						map[string]any{"region": "us-east-2", "alias": "use2"},
+					},
+					"google": map[string]any{
+						"project": "my-project",
+						"region":  "us-central1",
+					},
+				},
+			},
+		},
+		{
+			// Regression test for issue #2208: alias is auto-derived from the
+			// dot suffix when the provider block does not set it explicitly.
+			name: "alias-auto-derived",
+			providerOverrides: map[string]any{
+				"aws": map[string]any{
+					"region": "us-east-2",
+				},
+				"aws.use1": map[string]any{
+					"region": "us-east-1",
+				},
+			},
+			expected: map[string]any{
+				"provider": map[string]any{
+					"aws": []any{
+						map[string]any{"region": "us-east-2"},
+						map[string]any{"region": "us-east-1", "alias": "use1"},
+					},
+				},
+			},
+		},
+		{
+			// An explicit alias set inside the block must not be overwritten
+			// by the value derived from the dot suffix.
+			name: "explicit-alias-preserved",
+			providerOverrides: map[string]any{
+				"aws.use1": map[string]any{
+					"region": "us-east-1",
+					"alias":  "primary",
+				},
+			},
+			expected: map[string]any{
+				"provider": map[string]any{
+					"aws": []any{
+						map[string]any{"region": "us-east-1", "alias": "primary"},
+					},
+				},
 			},
 		},
 	}

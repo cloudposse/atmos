@@ -165,3 +165,97 @@ func TestStoreAutoDetectedIdentity_ExistingIdentity_NotOverwritten(t *testing.T)
 
 	assert.Equal(t, "user-supplied-role", info.Identity, "pre-set identity must not be overwritten")
 }
+
+// TestSetupTerraformAuth_IdentityFlagPropagatesToAuthCreator is a regression test for
+// issue #2392 (`--identity X` silently dropped by `atmos terraform plan`).
+//
+// Asserts: when info.Identity is set to a non-default identity name, that exact
+// value is passed to the auth manager creator — never replaced by a profile
+// default. This is the contract that auth/describe commands rely on; terraform
+// commands must honour it too.
+//
+// If a future regression overrides info.Identity (e.g. by re-running an identity
+// scanner over the explicit value, as #2392 implied was happening at v1.216.0),
+// the captured identity below diverges from the value passed in and the
+// assertion fails.
+func TestSetupTerraformAuth_IdentityFlagPropagatesToAuthCreator(t *testing.T) {
+	// Replace the merged-config getter so we don't try to fetch component config.
+	origGetter := defaultMergedAuthConfigGetter
+	t.Cleanup(func() { defaultMergedAuthConfigGetter = origGetter })
+	defaultMergedAuthConfigGetter = func(_ *schema.AtmosConfiguration, _ *schema.ConfigAndStacksInfo) (*schema.AuthConfig, error) {
+		// Return a config that has both a default and a non-default identity.
+		// The explicit --identity value must win — never the default.
+		return &schema.AuthConfig{
+			Identities: map[string]schema.Identity{
+				"core-identity/devops": {
+					Kind:    "aws/assume-role",
+					Default: true, // Profile default — must NOT be selected.
+				},
+				"core-root/admin": {
+					Kind: "aws/assume-role", // Explicit user choice via --identity.
+				},
+			},
+		}, nil
+	}
+
+	// Capture the identity name actually passed to the auth manager creator.
+	var capturedIdentity string
+	origCreator := defaultAuthManagerCreator
+	t.Cleanup(func() { defaultAuthManagerCreator = origCreator })
+	defaultAuthManagerCreator = func(identity string, _ *schema.AuthConfig, _ string, _ *schema.AtmosConfiguration) (auth.AuthManager, error) {
+		capturedIdentity = identity
+		// Return nil manager so we don't trip into authenticateWithIdentity logic.
+		return nil, nil
+	}
+
+	atmosConfig := schema.AtmosConfiguration{}
+	info := schema.ConfigAndStacksInfo{
+		// Simulate the args parsed by ProcessCommandLineArgs from
+		// `atmos terraform plan account-map -s core-gbl-root --identity core-root/admin`.
+		Identity:         "core-root/admin",
+		Stack:            "core-gbl-root",
+		ComponentFromArg: "account-map",
+		SubCommand:       "plan",
+	}
+
+	_, err := setupTerraformAuth(&atmosConfig, &info)
+	require.NoError(t, err)
+
+	assert.Equal(t, "core-root/admin", capturedIdentity,
+		"--identity flag must propagate verbatim to the auth manager creator (issue #2392); "+
+			"got %q which suggests a profile default override is leaking back in", capturedIdentity)
+}
+
+// TestSetupTerraformAuth_EmptyIdentity_AllowsAutoDetection verifies the inverse
+// of #2392: when no --identity flag is provided, info.Identity is empty and the
+// creator receives the empty string (allowing pkg/auth.resolveIdentityName to
+// auto-detect the profile default). This guards against an over-eager fix that
+// would break the default-identity path.
+func TestSetupTerraformAuth_EmptyIdentity_AllowsAutoDetection(t *testing.T) {
+	origGetter := defaultMergedAuthConfigGetter
+	t.Cleanup(func() { defaultMergedAuthConfigGetter = origGetter })
+	defaultMergedAuthConfigGetter = func(_ *schema.AtmosConfiguration, _ *schema.ConfigAndStacksInfo) (*schema.AuthConfig, error) {
+		return &schema.AuthConfig{
+			Identities: map[string]schema.Identity{
+				"profile-default": {Kind: "aws/assume-role", Default: true},
+			},
+		}, nil
+	}
+
+	var capturedIdentity string
+	origCreator := defaultAuthManagerCreator
+	t.Cleanup(func() { defaultAuthManagerCreator = origCreator })
+	defaultAuthManagerCreator = func(identity string, _ *schema.AuthConfig, _ string, _ *schema.AtmosConfiguration) (auth.AuthManager, error) {
+		capturedIdentity = identity
+		return nil, nil
+	}
+
+	atmosConfig := schema.AtmosConfiguration{}
+	info := schema.ConfigAndStacksInfo{Identity: ""}
+
+	_, err := setupTerraformAuth(&atmosConfig, &info)
+	require.NoError(t, err)
+
+	assert.Equal(t, "", capturedIdentity,
+		"empty info.Identity must remain empty so pkg/auth.resolveIdentityName can auto-detect the default")
+}

@@ -7,6 +7,8 @@ package exec
 // primary tools for reducing ExecuteTerraform's cyclomatic complexity from ~25 to ~10.
 
 import (
+	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -18,8 +20,10 @@ import (
 	"github.com/cloudposse/atmos/pkg/dependencies"
 	git "github.com/cloudposse/atmos/pkg/git"
 	log "github.com/cloudposse/atmos/pkg/logger"
-	"github.com/cloudposse/atmos/pkg/metrics/process"
+	metricsprocess "github.com/cloudposse/atmos/pkg/metrics/process"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/pro"
+	"github.com/cloudposse/atmos/pkg/retry"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -135,7 +139,7 @@ func executeCommandPipeline(
 
 	if shouldRunTerraformInit(atmosConfig, info) {
 		var err error
-		componentPath, err = executeTerraformInitPhase(atmosConfig, info, componentPath, execCtx.varFile)
+		componentPath, err = executeTerraformInitPhase(atmosConfig, info, componentPath, execCtx.varFile, opts...)
 		if err != nil {
 			return err
 		}
@@ -149,7 +153,7 @@ func executeCommandPipeline(
 		return err
 	}
 
-	if err = runWorkspaceSetup(atmosConfig, info, componentPath); err != nil {
+	if err = runWorkspaceSetup(atmosConfig, info, componentPath, opts...); err != nil {
 		return err
 	}
 
@@ -181,32 +185,41 @@ func shouldSkipWorkspaceSetup(info *schema.ConfigAndStacksInfo) bool {
 
 // runWorkspaceSetup selects (or creates) the Terraform workspace before the main command
 // runs.  It is a no-op when shouldSkipWorkspaceSetup returns true.
-func runWorkspaceSetup(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, componentPath string) error {
+func runWorkspaceSetup(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, componentPath string, opts ...ShellCommandOption) error {
 	if shouldSkipWorkspaceSetup(info) {
 		return nil
 	}
 
 	// Default: redirect workspace-select stderr to stdout so it is visible.
-	workspaceSelectRedirectStdErr := "/dev/stdout"
+	redirectStdErr := "/dev/stdout"
 	if info.RedirectStdErr != "" {
-		workspaceSelectRedirectStdErr = info.RedirectStdErr
+		redirectStdErr = info.RedirectStdErr
 	}
 
 	// For data-producing subcommands redirect "Switched to workspace…" to stderr
 	// so it doesn't pollute captured stdout in $() substitutions.
-	var wsOpts []ShellCommandOption
+	// Merge caller-provided opts (e.g., WithEnvironment) with workspace-specific opts.
+	wsOpts := append([]ShellCommandOption{}, opts...)
 	if info.SubCommand == "output" || info.SubCommand == "show" {
 		wsOpts = append(wsOpts, WithStdoutOverride(os.Stderr))
 	}
 
-	err := ExecuteShellCommand(
-		*atmosConfig,
-		info.Command,
-		[]string{"workspace", "select", info.TerraformWorkspace},
-		componentPath,
-		info.ComponentEnvList,
-		info.DryRun,
-		workspaceSelectRedirectStdErr,
+	err := executeShellCommandWithRetry(
+		atmosConfig,
+		info,
+		"workspace-select",
+		func(o ...ShellCommandOption) error {
+			return ExecuteShellCommand(
+				*atmosConfig,
+				info.Command,
+				[]string{"workspace", "select", info.TerraformWorkspace},
+				componentPath,
+				info.ComponentEnvList,
+				info.DryRun,
+				redirectStdErr,
+				o...,
+			)
+		},
 		wsOpts...,
 	)
 	if err == nil {
@@ -219,18 +232,35 @@ func runWorkspaceSetup(atmosConfig *schema.AtmosConfiguration, info *schema.Conf
 		return err
 	}
 
-	newErr := ExecuteShellCommand(
-		*atmosConfig,
-		info.Command,
-		[]string{"workspace", "new", info.TerraformWorkspace},
-		componentPath,
-		info.ComponentEnvList,
-		info.DryRun,
-		info.RedirectStdErr,
+	return createWorkspaceFallback(atmosConfig, info, componentPath, opts...)
+}
+
+// createWorkspaceFallback attempts to create a new workspace when select fails.
+// If workspace creation also fails with exit code 1 and the workspace is already
+// active (stale .terraform/environment file), it proceeds with a warning.
+func createWorkspaceFallback(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, componentPath string, opts ...ShellCommandOption) error {
+	newErr := executeShellCommandWithRetry(
+		atmosConfig,
+		info,
+		"workspace-new",
+		func(o ...ShellCommandOption) error {
+			return ExecuteShellCommand(
+				*atmosConfig,
+				info.Command,
+				[]string{"workspace", "new", info.TerraformWorkspace},
+				componentPath,
+				info.ComponentEnvList,
+				info.DryRun,
+				info.RedirectStdErr,
+				o...,
+			)
+		},
+		opts...,
 	)
 	if newErr == nil {
 		return nil
 	}
+
 	// If `workspace new` also fails with exit code 1, the workspace may already be the
 	// active workspace (the .terraform/environment file names it) but its state directory
 	// was deleted.  In that case we are already in the correct workspace and can proceed.
@@ -241,6 +271,7 @@ func runWorkspaceSetup(atmosConfig *schema.AtmosConfiguration, info *schema.Conf
 			"workspace", info.TerraformWorkspace)
 		return nil
 	}
+
 	return newErr
 }
 
@@ -306,19 +337,27 @@ func executeMainTerraformCommand( //nolint:revive // argument-limit: opts variad
 	}
 
 	// Capture subprocess resource metrics for Pro upload and local display.
-	var capturedMetrics *process.ProcessMetrics
-	opts = append(opts, WithMetricsCallback(func(m *process.ProcessMetrics) {
+	var capturedMetrics *metricsprocess.ProcessMetrics
+	opts = append(opts, WithMetricsCallback(func(m *metricsprocess.ProcessMetrics) {
 		capturedMetrics = m
 	}))
 
-	err := ExecuteShellCommand(
-		*atmosConfig,
-		info.Command,
-		allArgsAndFlags,
-		componentPath,
-		info.ComponentEnvList,
-		info.DryRun,
-		info.RedirectStdErr,
+	err := executeShellCommandWithRetry(
+		atmosConfig,
+		info,
+		info.SubCommand,
+		func(o ...ShellCommandOption) error {
+			return ExecuteShellCommand(
+				*atmosConfig,
+				info.Command,
+				allArgsAndFlags,
+				componentPath,
+				info.ComponentEnvList,
+				info.DryRun,
+				info.RedirectStdErr,
+				o...,
+			)
+		},
 		opts...,
 	)
 
@@ -328,9 +367,11 @@ func executeMainTerraformCommand( //nolint:revive // argument-limit: opts variad
 	displayMetrics(capturedMetrics)
 
 	// Upload status only when explicitly requested via --upload-status flag.
+	// Upload failures are logged but never cause the terraform command to fail —
+	// the exit code should reflect the plan/apply result, not telemetry.
 	if uploadStatusFlag && shouldUploadStatus(info) {
 		if uploadErr := uploadCommandStatus(atmosConfig, info, exitCode, capturedMetrics); uploadErr != nil {
-			return uploadErr
+			log.Warn("Failed to upload command status to Atmos Pro. The terraform command result is unaffected.", "error", uploadErr)
 		}
 	}
 
@@ -348,7 +389,7 @@ func uploadCommandStatus(
 	atmosConfig *schema.AtmosConfiguration,
 	info *schema.ConfigAndStacksInfo,
 	exitCode int,
-	metrics *process.ProcessMetrics,
+	metrics *metricsprocess.ProcessMetrics,
 ) error {
 	client, cerr := pro.NewAtmosProAPIClientFromEnv(atmosConfig)
 	if cerr != nil {
@@ -378,7 +419,7 @@ func cleanupTerraformFiles(atmosConfig *schema.AtmosConfiguration, info *schema.
 }
 
 // displayMetrics shows subprocess resource metrics via ui.Info.
-func displayMetrics(m *process.ProcessMetrics) {
+func displayMetrics(m *metricsprocess.ProcessMetrics) {
 	if m == nil {
 		return
 	}
@@ -420,4 +461,72 @@ func formatBytes(b int64) string {
 	default:
 		return fmt.Sprintf("%d B", b)
 	}
+}
+
+// invokeShellCommandFunc is the signature used by executeShellCommandWithRetry to delegate
+// the actual subprocess invocation back to its caller.  The caller provides a closure that
+// already binds the command, args, dir, env, etc., and only needs the variadic options
+// (used by the retry wrapper to inject stdout/stderr capture writers).
+type invokeShellCommandFunc func(opts ...ShellCommandOption) error
+
+// executeShellCommandWithRetry runs invoke exactly once when info.ComponentRetrySection is
+// nil or has no Conditions configured (zero behavioural change for non-retry components).
+//
+// When retry is configured, stdout and stderr are tee'd into a buffer and the buffer is
+// matched against the compiled retry conditions after each attempt.  Errors whose captured
+// output matches at least one condition trigger another attempt with the configured backoff;
+// other errors fail fast.  This is intentionally pattern-driven so that real terraform
+// failures (e.g., `plan` exit-code-2) are never retried unless the user opts in by listing
+// a matching condition.
+//
+// `phase` is included in retry log lines so users can see which subprocess invocation is
+// being retried (e.g. "init", "workspace-select", "apply").
+func executeShellCommandWithRetry(
+	atmosConfig *schema.AtmosConfiguration,
+	info *schema.ConfigAndStacksInfo,
+	phase string,
+	invoke invokeShellCommandFunc,
+	baseOpts ...ShellCommandOption,
+) error {
+	defer perf.Track(atmosConfig, "exec.executeShellCommandWithRetry")()
+
+	cfg := info.ComponentRetrySection
+	if cfg == nil || len(cfg.Conditions) == 0 {
+		return invoke(baseOpts...)
+	}
+
+	patterns, err := retry.CompileConditions(cfg.Conditions)
+	if err != nil {
+		return errors.Join(errUtils.ErrInvalidConfig, err)
+	}
+
+	var buf bytes.Buffer
+	captureOpts := append([]ShellCommandOption{}, baseOpts...)
+	captureOpts = append(captureOpts, WithStdoutCapture(&buf), WithStderrCapture(&buf))
+
+	attempt := 0
+	return retry.WithPredicate(
+		context.Background(),
+		cfg,
+		func() error {
+			attempt++
+			buf.Reset()
+			if attempt > 1 {
+				log.Warn(
+					"Retrying terraform subprocess after recoverable error",
+					"phase", phase,
+					logFieldComponent, info.ComponentFromArg,
+					"stack", info.StackFromArg,
+					"attempt", attempt,
+				)
+			}
+			return invoke(captureOpts...)
+		},
+		func(invokeErr error) bool {
+			if invokeErr == nil {
+				return false
+			}
+			return retry.MatchesAny(patterns, buf.String())
+		},
+	)
 }

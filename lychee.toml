@@ -42,8 +42,12 @@ exclude = [
   "gnu\\.org",
   # Linux Foundation specs (slow response times)
   "refspecs\\.linuxfoundation\\.org",
+  # OpenBSD man pages (slow response times, intermittent timeouts in CI)
+  "man\\.openbsd\\.org",
   # Kubernetes.io (rate limits and connection resets in CI)
   "kubernetes\\.io",
+  # runatlantis.io (connection resets on automated requests)
+  "runatlantis\\.io",
   # GitHub docs (intermittent 503s in CI)
   "docs\\.github\\.com",
   # Cloudinary image resizing proxy
@@ -52,6 +56,7 @@ exclude = [
   "atmos\\.tools",
   # Root-relative paths converted to file:// URLs (atmos.tools website paths)
   "file://.*/cli/",
+  "file://.*/functions/",
   # Files that don't exist yet (planned documentation)
   "website/docs/cli/errors\\.mdx",
   "website/docs/cli/configuration/mask\\.mdx",
@@ -68,6 +73,12 @@ exclude = [
   "atmos-pro\\.com",
   # LF AI Foundation blog links (may change or be unavailable)
   "lfaidata\\.foundation",
+  # Taskfile.dev (connection resets in CI)
+  "taskfile\\.dev",
+  # regex101.com (intermittent timeouts in CI)
+  "regex101\\.com",
+  # nx.dev (intermittent connection failures in CI)
+  "nx\\.dev",
   # Test data placeholder URLs (intentional)
   "github\\.com/test/",
   # Planned documentation paths (not yet published)
@@ -75,4 +86,12 @@ exclude = [
   "file://.*/ai/skill-marketplace",
   # Example/placeholder URLs in usage documentation
   "github\\.com/user/repo",
+  # Claude Code product page (claude.com edge returns 500 to non-browser/CI requests;
+  # the docs subdomain code.claude.com is reachable and is intentionally not excluded)
+  "claude\\.com/product/",
+  # regex101.com (intermittent 504 Gateway Timeout in CI)
+  "regex101\\.com",
+  # Anthropic's clau.de URL shortener is Cloudflare-fronted and returns 525
+  # (SSL handshake failed) to non-browser/CI requests; it resolves in a real browser.
+  "clau\\.de",
 ]

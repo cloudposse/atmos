@@ -70,7 +70,7 @@ You can even access the configurations natively from within terraform using our 
 > ### Did you know?
 >
 > By leveraging Atmos in conjunction with Cloud Posse's [*expertise in AWS*](https://cloudposse.com),
-> [*terraform blueprints*](https://cloudposse.com/services), and our [*knowledgeable community*](https://slack.cloudposse.com), teams can achieve
+> [*terraform blueprints*](https://cloudposse.com/services/), and our [*knowledgeable community*](https://slack.cloudposse.com), teams can achieve
 > operational mastery and innovation faster, transforming their infrastructure management practices into a competitive advantage.
 
 ## Core Features
@@ -117,7 +117,7 @@ strength in the cloud infrastructure and DevOps domains:
 
 > [!TIP]
 > Don't see your use-case listed? Ask us in the [`#atmos`](https://slack.cloudposse.com) Slack channel,
-> or [join us for "Office Hours"](https://cloudposse.com/office-hours) every week.
+> or [join us for "Office Hours"](https://cloudposse.com/office-hours/) every week.
 
 
 Moreover, `atmos` is not only a command-line interface for managing clouds and clusters. It provides many useful patterns
@@ -196,7 +196,7 @@ Dropped straight into your Inbox every week — and usually a 5-minute read.
 It's **FREE** for everyone!
 ## License
 
-<a href="https://opensource.org/license/apache-2-0"><img src="https://img.shields.io/badge/License-Apache%202.0-blue.svg?style=for-the-badge" alt="License"></a>
+<a href="https://opensource.org/licenses/Apache-2.0"><img src="https://img.shields.io/badge/License-Apache%202.0-blue.svg?style=for-the-badge" alt="License"></a>
 
 <details>
 <summary>Preamble to the Apache License, Version 2.0</summary>

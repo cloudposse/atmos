@@ -157,6 +157,57 @@ func TestParseIdentityFlag(t *testing.T) {
 			index:            0,
 			expectedIdentity: "",
 		},
+		// Boolean-false normalization: --identity=<bool-false> must resolve to the
+		// disabled sentinel so authentication is skipped (mirrors ATMOS_IDENTITY=false).
+		{
+			name:             "equals form with false normalizes to disabled sentinel",
+			arg:              cfg.IdentityFlag + "=false",
+			args:             []string{cfg.IdentityFlag + "=false"},
+			index:            0,
+			expectedIdentity: cfg.IdentityFlagDisabledValue,
+		},
+		{
+			name:             "equals form with mixed-case False normalizes to disabled sentinel",
+			arg:              cfg.IdentityFlag + "=False",
+			args:             []string{cfg.IdentityFlag + "=False"},
+			index:            0,
+			expectedIdentity: cfg.IdentityFlagDisabledValue,
+		},
+		{
+			name:             "equals form with uppercase FALSE normalizes to disabled sentinel",
+			arg:              cfg.IdentityFlag + "=FALSE",
+			args:             []string{cfg.IdentityFlag + "=FALSE"},
+			index:            0,
+			expectedIdentity: cfg.IdentityFlagDisabledValue,
+		},
+		{
+			name:             "equals form with 0 normalizes to disabled sentinel",
+			arg:              cfg.IdentityFlag + "=0",
+			args:             []string{cfg.IdentityFlag + "=0"},
+			index:            0,
+			expectedIdentity: cfg.IdentityFlagDisabledValue,
+		},
+		{
+			name:             "equals form with no normalizes to disabled sentinel",
+			arg:              cfg.IdentityFlag + "=no",
+			args:             []string{cfg.IdentityFlag + "=no"},
+			index:            0,
+			expectedIdentity: cfg.IdentityFlagDisabledValue,
+		},
+		{
+			name:             "equals form with off normalizes to disabled sentinel",
+			arg:              cfg.IdentityFlag + "=off",
+			args:             []string{cfg.IdentityFlag + "=off"},
+			index:            0,
+			expectedIdentity: cfg.IdentityFlagDisabledValue,
+		},
+		{
+			name:             "space-separated form with false normalizes to disabled sentinel",
+			arg:              cfg.IdentityFlag,
+			args:             []string{cfg.IdentityFlag, "false"},
+			index:            0,
+			expectedIdentity: cfg.IdentityFlagDisabledValue,
+		},
 	}
 
 	for _, tt := range tests {

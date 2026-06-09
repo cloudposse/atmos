@@ -1,0 +1,4 @@
+ai:
+  enabled: true
+  tools:
+    enabled: true

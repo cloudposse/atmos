@@ -19,11 +19,16 @@ type Client struct {
 }
 
 // NewClient creates a new GitHub API client.
-// It uses the GITHUB_TOKEN environment variable for authentication.
+// Token precedence: ATMOS_CI_GITHUB_TOKEN > GITHUB_TOKEN > GH_TOKEN.
+// ATMOS_CI_GITHUB_TOKEN allows using a separate token for CI operations
+// (e.g., commit statuses) while GITHUB_TOKEN is used by Terraform.
 func NewClient() (*Client, error) {
 	defer perf.Track(nil, "github.NewClient")()
 
-	token := os.Getenv("GITHUB_TOKEN")
+	token := os.Getenv("ATMOS_CI_GITHUB_TOKEN")
+	if token == "" {
+		token = os.Getenv("GITHUB_TOKEN")
+	}
 	if token == "" {
 		// Also check GH_TOKEN (used by gh CLI).
 		token = os.Getenv("GH_TOKEN")

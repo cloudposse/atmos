@@ -137,6 +137,7 @@ func TestFormatter_Success(t *testing.T) {
 }
 
 func TestFormatter_Warning(t *testing.T) {
+	t.Setenv("NO_COLOR", "1")
 	ioCtx := createTestIOContext()
 	term := terminal.New()
 	f := NewFormatter(ioCtx, term)
@@ -151,6 +152,7 @@ func TestFormatter_Warning(t *testing.T) {
 }
 
 func TestFormatter_Error(t *testing.T) {
+	t.Setenv("NO_COLOR", "1")
 	ioCtx := createTestIOContext()
 	term := terminal.New()
 	f := NewFormatter(ioCtx, term)
@@ -165,6 +167,7 @@ func TestFormatter_Error(t *testing.T) {
 }
 
 func TestFormatter_Info(t *testing.T) {
+	t.Setenv("NO_COLOR", "1")
 	ioCtx := createTestIOContext()
 	term := terminal.New()
 	f := NewFormatter(ioCtx, term)
@@ -421,6 +424,10 @@ func (m *mockTerminal) Write(content string) error {
 
 func (m *mockTerminal) IsTTY(stream terminal.Stream) bool {
 	return m.isTTY
+}
+
+func (m *mockTerminal) IsPiped(stream terminal.Stream) bool {
+	return false
 }
 
 func (m *mockTerminal) ColorProfile() terminal.ColorProfile {
@@ -855,6 +862,7 @@ func TestToastf_Integration(t *testing.T) {
 }
 
 func TestFormatter_FormatToast_EdgeCases(t *testing.T) {
+	t.Setenv("NO_COLOR", "1")
 	ioCtx := createTestIOContext()
 	term := createMockTerminal(terminal.ColorNone)
 	f := NewFormatter(ioCtx, term).(*formatter)
@@ -1238,6 +1246,7 @@ func TestFormatter_LipglossWidth(t *testing.T) {
 }
 
 func TestFormatter_Successf_Multiline(t *testing.T) {
+	t.Setenv("NO_COLOR", "1")
 	ioCtx := createTestIOContext()
 	term := createMockTerminal(terminal.ColorNone)
 	f := NewFormatter(ioCtx, term).(*formatter)
@@ -1311,6 +1320,7 @@ func TestFormatter_Successf_ToolSpec(t *testing.T) {
 }
 
 func TestFormatter_Errorf_Multiline(t *testing.T) {
+	t.Setenv("NO_COLOR", "1")
 	ioCtx := createTestIOContext()
 	term := createMockTerminal(terminal.ColorNone)
 	f := NewFormatter(ioCtx, term).(*formatter)
@@ -1332,6 +1342,7 @@ func TestFormatter_Errorf_Multiline(t *testing.T) {
 }
 
 func TestFormatter_Warningf_Multiline(t *testing.T) {
+	t.Setenv("NO_COLOR", "1")
 	ioCtx := createTestIOContext()
 	term := createMockTerminal(terminal.ColorNone)
 	f := NewFormatter(ioCtx, term).(*formatter)
@@ -1353,6 +1364,7 @@ func TestFormatter_Warningf_Multiline(t *testing.T) {
 }
 
 func TestFormatter_Infof_Multiline(t *testing.T) {
+	t.Setenv("NO_COLOR", "1")
 	ioCtx := createTestIOContext()
 	term := createMockTerminal(terminal.ColorNone)
 	f := NewFormatter(ioCtx, term).(*formatter)
@@ -1374,6 +1386,7 @@ func TestFormatter_Infof_Multiline(t *testing.T) {
 }
 
 func TestFormatSuccessAndError(t *testing.T) {
+	t.Setenv("NO_COLOR", "1")
 	tests := []struct {
 		name         string
 		text         string
@@ -2256,6 +2269,7 @@ func TestWriteln_PackageLevel(t *testing.T) {
 
 // TestFormatInline tests the FormatInline package-level function.
 func TestFormatInline(t *testing.T) {
+	t.Setenv("NO_COLOR", "1")
 	t.Run("plain text passes through", func(t *testing.T) {
 		ioCtx := createTestIOContext()
 		term := createMockTerminal(terminal.ColorNone)

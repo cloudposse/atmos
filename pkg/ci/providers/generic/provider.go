@@ -105,6 +105,15 @@ func (p *Provider) GetStatus(_ context.Context, _ provider.StatusOptions) (*prov
 	return nil, fmt.Errorf("%w: GetStatus is not supported by the generic CI provider", errUtils.ErrCIOperationNotSupported)
 }
 
+// PostComment is not supported by the generic provider.
+// PR/MR comments require a real platform provider (e.g., GitHub, GitLab).
+func (p *Provider) PostComment(_ context.Context, _ *provider.PostCommentOptions) (*provider.Comment, error) {
+	defer perf.Track(nil, "generic.Provider.PostComment")()
+
+	log.Debug("PostComment not supported by generic CI provider")
+	return nil, fmt.Errorf("%w: PostComment is not supported by the generic CI provider", errUtils.ErrCIOperationNotSupported)
+}
+
 // OutputWriter returns an OutputWriter for the generic provider.
 func (p *Provider) OutputWriter() provider.OutputWriter {
 	defer perf.Track(nil, "generic.Provider.OutputWriter")()

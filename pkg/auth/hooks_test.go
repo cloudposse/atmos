@@ -8,6 +8,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/auth/realm"
 	"github.com/cloudposse/atmos/pkg/auth/types"
 	log "github.com/cloudposse/atmos/pkg/logger"
@@ -21,6 +22,10 @@ type stubAuthManager struct {
 	whoami          *types.WhoamiInfo
 	envVars         map[string]string          // Environment variables to return from GetEnvironmentVariables.
 	identities      map[string]schema.Identity // Identities to return from GetIdentities.
+
+	// Profile-fallback instrumentation.
+	fallbackCalls int   // Number of times MaybeOfferAnyProfileFallback was invoked.
+	fallbackErr   error // Error to return from MaybeOfferAnyProfileFallback.
 }
 
 func (s *stubAuthManager) Authenticate(ctx context.Context, identityName string) (*types.WhoamiInfo, error) {
@@ -43,13 +48,17 @@ func (s *stubAuthManager) Validate() error { return nil }
 func (s *stubAuthManager) GetDefaultIdentity(_ bool) (string, error) {
 	return s.defaultIdentity, s.defaultErr
 }
+
 func (s *stubAuthManager) ListIdentities() []string                          { return []string{"one", "two"} }
 func (s *stubAuthManager) GetProviderForIdentity(identityName string) string { return "prov" }
 func (s *stubAuthManager) GetFilesDisplayPath(providerName string) string    { return "~/.aws/atmos" }
+
 func (s *stubAuthManager) GetProviderKindForIdentity(identityName string) (string, error) {
 	return "kind", nil
 }
 func (s *stubAuthManager) GetChain() []string { return []string{"prov", "id"} }
+
+func (s *stubAuthManager) CredentialStoreType() string { return "" }
 func (s *stubAuthManager) GetStackInfo() *schema.ConfigAndStacksInfo {
 	return &schema.ConfigAndStacksInfo{}
 }
@@ -112,6 +121,10 @@ func (s *stubAuthManager) PrepareShellEnvironment(ctx context.Context, identityN
 	return result, nil
 }
 
+func (s *stubAuthManager) EnsureIdentityEnvironment(ctx context.Context, identityName string) (map[string]string, error) {
+	return nil, nil
+}
+
 func (s *stubAuthManager) ExecuteIntegration(ctx context.Context, integrationName string) error {
 	return nil
 }
@@ -124,12 +137,21 @@ func (s *stubAuthManager) GetIntegration(integrationName string) (*schema.Integr
 	return nil, nil
 }
 
+func (s *stubAuthManager) RevokeEphemeralIntegrations(_ context.Context, _ string, _ *bool) error {
+	return nil
+}
+
 func (s *stubAuthManager) ResolvePrincipalSetting(identityName, key string) (interface{}, bool) {
 	return nil, false
 }
 
 func (s *stubAuthManager) ResolveProviderConfig(identityName string) (*schema.Provider, bool) {
 	return nil, false
+}
+
+func (s *stubAuthManager) MaybeOfferAnyProfileFallback(_ context.Context) error {
+	s.fallbackCalls++
+	return s.fallbackErr
 }
 
 func (s *stubAuthManager) GetRealm() realm.RealmInfo {
@@ -303,25 +325,101 @@ func TestDecodeAuthConfigFromStack(t *testing.T) {
 }
 
 func TestResolveTargetIdentityName(t *testing.T) {
+	ctx := context.Background()
+
 	// Directly specified on stack wins.
 	stack := &schema.ConfigAndStacksInfo{Identity: "explicit"}
-	name, err := resolveTargetIdentityName(stack, &stubAuthManager{defaultIdentity: "default"})
+	mgr := &stubAuthManager{defaultIdentity: "default"}
+	name, err := resolveTargetIdentityName(ctx, stack, mgr)
 	assert.NoError(t, err)
 	assert.Equal(t, "explicit", name)
+	assert.Zero(t, mgr.fallbackCalls, "explicit --identity must skip the profile fallback")
 
 	// Fallback to manager default.
 	stack.Identity = ""
-	name, err = resolveTargetIdentityName(stack, &stubAuthManager{defaultIdentity: "team"})
+	mgr = &stubAuthManager{defaultIdentity: "team"}
+	name, err = resolveTargetIdentityName(ctx, stack, mgr)
 	assert.NoError(t, err)
 	assert.Equal(t, "team", name)
+	assert.Zero(t, mgr.fallbackCalls, "successful default identity resolution must skip the profile fallback")
 
 	// Manager error returns ErrDefaultIdentity.
-	_, err = resolveTargetIdentityName(stack, &stubAuthManager{defaultErr: errors.New("boom")})
+	mgr = &stubAuthManager{defaultErr: errors.New("boom")}
+	_, err = resolveTargetIdentityName(ctx, stack, mgr)
 	assert.Error(t, err)
+	assert.Zero(t, mgr.fallbackCalls, "unrelated errors must not trigger the profile fallback")
 
 	// Manager returns empty default -> ErrNoDefaultIdentity.
-	_, err = resolveTargetIdentityName(stack, &stubAuthManager{defaultIdentity: ""})
+	// This branch also flows through the profile-fallback path (err is nil,
+	// name is empty, so the `!isNoAuthConfigError(err)` short-circuit does
+	// not fire). Asserting the fallback fires here catches a regression
+	// that skips it in the "empty default, no error" branch.
+	emptyMgr := &stubAuthManager{defaultIdentity: ""}
+	_, err = resolveTargetIdentityName(ctx, stack, emptyMgr)
+	assert.ErrorIs(t, err, errUtils.ErrNoDefaultIdentity)
+	assert.Equal(t, 1, emptyMgr.fallbackCalls,
+		"empty default identity must also try the profile fallback before surfacing ErrNoDefaultIdentity")
+}
+
+// TestResolveTargetIdentityName_InvokesFallbackOnNoAuthConfig is a regression
+// guard: when GetDefaultIdentity returns a "no auth config" terminal error
+// (ErrNoDefaultIdentity, ErrNoIdentitiesAvailable, or ErrNoProvidersAvailable),
+// resolveTargetIdentityName MUST invoke authManager.MaybeOfferAnyProfileFallback
+// before surfacing the fatal error. Without this, terraform commands never
+// trigger the profile-switch prompt that auth commands already support.
+func TestResolveTargetIdentityName_InvokesFallbackOnNoAuthConfig(t *testing.T) {
+	ctx := context.Background()
+	stack := &schema.ConfigAndStacksInfo{}
+
+	triggers := []struct {
+		name string
+		err  error
+	}{
+		{"ErrNoDefaultIdentity", errUtils.ErrNoDefaultIdentity},
+		{"ErrNoIdentitiesAvailable", errUtils.ErrNoIdentitiesAvailable},
+		{"ErrNoProvidersAvailable", errUtils.ErrNoProvidersAvailable},
+	}
+	for _, tc := range triggers {
+		t.Run(tc.name, func(t *testing.T) {
+			mgr := &stubAuthManager{defaultErr: tc.err}
+			_, err := resolveTargetIdentityName(ctx, stack, mgr)
+			assert.Error(t, err)
+			assert.Equal(t, 1, mgr.fallbackCalls,
+				"MaybeOfferAnyProfileFallback must fire for %s", tc.name)
+		})
+	}
+}
+
+// TestResolveTargetIdentityName_SurfacesFallbackError verifies that when
+// MaybeOfferAnyProfileFallback returns an enriched error (non-interactive
+// branch with candidate profiles), resolveTargetIdentityName surfaces that
+// error instead of the original bare ErrNoDefaultIdentity.
+func TestResolveTargetIdentityName_SurfacesFallbackError(t *testing.T) {
+	ctx := context.Background()
+	stack := &schema.ConfigAndStacksInfo{}
+	enriched := errors.New("try --profile managers")
+	mgr := &stubAuthManager{
+		defaultErr:  errUtils.ErrNoDefaultIdentity,
+		fallbackErr: enriched,
+	}
+
+	_, err := resolveTargetIdentityName(ctx, stack, mgr)
+	assert.ErrorIs(t, err, enriched,
+		"an enriched fallback error must be surfaced to the caller instead of the original")
+}
+
+// TestResolveTargetIdentityName_DoesNotInvokeFallbackOnUnrelatedError is the
+// negative-path guard: recovery logic must not trigger for errors that are
+// unrelated to missing auth config.
+func TestResolveTargetIdentityName_DoesNotInvokeFallbackOnUnrelatedError(t *testing.T) {
+	ctx := context.Background()
+	stack := &schema.ConfigAndStacksInfo{}
+	mgr := &stubAuthManager{defaultErr: errors.New("unrelated failure")}
+
+	_, err := resolveTargetIdentityName(ctx, stack, mgr)
 	assert.Error(t, err)
+	assert.Zero(t, mgr.fallbackCalls,
+		"fallback must only fire for no-auth-config errors, not arbitrary failures")
 }
 
 func TestAuthenticateAndWriteEnv(t *testing.T) {
