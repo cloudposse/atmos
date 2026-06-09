@@ -5,8 +5,30 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/cloudposse/atmos/tests/testhelpers"
 	"github.com/stretchr/testify/assert"
 )
+
+const doubleHyphenWorkDir = "fixtures/scenarios/workflows"
+
+func setupDoubleHyphenSandbox(t *testing.T) {
+	t.Helper()
+
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", "")
+	t.Setenv("ATMOS_BASE_PATH", "")
+
+	sandbox, err := testhelpers.SetupSandbox(t, doubleHyphenWorkDir)
+	if err != nil {
+		t.Fatalf("failed to setup sandbox for %q: %v", doubleHyphenWorkDir, err)
+	}
+	t.Cleanup(sandbox.Cleanup)
+
+	for key, value := range sandbox.GetEnvironmentVariables() {
+		t.Setenv(key, value)
+	}
+
+	t.Chdir(doubleHyphenWorkDir)
+}
 
 // TestDoubleHyphenSeparator tests that args after "--" are correctly passed through
 // to the underlying terraform command without being parsed by Atmos.
@@ -18,14 +40,6 @@ func TestDoubleHyphenSeparator(t *testing.T) {
 	if skipReason != "" {
 		t.Skipf("Skipping test: %s", skipReason)
 	}
-
-	// Use t.Setenv for proper test isolation - automatically restored after test.
-	t.Setenv("ATMOS_CLI_CONFIG_PATH", "")
-	t.Setenv("ATMOS_BASE_PATH", "")
-
-	// Use the workflows fixture which has a mock component.
-	workDir := "fixtures/scenarios/workflows"
-	t.Chdir(workDir)
 
 	tests := []struct {
 		name           string
@@ -61,6 +75,8 @@ func TestDoubleHyphenSeparator(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			setupDoubleHyphenSandbox(t)
+
 			cmd := atmosRunner.Command(tt.args...)
 			var stdout, stderr bytes.Buffer
 			cmd.Stdout = &stdout
@@ -102,12 +118,7 @@ func TestDoubleHyphenWithConsolidateWarnings(t *testing.T) {
 		t.Skipf("Skipping test: %s", skipReason)
 	}
 
-	// Use t.Setenv for proper test isolation - automatically restored after test.
-	t.Setenv("ATMOS_CLI_CONFIG_PATH", "")
-	t.Setenv("ATMOS_BASE_PATH", "")
-
-	workDir := "fixtures/scenarios/workflows"
-	t.Chdir(workDir)
+	setupDoubleHyphenSandbox(t)
 
 	// This is the exact command pattern from issue #1967.
 	cmd := atmosRunner.Command(
@@ -147,12 +158,7 @@ func TestDoubleHyphenStackNotOverwritten(t *testing.T) {
 		t.Skipf("Skipping test: %s", skipReason)
 	}
 
-	// Use t.Setenv for proper test isolation - automatically restored after test.
-	t.Setenv("ATMOS_CLI_CONFIG_PATH", "")
-	t.Setenv("ATMOS_BASE_PATH", "")
-
-	workDir := "fixtures/scenarios/workflows"
-	t.Chdir(workDir)
+	setupDoubleHyphenSandbox(t)
 
 	// Test that -s after -- doesn't get parsed as the stack flag.
 	cmd := atmosRunner.Command(
