@@ -217,6 +217,9 @@ var (
 	ErrInvalidFormat  = errors.New("invalid format")
 	ErrOutputFormat   = errors.New("output format error")
 
+	// File operation errors.
+	ErrRefusingToDeleteSymlink = ErrRefuseDeleteSymbolicLink
+
 	// Scheduler errors.
 	ErrNilGraph      = errors.New("scheduler graph cannot be nil")
 	ErrNilDispatcher = errors.New("scheduler dispatcher cannot be nil")
