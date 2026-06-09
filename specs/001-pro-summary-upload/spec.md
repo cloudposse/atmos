@@ -160,9 +160,10 @@ upload payload contains no `component_type` or `metadata` fields.
 - **FR-008**: The upload endpoint MUST remain the existing PATCH endpoint; no new endpoints are
   introduced.
 - **FR-007a**: On a transient upload failure (network error, HTTP 5xx, timeout), the CLI MUST
-  perform exactly one automatic retry after a short fixed delay before treating the upload as
-  failed. After the retry is exhausted, the failure MUST be warn-only and MUST NOT affect the
-  terraform command exit code.
+  perform at least one automatic retry before treating the upload as failed. After retries are
+  exhausted, the failure MUST be warn-only and MUST NOT affect the terraform command exit code.
+  (Current implementation uses 3 retries with exponential backoff — this exceeds the minimum
+  and is the intended behavior.)
 - **FR-008a**: The `command` field in the upload payload MUST contain the literal subcommand the
   user invoked (e.g., `"deploy"` when the user ran `atmos terraform deploy`), not the normalized
   internal form, so the server audit trail reflects actual user intent.

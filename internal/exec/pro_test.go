@@ -148,6 +148,18 @@ func TestShouldUploadStatus(t *testing.T) {
 			expected: true,
 		},
 		{
+			name: "should return true for deploy command with pro enabled",
+			info: &schema.ConfigAndStacksInfo{
+				SubCommand: "deploy",
+				ComponentSettingsSection: map[string]interface{}{
+					"pro": map[string]interface{}{
+						"enabled": true,
+					},
+				},
+			},
+			expected: true,
+		},
+		{
 			name: "should return false for destroy command",
 			info: &schema.ConfigAndStacksInfo{
 				SubCommand: "destroy",
@@ -448,6 +460,73 @@ func TestUploadStatusWithCIData(t *testing.T) {
 		err := uploadStatus(&info, 0, "", nil, mockProClient, mockGitRepo)
 		assert.NoError(t, err)
 
+		mockProClient.AssertExpectations(t)
+		mockGitRepo.AssertExpectations(t)
+	})
+}
+
+// TestUploadStatusPreservesInvokedSubCommand verifies that when a deploy invocation sets
+// InvokedSubCommand = "deploy" (before handleDeploySubcommand converts SubCommand to "apply"),
+// the upload DTO carries "deploy" in the Command field for audit trail fidelity (FR-008a).
+func TestUploadStatusPreservesInvokedSubCommand(t *testing.T) {
+	testRepoInfo := &atmosgit.RepoInfo{
+		RepoUrl:   "https://github.com/test/repo",
+		RepoName:  "repo",
+		RepoOwner: "test",
+		RepoHost:  "github.com",
+	}
+
+	t.Run("deploy invocation preserves deploy in command field", func(t *testing.T) {
+		mockProClient := new(MockProAPIClient)
+		mockGitRepo := new(MockGitRepo)
+
+		// Simulate the state AFTER handleDeploySubcommand has converted SubCommand.
+		info := schema.ConfigAndStacksInfo{
+			Stack:             "test-stack",
+			Component:         "test-component",
+			ComponentType:     "terraform",
+			SubCommand:        "apply",          // converted by handleDeploySubcommand
+			InvokedSubCommand: "deploy",         // original invocation
+			ComponentSettingsSection: map[string]interface{}{
+				"pro": map[string]interface{}{"enabled": true},
+			},
+		}
+
+		mockGitRepo.On("GetLocalRepoInfo").Return(testRepoInfo, nil)
+		mockGitRepo.On("GetCurrentCommitSHA").Return("abc123", nil)
+		mockProClient.On("UploadInstanceStatus", mock.MatchedBy(func(dto *dtos.InstanceStatusUploadRequest) bool {
+			return dto.Command == "deploy" // MUST be "deploy", not "apply"
+		})).Return(nil)
+
+		err := uploadStatus(&info, 0, "terraform", nil, mockProClient, mockGitRepo)
+		assert.NoError(t, err)
+		mockProClient.AssertExpectations(t)
+		mockGitRepo.AssertExpectations(t)
+	})
+
+	t.Run("plan invocation without InvokedSubCommand uses SubCommand", func(t *testing.T) {
+		mockProClient := new(MockProAPIClient)
+		mockGitRepo := new(MockGitRepo)
+
+		info := schema.ConfigAndStacksInfo{
+			Stack:         "test-stack",
+			Component:     "test-component",
+			ComponentType: "terraform",
+			SubCommand:    "plan",
+			// InvokedSubCommand intentionally empty — fallback to SubCommand.
+			ComponentSettingsSection: map[string]interface{}{
+				"pro": map[string]interface{}{"enabled": true},
+			},
+		}
+
+		mockGitRepo.On("GetLocalRepoInfo").Return(testRepoInfo, nil)
+		mockGitRepo.On("GetCurrentCommitSHA").Return("abc123", nil)
+		mockProClient.On("UploadInstanceStatus", mock.MatchedBy(func(dto *dtos.InstanceStatusUploadRequest) bool {
+			return dto.Command == "plan"
+		})).Return(nil)
+
+		err := uploadStatus(&info, 0, "terraform", nil, mockProClient, mockGitRepo)
+		assert.NoError(t, err)
 		mockProClient.AssertExpectations(t)
 		mockGitRepo.AssertExpectations(t)
 	})

@@ -144,6 +144,9 @@ func executeCommandPipeline(
 		}
 	}
 
+	// Capture the original subcommand before handleDeploySubcommand converts "deploy" to "apply",
+	// so the upload payload reflects what the user actually invoked (FR-008a).
+	info.InvokedSubCommand = info.SubCommand
 	handleDeploySubcommand(atmosConfig, info)
 	logTerraformContext(info, execCtx.workingDir)
 

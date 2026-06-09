@@ -995,6 +995,10 @@ type ConfigAndStacksInfo struct {
 	Command                       string
 	SubCommand                    string
 	SubCommand2                   string
+	// InvokedSubCommand is the original subcommand as typed by the user, captured before any
+	// internal conversion (e.g., before "deploy" is normalized to "apply" by handleDeploySubcommand).
+	// When set, upload paths use this value for audit trail fidelity instead of SubCommand.
+	InvokedSubCommand             string
 	StackSection                  AtmosSectionMapType
 	ComponentSection              AtmosSectionMapType
 	ComponentVarsSection          AtmosSectionMapType

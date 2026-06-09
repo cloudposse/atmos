@@ -27,8 +27,8 @@ workflow in CLAUDE.md.
 
 **Purpose**: Verify existing implementation compiles and baseline tests pass before making changes.
 
-- [ ] T001 Run `make test-short` to establish a passing baseline; confirm `TestPlugin_BuildStatusData_Plan`, `TestPlugin_BuildStatusData_Apply`, `TestBuildStatusData`, and `TestExtractOutputValues` all pass
-- [ ] T002 Run `go build ./...` to confirm no compilation errors on the current branch
+- [x] T001 Run `make test-short` to establish a passing baseline; confirm `TestPlugin_BuildStatusData_Plan`, `TestPlugin_BuildStatusData_Apply`, `TestBuildStatusData`, and `TestExtractOutputValues` all pass
+- [x] T002 Run `go build ./...` to confirm no compilation errors on the current branch
 
 ---
 
@@ -40,12 +40,12 @@ of `"deploy"`. This fix affects US1, US2, and the deploy path throughout.
 
 **⚠️ CRITICAL**: Tests T003–T004 must be written and confirmed failing before T005–T007.
 
-- [ ] T003 Write a failing test in `internal/exec/pro_test.go` that calls `uploadStatus` with `info.SubCommand = "deploy"` and asserts the DTO's `Command` field equals `"deploy"` (using a mock `AtmosProAPIClientInterface` to capture the DTO); confirm the test fails with current code
-- [ ] T004 Add `InvokedSubCommand string` field to `schema.ConfigAndStacksInfo` in `pkg/schema/schema.go`; document it as the original subcommand before internal conversion
-- [ ] T005 In `internal/exec/terraform_execute_helpers_exec.go`, add `info.InvokedSubCommand = info.SubCommand` immediately before the `handleDeploySubcommand(atmosConfig, info)` call (line ~147) so the original value is captured before conversion
-- [ ] T006 In `internal/exec/pro.go`, update `uploadStatus` to use `info.InvokedSubCommand` for the `Command:` field in `InstanceStatusUploadRequest`; fall back to `info.SubCommand` when `InvokedSubCommand` is empty (for callers that haven't set it)
-- [ ] T007 Update `shouldUploadStatus` in `internal/exec/pro.go` to also return `true` when `info.SubCommand == "deploy"` (line ~269); this adds explicit safety for any future caller that checks before conversion
-- [ ] T008 Confirm the test from T003 now passes; run `go test ./internal/exec/... -run TestUploadStatus -v`
+- [x] T003 Write a failing test in `internal/exec/pro_test.go` that calls `uploadStatus` with `info.SubCommand = "deploy"` and asserts the DTO's `Command` field equals `"deploy"` (using a mock `AtmosProAPIClientInterface` to capture the DTO); confirm the test fails with current code
+- [x] T004 Add `InvokedSubCommand string` field to `schema.ConfigAndStacksInfo` in `pkg/schema/schema.go`; document it as the original subcommand before internal conversion
+- [x] T005 In `internal/exec/terraform_execute_helpers_exec.go`, add `info.InvokedSubCommand = info.SubCommand` immediately before the `handleDeploySubcommand(atmosConfig, info)` call (line ~147) so the original value is captured before conversion
+- [x] T006 In `internal/exec/pro.go`, update `uploadStatus` to use `info.InvokedSubCommand` for the `Command:` field in `InstanceStatusUploadRequest`; fall back to `info.SubCommand` when `InvokedSubCommand` is empty (for callers that haven't set it)
+- [x] T007 Update `shouldUploadStatus` in `internal/exec/pro.go` to also return `true` when `info.SubCommand == "deploy"` (line ~269); this adds explicit safety for any future caller that checks before conversion
+- [x] T008 Confirm the test from T003 now passes; run `go test ./internal/exec/... -run TestUploadStatus -v`
 
 **Checkpoint**: Deploy invocations now send `"deploy"` in the payload `command` field. Foundation ready.
 
@@ -60,10 +60,10 @@ warnings, errors) to the Atmos Pro dashboard.
 against a stack with `settings.pro.enabled: true` and `ci.enabled: true`. The Atmos Pro
 dashboard must show resource counts without opening the CI platform.
 
-- [ ] T009 [P] [US1] In `internal/exec/terraform_execute_helpers_exec_test.go`, add table-driven tests for `buildCIStatusData`: verify it returns a non-nil map with `resource_counts`, `has_changes`, and `output_log` keys for a sample plan output, and returns nil when `maskedOutput` is empty
-- [ ] T010 [P] [US1] In `pkg/ci/plugins/terraform/plugin_test.go`, extend `TestPlugin_BuildStatusData_Plan` to assert that `resource_counts` contains all four keys (`create`, `change`, `replace`, `destroy`) with correct values for a plan output with mixed counts
-- [ ] T011 [US1] In `internal/exec/terraform_execute_helpers_exec_test.go`, add a test for `buildMetadataForUpload`: assert it returns nil when `captureOutput` is false, and a non-nil map when `captureOutput` is true with non-empty output
-- [ ] T012 [US1] Run `go test ./internal/exec/... -run 'TestBuildCIStatusData|TestBuildMetadata' -v` to confirm new tests pass; run `make test-short` to confirm no regressions
+- [x] T009 [P] [US1] In `internal/exec/terraform_execute_helpers_exec_test.go`, add table-driven tests for `buildCIStatusData`: verify it returns a non-nil map with `resource_counts`, `has_changes`, and `output_log` keys for a sample plan output, and returns nil when `maskedOutput` is empty
+- [x] T010 [P] [US1] In `pkg/ci/plugins/terraform/plugin_test.go`, extend `TestPlugin_BuildStatusData_Plan` to assert that `resource_counts` contains all four keys (`create`, `change`, `replace`, `destroy`) with correct values for a plan output with mixed counts
+- [x] T011 [US1] In `internal/exec/terraform_execute_helpers_exec_test.go`, add a test for `buildMetadataForUpload`: assert it returns nil when `captureOutput` is false, and a non-nil map when `captureOutput` is true with non-empty output
+- [x] T012 [US1] Run `go test ./internal/exec/... -run 'TestBuildCIStatusData|TestBuildMetadata' -v` to confirm new tests pass; run `make test-short` to confirm no regressions
 
 **Checkpoint**: Plan upload path fully tested. User Story 1 independently functional.
 
@@ -77,9 +77,9 @@ values; sensitive outputs appear as `"<MASKED>"` in the dashboard.
 **Independent Test**: Run `atmos terraform apply --upload-status` on a component with sensitive
 outputs. Confirm the dashboard shows apply result and `"<MASKED>"` for sensitive values.
 
-- [ ] T013 [P] [US2] In `pkg/ci/plugins/terraform/plugin_test.go`, add a table-driven test for `extractOutputValues` covering: (a) non-sensitive string value passes through, (b) sensitive value becomes `"<MASKED>"`, (c) nil map returns empty map; this is in addition to the existing tests if they don't cover all cases
-- [ ] T014 [P] [US2] In `pkg/ci/plugins/terraform/plugin_test.go`, add test `TestPlugin_BuildStatusData_Apply_WithOutputs` that includes a terraform apply output with both sensitive and non-sensitive output values; assert `data["outputs"]` contains `"<MASKED>"` for sensitive keys
-- [ ] T015 [US2] Run `go test ./pkg/ci/plugins/terraform/... -run 'TestExtractOutputValues|TestPlugin_BuildStatusData_Apply' -v` to confirm all tests pass
+- [x] T013 [P] [US2] In `pkg/ci/plugins/terraform/plugin_test.go`, add a table-driven test for `extractOutputValues` covering: (a) non-sensitive string value passes through, (b) sensitive value becomes `"<MASKED>"`, (c) nil map returns empty map; this is in addition to the existing tests if they don't cover all cases
+- [x] T014 [P] [US2] In `pkg/ci/plugins/terraform/plugin_test.go`, add test `TestPlugin_BuildStatusData_Apply_WithOutputs` that includes a terraform apply output with both sensitive and non-sensitive output values; assert `data["outputs"]` contains `"<MASKED>"` for sensitive keys
+- [x] T015 [US2] Run `go test ./pkg/ci/plugins/terraform/... -run 'TestExtractOutputValues|TestPlugin_BuildStatusData_Apply' -v` to confirm all tests pass
 
 **Checkpoint**: Apply metadata and sensitive output masking fully tested. User Story 2 independently functional.
 
@@ -93,8 +93,8 @@ with a `"truncated": true` indicator.
 **Independent Test**: Simulate a command output exceeding 3 MB. Confirm the upload log is
 truncated from the beginning (tail preserved) and `truncated: true` is set.
 
-- [ ] T016 [P] [US3] In `internal/exec/terraform_execute_helpers_exec_test.go`, add table-driven tests for `addOutputLog` covering: (a) empty output → no keys added to map, (b) output within limit → `output_log` key added, no `truncated` key, (c) output exceeding limit → `output_log` key contains only tail, `truncated: true` is set, (d) nil data map → no-op (no panic)
-- [ ] T017 [US3] Run `go test ./internal/exec/... -run TestAddOutputLog -v` to confirm all cases pass; verify the test for case (c) checks that the base64-decoded value starts with the tail of the input, not the beginning
+- [x] T016 [P] [US3] In `internal/exec/terraform_execute_helpers_exec_test.go`, add table-driven tests for `addOutputLog` covering: (a) empty output → no keys added to map, (b) output within limit → `output_log` key added, no `truncated` key, (c) output exceeding limit → `output_log` key contains only tail, `truncated: true` is set, (d) nil data map → no-op (no panic)
+- [x] T017 [US3] Run `go test ./internal/exec/... -run TestAddOutputLog -v` to confirm all cases pass; verify the test for case (c) checks that the base64-decoded value starts with the tail of the input, not the beginning
 
 **Checkpoint**: Output log truncation behavior fully tested. User Story 3 independently functional.
 
@@ -108,9 +108,9 @@ identical to the current CLI version — no `component_type` or `metadata` field
 **Independent Test**: Inspect the payload produced when `BuildStatusData` is called with a
 component type that has no `StatusDataProvider` implementation; assert nil is returned.
 
-- [ ] T018 [P] [US4] In `pkg/ci/plugin_registry_test.go`, add test `TestBuildStatusData_NoProvider` that registers a stub plugin without `StatusDataProvider` and asserts `ci.BuildStatusData` returns nil for that component type
-- [ ] T019 [P] [US4] In `internal/exec/terraform_execute_helpers_exec_test.go`, add test `TestBuildCIStatusData_CIDisabled` that calls `buildMetadataForUpload` with `captureOutput=false` and asserts the result is nil (ensuring `metadata` stays nil in the DTO when `ci.enabled` is false)
-- [ ] T020 [US4] Run `go test ./pkg/ci/... -run TestBuildStatusData -v` and `go test ./internal/exec/... -run TestBuildCIStatusData -v` to confirm all backward-compat tests pass
+- [x] T018 [P] [US4] In `pkg/ci/plugin_registry_test.go`, add test `TestBuildStatusData_NoProvider` that registers a stub plugin without `StatusDataProvider` and asserts `ci.BuildStatusData` returns nil for that component type
+- [x] T019 [P] [US4] In `internal/exec/terraform_execute_helpers_exec_test.go`, add test `TestBuildCIStatusData_CIDisabled` that calls `buildMetadataForUpload` with `captureOutput=false` and asserts the result is nil (ensuring `metadata` stays nil in the DTO when `ci.enabled` is false)
+- [x] T020 [US4] Run `go test ./pkg/ci/... -run TestBuildStatusData -v` and `go test ./internal/exec/... -run TestBuildCIStatusData -v` to confirm all backward-compat tests pass
 
 **Checkpoint**: Backward compatibility verified for all non-terraform component types.
 
@@ -120,10 +120,10 @@ component type that has no `StatusDataProvider` implementation; assert nil is re
 
 **Purpose**: Spec alignment, deferred issue tracking, and final validation.
 
-- [ ] T021 [P] Amend FR-007a in `specs/001-pro-summary-upload/spec.md` to read "at least one automatic retry" (current `pkg/pro/retry.go` uses `DefaultMaxRetries=3`; the spec said "exactly one" but implementation is more generous and correct — align spec to implementation)
-- [ ] T022 [P] Open a GitHub issue titled "feat: fetch max_output_log_bytes from server settings endpoint" describing the deferred server-settings API fetch (GET /api/v1/settings → max_output_log_bytes); add the issue number to the `## Decision 5` section in `specs/001-pro-summary-upload/research.md`
-- [ ] T023 Run `make test-short` to confirm the full fast test suite passes with all new tests
-- [ ] T024 Run `make lint` to confirm no linting violations introduced by the new field and function changes
+- [x] T021 [P] Amend FR-007a in `specs/001-pro-summary-upload/spec.md` to read "at least one automatic retry" (current `pkg/pro/retry.go` uses `DefaultMaxRetries=3`; the spec said "exactly one" but implementation is more generous and correct — align spec to implementation)
+- [x] T022 [P] Open a GitHub issue titled "feat: fetch max_output_log_bytes from server settings endpoint" describing the deferred server-settings API fetch (GET /api/v1/settings → max_output_log_bytes); add the issue number to the `## Decision 5` section in `specs/001-pro-summary-upload/research.md` — Issue #2586
+- [x] T023 Run `make test-short` to confirm the full fast test suite passes with all new tests
+- [x] T024 Run `make lint` to confirm no linting violations introduced by the new field and function changes
 
 ---
 

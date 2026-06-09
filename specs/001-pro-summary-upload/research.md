@@ -97,10 +97,11 @@ Current implementation hardcodes `defaultMaxOutputLogBytes = 3 * 1024 * 1024` in
 **Current state**: The built-in fallback (3 MB) is implemented. The dynamic fetch is not.
 This does not block the initial release — the 3 MB default is a reasonable production value.
 
-**Recommendation**: Defer the server-settings fetch to a follow-up issue. The hardcoded
-constant satisfies all current acceptance scenarios. If the server needs to change the limit,
-it can be done via a CLI config option (`settings.pro.max_output_log_bytes`) as an interim
-solution until the dynamic fetch is implemented.
+**Recommendation**: Defer the server-settings fetch to follow-up issue
+[#2586](https://github.com/cloudposse/atmos/issues/2586). The hardcoded constant satisfies all
+current acceptance scenarios. If the server needs to change the limit, it can be done via a CLI
+config option (`settings.pro.max_output_log_bytes`) as an interim solution until the dynamic
+fetch is implemented.
 
 ---
 
