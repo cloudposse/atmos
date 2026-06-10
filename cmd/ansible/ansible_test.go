@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/cloudposse/atmos/cmd/internal"
+	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/flags/preprocess"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -494,13 +495,17 @@ func TestPlaybookCmdArgsValidationWithDoubleDash(t *testing.T) {
 	t.Run("rejects missing component before --", func(t *testing.T) {
 		c := newCmd()
 		c.SetArgs([]string{"-s", "my-stack", "--", "--check"})
-		assert.Error(t, c.Execute())
+		err := c.Execute()
+		require.Error(t, err)
+		assert.ErrorIs(t, err, errUtils.ErrInvalidComponentArgument)
 	})
 
 	t.Run("rejects two components before --", func(t *testing.T) {
 		c := newCmd()
 		c.SetArgs([]string{"comp1", "comp2", "--", "--check"})
-		assert.Error(t, c.Execute())
+		err := c.Execute()
+		require.Error(t, err)
+		assert.ErrorIs(t, err, errUtils.ErrInvalidComponentArgument)
 	})
 }
 
