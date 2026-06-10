@@ -69,12 +69,15 @@ func ExecWithSpinner(progressMsg, completedMsg string, operation func() error) e
 // reported completion (e.g. the user pressed ctrl+c).
 func evaluateSpinnerResult(finalModel tea.Model, spinnerErr error) error {
 	if spinnerErr != nil {
-		return fmt.Errorf("spinner error: %w", spinnerErr)
+		return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrTUIRun, spinnerErr)
+	}
+	if finalModel == nil {
+		return errUtils.ErrSpinnerReturnedNilModel
 	}
 
 	m, ok := finalModel.(spinnerModel)
 	if !ok {
-		return nil
+		return fmt.Errorf("%w: got %T", errUtils.ErrSpinnerUnexpectedModelType, finalModel)
 	}
 	if m.err != nil {
 		return m.err
@@ -213,12 +216,15 @@ func ExecWithSpinnerDynamic(progressMsg string, operation func() (string, error)
 // ctrl+c).
 func evaluateDynamicSpinnerResult(finalModel tea.Model, spinnerErr error) error {
 	if spinnerErr != nil {
-		return fmt.Errorf("spinner error: %w", spinnerErr)
+		return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrTUIRun, spinnerErr)
+	}
+	if finalModel == nil {
+		return errUtils.ErrSpinnerReturnedNilModel
 	}
 
 	m, ok := finalModel.(dynamicSpinnerModel)
 	if !ok {
-		return nil
+		return fmt.Errorf("%w: got %T", errUtils.ErrSpinnerUnexpectedModelType, finalModel)
 	}
 	if m.err != nil {
 		return m.err

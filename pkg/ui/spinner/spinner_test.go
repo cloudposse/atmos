@@ -177,18 +177,26 @@ func TestEvaluateSpinnerResults(t *testing.T) {
 	opErr := errors.New("operation failed")
 
 	tests := []struct {
-		name       string
-		eval       func(tea.Model, error) error
-		finalModel tea.Model
-		spinnerErr error
-		wantErr    error
+		name        string
+		eval        func(tea.Model, error) error
+		finalModel  tea.Model
+		spinnerErr  error
+		wantErr     error
+		wantErrAlso error // additional sentinel that must also match via errors.Is.
 	}{
 		{
-			name:       "spinnerModel: returns spinner error wrapped when p.Run fails",
+			name:        "spinnerModel: returns spinner error wrapped when p.Run fails",
+			eval:        evaluateSpinnerResult,
+			finalModel:  spinnerModel{},
+			spinnerErr:  spinnerErr,
+			wantErr:     spinnerErr,
+			wantErrAlso: errUtils.ErrTUIRun,
+		},
+		{
+			name:       "spinnerModel: returns ErrSpinnerReturnedNilModel when final model is nil",
 			eval:       evaluateSpinnerResult,
-			finalModel: spinnerModel{},
-			spinnerErr: spinnerErr,
-			wantErr:    spinnerErr,
+			finalModel: nil,
+			wantErr:    errUtils.ErrSpinnerReturnedNilModel,
 		},
 		{
 			name:       "spinnerModel: returns operation error from completed model",
@@ -211,16 +219,24 @@ func TestEvaluateSpinnerResults(t *testing.T) {
 			wantErr:    errUtils.ErrSpinnerOperationInterrupted,
 		},
 		{
-			name:       "spinnerModel: returns nil when final model has unexpected type",
+			name:       "spinnerModel: returns ErrSpinnerUnexpectedModelType when final model has unexpected type",
 			eval:       evaluateSpinnerResult,
 			finalModel: dynamicSpinnerModel{},
+			wantErr:    errUtils.ErrSpinnerUnexpectedModelType,
 		},
 		{
-			name:       "dynamicSpinnerModel: returns spinner error wrapped when p.Run fails",
+			name:        "dynamicSpinnerModel: returns spinner error wrapped when p.Run fails",
+			eval:        evaluateDynamicSpinnerResult,
+			finalModel:  dynamicSpinnerModel{},
+			spinnerErr:  spinnerErr,
+			wantErr:     spinnerErr,
+			wantErrAlso: errUtils.ErrTUIRun,
+		},
+		{
+			name:       "dynamicSpinnerModel: returns ErrSpinnerReturnedNilModel when final model is nil",
 			eval:       evaluateDynamicSpinnerResult,
-			finalModel: dynamicSpinnerModel{},
-			spinnerErr: spinnerErr,
-			wantErr:    spinnerErr,
+			finalModel: nil,
+			wantErr:    errUtils.ErrSpinnerReturnedNilModel,
 		},
 		{
 			name:       "dynamicSpinnerModel: returns operation error from completed model",
@@ -246,15 +262,20 @@ func TestEvaluateSpinnerResults(t *testing.T) {
 			wantErr:    errUtils.ErrSpinnerOperationInterrupted,
 		},
 		{
-			name:       "dynamicSpinnerModel: returns nil when final model has unexpected type",
+			name:       "dynamicSpinnerModel: returns ErrSpinnerUnexpectedModelType when final model has unexpected type",
 			eval:       evaluateDynamicSpinnerResult,
 			finalModel: spinnerModel{},
+			wantErr:    errUtils.ErrSpinnerUnexpectedModelType,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			err := tt.eval(tt.finalModel, tt.spinnerErr)
+
+			if tt.wantErrAlso != nil {
+				assert.ErrorIs(t, err, tt.wantErrAlso)
+			}
 
 			if tt.wantErr == nil {
 				assert.NoError(t, err)
