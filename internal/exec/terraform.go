@@ -19,6 +19,9 @@ import (
 )
 
 const (
+	terraformPluginCacheDirEnv              = "TF_PLUGIN_CACHE_DIR"
+	terraformPluginCacheMayBreakLockFileEnv = "TF_PLUGIN_CACHE_MAY_BREAK_DEPENDENCY_LOCK_FILE"
+
 	// BeforeTerraformInitEvent is the hook event name for provisioners that run before terraform init.
 	// This matches the hook event registered by backend provisioners in pkg/provisioner/backend/backend.go.
 	// See pkg/hooks/event.go (hooks.BeforeTerraformInit) for the canonical definition.
@@ -163,8 +166,8 @@ func configurePluginCache(atmosConfig *schema.AtmosConfiguration) []string {
 	}
 
 	return []string{
-		fmt.Sprintf("TF_PLUGIN_CACHE_DIR=%s", pluginCacheDir),
-		"TF_PLUGIN_CACHE_MAY_BREAK_DEPENDENCY_LOCK_FILE=true",
+		fmt.Sprintf("%s=%s", terraformPluginCacheDirEnv, pluginCacheDir),
+		fmt.Sprintf("%s=true", terraformPluginCacheMayBreakLockFileEnv),
 	}
 }
 
@@ -173,7 +176,7 @@ func configurePluginCache(atmosConfig *schema.AtmosConfiguration) []string {
 // Invalid values (empty string or "/") are logged as warnings.
 func getValidUserPluginCacheDir(atmosConfig *schema.AtmosConfiguration) string {
 	// Check OS environment first.
-	if osEnvDir, inOsEnv := os.LookupEnv("TF_PLUGIN_CACHE_DIR"); inOsEnv {
+	if osEnvDir, inOsEnv := os.LookupEnv(terraformPluginCacheDirEnv); inOsEnv {
 		if isValidPluginCacheDir(osEnvDir, "environment variable") {
 			return osEnvDir
 		}
@@ -181,7 +184,7 @@ func getValidUserPluginCacheDir(atmosConfig *schema.AtmosConfiguration) string {
 	}
 
 	// Check global env section in atmos.yaml.
-	if globalEnvDir, inGlobalEnv := atmosConfig.Env["TF_PLUGIN_CACHE_DIR"]; inGlobalEnv {
+	if globalEnvDir, inGlobalEnv := atmosConfig.Env[terraformPluginCacheDirEnv]; inGlobalEnv {
 		if isValidPluginCacheDir(globalEnvDir, "atmos.yaml env section") {
 			return globalEnvDir
 		}
@@ -203,4 +206,58 @@ func isValidPluginCacheDir(path, source string) bool {
 		return false
 	}
 	return true
+}
+
+// disableTerraformPluginCacheForExecution removes Terraform/OpenTofu plugin-cache
+// configuration from this execution. This is intentionally scoped to the current
+// subprocess environment and config copy so concurrent graph runs can keep full
+// scheduler parallelism without racing on a shared provider cache.
+func disableTerraformPluginCacheForExecution(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) {
+	if atmosConfig == nil || info == nil || !info.DisablePluginCache {
+		return
+	}
+
+	atmosConfig.Components.Terraform.PluginCache = false
+	atmosConfig.Components.Terraform.PluginCacheDir = ""
+
+	delete(atmosConfig.Env, terraformPluginCacheDirEnv)
+	delete(atmosConfig.Env, terraformPluginCacheMayBreakLockFileEnv)
+	delete(info.ComponentEnvSection, terraformPluginCacheDirEnv)
+	delete(info.ComponentEnvSection, terraformPluginCacheMayBreakLockFileEnv)
+
+	baseEnv := info.SanitizedEnv
+	if baseEnv == nil {
+		baseEnv = os.Environ()
+	}
+	info.SanitizedEnv = removeEnvKeys(baseEnv, terraformPluginCacheDirEnv, terraformPluginCacheMayBreakLockFileEnv)
+	info.ComponentEnvList = removeEnvKeys(info.ComponentEnvList, terraformPluginCacheDirEnv, terraformPluginCacheMayBreakLockFileEnv)
+}
+
+func removeEnvKeys(env []string, keys ...string) []string {
+	if len(env) == 0 || len(keys) == 0 {
+		return env
+	}
+	skip := make(map[string]struct{}, len(keys))
+	for _, key := range keys {
+		skip[key] = struct{}{}
+	}
+
+	filtered := env[:0]
+	for _, entry := range env {
+		key := envKey(entry)
+		if _, ok := skip[key]; ok {
+			continue
+		}
+		filtered = append(filtered, entry)
+	}
+	return filtered
+}
+
+func envKey(entry string) string {
+	for i := 0; i < len(entry); i++ {
+		if entry[i] == '=' {
+			return entry[:i]
+		}
+	}
+	return entry
 }

@@ -119,6 +119,27 @@ atmos terraform plan --all -s dev \
   --execution-summary-file /tmp/atmos-plan-summary.json
 ```
 
+### GitHub Actions CI Output
+
+When CI mode is enabled with `--ci`, `ci.enabled: true`, or GitHub Actions auto-detection,
+graph-backed multi-component `plan` runs write a single aggregate CI result after the scheduler
+finishes. This applies to `--all`, `--components`, and `--query` plan runs. Single-component
+`plan`, `apply`, and `deploy` keep their existing per-command CI output.
+
+In GitHub Actions, the aggregate result writes once to `$GITHUB_STEP_SUMMARY` and `$GITHUB_OUTPUT`.
+The job summary includes component counts, total resource counts, failed/changed/no-change/skipped
+groups, a per-component table, and details for failed or changed components. Output variables include
+`has_changes`, `has_errors`, `exit_code`, resource totals, component totals, `summary`, `command`,
+`stack`, and `component`.
+
+Aggregate exit codes follow Terraform plan semantics across the whole graph:
+
+| Exit Code | Meaning |
+| ---: | --- |
+| `1` | At least one component failed |
+| `2` | No failures, but at least one component has changes |
+| `0` | No failures and no changes |
+
 ## Planfile Management
 
 ### Default Behavior

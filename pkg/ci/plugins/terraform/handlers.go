@@ -264,7 +264,7 @@ func (p *Plugin) downloadPlanfileForVerification(ctx *plugin.HookContext) error 
 // resource counts, output values, and error message bodies.
 //
 // Semantics by command:
-//   - apply/deploy: HasErrors = (exitCode != 0).
+//   - apply/deploy/destroy: HasErrors = (exitCode != 0).
 //   - plan: HasErrors = (exitCode == 1); exitCode == 2 implies HasChanges.
 //   - other commands: HasErrors = (exitCode != 0).
 //
@@ -276,8 +276,9 @@ func (p *Plugin) parseOutputWithError(ctx *plugin.HookContext) *plugin.OutputRes
 	result.ExitCode = ctx.ExitCode
 
 	// Derive HasErrors from exit code semantics. `terraform plan` uses
-	// -detailed-exitcode (0 = no change, 1 = error, 2 = change); apply/deploy
-	// and other commands treat any non-zero code as failure.
+	// -detailed-exitcode (0 = no change, 1 = error, 2 = change);
+	// apply/deploy/destroy and other commands treat any non-zero code as
+	// failure.
 	hasErrors := false
 	switch ctx.Command {
 	case "plan":

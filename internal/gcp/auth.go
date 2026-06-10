@@ -3,6 +3,7 @@ package gcp
 import (
 	"os"
 	"strings"
+	"time"
 
 	"golang.org/x/oauth2"
 	"google.golang.org/api/option"
@@ -15,6 +16,12 @@ type AuthOptions struct {
 	// - File path to service account JSON file
 	// - Empty string to use Application Default Credentials (ADC)
 	Credentials string
+
+	// AccessToken is an OAuth2 access token to use directly. This is preferred
+	// by Atmos GCP WIF/service-account identities because their generated ADC
+	// files do not contain refresh tokens.
+	AccessToken string //nolint:gosec // Intentional credential field passed directly to Google client options.
+	TokenExpiry time.Time
 
 	// TODO: Add support for service account impersonation
 	// ImpersonateServiceAccount string
@@ -44,6 +51,16 @@ func GetClientOptions(opts AuthOptions) []option.ClientOption {
 			// File path
 			clientOpts = append(clientOpts, option.WithCredentialsFile(opts.Credentials))
 		}
+		return clientOpts
+	}
+
+	if opts.AccessToken != "" {
+		token := &oauth2.Token{
+			AccessToken: opts.AccessToken,
+			Expiry:      opts.TokenExpiry,
+		}
+		tokenSource := oauth2.StaticTokenSource(token)
+		clientOpts = append(clientOpts, option.WithTokenSource(tokenSource))
 		return clientOpts
 	}
 
