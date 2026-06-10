@@ -1,0 +1,121 @@
+---
+title: atmos git list
+sidebar_label: list
+sidebar_class_name: command
+id: list
+description: List Git repositories configured under git.repositories.
+---
+import Screengrab from '@site/src/components/Screengrab'
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+List the repositories configured under [`git.repositories`](/cli/configuration/git) with their URIs, providers, branches, and resolved workdirs. Built on the standard Atmos list rendering pipeline, with the same column, format, and filter behavior as other `atmos list` commands. Also available as `atmos list git-repositories`.
+</Intro>
+
+<Screengrab title="atmos git list --help" slug="atmos-git-list--help" />
+
+## Usage
+
+```shell
+atmos git list [flags]
+```
+
+With repositories configured in `atmos.yaml`:
+
+```yaml
+git:
+  repositories:
+    flux-deploy:
+      uri: https://github.com/acme/flux-deploy.git
+      branch: main
+
+    generated-terraform:
+      uri: https://github.com/acme/generated-terraform.git
+```
+
+```shell
+atmos git list
+atmos list git-repositories     # alias
+```
+
+## Examples
+
+```shell
+# List all configured repositories (default sort: name ascending)
+atmos git list
+
+# Include the on-disk status of each workdir (cloned, missing, or dirty)
+atmos git list --check-status
+
+# Select columns
+atmos git list --columns=name,uri,workdir
+
+# Machine-readable output
+atmos git list --format=json
+atmos git list --format=csv --delimiter=";"
+
+# Alias registered under atmos list
+atmos list git-repositories --format=yaml
+```
+
+## Columns
+
+<dl>
+    <dt>`name`</dt>
+    <dd>Logical repository name (the key under `git.repositories`).</dd>
+
+    <dt>`uri`</dt>
+    <dd>Repository URI.</dd>
+
+    <dt>`provider`</dt>
+    <dd>Resolved provider (`cli`).</dd>
+
+    <dt>`branch`</dt>
+    <dd>Configured branch, or `(default)` when the remote default branch is used.</dd>
+
+    <dt>`workdir`</dt>
+    <dd>Resolved workdir — the automatic XDG location or the explicit `workdir` override.</dd>
+
+    <dt>`status`</dt>
+    <dd>`cloned`, `missing`, or `dirty`. Only populated with `--check-status`; without it, `atmos git list` never touches the filesystem or runs Git, so it is always fast.</dd>
+</dl>
+
+Columns can also be customized in `atmos.yaml` under `git.list.columns` — see [Git Configuration](/cli/configuration/git#list-output).
+
+## Flags
+
+<dl>
+    <dt>`--check-status` <em>(optional)</em></dt>
+    <dd>
+        Probe each workdir on disk and populate the `status` column. Probes run concurrently with a bounded worker pool.
+    </dd>
+
+    <dt>`--columns` <em>(optional)</em></dt>
+    <dd>
+        Comma-separated list of columns to display.
+        Environment variable: `ATMOS_GIT_LIST_COLUMNS`
+    </dd>
+
+    <dt>`--format` <em>(optional)</em></dt>
+    <dd>
+        Output format: `table` (default), `json`, `yaml`, `csv`, or `tsv`.
+        Environment variable: `ATMOS_GIT_LIST_FORMAT`
+    </dd>
+
+    <dt>`--delimiter` <em>(optional)</em></dt>
+    <dd>
+        Field delimiter for `csv`/`tsv` output.
+    </dd>
+
+    <dt>`--filter` <em>(optional)</em></dt>
+    <dd>
+        YQ expression to filter the listed repositories.
+        Environment variable: `ATMOS_GIT_LIST_FILTER`
+    </dd>
+</dl>
+
+## Related
+
+- [`atmos git status`](/cli/commands/git/status) — full porcelain status for one repository (shares the `--check-status` probe)
+- [`atmos git clone`](/cli/commands/git/clone) — materialize a `missing` workdir
+- [Git Configuration](/cli/configuration/git) — `git.repositories` and `git.list`

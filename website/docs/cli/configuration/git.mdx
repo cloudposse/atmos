@@ -1,0 +1,327 @@
+---
+title: Git Configuration
+sidebar_label: git
+sidebar_class_name: command
+id: git
+description: Configure managed Git repositories, authentication, local Git hooks, and list output in atmos.yaml.
+---
+import File from '@site/src/components/File'
+import Intro from '@site/src/components/Intro'
+import KeyPoints from '@site/src/components/KeyPoints'
+
+<Intro>
+The `git` section in `atmos.yaml` makes Git a foundational Atmos capability — a peer to Toolchain, Auth, and Hooks. Define managed repositories once under `git.repositories`, then clone, pull, diff, commit, and push them by logical name from the [`atmos git`](/cli/commands/git/usage) commands, [`kind: git` lifecycle hooks](/stacks/hooks#kind-git), and native CI workflows — with consistent authentication, safety rules, and workdir handling.
+</Intro>
+
+<KeyPoints>
+- Define managed repositories by logical name under `git.repositories`
+- Authenticate through Atmos Auth identities and integrations — credentials are never embedded in URIs
+- Clone is always *reconcile*: idempotent and safe under restored CI caches
+- Automatic workdirs under the Atmos XDG cache root are captured by the native CI cache for free
+- Configure local Git hooks (`pre-commit`, `commit-msg`, ...) that delegate to Atmos workflows
+</KeyPoints>
+
+## Basic Configuration
+
+<File title="atmos.yaml">
+```yaml
+git:
+  repositories:
+    flux-deploy:
+      uri: https://github.com/acme/flux-deploy.git
+      auth:
+        identity: platform-admin
+      commit:
+        signing: auto
+
+    generated-terraform:
+      uri: https://github.com/acme/generated-terraform.git
+
+  hooks:
+    pre-commit:
+      command: atmos workflow pre-commit
+    commit-msg:
+      command: atmos workflow commit-msg -- "$1"
+```
+</File>
+
+The keys under `git.repositories` (`flux-deploy`, `generated-terraform`) are arbitrary, user-defined logical names — not reserved values. Components, hooks, and commands refer to repositories by these names. Repository configuration follows standard Atmos deep-merge, so repositories can be defined in imported configuration and overridden per environment.
+
+## Repository Fields
+
+All fields a repository supports:
+
+<File title="atmos.yaml">
+```yaml
+git:
+  repositories:
+    flux-deploy:
+      provider: cli                       # optional; cli is the default
+      uri: https://github.com/acme/flux-deploy.git
+      branch: main
+      remote: origin
+      workdir: .workdir/git/flux-deploy   # optional; default is automatic XDG
+      clone:
+        depth: 1                          # shallow clone depth; 0 = full history (default)
+        filter: blob:none                 # optional partial-clone filter
+        single_branch: true
+        submodules: false                 # default false
+      auth:
+        identity: platform-admin
+      commit:
+        signing: auto                     # auto | always | never
+        author:
+          name: atmos[bot]
+          email: atmos-bot@acme.com
+      push:
+        retries: 3
+```
+</File>
+
+<dl>
+  <dt>`provider`</dt>
+  <dd>
+    Execution backend for Git operations. Default and currently the only value: `cli` (shells out to the Git CLI). `cli` is host-agnostic — it works with GitHub, GitLab, Bitbucket, and bare repositories.
+  </dd>
+
+  <dt>`uri`</dt>
+  <dd>
+    Remote repository URI. **Credentials must never be embedded in `uri`** — authentication flows through the process environment and Atmos Auth, never through URL rewriting with tokens.
+  </dd>
+
+  <dt>`branch`</dt>
+  <dd>
+    Branch to check out. Empty means the current branch for existing workdirs, and Git's default-branch behavior for fresh clones.
+  </dd>
+
+  <dt>`remote`</dt>
+  <dd>
+    Remote name. Default: `origin`.
+  </dd>
+
+  <dt>`workdir`</dt>
+  <dd>
+    Explicit workdir location, overriding the automatic XDG location (see [Automatic Workdirs](#automatic-workdirs)).
+  </dd>
+
+  <dt>`clone.depth`</dt>
+  <dd>
+    Shallow clone depth. `0` (default) means full history. Also settable per invocation with `--depth` (flag wins: CLI &gt; ENV &gt; config &gt; defaults).
+  </dd>
+
+  <dt>`clone.filter`</dt>
+  <dd>
+    Partial-clone filter spec (for example, `blob:none`). Also settable per invocation with `--filter`.
+  </dd>
+
+  <dt>`clone.single_branch`</dt>
+  <dd>
+    Limit the clone to the configured branch. Also settable per invocation with `--single-branch`.
+  </dd>
+
+  <dt>`clone.submodules`</dt>
+  <dd>
+    Initialize submodules after clone. Default: `false`.
+  </dd>
+
+  <dt>`auth.identity`</dt>
+  <dd>
+    The Atmos Auth identity used for Git operations against this repository. See [Authentication Resolution](#authentication-resolution).
+  </dd>
+
+  <dt>`commit.signing`</dt>
+  <dd>
+    Commit signing mode: `auto` (default — pass no signing flag; Git config decides), `always` (pass `-S`), or `never` (pass `--no-gpg-sign`). Overridable per invocation with `--sign` / `--no-sign`.
+  </dd>
+
+  <dt>`commit.author.name` / `commit.author.email`</dt>
+  <dd>
+    Commit author identity, passed per invocation (`-c user.name=... -c user.email=...`) without mutating repository or global Git config. Required in CI, where runners typically have no `user.name`/`user.email` configured. Locally, when Git already resolves an author, Atmos passes nothing — your own Git config wins.
+  </dd>
+
+  <dt>`push.retries`</dt>
+  <dd>
+    Bounded retry count for rejected non-fast-forward pushes (`pull --ff-only`, then re-push). Default: `3`. `0` disables retries.
+  </dd>
+</dl>
+
+## Defaults
+
+When fields are omitted:
+
+| Field | Default |
+| --- | --- |
+| `provider` | `cli` |
+| `remote` | `origin` |
+| `branch` | Current branch for existing repos; Git default-branch behavior for clone |
+| `workdir` | Automatic XDG cache location (see below) |
+| `commit.signing` | `auto` |
+| `commit.author` | Identity-derived when available; otherwise an `atmos[bot]`-style default |
+| `push.retries` | `3` |
+| `clone.depth` | `0` (full history) |
+| `clone.submodules` | `false` |
+
+## Automatic Workdirs
+
+When `workdir` is omitted, Atmos resolves a deterministic location under the Atmos XDG cache root:
+
+```text
+$XDG_CACHE_HOME/atmos/git/repositories/<name>
+```
+
+with the standard XDG fallbacks and `ATMOS_XDG_*` overrides. Because the [native CI cache](/cli/configuration/ci) archives the XDG cache root, managed clones are captured and restored across CI runs for free. An explicit `workdir` overrides the automatic location.
+
+### Clone Destinations
+
+The two-repo split (managed repositories vs. the current repository) extends to clone destinations:
+
+| Clone form | Destination |
+| --- | --- |
+| Named managed repository (`atmos git clone flux-deploy`) | Automatic XDG workdir (cache-captured) |
+| No-arg current-repo checkout replacement in CI (`atmos git clone`) | The **working directory** (e.g., `GITHUB_WORKSPACE`), exactly like `actions/checkout` — never an XDG workdir; subsequent Atmos commands expect the repo at CWD |
+| Ad hoc URI (`atmos git clone https://...`) | `<cwd>/<repo-name>`, like plain `git clone` |
+
+`--workdir=<path>` overrides the destination in all forms.
+
+## Clone Is Reconcile
+
+Workdirs persist across runs — and the native CI cache restores them, possibly stale. Clone semantics are therefore defined as **reconcile**, not "fail if exists":
+
+1. Workdir absent → clone.
+2. Workdir present and clean → fetch, check out the configured branch, fast-forward to the remote ref.
+3. Workdir present and dirty from a crashed or interrupted run → defined recovery: discard uncommitted changes *inside managed paths only* and re-reconcile; fail with a hint when unmanaged dirty files are present.
+
+Reconcile makes clone behavior independent of cache freshness: a cache hit means fetching the delta instead of a full clone; a cache miss means a fresh clone; correctness is identical either way.
+
+## Authentication Resolution
+
+`auth.identity` is the only named auth reference on a repository. Integrations are never referenced by name from `git` config — they attach to identities via their `via` link, and naming an identity on a repository brings its integrations along automatically. For example, a `github/sts` integration linked to `platform-admin` materializes `GIT_CONFIG_*` credentials for every Git subprocess targeting the repository, with zero Git-specific auth wiring:
+
+<File title="atmos.yaml">
+```yaml
+auth:
+  identities:
+    platform-admin:
+      kind: github/user        # illustrative
+  integrations:
+    deploy-sts:
+      kind: github/sts
+      via:
+        identity: platform-admin
+
+git:
+  repositories:
+    flux-deploy:
+      uri: https://github.com/acme/flux-deploy.git
+      auth:
+        identity: platform-admin   # pulls in deploy-sts via the identity link
+```
+</File>
+
+Per-operation resolution order:
+
+1. `--identity=<name>` flag (the global persistent flag).
+2. `git.repositories.<name>.auth.identity`.
+3. **Ambient credential broker:** when no identity is configured, the lazy ambient broker runs before the first Git subprocess. This is the zero-config CI path — `atmos git clone` of a private GitHub repository works with no `auth` block at all when an auto-provision `github/sts` integration (or an ambient `GITHUB_TOKEN`) is available.
+4. **Process environment passthrough:** your own Git credentials (credential helpers, SSH agent) always work, since the Git CLI provider inherits the process environment.
+
+See [Authentication](/cli/configuration/auth) for identities and integrations.
+
+## Local Git Hooks
+
+The `git.hooks` section maps Git hook names to commands, executed via thin `.git/hooks/*` shims installed by [`atmos git hooks install`](/cli/commands/git/hooks/install):
+
+<File title="atmos.yaml">
+```yaml
+git:
+  hooks:
+    pre-commit:
+      command: atmos workflow pre-commit
+    commit-msg:
+      command: atmos workflow commit-msg -- "$1"
+```
+</File>
+
+<dl>
+  <dt>`git.hooks.<hook-name>`</dt>
+  <dd>
+    A Git hook name: `pre-commit`, `commit-msg`, `pre-push`, and so on.
+  </dd>
+
+  <dt>`git.hooks.<hook-name>.command`</dt>
+  <dd>
+    The command to execute when the hook fires. Hook commands should usually invoke an Atmos workflow or custom command, which preserves existing toolchain, environment, and identity behavior. Hook arguments and stdin are forwarded.
+  </dd>
+</dl>
+
+Local Git hooks are triggered by **Git itself** in the current repository. They are separate from Atmos lifecycle events — for event-bound Git publishing (e.g., commit after `terraform apply`), use the [`kind: git` hook](/stacks/hooks#kind-git).
+
+## List Output
+
+The `git.list` section configures [`atmos git list`](/cli/commands/git/list) output, following the established `<section>.list.columns` pattern:
+
+<File title="atmos.yaml">
+```yaml
+git:
+  list:
+    format: table
+    columns:
+      - name: Name
+        value: "{{ .name }}"
+      - name: URI
+        value: "{{ .uri }}"
+```
+</File>
+
+<dl>
+  <dt>`git.list.format`</dt>
+  <dd>
+    Default output format: `table`, `json`, `yaml`, `csv`, or `tsv`.
+  </dd>
+
+  <dt>`git.list.columns`</dt>
+  <dd>
+    Column definitions (`name` + `value` template). Available row fields: `name`, `uri`, `provider`, `branch`, `workdir`, and `status` (populated only with `--check-status`). Custom columns also feed dynamic tab completion for `--columns`.
+  </dd>
+</dl>
+
+## Native CI Lifecycle
+
+With `ci.enabled: true`, Git composes with the native CI cache and Atmos Auth into a complete job lifecycle:
+
+1. **Job starts.** CI cache auto-restore brings back the Atmos XDG cache root — toolchain binaries *and* managed-repo Git workdirs from the previous run.
+2. **`atmos git clone`** (no-arg) puts the current repository in the workspace, replacing `actions/checkout`. Fetch-depth guidance applies when [`atmos describe affected`](/cli/commands/describe/affected) will run against this clone.
+3. **`atmos git clone --all`** reconciles the restored XDG workdirs: a cache hit fetches the delta instead of performing a full clone; a cache miss performs a fresh clone.
+4. **First Git subprocess** triggers the ambient broker — GitHub STS materializes `GIT_CONFIG_*` credentials for Git subprocesses.
+5. **Operations run:** render, publish, commit, push (with retry).
+6. **Command end:** the CI cache pending-save archives the XDG root for the next run.
+
+A minimal GitHub Actions job replacing `actions/checkout` + `actions/cache` glue:
+
+<File title=".github/workflows/publish.yaml">
+```yaml
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: cloudposse/github-action-setup-atmos@v2
+      - run: atmos git clone            # checkout replacement (workspace)
+      - run: atmos git clone --all      # reconcile all deployment repos (XDG, cache-warm)
+      - run: atmos kubernetes deploy argocd -s prod   # render + publish via hooks
+```
+</File>
+
+Cache restore/save and STS credential minting happen inside the Atmos commands — no `actions/checkout`, `actions/cache`, or token-wiring steps.
+
+:::note Cache churn
+
+Git workdirs change on every publish, so they churn cache archives. This is safe — workdirs are regenerable and always reconciled. To keep archives lean, scope `ci.cache.paths` to exclude `git/repositories/`, trading cache hits for full clones. `atmos git list --check-status` shows what is currently materialized under the cache root.
+
+:::
+
+## Related
+
+- [`atmos git`](/cli/commands/git/usage) — the command group
+- [`kind: git` hooks](/stacks/hooks#kind-git) — publish artifacts on lifecycle events
+- [Authentication](/cli/configuration/auth) — identities and integrations
+- [CI Configuration](/cli/configuration/ci) — native CI detection and cache

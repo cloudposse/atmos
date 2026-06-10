@@ -1,0 +1,90 @@
+---
+slug: atmos-gitops
+title: "Atmos GitOps: Git as a Platform Capability"
+authors: [osterman]
+tags: [feature]
+---
+
+Atmos now treats Git as a foundational platform capability — on par with Toolchain, Auth, and Hooks. Define managed repositories once in `atmos.yaml`, then clone, inspect, diff, commit, and push them through a new `atmos git` command group, or publish generated artifacts automatically on lifecycle events with the new `git` hook kind.
+
+<!--truncate-->
+
+## What Changed
+
+A new top-level `git` section in `atmos.yaml` declares managed repositories by logical name:
+
+```yaml
+git:
+  repositories:
+    flux-deploy:
+      uri: https://github.com/acme/flux-deploy.git
+      branch: main
+      auth:
+        identity: platform-admin
+      commit:
+        signing: auto
+        author:
+          name: atmos[bot]
+          email: atmos-bot@acme.com
+```
+
+On top of that foundation:
+
+- **`atmos git` commands** — `clone`, `pull`, `status`, `diff`, `commit`, `push`, and `list`, with `--all` bulk operations across every configured repository. Clone accepts configured names, plain URLs, or go-getter style URIs (`git::https://...?ref=main&depth=1`) — the same syntax you already use in vendoring.
+- **A `git` hook kind** — publish generated files on lifecycle events like `after.terraform.apply`, committing to the current repository or a managed deployment repository, with templated commit messages and provenance trailers (`Atmos-Stack`, `Atmos-Component`).
+- **Local Git hook shims** — `atmos git hooks install` wires `.git/hooks/*` (pre-commit, commit-msg, ...) to Atmos workflows and custom commands, replacing Husky-style glue.
+- **Native CI checkout** — in GitHub Actions with `ci.enabled: true`, a bare `atmos git clone` infers the current repository from CI metadata and clones it into the workspace, replacing `actions/checkout`. GitHub STS credentials flow to every Git subprocess automatically via `GIT_CONFIG_*`.
+
+## Why This Matters
+
+GitOps workflows have always needed glue: scripts to render manifests into deployment repos, commit them, handle push races, and wire up credentials. Atmos already owned rendering, lifecycle events, and credentials — now it owns the Git operations between them:
+
+- **Safety rules are centralized.** Fast-forward-only pulls, no force pushes ever, path-scoped commits that refuse to touch unrelated dirty files, and automatic retry-with-rebase when a concurrent publisher wins the push race.
+- **Commits work in CI out of the box.** Author identity is injected per invocation (no `user.name` configuration on runners), and commit signing is configurable per repository.
+- **Clones are cache-friendly.** Managed repositories live under the Atmos XDG cache root, so the native CI cache restores them across runs — and clone is defined as *reconcile* (fetch and fast-forward), so a stale restored clone is just a faster clone.
+
+## How to Use It
+
+Publish Terraform-generated artifacts back to your repo after every apply:
+
+```yaml
+components:
+  terraform:
+    app:
+      hooks:
+        publish-artifacts:
+          events:
+            - after.terraform.apply
+          kind: git
+          commit:
+            message: "Update generated artifacts for {{ .component }} in {{ .stack }}"
+            paths:
+              - generated/{{ .stack }}/{{ .component }}
+          push: true
+```
+
+Or target a separate deployment repository for Argo CD / Flux by adding `repository: flux-deploy`.
+
+Imperatively, the same operations are first-class commands:
+
+```shell
+atmos git clone --all          # reconcile every configured repository
+atmos git diff flux-deploy     # preview what would change — before committing
+atmos git commit flux-deploy --message="Render argocd for prod" --path=clusters/prod
+atmos git push flux-deploy
+```
+
+And in GitHub Actions, the checkout step becomes Atmos-native:
+
+```yaml
+steps:
+  - uses: cloudposse/github-action-setup-atmos@v2
+  - run: atmos git clone        # replaces actions/checkout
+  - run: atmos git clone --all  # warm all deployment repos
+```
+
+See the [`atmos git` command reference](/cli/commands/git) and the [Git configuration docs](/cli/configuration/git) for the full surface, including clone depth controls, signing modes, and push retry tuning.
+
+## Get Involved
+
+This is the foundation of a larger GitOps story — pull-request-based publishing for protected branches and Kubernetes deployment-repository provisioning are next. Read the PRD in `docs/prd/git-ops.md`, try it out, and share feedback in [GitHub Discussions](https://github.com/cloudposse/atmos/discussions).

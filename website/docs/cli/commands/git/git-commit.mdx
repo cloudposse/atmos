@@ -1,0 +1,119 @@
+---
+title: atmos git commit
+sidebar_label: commit
+sidebar_class_name: command
+id: commit
+description: Stage managed paths and create a commit in a managed Git repository.
+---
+import Screengrab from '@site/src/components/Screengrab'
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Stage paths and create a commit in a repository configured under [`git.repositories`](/cli/configuration/git), or in any local path. Commits are path-scoped and safe by default: when `--path` is provided, only those paths are staged, and the commit **fails** if unrelated dirty files exist outside the managed paths — Atmos never sweeps up files it wasn't told to commit.
+</Intro>
+
+<Screengrab title="atmos git commit --help" slug="atmos-git-commit--help" />
+
+## Usage
+
+```shell
+atmos git commit <name-or-path> --message=<msg> [flags]
+```
+
+With a configured repository (commit signing and author come from the repository config):
+
+```yaml
+git:
+  repositories:
+    flux-deploy:
+      uri: https://github.com/acme/flux-deploy.git
+      commit:
+        signing: auto            # auto | always | never
+        author:
+          name: atmos[bot]
+          email: atmos-bot@acme.com
+```
+
+```shell
+atmos git commit flux-deploy --message="Render argocd for prod" --path=clusters/prod
+```
+
+## Examples
+
+```shell
+# Commit specific paths in a managed repository
+atmos git commit flux-deploy --message="Render argocd for prod" --path=clusters/prod/argocd
+
+# Multiple paths (repeatable or comma-separated)
+atmos git commit flux-deploy --message="Update clusters" --path=clusters/prod --path=clusters/staging
+
+# Commit in a repository at a local path
+atmos git commit ./deployments --message="Update generated artifacts"
+
+# Force GPG signing for this commit
+atmos git commit flux-deploy --message="Signed release manifest" --sign
+
+# Preview what would be staged and committed, without committing
+atmos git commit flux-deploy --dry-run
+```
+
+## Behavior
+
+- **Path-scoped staging:** with `--path`, only the listed repo-relative paths are staged. Dirty files outside the managed paths fail the commit with a list of the offending files.
+- **Path validation:** every path must resolve inside the repository worktree; path traversal out of the worktree is an error.
+- **Clean no-op:** when there is nothing to commit, the command exits successfully without creating an empty commit.
+- **Commit author:** in environments with no `user.name`/`user.email` (typical CI runners), the repository's `commit.author` is passed per invocation without mutating Git config. Locally, your own Git config wins — when Git already resolves an author, Atmos passes nothing.
+- **Signing:** the repository's `commit.signing` mode applies (`auto` by default — Git config decides); `--sign` and `--no-sign` override it per invocation.
+
+## Arguments
+
+<dl>
+    <dt>`name-or-path` <em>(required)</em></dt>
+    <dd>
+        A repository name configured under `git.repositories`, or a filesystem path to an existing Git working tree.
+    </dd>
+</dl>
+
+## Flags
+
+<dl>
+    <dt>`--message` / `-m` <em>(required, except with `--dry-run`)</em></dt>
+    <dd>
+        Commit message.
+        Environment variable: `ATMOS_GIT_MESSAGE`
+    </dd>
+
+    <dt>`--path` <em>(optional)</em></dt>
+    <dd>
+        Stage only these repo-relative paths. Repeatable (`--path=a --path=b`) or comma-separated (`--path=a,b`). When omitted, all changes in the worktree are staged.
+    </dd>
+
+    <dt>`--sign` <em>(optional)</em></dt>
+    <dd>
+        Sign the commit with GPG (passes `-S` to `git commit`). Mutually exclusive with `--no-sign`.
+    </dd>
+
+    <dt>`--no-sign` <em>(optional)</em></dt>
+    <dd>
+        Disable GPG signing (passes `--no-gpg-sign` to `git commit`). Mutually exclusive with `--sign`.
+    </dd>
+
+    <dt>`--dry-run` / `-n` <em>(optional)</em></dt>
+    <dd>
+        Report exactly what would be staged and committed without performing the commit.
+        Environment variable: `ATMOS_GIT_DRY_RUN`
+    </dd>
+
+    <dt>`--identity` <em>(optional)</em></dt>
+    <dd>
+        Atmos Auth identity to use for this operation (global flag). Overrides the repository's `auth.identity`.
+        Environment variable: `ATMOS_IDENTITY`
+    </dd>
+</dl>
+
+## Related
+
+- [`atmos git diff`](/cli/commands/git/diff) — preview the changes before committing
+- [`atmos git push`](/cli/commands/git/push) — publish the commit to the remote
+- [`kind: git` hooks](/stacks/hooks#kind-git) — commit and push automatically on lifecycle events
+- [Git Configuration](/cli/configuration/git) — `commit.signing`, `commit.author`, and defaults

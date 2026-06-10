@@ -88,9 +88,20 @@ func (g *GitCommandProvider) GetCompatibilityFlags() map[string]compat.Compatibi
 	return nil
 }
 
-// GetAliases returns command aliases.
+// GetAliases returns command aliases for git subcommands.
+// Registers "atmos list git-repositories" as an alias for "atmos git list",
+// following the same pattern as "atmos workflow list" ↔ "atmos list workflows".
 func (g *GitCommandProvider) GetAliases() []internal.CommandAlias {
-	return nil
+	return []internal.CommandAlias{
+		{
+			Subcommand:    "list",
+			ParentCommand: "list",
+			Name:          "git-repositories",
+			Short:         "List configured Git repositories (alias for 'atmos git list')",
+			Long:          `List managed Git repositories configured under git.repositories in atmos.yaml. This is an alias for "atmos git list".`,
+			Example:       "atmos list git-repositories\natmos list git-repositories --format json",
+		},
+	}
 }
 
 // IsExperimental returns whether this command is experimental.

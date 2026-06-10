@@ -53,7 +53,9 @@ func TestGitCommandProvider_GetCompatibilityFlags(t *testing.T) {
 
 func TestGitCommandProvider_GetAliases(t *testing.T) {
 	p := &GitCommandProvider{}
-	assert.Nil(t, p.GetAliases())
+	// GetAliases returns the "atmos list git-repositories" alias added by the list subcommand.
+	aliases := p.GetAliases()
+	require.NotEmpty(t, aliases)
 }
 
 func TestGitCommandProvider_IsExperimental(t *testing.T) {
