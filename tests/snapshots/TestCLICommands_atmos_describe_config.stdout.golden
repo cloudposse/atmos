@@ -189,7 +189,8 @@
     }
   },
   "describe": {
-    "settings": {}
+    "settings": {},
+    "affected": {}
   },
   "secrets": {},
   "vendor": {

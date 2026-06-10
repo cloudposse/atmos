@@ -132,6 +132,7 @@ func TestProcessBaseComponentConfig(t *testing.T) {
 
 			err := ProcessBaseComponentConfig(
 				atmosConfig,
+				atmosConfig,
 				tt.baseComponentConfig,
 				tt.allComponentsMap,
 				tt.component,
@@ -278,6 +279,7 @@ func TestProcessBaseComponentConfig_CycleDetection(t *testing.T) {
 
 			err := ProcessBaseComponentConfig(
 				atmosConfig,
+				atmosConfig,
 				baseComponentConfig,
 				tt.allComponentsMap,
 				tt.component,
@@ -345,6 +347,7 @@ func TestProcessBaseComponentConfig_AbstractComponentSkip(t *testing.T) {
 	// The abstract component's top-level "component" key is skipped.
 	err := ProcessBaseComponentConfig(
 		atmosConfig,
+		atmosConfig,
 		baseComponentConfig,
 		allComponentsMap,
 		"iam-delegated-roles",
@@ -388,6 +391,7 @@ func TestProcessBaseComponentConfig_DeepChainNoFalsePositive(t *testing.T) {
 	baseComponents := []string{}
 
 	err := ProcessBaseComponentConfig(
+		atmosConfig,
 		atmosConfig,
 		baseComponentConfig,
 		allComponentsMap,
@@ -445,6 +449,7 @@ func TestProcessBaseComponentConfig_DiamondInheritance(t *testing.T) {
 	baseComponents := []string{}
 	err := ProcessBaseComponentConfig(
 		atmosConfig,
+		atmosConfig,
 		baseComponentConfig,
 		allComponentsMap,
 		"child",
@@ -466,6 +471,7 @@ func TestProcessBaseComponentConfig_DiamondInheritance(t *testing.T) {
 	}
 	baseComponents2 := []string{}
 	err = ProcessBaseComponentConfig(
+		atmosConfig,
 		atmosConfig,
 		baseComponentConfig2,
 		allComponentsMap,
@@ -553,6 +559,7 @@ func TestProcessBaseComponentConfig_MultipleAbstractComponentsCycle(t *testing.T
 	baseComponents1 := []string{}
 	err := ProcessBaseComponentConfig(
 		atmosConfig,
+		atmosConfig,
 		baseComponentConfig1,
 		allComponentsMap,
 		"iam-delegated-roles",
@@ -573,6 +580,7 @@ func TestProcessBaseComponentConfig_MultipleAbstractComponentsCycle(t *testing.T
 	}
 	baseComponents2 := []string{}
 	err = ProcessBaseComponentConfig(
+		atmosConfig,
 		atmosConfig,
 		baseComponentConfig2,
 		allComponentsMap,
@@ -633,6 +641,7 @@ func TestProcessBaseComponentConfig_AbstractWithInheritsCycle(t *testing.T) {
 	// 1. Return a cycle detection error, OR
 	// 2. Complete successfully by skipping the abstract component chain.
 	err := ProcessBaseComponentConfig(
+		atmosConfig,
 		atmosConfig,
 		baseComponentConfig,
 		allComponentsMap,
@@ -706,6 +715,7 @@ func TestProcessBaseComponentConfig_RealComponentSelfReferenceViaAbstract(t *tes
 	// This MUST NOT stack overflow.
 	err := ProcessBaseComponentConfig(
 		atmosConfig,
+		atmosConfig,
 		baseComponentConfig,
 		allComponentsMap,
 		"comp-A",
@@ -778,6 +788,7 @@ func TestProcessBaseComponentConfig_DeferDeleteCycleReentry(t *testing.T) {
 
 	// This MUST NOT stack overflow. The cycle detection should catch the re-entry.
 	err := ProcessBaseComponentConfig(
+		atmosConfig,
 		atmosConfig,
 		baseComponentConfig,
 		allComponentsMap,
@@ -865,6 +876,7 @@ func TestProcessBaseComponentConfig_AbstractMetadataComponentInherited(t *testin
 	// Process: eks/service/app1 inherits from eks/service/defaults.
 	err := ProcessBaseComponentConfig(
 		atmosConfig,
+		atmosConfig,
 		baseComponentConfig,
 		allComponentsMap,
 		"eks/service/app1",
@@ -949,6 +961,7 @@ func TestProcessBaseComponentConfig_AbstractMetadataComponentNotInherited_WhenDi
 	baseComponents := []string{}
 
 	err := ProcessBaseComponentConfig(
+		atmosConfig,
 		atmosConfig,
 		baseComponentConfig,
 		allComponentsMap,

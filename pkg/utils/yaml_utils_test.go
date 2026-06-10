@@ -777,6 +777,7 @@ func TestAtmosYamlTagsMap_ContainsAllTags(t *testing.T) {
 		AtmosYamlFuncGitName,
 		AtmosYamlFuncGitHost,
 		AtmosYamlFuncGitUrl,
+		AtmosYamlFuncAppend,
 		AtmosYamlFuncCwd,
 		AtmosYamlFuncUnset,
 		AtmosYamlFuncRandom,

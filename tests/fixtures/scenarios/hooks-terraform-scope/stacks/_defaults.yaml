@@ -1,0 +1,13 @@
+# Shared hook defaults defined ONCE at the top-level `terraform` scope.
+# Every terraform component in stacks that import this file inherits these
+# hooks without redefining them per-component (the DRY pattern).
+terraform:
+  hooks:
+    policy:
+      events:
+        - before-terraform-plan
+      kind: checkov
+    cost:
+      events:
+        - after-terraform-plan
+      kind: infracost

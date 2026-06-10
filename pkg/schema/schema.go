@@ -19,9 +19,19 @@ type DescribeSettings struct {
 	IncludeEmpty *bool `yaml:"include_empty,omitempty" json:"include_empty,omitempty" mapstructure:"include_empty"`
 }
 
+// DescribeAffected contains configuration for the `atmos describe affected` command.
+type DescribeAffected struct {
+	// Sections is the authoritative list of top-level component sections compared
+	// when computing affected components. When set, it REPLACES the built-in defaults.
+	// When empty, the built-in defaults are used. `metadata` and `settings` are always
+	// evaluated via dedicated logic and are not controlled by this list.
+	Sections []string `yaml:"sections,omitempty" json:"sections,omitempty" mapstructure:"sections"`
+}
+
 // Describe contains configuration for the describe command.
 type Describe struct {
 	Settings DescribeSettings `yaml:"settings,omitempty" json:"settings,omitempty" mapstructure:"settings"`
+	Affected DescribeAffected `yaml:"affected,omitempty" json:"affected,omitempty" mapstructure:"affected"`
 }
 
 // ProfilesConfig defines configuration for the profiles system.
