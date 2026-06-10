@@ -80,6 +80,7 @@ var (
 	ErrTerminalTooNarrow                     = errors.New("terminal too narrow")
 	ErrSpinnerReturnedNilModel               = errors.New("spinner returned nil model")
 	ErrSpinnerUnexpectedModelType            = errors.New("spinner returned unexpected model type")
+	ErrSpinnerOperationInterrupted           = errors.New("operation was interrupted")
 
 	// Theme-related errors.
 	ErrThemeNotFound = errors.New("theme not found")
@@ -675,6 +676,7 @@ var (
 	ErrTopologicalOrder             = errors.New("topological sort failed")
 	ErrFormatForLogging             = errors.New("format affected for logging failed")
 	ErrQueryEvaluation              = errors.New("query evaluation failed")
+	ErrNilResult                    = errors.New("nil result")
 
 	// Cache-related errors.
 	ErrCacheLocked    = errors.New("cache file is locked")
