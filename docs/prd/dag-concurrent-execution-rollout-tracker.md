@@ -4,7 +4,7 @@ This tracker coordinates the DAG concurrent execution rollout as a sequence of s
 
 ## Implementation Strategy
 
-The execution foundation and GitHub CI verification path are now merged into `main`. PR 1 through PR 7 established process stream injection, the generic scheduler, graph-backed Terraform routing, plan/apply/destroy concurrency, affected routing, and aggregate GitHub Actions output for concurrent Terraform plans. Remaining work should focus on making concurrent execution understandable from local terminals and extending DAG support without changing scheduler semantics.
+The execution foundation and GitHub CI verification path are now merged into `main` and shipped in Atmos [v1.221.0](https://github.com/cloudposse/atmos/releases/tag/v1.221.0). PR 1 through PR 7 established process stream injection, the generic scheduler, graph-backed Terraform routing, plan/apply/destroy concurrency, affected routing, and aggregate GitHub Actions output for concurrent Terraform plans. Remaining work should focus on making concurrent execution understandable from local terminals and extending DAG support without changing scheduler semantics.
 
 Remaining near-term layers are:
 
@@ -33,7 +33,7 @@ Remaining near-term layers are:
 | PR 4 | [cloudposse/atmos#2468](https://github.com/cloudposse/atmos/pull/2468) | Merged into `main` | `codex/dag-terraform-plan-concurrency` | Plan-only `--max-concurrency`, grouped/stream output, per-node logs, no-change hiding, and execution summaries |
 | PR 5 | [cloudposse/atmos#2474](https://github.com/cloudposse/atmos/pull/2474) | Merged into `main` | `codex/dag-terraform-apply-destroy-concurrency` | Concurrent Terraform `apply`/`destroy` safety model with auto-approve gates, cancellation propagation, and reverse destroy ordering |
 | PR 6 | [cloudposse/atmos#2519](https://github.com/cloudposse/atmos/pull/2519) | Merged into `main` | `codex/dag-terraform-affected-scheduler` | Routes Terraform `--affected` through the scheduler and adds `--fail-fast`/`--keep-going` controls |
-| PR 7 | [cloudposse/atmos#2577](https://github.com/cloudposse/atmos/pull/2577) | Merged into `main` | `codex/dag-github-concurrent-output` | GitHub Actions-oriented output for concurrent Terraform plans, aggregate CI summaries, output variables, optional status contexts, and optional PR comments |
+| PR 7 | [cloudposse/atmos#2577](https://github.com/cloudposse/atmos/pull/2577) | Merged into `main`; released in [v1.221.0](https://github.com/cloudposse/atmos/releases/tag/v1.221.0) | `codex/dag-github-concurrent-output` | GitHub Actions-oriented output for concurrent Terraform plans, aggregate CI summaries, output variables, optional status contexts, and optional PR comments |
 | Tracking | [cloudposse/atmos#2467](https://github.com/cloudposse/atmos/pull/2467) | Open draft | `codex/dag-concurrent-execution-tracker` | Rollout plan, findings, and PR coordination document |
 
 ## Planned PRs
@@ -46,7 +46,7 @@ Remaining near-term layers are:
 
 ## Current Findings
 
-- The implementation stack PRs 1 through 7 have merged into `main`. PR 8 should start from current `main` and focus on local interactive/TUI output.
+- The implementation stack PRs 1 through 7 have merged into `main` and shipped in Atmos [v1.221.0](https://github.com/cloudposse/atmos/releases/tag/v1.221.0), released on June 10, 2026. PR 8 should start from current `main` and focus on local interactive/TUI output.
 - `--ci` uses native CI provider detection. GitHub Actions auto-detects through `GITHUB_ACTIONS=true`; explicit `--ci` forces CI mode and falls back to the generic provider when no platform is detected.
 - GitHub Actions output is written through provider output writers to `$GITHUB_STEP_SUMMARY` and `$GITHUB_OUTPUT`. Concurrent Terraform plan CI now writes aggregate artifacts once after the scheduler finishes to avoid concurrent writes to those files.
 - Terraform CI plugin behavior remains compatibility-critical for single-component plan/apply/deploy. Multi-component plan CI uses the aggregate collector path; single-component and non-plan behavior continue through the existing hook path.
@@ -60,6 +60,8 @@ Remaining near-term layers are:
 ## PR 7: GitHub Actions Output For Concurrent Terraform Plans
 
 Merged PR: [cloudposse/atmos#2577](https://github.com/cloudposse/atmos/pull/2577)
+
+Released in Atmos [v1.221.0](https://github.com/cloudposse/atmos/releases/tag/v1.221.0), published on June 10, 2026.
 
 PR 7 makes concurrent Terraform plan verification usable in GitHub Actions with minimal friction.
 
@@ -96,7 +98,7 @@ Review focus:
 
 ## Review and Merge Model
 
-The first seven rollout PRs have merged into `main`, and PR 8 should branch from current `main`. If GitHub stacked PRs later become available for this repository, the remaining planned branches can be linked into official stack metadata, but this tracker should continue to represent the work in normal PR terms.
+The first seven rollout PRs have merged into `main` and shipped in Atmos [v1.221.0](https://github.com/cloudposse/atmos/releases/tag/v1.221.0). PR 8 should branch from current `main`. If GitHub stacked PRs later become available for this repository, the remaining planned branches can be linked into official stack metadata, but this tracker should continue to represent the work in normal PR terms.
 
 Before moving from one PR to the next, confirm:
 
