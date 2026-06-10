@@ -461,6 +461,49 @@ func TestPlaybookCmdArgsValidation(t *testing.T) {
 	})
 }
 
+func TestPlaybookCmdArgsValidationWithDoubleDash(t *testing.T) {
+	// Build a command that mirrors playbookCmd's parsing setup: the shared
+	// `--stack`/`-s` and `--dry-run` flags plus the same Args validator and
+	// FParseErrWhitelist. Parsing a real argv populates ArgsLenAtDash, which the
+	// validator relies on to ignore ansible-playbook passthrough args.
+	newCmd := func() *cobra.Command {
+		c := &cobra.Command{
+			Use:                "playbook",
+			Args:               validatePlaybookArgs,
+			FParseErrWhitelist: cobra.FParseErrWhitelist{UnknownFlags: true},
+			RunE:               func(*cobra.Command, []string) error { return nil },
+		}
+		c.Flags().StringP("stack", "s", "", "")
+		c.Flags().Bool("dry-run", false, "")
+		return c
+	}
+
+	t.Run("accepts component with passthrough args after --", func(t *testing.T) {
+		c := newCmd()
+		c.SetArgs([]string{"my-component", "-s", "my-stack", "--dry-run", "--", "--check", "--tags", "foo"})
+		require.NoError(t, c.Execute())
+
+		// Only the pre-dash component counts as positional; passthrough is preserved.
+		assert.Equal(t, 1, c.ArgsLenAtDash())
+		assert.Equal(t, []string{"my-component", "--check", "--tags", "foo"}, c.Flags().Args())
+
+		// Args validator passes for the parsed args.
+		assert.NoError(t, c.Args(c, c.Flags().Args()))
+	})
+
+	t.Run("rejects missing component before --", func(t *testing.T) {
+		c := newCmd()
+		c.SetArgs([]string{"-s", "my-stack", "--", "--check"})
+		assert.Error(t, c.Execute())
+	})
+
+	t.Run("rejects two components before --", func(t *testing.T) {
+		c := newCmd()
+		c.SetArgs([]string{"comp1", "comp2", "--", "--check"})
+		assert.Error(t, c.Execute())
+	})
+}
+
 func TestProcessArgsEdgeCases(t *testing.T) {
 	t.Run("handles args with double dash separator", func(t *testing.T) {
 		args := []string{"my-component", "--", "--verbose"}
