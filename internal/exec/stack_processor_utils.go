@@ -1937,8 +1937,15 @@ func sectionContainsAnyNotEmptySections(section map[string]any, sectionsToCheck 
 }
 
 // ProcessBaseComponentConfig processes base component(s) config.
+//
+// initialMergeConfig is the effective AtmosConfiguration for the target component, pre-computed
+// from the component's own settings layers (including settings.list_merge_strategy). When nil,
+// the global atmosConfig is used. Passing an effective config here ensures that
+// settings.list_merge_strategy set at the component level governs how base-component
+// lists are merged across the metadata.inherits chain (issue #2396, see also PR #2480).
 func ProcessBaseComponentConfig(
 	atmosConfig *schema.AtmosConfiguration,
+	initialMergeConfig *schema.AtmosConfiguration,
 	baseComponentConfig *schema.BaseComponentConfig,
 	allComponentsMap map[string]any,
 	component string,
@@ -1950,8 +1957,14 @@ func ProcessBaseComponentConfig(
 ) error {
 	defer perf.Track(atmosConfig, "exec.ProcessBaseComponentConfig")()
 
-	// Create cache key from stack + component + baseComponent.
-	cacheKey := fmt.Sprintf("%s:%s:%s", stack, component, baseComponent)
+	if initialMergeConfig == nil {
+		initialMergeConfig = atmosConfig
+	}
+
+	// Include the effective list_merge_strategy in the cache key so that components
+	// with different per-component strategies do not share a cache entry whose merged
+	// list values were produced with a different strategy.
+	cacheKey := fmt.Sprintf("%s:%s:%s:%s", stack, component, baseComponent, initialMergeConfig.Settings.ListMergeStrategy)
 
 	// Skip cache when provenance tracking is enabled, as we need to record provenance entries during processing.
 	if !atmosConfig.TrackProvenance {
@@ -1967,6 +1980,7 @@ func ProcessBaseComponentConfig(
 	visited := make(map[string]bool)
 	err := processBaseComponentConfigInternal(
 		atmosConfig,
+		initialMergeConfig,
 		baseComponentConfig,
 		allComponentsMap,
 		component,
@@ -1988,9 +2002,15 @@ func ProcessBaseComponentConfig(
 
 // processBaseComponentConfigInternal is the internal recursive implementation.
 //
+// initialMergeConfig carries the effective AtmosConfiguration for the target component.
+// At each level the function updates it with the current base component's settings so
+// that settings.list_merge_strategy declared on any component in the inheritance chain
+// is applied when merging that component's lists (issue #2396).
+//
 //nolint:gocognit,revive,cyclop,funlen
 func processBaseComponentConfigInternal(
 	atmosConfig *schema.AtmosConfiguration,
+	initialMergeConfig *schema.AtmosConfiguration,
 	baseComponentConfig *schema.BaseComponentConfig,
 	allComponentsMap map[string]any,
 	component string,
@@ -2068,6 +2088,7 @@ func processBaseComponentConfigInternal(
 
 				err := processBaseComponentConfigInternal(
 					atmosConfig,
+					initialMergeConfig,
 					baseComponentConfig,
 					allComponentsMap,
 					baseComponent,
@@ -2113,9 +2134,10 @@ func processBaseComponentConfigInternal(
 						}
 					}
 
-					// Process the baseComponentFromInheritList components recursively to find `componentInheritanceChain`
+					// Process the baseComponentFromInheritList components recursively to find `componentInheritanceChain`.
 					err := processBaseComponentConfigInternal(
 						atmosConfig,
+						initialMergeConfig,
 						baseComponentConfig,
 						allComponentsMap,
 						component,
@@ -2286,43 +2308,52 @@ func processBaseComponentConfigInternal(
 			baseComponentConfig.FinalBaseComponentName = baseComponent
 		}
 
+		// Determine the effective merge config for this inheritance level.
+		// settings.list_merge_strategy declared on the base component (or passed in via
+		// initialMergeConfig from the target component) controls how list-valued sections
+		// are merged when accumulating the inheritance chain (issue #2396, PR #2480).
+		// The raw baseComponentSettings are consulted here — before they are themselves
+		// merged — so the strategy always comes from the original YAML, not a previously
+		// merged value that may have been overwritten.
+		levelMergeConfig := effectiveAtmosConfig(initialMergeConfig, baseComponentSettings)
+
 		// Base component `vars`
-		merged, err := m.Merge(atmosConfig, []map[string]any{baseComponentConfig.BaseComponentVars, baseComponentVars})
+		merged, err := m.Merge(levelMergeConfig, []map[string]any{baseComponentConfig.BaseComponentVars, baseComponentVars})
 		if err != nil {
 			return err
 		}
 		baseComponentConfig.BaseComponentVars = merged
 
 		// Base component `settings`
-		merged, err = m.Merge(atmosConfig, []map[string]any{baseComponentConfig.BaseComponentSettings, baseComponentSettings})
+		merged, err = m.Merge(levelMergeConfig, []map[string]any{baseComponentConfig.BaseComponentSettings, baseComponentSettings})
 		if err != nil {
 			return err
 		}
 		baseComponentConfig.BaseComponentSettings = merged
 
 		// Base component `env`
-		merged, err = m.Merge(atmosConfig, []map[string]any{baseComponentConfig.BaseComponentEnv, baseComponentEnv})
+		merged, err = m.Merge(levelMergeConfig, []map[string]any{baseComponentConfig.BaseComponentEnv, baseComponentEnv})
 		if err != nil {
 			return err
 		}
 		baseComponentConfig.BaseComponentEnv = merged
 
 		// Base component `auth`
-		merged, err = m.Merge(atmosConfig, []map[string]any{baseComponentConfig.BaseComponentAuth, baseComponentAuth})
+		merged, err = m.Merge(levelMergeConfig, []map[string]any{baseComponentConfig.BaseComponentAuth, baseComponentAuth})
 		if err != nil {
 			return err
 		}
 		baseComponentConfig.BaseComponentAuth = merged
 
 		// Base component `dependencies`
-		merged, err = m.Merge(atmosConfig, []map[string]any{baseComponentConfig.BaseComponentDependencies, baseComponentDependencies})
+		merged, err = m.Merge(levelMergeConfig, []map[string]any{baseComponentConfig.BaseComponentDependencies, baseComponentDependencies})
 		if err != nil {
 			return err
 		}
 		baseComponentConfig.BaseComponentDependencies = merged
 
 		// Base component `locals` (for template processing, not passed to terraform/helmfile).
-		merged, err = m.Merge(atmosConfig, []map[string]any{baseComponentConfig.BaseComponentLocals, baseComponentLocals})
+		merged, err = m.Merge(levelMergeConfig, []map[string]any{baseComponentConfig.BaseComponentLocals, baseComponentLocals})
 		if err != nil {
 			return err
 		}
@@ -2345,7 +2376,7 @@ func processBaseComponentConfigInternal(
 				}
 				baseMetadataForMerge[k] = v
 			}
-			merged, err = m.Merge(atmosConfig, []map[string]any{baseComponentConfig.BaseComponentMetadata, baseMetadataForMerge})
+			merged, err = m.Merge(levelMergeConfig, []map[string]any{baseComponentConfig.BaseComponentMetadata, baseMetadataForMerge})
 			if err != nil {
 				return err
 			}
@@ -2353,14 +2384,14 @@ func processBaseComponentConfigInternal(
 		}
 
 		// Base component `providers`
-		merged, err = m.Merge(atmosConfig, []map[string]any{baseComponentConfig.BaseComponentProviders, baseComponentProviders})
+		merged, err = m.Merge(levelMergeConfig, []map[string]any{baseComponentConfig.BaseComponentProviders, baseComponentProviders})
 		if err != nil {
 			return err
 		}
 		baseComponentConfig.BaseComponentProviders = merged
 
 		// Base component `required_providers` (DEV-3124).
-		merged, err = m.Merge(atmosConfig, []map[string]any{baseComponentConfig.BaseComponentRequiredProviders, baseComponentRequiredProviders})
+		merged, err = m.Merge(levelMergeConfig, []map[string]any{baseComponentConfig.BaseComponentRequiredProviders, baseComponentRequiredProviders})
 		if err != nil {
 			return err
 		}
@@ -2373,14 +2404,14 @@ func processBaseComponentConfigInternal(
 		}
 
 		// Base component `hooks`
-		merged, err = m.Merge(atmosConfig, []map[string]any{baseComponentConfig.BaseComponentHooks, baseComponentHooks})
+		merged, err = m.Merge(levelMergeConfig, []map[string]any{baseComponentConfig.BaseComponentHooks, baseComponentHooks})
 		if err != nil {
 			return err
 		}
 		baseComponentConfig.BaseComponentHooks = merged
 
 		// Base component `generate`
-		merged, err = m.Merge(atmosConfig, []map[string]any{baseComponentConfig.BaseComponentGenerate, baseComponentGenerate})
+		merged, err = m.Merge(levelMergeConfig, []map[string]any{baseComponentConfig.BaseComponentGenerate, baseComponentGenerate})
 		if err != nil {
 			return err
 		}
@@ -2393,7 +2424,7 @@ func processBaseComponentConfigInternal(
 		baseComponentConfig.BaseComponentBackendType = baseComponentBackendType
 
 		// Base component `backend`
-		merged, err = m.Merge(atmosConfig, []map[string]any{baseComponentConfig.BaseComponentBackendSection, baseComponentBackendSection})
+		merged, err = m.Merge(levelMergeConfig, []map[string]any{baseComponentConfig.BaseComponentBackendSection, baseComponentBackendSection})
 		if err != nil {
 			return err
 		}
@@ -2403,7 +2434,7 @@ func processBaseComponentConfigInternal(
 		baseComponentConfig.BaseComponentRemoteStateBackendType = baseComponentRemoteStateBackendType
 
 		// Base component `remote_state_backend`
-		merged, err = m.Merge(atmosConfig, []map[string]any{baseComponentConfig.BaseComponentRemoteStateBackendSection, baseComponentRemoteStateBackendSection})
+		merged, err = m.Merge(levelMergeConfig, []map[string]any{baseComponentConfig.BaseComponentRemoteStateBackendSection, baseComponentRemoteStateBackendSection})
 		if err != nil {
 			return err
 		}
@@ -2411,7 +2442,7 @@ func processBaseComponentConfigInternal(
 
 		// Base component `source` (when source inheritance is enabled).
 		if atmosConfig.Stacks.Inherit.IsSourceInheritanceEnabled() {
-			merged, err = m.Merge(atmosConfig, []map[string]any{baseComponentConfig.BaseComponentSourceSection, baseComponentSourceSection})
+			merged, err = m.Merge(levelMergeConfig, []map[string]any{baseComponentConfig.BaseComponentSourceSection, baseComponentSourceSection})
 			if err != nil {
 				return err
 			}
@@ -2421,7 +2452,7 @@ func processBaseComponentConfigInternal(
 		// Base component `provision` (when source inheritance is enabled).
 		// Provision follows the same inheritance rules as source.
 		if atmosConfig.Stacks.Inherit.IsSourceInheritanceEnabled() {
-			merged, err = m.Merge(atmosConfig, []map[string]any{baseComponentConfig.BaseComponentProvisionSection, baseComponentProvisionSection})
+			merged, err = m.Merge(levelMergeConfig, []map[string]any{baseComponentConfig.BaseComponentProvisionSection, baseComponentProvisionSection})
 			if err != nil {
 				return err
 			}
@@ -2429,7 +2460,7 @@ func processBaseComponentConfigInternal(
 		}
 
 		// Base component `retry` — deep-merge so multi-level inheritance composes correctly.
-		merged, err = m.Merge(atmosConfig, []map[string]any{baseComponentConfig.BaseComponentRetry, baseComponentRetry})
+		merged, err = m.Merge(levelMergeConfig, []map[string]any{baseComponentConfig.BaseComponentRetry, baseComponentRetry})
 		if err != nil {
 			return err
 		}

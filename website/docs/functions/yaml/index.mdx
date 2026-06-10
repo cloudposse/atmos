@@ -43,6 +43,9 @@ YAML supports three types of data: core, defined, and user-defined.
 
 ## Use-cases
 
+ - The [__`!append`__](/functions/yaml/append) YAML function concatenates lists during stack inheritance instead of replacing them,
+   providing fine-grained control over list merging behavior on a per-field basis
+
  - The [__`!terraform.output`__](/functions/yaml/terraform.output) YAML function allows you to
    [access component outputs (remote state) directly within Atmos stack manifests](/stacks/remote-state).
    Note that this requires initializing each component (`terraform/tofu init`), which initializes all Terraform/OpenTofu
@@ -83,6 +86,11 @@ YAML supports three types of data: core, defined, and user-defined.
  - The [__`!cwd`__](/functions/yaml/cwd) YAML function is used to retrieve the current working directory
    where Atmos is executed from. Useful when you need paths relative to where you run Atmos
    rather than relative to the configuration file.
+
+ - The [__`!unset`__](/functions/yaml/unset) YAML function is used to delete or remove keys from
+   the configuration during inheritance and merging. This allows you to explicitly remove values
+   that were defined in parent configurations or imports, providing fine-grained control over
+   configuration inheritance
 
  - The [__`!random`__](/functions/yaml/random) YAML function generates a cryptographically secure random integer
    within a specified range, useful for generating random port numbers or IDs.
@@ -177,6 +185,13 @@ components:
         # Note: URLs without extensions are treated as text, so use URLs with appropriate extensions
         github_data: !include ./github-meta.json .api
 
+        # Remove a key that was defined in a parent configuration or import
+        deprecated_setting: !unset
+
+        # Remove specific nested configuration
+        legacy:
+          old_feature: !unset
+
         # Generate a random port number between 1024 and 65535
         app_port: !random 1024 65535
 
@@ -196,6 +211,12 @@ components:
         helm_annotation: !literal "{{ .Values.ingress.class }}"
         terraform_var: !literal "${var.hostname}"
         db_users: [!literal "{{external.email}}", !literal "{{external.admin}}"]
+
+      settings:
+        # Append to an inherited list instead of replacing it
+        depends_on: !append
+          - additional-component-1
+          - additional-component-2
 ```
 </File>
 

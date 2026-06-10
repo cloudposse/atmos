@@ -67,9 +67,15 @@ func processTopLevelComponentInheritance(opts *ComponentProcessorOptions, result
 		return fmt.Errorf("%w: 'components.%s.%s.component' in the file '%s'", errUtils.ErrInvalidComponentAttribute, opts.ComponentType, opts.Component, opts.StackName)
 	}
 
+	// Compute the effective merge config from the target component's own settings so
+	// that settings.list_merge_strategy declared at the component level governs how
+	// base-component lists are merged across the inheritance chain (issue #2396).
+	effectiveCfg := effectiveAtmosConfig(opts.AtmosConfig, result.ComponentSettings, result.ComponentOverridesSettings)
+
 	// Process the base components recursively to find componentInheritanceChain.
 	err := ProcessBaseComponentConfig(
 		opts.AtmosConfig,
+		effectiveCfg,
 		baseComponentConfig,
 		opts.AllComponentsMap,
 		opts.Component,
@@ -176,9 +182,15 @@ func processInheritedComponent(opts *ComponentProcessorOptions, result *Componen
 		}
 	}
 
+	// Compute the effective merge config from the target component's own settings so
+	// that settings.list_merge_strategy declared at the component level governs how
+	// base-component lists are merged across the metadata.inherits chain (issue #2396).
+	effectiveCfg := effectiveAtmosConfig(opts.AtmosConfig, result.ComponentSettings, result.ComponentOverridesSettings)
+
 	// Process the baseComponentFromInheritList components recursively.
 	err := ProcessBaseComponentConfig(
 		opts.AtmosConfig,
+		effectiveCfg,
 		baseComponentConfig,
 		opts.AllComponentsMap,
 		opts.Component,

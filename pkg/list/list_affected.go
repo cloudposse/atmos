@@ -7,6 +7,7 @@ import (
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/spf13/cobra"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/auth"
 	cfg "github.com/cloudposse/atmos/pkg/config"
@@ -136,6 +137,10 @@ func ExecuteListAffectedCmd(opts *AffectedCommandOptions) error {
 	)
 	if err != nil {
 		return fmt.Errorf("failed to get affected components: %w", err)
+	}
+
+	if result == nil {
+		return fmt.Errorf("%w: getAffectedComponents returned a nil result", errUtils.ErrNilResult)
 	}
 
 	if len(result.Affected) == 0 {

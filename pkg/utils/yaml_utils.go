@@ -40,7 +40,9 @@ const (
 	AtmosYamlFuncGitName                 = atmosGit.YAMLFuncName
 	AtmosYamlFuncGitHost                 = atmosGit.YAMLFuncHost
 	AtmosYamlFuncGitUrl                  = atmosGit.YAMLFuncURL
+	AtmosYamlFuncAppend                  = "!append"
 	AtmosYamlFuncCwd                     = "!cwd"
+	AtmosYamlFuncUnset                   = "!unset"
 	AtmosYamlFuncRandom                  = "!random"
 	AtmosYamlFuncLiteral                 = "!literal"
 	AtmosYamlFuncAwsAccountID            = "!aws.account_id"
@@ -75,7 +77,9 @@ var (
 		AtmosYamlFuncGitName,
 		AtmosYamlFuncGitHost,
 		AtmosYamlFuncGitUrl,
+		AtmosYamlFuncAppend,
 		AtmosYamlFuncCwd,
+		AtmosYamlFuncUnset,
 		AtmosYamlFuncRandom,
 		AtmosYamlFuncLiteral,
 		AtmosYamlFuncAwsAccountID,
@@ -106,7 +110,9 @@ var (
 		AtmosYamlFuncGitName:                 true,
 		AtmosYamlFuncGitHost:                 true,
 		AtmosYamlFuncGitUrl:                  true,
+		AtmosYamlFuncAppend:                  true,
 		AtmosYamlFuncCwd:                     true,
+		AtmosYamlFuncUnset:                   true,
 		AtmosYamlFuncRandom:                  true,
 		AtmosYamlFuncLiteral:                 true,
 		AtmosYamlFuncAwsAccountID:            true,
@@ -799,6 +805,12 @@ func ObfuscateSensitivePaths(data any, homeDir string) any {
 func ConvertToYAML(data any, opts ...YAMLOptions) (string, error) {
 	defer perf.Track(nil, "utils.ConvertToYAML")()
 
+	// Clean up duplicate array index keys created by Viper.
+	// Viper sometimes creates both array entries and indexed map keys (e.g., both "steps" array
+	// and "steps[0]", "steps[1]" keys) when merging configurations. This cleanup removes the
+	// indexed keys when an array exists to prevent duplicate output in YAML.
+	cleanedData := CleanupArrayIndexKeys(data)
+
 	// Get a buffer from the pool to reduce allocations.
 	buf := yamlBufferPool.Get().(*bytes.Buffer)
 	buf.Reset() // Ensure buffer is clean.
@@ -817,7 +829,7 @@ func ConvertToYAML(data any, opts ...YAMLOptions) (string, error) {
 	}
 	encoder.SetIndent(indent)
 
-	if err := encoder.Encode(data); err != nil {
+	if err := encoder.Encode(cleanedData); err != nil {
 		return "", err
 	}
 	return buf.String(), nil
@@ -882,6 +894,16 @@ func processCustomTagsInner(atmosConfig *schema.AtmosConfiguration, node *yaml.N
 			continue
 		}
 
+		// Handle !append tag - wrap the sequence in the append metadata so the merge
+		// phase (pkg/merge) appends it to the inherited list instead of replacing it.
+		// This mirrors handleAppend in pkg/config for atmos.yaml, but for stack manifests.
+		if tag == AtmosYamlFuncAppend {
+			if err := rewriteAppendNode(atmosConfig, n, file); err != nil {
+				return err
+			}
+			continue
+		}
+
 		// Use O(1) map lookup instead of O(n) slice search for performance.
 		// This optimization reduces 75M+ linear searches to constant-time lookups.
 		if atmosYamlTagsMap[tag] {
@@ -921,6 +943,41 @@ func getValueWithTag(n *yaml.Node) string {
 	tag := strings.TrimSpace(n.Tag)
 	val := strings.TrimSpace(n.Value)
 	return strings.TrimSpace(tag + " " + val)
+}
+
+// rewriteAppendNode rewrites an !append-tagged sequence node in place into a mapping node
+// of the form { AppendTagMetadataKey: <sequence> }. After the node tree is decoded, that
+// wrapper is carried in the resulting map[string]any and the merge phase (pkg/merge)
+// detects it via ExtractAppendListValue and appends the list instead of replacing it.
+//
+// The !append directive is only meaningful on sequences (lists). For any other node kind
+// the tag is simply cleared so the value decodes normally (a graceful no-op rather than a
+// decode error on the unknown tag).
+func rewriteAppendNode(atmosConfig *schema.AtmosConfiguration, n *yaml.Node, file string) error {
+	if n.Kind != yaml.SequenceNode {
+		n.Tag = ""
+		return nil
+	}
+
+	// Copy the original sequence to use as the wrapped list, clearing the !append tag.
+	inner := *n
+	inner.Tag = ""
+
+	// Process any custom tags inside the list items before wrapping.
+	if err := processCustomTagsInner(atmosConfig, &inner, file); err != nil {
+		return err
+	}
+
+	keyNode := &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: AppendTagMetadataKey}
+
+	// Rewrite n in place as a single-entry mapping wrapping the sequence.
+	n.Kind = yaml.MappingNode
+	n.Tag = ""
+	n.Value = ""
+	n.Style = 0
+	n.Content = []*yaml.Node{keyNode, &inner}
+
+	return nil
 }
 
 // hasCustomTags performs a fast scan to check if a node or any of its children contain custom Atmos tags.
