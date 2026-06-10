@@ -112,7 +112,7 @@ func GetHooks(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStac
 
 func (h *Hooks) RunAll(event HookEvent, atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, cmd *cobra.Command, args []string) error {
 	log.Debug("Running hooks", "count", len(h.items))
-	skipPredicate := newSkipPredicate(viper.GetString("skip-hooks"))
+	skipPredicate := newSkipPredicate(resolveSkipHooks(cmd))
 
 	// Preflight runs once per command lifecycle: install component
 	// dependencies up front and verify every hook's binary resolves before
@@ -382,6 +382,22 @@ func processHookExecutionYAMLFunction(atmosConfig *schema.AtmosConfiguration, va
 		return processedString, nil
 	}
 	return processHookExecutionString(atmosConfig, processedString, info)
+}
+
+// resolveSkipHooks returns the effective --skip-hooks value. It prefers the
+// Cobra flag when explicitly set, because before-* hooks run in PreRunE —
+// before the flag is bound to Viper in RunE (see pkg/flags/standard.go
+// BindFlagsToViper) — so viper.GetString would miss the CLI value there (it
+// only sees ATMOS_SKIP_HOOKS / the default). Reading the parsed Cobra flag
+// makes skipping symmetric across before-* and after-* events. Falling back to
+// Viper preserves env-var support and the nil-cmd path used by tests.
+func resolveSkipHooks(cmd *cobra.Command) string {
+	if cmd != nil {
+		if f := cmd.Flags().Lookup("skip-hooks"); f != nil && f.Changed {
+			return f.Value.String()
+		}
+	}
+	return viper.GetString("skip-hooks")
 }
 
 // newSkipPredicate builds the per-hook skip decision from the value of the

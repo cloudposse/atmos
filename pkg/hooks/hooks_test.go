@@ -699,6 +699,29 @@ func TestRunAll_EventFiltering(t *testing.T) {
 		assert.Equal(t, "literal-value", data["stack/comp/label_id"], "store must be called when event matches")
 	})
 
+	t.Run("before-init hook runs on before-init event", func(t *testing.T) {
+		h := makeHooks([]string{"before-terraform-init"})
+		err := h.RunAll(BeforeTerraformInit, h.config, h.info, nil, nil)
+		require.NoError(t, err)
+		data := getStore(h).GetData()
+		assert.Equal(t, "literal-value", data["stack/comp/label_id"], "before-init hook must fire on before-init event")
+	})
+
+	t.Run("after-init hook runs on after-init event", func(t *testing.T) {
+		h := makeHooks([]string{"after-terraform-init"})
+		err := h.RunAll(AfterTerraformInit, h.config, h.info, nil, nil)
+		require.NoError(t, err)
+		data := getStore(h).GetData()
+		assert.Equal(t, "literal-value", data["stack/comp/label_id"], "after-init hook must fire on after-init event")
+	})
+
+	t.Run("after-init hook does not run on before-init event", func(t *testing.T) {
+		h := makeHooks([]string{"after-terraform-init"})
+		err := h.RunAll(BeforeTerraformInit, h.config, h.info, nil, nil)
+		require.NoError(t, err)
+		assert.Empty(t, getStore(h).GetData(), "after-init hook must not fire on before-init event")
+	})
+
 	t.Run("hook with dot-format event matches correctly", func(t *testing.T) {
 		h := makeHooks([]string{"after.terraform.apply"})
 		err := h.RunAll(AfterTerraformApply, h.config, h.info, nil, nil)
@@ -729,6 +752,72 @@ func TestRunAll_EventFiltering(t *testing.T) {
 		require.NoError(t, err)
 		data := getStore(h).GetData()
 		assert.Equal(t, "literal-value", data["stack/comp/label_id"], "deploy hook must fire on apply event")
+	})
+}
+
+// TestRunAll_SkipHooksFromCobraFlag is the regression guard for the before-event
+// skip bug: before-* hooks run in PreRunE, before the global --skip-hooks flag is
+// bound to viper in RunE, so reading viper.GetString missed the CLI value and the
+// hooks fired anyway. This drives a REAL parsed Cobra flag (not viper.Set) through
+// RunAll on a before-terraform-plan event and asserts the hook is skipped. The
+// negative path confirms the hook still fires when the flag is absent.
+func TestRunAll_SkipHooksFromCobraFlag(t *testing.T) {
+	makeHooks := func() Hooks {
+		mockStore := NewMockStore()
+		cfg := &schema.AtmosConfiguration{Stores: make(store.StoreRegistry)}
+		cfg.Stores["test-store"] = mockStore
+		return Hooks{
+			config: cfg,
+			info:   &schema.ConfigAndStacksInfo{ComponentFromArg: "comp", Stack: "stack"},
+			items: map[string]Hook{
+				"cost": {
+					Events: []string{"before-terraform-plan"},
+					Kind:   "store",
+					Name:   "test-store",
+					// Literal value (no dot prefix) — no terraform output call needed.
+					Outputs: map[string]string{"label_id": "literal-value"},
+				},
+			},
+		}
+	}
+	getStore := func(h Hooks) *MockStore {
+		return h.config.Stores["test-store"].(*MockStore)
+	}
+
+	// Ensure the viper fallback can never mask the flag-driven behavior under test.
+	prev := viper.Get("skip-hooks")
+	viper.Set("skip-hooks", "")
+	t.Cleanup(func() { viper.Set("skip-hooks", prev) })
+
+	t.Run("bare --skip-hooks skips a before-event hook", func(t *testing.T) {
+		cmd := newSkipHooksCmd(t)
+		require.NoError(t, cmd.ParseFlags([]string{"--skip-hooks"}))
+
+		h := makeHooks()
+		err := h.RunAll(BeforeTerraformPlan, h.config, h.info, cmd, nil)
+		require.NoError(t, err)
+		assert.Empty(t, getStore(h).GetData(), "before-event hook must be skipped when --skip-hooks is set on the CLI")
+	})
+
+	t.Run("--skip-hooks=cost skips the named before-event hook", func(t *testing.T) {
+		cmd := newSkipHooksCmd(t)
+		require.NoError(t, cmd.ParseFlags([]string{"--skip-hooks=cost"}))
+
+		h := makeHooks()
+		err := h.RunAll(BeforeTerraformPlan, h.config, h.info, cmd, nil)
+		require.NoError(t, err)
+		assert.Empty(t, getStore(h).GetData(), "named before-event hook must be skipped")
+	})
+
+	// Negative path: without the flag, the same before-event hook must still fire.
+	t.Run("before-event hook fires when --skip-hooks is absent", func(t *testing.T) {
+		cmd := newSkipHooksCmd(t) // flag registered but not parsed → Changed=false.
+
+		h := makeHooks()
+		err := h.RunAll(BeforeTerraformPlan, h.config, h.info, cmd, nil)
+		require.NoError(t, err)
+		data := getStore(h).GetData()
+		assert.Equal(t, "literal-value", data["stack/comp/label_id"], "before-event hook must fire when --skip-hooks is not set")
 	})
 }
 

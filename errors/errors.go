@@ -80,6 +80,7 @@ var (
 	ErrTerminalTooNarrow                     = errors.New("terminal too narrow")
 	ErrSpinnerReturnedNilModel               = errors.New("spinner returned nil model")
 	ErrSpinnerUnexpectedModelType            = errors.New("spinner returned unexpected model type")
+	ErrSpinnerOperationInterrupted           = errors.New("operation was interrupted")
 
 	// Theme-related errors.
 	ErrThemeNotFound = errors.New("theme not found")
@@ -216,6 +217,9 @@ var (
 	ErrHeadLookup     = errors.New("HEAD not found")
 	ErrInvalidFormat  = errors.New("invalid format")
 	ErrOutputFormat   = errors.New("output format error")
+
+	// File operation errors.
+	ErrRefusingToDeleteSymlink = ErrRefuseDeleteSymbolicLink
 
 	// Scheduler errors.
 	ErrNilGraph      = errors.New("scheduler graph cannot be nil")
@@ -680,6 +684,7 @@ var (
 	ErrTopologicalOrder             = errors.New("topological sort failed")
 	ErrFormatForLogging             = errors.New("format affected for logging failed")
 	ErrQueryEvaluation              = errors.New("query evaluation failed")
+	ErrNilResult                    = errors.New("nil result")
 
 	// Cache-related errors.
 	ErrCacheLocked    = errors.New("cache file is locked")
