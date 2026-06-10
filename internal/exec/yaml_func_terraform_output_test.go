@@ -3,7 +3,6 @@ package exec
 import (
 	"os"
 	"os/exec"
-	"path/filepath"
 	"testing"
 
 	log "github.com/cloudposse/atmos/pkg/logger"
@@ -25,32 +24,17 @@ func TestYamlFuncTerraformOutput(t *testing.T) {
 	if _, err := exec.LookPath("tofu"); err != nil {
 		t.Skip("skipping: 'tofu' binary not found in PATH (required because the fixture components use command: tofu)")
 	}
-	err := os.Unsetenv("ATMOS_CLI_CONFIG_PATH")
-	if err != nil {
-		t.Fatalf("Failed to unset 'ATMOS_CLI_CONFIG_PATH': %v", err)
-	}
-
-	err = os.Unsetenv("ATMOS_BASE_PATH")
-	if err != nil {
-		t.Fatalf("Failed to unset 'ATMOS_BASE_PATH': %v", err)
-	}
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", "")
+	t.Setenv("ATMOS_BASE_PATH", "")
 
 	log.SetLevel(log.InfoLevel)
 	log.SetOutput(os.Stdout)
 
 	stack := "nonprod"
 
-	defer func() {
-		// Delete the generated files and folders after the test
-		err := os.RemoveAll(filepath.Join("..", "..", "components", "terraform", "mock", ".terraform"))
-		assert.NoError(t, err)
-
-		err = os.RemoveAll(filepath.Join("..", "..", "components", "terraform", "mock", "terraform.tfstate.d"))
-		assert.NoError(t, err)
-	}()
-
 	// Define the working directory
 	workDir := "../../tests/fixtures/scenarios/atmos-terraform-output-yaml-function"
+	setupTerraformYamlFunctionSandbox(t, workDir)
 	t.Chdir(workDir)
 
 	info := schema.ConfigAndStacksInfo{
@@ -65,7 +49,7 @@ func TestYamlFuncTerraformOutput(t *testing.T) {
 		ProcessFunctions: true,
 	}
 
-	err = ExecuteTerraform(info)
+	err := ExecuteTerraform(info)
 	if err != nil {
 		t.Fatalf("Failed to execute 'ExecuteTerraform': %v", err)
 	}
