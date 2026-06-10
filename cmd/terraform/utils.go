@@ -19,6 +19,7 @@ import (
 	e "github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/ansi"
 	"github.com/cloudposse/atmos/pkg/auth"
+	"github.com/cloudposse/atmos/pkg/ci"
 	"github.com/cloudposse/atmos/pkg/ci/plugins/terraform/planfile"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/flags/compat"
@@ -279,6 +280,72 @@ func runCIHooksForTerraformComponent(actualCmd *cobra.Command, event h.HookEvent
 	}
 }
 
+// terraformPlanCIResultHandler forwards scheduler results into the aggregate CI hook.
+type terraformPlanCIResultHandler struct {
+	cmd     *cobra.Command
+	info    *schema.ConfigAndStacksInfo
+	command string
+}
+
+// HandleTerraformPlanCIResults initializes config and runs the aggregate CI hook.
+func (handler *terraformPlanCIResultHandler) HandleTerraformPlanCIResults(resultSet schema.TerraformPlanCIResultSet) error {
+	if handler == nil || handler.cmd == nil || handler.info == nil {
+		return nil
+	}
+
+	command := handler.command
+	if command == "" {
+		command = resultSet.Command
+	}
+	if command == "" {
+		command = handler.info.SubCommand
+	}
+	resultSet.Command = command
+
+	atmosConfig, err := cfg.InitCliConfig(*handler.info, true)
+	if err != nil {
+		return fmt.Errorf(errWrapFormat, errUtils.ErrInitializeCLIConfig, err)
+	}
+
+	if err := h.RunCIHooks(&h.RunCIHooksOptions{
+		Event:       terraformAggregateEvent(command),
+		AtmosConfig: &atmosConfig,
+		Info:        handler.info,
+		ForceCIMode: terraformCIModeEnabled(handler.cmd),
+		Aggregate:   resultSet,
+	}); err != nil {
+		return err
+	}
+	return nil
+}
+
+// terraformAggregateEvent returns the aggregate CI hook event for a Terraform command.
+func terraformAggregateEvent(command string) h.HookEvent {
+	switch command {
+	case "apply":
+		return h.AfterTerraformApplyAggregate
+	case "destroy":
+		return h.AfterTerraformDestroyAggregate
+	default:
+		return h.AfterTerraformPlanAggregate
+	}
+}
+
+// terraformCIModeEnabled returns true when CLI, config, or native provider detection enables CI mode.
+func terraformCIModeEnabled(cmd *cobra.Command) bool {
+	forceCIMode := false
+	if cmd != nil {
+		forceCIMode, _ = cmd.Flags().GetBool("ci")
+	}
+	if forceCIMode {
+		return true
+	}
+	if viper.GetBool("ci") {
+		return true
+	}
+	return ci.IsCI()
+}
+
 // wirePerComponentHook installs the per-component CI hook on info so each
 // component in a multi-component run (`--all`, `--components`, `--query`) gets
 // its own summary entry instead of a single misattributed global call from
@@ -286,6 +353,18 @@ func runCIHooksForTerraformComponent(actualCmd *cobra.Command, event h.HookEvent
 // ExecuteTerraformQuery dispatch paths; keep it in one place so a new
 // subcommand only needs to be added once.
 func wirePerComponentHook(info *schema.ConfigAndStacksInfo, subCommand string, actualCmd *cobra.Command) {
+	if terraformCIModeEnabled(actualCmd) {
+		switch subCommand {
+		case "plan", "apply", "destroy":
+			info.TerraformPlanCIResultHandler = &terraformPlanCIResultHandler{
+				cmd:     actualCmd,
+				info:    info,
+				command: subCommand,
+			}
+			return
+		}
+	}
+
 	switch subCommand {
 	case "plan":
 		info.PerComponentHook = func(compInfo *schema.ConfigAndStacksInfo, output string, execErr error) {

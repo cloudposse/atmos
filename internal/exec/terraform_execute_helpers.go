@@ -119,19 +119,34 @@ func setupTerraformAuth(atmosConfig *schema.AtmosConfiguration, info *schema.Con
 		return nil, fmt.Errorf("%w: %w", errUtils.ErrFailedToInitializeAuthManager, err)
 	}
 
-	// Persist the auto-detected identity so downstream hooks don't re-prompt.
-	storeAutoDetectedIdentity(authManager, info)
-
 	// Store manager for nested YAML functions (e.g. !terraform.state).
 	info.AuthManager = authManager
 
-	// Bridge auth credentials into identity-aware stores (lazy resolution on first use).
-	if authManager != nil {
-		resolver := authbridge.NewResolver(authManager, info)
-		atmosConfig.Stores.SetAuthContextResolver(resolver)
-	}
+	injectTerraformStoreAuthResolver(atmosConfig, info, authManager)
 
 	return authManager, nil
+}
+
+func injectTerraformStoreAuthResolver(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, authManager auth.AuthManager) {
+	if authManager == nil {
+		return
+	}
+
+	// Persist the auto-detected identity so downstream hooks, nested operations,
+	// and stores without their own identity use the same authenticated principal.
+	storeAutoDetectedIdentity(authManager, info)
+
+	resolver := authbridge.NewResolver(authManager, info)
+	atmosConfig.Stores.SetAuthContextResolverWithDefaultIdentity(resolver, storeDefaultIdentity(info.Identity))
+}
+
+func storeDefaultIdentity(identity string) string {
+	switch identity {
+	case "", cfg.IdentityFlagSelectValue, cfg.IdentityFlagDisabledValue:
+		return ""
+	default:
+		return identity
+	}
 }
 
 // SetupTerraformAuthForCLI exposes terraform auth setup to command-layer callers

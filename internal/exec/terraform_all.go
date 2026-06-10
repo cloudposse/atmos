@@ -11,7 +11,6 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 	scheduleradapters "github.com/cloudposse/atmos/pkg/scheduler/adapters"
 	"github.com/cloudposse/atmos/pkg/schema"
-	"github.com/cloudposse/atmos/pkg/store/authbridge"
 	"github.com/cloudposse/atmos/pkg/ui"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -27,6 +26,7 @@ func ExecuteTerraformAll(info *schema.ConfigAndStacksInfo) error {
 // ExecuteTerraformAllWithContext executes all selected Terraform components through
 // the graph-backed scheduler using the provided cancellation context.
 func ExecuteTerraformAllWithContext(ctx context.Context, info *schema.ConfigAndStacksInfo) error {
+	defer perf.Track(nil, "exec.ExecuteTerraformAllWithContext")()
 	// Validate inputs for --all flag usage.
 	// When no stack is given, --all processes every stack — matching the documented
 	// behavior of `atmos terraform apply --all` (see website/docs/cli/commands/terraform).
@@ -38,7 +38,6 @@ func ExecuteTerraformAllWithContext(ctx context.Context, info *schema.ConfigAndS
 	if err != nil {
 		return fmt.Errorf(errWrapFmt, errUtils.ErrInitializeCLIConfig, err)
 	}
-	defer perf.Track(&atmosConfig, "exec.ExecuteTerraformAllWithContext")()
 
 	log.Debug("Executing terraform command for all components in dependency order", "command", info.SubCommand)
 
@@ -50,8 +49,7 @@ func ExecuteTerraformAllWithContext(ctx context.Context, info *schema.ConfigAndS
 		return err
 	}
 	if authManager != nil {
-		resolver := authbridge.NewResolver(authManager, info)
-		atmosConfig.Stores.SetAuthContextResolver(resolver)
+		injectTerraformStoreAuthResolver(&atmosConfig, info, authManager)
 	}
 
 	stacks, err := ExecuteDescribeStacks(

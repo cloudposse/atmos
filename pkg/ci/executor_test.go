@@ -934,6 +934,7 @@ func TestBuildHookContext(t *testing.T) {
 		},
 		Output:       "some output",
 		CommandError: fmt.Errorf("some error"),
+		Aggregate:    "aggregate-result-set",
 	}
 
 	ctx := buildHookContext(opts, mp)
@@ -945,6 +946,7 @@ func TestBuildHookContext(t *testing.T) {
 	assert.Equal(t, opts.Info, ctx.Info)
 	assert.Equal(t, "some output", ctx.Output)
 	assert.Equal(t, opts.CommandError, ctx.CommandError)
+	assert.Equal(t, opts.Aggregate, ctx.Aggregate)
 	assert.Equal(t, mp, ctx.Provider)
 	assert.NotNil(t, ctx.TemplateLoader)
 	assert.NotNil(t, ctx.CreatePlanfileStore)

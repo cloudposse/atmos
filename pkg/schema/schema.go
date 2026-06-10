@@ -565,6 +565,38 @@ type ShellConfig struct {
 	Prompt string `yaml:"prompt" json:"prompt" mapstructure:"prompt"`
 }
 
+// TerraformPlanCIResultHandler receives the complete result set for one
+// graph-backed Terraform run and can emit CI artifacts after scheduling has
+// fully completed.
+type TerraformPlanCIResultHandler interface {
+	HandleTerraformPlanCIResults(TerraformPlanCIResultSet) error
+}
+
+// TerraformPlanCIResultSet contains deterministic per-node Terraform results
+// for CI rendering.
+type TerraformPlanCIResultSet struct {
+	Command string
+	Results []TerraformPlanCIResult
+}
+
+// TerraformPlanCIResult contains the scheduler and Terraform output details
+// needed to render CI artifacts for one Terraform component.
+type TerraformPlanCIResult struct {
+	NodeID     string
+	Stack      string
+	Component  string
+	Status     string
+	Processed  bool
+	Changed    bool
+	ExitCode   int
+	Output     string
+	LogFiles   map[string]string
+	StartedAt  time.Time
+	FinishedAt time.Time
+	DurationMS int64
+	Error      string
+}
+
 // CIConfig contains CI/CD integration configuration.
 // Uses provider-agnostic naming to support GitHub Actions, GitLab CI, and other providers.
 type CIConfig struct {
@@ -1124,6 +1156,7 @@ type ConfigAndStacksInfo struct {
 	TerraformFailureMode       string
 	FailFast                   bool
 	KeepGoing                  bool
+	DisablePluginCache         bool
 	TerraformPlanLogOrder      string
 	TerraformPlanHide          []string
 	TerraformPlanHideNoChanges bool
@@ -1137,6 +1170,12 @@ type ConfigAndStacksInfo struct {
 	// set to the executed component, combined stdout+stderr output, and the execution
 	// error (nil on success). Nil means no per-component callback.
 	PerComponentHook func(info *ConfigAndStacksInfo, output string, execErr error)
+
+	// TerraformPlanCIResultHandler is called once after a graph-backed
+	// multi-component Terraform plan/apply/destroy run completes. It
+	// centralizes CI output writes for concurrent execution so GitHub
+	// summary/output files are not written by worker goroutines.
+	TerraformPlanCIResultHandler TerraformPlanCIResultHandler
 }
 
 // GetComponentEnvSection returns the component's env section map.

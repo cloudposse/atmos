@@ -273,7 +273,7 @@ pkg/ci/
   │   ├── plugin_test.go
   │   ├── handlers.go          # All handler implementations (onBeforePlan, onAfterPlan, onBeforeApply, onAfterApply)
   │   ├── handlers_test.go
-  │   ├── parser.go            # Parse plan/apply output (regex-based)
+  │   ├── parser.go            # Parse plan/apply/destroy output (regex-based)
   │   ├── parser_test.go
   │   ├── context.go           # TerraformTemplateContext
   │   ├── template_test.go

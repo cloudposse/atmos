@@ -113,6 +113,7 @@ func runPreExecutionSteps(
 		// Authentication setup failures must not silently produce unauthenticated terraform commands.
 		return err
 	}
+	disableTerraformPluginCacheForExecution(atmosConfig, info)
 
 	// Generate backend and provider-override files. When AutoGenerateFiles=true,
 	// GenerateFilesForComponent was already called inside resolveAndProvisionComponentPath

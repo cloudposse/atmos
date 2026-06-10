@@ -49,6 +49,25 @@ resource list:
 </details>
 ```
 
+## Multi-component Plan Summary
+
+When `atmos terraform plan` runs more than one component through the dependency graph in CI
+(`--all`, `--components`, or `--query`), Atmos writes one deterministic aggregate summary after all
+scheduler workers finish. This avoids concurrent writes to `$GITHUB_STEP_SUMMARY` while preserving
+per-component detail.
+
+The aggregate summary includes:
+
+- Total component counts grouped as changed, failed, no changes, and skipped
+- Total resource counts across successful, non-skipped components
+- Failed, changed, no-change, and skipped component groups
+- A per-component table with stack, component, status, summary, resource counts, and duration
+- Collapsible details for failed and changed components
+
+Skipped dependency-blocked components are shown separately from failed components. If any component
+fails, the aggregate CI exit code is `1`; otherwise it is `2` when any component changed and `0`
+when every component completed with no changes.
+
 ## Apply Summary
 
 Apply summaries show the result of the apply operation, including resource counts and any

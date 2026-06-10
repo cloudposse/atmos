@@ -380,6 +380,16 @@ func TestStoreAutoDetectedIdentity(t *testing.T) {
 			expectedIdentity: "existing-role",
 		},
 		{
+			name:            "interactive select sentinel stores selected identity",
+			initialIdentity: cfg.IdentityFlagSelectValue,
+			setupMock: func(ctrl *gomock.Controller) *mockTypes.MockAuthManager {
+				m := mockTypes.NewMockAuthManager(ctrl)
+				m.EXPECT().GetChain().Return([]string{"selected-role"})
+				return m
+			},
+			expectedIdentity: "selected-role",
+		},
+		{
 			name:            "empty chain does not update",
 			initialIdentity: "",
 			setupMock: func(ctrl *gomock.Controller) *mockTypes.MockAuthManager {
