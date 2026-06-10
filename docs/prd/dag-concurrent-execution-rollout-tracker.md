@@ -4,14 +4,13 @@ This tracker coordinates the DAG concurrent execution rollout as a sequence of s
 
 ## Implementation Strategy
 
-The execution foundation is now merged into `main`. PR 1 through PR 6 established process stream injection, the generic scheduler, graph-backed Terraform routing, plan/apply/destroy concurrency, and affected routing. Remaining work should focus on making concurrent execution understandable and easy to verify without changing scheduler semantics.
+The execution foundation and GitHub CI verification path are now merged into `main`. PR 1 through PR 7 established process stream injection, the generic scheduler, graph-backed Terraform routing, plan/apply/destroy concurrency, affected routing, and aggregate GitHub Actions output for concurrent Terraform plans. Remaining work should focus on making concurrent execution understandable from local terminals and extending DAG support without changing scheduler semantics.
 
-Near-term layers are:
+Remaining near-term layers are:
 
-1. GitHub Actions CI output for concurrent Terraform plan verification.
-2. TUI/interactive output for non-CI Terraform plan/apply/destroy runs.
-3. Mixed-type DAG adapter support after Terraform-only execution and output UX are stable.
-4. Advanced scheduling diagnostics and operator troubleshooting aids.
+1. TUI/interactive output for non-CI Terraform plan/apply/destroy runs.
+2. Mixed-type DAG adapter support after Terraform-only execution and output UX are stable.
+3. Advanced scheduling diagnostics and operator troubleshooting aids.
 
 ## Cross-Cutting Rules
 
@@ -34,35 +33,37 @@ Near-term layers are:
 | PR 4 | [cloudposse/atmos#2468](https://github.com/cloudposse/atmos/pull/2468) | Merged into `main` | `codex/dag-terraform-plan-concurrency` | Plan-only `--max-concurrency`, grouped/stream output, per-node logs, no-change hiding, and execution summaries |
 | PR 5 | [cloudposse/atmos#2474](https://github.com/cloudposse/atmos/pull/2474) | Merged into `main` | `codex/dag-terraform-apply-destroy-concurrency` | Concurrent Terraform `apply`/`destroy` safety model with auto-approve gates, cancellation propagation, and reverse destroy ordering |
 | PR 6 | [cloudposse/atmos#2519](https://github.com/cloudposse/atmos/pull/2519) | Merged into `main` | `codex/dag-terraform-affected-scheduler` | Routes Terraform `--affected` through the scheduler and adds `--fail-fast`/`--keep-going` controls |
-| PR 7 | [cloudposse/atmos#2577](https://github.com/cloudposse/atmos/pull/2577) | Open draft | `codex/dag-github-concurrent-output` | GitHub Actions-oriented output for concurrent Terraform plans, aggregate CI summaries, output variables, optional status contexts, and optional PR comments |
+| PR 7 | [cloudposse/atmos#2577](https://github.com/cloudposse/atmos/pull/2577) | Merged into `main` | `codex/dag-github-concurrent-output` | GitHub Actions-oriented output for concurrent Terraform plans, aggregate CI summaries, output variables, optional status contexts, and optional PR comments |
 | Tracking | [cloudposse/atmos#2467](https://github.com/cloudposse/atmos/pull/2467) | Open draft | `codex/dag-concurrent-execution-tracker` | Rollout plan, findings, and PR coordination document |
 
 ## Planned PRs
 
 | Step | Intended base | Proposed branch | Scope | Key gates / non-goals |
 | --- | --- | --- | --- | --- |
-| PR 8 | PR 7 / `main` after PR 7 merges | `codex/dag-terraform-interactive-output` | Add TUI/interactive output for non-CI Terraform plan/apply/destroy runs so concurrent execution is usable from a terminal. | Applies outside CI. Preserve GitHub CI rendering and native CI hooks. Do not introduce new execution semantics. |
+| PR 8 | `main` after PR 7 merge | `codex/dag-terraform-interactive-output` | Add TUI/interactive output for non-CI Terraform plan/apply/destroy runs so concurrent execution is usable from a terminal. | Applies outside CI. Preserve GitHub CI rendering and native CI hooks. Do not introduce new execution semantics. |
 | PR 9 | PR 8 | `codex/dag-mixed-type-adapters` | Add mixed-type DAG adapter support after Terraform-only execution and output UX are stable. Include explicit adapter boundaries for Terraform and future component types. | Requires repo-owner agreement on mixed-type ordering semantics. Do not rewrite unrelated executors. |
 | PR 10 | PR 9 | `codex/dag-scheduling-diagnostics` | Add advanced scheduling diagnostics, graph/debug output, and operator-facing troubleshooting aids. | Should not change scheduling semantics. Keep diagnostics opt-in and safe for CI logs. |
 
 ## Current Findings
 
-- The implementation stack PRs 1 through 6 have merged into `main`, and PR 7 is now open as draft [cloudposse/atmos#2577](https://github.com/cloudposse/atmos/pull/2577) from current `main`.
+- The implementation stack PRs 1 through 7 have merged into `main`. PR 8 should start from current `main` and focus on local interactive/TUI output.
 - `--ci` uses native CI provider detection. GitHub Actions auto-detects through `GITHUB_ACTIONS=true`; explicit `--ci` forces CI mode and falls back to the generic provider when no platform is detected.
-- GitHub Actions output is currently written through provider output writers to `$GITHUB_STEP_SUMMARY` and `$GITHUB_OUTPUT`.
-- Terraform CI plugin behavior is single-component shaped today: after-plan hooks parse one component's captured output, append one rendered summary, write output variables, optionally upload one planfile, optionally update one status context, and optionally post or update one PR comment.
-- Multi-component Terraform plan/apply/deploy currently suppress the global PostRun hook and install `Info.PerComponentHook`, which runs inside each scheduled component. That keeps single-component attribution correct, but concurrent plan mode can produce nondeterministic GitHub output unless writes are centralized or serialized.
-- The GitHub provider currently uses the commit Status API for status contexts. PR 7 should not depend on richer Checks API annotations or output.
-- PR comment markers are per component (`<!-- atmos:ci:<command>:<component>:<stack> -->`). Aggregate comments, if added, need a distinct aggregate marker so they do not collide with existing component comments.
-- The Terraform scheduler adapter already captures per-node stdout/stderr, exit code, changed state, status, timings, and log file paths; PR 7 should build CI aggregation from those existing outputs instead of scraping interleaved GitHub logs.
+- GitHub Actions output is written through provider output writers to `$GITHUB_STEP_SUMMARY` and `$GITHUB_OUTPUT`. Concurrent Terraform plan CI now writes aggregate artifacts once after the scheduler finishes to avoid concurrent writes to those files.
+- Terraform CI plugin behavior remains compatibility-critical for single-component plan/apply/deploy. Multi-component plan CI uses the aggregate collector path; single-component and non-plan behavior continue through the existing hook path.
+- Multi-component Terraform plan/apply/deploy suppress the global PostRun hook and install `Info.PerComponentHook` for per-component attribution. PR 7 centralizes CI artifact writes only for multi-component plan CI; later PRs should preserve that separation.
+- The GitHub provider currently uses the commit Status API for status contexts. PR 7 preserved that path; later CI work should not depend on richer Checks API annotations or output without a separate design.
+- Aggregate PR comments use a distinct marker from per-component comments (`<!-- atmos:ci:<command>:<component>:<stack> -->`) so they do not collide with existing component comments.
+- The Terraform scheduler adapter captures per-node stdout/stderr, exit code, changed state, status, timings, and log file paths. CI aggregation should continue to use those structured outputs instead of scraping interleaved GitHub logs.
+- GitHub Actions step summaries have a practical size limit of 1 MiB. Bulk operations should keep summaries bounded and rely on component logs, plan output files, and generated artifacts for full detail.
+- PR 7 hardening found and fixed concurrency issues around identity-backed secret resolution, credential materialization, Terraform/OpenTofu provider cache access, and long CI output truncation. These findings should stay part of the DAG rollout risk model.
 
 ## PR 7: GitHub Actions Output For Concurrent Terraform Plans
 
-Draft PR: [cloudposse/atmos#2577](https://github.com/cloudposse/atmos/pull/2577)
+Merged PR: [cloudposse/atmos#2577](https://github.com/cloudposse/atmos/pull/2577)
 
 PR 7 makes concurrent Terraform plan verification usable in GitHub Actions with minimal friction.
 
-Review focus:
+Merged scope:
 
 - Keep existing public config and flags: no new CLI flag or `atmos.yaml` setting for v1.
 - Add an aggregate CI path for multi-component `plan` runs only. Single-component plan/apply/deploy behavior remains unchanged.
@@ -73,7 +74,7 @@ Review focus:
 - Preserve optional PR comments and status contexts behind existing `ci.comments` and `ci.checks` settings, with deterministic serialized writes.
 - Avoid concurrent writes to `$GITHUB_OUTPUT` and `$GITHUB_STEP_SUMMARY`.
 
-Validation focus:
+Validation focus preserved for regressions:
 
 - Unit-test aggregate Terraform CI rendering with mixed no-change, changed, failed, skipped, and output-only results.
 - Unit-test aggregate output variables and exit-code rules.
@@ -84,7 +85,7 @@ Validation focus:
 
 ## PR 8: TUI/Interactive Terraform Output
 
-PR 8 moves after GitHub CI output so developer verification in CI is stable first. It should focus on non-CI interactive plan/apply/destroy rendering without changing CI output behavior.
+PR 8 follows the merged GitHub CI output work. It should focus on non-CI interactive plan/apply/destroy rendering without changing CI output behavior.
 
 Review focus:
 
@@ -95,7 +96,7 @@ Review focus:
 
 ## Review and Merge Model
 
-The first six rollout PRs have merged into `main`, and PR 7 is now open as a draft against `main`. If GitHub stacked PRs later become available for this repository, the remaining planned branches can be linked into official stack metadata, but this tracker should continue to represent the work in normal PR terms.
+The first seven rollout PRs have merged into `main`, and PR 8 should branch from current `main`. If GitHub stacked PRs later become available for this repository, the remaining planned branches can be linked into official stack metadata, but this tracker should continue to represent the work in normal PR terms.
 
 Before moving from one PR to the next, confirm:
 
@@ -106,9 +107,9 @@ Before moving from one PR to the next, confirm:
 
 ## Next Step Prompt
 
-Continue PR 7 review and hardening from draft [cloudposse/atmos#2577](https://github.com/cloudposse/atmos/pull/2577):
+Start PR 8 from current `main` on `codex/dag-terraform-interactive-output`:
 
-- Verify the GitHub Actions aggregate summary/output shape against a real concurrent Terraform plan job.
-- Confirm optional `ci.comments` and `ci.checks` behavior remains gated and deterministic.
-- Keep scheduler semantics unchanged: fail-fast, keep-going, skipped dependents, concurrency limits, workdir locking, and plan exit-code handling must not change.
-- Do not change interactive/TUI output in PR 7; that remains PR 8.
+- Build TUI/interactive Terraform output for non-CI plan/apply/destroy runs.
+- Preserve merged GitHub CI rendering and native CI hooks.
+- Keep scheduler semantics unchanged: fail-fast, keep-going, skipped dependents, concurrency limits, workdir locking, destroy reverse ordering, and plan exit-code handling must not change.
+- Do not introduce mixed-type DAG adapter behavior in PR 8; that remains PR 9.
