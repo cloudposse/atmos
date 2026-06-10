@@ -7,8 +7,11 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	mockTypes "github.com/cloudposse/atmos/pkg/auth/types"
+	cfg "github.com/cloudposse/atmos/pkg/config"
 )
 
 // writeMinimalAtmosProject writes a self-contained Atmos project (config + one stack + one
@@ -125,4 +128,60 @@ func TestBuildAuthManager_ComponentNotFound(t *testing.T) {
 	_, err = buildAuthManager(atmosConfig, secretScope{Stack: "dev", Component: "missing"})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to load component config for auth")
+}
+
+func TestSecretStoreDefaultIdentity(t *testing.T) {
+	tests := []struct {
+		name      string
+		requested string
+		setup     func(*mockTypes.MockAuthManager)
+		want      string
+	}{
+		{
+			name:      "explicit identity",
+			requested: "gcp/prod-secrets",
+			want:      "gcp/prod-secrets",
+		},
+		{
+			name:      "empty identity uses final authenticated chain entry",
+			requested: "",
+			setup: func(m *mockTypes.MockAuthManager) {
+				m.EXPECT().GetChain().Return([]string{"gcp", "gcp/prod-secrets"})
+			},
+			want: "gcp/prod-secrets",
+		},
+		{
+			name:      "selected identity uses final authenticated chain entry",
+			requested: cfg.IdentityFlagSelectValue,
+			setup: func(m *mockTypes.MockAuthManager) {
+				m.EXPECT().GetChain().Return([]string{"gcp", "gcp/staging-secrets"})
+			},
+			want: "gcp/staging-secrets",
+		},
+		{
+			name:      "empty chain leaves store default empty",
+			requested: "",
+			setup: func(m *mockTypes.MockAuthManager) {
+				m.EXPECT().GetChain().Return([]string{})
+			},
+			want: "",
+		},
+		{
+			name:      "disabled identity does not inherit chain",
+			requested: cfg.IdentityFlagDisabledValue,
+			want:      "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			authManager := mockTypes.NewMockAuthManager(ctrl)
+			if tt.setup != nil {
+				tt.setup(authManager)
+			}
+
+			assert.Equal(t, tt.want, secretStoreDefaultIdentity(authManager, tt.requested))
+		})
+	}
 }

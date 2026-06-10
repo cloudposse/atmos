@@ -3,7 +3,6 @@ package store
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"strings"
 	"sync"
@@ -29,6 +28,7 @@ type GSMClient interface {
 	CreateSecret(ctx context.Context, req *secretmanagerpb.CreateSecretRequest, opts ...gax.CallOption) (*secretmanagerpb.Secret, error)
 	AddSecretVersion(ctx context.Context, req *secretmanagerpb.AddSecretVersionRequest, opts ...gax.CallOption) (*secretmanagerpb.SecretVersion, error)
 	AccessSecretVersion(ctx context.Context, req *secretmanagerpb.AccessSecretVersionRequest, opts ...gax.CallOption) (*secretmanagerpb.AccessSecretVersionResponse, error)
+	GetSecret(ctx context.Context, req *secretmanagerpb.GetSecretRequest, opts ...gax.CallOption) (*secretmanagerpb.Secret, error)
 	DeleteSecret(ctx context.Context, req *secretmanagerpb.DeleteSecretRequest, opts ...gax.CallOption) error
 	Close() error
 }
@@ -251,6 +251,14 @@ func (s *GSMStore) getKey(stack string, component string, key string) (string, e
 	return baseKey, nil
 }
 
+func (s *GSMStore) secretResourceName(secretID string) string {
+	return fmt.Sprintf("projects/%s/secrets/%s", s.projectID, secretID)
+}
+
+func (s *GSMStore) secretVersionResourceName(secretID string) string {
+	return fmt.Sprintf("%s/versions/latest", s.secretResourceName(secretID))
+}
+
 // createSecret creates a new secret in Google Secret Manager, returning an existing one if already present.
 func (s *GSMStore) createSecret(ctx context.Context, secretID string) (*secretmanagerpb.Secret, error) {
 	parent := fmt.Sprintf("projects/%s", s.projectID)
@@ -268,10 +276,10 @@ func (s *GSMStore) createSecret(ctx context.Context, secretID string) (*secretma
 			switch st.Code() {
 			case codes.AlreadyExists:
 				return &secretmanagerpb.Secret{
-					Name: fmt.Sprintf("projects/%s/secrets/%s", s.projectID, secretID),
+					Name: s.secretResourceName(secretID),
 				}, nil
 			case codes.NotFound:
-				return nil, fmt.Errorf(errWrapFormatWithID, ErrResourceNotFound, fmt.Sprintf("projects/%s/secrets/%s", s.projectID, secretID), err)
+				return nil, fmt.Errorf(errWrapFormatWithID, ErrResourceNotFound, s.secretResourceName(secretID), err)
 			case codes.PermissionDenied:
 				return nil, fmt.Errorf(errWrapFormatWithID, ErrPermissionDenied, fmt.Sprintf("project %s", s.projectID), err)
 			}
@@ -309,9 +317,6 @@ func (s *GSMStore) addSecretVersion(ctx context.Context, secret *secretmanagerpb
 func (s *GSMStore) Set(stack string, component string, key string, value any) error {
 	if stack == "" {
 		return ErrEmptyStack
-	}
-	if component == "" {
-		return ErrEmptyComponent
 	}
 	if key == "" {
 		return ErrEmptyKey
@@ -357,9 +362,6 @@ func (s *GSMStore) Get(stack string, component string, key string) (any, error) 
 	if stack == "" {
 		return nil, ErrEmptyStack
 	}
-	if component == "" {
-		return nil, ErrEmptyComponent
-	}
 	if key == "" {
 		return nil, ErrEmptyKey
 	}
@@ -378,7 +380,7 @@ func (s *GSMStore) Get(stack string, component string, key string) (any, error) 
 	}
 
 	// Build the resource name for the latest version
-	name := fmt.Sprintf("projects/%s/secrets/%s/versions/latest", s.projectID, secretID)
+	name := s.secretVersionResourceName(secretID)
 
 	// Access the secret version
 	result, err := s.client.AccessSecretVersion(ctx, &secretmanagerpb.AccessSecretVersionRequest{
@@ -412,9 +414,6 @@ func (s *GSMStore) Delete(stack string, component string, key string) error {
 	if stack == "" {
 		return ErrEmptyStack
 	}
-	if component == "" {
-		return ErrEmptyComponent
-	}
 	if key == "" {
 		return ErrEmptyKey
 	}
@@ -431,7 +430,7 @@ func (s *GSMStore) Delete(stack string, component string, key string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), gsmOperationTimeout)
 	defer cancel()
 
-	name := fmt.Sprintf("projects/%s/secrets/%s", s.projectID, secretID)
+	name := s.secretResourceName(secretID)
 	err = s.client.DeleteSecret(ctx, &secretmanagerpb.DeleteSecretRequest{
 		Name: name,
 	})
@@ -450,16 +449,43 @@ func (s *GSMStore) Delete(stack string, component string, key string) error {
 	return nil
 }
 
-// Has reports whether a secret exists for the given stack, component, and key. It performs a
-// Get and maps a not-found result to false; any other error is propagated.
+// Has reports whether a secret exists for the given stack, component, and key. It checks
+// Secret Manager metadata only and never accesses the secret payload.
 func (s *GSMStore) Has(stack string, component string, key string) (bool, error) {
-	_, err := s.Get(stack, component, key)
-	if err != nil {
-		if errors.Is(err, ErrResourceNotFound) {
-			return false, nil
-		}
+	if stack == "" {
+		return false, ErrEmptyStack
+	}
+	if key == "" {
+		return false, ErrEmptyKey
+	}
+
+	if err := s.ensureClient(); err != nil {
 		return false, err
 	}
+
+	secretID, err := s.getKey(stack, component, key)
+	if err != nil {
+		return false, fmt.Errorf(errWrapFormat, ErrGetKey, err)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), gsmOperationTimeout)
+	defer cancel()
+
+	_, err = s.client.GetSecret(ctx, &secretmanagerpb.GetSecretRequest{
+		Name: s.secretResourceName(secretID),
+	})
+	if err != nil {
+		if st, ok := status.FromError(err); ok {
+			switch st.Code() {
+			case codes.NotFound:
+				return false, nil
+			case codes.PermissionDenied:
+				return false, fmt.Errorf(errWrapFormatWithID, ErrPermissionDenied, fmt.Sprintf("secret %s", secretID), err)
+			}
+		}
+		return false, fmt.Errorf(errWrapFormatWithID, ErrGetSecret, secretID, err)
+	}
+
 	return true, nil
 }
 
@@ -482,7 +508,7 @@ func (s *GSMStore) GetKey(key string) (interface{}, error) {
 	}
 
 	// Construct the full secret name
-	fullSecretName := fmt.Sprintf("projects/%s/secrets/%s/versions/latest", s.projectID, secretName)
+	fullSecretName := s.secretVersionResourceName(secretName)
 
 	ctx, cancel := context.WithTimeout(context.Background(), gsmOperationTimeout)
 	defer cancel()

@@ -73,7 +73,8 @@ boolean, the provider must persist the sensitivity flag explicitly:
 - **Azure Key Vault** — write the reserved tag `atmos-sensitive=true` on the secret;
   read tags on `GetSecret`.
 - **GCP Secret Manager** — write the reserved label `atmos-sensitive=true` on the
-  secret; read labels on access.
+  secret; read labels from secret metadata. Existence/status checks should use
+  `GetSecret` metadata only and must not call `AccessSecretVersion`.
 
 > **Why the separator differs:** AWS Secrets Manager tag keys permit a colon, so the
 > colon form `atmos:sensitive=true` is used there. Azure Key Vault and GCP Secret

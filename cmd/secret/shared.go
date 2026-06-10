@@ -120,8 +120,7 @@ func loadServiceAndConfig(scope secretScope) (*secrets.Service, *schema.AtmosCon
 
 	// Bridge auth credentials into identity-aware secret stores (lazy resolution).
 	if authManager != nil {
-		resolver := authbridge.NewResolver(authManager, authManager.GetStackInfo())
-		atmosConfig.Stores.SetAuthContextResolver(resolver)
+		injectSecretStoreAuthResolver(&atmosConfig, authManager, scope)
 	}
 
 	section, err := e.ExecuteDescribeComponent(&e.ExecuteDescribeComponentParams{
@@ -139,6 +138,26 @@ func loadServiceAndConfig(scope secretScope) (*secrets.Service, *schema.AtmosCon
 	}
 
 	return secrets.NewService(&atmosConfig, scope.Stack, scope.Component, section), &atmosConfig, nil
+}
+
+func injectSecretStoreAuthResolver(atmosConfig *schema.AtmosConfiguration, authManager auth.AuthManager, scope secretScope) {
+	resolver := authbridge.NewResolver(authManager, authManager.GetStackInfo())
+	atmosConfig.Stores.SetAuthContextResolverWithDefaultIdentity(resolver, secretStoreDefaultIdentity(authManager, scope.Identity))
+}
+
+func secretStoreDefaultIdentity(authManager auth.AuthManager, requestedIdentity string) string {
+	switch requestedIdentity {
+	case cfg.IdentityFlagDisabledValue:
+		return ""
+	case "", cfg.IdentityFlagSelectValue:
+		chain := authManager.GetChain()
+		if len(chain) == 0 {
+			return ""
+		}
+		return chain[len(chain)-1]
+	default:
+		return requestedIdentity
+	}
 }
 
 // buildAuthManager merges component auth and creates an authenticated manager for the scope.

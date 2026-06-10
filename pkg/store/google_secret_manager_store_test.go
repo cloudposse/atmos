@@ -53,6 +53,15 @@ func (m *MockGSMClient) AccessSecretVersion(ctx context.Context, req *secretmana
 	return args.Get(0).(*secretmanagerpb.AccessSecretVersionResponse), args.Error(1)
 }
 
+// GetSecret mocks the GSM GetSecret API call.
+func (m *MockGSMClient) GetSecret(ctx context.Context, req *secretmanagerpb.GetSecretRequest, opts ...gax.CallOption) (*secretmanagerpb.Secret, error) {
+	args := m.Called(mock.Anything, req)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*secretmanagerpb.Secret), args.Error(1)
+}
+
 // DeleteSecret mocks the GSM DeleteSecret API call.
 func (m *MockGSMClient) DeleteSecret(ctx context.Context, req *secretmanagerpb.DeleteSecretRequest, opts ...gax.CallOption) error {
 	args := m.Called(mock.Anything, req)
@@ -280,13 +289,12 @@ func TestGSMStore_Set(t *testing.T) {
 			wantErr:   true,
 		},
 		{
-			name:      "empty component",
+			name:      "successful stack-scoped set",
 			stack:     "dev-usw2",
 			component: "",
 			key:       "config-key",
 			value:     "test-value",
-			mockFn:    func(m *MockGSMClient) {},
-			wantErr:   true,
+			mockFn:    gsmClientSecretCreationMock("test-project", "test-prefix_dev_usw2_config-key", `"test-value"`, nil, nil),
 		},
 		{
 			name:      "empty key",
@@ -420,13 +428,24 @@ func TestGSMStore_Get(t *testing.T) {
 			wantErr:   true,
 		},
 		{
-			name:      "empty component",
+			name:      "successful stack-scoped get",
 			stack:     "dev-usw2",
 			component: "",
 			key:       "config-key",
-			mockFn:    func(m *MockGSMClient) {},
-			want:      nil,
-			wantErr:   true,
+			mockFn: func(m *MockGSMClient) {
+				m.On("AccessSecretVersion", mock.Anything, mock.MatchedBy(func(req *secretmanagerpb.AccessSecretVersionRequest) bool {
+					expectedReq := &secretmanagerpb.AccessSecretVersionRequest{
+						Name: "projects/test-project/secrets/test-prefix_dev_usw2_config-key/versions/latest",
+					}
+					return req.Name == expectedReq.Name
+				})).Return(&secretmanagerpb.AccessSecretVersionResponse{
+					Payload: &secretmanagerpb.SecretPayload{
+						Data: []byte(`"test-value"`),
+					},
+				}, nil)
+			},
+			want:    "test-value",
+			wantErr: false,
 		},
 		{
 			name:      "empty key",
@@ -472,9 +491,10 @@ func TestGSMStore_Get(t *testing.T) {
 func TestGSMStore_Delete(t *testing.T) {
 	testPrefix := "test-prefix"
 	testDelimiter := "-"
-	const secretName = "projects/test-project/secrets/test-prefix_dev_usw2_app_service_config-key"
+	const componentSecretName = "projects/test-project/secrets/test-prefix_dev_usw2_app_service_config-key"
+	const stackSecretName = "projects/test-project/secrets/test-prefix_dev_usw2_config-key"
 
-	matchDelete := func(m *MockGSMClient, err error) {
+	matchDelete := func(m *MockGSMClient, secretName string, err error) {
 		m.On("DeleteSecret", mock.Anything, mock.MatchedBy(func(req *secretmanagerpb.DeleteSecretRequest) bool {
 			return req.Name == secretName
 		})).Return(err)
@@ -493,30 +513,34 @@ func TestGSMStore_Delete(t *testing.T) {
 			stack:     "dev-usw2",
 			component: "app/service",
 			key:       "config-key",
-			mockFn:    func(m *MockGSMClient) { matchDelete(m, nil) },
+			mockFn:    func(m *MockGSMClient) { matchDelete(m, componentSecretName, nil) },
 		},
 		{
 			name:      "not found",
 			stack:     "dev-usw2",
 			component: "app/service",
 			key:       "config-key",
-			mockFn:    func(m *MockGSMClient) { matchDelete(m, status.Error(codes.NotFound, "resource not found")) },
-			wantErr:   ErrResourceNotFound,
+			mockFn: func(m *MockGSMClient) {
+				matchDelete(m, componentSecretName, status.Error(codes.NotFound, "resource not found"))
+			},
+			wantErr: ErrResourceNotFound,
 		},
 		{
 			name:      "permission denied",
 			stack:     "dev-usw2",
 			component: "app/service",
 			key:       "config-key",
-			mockFn:    func(m *MockGSMClient) { matchDelete(m, status.Error(codes.PermissionDenied, "permission denied")) },
-			wantErr:   ErrPermissionDenied,
+			mockFn: func(m *MockGSMClient) {
+				matchDelete(m, componentSecretName, status.Error(codes.PermissionDenied, "permission denied"))
+			},
+			wantErr: ErrPermissionDenied,
 		},
 		{
 			name:      "generic error wrapped as delete failure",
 			stack:     "dev-usw2",
 			component: "app/service",
 			key:       "config-key",
-			mockFn:    func(m *MockGSMClient) { matchDelete(m, ErrInternalError) },
+			mockFn:    func(m *MockGSMClient) { matchDelete(m, componentSecretName, ErrInternalError) },
 			wantErr:   ErrDeleteSecret,
 		},
 		{
@@ -528,12 +552,11 @@ func TestGSMStore_Delete(t *testing.T) {
 			wantErr:   ErrEmptyStack,
 		},
 		{
-			name:      "empty component",
+			name:      "stack-scoped success",
 			stack:     "dev-usw2",
 			component: "",
 			key:       "config-key",
-			mockFn:    func(m *MockGSMClient) {},
-			wantErr:   ErrEmptyComponent,
+			mockFn:    func(m *MockGSMClient) { matchDelete(m, stackSecretName, nil) },
 		},
 		{
 			name:      "empty key",
@@ -570,11 +593,12 @@ func TestGSMStore_Delete(t *testing.T) {
 func TestGSMStore_Has(t *testing.T) {
 	testPrefix := "test-prefix"
 	testDelimiter := "-"
-	const accessName = "projects/test-project/secrets/test-prefix_dev_usw2_app_service_config-key/versions/latest"
+	const componentSecretName = "projects/test-project/secrets/test-prefix_dev_usw2_app_service_config-key"
+	const stackSecretName = "projects/test-project/secrets/test-prefix_dev_usw2_config-key"
 
-	matchAccess := func(m *MockGSMClient, resp *secretmanagerpb.AccessSecretVersionResponse, err error) {
-		call := m.On("AccessSecretVersion", mock.Anything, mock.MatchedBy(func(req *secretmanagerpb.AccessSecretVersionRequest) bool {
-			return req.Name == accessName
+	matchGetSecret := func(m *MockGSMClient, secretName string, resp *secretmanagerpb.Secret, err error) {
+		call := m.On("GetSecret", mock.Anything, mock.MatchedBy(func(req *secretmanagerpb.GetSecretRequest) bool {
+			return req.Name == secretName
 		}))
 		if err != nil {
 			call.Return(nil, err)
@@ -584,28 +608,52 @@ func TestGSMStore_Has(t *testing.T) {
 	}
 
 	tests := []struct {
-		name    string
-		mockFn  func(*MockGSMClient)
-		want    bool
-		wantErr error
+		name      string
+		stack     string
+		component string
+		key       string
+		mockFn    func(*MockGSMClient)
+		want      bool
+		wantErr   error
 	}{
 		{
-			name: "present",
+			name:      "present",
+			stack:     "dev-usw2",
+			component: "app/service",
+			key:       "config-key",
 			mockFn: func(m *MockGSMClient) {
-				matchAccess(m, &secretmanagerpb.AccessSecretVersionResponse{
-					Payload: &secretmanagerpb.SecretPayload{Data: []byte(`"test-value"`)},
-				}, nil)
+				matchGetSecret(m, componentSecretName, &secretmanagerpb.Secret{Name: componentSecretName}, nil)
 			},
 			want: true,
 		},
 		{
-			name:   "absent",
-			mockFn: func(m *MockGSMClient) { matchAccess(m, nil, status.Error(codes.NotFound, "resource not found")) },
-			want:   false,
+			name:      "stack-scoped present",
+			stack:     "dev-usw2",
+			component: "",
+			key:       "config-key",
+			mockFn: func(m *MockGSMClient) {
+				matchGetSecret(m, stackSecretName, &secretmanagerpb.Secret{Name: stackSecretName}, nil)
+			},
+			want: true,
 		},
 		{
-			name:    "other error propagated",
-			mockFn:  func(m *MockGSMClient) { matchAccess(m, nil, status.Error(codes.PermissionDenied, "permission denied")) },
+			name:      "absent",
+			stack:     "dev-usw2",
+			component: "app/service",
+			key:       "config-key",
+			mockFn: func(m *MockGSMClient) {
+				matchGetSecret(m, componentSecretName, nil, status.Error(codes.NotFound, "resource not found"))
+			},
+			want: false,
+		},
+		{
+			name:      "other error propagated",
+			stack:     "dev-usw2",
+			component: "app/service",
+			key:       "config-key",
+			mockFn: func(m *MockGSMClient) {
+				matchGetSecret(m, componentSecretName, nil, status.Error(codes.PermissionDenied, "permission denied"))
+			},
 			want:    false,
 			wantErr: ErrPermissionDenied,
 		},
@@ -622,7 +670,7 @@ func TestGSMStore_Has(t *testing.T) {
 				StackDelimiter: &testDelimiter,
 			})
 
-			got, err := store.Has("dev-usw2", "app/service", "config-key")
+			got, err := store.Has(tt.stack, tt.component, tt.key)
 			if tt.wantErr != nil {
 				assert.ErrorIs(t, err, tt.wantErr)
 			} else {
@@ -732,6 +780,16 @@ func TestGSMStore_GetKey(t *testing.T) {
 			component:      "app/service",
 			key:            "config/key",
 			expected:       "test-prefix_dev_usw2_app_service_config_key",
+			wantErr:        false,
+		},
+		{
+			name:           "stack-scoped path omits component segment",
+			prefix:         "test-prefix",
+			stackDelimiter: stringPtr("-"),
+			stack:          "dev-usw2",
+			component:      "",
+			key:            "config",
+			expected:       "test-prefix_dev_usw2_config",
 			wantErr:        false,
 		},
 		{

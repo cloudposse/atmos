@@ -868,6 +868,7 @@ stores:
   gcp-secrets:
     type: google-secret-manager
     secret: true
+    identity: gcp/prod-secrets
     options: { project_id: my-project }
 
   # 1Password — local dev (service account) or 1Password Connect for services inside a VPC.
@@ -888,6 +889,10 @@ stores:
 ```
 
 - Path generation reuses the store's existing namespacing: `{prefix}/{stack}/{component}/{secret_name}`.
+  Stack-scoped secrets omit the component segment (`{prefix}/{stack}/{secret_name}`); provider-specific delimiters still apply
+  (for example, GCP Secret Manager uses `_` because secret IDs cannot contain `/`).
+- Status/existence checks used by `list` and `validate` must be metadata-only and must not read the payload
+  (for example, GCP Secret Manager uses `GetSecret`, not `AccessSecretVersion`).
 - Encryption-at-rest + the sensitivity flag follow the [Store Sensitivity PRD](secrets-masking/store-sensitivity.md) — a `secret: true` store always writes the sensitive variant (e.g. SSM `SecureString`).
 
 ### Track 2: Non-store (SOPS)
@@ -1099,7 +1104,7 @@ pkg/schema/
 
 ### Phase 5: Non-store backends (Track 2) + remaining store types
 - **SOPS** native provider (`pkg/secrets/providers/sops.go`): `sops/age`, `sops/aws-kms`, `sops/gcp-kms`, `sops/gpg`
-- Wire Azure Key Vault and GCP Secret Manager (existing store types) for `secret: true` use
+- Wire GCP Secret Manager first for `secret: true` use; Azure Key Vault follows the same store-adapter contract as a follow-up
 - Future: vals-style read-only loaders as additional non-store providers
 
 ## Documentation Deliverables
