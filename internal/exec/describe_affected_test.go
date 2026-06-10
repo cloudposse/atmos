@@ -1700,6 +1700,45 @@ func TestResolveBaseFromCI(t *testing.T) {
 		assert.Empty(t, describe.Ref, "auto-detect must not fall back to refs/remotes/origin/<target> (causes false positives)")
 	})
 
+	t.Run("GitHub Actions raw merged PR event uses merge commit for upload correlation", func(t *testing.T) {
+		// Reset and register provider for this test only.
+		ci.Reset()
+		t.Cleanup(ci.Reset)
+		ci.Register(githubCI.NewProvider())
+
+		t.Setenv("GITHUB_ACTIONS", "true")
+		t.Setenv("GITHUB_EVENT_NAME", "pull_request")
+		t.Setenv("GITHUB_BASE_REF", "main")
+
+		eventPayload := `{
+			"action": "closed",
+			"pull_request": {
+				"merged": true,
+				"merge_commit_sha": "mergedsha3456789012345678901234567890abcd",
+				"head": {
+					"sha": "headsha123456789012345678901234567890ab"
+				},
+				"base": {
+					"ref": "main",
+					"sha": "abc123def456789012345678901234567890abcd"
+				}
+			}
+		}`
+		eventPath := filepath.Join(t.TempDir(), "event.json")
+		err := os.WriteFile(eventPath, []byte(eventPayload), 0o644)
+		require.NoError(t, err)
+		t.Setenv("GITHUB_EVENT_PATH", eventPath)
+
+		describe := &DescribeAffectedCmdArgs{
+			CLIConfig: &schema.AtmosConfiguration{},
+		}
+		resolveBaseFromCI(describe)
+		assert.Equal(t, "pull_request", describe.CIEventType)
+		assert.Equal(t, "mergedsha3456789012345678901234567890abcd", describe.HeadSHAOverride)
+		assert.Equal(t, "main", describe.TargetBranch)
+		assert.NotEmpty(t, describe.SHA)
+	})
+
 	t.Run("GitHub Actions push event with before SHA", func(t *testing.T) {
 		// Reset and register provider for this test only.
 		ci.Reset()

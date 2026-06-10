@@ -76,7 +76,7 @@ The purpose of base resolution is to answer: "what is the fork point — the com
 - Only correct when the workflow checks out the **merge commit** (not the PR head) AND the merge strategy is merge or squash.
 - **Breaks for rebase merges with multiple commits**: `merge_commit_sha` points to the tip of the rebased commits, so `HEAD~1` is the previous rebased commit — not the target branch state.
 - **Breaks entirely when the workflow checks out `head.sha`**: `HEAD~1` is the parent commit on the PR branch, which for multi-commit PRs is just the second-to-last PR commit — completely wrong.
-- **Breaks the Atmos Pro upload correlation**: Atmos Pro indexes by `event.pull_request.head.sha` from the webhook. If the workflow checks out the merge commit (required for HEAD~1 to work), the upload SHA doesn't match what Atmos Pro expects. This creates conflicting requirements — you can't satisfy both HEAD~1 correctness and Atmos Pro SHA correlation with the same checkout.
+- **Breaks the Atmos Pro upload correlation for open PRs**: Atmos Pro indexes open PR uploads by `event.pull_request.head.sha` from the webhook. If the workflow checks out the merge commit (required for HEAD~1 to work), the upload SHA doesn't match what Atmos Pro expects. This creates conflicting requirements for open PR checks — you can't satisfy both HEAD~1 correctness and open-PR upload correlation with the same checkout.
 
 **`event.pull_request.base.sha` (from webhook payload)**:
 - Points to the correct branch but can be **stale**: if other PRs merge into the target branch between when the PR was created/updated and when it merges, `base.sha` points to an older commit on the target branch.
@@ -114,7 +114,7 @@ Each strategy is tried in order; the first success is used:
 
 ### Atmos Pro upload correlation
 
-For `--upload` mode, the CLI also extracts `event.pull_request.head.sha` from the event payload. This SHA is used as the `HeadSHA` in the upload request, ensuring it matches what Atmos Pro indexed from the webhook — regardless of which commit the workflow has checked out locally.
+For `--upload` mode, the CLI also extracts an event-aware upload correlation SHA from the payload. Open PR events use `event.pull_request.head.sha`, matching the webhook SHA Atmos Pro indexes for PR checks. Raw `pull_request.closed` events with `pull_request.merged == true` use `event.pull_request.merge_commit_sha`, matching the commit that landed on the base branch for native CI post-merge uploads. This does not change Atmos Pro's synthetic `settings.pro.pull_request.merged` event.
 
 Push events are rejected when `--upload` is set, since Atmos Pro only processes `pull_request` webhooks and cannot correlate push event uploads.
 
@@ -123,7 +123,7 @@ Push events are rejected when `--upload` is set, since Atmos Pro only processes 
 | Event | Action | Primary Strategy | Fallback | Type | Source |
 |-------|--------|-----------------|----------|------|--------|
 | `pull_request` | opened / synchronize | `MergeBaseWithAutoFetch(HEAD, origin/<target>)` | `event.pull_request.base.sha` → `GITHUB_BASE_REF` ref (warn) | SHA or ref | `event.pull_request.base.ref` → `git merge-base` |
-| `pull_request` | closed (merged) | `MergeBaseWithAutoFetch(HEAD, origin/<target>)` | `HEAD~1` → `event.pull_request.base.sha` → `GITHUB_BASE_REF` ref (warn) | SHA or ref | `event.pull_request.base.ref` → `git merge-base` |
+| `pull_request` | closed (merged) | `MergeBaseWithAutoFetch(HEAD, origin/<target>)` | `HEAD~1` → `event.pull_request.base.sha` → `GITHUB_BASE_REF` ref (warn) | SHA or ref | `event.pull_request.base.ref` → `git merge-base`; upload SHA from `event.pull_request.merge_commit_sha` |
 | `pull_request_target` | any | `MergeBaseWithAutoFetch(HEAD, origin/<target>)` | `event.pull_request.base.sha` → `GITHUB_BASE_REF` ref (warn) | SHA or ref | `event.pull_request.base.ref` → `git merge-base` |
 | `push` | normal | `event.before` | — | SHA | `$GITHUB_EVENT_PATH` |
 | `push` | force-push (`event.forced`) | `HEAD~1` | `origin/HEAD` ref | SHA or ref | git resolution |
@@ -140,7 +140,8 @@ Push events are rejected when `--upload` is set, since Atmos Pro only processes 
 
 - `action` — PR action (opened, synchronize, closed).
 - `pull_request.base.ref` — target branch name for merge-base computation.
-- `pull_request.head.sha` — PR head commit SHA for Atmos Pro upload correlation.
+- `pull_request.head.sha` — PR head commit SHA for open PR upload correlation.
+- `pull_request.merged` and `pull_request.merge_commit_sha` — used to correlate native CI post-merge uploads from raw `pull_request.closed` events.
 - `before` — previous HEAD SHA for push events.
 - `forced` — whether push was a force-push.
 

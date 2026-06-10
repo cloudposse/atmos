@@ -94,28 +94,56 @@ func (p *Provider) ResolveBase() (*provider.BaseResolution, error) {
 //     Compares to current tip of target; will produce false positives for
 //     out-of-date PRs.
 //
-// Also extracts the PR head SHA for Atmos Pro upload correlation.
+// Also extracts the upload correlation SHA for Atmos Pro. Open PR events use
+// pull_request.head.sha. Raw pull_request.closed events that GitHub marks as
+// merged use pull_request.merge_commit_sha so native CI post-merge uploads
+// correlate with the commit that landed on the base branch. This does not
+// affect Atmos Pro's synthetic settings.pro.pull_request.merged event.
 func resolvePRBase(eventName string) (*provider.BaseResolution, error) {
 	payload, err := readEventPayload()
 	if err != nil {
 		return nil, fmt.Errorf("reading GitHub event payload: %w", err)
 	}
 
-	headSHA := extractPRHeadSHA(payload)
-	targetBranch := extractTargetBranch(payload)
+	prHeadSHA := extractPRHeadSHA(payload)
+	mergeCommitSHA := extractPRMergeCommitSHA(payload)
+	merged := extractPRMerged(payload)
 	action, _ := payload["action"].(string)
+	uploadHeadSHA := resolvePRUploadHeadSHA(prHeadSHA, mergeCommitSHA, action == "closed" && merged)
+	targetBranch := extractTargetBranch(payload)
+	localHeadSHA := resolveGitSHA()
+
+	log.Debug(
+		"GitHub pull_request event metadata",
+		"event", eventName,
+		"action", action,
+		"merged", merged,
+		"pull_request_head_sha", prHeadSHA,
+		"merge_commit_sha", mergeCommitSHA,
+		"checked_out_head_sha", localHeadSHA,
+		"upload_head_sha", uploadHeadSHA,
+	)
+
+	withPRMetadata := func(res *provider.BaseResolution) *provider.BaseResolution {
+		res.HeadSHA = uploadHeadSHA
+		res.PullRequestHeadSHA = prHeadSHA
+		res.PullRequestMergeCommitSHA = mergeCommitSHA
+		res.PullRequestMerged = merged
+		res.EventAction = action
+		res.LocalHeadSHA = localHeadSHA
+		res.TargetBranch = targetBranch
+		res.EventType = eventName
+		return res
+	}
 
 	// 1) merge-base — the gold standard. Works regardless of what's
 	// checked out, merge strategy, or number of commits on the PR.
 	if targetBranch != "" {
 		if sha, mbErr := git.MergeBaseWithAutoFetch(".", targetBranch); mbErr == nil {
-			return &provider.BaseResolution{
-				SHA:          sha,
-				HeadSHA:      headSHA,
-				TargetBranch: targetBranch,
-				Source:       "merge-base(HEAD, origin/" + targetBranch + ")",
-				EventType:    eventName,
-			}, nil
+			return withPRMetadata(&provider.BaseResolution{
+				SHA:    sha,
+				Source: "merge-base(HEAD, origin/" + targetBranch + ")",
+			}), nil
 		} else {
 			log.Debug("merge-base failed, trying fallbacks", "target", targetBranch, "error", mbErr)
 		}
@@ -125,13 +153,10 @@ func resolvePRBase(eventName string) (*provider.BaseResolution, error) {
 	// Correct when the merge commit is checked out (merge/squash strategies).
 	if action == "closed" {
 		if sha, parentErr := resolveParentCommit(); parentErr == nil {
-			return &provider.BaseResolution{
-				SHA:          sha,
-				HeadSHA:      headSHA,
-				TargetBranch: targetBranch,
-				Source:       "HEAD~1 (merged PR, merge-base unavailable)",
-				EventType:    eventName,
-			}, nil
+			return withPRMetadata(&provider.BaseResolution{
+				SHA:    sha,
+				Source: "HEAD~1 (merged PR, merge-base unavailable)",
+			}), nil
 		} else {
 			log.Debug("HEAD~1 failed for merged PR", "error", parentErr)
 		}
@@ -143,13 +168,10 @@ func resolvePRBase(eventName string) (*provider.BaseResolution, error) {
 	// of main, so it will not silently turn a stale-but-untouched PR into
 	// "every component is affected".
 	if baseSHA := extractBaseSHA(payload); baseSHA != "" {
-		return &provider.BaseResolution{
-			SHA:          baseSHA,
-			HeadSHA:      headSHA,
-			TargetBranch: targetBranch,
-			Source:       sourcePayloadBaseSHA,
-			EventType:    eventName,
-		}, nil
+		return withPRMetadata(&provider.BaseResolution{
+			SHA:    baseSHA,
+			Source: sourcePayloadBaseSHA,
+		}), nil
 	}
 
 	// 4) Last-resort: ref to current tip of target branch. Logs Warn
@@ -157,8 +179,7 @@ func resolvePRBase(eventName string) (*provider.BaseResolution, error) {
 	// out-of-date PRs (every commit on main since the fork point shows
 	// up as a tree difference).
 	res := resolveFromBaseRef(eventName)
-	res.HeadSHA = headSHA
-	res.TargetBranch = targetBranch
+	res = withPRMetadata(res)
 	log.Warn(
 		"Falling back to current tip of target branch for PR base — affected detection may include unrelated commits from the target branch.",
 		"target", targetBranch,
@@ -189,7 +210,6 @@ func extractTargetBranch(payload map[string]any) string {
 }
 
 // extractPRHeadSHA extracts the head commit SHA from a pull request event payload.
-// This SHA is used for upload correlation with Atmos Pro, which indexes by head.sha.
 func extractPRHeadSHA(payload map[string]any) string {
 	pr, _ := payload[payloadKeyPullRequest].(map[string]any)
 	if pr == nil {
@@ -203,6 +223,37 @@ func extractPRHeadSHA(payload map[string]any) string {
 
 	sha, _ := head["sha"].(string)
 	return sha
+}
+
+// extractPRMergeCommitSHA extracts merge_commit_sha from a pull request event payload.
+// For closed merged PRs, GitHub sets this to the commit that landed on the base
+// branch: merge commit, squash commit, or final rebase commit depending on merge
+// strategy.
+func extractPRMergeCommitSHA(payload map[string]any) string {
+	pr, _ := payload[payloadKeyPullRequest].(map[string]any)
+	if pr == nil {
+		return ""
+	}
+
+	sha, _ := pr["merge_commit_sha"].(string)
+	return sha
+}
+
+func extractPRMerged(payload map[string]any) bool {
+	pr, _ := payload[payloadKeyPullRequest].(map[string]any)
+	if pr == nil {
+		return false
+	}
+
+	merged, _ := pr["merged"].(bool)
+	return merged
+}
+
+func resolvePRUploadHeadSHA(prHeadSHA, mergeCommitSHA string, mergedPR bool) string {
+	if mergedPR {
+		return mergeCommitSHA
+	}
+	return prHeadSHA
 }
 
 // extractBaseSHA extracts the base commit SHA from a pull request event payload.
