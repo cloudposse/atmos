@@ -117,6 +117,49 @@ terraform:
 ```
 </File>
 
+### Repeated flags (list values)
+
+For a flag that takes a **list**, repeat it — each value is its own entry in the `args:` list, exactly
+as you would type them. For example, `atmos describe component` accepts `--skip` repeatedly to skip
+multiple YAML functions:
+
+<File title="atmos.yaml">
+```yaml
+describe:
+  component:
+    args:
+      - --skip=terraform.state
+      - --skip=terraform.output
+```
+</File>
+
+That is equivalent to typing:
+
+```shell
+atmos describe component vpc -s prod --skip=terraform.state --skip=terraform.output
+```
+
+The same pattern works for any repeatable flag, including pass-through tool flags such as Terraform's
+`-var`:
+
+<File title="atmos.yaml">
+```yaml
+terraform:
+  args:
+    - -var=region=us-east-1
+    - -var=stage=prod
+```
+</File>
+
+<Note>
+For an Atmos flag, the configured list is **replaced, not extended**: passing that flag once on the
+command line suppresses *all* of its configured defaults — so `atmos describe component vpc -s prod
+--skip=vars` skips only `vars`, not the configured `terraform.state` and `terraform.output`. To keep
+the defaults and add to them, repeat them on the command line. (Tool-native flags like Terraform's
+`-var` are passed straight through, so the tool's own rules decide how command-line values combine
+with the defaults.)
+</Note>
+
 ## Precedence
 
 Default args sit below the command line and environment variables:
