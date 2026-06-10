@@ -6,6 +6,7 @@ type HookEvent string
 
 const (
 	BeforeTerraformInit            HookEvent = "before.terraform.init"
+	AfterTerraformInit             HookEvent = "after.terraform.init"
 	AfterTerraformApply            HookEvent = "after.terraform.apply"
 	AfterTerraformApplyAggregate   HookEvent = "after.terraform.apply.aggregate"
 	BeforeTerraformApply           HookEvent = "before.terraform.apply"

@@ -565,27 +565,59 @@ func TestProcessStackConfig_HappyPath(t *testing.T) {
 			},
 		},
 		{
-			name: "config with terraform hooks",
+			// DRY pattern: a hook defined once at top-level `terraform.hooks`
+			// must be inherited by a component that declares no hooks of its own.
+			name: "terraform hooks inherited by component with no own hooks",
 			config: map[string]any{
 				cfg.TerraformSectionName: map[string]any{
 					cfg.HooksSectionName: map[string]any{
-						"before_init": []any{"echo 'Before init'"},
+						"policy": map[string]any{
+							"events": []any{"before-terraform-plan"},
+							"kind":   "checkov",
+						},
+					},
+				},
+				cfg.ComponentsSectionName: map[string]any{
+					cfg.TerraformComponentType: map[string]any{
+						"vpc": map[string]any{
+							cfg.VarsSectionName: map[string]any{"name": "vpc"},
+						},
 					},
 				},
 			},
 			validateResult: func(t *testing.T, result map[string]any) {
-				assert.NotNil(t, result)
+				hooks := componentHooks(t, result, "vpc")
+				policy, ok := hooks["policy"].(map[string]any)
+				require.True(t, ok, "component must inherit the top-level terraform.hooks 'policy' hook, got: %v", hooks)
+				assert.Equal(t, "checkov", policy["kind"])
+				assert.Equal(t, []any{"before-terraform-plan"}, policy["events"])
 			},
 		},
 		{
-			name: "config with global hooks",
+			// A hook in the global top-level `hooks:` section is likewise
+			// inherited by every terraform component.
+			name: "global hooks inherited by component with no own hooks",
 			config: map[string]any{
 				cfg.HooksSectionName: map[string]any{
-					"before_all": []any{"echo 'Hello'"},
+					"cost": map[string]any{
+						"events": []any{"after-terraform-plan"},
+						"kind":   "infracost",
+					},
+				},
+				cfg.ComponentsSectionName: map[string]any{
+					cfg.TerraformComponentType: map[string]any{
+						"vpc": map[string]any{
+							cfg.VarsSectionName: map[string]any{"name": "vpc"},
+						},
+					},
 				},
 			},
 			validateResult: func(t *testing.T, result map[string]any) {
-				assert.NotNil(t, result)
+				hooks := componentHooks(t, result, "vpc")
+				cost, ok := hooks["cost"].(map[string]any)
+				require.True(t, ok, "component must inherit the global 'cost' hook, got: %v", hooks)
+				assert.Equal(t, "infracost", cost["kind"])
+				assert.Equal(t, []any{"after-terraform-plan"}, cost["events"])
 			},
 		},
 		{
@@ -965,5 +997,80 @@ func TestProcessStackConfig_CustomComponentTypeFilter(t *testing.T) {
 				assert.True(t, !hasScript || len(scriptSection) == 0, "script components should NOT be present when filtered")
 			}
 		})
+	}
+}
+
+// componentHooks extracts the merged hooks section for a terraform component
+// from a ProcessStackConfig result. It fails the test if the component or its
+// hooks section is missing, so inheritance assertions read cleanly.
+func componentHooks(t *testing.T, result map[string]any, component string) map[string]any {
+	t.Helper()
+	components, ok := result[cfg.ComponentsSectionName].(map[string]any)
+	require.True(t, ok, "result must contain a components section")
+	terraform, ok := components[cfg.TerraformComponentType].(map[string]any)
+	require.True(t, ok, "result must contain terraform components")
+	comp, ok := terraform[component].(map[string]any)
+	require.True(t, ok, "terraform component %q must exist", component)
+	hooks, ok := comp[cfg.HooksSectionName].(map[string]any)
+	require.True(t, ok, "component %q must have a hooks section, got: %v", component, comp[cfg.HooksSectionName])
+	return hooks
+}
+
+// TestProcessStackConfig_HooksWrongScopeNotInherited locks in the scope
+// distinction that tripped up the original report: hooks belong at top-level
+// `terraform.hooks` (or global `hooks:`), NOT under `components.terraform.hooks`.
+// A `hooks` key directly under `components.terraform` is a sibling of the
+// component names, so it is treated as a component literally named "hooks" and
+// is NOT inherited as hook defaults by real components.
+func TestProcessStackConfig_HooksWrongScopeNotInherited(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{}
+
+	config := map[string]any{
+		cfg.ComponentsSectionName: map[string]any{
+			cfg.TerraformComponentType: map[string]any{
+				// Misplaced: this is the WRONG scope for shared hook defaults.
+				cfg.HooksSectionName: map[string]any{
+					"policy": map[string]any{
+						"events": []any{"before-terraform-plan"},
+						"kind":   "checkov",
+					},
+				},
+				"vpc": map[string]any{
+					cfg.VarsSectionName: map[string]any{"name": "vpc"},
+				},
+			},
+		},
+	}
+
+	result, err := ProcessStackConfig(
+		atmosConfig,
+		"/test/stacks",
+		"/test/terraform",
+		"/test/helmfile",
+		"/test/packer",
+		"/test/ansible",
+		"test-stack.yaml",
+		config,
+		false,
+		false,
+		"",
+		map[string]map[string][]string{},
+		map[string]map[string]any{},
+		false,
+	)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	components, ok := result[cfg.ComponentsSectionName].(map[string]any)
+	require.True(t, ok, "result must contain a components section")
+	terraform, ok := components[cfg.TerraformComponentType].(map[string]any)
+	require.True(t, ok, "result must contain terraform components")
+
+	// The real component must NOT inherit the misplaced hook.
+	vpc, ok := terraform["vpc"].(map[string]any)
+	require.True(t, ok, "vpc component must exist")
+	if hooks, ok := vpc[cfg.HooksSectionName].(map[string]any); ok {
+		_, leaked := hooks["policy"]
+		assert.False(t, leaked, "component must NOT inherit a hook placed under components.terraform.hooks (wrong scope)")
 	}
 }
