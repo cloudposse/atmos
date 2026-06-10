@@ -252,6 +252,23 @@ func processArgs(args []string) (component string, additionalArgs []string) {
 	return component, additionalArgs
 }
 
+// splitComponentAndPassthrough separates the positional arguments before the
+// "--" separator (the Atmos component) from the passthrough arguments after it
+// (forwarded verbatim to ansible-playbook).
+//
+// Cobra's ArgsLenAtDash() is the authoritative separator source — it returns -1
+// when no "--" is present, otherwise the count of positional args that appeared
+// before "--". This mirrors the cmd/auth/shell.go and cmd/auth/exec.go pattern,
+// rather than inferring the passthrough from a positional offset (args[1:]),
+// which only works by coincidence when no "--" is used.
+func splitComponentAndPassthrough(cmd *cobra.Command, args []string) (componentArgs, passthroughArgs []string) {
+	dashIndex := cmd.ArgsLenAtDash()
+	if dashIndex < 0 || dashIndex > len(args) {
+		return args, nil
+	}
+	return args[:dashIndex], args[dashIndex:]
+}
+
 // initConfigAndStacksInfo initializes a ConfigAndStacksInfo for ansible command execution.
 func initConfigAndStacksInfo(cmd *cobra.Command, subCommand string, args []string) schema.ConfigAndStacksInfo {
 	info := buildConfigAndStacksInfo(cmd)
@@ -263,12 +280,23 @@ func initConfigAndStacksInfo(cmd *cobra.Command, subCommand string, args []strin
 	info.SubCommand = subCommand
 	info.CliArgs = []string{"ansible", subCommand}
 
-	// Process positional arguments.
-	component, additionalArgs := processArgs(args)
+	// Split the component (positional, before "--") from the passthrough flags
+	// (after "--") using Cobra's separator state as the authoritative source.
+	componentArgs, passthroughArgs := splitComponentAndPassthrough(cmd, args)
+
+	// Extract the component from the positional portion.
+	component, additionalFromPositional := processArgs(componentArgs)
 	if component != "" {
 		info.ComponentFromArg = component
 	}
-	info.AdditionalArgsAndFlags = additionalArgs
+
+	// Forward args after "--" to ansible-playbook. When no "--" is present,
+	// fall back to the positional remainder so behavior is unchanged.
+	if len(passthroughArgs) > 0 {
+		info.AdditionalArgsAndFlags = passthroughArgs
+	} else {
+		info.AdditionalArgsAndFlags = additionalFromPositional
+	}
 
 	return info
 }

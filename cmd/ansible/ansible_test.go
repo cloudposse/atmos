@@ -349,6 +349,46 @@ func TestInitConfigAndStacksInfo(t *testing.T) {
 	})
 }
 
+func TestInitConfigAndStacksInfoDoubleDash(t *testing.T) {
+	// Parse a real argv so Cobra populates ArgsLenAtDash, then confirm the
+	// component comes from the positional arg and the passthrough flags come
+	// from the "--" separator (not from a positional offset).
+	newCmd := func(capture *schema.ConfigAndStacksInfo) *cobra.Command {
+		c := &cobra.Command{
+			Use:                "playbook",
+			Args:               validatePlaybookArgs,
+			FParseErrWhitelist: cobra.FParseErrWhitelist{UnknownFlags: true},
+			RunE: func(cmd *cobra.Command, args []string) error {
+				*capture = initConfigAndStacksInfo(cmd, "playbook", args)
+				return nil
+			},
+		}
+		c.Flags().StringP("stack", "s", "", "")
+		c.Flags().Bool("dry-run", false, "")
+		return c
+	}
+
+	t.Run("forwards args after -- to ansible-playbook", func(t *testing.T) {
+		var info schema.ConfigAndStacksInfo
+		c := newCmd(&info)
+		c.SetArgs([]string{"webserver", "-s", "prod", "--", "--check", "--tags", "net"})
+		require.NoError(t, c.Execute())
+
+		assert.Equal(t, "webserver", info.ComponentFromArg)
+		assert.Equal(t, []string{"--check", "--tags", "net"}, info.AdditionalArgsAndFlags)
+	})
+
+	t.Run("no passthrough when -- absent", func(t *testing.T) {
+		var info schema.ConfigAndStacksInfo
+		c := newCmd(&info)
+		c.SetArgs([]string{"webserver", "-s", "prod"})
+		require.NoError(t, c.Execute())
+
+		assert.Equal(t, "webserver", info.ComponentFromArg)
+		assert.Empty(t, info.AdditionalArgsAndFlags)
+	})
+}
+
 func TestGetAnsibleFlags(t *testing.T) {
 	t.Run("extracts playbook flag", func(t *testing.T) {
 		cmd := &cobra.Command{Use: "test"}
