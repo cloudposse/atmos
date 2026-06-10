@@ -1,22 +1,17 @@
 services:
-  localstack:
-    container_name: localstack
-    image: public.ecr.aws/localstack/localstack:1.4.0
+  floci:
+    container_name: floci
+    image: floci/floci:1.5.23
     ports:
-      - "0.0.0.0:4566:4566"            # LocalStack Gateway
-      - "0.0.0.0:4510-4559:4510-4559"  # external services port range
+      - "0.0.0.0:4566:4566"            # Floci Gateway (LocalStack-compatible edge port)
     networks:
-      - localstack
+      - floci
     environment:
-      - SERVICES=s3, iam, lambda, dynamodb, sts, account, ec2
-      - DEBUG=0
-      - DOCKER_HOST=unix:///var/run/docker.sock
-      - AWS_ACCESS_KEY_ID="test"
-      - AWS_SECRET_ACCESS_KEY="test"
+      - FLOCI_STORAGE_MODE=persistent
+      - FLOCI_STORAGE_PERSISTENT_PATH=/data
     volumes:
-      - "${LOCALSTACK_VOLUME_DIR:-./volume}:/var/lib/localstack"
-      - "/var/run/docker.sock:/var/run/docker.sock"
+      - "${FLOCI_VOLUME_DIR:-./volume}:/data"
 
 networks:
-  localstack:
+  floci:
     driver: bridge
