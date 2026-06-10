@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -784,6 +785,62 @@ func TestExecuteTerraformAllowsParallelApplyWithAutoApprove(t *testing.T) {
 	require.Greater(t, maxActive.Load(), int32(1))
 }
 
+func TestExecuteTerraformDisablesPluginCacheForConcurrentGraph(t *testing.T) {
+	var mu sync.Mutex
+	disabled := make(map[string]bool)
+
+	err := ExecuteTerraform(context.Background(), TerraformOptions{
+		AtmosConfig: &schema.AtmosConfiguration{},
+		Info: &schema.ConfigAndStacksInfo{
+			All:            true,
+			SubCommand:     "plan",
+			MaxConcurrency: 2,
+		},
+		Stacks: terraformAdapterTestStacks(),
+		Executor: func(execution TerraformExecution) (TerraformExecutionResult, error) {
+			info := execution.Info
+			mu.Lock()
+			disabled[info.Component+"@"+info.Stack] = info.DisablePluginCache
+			mu.Unlock()
+			return TerraformExecutionResult{}, nil
+		},
+	})
+
+	require.NoError(t, err)
+	require.NotEmpty(t, disabled)
+	for nodeID, gotDisabled := range disabled {
+		require.True(t, gotDisabled, "expected plugin cache disabled for %s", nodeID)
+	}
+}
+
+func TestExecuteTerraformKeepsPluginCacheForSequentialGraph(t *testing.T) {
+	var mu sync.Mutex
+	disabled := make(map[string]bool)
+
+	err := ExecuteTerraform(context.Background(), TerraformOptions{
+		AtmosConfig: &schema.AtmosConfiguration{},
+		Info: &schema.ConfigAndStacksInfo{
+			All:            true,
+			SubCommand:     "plan",
+			MaxConcurrency: 1,
+		},
+		Stacks: terraformAdapterTestStacks(),
+		Executor: func(execution TerraformExecution) (TerraformExecutionResult, error) {
+			info := execution.Info
+			mu.Lock()
+			disabled[info.Component+"@"+info.Stack] = info.DisablePluginCache
+			mu.Unlock()
+			return TerraformExecutionResult{}, nil
+		},
+	})
+
+	require.NoError(t, err)
+	require.NotEmpty(t, disabled)
+	for nodeID, gotDisabled := range disabled {
+		require.False(t, gotDisabled, "expected plugin cache preserved for %s", nodeID)
+	}
+}
+
 func TestExecuteTerraformRejectsConcurrentApplyWithoutAutoApprove(t *testing.T) {
 	err := ExecuteTerraform(context.Background(), TerraformOptions{
 		AtmosConfig: &schema.AtmosConfiguration{},
@@ -1313,6 +1370,7 @@ func TestExecuteTerraformTreatsPlanExitTwoAsChangedSuccess(t *testing.T) {
 		},
 	}
 
+	var executedMu sync.Mutex
 	var executed []string
 	err := ExecuteTerraform(context.Background(), TerraformOptions{
 		AtmosConfig: &schema.AtmosConfiguration{},
@@ -1323,7 +1381,9 @@ func TestExecuteTerraformTreatsPlanExitTwoAsChangedSuccess(t *testing.T) {
 		},
 		Stacks: stacks,
 		Executor: func(execution TerraformExecution) (TerraformExecutionResult, error) {
+			executedMu.Lock()
 			executed = append(executed, execution.Info.Component)
+			executedMu.Unlock()
 			if execution.Info.Component == "app" {
 				return TerraformExecutionResult{}, errUtils.ExitCodeError{Code: 2}
 			}
@@ -1422,6 +1482,129 @@ func TestWriteTerraformSummaryIncludesNodeTimings(t *testing.T) {
 	require.NotEmpty(t, summary.Results[0].StartedAt)
 	require.NotEmpty(t, summary.Results[0].FinishedAt)
 	require.GreaterOrEqual(t, summary.Results[0].DurationMS, int64(1))
+}
+
+type capturingTerraformPlanCIResultHandler struct {
+	resultSet schema.TerraformPlanCIResultSet
+	calls     int
+	err       error
+}
+
+func (h *capturingTerraformPlanCIResultHandler) HandleTerraformPlanCIResults(resultSet schema.TerraformPlanCIResultSet) error {
+	h.calls++
+	h.resultSet = resultSet
+	return h.err
+}
+
+func TestExecuteTerraformCIResultHandlerReceivesCapturedSchedulerResults(t *testing.T) {
+	handler := &capturingTerraformPlanCIResultHandler{}
+	var captureFlagsMu sync.Mutex
+	var captureFlags []bool
+
+	err := ExecuteTerraform(context.Background(), TerraformOptions{
+		AtmosConfig: &schema.AtmosConfiguration{},
+		Info: &schema.ConfigAndStacksInfo{
+			All:                          true,
+			SubCommand:                   "plan",
+			MaxConcurrency:               2,
+			TerraformFailureMode:         terraformFailureModeKeepGoing,
+			TerraformPlanCIResultHandler: handler,
+		},
+		Stacks: terraformAdapterTestStacks(),
+		Executor: func(execution TerraformExecution) (TerraformExecutionResult, error) {
+			captureFlagsMu.Lock()
+			captureFlags = append(captureFlags, execution.CaptureOutput)
+			captureFlagsMu.Unlock()
+			if execution.Info.Component == "vpc" {
+				return TerraformExecutionResult{
+					Stdout: "Error: invalid reference",
+					Stderr: "terraform failed",
+				}, errUtils.ExitCodeError{Code: 1}
+			}
+			return TerraformExecutionResult{
+				Stdout: "No changes. Your infrastructure matches the configuration.",
+			}, nil
+		},
+	})
+
+	require.Error(t, err)
+	require.Equal(t, 1, handler.calls)
+	require.Equal(t, "plan", handler.resultSet.Command)
+	require.Len(t, handler.resultSet.Results, 3)
+	captureFlagsMu.Lock()
+	gotCaptureFlags := append([]bool(nil), captureFlags...)
+	captureFlagsMu.Unlock()
+	require.Equal(t, []bool{true}, gotCaptureFlags)
+
+	vpc := handler.resultSet.Results[0]
+	require.Equal(t, "vpc-dev", vpc.NodeID)
+	require.Equal(t, "dev", vpc.Stack)
+	require.Equal(t, "vpc", vpc.Component)
+	require.Equal(t, "failed", vpc.Status)
+	require.True(t, vpc.Processed)
+	require.Equal(t, 1, vpc.ExitCode)
+	require.Contains(t, vpc.Output, "Error: invalid reference")
+	require.Contains(t, vpc.Output, "terraform failed")
+	require.NotEmpty(t, vpc.Error)
+
+	database := handler.resultSet.Results[1]
+	require.Equal(t, "database-dev", database.NodeID)
+	require.Equal(t, "skipped", database.Status)
+	require.False(t, database.Processed)
+	require.Equal(t, 1, database.ExitCode)
+	require.Contains(t, database.Error, "dependency vpc-dev failed")
+
+	app := handler.resultSet.Results[2]
+	require.Equal(t, "app-dev", app.NodeID)
+	require.Equal(t, "skipped", app.Status)
+	require.False(t, app.Processed)
+	require.Equal(t, 1, app.ExitCode)
+	require.Contains(t, app.Error, "dependency vpc-dev failed")
+}
+
+func TestFinalizeTerraformCIResultsGuardsAndHandlerError(t *testing.T) {
+	finalizeTerraformCIResults(nil, nil, nil)
+	finalizeTerraformCIResults(&schema.ConfigAndStacksInfo{SubCommand: "output"}, nil, nil)
+	finalizeTerraformCIResults(&schema.ConfigAndStacksInfo{SubCommand: "plan"}, nil, nil)
+	require.Nil(t, cloneStringMap(nil))
+
+	handler := &capturingTerraformPlanCIResultHandler{err: errors.New("handler failed")}
+	finalizeTerraformCIResults(
+		&schema.ConfigAndStacksInfo{
+			SubCommand:                   "destroy",
+			TerraformPlanCIResultHandler: handler,
+		},
+		&scheduler.AggregateResult{
+			Results: []scheduler.Result{
+				{
+					NodeID: "vpc-dev",
+					Node: dependency.Node{
+						ID:        "vpc-dev",
+						Stack:     "dev",
+						Component: "vpc",
+					},
+					Status: scheduler.StatusFailed,
+					Value: TerraformNodeOutcome{
+						Processed: true,
+						LogFiles: map[string]string{
+							"stdout": "/tmp/stdout.log",
+						},
+					},
+					Err: errors.New("terraform failed"),
+				},
+			},
+		},
+		nil,
+	)
+
+	require.Equal(t, 1, handler.calls)
+	require.Equal(t, "destroy", handler.resultSet.Command)
+	require.Len(t, handler.resultSet.Results, 1)
+	entry := handler.resultSet.Results[0]
+	require.Equal(t, "vpc-dev", entry.NodeID)
+	require.Equal(t, "terraform failed", entry.Error)
+	require.Equal(t, 1, entry.ExitCode, "node errors without explicit exit code default to failure")
+	require.Equal(t, map[string]string{"stdout": "/tmp/stdout.log"}, entry.LogFiles)
 }
 
 func TestTerraformNodeTimingsHandlesNilInputs(t *testing.T) {

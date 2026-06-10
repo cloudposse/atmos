@@ -9,7 +9,6 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 	scheduleradapters "github.com/cloudposse/atmos/pkg/scheduler/adapters"
 	"github.com/cloudposse/atmos/pkg/schema"
-	"github.com/cloudposse/atmos/pkg/store/authbridge"
 	"github.com/cloudposse/atmos/pkg/ui"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -130,8 +129,7 @@ func ExecuteTerraformAffectedWithContext(ctx context.Context, args *DescribeAffe
 		return err
 	}
 	if authManager != nil {
-		resolver := authbridge.NewResolver(authManager, info)
-		atmosConfig.Stores.SetAuthContextResolver(resolver)
+		injectTerraformStoreAuthResolver(&atmosConfig, info, authManager)
 	}
 
 	args.CLIConfig = &atmosConfig
