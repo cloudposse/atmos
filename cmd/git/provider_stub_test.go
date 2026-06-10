@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/ci"
 	atmosgit "github.com/cloudposse/atmos/pkg/git"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -558,9 +559,35 @@ func TestRunCICheckout_WithStub(t *testing.T) {
 	})
 
 	opts := &cloneOptions{Workdir: t.TempDir()}
-	err := runCICheckout(context.Background(), "github", "acme/my-repo", "refs/heads/main", opts)
+	ciCtx := &ci.Context{
+		Repository: "acme/my-repo",
+		Ref:        "refs/heads/main",
+		CloneURL:   "https://github.com/acme/my-repo.git",
+	}
+	err := runCICheckout(context.Background(), "github", ciCtx, opts)
 	require.NoError(t, err)
 	assert.Equal(t, "https://github.com/acme/my-repo.git", clonedURI)
+}
+
+func TestRunCICheckout_ProviderSuppliedHost(t *testing.T) {
+	// The clone URL comes verbatim from the provider Context — a GitHub
+	// Enterprise (or any non-github.com) host flows through untouched.
+	var clonedURI string
+	withTestProvider(t, &stubGitProvider{
+		cloneFn: func(_ context.Context, opts *atmosgit.CloneOptions) error {
+			clonedURI = opts.URI
+			return nil
+		},
+	})
+
+	opts := &cloneOptions{Workdir: t.TempDir()}
+	ciCtx := &ci.Context{
+		Repository: "acme/repo",
+		CloneURL:   "https://ghe.acme.com/acme/repo.git",
+	}
+	err := runCICheckout(context.Background(), "github", ciCtx, opts)
+	require.NoError(t, err)
+	assert.Equal(t, "https://ghe.acme.com/acme/repo.git", clonedURI)
 }
 
 func TestRunCICheckout_BranchFromRef(t *testing.T) {
@@ -573,7 +600,12 @@ func TestRunCICheckout_BranchFromRef(t *testing.T) {
 	})
 
 	opts := &cloneOptions{Workdir: t.TempDir()}
-	err := runCICheckout(context.Background(), "github", "acme/repo", "feature/x", opts)
+	ciCtx := &ci.Context{
+		Repository: "acme/repo",
+		Ref:        "feature/x",
+		CloneURL:   "https://github.com/acme/repo.git",
+	}
+	err := runCICheckout(context.Background(), "github", ciCtx, opts)
 	require.NoError(t, err)
 	assert.Equal(t, "feature/x", capturedBranch)
 }

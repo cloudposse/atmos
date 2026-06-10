@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/ci"
 	atmosgit "github.com/cloudposse/atmos/pkg/git"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -393,9 +394,11 @@ func TestPrintDiff_WithDiffAndUntracked(t *testing.T) {
 
 // ---- runCICheckout error path ----
 
-func TestRunCICheckout_EmptyRepository(t *testing.T) {
+func TestRunCICheckout_NoCloneURL(t *testing.T) {
+	// A provider that cannot determine the clone URL must fail clearly;
+	// cmd/git never falls back to a hardcoded host.
 	opts := &cloneOptions{Workdir: "/tmp/ci"}
-	err := runCICheckout(context.Background(), "github", "", "main", opts)
+	err := runCICheckout(context.Background(), "generic", &ci.Context{Repository: "acme/repo"}, opts)
 	require.Error(t, err)
 	assert.True(t, errors.Is(err, errUtils.ErrGitRepositoryRequired))
 }

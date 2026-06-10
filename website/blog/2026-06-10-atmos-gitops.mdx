@@ -45,25 +45,29 @@ GitOps workflows have always needed glue: scripts to render manifests into deplo
 
 ## How to Use It
 
-Publish Terraform-generated artifacts back to your repo after every apply:
+A real problem every Terraform team hits: CI runs `terraform init`, the provider lock file (`.terraform.lock.hcl`) changes — a provider was upgraded, or hashes for a new platform were added — and that change silently drifts because nothing commits it back. With the `git` hook kind, Atmos commits it after apply:
 
 ```yaml
 components:
   terraform:
-    app:
+    vpc:
       hooks:
-        publish-artifacts:
+        commit-lockfile:
           events:
             - after.terraform.apply
           kind: git
+          # No repository: configured — the hook operates on the
+          # current repository, the one your pipeline checked out.
           commit:
-            message: "Update generated artifacts for {{ .component }} in {{ .stack }}"
+            message: "chore: update provider lock file for {{ .component }} in {{ .stack }}"
             paths:
-              - generated/{{ .stack }}/{{ .component }}
+              - components/terraform/vpc/.terraform.lock.hcl
           push: true
 ```
 
-Or target a separate deployment repository for Argo CD / Flux by adding `repository: flux-deploy`.
+When `repository:` is omitted, the hook targets the **current repository** — no special name needed. The commit is path-scoped (it refuses to sweep up unrelated dirty files), the author is injected so it works on runners with no Git identity, and if another job pushed first, the push retries with a rebase. If nothing changed, it's a clean no-op.
+
+To publish into a *different* repository instead — rendered manifests into an Argo CD / Flux deployment repo — add `repository: flux-deploy` pointing at a configured entry under `git.repositories`.
 
 Imperatively, the same operations are first-class commands:
 
@@ -83,7 +87,7 @@ steps:
   - run: atmos git clone --all  # warm all deployment repos
 ```
 
-See the [`atmos git` command reference](/cli/commands/git) and the [Git configuration docs](/cli/configuration/git) for the full surface, including clone depth controls, signing modes, and push retry tuning.
+See the [`atmos git` command reference](/cli/commands/git/usage) and the [Git configuration docs](/cli/configuration/git) for the full surface, including clone depth controls, signing modes, and push retry tuning.
 
 ## Get Involved
 

@@ -125,6 +125,17 @@ type Context struct {
 	// RepoName is the repository name.
 	RepoName string
 
+	// ServerURL is the base URL of the SCM host running this CI
+	// (e.g., "https://github.com" or a GitHub Enterprise URL).
+	// Empty when the provider cannot determine it.
+	ServerURL string
+
+	// CloneURL is the URL to clone the current repository, used by
+	// `atmos git clone` for CI checkout replacement. Each provider
+	// constructs it from its own metadata; empty when the provider
+	// cannot determine it.
+	CloneURL string
+
 	// PullRequest contains PR info if this is a pull request event.
 	PullRequest *PRInfo
 }

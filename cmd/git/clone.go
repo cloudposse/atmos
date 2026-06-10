@@ -242,7 +242,7 @@ func runCloneNoArg(ctx context.Context, opts *cloneOptions) error {
 		return fmt.Errorf("reading CI context for no-arg clone: %w", err)
 	}
 
-	return runCICheckout(ctx, detected.Name(), ciCtx.Repository, ciCtx.Ref, opts)
+	return runCICheckout(ctx, detected.Name(), ciCtx, opts)
 }
 
 // checkCIEnabled returns an error when ci.enabled is false or config is nil.
@@ -257,16 +257,21 @@ func checkCIEnabled() error {
 	return nil
 }
 
-// runCICheckout performs the no-arg CI current-repository checkout.
-func runCICheckout(ctx context.Context, providerName, repository, ref string, opts *cloneOptions) error {
+// runCICheckout performs the no-arg CI current-repository checkout. The clone
+// URL comes from the CI provider's Context (each provider constructs it from
+// its own metadata — e.g. GITHUB_SERVER_URL for GitHub Enterprise); cmd/git
+// never assumes a host.
+func runCICheckout(ctx context.Context, providerName string, ciCtx *ci.Context, opts *cloneOptions) error {
 	defer perf.Track(nil, "git.runCICheckout")()
 
-	if repository == "" {
+	if ciCtx.CloneURL == "" {
 		return errUtils.Build(errUtils.ErrGitRepositoryRequired).
-			WithHint("CI provider did not supply a repository name. Provide a URI or configured name.").
+			WithHintf("CI provider %q did not supply a clone URL for the current repository.", providerName).
+			WithHint("Provide a repository name or URI to clone explicitly.").
 			WithExitCode(2).
 			Err()
 	}
+	repository := ciCtx.Repository
 
 	workdir, err := resolveCIWorkdir(opts.Workdir)
 	if err != nil {
@@ -287,10 +292,10 @@ func runCICheckout(ctx context.Context, providerName, repository, ref string, op
 		RepoContext: atmosgit.RepoContext{
 			Workdir: workdir,
 			Remote:  resolveStringPrecedence(opts.Remote, atmosgit.DefaultRemote),
-			Branch:  resolveStringPrecedence(opts.Branch, ref),
+			Branch:  resolveStringPrecedence(opts.Branch, ciCtx.Ref),
 			Env:     env,
 		},
-		URI:   ciRepoURI(repository),
+		URI:   ciCtx.CloneURL,
 		Depth: opts.Depth,
 	}
 
@@ -355,12 +360,6 @@ func runConcurrent(ctx context.Context, names []string, f func(context.Context, 
 	wg.Wait()
 
 	return errors.Join(errs...)
-}
-
-// ciRepoURI constructs a clone URI from a "owner/repo" CI repository string.
-// Using https:// so ambient credentials (GITHUB_TOKEN via git config) apply.
-func ciRepoURI(repo string) string {
-	return "https://github.com/" + repo + ".git"
 }
 
 func init() {

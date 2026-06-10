@@ -364,13 +364,6 @@ func TestGitConfig_ReturnsGitSection(t *testing.T) {
 	assert.Contains(t, cfg.Repositories, "my-repo")
 }
 
-// ---- ciRepoURI test ----
-
-func TestCIRepoURI(t *testing.T) {
-	uri := ciRepoURI("acme/flux-deploy")
-	assert.Equal(t, "https://github.com/acme/flux-deploy.git", uri)
-}
-
 // ---- resolveAdHocWorkdir test ----
 
 func TestResolveAdHocWorkdir_FlagOverrides(t *testing.T) {
