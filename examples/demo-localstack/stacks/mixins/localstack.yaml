@@ -15,6 +15,7 @@ terraform:
       s3_use_path_style: false
       skip_credentials_validation: true
       skip_metadata_api_check: true
+      skip_requesting_account_id: true
       endpoints:
         # An alias for the default LocalStack URL
         sts: &localstack_url "https://localhost.localstack.cloud:4566"
