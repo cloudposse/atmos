@@ -14,7 +14,7 @@ screen -L -Logfile /tmp/direnv.log -S direnv-setup -dm \
 	sh -c "find /workspace/examples -mindepth 1 -type d -exec sh -c 'echo show_readme > {}/.envrc' \;"
 
 # Start Floci (LocalStack-compatible AWS emulator) in the background, since it can take a little bit to start up
-cd /workspace/examples/demo-localstack
+cd /workspace/examples/demo-floci
 screen -L -Logfile /tmp/floci.log -S floci -dm sh -c 'docker compose up'
 
 # Start k3s in the background, since it can take a little bit to start up

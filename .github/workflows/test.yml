@@ -313,10 +313,10 @@ jobs:
 
   # Run the AWS-emulator demo tests against Floci (a free, LocalStack-compatible emulator;
   # LocalStack Community Edition was EOL'd in March 2026).
-  # NOTE: the job key and display name intentionally remain "localstack" because
-  # "[localstack] demo-localstack" is a required status check in branch protection on main.
-  localstack:
-    name: "[localstack] ${{ matrix.demo-folder }}"
+  # NOTE: "[floci] demo-floci" must be kept in sync with the required status checks in
+  # branch protection on main (previously "[localstack] demo-localstack").
+  floci:
+    name: "[floci] ${{ matrix.demo-folder }}"
     needs: build
     runs-on: ubuntu-latest
 
@@ -330,7 +330,7 @@ jobs:
       fail-fast: false
       matrix:
         demo-folder:
-          - demo-localstack
+          - demo-floci
 
     timeout-minutes: 20
     steps:
@@ -556,7 +556,7 @@ jobs:
           # - demo-custom-command
           # - demo-json-validation
           # - demo-library
-          # - demo-localstack
+          # - demo-floci
           # - demo-opa-validation
           # - demo-opentofu
           # - demo-project
