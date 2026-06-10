@@ -163,6 +163,41 @@ func TestInstallHook_CreatesMissingHooksDir(t *testing.T) {
 	assert.True(t, info.Mode()&0o100 != 0, "shim must be executable")
 }
 
+func TestInstallHook_RejectsUnsafeHookNames(t *testing.T) {
+	unsafeNames := []string{
+		"",
+		".",
+		"..",
+		"../outside",
+		"/tmp/atmos-hook",
+		"nested/hook",
+		`nested\hook`,
+		"pre commit",
+		"pre;commit",
+	}
+
+	for _, hookName := range unsafeNames {
+		name := hookName
+		if name == "" {
+			name = "empty"
+		}
+		t.Run(name, func(t *testing.T) {
+			parent := t.TempDir()
+			dir := filepath.Join(parent, "hooks")
+
+			err := installHook(dir, hookName, true)
+			require.Error(t, err)
+			assert.True(t, errors.Is(err, errUtils.ErrInvalidConfig), "expected ErrInvalidConfig, got: %v", err)
+
+			_, statErr := os.Stat(dir)
+			assert.True(t, os.IsNotExist(statErr), "invalid hook names must be rejected before creating hooksDir")
+
+			_, statErr = os.Stat(filepath.Join(parent, "outside"))
+			assert.True(t, os.IsNotExist(statErr), "invalid hook names must not write outside hooksDir")
+		})
+	}
+}
+
 // ---- uninstall: removes only Atmos shims ----
 
 func TestUninstallHook_RemovesAtmosShim(t *testing.T) {
@@ -199,6 +234,23 @@ func TestUninstallHook_MissingFileIsNoop(t *testing.T) {
 	dir := t.TempDir()
 	err := uninstallHook(dir, "pre-commit")
 	require.NoError(t, err)
+}
+
+func TestUninstallHook_RejectsUnsafeHookNamesBeforeRemovingFiles(t *testing.T) {
+	parent := t.TempDir()
+	dir := filepath.Join(parent, "hooks")
+	require.NoError(t, os.MkdirAll(dir, 0o755))
+
+	outside := filepath.Join(parent, "outside")
+	require.NoError(t, os.WriteFile(outside, []byte(shimContent("pre-commit")), 0o755))
+
+	err := uninstallHook(dir, "../outside")
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, errUtils.ErrInvalidConfig), "expected ErrInvalidConfig, got: %v", err)
+
+	got, readErr := os.ReadFile(outside)
+	require.NoError(t, readErr, "unsafe hook name must not remove outside files")
+	assert.Contains(t, string(got), atmosShimMarker)
 }
 
 // ---- validateHookNames ----

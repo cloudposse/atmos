@@ -65,6 +65,10 @@ func runHooksUninstall(ctx context.Context, names []string) error {
 // uninstallHook removes the shim for hookName from hooksDir, only if it is
 // an Atmos-generated file. User-authored hooks are never deleted.
 func uninstallHook(hooksDir, hookName string) error {
+	if err := validateHookShimName(hookName); err != nil {
+		return err
+	}
+
 	dest := filepath.Join(hooksDir, hookName)
 
 	content, err := os.ReadFile(dest)

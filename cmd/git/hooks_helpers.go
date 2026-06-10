@@ -1,6 +1,7 @@
 package git
 
 import (
+	"path/filepath"
 	"sort"
 	"strings"
 
@@ -33,4 +34,34 @@ func sortedKeys(m map[string]schema.GitHookEntry) []string {
 	}
 	sort.Strings(keys)
 	return keys
+}
+
+// validateHookShimName rejects hook names that could escape .git/hooks.
+func validateHookShimName(hookName string) error {
+	if hookName == "" || hookName == "." || hookName == ".." || filepath.IsAbs(hookName) || strings.ContainsAny(hookName, `/\`) {
+		return invalidHookShimNameErr(hookName)
+	}
+
+	for _, r := range hookName {
+		if !isHookShimNameChar(r) {
+			return invalidHookShimNameErr(hookName)
+		}
+	}
+
+	return nil
+}
+
+func isHookShimNameChar(r rune) bool {
+	return r == '.' || r == '_' || r == '-' ||
+		(r >= 'a' && r <= 'z') ||
+		(r >= 'A' && r <= 'Z') ||
+		(r >= '0' && r <= '9')
+}
+
+func invalidHookShimNameErr(hookName string) error {
+	return errUtils.Build(errUtils.ErrInvalidConfig).
+		WithHintf("Hook name %q must be a simple filename using only letters, digits, '.', '_' or '-'.", hookName).
+		WithHint("Hook names must not be absolute paths, '.', '..', or contain path separators.").
+		WithExitCode(2).
+		Err()
 }

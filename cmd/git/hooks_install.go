@@ -113,6 +113,10 @@ func runHooksInstall(ctx context.Context, names []string, force bool) error {
 
 // installHook writes a single shim file for hookName into hooksDir.
 func installHook(hooksDir, hookName string, force bool) error {
+	if err := validateHookShimName(hookName); err != nil {
+		return err
+	}
+
 	dest := filepath.Join(hooksDir, hookName)
 	shim := shimContent(hookName)
 

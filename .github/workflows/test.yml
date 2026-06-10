@@ -319,7 +319,7 @@ jobs:
 
     services:
       localstack:
-        image: public.ecr.aws/localstack/localstack:1.4.0
+        image: localstack/localstack:4.7.0
         ports:
           - 4566:4566
           - 4510-4559:4510-4559
@@ -340,7 +340,7 @@ jobs:
         demo-folder:
           - demo-localstack
 
-    timeout-minutes: 20
+    timeout-minutes: 30
     steps:
 
       - name: Download build artifacts
@@ -369,10 +369,30 @@ jobs:
           tofu_version: ${{ env.OPEN_TOFU_VERSION }}
           tofu_wrapper: false
 
+      - name: Wait for LocalStack
+        run: |
+          for attempt in $(seq 1 60); do
+            if curl -fsS http://localhost:4566/_localstack/health >/tmp/localstack-health.json; then
+              cat /tmp/localstack-health.json
+              exit 0
+            fi
+            echo "Waiting for LocalStack (${attempt}/60)"
+            sleep 2
+          done
+
+          echo "LocalStack did not become ready"
+          curl -v http://localhost:4566/_localstack/health || true
+          exit 1
+
       - name: Run tests for ${{ matrix.demo-folder }}
         run: |
           cd examples/${{ matrix.demo-folder }}
-          atmos test
+          timeout 25m atmos test || {
+            status=$?
+            echo "atmos test failed or timed out with status ${status}"
+            curl -fsS http://localhost:4566/_localstack/health || true
+            exit "${status}"
+          }
 
   # run k3s demo tests
   k3s:

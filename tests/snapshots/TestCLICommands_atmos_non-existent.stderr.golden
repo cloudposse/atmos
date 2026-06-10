@@ -16,6 +16,7 @@ Valid subcommands are:
   • devcontainer
   • docs
   • env
+  • git
   • helmfile
   • help
   • list
