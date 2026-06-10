@@ -104,6 +104,7 @@ func coordinateForDeclaration(decl *Declaration, stack, component string) provid
 		}
 		if decl.StoreComponent != "" {
 			coord.Component = decl.StoreComponent
+			// A component segment addresses an instance-level store coordinate.
 			coord.Scope = ScopeInstance
 		}
 	}

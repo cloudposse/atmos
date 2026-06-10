@@ -149,6 +149,8 @@ func injectSecretStoreAuthResolver(atmosConfig *schema.AtmosConfiguration, authM
 	atmosConfig.Stores.SetAuthContextResolverWithDefaultIdentity(resolver, secretStoreDefaultIdentity(authManager, scope.Identity))
 }
 
+// secretStoreDefaultIdentity resolves secret store identity: disabled returns none,
+// empty/select uses the last authenticated identity, and explicit values pass through.
 func secretStoreDefaultIdentity(authManager auth.AuthManager, requestedIdentity string) string {
 	switch requestedIdentity {
 	case cfg.IdentityFlagDisabledValue:

@@ -44,6 +44,20 @@ func TestCoordinateForDeclaration_StoreCoordinateOverride(t *testing.T) {
 	assert.Equal(t, ScopeInstance, coord.Scope)
 }
 
+func TestCoordinateForDeclaration_StoreComponentForcesInstanceScope(t *testing.T) {
+	decl := &Declaration{
+		Name:           "STACK_DECLARED_SHARED_SECRET",
+		BackendType:    BackendStore,
+		Scope:          ScopeStack,
+		StoreComponent: "shared",
+	}
+
+	coord := coordinateForDeclaration(decl, "fuecoco-stg", "kinde")
+	assert.Equal(t, "fuecoco-stg", coord.Stack)
+	assert.Equal(t, "shared", coord.Component)
+	assert.Equal(t, ScopeInstance, coord.Scope)
+}
+
 func TestCoordinateForDeclaration_StoreStackOverrideWithoutComponent(t *testing.T) {
 	decl := &Declaration{
 		Name:        "GLOBAL_SECRET",
