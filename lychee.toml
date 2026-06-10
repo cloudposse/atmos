@@ -44,6 +44,8 @@ exclude = [
   "tldp\\.org",
   # Linux Foundation specs (slow response times)
   "refspecs\\.linuxfoundation\\.org",
+  # Open Group POSIX specs (slow response times, intermittent timeouts in CI)
+  "pubs\\.opengroup\\.org",
   # OpenBSD man pages (slow response times, intermittent timeouts in CI)
   "man\\.openbsd\\.org",
   # Kubernetes.io (rate limits and connection resets in CI)
@@ -52,6 +54,8 @@ exclude = [
   "runatlantis\\.io",
   # GitHub docs (intermittent 503s in CI)
   "docs\\.github\\.com",
+  # Algolia DocSearch docs (intermittent timeouts in CI)
+  "docsearch\\.algolia\\.com",
   # Cloudinary image resizing proxy
   "img\\.cloudposse\\.com",
   # atmos.tools URLs (can't verify website links locally)
