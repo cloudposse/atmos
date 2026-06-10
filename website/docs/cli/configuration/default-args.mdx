@@ -220,6 +220,27 @@ atmos describe component vpc -s prod                         # functions left un
 atmos describe component vpc -s prod --process-functions=true   # CLI override
 ```
 
+Default every `atmos list` command to JSON output, and limit the columns for `atmos list components`
+specifically. Because `list.args` applies to the whole `list` subtree, one entry covers `list stacks`,
+`list components`, `list values`, and the rest:
+
+```yaml
+list:
+  # Applies to every `atmos list ...` subcommand.
+  args:
+    - --format=json
+  # `atmos list components` only — overrides nothing here, just adds to it.
+  components:
+    args:
+      - --max-columns=5
+```
+
+```shell
+atmos list stacks                       # JSON
+atmos list components                   # JSON, capped at 5 columns
+atmos list values vpc -s prod --format=table   # CLI flag overrides the default format
+```
+
 <Note>
 For `terraform`, `helmfile`, and `packer`, you can also default the tool's native flags (e.g.
 `terraform.args: [-input=false]`) — they are passed straight through to the underlying tool.
