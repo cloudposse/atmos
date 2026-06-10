@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
@@ -182,6 +183,28 @@ func TestSecretStoreDefaultIdentity(t *testing.T) {
 			}
 
 			assert.Equal(t, tt.want, secretStoreDefaultIdentity(authManager, tt.requested))
+		})
+	}
+}
+
+func TestSecretScopeIdentityNormalizesDisabledValues(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{name: "empty", input: "", want: ""},
+		{name: "explicit identity", input: "terraform", want: "terraform"},
+		{name: "false disables auth", input: "false", want: cfg.IdentityFlagDisabledValue},
+		{name: "off disables auth", input: "off", want: cfg.IdentityFlagDisabledValue},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			v := viper.New()
+			v.Set(cfg.IdentityFlagName, tt.input)
+
+			assert.Equal(t, tt.want, secretScopeIdentity(v))
 		})
 	}
 }

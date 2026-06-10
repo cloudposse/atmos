@@ -37,7 +37,7 @@ func parseFacets(cmd *cobra.Command) (secretScope, error) {
 		Stack:         v.GetString(cfg.StackStr),
 		Component:     v.GetString("component"),
 		ComponentType: v.GetString("type"),
-		Identity:      v.GetString(cfg.IdentityFlagName),
+		Identity:      secretScopeIdentity(v),
 	}, nil
 }
 
@@ -54,7 +54,7 @@ func parseScope(cmd *cobra.Command, args []string) (secretScope, error) {
 		Stack:         v.GetString(cfg.StackStr),
 		Component:     v.GetString("component"),
 		ComponentType: v.GetString("type"),
-		Identity:      v.GetString(cfg.IdentityFlagName),
+		Identity:      secretScopeIdentity(v),
 	}
 
 	if scope.Stack == "" {
@@ -87,6 +87,10 @@ func parseScope(cmd *cobra.Command, args []string) (secretScope, error) {
 			Err()
 	}
 	return scope, nil
+}
+
+func secretScopeIdentity(v *viper.Viper) string {
+	return cfg.NormalizeIdentityValue(v.GetString(cfg.IdentityFlagName))
 }
 
 // loadService initializes config + auth and returns a secrets.Service scoped to (stack,
