@@ -441,11 +441,12 @@ func TestExecuteInit_ValidatesRequiredArgs(t *testing.T) {
 			errorContain: "target directory",
 		},
 		{
-			name:         "interactive allows empty template and target",
+			name:         "non-interactive requires both template and target",
 			templateName: "",
 			targetDir:    "",
-			interactive:  true,
-			expectError:  true, // Will fail on template selection, but not arg validation.
+			interactive:  false,
+			expectError:  true,
+			errorContain: "template name",
 		},
 	}
 

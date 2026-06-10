@@ -92,4 +92,3 @@ The main configuration is in `atmos.yaml`. Key settings:
 
 For support and questions:
 - [GitHub Issues](https://github.com/cloudposse/atmos/issues)
-- [Discord Community](https://cloudposse.co/discord)
