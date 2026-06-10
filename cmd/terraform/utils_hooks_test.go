@@ -41,6 +41,7 @@ var _ = schema.ConfigAndStacksInfo{
 	ComponentFromArg:             "",
 	ComponentType:                "",
 	TerraformPlanCIResultHandler: nil,
+	PerComponentHook:             nil,
 }
 
 // newHookTestCmd constructs a cobra.Command with all the flags
