@@ -13,7 +13,7 @@ Atmos is a powerful enterprise-grade workflow automation tool with so **much mor
 Here are some of the major differentiators of Atmos and topics worth exploring in greater depth:
 
 * [Atmos Design Patterns](/design-patterns)
-* [Third-party Integrations](/integrations/github-actions)
+* [Native CI for GitHub Actions](/ci)
 * [Atmos Vendoring](/vendor/)
 * [Component Vendoring](/vendor/component-manifest)
 * [Imports](/stacks/imports) (mixins, catalogs)

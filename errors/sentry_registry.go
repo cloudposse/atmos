@@ -7,7 +7,7 @@ import (
 	"sync"
 
 	"github.com/getsentry/sentry-go"
-	"github.com/mitchellh/mapstructure"
+	"github.com/go-viper/mapstructure/v2"
 
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -161,7 +161,7 @@ type componentErrorConfigWithMetadata struct {
 }
 
 // GetComponentErrorConfig extracts the merged error configuration from component settings.
-// It follows the same pattern used by Spacelift, Atlantis, and Pro integrations.
+// It follows the same pattern used by Spacelift, Atlantis, and Pro servers.
 func GetComponentErrorConfig(info *schema.ConfigAndStacksInfo) (*schema.ErrorsConfig, error) {
 	if info == nil {
 		return nil, nil

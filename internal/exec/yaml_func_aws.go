@@ -4,6 +4,8 @@ import (
 	"context"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	awsIdentity "github.com/cloudposse/atmos/pkg/aws/identity"
+	awsOrg "github.com/cloudposse/atmos/pkg/aws/organization"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -24,7 +26,7 @@ func processTagAwsValue(
 	input string,
 	expectedTag string,
 	stackInfo *schema.ConfigAndStacksInfo,
-	extractor func(*AWSCallerIdentity) string,
+	extractor func(*awsIdentity.CallerIdentity) string,
 ) any {
 	log.Debug(execAWSYAMLFunction, functionKey, input)
 
@@ -43,7 +45,7 @@ func processTagAwsValue(
 
 	// Get the AWS caller identity (cached).
 	ctx := context.Background()
-	identity, err := getAWSCallerIdentityCached(ctx, atmosConfig, authContext)
+	identity, err := awsIdentity.GetCallerIdentityCached(ctx, atmosConfig, authContext)
 	if err != nil {
 		log.Error(failedGetIdentity, "error", err)
 		errUtils.CheckErrorPrintAndExit(err, "", "")
@@ -68,7 +70,7 @@ func processTagAwsAccountID(
 ) any {
 	defer perf.Track(atmosConfig, "exec.processTagAwsAccountID")()
 
-	result := processTagAwsValue(atmosConfig, input, u.AtmosYamlFuncAwsAccountID, stackInfo, func(id *AWSCallerIdentity) string {
+	result := processTagAwsValue(atmosConfig, input, u.AtmosYamlFuncAwsAccountID, stackInfo, func(id *awsIdentity.CallerIdentity) string {
 		return id.Account
 	})
 
@@ -92,7 +94,7 @@ func processTagAwsCallerIdentityArn(
 ) any {
 	defer perf.Track(atmosConfig, "exec.processTagAwsCallerIdentityArn")()
 
-	result := processTagAwsValue(atmosConfig, input, u.AtmosYamlFuncAwsCallerIdentityArn, stackInfo, func(id *AWSCallerIdentity) string {
+	result := processTagAwsValue(atmosConfig, input, u.AtmosYamlFuncAwsCallerIdentityArn, stackInfo, func(id *awsIdentity.CallerIdentity) string {
 		return id.Arn
 	})
 
@@ -116,7 +118,7 @@ func processTagAwsCallerIdentityUserID(
 ) any {
 	defer perf.Track(atmosConfig, "exec.processTagAwsCallerIdentityUserID")()
 
-	result := processTagAwsValue(atmosConfig, input, u.AtmosYamlFuncAwsCallerIdentityUserID, stackInfo, func(id *AWSCallerIdentity) string {
+	result := processTagAwsValue(atmosConfig, input, u.AtmosYamlFuncAwsCallerIdentityUserID, stackInfo, func(id *awsIdentity.CallerIdentity) string {
 		return id.UserID
 	})
 
@@ -140,7 +142,7 @@ func processTagAwsRegion(
 ) any {
 	defer perf.Track(atmosConfig, "exec.processTagAwsRegion")()
 
-	result := processTagAwsValue(atmosConfig, input, u.AtmosYamlFuncAwsRegion, stackInfo, func(id *AWSCallerIdentity) string {
+	result := processTagAwsValue(atmosConfig, input, u.AtmosYamlFuncAwsRegion, stackInfo, func(id *awsIdentity.CallerIdentity) string {
 		return id.Region
 	})
 
@@ -181,7 +183,7 @@ func processTagAwsOrganizationID(
 
 	// Get the AWS organization info (cached).
 	ctx := context.Background()
-	orgInfo, err := getAWSOrganizationCached(ctx, atmosConfig, authContext)
+	orgInfo, err := awsOrg.GetOrganizationCached(ctx, atmosConfig, authContext)
 	if err != nil {
 		log.Error("Failed to get AWS organization info", "error", err)
 		errUtils.CheckErrorPrintAndExit(err, "", "")

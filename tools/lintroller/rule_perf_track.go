@@ -55,6 +55,7 @@ var excludedPackages = []string{
 	"/mock",          // Mock/test utilities.
 	"/pkg/spacelift", // Spacelift generation is one-shot per command.
 	"/pkg/validator", // Validation runs once per command.
+	"/internal/gcp",  // GCP utilities would create import cycle with pkg/perf (used by pkg/perf).
 	"/pkg/ai",        // AI operations are external API calls, not in hot path.
 	"/pkg/mcp",       // MCP protocol implementation, AI infrastructure, not in hot path.
 	"/pkg/lsp",       // LSP protocol implementation, performance-critical JSON-RPC communication.

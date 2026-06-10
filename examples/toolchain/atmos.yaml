@@ -74,8 +74,11 @@ toolchain:
 
 # Components configuration for terraform.
 # The mock component demonstrates component-level tool dependencies.
+# Since this example uses OpenTofu (not HashiCorp Terraform), we set
+# command: tofu so Atmos invokes the correct binary.
 components:
   terraform:
+    command: tofu
     base_path: "components/terraform"
     apply_auto_approve: false
     deploy_run_init: true

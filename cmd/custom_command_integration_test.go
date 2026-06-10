@@ -67,7 +67,7 @@ func TestCustomCommandIntegration_MockProviderEnvironment(t *testing.T) {
 	atmosConfig.Commands = []schema.Command{testCommand}
 
 	// Process custom commands to register them with RootCmd.
-	err = processCustomCommands(atmosConfig, atmosConfig.Commands, RootCmd, true)
+	err = processCustomCommands(atmosConfig, atmosConfig.Commands, RootCmd)
 	require.NoError(t, err)
 
 	// Find and execute the custom command.
@@ -138,7 +138,7 @@ func TestCustomCommandIntegration_IdentityFlagOverride(t *testing.T) {
 	atmosConfig.Commands = []schema.Command{testCommand}
 
 	// Process custom commands to register them with RootCmd.
-	err = processCustomCommands(atmosConfig, atmosConfig.Commands, RootCmd, true)
+	err = processCustomCommands(atmosConfig, atmosConfig.Commands, RootCmd)
 	require.NoError(t, err)
 
 	// Find the custom command.
@@ -215,7 +215,7 @@ func TestCustomCommandIntegration_MultipleSteps(t *testing.T) {
 	atmosConfig.Commands = []schema.Command{testCommand}
 
 	// Process custom commands to register them with RootCmd.
-	err = processCustomCommands(atmosConfig, atmosConfig.Commands, RootCmd, true)
+	err = processCustomCommands(atmosConfig, atmosConfig.Commands, RootCmd)
 	require.NoError(t, err)
 
 	// Find and execute the custom command.
@@ -327,7 +327,7 @@ func TestCustomCommandIntegration_BooleanFlagDefaults(t *testing.T) {
 	atmosConfig.Commands = []schema.Command{testCommand}
 
 	// Process custom commands to register them with RootCmd.
-	err = processCustomCommands(atmosConfig, atmosConfig.Commands, RootCmd, true)
+	err = processCustomCommands(atmosConfig, atmosConfig.Commands, RootCmd)
 	require.NoError(t, err)
 
 	// Find the custom command.
@@ -413,7 +413,7 @@ func TestCustomCommandIntegration_BooleanFlagTemplatePatterns(t *testing.T) {
 	atmosConfig.Commands = []schema.Command{testCommand}
 
 	// Process custom commands to register them with RootCmd.
-	err = processCustomCommands(atmosConfig, atmosConfig.Commands, RootCmd, true)
+	err = processCustomCommands(atmosConfig, atmosConfig.Commands, RootCmd)
 	require.NoError(t, err)
 
 	// Verify the command is registered.
@@ -541,7 +541,7 @@ func TestCustomCommandIntegration_StringFlagDefaults(t *testing.T) {
 	atmosConfig.Commands = []schema.Command{testCommand}
 
 	// Process custom commands to register them with RootCmd.
-	err = processCustomCommands(atmosConfig, atmosConfig.Commands, RootCmd, true)
+	err = processCustomCommands(atmosConfig, atmosConfig.Commands, RootCmd)
 	require.NoError(t, err)
 
 	// Find the custom command.
@@ -611,7 +611,7 @@ func TestCustomCommandIntegration_NoIdentity(t *testing.T) {
 	atmosConfig.Commands = []schema.Command{testCommand}
 
 	// Process custom commands to register them with RootCmd.
-	err = processCustomCommands(atmosConfig, atmosConfig.Commands, RootCmd, true)
+	err = processCustomCommands(atmosConfig, atmosConfig.Commands, RootCmd)
 	require.NoError(t, err)
 
 	// Find and execute the custom command.

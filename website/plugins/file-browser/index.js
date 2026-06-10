@@ -38,7 +38,10 @@ const TAGS_MAP = {
   'demo-library': ['Components'],
   'demo-workflows': ['Automation'],
   'demo-atlantis': ['Automation'],
+  'custom-commands': ['Automation'],
+  'interactive-workflows': ['Automation'],
   'demo-custom-command': ['Automation'],
+  'custom-components': ['Components'],
   'generate-files': ['Automation'],
   toolchain: ['DX'],
   devcontainer: ['DX'],
@@ -48,6 +51,8 @@ const TAGS_MAP = {
   scaffolding: ['Scaffold', 'Init'],
   'stack-names': ['Stacks'],
   'demo-ansible': ['Automation'],
+  'mcp-with-aws': ['DX', 'Automation'],
+  'aws-ami-packer-github-actions': ['Automation'],
 };
 
 // Documentation pages mapping for examples.
@@ -97,8 +102,16 @@ const DOCS_MAP = {
   'demo-atlantis': [
     { label: 'Atlantis Integration', url: '/cli/configuration/integrations/atlantis' },
   ],
-  'demo-custom-command': [
+  'custom-commands': [
     { label: 'Custom Commands', url: '/cli/configuration/commands' },
+  ],
+  'custom-components': [
+    { label: 'Custom Commands', url: '/cli/configuration/commands' },
+    { label: 'Custom Component Types', url: '/cli/configuration/commands#custom-component-types' },
+  ],
+  'interactive-workflows': [
+    { label: 'Workflows', url: '/workflows' },
+    { label: 'CLI Configuration', url: '/cli/configuration/workflows' },
   ],
   'generate-files': [
     { label: 'Generate Files', url: '/cli/commands/terraform/generate/files' },
@@ -129,6 +142,17 @@ const DOCS_MAP = {
   ],
   'demo-ansible': [
     { label: 'Ansible Playbook', url: '/cli/commands/ansible/playbook' },
+  ],
+  'mcp-with-aws': [
+    { label: 'Custom Commands', url: '/cli/configuration/commands' },
+    { label: 'Authentication', url: '/stacks/auth' },
+    { label: 'Toolchain', url: '/cli/configuration/toolchain' },
+  ],
+  'aws-ami-packer-github-actions': [
+    { label: 'Packer Build', url: '/cli/commands/packer/build' },
+    { label: 'Custom Commands', url: '/cli/configuration/commands' },
+    { label: 'Go Templates', url: '/templates' },
+    { label: 'GitHub Actions', url: '/integrations/github-actions/setup-atmos' },
   ],
 };
 
@@ -473,6 +497,7 @@ module.exports = function fileBrowserPlugin(context, options) {
     githubRepo = '',
     githubBranch = 'main',
     githubPath = '',
+    disclaimer = '',
     excludePatterns = [],
     maxFileSize = 100 * 1024, // 100KB default.
   } = options;
@@ -510,6 +535,7 @@ module.exports = function fileBrowserPlugin(context, options) {
           githubRepo,
           githubBranch,
           githubPath,
+          disclaimer,
         },
       };
     },

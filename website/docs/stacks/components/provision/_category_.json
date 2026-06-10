@@ -1,0 +1,11 @@
+{
+  "label": "provision",
+  "className": "command",
+  "collapsed": true,
+  "collapsible": true,
+  "position": 6,
+  "link": {
+    "type": "doc",
+    "id": "component-provision"
+  }
+}

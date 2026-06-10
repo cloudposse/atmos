@@ -10,17 +10,25 @@ import (
 	"github.com/cloudposse/atmos/tests/testhelpers"
 )
 
+func setupDoubleHyphenSandbox(t *testing.T, workDir string) {
+	t.Helper()
+
+	sandbox, err := testhelpers.SetupSandbox(t, workDir)
+	if err != nil {
+		t.Fatalf("Failed to setup sandbox: %v", err)
+	}
+	t.Cleanup(sandbox.Cleanup)
+
+	for k, v := range sandbox.GetEnvironmentVariables() {
+		t.Setenv(k, v)
+	}
+}
+
 // TestDoubleHyphenSeparator tests that args after "--" are correctly passed through
 // to the underlying terraform command without being parsed by Atmos.
 // This is the fix for GitHub issue #1967.
 func TestDoubleHyphenSeparator(t *testing.T) {
-	// Initialize atmosRunner if not already done.
-	if atmosRunner == nil {
-		atmosRunner = testhelpers.NewAtmosRunner(coverDir)
-		if err := atmosRunner.Build(); err != nil {
-			t.Skipf("Failed to initialize Atmos: %v", err)
-		}
-	}
+	ensureAtmosRunner(t)
 
 	// Skip if there's a skip reason.
 	if skipReason != "" {
@@ -33,6 +41,7 @@ func TestDoubleHyphenSeparator(t *testing.T) {
 
 	// Use the workflows fixture which has a mock component.
 	workDir := "fixtures/scenarios/workflows"
+	setupDoubleHyphenSandbox(t, workDir)
 	t.Chdir(workDir)
 
 	tests := []struct {
@@ -104,13 +113,7 @@ func TestDoubleHyphenSeparator(t *testing.T) {
 // TestDoubleHyphenWithConsolidateWarnings specifically tests the exact scenario
 // from GitHub issue #1967 where -consolidate-warnings=false caused stack corruption.
 func TestDoubleHyphenWithConsolidateWarnings(t *testing.T) {
-	// Initialize atmosRunner if not already done.
-	if atmosRunner == nil {
-		atmosRunner = testhelpers.NewAtmosRunner(coverDir)
-		if err := atmosRunner.Build(); err != nil {
-			t.Skipf("Failed to initialize Atmos: %v", err)
-		}
-	}
+	ensureAtmosRunner(t)
 
 	if skipReason != "" {
 		t.Skipf("Skipping test: %s", skipReason)
@@ -121,6 +124,7 @@ func TestDoubleHyphenWithConsolidateWarnings(t *testing.T) {
 	t.Setenv("ATMOS_BASE_PATH", "")
 
 	workDir := "fixtures/scenarios/workflows"
+	setupDoubleHyphenSandbox(t, workDir)
 	t.Chdir(workDir)
 
 	// This is the exact command pattern from issue #1967.
@@ -155,13 +159,7 @@ func TestDoubleHyphenWithConsolidateWarnings(t *testing.T) {
 // TestDoubleHyphenStackNotOverwritten ensures that args after -- don't
 // accidentally overwrite the stack value.
 func TestDoubleHyphenStackNotOverwritten(t *testing.T) {
-	// Initialize atmosRunner if not already done.
-	if atmosRunner == nil {
-		atmosRunner = testhelpers.NewAtmosRunner(coverDir)
-		if err := atmosRunner.Build(); err != nil {
-			t.Skipf("Failed to initialize Atmos: %v", err)
-		}
-	}
+	ensureAtmosRunner(t)
 
 	if skipReason != "" {
 		t.Skipf("Skipping test: %s", skipReason)
@@ -172,6 +170,7 @@ func TestDoubleHyphenStackNotOverwritten(t *testing.T) {
 	t.Setenv("ATMOS_BASE_PATH", "")
 
 	workDir := "fixtures/scenarios/workflows"
+	setupDoubleHyphenSandbox(t, workDir)
 	t.Chdir(workDir)
 
 	// Test that -s after -- doesn't get parsed as the stack flag.

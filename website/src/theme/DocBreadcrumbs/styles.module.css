@@ -1,0 +1,34 @@
+.row {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 0.8rem;
+}
+
+.breadcrumbsCol {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+/* The original <nav> inside it carries its own bottom margin — neutralize. */
+.breadcrumbsCol > nav {
+  margin-bottom: 0;
+}
+
+.actionsCol {
+  flex: 0 0 auto;
+  margin-left: auto;
+}
+
+/* The button component has its own bottom margin from when it lived in
+   DocItem/Content — neutralize when rendered in the breadcrumb row. */
+.actionsCol > * {
+  margin-bottom: 0;
+}
+
+@media (max-width: 600px) {
+  .row {
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+}

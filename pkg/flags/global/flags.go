@@ -71,8 +71,24 @@ type Flags struct {
 	RedirectStderr string
 	Version        bool
 
+	// AI integration.
+	AI    bool     // Enable AI-powered analysis of command output (--ai).
+	Skill []string // Specify skills for AI analysis context (--skill, comma-separated or repeated).
+
 	// Version management.
 	UseVersion string // Specify which version of Atmos to use (--use-version).
+
+	// SkipHooks controls runtime hook execution. Empty / "false" runs all
+	// hooks normally; "*" / "true" (set when --skip-hooks is passed without
+	// a value) skips every hook; a comma-separated list (e.g. "cost,sec")
+	// skips only the named hooks. Per-invocation only — does not propagate
+	// to nested commands or workflows.
+	SkipHooks string
+
+	// SettingsListMergeStrategy overrides settings.list_merge_strategy for
+	// this invocation. Controls how lists are merged in Atmos stack manifests
+	// (replace, append, merge).
+	SettingsListMergeStrategy string
 }
 
 // NewFlags creates a Flags with default values.
@@ -94,6 +110,7 @@ func NewFlags() Flags {
 		ProfileType:  "cpu",
 		Heatmap:      false,
 		HeatmapMode:  "bar",
+		Skill:        []string{}, // No skills active by default.
 	}
 }
 

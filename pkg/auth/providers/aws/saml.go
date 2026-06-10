@@ -8,12 +8,14 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 
 	aws "github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/sts"
+	"github.com/spf13/viper"
 	"github.com/versent/saml2aws/v2"
 	"github.com/versent/saml2aws/v2/pkg/cfg"
 	"github.com/versent/saml2aws/v2/pkg/creds"
@@ -25,15 +27,18 @@ import (
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/xdg"
 )
 
 const (
-	samlTimeoutSeconds    = 30
-	samlDefaultSessionSec = 3600
-	logFieldRole          = "role"
-	logFieldDriver        = "driver"
-	minSTSSeconds         = 900
-	maxSTSSeconds         = 43200
+	samlTimeoutSeconds            = 30
+	samlDefaultSessionSec         = 3600
+	logFieldRole                  = "role"
+	logFieldDriver                = "driver"
+	minSTSSeconds                 = 900
+	maxSTSSeconds                 = 43200
+	playwrightCacheDir            = "ms-playwright"
+	playwrightCacheDirPermissions = 0o755
 )
 
 type assumeRoleWithSAMLClient interface {
@@ -128,8 +133,19 @@ func (p *samlProvider) Authenticate(ctx context.Context) (types.ICredentials, er
 		return nil, fmt.Errorf("%w: no role to assume for assertion, SAML provider must be part of a chain", errUtils.ErrInvalidAuthConfig)
 	}
 
-	// Set up browser automation if needed.
-	p.setupBrowserAutomation()
+	// Set up browser automation only for the Browser driver.
+	// Other drivers (GoogleApps, Okta, ADFS) use API/HTTP flows and don't need
+	// Playwright, XDG storage directories, or symlinks.
+	if samlDriver == "Browser" {
+		if err := p.setupBrowserAutomation(); err != nil {
+			return nil, err
+		}
+	}
+
+	// Configure logrus to forward to Atmos logger instead of stdout.
+	// saml2aws uses the global logrus logger which outputs messages like "INFO[0037] opening browser".
+	// We forward these to Atmos's charmbracelet/log for consistent formatting.
+	log.ConfigureLogrusForAtmos()
 
 	// Create config and client + login details.
 	samlConfig := p.createSAMLConfig()
@@ -179,26 +195,29 @@ func (p *samlProvider) Authenticate(ctx context.Context) (types.ICredentials, er
 // createSAMLConfig creates the saml2aws configuration.
 func (p *samlProvider) createSAMLConfig() *cfg.IDPAccount {
 	return &cfg.IDPAccount{
-		URL:                  p.url,
-		Username:             p.config.Username,
-		Provider:             p.getDriver(),
-		MFA:                  "Auto",
-		SkipVerify:           false,
-		Timeout:              samlTimeoutSeconds, // 30 second timeout.
-		AmazonWebservicesURN: "urn:amazon:webservices",
-		SessionDuration:      samlDefaultSessionSec, // 1 hour default.
-		Profile:              p.name,
-		Region:               p.region,
-		DownloadBrowser:      p.shouldDownloadBrowser(), // Intelligently enable based on driver availability.
-		Headless:             false,                     // Force non-headless for interactive auth.
+		URL:                   p.url,
+		Username:              p.config.Username,
+		Provider:              p.getDriver(),
+		MFA:                   "Auto",
+		SkipVerify:            false,
+		Timeout:               samlTimeoutSeconds, // 30 second timeout.
+		AmazonWebservicesURN:  "urn:amazon:webservices",
+		SessionDuration:       samlDefaultSessionSec, // 1 hour default.
+		Profile:               p.name,
+		Region:                p.region,
+		DownloadBrowser:       p.shouldDownloadBrowser(), // Intelligently enable based on driver availability.
+		BrowserType:           p.config.BrowserType,
+		BrowserExecutablePath: p.config.BrowserExecutablePath,
+		Headless:              false, // Force non-headless for interactive auth.
 	}
 }
 
 // createLoginDetails creates the login details for saml2aws.
 func (p *samlProvider) createLoginDetails() *creds.LoginDetails {
 	loginDetails := &creds.LoginDetails{
-		URL:      p.url,
-		Username: p.config.Username,
+		URL:             p.url,
+		Username:        p.config.Username,
+		DownloadBrowser: p.shouldDownloadBrowser(), // Enable automatic driver installation.
 	}
 
 	// If password is provided in config, use it; otherwise prompt.
@@ -210,6 +229,14 @@ func (p *samlProvider) createLoginDetails() *creds.LoginDetails {
 }
 
 // authenticateAndGetAssertion authenticates and gets the SAML assertion.
+//
+// IMPORTANT: This function calls saml2aws.SAMLClient.Authenticate() which may panic
+// due to a bug in saml2aws browser provider (v2.36.19):
+// - When browser timeout occurs, ExpectRequest() returns (nil, error)
+// - The code then calls nil.PostData() causing a nil pointer dereference
+// - Location: browser.go:191 in saml2aws
+// - Workaround: Ensure browser authentication completes before timeout (default 5 minutes)
+// - User should not close the browser window manually during authentication.
 func (p *samlProvider) authenticateAndGetAssertion(samlClient saml2aws.SAMLClient, loginDetails *creds.LoginDetails) (string, error) {
 	samlAssertion, err := samlClient.Authenticate(loginDetails)
 	if err != nil {
@@ -327,12 +354,6 @@ func (p *samlProvider) getDriver() string {
 	if p.config.Driver != "" {
 		log.Debug("Using explicitly configured SAML driver", logFieldDriver, p.config.Driver)
 		return p.config.Driver
-	}
-
-	// Backward compatibility: check deprecated provider_type field.
-	if p.config.ProviderType != "" {
-		log.Warn("The 'provider_type' field is deprecated. Please use 'driver' instead", "current_value", p.config.ProviderType)
-		return p.config.ProviderType
 	}
 
 	// Check if Playwright drivers are available or can be auto-downloaded.
@@ -472,17 +493,35 @@ func (p *samlProvider) PrepareEnvironment(_ context.Context, environ map[string]
 // playwrightDriversInstalled checks if valid Playwright drivers are installed in standard locations.
 // Returns true if drivers are found, false if not found or home directory cannot be determined.
 func (p *samlProvider) playwrightDriversInstalled() bool {
-	homeDir, err := homedir.Dir()
-	if err != nil {
-		log.Debug("Cannot determine home directory for driver detection", "error", err)
-		return false
+	var playwrightPaths []string
+
+	// Check Atmos XDG cache directory first (allows users to consolidate all Atmos data).
+	if xdgCacheDir, err := xdg.GetXDGCacheDir(playwrightCacheDir, playwrightCacheDirPermissions); err == nil {
+		playwrightPaths = append(playwrightPaths, xdgCacheDir)
 	}
 
-	// Check common Playwright cache locations.
-	playwrightPaths := []string{
-		filepath.Join(homeDir, ".cache", "ms-playwright"),               // Linux.
-		filepath.Join(homeDir, "Library", "Caches", "ms-playwright-go"), // macOS (Go specific).
-		filepath.Join(homeDir, "AppData", "Local", "ms-playwright"),     // Windows.
+	// Check playwright-go's hardcoded cache locations.
+	// Note: playwright-go does NOT respect XDG_CACHE_HOME, it uses its own hardcoded paths.
+	homeDir, err := homedir.Dir()
+	if err == nil {
+		playwrightPaths = append(playwrightPaths,
+			filepath.Join(homeDir, ".cache", playwrightCacheDir),            // Linux (playwright-go default).
+			filepath.Join(homeDir, "Library", "Caches", playwrightCacheDir), // macOS (playwright-go default).
+			filepath.Join(homeDir, "AppData", "Local", playwrightCacheDir),  // Windows (playwright-go default).
+		)
+	} else {
+		log.Debug("Cannot determine home directory for driver detection", "error", err)
+	}
+
+	// On Windows, also check LOCALAPPDATA if it's set (for test environments or custom configs).
+	// playwright-go uses os.UserCacheDir() which returns LOCALAPPDATA directly on Windows.
+	if runtime.GOOS == "windows" {
+		v := viper.New()
+		if err := v.BindEnv("LOCALAPPDATA"); err == nil {
+			if localAppData := v.GetString("LOCALAPPDATA"); localAppData != "" {
+				playwrightPaths = append(playwrightPaths, filepath.Join(localAppData, playwrightCacheDir))
+			}
+		}
 	}
 
 	for _, path := range playwrightPaths {
@@ -552,7 +591,8 @@ func (p *samlProvider) hasValidPlaywrightDrivers(path string) bool {
 
 // shouldDownloadBrowser determines if browser drivers should be auto-downloaded.
 // It checks if the user explicitly configured download_browser_driver, otherwise
-// it intelligently enables auto-download for "Browser" driver if drivers aren't found.
+// it intelligently enables auto-download for "Browser" driver if drivers aren't found
+// and the user hasn't specified a custom browser.
 func (p *samlProvider) shouldDownloadBrowser() bool {
 	// If user explicitly set download_browser_driver, respect their choice.
 	if p.config.DownloadBrowserDriver {
@@ -568,23 +608,194 @@ func (p *samlProvider) shouldDownloadBrowser() bool {
 		return false
 	}
 
+	// If user specified a custom browser type or executable path, don't auto-download.
+	// They're using their own browser installation.
+	if p.config.BrowserType != "" || p.config.BrowserExecutablePath != "" {
+		log.Debug("Custom browser configured, skipping auto-download",
+			"browser_type", p.config.BrowserType,
+			"browser_executable_path", p.config.BrowserExecutablePath)
+		return false
+	}
+
 	// Check if Playwright drivers are already installed.
 	if p.playwrightDriversInstalled() {
 		log.Debug("Found valid Playwright drivers, auto-download disabled")
 		return false
 	}
 
-	// No valid drivers found, enable auto-download.
+	// No valid drivers found and no custom browser configured, enable auto-download.
 	log.Debug("No valid Playwright drivers found, enabling auto-download for Browser driver")
 	return true
 }
 
 // setupBrowserAutomation sets up browser automation for SAML authentication.
-func (p *samlProvider) setupBrowserAutomation() {
+// Returns an error if a custom browser executable is configured but invalid
+// (does not exist or is not a file), so the user gets a clear failure instead
+// of a confusing Playwright crash later.
+func (p *samlProvider) setupBrowserAutomation() error {
+	// Log browser configuration for diagnostics.
+	if p.config.BrowserType != "" {
+		log.Info("Custom browser type configured", "browser_type", p.config.BrowserType)
+	}
+	if p.config.BrowserExecutablePath != "" {
+		log.Info("Custom browser executable path configured", "browser_executable_path", p.config.BrowserExecutablePath)
+
+		// Fail fast if the configured browser executable is invalid.
+		if err := p.validateBrowserExecutable(); err != nil {
+			return err
+		}
+	}
+
 	// Set environment variables for browser automation.
+	// Clear/set explicitly on every call to avoid leaking state from a
+	// previous auth flow in the same process (e.g. MCP server, workflows).
 	if p.shouldDownloadBrowser() {
 		os.Setenv("SAML2AWS_AUTO_BROWSER_DOWNLOAD", "true")
 		log.Debug("Browser driver auto-download enabled", logFieldDriver, p.getDriver())
+	} else {
+		_ = os.Unsetenv("SAML2AWS_AUTO_BROWSER_DOWNLOAD")
+	}
+
+	// Ensure the storage directory that saml2aws expects exists.
+	// saml2aws hardcodes ~/.aws/saml2aws/storageState.json for browser state.
+	if err := p.setupBrowserStorageDir(); err != nil {
+		log.Warn("Failed to setup browser storage directory", "error", err)
+	}
+
+	return nil
+}
+
+// validateBrowserExecutable checks if the configured browser executable exists and is executable.
+func (p *samlProvider) validateBrowserExecutable() error {
+	const (
+		// executablePermissionBits represents the execute permission bits (owner, group, other).
+		// Used to check if a file has any execute permissions set.
+		executablePermissionBits = 0o111
+	)
+
+	if p.config.BrowserExecutablePath == "" {
+		return nil
+	}
+
+	// Check if file exists.
+	info, err := os.Stat(p.config.BrowserExecutablePath)
+	if err != nil {
+		return fmt.Errorf("%w: browser executable not found: %w", errUtils.ErrInvalidBrowserExecutable, err)
+	}
+
+	// Check if it's a file (not directory).
+	if info.IsDir() {
+		return fmt.Errorf("%w: browser executable path is a directory, not a file", errUtils.ErrInvalidBrowserExecutable)
+	}
+
+	// Check if file is executable (Unix permissions check).
+	// On Windows, this check is less reliable but os.Stat still validates existence.
+	if info.Mode().Perm()&executablePermissionBits == 0 {
+		log.Warn("Browser executable may not have execute permissions",
+			"path", p.config.BrowserExecutablePath,
+			"permissions", info.Mode().Perm().String())
+	}
+
+	log.Debug("Browser executable validated successfully",
+		"path", p.config.BrowserExecutablePath,
+		"size", info.Size(),
+		"permissions", info.Mode().Perm().String())
+
+	return nil
+}
+
+// setupBrowserStorageDir ensures the directory that saml2aws uses for browser
+// storage state exists. The path is hardcoded upstream as
+// `~/.aws/saml2aws/storageState.json` (using fmt.Sprintf with forward slashes,
+// which produces mixed-separator paths on Windows). We cannot redirect this
+// path to an XDG location because saml2aws does not expose a configurable
+// storage path.
+//
+// The fix: create `~/.aws/saml2aws/` as a plain directory using filepath.Join
+// (correct separators on all platforms) and os.MkdirAll (no privilege
+// requirements). This replaces the previous symlink strategy which broke on
+// Windows due to symlink privilege requirements and mixed path separators.
+//
+// See docs/fixes/2026-04-10-auth-windows-path-issues.md for the full analysis.
+func (p *samlProvider) setupBrowserStorageDir() error {
+	const (
+		samlStorageDirPerms = 0o700
+		awsDir              = ".aws"
+		saml2awsSubdir      = "saml2aws"
+	)
+
+	homeDir, err := homedir.Dir()
+	if err != nil {
+		return fmt.Errorf("%w: user home directory: %w", errUtils.ErrCreateDirectory, err)
+	}
+
+	// Create ~/.aws/saml2aws/ as a real directory (not a symlink).
+	// saml2aws hardcodes this path in pkg/provider/browser/browser.go:118.
+	saml2awsDir := filepath.Join(homeDir, awsDir, saml2awsSubdir)
+
+	// Migrate legacy symlink left by previous Atmos versions. os.MkdirAll
+	// would leave a stale symlink in place, so upgraded users would never
+	// receive the plain-directory migration.
+	p.migrateLegacySymlink(saml2awsDir)
+
+	if err := os.MkdirAll(saml2awsDir, samlStorageDirPerms); err != nil {
+		return fmt.Errorf("%w: %s: %w", errUtils.ErrCreateDirectory, saml2awsDir, err)
+	}
+
+	log.Debug("Browser storage directory ready", "path", saml2awsDir)
+	return nil
+}
+
+// migrateLegacySymlink removes a legacy symlink at path and preserves any
+// existing storageState.json from the symlink target. This handles upgrades
+// from Atmos versions that used a symlink-based storage strategy.
+func (p *samlProvider) migrateLegacySymlink(path string) {
+	const (
+		storageStateFile   = "storageState.json"
+		migrationDirPerms  = 0o700
+		migrationFilePerms = 0o600
+	)
+
+	info, lstatErr := os.Lstat(path)
+	if lstatErr != nil || info.Mode()&os.ModeSymlink == 0 {
+		return // Not a symlink — nothing to migrate.
+	}
+
+	// Read the symlink target to check for existing state before removing.
+	target, readErr := os.Readlink(path)
+	if readErr != nil {
+		log.Debug("Cannot read legacy symlink target, removing anyway", "path", path, "error", readErr)
+	}
+
+	// Check for existing storageState.json in the symlink target.
+	var stateData []byte
+	if target != "" {
+		statePath := filepath.Join(target, storageStateFile)
+		if data, readFileErr := os.ReadFile(statePath); readFileErr == nil {
+			stateData = data
+			log.Debug("Preserving browser state from legacy symlink target", "source", statePath)
+		}
+	}
+
+	// Remove the symlink.
+	log.Debug("Removing legacy saml2aws symlink", "path", path)
+	if removeErr := os.Remove(path); removeErr != nil {
+		log.Warn("Failed to remove legacy saml2aws symlink", "path", path, "error", removeErr)
+		return
+	}
+
+	// Restore storageState.json into the new real directory.
+	if len(stateData) > 0 {
+		if mkdirErr := os.MkdirAll(path, migrationDirPerms); mkdirErr != nil {
+			log.Warn("Failed to create directory for state migration", "path", path, "error", mkdirErr)
+			return
+		}
+		destPath := filepath.Join(path, storageStateFile)
+		if writeErr := os.WriteFile(destPath, stateData, migrationFilePerms); writeErr != nil {
+			log.Warn("Failed to migrate storageState.json", "dest", destPath, "error", writeErr)
+		} else {
+			log.Debug("Migrated storageState.json from legacy symlink", "dest", destPath)
+		}
 	}
 }
 
@@ -619,7 +830,11 @@ func (p *samlProvider) GetFilesDisplayPath() string {
 	// Use realm for credential isolation between different repositories.
 	fileManager, err := awsCloud.NewAWSFileManager(basePath, p.realm)
 	if err != nil {
-		return "~/.aws/atmos"
+		homeDir, homeErr := homedir.Dir()
+		if homeErr != nil {
+			return filepath.Join("~", ".aws", "atmos")
+		}
+		return filepath.Join(homeDir, ".aws", "atmos")
 	}
 
 	return fileManager.GetDisplayPath()

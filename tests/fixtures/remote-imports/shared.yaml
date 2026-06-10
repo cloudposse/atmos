@@ -1,0 +1,14 @@
+# Shared configuration for testing remote stack imports.
+# This file is imported via remote URL in tests and examples.
+#
+# Note: This fixture is hosted on GitHub and accessed via raw.githubusercontent.com
+# for integration testing of the remote import functionality.
+
+vars:
+  imported_from: "remote"
+  remote_import_test: true
+  shared_setting: "value-from-remote"
+
+settings:
+  version: "1.0.0"
+  source: "github.com/cloudposse/atmos"

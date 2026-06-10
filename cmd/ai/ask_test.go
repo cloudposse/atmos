@@ -558,8 +558,8 @@ func TestAskCommand_FlagCount(t *testing.T) {
 			count++
 		}
 	})
-	// Expected: include, exclude, no-auto-context, no-tools = 4 flags.
-	assert.Equal(t, 4, count, "ask command should have exactly 4 custom flags")
+	// Expected: include, exclude, no-auto-context, no-tools, mcp = 5 flags.
+	assert.Equal(t, 5, count, "ask command should have exactly 5 custom flags")
 }
 
 func TestAskCommand_AIEnabledButClientCreationFails(t *testing.T) {
@@ -2235,9 +2235,9 @@ ai:
 	})
 }
 
-// TestAskCommand_StandardParserIntegration tests that the ask command uses StandardParser
+// TestAskCommand_StandardParserServer tests that the ask command uses StandardParser
 // with proper Viper binding for flag precedence (CLI > ENV > defaults).
-func TestAskCommand_StandardParserIntegration(t *testing.T) {
+func TestAskCommand_StandardParserServer(t *testing.T) {
 	t.Run("askParser is initialized", func(t *testing.T) {
 		require.NotNil(t, askParser, "askParser should be initialized by init()")
 	})

@@ -43,6 +43,29 @@ See https://docs.aws.amazon.com/cli/latest/reference/eks/update-kubeconfig.html 
 			return err
 		}
 
+		flags := cmd.Flags()
+
+		// If --integration is specified, use Go SDK path via auth manager.
+		integration, _ := flags.GetString("integration")
+		if integration != "" {
+			return executeEKSUpdateKubeconfigViaIntegration(integration)
+		}
+
+		// If --name is provided without component/stack and without profile/role-arn,
+		// use Go SDK direct path (requires identity).
+		name, _ := flags.GetString("name")
+		stack, _ := flags.GetString("stack")
+		profile, _ := flags.GetString("profile")
+		roleArn, _ := flags.GetString("role-arn")
+		identity, _ := flags.GetString("identity")
+		if name != "" && stack == "" && profile == "" && roleArn == "" && identity != "" {
+			region, _ := flags.GetString("region")
+			kubeconfig, _ := flags.GetString("kubeconfig")
+			alias, _ := flags.GetString("alias")
+			return executeEKSUpdateKubeconfigDirect(name, region, kubeconfig, alias, identity)
+		}
+
+		// Legacy path: delegate to internal/exec for AWS CLI-based update.
 		return e.ExecuteAwsEksUpdateKubeconfigCommand(cmd, args)
 	},
 }
@@ -66,6 +89,8 @@ func init() {
 		flags.WithBoolFlag("dry-run", "", false, "Perform a dry run to simulate updating the kubeconfig without making any changes."),
 		flags.WithBoolFlag("verbose", "", false, "Enable verbose logging to provide detailed output during the kubeconfig update process."),
 		flags.WithStringFlag("alias", "", "", "Specify an alias to use for the cluster context name in the kubeconfig file."),
+		flags.WithStringFlag("integration", "", "", "Named integration from auth.integrations (uses Go SDK instead of AWS CLI)"),
+		flags.WithStringFlag("identity", "i", "", "Atmos identity to authenticate with (uses Go SDK instead of AWS CLI)"),
 		// Environment variable bindings.
 		flags.WithEnvVars("stack", "ATMOS_STACK"),
 		flags.WithEnvVars("profile", "ATMOS_AWS_PROFILE", "AWS_PROFILE"),

@@ -3,16 +3,17 @@ package exec
 import (
 	"context"
 	"errors"
+	"fmt"
 	"time"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/component"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/provisioner"
 	_ "github.com/cloudposse/atmos/pkg/provisioner/source"
 	provWorkdir "github.com/cloudposse/atmos/pkg/provisioner/workdir"
 	"github.com/cloudposse/atmos/pkg/schema"
-	"github.com/cloudposse/atmos/pkg/store/authbridge"
 	"github.com/cloudposse/atmos/pkg/ui"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -65,7 +66,8 @@ func resolveWorkdirPath(componentSection map[string]any, componentPath string) s
 func ExecuteTerraformShell(opts *ShellOptions, atmosConfig *schema.AtmosConfiguration) error {
 	defer perf.Track(atmosConfig, "exec.ExecuteTerraformShell")()
 
-	log.Debug("ExecuteTerraformShell called",
+	log.Debug(
+		"ExecuteTerraformShell called",
 		"component", opts.Component, "stack", opts.Stack,
 		"processTemplates", opts.ProcessTemplates, "processFunctions", opts.ProcessFunctions,
 		"skip", opts.Skip, "dryRun", opts.DryRun, "identity", opts.Identity,
@@ -88,9 +90,7 @@ func ExecuteTerraformShell(opts *ShellOptions, atmosConfig *schema.AtmosConfigur
 	if authManager != nil {
 		info.AuthManager = authManager
 
-		// Inject auth resolver into identity-aware stores.
-		resolver := authbridge.NewResolver(authManager, &info)
-		atmosConfig.Stores.SetAuthContextResolver(resolver)
+		injectTerraformStoreAuthResolver(atmosConfig, &info, authManager)
 	}
 
 	info, err = ProcessStacks(atmosConfig, info, true, opts.ProcessTemplates, opts.ProcessFunctions, opts.Skip, authManager)
@@ -114,6 +114,17 @@ func ExecuteTerraformShell(opts *ShellOptions, atmosConfig *schema.AtmosConfigur
 			WithCause(err).
 			WithExplanation("provisioner execution failed before terraform shell").
 			Err()
+	}
+
+	// ExecuteProvisioners above sets WorkdirPathKey to the bare workdir root;
+	// joining the metadata.component subpath onto it must happen before the
+	// shell, working directory, and varfile paths are read below.
+	if _, subpathErr := component.ApplyWorkdirSubpathToSection(&info); subpathErr != nil {
+		// subpathErr already wraps ErrWorkdirProvision; preserve that
+		// classification rather than re-wrapping with ErrProvisionerFailed
+		// (which means an AutoProvisionSource hook failed, not a path
+		// resolution failed).
+		return fmt.Errorf("resolve metadata.component subpath inside workdir: %w", subpathErr)
 	}
 
 	// Check if workdir provisioner set a workdir path - if so, use it instead of the component path.

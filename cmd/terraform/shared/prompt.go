@@ -3,6 +3,7 @@ package shared
 
 import (
 	"errors"
+	"fmt"
 	"sort"
 	"strings"
 
@@ -21,6 +22,7 @@ import (
 var (
 	initCliConfig         = cfg.InitCliConfig
 	executeDescribeStacks = e.ExecuteDescribeStacks
+	promptForMissing      = flags.PromptForMissingRequired
 )
 
 // buildConfigAndStacksInfo creates a ConfigAndStacksInfo populated with global CLI flags.
@@ -58,18 +60,34 @@ func PromptForComponent(cmd *cobra.Command, stack string) (string, error) {
 
 // PromptForStack shows an interactive selector for stack selection.
 // If component is provided, filters stacks to only those containing the component.
+// The selected stack is written back to the cmd "stack" flag so PostRunE hooks
+// (which re-parse args via ProcessCommandLineArgs) observe the selected value.
 func PromptForStack(cmd *cobra.Command, component string) (string, error) {
 	var args []string
 	if component != "" {
 		args = []string{component}
 	}
-	return flags.PromptForMissingRequired(
+	stack, err := promptForMissing(
 		"stack",
 		"Choose a stack",
 		StackFlagCompletion,
 		cmd,
 		args,
 	)
+	if err != nil {
+		return stack, err
+	}
+
+	// Persist to the Cobra flag so PostRunE hooks that re-parse args via
+	// ProcessCommandLineArgs see the selected value instead of an empty string.
+	if stack != "" {
+		if f := cmd.Flag("stack"); f != nil {
+			if setErr := f.Value.Set(stack); setErr != nil {
+				return "", fmt.Errorf("%w: stack=%q: %w", errUtils.ErrSetFlag, stack, setErr)
+			}
+		}
+	}
+	return stack, nil
 }
 
 // HandlePromptError processes errors from interactive prompts.

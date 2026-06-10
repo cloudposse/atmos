@@ -17,6 +17,7 @@ atmos_cli_config:
       plan:
         skip_planfile: false
       plugin_cache: true
+      auto_provision_workdir_for_outputs: true
     helmfile:
       base_path: components/helmfile
       use_eks: true
@@ -1019,6 +1020,8 @@ providers: {}
 provision: {}
 remote_state_backend: {}
 remote_state_backend_type: ""
+required_providers: {}
+required_version: ""
 settings:
   depends_on:
     1:

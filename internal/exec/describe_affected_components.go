@@ -2,11 +2,13 @@
 package exec
 
 import (
+	"fmt"
 	"reflect"
 
 	"github.com/go-viper/mapstructure/v2"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -22,6 +24,22 @@ const (
 	affectedReasonStackProvision  = "stack.provision"
 	affectedReasonDeleted         = "deleted"
 	affectedReasonDeletedStack    = "deleted.stack"
+
+	// Affected reasons for the remaining top-level component sections written by the
+	// stack processor. Keep these (and componentSectionChecks below) in sync with the
+	// sections assigned in stack_processor_merge.go (the comp[...] block) and with the
+	// "Evaluated sections" list in website/docs/cli/commands/describe/describe-affected.mdx.
+	affectedReasonStackProviders              = "stack.providers"
+	affectedReasonStackRequiredProviders      = "stack.required_providers"
+	affectedReasonStackRequiredVersion        = "stack.required_version"
+	affectedReasonStackGenerate               = "stack.generate"
+	affectedReasonStackBackend                = "stack.backend"
+	affectedReasonStackBackendType            = "stack.backend_type"
+	affectedReasonStackRemoteStateBackend     = "stack.remote_state_backend"
+	affectedReasonStackRemoteStateBackendType = "stack.remote_state_backend_type"
+	affectedReasonStackAuth                   = "stack.auth"
+	affectedReasonStackCommand                = "stack.command"
+	affectedReasonStackDependencies           = "stack.dependencies"
 )
 
 // Deletion type constants.
@@ -96,6 +114,110 @@ func addAffectedComponent(
 	)
 }
 
+// sectionCheck pairs a top-level component section name with the `affected` reason
+// reported when that section differs between the two refs.
+type sectionCheck struct {
+	section string
+	reason  string
+}
+
+// componentSectionChecks lists the top-level component sections compared verbatim
+// between refs to determine if a component is affected. `metadata` and `settings`
+// are intentionally absent: they have bespoke handling (metadata gates component
+// skipping; settings also drives dependency checks).
+//
+// This list MUST stay in sync with the sections the stack processor writes into the
+// final component map (the comp[...] assignments in stack_processor_merge.go) and with
+// the "Evaluated sections" list in
+// website/docs/cli/commands/describe/describe-affected.mdx. `locals`, `overrides`,
+// `inheritance`, `retry`, and `hooks` are deliberately excluded (see that doc for
+// rationale): in particular `hooks` is operational/execution-time behavior (what runs
+// before/after a command), not provisioned infrastructure, so it does not mark a
+// component as affected by default. Users who want it can add `hooks` to
+// `describe.affected.sections`, where it reports as `stack.hooks`.
+//
+// Order is significant: the first changed section becomes the headline `affected`
+// reason (all changed sections are still recorded in `affected_all`).
+var componentSectionChecks = []sectionCheck{
+	{sectionNameVars, affectedReasonStackVars},
+	{sectionNameEnv, affectedReasonStackEnv},
+	{cfg.ProvidersSectionName, affectedReasonStackProviders},
+	{cfg.RequiredProvidersSectionName, affectedReasonStackRequiredProviders},
+	{cfg.RequiredVersionSectionName, affectedReasonStackRequiredVersion},
+	{cfg.GenerateSectionName, affectedReasonStackGenerate},
+	{cfg.BackendSectionName, affectedReasonStackBackend},
+	{cfg.BackendTypeSectionName, affectedReasonStackBackendType},
+	{cfg.RemoteStateBackendSectionName, affectedReasonStackRemoteStateBackend},
+	{cfg.RemoteStateBackendTypeSectionName, affectedReasonStackRemoteStateBackendType},
+	{cfg.AuthSectionName, affectedReasonStackAuth},
+	{cfg.CommandSectionName, affectedReasonStackCommand},
+	{cfg.DependenciesSectionName, affectedReasonStackDependencies},
+	{sectionNameSource, affectedReasonStackSource},
+	{sectionNameProvision, affectedReasonStackProvision},
+}
+
+// resolveComponentSectionChecks returns the effective list of section checks. When
+// `describe.affected.sections` is configured it fully replaces the built-in defaults:
+// each configured name is mapped to its labeled reason when known, otherwise to a
+// generic `stack.<name>` reason so custom sections still report sensibly.
+func resolveComponentSectionChecks(atmosConfig *schema.AtmosConfiguration) []sectionCheck {
+	if atmosConfig == nil || len(atmosConfig.Describe.Affected.Sections) == 0 {
+		return componentSectionChecks
+	}
+
+	reasonByName := make(map[string]string, len(componentSectionChecks))
+	for _, c := range componentSectionChecks {
+		reasonByName[c.section] = c.reason
+	}
+
+	checks := make([]sectionCheck, 0, len(atmosConfig.Describe.Affected.Sections))
+	for _, name := range atmosConfig.Describe.Affected.Sections {
+		reason, ok := reasonByName[name]
+		if !ok {
+			reason = fmt.Sprintf("stack.%s", name)
+		}
+		checks = append(checks, sectionCheck{section: name, reason: reason})
+	}
+	return checks
+}
+
+// checkComponentSections compares every section in the effective check list that is
+// present on the component and records the component as affected on any difference.
+func checkComponentSections(
+	affected *[]schema.Affected,
+	atmosConfig *schema.AtmosConfiguration,
+	componentName string,
+	stackName string,
+	componentType string,
+	componentSection *map[string]any,
+	remoteStacks *map[string]any,
+	currentStacks *map[string]any,
+	includeSpaceliftAdminStacks bool,
+	includeSettings bool,
+) error {
+	locator := remoteComponentLocator{
+		remoteStacks:  remoteStacks,
+		stackName:     stackName,
+		componentType: componentType,
+		componentName: componentName,
+	}
+
+	for _, c := range resolveComponentSectionChecks(atmosConfig) {
+		value, ok := (*componentSection)[c.section]
+		if !ok {
+			continue
+		}
+		if isSectionValueEqual(locator, value, c.section) {
+			continue
+		}
+		if err := addAffectedComponent(affected, atmosConfig, componentName, stackName, componentType,
+			componentSection, c.reason, includeSpaceliftAdminStacks, currentStacks, includeSettings); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // processTerraformComponentsIndexed processes Terraform components using the files index.
 //
 //nolint:cyclop,funlen // Component processing requires checking multiple sections (metadata, vars, env, settings, modules)
@@ -165,25 +287,16 @@ func processTerraformComponentsIndexed(
 			}
 		}
 
-		// Check vars, env, settings sections (same as non-indexed version).
-		if varSection, ok := componentSection[sectionNameVars].(map[string]any); ok {
-			if !isEqual(remoteStacks, stackName, cfg.TerraformComponentType, componentName, varSection, sectionNameVars) {
-				err := addAffectedComponent(&affected, atmosConfig, componentName, stackName, cfg.TerraformComponentType,
-					&componentSection, affectedReasonStackVars, includeSpaceliftAdminStacks, currentStacks, includeSettings)
-				if err != nil {
-					return nil, err
-				}
-			}
-		}
-
-		if envSection, ok := componentSection[sectionNameEnv].(map[string]any); ok {
-			if !isEqual(remoteStacks, stackName, cfg.TerraformComponentType, componentName, envSection, sectionNameEnv) {
-				err := addAffectedComponent(&affected, atmosConfig, componentName, stackName, cfg.TerraformComponentType,
-					&componentSection, affectedReasonStackEnv, includeSpaceliftAdminStacks, currentStacks, includeSettings)
-				if err != nil {
-					return nil, err
-				}
-			}
+		// Check the comparable component sections (vars, env, providers, hooks, generate,
+		// backend, source, provision, ...) via the shared section table. `metadata` is
+		// handled above; `settings` is handled below because it also drives dependency checks.
+		err = checkComponentSections(
+			&affected, atmosConfig, componentName, stackName, cfg.TerraformComponentType,
+			&componentSection, remoteStacks, currentStacks,
+			includeSpaceliftAdminStacks, includeSettings,
+		)
+		if err != nil {
+			return nil, err
 		}
 
 		if settingsSection, ok := componentSection[cfg.SettingsSectionName].(map[string]any); ok {
@@ -194,28 +307,6 @@ func processTerraformComponentsIndexed(
 			)
 			if err != nil {
 				return nil, err
-			}
-		}
-
-		// Check source section for changes (source vendoring configuration).
-		if sourceSection, ok := componentSection[sectionNameSource].(map[string]any); ok {
-			if !isEqual(remoteStacks, stackName, cfg.TerraformComponentType, componentName, sourceSection, sectionNameSource) {
-				err := addAffectedComponent(&affected, atmosConfig, componentName, stackName, cfg.TerraformComponentType,
-					&componentSection, affectedReasonStackSource, includeSpaceliftAdminStacks, currentStacks, includeSettings)
-				if err != nil {
-					return nil, err
-				}
-			}
-		}
-
-		// Check provision section for changes (workdir configuration).
-		if provisionSection, ok := componentSection[sectionNameProvision].(map[string]any); ok {
-			if !isEqual(remoteStacks, stackName, cfg.TerraformComponentType, componentName, provisionSection, sectionNameProvision) {
-				err := addAffectedComponent(&affected, atmosConfig, componentName, stackName, cfg.TerraformComponentType,
-					&componentSection, affectedReasonStackProvision, includeSpaceliftAdminStacks, currentStacks, includeSettings)
-				if err != nil {
-					return nil, err
-				}
 			}
 		}
 	}
@@ -276,24 +367,16 @@ func processHelmfileComponentsIndexed(
 			}
 		}
 
-		if varSection, ok := componentSection[sectionNameVars].(map[string]any); ok {
-			if !isEqual(remoteStacks, stackName, cfg.HelmfileComponentType, componentName, varSection, sectionNameVars) {
-				err := addAffectedComponent(&affected, atmosConfig, componentName, stackName, cfg.HelmfileComponentType,
-					&componentSection, affectedReasonStackVars, false, nil, includeSettings)
-				if err != nil {
-					return nil, err
-				}
-			}
-		}
-
-		if envSection, ok := componentSection[sectionNameEnv].(map[string]any); ok {
-			if !isEqual(remoteStacks, stackName, cfg.HelmfileComponentType, componentName, envSection, sectionNameEnv) {
-				err := addAffectedComponent(&affected, atmosConfig, componentName, stackName, cfg.HelmfileComponentType,
-					&componentSection, affectedReasonStackEnv, false, nil, includeSettings)
-				if err != nil {
-					return nil, err
-				}
-			}
+		// Check the comparable component sections (vars, env, source, provision, ...) via the
+		// shared section table. `metadata` is handled above; `settings` is handled below
+		// because it also drives dependency checks.
+		err = checkComponentSections(
+			&affected, atmosConfig, componentName, stackName, cfg.HelmfileComponentType,
+			&componentSection, remoteStacks, currentStacks,
+			false, includeSettings,
+		)
+		if err != nil {
+			return nil, err
 		}
 
 		if settingsSection, ok := componentSection[cfg.SettingsSectionName].(map[string]any); ok {
@@ -304,28 +387,6 @@ func processHelmfileComponentsIndexed(
 			)
 			if err != nil {
 				return nil, err
-			}
-		}
-
-		// Check source section for changes (source vendoring configuration).
-		if sourceSection, ok := componentSection[sectionNameSource].(map[string]any); ok {
-			if !isEqual(remoteStacks, stackName, cfg.HelmfileComponentType, componentName, sourceSection, sectionNameSource) {
-				err := addAffectedComponent(&affected, atmosConfig, componentName, stackName, cfg.HelmfileComponentType,
-					&componentSection, affectedReasonStackSource, false, nil, includeSettings)
-				if err != nil {
-					return nil, err
-				}
-			}
-		}
-
-		// Check provision section for changes (workdir configuration).
-		if provisionSection, ok := componentSection[sectionNameProvision].(map[string]any); ok {
-			if !isEqual(remoteStacks, stackName, cfg.HelmfileComponentType, componentName, provisionSection, sectionNameProvision) {
-				err := addAffectedComponent(&affected, atmosConfig, componentName, stackName, cfg.HelmfileComponentType,
-					&componentSection, affectedReasonStackProvision, false, nil, includeSettings)
-				if err != nil {
-					return nil, err
-				}
 			}
 		}
 	}
@@ -386,24 +447,16 @@ func processPackerComponentsIndexed(
 			}
 		}
 
-		if varSection, ok := componentSection[sectionNameVars].(map[string]any); ok {
-			if !isEqual(remoteStacks, stackName, cfg.PackerComponentType, componentName, varSection, sectionNameVars) {
-				err := addAffectedComponent(&affected, atmosConfig, componentName, stackName, cfg.PackerComponentType,
-					&componentSection, affectedReasonStackVars, false, nil, includeSettings)
-				if err != nil {
-					return nil, err
-				}
-			}
-		}
-
-		if envSection, ok := componentSection[sectionNameEnv].(map[string]any); ok {
-			if !isEqual(remoteStacks, stackName, cfg.PackerComponentType, componentName, envSection, sectionNameEnv) {
-				err := addAffectedComponent(&affected, atmosConfig, componentName, stackName, cfg.PackerComponentType,
-					&componentSection, affectedReasonStackEnv, false, nil, includeSettings)
-				if err != nil {
-					return nil, err
-				}
-			}
+		// Check the comparable component sections (vars, env, source, provision, ...) via the
+		// shared section table. `metadata` is handled above; `settings` is handled below
+		// because it also drives dependency checks.
+		err = checkComponentSections(
+			&affected, atmosConfig, componentName, stackName, cfg.PackerComponentType,
+			&componentSection, remoteStacks, currentStacks,
+			false, includeSettings,
+		)
+		if err != nil {
+			return nil, err
 		}
 
 		if settingsSection, ok := componentSection[cfg.SettingsSectionName].(map[string]any); ok {
@@ -414,28 +467,6 @@ func processPackerComponentsIndexed(
 			)
 			if err != nil {
 				return nil, err
-			}
-		}
-
-		// Check source section for changes (source vendoring configuration).
-		if sourceSection, ok := componentSection[sectionNameSource].(map[string]any); ok {
-			if !isEqual(remoteStacks, stackName, cfg.PackerComponentType, componentName, sourceSection, sectionNameSource) {
-				err := addAffectedComponent(&affected, atmosConfig, componentName, stackName, cfg.PackerComponentType,
-					&componentSection, affectedReasonStackSource, false, nil, includeSettings)
-				if err != nil {
-					return nil, err
-				}
-			}
-		}
-
-		// Check provision section for changes (workdir configuration).
-		if provisionSection, ok := componentSection[sectionNameProvision].(map[string]any); ok {
-			if !isEqual(remoteStacks, stackName, cfg.PackerComponentType, componentName, provisionSection, sectionNameProvision) {
-				err := addAffectedComponent(&affected, atmosConfig, componentName, stackName, cfg.PackerComponentType,
-					&componentSection, affectedReasonStackProvision, false, nil, includeSettings)
-				if err != nil {
-					return nil, err
-				}
 			}
 		}
 	}
@@ -477,6 +508,7 @@ func checkSettingsAndDependenciesIndexed(
 
 // checkDependencyChangesIndexed checks if dependent files or folders have changed.
 // This helper reduces cyclomatic complexity of checkSettingsAndDependenciesIndexed.
+// It checks both dependencies.components (preferred) and settings.depends_on (legacy) for file/folder dependencies.
 func checkDependencyChangesIndexed(
 	affected *[]schema.Affected,
 	atmosConfig *schema.AtmosConfiguration,
@@ -490,20 +522,15 @@ func checkDependencyChangesIndexed(
 	currentStacks *map[string]any,
 	includeSettings bool,
 ) error {
-	var stackComponentSettings schema.Settings
-	err := mapstructure.Decode(settingsSection, &stackComponentSettings)
-	if err != nil {
-		return err
-	}
-
-	if reflect.ValueOf(stackComponentSettings).IsZero() ||
-		reflect.ValueOf(stackComponentSettings.DependsOn).IsZero() {
+	// Get file/folder dependencies from dependencies.components or settings.depends_on.
+	deps := getFileFolderDependencies(*componentSection, settingsSection)
+	if len(deps) == 0 {
 		return nil
 	}
 
 	isFolderOrFileChanged, changedType, changedFileOrFolder, err := isComponentDependentFolderOrFileChangedIndexed(
 		filesIndex,
-		stackComponentSettings.DependsOn,
+		deps,
 	)
 	if err != nil {
 		return err
@@ -518,6 +545,99 @@ func checkDependencyChangesIndexed(
 		componentSection, changedType, changedFileOrFolder,
 		includeSpaceliftAdminStacks, currentStacks, includeSettings,
 	)
+}
+
+// getFileFolderDependencies extracts file/folder dependencies from dependencies.components or settings.depends_on.
+// Returns a slice of ComponentDependency with kind="file" or kind="folder".
+func getFileFolderDependencies(componentSection map[string]any, settingsSection map[string]any) []schema.ComponentDependency {
+	// Check dependencies.components first (preferred location).
+	if result := getFileFolderDependenciesFromNewFormat(componentSection); len(result) > 0 {
+		return result
+	}
+
+	// Fall back to settings.depends_on (legacy location).
+	return getFileFolderDependenciesFromLegacyFormat(settingsSection)
+}
+
+// getFileFolderDependenciesFromNewFormat extracts file/folder deps from the
+// `dependencies` section. It accepts both the v2 surface
+// (`dependencies.files` / `dependencies.folders` sibling keys) and the legacy
+// inline shape (`dependencies.components[]` with `kind: file` / `kind: folder`).
+// Both surfaces produce equivalent ComponentDependency entries — Normalize
+// reconciles them.
+func getFileFolderDependenciesFromNewFormat(componentSection map[string]any) []schema.ComponentDependency {
+	depsSection, ok := componentSection[cfg.DependenciesSectionName].(map[string]any)
+	if !ok {
+		return nil
+	}
+
+	// Fast path: nothing to read if none of the entry-bearing keys are present.
+	if !hasDependencyEntries(depsSection) {
+		return nil
+	}
+
+	var deps schema.Dependencies
+	if err := mapstructure.Decode(depsSection, &deps); err != nil {
+		return nil
+	}
+	if err := deps.Normalize(); err != nil {
+		log.Warn("invalid dependencies section; file/folder deps may be silently ignored", "error", err)
+		return nil
+	}
+	if len(deps.Components) == 0 {
+		return nil
+	}
+
+	// Filter to only file/folder dependencies. Normalize has already mirrored
+	// any v2 sibling-key entries into Components, so this single filter
+	// covers both surfaces.
+	var result []schema.ComponentDependency
+	for i := range deps.Components {
+		if deps.Components[i].IsFileDependency() || deps.Components[i].IsFolderDependency() {
+			result = append(result, deps.Components[i])
+		}
+	}
+	return result
+}
+
+// getFileFolderDependenciesFromLegacyFormat extracts file/folder deps from settings.depends_on.
+func getFileFolderDependenciesFromLegacyFormat(settingsSection map[string]any) []schema.ComponentDependency {
+	if settingsSection == nil {
+		return nil
+	}
+
+	var stackComponentSettings schema.Settings
+	if err := mapstructure.Decode(settingsSection, &stackComponentSettings); err != nil {
+		return nil
+	}
+
+	if reflect.ValueOf(stackComponentSettings.DependsOn).IsZero() || len(stackComponentSettings.DependsOn) == 0 {
+		return nil
+	}
+
+	// Filter to only file/folder entries and convert to ComponentDependency.
+	var result []schema.ComponentDependency
+	for key := range stackComponentSettings.DependsOn {
+		dep := stackComponentSettings.DependsOn[key]
+		if dep.File != "" {
+			result = append(result, schema.ComponentDependency{
+				Kind: "file",
+				Path: dep.File,
+			})
+		}
+		if dep.Folder != "" {
+			result = append(result, schema.ComponentDependency{
+				Kind: "folder",
+				Path: dep.Folder,
+			})
+		}
+	}
+
+	if len(result) > 0 {
+		log.Debug("'settings.depends_on' is deprecated, use 'dependencies.components' instead. See: https://atmos.tools/stacks/dependencies/components")
+	}
+
+	return result
 }
 
 // addDependencyAffectedItem adds an affected item for a dependency change.

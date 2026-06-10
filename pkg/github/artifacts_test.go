@@ -327,9 +327,27 @@ func TestArtifactFetcherGetPRHeadSHA_APIError(t *testing.T) {
 	assert.Empty(t, result)
 }
 
-// --- Mock-based unit tests for findSuccessfulWorkflowRun ---.
+// --- Mock-based unit tests for findRunWithArtifact ---.
 
-func TestFindSuccessfulWorkflowRun_MatchesCorrectWorkflow(t *testing.T) {
+// testArtifactName is a platform-independent artifact name passed directly to
+// findRunWithArtifact, so these tests do not depend on the host platform.
+const testArtifactName = "build-artifacts-test"
+
+// artifactListWith builds an ArtifactList containing a single testArtifactName artifact with the given ID.
+func artifactListWith(id int64) *github.ArtifactList {
+	return &github.ArtifactList{
+		Artifacts: []*github.Artifact{
+			{
+				Name:               github.String(testArtifactName),
+				ID:                 github.Int64(id),
+				SizeInBytes:        github.Int64(1024),
+				ArchiveDownloadURL: github.String("https://example.com/artifact"),
+			},
+		},
+	}
+}
+
+func TestFindRunWithArtifact_MatchesCorrectWorkflow(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
@@ -360,31 +378,43 @@ func TestFindSuccessfulWorkflowRun_MatchesCorrectWorkflow(t *testing.T) {
 	mockActions.EXPECT().
 		ListRepositoryWorkflowRuns(gomock.Any(), "owner", "repo", gomock.Any()).
 		Return(runs, nil, nil)
+	// The non-"Tests" run (99999) must never be queried for artifacts.
+	mockActions.EXPECT().
+		ListWorkflowRunArtifacts(gomock.Any(), "owner", "repo", int64(12345), gomock.Any()).
+		Return(artifactListWith(555), nil, nil)
 
 	ctx := context.Background()
-	result, err := findSuccessfulWorkflowRun(ctx, mockActions, "owner", "repo", "abc123")
+	run, artifact, err := findRunWithArtifact(ctx, mockActions, "owner", "repo", "abc123", testArtifactName)
 
 	assert.NoError(t, err)
-	assert.NotNil(t, result)
-	assert.Equal(t, int64(12345), result.ID)
-	assert.Equal(t, runStartedAt, result.RunStartedAt)
+	assert.NotNil(t, run)
+	assert.Equal(t, int64(12345), run.ID)
+	assert.Equal(t, runStartedAt, run.RunStartedAt)
+	assert.NotNil(t, artifact)
+	assert.Equal(t, int64(555), artifact.GetID())
 }
 
-func TestFindSuccessfulWorkflowRun_IgnoresNonSuccessConclusion(t *testing.T) {
+func TestFindRunWithArtifact_InProgressRunWithArtifact(t *testing.T) {
+	// Regression test for the original bug: an in-progress "Tests" run whose
+	// Build job already uploaded the artifact must be usable, even though the
+	// overall run is not yet "completed".
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
 	mockActions := NewMockActionsService(ctrl)
 
+	runStartedAt := time.Date(2024, 1, 15, 10, 0, 0, 0, time.UTC)
+	runID := int64(12345)
 	workflowRunName := "Tests"
-	failure := "failure"
+	inProgress := "in_progress"
 
 	runs := &github.WorkflowRuns{
 		WorkflowRuns: []*github.WorkflowRun{
 			{
-				Name:       &workflowRunName,
-				Conclusion: &failure,
-				ID:         github.Int64(12345),
+				Name:         &workflowRunName,
+				Status:       &inProgress, // No conclusion yet — run is still running.
+				ID:           &runID,
+				RunStartedAt: &github.Timestamp{Time: runStartedAt},
 			},
 		},
 	}
@@ -392,16 +422,114 @@ func TestFindSuccessfulWorkflowRun_IgnoresNonSuccessConclusion(t *testing.T) {
 	mockActions.EXPECT().
 		ListRepositoryWorkflowRuns(gomock.Any(), "owner", "repo", gomock.Any()).
 		Return(runs, nil, nil)
+	mockActions.EXPECT().
+		ListWorkflowRunArtifacts(gomock.Any(), "owner", "repo", int64(12345), gomock.Any()).
+		Return(artifactListWith(555), nil, nil)
 
 	ctx := context.Background()
-	result, err := findSuccessfulWorkflowRun(ctx, mockActions, "owner", "repo", "abc123")
+	run, artifact, err := findRunWithArtifact(ctx, mockActions, "owner", "repo", "abc123", testArtifactName)
 
-	assert.Error(t, err)
-	assert.Nil(t, result)
-	assert.ErrorIs(t, err, ErrNoWorkflowRunFound)
+	assert.NoError(t, err)
+	assert.NotNil(t, run)
+	assert.Equal(t, int64(12345), run.ID)
+	assert.NotNil(t, artifact)
+	assert.Equal(t, int64(555), artifact.GetID())
 }
 
-func TestFindSuccessfulWorkflowRun_NoMatchingRuns(t *testing.T) {
+func TestFindRunWithArtifact_FallsBackToOlderRunWithArtifact(t *testing.T) {
+	// A newer in-progress re-run has not uploaded its artifact yet, so selection
+	// falls back to the older run that still has it.
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockActions := NewMockActionsService(ctrl)
+
+	workflowRunName := "Tests"
+	newerRunID := int64(222) // Newest first.
+	olderRunID := int64(111)
+	olderStartedAt := time.Date(2024, 1, 15, 9, 0, 0, 0, time.UTC)
+
+	runs := &github.WorkflowRuns{
+		WorkflowRuns: []*github.WorkflowRun{
+			{
+				Name:   &workflowRunName,
+				ID:     &newerRunID,
+				Status: github.String("in_progress"),
+			},
+			{
+				Name:         &workflowRunName,
+				ID:           &olderRunID,
+				Conclusion:   github.String("success"),
+				RunStartedAt: &github.Timestamp{Time: olderStartedAt},
+			},
+		},
+	}
+
+	mockActions.EXPECT().
+		ListRepositoryWorkflowRuns(gomock.Any(), "owner", "repo", gomock.Any()).
+		Return(runs, nil, nil)
+	// Newer run has no artifact yet.
+	mockActions.EXPECT().
+		ListWorkflowRunArtifacts(gomock.Any(), "owner", "repo", int64(222), gomock.Any()).
+		Return(&github.ArtifactList{Artifacts: []*github.Artifact{}}, nil, nil)
+	// Older run has the artifact.
+	mockActions.EXPECT().
+		ListWorkflowRunArtifacts(gomock.Any(), "owner", "repo", int64(111), gomock.Any()).
+		Return(artifactListWith(777), nil, nil)
+
+	ctx := context.Background()
+	run, artifact, err := findRunWithArtifact(ctx, mockActions, "owner", "repo", "abc123", testArtifactName)
+
+	assert.NoError(t, err)
+	assert.NotNil(t, run)
+	assert.Equal(t, int64(111), run.ID)
+	assert.Equal(t, olderStartedAt, run.RunStartedAt)
+	assert.NotNil(t, artifact)
+	assert.Equal(t, int64(777), artifact.GetID())
+}
+
+func TestFindRunWithArtifact_AcceptsFailedConclusion(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockActions := NewMockActionsService(ctrl)
+
+	runStartedAt := time.Date(2024, 1, 15, 10, 0, 0, 0, time.UTC)
+	workflowRunName := "Tests"
+	failure := "failure"
+	runID := int64(12345)
+
+	runs := &github.WorkflowRuns{
+		WorkflowRuns: []*github.WorkflowRun{
+			{
+				Name:         &workflowRunName,
+				Conclusion:   &failure,
+				ID:           &runID,
+				RunStartedAt: &github.Timestamp{Time: runStartedAt},
+			},
+		},
+	}
+
+	mockActions.EXPECT().
+		ListRepositoryWorkflowRuns(gomock.Any(), "owner", "repo", gomock.Any()).
+		Return(runs, nil, nil)
+	mockActions.EXPECT().
+		ListWorkflowRunArtifacts(gomock.Any(), "owner", "repo", int64(12345), gomock.Any()).
+		Return(artifactListWith(555), nil, nil)
+
+	ctx := context.Background()
+	run, artifact, err := findRunWithArtifact(ctx, mockActions, "owner", "repo", "abc123", testArtifactName)
+
+	// A failed workflow run should still be accepted — the build artifact
+	// may exist even if other jobs (e.g., Windows tests) failed.
+	assert.NoError(t, err)
+	assert.NotNil(t, run)
+	assert.Equal(t, int64(12345), run.ID)
+	assert.NotNil(t, artifact)
+	assert.Equal(t, int64(555), artifact.GetID())
+}
+
+func TestFindRunWithArtifact_NoMatchingRuns(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
@@ -416,14 +544,72 @@ func TestFindSuccessfulWorkflowRun_NoMatchingRuns(t *testing.T) {
 		Return(runs, nil, nil)
 
 	ctx := context.Background()
-	result, err := findSuccessfulWorkflowRun(ctx, mockActions, "owner", "repo", "abc123")
+	run, artifact, err := findRunWithArtifact(ctx, mockActions, "owner", "repo", "abc123", testArtifactName)
 
 	assert.Error(t, err)
-	assert.Nil(t, result)
+	assert.Nil(t, run)
+	assert.Nil(t, artifact)
 	assert.ErrorIs(t, err, ErrNoWorkflowRunFound)
 }
 
-func TestFindSuccessfulWorkflowRun_APIError(t *testing.T) {
+func TestFindRunWithArtifact_NilWorkflowRuns(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockActions := NewMockActionsService(ctrl)
+
+	// API returns nil WorkflowRuns.
+	mockActions.EXPECT().
+		ListRepositoryWorkflowRuns(gomock.Any(), "owner", "repo", gomock.Any()).
+		Return(nil, nil, nil)
+
+	ctx := context.Background()
+	run, artifact, err := findRunWithArtifact(ctx, mockActions, "owner", "repo", "abc123", testArtifactName)
+
+	assert.Error(t, err)
+	assert.Nil(t, run)
+	assert.Nil(t, artifact)
+	assert.ErrorIs(t, err, ErrNoWorkflowRunFound)
+}
+
+func TestFindRunWithArtifact_RunsExistButNoArtifact(t *testing.T) {
+	// A "Tests" run exists but its Build has not uploaded the platform artifact
+	// yet (still running or skipped) — surfaced as ErrNoArtifactFound.
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockActions := NewMockActionsService(ctrl)
+
+	workflowRunName := "Tests"
+	runID := int64(12345)
+
+	runs := &github.WorkflowRuns{
+		WorkflowRuns: []*github.WorkflowRun{
+			{
+				Name:   &workflowRunName,
+				ID:     &runID,
+				Status: github.String("in_progress"),
+			},
+		},
+	}
+
+	mockActions.EXPECT().
+		ListRepositoryWorkflowRuns(gomock.Any(), "owner", "repo", gomock.Any()).
+		Return(runs, nil, nil)
+	mockActions.EXPECT().
+		ListWorkflowRunArtifacts(gomock.Any(), "owner", "repo", int64(12345), gomock.Any()).
+		Return(&github.ArtifactList{Artifacts: []*github.Artifact{}}, nil, nil)
+
+	ctx := context.Background()
+	run, artifact, err := findRunWithArtifact(ctx, mockActions, "owner", "repo", "abc123", testArtifactName)
+
+	assert.Error(t, err)
+	assert.Nil(t, run)
+	assert.Nil(t, artifact)
+	assert.ErrorIs(t, err, ErrNoArtifactFound)
+}
+
+func TestFindRunWithArtifact_ListRunsAPIError(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
@@ -434,10 +620,47 @@ func TestFindSuccessfulWorkflowRun_APIError(t *testing.T) {
 		Return(nil, nil, errors.New("API error"))
 
 	ctx := context.Background()
-	result, err := findSuccessfulWorkflowRun(ctx, mockActions, "owner", "repo", "abc123")
+	run, artifact, err := findRunWithArtifact(ctx, mockActions, "owner", "repo", "abc123", testArtifactName)
 
 	assert.Error(t, err)
-	assert.Nil(t, result)
+	assert.Nil(t, run)
+	assert.Nil(t, artifact)
+}
+
+func TestFindRunWithArtifact_ListArtifactsAPIError(t *testing.T) {
+	// A non-"artifact not found" error from the artifact listing (e.g. auth) is
+	// surfaced immediately rather than being swallowed as "no artifact".
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockActions := NewMockActionsService(ctrl)
+
+	workflowRunName := "Tests"
+	runID := int64(12345)
+
+	runs := &github.WorkflowRuns{
+		WorkflowRuns: []*github.WorkflowRun{
+			{
+				Name: &workflowRunName,
+				ID:   &runID,
+			},
+		},
+	}
+
+	mockActions.EXPECT().
+		ListRepositoryWorkflowRuns(gomock.Any(), "owner", "repo", gomock.Any()).
+		Return(runs, nil, nil)
+	mockActions.EXPECT().
+		ListWorkflowRunArtifacts(gomock.Any(), "owner", "repo", int64(12345), gomock.Any()).
+		Return(nil, nil, errors.New("API error"))
+
+	ctx := context.Background()
+	run, artifact, err := findRunWithArtifact(ctx, mockActions, "owner", "repo", "abc123", testArtifactName)
+
+	assert.Error(t, err)
+	assert.Nil(t, run)
+	assert.Nil(t, artifact)
+	assert.NotErrorIs(t, err, ErrNoArtifactFound)
 }
 
 // --- Mock-based unit tests for findArtifactByName ---.
@@ -937,25 +1160,6 @@ func TestArtifactFetcherGetSHAArtifactInfo_NoArtifactError(t *testing.T) {
 	assert.ErrorIs(t, err, ErrNoArtifactFound)
 }
 
-func TestFindSuccessfulWorkflowRun_NilWorkflowRuns(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	mockActions := NewMockActionsService(ctrl)
-
-	// API returns nil WorkflowRuns.
-	mockActions.EXPECT().
-		ListRepositoryWorkflowRuns(gomock.Any(), "owner", "repo", gomock.Any()).
-		Return(nil, nil, nil)
-
-	ctx := context.Background()
-	result, err := findSuccessfulWorkflowRun(ctx, mockActions, "owner", "repo", "abc123")
-
-	assert.Error(t, err)
-	assert.Nil(t, result)
-	assert.ErrorIs(t, err, ErrNoWorkflowRunFound)
-}
-
 func TestFindArtifactByName_NilArtifactList(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
@@ -1045,6 +1249,89 @@ func TestNewArtifactFetcher(t *testing.T) {
 
 	fetcher := NewArtifactFetcher(mockPRS, mockActions)
 	assert.NotNil(t, fetcher)
+}
+
+// TestArtifactFetcherGetRefSHA_Success verifies a bare branch ref resolves to its full commit SHA.
+func TestArtifactFetcherGetRefSHA_Success(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockRepos := NewMockRepositoriesService(ctrl)
+
+	fullSHA := "ef725b83ded66da561cd47dc5a0c1c7ed1c2bd0b"
+	mockRepos.EXPECT().
+		GetCommitSHA1(gomock.Any(), "owner", "repo", "main", "").
+		Return(fullSHA, nil, nil)
+
+	ctx := context.Background()
+	fetcher := &ArtifactFetcher{repositories: mockRepos}
+	result, err := fetcher.GetRefSHA(ctx, "owner", "repo", "main")
+
+	assert.NoError(t, err)
+	assert.Equal(t, fullSHA, result)
+}
+
+// TestArtifactFetcherGetRefSHA_QualifiedRef verifies a qualified tags/ ref resolves to its full commit SHA.
+func TestArtifactFetcherGetRefSHA_QualifiedRef(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockRepos := NewMockRepositoriesService(ctrl)
+
+	fullSHA := "ceb752612345678901234567890123456789abcd"
+	mockRepos.EXPECT().
+		GetCommitSHA1(gomock.Any(), "owner", "repo", "tags/v1.199.0", "").
+		Return(fullSHA, nil, nil)
+
+	ctx := context.Background()
+	fetcher := &ArtifactFetcher{repositories: mockRepos}
+	result, err := fetcher.GetRefSHA(ctx, "owner", "repo", "tags/v1.199.0")
+
+	assert.NoError(t, err)
+	assert.Equal(t, fullSHA, result)
+}
+
+// TestArtifactFetcherGetRefSHA_NotFound verifies a 404 response maps to ErrRefNotFound.
+func TestArtifactFetcherGetRefSHA_NotFound(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockRepos := NewMockRepositoriesService(ctrl)
+
+	resp := &github.Response{
+		Response: &http.Response{StatusCode: 404},
+	}
+	mockRepos.EXPECT().
+		GetCommitSHA1(gomock.Any(), "owner", "repo", "does-not-exist", "").
+		Return("", resp, errors.New("not found"))
+
+	ctx := context.Background()
+	fetcher := &ArtifactFetcher{repositories: mockRepos}
+	result, err := fetcher.GetRefSHA(ctx, "owner", "repo", "does-not-exist")
+
+	assert.Error(t, err)
+	assert.Empty(t, result)
+	assert.ErrorIs(t, err, ErrRefNotFound)
+}
+
+// TestArtifactFetcherGetRefSHA_EmptySHA verifies an empty resolved SHA maps to ErrRefNotFound.
+func TestArtifactFetcherGetRefSHA_EmptySHA(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockRepos := NewMockRepositoriesService(ctrl)
+
+	mockRepos.EXPECT().
+		GetCommitSHA1(gomock.Any(), "owner", "repo", "main", "").
+		Return("", nil, nil)
+
+	ctx := context.Background()
+	fetcher := &ArtifactFetcher{repositories: mockRepos}
+	result, err := fetcher.GetRefSHA(ctx, "owner", "repo", "main")
+
+	assert.Error(t, err)
+	assert.Empty(t, result)
+	assert.ErrorIs(t, err, ErrRefNotFound)
 }
 
 // Note: Full integration tests for GetPRArtifactInfo require a real GitHub token

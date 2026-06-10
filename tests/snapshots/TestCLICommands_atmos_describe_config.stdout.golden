@@ -19,7 +19,13 @@
       "plan": {
         "skip_planfile": false
       },
-      "plugin_cache": true
+      "planfiles": {
+        "default": ""
+      },
+      "plugin_cache": true,
+      "auto_provision_workdir_for_outputs": true,
+      "ci": {},
+      "workspace": {}
     },
     "helmfile": {
       "base_path": "",
@@ -64,6 +70,7 @@
     },
     "inherit": {}
   },
+  "imports": {},
   "workflows": {
     "base_path": "",
     "list": {
@@ -156,6 +163,7 @@
     "InjectGithubToken": true,
     "GithubToken": "",
     "AtmosGithubToken": "",
+    "AtmosProGithubToken": "",
     "GithubUsername": "",
     "InjectBitbucketToken": true,
     "BitbucketToken": "",
@@ -167,7 +175,8 @@
     "pro": {
       "base_url": "https://atmos-pro.com",
       "endpoint": "api/v1",
-      "github_oidc": {}
+      "github_oidc": {},
+      "git_sts": {}
     },
     "telemetry": {
       "enabled": true,
@@ -180,7 +189,8 @@
     }
   },
   "describe": {
-    "settings": {}
+    "settings": {},
+    "affected": {}
   },
   "vendor": {
     "base_path": "",
@@ -263,6 +273,15 @@
       "columns": null
     }
   },
+  "ci": {
+    "output": {},
+    "summary": {},
+    "checks": {
+      "statuses": {}
+    },
+    "comments": {},
+    "templates": {}
+  },
   "ai": {
     "sessions": {
       "auto_compact": {}
@@ -272,6 +291,14 @@
     "web_search": {},
     "context": {}
   },
-  "mcp": {},
+  "aws": {
+    "security": {
+      "sources": {},
+      "tag_mapping": {}
+    }
+  },
+  "mcp": {
+    "routing": {}
+  },
   "lsp": {}
 }

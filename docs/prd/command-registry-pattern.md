@@ -623,6 +623,8 @@ func Execute() error {
 
 ### Custom Command Override Behavior
 
+> **Shipped behavior (corrected).** An earlier draft of this section claimed a same-named custom command "reuses the built-in and **replaces its behavior**." That is **not** what ships. Since **PR #2191** ("allow custom commands to merge into built-in namespaces at any level"), a custom command whose name collides with a built-in may **add subcommands** under that built-in's namespace, but it **cannot replace the built-in's behavior with steps** — the built-in is preserved and the steps are ignored with a warning. Replacing a built-in's behavior is an opt-in capability specified in [Overriding Built-in Commands with Step-Based Custom Commands](./custom-command-builtin-override.md) (via `override: true` plus an `invoke: built-in` step), not the default. The scenarios below are reframed to match reality.
+
 **Scenario 1: Custom command with same name as built-in (top-level command)**
 
 ```yaml
@@ -636,7 +638,7 @@ commands:
       - terraform {{ .arguments.subcommand }}
 ```
 
-**Result:** Custom `terraform` command **reuses** the built-in `terraform` command and **replaces its behavior**.
+**Result (default):** The built-in `terraform` command is **preserved** and the custom `steps` are **ignored** with the warning *"Custom command … defines steps that conflict with built-in command …; built-in behavior preserved, custom steps ignored"* (`cmd/cmd_utils.go`). To actually replace the built-in's behavior — and still reach the native `terraform` from a step — opt in with `override: true` and an `invoke: built-in` step, per the [override PRD](./custom-command-builtin-override.md).
 
 **Scenario 2: Custom command extending built-in with subcommands**
 
@@ -706,12 +708,15 @@ func processCustomCommands(
 }
 ```
 
-**Key behaviors:**
-- **Top-level custom command with existing name** → reuses registry command, can replace behavior or add subcommands
-- **Top-level custom command with new name** → creates new command
-- **Nested custom commands** → always added as subcommands to parent
+> **Note:** the snippet above is the original illustrative sketch and predates **PR #2191**. The current `processCustomCommands` (`cmd/cmd_utils.go`) uses `findSubcommand` at every level and, on a name collision, **reuses the existing built-in and ignores any custom `steps`** (warning emitted). It does not replace the built-in's behavior. See the corrected key behaviors below.
 
-**No changes needed to custom command processing** - the registry pattern coexists perfectly.
+**Key behaviors (shipped):**
+- **Top-level custom command with existing built-in name** → reuses the built-in; may add subcommands under it; custom `steps` are **ignored** (warning). Replacing behavior requires opt-in `override: true` — see the [override PRD](./custom-command-builtin-override.md).
+- **Top-level custom command with new name** → creates new command
+- **Nested custom commands, new name** → added as a new subcommand under the parent
+- **Nested custom commands, name collision** → `findSubcommand` runs at every level, so a nested name that collides with an existing subcommand (built-in or one already added) **reuses the existing command**; if the colliding custom command declares `steps`, they are **ignored** (warning emitted). This is the same collision behavior as top-level commands — it is not limited to the top level.
+
+The registry pattern itself needs no changes for this; the override capability is layered on top via the [override PRD](./custom-command-builtin-override.md).
 
 ## Migration Guide
 
@@ -1817,11 +1822,13 @@ func RegisterPlugin(plugin *Plugin) {
 
 ### Q: Can custom commands still override built-in commands?
 
-**A:** Yes. The execution order is:
+**A:** Not by default. The execution order is:
 1. Built-in commands registered via registry
 2. Custom commands processed from atmos.yaml
-3. If custom command has same name → overrides built-in
-4. If custom command has new name → extends available commands
+3. If a custom command has the **same name** as a built-in → it may **add subcommands** under that namespace, but its `steps` are **ignored** and the built-in's behavior is preserved (warning emitted) — see PR #2191.
+4. If a custom command has a **new name** → extends available commands
+
+Replacing a built-in command's behavior with steps is an **opt-in** capability (`override: true`), and a step can call the native built-in via `invoke: built-in`. See [Overriding Built-in Commands with Step-Based Custom Commands](./custom-command-builtin-override.md).
 
 ### Q: Do I need to update my atmos.yaml?
 
@@ -1829,7 +1836,7 @@ func RegisterPlugin(plugin *Plugin) {
 
 ### Q: What happens if I have a custom command named "about"?
 
-**A:** Your custom command will override the built-in `about` command, just like it does today. The registry pattern doesn't change this behavior.
+**A:** By default the built-in `about` command is preserved; a same-named custom command's `steps` are ignored (warning emitted), though you may add subcommands under it. To replace the built-in's behavior, opt in with `override: true` (see the [override PRD](./custom-command-builtin-override.md)). The registry pattern itself doesn't change this.
 
 ### Q: Can multiple commands register with the same name?
 

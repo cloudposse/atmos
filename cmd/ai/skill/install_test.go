@@ -693,7 +693,7 @@ func TestInstallCmd_RunE_InstallOptionsPassthrough(t *testing.T) {
 }
 
 // TestInstallCmd_RunE_SuccessfulInstall tests the full successful install path.
-// This is more of an integration test since it sets up a mock download.
+// This is more of a server test since it sets up a mock download.
 // Note: This test requires mocking the downloader which is complex, so we focus
 // on testing other aspects of the RunE function.
 func TestInstallCmd_RunE_FlagParsingSuccess(t *testing.T) {

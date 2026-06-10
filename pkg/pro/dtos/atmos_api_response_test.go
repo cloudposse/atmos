@@ -59,6 +59,58 @@ func TestAtmosApiResponse(t *testing.T) {
 		assert.Equal(t, "", response.TraceID)
 	})
 
+	t.Run("EffectiveErrorMessage prefers errorMessage over error", func(t *testing.T) {
+		r := AtmosApiResponse{ErrorMessage: "primary", Error: "legacy"}
+		assert.Equal(t, "primary", r.EffectiveErrorMessage())
+	})
+
+	t.Run("EffectiveErrorMessage falls back to error", func(t *testing.T) {
+		r := AtmosApiResponse{Error: "legacy only"}
+		assert.Equal(t, "legacy only", r.EffectiveErrorMessage())
+	})
+
+	t.Run("EffectiveErrorMessage returns empty when neither set", func(t *testing.T) {
+		r := AtmosApiResponse{}
+		assert.Equal(t, "", r.EffectiveErrorMessage())
+	})
+
+	t.Run("unmarshals legacy error field", func(t *testing.T) {
+		body := []byte(`{"success":false,"status":400,"error":"Bad input"}`)
+		var r AtmosApiResponse
+		require := assert.New(t)
+		require.NoError(json.Unmarshal(body, &r))
+		require.Equal("Bad input", r.Error)
+		require.Equal("", r.ErrorMessage)
+		require.Equal("Bad input", r.EffectiveErrorMessage())
+	})
+
+	t.Run("unmarshals errorTag and validationErrors", func(t *testing.T) {
+		body := []byte(`{
+			"success":false,
+			"status":400,
+			"errorTag":"DriftDetectionValidationError",
+			"errorMessage":"Drift detection validation failed",
+			"data":{"validationErrors":["A","B"]},
+			"traceId":"abc"
+		}`)
+		var r AtmosApiResponse
+		require := assert.New(t)
+		require.NoError(json.Unmarshal(body, &r))
+		require.Equal("DriftDetectionValidationError", r.ErrorTag)
+		require.Equal("Drift detection validation failed", r.EffectiveErrorMessage())
+		require.NotNil(r.Data)
+		require.Equal([]string{"A", "B"}, r.Data.ValidationErrors)
+		require.Equal("abc", r.TraceID)
+	})
+
+	t.Run("unmarshals without data leaves Data nil", func(t *testing.T) {
+		body := []byte(`{"success":false,"status":400,"errorMessage":"oops"}`)
+		var r AtmosApiResponse
+		require := assert.New(t)
+		require.NoError(json.Unmarshal(body, &r))
+		require.Nil(r.Data)
+	})
+
 	t.Run("JSON round-trip test", func(t *testing.T) {
 		// Test that JSON serialization/deserialization works correctly with camelCase traceId
 		original := AtmosApiResponse{

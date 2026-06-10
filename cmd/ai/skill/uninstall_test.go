@@ -949,9 +949,9 @@ func TestUninstallCmd_ForceFlagGetBool(t *testing.T) {
 	assert.True(t, force)
 }
 
-// TestUninstallCmd_StandardParserIntegration tests that the uninstall command uses StandardParser
+// TestUninstallCmd_StandardParserServer tests that the uninstall command uses StandardParser
 // with proper Viper binding for flag precedence (CLI > ENV > defaults).
-func TestUninstallCmd_StandardParserIntegration(t *testing.T) {
+func TestUninstallCmd_StandardParserServer(t *testing.T) {
 	t.Run("uninstallParser is initialized", func(t *testing.T) {
 		require.NotNil(t, uninstallParser, "uninstallParser should be initialized by init()")
 	})

@@ -123,7 +123,7 @@ func TestSSOProvider_PreAuthenticate_NoOp(t *testing.T) {
 
 func TestSSOProvider_Authenticate_Simple(t *testing.T) {
 	// Prevent browser launch during device auth flow and shorten network timeouts.
-	t.Setenv("GO_TEST", "1") // utils.OpenUrl early-exits when set.
+	t.Setenv("GO_TEST", "1") // browser.Open early-exits when set.
 	t.Setenv("CI", "1")      // promptDeviceAuth avoids opening in CI.
 
 	config := &schema.Provider{
@@ -134,6 +134,12 @@ func TestSSOProvider_Authenticate_Simple(t *testing.T) {
 
 	provider, err := NewSSOProvider(testProviderName, config)
 	require.NoError(t, err)
+
+	// Isolate from the package-level defaultSessionStore so this test cannot be
+	// influenced by — nor pollute — sibling tests that share the same (start_url,
+	// region) tuple. Each Authenticate() invocation here must do its own
+	// fast-path miss → fall-through-to-auth dance, independent of other tests.
+	provider.sessionStore = newSessionTokenStore()
 
 	// Use short timeout so SDK calls fail fast in tests.
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
@@ -149,7 +155,7 @@ func TestSSOProvider_promptDeviceAuth_SafeInCI(t *testing.T) {
 	t.Setenv("CI", "1")
 	p, err := NewSSOProvider("sso", &schema.Provider{Kind: testSSOKind, Region: testRegion, StartURL: testStartURL})
 	require.NoError(t, err)
-	// With a full verification URL, OpenUrl is skipped under GO_TEST and CI.
+	// With a full verification URL, browser.Open is skipped under GO_TEST and CI.
 	url := "https://company.awsapps.com/start/#/device?user_code=WDDD-HRQV"
 	p.promptDeviceAuth(&ssooidc.StartDeviceAuthorizationOutput{VerificationUriComplete: &url})
 }
@@ -202,7 +208,7 @@ func TestSSOProvider_NameAndPreAuthenticate_NoOp(t *testing.T) {
 }
 
 func TestSSOProvider_promptDeviceAuth_NonCI_OpensURL(t *testing.T) {
-	t.Setenv("GO_TEST", "1") // ensure OpenUrl returns quickly
+	t.Setenv("GO_TEST", "1") // ensure browser.Open returns quickly.
 	t.Setenv("CI", "")       // not CI
 	p, err := NewSSOProvider("sso", &schema.Provider{Kind: "aws/iam-identity-center", Region: "us-east-1", StartURL: "https://x"})
 	require.NoError(t, err)
@@ -512,16 +518,16 @@ func TestPollForAccessToken_ContextCancellation(t *testing.T) {
 }
 
 func TestPollResult_Structure(t *testing.T) {
-	// Test pollResult struct creation.
+	// Test pollResult struct creation. The token is now a full ssoTokenCache
+	// (access token + expiry + refresh fields) rather than a bare string.
 	now := time.Now()
 	result := pollResult{
-		token:     "test-token",
-		expiresAt: now,
-		err:       nil,
+		token: ssoTokenCache{AccessToken: "test-token", ExpiresAt: now},
+		err:   nil,
 	}
 
-	assert.Equal(t, "test-token", result.token)
-	assert.Equal(t, now, result.expiresAt)
+	assert.Equal(t, "test-token", result.token.AccessToken)
+	assert.Equal(t, now, result.token.ExpiresAt)
 	assert.Nil(t, result.err)
 }
 
@@ -588,9 +594,8 @@ func TestSpinnerModel_Update_PollResult(t *testing.T) {
 	// Simulate receiving poll result.
 	now := time.Now()
 	pollRes := pollResult{
-		token:     "test-token",
-		expiresAt: now,
-		err:       nil,
+		token: ssoTokenCache{AccessToken: "test-token", ExpiresAt: now},
+		err:   nil,
 	}
 
 	newModel, _ := model.Update(pollRes)
@@ -598,8 +603,8 @@ func TestSpinnerModel_Update_PollResult(t *testing.T) {
 
 	assert.True(t, updatedModel.done)
 	assert.NotNil(t, updatedModel.result)
-	assert.Equal(t, "test-token", updatedModel.result.token)
-	assert.Equal(t, now, updatedModel.result.expiresAt)
+	assert.Equal(t, "test-token", updatedModel.result.token.AccessToken)
+	assert.Equal(t, now, updatedModel.result.token.ExpiresAt)
 	assert.Nil(t, updatedModel.result.err)
 	assert.True(t, cancelCalled)
 }
@@ -623,7 +628,7 @@ func TestSpinnerModel_View(t *testing.T) {
 			name: "success",
 			done: true,
 			result: &pollResult{
-				token: "test",
+				token: ssoTokenCache{AccessToken: "test"},
 				err:   nil,
 			},
 			expectEmpty: true, // Success returns empty string, auth login will show table.
@@ -663,9 +668,8 @@ func TestSpinnerModel_CheckResult(t *testing.T) {
 	resultChan := make(chan pollResult, 1)
 	now := time.Now()
 	resultChan <- pollResult{
-		token:     "test-token",
-		expiresAt: now,
-		err:       nil,
+		token: ssoTokenCache{AccessToken: "test-token", ExpiresAt: now},
+		err:   nil,
 	}
 
 	model := spinnerModel{
@@ -680,7 +684,7 @@ func TestSpinnerModel_CheckResult(t *testing.T) {
 	msg := cmd()
 	pollRes, ok := msg.(pollResult)
 	assert.True(t, ok)
-	assert.Equal(t, "test-token", pollRes.token)
+	assert.Equal(t, "test-token", pollRes.token.AccessToken)
 
 	close(resultChan)
 }
@@ -913,6 +917,11 @@ func TestSSOProvider_Authenticate_NonInteractive_ErrorMessage(t *testing.T) {
 
 	provider, err := NewSSOProvider(testProviderName, providerConfig)
 	require.NoError(t, err)
+
+	// Isolate from defaultSessionStore. If a sibling test had seeded a token for
+	// this (start_url, region), the in-memory fast path would return it before
+	// the non-interactive guard runs, and we'd assert against the wrong code path.
+	provider.sessionStore = newSessionTokenStore()
 
 	ctx := context.Background()
 	_, err = provider.Authenticate(ctx)

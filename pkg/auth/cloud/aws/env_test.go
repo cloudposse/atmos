@@ -41,6 +41,8 @@ func TestPrepareEnvironment(t *testing.T) {
 				"AWS_REGION":                  "us-west-2",
 				"AWS_DEFAULT_REGION":          "us-west-2",
 				"AWS_EC2_METADATA_DISABLED":   "true",
+				// Credential/IRSA vars are deleted (not present in result).
+				// Scrubbing happens at subprocess level via WithEnvironment.
 			},
 		},
 		{
@@ -66,6 +68,7 @@ func TestPrepareEnvironment(t *testing.T) {
 				"AWS_PROFILE":                 "test-profile",
 				"AWS_SDK_LOAD_CONFIG":         "1",
 				"AWS_EC2_METADATA_DISABLED":   "true",
+				// Credential/IRSA vars are deleted from the result map.
 			},
 		},
 		{
@@ -165,11 +168,12 @@ func TestPrepareEnvironment_DoesNotMutateInput(t *testing.T) {
 	assert.Equal(t, originalAccessKey, inputEnv["AWS_ACCESS_KEY_ID"], "AWS_ACCESS_KEY_ID should not be modified in input")
 	assert.Equal(t, originalSecretKey, inputEnv["AWS_SECRET_ACCESS_KEY"], "AWS_SECRET_ACCESS_KEY should not be modified in input")
 
-	// Verify result does not contain credentials.
+	// Verify result has credentials deleted (not present in the result map).
+	// Scrubbing from subprocess env happens at the WithEnvironment level.
 	_, hasAccessKey := result["AWS_ACCESS_KEY_ID"]
+	assert.False(t, hasAccessKey, "AWS_ACCESS_KEY_ID should be absent from result")
 	_, hasSecretKey := result["AWS_SECRET_ACCESS_KEY"]
-	assert.False(t, hasAccessKey, "result should not contain AWS_ACCESS_KEY_ID")
-	assert.False(t, hasSecretKey, "result should not contain AWS_SECRET_ACCESS_KEY")
+	assert.False(t, hasSecretKey, "AWS_SECRET_ACCESS_KEY should be absent from result")
 
 	// Verify result contains expected values.
 	assert.Equal(t, "test-profile", result["AWS_PROFILE"])
@@ -344,6 +348,9 @@ func TestProblematicAWSEnvVars_ContainsExpectedVars(t *testing.T) {
 		"AWS_PROFILE",
 		"AWS_CONFIG_FILE",
 		"AWS_SHARED_CREDENTIALS_FILE",
+		"AWS_WEB_IDENTITY_TOKEN_FILE",
+		"AWS_ROLE_ARN",
+		"AWS_ROLE_SESSION_NAME",
 	}
 
 	for _, expected := range expectedVars {
@@ -509,4 +516,81 @@ func TestEnvironmentVarsToClear_ContainsExpectedVars(t *testing.T) {
 		}
 		assert.True(t, found, "environmentVarsToClear should contain %s", expected)
 	}
+}
+
+// TestPrepareEnvironment_IRSALeakPrevention verifies that IRSA (IAM Roles for
+// Service Accounts) environment variables injected by the EKS pod identity
+// webhook are deleted by PrepareEnvironment and do not leak through to
+// Terraform subprocesses. This reproduces the real-world scenario from
+// DEV-4216 where ARC runner pods have IRSA env vars injected by webhook.
+//
+// With the sanitized base env approach:
+//  1. os.Environ() (including IRSA vars) is passed to PrepareEnvironment
+//  2. PrepareEnvironment deletes IRSA vars and adds Atmos-managed auth vars
+//  3. The sanitized result is used as the subprocess base env via WithEnvironment
+func TestPrepareEnvironment_IRSALeakPrevention(t *testing.T) {
+	// Simulate IRSA vars injected by EKS pod identity webhook.
+	irsaTokenFile := "/var/run/secrets/eks.amazonaws.com/serviceaccount/token"
+	irsaRoleArn := "arn:aws:iam::241533146093:role/gold-core-use1-auto-actions-runner@actions-runner-system"
+
+	// Simulate os.Environ() from the pod (what the subprocess would inherit).
+	podEnviron := []string{
+		"HOME=/home/runner",
+		"PATH=/usr/bin",
+		"AWS_WEB_IDENTITY_TOKEN_FILE=" + irsaTokenFile,
+		"AWS_ROLE_ARN=" + irsaRoleArn,
+		"AWS_ROLE_SESSION_NAME=irsa-session",
+		"AWS_DEFAULT_REGION=us-east-1",
+		"AWS_REGION=us-east-1",
+		"AWS_STS_REGIONAL_ENDPOINTS=regional",
+	}
+
+	// Convert podEnviron []string to map[string]string for PrepareEnvironment.
+	// This simulates the new flow: os.Environ() (with IRSA vars) is converted to a map
+	// and passed to PrepareEnvironment, which deletes IRSA vars and adds auth vars.
+	podEnvMap := make(map[string]string)
+	for _, entry := range podEnviron {
+		if idx := indexOf(entry, '='); idx >= 0 {
+			podEnvMap[entry[:idx]] = entry[idx+1:]
+		}
+	}
+
+	result := PrepareEnvironment(
+		podEnvMap,
+		"core-artifacts/terraform",
+		"/home/runner/.config/atmos/aws/github-oidc/credentials",
+		"/home/runner/.config/atmos/aws/github-oidc/config",
+		"us-east-1",
+	)
+
+	// The fix: IRSA vars should be deleted from the result, not leak through to subprocess.
+	_, hasWebIdentity := result["AWS_WEB_IDENTITY_TOKEN_FILE"]
+	assert.False(t, hasWebIdentity,
+		"AWS_WEB_IDENTITY_TOKEN_FILE should be deleted, not leak IRSA token path")
+	_, hasRoleARN := result["AWS_ROLE_ARN"]
+	assert.False(t, hasRoleARN,
+		"AWS_ROLE_ARN should be deleted, not leak IRSA role ARN")
+	_, hasRoleSession := result["AWS_ROLE_SESSION_NAME"]
+	assert.False(t, hasRoleSession,
+		"AWS_ROLE_SESSION_NAME should be deleted, not leak IRSA session name")
+
+	// Atmos-managed credentials should be set correctly.
+	assert.Equal(t, "/home/runner/.config/atmos/aws/github-oidc/credentials",
+		result["AWS_SHARED_CREDENTIALS_FILE"])
+	assert.Equal(t, "core-artifacts/terraform", result["AWS_PROFILE"])
+	assert.Equal(t, "true", result["AWS_EC2_METADATA_DISABLED"])
+
+	// Non-AWS vars from the pod environment should be preserved.
+	assert.Equal(t, "/home/runner", result["HOME"])
+	assert.Equal(t, "/usr/bin", result["PATH"])
+}
+
+// indexOf returns the index of the first occurrence of b in s, or -1.
+func indexOf(s string, b byte) int {
+	for i := range len(s) {
+		if s[i] == b {
+			return i
+		}
+	}
+	return -1
 }

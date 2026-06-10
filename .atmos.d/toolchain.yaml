@@ -1,0 +1,8 @@
+toolchain:
+  aliases:
+    gofumpt: mvdan/gofumpt
+    tofu: opentofu/opentofu
+  registries:
+    - name: aqua
+      type: aqua
+      priority: 10

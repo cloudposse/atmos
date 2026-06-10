@@ -1,30 +1,32 @@
 package tests
 
 import (
-	"bytes"
-	"io"
 	"os"
+	"runtime"
 	"testing"
 
 	"github.com/cloudposse/atmos/cmd"
+	"github.com/cloudposse/atmos/internal/tui/templates/term"
 )
 
 func TestExecuteDescribeComponentCmd_Success_YAMLWithPager(t *testing.T) {
 	// This test uses a fixture that downloads from GitHub, so check rate limits first.
 	RequireGitHubAccess(t)
 
-	// Capture stdout/stderr to prevent test output pollution.
-	origStdout := os.Stdout
-	origStderr := os.Stderr
-	defer func() {
-		os.Stdout = origStdout
-		os.Stderr = origStderr
-	}()
+	// Skip in CI environments without TTY.
+	// The pager functionality requires TTY support.
+	if !term.IsTTYSupportForStdout() {
+		t.Skip("Skipping test: TTY not supported for stdout")
+	}
 
-	rOut, wOut, _ := os.Pipe()
-	rErr, wErr, _ := os.Pipe()
-	os.Stdout = wOut
-	os.Stderr = wErr
+	// On Unix-like systems, also check /dev/tty accessibility for alternate screen mode.
+	if runtime.GOOS != "windows" {
+		if f, err := os.Open("/dev/tty"); err != nil {
+			t.Skipf("Skipping test: /dev/tty not accessible: %v", err)
+		} else {
+			f.Close()
+		}
+	}
 
 	t.Chdir("./fixtures/scenarios/atmos-include-yaml-function")
 
@@ -33,17 +35,5 @@ func TestExecuteDescribeComponentCmd_Success_YAMLWithPager(t *testing.T) {
 
 	if err := cmd.Execute(); err != nil {
 		t.Fatalf("failed to execute command: %v", err)
-	}
-
-	// Close writers and read captured output.
-	wOut.Close()
-	wErr.Close()
-	var bufOut, bufErr bytes.Buffer
-	io.Copy(&bufOut, rOut)
-	io.Copy(&bufErr, rErr)
-
-	// Optionally validate output here if needed.
-	if bufOut.Len() == 0 {
-		t.Error("expected output but got none")
 	}
 }

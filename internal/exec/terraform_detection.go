@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/cloudposse/atmos/pkg/dependencies"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -25,13 +26,22 @@ var (
 //  1. Fast path: Check if the executable basename contains "tofu"
 //  2. Slow path: Execute the version command and check the output
 //
-// Results are cached by command path to avoid repeated subprocess execution.
-func IsOpenTofu(atmosConfig *schema.AtmosConfiguration) bool {
+// The tenv parameter provides toolchain path resolution. If nil, the command
+// is used as-is (system PATH only). Pass the ToolchainEnvironment from the
+// current command invocation so toolchain-installed executables are found.
+// Results are cached by resolved command path to avoid repeated subprocess execution.
+func IsOpenTofu(atmosConfig *schema.AtmosConfiguration, tenv *dependencies.ToolchainEnvironment) bool {
 	defer perf.Track(atmosConfig, "exec.IsOpenTofu")()
 
 	command := atmosConfig.Components.Terraform.Command
 	if command == "" {
 		command = "terraform" // Default to terraform if not specified.
+	}
+
+	// Resolve through toolchain so detection works when the tool is
+	// installed via `atmos toolchain install` and not on system PATH.
+	if tenv != nil {
+		command = tenv.Resolve(command)
 	}
 
 	// Check cache first.

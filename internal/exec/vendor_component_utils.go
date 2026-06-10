@@ -24,6 +24,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/downloader"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
+	"github.com/cloudposse/atmos/pkg/vendor"
 )
 
 const ociScheme = "oci://"
@@ -130,121 +131,29 @@ func ExecuteStackVendorInternal(
 	return ErrStackPullNotSupported
 }
 
-func copyComponentToDestination(tempDir, componentPath string, vendorComponentSpec *schema.VendorComponentSpec, sourceIsLocalFile bool, uri string) error {
-	// Copy from the temp folder to the destination folder and skip the excluded files
-	copyOptions := cp.Options{
-		// Skip specifies which files should be skipped
-		Skip: createComponentSkipFunc(tempDir, vendorComponentSpec),
-
-		// Preserve the atime and the mtime of the entries
-		// On linux we can preserve only up to 1 millisecond accuracy
-		PreserveTimes: false,
-
-		// Preserve the uid and the gid of all entries
-		PreserveOwner: false,
-
-		// OnSymlink specifies what to do on symlink
-		// Override the destination file if it already exists
-		OnSymlink: func(src string) cp.SymlinkAction {
-			return cp.Deep
-		},
-
-		// OnDirExists handles existing directories at the destination.
-		// We skip .git directories from source, but if the destination already has a .git directory
-		// (from a previous vendor run), we need to leave it untouched to avoid permission errors
-		// on git packfiles which often have restrictive permissions.
-		OnDirExists: func(src, dest string) cp.DirExistsAction {
-			if filepath.Base(dest) == ".git" {
-				return cp.Untouchable
-			}
-			return cp.Merge
-		},
-	}
-
-	componentPath2 := componentPath
-	if sourceIsLocalFile {
-		if filepath.Ext(componentPath) == "" {
-			componentPath2 = filepath.Join(componentPath, SanitizeFileName(uri))
-		}
-	}
-
-	if err := cp.Copy(tempDir, componentPath2, copyOptions); err != nil {
-		return err
-	}
-	return nil
+func copyComponentToDestination(tempDir, componentPath string, vendorComponentSpec *schema.VendorComponentSpec) error {
+	return vendor.CopyToTarget(tempDir, componentPath, vendor.CopyOptions{
+		IncludedPaths: vendorComponentSpec.Source.IncludedPaths,
+		ExcludedPaths: vendorComponentSpec.Source.ExcludedPaths,
+	})
 }
 
+// createComponentSkipFunc creates a skip function for component vendoring.
+// Delegates to pkg/vendor for the shared implementation.
 func createComponentSkipFunc(tempDir string, vendorComponentSpec *schema.VendorComponentSpec) ComponentSkipFunc {
-	return func(srcInfo os.FileInfo, src, dest string) (bool, error) {
-		if filepath.Base(src) == ".git" {
-			return true, nil
-		}
-
-		trimmedSrc := u.TrimBasePathFromPath(tempDir+"/", src)
-
-		// Check excludes first - if file matches any excluded pattern, skip it immediately.
-		// It supports POSIX-style Globs for file names/paths (double-star `**` is supported).
-		// https://en.wikipedia.org/wiki/Glob_(programming)
-		// https://github.com/bmatcuk/doublestar#patterns
-		if len(vendorComponentSpec.Source.ExcludedPaths) > 0 {
-			excluded, err := checkComponentExcludes(vendorComponentSpec.Source.ExcludedPaths, src, trimmedSrc)
-			if err != nil || excluded {
-				return excluded, err
-			}
-		}
-
-		// Then check includes - if specified, file must match to be included.
-		// Only include the files that match the 'included_paths' patterns (if any pattern is specified).
-		if len(vendorComponentSpec.Source.IncludedPaths) > 0 {
-			return checkComponentIncludes(vendorComponentSpec.Source.IncludedPaths, src, trimmedSrc)
-		}
-
-		// If 'included_paths' is not provided, include all files that were not excluded.
-		log.Debug("Including", u.TrimBasePathFromPath(tempDir+"/", src))
-		return false, nil
-	}
+	return vendor.CreateSkipFunc(tempDir, vendorComponentSpec.Source.IncludedPaths, vendorComponentSpec.Source.ExcludedPaths)
 }
 
+// checkComponentExcludes checks if the file matches any of the excluded patterns.
+// Delegates to pkg/vendor for the shared implementation.
 func checkComponentExcludes(excludePaths []string, src, trimmedSrc string) (bool, error) {
-	for _, excludePath := range excludePaths {
-		excludePath := filepath.Clean(excludePath)
-		// Match against trimmedSrc (relative path) instead of src (absolute path).
-		// This allows simple patterns like "providers.tf" to match without needing "**/" prefix.
-		excludeMatch, err := u.PathMatch(excludePath, trimmedSrc)
-		if err != nil {
-			return true, err
-		} else if excludeMatch {
-			// If the file matches ANY of the 'excluded_paths' patterns, exclude the file.
-			log.Debug("Excluding the file since it matches the '%s' pattern from 'excluded_paths'", "path", trimmedSrc, "excluded_paths", excludePath)
-			return true, nil
-		}
-	}
-	return false, nil
+	return vendor.ShouldExcludeFile(excludePaths, trimmedSrc)
 }
 
+// checkComponentIncludes checks if the file matches any of the included patterns.
+// Delegates to pkg/vendor for the shared implementation.
 func checkComponentIncludes(includePaths []string, src, trimmedSrc string) (bool, error) {
-	anyMatches := false
-	for _, includePath := range includePaths {
-		includePath := filepath.Clean(includePath)
-		// Match against trimmedSrc (relative path) instead of src (absolute path).
-		// This allows patterns to match correctly without needing to account for temp directory paths.
-		includeMatch, err := u.PathMatch(includePath, trimmedSrc)
-		if err != nil {
-			return true, err
-		} else if includeMatch {
-			// If the file matches ANY of the 'included_paths' patterns, include the file.
-			log.Debug("Including path since it matches the pattern from 'included_paths'\n", "path", trimmedSrc, "included_paths", includePath)
-			anyMatches = true
-			break
-		}
-	}
-
-	if anyMatches {
-		return false, nil
-	} else {
-		log.Debug("Excluding since it does not match any pattern from 'included_paths'", "path", trimmedSrc)
-		return true, nil
-	}
+	return vendor.ShouldIncludeFile(includePaths, trimmedSrc)
 }
 
 func ExecuteComponentVendorInternal(
@@ -506,7 +415,7 @@ func installComponent(p *pkgComponentVendor, atmosConfig *schema.AtmosConfigurat
 	default:
 		return fmt.Errorf("%w %s for package %s", errUtils.ErrUnknownPackageType, p.pkgType.String(), p.name)
 	}
-	if err := copyComponentToDestination(tempDir, p.componentPath, p.vendorComponentSpec, p.sourceIsLocalFile, p.uri); err != nil {
+	if err := copyComponentToDestination(tempDir, p.componentPath, p.vendorComponentSpec); err != nil {
 		return fmt.Errorf("failed to copy package %s error %w", p.name, err)
 	}
 

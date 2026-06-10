@@ -3,6 +3,7 @@ package tests
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -48,7 +49,9 @@ var (
 	repoRoot            string                   // Repository root directory for path normalization
 	skipReason          string                   // Package-level variable to track why tests should be skipped
 	atmosRunner         *testhelpers.AtmosRunner // Global runner for executing Atmos with coverage support (lazy initialized)
-	coverDir            string                   // GOCOVERDIR environment variable value
+	atmosRunnerOnce     sync.Once
+	atmosRunnerErr      error
+	coverDir            string // GOCOVERDIR environment variable value.
 	sandboxRegistry     = make(map[string]*testhelpers.SandboxEnvironment)
 	sandboxMutex        sync.RWMutex
 )
@@ -386,10 +389,18 @@ func sanitizeOutput(output string, opts ...sanitizeOption) (string, error) {
 	// Replace backslashes with forward slashes, EXCEPT those that are escape sequences (\n, \t, \r, etc.).
 	// Since actual CLI output has escape sequences already processed (they appear as actual newlines/tabs),
 	// we can safely replace backslashes that are followed by path-like characters.
-	normalizedOutput := filepath.ToSlash(output)
-	// Replace backslashes that look like path separators (followed by alphanumeric, ., -, _, *, etc.)
-	// This regex matches backslash followed by path-like characters, not escape sequences.
+	//
+	// First, protect JSON unicode escapes like \u003e from being corrupted by filepath.ToSlash
+	// and the path normalization regex below. On Windows, filepath.ToSlash converts ALL backslashes
+	// to forward slashes, which would turn \u003e into /u003e.
+	jsonUnicodeEscape := regexp.MustCompile(`\\u([0-9a-fA-F]{4})`)
+	const unicodePlaceholder = "\x00UNICODE_ESCAPE_"
+	protectedOutput := jsonUnicodeEscape.ReplaceAllString(output, unicodePlaceholder+"$1")
+	normalizedOutput := filepath.ToSlash(protectedOutput)
+	// Replace backslashes that look like path separators (followed by alphanumeric, ., -, _, *, etc.).
 	normalizedOutput = regexp.MustCompile(`\\([a-zA-Z0-9._*\-/])`).ReplaceAllString(normalizedOutput, "/$1")
+	// Restore protected unicode escapes.
+	normalizedOutput = regexp.MustCompile(regexp.QuoteMeta(unicodePlaceholder)+`([0-9a-fA-F]{4})`).ReplaceAllString(normalizedOutput, `\u$1`)
 
 	// 3. Build a regex that matches the repository root even if extra slashes appear.
 	//    First, escape any regex metacharacters in the normalized repository root.
@@ -675,6 +686,22 @@ func loadTestSuites(testCasesDir string) (*TestSuite, error) {
 	return &mergedSuite, nil
 }
 
+// validateAtmosBinary checks if the atmos binary is available.
+// Returns the binary path and a skip reason if the binary is not suitable for testing.
+func validateAtmosBinary(repoRoot string) (string, string) {
+	binaryPath, err := exec.LookPath("atmos")
+	if err != nil {
+		return "", fmt.Sprintf("Atmos binary not found in PATH: %s. Run 'make build' to build the binary.", os.Getenv("PATH"))
+	}
+
+	rel, err := filepath.Rel(repoRoot, binaryPath)
+	if err == nil && strings.HasPrefix(rel, "..") {
+		return binaryPath, fmt.Sprintf("Atmos binary found outside repository at %s", binaryPath)
+	}
+
+	return binaryPath, ""
+}
+
 // Entry point for tests to parse flags and handle setup/teardown.
 func TestMain(m *testing.M) {
 	// Parse flags first to get -v status
@@ -684,6 +711,10 @@ func TestMain(m *testing.M) {
 	// This prevents tests from inadvertently reading real infrastructure configs (e.g., infra-live).
 	// Tests should only use their fixture directories, not the user's working environment.
 	os.Unsetenv("ATMOS_CHDIR")
+
+	// Disable CI auto-detection so deploy/apply hooks don't try to
+	// download planfiles from GitHub Artifacts during tests.
+	os.Unsetenv("GITHUB_ACTIONS")
 
 	// Configure logger verbosity based on test flags
 	switch {
@@ -712,10 +743,21 @@ func TestMain(m *testing.M) {
 		logger.Fatal("failed to locate git repository", "dir", startingDir)
 	}
 
-	// Check if we should collect coverage
+	// Check if we should collect coverage.
 	coverDir = os.Getenv("GOCOVERDIR")
 	if coverDir != "" {
 		logger.Info("Coverage collection enabled", "GOCOVERDIR", coverDir)
+	}
+
+	// Check for the atmos binary. This is informational only: CLI tests execute via
+	// AtmosRunner, which builds atmos from source, so a missing or external PATH binary
+	// must NOT skip the suite (doing so silently reduces coverage on clean machines/CI).
+	binaryPath, binaryWarning := validateAtmosBinary(repoRoot)
+	if binaryWarning != "" {
+		logger.Info("Atmos binary check warning", "reason", binaryWarning)
+	}
+	if binaryPath != "" {
+		logger.Info("Atmos binary for tests", "binary", binaryPath)
 	}
 
 	logger.Info("Starting directory", "dir", startingDir)
@@ -768,6 +810,24 @@ func prepareAtmosCommand(t *testing.T, ctx context.Context, args ...string) *exe
 	return atmosRunner.CommandContext(ctx, args...)
 }
 
+func ensureAtmosRunner(t *testing.T) {
+	t.Helper()
+
+	atmosRunnerOnce.Do(func() {
+		if atmosRunner != nil {
+			return
+		}
+		atmosRunner = testhelpers.NewAtmosRunner(coverDir)
+		atmosRunnerErr = atmosRunner.Build()
+		if atmosRunnerErr == nil {
+			logger.Info("Atmos runner initialized for test", "coverageEnabled", coverDir != "")
+		}
+	})
+	if atmosRunnerErr != nil {
+		t.Skipf("Failed to initialize Atmos: %v", atmosRunnerErr)
+	}
+}
+
 func runCLICommandTest(t *testing.T, tc TestCase) {
 	// Skip long tests in short mode
 	if testing.Short() && tc.Short != nil && !*tc.Short {
@@ -778,15 +838,14 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 	checkPreconditions(t, tc.Preconditions)
 
 	// Initialize AtmosRunner early, before any directory changes, so it can build from the git repo
-	if tc.Command == "atmos" && atmosRunner == nil {
-		atmosRunner = testhelpers.NewAtmosRunner(coverDir)
-		if err := atmosRunner.Build(); err != nil {
-			t.Skipf("Failed to initialize Atmos: %v", err)
-		}
-		logger.Info("Atmos runner initialized for test", "coverageEnabled", coverDir != "")
+	if tc.Command == "atmos" {
+		ensureAtmosRunner(t)
 	}
 
-	// Create a context with timeout if specified
+	// Create a context with timeout if specified, defaulting to 10 minutes
+	// to prevent any single test from consuming the entire test budget.
+	const defaultTestTimeout = 10 * time.Minute
+
 	var ctx context.Context
 	var cancel context.CancelFunc
 
@@ -799,10 +858,10 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 		if timeout > 0 {
 			ctx, cancel = context.WithTimeout(context.Background(), timeout)
 		} else {
-			ctx, cancel = context.WithCancel(context.Background()) // No timeout, but cancelable
+			ctx, cancel = context.WithTimeout(context.Background(), defaultTestTimeout)
 		}
 	} else {
-		ctx, cancel = context.WithCancel(context.Background()) // No timeout, but cancelable
+		ctx, cancel = context.WithTimeout(context.Background(), defaultTestTimeout)
 	}
 	defer cancel()
 
@@ -826,6 +885,39 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 		t.Setenv("ATMOS_GITHUB_USERNAME", "")
 		t.Setenv("GITHUB_ACTOR", "")
 		t.Setenv("GITHUB_USERNAME", "")
+	}
+
+	// Prevent git from hanging waiting for credentials or interactive input.
+	// On macOS CI, the actions/checkout step configures git credentials as local config
+	// in the repo's .git/config, but vendor tests clone from different directories
+	// where this local config is not available, causing git to hang.
+	if _, exists := tc.Env["GIT_TERMINAL_PROMPT"]; !exists {
+		tc.Env["GIT_TERMINAL_PROMPT"] = "0"
+	}
+
+	// Configure git for non-interactive use via GIT_CONFIG_* env vars (Git 2.31+).
+	// macOS ships with credential.helper=osxkeychain in the system-level git config
+	// (/Library/Developer/CommandLineTools/.../gitconfig). This is NOT in ~/.gitconfig,
+	// so it persists even when HOME is overridden to a temp directory. When git clone
+	// runs, the osxkeychain helper tries to store/retrieve credentials:
+	//   - On CI (headless): hangs forever because there's no UI for Keychain
+	//   - Locally on macOS: shows a Keychain popup asking permission
+	// We fix this by disabling credential.helper and injecting GITHUB_TOKEN directly.
+	if _, exists := tc.Env["GIT_CONFIG_COUNT"]; !exists {
+		if githubToken := os.Getenv("GITHUB_TOKEN"); githubToken != "" {
+			// Disable credential helper (prevents osxkeychain hangs/popups) and inject token.
+			basicAuth := base64.StdEncoding.EncodeToString([]byte("x-access-token:" + githubToken))
+			tc.Env["GIT_CONFIG_COUNT"] = "2"
+			tc.Env["GIT_CONFIG_KEY_0"] = "credential.helper"
+			tc.Env["GIT_CONFIG_VALUE_0"] = ""
+			tc.Env["GIT_CONFIG_KEY_1"] = "http.https://github.com/.extraheader"
+			tc.Env["GIT_CONFIG_VALUE_1"] = "AUTHORIZATION: basic " + basicAuth
+		} else {
+			// No token available — just disable the credential helper to prevent hangs/popups.
+			tc.Env["GIT_CONFIG_COUNT"] = "1"
+			tc.Env["GIT_CONFIG_KEY_0"] = "credential.helper"
+			tc.Env["GIT_CONFIG_VALUE_0"] = ""
+		}
 	}
 
 	if runtime.GOOS == "darwin" && isCIEnvironment() {
@@ -1168,6 +1260,12 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 	// Validate outputs
 	if !verifyExitCode(t, tc.Expect.ExitCode, exitCode) {
 		t.Errorf("Description: %s", tc.Description)
+		if stdout.Len() > 0 {
+			t.Errorf("Captured stdout:\n%s", stdout.String())
+		}
+		if stderr.Len() > 0 {
+			t.Errorf("Captured stderr:\n%s", stderr.String())
+		}
 	}
 
 	// Validate output based on TTY mode
@@ -1785,11 +1883,14 @@ func cleanDirectory(t *testing.T, workdir string) error {
 		return fmt.Errorf("failed to get git status: %w", err)
 	}
 
-	// Clean only files in the provided working directory
+	// Clean only files in the provided working directory.
+	// Use workdir + separator to avoid matching directories with a shared prefix
+	// (e.g., "native-ci" should not match "native-ci-gha-plan").
+	workdirPrefix := workdir + string(filepath.Separator)
 	for file, statusEntry := range status {
 		if statusEntry.Worktree == git.Untracked {
 			fullPath := filepath.Join(repoRoot, file)
-			if strings.HasPrefix(fullPath, workdir) {
+			if strings.HasPrefix(fullPath, workdirPrefix) || fullPath == workdir {
 				t.Logf("Removing untracked file: %q", fullPath)
 				if err := os.RemoveAll(fullPath); err != nil {
 					return fmt.Errorf("failed to remove %q: %w", fullPath, err)

@@ -14,6 +14,7 @@
  DEBU  Loaded configuration directory source=atmos.d files=5 pattern=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-configuration/atmos.d/**/*
  DEBU  Found atmos.d directory, loading configurations path=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-configuration/atmos.d
  DEBU  Loaded configuration directory source=atmos.d files=5 pattern=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-configuration/atmos.d/**/*
+ DEBU  Failed to use pager
  DEBU  Found atmos.d directory, loading configurations path=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-configuration/atmos.d
  DEBU  Loaded configuration directory source=atmos.d files=5 pattern=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-configuration/atmos.d/**/*
  DEBU  Found atmos.d directory, loading configurations path=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-configuration/atmos.d
