@@ -11,6 +11,7 @@ import (
 	"github.com/googleapis/gax-go/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -162,6 +163,56 @@ func gsmClientSecretCreationMock(projectID string, secretId string, secretPayloa
 			return req.Parent == expectedReq.Parent &&
 				string(req.Payload.Data) == string(expectedReq.Payload.Data)
 		})).Return(ret, err)
+	}
+}
+
+func TestGSMStore_CreateSecretStatusErrors(t *testing.T) {
+	tests := []struct {
+		name    string
+		code    codes.Code
+		wantErr error
+		wantID  string
+	}{
+		{
+			name: "already exists returns existing resource name",
+			code: codes.AlreadyExists,
+		},
+		{
+			name:    "not found wraps resource name",
+			code:    codes.NotFound,
+			wantErr: ErrResourceNotFound,
+			wantID:  "projects/test-project/secrets/app-secret",
+		},
+		{
+			name:    "permission denied wraps project name",
+			code:    codes.PermissionDenied,
+			wantErr: ErrPermissionDenied,
+			wantID:  "project test-project",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mockClient := new(MockGSMClient)
+			store := newGSMStoreWithClient(mockClient, GSMStoreOptions{ProjectID: "test-project"})
+			const secretID = "app-secret"
+			const resourceName = "projects/test-project/secrets/app-secret"
+
+			mockClient.On("CreateSecret", mock.Anything, mock.MatchedBy(func(req *secretmanagerpb.CreateSecretRequest) bool {
+				return req.Parent == "projects/test-project" && req.SecretId == secretID
+			})).Return(nil, status.Error(tt.code, tt.name))
+
+			secret, err := store.createSecret(context.Background(), secretID)
+			if tt.wantErr != nil {
+				require.ErrorIs(t, err, tt.wantErr)
+				assert.Contains(t, err.Error(), tt.wantID)
+				assert.Nil(t, secret)
+			} else {
+				require.NoError(t, err)
+				assert.Equal(t, resourceName, secret.GetName())
+			}
+			mockClient.AssertExpectations(t)
+		})
 	}
 }
 
@@ -656,6 +707,35 @@ func TestGSMStore_Has(t *testing.T) {
 			},
 			want:    false,
 			wantErr: ErrPermissionDenied,
+		},
+		{
+			name:      "generic get secret error",
+			stack:     "dev-usw2",
+			component: "app/service",
+			key:       "config-key",
+			mockFn: func(m *MockGSMClient) {
+				matchGetSecret(m, componentSecretName, nil, ErrInternalError)
+			},
+			want:    false,
+			wantErr: ErrGetSecret,
+		},
+		{
+			name:      "empty stack",
+			stack:     "",
+			component: "app/service",
+			key:       "config-key",
+			mockFn:    func(m *MockGSMClient) {},
+			want:      false,
+			wantErr:   ErrEmptyStack,
+		},
+		{
+			name:      "empty key",
+			stack:     "dev-usw2",
+			component: "app/service",
+			key:       "",
+			mockFn:    func(m *MockGSMClient) {},
+			want:      false,
+			wantErr:   ErrEmptyKey,
 		},
 	}
 

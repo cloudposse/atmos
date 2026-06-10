@@ -13,6 +13,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	mockTypes "github.com/cloudposse/atmos/pkg/auth/types"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 // writeMinimalAtmosProject writes a self-contained Atmos project (config + one stack + one
@@ -129,6 +130,17 @@ func TestBuildAuthManager_ComponentNotFound(t *testing.T) {
 	_, err = buildAuthManager(atmosConfig, secretScope{Stack: "dev", Component: "missing"})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to load component config for auth")
+}
+
+func TestInjectSecretStoreAuthResolver(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	authManager := mockTypes.NewMockAuthManager(ctrl)
+	authManager.EXPECT().GetStackInfo().Return(&schema.ConfigAndStacksInfo{})
+
+	atmosConfig := &schema.AtmosConfiguration{}
+	require.NotPanics(t, func() {
+		injectSecretStoreAuthResolver(atmosConfig, authManager, secretScope{Identity: "terraform-ci"})
+	})
 }
 
 func TestSecretStoreDefaultIdentity(t *testing.T) {
