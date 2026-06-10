@@ -23,9 +23,7 @@ func TestYamlFuncTerraformOutput(t *testing.T) {
 	})
 
 	if _, err := exec.LookPath("tofu"); err != nil {
-		if _, err2 := exec.LookPath("terraform"); err2 != nil {
-			t.Skip("skipping: neither 'tofu' nor 'terraform' binary found in PATH (required for !terraform.output integration test)")
-		}
+		t.Skip("skipping: 'tofu' binary not found in PATH (required because the fixture components use command: tofu)")
 	}
 	err := os.Unsetenv("ATMOS_CLI_CONFIG_PATH")
 	if err != nil {
@@ -61,6 +59,7 @@ func TestYamlFuncTerraformOutput(t *testing.T) {
 		StackFile:        "",
 		ComponentType:    "terraform",
 		ComponentFromArg: "component-1",
+		Command:          "tofu",
 		SubCommand:       "deploy",
 		ProcessTemplates: true,
 		ProcessFunctions: true,
@@ -108,6 +107,7 @@ func TestYamlFuncTerraformOutput(t *testing.T) {
 		StackFile:        "",
 		ComponentType:    "terraform",
 		ComponentFromArg: "component-2",
+		Command:          "tofu",
 		SubCommand:       "deploy",
 		ProcessTemplates: true,
 		ProcessFunctions: true,

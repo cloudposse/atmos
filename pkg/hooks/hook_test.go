@@ -67,6 +67,18 @@ func TestHook_MatchesEvent(t *testing.T) {
 			event:    BeforeTerraformInit,
 			expected: true,
 		},
+		{
+			name:     "matches after-terraform-init event",
+			hook:     Hook{Events: []string{"after-terraform-init"}},
+			event:    AfterTerraformInit,
+			expected: true,
+		},
+		{
+			name:     "before-terraform-init hook does not fire on after-terraform-init",
+			hook:     Hook{Events: []string{"before-terraform-init"}},
+			event:    AfterTerraformInit,
+			expected: false,
+		},
 		// deploy and apply are aliases — hooks configured for either fire on both commands.
 		{
 			name:     "after-terraform-apply hook fires on deploy command",
