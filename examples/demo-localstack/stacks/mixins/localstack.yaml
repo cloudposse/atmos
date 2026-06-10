@@ -17,10 +17,13 @@ terraform:
       skip_metadata_api_check: true
       skip_requesting_account_id: true
       endpoints:
-        # An alias for the default LocalStack URL
+        # An alias for the default LocalStack URL exposed by the GitHub Actions service.
         sts: &localstack_url "http://localhost:4566"
 
-        # Use the LocalStack edge endpoint for all services.
+        # Use path-style S3 on localhost to avoid wildcard DNS/TLS flakiness in CI.
+        s3: *localstack_url
+
+        # Everything else can use HTTP on localhost
         apigateway: *localstack_url
         apigatewayv2: *localstack_url
         cloudformation: *localstack_url
@@ -33,7 +36,6 @@ terraform:
         lambda: *localstack_url
         rds: *localstack_url
         route53: *localstack_url
-        s3: *localstack_url
         secretsmanager: *localstack_url
         ses: *localstack_url
         sns: *localstack_url
