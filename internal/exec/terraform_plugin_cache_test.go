@@ -253,3 +253,99 @@ func TestConfigurePluginCache(t *testing.T) {
 		})
 	}
 }
+
+func TestDisableTerraformPluginCacheForExecutionFiltersConfiguredCache(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{
+		Components: schema.Components{
+			Terraform: schema.Terraform{
+				PluginCache:    true,
+				PluginCacheDir: "/configured/cache",
+			},
+		},
+		Env: map[string]string{
+			terraformPluginCacheDirEnv:              "/global/cache",
+			terraformPluginCacheMayBreakLockFileEnv: "true",
+			"KEEP_ME":                               "1",
+		},
+	}
+	info := &schema.ConfigAndStacksInfo{
+		DisablePluginCache: true,
+		ComponentEnvSection: schema.AtmosSectionMapType{
+			terraformPluginCacheDirEnv:              "/component/cache",
+			terraformPluginCacheMayBreakLockFileEnv: "true",
+			"KEEP_COMPONENT":                        "1",
+		},
+		ComponentEnvList: []string{
+			terraformPluginCacheDirEnv + "=/component/list/cache",
+			terraformPluginCacheMayBreakLockFileEnv + "=true",
+			"KEEP_LIST=1",
+		},
+		SanitizedEnv: []string{
+			terraformPluginCacheDirEnv + "=/sanitized/cache",
+			terraformPluginCacheMayBreakLockFileEnv + "=true",
+			"KEEP_SANITIZED=1",
+		},
+	}
+
+	disableTerraformPluginCacheForExecution(atmosConfig, info)
+
+	assert.False(t, atmosConfig.Components.Terraform.PluginCache)
+	assert.Empty(t, atmosConfig.Components.Terraform.PluginCacheDir)
+	assert.NotContains(t, atmosConfig.Env, terraformPluginCacheDirEnv)
+	assert.NotContains(t, atmosConfig.Env, terraformPluginCacheMayBreakLockFileEnv)
+	assert.Contains(t, atmosConfig.Env, "KEEP_ME")
+	assert.NotContains(t, info.ComponentEnvSection, terraformPluginCacheDirEnv)
+	assert.NotContains(t, info.ComponentEnvSection, terraformPluginCacheMayBreakLockFileEnv)
+	assert.Contains(t, info.ComponentEnvSection, "KEEP_COMPONENT")
+	assert.False(t, envListContainsKey(info.ComponentEnvList, terraformPluginCacheDirEnv))
+	assert.False(t, envListContainsKey(info.ComponentEnvList, terraformPluginCacheMayBreakLockFileEnv))
+	assert.True(t, envListContainsKey(info.ComponentEnvList, "KEEP_LIST"))
+	assert.False(t, envListContainsKey(info.SanitizedEnv, terraformPluginCacheDirEnv))
+	assert.False(t, envListContainsKey(info.SanitizedEnv, terraformPluginCacheMayBreakLockFileEnv))
+	assert.True(t, envListContainsKey(info.SanitizedEnv, "KEEP_SANITIZED"))
+}
+
+func TestDisableTerraformPluginCacheForExecutionFiltersProcessEnvWhenUnsanitized(t *testing.T) {
+	t.Setenv(terraformPluginCacheDirEnv, "/process/cache")
+	t.Setenv(terraformPluginCacheMayBreakLockFileEnv, "true")
+	t.Setenv("ATMOS_TEST_KEEP_ENV", "1")
+
+	atmosConfig := &schema.AtmosConfiguration{Env: map[string]string{}}
+	info := &schema.ConfigAndStacksInfo{DisablePluginCache: true}
+
+	disableTerraformPluginCacheForExecution(atmosConfig, info)
+
+	assert.False(t, envListContainsKey(info.SanitizedEnv, terraformPluginCacheDirEnv))
+	assert.False(t, envListContainsKey(info.SanitizedEnv, terraformPluginCacheMayBreakLockFileEnv))
+	assert.True(t, envListContainsKey(info.SanitizedEnv, "ATMOS_TEST_KEEP_ENV"))
+}
+
+func TestDisableTerraformPluginCacheForExecutionNoopWithoutFlag(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{
+		Components: schema.Components{
+			Terraform: schema.Terraform{PluginCache: true, PluginCacheDir: "/configured/cache"},
+		},
+		Env: map[string]string{terraformPluginCacheDirEnv: "/global/cache"},
+	}
+	info := &schema.ConfigAndStacksInfo{
+		ComponentEnvList: []string{terraformPluginCacheDirEnv + "=/component/cache"},
+		SanitizedEnv:     []string{terraformPluginCacheDirEnv + "=/sanitized/cache"},
+	}
+
+	disableTerraformPluginCacheForExecution(atmosConfig, info)
+
+	assert.True(t, atmosConfig.Components.Terraform.PluginCache)
+	assert.Equal(t, "/configured/cache", atmosConfig.Components.Terraform.PluginCacheDir)
+	assert.Contains(t, atmosConfig.Env, terraformPluginCacheDirEnv)
+	assert.True(t, envListContainsKey(info.ComponentEnvList, terraformPluginCacheDirEnv))
+	assert.True(t, envListContainsKey(info.SanitizedEnv, terraformPluginCacheDirEnv))
+}
+
+func envListContainsKey(env []string, key string) bool {
+	for _, entry := range env {
+		if envKey(entry) == key {
+			return true
+		}
+	}
+	return false
+}

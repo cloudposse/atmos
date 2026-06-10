@@ -694,6 +694,22 @@ func loadTestSuites(testCasesDir string) (*TestSuite, error) {
 	return &mergedSuite, nil
 }
 
+// validateAtmosBinary checks if the atmos binary is available.
+// Returns the binary path and a skip reason if the binary is not suitable for testing.
+func validateAtmosBinary(repoRoot string) (string, string) {
+	binaryPath, err := exec.LookPath("atmos")
+	if err != nil {
+		return "", fmt.Sprintf("Atmos binary not found in PATH: %s. Run 'make build' to build the binary.", os.Getenv("PATH"))
+	}
+
+	rel, err := filepath.Rel(repoRoot, binaryPath)
+	if err == nil && strings.HasPrefix(rel, "..") {
+		return binaryPath, fmt.Sprintf("Atmos binary found outside repository at %s", binaryPath)
+	}
+
+	return binaryPath, ""
+}
+
 // Entry point for tests to parse flags and handle setup/teardown.
 func TestMain(m *testing.M) {
 	// Parse flags first to get -v status
@@ -735,10 +751,21 @@ func TestMain(m *testing.M) {
 		logger.Fatal("failed to locate git repository", "dir", startingDir)
 	}
 
-	// Check if we should collect coverage
+	// Check if we should collect coverage.
 	coverDir = os.Getenv("GOCOVERDIR")
 	if coverDir != "" {
 		logger.Info("Coverage collection enabled", "GOCOVERDIR", coverDir)
+	}
+
+	// Check for the atmos binary. This is informational only: CLI tests execute via
+	// AtmosRunner, which builds atmos from source, so a missing or external PATH binary
+	// must NOT skip the suite (doing so silently reduces coverage on clean machines/CI).
+	binaryPath, binaryWarning := validateAtmosBinary(repoRoot)
+	if binaryWarning != "" {
+		logger.Info("Atmos binary check warning", "reason", binaryWarning)
+	}
+	if binaryPath != "" {
+		logger.Info("Atmos binary for tests", "binary", binaryPath)
 	}
 
 	logger.Info("Starting directory", "dir", startingDir)

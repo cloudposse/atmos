@@ -1,0 +1,28 @@
+components:
+  terraform:
+    vpc:
+      vars:
+        cidr: "10.0.0.0/16"
+        region: "us-east-1"
+    
+    eks:
+      vars:
+        cluster_name: "main"
+        node_groups:
+          - name: "default"
+            instance_type: "t3.medium"
+            min_size: 1
+            max_size: 3
+      settings:
+        depends_on:
+          - vpc
+          - iam-role
+    
+    rds:
+      vars:
+        engine: "postgres"
+        instance_class: "db.t3.micro"
+      settings:
+        depends_on:
+          - vpc
+          - security-groups

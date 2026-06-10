@@ -14,11 +14,27 @@
 - Show collapsible plan details with resource lists
 - Display warning callouts for destructive operations
 - Include metadata (component, stack, commit SHA)
+- For graph-backed multi-component Terraform `plan`, `apply`, and `destroy`
+  runs, write one aggregate summary after the DAG scheduler finishes instead of
+  writing from concurrent worker goroutines
 
 **Validation**:
 - Summary appears in GitHub Actions job summary panel
 - Badges link to corresponding resource sections
 - Destructive plans show CAUTION callout
+
+## Aggregate DAG Summary
+
+When `--ci` or native CI detection is active for a graph-backed multi-component
+Terraform run, Atmos serializes GitHub summary writes after the DAG scheduler
+finishes. This avoids concurrent writes to `$GITHUB_STEP_SUMMARY` while
+preserving DAG execution semantics, including reverse dependency order for
+`terraform destroy`.
+
+The aggregate summary is available for concurrent Terraform `plan`, `apply`,
+and `destroy` runs. It includes component totals, resource action totals,
+failed/changed/no-change/skipped groups, a per-component table, and collapsible
+details for failed or changed components.
 
 ## Rich Job Summary Example
 
