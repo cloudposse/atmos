@@ -28,6 +28,36 @@ func TestCoordinateForDeclaration_Scope(t *testing.T) {
 	assert.Equal(t, ScopeInstance, coord.Scope)
 }
 
+func TestCoordinateForDeclaration_StoreCoordinateOverride(t *testing.T) {
+	decl := &Declaration{
+		Name:           "KIND_CLIENT_SECRET",
+		BackendType:    BackendStore,
+		Scope:          ScopeInstance,
+		StoreStack:     "atmos",
+		StoreComponent: "shared",
+	}
+
+	coord := coordinateForDeclaration(decl, "fuecoco-stg", "kinde")
+	assert.Equal(t, "atmos", coord.Stack)
+	assert.Equal(t, "shared", coord.Component)
+	assert.Equal(t, "KIND_CLIENT_SECRET", coord.Key)
+	assert.Equal(t, ScopeInstance, coord.Scope)
+}
+
+func TestCoordinateForDeclaration_StoreStackOverrideWithoutComponent(t *testing.T) {
+	decl := &Declaration{
+		Name:        "GLOBAL_SECRET",
+		BackendType: BackendStore,
+		Scope:       ScopeStack,
+		StoreStack:  "atmos",
+	}
+
+	coord := coordinateForDeclaration(decl, "fuecoco-stg", "kinde")
+	assert.Equal(t, "atmos", coord.Stack)
+	assert.Empty(t, coord.Component)
+	assert.Equal(t, ScopeStack, coord.Scope)
+}
+
 // TestTagScope_StampsAndResolvesOverride proves position-derived scope tagging plus the standard
 // deep-merge semantics: a component-level (instance) tag overrides an inherited stack-level (stack)
 // tag, and a stack-only secret keeps stack scope. It also proves the input is not mutated.

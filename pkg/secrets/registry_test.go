@@ -12,9 +12,11 @@ func TestExtractDeclarations(t *testing.T) {
 		"secrets": map[string]any{
 			"vars": map[string]any{
 				"DATADOG_API_KEY": map[string]any{
-					"description": "Datadog API key",
-					"store":       "app-secrets",
-					"required":    true,
+					"description":     "Datadog API key",
+					"store":           "app-secrets",
+					"store_stack":     "atmos",
+					"store_component": "shared",
+					"required":        true,
 				},
 				"GITHUB_APP_KEY": map[string]any{
 					"sops": "dev-sops",
@@ -32,6 +34,8 @@ func TestExtractDeclarations(t *testing.T) {
 	dd := decls["DATADOG_API_KEY"]
 	assert.Equal(t, BackendStore, dd.BackendType)
 	assert.Equal(t, "app-secrets", dd.BackendName)
+	assert.Equal(t, "atmos", dd.StoreStack)
+	assert.Equal(t, "shared", dd.StoreComponent)
 	assert.True(t, dd.Required)
 	assert.Equal(t, "Datadog API key", dd.Description)
 

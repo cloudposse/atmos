@@ -37,6 +37,8 @@ func ExtractDeclarations(componentSection map[string]any) map[string]Declaration
 		if spec, ok := raw.(map[string]any); ok {
 			decl.Description = stringField(spec, "description")
 			decl.Reference = stringField(spec, "reference")
+			decl.StoreStack = stringField(spec, "store_stack")
+			decl.StoreComponent = stringField(spec, "store_component")
 			decl.Required = boolField(spec, "required")
 			decl.Scope = scopeField(spec)
 			if store := stringField(spec, "store"); store != "" {

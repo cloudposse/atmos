@@ -43,6 +43,11 @@ type Declaration struct {
 	// {{ .atmos_component }}). When set it overrides Name as the backend key; backends that key
 	// off the declaration name (most stores, SOPS) ignore it.
 	Reference string
+	// StoreStack optionally overrides the stack segment for store-backed secrets. This supports
+	// migrations from legacy !store usage that kept shared secrets under a fixed namespace.
+	StoreStack string
+	// StoreComponent optionally overrides the component segment for store-backed secrets.
+	StoreComponent string
 	// Required marks the secret as required for validation.
 	Required bool
 	// Scope is the addressing level (stack vs instance). It is derived from declaration position
@@ -92,6 +97,15 @@ func coordinateForDeclaration(decl *Declaration, stack, component string) provid
 	coord := providers.Coordinate{Stack: stack, Key: key, Scope: scope}
 	if scope != ScopeStack {
 		coord.Component = component
+	}
+	if decl.BackendType == BackendStore {
+		if decl.StoreStack != "" {
+			coord.Stack = decl.StoreStack
+		}
+		if decl.StoreComponent != "" {
+			coord.Component = decl.StoreComponent
+			coord.Scope = ScopeInstance
+		}
 	}
 	return coord
 }

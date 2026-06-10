@@ -236,6 +236,9 @@ import:
 Each declaration references its backend by name: `store: <name>` for a `secret: true`
 store (track 1), or `sops: <name>` for a SOPS provider (track 2). The referenced
 backend carries provider/region/prefix/identity, so the declaration stays terse.
+Store-backed declarations may set `store_stack` and `store_component` to read/write an
+existing shared store namespace during migration from `!store <store> <stack> <component> <key>`.
+When omitted, the normal secret coordinate is derived from the current stack/component and scope.
 
 ### Component-Level Secrets (Stack Files)
 
@@ -250,6 +253,11 @@ components:
             description: "Datadog API key for monitoring"
             store: app-secrets
             required: true
+          SHARED_CLIENT_SECRET:
+            description: "Migrated from !store app-secrets atmos shared client_secret"
+            store: app-secrets
+            store_stack: atmos
+            store_component: shared
           REDIS_URL:
             description: "Redis connection string"
             store: app-secrets
