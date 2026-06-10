@@ -89,3 +89,34 @@ func (r StoreRegistry) SetAuthContextResolver(resolver AuthContextResolver) {
 		}
 	}
 }
+
+// SetAuthContextResolverWithDefaultIdentity injects an auth context resolver into
+// identity-aware stores. Stores with their own configured identity keep it; stores
+// without a configured identity inherit defaultIdentity.
+func (r StoreRegistry) SetAuthContextResolverWithDefaultIdentity(resolver AuthContextResolver, defaultIdentity string) {
+	for _, s := range r {
+		ias, ok := s.(IdentityAwareStore)
+		if !ok {
+			continue
+		}
+		ias.SetAuthContext(resolver, defaultIdentityForStore(s, defaultIdentity))
+	}
+}
+
+func defaultIdentityForStore(s Store, defaultIdentity string) string {
+	if defaultIdentity == "" {
+		return ""
+	}
+
+	identified, ok := s.(interface {
+		IdentityName() string
+	})
+	if !ok {
+		return ""
+	}
+	if identified.IdentityName() == "" {
+		return defaultIdentity
+	}
+
+	return ""
+}

@@ -109,9 +109,18 @@ func NewSSMStore(options SSMStoreOptions, identityName string) (store.Store, err
 // If identityName is non-empty, it overrides the store's identity. Otherwise, the existing identity is preserved.
 func (s *SSMStore) SetAuthContext(resolver store.AuthContextResolver, identityName string) {
 	s.authResolver = resolver
-	if identityName != "" {
+	if identityName != "" && s.identityName != identityName {
 		s.identityName = identityName
+		s.client = nil
+		s.awsConfig = nil
+		s.initOnce = sync.Once{}
+		s.initErr = nil
 	}
+}
+
+// IdentityName returns the configured identity name, if any.
+func (s *SSMStore) IdentityName() string {
+	return s.identityName
 }
 
 // initDefaultClient initializes the AWS client using the default credential chain.

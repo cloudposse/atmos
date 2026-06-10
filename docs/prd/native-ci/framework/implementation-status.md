@@ -454,7 +454,7 @@ These are incremental improvements shipped as focused PRDs.
 | `pkg/ci/plugins/terraform/plugin_test.go` | Plugin tests | Done |
 | `pkg/ci/plugins/terraform/handlers.go` | All handler implementations: onBeforePlan, onAfterPlan, onBeforeApply, onAfterApply, onBeforeDeploy, onAfterDeploy + helpers (writeSummary, writeOutputs, uploadPlanfile, downloadPlanfileForVerification, createCheckRun, updateCheckRun, isPlanfileStorageEnabled) | Done |
 | `pkg/ci/plugins/terraform/handlers_test.go` | Handler tests (81% coverage) | Done |
-| `pkg/ci/plugins/terraform/parser.go` | Parse plan/apply output (regex-based) | Done |
+| `pkg/ci/plugins/terraform/parser.go` | Parse plan/apply/destroy output (regex-based) | Done |
 | `pkg/ci/plugins/terraform/parser_test.go` | Parser tests | Done |
 | `pkg/ci/plugins/terraform/context.go` | TerraformTemplateContext | Done |
 | `pkg/ci/plugins/terraform/template_test.go` | Template rendering tests | Done |

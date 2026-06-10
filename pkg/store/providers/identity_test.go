@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	storepkg "github.com/cloudposse/atmos/pkg/store"
 	"github.com/stretchr/testify/assert"
@@ -46,6 +47,46 @@ func TestSetAuthContextResolver_MixedStores(t *testing.T) {
 	assert.Equal(t, "", noIdentityStore.identityName) // No identity set.
 }
 
+func TestSetAuthContextResolverWithDefaultIdentity_DefaultsOnlyEmptyStores(t *testing.T) {
+	ctrl := gomock.NewController(t)
+
+	registry := make(storepkg.StoreRegistry)
+	explicitGSM := &GSMStore{
+		identityName: "gcp-prod",
+		projectID:    "my-project",
+	}
+	defaultGSM := &GSMStore{
+		projectID: "my-project",
+	}
+	defaultSSM := &SSMStore{
+		region:         "us-east-1",
+		stackDelimiter: stringPtr("-"),
+	}
+	defaultAzure := &AzureKeyVaultStore{
+		vaultURL:       "https://vault.example.com",
+		stackDelimiter: stringPtr("-"),
+	}
+	registry["explicit-gsm"] = explicitGSM
+	registry["default-gsm"] = defaultGSM
+	registry["default-ssm"] = defaultSSM
+	registry["default-azure"] = defaultAzure
+
+	resolver := storepkg.NewMockAuthContextResolver(ctrl)
+	registry.SetAuthContextResolverWithDefaultIdentity(resolver, "terraform-ci")
+
+	assert.NotNil(t, explicitGSM.authResolver)
+	assert.Equal(t, "gcp-prod", explicitGSM.identityName)
+
+	assert.NotNil(t, defaultGSM.authResolver)
+	assert.Equal(t, "terraform-ci", defaultGSM.identityName)
+
+	assert.NotNil(t, defaultSSM.authResolver)
+	assert.Equal(t, "terraform-ci", defaultSSM.identityName)
+
+	assert.NotNil(t, defaultAzure.authResolver)
+	assert.Equal(t, "terraform-ci", defaultAzure.identityName)
+}
+
 func TestSetAuthContext_DoesNotOverrideExistingIdentity(t *testing.T) {
 	ctrl := gomock.NewController(t)
 
@@ -65,6 +106,39 @@ func TestSetAuthContext_DoesNotOverrideExistingIdentity(t *testing.T) {
 	// Calling with a non-empty identity should override.
 	store.SetAuthContext(resolver, "new-identity")
 	assert.Equal(t, "new-identity", store.identityName)
+}
+
+func TestSetAuthContext_IdentityOverrideClearsDefaultClients(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	resolver := storepkg.NewMockAuthContextResolver(ctrl)
+
+	ssmStore := &SSMStore{
+		client:       new(MockSSMClient),
+		identityName: "",
+	}
+	ssmStore.SetAuthContext(resolver, "terraform-ci")
+	assert.Equal(t, "terraform-ci", ssmStore.identityName)
+	assert.Nil(t, ssmStore.client)
+	assert.Nil(t, ssmStore.awsConfig)
+
+	azureStore := &AzureKeyVaultStore{
+		client:       &mockClient{},
+		identityName: "",
+	}
+	azureStore.SetAuthContext(resolver, "terraform-ci")
+	assert.Equal(t, "terraform-ci", azureStore.identityName)
+	assert.Nil(t, azureStore.client)
+
+	mockGSMClient := new(MockGSMClient)
+	mockGSMClient.On("Close").Return(nil).Once()
+	gsmStore := &GSMStore{
+		client:       mockGSMClient,
+		identityName: "",
+	}
+	gsmStore.SetAuthContext(resolver, "terraform-ci")
+	assert.Equal(t, "terraform-ci", gsmStore.identityName)
+	assert.Nil(t, gsmStore.client)
+	mockGSMClient.AssertExpectations(t)
 }
 
 func TestSSMStore_LazyInit_WithIdentity(t *testing.T) {
@@ -426,6 +500,41 @@ func TestGSMStore_LazyInit_WithResolver(t *testing.T) {
 	// called and credentials file path processed. Actual client creation may
 	// fail in test (no real GCP credentials).
 	_ = store.ensureClient()
+}
+
+func TestGSMStore_IdentityAuthOptions_AccessTokenOverridesCredentialsFile(t *testing.T) {
+	expiry := time.Now().Add(time.Hour).UTC()
+	store := &GSMStore{
+		credentials: stringPtr("/store/credentials.json"),
+		projectID:   "my-project",
+	}
+
+	opts := store.identityAuthOptions(&storepkg.GCPAuthConfig{
+		CredentialsFile: "/atmos/application_default_credentials.json",
+		AccessToken:     "ya29.identity-token",
+		TokenExpiry:     expiry,
+	})
+
+	assert.Empty(t, opts.Credentials)
+	assert.Equal(t, "ya29.identity-token", opts.AccessToken)
+	assert.Equal(t, expiry, opts.TokenExpiry)
+}
+
+func TestGSMStore_IdentityAuthOptions_CredentialsFallbacks(t *testing.T) {
+	store := &GSMStore{
+		credentials: stringPtr("/store/credentials.json"),
+		projectID:   "my-project",
+	}
+
+	opts := store.identityAuthOptions(&storepkg.GCPAuthConfig{
+		CredentialsFile: "/atmos/application_default_credentials.json",
+	})
+	assert.Equal(t, "/atmos/application_default_credentials.json", opts.Credentials)
+	assert.Empty(t, opts.AccessToken)
+
+	opts = store.identityAuthOptions(&storepkg.GCPAuthConfig{})
+	assert.Equal(t, "/store/credentials.json", opts.Credentials)
+	assert.Empty(t, opts.AccessToken)
 }
 
 // --- SetAuthContextResolver with all cloud store types ---
