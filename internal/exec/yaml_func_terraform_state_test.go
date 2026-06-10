@@ -38,7 +38,7 @@ func TestYamlFuncTerraformState(t *testing.T) {
 
 	// Define the working directory
 	workDir := "../../tests/fixtures/scenarios/atmos-terraform-state-yaml-function"
-	setupTerraformStateSandbox(t, workDir)
+	setupTerraformYamlFunctionSandbox(t, workDir)
 	t.Chdir(workDir)
 
 	info := schema.ConfigAndStacksInfo{

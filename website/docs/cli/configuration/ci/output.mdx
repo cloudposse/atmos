@@ -61,6 +61,32 @@ ci:
 | `plan_summary` | string | Human-readable plan summary (e.g., "3 to add, 1 to change") |
 | `artifact_key` | string | Planfile storage key (when storage is configured) |
 
+### Aggregate Multi-component Plan Variables
+
+Graph-backed multi-component `plan` runs in CI write aggregate output variables once after all
+components finish. These variables are available for `--all`, `--components`, and `--query` plan
+runs.
+
+| Variable | Type | Description |
+|----------|------|-------------|
+| `has_changes` | `true`/`false` | Whether any component has changes |
+| `has_errors` | `true`/`false` | Whether any component failed |
+| `exit_code` | `0`, `1`, or `2` | Aggregate exit code: `1` for any failure, `2` for changes without failures, `0` for no changes |
+| `resources_to_create` | number | Total resources to create across successful changed components |
+| `resources_to_change` | number | Total resources to update across successful changed components |
+| `resources_to_replace` | number | Total resources to replace across successful changed components |
+| `resources_to_destroy` | number | Total resources to destroy across successful changed components |
+| `components_total` | number | Total components in the graph run |
+| `components_succeeded` | number | Components that completed without errors |
+| `components_failed` | number | Components that failed |
+| `components_changed` | number | Successful components with changes |
+| `components_no_changes` | number | Successful components with no changes |
+| `components_skipped` | number | Components skipped because dependencies failed or were skipped |
+| `summary` | Markdown | Full aggregate job summary body |
+| `command` | string | Always `plan` for aggregate plan output |
+| `stack` | string | Requested stack, or `all` when not scoped to one stack |
+| `component` | string | Always `aggregate` for aggregate plan output |
+
 ### Apply/Deploy Variables
 
 | Variable | Type | Description |

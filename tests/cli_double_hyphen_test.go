@@ -2,6 +2,7 @@ package tests
 
 import (
 	"bytes"
+	"os/exec"
 	"strings"
 	"testing"
 
@@ -10,6 +11,16 @@ import (
 )
 
 const doubleHyphenWorkDir = "fixtures/scenarios/workflows"
+
+func requireTerraformOrTofu(t *testing.T) {
+	t.Helper()
+
+	if _, lookErr := exec.LookPath("tofu"); lookErr != nil {
+		if _, lookErr2 := exec.LookPath("terraform"); lookErr2 != nil {
+			t.Skip("skipping: neither 'tofu' nor 'terraform' binary found in PATH")
+		}
+	}
+}
 
 func setupDoubleHyphenSandbox(t *testing.T) {
 	t.Helper()
@@ -35,6 +46,7 @@ func setupDoubleHyphenSandbox(t *testing.T) {
 // This is the fix for GitHub issue #1967.
 func TestDoubleHyphenSeparator(t *testing.T) {
 	ensureAtmosRunner(t)
+	requireTerraformOrTofu(t)
 
 	// Skip if there's a skip reason.
 	if skipReason != "" {
@@ -113,6 +125,7 @@ func TestDoubleHyphenSeparator(t *testing.T) {
 // from GitHub issue #1967 where -consolidate-warnings=false caused stack corruption.
 func TestDoubleHyphenWithConsolidateWarnings(t *testing.T) {
 	ensureAtmosRunner(t)
+	requireTerraformOrTofu(t)
 
 	if skipReason != "" {
 		t.Skipf("Skipping test: %s", skipReason)
@@ -153,6 +166,7 @@ func TestDoubleHyphenWithConsolidateWarnings(t *testing.T) {
 // accidentally overwrite the stack value.
 func TestDoubleHyphenStackNotOverwritten(t *testing.T) {
 	ensureAtmosRunner(t)
+	requireTerraformOrTofu(t)
 
 	if skipReason != "" {
 		t.Skipf("Skipping test: %s", skipReason)
