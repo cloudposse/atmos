@@ -58,6 +58,7 @@ each level merges into the final result so you can keep configuration
 | Event | When it fires |
 |---|---|
 | `before-terraform-init` | Before `atmos terraform init` runs |
+| `after-terraform-init` | After `atmos terraform init` finishes |
 | `before-terraform-plan` | Before `atmos terraform plan` runs (after init has completed) |
 | `after-terraform-plan` | After `atmos terraform plan` finishes |
 | `before-terraform-apply` | Before `atmos terraform apply` runs |
@@ -69,6 +70,11 @@ Hooks with no `events` list fire on every supported event for backward
 compatibility with configs written before event filtering existed. You
 can use the dotted form (`after.terraform.plan`) or the hyphenated form
 (`after-terraform-plan`) — they're equivalent.
+
+The `before-terraform-init` and `after-terraform-init` events fire around the
+explicit `atmos terraform init` command. They do not fire for the implicit
+`init` that `plan`, `apply`, and `deploy` run automatically — use
+`before-terraform-plan` / `before-terraform-apply` for those.
 
 ## Built-in Kinds
 

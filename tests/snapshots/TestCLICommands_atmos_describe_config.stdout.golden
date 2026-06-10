@@ -189,7 +189,8 @@
     }
   },
   "describe": {
-    "settings": {}
+    "settings": {},
+    "affected": {}
   },
   "vendor": {
     "base_path": "",

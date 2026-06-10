@@ -136,6 +136,51 @@ func isEqual(
 	return false
 }
 
+// remoteComponentLocator identifies a single component within the remote (target ref)
+// stacks map, so section lookups don't need to thread the navigation keys as separate
+// function arguments.
+type remoteComponentLocator struct {
+	remoteStacks  *map[string]any
+	stackName     string
+	componentType string
+	componentName string
+}
+
+// section returns the raw value of the named section for the located remote component,
+// and whether it was found.
+func (l remoteComponentLocator) section(sectionName string) (any, bool) {
+	remoteStackSection, ok := (*l.remoteStacks)[l.stackName].(map[string]any)
+	if !ok {
+		return nil, false
+	}
+	remoteComponentsSection, ok := remoteStackSection["components"].(map[string]any)
+	if !ok {
+		return nil, false
+	}
+	remoteComponentTypeSection, ok := remoteComponentsSection[l.componentType].(map[string]any)
+	if !ok {
+		return nil, false
+	}
+	remoteComponentSection, ok := remoteComponentTypeSection[l.componentName].(map[string]any)
+	if !ok {
+		return nil, false
+	}
+	return remoteComponentSection[sectionName], true
+}
+
+// isSectionValueEqual compares a local component section value with the corresponding value
+// on the located remote component. Unlike isEqual, it accepts a value of any type, so it also
+// handles scalar sections such as `backend_type`, `required_version`, and `command` (not just
+// map sections). When the remote component path is absent it returns false (treated as
+// changed/affected), matching isEqual semantics.
+func isSectionValueEqual(locator remoteComponentLocator, localValue any, sectionName string) bool {
+	remoteValue, ok := locator.section(sectionName)
+	if !ok {
+		return false
+	}
+	return deepEqualValues(localValue, remoteValue)
+}
+
 // deepEqualMaps performs optimized deep comparison of two maps.
 // This avoids the overhead of reflect.DeepEqual by using type assertions.
 // Correctly distinguishes between nil and empty maps to match reflect.DeepEqual behavior.
