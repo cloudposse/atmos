@@ -613,7 +613,7 @@ jobs:
       matrix:
         demo-folder:
           - demo-context
-          - demo-localstack
+          - demo-floci
           - demo-stacks
           - demo-helmfile
           - quick-start-advanced
@@ -639,7 +639,7 @@ jobs:
             }
 
   release:
-    needs: [test, lint, mock, k3s, localstack, docker, validate]
+    needs: [test, lint, mock, k3s, floci, docker, validate]
     if: github.event_name == 'push'
     uses: cloudposse/.github/.github/workflows/shared-go-auto-release.yml@main
     with:
