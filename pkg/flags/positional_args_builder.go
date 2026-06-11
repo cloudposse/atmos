@@ -140,6 +140,9 @@ func (b *PositionalArgsBuilder) generateUsage() string {
 //   - Counts required args (minimum)
 //   - Counts total args (maximum)
 //   - Returns validator that checks: minArgs <= provided <= maxArgs
+//
+// The returned validator is separator-aware: pass-through args after the "--"
+// separator are not counted as positional args (see SeparatorAwareValidator).
 func (b *PositionalArgsBuilder) generateValidator() cobra.PositionalArgs {
 	defer perf.Track(nil, "flags.PositionalArgsBuilder.generateValidator")()
 
@@ -161,16 +164,16 @@ func (b *PositionalArgsBuilder) generateValidator() cobra.PositionalArgs {
 	// Generate validator based on required/optional args
 	if requiredCount == totalCount {
 		// All args required - use exact count validator
-		return cobra.ExactArgs(requiredCount)
+		return SeparatorAwareValidator(cobra.ExactArgs(requiredCount))
 	}
 
 	if requiredCount == 0 {
 		// All optional - use maximum count validator
-		return cobra.MaximumNArgs(totalCount)
+		return SeparatorAwareValidator(cobra.MaximumNArgs(totalCount))
 	}
 
 	// Mixed required/optional - use range validator
-	return cobra.RangeArgs(requiredCount, totalCount)
+	return SeparatorAwareValidator(cobra.RangeArgs(requiredCount, totalCount))
 }
 
 // GeneratePromptAwareValidator creates a prompt-aware Cobra PositionalArgs validator.
@@ -210,15 +213,19 @@ func (b *PositionalArgsBuilder) GeneratePromptAwareValidator(hasPrompts bool) co
 		// Instead, we allow missing args and let Parse() handle the actual prompting.
 		// If prompts fail (not interactive), Parse() will return appropriate error.
 
+		// Count only positional args before the "--" separator; args after it
+		// are pass-through for the underlying tool, not Atmos positional args.
+		positional, _ := SplitArgsAtDash(cmd, args)
+
 		// Allow 0 to totalCount args when prompts are configured.
-		if len(args) > totalCount {
+		if len(positional) > totalCount {
 			//nolint:err113 // Dynamic error needed for Cobra validation message
-			return fmt.Errorf("accepts at most %d arg(s), received %d", totalCount, len(args))
+			return fmt.Errorf("accepts at most %d arg(s), received %d", totalCount, len(positional))
 		}
 
 		// If all args provided, still validate with standard validator
 		// to catch any other validation issues
-		if len(args) == totalCount {
+		if len(positional) == totalCount {
 			return standardValidator(cmd, args)
 		}
 

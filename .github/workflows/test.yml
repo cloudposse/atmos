@@ -311,34 +311,26 @@ jobs:
           category: hadolint
           wait-for-processing: true
 
-  # run localstack demo tests
-  localstack:
-    name: "[localstack] ${{ matrix.demo-folder }}"
+  # Run the AWS-emulator demo tests against Floci (a free, LocalStack-compatible emulator;
+  # LocalStack Community Edition was EOL'd in March 2026).
+  # NOTE: "[floci] demo-floci" must be kept in sync with the required status checks in
+  # branch protection on main (previously "[localstack] demo-localstack").
+  floci:
+    name: "[floci] ${{ matrix.demo-folder }}"
     needs: build
     runs-on: ubuntu-latest
 
     services:
-      localstack:
-        image: localstack/localstack:4.7.0
+      floci:
+        image: floci/floci:1.5.23
         ports:
           - 4566:4566
-          - 4510-4559:4510-4559
-        env:
-          SERVICES: s3, iam, lambda, dynamodb, sts, account, ec2
-          DEBUG: 0
-          DOCKER_HOST: unix:///var/run/docker.sock
-          AWS_ACCESS_KEY_ID: test
-          AWS_SECRET_ACCESS_KEY: test
-          AWS_DEFAULT_REGION: us-east-1
-          AWS_REGION: us-east-1
-        volumes:
-          - /var/run/docker.sock:/var/run/docker.sock
 
     strategy:
       fail-fast: false
       matrix:
         demo-folder:
-          - demo-localstack
+          - demo-floci
 
     timeout-minutes: 30
     steps:
@@ -369,28 +361,12 @@ jobs:
           tofu_version: ${{ env.OPEN_TOFU_VERSION }}
           tofu_wrapper: false
 
-      - name: Wait for LocalStack
-        run: |
-          for attempt in $(seq 1 60); do
-            if curl -fsS http://localhost:4566/_localstack/health >/tmp/localstack-health.json; then
-              cat /tmp/localstack-health.json
-              exit 0
-            fi
-            echo "Waiting for LocalStack (${attempt}/60)"
-            sleep 2
-          done
-
-          echo "LocalStack did not become ready"
-          curl -v http://localhost:4566/_localstack/health || true
-          exit 1
-
       - name: Run tests for ${{ matrix.demo-folder }}
         run: |
           cd examples/${{ matrix.demo-folder }}
           timeout 25m atmos test || {
             status=$?
             echo "atmos test failed or timed out with status ${status}"
-            curl -fsS http://localhost:4566/_localstack/health || true
             exit "${status}"
           }
 
@@ -584,7 +560,7 @@ jobs:
           # - demo-custom-command
           # - demo-json-validation
           # - demo-library
-          # - demo-localstack
+          # - demo-floci
           # - demo-opa-validation
           # - demo-opentofu
           # - demo-project
@@ -641,7 +617,7 @@ jobs:
       matrix:
         demo-folder:
           - demo-context
-          - demo-localstack
+          - demo-floci
           - demo-stacks
           - demo-helmfile
           - quick-start-advanced
@@ -667,7 +643,7 @@ jobs:
             }
 
   release:
-    needs: [test, lint, mock, k3s, localstack, docker, validate]
+    needs: [test, lint, mock, k3s, floci, docker, validate]
     if: github.event_name == 'push'
     uses: cloudposse/.github/.github/workflows/shared-go-auto-release.yml@main
     with:

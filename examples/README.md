@@ -33,7 +33,7 @@ Think of each demo folder as representing an example of a standalone repository.
 2.  ├── demo-library/             # Explore a reusable component library designed for seamless vendoring.
 3.  ├── demo-vendoring/           # Learn how to use vendoring to download and integrate remote dependencies from the `demo-library`.
 4.  ├── demo-validation/          # Validate your configurations to ensure correctness and compliance.
-5.  ├── demo-localstack/          # Leverage LocalStack to provision an S3 bucket using Atmos and Terraform.
+5.  ├── demo-floci/               # Leverage Floci (LocalStack-compatible AWS emulator) to provision an S3 bucket using Atmos and Terraform.
 6.  ├── demo-helmfile/            # Deploy NGINX on a local lightweight Kubernetes cluster (k3s) using Helm.
 7.  ├── custom-commands/          # Learn how to extend Atmos with your own custom CLI commands.
 8.  ├── demo-component-versions/  # Discover how to manage and use multiple versions of components effectively.

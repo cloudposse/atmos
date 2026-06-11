@@ -78,10 +78,10 @@ The custom endpoint resolver is automatically applied when:
 
 All AWS SDK calls will be directed to the configured endpoint URL.
 
-### LocalStack Example
+### Floci Example
 
-For a complete LocalStack example, see:
-- `/examples/demo-localstack/atmos.yaml`
+For a complete AWS emulator example, see:
+- `/examples/demo-floci/atmos.yaml`
 
 ### Implementation Details
 
