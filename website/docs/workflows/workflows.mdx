@@ -331,6 +331,12 @@ Each workflow definition must confirm to the following schema:
 
   <dt>`identity`</dt>
   <dd>Step-level identity for authentication (optional). If specified, Atmos will authenticate using this identity before executing the step. The subprocess will receive environment variables pointing to temporary credential files (e.g., `AWS_SHARED_CREDENTIALS_FILE`, `AWS_CONFIG_FILE`, `AWS_PROFILE`). See [Authentication](/cli/commands/auth/usage) for more details</dd>
+
+  <dt>`interactive`</dt>
+  <dd>Attach host stdin to a `shell` step and let the step handle Ctrl-C, like `docker -i` (optional). While the step runs, Atmos suspends its own interrupt handling so pressing Ctrl-C interrupts the step's process, not Atmos</dd>
+
+  <dt>`tty`</dt>
+  <dd>Allocate a pseudo-terminal for a `shell` step, like `docker -t` (optional). Use for commands that take over the terminal (SSM sessions, SSH, database consoles, `vim`). Secret masking is still applied; the step's `output` mode does not apply, and the step produces no capturable output. Combine with `interactive: true` for full terminal sessions. See [Interactive and TTY Steps](/cli/configuration/commands#interactive-and-tty-steps) for details</dd>
 </dl>
 
 :::note
