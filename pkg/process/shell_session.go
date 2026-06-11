@@ -8,6 +8,8 @@ import (
 	"os/exec"
 	"runtime"
 
+	"github.com/spf13/viper"
+
 	errUtils "github.com/cloudposse/atmos/errors"
 	iolib "github.com/cloudposse/atmos/pkg/io"
 	log "github.com/cloudposse/atmos/pkg/logger"
@@ -36,10 +38,25 @@ type ShellSessionSpec struct {
 	Interactive bool
 	// DryRun logs the command without executing it.
 	DryRun bool
-	// Masker applies secret masking to PTY output (from iolib.GetContext().Masker()).
+	// Masker applies secret masking to PTY output. When nil, it defaults to
+	// iolib.GetContext().Masker() with EnableMasking from the `mask` setting,
+	// so call sites don't need masking wiring.
 	Masker iolib.Masker
 	// EnableMasking enables secret masking of session output where supported.
 	EnableMasking bool
+}
+
+// RunShellStep routes a shell-family step: steps that request a terminal
+// (tty and/or interactive) run as terminal-attached sessions; plain steps
+// run via the caller-provided fallback (each execution path keeps its own
+// plain-step behavior: masked interpreter, command runner, output modes).
+func RunShellStep(ctx context.Context, spec *ShellSessionSpec, plain func() error) error {
+	defer perf.Track(nil, "process.RunShellStep")()
+
+	if spec.TTY || spec.Interactive {
+		return RunShellSession(ctx, spec)
+	}
+	return plain()
 }
 
 // RunShellSession executes a shell command attached to the user's terminal.
@@ -56,6 +73,12 @@ func RunShellSession(ctx context.Context, spec *ShellSessionSpec) error {
 
 	if ctx == nil {
 		ctx = context.Background()
+	}
+
+	// Default the masking wiring so call sites don't need to know about it.
+	if spec.Masker == nil {
+		spec.Masker = iolib.GetContext().Masker()
+		spec.EnableMasking = viper.GetBool("mask")
 	}
 
 	log.Debug("Executing shell session",

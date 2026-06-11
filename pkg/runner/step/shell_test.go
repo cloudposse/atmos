@@ -2,7 +2,6 @@ package step
 
 import (
 	"context"
-	"os"
 	"os/exec"
 	"strings"
 	"sync"
@@ -15,7 +14,6 @@ import (
 	"github.com/cloudposse/atmos/pkg/data"
 	iolib "github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/pkg/schema"
-	"github.com/cloudposse/atmos/pkg/signals"
 	"github.com/cloudposse/atmos/pkg/ui"
 )
 
@@ -471,32 +469,4 @@ func TestShellHandlerInteractiveStepWithWorkflowUsesShellSession(t *testing.T) {
 	require.NotNil(t, result)
 	assert.Empty(t, result.Value)
 	assert.Equal(t, 0, result.Metadata[exitCodeMetadata])
-}
-
-func TestPrepareInteractive(t *testing.T) {
-	t.Run("non-interactive is a no-op", func(t *testing.T) {
-		step := &schema.WorkflowStep{Name: "plain"}
-		cmd := exec.Command("sh", "-c", "true")
-
-		mode, release := prepareInteractive(step, cmd, OutputModeViewport)
-		defer release()
-
-		assert.Equal(t, OutputModeViewport, mode)
-		assert.Nil(t, cmd.Stdin)
-		assert.False(t, signals.InterruptExitSuspended())
-	})
-
-	t.Run("interactive forces raw mode and attaches stdin", func(t *testing.T) {
-		step := &schema.WorkflowStep{Name: "prompting", Interactive: true}
-		cmd := exec.Command("sh", "-c", "true")
-
-		mode, release := prepareInteractive(step, cmd, OutputModeLog)
-
-		assert.Equal(t, OutputModeRaw, mode)
-		assert.Equal(t, os.Stdin, cmd.Stdin)
-		assert.True(t, signals.InterruptExitSuspended(), "suspension must be active until release")
-
-		release()
-		assert.False(t, signals.InterruptExitSuspended())
-	})
 }

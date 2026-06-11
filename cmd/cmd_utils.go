@@ -31,6 +31,7 @@ import (
 	l "github.com/cloudposse/atmos/pkg/list"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/process"
 	"github.com/cloudposse/atmos/pkg/reexec"
 	stepPkg "github.com/cloudposse/atmos/pkg/runner/step"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -878,11 +879,24 @@ func executeCustomCommand(
 			// Steps with tty/interactive attach the user's terminal so commands
 			// like `aws ssm start-session` get a real TTY and own Ctrl-C.
 			commandName := fmt.Sprintf("%s-step-%d", commandConfig.Name, i)
-			err = executeShellStep(&step, commandToRun, commandName, workDir, env)
+			err = process.RunShellStep(context.Background(), &process.ShellSessionSpec{
+				Command:     commandToRun,
+				Name:        commandName,
+				Dir:         workDir,
+				Env:         env,
+				TTY:         step.Tty,
+				Interactive: step.Interactive,
+			}, func() error {
+				return e.ExecuteShell(commandToRun, commandName, workDir, env, false)
+			})
 		case schema.TaskTypeExec:
 			// Replace the Atmos process with the command (shell exec semantics).
-			commandName := fmt.Sprintf("%s-step-%d", commandConfig.Name, i)
-			err = executeExecStep(commandToRun, commandName, workDir, env)
+			err = process.ReplaceShellSession(&process.ExecSpec{
+				Command: commandToRun,
+				Name:    fmt.Sprintf("%s-step-%d", commandConfig.Name, i),
+				Dir:     workDir,
+				Env:     env,
+			})
 		case "atmos":
 			// Execute atmos command.
 			args := strings.Fields(commandToRun)

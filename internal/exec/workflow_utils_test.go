@@ -17,7 +17,6 @@ import (
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/dependencies"
 	"github.com/cloudposse/atmos/pkg/schema"
-	"github.com/cloudposse/atmos/pkg/signals"
 )
 
 // TestIsKnownWorkflowError tests the IsKnownWorkflowError function.
@@ -1694,27 +1693,6 @@ func TestDoubleHyphenIssue1967(t *testing.T) {
 	// Verify the terraform flag after -- is preserved.
 	assert.Equal(t, "--", args[5], "sixth arg should be --")
 	assert.Equal(t, "-consolidate-warnings=false", args[6], "seventh arg should be -consolidate-warnings=false")
-}
-
-func TestExecuteWorkflowShellStep_TtyDryRun(t *testing.T) {
-	// Dry-run exercises the terminal-session routing without executing.
-	step := &schema.WorkflowStep{Type: "shell", Tty: true, Interactive: true, Output: "raw"}
-	err := executeWorkflowShellStep(step, "aws ssm start-session", "wf-step-0", nil, true)
-	assert.NoError(t, err)
-}
-
-func TestExecuteWorkflowShellStep_PlainDryRun(t *testing.T) {
-	step := &schema.WorkflowStep{Type: "shell"}
-	err := executeWorkflowShellStep(step, "echo hello", "wf-step-0", nil, true)
-	assert.NoError(t, err)
-	assert.False(t, signals.InterruptExitSuspended())
-}
-
-func TestExecuteWorkflowShellStep_InteractiveReleasesSuspension(t *testing.T) {
-	step := &schema.WorkflowStep{Type: "shell", Interactive: true}
-	err := executeWorkflowShellStep(step, "echo hello", "wf-step-0", nil, false)
-	assert.NoError(t, err)
-	assert.False(t, signals.InterruptExitSuspended(), "suspension must be released after the step")
 }
 
 func TestExecuteWorkflowExecStep_ValidationViaSchema(t *testing.T) {

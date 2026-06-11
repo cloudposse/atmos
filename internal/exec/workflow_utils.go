@@ -13,7 +13,6 @@ import (
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/huh"
 	"github.com/samber/lo"
-	"github.com/spf13/viper"
 	"mvdan.cc/sh/v3/shell"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -26,7 +25,6 @@ import (
 	"github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/dependencies"
 	envpkg "github.com/cloudposse/atmos/pkg/env"
-	ioLayer "github.com/cloudposse/atmos/pkg/io"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/process"
@@ -417,10 +415,22 @@ func ExecuteWorkflow(
 		switch commandType {
 		case "shell":
 			// Render command before execution if show.command is enabled.
+			// Steps with tty/interactive attach the user's terminal; plain
+			// steps keep the existing masked shell-interpreter behavior.
 			stepPkg.RenderCommand(&step, workflowDefinition, command)
 			commandName := fmt.Sprintf("%s-step-%d", workflow, stepIdx)
 			err = retry.Do(context.Background(), step.Retry, func() error {
-				return executeWorkflowShellStep(&step, command, commandName, stepEnv, dryRun)
+				return process.RunShellStep(context.Background(), &process.ShellSessionSpec{
+					Command:     command,
+					Name:        commandName,
+					Dir:         ".",
+					Env:         stepEnv,
+					TTY:         step.Tty,
+					Interactive: step.Interactive,
+					DryRun:      dryRun,
+				}, func() error {
+					return ExecuteShell(command, commandName, ".", stepEnv, dryRun)
+				})
 			})
 		case schema.TaskTypeExec:
 			// Replace the Atmos process with the command (shell exec semantics).
@@ -548,34 +558,6 @@ func executeExtendedStep(ctx context.Context, workflowStep *schema.WorkflowStep,
 	// Execute the step.
 	_, err := stepExecutorState.Execute(ctx, workflowStep)
 	return err
-}
-
-// executeWorkflowShellStep runs a workflow shell step.
-//
-// Steps with `tty: true` attach to the user's terminal (PTY when supported);
-// their output/viewport modes do not apply. Steps with `interactive: true`
-// let the child process own Ctrl-C: the Atmos SIGINT-exit handler is
-// suspended while the step runs. Plain steps keep the existing masked
-// shell-interpreter behavior.
-func executeWorkflowShellStep(step *schema.WorkflowStep, command, commandName string, env []string, dryRun bool) error {
-	if step.Tty || step.Interactive {
-		if step.Output != "" {
-			log.Debug("Output mode ignored for shell session step", "step", step.Name, "output", step.Output)
-		}
-		return process.RunShellSession(context.Background(), &process.ShellSessionSpec{
-			Command:       command,
-			Name:          commandName,
-			Dir:           ".",
-			Env:           env,
-			TTY:           step.Tty,
-			Interactive:   step.Interactive,
-			DryRun:        dryRun,
-			Masker:        ioLayer.GetContext().Masker(),
-			EnableMasking: viper.GetBool("mask"),
-		})
-	}
-
-	return ExecuteShell(command, commandName, ".", env, dryRun)
 }
 
 // ResetStepExecutorState resets the step executor state.

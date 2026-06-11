@@ -7,15 +7,12 @@ import (
 	"os"
 	"strings"
 
-	"github.com/spf13/viper"
 	"mvdan.cc/sh/v3/shell"
 
-	iolib "github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/process"
 	"github.com/cloudposse/atmos/pkg/runner/step"
 	"github.com/cloudposse/atmos/pkg/schema"
-	"github.com/cloudposse/atmos/pkg/signals"
 )
 
 // Sentinel errors for task execution.
@@ -170,25 +167,17 @@ func runStepHandler(ctx context.Context, task *Task, handler step.StepHandler, o
 // SIGINT-exit handler is suspended while the task runs. Plain tasks delegate
 // to the CommandRunner.
 func runShellTask(ctx context.Context, task *Task, runner CommandRunner, opts *Options, dir string) error {
-	if task.Tty {
-		return process.RunShellSession(ctx, &process.ShellSessionSpec{
-			Command:       task.Command,
-			Name:          task.Name,
-			Dir:           dir,
-			Env:           append(os.Environ(), opts.Env...),
-			TTY:           true,
-			Interactive:   task.Interactive,
-			DryRun:        opts.DryRun,
-			Masker:        iolib.GetContext().Masker(),
-			EnableMasking: viper.GetBool("mask"),
-		})
-	}
-
-	if task.Interactive {
-		release := signals.SuspendInterruptExit()
-		defer release()
-	}
-	return runner.RunShell(ctx, task.Command, task.Name, dir, opts.Env, opts.DryRun)
+	return process.RunShellStep(ctx, &process.ShellSessionSpec{
+		Command:     task.Command,
+		Name:        task.Name,
+		Dir:         dir,
+		Env:         append(os.Environ(), opts.Env...),
+		TTY:         task.Tty,
+		Interactive: task.Interactive,
+		DryRun:      opts.DryRun,
+	}, func() error {
+		return runner.RunShell(ctx, task.Command, task.Name, dir, opts.Env, opts.DryRun)
+	})
 }
 
 // runAtmosTask executes an atmos-type task.

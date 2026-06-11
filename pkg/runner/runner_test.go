@@ -535,7 +535,7 @@ func TestRun_ShellTaskTty(t *testing.T) {
 	require.NoError(t, err)
 }
 
-func TestRun_ShellTaskInteractiveReleasesSuspension(t *testing.T) {
+func TestRun_ShellTaskInteractiveUsesSession(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
@@ -548,14 +548,10 @@ func TestRun_ShellTaskInteractiveReleasesSuspension(t *testing.T) {
 		Type:        "shell",
 		Interactive: true,
 	}
-	opts := Options{Dir: "/app"}
-
-	mockRunner.EXPECT().
-		RunShell(ctx, "read answer", "interactive-task", "/app", []string(nil), false).
-		DoAndReturn(func(context.Context, string, string, string, []string, bool) error {
-			assert.True(t, signals.InterruptExitSuspended(), "suspension must be active while the task runs")
-			return nil
-		})
+	// Interactive tasks route to the terminal session path, NOT the
+	// CommandRunner (no mock expectations). Dry-run avoids real execution;
+	// suspension/attachment behavior is covered by pkg/process tests.
+	opts := Options{Dir: "/app", DryRun: true}
 
 	err := Run(ctx, &task, mockRunner, opts)
 	require.NoError(t, err)
