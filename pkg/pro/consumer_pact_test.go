@@ -251,7 +251,7 @@ func TestPact_UploadInstanceStatus(t *testing.T) {
 				Query("stack", matchers.S("dev-us-east-1")).
 				Query("component", matchers.S("vpc")).
 				JSONBody(body{
-					"command":   matchers.Like("terraform plan"),
+					"command":   matchers.Term("plan", `^(plan|apply|remediate)$`),
 					"exit_code": matchers.Like(0),
 				})
 		}).
@@ -267,7 +267,7 @@ func TestPact_UploadInstanceStatus(t *testing.T) {
 				RepoName:  "repo",
 				Stack:     "dev-us-east-1",
 				Component: "vpc",
-				Command:   "terraform plan",
+				Command:   "plan",
 				ExitCode:  0,
 			})
 		})

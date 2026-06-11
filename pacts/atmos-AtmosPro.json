@@ -417,7 +417,7 @@
       "providerState": "workspace exists and instance exists for owner/repo",
       "request": {
         "body": {
-          "command": "terraform plan",
+          "command": "plan",
           "exit_code": 0
         },
         "headers": {
@@ -426,7 +426,8 @@
         },
         "matchingRules": {
           "$.body.command": {
-            "match": "type"
+            "match": "regex",
+            "regex": "^(plan|apply|remediate)$"
           },
           "$.body.exit_code": {
             "match": "type"
