@@ -340,10 +340,12 @@ func executeMainTerraformCommand( //nolint:revive // argument-limit: opts variad
 	}
 
 	// Capture masked stdout for CI status upload when needed.
-	var maskedOutput bytes.Buffer
+	// BoundedWriter caps memory at defaultMaxOutputLogBytes so a large terraform
+	// run (gigabytes of JSON output) never causes a memory spike.
+	maskedOutput := NewBoundedWriter(defaultMaxOutputLogBytes)
 	captureOutput := uploadStatusFlag && atmosConfig.CI.Enabled
 	if captureOutput {
-		opts = append(opts, WithStdoutCapture(&maskedOutput))
+		opts = append(opts, WithStdoutCapture(maskedOutput))
 	}
 
 	err := executeShellCommandWithRetry(
@@ -372,6 +374,12 @@ func executeMainTerraformCommand( //nolint:revive // argument-limit: opts variad
 	// the exit code should reflect the plan/apply result, not telemetry.
 	if uploadStatusFlag && shouldUploadStatus(info) {
 		metadata := buildMetadataForUpload(captureOutput, info, maskedOutput.Bytes())
+		// BoundedWriter truncation is signaled here because addOutputLog only
+		// checks len(output) > maxBytes, which never fires once the writer has
+		// already bounded the data to maxBytes at write time.
+		if captureOutput && maskedOutput.Truncated() && metadata != nil {
+			metadata["truncated"] = true
+		}
 		if uploadErr := uploadCommandStatus(atmosConfig, info, exitCode, metadata); uploadErr != nil {
 			log.Warn("Failed to upload command status to Atmos Pro. The terraform command result is unaffected.", "error", uploadErr)
 			return uploadErr
@@ -440,7 +448,10 @@ func addOutputLog(data map[string]any, output []byte, maxBytes int) {
 
 	logBytes := output
 	if maxBytes > 0 && len(output) > maxBytes {
-		// Truncate from beginning — keep the tail (plan summary, errors, apply result).
+		// Safety net for callers that pass an unbounded slice directly.
+		// In the normal execution path the caller uses BoundedWriter, so output
+		// is already capped at maxBytes and this branch is never taken; the
+		// "truncated" flag is set by the caller instead (see executeMainTerraformCommand).
 		logBytes = output[len(output)-maxBytes:]
 		data["truncated"] = true
 	}
