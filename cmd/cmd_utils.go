@@ -868,8 +868,10 @@ func executeCustomCommand(
 		switch stepType {
 		case "shell":
 			// Execute shell command (backward compatible).
+			// Steps with tty/interactive attach the user's terminal so commands
+			// like `aws ssm start-session` get a real TTY and own Ctrl-C.
 			commandName := fmt.Sprintf("%s-step-%d", commandConfig.Name, i)
-			err = e.ExecuteShell(commandToRun, commandName, workDir, env, false)
+			err = executeShellStep(&step, commandToRun, commandName, workDir, env)
 		case "atmos":
 			// Execute atmos command.
 			args := strings.Fields(commandToRun)
