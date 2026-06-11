@@ -6,7 +6,23 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+
+	"github.com/cloudposse/atmos/tests/testhelpers"
 )
+
+func setupDoubleHyphenSandbox(t *testing.T, workDir string) {
+	t.Helper()
+
+	sandbox, err := testhelpers.SetupSandbox(t, workDir)
+	if err != nil {
+		t.Fatalf("Failed to setup sandbox: %v", err)
+	}
+	t.Cleanup(sandbox.Cleanup)
+
+	for k, v := range sandbox.GetEnvironmentVariables() {
+		t.Setenv(k, v)
+	}
+}
 
 // TestDoubleHyphenSeparator tests that args after "--" are correctly passed through
 // to the underlying terraform command without being parsed by Atmos.
@@ -25,6 +41,7 @@ func TestDoubleHyphenSeparator(t *testing.T) {
 
 	// Use the workflows fixture which has a mock component.
 	workDir := "fixtures/scenarios/workflows"
+	setupDoubleHyphenSandbox(t, workDir)
 	t.Chdir(workDir)
 
 	tests := []struct {
@@ -107,6 +124,7 @@ func TestDoubleHyphenWithConsolidateWarnings(t *testing.T) {
 	t.Setenv("ATMOS_BASE_PATH", "")
 
 	workDir := "fixtures/scenarios/workflows"
+	setupDoubleHyphenSandbox(t, workDir)
 	t.Chdir(workDir)
 
 	// This is the exact command pattern from issue #1967.
@@ -152,6 +170,7 @@ func TestDoubleHyphenStackNotOverwritten(t *testing.T) {
 	t.Setenv("ATMOS_BASE_PATH", "")
 
 	workDir := "fixtures/scenarios/workflows"
+	setupDoubleHyphenSandbox(t, workDir)
 	t.Chdir(workDir)
 
 	// Test that -s after -- doesn't get parsed as the stack flag.
