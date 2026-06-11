@@ -47,6 +47,7 @@ func init() {
 	gitCmd.AddCommand(diffCmd)
 	gitCmd.AddCommand(commitCmd)
 	gitCmd.AddCommand(pushCmd)
+	gitCmd.AddCommand(cleanCmd)
 
 	// Register this command with the registry.
 	internal.Register(&GitCommandProvider{})

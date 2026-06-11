@@ -103,6 +103,11 @@ func DefaultWorkdir(name string) (string, error) {
 	return dir, nil
 }
 
+// DefaultWorkdirPath resolves the automatic XDG workdir path without creating it.
+func DefaultWorkdirPath(name string) string {
+	return xdg.LookupXDGCacheDir(filepath.Join("git", "repositories", name))
+}
+
 // ValidateRepoRelativePath ensures a repo-relative path stays inside the
 // worktree after cleaning, returning its absolute path. Path traversal out of
 // the worktree returns ErrGitPathEscapesWorktree.

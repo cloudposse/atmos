@@ -1,0 +1,39 @@
+base_path: "./"
+
+git:
+  repositories:
+    deploy:
+      uri: git@github.com:cloudposse-sandbox/empty.git
+      branch: main
+
+logs:
+  file: "/dev/stderr"
+  level: Info
+
+commands:
+- name: "gitops"
+  description: "Run the GitOps repository lifecycle demo"
+  commands:
+  - name: "reconcile"
+    description: "Clone or update the managed deployment repository"
+    steps:
+    - atmos git clone deploy
+    - atmos git status deploy
+
+  - name: "review"
+    description: "Review generated deployment changes"
+    steps:
+    - atmos git status deploy
+    - atmos git diff deploy
+
+  - name: "publish"
+    description: "Commit deployment changes"
+    steps:
+    - atmos git commit deploy --message "Update generated deployment artifacts"
+    # Uncomment after reviewing the commit target and credentials.
+    # - atmos git push deploy
+
+  - name: "clean"
+    description: "Remove the managed deployment workdir"
+    steps:
+    - atmos git clean deploy --force

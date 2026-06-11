@@ -37,6 +37,12 @@ func GetXDGCacheDir(subpath string, perm os.FileMode) (string, error) {
 	return getXDGDir("XDG_CACHE_HOME", "ATMOS_XDG_CACHE_HOME", xdg.CacheHome, subpath, perm)
 }
 
+// LookupXDGCacheDir resolves the Atmos cache directory path without creating it.
+// Use this for read-only checks where directory creation is not desired.
+func LookupXDGCacheDir(subpath string) string {
+	return lookupXDGDir("XDG_CACHE_HOME", "ATMOS_XDG_CACHE_HOME", xdg.CacheHome, subpath)
+}
+
 // GetXDGDataDir returns the Atmos data directory following XDG Base Directory Specification.
 // It respects ATMOS_XDG_DATA_HOME and XDG_DATA_HOME environment variables.
 // The directory is created if it doesn't exist.

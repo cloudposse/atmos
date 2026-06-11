@@ -7,4 +7,5 @@
  $ atmos git diff <name-or-path>
  $ atmos git commit <name-or-path> --message "msg"
  $ atmos git push <name-or-path>
+ $ atmos git clean <name>
 ```

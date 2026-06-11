@@ -13,7 +13,7 @@ import ActionCard from '@site/src/components/ActionCard'
 import PrimaryCTA from '@site/src/components/PrimaryCTA'
 
 <Intro>
-Clone, pull, inspect, diff, commit, and push Git repositories through a shared Atmos Git service with consistent authentication, safety rules, and CI integration. Treat Git repositories as artifact repositories: render or generate files, place them into a repository worktree, and publish them — from the CLI, from [hooks](/stacks/hooks#kind-git), or from native CI workflows.
+Clone, pull, inspect, diff, commit, push, and clean Git repositories through a shared Atmos Git service with consistent authentication, safety rules, and CI integration. Treat Git repositories as artifact repositories: render or generate files, place them into a repository worktree, and publish them — from the CLI, from [hooks](/stacks/hooks#kind-git), or from native CI workflows.
 </Intro>
 
 <Experimental />
@@ -48,6 +48,7 @@ atmos git clone flux-deploy
 atmos git status flux-deploy
 atmos git commit flux-deploy --message="Update manifests" --path=clusters/prod
 atmos git push flux-deploy
+atmos git clean flux-deploy --dry-run
 ```
 
 Repository names (`flux-deploy`, `generated-terraform`) are arbitrary, user-defined logical keys — not reserved values. Repository configuration follows standard Atmos deep-merge, so repositories can be defined in imported configuration and overridden per environment.

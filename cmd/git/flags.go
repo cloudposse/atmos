@@ -105,6 +105,18 @@ func newPushParser() *flags.StandardParser {
 	)
 }
 
+// newCleanParser creates a StandardParser for `atmos git clean`.
+func newCleanParser() *flags.StandardParser {
+	return flags.NewStandardParser(
+		flags.WithBoolFlag(flagAll, "", false, "Clean all configured repository workdirs"),
+		flags.WithBoolFlag(flagForce, "f", false, "Delete the resolved workdir"),
+		flags.WithBoolFlag(flagDryRun, "n", false, "Report what would be deleted without deleting"),
+		flags.WithEnvVars(flagAll, "ATMOS_GIT_CLEAN_ALL"),
+		flags.WithEnvVars(flagForce, "ATMOS_GIT_CLEAN_FORCE"),
+		flags.WithEnvVars(flagDryRun, "ATMOS_GIT_DRY_RUN"),
+	)
+}
+
 // gitConfig returns the Git section of the loaded Atmos configuration, or nil.
 func gitConfig() *schema.GitConfig {
 	if atmosConfigPtr == nil {
