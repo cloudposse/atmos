@@ -102,6 +102,7 @@ require (
 	github.com/openai/openai-go v1.12.0
 	github.com/opencontainers/image-spec v1.1.1
 	github.com/otiai10/copy v1.14.1
+	github.com/pact-foundation/pact-go/v2 v2.5.1
 	github.com/pkg/errors v0.9.1
 	github.com/playwright-community/playwright-go v0.5700.1
 	github.com/posthog/posthog-go v1.12.6
@@ -461,6 +462,7 @@ require (
 require (
 	github.com/bytecodealliance/wasmtime-go/v43 v43.0.2 // indirect
 	github.com/containerd/ttrpc v1.2.8 // indirect
+	github.com/hashicorp/logutils v1.0.0 // indirect
 	github.com/standard-webhooks/standard-webhooks/libraries v0.0.1 // indirect
 	go.opencensus.io v0.24.0 // indirect
 )
