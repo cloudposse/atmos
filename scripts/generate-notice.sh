@@ -30,6 +30,9 @@ cd "${REPO_ROOT}"
 # on macOS's stock bash 3.2.
 REPO_OVERRIDES="
 dario.cat/mergo github.com/imdario/mergo
+go4.org/intern github.com/go4org/intern
+go4.org/netipx github.com/go4org/netipx
+go4.org/unsafe/assume-no-moving-gc github.com/go4org/unsafe-assume-no-moving-gc
 inet.af/netaddr github.com/inetaf/netaddr
 "
 
@@ -63,22 +66,26 @@ EOF
 }
 
 # Check if go-licenses is installed
-if ! command -v go-licenses &> /dev/null; then
-    echo "Installing go-licenses..."
-    go install github.com/google/go-licenses@latest
+GO_LICENSES_BIN="$(command -v go-licenses || true)"
+if [ -z "${GO_LICENSES_BIN}" ]; then
+    GO_LICENSES_BIN="$(go env GOPATH)/bin/go-licenses"
+    if [ ! -x "${GO_LICENSES_BIN}" ]; then
+        echo "Installing go-licenses..."
+        go install github.com/google/go-licenses@latest
+    fi
 fi
 
 # Generate license report
 echo "Generating license report..."
-go-licenses report . 2>&1 | grep -v "^W" | grep -v "^E" > "${TEMP_DIR}/license-report.csv" || true
+"${GO_LICENSES_BIN}" report . 2>&1 | awk -F',' 'NF >= 3 {print}' > "${TEMP_DIR}/license-report.csv" || true
 
 # Replace non-deterministic (vanity-path) URLs with deterministic overrides.
 apply_url_overrides "${TEMP_DIR}/license-report.csv"
 
 # Count dependencies
 TOTAL_DEPS=$(wc -l < "${TEMP_DIR}/license-report.csv" | tr -d ' ')
-APACHE_DEPS=$(grep -c "Apache-2.0" "${TEMP_DIR}/license-report.csv" || echo "0")
-BSD_DEPS=$(grep -cE "BSD-.*Clause" "${TEMP_DIR}/license-report.csv" || echo "0")
+APACHE_DEPS=$(grep -c "Apache-2.0" "${TEMP_DIR}/license-report.csv" || true)
+BSD_DEPS=$(grep -cE "BSD-.*Clause" "${TEMP_DIR}/license-report.csv" || true)
 
 echo "Found ${TOTAL_DEPS} total dependencies"
 echo "  - ${APACHE_DEPS} Apache-2.0 licenses"
@@ -129,7 +136,7 @@ grep -E "BSD-.*Clause" "${TEMP_DIR}/license-report.csv" | \
     awk -F',' '{printf "  - %s\n    License: %s\n    URL: %s\n\n", $1, $3, $2}' >> "${NOTICE_FILE}"
 
 # Add MPL section if there are any
-MPL_COUNT=$(grep -c "MPL-2.0" "${TEMP_DIR}/license-report.csv" || echo "0")
+MPL_COUNT=$(grep -c "MPL-2.0" "${TEMP_DIR}/license-report.csv" || true)
 if [ "${MPL_COUNT}" -gt 0 ]; then
     cat >> "${NOTICE_FILE}" <<'EOF'
 
@@ -146,7 +153,7 @@ EOF
 fi
 
 # Add MIT section (optional, for completeness)
-MIT_COUNT=$(grep -c ",MIT" "${TEMP_DIR}/license-report.csv" || echo "0")
+MIT_COUNT=$(grep -c ",MIT" "${TEMP_DIR}/license-report.csv" || true)
 if [ "${MIT_COUNT}" -gt 0 ]; then
     cat >> "${NOTICE_FILE}" <<'EOF'
 

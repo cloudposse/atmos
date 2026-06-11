@@ -74,9 +74,13 @@ jobs:
       - name: Set up Go
         if: ${{ ! ( matrix.target == 'windows' && github.event.pull_request.draft  ) }}
         # setup-go v6 requires runner v2.327.1+ and can affect toolchain handling.
-        uses: actions/setup-go@v6
+        uses: actions/setup-go@44694675825211faa026b3c33043df3e48a5fa00 # v6.0.0
         with:
           go-version-file: "go.mod"
+          # Disable setup-go's module cache to avoid restoring or saving mutable
+          # cache entries from PR-controlled keys; make deps repopulates modules
+          # from checksummed sources instead.
+          cache: false
         id: go
 
       - name: Get dependencies
@@ -130,7 +134,7 @@ jobs:
         run: echo "C:\Program Files\Git\usr\bin" >> $Env:GITHUB_PATH
 
       - name: Download build artifacts for ${{ matrix.flavor.target }}
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3 # v8.0.0
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
         with:
           name: build-artifacts-${{ matrix.flavor.target }}
@@ -153,14 +157,14 @@ jobs:
           echo "${{ github.workspace }}" >> $Env:GITHUB_PATH
 
       - name: Install Terraform
-        uses: hashicorp/setup-terraform@v4
+        uses: hashicorp/setup-terraform@5e8dbf3c6d9deaf4193ca7a8fb23f2ac83bb6c85 # v4.0.0
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
         with:
           terraform_version: ${{ env.TERRAFORM_VERSION }}
           terraform_wrapper: false
 
       - name: Install OpenTofu
-        uses: opentofu/setup-opentofu@v2
+        uses: opentofu/setup-opentofu@fc711fa910b93cba0f3fbecaafc9f42fd0c411cb # v2.0.0
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
         with:
           tofu_version: ${{ env.OPEN_TOFU_VERSION }}
@@ -202,10 +206,14 @@ jobs:
 
       - name: Set up Go
         # setup-go v6 requires runner v2.327.1+ and can affect toolchain handling.
-        uses: actions/setup-go@v6
+        uses: actions/setup-go@44694675825211faa026b3c33043df3e48a5fa00 # v6.0.0
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
         with:
           go-version-file: "go.mod"
+          # Disable setup-go's module cache to avoid restoring or saving mutable
+          # cache entries from PR-controlled keys; make deps repopulates modules
+          # from checksummed sources instead.
+          cache: false
         id: go
 
       - name: Get dependencies
@@ -259,23 +267,29 @@ jobs:
         # key" -> "Could not verify signature. Exiting..." failures seen on v5
         # (wrapper 0.2.7). This keeps GPG integrity verification on (preferred
         # over skip_validation, which runs an unverified binary).
-        # Pinned to the v7.0.0 commit SHA for supply-chain hardening. Note this
-        # is the same commit as v6.0.2; the fix is absent from v6.0.0/v6.0.1.
-        uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v7.0.0
+        # Pinned to the v7.0.0 commit SHA for supply-chain hardening. The retry
+        # wrapper below downloads that exact Codecov wrapper script and keeps
+        # fail-on-error behavior so persistent upload failures fail the job.
+        uses: nick-fields/retry@7152eba30c6575329ac0576536151aca5a72780e # v3.0.0
+        env:
+          CC_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+          CC_SLUG: ${{ github.repository }}
+          CC_BRANCH: ${{ github.head_ref || github.ref_name }}
+          CC_PR: ${{ github.event.number }}
+          CC_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          CC_FILES: coverage.out
+          CC_FLAGS: unittests
+          CC_VERBOSE: "true"
+          CC_FAIL_ON_ERROR: "true"
         with:
-          token: ${{ secrets.CODECOV_TOKEN }}
-          slug: ${{ github.repository }}
-          files: coverage.out
-          # Codecov's uploader downloads its CLI and verifies the binary's GPG
-          # signature. Transient Codecov-side issues (e.g. an empty public-key
-          # import: "gpg: no valid OpenPGP data found" / "Can't check signature:
-          # No public key") make verification exit 1, which would hard-fail this
-          # job even when every test passed. Don't let a coverage-upload/infra
-          # flake fail a green test run — the 80% coverage gate is still enforced
-          # by Codecov's own PR status check, independent of this step's exit code.
-          fail_ci_if_error: false
-          flags: unittests
-          verbose: true
+          max_attempts: 3
+          timeout_minutes: 5
+          shell: bash
+          command: |
+            tmp_dir="$(mktemp -d)"
+            trap 'rm -rf "${tmp_dir}"' EXIT
+            curl -fsSL https://raw.githubusercontent.com/codecov/codecov-action/fb8b3582c8e4def4969c97caa2f19720cb33a72f/dist/codecov.sh -o "${tmp_dir}/codecov.sh"
+            bash "${tmp_dir}/codecov.sh"
 
   docker:
     name: "[lint] Dockerfile"
@@ -351,7 +365,7 @@ jobs:
     steps:
 
       - name: Download build artifacts
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3 # v8.0.0
         with:
           name: build-artifacts-linux
           path: /usr/local/bin
@@ -365,13 +379,13 @@ jobs:
           persist-credentials: false
 
       - name: Install Terraform
-        uses: hashicorp/setup-terraform@v4
+        uses: hashicorp/setup-terraform@5e8dbf3c6d9deaf4193ca7a8fb23f2ac83bb6c85 # v4.0.0
         with:
           terraform_version: ${{ env.TERRAFORM_VERSION }}
           terraform_wrapper: false
 
       - name: Install OpenTofu
-        uses: opentofu/setup-opentofu@v2
+        uses: opentofu/setup-opentofu@fc711fa910b93cba0f3fbecaafc9f42fd0c411cb # v2.0.0
         with:
           tofu_version: ${{ env.OPEN_TOFU_VERSION }}
           tofu_wrapper: false
@@ -415,7 +429,7 @@ jobs:
           kubectl get pods --all-namespaces
 
       - name: Download build artifacts
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3 # v8.0.0
         with:
           name: build-artifacts-linux
           path: /usr/local/bin
@@ -495,7 +509,7 @@ jobs:
 
       - name: Download build artifacts for ${{ matrix.flavor.target }}
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3 # v8.0.0
         with:
           name: build-artifacts-${{ matrix.flavor.target }}
           path: ${{ github.workspace }}
@@ -514,14 +528,14 @@ jobs:
 
       - name: Install Terraform
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
-        uses: hashicorp/setup-terraform@v4
+        uses: hashicorp/setup-terraform@5e8dbf3c6d9deaf4193ca7a8fb23f2ac83bb6c85 # v4.0.0
         with:
           terraform_version: ${{ env.TERRAFORM_VERSION }}
           terraform_wrapper: false
 
       - name: Install OpenTofu
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
-        uses: opentofu/setup-opentofu@v2
+        uses: opentofu/setup-opentofu@fc711fa910b93cba0f3fbecaafc9f42fd0c411cb # v2.0.0
         with:
           tofu_version: ${{ env.OPEN_TOFU_VERSION }}
           tofu_wrapper: false
@@ -594,13 +608,13 @@ jobs:
           persist-credentials: false
 
       - name: Install Terraform
-        uses: hashicorp/setup-terraform@v4
+        uses: hashicorp/setup-terraform@5e8dbf3c6d9deaf4193ca7a8fb23f2ac83bb6c85 # v4.0.0
         with:
           terraform_version: ${{ env.TERRAFORM_VERSION }}
           terraform_wrapper: false
 
       - name: Install OpenTofu
-        uses: opentofu/setup-opentofu@v2
+        uses: opentofu/setup-opentofu@fc711fa910b93cba0f3fbecaafc9f42fd0c411cb # v2.0.0
         with:
           tofu_version: ${{ env.OPEN_TOFU_VERSION }}
           tofu_wrapper: false
