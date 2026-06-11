@@ -11,6 +11,11 @@ logs:
   file: "/dev/stderr"
   level: Info
 
+settings:
+  experimental: silence
+  telemetry:
+    enabled: false
+
 commands:
 - name: "test"
   description: "Run all tests"
