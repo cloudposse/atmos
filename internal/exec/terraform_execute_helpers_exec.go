@@ -413,7 +413,7 @@ func uploadCommandStatus(
 ) error {
 	client, cerr := pro.NewAtmosProAPIClientFromEnv(atmosConfig)
 	if cerr != nil {
-		return cerr
+		return fmt.Errorf("%w: %w", errUtils.ErrFailedToCreateAPIClient, cerr)
 	}
 	gitRepo := &git.DefaultGitRepo{}
 	return uploadStatus(info, exitCode, info.ComponentType, metadata, client, gitRepo)
