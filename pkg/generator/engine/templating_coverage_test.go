@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/manifest"
 	"github.com/cloudposse/atmos/pkg/project/config"
 )
 
@@ -636,18 +637,22 @@ func TestProcessFileWithScaffoldConfig(t *testing.T) {
 	tempDir := t.TempDir()
 
 	scaffoldConfig := &config.ScaffoldConfig{
-		Name:        "Test Template",
-		Description: "Test Description",
-		Version:     "1.0.0",
-		Delimiters:  []string{"{{", "}}"},
-		Fields: map[string]config.FieldDefinition{
-			"project_name": {
-				Key:         "project_name",
-				Type:        "string",
-				Label:       "Project Name",
-				Description: "Name of the project",
-				Required:    true,
-				Default:     "my-project",
+		Metadata: manifest.Metadata{
+			Name:        "Test Template",
+			Description: "Test Description",
+			Version:     "1.0.0",
+		},
+		Spec: config.ScaffoldSpec{
+			Delimiters: []string{"{{", "}}"},
+			Fields: []config.FieldDefinition{
+				{
+					Name:        "project_name",
+					Type:        "string",
+					Label:       "Project Name",
+					Description: "Name of the project",
+					Required:    true,
+					Default:     "my-project",
+				},
 			},
 		},
 	}
@@ -687,21 +692,21 @@ func TestExtractDelimitersFromScaffoldConfig(t *testing.T) {
 		{
 			name: "config with custom delimiters",
 			scaffoldConfig: &config.ScaffoldConfig{
-				Delimiters: []string{"[[", "]]"},
+				Spec: config.ScaffoldSpec{Delimiters: []string{"[[", "]]"}},
 			},
 			expected: []string{"[[", "]]"},
 		},
 		{
 			name: "config with empty delimiters",
 			scaffoldConfig: &config.ScaffoldConfig{
-				Delimiters: []string{},
+				Spec: config.ScaffoldSpec{Delimiters: []string{}},
 			},
 			expected: []string{"{{", "}}"},
 		},
 		{
 			name: "config with single delimiter",
 			scaffoldConfig: &config.ScaffoldConfig{
-				Delimiters: []string{"[["},
+				Spec: config.ScaffoldSpec{Delimiters: []string{"[["}},
 			},
 			expected: []string{"{{", "}}"},
 		},

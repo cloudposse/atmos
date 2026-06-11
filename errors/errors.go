@@ -947,6 +947,16 @@ var (
 	ErrScaffoldParseYAML       = errors.New("failed to parse scaffold YAML")
 	ErrPromptFailed            = errors.New("interactive prompt failed")
 
+	// Manifest registry errors (pkg/manifest).
+	ErrManifestKindUnknown    = errors.New("unknown manifest kind")
+	ErrManifestKindEmpty      = errors.New("manifest kind is empty")
+	ErrManifestKindMismatch   = errors.New("manifest kind mismatch")
+	ErrManifestAPIVersion     = errors.New("unsupported manifest apiVersion")
+	ErrManifestParse          = errors.New("failed to parse manifest")
+	ErrManifestPrototypeNil   = errors.New("manifest prototype is nil")
+	ErrManifestSchemaGenerate = errors.New("failed to generate manifest JSON schema")
+	ErrManifestValidation     = errors.New("manifest validation failed")
+
 	// Generator errors.
 	ErrReadTemplatesDirectory        = errors.New("failed to read templates directory")
 	ErrReadTemplateFiles             = errors.New("failed to read template files")

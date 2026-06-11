@@ -10,6 +10,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/generator"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/project/config"
 )
 
 const (
@@ -25,6 +26,8 @@ const (
 //   - Name: Human-readable template name
 //   - Description: Brief description of the template's purpose
 //   - TemplateID: Unique identifier for the template
+//   - Version: Template version from scaffold.yaml metadata
+//   - Source: Where the template came from ("embedded", a local path, ...)
 //   - TargetDir: Default target directory for template output
 //   - Files: Collection of files/directories in this template
 //   - README: Optional README content for the template
@@ -32,6 +35,8 @@ type Configuration struct {
 	Name        string `yaml:"name"`
 	Description string `yaml:"description"`
 	TemplateID  string `yaml:"template_id"`
+	Version     string `yaml:"version"`
+	Source      string `yaml:"source"`
 	TargetDir   string `yaml:"target_dir"`
 	Files       []File `yaml:"files"`
 	README      string `yaml:"readme"`
@@ -130,28 +135,39 @@ func loadConfiguration(templatePath string) (*Configuration, error) {
 		readmeContent = string(data)
 	}
 
-	// Default metadata
+	// Default metadata derived from the directory name.
 	templateName := path.Base(templatePath)
-	configName := templateName
-	configDescription := fmt.Sprintf("%s template", templateName)
-	templateID := templateName
+	configuration := &Configuration{
+		Name:        templateName,
+		Description: fmt.Sprintf("%s template", templateName),
+		TemplateID:  templateName,
+		Source:      config.SourceEmbedded,
+		Files:       files,
+		README:      readmeContent,
+	}
 
-	// Try to load scaffold.yaml for metadata
+	// Load metadata from the template's scaffold.yaml manifest when present.
 	// Use path.Join (forward slashes) not filepath.Join for embed.FS.
 	scaffoldPath := path.Join(templatePath, "scaffold.yaml") //nolint:forbidigo // embed.FS always uses forward slashes
 	if data, err := generator.Templates.ReadFile(scaffoldPath); err == nil {
-		// Parse scaffold.yaml to extract metadata (basic parsing)
-		// For now, just use defaults since we don't have full scaffold parsing
-		_ = data // TODO: Parse scaffold config for name/description
+		scaffoldConfig, err := config.LoadScaffoldConfigFromContent(string(data))
+		if err != nil {
+			return nil, errUtils.Build(errUtils.ErrScaffoldLoadConfig).
+				WithCause(err).
+				WithExplanationf("Embedded template `%s` has an invalid `scaffold.yaml`", templateName).
+				WithContext("template", templateName).
+				Err()
+		}
+		if scaffoldConfig.Metadata.Name != "" {
+			configuration.Name = scaffoldConfig.Metadata.Name
+		}
+		if scaffoldConfig.Metadata.Description != "" {
+			configuration.Description = scaffoldConfig.Metadata.Description
+		}
+		configuration.Version = scaffoldConfig.Metadata.Version
 	}
 
-	return &Configuration{
-		Name:        configName,
-		Description: configDescription,
-		TemplateID:  templateID,
-		Files:       files,
-		README:      readmeContent,
-	}, nil
+	return configuration, nil
 }
 
 // templateMagicCommentPattern matches magic comments that indicate a file should be treated as a template.

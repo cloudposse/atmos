@@ -311,8 +311,8 @@ func extractDelimiters(scaffoldConfig interface{}) []string {
 // tryExtractFromPointerConfig tries to extract delimiters from *config.ScaffoldConfig.
 func tryExtractFromPointerConfig(scaffoldConfig interface{}) []string {
 	if cfg, ok := scaffoldConfig.(*config.ScaffoldConfig); ok {
-		if len(cfg.Delimiters) == 2 {
-			return []string{cfg.Delimiters[0], cfg.Delimiters[1]}
+		if len(cfg.Spec.Delimiters) == 2 {
+			return []string{cfg.Spec.Delimiters[0], cfg.Spec.Delimiters[1]}
 		}
 	}
 	return nil
@@ -321,8 +321,8 @@ func tryExtractFromPointerConfig(scaffoldConfig interface{}) []string {
 // tryExtractFromValueConfig tries to extract delimiters from config.ScaffoldConfig (value).
 func tryExtractFromValueConfig(scaffoldConfig interface{}) []string {
 	if cfg, ok := scaffoldConfig.(config.ScaffoldConfig); ok {
-		if len(cfg.Delimiters) == 2 {
-			return []string{cfg.Delimiters[0], cfg.Delimiters[1]}
+		if len(cfg.Spec.Delimiters) == 2 {
+			return []string{cfg.Spec.Delimiters[0], cfg.Spec.Delimiters[1]}
 		}
 	}
 	return nil

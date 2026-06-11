@@ -1,101 +1,137 @@
 package config
 
 import (
+	"os"
 	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/cloudposse/atmos/pkg/manifest"
 )
 
-func TestSaveAndLoadUserConfigWithBaseRef(t *testing.T) {
-	// Create temp directory
+// templateForRecordTests returns a template manifest used as the source of a
+// project record.
+func templateForRecordTests() *ScaffoldConfig {
+	return &ScaffoldConfig{
+		APIVersion: manifest.DefaultAPIVersion,
+		Kind:       ScaffoldKind,
+		Metadata: manifest.Metadata{
+			Name:    "simple",
+			Version: "1.0.0",
+		},
+		Spec: ScaffoldSpec{
+			Fields: []FieldDefinition{
+				{Name: "project_name", Type: "input", Default: "my-project"},
+				{Name: "aws_region", Type: "input", Default: "us-east-1"},
+			},
+		},
+	}
+}
+
+func TestSaveAndLoadProjectRecordWithBaseRef(t *testing.T) {
 	tmpDir := t.TempDir()
 
-	// Test data
-	templateID := "simple"
-	baseRef := "main"
 	values := map[string]interface{}{
 		"project_name": "test-project",
 		"aws_region":   "us-east-1",
 	}
 
-	// Save config with base ref
-	err := SaveUserConfigWithBaseRef(tmpDir, templateID, baseRef, values)
+	err := SaveProjectRecord(tmpDir, templateForRecordTests(), SourceEmbedded, "main", values)
 	require.NoError(t, err)
 
-	// Verify file was created
-	configPath := filepath.Join(tmpDir, ScaffoldConfigDir, ScaffoldConfigFileName)
-	assert.FileExists(t, configPath)
+	// Verify file was created.
+	recordPath := filepath.Join(tmpDir, ScaffoldConfigDir, ScaffoldConfigFileName)
+	assert.FileExists(t, recordPath)
 
-	// Load config back
-	userConfig, err := LoadUserConfig(tmpDir)
+	// Load record back.
+	record, err := LoadProjectRecord(tmpDir)
 	require.NoError(t, err)
-	require.NotNil(t, userConfig)
+	require.NotNil(t, record)
 
-	// Verify values
-	assert.Equal(t, templateID, userConfig.TemplateID)
-	assert.Equal(t, baseRef, userConfig.BaseRef)
-	assert.Equal(t, "test-project", userConfig.Values["project_name"])
-	assert.Equal(t, "us-east-1", userConfig.Values["aws_region"])
+	// The record is a full AtmosScaffoldConfig manifest.
+	assert.Equal(t, manifest.DefaultAPIVersion, record.APIVersion)
+	assert.Equal(t, ScaffoldKind, record.Kind)
+	assert.Equal(t, "simple", record.Metadata.Name)
+	assert.Equal(t, "1.0.0", record.Metadata.Version)
+	assert.Equal(t, SourceEmbedded, record.Spec.Source)
+	assert.Equal(t, "main", record.Spec.BaseRef)
+	assert.Equal(t, "test-project", record.Spec.Values["project_name"])
+	assert.Equal(t, "us-east-1", record.Spec.Values["aws_region"])
+
+	// The questionnaire snapshot travels with the record.
+	require.Len(t, record.Spec.Fields, 2)
+	assert.Equal(t, "project_name", record.Spec.Fields[0].Name)
+	assert.Equal(t, "aws_region", record.Spec.Fields[1].Name)
 }
 
-func TestSaveUserConfigWithBaseRef_EmptyBaseRef(t *testing.T) {
-	// Create temp directory
+func TestSaveProjectRecord_EmptyBaseRef(t *testing.T) {
 	tmpDir := t.TempDir()
 
-	// Test data with empty base ref
-	templateID := "simple"
-	baseRef := ""
 	values := map[string]interface{}{
 		"project_name": "test-project",
 	}
 
-	// Save config with empty base ref
-	err := SaveUserConfigWithBaseRef(tmpDir, templateID, baseRef, values)
+	err := SaveProjectRecord(tmpDir, templateForRecordTests(), "", "", values)
 	require.NoError(t, err)
 
-	// Load config back
-	userConfig, err := LoadUserConfig(tmpDir)
+	record, err := LoadProjectRecord(tmpDir)
 	require.NoError(t, err)
-	require.NotNil(t, userConfig)
+	require.NotNil(t, record)
 
-	// Verify values - empty base ref should not be present in YAML
-	assert.Equal(t, templateID, userConfig.TemplateID)
-	assert.Empty(t, userConfig.BaseRef) // Should be empty
-	assert.Equal(t, "test-project", userConfig.Values["project_name"])
+	// Empty source and baseRef are omitted from the record.
+	assert.Empty(t, record.Spec.Source)
+	assert.Empty(t, record.Spec.BaseRef)
+	assert.Equal(t, "test-project", record.Spec.Values["project_name"])
+
+	raw, err := os.ReadFile(filepath.Join(tmpDir, ScaffoldConfigDir, ScaffoldConfigFileName))
+	require.NoError(t, err)
+	assert.NotContains(t, string(raw), "baseRef")
 }
 
-func TestLoadUserConfig_NonexistentFile(t *testing.T) {
-	// Create temp directory without config file
+func TestSaveProjectRecord_PreservesValueKeyCasing(t *testing.T) {
+	// The record is marshaled directly to YAML (never through viper), so
+	// mixed-case value keys must survive a save/load round-trip.
 	tmpDir := t.TempDir()
 
-	// Load config from directory without file
-	userConfig, err := LoadUserConfig(tmpDir)
-	require.NoError(t, err)
-	assert.Nil(t, userConfig) // Should return nil when file doesn't exist
-}
-
-func TestSaveUserConfig_BackwardsCompatibility(t *testing.T) {
-	// Test that SaveUserConfig (without base ref) still works
-	tmpDir := t.TempDir()
-
-	templateID := "simple"
 	values := map[string]interface{}{
-		"project_name": "test-project",
+		"projectName": "test-project",
+		"awsRegion":   "us-east-1",
 	}
 
-	// Save config without base ref (backwards compatibility)
-	err := SaveUserConfig(tmpDir, templateID, values)
+	err := SaveProjectRecord(tmpDir, templateForRecordTests(), "", "", values)
 	require.NoError(t, err)
 
-	// Load config back
-	userConfig, err := LoadUserConfig(tmpDir)
+	loaded, err := LoadUserValues(tmpDir)
 	require.NoError(t, err)
-	require.NotNil(t, userConfig)
+	assert.Equal(t, "test-project", loaded["projectName"])
+	assert.Equal(t, "us-east-1", loaded["awsRegion"])
 
-	// Verify values - base ref should be empty
-	assert.Equal(t, templateID, userConfig.TemplateID)
-	assert.Empty(t, userConfig.BaseRef)
-	assert.Equal(t, "test-project", userConfig.Values["project_name"])
+	raw, err := os.ReadFile(filepath.Join(tmpDir, ScaffoldConfigDir, ScaffoldConfigFileName))
+	require.NoError(t, err)
+	assert.Contains(t, string(raw), "projectName")
+	assert.NotContains(t, string(raw), "projectname")
+}
+
+func TestLoadProjectRecord_NonexistentFile(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	record, err := LoadProjectRecord(tmpDir)
+	require.NoError(t, err)
+	assert.Nil(t, record) // Should return nil when file doesn't exist.
+}
+
+func TestSaveProjectRecord_NilTemplateConfig(t *testing.T) {
+	// A record can be written without a template manifest; it still must be
+	// a valid AtmosScaffoldConfig... except metadata.name is then empty,
+	// which fails schema validation on load. Verify the save succeeds and
+	// the load reports a helpful validation error.
+	tmpDir := t.TempDir()
+
+	err := SaveProjectRecord(tmpDir, nil, "", "", map[string]interface{}{"k": "v"})
+	require.NoError(t, err)
+
+	_, err = LoadProjectRecord(tmpDir)
+	require.Error(t, err)
 }

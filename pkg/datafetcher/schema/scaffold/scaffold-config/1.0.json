@@ -1,134 +1,132 @@
 {
+  "$id": "https://atmos.tools/schemas/atmosscaffoldconfig.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://json.schemastore.org/atmos-scaffold.json",
-  "title": "JSON Schema for Atmos Scaffold files. Version 1.0. https://atmos.tools",
-  "type": "object",
+  "additionalProperties": false,
   "properties": {
-    "name": {
-      "type": "string",
-      "description": "The name of the scaffold template"
+    "apiVersion": {
+      "const": "atmos/v1",
+      "description": "Atmos manifest API version"
     },
-    "description": {
-      "type": "string",
-      "description": "A description of what this scaffold creates"
+    "kind": {
+      "const": "AtmosScaffoldConfig",
+      "description": "Atmos manifest kind"
     },
-    "author": {
-      "type": "string",
-      "description": "The author of this scaffold template"
-    },
-    "version": {
-      "type": "string",
-      "description": "The version of this scaffold template"
-    },
-    "prompts": {
-      "type": "array",
-      "description": "Interactive prompts for template variables",
-      "items": {
-        "$ref": "#/definitions/prompt"
-      }
-    },
-    "dependencies": {
-      "type": "array",
-      "description": "List of required dependencies",
-      "items": {
-        "type": "string"
-      }
-    },
-    "hooks": {
-      "type": "object",
-      "description": "Lifecycle hooks to run during scaffolding",
+    "metadata": {
+      "additionalProperties": false,
       "properties": {
-        "before": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
-        },
-        "after": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
-        }
-      }
-    }
-  },
-  "required": [
-    "name"
-  ],
-  "additionalProperties": true,
-  "definitions": {
-    "prompt": {
-      "type": "object",
-      "properties": {
-        "name": {
-          "type": "string",
-          "description": "The variable name for this prompt"
+        "author": {
+          "description": "Author or maintainer",
+          "type": "string"
         },
         "description": {
-          "type": "string",
-          "description": "Human-readable description of this prompt"
+          "description": "Human-readable description",
+          "type": "string"
         },
-        "type": {
-          "type": "string",
-          "enum": ["input", "select", "confirm", "multiselect"],
-          "description": "The type of prompt to display"
+        "name": {
+          "description": "Unique name of this manifest",
+          "minLength": 1,
+          "type": "string"
         },
-        "default": {
-          "description": "Default value for this prompt"
-        },
-        "required": {
-          "type": "boolean",
-          "description": "Whether this prompt is required",
-          "default": false
-        },
-        "options": {
-          "type": "array",
-          "description": "Available options for select/multiselect prompts",
-          "items": {
-            "oneOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "object",
-                "properties": {
-                  "value": {
-                    "type": "string"
-                  },
-                  "label": {
-                    "type": "string"
-                  }
-                },
-                "required": ["value", "label"]
-              }
-            ]
-          }
-        },
-        "validation": {
-          "type": "object",
-          "description": "Validation rules for this prompt",
-          "properties": {
-            "pattern": {
-              "type": "string",
-              "description": "Regular expression pattern to validate against"
-            },
-            "min_length": {
-              "type": "integer",
-              "description": "Minimum length for string inputs"
-            },
-            "max_length": {
-              "type": "integer",
-              "description": "Maximum length for string inputs"
-            }
-          }
+        "version": {
+          "description": "Version of this manifest",
+          "type": "string"
         }
       },
       "required": [
-        "name",
-        "type"
+        "name"
       ],
-      "additionalProperties": false
+      "type": "object"
+    },
+    "spec": {
+      "additionalProperties": false,
+      "properties": {
+        "baseRef": {
+          "description": "Git ref used as the three-way merge base",
+          "type": "string"
+        },
+        "delimiters": {
+          "description": "Template delimiters as a two-element list",
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 2,
+          "minItems": 2,
+          "type": "array"
+        },
+        "fields": {
+          "description": "Ordered questionnaire fields",
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "default": {
+                "description": "Default value"
+              },
+              "description": {
+                "description": "Longer help text shown with the prompt",
+                "type": "string"
+              },
+              "label": {
+                "description": "Short prompt label",
+                "type": "string"
+              },
+              "name": {
+                "description": "Field name used as the template variable",
+                "type": "string"
+              },
+              "options": {
+                "description": "Choices for select and multiselect fields",
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "placeholder": {
+                "description": "Placeholder text for input fields",
+                "type": "string"
+              },
+              "required": {
+                "description": "Whether a value must be provided",
+                "type": "boolean"
+              },
+              "type": {
+                "description": "Prompt type",
+                "enum": [
+                  "input",
+                  "text",
+                  "string",
+                  "select",
+                  "multiselect",
+                  "confirm",
+                  "bool",
+                  "boolean"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "name"
+            ],
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "source": {
+          "description": "Where the template came from (written to project records)",
+          "type": "string"
+        },
+        "values": {
+          "description": "Field values (answers) keyed by field name",
+          "type": "object"
+        }
+      },
+      "type": "object"
     }
-  }
+  },
+  "required": [
+    "apiVersion",
+    "kind",
+    "metadata"
+  ],
+  "title": "Atmos AtmosScaffoldConfig manifest",
+  "type": "object"
 }

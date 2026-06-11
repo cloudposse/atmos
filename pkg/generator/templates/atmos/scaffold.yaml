@@ -1,18 +1,24 @@
-name: "atmos"
-description: "Complete Atmos project with full atmos.yaml configuration"
-author: "Cloud Posse"
-version: "1.0.0"
-
-prompts:
-  - name: "project_name"
-    description: "Project name"
-    type: "input"
-    default: "my-atmos-project"
-  - name: "terraform_version"
-    description: "Terraform version"
-    type: "input"
-    default: "1.5.0"
-  - name: "aws_region"
-    description: "Default AWS region"
-    type: "input"
-    default: "us-east-1"
+apiVersion: atmos/v1
+kind: AtmosScaffoldConfig
+metadata:
+  name: atmos
+  description: Complete Atmos project with full atmos.yaml configuration
+  author: Cloud Posse
+  version: 1.0.0
+spec:
+  fields:
+    - name: project_name
+      label: Project name
+      description: Name of the project
+      type: input
+      default: my-atmos-project
+    - name: terraform_version
+      label: Terraform version
+      description: Terraform version to use
+      type: input
+      default: "1.5.0"
+    - name: aws_region
+      label: AWS region
+      description: Default AWS region
+      type: input
+      default: us-east-1

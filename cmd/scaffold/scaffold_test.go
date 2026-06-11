@@ -9,10 +9,11 @@ import (
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"gopkg.in/yaml.v2"
 
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/generator/templates"
+	"github.com/cloudposse/atmos/pkg/manifest"
+	"github.com/cloudposse/atmos/pkg/project/config"
 )
 
 func TestNewScaffoldCommandProvider(t *testing.T) {
@@ -122,53 +123,6 @@ func TestScaffoldValidateCmd_Args(t *testing.T) {
 	assert.NoError(t, scaffoldValidateCmd.Args(scaffoldValidateCmd, []string{}))
 	assert.NoError(t, scaffoldValidateCmd.Args(scaffoldValidateCmd, []string{"path/to/scaffold.yaml"}))
 	assert.Error(t, scaffoldValidateCmd.Args(scaffoldValidateCmd, []string{"path1", "path2"}))
-}
-
-func TestScaffoldConfig_Structure(t *testing.T) {
-	config := ScaffoldConfig{
-		Name:        "test-scaffold",
-		Description: "Test description",
-		Author:      "test-author",
-		Version:     "1.0.0",
-		Prompts: []PromptConfig{
-			{
-				Name:        "component_name",
-				Description: "Name of the component",
-				Type:        "input",
-				Required:    true,
-			},
-		},
-		Dependencies: []string{"dep1", "dep2"},
-		Hooks: map[string][]string{
-			"post_generate": {"echo 'done'"},
-		},
-	}
-
-	assert.Equal(t, "test-scaffold", config.Name)
-	assert.Equal(t, "Test description", config.Description)
-	assert.Len(t, config.Prompts, 1)
-	assert.Len(t, config.Dependencies, 2)
-	assert.Len(t, config.Hooks, 1)
-}
-
-func TestPromptConfig_Structure(t *testing.T) {
-	prompt := PromptConfig{
-		Name:        "project_name",
-		Description: "Project name",
-		Type:        "input",
-		Default:     "my-project",
-		Required:    true,
-	}
-
-	assert.Equal(t, "project_name", prompt.Name)
-	assert.Equal(t, "input", prompt.Type)
-	assert.True(t, prompt.Required)
-	assert.Equal(t, "my-project", prompt.Default)
-}
-
-func TestValidPromptTypes(t *testing.T) {
-	expected := []string{"input", "select", "confirm", "multiselect"}
-	assert.Equal(t, expected, validPromptTypes)
 }
 
 func TestFindScaffoldFiles(t *testing.T) {
@@ -289,25 +243,42 @@ func TestValidateScaffoldFile(t *testing.T) {
 		errorContain string
 	}{
 		{
-			name: "valid scaffold",
-			content: `name: test-scaffold
-description: Test scaffold
-version: 1.0.0
-prompts:
-  - name: component_name
-    type: input
-    description: Component name
-    required: true
+			name: "valid scaffold manifest",
+			content: `apiVersion: atmos/v1
+kind: AtmosScaffoldConfig
+metadata:
+  name: test-scaffold
+  description: Test scaffold
+  version: 1.0.0
+spec:
+  fields:
+    - name: component_name
+      type: input
+      description: Component name
+      required: true
 `,
 			expectError: false,
 		},
 		{
-			name: "missing name",
-			content: `description: Test scaffold
-prompts: []
+			name: "legacy prompts format rejected",
+			content: `name: test-scaffold
+description: Test scaffold
+prompts:
+  - name: component_name
+    type: input
 `,
 			expectError:  true,
-			errorContain: "scaffold is missing required name field",
+			errorContain: "scaffold validation failed",
+		},
+		{
+			name: "missing metadata name",
+			content: `apiVersion: atmos/v1
+kind: AtmosScaffoldConfig
+metadata:
+  description: no name
+`,
+			expectError:  true,
+			errorContain: "scaffold validation failed",
 		},
 		{
 			name: "invalid YAML",
@@ -315,51 +286,64 @@ prompts: []
 invalid: [unclosed
 `,
 			expectError:  true,
-			errorContain: "failed to parse scaffold YAML",
+			errorContain: "scaffold validation failed",
 		},
 		{
-			name: "prompt without name",
-			content: `name: test-scaffold
-prompts:
-  - type: input
-    description: Test
+			name: "field without name",
+			content: `apiVersion: atmos/v1
+kind: AtmosScaffoldConfig
+metadata:
+  name: test-scaffold
+spec:
+  fields:
+    - type: input
+      description: Test
 `,
 			expectError:  true,
-			errorContain: "invalid scaffold prompt configuration",
+			errorContain: "scaffold validation failed",
 		},
 		{
-			name: "prompt without type",
-			content: `name: test-scaffold
-prompts:
-  - name: test_prompt
-    description: Test
+			name: "field with invalid type",
+			content: `apiVersion: atmos/v1
+kind: AtmosScaffoldConfig
+metadata:
+  name: test-scaffold
+spec:
+  fields:
+    - name: test_field
+      type: invalid_type
+      description: Test
 `,
 			expectError:  true,
-			errorContain: "invalid scaffold prompt configuration",
+			errorContain: "scaffold validation failed",
 		},
 		{
-			name: "prompt with invalid type",
-			content: `name: test-scaffold
-prompts:
-  - name: test_prompt
-    type: invalid_type
-    description: Test
+			name: "unknown top-level property rejected",
+			content: `apiVersion: atmos/v1
+kind: AtmosScaffoldConfig
+metadata:
+  name: test-scaffold
+extra: not-allowed
 `,
 			expectError:  true,
-			errorContain: "invalid scaffold prompt configuration",
+			errorContain: "scaffold validation failed",
 		},
 		{
-			name: "valid prompt types",
-			content: `name: test-scaffold
-prompts:
-  - name: prompt1
-    type: input
-  - name: prompt2
-    type: select
-  - name: prompt3
-    type: confirm
-  - name: prompt4
-    type: multiselect
+			name: "all valid field types",
+			content: `apiVersion: atmos/v1
+kind: AtmosScaffoldConfig
+metadata:
+  name: test-scaffold
+spec:
+  fields:
+    - name: field1
+      type: input
+    - name: field2
+      type: select
+    - name: field3
+      type: confirm
+    - name: field4
+      type: multiselect
 `,
 			expectError: false,
 		},
@@ -543,48 +527,22 @@ func TestExecuteValidateScaffold_WithValidFile(t *testing.T) {
 
 	// Create valid scaffold.yaml
 	scaffoldPath := filepath.Join(tmpDir, "scaffold.yaml")
-	content := `name: test-scaffold
-description: Test
-version: 1.0.0
-prompts:
-  - name: test_prompt
-    type: input
+	content := `apiVersion: atmos/v1
+kind: AtmosScaffoldConfig
+metadata:
+  name: test-scaffold
+  description: Test
+  version: 1.0.0
+spec:
+  fields:
+    - name: test_field
+      type: input
 `
 	err := os.WriteFile(scaffoldPath, []byte(content), 0o644)
 	require.NoError(t, err)
 
 	err = executeValidateScaffold(context.Background(), tmpDir)
 	assert.NoError(t, err)
-}
-
-func TestScaffoldConfig_YAMLMarshaling(t *testing.T) {
-	config := ScaffoldConfig{
-		Name:        "test-scaffold",
-		Description: "Test description",
-		Author:      "test-author",
-		Version:     "1.0.0",
-		Prompts: []PromptConfig{
-			{
-				Name:     "component_name",
-				Type:     "input",
-				Required: true,
-			},
-		},
-	}
-
-	// Marshal to YAML
-	data, err := yaml.Marshal(&config)
-	require.NoError(t, err)
-	assert.NotEmpty(t, data)
-
-	// Unmarshal back
-	var unmarshaled ScaffoldConfig
-	err = yaml.Unmarshal(data, &unmarshaled)
-	require.NoError(t, err)
-
-	assert.Equal(t, config.Name, unmarshaled.Name)
-	assert.Equal(t, config.Description, unmarshaled.Description)
-	assert.Len(t, unmarshaled.Prompts, 1)
 }
 
 func TestInit_PackageInitialization(t *testing.T) {
@@ -750,10 +708,13 @@ func TestScaffoldValidateCmd_RunEFunction(t *testing.T) {
 	assert.NotNil(t, scaffoldValidateCmd.RunE)
 }
 
-func TestScaffoldSchemaData_Embedded(t *testing.T) {
-	// Verify the schema data was embedded
-	assert.NotEmpty(t, scaffoldSchemaData)
-	assert.Contains(t, scaffoldSchemaData, "schema") // JSON schemas typically contain this
+func TestScaffoldManifestSchema_Registered(t *testing.T) {
+	// The AtmosScaffoldConfig kind registers its generated JSON Schema with
+	// the manifest registry (replacing the old embedded scaffold-schema.json).
+	def, ok := manifest.GetDefinition(config.ScaffoldKind)
+	require.True(t, ok)
+	assert.Contains(t, def.SchemaJSON(), "$schema")
+	assert.Contains(t, def.SchemaJSON(), config.ScaffoldKind)
 }
 
 func TestExecuteScaffoldGenerate_AbsolutePath(t *testing.T) {
@@ -800,47 +761,6 @@ func TestFindScaffoldFiles_WalkError(t *testing.T) {
 	if err != nil {
 		assert.Error(t, err)
 	}
-}
-
-func TestPromptConfig_AllFields(t *testing.T) {
-	prompt := PromptConfig{
-		Name:        "test_field",
-		Description: "Test field description",
-		Type:        "select",
-		Default:     []string{"option1", "option2"},
-		Required:    false,
-	}
-
-	// Verify all fields are accessible
-	assert.Equal(t, "test_field", prompt.Name)
-	assert.Equal(t, "Test field description", prompt.Description)
-	assert.Equal(t, "select", prompt.Type)
-	assert.NotNil(t, prompt.Default)
-	assert.False(t, prompt.Required)
-}
-
-func TestScaffoldConfig_AllFields(t *testing.T) {
-	config := ScaffoldConfig{
-		Name:         "full-config",
-		Description:  "Full configuration test",
-		Author:       "test-author",
-		Version:      "2.0.0",
-		Prompts:      []PromptConfig{},
-		Dependencies: []string{"dep1", "dep2", "dep3"},
-		Hooks: map[string][]string{
-			"pre_generate":  {"echo 'starting'"},
-			"post_generate": {"echo 'done'"},
-		},
-	}
-
-	// Verify all fields are accessible
-	assert.Equal(t, "full-config", config.Name)
-	assert.Equal(t, "Full configuration test", config.Description)
-	assert.Equal(t, "test-author", config.Author)
-	assert.Equal(t, "2.0.0", config.Version)
-	assert.Empty(t, config.Prompts)
-	assert.Len(t, config.Dependencies, 3)
-	assert.Len(t, config.Hooks, 2)
 }
 
 func TestMergeConfiguredTemplates_NoTemplatesKey(t *testing.T) {
@@ -903,15 +823,19 @@ func TestValidateAllScaffoldFiles_WithErrors(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	validPath := filepath.Join(tmpDir, "valid.yaml")
-	validContent := `name: valid-scaffold
-prompts:
-  - name: test
-    type: input`
+	validContent := `apiVersion: atmos/v1
+kind: AtmosScaffoldConfig
+metadata:
+  name: valid-scaffold
+spec:
+  fields:
+    - name: test
+      type: input`
 	err := os.WriteFile(validPath, []byte(validContent), 0o644)
 	require.NoError(t, err)
 
 	invalidPath := filepath.Join(tmpDir, "invalid.yaml")
-	invalidContent := `prompts: []` // Missing name
+	invalidContent := `spec: {}` // Missing envelope and metadata.name.
 	err = os.WriteFile(invalidPath, []byte(invalidContent), 0o644)
 	require.NoError(t, err)
 

@@ -3,7 +3,6 @@ package scaffold
 
 import (
 	"context"
-	_ "embed"
 	"errors"
 	"fmt"
 	"os"
@@ -12,7 +11,6 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
-	"gopkg.in/yaml.v2"
 
 	"github.com/cloudposse/atmos/cmd/internal"
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -22,17 +20,12 @@ import (
 	"github.com/cloudposse/atmos/pkg/generator/templates"
 	generatorUI "github.com/cloudposse/atmos/pkg/generator/ui"
 	log "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/manifest"
 	"github.com/cloudposse/atmos/pkg/project/config"
 	atmosui "github.com/cloudposse/atmos/pkg/ui"
 )
 
-//go:embed scaffold-schema.json
-var scaffoldSchemaData string
-
 var scaffoldGenerateParser *flags.StandardParser
-
-// Valid prompt types for scaffold configuration.
-var validPromptTypes = []string{"input", "select", "confirm", "multiselect"}
 
 // validateSetFlag validates a --set flag entry in the format "key=value".
 // Returns an error if the entry is malformed.
@@ -66,27 +59,6 @@ func parseSetFlag(entry string) (key string, value string, err error) {
 
 	parts := strings.SplitN(entry, "=", 2)
 	return strings.TrimSpace(parts[0]), strings.TrimSpace(parts[1]), nil
-}
-
-// ScaffoldConfig represents a scaffold configuration.
-type ScaffoldConfig struct {
-	Name         string              `yaml:"name"`
-	Description  string              `yaml:"description,omitempty"`
-	Author       string              `yaml:"author,omitempty"`
-	Version      string              `yaml:"version,omitempty"`
-	Prompts      []PromptConfig      `yaml:"prompts,omitempty"`
-	Dependencies []string            `yaml:"dependencies,omitempty"`
-	Hooks        map[string][]string `yaml:"hooks,omitempty"`
-}
-
-// PromptConfig represents a prompt configuration.
-type PromptConfig struct {
-	Name        string        `yaml:"name"`
-	Description string        `yaml:"description,omitempty"`
-	Type        string        `yaml:"type"`
-	Default     interface{}   `yaml:"default,omitempty"`
-	Required    bool          `yaml:"required,omitempty"`
-	Options     []interface{} `yaml:"options,omitempty"`
 }
 
 // scaffoldCmd represents the scaffold parent command.
@@ -554,11 +526,11 @@ func loadDryRunValues(selectedConfig *templates.Configuration, templateVars map[
 			Err()
 	}
 
-	// Merge with defaults from scaffold config
-	for key := range scaffoldConfig.Fields {
-		field := scaffoldConfig.Fields[key]
-		if _, exists := mergedValues[key]; !exists && field.Default != nil {
-			mergedValues[key] = field.Default
+	// Merge with defaults from scaffold config, preserving declared order.
+	for i := range scaffoldConfig.Spec.Fields {
+		field := &scaffoldConfig.Spec.Fields[i]
+		if _, exists := mergedValues[field.Name]; !exists && field.Default != nil {
+			mergedValues[field.Name] = field.Default
 		}
 	}
 
@@ -661,13 +633,13 @@ func executeScaffoldList(_ *cobra.Command) error {
 	// Build table data from templates.Configuration map.
 	header := []string{"Template", "Description", "Source"}
 	var rows [][]string
-	for name, cfg := range configs {
+	for name := range configs {
 		// Use tracked origin instead of inferring from TargetDir
 		source := origins[name]
 		if source == "" {
 			source = "embedded" // Fallback for safety
 		}
-		description := cfg.Description
+		description := configs[name].Description
 		if description == "" {
 			description = "-"
 		}
@@ -745,10 +717,8 @@ func printValidationSummary(validCount int, errorCount int) error {
 		atmosui.Errorf("Invalid files: %d", errorCount)
 		return errUtils.Build(errUtils.ErrScaffoldValidation).
 			WithExplanationf("%d scaffold file(s) failed validation", errorCount).
-			WithHint("Review the validation errors above and fix the issues").
-			WithHint("The `name` field is required in every scaffold.yaml").
-			WithHint("If prompts are defined, each must have `name` and `type` fields").
-			WithHint("Valid prompt types: `input`, `select`, `confirm`, `multiselect`").
+			WithHint("Review the validation errors above and fix the issues: every scaffold.yaml is an `AtmosScaffoldConfig` manifest with `apiVersion`, `kind`, and `metadata.name`").
+			WithHint("Questionnaire fields live under `spec.fields`; valid field types are `input`, `select`, `confirm`, and `multiselect`").
 			WithContext("valid_count", validCount).
 			WithContext("error_count", errorCount).
 			WithExitCode(1).
@@ -823,9 +793,8 @@ func findScaffoldFilesInDirectory(path string, scaffoldPaths []string) ([]string
 	return scaffoldPaths, nil
 }
 
-// validateScaffoldFile validates a single scaffold.yaml file.
-//
-//nolint:revive,funlen // function-length: validation logic with detailed error messages
+// validateScaffoldFile validates a single scaffold.yaml file against the
+// AtmosScaffoldConfig manifest schema.
 func validateScaffoldFile(scaffoldPath string) error {
 	// Read scaffold file
 	scaffoldData, err := os.ReadFile(scaffoldPath)
@@ -839,78 +808,24 @@ func validateScaffoldFile(scaffoldPath string) error {
 			Err()
 	}
 
-	// Parse scaffold configuration to ensure it's valid YAML
-	var config ScaffoldConfig
-	if err := yaml.Unmarshal(scaffoldData, &config); err != nil {
-		return errUtils.Build(errUtils.ErrScaffoldParseYAML).
-			WithExplanationf("Invalid YAML syntax in: `%s`", scaffoldPath).
-			WithHint("Check for syntax errors (indentation, quotes, colons)").
-			WithHint("Use a YAML validator: https://www.yamllint.com/").
-			WithExample("```yaml\nname: my-scaffold\ndescription: My scaffold template\nprompts:\n  - name: project_name\n    type: input\n```").
+	// Validate against the generated AtmosScaffoldConfig JSON Schema,
+	// including the manifest envelope (apiVersion, kind, metadata).
+	if err := manifest.Validate(config.ScaffoldKind, scaffoldData); err != nil {
+		return errUtils.Build(errUtils.ErrScaffoldValidation).
+			WithCause(err).
+			WithExplanationf("Invalid scaffold manifest: `%s`", scaffoldPath).
+			WithExample(scaffoldManifestExample).
 			WithContext("path", scaffoldPath).
 			WithExitCode(2).
 			Err()
-	}
-
-	// Basic validation
-	if config.Name == "" {
-		return errUtils.Build(errUtils.ErrScaffoldMissingName).
-			WithExplanation("Scaffold name is required").
-			WithHint("Add a `name` field to your `scaffold.yaml`").
-			WithExample("```yaml\nname: my-scaffold\ndescription: My template\n```").
-			WithContext("path", scaffoldPath).
-			WithExitCode(2).
-			Err()
-	}
-
-	// Validate prompts
-	for i, prompt := range config.Prompts {
-		if prompt.Name == "" {
-			return errUtils.Build(errUtils.ErrScaffoldInvalidPrompt).
-				WithExplanationf("Prompt #%d is missing the `name` field", i+1).
-				WithHint("Each prompt must have a `name` field").
-				WithExample("```yaml\nprompts:\n  - name: project_name\n    type: input\n    description: Project name\n```").
-				WithContext("prompt_index", i).
-				WithContext("path", scaffoldPath).
-				WithExitCode(2).
-				Err()
-		}
-		if prompt.Type == "" {
-			return errUtils.Build(errUtils.ErrScaffoldInvalidPrompt).
-				WithExplanationf("Prompt #%d (`%s`) is missing the `type` field", i+1, prompt.Name).
-				WithExplanationf("Valid types: `%s`", strings.Join(validPromptTypes, ", ")).
-				WithExample("```yaml\nprompts:\n  - name: project_name\n    type: input  # Must be one of: input, select, confirm, multiselect\n```").
-				WithContext("prompt_index", i).
-				WithContext("prompt_name", prompt.Name).
-				WithContext("path", scaffoldPath).
-				WithExitCode(2).
-				Err()
-		}
-		// Validate prompt type using validPromptTypes constant
-		valid := false
-		for _, validType := range validPromptTypes {
-			if prompt.Type == validType {
-				valid = true
-				break
-			}
-		}
-		if !valid {
-			return errUtils.Build(errUtils.ErrScaffoldInvalidPrompt).
-				WithExplanationf("Prompt #%d (`%s`) has invalid type: `%s`", i+1, prompt.Name, prompt.Type).
-				WithExplanationf("Must be one of: `%s`", strings.Join(validPromptTypes, ", ")).
-				WithExample("```yaml\nprompts:\n  - name: environment\n    type: select  # Valid: input, select, confirm, multiselect\n    options:\n      - dev\n      - staging\n      - prod\n```").
-				WithContext("prompt_index", i).
-				WithContext("prompt_name", prompt.Name).
-				WithContext("invalid_type", prompt.Type).
-				WithContext("valid_types", strings.Join(validPromptTypes, ", ")).
-				WithContext("path", scaffoldPath).
-				WithExitCode(2).
-				Err()
-		}
 	}
 
 	return nil
 }
+
+// scaffoldManifestExample is a minimal valid AtmosScaffoldConfig manifest
+// shown in validation error messages.
+const scaffoldManifestExample = "```yaml\napiVersion: atmos/v1\nkind: AtmosScaffoldConfig\nmetadata:\n  name: my-scaffold\n  description: My scaffold template\nspec:\n  fields:\n    - name: project_name\n      type: input\n      default: my-project\n```"
 
 // convertScaffoldTemplateToConfiguration converts an atmos.yaml scaffold template entry to a templates.Configuration.
 func convertScaffoldTemplateToConfiguration(name string, templateData interface{}) (templates.Configuration, error) {

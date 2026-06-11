@@ -4,55 +4,60 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/cloudposse/atmos/internal/tui/templates/term"
 	"github.com/stretchr/testify/assert"
+
+	"github.com/cloudposse/atmos/internal/tui/templates/term"
+	"github.com/cloudposse/atmos/pkg/manifest"
 )
 
 func TestPromptForScaffoldConfig_FormCreation(t *testing.T) {
-	// Skip this test in non-interactive environments
+	// Skip this test in non-interactive environments.
 	if !term.IsTTYSupportForStdout() {
 		t.Skip("Skipping interactive form test in non-interactive environment")
 	}
 
-	// Test that forms can be created with different field types
+	// Test that forms can be created with different field types.
 	scaffoldConfig := &ScaffoldConfig{
-		Name:        "Test Scaffold Template",
-		Description: "Test scaffold template configuration",
-		Fields: map[string]FieldDefinition{
-			"name": {
-				Key:         "name",
-				Type:        "input",
-				Label:       "Project Name",
-				Description: "The name of your project",
-				Default:     "my-project",
-				Required:    true,
-				Placeholder: "Enter project name",
-			},
-			"license": {
-				Key:         "license",
-				Type:        "select",
-				Label:       "License",
-				Description: "Choose a license",
-				Default:     "MIT",
-				Required:    true,
-				Options:     []string{"MIT", "Apache", "GPL"},
-			},
-			"regions": {
-				Key:         "regions",
-				Type:        "multiselect",
-				Label:       "AWS Regions",
-				Description: "Select regions",
-				Default:     []string{"us-east-1"},
-				Required:    true,
-				Options:     []string{"us-east-1", "us-west-2", "eu-west-1"},
-			},
-			"monitoring": {
-				Key:         "monitoring",
-				Type:        "confirm",
-				Label:       "Enable Monitoring",
-				Description: "Enable monitoring and alerting",
-				Default:     true,
-				Required:    false,
+		Metadata: manifest.Metadata{
+			Name:        "test-scaffold",
+			Description: "Test scaffold template configuration",
+		},
+		Spec: ScaffoldSpec{
+			Fields: []FieldDefinition{
+				{
+					Name:        "name",
+					Type:        "input",
+					Label:       "Project Name",
+					Description: "The name of your project",
+					Default:     "my-project",
+					Required:    true,
+					Placeholder: "Enter project name",
+				},
+				{
+					Name:        "license",
+					Type:        "select",
+					Label:       "License",
+					Description: "Choose a license",
+					Default:     "MIT",
+					Required:    true,
+					Options:     []string{"MIT", "Apache", "GPL"},
+				},
+				{
+					Name:        "regions",
+					Type:        "multiselect",
+					Label:       "AWS Regions",
+					Description: "Select regions",
+					Default:     []string{"us-east-1"},
+					Required:    true,
+					Options:     []string{"us-east-1", "us-west-2", "eu-west-1"},
+				},
+				{
+					Name:        "monitoring",
+					Type:        "confirm",
+					Label:       "Enable Monitoring",
+					Description: "Enable monitoring and alerting",
+					Default:     true,
+				},
 			},
 		},
 	}
@@ -64,98 +69,57 @@ func TestPromptForScaffoldConfig_FormCreation(t *testing.T) {
 		"monitoring": true,
 	}
 
-	// Test that the function doesn't panic
+	// Test that the function doesn't panic.
 	assert.NotPanics(t, func() {
 		PromptForScaffoldConfig(scaffoldConfig, userValues)
 	})
 }
 
-func TestPromptForScaffoldConfig_FieldGrouping(t *testing.T) {
-	// Skip this test in non-interactive environments
+func TestPromptForScaffoldConfig_MixedFieldTypes(t *testing.T) {
+	// Skip this test in non-interactive environments.
 	if !term.IsTTYSupportForStdout() {
 		t.Skip("Skipping interactive form test in non-interactive environment")
 	}
 
-	// Test that fields are properly grouped by type
+	// Fields of mixed types prompt in declared order within a single group.
 	scaffoldConfig := &ScaffoldConfig{
-		Name:        "Test Scaffold Template",
-		Description: "Test scaffold template configuration",
-		Fields: map[string]FieldDefinition{
-			// Basic fields (input, text)
-			"name": {
-				Key:      "name",
-				Type:     "input",
-				Label:    "Project Name",
-				Required: true,
-			},
-			"description": {
-				Key:      "description",
-				Type:     "text",
-				Label:    "Description",
-				Required: false,
-			},
-			// Config fields (select)
-			"license": {
-				Key:      "license",
-				Type:     "select",
-				Label:    "License",
-				Required: true,
-				Options:  []string{"MIT", "Apache"},
-			},
-			"cloud_provider": {
-				Key:      "cloud_provider",
-				Type:     "select",
-				Label:    "Cloud Provider",
-				Required: true,
-				Options:  []string{"aws", "gcp", "azure"},
-			},
-			// Advanced fields (multiselect, confirm)
-			"regions": {
-				Key:      "regions",
-				Type:     "multiselect",
-				Label:    "Regions",
-				Required: true,
-				Options:  []string{"us-east-1", "us-west-2"},
-			},
-			"monitoring": {
-				Key:      "monitoring",
-				Type:     "confirm",
-				Label:    "Enable Monitoring",
-				Required: false,
+		Metadata: manifest.Metadata{
+			Name:        "test-scaffold",
+			Description: "Test scaffold template configuration",
+		},
+		Spec: ScaffoldSpec{
+			Fields: []FieldDefinition{
+				{Name: "name", Type: "input", Label: "Project Name", Required: true},
+				{Name: "description", Type: "text", Label: "Description"},
+				{Name: "license", Type: "select", Label: "License", Required: true, Options: []string{"MIT", "Apache"}},
+				{Name: "cloud_provider", Type: "select", Label: "Cloud Provider", Required: true, Options: []string{"aws", "gcp", "azure"}},
+				{Name: "regions", Type: "multiselect", Label: "Regions", Required: true, Options: []string{"us-east-1", "us-west-2"}},
+				{Name: "monitoring", Type: "confirm", Label: "Enable Monitoring"},
 			},
 		},
 	}
 
 	userValues := make(map[string]interface{})
 
-	// Test that the function doesn't panic with complex field grouping
+	// Test that the function doesn't panic with mixed field types.
 	assert.NotPanics(t, func() {
 		PromptForScaffoldConfig(scaffoldConfig, userValues)
 	})
 }
 
 func TestPromptForScaffoldConfig_Validation(t *testing.T) {
-	// Skip this test in non-interactive environments
+	// Skip this test in non-interactive environments.
 	if !term.IsTTYSupportForStdout() {
 		t.Skip("Skipping interactive form test in non-interactive environment")
 	}
 
-	// Test form validation
+	// Test form validation.
 	scaffoldConfig := &ScaffoldConfig{
-		Name:        "Test Scaffold Template",
-		Description: "Test scaffold template configuration",
-		Fields: map[string]FieldDefinition{
-			"required_field": {
-				Key:      "required_field",
-				Type:     "input",
-				Label:    "Required Field",
-				Required: true,
-			},
-			"optional_field": {
-				Key:      "optional_field",
-				Type:     "input",
-				Label:    "Optional Field",
-				Required: false,
+		Metadata: manifest.Metadata{Name: "test-scaffold"},
+		Spec: ScaffoldSpec{
+			Fields: []FieldDefinition{
+				{Name: "required_field", Type: "input", Label: "Required Field", Required: true},
+				{Name: "optional_field", Type: "input", Label: "Optional Field"},
 			},
 		},
 	}
@@ -165,76 +129,57 @@ func TestPromptForScaffoldConfig_Validation(t *testing.T) {
 		"optional_field": "",
 	}
 
-	// Test that the function doesn't panic with validation
+	// Test that the function doesn't panic with validation.
 	assert.NotPanics(t, func() {
 		PromptForScaffoldConfig(scaffoldConfig, userValues)
 	})
 }
 
 func TestPromptForScaffoldConfig_DefaultValues(t *testing.T) {
-	// Skip this test in non-interactive environments
+	// Skip this test in non-interactive environments.
 	if !term.IsTTYSupportForStdout() {
 		t.Skip("Skipping interactive form test in non-interactive environment")
 	}
 
-	// Test that default values are properly handled
+	// Test that default values are properly handled.
 	scaffoldConfig := &ScaffoldConfig{
-		Name:        "Test Scaffold Template",
-		Description: "Test scaffold template configuration",
-		Fields: map[string]FieldDefinition{
-			"string_default": {
-				Key:     "string_default",
-				Type:    "input",
-				Label:   "String Default",
-				Default: "default string",
-			},
-			"bool_default": {
-				Key:     "bool_default",
-				Type:    "confirm",
-				Label:   "Bool Default",
-				Default: true,
-			},
-			"array_default": {
-				Key:     "array_default",
-				Type:    "multiselect",
-				Label:   "Array Default",
-				Default: []string{"default1", "default2"},
-				Options: []string{"default1", "default2", "option3"},
+		Metadata: manifest.Metadata{Name: "test-scaffold"},
+		Spec: ScaffoldSpec{
+			Fields: []FieldDefinition{
+				{Name: "string_default", Type: "input", Label: "String Default", Default: "default string"},
+				{Name: "bool_default", Type: "confirm", Label: "Bool Default", Default: true},
+				{
+					Name:    "array_default",
+					Type:    "multiselect",
+					Label:   "Array Default",
+					Default: []string{"default1", "default2"},
+					Options: []string{"default1", "default2", "option3"},
+				},
 			},
 		},
 	}
 
 	userValues := make(map[string]interface{})
 
-	// Test that the function doesn't panic with default values
+	// Test that the function doesn't panic with default values.
 	assert.NotPanics(t, func() {
 		PromptForScaffoldConfig(scaffoldConfig, userValues)
 	})
 }
 
 func TestPromptForScaffoldConfig_ValueCapture(t *testing.T) {
-	// Skip this test in non-interactive environments
+	// Skip this test in non-interactive environments.
 	if !term.IsTTYSupportForStdout() {
 		t.Skip("Skipping interactive form test in non-interactive environment")
 	}
 
-	// Test that form values are properly captured
+	// Test that form values are properly captured.
 	scaffoldConfig := &ScaffoldConfig{
-		Name:        "Test Scaffold Template",
-		Description: "Test scaffold template configuration",
-		Fields: map[string]FieldDefinition{
-			"name": {
-				Key:     "name",
-				Type:    "input",
-				Label:   "Project Name",
-				Default: "default-project",
-			},
-			"license": {
-				Key:     "license",
-				Type:    "select",
-				Label:   "License",
-				Default: "MIT",
-				Options: []string{"MIT", "Apache"},
+		Metadata: manifest.Metadata{Name: "test-scaffold"},
+		Spec: ScaffoldSpec{
+			Fields: []FieldDefinition{
+				{Name: "name", Type: "input", Label: "Project Name", Default: "default-project"},
+				{Name: "license", Type: "select", Label: "License", Default: "MIT", Options: []string{"MIT", "Apache"}},
 			},
 		},
 	}
@@ -244,97 +189,56 @@ func TestPromptForScaffoldConfig_ValueCapture(t *testing.T) {
 		"license": "Apache",
 	}
 
-	// Test that the function doesn't panic and values are captured
+	// Test that the function doesn't panic and values are captured.
 	assert.NotPanics(t, func() {
 		PromptForScaffoldConfig(scaffoldConfig, userValues)
 	})
 
-	// Verify that user values override defaults
+	// Verify that user values override defaults.
 	assert.Equal(t, "user-project", userValues["name"])
 	assert.Equal(t, "Apache", userValues["license"])
 }
 
 func TestPromptForScaffoldConfig_EmptyConfig(t *testing.T) {
-	// Skip this test in non-interactive environments
-	if !term.IsTTYSupportForStdout() {
-		t.Skip("Skipping interactive form test in non-interactive environment")
-	}
-
-	// Test with empty scaffold config
+	// Templates without fields skip the form entirely, so this runs headless.
 	scaffoldConfig := &ScaffoldConfig{
-		Name:        "Empty Project",
-		Description: "Empty scaffold template configuration",
-		Fields:      map[string]FieldDefinition{},
+		Metadata: manifest.Metadata{
+			Name:        "empty-project",
+			Description: "Empty scaffold template configuration",
+		},
 	}
 
 	userValues := make(map[string]interface{})
 
-	// Test that the function doesn't panic with empty config
+	// Test that the function doesn't panic with empty config.
 	assert.NotPanics(t, func() {
-		PromptForScaffoldConfig(scaffoldConfig, userValues)
+		err := PromptForScaffoldConfig(scaffoldConfig, userValues)
+		assert.NoError(t, err)
 	})
 }
 
 func TestPromptForScaffoldConfig_AllFieldsCaptured(t *testing.T) {
-	// Skip this test in non-interactive environments
+	// Skip this test in non-interactive environments.
 	if !term.IsTTYSupportForStdout() {
 		t.Skip("Skipping interactive form test in non-interactive environment")
 	}
 
-	// Create a scaffold config with all field types
+	// Create a scaffold config with all field types.
 	scaffoldConfig := &ScaffoldConfig{
-		Fields: map[string]FieldDefinition{
-			"name": {
-				Key:         "name",
-				Type:        "input",
-				Label:       "Project Name",
-				Default:     "default-project",
-				Required:    true,
-				Placeholder: "Enter project name",
-			},
-			"author": {
-				Key:         "author",
-				Type:        "input",
-				Label:       "Author",
-				Default:     "Default Author",
-				Required:    true,
-				Placeholder: "Enter author name",
-			},
-			"year": {
-				Key:         "year",
-				Type:        "input",
-				Label:       "Year",
-				Default:     "2024",
-				Required:    true,
-				Placeholder: "Enter year",
-			},
-			"license": {
-				Key:      "license",
-				Type:     "select",
-				Label:    "License",
-				Default:  "MIT",
-				Required: true,
-				Options:  []string{"MIT", "Apache", "GPL"},
-			},
-			"regions": {
-				Key:      "regions",
-				Type:     "multiselect",
-				Label:    "Regions",
-				Default:  []string{"us-east-1"},
-				Required: true,
-				Options:  []string{"us-east-1", "us-west-2", "eu-west-1"},
-			},
-			"enable_monitoring": {
-				Key:      "enable_monitoring",
-				Type:     "confirm",
-				Label:    "Enable Monitoring",
-				Default:  true,
-				Required: false,
+		Metadata: manifest.Metadata{Name: "test-scaffold"},
+		Spec: ScaffoldSpec{
+			Fields: []FieldDefinition{
+				{Name: "name", Type: "input", Label: "Project Name", Default: "default-project", Required: true, Placeholder: "Enter project name"},
+				{Name: "author", Type: "input", Label: "Author", Default: "Default Author", Required: true, Placeholder: "Enter author name"},
+				{Name: "year", Type: "input", Label: "Year", Default: "2024", Required: true, Placeholder: "Enter year"},
+				{Name: "license", Type: "select", Label: "License", Default: "MIT", Required: true, Options: []string{"MIT", "Apache", "GPL"}},
+				{Name: "regions", Type: "multiselect", Label: "Regions", Default: []string{"us-east-1"}, Required: true, Options: []string{"us-east-1", "us-west-2", "eu-west-1"}},
+				{Name: "enable_monitoring", Type: "confirm", Label: "Enable Monitoring", Default: true},
 			},
 		},
 	}
 
-	// Initial user values
+	// Initial user values.
 	userValues := map[string]interface{}{
 		"name":              "test-project",
 		"author":            "Test Author",
@@ -344,17 +248,17 @@ func TestPromptForScaffoldConfig_AllFieldsCaptured(t *testing.T) {
 		"enable_monitoring": false,
 	}
 
-	// This test verifies that all fields are properly captured
-	// In a real interactive test, we would need to mock the form input
+	// This test verifies that all fields are properly captured.
+	// In a real interactive test, we would need to mock the form input.
 	err := PromptForScaffoldConfig(scaffoldConfig, userValues)
 
 	// The function should either complete successfully or return an error
-	// but it shouldn't crash
+	// but it shouldn't crash.
 	if err != nil && !strings.Contains(err.Error(), "user aborted") {
 		t.Errorf("Unexpected error: %v", err)
 	}
 
-	// Verify that all expected fields are present in userValues
+	// Verify that all expected fields are present in userValues.
 	expectedFields := []string{"name", "author", "year", "license", "regions", "enable_monitoring"}
 	for _, field := range expectedFields {
 		if _, exists := userValues[field]; !exists {
@@ -364,7 +268,7 @@ func TestPromptForScaffoldConfig_AllFieldsCaptured(t *testing.T) {
 }
 
 func TestCreateField_AllFieldTypes(t *testing.T) {
-	// Test all field types to ensure they're created correctly
+	// Test all field types to ensure they're created correctly.
 	testCases := []struct {
 		name     string
 		field    FieldDefinition
@@ -373,7 +277,7 @@ func TestCreateField_AllFieldTypes(t *testing.T) {
 		{
 			name: "input field",
 			field: FieldDefinition{
-				Key:         "name",
+				Name:        "name",
 				Type:        "input",
 				Label:       "Project Name",
 				Default:     "default-project",
@@ -385,7 +289,7 @@ func TestCreateField_AllFieldTypes(t *testing.T) {
 		{
 			name: "select field",
 			field: FieldDefinition{
-				Key:      "license",
+				Name:     "license",
 				Type:     "select",
 				Label:    "License",
 				Default:  "MIT",
@@ -397,7 +301,7 @@ func TestCreateField_AllFieldTypes(t *testing.T) {
 		{
 			name: "multiselect field",
 			field: FieldDefinition{
-				Key:      "regions",
+				Name:     "regions",
 				Type:     "multiselect",
 				Label:    "Regions",
 				Default:  []string{"us-east-1"},
@@ -409,18 +313,17 @@ func TestCreateField_AllFieldTypes(t *testing.T) {
 		{
 			name: "confirm field",
 			field: FieldDefinition{
-				Key:      "enable_monitoring",
-				Type:     "confirm",
-				Label:    "Enable Monitoring",
-				Default:  true,
-				Required: false,
+				Name:    "enable_monitoring",
+				Type:    "confirm",
+				Label:   "Enable Monitoring",
+				Default: true,
 			},
 			expected: "confirm",
 		},
 		{
 			name: "year field",
 			field: FieldDefinition{
-				Key:         "year",
+				Name:        "year",
 				Type:        "input",
 				Label:       "Year",
 				Default:     "2024",
@@ -435,21 +338,21 @@ func TestCreateField_AllFieldTypes(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			values := make(map[string]interface{})
 
-			// Set initial value
-			values[tc.field.Key] = tc.field.Default
+			// Set initial value.
+			values[tc.field.Name] = tc.field.Default
 
-			// Create the field
-			field, _ := createField(tc.field.Key, &tc.field, values)
+			// Create the field.
+			field, _ := createField(tc.field.Name, &tc.field, values)
 
 			// Verify the field was created (we can't easily test the exact type without reflection)
-			// but we can verify it's not nil
+			// but we can verify it's not nil.
 			if field == nil {
 				t.Errorf("Field was not created for %s", tc.name)
 			}
 
-			// Verify the value is still in the map
-			if _, exists := values[tc.field.Key]; !exists {
-				t.Errorf("Value for field '%s' was removed from values map", tc.field.Key)
+			// Verify the value is still in the map.
+			if _, exists := values[tc.field.Name]; !exists {
+				t.Errorf("Value for field '%s' was removed from values map", tc.field.Name)
 			}
 		})
 	}
@@ -457,10 +360,10 @@ func TestCreateField_AllFieldTypes(t *testing.T) {
 
 func TestCreateField_ValueOverwriteIssue(t *testing.T) {
 	// This test reproduces the issue where values are being overwritten
-	// in the createField function before the form runs
+	// in the createField function before the form runs.
 
 	field := FieldDefinition{
-		Key:         "year",
+		Name:        "year",
 		Type:        "input",
 		Label:       "Year",
 		Default:     "2024",
@@ -468,21 +371,21 @@ func TestCreateField_ValueOverwriteIssue(t *testing.T) {
 		Placeholder: "2024",
 	}
 
-	// Simulate the values map that would be passed to createField
+	// Simulate the values map that would be passed to createField.
 	values := make(map[string]interface{})
-	values["year"] = "2025" // User-provided value
+	values["year"] = "2025" // User-provided value.
 
-	// Create the field - this should NOT overwrite the value
+	// Create the field - this should NOT overwrite the value.
 	_, _ = createField("year", &field, values)
 
-	// The value should still be "2025", not "2024"
+	// The value should still be "2025", not "2024".
 	if values["year"] != "2025" {
 		t.Errorf("Expected year to remain '2025', but got '%v'", values["year"])
 	}
 
-	// Test with a different field type
+	// Test with a different field type.
 	field2 := FieldDefinition{
-		Key:      "license",
+		Name:     "license",
 		Type:     "select",
 		Label:    "License",
 		Default:  "MIT",
@@ -490,22 +393,22 @@ func TestCreateField_ValueOverwriteIssue(t *testing.T) {
 		Options:  []string{"MIT", "Apache", "GPL"},
 	}
 
-	values["license"] = "Apache" // User-provided value
+	values["license"] = "Apache" // User-provided value.
 
-	// Create the field - this should NOT overwrite the value
+	// Create the field - this should NOT overwrite the value.
 	_, _ = createField("license", &field2, values)
 
-	// The value should still be "Apache", not "MIT"
+	// The value should still be "Apache", not "MIT".
 	if values["license"] != "Apache" {
 		t.Errorf("Expected license to remain 'Apache', but got '%v'", values["license"])
 	}
 }
 
 func TestCreateField_UserInputPriority(t *testing.T) {
-	// This test verifies that user input is prioritized over defaults
+	// This test verifies that user input is prioritized over defaults.
 
 	field := FieldDefinition{
-		Key:         "year",
+		Name:        "year",
 		Type:        "input",
 		Label:       "Year",
 		Default:     "2024",
@@ -513,79 +416,54 @@ func TestCreateField_UserInputPriority(t *testing.T) {
 		Placeholder: "2024",
 	}
 
-	// Simulate user-provided value
+	// Simulate user-provided value.
 	values := make(map[string]interface{})
-	values["year"] = "2025" // User wants 2025
+	values["year"] = "2025" // User wants 2025.
 
-	// Create the field
+	// Create the field.
 	fieldObj, getter := createField("year", &field, values)
 
-	// The field should be created
+	// The field should be created.
 	if fieldObj == nil {
 		t.Errorf("Field was not created")
 	}
 
-	// The getter should return the user's value, not the default
+	// The getter should return the user's value, not the default.
 	value := getter()
 	if value != "2025" {
 		t.Errorf("Expected getter to return user value '2025', but got '%v'", value)
 	}
 
-	// The values map should still contain the user's value
+	// The values map should still contain the user's value.
 	if values["year"] != "2025" {
 		t.Errorf("Expected values map to contain user value '2025', but got '%v'", values["year"])
 	}
 }
 
 func TestPromptForScaffoldConfig_UserInputCapture(t *testing.T) {
-	// This test simulates the complete form flow to verify user input is captured
+	// This test simulates the complete form flow to verify user input is captured.
 
 	scaffoldConfig := &ScaffoldConfig{
-		Fields: map[string]FieldDefinition{
-			"year": {
-				Key:         "year",
-				Type:        "input",
-				Label:       "Year",
-				Default:     "2024",
-				Required:    true,
-				Placeholder: "2024",
-			},
-			"author": {
-				Key:         "author",
-				Type:        "input",
-				Label:       "Author",
-				Default:     "Default Author",
-				Required:    true,
-				Placeholder: "Enter author name",
+		Metadata: manifest.Metadata{Name: "test-scaffold"},
+		Spec: ScaffoldSpec{
+			Fields: []FieldDefinition{
+				{Name: "year", Type: "input", Label: "Year", Default: "2024", Required: true, Placeholder: "2024"},
+				{Name: "author", Type: "input", Label: "Author", Default: "Default Author", Required: true, Placeholder: "Enter author name"},
 			},
 		},
 	}
 
-	// Initial user values (could be from command line or previous run)
+	// Initial user values (could be from command line or previous run).
 	userValues := map[string]interface{}{
-		"year":   "2025", // User wants 2025
+		"year":   "2025", // User wants 2025.
 		"author": "John Doe",
 	}
 
-	// This simulates what happens in the real form
-	// We can't easily test the interactive part, but we can verify the setup
+	// This simulates what happens in the real form.
+	// We can't easily test the interactive part, but we can verify the setup.
+	formValues := initializeFormValues(scaffoldConfig, userValues)
 
-	// Initialize form values with user values and defaults
-	formValues := make(map[string]interface{})
-
-	// Set defaults from scaffold config
-	for key, field := range scaffoldConfig.Fields {
-		if field.Default != nil {
-			formValues[key] = field.Default
-		}
-	}
-
-	// Override with user values
-	for key, value := range userValues {
-		formValues[key] = value
-	}
-
-	// Verify that user values take priority
+	// Verify that user values take priority.
 	if formValues["year"] != "2025" {
 		t.Errorf("Expected year to be '2025' (user value), but got '%v'", formValues["year"])
 	}
@@ -594,21 +472,21 @@ func TestPromptForScaffoldConfig_UserInputCapture(t *testing.T) {
 		t.Errorf("Expected author to be 'John Doe' (user value), but got '%v'", formValues["author"])
 	}
 
-	// Test that the createField function uses the correct values
-	yearFieldDef := scaffoldConfig.Fields["year"]
+	// Test that the createField function uses the correct values.
+	yearFieldDef := scaffoldConfig.Spec.Fields[0]
 	yearField, yearGetter := createField("year", &yearFieldDef, formValues)
 	if yearField == nil {
 		t.Errorf("Year field was not created")
 	}
 
-	// The getter should return the user's value
+	// The getter should return the user's value.
 	yearValue := yearGetter()
 	if yearValue != "2025" {
 		t.Errorf("Expected year getter to return '2025', but got '%v'", yearValue)
 	}
 
-	// Test author field
-	authorFieldDef := scaffoldConfig.Fields["author"]
+	// Test author field.
+	authorFieldDef := scaffoldConfig.Spec.Fields[1]
 	authorField, authorGetter := createField("author", &authorFieldDef, formValues)
 	if authorField == nil {
 		t.Errorf("Author field was not created")
@@ -621,40 +499,29 @@ func TestPromptForScaffoldConfig_UserInputCapture(t *testing.T) {
 }
 
 func TestPromptForScaffoldConfig_ExistingValuesPriority(t *testing.T) {
-	// This test verifies that existing values from scaffold.yaml take priority over defaults
+	// This test verifies that existing values from a project record take
+	// priority over defaults.
 
 	scaffoldConfig := &ScaffoldConfig{
-		Fields: map[string]FieldDefinition{
-			"year": {
-				Key:         "year",
-				Type:        "input",
-				Label:       "Year",
-				Default:     "2024",
-				Required:    true,
-				Placeholder: "2024",
-			},
-			"author": {
-				Key:         "author",
-				Type:        "input",
-				Label:       "Author",
-				Default:     "Default Author",
-				Required:    true,
-				Placeholder: "Enter author name",
+		Metadata: manifest.Metadata{Name: "test-scaffold"},
+		Spec: ScaffoldSpec{
+			Fields: []FieldDefinition{
+				{Name: "year", Type: "input", Label: "Year", Default: "2024", Required: true, Placeholder: "2024"},
+				{Name: "author", Type: "input", Label: "Author", Default: "Default Author", Required: true, Placeholder: "Enter author name"},
 			},
 		},
 	}
 
-	// Simulate existing values from scaffold.yaml (what would be loaded by LoadUserValues)
+	// Simulate existing values from a prior run (what LoadUserValues returns).
 	existingValues := map[string]interface{}{
-		"year":   "2025",   // Existing value from scaffold.yaml
-		"author": "Foobar", // Existing value from scaffold.yaml
+		"year":   "2025",
+		"author": "Foobar",
 	}
 
-	// This simulates what happens in executeWithSetup
-	// Deep merge project defaults with user values
+	// This simulates what happens in executeWithSetup.
 	mergedValues := DeepMerge(scaffoldConfig, existingValues)
 
-	// Verify that existing values take priority over defaults
+	// Verify that existing values take priority over defaults.
 	if mergedValues["year"] != "2025" {
 		t.Errorf("Expected year to be '2025' (existing value), but got '%v'", mergedValues["year"])
 	}
@@ -663,22 +530,10 @@ func TestPromptForScaffoldConfig_ExistingValuesPriority(t *testing.T) {
 		t.Errorf("Expected author to be 'Foobar' (existing value), but got '%v'", mergedValues["author"])
 	}
 
-	// Now simulate what happens in PromptForScaffoldConfig
-	formValues := make(map[string]interface{})
+	// Now simulate what happens in PromptForScaffoldConfig.
+	formValues := initializeFormValues(scaffoldConfig, mergedValues)
 
-	// Set defaults from scaffold config
-	for key, field := range scaffoldConfig.Fields {
-		if field.Default != nil {
-			formValues[key] = field.Default
-		}
-	}
-
-	// Override with user values (mergedValues contains existing values)
-	for key, value := range mergedValues {
-		formValues[key] = value
-	}
-
-	// Verify that existing values take priority in form values
+	// Verify that existing values take priority in form values.
 	if formValues["year"] != "2025" {
 		t.Errorf("Expected formValues year to be '2025' (existing value), but got '%v'", formValues["year"])
 	}
@@ -687,8 +542,8 @@ func TestPromptForScaffoldConfig_ExistingValuesPriority(t *testing.T) {
 		t.Errorf("Expected formValues author to be 'Foobar' (existing value), but got '%v'", formValues["author"])
 	}
 
-	// Test that createField uses the correct values
-	yearFieldDef := scaffoldConfig.Fields["year"]
+	// Test that createField uses the correct values.
+	yearFieldDef := scaffoldConfig.Spec.Fields[0]
 	yearField, yearGetter := createField("year", &yearFieldDef, formValues)
 	if yearField == nil {
 		t.Errorf("Year field was not created")
@@ -699,7 +554,7 @@ func TestPromptForScaffoldConfig_ExistingValuesPriority(t *testing.T) {
 		t.Errorf("Expected year getter to return '2025' (existing value), but got '%v'", yearValue)
 	}
 
-	authorFieldDef := scaffoldConfig.Fields["author"]
+	authorFieldDef := scaffoldConfig.Spec.Fields[1]
 	authorField, authorGetter := createField("author", &authorFieldDef, formValues)
 	if authorField == nil {
 		t.Errorf("Author field was not created")

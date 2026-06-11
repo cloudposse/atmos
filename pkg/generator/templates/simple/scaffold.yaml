@@ -1,10 +1,14 @@
-name: "simple"
-description: "Simple Atmos project template"
-author: "Cloud Posse"
-version: "1.0.0"
-
-prompts:
-  - name: "project_name"
-    description: "Project name"
-    type: "input"
-    default: "my-project"
+apiVersion: atmos/v1
+kind: AtmosScaffoldConfig
+metadata:
+  name: simple
+  description: Simple Atmos project template
+  author: Cloud Posse
+  version: 1.0.0
+spec:
+  fields:
+    - name: project_name
+      label: Project name
+      description: Name of the project
+      type: input
+      default: my-project

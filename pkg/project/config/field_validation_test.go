@@ -5,11 +5,13 @@ import (
 )
 
 func TestCreateField_InvalidFieldType(t *testing.T) {
-	// Test that unknown field types cause a panic with a helpful message
+	// Unknown field types are rejected by schema validation before a form is
+	// ever built; createField falls back to a plain input as defense in
+	// depth instead of panicking.
 	field := FieldDefinition{
 		Type:        "invalid_type",
 		Label:       "Test Field",
-		Description: "This should fail",
+		Description: "This should fall back to input",
 		Default:     "test",
 	}
 
@@ -17,19 +19,16 @@ func TestCreateField_InvalidFieldType(t *testing.T) {
 		"test_field": "test_value",
 	}
 
-	// Expect a panic for invalid field type
-	defer func() {
-		if r := recover(); r != nil {
-			expectedMessage := "unsupported field type 'invalid_type' for field 'test_field'. Supported types: input, text, string, select, multiselect, confirm, bool, boolean"
-			if r != expectedMessage {
-				t.Errorf("Expected panic message %q, got %q", expectedMessage, r)
-			}
-		} else {
-			t.Error("Expected createField to panic for invalid field type, but it didn't")
-		}
-	}()
-
-	createField("test_field", &field, values)
+	huhField, getter := createField("test_field", &field, values)
+	if huhField == nil {
+		t.Fatal("Expected createField to return a fallback field for an unknown type")
+	}
+	if getter == nil {
+		t.Fatal("Expected createField to return a getter for an unknown type")
+	}
+	if _, ok := getter().(string); !ok {
+		t.Errorf("Expected the fallback field to behave like an input (string value), got %T", getter())
+	}
 }
 
 func TestCreateField_ValidFieldTypes(t *testing.T) {

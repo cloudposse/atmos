@@ -38,11 +38,15 @@ func TestLoadDryRunValues(t *testing.T) {
 				Files: []templates.File{
 					{
 						Path: config.ScaffoldConfigFileName,
-						Content: `name: Test
-fields:
-  project_name:
-    type: string
-    default: default-name
+						Content: `apiVersion: atmos/v1
+kind: AtmosScaffoldConfig
+metadata:
+  name: test
+spec:
+  fields:
+    - name: project_name
+      type: string
+      default: default-name
 `,
 					},
 				},

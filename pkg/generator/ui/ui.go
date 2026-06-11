@@ -74,8 +74,8 @@ func resolveDelimiters(delimiters []string, scaffoldConfig *config.ScaffoldConfi
 	if len(delimiters) > 0 {
 		return delimiters
 	}
-	if scaffoldConfig != nil && len(scaffoldConfig.Delimiters) == 2 {
-		return scaffoldConfig.Delimiters
+	if scaffoldConfig != nil && len(scaffoldConfig.Spec.Delimiters) == 2 {
+		return scaffoldConfig.Spec.Delimiters
 	}
 	return []string{"{{", "}}"}
 }
@@ -527,9 +527,9 @@ func (ui *InitUI) RunSetupForm(scaffoldConfig *config.ScaffoldConfig, targetPath
 	valueSources := make(map[string]string)
 
 	// Start with all values as defaults
-	for key := range scaffoldConfig.Fields {
-		if _, exists := mergedValues[key]; exists {
-			valueSources[key] = "default"
+	for i := range scaffoldConfig.Spec.Fields {
+		if _, exists := mergedValues[scaffoldConfig.Spec.Fields[i].Name]; exists {
+			valueSources[scaffoldConfig.Spec.Fields[i].Name] = "default"
 		}
 	}
 
@@ -606,9 +606,10 @@ func (ui *InitUI) executeWithSetup(embedsConfig *tmpl.Configuration, targetPath 
 		return fmt.Errorf("failed to run setup form: %w", err)
 	}
 
-	// Save the user values with template ID and base ref
-	if err := config.SaveUserConfigWithBaseRef(targetPath, embedsConfig.TemplateID, baseRef, mergedValues); err != nil {
-		return fmt.Errorf("failed to save user values: %w", err)
+	// Write the project record: the template manifest with the user's
+	// answers and provenance merged in.
+	if err := config.SaveProjectRecord(targetPath, scaffoldConfig, embedsConfig.Source, baseRef, mergedValues); err != nil {
+		return fmt.Errorf("failed to save project record: %w", err)
 	}
 
 	// Process each file with rich configuration
@@ -624,9 +625,9 @@ func (ui *InitUI) executeWithSetup(embedsConfig *tmpl.Configuration, targetPath 
 		if len(delimiters) == 0 {
 			delimiters = []string{"{{", "}}"}
 			if scaffoldConfig != nil {
-				// scaffoldConfig is of type *config.ScaffoldConfig, access Delimiters field directly
-				if len(scaffoldConfig.Delimiters) == 2 {
-					delimiters = scaffoldConfig.Delimiters
+				// scaffoldConfig is of type *config.ScaffoldConfig, access Delimiters via Spec
+				if len(scaffoldConfig.Spec.Delimiters) == 2 {
+					delimiters = scaffoldConfig.Spec.Delimiters
 				}
 			}
 		}
