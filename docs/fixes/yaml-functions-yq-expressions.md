@@ -22,7 +22,7 @@ functions.
 Added bracket notation tests for map keys containing special characters (slashes, hyphens):
 
 - `tests/fixtures/components/terraform/mock/main.tf` - Added `secret_arns_map` output
-- `tests/fixtures/scenarios/atmos-terraform-output-yaml-function/stacks/deploy/nonprod.yaml` - Added
+- `tests/fixtures/scenarios/atmos-terraform-output-yaml-function/stacks/deploy/terraform-output-test.yaml` - Added
   `component-bracket-notation`
 - `tests/fixtures/scenarios/atmos-terraform-state-yaml-function/stacks/deploy/nonprod.yaml` - Added
   `component-bracket-notation`

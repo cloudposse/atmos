@@ -932,12 +932,12 @@ func TestListCmd_EmptySkillsList(t *testing.T) {
 
 	// Reset homedir cache to pick up new HOME.
 	homedir.Reset()
-	homedir.DisableCache = true
+	homedir.SetDisableCache(true)
 
 	// Restore cache settings after test.
 	t.Cleanup(func() {
 		homedir.Reset()
-		homedir.DisableCache = false
+		homedir.SetDisableCache(false)
 	})
 
 	// Reset the detailed flag to default.
@@ -984,12 +984,12 @@ func TestListCmd_WithInstalledSkills(t *testing.T) {
 
 	// Reset homedir cache to pick up new HOME.
 	homedir.Reset()
-	homedir.DisableCache = true
+	homedir.SetDisableCache(true)
 
 	// Restore cache settings after test.
 	t.Cleanup(func() {
 		homedir.Reset()
-		homedir.DisableCache = false
+		homedir.SetDisableCache(false)
 	})
 
 	// Create the skills directory and registry with a test skill.
@@ -1103,12 +1103,12 @@ func TestListCmd_WithMultipleSkills(t *testing.T) {
 
 	// Reset homedir cache to pick up new HOME.
 	homedir.Reset()
-	homedir.DisableCache = true
+	homedir.SetDisableCache(true)
 
 	// Restore cache settings after test.
 	t.Cleanup(func() {
 		homedir.Reset()
-		homedir.DisableCache = false
+		homedir.SetDisableCache(false)
 	})
 
 	// Create the skills directory and registry with multiple skills.
@@ -1246,12 +1246,12 @@ func TestListCmd_CorruptedRegistry(t *testing.T) {
 
 	// Reset homedir cache to pick up new HOME.
 	homedir.Reset()
-	homedir.DisableCache = true
+	homedir.SetDisableCache(true)
 
 	// Restore cache settings after test.
 	t.Cleanup(func() {
 		homedir.Reset()
-		homedir.DisableCache = false
+		homedir.SetDisableCache(false)
 	})
 
 	// Create the skills directory with a corrupted registry file.
@@ -1286,12 +1286,12 @@ func TestListCmd_SkillWithDisabledStatus(t *testing.T) {
 
 	// Reset homedir cache to pick up new HOME.
 	homedir.Reset()
-	homedir.DisableCache = true
+	homedir.SetDisableCache(true)
 
 	// Restore cache settings after test.
 	t.Cleanup(func() {
 		homedir.Reset()
-		homedir.DisableCache = false
+		homedir.SetDisableCache(false)
 	})
 
 	// Create the skills directory and registry with a disabled skill.
@@ -1394,12 +1394,12 @@ func TestListCmd_SkillWithBuiltInStatus(t *testing.T) {
 
 	// Reset homedir cache to pick up new HOME.
 	homedir.Reset()
-	homedir.DisableCache = true
+	homedir.SetDisableCache(true)
 
 	// Restore cache settings after test.
 	t.Cleanup(func() {
 		homedir.Reset()
-		homedir.DisableCache = false
+		homedir.SetDisableCache(false)
 	})
 
 	// Create the skills directory and registry with a built-in skill.

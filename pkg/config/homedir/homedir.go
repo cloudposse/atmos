@@ -1,50 +1,234 @@
+// Package homedir implements home directory detection across Linux, macOS, and Windows.
+//
+// It uses a layered strategy: environment variable ($HOME / USERPROFILE /
+// HOMEDRIVE+HOMEPATH), os/user.Current(), macOS dscl, and finally a shell
+// fallback as a last resort.
+//
+// CGO=0 note: in CGO-disabled builds (e.g., Alpine/musl containers, distroless
+// images, or builds with -tags netgo), the pure-Go user.Current() reads only
+// /etc/passwd. UIDs managed by NSS/LDAP/SSSD that are absent from /etc/passwd
+// will not be found there; the shell fallback (getHomeFromShell) is the last
+// resort for those environments. When the user is not in any password database,
+// the shell fallback returns ErrBlankOutput.
 package homedir
 
 import (
 	"bytes"
+	"context"
 	"errors"
+	"fmt"
 	"os"
 	"os/exec"
+	"os/user"
+	"path"
 	"path/filepath"
+	"regexp"
 	"runtime"
-	"strconv"
 	"strings"
 	"sync"
+	"time"
 )
 
-// DisableCache will disable caching of the home directory. Caching is enabled
-// by default.
-var DisableCache bool
+// disableCache will disable caching of the home directory. Caching is enabled
+// by default. Use SetDisableCache to modify this value safely from concurrent
+// goroutines; the accessor acquires the internal lock before reading or writing.
+var disableCache bool
+
+// SetDisableCache sets the disableCache flag in a thread-safe manner by
+// acquiring the internal cache lock before writing. It is safe to call from
+// any goroutine, including concurrent callers of Dir or Expand. For best
+// results, call it before any parallel Dir calls are in flight so that all
+// callers observe the same setting.
+func SetDisableCache(v bool) {
+	cacheLock.Lock()
+	disableCache = v
+	cacheLock.Unlock()
+}
+
+// GetDisableCache returns the current disableCache flag in a thread-safe manner.
+func GetDisableCache() bool {
+	cacheLock.RLock()
+	v := disableCache
+	cacheLock.RUnlock()
+	return v
+}
 
 var (
 	homedirCache           string
 	cacheLock              sync.RWMutex
+	timeoutLock            sync.RWMutex
 	ErrCannotExpandHomeDir = errors.New("cannot expand user-specific home dir")
 	ErrBlankOutput         = errors.New("blank output when reading home directory")
 	ErrHomeDrivePathBlank  = errors.New("HOMEDRIVE, HOMEPATH, or USERPROFILE are blank")
+	// ErrShellUnavailable is returned when the shell (sh) binary cannot be found.
+	// This can happen in minimal containers (e.g., distroless) that lack a shell.
+	ErrShellUnavailable = errors.New("shell (sh) not available")
+	// ErrIDUnavailable is returned when all username-lookup methods fail: id
+	// exited non-zero or was unavailable, $USER is empty, and whoami also
+	// failed or timed out. Ensure that 'id' or 'whoami' are on PATH, or set
+	// the USER environment variable.
+	ErrIDUnavailable = errors.New("unable to determine user: 'id' failed, $USER is empty, and 'whoami' also failed — ensure 'id' or 'whoami' are available, or set USER")
+	// ErrInvalidUsername is returned when the username contains characters outside
+	// the allowed whitelist. Using a sentinel avoids embedding the raw username
+	// (PII) in error messages or logs.
+	ErrInvalidUsername = errors.New("username contains invalid characters")
+
+	// usernameRe is a whitelist for valid Unix usernames. It accepts only
+	// letters, digits, dots, underscores, and hyphens. The first character
+	// must be alphanumeric, a dot, or an underscore — it cannot be a hyphen
+	// or a plus sign. This prevents shell tilde-special substitutions:
+	//   ~- expands to $OLDPWD and ~+ expands to $PWD in bash/dash.
+	// All other characters (shell operators |, &, >, <, (, ), tab, newline,
+	// space, single quotes, backticks, $, ;, /) are implicitly rejected,
+	// preventing shell injection when the username is interpolated into sh -c.
+	usernameRe = regexp.MustCompile(`^[A-Za-z0-9._][A-Za-z0-9._-]*$`)
+
+	// dsclNFSHomeDirRe matches a dscl NFSHomeDirectory output line tolerating
+	// any amount of leading whitespace before the key and any whitespace
+	// after the colon. It captures the rest of the line including any spaces
+	// in the path (e.g. "/Users/John Doe"). The caller trims trailing
+	// whitespace after extraction.
+	dsclNFSHomeDirRe = regexp.MustCompile(`^\s*NFSHomeDirectory:\s*(.+)$`)
+
+	// externalCmdTimeout is the maximum time allowed for external subprocess
+	// calls (id, dscl, sh). A conservative default prevents Dir()/Expand()
+	// from hanging indefinitely on slow NSS/LDAP/directory backends.
+	// Override via ATMOS_HOMEDIR_CMD_TIMEOUT (e.g., "10s", "500ms").
+	// Note: the value is read once at program init; changing the env var at
+	// runtime has no effect. Use SetExternalCmdTimeout for runtime adjustment.
+	externalCmdTimeout = 5 * time.Second
+
+	// maxStderrLen is the maximum number of bytes included from subprocess
+	// stderr in error messages. Longer output is truncated with "..." to
+	// prevent runaway log spam from NSS/LDAP backends that produce verbose
+	// error output.
+	maxStderrLen = 256
 )
 
-const (
-	passwdFieldCount   = 7
-	passwdHomeDirIndex = 5
-)
+func init() {
+	applyEnvTimeout()
+}
+
+// applyEnvTimeout reads ATMOS_HOMEDIR_CMD_TIMEOUT and, if it is a valid
+// positive duration, updates externalCmdTimeout. It is separated from init()
+// so that tests can call it directly after setting the env var, covering all
+// three branches (unset, invalid, valid).
+// Any value parseable by time.ParseDuration is accepted; invalid values
+// are silently ignored and the default (5s) is retained.
+func applyEnvTimeout() {
+	if v := os.Getenv("ATMOS_HOMEDIR_CMD_TIMEOUT"); v != "" {
+		if d, err := time.ParseDuration(v); err == nil && d > 0 {
+			timeoutLock.Lock()
+			externalCmdTimeout = d
+			timeoutLock.Unlock()
+		}
+	}
+}
+
+// SetExternalCmdTimeout sets the timeout used for all external subprocess calls
+// (id, dscl, sh) in a thread-safe manner. It is safe to call from any goroutine,
+// including concurrent callers of Dir or Expand. Zero and negative durations are
+// ignored. Prefer this over directly assigning externalCmdTimeout, which is not
+// protected by the timeout lock.
+func SetExternalCmdTimeout(d time.Duration) {
+	if d > 0 {
+		timeoutLock.Lock()
+		externalCmdTimeout = d
+		timeoutLock.Unlock()
+	}
+}
+
+// getExternalCmdTimeout returns the current external command timeout in a
+// thread-safe manner. All code that reads externalCmdTimeout should use this
+// function rather than reading the variable directly.
+func getExternalCmdTimeout() time.Duration {
+	timeoutLock.RLock()
+	defer timeoutLock.RUnlock()
+	return externalCmdTimeout
+}
+
+// truncateStderr returns at most maxStderrLen bytes from msg, appending "..."
+// when truncation occurs. This prevents runaway log spam from verbose NSS/LDAP
+// diagnostic output.
+func truncateStderr(msg string) string {
+	if len(msg) <= maxStderrLen {
+		return msg
+	}
+	return msg[:maxStderrLen] + "..."
+}
+
+// currentUserFunc is the function used to look up the current OS user.
+// It is a variable so that tests can replace it with a stub to simulate
+// error conditions without needing OS-level changes.
+var currentUserFunc = user.Current
+
+// darwinHomeDirFunc is the function used to look up the home directory on
+// macOS via dscl. It accepts a cached username (may be empty) from dirUnix so
+// that currentUserFunc is not called a second time on the darwin fallback path.
+// It is a variable so that tests can replace it with a stub to exercise the
+// darwin path on other operating systems.
+var darwinHomeDirFunc = getDarwinHomeDir
+
+// shellHomeDirFunc is the function used to get the home directory via the shell
+// fallback when $HOME is unset/empty and user.Current() has failed.
+// It can be replaced in tests to simulate failure or empty-output conditions.
+//
+// The default implementation (shellHomeDir) is injection-safe: it fetches the
+// current username via os/exec, validates it, and then uses ~username tilde
+// expansion (NOT eval with $HOME) so that the lookup is always backed by the
+// system password database — independent of $HOME — and works in both bash
+// and dash.
+var shellHomeDirFunc = shellHomeDir
+
+// testHookDirAfterReadUnlock, when non-nil, is called in Dir() after releasing
+// the read lock and before acquiring the write lock. Used only in tests to
+// exercise the double-check locking path (lines 202-204): a test can hold the
+// write lock here and pre-populate homedirCache so Dir() sees a non-empty cache
+// when it eventually acquires the write lock.
+var testHookDirAfterReadUnlock func()
 
 // Dir returns the home directory for the executing user.
 //
 // This uses an OS-specific method for discovering the home directory.
 // An error is returned if a home directory cannot be detected.
+//
+// Thread safety: Dir is safe for concurrent use. disableCache is read under
+// cacheLock (an internal sync.RWMutex), so concurrent reads are safe. Direct
+// writes to the disableCache package variable are unsafe when called concurrently
+// with Dir — use the exported SetDisableCache helper instead, which acquires
+// cacheLock before writing, ensuring the write is serialized with any concurrent
+// readers inside Dir.
 func Dir() (string, error) {
-	if !DisableCache {
-		cacheLock.RLock()
-		cached := homedirCache
-		cacheLock.RUnlock()
-		if cached != "" {
-			return cached, nil
-		}
+	cacheLock.RLock()
+	dcache := disableCache
+	cached := homedirCache
+	cacheLock.RUnlock()
+
+	if !dcache && cached != "" {
+		return cached, nil
+	}
+
+	if testHookDirAfterReadUnlock != nil {
+		// The hook is intentionally called AFTER the read-lock is released and
+		// BEFORE the write-lock is acquired. Tests use this window to populate
+		// homedirCache (under the write lock inside the hook) so that Dir()'s
+		// subsequent write-lock acquisition finds a non-empty cache, deterministically
+		// exercising the double-check path at line 213. The hook itself acquires and
+		// fully releases the write lock before returning, so there is no data race:
+		// Dir() only accesses homedirCache after acquiring cacheLock.Lock() below.
+		testHookDirAfterReadUnlock()
 	}
 
 	cacheLock.Lock()
 	defer cacheLock.Unlock()
+
+	// Re-check after acquiring the write lock: another goroutine may have
+	// already populated the cache between our read-unlock and write-lock.
+	// Re-read disableCache under the write lock for a consistent view.
+	dcache = disableCache
+	if !dcache && homedirCache != "" {
+		return homedirCache, nil
+	}
 
 	var result string
 	var err error
@@ -58,7 +242,12 @@ func Dir() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	homedirCache = result
+	// Only write to the cache when caching is enabled. If disableCache is true,
+	// skip the write to prevent a stale entry from poisoning the cache for
+	// future callers that have caching enabled.
+	if !dcache {
+		homedirCache = result
+	}
 	return result, nil
 }
 
@@ -83,11 +272,14 @@ func Expand(path string) (string, error) {
 		return "", err
 	}
 
-	return filepath.Join(dir, path[1:]), nil
+	// Strip any leading path separator from path[1:] so that filepath.Join
+	// correctly anchors the result under dir on all platforms. On Windows a
+	// leading slash makes the path drive-relative, which would discard dir.
+	rest := strings.TrimLeft(path[1:], `/\`)
+	return filepath.Join(dir, rest), nil
 }
 
 // Reset clears the cache, forcing the next call to Dir to re-detect
-
 // the home directory. This generally never has to be called, but can be
 // useful in tests if you're modifying the home directory via the HOME
 // env var or something.
@@ -98,18 +290,38 @@ func Reset() {
 }
 
 func dirUnix() (string, error) {
-	// Try to get the home directory from the environment variable first
+	// Try to get the home directory from the environment variable first.
+	// Apply filepath.Clean for consistency with dirWindows() which also
+	// normalises all returned paths.
 	if home := getHomeFromEnv(); home != "" {
-		return home, nil
+		return filepath.Clean(home), nil
 	}
 
-	// Try OS-specific methods
-	if runtime.GOOS == "darwin" {
-		if home, err := getDarwinHomeDir(); err == nil && home != "" {
-			return home, nil
+	// Try user.Current() on all platforms first — it is the most reliable
+	// and avoids spawning subprocesses. The darwin-specific dscl lookup is
+	// kept as a fallback for environments where user.Current() fails.
+	//
+	// Note: in CGO=0 builds (e.g., Alpine/musl), user.Current() uses a
+	// pure-Go implementation that reads only /etc/passwd. Users whose UID is
+	// managed by NSS/LDAP/SSSD and not listed in /etc/passwd will not be found
+	// here; the shell fallback below is the last resort for those environments.
+	//
+	// The user object is retained so that getDarwinHomeDir can reuse the
+	// Username without a second currentUserFunc() call on the darwin path.
+	var cachedUsername string
+	if u, err := currentUserFunc(); err == nil {
+		if u.HomeDir != "" {
+			return filepath.Clean(u.HomeDir), nil
 		}
-	} else {
-		if home, err := getUnixHomeDir(); err == nil && home != "" {
+		// HomeDir is empty but Username may still be available for dscl.
+		cachedUsername = u.Username
+	}
+
+	// Darwin-specific dscl fallback (only reached when user.Current() fails
+	// or returns an empty HomeDir). Pass the cached username to avoid a
+	// second currentUserFunc() call inside darwinHomeDirFunc.
+	if runtime.GOOS == "darwin" {
+		if home, err := darwinHomeDirFunc(cachedUsername); err == nil && home != "" {
 			return home, nil
 		}
 	}
@@ -118,86 +330,395 @@ func dirUnix() (string, error) {
 	return getHomeFromShell()
 }
 
+// homeEnvName is the name of the environment variable that holds the home
+// directory path. On Plan 9 it is "home" (lowercase); on every other platform
+// it is "HOME". Stored as a variable so tests can override it to simulate Plan 9
+// behaviour on any platform.
+var homeEnvName = "HOME"
+
 func getHomeFromEnv() string {
-	homeEnv := "HOME"
-	if runtime.GOOS == "plan9" {
-		homeEnv = "home" // On Plan 9, env vars are lowercase
-	}
-	return os.Getenv(homeEnv)
+	// TrimSpace for consistency with dirWindows(), which also trims env vars.
+	// A whitespace-only value is treated the same as an empty value.
+	// Strip wrapping quotes for parity with dirWindows: some shell init scripts
+	// or environment managers write HOME="~/path" or HOME="/home/user" with
+	// literal surrounding quotes.
+	home := strings.TrimSpace(os.Getenv(homeEnvName))
+	return strings.Trim(home, `"'`)
 }
 
 func dirWindows() (string, error) {
-	// First prefer the HOME environmental variable
-	if home := os.Getenv("HOME"); home != "" {
-		return home, nil
+	// First prefer the HOME environmental variable.
+	// Strip wrapping quotes first: some tools (Cygwin setup, legacy scripts)
+	// may write HOME="C:\Users\me" with literal quote characters. Strip them
+	// before the separator conversion so filepath.IsAbs remains correct.
+	// Apply filepath.FromSlash before filepath.Clean so that forward-slash
+	// paths set by Cygwin, Git Bash, or WSL1 (e.g., "/home/user") are
+	// converted to native Windows separators. POSIX-style absolute paths
+	// (e.g., "/cygwin/home/user") become drive-relative ("\cygwin\home\user")
+	// after conversion. toDriveAbsolute then prepends HOMEDRIVE (or
+	// SystemDrive) when available, producing a fully-qualified path
+	// ("C:\cygwin\home\user"). When neither HOMEDRIVE nor SystemDrive is set
+	// the result remains drive-relative — the best we can do without a drive
+	// letter; callers in standard Windows environments will always have at
+	// least SystemDrive available.
+	if home := strings.TrimSpace(os.Getenv("HOME")); home != "" {
+		return toDriveAbsolute(cleanWindowsPath(strings.Trim(home, `"'`))), nil
 	}
 
 	// Prefer standard environment variable USERPROFILE
-	if home := os.Getenv("USERPROFILE"); home != "" {
-		return home, nil
+	if home := strings.TrimSpace(os.Getenv("USERPROFILE")); home != "" {
+		return toDriveAbsolute(cleanWindowsPath(strings.Trim(home, `"'`))), nil
 	}
 
-	drive := os.Getenv("HOMEDRIVE")
-	path := os.Getenv("HOMEPATH")
-	home := drive + path
+	drive := strings.TrimSpace(os.Getenv("HOMEDRIVE"))
+	path := strings.TrimSpace(os.Getenv("HOMEPATH"))
 	if drive == "" || path == "" {
 		return "", ErrHomeDrivePathBlank
 	}
 
-	return home, nil
+	// HOMEPATH should have a leading backslash (e.g., \Users\foo).
+	// Enforce it to prevent a drive-relative path (e.g., C:Users\foo)
+	// when an unconventional value like "Users\foo" is set.
+	if !strings.HasPrefix(path, "\\") {
+		path = "\\" + path
+	}
+
+	return filepath.Clean(drive + path), nil
 }
 
-func getDarwinHomeDir() (string, error) {
-	var stdout bytes.Buffer
-	cmd := exec.Command("sh", "-c", `dscl -q . -read /Users/"$(whoami)" NFSHomeDirectory | sed 's/^[^ ]*: //'`)
-	cmd.Stdout = &stdout
-	if err := cmd.Run(); err != nil {
+// toDriveAbsolute promotes a drive-relative Windows path to a drive-absolute
+// path. It handles three distinct cases:
+//
+//  1. UNC/device paths ("\\server\share\..." or "\\?\...", "\\.\...")  — returned unchanged;
+//     they are already fully-qualified network paths.
+//  2. Drive-letter-relative paths ("C:Users\foo") — normalized to "C:\Users\foo"
+//     by inserting a root backslash after the colon.
+//  3. Root-relative paths ("\path") — HOMEDRIVE (or SystemDrive) is prepended
+//     when available to produce a drive-absolute path ("C:\path").
+//
+// Paths that are already drive-absolute (e.g. "C:\Users\me") and paths that do
+// not start with a backslash or drive letter are returned unchanged.
+// This is called only on Windows.
+func toDriveAbsolute(path string) string {
+	// Case 1: UNC paths ("\\server\share\...") and Win32 device paths
+	// ("\\?\" or "\\.\" ) are already fully-qualified; return them unchanged.
+	if strings.HasPrefix(path, `\\`) {
+		return path
+	}
+
+	// Case 2: Drive-letter-relative paths such as "C:Users\foo" have a drive
+	// letter and colon at positions 0-1, but no root backslash at position 2.
+	// Normalize them to "C:\Users\foo" so callers always receive a drive-absolute
+	// path. This pattern is produced when HOME or USERPROFILE is set to a
+	// relative value like "C:subdir\path" (uncommon but valid Windows env usage).
+	if len(path) >= 2 && path[1] == ':' && (len(path) == 2 || path[2] != '\\') {
+		return filepath.Clean(path[:2] + `\` + path[2:])
+	}
+
+	// Case 3: Root-relative paths start with a single backslash but have no
+	// drive letter (e.g. "\cygwin\home\user"). Prepend HOMEDRIVE or SystemDrive
+	// when available to produce a drive-absolute path ("C:\cygwin\home\user").
+	if !strings.HasPrefix(path, `\`) {
+		return path
+	}
+	for _, envKey := range []string{"HOMEDRIVE", "SystemDrive"} {
+		if d := strings.TrimSpace(os.Getenv(envKey)); d != "" {
+			return filepath.Clean(d + path)
+		}
+	}
+	return path
+}
+
+// cleanWindowsPath converts forward slashes to the native Windows separator and
+// applies filepath.Clean. A caller that wants a guaranteed drive-absolute result
+// should pass the output through toDriveAbsolute(), which prepends HOMEDRIVE or
+// SystemDrive when the cleaned path is still drive-relative ("\…").
+func cleanWindowsPath(path string) string {
+	return filepath.Clean(filepath.FromSlash(path))
+}
+
+// getDarwinHomeDir looks up the home directory via macOS dscl.
+// cachedUsername may be non-empty when dirUnix already called currentUserFunc
+// and obtained the username; passing it here avoids a second OS user lookup.
+// When cachedUsername is empty, getDarwinHomeDir falls back to id -un.
+func getDarwinHomeDir(cachedUsername string) (string, error) {
+	var username string
+	if cachedUsername != "" {
+		// Reuse the username from the dirUnix caller — no second currentUserFunc call.
+		username = cachedUsername
+	} else {
+		// Fall back to id -un when no cached username is available (e.g., when
+		// called directly from tests via darwinHomeDirFunc).
+		// Use a dedicated context so a slow id lookup does not consume the dscl
+		// deadline; each external command gets its own full timeout budget.
+		idCtx, idCancel := context.WithTimeout(context.Background(), getExternalCmdTimeout())
+		defer idCancel()
+		var whoOut, whoErr bytes.Buffer
+		whoCmd := exec.CommandContext(idCtx, "id", "-un")
+		whoCmd.Stdout = &whoOut
+		whoCmd.Stderr = &whoErr
+		if err := whoCmd.Run(); err != nil {
+			msg := truncateStderr(redactStderr(strings.TrimSpace(whoErr.String()), ""))
+			if msg != "" {
+				return "", fmt.Errorf("getDarwinHomeDir: id: %w (stderr: %s)", err, msg)
+			}
+			return "", fmt.Errorf("getDarwinHomeDir: id: %w", err)
+		}
+		username = strings.TrimSpace(whoOut.String())
+		if username == "" {
+			return "", ErrBlankOutput
+		}
+	}
+
+	// Guard against path traversal and shell injection: dscl path is
+	// /Users/<username>. validateUsername applies a strict whitelist and
+	// rejects dot-segments ("." and "..") that would allow path traversal.
+	if err := validateUsername(username); err != nil {
+		return "", fmt.Errorf("getDarwinHomeDir: %w", err)
+	}
+
+	// Each external command gets its own full timeout budget so that a slow
+	// id lookup above does not reduce the time available for dscl here.
+	dsclCtx, dsclCancel := context.WithTimeout(context.Background(), getExternalCmdTimeout())
+	defer dsclCancel()
+
+	// Query the directory service without a shell pipeline or sed.
+	var out, dsErr bytes.Buffer
+	dsCmd := exec.CommandContext(dsclCtx, "dscl", "-q", ".", "-read", "/Users/"+username, "NFSHomeDirectory")
+	dsCmd.Stdout = &out
+	dsCmd.Stderr = &dsErr
+	if err := dsCmd.Run(); err != nil {
+		msg := truncateStderr(redactStderr(strings.TrimSpace(dsErr.String()), username))
+		if msg != "" {
+			return "", fmt.Errorf("getDarwinHomeDir: dscl: %w (stderr: %s)", err, msg)
+		}
+		return "", fmt.Errorf("getDarwinHomeDir: dscl: %w", err)
+	}
+
+	// parseDsclNFSHomeDir parses the home directory path from dscl output.
+	// Call site returns the result directly.
+	return parseDsclNFSHomeDir(out.String())
+}
+
+// parseDsclNFSHomeDir extracts the home directory from dscl output.
+// It uses a compiled regex to tolerate any amount of leading whitespace before
+// the key and multiple spaces/tabs after the colon. The returned path is
+// filepath.Clean'd. Returns ErrBlankOutput when the key is absent or the
+// parsed value is empty, ".", or a non-absolute path (malformed record).
+func parseDsclNFSHomeDir(output string) (string, error) {
+	for _, line := range strings.Split(output, "\n") {
+		m := dsclNFSHomeDirRe.FindStringSubmatch(line)
+		if m == nil {
+			continue
+		}
+		// dscl always emits POSIX paths, so use the path package (not
+		// path/filepath) for cleaning and absolute-path detection.  Using
+		// filepath on Windows would misclassify "/Users/alice" as relative.
+		// TrimSpace removes any trailing whitespace or carriage returns that
+		// the (.+)$ capture group may include.
+		home := path.Clean(strings.TrimSpace(m[1]))
+		if home == "" || home == "." {
+			continue
+		}
+		// Require an absolute path: a relative result from dscl would be
+		// a malformed record and must not be returned to callers.
+		if !path.IsAbs(home) {
+			return "", ErrBlankOutput
+		}
+		return home, nil
+	}
+	return "", ErrBlankOutput
+}
+
+func getUnixHomeDir() (string, error) {
+	// Use os/user.Current to get the home directory without parsing
+	// /etc/passwd format data directly. This avoids handling raw password
+	// database entries, which can contain sensitive fields.
+	u, err := currentUserFunc()
+	if err != nil {
+		return "", fmt.Errorf("getUnixHomeDir: %w", err)
+	}
+	if u.HomeDir == "" {
+		return "", fmt.Errorf("getUnixHomeDir: %w", ErrBlankOutput)
+	}
+	// Normalize the path to eliminate redundant separators, trailing slashes,
+	// or symlink oddities, making it consistent with env-var and dscl paths.
+	return filepath.Clean(u.HomeDir), nil
+}
+
+func getHomeFromShell() (string, error) {
+	return shellHomeDirFunc()
+}
+
+// validateUsername checks that the given username is safe to use in subprocess
+// arguments and path construction. It rejects dot-segments ("." and "..") that
+// could allow path traversal when constructing paths like /Users/<username>, and
+// then applies the usernameRe whitelist to block all other unsafe characters.
+func validateUsername(username string) error {
+	// "." and ".." satisfy usernameRe but must be rejected explicitly: they are
+	// not valid Unix usernames and could allow path traversal.
+	if username == "." || username == ".." {
+		return ErrInvalidUsername
+	}
+	if !usernameRe.MatchString(username) {
+		return ErrInvalidUsername
+	}
+	return nil
+}
+
+// redactStderr returns a sanitized version of a stderr string with any
+// occurrence of the given username replaced by "<redacted>". The replacement
+// is case-insensitive so that stderr messages with a different casing variant
+// (e.g., "/Users/JDoe" when username is "jdoe") are also scrubbed. This
+// prevents PII (e.g., /Users/<username> in dscl error messages) from leaking
+// into logs or error chains.
+func redactStderr(stderr, username string) string {
+	if username == "" || stderr == "" {
+		return stderr
+	}
+	// Case-insensitive scan: walk stderr looking for the username in any casing.
+	lowerSrc := strings.ToLower(stderr)
+	lowerUser := strings.ToLower(username)
+	var result strings.Builder
+	result.Grow(len(stderr))
+	i := 0
+	for {
+		idx := strings.Index(lowerSrc[i:], lowerUser)
+		if idx < 0 {
+			result.WriteString(stderr[i:])
+			break
+		}
+		result.WriteString(stderr[i : i+idx])
+		result.WriteString("<redacted>")
+		i += idx + len(lowerUser)
+	}
+	return result.String()
+}
+
+// shellGetUsernameFunc is the function used by shellHomeDir to obtain the
+// current username via id -un. On any id failure (not found, non-zero exit,
+// or empty output), it falls back to the USER environment variable and then
+// to whoami, so that minimal containers and transient NSS/LDAP hiccups where
+// id exists but exits non-zero can still resolve the home directory.
+// It can be replaced in tests to simulate failure conditions.
+var shellGetUsernameFunc = func() (string, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), getExternalCmdTimeout())
+	defer cancel()
+	var idOut, idErr bytes.Buffer
+	idCmd := exec.CommandContext(ctx, "id", "-un")
+	idCmd.Stdout = &idOut
+	idCmd.Stderr = &idErr
+	if err := idCmd.Run(); err == nil {
+		if name := strings.TrimSpace(idOut.String()); name != "" {
+			return name, nil
+		}
+	}
+	// id failed or returned empty output. Try $USER then whoami before giving up.
+	// This handles: id not installed (ErrNotFound), NSS/LDAP errors (exit 1),
+	// and any other transient failure where the binary exists but misbehaves.
+	if u := strings.TrimSpace(os.Getenv("USER")); u != "" {
+		if err := validateUsername(u); err == nil {
+			return u, nil
+		}
+		// $USER is set but invalid; fall through to whoami.
+	}
+	whoamiCtx, whoamiCancel := context.WithTimeout(context.Background(), getExternalCmdTimeout())
+	defer whoamiCancel()
+	var whoOut, whoErr bytes.Buffer
+	whoamiCmd := exec.CommandContext(whoamiCtx, "whoami")
+	whoamiCmd.Stdout = &whoOut
+	whoamiCmd.Stderr = &whoErr
+	if werr := whoamiCmd.Run(); werr == nil {
+		if name := strings.TrimSpace(whoOut.String()); name != "" {
+			return name, nil
+		}
+	}
+	// Include any diagnostic stderr from id/whoami (no username available yet,
+	// so no redaction needed). These messages typically describe NSS/LDAP errors
+	// and do not include PII. Truncate to prevent log spam from verbose backends.
+	// Include both stderr snippets when both commands failed, for maximum
+	// diagnosability without requiring operators to run each command manually.
+	idMsg := truncateStderr(strings.TrimSpace(idErr.String()))
+	whoMsg := truncateStderr(strings.TrimSpace(whoErr.String()))
+	switch {
+	case idMsg != "" && whoMsg != "":
+		return "", fmt.Errorf("shellGetUsernameFunc: %w (id: %s; whoami: %s)", ErrIDUnavailable, idMsg, whoMsg)
+	case idMsg != "":
+		return "", fmt.Errorf("shellGetUsernameFunc: %w (id: %s)", ErrIDUnavailable, idMsg)
+	case whoMsg != "":
+		return "", fmt.Errorf("shellGetUsernameFunc: %w (whoami: %s)", ErrIDUnavailable, whoMsg)
+	}
+	return "", ErrIDUnavailable
+}
+
+// shellHomeDir is the production implementation of the shell home-directory
+// fallback. It is injection-safe because it:
+//  1. Fetches the current username via shellGetUsernameFunc (id -un by default).
+//  2. Validates the username with the same guard used by getDarwinHomeDir.
+//  3. Constructs a shell command that expands ~username (not bare ~) so that
+//     the lookup is backed by the system password database in both bash and
+//     dash, independent of $HOME.
+//
+// This replaces the previous `eval "echo ~$(id -un)"` which was vulnerable to
+// shell metacharacter injection if id -un ever returned a malicious string.
+func shellHomeDir() (string, error) {
+	// Step 1: obtain the current username in Go, outside the shell.
+	username, err := shellGetUsernameFunc()
+	if err != nil {
 		return "", err
 	}
+	if username == "" {
+		return "", ErrBlankOutput
+	}
+
+	// Step 2: validate the username to prevent injection in the shell command.
+	// validateUsername applies a strict whitelist and explicitly rejects "."
+	// and ".." (dot-segments that satisfy the regex but must not be passed to
+	// `printf '%s\n' ~.` or `~..` in the shell).
+	if err := validateUsername(username); err != nil {
+		return "", fmt.Errorf("getHomeFromShell: %w", err)
+	}
+
+	// Step 3: expand ~username in the shell.
+	// printf '%s\n' ~username expands the home directory from the system
+	// password database in both bash and dash, even when $HOME is unset.
+	// Safe to interpolate: username is pre-validated above to contain only
+	// safe characters (no shell metacharacters), making string concatenation
+	// equivalent to passing a literal.
+	shCtx, shCancel := context.WithTimeout(context.Background(), getExternalCmdTimeout())
+	defer shCancel()
+	var stdout, stderr bytes.Buffer
+	cmd := exec.CommandContext(shCtx, "sh", "-c", "printf '%s\\n' ~"+username)
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	if err := cmd.Run(); err != nil {
+		// If sh is not available at all, return a sentinel error so callers
+		// can distinguish "no shell" from "user not found" or "id failed".
+		if errors.Is(err, exec.ErrNotFound) {
+			return "", ErrShellUnavailable
+		}
+		msg := truncateStderr(redactStderr(strings.TrimSpace(stderr.String()), username))
+		if msg != "" {
+			return "", fmt.Errorf("getHomeFromShell: %w (stderr: %s)", err, msg)
+		}
+		return "", fmt.Errorf("getHomeFromShell: %w", err)
+	}
+
 	result := strings.TrimSpace(stdout.String())
 	if result == "" {
 		return "", ErrBlankOutput
 	}
-	return result, nil
-}
-
-func getUnixHomeDir() (string, error) {
-	var stdout bytes.Buffer
-	cmd := exec.Command("getent", "passwd", strconv.Itoa(os.Getuid()))
-	cmd.Stdout = &stdout
-	if err := cmd.Run(); err != nil {
-		if !errors.Is(err, exec.ErrNotFound) {
-			return "", err
-		}
-		return "", nil
+	// Guard against unexpanded tilde (e.g., "~username") which occurs when the
+	// user is not in the password database (distroless/scratch containers). A
+	// tilde-prefixed string is not a valid absolute path and must not be returned
+	// as a home directory.
+	if strings.HasPrefix(result, "~") {
+		return "", ErrBlankOutput
 	}
-
-	passwd := strings.TrimSpace(stdout.String())
-	if passwd == "" {
-		return "", nil
-	}
-
-	// username:password:uid:gid:gecos:home:shell
-	// lgtm[go/clear-text-logging]
-	// The password field in modern /etc/passwd is 'x', not the actual password.
-	// We only extract the home directory field and do not log sensitive data.
-	passwdParts := strings.SplitN(passwd, ":", passwdFieldCount)
-	if len(passwdParts) > passwdHomeDirIndex {
-		return passwdParts[passwdHomeDirIndex], nil
-	}
-	return "", nil
-}
-
-func getHomeFromShell() (string, error) {
-	var stdout bytes.Buffer
-	cmd := exec.Command("sh", "-c", "cd && pwd")
-	cmd.Stdout = &stdout
-	if err := cmd.Run(); err != nil {
-		return "", err
-	}
-
-	result := strings.TrimSpace(stdout.String())
-	if result == "" {
+	// Require an absolute path. A non-absolute result (e.g., "relative/path")
+	// would silently produce wrong results for callers that join it with other
+	// paths. This should not happen in practice, but is a safety net.
+	if !filepath.IsAbs(result) {
 		return "", ErrBlankOutput
 	}
 	return result, nil
