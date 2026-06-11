@@ -5,8 +5,10 @@ package git
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 
+	crdberrors "github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -257,6 +259,8 @@ func TestRunPullNamedRequiresClonedWorkdir(t *testing.T) {
 	err := runPullOne(context.Background(), "configured", &pullOptions{})
 	require.Error(t, err)
 	assert.True(t, errors.Is(err, errUtils.ErrNotInGitRepository))
+	assert.Contains(t, fmt.Sprint(crdberrors.GetAllDetails(err)), "Atmos has not cloned configured git repository")
+	assert.Contains(t, crdberrors.GetAllHints(err), "Run 'atmos git pull --clone' to clone the repository before pulling.")
 }
 
 func TestRunPullCloneClonesMissingNamedWorkdir(t *testing.T) {
