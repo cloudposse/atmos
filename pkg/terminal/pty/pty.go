@@ -26,6 +26,11 @@ type Options struct {
 	// EnableMasking enables output masking through the PTY proxy.
 	EnableMasking bool
 
+	// DisableStdinForward skips forwarding Stdin to the PTY and skips putting
+	// the host terminal into raw mode (like docker -t without -i: the child
+	// gets a TTY but receives no input from the host).
+	DisableStdinForward bool
+
 	// Stdin provides input to the PTY. If nil, defaults to os.Stdin.
 	Stdin io.Reader
 
@@ -77,8 +82,9 @@ func ExecWithPTY(ctx context.Context, cmd *exec.Cmd, opts *Options) error {
 	}
 	defer func() { _ = ptmx.Close() }()
 
-	// Setup terminal environment.
-	cleanup, err := setupTerminal(ptmx)
+	// Setup terminal environment. Raw mode is only needed when host input is
+	// forwarded to the PTY (it routes control bytes like Ctrl-C to the child).
+	cleanup, err := setupTerminal(ptmx, !opts.DisableStdinForward)
 	if err != nil {
 		return err
 	}
@@ -88,7 +94,11 @@ func ExecWithPTY(ctx context.Context, cmd *exec.Cmd, opts *Options) error {
 	outputWriter := createOutputWriter(opts)
 
 	// Run command with bidirectional IO.
-	return runWithIO(ctx, cmd, ptmx, opts.Stdin, outputWriter)
+	stdin := opts.Stdin
+	if opts.DisableStdinForward {
+		stdin = nil
+	}
+	return runWithIO(ctx, cmd, ptmx, stdin, outputWriter)
 }
 
 // applyDefaults applies default values to Options if not set.
@@ -120,13 +130,19 @@ func createOutputWriter(opts *Options) io.Writer {
 }
 
 // runWithIO sets up bidirectional IO and waits for command completion.
+// The stdin reader may be nil to skip input forwarding entirely.
 func runWithIO(ctx context.Context, cmd *exec.Cmd, ptmx *os.File, stdin io.Reader, stdout io.Writer) error {
 	var wg sync.WaitGroup
 	errChan := make(chan error, 2)
 
-	// Copy input from user terminal to PTY.
-	wg.Add(1)
-	go copyInput(&wg, errChan, ptmx, stdin)
+	// Copy input from user terminal to PTY. This goroutine is intentionally
+	// NOT in the WaitGroup: io.Copy from a terminal stdin only returns on the
+	// next read after the PTY closes, so joining it would block completion
+	// until the user presses a key (the standard docker-CLI pattern is to let
+	// it die with the process).
+	if stdin != nil {
+		go copyInput(errChan, ptmx, stdin)
+	}
 
 	// Copy output from PTY to terminal.
 	wg.Add(1)
@@ -137,11 +153,15 @@ func runWithIO(ctx context.Context, cmd *exec.Cmd, ptmx *os.File, stdin io.Reade
 }
 
 // copyInput copies data from stdin to PTY, ignoring expected EIO errors.
-func copyInput(wg *sync.WaitGroup, errChan chan error, dst io.Writer, src io.Reader) {
-	defer wg.Done()
+// The send is non-blocking: input errors observed after completion has already
+// drained the channel are not actionable.
+func copyInput(errChan chan error, dst io.Writer, src io.Reader) {
 	_, err := io.Copy(dst, src)
 	if err != nil && !isPtyEIO(err) {
-		errChan <- fmt.Errorf("input copy failed: %w", err)
+		select {
+		case errChan <- fmt.Errorf("input copy failed: %w", err):
+		default:
+		}
 	}
 }
 
@@ -170,14 +190,19 @@ func waitForCompletion(ctx context.Context, cmd *exec.Cmd, wg *sync.WaitGroup, e
 		return ctx.Err()
 	case err := <-cmdDone:
 		wg.Wait()
-		close(errChan)
 		// Return first IO error if any, otherwise return command error.
-		for ioErr := range errChan {
-			if ioErr != nil {
-				return ioErr
+		// Drain non-blockingly: the channel stays open because the detached
+		// stdin copier may outlive command completion.
+		for {
+			select {
+			case ioErr := <-errChan:
+				if ioErr != nil {
+					return ioErr
+				}
+			default:
+				return err
 			}
 		}
-		return err
 	}
 }
 

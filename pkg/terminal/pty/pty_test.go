@@ -323,3 +323,77 @@ func TestMaskedWriter_PreservesByteCount(t *testing.T) {
 		}
 	}
 }
+
+// neverEOFReader simulates a terminal stdin: reads block forever until the
+// process exits, so io.Copy from such a reader never returns on its own.
+type neverEOFReader struct{}
+
+func (neverEOFReader) Read(p []byte) (int, error) {
+	select {} // Block forever.
+}
+
+func TestExecWithPTY_ReturnsWithBlockedStdin(t *testing.T) {
+	if !IsSupported() {
+		t.Skipf("PTY not supported on %s", runtime.GOOS)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	var stdout bytes.Buffer
+	cmd := exec.Command("sh", "-c", "printf 'done\\n'; sleep 0.1")
+	opts := &Options{
+		Stdin:  neverEOFReader{},
+		Stdout: &stdout,
+	}
+
+	// Regression: the stdin copier must not block completion. Before the fix,
+	// ExecWithPTY joined the stdin copy goroutine, which blocks until the next
+	// stdin read after the child exits (i.e., until a keypress).
+	finished := make(chan error, 1)
+	go func() { finished <- ExecWithPTY(ctx, cmd, opts) }()
+
+	select {
+	case err := <-finished:
+		if err != nil {
+			t.Fatalf("ExecWithPTY() error = %v", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("ExecWithPTY() did not return after child exit with blocked stdin")
+	}
+
+	if !strings.Contains(stdout.String(), "done") {
+		t.Errorf("Expected output to contain 'done', got: %s", stdout.String())
+	}
+}
+
+func TestExecWithPTY_DisableStdinForward(t *testing.T) {
+	if !IsSupported() {
+		t.Skipf("PTY not supported on %s", runtime.GOOS)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	var stdout bytes.Buffer
+	// The child still sees a TTY on stdin, but host input is not forwarded:
+	// `read` with a short timeout gets nothing and falls through.
+	cmd := exec.Command("sh", "-c", "test -t 0 && printf 'is-a-tty\\n'; sleep 0.1")
+	opts := &Options{
+		Stdin:               strings.NewReader("should never be forwarded"),
+		Stdout:              &stdout,
+		DisableStdinForward: true,
+	}
+
+	if err := ExecWithPTY(ctx, cmd, opts); err != nil {
+		t.Fatalf("ExecWithPTY() error = %v", err)
+	}
+
+	output := stdout.String()
+	if !strings.Contains(output, "is-a-tty") {
+		t.Errorf("Expected child to see a TTY on stdin, got: %s", output)
+	}
+	if strings.Contains(output, "should never be forwarded") {
+		t.Errorf("Host stdin leaked into the PTY: %s", output)
+	}
+}
