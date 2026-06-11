@@ -7,6 +7,15 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestNewBoundedWriterPanics(t *testing.T) {
+	t.Run("panics on zero capacity", func(t *testing.T) {
+		assert.Panics(t, func() { NewBoundedWriter(0) })
+	})
+	t.Run("panics on negative capacity", func(t *testing.T) {
+		assert.Panics(t, func() { NewBoundedWriter(-1) })
+	})
+}
+
 func TestBoundedWriter(t *testing.T) {
 	t.Run("nothing written returns nil Bytes and not truncated", func(t *testing.T) {
 		w := NewBoundedWriter(10)

@@ -17,8 +17,11 @@ type BoundedWriter struct {
 }
 
 // NewBoundedWriter returns a BoundedWriter that keeps at most maxBytes bytes of
-// tail output.  maxBytes must be positive.
+// tail output.  maxBytes must be positive; it panics otherwise.
 func NewBoundedWriter(maxBytes int) *BoundedWriter {
+	if maxBytes <= 0 {
+		panic("bounded_writer: NewBoundedWriter requires maxBytes > 0")
+	}
 	return &BoundedWriter{
 		ring:     make([]byte, maxBytes),
 		capacity: maxBytes,
