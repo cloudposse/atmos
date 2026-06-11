@@ -135,12 +135,7 @@ func buildBaseRow(cfg *schema.GitConfig, name string) map[string]any {
 	// Resolve workdir (XDG automatic when not explicit).
 	workdir := repo.Workdir
 	if workdir == "" {
-		resolved, err := atmosgit.DefaultWorkdir(name)
-		if err != nil {
-			workdir = ""
-		} else {
-			workdir = resolved
-		}
+		workdir = atmosgit.DefaultWorkdirPath(name)
 	}
 
 	return map[string]any{

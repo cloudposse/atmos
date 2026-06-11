@@ -80,7 +80,7 @@ func TestResolveRepositoryAppliesDefaults(t *testing.T) {
 	// Automatic XDG workdir: <cache>/atmos/git/repositories/<name>.
 	expected := filepath.Join(cacheRoot, "atmos", "git", "repositories", "minimal")
 	assert.Equal(t, expected, resolved.Workdir)
-	assert.DirExists(t, expected)
+	assert.NoDirExists(t, expected)
 }
 
 func TestResolveRepositoryZeroRetriesDisables(t *testing.T) {

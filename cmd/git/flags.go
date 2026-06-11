@@ -20,6 +20,7 @@ const (
 	flagDepth      = "depth"
 	flagFilter     = "filter"
 	flagDryRun     = "dry-run"
+	flagClone      = "clone"
 	flagPath       = "path"
 	flagMessage    = "message"
 	flagSign       = "sign"
@@ -58,9 +59,11 @@ func newPullParser() *flags.StandardParser {
 		flags.WithStringFlag(flagBranch, "b", "", "Branch to pull"),
 		flags.WithStringFlag(flagRemote, "", "", "Remote name (default: origin)"),
 		flags.WithBoolFlag(flagAll, "", false, "Pull all configured repositories"),
+		flags.WithBoolFlag(flagClone, "", false, "Clone the configured repository first when the workdir is missing"),
 		flags.WithEnvVars(flagBranch, "ATMOS_GIT_BRANCH"),
 		flags.WithEnvVars(flagRemote, "ATMOS_GIT_REMOTE"),
 		flags.WithEnvVars(flagAll, "ATMOS_GIT_PULL_ALL"),
+		flags.WithEnvVars(flagClone, "ATMOS_GIT_PULL_CLONE"),
 	)
 }
 

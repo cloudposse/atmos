@@ -86,6 +86,9 @@ func runStatusOne(ctx context.Context, arg string) error {
 		}
 		workdir = resolved.Workdir
 		identity = resolved.Identity
+		if err := requireClonedNamedWorkdir(arg, workdir, "status"); err != nil {
+			return err
+		}
 	} else {
 		workdir = arg
 	}

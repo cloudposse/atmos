@@ -147,7 +147,7 @@ func TestRunPull_NoArg(t *testing.T) {
 	t.Cleanup(func() { atmosConfigPtr = original })
 	atmosConfigPtr = &schema.AtmosConfiguration{}
 
-	err := runPull(context.Background(), false, "", "", []string{})
+	err := runPull(context.Background(), &pullOptions{}, []string{})
 	require.Error(t, err)
 	assert.True(t, errors.Is(err, errUtils.ErrGitRepositoryRequired))
 }
@@ -157,7 +157,7 @@ func TestRunPull_AllNoRepositories(t *testing.T) {
 	t.Cleanup(func() { atmosConfigPtr = original })
 	atmosConfigPtr = &schema.AtmosConfiguration{}
 
-	err := runPull(context.Background(), true, "", "", []string{})
+	err := runPull(context.Background(), &pullOptions{All: true}, []string{})
 	assert.NoError(t, err)
 }
 
@@ -166,7 +166,7 @@ func TestRunPull_AllNilConfig(t *testing.T) {
 	t.Cleanup(func() { atmosConfigPtr = original })
 	atmosConfigPtr = nil
 
-	err := runPull(context.Background(), true, "", "", []string{})
+	err := runPull(context.Background(), &pullOptions{All: true}, []string{})
 	assert.NoError(t, err)
 }
 
@@ -466,7 +466,7 @@ func TestRunPullAll_NoRepositories(t *testing.T) {
 	t.Cleanup(func() { atmosConfigPtr = original })
 	atmosConfigPtr = &schema.AtmosConfiguration{}
 
-	err := runPullAll(context.Background(), "", "")
+	err := runPullAll(context.Background(), &pullOptions{})
 	assert.NoError(t, err)
 }
 
@@ -475,7 +475,7 @@ func TestRunPullAll_NilConfig(t *testing.T) {
 	t.Cleanup(func() { atmosConfigPtr = original })
 	atmosConfigPtr = nil
 
-	err := runPullAll(context.Background(), "", "")
+	err := runPullAll(context.Background(), &pullOptions{})
 	assert.NoError(t, err)
 }
 

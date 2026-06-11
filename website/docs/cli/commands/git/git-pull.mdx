@@ -43,11 +43,17 @@ atmos git pull flux-deploy
 # Pull the single configured repository
 atmos git pull
 
+# Clone the single configured repository first when its workdir is missing
+atmos git pull --clone
+
 # Pull a repository at a local path
 atmos git pull ./deployments
 
 # Pull all configured repositories concurrently
 atmos git pull --all
+
+# Clone missing configured workdirs before pulling all repositories
+atmos git pull --all --clone
 
 # Pull a specific branch from a specific remote
 atmos git pull flux-deploy --remote=origin --branch=main
@@ -73,6 +79,12 @@ The positional argument is resolved as: configured repository **name** → **URI
     <dd>
         Fast-forward pull every repository configured under `git.repositories`, concurrently. Every repository is attempted; failures are aggregated and reported at the end. Mutually exclusive with a positional argument.
         Environment variable: `ATMOS_GIT_PULL_ALL`
+    </dd>
+
+    <dt>`--clone` <em>(optional)</em></dt>
+    <dd>
+        Clone a configured repository when its workdir is missing. This flag only applies to configured repository names, including no-arg single-repository pull and `--all`; it is rejected for local path arguments.
+        Environment variable: `ATMOS_GIT_PULL_CLONE`
     </dd>
 
     <dt>`--branch` / `-b` <em>(optional)</em></dt>

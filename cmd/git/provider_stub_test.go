@@ -72,10 +72,12 @@ func TestRunStatusOne_ConfiguredNameNotFound(t *testing.T) {
 
 	original := atmosConfigPtr
 	t.Cleanup(func() { atmosConfigPtr = original })
+	dir := t.TempDir()
+	markGitWorktree(t, dir)
 	atmosConfigPtr = &schema.AtmosConfiguration{
 		Git: schema.GitConfig{
 			Repositories: map[string]schema.GitRepository{
-				"configured": {URI: "https://github.com/acme/configured.git"},
+				"configured": {URI: "https://github.com/acme/configured.git", Workdir: dir},
 			},
 		},
 	}
@@ -95,6 +97,7 @@ func TestRunStatusNoArg_UsesSingleConfiguredRepository(t *testing.T) {
 	})
 
 	dir := t.TempDir()
+	markGitWorktree(t, dir)
 	original := atmosConfigPtr
 	t.Cleanup(func() { atmosConfigPtr = original })
 	atmosConfigPtr = &schema.AtmosConfiguration{
@@ -113,6 +116,29 @@ func TestRunStatusNoArg_UsesSingleConfiguredRepository(t *testing.T) {
 	assert.Equal(t, dir, capturedWorkdir)
 }
 
+func TestRunStatusNamedRequiresClonedWorkdir(t *testing.T) {
+	withTestProvider(t, &stubGitProvider{
+		statusFn: func(_ context.Context, _ *atmosgit.StatusOptions) (*atmosgit.StatusResult, error) {
+			t.Fatal("status provider should not run for a missing named workdir")
+			return nil, nil
+		},
+	})
+
+	original := atmosConfigPtr
+	t.Cleanup(func() { atmosConfigPtr = original })
+	atmosConfigPtr = &schema.AtmosConfiguration{
+		Git: schema.GitConfig{
+			Repositories: map[string]schema.GitRepository{
+				"configured": {URI: "https://github.com/acme/configured.git"},
+			},
+		},
+	}
+
+	err := runStatusOne(context.Background(), "configured")
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, errUtils.ErrNotInGitRepository))
+}
+
 func TestRunStatusAll_WithConfiguredRepos(t *testing.T) {
 	callCount := 0
 	withTestProvider(t, &stubGitProvider{
@@ -124,11 +150,15 @@ func TestRunStatusAll_WithConfiguredRepos(t *testing.T) {
 
 	original := atmosConfigPtr
 	t.Cleanup(func() { atmosConfigPtr = original })
+	repoA := t.TempDir()
+	repoB := t.TempDir()
+	markGitWorktree(t, repoA)
+	markGitWorktree(t, repoB)
 	atmosConfigPtr = &schema.AtmosConfiguration{
 		Git: schema.GitConfig{
 			Repositories: map[string]schema.GitRepository{
-				"repo-a": {URI: "https://github.com/acme/a.git"},
-				"repo-b": {URI: "https://github.com/acme/b.git"},
+				"repo-a": {URI: "https://github.com/acme/a.git", Workdir: repoA},
+				"repo-b": {URI: "https://github.com/acme/b.git", Workdir: repoB},
 			},
 		},
 	}
@@ -154,7 +184,7 @@ func TestRunPullOne_Path(t *testing.T) {
 	t.Cleanup(func() { atmosConfigPtr = original })
 	atmosConfigPtr = &schema.AtmosConfiguration{}
 
-	err := runPullOne(context.Background(), dir, "main", "origin")
+	err := runPullOne(context.Background(), dir, &pullOptions{Branch: "main", Remote: "origin"})
 	require.NoError(t, err)
 	assert.Equal(t, dir, capturedWorkdir)
 }
@@ -171,7 +201,7 @@ func TestRunPullOne_Path_Error(t *testing.T) {
 	t.Cleanup(func() { atmosConfigPtr = original })
 	atmosConfigPtr = &schema.AtmosConfiguration{}
 
-	err := runPullOne(context.Background(), t.TempDir(), "", "")
+	err := runPullOne(context.Background(), t.TempDir(), &pullOptions{})
 	require.Error(t, err)
 	assert.True(t, errors.Is(err, pullErr))
 }
@@ -179,6 +209,7 @@ func TestRunPullOne_Path_Error(t *testing.T) {
 func TestRunPullOne_ConfiguredNameResolved(t *testing.T) {
 	// A configured repository name resolves via the name path, stub succeeds.
 	dir := t.TempDir()
+	markGitWorktree(t, dir)
 	var capturedWorkdir string
 	withTestProvider(t, &stubGitProvider{
 		pullFn: func(_ context.Context, opts *atmosgit.PullOptions) error {
@@ -200,9 +231,66 @@ func TestRunPullOne_ConfiguredNameResolved(t *testing.T) {
 		},
 	}
 
-	err := runPullOne(context.Background(), "configured", "", "")
+	err := runPullOne(context.Background(), "configured", &pullOptions{})
 	require.NoError(t, err)
 	assert.Equal(t, dir, capturedWorkdir)
+}
+
+func TestRunPullNamedRequiresClonedWorkdir(t *testing.T) {
+	withTestProvider(t, &stubGitProvider{
+		pullFn: func(_ context.Context, _ *atmosgit.PullOptions) error {
+			t.Fatal("pull provider should not run for a missing named workdir")
+			return nil
+		},
+	})
+
+	original := atmosConfigPtr
+	t.Cleanup(func() { atmosConfigPtr = original })
+	atmosConfigPtr = &schema.AtmosConfiguration{
+		Git: schema.GitConfig{
+			Repositories: map[string]schema.GitRepository{
+				"configured": {URI: "https://github.com/acme/configured.git"},
+			},
+		},
+	}
+
+	err := runPullOne(context.Background(), "configured", &pullOptions{})
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, errUtils.ErrNotInGitRepository))
+}
+
+func TestRunPullCloneClonesMissingNamedWorkdir(t *testing.T) {
+	var clonedURI string
+	withTestProvider(t, &stubGitProvider{
+		cloneFn: func(_ context.Context, opts *atmosgit.CloneOptions) error {
+			clonedURI = opts.URI
+			return nil
+		},
+		pullFn: func(_ context.Context, _ *atmosgit.PullOptions) error {
+			t.Fatal("pull provider should not run after cloning a missing workdir")
+			return nil
+		},
+	})
+
+	original := atmosConfigPtr
+	t.Cleanup(func() { atmosConfigPtr = original })
+	atmosConfigPtr = &schema.AtmosConfiguration{
+		Git: schema.GitConfig{
+			Repositories: map[string]schema.GitRepository{
+				"configured": {URI: "https://github.com/acme/configured.git"},
+			},
+		},
+	}
+
+	err := runPullOne(context.Background(), "configured", &pullOptions{Clone: true})
+	require.NoError(t, err)
+	assert.Equal(t, "https://github.com/acme/configured.git", clonedURI)
+}
+
+func TestRunPullCloneRejectsPath(t *testing.T) {
+	err := runPullOne(context.Background(), t.TempDir(), &pullOptions{Clone: true})
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, errUtils.ErrInvalidFlag))
 }
 
 func TestRunPullNoArg_UsesSingleConfiguredRepository(t *testing.T) {
@@ -215,6 +303,7 @@ func TestRunPullNoArg_UsesSingleConfiguredRepository(t *testing.T) {
 	})
 
 	dir := t.TempDir()
+	markGitWorktree(t, dir)
 	original := atmosConfigPtr
 	t.Cleanup(func() { atmosConfigPtr = original })
 	atmosConfigPtr = &schema.AtmosConfiguration{
@@ -228,7 +317,7 @@ func TestRunPullNoArg_UsesSingleConfiguredRepository(t *testing.T) {
 		},
 	}
 
-	err := runPull(context.Background(), false, "", "", nil)
+	err := runPull(context.Background(), &pullOptions{}, nil)
 	require.NoError(t, err)
 	assert.Equal(t, dir, capturedWorkdir)
 }
@@ -244,17 +333,23 @@ func TestRunPullAll_WithRepos(t *testing.T) {
 
 	original := atmosConfigPtr
 	t.Cleanup(func() { atmosConfigPtr = original })
+	r1 := t.TempDir()
+	r2 := t.TempDir()
+	r3 := t.TempDir()
+	markGitWorktree(t, r1)
+	markGitWorktree(t, r2)
+	markGitWorktree(t, r3)
 	atmosConfigPtr = &schema.AtmosConfiguration{
 		Git: schema.GitConfig{
 			Repositories: map[string]schema.GitRepository{
-				"r1": {URI: "https://github.com/acme/r1.git"},
-				"r2": {URI: "https://github.com/acme/r2.git"},
-				"r3": {URI: "https://github.com/acme/r3.git"},
+				"r1": {URI: "https://github.com/acme/r1.git", Workdir: r1},
+				"r2": {URI: "https://github.com/acme/r2.git", Workdir: r2},
+				"r3": {URI: "https://github.com/acme/r3.git", Workdir: r3},
 			},
 		},
 	}
 
-	err := runPullAll(context.Background(), "", "")
+	err := runPullAll(context.Background(), &pullOptions{})
 	require.NoError(t, err)
 	assert.Equal(t, 3, callCount, "all repos should be pulled")
 }

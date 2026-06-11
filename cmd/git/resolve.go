@@ -1,8 +1,11 @@
 package git
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	atmosgit "github.com/cloudposse/atmos/pkg/git"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -41,4 +44,24 @@ func classifyArg(arg string, cfg *schema.GitConfig) argKind {
 // resolveRepoByName looks up a repository by name and returns a ResolvedRepository.
 func resolveRepoByName(name string, cfg *schema.GitConfig) (*atmosgit.ResolvedRepository, error) {
 	return atmosgit.ResolveRepository(cfg, name)
+}
+
+func requireClonedNamedWorkdir(name, workdir, operation string) error {
+	if isGitWorktreePath(workdir) {
+		return nil
+	}
+	return errUtils.Build(errUtils.ErrNotInGitRepository).
+		WithExplanationf("Configured git repository %q has not been cloned at %q, so `atmos git %s` cannot run there yet.", name, workdir, operation).
+		WithHintf("Run 'atmos git clone %s' first.", name).
+		WithHint("Run 'atmos git list' to inspect configured repositories and their resolved workdirs.").
+		WithExitCode(2).
+		Err()
+}
+
+func isGitWorktreePath(workdir string) bool {
+	if workdir == "" {
+		return false
+	}
+	_, err := os.Stat(filepath.Join(workdir, ".git"))
+	return err == nil
 }

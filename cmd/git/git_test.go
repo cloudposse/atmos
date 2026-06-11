@@ -257,7 +257,7 @@ func TestRunCloneNoArg_CIDisabled(t *testing.T) {
 // ---- runPull --all mutual exclusion test ----
 
 func TestRunPull_AllMutualExclusionWithArg(t *testing.T) {
-	err := runPull(context.Background(), true, "", "", []string{"some-repo"})
+	err := runPull(context.Background(), &pullOptions{All: true}, []string{"some-repo"})
 	require.Error(t, err)
 	assert.True(t, errors.Is(err, errUtils.ErrInvalidConfig), "expected ErrInvalidConfig, got: %v", err)
 }

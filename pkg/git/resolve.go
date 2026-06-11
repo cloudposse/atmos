@@ -52,11 +52,7 @@ func ResolveRepository(cfg *schema.GitConfig, name string) (*ResolvedRepository,
 
 	workdir := repo.Workdir
 	if workdir == "" {
-		var err error
-		workdir, err = DefaultWorkdir(name)
-		if err != nil {
-			return nil, err
-		}
+		workdir = DefaultWorkdirPath(name)
 	}
 
 	resolved := &ResolvedRepository{

@@ -156,6 +156,7 @@ func TestRunClone_AbsPathArg_ErrorsAsNotFound(t *testing.T) {
 
 func TestRunPullOne_FlagBranchBeatsResolved(t *testing.T) {
 	dir := t.TempDir()
+	markGitWorktree(t, dir)
 	var capturedBranch string
 	withTestProvider(t, &stubGitProvider{
 		pullFn: func(_ context.Context, opts *atmosgit.PullOptions) error {
@@ -178,7 +179,7 @@ func TestRunPullOne_FlagBranchBeatsResolved(t *testing.T) {
 	}
 
 	// Flag branch "feature-x" should beat the repo's default branch.
-	err := runPullOne(context.Background(), "my-repo", "feature-x", "")
+	err := runPullOne(context.Background(), "my-repo", &pullOptions{Branch: "feature-x"})
 	require.NoError(t, err)
 	assert.Equal(t, "feature-x", capturedBranch)
 }
