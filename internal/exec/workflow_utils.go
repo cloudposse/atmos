@@ -13,6 +13,7 @@ import (
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/huh"
 	"github.com/samber/lo"
+	"github.com/spf13/viper"
 	"mvdan.cc/sh/v3/shell"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -25,11 +26,14 @@ import (
 	"github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/dependencies"
 	envpkg "github.com/cloudposse/atmos/pkg/env"
+	ioLayer "github.com/cloudposse/atmos/pkg/io"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/process"
 	"github.com/cloudposse/atmos/pkg/retry"
 	stepPkg "github.com/cloudposse/atmos/pkg/runner/step"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/signals"
 	"github.com/cloudposse/atmos/pkg/telemetry"
 	"github.com/cloudposse/atmos/pkg/ui"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -405,7 +409,7 @@ func ExecuteWorkflow(
 			stepPkg.RenderCommand(&step, workflowDefinition, command)
 			commandName := fmt.Sprintf("%s-step-%d", workflow, stepIdx)
 			err = retry.Do(context.Background(), step.Retry, func() error {
-				return ExecuteShell(command, commandName, ".", stepEnv, dryRun)
+				return executeWorkflowShellStep(&step, command, commandName, stepEnv, dryRun)
 			})
 		case "atmos":
 			// Parse command using shell.Fields for proper quote handling.
@@ -521,6 +525,38 @@ func executeExtendedStep(ctx context.Context, workflowStep *schema.WorkflowStep,
 	// Execute the step.
 	_, err := stepExecutorState.Execute(ctx, workflowStep)
 	return err
+}
+
+// executeWorkflowShellStep runs a workflow shell step.
+//
+// Steps with `tty: true` attach to the user's terminal (PTY when supported);
+// their output/viewport modes do not apply. Steps with `interactive: true`
+// let the child process own Ctrl-C: the Atmos SIGINT-exit handler is
+// suspended while the step runs. Plain steps keep the existing masked
+// shell-interpreter behavior.
+func executeWorkflowShellStep(step *schema.WorkflowStep, command, commandName string, env []string, dryRun bool) error {
+	if step.Tty {
+		if step.Output != "" {
+			log.Debug("Output mode ignored for tty step", "step", step.Name, "output", step.Output)
+		}
+		return process.RunShellSession(context.Background(), &process.ShellSessionSpec{
+			Command:       command,
+			Name:          commandName,
+			Dir:           ".",
+			Env:           env,
+			TTY:           true,
+			Interactive:   step.Interactive,
+			DryRun:        dryRun,
+			Masker:        ioLayer.GetContext().Masker(),
+			EnableMasking: viper.GetBool("mask"),
+		})
+	}
+
+	if step.Interactive {
+		release := signals.SuspendInterruptExit()
+		defer release()
+	}
+	return ExecuteShell(command, commandName, ".", env, dryRun)
 }
 
 // ResetStepExecutorState resets the step executor state.
