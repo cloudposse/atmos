@@ -14,7 +14,7 @@ git:
 ## Try It
 
 ```shell
-cd examples/demo-gitops
+cd examples/gitops
 
 atmos git clone deploy
 atmos git status deploy

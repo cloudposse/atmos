@@ -873,7 +873,12 @@ func executeCustomCommand(
 		case "atmos":
 			// Execute atmos command.
 			args := strings.Fields(commandToRun)
-			err = e.ExecuteShellCommand(atmosConfig, "atmos", args, workDir, env, false, "")
+			execPath, execErr := os.Executable()
+			if execErr != nil {
+				err = execErr
+				break
+			}
+			err = e.ExecuteShellCommand(atmosConfig, execPath, args, workDir, env, false, "")
 		default:
 			// Check if this is an extended step type (input, confirm, choose, etc.).
 			if stepPkg.IsExtendedStepType(stepType) {

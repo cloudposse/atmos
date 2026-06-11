@@ -12,6 +12,18 @@ logs:
   level: Info
 
 commands:
+- name: "test"
+  description: "Run all tests"
+  steps:
+  - command: git clone deploy
+    type: atmos
+  - command: git status deploy
+    type: atmos
+  - command: git diff deploy
+    type: atmos
+  - command: git clean deploy --dry-run
+    type: atmos
+
 - name: "gitops"
   description: "Run the GitOps repository lifecycle demo"
   commands:
