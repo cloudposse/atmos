@@ -241,34 +241,6 @@ func getAnsibleFlags(cmd *cobra.Command) ansibleCLIFlags {
 	return cliFlags
 }
 
-// processArgs processes command arguments to extract component and additional args.
-func processArgs(args []string) (component string, additionalArgs []string) {
-	if len(args) > 0 {
-		component = args[0]
-		if len(args) > 1 {
-			additionalArgs = args[1:]
-		}
-	}
-	return component, additionalArgs
-}
-
-// splitComponentAndPassthrough separates the positional arguments before the
-// "--" separator (the Atmos component) from the passthrough arguments after it
-// (forwarded verbatim to ansible-playbook).
-//
-// Cobra's ArgsLenAtDash() is the authoritative separator source — it returns -1
-// when no "--" is present, otherwise the count of positional args that appeared
-// before "--". This mirrors the cmd/auth/shell.go and cmd/auth/exec.go pattern,
-// rather than inferring the passthrough from a positional offset (args[1:]),
-// which only works by coincidence when no "--" is used.
-func splitComponentAndPassthrough(cmd *cobra.Command, args []string) (componentArgs, passthroughArgs []string) {
-	dashIndex := cmd.ArgsLenAtDash()
-	if dashIndex < 0 || dashIndex > len(args) {
-		return args, nil
-	}
-	return args[:dashIndex], args[dashIndex:]
-}
-
 // initConfigAndStacksInfo initializes a ConfigAndStacksInfo for ansible command execution.
 func initConfigAndStacksInfo(cmd *cobra.Command, subCommand string, args []string) schema.ConfigAndStacksInfo {
 	info := buildConfigAndStacksInfo(cmd)
@@ -280,23 +252,17 @@ func initConfigAndStacksInfo(cmd *cobra.Command, subCommand string, args []strin
 	info.SubCommand = subCommand
 	info.CliArgs = []string{"ansible", subCommand}
 
-	// Split the component (positional, before "--") from the passthrough flags
-	// (after "--") using Cobra's separator state as the authoritative source.
-	componentArgs, passthroughArgs := splitComponentAndPassthrough(cmd, args)
-
-	// Extract the component from the positional portion.
-	component, additionalFromPositional := processArgs(componentArgs)
-	if component != "" {
-		info.ComponentFromArg = component
+	// Split the component (positional, before "--") from the pass-through args
+	// (after "--", forwarded verbatim to ansible-playbook) via the flag
+	// handler's shared separator helper.
+	positional, separated := flags.SplitArgsAtDash(cmd, args)
+	if len(positional) > 0 {
+		info.ComponentFromArg = positional[0]
 	}
-
-	// Forward args after "--" to ansible-playbook. When no "--" is present,
-	// fall back to the positional remainder so behavior is unchanged.
-	if len(passthroughArgs) > 0 {
-		info.AdditionalArgsAndFlags = passthroughArgs
-	} else {
-		info.AdditionalArgsAndFlags = additionalFromPositional
+	if len(positional) > 1 {
+		info.AdditionalArgsAndFlags = positional[1:] // Preserve no-dash fallback.
 	}
+	info.AdditionalArgsAndFlags = append(info.AdditionalArgsAndFlags, separated...)
 
 	return info
 }

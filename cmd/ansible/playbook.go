@@ -3,19 +3,16 @@
 package ansible
 
 import (
-	"fmt"
-
 	"github.com/spf13/cobra"
 
-	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/component"
+	"github.com/cloudposse/atmos/pkg/flags"
 )
 
 // playbookCmd represents the `atmos ansible playbook` command.
 var playbookCmd = &cobra.Command{
 	Use:     "playbook",
 	Aliases: []string{"pb"},
-	Args:    validatePlaybookArgs,
 	Short:   "Run Ansible playbooks for configuration management.",
 	Long: `This command runs an Ansible playbook, applying configuration changes to target hosts.
 
@@ -23,6 +20,7 @@ Example usage:
   atmos ansible playbook <component> --stack <stack> [options]
   atmos ansible playbook <component> --stack <stack> --playbook <playbook.yml> [options]
   atmos ansible playbook <component> -s <stack> -p <playbook.yml> [options]
+  atmos ansible playbook <component> -s <stack> -- --check --tags <tags>
 
 To see all available options, refer to https://docs.ansible.com/ansible/latest/cli/ansible-playbook.html
 `,
@@ -31,25 +29,20 @@ To see all available options, refer to https://docs.ansible.com/ansible/latest/c
 	RunE:               runPlaybook,
 }
 
-// validatePlaybookArgs requires exactly one component argument, counting only
-// the positional arguments that appear before a "--" separator.
-//
-// Everything after "--" is forwarded verbatim to ansible-playbook
-// (e.g. `atmos ansible playbook <component> -s <stack> -- --check --tags foo`),
-// so those tokens must not be counted as Atmos positional arguments. The
-// previous cobra.ExactArgs(1) validator counted them, so any invocation using
-// "--" failed validation; the root UsageFunc then rendered that failure as the
-// misleading "Unknown command <component>" error. cobra.ArgsLenAtDash() returns
-// -1 when no "--" is present, in which case the full argument slice is checked.
-func validatePlaybookArgs(cmd *cobra.Command, args []string) error {
-	componentArgs := args
-	if dashIndex := cmd.ArgsLenAtDash(); dashIndex >= 0 {
-		componentArgs = args[:dashIndex]
-	}
-	if len(componentArgs) != 1 {
-		return fmt.Errorf("%w (received %d)", errUtils.ErrInvalidComponentArgument, len(componentArgs))
-	}
-	return nil
+func init() {
+	// Declare the positional-args contract through the flag handler. The
+	// builder-generated validator is separator-aware: pass-through args after
+	// "--" (forwarded to ansible-playbook) are not counted as positional args.
+	argsBuilder := flags.NewPositionalArgsBuilder()
+	argsBuilder.AddArg(&flags.PositionalArgSpec{
+		Name:        "component",
+		Description: "Ansible component",
+		Required:    true,
+		TargetField: "Component",
+	})
+	_, validator, usage := argsBuilder.Build()
+	playbookCmd.Use = "playbook " + usage
+	playbookCmd.Args = validator
 }
 
 // runPlaybook executes the ansible playbook command.
