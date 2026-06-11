@@ -210,6 +210,71 @@ func TestResolveBase_PullRequest_Closed(t *testing.T) {
 	}
 }
 
+func TestResolveBase_PullRequest_ClosedMerged_UsesMergeCommitForUpload(t *testing.T) {
+	t.Setenv("GITHUB_EVENT_NAME", "pull_request")
+	t.Setenv("GITHUB_BASE_REF", "main")
+
+	eventPayload := map[string]any{
+		"action": "closed",
+		"pull_request": map[string]any{
+			"merged":           true,
+			"merge_commit_sha": "mergedsha3456789012345678901234567890abcd",
+			"head": map[string]any{
+				"sha": "headsha123456789012345678901234567890ab",
+			},
+			"base": map[string]any{
+				"ref": "main",
+				"sha": "abc123def456789012345678901234567890abcd",
+			},
+		},
+	}
+	eventPath := writeEventPayload(t, eventPayload)
+	t.Setenv("GITHUB_EVENT_PATH", eventPath)
+
+	p := NewProvider()
+	res, err := p.ResolveBase()
+
+	require.NoError(t, err)
+	require.NotNil(t, res)
+	assert.Equal(t, "pull_request", res.EventType)
+	assert.Equal(t, "closed", res.EventAction)
+	assert.True(t, res.PullRequestMerged)
+	assert.Equal(t, "headsha123456789012345678901234567890ab", res.PullRequestHeadSHA)
+	assert.Equal(t, "mergedsha3456789012345678901234567890abcd", res.PullRequestMergeCommitSHA)
+	assert.Equal(t, "mergedsha3456789012345678901234567890abcd", res.HeadSHA)
+}
+
+func TestResolveBase_PullRequest_ClosedMerged_MissingMergeCommitFallsBackToLocalHeadUpload(t *testing.T) {
+	t.Setenv("GITHUB_EVENT_NAME", "pull_request")
+	t.Setenv("GITHUB_BASE_REF", "main")
+
+	eventPayload := map[string]any{
+		"action": "closed",
+		"pull_request": map[string]any{
+			"merged": true,
+			"head": map[string]any{
+				"sha": "headsha123456789012345678901234567890ab",
+			},
+			"base": map[string]any{
+				"ref": "main",
+				"sha": "abc123def456789012345678901234567890abcd",
+			},
+		},
+	}
+	eventPath := writeEventPayload(t, eventPayload)
+	t.Setenv("GITHUB_EVENT_PATH", eventPath)
+
+	p := NewProvider()
+	res, err := p.ResolveBase()
+
+	require.NoError(t, err)
+	require.NotNil(t, res)
+	assert.True(t, res.PullRequestMerged)
+	assert.Equal(t, "headsha123456789012345678901234567890ab", res.PullRequestHeadSHA)
+	assert.Empty(t, res.PullRequestMergeCommitSHA)
+	assert.Empty(t, res.HeadSHA, "empty override lets upload fall back to checked-out HEAD")
+}
+
 func TestResolveBase_PullRequestTarget(t *testing.T) {
 	t.Setenv("GITHUB_EVENT_NAME", "pull_request_target")
 	t.Setenv("GITHUB_BASE_REF", "main")

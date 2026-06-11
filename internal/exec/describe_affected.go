@@ -56,7 +56,7 @@ type DescribeAffectedCmdArgs struct {
 	ExcludeLocked               bool
 	AuthManager                 auth.AuthManager // Optional: Auth manager for credential management (from --identity flag).
 	AuthDisabled                bool             // True when --identity=false (or alias) explicitly disables authentication; routes stack resolution to ExecuteDescribeStacksWithAuthDisabled.
-	HeadSHAOverride             string           // PR head SHA from CI event payload, used for upload correlation with Atmos Pro.
+	HeadSHAOverride             string           // CI-provided SHA used for upload correlation with Atmos Pro.
 	CIEventType                 string           // CI event type (e.g., "pull_request", "push") for upload validation.
 	TargetBranch                string           // PR target branch (e.g., "main") used to auto-fetch when refs are missing locally.
 }
@@ -305,8 +305,14 @@ func resolveBaseFromCI(describe *DescribeAffectedCmdArgs) {
 	log.Info("Auto-detected CI base",
 		"provider", p.Name(),
 		"event", resolution.EventType,
+		"action", resolution.EventAction,
 		"base", base,
-		"source", resolution.Source)
+		"source", resolution.Source,
+		"pull_request_merged", resolution.PullRequestMerged,
+		"pull_request_head_sha", resolution.PullRequestHeadSHA,
+		"merge_commit_sha", resolution.PullRequestMergeCommitSHA,
+		"checked_out_head_sha", resolution.LocalHeadSHA,
+		"upload_head_sha", resolution.HeadSHA)
 }
 
 // Execute executes `describe affected` command.
@@ -473,14 +479,20 @@ func (d *describeAffectedExec) uploadableQuery(args *DescribeAffectedCmdArgs, re
 			Err()
 	}
 
-	// Use the PR head SHA from the CI event payload when available.
-	// This ensures the upload SHA matches what Atmos Pro indexed from the webhook,
-	// regardless of which commit the workflow has checked out (e.g., merge commit vs PR head).
+	// Use the CI provider's upload correlation SHA when available. For open PR
+	// events this is usually pull_request.head.sha; for raw merged PR-closed
+	// events it can be pull_request.merge_commit_sha; for merge_group events it
+	// is merge_group.head_sha.
 	headSHA := headHead.Hash().String()
 	if args.HeadSHAOverride != "" {
 		headSHA = args.HeadSHAOverride
-		log.Debug("Using PR head SHA for upload correlation", "headSHA", headSHA, "localHEAD", headHead.Hash().String())
+		log.Debug("Using CI-provided SHA for upload correlation", "headSHA", headSHA, "localHEAD", headHead.Hash().String())
 	}
+	log.Debug("Resolved upload correlation SHA",
+		"event", args.CIEventType,
+		"headSHA", headSHA,
+		"overrideSHA", args.HeadSHAOverride,
+		"localHEAD", headHead.Hash().String())
 
 	req := dtos.UploadAffectedStacksRequest{
 		HeadSHA:   headSHA,

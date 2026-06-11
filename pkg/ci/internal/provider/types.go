@@ -11,10 +11,29 @@ type BaseResolution struct {
 	// SHA is a git commit hash. Mutually exclusive with Ref.
 	SHA string
 
-	// HeadSHA is the PR head commit SHA for upload correlation with Atmos Pro.
-	// Populated for pull_request events from event.pull_request.head.sha.
-	// Empty for non-PR events (push, merge_group, etc.).
+	// HeadSHA is the commit SHA used for upload correlation with Atmos Pro.
+	// For open PR events this is usually event.pull_request.head.sha. For
+	// merged PR-closed events it can be event.pull_request.merge_commit_sha.
+	// For merge_group events it is event.merge_group.head_sha.
 	HeadSHA string
+
+	// PullRequestHeadSHA is the original event.pull_request.head.sha when known.
+	// It is diagnostic metadata only; HeadSHA is the upload correlation SHA.
+	PullRequestHeadSHA string
+
+	// PullRequestMergeCommitSHA is event.pull_request.merge_commit_sha when known.
+	// It is diagnostic metadata only; HeadSHA is the upload correlation SHA.
+	PullRequestMergeCommitSHA string
+
+	// PullRequestMerged is event.pull_request.merged when known.
+	PullRequestMerged bool
+
+	// EventAction is the provider-specific event action (e.g., "closed").
+	EventAction string
+
+	// LocalHeadSHA is the checked-out git HEAD when the provider resolved base.
+	// It is diagnostic metadata only.
+	LocalHeadSHA string
 
 	// TargetBranch is the PR target branch name (e.g., "main") when known.
 	// Used by callers to recover from missing local refs by running a
