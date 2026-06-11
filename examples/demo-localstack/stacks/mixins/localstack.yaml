@@ -12,15 +12,16 @@ terraform:
       region: "us-east-1"
       access_key: "test"
       secret_key: "test"
-      s3_use_path_style: false
+      s3_use_path_style: true
       skip_credentials_validation: true
       skip_metadata_api_check: true
+      skip_requesting_account_id: true
       endpoints:
-        # An alias for the default LocalStack URL
-        sts: &localstack_url "https://localhost.localstack.cloud:4566"
+        # An alias for the default LocalStack URL exposed by the GitHub Actions service.
+        sts: &localstack_url "http://localhost:4566"
 
-        # S3 is an exception, and requires a TLS endpoint
-        s3: "https://localhost.localstack.cloud:4566"
+        # Use path-style S3 on localhost to avoid wildcard DNS/TLS flakiness in CI.
+        s3: *localstack_url
 
         # Everything else can use HTTP on localhost
         apigateway: *localstack_url

@@ -19,9 +19,19 @@ type DescribeSettings struct {
 	IncludeEmpty *bool `yaml:"include_empty,omitempty" json:"include_empty,omitempty" mapstructure:"include_empty"`
 }
 
+// DescribeAffected contains configuration for the `atmos describe affected` command.
+type DescribeAffected struct {
+	// Sections is the authoritative list of top-level component sections compared
+	// when computing affected components. When set, it REPLACES the built-in defaults.
+	// When empty, the built-in defaults are used. `metadata` and `settings` are always
+	// evaluated via dedicated logic and are not controlled by this list.
+	Sections []string `yaml:"sections,omitempty" json:"sections,omitempty" mapstructure:"sections"`
+}
+
 // Describe contains configuration for the describe command.
 type Describe struct {
 	Settings DescribeSettings `yaml:"settings,omitempty" json:"settings,omitempty" mapstructure:"settings"`
+	Affected DescribeAffected `yaml:"affected,omitempty" json:"affected,omitempty" mapstructure:"affected"`
 }
 
 // ProfilesConfig defines configuration for the profiles system.
@@ -552,6 +562,38 @@ type PlanfileStoreSpec struct {
 
 type ShellConfig struct {
 	Prompt string `yaml:"prompt" json:"prompt" mapstructure:"prompt"`
+}
+
+// TerraformPlanCIResultHandler receives the complete result set for one
+// graph-backed Terraform run and can emit CI artifacts after scheduling has
+// fully completed.
+type TerraformPlanCIResultHandler interface {
+	HandleTerraformPlanCIResults(TerraformPlanCIResultSet) error
+}
+
+// TerraformPlanCIResultSet contains deterministic per-node Terraform results
+// for CI rendering.
+type TerraformPlanCIResultSet struct {
+	Command string
+	Results []TerraformPlanCIResult
+}
+
+// TerraformPlanCIResult contains the scheduler and Terraform output details
+// needed to render CI artifacts for one Terraform component.
+type TerraformPlanCIResult struct {
+	NodeID     string
+	Stack      string
+	Component  string
+	Status     string
+	Processed  bool
+	Changed    bool
+	ExitCode   int
+	Output     string
+	LogFiles   map[string]string
+	StartedAt  time.Time
+	FinishedAt time.Time
+	DurationMS int64
+	Error      string
 }
 
 // CIConfig contains CI/CD integration configuration.
@@ -1104,6 +1146,7 @@ type ConfigAndStacksInfo struct {
 	TerraformFailureMode       string
 	FailFast                   bool
 	KeepGoing                  bool
+	DisablePluginCache         bool
 	TerraformPlanLogOrder      string
 	TerraformPlanHide          []string
 	TerraformPlanHideNoChanges bool
@@ -1117,6 +1160,12 @@ type ConfigAndStacksInfo struct {
 	// set to the executed component, combined stdout+stderr output, and the execution
 	// error (nil on success). Nil means no per-component callback.
 	PerComponentHook func(info *ConfigAndStacksInfo, output string, execErr error)
+
+	// TerraformPlanCIResultHandler is called once after a graph-backed
+	// multi-component Terraform plan/apply/destroy run completes. It
+	// centralizes CI output writes for concurrent execution so GitHub
+	// summary/output files are not written by worker goroutines.
+	TerraformPlanCIResultHandler TerraformPlanCIResultHandler
 }
 
 // GetComponentEnvSection returns the component's env section map.

@@ -39,6 +39,7 @@ func init() {
 
 // GetType returns the component type.
 func (p *Plugin) GetType() string {
+	defer perf.Track(nil, "terraform.Plugin.GetType")()
 	return "terraform"
 }
 
@@ -57,6 +58,10 @@ func (p *Plugin) GetHookBindings() []plugin.HookBinding {
 			Handler: p.onAfterPlan,
 		},
 		{
+			Event:   "after.terraform.plan.aggregate",
+			Handler: p.onAfterTerraformAggregate,
+		},
+		{
 			Event:   "before.terraform.apply",
 			Handler: p.onBeforeApply,
 		},
@@ -65,12 +70,20 @@ func (p *Plugin) GetHookBindings() []plugin.HookBinding {
 			Handler: p.onAfterApply,
 		},
 		{
+			Event:   "after.terraform.apply.aggregate",
+			Handler: p.onAfterTerraformAggregate,
+		},
+		{
 			Event:   "before.terraform.deploy",
 			Handler: p.onBeforeDeploy,
 		},
 		{
 			Event:   "after.terraform.deploy",
 			Handler: p.onAfterDeploy,
+		},
+		{
+			Event:   "after.terraform.destroy.aggregate",
+			Handler: p.onAfterTerraformAggregate,
 		},
 	}
 }
@@ -209,7 +222,7 @@ var multiBlankLinesRe = regexp.MustCompile(`\n{3,}`)
 // For plan: strips data source reads and state refreshes, returns empty for no-changes.
 // For apply: strips preamble and progress lines, keeps plan diffs and apply result.
 func cleanOutput(output, command string) string {
-	if command == "apply" {
+	if command == "apply" || command == "destroy" {
 		return cleanApplyOutput(output)
 	}
 	return cleanPlanOutput(output)

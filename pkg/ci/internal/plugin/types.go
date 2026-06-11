@@ -47,6 +47,10 @@ type HookContext struct {
 	// that occur before terraform itself runs (e.g., authentication failures).
 	ExitCode int
 
+	// Aggregate carries command-specific aggregate result data for hook events
+	// that summarize more than one component.
+	Aggregate any
+
 	// Provider is the detected CI platform provider.
 	Provider provider.Provider
 
