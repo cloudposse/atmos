@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"strings"
 
 	"github.com/spf13/viper"
@@ -112,6 +113,16 @@ func Run(ctx context.Context, task *Task, runner CommandRunner, opts Options) er
 		return runShellTask(ctx, task, runner, &opts, dir)
 	case schema.TaskTypeAtmos:
 		return runAtmosTask(ctx, task, runner, opts, dir)
+	case schema.TaskTypeExec:
+		// Replace the Atmos process with the command (shell exec semantics).
+		// Validated by RunAll to be the final task.
+		return process.ReplaceShellSession(&process.ExecSpec{
+			Command: task.Command,
+			Name:    task.Name,
+			Dir:     dir,
+			Env:     append(os.Environ(), opts.Env...),
+			DryRun:  opts.DryRun,
+		})
 	}
 
 	// Check step handler registry for extended step types (input, choose, etc.).
@@ -164,7 +175,7 @@ func runShellTask(ctx context.Context, task *Task, runner CommandRunner, opts *O
 			Command:       task.Command,
 			Name:          task.Name,
 			Dir:           dir,
-			Env:           opts.Env,
+			Env:           append(os.Environ(), opts.Env...),
 			TTY:           true,
 			Interactive:   task.Interactive,
 			DryRun:        opts.DryRun,
@@ -232,6 +243,12 @@ func appendStackArg(args []string, stack string) []string {
 // It stops at the first error and returns it.
 func RunAll(ctx context.Context, tasks Tasks, runner CommandRunner, opts Options) error {
 	defer perf.Track(opts.AtmosConfig, "runner.RunAll")()
+
+	// An exec task replaces the Atmos process, so it must be the final task
+	// and must not set supervisor-only fields.
+	if err := schema.ValidateExecTasks(tasks); err != nil {
+		return err
+	}
 
 	for i, task := range tasks {
 		if err := Run(ctx, &task, runner, opts); err != nil {

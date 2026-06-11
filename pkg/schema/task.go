@@ -16,6 +16,9 @@ const (
 	TaskTypeShell = "shell"
 	// TaskTypeAtmos is the task type for atmos commands.
 	TaskTypeAtmos = "atmos"
+	// TaskTypeExec is the task type for commands that replace the Atmos
+	// process entirely (shell exec semantics). Must be the final step.
+	TaskTypeExec = "exec"
 )
 
 // Sentinel errors for task validation.

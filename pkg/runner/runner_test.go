@@ -561,3 +561,39 @@ func TestRun_ShellTaskInteractiveReleasesSuspension(t *testing.T) {
 	require.NoError(t, err)
 	assert.False(t, signals.InterruptExitSuspended(), "suspension must be released after the task")
 }
+
+func TestRun_ExecTaskDryRun(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockRunner := NewMockCommandRunner(ctrl)
+	ctx := context.Background()
+
+	task := Task{
+		Name:    "session-task",
+		Command: "aws ssm start-session",
+		Type:    schema.TaskTypeExec,
+	}
+	// Dry-run exercises the exec routing without replacing the process.
+	// The CommandRunner must NOT be called for exec tasks.
+	err := Run(ctx, &task, mockRunner, Options{DryRun: true})
+	require.NoError(t, err)
+}
+
+func TestRunAll_RejectsNonFinalExecTask(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockRunner := NewMockCommandRunner(ctrl)
+	ctx := context.Background()
+
+	tasks := Tasks{
+		{Name: "session", Command: "ssh host", Type: schema.TaskTypeExec},
+		{Name: "after", Command: "echo never runs", Type: schema.TaskTypeShell},
+	}
+
+	// Validation must fail before any task executes (no mock expectations).
+	err := RunAll(ctx, tasks, mockRunner, Options{DryRun: true})
+	require.Error(t, err)
+	assert.ErrorIs(t, err, schema.ErrExecStepNotLast)
+}

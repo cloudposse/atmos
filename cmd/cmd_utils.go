@@ -729,6 +729,13 @@ func executeCustomCommand(
 		log.Debug("Using working directory for custom command", "command", commandConfig.Name, "working_directory", workDir)
 	}
 
+	// Validate exec steps before executing anything: an exec step replaces
+	// the Atmos process, so it must be the final step and must not set
+	// supervisor-only fields (tty, interactive, retry, timeout, output).
+	if err := schema.ValidateExecTasks(commandConfig.Steps); err != nil {
+		errUtils.CheckErrorPrintAndExit(err, "", "https://atmos.tools/cli/configuration/commands#interactive-and-tty-steps")
+	}
+
 	// Initialize step executor once before loop - reused across steps to preserve outputs.
 	executor := stepPkg.NewStepExecutor()
 
@@ -872,6 +879,10 @@ func executeCustomCommand(
 			// like `aws ssm start-session` get a real TTY and own Ctrl-C.
 			commandName := fmt.Sprintf("%s-step-%d", commandConfig.Name, i)
 			err = executeShellStep(&step, commandToRun, commandName, workDir, env)
+		case schema.TaskTypeExec:
+			// Replace the Atmos process with the command (shell exec semantics).
+			commandName := fmt.Sprintf("%s-step-%d", commandConfig.Name, i)
+			err = executeExecStep(commandToRun, commandName, workDir, env)
 		case "atmos":
 			// Execute atmos command.
 			args := strings.Fields(commandToRun)

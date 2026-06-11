@@ -1716,3 +1716,18 @@ func TestExecuteWorkflowShellStep_InteractiveReleasesSuspension(t *testing.T) {
 	assert.NoError(t, err)
 	assert.False(t, signals.InterruptExitSuspended(), "suspension must be released after the step")
 }
+
+func TestExecuteWorkflowExecStep_ValidationViaSchema(t *testing.T) {
+	// The workflow runner validates exec steps before executing anything.
+	err := schema.ValidateExecWorkflowSteps([]schema.WorkflowStep{
+		{Type: schema.TaskTypeExec, Command: "psql"},
+		{Type: schema.TaskTypeShell, Command: "echo never runs"},
+	})
+	require.ErrorIs(t, err, schema.ErrExecStepNotLast)
+
+	err = schema.ValidateExecWorkflowSteps([]schema.WorkflowStep{
+		{Type: schema.TaskTypeShell, Command: "echo first"},
+		{Type: schema.TaskTypeExec, Command: "psql"},
+	})
+	assert.NoError(t, err)
+}
