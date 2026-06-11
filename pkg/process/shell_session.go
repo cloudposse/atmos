@@ -120,7 +120,15 @@ func runSessionPTY(ctx context.Context, cmd *exec.Cmd, spec *ShellSessionSpec) e
 // Masking cannot be applied to inherited file descriptors.
 func runSessionAttached(cmd *exec.Cmd, spec *ShellSessionSpec) error {
 	if spec.EnableMasking {
-		ui.Warning("Output masking is not supported for tty steps on this platform; secrets will not be masked")
+		if spec.TTY {
+			// A PTY was requested but is unavailable on this platform - the
+			// loss of masking is unexpected, so warn visibly.
+			ui.Warning("Output masking is not supported for tty steps on this platform; secrets will not be masked")
+		} else {
+			// Plain interactive sessions always attach the real streams;
+			// the loss of masking is inherent, so don't warn on every step.
+			log.Debug("Output masking does not apply to interactive sessions", "name", spec.Name)
+		}
 	}
 
 	// Attach the real *os.File streams so the child's own TTY detection works.
