@@ -435,6 +435,44 @@ func TestShellHandlerTtyStepSuccess(t *testing.T) {
 	assert.Equal(t, 0, result.Metadata[exitCodeMetadata])
 }
 
+func TestShellHandlerInteractiveStepUsesShellSession(t *testing.T) {
+	initShellTestIO(t)
+	handler := &ShellHandler{BaseHandler: NewBaseHandler("shell", CategoryCommand, false)}
+
+	step := &schema.WorkflowStep{
+		Name:        "interactive-step",
+		Type:        "shell",
+		Command:     "exit 0",
+		Interactive: true,
+		Output:      "capture",
+	}
+
+	result, err := handler.Execute(context.Background(), step, NewVariables())
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	assert.Empty(t, result.Value)
+	assert.Equal(t, 0, result.Metadata[exitCodeMetadata])
+}
+
+func TestShellHandlerInteractiveStepWithWorkflowUsesShellSession(t *testing.T) {
+	initShellTestIO(t)
+	handler := &ShellHandler{BaseHandler: NewBaseHandler("shell", CategoryCommand, false)}
+
+	step := &schema.WorkflowStep{
+		Name:        "interactive-step",
+		Type:        "shell",
+		Command:     "exit 0",
+		Interactive: true,
+	}
+	workflow := &schema.WorkflowDefinition{Output: "capture"}
+
+	result, err := handler.ExecuteWithWorkflow(context.Background(), step, NewVariables(), workflow)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	assert.Empty(t, result.Value)
+	assert.Equal(t, 0, result.Metadata[exitCodeMetadata])
+}
+
 func TestPrepareInteractive(t *testing.T) {
 	t.Run("non-interactive is a no-op", func(t *testing.T) {
 		step := &schema.WorkflowStep{Name: "plain"}

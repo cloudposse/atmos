@@ -69,9 +69,10 @@ func (h *ShellHandler) Execute(ctx context.Context, step *schema.WorkflowStep, v
 		}
 	}
 
-	// Terminal-attached steps bypass output mode handling entirely.
-	if step.Tty {
-		return h.executeTtyStep(ctx, step, command, workDir, envVars)
+	// Terminal-attached or interactive steps need the session path for
+	// platform-aware shell selection and direct terminal attachment.
+	if step.Tty || step.Interactive {
+		return h.executeShellSessionStep(ctx, step, command, workDir, envVars)
 	}
 
 	// Create command - use shell to interpret the command string.
@@ -124,12 +125,12 @@ func getExitCode(err error) int {
 	return 1
 }
 
-// executeTtyStep runs a tty step attached to the user's terminal.
-// TTY steps produce no capturable output (the PTY writes straight to the
-// terminal), so the StepResult carries an empty output and only the exit code.
-func (h *ShellHandler) executeTtyStep(ctx context.Context, step *schema.WorkflowStep, command, workDir string, envVars []string) (*StepResult, error) {
+// executeShellSessionStep runs a terminal-attached or interactive step.
+// Session steps produce no capturable output, so the StepResult carries an
+// empty output and only the exit code.
+func (h *ShellHandler) executeShellSessionStep(ctx context.Context, step *schema.WorkflowStep, command, workDir string, envVars []string) (*StepResult, error) {
 	if step.Output != "" {
-		log.Debug("Output mode ignored for tty step", "step", step.Name, "output", step.Output)
+		log.Debug("Output mode ignored for shell session step", "step", step.Name, "output", step.Output)
 	}
 
 	err := process.RunShellSession(ctx, &process.ShellSessionSpec{
@@ -137,7 +138,7 @@ func (h *ShellHandler) executeTtyStep(ctx context.Context, step *schema.Workflow
 		Name:          step.Name,
 		Dir:           workDir,
 		Env:           append(os.Environ(), envVars...),
-		TTY:           true,
+		TTY:           step.Tty,
 		Interactive:   step.Interactive,
 		Masker:        iolib.GetContext().Masker(),
 		EnableMasking: viper.GetBool("mask"),
@@ -196,9 +197,10 @@ func (h *ShellHandler) ExecuteWithWorkflow(ctx context.Context, step *schema.Wor
 		}
 	}
 
-	// Terminal-attached steps bypass output mode handling entirely.
-	if step.Tty {
-		return h.executeTtyStep(ctx, step, command, workDir, envVars)
+	// Terminal-attached or interactive steps need the session path for
+	// platform-aware shell selection and direct terminal attachment.
+	if step.Tty || step.Interactive {
+		return h.executeShellSessionStep(ctx, step, command, workDir, envVars)
 	}
 
 	// Create command.

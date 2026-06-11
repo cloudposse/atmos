@@ -1,9 +1,12 @@
 package pty
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
+	"os"
 	"os/exec"
 	"runtime"
 	"strings"
@@ -12,6 +15,73 @@ import (
 
 	iolib "github.com/cloudposse/atmos/pkg/io"
 )
+
+func ptyHelperCommand(t *testing.T, args ...string) *exec.Cmd {
+	t.Helper()
+	exe, err := os.Executable()
+	if err != nil {
+		t.Fatalf("os.Executable() error = %v", err)
+	}
+	return exec.Command(exe, append([]string{"-test.run=TestPTYHelper", "--"}, args...)...)
+}
+
+func TestPTYHelper(t *testing.T) {
+	args := ptyHelperArgs()
+	if args == nil {
+		return
+	}
+
+	switch args[0] {
+	case "print-done":
+		fmt.Println("done")
+		time.Sleep(100 * time.Millisecond)
+	case "stdin-marker":
+		if isCharDevice(os.Stdin) {
+			fmt.Println("is-a-tty")
+		}
+		if line, ok := readLineWithTimeout(300 * time.Millisecond); ok {
+			fmt.Println("INPUT-RECEIVED:" + strings.TrimSpace(line))
+		} else {
+			fmt.Println("NO-INPUT")
+		}
+	default:
+		t.Fatalf("unknown helper command: %s", args[0])
+	}
+	os.Exit(0)
+}
+
+func ptyHelperArgs() []string {
+	for i, arg := range os.Args {
+		if arg == "--" && i+1 < len(os.Args) {
+			return os.Args[i+1:]
+		}
+	}
+	return nil
+}
+
+func isCharDevice(file *os.File) bool {
+	info, err := file.Stat()
+	return err == nil && info.Mode()&os.ModeCharDevice != 0
+}
+
+func readLineWithTimeout(timeout time.Duration) (string, bool) {
+	lines := make(chan string, 1)
+	go func() {
+		line, err := bufio.NewReader(os.Stdin).ReadString('\n')
+		if err == nil || line != "" {
+			lines <- line
+			return
+		}
+		lines <- ""
+	}()
+
+	select {
+	case line := <-lines:
+		return line, line != ""
+	case <-time.After(timeout):
+		return "", false
+	}
+}
 
 func TestIsSupported(t *testing.T) {
 	supported := IsSupported()
@@ -341,7 +411,7 @@ func TestExecWithPTY_ReturnsWithBlockedStdin(t *testing.T) {
 	defer cancel()
 
 	var stdout bytes.Buffer
-	cmd := exec.Command("sh", "-c", "printf 'done\\n'; sleep 0.1")
+	cmd := ptyHelperCommand(t, "print-done")
 	opts := &Options{
 		Stdin:  neverEOFReader{},
 		Stdout: &stdout,
@@ -376,11 +446,9 @@ func TestExecWithPTY_DisableStdinForward(t *testing.T) {
 	defer cancel()
 
 	var stdout bytes.Buffer
-	// The child still sees a TTY on stdin, but host input is not forwarded:
-	// `read` with a short timeout gets nothing and falls through.
-	cmd := exec.Command("sh", "-c", "test -t 0 && printf 'is-a-tty\\n'; sleep 0.1")
+	cmd := ptyHelperCommand(t, "stdin-marker")
 	opts := &Options{
-		Stdin:               strings.NewReader("should never be forwarded"),
+		Stdin:               strings.NewReader("should never be forwarded\n"),
 		Stdout:              &stdout,
 		DisableStdinForward: true,
 	}
@@ -393,7 +461,38 @@ func TestExecWithPTY_DisableStdinForward(t *testing.T) {
 	if !strings.Contains(output, "is-a-tty") {
 		t.Errorf("Expected child to see a TTY on stdin, got: %s", output)
 	}
-	if strings.Contains(output, "should never be forwarded") {
+	if !strings.Contains(output, "NO-INPUT") {
+		t.Errorf("Expected host stdin not to be forwarded, got: %s", output)
+	}
+	if strings.Contains(output, "INPUT-RECEIVED") {
 		t.Errorf("Host stdin leaked into the PTY: %s", output)
+	}
+}
+
+func TestExecWithPTY_ForwardsStdin(t *testing.T) {
+	if !IsSupported() {
+		t.Skipf("PTY not supported on %s", runtime.GOOS)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	var stdout bytes.Buffer
+	cmd := ptyHelperCommand(t, "stdin-marker")
+	opts := &Options{
+		Stdin:  strings.NewReader("forwarded input\n"),
+		Stdout: &stdout,
+	}
+
+	if err := ExecWithPTY(ctx, cmd, opts); err != nil {
+		t.Fatalf("ExecWithPTY() error = %v", err)
+	}
+
+	output := stdout.String()
+	if !strings.Contains(output, "is-a-tty") {
+		t.Errorf("Expected child to see a TTY on stdin, got: %s", output)
+	}
+	if !strings.Contains(output, "INPUT-RECEIVED:forwarded input") {
+		t.Errorf("Expected host stdin to be forwarded, got: %s", output)
 	}
 }

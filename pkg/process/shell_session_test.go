@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -18,13 +19,69 @@ import (
 	"github.com/cloudposse/atmos/pkg/terminal/pty"
 )
 
-// echoEnvToFileCommand returns a shell command that writes the value of an
-// environment variable to a file, portable across sh and cmd.exe.
-func echoEnvToFileCommand(envVar, path string) string {
-	if runtime.GOOS == "windows" {
-		return "echo %" + envVar + "% > " + path
+func shellSessionHelperCommand(t *testing.T, args ...string) string {
+	t.Helper()
+	exe, err := os.Executable()
+	require.NoError(t, err)
+
+	commandArgs := append([]string{exe, "-test.run=TestShellSessionHelper", "--"}, args...)
+	quoted := make([]string, len(commandArgs))
+	for i, arg := range commandArgs {
+		quoted[i] = shellQuoteArg(arg)
 	}
-	return "echo $" + envVar + " > " + path
+	return strings.Join(quoted, " ")
+}
+
+func shellQuoteArg(arg string) string {
+	if runtime.GOOS == "windows" {
+		return `"` + strings.ReplaceAll(arg, `"`, `\"`) + `"`
+	}
+	return "'" + strings.ReplaceAll(arg, "'", "'\\''") + "'"
+}
+
+func TestShellSessionHelper(t *testing.T) {
+	args := helperArgs()
+	if args == nil {
+		return
+	}
+
+	switch args[0] {
+	case "write-env":
+		require.Len(t, args, 3)
+		require.NoError(t, os.WriteFile(args[2], []byte(os.Getenv(args[1])), 0o600))
+	case "write-dir":
+		require.Len(t, args, 2)
+		wd, err := os.Getwd()
+		require.NoError(t, err)
+		require.NoError(t, os.WriteFile(args[1], []byte(wd), 0o600))
+	case "sleep":
+		require.Len(t, args, 2)
+		duration, err := time.ParseDuration(args[1])
+		require.NoError(t, err)
+		time.Sleep(duration)
+	case "write-tty":
+		require.Len(t, args, 2)
+		if isCharDevice(os.Stdin) && isCharDevice(os.Stdout) {
+			require.NoError(t, os.WriteFile(args[1], []byte("tty"), 0o600))
+		}
+	default:
+		t.Fatalf("unknown helper command: %s", args[0])
+	}
+	os.Exit(0)
+}
+
+func helperArgs() []string {
+	for i, arg := range os.Args {
+		if arg == "--" && i+1 < len(os.Args) {
+			return os.Args[i+1:]
+		}
+	}
+	return nil
+}
+
+func isCharDevice(file *os.File) bool {
+	info, err := file.Stat()
+	return err == nil && info.Mode()&os.ModeCharDevice != 0
 }
 
 func TestRunShellSession_AttachedExitCode(t *testing.T) {
@@ -43,7 +100,7 @@ func TestRunShellSession_AttachedSuccess(t *testing.T) {
 	marker := filepath.Join(t.TempDir(), "marker")
 
 	err := RunShellSession(context.Background(), &ShellSessionSpec{
-		Command: echoEnvToFileCommand("ATMOS_SHLVL", marker),
+		Command: shellSessionHelperCommand(t, "write-env", "ATMOS_SHLVL", marker),
 		Name:    "shlvl-test",
 	})
 	require.NoError(t, err)
@@ -57,7 +114,7 @@ func TestRunShellSession_DryRunDoesNotExecute(t *testing.T) {
 	marker := filepath.Join(t.TempDir(), "marker")
 
 	err := RunShellSession(context.Background(), &ShellSessionSpec{
-		Command: echoEnvToFileCommand("ATMOS_SHLVL", marker),
+		Command: shellSessionHelperCommand(t, "write-env", "ATMOS_SHLVL", marker),
 		Name:    "dry-run-test",
 		DryRun:  true,
 	})
@@ -66,15 +123,23 @@ func TestRunShellSession_DryRunDoesNotExecute(t *testing.T) {
 	assert.NoFileExists(t, marker, "dry-run must not execute the command")
 }
 
+func TestRunShellSession_DryRunIgnoresMalformedShellLevel(t *testing.T) {
+	t.Setenv("ATMOS_SHLVL", "not-a-number")
+
+	err := RunShellSession(context.Background(), &ShellSessionSpec{
+		Command: shellSessionHelperCommand(t, "sleep", "1ms"),
+		Name:    "dry-run-shlvl-test",
+		DryRun:  true,
+	})
+	require.NoError(t, err)
+}
+
 func TestRunShellSession_WorkingDirectory(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("pwd-based working directory check requires sh")
-	}
 	dir := t.TempDir()
 	marker := filepath.Join(dir, "marker")
 
 	err := RunShellSession(context.Background(), &ShellSessionSpec{
-		Command: "pwd > " + marker,
+		Command: shellSessionHelperCommand(t, "write-dir", marker),
 		Name:    "dir-test",
 		Dir:     dir,
 	})
@@ -91,15 +156,12 @@ func TestRunShellSession_WorkingDirectory(t *testing.T) {
 }
 
 func TestRunShellSession_ContextCancellation(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("sleep-based cancellation check requires sh")
-	}
 	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
 	defer cancel()
 
 	start := time.Now()
 	err := RunShellSession(ctx, &ShellSessionSpec{
-		Command: "sleep 10",
+		Command: shellSessionHelperCommand(t, "sleep", "10s"),
 		Name:    "cancel-test",
 	})
 	require.Error(t, err)
@@ -107,15 +169,12 @@ func TestRunShellSession_ContextCancellation(t *testing.T) {
 }
 
 func TestRunShellSession_InteractiveSuspendsInterruptExit(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("sleep-based timing check requires sh")
-	}
 	require.False(t, signals.InterruptExitSuspended())
 
 	done := make(chan error, 1)
 	go func() {
 		done <- RunShellSession(context.Background(), &ShellSessionSpec{
-			Command:     "sleep 0.5",
+			Command:     shellSessionHelperCommand(t, "sleep", "500ms"),
 			Name:        "suspend-test",
 			Interactive: true,
 		})
@@ -150,9 +209,8 @@ func TestRunShellSession_PTYChildSeesTTY(t *testing.T) {
 	}
 	marker := filepath.Join(t.TempDir(), "marker")
 
-	// `test -t 0` and `test -t 1` succeed only when the streams are a TTY.
 	err := RunShellSession(context.Background(), &ShellSessionSpec{
-		Command: "test -t 0 && test -t 1 && echo tty > " + marker + "; sleep 0.1",
+		Command: shellSessionHelperCommand(t, "write-tty", marker),
 		Name:    "pty-tty-test",
 		TTY:     true,
 	})
@@ -161,6 +219,17 @@ func TestRunShellSession_PTYChildSeesTTY(t *testing.T) {
 	content, err := os.ReadFile(marker)
 	require.NoError(t, err)
 	assert.Equal(t, "tty", strings.TrimSpace(string(content)))
+}
+
+func TestRunSessionAttachedWarnsWhenMaskingEnabled(t *testing.T) {
+	exe, err := os.Executable()
+	require.NoError(t, err)
+
+	cmd := exec.Command(exe, "-test.run=TestShellSessionHelper", "--", "sleep", "1ms")
+	cmd.Env = os.Environ()
+
+	err = runSessionAttached(cmd, &ShellSessionSpec{EnableMasking: true})
+	require.NoError(t, err)
 }
 
 func TestSessionExitError(t *testing.T) {

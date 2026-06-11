@@ -58,16 +58,16 @@ func RunShellSession(ctx context.Context, spec *ShellSessionSpec) error {
 		ctx = context.Background()
 	}
 
-	shellLevel, err := u.GetNextShellLevel()
-	if err != nil {
-		return err
-	}
-
 	log.Debug("Executing shell session",
 		"name", spec.Name, "command", spec.Command, "tty", spec.TTY, "interactive", spec.Interactive)
 
 	if spec.DryRun {
 		return nil
+	}
+
+	shellLevel, err := u.GetNextShellLevel()
+	if err != nil {
+		return err
 	}
 
 	if spec.Interactive {
