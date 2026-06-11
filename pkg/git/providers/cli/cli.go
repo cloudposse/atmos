@@ -58,9 +58,22 @@ func New(opts ...Option) *Provider {
 	return p
 }
 
+// SwapStderr replaces the stderr writer and returns a restore function.
+func (p *Provider) SwapStderr(w io.Writer) func() {
+	prev := p.stderr
+	p.stderr = w
+	return func() {
+		p.stderr = prev
+	}
+}
+
 // run invokes git with the repository context applied.
 func (p *Provider) run(ctx context.Context, dir string, env []string, args ...string) (atmosgit.RunResult, error) {
 	return p.runner.Run(ctx, gitCommand, args, atmosgit.RunOptions{Dir: dir, Env: env, Stderr: p.stderr})
+}
+
+func (p *Provider) runQuiet(ctx context.Context, dir string, env []string, args ...string) (atmosgit.RunResult, error) {
+	return p.runner.Run(ctx, gitCommand, args, atmosgit.RunOptions{Dir: dir, Env: env})
 }
 
 // Clone reconciles a repository workdir: a fresh clone when the workdir is

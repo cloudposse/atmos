@@ -178,7 +178,8 @@ The two-repo split (managed repositories vs. the current repository) extends to 
 | Clone form | Destination |
 | --- | --- |
 | Named managed repository (`atmos git clone flux-deploy`) | Automatic XDG workdir (cache-captured) |
-| No-arg current-repo checkout replacement in CI (`atmos git clone`) | The **working directory** (e.g., `GITHUB_WORKSPACE`), exactly like `actions/checkout` — never an XDG workdir; subsequent Atmos commands expect the repo at CWD |
+| Single configured repository outside CI (`atmos git clone` with exactly one repository) | Automatic XDG workdir (cache-captured) |
+| No-arg current-repo checkout replacement in CI (`atmos git clone` with `ci.enabled: true` and detected CI metadata) | The **working directory** (e.g., `GITHUB_WORKSPACE`), exactly like `actions/checkout` — never an XDG workdir; subsequent Atmos commands expect the repo at CWD |
 | Ad hoc URI (`atmos git clone https://...`) | `<cwd>/<repo-name>`, like plain `git clone` |
 
 `--workdir=<path>` overrides the destination in all forms.

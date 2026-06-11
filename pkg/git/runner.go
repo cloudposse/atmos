@@ -6,9 +6,9 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"os/exec"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	pkgexec "github.com/cloudposse/atmos/pkg/exec"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
@@ -46,12 +46,22 @@ type Runner interface {
 	Run(ctx context.Context, command string, args []string, opts RunOptions) (RunResult, error)
 }
 
-// ExecRunner is the production Runner using exec.CommandContext.
-type ExecRunner struct{}
+// ExecRunner is the production Runner using pkg/exec.CommandExecutor.
+type ExecRunner struct {
+	executor pkgexec.CommandExecutor
+}
 
 // NewExecRunner returns the production Runner.
 func NewExecRunner() *ExecRunner {
-	return &ExecRunner{}
+	return NewExecRunnerWithExecutor(pkgexec.Default())
+}
+
+// NewExecRunnerWithExecutor returns a Runner backed by the provided command executor.
+func NewExecRunnerWithExecutor(executor pkgexec.CommandExecutor) *ExecRunner {
+	if executor == nil {
+		executor = pkgexec.Default()
+	}
+	return &ExecRunner{executor: executor}
 }
 
 // Run executes the command and returns the captured result. A non-zero exit
@@ -63,7 +73,7 @@ func (r *ExecRunner) Run(ctx context.Context, command string, args []string, opt
 	var stdout bytes.Buffer
 	tail := &tailBuffer{limit: stderrTailLimit}
 
-	cmd := exec.CommandContext(ctx, command, args...)
+	cmd := r.executor.CommandContext(ctx, command, args...)
 	cmd.Dir = opts.Dir
 	cmd.Env = opts.Env
 	cmd.Stdout = &stdout
@@ -79,7 +89,7 @@ func (r *ExecRunner) Run(ctx context.Context, command string, args []string, opt
 		return result, nil
 	}
 
-	var exitErr *exec.ExitError
+	var exitErr interface{ ExitCode() int }
 	if errors.As(err, &exitErr) {
 		result.ExitCode = exitErr.ExitCode()
 		return result, fmt.Errorf("%w: %s %s (exit %d)", errUtils.ErrGitCommandExited, command, firstArg(args), result.ExitCode)

@@ -1,12 +1,19 @@
 package git
 
 import (
+	"bytes"
 	"context"
+	"errors"
 	"fmt"
+	"io"
+	"strings"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	atmosgit "github.com/cloudposse/atmos/pkg/git"
+	iolib "github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/ui"
+	"github.com/cloudposse/atmos/pkg/ui/spinner"
 )
 
 // testProviderOverride, when non-nil, is used by providerForName() instead of
@@ -29,6 +36,10 @@ type Executor struct {
 	provider atmosgit.Provider
 }
 
+type stderrSwapper interface {
+	SwapStderr(io.Writer) func()
+}
+
 // newExecutor builds an Executor using the named provider from the registry.
 // Pass an empty string to use the default "cli" provider.
 func newExecutor(providerName string) (*Executor, error) {
@@ -49,12 +60,75 @@ func newExecutorWithProvider(p atmosgit.Provider) *Executor {
 func (e *Executor) Clone(ctx context.Context, opts *atmosgit.CloneOptions, label string) error {
 	defer perf.Track(nil, "git.Executor.Clone")()
 
-	if err := e.provider.Clone(ctx, opts); err != nil {
-		return err
+	progressMsg := fmt.Sprintf("Cloning %s", label)
+	completedMsg := fmt.Sprintf("Cloned %s into %s.", label, opts.Workdir)
+	stderr, err := e.captureStderr(func() error {
+		return spinner.ExecWithSpinner(progressMsg, completedMsg, func() error {
+			return e.provider.Clone(ctx, opts)
+		})
+	})
+	return wrapCloneError(label, opts.Workdir, stderr, err)
+}
+
+func (e *Executor) CloneWithoutSpinner(ctx context.Context, opts *atmosgit.CloneOptions, label string) error {
+	defer perf.Track(nil, "git.Executor.CloneWithoutSpinner")()
+
+	stderr, err := e.captureStderr(func() error {
+		return e.provider.Clone(ctx, opts)
+	})
+	if err != nil {
+		return wrapCloneError(label, opts.Workdir, stderr, err)
 	}
 
 	ui.Successf("Cloned %s into %s.", label, opts.Workdir)
 	return nil
+}
+
+func (e *Executor) captureStderr(operation func() error) (string, error) {
+	swapper, ok := e.provider.(stderrSwapper)
+	if !ok {
+		return "", operation()
+	}
+
+	var stderr bytes.Buffer
+	restore := swapper.SwapStderr(iolib.MaskWriter(&stderr))
+	defer restore()
+
+	err := operation()
+	return strings.TrimSpace(stderr.String()), err
+}
+
+func wrapCloneError(label, workdir, stderr string, err error) error {
+	if err == nil {
+		return nil
+	}
+
+	base := errUtils.ErrGitCommandFailed
+	wrapCause := true
+	switch {
+	case errors.Is(err, errUtils.ErrGitAuthFailed):
+		base = errUtils.ErrGitAuthFailed
+		wrapCause = false
+	case errors.Is(err, errUtils.ErrGitCommandExited):
+		base = errUtils.ErrGitCommandExited
+		wrapCause = false
+	}
+
+	explanation := fmt.Sprintf("Failed to clone Git repository %q into %q.", label, workdir)
+	if stderr != "" {
+		explanation += "\n\nGit output:\n\n```text\n" + stderr + "\n```"
+	}
+
+	builder := errUtils.Build(base)
+	if wrapCause {
+		builder = builder.WithCause(err)
+	}
+
+	return builder.
+		WithExplanation(explanation).
+		WithHint("Run 'atmos git list' to confirm the configured URI, branch, and resolved workdir.").
+		WithExitCode(2).
+		Err()
 }
 
 // Pull delegates to the provider.

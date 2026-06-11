@@ -3,8 +3,9 @@ base_path: "./"
 git:
   repositories:
     deploy:
-      uri: git@github.com:cloudposse-sandbox/empty.git
-      branch: main
+      uri: https://github.com/cloudposse-sandbox/empty.git
+      # SSH alternative when an SSH key is available:
+      # uri: git@github.com:cloudposse-sandbox/empty.git
 
 logs:
   file: "/dev/stderr"

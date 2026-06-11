@@ -51,7 +51,7 @@ func TestValidateGitListFormat_UnknownRejected(t *testing.T) {
 // ---- defaultGitListColumns ----
 
 func TestDefaultGitListColumns_WithoutStatus(t *testing.T) {
-	cols := defaultGitListColumns(false)
+	cols := defaultGitListColumns(false, format.FormatTable)
 	names := extractColumnNames(cols)
 	assert.Equal(t, []string{"Name", "URI", "Provider", "Branch", "Workdir"}, names)
 
@@ -62,10 +62,17 @@ func TestDefaultGitListColumns_WithoutStatus(t *testing.T) {
 }
 
 func TestDefaultGitListColumns_WithStatus(t *testing.T) {
-	cols := defaultGitListColumns(true)
+	cols := defaultGitListColumns(true, format.FormatTable)
+	names := extractColumnNames(cols)
+	assert.Equal(t, []string{" ", "Name", "URI", "Provider", "Branch", "Workdir"}, names)
+	assert.Equal(t, "{{ .status }}", cols[0].Value)
+}
+
+func TestDefaultGitListColumns_WithStatusDataFormat(t *testing.T) {
+	cols := defaultGitListColumns(true, format.FormatJSON)
 	names := extractColumnNames(cols)
 	assert.Equal(t, []string{"Name", "URI", "Provider", "Branch", "Workdir", "Status"}, names)
-	assert.Equal(t, "{{ .status }}", cols[5].Value)
+	assert.Equal(t, "{{ .status_text }}", cols[5].Value)
 }
 
 // ---- parseGitColumnSpec ----
@@ -232,6 +239,20 @@ func TestExtractGitRepoRows_StatusValues(t *testing.T) {
 	}
 }
 
+func TestGitStatusIndicatorTTYUsesDot(t *testing.T) {
+	for _, status := range []string{statusMissing, statusCloned, statusDirty} {
+		got := gitStatusIndicatorWithTTY(status, true)
+		assert.Contains(t, got, statusDot)
+		assert.NotEqual(t, status, got)
+	}
+}
+
+func TestGitStatusIndicatorNonTTYUsesText(t *testing.T) {
+	for _, status := range []string{statusMissing, statusCloned, statusDirty} {
+		assert.Equal(t, status, gitStatusIndicatorWithTTY(status, false))
+	}
+}
+
 // ---- buildGitListSorters ----
 
 func TestBuildGitListSorters_Default(t *testing.T) {
@@ -260,7 +281,7 @@ func TestGetGitListColumns_FlagTakesPrecedence(t *testing.T) {
 			},
 		},
 	}
-	cols := getGitListColumns(atmosConfig, []string{"Name"}, false)
+	cols := getGitListColumns(atmosConfig, []string{"Name"}, false, format.FormatTable)
 	require.Len(t, cols, 1)
 	assert.Equal(t, "Name", cols[0].Name)
 }
@@ -276,21 +297,27 @@ func TestGetGitListColumns_ConfigTakesPrecedenceOverDefault(t *testing.T) {
 			},
 		},
 	}
-	cols := getGitListColumns(atmosConfig, nil, false)
+	cols := getGitListColumns(atmosConfig, nil, false, format.FormatTable)
 	require.Len(t, cols, 2)
 	assert.Equal(t, "Repo", cols[0].Name)
 	assert.Equal(t, "URL", cols[1].Name)
 }
 
 func TestGetGitListColumns_Default_NoStatus(t *testing.T) {
-	cols := getGitListColumns(&schema.AtmosConfiguration{}, nil, false)
+	cols := getGitListColumns(&schema.AtmosConfiguration{}, nil, false, format.FormatTable)
 	names := extractColumnNames(cols)
 	assert.NotContains(t, names, "Status")
 	assert.Contains(t, names, "Name")
 }
 
 func TestGetGitListColumns_Default_WithStatus(t *testing.T) {
-	cols := getGitListColumns(&schema.AtmosConfiguration{}, nil, true)
+	cols := getGitListColumns(&schema.AtmosConfiguration{}, nil, true, format.FormatTable)
+	names := extractColumnNames(cols)
+	assert.Contains(t, names, " ")
+}
+
+func TestGetGitListColumns_DefaultWithStatusForDataFormat(t *testing.T) {
+	cols := getGitListColumns(&schema.AtmosConfiguration{}, nil, true, format.FormatJSON)
 	names := extractColumnNames(cols)
 	assert.Contains(t, names, "Status")
 }

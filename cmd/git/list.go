@@ -54,8 +54,9 @@ var listCmd = &cobra.Command{
 	Long: `List managed Git repositories configured under git.repositories in atmos.yaml.
 
 Output includes name, URI, provider, branch, and resolved workdir for each repository.
-Pass --check-status to also probe the filesystem for clone state (missing/cloned/dirty).
-Without --check-status the command performs no filesystem or network I/O and is always fast.
+Default table output also probes local workdirs and shows a status dot for each
+repository. Pass --columns to customize the output; pass --check-status when a
+custom column references status fields.
 
 Formats: ` + validFormats + `.
 tree and matrix are not supported for this flat repository list.`,
@@ -118,8 +119,12 @@ func renderGitRepositoriesList(atmosConfig *schema.AtmosConfiguration, opts *Git
 
 	cfg := &atmosConfig.Git
 
-	// Extract rows (status probed here when --check-status is set).
-	rows, err := extractGitRepoRows(cfg, opts.CheckStatus)
+	outputFormat := format.Format(opts.Format)
+	includeStatus := shouldProbeGitListStatus(atmosConfig, opts, outputFormat)
+
+	// Extract rows. Default table output probes status so it can show the dot
+	// column; custom columns opt in with --check-status.
+	rows, err := extractGitRepoRows(cfg, includeStatus)
 	if err != nil {
 		return err
 	}
@@ -130,7 +135,7 @@ func renderGitRepositoriesList(atmosConfig *schema.AtmosConfiguration, opts *Git
 	}
 
 	// Build column selector.
-	cols := getGitListColumns(atmosConfig, opts.Columns, opts.CheckStatus)
+	cols := getGitListColumns(atmosConfig, opts.Columns, includeStatus, outputFormat)
 
 	selector, err := column.NewSelector(cols, column.BuildColumnFuncMap())
 	if err != nil {
@@ -146,9 +151,18 @@ func renderGitRepositoriesList(atmosConfig *schema.AtmosConfiguration, opts *Git
 	// No additional filters beyond extraction (repositories are already enumerated).
 	var filters []filter.Filter
 
-	outputFormat := format.Format(opts.Format)
 	r := renderer.New(filters, selector, sorters, outputFormat, opts.Delimiter)
 	return r.Render(rows)
+}
+
+func shouldProbeGitListStatus(atmosConfig *schema.AtmosConfiguration, opts *GitListOptions, outputFormat format.Format) bool {
+	if opts.CheckStatus {
+		return true
+	}
+	if len(opts.Columns) > 0 || len(atmosConfig.Git.List.Columns) > 0 {
+		return false
+	}
+	return outputFormat == "" || outputFormat == format.FormatTable
 }
 
 // validateGitListFormat returns an error when format is a value not supported
@@ -192,7 +206,12 @@ func loadGitListConfig(_ *cobra.Command, _ []string, opts *GitListOptions) (sche
 
 // getGitListColumns returns the column configuration for the list output.
 // Precedence: --columns flag > atmos.yaml git.list.columns > defaults.
-func getGitListColumns(atmosConfig *schema.AtmosConfiguration, columnsFlag []string, includeStatus bool) []column.Config {
+func getGitListColumns(
+	atmosConfig *schema.AtmosConfiguration,
+	columnsFlag []string,
+	includeStatus bool,
+	outputFormat format.Format,
+) []column.Config {
 	defer perf.Track(nil, "git.getGitListColumns")()
 
 	if len(columnsFlag) > 0 {
@@ -211,12 +230,12 @@ func getGitListColumns(atmosConfig *schema.AtmosConfiguration, columnsFlag []str
 		return cols
 	}
 
-	return defaultGitListColumns(includeStatus)
+	return defaultGitListColumns(includeStatus, outputFormat)
 }
 
 // defaultGitListColumns returns the default column set for git list.
 // The status column is appended only when --check-status is set.
-func defaultGitListColumns(includeStatus bool) []column.Config {
+func defaultGitListColumns(includeStatus bool, outputFormat format.Format) []column.Config {
 	cols := []column.Config{
 		{Name: "Name", Value: "{{ .name }}"},
 		{Name: "URI", Value: "{{ .uri }}"},
@@ -224,10 +243,15 @@ func defaultGitListColumns(includeStatus bool) []column.Config {
 		{Name: "Branch", Value: "{{ .branch }}"},
 		{Name: "Workdir", Value: "{{ .workdir }}"},
 	}
-	if includeStatus {
-		cols = append(cols, column.Config{Name: "Status", Value: "{{ .status }}"})
+	if !includeStatus {
+		return cols
 	}
-	return cols
+	switch outputFormat {
+	case format.FormatJSON, format.FormatYAML, format.FormatCSV, format.FormatTSV:
+		return append(cols, column.Config{Name: "Status", Value: "{{ .status_text }}"})
+	default:
+		return append([]column.Config{{Name: " ", Value: "{{ .status }}", Width: 1}}, cols...)
+	}
 }
 
 // parseGitColumnsFlag converts string column specs into column.Config values.

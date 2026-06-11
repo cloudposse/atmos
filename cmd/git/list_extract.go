@@ -4,9 +4,13 @@ import (
 	"context"
 	"sync"
 
+	"github.com/charmbracelet/lipgloss"
+
 	atmosgit "github.com/cloudposse/atmos/pkg/git"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/terminal"
+	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
 
 const (
@@ -22,7 +26,14 @@ const (
 
 	// Worker pool size for concurrent status probes.
 	statusWorkerPoolSize = 4
+
+	statusDot = "●"
 )
+
+var isGitListTTYCached = sync.OnceValue(func() bool {
+	term := terminal.New()
+	return term.IsTTY(terminal.Stdout)
+})
 
 // StatusProber is a seam for status probing used in tests.
 // Production code uses the git provider; tests substitute a stub.
@@ -185,6 +196,26 @@ func probeStatusConcurrently(ctx context.Context, rows []map[string]any, prober 
 	wg.Wait()
 
 	for i, status := range results {
-		rows[i]["status"] = status
+		rows[i]["status"] = gitStatusIndicator(status)
+		rows[i]["status_text"] = status
+	}
+}
+
+func gitStatusIndicator(status string) string {
+	return gitStatusIndicatorWithTTY(status, isGitListTTYCached())
+}
+
+func gitStatusIndicatorWithTTY(status string, isTTY bool) string {
+	if !isTTY {
+		return status
+	}
+
+	switch status {
+	case statusCloned:
+		return theme.GetSuccessStyle().Render(statusDot)
+	case statusDirty:
+		return theme.GetWarningStyle().Render(statusDot)
+	default:
+		return lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorDarkGray)).Render(statusDot)
 	}
 }

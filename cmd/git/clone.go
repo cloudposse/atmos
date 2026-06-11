@@ -15,6 +15,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/ci"
 	atmosgit "github.com/cloudposse/atmos/pkg/git"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui"
 
 	// Register CI providers for detection in no-arg clone.
@@ -30,14 +31,16 @@ var cloneCmd = &cobra.Command{
 	Short: "Clone or reconcile a managed Git repository",
 	Long: `Clone a named Git repository (configured under git.repositories) or an ad hoc URI.
 
-When no argument is provided and ci.enabled is true, the current CI repository
-is cloned into the working directory (replaces actions/checkout).
+When no argument is provided, Atmos clones the single configured repository.
+When ci.enabled is true and a CI provider is detected, the current CI repository
+is cloned into the working directory instead (replaces actions/checkout).
 
 URI forms supported:
   - Named repository:   atmos git clone flux-deploy
   - HTTPS URI:          atmos git clone https://github.com/acme/repo.git
   - SCP-style:          atmos git clone git@github.com:acme/repo.git
   - go-getter style:    atmos git clone git::https://github.com/acme/repo.git?ref=main&depth=1
+  - Single configured:  atmos git clone
   - Bulk operation:     atmos git clone --all`,
 	Args: cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
@@ -159,6 +162,9 @@ func runCloneNamed(ctx context.Context, name string, opts *cloneOptions) error {
 		Submodules:   opts.Submodules || resolved.Clone.Submodules,
 	}
 
+	if opts.All {
+		return exec.CloneWithoutSpinner(ctx, cloneOpts, name)
+	}
 	return exec.Clone(ctx, cloneOpts, name)
 }
 
@@ -224,37 +230,39 @@ func resolveAdHocWorkdir(workdirFlag, repoName string) (string, error) {
 func runCloneNoArg(ctx context.Context, opts *cloneOptions) error {
 	defer perf.Track(nil, "git.runCloneNoArg")()
 
-	if err := checkCIEnabled(); err != nil {
-		return err
+	if isCICloneEnabled() {
+		detected := ci.Detect()
+		if detected != nil {
+			ciCtx, err := detected.Context()
+			if err != nil {
+				return fmt.Errorf("reading CI context for no-arg clone: %w", err)
+			}
+			return runCICheckout(ctx, detected.Name(), ciCtx, opts)
+		}
 	}
 
-	detected := ci.Detect()
-	if detected == nil {
-		return errUtils.Build(errUtils.ErrGitRepositoryRequired).
-			WithHint("No CI provider was detected in the current environment.").
-			WithHint("Provide a repository name or URI to clone.").
-			WithExitCode(2).
-			Err()
+	if name, ok := singleConfiguredRepositoryName(gitConfig()); ok {
+		return runCloneNamed(ctx, name, opts)
 	}
 
-	ciCtx, err := detected.Context()
-	if err != nil {
-		return fmt.Errorf("reading CI context for no-arg clone: %w", err)
-	}
-
-	return runCICheckout(ctx, detected.Name(), ciCtx, opts)
+	return errUtils.Build(errUtils.ErrGitRepositoryRequired).
+		WithHint("Provide a repository name or URI to clone.").
+		WithHint("Use 'atmos git clone --all' to clone all configured repositories.").
+		WithHint("When exactly one repository is configured under git.repositories, no-arg clone uses that repository.").
+		WithExitCode(2).
+		Err()
 }
 
-// checkCIEnabled returns an error when ci.enabled is false or config is nil.
-func checkCIEnabled() error {
-	if atmosConfigPtr == nil || !atmosConfigPtr.CI.Enabled {
-		return errUtils.Build(errUtils.ErrGitRepositoryRequired).
-			WithHint("Provide a repository name or URI to clone.").
-			WithHint("Set 'ci.enabled: true' in atmos.yaml to enable CI current-repository checkout replacement.").
-			WithExitCode(2).
-			Err()
+func isCICloneEnabled() bool {
+	return atmosConfigPtr != nil && atmosConfigPtr.CI.Enabled
+}
+
+func singleConfiguredRepositoryName(cfg *schema.GitConfig) (string, bool) {
+	names := atmosgit.ConfiguredRepositoryNames(cfg)
+	if len(names) != 1 {
+		return "", false
 	}
-	return nil
+	return names[0], true
 }
 
 // runCICheckout performs the no-arg CI current-repository checkout. The clone

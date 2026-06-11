@@ -32,7 +32,7 @@ func (p *Provider) Status(ctx context.Context, opts *atmosgit.StatusOptions) (*a
 		args = append(args, opts.Paths...)
 	}
 
-	result, err := p.run(ctx, opts.Workdir, opts.Env, args...)
+	result, err := p.runQuiet(ctx, opts.Workdir, opts.Env, args...)
 	if err != nil {
 		return nil, classify(err, result, "status")
 	}

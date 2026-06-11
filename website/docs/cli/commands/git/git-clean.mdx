@@ -17,7 +17,7 @@ Remove workdirs for repositories configured under `git.repositories`. Clean only
 ## Usage
 
 ```shell
-atmos git clean <name> [flags]
+atmos git clean [name] [flags]
 ```
 
 Clean a named managed repository:
@@ -25,6 +25,13 @@ Clean a named managed repository:
 ```shell
 atmos git clean deploy --dry-run
 atmos git clean deploy --force
+```
+
+When exactly one repository is configured, the name can be omitted:
+
+```shell
+atmos git clean --dry-run
+atmos git clean --force
 ```
 
 Clean every configured repository workdir:

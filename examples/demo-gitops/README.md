@@ -8,8 +8,7 @@ The repository is named `deploy` and intentionally omits `workdir`, so Atmos use
 git:
   repositories:
     deploy:
-      uri: git@github.com:cloudposse-sandbox/empty.git
-      branch: main
+      uri: https://github.com/cloudposse-sandbox/empty.git
 ```
 
 ## Try It

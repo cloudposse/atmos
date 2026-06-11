@@ -444,6 +444,30 @@ func TestRunCloneNamed_Success(t *testing.T) {
 	assert.Equal(t, "https://github.com/acme/my-repo.git", clonedURI)
 }
 
+func TestRunCloneNoArg_ClonesSingleConfiguredRepository(t *testing.T) {
+	var clonedURI string
+	withTestProvider(t, &stubGitProvider{
+		cloneFn: func(_ context.Context, opts *atmosgit.CloneOptions) error {
+			clonedURI = opts.URI
+			return nil
+		},
+	})
+
+	original := atmosConfigPtr
+	t.Cleanup(func() { atmosConfigPtr = original })
+	atmosConfigPtr = &schema.AtmosConfiguration{
+		Git: schema.GitConfig{
+			Repositories: map[string]schema.GitRepository{
+				"deploy": {URI: "https://github.com/acme/deploy.git"},
+			},
+		},
+	}
+
+	err := runClone(context.Background(), &cloneOptions{}, nil)
+	require.NoError(t, err)
+	assert.Equal(t, "https://github.com/acme/deploy.git", clonedURI)
+}
+
 func TestRunCloneNamed_NotFound(t *testing.T) {
 	withTestProvider(t, &stubGitProvider{})
 

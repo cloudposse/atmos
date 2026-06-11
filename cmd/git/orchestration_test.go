@@ -403,35 +403,30 @@ func TestRunCICheckout_NoCloneURL(t *testing.T) {
 	assert.True(t, errors.Is(err, errUtils.ErrGitRepositoryRequired))
 }
 
-// ---- checkCIEnabled ----
+// ---- isCICloneEnabled ----
 
-func TestCheckCIEnabled_NilConfig(t *testing.T) {
+func TestIsCICloneEnabled_NilConfig(t *testing.T) {
 	original := atmosConfigPtr
 	t.Cleanup(func() { atmosConfigPtr = original })
 	atmosConfigPtr = nil
 
-	err := checkCIEnabled()
-	require.Error(t, err)
-	assert.True(t, errors.Is(err, errUtils.ErrGitRepositoryRequired))
+	assert.False(t, isCICloneEnabled())
 }
 
-func TestCheckCIEnabled_Disabled(t *testing.T) {
+func TestIsCICloneEnabled_Disabled(t *testing.T) {
 	original := atmosConfigPtr
 	t.Cleanup(func() { atmosConfigPtr = original })
 	atmosConfigPtr = &schema.AtmosConfiguration{CI: schema.CIConfig{Enabled: false}}
 
-	err := checkCIEnabled()
-	require.Error(t, err)
-	assert.True(t, errors.Is(err, errUtils.ErrGitRepositoryRequired))
+	assert.False(t, isCICloneEnabled())
 }
 
-func TestCheckCIEnabled_Enabled(t *testing.T) {
+func TestIsCICloneEnabled_Enabled(t *testing.T) {
 	original := atmosConfigPtr
 	t.Cleanup(func() { atmosConfigPtr = original })
 	atmosConfigPtr = &schema.AtmosConfiguration{CI: schema.CIConfig{Enabled: true}}
 
-	err := checkCIEnabled()
-	assert.NoError(t, err)
+	assert.True(t, isCICloneEnabled())
 }
 
 // ---- runCloneAll with empty repositories ----

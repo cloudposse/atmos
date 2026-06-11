@@ -70,10 +70,14 @@ func runClean(ctx context.Context, opts *cleanOptions, args []string) error {
 	}
 
 	if !opts.All && len(args) == 0 {
-		return errUtils.Build(errUtils.ErrGitRepositoryRequired).
-			WithHint("Provide a repository name, or use --all to clean all configured repository workdirs.").
-			WithExitCode(2).
-			Err()
+		name, ok := singleConfiguredRepositoryName(gitConfig())
+		if !ok {
+			return errUtils.Build(errUtils.ErrGitRepositoryRequired).
+				WithHint("Provide a repository name, or use --all to clean all configured repository workdirs.").
+				WithExitCode(2).
+				Err()
+		}
+		args = []string{name}
 	}
 
 	if !opts.Force && !opts.DryRun {

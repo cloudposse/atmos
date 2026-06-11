@@ -34,6 +34,29 @@ func TestRunCleanRequiresForceOrDryRun(t *testing.T) {
 	assert.True(t, errors.Is(err, errUtils.ErrInvalidConfig))
 }
 
+func TestRunCleanNoArgUsesSingleConfiguredRepository(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("ATMOS_XDG_CACHE_HOME", filepath.Join(root, "cache"))
+	withGitCleanConfig(t, root, map[string]schema.GitRepository{
+		"deploy": {URI: "https://github.com/acme/deploy.git"},
+	})
+
+	err := runClean(context.Background(), &cleanOptions{DryRun: true}, nil)
+
+	require.NoError(t, err)
+}
+
+func TestRunCleanNoArgSingleRepositoryStillRequiresForceOrDryRun(t *testing.T) {
+	withGitCleanConfig(t, t.TempDir(), map[string]schema.GitRepository{
+		"deploy": {URI: "https://github.com/acme/deploy.git"},
+	})
+
+	err := runClean(context.Background(), &cleanOptions{}, nil)
+
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, errUtils.ErrInvalidConfig))
+}
+
 func TestRunCleanDryRunDoesNotDelete(t *testing.T) {
 	requireGit(t)
 

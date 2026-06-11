@@ -9,7 +9,7 @@ import Screengrab from '@site/src/components/Screengrab'
 import Intro from '@site/src/components/Intro'
 
 <Intro>
-List the repositories configured under [`git.repositories`](/cli/configuration/git) with their URIs, providers, branches, and resolved workdirs. Built on the standard Atmos list rendering pipeline, with the same column, format, and filter behavior as other `atmos list` commands. Also available as `atmos list git-repositories`.
+List the repositories configured under [`git.repositories`](/cli/configuration/git) with their local clone state, URIs, providers, branches, and resolved workdirs. Built on the standard Atmos list rendering pipeline, with the same column, format, and filter behavior as other `atmos list` commands. Also available as `atmos list git-repositories`.
 </Intro>
 
 <Screengrab title="atmos git list --help" slug="atmos-git-list--help" />
@@ -41,14 +41,16 @@ atmos list git-repositories     # alias
 ## Examples
 
 ```shell
-# List all configured repositories (default sort: name ascending)
+# List all configured repositories (default sort: name ascending).
+# Default table output shows a green dot for clean clones, yellow for dirty
+# clones, and gray for missing workdirs.
 atmos git list
-
-# Include the on-disk status of each workdir (cloned, missing, or dirty)
-atmos git list --check-status
 
 # Select columns
 atmos git list --columns=name,uri,workdir
+
+# Include status fields when using custom columns
+atmos git list --check-status --columns=status,name,workdir
 
 # Machine-readable output
 atmos git list --format=json
@@ -77,7 +79,10 @@ atmos list git-repositories --format=yaml
     <dd>Resolved workdir — the automatic XDG location or the explicit `workdir` override.</dd>
 
     <dt>`status`</dt>
-    <dd>`cloned`, `missing`, or `dirty`. Only populated with `--check-status`; without it, `atmos git list` never touches the filesystem or runs Git, so it is always fast.</dd>
+    <dd>Colored table indicator for local clone state: green dot for `cloned`, yellow dot for `dirty`, and gray dot for `missing`. In non-TTY output this resolves to the semantic status text.</dd>
+
+    <dt>`status_text`</dt>
+    <dd>`cloned`, `missing`, or `dirty`. Used by machine-readable default output and custom columns that need status text.</dd>
 </dl>
 
 Columns can also be customized in `atmos.yaml` under `git.list.columns` — see [Git Configuration](/cli/configuration/git#list-output).
@@ -87,7 +92,7 @@ Columns can also be customized in `atmos.yaml` under `git.list.columns` — see 
 <dl>
     <dt>`--check-status` <em>(optional)</em></dt>
     <dd>
-        Probe each workdir on disk and populate the `status` column. Probes run concurrently with a bounded worker pool.
+        Probe each workdir on disk and populate status fields when using custom columns. Default table output already probes status to show the dot column. Probes run concurrently with a bounded worker pool.
     </dd>
 
     <dt>`--columns` <em>(optional)</em></dt>
