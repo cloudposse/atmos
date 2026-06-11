@@ -2,6 +2,7 @@ package step
 
 import (
 	"context"
+	"os"
 	"os/exec"
 	"strings"
 	"sync"
@@ -14,6 +15,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/data"
 	iolib "github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/signals"
 	"github.com/cloudposse/atmos/pkg/ui"
 )
 
@@ -392,5 +394,71 @@ func TestShellHandlerExecuteWithWorkflowErrorCases(t *testing.T) {
 		require.NoError(t, err)
 		assert.Contains(t, result.Value, "stdout")
 		assert.Contains(t, result.Metadata["stderr"], "stderr")
+	})
+}
+
+func TestShellHandlerTtyStep(t *testing.T) {
+	initShellTestIO(t)
+	handler := &ShellHandler{BaseHandler: NewBaseHandler("shell", CategoryCommand, false)}
+
+	step := &schema.WorkflowStep{
+		Name:    "tty-step",
+		Type:    "shell",
+		Command: "exit 7",
+		Tty:     true,
+		Output:  "viewport", // Must be ignored for tty steps.
+	}
+
+	result, err := handler.Execute(context.Background(), step, NewVariables())
+	require.Error(t, err)
+	require.NotNil(t, result)
+	// TTY steps produce no capturable output; only the exit code is recorded.
+	assert.Empty(t, result.Value)
+	assert.Equal(t, 7, result.Metadata[exitCodeMetadata])
+}
+
+func TestShellHandlerTtyStepSuccess(t *testing.T) {
+	initShellTestIO(t)
+	handler := &ShellHandler{BaseHandler: NewBaseHandler("shell", CategoryCommand, false)}
+
+	step := &schema.WorkflowStep{
+		Name:    "tty-step",
+		Type:    "shell",
+		Command: "exit 0",
+		Tty:     true,
+	}
+
+	result, err := handler.Execute(context.Background(), step, NewVariables())
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	assert.Empty(t, result.Value)
+	assert.Equal(t, 0, result.Metadata[exitCodeMetadata])
+}
+
+func TestPrepareInteractive(t *testing.T) {
+	t.Run("non-interactive is a no-op", func(t *testing.T) {
+		step := &schema.WorkflowStep{Name: "plain"}
+		cmd := exec.Command("sh", "-c", "true")
+
+		mode, release := prepareInteractive(step, cmd, OutputModeViewport)
+		defer release()
+
+		assert.Equal(t, OutputModeViewport, mode)
+		assert.Nil(t, cmd.Stdin)
+		assert.False(t, signals.InterruptExitSuspended())
+	})
+
+	t.Run("interactive forces raw mode and attaches stdin", func(t *testing.T) {
+		step := &schema.WorkflowStep{Name: "prompting", Interactive: true}
+		cmd := exec.Command("sh", "-c", "true")
+
+		mode, release := prepareInteractive(step, cmd, OutputModeLog)
+
+		assert.Equal(t, OutputModeRaw, mode)
+		assert.Equal(t, os.Stdin, cmd.Stdin)
+		assert.True(t, signals.InterruptExitSuspended(), "suspension must be active until release")
+
+		release()
+		assert.False(t, signals.InterruptExitSuspended())
 	})
 }

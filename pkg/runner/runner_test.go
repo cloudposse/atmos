@@ -11,6 +11,7 @@ import (
 	"go.uber.org/mock/gomock"
 
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/signals"
 )
 
 func TestRun_ShellTask(t *testing.T) {
@@ -510,4 +511,53 @@ func TestTaskName_WithoutName(t *testing.T) {
 	task := &Task{}
 	assert.Equal(t, "step1", taskName(task, 0))
 	assert.Equal(t, "step5", taskName(task, 4))
+}
+
+func TestRun_ShellTaskTty(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockRunner := NewMockCommandRunner(ctrl)
+	ctx := context.Background()
+
+	task := Task{
+		Name:        "session-task",
+		Command:     "aws ssm start-session",
+		Type:        "shell",
+		Tty:         true,
+		Interactive: true,
+	}
+	// Dry-run exercises the terminal-session routing without executing.
+	// The CommandRunner must NOT be called for tty tasks.
+	opts := Options{DryRun: true}
+
+	err := Run(ctx, &task, mockRunner, opts)
+	require.NoError(t, err)
+}
+
+func TestRun_ShellTaskInteractiveReleasesSuspension(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockRunner := NewMockCommandRunner(ctrl)
+	ctx := context.Background()
+
+	task := Task{
+		Name:        "interactive-task",
+		Command:     "read answer",
+		Type:        "shell",
+		Interactive: true,
+	}
+	opts := Options{Dir: "/app"}
+
+	mockRunner.EXPECT().
+		RunShell(ctx, "read answer", "interactive-task", "/app", []string(nil), false).
+		DoAndReturn(func(context.Context, string, string, string, []string, bool) error {
+			assert.True(t, signals.InterruptExitSuspended(), "suspension must be active while the task runs")
+			return nil
+		})
+
+	err := Run(ctx, &task, mockRunner, opts)
+	require.NoError(t, err)
+	assert.False(t, signals.InterruptExitSuspended(), "suspension must be released after the task")
 }
