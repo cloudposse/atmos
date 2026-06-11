@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -55,6 +56,18 @@ func repoHooksDir(repoDir string) string {
 	return filepath.Join(repoDir, ".git", "hooks")
 }
 
+func assertHookExecutable(t *testing.T, path string) {
+	t.Helper()
+
+	if runtime.GOOS == "windows" {
+		return
+	}
+
+	info, err := os.Stat(path)
+	require.NoError(t, err)
+	assert.True(t, info.Mode()&0o100 != 0, "hook file must be executable")
+}
+
 // ---- shimContent tests ----
 
 func TestShimContent(t *testing.T) {
@@ -88,9 +101,7 @@ func TestInstallHook_WritesExecutableShim(t *testing.T) {
 	assert.Contains(t, string(content), "exec atmos git hooks run pre-commit \"$@\"")
 
 	// File must be executable.
-	info, err := os.Stat(hookPath)
-	require.NoError(t, err)
-	assert.True(t, info.Mode()&0o100 != 0, "hook file must be executable")
+	assertHookExecutable(t, hookPath)
 }
 
 // ---- install: refuses overwrite without --force ----
@@ -158,9 +169,10 @@ func TestInstallHook_CreatesMissingHooksDir(t *testing.T) {
 	err := installHook(dir, "pre-commit", false)
 	require.NoError(t, err)
 
-	info, err := os.Stat(filepath.Join(dir, "pre-commit"))
+	hookPath := filepath.Join(dir, "pre-commit")
+	_, err = os.Stat(hookPath)
 	require.NoError(t, err)
-	assert.True(t, info.Mode()&0o100 != 0, "shim must be executable")
+	assertHookExecutable(t, hookPath)
 }
 
 func TestInstallHook_RejectsUnsafeHookNames(t *testing.T) {

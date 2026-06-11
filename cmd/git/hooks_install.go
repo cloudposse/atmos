@@ -143,6 +143,9 @@ func installHook(hooksDir, hookName string, force bool) error {
 	if writeErr := os.WriteFile(dest, []byte(shim), shimPerm); writeErr != nil {
 		return fmt.Errorf("writing hook shim %q: %w", dest, writeErr)
 	}
+	if chmodErr := os.Chmod(dest, shimPerm); chmodErr != nil {
+		return fmt.Errorf("setting executable permission on hook shim %q: %w", dest, chmodErr)
+	}
 
 	ui.Successf("Installed hook shim: %s", dest)
 	return nil
