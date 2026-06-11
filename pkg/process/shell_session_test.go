@@ -212,7 +212,11 @@ func TestRunShellSession_PTYChildSeesTTY(t *testing.T) {
 	err := RunShellSession(context.Background(), &ShellSessionSpec{
 		Command: shellSessionHelperCommand(t, "write-tty", marker),
 		Name:    "pty-tty-test",
-		TTY:     true,
+		// The test binary links TUI libraries that query the terminal when
+		// stdout is a TTY and block waiting for replies; a dumb terminal
+		// suppresses the queries.
+		Env: append(os.Environ(), "TERM=dumb", "NO_COLOR=1"),
+		TTY: true,
 	})
 	require.NoError(t, err)
 

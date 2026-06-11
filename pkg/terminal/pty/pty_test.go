@@ -22,7 +22,12 @@ func ptyHelperCommand(t *testing.T, args ...string) *exec.Cmd {
 	if err != nil {
 		t.Fatalf("os.Executable() error = %v", err)
 	}
-	return exec.Command(exe, append([]string{"-test.run=TestPTYHelper", "--"}, args...)...)
+	cmd := exec.Command(exe, append([]string{"-test.run=TestPTYHelper", "--"}, args...)...)
+	// The test binary links TUI libraries that query the terminal (OSC/DSR)
+	// when stdout is a TTY and block waiting for replies no test PTY will
+	// send. A dumb terminal suppresses the queries.
+	cmd.Env = append(os.Environ(), "TERM=dumb", "NO_COLOR=1")
+	return cmd
 }
 
 func TestPTYHelper(t *testing.T) {
