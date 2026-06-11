@@ -39,15 +39,18 @@ func TestPact_UploadAffectedStacks(t *testing.T) {
 					"repo_host":  matchers.Like("github.com"),
 					// All non-omitempty fields from schema.Affected are always serialized
 					// and must be included for pact V2 strict body matching.
+					// Values reflect post-StripAffectedForUpload state: component_type,
+					// component_path, affected, and stack_slug are zeroed; affected_all is
+					// nil (null); dependents is always [] (never null).
 					"stacks": matchers.EachLike(body{
 						"component":              matchers.Like("vpc"),
 						"stack":                  matchers.Like("dev-us-east-1"),
-						"component_type":         matchers.Like("terraform"),
-						"component_path":         matchers.Like("components/terraform/vpc"),
+						"component_type":         matchers.Like(""),
+						"component_path":         matchers.Like(""),
 						"stack_slug":             matchers.Like(""),
-						"affected":               matchers.Like("component"),
-						"affected_all":           matchers.EachLike("component", 1),
-						"dependents":             nil,
+						"affected":               matchers.Like(""),
+						"affected_all":           nil,
+						"dependents":             []interface{}{},
 						"included_in_dependents": matchers.Like(false),
 						"settings":               nil,
 					}, 1),
@@ -67,14 +70,14 @@ func TestPact_UploadAffectedStacks(t *testing.T) {
 				RepoName:  "repo",
 				RepoOwner: "org",
 				RepoHost:  "github.com",
+				// Stacks mirror the output of StripAffectedForUpload: only Component,
+				// Stack, IncludedInDependents, Dependents, Settings, Deleted, and
+				// DeletionType are preserved; all other fields are zero values.
 				Stacks: []schema.Affected{
 					{
-						Component:     "vpc",
-						Stack:         "dev-us-east-1",
-						ComponentType: "terraform",
-						ComponentPath: "components/terraform/vpc",
-						Affected:      "component",
-						AffectedAll:   []string{"component"},
+						Component:  "vpc",
+						Stack:      "dev-us-east-1",
+						Dependents: []schema.Dependent{},
 					},
 				},
 			})

@@ -260,14 +260,12 @@
           "repo_url": "https://github.com/org/repo",
           "stacks": [
             {
-              "affected": "component",
-              "affected_all": [
-                "component"
-              ],
+              "affected": "",
+              "affected_all": null,
               "component": "vpc",
-              "component_path": "components/terraform/vpc",
-              "component_type": "terraform",
-              "dependents": null,
+              "component_path": "",
+              "component_type": "",
+              "dependents": [],
               "included_in_dependents": false,
               "settings": null,
               "stack": "dev-us-east-1",
@@ -304,10 +302,6 @@
           },
           "$.body.stacks[*].affected": {
             "match": "type"
-          },
-          "$.body.stacks[*].affected_all": {
-            "match": "type",
-            "min": 1
           },
           "$.body.stacks[*].component": {
             "match": "type"
