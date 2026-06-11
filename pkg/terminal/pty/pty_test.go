@@ -496,3 +496,37 @@ func TestExecWithPTY_ForwardsStdin(t *testing.T) {
 		t.Errorf("Expected host stdin to be forwarded, got: %s", output)
 	}
 }
+
+func TestExecWithPTY_ReturnsWhenGrandchildHoldsPTY(t *testing.T) {
+	if !IsSupported() {
+		t.Skipf("PTY not supported on %s", runtime.GOOS)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	var stdout bytes.Buffer
+	// Reproduces the aws ssm session-manager-plugin teardown hang: the shell
+	// exits immediately, but the backgrounded sleep inherits the PTY slave
+	// and holds it open, so the output copier never gets EIO. Completion must
+	// be bounded by the drain deadline, not the grandchild's lifetime.
+	cmd := exec.Command("sh", "-c", "echo session-over; sleep 15 & exit 0")
+	opts := &Options{
+		Stdin:  strings.NewReader(""),
+		Stdout: &stdout,
+	}
+
+	start := time.Now()
+	err := ExecWithPTY(ctx, cmd, opts)
+	elapsed := time.Since(start)
+
+	if err != nil {
+		t.Fatalf("ExecWithPTY() error = %v", err)
+	}
+	if elapsed > 5*time.Second {
+		t.Fatalf("ExecWithPTY() took %v; teardown must be bounded by the drain deadline, not the grandchild's lifetime", elapsed)
+	}
+	if !strings.Contains(stdout.String(), "session-over") {
+		t.Errorf("Expected drained output to contain 'session-over', got: %q", stdout.String())
+	}
+}

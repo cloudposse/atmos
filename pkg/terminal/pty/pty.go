@@ -4,12 +4,14 @@ package pty
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
 	"os/exec"
 	"runtime"
 	"sync"
+	"time"
 
 	"github.com/creack/pty"
 
@@ -149,7 +151,7 @@ func runWithIO(ctx context.Context, cmd *exec.Cmd, ptmx *os.File, stdin io.Reade
 	go copyOutput(&wg, errChan, stdout, ptmx)
 
 	// Wait for completion or cancellation.
-	return waitForCompletion(ctx, cmd, &wg, errChan)
+	return waitForCompletion(ctx, cmd, ptmx, &wg, errChan)
 }
 
 // copyInput copies data from stdin to PTY, ignoring expected EIO errors.
@@ -165,17 +167,48 @@ func copyInput(errChan chan error, dst io.Writer, src io.Reader) {
 	}
 }
 
-// copyOutput copies data from PTY to stdout, ignoring expected EIO errors.
+// outputDrainTimeout bounds how long completion waits for the output copier
+// after the child exits. The copier normally ends almost immediately with EIO
+// when the last PTY slave fd closes - but grandchildren that inherited the
+// slave (e.g. aws ssm's session-manager-plugin, or backgrounded processes)
+// can keep it open indefinitely, which would leave the host terminal in raw
+// mode with no prompt until a stray keypress shook things loose.
+const outputDrainTimeout = 1 * time.Second
+
+// copyOutput copies data from PTY to stdout, ignoring expected errors:
+// EIO from the closed PTY, and deadline/close errors from bounded draining.
 func copyOutput(wg *sync.WaitGroup, errChan chan error, dst io.Writer, src io.Reader) {
 	defer wg.Done()
 	_, err := io.Copy(dst, src)
-	if err != nil && !isPtyEIO(err) {
+	if err != nil && !isPtyEIO(err) && !errors.Is(err, os.ErrDeadlineExceeded) && !errors.Is(err, os.ErrClosed) {
 		errChan <- fmt.Errorf("output copy failed: %w", err)
 	}
 }
 
+// waitOutputDrained waits for the output copier with a deadline. If the PTY
+// slave is still held open past the deadline, the pending read is forced to
+// return so the session can tear down and the host terminal can be restored.
+func waitOutputDrained(ptmx *os.File, wg *sync.WaitGroup) {
+	drained := make(chan struct{})
+	go func() {
+		wg.Wait()
+		close(drained)
+	}()
+
+	select {
+	case <-drained:
+	case <-time.After(outputDrainTimeout):
+		// Unblock the pending read: prefer a deadline (keeps ptmx usable for
+		// the deferred Close), fall back to Close for non-pollable files.
+		if err := ptmx.SetReadDeadline(time.Now()); err != nil {
+			_ = ptmx.Close()
+		}
+		<-drained
+	}
+}
+
 // waitForCompletion waits for command completion or context cancellation.
-func waitForCompletion(ctx context.Context, cmd *exec.Cmd, wg *sync.WaitGroup, errChan chan error) error {
+func waitForCompletion(ctx context.Context, cmd *exec.Cmd, ptmx *os.File, wg *sync.WaitGroup, errChan chan error) error {
 	cmdDone := make(chan error, 1)
 	go func() {
 		cmdDone <- cmd.Wait()
@@ -186,10 +219,10 @@ func waitForCompletion(ctx context.Context, cmd *exec.Cmd, wg *sync.WaitGroup, e
 		if cmd.Process != nil {
 			_ = cmd.Process.Kill()
 		}
-		wg.Wait()
+		waitOutputDrained(ptmx, wg)
 		return ctx.Err()
 	case err := <-cmdDone:
-		wg.Wait()
+		waitOutputDrained(ptmx, wg)
 		// Return first IO error if any, otherwise return command error.
 		// Drain non-blockingly: the channel stays open because the detached
 		// stdin copier may outlive command completion.
