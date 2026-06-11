@@ -112,6 +112,10 @@ func TestRunClone_AllWithEmptyConfig(t *testing.T) {
 // ---- runStatus error paths ----
 
 func TestRunStatus_NoArg(t *testing.T) {
+	original := atmosConfigPtr
+	t.Cleanup(func() { atmosConfigPtr = original })
+	atmosConfigPtr = &schema.AtmosConfiguration{}
+
 	err := runStatus(context.Background(), false, []string{})
 	require.Error(t, err)
 	assert.True(t, errors.Is(err, errUtils.ErrGitRepositoryRequired))
@@ -139,6 +143,10 @@ func TestRunStatus_NilConfig(t *testing.T) {
 // ---- runPull error paths ----
 
 func TestRunPull_NoArg(t *testing.T) {
+	original := atmosConfigPtr
+	t.Cleanup(func() { atmosConfigPtr = original })
+	atmosConfigPtr = &schema.AtmosConfiguration{}
+
 	err := runPull(context.Background(), false, "", "", []string{})
 	require.Error(t, err)
 	assert.True(t, errors.Is(err, errUtils.ErrGitRepositoryRequired))

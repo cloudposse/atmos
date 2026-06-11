@@ -3,7 +3,6 @@ package git
 import (
 	"bytes"
 	"context"
-	"errors"
 	"fmt"
 	"io"
 	"strings"
@@ -99,44 +98,53 @@ func (e *Executor) captureStderr(operation func() error) (string, error) {
 }
 
 func wrapCloneError(label, workdir, stderr string, err error) error {
+	return wrapGitOperationError(
+		fmt.Sprintf("clone Git repository %q", label),
+		workdir,
+		stderr,
+		err,
+		"Run 'atmos git list' to confirm the configured URI, branch, and resolved workdir.",
+	)
+}
+
+func wrapGitOperationError(action, workdir, stderr string, err error, hint string) error {
 	if err == nil {
 		return nil
 	}
 
-	base := errUtils.ErrGitCommandFailed
-	wrapCause := true
-	switch {
-	case errors.Is(err, errUtils.ErrGitAuthFailed):
-		base = errUtils.ErrGitAuthFailed
-		wrapCause = false
-	case errors.Is(err, errUtils.ErrGitCommandExited):
-		base = errUtils.ErrGitCommandExited
-		wrapCause = false
+	explanation := fmt.Sprintf("Failed to %s.", action)
+	if workdir != "" {
+		explanation = fmt.Sprintf("Failed to %s in %q.", action, workdir)
 	}
-
-	explanation := fmt.Sprintf("Failed to clone Git repository %q into %q.", label, workdir)
+	explanation += "\n\nUnderlying error:\n\n```text\n" + err.Error() + "\n```"
 	if stderr != "" {
 		explanation += "\n\nGit output:\n\n```text\n" + stderr + "\n```"
 	}
 
-	builder := errUtils.Build(base)
-	if wrapCause {
-		builder = builder.WithCause(err)
-	}
-
-	return builder.
+	builder := errUtils.Build(err).
 		WithExplanation(explanation).
-		WithHint("Run 'atmos git list' to confirm the configured URI, branch, and resolved workdir.").
-		WithExitCode(2).
-		Err()
+		WithExitCode(2)
+	if hint != "" {
+		builder = builder.WithHint(hint)
+	}
+	return builder.Err()
 }
 
 // Pull delegates to the provider.
 func (e *Executor) Pull(ctx context.Context, opts *atmosgit.PullOptions) error {
 	defer perf.Track(nil, "git.Executor.Pull")()
 
-	if err := e.provider.Pull(ctx, opts); err != nil {
-		return err
+	stderr, err := e.captureStderr(func() error {
+		return e.provider.Pull(ctx, opts)
+	})
+	if err != nil {
+		return wrapGitOperationError(
+			"pull Git repository",
+			opts.Workdir,
+			stderr,
+			err,
+			"Run 'atmos git list' to confirm the configured branch and resolved workdir.",
+		)
 	}
 
 	ui.Successf("Pulled repository at %s.", opts.Workdir)
@@ -147,29 +155,65 @@ func (e *Executor) Pull(ctx context.Context, opts *atmosgit.PullOptions) error {
 func (e *Executor) Status(ctx context.Context, opts *atmosgit.StatusOptions) (*atmosgit.StatusResult, error) {
 	defer perf.Track(nil, "git.Executor.Status")()
 
-	return e.provider.Status(ctx, opts)
+	var result *atmosgit.StatusResult
+	stderr, err := e.captureStderr(func() error {
+		var opErr error
+		result, opErr = e.provider.Status(ctx, opts)
+		return opErr
+	})
+	if err != nil {
+		return nil, wrapGitOperationError("read Git status", opts.Workdir, stderr, err, "")
+	}
+	return result, nil
 }
 
 // Diff delegates to the provider.
 func (e *Executor) Diff(ctx context.Context, opts *atmosgit.DiffOptions) (*atmosgit.DiffResult, error) {
 	defer perf.Track(nil, "git.Executor.Diff")()
 
-	return e.provider.Diff(ctx, opts)
+	var result *atmosgit.DiffResult
+	stderr, err := e.captureStderr(func() error {
+		var opErr error
+		result, opErr = e.provider.Diff(ctx, opts)
+		return opErr
+	})
+	if err != nil {
+		return nil, wrapGitOperationError("show Git diff", opts.Workdir, stderr, err, "")
+	}
+	return result, nil
 }
 
 // Commit delegates to the provider.
 func (e *Executor) Commit(ctx context.Context, opts *atmosgit.CommitOptions) (*atmosgit.CommitResult, error) {
 	defer perf.Track(nil, "git.Executor.Commit")()
 
-	return e.provider.Commit(ctx, opts)
+	var result *atmosgit.CommitResult
+	stderr, err := e.captureStderr(func() error {
+		var opErr error
+		result, opErr = e.provider.Commit(ctx, opts)
+		return opErr
+	})
+	if err != nil {
+		return nil, wrapGitOperationError("commit Git changes", opts.Workdir, stderr, err, "")
+	}
+	return result, nil
 }
 
 // Push delegates to the provider.
 func (e *Executor) Push(ctx context.Context, opts *atmosgit.PushOptions) error {
 	defer perf.Track(nil, "git.Executor.Push")()
 
-	if err := e.provider.Push(ctx, opts); err != nil {
-		return err
+	stderr, err := e.captureStderr(func() error {
+		return e.provider.Push(ctx, opts)
+	})
+	if err != nil {
+		return wrapGitOperationError(
+			"push Git repository",
+			opts.Workdir,
+			stderr,
+			err,
+			"Run 'atmos git status' and 'atmos git pull' before retrying the push.",
+		)
 	}
 
 	ui.Successf("Pushed %s to %s/%s.", opts.Workdir, opts.Remote, opts.Branch)

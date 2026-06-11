@@ -32,7 +32,7 @@ func initTempRepo(t *testing.T) string {
 
 	run := func(args ...string) {
 		t.Helper()
-		cmd := exec.Command("git", args...)
+		cmd := exec.Command("git", gitTestArgs(args...)...)
 		cmd.Dir = dir
 		cmd.Env = append(
 			os.Environ(),

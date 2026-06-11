@@ -37,4 +37,4 @@ commands:
   - name: "clean"
     description: "Remove the managed deployment workdir"
     steps:
-    - atmos git clean deploy --force
+    - atmos git clean deploy

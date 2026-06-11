@@ -85,6 +85,34 @@ func TestRunStatusOne_ConfiguredNameNotFound(t *testing.T) {
 	assert.NoError(t, err)
 }
 
+func TestRunStatusNoArg_UsesSingleConfiguredRepository(t *testing.T) {
+	var capturedWorkdir string
+	withTestProvider(t, &stubGitProvider{
+		statusFn: func(_ context.Context, opts *atmosgit.StatusOptions) (*atmosgit.StatusResult, error) {
+			capturedWorkdir = opts.Workdir
+			return &atmosgit.StatusResult{Clean: true}, nil
+		},
+	})
+
+	dir := t.TempDir()
+	original := atmosConfigPtr
+	t.Cleanup(func() { atmosConfigPtr = original })
+	atmosConfigPtr = &schema.AtmosConfiguration{
+		Git: schema.GitConfig{
+			Repositories: map[string]schema.GitRepository{
+				"configured": {
+					URI:     "https://github.com/acme/configured.git",
+					Workdir: dir,
+				},
+			},
+		},
+	}
+
+	err := runStatus(context.Background(), false, nil)
+	require.NoError(t, err)
+	assert.Equal(t, dir, capturedWorkdir)
+}
+
 func TestRunStatusAll_WithConfiguredRepos(t *testing.T) {
 	callCount := 0
 	withTestProvider(t, &stubGitProvider{
@@ -173,6 +201,34 @@ func TestRunPullOne_ConfiguredNameResolved(t *testing.T) {
 	}
 
 	err := runPullOne(context.Background(), "configured", "", "")
+	require.NoError(t, err)
+	assert.Equal(t, dir, capturedWorkdir)
+}
+
+func TestRunPullNoArg_UsesSingleConfiguredRepository(t *testing.T) {
+	var capturedWorkdir string
+	withTestProvider(t, &stubGitProvider{
+		pullFn: func(_ context.Context, opts *atmosgit.PullOptions) error {
+			capturedWorkdir = opts.Workdir
+			return nil
+		},
+	})
+
+	dir := t.TempDir()
+	original := atmosConfigPtr
+	t.Cleanup(func() { atmosConfigPtr = original })
+	atmosConfigPtr = &schema.AtmosConfiguration{
+		Git: schema.GitConfig{
+			Repositories: map[string]schema.GitRepository{
+				"configured": {
+					URI:     "https://github.com/acme/configured.git",
+					Workdir: dir,
+				},
+			},
+		},
+	}
+
+	err := runPull(context.Background(), false, "", "", nil)
 	require.NoError(t, err)
 	assert.Equal(t, dir, capturedWorkdir)
 }

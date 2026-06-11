@@ -73,7 +73,7 @@ func (p *Provider) run(ctx context.Context, dir string, env []string, args ...st
 }
 
 func (p *Provider) runQuiet(ctx context.Context, dir string, env []string, args ...string) (atmosgit.RunResult, error) {
-	return p.runner.Run(ctx, gitCommand, args, atmosgit.RunOptions{Dir: dir, Env: env})
+	return p.runner.Run(ctx, gitCommand, args, atmosgit.RunOptions{Dir: dir, Env: env, Stderr: p.stderr})
 }
 
 // Clone reconciles a repository workdir: a fresh clone when the workdir is

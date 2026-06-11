@@ -15,6 +15,7 @@ import (
 	atmosgit "github.com/cloudposse/atmos/pkg/git"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/ui"
+	"github.com/cloudposse/atmos/pkg/ui/spinner"
 )
 
 // cleanParser handles flag parsing for `atmos git clean`.
@@ -27,14 +28,14 @@ const (
 
 // cleanCmd is the `atmos git clean` subcommand.
 var cleanCmd = &cobra.Command{
-	Use:   "clean <name>",
+	Use:   "clean [name]",
 	Short: "Remove managed Git repository workdirs",
 	Long: `Remove workdirs for repositories configured under git.repositories.
 
 Named repositories without an explicit workdir are cleaned from the automatic
 Atmos XDG cache location. The command only accepts configured repository names,
 not arbitrary filesystem paths. Use --dry-run to preview the resolved path and
---force to delete it.`,
+--force to delete dirty workdirs.`,
 	Args: cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		defer perf.Track(atmosConfigPtr, "git.clean.RunE")()
@@ -78,13 +79,6 @@ func runClean(ctx context.Context, opts *cleanOptions, args []string) error {
 				Err()
 		}
 		args = []string{name}
-	}
-
-	if !opts.Force && !opts.DryRun {
-		return errUtils.Build(errUtils.ErrInvalidConfig).
-			WithHint("Pass --force to delete Git workdirs, or --dry-run to preview what would be deleted.").
-			WithExitCode(2).
-			Err()
 	}
 
 	if opts.All {
@@ -145,7 +139,20 @@ func cleanGitWorkdir(name, uri, workdir string, explicitWorkdir bool, opts *clea
 		return nil
 	}
 
-	return removeCleanWorkdir(name, abs, explicitWorkdir)
+	if !opts.Force {
+		dirty, err := isGitWorkdirDirty(abs)
+		if err != nil {
+			return err
+		}
+		if dirty {
+			return errUtils.Build(errUtils.ErrRequiredFlagNotProvided).
+				WithHint("Workdir has uncommitted changes. Pass --force to delete it anyway.").
+				WithExitCode(2).
+				Err()
+		}
+	}
+
+	return removeCleanWorkdir(name, abs, explicitWorkdir, opts.All)
 }
 
 func resolveCleanWorkdirPath(name, workdir string, explicitWorkdir bool) (string, error) {
@@ -198,16 +205,30 @@ func validateCleanableGitWorkdir(name, abs, uri string) (bool, error) {
 	return true, nil
 }
 
-func removeCleanWorkdir(name, abs string, explicitWorkdir bool) error {
-	if err := os.RemoveAll(abs); err != nil {
-		return fmt.Errorf("%w: failed to clean git workdir %q: %w", errUtils.ErrFileOperation, abs, err)
+func removeCleanWorkdir(name, abs string, explicitWorkdir, skipSpinner bool) error {
+	remove := func() error {
+		if err := os.RemoveAll(abs); err != nil {
+			return fmt.Errorf("%w: failed to clean git workdir %q: %w", errUtils.ErrFileOperation, abs, err)
+		}
+		return nil
 	}
-	if explicitWorkdir {
-		ui.Successf("Cleaned configured git workdir for %s: %s", name, abs)
-	} else {
-		ui.Successf("Cleaned XDG git workdir for %s: %s", name, abs)
+
+	message := cleanWorkdirSuccessMessage(name, abs, explicitWorkdir)
+	if !skipSpinner {
+		return spinner.ExecWithSpinner(fmt.Sprintf("Cleaning %s", name), message, remove)
 	}
+	if err := remove(); err != nil {
+		return err
+	}
+	ui.Success(message)
 	return nil
+}
+
+func cleanWorkdirSuccessMessage(name, abs string, explicitWorkdir bool) string {
+	if explicitWorkdir {
+		return fmt.Sprintf("Cleaned configured git workdir for %s: %s", name, abs)
+	}
+	return fmt.Sprintf("Cleaned XDG git workdir for %s: %s", name, abs)
 }
 
 func validateCleanWorkdirPath(path string) error {
@@ -363,6 +384,14 @@ func gitRemoteOriginURL(workdir string) (string, error) {
 			Err()
 	}
 	return strings.TrimSpace(string(out)), nil
+}
+
+func isGitWorkdirDirty(workdir string) (bool, error) {
+	out, err := exec.Command("git", "-C", workdir, "status", "--porcelain").Output()
+	if err != nil {
+		return false, fmt.Errorf("%w: checking git workdir status for %q: %w", errUtils.ErrGitCommandFailed, workdir, err)
+	}
+	return strings.TrimSpace(string(out)) != "", nil
 }
 
 func sameGitRemote(configured, actual string) bool {

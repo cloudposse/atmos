@@ -17,7 +17,7 @@ Pull the latest changes for a repository configured under [`git.repositories`](/
 ## Usage
 
 ```shell
-atmos git pull <name-or-path> [flags]
+atmos git pull [name-or-path] [flags]
 ```
 
 With a configured repository:
@@ -40,6 +40,9 @@ atmos git pull flux-deploy
 # Pull a named managed repository
 atmos git pull flux-deploy
 
+# Pull the single configured repository
+atmos git pull
+
 # Pull a repository at a local path
 atmos git pull ./deployments
 
@@ -57,9 +60,9 @@ The positional argument is resolved as: configured repository **name** → **URI
 ## Arguments
 
 <dl>
-    <dt>`name-or-path` <em>(required unless `--all`)</em></dt>
+    <dt>`name-or-path` <em>(required unless exactly one repository is configured, or `--all` is set)</em></dt>
     <dd>
-        A repository name configured under `git.repositories`, or a filesystem path to an existing Git working tree.
+        A repository name configured under `git.repositories`, or a filesystem path to an existing Git working tree. When exactly one repository is configured, omitting this argument pulls that repository.
     </dd>
 </dl>
 

@@ -109,7 +109,7 @@ func newPushParser() *flags.StandardParser {
 func newCleanParser() *flags.StandardParser {
 	return flags.NewStandardParser(
 		flags.WithBoolFlag(flagAll, "", false, "Clean all configured repository workdirs"),
-		flags.WithBoolFlag(flagForce, "f", false, "Delete the resolved workdir"),
+		flags.WithBoolFlag(flagForce, "f", false, "Delete dirty workdirs after safety checks"),
 		flags.WithBoolFlag(flagDryRun, "n", false, "Report what would be deleted without deleting"),
 		flags.WithEnvVars(flagAll, "ATMOS_GIT_CLEAN_ALL"),
 		flags.WithEnvVars(flagForce, "ATMOS_GIT_CLEAN_FORCE"),

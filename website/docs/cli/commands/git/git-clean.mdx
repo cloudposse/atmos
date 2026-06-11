@@ -9,7 +9,7 @@ import Screengrab from '@site/src/components/Screengrab'
 import Intro from '@site/src/components/Intro'
 
 <Intro>
-Remove workdirs for repositories configured under `git.repositories`. Clean only accepts configured repository names, verifies the target is a Git worktree whose `origin` matches the configured repository URI, and refuses dangerous filesystem targets such as roots, the current project, parent directories, symlinks, and invalid XDG cache roots.
+Remove workdirs for repositories configured under `git.repositories`. Clean only accepts configured repository names, verifies the target is a Git worktree whose `origin` matches the configured repository URI, and refuses dangerous filesystem targets such as roots, the current project, parent directories, symlinks, and invalid XDG cache roots. Clean workdirs do not require `--force`; dirty workdirs require `--force` before local changes are discarded.
 </Intro>
 
 <Screengrab title="atmos git clean --help" slug="atmos-git-clean--help" />
@@ -24,20 +24,20 @@ Clean a named managed repository:
 
 ```shell
 atmos git clean deploy --dry-run
-atmos git clean deploy --force
+atmos git clean deploy
 ```
 
 When exactly one repository is configured, the name can be omitted:
 
 ```shell
 atmos git clean --dry-run
-atmos git clean --force
+atmos git clean
 ```
 
 Clean every configured repository workdir:
 
 ```shell
-atmos git clean --all --force
+atmos git clean --all
 ```
 
 ## Safety
@@ -50,6 +50,7 @@ atmos git clean --all --force
 - Requires the target to be a Git worktree.
 - Requires `remote.origin.url` to match the configured repository `uri`.
 - For automatic XDG workdirs, rejects dangerous cache roots from `ATMOS_XDG_CACHE_HOME` or `XDG_CACHE_HOME`, including relative paths and project/root directories.
+- Requires `--force` when the workdir has uncommitted changes.
 
 Missing workdirs are treated as already clean.
 
@@ -64,7 +65,7 @@ Missing workdirs are treated as already clean.
 
     <dt>`--force` / `-f` <em>(optional)</em></dt>
     <dd>
-        Delete the resolved managed workdir after safety checks pass.
+        Delete a dirty workdir after safety checks pass. Clean workdirs do not require `--force`.
         Environment variable: `ATMOS_GIT_CLEAN_FORCE`
     </dd>
 

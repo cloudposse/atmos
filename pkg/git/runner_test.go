@@ -4,7 +4,9 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -51,6 +53,25 @@ func TestExecRunnerMissingBinaryWrapsSentinel(t *testing.T) {
 	_, err := NewExecRunner().Run(context.Background(), "definitely-not-a-real-binary-atmos", nil, RunOptions{})
 	require.Error(t, err)
 	assert.True(t, errors.Is(err, errUtils.ErrGitCommandFailed))
+}
+
+func TestExecRunnerDoesNotDiscoverParentGitRepo(t *testing.T) {
+	requireGit(t)
+
+	root := t.TempDir()
+	initCmd := exec.Command("git", "init")
+	initCmd.Dir = root
+	out, err := initCmd.CombinedOutput()
+	require.NoError(t, err, string(out))
+
+	child := filepath.Join(root, "cache", "repositories", "deploy")
+	require.NoError(t, os.MkdirAll(child, 0o755))
+
+	result, err := NewExecRunner().Run(context.Background(), "git", []string{"status", "--porcelain"}, RunOptions{Dir: child})
+
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, errUtils.ErrGitCommandExited))
+	assert.Contains(t, result.StderrTail, "not a git repository")
 }
 
 func TestTailBufferKeepsTail(t *testing.T) {

@@ -19,10 +19,11 @@ var statusParser = newStatusParser()
 
 // statusCmd is the `atmos git status` subcommand.
 var statusCmd = &cobra.Command{
-	Use:   "status <name-or-path>",
+	Use:   "status [name-or-path]",
 	Short: "Show the working tree status of a managed Git repository",
 	Long: `Report the working tree status for a named repository (configured under git.repositories)
-or a filesystem path. Output is the porcelain status (pipeable to stdout).
+or a filesystem path. When no argument is provided, Atmos reports status for the
+single configured repository. Output is the porcelain status (pipeable to stdout).
 
 Use --all to report status for all configured repositories.`,
 	Args: cobra.MaximumNArgs(1),
@@ -55,8 +56,13 @@ func runStatus(ctx context.Context, all bool, args []string) error {
 	}
 
 	if len(args) == 0 {
+		if name, ok := singleConfiguredRepositoryName(gitConfig()); ok {
+			return runStatusOne(ctx, name)
+		}
 		return errUtils.Build(errUtils.ErrGitRepositoryRequired).
-			WithHint("Provide a repository name or path, or use --all to report status for all configured repositories.").
+			WithHint("Provide a repository name or path to report status.").
+			WithHint("Use 'atmos git status --all' to report status for all configured repositories.").
+			WithHint("When exactly one repository is configured under git.repositories, no-arg status uses that repository.").
 			WithExitCode(2).
 			Err()
 	}

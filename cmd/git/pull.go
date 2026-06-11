@@ -18,10 +18,11 @@ var pullParser = newPullParser()
 
 // pullCmd is the `atmos git pull` subcommand.
 var pullCmd = &cobra.Command{
-	Use:   "pull <name-or-path>",
+	Use:   "pull [name-or-path]",
 	Short: "Fast-forward pull a managed Git repository",
 	Long: `Pull the latest changes for a named repository (configured under git.repositories)
-or a filesystem path. Pull is always fast-forward-only.
+or a filesystem path. When no argument is provided, Atmos pulls the single
+configured repository. Pull is always fast-forward-only.
 
 Use --all to pull all configured repositories concurrently.`,
 	Args: cobra.MaximumNArgs(1),
@@ -56,8 +57,13 @@ func runPull(ctx context.Context, all bool, branch, remote string, args []string
 	}
 
 	if len(args) == 0 {
+		if name, ok := singleConfiguredRepositoryName(gitConfig()); ok {
+			return runPullOne(ctx, name, branch, remote)
+		}
 		return errUtils.Build(errUtils.ErrGitRepositoryRequired).
-			WithHint("Provide a repository name or path, or use --all to pull all configured repositories.").
+			WithHint("Provide a repository name or path to pull.").
+			WithHint("Use 'atmos git pull --all' to pull all configured repositories.").
+			WithHint("When exactly one repository is configured under git.repositories, no-arg pull uses that repository.").
 			WithExitCode(2).
 			Err()
 	}

@@ -23,17 +23,6 @@ func TestRunCleanRequiresRepositoryNameOrAll(t *testing.T) {
 	assert.True(t, errors.Is(err, errUtils.ErrGitRepositoryRequired))
 }
 
-func TestRunCleanRequiresForceOrDryRun(t *testing.T) {
-	withGitCleanConfig(t, t.TempDir(), map[string]schema.GitRepository{
-		"deploy": {URI: "git@github.com:cloudposse-sandbox/empty.git"},
-	})
-
-	err := runClean(context.Background(), &cleanOptions{}, []string{"deploy"})
-
-	require.Error(t, err)
-	assert.True(t, errors.Is(err, errUtils.ErrInvalidConfig))
-}
-
 func TestRunCleanNoArgUsesSingleConfiguredRepository(t *testing.T) {
 	root := t.TempDir()
 	t.Setenv("ATMOS_XDG_CACHE_HOME", filepath.Join(root, "cache"))
@@ -44,17 +33,6 @@ func TestRunCleanNoArgUsesSingleConfiguredRepository(t *testing.T) {
 	err := runClean(context.Background(), &cleanOptions{DryRun: true}, nil)
 
 	require.NoError(t, err)
-}
-
-func TestRunCleanNoArgSingleRepositoryStillRequiresForceOrDryRun(t *testing.T) {
-	withGitCleanConfig(t, t.TempDir(), map[string]schema.GitRepository{
-		"deploy": {URI: "https://github.com/acme/deploy.git"},
-	})
-
-	err := runClean(context.Background(), &cleanOptions{}, nil)
-
-	require.Error(t, err)
-	assert.True(t, errors.Is(err, errUtils.ErrInvalidConfig))
 }
 
 func TestRunCleanDryRunDoesNotDelete(t *testing.T) {
@@ -81,6 +59,60 @@ func TestRunCleanExplicitWorkdirDeletesManagedClone(t *testing.T) {
 	remote := initTestRemote(t, root)
 	workdir := filepath.Join(root, "workdirs", "deploy")
 	gitRun(t, root, "clone", remote, workdir)
+	withGitCleanConfig(t, root, map[string]schema.GitRepository{
+		"deploy": {URI: remote, Workdir: workdir},
+	})
+
+	err := runClean(context.Background(), &cleanOptions{Force: true}, []string{"deploy"})
+
+	require.NoError(t, err)
+	assert.NoDirExists(t, workdir)
+}
+
+func TestRunCleanNoForceDeletesManagedClone(t *testing.T) {
+	requireGit(t)
+
+	root := t.TempDir()
+	remote := initTestRemote(t, root)
+	workdir := filepath.Join(root, "workdirs", "deploy")
+	gitRun(t, root, "clone", remote, workdir)
+	withGitCleanConfig(t, root, map[string]schema.GitRepository{
+		"deploy": {URI: remote, Workdir: workdir},
+	})
+
+	err := runClean(context.Background(), &cleanOptions{}, []string{"deploy"})
+
+	require.NoError(t, err)
+	assert.NoDirExists(t, workdir)
+}
+
+func TestRunCleanDirtyWorkdirRequiresForce(t *testing.T) {
+	requireGit(t)
+
+	root := t.TempDir()
+	remote := initTestRemote(t, root)
+	workdir := filepath.Join(root, "workdirs", "deploy")
+	gitRun(t, root, "clone", remote, workdir)
+	require.NoError(t, os.WriteFile(filepath.Join(workdir, "dirty.txt"), []byte("dirty\n"), 0o644))
+	withGitCleanConfig(t, root, map[string]schema.GitRepository{
+		"deploy": {URI: remote, Workdir: workdir},
+	})
+
+	err := runClean(context.Background(), &cleanOptions{}, []string{"deploy"})
+
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, errUtils.ErrRequiredFlagNotProvided))
+	assert.DirExists(t, workdir)
+}
+
+func TestRunCleanDirtyWorkdirDeletesWithForce(t *testing.T) {
+	requireGit(t)
+
+	root := t.TempDir()
+	remote := initTestRemote(t, root)
+	workdir := filepath.Join(root, "workdirs", "deploy")
+	gitRun(t, root, "clone", remote, workdir)
+	require.NoError(t, os.WriteFile(filepath.Join(workdir, "dirty.txt"), []byte("dirty\n"), 0o644))
 	withGitCleanConfig(t, root, map[string]schema.GitRepository{
 		"deploy": {URI: remote, Workdir: workdir},
 	})
@@ -273,7 +305,7 @@ func initTestRemote(t *testing.T, root string) string {
 func gitRun(t *testing.T, dir string, args ...string) {
 	t.Helper()
 
-	cmd := exec.Command("git", args...)
+	cmd := exec.Command("git", gitTestArgs(args...)...)
 	if dir != "" {
 		cmd.Dir = dir
 	}

@@ -17,7 +17,7 @@ Report the working tree status of a repository configured under [`git.repositori
 ## Usage
 
 ```shell
-atmos git status <name-or-path> [flags]
+atmos git status [name-or-path] [flags]
 ```
 
 With a configured repository:
@@ -39,6 +39,9 @@ atmos git status flux-deploy
 # Status of a named managed repository
 atmos git status flux-deploy
 
+# Status of the single configured repository
+atmos git status
+
 # Status of a repository at a local path
 atmos git status ./deployments
 
@@ -52,9 +55,9 @@ atmos git status flux-deploy | grep '^ M'
 ## Arguments
 
 <dl>
-    <dt>`name-or-path` <em>(required unless `--all`)</em></dt>
+    <dt>`name-or-path` <em>(required unless exactly one repository is configured, or `--all` is set)</em></dt>
     <dd>
-        A repository name configured under `git.repositories`, or a filesystem path to an existing Git working tree. Use an explicit path prefix (`./deployments`) to force path interpretation when an argument collides with a repository name.
+        A repository name configured under `git.repositories`, or a filesystem path to an existing Git working tree. When exactly one repository is configured, omitting this argument reports status for that repository. Use an explicit path prefix (`./deployments`) to force path interpretation when an argument collides with a repository name.
     </dd>
 </dl>
 

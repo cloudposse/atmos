@@ -6,6 +6,9 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
+	"path/filepath"
+	"strings"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	pkgexec "github.com/cloudposse/atmos/pkg/exec"
@@ -75,7 +78,7 @@ func (r *ExecRunner) Run(ctx context.Context, command string, args []string, opt
 
 	cmd := r.executor.CommandContext(ctx, command, args...)
 	cmd.Dir = opts.Dir
-	cmd.Env = opts.Env
+	cmd.Env = envWithGitCeiling(opts.Env, opts.Dir)
 	cmd.Stdout = &stdout
 	if opts.Stderr != nil {
 		cmd.Stderr = io.MultiWriter(opts.Stderr, tail)
@@ -96,6 +99,51 @@ func (r *ExecRunner) Run(ctx context.Context, command string, args []string, opt
 	}
 
 	return result, fmt.Errorf("%w: %s: %w", errUtils.ErrGitCommandFailed, command, err)
+}
+
+func envWithGitCeiling(env []string, dir string) []string {
+	if dir == "" {
+		return env
+	}
+
+	base := env
+	if base == nil {
+		base = os.Environ()
+	}
+
+	parent := filepath.Dir(dir)
+	if abs, err := filepath.Abs(parent); err == nil {
+		parent = abs
+	}
+
+	current := envValue(base, "GIT_CEILING_DIRECTORIES")
+	value := parent
+	if current != "" {
+		value += string(os.PathListSeparator) + current
+	}
+	return upsertEnv(base, "GIT_CEILING_DIRECTORIES", value)
+}
+
+func envValue(env []string, key string) string {
+	prefix := key + "="
+	for _, item := range env {
+		if strings.HasPrefix(item, prefix) {
+			return strings.TrimPrefix(item, prefix)
+		}
+	}
+	return ""
+}
+
+func upsertEnv(env []string, key, value string) []string {
+	prefix := key + "="
+	next := append([]string{}, env...)
+	for i, item := range next {
+		if strings.HasPrefix(item, prefix) {
+			next[i] = prefix + value
+			return next
+		}
+	}
+	return append(next, prefix+value)
 }
 
 // firstArg names the git subcommand for error context without echoing
