@@ -37,6 +37,11 @@ Valid subcommands are:
   • version
   • workflow
 
+## Usage
+
+ atmos [flags]
+ atmos [sub-command] [flags]
+
 ## Hints
 
 💡 Run atmos --help for usage
