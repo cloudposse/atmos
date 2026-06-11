@@ -74,7 +74,7 @@ jobs:
       - name: Set up Go
         if: ${{ ! ( matrix.target == 'windows' && github.event.pull_request.draft  ) }}
         # setup-go v6 requires runner v2.327.1+ and can affect toolchain handling.
-        uses: actions/setup-go@v6
+        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
         with:
           go-version-file: "go.mod"
         id: go
@@ -95,7 +95,7 @@ jobs:
           make version-${{ matrix.target }}
 
       - name: Upload build artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: ${{ ! ( matrix.target == 'windows' && github.event.pull_request.draft  ) }}
         with:
           name: build-artifacts-${{ matrix.target }}
@@ -130,7 +130,7 @@ jobs:
         run: echo "C:\Program Files\Git\usr\bin" >> $Env:GITHUB_PATH
 
       - name: Download build artifacts for ${{ matrix.flavor.target }}
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
         with:
           name: build-artifacts-${{ matrix.flavor.target }}
@@ -153,14 +153,14 @@ jobs:
           echo "${{ github.workspace }}" >> $Env:GITHUB_PATH
 
       - name: Install Terraform
-        uses: hashicorp/setup-terraform@v4
+        uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
         with:
           terraform_version: ${{ env.TERRAFORM_VERSION }}
           terraform_wrapper: false
 
       - name: Install OpenTofu
-        uses: opentofu/setup-opentofu@v2
+        uses: opentofu/setup-opentofu@847eaa4afeb791b06daa46e8eafa8b1b68d7cfb4 # v2
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
         with:
           tofu_version: ${{ env.OPEN_TOFU_VERSION }}
@@ -168,7 +168,7 @@ jobs:
 
       # https://github.com/hashicorp/setup-packer
       - name: Install Packer
-        uses: hashicorp/setup-packer@main
+        uses: hashicorp/setup-packer@3286471d6cc6756d056a0b199fea5e0becdbc189 # main
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
         with:
           version: ${{ env.PACKER_VERSION }}
@@ -202,7 +202,7 @@ jobs:
 
       - name: Set up Go
         # setup-go v6 requires runner v2.327.1+ and can affect toolchain handling.
-        uses: actions/setup-go@v6
+        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
         with:
           go-version-file: "go.mod"
@@ -290,7 +290,7 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: hadolint/hadolint-action@v3.1.0
+      - uses: hadolint/hadolint-action@54c9adbab1582c2ef04b2016b760714a4bfde3cf # v3.1.0
         id: hadolint
         with:
           dockerfile: Dockerfile
@@ -302,7 +302,7 @@ jobs:
           ignore: DL3008
 
       - name: Upload SARIF file
-        uses: github/codeql-action/upload-sarif@v4
+        uses: github/codeql-action/upload-sarif@8aad20d150bbac5944a9f9d289da16a4b0d87c1e # v4
         if: always()
         with:
           # Path to SARIF file relative to the root of the repository
@@ -344,7 +344,7 @@ jobs:
     steps:
 
       - name: Download build artifacts
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           name: build-artifacts-linux
           path: /usr/local/bin
@@ -358,13 +358,13 @@ jobs:
           persist-credentials: false
 
       - name: Install Terraform
-        uses: hashicorp/setup-terraform@v4
+        uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4
         with:
           terraform_version: ${{ env.TERRAFORM_VERSION }}
           terraform_wrapper: false
 
       - name: Install OpenTofu
-        uses: opentofu/setup-opentofu@v2
+        uses: opentofu/setup-opentofu@847eaa4afeb791b06daa46e8eafa8b1b68d7cfb4 # v2
         with:
           tofu_version: ${{ env.OPEN_TOFU_VERSION }}
           tofu_wrapper: false
@@ -408,7 +408,7 @@ jobs:
           kubectl get pods --all-namespaces
 
       - name: Download build artifacts
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           name: build-artifacts-linux
           path: /usr/local/bin
@@ -423,7 +423,7 @@ jobs:
         run: sudo apt-get -y install kubectl helmfile
 
       - name: Install Helm
-        uses: azure/setup-helm@v4
+        uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4 # v4
         with:
           version: ${{ env.HELM_VERSION }}
 
@@ -488,7 +488,7 @@ jobs:
 
       - name: Download build artifacts for ${{ matrix.flavor.target }}
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           name: build-artifacts-${{ matrix.flavor.target }}
           path: ${{ github.workspace }}
@@ -507,14 +507,14 @@ jobs:
 
       - name: Install Terraform
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
-        uses: hashicorp/setup-terraform@v4
+        uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4
         with:
           terraform_version: ${{ env.TERRAFORM_VERSION }}
           terraform_wrapper: false
 
       - name: Install OpenTofu
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
-        uses: opentofu/setup-opentofu@v2
+        uses: opentofu/setup-opentofu@847eaa4afeb791b06daa46e8eafa8b1b68d7cfb4 # v2
         with:
           tofu_version: ${{ env.OPEN_TOFU_VERSION }}
           tofu_wrapper: false
@@ -587,19 +587,19 @@ jobs:
           persist-credentials: false
 
       - name: Install Terraform
-        uses: hashicorp/setup-terraform@v4
+        uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4
         with:
           terraform_version: ${{ env.TERRAFORM_VERSION }}
           terraform_wrapper: false
 
       - name: Install OpenTofu
-        uses: opentofu/setup-opentofu@v2
+        uses: opentofu/setup-opentofu@847eaa4afeb791b06daa46e8eafa8b1b68d7cfb4 # v2
         with:
           tofu_version: ${{ env.OPEN_TOFU_VERSION }}
           tofu_wrapper: false
 
       - name: Lint examples/${{ matrix.demo-folder }}/components/terraform
-        uses: reviewdog/action-tflint@v1
+        uses: reviewdog/action-tflint@54a5e5aed57dcfbb4662ec548de876df33d6288d # v1
         with:
           github_token: ${{ github.token }}
           working_directory: examples/${{ matrix.demo-folder }}/components/terraform
@@ -635,7 +635,7 @@ jobs:
           persist-credentials: false
 
       - name: Validate YAML Schema for Stacks
-        uses: InoUno/yaml-ls-check@v1.4.0
+        uses: InoUno/yaml-ls-check@2c229b85b877b2853b40bd0fbdcfccff5ff735c7 # v1.4.0
         with:
           root: "examples/${{ matrix.demo-folder }}/stacks"
           schemaMapping: |
@@ -649,7 +649,7 @@ jobs:
   release:
     needs: [test, lint, mock, k3s, localstack, docker, validate]
     if: github.event_name == 'push'
-    uses: cloudposse/.github/.github/workflows/shared-go-auto-release.yml@main
+    uses: cloudposse/.github/.github/workflows/shared-go-auto-release.yml@8244c7c9142e92281e7841f655fa48e9ceb9b454 # main
     with:
       publish: false
       format: binary
