@@ -11,7 +11,13 @@ Atmos now supports using dotenv files directly with the `!include` YAML function
 
 ## Explicit Dotenv Loading
 
-You can load a dotenv file into the CLI `env` section with a YAML merge key. The `<<` key is YAML's merge-key syntax, the same YAML mechanism commonly used with anchors and aliases:
+You can load a dotenv file directly into the CLI `env` section:
+
+```yaml
+env: !include .env
+```
+
+Use a YAML merge key when you want to include dotenv values and also define inline overrides. The `<<` key is YAML's merge-key syntax, the same YAML mechanism commonly used with anchors and aliases:
 
 ```yaml
 env:
