@@ -1,6 +1,6 @@
-# GitOps Demo
+# GitOps Publishing Demo
 
-This example shows the Atmos Git command lifecycle for a managed deployment repository.
+This example shows the **publishing half of a GitOps pipeline** — reconcile, review, and publish artifacts to a managed deployment repository using `atmos git`. A reconciler such as Argo CD or Flux (or your CI) consumes what gets published; Atmos is the producer side.
 
 The repository is named `deploy` and intentionally omits `workdir`, so Atmos uses the automatic XDG cache location:
 
@@ -22,7 +22,7 @@ atmos git diff deploy
 atmos git clean deploy --dry-run
 ```
 
-The custom commands wrap the same Atmos Git operations:
+The custom commands wrap the same Atmos Git operations — showing how to compose your own GitOps publishing workflow from the `atmos git` primitives:
 
 ```shell
 atmos gitops reconcile

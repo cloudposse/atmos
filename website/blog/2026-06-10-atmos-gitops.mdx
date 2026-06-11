@@ -1,11 +1,11 @@
 ---
 slug: atmos-gitops
-title: "Atmos GitOps: Git as a Platform Capability"
+title: "Atmos Git: A Foundational Capability for GitOps Pipelines"
 authors: [osterman]
 tags: [feature]
 ---
 
-Atmos now treats Git as a foundational platform capability — on par with Toolchain, Auth, and Hooks. Define managed repositories once in `atmos.yaml`, then clone, inspect, diff, commit, and push them through a new `atmos git` command group, or publish generated artifacts automatically on lifecycle events with the new `git` hook kind.
+Atmos now treats Git as a foundational platform capability — on par with Toolchain, Auth, and Hooks — built to enable GitOps workflows where you need to commit artifacts to a source of truth: deployment repos consumed by Argo CD or Flux, provider lock files, rendered manifests. Define managed repositories once in `atmos.yaml`, then clone, inspect, diff, commit, and push them through a new `atmos git` command group, or publish generated artifacts automatically on lifecycle events with the new `git` hook kind.
 
 <!--truncate-->
 
@@ -42,6 +42,10 @@ GitOps workflows have always needed glue: scripts to render manifests into deplo
 - **Safety rules are centralized.** Fast-forward-only pulls, no force pushes ever, path-scoped commits that refuse to touch unrelated dirty files, and automatic retry-with-rebase when a concurrent publisher wins the push race.
 - **Commits work in CI out of the box.** Author identity is injected per invocation (no `user.name` configuration on runners), and commit signing is configurable per repository.
 - **Clones are cache-friendly.** Managed repositories live under the Atmos XDG cache root, so the native CI cache restores them across runs — and clone is defined as *reconcile* (fetch and fast-forward), so a stale restored clone is just a faster clone.
+
+## What This Is — and Isn't
+
+Atmos owns the **publishing side** of GitOps: render → diff → commit → push, with centralized safety rules. Reconciliation stays where it belongs — Argo CD or Flux pulls from the repository, or your CI applies on merge. There are no agents and no drift-correction loop in Atmos itself; it's the producer feeding your reconciler. And this isn't a replacement for the [GitHub Actions integration](/ci) you may already run plan/apply pipelines with — it's the Git plumbing those pipelines use.
 
 ## How to Use It
 

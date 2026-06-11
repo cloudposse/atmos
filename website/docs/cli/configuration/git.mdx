@@ -10,7 +10,7 @@ import Intro from '@site/src/components/Intro'
 import KeyPoints from '@site/src/components/KeyPoints'
 
 <Intro>
-The `git` section in `atmos.yaml` makes Git a foundational Atmos capability — a peer to Toolchain, Auth, and Hooks. Define managed repositories once under `git.repositories`, then clone, pull, diff, commit, and push them by logical name from the [`atmos git`](/cli/commands/git/usage) commands, [`kind: git` lifecycle hooks](/stacks/hooks#kind-git), and native CI workflows — with consistent authentication, safety rules, and workdir handling.
+The `git` section in `atmos.yaml` makes Git a foundational Atmos capability — a peer to Toolchain, Auth, and Hooks. Define managed repositories once under `git.repositories`, then clone, pull, diff, commit, and push them by logical name from the [`atmos git`](/cli/commands/git/usage) commands, [`kind: git` lifecycle hooks](/stacks/hooks#kind-git), and native CI workflows — with consistent authentication, safety rules, and workdir handling. It is the foundation for GitOps workflows with Atmos: commit generated artifacts to a source-of-truth repository that Argo CD, Flux, or your CI consumes.
 </Intro>
 
 <KeyPoints>

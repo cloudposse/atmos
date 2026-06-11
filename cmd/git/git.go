@@ -68,7 +68,7 @@ func (g *GitCommandProvider) GetName() string {
 
 // GetGroup returns the command group for help organization.
 func (g *GitCommandProvider) GetGroup() string {
-	return "GitOps"
+	return "Git"
 }
 
 // GetFlagsBuilder returns the flags builder for this command.

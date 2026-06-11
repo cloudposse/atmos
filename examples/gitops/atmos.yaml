@@ -30,7 +30,7 @@ commands:
     type: atmos
 
 - name: "gitops"
-  description: "Run the GitOps repository lifecycle demo"
+  description: "Run the GitOps publishing lifecycle demo"
   commands:
   - name: "reconcile"
     description: "Clone or update the managed deployment repository"

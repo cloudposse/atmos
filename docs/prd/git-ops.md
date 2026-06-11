@@ -1,4 +1,4 @@
-# PRD: Atmos GitOps
+# PRD: Atmos Git (GitOps Enablement)
 
 **Status:** Proposed
 **Version:** 0.3
@@ -17,7 +17,9 @@
 
 ## Executive Summary
 
-Atmos GitOps makes Git a reusable, foundational Atmos platform capability, similar in scope to Toolchain, Auth, and Hooks. Atmos should be able to clone, pull, inspect, diff, commit, and push Git repositories as part of provisioners, hooks, workflows, custom commands, CI workflows, and component lifecycle events.
+Atmos Git makes Git a reusable, foundational Atmos platform capability, similar in scope to Toolchain, Auth, and Hooks. Atmos should be able to clone, pull, inspect, diff, commit, and push Git repositories as part of provisioners, hooks, workflows, custom commands, CI workflows, and component lifecycle events.
+
+This is the enablement layer for GitOps workflows: Atmos publishes desired state and generated artifacts to source-of-truth repositories; reconciliation is performed by consumers such as Argo CD, Flux, or CI. Atmos is the producer side of a GitOps pipeline, not the reconciler.
 
 The core idea is that Git repositories can be artifact repositories. Atmos can render or generate artifacts, place them into a repository worktree, and perform Git operations through a shared service with consistent authentication, safety rules, and command behavior.
 
@@ -79,6 +81,7 @@ Atmos needs a reusable Git foundation that can be used consistently by CLI comma
 6. **General Git Porcelain Replacement:** Atmos Git is not intended to expose every Git command.
 7. **Implicit Arbitrary Shell Automation:** Git operations should be explicit, configured, and bounded by safety rules.
 8. **A Competing Clone Cache:** `atmos git clone` does not implement its own cross-run caching; it relies on XDG workdir placement plus the native CI cache, and reconciles restored workdirs instead.
+9. **Continuous Reconciliation / Drift Detection:** Atmos does not implement a pull-based reconciler (Flux/Argo CD style). Atmos is the publisher; reconcilers consume what it publishes.
 
 ---
 
@@ -121,7 +124,7 @@ A Git repository can be a destination for generated artifacts. Atmos can render 
 
 ### Three Hook-Shaped Things, Kept Separate
 
-Atmos GitOps touches three distinct mechanisms. They are intentionally separate:
+Atmos Git touches three distinct mechanisms. They are intentionally separate:
 
 | Mechanism | Config | Triggered by | Repository target |
 | --- | --- | --- | --- |
@@ -407,7 +410,7 @@ Commit flags:
 
 ### Flag Architecture
 
-All `cmd/git` commands register via the command registry (`CommandProvider`) under a new **GitOps** command group (Git is a foundational capability; it does not belong in "Other Commands"). All command-specific flags use `flags.NewStandardParser()` with the two-step binding from the reference implementation (`cmd/version/version.go`): `BindToViper` in `init()`, `BindFlagsToViper` in `RunE`. Never `viper.BindEnv()`/`viper.BindPFlag()` directly (Forbidigo-enforced).
+All `cmd/git` commands register via the command registry (`CommandProvider`) under a new **Git** command group (Git is a foundational capability; it does not belong in "Other Commands"). All command-specific flags use `flags.NewStandardParser()` with the two-step binding from the reference implementation (`cmd/version/version.go`): `BindToViper` in `init()`, `BindFlagsToViper` in `RunE`. Never `viper.BindEnv()`/`viper.BindPFlag()` directly (Forbidigo-enforced).
 
 Specific requirements discovered against the existing flag registry:
 
@@ -883,7 +886,7 @@ Command docs and config docs should cross-link following existing documentation 
 1. Extend `pkg/git` with the service and provider registry (coexisting with the existing go-git-based package).
 2. Implement the CLI provider with a fakeable runner.
 3. Add config resolution for named repositories, automatic XDG workdirs, commit author resolution, and push retry.
-4. Add `cmd/git` via the command registry pattern under a new GitOps command group; all command-specific flags use `flags.NewStandardParser()` with `BindToViper` in `init()` and `BindFlagsToViper` in `RunE`, env vars under the `ATMOS_GIT_` prefix.
+4. Add `cmd/git` via the command registry pattern under a new Git command group; all command-specific flags use `flags.NewStandardParser()` with `BindToViper` in `init()` and `BindFlagsToViper` in `RunE`, env vars under the `ATMOS_GIT_` prefix.
 5. Add `atmos git list` on the `pkg/list` rendering pipeline, with the `atmos list git-repositories` alias.
 6. Add command examples and embedded markdown usage.
 

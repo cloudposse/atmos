@@ -27,7 +27,7 @@ func TestGitCommandProvider_GetName(t *testing.T) {
 
 func TestGitCommandProvider_GetGroup(t *testing.T) {
 	p := &GitCommandProvider{}
-	assert.Equal(t, "GitOps", p.GetGroup())
+	assert.Equal(t, "Git", p.GetGroup())
 }
 
 func TestGitCommandProvider_GetCommand(t *testing.T) {
