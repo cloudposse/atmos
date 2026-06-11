@@ -61,6 +61,67 @@ func TestGetClientOptions(t *testing.T) {
 	}
 }
 
+func TestGetSecretManagerClientOptions(t *testing.T) {
+	t.Run("uses regular auth options without emulator", func(t *testing.T) {
+		t.Setenv("SECRET_MANAGER_EMULATOR_HOST", "")
+
+		clientOpts := GetSecretManagerClientOptions(AuthOptions{
+			Credentials: `{"type": "service_account", "project_id": "test"}`,
+		})
+		if len(clientOpts) != 1 {
+			t.Errorf("GetSecretManagerClientOptions() returned %d options, expected regular credentials option", len(clientOpts))
+		}
+	})
+
+	t.Run("uses plaintext emulator options when configured", func(t *testing.T) {
+		t.Setenv("SECRET_MANAGER_EMULATOR_HOST", "localhost:4588")
+
+		clientOpts := GetSecretManagerClientOptions(AuthOptions{
+			Credentials: `{"type": "service_account", "project_id": "test"}`,
+		})
+		if len(clientOpts) != 3 {
+			t.Errorf("GetSecretManagerClientOptions() returned %d options, expected emulator endpoint/auth/dial options", len(clientOpts))
+		}
+	})
+}
+
+func TestSecretManagerEmulatorHost(t *testing.T) {
+	tests := []struct {
+		name string
+		env  string
+		want string
+	}{
+		{
+			name: "empty",
+			want: "",
+		},
+		{
+			name: "host port",
+			env:  "localhost:4588",
+			want: "localhost:4588",
+		},
+		{
+			name: "http URL",
+			env:  "http://localhost:4588",
+			want: "localhost:4588",
+		},
+		{
+			name: "https URL with path",
+			env:  "https://floci-gcp:4588/api",
+			want: "floci-gcp:4588",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv("SECRET_MANAGER_EMULATOR_HOST", tt.env)
+			if got := secretManagerEmulatorHost(); got != tt.want {
+				t.Errorf("secretManagerEmulatorHost() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
 func TestGetCredentialsFromBackend(t *testing.T) {
 	tests := []struct {
 		name     string

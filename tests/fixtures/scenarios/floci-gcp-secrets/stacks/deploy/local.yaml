@@ -1,0 +1,15 @@
+vars:
+  stage: local
+
+components:
+  terraform:
+    app:
+      vars:
+        token_value: !secret API_TOKEN
+      secrets:
+        vars:
+          API_TOKEN:
+            store: floci-gsm
+            store_stack: local
+            store_component: app
+            description: Token stored in floci-gcp Secret Manager for integration tests.

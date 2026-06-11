@@ -1,0 +1,25 @@
+base_path: "./"
+
+components:
+  terraform:
+    base_path: "components/terraform"
+    command: terraform
+
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "deploy/**/*"
+  excluded_paths:
+    - "**/_defaults.yaml"
+  name_template: "{{ .vars.stage }}"
+
+logs:
+  level: Info
+
+stores:
+  floci-gsm:
+    type: google-secret-manager
+    secret: true
+    options:
+      project_id: test-project
+      stack_delimiter: "-"

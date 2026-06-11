@@ -119,7 +119,7 @@ func (s *GSMStore) SetAuthContext(resolver AuthContextResolver, identityName str
 func (s *GSMStore) initDefaultClient() error {
 	ctx := context.Background()
 
-	clientOpts := gcp.GetClientOptions(gcp.AuthOptions{
+	clientOpts := gcp.GetSecretManagerClientOptions(gcp.AuthOptions{
 		Credentials: gcp.GetCredentialsFromStore(s.credentials),
 	})
 
@@ -150,7 +150,7 @@ func (s *GSMStore) initIdentityClient() error {
 		return fmt.Errorf("%w: failed to resolve GCP auth context for identity %q: %w", ErrAuthContextNotAvailable, s.identityName, err)
 	}
 
-	clientOpts := gcp.GetClientOptions(s.identityAuthOptions(authContext))
+	clientOpts := gcp.GetSecretManagerClientOptions(s.identityAuthOptions(authContext))
 
 	client, err := secretmanager.NewClient(ctx, clientOpts...)
 	if err != nil {

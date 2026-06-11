@@ -1,12 +1,15 @@
 package gcp
 
 import (
+	"net/url"
 	"os"
 	"strings"
 	"time"
 
 	"golang.org/x/oauth2"
 	"google.golang.org/api/option"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 )
 
 // AuthOptions contains configuration for Google Cloud authentication.
@@ -78,6 +81,35 @@ func GetClientOptions(opts AuthOptions) []option.ClientOption {
 	// If no explicit credentials or access token, Google Cloud client libraries
 	// will automatically use ADC (Application Default Credentials).
 	return clientOpts
+}
+
+// GetSecretManagerClientOptions returns Google Secret Manager client options.
+// When SECRET_MANAGER_EMULATOR_HOST is set, it configures the client for a local
+// plaintext gRPC emulator such as floci-gcp. Secret Manager has no official
+// emulator, so the Go SDK does not auto-detect this environment variable.
+func GetSecretManagerClientOptions(opts AuthOptions) []option.ClientOption {
+	if host := secretManagerEmulatorHost(); host != "" {
+		return []option.ClientOption{
+			option.WithEndpoint(host),
+			option.WithoutAuthentication(),
+			option.WithGRPCDialOption(grpc.WithTransportCredentials(insecure.NewCredentials())),
+		}
+	}
+
+	return GetClientOptions(opts)
+}
+
+func secretManagerEmulatorHost() string {
+	host := strings.TrimSpace(os.Getenv("SECRET_MANAGER_EMULATOR_HOST"))
+	if host == "" {
+		return ""
+	}
+	if strings.Contains(host, "://") {
+		if parsed, err := url.Parse(host); err == nil && parsed.Host != "" {
+			return parsed.Host
+		}
+	}
+	return host
 }
 
 // GetCredentialsFromBackend extracts credentials from a Terraform backend configuration.
