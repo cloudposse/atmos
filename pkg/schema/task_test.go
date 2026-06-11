@@ -159,6 +159,54 @@ func TestTasks_UnmarshalYAML_WithIdentity(t *testing.T) {
 	assert.Equal(t, "production-deployer", tasks[0].Identity)
 }
 
+func TestTasks_UnmarshalYAML_WithInteractiveAndTty(t *testing.T) {
+	input := `
+- command: aws ssm start-session --target i-1234567890
+  interactive: true
+  tty: true
+- command: echo plain
+`
+	var tasks Tasks
+	err := yaml.Unmarshal([]byte(input), &tasks)
+	require.NoError(t, err)
+
+	require.Len(t, tasks, 2)
+	assert.Equal(t, "aws ssm start-session --target i-1234567890", tasks[0].Command)
+	assert.True(t, tasks[0].Interactive)
+	assert.True(t, tasks[0].Tty)
+	// Defaults are false for both fields.
+	assert.Equal(t, "echo plain", tasks[1].Command)
+	assert.False(t, tasks[1].Interactive)
+	assert.False(t, tasks[1].Tty)
+}
+
+func TestTasksDecodeHook_InteractiveAndTtyWeaklyTyped(t *testing.T) {
+	input := map[string]any{
+		"steps": []any{
+			map[string]any{
+				"command":     "top",
+				"interactive": "true",
+				"tty":         "true",
+			},
+		},
+	}
+
+	var result testConfigWithTasks
+	decoder, err := mapstructure.NewDecoder(&mapstructure.DecoderConfig{
+		Result:           &result,
+		WeaklyTypedInput: true,
+		DecodeHook:       TasksDecodeHook(),
+	})
+	require.NoError(t, err)
+
+	err = decoder.Decode(input)
+	require.NoError(t, err)
+
+	require.Len(t, result.Steps, 1)
+	assert.True(t, result.Steps[0].Interactive)
+	assert.True(t, result.Steps[0].Tty)
+}
+
 func TestTasks_UnmarshalYAML_EmptyList(t *testing.T) {
 	input := `[]`
 	var tasks Tasks
@@ -208,6 +256,8 @@ func TestTask_ToWorkflowStep(t *testing.T) {
 		Stack:            "dev",
 		WorkingDirectory: "/app",
 		Identity:         "test-identity",
+		Interactive:      true,
+		Tty:              true,
 		Retry: &RetryConfig{
 			MaxAttempts: &maxAttempts,
 		},
@@ -222,6 +272,8 @@ func TestTask_ToWorkflowStep(t *testing.T) {
 	assert.Equal(t, task.Stack, step.Stack)
 	assert.Equal(t, task.WorkingDirectory, step.WorkingDirectory)
 	assert.Equal(t, task.Identity, step.Identity)
+	assert.Equal(t, task.Interactive, step.Interactive)
+	assert.Equal(t, task.Tty, step.Tty)
 	assert.Equal(t, task.Retry, step.Retry)
 	// Note: Timeout is not in WorkflowStep.
 }
@@ -235,6 +287,8 @@ func TestTaskFromWorkflowStep(t *testing.T) {
 		Stack:            "prod",
 		WorkingDirectory: "/infra",
 		Identity:         "prod-identity",
+		Interactive:      true,
+		Tty:              true,
 		Retry: &RetryConfig{
 			MaxAttempts: &maxAttempts,
 		},
@@ -248,6 +302,8 @@ func TestTaskFromWorkflowStep(t *testing.T) {
 	assert.Equal(t, step.Stack, task.Stack)
 	assert.Equal(t, step.WorkingDirectory, task.WorkingDirectory)
 	assert.Equal(t, step.Identity, task.Identity)
+	assert.Equal(t, step.Interactive, task.Interactive)
+	assert.Equal(t, step.Tty, task.Tty)
 	assert.Equal(t, step.Retry, task.Retry)
 	assert.Zero(t, task.Timeout) // WorkflowStep doesn't have Timeout.
 }

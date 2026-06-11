@@ -11,6 +11,7 @@ import (
 	ioLayer "github.com/cloudposse/atmos/pkg/io"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/panics"
+	"github.com/cloudposse/atmos/pkg/signals"
 )
 
 func main() {
@@ -18,16 +19,22 @@ func main() {
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
 	go func() {
-		sig := <-sigChan
-		// Clean up resources before exit.
-		cmd.Cleanup()
-		// Exit with correct POSIX exit code (128 + signal number).
-		// Use errUtils.OsExit to allow test interception (Go 1.25+ panics on os.Exit in tests).
-		if s, ok := sig.(syscall.Signal); ok {
-			errUtils.OsExit(128 + int(s))
+		for sig := range sigChan {
+			// While an interactive/TTY step owns the terminal, SIGINT belongs to
+			// the foreground child process - keep waiting instead of exiting.
+			if !shouldExitOnSignal(sig) {
+				continue
+			}
+			// Clean up resources before exit.
+			cmd.Cleanup()
+			// Exit with correct POSIX exit code (128 + signal number).
+			// Use errUtils.OsExit to allow test interception (Go 1.25+ panics on os.Exit in tests).
+			if s, ok := sig.(syscall.Signal); ok {
+				errUtils.OsExit(128 + int(s))
+			}
+			// Fallback to SIGINT exit code if signal type assertion fails.
+			errUtils.OsExit(130)
 		}
-		// Fallback to SIGINT exit code if signal type assertion fails.
-		errUtils.OsExit(130)
 	}()
 
 	// Disable timestamp in logs so snapshots work. We will address this in a future PR updating styles, etc.
@@ -95,6 +102,13 @@ func run() (exitCode int) {
 	}
 
 	return 0
+}
+
+// shouldExitOnSignal reports whether the process should exit in response to sig.
+// SIGINT is ignored while a foreground interactive/TTY step owns the terminal
+// (the child process handles Ctrl-C). SIGTERM always exits as an escape hatch.
+func shouldExitOnSignal(sig os.Signal) bool {
+	return sig != os.Interrupt || !signals.InterruptExitSuspended()
 }
 
 // hasVersionFlag checks if --version flag is present in args.
