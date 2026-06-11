@@ -2,6 +2,7 @@ package gcp
 
 import (
 	"testing"
+	"time"
 
 	"google.golang.org/api/option"
 )
@@ -18,6 +19,14 @@ func TestGetClientOptions(t *testing.T) {
 				Credentials: "",
 			},
 			expected: 0, // ADC uses no explicit options
+		},
+		{
+			name: "access token",
+			opts: AuthOptions{
+				AccessToken: "ya29.access-token",
+				TokenExpiry: time.Now().Add(time.Hour),
+			},
+			expected: 1, // WithTokenSource
 		},
 		{
 			name: "JSON credentials",

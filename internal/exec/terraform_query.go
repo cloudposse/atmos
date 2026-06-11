@@ -15,7 +15,6 @@ import (
 	"github.com/cloudposse/atmos/pkg/process"
 	scheduleradapters "github.com/cloudposse/atmos/pkg/scheduler/adapters"
 	"github.com/cloudposse/atmos/pkg/schema"
-	"github.com/cloudposse/atmos/pkg/store/authbridge"
 )
 
 // authManagerFactory creates an AuthManager from the given parameters.
@@ -33,11 +32,11 @@ func ExecuteTerraformQuery(info *schema.ConfigAndStacksInfo) error {
 
 // ExecuteTerraformQueryWithContext executes graph-backed multi-component Terraform work.
 func ExecuteTerraformQueryWithContext(ctx context.Context, info *schema.ConfigAndStacksInfo) error {
+	defer perf.Track(nil, "exec.ExecuteTerraformQueryWithContext")()
 	atmosConfig, err := cfg.InitCliConfig(*info, true)
 	if err != nil {
 		return err
 	}
-	defer perf.Track(&atmosConfig, "exec.ExecuteTerraformQueryWithContext")()
 
 	// Create auth manager for YAML function processing during stack description.
 	// Without this, YAML functions like !terraform.state fail when using --all
@@ -51,8 +50,7 @@ func ExecuteTerraformQueryWithContext(ctx context.Context, info *schema.ConfigAn
 	// Inject auth resolver into identity-aware stores so they can lazily resolve
 	// credentials on first access. This bridges the store system with the auth system.
 	if authManager != nil {
-		resolver := authbridge.NewResolver(authManager, info)
-		atmosConfig.Stores.SetAuthContextResolver(resolver)
+		injectTerraformStoreAuthResolver(&atmosConfig, info, authManager)
 	}
 
 	stacks, err := ExecuteDescribeStacks(

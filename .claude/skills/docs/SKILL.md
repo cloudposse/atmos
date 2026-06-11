@@ -58,6 +58,21 @@ Example:
 </ActionCard>
 ```
 
+## Changelog Posts
+
+Changelog posts live in `website/blog/` as dated `.mdx` files. Follow the template and tag/author rules in
+`CLAUDE.md` and the `pull-request` skill. In addition:
+
+- **NEVER start a sentence, paragraph, heading body, list item, or the post intro with a backtick** (inline code
+  span) or a code fence. Lead with prose, then introduce the code. Markdown that opens on a backtick reads
+  awkwardly, breaks scannability, and can render poorly in feed/preview contexts.
+  - Wrong: `` `atmos describe affected` now compares every section. ``
+  - Right: ``The `atmos describe affected` command now compares every section.``
+  - Wrong (list/intro): `` `vars`, `env`, `settings` are evaluated. ``
+  - Right: ``The evaluated sections are `vars`, `env`, and `settings`.``
+- Put a real code block (fenced, language-tagged) on its own lines when showing commands or config — not inline at
+  the start of a sentence.
+
 ## Release Docs
 
 When behavior changes, update all user-facing surfaces in the same PR:

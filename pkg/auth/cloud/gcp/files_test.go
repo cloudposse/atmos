@@ -1,15 +1,21 @@
 package gcp
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	errUtils "github.com/cloudposse/atmos/errors"
 )
 
 const testRealm = "test-realm"
@@ -152,6 +158,22 @@ func TestWriteADCFile_NilContent(t *testing.T) {
 	_, err := WriteADCFile(testRealm, "gcp-adc", "id", nil)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "nil")
+}
+
+func TestWriteADCFile_PathResolutionErrorPreservesSentinels(t *testing.T) {
+	tmp := t.TempDir()
+	blockedConfigHome := filepath.Join(tmp, "blocked-config-home")
+	require.NoError(t, os.WriteFile(blockedConfigHome, []byte("not a directory"), 0o600))
+	t.Setenv("XDG_CONFIG_HOME", blockedConfigHome)
+
+	_, err := WriteADCFile(testRealm, "gcp-adc", "id", &AuthorizedUserContent{
+		Type:        "authorized_user",
+		AccessToken: "ya29.token",
+	})
+
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, errUtils.ErrWriteADCFile), "error should match ADC write sentinel")
+	assert.True(t, errors.Is(err, errUtils.ErrInvalidAuthConfig), "error should preserve underlying auth config sentinel")
 }
 
 func TestWritePropertiesFile(t *testing.T) {
@@ -328,6 +350,82 @@ func TestWriteADCFile_Overwrite(t *testing.T) {
 	var parsed AuthorizedUserContent
 	require.NoError(t, json.Unmarshal(data, &parsed))
 	assert.Equal(t, "second-token", parsed.AccessToken)
+}
+
+func TestWriteADCFile_ConcurrentReadersNeverSeePartialJSON(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows atomic write fallback can briefly remove the target before rename")
+	}
+
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmp)
+
+	const (
+		providerName = "gcp-adc"
+		identityName = "concurrent-id"
+		writers      = 4
+		writes       = 8
+		readers      = 8
+		reads        = writers * writes * 4
+	)
+
+	_, err := WriteADCFile(testRealm, providerName, identityName, &AuthorizedUserContent{
+		Type:        "authorized_user",
+		AccessToken: "seed-token",
+		TokenExpiry: time.Now().Add(time.Hour).UTC().Format(time.RFC3339),
+	})
+	require.NoError(t, err)
+
+	start := make(chan struct{})
+	errCh := make(chan error, writers+readers)
+	var wg sync.WaitGroup
+
+	for writer := 0; writer < writers; writer++ {
+		wg.Add(1)
+		go func(writerID int) {
+			defer wg.Done()
+			<-start
+			for i := 0; i < writes; i++ {
+				token := strings.Repeat("x", 64*1024) + string(rune('a'+writerID)) + string(rune('0'+i))
+				_, writeErr := WriteADCFile(testRealm, providerName, identityName, &AuthorizedUserContent{
+					Type:        "authorized_user",
+					AccessToken: token,
+					TokenExpiry: time.Now().Add(time.Hour).UTC().Format(time.RFC3339),
+				})
+				if writeErr != nil {
+					errCh <- writeErr
+					return
+				}
+			}
+		}(writer)
+	}
+
+	for reader := 0; reader < readers; reader++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			<-start
+			for i := 0; i < reads; i++ {
+				creds, readErr := LoadCredentialsFromFiles(context.Background(), testRealm, providerName, identityName)
+				if readErr != nil {
+					errCh <- readErr
+					return
+				}
+				if creds == nil || creds.AccessToken == "" {
+					errCh <- assert.AnError
+					return
+				}
+			}
+		}()
+	}
+
+	close(start)
+	wg.Wait()
+	close(errCh)
+
+	for err := range errCh {
+		require.NoError(t, err)
+	}
 }
 
 func TestGetConfigDir_InvalidIdentity(t *testing.T) {
