@@ -27,6 +27,9 @@ func TestClassifyCosignError(t *testing.T) {
 			`{"code":` + status + `,"message":"service unavailable"}`)
 	}
 
+	rekorStreamInternalError := "cosign [verify-blob ...]: exit status 1\n" +
+		"Error: searching log query: stream error: stream ID 1; INTERNAL_ERROR; received from peer"
+
 	tampered := "cosign [verify-blob ...]: exit status 1\n" +
 		"Error: invalid signature when validating ASN.1 encoded signature"
 
@@ -50,6 +53,7 @@ func TestClassifyCosignError(t *testing.T) {
 		{name: "rekor 502 on tlog retrieve endpoint is retryable", err: rekorStatusErr("502"), wantWrapped: true},
 		{name: "rekor 503 on tlog retrieve endpoint is retryable", err: rekorStatusErr("503"), wantWrapped: true},
 		{name: "rekor 504 on tlog retrieve endpoint is retryable", err: rekorStatusErr("504"), wantWrapped: true},
+		{name: "rekor stream internal error is retryable", err: errors.New(rekorStreamInternalError), wantWrapped: true},
 		{name: "rekor 401 on tlog retrieve endpoint is NOT retryable", err: errors.New(rekor401), wantWrapped: false},
 		{name: "tampered artifact is NOT retryable", err: errors.New(tampered), wantWrapped: false},
 		{name: "identity mismatch is NOT retryable", err: errors.New(identityMismatch), wantWrapped: false},
