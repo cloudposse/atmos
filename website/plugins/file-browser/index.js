@@ -46,7 +46,7 @@ const TAGS_MAP = {
   toolchain: ['DX'],
   devcontainer: ['DX'],
   'devcontainer-build': ['DX'],
-  'demo-localstack': ['DX'],
+  'demo-floci': ['DX'],
   'demo-helmfile': ['DX'],
   'stack-names': ['Stacks'],
   'demo-ansible': ['Automation'],
