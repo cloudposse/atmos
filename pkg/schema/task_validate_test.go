@@ -112,11 +112,34 @@ func TestValidateExecTasks_ErrorNamesStep(t *testing.T) {
 }
 
 func TestValidateExecWorkflowSteps(t *testing.T) {
+	maxAttempts := 3
+
 	tests := []struct {
 		name    string
 		steps   []WorkflowStep
 		wantErr error
 	}{
+		{
+			name: "exec with tty",
+			steps: []WorkflowStep{
+				{Type: TaskTypeExec, Command: "psql", Tty: true},
+			},
+			wantErr: ErrExecStepInvalidField,
+		},
+		{
+			name: "exec with interactive",
+			steps: []WorkflowStep{
+				{Type: TaskTypeExec, Command: "psql", Interactive: true},
+			},
+			wantErr: ErrExecStepInvalidField,
+		},
+		{
+			name: "exec with retry",
+			steps: []WorkflowStep{
+				{Type: TaskTypeExec, Command: "psql", Retry: &RetryConfig{MaxAttempts: &maxAttempts}},
+			},
+			wantErr: ErrExecStepInvalidField,
+		},
 		{
 			name: "exec as last step",
 			steps: []WorkflowStep{

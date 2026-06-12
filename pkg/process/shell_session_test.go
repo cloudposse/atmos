@@ -255,3 +255,24 @@ func TestSessionShell(t *testing.T) {
 		assert.Equal(t, "-c", flag)
 	}
 }
+
+func TestRunSessionAttachedWarnsWhenTTYRequested(t *testing.T) {
+	exe, err := os.Executable()
+	require.NoError(t, err)
+
+	cmd := exec.Command(exe, "-test.run=TestShellSessionHelper", "--", "sleep", "1ms")
+	cmd.Env = os.Environ()
+
+	// TTY requested but running through the attached fallback: the loss of
+	// masking is unexpected, so the visible warning branch fires.
+	err = runSessionAttached(cmd, &ShellSessionSpec{TTY: true, EnableMasking: true})
+	require.NoError(t, err)
+}
+
+func TestRunShellSession_NilContext(t *testing.T) {
+	err := RunShellSession(nil, &ShellSessionSpec{ //nolint:staticcheck // Intentionally nil to cover the default branch.
+		Command: "exit 0",
+		Name:    "nil-ctx-test",
+	})
+	assert.NoError(t, err)
+}

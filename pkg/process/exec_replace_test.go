@@ -145,3 +145,33 @@ func TestReplaceShellSession_InvalidWorkingDirectory(t *testing.T) {
 	})
 	assert.Error(t, err)
 }
+
+func TestReplaceShellSession_ShellNotFound(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("exercises the Unix LookPath path")
+	}
+	// Empty PATH: LookPath("sh") fails before any replacement is attempted.
+	t.Setenv("PATH", t.TempDir())
+
+	err := ReplaceShellSession(&ExecSpec{Command: "exit 0", Name: "no-shell-test"})
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrProcessStartFailed)
+}
+
+func TestReplaceShellSession_ExecveFailure(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("exercises the Unix execve path")
+	}
+	// A fake `sh` that passes LookPath (executable bit set) but fails execve
+	// with ENOEXEC (no shebang, not a binary). Go's syscall.Exec calls raw
+	// execve, so the error is returned instead of replacing the test process.
+	dir := t.TempDir()
+	fakeShell := filepath.Join(dir, "sh")
+	require.NoError(t, os.WriteFile(fakeShell, []byte("not a real executable\n"), 0o755))
+	t.Setenv("PATH", dir)
+
+	// Empty Env also exercises the os.Environ() default in prepareExec.
+	err := ReplaceShellSession(&ExecSpec{Command: "exit 0", Name: "execve-fail-test"})
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrProcessStartFailed)
+}

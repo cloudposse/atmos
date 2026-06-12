@@ -1709,3 +1709,46 @@ func TestExecuteWorkflowExecStep_ValidationViaSchema(t *testing.T) {
 	})
 	assert.NoError(t, err)
 }
+
+func TestExecuteWorkflow_ExecStepDryRun(t *testing.T) {
+	testDir := "../../tests/fixtures/scenarios/workflows"
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", testDir)
+	t.Setenv("ATMOS_BASE_PATH", testDir)
+
+	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+	require.NoError(t, err)
+
+	workflowDefinition := &schema.WorkflowDefinition{
+		Description: "Exec step as the final step",
+		Steps: []schema.WorkflowStep{
+			{Name: "prep", Type: "shell", Command: "echo preparing"},
+			{Name: "session", Type: schema.TaskTypeExec, Command: "echo session"},
+		},
+	}
+
+	// Dry-run exercises validation and the exec routing without replacing the process.
+	err = ExecuteWorkflow(atmosConfig, "exec-dry-run", "test.yaml", workflowDefinition, true, "", "", "")
+	require.NoError(t, err)
+}
+
+func TestExecuteWorkflow_ExecStepNotLastFails(t *testing.T) {
+	testDir := "../../tests/fixtures/scenarios/workflows"
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", testDir)
+	t.Setenv("ATMOS_BASE_PATH", testDir)
+
+	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+	require.NoError(t, err)
+
+	workflowDefinition := &schema.WorkflowDefinition{
+		Description: "Exec step in the wrong position",
+		Steps: []schema.WorkflowStep{
+			{Name: "session", Type: schema.TaskTypeExec, Command: "echo session"},
+			{Name: "after", Type: "shell", Command: "echo never runs"},
+		},
+	}
+
+	// Validation must fail before any step executes, even in dry-run.
+	err = ExecuteWorkflow(atmosConfig, "exec-not-last", "test.yaml", workflowDefinition, true, "", "", "")
+	require.Error(t, err)
+	assert.ErrorIs(t, err, schema.ErrExecStepNotLast)
+}

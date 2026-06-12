@@ -6,11 +6,15 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"runtime"
 	"strings"
+	"sync"
+	"syscall"
 	"testing"
+	"testing/iotest"
 	"time"
 
 	iolib "github.com/cloudposse/atmos/pkg/io"
@@ -533,5 +537,90 @@ func TestExecWithPTY_ReturnsWhenGrandchildHoldsPTY(t *testing.T) {
 	}
 	if !strings.Contains(stdout.String(), "session-over") {
 		t.Errorf("Expected drained output to contain 'session-over', got: %q", stdout.String())
+	}
+}
+
+func TestIsPtyEIO(t *testing.T) {
+	if isPtyEIO(nil) {
+		t.Error("isPtyEIO(nil) must be false")
+	}
+	if isPtyEIO(errors.New("plain error")) {
+		t.Error("isPtyEIO(plain error) must be false")
+	}
+	eio := &os.PathError{Op: "read", Path: "/dev/ptmx", Err: syscall.EIO}
+	if runtime.GOOS != "windows" && !isPtyEIO(eio) {
+		t.Error("isPtyEIO(PathError{EIO}) must be true on Unix")
+	}
+	notEIO := &os.PathError{Op: "read", Path: "/dev/ptmx", Err: syscall.ENOENT}
+	if isPtyEIO(notEIO) {
+		t.Error("isPtyEIO(PathError{ENOENT}) must be false")
+	}
+}
+
+func TestCopyInputReportsUnexpectedErrors(t *testing.T) {
+	errChan := make(chan error, 2)
+	copyInput(errChan, io.Discard, iotest.ErrReader(errors.New("boom")))
+
+	select {
+	case err := <-errChan:
+		if !strings.Contains(err.Error(), "input copy failed") {
+			t.Errorf("unexpected error: %v", err)
+		}
+	default:
+		t.Error("expected an input copy error to be reported")
+	}
+}
+
+func TestCopyOutputIgnoresBenignErrors(t *testing.T) {
+	for _, benign := range []error{os.ErrDeadlineExceeded, os.ErrClosed} {
+		errChan := make(chan error, 2)
+		var wg sync.WaitGroup
+		wg.Add(1)
+		copyOutput(&wg, errChan, io.Discard, iotest.ErrReader(benign))
+		select {
+		case err := <-errChan:
+			t.Errorf("benign error %v must not be reported, got %v", benign, err)
+		default:
+		}
+	}
+
+	// Unexpected errors ARE reported.
+	errChan := make(chan error, 2)
+	var wg sync.WaitGroup
+	wg.Add(1)
+	copyOutput(&wg, errChan, io.Discard, iotest.ErrReader(errors.New("boom")))
+	select {
+	case <-errChan:
+	default:
+		t.Error("expected an output copy error to be reported")
+	}
+}
+
+func TestWaitOutputDrained_ForcesUnblockAfterDeadline(t *testing.T) {
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("os.Pipe() error = %v", err)
+	}
+	defer func() { _ = w.Close(); _ = r.Close() }()
+
+	// Simulate the output copier blocked on a PTY that never EOFs: the read
+	// only returns once waitOutputDrained forces the deadline.
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		buf := make([]byte, 1)
+		_, _ = r.Read(buf)
+	}()
+
+	start := time.Now()
+	waitOutputDrained(r, &wg)
+	elapsed := time.Since(start)
+
+	if elapsed < outputDrainTimeout {
+		t.Errorf("waitOutputDrained returned in %v, before the %v deadline", elapsed, outputDrainTimeout)
+	}
+	if elapsed > outputDrainTimeout+5*time.Second {
+		t.Errorf("waitOutputDrained took %v; the deadline must force the pending read to return", elapsed)
 	}
 }
