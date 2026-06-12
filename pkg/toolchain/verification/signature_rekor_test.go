@@ -27,6 +27,16 @@ func TestClassifyCosignError(t *testing.T) {
 			`{"code":` + status + `,"message":"service unavailable"}`)
 	}
 
+	// Realistic cosign stderr captured from an HTTP/2 transport flake in CI:
+	// the connection to Rekor broke mid-request, so no verdict was rendered.
+	rekorStreamErr := "cosign [verify-blob ...]: exit status 1\n" +
+		"Error: searching log query: stream error: stream ID 1; INTERNAL_ERROR; received from peer"
+
+	transportErr := func(detail string) error {
+		return errors.New("cosign [verify-blob ...]: exit status 1\n" +
+			"Error: searching log query: Post \"https://rekor.sigstore.dev/api/v1/log/entries/retrieve\": " + detail)
+	}
+
 	tampered := "cosign [verify-blob ...]: exit status 1\n" +
 		"Error: invalid signature when validating ASN.1 encoded signature"
 
@@ -51,6 +61,11 @@ func TestClassifyCosignError(t *testing.T) {
 		{name: "rekor 503 on tlog retrieve endpoint is retryable", err: rekorStatusErr("503"), wantWrapped: true},
 		{name: "rekor 504 on tlog retrieve endpoint is retryable", err: rekorStatusErr("504"), wantWrapped: true},
 		{name: "rekor 401 on tlog retrieve endpoint is NOT retryable", err: errors.New(rekor401), wantWrapped: false},
+		{name: "http2 stream error is retryable", err: errors.New(rekorStreamErr), wantWrapped: true},
+		{name: "connection reset is retryable", err: transportErr("read tcp 10.0.0.1:443: connection reset by peer"), wantWrapped: true},
+		{name: "TLS handshake timeout is retryable", err: transportErr("net/http: TLS handshake timeout"), wantWrapped: true},
+		{name: "i/o timeout is retryable", err: transportErr("dial tcp 10.0.0.1:443: i/o timeout"), wantWrapped: true},
+		{name: "unexpected EOF is retryable", err: transportErr("unexpected EOF"), wantWrapped: true},
 		{name: "tampered artifact is NOT retryable", err: errors.New(tampered), wantWrapped: false},
 		{name: "identity mismatch is NOT retryable", err: errors.New(identityMismatch), wantWrapped: false},
 		{name: "generic cosign failure is NOT retryable", err: errors.New("cosign: exit status 1"), wantWrapped: false},
@@ -114,6 +129,24 @@ func TestRunCosignWithRetry_RecoversFromRekorFlake(t *testing.T) {
 		ErrSignatureFailed)
 
 	runner := &flakyRunner{retryableErr: rekorErr, failAttempts: 2}
+	req := &Request{Runner: runner}
+
+	err := runCosignWithRetry(context.Background(), req, []string{"verify-blob", "asset.tar.gz"})
+	require.NoError(t, err)
+	assert.Equal(t, 3, runner.calls, "expected 2 retried failures + 1 success")
+	assert.Equal(t, []string{"verify-blob", "asset.tar.gz"}, runner.finalCallArgs)
+}
+
+func TestRunCosignWithRetry_RecoversFromTransportFlake(t *testing.T) {
+	t.Parallel()
+
+	// The exact HTTP/2 transport error observed in CI: the connection to
+	// Rekor broke mid-request, so no signature verdict was rendered.
+	streamErr := fmt.Errorf("%w: cosign [verify-blob ...]: exit status 1\n"+
+		"Error: searching log query: stream error: stream ID 1; INTERNAL_ERROR; received from peer",
+		ErrSignatureFailed)
+
+	runner := &flakyRunner{retryableErr: streamErr, failAttempts: 2}
 	req := &Request{Runner: runner}
 
 	err := runCosignWithRetry(context.Background(), req, []string{"verify-blob", "asset.tar.gz"})
