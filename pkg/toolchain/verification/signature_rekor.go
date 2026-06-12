@@ -58,6 +58,12 @@ var transportFlakeMarkers = []string{
 // the endpoint historically prone to short-window outages.
 const rekorTlogEndpointMarker = "/api/v1/log/entries/retrieve]["
 
+const (
+	rekorSearchLogQueryMarker     = "searching log query"
+	rekorStreamInternalErrMarker  = "INTERNAL_ERROR"
+	rekorStreamReceivedPeerMarker = "received from peer"
+)
+
 var rekorTlog5xxStatuses = []string{"500", "502", "503", "504"}
 
 // classifyCosignError joins ErrSignatureRetryable into err when the cosign
@@ -94,7 +100,16 @@ func classifyCosignError(err error) error {
 			}
 		}
 	}
+	if isRekorStreamInternalError(msg) {
+		return errors.Join(errUtils.ErrSignatureRetryable, err)
+	}
 	return err
+}
+
+func isRekorStreamInternalError(msg string) bool {
+	return strings.Contains(msg, rekorSearchLogQueryMarker) &&
+		strings.Contains(msg, rekorStreamInternalErrMarker) &&
+		strings.Contains(msg, rekorStreamReceivedPeerMarker)
 }
 
 // isRetryableCosignError is the predicate handed to retry.WithPredicate.
