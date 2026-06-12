@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/vendor"
 )
 
 // TestCheckComponentExcludes_SimpleFilename tests that a simple filename pattern
@@ -81,14 +82,8 @@ func TestCheckComponentExcludes_SimpleFilename(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Create a mock absolute path (this simulates what the actual code does).
-			// The src parameter in the real code is a full path like /tmp/atmos-vendor-xyz/providers.tf.
-			// We need to test that the pattern matches against trimmedSrc, not src.
-			tempDir := "/var/folders/abc/atmos-vendor-12345"
-			src := filepath.Join(tempDir, tt.trimmedSrc)
-
-			skip, err := checkComponentExcludes(tt.excludePaths, src, tt.trimmedSrc)
-			require.NoError(t, err, "checkComponentExcludes should not return error")
+			skip, err := vendor.ShouldExcludeFile(tt.excludePaths, tt.trimmedSrc)
+			require.NoError(t, err, "ShouldExcludeFile should not return error")
 			assert.Equal(t, tt.expectSkip, skip, tt.description)
 		})
 	}
@@ -237,8 +232,8 @@ func TestCreateComponentSkipFunc_IncludeOnly(t *testing.T) {
 
 // mockFileInfo is defined in copy_glob_error_paths_test.go and reused here.
 
-// TestShouldExcludeFile tests the shouldExcludeFile function from vendor_utils.go.
-// This ensures the same fix is applied consistently to both component and general vendor logic.
+// TestShouldExcludeFile tests vendor.ShouldExcludeFile directly to ensure
+// the fix is applied consistently to both component and general vendor logic.
 func TestShouldExcludeFile(t *testing.T) {
 	tests := []struct {
 		name         string
@@ -274,11 +269,7 @@ func TestShouldExcludeFile(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Create a mock absolute path.
-			tempDir := "/var/folders/abc/atmos-vendor-12345"
-			src := filepath.Join(tempDir, tt.trimmedSrc)
-
-			skip, err := shouldExcludeFile(src, tt.excludePaths, tt.trimmedSrc)
+			skip, err := vendor.ShouldExcludeFile(tt.excludePaths, tt.trimmedSrc)
 			require.NoError(t, err)
 			assert.Equal(t, tt.expectSkip, skip)
 		})

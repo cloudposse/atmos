@@ -91,7 +91,12 @@ func createSymlinkHandler(srcDir string, opts CopyOptions) func(string) cp.Symli
 		}
 
 		// Apply the skip policy to the resolved target path.
-		if shouldSkipSymlinkTarget(realSrcDir, resolved, src, opts) {
+		skip, skipErr := shouldSkipSymlinkTarget(realSrcDir, resolved, src, opts)
+		if skipErr != nil {
+			log.Debug("Skipping symlink (error applying skip policy)", "path", src, "error", skipErr)
+			return cp.Skip
+		}
+		if skip {
 			return cp.Skip
 		}
 
@@ -100,39 +105,59 @@ func createSymlinkHandler(srcDir string, opts CopyOptions) func(string) cp.Symli
 }
 
 // shouldSkipSymlinkTarget checks whether the resolved symlink target should be
-// skipped based on the skip policy (.git exclusion, exclude patterns).
+// skipped based on the skip policy (.git exclusion, exclude patterns, include patterns).
+// Returns (true, nil) if the target should be skipped, (false, nil) if it should be followed,
+// or (false, err) if a pattern evaluation fails — consistent with ShouldExcludeFile/ShouldIncludeFile.
 // This catches symlinks that point into excluded directories
 // (e.g., head.txt -> .git/HEAD would bypass basename checks).
-func shouldSkipSymlinkTarget(realSrcDir, resolved, src string, opts CopyOptions) bool {
+func shouldSkipSymlinkTarget(realSrcDir, resolved, src string, opts CopyOptions) (bool, error) {
 	relPath, err := filepath.Rel(realSrcDir, resolved)
 	if err != nil {
 		log.Debug("Skipping symlink (cannot compute relative path)", "path", src, "error", err)
-		return true
+		return true, nil
 	}
 
 	// Check if any path component is .git.
 	for _, component := range strings.Split(filepath.ToSlash(relPath), "/") {
 		if component == ".git" {
 			log.Debug("Skipping symlink (target resolves into .git directory)", "path", src, "target", resolved)
-			return true
+			return true, nil
 		}
 	}
+
+	normalizedRelPath := filepath.ToSlash(relPath)
 
 	// Check against exclude patterns if configured.
 	if len(opts.ExcludedPaths) > 0 {
-		normalizedRelPath := filepath.ToSlash(relPath)
 		excluded, excludeErr := ShouldExcludeFile(opts.ExcludedPaths, normalizedRelPath)
 		if excludeErr != nil {
-			log.Debug("Skipping symlink (error checking exclude patterns)", "path", src, "error", excludeErr)
-			return true
+			return false, excludeErr
 		}
 		if excluded {
 			log.Debug("Skipping symlink (target matches exclude pattern)", "path", src, "target", resolved, "relPath", normalizedRelPath)
-			return true
+			return true, nil
 		}
 	}
 
-	return false
+	// Check against include patterns if configured (skip non-matching files; allow directories).
+	// Apply include filtering to files only; directory symlinks are traversed to filter their contents.
+	if len(opts.IncludedPaths) > 0 {
+		// Stat the resolved target to determine if it is a directory.
+		// Treat stat failure as non-directory and apply filtering conservatively.
+		resolvedInfo, _ := os.Stat(resolved)
+		if resolvedInfo == nil || !resolvedInfo.IsDir() {
+			skip, includeErr := ShouldIncludeFile(opts.IncludedPaths, normalizedRelPath)
+			if includeErr != nil {
+				return false, includeErr
+			}
+			if skip {
+				log.Debug("Skipping symlink (target does not match include pattern)", "path", src, "target", resolved, "relPath", normalizedRelPath)
+				return true, nil
+			}
+		}
+	}
+
+	return false, nil
 }
 
 // CreateSkipFunc builds a skip function for otiai10/copy that applies include/exclude patterns.
@@ -168,7 +193,10 @@ func CreateSkipFunc(srcDir string, includedPaths, excludedPaths []string) func(o
 			if srcInfo.IsDir() {
 				return false, nil
 			}
-			return ShouldIncludeFile(includedPaths, trimmedSrc)
+			skip, err := ShouldIncludeFile(includedPaths, trimmedSrc)
+			if err != nil || skip {
+				return skip, err
+			}
 		}
 
 		// If 'included_paths' is not provided, include all files that were not excluded.
@@ -180,16 +208,16 @@ func CreateSkipFunc(srcDir string, includedPaths, excludedPaths []string) func(o
 // ShouldExcludeFile checks if the file matches any of the excluded patterns.
 func ShouldExcludeFile(excludedPaths []string, trimmedSrc string) (bool, error) {
 	for _, excludePath := range excludedPaths {
-		excludePath := path.Clean(filepath.ToSlash(excludePath))
+		cleanedPath := path.Clean(filepath.ToSlash(excludePath))
 		// Match against trimmedSrc (relative path) instead of absolute path.
 		// This allows simple patterns like "providers.tf" to match without needing "**/" prefix.
-		excludeMatch, err := u.PathMatch(excludePath, trimmedSrc)
+		excludeMatch, err := u.PathMatch(cleanedPath, trimmedSrc)
 		if err != nil {
 			// Return false (don't exclude) on error so we don't accidentally skip files
 			// due to an invalid pattern. The error propagates and aborts the copy.
 			return false, err
 		} else if excludeMatch {
-			log.Debug("Excluding file since it match any pattern from 'excluded_paths'", "excluded_paths", excludePath, "source", trimmedSrc)
+			log.Debug("Excluding file since it match any pattern from 'excluded_paths'", "excluded_paths", cleanedPath, "source", trimmedSrc)
 			return true, nil
 		}
 	}
@@ -197,15 +225,24 @@ func ShouldExcludeFile(excludedPaths []string, trimmedSrc string) (bool, error) 
 }
 
 // ShouldIncludeFile checks if the file matches any of the included patterns.
+// The return value is a skip flag: (false, nil) means the file matched a pattern and should be
+// included; (true, nil) means it did not match and should be skipped; (false, err) means a
+// pattern was invalid and the error should propagate to abort the copy.
+//
+// Note: the return semantics are inverted relative to the function name — true means "skip the
+// file" (i.e., do NOT include it), not "yes, include it".
 func ShouldIncludeFile(includedPaths []string, trimmedSrc string) (bool, error) {
 	for _, includePath := range includedPaths {
-		includePath := path.Clean(filepath.ToSlash(includePath))
+		cleanedPath := path.Clean(filepath.ToSlash(includePath))
 		// Match against trimmedSrc (relative path) instead of absolute path.
-		includeMatch, err := u.PathMatch(includePath, trimmedSrc)
+		includeMatch, err := u.PathMatch(cleanedPath, trimmedSrc)
 		if err != nil {
-			return true, err
+			// Return false (don't skip) on error so we don't accidentally exclude files
+			// due to an invalid pattern. The error propagates and aborts the copy.
+			log.Debug("Error checking include pattern", "pattern", cleanedPath, "path", trimmedSrc, "error", err)
+			return false, err
 		} else if includeMatch {
-			log.Debug("Including path since it matches the '%s' pattern from 'included_paths'", "included_paths", includePath, "path", trimmedSrc)
+			log.Debug("Including path since it matches a pattern from 'included_paths'", "included_paths", cleanedPath, "path", trimmedSrc)
 			return false, nil
 		}
 	}
