@@ -11,6 +11,8 @@ import (
 
 	"github.com/creack/pty"
 	"golang.org/x/term"
+
+	"github.com/cloudposse/atmos/pkg/signals"
 )
 
 // setupTerminal configures terminal resize handling and raw mode.
@@ -40,8 +42,19 @@ func setupTerminal(ptmx *os.File, rawMode bool) (func(), error) {
 		}
 	}
 
+	// Restore the terminal even if the process exits through the signal
+	// handler (os.Exit skips deferred functions).
+	deregister := func() {}
+	if oldState != nil {
+		state := oldState
+		deregister = signals.RegisterExitCleanup(func() {
+			_ = term.Restore(int(os.Stdin.Fd()), state) //nolint:gosec // Stdin fd fits in int on all supported platforms.
+		})
+	}
+
 	// Return cleanup function.
 	cleanup := func() {
+		deregister()
 		signal.Stop(ch)
 		close(ch)
 		if oldState != nil {

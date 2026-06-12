@@ -276,3 +276,20 @@ func TestRunShellSession_NilContext(t *testing.T) {
 	})
 	assert.NoError(t, err)
 }
+
+func TestRunShellSession_SignalKilledChildReportsShellCode(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("signal death semantics are Unix-specific")
+	}
+
+	// The child kills itself with SIGINT: the session must report the
+	// shell-convention code 130 (128+SIGINT), not Go's -1.
+	err := RunShellSession(context.Background(), &ShellSessionSpec{
+		Command: "kill -INT $$",
+		Name:    "signal-exit-test",
+	})
+
+	var exitErr errUtils.ExitCodeError
+	require.ErrorAs(t, err, &exitErr)
+	assert.Equal(t, 130, exitErr.Code)
+}

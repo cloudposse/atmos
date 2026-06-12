@@ -168,13 +168,14 @@ func runSessionAttached(cmd *exec.Cmd, spec *ShellSessionSpec) error {
 
 // sessionExitError normalizes session errors: non-zero exits become
 // errUtils.ExitCodeError so callers propagate the child's exit code.
+// Signal-killed children report shell-convention codes (128+signal).
 func sessionExitError(err error) error {
 	if err == nil {
 		return nil
 	}
 	var exitErr *exec.ExitError
 	if errors.As(err, &exitErr) {
-		return errUtils.ExitCodeError{Code: exitErr.ExitCode()}
+		return errUtils.ExitCodeError{Code: exitStatusCode(exitErr)}
 	}
 	return err
 }

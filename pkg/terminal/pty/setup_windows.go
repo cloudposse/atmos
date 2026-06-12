@@ -7,6 +7,8 @@ import (
 	"os"
 
 	"golang.org/x/term"
+
+	"github.com/cloudposse/atmos/pkg/signals"
 )
 
 // setupTerminal configures terminal for Windows.
@@ -27,8 +29,19 @@ func setupTerminal(ptmx *os.File, rawMode bool) (func(), error) {
 		}
 	}
 
+	// Restore the terminal even if the process exits through the signal
+	// handler (os.Exit skips deferred functions).
+	deregister := func() {}
+	if oldState != nil {
+		state := oldState
+		deregister = signals.RegisterExitCleanup(func() {
+			_ = term.Restore(int(os.Stdin.Fd()), state)
+		})
+	}
+
 	// Return cleanup function.
 	cleanup := func() {
+		deregister()
 		if oldState != nil {
 			_ = term.Restore(int(os.Stdin.Fd()), oldState)
 		}

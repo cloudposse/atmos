@@ -25,6 +25,9 @@ func main() {
 			if !shouldExitOnSignal(sig) {
 				continue
 			}
+			// Run registered exit cleanups (e.g. restore the terminal from raw
+			// mode) - os.Exit below skips deferred functions.
+			signals.RunExitCleanups()
 			// Clean up resources before exit.
 			cmd.Cleanup()
 			// Exit with correct POSIX exit code (128 + signal number).
