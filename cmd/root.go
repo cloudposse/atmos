@@ -789,9 +789,9 @@ func setupColorProfileFromEnv() {
 func setupColorProfileFromEnvWithArgs(args []string) {
 	defer perf.Track(nil, "cmd.setupColorProfileFromEnvWithArgs")()
 
-	// Check environment variable first using global viper.
-	// Note: ATMOS env prefix and AutomaticEnv are configured in init().
-	forceColor := viper.GetBool("FORCE_COLOR")
+	// Check environment variables first using the bound viper key:
+	// init() maps both ATMOS_FORCE_COLOR and CLICOLOR_FORCE to "force-color".
+	forceColor := viper.GetBool("force-color")
 
 	// Also check --force-color CLI flag by manually parsing args.
 	// This is needed because Cobra hasn't parsed flags yet during init().

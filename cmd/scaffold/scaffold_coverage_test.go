@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/generator/templates"
 	"github.com/cloudposse/atmos/pkg/project/config"
 )
@@ -244,10 +245,16 @@ func TestExecuteTemplateGenerationErrors(t *testing.T) {
 		},
 	}
 
-	// Test with empty target directory (should use interactive flow).
-	err := executeTemplateGeneration(&selectedConfig, "", false, false, map[string]interface{}{}, nil)
-	// This will error because UI is nil, but that's expected in test.
-	assert.Error(t, err)
+	// With an empty target directory in non-interactive mode the call must
+	// fail fast instead of trying to prompt.
+	opts := scaffoldGenerateOptions{
+		interactive:    false,
+		useDefaults:    true,
+		templateValues: map[string]interface{}{},
+	}
+	err := executeTemplateGeneration(&selectedConfig, "", opts, nil)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrTargetDirRequired)
 }
 
 // TestExecuteScaffoldGenerateWithDryRun tests dry-run flag integration.

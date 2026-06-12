@@ -553,6 +553,16 @@ func (ui *InitUI) RunSetupForm(scaffoldConfig *config.ScaffoldConfig, targetPath
 		if err := config.PromptForScaffoldConfig(scaffoldConfig, mergedValues); err != nil {
 			return nil, nil, fmt.Errorf("failed to prompt for configuration: %w", err)
 		}
+	} else if missing := config.MissingRequiredValues(scaffoldConfig, mergedValues); len(missing) > 0 {
+		// Non-interactive mode cannot prompt for missing required values:
+		// fail fast instead of generating a broken project.
+		return nil, nil, errUtils.Build(errUtils.ErrGeneratorFieldRequired).
+			WithExplanationf("Required fields have no value: `%s`", strings.Join(missing, "`, `")).
+			WithHintf("Provide values with `--set %s=<value>`", missing[0]).
+			WithHint("Or run interactively (in a terminal) to be prompted").
+			WithContext("missing_fields", strings.Join(missing, ", ")).
+			WithExitCode(2).
+			Err()
 	}
 
 	// Show configuration summary after any user input

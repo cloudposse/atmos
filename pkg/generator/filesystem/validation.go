@@ -50,7 +50,6 @@ func validateExistingDirectory(targetPath string, force, update bool) error {
 		WithExplanationf("Directory `%s` already contains files", targetPath).
 		WithExplanationf("Files: `%s`", strings.Join(visibleEntries, ", ")).
 		WithHint("Use `--force` to overwrite existing files").
-		WithHint("Use `--update` to merge changes with existing files").
 		WithHint("Or choose a different target directory").
 		WithContext("target_dir", targetPath).
 		WithContext("file_count", len(visibleEntries)).

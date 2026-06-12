@@ -2,6 +2,7 @@ package merge
 
 import (
 	"bytes"
+	"fmt"
 	"reflect"
 
 	"gopkg.in/yaml.v3"
@@ -240,9 +241,15 @@ func (m *YAMLMerger) mergeMappings(base, ours, theirs *yaml.Node, path string, c
 	}
 
 	// Build map for base lookup
-	baseMap := buildKeyMap(base)
+	baseMap, err := buildKeyMap(base, path)
+	if err != nil {
+		return nil, err
+	}
 	// Build map for theirs lookup (checking if keys exist)
-	theirsMap := buildKeyMap(theirs)
+	theirsMap, err := buildKeyMap(theirs, path)
+	if err != nil {
+		return nil, err
+	}
 
 	// Track which keys we've processed
 	processed := make(map[string]bool)
@@ -372,12 +379,15 @@ func (m *YAMLMerger) mergeScalars(base, ours, theirs *yaml.Node, path string, co
 }
 
 // buildKeyMap builds a map of key -> value node for a mapping.
-// Non-scalar keys (complex keys) are skipped as they cannot be represented as string keys.
-func buildKeyMap(node *yaml.Node) map[string]*yaml.Node {
+// Non-scalar keys (complex keys) cannot be represented as string keys:
+// silently skipping them would drop or mis-merge their entries, so they are
+// reported as an explicit error instead. Complex YAML keys are out of scope
+// for Atmos scaffold merges.
+func buildKeyMap(node *yaml.Node, path string) (map[string]*yaml.Node, error) {
 	result := make(map[string]*yaml.Node)
 
 	if node.Kind != yaml.MappingNode {
-		return result
+		return result, nil
 	}
 
 	for i := 0; i < len(node.Content); i += 2 {
@@ -385,16 +395,30 @@ func buildKeyMap(node *yaml.Node) map[string]*yaml.Node {
 			continue
 		}
 		keyNode := node.Content[i]
-		// Skip non-scalar keys (complex keys not supported in merge).
 		if keyNode.Kind != yaml.ScalarNode {
-			continue
+			return nil, errUtils.Build(errUtils.ErrMergeConflict).
+				WithExplanationf("Mapping at `%s` uses a complex (non-scalar) YAML key, which is not supported by the 3-way merge", displayPath(path)).
+				WithHint("Replace complex mapping keys with plain string keys").
+				WithContext("path", displayPath(path)).
+				WithContext("key_kind", fmt.Sprintf("%d", keyNode.Kind)).
+				WithExitCode(2).
+				Err()
 		}
 		key := keyNode.Value
 		value := node.Content[i+1]
 		result[key] = value
 	}
 
-	return result
+	return result, nil
+}
+
+// displayPath renders a node path for error messages, naming the document
+// root explicitly when the path is empty.
+func displayPath(path string) string {
+	if path == "" {
+		return "(document root)"
+	}
+	return path
 }
 
 // createEmptyNodeOfKind creates an empty placeholder node matching the given node's kind.

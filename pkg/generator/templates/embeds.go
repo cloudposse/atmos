@@ -2,6 +2,7 @@ package templates
 
 import (
 	"fmt"
+	"io/fs"
 	"os"
 	"path"
 	"regexp"
@@ -101,7 +102,7 @@ func GetAvailableConfigurations() (map[string]Configuration, error) {
 		if entry.IsDir() {
 			// Use path.Join (forward slashes) not filepath.Join for embed.FS.
 			templatePath := path.Join(templatesDir, entry.Name()) //nolint:forbidigo // embed.FS always uses forward slashes
-			config, err := loadConfiguration(templatePath)
+			config, err := loadConfiguration(generator.Templates, templatePath, entry.Name(), config.SourceEmbedded)
 			if err != nil {
 				// Skip templates that can't be loaded
 				continue
@@ -113,49 +114,75 @@ func GetAvailableConfigurations() (map[string]Configuration, error) {
 	return configs, nil
 }
 
-// loadConfiguration loads a template configuration from the embedded filesystem.
-func loadConfiguration(templatePath string) (*Configuration, error) {
+// LoadConfigurationFromDir loads a template configuration from a local
+// directory on disk (e.g. a template referenced by `source:` in the
+// `scaffold.templates` section of atmos.yaml). The directory is read with
+// the same rules as embedded templates: scaffold.yaml provides metadata and
+// the questionnaire, .tmpl files and atmos:template magic comments mark
+// templates.
+func LoadConfigurationFromDir(name, dir string) (*Configuration, error) {
+	defer perf.Track(nil, "templates.LoadConfigurationFromDir")()
+
+	info, err := os.Stat(dir)
+	if err != nil || !info.IsDir() {
+		return nil, errUtils.Build(errUtils.ErrScaffoldCreateFromPath).
+			WithExplanationf("Template source directory does not exist: `%s`", dir).
+			WithHint("Check the `source` path in the `scaffold.templates` section of `atmos.yaml`").
+			WithHint("The path is resolved relative to the directory containing `atmos.yaml`").
+			WithContext("template", name).
+			WithContext("source", dir).
+			WithExitCode(2).
+			Err()
+	}
+
+	return loadConfiguration(os.DirFS(dir), ".", name, dir)
+}
+
+// loadConfiguration loads a template configuration from any filesystem,
+// covering both the embedded templates and local directories. The
+// defaultName seeds the metadata when the template has no scaffold.yaml;
+// source records where the template came from.
+func loadConfiguration(fsys fs.FS, templatePath, defaultName, source string) (*Configuration, error) {
 	// Read all files in the template directory
-	files, err := readTemplateFiles(templatePath)
+	files, err := readTemplateFiles(fsys, templatePath)
 	if err != nil {
 		return nil, errUtils.Build(errUtils.ErrReadTemplateFiles).
 			WithExplanationf("Cannot read template directory: `%s`", templatePath).
 			WithHint("Template may be corrupted or missing files").
-			WithHint("Try rebuilding Atmos: `make build`").
 			WithContext("template_path", templatePath).
+			WithContext("source", source).
 			WithExitCode(1).
 			Err()
 	}
 
 	// Find README if it exists
 	var readmeContent string
-	// Use path.Join (forward slashes) not filepath.Join for embed.FS.
-	readmePath := path.Join(templatePath, "README.md") //nolint:forbidigo // embed.FS always uses forward slashes
-	if data, err := generator.Templates.ReadFile(readmePath); err == nil {
+	// Use path.Join (forward slashes) not filepath.Join for fs.FS paths.
+	readmePath := path.Join(templatePath, "README.md") //nolint:forbidigo // fs.FS always uses forward slashes
+	if data, err := fs.ReadFile(fsys, readmePath); err == nil {
 		readmeContent = string(data)
 	}
 
-	// Default metadata derived from the directory name.
-	templateName := path.Base(templatePath)
 	configuration := &Configuration{
-		Name:        templateName,
-		Description: fmt.Sprintf("%s template", templateName),
-		TemplateID:  templateName,
-		Source:      config.SourceEmbedded,
+		Name:        defaultName,
+		Description: fmt.Sprintf("%s template", defaultName),
+		TemplateID:  defaultName,
+		Source:      source,
 		Files:       files,
 		README:      readmeContent,
 	}
 
 	// Load metadata from the template's scaffold.yaml manifest when present.
-	// Use path.Join (forward slashes) not filepath.Join for embed.FS.
-	scaffoldPath := path.Join(templatePath, "scaffold.yaml") //nolint:forbidigo // embed.FS always uses forward slashes
-	if data, err := generator.Templates.ReadFile(scaffoldPath); err == nil {
+	// Use path.Join (forward slashes) not filepath.Join for fs.FS paths.
+	scaffoldPath := path.Join(templatePath, "scaffold.yaml") //nolint:forbidigo // fs.FS always uses forward slashes
+	if data, err := fs.ReadFile(fsys, scaffoldPath); err == nil {
 		scaffoldConfig, err := config.LoadScaffoldConfigFromContent(string(data))
 		if err != nil {
 			return nil, errUtils.Build(errUtils.ErrScaffoldLoadConfig).
 				WithCause(err).
-				WithExplanationf("Embedded template `%s` has an invalid `scaffold.yaml`", templateName).
-				WithContext("template", templateName).
+				WithExplanationf("Template `%s` has an invalid `scaffold.yaml`", defaultName).
+				WithContext("template", defaultName).
+				WithContext("source", source).
 				Err()
 		}
 		if scaffoldConfig.Metadata.Name != "" {
@@ -228,25 +255,25 @@ func stripTemplateMagicComment(content string) string {
 }
 
 // readTemplateFiles recursively reads all files from a template directory.
-func readTemplateFiles(templatePath string) ([]File, error) {
+func readTemplateFiles(fsys fs.FS, templatePath string) ([]File, error) {
 	var files []File
 
-	entries, err := generator.Templates.ReadDir(templatePath)
+	entries, err := fs.ReadDir(fsys, templatePath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read directory '%s': %w", templatePath, err)
 	}
 
 	for _, entry := range entries {
-		// Use path.Join (forward slashes) not filepath.Join for embed.FS.
-		filePath := path.Join(templatePath, entry.Name()) //nolint:forbidigo // embed.FS always uses forward slashes
+		// Use path.Join (forward slashes) not filepath.Join for fs.FS paths.
+		filePath := path.Join(templatePath, entry.Name()) //nolint:forbidigo // fs.FS always uses forward slashes
 
 		var entryFiles []File
 		var err error
 
 		if entry.IsDir() {
-			entryFiles, err = processDirectoryEntry(templatePath, filePath, entry.Name())
+			entryFiles, err = processDirectoryEntry(fsys, templatePath, filePath, entry.Name())
 		} else {
-			entryFiles, err = processFileEntry(templatePath, filePath, entry.Name())
+			entryFiles, err = processFileEntry(fsys, templatePath, filePath, entry.Name())
 		}
 
 		if err != nil {
@@ -260,7 +287,7 @@ func readTemplateFiles(templatePath string) ([]File, error) {
 }
 
 // processDirectoryEntry processes a directory entry and returns all files within it.
-func processDirectoryEntry(templatePath, filePath, entryName string) ([]File, error) {
+func processDirectoryEntry(fsys fs.FS, templatePath, filePath, entryName string) ([]File, error) {
 	var files []File
 
 	// Add directory entry
@@ -273,7 +300,7 @@ func processDirectoryEntry(templatePath, filePath, entryName string) ([]File, er
 	})
 
 	// Recursively read directory contents
-	subFiles, err := readTemplateFiles(filePath)
+	subFiles, err := readTemplateFiles(fsys, filePath)
 	if err != nil {
 		return nil, err
 	}
@@ -281,7 +308,7 @@ func processDirectoryEntry(templatePath, filePath, entryName string) ([]File, er
 	// Prepend directory path to sub-files
 	for _, subFile := range subFiles {
 		// Use path.Join (forward slashes) for consistency in File.Path.
-		subFile.Path = path.Join(entryName, subFile.Path) //nolint:forbidigo // embed.FS always uses forward slashes
+		subFile.Path = path.Join(entryName, subFile.Path) //nolint:forbidigo // fs.FS always uses forward slashes
 		files = append(files, subFile)
 	}
 
@@ -289,9 +316,9 @@ func processDirectoryEntry(templatePath, filePath, entryName string) ([]File, er
 }
 
 // processFileEntry processes a file entry and returns the file with its content.
-func processFileEntry(templatePath, filePath, entryName string) ([]File, error) {
+func processFileEntry(fsys fs.FS, templatePath, filePath, entryName string) ([]File, error) {
 	// Read file content
-	content, err := generator.Templates.ReadFile(filePath)
+	content, err := fs.ReadFile(fsys, filePath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read file '%s': %w", filePath, err)
 	}

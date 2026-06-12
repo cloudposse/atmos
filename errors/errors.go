@@ -976,6 +976,7 @@ var (
 	ErrCreateGeneratorContext        = errors.New("failed to create generator context")
 	ErrReadScaffoldConfig            = errors.New("failed to read scaffold configuration")
 	ErrTargetDirRequired             = errors.New("target directory is required")
+	ErrTemplateNameRequired          = errors.New("template name is required")
 	ErrScaffoldFileNotFound          = errors.New("scaffold file not found")
 	ErrInvalidScaffoldFile           = errors.New("invalid scaffold file")
 	ErrScaffoldDirectoryRead         = errors.New("failed to read scaffold directory")

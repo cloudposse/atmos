@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -14,6 +15,7 @@ import (
 
 	"github.com/cloudposse/atmos/cmd/internal"
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/internal/tui/templates/term"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/flags/compat"
 	"github.com/cloudposse/atmos/pkg/generator/setup"
@@ -105,6 +107,12 @@ If no target directory is specified, you will be prompted for one.`,
 		force := v.GetBool("force")
 		dryRun := v.GetBool("dry-run")
 
+		// Interactive prompting requires both an interactive-capable flag
+		// value AND a real terminal: in CI or piped contexts the form is
+		// skipped automatically and defaults + --set values are used.
+		interactive := v.GetBool("interactive") && term.IsTTYSupportForStdout()
+		useDefaults := dryRun || v.GetBool("defaults") || !interactive
+
 		// Parse string map from --set flags
 		templateValuesMap := flags.ParseStringMap(v, "set")
 
@@ -125,15 +133,27 @@ If no target directory is specified, you will be prompted for one.`,
 			templateValues[k] = val
 		}
 
-		return executeScaffoldGenerate(
-			cmd,
-			template,
-			target,
-			force,
-			dryRun,
-			templateValues,
-		)
+		return executeScaffoldGenerate(scaffoldGenerateOptions{
+			templateName:   template,
+			targetDir:      target,
+			force:          force,
+			dryRun:         dryRun,
+			interactive:    interactive,
+			useDefaults:    useDefaults,
+			templateValues: templateValues,
+		})
 	},
+}
+
+// scaffoldGenerateOptions holds the resolved inputs for scaffold generation.
+type scaffoldGenerateOptions struct {
+	templateName   string
+	targetDir      string
+	force          bool
+	dryRun         bool
+	interactive    bool
+	useDefaults    bool
+	templateValues map[string]interface{}
 }
 
 // scaffoldListCmd represents the scaffold list subcommand.
@@ -174,9 +194,13 @@ func init() {
 	scaffoldGenerateParser = flags.NewStandardParser(
 		flags.WithBoolFlag("force", "f", false, "Overwrite existing files"),
 		flags.WithBoolFlag("dry-run", "", false, "Preview changes without writing files"),
+		flags.WithBoolFlag("interactive", "i", true, "Prompt for field values (disabled automatically without a terminal)"),
+		flags.WithBoolFlag("defaults", "", false, "Use field defaults and --set values without prompting"),
 		flags.WithStringMapFlag("set", "", map[string]string{}, "Set template values (can be used multiple times: --set key=value)"),
 		flags.WithEnvVars("force", "ATMOS_SCAFFOLD_FORCE"),
 		flags.WithEnvVars("dry-run", "ATMOS_SCAFFOLD_DRY_RUN"),
+		flags.WithEnvVars("interactive", "ATMOS_SCAFFOLD_INTERACTIVE"),
+		flags.WithEnvVars("defaults", "ATMOS_SCAFFOLD_DEFAULTS"),
 		flags.WithEnvVars("set", "ATMOS_SCAFFOLD_SET"),
 	)
 
@@ -221,8 +245,10 @@ func (s *ScaffoldCommandProvider) GetAliases() []internal.CommandAlias {
 }
 
 // IsExperimental returns whether this command is experimental.
+// Scaffold ships as experimental while the template schema and update
+// workflow mature; behavior may change between releases.
 func (s *ScaffoldCommandProvider) IsExperimental() bool {
-	return false
+	return true
 }
 
 // GetFlagsBuilder returns nil since the parent scaffold command has no flags.
@@ -243,16 +269,9 @@ func (s *ScaffoldCommandProvider) GetCompatibilityFlags() map[string]compat.Comp
 
 // executeScaffoldGenerate generates code from a scaffold template.
 // This logic was moved from internal/exec/scaffold.go to keep command logic in cmd/.
-func executeScaffoldGenerate(
-	_ *cobra.Command,
-	templateName string,
-	targetDir string,
-	force bool,
-	dryRun bool,
-	templateVars map[string]interface{},
-) error {
+func executeScaffoldGenerate(opts scaffoldGenerateOptions) error {
 	// Convert to absolute path
-	absTargetDir, err := resolveTargetDirectory(targetDir)
+	absTargetDir, err := resolveTargetDirectory(opts.targetDir)
 	if err != nil {
 		return err
 	}
@@ -264,13 +283,13 @@ func executeScaffoldGenerate(
 	}
 
 	// Select template (interactive or by name)
-	selectedConfig, err := selectTemplate(templateName, configs, scaffoldUI)
+	selectedConfig, err := selectGenerateTemplate(opts, configs, scaffoldUI)
 	if err != nil {
 		return err
 	}
 
 	// If dry-run mode, render preview and return without writing files.
-	if dryRun {
+	if opts.dryRun {
 		if absTargetDir == "" {
 			return errUtils.Build(errUtils.ErrTargetDirRequired).
 				WithExplanation("Target directory is required when using `--dry-run` flag").
@@ -280,11 +299,29 @@ func executeScaffoldGenerate(
 				WithExitCode(2).
 				Err()
 		}
-		return renderDryRunPreview(&selectedConfig, absTargetDir, templateVars)
+		return renderDryRunPreview(&selectedConfig, absTargetDir, opts.templateValues)
 	}
 
 	// Execute template generation.
-	return executeTemplateGeneration(&selectedConfig, absTargetDir, force, dryRun, templateVars, scaffoldUI)
+	return executeTemplateGeneration(&selectedConfig, absTargetDir, opts, scaffoldUI)
+}
+
+// selectGenerateTemplate selects the template for generation, refusing to
+// open an interactive picker when interactivity is unavailable.
+func selectGenerateTemplate(
+	opts scaffoldGenerateOptions,
+	configs map[string]templates.Configuration,
+	scaffoldUI *generatorUI.InitUI,
+) (templates.Configuration, error) {
+	if opts.templateName == "" && !opts.interactive {
+		return templates.Configuration{}, errUtils.Build(errUtils.ErrTemplateNameRequired).
+			WithExplanation("A template name is required in non-interactive mode").
+			WithHint("Specify the template: `atmos scaffold generate <template> <target>`").
+			WithHint("Run `atmos scaffold list` to see available templates").
+			WithExitCode(2).
+			Err()
+	}
+	return selectTemplate(opts.templateName, configs, scaffoldUI)
 }
 
 // resolveTargetDirectory converts target directory to absolute path.
@@ -450,25 +487,20 @@ func selectTemplateByName(
 }
 
 // executeTemplateGeneration executes the template generation with the selected configuration.
-//
-//nolint:revive // argument-limit: requires all generation context
 func executeTemplateGeneration(
 	selectedConfig *templates.Configuration,
 	targetDir string,
-	force bool,
-	dryRun bool,
-	templateVars map[string]interface{},
+	opts scaffoldGenerateOptions,
 	scaffoldUI *generatorUI.InitUI,
 ) error {
-	update := false       // Scaffold typically doesn't use update mode like init does
-	useDefaults := dryRun // If dry-run, we want to use defaults and not prompt
+	update := false // Update mode (3-way merge) is not yet exposed on the CLI.
 
 	if targetDir == "" {
-		return executeTemplateWithoutTargetDir(selectedConfig, force, update, useDefaults, dryRun, templateVars, scaffoldUI)
+		return executeTemplateWithoutTargetDir(selectedConfig, opts, scaffoldUI)
 	}
 
 	// Target directory provided, use normal Execute.
-	return scaffoldUI.Execute(selectedConfig, targetDir, force, update, useDefaults, templateVars)
+	return scaffoldUI.Execute(selectedConfig, targetDir, opts.force, update, opts.useDefaults, opts.templateValues)
 }
 
 // renderDryRunPreview renders a preview of template files without writing to disk.
@@ -588,28 +620,24 @@ func printFilePath(targetDir, renderedPath string) {
 }
 
 // executeTemplateWithoutTargetDir handles template execution when no target directory is provided.
-//
-//nolint:revive // argument-limit: requires all generation context for interactive mode
 func executeTemplateWithoutTargetDir(
 	selectedConfig *templates.Configuration,
-	force bool,
-	update bool,
-	useDefaults bool,
-	dryRun bool,
-	templateVars map[string]interface{},
+	opts scaffoldGenerateOptions,
 	scaffoldUI *generatorUI.InitUI,
 ) error {
-	if !dryRun {
+	const update = false // Update mode (3-way merge) is not yet exposed on the CLI.
+
+	if opts.interactive && !opts.dryRun {
 		// Interactive mode: use ExecuteWithInteractiveFlow which will prompt for target directory.
-		return scaffoldUI.ExecuteWithInteractiveFlow(selectedConfig, "", force, update, useDefaults, templateVars)
+		return scaffoldUI.ExecuteWithInteractiveFlow(selectedConfig, "", opts.force, update, opts.useDefaults, opts.templateValues)
 	}
 
-	// Dry-run mode: target directory is required
+	// Without a terminal (or in dry-run mode) the target cannot be prompted for.
 	return errUtils.Build(errUtils.ErrTargetDirRequired).
-		WithExplanation("Target directory is required when using `--dry-run` flag").
+		WithExplanation("Target directory is required in non-interactive mode").
 		WithHint("Specify target directory: `atmos scaffold generate <template> <target>`").
-		WithHint("Or remove `--dry-run` flag to use interactive mode").
-		WithContext("flag", "dry-run").
+		WithContext("interactive", opts.interactive).
+		WithContext("dry_run", opts.dryRun).
 		WithExitCode(2).
 		Err()
 }
@@ -630,20 +658,32 @@ func executeScaffoldList(_ *cobra.Command) error {
 		return nil
 	}
 
-	// Build table data from templates.Configuration map.
-	header := []string{"Template", "Description", "Source"}
-	var rows [][]string
+	// Build table data from templates.Configuration map, sorted by template
+	// name for deterministic output. Row order must match the table columns:
+	// Template, Source, Version, Description.
+	names := make([]string, 0, len(configs))
 	for name := range configs {
-		// Use tracked origin instead of inferring from TargetDir
+		names = append(names, name)
+	}
+	sort.Strings(names)
+
+	header := []string{"Template", "Source", "Version", "Description"}
+	var rows [][]string
+	for _, name := range names {
+		// Use tracked origin instead of inferring from TargetDir.
 		source := origins[name]
 		if source == "" {
-			source = "embedded" // Fallback for safety
+			source = config.SourceEmbedded // Fallback for safety.
+		}
+		version := configs[name].Version
+		if version == "" {
+			version = "-"
 		}
 		description := configs[name].Description
 		if description == "" {
 			description = "-"
 		}
-		rows = append(rows, []string{name, description, source})
+		rows = append(rows, []string{name, source, version, description})
 	}
 
 	scaffoldUI.DisplayTemplateTable(header, rows)
@@ -840,41 +880,45 @@ func convertScaffoldTemplateToConfiguration(name string, templateData interface{
 			Err()
 	}
 
-	config := templates.Configuration{
-		Name:        name,
-		Description: fmt.Sprintf("Scaffold template: %s", name),
-		TemplateID:  name,
+	source, _ := templateMap["source"].(string)
+	if source == "" {
+		return templates.Configuration{}, errUtils.Build(errUtils.ErrInvalidTemplateData).
+			WithExplanationf("Template `%s` has no `source` in `atmos.yaml`", name).
+			WithHint("Set `source` to a local directory containing the template files").
+			WithExample("```yaml\nscaffold:\n  templates:\n    my-template:\n      description: My template\n      source: ./scaffolds/my-template\n```").
+			WithContext("template_name", name).
+			WithExitCode(2).
+			Err()
 	}
 
-	// Extract description if provided
-	if desc, ok := templateMap["description"].(string); ok {
-		config.Description = desc
+	// Remote templates (git::, http://, etc.) are not yet supported.
+	if strings.HasPrefix(source, "git::") || strings.HasPrefix(source, "http://") || strings.HasPrefix(source, "https://") {
+		return templates.Configuration{}, errUtils.Build(errUtils.ErrInvalidTemplateData).
+			WithExplanationf("Remote template source is not yet supported: `%s`", source).
+			WithHint("Use a local path for the template source instead").
+			WithHint("Remote Git templates will be supported in a future release").
+			WithContext("template_name", name).
+			WithContext("source", source).
+			WithExitCode(2).
+			Err()
 	}
 
-	// Extract source (for remote templates).
-	if source, ok := templateMap["source"].(string); ok {
-		// Remote templates (git::, http://, etc.) are not yet supported.
-		if strings.HasPrefix(source, "git::") || strings.HasPrefix(source, "http://") || strings.HasPrefix(source, "https://") {
-			return templates.Configuration{}, errUtils.Build(errUtils.ErrInvalidTemplateData).
-				WithExplanationf("Remote template source is not yet supported: `%s`", source).
-				WithHint("Use a local path for the template source instead").
-				WithHint("Remote Git templates will be supported in a future release").
-				WithContext("template_name", name).
-				WithContext("source", source).
-				WithExitCode(2).
-				Err()
-		}
-		// For local source paths, store in description for now.
-		config.Description = fmt.Sprintf("%s (source: %s)", config.Description, source)
+	// Load the template files from the local source directory. The path is
+	// resolved relative to the current directory (where atmos.yaml lives).
+	cfg, err := templates.LoadConfigurationFromDir(name, source)
+	if err != nil {
+		return templates.Configuration{}, err
+	}
+
+	// An explicit description in atmos.yaml overrides the template's own metadata.
+	if desc, ok := templateMap["description"].(string); ok && desc != "" {
+		cfg.Description = desc
 	}
 
 	// Extract target_dir if provided
 	if targetDir, ok := templateMap["target_dir"].(string); ok {
-		config.TargetDir = targetDir
+		cfg.TargetDir = targetDir
 	}
 
-	// Note: We don't load actual files here since they might be remote or require
-	// additional processing. The actual template processing will be handled by
-	// the generator when the template is selected.
-	return config, nil
+	return *cfg, nil
 }

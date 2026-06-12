@@ -370,7 +370,34 @@ spec:
 	}
 }
 
+// writeLocalTemplate creates a minimal local template directory with a
+// scaffold.yaml manifest and one templated file, returning its path.
+func writeLocalTemplate(t *testing.T) string {
+	t.Helper()
+	dir := t.TempDir()
+
+	scaffoldContent := `apiVersion: atmos/v1
+kind: AtmosScaffoldConfig
+metadata:
+  name: local-template
+  description: Local scaffold from disk
+  version: 0.1.0
+spec:
+  fields:
+    - name: project_name
+      type: input
+      default: my-project
+`
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "scaffold.yaml"), []byte(scaffoldContent), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "README.md.tmpl"), []byte("# {{.Config.project_name}}\n"), 0o644))
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "stacks"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "stacks", "main.yaml"), []byte("vars: {}\n"), 0o644))
+	return dir
+}
+
 func TestConvertScaffoldTemplateToConfiguration(t *testing.T) {
+	localDir := writeLocalTemplate(t)
+
 	tests := []struct {
 		name         string
 		templateName string
@@ -379,17 +406,12 @@ func TestConvertScaffoldTemplateToConfiguration(t *testing.T) {
 		validate     func(t *testing.T, config templates.Configuration)
 	}{
 		{
-			name:         "basic template",
+			name:         "template without source rejected",
 			templateName: "component",
 			templateData: map[string]interface{}{
 				"description": "Component scaffold",
 			},
-			expectError: false,
-			validate: func(t *testing.T, config templates.Configuration) {
-				assert.Equal(t, "component", config.Name)
-				assert.Equal(t, "Component scaffold", config.Description)
-				assert.Equal(t, "component", config.TemplateID)
-			},
+			expectError: true, // A source directory is required.
 		},
 		{
 			name:         "template with remote source (rejected)",
@@ -399,32 +421,49 @@ func TestConvertScaffoldTemplateToConfiguration(t *testing.T) {
 				"source":      "https://github.com/example/template.git",
 			},
 			expectError: true, // Remote templates are not yet supported.
-			validate:    nil,
 		},
 		{
-			name:         "template with local source",
+			name:         "template with nonexistent local source rejected",
+			templateName: "missing-template",
+			templateData: map[string]interface{}{
+				"source": filepath.Join(localDir, "does-not-exist"),
+			},
+			expectError: true,
+		},
+		{
+			name:         "template with local source loads files",
 			templateName: "local-template",
 			templateData: map[string]interface{}{
-				"description": "Local scaffold",
-				"source":      "./templates/mytemplate",
+				"source": localDir,
 			},
 			expectError: false,
 			validate: func(t *testing.T, config templates.Configuration) {
+				// Metadata comes from the template's own scaffold.yaml.
 				assert.Equal(t, "local-template", config.Name)
-				assert.Contains(t, config.Description, "source:")
-				assert.Contains(t, config.Description, "./templates/mytemplate")
+				assert.Equal(t, "Local scaffold from disk", config.Description)
+				assert.Equal(t, "0.1.0", config.Version)
+				assert.Equal(t, localDir, config.Source)
+				// Files are actually loaded from disk, including nested dirs.
+				paths := make([]string, 0, len(config.Files))
+				for _, f := range config.Files {
+					paths = append(paths, f.Path)
+				}
+				assert.Contains(t, paths, "scaffold.yaml")
+				assert.Contains(t, paths, "README.md.tmpl")
+				assert.Contains(t, paths, "stacks/main.yaml")
 			},
 		},
 		{
-			name:         "template with target_dir",
-			templateName: "stack-template",
+			name:         "atmos.yaml description overrides template metadata",
+			templateName: "local-template",
 			templateData: map[string]interface{}{
-				"description": "Stack scaffold",
+				"description": "Override from atmos.yaml",
+				"source":      localDir,
 				"target_dir":  "stacks/components",
 			},
 			expectError: false,
 			validate: func(t *testing.T, config templates.Configuration) {
-				assert.Equal(t, "stack-template", config.Name)
+				assert.Equal(t, "Override from atmos.yaml", config.Description)
 				assert.Equal(t, "stacks/components", config.TargetDir)
 			},
 		},
@@ -433,16 +472,6 @@ func TestConvertScaffoldTemplateToConfiguration(t *testing.T) {
 			templateName: "invalid",
 			templateData: "not a map",
 			expectError:  true,
-		},
-		{
-			name:         "template without description",
-			templateName: "no-desc",
-			templateData: map[string]interface{}{},
-			expectError:  false,
-			validate: func(t *testing.T, config templates.Configuration) {
-				assert.Equal(t, "no-desc", config.Name)
-				assert.Contains(t, config.Description, "Scaffold template:")
-			},
 		},
 	}
 
@@ -1051,7 +1080,8 @@ func TestExecuteTemplateGeneration_ErrorPath(t *testing.T) {
 	}
 
 	// Test with nil UI to trigger error.
-	err := executeTemplateGeneration(&config, "/tmp/test", false, false, map[string]interface{}{}, nil)
+	opts := scaffoldGenerateOptions{useDefaults: true, templateValues: map[string]interface{}{}}
+	err := executeTemplateGeneration(&config, t.TempDir(), opts, nil)
 	assert.Error(t, err)
 }
 

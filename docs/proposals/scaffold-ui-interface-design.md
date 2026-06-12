@@ -206,14 +206,14 @@ ui.Writeln("")
 ```go
 // In scaffold.go:393
 func selectTemplateInteractive(
-	configs map[string]templates.Configuration,
-	scaffoldUI *generatorUI.InitUI,
+    configs map[string]templates.Configuration,
+    scaffoldUI *generatorUI.InitUI,
 ) (templates.Configuration, error) {
-	selectedName, err := scaffoldUI.PromptForTemplate("scaffold", configs)
-	if err != nil {
-		// ...
-	}
-	// ...
+    selectedName, err := scaffoldUI.PromptForTemplate("scaffold", configs)
+    if err != nil {
+        // ...
+    }
+    // ...
 }
 ```
 
@@ -221,15 +221,15 @@ func selectTemplateInteractive(
 ```go
 selectedConfig, err := ui.PromptForTemplate(configs)
 if err != nil {
-	return err
+    return err
 }
 ```
 
 **Test Mock**:
 ```go
 mockUI.EXPECT().
-	PromptForTemplate(gomock.Any()).
-	Return(templates.Configuration{Name: "test-template"}, nil)
+    PromptForTemplate(gomock.Any()).
+    Return(templates.Configuration{Name: "test-template"}, nil)
 ```
 
 ---
@@ -243,15 +243,15 @@ mockUI.EXPECT().
 ```go
 targetDir, err := ui.PromptForTargetDirectory(".")
 if err != nil {
-	return err
+    return err
 }
 ```
 
 **Test Mock**:
 ```go
 mockUI.EXPECT().
-	PromptForTargetDirectory(".").
-	Return("/tmp/test", nil)
+    PromptForTargetDirectory(".").
+    Return("/tmp/test", nil)
 ```
 
 ---
@@ -264,18 +264,18 @@ mockUI.EXPECT().
 **Usage**:
 ```go
 value, err := ui.PromptForValue(PromptConfig{
-	Name:        "component_name",
-	Description: "Name of the component",
-	Type:        "input",
-	Required:    true,
+    Name:        "component_name",
+    Description: "Name of the component",
+    Type:        "input",
+    Required:    true,
 }, nil)
 ```
 
 **Test Mock**:
 ```go
 mockUI.EXPECT().
-	PromptForValue(gomock.Any(), gomock.Any()).
-	Return("vpc", nil)
+    PromptForValue(gomock.Any(), gomock.Any()).
+    Return("vpc", nil)
 ```
 
 ### Complex Rendering
@@ -288,24 +288,24 @@ mockUI.EXPECT().
 **Current Implementation**:
 ```go
 func executeScaffoldList(cmd *cobra.Command) error {
-	// ... loads templates ...
+    // ... loads templates ...
 
-	if err := atmosui.Writeln("\nAvailable Scaffold Templates:\n"); err != nil {
-		return err
-	}
+    if err := atmosui.Writeln("\nAvailable Scaffold Templates:\n"); err != nil {
+        return err
+    }
 
-	// Create table data
-	header := []string{"Name", "Description", "Source", "Version"}
-	rows := [][]string{}
+    // Create table data
+    header := []string{"Name", "Description", "Source", "Version"}
+    rows := [][]string{}
 
-	for name, config := range configs {
-		// Build rows...
-	}
+    for name, config := range configs {
+        // Build rows...
+    }
 
-	// Render table
-	genCtx.UI.DisplayConfigurationTable(header, rows)
+    // Render table
+    genCtx.UI.DisplayConfigurationTable(header, rows)
 
-	return nil
+    return nil
 }
 ```
 
@@ -318,31 +318,31 @@ return ui.RenderTemplateList(configs)
 **Implementation** (in ui_impl.go):
 ```go
 func (ui *ProductionUI) RenderTemplateList(configs map[string]templates.Configuration) error {
-	if err := atmosui.Writeln("\nAvailable Scaffold Templates:\n"); err != nil {
-		return err
-	}
+    if err := atmosui.Writeln("\nAvailable Scaffold Templates:\n"); err != nil {
+        return err
+    }
 
-	// Build table data
-	header := []string{"Name", "Description", "Source", "Version"}
-	rows := [][]string{}
+    // Build table data
+    header := []string{"Name", "Description", "Source", "Version"}
+    rows := [][]string{}
 
-	for name, config := range configs {
-		source := "embedded"
-		if config.Source != "" {
-			source = config.Source
-		}
+    for name, config := range configs {
+        source := "embedded"
+        if config.Source != "" {
+            source = config.Source
+        }
 
-		rows = append(rows, []string{
-			name,
-			config.Description,
-			source,
-			config.Version,
-		})
-	}
+        rows = append(rows, []string{
+            name,
+            config.Description,
+            source,
+            config.Version,
+        })
+    }
 
-	// Render using InitUI
-	ui.initUI.DisplayConfigurationTable(header, rows)
-	return nil
+    // Render using InitUI
+    ui.initUI.DisplayConfigurationTable(header, rows)
+    return nil
 }
 ```
 
@@ -361,41 +361,41 @@ mockUI.EXPECT().RenderTemplateList(gomock.Any()).Return(nil)
 **Current Implementation**:
 ```go
 func renderDryRunPreview(
-	selectedConfig *templates.Configuration,
-	targetDir string,
-	templateValues map[string]interface{},
+    selectedConfig *templates.Configuration,
+    targetDir string,
+    templateValues map[string]interface{},
 ) error {
-	// Header
-	if err := renderDryRunHeader(selectedConfig, targetDir); err != nil {
-		return err
-	}
+    // Header
+    if err := renderDryRunHeader(selectedConfig, targetDir); err != nil {
+        return err
+    }
 
-	// Load values
-	mergedValues, err := loadDryRunValues(selectedConfig, templateValues)
-	if err != nil {
-		return err
-	}
+    // Load values
+    mergedValues, err := loadDryRunValues(selectedConfig, templateValues)
+    if err != nil {
+        return err
+    }
 
-	// Render file list
-	if err := renderDryRunFileList(selectedConfig, targetDir, mergedValues); err != nil {
-		return err
-	}
+    // Render file list
+    if err := renderDryRunFileList(selectedConfig, targetDir, mergedValues); err != nil {
+        return err
+    }
 
-	return atmosui.Writeln("\n💡 Use --force to overwrite existing files")
+    return atmosui.Writeln("\n💡 Use --force to overwrite existing files")
 }
 ```
 
 **New Usage**:
 ```go
 files := []DryRunFile{
-	{
-		Path:        "src/main.go",
-		Content:     "package main...",
-		IsTemplate:  true,
-		Exists:      false,
-		WouldCreate: true,
-	},
-	// ...
+    {
+        Path:        "src/main.go",
+        Content:     "package main...",
+        IsTemplate:  true,
+        Exists:      false,
+        WouldCreate: true,
+    },
+    // ...
 }
 
 return ui.RenderDryRunPreview(config, targetDir, files)
@@ -404,53 +404,53 @@ return ui.RenderDryRunPreview(config, targetDir, files)
 **Implementation** (in ui_impl.go):
 ```go
 func (ui *ProductionUI) RenderDryRunPreview(
-	config *templates.Configuration,
-	targetDir string,
-	files []DryRunFile,
+    config *templates.Configuration,
+    targetDir string,
+    files []DryRunFile,
 ) error {
-	// Header
-	if err := atmosui.Writeln("\n🔍 Dry-run mode: Preview of files that would be generated\n"); err != nil {
-		return err
-	}
+    // Header
+    if err := atmosui.Writeln("\n🔍 Dry-run mode: Preview of files that would be generated\n"); err != nil {
+        return err
+    }
 
-	if err := atmosui.Writef("Template: %s\n", config.Name); err != nil {
-		return err
-	}
+    if err := atmosui.Writef("Template: %s\n", config.Name); err != nil {
+        return err
+    }
 
-	if targetDir != "" {
-		if err := atmosui.Writef("Target: %s\n\n", targetDir); err != nil {
-			return err
-		}
-	}
+    if targetDir != "" {
+        if err := atmosui.Writef("Target: %s\n\n", targetDir); err != nil {
+            return err
+        }
+    }
 
-	// File list
-	if err := atmosui.Writeln("Files that would be generated:\n"); err != nil {
-		return err
-	}
+    // File list
+    if err := atmosui.Writeln("Files that would be generated:\n"); err != nil {
+        return err
+    }
 
-	for _, file := range files {
-		status := "CREATE"
-		icon := "+"
+    for _, file := range files {
+        status := "CREATE"
+        icon := "+"
 
-		if file.Exists {
-			status = "UPDATE"
-			icon = "~"
-		}
+        if file.Exists {
+            status = "UPDATE"
+            icon = "~"
+        }
 
-		if err := atmosui.Writef("  %s %s %s\n", icon, status, file.Path); err != nil {
-			return err
-		}
-	}
+        if err := atmosui.Writef("  %s %s %s\n", icon, status, file.Path); err != nil {
+            return err
+        }
+    }
 
-	return atmosui.Writeln("\n💡 Use --force to overwrite existing files")
+    return atmosui.Writeln("\n💡 Use --force to overwrite existing files")
 }
 ```
 
 **Test Mock**:
 ```go
 mockUI.EXPECT().
-	RenderDryRunPreview(gomock.Any(), "/tmp/test", gomock.Any()).
-	Return(nil)
+    RenderDryRunPreview(gomock.Any(), "/tmp/test", gomock.Any()).
+    Return(nil)
 ```
 
 ---
@@ -463,32 +463,32 @@ mockUI.EXPECT().
 **Current Implementation**:
 ```go
 func validateAllScaffoldFiles(scaffoldPaths []string) (int, int, error) {
-	validCount := 0
-	errorCount := 0
+    validCount := 0
+    errorCount := 0
 
-	for _, scaffoldPath := range scaffoldPaths {
-		if err := validateSingleScaffoldFile(scaffoldPath); err != nil {
-			errorCount++
-			if uiErr := atmosui.Error(fmt.Sprintf("✗ %s: %v", scaffoldPath, err)); uiErr != nil {
-				return 0, 0, uiErr
-			}
-		} else {
-			validCount++
-			if uiErr := atmosui.Success(fmt.Sprintf("✓ %s", scaffoldPath)); uiErr != nil {
-				return 0, 0, uiErr
-			}
-		}
-	}
+    for _, scaffoldPath := range scaffoldPaths {
+        if err := validateSingleScaffoldFile(scaffoldPath); err != nil {
+            errorCount++
+            if uiErr := atmosui.Error(fmt.Sprintf("✗ %s: %v", scaffoldPath, err)); uiErr != nil {
+                return 0, 0, uiErr
+            }
+        } else {
+            validCount++
+            if uiErr := atmosui.Success(fmt.Sprintf("✓ %s", scaffoldPath)); uiErr != nil {
+                return 0, 0, uiErr
+            }
+        }
+    }
 
-	return validCount, errorCount, nil
+    return validCount, errorCount, nil
 }
 ```
 
 **New Usage**:
 ```go
 results := []ValidationResult{
-	{Path: "scaffold1.yaml", Valid: true},
-	{Path: "scaffold2.yaml", Valid: false, Errors: []string{"missing name"}},
+    {Path: "scaffold1.yaml", Valid: true},
+    {Path: "scaffold2.yaml", Valid: false, Errors: []string{"missing name"}},
 }
 
 return ui.RenderValidationResults(results)
@@ -497,19 +497,19 @@ return ui.RenderValidationResults(results)
 **Implementation**:
 ```go
 func (ui *ProductionUI) RenderValidationResults(results []ValidationResult) error {
-	for _, result := range results {
-		if result.Valid {
-			if err := atmosui.Success(fmt.Sprintf("✓ %s", result.Path)); err != nil {
-				return err
-			}
-		} else {
-			errMsg := strings.Join(result.Errors, ", ")
-			if err := atmosui.Error(fmt.Sprintf("✗ %s: %s", result.Path, errMsg)); err != nil {
-				return err
-			}
-		}
-	}
-	return nil
+    for _, result := range results {
+        if result.Valid {
+            if err := atmosui.Success(fmt.Sprintf("✓ %s", result.Path)); err != nil {
+                return err
+            }
+        } else {
+            errMsg := strings.Join(result.Errors, ", ")
+            if err := atmosui.Error(fmt.Sprintf("✗ %s: %s", result.Path, errMsg)); err != nil {
+                return err
+            }
+        }
+    }
+    return nil
 }
 ```
 
@@ -528,20 +528,20 @@ mockUI.EXPECT().RenderValidationResults(gomock.Any()).Return(nil)
 **Current Implementation**:
 ```go
 func printValidationSummary(validCount int, errorCount int) error {
-	if err := atmosui.Writeln(""); err != nil {
-		return err
-	}
+    if err := atmosui.Writeln(""); err != nil {
+        return err
+    }
 
-	if errorCount > 0 {
-		return errUtils.Build(errUtils.ErrScaffoldValidation).
-			WithExplanationf("Found %d scaffold file(s) with errors", errorCount).
-			WithHintf("Valid files: %d", validCount).
-			WithHintf("Files with errors: %d", errorCount).
-			// ...
-			Err()
-	}
+    if errorCount > 0 {
+        return errUtils.Build(errUtils.ErrScaffoldValidation).
+            WithExplanationf("Found %d scaffold file(s) with errors", errorCount).
+            WithHintf("Valid files: %d", validCount).
+            WithHintf("Files with errors: %d", errorCount).
+            // ...
+            Err()
+    }
 
-	return atmosui.Success(fmt.Sprintf("All %d scaffold file(s) are valid!", validCount))
+    return atmosui.Success(fmt.Sprintf("All %d scaffold file(s) are valid!", validCount))
 }
 ```
 
@@ -566,8 +566,8 @@ mockUI.EXPECT().RenderValidationSummary(2, 1).Return(errors.New("validation fail
 **Current Implementation**:
 ```go
 func printFilePath(targetDir string, renderedPath string) error {
-	fullPath := filepath.Join(targetDir, renderedPath)
-	return atmosui.Writef("  %s %s\n", "•", fullPath)
+    fullPath := filepath.Join(targetDir, renderedPath)
+    return atmosui.Writef("  %s %s\n", "•", fullPath)
 }
 ```
 
@@ -598,20 +598,20 @@ ui.PrintFileStatus("main.go", FileStatusSkipped)
 **Implementation**:
 ```go
 func (ui *ProductionUI) PrintFileStatus(path string, status FileStatus) error {
-	var icon, statusText string
+    var icon, statusText string
 
-	switch status {
-	case FileStatusCreated:
-		icon, statusText = "+", "CREATE"
-	case FileStatusUpdated:
-		icon, statusText = "~", "UPDATE"
-	case FileStatusSkipped:
-		icon, statusText = "-", "SKIP"
-	case FileStatusConflict:
-		icon, statusText = "!", "CONFLICT"
-	}
+    switch status {
+    case FileStatusCreated:
+        icon, statusText = "+", "CREATE"
+    case FileStatusUpdated:
+        icon, statusText = "~", "UPDATE"
+    case FileStatusSkipped:
+        icon, statusText = "-", "SKIP"
+    case FileStatusConflict:
+        icon, statusText = "!", "CONFLICT"
+    }
 
-	return atmosui.Writef("  %s %s %s\n", icon, statusText, path)
+    return atmosui.Writef("  %s %s %s\n", icon, statusText, path)
 }
 ```
 
@@ -630,114 +630,114 @@ mockUI.EXPECT().PrintFileStatus("config.yaml", FileStatusCreated).Return(nil)
 package scaffold
 
 import (
-	"fmt"
-	"strings"
+    "fmt"
+    "strings"
 
-	atmosui "github.com/cloudposse/atmos/pkg/ui"
-	"github.com/cloudposse/atmos/pkg/generator/templates"
-	generatorUI "github.com/cloudposse/atmos/pkg/generator/ui"
+    atmosui "github.com/cloudposse/atmos/pkg/ui"
+    "github.com/cloudposse/atmos/pkg/generator/templates"
+    generatorUI "github.com/cloudposse/atmos/pkg/generator/ui"
 )
 
 // ProductionUI implements ScaffoldUI using real UI components.
 type ProductionUI struct {
-	initUI *generatorUI.InitUI
+    initUI *generatorUI.InitUI
 }
 
 // NewProductionUI creates a production UI implementation.
 func NewProductionUI(initUI *generatorUI.InitUI) ScaffoldUI {
-	return &ProductionUI{initUI: initUI}
+    return &ProductionUI{initUI: initUI}
 }
 
 // Basic output methods
 func (ui *ProductionUI) Info(message string) error {
-	return atmosui.Info(message)
+    return atmosui.Info(message)
 }
 
 func (ui *ProductionUI) Success(message string) error {
-	return atmosui.Success(message)
+    return atmosui.Success(message)
 }
 
 func (ui *ProductionUI) Error(message string) error {
-	return atmosui.Error(message)
+    return atmosui.Error(message)
 }
 
 func (ui *ProductionUI) Warning(message string) error {
-	return atmosui.Warning(message)
+    return atmosui.Warning(message)
 }
 
 func (ui *ProductionUI) Write(message string) error {
-	return atmosui.Write(message)
+    return atmosui.Write(message)
 }
 
 func (ui *ProductionUI) Writef(format string, args ...interface{}) error {
-	return atmosui.Writef(format, args...)
+    return atmosui.Writef(format, args...)
 }
 
 func (ui *ProductionUI) Writeln(message string) error {
-	return atmosui.Writeln(message)
+    return atmosui.Writeln(message)
 }
 
 // Interactive prompts
 func (ui *ProductionUI) PromptForTemplate(configs map[string]templates.Configuration) (templates.Configuration, error) {
-	selectedName, err := ui.initUI.PromptForTemplate("scaffold", configs)
-	if err != nil {
-		return templates.Configuration{}, err
-	}
+    selectedName, err := ui.initUI.PromptForTemplate("scaffold", configs)
+    if err != nil {
+        return templates.Configuration{}, err
+    }
 
-	config, ok := configs[selectedName]
-	if !ok {
-		return templates.Configuration{}, fmt.Errorf("template not found: %s", selectedName)
-	}
+    config, ok := configs[selectedName]
+    if !ok {
+        return templates.Configuration{}, fmt.Errorf("template not found: %s", selectedName)
+    }
 
-	return config, nil
+    return config, nil
 }
 
 func (ui *ProductionUI) PromptForTargetDirectory(defaultDir string) (string, error) {
-	return ui.initUI.PromptForTargetDirectory(defaultDir)
+    return ui.initUI.PromptForTargetDirectory(defaultDir)
 }
 
 func (ui *ProductionUI) PromptForValue(prompt PromptConfig, defaultValue interface{}) (interface{}, error) {
-	// Implementation depends on prompt type
-	switch prompt.Type {
-	case "input":
-		return ui.initUI.PromptForInput(prompt.Description, fmt.Sprintf("%v", defaultValue))
-	case "confirm":
-		return ui.initUI.PromptForConfirmation(prompt.Description)
-	// ... other types
-	default:
-		return nil, fmt.Errorf("unsupported prompt type: %s", prompt.Type)
-	}
+    // Implementation depends on prompt type
+    switch prompt.Type {
+    case "input":
+        return ui.initUI.PromptForInput(prompt.Description, fmt.Sprintf("%v", defaultValue))
+    case "confirm":
+        return ui.initUI.PromptForConfirmation(prompt.Description)
+    // ... other types
+    default:
+        return nil, fmt.Errorf("unsupported prompt type: %s", prompt.Type)
+    }
 }
 
 // Complex rendering - implementations shown above
 func (ui *ProductionUI) RenderTemplateList(configs map[string]templates.Configuration) error {
-	// ... implementation shown above
+    // ... implementation shown above
 }
 
 func (ui *ProductionUI) RenderDryRunPreview(
-	config *templates.Configuration,
-	targetDir string,
-	files []DryRunFile,
+    config *templates.Configuration,
+    targetDir string,
+    files []DryRunFile,
 ) error {
-	// ... implementation shown above
+    // ... implementation shown above
 }
 
 func (ui *ProductionUI) RenderValidationResults(results []ValidationResult) error {
-	// ... implementation shown above
+    // ... implementation shown above
 }
 
 func (ui *ProductionUI) RenderValidationSummary(validCount, errorCount int) error {
-	// ... implementation shown above
+    // ... implementation shown above
 }
 
 // File operations
 func (ui *ProductionUI) PrintFilePath(targetDir, renderedPath string) error {
-	fullPath := filepath.Join(targetDir, renderedPath)
-	return atmosui.Writef("  %s %s\n", "•", fullPath)
+    fullPath := filepath.Join(targetDir, renderedPath)
+    return atmosui.Writef("  %s %s\n", "•", fullPath)
 }
 
 func (ui *ProductionUI) PrintFileStatus(path string, status FileStatus) error {
-	// ... implementation shown above
+    // ... implementation shown above
 }
 ```
 
@@ -753,47 +753,47 @@ go generate
 ### Unit Test Example
 ```go
 func TestScaffoldGenerator_Generate_InteractiveMode(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
+    ctrl := gomock.NewController(t)
+    defer ctrl.Finish()
 
-	// Create mocks
-	mockUI := NewMockScaffoldUI(ctrl)
-	mockLoader := NewMockTemplateLoader(ctrl)
-	mockExecutor := NewMockTemplateExecutor(ctrl)
+    // Create mocks
+    mockUI := NewMockScaffoldUI(ctrl)
+    mockLoader := NewMockTemplateLoader(ctrl)
+    mockExecutor := NewMockTemplateExecutor(ctrl)
 
-	// Test data
-	testConfig := templates.Configuration{
-		Name:  "test-template",
-		Files: []templates.File{{Path: "test.txt"}},
-	}
-	configs := map[string]templates.Configuration{
-		"test-template": testConfig,
-	}
+    // Test data
+    testConfig := templates.Configuration{
+        Name:  "test-template",
+        Files: []templates.File{{Path: "test.txt"}},
+    }
+    configs := map[string]templates.Configuration{
+        "test-template": testConfig,
+    }
 
-	// Set expectations in order
-	gomock.InOrder(
-		// Load templates
-		mockLoader.EXPECT().LoadTemplates().Return(configs, nil),
-		mockLoader.EXPECT().MergeConfiguredTemplates(configs).Return(nil),
+    // Set expectations in order
+    gomock.InOrder(
+        // Load templates
+        mockLoader.EXPECT().LoadTemplates().Return(configs, nil),
+        mockLoader.EXPECT().MergeConfiguredTemplates(configs).Return(nil),
 
-		// Interactive selection (no template name provided)
-		mockUI.EXPECT().PromptForTemplate(configs).Return(testConfig, nil),
+        // Interactive selection (no template name provided)
+        mockUI.EXPECT().PromptForTemplate(configs).Return(testConfig, nil),
 
-		// Generation
-		mockUI.EXPECT().Info(gomock.Any()).Return(nil),
-		mockExecutor.EXPECT().Generate(testConfig, gomock.Any(), false, gomock.Any()).Return(nil),
-		mockUI.EXPECT().Success(gomock.Any()).Return(nil),
-	)
+        // Generation
+        mockUI.EXPECT().Info(gomock.Any()).Return(nil),
+        mockExecutor.EXPECT().Generate(testConfig, gomock.Any(), false, gomock.Any()).Return(nil),
+        mockUI.EXPECT().Success(gomock.Any()).Return(nil),
+    )
 
-	// Execute
-	generator := NewScaffoldGenerator(mockUI, mockLoader, mockExecutor)
-	err := generator.Generate(GenerateOptions{
-		TemplateName: "", // Empty triggers interactive mode
-		TargetDir:    "/tmp/test",
-	})
+    // Execute
+    generator := NewScaffoldGenerator(mockUI, mockLoader, mockExecutor)
+    err := generator.Generate(GenerateOptions{
+        TemplateName: "", // Empty triggers interactive mode
+        TargetDir:    "/tmp/test",
+    })
 
-	// Assert
-	require.NoError(t, err)
+    // Assert
+    require.NoError(t, err)
 }
 ```
 

@@ -246,6 +246,31 @@ func DeepMerge(scaffoldConfig *ScaffoldConfig, userValues map[string]interface{}
 	return merged
 }
 
+// MissingRequiredValues returns the names of required fields that have no
+// usable (non-nil, non-empty-string) value in the provided values map. Used
+// to fail fast in non-interactive mode instead of generating a broken
+// project.
+func MissingRequiredValues(scaffoldConfig *ScaffoldConfig, values map[string]interface{}) []string {
+	defer perf.Track(nil, "config.MissingRequiredValues")()
+
+	var missing []string
+	for i := range scaffoldConfig.Spec.Fields {
+		field := &scaffoldConfig.Spec.Fields[i]
+		if !field.Required {
+			continue
+		}
+		value, exists := values[field.Name]
+		if !exists || value == nil {
+			missing = append(missing, field.Name)
+			continue
+		}
+		if str, ok := value.(string); ok && str == "" {
+			missing = append(missing, field.Name)
+		}
+	}
+	return missing
+}
+
 // GetConfigPath returns the path where the config directory should be stored based on the user's home directory and returns an error if the user home directory cannot be determined.
 func GetConfigPath() (string, error) {
 	defer perf.Track(nil, "config.GetConfigPath")()

@@ -7,14 +7,17 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 
 	"github.com/cloudposse/atmos/cmd/internal"
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/internal/tui/templates/term"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/flags/compat"
 	"github.com/cloudposse/atmos/pkg/generator/templates"
 	"github.com/cloudposse/atmos/pkg/generator/ui"
 	iolib "github.com/cloudposse/atmos/pkg/io"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/terminal"
 )
 
@@ -45,10 +48,20 @@ If no target directory is specified, you will be prompted for one.`,
 			target = args[1]
 		}
 
-		force, _ := cmd.Flags().GetBool("force")
-		interactive, _ := cmd.Flags().GetBool("interactive")
+		v := viper.GetViper()
+		if err := initParser.BindFlagsToViper(cmd, v); err != nil {
+			return err
+		}
 
-		// Get template values from --set flags
+		// Get flag values with proper precedence: flag > env > config > default.
+		force := v.GetBool("force")
+
+		// Interactive prompting requires both an interactive-capable flag
+		// value AND a real terminal: in CI or piped contexts prompts are
+		// skipped automatically and defaults + --set values are used.
+		interactive := v.GetBool("interactive") && term.IsTTYSupportForStdout()
+
+		// Get template values from --set flags.
 		setFlags, _ := cmd.Flags().GetStringSlice("set")
 		templateValues := make(map[string]interface{})
 		for _, flag := range setFlags {
@@ -69,10 +82,26 @@ If no target directory is specified, you will be prompted for one.`,
 	},
 }
 
+var initParser *flags.StandardParser
+
 func init() {
-	initCmd.Flags().BoolP("force", "f", false, "Overwrite existing files")
-	initCmd.Flags().BoolP("interactive", "i", true, "Interactive mode for template selection and configuration")
-	initCmd.Flags().StringSlice("set", []string{}, "Set template values (can be used multiple times: --set key=value)")
+	// Create StandardParser for init command flags with ATMOS_INIT_* env vars.
+	initParser = flags.NewStandardParser(
+		flags.WithBoolFlag("force", "f", false, "Overwrite existing files"),
+		flags.WithBoolFlag("interactive", "i", true, "Interactive mode for template selection and configuration (disabled automatically without a terminal)"),
+		flags.WithStringSliceFlag("set", "", []string{}, "Set template values (can be used multiple times: --set key=value)"),
+		flags.WithEnvVars("force", "ATMOS_INIT_FORCE"),
+		flags.WithEnvVars("interactive", "ATMOS_INIT_INTERACTIVE"),
+		flags.WithEnvVars("set", "ATMOS_INIT_SET"),
+	)
+
+	// Register flags on the command.
+	initParser.RegisterFlags(initCmd)
+
+	// Bind to Viper for precedence handling.
+	if err := initParser.BindToViper(viper.GetViper()); err != nil {
+		log.Debug("Failed to bind init flags to Viper", "error", err)
+	}
 
 	// Register this command with the registry.
 	// This happens during package initialization via blank import in cmd/root.go.
@@ -121,8 +150,10 @@ func (i *InitCommandProvider) GetAliases() []internal.CommandAlias {
 }
 
 // IsExperimental returns whether this command is experimental.
+// Init ships as experimental while the project-template catalog and
+// update workflow mature; behavior may change between releases.
 func (i *InitCommandProvider) IsExperimental() bool {
-	return false
+	return true
 }
 
 // parseSetFlag parses a --set flag in the format key=value.
