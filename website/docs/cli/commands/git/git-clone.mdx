@@ -106,7 +106,7 @@ Affected detection requires merge-base history. If [`atmos describe affected`](/
         - SCP-style: `git@github.com:acme/repo.git`
         - go-getter style: `git::https://github.com/acme/repo.git?ref=main&depth=1` — the `git::` prefix is stripped, `?ref=` maps to the branch/ref and `?depth=` to clone depth; unknown query parameters are rejected
 
-        When omitted, performs the CI current-repository checkout (requires `ci.enabled: true`).
+        When omitted: in CI (`ci.enabled: true` with a detected CI provider), performs the current-repository checkout; otherwise, reconciles the single configured repository when exactly one entry exists under [`git.repositories`](/cli/configuration/git). When zero or multiple repositories are configured, pass a repository name, a URI, or `--all`.
     </dd>
 </dl>
 

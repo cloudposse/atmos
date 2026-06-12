@@ -18,6 +18,15 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
+// setAtmosConfigPtr swaps the package-level atmosConfigPtr for the duration of
+// the test and restores the original value on cleanup.
+func setAtmosConfigPtr(t *testing.T, cfg *schema.AtmosConfiguration) {
+	t.Helper()
+	original := atmosConfigPtr
+	t.Cleanup(func() { atmosConfigPtr = original })
+	atmosConfigPtr = cfg
+}
+
 // ---- CommandProvider interface tests ----
 
 func TestGitCommandProvider_GetName(t *testing.T) {
@@ -76,9 +85,7 @@ func TestSetAtmosConfig(t *testing.T) {
 // ---- runClone error paths ----
 
 func TestRunClone_NoArgNilConfig(t *testing.T) {
-	original := atmosConfigPtr
-	t.Cleanup(func() { atmosConfigPtr = original })
-	atmosConfigPtr = nil
+	setAtmosConfigPtr(t, nil)
 
 	opts := &cloneOptions{All: false}
 	err := runClone(context.Background(), opts, []string{})
@@ -87,9 +94,7 @@ func TestRunClone_NoArgNilConfig(t *testing.T) {
 }
 
 func TestRunClone_PathArgReturnsNotFoundError(t *testing.T) {
-	original := atmosConfigPtr
-	t.Cleanup(func() { atmosConfigPtr = original })
-	atmosConfigPtr = &schema.AtmosConfiguration{}
+	setAtmosConfigPtr(t, &schema.AtmosConfiguration{})
 
 	// A plain path that doesn't look like a URI → argKindPath → not-found error.
 	opts := &cloneOptions{}
@@ -99,9 +104,7 @@ func TestRunClone_PathArgReturnsNotFoundError(t *testing.T) {
 }
 
 func TestRunClone_AllWithEmptyConfig(t *testing.T) {
-	original := atmosConfigPtr
-	t.Cleanup(func() { atmosConfigPtr = original })
-	atmosConfigPtr = &schema.AtmosConfiguration{}
+	setAtmosConfigPtr(t, &schema.AtmosConfiguration{})
 
 	opts := &cloneOptions{All: true}
 	// No repos configured → no error, no work done.
@@ -112,9 +115,7 @@ func TestRunClone_AllWithEmptyConfig(t *testing.T) {
 // ---- runStatus error paths ----
 
 func TestRunStatus_NoArg(t *testing.T) {
-	original := atmosConfigPtr
-	t.Cleanup(func() { atmosConfigPtr = original })
-	atmosConfigPtr = &schema.AtmosConfiguration{}
+	setAtmosConfigPtr(t, &schema.AtmosConfiguration{})
 
 	err := runStatus(context.Background(), false, []string{})
 	require.Error(t, err)
@@ -122,9 +123,7 @@ func TestRunStatus_NoArg(t *testing.T) {
 }
 
 func TestRunStatus_AllNoRepositories(t *testing.T) {
-	original := atmosConfigPtr
-	t.Cleanup(func() { atmosConfigPtr = original })
-	atmosConfigPtr = &schema.AtmosConfiguration{}
+	setAtmosConfigPtr(t, &schema.AtmosConfiguration{})
 
 	// No repos configured → early return, no error.
 	err := runStatus(context.Background(), true, []string{})
@@ -132,9 +131,7 @@ func TestRunStatus_AllNoRepositories(t *testing.T) {
 }
 
 func TestRunStatus_NilConfig(t *testing.T) {
-	original := atmosConfigPtr
-	t.Cleanup(func() { atmosConfigPtr = original })
-	atmosConfigPtr = nil
+	setAtmosConfigPtr(t, nil)
 
 	err := runStatus(context.Background(), true, []string{})
 	assert.NoError(t, err)
@@ -143,9 +140,7 @@ func TestRunStatus_NilConfig(t *testing.T) {
 // ---- runPull error paths ----
 
 func TestRunPull_NoArg(t *testing.T) {
-	original := atmosConfigPtr
-	t.Cleanup(func() { atmosConfigPtr = original })
-	atmosConfigPtr = &schema.AtmosConfiguration{}
+	setAtmosConfigPtr(t, &schema.AtmosConfiguration{})
 
 	err := runPull(context.Background(), &pullOptions{}, []string{})
 	require.Error(t, err)
@@ -153,18 +148,14 @@ func TestRunPull_NoArg(t *testing.T) {
 }
 
 func TestRunPull_AllNoRepositories(t *testing.T) {
-	original := atmosConfigPtr
-	t.Cleanup(func() { atmosConfigPtr = original })
-	atmosConfigPtr = &schema.AtmosConfiguration{}
+	setAtmosConfigPtr(t, &schema.AtmosConfiguration{})
 
 	err := runPull(context.Background(), &pullOptions{All: true}, []string{})
 	assert.NoError(t, err)
 }
 
 func TestRunPull_AllNilConfig(t *testing.T) {
-	original := atmosConfigPtr
-	t.Cleanup(func() { atmosConfigPtr = original })
-	atmosConfigPtr = nil
+	setAtmosConfigPtr(t, nil)
 
 	err := runPull(context.Background(), &pullOptions{All: true}, []string{})
 	assert.NoError(t, err)
@@ -173,9 +164,7 @@ func TestRunPull_AllNilConfig(t *testing.T) {
 // ---- runDiff error paths ----
 
 func TestRunDiff_URIArg(t *testing.T) {
-	original := atmosConfigPtr
-	t.Cleanup(func() { atmosConfigPtr = original })
-	atmosConfigPtr = &schema.AtmosConfiguration{}
+	setAtmosConfigPtr(t, &schema.AtmosConfiguration{})
 
 	err := runDiff(context.Background(), "https://github.com/acme/repo.git", nil)
 	require.Error(t, err)
@@ -185,9 +174,7 @@ func TestRunDiff_URIArg(t *testing.T) {
 // ---- runPush error paths ----
 
 func TestRunPush_URIArg(t *testing.T) {
-	original := atmosConfigPtr
-	t.Cleanup(func() { atmosConfigPtr = original })
-	atmosConfigPtr = &schema.AtmosConfiguration{}
+	setAtmosConfigPtr(t, &schema.AtmosConfiguration{})
 
 	err := runPush(context.Background(), "https://github.com/acme/repo.git", "", "", false)
 	require.Error(t, err)
@@ -195,9 +182,7 @@ func TestRunPush_URIArg(t *testing.T) {
 }
 
 func TestRunPush_DryRunPath(t *testing.T) {
-	original := atmosConfigPtr
-	t.Cleanup(func() { atmosConfigPtr = original })
-	atmosConfigPtr = &schema.AtmosConfiguration{}
+	setAtmosConfigPtr(t, &schema.AtmosConfiguration{})
 
 	// A plain path with dry-run → no provider needed, should succeed.
 	err := runPush(context.Background(), "/tmp/somerepo", "main", "origin", true)
@@ -207,9 +192,7 @@ func TestRunPush_DryRunPath(t *testing.T) {
 // ---- runCommit error paths ----
 
 func TestRunCommit_EmptyMessage(t *testing.T) {
-	original := atmosConfigPtr
-	t.Cleanup(func() { atmosConfigPtr = original })
-	atmosConfigPtr = &schema.AtmosConfiguration{}
+	setAtmosConfigPtr(t, &schema.AtmosConfiguration{})
 
 	opts := &commitOptions{Message: "", DryRun: false}
 	err := runCommit(context.Background(), "/tmp/repo", opts)
@@ -218,9 +201,7 @@ func TestRunCommit_EmptyMessage(t *testing.T) {
 }
 
 func TestRunCommit_EmptyMessageWithDryRunAllowed(t *testing.T) {
-	original := atmosConfigPtr
-	t.Cleanup(func() { atmosConfigPtr = original })
-	atmosConfigPtr = &schema.AtmosConfiguration{}
+	setAtmosConfigPtr(t, &schema.AtmosConfiguration{})
 
 	// dry-run with empty message is allowed: it just shows status without committing.
 	// The path hits composeEnv → atmosgit.ComposeEnvironment which calls os.Environ()
@@ -414,25 +395,19 @@ func TestRunCICheckout_NoCloneURL(t *testing.T) {
 // ---- isCICloneEnabled ----
 
 func TestIsCICloneEnabled_NilConfig(t *testing.T) {
-	original := atmosConfigPtr
-	t.Cleanup(func() { atmosConfigPtr = original })
-	atmosConfigPtr = nil
+	setAtmosConfigPtr(t, nil)
 
 	assert.False(t, isCICloneEnabled())
 }
 
 func TestIsCICloneEnabled_Disabled(t *testing.T) {
-	original := atmosConfigPtr
-	t.Cleanup(func() { atmosConfigPtr = original })
-	atmosConfigPtr = &schema.AtmosConfiguration{CI: schema.CIConfig{Enabled: false}}
+	setAtmosConfigPtr(t, &schema.AtmosConfiguration{CI: schema.CIConfig{Enabled: false}})
 
 	assert.False(t, isCICloneEnabled())
 }
 
 func TestIsCICloneEnabled_Enabled(t *testing.T) {
-	original := atmosConfigPtr
-	t.Cleanup(func() { atmosConfigPtr = original })
-	atmosConfigPtr = &schema.AtmosConfiguration{CI: schema.CIConfig{Enabled: true}}
+	setAtmosConfigPtr(t, &schema.AtmosConfiguration{CI: schema.CIConfig{Enabled: true}})
 
 	assert.True(t, isCICloneEnabled())
 }
@@ -440,9 +415,7 @@ func TestIsCICloneEnabled_Enabled(t *testing.T) {
 // ---- runCloneAll with empty repositories ----
 
 func TestRunCloneAll_NoRepositories(t *testing.T) {
-	original := atmosConfigPtr
-	t.Cleanup(func() { atmosConfigPtr = original })
-	atmosConfigPtr = &schema.AtmosConfiguration{}
+	setAtmosConfigPtr(t, &schema.AtmosConfiguration{})
 
 	opts := &cloneOptions{}
 	err := runCloneAll(context.Background(), opts)
@@ -450,9 +423,7 @@ func TestRunCloneAll_NoRepositories(t *testing.T) {
 }
 
 func TestRunCloneAll_NilConfig(t *testing.T) {
-	original := atmosConfigPtr
-	t.Cleanup(func() { atmosConfigPtr = original })
-	atmosConfigPtr = nil
+	setAtmosConfigPtr(t, nil)
 
 	opts := &cloneOptions{}
 	err := runCloneAll(context.Background(), opts)
@@ -462,18 +433,14 @@ func TestRunCloneAll_NilConfig(t *testing.T) {
 // ---- runPullAll with empty repositories ----
 
 func TestRunPullAll_NoRepositories(t *testing.T) {
-	original := atmosConfigPtr
-	t.Cleanup(func() { atmosConfigPtr = original })
-	atmosConfigPtr = &schema.AtmosConfiguration{}
+	setAtmosConfigPtr(t, &schema.AtmosConfiguration{})
 
 	err := runPullAll(context.Background(), &pullOptions{})
 	assert.NoError(t, err)
 }
 
 func TestRunPullAll_NilConfig(t *testing.T) {
-	original := atmosConfigPtr
-	t.Cleanup(func() { atmosConfigPtr = original })
-	atmosConfigPtr = nil
+	setAtmosConfigPtr(t, nil)
 
 	err := runPullAll(context.Background(), &pullOptions{})
 	assert.NoError(t, err)
