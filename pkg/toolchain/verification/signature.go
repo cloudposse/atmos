@@ -2,6 +2,7 @@ package verification
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -73,7 +74,7 @@ func (v *Verifier) verifyCosign(ctx context.Context, req *Request, cfg *registry
 	}
 	args = append(args, req.AssetPath)
 	if err := runCosignWithRetry(ctx, req, args); err != nil {
-		return err
+		return handleSignatureVerificationError("cosign", req, result, err)
 	}
 	result.SignatureMethods = append(result.SignatureMethods, "cosign")
 	return nil
@@ -138,7 +139,14 @@ func (v *Verifier) verifySLSA(ctx context.Context, req *Request, cfg *registry.S
 	if err != nil {
 		return err
 	}
-	args := []string{"verify-artifact", req.AssetPath, "--provenance-path", provenanceURL}
+	provenanceSidecar, err := v.resolveRemoteSignatureSidecar(ctx, req, provenanceURL, "slsa provenance", result)
+	if err != nil || provenanceSidecar.skipped {
+		return err
+	}
+	if provenanceSidecar.cleanup != nil {
+		defer provenanceSidecar.cleanup()
+	}
+	args := []string{"verify-artifact", req.AssetPath, "--provenance-path", provenanceSidecar.path}
 	if cfg.SourceURI != "" {
 		args = append(args, "--source-uri", cfg.SourceURI)
 	}
@@ -146,7 +154,7 @@ func (v *Verifier) verifySLSA(ctx context.Context, req *Request, cfg *registry.S
 		args = append(args, "--source-tag", cfg.SourceTag)
 	}
 	if err := runner(req).Run(ctx, "slsa-verifier", args...); err != nil {
-		return err
+		return handleSignatureVerificationError("slsa provenance", req, result, err)
 	}
 	result.SignatureMethods = append(result.SignatureMethods, "slsa_provenance")
 	return nil
@@ -163,12 +171,19 @@ func (v *Verifier) verifyMinisign(ctx context.Context, req *Request, cfg *regist
 	if err != nil {
 		return err
 	}
-	args := []string{"-Vm", req.AssetPath, "-x", sigURL}
+	signatureSidecar, err := v.resolveRemoteSignatureSidecar(ctx, req, sigURL, "minisign signature", result)
+	if err != nil || signatureSidecar.skipped {
+		return err
+	}
+	if signatureSidecar.cleanup != nil {
+		defer signatureSidecar.cleanup()
+	}
+	args := []string{"-Vm", req.AssetPath, "-x", signatureSidecar.path}
 	if cfg.PublicKey != "" {
 		args = append(args, "-P", cfg.PublicKey)
 	}
 	if err := runner(req).Run(ctx, "minisign", args...); err != nil {
-		return err
+		return handleSignatureVerificationError("minisign signature", req, result, err)
 	}
 	result.SignatureMethods = append(result.SignatureMethods, "minisign")
 	return nil
@@ -186,10 +201,89 @@ func (v *Verifier) verifyGitHubAttestation(ctx context.Context, req *Request, cf
 		args = append(args, "--predicate-type", cfg.PredicateType)
 	}
 	if err := runner(req).Run(ctx, "gh", args...); err != nil {
-		return err
+		return handleSignatureVerificationError("github artifact attestations", req, result, err)
 	}
 	result.SignatureMethods = append(result.SignatureMethods, "github_artifact_attestations")
 	return nil
+}
+
+type signatureSidecarResolution struct {
+	path    string
+	cleanup func()
+	skipped bool
+}
+
+func (v *Verifier) resolveRemoteSignatureSidecar(
+	ctx context.Context,
+	req *Request,
+	sidecarURL string,
+	method string,
+	result *Result,
+) (signatureSidecarResolution, error) {
+	if !isHTTPURL(sidecarURL) {
+		return signatureSidecarResolution{path: sidecarURL}, nil
+	}
+	path, err := v.downloadTempSidecar(ctx, req, sidecarURL)
+	if err != nil {
+		if req.Policy.Signatures != PolicyRequired {
+			result.SkippedReasons = append(result.SkippedReasons, fmt.Sprintf("%s unavailable: %v", method, err))
+			return signatureSidecarResolution{skipped: true}, nil
+		}
+		return signatureSidecarResolution{}, fmt.Errorf("%w: %w", ErrSignatureRequired, err)
+	}
+	cleanup := func() {
+		// #nosec G703 -- file is a temporary signature sidecar created by this process.
+		_ = os.Remove(path)
+	}
+	return signatureSidecarResolution{path: path, cleanup: cleanup}, nil
+}
+
+func handleSignatureVerificationError(method string, req *Request, result *Result, err error) error {
+	if err == nil {
+		return nil
+	}
+	if isSignatureEvidenceUnavailable(err) {
+		if req.Policy.Signatures != PolicyRequired {
+			result.SkippedReasons = append(result.SkippedReasons, fmt.Sprintf("%s unavailable: %v", method, err))
+			return nil
+		}
+		return fmt.Errorf("%w: %w", ErrSignatureRequired, err)
+	}
+	return err
+}
+
+func isSignatureEvidenceUnavailable(err error) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, ErrDownloadFailed) {
+		return true
+	}
+	msg := strings.ToLower(err.Error())
+	for _, marker := range signatureUnavailableMarkers {
+		if strings.Contains(msg, marker) {
+			return true
+		}
+	}
+	return false
+}
+
+var signatureUnavailableMarkers = []string{
+	"404 not found",
+	"http 404",
+	"status 404",
+	"no attestations found",
+	"no attestations were found",
+	"no matching attestations",
+	"could not find any attestations",
+	"unable to find any attestations",
+	"attestation not found",
+	"signature not found",
+	"provenance not found",
+}
+
+func isHTTPURL(rawURL string) bool {
+	return strings.HasPrefix(rawURL, "http://") || strings.HasPrefix(rawURL, "https://")
 }
 
 func (v *Verifier) downloadCosignSidecars(ctx context.Context, req *Request, cfg *registry.CosignConfig) ([]string, func(), error) {
