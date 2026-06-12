@@ -1,11 +1,11 @@
 ---
 slug: tty-interactive-steps
-title: "Hand the Terminal to Your Commands with tty and interactive Steps"
+title: "Terminal Steps: tty, interactive, and exec for Custom Commands and Workflows"
 authors: [osterman]
 tags: [feature]
 ---
 
-Custom command and workflow shell steps now support docker-style `tty` and `interactive` fields, so commands like `aws ssm start-session`, `ssh`, `psql`, and `vim` can take over the terminal properly — with Ctrl-C going to the session instead of killing Atmos.
+Custom command and workflow shell steps now support docker-style `tty` and `interactive` fields — plus a new `exec` step type that replaces the Atmos process entirely — so commands like `aws ssm start-session`, `ssh`, `psql`, and `vim` can take over the terminal properly, with Ctrl-C going to the session instead of killing Atmos.
 
 <!--truncate-->
 
@@ -62,7 +62,23 @@ workflows:
         command: "psql $DATABASE_URL"
 ```
 
-You can also use `interactive: true` on its own for prompt-style commands that read stdin but don't need a full TTY — output stays masked and captured as usual, while Ctrl-C is handled by the command.
+You can also use `interactive: true` on its own for prompt-style commands that read stdin but don't need a full TTY, while Ctrl-C is handled by the command.
+
+## Going Further: `type: exec`
+
+Sometimes Atmos should be purely a launcher. A step of `type: exec` **replaces the Atmos process entirely** — shell `exec` semantics, a true `execve` on macOS and Linux:
+
+```yaml
+commands:
+  - name: ssh
+    steps:
+      - type: exec
+        command: "aws ssm start-session --target {{ .Arguments.instance_id }}"
+```
+
+The command inherits your terminal, environment, and working directory natively. Job control (Ctrl-Z) works exactly as if you'd run the command yourself, there's zero proxy overhead, and the command's exit code becomes the Atmos exit code. The trade-offs are inherent to process replacement: the exec step must be the final step (validated), no secret masking applies, and nothing runs after it.
+
+Rule of thumb: use `tty`/`interactive` when you want Atmos supervising (masking, multiple steps, retries); use `type: exec` when the command *is* the destination — SSM sessions, SSH, consoles.
 
 ## How It Works
 

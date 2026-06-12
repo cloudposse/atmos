@@ -324,7 +324,7 @@ Each workflow definition must confirm to the following schema:
   <dd>Step name (optional). It's used to find the first step from which to start executing the workflow when the command-line flag `--from-step` is specified. If the `name` is omitted, a friendly name will be generated for you consisting of a prefix of `step` and followed by the index of the step (the index starts with 1, so the first generated step name would be `step1`).</dd>
 
   <dt>`type`</dt>
-  <dd>The type of the step. Can be `atmos`, `shell`, or any of the [interactive step types](#step-types) like `input`, `confirm`, `choose`, `filter`, `markdown`, `spin`, and more. Type `atmos` is implicit for command steps. Type `shell` is required for shell scripts. See the [Step Types](#step-types) section for all available types</dd>
+  <dd>The type of the step. Can be `atmos`, `shell`, `exec`, or any of the [interactive step types](#step-types) like `input`, `confirm`, `choose`, `filter`, `markdown`, `spin`, and more. Type `atmos` is implicit for command steps. Type `shell` is required for shell scripts. Type `exec` replaces the Atmos process entirely (shell `exec` semantics) and must be the final step — see [Replacing the Atmos Process](/cli/configuration/commands#replacing-the-atmos-process-type-exec). See the [Step Types](#step-types) section for all available types</dd>
 
   <dt>`stack`</dt>
   <dd>Step-level Atmos stack (optional). If specified, the `command` will be executed for this Atmos stack. It overrides the workflow-level `stack` attribute, and can itself be overridden on the command line by using the `--stack` flag (`-s` for shorthand)</dd>
