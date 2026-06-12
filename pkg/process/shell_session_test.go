@@ -34,7 +34,9 @@ func shellSessionHelperCommand(t *testing.T, args ...string) string {
 
 func shellQuoteArg(arg string) string {
 	if runtime.GOOS == "windows" {
-		return `"` + strings.ReplaceAll(arg, `"`, `\"`) + `"`
+		// cmd.exe /S /C passes the command verbatim; the child (the Go test
+		// binary) parses standard quoting, so plain quotes are correct.
+		return `"` + arg + `"`
 	}
 	return "'" + strings.ReplaceAll(arg, "'", "'\\''") + "'"
 }

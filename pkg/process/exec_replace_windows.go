@@ -3,9 +3,9 @@
 package process
 
 import (
+	"context"
 	"fmt"
 	"os"
-	"os/exec"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -30,8 +30,7 @@ func ReplaceShellSession(spec *ExecSpec) error {
 	release := signals.SuspendInterruptExit()
 	defer release()
 
-	shell, flag := sessionShell()
-	cmd := exec.Command(shell, flag, spec.Command)
+	cmd := newShellCommand(context.Background(), spec.Command)
 	cmd.Env = env
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout

@@ -105,8 +105,7 @@ func RunShellSession(ctx context.Context, spec *ShellSessionSpec) error {
 	}
 	env = append(append([]string{}, env...), fmt.Sprintf("ATMOS_SHLVL=%d", shellLevel))
 
-	shell, flag := sessionShell()
-	cmd := exec.CommandContext(ctx, shell, flag, spec.Command)
+	cmd := newShellCommand(ctx, spec.Command)
 	cmd.Dir = spec.Dir
 	cmd.Env = env
 
