@@ -37,7 +37,7 @@ type Task struct {
 	Name string `yaml:"name,omitempty" json:"name,omitempty" mapstructure:"name"`
 	// Command is the command to execute.
 	Command string `yaml:"command,omitempty" json:"command,omitempty" mapstructure:"command"`
-	// Type specifies the command type: TaskTypeShell or TaskTypeAtmos. Defaults to TaskTypeShell.
+	// Type specifies the command type: TaskTypeShell, TaskTypeAtmos, or TaskTypeExec. Defaults to TaskTypeShell.
 	Type string `yaml:"type,omitempty" json:"type,omitempty" mapstructure:"type"`
 	// Timeout specifies the maximum duration for the task. Zero means no timeout.
 	Timeout time.Duration `yaml:"timeout,omitempty" json:"timeout,omitempty" mapstructure:"timeout"`
