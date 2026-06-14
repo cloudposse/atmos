@@ -309,8 +309,8 @@ func TestGetMatchesForPattern_RecursiveMatch(t *testing.T) {
 
 // TestIsShallowPattern ensures shallow pattern detection works.
 func TestIsShallowPattern(t *testing.T) {
-	if !isShallowPattern("**/demo-localstack/*") {
-		t.Errorf("Expected '**/demo-localstack/*' to be shallow")
+	if !isShallowPattern("**/demo-helmfile/*") {
+		t.Errorf("Expected '**/demo-helmfile/*' to be shallow")
 	}
 	if isShallowPattern("**/demo-library/**") {
 		t.Errorf("Expected '**/demo-library/**' not to be shallow")
