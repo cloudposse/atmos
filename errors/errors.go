@@ -216,6 +216,7 @@ var (
 	ErrGitHookNotConfigured        = errors.New("git hook not configured")
 	ErrGitRepositoryRequired       = errors.New("git repository name or URI is required")
 	ErrGitProviderNotFound         = errors.New("git provider not registered")
+	ErrGitWorkdirExists            = errors.New("git workdir already exists")
 
 	// I/O and output errors.
 	ErrBuildIOConfig  = errors.New("failed to build I/O config")

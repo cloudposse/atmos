@@ -111,6 +111,9 @@ func (p *Provider) cloneFresh(ctx context.Context, opts *atmosgit.CloneOptions) 
 	if opts.Submodules {
 		args = append(args, "--recurse-submodules")
 	}
+	// Native passthrough args are flags for git clone, so they must precede
+	// the "--" separating flags from the URI/workdir positionals.
+	args = append(args, opts.ExtraArgs...)
 	args = append(args, "--", opts.URI, opts.Workdir)
 
 	result, err := p.run(ctx, "", opts.Env, args...)
@@ -206,6 +209,7 @@ func (p *Provider) Pull(ctx context.Context, opts *atmosgit.PullOptions) error {
 	if opts.Branch != "" {
 		args = append(args, opts.Branch)
 	}
+	args = append(args, opts.ExtraArgs...)
 
 	result, err := p.run(ctx, opts.Workdir, opts.Env, args...)
 	if err != nil {

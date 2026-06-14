@@ -26,7 +26,8 @@ or a filesystem path. The unified diff is written to stdout (pipeable).
 
 This is the read-before-write step for GitOps publishing: it shows what would
 be committed without actually committing. Use --path to scope to specific paths.`,
-	Args: cobra.ExactArgs(1),
+	Args:              cobra.ExactArgs(1),
+	ValidArgsFunction: completeRepoNames,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		defer perf.Track(atmosConfigPtr, "git.diff.RunE")()
 
@@ -35,7 +36,7 @@ be committed without actually committing. Use --path to scope to specific paths.
 			return err
 		}
 
-		paths := v.GetStringSlice(flagPath)
+		paths := v.GetStringSlice(viperKey(diffViperPrefix, flagPath))
 		return runDiff(cmd.Context(), args[0], paths)
 	},
 }

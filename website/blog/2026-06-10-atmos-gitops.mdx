@@ -30,7 +30,8 @@ git:
 
 On top of that foundation:
 
-- **`atmos git` commands** — `clone`, `pull`, `status`, `diff`, `commit`, `push`, and `list`, with `--all` bulk operations across every configured repository. Clone accepts configured names, plain URLs, or go-getter style URIs (`git::https://...?ref=main&depth=1`) — the same syntax you already use in vendoring.
+- **`atmos git` commands** — `init`, `clone`, `pull`, `status`, `diff`, `commit`, `push`, and `list`, with `--all` bulk operations across every configured repository. Clone accepts configured names, plain URLs, or go-getter style URIs (`git::https://...?ref=main&depth=1`) — the same syntax you already use in vendoring. `init`, `clone`, `pull`, and `push` pass arguments after `--` verbatim to the underlying git invocation, so uncommon git flags still compose with Atmos safety rules.
+- **Bootstrap from scratch or from a template** — `atmos git init` creates a configured repository whose remote has no content yet: workdir, initial branch, and remote wired up, ready to commit and push. `--from=<uri>` seeds it from a template (one fresh initial commit), and `--from=<uri> --keep-history` migrates an existing repository while keeping the source pullable as an `upstream` remote.
 - **A `git` hook kind** — publish generated files on lifecycle events like `after.terraform.apply`, committing to the current repository or a managed deployment repository, with templated commit messages and provenance trailers (`Atmos-Stack`, `Atmos-Component`).
 - **Local Git hook shims** — `atmos git hooks install` wires `.git/hooks/*` (pre-commit, commit-msg, ...) to Atmos workflows and custom commands, replacing Husky-style glue.
 - **Native CI checkout** — in GitHub Actions with `ci.enabled: true`, a bare `atmos git clone` infers the current repository from CI metadata and clones it into the workspace, replacing `actions/checkout`. GitHub STS credentials flow to every Git subprocess automatically via `GIT_CONFIG_*`.
@@ -92,6 +93,33 @@ steps:
 ```
 
 See the [`atmos git` command reference](/cli/commands/git/usage) and the [Git configuration docs](/cli/configuration/git) for the full surface, including clone depth controls, signing modes, and push retry tuning.
+
+## Bootstrapping a Repository — `atmos git init`
+
+Cloning assumes the repository already exists. Often it doesn't yet: you're standing up a *new* GitOps deployment repo for a new cluster, a new tenant, a new environment. `atmos git init` is clone's counterpart — it creates a configured repository whose remote has no content, on the configured branch, with the remote wired up, ready for `atmos git commit` and `atmos git push`:
+
+```shell
+atmos git init flux-prod        # empty repo, origin -> configured uri, ready to push
+```
+
+The interesting part is `--from`, which turns init into a repository *factory*. Point it at a template and Atmos instantiates a fresh repository from it:
+
+```shell
+# Stamp out a new deployment repo from your org's GitOps template.
+# Fresh history: one clean initial commit, no link back to the template.
+atmos git init flux-prod --from=https://github.com/acme/gitops-template.git
+```
+
+This is the pattern platform teams reach for constantly: a golden GitOps template (Flux/Argo layout, Kustomize bases, policy guardrails) that every new cluster or tenant repo starts from. Instead of "clone the template, delete `.git`, re-init, fix the remote, commit" by hand, it's one command — wired to the repository you already declared in `atmos.yaml`, with the right identity, branch, and signing applied.
+
+And when you're *migrating* an existing repository to a new home, `--keep-history` preserves the full commit history and keeps the source reachable as an `upstream` remote, so you can keep pulling updates from it:
+
+```shell
+# Migrate, preserving history; pull future template updates with `git pull upstream`.
+atmos git init flux-prod --from=https://github.com/acme/old-flux.git --keep-history
+```
+
+Same declarative model as the rest of `atmos git`: the repository, its identity, and its conventions are defined once in `atmos.yaml`, and `init` brings it into existence.
 
 ## Get Involved
 

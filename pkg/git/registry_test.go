@@ -13,6 +13,7 @@ import (
 
 type stubProvider struct{}
 
+func (s *stubProvider) Init(context.Context, *InitOptions) error   { return nil }
 func (s *stubProvider) Clone(context.Context, *CloneOptions) error { return nil }
 func (s *stubProvider) Pull(context.Context, *PullOptions) error   { return nil }
 func (s *stubProvider) Status(context.Context, *StatusOptions) (*StatusResult, error) {

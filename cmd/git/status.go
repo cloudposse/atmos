@@ -26,7 +26,8 @@ or a filesystem path. When no argument is provided, Atmos reports status for the
 single configured repository. Output is the porcelain status (pipeable to stdout).
 
 Use --all to report status for all configured repositories.`,
-	Args: cobra.MaximumNArgs(1),
+	Args:              cobra.MaximumNArgs(1),
+	ValidArgsFunction: completeRepoNames,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		defer perf.Track(atmosConfigPtr, "git.status.RunE")()
 
@@ -35,7 +36,7 @@ Use --all to report status for all configured repositories.`,
 			return err
 		}
 
-		all := v.GetBool(flagAll)
+		all := v.GetBool(viperKey(statusViperPrefix, flagAll))
 		return runStatus(cmd.Context(), all, args)
 	},
 }

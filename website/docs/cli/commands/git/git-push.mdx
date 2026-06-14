@@ -17,7 +17,7 @@ Push commits from a repository configured under [`git.repositories`](/cli/config
 ## Usage
 
 ```shell
-atmos git push <name-or-path> [flags]
+atmos git push <name-or-path> [flags] [-- <native git args>]
 ```
 
 With a configured repository:
@@ -49,6 +49,9 @@ atmos git push flux-deploy --remote=origin --branch=main
 
 # Report what would be pushed without pushing
 atmos git push flux-deploy --dry-run
+
+# Pass native arguments to the underlying git push invocation
+atmos git push flux-deploy -- --follow-tags
 ```
 
 ## Push Contention
@@ -95,6 +98,14 @@ A rejected non-fast-forward push is the most common failure mode in GitOps publi
         Environment variable: `ATMOS_IDENTITY`
     </dd>
 </dl>
+
+## Native Git Arguments
+
+Arguments after `--` are passed verbatim to each underlying `git push` invocation (not to the `pull --ff-only` recovery between retries).
+
+```shell
+atmos git push flux-deploy -- --follow-tags
+```
 
 ## Related
 

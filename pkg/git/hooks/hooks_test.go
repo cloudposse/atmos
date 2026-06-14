@@ -1,4 +1,4 @@
-package git
+package hooks
 
 import (
 	"errors"
@@ -17,6 +17,15 @@ import (
 )
 
 // ---- helper: create a temporary git repository ----
+
+func gitTestArgs(args ...string) []string {
+	base := []string{
+		"-c", "commit.gpgsign=false",
+		"-c", "tag.gpgsign=false",
+		"-c", "gpg.format=openpgp",
+	}
+	return append(base, args...)
+}
 
 // initTempRepo creates a new git repository in a temp directory and returns the
 // path. The test is skipped when git is not available.
@@ -68,17 +77,17 @@ func assertHookExecutable(t *testing.T, path string) {
 	assert.True(t, info.Mode()&0o100 != 0, "hook file must be executable")
 }
 
-// ---- shimContent tests ----
+// ---- ShimContent tests ----
 
 func TestShimContent(t *testing.T) {
-	content := shimContent("pre-commit")
+	content := ShimContent("pre-commit")
 	assert.Contains(t, content, "#!/bin/sh")
-	assert.Contains(t, content, atmosShimMarker)
+	assert.Contains(t, content, ShimMarker)
 	assert.Contains(t, content, "exec atmos git hooks run pre-commit \"$@\"")
 }
 
 func TestShimContent_CommitMsg(t *testing.T) {
-	content := shimContent("commit-msg")
+	content := ShimContent("commit-msg")
 	assert.Contains(t, content, "exec atmos git hooks run commit-msg \"$@\"")
 }
 
@@ -97,7 +106,7 @@ func TestInstallHook_WritesExecutableShim(t *testing.T) {
 	// File must exist with correct content.
 	content, err := os.ReadFile(hookPath)
 	require.NoError(t, err)
-	assert.Contains(t, string(content), atmosShimMarker)
+	assert.Contains(t, string(content), ShimMarker)
 	assert.Contains(t, string(content), "exec atmos git hooks run pre-commit \"$@\"")
 
 	// File must be executable.
@@ -138,7 +147,7 @@ func TestInstallHook_ForceOverwritesUserHook(t *testing.T) {
 
 	got, err := os.ReadFile(hookPath)
 	require.NoError(t, err)
-	assert.Contains(t, string(got), atmosShimMarker)
+	assert.Contains(t, string(got), ShimMarker)
 }
 
 // ---- install: idempotent for Atmos-generated files ----
@@ -150,7 +159,7 @@ func TestInstallHook_OverwritesAtmosShimWithoutForce(t *testing.T) {
 
 	hookPath := filepath.Join(dir, "pre-commit")
 	// Write an existing Atmos shim.
-	require.NoError(t, os.WriteFile(hookPath, []byte(shimContent("pre-commit")), 0o755))
+	require.NoError(t, os.WriteFile(hookPath, []byte(ShimContent("pre-commit")), 0o755))
 
 	// Should succeed without --force because the marker is present.
 	err := installHook(dir, "pre-commit", false)
@@ -158,7 +167,7 @@ func TestInstallHook_OverwritesAtmosShimWithoutForce(t *testing.T) {
 
 	got, err := os.ReadFile(hookPath)
 	require.NoError(t, err)
-	assert.Contains(t, string(got), atmosShimMarker)
+	assert.Contains(t, string(got), ShimMarker)
 }
 
 // ---- install: creates hooks directory when missing ----
@@ -215,7 +224,7 @@ func TestInstallHook_RejectsUnsafeHookNames(t *testing.T) {
 func TestUninstallHook_RemovesAtmosShim(t *testing.T) {
 	dir := t.TempDir()
 	hookPath := filepath.Join(dir, "pre-commit")
-	require.NoError(t, os.WriteFile(hookPath, []byte(shimContent("pre-commit")), 0o755))
+	require.NoError(t, os.WriteFile(hookPath, []byte(ShimContent("pre-commit")), 0o755))
 
 	err := uninstallHook(dir, "pre-commit")
 	require.NoError(t, err)
@@ -254,7 +263,7 @@ func TestUninstallHook_RejectsUnsafeHookNamesBeforeRemovingFiles(t *testing.T) {
 	require.NoError(t, os.MkdirAll(dir, 0o755))
 
 	outside := filepath.Join(parent, "outside")
-	require.NoError(t, os.WriteFile(outside, []byte(shimContent("pre-commit")), 0o755))
+	require.NoError(t, os.WriteFile(outside, []byte(ShimContent("pre-commit")), 0o755))
 
 	err := uninstallHook(dir, "../outside")
 	require.Error(t, err)
@@ -262,7 +271,7 @@ func TestUninstallHook_RejectsUnsafeHookNamesBeforeRemovingFiles(t *testing.T) {
 
 	got, readErr := os.ReadFile(outside)
 	require.NoError(t, readErr, "unsafe hook name must not remove outside files")
-	assert.Contains(t, string(got), atmosShimMarker)
+	assert.Contains(t, string(got), ShimMarker)
 }
 
 // ---- validateHookNames ----
@@ -299,52 +308,42 @@ func TestValidateHookNames_NilConfig(t *testing.T) {
 	assert.True(t, errors.Is(err, errUtils.ErrGitHookNotConfigured))
 }
 
-// ---- hookNotConfiguredErr ----
+// ---- NotConfiguredError ----
 
-func TestHookNotConfiguredErr_ListsConfiguredHooks(t *testing.T) {
+func TestNotConfiguredError_ListsConfiguredHooks(t *testing.T) {
 	hooks := map[string]schema.GitHookEntry{
 		"pre-commit": {Command: "atmos workflow pre-commit"},
 		"commit-msg": {Command: "atmos workflow commit-msg -- \"$1\""},
 	}
-	err := hookNotConfiguredErr("pre-push", hooks)
+	err := NotConfiguredError("pre-push", hooks)
 	require.Error(t, err)
 	assert.True(t, errors.Is(err, errUtils.ErrGitHookNotConfigured))
 	// The sentinel text must be present in the error message.
 	assert.Contains(t, err.Error(), "git hook not configured")
 }
 
-func TestHookNotConfiguredErr_NoHooksConfigured(t *testing.T) {
-	err := hookNotConfiguredErr("pre-commit", nil)
+func TestNotConfiguredError_NoHooksConfigured(t *testing.T) {
+	err := NotConfiguredError("pre-commit", nil)
 	require.Error(t, err)
 	assert.True(t, errors.Is(err, errUtils.ErrGitHookNotConfigured))
 }
 
-// ---- runHooksRun: missing config → ErrGitHookNotConfigured with exit code 2 ----
+// ---- Run: missing config → ErrGitHookNotConfigured with exit code 2 ----
 
-func TestRunHooksRun_HookNotConfigured(t *testing.T) {
-	original := atmosConfigPtr
-	t.Cleanup(func() { atmosConfigPtr = original })
-
-	atmosConfigPtr = &schema.AtmosConfiguration{
-		Git: schema.GitConfig{
-			Hooks: map[string]schema.GitHookEntry{
-				"pre-commit": {Command: "atmos workflow pre-commit"},
-			},
+func TestRun_HookNotConfigured(t *testing.T) {
+	cfg := &schema.GitConfig{
+		Hooks: map[string]schema.GitHookEntry{
+			"pre-commit": {Command: "atmos workflow pre-commit"},
 		},
 	}
 
-	err := runHooksRun("commit-msg", nil)
+	err := Run(cfg, "commit-msg", nil)
 	require.Error(t, err)
 	assert.True(t, errors.Is(err, errUtils.ErrGitHookNotConfigured))
 }
 
-func TestRunHooksRun_NilConfig(t *testing.T) {
-	original := atmosConfigPtr
-	t.Cleanup(func() { atmosConfigPtr = original })
-
-	atmosConfigPtr = nil
-
-	err := runHooksRun("pre-commit", nil)
+func TestRun_NilConfig(t *testing.T) {
+	err := Run(nil, "pre-commit", nil)
 	require.Error(t, err)
 	assert.True(t, errors.Is(err, errUtils.ErrGitHookNotConfigured))
 }
@@ -371,55 +370,29 @@ func TestBuildHookCommand_MultipleArgs(t *testing.T) {
 	assert.Equal(t, "atmos workflow pre-push 'origin' 'https://github.com/acme/repo.git'", got)
 }
 
-// ---- extractHookNameAndArgs ----
+// ---- SortedNames ----
 
-func TestExtractHookNameAndArgs_Basic(t *testing.T) {
-	name, args := extractHookNameAndArgs([]string{"pre-commit"})
-	assert.Equal(t, "pre-commit", name)
-	assert.Empty(t, args)
-}
-
-func TestExtractHookNameAndArgs_WithArgs(t *testing.T) {
-	name, args := extractHookNameAndArgs([]string{"commit-msg", ".git/COMMIT_EDITMSG"})
-	assert.Equal(t, "commit-msg", name)
-	assert.Equal(t, []string{".git/COMMIT_EDITMSG"}, args)
-}
-
-func TestExtractHookNameAndArgs_Empty(t *testing.T) {
-	name, args := extractHookNameAndArgs(nil)
-	assert.Equal(t, "", name)
-	assert.Nil(t, args)
-}
-
-func TestExtractHookNameAndArgs_SkipsLeadingFlags(t *testing.T) {
-	name, args := extractHookNameAndArgs([]string{"--verbose", "pre-commit", "extra"})
-	assert.Equal(t, "pre-commit", name)
-	assert.Equal(t, []string{"extra"}, args)
-}
-
-// ---- sortedKeys ----
-
-func TestSortedKeys_ReturnsSorted(t *testing.T) {
+func TestSortedNames_ReturnsSorted(t *testing.T) {
 	m := map[string]schema.GitHookEntry{
 		"pre-push":   {Command: "x"},
 		"commit-msg": {Command: "y"},
 		"pre-commit": {Command: "z"},
 	}
-	got := sortedKeys(m)
+	got := SortedNames(m)
 	assert.Equal(t, []string{"commit-msg", "pre-commit", "pre-push"}, got)
 }
 
-func TestSortedKeys_EmptyMap(t *testing.T) {
-	got := sortedKeys(map[string]schema.GitHookEntry{})
+func TestSortedNames_EmptyMap(t *testing.T) {
+	got := SortedNames(map[string]schema.GitHookEntry{})
 	assert.Empty(t, got)
 }
 
-// ---- runHooksRun: stdin forwarding via ShellRunner ----
+// ---- Run: stdin forwarding via ShellRunner ----
 // ShellRunner calls interp.StdIO(os.Stdin, ...) unconditionally.
 // We assert the design: buildHookCommand produces the expected string that
 // would be passed to ShellRunner, which inherits os.Stdin.
 
-func TestRunHooksRun_StdinForwardingDesign(t *testing.T) {
+func TestRun_StdinForwardingDesign(t *testing.T) {
 	// Stdin-consuming hooks (pre-push, pre-receive) must not receive spurious args.
 	cmd := buildHookCommand("cat", []string{})
 	assert.Equal(t, "cat", cmd, "stdin-consuming hook must not receive spurious args")
@@ -482,10 +455,10 @@ func TestWarnIfHooksPathSet_NoHooksPath(t *testing.T) {
 	warnIfHooksPathSet(t.Context())
 }
 
-// ---- runHooksInstall and runHooksUninstall integration: using temp git repo ----
+// ---- Install and Uninstall integration: using temp git repo ----
 // Must NOT run in parallel because they modify cwd.
 
-func TestRunHooksInstall_AllConfigured(t *testing.T) {
+func TestInstall_AllConfigured(t *testing.T) {
 	repoDir := initTempRepo(t)
 
 	origDir, err := os.Getwd()
@@ -494,18 +467,14 @@ func TestRunHooksInstall_AllConfigured(t *testing.T) {
 
 	require.NoError(t, os.Chdir(repoDir))
 
-	original := atmosConfigPtr
-	t.Cleanup(func() { atmosConfigPtr = original })
-	atmosConfigPtr = &schema.AtmosConfiguration{
-		Git: schema.GitConfig{
-			Hooks: map[string]schema.GitHookEntry{
-				"pre-commit": {Command: "atmos workflow pre-commit"},
-				"commit-msg": {Command: "atmos workflow commit-msg -- \"$1\""},
-			},
+	cfg := &schema.GitConfig{
+		Hooks: map[string]schema.GitHookEntry{
+			"pre-commit": {Command: "atmos workflow pre-commit"},
+			"commit-msg": {Command: "atmos workflow commit-msg -- \"$1\""},
 		},
 	}
 
-	err = runHooksInstall(t.Context(), nil, false)
+	err = Install(t.Context(), cfg, nil, false)
 	require.NoError(t, err)
 
 	// Both shims must exist.
@@ -513,11 +482,11 @@ func TestRunHooksInstall_AllConfigured(t *testing.T) {
 		p := filepath.Join(repoDir, ".git", "hooks", name)
 		content, readErr := os.ReadFile(p)
 		require.NoError(t, readErr, "expected shim %s to exist", name)
-		assert.Contains(t, string(content), atmosShimMarker)
+		assert.Contains(t, string(content), ShimMarker)
 	}
 }
 
-func TestRunHooksUninstall_RemovesAtmosShims(t *testing.T) {
+func TestUninstall_RemovesAtmosShims(t *testing.T) {
 	repoDir := initTempRepo(t)
 
 	origDir, err := os.Getwd()
@@ -531,19 +500,15 @@ func TestRunHooksUninstall_RemovesAtmosShims(t *testing.T) {
 
 	// Write an Atmos shim.
 	hookPath := filepath.Join(hDir, "pre-commit")
-	require.NoError(t, os.WriteFile(hookPath, []byte(shimContent("pre-commit")), 0o755))
+	require.NoError(t, os.WriteFile(hookPath, []byte(ShimContent("pre-commit")), 0o755))
 
-	original := atmosConfigPtr
-	t.Cleanup(func() { atmosConfigPtr = original })
-	atmosConfigPtr = &schema.AtmosConfiguration{
-		Git: schema.GitConfig{
-			Hooks: map[string]schema.GitHookEntry{
-				"pre-commit": {Command: "atmos workflow pre-commit"},
-			},
+	cfg := &schema.GitConfig{
+		Hooks: map[string]schema.GitHookEntry{
+			"pre-commit": {Command: "atmos workflow pre-commit"},
 		},
 	}
 
-	err = runHooksUninstall(t.Context(), nil)
+	err = Uninstall(t.Context(), cfg, nil)
 	require.NoError(t, err)
 
 	_, statErr := os.Stat(hookPath)

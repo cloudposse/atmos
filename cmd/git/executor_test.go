@@ -13,12 +13,20 @@ import (
 
 // stubGitProvider is a test double that lets tests control each operation.
 type stubGitProvider struct {
+	initFn   func(ctx context.Context, opts *atmosgit.InitOptions) error
 	cloneFn  func(ctx context.Context, opts *atmosgit.CloneOptions) error
 	pullFn   func(ctx context.Context, opts *atmosgit.PullOptions) error
 	statusFn func(ctx context.Context, opts *atmosgit.StatusOptions) (*atmosgit.StatusResult, error)
 	diffFn   func(ctx context.Context, opts *atmosgit.DiffOptions) (*atmosgit.DiffResult, error)
 	commitFn func(ctx context.Context, opts *atmosgit.CommitOptions) (*atmosgit.CommitResult, error)
 	pushFn   func(ctx context.Context, opts *atmosgit.PushOptions) error
+}
+
+func (s *stubGitProvider) Init(ctx context.Context, opts *atmosgit.InitOptions) error {
+	if s.initFn != nil {
+		return s.initFn(ctx, opts)
+	}
+	return nil
 }
 
 func (s *stubGitProvider) Clone(ctx context.Context, opts *atmosgit.CloneOptions) error {

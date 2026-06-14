@@ -18,7 +18,7 @@ func (p *Provider) Push(ctx context.Context, opts *atmosgit.PushOptions) error {
 
 	attempts := opts.Retries + 1
 	for attempt := range attempts {
-		result, err := p.pushOnce(ctx, opts.RepoContext)
+		result, err := p.pushOnce(ctx, opts)
 		if err == nil {
 			return nil
 		}
@@ -38,12 +38,13 @@ func (p *Provider) Push(ctx context.Context, opts *atmosgit.PushOptions) error {
 }
 
 // pushOnce performs a single push attempt.
-func (p *Provider) pushOnce(ctx context.Context, rc atmosgit.RepoContext) (atmosgit.RunResult, error) {
-	args := []string{"push", remoteOrDefault(rc.Remote)}
-	if rc.Branch != "" {
-		args = append(args, rc.Branch)
+func (p *Provider) pushOnce(ctx context.Context, opts *atmosgit.PushOptions) (atmosgit.RunResult, error) {
+	args := []string{"push", remoteOrDefault(opts.Remote)}
+	if opts.Branch != "" {
+		args = append(args, opts.Branch)
 	}
-	return p.run(ctx, rc.Workdir, rc.Env, args...)
+	args = append(args, opts.ExtraArgs...)
+	return p.run(ctx, opts.Workdir, opts.Env, args...)
 }
 
 // rebaseOntoRemote replays local commits onto the updated remote ref so the

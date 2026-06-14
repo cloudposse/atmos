@@ -1369,6 +1369,9 @@ func showUsageExample(cmd *cobra.Command, details string) {
 	errUtils.CheckErrorPrintAndExit(errors.New(details), "Incorrect Usage", suggestion)
 }
 
+// appendUsageSection appends a generated "Usage" Markdown section (a fenced
+// shell block containing the command's usage lines) to the details string.
+// When the command yields no usage lines, details is returned unchanged.
 func appendUsageSection(details string, cmd *cobra.Command) string {
 	usage := commandUsageLines(cmd)
 	if usage == "" {
@@ -1378,6 +1381,10 @@ func appendUsageSection(details string, cmd *cobra.Command) string {
 	return details + "\n## Usage\n\n```shell\n" + usage + "\n```\n"
 }
 
+// commandUsageLines generates the usage line(s) for a cobra command: the
+// UseLine when the command is runnable, plus a "<path> [sub-command] [flags]"
+// line when it has available subcommands. Returns an empty string for a nil
+// command.
 func commandUsageLines(cmd *cobra.Command) string {
 	if cmd == nil {
 		return ""

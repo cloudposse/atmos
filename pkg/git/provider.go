@@ -50,11 +50,20 @@ type CloneOptions struct {
 	SingleBranch bool
 	// Submodules enables submodule initialization.
 	Submodules bool
+	// ExtraArgs are native git arguments (from `--` on the command line)
+	// appended verbatim to the `git clone` invocation by the cli provider.
+	// They apply only to a fresh clone, not when reconciling an existing
+	// workdir (where no `git clone` runs).
+	ExtraArgs []string
 }
 
 // PullOptions configures Pull. Pull is always fast-forward-only.
 type PullOptions struct {
 	RepoContext
+	// ExtraArgs are native git arguments (from `--` on the command line)
+	// appended verbatim to the `git pull --ff-only` invocation by the cli
+	// provider.
+	ExtraArgs []string
 }
 
 // StatusOptions configures Status.
@@ -122,17 +131,50 @@ type CommitResult struct {
 	SHA       string
 }
 
+// InitOptions configures Init. Init creates a new repository workdir from
+// scratch — the inverse of Clone, for GitOps repositories whose remote has no
+// content yet.
+type InitOptions struct {
+	RepoContext
+	// URI is the configured remote repository URI, registered as the
+	// configured remote (default "origin") so commit/push work immediately.
+	URI string
+	// FromURI optionally seeds the new repository's content from another
+	// repository (a template or a repository being migrated).
+	FromURI string
+	// KeepHistory preserves FromURI's full history and keeps the source
+	// reachable as an additional remote ("upstream") so future updates can be
+	// pulled. When false (the default), the source content is imported with a
+	// single fresh initial commit and no link to the source remains.
+	KeepHistory bool
+	// Signing selects the signing mode for the fresh initial commit created
+	// when FromURI is set without KeepHistory; empty means SigningAuto.
+	Signing SigningMode
+	// Author overrides the author/committer identity for the fresh initial
+	// commit when non-nil.
+	Author *Author
+	// ExtraArgs are native git arguments (from `--` on the command line)
+	// appended verbatim to the primary git invocation by the cli provider:
+	// `git init` for an empty init, or the `git clone` of FromURI.
+	ExtraArgs []string
+}
+
 // PushOptions configures Push.
 type PushOptions struct {
 	RepoContext
 	// Retries bounds the rebase-and-retry loop on non-fast-forward rejection.
 	Retries int
+	// ExtraArgs are native git arguments (from `--` on the command line)
+	// appended verbatim to each `git push` invocation by the cli provider
+	// (not to the rebase recovery between retries).
+	ExtraArgs []string
 }
 
 // Provider is a pluggable Git execution backend. The "cli" provider shells out
 // to the git CLI (the only v1 implementation); a future "github" provider may
 // use host APIs for capabilities like pull-request publishing.
 type Provider interface {
+	Init(ctx context.Context, opts *InitOptions) error
 	Clone(ctx context.Context, opts *CloneOptions) error
 	Pull(ctx context.Context, opts *PullOptions) error
 	Status(ctx context.Context, opts *StatusOptions) (*StatusResult, error)

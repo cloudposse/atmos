@@ -176,7 +176,7 @@ func TestRunDiff_URIArg(t *testing.T) {
 func TestRunPush_URIArg(t *testing.T) {
 	setAtmosConfigPtr(t, &schema.AtmosConfiguration{})
 
-	err := runPush(context.Background(), "https://github.com/acme/repo.git", "", "", false)
+	err := runPush(context.Background(), "https://github.com/acme/repo.git", &pushOptions{})
 	require.Error(t, err)
 	assert.True(t, errors.Is(err, errUtils.ErrGitRepositoryRequired))
 }
@@ -185,7 +185,7 @@ func TestRunPush_DryRunPath(t *testing.T) {
 	setAtmosConfigPtr(t, &schema.AtmosConfiguration{})
 
 	// A plain path with dry-run → no provider needed, should succeed.
-	err := runPush(context.Background(), "/tmp/somerepo", "main", "origin", true)
+	err := runPush(context.Background(), "/tmp/somerepo", &pushOptions{Branch: "main", Remote: "origin", DryRun: true})
 	assert.NoError(t, err)
 }
 

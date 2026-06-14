@@ -1,6 +1,8 @@
 package git
 
 import (
+	"github.com/spf13/cobra"
+
 	errUtils "github.com/cloudposse/atmos/errors"
 	atmosgit "github.com/cloudposse/atmos/pkg/git"
 
@@ -9,8 +11,35 @@ import (
 )
 
 // Shared flag/env-var names under the ATMOS_GIT_ prefix.
-// Using non-colliding Viper keys (all prefixed with "git-") avoids keyspace
-// collisions with existing Atmos bindings.
+//
+// Every parser sets a per-subcommand Viper prefix (e.g. "git.clone"), so flags
+// are stored under namespaced keys like "git.clone.branch". This prevents two
+// kinds of keyspace collisions on the global Viper:
+//   - cross-command: "dry-run" is also bound by workflow/terraform with
+//     different env vars (ATMOS_WORKFLOW_DRY_RUN, ATMOS_WORKDIR_DRY_RUN);
+//   - intra-git: clone/pull/status/clean each bind "all" to a different env
+//     var (ATMOS_GIT_CLONE_ALL vs ATMOS_GIT_PULL_ALL, ...), and Viper appends
+//     env bindings per key, so a shared key would bleed across subcommands.
+//
+// Read values with viperKey(<subcommand>ViperPrefix, flagName).
+
+// Per-subcommand Viper key prefixes.
+const (
+	initViperPrefix   = "git.init"
+	cloneViperPrefix  = "git.clone"
+	pullViperPrefix   = "git.pull"
+	pushViperPrefix   = "git.push"
+	statusViperPrefix = "git.status"
+	diffViperPrefix   = "git.diff"
+	commitViperPrefix = "git.commit"
+	cleanViperPrefix  = "git.clean"
+	listViperPrefix   = "git.list"
+)
+
+// viperKey returns the namespaced Viper key for a git subcommand flag.
+func viperKey(prefix, flagName string) string {
+	return prefix + "." + flagName
+}
 
 const (
 	flagRepoURI    = "repo-uri"
@@ -27,15 +56,44 @@ const (
 	flagNoSign     = "no-sign"
 	flagSingleBr   = "single-branch"
 	flagSubmodules = "submodules"
+	flagFrom       = "from"
+	flagKeepHist   = "keep-history"
+	flagForce      = "force"
 	// Shared "all" flag name used across clone, pull, and status subcommands.
 	flagAll = "all"
 )
 
+// Shorthands and env var names shared by several subcommands.
+const (
+	branchShorthand = "b"
+	dryRunShorthand = "n"
+	envGitBranch    = "ATMOS_GIT_BRANCH"
+	envGitDryRun    = "ATMOS_GIT_DRY_RUN"
+)
+
+// newInitParser creates a StandardParser for `atmos git init`.
+func newInitParser() *flags.StandardParser {
+	return flags.NewStandardParser(
+		flags.WithViperPrefix(initViperPrefix),
+		flags.WithStringFlag(flagFrom, "", "", "Seed the new repository from another repository URI"),
+		flags.WithBoolFlag(flagKeepHist, "", false, "Keep the --from repository's history and add it as an 'upstream' remote"),
+		flags.WithStringFlag(flagBranch, branchShorthand, "", "Initial branch name"),
+		flags.WithStringFlag(flagWorkdir, "", "", "Override destination directory"),
+		flags.WithBoolFlag(flagDryRun, dryRunShorthand, false, "Report what would be done without initializing"),
+		flags.WithEnvVars(flagFrom, "ATMOS_GIT_FROM"),
+		flags.WithEnvVars(flagKeepHist, "ATMOS_GIT_KEEP_HISTORY"),
+		flags.WithEnvVars(flagBranch, envGitBranch),
+		flags.WithEnvVars(flagWorkdir, "ATMOS_GIT_WORKDIR"),
+		flags.WithEnvVars(flagDryRun, envGitDryRun),
+	)
+}
+
 // newCloneParser creates a StandardParser for `atmos git clone`.
 func newCloneParser() *flags.StandardParser {
 	return flags.NewStandardParser(
+		flags.WithViperPrefix(cloneViperPrefix),
 		flags.WithStringFlag(flagRepoURI, "", "", "Remote repository URI (overrides configured URI)"),
-		flags.WithStringFlag(flagBranch, "b", "", "Branch to clone"),
+		flags.WithStringFlag(flagBranch, branchShorthand, "", "Branch to clone"),
 		flags.WithStringFlag(flagRemote, "", "", "Remote name (default: origin)"),
 		flags.WithStringFlag(flagWorkdir, "", "", "Override destination directory"),
 		flags.WithIntFlag(flagDepth, "", 0, "Shallow clone depth (0 = full history)"),
@@ -44,11 +102,13 @@ func newCloneParser() *flags.StandardParser {
 		flags.WithBoolFlag(flagSubmodules, "", false, "Initialize submodules after clone"),
 		flags.WithBoolFlag(flagAll, "", false, "Clone/reconcile all configured repositories"),
 		flags.WithEnvVars(flagRepoURI, "ATMOS_GIT_REPO_URI"),
-		flags.WithEnvVars(flagBranch, "ATMOS_GIT_BRANCH"),
+		flags.WithEnvVars(flagBranch, envGitBranch),
 		flags.WithEnvVars(flagRemote, "ATMOS_GIT_REMOTE"),
 		flags.WithEnvVars(flagWorkdir, "ATMOS_GIT_WORKDIR"),
 		flags.WithEnvVars(flagDepth, "ATMOS_GIT_DEPTH"),
 		flags.WithEnvVars(flagFilter, "ATMOS_GIT_FILTER"),
+		flags.WithEnvVars(flagSingleBr, "ATMOS_GIT_SINGLE_BRANCH"),
+		flags.WithEnvVars(flagSubmodules, "ATMOS_GIT_SUBMODULES"),
 		flags.WithEnvVars(flagAll, "ATMOS_GIT_CLONE_ALL"),
 	)
 }
@@ -56,11 +116,12 @@ func newCloneParser() *flags.StandardParser {
 // newPullParser creates a StandardParser for `atmos git pull`.
 func newPullParser() *flags.StandardParser {
 	return flags.NewStandardParser(
-		flags.WithStringFlag(flagBranch, "b", "", "Branch to pull"),
+		flags.WithViperPrefix(pullViperPrefix),
+		flags.WithStringFlag(flagBranch, branchShorthand, "", "Branch to pull"),
 		flags.WithStringFlag(flagRemote, "", "", "Remote name (default: origin)"),
 		flags.WithBoolFlag(flagAll, "", false, "Pull all configured repositories"),
 		flags.WithBoolFlag(flagClone, "", false, "Clone the configured repository first when the workdir is missing"),
-		flags.WithEnvVars(flagBranch, "ATMOS_GIT_BRANCH"),
+		flags.WithEnvVars(flagBranch, envGitBranch),
 		flags.WithEnvVars(flagRemote, "ATMOS_GIT_REMOTE"),
 		flags.WithEnvVars(flagAll, "ATMOS_GIT_PULL_ALL"),
 		flags.WithEnvVars(flagClone, "ATMOS_GIT_PULL_CLONE"),
@@ -70,6 +131,7 @@ func newPullParser() *flags.StandardParser {
 // newStatusParser creates a StandardParser for `atmos git status`.
 func newStatusParser() *flags.StandardParser {
 	return flags.NewStandardParser(
+		flags.WithViperPrefix(statusViperPrefix),
 		flags.WithBoolFlag(flagAll, "", false, "Report status for all configured repositories"),
 		flags.WithEnvVars(flagAll, "ATMOS_GIT_STATUS_ALL"),
 	)
@@ -78,6 +140,7 @@ func newStatusParser() *flags.StandardParser {
 // newDiffParser creates a StandardParser for `atmos git diff`.
 func newDiffParser() *flags.StandardParser {
 	return flags.NewStandardParser(
+		flags.WithViperPrefix(diffViperPrefix),
 		flags.WithStringSliceFlag(flagPath, "", []string{}, "Limit diff to these repo-relative paths"),
 		flags.WithEnvVars(flagPath, "ATMOS_GIT_DIFF_PATH"),
 	)
@@ -86,37 +149,43 @@ func newDiffParser() *flags.StandardParser {
 // newCommitParser creates a StandardParser for `atmos git commit`.
 func newCommitParser() *flags.StandardParser {
 	return flags.NewStandardParser(
+		flags.WithViperPrefix(commitViperPrefix),
 		flags.WithStringFlag(flagMessage, "m", "", "Commit message (required)"),
 		flags.WithStringSliceFlag(flagPath, "", []string{}, "Stage only these repo-relative paths"),
 		flags.WithBoolFlag(flagSign, "", false, "Sign the commit with GPG (-S)"),
 		flags.WithBoolFlag(flagNoSign, "", false, "Disable GPG signing (--no-gpg-sign)"),
-		flags.WithBoolFlag(flagDryRun, "n", false, "Report what would be staged/committed without committing"),
+		flags.WithBoolFlag(flagDryRun, dryRunShorthand, false, "Report what would be staged/committed without committing"),
 		flags.WithEnvVars(flagMessage, "ATMOS_GIT_MESSAGE"),
-		flags.WithEnvVars(flagDryRun, "ATMOS_GIT_DRY_RUN"),
+		flags.WithEnvVars(flagPath, "ATMOS_GIT_COMMIT_PATH"),
+		flags.WithEnvVars(flagSign, "ATMOS_GIT_SIGN"),
+		flags.WithEnvVars(flagNoSign, "ATMOS_GIT_NO_SIGN"),
+		flags.WithEnvVars(flagDryRun, envGitDryRun),
 	)
 }
 
 // newPushParser creates a StandardParser for `atmos git push`.
 func newPushParser() *flags.StandardParser {
 	return flags.NewStandardParser(
-		flags.WithStringFlag(flagBranch, "b", "", "Branch to push (default: current branch)"),
+		flags.WithViperPrefix(pushViperPrefix),
+		flags.WithStringFlag(flagBranch, branchShorthand, "", "Branch to push (default: current branch)"),
 		flags.WithStringFlag(flagRemote, "", "", "Remote name (default: origin)"),
-		flags.WithBoolFlag(flagDryRun, "n", false, "Report what would be pushed without pushing"),
-		flags.WithEnvVars(flagBranch, "ATMOS_GIT_BRANCH"),
+		flags.WithBoolFlag(flagDryRun, dryRunShorthand, false, "Report what would be pushed without pushing"),
+		flags.WithEnvVars(flagBranch, envGitBranch),
 		flags.WithEnvVars(flagRemote, "ATMOS_GIT_REMOTE"),
-		flags.WithEnvVars(flagDryRun, "ATMOS_GIT_DRY_RUN"),
+		flags.WithEnvVars(flagDryRun, envGitDryRun),
 	)
 }
 
 // newCleanParser creates a StandardParser for `atmos git clean`.
 func newCleanParser() *flags.StandardParser {
 	return flags.NewStandardParser(
+		flags.WithViperPrefix(cleanViperPrefix),
 		flags.WithBoolFlag(flagAll, "", false, "Clean all configured repository workdirs"),
 		flags.WithBoolFlag(flagForce, "f", false, "Delete dirty workdirs after safety checks"),
-		flags.WithBoolFlag(flagDryRun, "n", false, "Report what would be deleted without deleting"),
+		flags.WithBoolFlag(flagDryRun, dryRunShorthand, false, "Report what would be deleted without deleting"),
 		flags.WithEnvVars(flagAll, "ATMOS_GIT_CLEAN_ALL"),
 		flags.WithEnvVars(flagForce, "ATMOS_GIT_CLEAN_FORCE"),
-		flags.WithEnvVars(flagDryRun, "ATMOS_GIT_DRY_RUN"),
+		flags.WithEnvVars(flagDryRun, envGitDryRun),
 	)
 }
 
@@ -150,6 +219,16 @@ func resolveWorkdir(workdirFlag, repoWorkdir string) string {
 		return workdirFlag
 	}
 	return repoWorkdir
+}
+
+// completeRepoNames is a cobra ValidArgsFunction completing the positional
+// argument with repository names configured under git.repositories. Commands
+// that also accept filesystem paths keep default file completion as well.
+func completeRepoNames(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+	if len(args) > 0 {
+		return nil, cobra.ShellCompDirectiveNoFileComp
+	}
+	return atmosgit.ConfiguredRepositoryNames(gitConfig()), cobra.ShellCompDirectiveDefault
 }
 
 // wrapRepoNotFound wraps ErrGitRepositoryNotFound with actionable hints.

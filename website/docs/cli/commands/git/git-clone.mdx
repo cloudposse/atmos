@@ -17,7 +17,7 @@ Clone a named repository configured under [`git.repositories`](/cli/configuratio
 ## Usage
 
 ```shell
-atmos git clone [name-or-uri] [flags]
+atmos git clone [name-or-uri] [flags] [-- <native git args>]
 ```
 
 Configure repositories once in `atmos.yaml`, then clone them by name:
@@ -64,6 +64,9 @@ atmos git clone flux-deploy --depth=1 --single-branch --workdir=./deploy
 # In CI (ci.enabled: true): check out the current repository into the
 # working directory — replaces actions/checkout
 atmos git clone
+
+# Pass native arguments to the underlying git clone invocation
+atmos git clone flux-deploy -- --no-tags
 ```
 
 ## Clone Destinations
@@ -158,11 +161,13 @@ Affected detection requires merge-base history. If [`atmos describe affected`](/
     <dt>`--single-branch` <em>(optional)</em></dt>
     <dd>
         Limit the clone to the specified branch.
+        Environment variable: `ATMOS_GIT_SINGLE_BRANCH`
     </dd>
 
     <dt>`--submodules` <em>(optional)</em></dt>
     <dd>
         Initialize submodules after clone. Off by default.
+        Environment variable: `ATMOS_GIT_SUBMODULES`
     </dd>
 
     <dt>`--identity` <em>(optional)</em></dt>
@@ -172,8 +177,17 @@ Affected detection requires merge-base history. If [`atmos describe affected`](/
     </dd>
 </dl>
 
+## Native Git Arguments
+
+Arguments after `--` are passed verbatim to the underlying `git clone` invocation. They apply only when a fresh clone runs; reconciling an existing workdir (fetch + fast-forward) does not invoke `git clone`.
+
+```shell
+atmos git clone flux-deploy -- --no-tags
+```
+
 ## Related
 
+- [`atmos git init`](/cli/commands/git/init) — initialize a repository whose remote has no content yet
 - [`atmos git pull`](/cli/commands/git/pull) — fast-forward an existing workdir
 - [`atmos git list`](/cli/commands/git/list) — list configured repositories and their workdirs
 - [Git Configuration](/cli/configuration/git) — repository fields, defaults, and the native CI lifecycle

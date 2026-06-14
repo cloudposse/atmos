@@ -16,15 +16,11 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/ui"
 	"github.com/cloudposse/atmos/pkg/ui/spinner"
+	"github.com/cloudposse/atmos/pkg/xdg"
 )
 
 // cleanParser handles flag parsing for `atmos git clean`.
 var cleanParser = newCleanParser()
-
-const (
-	envAtmosXDGCacheHome = "ATMOS_XDG_CACHE_HOME"
-	envXDGCacheHome      = "XDG_CACHE_HOME"
-)
 
 // cleanCmd is the `atmos git clean` subcommand.
 var cleanCmd = &cobra.Command{
@@ -36,7 +32,8 @@ Named repositories without an explicit workdir are cleaned from the automatic
 Atmos XDG cache location. The command only accepts configured repository names,
 not arbitrary filesystem paths. Use --dry-run to preview the resolved path and
 --force to delete dirty workdirs.`,
-	Args: cobra.MaximumNArgs(1),
+	Args:              cobra.MaximumNArgs(1),
+	ValidArgsFunction: completeRepoNames,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		defer perf.Track(atmosConfigPtr, "git.clean.RunE")()
 
@@ -46,9 +43,9 @@ not arbitrary filesystem paths. Use --dry-run to preview the resolved path and
 		}
 
 		opts := &cleanOptions{
-			All:    v.GetBool(flagAll),
-			Force:  v.GetBool(flagForce),
-			DryRun: v.GetBool(flagDryRun),
+			All:    v.GetBool(viperKey(cleanViperPrefix, flagAll)),
+			Force:  v.GetBool(viperKey(cleanViperPrefix, flagForce)),
+			DryRun: v.GetBool(viperKey(cleanViperPrefix, flagDryRun)),
 		}
 		return runClean(cmd.Context(), opts, args)
 	},
@@ -250,7 +247,7 @@ func validateCleanWorkdirPath(path string) error {
 }
 
 func validateAutomaticCleanWorkdirPath(path string) error {
-	base, source := gitCacheHomeEnv()
+	base, source := xdg.LookupCacheHomeBase()
 	if base == "" {
 		return nil
 	}
@@ -283,20 +280,6 @@ func validateAutomaticCleanWorkdirPath(path string) error {
 	}
 
 	return nil
-}
-
-func gitCacheHomeEnv() (string, string) {
-	v := viper.New()
-	_ = v.BindEnv(envAtmosXDGCacheHome, envAtmosXDGCacheHome)
-	_ = v.BindEnv(envXDGCacheHome, envXDGCacheHome)
-
-	if value := v.GetString(envAtmosXDGCacheHome); value != "" {
-		return value, envAtmosXDGCacheHome
-	}
-	if value := v.GetString(envXDGCacheHome); value != "" {
-		return value, envXDGCacheHome
-	}
-	return "", ""
 }
 
 func isVolumeRoot(path string) bool {

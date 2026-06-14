@@ -651,9 +651,9 @@ func TestRenderGitRepositoriesList_SortedOutput(t *testing.T) {
 
 func TestParseGitListOptions_ReadsFromViper(t *testing.T) {
 	v := viper.New()
-	v.Set(listFlagColumns, []string{"Name", "URI"})
-	v.Set(listFlagFormat, "json")
-	v.Set(listFlagCheckStatus, true)
+	v.Set(viperKey(listViperPrefix, listFlagColumns), []string{"Name", "URI"})
+	v.Set(viperKey(listViperPrefix, listFlagFormat), "json")
+	v.Set(viperKey(listViperPrefix, listFlagCheckStatus), true)
 
 	opts := parseGitListOptions(listCmd, v)
 	assert.Equal(t, []string{"Name", "URI"}, opts.Columns)

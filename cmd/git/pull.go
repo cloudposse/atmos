@@ -8,6 +8,7 @@ import (
 	"github.com/spf13/viper"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/flags"
 	atmosgit "github.com/cloudposse/atmos/pkg/git"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/ui"
@@ -25,8 +26,12 @@ or a filesystem path. When no argument is provided, Atmos pulls the single
 configured repository. Pull is always fast-forward-only.
 
 Use the --clone flag to clone a configured repository when its workdir is missing.
-Use the --all flag to pull all configured repositories concurrently.`,
-	Args: cobra.MaximumNArgs(1),
+Use the --all flag to pull all configured repositories concurrently.
+
+Arguments after -- are passed verbatim to the underlying git pull invocation:
+  atmos git pull flux-deploy -- --no-tags`,
+	Args:              flags.SeparatorAwareValidator(cobra.MaximumNArgs(1)),
+	ValidArgsFunction: completeRepoNames,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		defer perf.Track(atmosConfigPtr, "git.pull.RunE")()
 
@@ -35,15 +40,17 @@ Use the --all flag to pull all configured repositories concurrently.`,
 			return err
 		}
 
-		branch := v.GetString(flagBranch)
-		remote := v.GetString(flagRemote)
+		positional, nativeArgs := flags.SplitArgsAtDash(cmd, args)
+		branch := v.GetString(viperKey(pullViperPrefix, flagBranch))
+		remote := v.GetString(viperKey(pullViperPrefix, flagRemote))
 		opts := &pullOptions{
-			All:    v.GetBool(flagAll),
-			Clone:  v.GetBool(flagClone),
-			Branch: branch,
-			Remote: remote,
+			All:       v.GetBool(viperKey(pullViperPrefix, flagAll)),
+			Clone:     v.GetBool(viperKey(pullViperPrefix, flagClone)),
+			Branch:    branch,
+			Remote:    remote,
+			ExtraArgs: nativeArgs,
 		}
-		return runPull(cmd.Context(), opts, args)
+		return runPull(cmd.Context(), opts, positional)
 	},
 }
 
@@ -52,6 +59,8 @@ type pullOptions struct {
 	Clone  bool
 	Branch string
 	Remote string
+	// ExtraArgs are native git arguments captured after "--" on the command line.
+	ExtraArgs []string
 }
 
 type pullTarget struct {
@@ -121,6 +130,7 @@ func runPullOne(ctx context.Context, arg string, opts *pullOptions) error {
 			Branch:  target.Branch,
 			Env:     env,
 		},
+		ExtraArgs: opts.ExtraArgs,
 	})
 }
 

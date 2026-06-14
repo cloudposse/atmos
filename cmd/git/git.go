@@ -9,6 +9,7 @@ package git
 import (
 	"github.com/spf13/cobra"
 
+	cmdhooks "github.com/cloudposse/atmos/cmd/git/hooks"
 	"github.com/cloudposse/atmos/cmd/internal"
 	"github.com/cloudposse/atmos/cmd/markdown"
 	"github.com/cloudposse/atmos/pkg/flags"
@@ -28,6 +29,7 @@ var atmosConfigPtr *schema.AtmosConfiguration
 // making the configuration available to all git subcommands.
 func SetAtmosConfig(config *schema.AtmosConfiguration) {
 	atmosConfigPtr = config
+	cmdhooks.SetAtmosConfig(config)
 }
 
 // gitCmd is the `atmos git` parent command.
@@ -41,6 +43,7 @@ func init() {
 	defer perf.Track(nil, "git.init")()
 
 	// Attach subcommands.
+	gitCmd.AddCommand(initCmd)
 	gitCmd.AddCommand(cloneCmd)
 	gitCmd.AddCommand(pullCmd)
 	gitCmd.AddCommand(statusCmd)
@@ -48,6 +51,7 @@ func init() {
 	gitCmd.AddCommand(commitCmd)
 	gitCmd.AddCommand(pushCmd)
 	gitCmd.AddCommand(cleanCmd)
+	gitCmd.AddCommand(cmdhooks.Command)
 
 	// Register this command with the registry.
 	internal.Register(&GitCommandProvider{})

@@ -86,16 +86,19 @@ atmos git commit flux-deploy --dry-run
     <dt>`--path` <em>(optional)</em></dt>
     <dd>
         Stage only these repo-relative paths. Repeatable (`--path=a --path=b`) or comma-separated (`--path=a,b`). When omitted, all changes in the worktree are staged.
+        Environment variable: `ATMOS_GIT_COMMIT_PATH`
     </dd>
 
     <dt>`--sign` <em>(optional)</em></dt>
     <dd>
         Sign the commit with GPG (passes `-S` to `git commit`). Mutually exclusive with `--no-sign`.
+        Environment variable: `ATMOS_GIT_SIGN`
     </dd>
 
     <dt>`--no-sign` <em>(optional)</em></dt>
     <dd>
         Disable GPG signing (passes `--no-gpg-sign` to `git commit`). Mutually exclusive with `--sign`.
+        Environment variable: `ATMOS_GIT_NO_SIGN`
     </dd>
 
     <dt>`--dry-run` / `-n` <em>(optional)</em></dt>

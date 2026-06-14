@@ -78,10 +78,10 @@ tree and matrix are not supported for this flat repository list.`,
 func parseGitListOptions(cmd *cobra.Command, v *viper.Viper) *GitListOptions {
 	return &GitListOptions{
 		Flags:       flags.ParseGlobalFlags(cmd, v),
-		Columns:     v.GetStringSlice(listFlagColumns),
-		Format:      v.GetString(listFlagFormat),
-		Delimiter:   v.GetString(listFlagDelimiter),
-		CheckStatus: v.GetBool(listFlagCheckStatus),
+		Columns:     v.GetStringSlice(viperKey(listViperPrefix, listFlagColumns)),
+		Format:      v.GetString(viperKey(listViperPrefix, listFlagFormat)),
+		Delimiter:   v.GetString(viperKey(listViperPrefix, listFlagDelimiter)),
+		CheckStatus: v.GetBool(viperKey(listViperPrefix, listFlagCheckStatus)),
 	}
 }
 
@@ -345,6 +345,7 @@ func defaultGitColumnNames(includeStatus bool) []string {
 
 func init() {
 	listParser = flags.NewStandardParser(
+		flags.WithViperPrefix(listViperPrefix),
 		flags.WithStringSliceFlag(listFlagColumns, "", []string{}, "Columns to display (comma-separated, overrides atmos.yaml)"),
 		flags.WithStringFlag(listFlagFormat, "f", "", "Output format: "+validFormats),
 		flags.WithStringFlag(listFlagDelimiter, "", "", "Delimiter for CSV/TSV output"),

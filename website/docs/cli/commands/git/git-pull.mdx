@@ -17,7 +17,7 @@ Pull the latest changes for a repository configured under [`git.repositories`](/
 ## Usage
 
 ```shell
-atmos git pull [name-or-path] [flags]
+atmos git pull [name-or-path] [flags] [-- <native git args>]
 ```
 
 With a configured repository:
@@ -57,6 +57,9 @@ atmos git pull --all --clone
 
 # Pull a specific branch from a specific remote
 atmos git pull flux-deploy --remote=origin --branch=main
+
+# Pass native arguments to the underlying git pull invocation
+atmos git pull flux-deploy -- --no-tags
 ```
 
 ## Argument Resolution
@@ -105,6 +108,14 @@ The positional argument is resolved as: configured repository **name** → **URI
         Environment variable: `ATMOS_IDENTITY`
     </dd>
 </dl>
+
+## Native Git Arguments
+
+Arguments after `--` are passed verbatim to the underlying `git pull --ff-only` invocation.
+
+```shell
+atmos git pull flux-deploy -- --no-tags
+```
 
 ## Related
 

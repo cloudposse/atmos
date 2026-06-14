@@ -439,7 +439,7 @@ func TestRunPush_Path_Success(t *testing.T) {
 	t.Cleanup(func() { atmosConfigPtr = original })
 	atmosConfigPtr = &schema.AtmosConfiguration{}
 
-	err := runPush(context.Background(), dir, "main", "origin", false)
+	err := runPush(context.Background(), dir, &pushOptions{Branch: "main", Remote: "origin"})
 	require.NoError(t, err)
 	require.NotNil(t, capturedOpts)
 	assert.Equal(t, dir, capturedOpts.Workdir)
@@ -459,7 +459,7 @@ func TestRunPush_Path_Error(t *testing.T) {
 	t.Cleanup(func() { atmosConfigPtr = original })
 	atmosConfigPtr = &schema.AtmosConfiguration{}
 
-	err := runPush(context.Background(), t.TempDir(), "main", "origin", false)
+	err := runPush(context.Background(), t.TempDir(), &pushOptions{Branch: "main", Remote: "origin"})
 	require.Error(t, err)
 	assert.True(t, errors.Is(err, pushErr))
 }

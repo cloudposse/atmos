@@ -95,7 +95,7 @@ func TestRunPush_ConfiguredName_Success(t *testing.T) {
 		},
 	}
 
-	err := runPush(context.Background(), "my-repo", "", "", false)
+	err := runPush(context.Background(), "my-repo", &pushOptions{})
 	require.NoError(t, err)
 	require.NotNil(t, capturedOpts)
 	assert.Equal(t, dir, capturedOpts.Workdir)
@@ -119,7 +119,7 @@ func TestRunPush_ConfiguredName_DryRun(t *testing.T) {
 	}
 
 	// Dry-run with named repo: no provider call needed.
-	err := runPush(context.Background(), "my-repo", "main", "origin", true)
+	err := runPush(context.Background(), "my-repo", &pushOptions{Branch: "main", Remote: "origin", DryRun: true})
 	assert.NoError(t, err)
 }
 
@@ -134,7 +134,7 @@ func TestRunPush_PathArg_NonDryRun(t *testing.T) {
 
 	// A path that's not a configured name is treated as argKindPath.
 	// With test provider override it succeeds.
-	err := runPush(context.Background(), t.TempDir(), "main", "origin", false)
+	err := runPush(context.Background(), t.TempDir(), &pushOptions{Branch: "main", Remote: "origin"})
 	assert.NoError(t, err)
 }
 

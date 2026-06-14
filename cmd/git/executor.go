@@ -55,6 +55,26 @@ func newExecutorWithProvider(p atmosgit.Provider) *Executor {
 	return &Executor{provider: p}
 }
 
+// Init delegates to the provider.
+func (e *Executor) Init(ctx context.Context, opts *atmosgit.InitOptions, label string) error {
+	defer perf.Track(nil, "git.Executor.Init")()
+
+	progressMsg := fmt.Sprintf("Initializing %s", label)
+	completedMsg := fmt.Sprintf("Initialized %s in %s.", label, opts.Workdir)
+	stderr, err := e.captureStderr(func() error {
+		return spinner.ExecWithSpinner(progressMsg, completedMsg, func() error {
+			return e.provider.Init(ctx, opts)
+		})
+	})
+	return wrapGitOperationError(
+		fmt.Sprintf("initialize Git repository %q", label),
+		opts.Workdir,
+		stderr,
+		err,
+		"Run 'atmos git list' to confirm the configured URI, branch, and resolved workdir.",
+	)
+}
+
 // Clone delegates to the provider.
 func (e *Executor) Clone(ctx context.Context, opts *atmosgit.CloneOptions, label string) error {
 	defer perf.Track(nil, "git.Executor.Clone")()

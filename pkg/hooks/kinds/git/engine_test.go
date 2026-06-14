@@ -34,6 +34,8 @@ type stubProvider struct {
 	pushCalls   []*gitsvc.PushOptions
 }
 
+func (s *stubProvider) Init(_ context.Context, _ *gitsvc.InitOptions) error { return nil }
+
 func (s *stubProvider) Clone(_ context.Context, opts *gitsvc.CloneOptions) error {
 	s.cloneCalls = append(s.cloneCalls, opts)
 	return s.cloneErr

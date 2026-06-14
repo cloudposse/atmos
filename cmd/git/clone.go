@@ -13,6 +13,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/ci"
+	"github.com/cloudposse/atmos/pkg/flags"
 	atmosgit "github.com/cloudposse/atmos/pkg/git"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -41,8 +42,12 @@ URI forms supported:
   - SCP-style:          atmos git clone git@github.com:acme/repo.git
   - go-getter style:    atmos git clone git::https://github.com/acme/repo.git?ref=main&depth=1
   - Single configured:  atmos git clone
-  - Bulk operation:     atmos git clone --all`,
-	Args: cobra.MaximumNArgs(1),
+  - Bulk operation:     atmos git clone --all
+
+Arguments after -- are passed verbatim to the underlying git clone invocation:
+  atmos git clone flux-deploy -- --no-tags`,
+	Args:              flags.SeparatorAwareValidator(cobra.MaximumNArgs(1)),
+	ValidArgsFunction: completeRepoNames,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		defer perf.Track(atmosConfigPtr, "git.clone.RunE")()
 
@@ -51,8 +56,10 @@ URI forms supported:
 			return err
 		}
 
+		positional, nativeArgs := flags.SplitArgsAtDash(cmd, args)
 		opts := parseCloneFlags(v)
-		return runClone(cmd.Context(), opts, args)
+		opts.ExtraArgs = nativeArgs
+		return runClone(cmd.Context(), opts, positional)
 	},
 }
 
@@ -67,19 +74,21 @@ type cloneOptions struct {
 	SingleBranch bool
 	Submodules   bool
 	All          bool
+	// ExtraArgs are native git arguments captured after "--" on the command line.
+	ExtraArgs []string
 }
 
 func parseCloneFlags(v *viper.Viper) *cloneOptions {
 	return &cloneOptions{
-		RepoURI:      v.GetString(flagRepoURI),
-		Branch:       v.GetString(flagBranch),
-		Remote:       v.GetString(flagRemote),
-		Workdir:      v.GetString(flagWorkdir),
-		Depth:        v.GetInt(flagDepth),
-		Filter:       v.GetString(flagFilter),
-		SingleBranch: v.GetBool(flagSingleBr),
-		Submodules:   v.GetBool(flagSubmodules),
-		All:          v.GetBool(flagAll),
+		RepoURI:      v.GetString(viperKey(cloneViperPrefix, flagRepoURI)),
+		Branch:       v.GetString(viperKey(cloneViperPrefix, flagBranch)),
+		Remote:       v.GetString(viperKey(cloneViperPrefix, flagRemote)),
+		Workdir:      v.GetString(viperKey(cloneViperPrefix, flagWorkdir)),
+		Depth:        v.GetInt(viperKey(cloneViperPrefix, flagDepth)),
+		Filter:       v.GetString(viperKey(cloneViperPrefix, flagFilter)),
+		SingleBranch: v.GetBool(viperKey(cloneViperPrefix, flagSingleBr)),
+		Submodules:   v.GetBool(viperKey(cloneViperPrefix, flagSubmodules)),
+		All:          v.GetBool(viperKey(cloneViperPrefix, flagAll)),
 	}
 }
 
@@ -160,6 +169,7 @@ func runCloneNamed(ctx context.Context, name string, opts *cloneOptions) error {
 		Filter:       filter,
 		SingleBranch: opts.SingleBranch || resolved.Clone.SingleBranch,
 		Submodules:   opts.Submodules || resolved.Clone.Submodules,
+		ExtraArgs:    opts.ExtraArgs,
 	}
 
 	if opts.All {
@@ -209,6 +219,7 @@ func runCloneURI(ctx context.Context, rawURI string, opts *cloneOptions) error {
 		Filter:       opts.Filter,
 		SingleBranch: opts.SingleBranch,
 		Submodules:   opts.Submodules,
+		ExtraArgs:    opts.ExtraArgs,
 	}
 
 	return exec.Clone(ctx, cloneOpts, parsed.URI)
@@ -303,8 +314,9 @@ func runCICheckout(ctx context.Context, providerName string, ciCtx *ci.Context, 
 			Branch:  resolveStringPrecedence(opts.Branch, ciCtx.Ref),
 			Env:     env,
 		},
-		URI:   ciCtx.CloneURL,
-		Depth: opts.Depth,
+		URI:       ciCtx.CloneURL,
+		Depth:     opts.Depth,
+		ExtraArgs: opts.ExtraArgs,
 	}
 
 	if err := exec.Clone(ctx, cloneOpts, repository); err != nil {
@@ -373,6 +385,6 @@ func runConcurrent(ctx context.Context, names []string, f func(context.Context, 
 func init() {
 	cloneParser.RegisterFlags(cloneCmd)
 	if err := cloneParser.BindToViper(viper.GetViper()); err != nil {
-		panic(err)
+		panic(fmt.Sprintf("git clone: BindToViper: %v", err))
 	}
 }

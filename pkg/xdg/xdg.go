@@ -13,6 +13,23 @@ import (
 // DefaultCacheDirPerm is the default permission for cache directories.
 const DefaultCacheDirPerm = 0o755
 
+// Environment variable names for the XDG base directories. Each standard XDG
+// variable has an Atmos-specific override that takes precedence over it.
+const (
+	// EnvXDGCacheHome is the standard XDG cache base directory variable.
+	EnvXDGCacheHome = "XDG_CACHE_HOME"
+	// EnvAtmosXDGCacheHome is the Atmos-specific cache base override.
+	EnvAtmosXDGCacheHome = "ATMOS_XDG_CACHE_HOME"
+	// EnvXDGDataHome is the standard XDG data base directory variable.
+	EnvXDGDataHome = "XDG_DATA_HOME"
+	// EnvAtmosXDGDataHome is the Atmos-specific data base override.
+	EnvAtmosXDGDataHome = "ATMOS_XDG_DATA_HOME"
+	// EnvXDGConfigHome is the standard XDG config base directory variable.
+	EnvXDGConfigHome = "XDG_CONFIG_HOME"
+	// EnvAtmosXDGConfigHome is the Atmos-specific config base override.
+	EnvAtmosXDGConfigHome = "ATMOS_XDG_CONFIG_HOME"
+)
+
 func init() {
 	// Override adrg/xdg defaults for macOS to follow CLI tool conventions.
 	// This must happen in init() to ensure it runs before any code uses xdg.ConfigHome, etc.
@@ -34,33 +51,53 @@ func init() {
 // It respects ATMOS_XDG_CACHE_HOME and XDG_CACHE_HOME environment variables.
 // The directory is created if it doesn't exist.
 func GetXDGCacheDir(subpath string, perm os.FileMode) (string, error) {
-	return getXDGDir("XDG_CACHE_HOME", "ATMOS_XDG_CACHE_HOME", xdg.CacheHome, subpath, perm)
+	return getXDGDir(EnvXDGCacheHome, EnvAtmosXDGCacheHome, xdg.CacheHome, subpath, perm)
 }
 
 // LookupXDGCacheDir resolves the Atmos cache directory path without creating it.
 // Use this for read-only checks where directory creation is not desired.
 func LookupXDGCacheDir(subpath string) string {
-	return lookupXDGDir("XDG_CACHE_HOME", "ATMOS_XDG_CACHE_HOME", xdg.CacheHome, subpath)
+	return lookupXDGDir(EnvXDGCacheHome, EnvAtmosXDGCacheHome, xdg.CacheHome, subpath)
+}
+
+// LookupCacheHomeBase returns the cache base directory configured via the
+// environment, plus the name of the variable that supplied it
+// (ATMOS_XDG_CACHE_HOME wins over XDG_CACHE_HOME). Both values are empty when
+// neither variable is set, meaning the platform default applies. Use this for
+// safety checks that need to report which variable configured the base.
+func LookupCacheHomeBase() (value, source string) {
+	v := viper.New()
+	// Best-effort bind; fall through to empty on error.
+	_ = v.BindEnv(EnvAtmosXDGCacheHome, EnvAtmosXDGCacheHome)
+	_ = v.BindEnv(EnvXDGCacheHome, EnvXDGCacheHome)
+
+	if dir := v.GetString(EnvAtmosXDGCacheHome); dir != "" {
+		return dir, EnvAtmosXDGCacheHome
+	}
+	if dir := v.GetString(EnvXDGCacheHome); dir != "" {
+		return dir, EnvXDGCacheHome
+	}
+	return "", ""
 }
 
 // GetXDGDataDir returns the Atmos data directory following XDG Base Directory Specification.
 // It respects ATMOS_XDG_DATA_HOME and XDG_DATA_HOME environment variables.
 // The directory is created if it doesn't exist.
 func GetXDGDataDir(subpath string, perm os.FileMode) (string, error) {
-	return getXDGDir("XDG_DATA_HOME", "ATMOS_XDG_DATA_HOME", xdg.DataHome, subpath, perm)
+	return getXDGDir(EnvXDGDataHome, EnvAtmosXDGDataHome, xdg.DataHome, subpath, perm)
 }
 
 // GetXDGConfigDir returns the Atmos config directory following XDG Base Directory Specification.
 // It respects ATMOS_XDG_CONFIG_HOME and XDG_CONFIG_HOME environment variables.
 // The directory is created if it doesn't exist.
 func GetXDGConfigDir(subpath string, perm os.FileMode) (string, error) {
-	return getXDGDir("XDG_CONFIG_HOME", "ATMOS_XDG_CONFIG_HOME", xdg.ConfigHome, subpath, perm)
+	return getXDGDir(EnvXDGConfigHome, EnvAtmosXDGConfigHome, xdg.ConfigHome, subpath, perm)
 }
 
 // LookupXDGConfigDir resolves the Atmos config directory path without creating it.
 // Use this for read-only checks where directory creation is not desired.
 func LookupXDGConfigDir(subpath string) string {
-	return lookupXDGDir("XDG_CONFIG_HOME", "ATMOS_XDG_CONFIG_HOME", xdg.ConfigHome, subpath)
+	return lookupXDGDir(EnvXDGConfigHome, EnvAtmosXDGConfigHome, xdg.ConfigHome, subpath)
 }
 
 // lookupXDGDir resolves an XDG directory path without creating it.

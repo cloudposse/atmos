@@ -28,7 +28,8 @@ managed paths fail the commit. When --dry-run is set, the command reports what
 would be staged and committed without actually committing.
 
 --sign and --no-sign are mutually exclusive.`,
-	Args: cobra.ExactArgs(1),
+	Args:              cobra.ExactArgs(1),
+	ValidArgsFunction: completeRepoNames,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		defer perf.Track(atmosConfigPtr, "git.commit.RunE")()
 
@@ -53,11 +54,11 @@ type commitOptions struct {
 
 func parseCommitFlags(v *viper.Viper) *commitOptions {
 	return &commitOptions{
-		Message: v.GetString(flagMessage),
-		Paths:   v.GetStringSlice(flagPath),
-		Sign:    v.GetBool(flagSign),
-		NoSign:  v.GetBool(flagNoSign),
-		DryRun:  v.GetBool(flagDryRun),
+		Message: v.GetString(viperKey(commitViperPrefix, flagMessage)),
+		Paths:   v.GetStringSlice(viperKey(commitViperPrefix, flagPath)),
+		Sign:    v.GetBool(viperKey(commitViperPrefix, flagSign)),
+		NoSign:  v.GetBool(viperKey(commitViperPrefix, flagNoSign)),
+		DryRun:  v.GetBool(viperKey(commitViperPrefix, flagDryRun)),
 	}
 }
 
