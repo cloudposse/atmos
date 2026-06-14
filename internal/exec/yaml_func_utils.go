@@ -117,7 +117,11 @@ func processNodesWithContext(
 			return newNestedMap
 
 		case []any:
-			var newSlice []any
+			// Pre-allocate a non-nil slice so an empty input list (or a list whose items are
+			// all removed by !unset) stays an empty list rather than collapsing to nil. A nil
+			// slice marshals to JSON `null` in generated tfvars, which breaks consumers such as
+			// Terraform's concat() that reject null where a list is expected.
+			newSlice := make([]any, 0, len(v))
 			for _, val := range v {
 				// Check if the value is a string with !unset tag and it's not skipped.
 				if strVal, ok := val.(string); ok && strings.HasPrefix(strVal, u.AtmosYamlFuncUnset) && !skipFunc(skip, u.AtmosYamlFuncUnset) {
