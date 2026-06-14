@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"runtime"
+	"time"
 
 	"github.com/cloudposse/atmos/pkg/perf"
 
@@ -12,6 +13,7 @@ import (
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	git "github.com/cloudposse/atmos/pkg/git"
 	log "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/metrics/process"
 	"github.com/cloudposse/atmos/pkg/pro"
 	"github.com/cloudposse/atmos/pkg/pro/dtos"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -21,18 +23,21 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// ProLockUnlockCmdArgs holds the common arguments for pro lock and unlock commands.
 type ProLockUnlockCmdArgs struct {
 	Component   string
 	Stack       string
 	AtmosConfig schema.AtmosConfiguration
 }
 
+// ProLockCmdArgs holds the arguments for the pro lock command.
 type ProLockCmdArgs struct {
 	ProLockUnlockCmdArgs
 	LockMessage string
 	LockTTL     int32
 }
 
+// ProUnlockCmdArgs holds the arguments for the pro unlock command.
 type ProUnlockCmdArgs struct {
 	ProLockUnlockCmdArgs
 }
@@ -215,17 +220,17 @@ func executeProUnlock(a *ProUnlockCmdArgs, apiClient pro.AtmosProAPIClientInterf
 }
 
 // uploadStatus uploads the terraform results to the pro API.
-func uploadStatus(info *schema.ConfigAndStacksInfo, exitCode int, client pro.AtmosProAPIClientInterface, gitRepo git.GitRepoInterface) error {
-	// Get the git repository info
+func uploadStatus(info *schema.ConfigAndStacksInfo, exitCode int, metrics *process.ProcessMetrics, client pro.AtmosProAPIClientInterface, gitRepo git.GitRepoInterface) error {
+	// Get the git repository info.
 	repoInfo, err := gitRepo.GetLocalRepoInfo()
 	if err != nil {
 		return errors.Join(errUtils.ErrFailedToGetLocalRepo, err)
 	}
 
-	// Get current git SHA
+	// Get current git SHA.
 	gitSHA, err := gitRepo.GetCurrentCommitSHA()
 	if err != nil {
-		// Log warning but don't fail the upload
+		// Log warning but don't fail the upload.
 		log.Warn(fmt.Sprintf("Failed to get current git SHA: %v", err))
 		gitSHA = ""
 	}
@@ -236,7 +241,7 @@ func uploadStatus(info *schema.ConfigAndStacksInfo, exitCode int, client pro.Atm
 	//nolint:forbidigo // Exception: Run ID is always from CI/CD environment, not config
 	atmosProRunID := os.Getenv("ATMOS_PRO_RUN_ID")
 
-	// Create the DTO
+	// Create the DTO.
 	dto := dtos.InstanceStatusUploadRequest{
 		AtmosProRunID: atmosProRunID,
 		AtmosVersion:  pkgversion.Version,
@@ -253,12 +258,55 @@ func uploadStatus(info *schema.ConfigAndStacksInfo, exitCode int, client pro.Atm
 		ExitCode:      exitCode,
 	}
 
-	// Upload the status
+	// Add last_run timestamp if we have a run ID or git SHA.
+	if atmosProRunID != "" || gitSHA != "" {
+		dto.LastRun = time.Now().UTC().Format(time.RFC3339)
+	}
+
+	// Populate resource metrics if available.
+	if metrics != nil {
+		populateMetricsDTO(&dto, metrics)
+	}
+
+	// Upload the status.
 	if err := client.UploadInstanceStatus(&dto); err != nil {
 		return errors.Join(errUtils.ErrFailedToUploadInstanceStatus, err)
 	}
 
 	return nil
+}
+
+// populateMetricsDTO fills the DTO with resource metrics from a completed subprocess.
+func populateMetricsDTO(dto *dtos.InstanceStatusUploadRequest, m *process.ProcessMetrics) {
+	wallMs := m.WallTime.Milliseconds()
+	userMs := m.UserCPUTime.Milliseconds()
+	sysMs := m.SystemCPUTime.Milliseconds()
+	dto.WallTimeMs = &wallMs
+	dto.UserCPUTimeMs = &userMs
+	dto.SysCPUTimeMs = &sysMs
+
+	// Rusage fields — only populate if non-zero (unavailable on Windows).
+	if m.MaxRSSBytes > 0 {
+		dto.PeakRSSBytes = &m.MaxRSSBytes
+	}
+	if m.MinorPageFaults > 0 {
+		dto.MinorPageFaults = &m.MinorPageFaults
+	}
+	if m.MajorPageFaults > 0 {
+		dto.MajorPageFaults = &m.MajorPageFaults
+	}
+	if m.InBlockOps > 0 {
+		dto.InBlockOps = &m.InBlockOps
+	}
+	if m.OutBlockOps > 0 {
+		dto.OutBlockOps = &m.OutBlockOps
+	}
+	if m.VolCtxSwitches > 0 {
+		dto.VolCtxSwitches = &m.VolCtxSwitches
+	}
+	if m.InvolCtxSwitches > 0 {
+		dto.InvolCtxSwitches = &m.InvolCtxSwitches
+	}
 }
 
 // shouldUploadStatus determines if status should be uploaded.

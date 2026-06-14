@@ -13,16 +13,19 @@ import (
 	"fmt"
 	"os"
 	osexec "os/exec"
+	"time"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	auth "github.com/cloudposse/atmos/pkg/auth"
 	"github.com/cloudposse/atmos/pkg/dependencies"
 	git "github.com/cloudposse/atmos/pkg/git"
 	log "github.com/cloudposse/atmos/pkg/logger"
+	metricsprocess "github.com/cloudposse/atmos/pkg/metrics/process"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/pro"
 	"github.com/cloudposse/atmos/pkg/retry"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -334,6 +337,12 @@ func executeMainTerraformCommand( //nolint:revive // argument-limit: opts variad
 		return nil
 	}
 
+	// Capture subprocess resource metrics for Pro upload and local display.
+	var capturedMetrics *metricsprocess.ProcessMetrics
+	opts = append(opts, WithMetricsCallback(func(m *metricsprocess.ProcessMetrics) {
+		capturedMetrics = m
+	}))
+
 	err := executeShellCommandWithRetry(
 		atmosConfig,
 		info,
@@ -355,11 +364,14 @@ func executeMainTerraformCommand( //nolint:revive // argument-limit: opts variad
 
 	exitCode := resolveExitCode(err)
 
+	// Display resource metrics locally.
+	displayMetrics(capturedMetrics)
+
 	// Upload status only when explicitly requested via --upload-status flag.
 	// Upload failures are logged but never cause the terraform command to fail —
 	// the exit code should reflect the plan/apply result, not telemetry.
 	if uploadStatusFlag && shouldUploadStatus(info) {
-		if uploadErr := uploadCommandStatus(atmosConfig, info, exitCode); uploadErr != nil {
+		if uploadErr := uploadCommandStatus(atmosConfig, info, exitCode, capturedMetrics); uploadErr != nil {
 			log.Warn("Failed to upload command status to Atmos Pro. The terraform command result is unaffected.", "error", uploadErr)
 		}
 	}
@@ -378,13 +390,14 @@ func uploadCommandStatus(
 	atmosConfig *schema.AtmosConfiguration,
 	info *schema.ConfigAndStacksInfo,
 	exitCode int,
+	metrics *metricsprocess.ProcessMetrics,
 ) error {
 	client, cerr := pro.NewAtmosProAPIClientFromEnv(atmosConfig)
 	if cerr != nil {
 		return cerr
 	}
 	gitRepo := &git.DefaultGitRepo{}
-	return uploadStatus(info, exitCode, client, gitRepo)
+	return uploadStatus(info, exitCode, metrics, client, gitRepo)
 }
 
 // cleanupTerraformFiles removes ephemeral plan and varfiles that Atmos generates.
@@ -403,6 +416,51 @@ func cleanupTerraformFiles(atmosConfig *schema.AtmosConfiguration, info *schema.
 		if err := os.Remove(varFilePath); err != nil && !os.IsNotExist(err) {
 			log.Trace("Failed to remove var file during cleanup", "error", err, "file", varFilePath)
 		}
+	}
+}
+
+// displayMetrics shows subprocess resource metrics via ui.Info.
+func displayMetrics(m *metricsprocess.ProcessMetrics) {
+	if m == nil {
+		return
+	}
+
+	msg := fmt.Sprintf("Completed in %s | CPU: %s user, %s sys",
+		formatDuration(m.WallTime),
+		formatDuration(m.UserCPUTime),
+		formatDuration(m.SystemCPUTime))
+
+	if m.MaxRSSBytes > 0 {
+		msg += fmt.Sprintf(" | Peak memory: %s", formatBytes(m.MaxRSSBytes))
+	}
+
+	ui.Info(msg)
+}
+
+// formatDuration formats a duration for human display.
+func formatDuration(d time.Duration) string {
+	if d < time.Second {
+		return fmt.Sprintf("%dms", d.Milliseconds())
+	}
+	return fmt.Sprintf("%.1fs", d.Seconds())
+}
+
+// formatBytes formats bytes into a human-readable string.
+func formatBytes(b int64) string {
+	const (
+		kb = 1024
+		mb = 1024 * kb
+		gb = 1024 * mb
+	)
+	switch {
+	case b >= gb:
+		return fmt.Sprintf("%.1f GB", float64(b)/float64(gb))
+	case b >= mb:
+		return fmt.Sprintf("%.1f MB", float64(b)/float64(mb))
+	case b >= kb:
+		return fmt.Sprintf("%.1f KB", float64(b)/float64(kb))
+	default:
+		return fmt.Sprintf("%d B", b)
 	}
 }
 

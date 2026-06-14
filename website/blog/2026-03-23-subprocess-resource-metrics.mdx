@@ -1,0 +1,40 @@
+---
+slug: subprocess-resource-metrics
+title: "Subprocess Resource Metrics Collection"
+authors: [osterman]
+tags: [feature]
+---
+
+Atmos now captures resource metrics from every Terraform subprocess — wall time, CPU usage, peak memory, page faults, I/O operations, and context switches — and uploads them to Atmos Pro alongside instance status updates.
+
+<!--truncate-->
+
+## What Changed
+
+When Atmos runs a Terraform command, it now collects detailed resource usage metrics from the subprocess using OS-level instrumentation (`getrusage` on Unix). After each command completes, a summary is displayed locally:
+
+```
+ℹ Completed in 12.3s | CPU: 8.1s user, 1.2s sys | Peak memory: 245.7 MB
+```
+
+When `--upload-status` is enabled, these metrics are included in the Atmos Pro instance status payload, giving teams visibility into how their infrastructure commands perform over time.
+
+## Metrics Collected
+
+| Metric | Description | Platform |
+|--------|-------------|----------|
+| Wall time | Elapsed real time | All |
+| User CPU time | Time spent in user mode | All |
+| System CPU time | Time spent in kernel mode | All |
+| Peak RSS | Maximum resident set size | Unix |
+| Page faults | Minor and major page faults | Unix |
+| I/O operations | Block input/output operations | Unix |
+| Context switches | Voluntary and involuntary | Unix |
+
+## Why This Matters
+
+Infrastructure teams often lack visibility into the resource consumption of their Terraform runs. Slow plans or high-memory applies go unnoticed until they cause CI timeouts or OOM kills. With subprocess metrics, teams can identify performance trends, detect regressions, and right-size their CI runners.
+
+## Get Involved
+
+- [View the PR](https://github.com/cloudposse/atmos/pull/2217)

@@ -10,6 +10,7 @@ import (
 	"time"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	metricsprocess "github.com/cloudposse/atmos/pkg/metrics/process"
 )
 
 // Runner executes a task and returns the observed process result.
@@ -40,6 +41,7 @@ type Result struct {
 	Args       []string
 	ExitCode   int
 	Err        error
+	Metrics    *metricsprocess.ProcessMetrics
 	Started    bool
 	Canceled   bool
 	StartedAt  time.Time
@@ -96,6 +98,7 @@ func (r DefaultRunner) Run(ctx context.Context, spec TaskSpec) (result Result) {
 	result.StartedAt = time.Now()
 
 	err := cmd.Wait()
+	result.Metrics = metricsprocess.CollectFromProcessState(cmd, time.Since(result.StartedAt))
 	if err == nil {
 		return result
 	}
