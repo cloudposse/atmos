@@ -499,6 +499,14 @@ func exitCodeFromErr(err error) int {
 	return 1
 }
 
+// ApplyOnFailure applies the hook's effective on_failure mode to runErr:
+// "warn" logs and swallows, "ignore" swallows silently, "fail" propagates.
+// Exported so engines living outside this package (pkg/hooks/kinds/*) enforce
+// the same on_failure semantics as the built-in command engine.
+func ApplyOnFailure(ctx *ExecContext, runErr error) error {
+	return applyOnFailure(ctx, runErr)
+}
+
 // applyOnFailure returns nil or an error depending on the configured failure
 // mode. "warn" (default) logs and returns nil; "fail" propagates the error;
 // "ignore" drops it entirely.

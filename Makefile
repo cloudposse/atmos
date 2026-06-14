@@ -83,7 +83,12 @@ version-default:
 	chmod +x ./build/atmos
 	./build/atmos version
 
-version-windows: build-windows
+# Run the already-built binary; do NOT depend on build-windows. The CI build
+# step runs `make build-windows` before this, so re-declaring the dependency
+# made Windows recompile and re-link the whole binary a second time per job —
+# work that version-linux/version-macos (via version-default) do not repeat.
+# On the slow windows-latest runner that doubled the build phase.
+version-windows:
 	./build/atmos.exe version
 
 deps:

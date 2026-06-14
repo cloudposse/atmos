@@ -1,0 +1,77 @@
+---
+title: atmos git hooks run
+sidebar_label: run
+sidebar_class_name: command
+id: run
+slug: /cli/commands/git/hooks/run
+description: Run a local Git hook command configured under git.hooks.
+---
+import Screengrab from '@site/src/components/Screengrab'
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Execute the command configured for a Git hook under [`git.hooks`](/cli/configuration/git#local-git-hooks). This is what the `.git/hooks/*` shims installed by [`atmos git hooks install`](/cli/commands/git/hooks/install) invoke, but it can also be run directly — useful for testing a hook without triggering it through Git.
+</Intro>
+
+<Screengrab title="atmos git hooks run --help" slug="atmos-git-hooks-run--help" />
+
+## Usage
+
+```shell
+atmos git hooks run <hook-name> [args...]
+```
+
+Given this configuration:
+
+```yaml
+git:
+  hooks:
+    pre-commit:
+      command: atmos workflow pre-commit
+    commit-msg:
+      command: atmos workflow commit-msg -- "$1"
+```
+
+Git invokes the installed shim, which runs:
+
+```shell
+atmos git hooks run commit-msg .git/COMMIT_EDITMSG
+```
+
+## Examples
+
+```shell
+# Test a hook without committing
+atmos git hooks run pre-commit
+
+# Run a hook that takes arguments (commit-msg receives the message file path)
+atmos git hooks run commit-msg .git/COMMIT_EDITMSG
+```
+
+## Behavior
+
+- Loads the Atmos configuration for the current repository and resolves `git.hooks.<hook-name>.command`.
+- Executes the configured command through the shared workflow/command dispatch, inheriting toolchain `PATH`, environment, and identity behavior.
+- Forwards hook arguments **and stdin** — hooks such as `pre-push` and `pre-receive` receive their input on stdin, not argv.
+- Propagates the command's exit code, so a failing hook command blocks the Git operation exactly as a hand-written hook would.
+- Fails with a clear error listing the configured hooks when `<hook-name>` is not configured under `git.hooks`.
+
+## Arguments
+
+<dl>
+    <dt>`hook-name` <em>(required)</em></dt>
+    <dd>
+        The Git hook to run, matching a key under `git.hooks` (`pre-commit`, `commit-msg`, `pre-push`, ...).
+    </dd>
+
+    <dt>`args...` <em>(optional)</em></dt>
+    <dd>
+        Arguments forwarded verbatim to the configured command — exactly what Git passes to the hook (for example, the commit message file path for `commit-msg`). Arguments are passed through even when they look like flags.
+    </dd>
+</dl>
+
+## Related
+
+- [`atmos git hooks install`](/cli/commands/git/hooks/install) — install the shims that call this command
+- [Workflows](/cli/configuration/workflows) — what hook commands typically invoke
+- [Git Configuration](/cli/configuration/git#local-git-hooks) — the `git.hooks` section
