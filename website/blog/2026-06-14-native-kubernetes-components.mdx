@@ -1,0 +1,117 @@
+---
+slug: native-kubernetes-components
+title: "Native Kubernetes Components: Render, Apply, and Publish to GitOps Repos"
+authors: [osterman]
+tags: [feature]
+---
+
+Atmos now treats Kubernetes as a first-class component type. Define Kubernetes
+objects — inline manifests, files, directories, or Kustomize overlays — in your
+stack configuration, then `render`, `diff`, `apply`, and `delete` them through
+the Kubernetes Go SDK with server-side apply. No `kubectl` or `kustomize` binary
+required. And because Atmos owns rendering, lifecycle events, and credentials, an
+`apply` can publish the rendered manifests to a Git deployment repository instead
+of a cluster — the producer side of a GitOps workflow.
+
+<!--truncate-->
+
+## What Changed
+
+`components.kubernetes.<name>` is a native component type with the same stack
+semantics as Terraform and Helmfile — `vars`, `env`, `auth`, `metadata`,
+`settings`, `dependencies`, `hooks`, inheritance, and overrides — plus
+Kubernetes-specific `paths`, `manifests`, and `render` sections:
+
+```yaml
+components:
+  kubernetes:
+    argocd:
+      provider: kustomize
+      vars: { cluster: ue2-dev, namespace: argocd }
+      paths:
+        - bootstrap/argocd
+      manifests:
+        - apiVersion: v1
+          kind: Namespace
+          metadata: { name: "{{ .vars.namespace }}" }
+```
+
+Run it like any other component:
+
+```shell
+atmos kubernetes render argocd -s plat-ue2-dev    # print the manifests
+atmos kubernetes diff   argocd -s plat-ue2-dev    # server-side diff
+atmos kubernetes apply  argocd -s plat-ue2-dev    # server-side apply
+```
+
+`--all` and `--affected` run components in dependency order, so the same change
+detection that drives Terraform pipelines works for Kubernetes.
+
+## Deliver to a Cluster — or a GitOps Repository
+
+By default `apply`/`deploy` applies to the cluster. But many teams don't apply
+directly: they commit rendered manifests to a deployment repository that Argo CD
+or Flux reconciles. Atmos models delivery destinations as **provision targets**,
+selected by `kind`:
+
+```yaml
+git:
+  repositories:
+    deployments:
+      uri: https://github.com/acme/deployments.git
+      branch: main
+
+components:
+  kubernetes:
+    argocd:
+      provision:
+        default: cluster
+        targets:
+          cluster:
+            kind: kubernetes
+          deployment-repo:
+            kind: git
+            repository: deployments
+            path: "clusters/{{ .vars.cluster }}/argocd"
+            commit:
+              message: "Render {{ .vars.app_name }} for {{ .vars.stage }}"
+```
+
+```shell
+# apply to the cluster (default)
+atmos kubernetes apply argocd -s plat-ue2-dev
+
+# render and publish to the deployment repo instead
+atmos kubernetes apply argocd -s plat-ue2-dev --target=deployment-repo
+```
+
+The git target clones (or fast-forwards) the repository, replaces the managed
+`path` with the freshly rendered manifests, commits that path with provenance
+trailers (`Atmos-Stack`, `Atmos-Component`), and pushes. Re-delivering identical
+manifests is a clean no-op. It is built on the reusable
+[Atmos Git](/cli/commands/git/usage) service, so credentials come from Atmos Auth
+(GitHub STS) and never land in the manifests.
+
+This is the same target convention Atmos uses elsewhere for "where to put
+things," and the `git` target is component-agnostic: the rendered-artifact model
+that Kubernetes produces today is the same one future component types will use to
+publish to `git`, `oci`, and other destinations.
+
+## Why This Matters
+
+GitOps pipelines have always needed glue: ad hoc scripts to render manifests into
+a deployment repo, commit them, survive push races, and wire credentials. Atmos
+already owns rendering, lifecycle events, and authentication — provision targets
+add the delivery step with centralized safety rules, so the same component
+configuration can apply to a cluster in dev and publish to a GitOps repo in prod
+with a single flag.
+
+## How to Use It
+
+- Add a `components.kubernetes.<name>` to a stack with `paths`/`manifests`.
+- Run `atmos kubernetes render|diff|apply|delete <component> -s <stack>`.
+- To publish to a deployment repo, declare a `git.repositories.<name>` and a
+  `provision.targets` entry with `kind: git`, then `apply ... --target=<name>`.
+
+See the [Kubernetes component](/stacks/components/kubernetes) and
+[`atmos kubernetes`](/cli/commands/kubernetes/usage) documentation to get started.

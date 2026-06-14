@@ -192,6 +192,50 @@ components:
 When `split` is `true`, `path` is treated as a directory and Atmos writes one
 file per object. Otherwise `path` is a single multi-document YAML file.
 
+## Delivery Targets
+
+`apply` and `deploy` deliver the rendered manifests to a target. By default they
+apply to the cluster, but a component can declare named delivery targets under
+`provision.targets` and select one with `--target`. Each target has a `kind`:
+
+- `kind: kubernetes` — apply the manifests to the cluster (the default).
+- `kind: git` — render the manifests and commit them to a Git deployment
+  repository (a GitOps source-of-truth reconciled by Argo CD or Flux).
+
+```yaml
+# atmos.yaml declares the managed deployment repository:
+git:
+  repositories:
+    deployments:
+      uri: https://github.com/acme/deployments.git
+      branch: main
+
+# the component selects where apply/deploy delivers:
+components:
+  kubernetes:
+    argocd:
+      provision:
+        default: cluster                 # used when --target is omitted
+        targets:
+          cluster:
+            kind: kubernetes
+          deployment-repo:
+            kind: git
+            repository: deployments       # references git.repositories.<name>
+            path: "clusters/{{ .vars.cluster }}/argocd"   # supports Go templates
+            auth:
+              identity: platform-admin    # optional; else the repository default
+            commit:
+              message: "Render {{ .vars.app_name }} for {{ .vars.stage }}"
+              signing: auto               # auto | always | never
+```
+
+The git target clones (or fast-forwards) the repository, replaces the managed
+`path` with the rendered manifests, commits that path with provenance trailers
+(`Atmos-Stack`, `Atmos-Component`), and pushes. Re-delivering identical manifests
+is a clean no-op. Credentials come from Atmos Auth (GitHub STS); no tokens are
+written into the manifests. Pull-request publishing is not yet supported.
+
 ## Auth
 
 Kubernetes operations use the kubeconfig and client configuration visible to

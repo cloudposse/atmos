@@ -776,7 +776,7 @@
     },
     "provision": {
       "title": "provision",
-      "description": "Provisioning configuration such as workdir or git targets",
+      "description": "Provisioning configuration such as workdir or delivery targets",
       "oneOf": [
         {
           "type": "string",
@@ -784,6 +784,75 @@
         },
         {
           "type": "object",
+          "properties": {
+            "workdir": {
+              "type": "object",
+              "description": "Working directory provisioning settings for this component",
+              "additionalProperties": true
+            },
+            "default": {
+              "type": "string",
+              "description": "Name of the provision target used by apply/deploy when --target is not given"
+            },
+            "targets": {
+              "type": "object",
+              "description": "Named delivery destinations for rendered artifacts, keyed by target name",
+              "additionalProperties": {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "description": "Target provisioner kind (e.g. 'git' or 'kubernetes')"
+                  },
+                  "repository": {
+                    "type": "string",
+                    "description": "For kind 'git': name of a top-level git.repositories.<name> to publish to"
+                  },
+                  "path": {
+                    "type": "string",
+                    "description": "For kind 'git': destination path inside the deployment repository (supports Go templates)"
+                  },
+                  "auth": {
+                    "type": "object",
+                    "properties": {
+                      "identity": {
+                        "type": "string",
+                        "description": "Atmos Auth identity used for the delivery"
+                      }
+                    },
+                    "additionalProperties": false
+                  },
+                  "commit": {
+                    "type": "object",
+                    "properties": {
+                      "message": {
+                        "type": "string",
+                        "description": "Commit message (supports Go templates)"
+                      },
+                      "signing": {
+                        "type": "string",
+                        "enum": ["auto", "always", "never"],
+                        "description": "Commit signing mode"
+                      }
+                    },
+                    "additionalProperties": false
+                  },
+                  "pull_request": {
+                    "type": "object",
+                    "properties": {
+                      "enabled": {
+                        "type": "boolean",
+                        "description": "Publish via pull request (not yet supported by the cli git provider)"
+                      }
+                    },
+                    "additionalProperties": false
+                  }
+                },
+                "required": ["kind"],
+                "additionalProperties": true
+              }
+            }
+          },
           "additionalProperties": true
         }
       ]

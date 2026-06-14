@@ -50,3 +50,35 @@ spec:
 	metadata := namespace["metadata"].(map[string]any)
 	require.Equal(t, "demo", metadata["name"])
 }
+
+func TestRenderManifestInputTemplatesProvisionTargets(t *testing.T) {
+	componentSection := map[string]any{
+		config.VarsSectionName: map[string]any{
+			"stage":    "dev",
+			"app_name": "argocd",
+		},
+		config.ProvisionSectionName: map[string]any{
+			"default": "cluster",
+			"targets": map[string]any{
+				"cluster": map[string]any{"kind": "kubernetes"},
+				"deployment-repo": map[string]any{
+					"kind":       "git",
+					"repository": "deployments",
+					"path":       "clusters/{{ .vars.stage }}/{{ .vars.app_name }}",
+					"commit": map[string]any{
+						"message": "Render {{ .vars.app_name }} for {{ .vars.stage }}",
+					},
+				},
+			},
+		},
+	}
+
+	require.NoError(t, renderManifestInputTemplates(&schema.AtmosConfiguration{}, componentSection))
+
+	provision := componentSection[config.ProvisionSectionName].(map[string]any)
+	targets := provision["targets"].(map[string]any)
+	repo := targets["deployment-repo"].(map[string]any)
+	require.Equal(t, "clusters/dev/argocd", repo["path"])
+	commit := repo["commit"].(map[string]any)
+	require.Equal(t, "Render argocd for dev", commit["message"])
+}

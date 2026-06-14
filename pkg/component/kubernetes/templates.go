@@ -10,7 +10,10 @@ import (
 )
 
 func renderManifestInputTemplates(atmosConfig *schema.AtmosConfiguration, componentSection map[string]any) error {
-	for _, key := range []string{cfg.PathsSectionName, cfg.ManifestsSectionName, cfg.RenderSectionName} {
+	// The provision section is rendered so target fields that reference component
+	// vars (e.g. a git target's path and commit.message) are materialized before
+	// delivery, the same way paths/manifests/render templates are.
+	for _, key := range []string{cfg.PathsSectionName, cfg.ManifestsSectionName, cfg.RenderSectionName, cfg.ProvisionSectionName} {
 		value, ok := componentSection[key]
 		if !ok {
 			continue

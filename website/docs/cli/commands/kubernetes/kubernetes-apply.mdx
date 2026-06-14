@@ -6,7 +6,8 @@ id: apply
 ---
 
 import Intro from "@site/src/components/Intro";
-import ActionCard, { PrimaryCTA } from "@site/src/components/ActionCard";
+import ActionCard from "@site/src/components/ActionCard";
+import PrimaryCTA from "@site/src/components/PrimaryCTA";
 
 <Intro>
   Deploy the Kubernetes objects defined by a stack-configured component without
@@ -54,6 +55,11 @@ applied v1/Namespace argocd
 applied apps/v1/Deployment argocd/argocd-server
 ```
 
+To publish the rendered manifests to a Git deployment repository instead of
+applying to the cluster, configure `provision.targets` and select a git target
+with `--target`. See
+[Deployment repositories (GitOps)](/cli/commands/kubernetes/deploy#deployment-repositories-gitops).
+
 ## Flags
 
 <dl>
@@ -61,6 +67,14 @@ applied apps/v1/Deployment argocd/argocd-server
     `--stack`, `-s` <em>(required)</em>
   </dt>
   <dd>Atmos stack.</dd>
+
+<dt>
+  `--target` <em>(optional)</em>
+</dt>
+<dd>
+  Provision target to deliver to (a named `provision.targets` entry, e.g. a git
+  deployment repository). Defaults to `provision.default`, otherwise the cluster.
+</dd>
 
 <dt>
   `--all` <em>(optional)</em>

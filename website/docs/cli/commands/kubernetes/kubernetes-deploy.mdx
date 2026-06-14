@@ -6,7 +6,8 @@ id: deploy
 ---
 
 import Intro from "@site/src/components/Intro";
-import ActionCard, { PrimaryCTA } from "@site/src/components/ActionCard";
+import ActionCard from "@site/src/components/ActionCard";
+import PrimaryCTA from "@site/src/components/PrimaryCTA";
 
 <Intro>
   Run a Kubernetes deployment using Atmos language. `deploy` is the
@@ -48,6 +49,41 @@ Use `deploy` when you want command language that matches an application deployme
 atmos kubernetes deploy argocd -s plat-ue2-dev
 ```
 
+## Deployment repositories (GitOps)
+
+By default `deploy`/`apply` applies the rendered manifests to the cluster. A
+component can instead publish them to a Git deployment repository (the
+source-of-truth that Argo CD or Flux reconciles) by declaring delivery targets
+under `provision.targets`:
+
+```yaml
+components:
+  kubernetes:
+    argocd:
+      provision:
+        default: cluster
+        targets:
+          cluster:
+            kind: kubernetes
+          deployment-repo:
+            kind: git
+            repository: deployments        # references git.repositories.<name>
+            path: "clusters/{{ .vars.cluster }}/argocd"
+            commit:
+              message: "Render {{ .vars.app_name }} for {{ .vars.stage }}"
+```
+
+Selecting the git target renders the manifests once and commits them to the
+configured repository instead of applying to the cluster:
+
+```shell
+atmos kubernetes deploy argocd -s plat-ue2-dev --target=deployment-repo
+```
+
+When `--target` is omitted, `provision.default` is used, otherwise the cluster.
+Credentials for cloning and pushing come from Atmos Auth (GitHub STS), so no
+tokens are stored in the manifests.
+
 ## Flags
 
 <dl>
@@ -55,6 +91,14 @@ atmos kubernetes deploy argocd -s plat-ue2-dev
     `--stack`, `-s` <em>(required)</em>
   </dt>
   <dd>Atmos stack.</dd>
+
+<dt>
+  `--target` <em>(optional)</em>
+</dt>
+<dd>
+  Provision target to deliver to (a named `provision.targets` entry, e.g. a git
+  deployment repository). Defaults to `provision.default`, otherwise the cluster.
+</dd>
 
 <dt>
   `--all` <em>(optional)</em>

@@ -226,8 +226,14 @@ atmos helmfile apply nginx -s prod --identity=prod-admin
 ### Using with Explicit Cluster Name
 
 <File title="atmos.yaml">
-  ```yaml components: helmfile: base_path: components/helmfile use_eks: true
-  kubeconfig_path: /dev/shm cluster_name: "production-eks-cluster" ```
+```yaml
+components:
+  helmfile:
+    base_path: components/helmfile
+    use_eks: true
+    kubeconfig_path: /dev/shm
+    cluster_name: "production-eks-cluster"
+```
 </File>
 
 ### Overriding Cluster Name at Runtime
@@ -242,10 +248,13 @@ atmos helmfile apply nginx -s prod --identity=prod-admin --cluster-name=other-cl
 If you have an existing configuration using the deprecated options:
 
 <File title="Before (deprecated)">
-  ```yaml components: helmfile: use_eks: true # was default
-  helm_aws_profile_pattern: "{namespace}-{tenant}-gbl-{stage}-helm"
-  cluster_name_pattern: "{namespace}-{tenant}-{environment}-{stage}-eks-cluster"
-  ```
+```yaml
+components:
+  helmfile:
+    use_eks: true  # was default
+    helm_aws_profile_pattern: "{namespace}-{tenant}-gbl-{stage}-helm"
+    cluster_name_pattern: "{namespace}-{tenant}-{environment}-{stage}-eks-cluster"
+```
 </File>
 
 <File title="After (recommended)">

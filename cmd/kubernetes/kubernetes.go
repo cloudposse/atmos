@@ -112,6 +112,10 @@ func newOperationCommand(name string, short string) *cobra.Command {
 		cmd.Flags().Bool("split", false, "Write one rendered manifest file per Kubernetes object. Requires --output-dir.")
 	}
 
+	if name == "apply" || name == "deploy" {
+		cmd.Flags().String("target", "", "Provision target to deliver to (e.g. a git deployment repository). Defaults to provision.default, otherwise the cluster.")
+	}
+
 	return cmd
 }
 
@@ -169,7 +173,7 @@ func getOperationFlags(cmd *cobra.Command) map[string]any {
 			result[name] = flag.Value.String() == valueTrue
 		}
 	}
-	for _, name := range []string{"repo-path", "base", "ref", "sha", "ssh-key", "ssh-key-password"} {
+	for _, name := range []string{"repo-path", "base", "ref", "sha", "ssh-key", "ssh-key-password", "target"} {
 		if flag := cmd.Flag(name); flag != nil {
 			result[name] = flag.Value.String()
 		}

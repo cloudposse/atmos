@@ -5,6 +5,16 @@ components:
     base_path: "components/kubernetes"
     provider: kubectl
 
+# Managed Git repositories for GitOps delivery. A Kubernetes component can render
+# its manifests and publish them to one of these repositories (instead of applying
+# to a cluster) via `provision.targets` with `kind: git`. Argo CD or Flux then
+# reconciles the repository. Replace the URI with your deployment repository.
+git:
+  repositories:
+    deployments:
+      uri: https://github.com/acme/deployments.git
+      branch: main
+
 stacks:
   base_path: "stacks"
   included_paths:

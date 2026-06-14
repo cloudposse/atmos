@@ -112,7 +112,7 @@ func runWithHooks(
 		return err
 	}
 
-	if err := runOperation(ctx, info, operation, objects); err != nil {
+	if err := runOperation(ctx, atmosConfig, info, operation, objects); err != nil {
 		return err
 	}
 
@@ -194,14 +194,16 @@ func loadManifestObjects(source manifestSource, info *schema.ConfigAndStacksInfo
 }
 
 // runOperation dispatches the rendered objects to the requested Kubernetes operation.
-func runOperation(ctx *component.ExecutionContext, info *schema.ConfigAndStacksInfo, operation Operation, objects []*unstructured.Unstructured) error {
+// Apply/deploy resolves the configured provision target (cluster by default, or a
+// delivery destination such as git); render/diff/delete remain cluster-local.
+func runOperation(ctx *component.ExecutionContext, atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, operation Operation, objects []*unstructured.Unstructured) error {
 	switch operation {
 	case OperationRender:
 		return renderObjects(objects, resolveRenderOptions(ctx.Flags, info.ComponentSection))
 	case OperationDiff:
 		return runDiff(objects)
 	case OperationApply:
-		return runApply(objects)
+		return deliverApply(atmosConfig, info, ctx.Flags, objects)
 	case OperationDelete:
 		return runDelete(objects)
 	default:

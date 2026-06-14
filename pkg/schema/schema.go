@@ -424,6 +424,47 @@ type TelemetrySettings struct {
 // ProvisionSettings contains global defaults for provisioning.
 type ProvisionSettings struct {
 	Workdir ProvisionWorkdirSettings `yaml:"workdir,omitempty" json:"workdir,omitempty" mapstructure:"workdir"`
+	// Default is the name of the target used by apply/deploy when no --target is given.
+	Default string `yaml:"default,omitempty" json:"default,omitempty" mapstructure:"default"`
+	// Targets maps target names to delivery destinations for rendered artifacts.
+	Targets map[string]ProvisionTarget `yaml:"targets,omitempty" json:"targets,omitempty" mapstructure:"targets"`
+}
+
+// ProvisionTarget is a delivery destination for a rendered artifact, selected by
+// its kind (e.g. "git", "kubernetes"). Kind-specific fields below are interpreted
+// by the registered target provisioner for that kind.
+type ProvisionTarget struct {
+	// Kind selects the target provisioner (e.g. "git", "kubernetes").
+	Kind string `yaml:"kind" json:"kind" mapstructure:"kind"`
+	// Repository references a top-level git.repositories.<name> (git kind).
+	Repository string `yaml:"repository,omitempty" json:"repository,omitempty" mapstructure:"repository"`
+	// Path is the destination path inside the deployment repository (git kind, supports templates).
+	Path string `yaml:"path,omitempty" json:"path,omitempty" mapstructure:"path"`
+	// Auth selects the Atmos Auth identity used for the delivery (overrides the repository default).
+	Auth ProvisionTargetAuth `yaml:"auth,omitempty" json:"auth,omitempty" mapstructure:"auth"`
+	// Commit controls the commit message and signing for the delivery (git kind).
+	Commit ProvisionTargetCommit `yaml:"commit,omitempty" json:"commit,omitempty" mapstructure:"commit"`
+	// PullRequest configures pull-request publishing (git kind; not yet supported by the cli provider).
+	PullRequest ProvisionTargetPullRequest `yaml:"pull_request,omitempty" json:"pull_request,omitempty" mapstructure:"pull_request"`
+}
+
+// ProvisionTargetAuth selects the Atmos Auth identity for a delivery.
+type ProvisionTargetAuth struct {
+	Identity string `yaml:"identity,omitempty" json:"identity,omitempty" mapstructure:"identity"`
+}
+
+// ProvisionTargetCommit controls commit message and signing for a git delivery.
+type ProvisionTargetCommit struct {
+	// Message is the commit message (supports templates).
+	Message string `yaml:"message,omitempty" json:"message,omitempty" mapstructure:"message"`
+	// Signing mode: "auto" (git config decides), "always" (-S), or "never" (--no-gpg-sign).
+	Signing string `yaml:"signing,omitempty" json:"signing,omitempty" mapstructure:"signing"`
+}
+
+// ProvisionTargetPullRequest configures pull-request publishing for a git delivery.
+type ProvisionTargetPullRequest struct {
+	// Enabled requests pull-request publishing (not yet supported by the cli provider).
+	Enabled bool `yaml:"enabled,omitempty" json:"enabled,omitempty" mapstructure:"enabled"`
 }
 
 // ProvisionWorkdirSettings contains default settings for workdir provisioning.

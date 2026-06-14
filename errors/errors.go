@@ -903,6 +903,12 @@ var (
 	ErrProviderNotInConfig                  = errors.New("provider not found in configuration")
 	ErrInvalidLogoutOption                  = errors.New("invalid logout option")
 
+	// Provision target (delivery destination) errors.
+	ErrProvisionTargetNotFound    = errors.New("provision target not found")
+	ErrProvisionTargetKindUnknown = errors.New("provision target kind is not registered")
+	ErrProvisionTargetKindMissing = errors.New("provision target is missing a kind")
+	ErrGitPullRequestNotSupported = errors.New("git pull request publishing is not supported by the cli provider")
+
 	// Backend provisioning errors.
 	ErrBucketRequired            = errors.New("backend.bucket is required")
 	ErrRegionRequired            = errors.New("backend.region is required")

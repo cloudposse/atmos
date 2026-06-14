@@ -15,6 +15,22 @@ components:
         image: nginx:1.27-alpine
         replicas: 1
         service_port: 80
+      # Delivery targets for `atmos kubernetes apply|deploy`. With `default: cluster`,
+      # `apply demo -s dev` applies to the cluster as before. Selecting the git target
+      # with `apply demo -s dev --target deployment-repo` instead renders the manifests
+      # and commits them to the `deployments` repository (see git.repositories in
+      # atmos.yaml) under the templated path, for Argo CD / Flux to reconcile.
+      provision:
+        default: cluster
+        targets:
+          cluster:
+            kind: kubernetes
+          deployment-repo:
+            kind: git
+            repository: deployments
+            path: 'clusters/{{ .vars.stage }}/{{ .vars.app_name }}'
+            commit:
+              message: 'Render {{ .vars.app_name }} for {{ .vars.stage }}'
       manifests:
         - apiVersion: v1
           kind: Namespace
