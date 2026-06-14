@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"os"
 	osexec "os/exec"
+	"strings"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	auth "github.com/cloudposse/atmos/pkg/auth"
@@ -172,6 +173,12 @@ func executeCommandPipeline(
 // shouldSkipWorkspaceSetup returns true when workspace setup should be skipped.
 func shouldSkipWorkspaceSetup(info *schema.ConfigAndStacksInfo) bool {
 	if info.SubCommand == subcommandInit || (info.SubCommand == subcommandWorkspace && info.SubCommand2 != "") {
+		return true
+	}
+	// `providers` subcommands (mirror, lock, schema) operate on configuration, not
+	// state, so they need no workspace — and selecting one fails on never-applied
+	// components.
+	if strings.HasPrefix(info.SubCommand, "providers") {
 		return true
 	}
 	if info.ComponentBackendType == "http" {

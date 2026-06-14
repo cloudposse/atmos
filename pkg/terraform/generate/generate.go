@@ -70,7 +70,8 @@ func (s *Service) ExecuteForComponent(
 ) error {
 	defer perf.Track(atmosConfig, "terraform.generate.ExecuteForComponent")()
 
-	log.Debug("ExecuteForComponent called",
+	log.Debug(
+		"ExecuteForComponent called",
 		logKeyComponent, component,
 		logKeyStack, stack,
 		"dryRun", dryRun,
@@ -136,7 +137,8 @@ func (s *Service) ExecuteForAll(
 ) error {
 	defer perf.Track(atmosConfig, "terraform.generate.ExecuteForAll")()
 
-	log.Debug("ExecuteForAll called",
+	log.Debug(
+		"ExecuteForAll called",
 		"stacks", stacks,
 		"components", components,
 		"dryRun", dryRun,
@@ -178,7 +180,8 @@ func (s *Service) GenerateFilesForComponent(atmosConfig *schema.AtmosConfigurati
 		return nil
 	}
 
-	log.Debug("Auto-generating files for component",
+	log.Debug(
+		"Auto-generating files for component",
 		logKeyComponent, info.ComponentFromArg,
 		logKeyStack, info.Stack,
 	)
@@ -245,7 +248,8 @@ func processComponentForGenerate(
 		componentPath,
 	)
 
-	log.Info("Processing component",
+	log.Info(
+		"Processing component",
 		logKeyComponent, componentName,
 		logKeyStack, stackFileName,
 	)

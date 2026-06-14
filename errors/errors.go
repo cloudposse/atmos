@@ -678,6 +678,14 @@ var (
 	// Terraform --all flag errors.
 	ErrComponentWithAllFlagConflict = errors.New("component argument can't be used with --all flag")
 
+	// ErrCacheCertUntrusted is returned when the OS trust store does not trust the
+	// registry cache proxy's certificate (macOS/Windows require a one-time trust step).
+	ErrCacheCertUntrusted = errors.New("registry cache certificate is not trusted")
+
+	// ErrTrustStore is returned when installing or removing the registry cache proxy's
+	// certificate in the OS trust store fails.
+	ErrTrustStore = errors.New("registry cache trust store operation failed")
+
 	// Terraform execution errors.
 	ErrTerraformExecFailed          = errors.New("terraform execution failed")
 	ErrDescribeAffected             = errors.New("describe affected failed")

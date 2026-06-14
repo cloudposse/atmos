@@ -1,6 +1,7 @@
 package cache
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -22,6 +23,13 @@ type mockFileLock struct {
 }
 
 func (m *mockFileLock) WithLock(fn func() error) error {
+	if m.withLockErr != nil {
+		return m.withLockErr
+	}
+	return fn()
+}
+
+func (m *mockFileLock) WithLockContext(_ context.Context, fn func() error) error {
 	if m.withLockErr != nil {
 		return m.withLockErr
 	}

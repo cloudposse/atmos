@@ -8,6 +8,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/provisioner"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -22,7 +23,11 @@ func init() {
 	_ = provisioner.RegisterProvisioner(provisioner.Provisioner{
 		Type:      "workdir",
 		HookEvent: HookEventBeforeTerraformInit,
-		Func:      ProvisionWorkdir,
+		// Adapt ProvisionWorkdir (a public function with many direct callers) to the
+		// ProvisionerFunc signature; the before-init event carries no exec context.
+		Func: func(ctx context.Context, atmosConfig *schema.AtmosConfiguration, componentConfig map[string]any, authContext *schema.AuthContext, _ *provisioner.TerraformExecContext) error {
+			return ProvisionWorkdir(ctx, atmosConfig, componentConfig, authContext)
+		},
 	})
 }
 
@@ -164,6 +169,14 @@ func (s *Service) Provision(
 
 	// 4. Store workdir path for terraform execution.
 	componentConfig[WorkdirPathKey] = workdirPath
+
+	// 5. Restore the committed per-instance provider lock (if any) from the source dir into
+	// the workdir as the canonical .terraform.lock.hcl, so init honors the instance's pinned
+	// providers; the after.terraform.init hook completes and re-persists it. Best-effort: a
+	// restore failure must not block provisioning (init simply re-resolves).
+	if err := provisioner.RestorePerInstanceLock(metadata.Source, workdirPath, componentConfig); err != nil {
+		log.Debug("Failed to restore per-instance provider lock", "error", err)
+	}
 
 	// Signal that the workdir was actively provisioned (files synced) this invocation.
 	// This tells buildInitArgs to add -reconfigure to terraform init.
