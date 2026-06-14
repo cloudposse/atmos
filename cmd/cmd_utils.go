@@ -897,7 +897,12 @@ func executeCustomCommand(
 		case "atmos":
 			// Execute atmos command.
 			args := strings.Fields(commandToRun)
-			err = e.ExecuteShellCommand(atmosConfig, "atmos", args, workDir, env, false, "")
+			execPath, execErr := os.Executable()
+			if execErr != nil {
+				err = execErr
+				break
+			}
+			err = e.ExecuteShellCommand(atmosConfig, execPath, args, workDir, env, false, "")
 		default:
 			// Check if this is an extended step type (input, confirm, choose, etc.).
 			if stepPkg.IsExtendedStepType(stepType) {
@@ -1351,11 +1356,11 @@ func verifyInsideGitRepoE() error {
 func showErrorExampleFromMarkdown(cmd *cobra.Command, arg string) {
 	commandPath := cmd.CommandPath()
 	suggestions := []string{}
-	details := fmt.Sprintf("The command `%s` is not valid usage\n", commandPath)
+	details := fmt.Sprintf("You invoked `%s` incorrectly.\n", commandPath)
 	if len(arg) > 0 {
 		details = fmt.Sprintf("Unknown command `%s` for `%s`\n", arg, commandPath)
 	} else if len(cmd.Commands()) != 0 && arg == "" {
-		details = fmt.Sprintf("The command `%s` requires a subcommand\n", commandPath)
+		details = fmt.Sprintf("`%s` requires a subcommand.\n", commandPath)
 	}
 	if len(arg) > 0 {
 		suggestions = cmd.SuggestionsFor(arg)
@@ -1380,11 +1385,44 @@ func showErrorExampleFromMarkdown(cmd *cobra.Command, arg string) {
 func showUsageExample(cmd *cobra.Command, details string) {
 	contentName := strings.ReplaceAll(strings.ReplaceAll(cmd.CommandPath(), " ", "_"), "-", "_")
 	suggestion := fmt.Sprintf("\n\nRun `%s --help` for usage", cmd.CommandPath())
+	details = appendUsageSection(details, cmd)
 	if exampleContent, ok := examples[contentName]; ok {
 		suggestion = exampleContent.Suggestion
 		details += "\n## Usage Examples:\n" + exampleContent.Content
 	}
 	errUtils.CheckErrorPrintAndExit(errors.New(details), "Incorrect Usage", suggestion)
+}
+
+// appendUsageSection appends a generated "Usage" Markdown section (a fenced
+// shell block containing the command's usage lines) to the details string.
+// When the command yields no usage lines, details is returned unchanged.
+func appendUsageSection(details string, cmd *cobra.Command) string {
+	usage := commandUsageLines(cmd)
+	if usage == "" {
+		return details
+	}
+
+	return details + "\n## Usage\n\n```shell\n" + usage + "\n```\n"
+}
+
+// commandUsageLines generates the usage line(s) for a cobra command: the
+// UseLine when the command is runnable, plus a "<path> [sub-command] [flags]"
+// line when it has available subcommands. Returns an empty string for a nil
+// command.
+func commandUsageLines(cmd *cobra.Command) string {
+	if cmd == nil {
+		return ""
+	}
+
+	lines := []string{}
+	if cmd.Runnable() {
+		lines = append(lines, cmd.UseLine())
+	}
+	if cmd.HasAvailableSubCommands() {
+		lines = append(lines, fmt.Sprintf("%s [sub-command] [flags]", cmd.CommandPath()))
+	}
+
+	return strings.Join(lines, "\n")
 }
 
 // StackFlagCompletion provides shell completion for the --stack flag.

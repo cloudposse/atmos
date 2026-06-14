@@ -15,6 +15,10 @@ Valid subcommands are:
   • validate
   • whoami
 
+## Usage
+
+ atmos auth [sub-command] [flags]
+
 ## Hints
 
 💡 Run atmos auth --help for usage
