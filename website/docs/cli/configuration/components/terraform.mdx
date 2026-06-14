@@ -155,6 +155,8 @@ components:
   <dd>
     When `true`, Atmos enables Terraform provider plugin caching by automatically setting `TF_PLUGIN_CACHE_DIR`. This improves performance by reusing downloaded providers across components, reducing init times and network bandwidth.
 
+    This is Terraform's **own** provider cache and is independent of the [registry cache](#cache) (`cache`). The plugin cache stores provider plugins that Terraform manages itself; the registry cache is an Atmos-managed proxy that caches both provider *and* module registry traffic. The two are separate layers and can be used together.
+
     When caching is enabled, Atmos also sets `TF_PLUGIN_CACHE_MAY_BREAK_DEPENDENCY_LOCK_FILE=true` as required by Terraform.
 
     If `TF_PLUGIN_CACHE_DIR` is already set in your environment or via the global `env:` section in `atmos.yaml`, Atmos does not override it—you manage your own cache.
@@ -221,6 +223,92 @@ components:
       pass_vars: true
 ```
 </File>
+
+## CLI Configuration (`rc`) {#rc}
+
+The `rc` section declares the Terraform/OpenTofu CLI configuration (`.terraformrc` / `.tofurc`). Atmos renders it and exposes it to the subprocess via `TF_CLI_CONFIG_FILE` and `TOFU_CLI_CONFIG_FILE` — no hand-managed dotfiles. It is a **near-opaque passthrough**: keys map directly to CLI-config directives, so new directives work without an Atmos release.
+
+<dl>
+  <dt><code>enabled</code></dt>
+  <dd>Enable rendering of the CLI configuration. Defaults to <code>false</code>.</dd>
+  <dt>(remaining keys)</dt>
+  <dd>Rendered verbatim into Terraform's native CLI config (HCL): <code>provider_installation</code>, <code>host</code>, <code>credentials</code>, <code>plugin_cache_dir</code>, etc.</dd>
+</dl>
+
+```yaml
+components:
+  terraform:
+    rc:
+      enabled: true
+      provider_installation:
+        - network_mirror:
+            url: "https://terraform-mirror.example.com/"
+        - direct:
+            exclude:
+              - "registry.terraform.io/hashicorp/*"
+```
+
+If you already manage your own CLI config (via `TF_CLI_CONFIG_FILE`, `TOFU_CLI_CONFIG_FILE`, or the legacy `TERRAFORM_CONFIG`), Atmos detects it and defers to you.
+
+## Registry Cache (`cache`) {#cache}
+
+The `cache` section enables the [Terraform registry cache](/cli/commands/terraform/cache) — transparent provider and module caching via an ephemeral local network-mirror proxy. It is execution-environment (runner) configuration that merges through the stack hierarchy.
+
+This is **not** the same as Terraform's [`plugin_cache`](#configuration-reference): the registry cache is an Atmos-managed proxy that caches both provider *and* module registry traffic (default root `~/.cache/atmos/terraform/registry`), whereas `plugin_cache` is Terraform's own provider plugin cache (`~/.cache/atmos/terraform/plugins`). They are independent layers.
+
+<dl>
+  <dt><code>enabled</code></dt>
+  <dd>Enable the registry cache. Defaults to <code>false</code>.</dd>
+  <dt><code>location</code></dt>
+  <dd>Cache root. Defaults to the XDG cache directory under <code>terraform/registry</code>.</dd>
+  <dt><code>backend.type</code></dt>
+  <dd>Storage backend. <code>filesystem</code> (default).</dd>
+  <dt><code>metadata_ttl</code></dt>
+  <dd>Time-to-live for registry metadata (Go duration). Defaults to <code>24h</code>.</dd>
+  <dt><code>stale_while_revalidate</code></dt>
+  <dd>Window during which stale metadata may be served while revalidating (Go duration). Defaults to <code>168h</code>.</dd>
+  <dt><code>mirror.enabled</code></dt>
+  <dd>Express fleet pre-seeding policy. The <a href="/cli/commands/terraform/cache/mirror"><code>cache mirror</code></a> command runs regardless. Defaults to <code>false</code>.</dd>
+</dl>
+
+Target platforms are configured at the project level via [`platforms`](#platforms) (not under `cache`), since the same list also drives multi-platform lock completion.
+
+```yaml
+components:
+  terraform:
+    platforms:
+      - linux_amd64
+      - darwin_arm64
+      - windows_amd64
+    cache:
+      enabled: true
+      metadata_ttl: 24h
+      stale_while_revalidate: 168h
+```
+
+Manage the cache with [`atmos terraform cache list|stats|prune|delete|mirror`](/cli/commands/terraform/cache).
+
+## Platforms (`platforms`) {#platforms}
+
+`components.terraform.platforms` is the list of target platforms a project builds for, as `<os>_<arch>` (e.g. `linux_amd64`, `darwin_arm64`). A single list drives two things:
+
+<dl>
+  <dt>Eager pre-seeding</dt>
+  <dd>The lazy proxy only caches the platform Terraform requests at run time (your host's). Run <a href="/cli/commands/terraform/cache/mirror"><code>atmos terraform cache mirror</code></a> to pre-fetch every platform in <code>platforms</code> into the same cache directory — for mixed CI/developer fleets or air-gapped bundles.</dd>
+  <dt>Complete lock files</dt>
+  <dd>When a customized provider installation method is active (Terraform's default <a href="#configuration-reference"><code>plugin_cache</code></a>, or the registry <a href="#cache"><code>cache</code></a>), <code>init</code> writes a <code>.terraform.lock.hcl</code> with checksums for only the host platform and warns <em>"Incomplete lock file information for providers"</em>. With <code>platforms</code> declared, Atmos runs <code>providers lock</code> after init to complete the lock for every platform, so a committed lock installs cleanly across a fleet.</dd>
+</dl>
+
+```yaml
+components:
+  terraform:
+    platforms:
+      - linux_amd64
+      - darwin_arm64
+      - windows_amd64
+```
+
+For **ephemeral or vendored** components ([`provision.workdir`](/cli/commands/terraform/workdir) or a [`source:`](/vendor/)) the canonical `.terraform.lock.hcl` has no committable home, so Atmos keeps the committed lock per instance as `.<stack>-<component>.terraform.lock.hcl` — restored into the working directory before `init` and persisted after. Keep canonical `**/.terraform.lock.hcl` ignored and un-ignore `!**/.*-*.terraform.lock.hcl` in `.gitignore`. Plain in-repo components keep committing the canonical lock as usual.
 
 ## Generated Files
 
