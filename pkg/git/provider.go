@@ -157,10 +157,11 @@ type InitOptions struct {
 	// appended verbatim to the primary git invocation by the cli provider:
 	// `git init` for an empty init, or the `git clone` of FromURI.
 	ExtraArgs []string
-	// Force re-initializes in place when the workdir already exists instead of
-	// refusing. It is non-destructive: `git init` is idempotent and the
-	// configured remote is updated rather than duplicated. Force does not apply
-	// to seeded (FromURI) modes, whose clone requires an empty target.
+	// Force deletes the existing workdir and re-initializes from scratch
+	// (destructive). It applies to both empty init and FromURI seeding. Without
+	// Force, an already-initialized repository is reconciled in place
+	// (idempotent: re-run `git init`, re-point the configured remote), while any
+	// other non-empty directory is refused.
 	Force bool
 }
 
