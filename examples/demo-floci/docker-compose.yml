@@ -1,0 +1,17 @@
+services:
+  floci:
+    container_name: floci
+    image: floci/floci:1.5.23
+    ports:
+      - "0.0.0.0:4566:4566"            # Floci Gateway (LocalStack-compatible edge port)
+    networks:
+      - floci
+    environment:
+      - FLOCI_STORAGE_MODE=persistent
+      - FLOCI_STORAGE_PERSISTENT_PATH=/data
+    volumes:
+      - "${FLOCI_VOLUME_DIR:-./volume}:/data"
+
+networks:
+  floci:
+    driver: bridge
