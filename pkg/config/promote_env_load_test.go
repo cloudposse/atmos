@@ -30,8 +30,11 @@ func writeProfileFixture(t *testing.T, dir, name, nameTemplate string) {
 // environment and honored by Atmos's own profile resolution within the same load.
 func TestLoadConfig_PinsAtmosProfileFromEnvSection(t *testing.T) {
 	tmpDir := t.TempDir()
+	// Use a uniquely-named non-ATMOS_ key so the "not promoted" assertion is robust even
+	// when the test host has common vars (e.g. AWS_REGION on CI runners) already set.
+	const nonAtmosKey = "ATMOSTEST_NONATMOS_PIN_KEY"
 	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, ".env"),
-		[]byte("ATMOS_PROFILE=pinned\nAWS_REGION=us-west-2\n"), 0o644))
+		[]byte("ATMOS_PROFILE=pinned\n"+nonAtmosKey+"=should-not-promote\n"), 0o644))
 	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, AtmosConfigFileName),
 		[]byte("base_path: ./\nenv: !include .env\n"), 0o644))
 	writeProfileFixture(t, tmpDir, "pinned", "pinned-template")
@@ -51,8 +54,8 @@ func TestLoadConfig_PinsAtmosProfileFromEnvSection(t *testing.T) {
 	assert.Equal(t, "pinned-template", atmosConfig.Stacks.NameTemplate)
 	// A non-ATMOS_ key from the `.env` must NOT be promoted into the Atmos process env
 	// (it still flows to subprocesses via MergeGlobalEnv, but not here).
-	_, awsSet := os.LookupEnv("AWS_REGION")
-	assert.False(t, awsSet, "non-ATMOS_ keys must not be promoted into the Atmos process env")
+	_, nonAtmosSet := os.LookupEnv(nonAtmosKey)
+	assert.False(t, nonAtmosSet, "non-ATMOS_ keys must not be promoted into the Atmos process env")
 }
 
 // TestLoadConfig_RealEnvWinsOverEnvSection verifies that an exported ATMOS_PROFILE takes
