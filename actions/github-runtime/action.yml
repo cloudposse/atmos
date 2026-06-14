@@ -1,0 +1,40 @@
+# Atmos GitHub Runtime
+#
+# Exposes the GitHub Actions runtime credentials (ACTIONS_RUNTIME_TOKEN,
+# ACTIONS_RESULTS_URL, ...) that the runner injects only into *action* steps,
+# so a following `run:` step can use `atmos ci cache restore/save` (whose GitHub
+# backend reads them from the environment).
+#
+# Two modes (the runtime token is always masked with ::add-mask:: either way):
+#   - output (default): expose credentials as masked *step outputs*. You thread
+#     them only into the steps that need them via `env:` — least privilege.
+#   - env: export every ACTIONS_* var to $GITHUB_ENV — every later run step in
+#     the job inherits them (convenient, but the largest blast radius).
+#
+# See actions/github-runtime/README.md for the security tradeoff and examples.
+name: 'Atmos GitHub Runtime'
+description: 'Expose GitHub Actions runtime credentials to run steps so `atmos ci cache` can reach the cache service.'
+author: 'Cloud Posse'
+branding:
+  icon: 'unlock'
+  color: 'blue'
+
+inputs:
+  mode:
+    description: 'How to expose credentials: "output" (masked step outputs, least-privilege) or "env" (export ACTIONS_* to $GITHUB_ENV, ambient).'
+    required: false
+    default: 'output'
+
+outputs:
+  runtime-token:
+    description: 'ACTIONS_RUNTIME_TOKEN (masked). Set ACTIONS_RUNTIME_TOKEN from this in the consuming step.'
+  results-url:
+    description: 'ACTIONS_RESULTS_URL — the cache service v2 base URL used by save/restore.'
+  cache-url:
+    description: 'ACTIONS_CACHE_URL — legacy v1 cache URL, when present.'
+  runtime-url:
+    description: 'ACTIONS_RUNTIME_URL.'
+
+runs:
+  using: node24
+  main: index.js

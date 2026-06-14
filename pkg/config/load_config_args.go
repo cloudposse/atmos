@@ -50,6 +50,7 @@ func loadConfigFromCLIArgs(v *viper.Viper, configAndStacksInfo *schema.ConfigAnd
 	if err := v.Unmarshal(atmosConfig, atmosDecodeHook()); err != nil {
 		return err
 	}
+	extractEnvMapsFromViper(v, atmosConfig)
 
 	// Fix auth.identities after Viper unmarshal (same as in main LoadConfig flow).
 	// Viper treats dots in map keys as nested paths, which breaks identity names like "product.usa".
@@ -59,6 +60,7 @@ func loadConfigFromCLIArgs(v *viper.Viper, configAndStacksInfo *schema.ConfigAnd
 
 	// Preserve case-sensitive map keys (same as in main LoadConfig flow).
 	preserveCaseSensitiveMaps(v, atmosConfig)
+	restoreCaseSensitiveEnvMaps(atmosConfig)
 
 	atmosConfig.CliConfigPath = connectPaths(configPaths)
 	return nil
