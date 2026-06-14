@@ -1,0 +1,62 @@
+base_path: "./"
+
+git:
+  repositories:
+    deploy:
+      uri: https://github.com/cloudposse-sandbox/empty.git
+      # SSH alternative when an SSH key is available:
+      # uri: git@github.com:cloudposse-sandbox/empty.git
+      # Seed `atmos git init deploy` from a template repository. The
+      # --from / --keep-history flags override these defaults.
+      init:
+        from: https://github.com/cloudposse/terraform-aws-components.git
+        keep_history: false
+
+logs:
+  file: "/dev/stderr"
+  level: Info
+
+settings:
+  experimental: silence
+  telemetry:
+    enabled: false
+
+commands:
+- name: "test"
+  description: "Run all tests"
+  steps:
+  - command: git clone deploy
+    type: atmos
+  - command: git status deploy
+    type: atmos
+  - command: git diff deploy
+    type: atmos
+  - command: git clean deploy --dry-run
+    type: atmos
+
+- name: "gitops"
+  description: "Run the GitOps publishing lifecycle demo"
+  commands:
+  - name: "reconcile"
+    description: "Clone or update the managed deployment repository"
+    steps:
+    - atmos git clone deploy
+    - atmos git status deploy
+
+  - name: "review"
+    description: "Review generated deployment changes"
+    steps:
+    - atmos git status deploy
+    - atmos git diff deploy
+
+  - name: "publish"
+    description: "Commit deployment changes"
+    steps:
+    - atmos git commit deploy --message "Update generated deployment artifacts"
+    # Uncomment after reviewing the commit target and credentials.
+    # - atmos git push deploy
+
+  - name: "clean"
+    description: "Remove the managed deployment workdir"
+    steps:
+    - atmos git clean deploy

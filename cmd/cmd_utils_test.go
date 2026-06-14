@@ -101,6 +101,39 @@ func TestContains(t *testing.T) {
 	}
 }
 
+func TestCommandUsageLines(t *testing.T) {
+	rootCmd := &cobra.Command{Use: "atmos"}
+	gitCmd := &cobra.Command{Use: "git"}
+	pushCmd := &cobra.Command{
+		Use: "push <name-or-path>",
+		Run: func(cmd *cobra.Command, args []string) {},
+	}
+	pushCmd.Flags().Bool("dry-run", false, "preview the push")
+	gitCmd.AddCommand(pushCmd)
+	rootCmd.AddCommand(gitCmd)
+
+	assert.Equal(t, "atmos git push <name-or-path> [flags]", commandUsageLines(pushCmd))
+	assert.Equal(t, "atmos git [sub-command] [flags]", commandUsageLines(gitCmd))
+	assert.Empty(t, commandUsageLines(nil))
+}
+
+func TestAppendUsageSection(t *testing.T) {
+	cmd := &cobra.Command{
+		Use: "push <name-or-path>",
+		Run: func(cmd *cobra.Command, args []string) {},
+	}
+	cmd.Flags().Bool("dry-run", false, "preview the push")
+	rootCmd := &cobra.Command{Use: "atmos"}
+	gitCmd := &cobra.Command{Use: "git"}
+	gitCmd.AddCommand(cmd)
+	rootCmd.AddCommand(gitCmd)
+
+	got := appendUsageSection("You invoked `atmos git push` incorrectly.\n", cmd)
+
+	assert.Contains(t, got, "## Usage")
+	assert.Contains(t, got, "```shell\natmos git push <name-or-path> [flags]\n```")
+}
+
 func TestIsVersionCommand(t *testing.T) {
 	tests := []struct {
 		name     string
