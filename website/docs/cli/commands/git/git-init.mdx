@@ -67,6 +67,12 @@ atmos git init flux-deploy --from=https://github.com/acme/flux-template.git
 # as the 'upstream' remote
 atmos git init flux-deploy --from=https://github.com/acme/old-deploy.git --keep-history
 
+# Re-running init is idempotent: reconciles an existing repo in place
+atmos git init flux-deploy
+
+# Force a clean re-create from scratch (destructive: deletes the workdir first)
+atmos git init flux-deploy --force
+
 # Preview without touching the filesystem
 atmos git init flux-deploy --from=https://github.com/acme/flux-template.git --dry-run
 
@@ -86,8 +92,12 @@ In fresh mode the configured `branch` names the **new** history (`git init -b <b
 
 The initial commit created in fresh mode honors the repository's [`commit.signing`](/cli/configuration/git) mode and `commit.author` override.
 
-:::note Init never overwrites
-`atmos git init` refuses to run when the resolved workdir already exists and is not empty. Use [`atmos git clone`](/cli/commands/git/clone) to reconcile an existing workdir, or [`atmos git clean`](/cli/commands/git/clean) to remove it first.
+:::note Idempotent by default; `--force` re-creates
+Re-running `atmos git init` is safe: when the resolved workdir is **already an initialized Git repository**, init reconciles it in place — it re-runs `git init` (idempotent) and re-points the configured remote, without re-seeding or erroring. This holds whether or not `init.from` is configured (the repository already exists, so there is nothing to seed).
+
+Any **other non-empty directory** (not a Git repository) is refused, so init never clobbers unrelated content.
+
+Pass `--force` to **delete the existing workdir and re-initialize from scratch** — this is destructive (uncommitted/unpushed local content is lost) and re-runs the full create or seed. Use [`--dry-run`](#flags) to preview, or [`atmos git clean`](/cli/commands/git/clean) to remove the workdir explicitly.
 :::
 
 ## Arguments
@@ -124,6 +134,12 @@ The initial commit created in fresh mode honors the repository's [`commit.signin
     <dd>
         Override the destination directory. Default: the repository's configured `workdir`, or the automatic XDG workdir (`$XDG_CACHE_HOME/atmos/git/repositories/<name>`).
         Environment variable: `ATMOS_GIT_WORKDIR`
+    </dd>
+
+    <dt>`--force` / `-f` <em>(optional)</em></dt>
+    <dd>
+        Delete the existing workdir and re-initialize from scratch. Destructive — uncommitted/unpushed local content is lost. Without `--force`, re-running init reconciles an existing repository in place (idempotent); use `--force` only when you want a clean re-create or re-seed.
+        Environment variable: `ATMOS_GIT_FORCE`
     </dd>
 
     <dt>`--dry-run` / `-n` <em>(optional)</em></dt>

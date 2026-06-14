@@ -5,6 +5,8 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"os"
+	"path/filepath"
 	"strings"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -59,8 +61,9 @@ func newExecutorWithProvider(p atmosgit.Provider) *Executor {
 func (e *Executor) Init(ctx context.Context, opts *atmosgit.InitOptions, label string) error {
 	defer perf.Track(nil, "git.Executor.Init")()
 
-	progressMsg := fmt.Sprintf("Initializing %s", label)
-	completedMsg := initCompletedMessage(label, opts)
+	reconcile := initWillReconcile(opts)
+	progressMsg := initProgressMessage(label, opts, reconcile)
+	completedMsg := initCompletedMessage(label, opts, reconcile)
 	stderr, err := e.captureStderr(func() error {
 		return spinner.ExecWithSpinner(progressMsg, completedMsg, func() error {
 			return e.provider.Init(ctx, opts)
@@ -75,16 +78,51 @@ func (e *Executor) Init(ctx context.Context, opts *atmosgit.InitOptions, label s
 	)
 }
 
+// initWillReconcile reports whether init will reconcile an already-initialized
+// repository in place (the workdir already contains a ".git", and --force was
+// not given) rather than creating or seeding a fresh one. It only phrases the
+// output; the provider makes the authoritative decision.
+func initWillReconcile(opts *atmosgit.InitOptions) bool {
+	if opts.Force {
+		return false
+	}
+	_, err := os.Stat(filepath.Join(opts.Workdir, ".git"))
+	return err == nil
+}
+
+// initProgressMessage builds the spinner progress line, naming the seed source
+// when init is seeding from another repository.
+func initProgressMessage(label string, opts *atmosgit.InitOptions, reconcile bool) string {
+	switch {
+	case reconcile:
+		return fmt.Sprintf("Reconciling Git repository %s", label)
+	case opts.FromURI != "":
+		return fmt.Sprintf("Initializing Git repository %s from %s", label, opts.FromURI)
+	default:
+		return fmt.Sprintf("Initializing Git repository %s", label)
+	}
+}
+
 // initCompletedMessage builds a mode-aware init success message so the output
-// reflects whether the repository was seeded (and how), mirroring the dry-run.
-func initCompletedMessage(label string, opts *atmosgit.InitOptions) string {
+// reflects whether the Git repository was created, seeded (and how), or
+// reconciled, mirroring the dry-run, and makes clear that a Git repository (not
+// a deployment) was acted on. The verb reflects --force, which deletes and
+// re-creates from scratch.
+func initCompletedMessage(label string, opts *atmosgit.InitOptions, reconcile bool) string {
+	if reconcile {
+		return fmt.Sprintf("Reconciled Git repository %s in %s.", label, opts.Workdir)
+	}
+	verb := "Initialized"
+	if opts.Force {
+		verb = "Re-initialized"
+	}
 	switch {
 	case opts.FromURI == "":
-		return fmt.Sprintf("Initialized empty repository %s in %s.", label, opts.Workdir)
+		return fmt.Sprintf("%s empty Git repository %s in %s.", verb, label, opts.Workdir)
 	case opts.KeepHistory:
-		return fmt.Sprintf("Initialized %s in %s from %s (history preserved; source kept as 'upstream').", label, opts.Workdir, opts.FromURI)
+		return fmt.Sprintf("%s Git repository %s in %s from %s (history preserved; source kept as 'upstream').", verb, label, opts.Workdir, opts.FromURI)
 	default:
-		return fmt.Sprintf("Initialized %s in %s from %s (fresh history).", label, opts.Workdir, opts.FromURI)
+		return fmt.Sprintf("%s Git repository %s in %s from %s (fresh history).", verb, label, opts.Workdir, opts.FromURI)
 	}
 }
 

@@ -172,6 +172,138 @@ func TestInitRefusesNonEmptyWorkdir(t *testing.T) {
 	assert.Empty(t, runner.calls, "no git command may run against a non-empty target")
 }
 
+func TestInitReconcilesExistingRepoIdempotently(t *testing.T) {
+	runner := newFakeRunner()
+	provider := New(WithRunner(runner))
+	workdir := t.TempDir()
+	// A ".git" entry marks the workdir as an already-initialized repository.
+	require.NoError(t, os.MkdirAll(filepath.Join(workdir, ".git"), 0o755))
+
+	// Without --force, re-initializing an existing repo reconciles in place: it
+	// succeeds rather than erroring, with no destructive operation.
+	err := provider.Init(context.Background(), &atmosgit.InitOptions{
+		RepoContext: atmosgit.RepoContext{Workdir: workdir, Branch: "main", Remote: "origin"},
+		URI:         "https://github.com/acme/deploy.git",
+	})
+	require.NoError(t, err)
+
+	calls := runner.joinedCalls()
+	require.Len(t, calls, 3)
+	// Idempotent init, then update the existing remote in place (probe + set-url),
+	// never a duplicate `remote add`.
+	assert.Equal(t, "init -b main", calls[0])
+	assert.Equal(t, "remote get-url origin", calls[1])
+	assert.Equal(t, "remote set-url origin https://github.com/acme/deploy.git", calls[2])
+}
+
+func TestInitReconcileAddsRemoteWhenAbsent(t *testing.T) {
+	runner := newFakeRunner()
+	// get-url fails (no remote configured yet); reconcile falls back to add.
+	runner.on("remote get-url", atmosgit.RunResult{ExitCode: 1}, exitErr(1))
+	provider := New(WithRunner(runner))
+	workdir := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(workdir, ".git"), 0o755))
+
+	err := provider.Init(context.Background(), &atmosgit.InitOptions{
+		RepoContext: atmosgit.RepoContext{Workdir: workdir, Branch: "main", Remote: "origin"},
+		URI:         "https://github.com/acme/deploy.git",
+	})
+	require.NoError(t, err)
+
+	calls := runner.joinedCalls()
+	require.Len(t, calls, 3)
+	assert.Equal(t, "init -b main", calls[0])
+	assert.Equal(t, "remote get-url origin", calls[1])
+	assert.Equal(t, "remote add origin https://github.com/acme/deploy.git", calls[2])
+}
+
+func TestInitForceDeletesAndReinitializes(t *testing.T) {
+	runner := newFakeRunner()
+	provider := New(WithRunner(runner))
+	workdir := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(workdir, ".git"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(workdir, "old.txt"), []byte("x"), 0o644))
+
+	err := provider.Init(context.Background(), &atmosgit.InitOptions{
+		RepoContext: atmosgit.RepoContext{Workdir: workdir, Branch: "main", Remote: "origin"},
+		URI:         "https://github.com/acme/deploy.git",
+		Force:       true,
+	})
+	require.NoError(t, err)
+
+	// The old workdir content is gone (deleted, then re-created fresh).
+	assert.NoFileExists(t, filepath.Join(workdir, "old.txt"))
+	calls := runner.joinedCalls()
+	require.Len(t, calls, 2)
+	// Fresh init + a plain `remote add` (no reconcile probe — the dir was wiped).
+	assert.Equal(t, "init -b main", calls[0])
+	assert.Equal(t, "remote add origin https://github.com/acme/deploy.git", calls[1])
+}
+
+func TestInitForceWithFromDeletesThenSeeds(t *testing.T) {
+	runner := newFakeRunner()
+	provider := New(WithRunner(runner))
+	workdir := filepath.Join(t.TempDir(), "deploy")
+	require.NoError(t, os.MkdirAll(filepath.Join(workdir, ".git"), 0o755))
+
+	// --force deletes the populated workdir, so the seeding clone has the empty
+	// target it requires.
+	err := provider.Init(context.Background(), &atmosgit.InitOptions{
+		RepoContext: atmosgit.RepoContext{Workdir: workdir, Branch: "main", Remote: "origin"},
+		URI:         "https://github.com/acme/deploy.git",
+		FromURI:     "https://github.com/acme/template.git",
+		KeepHistory: true,
+		Force:       true,
+	})
+	require.NoError(t, err)
+
+	calls := runner.joinedCalls()
+	require.Len(t, calls, 3)
+	assert.Equal(t, "clone --branch main -- https://github.com/acme/template.git "+workdir, calls[0])
+	assert.Equal(t, "remote rename origin upstream", calls[1])
+	assert.Equal(t, "remote add origin https://github.com/acme/deploy.git", calls[2])
+}
+
+func TestInitFromReconcilesExistingRepoIdempotently(t *testing.T) {
+	runner := newFakeRunner()
+	provider := New(WithRunner(runner))
+	workdir := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(workdir, ".git"), 0o755))
+
+	// init.from is configured, but the repository already exists: re-running
+	// init reconciles in place (idempotent) rather than re-seeding or erroring.
+	err := provider.Init(context.Background(), &atmosgit.InitOptions{
+		RepoContext: atmosgit.RepoContext{Workdir: workdir, Branch: "main", Remote: "origin"},
+		URI:         "https://github.com/acme/deploy.git",
+		FromURI:     "https://github.com/acme/template.git",
+	})
+	require.NoError(t, err)
+
+	calls := runner.joinedCalls()
+	require.Len(t, calls, 3)
+	// No clone: reconcile re-inits and re-points the configured remote.
+	assert.Equal(t, "init -b main", calls[0])
+	assert.Equal(t, "remote get-url origin", calls[1])
+	assert.Equal(t, "remote set-url origin https://github.com/acme/deploy.git", calls[2])
+}
+
+func TestInitFromRefusesPopulatedNonRepoWithoutForce(t *testing.T) {
+	runner := newFakeRunner()
+	provider := New(WithRunner(runner))
+	workdir := t.TempDir()
+	// Non-empty but NOT a Git repository (no .git): refused without --force.
+	require.NoError(t, os.WriteFile(filepath.Join(workdir, "stray.txt"), []byte("x"), 0o644))
+
+	err := provider.Init(context.Background(), &atmosgit.InitOptions{
+		RepoContext: atmosgit.RepoContext{Workdir: workdir},
+		URI:         "https://github.com/acme/deploy.git",
+		FromURI:     "https://github.com/acme/template.git",
+	})
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, errUtils.ErrGitWorkdirExists))
+	assert.Empty(t, runner.calls)
+}
+
 func TestInitAllowsExistingEmptyWorkdir(t *testing.T) {
 	runner := newFakeRunner()
 	provider := New(WithRunner(runner))

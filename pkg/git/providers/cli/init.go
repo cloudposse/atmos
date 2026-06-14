@@ -18,44 +18,96 @@ const sourceRemoteName = "upstream"
 // initSubcommand is the git subcommand (and classify label) for `git init`.
 const initSubcommand = "init"
 
-// Init creates a new repository workdir from scratch — the inverse of Clone,
-// for GitOps repositories whose remote has no content yet.
+// remoteSubcommand is the git subcommand for managing remotes.
+const remoteSubcommand = "remote"
+
+// Init creates a repository workdir — the inverse of Clone, for GitOps
+// repositories whose remote has no content yet.
+//
+// Init is idempotent for the empty (no --from) mode: re-running it against an
+// already-initialized repository reconciles in place (`git init` is idempotent
+// and the configured remote is updated rather than duplicated). --force means
+// "redo from scratch": the existing workdir is deleted and re-initialized.
 func (p *Provider) Init(ctx context.Context, opts *atmosgit.InitOptions) error {
 	defer perf.Track(nil, "cli.Provider.Init")()
 
-	if err := ensureInitTarget(opts.Workdir); err != nil {
+	if opts.Force {
+		// Destructive by design: discard any existing workdir, then re-create.
+		if err := os.RemoveAll(opts.Workdir); err != nil {
+			return fmt.Errorf("removing existing workdir %q: %w", opts.Workdir, err)
+		}
+		return p.initByMode(ctx, opts, false)
+	}
+
+	existed, isRepo, err := inspectInitTarget(opts.Workdir)
+	if err != nil {
 		return err
 	}
 
-	if opts.FromURI == "" {
-		return p.initEmpty(ctx, opts)
+	// An already-initialized repository reconciles idempotently in either mode:
+	// the repository already exists, so there is nothing to seed — re-running
+	// init just re-runs `git init` and re-points the configured remote. Seeding
+	// from --from happens only on a fresh workdir; --force re-seeds from scratch.
+	if isRepo {
+		return p.initEmpty(ctx, opts, true)
 	}
+	if existed {
+		return fmt.Errorf("%w: %q is not empty; use --force to re-create it",
+			errUtils.ErrGitWorkdirExists, opts.Workdir)
+	}
+	return p.initByMode(ctx, opts, false)
+}
+
+// initByMode dispatches to the empty or seeded init path. The reconcile flag
+// applies only to the empty path (idempotent re-init of an existing repository).
+func (p *Provider) initByMode(ctx context.Context, opts *atmosgit.InitOptions, reconcile bool) error {
+	if opts.FromURI == "" {
+		return p.initEmpty(ctx, opts, reconcile)
+	}
+	return p.initSeed(ctx, opts)
+}
+
+// initSeed dispatches between the fresh-history and keep-history seeding paths.
+func (p *Provider) initSeed(ctx context.Context, opts *atmosgit.InitOptions) error {
 	if opts.KeepHistory {
 		return p.initFromSourceKeepHistory(ctx, opts)
 	}
 	return p.initFromSourceFresh(ctx, opts)
 }
 
-// ensureInitTarget refuses to initialize into an existing non-empty directory;
-// init never overwrites content (clone owns reconciling existing workdirs).
-func ensureInitTarget(workdir string) error {
+// inspectInitTarget reports whether the workdir already has content and whether
+// that content is a Git repository (a ".git" entry is present).
+func inspectInitTarget(workdir string) (existed, isRepo bool, err error) {
 	entries, err := os.ReadDir(workdir)
 	if os.IsNotExist(err) {
-		return nil
+		return false, false, nil
 	}
 	if err != nil {
-		return fmt.Errorf("checking init target %q: %w", workdir, err)
+		return false, false, fmt.Errorf("checking init target %q: %w", workdir, err)
 	}
-	if len(entries) > 0 {
-		return fmt.Errorf("%w: %q is not empty", errUtils.ErrGitWorkdirExists, workdir)
+	if len(entries) == 0 {
+		return false, false, nil
 	}
-	return nil
+	return true, hasGitDir(entries), nil
+}
+
+// hasGitDir reports whether a directory listing contains a ".git" entry,
+// indicating the workdir is already a Git repository.
+func hasGitDir(entries []os.DirEntry) bool {
+	for _, e := range entries {
+		if e.Name() == ".git" {
+			return true
+		}
+	}
+	return false
 }
 
 // initEmpty creates an empty repository on the configured branch with the
 // configured remote wired up, ready for `atmos git commit` + `atmos git push`
-// against an empty remote.
-func (p *Provider) initEmpty(ctx context.Context, opts *atmosgit.InitOptions) error {
+// against an empty remote. When reconciling (the workdir already existed, under
+// --force), `git init` runs idempotently and the configured remote is updated
+// in place rather than duplicated.
+func (p *Provider) initEmpty(ctx context.Context, opts *atmosgit.InitOptions, reconcile bool) error {
 	if err := os.MkdirAll(opts.Workdir, workdirParentPerm); err != nil {
 		return fmt.Errorf("creating workdir %q: %w", opts.Workdir, err)
 	}
@@ -69,6 +121,9 @@ func (p *Provider) initEmpty(ctx context.Context, opts *atmosgit.InitOptions) er
 		return classify(err, result, initSubcommand)
 	}
 
+	if reconcile {
+		return p.wireRemote(ctx, opts.RepoContext, remoteOrDefault(opts.Remote), opts.URI)
+	}
 	return p.addRemote(ctx, opts.RepoContext, remoteOrDefault(opts.Remote), opts.URI)
 }
 
@@ -131,7 +186,7 @@ func (p *Provider) initFromSourceKeepHistory(ctx context.Context, opts *atmosgit
 		source = "source"
 	}
 
-	if result, err := p.run(ctx, opts.Workdir, opts.Env, "remote", "rename", atmosgit.DefaultRemote, source); err != nil {
+	if result, err := p.run(ctx, opts.Workdir, opts.Env, remoteSubcommand, "rename", atmosgit.DefaultRemote, source); err != nil {
 		return classify(err, result, "remote rename")
 	}
 
@@ -163,9 +218,23 @@ func (p *Provider) cloneSource(ctx context.Context, opts *atmosgit.InitOptions, 
 
 // addRemote registers a remote, pointing name at uri.
 func (p *Provider) addRemote(ctx context.Context, rc atmosgit.RepoContext, name, uri string) error {
-	result, err := p.run(ctx, rc.Workdir, rc.Env, "remote", "add", name, uri)
+	result, err := p.run(ctx, rc.Workdir, rc.Env, remoteSubcommand, "add", name, uri)
 	if err != nil {
 		return classify(err, result, "remote add")
+	}
+	return nil
+}
+
+// wireRemote points name at uri, updating the remote when it already exists
+// (reconcile path) instead of failing on a duplicate `remote add`.
+func (p *Provider) wireRemote(ctx context.Context, rc atmosgit.RepoContext, name, uri string) error {
+	if _, err := p.run(ctx, rc.Workdir, rc.Env, remoteSubcommand, "get-url", name); err != nil {
+		// Remote not present yet: add it.
+		return p.addRemote(ctx, rc, name, uri)
+	}
+	result, err := p.run(ctx, rc.Workdir, rc.Env, remoteSubcommand, "set-url", name, uri)
+	if err != nil {
+		return classify(err, result, "remote set-url")
 	}
 	return nil
 }

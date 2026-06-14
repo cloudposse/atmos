@@ -157,6 +157,11 @@ type InitOptions struct {
 	// appended verbatim to the primary git invocation by the cli provider:
 	// `git init` for an empty init, or the `git clone` of FromURI.
 	ExtraArgs []string
+	// Force re-initializes in place when the workdir already exists instead of
+	// refusing. It is non-destructive: `git init` is idempotent and the
+	// configured remote is updated rather than duplicated. Force does not apply
+	// to seeded (FromURI) modes, whose clone requires an empty target.
+	Force bool
 }
 
 // PushOptions configures Push.

@@ -75,29 +75,42 @@ func (s *stubGitProvider) Push(ctx context.Context, opts *atmosgit.PushOptions) 
 
 func TestInitCompletedMessage(t *testing.T) {
 	tests := []struct {
-		name string
-		opts *atmosgit.InitOptions
-		want string
+		name      string
+		opts      *atmosgit.InitOptions
+		reconcile bool
+		want      string
 	}{
 		{
 			name: "empty repository",
 			opts: &atmosgit.InitOptions{RepoContext: atmosgit.RepoContext{Workdir: "/w"}},
-			want: "Initialized empty repository deploy in /w.",
+			want: "Initialized empty Git repository deploy in /w.",
 		},
 		{
 			name: "seeded fresh history",
 			opts: &atmosgit.InitOptions{RepoContext: atmosgit.RepoContext{Workdir: "/w"}, FromURI: "https://x/tpl.git"},
-			want: "Initialized deploy in /w from https://x/tpl.git (fresh history).",
+			want: "Initialized Git repository deploy in /w from https://x/tpl.git (fresh history).",
 		},
 		{
 			name: "seeded keep history",
 			opts: &atmosgit.InitOptions{RepoContext: atmosgit.RepoContext{Workdir: "/w"}, FromURI: "https://x/old.git", KeepHistory: true},
-			want: "Initialized deploy in /w from https://x/old.git (history preserved; source kept as 'upstream').",
+			want: "Initialized Git repository deploy in /w from https://x/old.git (history preserved; source kept as 'upstream').",
+		},
+		{
+			name:      "force re-initialize empty",
+			opts:      &atmosgit.InitOptions{RepoContext: atmosgit.RepoContext{Workdir: "/w"}, Force: true},
+			reconcile: false,
+			want:      "Re-initialized empty Git repository deploy in /w.",
+		},
+		{
+			name:      "reconcile existing repo",
+			opts:      &atmosgit.InitOptions{RepoContext: atmosgit.RepoContext{Workdir: "/w"}, FromURI: "https://x/tpl.git"},
+			reconcile: true,
+			want:      "Reconciled Git repository deploy in /w.",
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			assert.Equal(t, tt.want, initCompletedMessage("deploy", tt.opts))
+			assert.Equal(t, tt.want, initCompletedMessage("deploy", tt.opts, tt.reconcile))
 		})
 	}
 }

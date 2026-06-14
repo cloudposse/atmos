@@ -79,11 +79,13 @@ func newInitParser() *flags.StandardParser {
 		flags.WithBoolFlag(flagKeepHist, "", false, "Keep the --from repository's history and add it as an 'upstream' remote"),
 		flags.WithStringFlag(flagBranch, branchShorthand, "", "Initial branch name"),
 		flags.WithStringFlag(flagWorkdir, "", "", "Override destination directory"),
+		flags.WithBoolFlag(flagForce, "f", false, "Delete an existing workdir and re-initialize from scratch (destructive)"),
 		flags.WithBoolFlag(flagDryRun, dryRunShorthand, false, "Report what would be done without initializing"),
 		flags.WithEnvVars(flagFrom, "ATMOS_GIT_FROM"),
 		flags.WithEnvVars(flagKeepHist, "ATMOS_GIT_KEEP_HISTORY"),
 		flags.WithEnvVars(flagBranch, envGitBranch),
 		flags.WithEnvVars(flagWorkdir, "ATMOS_GIT_WORKDIR"),
+		flags.WithEnvVars(flagForce, "ATMOS_GIT_FORCE"),
 		flags.WithEnvVars(flagDryRun, envGitDryRun),
 	)
 }

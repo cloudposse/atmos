@@ -66,6 +66,7 @@ type initOptions struct {
 	KeepHistory bool
 	Branch      string
 	Workdir     string
+	Force       bool
 	DryRun      bool
 	// ExtraArgs are native git arguments captured after "--" on the command line.
 	ExtraArgs []string
@@ -77,6 +78,7 @@ func parseInitFlags(v *viper.Viper) *initOptions {
 		KeepHistory: v.GetBool(viperKey(initViperPrefix, flagKeepHist)),
 		Branch:      v.GetString(viperKey(initViperPrefix, flagBranch)),
 		Workdir:     v.GetString(viperKey(initViperPrefix, flagWorkdir)),
+		Force:       v.GetBool(viperKey(initViperPrefix, flagForce)),
 		DryRun:      v.GetBool(viperKey(initViperPrefix, flagDryRun)),
 	}
 }
@@ -137,6 +139,7 @@ func runInit(ctx context.Context, opts *initOptions, args []string) error {
 		Signing:     resolved.Signing,
 		Author:      resolved.Author,
 		ExtraArgs:   opts.ExtraArgs,
+		Force:       opts.Force,
 	}, name)
 }
 
@@ -175,6 +178,9 @@ func resolveInitSeed(opts *initOptions, resolved *atmosgit.ResolvedRepository) e
 // reportInitDryRun describes what init would do without doing it. The opts.From
 // and opts.KeepHistory values are already resolved (CLI flag over config).
 func reportInitDryRun(name, workdir, branch, uri string, opts *initOptions) {
+	if opts.Force {
+		ui.Infof("[dry-run] Would delete any existing workdir at %s, then re-initialize from scratch.", workdir)
+	}
 	switch {
 	case opts.From == "":
 		ui.Infof("[dry-run] Would initialize empty repository %q at %s (branch %q, remote -> %s).", name, workdir, branch, uri)
