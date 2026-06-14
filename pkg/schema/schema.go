@@ -519,6 +519,73 @@ type Terraform struct {
 	CI TerraformCI `yaml:"ci,omitempty" json:"ci,omitempty" mapstructure:"ci"`
 	// Workspace holds workspace-related configuration for backend key generation.
 	Workspace WorkspaceConfig `yaml:"workspace,omitempty" json:"workspace,omitempty" mapstructure:"workspace"`
+	// RC holds Terraform CLI configuration (.terraformrc) that Atmos renders and
+	// exposes to the terraform/tofu subprocess via TF_CLI_CONFIG_FILE. Disabled by default.
+	RC *TerraformRCConfig `yaml:"rc,omitempty" json:"rc,omitempty" mapstructure:"rc"`
+	// Cache holds the Terraform registry cache configuration (provider + module
+	// caching via an ephemeral network-mirror proxy). Disabled by default.
+	Cache *TerraformCacheConfig `yaml:"cache,omitempty" json:"cache,omitempty" mapstructure:"cache"`
+	// Platforms lists the target platforms a project builds for, as <os>_<arch>
+	// (e.g. linux_amd64, darwin_arm64). It is consumed by `atmos terraform cache
+	// mirror` (eager multi-platform pre-seeding) and by the automatic post-init
+	// `providers lock` that keeps .terraform.lock.hcl complete across platforms.
+	// Empty defaults to the current host platform.
+	Platforms []string `yaml:"platforms,omitempty" json:"platforms,omitempty" mapstructure:"platforms"`
+}
+
+// TerraformRCConfig is a near-opaque passthrough rendered into Terraform's native
+// CLI configuration (HCL). Only `enabled` is typed; all remaining keys are captured
+// verbatim in Config and rendered as CLI-config directives (provider_installation,
+// host, credentials, plugin_cache_dir, ...), so new directives require no Atmos
+// schema change.
+type TerraformRCConfig struct {
+	// Enabled turns on rendering of the CLI configuration. Defaults to false.
+	Enabled bool `yaml:"enabled,omitempty" json:"enabled,omitempty" mapstructure:"enabled"`
+	// Config captures all remaining keys verbatim (provider_installation, host, ...).
+	Config map[string]any `yaml:",inline" json:",inline" mapstructure:",remain"`
+}
+
+// TerraformCacheConfig configures the Terraform registry cache. The cache is
+// execution-environment (runner) configuration — where/how a machine caches
+// registry content — not stack data.
+type TerraformCacheConfig struct {
+	// Enabled turns on the registry cache. Defaults to false.
+	Enabled bool `yaml:"enabled,omitempty" json:"enabled,omitempty" mapstructure:"enabled"`
+	// Location is the cache root. Defaults to the XDG cache directory
+	// (~/.cache/atmos or $XDG_CACHE_HOME/atmos) under terraform/registry.
+	Location string `yaml:"location,omitempty" json:"location,omitempty" mapstructure:"location"`
+	// Backend selects the storage backend. filesystem (default) in V1.
+	Backend TerraformCacheBackend `yaml:"backend,omitempty" json:"backend,omitempty" mapstructure:"backend"`
+	// MetadataTTL is the time-to-live for registry metadata. Defaults to 24h.
+	MetadataTTL string `yaml:"metadata_ttl,omitempty" json:"metadata_ttl,omitempty" mapstructure:"metadata_ttl"`
+	// StaleWhileRevalidate is the window during which stale metadata may be served
+	// while revalidating in the background. Defaults to 168h.
+	StaleWhileRevalidate string `yaml:"stale_while_revalidate,omitempty" json:"stale_while_revalidate,omitempty" mapstructure:"stale_while_revalidate"`
+	// Mirror configures eager multi-platform pre-seeding via `atmos terraform cache
+	// mirror` (which wraps `terraform/tofu providers mirror`). When omitted, mirror
+	// defaults to the current host platform.
+	Mirror *TerraformCacheMirror `yaml:"mirror,omitempty" json:"mirror,omitempty" mapstructure:"mirror"`
+}
+
+// TerraformCacheBackend selects and configures the cache storage backend.
+type TerraformCacheBackend struct {
+	// Type is the storage backend: filesystem (default, maps to artifact local/dir).
+	Type string `yaml:"type,omitempty" json:"type,omitempty" mapstructure:"type"`
+	// Options carries backend-specific configuration.
+	Options map[string]any `yaml:"options,omitempty" json:"options,omitempty" mapstructure:"options"`
+}
+
+// TerraformCacheMirror configures eager, multi-platform pre-seeding of the cache
+// using `terraform/tofu providers mirror`. The mirror writes the canonical
+// filesystem_mirror layout the lazy proxy already serves, so the same cache
+// directory works lazily (proxy), eagerly (mirror), and offline (filesystem_mirror).
+//
+// The target platforms live at components.terraform.platforms (a project-level
+// property shared with the automatic post-init `providers lock`), not here.
+type TerraformCacheMirror struct {
+	// Enabled expresses fleet pre-seeding policy; the `cache mirror` command runs
+	// regardless of this value. Defaults to false.
+	Enabled bool `yaml:"enabled,omitempty" json:"enabled,omitempty" mapstructure:"enabled"`
 }
 
 // WorkspaceConfig holds workspace-related configuration.
@@ -1215,6 +1282,25 @@ type ConfigAndStacksInfo struct {
 	// centralizes CI output writes for concurrent execution so GitHub
 	// summary/output files are not written by worker goroutines.
 	TerraformPlanCIResultHandler TerraformPlanCIResultHandler
+
+	// RCCleanup, when non-nil, removes the temporary Terraform CLI config file
+	// (TF_CLI_CONFIG_FILE) generated for this run. It is registered during env
+	// assembly and invoked (deferred) after the whole terraform pipeline completes,
+	// so the temp file survives init, workspace, and plan/apply subprocesses.
+	// Transient runtime state — not serialized.
+	RCCleanup func() error `yaml:"-" json:"-" mapstructure:"-"`
+
+	// TerraformCache holds the started registry cache (*pkg/terraform/cache.Setup),
+	// typed as any to avoid a schema→cache import cycle. When non-nil, env assembly
+	// merges its CLI-config contribution (network_mirror + module host overrides)
+	// into the generated RC. Transient runtime state — not serialized.
+	TerraformCache any `yaml:"-" json:"-" mapstructure:"-"`
+
+	// TerraformCacheExternal indicates the caller owns the registry cache lifecycle
+	// (started it and will close it). When true, ExecuteTerraform reuses the
+	// pre-set TerraformCache and does not start, verify, or close its own. Used by
+	// `atmos terraform cache mirror` to share one proxy across components.
+	TerraformCacheExternal bool `yaml:"-" json:"-" mapstructure:"-"`
 }
 
 // GetComponentEnvSection returns the component's env section map.

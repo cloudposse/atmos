@@ -22,11 +22,14 @@ import (
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/provisioner"
+	_ "github.com/cloudposse/atmos/pkg/provisioner/lock"   // register after.terraform.init providers-lock provisioner
 	_ "github.com/cloudposse/atmos/pkg/provisioner/source" // register source provisioner
 	provWorkdir "github.com/cloudposse/atmos/pkg/provisioner/workdir"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/store/authbridge"
+	tfcache "github.com/cloudposse/atmos/pkg/terraform/cache"
 	tfgenerate "github.com/cloudposse/atmos/pkg/terraform/generate"
+	"github.com/cloudposse/atmos/pkg/terraform/rc"
 	"github.com/cloudposse/atmos/pkg/terraform/tfvars"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -466,6 +469,15 @@ func assembleComponentEnvVars(atmosConfig *schema.AtmosConfiguration, info *sche
 	// Plugin cache directory.
 	info.ComponentEnvList = append(info.ComponentEnvList, configurePluginCache(atmosConfig)...)
 
+	// Terraform CLI configuration (.terraformrc) rendered by Atmos and exposed via
+	// TF_CLI_CONFIG_FILE / TOFU_CLI_CONFIG_FILE. Also the injection point for the
+	// registry cache's network_mirror/host directives. The cleanup closer is stashed
+	// on info and run (deferred) after the whole terraform pipeline so the temp file
+	// survives every subprocess (init, workspace, plan/apply).
+	if err := configureTerraformRC(atmosConfig, info); err != nil {
+		return err
+	}
+
 	// Toolchain PATH must come last so it takes precedence over all other PATH entries.
 	if tenv != nil {
 		info.ComponentEnvList = append(info.ComponentEnvList, tenv.EnvVars()...)
@@ -491,6 +503,94 @@ func assembleComponentEnvVars(atmosConfig *schema.AtmosConfiguration, info *sche
 	}
 
 	return nil
+}
+
+// configureTerraformRC builds the effective Terraform CLI-config map from the
+// user's components.terraform.rc plus any registry-cache contribution (network
+// mirror + module host overrides), renders it to a temp file, and appends
+// TF_CLI_CONFIG_FILE / TOFU_CLI_CONFIG_FILE. The cleanup closer is stashed on info
+// and deferred at the ExecuteTerraform level so the file outlives every subprocess.
+func configureTerraformRC(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) error {
+	rcMap := map[string]any{}
+
+	if rcCfg := atmosConfig.Components.Terraform.RC; rcCfg != nil && rcCfg.Enabled {
+		for k, v := range rcCfg.Config {
+			// Deep-copy nested values: mergeCacheContribution mutates the "host" map in
+			// place, and a shallow copy would leak cache loopback overrides back into
+			// atmosConfig.Components.Terraform.RC.Config for later components/commands in
+			// the same process.
+			rcMap[k] = cloneRCValue(v)
+		}
+	}
+
+	if setup, ok := info.TerraformCache.(*tfcache.Setup); ok && setup != nil {
+		mergeCacheContribution(rcMap, setup.Contribute())
+
+		// Make the terraform/tofu subprocess trust the proxy's self-signed cert.
+		trustEnv, err := setup.TrustEnv()
+		if err != nil {
+			return err
+		}
+		info.ComponentEnvList = append(info.ComponentEnvList, trustEnv...)
+	}
+
+	if len(rcMap) == 0 {
+		return nil
+	}
+
+	rcEnv, rcCleanup, err := rc.Generate(rcMap, atmosConfig, info)
+	if err != nil {
+		return err
+	}
+	info.ComponentEnvList = append(info.ComponentEnvList, rcEnv...)
+	info.RCCleanup = rcCleanup
+	return nil
+}
+
+// mergeCacheContribution merges the registry cache's CLI-config directives into
+// rcMap. The cache owns provider_installation (it must be the single network-mirror
+// egress); host overrides are merged per-host so user-declared hosts are preserved.
+func mergeCacheContribution(rcMap, contribution map[string]any) {
+	const hostKey = "host"
+	for key, value := range contribution {
+		if key != hostKey {
+			rcMap[key] = value
+			continue
+		}
+		add, _ := value.(map[string]any)
+		existing, _ := rcMap[hostKey].(map[string]any)
+		if existing == nil {
+			rcMap[hostKey] = add
+			continue
+		}
+		for host, services := range add {
+			existing[host] = services
+		}
+		rcMap[hostKey] = existing
+	}
+}
+
+// cloneRCValue deep-copies a CLI-config value so callers can mutate the result without
+// affecting the source. Maps and slices are cloned recursively; scalars are returned
+// as-is. This protects atmosConfig.Components.Terraform.RC.Config from in-place mutation
+// when the registry cache contribution is merged.
+func cloneRCValue(v any) any {
+	switch val := v.(type) {
+	case map[string]any:
+		out := make(map[string]any, len(val))
+		for k, item := range val {
+			out[k] = cloneRCValue(item)
+		}
+		return out
+	case []any:
+		out := make([]any, len(val))
+		for i, item := range val {
+			out[i] = cloneRCValue(item)
+		}
+		return out
+	default:
+		return val
+	}
 }
 
 // shouldRunTerraformInit returns true when a `terraform init` should be executed as a
@@ -631,7 +731,46 @@ func executeTerraformInitPhase(atmosConfig *schema.AtmosConfiguration, info *sch
 		return newPath, err
 	}
 
+	dispatchAfterInit(atmosConfig, info, newPath)
+
 	return newPath, nil
+}
+
+// dispatchAfterInit fires the after.terraform.init provisioners (e.g. the multi-platform
+// providers-lock hook) once init has succeeded. It hands them a TerraformExecContext whose
+// runner reuses the same binary, env (incl. TF_CLI_CONFIG_FILE pointing at the live proxy),
+// and working directory as init, so a `providers lock` runs against the already-warm cache.
+// Lock completion is best-effort: a failure is logged, not propagated, so it never fails the
+// user's plan/apply.
+func dispatchAfterInit(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, componentPath string) {
+	execCtx := &provisioner.TerraformExecContext{
+		WorkingDir: componentPath,
+		Run: func(args []string) error {
+			return ExecuteShellCommand(
+				*atmosConfig,
+				info.Command,
+				args,
+				componentPath,
+				info.ComponentEnvList,
+				info.DryRun,
+				info.RedirectStdErr,
+			)
+		},
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	defer cancel()
+
+	if err := provisioner.ExecuteProvisioners(
+		ctx,
+		provisioner.HookEvent(afterTerraformInitEvent),
+		atmosConfig,
+		info.ComponentSection,
+		info.AuthContext,
+		execCtx,
+	); err != nil {
+		log.Warn("Failed to complete multi-platform provider lock", "error", err)
+	}
 }
 
 // handleDeploySubcommand converts `deploy` into `apply` and ensures -auto-approve is

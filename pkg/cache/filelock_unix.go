@@ -3,6 +3,7 @@
 package cache
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"time"
@@ -64,6 +65,33 @@ func (f *flockFileLock) WithLock(fn func() error) error {
 	defer func() {
 		if err := lock.Unlock(); err != nil {
 			log.Trace("Failed to unlock cache file", "error", err, "path", f.lockPath)
+		}
+	}()
+
+	return fn()
+}
+
+// WithLockContext executes fn while holding an exclusive lock, blocking until the
+// lock is acquired or ctx is done. Acquisition polls at lockRetryDelay intervals for
+// the full lifetime of ctx, so a healthy but slow holder (e.g. a multi-second
+// download) is waited out rather than failing on a fixed budget.
+func (f *flockFileLock) WithLockContext(ctx context.Context, fn func() error) error {
+	defer perf.Track(nil, "cache.flockFileLock.WithLockContext")()
+
+	lock := flock.New(f.lockPath)
+
+	locked, err := lock.TryLockContext(ctx, lockRetryDelay)
+	if err != nil {
+		return errors.Join(errUtils.ErrCacheLocked, err)
+	}
+	if !locked {
+		// ctx was canceled or its deadline passed before the lock was acquired.
+		return fmt.Errorf("%w: cache file is locked by another process", errUtils.ErrCacheLocked)
+	}
+
+	defer func() {
+		if uerr := lock.Unlock(); uerr != nil {
+			log.Trace("Failed to unlock cache file", "error", uerr, "path", f.lockPath)
 		}
 	}()
 

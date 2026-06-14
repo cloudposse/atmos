@@ -3,6 +3,7 @@
 package cache
 
 import (
+	"context"
 	"time"
 )
 
@@ -19,6 +20,16 @@ func NewFileLock(_ string) FileLock {
 
 // WithLock executes fn without locking on Windows.
 func (n *noopFileLock) WithLock(fn func() error) error {
+	// Add a small delay after operations to let Windows release file handles.
+	defer func() {
+		time.Sleep(50 * time.Millisecond)
+	}()
+
+	return fn()
+}
+
+// WithLockContext executes fn without locking on Windows (graceful degradation).
+func (n *noopFileLock) WithLockContext(_ context.Context, fn func() error) error {
 	// Add a small delay after operations to let Windows release file handles.
 	defer func() {
 		time.Sleep(50 * time.Millisecond)
