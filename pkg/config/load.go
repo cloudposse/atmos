@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/go-viper/mapstructure/v2"
+	"github.com/joho/godotenv"
 	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
 	"gopkg.in/yaml.v3"
@@ -19,7 +20,9 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/auth/provisioning"
 	"github.com/cloudposse/atmos/pkg/config/casemap"
+	envpkg "github.com/cloudposse/atmos/pkg/env"
 	"github.com/cloudposse/atmos/pkg/filesystem"
+	"github.com/cloudposse/atmos/pkg/filetype"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -36,11 +39,16 @@ const (
 	MaximumImportLvL = 10
 	// CommandsKey is the configuration key for commands.
 	commandsKey = "commands"
+	envKey      = "env"
 	// YamlType is the configuration file type.
 	yamlType = "yaml"
+	// YamlPathDelimiter separates nested YAML path elements.
+	yamlPathDelimiter = "."
 )
 
 var defaultHomeDirProvider = filesystem.NewOSHomeDirProvider()
+
+var ErrResolvedConfigFileNotFound = errors.New("resolved config file not found")
 
 // osGetwd wraps os.Getwd, allowing tests to simulate CWD errors.
 var osGetwd = os.Getwd
@@ -295,6 +303,14 @@ func LoadConfig(configAndStacksInfo *schema.ConfigAndStacksInfo) (schema.AtmosCo
 	}
 	setEnv(v)
 
+	// Promote ATMOS_* variables declared in the base config `env:` section
+	// (e.g. via `env: !include .env`) into the process environment BEFORE resolving
+	// profiles. This lets a project pin ATMOS_PROFILE (and other ATMOS_* settings) in a
+	// `.env` file. It runs before profile resolution so the pinned ATMOS_PROFILE is
+	// honored within this same LoadConfig call. Real environment variables always win;
+	// an already-set variable is never overwritten.
+	promoteAtmosEnvFromConfig(v)
+
 	// Load profiles if specified via --profile flag, ATMOS_PROFILE env var, or
 	// the `profiles.default` field in the base atmos.yaml.
 	// Profiles are loaded after base config but before final unmarshaling.
@@ -350,16 +366,7 @@ func LoadConfig(configAndStacksInfo *schema.ConfigAndStacksInfo) (schema.AtmosCo
 		return atmosConfig, err
 	}
 
-	// Manually extract top-level env fields to avoid mapstructure tag collision.
-	// Both AtmosConfiguration.Env and Command.Env use "env" but with different types
-	// (map[string]string vs []CommandEnv), causing mapstructure to silently drop Commands.
-	// Using mapstructure:"-" on the Env fields and extracting manually here fixes this.
-	if envMap := v.GetStringMapString("env"); len(envMap) > 0 {
-		atmosConfig.Env = envMap
-	}
-	if envMap := v.GetStringMapString("templates.settings.env"); len(envMap) > 0 {
-		atmosConfig.Templates.Settings.Env = envMap
-	}
+	extractEnvMapsFromViper(v, &atmosConfig)
 
 	// Fix auth.identities after Viper unmarshal.
 	// Viper treats dots in map keys as nested paths, which breaks identity names like "product.usa".
@@ -372,12 +379,7 @@ func LoadConfig(configAndStacksInfo *schema.ConfigAndStacksInfo) (schema.AtmosCo
 	// Viper lowercases all YAML map keys, but we need to preserve original case
 	// for identity names and environment variables.
 	preserveCaseSensitiveMaps(v, &atmosConfig)
-
-	// Restore original case for templates.settings.env keys (e.g., AWS_PROFILE).
-	// Viper lowercases all map keys, so we apply the case map after extraction.
-	if caseSensitiveEnv := atmosConfig.GetCaseSensitiveMap("templates.settings.env"); len(caseSensitiveEnv) > 0 {
-		atmosConfig.Templates.Settings.Env = caseSensitiveEnv
-	}
+	restoreCaseSensitiveEnvMaps(&atmosConfig)
 
 	// Apply git root discovery for default base path.
 	// This enables running Atmos from any subdirectory, similar to Git.
@@ -818,6 +820,11 @@ func loadConfigFile(path string, fileName string) (*viper.Viper, error) {
 	tempViper.SetConfigType(yamlType)
 
 	if err := tempViper.ReadInConfig(); err != nil {
+		if canRetryWithResolvedDotenvMergeIncludes(err) {
+			if retryErr := readConfigWithResolvedDotenvMergeIncludes(tempViper, path, fileName); retryErr == nil {
+				return tempViper, nil
+			}
+		}
 		// Return sentinel error unwrapped for type checking
 		var configFileNotFoundError viper.ConfigFileNotFoundError
 		if errors.As(err, &configFileNotFoundError) {
@@ -831,6 +838,147 @@ func loadConfigFile(path string, fileName string) (*viper.Viper, error) {
 	return tempViper, nil
 }
 
+func canRetryWithResolvedDotenvMergeIncludes(err error) bool {
+	return err != nil && strings.Contains(err.Error(), "map merge requires map or sequence of maps")
+}
+
+func readConfigWithResolvedDotenvMergeIncludes(v *viper.Viper, path, fileName string) error {
+	configFile, err := findConfigFile(path, fileName)
+	if err != nil {
+		return err
+	}
+	content, err := os.ReadFile(configFile) //nolint:gosec // configFile is resolved from Atmos config search paths.
+	if err != nil {
+		return err
+	}
+	content, err = resolveDotenvMergeIncludeKeys(configFile, content)
+	if err != nil {
+		return err
+	}
+	v.SetConfigFile(configFile)
+	return v.ReadConfig(bytes.NewReader(content))
+}
+
+func findConfigFile(path, fileName string) (string, error) {
+	candidates := []string{fileName}
+	if filepath.Ext(fileName) == "" {
+		candidates = []string{fileName + ".yaml", fileName + ".yml", fileName}
+	}
+	for _, candidate := range candidates {
+		configFile := filepath.Join(path, candidate)
+		info, err := os.Stat(configFile) //nolint:gosec // configFile is resolved from Atmos config search paths.
+		if err == nil && !info.IsDir() {
+			return configFile, nil
+		}
+	}
+	return "", fmt.Errorf("%w: %q in %q", ErrResolvedConfigFileNotFound, fileName, path)
+}
+
+func resolveDotenvMergeIncludeKeys(configFile string, content []byte) ([]byte, error) {
+	var root yaml.Node
+	if err := yaml.Unmarshal(content, &root); err != nil {
+		return content, err
+	}
+
+	changed, err := resolveDotenvMergeIncludeKeysInNode(configFile, &root)
+	if err != nil || !changed {
+		return content, err
+	}
+
+	resolved, err := yaml.Marshal(&root)
+	if err != nil {
+		return nil, err
+	}
+	return resolved, nil
+}
+
+func resolveDotenvMergeIncludeKeysInNode(configFile string, node *yaml.Node) (bool, error) {
+	if node == nil {
+		return false, nil
+	}
+
+	changed := false
+	if node.Kind == yaml.MappingNode {
+		for i := 0; i < len(node.Content); i += 2 {
+			keyNode := node.Content[i]
+			valueNode := node.Content[i+1]
+			if keyNode.Value != "<<" {
+				continue
+			}
+			nodeChanged, err := resolveDotenvMergeIncludeValue(configFile, valueNode)
+			if err != nil {
+				return false, err
+			}
+			changed = changed || nodeChanged
+		}
+	}
+
+	for _, child := range node.Content {
+		childChanged, err := resolveDotenvMergeIncludeKeysInNode(configFile, child)
+		if err != nil {
+			return false, err
+		}
+		changed = changed || childChanged
+	}
+	return changed, nil
+}
+
+func resolveDotenvMergeIncludeValue(configFile string, node *yaml.Node) (bool, error) {
+	if isDotenvIncludeNode(node) {
+		resolvedNode, err := loadDotenvIncludeAsYAMLNode(configFile, node.Value)
+		if err != nil {
+			return false, err
+		}
+		*node = *resolvedNode
+		return true, nil
+	}
+	if node.Kind != yaml.SequenceNode {
+		return false, nil
+	}
+
+	changed := false
+	for _, child := range node.Content {
+		if !isDotenvIncludeNode(child) {
+			continue
+		}
+		resolvedNode, err := loadDotenvIncludeAsYAMLNode(configFile, child.Value)
+		if err != nil {
+			return false, err
+		}
+		*child = *resolvedNode
+		changed = true
+	}
+	return changed, nil
+}
+
+func loadDotenvIncludeAsYAMLNode(configFile, includeValue string) (*yaml.Node, error) {
+	includeFile, ok := parseDotenvIncludeFile(includeValue)
+	if !ok {
+		return nil, fmt.Errorf("%w: %s", u.ErrIncludeYamlFunctionInvalidFile, includeValue)
+	}
+	if !filepath.IsAbs(includeFile) {
+		includeFile = filepath.Join(filepath.Dir(configFile), includeFile)
+	}
+
+	res, err := filetype.ParseFileByExtension(os.ReadFile, includeFile)
+	if err != nil {
+		return nil, err
+	}
+	yamlBytes, err := yaml.Marshal(res)
+	if err != nil {
+		return nil, err
+	}
+
+	var doc yaml.Node
+	if err := yaml.Unmarshal(yamlBytes, &doc); err != nil {
+		return nil, err
+	}
+	if len(doc.Content) == 0 || doc.Content[0].Kind != yaml.MappingNode {
+		return nil, fmt.Errorf("%w: %s", u.ErrIncludeYamlFunctionInvalidFile, includeValue)
+	}
+	return doc.Content[0], nil
+}
+
 // readConfigFileContent reads the content of a configuration file.
 func readConfigFileContent(configFilePath string) ([]byte, error) {
 	content, err := os.ReadFile(configFilePath)
@@ -842,18 +990,31 @@ func readConfigFileContent(configFilePath string) ([]byte, error) {
 
 // processConfigImportsAndReapply processes imports and re-applies the original config for proper precedence.
 func processConfigImportsAndReapply(path string, tempViper *viper.Viper, content []byte) error {
+	configDir := path
+	configFileForIncludes := path
+	if info, err := os.Stat(path); err == nil && !info.IsDir() { //nolint:gosec // path is an Atmos config path selected by the loader or tests.
+		configDir = filepath.Dir(path)
+	} else {
+		configFileForIncludes = filepath.Join(path, AtmosConfigFileName)
+	}
+
+	content, err := resolveDotenvMergeIncludeKeys(configFileForIncludes, content)
+	if err != nil {
+		return fmt.Errorf("%w: parse main config: %w", errUtils.ErrMergeConfiguration, err)
+	}
+
 	// Parse the main config to get its commands separately.
 	mainViper := viper.New()
 	mainViper.SetConfigType(yamlType)
-	if err := mainViper.ReadConfig(bytes.NewReader(content)); err != nil {
+	if err = mainViper.ReadConfig(bytes.NewReader(content)); err != nil {
 		return fmt.Errorf("%w: parse main config: %w", errUtils.ErrMergeConfiguration, err)
 	}
 	mainCommands := mainViper.Get(commandsKey)
 
 	// Process default imports (e.g., .atmos.d) first.
 	// These don't need the main config to be loaded.
-	if err := mergeDefaultImports(path, tempViper); err != nil {
-		log.Debug("error process default imports", "path", path, "error", err)
+	if err := mergeDefaultImports(configDir, tempViper); err != nil {
+		log.Debug("error process default imports", "path", configDir, "error", err)
 	}
 	defaultCommands := tempViper.Get(commandsKey)
 
@@ -944,10 +1105,14 @@ func mergeConfig(v *viper.Viper, path string, fileName string, processImports bo
 	if err != nil {
 		return err
 	}
+	content, err = resolveDotenvMergeIncludeKeys(configFilePath, content)
+	if err != nil {
+		return err
+	}
 
 	// Process imports if requested
 	if processImports {
-		if err := processConfigImportsAndReapply(path, tempViper, content); err != nil {
+		if err := processConfigImportsAndReapply(configFilePath, tempViper, content); err != nil {
 			return err
 		}
 	}
@@ -1230,6 +1395,10 @@ func mergeConfigFile(
 	if err != nil {
 		return err
 	}
+	content, err = resolveDotenvMergeIncludeKeys(path, content)
+	if err != nil {
+		return err
+	}
 
 	// Track this file for case-sensitive key extraction.
 	trackMergedConfigFile(path)
@@ -1341,7 +1510,7 @@ func loadEmbeddedConfig(v *viper.Viper) error {
 // caseSensitivePaths lists the YAML paths that need case preservation.
 // Viper lowercases all map keys, but these sections need original case.
 var caseSensitivePaths = []string{
-	"env",                    // Environment variables (e.g., GITHUB_TOKEN)
+	envKey,                   // Environment variables (e.g., GITHUB_TOKEN)
 	"templates.settings.env", // Template env variables (e.g., AWS_PROFILE)
 	"auth.identities",        // Auth identity names (e.g., SuperAdmin)
 }
@@ -1372,6 +1541,7 @@ func mergeCaseMapsFromFile(configFile string, mergedCaseMaps *casemap.CaseMaps) 
 	fileCaseMaps, err := casemap.ExtractFromYAML(rawYAML, caseSensitivePaths)
 	if err != nil {
 		log.Trace("Failed to extract case mappings", "file", configFile, "error", err)
+		mergeDotenvIncludeCaseMaps(configFile, rawYAML, mergedCaseMaps)
 		return
 	}
 
@@ -1389,6 +1559,8 @@ func mergeCaseMapsFromFile(configFile string, mergedCaseMaps *casemap.CaseMaps) 
 		}
 		mergedCaseMaps.Set(path, existingMap)
 	}
+
+	mergeDotenvIncludeCaseMaps(configFile, rawYAML, mergedCaseMaps)
 }
 
 // populateLegacyIdentityCaseMap copies auth.identities case mappings to the legacy IdentityCaseMap field.
@@ -1442,6 +1614,194 @@ func preserveCaseSensitiveMaps(v *viper.Viper, atmosConfig *schema.AtmosConfigur
 	populateLegacyIdentityCaseMap(mergedCaseMaps, atmosConfig)
 
 	log.Trace("Preserved case-sensitive map keys", "paths", caseSensitivePaths, "files_processed", len(filesToProcess))
+}
+
+// promoteAtmosEnvFromConfig promotes ATMOS_-prefixed keys from the base config `env:`
+// section into the process environment so Atmos itself honors them (notably ATMOS_PROFILE).
+// The `env:` section is read with original key case preserved, because viper lowercases
+// map keys but environment variable names are case-sensitive.
+func promoteAtmosEnvFromConfig(v *viper.Viper) {
+	defer perf.Track(nil, "config.promoteAtmosEnvFromConfig")()
+
+	envMap := caseSensitiveEnvFromViper(v)
+	if promoted := envpkg.PromoteAtmosEnv(envMap); len(promoted) > 0 {
+		log.Debug("Promoted ATMOS_* env vars from config 'env' section", "keys", promoted)
+	}
+}
+
+// caseSensitiveEnvFromViper returns the `env:` section from viper with original key case
+// restored from the source config files (including dotenv files included via `!include`).
+// Returns nil when there is no `env:` section.
+func caseSensitiveEnvFromViper(v *viper.Viper) map[string]string {
+	lower := v.GetStringMapString(envKey)
+	if len(lower) == 0 {
+		return nil
+	}
+
+	caseMaps := casemap.New()
+	for _, configFile := range collectConfigFilesForCasePreservation(v.ConfigFileUsed()) {
+		mergeCaseMapsFromFile(configFile, caseMaps)
+	}
+	envCase := caseMaps.Get(envKey)
+
+	result := make(map[string]string, len(lower))
+	for lowerKey, value := range lower {
+		key := lowerKey
+		if original, ok := envCase[lowerKey]; ok {
+			key = original
+		}
+		result[key] = value
+	}
+	return result
+}
+
+func extractEnvMapsFromViper(v *viper.Viper, atmosConfig *schema.AtmosConfiguration) {
+	// Manually extract top-level env fields to avoid mapstructure tag collision.
+	// Both AtmosConfiguration.Env and Command.Env use "env" but with different types
+	// (map[string]string vs []CommandEnv), causing mapstructure to silently drop Commands.
+	// Using mapstructure:"-" on the Env fields and extracting manually here fixes this.
+	if envMap := v.GetStringMapString(envKey); len(envMap) > 0 {
+		atmosConfig.Env = envMap
+	}
+	if envMap := v.GetStringMapString("templates.settings.env"); len(envMap) > 0 {
+		atmosConfig.Templates.Settings.Env = envMap
+	}
+}
+
+func restoreCaseSensitiveEnvMaps(atmosConfig *schema.AtmosConfiguration) {
+	if caseSensitiveEnv := atmosConfig.GetCaseSensitiveMap(envKey); len(caseSensitiveEnv) > 0 {
+		atmosConfig.Env = caseSensitiveEnv
+	}
+	if caseSensitiveEnv := atmosConfig.GetCaseSensitiveMap("templates.settings.env"); len(caseSensitiveEnv) > 0 {
+		atmosConfig.Templates.Settings.Env = caseSensitiveEnv
+	}
+}
+
+func mergeDotenvIncludeCaseMaps(configFile string, rawYAML []byte, mergedCaseMaps *casemap.CaseMaps) {
+	var root yaml.Node
+	if err := yaml.Unmarshal(rawYAML, &root); err != nil {
+		log.Trace("Failed to parse YAML for dotenv include case mappings", "file", configFile, "error", err)
+		return
+	}
+
+	for _, path := range []string{envKey, "templates.settings.env"} {
+		node := findYAMLPathNode(&root, strings.Split(path, yamlPathDelimiter))
+		mergeDotenvIncludeCaseMapFromNode(configFile, path, node, mergedCaseMaps)
+	}
+}
+
+func findYAMLPathNode(node *yaml.Node, parts []string) *yaml.Node {
+	if node == nil {
+		return nil
+	}
+	if node.Kind == yaml.DocumentNode {
+		if len(node.Content) == 0 {
+			return nil
+		}
+		return findYAMLPathNode(node.Content[0], parts)
+	}
+	if len(parts) == 0 {
+		return node
+	}
+	if node.Kind != yaml.MappingNode {
+		return nil
+	}
+	currentPart := parts[0]
+	remainingParts := []string(nil)
+	if len(parts) > 1 {
+		remainingParts = parts[1:]
+	}
+	for i := 0; i+1 < len(node.Content); i += 2 {
+		if node.Content[i].Value == currentPart {
+			return findYAMLPathNode(node.Content[i+1], remainingParts)
+		}
+	}
+	return nil
+}
+
+func mergeDotenvIncludeCaseMapFromNode(configFile, path string, node *yaml.Node, mergedCaseMaps *casemap.CaseMaps) {
+	if node == nil {
+		return
+	}
+	if isDotenvIncludeNode(node) {
+		mergeDotenvIncludeCaseMap(configFile, path, node.Value, mergedCaseMaps)
+		return
+	}
+	if node.Kind != yaml.MappingNode {
+		return
+	}
+	for i := 0; i < len(node.Content); i += 2 {
+		keyNode := node.Content[i]
+		valueNode := node.Content[i+1]
+		if keyNode.Value != "<<" {
+			mergeCaseMapKey(path, keyNode.Value, mergedCaseMaps)
+			continue
+		}
+		if isDotenvIncludeNode(valueNode) {
+			mergeDotenvIncludeCaseMap(configFile, path, valueNode.Value, mergedCaseMaps)
+		}
+		if valueNode.Kind == yaml.SequenceNode {
+			for _, child := range valueNode.Content {
+				if isDotenvIncludeNode(child) {
+					mergeDotenvIncludeCaseMap(configFile, path, child.Value, mergedCaseMaps)
+				}
+			}
+		}
+	}
+}
+
+func mergeCaseMapKey(path, key string, mergedCaseMaps *casemap.CaseMaps) {
+	if key == "" {
+		return
+	}
+	caseMap := mergedCaseMaps.Get(path)
+	if caseMap == nil {
+		caseMap = make(casemap.CaseMap)
+	}
+	caseMap[strings.ToLower(key)] = key
+	mergedCaseMaps.Set(path, caseMap)
+}
+
+func isDotenvIncludeNode(node *yaml.Node) bool {
+	return node != nil && node.Kind == yaml.ScalarNode && node.Tag == u.AtmosYamlFuncInclude
+}
+
+func mergeDotenvIncludeCaseMap(configFile, path, includeValue string, mergedCaseMaps *casemap.CaseMaps) {
+	includeFile, ok := parseDotenvIncludeFile(includeValue)
+	if !ok {
+		return
+	}
+	if !filepath.IsAbs(includeFile) {
+		includeFile = filepath.Join(filepath.Dir(configFile), includeFile)
+	}
+
+	data, err := os.ReadFile(includeFile)
+	if err != nil {
+		log.Trace("Skipping dotenv include case map extraction for unreadable file", "file", includeFile, "error", err)
+		return
+	}
+	envMap, err := godotenv.UnmarshalBytes(data)
+	if err != nil {
+		log.Trace("Skipping dotenv include case map extraction for invalid dotenv file", "file", includeFile, "error", err)
+		return
+	}
+
+	for key := range envMap {
+		mergeCaseMapKey(path, key, mergedCaseMaps)
+	}
+}
+
+func parseDotenvIncludeFile(includeValue string) (string, bool) {
+	parts, err := u.SplitStringByDelimiter(includeValue, ' ')
+	if err != nil || len(parts) == 0 {
+		return "", false
+	}
+	includeFile := strings.TrimSpace(parts[0])
+	if includeFile == "" {
+		return "", false
+	}
+	ext := filetype.GetFileExtension(filetype.ExtractFilenameFromPath(includeFile))
+	return includeFile, ext == ".env"
 }
 
 // fixAuthIdentities re-parses auth.identities from raw YAML to fix Viper's dot-splitting behavior.
