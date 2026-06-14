@@ -220,26 +220,33 @@ atmos describe component vpc -s prod                         # functions left un
 atmos describe component vpc -s prod --process-functions=true   # CLI override
 ```
 
-Default every `atmos list` command to JSON output, and limit the columns for `atmos list components`
-specifically. Because `list.args` applies to the whole `list` subtree, one entry covers `list stacks`,
-`list components`, `list values`, and the rest:
+Default every `atmos list` command to JSON output, and include all component types for
+`atmos list components` specifically. Because `list.args` applies to the whole `list` subtree, one
+entry covers `list stacks`, `list components`, `list values`, and the rest:
 
 ```yaml
 list:
   # Applies to every `atmos list ...` subcommand.
   args:
     - --format=json
-  # `atmos list components` only — overrides nothing here, just adds to it.
+  # `atmos list components` only — adds to the inherited list.args.
   components:
     args:
-      - --max-columns=5
+      - --type=all
 ```
 
 ```shell
 atmos list stacks                       # JSON
-atmos list components                   # JSON, capped at 5 columns
-atmos list values vpc -s prod --format=table   # CLI flag overrides the default format
+atmos list components                   # JSON, includes abstract components (--type=all)
+atmos list components --format=table    # CLI flag overrides the default format
 ```
+
+<Note>
+The path follows the **command**, and the supported flags are the subcommand's own — so put a flag
+under the subcommand that accepts it (e.g. `--type` under `list.components`, `--max-columns` under
+`list.values`). An injected flag the target subcommand doesn't define is an error, just as it would be
+if you typed it.
+</Note>
 
 <Note>
 For `terraform`, `helmfile`, and `packer`, you can also default the tool's native flags (e.g.
