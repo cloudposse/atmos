@@ -1,9 +1,11 @@
 package ci
 
 import (
+	"sort"
 	"sync"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/ci/cache"
 	"github.com/cloudposse/atmos/pkg/ci/internal/provider"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -150,4 +152,65 @@ func DetectDebugMode() DebugModeInfo {
 		info.Active = d.IsDebugMode()
 	}
 	return info
+}
+
+// DetectCache returns the cache backend exposed by the active CI provider.
+// It returns errUtils.ErrCacheUnavailable when no CI provider is detected or the
+// detected provider does not implement the cache capability. This keeps callers
+// (CLI subcommands and lifecycle hooks) provider-agnostic.
+//
+// DetectCache is the in-runner path: it requires the provider to be actively
+// detected (e.g. GITHUB_ACTIONS=true), so the automatic restore/save lifecycle
+// safely no-ops outside CI. For cache administration that should work locally,
+// use ResolveAdminCache.
+func DetectCache() (cache.Backend, error) {
+	defer perf.Track(nil, "ci.DetectCache")()
+
+	p := Detect()
+	if p == nil {
+		return nil, errUtils.ErrCacheUnavailable
+	}
+	cp, ok := p.(provider.CacheProvider)
+	if !ok {
+		return nil, errUtils.ErrCacheUnavailable
+	}
+	return cp.Cache()
+}
+
+// ResolveAdminCache returns a cache backend for administering the cache (list and
+// delete) without requiring an active CI runtime. Cache administration uses the
+// provider's public API and a token, so it must work locally — outside a runner —
+// which DetectCache deliberately does not allow.
+//
+// It prefers the actively-detected provider (when running inside CI) and
+// otherwise falls back to any registered cache-capable provider so a repo admin
+// can manage the cache from their workstation. The resulting backend's
+// save/restore may still be unavailable outside a runner; that is enforced by the
+// backend itself (see the github backend's Save/Restore).
+func ResolveAdminCache() (cache.Backend, error) {
+	defer perf.Track(nil, "ci.ResolveAdminCache")()
+
+	if p := Detect(); p != nil {
+		if cp, ok := p.(provider.CacheProvider); ok {
+			return cp.Cache()
+		}
+	}
+
+	providersMu.RLock()
+	defer providersMu.RUnlock()
+	names := make([]string, 0, len(providers))
+	for name := range providers {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	for _, name := range names {
+		p := providers[name]
+		cp, ok := p.(provider.CacheProvider)
+		if !ok {
+			continue
+		}
+		log.Debug("CI cache: resolved cache-capable provider for administration", "provider", p.Name())
+		return cp.Cache()
+	}
+	return nil, errUtils.ErrCacheUnavailable
 }

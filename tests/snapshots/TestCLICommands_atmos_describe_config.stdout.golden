@@ -280,7 +280,8 @@
       "statuses": {}
     },
     "comments": {},
-    "templates": {}
+    "templates": {},
+    "cache": {}
   },
   "ai": {
     "sessions": {
