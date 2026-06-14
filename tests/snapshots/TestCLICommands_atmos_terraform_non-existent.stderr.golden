@@ -42,6 +42,11 @@ Valid subcommands are:
   • workspace
   • write
 
+## Usage
+
+ atmos terraform [flags]
+ atmos terraform [sub-command] [flags]
+
 ## Usage Examples:
 
 – Execute a terraform subcommand
