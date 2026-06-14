@@ -54,6 +54,30 @@ func TestProvider_Name(t *testing.T) {
 	assert.Equal(t, "github-actions", p.Name())
 }
 
+func TestProvider_Cache(t *testing.T) {
+	t.Run("returns an admin-capable backend outside a runner", func(t *testing.T) {
+		// Outside a runner the backend is still constructed so cache
+		// administration (list/delete) works; only save/restore are gated.
+		t.Setenv("ACTIONS_RUNTIME_TOKEN", "")
+		t.Setenv("ACTIONS_RESULTS_URL", "")
+		t.Setenv("GITHUB_REPOSITORY", "octo/cat")
+		p := NewProvider()
+		backend, err := p.Cache()
+		require.NoError(t, err)
+		assert.Equal(t, "github/actions", backend.Name())
+	})
+
+	t.Run("returns a backend inside a runner", func(t *testing.T) {
+		t.Setenv("ACTIONS_RUNTIME_TOKEN", "runtime-token")
+		t.Setenv("ACTIONS_RESULTS_URL", "https://results.example.com/")
+		t.Setenv("GITHUB_REPOSITORY", "octo/cat")
+		p := NewProvider()
+		backend, err := p.Cache()
+		require.NoError(t, err)
+		assert.Equal(t, "github/actions", backend.Name())
+	})
+}
+
 func TestProvider_Context(t *testing.T) {
 	t.Run("parses environment variables", func(t *testing.T) {
 		t.Setenv("GITHUB_RUN_ID", "12345")
