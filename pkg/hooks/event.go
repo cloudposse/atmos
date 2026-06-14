@@ -26,6 +26,8 @@ const (
 	AfterKubernetesDeploy          HookEvent = "after.kubernetes.deploy"
 	BeforeKubernetesDelete         HookEvent = "before.kubernetes.delete"
 	AfterKubernetesDelete          HookEvent = "after.kubernetes.delete"
+	BeforeKubernetesValidate       HookEvent = "before.kubernetes.validate"
+	AfterKubernetesValidate        HookEvent = "after.kubernetes.validate"
 )
 
 // Normalize returns the canonical form of a HookEvent, collapsing deploy aliases
@@ -47,11 +49,12 @@ func (e HookEvent) Normalize() HookEvent {
 	}
 }
 
-// IsPostExecution reports whether the event fires after terraform has already run
-// (and therefore after terraform init has already completed).
-// Store hooks use this to decide whether to skip terraform init when reading outputs:
-// after-events can safely skip init because the workdir is already initialized;
-// before-events must run init because the workdir may not be initialized yet.
+// IsPostExecution reports whether the event fires after a component command has
+// already run, i.e. any "after.*" event (Terraform, Kubernetes, etc.).
+// For Terraform specifically, store hooks use this to decide whether to skip
+// terraform init when reading outputs: after-events can safely skip init because
+// the workdir is already initialized, while before-events must run init because
+// the workdir may not be initialized yet.
 func (e HookEvent) IsPostExecution() bool {
 	return strings.HasPrefix(string(e), "after.")
 }

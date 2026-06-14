@@ -7,6 +7,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -154,6 +155,40 @@ func TestExecuteGraphValidatesRequiredOptions(t *testing.T) {
 	require.ErrorContains(t, err, "config and stacks info is nil")
 }
 
+func TestExecuteGraphRejectsNilArguments(t *testing.T) {
+	err := ExecuteGraph(context.Background(), nil)
+	require.ErrorIs(t, err, errUtils.ErrGraphExecutionOptions)
+
+	//nolint:staticcheck // Intentionally passing a nil context to exercise the guard.
+	err = ExecuteGraph(nil, &GraphExecutionOptions{Provider: &graphTestProvider{}, Info: &schema.ConfigAndStacksInfo{}})
+	require.ErrorIs(t, err, errUtils.ErrGraphExecutionOptions)
+}
+
+func TestGraphNodeIDAvoidsDelimiterCollisions(t *testing.T) {
+	// With a naive "%s-%s" format these two pairs would both yield "api-prod-dev".
+	assert.NotEqual(t, GraphNodeID("api-prod", "dev"), GraphNodeID("api", "prod-dev"))
+}
+
+func TestFilterGraphSelectionValidatesSetEquality(t *testing.T) {
+	graph, err := BuildGraph(graphTestStacks(), cfg.KubernetesComponentType)
+	require.NoError(t, err)
+
+	// A selection whose length equals the graph size but contains an unknown ID must
+	// NOT short-circuit to the full graph; only the valid selected nodes survive.
+	filtered := FilterGraph(graph, nil, &GraphSelection{
+		NodeIDs: []string{
+			GraphNodeID("base", "dev"),
+			GraphNodeID("api", "dev"),
+			GraphNodeID("worker", "dev"),
+			GraphNodeID("does-not", "exist"),
+		},
+	})
+
+	assert.Equal(t, 3, filtered.Size())
+	assert.NotContains(t, filtered.Nodes, GraphNodeID("base", "prod"))
+	assert.Contains(t, filtered.Nodes, GraphNodeID("base", "dev"))
+}
+
 func TestExecuteGraphHonorsCanceledContext(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
@@ -167,6 +202,7 @@ func TestExecuteGraphHonorsCanceledContext(t *testing.T) {
 	})
 
 	require.ErrorIs(t, err, context.Canceled)
+	require.ErrorIs(t, err, errUtils.ErrGraphExecutionCanceled)
 	assert.Empty(t, provider.calls)
 }
 

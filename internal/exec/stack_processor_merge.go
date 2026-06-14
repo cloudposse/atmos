@@ -272,7 +272,12 @@ func mergeComponentConfigurations(atmosConfig *schema.AtmosConfiguration, opts *
 		finalComponentCommand = result.ComponentOverridesCommand
 	}
 
-	finalComponentProvider := result.BaseComponentProvider
+	// Precedence (lowest to highest): stack-global Kubernetes defaults → base
+	// component → component instance.
+	finalComponentProvider := opts.GlobalKubernetesProvider
+	if result.BaseComponentProvider != "" {
+		finalComponentProvider = result.BaseComponentProvider
+	}
 	if result.ComponentProvider != "" {
 		finalComponentProvider = result.ComponentProvider
 	}
@@ -280,6 +285,7 @@ func mergeComponentConfigurations(atmosConfig *schema.AtmosConfiguration, opts *
 	finalComponentPaths, err := mergeComponentAnySection(
 		mergeConfig,
 		cfg.PathsSectionName,
+		opts.GlobalKubernetesPaths,
 		result.BaseComponentPaths,
 		result.ComponentPaths,
 	)
@@ -290,6 +296,7 @@ func mergeComponentConfigurations(atmosConfig *schema.AtmosConfiguration, opts *
 	finalComponentManifests, err := mergeComponentAnySection(
 		mergeConfig,
 		cfg.ManifestsSectionName,
+		opts.GlobalKubernetesManifests,
 		result.BaseComponentManifests,
 		result.ComponentManifests,
 	)
@@ -302,6 +309,7 @@ func mergeComponentConfigurations(atmosConfig *schema.AtmosConfiguration, opts *
 		finalComponentRender, err = m.Merge(
 			mergeConfig,
 			[]map[string]any{
+				opts.GlobalKubernetesRender,
 				result.BaseComponentRender,
 				result.ComponentRender,
 			},

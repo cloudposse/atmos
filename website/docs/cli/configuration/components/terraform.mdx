@@ -218,7 +218,13 @@ components:
 OpenTofu supports additional features like passing variables to `init` for dynamic backend configuration:
 
 <File title="atmos.yaml">
-  ```yaml components: terraform: command: tofu init: pass_vars: true ```
+```yaml
+components:
+  terraform:
+    command: tofu
+    init:
+      pass_vars: true
+```
 </File>
 
 ## Generated Files

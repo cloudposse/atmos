@@ -11,6 +11,8 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	runtimeschema "k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic/fake"
+
+	errUtils "github.com/cloudposse/atmos/errors"
 )
 
 func TestResourceID(t *testing.T) {
@@ -65,7 +67,8 @@ func TestNewSDKClientReturnsConfigLoadError(t *testing.T) {
 	client, err := newSDKClient()
 
 	require.Nil(t, client)
-	require.ErrorContains(t, err, "failed to load Kubernetes client config")
+	require.ErrorIs(t, err, errUtils.ErrKubernetesClientInit)
+	require.ErrorContains(t, err, "client config")
 }
 
 func TestResourceForResolvesNamespacedAndClusterResources(t *testing.T) {
@@ -98,7 +101,8 @@ func TestResourceForErrors(t *testing.T) {
 	require.ErrorContains(t, err, "missing group/version/kind")
 
 	_, _, err = client.resourceFor(kubernetesObject("apps/v1", "Deployment", "api", ""))
-	require.ErrorContains(t, err, "failed to resolve GVK")
+	require.ErrorIs(t, err, errUtils.ErrKubernetesResolveResource)
+	require.ErrorContains(t, err, "GVK")
 }
 
 func TestSDKClientDeleteReportsDeletedObjects(t *testing.T) {
@@ -118,16 +122,34 @@ func TestSDKClientDeleteReportsDeletedObjects(t *testing.T) {
 	}}, results)
 }
 
+func TestSDKClientDeleteReportsNotFoundObjects(t *testing.T) {
+	// The object does not exist in the fake cluster, so Delete returns NotFound and
+	// the result must report "not-found" (regression test for the shadowed-err bug
+	// that always reported "deleted").
+	client := newFakeSDKClient()
+
+	results, err := client.Delete(context.Background(), []*unstructured.Unstructured{
+		kubernetesObject("v1", "ConfigMap", "missing", ""),
+	})
+
+	require.NoError(t, err)
+	require.Len(t, results, 1)
+	assert.Equal(t, "not-found", results[0].Action)
+	assert.Equal(t, "missing", results[0].Name)
+}
+
 func TestSDKClientApplyAndDiffWrapFakeDynamicClientErrors(t *testing.T) {
 	object := kubernetesObject("v1", "ConfigMap", "settings", "default")
 	object.Object["data"] = map[string]any{"key": "value"}
 	client := newFakeSDKClient(object.DeepCopy())
 
 	_, err := client.Apply(context.Background(), []*unstructured.Unstructured{object})
-	require.ErrorContains(t, err, "failed to apply ConfigMap/settings")
+	require.ErrorIs(t, err, errUtils.ErrKubernetesApply)
+	require.ErrorContains(t, err, "ConfigMap/settings")
 
 	_, err = client.Diff(context.Background(), []*unstructured.Unstructured{object})
-	require.ErrorContains(t, err, "failed to server dry-run apply ConfigMap/settings")
+	require.ErrorIs(t, err, errUtils.ErrKubernetesDiff)
+	require.ErrorContains(t, err, "ConfigMap/settings")
 }
 
 func newFakeSDKClient(objects ...runtime.Object) *sdkClient {

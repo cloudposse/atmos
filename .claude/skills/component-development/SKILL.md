@@ -63,7 +63,7 @@ If a public website schema file exists in the checkout, update it too. Do not as
 Commands should be Atmos-native, not thin binary wrappers, when the implementation owns behavior.
 
 - Use the component registry provider rather than hard-coded command logic.
-- Use `flags.StandardParser` for common flags.
+- Use `flags.NewStandardParser()` for command-specific flags.
 - Preserve `--identity` and profile handling.
 - For bulk operations, allow zero positional component args with `--all` or `--affected`.
 - Reject ambiguous forms such as component arg plus `--all`.

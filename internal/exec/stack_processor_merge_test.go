@@ -408,6 +408,48 @@ func minimalComponentResult() *ComponentProcessorResult {
 	}
 }
 
+// TestMergeComponentConfigurations_GlobalKubernetesDefaults verifies stack-global
+// Kubernetes provider/paths/manifests/render defaults are the lowest-precedence layer:
+// they flow through when the component sets nothing, and the component overrides them.
+func TestMergeComponentConfigurations_GlobalKubernetesDefaults(t *testing.T) {
+	atmosCfg := &schema.AtmosConfiguration{}
+
+	t.Run("global-defaults-flow-through", func(t *testing.T) {
+		opts := ComponentProcessorOptions{
+			ComponentType:             cfg.KubernetesComponentType,
+			Component:                 "api",
+			AtmosConfig:               atmosCfg,
+			GlobalKubernetesProvider:  "kustomize",
+			GlobalKubernetesPaths:     []any{"base"},
+			GlobalKubernetesManifests: []any{"global.yaml"},
+			GlobalKubernetesRender:    map[string]any{"output": map[string]any{"split": true}},
+		}
+		comp, err := mergeComponentConfigurations(atmosCfg, &opts, minimalComponentResult())
+		require.NoError(t, err)
+		assert.Equal(t, "kustomize", comp[cfg.ProviderSectionName])
+		assert.Equal(t, []any{"base"}, comp[cfg.PathsSectionName])
+		assert.Equal(t, []any{"global.yaml"}, comp[cfg.ManifestsSectionName])
+		render, ok := comp[cfg.RenderSectionName].(map[string]any)
+		require.True(t, ok, "render section must be present")
+		out := render["output"].(map[string]any)
+		assert.Equal(t, true, out["split"])
+	})
+
+	t.Run("component-overrides-global", func(t *testing.T) {
+		opts := ComponentProcessorOptions{
+			ComponentType:            cfg.KubernetesComponentType,
+			Component:                "api",
+			AtmosConfig:              atmosCfg,
+			GlobalKubernetesProvider: "kustomize",
+		}
+		res := minimalComponentResult()
+		res.ComponentProvider = "kubectl"
+		comp, err := mergeComponentConfigurations(atmosCfg, &opts, res)
+		require.NoError(t, err)
+		assert.Equal(t, "kubectl", comp[cfg.ProviderSectionName], "component provider must override the global default")
+	})
+}
+
 // TestMergeComponentConfigurations_Retry covers the per-component retry merge added by
 // the component-retry feature: base → component → overrides precedence on scalars, and
 // list-append on the `conditions:` slice (the existing deep-merge semantic). It also

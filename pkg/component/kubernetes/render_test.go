@@ -83,8 +83,10 @@ func TestResolveRenderOptions(t *testing.T) {
 	options := resolveRenderOptions(nil, componentSection)
 	require.Equal(t, renderOptions{OutputDir: "component-output", Split: true}, options)
 
+	// --output is single-file mode and overrides a component-configured split,
+	// otherwise validation would reject it ("--split requires --output-dir").
 	options = resolveRenderOptions(map[string]any{"output": "flag-output.yaml"}, componentSection)
-	require.Equal(t, renderOptions{Output: "flag-output.yaml", Split: true}, options)
+	require.Equal(t, renderOptions{Output: "flag-output.yaml", Split: false}, options)
 
 	options = resolveRenderOptions(map[string]any{"output_dir": "flag-dir", "split": true}, map[string]any{})
 	require.Equal(t, renderOptions{OutputDir: "flag-dir", Split: true}, options)

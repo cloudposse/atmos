@@ -11,6 +11,8 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
+// ComponentProvider implements the Atmos component.ComponentProvider interface for
+// the native Kubernetes component type (render/diff/apply/deploy/delete).
 type ComponentProvider struct{}
 
 var executeOperation = Execute
@@ -23,16 +25,20 @@ func init() {
 	}
 }
 
+// GetType returns the component type identifier ("kubernetes").
 func (p *ComponentProvider) GetType() string {
 	defer perf.Track(nil, "kubernetes.GetType")()
 	return "kubernetes"
 }
 
+// GetGroup returns the human-readable group label used in command help ("Kubernetes").
 func (p *ComponentProvider) GetGroup() string {
 	defer perf.Track(nil, "kubernetes.GetGroup")()
 	return "Kubernetes"
 }
 
+// GetBasePath returns the configured base path for Kubernetes components, or the
+// default when unset.
 func (p *ComponentProvider) GetBasePath(atmosConfig *schema.AtmosConfiguration) string {
 	defer perf.Track(atmosConfig, "kubernetes.GetBasePath")()
 
@@ -42,6 +48,7 @@ func (p *ComponentProvider) GetBasePath(atmosConfig *schema.AtmosConfiguration) 
 	return atmosConfig.Components.Kubernetes.BasePath
 }
 
+// ListComponents returns the sorted names of Kubernetes components defined in the stack config.
 func (p *ComponentProvider) ListComponents(ctx context.Context, stack string, stackConfig map[string]any) ([]string, error) {
 	defer perf.Track(nil, "kubernetes.ListComponents")()
 
@@ -63,6 +70,9 @@ func (p *ComponentProvider) ListComponents(ctx context.Context, stack string, st
 	return componentNames, nil
 }
 
+// ValidateComponent validates a Kubernetes component config. Abstract components are
+// skipped. The provider, when present, must be a string of "kubectl" or "kustomize";
+// a non-string provider is rejected so the type error surfaces at validation time.
 func (p *ComponentProvider) ValidateComponent(config map[string]any) error {
 	defer perf.Track(nil, "kubernetes.ValidateComponent")()
 
@@ -76,9 +86,13 @@ func (p *ComponentProvider) ValidateComponent(config map[string]any) error {
 		}
 	}
 
-	if provider, ok := config["provider"].(string); ok && provider != "" {
+	if rawProvider, exists := config["provider"]; exists {
+		provider, ok := rawProvider.(string)
+		if !ok {
+			return fmt.Errorf("%w: %w", errUtils.ErrComponentValidationFailed, errUtils.ErrKubernetesProviderType)
+		}
 		switch provider {
-		case ProviderKubectl, ProviderKustomize:
+		case "", ProviderKubectl, ProviderKustomize:
 		default:
 			return fmt.Errorf("%w: provider must be %q or %q", errUtils.ErrComponentValidationFailed, ProviderKubectl, ProviderKustomize)
 		}
@@ -87,6 +101,7 @@ func (p *ComponentProvider) ValidateComponent(config map[string]any) error {
 	return nil
 }
 
+// Execute dispatches the requested subcommand to the corresponding Kubernetes operation.
 func (p *ComponentProvider) Execute(ctx *component.ExecutionContext) error {
 	defer perf.Track(ctx.AtmosConfig, "kubernetes.Execute")()
 
@@ -99,17 +114,21 @@ func (p *ComponentProvider) Execute(ctx *component.ExecutionContext) error {
 		return executeOperation(ctx, OperationApply)
 	case "delete":
 		return executeOperation(ctx, OperationDelete)
+	case "validate":
+		return executeOperation(ctx, OperationValidate)
 	default:
 		return fmt.Errorf("%w: %q", errUtils.ErrKubernetesUnsupportedSubcommand, ctx.SubCommand)
 	}
 }
 
+// GenerateArtifacts is a no-op for Kubernetes components; manifests are produced at execution time.
 func (p *ComponentProvider) GenerateArtifacts(ctx *component.ExecutionContext) error {
 	defer perf.Track(nil, "kubernetes.GenerateArtifacts")()
 	return nil
 }
 
+// GetAvailableCommands returns the subcommands supported by the Kubernetes component type.
 func (p *ComponentProvider) GetAvailableCommands() []string {
 	defer perf.Track(nil, "kubernetes.GetAvailableCommands")()
-	return []string{"render", "diff", "plan", "apply", "deploy", "delete"}
+	return []string{"render", "diff", "plan", "apply", "deploy", "delete", "validate"}
 }

@@ -46,6 +46,12 @@ type ComponentProcessorOptions struct {
 	GlobalSourceSection             map[string]any
 	GlobalProvisionSection          map[string]any
 
+	// Kubernetes-specific global defaults (lowest precedence in the final merge).
+	GlobalKubernetesProvider  string
+	GlobalKubernetesPaths     any
+	GlobalKubernetesManifests any
+	GlobalKubernetesRender    map[string]any
+
 	// Atmos configuration.
 	AtmosConfig *schema.AtmosConfiguration
 }

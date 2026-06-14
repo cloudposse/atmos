@@ -7,6 +7,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	errUtils "github.com/cloudposse/atmos/errors"
 )
 
 func TestManifestLoaderLoadsInlineAndPathManifests(t *testing.T) {
@@ -171,10 +173,31 @@ func TestManifestPathHelpers(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "Kustomization"), []byte("resources: []"), 0o644))
 	assert.True(t, hasKustomizationFile(dir))
 
-	assert.Equal(t, filepath.Clean(filepath.Join(dir, "relative.yaml")), resolvePath(dir, "relative.yaml"))
-	assert.Equal(t, filepath.Clean("/tmp/absolute.yaml"), resolvePath(dir, "/tmp/absolute.yaml"))
-	assert.Equal(t, []any{"one", "two"}, asAnySlice([]string{"one", "two"}))
-	assert.Equal(t, []any{"one"}, asAnySlice("one"))
-	assert.Nil(t, asAnySlice(42))
-	assert.Equal(t, []string{"one"}, asStringSlice([]any{"one", "", 2}))
+	relative, err := resolvePath(dir, "relative.yaml")
+	require.NoError(t, err)
+	assert.Equal(t, filepath.Clean(filepath.Join(dir, "relative.yaml")), relative)
+
+	absolute, err := resolvePath(dir, filepath.Clean("/tmp/absolute.yaml"))
+	require.NoError(t, err)
+	assert.Equal(t, filepath.Clean("/tmp/absolute.yaml"), absolute)
+
+	// Relative traversal that escapes the component directory is rejected.
+	_, err = resolvePath(dir, filepath.Join("..", "..", "etc", "passwd"))
+	require.ErrorIs(t, err, errUtils.ErrManifestPathTraversal)
+
+	anySlice, err := asAnySlice([]string{"one", "two"})
+	require.NoError(t, err)
+	assert.Equal(t, []any{"one", "two"}, anySlice)
+
+	single, err := asAnySlice("one")
+	require.NoError(t, err)
+	assert.Equal(t, []any{"one"}, single)
+
+	// Unsupported types fail loudly instead of being silently dropped.
+	_, err = asAnySlice(42)
+	require.ErrorIs(t, err, errUtils.ErrManifestEntryInvalidType)
+
+	strSlice, err := asStringSlice([]any{"one", "", 2})
+	require.NoError(t, err)
+	assert.Equal(t, []string{"one"}, strSlice)
 }

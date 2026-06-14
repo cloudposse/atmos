@@ -99,10 +99,17 @@ components/ansible/
 Each Ansible component contains playbooks that use variables passed from Atmos:
 
 <File title="components/ansible/hello-world/site.yml">
-  ```yaml --- - name: Hello World hosts: localhost connection: local
-  gather_facts: false tasks: - name: Say hello ansible.builtin.debug: msg:
-  "Hello from {{ app_name }} (version {{ app_version }}) on port {{ app_port }}"
-  ```
+```yaml
+---
+- name: Hello World
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  tasks:
+    - name: Say hello
+      ansible.builtin.debug:
+        msg: "Hello from {{ app_name }} (version {{ app_version }}) on port {{ app_port }}"
+```
 </File>
 
 ### Playbook and Inventory Resolution
@@ -152,26 +159,26 @@ import:
   - orgs/acme/plat/prod/_defaults
 
 vars:
-region: us-east-1
-stage: prod
+  region: us-east-1
+  stage: prod
 
 ansible:
-vars:
-managed_by: Atmos
-env:
-ANSIBLE_HOST_KEY_CHECKING: "false"
+  vars:
+    managed_by: Atmos
+  env:
+    ANSIBLE_HOST_KEY_CHECKING: "false"
 
 components:
-ansible:
-webserver:
-vars:
-app_name: myapp
-app_port: 8080
-app_version: "2.0.0"
-settings:
-ansible:
-playbook: site.yml
-inventory: inventory/production
+  ansible:
+    webserver:
+      vars:
+        app_name: myapp
+        app_port: 8080
+        app_version: "2.0.0"
+      settings:
+        ansible:
+          playbook: site.yml
+          inventory: inventory/production
 
     database:
       metadata:

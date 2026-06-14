@@ -32,7 +32,7 @@ func TestComponentProviderMetadataAndBasePath(t *testing.T) {
 		},
 	}))
 	assert.NoError(t, provider.GenerateArtifacts(&component.ExecutionContext{}))
-	assert.Equal(t, []string{"render", "diff", "plan", "apply", "deploy", "delete"}, provider.GetAvailableCommands())
+	assert.Equal(t, []string{"render", "diff", "plan", "apply", "deploy", "delete", "validate"}, provider.GetAvailableCommands())
 }
 
 func TestComponentProviderListComponents(t *testing.T) {
@@ -64,7 +64,12 @@ func TestComponentProviderValidateComponent(t *testing.T) {
 	}))
 	assert.NoError(t, provider.ValidateComponent(map[string]any{"provider": ProviderKubectl}))
 	assert.NoError(t, provider.ValidateComponent(map[string]any{"provider": ProviderKustomize}))
+	assert.NoError(t, provider.ValidateComponent(map[string]any{"provider": ""}))
 	require.ErrorContains(t, provider.ValidateComponent(map[string]any{"provider": "helm"}), "provider must be")
+
+	// A non-string provider is rejected at validation time rather than deferred to runtime.
+	err := provider.ValidateComponent(map[string]any{"provider": 123})
+	require.ErrorIs(t, err, errUtils.ErrKubernetesProviderType)
 }
 
 func TestComponentProviderExecuteDispatchesOperations(t *testing.T) {

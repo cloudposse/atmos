@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/auth"
 	"github.com/cloudposse/atmos/pkg/component"
 	cfg "github.com/cloudposse/atmos/pkg/config"
@@ -470,6 +471,44 @@ func TestExecuteRenderWithStubbedExternalDependencies(t *testing.T) {
 	assert.Contains(t, string(data), "kind: ConfigMap")
 }
 
+func TestRunOperationApplyGateRejectsInvalidManifest(t *testing.T) {
+	original := newKubernetesSDKClient
+	t.Cleanup(func() { newKubernetesSDKClient = original })
+	newKubernetesSDKClient = func() (*sdkClient, error) {
+		t.Fatal("apply gate must reject invalid manifests before contacting the cluster")
+		return nil, nil
+	}
+
+	objects := []*unstructured.Unstructured{kubernetesObject("v1", "ConfigMap", "", "")}
+	err := runOperation(
+		&component.ExecutionContext{},
+		&schema.AtmosConfiguration{},
+		&schema.ConfigAndStacksInfo{},
+		OperationApply,
+		objects,
+	)
+	require.ErrorIs(t, err, errUtils.ErrKubernetesValidationFailed)
+}
+
+func TestRunOperationValidateDispatches(t *testing.T) {
+	original := newKubernetesSDKClient
+	t.Cleanup(func() { newKubernetesSDKClient = original })
+	newKubernetesSDKClient = func() (*sdkClient, error) {
+		t.Fatal("offline validate must not contact the cluster")
+		return nil, nil
+	}
+
+	objects := []*unstructured.Unstructured{kubernetesObject("v1", "ConfigMap", "settings", "")}
+	err := runOperation(
+		&component.ExecutionContext{},
+		&schema.AtmosConfiguration{},
+		&schema.ConfigAndStacksInfo{},
+		OperationValidate,
+		objects,
+	)
+	require.NoError(t, err)
+}
+
 func TestEventsFor(t *testing.T) {
 	tests := []struct {
 		operation Operation
@@ -480,6 +519,7 @@ func TestEventsFor(t *testing.T) {
 		{OperationDiff, hooks.BeforeKubernetesDiff, hooks.AfterKubernetesDiff},
 		{OperationApply, hooks.BeforeKubernetesApply, hooks.AfterKubernetesApply},
 		{OperationDelete, hooks.BeforeKubernetesDelete, hooks.AfterKubernetesDelete},
+		{OperationValidate, hooks.BeforeKubernetesValidate, hooks.AfterKubernetesValidate},
 		{Operation("unknown"), hooks.HookEvent(""), hooks.HookEvent("")},
 	}
 
@@ -539,7 +579,7 @@ func TestRunOperationsUseSDKClientFactory(t *testing.T) {
 	}
 	require.NoError(t, runDelete([]*unstructured.Unstructured{kubernetesObject("v1", "ConfigMap", "settings", "")}))
 	require.ErrorContains(t, runApply([]*unstructured.Unstructured{object}), "failed to apply")
-	require.ErrorContains(t, runDiff([]*unstructured.Unstructured{object}), "failed to server dry-run apply")
+	require.ErrorContains(t, runDiff([]*unstructured.Unstructured{object}), "server dry-run apply")
 }
 
 func captureKubernetesStdout(t *testing.T, fn func()) string {

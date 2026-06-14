@@ -3,17 +3,21 @@ title: atmos kubernetes apply
 sidebar_label: apply
 sidebar_class_name: command
 id: apply
+description: Apply the Kubernetes objects for a stack-configured component to the target cluster.
 ---
 
 import Intro from "@site/src/components/Intro";
 import ActionCard from "@site/src/components/ActionCard";
 import PrimaryCTA from "@site/src/components/PrimaryCTA";
+import Screengrab from "@site/src/components/Screengrab";
 
 <Intro>
   Deploy the Kubernetes objects defined by a stack-configured component without
   leaving Atmos. `apply` renders the manifests, prepares the component
   environment, runs hooks, and applies the result to the target cluster.
 </Intro>
+
+<Screengrab title="atmos kubernetes apply --help" slug="atmos-kubernetes-apply--help" />
 
 <ActionCard title="Configure Kubernetes Components">
   Define where manifests come from, which values they receive, and which

@@ -33,6 +33,7 @@ import PrimaryCTA from "@site/src/components/PrimaryCTA";
 
 ```shell
 atmos kubernetes render <component> --stack <stack>
+atmos kubernetes validate <component> --stack <stack>
 atmos kubernetes diff <component> --stack <stack>
 atmos kubernetes plan <component> --stack <stack>
 atmos kubernetes apply <component> --stack <stack>
@@ -181,6 +182,7 @@ components:
 ```
 
 Supported events include `before.kubernetes.render`, `after.kubernetes.render`,
+`before.kubernetes.validate`, `after.kubernetes.validate`,
 `before.kubernetes.diff`, `after.kubernetes.diff`, `before.kubernetes.apply`,
 `after.kubernetes.apply`, `before.kubernetes.delete`, and
 `after.kubernetes.delete`.

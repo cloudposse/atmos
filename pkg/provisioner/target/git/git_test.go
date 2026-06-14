@@ -96,6 +96,20 @@ func TestWriteArtifactRejectsPathEscape(t *testing.T) {
 	assert.ErrorIs(t, err, errUtils.ErrGitPathEscapesWorktree)
 }
 
+func TestWriteArtifactRejectsRootPath(t *testing.T) {
+	for _, path := range []string{"", ".", "  ", " . "} {
+		workdir := t.TempDir()
+		// A sentinel file at the worktree root must survive: a root path must be
+		// rejected before os.RemoveAll could wipe the repository (including .git).
+		sentinel := filepath.Join(workdir, ".git")
+		require.NoError(t, os.WriteFile(sentinel, []byte("gitdir"), 0o600))
+
+		err := writeArtifact(workdir, path, &target.ProvisionArtifact{Files: map[string][]byte{"x.yaml": []byte("x")}})
+		require.ErrorIs(t, err, errUtils.ErrGitTargetPathInvalid)
+		assert.FileExists(t, sentinel)
+	}
+}
+
 // isolatedGitEnv configures the process env so the developer's gitconfig cannot
 // leak in and "main" is the deterministic default branch.
 func isolatedGitEnv(t *testing.T) {

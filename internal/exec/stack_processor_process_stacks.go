@@ -113,6 +113,10 @@ func ProcessStackConfig(
 	kubernetesGenerate := map[string]any{}
 	kubernetesSource := map[string]any{}
 	kubernetesProvision := map[string]any{}
+	kubernetesProvider := ""
+	var kubernetesPaths any
+	var kubernetesManifests any
+	kubernetesRender := map[string]any{}
 
 	terraformComponents := map[string]any{}
 	helmfileComponents := map[string]any{}
@@ -690,6 +694,30 @@ func ProcessStackConfig(
 		}
 	}
 
+	// Stack-global Kubernetes provider/paths/manifests/render defaults. These form
+	// the lowest-precedence layer (below base and component) in the final merge.
+	if i, ok := globalKubernetesSection[cfg.ProviderSectionName]; ok {
+		kubernetesProvider, ok = i.(string)
+		if !ok {
+			return nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidConfig, stackName)
+		}
+	}
+
+	if i, ok := globalKubernetesSection[cfg.PathsSectionName]; ok {
+		kubernetesPaths = i
+	}
+
+	if i, ok := globalKubernetesSection[cfg.ManifestsSectionName]; ok {
+		kubernetesManifests = i
+	}
+
+	if i, ok := globalKubernetesSection[cfg.RenderSectionName]; ok {
+		kubernetesRender, ok = i.(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidConfig, stackName)
+		}
+	}
+
 	// Convert atmosConfig.Auth struct to map[string]any once before parallel processing.
 	// This prevents race conditions when processAuthConfig is called from multiple goroutines.
 	// Use JSON marshaling for deep conversion of nested structs to maps.
@@ -905,6 +933,10 @@ func ProcessStackConfig(
 					GlobalAndTerraformGenerate: globalAndKubernetesGenerate,
 					GlobalSourceSection:        kubernetesSource,
 					GlobalProvisionSection:     kubernetesProvision,
+					GlobalKubernetesProvider:   kubernetesProvider,
+					GlobalKubernetesPaths:      kubernetesPaths,
+					GlobalKubernetesManifests:  kubernetesManifests,
+					GlobalKubernetesRender:     kubernetesRender,
 					AtmosConfig:                atmosConfig,
 				}, nil
 			}

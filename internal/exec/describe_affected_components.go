@@ -563,10 +563,10 @@ func addKubernetesSectionAffected(
 	includeSpaceliftAdminStacks bool,
 	includeSettings bool,
 ) error {
-	sections := []struct {
-		name   string
-		reason string
-	}{
+	// These sections include the Kubernetes-specific paths/manifests/render, which are
+	// not part of the shared componentSectionChecks table; comparison reuses the shared
+	// isSectionValueEqual primitive via remoteComponentLocator.
+	sections := []sectionCheck{
 		{sectionNameVars, affectedReasonStackVars},
 		{sectionNameEnv, affectedReasonStackEnv},
 		{sectionNameSource, affectedReasonStackSource},
@@ -577,12 +577,19 @@ func addKubernetesSectionAffected(
 		{sectionNameRender, affectedReasonStackRender},
 	}
 
+	locator := remoteComponentLocator{
+		remoteStacks:  remoteStacks,
+		stackName:     stackName,
+		componentType: cfg.KubernetesComponentType,
+		componentName: componentName,
+	}
+
 	for _, section := range sections {
-		value, ok := (*componentSection)[section.name]
+		value, ok := (*componentSection)[section.section]
 		if !ok {
 			continue
 		}
-		if isComponentSectionEqual(remoteStacks, stackName, cfg.KubernetesComponentType, componentName, value, section.name) {
+		if isSectionValueEqual(locator, value, section.section) {
 			continue
 		}
 		err := addAffectedComponent(affected, atmosConfig, componentName, stackName, cfg.KubernetesComponentType,
@@ -593,29 +600,6 @@ func addKubernetesSectionAffected(
 	}
 
 	return nil
-}
-
-func isComponentSectionEqual(
-	remoteStacks *map[string]any,
-	localStackName string,
-	componentType string,
-	localComponentName string,
-	localSection any,
-	sectionName string,
-) bool {
-	if remoteStackSection, ok := (*remoteStacks)[localStackName].(map[string]any); ok {
-		if remoteComponentsSection, ok := remoteStackSection["components"].(map[string]any); ok {
-			if remoteComponentTypeSection, ok := remoteComponentsSection[componentType].(map[string]any); ok {
-				if remoteComponentSection, ok := remoteComponentTypeSection[localComponentName].(map[string]any); ok {
-					remoteSection, ok := remoteComponentSection[sectionName]
-					if ok {
-						return reflect.DeepEqual(localSection, remoteSection)
-					}
-				}
-			}
-		}
-	}
-	return false
 }
 
 // checkSettingsAndDependenciesIndexed checks settings using indexed files.

@@ -3,11 +3,13 @@ title: atmos kubernetes deploy
 sidebar_label: deploy
 sidebar_class_name: command
 id: deploy
+description: Deploy a stack-configured Kubernetes component to the target cluster (workflow-friendly alias for apply).
 ---
 
 import Intro from "@site/src/components/Intro";
 import ActionCard from "@site/src/components/ActionCard";
 import PrimaryCTA from "@site/src/components/PrimaryCTA";
+import Screengrab from "@site/src/components/Screengrab";
 
 <Intro>
   Run a Kubernetes deployment using Atmos language. `deploy` is the
@@ -15,6 +17,8 @@ import PrimaryCTA from "@site/src/components/PrimaryCTA";
   useful when your automation treats Kubernetes resources as deployable
   services.
 </Intro>
+
+<Screengrab title="atmos kubernetes deploy --help" slug="atmos-kubernetes-deploy--help" />
 
 <ActionCard title="Configure Kubernetes Components">
   `deploy` uses the same stack and `atmos.yaml` settings as `apply`, including

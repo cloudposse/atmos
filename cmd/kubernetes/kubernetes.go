@@ -27,7 +27,7 @@ var kubernetesCmd = &cobra.Command{
 	Use:     "kubernetes",
 	Aliases: []string{"k8s"},
 	Short:   "Manage Kubernetes-native components",
-	Long:    "Render, diff, apply, and delete Kubernetes-native Atmos components using Kubernetes Go SDKs.",
+	Long:    "Render, validate, diff, apply, and delete Kubernetes-native Atmos components using Kubernetes Go SDKs.",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return cmd.Usage()
 	},
@@ -47,6 +47,7 @@ func init() {
 	kubernetesCmd.AddCommand(newOperationCommand("apply", "Apply Kubernetes manifests"))
 	kubernetesCmd.AddCommand(newOperationCommand("deploy", "Deploy Kubernetes manifests"))
 	kubernetesCmd.AddCommand(newOperationCommand("delete", "Delete Kubernetes manifests"))
+	kubernetesCmd.AddCommand(newOperationCommand("validate", "Validate rendered Kubernetes manifests"))
 
 	internal.Register(&CommandProvider{})
 }
@@ -95,28 +96,52 @@ func newOperationCommand(name string, short string) *cobra.Command {
 		},
 	}
 
-	cmd.Flags().Bool("all", false, "Process all Kubernetes components in dependency order.")
-	cmd.Flags().Bool("affected", false, "Process affected Kubernetes components in dependency order.")
-	cmd.Flags().Bool("include-dependents", false, "Include dependent components when processing affected Kubernetes components.")
-	cmd.Flags().String("repo-path", "", "Path to the already cloned target repository to use as the affected baseline.")
-	cmd.Flags().String("base", "", "Git base ref or SHA to compare against for affected detection.")
-	cmd.Flags().String("ref", "", "Git ref to compare against for affected detection.")
-	cmd.Flags().String("sha", "", "Git SHA to compare against for affected detection.")
-	cmd.Flags().String("ssh-key", "", "Path to the SSH private key used to clone the target ref for affected detection.")
-	cmd.Flags().String("ssh-key-password", "", "Password for the SSH private key used to clone the target ref for affected detection.")
-	cmd.Flags().Bool("clone-target-ref", false, "Clone the target ref instead of checking it out in the current repository for affected detection.")
+	// Register operation-specific flags through the standard parser for CLI consistency.
+	flags.NewStandardParser(operationFlagOptions(name)...).RegisterFlags(cmd)
+
+	return cmd
+}
+
+// operationFlagOptions returns the standard-parser options for a Kubernetes operation
+// command: the shared selection/affected flags plus operation-specific output and target flags.
+func operationFlagOptions(name string) []flags.Option {
+	options := []flags.Option{
+		flags.WithBoolFlag("all", "", false, "Process all Kubernetes components in dependency order."),
+		flags.WithBoolFlag("affected", "", false, "Process affected Kubernetes components in dependency order."),
+		flags.WithBoolFlag("include-dependents", "", false, "Include dependent components when processing affected Kubernetes components."),
+		flags.WithStringFlag("repo-path", "", "", "Path to the already cloned target repository to use as the affected baseline."),
+		flags.WithStringFlag("base", "", "", "Git base ref or SHA to compare against for affected detection."),
+		flags.WithStringFlag("ref", "", "", "Git ref to compare against for affected detection."),
+		flags.WithStringFlag("sha", "", "", "Git SHA to compare against for affected detection."),
+		flags.WithStringFlag("ssh-key", "", "", "Path to the SSH private key used to clone the target ref for affected detection."),
+		flags.WithStringFlag("ssh-key-password", "", "", "Password for the SSH private key used to clone the target ref for affected detection."),
+		flags.WithBoolFlag("clone-target-ref", "", false, "Clone the target ref instead of checking it out in the current repository for affected detection."),
+	}
 
 	if name == "render" {
-		cmd.Flags().String("output", "", "Write rendered manifests to a single multi-document YAML file.")
-		cmd.Flags().String("output-dir", "", "Write rendered manifests to a directory.")
-		cmd.Flags().Bool("split", false, "Write one rendered manifest file per Kubernetes object. Requires --output-dir.")
+		options = append(
+			options,
+			flags.WithStringFlag("output", "", "", "Write rendered manifests to a single multi-document YAML file."),
+			flags.WithStringFlag("output-dir", "", "", "Write rendered manifests to a directory."),
+			flags.WithBoolFlag("split", "", false, "Write one rendered manifest file per Kubernetes object. Requires --output-dir."),
+		)
 	}
 
 	if name == "apply" || name == "deploy" {
-		cmd.Flags().String("target", "", "Provision target to deliver to (e.g. a git deployment repository). Defaults to provision.default, otherwise the cluster.")
+		options = append(
+			options,
+			flags.WithStringFlag("target", "", "", "Provision target to deliver to (e.g. a git deployment repository). Defaults to provision.default, otherwise the cluster."),
+		)
 	}
 
-	return cmd
+	if name == "validate" {
+		options = append(
+			options,
+			flags.WithBoolFlag("server", "", false, "Also validate rendered manifests against the live cluster using a server-side dry-run apply. Requires a reachable cluster and kubeconfig."),
+		)
+	}
+
+	return options
 }
 
 func validateOperationArgs(cmd *cobra.Command, args []string) error {
@@ -168,7 +193,7 @@ func runOperation(cmd *cobra.Command, subCommand string, args []string) error {
 
 func getOperationFlags(cmd *cobra.Command) map[string]any {
 	result := make(map[string]any)
-	for _, name := range []string{"all", "affected", "include-dependents", "clone-target-ref"} {
+	for _, name := range []string{"all", "affected", "include-dependents", "clone-target-ref", "server"} {
 		if flag := cmd.Flag(name); flag != nil {
 			result[name] = flag.Value.String() == valueTrue
 		}

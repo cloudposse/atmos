@@ -3,11 +3,13 @@ title: atmos kubernetes render
 sidebar_label: render
 sidebar_class_name: command
 id: render
+description: Render the final Kubernetes manifests for a stack-configured component without touching the cluster.
 ---
 
 import Intro from "@site/src/components/Intro";
 import ActionCard from "@site/src/components/ActionCard";
 import PrimaryCTA from "@site/src/components/PrimaryCTA";
+import Screengrab from "@site/src/components/Screengrab";
 
 <Intro>
   See exactly what Kubernetes YAML Atmos will send before anything touches the
@@ -15,6 +17,8 @@ import PrimaryCTA from "@site/src/components/PrimaryCTA";
   and provider inputs into the final manifests you can inspect, save, or pass to
   another tool.
 </Intro>
+
+<Screengrab title="atmos kubernetes render --help" slug="atmos-kubernetes-render--help" />
 
 <ActionCard title="Configure Render Inputs">
   Put manifest files, Kustomize paths, inline objects, variables, environment,

@@ -13,6 +13,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/auth"
 	"github.com/cloudposse/atmos/pkg/component"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/data"
 	"github.com/cloudposse/atmos/pkg/dependencies"
 	"github.com/cloudposse/atmos/pkg/hooks"
 	log "github.com/cloudposse/atmos/pkg/logger"
@@ -161,8 +162,15 @@ func ensureComponentInputExists(
 		}
 	}
 
-	hasConfiguredInput := len(asAnySlice(info.ComponentSection["manifests"])) > 0 || len(asStringSlice(info.ComponentSection["paths"])) > 0
-	if componentPathExists || hasConfiguredInput {
+	manifestsInput, err := asAnySlice(info.ComponentSection["manifests"])
+	if err != nil {
+		return err
+	}
+	pathsInput, err := asStringSlice(info.ComponentSection["paths"])
+	if err != nil {
+		return err
+	}
+	if componentPathExists || len(manifestsInput) > 0 || len(pathsInput) > 0 {
 		return nil
 	}
 
@@ -203,9 +211,16 @@ func runOperation(ctx *component.ExecutionContext, atmosConfig *schema.AtmosConf
 	case OperationDiff:
 		return runDiff(objects)
 	case OperationApply:
+		// Auto-gate apply/deploy: fail fast on structurally invalid manifests
+		// before contacting the cluster or delivering to a provision target.
+		if err := validateObjectsStructural(objects); err != nil {
+			return err
+		}
 		return deliverApply(atmosConfig, info, ctx.Flags, objects)
 	case OperationDelete:
 		return runDelete(objects)
+	case OperationValidate:
+		return runValidate(objects, resolveValidateOptions(ctx.Flags))
 	default:
 		return fmt.Errorf("%w: %q", errUtils.ErrKubernetesUnsupportedOperation, operation)
 	}
@@ -271,7 +286,7 @@ func maybeAutoGenerateFiles(atmosConfig *schema.AtmosConfiguration, info *schema
 	}
 
 	if err := os.MkdirAll(componentPath, dirPerm); err != nil {
-		return fmt.Errorf("failed to create Kubernetes component directory: %w", err)
+		return fmt.Errorf("%w: %q: %w", errUtils.ErrKubernetesComponentDir, componentPath, err)
 	}
 
 	templateContext := tfgenerate.BuildTemplateContext(info)
@@ -321,10 +336,10 @@ func runDiff(objects []*unstructured.Unstructured) error {
 func printResults(results []objectResult) {
 	for _, result := range results {
 		if result.Namespace == "" {
-			fmt.Fprintf(os.Stdout, "%s %s %s\n", result.Action, result.Resource, result.Name)
+			_ = data.Writef("%s %s %s\n", result.Action, result.Resource, result.Name)
 			continue
 		}
-		fmt.Fprintf(os.Stdout, "%s %s %s/%s\n", result.Action, result.Resource, result.Namespace, result.Name)
+		_ = data.Writef("%s %s %s/%s\n", result.Action, result.Resource, result.Namespace, result.Name)
 	}
 }
 
@@ -338,6 +353,8 @@ func eventsFor(operation Operation) (hooks.HookEvent, hooks.HookEvent) {
 		return hooks.BeforeKubernetesApply, hooks.AfterKubernetesApply
 	case OperationDelete:
 		return hooks.BeforeKubernetesDelete, hooks.AfterKubernetesDelete
+	case OperationValidate:
+		return hooks.BeforeKubernetesValidate, hooks.AfterKubernetesValidate
 	default:
 		return hooks.HookEvent(""), hooks.HookEvent("")
 	}

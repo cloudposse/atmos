@@ -55,7 +55,7 @@ func TestCommandProviderMetadata(t *testing.T) {
 	for _, cmd := range provider.GetCommand().Commands() {
 		subcommands = append(subcommands, cmd.Name())
 	}
-	assert.ElementsMatch(t, []string{"render", "diff", "plan", "apply", "deploy", "delete"}, subcommands)
+	assert.ElementsMatch(t, []string{"render", "diff", "plan", "apply", "deploy", "delete", "validate"}, subcommands)
 }
 
 func TestNewOperationCommandRegistersExpectedFlags(t *testing.T) {
@@ -69,6 +69,19 @@ func TestNewOperationCommandRegistersExpectedFlags(t *testing.T) {
 	assert.Nil(t, applyCmd.Flag("output"))
 	assert.Nil(t, applyCmd.Flag("output-dir"))
 	assert.Nil(t, applyCmd.Flag("split"))
+
+	validateCmd := newOperationCommand("validate", "Validate")
+	assert.NotNil(t, validateCmd.Flag("server"), "expected validate to register --server")
+	assert.Nil(t, validateCmd.Flag("output"))
+	assert.Nil(t, applyCmd.Flag("server"), "--server is validate-only")
+}
+
+func TestGetOperationFlagsSurfacesServer(t *testing.T) {
+	cmd := configuredOperationCommand(t, "validate", map[string]string{"server": "true"})
+
+	flags := getOperationFlags(cmd)
+
+	assert.Equal(t, true, flags["server"])
 }
 
 func TestValidateOperationArgs(t *testing.T) {

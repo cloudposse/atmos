@@ -312,3 +312,30 @@ process start failed: exec: "terraform": executable file not found in $PATH
 EOF
 has_changes=false
 exit_code=1
+exit_code=1
+summary<<EOF
+
+## Plan Failed for `mycomponent` in `prod`
+
+<a href="https://cloudposse.com/"><img src="https://cloudposse.com/logo-300x69.svg" width="100px" align="right"/></a>
+[![failed](https://shields.io/badge/PLAN-FAILED-ff0000?style=for-the-badge)](#user-content-result-prod-mycomponent)
+<details><summary><a id="result-prod-mycomponent" />:warning: Error summary</summary>
+
+<br/>
+To reproduce this locally, run:<br/><br/>
+
+```shell
+atmos terraform plan mycomponent -s prod
+```
+
+---
+```hcl
+
+process start failed: exec: "terraform": executable file not found in $PATH
+
+```
+</details>
+
+EOF
+has_changes=false
+has_errors=true

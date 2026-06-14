@@ -3,6 +3,7 @@ package kubernetes
 import (
 	"context"
 	"encoding/json"
+	stderrors "errors"
 	"fmt"
 	"reflect"
 
@@ -51,7 +52,7 @@ func newSDKClient() (*sdkClient, error) {
 
 	restConfig, err := clientConfig.ClientConfig()
 	if err != nil {
-		return nil, fmt.Errorf("failed to load Kubernetes client config: %w", err)
+		return nil, fmt.Errorf("%w: failed to load client config: %w", errUtils.ErrKubernetesClientInit, err)
 	}
 
 	namespace, _, err := clientConfig.Namespace()
@@ -61,12 +62,12 @@ func newSDKClient() (*sdkClient, error) {
 
 	dynamicClient, err := dynamic.NewForConfig(restConfig)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create Kubernetes dynamic client: %w", err)
+		return nil, fmt.Errorf("%w: failed to create dynamic client: %w", errUtils.ErrKubernetesClientInit, err)
 	}
 
 	discoveryClient, err := discovery.NewDiscoveryClientForConfig(restConfig)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create Kubernetes discovery client: %w", err)
+		return nil, fmt.Errorf("%w: failed to create discovery client: %w", errUtils.ErrKubernetesClientInit, err)
 	}
 
 	return &sdkClient{
@@ -88,7 +89,7 @@ func (c *sdkClient) Apply(ctx context.Context, objects []*unstructured.Unstructu
 
 		data, err := json.Marshal(obj.Object)
 		if err != nil {
-			return nil, fmt.Errorf("failed to marshal %s/%s for server-side apply: %w", obj.GetKind(), obj.GetName(), err)
+			return nil, fmt.Errorf("%w: %s/%s for server-side apply: %w", errUtils.ErrKubernetesMarshal, obj.GetKind(), obj.GetName(), err)
 		}
 
 		force := true
@@ -97,7 +98,7 @@ func (c *sdkClient) Apply(ctx context.Context, objects []*unstructured.Unstructu
 			Force:        &force,
 		})
 		if err != nil {
-			return nil, fmt.Errorf("failed to apply %s/%s: %w", obj.GetKind(), obj.GetName(), err)
+			return nil, fmt.Errorf("%w: %s/%s: %w", errUtils.ErrKubernetesApply, obj.GetKind(), obj.GetName(), err)
 		}
 
 		results = append(results, objectResult{
@@ -120,12 +121,15 @@ func (c *sdkClient) Delete(ctx context.Context, objects []*unstructured.Unstruct
 			return nil, err
 		}
 
-		if err := resource.Delete(ctx, obj.GetName(), metav1.DeleteOptions{}); err != nil && !errors.IsNotFound(err) {
-			return nil, fmt.Errorf("failed to delete %s/%s: %w", obj.GetKind(), obj.GetName(), err)
+		// Use a distinct variable name so the not-found check below inspects the
+		// delete result, not the (already nil-checked) error from resourceFor.
+		deleteErr := resource.Delete(ctx, obj.GetName(), metav1.DeleteOptions{})
+		if deleteErr != nil && !errors.IsNotFound(deleteErr) {
+			return nil, fmt.Errorf("%w: %s/%s: %w", errUtils.ErrKubernetesDelete, obj.GetKind(), obj.GetName(), deleteErr)
 		}
 
 		action := "deleted"
-		if err != nil && errors.IsNotFound(err) {
+		if deleteErr != nil && errors.IsNotFound(deleteErr) {
 			action = "not-found"
 		}
 		results = append(results, objectResult{
@@ -150,7 +154,7 @@ func (c *sdkClient) Diff(ctx context.Context, objects []*unstructured.Unstructur
 
 		data, err := json.Marshal(obj.Object)
 		if err != nil {
-			return nil, fmt.Errorf("failed to marshal %s/%s for server dry-run: %w", obj.GetKind(), obj.GetName(), err)
+			return nil, fmt.Errorf("%w: %s/%s for server dry-run: %w", errUtils.ErrKubernetesMarshal, obj.GetKind(), obj.GetName(), err)
 		}
 
 		force := true
@@ -160,7 +164,7 @@ func (c *sdkClient) Diff(ctx context.Context, objects []*unstructured.Unstructur
 			DryRun:       []string{metav1.DryRunAll},
 		})
 		if err != nil {
-			return nil, fmt.Errorf("failed to server dry-run apply %s/%s: %w", obj.GetKind(), obj.GetName(), err)
+			return nil, fmt.Errorf("%w: server dry-run apply %s/%s: %w", errUtils.ErrKubernetesDiff, obj.GetKind(), obj.GetName(), err)
 		}
 
 		liveObject, err := resource.Get(ctx, obj.GetName(), metav1.GetOptions{})
@@ -169,7 +173,7 @@ func (c *sdkClient) Diff(ctx context.Context, objects []*unstructured.Unstructur
 		case errors.IsNotFound(err):
 			action = "create"
 		case err != nil:
-			return nil, fmt.Errorf("failed to read live %s/%s: %w", obj.GetKind(), obj.GetName(), err)
+			return nil, fmt.Errorf("%w: read live %s/%s: %w", errUtils.ErrKubernetesDiff, obj.GetKind(), obj.GetName(), err)
 		case objectsEqualForDiff(liveObject, dryRunObject):
 			action = "no-change"
 		}
@@ -184,6 +188,50 @@ func (c *sdkClient) Diff(ctx context.Context, objects []*unstructured.Unstructur
 	return results, nil
 }
 
+// Validate performs a server-side dry-run apply for each object and aggregates
+// per-object failures (rather than stopping at the first) so every invalid
+// manifest is reported in a single run. Objects the server accepts are returned
+// with a "valid" action.
+func (c *sdkClient) Validate(ctx context.Context, objects []*unstructured.Unstructured) ([]objectResult, error) {
+	defer perf.Track(nil, "kubernetes.sdkClient.Validate")()
+
+	results := make([]objectResult, 0, len(objects))
+	var errs []error
+	for _, obj := range objects {
+		resource, namespace, err := c.resourceFor(obj)
+		if err != nil {
+			errs = append(errs, err)
+			continue
+		}
+
+		data, err := json.Marshal(obj.Object)
+		if err != nil {
+			errs = append(errs, fmt.Errorf("%w: %s/%s for server dry-run: %w", errUtils.ErrKubernetesMarshal, obj.GetKind(), obj.GetName(), err))
+			continue
+		}
+
+		force := true
+		_, err = resource.Patch(ctx, obj.GetName(), types.ApplyPatchType, data, metav1.PatchOptions{
+			FieldManager: fieldManager,
+			Force:        &force,
+			DryRun:       []string{metav1.DryRunAll},
+		})
+		if err != nil {
+			errs = append(errs, fmt.Errorf("%w: %s/%s: %w", errUtils.ErrKubernetesValidate, obj.GetKind(), obj.GetName(), err))
+			continue
+		}
+
+		results = append(results, objectResult{
+			Action:    "valid",
+			Resource:  resourceID(obj),
+			Namespace: namespace,
+			Name:      obj.GetName(),
+		})
+	}
+
+	return results, stderrors.Join(errs...)
+}
+
 func (c *sdkClient) resourceFor(obj *unstructured.Unstructured) (dynamic.ResourceInterface, string, error) {
 	if obj.GetName() == "" {
 		return nil, "", fmt.Errorf("%w: %s", errUtils.ErrKubernetesMissingMetadataName, resourceID(obj))
@@ -196,7 +244,7 @@ func (c *sdkClient) resourceFor(obj *unstructured.Unstructured) (dynamic.Resourc
 
 	mapping, err := c.mapper.RESTMapping(gvk.GroupKind(), gvk.Version)
 	if err != nil {
-		return nil, "", fmt.Errorf("failed to resolve GVK %s to a Kubernetes resource: %w", gvk.String(), err)
+		return nil, "", fmt.Errorf("%w: GVK %s: %w", errUtils.ErrKubernetesResolveResource, gvk.String(), err)
 	}
 
 	namespaceableResource := c.dynamicClient.Resource(mapping.Resource)

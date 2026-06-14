@@ -32,21 +32,14 @@ type manifestLoader struct {
 func (l manifestLoader) Load(componentSection map[string]any) ([]*unstructured.Unstructured, error) {
 	defer perf.Track(nil, "kubernetes.manifestLoader.Load")()
 
-	objects := make([]*unstructured.Unstructured, 0)
-
-	for _, manifest := range asAnySlice(componentSection["manifests"]) {
-		loaded, err := l.loadManifestValue(manifest)
-		if err != nil {
-			return nil, err
-		}
-		objects = append(objects, loaded...)
+	objects, err := l.loadInlineManifests(componentSection)
+	if err != nil {
+		return nil, err
 	}
 
-	paths := asStringSlice(componentSection["paths"])
-	if len(paths) == 0 && len(objects) == 0 && l.componentPath != "" {
-		if _, err := os.Stat(l.componentPath); err == nil {
-			paths = []string{l.componentPath}
-		}
+	paths, err := l.resolveManifestPaths(componentSection, len(objects))
+	if err != nil {
+		return nil, err
 	}
 
 	for _, path := range paths {
@@ -58,6 +51,39 @@ func (l manifestLoader) Load(componentSection map[string]any) ([]*unstructured.U
 	}
 
 	return objects, nil
+}
+
+// loadInlineManifests loads the objects from the component's inline 'manifests' entries.
+func (l manifestLoader) loadInlineManifests(componentSection map[string]any) ([]*unstructured.Unstructured, error) {
+	manifests, err := asAnySlice(componentSection["manifests"])
+	if err != nil {
+		return nil, err
+	}
+
+	objects := make([]*unstructured.Unstructured, 0)
+	for _, manifest := range manifests {
+		loaded, err := l.loadManifestValue(manifest)
+		if err != nil {
+			return nil, err
+		}
+		objects = append(objects, loaded...)
+	}
+	return objects, nil
+}
+
+// resolveManifestPaths returns the configured 'paths', falling back to the component
+// directory when no paths or inline manifests were provided.
+func (l manifestLoader) resolveManifestPaths(componentSection map[string]any, loadedObjects int) ([]string, error) {
+	paths, err := asStringSlice(componentSection["paths"])
+	if err != nil {
+		return nil, err
+	}
+	if len(paths) == 0 && loadedObjects == 0 && l.componentPath != "" {
+		if _, err := os.Stat(l.componentPath); err == nil {
+			paths = []string{l.componentPath}
+		}
+	}
+	return paths, nil
 }
 
 func (l manifestLoader) loadManifestValue(value any) ([]*unstructured.Unstructured, error) {
@@ -76,7 +102,10 @@ func (l manifestLoader) loadManifestValue(value any) ([]*unstructured.Unstructur
 }
 
 func (l manifestLoader) loadPath(path string) ([]*unstructured.Unstructured, error) {
-	resolved := resolvePath(l.componentPath, path)
+	resolved, err := resolvePath(l.componentPath, path)
+	if err != nil {
+		return nil, err
+	}
 	info, err := os.Stat(resolved)
 	if err != nil {
 		return nil, fmt.Errorf("failed to stat Kubernetes path %q: %w", path, err)
@@ -212,38 +241,53 @@ func hasKustomizationFile(path string) bool {
 	return false
 }
 
-func resolvePath(basePath string, path string) string {
+// resolvePath resolves a manifest path against the component directory. Absolute
+// paths are returned as-is (intentionally supported). Relative paths are joined to
+// basePath and rejected if they escape it via ".." traversal.
+func resolvePath(basePath string, path string) (string, error) {
 	if filepath.IsAbs(path) || basePath == "" {
-		return filepath.Clean(path)
+		return filepath.Clean(path), nil
 	}
-	return filepath.Clean(filepath.Join(basePath, path))
+	cleanedBase := filepath.Clean(basePath)
+	resolved := filepath.Clean(filepath.Join(cleanedBase, path))
+	rel, err := filepath.Rel(cleanedBase, resolved)
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(os.PathSeparator)) {
+		return "", fmt.Errorf("%w: %q", errUtils.ErrManifestPathTraversal, path)
+	}
+	return resolved, nil
 }
 
-func asStringSlice(value any) []string {
+func asStringSlice(value any) ([]string, error) {
+	items, err := asAnySlice(value)
+	if err != nil {
+		return nil, err
+	}
 	values := make([]string, 0)
-	for _, item := range asAnySlice(value) {
+	for _, item := range items {
 		if str, ok := item.(string); ok && str != "" {
 			values = append(values, str)
 		}
 	}
-	return values
+	return values, nil
 }
 
-func asAnySlice(value any) []any {
+// asAnySlice normalizes a manifests/paths value to a slice. Unsupported types
+// fail loudly so malformed input cannot silently become an empty (no-op) result.
+func asAnySlice(value any) ([]any, error) {
 	switch typed := value.(type) {
 	case nil:
-		return nil
+		return nil, nil
 	case []any:
-		return typed
+		return typed, nil
 	case []string:
 		result := make([]any, 0, len(typed))
 		for _, item := range typed {
 			result = append(result, item)
 		}
-		return result
+		return result, nil
 	case string:
-		return []any{typed}
+		return []any{typed}, nil
 	default:
-		return nil
+		return nil, fmt.Errorf("%w, got %T", errUtils.ErrManifestEntryInvalidType, value)
 	}
 }
