@@ -462,6 +462,10 @@ func setEnv(v *viper.Viper) {
 	bindEnv(v, "settings.telemetry.endpoint", "ATMOS_TELEMETRY_ENDPOINT")
 	bindEnv(v, "settings.telemetry.logging", "ATMOS_TELEMETRY_LOGGING")
 
+	// CI cache settings (env overrides for schema fields with no CLI flag).
+	bindEnv(v, "ci.cache.enabled", "ATMOS_CI_CACHE_ENABLED")
+	bindEnv(v, "ci.cache.auto", "ATMOS_CI_CACHE_AUTO")
+
 	// Profiler settings
 	bindEnv(v, "profiler.enabled", "ATMOS_PROFILER_ENABLED")
 	bindEnv(v, "profiler.host", "ATMOS_PROFILER_HOST")
