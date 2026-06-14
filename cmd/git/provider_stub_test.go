@@ -138,7 +138,7 @@ func TestRunStatusNamedRequiresClonedWorkdir(t *testing.T) {
 
 	err := runStatusOne(context.Background(), "configured")
 	require.Error(t, err)
-	assert.True(t, errors.Is(err, errUtils.ErrNotInGitRepository))
+	assert.True(t, errors.Is(err, errUtils.ErrGitWorkdirNotInitialized))
 }
 
 func TestRunStatusAll_WithConfiguredRepos(t *testing.T) {
@@ -258,8 +258,8 @@ func TestRunPullNamedRequiresClonedWorkdir(t *testing.T) {
 
 	err := runPullOne(context.Background(), "configured", &pullOptions{})
 	require.Error(t, err)
-	assert.True(t, errors.Is(err, errUtils.ErrNotInGitRepository))
-	assert.Contains(t, fmt.Sprint(crdberrors.GetAllDetails(err)), "Atmos has not cloned configured git repository")
+	assert.True(t, errors.Is(err, errUtils.ErrGitWorkdirNotInitialized))
+	assert.Contains(t, fmt.Sprint(crdberrors.GetAllDetails(err)), "has not been cloned or initialized")
 	assert.Contains(t, crdberrors.GetAllHints(err), "Run 'atmos git pull --clone' to clone the repository before pulling.")
 }
 

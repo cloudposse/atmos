@@ -148,6 +148,21 @@ func TestPullDefaultsRemote(t *testing.T) {
 	assert.Equal(t, []string{"pull", "--ff-only", "origin"}, runner.calls[0].args)
 }
 
+func TestPullNoTrackingBranchClassified(t *testing.T) {
+	runner := newFakeRunner()
+	runner.on("pull", atmosgit.RunResult{
+		ExitCode:   1,
+		StderrTail: "You asked to pull from the remote 'origin', but did not specify a branch.",
+	}, exitErr(1))
+	provider := New(WithRunner(runner))
+
+	err := provider.Pull(context.Background(), &atmosgit.PullOptions{
+		RepoContext: atmosgit.RepoContext{Workdir: "/w"},
+	})
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, errUtils.ErrGitNoTrackingBranch))
+}
+
 func TestCloneAuthFailureClassified(t *testing.T) {
 	runner := newFakeRunner()
 	runner.on("clone", atmosgit.RunResult{ExitCode: 128, StderrTail: "fatal: Authentication failed for 'https://github.com/acme/deploy.git'"}, exitErr(128))

@@ -3,6 +3,7 @@ package git
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -208,6 +209,14 @@ func (e *Executor) Pull(ctx context.Context, opts *atmosgit.PullOptions) error {
 	stderr, err := e.captureStderr(func() error {
 		return e.provider.Pull(ctx, opts)
 	})
+	if errors.Is(err, errUtils.ErrGitNoTrackingBranch) {
+		return errUtils.Build(errUtils.ErrGitNoTrackingBranch).
+			WithExplanation(fmt.Sprintf("The repository at %s has no branch to pull: its current branch has no upstream, and no branch is configured for it.", opts.Workdir)).
+			WithHint("Set 'branch:' for this repository under git.repositories so Atmos pulls that branch explicitly.").
+			WithHint("Or name the remote and branch after the '--' separator, e.g. 'atmos git pull myrepo -- origin main'.").
+			WithExitCode(2).
+			Err()
+	}
 	if err != nil {
 		return wrapGitOperationError(
 			"pull Git repository",

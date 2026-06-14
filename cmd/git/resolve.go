@@ -51,13 +51,13 @@ func requireClonedNamedWorkdir(name, workdir, operation string) error {
 		return nil
 	}
 
-	builder := errUtils.Build(errUtils.ErrNotInGitRepository).
-		WithExplanationf("Atmos has not cloned configured git repository %q at %q, so atmos git %s cannot run there yet.", name, workdir, operation)
+	builder := errUtils.Build(errUtils.ErrGitWorkdirNotInitialized).
+		WithExplanationf("Configured git repository %q has not been cloned or initialized at %q yet, so atmos git %s cannot run there.", name, workdir, operation)
 	if operation == "pull" {
 		builder = builder.WithHint("Run 'atmos git pull --clone' to clone the repository before pulling.")
 	}
 	return builder.
-		WithHintf("Run 'atmos git clone %s' first.", name).
+		WithHintf("Run 'atmos git clone %s' to clone it, or 'atmos git init %s' to create it from scratch.", name, name).
 		WithHint("Run 'atmos git list' to inspect configured repositories and their resolved workdirs.").
 		WithExitCode(2).
 		Err()

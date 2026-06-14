@@ -217,6 +217,8 @@ var (
 	ErrGitRepositoryRequired       = errors.New("git repository name or URI is required")
 	ErrGitProviderNotFound         = errors.New("git provider not registered")
 	ErrGitWorkdirExists            = errors.New("git workdir already exists")
+	ErrGitNoTrackingBranch         = errors.New("no branch to pull: the current branch has no upstream")
+	ErrGitWorkdirNotInitialized    = errors.New("git repository not cloned or initialized")
 
 	// I/O and output errors.
 	ErrBuildIOConfig  = errors.New("failed to build I/O config")

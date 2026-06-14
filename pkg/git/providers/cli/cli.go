@@ -213,6 +213,9 @@ func (p *Provider) Pull(ctx context.Context, opts *atmosgit.PullOptions) error {
 
 	result, err := p.run(ctx, opts.Workdir, opts.Env, args...)
 	if err != nil {
+		if isNoTrackingBranch(result) {
+			return fmt.Errorf("%w: %w", errUtils.ErrGitNoTrackingBranch, err)
+		}
 		return classify(err, result, "pull --ff-only")
 	}
 	return nil

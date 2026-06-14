@@ -28,6 +28,14 @@ var rejectedPatterns = []string{
 	"[rejected]",
 }
 
+// noTrackingPatterns identify a pull that failed because the current branch has
+// no upstream and no branch was named, so git cannot tell what to pull.
+var noTrackingPatterns = []string{
+	"no tracking information",
+	"did not specify a branch",
+	"specify a branch on the command line",
+}
+
 // classify translates a raw runner error into a named sentinel using the
 // bounded stderr tail. The tail itself is never embedded in the returned
 // error: it may contain secrets and bypasses writer-level masking.
@@ -44,6 +52,12 @@ func classify(err error, result atmosgit.RunResult, op string) error {
 // isRejectedPush reports whether stderr indicates a non-fast-forward rejection.
 func isRejectedPush(result atmosgit.RunResult) bool {
 	return matchesAny(result.StderrTail, rejectedPatterns)
+}
+
+// isNoTrackingBranch reports whether a pull failed because the branch has no
+// upstream to track.
+func isNoTrackingBranch(result atmosgit.RunResult) bool {
+	return matchesAny(result.StderrTail, noTrackingPatterns)
 }
 
 // matchesAny reports whether s contains any pattern (case-insensitive).
