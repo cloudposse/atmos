@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 
 	cp "github.com/otiai10/copy"
 
@@ -18,6 +19,9 @@ const (
 	// Terraform and OpenTofu both use .terraform as the default TF_DATA_DIR.
 	terraformDataDir           = ".terraform"
 	terraformWorkspaceStateDir = "terraform.tfstate.d"
+	// Suffix shared by the canonical .terraform.lock.hcl and the per-instance
+	// .<stack>-<component>.terraform.lock.hcl that Atmos manages.
+	terraformLockFileSuffix = ".terraform.lock.hcl"
 )
 
 // copyDir recursively copies a directory from src to dst.
@@ -121,6 +125,13 @@ func syncSourceToDest(src, dst string, hasher Hasher) (map[string]bool, bool, er
 			return os.MkdirAll(dstPath, DirPermissions)
 		}
 
+		// Lock files are managed by the providers-lock restore/persist lifecycle, not by
+		// the source→workdir sync: do not copy a source lock into the workdir (and, via the
+		// matching skip in deleteRemovedFiles, do not let the workdir's own lock be deleted).
+		if shouldSkipSyncFile(relPath) {
+			return nil
+		}
+
 		srcFiles[relPath] = true
 
 		if fileNeedsCopy(path, dstPath, hasher) {
@@ -187,6 +198,12 @@ func deleteRemovedFiles(dst string, srcFiles map[string]bool) (bool, error) {
 			return nil
 		}
 
+		// Preserve the workdir's managed lock files (canonical + per-instance) across
+		// re-sync; they are not part of the source tree and must not be deleted.
+		if shouldSkipSyncFile(relPath) {
+			return nil
+		}
+
 		anyDeleted = true
 		return os.Remove(path)
 	})
@@ -202,6 +219,14 @@ func shouldSkipSyncDir(relPath string) bool {
 	default:
 		return false
 	}
+}
+
+// shouldSkipSyncFile reports whether relPath is a Terraform dependency lock file
+// (canonical .terraform.lock.hcl or a per-instance .<stack>-<component>.terraform.lock.hcl).
+// Lock files are owned by the providers-lock restore/persist lifecycle, so the source→workdir
+// sync must neither copy them in nor delete the workdir's own.
+func shouldSkipSyncFile(relPath string) bool {
+	return strings.HasSuffix(filepath.Base(relPath), terraformLockFileSuffix)
 }
 
 // copyFile copies a single file from src to dst.

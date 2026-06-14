@@ -16,7 +16,7 @@ components:
           - rds
           - elasticache
           - s3-bucket
-    
+
     rds:
       vars:
         instance_class: "db.r5.large"
