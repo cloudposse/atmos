@@ -215,7 +215,7 @@ func executeProUnlock(a *ProUnlockCmdArgs, apiClient pro.AtmosProAPIClientInterf
 }
 
 // uploadStatus uploads the terraform results to the pro API.
-func uploadStatus(info *schema.ConfigAndStacksInfo, exitCode int, client pro.AtmosProAPIClientInterface, gitRepo git.GitRepoInterface) error {
+func uploadStatus(info *schema.ConfigAndStacksInfo, exitCode int, componentType string, metadata map[string]any, client pro.AtmosProAPIClientInterface, gitRepo git.GitRepoInterface) error {
 	// Get the git repository info
 	repoInfo, err := gitRepo.GetLocalRepoInfo()
 	if err != nil {
@@ -249,8 +249,10 @@ func uploadStatus(info *schema.ConfigAndStacksInfo, exitCode int, client pro.Atm
 		RepoHost:      repoInfo.RepoHost,
 		Stack:         info.Stack,
 		Component:     info.Component,
-		Command:       info.SubCommand,
+		Command:       resolveUploadCommand(info),
 		ExitCode:      exitCode,
+		ComponentType: componentType,
+		Metadata:      metadata,
 	}
 
 	// Upload the status
@@ -261,10 +263,22 @@ func uploadStatus(info *schema.ConfigAndStacksInfo, exitCode int, client pro.Atm
 	return nil
 }
 
+// resolveUploadCommand returns the command string for the upload DTO.
+// When InvokedSubCommand is set (captured before handleDeploySubcommand converts "deploy" to
+// "apply"), it is used to preserve the literal user invocation in the audit trail (FR-008a).
+func resolveUploadCommand(info *schema.ConfigAndStacksInfo) string {
+	if info.InvokedSubCommand != "" {
+		return info.InvokedSubCommand
+	}
+	return info.SubCommand
+}
+
 // shouldUploadStatus determines if status should be uploaded.
 func shouldUploadStatus(info *schema.ConfigAndStacksInfo) bool {
-	// Only upload for plan and apply commands.
-	if info.SubCommand != "plan" && info.SubCommand != "apply" {
+	// Accept plan, apply, and deploy. "deploy" is captured in InvokedSubCommand before
+	// handleDeploySubcommand converts SubCommand to "apply", so this guard covers the
+	// explicit deploy path if shouldUploadStatus is ever called before that conversion.
+	if info.SubCommand != "plan" && info.SubCommand != "apply" && info.SubCommand != "deploy" {
 		return false
 	}
 

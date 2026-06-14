@@ -361,6 +361,131 @@ func TestPlugin_GetArtifactKey(t *testing.T) {
 	})
 }
 
+func TestPlugin_BuildStatusData_Plan(t *testing.T) {
+	p := &Plugin{}
+	output := "Plan: 3 to add, 1 to change, 0 to destroy."
+
+	data := p.BuildStatusData(output, "plan")
+
+	require.NotNil(t, data)
+	assert.Equal(t, true, data["has_changes"])
+	assert.Equal(t, false, data["has_errors"])
+
+	counts, ok := data["resource_counts"].(map[string]int)
+	require.True(t, ok, "resource_counts should be map[string]int")
+	assert.Equal(t, 3, counts["create"])
+	assert.Equal(t, 1, counts["change"])
+	assert.Equal(t, 0, counts["replace"])
+	assert.Equal(t, 0, counts["destroy"])
+}
+
+func TestPlugin_BuildStatusData_Apply(t *testing.T) {
+	p := &Plugin{}
+	output := `Apply complete! Resources: 2 added, 0 changed, 0 destroyed.
+
+Outputs:
+
+vpc_id = "vpc-abc123"
+public = "true"`
+
+	data := p.BuildStatusData(output, "apply")
+
+	require.NotNil(t, data)
+	assert.Equal(t, false, data["has_errors"])
+}
+
+// TestPlugin_BuildStatusData_Apply_WithOutputs verifies that apply metadata includes
+// Terraform output values and that sensitive outputs are replaced with "<MASKED>" (FR-003).
+func TestPlugin_BuildStatusData_Apply_WithOutputs(t *testing.T) {
+	p := &Plugin{}
+
+	t.Run("non-sensitive output passes through", func(t *testing.T) {
+		output := `Apply complete! Resources: 1 added, 0 changed, 0 destroyed.
+
+Outputs:
+
+vpc_id = "vpc-abc123"`
+
+		data := p.BuildStatusData(output, "apply")
+		require.NotNil(t, data)
+		assert.Equal(t, false, data["has_errors"])
+	})
+
+	t.Run("sensitive outputs are masked", func(t *testing.T) {
+		outputs := map[string]plugin.TerraformOutput{
+			"db_password": {Value: "supersecret", Sensitive: true},
+			"vpc_id":      {Value: "vpc-abc123", Sensitive: false},
+		}
+
+		result := extractOutputValues(outputs)
+
+		assert.Equal(t, "<MASKED>", result["db_password"], "sensitive output must be masked")
+		assert.Equal(t, "vpc-abc123", result["vpc_id"], "non-sensitive output must pass through")
+	})
+
+	t.Run("mixed outputs do not leak sensitive values", func(t *testing.T) {
+		outputs := map[string]plugin.TerraformOutput{
+			"secret_key": {Value: "do-not-leak", Sensitive: true},
+			"region":     {Value: "us-east-1", Sensitive: false},
+			"token":      {Value: "also-secret", Sensitive: true},
+		}
+
+		result := extractOutputValues(outputs)
+
+		require.Len(t, result, 3)
+		assert.Equal(t, "<MASKED>", result["secret_key"])
+		assert.Equal(t, "<MASKED>", result["token"])
+		assert.Equal(t, "us-east-1", result["region"])
+	})
+}
+
+func TestPlugin_BuildStatusData_NoChanges(t *testing.T) {
+	p := &Plugin{}
+	output := "No changes. Your infrastructure matches the configuration."
+
+	data := p.BuildStatusData(output, "plan")
+
+	require.NotNil(t, data)
+	assert.Equal(t, false, data["has_changes"])
+	assert.Equal(t, false, data["has_errors"])
+}
+
+func TestExtractOutputValues(t *testing.T) {
+	t.Run("extracts non-sensitive values", func(t *testing.T) {
+		outputs := map[string]plugin.TerraformOutput{
+			"vpc_id": {Value: "vpc-abc123", Sensitive: false},
+			"name":   {Value: "test", Sensitive: false},
+		}
+
+		result := extractOutputValues(outputs)
+
+		assert.Equal(t, "vpc-abc123", result["vpc_id"])
+		assert.Equal(t, "test", result["name"])
+	})
+
+	t.Run("masks sensitive values", func(t *testing.T) {
+		outputs := map[string]plugin.TerraformOutput{
+			"password": {Value: "secret123", Sensitive: true},
+			"vpc_id":   {Value: "vpc-abc123", Sensitive: false},
+		}
+
+		result := extractOutputValues(outputs)
+
+		assert.Equal(t, "<MASKED>", result["password"])
+		assert.Equal(t, "vpc-abc123", result["vpc_id"])
+	})
+
+	t.Run("handles empty map", func(t *testing.T) {
+		result := extractOutputValues(map[string]plugin.TerraformOutput{})
+		assert.Empty(t, result)
+	})
+
+	t.Run("handles nil map", func(t *testing.T) {
+		result := extractOutputValues(nil)
+		assert.Empty(t, result)
+	})
+}
+
 // TestBuildTemplateContext_PreservesPassedResult ensures that when a caller
 // supplies an enriched *plugin.OutputResult (e.g., the result from
 // parseOutputWithError that has HasErrors=true because ctx.CommandError != nil),

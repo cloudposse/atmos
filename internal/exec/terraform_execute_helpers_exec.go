@@ -9,6 +9,7 @@ package exec
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"os"
@@ -16,6 +17,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	auth "github.com/cloudposse/atmos/pkg/auth"
+	ci "github.com/cloudposse/atmos/pkg/ci"
 	"github.com/cloudposse/atmos/pkg/dependencies"
 	git "github.com/cloudposse/atmos/pkg/git"
 	log "github.com/cloudposse/atmos/pkg/logger"
@@ -143,6 +145,9 @@ func executeCommandPipeline(
 		}
 	}
 
+	// Capture the original subcommand before handleDeploySubcommand converts "deploy" to "apply",
+	// so the upload payload reflects what the user actually invoked (FR-008a).
+	info.InvokedSubCommand = info.SubCommand
 	handleDeploySubcommand(atmosConfig, info)
 	logTerraformContext(info, execCtx.workingDir)
 
@@ -334,6 +339,15 @@ func executeMainTerraformCommand( //nolint:revive // argument-limit: opts variad
 		return nil
 	}
 
+	// Capture masked stdout for CI status upload when needed.
+	// BoundedWriter caps memory at defaultMaxOutputLogBytes so a large terraform
+	// run (gigabytes of JSON output) never causes a memory spike.
+	maskedOutput := NewBoundedWriter(defaultMaxOutputLogBytes)
+	captureOutput := uploadStatusFlag && atmosConfig.CI.Enabled
+	if captureOutput {
+		opts = append(opts, WithStdoutCapture(maskedOutput))
+	}
+
 	err := executeShellCommandWithRetry(
 		atmosConfig,
 		info,
@@ -359,8 +373,16 @@ func executeMainTerraformCommand( //nolint:revive // argument-limit: opts variad
 	// Upload failures are logged but never cause the terraform command to fail —
 	// the exit code should reflect the plan/apply result, not telemetry.
 	if uploadStatusFlag && shouldUploadStatus(info) {
-		if uploadErr := uploadCommandStatus(atmosConfig, info, exitCode); uploadErr != nil {
+		metadata := buildMetadataForUpload(captureOutput, info, maskedOutput.Bytes())
+		// BoundedWriter truncation is signaled here because addOutputLog only
+		// checks len(output) > maxBytes, which never fires once the writer has
+		// already bounded the data to maxBytes at write time.
+		if captureOutput && maskedOutput.Truncated() && metadata != nil {
+			metadata["truncated"] = true
+		}
+		if uploadErr := uploadCommandStatus(atmosConfig, info, exitCode, metadata); uploadErr != nil {
 			log.Warn("Failed to upload command status to Atmos Pro. The terraform command result is unaffected.", "error", uploadErr)
+			return uploadErr
 		}
 	}
 
@@ -373,18 +395,68 @@ func executeMainTerraformCommand( //nolint:revive // argument-limit: opts variad
 	return err
 }
 
+// buildMetadataForUpload builds the metadata map when CI output was captured.
+// Returns nil when captureOutput is false (CI disabled or upload not requested).
+func buildMetadataForUpload(captureOutput bool, info *schema.ConfigAndStacksInfo, maskedOutput []byte) map[string]any {
+	if !captureOutput {
+		return nil
+	}
+	return buildCIStatusData(info, maskedOutput)
+}
+
 // uploadCommandStatus uploads the command status to Atmos Pro.
 func uploadCommandStatus(
 	atmosConfig *schema.AtmosConfiguration,
 	info *schema.ConfigAndStacksInfo,
 	exitCode int,
+	metadata map[string]any,
 ) error {
 	client, cerr := pro.NewAtmosProAPIClientFromEnv(atmosConfig)
 	if cerr != nil {
-		return cerr
+		return fmt.Errorf("%w: %w", errUtils.ErrFailedToCreateAPIClient, cerr)
 	}
 	gitRepo := &git.DefaultGitRepo{}
-	return uploadStatus(info, exitCode, client, gitRepo)
+	return uploadStatus(info, exitCode, info.ComponentType, metadata, client, gitRepo)
+}
+
+// defaultMaxOutputLogBytes is the fallback max size for the output log (3MB pre-encoding).
+const defaultMaxOutputLogBytes = 3 * 1024 * 1024
+
+// buildCIStatusData builds the CI status data map from captured output.
+// Returns nil if no CI plugin supports StatusDataProvider for the component type.
+func buildCIStatusData(info *schema.ConfigAndStacksInfo, maskedOutput []byte) map[string]any {
+	defer perf.Track(nil, "exec.buildCIStatusData")()
+
+	data := ci.BuildStatusData(info.ComponentType, string(maskedOutput), info.SubCommand)
+	if data == nil {
+		return nil
+	}
+
+	// Add output log (base64-encoded, truncated from beginning if needed).
+	addOutputLog(data, maskedOutput, defaultMaxOutputLogBytes)
+
+	return data
+}
+
+// addOutputLog adds the base64-encoded output log to the CI data map.
+// If the output exceeds maxBytes, it is truncated from the beginning (keeping the tail)
+// and a "truncated" key is set to true.
+func addOutputLog(data map[string]any, output []byte, maxBytes int) {
+	if len(output) == 0 || data == nil {
+		return
+	}
+
+	logBytes := output
+	if maxBytes > 0 && len(output) > maxBytes {
+		// Safety net for callers that pass an unbounded slice directly.
+		// In the normal execution path the caller uses BoundedWriter, so output
+		// is already capped at maxBytes and this branch is never taken; the
+		// "truncated" flag is set by the caller instead (see executeMainTerraformCommand).
+		logBytes = output[len(output)-maxBytes:]
+		data["truncated"] = true
+	}
+
+	data["output_log"] = base64.StdEncoding.EncodeToString(logBytes)
 }
 
 // cleanupTerraformFiles removes ephemeral plan and varfiles that Atmos generates.

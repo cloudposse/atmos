@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-Guidance for Claude Code when working with this repository.
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
 ## Project Overview
 
@@ -36,9 +36,17 @@ Multiple Claude sessions may be working on the same branch or worktree simultane
 ```bash
 # Build & Test
 make build                   # Build to ./build/atmos
-make testacc                 # Run tests
+make testacc                 # Run all tests
+make test-short              # Quick tests only (skip >2s tests)
 make testacc-cover           # Tests with coverage
+make testacc-coverage        # Tests + open HTML coverage report
+make test-race               # Tests with race detector (recommended for CI)
 make lint                    # golangci-lint on changed files
+make generate-mocks          # Regenerate all mocks via go:generate
+
+# Run a single test
+go test ./pkg/mypackage/... -run TestFunctionName -v
+go test ./internal/exec/... -run TestExecuteTerraform -v -timeout 5m
 ```
 
 ## Architecture
@@ -343,18 +351,6 @@ Use `no-release` label for docs-only changes.
 Check status: `gh pr checks {pr} --repo cloudposse/atmos`
 Reply to threads: Use `gh api graphql` with `addPullRequestReviewThreadReply`
 
-### Documentation Requirements (MANDATORY)
-- All new commands/flags/parameters MUST have Docusaurus documentation
-- Use definition lists `<dl>` instead of tables for arguments and flags
-- Follow Docusaurus conventions from existing files
-- File location: `website/docs/cli/commands/<command>/<subcommand>.mdx`
-- Link to documentation using current URL paths (e.g., `/stacks`, `/components`, `/cli/configuration`)
-- Include purpose note and help screengrab
-- Use consistent section ordering: Usage → Examples → Arguments → Flags
-
-### Website Documentation Build (MANDATORY)
-ALWAYS build the website after documentation changes: `cd website && npm run build`
-
 ### Bug Fixing Workflow (MANDATORY)
 1. Write a test to reproduce the bug
 2. Run the test to confirm it fails
@@ -460,5 +456,5 @@ NEVER use `--no-verify`. Run `make lint` before committing. Hooks run go-fumpt, 
 <!-- SPECKIT START -->
 For additional context about technologies to be used, project structure,
 shell commands, and other important information, read the current plan
-at `specs/001-pact-consumer-contracts/plan.md`
+at specs/001-pro-summary-upload/plan.md
 <!-- SPECKIT END -->
