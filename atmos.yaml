@@ -225,6 +225,27 @@ commands:
           - 'echo Dependencies: "{{ .ComponentConfig.deps }}"'
           - 'echo settings.config.is_prod: "{{ .ComponentConfig.settings.config.is_prod }}"'
           - 'echo ATMOS_IS_PROD: "$ATMOS_IS_PROD"'
+  - name: helm
+    description: Execute 'helm' helper commands
+    # subcommands
+    commands:
+      - name: plugins
+        description: Manage Helm plugins required by Atmos
+        # subcommands
+        commands:
+          - name: install
+            description: Install the helm-diff plugin (with retry on transient registry errors)
+            steps:
+              # Steps support a per-step 'retry' block (same RetryConfig as workflows).
+              # The plugin registry occasionally returns transient 5xx errors, so retry
+              # the install with exponential backoff instead of failing the command.
+              - name: install-helm-diff
+                command: helm plugin install https://github.com/databus23/helm-diff
+                retry:
+                  max_attempts: 3
+                  backoff_strategy: exponential
+                  initial_delay: 5s
+                  max_delay: 30s
 
 # Integrations
 integrations:
