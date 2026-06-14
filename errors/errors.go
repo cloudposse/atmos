@@ -1176,6 +1176,22 @@ var (
 	ErrLSPNoServerForFile       = errors.New("no LSP server found for file")
 	ErrLSPRPCError              = errors.New("RPC error")
 	ErrLSPNoContentLengthHeader = errors.New("no Content-Length header found")
+
+	// Kubernetes-native component errors.
+	ErrKubernetesFlagsMutuallyExclusive     = errors.New("--all and --affected are mutually exclusive")
+	ErrKubernetesComponentArgWithSelection  = errors.New("component argument cannot be used with --all or --affected")
+	ErrKubernetesOutputSingleComponentOnly  = errors.New("--output and --output-dir are only supported when rendering one component")
+	ErrKubernetesComponentArgRequired       = errors.New("requires exactly one component argument unless --all or --affected is set")
+	ErrKubernetesUnsupportedOperation       = errors.New("unsupported kubernetes operation")
+	ErrKubernetesUnsupportedSubcommand      = errors.New("unsupported kubernetes subcommand")
+	ErrKubernetesMissingMetadataName        = errors.New("object is missing metadata.name")
+	ErrKubernetesMissingGVK                 = errors.New("object is missing group/version/kind")
+	ErrManifestEntryInvalidType             = errors.New("manifest entries must be YAML strings or maps")
+	ErrManifestMissingAPIVersionKind        = errors.New("manifest is missing apiVersion or kind")
+	ErrManifestListItemNotObject            = errors.New("list item is not an unstructured object")
+	ErrKubernetesOutputDirMutuallyExclusive = errors.New("--output and --output-dir are mutually exclusive")
+	ErrKubernetesSplitRequiresOutputDir     = errors.New("--split requires --output-dir and cannot be used with --output")
+	ErrKubernetesSplitNeedsOutputDir        = errors.New("--split requires --output-dir")
 )
 
 // ExitCodeError is a typed error that preserves subcommand exit codes.

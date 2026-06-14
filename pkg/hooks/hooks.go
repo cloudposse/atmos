@@ -66,8 +66,9 @@ func GetHooks(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStac
 	// here would fail. The hooks section itself is static config (event names,
 	// commands, store names) and does not use YAML functions.
 	sections, err := e.ExecuteDescribeComponent(&e.ExecuteDescribeComponentParams{
-		Component: info.ComponentFromArg,
-		Stack:     info.Stack,
+		Component:     info.ComponentFromArg,
+		Stack:         info.Stack,
+		ComponentType: info.ComponentType,
 		// Hook discovery only needs static hook metadata; avoid template rendering
 		// here to prevent pre-auth side effects during command preflight.
 		ProcessTemplates:     false,
@@ -479,8 +480,12 @@ func (h *Hooks) resolveDeps(atmosConfig *schema.AtmosConfiguration, info *schema
 	}
 
 	resolver := dependencies.NewResolver(atmosConfig)
+	componentType := info.ComponentType
+	if componentType == "" {
+		componentType = cfg.TerraformComponentType
+	}
 	deps, err := resolver.ResolveComponentDependencies(
-		cfg.TerraformComponentType,
+		componentType,
 		stackSection,
 		componentSection,
 	)

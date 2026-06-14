@@ -1,0 +1,71 @@
+---
+title: atmos kubernetes deploy
+sidebar_label: deploy
+sidebar_class_name: command
+id: deploy
+---
+
+import Intro from "@site/src/components/Intro";
+import ActionCard, { PrimaryCTA } from "@site/src/components/ActionCard";
+
+<Intro>
+  Run a Kubernetes deployment using Atmos language. `deploy` is the
+  workflow-friendly alias for applying a stack-configured Kubernetes component,
+  useful when your automation treats Kubernetes resources as deployable
+  services.
+</Intro>
+
+<ActionCard title="Configure Kubernetes Components">
+  `deploy` uses the same stack and `atmos.yaml` settings as `apply`, including
+  manifest paths, variables, credentials, hooks, and dependency ordering.
+  <div>
+    <PrimaryCTA to="/stacks/components/kubernetes">
+      Stack Configuration
+    </PrimaryCTA>
+    <PrimaryCTA to="/cli/configuration/components/kubernetes">
+      atmos.yaml Configuration
+    </PrimaryCTA>
+  </div>
+</ActionCard>
+
+## Usage
+
+```shell
+atmos kubernetes deploy <component> --stack <stack>
+atmos kubernetes deploy --affected --base origin/main --include-dependents
+```
+
+In v1, `deploy` is an alias of
+[`atmos kubernetes apply`](/cli/commands/kubernetes/apply). It renders the final
+manifests and applies them through the Kubernetes Go SDK using server-side
+apply.
+
+Use `deploy` when you want command language that matches an application deployment workflow. Use `apply` when you want command language that mirrors Kubernetes API behavior.
+
+## Example
+
+```shell
+atmos kubernetes deploy argocd -s plat-ue2-dev
+```
+
+## Flags
+
+<dl>
+  <dt>
+    `--stack`, `-s` <em>(required)</em>
+  </dt>
+  <dd>Atmos stack.</dd>
+
+<dt>
+  `--all` <em>(optional)</em>
+</dt>
+<dd>Deploy all Kubernetes components in dependency order.</dd>
+
+<dt>
+  `--affected` <em>(optional)</em>
+</dt>
+<dd>Deploy affected Kubernetes components and their dependencies.</dd>
+
+  <dt>`--include-dependents` <em>(optional)</em></dt>
+  <dd>With `--affected`, include dependent Kubernetes components.</dd>
+</dl>

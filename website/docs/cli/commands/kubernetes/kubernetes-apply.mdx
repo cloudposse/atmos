@@ -1,0 +1,77 @@
+---
+title: atmos kubernetes apply
+sidebar_label: apply
+sidebar_class_name: command
+id: apply
+---
+
+import Intro from "@site/src/components/Intro";
+import ActionCard, { PrimaryCTA } from "@site/src/components/ActionCard";
+
+<Intro>
+  Deploy the Kubernetes objects defined by a stack-configured component without
+  leaving Atmos. `apply` renders the manifests, prepares the component
+  environment, runs hooks, and applies the result to the target cluster.
+</Intro>
+
+<ActionCard title="Configure Kubernetes Components">
+  Define where manifests come from, which values they receive, and which
+  credentials or hooks should run from the Kubernetes component stack
+  configuration.
+  <div>
+    <PrimaryCTA to="/stacks/components/kubernetes">
+      Stack Configuration
+    </PrimaryCTA>
+    <PrimaryCTA to="/cli/configuration/components/kubernetes">
+      atmos.yaml Configuration
+    </PrimaryCTA>
+  </div>
+</ActionCard>
+
+## Usage
+
+```shell
+atmos kubernetes apply <component> --stack <stack>
+atmos kubernetes apply --all --stack <stack>
+```
+
+`apply` renders the final manifests and applies them through Kubernetes Go
+clients. Atmos resolves each object from GVK to GVR using discovery and a
+RESTMapper, then applies it through the dynamic client with server-side apply.
+
+The command does not require the `kubectl` binary.
+
+## Example
+
+```shell
+atmos kubernetes apply argocd -s plat-ue2-dev
+```
+
+Example output:
+
+```text
+applied v1/Namespace argocd
+applied apps/v1/Deployment argocd/argocd-server
+```
+
+## Flags
+
+<dl>
+  <dt>
+    `--stack`, `-s` <em>(required)</em>
+  </dt>
+  <dd>Atmos stack.</dd>
+
+<dt>
+  `--all` <em>(optional)</em>
+</dt>
+<dd>Apply all Kubernetes components in dependency order.</dd>
+
+<dt>
+  `--affected` <em>(optional)</em>
+</dt>
+<dd>Apply affected Kubernetes components and their dependencies.</dd>
+
+  <dt>`--include-dependents` <em>(optional)</em></dt>
+  <dd>With `--affected`, include dependent Kubernetes components.</dd>
+</dl>

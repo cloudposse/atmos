@@ -6,12 +6,15 @@ sidebar_class_name: command
 id: terraform
 description: Configure Terraform and OpenTofu component behavior in atmos.yaml.
 ---
-import File from '@site/src/components/File'
-import Intro from '@site/src/components/Intro'
-import DocCardList from '@theme/DocCardList'
+
+import File from "@site/src/components/File";
+import Intro from "@site/src/components/Intro";
+import DocCardList from "@theme/DocCardList";
 
 <Intro>
-Configure how Atmos executes Terraform and OpenTofu commands, including the base path for components, auto-approve behavior, backend file generation, and initialization options.
+  Configure how Atmos executes Terraform and OpenTofu commands, including the
+  base path for components, auto-approve behavior, backend file generation, and
+  initialization options.
 </Intro>
 
 :::note Disambiguation
@@ -60,7 +63,8 @@ components:
     # Interactive shell configuration
     shell:
       prompt: "Terraform Shell"
-```
+
+````
 </File>
 
 ## Configuration Reference
@@ -207,19 +211,14 @@ components:
   terraform:
     command: tofu
     base_path: components/terraform
-```
+````
+
 </File>
 
 OpenTofu supports additional features like passing variables to `init` for dynamic backend configuration:
 
 <File title="atmos.yaml">
-```yaml
-components:
-  terraform:
-    command: tofu
-    init:
-      pass_vars: true
-```
+  ```yaml components: terraform: command: tofu init: pass_vars: true ```
 </File>
 
 ## Generated Files
@@ -233,16 +232,58 @@ backend.tf.json
 
 ## Related Commands
 
-<DocCardList items={[
-  {type: 'link', href: '/cli/commands/terraform/usage', label: 'atmos terraform', description: 'Execute Terraform/OpenTofu commands'},
-  {type: 'link', href: '/cli/commands/terraform/plan', label: 'atmos terraform plan', description: 'Generate and show execution plan'},
-  {type: 'link', href: '/cli/commands/terraform/apply', label: 'atmos terraform apply', description: 'Apply infrastructure changes'},
-  {type: 'link', href: '/cli/commands/terraform/deploy', label: 'atmos terraform deploy', description: 'Run init, plan, and apply in sequence'},
-  {type: 'link', href: '/cli/commands/terraform/shell', label: 'atmos terraform shell', description: 'Open an interactive shell'},
-  {type: 'link', href: '/cli/commands/terraform/generate/backends', label: 'atmos terraform generate backends', description: 'Generate backend configuration files'},
-  {type: 'link', href: '/cli/commands/terraform/generate/varfiles', label: 'atmos terraform generate varfiles', description: 'Generate variable files'},
-  {type: 'link', href: '/cli/commands/terraform/generate/files', label: 'atmos terraform generate files', description: 'Generate auxiliary configuration files'},
-]} />
+<DocCardList
+  items={[
+    {
+      type: "link",
+      href: "/cli/commands/terraform/usage",
+      label: "atmos terraform",
+      description: "Execute Terraform/OpenTofu commands",
+    },
+    {
+      type: "link",
+      href: "/cli/commands/terraform/plan",
+      label: "atmos terraform plan",
+      description: "Generate and show execution plan",
+    },
+    {
+      type: "link",
+      href: "/cli/commands/terraform/apply",
+      label: "atmos terraform apply",
+      description: "Apply infrastructure changes",
+    },
+    {
+      type: "link",
+      href: "/cli/commands/terraform/deploy",
+      label: "atmos terraform deploy",
+      description: "Run init, plan, and apply in sequence",
+    },
+    {
+      type: "link",
+      href: "/cli/commands/terraform/shell",
+      label: "atmos terraform shell",
+      description: "Open an interactive shell",
+    },
+    {
+      type: "link",
+      href: "/cli/commands/terraform/generate/backends",
+      label: "atmos terraform generate backends",
+      description: "Generate backend configuration files",
+    },
+    {
+      type: "link",
+      href: "/cli/commands/terraform/generate/varfiles",
+      label: "atmos terraform generate varfiles",
+      description: "Generate variable files",
+    },
+    {
+      type: "link",
+      href: "/cli/commands/terraform/generate/files",
+      label: "atmos terraform generate files",
+      description: "Generate auxiliary configuration files",
+    },
+  ]}
+/>
 
 ## Related
 

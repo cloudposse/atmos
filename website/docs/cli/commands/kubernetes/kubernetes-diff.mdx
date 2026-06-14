@@ -1,0 +1,75 @@
+---
+title: atmos kubernetes diff
+sidebar_label: diff
+sidebar_class_name: command
+id: diff
+---
+
+import Intro from "@site/src/components/Intro";
+import ActionCard, { PrimaryCTA } from "@site/src/components/ActionCard";
+
+<Intro>
+  Check what would change in the cluster before you deploy. `diff` renders the
+  component, asks Kubernetes to validate the update with server-side dry run,
+  and reports which objects would be created, changed, or left alone.
+</Intro>
+
+<ActionCard title="Configure Kubernetes Components">
+  `diff` uses the same stack inputs as deployment: `provider`, `paths`,
+  `manifests`, `vars`, `env`, Auth, hooks, and dependencies.
+  <div>
+    <PrimaryCTA to="/stacks/components/kubernetes">
+      Stack Configuration
+    </PrimaryCTA>
+  </div>
+</ActionCard>
+
+## Usage
+
+```shell
+atmos kubernetes diff <component> --stack <stack>
+atmos kubernetes diff --affected --base origin/main
+```
+
+`diff` renders the final manifests, sends each object through Kubernetes
+server-side dry-run apply, reads the live object through the dynamic client,
+normalizes volatile metadata, and reports whether each object would be created,
+changed, or left unchanged.
+
+The command does not require the `kubectl` binary and does not run `kubectl diff`.
+
+## Example
+
+```shell
+atmos kubernetes diff argocd -s plat-ue2-dev
+```
+
+Example output:
+
+```text
+create v1/Namespace argocd
+changed apps/v1/Deployment argocd/argocd-server
+no-change v1/Service argocd/argocd-server
+```
+
+## Flags
+
+<dl>
+  <dt>
+    `--stack`, `-s` <em>(required)</em>
+  </dt>
+  <dd>Atmos stack.</dd>
+
+<dt>
+  `--all` <em>(optional)</em>
+</dt>
+<dd>Diff all Kubernetes components in dependency order.</dd>
+
+<dt>
+  `--affected` <em>(optional)</em>
+</dt>
+<dd>Diff affected Kubernetes components and their dependencies.</dd>
+
+  <dt>`--include-dependents` <em>(optional)</em></dt>
+  <dd>With `--affected`, include dependent Kubernetes components.</dd>
+</dl>

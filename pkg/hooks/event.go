@@ -5,14 +5,24 @@ import "strings"
 type HookEvent string
 
 const (
-	BeforeTerraformInit   HookEvent = "before.terraform.init"
-	AfterTerraformInit    HookEvent = "after.terraform.init"
-	AfterTerraformApply   HookEvent = "after.terraform.apply"
-	BeforeTerraformApply  HookEvent = "before.terraform.apply"
-	AfterTerraformPlan    HookEvent = "after.terraform.plan"
-	BeforeTerraformPlan   HookEvent = "before.terraform.plan"
-	BeforeTerraformDeploy HookEvent = "before.terraform.deploy"
-	AfterTerraformDeploy  HookEvent = "after.terraform.deploy"
+	BeforeTerraformInit    HookEvent = "before.terraform.init"
+	AfterTerraformInit     HookEvent = "after.terraform.init"
+	AfterTerraformApply    HookEvent = "after.terraform.apply"
+	BeforeTerraformApply   HookEvent = "before.terraform.apply"
+	AfterTerraformPlan     HookEvent = "after.terraform.plan"
+	BeforeTerraformPlan    HookEvent = "before.terraform.plan"
+	BeforeTerraformDeploy  HookEvent = "before.terraform.deploy"
+	AfterTerraformDeploy   HookEvent = "after.terraform.deploy"
+	BeforeKubernetesRender HookEvent = "before.kubernetes.render"
+	AfterKubernetesRender  HookEvent = "after.kubernetes.render"
+	BeforeKubernetesDiff   HookEvent = "before.kubernetes.diff"
+	AfterKubernetesDiff    HookEvent = "after.kubernetes.diff"
+	BeforeKubernetesApply  HookEvent = "before.kubernetes.apply"
+	AfterKubernetesApply   HookEvent = "after.kubernetes.apply"
+	BeforeKubernetesDeploy HookEvent = "before.kubernetes.deploy"
+	AfterKubernetesDeploy  HookEvent = "after.kubernetes.deploy"
+	BeforeKubernetesDelete HookEvent = "before.kubernetes.delete"
+	AfterKubernetesDelete  HookEvent = "after.kubernetes.delete"
 )
 
 // Normalize returns the canonical form of a HookEvent, collapsing deploy aliases
@@ -25,6 +35,10 @@ func (e HookEvent) Normalize() HookEvent {
 		return AfterTerraformApply
 	case BeforeTerraformDeploy:
 		return BeforeTerraformApply
+	case AfterKubernetesDeploy:
+		return AfterKubernetesApply
+	case BeforeKubernetesDeploy:
+		return BeforeKubernetesApply
 	default:
 		return e
 	}

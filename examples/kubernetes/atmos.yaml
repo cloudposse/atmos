@@ -1,0 +1,85 @@
+base_path: "./"
+
+components:
+  kubernetes:
+    base_path: "components/kubernetes"
+    provider: kubectl
+
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "deploy/**/*"
+  excluded_paths:
+    - "**/_defaults.yaml"
+  name_pattern: "{stage}"
+
+logs:
+  file: "/dev/stderr"
+  level: Info
+
+auth:
+  identities:
+    local-k3s:
+      kind: ambient
+  # For real EKS clusters, wire Atmos Auth to Kubernetes by adding an aws/eks
+  # integration to the identity used by the component command.
+  #
+  # integrations:
+  #   prod-eks:
+  #     kind: aws/eks
+  #     via:
+  #       identity: platform-admin
+  #     spec:
+  #       cluster:
+  #         name: acme-prod-eks
+  #         region: us-east-1
+  #         alias: acme-prod
+  #         kubeconfig:
+  #           path: /tmp/acme-prod-kubeconfig
+  #           update: replace
+
+commands:
+  - name: "test"
+    description: "Run the local Kubernetes component smoke test"
+    steps:
+      - atmos validate stacks
+      - atmos kubernetes render demo -s dev --identity local-k3s
+
+  - name: "k3s"
+    commands:
+      - name: "up"
+        description: Start k3s in the background
+        steps:
+          - |
+            container_running=$(docker ps -q -f "name=kubernetes-k3s")
+            if [ -n "$container_running" ]; then
+              echo "k3s is already running; run \`atmos k3s down\` to stop it"
+            else
+              docker compose up -d --wait
+            fi
+
+      - name: "down"
+        description: Stop k3s
+        steps:
+          - docker compose down
+
+      - name: "restart"
+        description: Restart k3s
+        steps:
+          - docker compose restart
+
+      - name: "reset"
+        description: Reset k3s and delete all data
+        steps:
+          - docker compose down --volumes
+
+      - name: "status"
+        description: Show the status of k3s
+        steps:
+          - |
+            container_running=$(docker ps -q -f "name=kubernetes-k3s")
+            if [ -n "$container_running" ]; then
+              docker compose ps --format "{{`{{.Service}} is {{.State}}`}}"
+            else
+              echo "k3s is not running; run \`atmos k3s up\` to start it"
+            fi

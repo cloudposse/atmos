@@ -194,9 +194,9 @@ func mergeComponentConfigurations(atmosConfig *schema.AtmosConfiguration, opts *
 		}
 	}
 
-	// Terraform-specific: merge hooks using deferred merge.
+	// Merge hooks using deferred merge for component types with lifecycle hooks.
 	var finalComponentHooks map[string]any
-	if opts.ComponentType == cfg.TerraformComponentType {
+	if supportsComponentHooks(opts.ComponentType) {
 		var hooksCtx *m.DeferredMergeContext
 		finalComponentHooks, hooksCtx, err = m.MergeWithDeferred(
 			mergeConfig,
@@ -217,14 +217,14 @@ func mergeComponentConfigurations(atmosConfig *schema.AtmosConfiguration, opts *
 		}
 	}
 
-	// Terraform-specific: merge generate section using deferred merge.
+	// Merge generate section using deferred merge.
 	// Merge order (lowest to highest priority):
-	// 1. Global + Terraform-level generate (stack-level `generate:` + `terraform.generate:`)
+	// 1. Global + component-type-level generate
 	// 2. Base component generate (from metadata.inherits)
 	// 3. Component generate (component-specific generate section)
 	// 4. Component overrides generate (from overrides section)
 	var finalComponentGenerate map[string]any
-	if opts.ComponentType == cfg.TerraformComponentType {
+	if supportsGenerate(opts.ComponentType) {
 		var generateCtx *m.DeferredMergeContext
 		finalComponentGenerate, generateCtx, err = m.MergeWithDeferred(
 			mergeConfig,
@@ -270,6 +270,45 @@ func mergeComponentConfigurations(atmosConfig *schema.AtmosConfiguration, opts *
 	}
 	if result.ComponentOverridesCommand != "" {
 		finalComponentCommand = result.ComponentOverridesCommand
+	}
+
+	finalComponentProvider := result.BaseComponentProvider
+	if result.ComponentProvider != "" {
+		finalComponentProvider = result.ComponentProvider
+	}
+
+	finalComponentPaths, err := mergeComponentAnySection(
+		mergeConfig,
+		cfg.PathsSectionName,
+		result.BaseComponentPaths,
+		result.ComponentPaths,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	finalComponentManifests, err := mergeComponentAnySection(
+		mergeConfig,
+		cfg.ManifestsSectionName,
+		result.BaseComponentManifests,
+		result.ComponentManifests,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	var finalComponentRender map[string]any
+	if opts.ComponentType == cfg.KubernetesComponentType {
+		finalComponentRender, err = m.Merge(
+			mergeConfig,
+			[]map[string]any{
+				result.BaseComponentRender,
+				result.ComponentRender,
+			},
+		)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	// Process settings integrations.
@@ -455,10 +494,25 @@ func mergeComponentConfigurations(atmosConfig *schema.AtmosConfiguration, opts *
 		comp[cfg.AuthSectionName] = mergedAuth
 	}
 
-	// Process source and provision configuration for terraform, helmfile, and packer components.
-	if opts.ComponentType == cfg.TerraformComponentType ||
-		opts.ComponentType == cfg.HelmfileComponentType ||
-		opts.ComponentType == cfg.PackerComponentType {
+	if opts.ComponentType == cfg.KubernetesComponentType {
+		if finalComponentProvider != "" {
+			comp[cfg.ProviderSectionName] = finalComponentProvider
+		}
+		if finalComponentPaths != nil {
+			comp[cfg.PathsSectionName] = finalComponentPaths
+		}
+		if finalComponentManifests != nil {
+			comp[cfg.ManifestsSectionName] = finalComponentManifests
+		}
+		if len(finalComponentRender) > 0 {
+			comp[cfg.RenderSectionName] = finalComponentRender
+		}
+		comp[cfg.HooksSectionName] = finalComponentHooks
+		comp[cfg.GenerateSectionName] = finalComponentGenerate
+	}
+
+	// Process source and provision configuration.
+	if supportsSourceProvision(opts.ComponentType) {
 		finalComponentSource, err := m.Merge(
 			mergeConfig,
 			[]map[string]any{
@@ -494,6 +548,24 @@ func mergeComponentConfigurations(atmosConfig *schema.AtmosConfiguration, opts *
 	}
 
 	return comp, nil
+}
+
+func mergeComponentAnySection(atmosConfig *schema.AtmosConfiguration, key string, values ...any) (any, error) {
+	sections := make([]map[string]any, 0, len(values))
+	for _, value := range values {
+		if value == nil {
+			continue
+		}
+		sections = append(sections, map[string]any{key: value})
+	}
+	if len(sections) == 0 {
+		return nil, nil
+	}
+	merged, err := m.Merge(atmosConfig, sections)
+	if err != nil {
+		return nil, err
+	}
+	return merged[key], nil
 }
 
 // processAuthConfig merges global and component-level auth configurations.

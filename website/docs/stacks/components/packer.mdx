@@ -6,11 +6,14 @@ sidebar_class_name: command
 description: Configure Packer components in your Atmos stack manifests for machine image building.
 id: packer
 ---
-import File from '@site/src/components/File'
-import Intro from '@site/src/components/Intro'
+
+import File from "@site/src/components/File";
+import Intro from "@site/src/components/Intro";
 
 <Intro>
-Packer components build machine images (AMIs, VM images, container images) using HashiCorp Packer. They allow you to manage image builds with the same stack-based configuration approach used for Terraform and Helmfile.
+  Packer components build machine images (AMIs, VM images, container images)
+  using HashiCorp Packer. They allow you to manage image builds with the same
+  stack-based configuration approach used for Terraform and Helmfile.
 </Intro>
 
 ## Available Configuration Sections
@@ -21,17 +24,17 @@ Packer components support the common configuration sections:
   <dt>[`vars`](/stacks/vars)</dt>
   <dd>Variables passed to packer.</dd>
 
-  <dt>[`env`](/stacks/env)</dt>
-  <dd>Environment variables during execution.</dd>
+<dt>[`env`](/stacks/env)</dt>
+<dd>Environment variables during execution.</dd>
 
-  <dt>[`settings`](/stacks/settings)</dt>
-  <dd>Integrations and metadata.</dd>
+<dt>[`settings`](/stacks/settings)</dt>
+<dd>Integrations and metadata.</dd>
 
-  <dt>[`metadata`](/stacks/components/component-metadata)</dt>
-  <dd>Component behavior and inheritance.</dd>
+<dt>[`metadata`](/stacks/components/component-metadata)</dt>
+<dd>Component behavior and inheritance.</dd>
 
-  <dt>[`command`](/stacks/command)</dt>
-  <dd>Override packer binary.</dd>
+<dt>[`command`](/stacks/command)</dt>
+<dd>Override packer binary.</dd>
 
   <dt>[`hooks`](/stacks/hooks)</dt>
   <dd>Lifecycle event handlers.</dd>
@@ -52,7 +55,7 @@ components:
         instance_type: t3.medium
         source_ami_filter:
           name: "ubuntu/images/hvm-ssd/ubuntu-jammy-22.04-amd64-server-*"
-          owner: "099720109477"  # Canonical
+          owner: "099720109477" # Canonical
         ami_name_prefix: "acme-ubuntu"
       env:
         AWS_PROFILE: acme-prod
@@ -98,30 +101,31 @@ variable "region" {
 }
 
 variable "instance_type" {
-  type        = string
-  default     = "t3.medium"
-  description = "EC2 instance type for the builder"
+type = string
+default = "t3.medium"
+description = "EC2 instance type for the builder"
 }
 
 variable "source_ami_filter" {
-  type = object({
-    name  = string
-    owner = string
-  })
-  description = "Filter for source AMI"
+type = object({
+name = string
+owner = string
+})
+description = "Filter for source AMI"
 }
 
 variable "ami_name_prefix" {
-  type        = string
-  description = "Prefix for the AMI name"
+type = string
+description = "Prefix for the AMI name"
 }
 
 variable "tags" {
-  type        = map(string)
-  default     = {}
-  description = "Tags to apply to the AMI"
+type = map(string)
+default = {}
+description = "Tags to apply to the AMI"
 }
-```
+
+````
 </File>
 
 <File title="components/packer/ami-ubuntu/template.pkr.hcl">
@@ -169,7 +173,8 @@ build {
     ]
   }
 }
-```
+````
+
 </File>
 
 ## Component-Type Defaults
@@ -205,28 +210,28 @@ import:
   - orgs/acme/plat/prod/_defaults
 
 vars:
-  region: us-east-1
-  stage: prod
+region: us-east-1
+stage: prod
 
 packer:
-  vars:
-    tags:
-      Environment: prod
-      ManagedBy: Atmos
-  env:
-    AWS_PROFILE: acme-prod
+vars:
+tags:
+Environment: prod
+ManagedBy: Atmos
+env:
+AWS_PROFILE: acme-prod
 
 components:
-  packer:
-    ami-ubuntu-base:
-      metadata:
-        component: ami-ubuntu
-      vars:
-        instance_type: t3.medium
-        ami_name_prefix: "acme-prod"
-        source_ami_filter:
-          name: "ubuntu/images/hvm-ssd/ubuntu-jammy-22.04-amd64-server-*"
-          owner: "099720109477"
+packer:
+ami-ubuntu-base:
+metadata:
+component: ami-ubuntu
+vars:
+instance_type: t3.medium
+ami_name_prefix: "acme-prod"
+source_ami_filter:
+name: "ubuntu/images/hvm-ssd/ubuntu-jammy-22.04-amd64-server-\*"
+owner: "099720109477"
 
     ami-eks-node:
       metadata:
@@ -250,7 +255,8 @@ components:
         repository: "acme/base"
         tag: "{{ .stage }}-{{ timestamp }}"
         base_image: "ubuntu:22.04"
-```
+
+````
 </File>
 
 ## Template Configuration
@@ -270,7 +276,7 @@ components:
       # Packer loads all *.pkr.hcl files from the component directory
       vars:
         region: us-east-1
-```
+````
 
 This allows you to organize your Packer component with multiple files:
 
@@ -292,7 +298,7 @@ components:
     my-ami:
       settings:
         packer:
-          template: main.pkr.hcl  # Use specific file
+          template: main.pkr.hcl # Use specific file
       vars:
         region: us-east-1
 ```
@@ -305,10 +311,11 @@ atmos packer validate my-ami -s prod --template main.pkr.hcl
 
 :::tip Directory Mode Benefits
 Directory mode is recommended because it:
+
 - Follows Packer best practices for organizing configurations
 - Allows separation of variables, sources, and builds into logical files
 - Simplifies stack manifests by not requiring explicit template configuration
-:::
+  :::
 
 ## Running Packer Commands
 
@@ -336,14 +343,14 @@ Common environment variables for Packer components:
   <dt>`PACKER_LOG`</dt>
   <dd>Enable logging (set to `1`).</dd>
 
-  <dt>`PACKER_LOG_PATH`</dt>
-  <dd>Path to log file.</dd>
+<dt>`PACKER_LOG_PATH`</dt>
+<dd>Path to log file.</dd>
 
-  <dt>`AWS_PROFILE`</dt>
-  <dd>AWS profile for authentication.</dd>
+<dt>`AWS_PROFILE`</dt>
+<dd>AWS profile for authentication.</dd>
 
-  <dt>`AWS_REGION`</dt>
-  <dd>Default AWS region.</dd>
+<dt>`AWS_REGION`</dt>
+<dd>Default AWS region.</dd>
 
   <dt>`PACKER_CACHE_DIR`</dt>
   <dd>Directory for Packer cache.</dd>
@@ -394,12 +401,12 @@ components:
   packer:
     azure-image:
       vars:
-        azure_subscription_id: "{{ env \"ARM_SUBSCRIPTION_ID\" }}"
+        azure_subscription_id: '{{ env "ARM_SUBSCRIPTION_ID" }}'
         azure_resource_group: "packer-images-rg"
         azure_location: "eastus"
       env:
-        ARM_CLIENT_ID: "{{ env \"ARM_CLIENT_ID\" }}"
-        ARM_CLIENT_SECRET: "{{ env \"ARM_CLIENT_SECRET\" }}"
+        ARM_CLIENT_ID: '{{ env "ARM_CLIENT_ID" }}'
+        ARM_CLIENT_SECRET: '{{ env "ARM_CLIENT_SECRET" }}'
 ```
 
 ### GCP Machine Image

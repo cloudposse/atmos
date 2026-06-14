@@ -84,6 +84,7 @@ type AtmosConfiguration struct {
 	HelmfileDirAbsolutePath       string             `yaml:"helmfileDirAbsolutePath,omitempty" json:"helmfileDirAbsolutePath,omitempty" mapstructure:"helmfileDirAbsolutePath"`
 	PackerDirAbsolutePath         string             `yaml:"packerDirAbsolutePath,omitempty" json:"packerDirAbsolutePath,omitempty" mapstructure:"packerDirAbsolutePath"`
 	AnsibleDirAbsolutePath        string             `yaml:"ansibleDirAbsolutePath,omitempty" json:"ansibleDirAbsolutePath,omitempty" mapstructure:"ansibleDirAbsolutePath"`
+	KubernetesDirAbsolutePath     string             `yaml:"kubernetesDirAbsolutePath,omitempty" json:"kubernetesDirAbsolutePath,omitempty" mapstructure:"kubernetesDirAbsolutePath"`
 	StackConfigFilesRelativePaths []string           `yaml:"stackConfigFilesRelativePaths,omitempty" json:"stackConfigFilesRelativePaths,omitempty" mapstructure:"stackConfigFilesRelativePaths"`
 	StackConfigFilesAbsolutePaths []string           `yaml:"stackConfigFilesAbsolutePaths,omitempty" json:"stackConfigFilesAbsolutePaths,omitempty" mapstructure:"stackConfigFilesAbsolutePaths"`
 	StackType                     string             `yaml:"stackType,omitempty" json:"StackType,omitempty" mapstructure:"stackType"`
@@ -679,12 +680,26 @@ type Ansible struct {
 	AutoGenerateFiles bool `yaml:"auto_generate_files" json:"auto_generate_files" mapstructure:"auto_generate_files"`
 }
 
+// Kubernetes defines configuration for Kubernetes components.
+type Kubernetes struct {
+	BasePath string `yaml:"base_path" json:"base_path" mapstructure:"base_path"`
+	// Provider selects the SDK-backed renderer/loader. Supported values are kubectl and kustomize.
+	Provider string `yaml:"provider" json:"provider" mapstructure:"provider"`
+	// AutoGenerateFiles enables automatic generation of auxiliary configuration files
+	// during Kubernetes operations when set to true.
+	// Generated files are defined in the component's generate section.
+	AutoGenerateFiles bool `yaml:"auto_generate_files" json:"auto_generate_files" mapstructure:"auto_generate_files"`
+	// Source holds global source configuration defaults for JIT-vendored components.
+	Source *SourceSettings `yaml:"source,omitempty" json:"source,omitempty" mapstructure:"source"`
+}
+
 type Components struct {
 	// Built-in component types (legacy - will migrate to plugin model in future phases).
-	Terraform Terraform `yaml:"terraform" json:"terraform" mapstructure:"terraform"`
-	Helmfile  Helmfile  `yaml:"helmfile" json:"helmfile" mapstructure:"helmfile"`
-	Packer    Packer    `yaml:"packer" json:"packer" mapstructure:"packer"`
-	Ansible   Ansible   `yaml:"ansible" json:"ansible" mapstructure:"ansible"`
+	Terraform  Terraform  `yaml:"terraform" json:"terraform" mapstructure:"terraform"`
+	Helmfile   Helmfile   `yaml:"helmfile" json:"helmfile" mapstructure:"helmfile"`
+	Packer     Packer     `yaml:"packer" json:"packer" mapstructure:"packer"`
+	Ansible    Ansible    `yaml:"ansible" json:"ansible" mapstructure:"ansible"`
+	Kubernetes Kubernetes `yaml:"kubernetes" json:"kubernetes" mapstructure:"kubernetes"`
 
 	// List configuration for component listing.
 	List ListConfig `yaml:"list,omitempty" json:"list,omitempty" mapstructure:"list"`
@@ -710,6 +725,8 @@ func (c *Components) GetComponentConfig(componentType string) (any, bool) {
 		return c.Packer, true
 	case "ansible":
 		return c.Ansible, true
+	case "kubernetes":
+		return c.Kubernetes, true
 	default:
 		// Check plugin types.
 		if config, ok := c.Plugins[componentType]; ok {
@@ -1242,6 +1259,10 @@ type BaseComponentConfig struct {
 	// BaseComponentGenerate holds the generate section configuration from the base component,
 	// defining auxiliary files to be generated for this component.
 	BaseComponentGenerate                  AtmosSectionMapType
+	BaseComponentProvider                  string
+	BaseComponentPaths                     any
+	BaseComponentManifests                 any
+	BaseComponentRender                    AtmosSectionMapType
 	FinalBaseComponentName                 string
 	BaseComponentCommand                   string
 	BaseComponentBackendType               string

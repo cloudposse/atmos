@@ -21,6 +21,10 @@ const (
 	affectedReasonStackSettings   = "stack.settings"
 	affectedReasonStackSource     = "stack.source"
 	affectedReasonStackProvision  = "stack.provision"
+	affectedReasonStackGenerate   = "stack.generate"
+	affectedReasonStackPaths      = "stack.paths"
+	affectedReasonStackManifests  = "stack.manifests"
+	affectedReasonStackRender     = "stack.render"
 	affectedReasonDeleted         = "deleted"
 	affectedReasonDeletedStack    = "deleted.stack"
 )
@@ -38,6 +42,10 @@ const (
 	sectionNameEnv       = "env"
 	sectionNameSource    = "source"
 	sectionNameProvision = "provision"
+	sectionNameGenerate  = "generate"
+	sectionNamePaths     = "paths"
+	sectionNameManifests = "manifests"
+	sectionNameRender    = "render"
 )
 
 // shouldSkipComponent determines if a component should be skipped based on metadata.
@@ -442,6 +450,143 @@ func processPackerComponentsIndexed(
 	}
 
 	return affected, nil
+}
+
+// processKubernetesComponentsIndexed processes Kubernetes components using the files index.
+//
+//nolint:funlen // Similar structure to Helmfile/Packer with Kubernetes-specific sections
+func processKubernetesComponentsIndexed(
+	stackName string,
+	kubernetesSection map[string]any,
+	remoteStacks *map[string]any,
+	currentStacks *map[string]any,
+	atmosConfig *schema.AtmosConfiguration,
+	filesIndex *changedFilesIndex,
+	patternCache *componentPathPatternCache,
+	includeSpaceliftAdminStacks bool,
+	includeSettings bool,
+	excludeLocked bool,
+) ([]schema.Affected, error) {
+	var affected []schema.Affected
+
+	for componentName, compSection := range kubernetesSection {
+		componentSection, ok := compSection.(map[string]any)
+		if !ok {
+			continue
+		}
+
+		metadataSection, hasMetadata := componentSection[sectionNameMetadata].(map[string]any)
+		if hasMetadata {
+			if shouldSkipComponent(metadataSection, componentName, excludeLocked) {
+				continue
+			}
+
+			if !isEqual(remoteStacks, stackName, cfg.KubernetesComponentType, componentName, metadataSection, sectionNameMetadata) {
+				err := addAffectedComponent(&affected, atmosConfig, componentName, stackName, cfg.KubernetesComponentType,
+					&componentSection, affectedReasonStackMetadata, includeSpaceliftAdminStacks, currentStacks, includeSettings)
+				if err != nil {
+					return nil, err
+				}
+			}
+		}
+
+		component := GetComponentFolder(&componentSection, componentName)
+
+		changed, err := isComponentFolderChangedIndexed(component, cfg.KubernetesComponentType, atmosConfig, filesIndex, patternCache)
+		if err != nil {
+			return nil, err
+		}
+		if changed {
+			err := addAffectedComponent(&affected, atmosConfig, componentName, stackName, cfg.KubernetesComponentType,
+				&componentSection, affectedReasonComponent, includeSpaceliftAdminStacks, currentStacks, includeSettings)
+			if err != nil {
+				return nil, err
+			}
+		}
+
+		if err := addKubernetesSectionAffected(&affected, atmosConfig, componentName, stackName, &componentSection, remoteStacks, currentStacks, includeSpaceliftAdminStacks, includeSettings); err != nil {
+			return nil, err
+		}
+
+		if settingsSection, ok := componentSection[cfg.SettingsSectionName].(map[string]any); ok {
+			err := checkSettingsAndDependenciesIndexed(
+				&affected, atmosConfig, componentName, stackName, cfg.KubernetesComponentType,
+				&componentSection, settingsSection, remoteStacks, currentStacks, filesIndex,
+				includeSpaceliftAdminStacks, includeSettings,
+			)
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+
+	return affected, nil
+}
+
+func addKubernetesSectionAffected(
+	affected *[]schema.Affected,
+	atmosConfig *schema.AtmosConfiguration,
+	componentName string,
+	stackName string,
+	componentSection *map[string]any,
+	remoteStacks *map[string]any,
+	currentStacks *map[string]any,
+	includeSpaceliftAdminStacks bool,
+	includeSettings bool,
+) error {
+	sections := []struct {
+		name   string
+		reason string
+	}{
+		{sectionNameVars, affectedReasonStackVars},
+		{sectionNameEnv, affectedReasonStackEnv},
+		{sectionNameSource, affectedReasonStackSource},
+		{sectionNameProvision, affectedReasonStackProvision},
+		{sectionNameGenerate, affectedReasonStackGenerate},
+		{sectionNamePaths, affectedReasonStackPaths},
+		{sectionNameManifests, affectedReasonStackManifests},
+		{sectionNameRender, affectedReasonStackRender},
+	}
+
+	for _, section := range sections {
+		value, ok := (*componentSection)[section.name]
+		if !ok {
+			continue
+		}
+		if isComponentSectionEqual(remoteStacks, stackName, cfg.KubernetesComponentType, componentName, value, section.name) {
+			continue
+		}
+		err := addAffectedComponent(affected, atmosConfig, componentName, stackName, cfg.KubernetesComponentType,
+			componentSection, section.reason, includeSpaceliftAdminStacks, currentStacks, includeSettings)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func isComponentSectionEqual(
+	remoteStacks *map[string]any,
+	localStackName string,
+	componentType string,
+	localComponentName string,
+	localSection any,
+	sectionName string,
+) bool {
+	if remoteStackSection, ok := (*remoteStacks)[localStackName].(map[string]any); ok {
+		if remoteComponentsSection, ok := remoteStackSection["components"].(map[string]any); ok {
+			if remoteComponentTypeSection, ok := remoteComponentsSection[componentType].(map[string]any); ok {
+				if remoteComponentSection, ok := remoteComponentTypeSection[localComponentName].(map[string]any); ok {
+					remoteSection, ok := remoteComponentSection[sectionName]
+					if ok {
+						return reflect.DeepEqual(localSection, remoteSection)
+					}
+				}
+			}
+		}
+	}
+	return false
 }
 
 // checkSettingsAndDependenciesIndexed checks settings using indexed files.

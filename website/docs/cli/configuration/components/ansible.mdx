@@ -6,12 +6,15 @@ sidebar_class_name: command
 id: ansible
 description: Configure Ansible component behavior in atmos.yaml.
 ---
-import File from '@site/src/components/File'
-import Intro from '@site/src/components/Intro'
-import DocCardList from '@theme/DocCardList'
+
+import File from "@site/src/components/File";
+import Intro from "@site/src/components/Intro";
+import DocCardList from "@theme/DocCardList";
 
 <Intro>
-Configure how Atmos executes Ansible commands for configuration management and infrastructure automation, including playbook execution and inventory management.
+  Configure how Atmos executes Ansible commands for configuration management and
+  infrastructure automation, including playbook execution and inventory
+  management.
 </Intro>
 
 ## Configuration
@@ -25,6 +28,7 @@ components:
 
     # Base path to Ansible components
     base_path: components/ansible
+
 ```
 </File>
 
@@ -54,16 +58,18 @@ components:
 Ansible components follow the same directory structure as other component types:
 
 ```
+
 components/
 └── ansible/
-    ├── hello-world/
-    │   ├── site.yml
-    │   └── inventory.ini
-    └── webserver/
-        ├── site.yml
-        ├── roles/
-        └── inventory/
-```
+├── hello-world/
+│ ├── site.yml
+│ └── inventory.ini
+└── webserver/
+├── site.yml
+├── roles/
+└── inventory/
+
+````
 
 ## Usage
 
@@ -75,14 +81,26 @@ atmos ansible playbook hello-world -s dev
 
 # Check Ansible version
 atmos ansible version
-```
+````
 
 ## Related Commands
 
-<DocCardList items={[
-  {type: 'link', href: '/cli/commands/ansible/usage', label: 'atmos ansible', description: 'Execute Ansible commands'},
-  {type: 'link', href: '/cli/commands/ansible/playbook', label: 'atmos ansible playbook', description: 'Run Ansible playbooks'},
-]} />
+<DocCardList
+  items={[
+    {
+      type: "link",
+      href: "/cli/commands/ansible/usage",
+      label: "atmos ansible",
+      description: "Execute Ansible commands",
+    },
+    {
+      type: "link",
+      href: "/cli/commands/ansible/playbook",
+      label: "atmos ansible playbook",
+      description: "Run Ansible playbooks",
+    },
+  ]}
+/>
 
 ## Related
 

@@ -6,12 +6,15 @@ sidebar_class_name: command
 id: helmfile
 description: Configure Helmfile component behavior in atmos.yaml.
 ---
-import File from '@site/src/components/File'
-import Intro from '@site/src/components/Intro'
-import DocCardList from '@theme/DocCardList'
+
+import File from "@site/src/components/File";
+import Intro from "@site/src/components/Intro";
+import DocCardList from "@theme/DocCardList";
 
 <Intro>
-Configure how Atmos executes Helmfile commands for Kubernetes deployments, including EKS integration, kubeconfig management, and cluster name configuration.
+  Configure how Atmos executes Helmfile commands for Kubernetes deployments,
+  including EKS integration, kubeconfig management, and cluster name
+  configuration.
 </Intro>
 
 :::warning Breaking Change in v1.x
@@ -49,7 +52,8 @@ components:
 
     # AWS profile pattern (deprecated, use --identity flag instead)
     # helm_aws_profile_pattern: "{namespace}-{tenant}-gbl-{stage}-helm"
-```
+
+````
 </File>
 
 ## Configuration Reference
@@ -197,7 +201,8 @@ components:
   helmfile:
     base_path: components/helmfile
     use_eks: false  # Use existing KUBECONFIG
-```
+````
+
 </File>
 
 ### Using with EKS and Identity Authentication
@@ -221,14 +226,8 @@ atmos helmfile apply nginx -s prod --identity=prod-admin
 ### Using with Explicit Cluster Name
 
 <File title="atmos.yaml">
-```yaml
-components:
-  helmfile:
-    base_path: components/helmfile
-    use_eks: true
-    kubeconfig_path: /dev/shm
-    cluster_name: "production-eks-cluster"
-```
+  ```yaml components: helmfile: base_path: components/helmfile use_eks: true
+  kubeconfig_path: /dev/shm cluster_name: "production-eks-cluster" ```
 </File>
 
 ### Overriding Cluster Name at Runtime
@@ -243,13 +242,10 @@ atmos helmfile apply nginx -s prod --identity=prod-admin --cluster-name=other-cl
 If you have an existing configuration using the deprecated options:
 
 <File title="Before (deprecated)">
-```yaml
-components:
-  helmfile:
-    use_eks: true  # was default
-    helm_aws_profile_pattern: "{namespace}-{tenant}-gbl-{stage}-helm"
-    cluster_name_pattern: "{namespace}-{tenant}-{environment}-{stage}-eks-cluster"
-```
+  ```yaml components: helmfile: use_eks: true # was default
+  helm_aws_profile_pattern: "{namespace}-{tenant}-gbl-{stage}-helm"
+  cluster_name_pattern: "{namespace}-{tenant}-{environment}-{stage}-eks-cluster"
+  ```
 </File>
 
 <File title="After (recommended)">
@@ -270,10 +266,22 @@ atmos helmfile apply my-component -s prod --identity=prod-admin
 
 ## Related Commands
 
-<DocCardList items={[
-  {type: 'link', href: '/cli/commands/helmfile/usage', label: 'atmos helmfile', description: 'Execute Helmfile commands'},
-  {type: 'link', href: '/cli/commands/helmfile/generate-varfile', label: 'atmos helmfile generate varfile', description: 'Generate variable files for Helmfile'},
-]} />
+<DocCardList
+  items={[
+    {
+      type: "link",
+      href: "/cli/commands/helmfile/usage",
+      label: "atmos helmfile",
+      description: "Execute Helmfile commands",
+    },
+    {
+      type: "link",
+      href: "/cli/commands/helmfile/generate-varfile",
+      label: "atmos helmfile generate varfile",
+      description: "Generate variable files for Helmfile",
+    },
+  ]}
+/>
 
 ## Related
 

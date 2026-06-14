@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"io"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/fatih/color"
@@ -120,8 +121,9 @@ func TestPrintMessageInColor(t *testing.T) {
 				PrintMessageInColor(tt.message, tt.messageColor)
 			})
 			assert.Contains(t, output, tt.wantContains)
-			// The output should be longer than the message due to color codes
-			if tt.message != "" {
+			// Color output depends on terminal/environment detection. When ANSI
+			// escapes are emitted, verify the wrapper added bytes around the message.
+			if tt.message != "" && strings.Contains(output, "\x1b[") {
 				assert.True(t, len(output) > len(tt.message))
 			}
 		})
