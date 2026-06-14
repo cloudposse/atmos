@@ -177,12 +177,23 @@ jobs:
         with:
           version: ${{ env.PACKER_VERSION }}
 
+      # Dogfood `atmos ci cache`: cache ~/.cache/atmos (where the toolchain
+      # installs helm/helmfile) via the recommended composite action. Atmos
+      # derives the key/paths from atmos.yaml (ci.cache) and native actions/cache
+      # does the storage — restore now, save automatically in its post step. No
+      # runtime token needed. continue-on-error so cache issues never fail the
+      # job — the cache is a pure accelerator.
+      - name: Cache Atmos toolchain
+        if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
+        continue-on-error: true
+        uses: ./actions/cache
+
       - name: Install Helm and Helmfile
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
         run: |
           atmos toolchain install --default helm/helm@${{ env.HELM_VERSION }}
           atmos toolchain install --default helmfile/helmfile@${{ env.HELMFILE_VERSION }}
-          atmos toolchain env --format github
+          atmos toolchain env --format=github
 
       - name: Verify Helm and Helmfile
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}

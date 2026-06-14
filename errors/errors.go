@@ -1050,6 +1050,22 @@ var (
 	ErrArtifactStoreInvalidArgs = errors.New("invalid artifact store arguments")
 	ErrArtifactMetadataFailed   = errors.New("failed to load artifact metadata")
 	ErrArtifactIntegrityFailed  = errors.New("artifact integrity check failed")
+
+	// CI cache errors.
+	ErrCacheUnavailable     = errors.New("CI cache is not available in this environment")
+	ErrCacheNotFound        = errors.New("cache entry not found")
+	ErrCacheAlreadyExists   = errors.New("cache entry already exists")
+	ErrCacheSaveFailed      = errors.New("failed to save cache entry")
+	ErrCacheRestoreFailed   = errors.New("failed to restore cache entry")
+	ErrCacheDeleteFailed    = errors.New("failed to delete cache entry")
+	ErrCacheListFailed      = errors.New("failed to list cache entries")
+	ErrCacheBackendNotFound = errors.New("cache backend not found")
+	ErrCacheInvalidArgs     = errors.New("invalid cache arguments")
+	ErrCacheKeyRequired     = errors.New("cache key is required")
+	ErrCacheArchiveFailed   = errors.New("failed to build cache archive")
+	ErrCacheExtractFailed   = errors.New("failed to extract cache archive")
+	ErrCacheBackendRequest  = errors.New("cache backend request failed")
+
 	// AI-related errors.
 	ErrAINotEnabled                 = errors.New("AI features are not enabled")
 	ErrAIDisabledInConfiguration    = errors.New("AI features are disabled in configuration")
