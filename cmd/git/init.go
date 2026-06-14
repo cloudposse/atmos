@@ -34,6 +34,10 @@ With --from=<uri>, the new repository is seeded from another repository:
   - With --keep-history: the source's full history is preserved and the source
     stays reachable as the 'upstream' remote, so future updates can be pulled.
 
+The seed source can also be configured per repository under
+git.repositories.<name>.init (from, keep_history); the --from and --keep-history
+flags override the configured defaults.
+
 When no argument is provided, Atmos initializes the single configured repository.
 
 Arguments after -- are passed verbatim to the underlying git invocation
@@ -81,13 +85,6 @@ func parseInitFlags(v *viper.Viper) *initOptions {
 func runInit(ctx context.Context, opts *initOptions, args []string) error {
 	defer perf.Track(nil, "git.runInit")()
 
-	if opts.KeepHistory && opts.From == "" {
-		return errUtils.Build(errUtils.ErrInvalidFlag).
-			WithHint("--keep-history only applies when seeding from another repository; pass --from=<uri> as well.").
-			WithExitCode(2).
-			Err()
-	}
-
 	name, err := resolveInitName(args)
 	if err != nil {
 		return err
@@ -103,6 +100,10 @@ func runInit(ctx context.Context, opts *initOptions, args []string) error {
 			WithHintf("Repository %q has no uri configured under git.repositories; init needs it to wire up the remote.", name).
 			WithExitCode(2).
 			Err()
+	}
+
+	if err := resolveInitSeed(opts, resolved); err != nil {
+		return err
 	}
 
 	workdir := resolveWorkdir(opts.Workdir, resolved.Workdir)
@@ -155,7 +156,24 @@ func resolveInitName(args []string) (string, error) {
 		Err()
 }
 
-// reportInitDryRun describes what init would do without doing it.
+// resolveInitSeed folds the repository's configured seed defaults into opts so
+// downstream code reads a single source of truth: CLI flags override the
+// repository config, which supplies the default seed source. It also validates
+// that keep-history has a seed source to keep history from.
+func resolveInitSeed(opts *initOptions, resolved *atmosgit.ResolvedRepository) error {
+	opts.From = resolveStringPrecedence(opts.From, resolved.From)
+	opts.KeepHistory = opts.KeepHistory || resolved.KeepHistory
+	if opts.KeepHistory && opts.From == "" {
+		return errUtils.Build(errUtils.ErrInvalidFlag).
+			WithHint("keep-history only applies when seeding from another repository; pass --from=URI or set the repository's init.from under git.repositories.").
+			WithExitCode(2).
+			Err()
+	}
+	return nil
+}
+
+// reportInitDryRun describes what init would do without doing it. The opts.From
+// and opts.KeepHistory values are already resolved (CLI flag over config).
 func reportInitDryRun(name, workdir, branch, uri string, opts *initOptions) {
 	switch {
 	case opts.From == "":

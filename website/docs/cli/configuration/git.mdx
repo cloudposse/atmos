@@ -75,6 +75,9 @@ git:
           email: atmos-bot@acme.com
       push:
         retries: 3
+      init:
+        from: https://github.com/acme/flux-template.git   # optional seed source for `atmos git init`
+        keep_history: false                # preserve source history as `upstream` (requires `from`)
 ```
 </File>
 
@@ -141,7 +144,17 @@ git:
 
   <dt>`push.retries`</dt>
   <dd>
-    Bounded retry count for rejected non-fast-forward pushes (`pull --ff-only`, then re-push). Default: `3`. `0` disables retries.
+    Bounded retry count for rejected non-fast-forward pushes (`pull --rebase`, then re-push). Default: `3`. `0` disables retries.
+  </dd>
+
+  <dt>`init.from`</dt>
+  <dd>
+    Default seed source for [`atmos git init`](/cli/commands/git/init) — the repository URI whose content bootstraps this repository (a template, or a repository being migrated). When omitted, `init` creates an empty repository. Overridable per invocation with `--from` (flag wins: CLI &gt; ENV &gt; config &gt; defaults).
+  </dd>
+
+  <dt>`init.keep_history`</dt>
+  <dd>
+    When seeding via `init.from`, preserve the source's full history and keep it reachable as the `upstream` remote so future updates can be pulled. Default: `false` (fresh history — a single initial commit). Only valid together with `init.from`. Overridable per invocation with `--keep-history`.
   </dd>
 </dl>
 

@@ -20,6 +20,7 @@ var (
 	_ = schema.GitCloneConfig{Depth: 1, Filter: "blob:none", SingleBranch: true, Submodules: false}
 	_ = schema.GitCommitConfig{Signing: "auto", Author: schema.GitAuthorConfig{Name: "", Email: ""}}
 	_ = schema.GitAuthConfig{Identity: ""}
+	_ = schema.GitInitConfig{From: "", KeepHistory: false}
 )
 
 func gitConfigFixture() *schema.GitConfig {
@@ -36,6 +37,10 @@ func gitConfigFixture() *schema.GitConfig {
 				},
 				Push:  schema.GitPushConfig{Retries: &retries},
 				Clone: schema.GitCloneConfig{Depth: 1, SingleBranch: true},
+				Init: schema.GitInitConfig{
+					From:        "https://github.com/acme/template.git",
+					KeepHistory: true,
+				},
 			},
 			"minimal": {
 				URI: "https://github.com/acme/minimal.git",
@@ -61,6 +66,8 @@ func TestResolveRepositoryAppliesExplicitConfig(t *testing.T) {
 	assert.Equal(t, 5, resolved.PushRetries)
 	assert.Equal(t, 1, resolved.Clone.Depth)
 	assert.True(t, resolved.Clone.SingleBranch)
+	assert.Equal(t, "https://github.com/acme/template.git", resolved.From)
+	assert.True(t, resolved.KeepHistory)
 }
 
 func TestResolveRepositoryAppliesDefaults(t *testing.T) {
@@ -76,6 +83,8 @@ func TestResolveRepositoryAppliesDefaults(t *testing.T) {
 	assert.Nil(t, resolved.Author)
 	assert.Equal(t, DefaultPushRetries, resolved.PushRetries)
 	assert.Equal(t, 0, resolved.Clone.Depth)
+	assert.Empty(t, resolved.From)
+	assert.False(t, resolved.KeepHistory)
 
 	// Automatic XDG workdir: <cache>/atmos/git/repositories/<name>.
 	expected := filepath.Join(cacheRoot, "atmos", "git", "repositories", "minimal")

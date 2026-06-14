@@ -37,6 +37,12 @@ type ResolvedRepository struct {
 	Signing     SigningMode
 	Author      *Author
 	PushRetries int
+	// From is the default seed source for `atmos git init` (the --from flag
+	// overrides it). Empty means init creates an empty repository.
+	From string
+	// KeepHistory is the default for init's --keep-history (preserve source
+	// history, keep it pullable as 'upstream'). Only meaningful with From.
+	KeepHistory bool
 }
 
 // ResolveRepository looks up a named repository under git.repositories and
@@ -67,6 +73,8 @@ func ResolveRepository(cfg *schema.GitConfig, name string) (*ResolvedRepository,
 		Signing:     SigningMode(stringOrDefault(repo.Commit.Signing, string(SigningAuto))),
 		Author:      resolveAuthor(repo.Commit.Author),
 		PushRetries: resolveRetries(repo.Push.Retries),
+		From:        repo.Init.From,
+		KeepHistory: repo.Init.KeepHistory,
 	}
 
 	return resolved, nil

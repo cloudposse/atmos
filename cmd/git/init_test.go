@@ -26,9 +26,83 @@ func setInitTestConfig(t *testing.T, repos map[string]schema.GitRepository) {
 }
 
 func TestRunInit_KeepHistoryRequiresFrom(t *testing.T) {
+	setInitTestConfig(t, map[string]schema.GitRepository{
+		"docs": {URI: "https://github.com/acme/docs.git", Workdir: t.TempDir()},
+	})
+
 	err := runInit(context.Background(), &initOptions{KeepHistory: true}, []string{"docs"})
 	require.Error(t, err)
 	assert.True(t, errors.Is(err, errUtils.ErrInvalidFlag))
+}
+
+// TestRunInit_ConfiguredKeepHistoryRequiresFrom: keep_history set in config but
+// no seed source anywhere is the same error as the flag without --from.
+func TestRunInit_ConfiguredKeepHistoryRequiresFrom(t *testing.T) {
+	setInitTestConfig(t, map[string]schema.GitRepository{
+		"docs": {
+			URI:     "https://github.com/acme/docs.git",
+			Workdir: t.TempDir(),
+			Init:    schema.GitInitConfig{KeepHistory: true},
+		},
+	})
+
+	err := runInit(context.Background(), &initOptions{}, []string{"docs"})
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, errUtils.ErrInvalidFlag))
+}
+
+// TestRunInit_UsesConfiguredFrom: with no --from flag, init.from from config
+// seeds the repository.
+func TestRunInit_UsesConfiguredFrom(t *testing.T) {
+	setInitTestConfig(t, map[string]schema.GitRepository{
+		"docs": {
+			URI:     "https://github.com/acme/docs.git",
+			Workdir: t.TempDir(),
+			Init: schema.GitInitConfig{
+				From:        "https://github.com/acme/template.git",
+				KeepHistory: true,
+			},
+		},
+	})
+
+	var got *atmosgit.InitOptions
+	withTestProvider(t, &stubGitProvider{
+		initFn: func(_ context.Context, opts *atmosgit.InitOptions) error {
+			got = opts
+			return nil
+		},
+	})
+
+	require.NoError(t, runInit(context.Background(), &initOptions{}, []string{"docs"}))
+
+	require.NotNil(t, got)
+	assert.Equal(t, "https://github.com/acme/template.git", got.FromURI)
+	assert.True(t, got.KeepHistory)
+}
+
+// TestRunInit_FlagFromOverridesConfig: the --from flag wins over init.from.
+func TestRunInit_FlagFromOverridesConfig(t *testing.T) {
+	setInitTestConfig(t, map[string]schema.GitRepository{
+		"docs": {
+			URI:     "https://github.com/acme/docs.git",
+			Workdir: t.TempDir(),
+			Init:    schema.GitInitConfig{From: "https://github.com/acme/config-template.git"},
+		},
+	})
+
+	var got *atmosgit.InitOptions
+	withTestProvider(t, &stubGitProvider{
+		initFn: func(_ context.Context, opts *atmosgit.InitOptions) error {
+			got = opts
+			return nil
+		},
+	})
+
+	opts := &initOptions{From: "https://github.com/acme/flag-template.git"}
+	require.NoError(t, runInit(context.Background(), opts, []string{"docs"}))
+
+	require.NotNil(t, got)
+	assert.Equal(t, "https://github.com/acme/flag-template.git", got.FromURI)
 }
 
 func TestRunInit_UnknownRepository(t *testing.T) {

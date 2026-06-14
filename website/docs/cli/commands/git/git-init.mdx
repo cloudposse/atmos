@@ -34,6 +34,22 @@ git:
 atmos git init flux-deploy
 ```
 
+The seed source can also be configured per repository under `init`, so a plain
+`atmos git init flux-deploy` reproduces the same bootstrap every time:
+
+```yaml
+git:
+  repositories:
+    flux-deploy:
+      uri: https://github.com/acme/flux-deploy.git
+      branch: main
+      init:
+        from: https://github.com/acme/flux-template.git
+        keep_history: false
+```
+
+The `--from` and `--keep-history` flags override these configured defaults.
+
 ## Examples
 
 ```shell
@@ -88,13 +104,13 @@ The initial commit created in fresh mode honors the repository's [`commit.signin
 <dl>
     <dt>`--from` <em>(optional)</em></dt>
     <dd>
-        Seed the new repository's content from another repository URI (a template, or a repository being migrated).
+        Seed the new repository's content from another repository URI (a template, or a repository being migrated). Overrides the repository's configured `init.from`.
         Environment variable: `ATMOS_GIT_FROM`
     </dd>
 
     <dt>`--keep-history` <em>(optional)</em></dt>
     <dd>
-        Keep the `--from` repository's full history and keep the source reachable as the `upstream` remote so future updates can be pulled. Requires `--from`.
+        Keep the seed repository's full history and keep the source reachable as the `upstream` remote so future updates can be pulled. Requires a seed source from either `--from` or the repository's configured `init.from`. Also settable as `init.keep_history`.
         Environment variable: `ATMOS_GIT_KEEP_HISTORY`
     </dd>
 

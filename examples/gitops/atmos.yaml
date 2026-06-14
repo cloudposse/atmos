@@ -6,6 +6,11 @@ git:
       uri: https://github.com/cloudposse-sandbox/empty.git
       # SSH alternative when an SSH key is available:
       # uri: git@github.com:cloudposse-sandbox/empty.git
+      # Optional: seed `atmos git init deploy` from a template repository.
+      # The --from / --keep-history flags override these defaults.
+      # init:
+      #   from: https://github.com/cloudposse/terraform-aws-components.git
+      #   keep_history: false
 
 logs:
   file: "/dev/stderr"

@@ -33,6 +33,19 @@ type GitRepository struct {
 	Commit GitCommitConfig `yaml:"commit,omitempty" json:"commit,omitempty" mapstructure:"commit"`
 	// Push controls push retry behavior.
 	Push GitPushConfig `yaml:"push,omitempty" json:"push,omitempty" mapstructure:"push"`
+	// Init sets defaults for `atmos git init` on this repository.
+	Init GitInitConfig `yaml:"init,omitempty" json:"init,omitempty" mapstructure:"init"`
+}
+
+// GitInitConfig sets defaults for `atmos git init` on a managed repository.
+type GitInitConfig struct {
+	// From seeds the new repository from another repository's content. It acts
+	// as the default for the `--from` flag; the flag overrides it when set.
+	From string `yaml:"from,omitempty" json:"from,omitempty" mapstructure:"from"`
+	// KeepHistory preserves the source's full history and keeps the source
+	// reachable as the 'upstream' remote. Only valid together with From.
+	// The `--keep-history` flag also enables it.
+	KeepHistory bool `yaml:"keep_history,omitempty" json:"keep_history,omitempty" mapstructure:"keep_history"`
 }
 
 // GitCloneConfig controls clone behavior for a managed repository.
