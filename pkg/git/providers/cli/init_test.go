@@ -59,15 +59,16 @@ func TestInitEmptyAppendsExtraArgs(t *testing.T) {
 	runner := newFakeRunner()
 	provider := New(WithRunner(runner))
 	workdir := filepath.Join(t.TempDir(), "deploy")
+	tpl := filepath.Join(t.TempDir(), "tpl")
 
 	err := provider.Init(context.Background(), &atmosgit.InitOptions{
 		RepoContext: atmosgit.RepoContext{Workdir: workdir, Branch: "main"},
 		URI:         "https://github.com/acme/deploy.git",
-		ExtraArgs:   []string{"--template", "/tmp/tpl"},
+		ExtraArgs:   []string{"--template", tpl},
 	})
 	require.NoError(t, err)
 
-	assert.Equal(t, []string{"init", "-b", "main", "--template", "/tmp/tpl"}, runner.calls[0].args)
+	assert.Equal(t, []string{"init", "-b", "main", "--template", tpl}, runner.calls[0].args)
 }
 
 func TestInitFromFreshImportsContentWithSingleCommit(t *testing.T) {

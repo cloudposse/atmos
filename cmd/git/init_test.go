@@ -3,6 +3,7 @@ package git
 import (
 	"context"
 	"errors"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -139,6 +140,12 @@ func TestRunInit_DryRunSkipsProvider(t *testing.T) {
 	assert.False(t, called, "dry-run must not invoke the provider")
 }
 
+// TestInitCmdForwardsNativeArgs parses and runs the package-level initCmd
+// directly. The cmd.NewTestKit(t) helper cannot be used here: cmd/root.go
+// blank-imports cmd/git, so cmd/git importing cmd would be a circular import
+// (the same constraint documented in cmd/terraform/utils_hooks_test.go). These
+// tests operate only on package-local command vars and do not mutate RootCmd
+// state.
 func TestInitCmdForwardsNativeArgs(t *testing.T) {
 	setInitTestConfig(t, map[string]schema.GitRepository{
 		"docs": {URI: "https://github.com/acme/docs.git", Workdir: t.TempDir()},
@@ -152,8 +159,9 @@ func TestInitCmdForwardsNativeArgs(t *testing.T) {
 		},
 	})
 
-	require.NoError(t, initCmd.ParseFlags([]string{"docs", "--", "--template", "/tmp/tpl"}))
+	tpl := filepath.Join(t.TempDir(), "tpl")
+	require.NoError(t, initCmd.ParseFlags([]string{"docs", "--", "--template", tpl}))
 	require.NoError(t, initCmd.RunE(initCmd, initCmd.Flags().Args()))
 
-	assert.Equal(t, []string{"--template", "/tmp/tpl"}, got)
+	assert.Equal(t, []string{"--template", tpl}, got)
 }

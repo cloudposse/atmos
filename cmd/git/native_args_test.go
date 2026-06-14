@@ -15,6 +15,12 @@ import (
 // cobra RunE wiring into the provider options. ParseFlags records
 // ArgsLenAtDash on the command exactly as a full cobra Execute would, so RunE
 // sees the same state without spinning up the whole root command.
+//
+// Note on test isolation: cmd.NewTestKit(t) cannot be used here. cmd/root.go
+// blank-imports cmd/git, so cmd/git importing cmd would be a circular import
+// (the same constraint documented in cmd/terraform/utils_hooks_test.go). These
+// tests operate only on package-local command vars (pushCmd/pullCmd) and do not
+// mutate RootCmd state.
 
 func TestPushCmdForwardsNativeArgs(t *testing.T) {
 	var got []string

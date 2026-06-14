@@ -24,6 +24,15 @@ var runCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		defer perf.Track(atmosConfigPtr, "git.hooks.run.RunE")()
 
+		// DisableFlagParsing means cobra never auto-handles help, so a bare
+		// `atmos git hooks run --help` would otherwise fall through to the
+		// empty-hook-name path below and surface a config error. Handle it
+		// explicitly so help is shown instead.
+		if isHelpRequest(args) {
+			_ = cmd.Help()
+			return nil
+		}
+
 		hookName, hookArgs := extractHookNameAndArgs(args)
 		if hookName == "" {
 			return errUtils.Build(errUtils.ErrGitHookNotConfigured).
@@ -36,9 +45,24 @@ var runCmd = &cobra.Command{
 	},
 }
 
+// isHelpRequest reports whether args contain a help flag (-h/--help) before any
+// "--" separator. Args after "--" belong to the downstream hook command and
+// must not be interpreted as a help request for this command.
+func isHelpRequest(args []string) bool {
+	for _, a := range args {
+		if a == "--" {
+			return false
+		}
+		if a == "-h" || a == "--help" {
+			return true
+		}
+	}
+	return false
+}
+
 // extractHookNameAndArgs splits the raw args into hook name and remaining args.
-// Skips any leading flags (e.g. --help) so a bare call like
-// `atmos git hooks run --help` still works for documentation purposes.
+// Skips any leading flags so the first non-flag token is treated as the hook
+// name. Help flags are handled separately in RunE before this is called.
 func extractHookNameAndArgs(args []string) (string, []string) {
 	for i, a := range args {
 		if !strings.HasPrefix(a, "-") {

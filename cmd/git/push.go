@@ -24,7 +24,7 @@ var pushCmd = &cobra.Command{
 	Long: `Push the current branch to the configured remote for a named repository
 (configured under git.repositories) or a filesystem path. Atmos never force-pushes.
 
-On non-fast-forward rejection, push will retry (pull --ff-only, then re-push)
+On non-fast-forward rejection, push will retry (pull --rebase, then re-push)
 up to push.retries times (default 3). Use --dry-run to report what would be
 pushed without pushing.
 
