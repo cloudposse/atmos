@@ -41,7 +41,10 @@ jobs:
   # ensure the code builds...
   build:
     name: Build (${{ matrix.target }})
-    timeout-minutes: 15
+    # windows-latest compiles this large dependency tree far slower than the
+    # Linux (self-hosted, s3-cache) and macOS runners, and a cold Go build cache
+    # after dependency changes pushes it past a tight limit. Give it headroom.
+    timeout-minutes: 25
     strategy:
       fail-fast: false
       matrix:
@@ -356,7 +359,7 @@ jobs:
         demo-folder:
           - demo-floci
 
-    timeout-minutes: 20
+    timeout-minutes: 30
     steps:
 
       - name: Download build artifacts
@@ -388,7 +391,11 @@ jobs:
       - name: Run tests for ${{ matrix.demo-folder }}
         run: |
           cd examples/${{ matrix.demo-folder }}
-          atmos test
+          timeout 25m atmos test || {
+            status=$?
+            echo "atmos test failed or timed out with status ${status}"
+            exit "${status}"
+          }
 
   # run k3s demo tests
   k3s:

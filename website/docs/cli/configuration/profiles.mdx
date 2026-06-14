@@ -58,6 +58,24 @@ Atmos resolves the active profile using this precedence (highest first):
 3. `profiles.default` in the base `atmos.yaml`
 4. No profile
 
+### Pinning a Profile Per Project
+
+You can pin a profile for a whole project by setting `ATMOS_PROFILE` in a committed dotenv file and including it in the base `atmos.yaml` [`env`](/cli/configuration/env) section:
+
+<File title=".env">
+```dotenv
+ATMOS_PROFILE=dev
+```
+</File>
+
+<File title="atmos.yaml">
+```yaml
+env: !include .env
+```
+</File>
+
+Atmos promotes `ATMOS_`-prefixed variables from the `env` section into its own environment before it resolves the active profile, so every `atmos` command in the project uses the `dev` profile automatically. An exported `ATMOS_PROFILE` (or a `--profile` flag) still wins, so per-command overrides like `ATMOS_PROFILE=ci atmos …` continue to work. See [Pinning Atmos Configuration Per Project](/cli/configuration/env#pinning-atmos-configuration-per-project) for details.
+
 ## Profile Discovery
 
 Atmos discovers profiles from multiple locations in the following precedence order (highest to lowest):

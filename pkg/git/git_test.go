@@ -63,7 +63,7 @@ func initNativeGitRepo(t *testing.T) string {
 func runNativeGit(t *testing.T, dir string, args ...string) {
 	t.Helper()
 
-	cmd := exec.Command("git", args...)
+	cmd := exec.Command("git", gitTestArgs(args...)...)
 	cmd.Dir = dir
 	output, err := cmd.CombinedOutput()
 	require.NoError(t, err, string(output))
@@ -72,7 +72,7 @@ func runNativeGit(t *testing.T, dir string, args ...string) {
 func runNativeGitOutput(t *testing.T, dir string, args ...string) string {
 	t.Helper()
 
-	cmd := exec.Command("git", args...)
+	cmd := exec.Command("git", gitTestArgs(args...)...)
 	cmd.Dir = dir
 	output, err := cmd.CombinedOutput()
 	require.NoError(t, err, string(output))
