@@ -1,7 +1,11 @@
 // Package provider defines the CI/CD provider interface and related types.
 package provider
 
-import "context"
+import (
+	"context"
+
+	"github.com/cloudposse/atmos/pkg/ci/cache"
+)
 
 // BaseResolution contains the resolved base commit for affected detection.
 type BaseResolution struct {
@@ -73,6 +77,17 @@ type DebugModeDetector interface {
 	// at the CI provider level. Callers use this to auto-promote their own
 	// log level.
 	IsDebugMode() bool
+}
+
+// CacheProvider is an optional capability for CI providers that expose a remote
+// build cache (for example, the GitHub Actions cache). Providers implement this
+// when their platform offers a documented cache store reachable from within a
+// run. Cache() returns errUtils.ErrCacheUnavailable when the provider is active
+// but the cache cannot be reached in the current environment (e.g. the runtime
+// cache token is absent).
+type CacheProvider interface {
+	// Cache returns the provider's cache backend.
+	Cache() (cache.Backend, error)
 }
 
 // OutputWriter writes CI outputs (environment variables, job summaries, etc.).

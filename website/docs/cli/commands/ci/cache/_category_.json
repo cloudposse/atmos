@@ -1,0 +1,11 @@
+{
+  "label": "cache",
+  "className": "command",
+  "collapsible": true,
+  "collapsed": true,
+  "position": 3,
+  "link": {
+    "type": "doc",
+    "id": "cache"
+  }
+}

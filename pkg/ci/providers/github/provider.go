@@ -197,12 +197,14 @@ func (p *Provider) OutputWriter() provider.OutputWriter {
 }
 
 func init() {
-	// Only register if we can detect GitHub Actions.
-	// The client is lazily initialized — GITHUB_TOKEN is not required at init time.
-	p := NewProvider()
-	if p.Detect() {
-		ci.Register(p)
-	}
+	// Register unconditionally: registration advertises the provider's
+	// capabilities, while Detect() decides whether it is active for the current
+	// run (GITHUB_ACTIONS=true). Registering outside a runner lets cache
+	// administration (`atmos ci cache list`/`delete`) resolve the GitHub cache
+	// backend locally via ci.ResolveAdminCache, without making the provider the
+	// detected one. The client is lazily initialized — GITHUB_TOKEN is not
+	// required at init time.
+	ci.Register(NewProvider())
 }
 
 // serverURLOrDefault returns GITHUB_SERVER_URL, defaulting to github.com.
