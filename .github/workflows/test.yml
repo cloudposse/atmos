@@ -332,34 +332,26 @@ jobs:
           category: hadolint
           wait-for-processing: true
 
-  # run localstack demo tests
-  localstack:
-    name: "[localstack] ${{ matrix.demo-folder }}"
+  # Run the AWS-emulator demo tests against Floci (a free, LocalStack-compatible emulator;
+  # LocalStack Community Edition was EOL'd in March 2026).
+  # NOTE: "[floci] demo-floci" must be kept in sync with the required status checks in
+  # branch protection on main (previously "[localstack] demo-localstack").
+  floci:
+    name: "[floci] ${{ matrix.demo-folder }}"
     needs: build
     runs-on: ubuntu-latest
 
     services:
-      localstack:
-        image: public.ecr.aws/localstack/localstack:1.4.0
+      floci:
+        image: floci/floci:1.5.23
         ports:
           - 4566:4566
-          - 4510-4559:4510-4559
-        env:
-          SERVICES: s3, iam, lambda, dynamodb, sts, account, ec2
-          DEBUG: 0
-          DOCKER_HOST: unix:///var/run/docker.sock
-          AWS_ACCESS_KEY_ID: test
-          AWS_SECRET_ACCESS_KEY: test
-          AWS_DEFAULT_REGION: us-east-1
-          AWS_REGION: us-east-1
-        volumes:
-          - /var/run/docker.sock:/var/run/docker.sock
 
     strategy:
       fail-fast: false
       matrix:
         demo-folder:
-          - demo-localstack
+          - demo-floci
 
     timeout-minutes: 20
     steps:
@@ -585,7 +577,7 @@ jobs:
           # - demo-custom-command
           # - demo-json-validation
           # - demo-library
-          # - demo-localstack
+          # - demo-floci
           # - demo-opa-validation
           # - demo-opentofu
           # - demo-project
@@ -642,7 +634,7 @@ jobs:
       matrix:
         demo-folder:
           - demo-context
-          - demo-localstack
+          - demo-floci
           - demo-stacks
           - demo-helmfile
           - quick-start-advanced
@@ -668,7 +660,7 @@ jobs:
             }
 
   release:
-    needs: [test, lint, mock, k3s, localstack, docker, validate]
+    needs: [test, lint, mock, k3s, floci, docker, validate]
     if: github.event_name == 'push'
     uses: cloudposse/.github/.github/workflows/shared-go-auto-release.yml@main
     with:
