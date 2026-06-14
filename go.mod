@@ -84,6 +84,7 @@ require (
 	github.com/hexops/gotextdiff v1.0.3
 	github.com/jfrog/jfrog-client-go v1.55.0
 	github.com/johannesboyne/gofakes3 v0.0.0-20260208201424-4c385a1f6a73
+	github.com/joho/godotenv v1.5.1
 	github.com/json-iterator/go v1.1.12
 	github.com/jwalton/go-supportscolor v1.2.0
 	github.com/kubescape/go-git-url v0.0.31
@@ -101,6 +102,7 @@ require (
 	github.com/openai/openai-go v1.12.0
 	github.com/opencontainers/image-spec v1.1.1
 	github.com/otiai10/copy v1.14.1
+	github.com/pact-foundation/pact-go/v2 v2.5.1
 	github.com/pkg/errors v0.9.1
 	github.com/playwright-community/playwright-go v0.5700.1
 	github.com/posthog/posthog-go v1.12.6
@@ -229,7 +231,7 @@ require (
 	github.com/docker/docker-credential-helpers v0.9.7 // indirect
 	github.com/docker/libkv v0.2.2-0.20180912205406-458977154600 // indirect
 	github.com/dsnet/compress v0.0.1 // indirect
-	github.com/dustin/go-humanize v1.0.1 // indirect
+	github.com/dustin/go-humanize v1.0.1
 	github.com/dustin/gojson v0.0.0-20160307161227-2e71ec9dd5ad // indirect
 	github.com/dvsekhvalnov/jose2go v1.8.0 // indirect
 	github.com/editorconfig/editorconfig-core-go/v2 v2.6.4 // indirect
@@ -313,7 +315,6 @@ require (
 	github.com/jfrog/gofrog v1.7.6 // indirect
 	github.com/jinzhu/copier v0.4.0 // indirect
 	github.com/jmespath/go-jmespath v0.4.0 // indirect
-	github.com/joho/godotenv v1.5.1 // indirect
 	github.com/kballard/go-shellquote v0.0.0-20180428030007-95032a82bc51 // indirect
 	github.com/kevinburke/ssh_config v1.6.0 // indirect
 	github.com/klauspost/compress v1.18.6 // indirect
@@ -481,6 +482,7 @@ require (
 	github.com/go-openapi/swag/typeutils v0.25.4 // indirect
 	github.com/go-openapi/swag/yamlutils v0.25.4 // indirect
 	github.com/google/gnostic-models v0.7.0 // indirect
+	github.com/hashicorp/logutils v1.0.0 // indirect
 	github.com/monochromegane/go-gitignore v0.0.0-20200626010858-205db1a8cc00 // indirect
 	github.com/standard-webhooks/standard-webhooks/libraries v0.0.1 // indirect
 	github.com/xlab/treeprint v1.2.0 // indirect

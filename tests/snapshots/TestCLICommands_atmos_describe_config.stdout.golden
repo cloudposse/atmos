@@ -189,7 +189,8 @@
     }
   },
   "describe": {
-    "settings": {}
+    "settings": {},
+    "affected": {}
   },
   "vendor": {
     "base_path": "",
@@ -256,6 +257,9 @@
     "use_tool_versions": false,
     "use_lock_file": false
   },
+  "git": {
+    "list": {}
+  },
   "profiles": {},
   "metadata": {},
   "list": {
@@ -279,7 +283,8 @@
       "statuses": {}
     },
     "comments": {},
-    "templates": {}
+    "templates": {},
+    "cache": {}
   },
   "ai": {
     "sessions": {

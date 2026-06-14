@@ -231,6 +231,76 @@ hooks:
 See [Store function reference](#store-function-reference) below for
 configuration details.
 
+### `kind: git`
+
+Publishes component artifacts to a Git repository on lifecycle events —
+commit (and optionally push) generated files through the shared
+[Atmos Git service](/cli/commands/git/usage), with its safety rules
+(no force push, path-scoped commits, bounded push retry) and
+authentication built in.
+
+By default the hook targets the **current repository** — the repo the
+component already lives in — matching the common case of committing
+generated files back to the working repo after `terraform apply`:
+
+```yaml
+components:
+  terraform:
+    app:
+      hooks:
+        publish-artifacts:
+          events:
+            - after.terraform.apply
+          kind: git
+          # repository omitted -> the current repository
+          commit:
+            message: "Update generated artifacts for {{ .component }} in {{ .stack }}"
+            paths:
+              - generated/{{ .stack }}/{{ .component }}
+          push: true
+```
+
+Setting `repository: <name>` targets a managed repository configured
+under the top-level [`git.repositories`](/cli/configuration/git) section
+instead — Atmos clones/reconciles its workdir, commits, and pushes with
+the repository's configured identity, signing, and retry settings:
+
+```yaml
+components:
+  terraform:
+    app:
+      hooks:
+        publish-artifacts:
+          events:
+            - after.terraform.apply
+          kind: git
+          repository: generated-terraform
+          commit:
+            message: "Update generated artifacts for {{ .component }} in {{ .stack }}"
+          push: true
+```
+
+Behavior notes:
+
+- **Clean no-op:** when there are no changes to commit, the hook
+  succeeds without creating a commit — no empty commits.
+- **Push only on commit:** `push: true` pushes only when a commit was
+  actually created.
+- **Provenance trailers:** published commits carry `Atmos-Stack`,
+  `Atmos-Component`, and `Atmos-Source-SHA` trailers, making
+  deployment-repo commits traceable back to exactly what produced them.
+- **Failure mode:** unlike the advisory tool kinds, `kind: git` defaults
+  to `on_failure: fail` — a silently dropped commit or push loses
+  artifacts. Override with `on_failure: warn` or `ignore` if publishing
+  is best-effort.
+- **Templating:** `commit.message` and `commit.paths` support the
+  standard hook template context (`{{ .component }}`, `{{ .stack }}`,
+  `{{ .vars.* }}`).
+
+`kind: git` hooks are separate from *local* Git hooks (`pre-commit`,
+`commit-msg`, ...) — those are configured under `git.hooks` and managed
+by [`atmos git hooks`](/cli/commands/git/hooks/).
+
 ### `kind: command` (generic engine)
 
 The escape hatch — runs any toolchain-resolved binary with Atmos's
@@ -489,7 +559,7 @@ Stores](/stacks/sharing-state/stores).
   <dd>List of [lifecycle events](#supported-lifecycle-events) that trigger this hook.</dd>
 
   <dt>`hooks.<name>.kind`</dt>
-  <dd>Which engine runs the hook. One of `store`, `command`, `infracost`, `checkov`, `trivy`, `kics`. Aliased from legacy `command:` field.</dd>
+  <dd>Which engine runs the hook. One of `store`, `command`, `git`, `infracost`, `checkov`, `trivy`, `kics`. Aliased from legacy `command:` field.</dd>
 
   <dt>`hooks.<name>.command`</dt>
   <dd>For `kind: command`: the binary to execute (resolved via the toolchain or PATH). Named kinds default this.</dd>
@@ -508,6 +578,18 @@ Stores](/stacks/sharing-state/stores).
 
   <dt>`hooks.<name>.name` / `hooks.<name>.outputs`</dt>
   <dd>Store-kind specific. See [store function reference](/stacks/sharing-state/stores).</dd>
+
+  <dt>`hooks.<name>.repository`</dt>
+  <dd>For `kind: git`: the name of a managed repository under the top-level [`git.repositories`](/cli/configuration/git) config. Omit to target the current repository.</dd>
+
+  <dt>`hooks.<name>.commit.message`</dt>
+  <dd>For `kind: git`: the commit message. Supports the standard hook template context. Empty selects the engine default (`Update artifacts for <component> in <stack>`).</dd>
+
+  <dt>`hooks.<name>.commit.paths`</dt>
+  <dd>For `kind: git`: repo-relative paths staged for the commit. Paths must resolve inside the repository worktree.</dd>
+
+  <dt>`hooks.<name>.push`</dt>
+  <dd>For `kind: git`: push the created commit to the remote when `true` (only when a commit was actually created).</dd>
 </dl>
 
 ## Examples
@@ -528,4 +610,6 @@ Each uses dummy AWS provider config so `tofu plan` succeeds offline.
 - [Component Dependencies](/stacks/dependencies/components) — `dependencies.tools` syntax used for auto-install
 - [Toolchain Configuration](/cli/configuration/toolchain) — registry overrides
 - [External Stores](/stacks/sharing-state/stores) — reading data written by `kind: store`
+- [Git Configuration](/cli/configuration/git) — managed repositories used by `kind: git`
+- [`atmos git`](/cli/commands/git/usage) — imperative Git operations on the same shared service
 - [Terraform State](/stacks/sharing-state/terraform-state) — alternative state-sharing pattern via `!terraform.state`

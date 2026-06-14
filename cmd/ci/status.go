@@ -1,6 +1,8 @@
 package ci
 
 import (
+	"sort"
+
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
@@ -106,9 +108,11 @@ func runStatus(cmd *cobra.Command, _ []string) error {
 
 // getDefaultProvider returns a provider from the registry.
 // This is used when not running in CI but a provider is still available.
+// Names are sorted so selection is deterministic regardless of registry map
+// ordering (providers self-register from multiple init() functions).
 func getDefaultProvider() (cipkg.Provider, error) {
-	// Try to get any registered provider from the registry.
 	names := cipkg.List()
+	sort.Strings(names)
 	for _, name := range names {
 		p, err := cipkg.Get(name)
 		if err == nil {

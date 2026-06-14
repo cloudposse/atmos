@@ -19,9 +19,19 @@ type DescribeSettings struct {
 	IncludeEmpty *bool `yaml:"include_empty,omitempty" json:"include_empty,omitempty" mapstructure:"include_empty"`
 }
 
+// DescribeAffected contains configuration for the `atmos describe affected` command.
+type DescribeAffected struct {
+	// Sections is the authoritative list of top-level component sections compared
+	// when computing affected components. When set, it REPLACES the built-in defaults.
+	// When empty, the built-in defaults are used. `metadata` and `settings` are always
+	// evaluated via dedicated logic and are not controlled by this list.
+	Sections []string `yaml:"sections,omitempty" json:"sections,omitempty" mapstructure:"sections"`
+}
+
 // Describe contains configuration for the describe command.
 type Describe struct {
 	Settings DescribeSettings `yaml:"settings,omitempty" json:"settings,omitempty" mapstructure:"settings"`
+	Affected DescribeAffected `yaml:"affected,omitempty" json:"affected,omitempty" mapstructure:"affected"`
 }
 
 // ProfilesConfig defines configuration for the profiles system.
@@ -104,6 +114,7 @@ type AtmosConfiguration struct {
 	Profiler        profiler.Config     `yaml:"profiler,omitempty" json:"profiler,omitempty" mapstructure:"profiler"`
 	TrackProvenance bool                `yaml:"track_provenance,omitempty" json:"track_provenance,omitempty" mapstructure:"track_provenance"`
 	Toolchain       Toolchain           `yaml:"toolchain,omitempty" json:"toolchain,omitempty" mapstructure:"toolchain"`
+	Git             GitConfig           `yaml:"git,omitempty" json:"git,omitempty" mapstructure:"git"`
 	Devcontainer    map[string]any      `yaml:"devcontainer,omitempty" json:"devcontainer,omitempty" mapstructure:"devcontainer"`
 	Profiles        ProfilesConfig      `yaml:"profiles,omitempty" json:"profiles,omitempty" mapstructure:"profiles"`
 	Metadata        ConfigMetadata      `yaml:"metadata,omitempty" json:"metadata,omitempty" mapstructure:"metadata"`
@@ -555,6 +566,38 @@ type ShellConfig struct {
 	Prompt string `yaml:"prompt" json:"prompt" mapstructure:"prompt"`
 }
 
+// TerraformPlanCIResultHandler receives the complete result set for one
+// graph-backed Terraform run and can emit CI artifacts after scheduling has
+// fully completed.
+type TerraformPlanCIResultHandler interface {
+	HandleTerraformPlanCIResults(TerraformPlanCIResultSet) error
+}
+
+// TerraformPlanCIResultSet contains deterministic per-node Terraform results
+// for CI rendering.
+type TerraformPlanCIResultSet struct {
+	Command string
+	Results []TerraformPlanCIResult
+}
+
+// TerraformPlanCIResult contains the scheduler and Terraform output details
+// needed to render CI artifacts for one Terraform component.
+type TerraformPlanCIResult struct {
+	NodeID     string
+	Stack      string
+	Component  string
+	Status     string
+	Processed  bool
+	Changed    bool
+	ExitCode   int
+	Output     string
+	LogFiles   map[string]string
+	StartedAt  time.Time
+	FinishedAt time.Time
+	DurationMS int64
+	Error      string
+}
+
 // CIConfig contains CI/CD integration configuration.
 // Uses provider-agnostic naming to support GitHub Actions, GitLab CI, and other providers.
 type CIConfig struct {
@@ -564,6 +607,44 @@ type CIConfig struct {
 	Checks    CIChecksConfig    `yaml:"checks,omitempty" json:"checks,omitempty" mapstructure:"checks"`
 	Comments  CICommentsConfig  `yaml:"comments,omitempty" json:"comments,omitempty" mapstructure:"comments"`
 	Templates CITemplatesConfig `yaml:"templates,omitempty" json:"templates,omitempty" mapstructure:"templates"`
+	Cache     CICacheConfig     `yaml:"cache,omitempty" json:"cache,omitempty" mapstructure:"cache"`
+}
+
+// CICacheConfig configures the CI build cache, which restores a well-known
+// cache directory (the toolchain install path and anything else under the XDG
+// cache root) at Atmos startup and saves it at exit, using the active CI
+// provider's cache store (e.g. the GitHub Actions cache). All operations are
+// no-ops when no cache-capable CI provider is detected (i.e. outside CI).
+type CICacheConfig struct {
+	// Enabled is the master switch for the CI cache (env: ATMOS_CI_CACHE_ENABLED).
+	Enabled bool `yaml:"enabled,omitempty" json:"enabled,omitempty" mapstructure:"enabled"`
+
+	// Auto controls automatic behavior: "off" (default), "restore", "save", or "both".
+	// "restore" restores on startup; "save" saves on exit; "both" does both. The
+	// explicit `atmos ci cache` subcommands are always available regardless.
+	Auto string `yaml:"auto,omitempty" json:"auto,omitempty" mapstructure:"auto"`
+
+	// Root overrides the well-known cache directory that is archived. Defaults
+	// to the Atmos XDG cache directory (~/.cache/atmos), of which the toolchain
+	// is a sub-path. Honors ATMOS_XDG_CACHE_HOME / XDG_CACHE_HOME when unset.
+	Root string `yaml:"root,omitempty" json:"root,omitempty" mapstructure:"root"`
+
+	// Paths are root-relative subpaths to include in the cache. Empty means the
+	// entire root is cached.
+	Paths []string `yaml:"paths,omitempty" json:"paths,omitempty" mapstructure:"paths"`
+
+	// Key is the cache key. Supports Go templates with {{.OS}}, {{.Arch}} and a
+	// hashFiles function. Defaults to a key derived from the toolchain lockfile
+	// hash plus OS/arch when unset.
+	Key string `yaml:"key,omitempty" json:"key,omitempty" mapstructure:"key"`
+
+	// RestoreKeys are prefix fallbacks tried (in order) when the exact key is
+	// absent, mirroring actions/cache restore-keys.
+	RestoreKeys []string `yaml:"restore_keys,omitempty" json:"restore_keys,omitempty" mapstructure:"restore_keys"`
+
+	// Compression selects the archive compression. Currently only "gzip" (the
+	// default) is supported.
+	Compression string `yaml:"compression,omitempty" json:"compression,omitempty" mapstructure:"compression"`
 }
 
 // CIOutputConfig configures CI output variables for downstream jobs.
@@ -1117,6 +1198,7 @@ type ConfigAndStacksInfo struct {
 	TerraformFailureMode       string
 	FailFast                   bool
 	KeepGoing                  bool
+	DisablePluginCache         bool
 	TerraformPlanLogOrder      string
 	TerraformPlanHide          []string
 	TerraformPlanHideNoChanges bool
@@ -1130,6 +1212,12 @@ type ConfigAndStacksInfo struct {
 	// set to the executed component, combined stdout+stderr output, and the execution
 	// error (nil on success). Nil means no per-component callback.
 	PerComponentHook func(info *ConfigAndStacksInfo, output string, execErr error)
+
+	// TerraformPlanCIResultHandler is called once after a graph-backed
+	// multi-component Terraform plan/apply/destroy run completes. It
+	// centralizes CI output writes for concurrent execution so GitHub
+	// summary/output files are not written by worker goroutines.
+	TerraformPlanCIResultHandler TerraformPlanCIResultHandler
 }
 
 // GetComponentEnvSection returns the component's env section map.

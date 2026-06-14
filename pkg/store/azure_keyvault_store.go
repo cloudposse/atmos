@@ -94,8 +94,11 @@ func NewAzureKeyVaultStore(options AzureKeyVaultStoreOptions, identityName strin
 // If identityName is non-empty, it overrides the store's identity. Otherwise, the existing identity is preserved.
 func (s *AzureKeyVaultStore) SetAuthContext(resolver AuthContextResolver, identityName string) {
 	s.authResolver = resolver
-	if identityName != "" {
+	if identityName != "" && s.identityName != identityName {
 		s.identityName = identityName
+		s.client = nil
+		s.initOnce = sync.Once{}
+		s.initErr = nil
 	}
 }
 

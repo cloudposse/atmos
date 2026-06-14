@@ -80,6 +80,7 @@ var (
 	ErrTerminalTooNarrow                     = errors.New("terminal too narrow")
 	ErrSpinnerReturnedNilModel               = errors.New("spinner returned nil model")
 	ErrSpinnerUnexpectedModelType            = errors.New("spinner returned unexpected model type")
+	ErrSpinnerOperationInterrupted           = errors.New("operation was interrupted")
 
 	// Theme-related errors.
 	ErrThemeNotFound = errors.New("theme not found")
@@ -207,6 +208,17 @@ var (
 	ErrGitWorktreeAdd              = errors.New("failed to create git worktree")
 	ErrFetchOrigin                 = errors.New("failed to fetch from origin")
 	ErrDeepenOrigin                = errors.New("failed to deepen fetch from origin")
+	ErrGitRepositoryNotFound       = errors.New("git repository not configured")
+	ErrGitAuthFailed               = errors.New("git authentication failed")
+	ErrGitPushRejected             = errors.New("git push rejected: non-fast-forward")
+	ErrGitDirtyUnmanagedFiles      = errors.New("unmanaged dirty files detected outside commit paths")
+	ErrGitPathEscapesWorktree      = errors.New("path resolves outside git worktree")
+	ErrGitHookNotConfigured        = errors.New("git hook not configured")
+	ErrGitRepositoryRequired       = errors.New("git repository name or URI is required")
+	ErrGitProviderNotFound         = errors.New("git provider not registered")
+	ErrGitWorkdirExists            = errors.New("git workdir already exists")
+	ErrGitNoTrackingBranch         = errors.New("no branch to pull: the current branch has no upstream")
+	ErrGitWorkdirNotInitialized    = errors.New("git repository not cloned or initialized")
 
 	// I/O and output errors.
 	ErrBuildIOConfig  = errors.New("failed to build I/O config")
@@ -675,6 +687,7 @@ var (
 	ErrTopologicalOrder             = errors.New("topological sort failed")
 	ErrFormatForLogging             = errors.New("format affected for logging failed")
 	ErrQueryEvaluation              = errors.New("query evaluation failed")
+	ErrNilResult                    = errors.New("nil result")
 
 	// Cache-related errors.
 	ErrCacheLocked    = errors.New("cache file is locked")
@@ -1046,6 +1059,22 @@ var (
 	ErrArtifactStoreInvalidArgs = errors.New("invalid artifact store arguments")
 	ErrArtifactMetadataFailed   = errors.New("failed to load artifact metadata")
 	ErrArtifactIntegrityFailed  = errors.New("artifact integrity check failed")
+
+	// CI cache errors.
+	ErrCacheUnavailable     = errors.New("CI cache is not available in this environment")
+	ErrCacheNotFound        = errors.New("cache entry not found")
+	ErrCacheAlreadyExists   = errors.New("cache entry already exists")
+	ErrCacheSaveFailed      = errors.New("failed to save cache entry")
+	ErrCacheRestoreFailed   = errors.New("failed to restore cache entry")
+	ErrCacheDeleteFailed    = errors.New("failed to delete cache entry")
+	ErrCacheListFailed      = errors.New("failed to list cache entries")
+	ErrCacheBackendNotFound = errors.New("cache backend not found")
+	ErrCacheInvalidArgs     = errors.New("invalid cache arguments")
+	ErrCacheKeyRequired     = errors.New("cache key is required")
+	ErrCacheArchiveFailed   = errors.New("failed to build cache archive")
+	ErrCacheExtractFailed   = errors.New("failed to extract cache archive")
+	ErrCacheBackendRequest  = errors.New("cache backend request failed")
+
 	// AI-related errors.
 	ErrAINotEnabled                 = errors.New("AI features are not enabled")
 	ErrAIDisabledInConfiguration    = errors.New("AI features are disabled in configuration")

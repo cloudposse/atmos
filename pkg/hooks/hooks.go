@@ -613,6 +613,10 @@ type RunCIHooksOptions struct {
 	// authoritative signal plugins use to determine success/failure and (for
 	// `terraform plan` with -detailed-exitcode) change detection. Pass 0 on success.
 	ExitCode int
+
+	// Aggregate carries command-specific aggregate result data for hook events
+	// that summarize more than one component.
+	Aggregate any
 }
 
 // RunCIHooks executes CI actions based on provider bindings.
@@ -656,6 +660,7 @@ func RunCIHooks(opts *RunCIHooksOptions) error {
 		ForceCIMode:  opts.ForceCIMode,
 		CommandError: opts.CommandError,
 		ExitCode:     opts.ExitCode,
+		Aggregate:    opts.Aggregate,
 	})
 }
 

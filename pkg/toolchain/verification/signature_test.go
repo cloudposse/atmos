@@ -2,6 +2,7 @@ package verification
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"testing"
 
@@ -18,11 +19,12 @@ type commandCall struct {
 
 type fakeRunner struct {
 	calls []commandCall
+	err   error
 }
 
 func (r *fakeRunner) Run(_ context.Context, name string, args ...string) error {
 	r.calls = append(r.calls, commandCall{name: name, args: append([]string(nil), args...)})
-	return nil
+	return r.err
 }
 
 func TestVerifyCosignCommandFromOpts(t *testing.T) {
@@ -190,11 +192,16 @@ func TestVerifySignatureCommands(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			runner := &fakeRunner{}
+			downloader := fakeDownloader{
+				"https://example.com/provenance.intoto.jsonl": []byte("provenance"),
+				"https://example.com/tool.minisig":            []byte("minisig"),
+			}
 			result, err := (&Verifier{}).Verify(context.Background(), Request{
-				Tool:      tt.tool,
-				Version:   "1.0.0",
-				AssetURL:  "https://example.com/tool.tar.gz",
-				AssetPath: writeAsset(t, []byte("hello")),
+				Tool:       tt.tool,
+				Version:    "1.0.0",
+				AssetURL:   "https://example.com/tool.tar.gz",
+				AssetPath:  writeAsset(t, []byte("hello")),
+				Downloader: downloader,
 				Policy: Policy{
 					Checksums:  PolicyDisabled,
 					Signatures: PolicyWhenAvailable,
@@ -286,6 +293,223 @@ func TestVerifyCosignRequiredUnavailableSidecar(t *testing.T) {
 	})
 
 	require.ErrorIs(t, err, ErrSignatureRequired)
+}
+
+func TestVerifyGitHubAttestationSkipsHTTP404WhenAvailable(t *testing.T) {
+	runner := &fakeRunner{
+		err: fmt.Errorf("%w: gh [attestation verify asset --repo terraform-linters/tflint]: exit status 1\n"+
+			"Error: HTTP 404: Not Found (https://api.github.com/repos/terraform-linters/tflint/attestations/sha256:abc)",
+			ErrSignatureFailed),
+	}
+	result, err := (&Verifier{}).Verify(context.Background(), Request{
+		Tool: &registry.Tool{
+			RepoOwner: "terraform-linters",
+			RepoName:  "tflint",
+			GitHubArtifactAttestations: registry.GitHubArtifactAttestations{
+				SignerWorkflow: "terraform-linters/tflint/.github/workflows/release.yml",
+				PredicateType:  "https://slsa.dev/provenance/v1",
+			},
+		},
+		Version:   "0.58.1",
+		AssetURL:  "https://github.com/terraform-linters/tflint/releases/download/v0.58.1/tflint_darwin_arm64.zip",
+		AssetPath: writeAsset(t, []byte("hello")),
+		Policy: Policy{
+			Checksums:  PolicyDisabled,
+			Signatures: PolicyWhenAvailable,
+		},
+		Runner: runner,
+	})
+
+	require.NoError(t, err)
+	require.Len(t, runner.calls, 1)
+	assert.Empty(t, result.SignatureMethods)
+	assert.True(t, hasSkipReasonContaining(result.SkippedReasons, "github artifact attestations unavailable"))
+}
+
+func TestVerifyGitHubAttestationRequiredFailsHTTP404(t *testing.T) {
+	_, err := (&Verifier{}).Verify(context.Background(), Request{
+		Tool: &registry.Tool{
+			RepoOwner: "terraform-linters",
+			RepoName:  "tflint",
+			GitHubArtifactAttestations: registry.GitHubArtifactAttestations{
+				SignerWorkflow: "terraform-linters/tflint/.github/workflows/release.yml",
+			},
+		},
+		Version:   "0.58.1",
+		AssetURL:  "https://github.com/terraform-linters/tflint/releases/download/v0.58.1/tflint_darwin_arm64.zip",
+		AssetPath: writeAsset(t, []byte("hello")),
+		Policy: Policy{
+			Checksums:  PolicyDisabled,
+			Signatures: PolicyRequired,
+		},
+		Runner: &fakeRunner{
+			err: fmt.Errorf("%w: Error: HTTP 404: Not Found", ErrSignatureFailed),
+		},
+	})
+
+	require.ErrorIs(t, err, ErrSignatureRequired)
+}
+
+func TestVerifySLSASkipsUnavailableSidecarWhenAvailable(t *testing.T) {
+	runner := &fakeRunner{}
+	result, err := (&Verifier{}).Verify(context.Background(), Request{
+		Tool: &registry.Tool{
+			RepoOwner: "owner",
+			RepoName:  "tool",
+			SLSAProvenance: registry.SLSAProvenance{
+				Type: "http",
+				URL:  "https://example.com/missing.intoto.jsonl",
+			},
+		},
+		Version:   "1.0.0",
+		AssetURL:  "https://example.com/tool.tar.gz",
+		AssetPath: writeAsset(t, []byte("hello")),
+		Downloader: fakeDownloader{
+			"https://example.com/other.intoto.jsonl": []byte("not used"),
+		},
+		Policy: Policy{
+			Checksums:  PolicyDisabled,
+			Signatures: PolicyWhenAvailable,
+		},
+		Runner: runner,
+	})
+
+	require.NoError(t, err)
+	assert.Empty(t, runner.calls)
+	assert.True(t, hasSkipReasonContaining(result.SkippedReasons, "slsa provenance unavailable"))
+}
+
+func TestVerifySLSARequiredUnavailableSidecar(t *testing.T) {
+	_, err := (&Verifier{}).Verify(context.Background(), Request{
+		Tool: &registry.Tool{
+			RepoOwner: "owner",
+			RepoName:  "tool",
+			SLSAProvenance: registry.SLSAProvenance{
+				Type: "http",
+				URL:  "https://example.com/missing.intoto.jsonl",
+			},
+		},
+		Version:   "1.0.0",
+		AssetURL:  "https://example.com/tool.tar.gz",
+		AssetPath: writeAsset(t, []byte("hello")),
+		Downloader: fakeDownloader{
+			"https://example.com/other.intoto.jsonl": []byte("not used"),
+		},
+		Policy: Policy{
+			Checksums:  PolicyDisabled,
+			Signatures: PolicyRequired,
+		},
+		Runner: &fakeRunner{},
+	})
+
+	require.ErrorIs(t, err, ErrSignatureRequired)
+}
+
+func TestVerifyMinisignSkipsUnavailableSidecarWhenAvailable(t *testing.T) {
+	runner := &fakeRunner{}
+	result, err := (&Verifier{}).Verify(context.Background(), Request{
+		Tool: &registry.Tool{
+			RepoOwner: "owner",
+			RepoName:  "tool",
+			Minisign: registry.MinisignConfig{
+				Type: "http",
+				URL:  "https://example.com/missing.minisig",
+			},
+		},
+		Version:   "1.0.0",
+		AssetURL:  "https://example.com/tool.tar.gz",
+		AssetPath: writeAsset(t, []byte("hello")),
+		Downloader: fakeDownloader{
+			"https://example.com/other.minisig": []byte("not used"),
+		},
+		Policy: Policy{
+			Checksums:  PolicyDisabled,
+			Signatures: PolicyWhenAvailable,
+		},
+		Runner: runner,
+	})
+
+	require.NoError(t, err)
+	assert.Empty(t, runner.calls)
+	assert.True(t, hasSkipReasonContaining(result.SkippedReasons, "minisign signature unavailable"))
+}
+
+func TestVerifyMinisignRequiredUnavailableSidecar(t *testing.T) {
+	_, err := (&Verifier{}).Verify(context.Background(), Request{
+		Tool: &registry.Tool{
+			RepoOwner: "owner",
+			RepoName:  "tool",
+			Minisign: registry.MinisignConfig{
+				Type: "http",
+				URL:  "https://example.com/missing.minisig",
+			},
+		},
+		Version:   "1.0.0",
+		AssetURL:  "https://example.com/tool.tar.gz",
+		AssetPath: writeAsset(t, []byte("hello")),
+		Downloader: fakeDownloader{
+			"https://example.com/other.minisig": []byte("not used"),
+		},
+		Policy: Policy{
+			Checksums:  PolicyDisabled,
+			Signatures: PolicyRequired,
+		},
+		Runner: &fakeRunner{},
+	})
+
+	require.ErrorIs(t, err, ErrSignatureRequired)
+}
+
+func TestVerifyCosignOptsSkipsHTTP404WhenAvailable(t *testing.T) {
+	runner := &fakeRunner{
+		err: fmt.Errorf("%w: Error: HTTP 404: Not Found (https://example.com/tool.sig)", ErrSignatureFailed),
+	}
+	result, err := (&Verifier{}).Verify(context.Background(), Request{
+		Tool: &registry.Tool{
+			RepoOwner: "owner",
+			RepoName:  "tool",
+			Cosign: registry.CosignConfig{
+				Opts: []string{"--signature", "https://example.com/{{.Asset}}.sig"},
+			},
+		},
+		Version:   "1.0.0",
+		AssetURL:  "https://example.com/tool.tar.gz",
+		AssetPath: writeAsset(t, []byte("hello")),
+		Policy: Policy{
+			Checksums:  PolicyDisabled,
+			Signatures: PolicyWhenAvailable,
+		},
+		Runner: runner,
+	})
+
+	require.NoError(t, err)
+	require.Len(t, runner.calls, 1)
+	assert.Empty(t, result.SignatureMethods)
+	assert.True(t, hasSkipReasonContaining(result.SkippedReasons, "cosign unavailable"))
+}
+
+func TestVerifySignatureInvalidEvidenceStillFailsWhenAvailable(t *testing.T) {
+	_, err := (&Verifier{}).Verify(context.Background(), Request{
+		Tool: &registry.Tool{
+			RepoOwner: "owner",
+			RepoName:  "tool",
+			Cosign: registry.CosignConfig{
+				Opts: []string{"--signature", "https://example.com/tool.sig"},
+			},
+		},
+		Version:   "1.0.0",
+		AssetURL:  "https://example.com/tool.tar.gz",
+		AssetPath: writeAsset(t, []byte("hello")),
+		Policy: Policy{
+			Checksums:  PolicyDisabled,
+			Signatures: PolicyWhenAvailable,
+		},
+		Runner: &fakeRunner{
+			err: fmt.Errorf("%w: Error: invalid signature when validating ASN.1 encoded signature", ErrSignatureFailed),
+		},
+	})
+
+	require.ErrorIs(t, err, ErrSignatureFailed)
 }
 
 func TestVerifyCosignDownloadsSidecars(t *testing.T) {

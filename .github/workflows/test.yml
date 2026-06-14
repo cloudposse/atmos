@@ -41,7 +41,10 @@ jobs:
   # ensure the code builds...
   build:
     name: Build (${{ matrix.target }})
-    timeout-minutes: 15
+    # windows-latest compiles this large dependency tree far slower than the
+    # Linux (self-hosted, s3-cache) and macOS runners, and a cold Go build cache
+    # after dependency changes pushes it past a tight limit. Give it headroom.
+    timeout-minutes: 25
     strategy:
       fail-fast: false
       matrix:
@@ -73,7 +76,8 @@ jobs:
 
       - name: Set up Go
         if: ${{ ! ( matrix.target == 'windows' && github.event.pull_request.draft  ) }}
-        uses: actions/setup-go@v5
+        # setup-go v6 requires runner v2.327.1+ and can affect toolchain handling.
+        uses: actions/setup-go@v6
         with:
           go-version-file: "go.mod"
         id: go
@@ -129,7 +133,7 @@ jobs:
         run: echo "C:\Program Files\Git\usr\bin" >> $Env:GITHUB_PATH
 
       - name: Download build artifacts for ${{ matrix.flavor.target }}
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
         with:
           name: build-artifacts-${{ matrix.flavor.target }}
@@ -152,14 +156,14 @@ jobs:
           echo "${{ github.workspace }}" >> $Env:GITHUB_PATH
 
       - name: Install Terraform
-        uses: hashicorp/setup-terraform@v3
+        uses: hashicorp/setup-terraform@v4
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
         with:
           terraform_version: ${{ env.TERRAFORM_VERSION }}
           terraform_wrapper: false
 
       - name: Install OpenTofu
-        uses: opentofu/setup-opentofu@v1
+        uses: opentofu/setup-opentofu@v2
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
         with:
           tofu_version: ${{ env.OPEN_TOFU_VERSION }}
@@ -172,12 +176,23 @@ jobs:
         with:
           version: ${{ env.PACKER_VERSION }}
 
+      # Dogfood `atmos ci cache`: cache ~/.cache/atmos (where the toolchain
+      # installs helm/helmfile) via the recommended composite action. Atmos
+      # derives the key/paths from atmos.yaml (ci.cache) and native actions/cache
+      # does the storage — restore now, save automatically in its post step. No
+      # runtime token needed. continue-on-error so cache issues never fail the
+      # job — the cache is a pure accelerator.
+      - name: Cache Atmos toolchain
+        if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
+        continue-on-error: true
+        uses: ./actions/cache
+
       - name: Install Helm and Helmfile
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
         run: |
           atmos toolchain install --default helm/helm@${{ env.HELM_VERSION }}
           atmos toolchain install --default helmfile/helmfile@${{ env.HELMFILE_VERSION }}
-          atmos toolchain env --format github
+          atmos toolchain env --format=github
 
       - name: Verify Helm and Helmfile
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
@@ -200,7 +215,8 @@ jobs:
           atmos version
 
       - name: Set up Go
-        uses: actions/setup-go@v5
+        # setup-go v6 requires runner v2.327.1+ and can affect toolchain handling.
+        uses: actions/setup-go@v6
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
         with:
           go-version-file: "go.mod"
@@ -252,7 +268,7 @@ jobs:
 
       - name: Upload coverage report to Codecov
         if: matrix.flavor.target == 'linux' && (success() || failure())
-        uses: codecov/codecov-action@v5
+        uses: codecov/codecov-action@v7
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           slug: ${{ github.repository }}
@@ -267,6 +283,11 @@ jobs:
           fail_ci_if_error: false
           flags: unittests
           verbose: true
+          # Install the Codecov CLI from PyPI instead of cli.codecov.io. The
+          # default path fetches Codecov's GPG public key from Keybase, which is
+          # currently returning 404 ("SELF-SIGNED PUBLIC KEY NOT FOUND").
+          # See codecov/codecov-action#1955. Safe to remove once Codecov restores the key.
+          use_pypi: true
 
   docker:
     name: "[lint] Dockerfile"
@@ -309,40 +330,32 @@ jobs:
           category: hadolint
           wait-for-processing: true
 
-  # run localstack demo tests
-  localstack:
-    name: "[localstack] ${{ matrix.demo-folder }}"
+  # Run the AWS-emulator demo tests against Floci (a free, LocalStack-compatible emulator;
+  # LocalStack Community Edition was EOL'd in March 2026).
+  # NOTE: "[floci] demo-floci" must be kept in sync with the required status checks in
+  # branch protection on main (previously "[localstack] demo-localstack").
+  floci:
+    name: "[floci] ${{ matrix.demo-folder }}"
     needs: build
     runs-on: ubuntu-latest
 
     services:
-      localstack:
-        image: public.ecr.aws/localstack/localstack:1.4.0
+      floci:
+        image: floci/floci:1.5.23
         ports:
           - 4566:4566
-          - 4510-4559:4510-4559
-        env:
-          SERVICES: s3, iam, lambda, dynamodb, sts, account, ec2
-          DEBUG: 0
-          DOCKER_HOST: unix:///var/run/docker.sock
-          AWS_ACCESS_KEY_ID: test
-          AWS_SECRET_ACCESS_KEY: test
-          AWS_DEFAULT_REGION: us-east-1
-          AWS_REGION: us-east-1
-        volumes:
-          - /var/run/docker.sock:/var/run/docker.sock
 
     strategy:
       fail-fast: false
       matrix:
         demo-folder:
-          - demo-localstack
+          - demo-floci
 
-    timeout-minutes: 20
+    timeout-minutes: 30
     steps:
 
       - name: Download build artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: build-artifacts-linux
           path: /usr/local/bin
@@ -356,13 +369,13 @@ jobs:
           persist-credentials: false
 
       - name: Install Terraform
-        uses: hashicorp/setup-terraform@v3
+        uses: hashicorp/setup-terraform@v4
         with:
           terraform_version: ${{ env.TERRAFORM_VERSION }}
           terraform_wrapper: false
 
       - name: Install OpenTofu
-        uses: opentofu/setup-opentofu@v1
+        uses: opentofu/setup-opentofu@v2
         with:
           tofu_version: ${{ env.OPEN_TOFU_VERSION }}
           tofu_wrapper: false
@@ -370,7 +383,11 @@ jobs:
       - name: Run tests for ${{ matrix.demo-folder }}
         run: |
           cd examples/${{ matrix.demo-folder }}
-          atmos test
+          timeout 25m atmos test || {
+            status=$?
+            echo "atmos test failed or timed out with status ${status}"
+            exit "${status}"
+          }
 
   # run k3s demo tests
   k3s:
@@ -406,7 +423,7 @@ jobs:
           kubectl get pods --all-namespaces
 
       - name: Download build artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: build-artifacts-linux
           path: /usr/local/bin
@@ -486,7 +503,7 @@ jobs:
 
       - name: Download build artifacts for ${{ matrix.flavor.target }}
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: build-artifacts-${{ matrix.flavor.target }}
           path: ${{ github.workspace }}
@@ -505,14 +522,14 @@ jobs:
 
       - name: Install Terraform
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
-        uses: hashicorp/setup-terraform@v3
+        uses: hashicorp/setup-terraform@v4
         with:
           terraform_version: ${{ env.TERRAFORM_VERSION }}
           terraform_wrapper: false
 
       - name: Install OpenTofu
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
-        uses: opentofu/setup-opentofu@v1
+        uses: opentofu/setup-opentofu@v2
         with:
           tofu_version: ${{ env.OPEN_TOFU_VERSION }}
           tofu_wrapper: false
@@ -562,7 +579,7 @@ jobs:
           # - demo-custom-command
           # - demo-json-validation
           # - demo-library
-          # - demo-localstack
+          # - demo-floci
           # - demo-opa-validation
           # - demo-opentofu
           # - demo-project
@@ -585,13 +602,13 @@ jobs:
           persist-credentials: false
 
       - name: Install Terraform
-        uses: hashicorp/setup-terraform@v3
+        uses: hashicorp/setup-terraform@v4
         with:
           terraform_version: ${{ env.TERRAFORM_VERSION }}
           terraform_wrapper: false
 
       - name: Install OpenTofu
-        uses: opentofu/setup-opentofu@v1
+        uses: opentofu/setup-opentofu@v2
         with:
           tofu_version: ${{ env.OPEN_TOFU_VERSION }}
           tofu_wrapper: false
@@ -619,7 +636,7 @@ jobs:
       matrix:
         demo-folder:
           - demo-context
-          - demo-localstack
+          - demo-floci
           - demo-stacks
           - demo-helmfile
           - quick-start-advanced
@@ -645,7 +662,7 @@ jobs:
             }
 
   release:
-    needs: [test, lint, mock, k3s, localstack, docker, validate]
+    needs: [test, lint, mock, k3s, floci, docker, validate]
     if: github.event_name == 'push'
     uses: cloudposse/.github/.github/workflows/shared-go-auto-release.yml@main
     with:
