@@ -35,7 +35,7 @@ func SetAtmosConfig(config *schema.AtmosConfiguration) {
 // gitCmd is the `atmos git` parent command.
 var gitCmd = &cobra.Command{
 	Use:   "git",
-	Short: "Manage Git repositories as Atmos artifacts",
+	Short: "GitOps enablement: automate Git commits locally and in CI",
 	Long:  markdown.AtmosGitMarkdown,
 }
 

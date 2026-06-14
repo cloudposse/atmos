@@ -1,4 +1,4 @@
-- Manage Git repositories as Atmos artifacts
+- GitOps enablement: automate Git commits easily and conventionally, both locally and in CI
 
 ```shell
  $ atmos git clone <name-or-uri>

@@ -3,7 +3,7 @@ title: atmos git
 sidebar_label: git
 sidebar_class_name: command
 id: usage
-description: Manage Git repositories as Atmos artifacts with consistent authentication, safety rules, and lifecycle integration.
+description: GitOps enablement for Atmos — make automated Git commits easy, safe, and conventional both locally and in CI across every project.
 ---
 import Screengrab from '@site/src/components/Screengrab'
 import DocCardList from '@theme/DocCardList'
@@ -13,7 +13,7 @@ import ActionCard from '@site/src/components/ActionCard'
 import PrimaryCTA from '@site/src/components/PrimaryCTA'
 
 <Intro>
-Initialize, clone, pull, inspect, diff, commit, push, and clean Git repositories through a shared Atmos Git service with consistent authentication, safety rules, and CI integration. Treat Git repositories as artifact repositories: render or generate files, place them into a repository worktree, and publish them — from the CLI, from [hooks](/stacks/hooks#kind-git), or from native CI workflows.
+`atmos git` is GitOps enablement for Atmos: it makes **automated Git commits easy, safe, and conventional** — the same way on your laptop and in CI, across every project. Treat Git repositories as artifact repositories: render or generate files, place them into a repository worktree, and publish them — committed and pushed automatically — from the CLI, from [hooks](/stacks/hooks#kind-git) (e.g. after `terraform apply`), or from native CI workflows. Initialize, clone, pull, inspect, diff, commit, push, and clean managed repositories by logical name, with consistent authentication, commit signing, and safety rules so no two pipelines reinvent their own brittle `git` scripting.
 </Intro>
 
 <Experimental />
@@ -58,7 +58,7 @@ Repository names (`flux-deploy`, `generated-terraform`) are arbitrary, user-defi
 Every `atmos git` command goes through the shared Atmos Git service, which adds:
 
 - **Authentication via Atmos Auth** — repository `auth.identity` brings linked integrations (such as `github/sts`) along automatically; the ambient credential broker covers the zero-config CI case; your own credential helpers and SSH agent always continue to work.
-- **Safety rules** — pulls are always fast-forward-only, force push is never performed, rejected pushes retry with a bounded `pull --ff-only` + re-push loop, and path-scoped commits refuse to commit when unrelated dirty files are present.
+- **Safety rules** — pulls are always fast-forward-only, force push is never performed, rejected pushes retry with a bounded `pull --rebase` + re-push loop, and path-scoped commits refuse to commit when unrelated dirty files are present.
 - **Reconcile semantics** — `atmos git clone` is idempotent: it clones when the workdir is absent and fetches/fast-forwards when it already exists, which makes restored CI caches safe.
 - **Automatic workdirs** — managed repositories clone into a deterministic location under the Atmos XDG cache root, so the [native CI cache](/cli/configuration/ci) captures them across runs for free.
 - **Native escape hatch** — `init`, `clone`, `pull`, and `push` pass arguments after `--` verbatim to the underlying git invocation (e.g., `atmos git clone flux-deploy -- --no-tags`), so Atmos safety rules and uncommon git flags compose.

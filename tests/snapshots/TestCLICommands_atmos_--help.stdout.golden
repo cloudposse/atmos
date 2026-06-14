@@ -32,7 +32,7 @@ AVAILABLE COMMANDS
       devcontainer [command] [EXPERIMENTAL]  Manage development containers
       docs [command]                         Open Atmos documentation or display component-specific docs
       env                                    Output environment variables configured in atmos.yaml
-      git [command] [EXPERIMENTAL]           Manage Git repositories as Atmos artifacts
+      git [command] [EXPERIMENTAL]           GitOps enablement: automate Git commits locally and in CI
       helmfile [command]                     Manage Helmfile-based Kubernetes deployments
       help                                   Help about any command
       list [command]                         List available stacks and components
