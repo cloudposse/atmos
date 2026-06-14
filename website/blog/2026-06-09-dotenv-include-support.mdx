@@ -58,6 +58,22 @@ Atmos parses these filenames as dotenv files when they are used with `!include`:
 
 Use `!include.raw` when you want the raw file contents instead.
 
+## Pin a Profile Per Project
+
+Because `ATMOS_`-prefixed variables in the `env` section configure Atmos itself, you can use a dotenv file to **pin a [profile](/cli/configuration/profiles) per project**. Drop an `ATMOS_PROFILE` into `.env`, include it in your base `atmos.yaml`, and every command in the project uses that profile automatically:
+
+```dotenv
+# .env
+ATMOS_PROFILE=dev
+```
+
+```yaml
+# atmos.yaml
+env: !include .env
+```
+
+No `--profile` flag, no exported variable — just `atmos terraform plan vpc -s dev`. Atmos promotes the `ATMOS_*` values into its own environment before it resolves the active profile. An exported `ATMOS_PROFILE` (or `--profile`) still wins, so ad-hoc overrides like `ATMOS_PROFILE=ci atmos …` keep working. This is a great way to make sure everyone on a team — and CI — runs with the same defaults for a given repository.
+
 ## No Implicit Loading
 
 Atmos does not automatically load dotenv files, and it does not load or execute `.envrc`. This keeps dotenv support explicit in `atmos.yaml` and avoids shell-execution semantics.

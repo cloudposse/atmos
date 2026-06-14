@@ -20,6 +20,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/auth/provisioning"
 	"github.com/cloudposse/atmos/pkg/config/casemap"
+	envpkg "github.com/cloudposse/atmos/pkg/env"
 	"github.com/cloudposse/atmos/pkg/filesystem"
 	"github.com/cloudposse/atmos/pkg/filetype"
 	log "github.com/cloudposse/atmos/pkg/logger"
@@ -301,6 +302,14 @@ func LoadConfig(configAndStacksInfo *schema.ConfigAndStacksInfo) (schema.AtmosCo
 		}
 	}
 	setEnv(v)
+
+	// Promote ATMOS_* variables declared in the base config `env:` section
+	// (e.g. via `env: !include .env`) into the process environment BEFORE resolving
+	// profiles. This lets a project pin ATMOS_PROFILE (and other ATMOS_* settings) in a
+	// `.env` file. It runs before profile resolution so the pinned ATMOS_PROFILE is
+	// honored within this same LoadConfig call. Real environment variables always win;
+	// an already-set variable is never overwritten.
+	promoteAtmosEnvFromConfig(v)
 
 	// Load profiles if specified via --profile flag, ATMOS_PROFILE env var, or
 	// the `profiles.default` field in the base atmos.yaml.
@@ -1601,6 +1610,45 @@ func preserveCaseSensitiveMaps(v *viper.Viper, atmosConfig *schema.AtmosConfigur
 	populateLegacyIdentityCaseMap(mergedCaseMaps, atmosConfig)
 
 	log.Trace("Preserved case-sensitive map keys", "paths", caseSensitivePaths, "files_processed", len(filesToProcess))
+}
+
+// promoteAtmosEnvFromConfig promotes ATMOS_-prefixed keys from the base config `env:`
+// section into the process environment so Atmos itself honors them (notably ATMOS_PROFILE).
+// The `env:` section is read with original key case preserved, because viper lowercases
+// map keys but environment variable names are case-sensitive.
+func promoteAtmosEnvFromConfig(v *viper.Viper) {
+	defer perf.Track(nil, "config.promoteAtmosEnvFromConfig")()
+
+	envMap := caseSensitiveEnvFromViper(v)
+	if promoted := envpkg.PromoteAtmosEnv(envMap); len(promoted) > 0 {
+		log.Debug("Promoted ATMOS_* env vars from config 'env' section", "keys", promoted)
+	}
+}
+
+// caseSensitiveEnvFromViper returns the `env:` section from viper with original key case
+// restored from the source config files (including dotenv files included via `!include`).
+// Returns nil when there is no `env:` section.
+func caseSensitiveEnvFromViper(v *viper.Viper) map[string]string {
+	lower := v.GetStringMapString(envKey)
+	if len(lower) == 0 {
+		return nil
+	}
+
+	caseMaps := casemap.New()
+	for _, configFile := range collectConfigFilesForCasePreservation(v.ConfigFileUsed()) {
+		mergeCaseMapsFromFile(configFile, caseMaps)
+	}
+	envCase := caseMaps.Get(envKey)
+
+	result := make(map[string]string, len(lower))
+	for lowerKey, value := range lower {
+		key := lowerKey
+		if original, ok := envCase[lowerKey]; ok {
+			key = original
+		}
+		result[key] = value
+	}
+	return result
 }
 
 func extractEnvMapsFromViper(v *viper.Viper, atmosConfig *schema.AtmosConfiguration) {
