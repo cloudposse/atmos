@@ -338,7 +338,8 @@ jobs:
 
     services:
       floci:
-        image: floci/floci:1.5.23
+        # Pin by immutable digest for reproducibility/supply-chain safety (matches our SHA-pinned actions). Comment tracks the human-readable tag.
+        image: floci/floci@sha256:c88ec20bf221630dd195d38a14eeb0ac52ddfa72c37ebb3c8aa17f63ae27c5f2 # 1.5.23
         ports:
           - 4566:4566
 
