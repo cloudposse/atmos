@@ -112,7 +112,7 @@
   "imports": [
     "catalog/base"
   ],
-  "inheritance": null,
+  "inheritance": [],
   "metadata": {},
   "overrides": {},
   "providers": {},

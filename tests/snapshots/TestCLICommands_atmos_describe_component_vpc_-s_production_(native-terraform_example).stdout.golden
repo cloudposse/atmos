@@ -202,7 +202,7 @@
   "imports": [
     "_defaults"
   ],
-  "inheritance": null,
+  "inheritance": [],
   "metadata": {},
   "overrides": {},
   "providers": {},
