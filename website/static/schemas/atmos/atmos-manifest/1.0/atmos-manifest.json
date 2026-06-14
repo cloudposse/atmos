@@ -819,7 +819,7 @@
     },
     "env": {
       "title": "env",
-      "description": "Env section",
+      "description": "Env section. Supports either a map of environment variables or a YAML !include string.",
       "oneOf": [
         {
           "type": "string",

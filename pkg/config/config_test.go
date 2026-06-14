@@ -349,6 +349,73 @@ terraform:
 	}
 }
 
+func TestInitCliConfig_DotenvIncludeInAtmosYamlEnv(t *testing.T) {
+	tests := []struct {
+		name          string
+		configContent string
+		expectedEnv   map[string]string
+	}{
+		{
+			name: "direct include",
+			configContent: `base_path: ./
+env: !include .env
+`,
+			expectedEnv: map[string]string{
+				"DATABASE_URL": "postgres://localhost/db",
+				"AWS_REGION":   "from-dotenv",
+			},
+		},
+		{
+			name: "merge include with inline override",
+			configContent: `base_path: ./
+env:
+  <<: !include .env
+  AWS_REGION: inline
+  BALH: foo
+`,
+			expectedEnv: map[string]string{
+				"DATABASE_URL": "postgres://localhost/db",
+				"AWS_REGION":   "inline",
+				"BALH":         "foo",
+			},
+		},
+		{
+			name: "layered merge includes",
+			configContent: `base_path: ./
+env:
+  <<:
+    - !include .env.local
+    - !include .env
+  AWS_REGION: inline
+`,
+			expectedEnv: map[string]string{
+				"DATABASE_URL": "postgres://localhost/db",
+				"AWS_REGION":   "inline",
+				"LOCAL_ONLY":   "true",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tmpDir := t.TempDir()
+
+			createConfigFile(t, tmpDir, ".env", `DATABASE_URL=postgres://localhost/db
+AWS_REGION=from-dotenv
+`)
+			createConfigFile(t, tmpDir, ".env.local", `AWS_REGION=from-local
+LOCAL_ONLY=true
+`)
+			createConfigFile(t, tmpDir, "atmos.yaml", tt.configContent)
+			changeWorkingDir(t, tmpDir)
+
+			cfg, err := InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+			require.NoError(t, err)
+			assert.Equal(t, tt.expectedEnv, cfg.Env)
+		})
+	}
+}
+
 func TestParseFlags(t *testing.T) {
 	tests := []struct {
 		name     string
