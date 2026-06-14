@@ -262,3 +262,36 @@ func TestProvider_OutputWriter_IndependentOfToken(t *testing.T) {
 	writer := p.OutputWriter()
 	assert.NotNil(t, writer)
 }
+
+func TestProviderContextCloneURL(t *testing.T) {
+	t.Setenv("GITHUB_REPOSITORY", "acme/deploy")
+	t.Setenv("GITHUB_SERVER_URL", "")
+
+	p := NewProvider()
+	ctx, err := p.Context()
+	require.NoError(t, err)
+	assert.Equal(t, "https://github.com", ctx.ServerURL)
+	assert.Equal(t, "https://github.com/acme/deploy.git", ctx.CloneURL)
+}
+
+func TestProviderContextCloneURLEnterprise(t *testing.T) {
+	// GitHub Enterprise: GITHUB_SERVER_URL points at the enterprise host and
+	// the clone URL must follow it — never hardcoded github.com.
+	t.Setenv("GITHUB_REPOSITORY", "acme/deploy")
+	t.Setenv("GITHUB_SERVER_URL", "https://ghe.acme.com")
+
+	p := NewProvider()
+	ctx, err := p.Context()
+	require.NoError(t, err)
+	assert.Equal(t, "https://ghe.acme.com", ctx.ServerURL)
+	assert.Equal(t, "https://ghe.acme.com/acme/deploy.git", ctx.CloneURL)
+}
+
+func TestProviderContextCloneURLEmptyWithoutRepository(t *testing.T) {
+	t.Setenv("GITHUB_REPOSITORY", "")
+
+	p := NewProvider()
+	ctx, err := p.Context()
+	require.NoError(t, err)
+	assert.Empty(t, ctx.CloneURL)
+}

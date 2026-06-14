@@ -66,6 +66,20 @@ atmos describe stacks --help
 atmos describe workflows --help
 atmos docs --help
 atmos docs generate --help
+atmos git --help
+atmos git init --help
+atmos git clone --help
+atmos git pull --help
+atmos git status --help
+atmos git diff --help
+atmos git commit --help
+atmos git push --help
+atmos git clean --help
+atmos git list --help
+atmos git hooks --help
+atmos git hooks install --help
+atmos git hooks run --help
+atmos git hooks uninstall --help
 atmos env --help
 atmos list --help
 atmos list components --help
