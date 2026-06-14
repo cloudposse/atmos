@@ -2,6 +2,7 @@ tests:
   - name: atmos workflow success
     enabled: true
     snapshot: false
+    preconditions: ["tofu"]
     description: "Ensure atmos workflow passes"
     workdir: "fixtures/scenarios/workflows/"
     command: "atmos"

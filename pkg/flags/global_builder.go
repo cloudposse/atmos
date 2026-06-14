@@ -219,12 +219,9 @@ func (b *GlobalOptionsBuilder) registerSystemFlags(defaults *global.Flags) {
 	b.options = append(b.options, WithStringFlag("use-version", "", defaults.UseVersion, "Use a specific version of Atmos (e.g., --use-version=1.160.0)"))
 	b.options = append(b.options, WithEnvVars("use-version", "ATMOS_USE_VERSION"))
 
-	// Skip hooks at runtime. --skip-hooks (no value) skips all hooks for the
-	// current invocation; --skip-hooks=name1,name2 skips only the named
-	// hooks. Per-invocation only — does not propagate to nested commands.
-	b.options = append(b.options, WithStringFlag("skip-hooks", "", defaults.SkipHooks, "Skip lifecycle hooks for this invocation. Use --skip-hooks (no value) to skip all, or --skip-hooks=name1,name2 to skip specific hooks by name"))
-	b.options = append(b.options, WithEnvVars("skip-hooks", "ATMOS_SKIP_HOOKS"))
-	b.options = append(b.options, WithNoOptDefVal("skip-hooks", "*"))
+	// Note: --skip-hooks is NOT a global flag. Lifecycle hooks only run on
+	// terraform plan/apply/deploy, so the flag is registered as a persistent
+	// flag on the terraform command in cmd/terraform/flags.go.
 }
 
 // Build creates a StandardParser with all global flags configured.

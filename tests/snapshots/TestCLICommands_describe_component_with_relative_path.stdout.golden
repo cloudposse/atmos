@@ -10,7 +10,7 @@ atmos_cli_config:
       init_run_reconfigure: true
       auto_generate_backend_file: false
       auto_generate_files: false
-      command: terraform
+      command: tofu
       shell:
         prompt: ""
       init:
@@ -69,7 +69,7 @@ backend_type: s3
 cli_args:
   - describe
   - component
-command: terraform
+command: tofu
 component: top-level-component1
 component_info:
   component_path: /absolute/path/to/repo/tests/fixtures/scenarios/complete/components/terraform/top-level-component1

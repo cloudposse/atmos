@@ -9,7 +9,7 @@ atmos_cli_config:
       init_run_reconfigure: true
       auto_generate_backend_file: true
       auto_generate_files: false
-      command: terraform
+      command: tofu
       shell:
         prompt: ""
       init:
@@ -59,7 +59,7 @@ backend_type: ""
 cli_args:
   - describe
   - component
-command: terraform
+command: tofu
 component: vpc
 component_info:
   component_path: /absolute/path/to/repo/examples/quick-start-advanced/components/terraform/vpc
