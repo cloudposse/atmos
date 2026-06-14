@@ -95,6 +95,9 @@ func TestRunShellSession_AttachedExitCode(t *testing.T) {
 	var exitErr errUtils.ExitCodeError
 	require.ErrorAs(t, err, &exitErr)
 	assert.Equal(t, 7, exitErr.Code)
+	// Terminal-handoff sessions propagate the code silently (no themed error
+	// box, which would query the terminal and can hang post-session).
+	assert.True(t, exitErr.Silent, "session exit-code errors must be silent")
 }
 
 func TestRunShellSession_AttachedSuccess(t *testing.T) {

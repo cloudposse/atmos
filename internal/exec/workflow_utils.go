@@ -513,6 +513,13 @@ func ExecuteWorkflow(
 			if progressRenderer.IsEnabled() {
 				progressRenderer.Done()
 			}
+			// Terminal-handoff steps (tty/interactive/exec) that exit non-zero
+			// propagate the code silently, like a shell - don't wrap them in a
+			// themed workflow error (which would query the terminal post-session).
+			var silentExit errUtils.ExitCodeError
+			if errors.As(err, &silentExit) && silentExit.Silent {
+				return err
+			}
 			return buildWorkflowStepError(err, &workflowStepErrorContext{
 				WorkflowPath:     workflowPath,
 				WorkflowBasePath: atmosConfig.Workflows.BasePath,

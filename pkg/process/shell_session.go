@@ -175,7 +175,10 @@ func sessionExitError(err error) error {
 	}
 	var exitErr *exec.ExitError
 	if errors.As(err, &exitErr) {
-		return errUtils.ExitCodeError{Code: exitStatusCode(exitErr)}
+		// Silent: a terminal-handoff session that exits non-zero propagates
+		// the code like a shell, without Atmos rendering its own error box
+		// (which would query the terminal and can hang post-session).
+		return errUtils.ExitCodeError{Code: exitStatusCode(exitErr), Silent: true}
 	}
 	return err
 }

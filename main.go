@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"os"
 	"os/signal"
 	"strings"
@@ -91,6 +92,13 @@ func run() (exitCode int) {
 
 	err := cmd.Execute()
 	if err != nil {
+		// Silent exit-code carriers (terminal-handoff steps) propagate the
+		// child's code without themed rendering, which would query the
+		// terminal and can hang when stdin is still contended by the session.
+		if code, ok := silentExitCode(err); ok {
+			return code
+		}
+
 		// Capture error to Sentry if configured (safe to call even if Sentry not initialized).
 		errUtils.CaptureError(err)
 
@@ -105,6 +113,18 @@ func run() (exitCode int) {
 	}
 
 	return 0
+}
+
+// silentExitCode reports the exit code to use when err is a silent exit-code
+// carrier (a terminal-handoff step that exited non-zero). Such errors must
+// propagate the code without themed rendering, which would query the terminal
+// and can hang when the session still contends for stdin.
+func silentExitCode(err error) (int, bool) {
+	var exitCodeErr errUtils.ExitCodeError
+	if errors.As(err, &exitCodeErr) && exitCodeErr.Silent {
+		return exitCodeErr.Code, true
+	}
+	return 0, false
 }
 
 // shouldExitOnSignal reports whether the process should exit in response to sig.
