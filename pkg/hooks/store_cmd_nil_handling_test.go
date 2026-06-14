@@ -63,7 +63,7 @@ func TestStoreCommand_NilOutputHandling(t *testing.T) {
 					ComponentFromArg: "test-component",
 					Stack:            "test-stack",
 				},
-				outputGetter: func(cfg *schema.AtmosConfiguration, stack, component, output string, skipCache bool, authContext *schema.AuthContext, authManager any) (any, bool, error) {
+				terraformOutputter: func(cfg *schema.AtmosConfiguration, stack, component, output string, skipCache bool, authContext *schema.AuthContext, authManager any) (any, bool, error) {
 					// Simulate different scenarios:
 					// - tt.mockOutput == nil && tt.expectError: simulate missing output (exists=false)
 					// - tt.mockOutput == nil && !tt.expectError: simulate legitimate null (exists=true, value=nil)
@@ -156,10 +156,10 @@ func TestStoreCommand_IntermittentFailureHandling(t *testing.T) {
 			}
 
 			cmd := &StoreCommand{
-				Name:         "store",
-				atmosConfig:  atmosConfig,
-				info:         &schema.ConfigAndStacksInfo{ComponentFromArg: "test-component", Stack: "test-stack"},
-				outputGetter: mockGetter,
+				Name:               "store",
+				atmosConfig:        atmosConfig,
+				info:               &schema.ConfigAndStacksInfo{ComponentFromArg: "test-component", Stack: "test-stack"},
+				terraformOutputter: mockGetter,
 			}
 
 			hook := &Hook{
@@ -242,10 +242,10 @@ func TestStoreCommand_RateLimitErrorHandling(t *testing.T) {
 	}
 
 	cmd := &StoreCommand{
-		Name:         "store",
-		atmosConfig:  atmosConfig,
-		info:         &schema.ConfigAndStacksInfo{ComponentFromArg: "test-component", Stack: "test-stack"},
-		outputGetter: mockGetter,
+		Name:               "store",
+		atmosConfig:        atmosConfig,
+		info:               &schema.ConfigAndStacksInfo{ComponentFromArg: "test-component", Stack: "test-stack"},
+		terraformOutputter: mockGetter,
 	}
 
 	hook := &Hook{
@@ -329,10 +329,10 @@ func TestStoreCommand_ErrorVsLegitimateNull(t *testing.T) {
 			}
 
 			cmd := &StoreCommand{
-				Name:         "store",
-				atmosConfig:  atmosConfig,
-				info:         &schema.ConfigAndStacksInfo{ComponentFromArg: "test-component", Stack: "test-stack"},
-				outputGetter: tt.mockGetter,
+				Name:               "store",
+				atmosConfig:        atmosConfig,
+				info:               &schema.ConfigAndStacksInfo{ComponentFromArg: "test-component", Stack: "test-stack"},
+				terraformOutputter: tt.mockGetter,
 			}
 
 			hook := &Hook{
@@ -382,10 +382,10 @@ func TestStoreCommand_MockOutputGetter(t *testing.T) {
 	}
 
 	cmd := &StoreCommand{
-		Name:         "store",
-		atmosConfig:  atmosConfig,
-		info:         &schema.ConfigAndStacksInfo{ComponentFromArg: "test-component", Stack: "test-stack"},
-		outputGetter: mockGetter,
+		Name:               "store",
+		atmosConfig:        atmosConfig,
+		info:               &schema.ConfigAndStacksInfo{ComponentFromArg: "test-component", Stack: "test-stack"},
+		terraformOutputter: mockGetter,
 	}
 
 	hook := &Hook{
@@ -418,7 +418,7 @@ func TestStoreCommand_MissingOutputError(t *testing.T) {
 		Name:        "store",
 		atmosConfig: atmosConfig,
 		info:        &schema.ConfigAndStacksInfo{ComponentFromArg: "test-component", Stack: "test-stack"},
-		outputGetter: func(cfg *schema.AtmosConfiguration, stack, component, output string, skipCache bool, authContext *schema.AuthContext, authManager any) (any, bool, error) {
+		terraformOutputter: func(cfg *schema.AtmosConfiguration, stack, component, output string, skipCache bool, authContext *schema.AuthContext, authManager any) (any, bool, error) {
 			// Return missing output to test that it errors
 			return nil, false, nil
 		},

@@ -145,6 +145,86 @@ func TestGetHooks(t *testing.T) {
 	}
 }
 
+func TestHooksFromComponent_NoHooksSection(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{}
+	info := &schema.ConfigAndStacksInfo{}
+
+	// Resolved component with no `hooks` key — common for component configs
+	// that don't define any lifecycle hooks. Should return empty Hooks, no error.
+	resolved := map[string]any{
+		"vars":      map[string]any{"foo": "bar"},
+		"component": "slack-knowledge",
+	}
+
+	hooks, err := HooksFromComponent(atmosConfig, info, resolved)
+
+	require.NoError(t, err)
+	require.NotNil(t, hooks)
+	assert.False(t, hooks.HasHooks())
+	assert.Nil(t, hooks.items)
+}
+
+func TestHooksFromComponent_NilComponent(t *testing.T) {
+	// nil resolved component (e.g. caller passed nil unintentionally) should
+	// degrade to empty Hooks, not nil-deref.
+	hooks, err := HooksFromComponent(&schema.AtmosConfiguration{}, &schema.ConfigAndStacksInfo{}, nil)
+
+	require.NoError(t, err)
+	require.NotNil(t, hooks)
+	assert.False(t, hooks.HasHooks())
+}
+
+func TestHooksFromComponent_WithHooks(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{}
+	info := &schema.ConfigAndStacksInfo{
+		ComponentFromArg: "slack-knowledge",
+		Stack:            "dev",
+	}
+
+	resolved := map[string]any{
+		"hooks": map[string]any{
+			"store-runtime": map[string]any{
+				"events":  []any{"after-apply"},
+				"command": "store",
+				"name":    "dev/ssm",
+				"outputs": map[string]any{
+					"/slack-knowledge/agent-id": ".agent_id",
+				},
+			},
+		},
+	}
+
+	hooks, err := HooksFromComponent(atmosConfig, info, resolved)
+
+	require.NoError(t, err)
+	require.NotNil(t, hooks)
+	assert.True(t, hooks.HasHooks())
+	require.Contains(t, hooks.items, "store-runtime")
+
+	hook := hooks.items["store-runtime"]
+	// The config uses the legacy `command: store` spelling; Eric's Hook
+	// UnmarshalYAML promotes it to Kind (clearing Command) for back-compat.
+	assert.Equal(t, "store", hook.Kind)
+	assert.Equal(t, "dev/ssm", hook.Name)
+	assert.Equal(t, []string{"after-apply"}, hook.Events)
+	assert.Equal(t, ".agent_id", hook.Outputs["/slack-knowledge/agent-id"])
+}
+
+func TestHooksFromComponent_MalformedHooks(t *testing.T) {
+	// The `hooks` key is present but not a map (e.g. someone wrote a list by
+	// mistake). Should return a clean error, not panic.
+	resolved := map[string]any{
+		"hooks": []any{"this", "is", "wrong"},
+	}
+
+	hooks, err := HooksFromComponent(&schema.AtmosConfiguration{}, &schema.ConfigAndStacksInfo{}, resolved)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "hooks section is not a map")
+	assert.NotNil(t, hooks)
+	assert.False(t, hooks.HasHooks())
+}
+
 func TestGetHooks_WithRealComponent(t *testing.T) {
 	// This test uses the hooks-component-scoped test case to test the full GetHooks path
 	testDir := "../../tests/test-cases/hooks-component-scoped"

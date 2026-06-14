@@ -1,5 +1,6 @@
 import:
   - catalog/script/deploy-app
+  - catalog/hello/world
 
 vars:
   stage: dev
@@ -9,3 +10,7 @@ components:
     deploy-app:
       vars:
         replicas: 1  # Override for dev
+  hello:
+    world:
+      vars:
+        greeting: "hello from dev"  # Override for dev
