@@ -203,14 +203,15 @@ if kind == "" {
 }
 ```
 
-### Declarations Live in Stack Config ("global" = shared import)
+### Declarations Live in Stack Config ("global" = shared import + global scope)
 
-For v1, secrets are declared **only in stack/component config** — there is no
-`atmos.yaml`-level global `secrets.vars` block. This guarantees every secret has a
-real `(stack, component, key)` coordinate, so the existing
-`Store.Set(stack, component, key)` fits unchanged (no key-only write path needed).
+Secrets are declared **only in stack/component config** — there is no
+`atmos.yaml`-level global `secrets.vars` block.
 
-A "global" secret is just a shared declaration **imported** wherever it is needed:
+A "global" secret is a shared declaration **imported** wherever it is needed. The import shares
+the *declaration*; adding `scope: global` shares the *value* too (the coordinate omits both the
+stack and component segments — `{prefix}/{NAME}` — so every importer computes the same backend
+path; see [Secret Scopes](#secret-scopes-instance-stack-global)):
 
 ```yaml
 # stacks/catalog/secrets/shared.yaml — a reusable declaration fragment
@@ -222,6 +223,7 @@ components:
           ARTIFACTORY_TOKEN:
             description: "Artifactory access token for private packages"
             store: app-secrets       # track 1 (store-backed)
+            scope: global            # one value shared by every importer (rotate once)
             required: true
           GITHUB_APP_KEY:
             description: "GitHub App private key for CI"
@@ -312,16 +314,21 @@ components:
             store: app-secrets
 ```
 
-## Secret Scopes (stack vs instance)
+## Secret Scopes (instance, stack, global)
 
 Secrets have an explicit **scope** that controls where the *value* is stored — this is the fix for
-the **secrets sprawl** problem above. Two scopes ship today (global/cross-stack is deferred —
-multi-region makes its semantics messy):
+the **secrets sprawl** problem above. Three scopes form a ladder of sharing:
 
+- **`instance`** (default) — declared under a component (`components.<type>.<c>.secrets:`). Stored
+  **per component instance** (the current behavior). Path: `{prefix}/{stack}/{component}/{NAME}`.
 - **`stack`** — declared at the top level of a stack (`secrets:` sibling of `vars:`). Stored **once
   per stack** and shared by every component instance. Rotate once, every instance sees it.
-- **`instance`** (default) — declared under a component (`components.<type>.<c>.secrets:`). Stored
-  **per component instance** (the current behavior).
+  Path: `{prefix}/{stack}/{NAME}`.
+- **`global`** — declared explicitly (`scope: global`, honored at either position). Stored **once
+  per backend store** and shared by every stack and component that resolves through it. Sharing is
+  bounded by the store's backend (account/project/prefix), which remains the isolation boundary.
+  Path: `{prefix}/{NAME}`. Store-backed only for now (`SupportsScope` gates it; SOPS file placement
+  is scope-keyed and has no global derivation rule yet).
 
 ### Scope is derived from position (one-way)
 
@@ -350,7 +357,9 @@ it under a component, but an instance-declared secret can never become stack-sco
 a derived `scope` tag is stamped onto each declaration by position **before** the standard
 deep-merge (`internal/exec/stack_processor_merge.go`), so "most-specific wins" resolves overrides
 and enforces the one-way rule with no merge-engine changes. An explicit `scope:` that conflicts with
-position is an error (`ErrScopeConflict`).
+position is an error (`ErrScopeConflict`) — except `scope: global`, which is strictly more shared
+than either position implies and is honored wherever the declaration appears (it survives the
+positional stamp).
 
 ### Override is opt-in (no silent shadow)
 
@@ -542,7 +551,10 @@ atmos secret push --stack dev --component api --input .env.local
 
 ### `atmos secret import`
 
-Import secrets from an env file for declared secrets.
+Import is the general way to bring existing secret values under management. Two source modes:
+a **file** (bulk, `.env`/JSON) or an existing **store coordinate** (one secret, selected by any
+`--from-*` flag — the positional argument is then a declared NAME instead of a FILE). Future
+sources hang off the same verb.
 
 ```bash
 # Import from .env file (sets values for declared secrets)
@@ -559,15 +571,31 @@ cat .env | atmos secret import - --stack prod --component api
 
 # Import from JSON format
 atmos secret import secrets.json --stack prod --format json
+
+# Adopt a value left at a legacy `!store app-secrets atmos shared client_secret` path:
+# the --from-* flags transcribe the legacy expression one-to-one. Copies, never moves.
+atmos secret import SHARED_CLIENT_SECRET \
+  --from-stack atmos --from-component shared --from-key client_secret \
+  --stack prod --component api
 ```
 
-**Behavior:**
+**Behavior (file mode):**
 - Parses env file (KEY=value format) or JSON/YAML
 - For each key in the file:
   - If declared: sets value in configured provider
   - If not declared: warns and skips (maintains declarative registry principle)
 - Supports `--dry-run` to preview changes
 - Reports summary: X imported, Y skipped (undeclared)
+
+**Behavior (store-coordinate mode):**
+- Reads the source value from `(--from-store, --from-stack, --from-component, --from-key)`;
+  `--from-store` defaults to the declaration's own store, `--from-key` to the secret name.
+  The stack/component segments are raw path strings — they need not name real stacks/components
+- Registers the value with the masker immediately, then writes through the declaration's normal
+  Set path (sensitivity flag, scope-derived coordinate — including `scope: global` targets)
+- terraform-import semantics: the source value is never modified or deleted
+- `--dry-run` reads the source (proving it exists and is accessible) but writes nothing
+- An undeclared NAME is a hard error (explicit target, unlike lenient file mode)
 
 **Difference from `push`:**
 - `push` fails immediately on any undeclared key
@@ -1203,7 +1231,7 @@ Location: `pkg/datafetcher/schema/`
 6. **Provider naming** - Use `kind` field with `cloud/thing` format (consistent with auth)
 7. **Structured secrets** - Path extraction via `| path ".foo.bar"` modifier and `--path` CLI flag
 8. **Provider auth** - Optional `identity` field on provider/store config
-9. **Declaration scope** - Stack/component config only for v1; "global" is a shared import (every secret keeps a real `(stack, component, key)` coordinate, so `Store.Set` fits unchanged)
+9. **Declaration scope** - Stack/component config only; "global" = a shared import (the declaration) + `scope: global` (the value — the coordinate omits the stack and component segments so every importer converges on one backend path). Migration from legacy `!store` paths is a one-shot CLI adoption (`atmos secret import NAME --from-*`, terraform-import-style: copy, never move) — coordinate overrides (per-declaration `store_stack`/`store_component` fields, `!secret.store`, store-level namespace pins) were rejected because they bake legacy raw-coordinate addressing into permanent declarative vocabulary
 10. **Masking control** - No separate `--secrets` flag; the existing `--mask` drives it. On inspection commands `--mask=true` skips retrieval entirely (no credentials); value-producing commands always retrieve
 11. **Flag vocabulary** - `secret: true` = subsystem membership (aligns with `!secret`); `sensitive` = the per-value data-handling mechanism it uses internally (Terraform `sensitive`, `SensitiveStore`)
 

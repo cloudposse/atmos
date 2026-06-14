@@ -81,11 +81,15 @@ func boolField(spec map[string]any, key string) bool {
 
 // scopeField reads the derived `scope` tag stamped onto a declaration by the stack processor,
 // defaulting to ScopeInstance when absent or unrecognized. The tag is normally injected by
-// position (top-level `secrets:` → stack; component `secrets:` → instance), but a directly
-// constructed section may carry an explicit value.
+// position (top-level `secrets:` → stack; component `secrets:` → instance) with an explicit
+// `scope: global` surviving the stamp, but a directly constructed section may carry any value.
 func scopeField(spec map[string]any) Scope {
-	if stringField(spec, "scope") == string(ScopeStack) {
+	switch stringField(spec, "scope") {
+	case string(ScopeStack):
 		return ScopeStack
+	case string(ScopeGlobal):
+		return ScopeGlobal
+	default:
+		return ScopeInstance
 	}
-	return ScopeInstance
 }

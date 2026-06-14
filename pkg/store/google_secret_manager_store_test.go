@@ -271,22 +271,22 @@ func TestGSMStore_Set(t *testing.T) {
 				}, nil),
 		},
 		{
-			name:      "empty stack",
-			stack:     "",
-			component: "app/service",
-			key:       "config-key",
-			value:     "test-value",
-			mockFn:    func(m *MockGSMClient) {},
-			wantErr:   true,
-		},
-		{
-			name:      "empty component",
+			// A stack-scoped secret coordinate omits the component segment.
+			name:      "stack scoped set omits component",
 			stack:     "dev-usw2",
 			component: "",
 			key:       "config-key",
 			value:     "test-value",
-			mockFn:    func(m *MockGSMClient) {},
-			wantErr:   true,
+			mockFn:    gsmClientSecretCreationMock("test-project", "test-prefix_dev_usw2_config-key", `"test-value"`, nil, nil),
+		},
+		{
+			// A global secret coordinate omits both the stack and component segments.
+			name:      "global scoped set omits stack and component",
+			stack:     "",
+			component: "",
+			key:       "config-key",
+			value:     "test-value",
+			mockFn:    gsmClientSecretCreationMock("test-project", "test-prefix_config-key", `"test-value"`, nil, nil),
 		},
 		{
 			name:      "empty key",
@@ -411,22 +411,34 @@ func TestGSMStore_Get(t *testing.T) {
 			wantErr: true,
 		},
 		{
-			name:      "empty stack",
-			stack:     "",
-			component: "app/service",
-			key:       "config-key",
-			mockFn:    func(m *MockGSMClient) {},
-			want:      nil,
-			wantErr:   true,
-		},
-		{
-			name:      "empty component",
+			// A stack-scoped secret coordinate omits the component segment.
+			name:      "stack scoped get omits component",
 			stack:     "dev-usw2",
 			component: "",
 			key:       "config-key",
-			mockFn:    func(m *MockGSMClient) {},
-			want:      nil,
-			wantErr:   true,
+			mockFn: func(m *MockGSMClient) {
+				m.On("AccessSecretVersion", mock.Anything, mock.MatchedBy(func(req *secretmanagerpb.AccessSecretVersionRequest) bool {
+					return req.Name == "projects/test-project/secrets/test-prefix_dev_usw2_config-key/versions/latest"
+				})).Return(&secretmanagerpb.AccessSecretVersionResponse{
+					Payload: &secretmanagerpb.SecretPayload{Data: []byte(`"test-value"`)},
+				}, nil)
+			},
+			want: "test-value",
+		},
+		{
+			// A global secret coordinate omits both the stack and component segments.
+			name:      "global scoped get omits stack and component",
+			stack:     "",
+			component: "",
+			key:       "config-key",
+			mockFn: func(m *MockGSMClient) {
+				m.On("AccessSecretVersion", mock.Anything, mock.MatchedBy(func(req *secretmanagerpb.AccessSecretVersionRequest) bool {
+					return req.Name == "projects/test-project/secrets/test-prefix_config-key/versions/latest"
+				})).Return(&secretmanagerpb.AccessSecretVersionResponse{
+					Payload: &secretmanagerpb.SecretPayload{Data: []byte(`"test-value"`)},
+				}, nil)
+			},
+			want: "test-value",
 		},
 		{
 			name:      "empty key",
@@ -520,20 +532,28 @@ func TestGSMStore_Delete(t *testing.T) {
 			wantErr:   ErrDeleteSecret,
 		},
 		{
-			name:      "empty stack",
-			stack:     "",
-			component: "app/service",
-			key:       "config-key",
-			mockFn:    func(m *MockGSMClient) {},
-			wantErr:   ErrEmptyStack,
-		},
-		{
-			name:      "empty component",
+			// A stack-scoped secret coordinate omits the component segment.
+			name:      "stack scoped delete omits component",
 			stack:     "dev-usw2",
 			component: "",
 			key:       "config-key",
-			mockFn:    func(m *MockGSMClient) {},
-			wantErr:   ErrEmptyComponent,
+			mockFn: func(m *MockGSMClient) {
+				m.On("DeleteSecret", mock.Anything, mock.MatchedBy(func(req *secretmanagerpb.DeleteSecretRequest) bool {
+					return req.Name == "projects/test-project/secrets/test-prefix_dev_usw2_config-key"
+				})).Return(nil)
+			},
+		},
+		{
+			// A global secret coordinate omits both the stack and component segments.
+			name:      "global scoped delete omits stack and component",
+			stack:     "",
+			component: "",
+			key:       "config-key",
+			mockFn: func(m *MockGSMClient) {
+				m.On("DeleteSecret", mock.Anything, mock.MatchedBy(func(req *secretmanagerpb.DeleteSecretRequest) bool {
+					return req.Name == "projects/test-project/secrets/test-prefix_config-key"
+				})).Return(nil)
+			},
 		},
 		{
 			name:      "empty key",

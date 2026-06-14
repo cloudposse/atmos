@@ -38,4 +38,9 @@ type SecretDeclaration struct {
 	Reference string `yaml:"reference,omitempty" json:"reference,omitempty" mapstructure:"reference"`
 	// Required marks the secret as required; validation fails if it is not initialized.
 	Required bool `yaml:"required,omitempty" json:"required,omitempty" mapstructure:"required"`
+	// Scope is the storage scope (instance, stack, or global). Normally derived from declaration
+	// position (top-level `secrets:` → stack; component `secrets:` → instance); an explicit value
+	// must match the position, except `global` which is honored at either position. A global
+	// secret is stored once per backend store and shared by every stack and component.
+	Scope string `yaml:"scope,omitempty" json:"scope,omitempty" mapstructure:"scope"`
 }

@@ -16,6 +16,7 @@ type secretService interface {
 	Get(name string, opts secrets.ResolveOptions) (any, error)
 	Delete(name string) error
 	DeleteAll() (int, error)
+	ImportFromStore(name string, src secrets.ImportSource, dryRun bool) error
 	Status() []secrets.Status
 	IsDeclared(name string) bool
 	ScopeOf(name string) (secrets.Scope, bool)

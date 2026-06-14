@@ -26,6 +26,18 @@ func TestCoordinateForDeclaration_Scope(t *testing.T) {
 	coord = coordinateForDeclaration(defDecl, "prod", "api")
 	assert.Equal(t, "api", coord.Component)
 	assert.Equal(t, ScopeInstance, coord.Scope)
+
+	// A global declaration drops both the stack and component segments (one shared value per
+	// backend), regardless of the resolving scope.
+	globalDecl := &Declaration{Name: "SHARED_CLIENT_SECRET", Scope: ScopeGlobal}
+	coord = coordinateForDeclaration(globalDecl, "prod", "api")
+	assert.Empty(t, coord.Stack, "global coordinate must omit the stack")
+	assert.Empty(t, coord.Component, "global coordinate must omit the component")
+	assert.Equal(t, "SHARED_CLIENT_SECRET", coord.Key)
+	assert.Equal(t, ScopeGlobal, coord.Scope)
+
+	coordOther := coordinateForDeclaration(globalDecl, "dev", "web")
+	assert.Equal(t, coord, coordOther, "every resolving scope must converge on the same global coordinate")
 }
 
 // TestTagScope_StampsAndResolvesOverride proves position-derived scope tagging plus the standard
@@ -83,17 +95,37 @@ func TestTagScope_ConflictRejected(t *testing.T) {
 	require.ErrorIs(t, err, ErrScopeConflict)
 }
 
-// TestExtractDeclarations_ScopeDefault proves a declaration without a scope tag defaults to instance.
+// TestTagScope_GlobalSurvivesEitherPosition proves an explicit `scope: global` is exempt from the
+// positional-conflict rule: it survives the stamp at both the stack-level and component-level
+// positions (a global declaration is typically a catalog fragment imported anywhere).
+func TestTagScope_GlobalSurvivesEitherPosition(t *testing.T) {
+	for _, positional := range []Scope{ScopeStack, ScopeInstance} {
+		section := map[string]any{
+			"vars": map[string]any{
+				"SHARED_CLIENT_SECRET": map[string]any{"store": "app-secrets", "scope": "global"},
+			},
+		}
+		tagged, err := TagScope(section, positional)
+		require.NoError(t, err, "explicit global must not conflict with positional scope %q", positional)
+		got := tagged["vars"].(map[string]any)["SHARED_CLIENT_SECRET"].(map[string]any)["scope"]
+		assert.Equal(t, "global", got, "explicit global must survive the %q positional stamp", positional)
+	}
+}
+
+// TestExtractDeclarations_ScopeDefault proves a declaration without a scope tag defaults to
+// instance, and explicit stack/global tags are honored.
 func TestExtractDeclarations_ScopeDefault(t *testing.T) {
 	section := map[string]any{
 		"secrets": map[string]any{
 			"vars": map[string]any{
 				"X": map[string]any{"sops": "default"},
 				"Y": map[string]any{"sops": "default", "scope": "stack"},
+				"Z": map[string]any{"store": "app-secrets", "scope": "global"},
 			},
 		},
 	}
 	decls := ExtractDeclarations(section)
 	assert.Equal(t, ScopeInstance, decls["X"].Scope)
 	assert.Equal(t, ScopeStack, decls["Y"].Scope)
+	assert.Equal(t, ScopeGlobal, decls["Z"].Scope)
 }

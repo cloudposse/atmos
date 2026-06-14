@@ -97,13 +97,30 @@ func TestKeychainStore_KeyComposition(t *testing.T) {
 func TestKeychainStore_ValidatesEmptyArgs(t *testing.T) {
 	s := newTestKeychainStore(t)
 
-	assert.ErrorIs(t, s.Set("", "vpc", "k", "v"), ErrEmptyStack)
-	assert.ErrorIs(t, s.Set("dev", "", "k", "v"), ErrEmptyComponent)
 	assert.ErrorIs(t, s.Set("dev", "vpc", "", "v"), ErrEmptyKey)
 	assert.ErrorIs(t, s.Set("dev", "vpc", "k", nil), ErrNilValue)
 
 	_, err := s.GetKey("")
 	assert.ErrorIs(t, err, ErrEmptyKey)
+}
+
+// TestKeychainStore_ScopedCoordinates proves the empty-segment contract for scoped secret
+// coordinates: a stack-scoped coordinate (empty component) omits the component segment, and a
+// global coordinate (empty stack and component) collapses to `prefix/key`. The raw GetKey reads
+// pin the exact composed layout.
+func TestKeychainStore_ScopedCoordinates(t *testing.T) {
+	s, err := NewKeychainStore(&KeychainStoreOptions{Backend: keyring.TypeMemory, Prefix: "atmos"})
+	require.NoError(t, err)
+
+	require.NoError(t, s.Set("plat-ue2-dev", "", "STACK_KEY", "stack-v"))
+	got, err := s.GetKey("atmos/plat/ue2/dev/STACK_KEY")
+	require.NoError(t, err)
+	assert.Equal(t, "stack-v", got)
+
+	require.NoError(t, s.Set("", "", "GLOBAL_KEY", "global-v"))
+	got, err = s.GetKey("atmos/GLOBAL_KEY")
+	require.NoError(t, err)
+	assert.Equal(t, "global-v", got)
 }
 
 func TestKeychainStore_RegistryBuildsAndIsSecretByDefault(t *testing.T) {

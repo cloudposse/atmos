@@ -262,14 +262,9 @@ func (s *SSMStore) assumeRole(ctx context.Context, roleArn *string) (*aws.Config
 	return &cfg, nil
 }
 
-// Set stores a key-value pair in AWS SSM Parameter Store.
+// Set stores a key-value pair in AWS SSM Parameter Store. An empty stack and/or component is
+// permitted: scoped secret coordinates (stack/global scope) omit those path segments.
 func (s *SSMStore) Set(stack string, component string, key string, value any) error {
-	if stack == "" {
-		return ErrEmptyStack
-	}
-	if component == "" {
-		return ErrEmptyComponent
-	}
 	if key == "" {
 		return ErrEmptyKey
 	}
@@ -328,13 +323,9 @@ func (s *SSMStore) Set(stack string, component string, key string, value any) er
 }
 
 // Get retrieves a value by key for an Atmos component in a stack from AWS SSM Parameter Store.
+// An empty stack and/or component is permitted: scoped secret coordinates (stack/global scope)
+// omit those path segments.
 func (s *SSMStore) Get(stack string, component string, key string) (any, error) {
-	if stack == "" {
-		return nil, ErrEmptyStack
-	}
-	if component == "" {
-		return nil, ErrEmptyComponent
-	}
 	if key == "" {
 		return nil, ErrEmptyKey
 	}
@@ -451,13 +442,9 @@ func (s *SSMStore) GetKey(key string) (any, error) {
 }
 
 // Delete removes a parameter for an Atmos component in a stack from AWS SSM Parameter Store.
+// An empty stack and/or component is permitted: scoped secret coordinates (stack/global scope)
+// omit those path segments.
 func (s *SSMStore) Delete(stack string, component string, key string) error {
-	if stack == "" {
-		return ErrEmptyStack
-	}
-	if component == "" {
-		return ErrEmptyComponent
-	}
 	if key == "" {
 		return ErrEmptyKey
 	}

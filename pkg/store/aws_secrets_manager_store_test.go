@@ -171,26 +171,46 @@ func TestSecretsManagerStore_KeyBuilding(t *testing.T) {
 
 func TestSecretsManagerStore_Set_Validation(t *testing.T) {
 	s := newTestASMStore(newFakeSecretsManager())
-	assert.ErrorIs(t, s.Set("", "api", "k", "v"), ErrEmptyStack)
-	assert.ErrorIs(t, s.Set("prod", "", "k", "v"), ErrEmptyComponent)
 	assert.ErrorIs(t, s.Set("prod", "api", "", "v"), ErrEmptyKey)
 	assert.ErrorIs(t, s.Set("prod", "api", "k", nil), ErrNilValue)
 }
 
+// TestSecretsManagerStore_ScopedCoordinates proves the empty-segment contract for scoped secret
+// coordinates: a stack-scoped coordinate (empty component) omits the component segment, and a
+// global coordinate (empty stack and component) collapses to `prefix/key`.
+func TestSecretsManagerStore_ScopedCoordinates(t *testing.T) {
+	fake := newFakeSecretsManager()
+	s := newTestASMStore(fake) // prefix "atmos/secrets", delimiter "-".
+
+	require.NoError(t, s.Set("plat-prod-ue1", "", "STACK_KEY", "stack-v"))
+	_, ok := fake.data["atmos/secrets/plat/prod/ue1/STACK_KEY"]
+	assert.True(t, ok, "expected stack-scoped secret id, have %v", fake.data)
+
+	require.NoError(t, s.Set("", "", "GLOBAL_KEY", "global-v"))
+	_, ok = fake.data["atmos/secrets/GLOBAL_KEY"]
+	assert.True(t, ok, "expected global secret id, have %v", fake.data)
+
+	got, err := s.Get("plat-prod-ue1", "", "STACK_KEY")
+	require.NoError(t, err)
+	assert.Equal(t, "stack-v", got)
+
+	got, err = s.Get("", "", "GLOBAL_KEY")
+	require.NoError(t, err)
+	assert.Equal(t, "global-v", got)
+
+	require.NoError(t, s.Delete("", "", "GLOBAL_KEY"))
+	_, ok = fake.data["atmos/secrets/GLOBAL_KEY"]
+	assert.False(t, ok, "expected global secret id deleted, have %v", fake.data)
+}
+
 func TestSecretsManagerStore_Get_Validation(t *testing.T) {
 	s := newTestASMStore(newFakeSecretsManager())
-	_, err := s.Get("", "api", "k")
-	assert.ErrorIs(t, err, ErrEmptyStack)
-	_, err = s.Get("prod", "", "k")
-	assert.ErrorIs(t, err, ErrEmptyComponent)
-	_, err = s.Get("prod", "api", "")
+	_, err := s.Get("prod", "api", "")
 	assert.ErrorIs(t, err, ErrEmptyKey)
 }
 
 func TestSecretsManagerStore_Delete_Validation(t *testing.T) {
 	s := newTestASMStore(newFakeSecretsManager())
-	assert.ErrorIs(t, s.Delete("", "api", "k"), ErrEmptyStack)
-	assert.ErrorIs(t, s.Delete("prod", "", "k"), ErrEmptyComponent)
 	assert.ErrorIs(t, s.Delete("prod", "api", ""), ErrEmptyKey)
 }
 

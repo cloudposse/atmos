@@ -305,9 +305,24 @@ func TestSSMStore_Delete(t *testing.T) {
 
 	t.Run("validation errors", func(t *testing.T) {
 		s := newTestSSMStore(new(MockSSMClient))
-		assert.ErrorIs(t, s.Delete("", "api", "k"), ErrEmptyStack)
-		assert.ErrorIs(t, s.Delete("prod", "", "k"), ErrEmptyComponent)
 		assert.ErrorIs(t, s.Delete("prod", "api", ""), ErrEmptyKey)
+	})
+
+	t.Run("scoped coordinates omit empty segments", func(t *testing.T) {
+		// Stack-scoped (empty component) and global (empty stack and component) secret
+		// coordinates are valid; the path simply omits the empty segments.
+		mockSSM := new(MockSSMClient)
+		mockSSM.On("DeleteParameter", mock.Anything, &ssm.DeleteParameterInput{
+			Name: aws.String("/atmos/prod/k"),
+		}).Return(&ssm.DeleteParameterOutput{}, nil)
+		mockSSM.On("DeleteParameter", mock.Anything, &ssm.DeleteParameterInput{
+			Name: aws.String("/atmos/k"),
+		}).Return(&ssm.DeleteParameterOutput{}, nil)
+		s := newTestSSMStore(mockSSM)
+
+		require.NoError(t, s.Delete("prod", "", "k"))
+		require.NoError(t, s.Delete("", "", "k"))
+		mockSSM.AssertExpectations(t)
 	})
 
 	t.Run("client error wrapped", func(t *testing.T) {

@@ -80,8 +80,9 @@ func runSecretList(cmd *cobra.Command, args []string) error {
 }
 
 // enumeratedSecretRows builds list rows across all (stack, component) instances matching the
-// facets. Stack-scoped secrets are de-duplicated to a single row per (stack, secret) — they are
-// inherited into every component but stored once — and shown with a `*` component.
+// facets. Shared secrets are de-duplicated to a single row per storage location — stack-scoped
+// to one row per (stack, secret) shown with a `*` component, global to one row per secret shown
+// with a `*` stack and component — they are inherited into every consumer but stored once.
 func enumeratedSecretRows(facet secretScope) ([]map[string]any, error) {
 	entries, atmosConfig, err := enumerateScopesFn(facet)
 	if err != nil {
@@ -89,22 +90,30 @@ func enumeratedSecretRows(facet secretScope) ([]map[string]any, error) {
 	}
 
 	var rows []map[string]any
-	seenStackScoped := make(map[string]bool)
+	seenShared := make(map[string]bool)
 	for _, entry := range entries {
 		svc := secrets.NewService(atmosConfig, entry.Stack, entry.Component, entry.Section)
 		statuses := svc.Status()
 		for i := range statuses {
 			st := &statuses[i]
-			if st.Declaration.IsStackScoped() {
-				key := entry.Stack + "\x00" + st.Declaration.Name
-				if seenStackScoped[key] {
+			switch st.Declaration.Scope {
+			case secrets.ScopeGlobal:
+				key := "global\x00" + st.Declaration.Name
+				if seenShared[key] {
 					continue
 				}
-				seenStackScoped[key] = true
+				seenShared[key] = true
+				rows = append(rows, statusRow("*", "*", st))
+			case secrets.ScopeStack:
+				key := entry.Stack + "\x00" + st.Declaration.Name
+				if seenShared[key] {
+					continue
+				}
+				seenShared[key] = true
 				rows = append(rows, statusRow(entry.Stack, "*", st))
-				continue
+			default:
+				rows = append(rows, statusRow(entry.Stack, entry.Component, st))
 			}
-			rows = append(rows, statusRow(entry.Stack, entry.Component, st))
 		}
 	}
 	return rows, nil
@@ -175,10 +184,12 @@ func statusRow(stack, component string, st *secrets.Status) map[string]any {
 
 // scopeLabel returns the display scope for a declaration, defaulting empty to "instance".
 func scopeLabel(scope secrets.Scope) string {
-	if scope == secrets.ScopeStack {
-		return string(secrets.ScopeStack)
+	switch scope {
+	case secrets.ScopeStack, secrets.ScopeGlobal:
+		return string(scope)
+	default:
+		return string(secrets.ScopeInstance)
 	}
-	return string(secrets.ScopeInstance)
 }
 
 // secretListColumns returns column configuration for secret list output.

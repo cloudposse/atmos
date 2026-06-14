@@ -55,4 +55,12 @@ var (
 	// ErrSopsCollision indicates two scopes resolve to a colliding SOPS file: distinct instances
 	// sharing a file (no isolation), or a stack-scoped secret resolving per-component (not shared).
 	ErrSopsCollision = errors.New("SOPS secret files collide across scopes")
+
+	// ErrImportSourceStore indicates the import source store could not be determined: the
+	// declaration is not store-backed and no explicit source store was given.
+	ErrImportSourceStore = errors.New("import source store is required (the declaration has no `store:` to default to)")
+
+	// ErrImportSourceRead indicates the source value could not be read from the source store
+	// coordinate during an import.
+	ErrImportSourceRead = errors.New("failed to read import source value")
 )

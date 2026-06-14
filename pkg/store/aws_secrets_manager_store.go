@@ -162,14 +162,9 @@ func (s *SecretsManagerStore) getKey(stack string, component string, key string)
 	return getKey(s.prefix, *s.stackDelimiter, stack, component, key, "/")
 }
 
-// Set stores a value, creating the secret if it does not yet exist.
+// Set stores a value, creating the secret if it does not yet exist. An empty stack and/or
+// component is permitted: scoped secret coordinates (stack/global scope) omit those path segments.
 func (s *SecretsManagerStore) Set(stack string, component string, key string, value any) error {
-	if stack == "" {
-		return ErrEmptyStack
-	}
-	if component == "" {
-		return ErrEmptyComponent
-	}
 	if key == "" {
 		return ErrEmptyKey
 	}
@@ -222,14 +217,9 @@ func (s *SecretsManagerStore) putOrCreate(ctx context.Context, secretID, strValu
 	return nil
 }
 
-// Get retrieves a value for an Atmos component in a stack.
+// Get retrieves a value for an Atmos component in a stack. An empty stack and/or component is
+// permitted: scoped secret coordinates (stack/global scope) omit those path segments.
 func (s *SecretsManagerStore) Get(stack string, component string, key string) (any, error) {
-	if stack == "" {
-		return nil, ErrEmptyStack
-	}
-	if component == "" {
-		return nil, ErrEmptyComponent
-	}
 	if key == "" {
 		return nil, ErrEmptyKey
 	}
@@ -284,13 +274,9 @@ func (s *SecretsManagerStore) getByID(secretID string) (any, error) {
 }
 
 // Delete removes a secret (with no recovery window so the name can be reused immediately).
+// An empty stack and/or component is permitted: scoped secret coordinates (stack/global scope)
+// omit those path segments.
 func (s *SecretsManagerStore) Delete(stack string, component string, key string) error {
-	if stack == "" {
-		return ErrEmptyStack
-	}
-	if component == "" {
-		return ErrEmptyComponent
-	}
 	if key == "" {
 		return ErrEmptyKey
 	}

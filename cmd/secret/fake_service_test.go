@@ -14,6 +14,13 @@ type setCall struct {
 	value any
 }
 
+// importCall records a single ImportFromStore invocation on the fake service.
+type importCall struct {
+	name   string
+	src    secrets.ImportSource
+	dryRun bool
+}
+
 // getCall records a single Get invocation on the fake service.
 type getCall struct {
 	name string
@@ -42,10 +49,12 @@ type fakeSecretService struct {
 	deleteAllErr error
 	missingErr   error
 	keygenErr    error
+	importErr    error
 
 	// Recorded calls.
 	setCalls       []setCall
 	getCalls       []getCall
+	importCalls    []importCall
 	deletedNames   []string
 	deleteAllCalls int
 	generatedVault []secrets.GenerableVault
@@ -87,6 +96,11 @@ func (f *fakeSecretService) Delete(name string) error {
 func (f *fakeSecretService) DeleteAll() (int, error) {
 	f.deleteAllCalls++
 	return f.deleteAllCount, f.deleteAllErr
+}
+
+func (f *fakeSecretService) ImportFromStore(name string, src secrets.ImportSource, dryRun bool) error {
+	f.importCalls = append(f.importCalls, importCall{name: name, src: src, dryRun: dryRun})
+	return f.importErr
 }
 
 func (f *fakeSecretService) Status() []secrets.Status { return f.statuses }

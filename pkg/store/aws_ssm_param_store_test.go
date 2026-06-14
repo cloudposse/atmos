@@ -162,22 +162,36 @@ func TestSSMStore_Set(t *testing.T) {
 			wantErr: true,
 		},
 		{
-			name:      "empty_stack",
-			stack:     "",
-			component: "service",
-			key:       "config-key",
-			value:     "test-value",
-			mockSetup: func(mockSSM *MockSSMClient, mockAssumedSSM *MockSSMClient, mockSTS *MockSTSClient) {},
-			wantErr:   true,
-		},
-		{
-			name:      "empty_component",
+			// A stack-scoped secret coordinate omits the component segment.
+			name:      "stack_scoped_set_omits_component",
 			stack:     "dev/usw2/app",
 			component: "",
 			key:       "config-key",
 			value:     "test-value",
-			mockSetup: func(mockSSM *MockSSMClient, mockAssumedSSM *MockSSMClient, mockSTS *MockSTSClient) {},
-			wantErr:   true,
+			mockSetup: func(mockSSM *MockSSMClient, mockAssumedSSM *MockSSMClient, mockSTS *MockSTSClient) {
+				mockSSM.On("PutParameter", mock.Anything, &ssm.PutParameterInput{
+					Name:      aws.String("/test-prefix/dev/usw2/app/config-key"),
+					Value:     aws.String(`"test-value"`),
+					Type:      types.ParameterTypeString,
+					Overwrite: aws.Bool(true),
+				}).Return(&ssm.PutParameterOutput{}, nil)
+			},
+		},
+		{
+			// A global secret coordinate omits both the stack and component segments.
+			name:      "global_scoped_set_omits_stack_and_component",
+			stack:     "",
+			component: "",
+			key:       "config-key",
+			value:     "test-value",
+			mockSetup: func(mockSSM *MockSSMClient, mockAssumedSSM *MockSSMClient, mockSTS *MockSTSClient) {
+				mockSSM.On("PutParameter", mock.Anything, &ssm.PutParameterInput{
+					Name:      aws.String("/test-prefix/config-key"),
+					Value:     aws.String(`"test-value"`),
+					Type:      types.ParameterTypeString,
+					Overwrite: aws.Bool(true),
+				}).Return(&ssm.PutParameterOutput{}, nil)
+			},
 		},
 		{
 			name:      "empty_key",
@@ -378,20 +392,40 @@ func TestSSMStore_Get(t *testing.T) {
 			wantErr: true,
 		},
 		{
-			name:      "empty_stack",
-			stack:     "",
-			component: "service",
-			key:       "config-key",
-			mockSetup: func(mockSSM *MockSSMClient, mockAssumedSSM *MockSSMClient, mockSTS *MockSTSClient) {},
-			wantErr:   true,
-		},
-		{
-			name:      "empty_component",
+			// A stack-scoped secret coordinate omits the component segment.
+			name:      "stack_scoped_get_omits_component",
 			stack:     "dev/usw2/app",
 			component: "",
 			key:       "config-key",
-			mockSetup: func(mockSSM *MockSSMClient, mockAssumedSSM *MockSSMClient, mockSTS *MockSTSClient) {},
-			wantErr:   true,
+			mockSetup: func(mockSSM *MockSSMClient, mockAssumedSSM *MockSSMClient, mockSTS *MockSTSClient) {
+				mockSSM.On("GetParameter", mock.Anything, &ssm.GetParameterInput{
+					Name:           aws.String("/test-prefix/dev/usw2/app/config-key"),
+					WithDecryption: aws.Bool(true),
+				}).Return(&ssm.GetParameterOutput{
+					Parameter: &types.Parameter{
+						Value: aws.String(`"test-value"`),
+					},
+				}, nil)
+			},
+			want: "test-value",
+		},
+		{
+			// A global secret coordinate omits both the stack and component segments.
+			name:      "global_scoped_get_omits_stack_and_component",
+			stack:     "",
+			component: "",
+			key:       "config-key",
+			mockSetup: func(mockSSM *MockSSMClient, mockAssumedSSM *MockSSMClient, mockSTS *MockSTSClient) {
+				mockSSM.On("GetParameter", mock.Anything, &ssm.GetParameterInput{
+					Name:           aws.String("/test-prefix/config-key"),
+					WithDecryption: aws.Bool(true),
+				}).Return(&ssm.GetParameterOutput{
+					Parameter: &types.Parameter{
+						Value: aws.String(`"test-value"`),
+					},
+				}, nil)
+			},
+			want: "test-value",
 		},
 		{
 			name:      "empty_key",

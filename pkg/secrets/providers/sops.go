@@ -161,8 +161,10 @@ func (p *sopsProvider) Kind() string {
 	return p.kind
 }
 
-// SupportsScope reports the scopes SOPS can represent. Both work: the backing file path encodes
-// the scope (a stack file shared by every instance, or a per-instance file).
+// SupportsScope reports the scopes SOPS can represent. Instance and stack work: the backing file
+// path encodes the scope (a stack file shared by every instance, or a per-instance file). Global
+// is NOT supported yet — file placement is scope-keyed and a stack/component-less file location
+// has no derivation rule; revisit if demand appears.
 func (p *sopsProvider) SupportsScope(scope Scope) bool {
 	defer perf.Track(nil, "providers.sopsProvider.SupportsScope")()
 

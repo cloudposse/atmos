@@ -70,8 +70,22 @@ func runSecretSet(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	ui.Successf("Set secret `%s` for component `%s` in stack `%s`", target.name, scope.Component, scope.Stack)
+	ui.Success(setSuccessMessage(svc, scope, target.name))
 	return nil
+}
+
+// setSuccessMessage describes where the value was written: shared scopes (stack, global) name the
+// shared location so the user knows every consumer sees the new value.
+func setSuccessMessage(svc secretService, scope secretScope, name string) string {
+	sc, _ := svc.ScopeOf(name)
+	switch sc {
+	case secrets.ScopeGlobal:
+		return fmt.Sprintf("Set global secret `%s` (one value shared by every stack and component using its store)", name)
+	case secrets.ScopeStack:
+		return fmt.Sprintf("Set stack-scoped secret `%s` for stack `%s` (shared by every component in the stack)", name, scope.Stack)
+	default:
+		return fmt.Sprintf("Set secret `%s` for component `%s` in stack `%s`", name, scope.Component, scope.Stack)
+	}
 }
 
 // setTarget is the resolved secret name and any inline value parsed for `secret set`.

@@ -20,7 +20,9 @@ const scopeFieldKey = "scope"
 //
 // A declaration carrying an explicit `scope` that conflicts with the positional scope returns
 // ErrScopeConflict, enforcing the one-way rule: an instance-declared secret can never be
-// stack-scoped, and a stack-level declaration can't be instance-scoped.
+// stack-scoped, and a stack-level declaration can't be instance-scoped. An explicit
+// `scope: global` is exempt — it is strictly more shared than either position implies, so it is
+// honored wherever the declaration appears (typically a catalog fragment imported anywhere).
 func TagScope(section map[string]any, scope Scope) (map[string]any, error) {
 	defer perf.Track(nil, "secrets.TagScope")()
 
@@ -45,17 +47,32 @@ func TagScope(section map[string]any, scope Scope) (map[string]any, error) {
 			newVars[name] = raw
 			continue
 		}
-		if existing, ok := spec[scopeFieldKey].(string); ok && existing != "" && existing != string(scope) {
-			return nil, fmt.Errorf("%w: secret %q declares scope %q but its position implies %q",
-				ErrScopeConflict, name, existing, scope)
+		stamped, err := stampDeclarationScope(name, spec, scope)
+		if err != nil {
+			return nil, err
 		}
-		newSpec := make(map[string]any, len(spec)+1)
-		for sk, sv := range spec {
-			newSpec[sk] = sv
-		}
-		newSpec[scopeFieldKey] = string(scope)
-		newVars[name] = newSpec
+		newVars[name] = stamped
 	}
 	out[varsSectionKey] = newVars
 	return out, nil
+}
+
+// stampDeclarationScope returns a copy of one declaration spec with the positional scope stamped,
+// enforcing the one-way conflict rule. An explicit `scope: global` is exempt and survives the
+// stamp; any other explicit scope must match the positional one.
+func stampDeclarationScope(name string, spec map[string]any, scope Scope) (map[string]any, error) {
+	existing, _ := spec[scopeFieldKey].(string)
+	if existing != "" && existing != string(scope) && existing != string(ScopeGlobal) {
+		return nil, fmt.Errorf("%w: secret %q declares scope %q but its position implies %q",
+			ErrScopeConflict, name, existing, scope)
+	}
+	newSpec := make(map[string]any, len(spec)+1)
+	for sk, sv := range spec {
+		newSpec[sk] = sv
+	}
+	// An explicit global scope survives the positional stamp; everything else takes it.
+	if existing != string(ScopeGlobal) {
+		newSpec[scopeFieldKey] = string(scope)
+	}
+	return newSpec, nil
 }

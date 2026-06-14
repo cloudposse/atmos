@@ -305,14 +305,9 @@ func (s *GSMStore) addSecretVersion(ctx context.Context, secret *secretmanagerpb
 	return nil
 }
 
-// Set stores a key-value pair in Google Secret Manager.
+// Set stores a key-value pair in Google Secret Manager. An empty stack and/or component is
+// permitted: scoped secret coordinates (stack/global scope) omit those path segments.
 func (s *GSMStore) Set(stack string, component string, key string, value any) error {
-	if stack == "" {
-		return ErrEmptyStack
-	}
-	if component == "" {
-		return ErrEmptyComponent
-	}
 	if key == "" {
 		return ErrEmptyKey
 	}
@@ -352,14 +347,9 @@ func (s *GSMStore) Set(stack string, component string, key string, value any) er
 	return nil
 }
 
-// Get retrieves a value by key from Google Secret Manager.
+// Get retrieves a value by key from Google Secret Manager. An empty stack and/or component is
+// permitted: scoped secret coordinates (stack/global scope) omit those path segments.
 func (s *GSMStore) Get(stack string, component string, key string) (any, error) {
-	if stack == "" {
-		return nil, ErrEmptyStack
-	}
-	if component == "" {
-		return nil, ErrEmptyComponent
-	}
 	if key == "" {
 		return nil, ErrEmptyKey
 	}
@@ -407,14 +397,9 @@ func (s *GSMStore) Get(stack string, component string, key string) (any, error) 
 }
 
 // Delete removes a secret (and all its versions) from Google Secret Manager for the given
-// stack, component, and key.
+// stack, component, and key. An empty stack and/or component is permitted: scoped secret
+// coordinates (stack/global scope) omit those path segments.
 func (s *GSMStore) Delete(stack string, component string, key string) error {
-	if stack == "" {
-		return ErrEmptyStack
-	}
-	if component == "" {
-		return ErrEmptyComponent
-	}
 	if key == "" {
 		return ErrEmptyKey
 	}

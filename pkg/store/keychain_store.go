@@ -90,14 +90,10 @@ func NewKeychainStore(options *KeychainStoreOptions) (Store, error) {
 	return &KeychainStore{kr: kr, prefix: prefix, stackDelimiter: stackDelimiter}, nil
 }
 
-// composeKey builds the stable keychain key for a stack/component/key triple.
+// composeKey builds the stable keychain key for a stack/component/key triple. An empty stack
+// and/or component is permitted: scoped secret coordinates (stack/global scope) omit those
+// path segments.
 func (s *KeychainStore) composeKey(stack, component, key string) (string, error) {
-	if stack == "" {
-		return "", ErrEmptyStack
-	}
-	if component == "" {
-		return "", ErrEmptyComponent
-	}
 	if key == "" {
 		return "", ErrEmptyKey
 	}

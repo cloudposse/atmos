@@ -26,6 +26,8 @@ const (
 	ScopeInstance = providers.ScopeInstance
 	// ScopeStack stores a single value shared by every instance in a stack.
 	ScopeStack = providers.ScopeStack
+	// ScopeGlobal stores a single value shared by every stack and component using the backend.
+	ScopeGlobal = providers.ScopeGlobal
 )
 
 // Declaration is a single declared secret resolved from a component's secrets.vars.
@@ -75,7 +77,9 @@ type ResolveOptions struct {
 
 // coordinateForDeclaration builds the backend coordinate for a declaration in a scope. A
 // stack-scoped declaration omits the component segment so its value is stored once per stack and
-// shared by every instance; an instance-scoped declaration (the default) keeps the component.
+// shared by every instance; a global declaration omits both the stack and component segments so
+// its value is stored once per backend and shared everywhere; an instance-scoped declaration
+// (the default) keeps both.
 func coordinateForDeclaration(decl *Declaration, stack, component string) providers.Coordinate {
 	defer perf.Track(nil, "secrets.coordinateForDeclaration")()
 
@@ -89,8 +93,11 @@ func coordinateForDeclaration(decl *Declaration, stack, component string) provid
 	if scope == "" {
 		scope = ScopeInstance
 	}
-	coord := providers.Coordinate{Stack: stack, Key: key, Scope: scope}
-	if scope != ScopeStack {
+	coord := providers.Coordinate{Key: key, Scope: scope}
+	if scope != ScopeGlobal {
+		coord.Stack = stack
+	}
+	if scope != ScopeStack && scope != ScopeGlobal {
 		coord.Component = component
 	}
 	return coord

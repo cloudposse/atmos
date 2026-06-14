@@ -7,10 +7,10 @@ import (
 	"errors"
 )
 
-// Scope identifies the addressing level at which a secret value is stored. Atmos exposes two
-// scopes today; each provider maps a scope to its native primitive (file path, key path,
-// environment) and declares which scopes it supports via Provider.SupportsScope. An empty Scope
-// is treated as ScopeInstance for back-compat.
+// Scope identifies the addressing level at which a secret value is stored. Atmos exposes three
+// scopes forming a ladder of sharing (instance → stack → global); each provider maps a scope to
+// its native primitive (file path, key path, environment) and declares which scopes it supports
+// via Provider.SupportsScope. An empty Scope is treated as ScopeInstance for back-compat.
 type Scope string
 
 const (
@@ -18,6 +18,10 @@ const (
 	ScopeInstance Scope = "instance"
 	// ScopeStack stores a single value shared by every instance in a stack (no component segment).
 	ScopeStack Scope = "stack"
+	// ScopeGlobal stores a single value shared by every stack and component that resolves through
+	// the same backend (no stack or component segment). Sharing is bounded by the backend the
+	// store points at (account/project/prefix), which remains the isolation boundary.
+	ScopeGlobal Scope = "global"
 )
 
 // Coordinate identifies a single secret value within a backend's namespace.
@@ -25,8 +29,9 @@ type Coordinate struct {
 	Stack     string
 	Component string
 	Key       string
-	// Scope is the addressing level (stack vs instance). Providers interpret it in their own
-	// terms. Empty is treated as ScopeInstance. For ScopeStack, Component is empty.
+	// Scope is the addressing level (instance, stack, or global). Providers interpret it in
+	// their own terms. Empty is treated as ScopeInstance. For ScopeStack, Component is empty;
+	// for ScopeGlobal, both Stack and Component are empty.
 	Scope Scope
 }
 
