@@ -526,7 +526,7 @@ func TestFormatter_AutomaticIcons(t *testing.T) {
 		{
 			name:         "Info includes info icon",
 			method:       func(f Formatter, text string) string { return f.Info(text) },
-			expectedIcon: "ℹ",
+			expectedIcon: "▶",
 			text:         "information message",
 		},
 	}
@@ -592,7 +592,7 @@ func TestFormatter_FormattedMethods(t *testing.T) {
 		{
 			name:         "Infof formats with arguments",
 			method:       func(f Formatter) string { return f.Infof("Loading configuration from %s", "/etc/atmos.yaml") },
-			expectedIcon: "ℹ",
+			expectedIcon: "▶",
 			expectedText: "Loading configuration from /etc/atmos.yaml",
 		},
 	}
@@ -1144,7 +1144,7 @@ func TestFormatter_ConvenienceFunctions_Multiline(t *testing.T) {
 			name:    "Info multiline",
 			fn:      func(f *formatter, msg string) string { return f.Info(msg) },
 			message: "Processing\nStep 1 of 3",
-			icon:    "ℹ",
+			icon:    "▶",
 		},
 	}
 
