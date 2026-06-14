@@ -71,6 +71,7 @@ import (
 	_ "github.com/cloudposse/atmos/cmd/auth"
 	_ "github.com/cloudposse/atmos/cmd/aws"
 	_ "github.com/cloudposse/atmos/cmd/ci"
+	cicache "github.com/cloudposse/atmos/cmd/ci/cache"
 	"github.com/cloudposse/atmos/cmd/devcontainer"
 	_ "github.com/cloudposse/atmos/cmd/env"
 	_ "github.com/cloudposse/atmos/cmd/helmfile"
@@ -585,6 +586,12 @@ var RootCmd = &cobra.Command{
 		// This ensures tables and styled output degrade gracefully when piped or in non-TTY environments.
 		term := terminal.New()
 		lipgloss.SetColorProfile(convertToTermenvProfile(term.ColorProfile()))
+
+		// Automatic CI cache restore-on-start (and register save-on-exit) when
+		// enabled. No-op outside a supported CI provider or for help commands.
+		if !isHelpRequested && !isCompletionCommand(cmd) {
+			cicache.AutoRestore(cmd, &tmpConfig)
+		}
 	},
 	PersistentPostRun: func(cmd *cobra.Command, args []string) {
 		// Stop profiler after command execution.
@@ -818,6 +825,9 @@ func cleanupLogFile() {
 // Cleanup performs cleanup operations before the program exits.
 // This should be called by main when the program is terminating.
 func Cleanup() {
+	// Run the automatic CI cache save-on-exit (if registered during PreRun)
+	// before closing the log file, so it runs on normal exit and on signals.
+	cicache.RunPendingSave()
 	cleanupLogFile()
 }
 
