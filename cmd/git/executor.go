@@ -60,7 +60,7 @@ func (e *Executor) Init(ctx context.Context, opts *atmosgit.InitOptions, label s
 	defer perf.Track(nil, "git.Executor.Init")()
 
 	progressMsg := fmt.Sprintf("Initializing %s", label)
-	completedMsg := fmt.Sprintf("Initialized %s in %s.", label, opts.Workdir)
+	completedMsg := initCompletedMessage(label, opts)
 	stderr, err := e.captureStderr(func() error {
 		return spinner.ExecWithSpinner(progressMsg, completedMsg, func() error {
 			return e.provider.Init(ctx, opts)
@@ -73,6 +73,19 @@ func (e *Executor) Init(ctx context.Context, opts *atmosgit.InitOptions, label s
 		err,
 		"Run 'atmos git list' to confirm the configured URI, branch, and resolved workdir.",
 	)
+}
+
+// initCompletedMessage builds a mode-aware init success message so the output
+// reflects whether the repository was seeded (and how), mirroring the dry-run.
+func initCompletedMessage(label string, opts *atmosgit.InitOptions) string {
+	switch {
+	case opts.FromURI == "":
+		return fmt.Sprintf("Initialized empty repository %s in %s.", label, opts.Workdir)
+	case opts.KeepHistory:
+		return fmt.Sprintf("Initialized %s in %s from %s (history preserved; source kept as 'upstream').", label, opts.Workdir, opts.FromURI)
+	default:
+		return fmt.Sprintf("Initialized %s in %s from %s (fresh history).", label, opts.Workdir, opts.FromURI)
+	}
 }
 
 // Clone delegates to the provider.

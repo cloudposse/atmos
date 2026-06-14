@@ -73,6 +73,35 @@ func (s *stubGitProvider) Push(ctx context.Context, opts *atmosgit.PushOptions) 
 
 // ---- Executor.Status tests ----
 
+func TestInitCompletedMessage(t *testing.T) {
+	tests := []struct {
+		name string
+		opts *atmosgit.InitOptions
+		want string
+	}{
+		{
+			name: "empty repository",
+			opts: &atmosgit.InitOptions{RepoContext: atmosgit.RepoContext{Workdir: "/w"}},
+			want: "Initialized empty repository deploy in /w.",
+		},
+		{
+			name: "seeded fresh history",
+			opts: &atmosgit.InitOptions{RepoContext: atmosgit.RepoContext{Workdir: "/w"}, FromURI: "https://x/tpl.git"},
+			want: "Initialized deploy in /w from https://x/tpl.git (fresh history).",
+		},
+		{
+			name: "seeded keep history",
+			opts: &atmosgit.InitOptions{RepoContext: atmosgit.RepoContext{Workdir: "/w"}, FromURI: "https://x/old.git", KeepHistory: true},
+			want: "Initialized deploy in /w from https://x/old.git (history preserved; source kept as 'upstream').",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, initCompletedMessage("deploy", tt.opts))
+		})
+	}
+}
+
 func TestExecutor_Status_Clean(t *testing.T) {
 	stub := &stubGitProvider{
 		statusFn: func(_ context.Context, _ *atmosgit.StatusOptions) (*atmosgit.StatusResult, error) {
