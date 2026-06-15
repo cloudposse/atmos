@@ -525,10 +525,18 @@ When a hook's kind produces a markdown summary (every built-in kind
 does), Atmos renders **the same bytes** in:
 
 - Your terminal (via `ui.MarkdownMessage`)
+- The GitHub Actions [job step summary](https://docs.github.com/en/actions/using-workflows/workflow-commands-for-github-actions#adding-a-job-summary) — automatically, when running in GitHub Actions (i.e. `GITHUB_STEP_SUMMARY` is set)
 - The Atmos Pro run page (when Pro is connected)
 
 No separate "terminal-friendly" vs "Pro-friendly" variants — write
 markdown once, get it everywhere.
+
+This is what surfaces scanner findings in the pipeline run instead of
+leaving them buried in the log stream. It requires no configuration: when
+Atmos detects it is running inside GitHub Actions, each hook's summary is
+appended to the job step summary as well as printed to the log. Writing the
+step summary is best-effort — it never fails the hook or the terraform
+command if the summary file can't be written.
 
 ## Backwards Compatibility
 
