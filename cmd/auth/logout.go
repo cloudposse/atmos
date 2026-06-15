@@ -201,7 +201,7 @@ func confirmKeychainDeletion(identityOrProvider string, force bool, isTTY bool) 
 	var confirmed bool
 
 	// Create Huh confirmation prompt.
-	confirmPrompt := huh.NewConfirm().
+	confirmPrompt := uiutils.NewAtmosConfirm().
 		Title(message).
 		Affirmative("Yes, delete credentials").
 		Negative("No, keep credentials").

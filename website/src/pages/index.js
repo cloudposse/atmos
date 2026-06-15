@@ -7,7 +7,7 @@ import Screengrab from '@site/src/components/Screengrab'
 import TypingAnimation from '@site/src/components/TypingAnimation'
 import LazyDemo from '@site/src/components/LazyDemo'
 import ScrollFadeIn from '@site/src/components/ScrollFadeIn'
-import { RiLockLine, RiBox3Line, RiFlashlightLine, RiStackLine } from 'react-icons/ri';
+import { RiLockLine, RiBox3Line, RiFlashlightLine, RiShieldKeyholeLine } from 'react-icons/ri';
 import { SiAmazonwebservices, SiGooglecloud } from 'react-icons/si';
 import { VscAzure } from 'react-icons/vsc';
 import AISection from '@site/src/components/AISection'
@@ -135,10 +135,10 @@ function Home() {
             >
               <div className="feature-card">
                 <div className="feature-header">
-                  <div className="feature-icon"><RiStackLine /></div>
-                  <h3>Smart Scaffolding</h3>
+                  <div className="feature-icon"><RiShieldKeyholeLine /></div>
+                  <h3>Secrets Management</h3>
                 </div>
-                <p>Configuration inheritance and composable stacks that scale</p>
+                <p>Declare secrets per environment and mask them everywhere</p>
               </div>
             </motion.div>
           </section>

@@ -84,6 +84,7 @@ type AtmosConfiguration struct {
 	Settings                      AtmosSettings      `yaml:"settings,omitempty" json:"settings,omitempty" mapstructure:"settings"`
 	Describe                      Describe           `yaml:"describe,omitempty" json:"describe,omitempty" mapstructure:"describe"`
 	StoresConfig                  store.StoresConfig `yaml:"stores,omitempty" json:"stores,omitempty" mapstructure:"stores"`
+	Secrets                       SecretsConfig      `yaml:"secrets,omitempty" json:"secrets,omitempty" mapstructure:"secrets"`
 	Vendor                        Vendor             `yaml:"vendor,omitempty" json:"vendor,omitempty" mapstructure:"vendor"`
 	Initialized                   bool               `yaml:"initialized" json:"initialized" mapstructure:"initialized"`
 	BasePathAbsolute              string             `yaml:"basePathAbsolute,omitempty" json:"basePathAbsolute,omitempty" mapstructure:"basePathAbsolute"`
@@ -1211,6 +1212,14 @@ type ConfigAndStacksInfo struct {
 	ComponentEnvSection           AtmosSectionMapType
 	ComponentAuthSection          AtmosSectionMapType
 	ComponentEnvList              []string
+	// TerraformSecretVarKeys holds the set of top-level keys in ComponentVarsSection
+	// whose value contains a resolved secret (detected via the masker). These variables
+	// are excluded from the on-disk Terraform varfile and injected at runtime as
+	// TF_VAR_<name> environment variables instead, so plaintext secrets never hit disk.
+	// Computed once early in the execution pipeline (right after secret resolution,
+	// before auth credentials are registered) to keep the varfile-write and env-assembly
+	// steps consistent.
+	TerraformSecretVarKeys map[string]bool
 	// SanitizedEnv holds the sanitized process environment from auth.
 	// When set, subprocess execution uses this instead of re-reading os.Environ(),
 	// which would reintroduce problematic vars (e.g., IRSA credentials on EKS pods).
@@ -1234,8 +1243,13 @@ type ConfigAndStacksInfo struct {
 	//   - pkg/auth already imports pkg/schema (for ConfigAndStacksInfo)
 	//   - This would create: schema → auth → schema (circular dependency error)
 	//   - Type assertions are used at usage sites to recover type safety
-	AuthManager          any
-	AuthDisabled         bool
+	AuthManager  any
+	AuthDisabled bool
+	// SecretsMaskOnly indicates an inspection command (describe/list) is resolving YAML
+	// functions with masking enabled. When true, the `!secret` resolver returns the mask
+	// replacement WITHOUT retrieving from the backend (no credentials required). Value-
+	// producing commands (secret get/pull/push, terraform plan/apply/output) leave this false.
+	SecretsMaskOnly      bool
 	ComponentBackendType string
 	// RequiredVersion is the Terraform version constraint (e.g., ">= 1.10.1").
 	// This is extracted from terraform.required_version or components.terraform.<name>.required_version.
@@ -1464,6 +1478,7 @@ type BaseComponentConfig struct {
 	BaseComponentSettings          AtmosSectionMapType
 	BaseComponentEnv               AtmosSectionMapType
 	BaseComponentAuth              AtmosSectionMapType
+	BaseComponentSecrets           AtmosSectionMapType
 	BaseComponentDependencies      AtmosSectionMapType
 	BaseComponentLocals            AtmosSectionMapType // Component-level locals for template processing.
 	BaseComponentMetadata          AtmosSectionMapType

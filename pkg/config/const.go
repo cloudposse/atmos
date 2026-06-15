@@ -87,6 +87,7 @@ const (
 	ProvidersSectionName              = "providers"
 	ProviderSectionName               = "provider"
 	HooksSectionName                  = "hooks"
+	SecretsSectionName                = "secrets"
 	VarsSectionName                   = "vars"
 	SettingsSectionName               = "settings"
 	LocalsSectionName                 = "locals"

@@ -254,6 +254,58 @@ Common environment variables for Ansible components:
   <dd>Paths to search for collections.</dd>
 </dl>
 
+## Passing Secrets Securely
+
+The generated variables file is written to **disk in plaintext** (world‑readable, `0644`) so Ansible
+can read it via `--extra-vars`. Unlike Terraform — which keeps secret‑bearing `vars` off disk —
+Ansible performs **no** off‑disk partitioning. **Never put secrets in an Ansible component's `vars`
+section.**
+
+:::warning Secrets belong in `env`, not `vars`
+Values in the `env` section are injected only into the Ansible subprocess environment and are
+**never written to the variables file**. Declare secrets under
+[`secrets.vars`](/cli/configuration/secrets#declaring-secrets), reference them with
+[`!secret`](/functions/yaml/secret) in `env`, and read them in your playbook with Ansible's
+`env` lookup.
+:::
+
+<File title="stacks/deploy/prod.yaml">
+```yaml
+components:
+  ansible:
+    webserver:
+      secrets:
+        vars:
+          DB_PASSWORD:
+            description: "Application database password"
+            store: ssm-secrets        # a `secret: true` store; or use `sops: <provider>`
+            required: true
+      env:
+        # Injected ONLY into the Ansible subprocess environment — never written to the
+        # variables file on disk.
+        DB_PASSWORD: !secret DB_PASSWORD
+      vars:
+        http_port: 8080               # non-secret values only
+```
+</File>
+
+Read the secret from the environment in your playbook — not from the on‑disk extra‑vars file:
+
+<File title="components/ansible/webserver/site.yml">
+```yaml
+- hosts: all
+  vars:
+    # `lookup('env', ...)` reads the secret from the environment exported by the `env` section.
+    db_password: "{{ lookup('env', 'DB_PASSWORD') }}"
+  tasks:
+    - name: Configure the application
+      ansible.builtin.template:
+        src: app.conf.j2
+        dest: /etc/app/app.conf
+      no_log: true                    # avoid echoing the secret in task output
+```
+</File>
+
 ## Try It
 
 See the [demo-ansible](/examples/demo-ansible) example for a minimal hello-world setup demonstrating variable passing:
@@ -285,5 +337,7 @@ atmos ansible playbook hello-world -s dev
 - [Packer Components](/stacks/components/packer)
 - [Configure Variables](/stacks/vars)
 - [Configure Environment](/stacks/env)
+- [Passing Secrets](/cli/configuration/secrets)
+- [`!secret` function](/functions/yaml/secret)
 - [depends_on](/stacks/settings/depends_on)
 - [atmos ansible playbook](/cli/commands/ansible/playbook)

@@ -241,6 +241,59 @@ Common environment variables for Helmfile components:
   <dd>Enable OCI registry support.</dd>
 </dl>
 
+## Passing Secrets Securely
+
+Helmfile writes the `vars` section to a [varfile **on disk** in plaintext](/cli/configuration/secrets)
+(world‑readable, `0644`) so Helmfile can read it. Unlike Terraform — which keeps secret‑bearing
+`vars` off disk — Helmfile performs **no** off‑disk partitioning. **Never put secrets in a Helmfile
+component's `vars` section.**
+
+:::warning Secrets belong in `env`, not `vars`
+Values in the `env` section are injected only into the Helmfile subprocess environment and are
+**never written to disk**. Declare secrets under [`secrets.vars`](/cli/configuration/secrets#declaring-secrets),
+reference them with [`!secret`](/functions/yaml/secret) in `env`, and read them inside `helmfile.yaml`
+with Helmfile's `requiredEnv` function.
+:::
+
+A simple, self‑contained example:
+
+<File title="stacks/deploy/prod.yaml">
+```yaml
+components:
+  helmfile:
+    my-app:
+      secrets:
+        vars:
+          DB_PASSWORD:
+            description: "Application database password"
+            store: ssm-secrets        # a `secret: true` store; or use `sops: <provider>`
+            required: true
+      env:
+        # Resolved at runtime and injected ONLY into the Helmfile subprocess
+        # environment — never written to the varfile on disk.
+        DB_PASSWORD: !secret DB_PASSWORD
+      vars:
+        chart_version: "1.2.3"         # non-secret values only
+```
+</File>
+
+Read the secret from the environment in `helmfile.yaml` — not from `.Values` (which comes from the
+on‑disk varfile):
+
+<File title="components/helmfile/my-app/helmfile.yaml">
+```yaml
+releases:
+  - name: my-app
+    chart: my-repo/my-app
+    version: {{ .Values.chart_version | quote }}
+    values:
+      - database:
+          # `requiredEnv` reads the secret from the environment and fails fast if it is unset.
+          # Use `env "DB_PASSWORD"` instead if the variable is optional.
+          password: {{ requiredEnv "DB_PASSWORD" | quote }}
+```
+</File>
+
 ## Integration with Terraform
 
 Helmfile components often depend on infrastructure created by Terraform:
@@ -317,4 +370,6 @@ releases:
 - [Terraform Components](/stacks/components/terraform)
 - [Configure Variables](/stacks/vars)
 - [Configure Environment](/stacks/env)
+- [Passing Secrets](/cli/configuration/secrets)
+- [`!secret` function](/functions/yaml/secret)
 - [depends_on](/stacks/settings/depends_on)

@@ -94,6 +94,11 @@ func runPreExecutionSteps(
 	workingDir string,
 	tenv *dependencies.ToolchainEnvironment,
 ) error {
+	// Partition variables into disk-safe vs. secret-bearing BEFORE writing the varfile or
+	// assembling env vars (and before the auth pre-hook registers credentials with the
+	// masker), so secrets are kept off disk and injected as TF_VAR_* env vars instead.
+	computeTerraformSecretVarKeys(info)
+
 	if err := printAndWriteVarFiles(atmosConfig, info); err != nil {
 		return err
 	}

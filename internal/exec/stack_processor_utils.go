@@ -2041,6 +2041,7 @@ func processBaseComponentConfigInternal(
 	var baseComponentSettings map[string]any
 	var baseComponentEnv map[string]any
 	var baseComponentAuth map[string]any
+	var baseComponentSecrets map[string]any
 	var baseComponentDependencies map[string]any
 	var baseComponentLocals map[string]any
 	var baseComponentProviders map[string]any
@@ -2184,6 +2185,13 @@ func processBaseComponentConfigInternal(
 			baseComponentAuth, ok = baseComponentAuthSection.(map[string]any)
 			if !ok {
 				return fmt.Errorf("%w: '%s.auth' in the stack '%s'", errUtils.ErrInvalidAuthSection, baseComponent, stack)
+			}
+		}
+
+		if baseComponentSecretsSection, baseComponentSecretsSectionExist := baseComponentMap[cfg.SecretsSectionName]; baseComponentSecretsSectionExist {
+			baseComponentSecrets, ok = baseComponentSecretsSection.(map[string]any)
+			if !ok {
+				return fmt.Errorf("%w: '%s.secrets' in the stack '%s'", errUtils.ErrInvalidComponentSecrets, baseComponent, stack)
 			}
 		}
 
@@ -2370,6 +2378,14 @@ func processBaseComponentConfigInternal(
 			return err
 		}
 		baseComponentConfig.BaseComponentAuth = merged
+
+		// Base component `secrets` — abstract/base components can declare secrets that concrete
+		// components inherit (instance-scoped, like the rest of the component-level layers).
+		merged, err = m.Merge(atmosConfig, []map[string]any{baseComponentConfig.BaseComponentSecrets, baseComponentSecrets})
+		if err != nil {
+			return err
+		}
+		baseComponentConfig.BaseComponentSecrets = merged
 
 		// Base component `dependencies`
 		merged, err = m.Merge(levelMergeConfig, []map[string]any{baseComponentConfig.BaseComponentDependencies, baseComponentDependencies})

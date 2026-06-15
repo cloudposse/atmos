@@ -20,6 +20,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	iolib "github.com/cloudposse/atmos/pkg/io"
 	provWorkdir "github.com/cloudposse/atmos/pkg/provisioner/workdir"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/toolchain"
@@ -1103,6 +1104,35 @@ func TestProcessOutputs_WithInvalidJSON(t *testing.T) {
 	assert.Nil(t, outputs["invalid_json"])
 	// Valid value should be processed correctly.
 	assert.Equal(t, "hello", outputs["valid_value"])
+}
+
+// TestProcessOutputs_RegistersSensitive verifies that a sensitive output is registered with
+// the I/O masker (so it is redacted everywhere) while a non-sensitive output is NOT registered
+// (to avoid over-masking common values like VPC IDs).
+func TestProcessOutputs_RegistersSensitive(t *testing.T) {
+	atmosConfig := validAtmosConfig()
+
+	require.NoError(t, iolib.Initialize())
+	iolib.GetContext().Masker().Clear()
+
+	outputMeta := map[string]tfexec.OutputMeta{
+		"password": {
+			Sensitive: true,
+			Value:     []byte(`"hunter2-super-secret"`),
+		},
+		"vpc_id": {
+			Sensitive: false,
+			Value:     []byte(`"vpc-abc123"`),
+		},
+	}
+
+	_ = processOutputs(outputMeta, atmosConfig)
+
+	masker := iolib.GetContext().Masker()
+	assert.Contains(t, masker.Mask("value is hunter2-super-secret"), iolib.MaskReplacement,
+		"sensitive output value should be masked")
+	assert.Equal(t, "the vpc is vpc-abc123", masker.Mask("the vpc is vpc-abc123"),
+		"non-sensitive output value must not be masked")
 }
 
 // TestExecutor_ExecuteWithSections_InitWithReconfigure tests init with reconfigure option.
