@@ -336,6 +336,15 @@ func CheckErrorPrintAndExit(err error, title string, suggestion string) {
 			Exit(0)
 			return
 		}
+		// Silent exits propagate the code without printing (terminal-handoff
+		// steps; rendering would query the terminal and can hang).
+		if exitCodeErr.Silent {
+			if atmosConfig != nil && atmosConfig.Errors.Sentry.Enabled {
+				CloseSentry()
+			}
+			Exit(exitCodeErr.Code)
+			return
+		}
 		// Non-zero exit codes: print error and exit with that code
 		CheckErrorAndPrint(err, title, suggestion)
 

@@ -31,6 +31,7 @@ import (
 	l "github.com/cloudposse/atmos/pkg/list"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/process"
 	"github.com/cloudposse/atmos/pkg/reexec"
 	stepPkg "github.com/cloudposse/atmos/pkg/runner/step"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -729,6 +730,13 @@ func executeCustomCommand(
 		log.Debug("Using working directory for custom command", "command", commandConfig.Name, "working_directory", workDir)
 	}
 
+	// Validate exec steps before executing anything: an exec step replaces
+	// the Atmos process, so it must be the final step and must not set
+	// supervisor-only fields (tty, interactive, retry, timeout, output).
+	if err := schema.ValidateExecTasks(commandConfig.Steps); err != nil {
+		errUtils.CheckErrorPrintAndExit(err, "", "https://atmos.tools/cli/configuration/commands#interactive-and-tty-steps")
+	}
+
 	// Initialize step executor once before loop - reused across steps to preserve outputs.
 	executor := stepPkg.NewStepExecutor()
 
@@ -892,8 +900,27 @@ func executeCustomCommand(
 		switch stepType {
 		case "shell":
 			// Execute shell command (backward compatible).
+			// Steps with tty/interactive attach the user's terminal so commands
+			// like `aws ssm start-session` get a real TTY and own Ctrl-C.
 			commandName := fmt.Sprintf("%s-step-%d", commandConfig.Name, i)
-			err = e.ExecuteShell(commandToRun, commandName, workDir, env, false)
+			err = process.RunShellStep(context.Background(), &process.ShellSessionSpec{
+				Command:     commandToRun,
+				Name:        commandName,
+				Dir:         workDir,
+				Env:         env,
+				TTY:         step.Tty,
+				Interactive: step.Interactive,
+			}, func() error {
+				return e.ExecuteShell(commandToRun, commandName, workDir, env, false)
+			})
+		case schema.TaskTypeExec:
+			// Replace the Atmos process with the command (shell exec semantics).
+			err = process.ReplaceShellSession(&process.ExecSpec{
+				Command: commandToRun,
+				Name:    fmt.Sprintf("%s-step-%d", commandConfig.Name, i),
+				Dir:     workDir,
+				Env:     env,
+			})
 		case "atmos":
 			// Execute atmos command.
 			args := strings.Fields(commandToRun)

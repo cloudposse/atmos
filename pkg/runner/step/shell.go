@@ -8,7 +8,10 @@ import (
 	"os/exec"
 	"strings"
 
+	errUtils "github.com/cloudposse/atmos/errors"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/process"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -62,6 +65,12 @@ func (h *ShellHandler) Execute(ctx context.Context, step *schema.WorkflowStep, v
 		}
 	}
 
+	// Terminal-attached or interactive steps need the session path for
+	// platform-aware shell selection and direct terminal attachment.
+	if step.Tty || step.Interactive {
+		return h.executeShellSessionStep(ctx, step, command, workDir, envVars)
+	}
+
 	// Create command - use shell to interpret the command string.
 	cmd := exec.CommandContext(ctx, "sh", "-c", command)
 
@@ -98,11 +107,37 @@ func (h *ShellHandler) Execute(ctx context.Context, step *schema.WorkflowStep, v
 
 // getExitCode extracts exit code from error.
 func getExitCode(err error) int {
+	var exitCodeErr errUtils.ExitCodeError
+	if errors.As(err, &exitCodeErr) {
+		return exitCodeErr.Code
+	}
 	var exitErr *exec.ExitError
 	if errors.As(err, &exitErr) {
 		return exitErr.ExitCode()
 	}
 	return 1
+}
+
+// executeShellSessionStep runs a terminal-attached or interactive step.
+// Session steps produce no capturable output, so the StepResult carries an
+// empty output and only the exit code.
+func (h *ShellHandler) executeShellSessionStep(ctx context.Context, step *schema.WorkflowStep, command, workDir string, envVars []string) (*StepResult, error) {
+	if step.Output != "" {
+		log.Debug("Output mode ignored for shell session step", "step", step.Name, "output", step.Output)
+	}
+
+	err := process.RunShellSession(ctx, &process.ShellSessionSpec{
+		Command:     command,
+		Name:        step.Name,
+		Dir:         workDir,
+		Env:         append(os.Environ(), envVars...),
+		TTY:         step.Tty,
+		Interactive: step.Interactive,
+	})
+	if err != nil {
+		return NewStepResult("").WithMetadata(exitCodeMetadata, getExitCode(err)), err
+	}
+	return NewStepResult("").WithMetadata(exitCodeMetadata, 0), nil
 }
 
 // ExecuteWithWorkflow runs the shell command with workflow context for output mode.
@@ -133,6 +168,12 @@ func (h *ShellHandler) ExecuteWithWorkflow(ctx context.Context, step *schema.Wor
 		for k, v := range resolvedEnv {
 			envVars = append(envVars, k+"="+v)
 		}
+	}
+
+	// Terminal-attached or interactive steps need the session path for
+	// platform-aware shell selection and direct terminal attachment.
+	if step.Tty || step.Interactive {
+		return h.executeShellSessionStep(ctx, step, command, workDir, envVars)
 	}
 
 	// Create command.

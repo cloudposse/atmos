@@ -1223,6 +1223,12 @@ var (
 // This avoids deep exits (os.Exit) which are untestable.
 type ExitCodeError struct {
 	Code int
+	// Silent suppresses themed error rendering: the process exits with Code
+	// without printing an error box. Used for terminal-handoff steps (tty,
+	// interactive, exec) where, like a shell, a non-zero exit from the child
+	// program should propagate the code without Atmos rendering its own error
+	// (which would query the terminal and can hang when stdin is contended).
+	Silent bool
 }
 
 func (e ExitCodeError) Error() string {
