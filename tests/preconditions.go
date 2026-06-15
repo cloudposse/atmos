@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"runtime"
+	"strings"
 	"testing"
 	"time"
 
@@ -595,4 +596,29 @@ func RequirePodman(t *testing.T) {
 	}
 
 	t.Logf("Podman is available and working")
+}
+
+// terraformRegistryErrorSignatures are substrings emitted by Terraform/OpenTofu when a
+// provider install fails because of a transient registry problem (HTTP 429 rate limiting,
+// registry unreachable) rather than a defect in the code under test.
+var terraformRegistryErrorSignatures = []string{
+	"Failed to install provider",
+	"Failed to query available provider packages",
+	"could not query provider registry",
+	"Too Many Requests",
+}
+
+// SkipIfTerraformRegistryError skips the test when the captured Terraform/OpenTofu output
+// shows a transient provider-registry failure (for example, an HTTP 429 rate limit from
+// registry.terraform.io). These failures are environmental, not regressions, so the repo
+// treats them as skips, mirroring the Packer init network-failure handling. Pass the
+// captured command output (stdout/stderr) collected while running the Terraform subcommand.
+func SkipIfTerraformRegistryError(t *testing.T, output string) {
+	t.Helper()
+
+	for _, sig := range terraformRegistryErrorSignatures {
+		if strings.Contains(output, sig) {
+			t.Skipf("Skipping: transient Terraform provider registry error detected in output (%q)", sig)
+		}
+	}
 }

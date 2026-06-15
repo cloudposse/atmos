@@ -468,6 +468,8 @@ require (
 	sigs.k8s.io/yaml v1.6.0
 )
 
+require sigs.k8s.io/controller-runtime v0.24.1
+
 require (
 	cloud.google.com/go/kms v1.31.0 // indirect
 	cloud.google.com/go/longrunning v1.0.0 // indirect
@@ -482,6 +484,7 @@ require (
 	github.com/cpuguy83/go-md2man/v2 v2.0.7 // indirect
 	github.com/dylibso/observe-sdk/go v0.0.0-20240828172851-9145d8ad07e1 // indirect
 	github.com/emicklei/go-restful/v3 v3.13.0 // indirect
+	github.com/evanphx/json-patch/v5 v5.9.11 // indirect
 	github.com/extism/go-sdk v1.7.1 // indirect
 	github.com/getsops/gopgagent v0.0.0-20241224165529-7044f28e491e // indirect
 	github.com/go-errors/errors v1.4.2 // indirect
@@ -521,4 +524,5 @@ require (
 	go.opentelemetry.io/proto/otlp v1.10.0 // indirect
 	gopkg.in/evanphx/json-patch.v4 v4.13.0 // indirect
 	k8s.io/api v0.36.1 // indirect
+	k8s.io/apiextensions-apiserver v0.36.0 // indirect
 )

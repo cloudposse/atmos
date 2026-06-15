@@ -20,5 +20,15 @@ func TestMain(m *testing.M) {
 	data.InitWriter(ioCtx)
 	ui.InitFormatter(ioCtx)
 
-	os.Exit(m.Run())
+	// envtestSetup is a no-op for the default (fast, fake-client) test tier. When
+	// the package is built with `-tags envtest` it provisions the envtest
+	// control-plane binaries (kube-apiserver+etcd) via the Atmos toolchain and
+	// starts a real API server for the end-to-end tier. It returns a teardown
+	// func that is invoked after the tests run (before os.Exit, which would skip
+	// any deferred cleanup).
+	teardownEnvtest := envtestSetup()
+	code := m.Run()
+	teardownEnvtest()
+
+	os.Exit(code)
 }

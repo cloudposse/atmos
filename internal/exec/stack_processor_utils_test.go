@@ -363,6 +363,133 @@ func TestProcessBaseComponentConfig_AbstractComponentSkip(t *testing.T) {
 	assert.Contains(t, baseComponents, "iam-delegated-roles-defaults")
 }
 
+// TestProcessBaseComponentConfigInternal_KubernetesFields verifies that the kubernetes-native
+// base fields (provider/paths/manifests/render) defined on a base component are extracted and
+// merged onto the derived component's BaseComponentConfig, and that invalid types produce a
+// precise error. Exercised via the public ProcessBaseComponentConfig wrapper, which delegates
+// to processBaseComponentConfigInternal.
+func TestProcessBaseComponentConfigInternal_KubernetesFields(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{}
+
+	t.Run("kubernetes-base-fields-merge-onto-derived", func(t *testing.T) {
+		ClearBaseComponentConfigCache()
+
+		allComponentsMap := map[string]any{
+			"app-base": map[string]any{
+				cfg.ProviderSectionName:  "kustomize",
+				cfg.PathsSectionName:     []any{"base/deployment.yaml"},
+				cfg.ManifestsSectionName: map[string]any{"deployment": "base/d.yaml"},
+				cfg.RenderSectionName:    map[string]any{"engine": "kustomize"},
+			},
+			"app": map[string]any{
+				cfg.MetadataSectionName: map[string]any{
+					"component": "app",
+					"type":      "real",
+					"inherits":  []any{"app-base"},
+				},
+			},
+		}
+
+		baseComponentConfig := &schema.BaseComponentConfig{
+			BaseComponentVars:     map[string]any{},
+			BaseComponentSettings: map[string]any{},
+			BaseComponentEnv:      map[string]any{},
+		}
+		baseComponents := []string{}
+
+		err := ProcessBaseComponentConfig(
+			atmosConfig,
+			atmosConfig,
+			baseComponentConfig,
+			allComponentsMap,
+			"app",
+			"test-stack",
+			"app-base",
+			filepath.Join("dummy", "path"),
+			false,
+			&baseComponents,
+		)
+		require.NoError(t, err)
+
+		assert.Equal(t, "kustomize", baseComponentConfig.BaseComponentProvider)
+		paths, ok := baseComponentConfig.BaseComponentPaths.([]any)
+		require.True(t, ok, "BaseComponentPaths must be a slice")
+		require.Len(t, paths, 1)
+		assert.Equal(t, "base/deployment.yaml", paths[0])
+		manifests, ok := baseComponentConfig.BaseComponentManifests.(map[string]any)
+		require.True(t, ok, "BaseComponentManifests must be a map")
+		assert.Equal(t, "base/d.yaml", manifests["deployment"])
+		assert.Equal(t, "kustomize", baseComponentConfig.BaseComponentRender["engine"])
+		assert.Contains(t, baseComponents, "app-base")
+	})
+
+	t.Run("invalid-provider-type-returns-error", func(t *testing.T) {
+		ClearBaseComponentConfigCache()
+
+		allComponentsMap := map[string]any{
+			"app-base": map[string]any{
+				cfg.ProviderSectionName: map[string]any{"not": "a string"},
+			},
+			"app": map[string]any{},
+		}
+		baseComponentConfig := &schema.BaseComponentConfig{
+			BaseComponentVars:     map[string]any{},
+			BaseComponentSettings: map[string]any{},
+			BaseComponentEnv:      map[string]any{},
+		}
+		baseComponents := []string{}
+
+		err := ProcessBaseComponentConfig(
+			atmosConfig,
+			atmosConfig,
+			baseComponentConfig,
+			allComponentsMap,
+			"app",
+			"test-stack",
+			"app-base",
+			filepath.Join("dummy", "path"),
+			false,
+			&baseComponents,
+		)
+		require.Error(t, err)
+		require.ErrorIs(t, err, errUtils.ErrInvalidConfig)
+		assert.Contains(t, err.Error(), "app-base.provider")
+	})
+
+	t.Run("invalid-render-type-returns-error", func(t *testing.T) {
+		ClearBaseComponentConfigCache()
+
+		allComponentsMap := map[string]any{
+			"app-base": map[string]any{
+				cfg.RenderSectionName: "not-a-map",
+			},
+			"app": map[string]any{},
+		}
+		baseComponentConfig := &schema.BaseComponentConfig{
+			BaseComponentVars:     map[string]any{},
+			BaseComponentSettings: map[string]any{},
+			BaseComponentEnv:      map[string]any{},
+		}
+		baseComponents := []string{}
+
+		err := ProcessBaseComponentConfig(
+			atmosConfig,
+			atmosConfig,
+			baseComponentConfig,
+			allComponentsMap,
+			"app",
+			"test-stack",
+			"app-base",
+			filepath.Join("dummy", "path"),
+			false,
+			&baseComponents,
+		)
+		require.Error(t, err)
+		require.ErrorIs(t, err, errUtils.ErrInvalidConfig)
+		assert.Contains(t, err.Error(), "app-base.render")
+	})
+}
+
 // TestProcessBaseComponentConfig_DeepChainNoFalsePositive verifies that deep inheritance
 // chains (3+ levels) work correctly without triggering false cycle detection.
 func TestProcessBaseComponentConfig_DeepChainNoFalsePositive(t *testing.T) {

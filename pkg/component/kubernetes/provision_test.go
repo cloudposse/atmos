@@ -6,12 +6,31 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	authtypes "github.com/cloudposse/atmos/pkg/auth/types"
 	"github.com/cloudposse/atmos/pkg/provisioner/target"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
+
+func TestAuthManagerForReturnsNilWhenNoManager(t *testing.T) {
+	// No auth manager is set on the info, so no environment provider is supplied.
+	assert.Nil(t, authManagerFor(&schema.ConfigAndStacksInfo{}))
+
+	// A value that is not an auth.AuthManager must not be treated as one.
+	assert.Nil(t, authManagerFor(&schema.ConfigAndStacksInfo{AuthManager: "not-a-manager"}))
+}
+
+func TestAuthManagerForReturnsConfiguredManager(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	mockManager := authtypes.NewMockAuthManager(ctrl)
+
+	provider := authManagerFor(&schema.ConfigAndStacksInfo{AuthManager: mockManager})
+	require.NotNil(t, provider)
+	assert.Equal(t, target.IdentityEnvironmentProvider(mockManager), provider)
+}
 
 // captureProvisioner records the DeliverInput it receives so tests can assert
 // the executor built and routed the artifact correctly.
