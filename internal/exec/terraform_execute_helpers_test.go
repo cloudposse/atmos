@@ -674,3 +674,78 @@ func TestTerraformSecretVars_NoSecrets(t *testing.T) {
 	require.NoError(t, err)
 	assert.Empty(t, env, "no TF_VAR_ entries expected when no secrets present")
 }
+
+func TestHandleDeploySubcommand(t *testing.T) {
+	tests := []struct {
+		name             string
+		subCommand       string
+		useTerraformPlan bool
+		applyAutoApprove bool
+		initialArgs      []string
+		wantSubCommand   string
+		wantArgs         []string
+	}{
+		{
+			name:           "deploy rewrites to apply and adds auto-approve",
+			subCommand:     subcommandDeploy,
+			initialArgs:    []string{},
+			wantSubCommand: subcommandApply,
+			wantArgs:       []string{autoApproveFlag},
+		},
+		{
+			name:             "deploy with UseTerraformPlan does not add auto-approve",
+			subCommand:       subcommandDeploy,
+			useTerraformPlan: true,
+			initialArgs:      []string{},
+			wantSubCommand:   subcommandApply,
+			wantArgs:         []string{},
+		},
+		{
+			name:           "deploy does not duplicate an existing auto-approve flag",
+			subCommand:     subcommandDeploy,
+			initialArgs:    []string{autoApproveFlag},
+			wantSubCommand: subcommandApply,
+			wantArgs:       []string{autoApproveFlag},
+		},
+		{
+			name:             "apply with ApplyAutoApprove adds auto-approve",
+			subCommand:       subcommandApply,
+			applyAutoApprove: true,
+			initialArgs:      []string{},
+			wantSubCommand:   subcommandApply,
+			wantArgs:         []string{autoApproveFlag},
+		},
+		{
+			name:             "apply with ApplyAutoApprove does not duplicate auto-approve",
+			subCommand:       subcommandApply,
+			applyAutoApprove: true,
+			initialArgs:      []string{autoApproveFlag},
+			wantSubCommand:   subcommandApply,
+			wantArgs:         []string{autoApproveFlag},
+		},
+		{
+			name:           "plan is left untouched",
+			subCommand:     "plan",
+			initialArgs:    []string{},
+			wantSubCommand: "plan",
+			wantArgs:       []string{},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			atmosConfig := &schema.AtmosConfiguration{}
+			atmosConfig.Components.Terraform.ApplyAutoApprove = tt.applyAutoApprove
+			info := &schema.ConfigAndStacksInfo{
+				SubCommand:             tt.subCommand,
+				UseTerraformPlan:       tt.useTerraformPlan,
+				AdditionalArgsAndFlags: tt.initialArgs,
+			}
+
+			handleDeploySubcommand(atmosConfig, info)
+
+			assert.Equal(t, tt.wantSubCommand, info.SubCommand)
+			assert.Equal(t, tt.wantArgs, info.AdditionalArgsAndFlags)
+		})
+	}
+}

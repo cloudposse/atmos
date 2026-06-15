@@ -342,3 +342,25 @@ func TestAddProvenanceToLine_NoColor(t *testing.T) {
 		assert.Equal(t, "vars:\n", buf.String())
 	})
 }
+
+func TestFormatProvenanceCommentWithStackFile(t *testing.T) {
+	t.Run("nil entry returns empty string", func(t *testing.T) {
+		assert.Empty(t, formatProvenanceCommentWithStackFile(nil, false))
+	})
+
+	t.Run("no color trims stacks/ prefix and shows defined symbol", func(t *testing.T) {
+		entry := &m.ProvenanceEntry{File: "stacks/orgs/acme/dev.yaml", Line: 12, Depth: 1}
+		out := formatProvenanceCommentWithStackFile(entry, false)
+		assert.Equal(t, "# "+SymbolDefined+" [1] orgs/acme/dev.yaml:12", out)
+	})
+
+	t.Run("color path renders all parts for a computed entry", func(t *testing.T) {
+		entry := &m.ProvenanceEntry{File: "stacks/catalog/vpc.yaml", Line: 5, Depth: 3, Type: m.ProvenanceTypeComputed}
+		out := formatProvenanceCommentWithStackFile(entry, true)
+		assert.NotEmpty(t, out)
+		// Color output wraps parts in ANSI escapes, but the literal symbol, file, and line remain.
+		assert.Contains(t, out, SymbolComputed)
+		assert.Contains(t, out, "catalog/vpc.yaml")
+		assert.Contains(t, out, "[3]")
+	})
+}
