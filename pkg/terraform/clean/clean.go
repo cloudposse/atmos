@@ -450,7 +450,7 @@ func confirmDeletion() (bool, error) {
 func confirmDeleteTerraformLocal(message string) (confirm bool, err error) {
 	confirm = false
 	t := utils.NewAtmosHuhTheme()
-	confirmPrompt := huh.NewConfirm().
+	confirmPrompt := utils.NewAtmosConfirm().
 		Title(message).
 		Affirmative("Yes!").
 		Negative("No.").

@@ -3,7 +3,6 @@ package exec
 import (
 	"bytes"
 	"context"
-	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -26,15 +25,12 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 	process "github.com/cloudposse/atmos/pkg/process"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/shell"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
-const (
-	atmosShellLevelEnvVar = "ATMOS_SHLVL"
-	logFieldCommand       = "command"
-	osWindows             = "windows"
-)
+const logFieldCommand = "command"
 
 // ShellCommandOption is a functional option for ExecuteShellCommand.
 type ShellCommandOption func(*shellCommandConfig)
@@ -486,13 +482,13 @@ func ExecAuthShellCommand(
 ) error {
 	defer perf.Track(atmosConfig, "exec.ExecAuthShellCommand")()
 
-	atmosShellVal := getAtmosShellLevel() + 1
-	if err := setAtmosShellLevel(atmosShellVal); err != nil {
+	atmosShellVal := shell.Level() + 1
+	if err := shell.SetLevel(atmosShellVal); err != nil {
 		return err
 	}
 
 	// Decrement the value after exiting the shell.
-	defer decrementAtmosShellLevel()
+	defer shell.DecrementLevel()
 
 	// Append shell-specific env vars to the sanitized environment.
 	// The sanitizedEnv already includes os.Environ() (sanitized) + auth vars.
@@ -500,7 +496,7 @@ func ExecAuthShellCommand(
 	// does not deduplicate — the first occurrence wins if duplicates exist.
 	shellEnv := append([]string{}, sanitizedEnv...)
 	shellEnv = envpkg.UpdateEnvVar(shellEnv, "ATMOS_IDENTITY", identityName)
-	shellEnv = envpkg.UpdateEnvVar(shellEnv, atmosShellLevelEnvVar, strconv.Itoa(atmosShellVal))
+	shellEnv = envpkg.UpdateEnvVar(shellEnv, shell.LevelEnvVar, strconv.Itoa(atmosShellVal))
 
 	// Append global env from atmos.yaml.
 	for k, v := range atmosConfig.Env {
@@ -525,135 +521,17 @@ func ExecAuthShellCommand(
 	mergedEnv := shellEnv
 
 	// Determine shell command and args.
-	shellCommand, shellCommandArgs := determineShell(shellOverride, shellArgs)
-	if shellCommand == "" {
-		return errors.Join(errUtils.ErrNoSuitableShell, fmt.Errorf("bash and sh not found in PATH"))
-	}
+	shellCommand, shellCommandArgs := shell.Determine(shellOverride, shellArgs)
 
 	log.Debug("Starting process", logFieldCommand, shellCommand, "args", shellCommandArgs)
 
 	// Execute the shell and wait for it to exit.
-	err := executeShellProcess(shellCommand, shellCommandArgs, mergedEnv)
+	err := shell.StartInteractive(shellCommand, shellCommandArgs, mergedEnv)
 
 	// Print user-facing message about exiting the shell.
 	printShellExitMessage(identityName, providerName)
 
 	return err
-}
-
-// executeShellProcess starts a shell process and waits for it to exit, propagating the exit code.
-func executeShellProcess(shellCommand string, shellArgs []string, env []string) error {
-	// Resolve shell command to absolute path if necessary.
-	// os.StartProcess doesn't search PATH, so we need to resolve relative commands.
-	resolvedCommand := shellCommand
-	if !filepath.IsAbs(resolvedCommand) {
-		lookup, err := exec.LookPath(resolvedCommand)
-		if err != nil {
-			return errors.Join(errUtils.ErrNoSuitableShell, fmt.Errorf("failed to resolve shell %q", resolvedCommand))
-		}
-		resolvedCommand = lookup
-	}
-
-	// Build full args array: [shellCommand, arg1, arg2, ...].
-	fullArgs := append([]string{shellCommand}, shellArgs...)
-
-	// Transfer stdin, stdout, and stderr to the new process.
-	pa := os.ProcAttr{
-		Files: []*os.File{os.Stdin, os.Stdout, os.Stderr},
-		Dir:   "",
-		Env:   env,
-	}
-
-	proc, err := os.StartProcess(resolvedCommand, fullArgs, &pa)
-	if err != nil {
-		return err
-	}
-
-	// Wait until the user exits the shell.
-	state, err := proc.Wait()
-	if err != nil {
-		return err
-	}
-
-	exitCode := state.ExitCode()
-	log.Debug("Exited shell", "state", state.String(), "exitCode", exitCode)
-
-	// Propagate the shell's exit code.
-	if exitCode != 0 {
-		return errUtils.ExitCodeError{Code: exitCode}
-	}
-
-	return nil
-}
-
-// getAtmosShellLevel retrieves the current ATMOS_SHLVL value.
-func getAtmosShellLevel() int {
-	atmosShellLvl := os.Getenv(atmosShellLevelEnvVar) //nolint:forbidigo // ATMOS_SHLVL is a runtime variable that changes during shell execution, not a config variable.
-	if atmosShellLvl == "" {
-		return 0
-	}
-	val, err := strconv.Atoi(atmosShellLvl)
-	if err != nil {
-		return 0
-	}
-	return val
-}
-
-// setAtmosShellLevel sets the ATMOS_SHLVL environment variable.
-func setAtmosShellLevel(level int) error {
-	return os.Setenv(atmosShellLevelEnvVar, fmt.Sprintf("%d", level))
-}
-
-// decrementAtmosShellLevel decrements the ATMOS_SHLVL environment variable.
-func decrementAtmosShellLevel() {
-	currentLevel := getAtmosShellLevel()
-	if currentLevel <= 0 {
-		return
-	}
-	newLevel := currentLevel - 1
-	if err := setAtmosShellLevel(newLevel); err != nil {
-		log.Warn("Failed to update ATMOS_SHLVL", "error", err)
-	}
-}
-
-// determineShell determines which shell to use and what arguments to pass.
-func determineShell(shellOverride string, shellArgs []string) (string, []string) {
-	// Determine shell command from override, environment, or fallback.
-	shellCommand := shellOverride
-	if shellCommand == "" {
-		shellCommand = viper.GetString("shell")
-	}
-	if shellCommand == "" {
-		if runtime.GOOS == osWindows {
-			shellCommand = "cmd.exe"
-		} else {
-			shellCommand = findAvailableShell()
-		}
-	}
-
-	// If no custom shell args provided, use login shell by default (Unix only).
-	shellCommandArgs := shellArgs
-	if len(shellCommandArgs) == 0 && runtime.GOOS != osWindows {
-		shellCommandArgs = []string{"-l"}
-	}
-
-	return shellCommand, shellCommandArgs
-}
-
-// findAvailableShell finds an available shell on the system.
-func findAvailableShell() string {
-	// Try bash first.
-	if bashPath, err := exec.LookPath("bash"); err == nil {
-		return bashPath
-	}
-
-	// Fallback to sh.
-	if shPath, err := exec.LookPath("sh"); err == nil {
-		return shPath
-	}
-
-	// If nothing found, return empty (will cause error later).
-	return ""
 }
 
 // printShellEnterMessage prints a user-facing message when entering an Atmos-managed shell.

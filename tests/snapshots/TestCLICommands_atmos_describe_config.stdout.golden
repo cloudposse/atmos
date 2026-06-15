@@ -192,6 +192,7 @@
     "settings": {},
     "affected": {}
   },
+  "secrets": {},
   "vendor": {
     "base_path": "",
     "list": {

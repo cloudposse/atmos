@@ -110,6 +110,15 @@ func extractComponentSections(opts *ComponentProcessorOptions, result *Component
 		}
 	}
 
+	// Extract secrets section (declarations). Available for all component types.
+	if i, ok := opts.ComponentMap[cfg.SecretsSectionName]; ok {
+		componentSecrets, ok := i.(map[string]any)
+		if !ok {
+			return fmt.Errorf("%w: 'components.%s.%s.secrets' in the file '%s'", errUtils.ErrInvalidComponentSecrets, opts.ComponentType, opts.Component, opts.StackName)
+		}
+		result.ComponentSecrets = componentSecrets
+	}
+
 	// Extract auth section.
 	if i, ok := opts.ComponentMap[cfg.AuthSectionName]; ok {
 		componentAuth, ok := i.(map[string]any)

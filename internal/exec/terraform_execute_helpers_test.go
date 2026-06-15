@@ -6,6 +6,7 @@ import (
 	"os"
 	osexec "os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -13,8 +14,10 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	atmosio "github.com/cloudposse/atmos/pkg/io"
 	provWorkdir "github.com/cloudposse/atmos/pkg/provisioner/workdir"
 	"github.com/cloudposse/atmos/pkg/schema"
+	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -611,4 +614,63 @@ func TestAddRegionEnvVarForImport_SkipsForNonImportSubcommands(t *testing.T) {
 			assert.Empty(t, info.ComponentEnvList, "should not add AWS_REGION for %s", subCmd)
 		})
 	}
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Secret variables never hit disk (computeTerraformSecretVarKeys / diskSafeVars / secretVarEnv)
+// ──────────────────────────────────────────────────────────────────────────────
+
+func TestTerraformSecretVars_NeverHitDisk(t *testing.T) {
+	const secret = "tf-disk-guard-SECRET-abc123xyz"
+	atmosio.RegisterSecret(secret)
+
+	info := &schema.ConfigAndStacksInfo{
+		ComponentVarsSection: map[string]any{
+			"plain_password": secret,
+			"db_url":         "postgres://user:" + secret + "@db.example.com/app",
+			"nested":         map[string]any{"token": secret},
+			"region":         "us-east-1-tfdiskguard",
+		},
+	}
+
+	computeTerraformSecretVarKeys(info)
+
+	// Secret-bearing keys (direct, composed substring, nested) are flagged; the plain
+	// non-secret one is not.
+	require.NotNil(t, info.TerraformSecretVarKeys)
+	assert.True(t, info.TerraformSecretVarKeys["plain_password"], "direct secret must be flagged")
+	assert.True(t, info.TerraformSecretVarKeys["db_url"], "secret composed into a string must be flagged")
+	assert.True(t, info.TerraformSecretVarKeys["nested"], "secret nested in a map must be flagged")
+	assert.False(t, info.TerraformSecretVarKeys["region"], "non-secret var must not be flagged")
+
+	// Write the disk-safe vars exactly as logAndWriteComponentVars does, then assert the
+	// bytes on disk contain no representation of the secret.
+	dir := t.TempDir()
+	varFile := filepath.Join(dir, "test.terraform.tfvars.json")
+	require.NoError(t, u.WriteToFileAsJSON(varFile, diskSafeVars(info), 0o600))
+
+	onDisk, err := os.ReadFile(varFile)
+	require.NoError(t, err)
+	assert.NotContains(t, string(onDisk), secret, "secret must never be written to the varfile on disk")
+	assert.Contains(t, string(onDisk), "us-east-1-tfdiskguard", "non-secret vars must still be written")
+
+	// The secret-bearing vars are instead injected as TF_VAR_* env entries.
+	env, err := secretVarEnv(info)
+	require.NoError(t, err)
+	joined := strings.Join(env, "\n")
+	assert.Contains(t, joined, "TF_VAR_plain_password=")
+	assert.Contains(t, joined, "TF_VAR_db_url=")
+	assert.Contains(t, joined, secret, "secret value is carried in the TF_VAR_ env entry")
+}
+
+func TestTerraformSecretVars_NoSecrets(t *testing.T) {
+	info := &schema.ConfigAndStacksInfo{
+		ComponentVarsSection: map[string]any{"region": "us-west-2-nosecret-xyz", "count": 1},
+	}
+	computeTerraformSecretVarKeys(info)
+	assert.Nil(t, info.TerraformSecretVarKeys, "no secret keys expected when no secrets present")
+
+	env, err := secretVarEnv(info)
+	require.NoError(t, err)
+	assert.Empty(t, env, "no TF_VAR_ entries expected when no secrets present")
 }

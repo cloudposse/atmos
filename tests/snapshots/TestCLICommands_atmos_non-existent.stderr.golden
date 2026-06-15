@@ -25,6 +25,7 @@ Valid subcommands are:
   • packer
   • pro
   • profile
+  • secret
   • show
   • support
   • terraform
