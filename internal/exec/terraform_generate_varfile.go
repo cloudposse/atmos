@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
 	"time"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -13,6 +15,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 	provWorkdir "github.com/cloudposse/atmos/pkg/provisioner/workdir"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -101,17 +104,64 @@ func ExecuteGenerateVarfile(opts *VarfileOptions, atmosConfig *schema.AtmosConfi
 		"variables", info.ComponentVarsSection,
 	)
 
+	// Display the varfile path relative to the current working directory.
+	displayPath := relativeToCwd(varFilePath)
+
 	// Write the variables to a file.
-	log.Debug("Writing the variables to file", "file", varFilePath)
+	log.Debug("Writing the variables to file", "file", displayPath)
+
+	varsToWrite := varfileVarsToWrite(&info, opts.WithSecrets, displayPath)
 
 	if !info.DryRun {
-		err = u.WriteToFileAsJSON(varFilePath, info.ComponentVarsSection, 0o644)
+		err = u.WriteToFileAsJSON(varFilePath, varsToWrite, filePermissions)
 		if err != nil {
 			return err
+		}
+		if opts.WithSecrets {
+			ui.Successf("Generated varfile `%s` (with secrets)", displayPath)
+		} else {
+			ui.Successf("Generated varfile `%s`", displayPath)
 		}
 	}
 
 	return nil
+}
+
+// relativeToCwd returns p relative to the current working directory for display. It falls
+// back to the original path when the working directory can't be determined or p can't be
+// made relative (e.g. on a different volume).
+func relativeToCwd(p string) string {
+	cwd, err := os.Getwd()
+	if err != nil {
+		return p
+	}
+	rel, err := filepath.Rel(cwd, p)
+	if err != nil {
+		return p
+	}
+	return rel
+}
+
+// varfileVarsToWrite returns the variables to write to a generated varfile. By default,
+// secret-bearing variables are omitted so plaintext secrets never hit disk; with
+// withSecrets=true they are included (e.g. to export the file). An appropriate warning is
+// emitted in each case. Requires that secrets have already been resolved into info.
+func varfileVarsToWrite(info *schema.ConfigAndStacksInfo, withSecrets bool, varFilePath string) map[string]any {
+	computeTerraformSecretVarKeys(info)
+
+	if withSecrets {
+		if len(info.TerraformSecretVarKeys) > 0 {
+			log.Debug("Writing resolved secret values to the varfile in plaintext (--with-secrets)",
+				"file", varFilePath, "count", len(info.TerraformSecretVarKeys))
+		}
+		return info.ComponentVarsSection
+	}
+
+	if len(info.TerraformSecretVarKeys) > 0 {
+		log.Warn("Omitting secrets from the generated varfile; pass --with-secrets to include them",
+			"file", varFilePath, "count", len(info.TerraformSecretVarKeys))
+	}
+	return diskSafeVars(info)
 }
 
 // ExecuteTerraformGenerateVarfileCmd executes `terraform generate varfile` command.

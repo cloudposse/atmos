@@ -19,6 +19,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/component"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/dependencies"
+	atmosio "github.com/cloudposse/atmos/pkg/io"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/provisioner"
@@ -30,6 +31,7 @@ import (
 	tfcache "github.com/cloudposse/atmos/pkg/terraform/cache"
 	tfgenerate "github.com/cloudposse/atmos/pkg/terraform/generate"
 	"github.com/cloudposse/atmos/pkg/terraform/rc"
+	"github.com/cloudposse/atmos/pkg/terraform/tfvars"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -273,8 +275,59 @@ func printAndWriteVarFiles(atmosConfig *schema.AtmosConfiguration, info *schema.
 	return logCliVarsOverrides(atmosConfig, info)
 }
 
+// computeTerraformSecretVarKeys records the set of top-level variable keys whose value
+// contains a resolved secret, so they can be kept out of the on-disk varfile and injected
+// as TF_VAR_<name> environment variables instead. It must run after secret resolution
+// (ProcessStacks) and before auth credentials are registered with the masker, so that the
+// varfile-write and env-assembly steps partition the variables identically.
+func computeTerraformSecretVarKeys(info *schema.ConfigAndStacksInfo) {
+	_, secret := tfvars.Partition(info.ComponentVarsSection, atmosio.ContainsSecret)
+	if len(secret) == 0 {
+		info.TerraformSecretVarKeys = nil
+		return
+	}
+	keys := make(map[string]bool, len(secret))
+	for k := range secret {
+		keys[k] = true
+	}
+	info.TerraformSecretVarKeys = keys
+}
+
+// diskSafeVars returns ComponentVarsSection with secret-bearing top-level keys removed,
+// so resolved secrets are never written to the on-disk varfile. Returns the original map
+// unchanged when no secret-bearing variables were detected.
+func diskSafeVars(info *schema.ConfigAndStacksInfo) map[string]any {
+	if len(info.TerraformSecretVarKeys) == 0 {
+		return info.ComponentVarsSection
+	}
+	safe := make(map[string]any, len(info.ComponentVarsSection))
+	for k, v := range info.ComponentVarsSection {
+		if info.TerraformSecretVarKeys[k] {
+			continue
+		}
+		safe[k] = v
+	}
+	return safe
+}
+
+// secretVarEnv returns the TF_VAR_<name> environment entries for the component's
+// secret-bearing variables, for injection into the subprocess environment.
+func secretVarEnv(info *schema.ConfigAndStacksInfo) ([]string, error) {
+	if len(info.TerraformSecretVarKeys) == 0 {
+		return nil, nil
+	}
+	secret := make(map[string]any, len(info.TerraformSecretVarKeys))
+	for k := range info.TerraformSecretVarKeys {
+		if v, ok := info.ComponentVarsSection[k]; ok {
+			secret[k] = v
+		}
+	}
+	return tfvars.SecretEnv(secret)
+}
+
 // logAndWriteComponentVars logs component variables and writes the varfile to disk
-// when not using a pre-existing plan.
+// when not using a pre-existing plan. Secret-bearing variables are excluded from the
+// varfile (they are injected as TF_VAR_<name> env vars in assembleComponentEnvVars).
 func logAndWriteComponentVars(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) error {
 	log.Debug("Variables for the component in the stack", logFieldComponent, info.ComponentFromArg, "stack", info.Stack)
 	if atmosConfig.Logs.Level == u.LogLevelTrace || atmosConfig.Logs.Level == u.LogLevelDebug {
@@ -287,7 +340,7 @@ func logAndWriteComponentVars(atmosConfig *schema.AtmosConfiguration, info *sche
 		varFilePath := constructTerraformComponentVarfilePath(atmosConfig, info)
 		log.Debug("Writing the variables", "file", varFilePath)
 		if !info.DryRun {
-			if err := u.WriteToFileAsJSON(varFilePath, info.ComponentVarsSection, filePermissions); err != nil {
+			if err := u.WriteToFileAsJSON(varFilePath, diskSafeVars(info), filePermissions); err != nil {
 				return err
 			}
 		}
@@ -436,6 +489,18 @@ func assembleComponentEnvVars(atmosConfig *schema.AtmosConfiguration, info *sche
 		for _, v := range info.ComponentEnvList {
 			log.Debug(v)
 		}
+	}
+
+	// Inject secret-bearing variables as TF_VAR_<name> so they reach Terraform via the
+	// (transient) process environment instead of the on-disk varfile. Appended AFTER the
+	// debug dump above so secret values are never written to logs.
+	secretEnv, err := secretVarEnv(info)
+	if err != nil {
+		return err
+	}
+	if len(secretEnv) > 0 {
+		info.ComponentEnvList = append(info.ComponentEnvList, secretEnv...)
+		log.Debug("Injecting secret variables as TF_VAR_* environment variables", "count", len(secretEnv))
 	}
 
 	return nil

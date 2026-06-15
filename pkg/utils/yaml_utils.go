@@ -20,6 +20,7 @@ import (
 const (
 	// Atmos YAML functions.
 	AtmosYamlFuncExec                    = "!exec"
+	AtmosYamlFuncSecret                  = "!secret"
 	AtmosYamlFuncStore                   = "!store"
 	AtmosYamlFuncStoreGet                = "!store.get"
 	AtmosYamlFuncTemplate                = "!template"
@@ -55,6 +56,7 @@ const (
 var (
 	AtmosYamlTags = []string{
 		AtmosYamlFuncExec,
+		AtmosYamlFuncSecret,
 		AtmosYamlFuncStore,
 		AtmosYamlFuncStoreGet,
 		AtmosYamlFuncTemplate,
@@ -88,6 +90,7 @@ var (
 	// called 75M+ times, causing significant performance overhead.
 	atmosYamlTagsMap = map[string]bool{
 		AtmosYamlFuncExec:                    true,
+		AtmosYamlFuncSecret:                  true,
 		AtmosYamlFuncStore:                   true,
 		AtmosYamlFuncStoreGet:                true,
 		AtmosYamlFuncTemplate:                true,

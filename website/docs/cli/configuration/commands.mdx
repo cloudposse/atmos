@@ -1025,6 +1025,62 @@ When using custom component types, the `{{ .Component }}` object contains:
 | `{{ .Component.settings.* }}` | Settings defined in the component |
 | `{{ .Component.env.* }}` | Environment variables defined in the component |
 
+### Passing Secrets to Custom Components
+
+A custom component's `env` section is exported as **real environment variables** to every step,
+just like the built-in `terraform`/`helmfile`/`packer`/`ansible` component types. This makes secrets
+easy to pass securely: declare them under [`secrets.vars`](/cli/configuration/secrets#declaring-secrets),
+reference them with [`!secret`](/functions/yaml/secret) in the component `env` section, and read them
+in your steps (or the scripts they invoke) as ordinary environment variables.
+
+<File title="stacks/deploy/prod.yaml">
+```yaml
+components:
+  script:
+    deploy-app:
+      secrets:
+        vars:
+          DB_PASSWORD:
+            description: "Application database password"
+            store: ssm-secrets        # a `secret: true` store; or use `sops: <provider>`
+            required: true
+      env:
+        DB_PASSWORD: !secret DB_PASSWORD
+      vars:
+        app_name: "myapp"
+```
+</File>
+
+<File title="atmos.yaml">
+```yaml
+commands:
+  - name: deploy
+    arguments:
+      - name: component
+        type: component
+        required: true
+    flags:
+      - name: stack
+        shorthand: s
+        semantic_type: stack
+        required: true
+    component:
+      type: script
+    steps:
+      # $DB_PASSWORD is exported from the component env section — no need to inline it.
+      - './deploy.sh'
+```
+</File>
+
+:::warning Don't inline secrets into the command string
+Reference secrets as environment variables (`$DB_PASSWORD`), not by inlining the template value
+(`echo {{ .Component.env.DB_PASSWORD }}`). An inlined value lands in shell history and process
+arguments. Step output is masked, but that is defense‑in‑depth, not the primary mitigation.
+:::
+
+See [Passing Secrets](/cli/configuration/secrets) for the full list of supported secret backends
+(AWS SSM/Secrets Manager, Vault, Azure Key Vault, GCP Secret Manager, 1Password, SOPS, and more).
+
 ### Configuration Options
 
 The `component:` section supports:

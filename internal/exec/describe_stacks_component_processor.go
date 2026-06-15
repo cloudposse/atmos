@@ -12,6 +12,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/auth"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	iolib "github.com/cloudposse/atmos/pkg/io"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	m "github.com/cloudposse/atmos/pkg/merge"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -715,6 +716,10 @@ func processComponentSectionYAMLFunctions(
 	componentSection map[string]any,
 	skip []string,
 ) (map[string]any, error) {
+	// `describe stacks` and the `list` family are inspection commands: when masking is enabled
+	// (the default), resolve `!secret` to the mask replacement WITHOUT contacting the backend,
+	// so inspection needs no credentials for the secret provider.
+	info.SecretsMaskOnly = iolib.MaskingEnabled()
 	converted, err := ProcessCustomYamlTags(
 		atmosConfig,
 		componentSection,
@@ -752,6 +757,7 @@ func applyTerraformMetadataInheritance(
 			BaseComponentSettings:  make(map[string]any),
 			BaseComponentEnv:       make(map[string]any),
 			BaseComponentAuth:      make(map[string]any),
+			BaseComponentSecrets:   make(map[string]any),
 			BaseComponentMetadata:  make(map[string]any),
 			BaseComponentProviders: make(map[string]any),
 			BaseComponentHooks:     make(map[string]any),
