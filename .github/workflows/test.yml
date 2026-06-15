@@ -463,8 +463,9 @@ jobs:
           cd examples/${{ matrix.demo-folder }}
           atmos test
 
-  # Run the Kubernetes native component end-to-end tier against a real
-  # kube-apiserver+etcd control plane (controller-runtime envtest). The
+  # Exercise the Kubernetes native component against a real kube-apiserver+etcd
+  # control plane (started by controller-runtime envtest): server-side apply,
+  # dry-run diff, delete, server-side validate, and a CRD round-trip. The
   # control-plane binaries are provisioned on demand by the tests themselves via
   # the Atmos toolchain (an inline registry in envtest_test.go) — there is no
   # install step here. Windows is intentionally excluded: there is no official
@@ -474,8 +475,8 @@ jobs:
   # not yet persist that across runs, so each run re-downloads the (small)
   # tarball. Adding an actions/cache step keyed on the envtest version is an
   # easy follow-up.
-  envtest:
-    name: "[envtest] kubernetes (${{ matrix.os }})"
+  kubernetes-controlplane:
+    name: "[Kubernetes] control plane (${{ matrix.os }})"
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -496,8 +497,12 @@ jobs:
         with:
           go-version-file: "go.mod"
 
-      - name: Run Kubernetes envtest end-to-end tests
+      - name: Run Kubernetes control-plane tests
         env:
+          # Atmos builds with CGO disabled (see Makefile). Match that here so the
+          # toolchain's transitive CGO dependencies (e.g. bearsh/hid → libudev)
+          # are not compiled — they are unused and libudev is absent on runners.
+          CGO_ENABLED: "0"
           # Fail loudly if the control plane can't be provisioned/started, rather
           # than silently skipping all coverage.
           ATMOS_ENVTEST_REQUIRED: "true"
