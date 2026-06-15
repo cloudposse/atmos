@@ -760,6 +760,7 @@ func TestAtmosYamlTagsMap_ContainsAllTags(t *testing.T) {
 	// Validate that atmosYamlTagsMap contains all tags from AtmosYamlTags slice.
 	expectedTags := []string{
 		AtmosYamlFuncExec,
+		AtmosYamlFuncSecret,
 		AtmosYamlFuncStore,
 		AtmosYamlFuncStoreGet,
 		AtmosYamlFuncTemplate,

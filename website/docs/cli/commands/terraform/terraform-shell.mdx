@@ -200,6 +200,24 @@ atmos terraform shell infra/vpc -s tenant1-ue2-dev --identity dev-role
         atmos terraform shell <component> -s <stack> --skip=terraform.output,include
         ```
     </dd>
+
+    <dt>`--with-secrets` <em>(optional)</em></dt>
+    <dd>
+        Export the component's secret-bearing variables into the interactive shell as
+        `TF_VAR_<name>` environment variables. **Disabled by default** so secrets are not
+        exposed in the shell environment.
+
+        Resolved secrets are never written to the on-disk varfile. By default they are also
+        withheld from the shell, so `terraform` commands run inside the shell will not see them
+        (variables that require a secret will prompt or fail). Pass `--with-secrets` when you
+        need those commands to work with the real values.
+
+        Can also be set via the `ATMOS_WITH_SECRETS` environment variable.
+
+        ```shell
+        atmos terraform shell <component> -s <stack> --with-secrets
+        ```
+    </dd>
 </dl>
 
 ## Related Commands

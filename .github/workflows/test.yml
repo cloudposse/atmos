@@ -41,10 +41,13 @@ jobs:
   # ensure the code builds...
   build:
     name: Build (${{ matrix.target }})
-    # windows-latest compiles this large dependency tree far slower than the
-    # Linux (self-hosted, s3-cache) and macOS runners, and a cold Go build cache
-    # after dependency changes pushes it past a tight limit. Give it headroom.
-    timeout-minutes: 25
+    # windows-latest is the slowest target: it compiles this large dependency
+    # tree far slower than the Linux (self-hosted, s3-cache) and macOS runners,
+    # and on top of that the post-job Go cache save (tar + zstd of
+    # GOMODCACHE/GOCACHE) takes several minutes. A cold cache after dependency
+    # changes plus that save pushes the job past a tight limit and the run gets
+    # cancelled. Give the slowest target enough headroom for build + cache save.
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
@@ -284,9 +287,13 @@ jobs:
           flags: unittests
           verbose: true
           # Install the Codecov CLI from PyPI instead of cli.codecov.io. The
-          # default path fetches Codecov's GPG public key from Keybase, which is
-          # currently returning 404 ("SELF-SIGNED PUBLIC KEY NOT FOUND").
-          # See codecov/codecov-action#1955. Safe to remove once Codecov restores the key.
+          # default path fetches Codecov's GPG public key from Keybase
+          # (https://keybase.io/codecovsecurity/pgp_keys.asc) to verify the CLI
+          # binary; that URL is currently returning 404 ("SELF-SIGNED PUBLIC KEY
+          # NOT FOUND"), so the import yields "no valid OpenPGP data found" and
+          # the run fails with "Could not verify signature". The PyPI path avoids
+          # the broken keyserver fetch. See codecov/codecov-action#1955. Safe to
+          # remove once Codecov restores the Keybase key.
           use_pypi: true
 
   docker:
