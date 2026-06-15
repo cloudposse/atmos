@@ -208,6 +208,17 @@ var (
 	ErrGitWorktreeAdd              = errors.New("failed to create git worktree")
 	ErrFetchOrigin                 = errors.New("failed to fetch from origin")
 	ErrDeepenOrigin                = errors.New("failed to deepen fetch from origin")
+	ErrGitRepositoryNotFound       = errors.New("git repository not configured")
+	ErrGitAuthFailed               = errors.New("git authentication failed")
+	ErrGitPushRejected             = errors.New("git push rejected: non-fast-forward")
+	ErrGitDirtyUnmanagedFiles      = errors.New("unmanaged dirty files detected outside commit paths")
+	ErrGitPathEscapesWorktree      = errors.New("path resolves outside git worktree")
+	ErrGitHookNotConfigured        = errors.New("git hook not configured")
+	ErrGitRepositoryRequired       = errors.New("git repository name or URI is required")
+	ErrGitProviderNotFound         = errors.New("git provider not registered")
+	ErrGitWorkdirExists            = errors.New("git workdir already exists")
+	ErrGitNoTrackingBranch         = errors.New("no branch to pull: the current branch has no upstream")
+	ErrGitWorkdirNotInitialized    = errors.New("git repository not cloned or initialized")
 
 	// I/O and output errors.
 	ErrBuildIOConfig  = errors.New("failed to build I/O config")
@@ -373,6 +384,8 @@ var (
 	ErrInvalidComponentRequiredProviders          = errors.New("invalid component required_providers section")
 	ErrInvalidComponentRequiredVersion            = errors.New("invalid component required_version attribute")
 	ErrInvalidComponentHooks                      = errors.New("invalid component hooks section")
+	ErrInvalidComponentSecrets                    = errors.New("invalid component secrets section")
+	ErrStoreIsSecret                              = errors.New("store is a secret store; use !secret instead of !store")
 	ErrInvalidComponentGenerate                   = errors.New("invalid component generate section")
 	ErrInvalidComponentAuth                       = errors.New("invalid component auth section")
 	ErrInvalidComponentProvision                  = errors.New("invalid component provision section")
@@ -666,6 +679,14 @@ var (
 
 	// Terraform --all flag errors.
 	ErrComponentWithAllFlagConflict = errors.New("component argument can't be used with --all flag")
+
+	// ErrCacheCertUntrusted is returned when the OS trust store does not trust the
+	// registry cache proxy's certificate (macOS/Windows require a one-time trust step).
+	ErrCacheCertUntrusted = errors.New("registry cache certificate is not trusted")
+
+	// ErrTrustStore is returned when installing or removing the registry cache proxy's
+	// certificate in the OS trust store fails.
+	ErrTrustStore = errors.New("registry cache trust store operation failed")
 
 	// Terraform execution errors.
 	ErrTerraformExecFailed          = errors.New("terraform execution failed")

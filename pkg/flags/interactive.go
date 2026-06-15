@@ -223,7 +223,7 @@ func PromptForConfirmation(title string, force bool) (bool, error) {
 	}
 
 	var confirmed bool
-	prompt := huh.NewConfirm().
+	prompt := uiutils.NewAtmosConfirm().
 		Title(title).
 		Affirmative("Yes!").
 		Negative("No.").

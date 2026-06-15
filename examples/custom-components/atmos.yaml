@@ -32,3 +32,6 @@ commands:
       - 'echo "App: {{ .Component.vars.app_name }}"'
       - 'echo "Version: {{ .Component.vars.version }}"'
       - 'echo "Replicas: {{ .Component.vars.replicas }}"'
+      # The component `env` section is exported as real environment variables, so steps can
+      # read $APP_VERSION / $DEPLOY_REGION directly (no need to inline them into the command).
+      - 'echo "Env: deploying v$APP_VERSION to $DEPLOY_REGION"'

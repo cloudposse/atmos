@@ -37,6 +37,7 @@ func autoProvisionBackend(
 	atmosConfig *schema.AtmosConfiguration,
 	componentConfig map[string]any,
 	authContext *schema.AuthContext,
+	_ *TerraformExecContext,
 ) error {
 	defer perf.Track(atmosConfig, "provisioner.autoProvisionBackend")()
 

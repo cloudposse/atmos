@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"os"
+	"strings"
 	"testing"
 )
 
@@ -12,6 +13,17 @@ func TestMain(m *testing.M) {
 	// This lets tests use the test binary itself as a cross-platform "exit 1" command.
 	if os.Getenv("_ATMOS_TEST_EXIT_ONE") == "1" {
 		os.Exit(1)
+	}
+
+	// Cross-platform subprocess helper: when _ATMOS_TEST_DUMP_ENV names a file, write this
+	// process's environment (one KEY=VALUE per line) to it and exit. This lets tests capture the
+	// environment Atmos passes to a custom-command step subprocess without invoking
+	// platform-specific binaries (e.g. `env` / `cmd /c set`).
+	if dumpFile := os.Getenv("_ATMOS_TEST_DUMP_ENV"); dumpFile != "" {
+		if err := os.WriteFile(dumpFile, []byte(strings.Join(os.Environ(), "\n")), 0o600); err != nil {
+			os.Exit(1)
+		}
+		os.Exit(0)
 	}
 
 	// Capture initial RootCmd state.

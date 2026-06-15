@@ -43,6 +43,7 @@ examples/custom-components/
    App: myapp
    Version: 1.0.0
    Replicas: 1
+   Env: deploying v1.0.0 to us-east-1
    ```
 
 ## How It Works
@@ -59,3 +60,11 @@ examples/custom-components/
 3. **Template Access**:
    - Steps can access component config via `{{ .Component.* }}`
    - All component sections are available: `vars`, `settings`, `metadata`, etc.
+
+4. **Environment Variables**:
+   - The component `env` section is exported as real environment variables to every step,
+     just like the built-in `terraform`/`helmfile`/`packer`/`ansible` component types.
+   - Steps (and scripts they invoke) read them directly as `$APP_VERSION`, `$DEPLOY_REGION`, etc.
+   - For sensitive values, use `!secret NAME` in the `env` section so the value resolves from a
+     secret backend and is masked in output — never inline a secret into the command string.
+     See [Passing secrets](https://atmos.tools/cli/configuration/secrets).

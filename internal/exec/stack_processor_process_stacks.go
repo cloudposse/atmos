@@ -70,6 +70,7 @@ func ProcessStackConfig(
 	globalAnsibleSection := map[string]any{}
 	globalComponentsSection := map[string]any{}
 	globalAuthSection := map[string]any{}
+	globalSecretsSection := map[string]any{}
 
 	terraformVars := map[string]any{}
 	terraformSettings := map[string]any{}
@@ -183,6 +184,15 @@ func ProcessStackConfig(
 		globalAuthSection, ok = i.(map[string]any)
 		if !ok {
 			return nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidAuthSection, stackName)
+		}
+	}
+
+	// Stack-level (global) secrets declarations/providers; merged into every component's
+	// secrets section so providers and declarations can be defined once per stack.
+	if i, ok := config[cfg.SecretsSectionName]; ok {
+		globalSecretsSection, ok = i.(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidComponentSecrets, stackName)
 		}
 	}
 
@@ -603,6 +613,7 @@ func ProcessStackConfig(
 					GlobalSettings:                  globalAndTerraformSettings,
 					GlobalEnv:                       globalAndTerraformEnv,
 					GlobalAuth:                      globalAndTerraformAuth,
+					GlobalSecrets:                   globalSecretsSection,
 					GlobalDependencies:              globalAndTerraformDependencies,
 					GlobalCommand:                   terraformCommand,
 					AtmosGlobalAuthMap:              atmosAuthConfig,
@@ -650,6 +661,7 @@ func ProcessStackConfig(
 					GlobalSettings:           globalAndHelmfileSettings,
 					GlobalEnv:                globalAndHelmfileEnv,
 					GlobalAuth:               globalAndHelmfileAuth,
+					GlobalSecrets:            globalSecretsSection,
 					GlobalDependencies:       globalAndHelmfileDependencies,
 					GlobalCommand:            helmfileCommand,
 					AtmosGlobalAuthMap:       atmosAuthConfig,
@@ -688,6 +700,7 @@ func ProcessStackConfig(
 					GlobalSettings:           globalAndPackerSettings,
 					GlobalEnv:                globalAndPackerEnv,
 					GlobalAuth:               globalAndPackerAuth,
+					GlobalSecrets:            globalSecretsSection,
 					GlobalDependencies:       globalAndPackerDependencies,
 					GlobalCommand:            packerCommand,
 					AtmosGlobalAuthMap:       atmosAuthConfig,
@@ -726,6 +739,7 @@ func ProcessStackConfig(
 					GlobalSettings:           globalAndAnsibleSettings,
 					GlobalEnv:                globalAndAnsibleEnv,
 					GlobalAuth:               globalAndAnsibleAuth,
+					GlobalSecrets:            globalSecretsSection,
 					GlobalDependencies:       globalAndAnsibleDependencies,
 					GlobalCommand:            ansibleCommand,
 					AtmosGlobalAuthMap:       atmosAuthConfig,
