@@ -475,8 +475,8 @@ jobs:
   # not yet persist that across runs, so each run re-downloads the (small)
   # tarball. Adding an actions/cache step keyed on the envtest version is an
   # easy follow-up.
-  kubernetes-controlplane:
-    name: "[Kubernetes] control plane (${{ matrix.os }})"
+  kubernetes-e2e:
+    name: "[kubernetes] e2e tests (${{ matrix.os }})"
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -497,7 +497,7 @@ jobs:
         with:
           go-version-file: "go.mod"
 
-      - name: Run Kubernetes control-plane tests
+      - name: Run Kubernetes end-to-end tests
         env:
           # Atmos builds with CGO disabled (see Makefile). Match that here so the
           # toolchain's transitive CGO dependencies (e.g. bearsh/hid → libudev)
