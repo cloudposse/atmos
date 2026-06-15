@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/ci"
 	"github.com/cloudposse/atmos/pkg/component"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	log "github.com/cloudposse/atmos/pkg/logger"
@@ -97,6 +98,7 @@ func (e *CommandEngine) Run(ctx *ExecContext) (*Output, error) {
 
 	out := captureOutput(ctx, outputFile)
 	renderTerminal(ctx, out)
+	renderCISummary(out)
 
 	if runErr != nil {
 		return out, applyOnFailure(ctx, runErr)
@@ -260,6 +262,28 @@ func renderTerminal(ctx *ExecContext, out *Output) {
 	if out.Artifact != nil && ctx.Hook.Format == FormatMarkdown {
 		ui.Writeln("")
 		ui.MarkdownMessage(string(out.Artifact.Body))
+	}
+}
+
+// renderCISummary appends the hook's markdown summary to the active CI
+// provider's job step summary (e.g. GitHub Actions' $GITHUB_STEP_SUMMARY) so
+// scanner findings are visible in the pipeline run, not just the log stream.
+// It is a no-op outside CI. Writing to the step summary is best-effort: a
+// failure here must never fail the hook (the findings already rendered to the
+// terminal), so the error is logged at debug and swallowed.
+func renderCISummary(out *Output) {
+	if out == nil || out.Summary == nil || out.Summary.Body == "" {
+		return
+	}
+	// The step summary is append-only and shared: a prior step or hook may
+	// have left content without a trailing blank line. Each summary body
+	// starts with a `## <tool>` heading, and GitHub-flavored Markdown only
+	// renders an ATX heading as a heading when a blank line precedes it. So
+	// prefix a newline to guarantee separation — every appended summary lands
+	// as its own cleanly-delimited chapter. Mirrors renderTerminal's leading
+	// ui.Writeln("").
+	if err := ci.WriteStepSummary("\n" + out.Summary.Body); err != nil {
+		log.Debug("Failed to write hook summary to CI step summary", "error", err)
 	}
 }
 
