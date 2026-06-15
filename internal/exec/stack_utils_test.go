@@ -6,6 +6,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -96,6 +97,122 @@ func TestBuildTerraformWorkspace(t *testing.T) {
 				assert.NoError(t, err, "Did not expect error for case: %s", tc.name)
 				assert.Equal(t, tc.expectedWorkspace, workspace, "Expected workspace to match for case: %s", tc.name)
 			}
+		})
+	}
+}
+
+func TestBuildDependentStackNameFromDependsOnLegacy(t *testing.T) {
+	tests := []struct {
+		name                         string
+		dependsOn                    string
+		allStackNames                []string
+		currentStackName             string
+		componentNamesInCurrentStack []string
+		currentComponentName         string
+		expected                     string
+		expectError                  bool
+	}{
+		{
+			name:                         "dependency matches a stack name",
+			dependsOn:                    "prod/us-east-1",
+			allStackNames:                []string{"dev-us-east-1", "prod-us-east-1"},
+			currentStackName:             "dev-us-east-1",
+			componentNamesInCurrentStack: []string{"vpc", "eks"},
+			currentComponentName:         "app",
+			expected:                     "prod-us-east-1",
+			expectError:                  false,
+		},
+		{
+			name:                         "dependency matches a component in the current stack",
+			dependsOn:                    "vpc",
+			allStackNames:                []string{"dev-us-east-1", "prod-us-east-1"},
+			currentStackName:             "dev-us-east-1",
+			componentNamesInCurrentStack: []string{"vpc", "eks"},
+			currentComponentName:         "app",
+			expected:                     "dev-us-east-1-vpc",
+			expectError:                  false,
+		},
+		{
+			name:                         "dependency matches neither stack nor component",
+			dependsOn:                    "missing/thing",
+			allStackNames:                []string{"dev-us-east-1", "prod-us-east-1"},
+			currentStackName:             "dev-us-east-1",
+			componentNamesInCurrentStack: []string{"vpc", "eks"},
+			currentComponentName:         "app",
+			expected:                     "",
+			expectError:                  true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := BuildDependentStackNameFromDependsOnLegacy(
+				tt.dependsOn,
+				tt.allStackNames,
+				tt.currentStackName,
+				tt.componentNamesInCurrentStack,
+				tt.currentComponentName,
+			)
+			if tt.expectError {
+				assert.ErrorIs(t, err, errUtils.ErrDependencyResolution)
+				assert.Empty(t, result)
+				return
+			}
+			assert.NoError(t, err)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestBuildDependentStackNameFromDependsOn(t *testing.T) {
+	tests := []struct {
+		name                   string
+		currentComponentName   string
+		currentStackName       string
+		dependsOnComponentName string
+		dependsOnStackName     string
+		allStackNames          []string
+		expected               string
+		expectError            bool
+	}{
+		{
+			name:                   "dependency resolves to an existing stack",
+			currentComponentName:   "app",
+			currentStackName:       "dev-us-east-1",
+			dependsOnComponentName: "vpc",
+			dependsOnStackName:     "prod/us-east-1",
+			allStackNames:          []string{"dev-us-east-1", "prod-us-east-1-vpc"},
+			expected:               "prod-us-east-1-vpc",
+			expectError:            false,
+		},
+		{
+			name:                   "dependency does not resolve to any stack",
+			currentComponentName:   "app",
+			currentStackName:       "dev-us-east-1",
+			dependsOnComponentName: "vpc",
+			dependsOnStackName:     "prod/us-east-1",
+			allStackNames:          []string{"dev-us-east-1", "staging-us-east-1"},
+			expected:               "",
+			expectError:            true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := BuildDependentStackNameFromDependsOn(
+				tt.currentComponentName,
+				tt.currentStackName,
+				tt.dependsOnComponentName,
+				tt.dependsOnStackName,
+				tt.allStackNames,
+			)
+			if tt.expectError {
+				assert.ErrorIs(t, err, errUtils.ErrDependencyResolution)
+				assert.Empty(t, result)
+				return
+			}
+			assert.NoError(t, err)
+			assert.Equal(t, tt.expected, result)
 		})
 	}
 }
