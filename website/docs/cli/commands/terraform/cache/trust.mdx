@@ -1,0 +1,64 @@
+---
+title: atmos terraform cache trust
+sidebar_label: cache trust
+sidebar_class_name: command
+id: trust
+description: Trust the registry cache proxy certificate in the OS trust store (required once on macOS and Windows).
+---
+import Intro from '@site/src/components/Intro'
+import Screengrab from '@site/src/components/Screengrab'
+
+<Intro>
+Install the registry cache's self-signed certificate into the operating system trust store so `terraform`/`tofu` trust the HTTPS cache proxy. This is a **one-time** step required on **macOS and Windows**. On Linux/BSD it is not needed — Atmos trusts the certificate automatically — and the command is a no-op there.
+</Intro>
+
+<Screengrab title="atmos terraform cache trust --help" slug="atmos-terraform-cache-trust--help" />
+
+## Why this is needed (and only on macOS/Windows)
+
+The registry cache serves providers and modules over HTTPS from a loopback proxy using a self-signed certificate (`terraform`/`tofu` require provider network mirrors to be HTTPS). For the subprocess to trust that certificate, the certificate must be in a trust store the subprocess consults:
+
+- **Linux/BSD** — works out of the box. Atmos writes a CA bundle (system roots + the proxy certificate) and points the subprocess at it via the standard `SSL_CERT_FILE` environment variable, which Go honors. **No trust step, no `atmos terraform cache trust`.**
+- **macOS / Windows** — Go ignores `SSL_CERT_FILE` and uses the OS platform verifier, so the certificate must be installed into the OS trust store once with `atmos terraform cache trust`:
+  - **macOS** — adds it to your login keychain (you may be prompted for your password).
+  - **Windows** — adds it to your user `Root` certificate store.
+
+:::caution One-time trust step on macOS and Windows
+The **first** time you run a `terraform`/`tofu` command with the cache enabled on macOS or Windows, Atmos detects that the proxy certificate is not trusted and stops with an actionable error before the subprocess fails with a raw `x509` error. Run:
+
+```shell
+atmos terraform cache trust
+```
+
+then re-run your command. You only need to do this once per machine (until the certificate is regenerated near expiry). It is **not** required on Linux/BSD.
+:::
+
+## Usage
+
+```shell
+atmos terraform cache trust
+```
+
+The command takes no arguments. Atmos global selection flags (`--base-path`, `--config`, `--config-path`, `--profile`) are honored and select which configuration resolves the cache location and certificate path.
+
+## Flags
+
+<dl>
+  <dt>No command-specific flags</dt>
+  <dd>This command takes no arguments or command-specific flags. It locates the cache certificate from the resolved Atmos configuration and installs it into the OS trust store. Atmos global flags are honored.</dd>
+</dl>
+
+## Examples
+
+```shell
+# Trust the cache certificate (macOS/Windows; no-op on Linux/BSD)
+atmos terraform cache trust
+
+# Remove it later
+atmos terraform cache untrust
+```
+
+## Related Commands
+
+- [`atmos terraform cache untrust`](/cli/commands/terraform/cache/untrust)
+- [`atmos terraform cache`](/cli/commands/terraform/cache)

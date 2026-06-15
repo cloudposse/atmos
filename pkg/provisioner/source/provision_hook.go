@@ -49,6 +49,7 @@ func autoProvisionSourceTerraform(
 	atmosConfig *schema.AtmosConfiguration,
 	componentConfig map[string]any,
 	authContext *schema.AuthContext,
+	_ *provisioner.TerraformExecContext,
 ) error {
 	return AutoProvisionSource(ctx, atmosConfig, cfg.TerraformComponentType, componentConfig, authContext)
 }

@@ -1,0 +1,39 @@
+---
+title: atmos terraform cache delete
+sidebar_label: cache delete
+sidebar_class_name: command
+id: delete
+description: Delete a specific cached object by its cache key.
+---
+import Intro from '@site/src/components/Intro'
+import Screengrab from '@site/src/components/Screengrab'
+
+<Intro>
+Delete a single cached object (and its metadata sidecar) by its cache key, as shown by `atmos terraform cache list`.
+</Intro>
+
+<Screengrab title="atmos terraform cache delete --help" slug="atmos-terraform-cache-delete--help" />
+
+## Usage
+
+```shell
+atmos terraform cache delete <key>
+```
+
+## Arguments
+
+<dl>
+  <dt>`key`</dt>
+  <dd>The cache key to delete, e.g. `providers/registry.terraform.io/hashicorp/aws/index.json`. Use [`atmos terraform cache list`](/cli/commands/terraform/cache/list) to find keys.</dd>
+</dl>
+
+## Examples
+
+```shell
+atmos terraform cache delete providers/registry.terraform.io/hashicorp/aws/index.json
+```
+
+## Related Commands
+
+- [`atmos terraform cache list`](/cli/commands/terraform/cache/list)
+- [`atmos terraform cache prune`](/cli/commands/terraform/cache/prune)

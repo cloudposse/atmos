@@ -10,7 +10,7 @@
         "init_run_reconfigure": true,
         "auto_generate_backend_file": false,
         "auto_generate_files": false,
-        "command": "",
+        "command": "tofu",
         "shell": {
           "prompt": ""
         },
@@ -95,7 +95,7 @@
     "describe",
     "component"
   ],
-  "command": "terraform",
+  "command": "tofu",
   "component": "vpc",
   "component_info": {
     "component_path": "/absolute/path/to/repo/examples/native-terraform/components/terraform/vpc",

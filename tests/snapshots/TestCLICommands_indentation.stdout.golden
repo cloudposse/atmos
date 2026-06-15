@@ -8,7 +8,7 @@ components:
         init_run_reconfigure: true
         auto_generate_backend_file: false
         auto_generate_files: false
-        command: ""
+        command: tofu
         shell:
             prompt: ""
         init:
