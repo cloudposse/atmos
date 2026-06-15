@@ -293,6 +293,31 @@ atmos terraform plan test/test-component -s tenant1-ue2-dev --append-user-agent 
         ```
     </dd>
 
+    <dt>`--skip-hooks` <em>(optional)</em></dt>
+    <dd>
+        Bypass [lifecycle hooks](/stacks/hooks) for the current invocation
+        without editing stack configuration. Hooks only run on `terraform`
+        `plan`, `apply`, and `deploy`, so this flag lives on the `terraform`
+        command and its subcommands.
+
+        - **No value** (`--skip-hooks`): skip every hook.
+        - **Comma-separated list** (`--skip-hooks=cost,security`): skip only the named hooks; others still run.
+        - **Boolean** (`--skip-hooks=true|false`): explicit on/off.
+        - Also available as the `ATMOS_SKIP_HOOKS` environment variable (same value syntax).
+        - **Per-invocation only** — does not propagate to nested commands or workflows.
+
+        ```shell
+        # Skip all hooks for one run (emergency rollback, debugging, etc.)
+        atmos terraform apply <component> -s <stack> --skip-hooks
+
+        # Skip just the cost-estimator and security scanner
+        atmos terraform plan <component> -s <stack> --skip-hooks=cost,security
+
+        # Via environment variable
+        ATMOS_SKIP_HOOKS=true atmos terraform apply <component> -s <stack>
+        ```
+    </dd>
+
     <dt>`--skip-planfile` <em>(optional)</em></dt>
     <dd>
         Skip writing the plan to a file.

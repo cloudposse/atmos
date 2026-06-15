@@ -479,8 +479,10 @@ ATMOS_SKIP_HOOKS=true atmos terraform apply vpc -s prod        # via env var
 
 Skipped hooks are logged at `INFO` level so it stays visible in CI
 output. The flag is **per-invocation only** — it doesn't propagate to
-nested commands or workflows. See [Global Flags](/cli/global-flags) for
-all options.
+nested commands or workflows. Because hooks only run on terraform
+operations, `--skip-hooks` is a flag of the
+[`atmos terraform`](/cli/commands/terraform/usage) command and all its
+subcommands (`plan`, `apply`, `deploy`, …).
 
 ## Hooks with `--all`
 
@@ -606,7 +608,8 @@ Each uses dummy AWS provider config so `tofu plan` succeeds offline.
 
 ## Related
 
-- [Global Flags](/cli/global-flags) — `--skip-hooks` and friends
+- [`atmos terraform`](/cli/commands/terraform/usage) — `--skip-hooks` and other terraform flags
+- [Global Flags](/cli/global-flags) — flags available on every command
 - [Component Dependencies](/stacks/dependencies/components) — `dependencies.tools` syntax used for auto-install
 - [Toolchain Configuration](/cli/configuration/toolchain) — registry overrides
 - [External Stores](/stacks/sharing-state/stores) — reading data written by `kind: store`

@@ -365,7 +365,7 @@ func (s *ArtifactoryStore) GetKey(key string) (interface{}, error) {
 }
 
 func init() {
-	store.Register("artifactory", buildArtifactoryStore)
+	store.Register(store.KindArtifactory, buildArtifactoryStore)
 }
 
 // buildArtifactoryStore is the store.StoreFactory for Artifactory stores.

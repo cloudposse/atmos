@@ -205,7 +205,7 @@ func (s *RedisStore) RedisClient() RedisClient {
 }
 
 func init() {
-	store.Register("redis", buildRedisStore)
+	store.Register(store.KindRedis, buildRedisStore)
 }
 
 // buildRedisStore is the store.StoreFactory for Redis stores.

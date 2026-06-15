@@ -749,6 +749,10 @@ func processStoreConfig(atmosConfig *schema.AtmosConfiguration) error {
 		log.Debug("processStoreConfig", "atmosConfig.StoresConfig", fmt.Sprintf("%v", atmosConfig.StoresConfig))
 	}
 
+	// Mark secret-by-default backends (e.g. 1Password) as `secret: true` before building the
+	// registry, so the secrets subsystem (which reads StoreConfig.Secret) sees them as secret.
+	store.ApplySecretDefaults(atmosConfig.StoresConfig)
+
 	storeRegistry, err := store.NewStoreRegistry(&atmosConfig.StoresConfig)
 	if err != nil {
 		return err

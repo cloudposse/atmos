@@ -230,7 +230,7 @@ resource "aws_ssm_parameter" "vpc_id" {
 
 ## Considerations
 
-- **Secrets exposure**: Store values may appear in stdout when describing stacks
+- **Secrets exposure**: `!store` reads in cleartext, so values may appear in stdout when describing stacks. For secrets, mark the store [`secret: true`](/cli/configuration/secrets) and use [`!secret`](/functions/yaml/secret), which masks values and gates access
 - **Permissions**: You need read access to all referenced stores
 - **Cold starts**: Returns error if the key doesn't exist (use `| default` to handle)
 - **Latency**: External store calls add latency compared to `!terraform.state`
