@@ -18,14 +18,6 @@ import (
 	atmosYaml "github.com/cloudposse/atmos/pkg/yaml"
 )
 
-// ExecuteTerraformGenerateVarfilesCmd executes `terraform generate varfiles` command.
-// Deprecated: Use ExecuteTerraformGenerateVarfiles with typed parameters instead.
-func ExecuteTerraformGenerateVarfilesCmd(cmd interface{}, args []string) error {
-	defer perf.Track(nil, "exec.ExecuteTerraformGenerateVarfilesCmd")()
-
-	return errUtils.ErrDeprecatedCmdNotCallable
-}
-
 // ExecuteTerraformGenerateVarfiles generates varfiles for all terraform components in all stacks.
 func ExecuteTerraformGenerateVarfiles(
 	atmosConfig *schema.AtmosConfiguration,

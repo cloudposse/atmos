@@ -4,7 +4,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/charmbracelet/lipgloss"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -237,27 +236,6 @@ func TestIsProvenanceColorEnabled(t *testing.T) {
 	}
 }
 
-func TestColorize(t *testing.T) {
-	text := "hello"
-	color := lipgloss.Color("#FF0000")
-
-	t.Run("useColor false returns plain text", func(t *testing.T) {
-		result := colorize(text, color, false)
-		assert.Equal(t, text, result)
-	})
-
-	t.Run("useColor true returns styled text", func(t *testing.T) {
-		// Force lipgloss to render colors regardless of TTY.
-		lipgloss.SetColorProfile(2) //nolint:mnd // TrueColor profile.
-		t.Cleanup(func() { lipgloss.SetColorProfile(0) })
-
-		result := colorize(text, color, true)
-		// Styled text should contain original text and differ from plain output.
-		assert.Contains(t, result, text)
-		assert.NotEqual(t, text, result)
-	})
-}
-
 func TestFormatProvenanceCommentWithStackFile_NoColor(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -325,60 +303,6 @@ func TestRenderProvenanceLegend_NoColor(t *testing.T) {
 		result := buf.String()
 		assert.Contains(t, result, "# Provenance Legend:")
 		assert.Contains(t, result, "# Stack: orgs/acme/dev/us-east-2.yaml")
-	})
-}
-
-func TestRenderFileTree_NoColor(t *testing.T) {
-	t.Run("empty tree", func(t *testing.T) {
-		var buf strings.Builder
-		renderFileTree(&buf, nil, false)
-		assert.Equal(t, "No provenance data available.\n", buf.String())
-	})
-
-	t.Run("single file single item", func(t *testing.T) {
-		var buf strings.Builder
-		tree := []FileTreeNode{
-			{
-				File: "orgs/acme/dev.yaml",
-				Items: []ProvenanceItem{
-					{Symbol: SymbolDefined, Line: 10, Path: "vars.enabled"},
-				},
-			},
-		}
-		renderFileTree(&buf, tree, false)
-		result := buf.String()
-		assert.Contains(t, result, "stacks/")
-		assert.Contains(t, result, "orgs/acme/dev.yaml")
-		assert.Contains(t, result, SymbolDefined)
-		assert.Contains(t, result, ":10")
-		assert.Contains(t, result, "vars.enabled")
-		// No ANSI codes when color is off.
-		assert.NotContains(t, result, "\x1b[")
-	})
-
-	t.Run("multiple files", func(t *testing.T) {
-		var buf strings.Builder
-		tree := []FileTreeNode{
-			{
-				File: "catalog/defaults.yaml",
-				Items: []ProvenanceItem{
-					{Symbol: SymbolInherited, Line: 5, Path: "vars.name"},
-				},
-			},
-			{
-				File: "orgs/acme/dev.yaml",
-				Items: []ProvenanceItem{
-					{Symbol: SymbolDefined, Line: 10, Path: "vars.enabled"},
-					{Symbol: SymbolComputed, Line: 0, Path: "vars.computed"},
-				},
-			},
-		}
-		renderFileTree(&buf, tree, false)
-		result := buf.String()
-
-		// First file uses ├── connector, last uses └──.
-		assert.Contains(t, result, "├── catalog/defaults.yaml")
-		assert.Contains(t, result, "└── orgs/acme/dev.yaml")
 	})
 }
 

@@ -58,14 +58,6 @@ func checkBackendTypeAfterProcessing(backendType string) error {
 	return nil
 }
 
-// ExecuteTerraformGenerateBackendsCmd executes `terraform generate backends` command.
-// Deprecated: Use ExecuteTerraformGenerateBackends with typed parameters instead.
-func ExecuteTerraformGenerateBackendsCmd(cmd interface{}, args []string) error {
-	defer perf.Track(nil, "exec.ExecuteTerraformGenerateBackendsCmd")()
-
-	return errUtils.ErrDeprecatedCmdNotCallable
-}
-
 // ExecuteTerraformGenerateBackends generates backend configs for all terraform components.
 func ExecuteTerraformGenerateBackends(
 	atmosConfig *schema.AtmosConfiguration,

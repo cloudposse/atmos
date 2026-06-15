@@ -59,23 +59,6 @@ func IsYaml(file string) bool {
 	return slices.Contains(yamlExtensions, ext)
 }
 
-// ConvertPathsToAbsolutePaths converts a slice of paths to a slice of absolute paths.
-func ConvertPathsToAbsolutePaths(paths []string) ([]string, error) {
-	defer perf.Track(nil, "utils.ConvertPathsToAbsolutePaths")()
-
-	res := []string{}
-
-	for _, dir := range paths {
-		abs, err := filepath.Abs(dir)
-		if err != nil {
-			return nil, err
-		}
-		res = append(res, abs)
-	}
-
-	return res, nil
-}
-
 // JoinPaths joins a base path with each item in the path slice and returns a slice of joined paths.
 // This is a pure path construction function without filesystem validation.
 func JoinPaths(basePath string, paths []string) ([]string, error) {
@@ -211,17 +194,6 @@ func EnsureDir(fileName string) error {
 		}
 	}
 	return nil
-}
-
-// SliceOfPathsContainsPath checks if a slice of file paths contains a path.
-func SliceOfPathsContainsPath(paths []string, checkPath string) bool {
-	for _, v := range paths {
-		dir := filepath.Dir(v)
-		if dir == checkPath {
-			return true
-		}
-	}
-	return false
 }
 
 // GetAllFilesInDir returns all files in the provided directory and all subdirectories.

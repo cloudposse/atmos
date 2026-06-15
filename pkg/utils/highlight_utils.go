@@ -8,7 +8,6 @@ import (
 	"github.com/alecthomas/chroma/v2"
 	"github.com/alecthomas/chroma/v2/formatters"
 	"github.com/alecthomas/chroma/v2/lexers"
-	"github.com/alecthomas/chroma/v2/quick"
 	"github.com/alecthomas/chroma/v2/styles"
 
 	"github.com/cloudposse/atmos/internal/tui/templates"
@@ -56,21 +55,6 @@ func GetHighlightSettings(config *schema.AtmosConfiguration) *schema.SyntaxHighl
 		settings.Wrap = defaults.Wrap
 	}
 	return settings
-}
-
-// HighlightCode highlights the given code using chroma with the specified lexer and theme
-func HighlightCode(code string, lexerName string, theme string) (string, error) {
-	defer perf.Track(nil, "utils.HighlightCode")()
-
-	if !termUtils.IsTTYSupportForStdout() {
-		return code, nil
-	}
-	var buf bytes.Buffer
-	err := quick.Highlight(&buf, code, lexerName, "terminal", theme)
-	if err != nil {
-		return code, err
-	}
-	return buf.String(), nil
 }
 
 // HighlightCodeWithConfig highlights the given code using the provided configuration.

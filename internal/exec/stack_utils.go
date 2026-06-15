@@ -251,15 +251,3 @@ func IsComponentAbstract(metadataSection map[string]any) bool {
 	}
 	return false
 }
-
-// IsComponentEnabled returns 'true' if the component is enabled.
-func IsComponentEnabled(varsSection map[string]any) bool {
-	defer perf.Track(nil, "exec.IsComponentEnabled")()
-
-	if enabled, ok := varsSection["enabled"].(bool); ok {
-		if enabled == false {
-			return false
-		}
-	}
-	return true
-}
