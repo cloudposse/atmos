@@ -3,11 +3,13 @@ title: atmos kubernetes validate
 sidebar_label: validate
 sidebar_class_name: command
 id: validate
+description: Validate rendered Kubernetes manifests offline by default, with optional server-side dry-run checks.
 ---
 
 import Intro from "@site/src/components/Intro";
 import ActionCard from "@site/src/components/ActionCard";
 import PrimaryCTA from "@site/src/components/PrimaryCTA";
+import Screengrab from "@site/src/components/Screengrab";
 
 <Intro>
   Catch broken manifests before they reach the cluster. `validate` renders the
@@ -16,6 +18,8 @@ import PrimaryCTA from "@site/src/components/PrimaryCTA";
   a resolvable group/version/kind. With `--server`, it additionally validates the
   objects against the live cluster using a server-side dry-run apply.
 </Intro>
+
+<Screengrab title="atmos kubernetes validate --help" slug="atmos-kubernetes-validate--help" />
 
 <ActionCard title="Configure Kubernetes Components">
   `validate` uses the same stack inputs as the rest of the lifecycle:

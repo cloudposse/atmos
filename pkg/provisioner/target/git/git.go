@@ -144,9 +144,10 @@ func commitAndPush(ctx context.Context, s *repoSession, cfg *config, artifact *t
 // artifact files, so removals propagate deterministically.
 func writeArtifact(workdir, path string, artifact *target.ProvisionArtifact) error {
 	// Guard against deleting the worktree root: ValidateRepoRelativePath resolves
-	// "" and "." to the worktree root, and a subsequent os.RemoveAll there would
-	// destroy the entire repository (including .git).
-	if trimmed := strings.TrimSpace(path); trimmed == "" || trimmed == "." {
+	// root-equivalent paths ("", ".", "./", "a/..") to the worktree root, and a
+	// subsequent os.RemoveAll there would destroy the entire repository (including
+	// .git). filepath.Clean normalizes all such variants to "." before the check.
+	if trimmed := strings.TrimSpace(path); filepath.Clean(trimmed) == "." {
 		return fmt.Errorf("%w: %q", errUtils.ErrGitTargetPathInvalid, path)
 	}
 

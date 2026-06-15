@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	apivalidation "k8s.io/apimachinery/pkg/util/validation"
@@ -106,7 +107,10 @@ func runServerValidate(objects []*unstructured.Unstructured) error {
 		return err
 	}
 
-	results, err := client.Validate(context.Background(), objects)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	defer cancel()
+
+	results, err := client.Validate(ctx, objects)
 	if err != nil {
 		return fmt.Errorf("%w: %w", errUtils.ErrKubernetesValidationFailed, err)
 	}

@@ -97,7 +97,7 @@ func TestWriteArtifactRejectsPathEscape(t *testing.T) {
 }
 
 func TestWriteArtifactRejectsRootPath(t *testing.T) {
-	for _, path := range []string{"", ".", "  ", " . "} {
+	for _, path := range []string{"", ".", "  ", " . ", "./", "a/..", "./a/.."} {
 		workdir := t.TempDir()
 		// A sentinel file at the worktree root must survive: a root path must be
 		// rejected before os.RemoveAll could wipe the repository (including .git).
