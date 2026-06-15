@@ -639,11 +639,11 @@ APACHE 2.0 LICENSED DEPENDENCIES
 
   - k8s.io/apimachinery/pkg
     License: Apache-2.0
-    URL: https://github.com/kubernetes/apimachinery/blob/v0.36.1/LICENSE
+    URL: https://github.com/kubernetes/apimachinery/blob/v0.36.2/LICENSE
 
   - k8s.io/client-go
     License: Apache-2.0
-    URL: https://github.com/kubernetes/client-go/blob/v0.36.1/LICENSE
+    URL: https://github.com/kubernetes/client-go/blob/v0.36.2/LICENSE
 
   - k8s.io/klog/v2
     License: Apache-2.0
@@ -992,11 +992,11 @@ BSD LICENSED DEPENDENCIES
 
   - k8s.io/apimachinery/third_party/forked/golang/reflect
     License: BSD-3-Clause
-    URL: https://github.com/kubernetes/apimachinery/blob/v0.36.1/third_party/forked/golang/LICENSE
+    URL: https://github.com/kubernetes/apimachinery/blob/v0.36.2/third_party/forked/golang/LICENSE
 
   - k8s.io/client-go/third_party/forked/golang/template
     License: BSD-3-Clause
-    URL: https://github.com/kubernetes/client-go/blob/v0.36.1/third_party/forked/golang/LICENSE
+    URL: https://github.com/kubernetes/client-go/blob/v0.36.2/third_party/forked/golang/LICENSE
 
   - k8s.io/utils/internal/third_party/forked/golang/net
     License: BSD-3-Clause
