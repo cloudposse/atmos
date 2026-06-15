@@ -724,6 +724,15 @@ func TestHandleDeploySubcommand(t *testing.T) {
 			wantArgs:         []string{autoApproveFlag},
 		},
 		{
+			name:             "apply with ApplyAutoApprove and UseTerraformPlan does not add auto-approve",
+			subCommand:       subcommandApply,
+			applyAutoApprove: true,
+			useTerraformPlan: true,
+			initialArgs:      []string{},
+			wantSubCommand:   subcommandApply,
+			wantArgs:         []string{},
+		},
+		{
 			name:           "plan is left untouched",
 			subCommand:     "plan",
 			initialArgs:    []string{},
