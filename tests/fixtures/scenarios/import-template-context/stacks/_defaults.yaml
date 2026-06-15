@@ -1,6 +1,11 @@
 settings:
   context:
     catalog_ref: v1
+    tier: v1
+    # `deployment_repo` is itself a template referencing another context value.
+    # An import path that references `deployment_repo` must therefore be rendered
+    # to a fixed point (more than one pass) to fully resolve.
+    deployment_repo: 'catalog/{{ .settings.context.tier }}'
 
 vars:
   region: us-east-1

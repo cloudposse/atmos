@@ -4313,3 +4313,68 @@ func TestProcessYAMLConfigFile_TemplatedImportPath_NestedPropagation(t *testing.
 	require.NoError(t, err)
 	assert.Equal(t, "v1", serviceCatalogVersion(t, deepMerged))
 }
+
+// TestProcessYAMLConfigFile_TemplatedImportPath_NestedTemplateValue verifies that a
+// referenced value which is ITSELF a template is resolved to a fixed point. Here
+// `_defaults` sets `settings.context.deployment_repo = "catalog/{{ .settings.context.tier }}"`,
+// and the import path references `deployment_repo`. The first pass substitutes the
+// raw template string, and a second (continuation) pass resolves the nested
+// `{{ .settings.context.tier }}` to `v1`, yielding `catalog/v1/service`.
+func TestProcessYAMLConfigFile_TemplatedImportPath_NestedTemplateValue(t *testing.T) {
+	deepMerged, err := processImportTemplateFixture(t, templatedImportContextConfig(), "nested-value.yaml")
+	require.NoError(t, err)
+	assert.Equal(t, "v1", serviceCatalogVersion(t, deepMerged))
+}
+
+// TestRenderImportPath_FixedPoint verifies that renderImportPath re-renders to a
+// fixed point when a referenced value embeds a template referencing another value.
+func TestRenderImportPath_FixedPoint(t *testing.T) {
+	atmosConfig := templatedImportContextConfig()
+
+	ctx := map[string]any{
+		cfg.SettingsSectionName: map[string]any{
+			"context": map[string]any{
+				"tier": "v1",
+				// repo is a template that references another context value.
+				"repo": "catalog/{{ .settings.context.tier }}",
+			},
+		},
+	}
+
+	out, err := renderImportPath(
+		atmosConfig,
+		"file.yaml",
+		"{{ .settings.context.repo }}/service",
+		ctx,
+		schema.StackImport{},
+	)
+	require.NoError(t, err)
+	assert.Equal(t, "catalog/v1/service", out)
+}
+
+// TestRenderImportPath_FixedPoint_UnresolvableLiteralPreserved verifies that a
+// referenced value containing a `{{ ... }}` that cannot be resolved is left intact
+// (the error-tolerant continuation keeps the last good render) rather than failing
+// or collapsing to an empty value. The first pass resolves `repo`; the second pass
+// fails to resolve the embedded `{{ .undefined }}` and the prior render is kept.
+func TestRenderImportPath_FixedPoint_UnresolvableLiteralPreserved(t *testing.T) {
+	atmosConfig := templatedImportContextConfig()
+
+	ctx := map[string]any{
+		cfg.SettingsSectionName: map[string]any{
+			"context": map[string]any{
+				"repo": "catalog/{{ .undefined }}",
+			},
+		},
+	}
+
+	out, err := renderImportPath(
+		atmosConfig,
+		"file.yaml",
+		"{{ .settings.context.repo }}/service",
+		ctx,
+		schema.StackImport{},
+	)
+	require.NoError(t, err)
+	assert.Equal(t, "catalog/{{ .undefined }}/service", out)
+}

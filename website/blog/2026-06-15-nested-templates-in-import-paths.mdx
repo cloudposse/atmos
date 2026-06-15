@@ -1,0 +1,56 @@
+---
+slug: nested-templates-in-import-paths
+title: "Import Paths Now Resolve Nested Templates"
+authors: [osterman]
+tags: [enhancement]
+---
+
+Templated import paths now render to a **fixed point**: a value referenced in an import path may itself contain template syntax, and Atmos keeps rendering until it fully resolves. This lets you compose a value like a repository URL **once** in `settings.context` and reuse it across every import.
+
+<!--truncate-->
+
+## The Problem
+
+[Templated imports](/stacks/imports#referencing-earlier-imports-in-import-paths) let an import path reference `settings`/`vars`/`env` established by an earlier import. But the path was rendered in a single pass, so if the referenced value *itself* contained a template, that inner template was substituted in literally and never evaluated:
+
+```yaml
+settings:
+  context:
+    deployment_repo: 'git@{{ atmos.Resolve "!git.host" }}:{{ atmos.Resolve "!git.repository" }}'
+import:
+  - '{{ .settings.context.deployment_repo }}//stacks/catalog/global?ref=main'
+```
+
+The first pass expanded `{{ .settings.context.deployment_repo }}` to the raw string `git@{{ atmos.Resolve "!git.host" }}:...`, and the literal `{{ ... }}` text reached the URL parser:
+
+```
+failed to parse URL: invalid port ":{{ atmos.Resolve \"!git.repository\" }}" after host
+```
+
+The only workaround was to inline the full `atmos.Resolve` expression into every import path — defeating the point of defining it once.
+
+## The Solution
+
+Import paths now re-render until the result stops changing (or no `{{` remains). A referenced value that contains its own templates is fully resolved, so the example above just works — and you can define the repository URL once and reference it everywhere:
+
+```yaml title="stacks/deploy/prod/_defaults.yaml"
+settings:
+  context:
+    deployment_repo_version: main
+    deployment_repo: 'git@{{ atmos.Resolve "!git.host" }}:{{ atmos.Resolve "!git.repository" }}'
+```
+
+```yaml title="stacks/catalog_prod/global.yaml"
+import:
+  - '{{ .settings.context.deployment_repo }}//stacks/catalog/global?ref={{ .settings.context.deployment_repo_version }}'
+```
+
+The first pass keeps today's behavior (including the hard error for a genuinely missing value); the additional passes are error-tolerant, so any import path that already resolved in a single pass produces the exact same result as before.
+
+## Component `source` Blocks
+
+The same `{{ .settings.context.deployment_repo }}` reference works in a component's `source.uri`/`version`, but those are rendered during component processing, which runs a single template pass by default. To resolve a value that itself contains templates there, set [`templates.settings.evaluations: 2`](/cli/configuration/templates). Note that increasing `evaluations` also re-processes any [escaped templates](/templates#excluding-templates-in-stack-manifest-from-processing-by-atmos) on each extra pass.
+
+## Get Involved
+
+See [Referencing Earlier Imports in Import Paths](/stacks/imports#referencing-earlier-imports-in-import-paths) for the full reference. Questions or ideas? Join us in the [Cloud Posse community Slack](https://slack.cloudposse.com/).

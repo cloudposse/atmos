@@ -630,7 +630,40 @@ appears **before** the import that references it.
 
   <dt>Missing values</dt>
   <dd>If a referenced value is not defined by an earlier import (or the import's `context`), Atmos fails with an error. Set `ignore_missing_template_values: true` on the import (or [`templates.settings.ignore_missing_template_values`](/cli/configuration/templates) globally) to leave unresolved values as-is instead.</dd>
+
+  <dt>Nested templates are resolved</dt>
+  <dd>A referenced value may itself contain template syntax. Import paths are rendered to a **fixed point** — Atmos keeps rendering until the result stops changing — so a value like `settings.context.deployment_repo` that embeds `{{ atmos.Resolve "!git.repository" }}` is fully resolved when used in a later import path. This lets you define a composite value (such as a repository URL) **once** and reuse it across imports.</dd>
 </dl>
+
+### Composing a value once and reusing it
+
+Because referenced values are themselves rendered, you can assemble a repository
+URL from [YAML functions](/functions/yaml) in a single place and
+reference it from every import (and from component `source` blocks):
+
+```yaml title="stacks/deploy/prod/_defaults.yaml"
+settings:
+  context:
+    deployment_repo_version: main
+    # `deployment_repo` itself contains templates; Atmos resolves them when the
+    # value is used in an import path.
+    deployment_repo: 'git@{{ atmos.Resolve "!git.host" }}:{{ atmos.Resolve "!git.repository" }}'
+```
+
+```yaml title="stacks/catalog_prod/global.yaml"
+import:
+  - '{{ .settings.context.deployment_repo }}//stacks/catalog/global?ref={{ .settings.context.deployment_repo_version }}'
+```
+
+:::note Component `source` blocks
+The same `{{ .settings.context.deployment_repo }}` reference works in a component's
+`source.uri`/`version`, but those are rendered during **component processing**, which
+runs a single template pass by default. To resolve a value that itself contains
+templates there, set [`templates.settings.evaluations: 2`](/cli/configuration/templates).
+Note that increasing `evaluations` also re-processes any
+[escaped templates](/templates#excluding-templates-in-stack-manifest-from-processing-by-atmos)
+on each extra pass.
+:::
 
 :::note Import paths vs. file content
 Only the import **path** sees values from earlier imports. The **content** of an imported

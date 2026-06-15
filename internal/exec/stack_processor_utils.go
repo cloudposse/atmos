@@ -70,6 +70,11 @@ var localsExtractionCache sync.Map // map[string]*extractLocalsResult (immutable
 // hex-encoded portion of localsCacheKey.
 const hexBase = 16
 
+// importPathMaxTemplateEvaluations caps the number of fixed-point render passes
+// `renderImportPath` performs, guarding against pathological self-referential
+// values that never stabilize.
+const importPathMaxTemplateEvaluations = 16
+
 // localsCacheKey builds a stable cache key from the absolute file path and a
 // content fingerprint. The fingerprint is a 64-bit FNV-1a hash of yamlContent
 // so that the same file path used with two different contents (mostly a test
@@ -1622,7 +1627,12 @@ func renderImportPath(
 		tmplData = merged
 	}
 
-	rendered, err := ProcessTmpl(atmosConfig, fmt.Sprintf("import-path(%s)", relativeFilePath), imp, tmplData, ignoreMissing)
+	tmplName := fmt.Sprintf("import-path(%s)", relativeFilePath)
+
+	// First render: full, error-reporting behavior (preserves existing semantics,
+	// including hard errors for missing values when `ignore_missing_template_values`
+	// is off).
+	rendered, err := ProcessTmpl(atmosConfig, tmplName, imp, tmplData, ignoreMissing)
 	if err != nil {
 		wrapped := fmt.Errorf("%w: import path '%s' in file '%s': %w",
 			errUtils.ErrImportPathTemplate, imp, relativeFilePath, err)
@@ -1630,6 +1640,19 @@ func renderImportPath(
 			WithHint("Define the referenced variable in an earlier import (e.g. a `_defaults` file) or in this import's `context:`.").
 			WithHint("Set `ignore_missing_template_values: true` on the import (or `templates.settings.ignore_missing_template_values` in atmos.yaml) to leave unresolved values as-is.").
 			Err()
+	}
+
+	// Fixed-point continuation: when a referenced value (e.g. `settings.context.repo`)
+	// itself contains template syntax, the first pass substitutes it in literally, so
+	// re-render until the result is stable or no `{{` remains. Continuation passes are
+	// error-tolerant: a pass that fails to render leaves the last good result in place,
+	// so any path that resolved single-pass yields the exact same output as before.
+	for i := 1; i < importPathMaxTemplateEvaluations && strings.Contains(rendered, "{{"); i++ {
+		next, nextErr := ProcessTmpl(atmosConfig, tmplName, rendered, tmplData, ignoreMissing)
+		if nextErr != nil || next == rendered {
+			break
+		}
+		rendered = next
 	}
 
 	return rendered, nil
