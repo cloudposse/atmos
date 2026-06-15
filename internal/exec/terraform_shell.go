@@ -49,6 +49,7 @@ func shellInfoFromOptions(opts *ShellOptions) schema.ConfigAndStacksInfo {
 		SubCommand:       "shell",
 		DryRun:           opts.DryRun,
 		Identity:         opts.Identity,
+		SkipInit:         opts.SkipInit,
 	}
 }
 
@@ -165,20 +166,109 @@ func ExecuteTerraformShell(opts *ShellOptions, atmosConfig *schema.AtmosConfigur
 		return nil
 	}
 
+	if err := prepareShellExecution(atmosConfig, &info, cfg, opts.WithSecrets); err != nil {
+		return err
+	}
+
+	// Remove the temporary Terraform CLI config (TF_CLI_CONFIG_FILE) after init, workspace, and
+	// the whole interactive shell session complete. Deferred here (not in prepareShellExecution)
+	// so the file survives every subprocess and the shell.
+	if info.RCCleanup != nil {
+		defer func() {
+			if cleanupErr := info.RCCleanup(); cleanupErr != nil {
+				log.Debug("Failed to remove temporary Terraform CLI config", "error", cleanupErr)
+			}
+		}()
+	}
+
+	return executeShellLifecycle(atmosConfig, &info, cfg)
+}
+
+// Seams for testing the shell lifecycle without launching real subprocesses or an interactive
+// shell. They default to the real implementations (mirrors the execTerraformFn pattern).
+var (
+	shellInitFn      = executeTerraformInitCommand
+	shellWorkspaceFn = runWorkspaceSetup
+	shellExecFn      = execTerraformShellCommand
+)
+
+// executeShellLifecycle runs `terraform init` and selects/creates the workspace before launching
+// the interactive shell, so the user lands in an initialized component and the correct workspace
+// (not `default`). This matches the documented behavior and the pre-v1.202.0 flow where shell ran
+// through the shared ExecuteTerraform pipeline. The before.terraform.init provisioners already ran
+// in ExecuteTerraformShell, so init uses the provisioner-free path to avoid running them twice.
+func executeShellLifecycle(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, cfg *shellConfig) error {
+	defer perf.Track(atmosConfig, "exec.executeShellLifecycle")()
+
+	if shouldRunTerraformInit(atmosConfig, info) {
+		// Mirror prepareInitExecution's non-workdir cleanup of .terraform/environment so
+		// Terraform doesn't prompt for workspace selection. Skipped for workdir components.
+		if _, isWorkdir := info.ComponentSection[provWorkdir.WorkdirPathKey].(string); !isWorkdir {
+			cleanTerraformWorkspace(*atmosConfig, cfg.componentPath)
+		}
+		if err := shellInitFn(atmosConfig, info, cfg.componentPath, cfg.varFile); err != nil {
+			return err
+		}
+	}
+
+	// Select (or create) the workspace. No-op for the http backend or when TF_WORKSPACE is set
+	// (see shouldSkipWorkspaceSetup); resolves to `default` when workspaces_enabled: false.
+	if err := shellWorkspaceFn(atmosConfig, info, cfg.componentPath); err != nil {
+		return err
+	}
+
+	return shellExecFn(atmosConfig, info.ComponentFromArg, info.Stack,
+		info.ComponentEnvList, cfg.varFile, cfg.workingDir, info.TerraformWorkspace, cfg.componentPath)
+}
+
+// prepareShellExecution performs the per-component setup the shell needs before running
+// `terraform init`/`workspace` and launching the interactive shell: resolving the terraform/tofu
+// binary (including the toolchain), writing the disk-safe varfile, generating backend and
+// provider-override config files, and assembling the component environment. It registers
+// info.RCCleanup so the temporary Terraform CLI config survives init, workspace, and the shell.
+func prepareShellExecution(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, cfg *shellConfig, withSecrets bool) error {
+	defer perf.Track(atmosConfig, "exec.prepareShellExecution")()
+
+	// Resolve the terraform/tofu binary (config + toolchain) so init/workspace and the shell
+	// all use the correct executable.
+	resolveTerraformCommand(atmosConfig, info)
+	tenv, err := resolveAndInstallToolchainDeps(atmosConfig, info)
+	if err != nil {
+		return err
+	}
+	info.Command = tenv.Resolve(info.Command)
+
 	// Keep resolved secrets out of the on-disk varfile. With --with-secrets, export them
 	// into the interactive shell as TF_VAR_* env vars; otherwise they are not available
 	// (terraform commands in the shell that need them will prompt or fail).
-	computeTerraformSecretVarKeys(&info)
+	computeTerraformSecretVarKeys(info)
 
-	varFilePath := constructTerraformComponentVarfilePath(atmosConfig, &info)
-	if err := u.WriteToFileAsJSON(varFilePath, diskSafeVars(&info), filePermissions); err != nil {
+	varFilePath := constructTerraformComponentVarfilePath(atmosConfig, info)
+	if err := u.WriteToFileAsJSON(varFilePath, diskSafeVars(info), filePermissions); err != nil {
 		return err
 	}
 
-	if err := applyShellSecretEnv(&info, opts.WithSecrets); err != nil {
+	// Generate backend + provider-override files so `terraform init` configures the backend.
+	if err := generateConfigFiles(atmosConfig, info, cfg.workingDir); err != nil {
 		return err
 	}
 
-	return execTerraformShellCommand(atmosConfig, info.ComponentFromArg, info.Stack,
-		info.ComponentEnvList, cfg.varFile, cfg.workingDir, info.TerraformWorkspace, cfg.componentPath)
+	// Assemble env vars (TF_IN_AUTOMATION, ATMOS_BASE_PATH, plugin cache, TF_CLI_CONFIG_FILE,
+	// toolchain PATH). assembleComponentEnvVars injects secret TF_VAR_* unconditionally, so
+	// suppress that here (snapshot/clear/restore TerraformSecretVarKeys) and instead route
+	// secrets through applyShellSecretEnv, preserving the "secrets withheld unless --with-secrets"
+	// shell behavior.
+	secretKeys := info.TerraformSecretVarKeys
+	info.TerraformSecretVarKeys = nil
+	err = assembleComponentEnvVars(atmosConfig, info, tenv)
+	info.TerraformSecretVarKeys = secretKeys
+	if err != nil {
+		return err
+	}
+
+	if err := applyShellSecretEnv(info, withSecrets); err != nil {
+		return err
+	}
+
+	return nil
 }

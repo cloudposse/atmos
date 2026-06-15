@@ -2,6 +2,7 @@ package exec
 
 import (
 	"bytes"
+	"errors"
 	"os"
 	"testing"
 
@@ -13,6 +14,9 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui"
 )
+
+// errTestInitFailed is a sentinel used to assert init-failure propagation in the shell lifecycle.
+var errTestInitFailed = errors.New("init failed")
 
 func TestShellInfoFromOptions(t *testing.T) {
 	tests := []struct {
@@ -374,4 +378,130 @@ func TestApplyShellSecretEnv(t *testing.T) {
 			assert.NotContains(t, e, "TF_VAR_token", "secret must not be exported without --with-secrets")
 		}
 	})
+}
+
+// TestShellInfoFromOptions_MapsSkipInit verifies the --skip-init flag value flows from
+// ShellOptions into ConfigAndStacksInfo so shouldRunTerraformInit can honor it.
+func TestShellInfoFromOptions_MapsSkipInit(t *testing.T) {
+	t.Run("skip-init true", func(t *testing.T) {
+		info := shellInfoFromOptions(&ShellOptions{Component: "vpc", Stack: "dev", SkipInit: true})
+		assert.True(t, info.SkipInit)
+	})
+	t.Run("skip-init false (default)", func(t *testing.T) {
+		info := shellInfoFromOptions(&ShellOptions{Component: "vpc", Stack: "dev"})
+		assert.False(t, info.SkipInit)
+	})
+}
+
+// TestShouldRunTerraformInit_Shell guards the regression: the shell subcommand must run
+// `terraform init` by default, and --skip-init must disable it.
+func TestShouldRunTerraformInit_Shell(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{}
+
+	t.Run("shell runs init by default", func(t *testing.T) {
+		info := shellInfoFromOptions(&ShellOptions{Component: "vpc", Stack: "dev"})
+		assert.True(t, shouldRunTerraformInit(atmosConfig, &info),
+			"terraform shell must run init by default (pre-v1.202.0 behavior)")
+	})
+
+	t.Run("--skip-init disables init", func(t *testing.T) {
+		info := shellInfoFromOptions(&ShellOptions{Component: "vpc", Stack: "dev", SkipInit: true})
+		assert.False(t, shouldRunTerraformInit(atmosConfig, &info))
+	})
+}
+
+// TestShouldSkipWorkspaceSetup_Shell guards the regression: the shell subcommand must NOT skip
+// workspace selection (so the user lands in the component's workspace, not `default`), except for
+// the http backend or when TF_WORKSPACE is already set.
+func TestShouldSkipWorkspaceSetup_Shell(t *testing.T) {
+	t.Run("shell selects workspace", func(t *testing.T) {
+		info := shellInfoFromOptions(&ShellOptions{Component: "vpc", Stack: "dev"})
+		assert.False(t, shouldSkipWorkspaceSetup(&info),
+			"terraform shell must select/create the workspace (pre-v1.202.0 behavior)")
+	})
+
+	t.Run("http backend skips workspace", func(t *testing.T) {
+		info := shellInfoFromOptions(&ShellOptions{Component: "vpc", Stack: "dev"})
+		info.ComponentBackendType = "http"
+		assert.True(t, shouldSkipWorkspaceSetup(&info))
+	})
+
+	t.Run("TF_WORKSPACE set skips workspace", func(t *testing.T) {
+		t.Setenv("TF_WORKSPACE", "dev")
+		info := shellInfoFromOptions(&ShellOptions{Component: "vpc", Stack: "dev"})
+		assert.True(t, shouldSkipWorkspaceSetup(&info))
+	})
+}
+
+// swapShellLifecycleSeams overrides the shell-lifecycle function seams with recorders and restores
+// them on cleanup. Returns a pointer to the ordered list of recorded step names.
+func swapShellLifecycleSeams(t *testing.T) *[]string {
+	t.Helper()
+	calls := &[]string{}
+
+	origInit, origWs, origExec := shellInitFn, shellWorkspaceFn, shellExecFn
+	t.Cleanup(func() {
+		shellInitFn, shellWorkspaceFn, shellExecFn = origInit, origWs, origExec
+	})
+
+	shellInitFn = func(_ *schema.AtmosConfiguration, _ *schema.ConfigAndStacksInfo, _, _ string, _ ...ShellCommandOption) error {
+		*calls = append(*calls, "init")
+		return nil
+	}
+	shellWorkspaceFn = func(_ *schema.AtmosConfiguration, _ *schema.ConfigAndStacksInfo, _ string, _ ...ShellCommandOption) error {
+		*calls = append(*calls, "workspace")
+		return nil
+	}
+	shellExecFn = func(_ *schema.AtmosConfiguration, _, _ string, _ []string, _, _, _, _ string) error {
+		*calls = append(*calls, "shell")
+		return nil
+	}
+	return calls
+}
+
+// TestExecuteShellLifecycle_RunsInitThenWorkspaceThenShell is the core regression test: by default
+// `terraform shell` must run init, then select/create the workspace, then launch the shell — in
+// that order. Against the v1.202.0–v1.279.x code the init and workspace steps were missing.
+func TestExecuteShellLifecycle_RunsInitThenWorkspaceThenShell(t *testing.T) {
+	calls := swapShellLifecycleSeams(t)
+
+	atmosConfig := &schema.AtmosConfiguration{}
+	info := shellInfoFromOptions(&ShellOptions{Component: "vpc", Stack: "dev"})
+	cfg := &shellConfig{componentPath: t.TempDir(), workingDir: t.TempDir(), varFile: "dev-vpc.tfvars.json"}
+
+	require.NoError(t, executeShellLifecycle(atmosConfig, &info, cfg))
+	assert.Equal(t, []string{"init", "workspace", "shell"}, *calls)
+}
+
+// TestExecuteShellLifecycle_SkipInit_KeepsWorkspace verifies the levers are decoupled: --skip-init
+// suppresses init but the workspace is still selected before the shell launches.
+func TestExecuteShellLifecycle_SkipInit_KeepsWorkspace(t *testing.T) {
+	calls := swapShellLifecycleSeams(t)
+
+	atmosConfig := &schema.AtmosConfiguration{}
+	info := shellInfoFromOptions(&ShellOptions{Component: "vpc", Stack: "dev", SkipInit: true})
+	cfg := &shellConfig{componentPath: t.TempDir(), workingDir: t.TempDir(), varFile: "dev-vpc.tfvars.json"}
+
+	require.NoError(t, executeShellLifecycle(atmosConfig, &info, cfg))
+	assert.Equal(t, []string{"workspace", "shell"}, *calls,
+		"--skip-init must skip init but still select the workspace and launch the shell")
+}
+
+// TestExecuteShellLifecycle_InitErrorStopsBeforeShell verifies an init failure aborts the
+// lifecycle before the workspace is touched or the shell is launched.
+func TestExecuteShellLifecycle_InitErrorStopsBeforeShell(t *testing.T) {
+	calls := swapShellLifecycleSeams(t)
+	wantErr := errTestInitFailed
+	shellInitFn = func(_ *schema.AtmosConfiguration, _ *schema.ConfigAndStacksInfo, _, _ string, _ ...ShellCommandOption) error {
+		*calls = append(*calls, "init")
+		return wantErr
+	}
+
+	atmosConfig := &schema.AtmosConfiguration{}
+	info := shellInfoFromOptions(&ShellOptions{Component: "vpc", Stack: "dev"})
+	cfg := &shellConfig{componentPath: t.TempDir(), workingDir: t.TempDir(), varFile: "dev-vpc.tfvars.json"}
+
+	err := executeShellLifecycle(atmosConfig, &info, cfg)
+	require.ErrorIs(t, err, wantErr)
+	assert.Equal(t, []string{"init"}, *calls, "workspace and shell must not run after init fails")
 }
