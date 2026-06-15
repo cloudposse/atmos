@@ -45,6 +45,7 @@ var manifestSections = map[string]sectionScope{
 	"helmfile":                  {topLevel: true},
 	"packer":                    {topLevel: true},
 	"ansible":                   {topLevel: true},
+	"kubernetes":                {topLevel: true},
 	"components":                {topLevel: true},
 	"overrides":                 {topLevel: true},
 	"workflows":                 {topLevel: true},
@@ -77,6 +78,10 @@ var nonManifestSections = map[string]struct{}{
 	"template":           {}, // Packer template sub-field.
 	"playbook":           {}, // Ansible sub-field.
 	"inventory":          {}, // Ansible sub-field.
+	"provider":           {}, // Kubernetes component sub-field (manifest provider engine).
+	"paths":              {}, // Kubernetes component sub-field (manifest paths).
+	"manifests":          {}, // Kubernetes component sub-field (inline manifests).
+	"render":             {}, // Kubernetes component sub-field (render output config).
 	"workspace":          {}, // Terraform workspace (derived/metadata).
 	"required_version":   {}, // Introspected from Terraform, not authored.
 	"required_providers": {}, // Introspected from Terraform, not authored.

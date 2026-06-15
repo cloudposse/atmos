@@ -177,9 +177,12 @@ func TestManifestPathHelpers(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, filepath.Clean(filepath.Join(dir, "relative.yaml")), relative)
 
-	absolute, err := resolvePath(dir, filepath.Clean("/tmp/absolute.yaml"))
+	// Use a platform-native absolute path: "/tmp/..." is not absolute on Windows
+	// (it lacks a drive letter), but t.TempDir() is absolute on every OS.
+	absInput := filepath.Join(t.TempDir(), "absolute.yaml")
+	absolute, err := resolvePath(dir, absInput)
 	require.NoError(t, err)
-	assert.Equal(t, filepath.Clean("/tmp/absolute.yaml"), absolute)
+	assert.Equal(t, filepath.Clean(absInput), absolute)
 
 	// Relative traversal that escapes the component directory is rejected.
 	_, err = resolvePath(dir, filepath.Join("..", "..", "etc", "passwd"))
