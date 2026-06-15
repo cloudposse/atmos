@@ -3,12 +3,13 @@ package exec
 import (
 	"fmt"
 	"path/filepath"
+	"slices"
 	"strings"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
-	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 // BuildTerraformWorkspace builds Terraform workspace.
@@ -130,26 +131,24 @@ func BuildDependentStackNameFromDependsOnLegacy(
 ) (string, error) {
 	defer perf.Track(nil, "exec.BuildDependentStackNameFromDependsOnLegacy")()
 
-	var dependentStackName string
-
 	dep := strings.Replace(dependsOn, "/", "-", -1)
 
-	if u.SliceContainsString(allStackNames, dep) {
-		dependentStackName = dep
-	} else if u.SliceContainsString(componentNamesInCurrentStack, dep) {
-		dependentStackName = fmt.Sprintf("%s-%s", currentStackName, dep)
-	} else {
-		errorMessage := fmt.Errorf("the component '%[1]s' in the stack '%[2]s' specifies 'depends_on' dependency '%[3]s', "+
-			"but '%[3]s' is not a stack and not a component in the '%[2]s' stack",
-			currentComponentName,
-			currentStackName,
-			dependsOn,
-		)
-
-		return "", errorMessage
+	if slices.Contains(allStackNames, dep) {
+		return dep, nil
 	}
 
-	return dependentStackName, nil
+	if slices.Contains(componentNamesInCurrentStack, dep) {
+		return fmt.Sprintf("%s-%s", currentStackName, dep), nil
+	}
+
+	return "", fmt.Errorf(
+		"%w: the component '%[2]s' in the stack '%[3]s' specifies 'depends_on' dependency '%[4]s', "+
+			"but '%[4]s' is not a stack and not a component in the '%[3]s' stack",
+		errUtils.ErrDependencyResolution,
+		currentComponentName,
+		currentStackName,
+		dependsOn,
+	)
 }
 
 // BuildDependentStackNameFromDependsOn builds the dependent stack name from "settings.depends_on" config.
@@ -164,19 +163,19 @@ func BuildDependentStackNameFromDependsOn(
 
 	dep := strings.Replace(fmt.Sprintf("%s-%s", dependsOnStackName, dependsOnComponentName), "/", "-", -1)
 
-	if u.SliceContainsString(allStackNames, dep) {
+	if slices.Contains(allStackNames, dep) {
 		return dep, nil
 	}
 
-	errorMessage := fmt.Errorf("the component '%[1]s' in the stack '%[2]s' specifies 'settings.depends_on' dependency "+
-		"on the component '%[3]s' in the stack '%[4]s', but '%[3]s' is not defined in the '%[4]s' stack, or the component and stack names are not correct",
+	return "", fmt.Errorf(
+		"%w: the component '%[2]s' in the stack '%[3]s' specifies 'settings.depends_on' dependency "+
+			"on the component '%[4]s' in the stack '%[5]s', but '%[4]s' is not defined in the '%[5]s' stack, or the component and stack names are not correct",
+		errUtils.ErrDependencyResolution,
 		currentComponentName,
 		currentStackName,
 		dependsOnComponentName,
 		dependsOnStackName,
 	)
-
-	return "", errorMessage
 }
 
 // BuildComponentPath builds component path (path to the component's physical location on disk).

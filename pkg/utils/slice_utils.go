@@ -8,44 +8,12 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
-// SliceContainsString checks if a string is present in a slice.
-func SliceContainsString(s []string, str string) bool {
-	defer perf.Track(nil, "utils.SliceContainsString")()
-
-	for _, v := range s {
-		if v == str {
-			return true
-		}
-	}
-	return false
-}
-
 // SliceContainsInt checks if an int is present in a slice.
 func SliceContainsInt(s []int, i int) bool {
 	defer perf.Track(nil, "utils.SliceContainsInt")()
 
 	for _, v := range s {
 		if v == i {
-			return true
-		}
-	}
-	return false
-}
-
-// SliceContainsStringStartsWith checks if a slice contains a string that the given string begins with.
-func SliceContainsStringStartsWith(s []string, str string) bool {
-	for _, v := range s {
-		if strings.HasPrefix(str, v) {
-			return true
-		}
-	}
-	return false
-}
-
-// SliceContainsStringHasPrefix checks if a slice contains a string that begins with the given prefix.
-func SliceContainsStringHasPrefix(s []string, prefix string) bool {
-	for _, v := range s {
-		if strings.HasPrefix(v, prefix) {
 			return true
 		}
 	}

@@ -2,6 +2,7 @@ package exec
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -71,7 +72,7 @@ func ExecuteAtmosCmd() error {
 	lo.ForEach(componentsSet, func(c string, _ int) {
 		var stacksForComponent []string
 		for k, v := range stacksComponentsMap {
-			if u.SliceContainsString(v, c) {
+			if slices.Contains(v, c) {
 				stacksForComponent = append(stacksForComponent, k)
 			}
 		}

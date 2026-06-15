@@ -3,7 +3,6 @@ package utils
 import (
 	"bytes"
 	"encoding/json"
-	"fmt"
 	"os"
 	"strings"
 
@@ -64,40 +63,6 @@ func GetHighlightedJSON(atmosConfig *schema.AtmosConfiguration, data any) (strin
 		return prettyJSON.String(), nil
 	}
 	return highlighted, nil
-}
-
-func GetAtmosConfigJSON(atmosConfig *schema.AtmosConfiguration) (string, error) {
-	defer perf.Track(atmosConfig, "utils.GetAtmosConfigJSON")()
-
-	j, err := ConvertToJSON(atmosConfig)
-	if err != nil {
-		return "", err
-	}
-
-	var prettyJSON bytes.Buffer
-	err = json.Indent(&prettyJSON, []byte(j), "", "  ")
-	if err != nil {
-		return "", err
-	}
-
-	highlighted, err := HighlightCodeWithConfig(atmosConfig, prettyJSON.String())
-	if err == nil {
-		return highlighted, nil
-	}
-	// Fallback to plain text if highlighting fails
-	return prettyJSON.String(), nil
-}
-
-// PrintAsJSONToFileDescriptor prints the provided value as JSON document to a file descriptor
-func PrintAsJSONToFileDescriptor(atmosConfig schema.AtmosConfiguration, data any) error {
-	defer perf.Track(&atmosConfig, "utils.PrintAsJSONToFileDescriptor")()
-
-	j, err := ConvertToJSON(data)
-	if err != nil {
-		return err
-	}
-	fmt.Println(j)
-	return nil
 }
 
 // WriteToFileAsJSON converts the provided value to JSON and writes it to the specified file

@@ -614,28 +614,6 @@ func getIndentFromConfig(atmosConfig *schema.AtmosConfiguration) int {
 	return atmosConfig.Settings.Terminal.TabWidth
 }
 
-func PrintAsYAMLWithConfig(atmosConfig *schema.AtmosConfiguration, data any) error {
-	defer perf.Track(atmosConfig, "utils.PrintAsYAMLWithConfig")()
-
-	if atmosConfig == nil {
-		return ErrNilAtmosConfig
-	}
-
-	indent := getIndentFromConfig(atmosConfig)
-	y, err := ConvertToYAML(data, YAMLOptions{Indent: indent})
-	if err != nil {
-		return err
-	}
-
-	highlighted, err := HighlightCodeWithConfig(atmosConfig, y, "yaml")
-	if err != nil {
-		PrintMessage(y)
-		return nil
-	}
-	PrintMessage(highlighted)
-	return nil
-}
-
 func GetHighlightedYAML(atmosConfig *schema.AtmosConfiguration, data any) (string, error) {
 	defer perf.Track(atmosConfig, "utils.GetHighlightedYAML")()
 

@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -363,7 +364,7 @@ func warnOnConflictingEnvVars() {
 		if len(parts) != 2 {
 			continue
 		}
-		if u.SliceContainsString(warnOnExactVars, parts[0]) {
+		if slices.Contains(warnOnExactVars, parts[0]) {
 			problematicVars = append(problematicVars, parts[0])
 			continue
 		}
@@ -714,13 +715,13 @@ func dispatchAfterInit(atmosConfig *schema.AtmosConfiguration, info *schema.Conf
 func handleDeploySubcommand(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) {
 	if info.SubCommand == subcommandDeploy {
 		info.SubCommand = subcommandApply
-		if !info.UseTerraformPlan && !u.SliceContainsString(info.AdditionalArgsAndFlags, autoApproveFlag) {
+		if !info.UseTerraformPlan && !slices.Contains(info.AdditionalArgsAndFlags, autoApproveFlag) {
 			info.AdditionalArgsAndFlags = append(info.AdditionalArgsAndFlags, autoApproveFlag)
 		}
 	}
 
 	if info.SubCommand == subcommandApply && atmosConfig.Components.Terraform.ApplyAutoApprove && !info.UseTerraformPlan {
-		if !u.SliceContainsString(info.AdditionalArgsAndFlags, autoApproveFlag) {
+		if !slices.Contains(info.AdditionalArgsAndFlags, autoApproveFlag) {
 			info.AdditionalArgsAndFlags = append(info.AdditionalArgsAndFlags, autoApproveFlag)
 		}
 	}

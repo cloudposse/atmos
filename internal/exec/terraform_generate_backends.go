@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/go-viper/mapstructure/v2"
@@ -113,8 +114,7 @@ func ExecuteTerraformGenerateBackends(
 
 			// Check if `components` filter is provided
 			if len(components) == 0 ||
-				u.SliceContainsString(components, componentName) {
-
+				slices.Contains(components, componentName) {
 				// Component metadata
 				if metadataSection, ok = componentSection[cfg.MetadataSectionName].(map[string]any); ok {
 					if componentType, ok := metadataSection["type"].(string); ok {
@@ -304,11 +304,10 @@ func ExecuteTerraformGenerateBackends(
 				if len(stacks) == 0 ||
 					// `stacks` filter can contain the names of the top-level stack config files:
 					// atmos terraform generate varfiles --stacks=orgs/cp/tenant1/staging/us-east-2,orgs/cp/tenant2/dev/us-east-2
-					u.SliceContainsString(stacks, stackFileName) ||
+					slices.Contains(stacks, stackFileName) ||
 					// `stacks` filter can also contain the logical stack names (derived from the context vars):
 					// atmos terraform generate varfiles --stacks=tenant1-ue2-staging,tenant1-ue2-prod
-					u.SliceContainsString(stacks, stackName) {
-
+					slices.Contains(stacks, stackName) {
 					// If '--file-template' is not specified, don't check if we've already processed the terraform component,
 					// and write the backends to the terraform components folders
 					if !fileTemplateProvided {

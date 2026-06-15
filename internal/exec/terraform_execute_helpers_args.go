@@ -5,6 +5,7 @@ package exec
 // independently testable.
 
 import (
+	"slices"
 	"strings"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
@@ -25,8 +26,8 @@ func buildPlanSubcommandArgs( //nolint:revive // argument-limit: uploadStatusFla
 ) []string {
 	allArgsAndFlags = append(allArgsAndFlags, varFileFlag, varFile)
 
-	if !u.SliceContainsString(info.AdditionalArgsAndFlags, outFlag) &&
-		!u.SliceContainsStringHasPrefix(info.AdditionalArgsAndFlags, outFlag+"=") &&
+	if !slices.Contains(info.AdditionalArgsAndFlags, outFlag) &&
+		!slices.ContainsFunc(info.AdditionalArgsAndFlags, func(s string) bool { return strings.HasPrefix(s, outFlag+"=") }) &&
 		!atmosConfig.Components.Terraform.Plan.SkipPlanfile {
 		allArgsAndFlags = append(allArgsAndFlags, outFlag, planFile)
 	}
@@ -34,7 +35,7 @@ func buildPlanSubcommandArgs( //nolint:revive // argument-limit: uploadStatusFla
 	// Always remove the flag from AdditionalArgsAndFlags since it's only used internally by Atmos.
 	info.AdditionalArgsAndFlags = u.SliceRemoveFlag(info.AdditionalArgsAndFlags, cfg.UploadStatusFlag)
 
-	if uploadStatusFlag && !u.SliceContainsString(info.AdditionalArgsAndFlags, detailedExitCodeFlag) {
+	if uploadStatusFlag && !slices.Contains(info.AdditionalArgsAndFlags, detailedExitCodeFlag) {
 		allArgsAndFlags = append(allArgsAndFlags, detailedExitCodeFlag)
 	}
 

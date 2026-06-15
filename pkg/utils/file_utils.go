@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -55,7 +56,7 @@ func IsYaml(file string) bool {
 		baseExt := filepath.Ext(strings.TrimSuffix(file, ext))
 		ext = baseExt + ext
 	}
-	return SliceContainsString(yamlExtensions, ext)
+	return slices.Contains(yamlExtensions, ext)
 }
 
 // ConvertPathsToAbsolutePaths converts a slice of paths to a slice of absolute paths.

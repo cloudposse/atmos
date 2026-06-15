@@ -3,7 +3,6 @@ package utils
 import (
 	"bytes"
 	"encoding/json"
-	"io"
 	"strings"
 
 	"github.com/alecthomas/chroma/v2"
@@ -177,50 +176,4 @@ func getFormatter(settings *schema.SyntaxHighlighting) chroma.Formatter {
 		return formatters.TTY256
 	}
 	return formatters.Get(settings.Formatter)
-}
-
-// HighlightWriter returns an io.Writer that highlights code written to it
-type HighlightWriter struct {
-	config schema.AtmosConfiguration
-	writer io.Writer
-	format string
-}
-
-// NewHighlightWriter creates a new HighlightWriter
-func NewHighlightWriter(w io.Writer, config schema.AtmosConfiguration, format ...string) *HighlightWriter {
-	defer perf.Track(&config, "utils.NewHighlightWriter")()
-
-	var f string
-	if len(format) > 0 {
-		f = format[0]
-	}
-	return &HighlightWriter{
-		config: config,
-		writer: w,
-		format: f,
-	}
-}
-
-// Write implements io.Writer
-// The returned byte count n is the length of p regardless of whether the highlighting
-// process changes the actual number of bytes written to the underlying writer.
-// This maintains compatibility with the io.Writer interface contract while still
-// providing syntax highlighting functionality.
-func (h *HighlightWriter) Write(p []byte) (n int, err error) {
-	highlighted, err := HighlightCodeWithConfig(&h.config, string(p), h.format)
-	if err != nil {
-		return 0, err
-	}
-
-	// Write the highlighted content, ignoring the actual number of bytes written
-	// since we'll return the original input length
-	_, err = h.writer.Write([]byte(highlighted))
-	if err != nil {
-		// If there's an error, we can't be sure how many bytes were actually written
-		return 0, err
-	}
-
-	// Return the original length of p as required by io.Writer interface
-	// This ensures that the caller knows all bytes from p were processed
-	return len(p), nil
 }

@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/go-viper/mapstructure/v2"
@@ -70,8 +71,7 @@ func ExecuteTerraformGenerateVarfiles(
 
 			// Check if `components` filter is provided
 			if len(components) == 0 ||
-				u.SliceContainsString(components, componentName) {
-
+				slices.Contains(components, componentName) {
 				// Component vars
 				if varsSection, ok = componentSection[cfg.VarsSectionName].(map[string]any); !ok {
 					continue
@@ -254,11 +254,10 @@ func ExecuteTerraformGenerateVarfiles(
 				if len(stacks) == 0 ||
 					// `stacks` filter can contain the names of the top-level stack config files:
 					// atmos terraform generate varfiles --stacks=orgs/cp/tenant1/staging/us-east-2,orgs/cp/tenant2/dev/us-east-2
-					u.SliceContainsString(stacks, stackFileName) ||
+					slices.Contains(stacks, stackFileName) ||
 					// `stacks` filter can also contain the logical stack names (derived from the context vars):
 					// atmos terraform generate varfiles --stacks=tenant1-ue2-staging,tenant1-ue2-prod
-					u.SliceContainsString(stacks, stackName) {
-
+					slices.Contains(stacks, stackName) {
 					// Replace the tokens in the file template
 					// Supported context tokens: {namespace}, {tenant}, {environment}, {region}, {stage}, {base-component}, {component}, {component-path}
 					fileName := cfg.ReplaceContextTokens(context, fileTemplate)

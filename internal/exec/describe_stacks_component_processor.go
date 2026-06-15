@@ -4,6 +4,7 @@ package exec
 import (
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/go-viper/mapstructure/v2"
@@ -231,7 +232,7 @@ func (p *describeStacksProcessor) processStackFile(stackFileName string, stackMa
 	}
 
 	for _, te := range typeEntries {
-		if len(p.componentTypes) > 0 && !u.SliceContainsString(p.componentTypes, te.name) {
+		if len(p.componentTypes) > 0 && !slices.Contains(p.componentTypes, te.name) {
 			continue
 		}
 		typeSection, ok := componentsSection[te.name].(map[string]any)
@@ -350,8 +351,8 @@ func (p *describeStacksProcessor) processComponentEntry( //nolint:gocognit,reviv
 	// This check is performed before any mutations to componentSection so that
 	// the live stacksMap data is not modified for filtered-out components.
 	componentIncluded := len(p.components) == 0 ||
-		u.SliceContainsString(p.components, componentName) ||
-		u.SliceContainsString(derivedComponents, componentName)
+		slices.Contains(p.components, componentName) ||
+		slices.Contains(derivedComponents, componentName)
 	if !componentIncluded {
 		return nil
 	}
@@ -646,7 +647,7 @@ func addSectionsToComponentEntry(
 				continue
 			}
 		}
-		if len(sections) == 0 || u.SliceContainsString(sections, sectionName) {
+		if len(sections) == 0 || slices.Contains(sections, sectionName) {
 			destMap[sectionName] = section
 		}
 	}
