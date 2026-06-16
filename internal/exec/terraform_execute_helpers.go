@@ -708,8 +708,22 @@ func executeTerraformInitPhase(atmosConfig *schema.AtmosConfiguration, info *sch
 		return componentPath, err
 	}
 
+	if err = executeTerraformInitCommand(atmosConfig, info, newPath, varFile, opts...); err != nil {
+		return newPath, err
+	}
+
+	return newPath, nil
+}
+
+// executeTerraformInitCommand runs the `terraform init` subprocess against an already-resolved
+// componentPath and dispatches the after.terraform.init provisioners. Unlike
+// executeTerraformInitPhase it does NOT run prepareInitExecution — it skips cleanTerraformWorkspace,
+// the before.terraform.init provisioners, and workdir-path resolution. Callers that have already
+// performed that preparation (e.g. ExecuteTerraformShell, which fires the before.terraform.init
+// provisioners itself) use this directly to avoid running the provisioners twice.
+func executeTerraformInitCommand(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, componentPath, varFile string, opts ...ShellCommandOption) error {
 	initArgs := buildInitArgs(atmosConfig, info, varFile)
-	err = executeShellCommandWithRetry(
+	err := executeShellCommandWithRetry(
 		atmosConfig,
 		info,
 		"init",
@@ -718,7 +732,7 @@ func executeTerraformInitPhase(atmosConfig *schema.AtmosConfiguration, info *sch
 				*atmosConfig,
 				info.Command,
 				initArgs,
-				newPath,
+				componentPath,
 				info.ComponentEnvList,
 				info.DryRun,
 				info.RedirectStdErr,
@@ -728,12 +742,12 @@ func executeTerraformInitPhase(atmosConfig *schema.AtmosConfiguration, info *sch
 		opts...,
 	)
 	if err != nil {
-		return newPath, err
+		return err
 	}
 
-	dispatchAfterInit(atmosConfig, info, newPath)
+	dispatchAfterInit(atmosConfig, info, componentPath)
 
-	return newPath, nil
+	return nil
 }
 
 // dispatchAfterInit fires the after.terraform.init provisioners (e.g. the multi-platform
