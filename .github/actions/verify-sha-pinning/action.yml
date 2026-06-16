@@ -34,13 +34,13 @@ runs:
         WORKFLOW_DIR: ${{ inputs.workflow-dir }}
       with:
         github-token: ${{ inputs.github-token }}
-        retries: 3
         script: |
           const fs = require('fs');
           const path = require('path');
 
           const workflowDir = process.env.WORKFLOW_DIR;
           const tagShaCache = new Map();
+          const nonRetryableStatuses = new Set([400, 401, 403, 404, 422]);
 
           const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 
@@ -50,7 +50,7 @@ runs:
               try {
                 return await operation();
               } catch (err) {
-                if (err.status === 404) {
+                if (nonRetryableStatuses.has(err.status)) {
                   throw err;
                 }
                 lastErr = err;
@@ -169,7 +169,10 @@ runs:
 
             // Check if the pinned SHA exists in this repo at all
             try {
-              await github.rest.repos.getCommit({ owner, repo, ref: pinnedSha });
+              await withRetries(
+                () => github.rest.repos.getCommit({ owner, repo, ref: pinnedSha }),
+                `Checking ${owner}/${repo}@${pinnedSha}`
+              );
               details.existsInRepo = true;
             } catch (err) {
               details.existsInRepo = (err.status !== 404 && err.status !== 422);
@@ -178,9 +181,12 @@ runs:
             // Find which tags (if any) point to this SHA
             if (details.existsInRepo) {
               try {
-                const tags = await github.paginate(github.rest.repos.listTags, {
-                  owner, repo, per_page: 100,
-                });
+                const tags = await withRetries(
+                  () => github.paginate(github.rest.repos.listTags, {
+                    owner, repo, per_page: 100,
+                  }),
+                  `Listing tags for ${owner}/${repo}`
+                );
                 details.matchingTags = tags
                   .filter(t => t.commit.sha === pinnedSha)
                   .map(t => t.name);

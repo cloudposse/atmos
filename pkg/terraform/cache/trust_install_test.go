@@ -116,6 +116,60 @@ func TestTrustInstructions(t *testing.T) {
 	}
 }
 
+func TestTrustInstructions_ForcedPlatforms(t *testing.T) {
+	tests := []struct {
+		name          string
+		goos          string
+		githubActions bool
+		required      bool
+		noteContains  string
+	}{
+		{
+			name:         "darwin login keychain",
+			goos:         "darwin",
+			required:     true,
+			noteContains: "login keychain",
+		},
+		{
+			name:          "darwin system keychain",
+			goos:          "darwin",
+			githubActions: true,
+			required:      true,
+			noteContains:  "System keychain",
+		},
+		{
+			name:         "windows current user",
+			goos:         "windows",
+			required:     true,
+			noteContains: string(windowsTrustStoreCurrentUser),
+		},
+		{
+			name:          "windows local machine",
+			goos:          "windows",
+			githubActions: true,
+			required:      true,
+			noteContains:  string(windowsTrustStoreLocalMachine),
+		},
+		{
+			name:         "other platform",
+			goos:         "linux",
+			required:     false,
+			noteContains: "SSL_CERT_FILE",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			forceTrustPlatform(t, tt.goos, nil)
+			forceGitHubActions(t, tt.githubActions)
+
+			required, note := TrustInstructions()
+			assert.Equal(t, tt.required, required)
+			assert.Contains(t, note, tt.noteContains)
+		})
+	}
+}
+
 func TestWindowsTrustStoreScopeForInstall(t *testing.T) {
 	forceGitHubActions(t, false)
 	assert.Equal(t, windowsTrustStoreCurrentUser, windowsTrustStoreScopeForInstall())
@@ -302,6 +356,20 @@ func TestRemoveTrust_WindowsGitHubActionsUsesCertutilEnterpriseRoot(t *testing.T
 	require.Len(t, *commands, 1)
 	assert.Equal(t, "certutil", (*commands)[0].name)
 	assert.Equal(t, []string{"-delstore", "-enterprise", "Root", certCommonName}, (*commands)[0].args)
+}
+
+func TestWindowsTrustStoreStubsUnavailableOnNonWindows(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("non-Windows stubs are not compiled on Windows")
+	}
+
+	err := installWindowsTrust(filepath.Join(t.TempDir(), "cert.pem"))
+	require.ErrorIs(t, err, errUtils.ErrInvalidConfig)
+	assert.Contains(t, err.Error(), "unavailable on this platform")
+
+	err = removeWindowsTrust(certCommonName)
+	require.ErrorIs(t, err, errUtils.ErrInvalidConfig)
+	assert.Contains(t, err.Error(), "unavailable on this platform")
 }
 
 func TestRunTrustCommand(t *testing.T) {

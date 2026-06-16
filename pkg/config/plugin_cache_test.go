@@ -114,6 +114,9 @@ func TestViperBindEnv_TerraformRegistryCache(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv("ATMOS_COMPONENTS_TERRAFORM_CACHE_ENABLED", "false")
+			t.Setenv("ATMOS_COMPONENTS_TERRAFORM_CACHE_LOCATION", "")
+
 			if tt.envEnabled != "" {
 				t.Setenv("ATMOS_COMPONENTS_TERRAFORM_CACHE_ENABLED", tt.envEnabled)
 			}
