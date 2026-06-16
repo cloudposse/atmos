@@ -504,6 +504,18 @@ func TestHandleConfigInitError(t *testing.T) {
 			expectNil: true,
 		},
 		{
+			name:      "version command after global flag with error returns nil",
+			initErr:   errors.New("config error"),
+			args:      []string{"atmos", "--config", "atmos.yaml", "version"},
+			expectNil: true,
+		},
+		{
+			name:        "custom command version flag preserves error",
+			initErr:     errors.New("config error"),
+			args:        []string{"atmos", "install", "--version", "1.2.3"},
+			expectError: true,
+		},
+		{
 			name:      "config not found returns nil",
 			initErr:   fmt.Errorf("wrapped: %w", cfg.NotFound),
 			args:      []string{"atmos", "terraform", "plan"},

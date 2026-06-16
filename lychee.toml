@@ -77,6 +77,8 @@ exclude = [
   "lfaidata\\.foundation",
   # Taskfile.dev (connection resets in CI)
   "taskfile\\.dev",
+  # Gomplate docs (connection resets in CI)
+  "docs\\.gomplate\\.ca",
   # regex101.com (intermittent timeouts in CI)
   "regex101\\.com",
   # nx.dev (intermittent connection failures in CI)

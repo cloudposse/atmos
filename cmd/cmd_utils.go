@@ -1183,18 +1183,88 @@ func isVersionCommand() bool {
 
 // isVersionCommandWithArgs checks if the given args represent a version command.
 // This is a testable version of isVersionCommand that accepts args as a parameter.
-// It scans the entire args slice (skipping the program name) so that global flags
-// preceding the subcommand, e.g. `atmos --verbose version`, are still recognized.
+// It only recognizes root-level version requests. Once a real command token is
+// reached, any later --version belongs to that command.
 func isVersionCommandWithArgs(args []string) bool {
 	if len(args) < 2 {
 		return false
 	}
-	for _, arg := range args[1:] {
+
+	for i := 1; i < len(args); i++ {
+		arg := args[i]
 		if arg == "version" || arg == "--version" {
 			return true
 		}
+		if arg == "--" {
+			return false
+		}
+		if isRootBoolFlag(arg) {
+			continue
+		}
+		if isRootValueFlag(arg) {
+			if !strings.Contains(arg, "=") {
+				i++
+			}
+			continue
+		}
+		if strings.HasPrefix(arg, "-C") && arg != "-C" {
+			continue
+		}
+		if strings.HasPrefix(arg, "-") {
+			return false
+		}
+		return false
 	}
 	return false
+}
+
+func isRootBoolFlag(arg string) bool {
+	flagName := strings.SplitN(arg, "=", 2)[0]
+	switch flagName {
+	case "--ai",
+		"--force-color",
+		"--force-tty",
+		"--heatmap",
+		"--help",
+		"-h",
+		"--interactive",
+		"--mask",
+		"--no-color",
+		"--profiler-enabled",
+		"--verbose",
+		"-v":
+		return true
+	default:
+		return false
+	}
+}
+
+func isRootValueFlag(arg string) bool {
+	flagName := strings.SplitN(arg, "=", 2)[0]
+	switch flagName {
+	case "--base-path",
+		"--chdir",
+		"-C",
+		"--config",
+		"--config-path",
+		"--heatmap-mode",
+		"--identity",
+		"--logs-file",
+		"--logs-level",
+		"--pager",
+		"--profile",
+		"--profile-file",
+		"--profile-type",
+		"--profiler-host",
+		"--profiler-port",
+		"--redirect-stderr",
+		"--settings-list-merge-strategy",
+		"--skill",
+		"--use-version":
+		return true
+	default:
+		return false
+	}
 }
 
 // isVersionManagementCommand checks if the current command is a version management command.

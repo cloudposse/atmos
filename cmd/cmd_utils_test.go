@@ -168,6 +168,46 @@ func TestIsVersionCommand(t *testing.T) {
 			expected: true,
 		},
 		{
+			name:     "global string flag before version subcommand",
+			args:     []string{"--config", "atmos.yaml", "version"},
+			expected: true,
+		},
+		{
+			name:     "global string flag equals form before version subcommand",
+			args:     []string{"--config=atmos.yaml", "version"},
+			expected: true,
+		},
+		{
+			name:     "global shorthand value flag before version subcommand",
+			args:     []string{"-C", "examples/demo-stacks", "version"},
+			expected: true,
+		},
+		{
+			name:     "global shorthand attached value before version subcommand",
+			args:     []string{"-Cexamples/demo-stacks", "version"},
+			expected: true,
+		},
+		{
+			name:     "global bool flag equals form before --version flag",
+			args:     []string{"--interactive=false", "--version"},
+			expected: true,
+		},
+		{
+			name:     "custom command owns version flag",
+			args:     []string{"install", "--version", "1.2.3"},
+			expected: false,
+		},
+		{
+			name:     "terraform command owns version flag",
+			args:     []string{"terraform", "plan", "--version"},
+			expected: false,
+		},
+		{
+			name:     "scaffold command owns version flag",
+			args:     []string{"scaffold", "generate", "--version"},
+			expected: false,
+		},
+		{
 			name:     "not version command",
 			args:     []string{"help"},
 			expected: false,
