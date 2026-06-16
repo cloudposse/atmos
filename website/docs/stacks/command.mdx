@@ -2,14 +2,14 @@
 title: Configure Command Override
 sidebar_label: command
 sidebar_class_name: command
-description: Use the command setting to override the default executable for Terraform, Helmfile, Packer, or Ansible.
+description: Use the command setting to override the default executable for Terraform, Helmfile, Packer, Ansible, or Rain.
 id: command
 ---
 import File from '@site/src/components/File'
 import Intro from '@site/src/components/Intro'
 
 <Intro>
-The `command` setting allows you to override the executable that Atmos uses to run Terraform, Helmfile, Packer, or Ansible commands. This is useful for using alternative tools like OpenTofu, custom wrappers, or specific binary versions.
+The `command` setting allows you to override the executable that Atmos uses to run Terraform, Helmfile, Packer, Ansible, or Rain commands. This is useful for using alternative tools like OpenTofu, custom wrappers, or specific binary versions.
 </Intro>
 
 ## Use Cases
@@ -34,6 +34,9 @@ terraform:
 
 helmfile:
   command: /usr/local/bin/helmfile
+
+rain:
+  command: /usr/local/bin/rain
 ```
 
 ### Component Level

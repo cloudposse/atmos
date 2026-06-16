@@ -64,6 +64,10 @@ var (
 				BasePath: "components/packer",
 				Command:  "packer",
 			},
+			Rain: schema.Rain{
+				BasePath: "components/rain",
+				Command:  "rain",
+			},
 		},
 		Settings: schema.AtmosSettings{
 			ListMergeStrategy: "replace",

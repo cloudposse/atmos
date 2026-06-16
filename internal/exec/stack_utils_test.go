@@ -244,6 +244,22 @@ func TestBuildComponentPath(t *testing.T) {
 			expectedPath:  filepath.Join("/base", "packer", "images/web"),
 		},
 		{
+			name: "rain component",
+			atmosConfig: schema.AtmosConfiguration{
+				BasePath: string(filepath.Separator) + "base",
+				Components: schema.Components{
+					Rain: schema.Rain{
+						BasePath: "rain",
+					},
+				},
+			},
+			componentSectionMap: map[string]any{
+				cfg.ComponentSectionName: "cloudformation/app",
+			},
+			componentType: cfg.RainComponentType,
+			expectedPath:  string(filepath.Separator) + filepath.Join("base", "rain", "cloudformation", "app"),
+		},
+		{
 			name: "unknown component type",
 			atmosConfig: schema.AtmosConfiguration{
 				BasePath: "/base",
@@ -267,10 +283,30 @@ func TestBuildComponentPath(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := BuildComponentPath(&tt.atmosConfig, &tt.componentSectionMap, tt.componentType)
+			result, err := BuildComponentPath(&tt.atmosConfig, &tt.componentSectionMap, tt.componentType)
+			assert.NoError(t, err)
 			assert.Equal(t, tt.expectedPath, result)
 		})
 	}
+
+	t.Run("rain component rejects absolute component path", func(t *testing.T) {
+		atmosConfig := schema.AtmosConfiguration{
+			BasePath: string(filepath.Separator) + "base",
+			Components: schema.Components{
+				Rain: schema.Rain{
+					BasePath: "rain",
+				},
+			},
+		}
+		componentSectionMap := map[string]any{
+			cfg.ComponentSectionName: filepath.Join(t.TempDir(), "rain"),
+		}
+
+		result, err := BuildComponentPath(&atmosConfig, &componentSectionMap, cfg.RainComponentType)
+
+		assert.Empty(t, result)
+		assert.ErrorIs(t, err, errUtils.ErrInvalidFilePath)
+	})
 }
 
 func TestBuildComponentPathWithFallback(t *testing.T) {
@@ -319,7 +355,8 @@ func TestBuildComponentPathWithFallback(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := BuildComponentPath(&atmosConfig, &tt.componentSection, cfg.TerraformComponentType, tt.fallback...)
+			result, err := BuildComponentPath(&atmosConfig, &tt.componentSection, cfg.TerraformComponentType, tt.fallback...)
+			assert.NoError(t, err)
 			assert.Equal(t, tt.expected, result)
 		})
 	}

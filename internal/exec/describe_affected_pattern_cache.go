@@ -58,6 +58,8 @@ func (c *componentPathPatternCache) getComponentPathPattern(
 		componentPath = filepath.Join(atmosConfig.BasePath, atmosConfig.Components.Helmfile.BasePath, component)
 	case cfg.PackerComponentType:
 		componentPath = filepath.Join(atmosConfig.BasePath, atmosConfig.Components.Packer.BasePath, component)
+	case cfg.RainComponentType:
+		componentPath = filepath.Join(atmosConfig.BasePath, atmosConfig.Components.Rain.BasePath, component)
 	default:
 		// Unknown component type - return pattern without caching.
 		return "", fmt.Errorf("%w: %s", errUtils.ErrUnsupportedComponentType, componentType)

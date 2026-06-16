@@ -3,13 +3,13 @@ title: Component Configuration
 sidebar_label: components
 sidebar_class_name: command
 id: components
-description: Configure how Atmos locates and executes your Terraform, Helmfile, Packer, and Ansible components.
+description: Configure how Atmos locates and executes your Terraform, Helmfile, Packer, Ansible, and Rain components.
 ---
 import File from '@site/src/components/File'
 import Intro from '@site/src/components/Intro'
 
 <Intro>
-The `components` section in `atmos.yaml` defines how Atmos locates and executes your infrastructure components. Each component type (Terraform, Helmfile, Packer, Ansible) has its own configuration for paths, commands, and behaviors.
+The `components` section in `atmos.yaml` defines how Atmos locates and executes your infrastructure components. Each component type (Terraform, Helmfile, Packer, Ansible, Rain) has its own configuration for paths, commands, and behaviors.
 </Intro>
 
 :::important
@@ -19,7 +19,7 @@ This configuration is defined in `atmos.yaml` and specifies default behaviors li
 
 ## Supported Component Types
 
-Atmos supports four built-in component types:
+Atmos supports five built-in component types:
 
 <dl>
   <dt>[Terraform](/cli/configuration/components/terraform)</dt>
@@ -33,6 +33,9 @@ Atmos supports four built-in component types:
 
   <dt>[Ansible](/cli/configuration/components/ansible)</dt>
   <dd>Configuration management and infrastructure automation using Ansible playbooks.</dd>
+
+  <dt>[Rain](/cli/configuration/components/rain)</dt>
+  <dd>AWS CloudFormation management using Rain templates and stack configuration.</dd>
 </dl>
 
 ## Configuration Structure
@@ -61,6 +64,11 @@ components:
     base_path: components/ansible
     command: ansible
     # ... ansible-specific settings
+
+  rain:
+    base_path: components/rain
+    command: rain
+    # ... rain-specific settings
 ```
 </File>
 
@@ -82,4 +90,5 @@ All component types share these common configuration options:
 - [Helmfile Configuration](/cli/configuration/components/helmfile)
 - [Packer Configuration](/cli/configuration/components/packer)
 - [Ansible Configuration](/cli/configuration/components/ansible)
+- [Rain Configuration](/cli/configuration/components/rain)
 - [Stack Configuration](/cli/configuration/stacks)

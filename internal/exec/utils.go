@@ -286,6 +286,8 @@ func getFindStacksMapCacheKey(atmosConfig *schema.AtmosConfiguration, ignoreMiss
 	keyBuilder.WriteString(cacheKeyDelimiter)
 	keyBuilder.WriteString(atmosConfig.AnsibleDirAbsolutePath)
 	keyBuilder.WriteString(cacheKeyDelimiter)
+	keyBuilder.WriteString(atmosConfig.RainDirAbsolutePath)
+	keyBuilder.WriteString(cacheKeyDelimiter)
 	keyBuilder.WriteString(fmt.Sprintf("%v", ignoreMissingFiles))
 	keyBuilder.WriteString(cacheKeyDelimiter)
 
@@ -363,6 +365,7 @@ func FindStacksMap(atmosConfig *schema.AtmosConfiguration, ignoreMissingFiles bo
 		atmosConfig.HelmfileDirAbsolutePath,
 		atmosConfig.PackerDirAbsolutePath,
 		atmosConfig.AnsibleDirAbsolutePath,
+		atmosConfig.RainDirAbsolutePath,
 		atmosConfig.StackConfigFilesAbsolutePaths,
 		false,
 		true,
@@ -991,6 +994,8 @@ func ProcessStacks(
 		componentInfo[cfg.ComponentPathSectionName] = constructHelmfileComponentWorkingDir(atmosConfig, &configAndStacksInfo)
 	case cfg.PackerComponentType:
 		componentInfo[cfg.ComponentPathSectionName] = constructPackerComponentWorkingDir(atmosConfig, &configAndStacksInfo)
+	case cfg.RainComponentType:
+		componentInfo[cfg.ComponentPathSectionName] = constructRainComponentWorkingDir(atmosConfig, &configAndStacksInfo)
 	}
 
 	configAndStacksInfo.ComponentSection["component_info"] = componentInfo

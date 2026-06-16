@@ -563,6 +563,7 @@ func processCommandLineArgs(atmosConfig *schema.AtmosConfiguration, configAndSta
 	if err := setPackerConfig(atmosConfig, configAndStacksInfo); err != nil {
 		return err
 	}
+	setRainConfig(atmosConfig, configAndStacksInfo)
 	if err := setStacksConfig(atmosConfig, configAndStacksInfo); err != nil {
 		return err
 	}
@@ -625,6 +626,17 @@ func setPackerConfig(atmosConfig *schema.AtmosConfiguration, configAndStacksInfo
 		log.Debug(cmdLineArg, PackerDirFlag, configAndStacksInfo.PackerDir)
 	}
 	return nil
+}
+
+func setRainConfig(atmosConfig *schema.AtmosConfiguration, configAndStacksInfo *schema.ConfigAndStacksInfo) {
+	if len(configAndStacksInfo.RainCommand) > 0 {
+		atmosConfig.Components.Rain.Command = configAndStacksInfo.RainCommand
+		log.Debug(cmdLineArg, RainCommandFlag, configAndStacksInfo.RainCommand)
+	}
+	if len(configAndStacksInfo.RainDir) > 0 {
+		atmosConfig.Components.Rain.BasePath = configAndStacksInfo.RainDir
+		log.Debug(cmdLineArg, RainDirFlag, configAndStacksInfo.RainDir)
+	}
 }
 
 func setStacksConfig(atmosConfig *schema.AtmosConfiguration, configAndStacksInfo *schema.ConfigAndStacksInfo) error {

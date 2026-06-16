@@ -35,6 +35,7 @@ import (
 	// The init() function in each package registers the provider.
 	_ "github.com/cloudposse/atmos/pkg/component/ansible"
 	_ "github.com/cloudposse/atmos/pkg/component/mock"
+	_ "github.com/cloudposse/atmos/pkg/component/rain"
 
 	// Import the Atmos Pro credential broker so it registers itself (init) and is consulted
 	// before the first remote read in CI (lazily provisions the github/sts integration).
@@ -81,6 +82,7 @@ import (
 	_ "github.com/cloudposse/atmos/cmd/lsp"
 	_ "github.com/cloudposse/atmos/cmd/mcp"
 	_ "github.com/cloudposse/atmos/cmd/profile"
+	_ "github.com/cloudposse/atmos/cmd/rain"
 	_ "github.com/cloudposse/atmos/cmd/secret"
 	_ "github.com/cloudposse/atmos/cmd/terraform"
 	"github.com/cloudposse/atmos/cmd/terraform/backend"

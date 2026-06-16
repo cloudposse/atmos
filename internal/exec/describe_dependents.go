@@ -207,7 +207,11 @@ func ExecuteDescribeDependents(
 	// When a pre-computed dependency index is available, use O(1) lookup.
 	// Otherwise, fall back to the full O(stacks × components) scan.
 	if args.DepIndex != nil {
-		dependents = findDependentsFromIndex(atmosConfig, args, &providedComponentVars)
+		var err error
+		dependents, err = findDependentsFromIndex(atmosConfig, args, &providedComponentVars)
+		if err != nil {
+			return nil, err
+		}
 	} else {
 		var err error
 		dependents, err = findDependentsByScan(atmosConfig, args, stacks, &providedComponentVars)
@@ -228,7 +232,7 @@ func findDependentsFromIndex(
 	atmosConfig *schema.AtmosConfiguration,
 	args *DescribeDependentsArgs,
 	providedComponentVars *schema.Context,
-) []schema.Dependent {
+) ([]schema.Dependent, error) {
 	var dependents []schema.Dependent
 
 	entries := args.DepIndex[args.Component]
@@ -252,11 +256,14 @@ func findDependentsFromIndex(
 			continue
 		}
 
-		dependent := buildDependentEntry(atmosConfig, args, e)
+		dependent, err := buildDependentEntry(atmosConfig, args, e)
+		if err != nil {
+			return nil, err
+		}
 		dependents = append(dependents, dependent)
 	}
 
-	return dependents
+	return dependents, nil
 }
 
 // findDependentsByScan falls back to the full O(stacks * components) scan.
@@ -373,7 +380,11 @@ func scanComponentForDependents(p *scanComponentParams) ([]schema.Dependent, err
 			StackComponentVars:        stackComponentVars,
 			SettingsSection:           settingsSection,
 		}
-		dependents = append(dependents, buildDependentEntry(p.AtmosConfig, p.Args, e))
+		dependent, err := buildDependentEntry(p.AtmosConfig, p.Args, e)
+		if err != nil {
+			return nil, err
+		}
+		dependents = append(dependents, dependent)
 	}
 
 	return dependents, nil
@@ -384,10 +395,15 @@ func buildDependentEntry(
 	atmosConfig *schema.AtmosConfiguration,
 	args *DescribeDependentsArgs,
 	e *dependencyIndexEntry,
-) schema.Dependent {
+) (schema.Dependent, error) {
+	componentPath, err := BuildComponentPath(atmosConfig, &e.StackComponentMap, e.StackComponentType)
+	if err != nil {
+		return schema.Dependent{}, err
+	}
+
 	dependent := schema.Dependent{
 		Component:     e.StackComponentName,
-		ComponentPath: BuildComponentPath(atmosConfig, &e.StackComponentMap, e.StackComponentType),
+		ComponentPath: componentPath,
 		ComponentType: e.StackComponentType,
 		Stack:         e.StackName,
 		StackSlug:     fmt.Sprintf("%s-%s", e.StackName, strings.ReplaceAll(e.StackComponentName, "/", "-")),
@@ -421,7 +437,7 @@ func buildDependentEntry(
 		dependent.Settings = e.SettingsSection
 	}
 
-	return dependent
+	return dependent, nil
 }
 
 // sortDependentsByStackSlug sorts the dependents by stack slug.

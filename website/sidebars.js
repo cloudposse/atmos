@@ -304,6 +304,11 @@ module.exports = {
                     id: 'components/ansible',
                     label: 'Ansible',
                 },
+                {
+                    type: 'doc',
+                    id: 'components/rain',
+                    label: 'Rain',
+                },
             ]
         },
 

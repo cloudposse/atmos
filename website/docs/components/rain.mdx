@@ -1,0 +1,100 @@
+---
+title: Using Rain
+sidebar_position: 7
+sidebar_label: Rain
+id: rain
+description: Manage AWS CloudFormation stacks with Rain and Atmos stack configuration.
+---
+import Intro from '@site/src/components/Intro'
+import File from '@site/src/components/File'
+
+<Intro>
+Atmos supports Rain components for AWS CloudFormation management. Rain components combine CloudFormation templates with Atmos stack configuration, authentication, dependency ordering, and Git-aware execution.
+</Intro>
+
+For a complete list of supported commands, see the Atmos [rain](/cli/commands/rain/usage) documentation.
+
+## Stack Configuration
+
+The schema for configuring Rain components in Atmos stacks:
+
+<File title="stacks/catalog/api.yaml">
+```yaml
+components:
+  rain:
+    <component_name>:
+      metadata:
+        component: <component_directory>
+      template: template.yaml
+      name: <cloudformation_stack_name>
+      config: rain-config.yaml
+      params: {}
+      tags: {}
+      settings:
+        rain:
+          region: us-east-1
+      dependencies:
+        tools:
+          rain: latest
+```
+</File>
+
+## CloudFormation Stack Name
+
+Use `name` for the CloudFormation stack name:
+
+```yaml
+components:
+  rain:
+    api:
+      template: template.yaml
+      name: app-api-dev
+```
+
+The `name` field is required for stack-targeted Rain commands such as `deploy`, `rm`, `logs`, `watch`, `cat`, `console`, `forecast`, and `diff`.
+
+## Toolchain Dependencies
+
+Rain remains an external executable resolved from PATH or Atmos toolchain dependencies. Add a tool dependency when the component should run with an Atmos-managed Rain binary:
+
+```yaml
+components:
+  rain:
+    api:
+      dependencies:
+        tools:
+          rain: latest
+```
+
+## Git-Aware Execution
+
+Rain commands support multi-component and affected-component workflows:
+
+```bash
+# Deploy every enabled Rain component in dependency order
+atmos rain deploy --all -s dev
+
+# Deploy only affected Rain components
+atmos rain deploy --affected --ref origin/main --sha HEAD
+
+# Limit a multi-component run to selected components
+atmos rain deploy --all -s dev --components api,worker
+```
+
+`--affected` filters results to Rain components, skips deleted components, and uses the same Git compare flags supported by Atmos affected detection.
+
+## Authentication
+
+Use `--identity` to authenticate before Atmos processes the stack and invokes Rain:
+
+```bash
+atmos rain deploy api -s dev --identity prod-admin
+```
+
+Component-level `auth` settings are processed during stack resolution. Rain receives the sanitized AWS environment produced by Atmos auth.
+
+## Related
+
+- [Rain Components in Stacks](/stacks/components/rain) - Full configuration reference
+- [Rain CLI Configuration](/cli/configuration/components/rain) - `atmos.yaml` settings
+- [atmos rain](/cli/commands/rain/usage) - Command reference

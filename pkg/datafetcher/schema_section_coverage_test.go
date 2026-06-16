@@ -45,6 +45,7 @@ var manifestSections = map[string]sectionScope{
 	"helmfile":                  {topLevel: true},
 	"packer":                    {topLevel: true},
 	"ansible":                   {topLevel: true},
+	"rain":                      {topLevel: true},
 	"components":                {topLevel: true},
 	"overrides":                 {topLevel: true},
 	"workflows":                 {topLevel: true},

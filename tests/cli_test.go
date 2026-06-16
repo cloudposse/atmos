@@ -517,6 +517,11 @@ func sanitizeOutput(output string, opts ...sanitizeOption) (string, error) {
 	terraformCommandEnvLogRegex := regexp.MustCompile(`(?m)^.*Found ENV variable ATMOS_COMPONENTS_TERRAFORM_COMMAND=[^\n]*\n?`)
 	result = terraformCommandEnvLogRegex.ReplaceAllString(result, "")
 
+	// 15a. Drop GitHub token resolution debug logs. These depend on whether the test
+	// environment has an authenticated GitHub CLI or token and are not product output under test.
+	githubTokenLogRegex := regexp.MustCompile(`(?m)^.*(?:GitHub CLI token lookup failed|No GitHub token resolved; using anonymous).*\n?`)
+	result = githubTokenLogRegex.ReplaceAllString(result, "")
+
 	// 16. Apply custom replacements if provided.
 	// These are test-specific patterns that don't need to be part of the global sanitization.
 	// IMPORTANT: This must run LAST so it can override any built-in sanitization results.
@@ -528,20 +533,20 @@ func sanitizeOutput(output string, opts ...sanitizeOption) (string, error) {
 		result = customRegex.ReplaceAllString(result, replacement)
 	}
 
-	// 15a. Normalize temporary directory paths from TEST_GIT_ROOT and other test fixtures.
+	// 15b. Normalize temporary directory paths from TEST_GIT_ROOT and other test fixtures.
 	// These appear in trace logs as path=/var/folders/.../mock-git-root or path=/absolute/path/to/repo/mock-git-root.
 	// Replace with a stable placeholder since these are test-specific paths.
 	// Matches both raw paths and already-sanitized repo paths.
 	tempGitRootRegex := regexp.MustCompile(`path=(/var/folders/[^\s]+/mock-git-root|/tmp/[^\s]+/mock-git-root|/Users/[^\s]+/mock-git-root|/home/[^\s]+/mock-git-root|[A-Z]:/[^\s]+/mock-git-root|/absolute/path/to/repo/mock-git-root|/absolute/path/to/external/mock-git-root)`)
 	result = tempGitRootRegex.ReplaceAllString(result, "path=/mock-git-root")
 
-	// 15b. Normalize temp home directory paths in trace logs (e.g., path=/var/folders/.../T/TestCLI.../.atmos).
+	// 15c. Normalize temp home directory paths in trace logs (e.g., path=/var/folders/.../T/TestCLI.../.atmos).
 	// These are used for home directory mocking in tests.
 	// Matches both raw paths and already-sanitized repo paths.
 	tempHomeDirRegex := regexp.MustCompile(`path=(/var/folders/[^\s]+/\.atmos|/tmp/[^\s]+/\.atmos|/Users/[^\s]+/\.atmos|/home/[^\s]+/\.atmos|[A-Z]:/[^\s]+/\.atmos|/absolute/path/to/repo/[^\s]+/\.atmos)`)
 	result = tempHomeDirRegex.ReplaceAllString(result, "path=/mock-home/.atmos")
 
-	// 15c. Normalize external absolute paths (additional pattern with forward slashes for Windows).
+	// 15d. Normalize external absolute paths (additional pattern with forward slashes for Windows).
 	// Note: Windows paths use forward slashes here because filepath.ToSlash normalizes them earlier.
 	// The pattern matches the entire path including subdirectories by not excluding slashes in the final segment.
 	externalPathRegex2 := regexp.MustCompile(`(/Users/[^/]+/[^/]+/[^/]+/[^\s":]+|/home/[^/]+/[^/]+/[^/]+/[^\s":]+|C:/Users/[^/]+/[^/]+/[^/]+/[^\s":]+)`)

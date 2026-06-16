@@ -192,25 +192,30 @@ func BuildComponentPath(
 	componentSectionMap *map[string]any,
 	componentType string,
 	componentNameFallback ...string,
-) string {
+) (string, error) {
 	defer perf.Track(atmosConfig, "exec.BuildComponentPath")()
 
 	// Determine the component folder name.
 	componentFolder := GetComponentFolder(componentSectionMap, componentNameFallback...)
 	if componentFolder == "" {
-		return ""
+		return "", nil
 	}
 
 	// Build the full path based on component type.
 	switch componentType {
 	case cfg.TerraformComponentType:
-		return filepath.Join(atmosConfig.BasePath, atmosConfig.Components.Terraform.BasePath, componentFolder)
+		return filepath.Join(atmosConfig.BasePath, atmosConfig.Components.Terraform.BasePath, componentFolder), nil
 	case cfg.HelmfileComponentType:
-		return filepath.Join(atmosConfig.BasePath, atmosConfig.Components.Helmfile.BasePath, componentFolder)
+		return filepath.Join(atmosConfig.BasePath, atmosConfig.Components.Helmfile.BasePath, componentFolder), nil
 	case cfg.PackerComponentType:
-		return filepath.Join(atmosConfig.BasePath, atmosConfig.Components.Packer.BasePath, componentFolder)
+		return filepath.Join(atmosConfig.BasePath, atmosConfig.Components.Packer.BasePath, componentFolder), nil
+	case cfg.RainComponentType:
+		if filepath.IsAbs(componentFolder) {
+			return "", fmt.Errorf("%w: rain component path must be relative: %s", errUtils.ErrInvalidFilePath, componentFolder)
+		}
+		return filepath.Join(atmosConfig.BasePath, atmosConfig.Components.Rain.BasePath, componentFolder), nil
 	default:
-		return ""
+		return "", nil
 	}
 }
 

@@ -70,6 +70,13 @@ func TestProcessStackConfig_ErrorPaths(t *testing.T) {
 			expectedError: errUtils.ErrInvalidPackerSection,
 		},
 		{
+			name: "invalid rain section type",
+			config: map[string]any{
+				cfg.RainSectionName: "invalid-not-a-map",
+			},
+			expectedError: errUtils.ErrInvalidRainSection,
+		},
+		{
 			name: "invalid components section type",
 			config: map[string]any{
 				cfg.ComponentsSectionName: "invalid-not-a-map",
@@ -300,6 +307,15 @@ func TestProcessStackConfig_ErrorPaths(t *testing.T) {
 			expectedError: errUtils.ErrInvalidComponentsPacker,
 		},
 		{
+			name: "invalid components.rain type",
+			config: map[string]any{
+				cfg.ComponentsSectionName: map[string]any{
+					cfg.RainComponentType: "invalid",
+				},
+			},
+			expectedError: errUtils.ErrInvalidComponentsRain,
+		},
+		{
 			name: "invalid custom component map type",
 			config: map[string]any{
 				cfg.ComponentsSectionName: map[string]any{
@@ -380,6 +396,7 @@ func TestProcessStackConfig_ErrorPaths(t *testing.T) {
 				"/test/helmfile",
 				"/test/packer",
 				"/test/ansible",
+				"/test/rain",
 				"test-stack.yaml",
 				tt.config,
 				false,
@@ -833,6 +850,7 @@ func TestProcessStackConfig_HappyPath(t *testing.T) {
 				"/test/helmfile",
 				"/test/packer",
 				"/test/ansible",
+				"/test/rain",
 				"test-stack.yaml",
 				tt.config,
 				false,
@@ -890,6 +908,7 @@ func TestProcessStackConfig_ComponentTypeFilter(t *testing.T) {
 				"/test/helmfile",
 				"/test/packer",
 				"/test/ansible",
+				"/test/rain",
 				"test-stack.yaml",
 				config,
 				false,
@@ -959,6 +978,7 @@ func TestProcessStackConfig_CustomComponentTypeFilter(t *testing.T) {
 				"/test/helmfile",
 				"/test/packer",
 				"/test/ansible",
+				"/test/rain",
 				"test-stack.yaml",
 				config,
 				false,
@@ -1049,6 +1069,7 @@ func TestProcessStackConfig_HooksWrongScopeNotInherited(t *testing.T) {
 		"/test/helmfile",
 		"/test/packer",
 		"/test/ansible",
+		"/test/rain",
 		"test-stack.yaml",
 		config,
 		false,

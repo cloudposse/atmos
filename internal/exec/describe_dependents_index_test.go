@@ -195,7 +195,8 @@ func TestFindDependentsFromIndex_NoMatches(t *testing.T) {
 	args := &DescribeDependentsArgs{Component: "vpc", Stack: "dev-use1", DepIndex: dependencyIndex{}}
 	providedVars := &schema.Context{Namespace: "acme", Tenant: "dev"}
 
-	result := findDependentsFromIndex(nil, args, providedVars)
+	result, err := findDependentsFromIndex(nil, args, providedVars)
+	require.NoError(t, err)
 	assert.Nil(t, result, "no index entries should return nil")
 }
 
@@ -314,6 +315,7 @@ func TestFindDependentsFromIndex_SkipsSelfReference(t *testing.T) {
 	args := &DescribeDependentsArgs{Component: "vpc", Stack: "dev-use1", DepIndex: idx}
 	providedVars := &schema.Context{Tenant: "dev"}
 
-	result := findDependentsFromIndex(nil, args, providedVars)
+	result, err := findDependentsFromIndex(nil, args, providedVars)
+	require.NoError(t, err)
 	assert.Empty(t, result, "self-references should be skipped")
 }

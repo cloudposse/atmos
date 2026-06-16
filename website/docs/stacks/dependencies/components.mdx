@@ -426,7 +426,7 @@ dependencies:
 | Merge behavior | Deep merge (complex) | Per-list (replace by default, append opt-in) |
 | Location | Under `settings` | Under `dependencies` |
 | Cross-stack | `namespace`, `tenant`, `environment`, `stage` fields | `stack` field only (use templates) |
-| Cross-type | Not supported | Use `kind` field on `components[]` (terraform, helmfile, packer, etc.) |
+| Cross-type | Not supported | Use `kind` field on `components[]` (terraform, helmfile, packer, ansible, rain, etc.) |
 | File/folder deps | `file` and `folder` fields per entry | `dependencies.files` and `dependencies.folders` sibling keys |
 
 Both formats continue to work. The new format is recommended for new configurations.

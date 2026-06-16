@@ -114,6 +114,7 @@ func getComponentTypes() []string {
 		config.HelmfileComponentType:  {},
 		config.PackerComponentType:    {},
 		config.AnsibleComponentType:   {},
+		config.RainComponentType:      {},
 	}
 
 	// Add any additional types from the component registry.
