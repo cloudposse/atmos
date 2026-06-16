@@ -218,6 +218,25 @@ atmos terraform shell infra/vpc -s tenant1-ue2-dev --identity dev-role
         atmos terraform shell <component> -s <stack> --with-secrets
         ```
     </dd>
+
+    <dt>`--skip-init` <em>(optional)</em></dt>
+    <dd>
+        Skip running `terraform init` before launching the shell. By default Atmos runs
+        `terraform init` (and selects/creates the workspace) so you enter an initialized
+        component, matching the behavior described above. Use this to enter the shell faster
+        when the component is already initialized.
+
+        Workspace selection is unaffected by this flag — it stays governed by the
+        [`workspaces_enabled`](/cli/configuration/components/terraform) setting. For a shell that
+        neither initializes nor switches workspaces, combine `--skip-init` with
+        `workspaces_enabled: false`.
+
+        Can also be set via the `ATMOS_SKIP_INIT` environment variable.
+
+        ```shell
+        atmos terraform shell <component> -s <stack> --skip-init
+        ```
+    </dd>
 </dl>
 
 ## Related Commands

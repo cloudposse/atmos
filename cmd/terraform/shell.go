@@ -69,6 +69,9 @@ as you would in a typical setup, but within the configured Atmos environment.`,
 		dryRun := v.GetBool("dry-run")
 		identity := v.GetString("identity")
 		withSecrets := v.GetBool("with-secrets")
+		// --skip-init is a shared terraform persistent flag (inherited from terraformCmd);
+		// honor it so users can enter the shell without running `terraform init`.
+		skipInit := v.GetBool("skip-init")
 
 		// Prompt for stack if missing.
 		if stack == "" {
@@ -107,6 +110,7 @@ as you would in a typical setup, but within the configured Atmos environment.`,
 			DryRun:      dryRun,
 			Identity:    identity,
 			WithSecrets: withSecrets,
+			SkipInit:    skipInit,
 			ProcessingOptions: e.ProcessingOptions{
 				ProcessTemplates: processTemplates,
 				ProcessFunctions: processFunctions,
