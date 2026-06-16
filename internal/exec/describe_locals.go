@@ -515,7 +515,7 @@ func deriveStackNameFromTemplate(
 		"vars": varsSection,
 	}
 
-	stackName, err := ProcessTmpl(atmosConfig, "describe-locals-name-template", atmosConfig.Stacks.NameTemplate, templateData, false)
+	stackName, err := ProcessTmpl(atmosConfig, "describe-locals-name-template", atmosConfig.Stacks.NameTemplate, templateData, atmosConfig.Templates.Settings.IgnoreMissingTemplateValues)
 	if err != nil {
 		log.Debug("Failed to evaluate name template for stack", "file", stackFileName, "error", err)
 		return ""
