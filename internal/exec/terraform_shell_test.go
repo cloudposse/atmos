@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -485,6 +486,242 @@ func TestExecuteShellLifecycle_SkipInit_KeepsWorkspace(t *testing.T) {
 	require.NoError(t, executeShellLifecycle(atmosConfig, &info, cfg))
 	assert.Equal(t, []string{"workspace", "shell"}, *calls,
 		"--skip-init must skip init but still select the workspace and launch the shell")
+}
+
+// newShellPrepInfo builds a minimal ConfigAndStacksInfo whose component working dir resolves to
+// tmpDir (via the workdir provisioner key), so prepareShellExecution writes its varfile there and
+// generateConfigFiles no-ops (no backend/providers configured).
+func newShellPrepInfo(tmpDir string) *schema.ConfigAndStacksInfo {
+	return &schema.ConfigAndStacksInfo{
+		ComponentFromArg: "vpc",
+		FinalComponent:   "vpc",
+		ComponentType:    "terraform",
+		Stack:            "dev",
+		ComponentSection: map[string]any{provWorkdir.WorkdirPathKey: tmpDir},
+		ComponentVarsSection: map[string]any{
+			"name": "vpc-test",
+		},
+	}
+}
+
+// TestPrepareShellExecution_HappyPath exercises the full per-component setup the shell performs
+// before init/workspace/shell: binary + toolchain resolution, secret-key computation, disk-safe
+// varfile write, backend/provider config generation, env assembly, and RC cleanup registration.
+func TestPrepareShellExecution_HappyPath(t *testing.T) {
+	tmpDir := t.TempDir()
+	atmosConfig := &schema.AtmosConfiguration{BasePath: tmpDir}
+	info := newShellPrepInfo(tmpDir)
+	cfg := &shellConfig{componentPath: tmpDir, workingDir: tmpDir, varFile: "dev-vpc.terraform.tfvars.json"}
+
+	err := prepareShellExecution(atmosConfig, info, cfg, false)
+	require.NoError(t, err)
+
+	// RC cleanup is registered so the temporary Terraform CLI config survives init/workspace/shell;
+	// run it here to avoid leaking the temp file.
+	if info.RCCleanup != nil {
+		t.Cleanup(func() { _ = info.RCCleanup() })
+	}
+
+	// The terraform binary was resolved.
+	assert.NotEmpty(t, info.Command, "terraform/tofu command must be resolved")
+
+	// The disk-safe varfile was written into the resolved working dir.
+	varfilePath := constructTerraformComponentVarfilePath(atmosConfig, info)
+	assert.FileExists(t, varfilePath, "disk-safe varfile must be written")
+
+	// Standard Atmos env vars were assembled for the subprocess/shell.
+	assert.Contains(t, info.ComponentEnvList, "TF_IN_AUTOMATION=true",
+		"component env must be assembled before launching the shell")
+}
+
+// TestPrepareShellExecution_WithSecrets routes a secret-bearing var through the shell env when
+// --with-secrets is set: it must be exported as TF_VAR_* but never written to the on-disk varfile.
+func TestPrepareShellExecution_WithSecrets(t *testing.T) {
+	const secret = "prepare-shell-secret-7a6b5c"
+	iolib.RegisterSecret(secret)
+
+	tmpDir := t.TempDir()
+	atmosConfig := &schema.AtmosConfiguration{BasePath: tmpDir}
+	info := newShellPrepInfo(tmpDir)
+	info.ComponentVarsSection = map[string]any{"token": secret, "region": "us-east-1-prepareshell"}
+	cfg := &shellConfig{componentPath: tmpDir, workingDir: tmpDir, varFile: "dev-vpc.terraform.tfvars.json"}
+
+	require.NoError(t, prepareShellExecution(atmosConfig, info, cfg, true))
+	if info.RCCleanup != nil {
+		t.Cleanup(func() { _ = info.RCCleanup() })
+	}
+
+	// The secret is exported into the shell env as TF_VAR_token.
+	var exported bool
+	for _, e := range info.ComponentEnvList {
+		if e == "TF_VAR_token="+secret {
+			exported = true
+		}
+	}
+	assert.True(t, exported, "with --with-secrets the secret must be exported as TF_VAR_token")
+
+	// The secret must NOT be written to the on-disk varfile.
+	varfilePath := constructTerraformComponentVarfilePath(atmosConfig, info)
+	data, err := os.ReadFile(varfilePath)
+	require.NoError(t, err)
+	assert.NotContains(t, string(data), secret, "secret must never be written to the on-disk varfile")
+}
+
+// TestPrepareShellExecution_VarfileWriteError verifies an error from writing the varfile is
+// propagated. The working dir resolves to a path nested under a regular file, so the write fails.
+func TestPrepareShellExecution_VarfileWriteError(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Create a regular file, then point the working dir at a path *inside* it so the varfile
+	// write (and its parent-dir creation) fails.
+	blocker := filepath.Join(tmpDir, "not-a-dir")
+	require.NoError(t, os.WriteFile(blocker, []byte("x"), 0o600))
+	badDir := filepath.Join(blocker, "sub")
+
+	atmosConfig := &schema.AtmosConfiguration{BasePath: tmpDir}
+	info := newShellPrepInfo(badDir)
+	cfg := &shellConfig{componentPath: badDir, workingDir: badDir, varFile: "dev-vpc.terraform.tfvars.json"}
+
+	err := prepareShellExecution(atmosConfig, info, cfg, false)
+	require.Error(t, err, "varfile write into a non-directory path must fail")
+}
+
+// TestExecuteShellLifecycle_WorkdirComponent_SkipsWorkspaceClean covers the workdir branch: when
+// the component is provisioned into a workdir, executeShellLifecycle skips the .terraform/environment
+// cleanup but still runs init -> workspace -> shell in order.
+func TestExecuteShellLifecycle_WorkdirComponent_SkipsWorkspaceClean(t *testing.T) {
+	calls := swapShellLifecycleSeams(t)
+
+	tmpDir := t.TempDir()
+	atmosConfig := &schema.AtmosConfiguration{}
+	info := shellInfoFromOptions(&ShellOptions{Component: "vpc", Stack: "dev"})
+	info.ComponentSection = map[string]any{provWorkdir.WorkdirPathKey: tmpDir}
+	cfg := &shellConfig{componentPath: tmpDir, workingDir: tmpDir, varFile: "dev-vpc.tfvars.json"}
+
+	require.NoError(t, executeShellLifecycle(atmosConfig, &info, cfg))
+	assert.Equal(t, []string{"init", "workspace", "shell"}, *calls,
+		"workdir components still run init, workspace, and shell in order")
+}
+
+// TestExecuteTerraformInitCommand_DryRun covers the provisioner-free init helper used by the shell:
+// in dry-run mode it builds the init args and dispatches after.terraform.init without launching a
+// real subprocess, returning no error.
+func TestExecuteTerraformInitCommand_DryRun(t *testing.T) {
+	tmpDir := t.TempDir()
+	atmosConfig := &schema.AtmosConfiguration{BasePath: tmpDir}
+	info := &schema.ConfigAndStacksInfo{
+		ComponentFromArg: "vpc",
+		FinalComponent:   "vpc",
+		ComponentType:    "terraform",
+		Stack:            "dev",
+		Command:          "terraform",
+		DryRun:           true,
+		ComponentSection: map[string]any{},
+	}
+
+	err := executeTerraformInitCommand(atmosConfig, info, tmpDir, "dev-vpc.terraform.tfvars.json")
+	require.NoError(t, err, "dry-run init must not launch a subprocess and must not error")
+}
+
+// TestRunShellSession_PreparesThenRunsLifecycle covers the post-ProcessStacks glue of the shell
+// entry point: prepareShellExecution runs, the RC cleanup is registered, and the lifecycle
+// (init -> workspace -> shell) runs in order. The lifecycle subprocess/shell steps are stubbed.
+func TestRunShellSession_PreparesThenRunsLifecycle(t *testing.T) {
+	calls := swapShellLifecycleSeams(t)
+
+	tmpDir := t.TempDir()
+	atmosConfig := &schema.AtmosConfiguration{BasePath: tmpDir}
+	info := newShellPrepInfo(tmpDir)
+	cfg := &shellConfig{componentPath: tmpDir, workingDir: tmpDir, varFile: "dev-vpc.terraform.tfvars.json"}
+
+	require.NoError(t, runShellSession(atmosConfig, info, cfg, false))
+
+	// prepareShellExecution ran (binary resolved, env assembled).
+	assert.NotEmpty(t, info.Command, "prepareShellExecution must resolve the terraform binary")
+	assert.Contains(t, info.ComponentEnvList, "TF_IN_AUTOMATION=true")
+	// The lifecycle ran in order.
+	assert.Equal(t, []string{"init", "workspace", "shell"}, *calls)
+}
+
+// TestRunShellSession_PrepareErrorSkipsLifecycle verifies that when prepareShellExecution fails,
+// the lifecycle (init/workspace/shell) never runs.
+func TestRunShellSession_PrepareErrorSkipsLifecycle(t *testing.T) {
+	calls := swapShellLifecycleSeams(t)
+
+	tmpDir := t.TempDir()
+	// Point the working dir at a path nested under a regular file so the varfile write fails.
+	blocker := filepath.Join(tmpDir, "blocker")
+	require.NoError(t, os.WriteFile(blocker, []byte("x"), 0o600))
+	badDir := filepath.Join(blocker, "sub")
+
+	atmosConfig := &schema.AtmosConfiguration{BasePath: tmpDir}
+	info := newShellPrepInfo(badDir)
+	cfg := &shellConfig{componentPath: badDir, workingDir: badDir, varFile: "dev-vpc.terraform.tfvars.json"}
+
+	err := runShellSession(atmosConfig, info, cfg, false)
+	require.Error(t, err, "prepare failure must propagate")
+	assert.Empty(t, *calls, "the init/workspace/shell lifecycle must not run when prepare fails")
+}
+
+// TestExecuteShellLifecycle_WorkspaceErrorStopsBeforeShell verifies a workspace-setup failure
+// aborts the lifecycle (after init) before the interactive shell is launched.
+func TestExecuteShellLifecycle_WorkspaceErrorStopsBeforeShell(t *testing.T) {
+	calls := swapShellLifecycleSeams(t)
+	wantErr := errors.New("workspace failed")
+	shellWorkspaceFn = func(_ *schema.AtmosConfiguration, _ *schema.ConfigAndStacksInfo, _ string, _ ...ShellCommandOption) error {
+		*calls = append(*calls, "workspace")
+		return wantErr
+	}
+
+	atmosConfig := &schema.AtmosConfiguration{}
+	info := shellInfoFromOptions(&ShellOptions{Component: "vpc", Stack: "dev"})
+	cfg := &shellConfig{componentPath: t.TempDir(), workingDir: t.TempDir(), varFile: "dev-vpc.tfvars.json"}
+
+	err := executeShellLifecycle(atmosConfig, &info, cfg)
+	require.ErrorIs(t, err, wantErr)
+	assert.Equal(t, []string{"init", "workspace"}, *calls, "shell must not launch after workspace setup fails")
+}
+
+// TestExecuteTerraformInitPhase_DryRun covers the standard init pre-step (prepareInitExecution +
+// executeTerraformInitCommand) in dry-run mode: it returns the resolved path without launching a
+// real subprocess.
+func TestExecuteTerraformInitPhase_DryRun(t *testing.T) {
+	tmpDir := t.TempDir()
+	atmosConfig := &schema.AtmosConfiguration{BasePath: tmpDir}
+	info := &schema.ConfigAndStacksInfo{
+		ComponentFromArg: "vpc",
+		FinalComponent:   "vpc",
+		ComponentType:    "terraform",
+		Stack:            "dev",
+		Command:          "terraform",
+		DryRun:           true,
+		ComponentSection: map[string]any{provWorkdir.WorkdirPathKey: tmpDir},
+	}
+
+	newPath, err := executeTerraformInitPhase(atmosConfig, info, tmpDir, "dev-vpc.terraform.tfvars.json")
+	require.NoError(t, err)
+	assert.Equal(t, tmpDir, newPath, "workdir components return the workdir path")
+}
+
+// TestExecuteTerraformInitPhase_SubprocessError covers the init error path: when the terraform
+// binary cannot be executed, both executeTerraformInitPhase and executeTerraformInitCommand
+// propagate the failure (no dry-run, so the subprocess actually runs and fails fast).
+func TestExecuteTerraformInitPhase_SubprocessError(t *testing.T) {
+	tmpDir := t.TempDir()
+	atmosConfig := &schema.AtmosConfiguration{BasePath: tmpDir}
+	info := &schema.ConfigAndStacksInfo{
+		ComponentFromArg: "vpc",
+		FinalComponent:   "vpc",
+		ComponentType:    "terraform",
+		Stack:            "dev",
+		// A binary that does not exist on any platform, so `init` fails fast without a real terraform.
+		Command:          "atmos-nonexistent-terraform-binary-for-tests",
+		DryRun:           false,
+		ComponentSection: map[string]any{provWorkdir.WorkdirPathKey: tmpDir},
+	}
+
+	_, err := executeTerraformInitPhase(atmosConfig, info, tmpDir, "dev-vpc.terraform.tfvars.json")
+	require.Error(t, err, "init must fail when the terraform binary cannot be executed")
 }
 
 // TestExecuteShellLifecycle_InitErrorStopsBeforeShell verifies an init failure aborts the

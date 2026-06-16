@@ -166,7 +166,17 @@ func ExecuteTerraformShell(opts *ShellOptions, atmosConfig *schema.AtmosConfigur
 		return nil
 	}
 
-	if err := prepareShellExecution(atmosConfig, &info, cfg, opts.WithSecrets); err != nil {
+	return runShellSession(atmosConfig, &info, cfg, opts.WithSecrets)
+}
+
+// runShellSession performs the per-component setup (prepareShellExecution) and then runs
+// `terraform init`/`workspace` and launches the interactive shell (executeShellLifecycle).
+// It is split out of ExecuteTerraformShell so the post-ProcessStacks lifecycle can be unit-tested
+// without resolving real stacks or launching a shell.
+func runShellSession(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, cfg *shellConfig, withSecrets bool) error {
+	defer perf.Track(atmosConfig, "exec.runShellSession")()
+
+	if err := prepareShellExecution(atmosConfig, info, cfg, withSecrets); err != nil {
 		return err
 	}
 
@@ -181,7 +191,7 @@ func ExecuteTerraformShell(opts *ShellOptions, atmosConfig *schema.AtmosConfigur
 		}()
 	}
 
-	return executeShellLifecycle(atmosConfig, &info, cfg)
+	return executeShellLifecycle(atmosConfig, info, cfg)
 }
 
 // Seams for testing the shell lifecycle without launching real subprocesses or an interactive
