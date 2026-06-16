@@ -1,0 +1,57 @@
+---
+slug: rain-cloudformation-components
+title: "Rain CloudFormation Components in Atmos"
+authors: [osterman]
+tags: [feature]
+---
+
+Atmos now supports Rain as a first-class component type, bringing AWS CloudFormation workflows into the same stack-aware orchestration model used for Terraform, Helmfile, Packer, and Ansible.
+
+<!--truncate-->
+
+## What Changed
+
+Rain components can now be configured under `components.rain` in stack manifests and executed with the new `atmos rain` command group. Atmos resolves the component, stack context, auth settings, dependencies, variables, environment, and working directory before invoking Rain.
+
+The command group covers the Rain lifecycle, including deploy, diff, forecast, package, remove, watch, and StackSet operations. Multi-component workflows also work with familiar Atmos selectors such as `--all`, `--affected`, `--components`, and `--query`.
+
+## Why It Matters
+
+Teams using CloudFormation can manage Rain stacks with the same conventions they already use for other Atmos component types:
+
+- shared stack inheritance for variables, environment, settings, auth, and dependencies
+- dependency-ordered execution for multi-component runs
+- Git-aware affected detection for targeted CI workflows
+- generated Rain parameter and tag files from stack configuration
+- consistent documentation and CLI behavior alongside other component types
+
+## Get Started
+
+Define Rain defaults in `atmos.yaml`, then add Rain components to your stacks:
+
+```yaml
+components:
+  rain:
+    app:
+      template: app.yaml
+      name: app-prod
+      params:
+        Environment: prod
+      tags:
+        Team: platform
+```
+
+Deploy a single component:
+
+```shell
+atmos rain deploy app --stack prod
+```
+
+Or run dependency-ordered workflows:
+
+```shell
+atmos rain deploy --all --stack prod
+atmos rain diff --affected
+```
+
+See the [Rain component documentation](/components/rain) and [`atmos rain` command reference](/cli/commands/rain/usage) for the full configuration and command surface.

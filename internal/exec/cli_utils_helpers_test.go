@@ -1046,6 +1046,16 @@ func TestFlagListConsistency(t *testing.T) {
 	})
 }
 
+func TestProcessArgsAndFlags_BooleanCommonFlagsDoNotConsumeFollowingArgs(t *testing.T) {
+	got, err := processArgsAndFlags(
+		cfg.TerraformComponentType,
+		[]string{"plan", "vpc", "--clone-target-ref", "-refresh=false", "--stack", "my-stack"},
+	)
+
+	require.NoError(t, err)
+	assert.Equal(t, []string{"-refresh=false"}, got.AdditionalArgsAndFlags)
+}
+
 // TestProcessArgsAndFlags_PrefixCollisionSafety verifies that flags sharing a common prefix
 // do not interfere with each other during parsing or stripping.
 //

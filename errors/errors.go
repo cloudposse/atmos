@@ -1234,6 +1234,16 @@ var (
 	ErrLSPNoContentLengthHeader = errors.New("no Content-Length header found")
 )
 
+// Stack dependency (`depends_on`) resolution errors.
+var (
+	// ErrInvalidDependsOn indicates a legacy `settings.spacelift.depends_on` value
+	// does not resolve to a known stack or to a component in the current stack.
+	ErrInvalidDependsOn = errors.New("invalid 'depends_on' dependency")
+	// ErrInvalidSettingsDependsOn indicates a `settings.depends_on` value does not
+	// resolve to a known component in a known stack.
+	ErrInvalidSettingsDependsOn = errors.New("invalid 'settings.depends_on' dependency")
+)
+
 // ExitCodeError is a typed error that preserves subcommand exit codes.
 // This allows the root command to exit with the same code as the subcommand.
 // When Code is 0, it indicates successful completion that should exit cleanly without printing errors.

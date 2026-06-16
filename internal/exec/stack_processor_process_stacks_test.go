@@ -70,6 +70,13 @@ func TestProcessStackConfig_ErrorPaths(t *testing.T) {
 			expectedError: errUtils.ErrInvalidPackerSection,
 		},
 		{
+			name: "invalid rain section type",
+			config: map[string]any{
+				cfg.RainSectionName: "invalid-not-a-map",
+			},
+			expectedError: errUtils.ErrInvalidRainSection,
+		},
+		{
 			name: "invalid components section type",
 			config: map[string]any{
 				cfg.ComponentsSectionName: "invalid-not-a-map",
@@ -298,6 +305,15 @@ func TestProcessStackConfig_ErrorPaths(t *testing.T) {
 				},
 			},
 			expectedError: errUtils.ErrInvalidComponentsPacker,
+		},
+		{
+			name: "invalid components.rain type",
+			config: map[string]any{
+				cfg.ComponentsSectionName: map[string]any{
+					cfg.RainComponentType: "invalid",
+				},
+			},
+			expectedError: errUtils.ErrInvalidComponentsRain,
 		},
 		{
 			name: "invalid custom component map type",

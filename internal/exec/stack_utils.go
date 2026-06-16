@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -31,7 +32,7 @@ func BuildTerraformWorkspace(atmosConfig *schema.AtmosConfiguration, configAndSt
 	case configAndStacksInfo.StackManifestName != "":
 		contextPrefix = configAndStacksInfo.StackManifestName
 	case atmosConfig.Stacks.NameTemplate != "":
-		tmpl, err = ProcessTmpl(atmosConfig, "terraform-workspace-stacks-name-template", atmosConfig.Stacks.NameTemplate, configAndStacksInfo.ComponentSection, false)
+		tmpl, err = ProcessTmpl(atmosConfig, "terraform-workspace-stacks-name-template", atmosConfig.Stacks.NameTemplate, configAndStacksInfo.ComponentSection, atmosConfig.Templates.Settings.IgnoreMissingTemplateValues)
 		if err != nil {
 			return "", err
 		}
@@ -139,15 +140,16 @@ func BuildDependentStackNameFromDependsOnLegacy(
 	} else if u.SliceContainsString(componentNamesInCurrentStack, dep) {
 		dependentStackName = fmt.Sprintf("%s-%s", currentStackName, dep)
 	} else {
-		errorMessage := fmt.Errorf( //nolint:err113 // Preserves existing user-facing validation message format.
-			"the component '%[1]s' in the stack '%[2]s' specifies 'depends_on' dependency '%[3]s', "+
-				"but '%[3]s' is not a stack and not a component in the '%[2]s' stack",
+		return "", fmt.Errorf(
+			"%w: the component '%s' in the stack '%s' specifies 'depends_on' dependency '%s', "+
+				"but '%s' is not a stack and not a component in the '%s' stack",
+			errUtils.ErrInvalidDependsOn,
 			currentComponentName,
 			currentStackName,
 			dependsOn,
+			dependsOn,
+			currentStackName,
 		)
-
-		return "", errorMessage
 	}
 
 	return dependentStackName, nil
@@ -169,16 +171,17 @@ func BuildDependentStackNameFromDependsOn(
 		return dep, nil
 	}
 
-	errorMessage := fmt.Errorf( //nolint:err113 // Preserves existing user-facing validation message format.
-		"the component '%[1]s' in the stack '%[2]s' specifies 'settings.depends_on' dependency "+
-			"on the component '%[3]s' in the stack '%[4]s', but '%[3]s' is not defined in the '%[4]s' stack, or the component and stack names are not correct",
+	return "", fmt.Errorf(
+		"%w: the component '%s' in the stack '%s' specifies 'settings.depends_on' dependency "+
+			"on the component '%s' in the stack '%s', but '%s' is not defined in the '%s' stack, or the component and stack names are not correct",
+		errUtils.ErrInvalidSettingsDependsOn,
 		currentComponentName,
 		currentStackName,
 		dependsOnComponentName,
 		dependsOnStackName,
+		dependsOnComponentName,
+		dependsOnStackName,
 	)
-
-	return "", errorMessage
 }
 
 // BuildComponentPath builds component path (path to the component's physical location on disk).
@@ -189,27 +192,30 @@ func BuildComponentPath(
 	componentSectionMap *map[string]any,
 	componentType string,
 	componentNameFallback ...string,
-) string {
+) (string, error) {
 	defer perf.Track(atmosConfig, "exec.BuildComponentPath")()
 
 	// Determine the component folder name.
 	componentFolder := GetComponentFolder(componentSectionMap, componentNameFallback...)
 	if componentFolder == "" {
-		return ""
+		return "", nil
 	}
 
 	// Build the full path based on component type.
 	switch componentType {
 	case cfg.TerraformComponentType:
-		return filepath.Join(atmosConfig.BasePath, atmosConfig.Components.Terraform.BasePath, componentFolder)
+		return filepath.Join(atmosConfig.BasePath, atmosConfig.Components.Terraform.BasePath, componentFolder), nil
 	case cfg.HelmfileComponentType:
-		return filepath.Join(atmosConfig.BasePath, atmosConfig.Components.Helmfile.BasePath, componentFolder)
+		return filepath.Join(atmosConfig.BasePath, atmosConfig.Components.Helmfile.BasePath, componentFolder), nil
 	case cfg.PackerComponentType:
-		return filepath.Join(atmosConfig.BasePath, atmosConfig.Components.Packer.BasePath, componentFolder)
+		return filepath.Join(atmosConfig.BasePath, atmosConfig.Components.Packer.BasePath, componentFolder), nil
 	case cfg.RainComponentType:
-		return filepath.Join(atmosConfig.BasePath, atmosConfig.Components.Rain.BasePath, componentFolder)
+		if filepath.IsAbs(componentFolder) {
+			return "", fmt.Errorf("%w: rain component path must be relative: %s", errUtils.ErrInvalidFilePath, componentFolder)
+		}
+		return filepath.Join(atmosConfig.BasePath, atmosConfig.Components.Rain.BasePath, componentFolder), nil
 	default:
-		return ""
+		return "", nil
 	}
 }
 

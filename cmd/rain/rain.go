@@ -53,36 +53,45 @@ func init() {
 	internal.Register(&RainCommandProvider{})
 }
 
+// RainCommandProvider registers the Rain command with the Atmos command registry.
 type RainCommandProvider struct{}
 
+// GetCommand returns the root Rain Cobra command.
 func (p *RainCommandProvider) GetCommand() *cobra.Command {
 	return rainCmd
 }
 
+// GetName returns the RainCommandProvider command name.
 func (p *RainCommandProvider) GetName() string {
 	return "rain"
 }
 
+// GetGroup returns the RainCommandProvider command group.
 func (p *RainCommandProvider) GetGroup() string {
 	return "Core Stack Commands"
 }
 
+// GetAliases returns the RainCommandProvider command aliases.
 func (p *RainCommandProvider) GetAliases() []internal.CommandAlias {
 	return nil
 }
 
+// GetFlagsBuilder returns the RainCommandProvider flags builder.
 func (p *RainCommandProvider) GetFlagsBuilder() flags.Builder {
 	return nil
 }
 
+// GetPositionalArgsBuilder returns the RainCommandProvider positional args builder.
 func (p *RainCommandProvider) GetPositionalArgsBuilder() *flags.PositionalArgsBuilder {
 	return nil
 }
 
+// GetCompatibilityFlags returns the RainCommandProvider compatibility flags.
 func (p *RainCommandProvider) GetCompatibilityFlags() map[string]compat.CompatibilityFlag {
 	return nil
 }
 
+// IsExperimental reports whether the RainCommandProvider command is experimental.
 func (p *RainCommandProvider) IsExperimental() bool {
 	return false
 }

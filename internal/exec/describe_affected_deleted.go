@@ -44,11 +44,14 @@ func detectDeletedComponents(
 
 		if !stackExistsInHead {
 			// Entire stack was deleted - add all non-abstract components.
-			stackDeleted := processDeletedStack(
+			stackDeleted, err := processDeletedStack(
 				stackName,
 				remoteComponentsSection,
 				atmosConfig,
 			)
+			if err != nil {
+				return nil, err
+			}
 			deleted = append(deleted, stackDeleted...)
 		} else {
 			// Stack exists but check for deleted components within.
@@ -74,7 +77,7 @@ func processDeletedStack(
 	stackName string,
 	remoteComponentsSection map[string]any,
 	atmosConfig *schema.AtmosConfiguration,
-) []schema.Affected {
+) ([]schema.Affected, error) {
 	defer perf.Track(atmosConfig, "exec.processDeletedStack")()
 
 	return processAllComponentsAsDeleted(
@@ -94,7 +97,7 @@ func processAllComponentsAsDeleted(
 	atmosConfig *schema.AtmosConfiguration,
 	affectedReason string,
 	deletionType string,
-) []schema.Affected {
+) ([]schema.Affected, error) {
 	var deleted []schema.Affected
 
 	// Process each component type.
@@ -115,7 +118,7 @@ func processAllComponentsAsDeleted(
 				continue
 			}
 
-			affected := createDeletedAffectedItem(&deletedItemParams{
+			affected, err := createDeletedAffectedItem(&deletedItemParams{
 				componentName:    componentName,
 				stackName:        stackName,
 				componentType:    componentType,
@@ -124,11 +127,14 @@ func processAllComponentsAsDeleted(
 				deletionType:     deletionType,
 				atmosConfig:      atmosConfig,
 			})
+			if err != nil {
+				return nil, err
+			}
 			deleted = append(deleted, affected)
 		}
 	}
 
-	return deleted
+	return deleted, nil
 }
 
 // processDeletedComponentsInStack handles the case where a stack exists but some components were deleted.
@@ -158,7 +164,7 @@ func processDeletedComponentsInStack(
 			atmosConfig,
 			affectedReasonDeleted,
 			deletionTypeComponent,
-		), nil
+		)
 	}
 
 	var deleted []schema.Affected
@@ -192,7 +198,7 @@ func processDeletedComponentsInStack(
 			}
 
 			// Component was deleted.
-			affected := createDeletedAffectedItem(&deletedItemParams{
+			affected, err := createDeletedAffectedItem(&deletedItemParams{
 				componentName:    componentName,
 				stackName:        stackName,
 				componentType:    componentType,
@@ -201,6 +207,9 @@ func processDeletedComponentsInStack(
 				deletionType:     deletionTypeComponent,
 				atmosConfig:      atmosConfig,
 			})
+			if err != nil {
+				return nil, err
+			}
 			deleted = append(deleted, affected)
 		}
 	}
@@ -235,7 +244,7 @@ type deletedItemParams struct {
 }
 
 // createDeletedAffectedItem creates an Affected item for a deleted component.
-func createDeletedAffectedItem(params *deletedItemParams) schema.Affected {
+func createDeletedAffectedItem(params *deletedItemParams) (schema.Affected, error) {
 	affected := schema.Affected{
 		Component:     params.componentName,
 		ComponentType: params.componentType,
@@ -247,7 +256,11 @@ func createDeletedAffectedItem(params *deletedItemParams) schema.Affected {
 	}
 
 	// Build component path from the BASE component section.
-	affected.ComponentPath = BuildComponentPath(params.atmosConfig, params.componentSection, params.componentType, params.componentName)
+	componentPath, err := BuildComponentPath(params.atmosConfig, params.componentSection, params.componentType, params.componentName)
+	if err != nil {
+		return schema.Affected{}, err
+	}
+	affected.ComponentPath = componentPath
 	affected.StackSlug = fmt.Sprintf("%s-%s", params.stackName, strings.ReplaceAll(params.componentName, "/", "-"))
 
 	// Extract metadata from the component's vars section (same as non-deleted items).
@@ -255,7 +268,7 @@ func createDeletedAffectedItem(params *deletedItemParams) schema.Affected {
 		populateDeletedItemMetadata(&affected, params)
 	}
 
-	return affected
+	return affected, nil
 }
 
 // populateDeletedItemMetadata extracts and populates metadata fields from the component section.
