@@ -34,11 +34,34 @@ runs:
         WORKFLOW_DIR: ${{ inputs.workflow-dir }}
       with:
         github-token: ${{ inputs.github-token }}
+        retries: 3
         script: |
           const fs = require('fs');
           const path = require('path');
 
           const workflowDir = process.env.WORKFLOW_DIR;
+          const tagShaCache = new Map();
+
+          const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
+
+          async function withRetries(operation, label, maxAttempts = 3) {
+            let lastErr;
+            for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+              try {
+                return await operation();
+              } catch (err) {
+                if (err.status === 404) {
+                  throw err;
+                }
+                lastErr = err;
+                if (attempt < maxAttempts) {
+                  core.warning(`${label} failed on attempt ${attempt}/${maxAttempts}: ${err.message}; retrying`);
+                  await sleep(250 * attempt);
+                }
+              }
+            }
+            throw lastErr;
+          }
 
           // Find all workflow files
           const files = fs.readdirSync(workflowDir)
@@ -91,28 +114,44 @@ runs:
 
           // Resolve a tag to its commit SHA, handling annotated tags
           async function resolveTagSha(owner, repo, tag) {
+            const cacheKey = `${owner}/${repo}@${tag}`;
+            if (tagShaCache.has(cacheKey)) {
+              return tagShaCache.get(cacheKey);
+            }
+
             try {
-              const ref = await github.rest.git.getRef({
-                owner,
-                repo,
-                ref: `tags/${tag}`,
-              });
+              const ref = await withRetries(
+                () => github.rest.git.getRef({
+                  owner,
+                  repo,
+                  ref: `tags/${tag}`,
+                }),
+                `Resolving ${cacheKey}`
+              );
 
               const obj = ref.data.object;
+              let sha;
 
               // Lightweight tag — points directly to a commit
               if (obj.type === 'commit') {
-                return obj.sha;
+                sha = obj.sha;
+                tagShaCache.set(cacheKey, sha);
+                return sha;
               }
 
               // Annotated tag — dereference to get the commit
               if (obj.type === 'tag') {
-                const tagObj = await github.rest.git.getTag({
-                  owner,
-                  repo,
-                  tag_sha: obj.sha,
-                });
-                return tagObj.data.object.sha;
+                const tagObj = await withRetries(
+                  () => github.rest.git.getTag({
+                    owner,
+                    repo,
+                    tag_sha: obj.sha,
+                  }),
+                  `Dereferencing ${cacheKey}`
+                );
+                sha = tagObj.data.object.sha;
+                tagShaCache.set(cacheKey, sha);
+                return sha;
               }
 
               throw new Error(`Unexpected ref object type: ${obj.type}`);

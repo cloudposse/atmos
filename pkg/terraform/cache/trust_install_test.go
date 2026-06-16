@@ -15,6 +15,43 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 )
 
+type recordedTrustCommand struct {
+	name string
+	args []string
+}
+
+func forceTrustPlatform(t *testing.T, goos string, fn func(string, ...string) error) *[]recordedTrustCommand {
+	t.Helper()
+	prevGOOS := trustRuntimeGOOS
+	prevRun := runTrustCommandFunc
+	commands := []recordedTrustCommand{}
+	trustRuntimeGOOS = goos
+	runTrustCommandFunc = func(name string, args ...string) error {
+		commands = append(commands, recordedTrustCommand{name: name, args: append([]string(nil), args...)})
+		if fn != nil {
+			return fn(name, args...)
+		}
+		return nil
+	}
+	t.Cleanup(func() {
+		trustRuntimeGOOS = prevGOOS
+		runTrustCommandFunc = prevRun
+	})
+	return &commands
+}
+
+func forceWindowsTrustFuncs(t *testing.T, install func(string) error, remove func(string) error) {
+	t.Helper()
+	prevInstall := installWindowsTrustFunc
+	prevRemove := removeWindowsTrustFunc
+	installWindowsTrustFunc = install
+	removeWindowsTrustFunc = remove
+	t.Cleanup(func() {
+		installWindowsTrustFunc = prevInstall
+		removeWindowsTrustFunc = prevRemove
+	})
+}
+
 // TestMain gates the test binary so tests can use it as a cross-platform subprocess:
 // with _ATMOS_TEST_EXIT_ONE the process exits 1 (a failing trust command), with
 // _ATMOS_TEST_EXIT_ZERO it exits 0 (a succeeding one), and with _ATMOS_TEST_HTTPS_PROBE_URL
@@ -22,6 +59,10 @@ import (
 // so a parent test can observe whether SSL_CERT_FILE is honored on this platform.
 // Without any gate it runs normally.
 func TestMain(m *testing.M) {
+	if os.Getenv("_ATMOS_TEST_BLOCK_TRUST_COMMAND") == "1" {
+		time.Sleep(10 * time.Second)
+		os.Exit(0)
+	}
 	if os.Getenv("_ATMOS_TEST_EXIT_ONE") == "1" {
 		os.Exit(1)
 	}
@@ -79,11 +120,38 @@ func TestInstallTrust_NoopWhenTrustNotRequired(t *testing.T) {
 	assert.NoError(t, InstallTrust(cert))
 }
 
+func TestInstallTrust_WindowsUsesCurrentUserRootStore(t *testing.T) {
+	forceTrustPlatform(t, "windows", nil)
+	cert := filepath.Join(t.TempDir(), "cert.pem")
+	require.NoError(t, os.WriteFile(cert, []byte("placeholder"), tlsCertPerm))
+	var gotPath string
+	forceWindowsTrustFuncs(t, func(path string) error {
+		gotPath = path
+		return nil
+	}, nil)
+
+	require.NoError(t, InstallTrust(cert))
+	assert.Equal(t, cert, gotPath)
+}
+
 func TestRemoveTrust_NoopWhenTrustNotRequired(t *testing.T) {
 	if required, _ := TrustInstructions(); required {
 		t.Skip("platform performs a real (potentially prompting) OS trust-store removal")
 	}
 	assert.NoError(t, RemoveTrust(filepath.Join(t.TempDir(), "missing.pem")))
+}
+
+func TestRemoveTrust_WindowsUsesCurrentUserRootStore(t *testing.T) {
+	forceTrustPlatform(t, "windows", nil)
+	cert := filepath.Join(t.TempDir(), "cert.pem")
+	var gotCommonName string
+	forceWindowsTrustFuncs(t, nil, func(commonName string) error {
+		gotCommonName = commonName
+		return nil
+	})
+
+	require.NoError(t, RemoveTrust(cert))
+	assert.Equal(t, certCommonName, gotCommonName)
 }
 
 func TestRunTrustCommand(t *testing.T) {
@@ -99,6 +167,19 @@ func TestRunTrustCommand(t *testing.T) {
 		t.Setenv("_ATMOS_TEST_EXIT_ONE", "1")
 		err := runTrustCommand(exe)
 		require.ErrorIs(t, err, errUtils.ErrInvalidConfig)
+	})
+
+	t.Run("timeout surfaces actionable error", func(t *testing.T) {
+		prevTimeout := trustCommandTimeout
+		trustCommandTimeout = 50 * time.Millisecond
+		t.Cleanup(func() {
+			trustCommandTimeout = prevTimeout
+		})
+
+		t.Setenv("_ATMOS_TEST_BLOCK_TRUST_COMMAND", "1")
+		err := runTrustCommand(exe)
+		require.ErrorIs(t, err, errUtils.ErrInvalidConfig)
+		assert.Contains(t, err.Error(), "timed out after")
 	})
 }
 

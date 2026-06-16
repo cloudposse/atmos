@@ -1,11 +1,14 @@
 package cache
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"time"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/config/homedir"
@@ -15,13 +18,21 @@ import (
 // certCommonName is the subject CN used to locate the certificate for removal.
 const certCommonName = "Atmos Terraform Registry Cache"
 
+var (
+	trustRuntimeGOOS        = runtime.GOOS
+	runTrustCommandFunc     = runTrustCommand
+	installWindowsTrustFunc = installWindowsTrust
+	removeWindowsTrustFunc  = removeWindowsTrust
+	trustCommandTimeout     = 30 * time.Second
+)
+
 // TrustInstructions returns whether OS trust-store installation is required on this
 // platform, plus a human note. On Linux/BSD Atmos trusts the cert via SSL_CERT_FILE
 // automatically, so no trust-store change is needed.
 func TrustInstructions() (required bool, note string) {
 	defer perf.Track(nil, "cache.TrustInstructions")()
 
-	switch runtime.GOOS {
+	switch trustRuntimeGOOS {
 	case "darwin":
 		return true, "Installs the certificate into your login keychain (you may be prompted for your password)."
 	case "windows":
@@ -41,15 +52,15 @@ func InstallTrust(certPath string) error {
 		return fmt.Errorf("%w: cache certificate not found at %q (run a terraform command with the cache enabled first): %w", errUtils.ErrInvalidConfig, certPath, err)
 	}
 
-	switch runtime.GOOS {
+	switch trustRuntimeGOOS {
 	case "darwin":
 		keychain, err := loginKeychainPath()
 		if err != nil {
 			return err
 		}
-		return runTrustCommand("security", "add-trusted-cert", "-r", "trustRoot", "-k", keychain, certPath)
+		return runTrustCommandFunc("security", "add-trusted-cert", "-r", "trustRoot", "-k", keychain, certPath)
 	case "windows":
-		return runTrustCommand("certutil", "-addstore", "-user", "Root", certPath)
+		return installWindowsTrustFunc(certPath)
 	default:
 		return nil
 	}
@@ -60,11 +71,11 @@ func InstallTrust(certPath string) error {
 func RemoveTrust(certPath string) error {
 	defer perf.Track(nil, "tfcache.RemoveTrust")()
 
-	switch runtime.GOOS {
+	switch trustRuntimeGOOS {
 	case "darwin":
-		return runTrustCommand("security", "remove-trusted-cert", certPath)
+		return runTrustCommandFunc("security", "remove-trusted-cert", certPath)
 	case "windows":
-		return runTrustCommand("certutil", "-delstore", "-user", "Root", certCommonName)
+		return removeWindowsTrustFunc(certCommonName)
 	default:
 		return nil
 	}
@@ -81,10 +92,16 @@ func loginKeychainPath() (string, error) {
 
 // runTrustCommand runs an OS trust-store command, surfacing its output on failure.
 func runTrustCommand(name string, args ...string) error {
-	cmd := exec.Command(name, args...)
+	ctx, cancel := context.WithTimeout(context.Background(), trustCommandTimeout)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, name, args...)
 	cmd.Stdin = os.Stdin
 	out, err := cmd.CombinedOutput()
 	if err != nil {
+		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+			return fmt.Errorf("%w: %s timed out after %s: %w: %s", errUtils.ErrInvalidConfig, name, trustCommandTimeout, err, string(out))
+		}
 		return fmt.Errorf("%w: %s failed: %w: %s", errUtils.ErrInvalidConfig, name, err, string(out))
 	}
 	return nil

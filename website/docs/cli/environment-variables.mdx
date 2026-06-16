@@ -182,6 +182,21 @@ These environment variables configure Atmos behavior and can override settings i
     - **YAML Path:** `components.terraform.plugin_cache_dir`
   </dd>
 
+  <dt>`ATMOS_COMPONENTS_TERRAFORM_CACHE_ENABLED`</dt>
+  <dd>
+    If set to `true`, enable the Terraform registry cache proxy for provider and module registry traffic.
+
+    - **YAML Path:** `components.terraform.cache.enabled`
+    - **Default:** `false`
+  </dd>
+
+  <dt>`ATMOS_COMPONENTS_TERRAFORM_CACHE_LOCATION`</dt>
+  <dd>
+    Custom root directory for the Terraform registry cache. Pin this to a stable path in CI when the cache should be reused across `atmos` invocations.
+
+    - **YAML Path:** `components.terraform.cache.location`
+  </dd>
+
   <dt>`ATMOS_COMPONENTS_TERRAFORM_AUTO_PROVISION_WORKDIR_FOR_OUTPUTS`</dt>
   <dd>
     If set to `false`, disable automatic JIT workdir provisioning before

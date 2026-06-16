@@ -179,12 +179,12 @@ jobs:
         with:
           version: ${{ env.PACKER_VERSION }}
 
-      # Dogfood `atmos ci cache`: cache ~/.cache/atmos (where the toolchain
-      # installs helm/helmfile) via the recommended composite action. Atmos
-      # derives the key/paths from atmos.yaml (ci.cache) and native actions/cache
-      # does the storage — restore now, save automatically in its post step. No
-      # runtime token needed. continue-on-error so cache issues never fail the
-      # job — the cache is a pure accelerator.
+      # Dogfood `atmos ci cache`: cache the configured Atmos cache root via the
+      # recommended composite action. Do not export ATMOS_XDG_CACHE_HOME or
+      # TF_PLUGIN_CACHE_DIR for the full acceptance job: many tests assert XDG
+      # defaults and Terraform's plugin cache is not safe for shared concurrent
+      # use. This cache step restores/saves toolchain bits only; it must stay a
+      # pure accelerator.
       - name: Cache Atmos toolchain
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
         continue-on-error: true
@@ -255,6 +255,16 @@ jobs:
           # Enable Playwright integration tests to validate browser driver download
           RUN_PLAYWRIGHT_INTEGRATION: 1
         run: make testacc-cover
+
+      - name: Terraform registry cache acceptance test
+        timeout-minutes: 10
+        if: matrix.flavor.target == 'windows' && ! github.event.pull_request.draft
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PACKER_GITHUB_API_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ATMOS_TEST_SKIP_PRECONDITION_CHECKS: true
+          ATMOS_TEST_TERRAFORM_REGISTRY_CACHE: 1
+        run: go test ./tests -run '^TestTerraformRegistryCache$' -count=1 -timeout 10m -v
 
       - name: Acceptance tests
         timeout-minutes: 45
