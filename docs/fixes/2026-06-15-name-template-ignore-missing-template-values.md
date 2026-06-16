@@ -23,7 +23,7 @@ added in PR #2158.
 
 Users who set this flag still hit hard errors like:
 
-```
+```text
 template: ...name-template...: executing "..." at <.vars.tenant>: map has no entry for key "tenant"
 ```
 
