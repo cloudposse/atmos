@@ -299,7 +299,7 @@ func TestBuildComponentPath(t *testing.T) {
 			},
 		}
 		componentSectionMap := map[string]any{
-			cfg.ComponentSectionName: filepath.Join(string(filepath.Separator), "tmp", "rain"),
+			cfg.ComponentSectionName: filepath.Join(t.TempDir(), "rain"),
 		}
 
 		result, err := BuildComponentPath(&atmosConfig, &componentSectionMap, cfg.RainComponentType)
