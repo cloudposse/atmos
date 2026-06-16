@@ -8,6 +8,8 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	errUtils "github.com/cloudposse/atmos/errors"
 )
 
 func TestNewSpinnerModel(t *testing.T) {
@@ -164,6 +166,125 @@ func TestExecWithSpinner_NonTTY(t *testing.T) {
 		// Either way, we should get some error back.
 		_ = err // Accept either error
 	})
+}
+
+// TestEvaluateSpinnerResults covers evaluateSpinnerResult and
+// evaluateDynamicSpinnerResult together via a shared table, since both
+// functions interpret the same {spinnerErr, m.done, m.err} outcomes for
+// their respective model types.
+func TestEvaluateSpinnerResults(t *testing.T) {
+	spinnerErr := errors.New("tea program failed")
+	opErr := errors.New("operation failed")
+
+	tests := []struct {
+		name        string
+		eval        func(tea.Model, error) error
+		finalModel  tea.Model
+		spinnerErr  error
+		wantErr     error
+		wantErrAlso error // additional sentinel that must also match via errors.Is.
+	}{
+		{
+			name:        "spinnerModel: returns spinner error wrapped when p.Run fails",
+			eval:        evaluateSpinnerResult,
+			finalModel:  spinnerModel{},
+			spinnerErr:  spinnerErr,
+			wantErr:     spinnerErr,
+			wantErrAlso: errUtils.ErrTUIRun,
+		},
+		{
+			name:       "spinnerModel: returns ErrSpinnerReturnedNilModel when final model is nil",
+			eval:       evaluateSpinnerResult,
+			finalModel: nil,
+			wantErr:    errUtils.ErrSpinnerReturnedNilModel,
+		},
+		{
+			name:       "spinnerModel: returns operation error from completed model",
+			eval:       evaluateSpinnerResult,
+			finalModel: spinnerModel{done: true, err: opErr},
+			wantErr:    opErr,
+		},
+		{
+			name:       "spinnerModel: returns nil for a normally completed model",
+			eval:       evaluateSpinnerResult,
+			finalModel: spinnerModel{done: true, err: nil},
+		},
+		{
+			// This reproduces the scenario where the bubbletea program exits
+			// (e.g. ctrl+c) before the operation goroutine sends its completion
+			// message: m.done stays false and m.err stays nil.
+			name:       "spinnerModel: returns ErrSpinnerOperationInterrupted when model never completed",
+			eval:       evaluateSpinnerResult,
+			finalModel: spinnerModel{done: false, err: nil},
+			wantErr:    errUtils.ErrSpinnerOperationInterrupted,
+		},
+		{
+			name:       "spinnerModel: returns ErrSpinnerUnexpectedModelType when final model has unexpected type",
+			eval:       evaluateSpinnerResult,
+			finalModel: dynamicSpinnerModel{},
+			wantErr:    errUtils.ErrSpinnerUnexpectedModelType,
+		},
+		{
+			name:        "dynamicSpinnerModel: returns spinner error wrapped when p.Run fails",
+			eval:        evaluateDynamicSpinnerResult,
+			finalModel:  dynamicSpinnerModel{},
+			spinnerErr:  spinnerErr,
+			wantErr:     spinnerErr,
+			wantErrAlso: errUtils.ErrTUIRun,
+		},
+		{
+			name:       "dynamicSpinnerModel: returns ErrSpinnerReturnedNilModel when final model is nil",
+			eval:       evaluateDynamicSpinnerResult,
+			finalModel: nil,
+			wantErr:    errUtils.ErrSpinnerReturnedNilModel,
+		},
+		{
+			name:       "dynamicSpinnerModel: returns operation error from completed model",
+			eval:       evaluateDynamicSpinnerResult,
+			finalModel: dynamicSpinnerModel{done: true, err: opErr},
+			wantErr:    opErr,
+		},
+		{
+			name:       "dynamicSpinnerModel: returns nil for a normally completed model",
+			eval:       evaluateDynamicSpinnerResult,
+			finalModel: dynamicSpinnerModel{done: true, err: nil},
+		},
+		{
+			// This reproduces the `atmos list affected` crash: the bubbletea
+			// program exits (e.g. ctrl+c) before the operation goroutine sends
+			// opCompleteDynamicMsg, so m.done stays false and m.err stays nil.
+			// Previously this fell through to `return nil`, leaving the
+			// caller's result variable nil and causing a nil pointer
+			// dereference.
+			name:       "dynamicSpinnerModel: returns ErrSpinnerOperationInterrupted when model never completed",
+			eval:       evaluateDynamicSpinnerResult,
+			finalModel: dynamicSpinnerModel{done: false, err: nil},
+			wantErr:    errUtils.ErrSpinnerOperationInterrupted,
+		},
+		{
+			name:       "dynamicSpinnerModel: returns ErrSpinnerUnexpectedModelType when final model has unexpected type",
+			eval:       evaluateDynamicSpinnerResult,
+			finalModel: spinnerModel{},
+			wantErr:    errUtils.ErrSpinnerUnexpectedModelType,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := tt.eval(tt.finalModel, tt.spinnerErr)
+
+			if tt.wantErrAlso != nil {
+				assert.ErrorIs(t, err, tt.wantErrAlso)
+			}
+
+			if tt.wantErr == nil {
+				assert.NoError(t, err)
+				return
+			}
+			require.Error(t, err)
+			assert.ErrorIs(t, err, tt.wantErr)
+		})
+	}
 }
 
 // Tests for dynamicSpinnerModel.

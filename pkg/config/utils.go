@@ -738,6 +738,17 @@ func setSettingsConfig(atmosConfig *schema.AtmosConfiguration, configAndStacksIn
 	if len(configAndStacksInfo.SettingsListMergeStrategy) > 0 {
 		atmosConfig.Settings.ListMergeStrategy = configAndStacksInfo.SettingsListMergeStrategy
 		log.Debug(cmdLineArg, SettingsListMergeStrategyFlag, configAndStacksInfo.SettingsListMergeStrategy)
+		return nil
+	}
+
+	// Fallback: command paths that call InitCliConfig directly (e.g. `describe
+	// config`) populate ConfigAndStacksInfo with the zero value, so the CLI
+	// flag never reaches the assignment above. Scan os.Args ourselves to
+	// honor `--settings-list-merge-strategy=...` on those paths, mirroring how
+	// setLogConfig handles `--logs-level`.
+	if v, ok := parseFlags()["settings-list-merge-strategy"]; ok && v != "" {
+		atmosConfig.Settings.ListMergeStrategy = v
+		log.Debug(cmdLineArg, SettingsListMergeStrategyFlag, v)
 	}
 
 	return nil
@@ -748,6 +759,10 @@ func processStoreConfig(atmosConfig *schema.AtmosConfiguration) error {
 	if len(atmosConfig.StoresConfig) > 0 {
 		log.Debug("processStoreConfig", "atmosConfig.StoresConfig", fmt.Sprintf("%v", atmosConfig.StoresConfig))
 	}
+
+	// Mark secret-by-default backends (e.g. 1Password) as `secret: true` before building the
+	// registry, so the secrets subsystem (which reads StoreConfig.Secret) sees them as secret.
+	store.ApplySecretDefaults(atmosConfig.StoresConfig)
 
 	storeRegistry, err := store.NewStoreRegistry(&atmosConfig.StoresConfig)
 	if err != nil {

@@ -238,7 +238,7 @@ func (m *manager) confirmSingleProfileSelection(identityName, profile string) (s
 	title := ui.FormatInline(fmt.Sprintf("Switch to profile `%s` for identity `%s`?", profile, identityName))
 	form := huh.NewForm(
 		huh.NewGroup(
-			huh.NewConfirm().
+			uiutils.NewAtmosConfirm().
 				Title(title).
 				Description(profileFallbackCancelHint).
 				Affirmative("Yes").
@@ -406,7 +406,7 @@ func (m *manager) confirmSingleAnyProfileSelection(profile string) (string, erro
 	title := ui.FormatInline(fmt.Sprintf("Switch to profile `%s`?", profile))
 	form := huh.NewForm(
 		huh.NewGroup(
-			huh.NewConfirm().
+			uiutils.NewAtmosConfirm().
 				Title(title).
 				Description(profileFallbackCancelHint).
 				Affirmative("Yes").

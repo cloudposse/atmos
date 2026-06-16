@@ -1,0 +1,48 @@
+---
+title: atmos terraform cache stats
+sidebar_label: cache stats
+sidebar_class_name: command
+id: stats
+description: Show cache size, object count, and provider/module breakdown.
+---
+import Intro from '@site/src/components/Intro'
+import Screengrab from '@site/src/components/Screengrab'
+
+<Intro>
+Report filesystem facts about the registry cache: total size, object count, the provider-vs-module breakdown, and the largest and oldest objects. Counts include only cached registry artifacts (providers and modules) — proxy infrastructure co-located in the cache root, such as the self-signed TLS certificate, is not counted.
+</Intro>
+
+:::note
+These stats describe the **registry cache** (the proxy-managed cache of provider and module registry traffic), not Terraform's separate [provider plugin cache](/cli/configuration/components/terraform) (`plugin_cache`).
+:::
+
+<Screengrab title="atmos terraform cache stats --help" slug="atmos-terraform-cache-stats--help" />
+
+## Usage
+
+```shell
+atmos terraform cache stats [flags]
+```
+
+## Flags
+
+<dl>
+  <dt>`--format` / `-f`</dt>
+  <dd>Output format: `table` (default), `json`, or `yaml`.</dd>
+</dl>
+
+## No hit rate (by design)
+
+`stats` does **not** report a cache hit rate. By design, the filesystem is the cache index — there is no persistent hit/miss store, because a hit is a per-run event, not stored state. Per-run hit counts and bytes-saved are surfaced once, by the **savings report** printed at the end of a `terraform`/`tofu` run when bytes were served from cache. Persistent hit-rate reporting would require a future, optional metrics database and is intentionally out of scope.
+
+## Examples
+
+```shell
+atmos terraform cache stats
+atmos terraform cache stats --format=json
+```
+
+## Related Commands
+
+- [`atmos terraform cache list`](/cli/commands/terraform/cache/list)
+- [`atmos terraform cache prune`](/cli/commands/terraform/cache/prune)

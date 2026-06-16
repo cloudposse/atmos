@@ -115,5 +115,7 @@ func (r *Resolver) ResolveGCPAuthContext(ctx context.Context, identityName strin
 	return &store.GCPAuthConfig{
 		CredentialsFile: gcpCtx.CredentialsFile,
 		ProjectID:       gcpCtx.ProjectID,
+		AccessToken:     gcpCtx.AccessToken,
+		TokenExpiry:     gcpCtx.TokenExpiry,
 	}, nil
 }

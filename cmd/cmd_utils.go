@@ -24,13 +24,16 @@ import (
 	"github.com/cloudposse/atmos/pkg/auth"
 	"github.com/cloudposse/atmos/pkg/auth/credentials"
 	"github.com/cloudposse/atmos/pkg/auth/validation"
+	"github.com/cloudposse/atmos/pkg/component/custom"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/dependencies"
 	envpkg "github.com/cloudposse/atmos/pkg/env"
 	l "github.com/cloudposse/atmos/pkg/list"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/process"
 	"github.com/cloudposse/atmos/pkg/reexec"
+	stepPkg "github.com/cloudposse/atmos/pkg/runner/step"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -94,11 +97,18 @@ func processCustomCommands(
 		existing := findSubcommand(parentCommand, commandConfig.Name)
 		if existing != nil {
 			if len(commandConfig.Steps) > 0 {
-				ui.Warningf(
-					"Custom command %q defines steps that conflict with built-in command %q; "+
-						"built-in behavior preserved, custom steps ignored",
-					commandConfig.Name, existing.CommandPath(),
-				)
+				// The custom command collides with a built-in and defines steps, which are
+				// ignored (built-in behavior wins; see PR #2191). Defer the warning until the
+				// conflicting command is actually invoked instead of emitting it here:
+				// processCustomCommands runs during root init for nearly every Atmos invocation,
+				// so emitting at registration printed the warning even for unrelated commands
+				// (e.g. `atmos list stacks`), polluting stderr in scripting and CI.
+				// See https://github.com/cloudposse/atmos/issues/2102.
+				//
+				// TODO(#2102): when `override:`/`invoke:` lands (custom-command-builtin-override PRD),
+				// skip this warning for commands that opt into running their steps, since the
+				// "custom steps ignored" message would then be wrong.
+				warnStepsConflictOnRun(existing, commandConfig.Name)
 			}
 			command = existing
 		} else {
@@ -249,7 +259,8 @@ func preCustomCommand(
 	if len(args) < requiredNoDefaultCount {
 		sb.WriteString(
 			fmt.Sprintf("Command requires at least %d argument(s) (no defaults provided for them):\n",
-				requiredNoDefaultCount))
+				requiredNoDefaultCount),
+		)
 
 		// List out which arguments are missing
 		missingIndex := 1
@@ -306,6 +317,33 @@ func findSubcommand(parent *cobra.Command, name string) *cobra.Command {
 	return nil
 }
 
+// warnStepsConflictOnRun arranges for the "custom steps ignored" collision warning to be
+// emitted only when the conflicting built-in command cmd is actually run, rather than at
+// registration time. It wraps cmd.PreRunE (preserving any existing PreRunE/PreRun and honoring
+// Cobra's precedence of PreRunE over PreRun) so the warning surfaces once, at the point the user
+// invokes the colliding command. See https://github.com/cloudposse/atmos/issues/2102.
+func warnStepsConflictOnRun(cmd *cobra.Command, customName string) {
+	commandPath := cmd.CommandPath()
+	prevPreRunE := cmd.PreRunE
+	prevPreRun := cmd.PreRun
+
+	cmd.PreRunE = func(c *cobra.Command, args []string) error {
+		ui.Warningf(
+			"Custom command %q defines steps that conflict with built-in command %q; "+
+				"built-in behavior preserved, custom steps ignored",
+			customName, commandPath,
+		)
+
+		switch {
+		case prevPreRunE != nil:
+			return prevPreRunE(c, args)
+		case prevPreRun != nil:
+			prevPreRun(c, args)
+		}
+		return nil
+	}
+}
+
 // createCustomCommand creates a new cobra command with flags from commandConfig,
 // validating flag names and types for conflicts with parent command flags.
 func createCustomCommand(
@@ -337,6 +375,12 @@ func createCustomCommand(
 	if err := registerCustomCommandFlags(commandConfig, customCommand, parentCommand); err != nil {
 		return nil, err
 	}
+
+	// Set ValidArgsFunction for first semantic-typed positional argument.
+	setSemanticArgCompletion(customCommand, commandConfig)
+
+	// Register completion for semantic-typed flags.
+	registerSemanticFlagCompletions(customCommand, commandConfig)
 
 	return customCommand, nil
 }
@@ -648,7 +692,7 @@ func executeCustomCommand(
 			AuthContext: &schema.AuthContext{},
 		}
 
-		credStore := credentials.NewCredentialStore()
+		credStore := credentials.NewCredentialStoreWithConfig(&atmosConfig.Auth)
 		validator := validation.NewValidator()
 		authManager, err = auth.NewAuthManager(&atmosConfig.Auth, credStore, validator, authStackInfo, atmosConfig.CliConfigPath)
 		if err != nil {
@@ -686,6 +730,16 @@ func executeCustomCommand(
 		log.Debug("Using working directory for custom command", "command", commandConfig.Name, "working_directory", workDir)
 	}
 
+	// Validate exec steps before executing anything: an exec step replaces
+	// the Atmos process, so it must be the final step and must not set
+	// supervisor-only fields (tty, interactive, retry, timeout, output).
+	if err := schema.ValidateExecTasks(commandConfig.Steps); err != nil {
+		errUtils.CheckErrorPrintAndExit(err, "", "https://atmos.tools/cli/configuration/commands#interactive-and-tty-steps")
+	}
+
+	// Initialize step executor once before loop - reused across steps to preserve outputs.
+	executor := stepPkg.NewStepExecutor()
+
 	// Execute custom command's steps
 	for i, step := range commandConfig.Steps {
 		// Prepare template data for arguments
@@ -709,6 +763,10 @@ func executeCustomCommand(
 			}
 		}
 
+		// Prompt for missing semantic-typed values if interactive mode is enabled.
+		// This enables interactive selection for custom commands with component/stack arguments.
+		promptForSemanticValues(cmd, commandConfig, argumentsData, flagsData, nil)
+
 		// Prepare template data
 		data := map[string]any{
 			"Arguments":    argumentsData,
@@ -716,10 +774,14 @@ func executeCustomCommand(
 			"TrailingArgs": trailingArgs,
 		}
 
-		// If the custom command defines 'component_config' section with 'component' and 'stack' attributes,
-		// process the component stack config and expose it in {{ .ComponentConfig.xxx.yyy.zzz }} Go template variables
-		if commandConfig.ComponentConfig.Component != "" && commandConfig.ComponentConfig.Stack != "" {
-			// Process Go templates in the command's 'component_config.component'
+		// If the custom command defines 'component' section with a custom component type,
+		// register the type, resolve component config, and expose it in {{ .Component.* }} Go template variables.
+		if commandConfig.Component != nil && commandConfig.Component.Type != "" {
+			processCustomComponentType(&atmosConfig, commandConfig, argumentsData, flagsData, data, authManager)
+		} else if commandConfig.ComponentConfig.Component != "" && commandConfig.ComponentConfig.Stack != "" {
+			// Legacy: If the custom command defines 'component_config' section with 'component' and 'stack' attributes,
+			// process the component stack config and expose it in {{ .ComponentConfig.xxx.yyy.zzz }} Go template variables.
+			// Process Go templates in the command's 'component_config.component'.
 			component, err := e.ProcessTmpl(&atmosConfig, fmt.Sprintf("component-config-component-%d", i), commandConfig.ComponentConfig.Component, data, false)
 			errUtils.CheckErrorPrintAndExit(err, "", "")
 			if component == "" || component == "<no value>" {
@@ -727,7 +789,7 @@ func executeCustomCommand(
 					commandConfig.ComponentConfig.Component, cfg.CliConfigFileName+u.DefaultStackConfigFileExtension), "", "")
 			}
 
-			// Process Go templates in the command's 'component_config.stack'
+			// Process Go templates in the command's 'component_config.stack'.
 			stack, err := e.ProcessTmpl(&atmosConfig, fmt.Sprintf("component-config-stack-%d", i), commandConfig.ComponentConfig.Stack, data, false)
 			errUtils.CheckErrorPrintAndExit(err, "", "")
 			if stack == "" || stack == "<no value>" {
@@ -735,7 +797,7 @@ func executeCustomCommand(
 					commandConfig.ComponentConfig.Stack, cfg.CliConfigFileName+u.DefaultStackConfigFileExtension), "", "")
 			}
 
-			// Get the config for the component in the stack
+			// Get the config for the component in the stack.
 			componentConfig, err := e.ExecuteDescribeComponent(&e.ExecuteDescribeComponentParams{
 				Component:            component,
 				Stack:                stack,
@@ -752,6 +814,30 @@ func executeCustomCommand(
 		// ENV var values support Go templates and have access to {{ .ComponentConfig.xxx.yyy.zzz }} Go template variables
 		// Start with current environment + global env from atmos.yaml to inherit PATH and other variables.
 		env := envpkg.MergeGlobalEnv(os.Environ(), atmosConfig.Env)
+
+		// Expose the absolute path of the running atmos binary so custom command steps can
+		// re-invoke the SAME binary (e.g. `"${ATMOS_CLI_PATH:-atmos}" describe ...`) instead of
+		// relying on a possibly-stale or absent `atmos` on PATH.
+		if execPath, execErr := os.Executable(); execErr == nil {
+			env = envpkg.UpdateEnvVar(env, "ATMOS_CLI_PATH", execPath)
+			// Also prepend the running binary's directory to PATH so custom command steps can
+			// invoke a bare `atmos` and resolve to the SAME binary — even when atmos isn't on
+			// the caller's PATH (e.g. `./build/atmos <cmd>`). Keeps example steps readable.
+			env = envpkg.EnsureBinaryInPath(env, execPath)
+		}
+
+		// Export the custom component's resolved `env` section into the step subprocess
+		// environment, mirroring the built-in terraform/helmfile/packer providers. Without this,
+		// a custom component's `env` section (including resolved `!secret` values) would only be
+		// available as `{{ .Component.env.* }}` template data and never reach the step subprocess.
+		// This runs before the command-level `env:` loop below so command-defined vars take
+		// precedence on key collisions.
+		if commandConfig.Component != nil && commandConfig.Component.Type != "" {
+			if componentConfig, ok := data["Component"].(map[string]any); ok {
+				env = appendComponentEnvVars(env, componentConfig)
+			}
+		}
+
 		for _, v := range commandConfig.Env {
 			key := strings.TrimSpace(v.Key)
 			value := v.Value
@@ -804,11 +890,72 @@ func executeCustomCommand(
 		commandToRun, err := e.ProcessTmpl(&atmosConfig, fmt.Sprintf("step-%d", i), step.Command, data, false)
 		errUtils.CheckErrorPrintAndExit(err, "", "")
 
-		// Execute the command step
-		commandName := fmt.Sprintf("%s-step-%d", commandConfig.Name, i)
+		// Determine step type - default to shell if not specified.
+		stepType := strings.TrimSpace(step.Type)
+		if stepType == "" {
+			stepType = "shell"
+		}
 
-		// Pass the prepared environment with custom variables to the subprocess
-		err = e.ExecuteShell(commandToRun, commandName, workDir, env, false)
+		// Execute the step based on type.
+		switch stepType {
+		case "shell":
+			// Execute shell command (backward compatible).
+			// Steps with tty/interactive attach the user's terminal so commands
+			// like `aws ssm start-session` get a real TTY and own Ctrl-C.
+			commandName := fmt.Sprintf("%s-step-%d", commandConfig.Name, i)
+			err = process.RunShellStep(context.Background(), &process.ShellSessionSpec{
+				Command:     commandToRun,
+				Name:        commandName,
+				Dir:         workDir,
+				Env:         env,
+				TTY:         step.Tty,
+				Interactive: step.Interactive,
+			}, func() error {
+				return e.ExecuteShell(commandToRun, commandName, workDir, env, false)
+			})
+		case schema.TaskTypeExec:
+			// Replace the Atmos process with the command (shell exec semantics).
+			err = process.ReplaceShellSession(&process.ExecSpec{
+				Command: commandToRun,
+				Name:    fmt.Sprintf("%s-step-%d", commandConfig.Name, i),
+				Dir:     workDir,
+				Env:     env,
+			})
+		case "atmos":
+			// Execute atmos command.
+			args := strings.Fields(commandToRun)
+			execPath, execErr := os.Executable()
+			if execErr != nil {
+				err = execErr
+				break
+			}
+			err = e.ExecuteShellCommand(atmosConfig, execPath, args, workDir, env, false, "")
+		default:
+			// Check if this is an extended step type (input, confirm, choose, etc.).
+			if stepPkg.IsExtendedStepType(stepType) {
+				// Convert Task to WorkflowStep for handler compatibility.
+				workflowStep := step.ToWorkflowStep()
+				// Update command with template-resolved value.
+				workflowStep.Command = commandToRun
+				// Propagate working directory to extended step if not already set.
+				if workflowStep.WorkingDirectory == "" {
+					workflowStep.WorkingDirectory = workDir
+				}
+
+				// Update environment variables for this step (reuse executor to preserve step outputs).
+				for _, envVar := range env {
+					parts := strings.SplitN(envVar, "=", 2)
+					if len(parts) == 2 {
+						executor.SetEnv(parts[0], parts[1])
+					}
+				}
+
+				// Execute the extended step.
+				_, err = executor.Execute(context.Background(), &workflowStep)
+			} else {
+				err = fmt.Errorf("%w: unsupported step type %q for custom command step %d", errUtils.ErrInvalidWorkflowStepType, stepType, i)
+			}
+		}
 		errUtils.CheckErrorPrintAndExit(err, "", "")
 	}
 }
@@ -826,6 +973,34 @@ func cloneCommand(orig *schema.Command) (*schema.Command, error) {
 	}
 
 	return &clone, nil
+}
+
+// findTypedValue finds the value of an argument or flag with the specified semantic type.
+// For arguments, it checks the Type field.
+// For flags, it checks the SemanticType field.
+// Returns empty string if no matching typed argument/flag is found.
+func findTypedValue(cmd *schema.Command, argumentsData map[string]string, flagsData map[string]any, semanticType string) string {
+	// Check arguments first.
+	for _, arg := range cmd.Arguments {
+		if arg.Type == semanticType {
+			if val, ok := argumentsData[arg.Name]; ok {
+				return val
+			}
+		}
+	}
+
+	// Check flags.
+	for _, flag := range cmd.Flags {
+		if flag.SemanticType == semanticType {
+			if val, ok := flagsData[flag.Name]; ok {
+				if strVal, ok := val.(string); ok {
+					return strVal
+				}
+			}
+		}
+	}
+
+	return ""
 }
 
 // validateAtmosConfig checks the Atmos configuration and returns an error instead of exiting.
@@ -1128,7 +1303,8 @@ func resolveComponentPath(info *schema.ConfigAndStacksInfo, commandName string) 
 		return handlePathResolutionError(err)
 	}
 
-	log.Debug("Resolved component from path",
+	log.Debug(
+		"Resolved component from path",
 		"original_path", info.ComponentFromArg,
 		"resolved_component", resolvedComponent,
 		"stack", info.Stack,
@@ -1207,11 +1383,11 @@ func verifyInsideGitRepoE() error {
 func showErrorExampleFromMarkdown(cmd *cobra.Command, arg string) {
 	commandPath := cmd.CommandPath()
 	suggestions := []string{}
-	details := fmt.Sprintf("The command `%s` is not valid usage\n", commandPath)
+	details := fmt.Sprintf("You invoked `%s` incorrectly.\n", commandPath)
 	if len(arg) > 0 {
 		details = fmt.Sprintf("Unknown command `%s` for `%s`\n", arg, commandPath)
 	} else if len(cmd.Commands()) != 0 && arg == "" {
-		details = fmt.Sprintf("The command `%s` requires a subcommand\n", commandPath)
+		details = fmt.Sprintf("`%s` requires a subcommand.\n", commandPath)
 	}
 	if len(arg) > 0 {
 		suggestions = cmd.SuggestionsFor(arg)
@@ -1236,11 +1412,44 @@ func showErrorExampleFromMarkdown(cmd *cobra.Command, arg string) {
 func showUsageExample(cmd *cobra.Command, details string) {
 	contentName := strings.ReplaceAll(strings.ReplaceAll(cmd.CommandPath(), " ", "_"), "-", "_")
 	suggestion := fmt.Sprintf("\n\nRun `%s --help` for usage", cmd.CommandPath())
+	details = appendUsageSection(details, cmd)
 	if exampleContent, ok := examples[contentName]; ok {
 		suggestion = exampleContent.Suggestion
 		details += "\n## Usage Examples:\n" + exampleContent.Content
 	}
 	errUtils.CheckErrorPrintAndExit(errors.New(details), "Incorrect Usage", suggestion)
+}
+
+// appendUsageSection appends a generated "Usage" Markdown section (a fenced
+// shell block containing the command's usage lines) to the details string.
+// When the command yields no usage lines, details is returned unchanged.
+func appendUsageSection(details string, cmd *cobra.Command) string {
+	usage := commandUsageLines(cmd)
+	if usage == "" {
+		return details
+	}
+
+	return details + "\n## Usage\n\n```shell\n" + usage + "\n```\n"
+}
+
+// commandUsageLines generates the usage line(s) for a cobra command: the
+// UseLine when the command is runnable, plus a "<path> [sub-command] [flags]"
+// line when it has available subcommands. Returns an empty string for a nil
+// command.
+func commandUsageLines(cmd *cobra.Command) string {
+	if cmd == nil {
+		return ""
+	}
+
+	lines := []string{}
+	if cmd.Runnable() {
+		lines = append(lines, cmd.UseLine())
+	}
+	if cmd.HasAvailableSubCommands() {
+		lines = append(lines, fmt.Sprintf("%s [sub-command] [flags]", cmd.CommandPath()))
+	}
+
+	return strings.Join(lines, "\n")
 }
 
 // StackFlagCompletion provides shell completion for the --stack flag.
@@ -1272,7 +1481,8 @@ func StackFlagCompletion(cmd *cobra.Command, args []string, toComplete string) (
 				)
 				if err != nil {
 					// If resolution fails, fall through to list all stacks (graceful degradation)
-					log.Trace("Could not resolve path for stack completion, listing all stacks",
+					log.Trace(
+						"Could not resolve path for stack completion, listing all stacks",
 						"path", component,
 						"error", err,
 					)
@@ -1283,7 +1493,8 @@ func StackFlagCompletion(cmd *cobra.Command, args []string, toComplete string) (
 					return output, cobra.ShellCompDirectiveNoFileComp
 				}
 				component = resolvedComponent
-				log.Trace("Resolved path for stack completion",
+				log.Trace(
+					"Resolved path for stack completion",
 					"original", args[0],
 					"resolved", component,
 				)
@@ -1486,4 +1697,109 @@ func Contains(slice []string, target string) bool {
 		}
 	}
 	return false
+}
+
+// processCustomComponentType registers a custom component type and resolves its configuration.
+//
+//nolint:revive // argument-limit: parameters are necessary for component processing
+func processCustomComponentType(
+	_ *schema.AtmosConfiguration,
+	commandConfig *schema.Command,
+	argumentsData map[string]string,
+	flagsData map[string]any,
+	data map[string]any,
+	authManager auth.AuthManager,
+) {
+	componentConfig, err := resolveCustomComponentConfig(
+		commandConfig,
+		argumentsData,
+		flagsData,
+		authManager,
+		custom.EnsureRegistered,
+		e.ExecuteDescribeComponent,
+	)
+	errUtils.CheckErrorPrintAndExit(err, "", "")
+	data["Component"] = componentConfig
+}
+
+// appendComponentEnvVars exports a custom component's resolved `env` section (from the
+// describe-component result) into the step subprocess environment, mirroring how the built-in
+// terraform/helmfile/packer/ansible providers export `ComponentEnvSection`. Without this, a custom
+// component's `env` section (including resolved `!secret` values) would only be available as
+// `{{ .Component.env.* }}` template data and never reach the step subprocess. Null and "null"
+// values are skipped (same convention as pkg/env.ConvertEnvVars). Existing entries are overwritten,
+// so callers can layer the command-level `env:` on top for higher precedence. Keys are applied in
+// sorted order for deterministic output.
+func appendComponentEnvVars(env []string, componentConfig map[string]any) []string {
+	defer perf.Track(nil, "cmd.appendComponentEnvVars")()
+
+	envSection, ok := componentConfig[cfg.EnvSectionName].(map[string]any)
+	if !ok {
+		return env
+	}
+
+	keys := make([]string, 0, len(envSection))
+	for k := range envSection {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+
+	for _, k := range keys {
+		v := envSection[k]
+		if v == nil || v == "null" {
+			continue
+		}
+		env = envpkg.UpdateEnvVar(env, k, fmt.Sprint(v))
+	}
+
+	return env
+}
+
+// resolveCustomComponentConfig finds the component/stack, registers the custom type,
+// and resolves the component config. It returns an error instead of exiting so it is
+// testable; the caller is responsible for handling the error (see processCustomComponentType).
+// The ensureRegisteredFn and describeFn dependencies are injected to enable unit testing.
+//
+//nolint:revive // argument-limit: parameters are necessary for component processing
+func resolveCustomComponentConfig(
+	commandConfig *schema.Command,
+	argumentsData map[string]string,
+	flagsData map[string]any,
+	authManager auth.AuthManager,
+	ensureRegisteredFn func(typeName, basePath string) error,
+	describeFn func(*e.ExecuteDescribeComponentParams) (map[string]any, error),
+) (map[string]any, error) {
+	defer perf.Track(nil, "cmd.resolveCustomComponentConfig")()
+
+	// Find component name from argument/flag with type: component.
+	componentName := findTypedValue(commandConfig, argumentsData, flagsData, semanticTypeComponent)
+	if componentName == "" {
+		return nil, errUtils.ErrComponentArgumentNotFound
+	}
+
+	// Find stack name from argument/flag with type: stack (or semantic_type: stack for flags).
+	stackName := findTypedValue(commandConfig, argumentsData, flagsData, semanticTypeStack)
+	if stackName == "" {
+		return nil, errUtils.ErrStackArgumentNotFound
+	}
+
+	// Register the custom component type if not already registered.
+	basePath := commandConfig.Component.BasePath
+	if basePath == "" {
+		basePath = fmt.Sprintf("components/%s", commandConfig.Component.Type)
+	}
+	if err := ensureRegisteredFn(commandConfig.Component.Type, basePath); err != nil {
+		return nil, err
+	}
+
+	// Get the config for the component in the stack.
+	return describeFn(&e.ExecuteDescribeComponentParams{
+		Component:            componentName,
+		Stack:                stackName,
+		ComponentType:        commandConfig.Component.Type,
+		ProcessTemplates:     true,
+		ProcessYamlFunctions: true,
+		Skip:                 nil,
+		AuthManager:          authManager,
+	})
 }

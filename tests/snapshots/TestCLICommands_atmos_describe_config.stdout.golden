@@ -9,7 +9,7 @@
       "init_run_reconfigure": true,
       "auto_generate_backend_file": false,
       "auto_generate_files": false,
-      "command": "",
+      "command": "tofu",
       "shell": {
         "prompt": ""
       },
@@ -70,6 +70,7 @@
     },
     "inherit": {}
   },
+  "imports": {},
   "workflows": {
     "base_path": "",
     "list": {
@@ -162,6 +163,7 @@
     "InjectGithubToken": true,
     "GithubToken": "",
     "AtmosGithubToken": "",
+    "AtmosProGithubToken": "",
     "GithubUsername": "",
     "InjectBitbucketToken": true,
     "BitbucketToken": "",
@@ -173,7 +175,8 @@
     "pro": {
       "base_url": "https://atmos-pro.com",
       "endpoint": "api/v1",
-      "github_oidc": {}
+      "github_oidc": {},
+      "git_sts": {}
     },
     "telemetry": {
       "enabled": true,
@@ -186,8 +189,10 @@
     }
   },
   "describe": {
-    "settings": {}
+    "settings": {},
+    "affected": {}
   },
+  "secrets": {},
   "vendor": {
     "base_path": "",
     "list": {
@@ -253,6 +258,9 @@
     "use_tool_versions": false,
     "use_lock_file": false
   },
+  "git": {
+    "list": {}
+  },
   "profiles": {},
   "metadata": {},
   "list": {
@@ -276,7 +284,8 @@
       "statuses": {}
     },
     "comments": {},
-    "templates": {}
+    "templates": {},
+    "cache": {}
   },
   "ai": {
     "sessions": {

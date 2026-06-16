@@ -130,7 +130,7 @@ func TestRetrieveCredentials(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			creds, err := retrieveCredentials(tt.whoami)
+			creds, err := retrieveCredentials(tt.whoami, nil)
 
 			if tt.expectedError != nil {
 				assert.Error(t, err)
@@ -538,7 +538,7 @@ func TestPrintConsoleHelpers(t *testing.T) {
 // WhoamiInfo (no Credentials, no CredentialsRef) errors out cleanly.
 func TestRetrieveCredentials_NoCredentialsAvailable(t *testing.T) {
 	whoami := &authTypes.WhoamiInfo{Identity: "id"}
-	creds, err := retrieveCredentials(whoami)
+	creds, err := retrieveCredentials(whoami, nil)
 	require.Error(t, err)
 	assert.Nil(t, creds)
 	assert.ErrorIs(t, err, errUtils.ErrAuthConsole)
@@ -557,7 +557,7 @@ func TestRetrieveCredentials_InlineCredentials(t *testing.T) {
 		Credentials: mockCreds,
 	}
 
-	got, err := retrieveCredentials(whoami)
+	got, err := retrieveCredentials(whoami, nil)
 	require.NoError(t, err)
 	assert.Same(t, mockCreds, got,
 		"inline Credentials must be returned verbatim without store lookup")

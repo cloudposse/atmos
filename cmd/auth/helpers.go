@@ -11,9 +11,7 @@ import (
 	"github.com/spf13/viper"
 
 	"github.com/cloudposse/atmos/pkg/auth"
-	"github.com/cloudposse/atmos/pkg/auth/credentials"
 	authTypes "github.com/cloudposse/atmos/pkg/auth/types"
-	"github.com/cloudposse/atmos/pkg/auth/validation"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -36,18 +34,12 @@ func BuildConfigAndStacksInfo(cmd *cobra.Command, v *viper.Viper) schema.ConfigA
 }
 
 // CreateAuthManager creates a new auth manager with all required dependencies.
-// Exported for use by command packages (e.g., terraform package).
+// Exported for use by command packages (e.g., terraform package). Delegates to the
+// package-level auth.NewDefaultManager so the construction logic lives in one place.
 func CreateAuthManager(authConfig *schema.AuthConfig, cliConfigPath string) (auth.AuthManager, error) {
 	defer perf.Track(nil, "auth.CreateAuthManager")()
 
-	authStackInfo := &schema.ConfigAndStacksInfo{
-		AuthContext: &schema.AuthContext{},
-	}
-
-	credStore := credentials.NewCredentialStore()
-	validator := validation.NewValidator()
-
-	return auth.NewAuthManager(authConfig, credStore, validator, authStackInfo, cliConfigPath)
+	return auth.NewDefaultManager(authConfig, cliConfigPath)
 }
 
 // formatDuration formats a duration into a human-readable string.

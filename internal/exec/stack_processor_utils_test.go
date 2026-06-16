@@ -2,7 +2,10 @@ package exec
 
 import (
 	"errors"
+	"fmt"
+	"net/url"
 	"os"
+	osexec "os/exec"
 	"path/filepath"
 	"sort"
 	"testing"
@@ -128,6 +131,7 @@ func TestProcessBaseComponentConfig(t *testing.T) {
 			baseComponents := []string{}
 
 			err := ProcessBaseComponentConfig(
+				atmosConfig,
 				atmosConfig,
 				tt.baseComponentConfig,
 				tt.allComponentsMap,
@@ -275,6 +279,7 @@ func TestProcessBaseComponentConfig_CycleDetection(t *testing.T) {
 
 			err := ProcessBaseComponentConfig(
 				atmosConfig,
+				atmosConfig,
 				baseComponentConfig,
 				tt.allComponentsMap,
 				tt.component,
@@ -342,6 +347,7 @@ func TestProcessBaseComponentConfig_AbstractComponentSkip(t *testing.T) {
 	// The abstract component's top-level "component" key is skipped.
 	err := ProcessBaseComponentConfig(
 		atmosConfig,
+		atmosConfig,
 		baseComponentConfig,
 		allComponentsMap,
 		"iam-delegated-roles",
@@ -385,6 +391,7 @@ func TestProcessBaseComponentConfig_DeepChainNoFalsePositive(t *testing.T) {
 	baseComponents := []string{}
 
 	err := ProcessBaseComponentConfig(
+		atmosConfig,
 		atmosConfig,
 		baseComponentConfig,
 		allComponentsMap,
@@ -442,6 +449,7 @@ func TestProcessBaseComponentConfig_DiamondInheritance(t *testing.T) {
 	baseComponents := []string{}
 	err := ProcessBaseComponentConfig(
 		atmosConfig,
+		atmosConfig,
 		baseComponentConfig,
 		allComponentsMap,
 		"child",
@@ -463,6 +471,7 @@ func TestProcessBaseComponentConfig_DiamondInheritance(t *testing.T) {
 	}
 	baseComponents2 := []string{}
 	err = ProcessBaseComponentConfig(
+		atmosConfig,
 		atmosConfig,
 		baseComponentConfig2,
 		allComponentsMap,
@@ -550,6 +559,7 @@ func TestProcessBaseComponentConfig_MultipleAbstractComponentsCycle(t *testing.T
 	baseComponents1 := []string{}
 	err := ProcessBaseComponentConfig(
 		atmosConfig,
+		atmosConfig,
 		baseComponentConfig1,
 		allComponentsMap,
 		"iam-delegated-roles",
@@ -570,6 +580,7 @@ func TestProcessBaseComponentConfig_MultipleAbstractComponentsCycle(t *testing.T
 	}
 	baseComponents2 := []string{}
 	err = ProcessBaseComponentConfig(
+		atmosConfig,
 		atmosConfig,
 		baseComponentConfig2,
 		allComponentsMap,
@@ -630,6 +641,7 @@ func TestProcessBaseComponentConfig_AbstractWithInheritsCycle(t *testing.T) {
 	// 1. Return a cycle detection error, OR
 	// 2. Complete successfully by skipping the abstract component chain.
 	err := ProcessBaseComponentConfig(
+		atmosConfig,
 		atmosConfig,
 		baseComponentConfig,
 		allComponentsMap,
@@ -703,6 +715,7 @@ func TestProcessBaseComponentConfig_RealComponentSelfReferenceViaAbstract(t *tes
 	// This MUST NOT stack overflow.
 	err := ProcessBaseComponentConfig(
 		atmosConfig,
+		atmosConfig,
 		baseComponentConfig,
 		allComponentsMap,
 		"comp-A",
@@ -775,6 +788,7 @@ func TestProcessBaseComponentConfig_DeferDeleteCycleReentry(t *testing.T) {
 
 	// This MUST NOT stack overflow. The cycle detection should catch the re-entry.
 	err := ProcessBaseComponentConfig(
+		atmosConfig,
 		atmosConfig,
 		baseComponentConfig,
 		allComponentsMap,
@@ -862,6 +876,7 @@ func TestProcessBaseComponentConfig_AbstractMetadataComponentInherited(t *testin
 	// Process: eks/service/app1 inherits from eks/service/defaults.
 	err := ProcessBaseComponentConfig(
 		atmosConfig,
+		atmosConfig,
 		baseComponentConfig,
 		allComponentsMap,
 		"eks/service/app1",
@@ -946,6 +961,7 @@ func TestProcessBaseComponentConfig_AbstractMetadataComponentNotInherited_WhenDi
 	baseComponents := []string{}
 
 	err := ProcessBaseComponentConfig(
+		atmosConfig,
 		atmosConfig,
 		baseComponentConfig,
 		allComponentsMap,
@@ -3025,6 +3041,172 @@ func TestProcessImportSection_NilElement(t *testing.T) {
 	assert.ErrorIs(t, err, errUtils.ErrInvalidImport)
 }
 
+func TestProcessImportSection_NestedImports(t *testing.T) {
+	manifestPath := filepath.Join("test", "path.yaml")
+
+	t.Run("decodes nested imports", func(t *testing.T) {
+		stackMap := map[string]any{
+			"import": []any{
+				map[string]any{
+					"path":           "catalog/base",
+					"nested_imports": "remote",
+				},
+			},
+		}
+
+		imports, err := ProcessImportSection(stackMap, manifestPath)
+		require.NoError(t, err)
+		require.Len(t, imports, 1)
+		assert.Equal(t, schema.StackImportNestedImportsRemote, imports[0].NestedImports)
+	})
+
+	t.Run("normalizes nested imports", func(t *testing.T) {
+		stackMap := map[string]any{
+			"import": []any{
+				map[string]any{
+					"path":           "catalog/base",
+					"nested_imports": " REMOTE ",
+				},
+				map[string]any{
+					"path":           "catalog/local",
+					"nested_imports": " Local ",
+				},
+				map[string]any{
+					"path": "catalog/default",
+				},
+			},
+		}
+
+		imports, err := ProcessImportSection(stackMap, manifestPath)
+		require.NoError(t, err)
+		require.Len(t, imports, 3)
+		assert.Equal(t, schema.StackImportNestedImportsRemote, imports[0].NestedImports)
+		assert.Equal(t, schema.StackImportNestedImportsLocal, imports[1].NestedImports)
+		assert.Empty(t, imports[2].NestedImports)
+		assert.Equal(t, schema.StackImportNestedImportsLocal, normalizeNestedImports(imports[2].NestedImports))
+	})
+
+	t.Run("rejects invalid nested imports", func(t *testing.T) {
+		stackMap := map[string]any{
+			"import": []any{
+				map[string]any{
+					"path":           "catalog/base",
+					"nested_imports": "workspace",
+				},
+			},
+		}
+
+		_, err := ProcessImportSection(stackMap, manifestPath)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, errUtils.ErrInvalidImport)
+	})
+}
+
+func TestProcessYAMLConfigFileWithContext_InheritedNestedRemoteBasePath(t *testing.T) {
+	repoDir := initStackProcessorGitRepo(t, map[string]string{
+		"stacks/orgs/acme/_defaults.yaml": `
+import:
+  - catalog/base
+
+vars:
+  from_remote_parent: true
+`,
+		"stacks/catalog/base.yaml": `
+vars:
+  from_remote_child: true
+`,
+	})
+
+	tempDir := t.TempDir()
+	localStacksDir := filepath.Join(tempDir, "stacks", "deploy")
+	require.NoError(t, os.MkdirAll(localStacksDir, 0o755))
+
+	repoURI := stackProcessorGitFileURI(repoDir)
+	localStackPath := filepath.Join(localStacksDir, "test.yaml")
+	require.NoError(t, os.WriteFile(localStackPath, []byte(fmt.Sprintf(`
+import:
+  - path: "git::%s//stacks/orgs/acme/_defaults.yaml?ref=main"
+    nested_imports: remote
+
+vars:
+  from_local_stack: true
+`, repoURI)), 0o644))
+
+	atmosConfig := &schema.AtmosConfiguration{
+		Stacks: schema.Stacks{BasePath: "stacks"},
+	}
+
+	deepMergedConfig, importsConfig, stackConfigMap, terraformInline, terraformImports, helmfileInline, helmfileImports, mergeContext, err := ProcessYAMLConfigFileWithContext(
+		atmosConfig,
+		filepath.Join(tempDir, "stacks"),
+		localStackPath,
+		map[string]map[string]any{},
+		map[string]any{},
+		false,
+		false,
+		false,
+		false,
+		map[string]any{},
+		map[string]any{},
+		map[string]any{},
+		map[string]any{},
+		"",
+		nil,
+	)
+	require.NoError(t, err)
+	assert.NotNil(t, stackConfigMap)
+	assert.NotNil(t, terraformInline)
+	assert.NotNil(t, terraformImports)
+	assert.NotNil(t, helmfileInline)
+	assert.NotNil(t, helmfileImports)
+	assert.NotNil(t, mergeContext)
+
+	vars, ok := deepMergedConfig["vars"].(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, true, vars["from_remote_parent"])
+	assert.Equal(t, true, vars["from_remote_child"])
+	assert.Equal(t, true, vars["from_local_stack"])
+
+	assert.Contains(t, importsConfig, fmt.Sprintf("git::%s//stacks/orgs/acme/_defaults.yaml?ref=main#stacks/orgs/acme/_defaults.yaml", repoURI))
+	assert.Contains(t, importsConfig, "catalog/base")
+}
+
+func initStackProcessorGitRepo(t *testing.T, files map[string]string) string {
+	t.Helper()
+
+	repoDir := t.TempDir()
+	runStackProcessorGit(t, repoDir, "init")
+	runStackProcessorGit(t, repoDir, "checkout", "-b", "main")
+	runStackProcessorGit(t, repoDir, "config", "user.email", "test@example.com")
+	runStackProcessorGit(t, repoDir, "config", "user.name", "Test User")
+
+	for name, content := range files {
+		path := filepath.Join(repoDir, filepath.FromSlash(name))
+		require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
+		require.NoError(t, os.WriteFile(path, []byte(content), 0o644))
+	}
+
+	runStackProcessorGit(t, repoDir, "add", ".")
+	runStackProcessorGit(t, repoDir, "commit", "-m", "initial")
+	return repoDir
+}
+
+func runStackProcessorGit(t *testing.T, dir string, args ...string) {
+	t.Helper()
+	cmd := osexec.Command("git", args...)
+	cmd.Dir = dir
+	out, err := cmd.CombinedOutput()
+	require.NoError(t, err, "git %v failed: %s", args, string(out))
+}
+
+func stackProcessorGitFileURI(path string) string {
+	cleaned := filepath.ToSlash(filepath.Clean(path))
+	if filepath.VolumeName(path) != "" && cleaned != "" && cleaned[0] != '/' {
+		cleaned = "/" + cleaned
+	}
+	return (&url.URL{Scheme: "file", Path: cleaned}).String()
+}
+
 // TestProcessTemplatesInSection tests the processTemplatesInSection helper function.
 func TestProcessTemplatesInSection(t *testing.T) {
 	atmosConfig := &schema.AtmosConfiguration{}
@@ -3967,4 +4149,170 @@ locals:
 	require.NoError(t, err)
 	require.NotNil(t, result)
 	assert.Equal(t, "vpc-shared-01", result.locals["vpc_id"])
+}
+
+// templatedImportContextConfig returns an AtmosConfiguration with Go templating
+// enabled, used by the templated-import-path tests below.
+func templatedImportContextConfig() *schema.AtmosConfiguration {
+	return &schema.AtmosConfiguration{
+		Templates: schema.Templates{
+			Settings: schema.TemplatesSettings{
+				Enabled:  true,
+				Sprig:    schema.TemplatesSettingsSprig{Enabled: true},
+				Gomplate: schema.TemplatesSettingsGomplate{Enabled: true},
+			},
+		},
+	}
+}
+
+// processImportTemplateFixture runs ProcessYAMLConfigFile over a file in the
+// import-template-context scenario and returns the deep-merged config + error.
+func processImportTemplateFixture(t *testing.T, atmosConfig *schema.AtmosConfiguration, manifest string) (map[string]any, error) {
+	t.Helper()
+	stacksBasePath := filepath.Join("..", "..", "tests", "fixtures", "scenarios", "import-template-context", "stacks")
+	filePath := filepath.Join(stacksBasePath, "deploy", manifest)
+
+	deepMerged, _, _, _, _, _, _, err := ProcessYAMLConfigFile( //nolint:dogsled
+		atmosConfig,
+		stacksBasePath,
+		filePath,
+		map[string]map[string]any{},
+		nil,
+		false,
+		false,
+		false,
+		false,
+		nil,
+		nil,
+		nil,
+		nil,
+		"",
+	)
+	return deepMerged, err
+}
+
+// serviceCatalogVersion extracts components.terraform.service.vars.catalog_version
+// from a deep-merged stack config, or "" if absent.
+func serviceCatalogVersion(t *testing.T, deepMerged map[string]any) string {
+	t.Helper()
+	components, ok := deepMerged[cfg.ComponentsSectionName].(map[string]any)
+	if !ok {
+		return ""
+	}
+	terraform, ok := components[cfg.TerraformSectionName].(map[string]any)
+	if !ok {
+		return ""
+	}
+	service, ok := terraform["service"].(map[string]any)
+	if !ok {
+		return ""
+	}
+	vars, ok := service[cfg.VarsSectionName].(map[string]any)
+	if !ok {
+		return ""
+	}
+	if v, ok := vars["catalog_version"].(string); ok {
+		return v
+	}
+	return ""
+}
+
+// TestProcessYAMLConfigFile_TemplatedImportPath_FromEarlierImport verifies that a
+// later import's path can reference `settings` defined by an earlier import in the
+// same manifest (the core feature: e.g. pinning a remote import's Git ref).
+func TestProcessYAMLConfigFile_TemplatedImportPath_FromEarlierImport(t *testing.T) {
+	deepMerged, err := processImportTemplateFixture(t, templatedImportContextConfig(), "dev.yaml")
+	require.NoError(t, err)
+	// `_defaults` sets settings.context.catalog_ref=v1, so the templated import
+	// must resolve to the v1 catalog (not v2).
+	assert.Equal(t, "v1", serviceCatalogVersion(t, deepMerged))
+}
+
+// TestProcessYAMLConfigFile_TemplatedImportPath_ExplicitContext verifies that an
+// import's own `context` feeds its templated path.
+func TestProcessYAMLConfigFile_TemplatedImportPath_ExplicitContext(t *testing.T) {
+	deepMerged, err := processImportTemplateFixture(t, templatedImportContextConfig(), "explicit-context.yaml")
+	require.NoError(t, err)
+	assert.Equal(t, "v2", serviceCatalogVersion(t, deepMerged))
+}
+
+// TestProcessYAMLConfigFile_TemplatedImportPath_MissingValueErrors verifies a hard
+// error (ErrImportPathTemplate) when the referenced value is missing and
+// ignore_missing_template_values is off.
+func TestProcessYAMLConfigFile_TemplatedImportPath_MissingValueErrors(t *testing.T) {
+	_, err := processImportTemplateFixture(t, templatedImportContextConfig(), "missing-var.yaml")
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrImportPathTemplate)
+}
+
+// TestProcessYAMLConfigFile_TemplatedImportPath_IgnoreMissing verifies that
+// ignore_missing_template_values prevents the hard template error (the unresolved
+// import is then tolerated via skip_if_missing).
+func TestProcessYAMLConfigFile_TemplatedImportPath_IgnoreMissing(t *testing.T) {
+	deepMerged, err := processImportTemplateFixture(t, templatedImportContextConfig(), "ignore-missing.yaml")
+	require.NoError(t, err)
+	// The import never resolved, so the service component is absent.
+	assert.Empty(t, serviceCatalogVersion(t, deepMerged))
+}
+
+// TestProcessYAMLConfigFile_TemplatedImportPath_SkipTemplatesProcessing verifies that
+// skip_templates_processing leaves the `{{ ... }}` literal (so the import does not
+// resolve and is tolerated as a templated import).
+func TestProcessYAMLConfigFile_TemplatedImportPath_SkipTemplatesProcessing(t *testing.T) {
+	deepMerged, err := processImportTemplateFixture(t, templatedImportContextConfig(), "skip-templates.yaml")
+	require.NoError(t, err)
+	assert.Empty(t, serviceCatalogVersion(t, deepMerged))
+}
+
+// TestProcessYAMLConfigFile_TemplatedImportPath_TemplatesDisabled verifies that when
+// templating is disabled globally, a `{{ ... }}` import path is left literal (and
+// thus tolerated as a templated import that doesn't resolve), rather than rendered.
+func TestProcessYAMLConfigFile_TemplatedImportPath_TemplatesDisabled(t *testing.T) {
+	// Templates disabled (zero-value Templates.Settings.Enabled == false).
+	deepMerged, err := processImportTemplateFixture(t, &schema.AtmosConfiguration{}, "dev.yaml")
+	require.NoError(t, err)
+	// The templated import was not rendered, so it could not resolve to v1.
+	assert.Empty(t, serviceCatalogVersion(t, deepMerged))
+}
+
+// TestRenderImportPath_NoTemplateIsNoOp verifies that paths without `{{` and imports
+// with skip_templates_processing are returned unchanged.
+func TestRenderImportPath_NoTemplateIsNoOp(t *testing.T) {
+	atmosConfig := templatedImportContextConfig()
+
+	out, err := renderImportPath(atmosConfig, "file.yaml", "catalog/plain/service", map[string]any{}, schema.StackImport{})
+	require.NoError(t, err)
+	assert.Equal(t, "catalog/plain/service", out)
+
+	literal := "catalog/{{ .x }}/service"
+	out, err = renderImportPath(atmosConfig, "file.yaml", literal, map[string]any{}, schema.StackImport{SkipTemplatesProcessing: true})
+	require.NoError(t, err)
+	assert.Equal(t, literal, out)
+}
+
+// TestExtractImportPathSections verifies only settings/vars/env are extracted.
+func TestExtractImportPathSections(t *testing.T) {
+	in := map[string]any{
+		cfg.SettingsSectionName:   map[string]any{"context": map[string]any{"ref": "v1"}},
+		cfg.VarsSectionName:       map[string]any{"region": "us-east-1"},
+		cfg.EnvSectionName:        map[string]any{"FOO": "bar"},
+		cfg.ComponentsSectionName: map[string]any{"terraform": map[string]any{}},
+		"import":                  []any{"x"},
+	}
+	out := extractImportPathSections(in)
+	assert.Len(t, out, 3)
+	assert.Contains(t, out, cfg.SettingsSectionName)
+	assert.Contains(t, out, cfg.VarsSectionName)
+	assert.Contains(t, out, cfg.EnvSectionName)
+	assert.NotContains(t, out, cfg.ComponentsSectionName)
+	assert.NotContains(t, out, "import")
+}
+
+// TestProcessYAMLConfigFile_TemplatedImportPath_NestedPropagation verifies the
+// real-world pattern: a variable set by a sibling `_defaults` import propagates
+// down so a later-imported "prod catalog" file can template its own import path.
+func TestProcessYAMLConfigFile_TemplatedImportPath_NestedPropagation(t *testing.T) {
+	deepMerged, err := processImportTemplateFixture(t, templatedImportContextConfig(), "nested.yaml")
+	require.NoError(t, err)
+	assert.Equal(t, "v1", serviceCatalogVersion(t, deepMerged))
 }

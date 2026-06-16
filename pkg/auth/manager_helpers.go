@@ -26,7 +26,7 @@ func autoDetectDefaultIdentity(authConfig *schema.AuthConfig, cliConfigPath stri
 	tempStackInfo := &schema.ConfigAndStacksInfo{
 		AuthContext: &schema.AuthContext{},
 	}
-	credStore := credentials.NewCredentialStore()
+	credStore := credentials.NewCredentialStoreWithConfig(authConfig)
 	validator := validation.NewValidator()
 	tempManager, err := NewAuthManager(authConfig, credStore, validator, tempStackInfo, cliConfigPath)
 	if err != nil {
@@ -110,7 +110,7 @@ func createAuthManagerInstance(authConfig *schema.AuthConfig, cliConfigPath stri
 		AuthContext: &schema.AuthContext{},
 	}
 
-	credStore := credentials.NewCredentialStore()
+	credStore := credentials.NewCredentialStoreWithConfig(authConfig)
 	validator := validation.NewValidator()
 	authManager, err := NewAuthManager(authConfig, credStore, validator, authStackInfo, cliConfigPath)
 	if err != nil {

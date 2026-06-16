@@ -28,6 +28,7 @@ const (
 type AzureKeyVaultClient interface {
 	SetSecret(ctx context.Context, name string, parameters azsecrets.SetSecretParameters, options *azsecrets.SetSecretOptions) (azsecrets.SetSecretResponse, error)
 	GetSecret(ctx context.Context, name string, version string, options *azsecrets.GetSecretOptions) (azsecrets.GetSecretResponse, error)
+	DeleteSecret(ctx context.Context, name string, options *azsecrets.DeleteSecretOptions) (azsecrets.DeleteSecretResponse, error)
 }
 
 // AzureKeyVaultStore is an implementation of the Store interface for Azure Key Vault.
@@ -50,10 +51,13 @@ type AzureKeyVaultStoreOptions struct {
 	StackDelimiter *string `mapstructure:"stack_delimiter"`
 }
 
-// Ensure AzureKeyVaultStore implements the store.Store and IdentityAwareStore interfaces.
+// Ensure AzureKeyVaultStore implements the store.Store, IdentityAwareStore, DeletableStore,
+// and StatusStore interfaces.
 var (
 	_ Store              = (*AzureKeyVaultStore)(nil)
 	_ IdentityAwareStore = (*AzureKeyVaultStore)(nil)
+	_ DeletableStore     = (*AzureKeyVaultStore)(nil)
+	_ StatusStore        = (*AzureKeyVaultStore)(nil)
 )
 
 // NewAzureKeyVaultStore creates a new Azure Key Vault store.
@@ -94,8 +98,11 @@ func NewAzureKeyVaultStore(options AzureKeyVaultStoreOptions, identityName strin
 // If identityName is non-empty, it overrides the store's identity. Otherwise, the existing identity is preserved.
 func (s *AzureKeyVaultStore) SetAuthContext(resolver AuthContextResolver, identityName string) {
 	s.authResolver = resolver
-	if identityName != "" {
+	if identityName != "" && s.identityName != identityName {
 		s.identityName = identityName
+		s.client = nil
+		s.initOnce = sync.Once{}
+		s.initErr = nil
 	}
 }
 
@@ -288,6 +295,57 @@ func (s *AzureKeyVaultStore) Get(stack string, component string, key string) (in
 		return *resp.Value, nil
 	}
 	return result, nil
+}
+
+// Delete removes a secret from Azure Key Vault for the given stack, component, and key.
+func (s *AzureKeyVaultStore) Delete(stack string, component string, key string) error {
+	if stack == "" {
+		return ErrEmptyStack
+	}
+	if component == "" {
+		return ErrEmptyComponent
+	}
+	if key == "" {
+		return ErrEmptyKey
+	}
+
+	if err := s.ensureClient(); err != nil {
+		return err
+	}
+
+	secretName, err := s.getKey(stack, component, key)
+	if err != nil {
+		return fmt.Errorf(errWrapFormat, ErrGetKey, err)
+	}
+
+	_, err = s.client.DeleteSecret(context.Background(), secretName, nil)
+	if err != nil {
+		var respErr *azcore.ResponseError
+		if errors.As(err, &respErr) {
+			switch respErr.StatusCode {
+			case statusCodeNotFound:
+				return fmt.Errorf(errWrapFormatWithID, ErrResourceNotFound, secretName, err)
+			case statusCodeForbidden:
+				return fmt.Errorf(errWrapFormatWithID, ErrPermissionDenied, fmt.Sprintf("secret %s", secretName), err)
+			}
+		}
+		return fmt.Errorf(errWrapFormatWithID, ErrDeleteSecret, secretName, err)
+	}
+
+	return nil
+}
+
+// Has reports whether a secret exists for the given stack, component, and key. It performs a
+// Get and maps a not-found result to false; any other error is propagated.
+func (s *AzureKeyVaultStore) Has(stack string, component string, key string) (bool, error) {
+	_, err := s.Get(stack, component, key)
+	if err != nil {
+		if errors.Is(err, ErrResourceNotFound) {
+			return false, nil
+		}
+		return false, err
+	}
+	return true, nil
 }
 
 func (s *AzureKeyVaultStore) GetKey(key string) (interface{}, error) {

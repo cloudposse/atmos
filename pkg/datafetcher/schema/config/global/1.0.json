@@ -140,6 +140,17 @@
                   "skip_if_missing": {
                     "type": "boolean"
                   },
+                  "nested_imports": {
+                    "type": "string",
+                    "enum": [
+                      "local",
+                      "remote"
+                    ]
+                  },
+                  "ttl": {
+                    "type": "string",
+                    "description": "Cache duration for the cloned source repo of a remote (git) import. When set, the clone is reused across Atmos invocations until it expires (e.g. with a warm CI cache). Within a single invocation a source repo is cloned at most once regardless of TTL. Examples: '0s', '5m', '1h', '7d', 'daily'."
+                  },
                   "context": {
                     "type": "object",
                     "additionalProperties": true
@@ -1125,6 +1136,14 @@
                       },
                       "type": {
                         "type": "string"
+                      },
+                      "interactive": {
+                        "type": "boolean",
+                        "description": "Attach host stdin to the step and let the step handle Ctrl-C (like docker -i)"
+                      },
+                      "tty": {
+                        "type": "boolean",
+                        "description": "Allocate a pseudo-terminal for the step (like docker -t); combine with interactive for full terminal sessions"
                       }
                     },
                     "required": [

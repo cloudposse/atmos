@@ -1,0 +1,83 @@
+---
+title: atmos git diff
+sidebar_label: diff
+sidebar_class_name: command
+id: diff
+description: Show changes between the working tree and HEAD in a managed Git repository.
+---
+import Screengrab from '@site/src/components/Screengrab'
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Show uncommitted changes in a repository configured under [`git.repositories`](/cli/configuration/git), or in any local path. This is the read-before-write step of GitOps publishing — the GitOps analog of `terraform plan`: see exactly what *would* be committed to a deployment repository without committing anything.
+</Intro>
+
+<Screengrab title="atmos git diff --help" slug="atmos-git-diff--help" />
+
+## Usage
+
+```shell
+atmos git diff <name-or-path> [flags]
+```
+
+With a configured deployment repository:
+
+```yaml
+git:
+  repositories:
+    flux-deploy:
+      uri: https://github.com/acme/flux-deploy.git
+```
+
+```shell
+atmos git diff flux-deploy --path=clusters/prod
+```
+
+The unified diff is written to stdout (pipeable). Untracked files are reported separately on stderr so they don't corrupt piped diff output.
+
+## Examples
+
+```shell
+# Show all uncommitted changes in a managed repository
+atmos git diff flux-deploy
+
+# Scope the diff to specific repo-relative paths
+atmos git diff flux-deploy --path=clusters/prod --path=clusters/staging
+
+# Diff a repository at a local path
+atmos git diff ./deployments
+
+# Pull-request preview in CI: render manifests, then show what would change
+atmos git diff flux-deploy --path=clusters/prod > preview.diff
+```
+
+## Arguments
+
+<dl>
+    <dt>`name-or-path` <em>(required)</em></dt>
+    <dd>
+        A repository name configured under `git.repositories`, or a filesystem path to an existing Git working tree. URIs are not accepted — diff operates on a local workdir.
+    </dd>
+</dl>
+
+## Flags
+
+<dl>
+    <dt>`--path` <em>(optional)</em></dt>
+    <dd>
+        Limit the diff to these repo-relative paths. Repeatable (`--path=a --path=b`) or comma-separated (`--path=a,b`).
+        Environment variable: `ATMOS_GIT_DIFF_PATH`
+    </dd>
+
+    <dt>`--identity` <em>(optional)</em></dt>
+    <dd>
+        Atmos Auth identity to use for this operation (global flag). Overrides the repository's `auth.identity`.
+        Environment variable: `ATMOS_IDENTITY`
+    </dd>
+</dl>
+
+## Related
+
+- [`atmos git commit`](/cli/commands/git/commit) — commit the changes shown by diff
+- [`atmos git status`](/cli/commands/git/status) — summary view of the working tree
+- [Git Configuration](/cli/configuration/git) — repository fields and defaults

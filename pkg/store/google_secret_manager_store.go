@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"sync"
@@ -28,6 +29,7 @@ type GSMClient interface {
 	CreateSecret(ctx context.Context, req *secretmanagerpb.CreateSecretRequest, opts ...gax.CallOption) (*secretmanagerpb.Secret, error)
 	AddSecretVersion(ctx context.Context, req *secretmanagerpb.AddSecretVersionRequest, opts ...gax.CallOption) (*secretmanagerpb.SecretVersion, error)
 	AccessSecretVersion(ctx context.Context, req *secretmanagerpb.AccessSecretVersionRequest, opts ...gax.CallOption) (*secretmanagerpb.AccessSecretVersionResponse, error)
+	DeleteSecret(ctx context.Context, req *secretmanagerpb.DeleteSecretRequest, opts ...gax.CallOption) error
 	Close() error
 }
 
@@ -56,10 +58,13 @@ type GSMStoreOptions struct {
 	Locations      *[]string `mapstructure:"locations"`   // Optional replication locations
 }
 
-// Verify that GSMStore implements the Store and IdentityAwareStore interfaces.
+// Verify that GSMStore implements the Store, IdentityAwareStore, DeletableStore, and
+// StatusStore interfaces.
 var (
 	_ Store              = (*GSMStore)(nil)
 	_ IdentityAwareStore = (*GSMStore)(nil)
+	_ DeletableStore     = (*GSMStore)(nil)
+	_ StatusStore        = (*GSMStore)(nil)
 )
 
 // NewGSMStore initializes a new Google Secret Manager Store.
@@ -97,8 +102,16 @@ func NewGSMStore(options GSMStoreOptions, identityName string) (Store, error) {
 // If identityName is non-empty, it overrides the store's identity. Otherwise, the existing identity is preserved.
 func (s *GSMStore) SetAuthContext(resolver AuthContextResolver, identityName string) {
 	s.authResolver = resolver
-	if identityName != "" {
+	if identityName != "" && s.identityName != identityName {
+		if s.client != nil {
+			if err := s.client.Close(); err != nil {
+				log.Trace("Failed to close Google Secret Manager client during identity switch", "error", err)
+			}
+		}
 		s.identityName = identityName
+		s.client = nil
+		s.initOnce = sync.Once{}
+		s.initErr = nil
 	}
 }
 
@@ -137,15 +150,7 @@ func (s *GSMStore) initIdentityClient() error {
 		return fmt.Errorf("%w: failed to resolve GCP auth context for identity %q: %w", ErrAuthContextNotAvailable, s.identityName, err)
 	}
 
-	// Use credentials file from GCP auth context if available, otherwise fall back to store credentials.
-	credentials := gcp.GetCredentialsFromStore(s.credentials)
-	if authContext.CredentialsFile != "" {
-		credentials = authContext.CredentialsFile
-	}
-
-	clientOpts := gcp.GetClientOptions(gcp.AuthOptions{
-		Credentials: credentials,
-	})
+	clientOpts := gcp.GetClientOptions(s.identityAuthOptions(authContext))
 
 	client, err := secretmanager.NewClient(ctx, clientOpts...)
 	if err != nil {
@@ -160,6 +165,25 @@ func (s *GSMStore) initIdentityClient() error {
 	s.client = client
 
 	return nil
+}
+
+func (s *GSMStore) identityAuthOptions(authContext *GCPAuthConfig) gcp.AuthOptions {
+	opts := gcp.AuthOptions{
+		Credentials: gcp.GetCredentialsFromStore(s.credentials),
+	}
+	if authContext == nil {
+		return opts
+	}
+	if authContext.AccessToken != "" {
+		opts.Credentials = ""
+		opts.AccessToken = authContext.AccessToken
+		opts.TokenExpiry = authContext.TokenExpiry
+		return opts
+	}
+	if authContext.CredentialsFile != "" {
+		opts.Credentials = authContext.CredentialsFile
+	}
+	return opts
 }
 
 // ensureClient lazily initializes the GCP client if it hasn't been initialized yet.
@@ -281,14 +305,9 @@ func (s *GSMStore) addSecretVersion(ctx context.Context, secret *secretmanagerpb
 	return nil
 }
 
-// Set stores a key-value pair in Google Secret Manager.
+// Set stores a key-value pair in Google Secret Manager. An empty stack and/or component is
+// permitted: scoped secret coordinates (stack/global scope) omit those path segments.
 func (s *GSMStore) Set(stack string, component string, key string, value any) error {
-	if stack == "" {
-		return ErrEmptyStack
-	}
-	if component == "" {
-		return ErrEmptyComponent
-	}
 	if key == "" {
 		return ErrEmptyKey
 	}
@@ -328,14 +347,9 @@ func (s *GSMStore) Set(stack string, component string, key string, value any) er
 	return nil
 }
 
-// Get retrieves a value by key from Google Secret Manager.
+// Get retrieves a value by key from Google Secret Manager. An empty stack and/or component is
+// permitted: scoped secret coordinates (stack/global scope) omit those path segments.
 func (s *GSMStore) Get(stack string, component string, key string) (any, error) {
-	if stack == "" {
-		return nil, ErrEmptyStack
-	}
-	if component == "" {
-		return nil, ErrEmptyComponent
-	}
 	if key == "" {
 		return nil, ErrEmptyKey
 	}
@@ -380,6 +394,58 @@ func (s *GSMStore) Get(stack string, component string, key string) (any, error) 
 		return string(result.Payload.Data), nil
 	}
 	return unmarshalled, nil
+}
+
+// Delete removes a secret (and all its versions) from Google Secret Manager for the given
+// stack, component, and key. An empty stack and/or component is permitted: scoped secret
+// coordinates (stack/global scope) omit those path segments.
+func (s *GSMStore) Delete(stack string, component string, key string) error {
+	if key == "" {
+		return ErrEmptyKey
+	}
+
+	if err := s.ensureClient(); err != nil {
+		return err
+	}
+
+	secretID, err := s.getKey(stack, component, key)
+	if err != nil {
+		return fmt.Errorf(errWrapFormat, ErrGetKey, err)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), gsmOperationTimeout)
+	defer cancel()
+
+	name := fmt.Sprintf("projects/%s/secrets/%s", s.projectID, secretID)
+	err = s.client.DeleteSecret(ctx, &secretmanagerpb.DeleteSecretRequest{
+		Name: name,
+	})
+	if err != nil {
+		if st, ok := status.FromError(err); ok {
+			switch st.Code() {
+			case codes.NotFound:
+				return fmt.Errorf(errWrapFormatWithID, ErrResourceNotFound, secretID, err)
+			case codes.PermissionDenied:
+				return fmt.Errorf(errWrapFormatWithID, ErrPermissionDenied, fmt.Sprintf("secret %s", secretID), err)
+			}
+		}
+		return fmt.Errorf(errWrapFormatWithID, ErrDeleteSecret, secretID, err)
+	}
+
+	return nil
+}
+
+// Has reports whether a secret exists for the given stack, component, and key. It performs a
+// Get and maps a not-found result to false; any other error is propagated.
+func (s *GSMStore) Has(stack string, component string, key string) (bool, error) {
+	_, err := s.Get(stack, component, key)
+	if err != nil {
+		if errors.Is(err, ErrResourceNotFound) {
+			return false, nil
+		}
+		return false, err
+	}
+	return true, nil
 }
 
 // GetKey retrieves a secret value directly by its key name, without stack/component scoping.

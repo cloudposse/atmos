@@ -42,6 +42,10 @@ type userIdentity struct {
 	name   string
 	config *schema.Identity
 	realm  string // Credential isolation realm set by auth manager.
+	// credStore is the config-aware credential store injected by the auth
+	// manager via SetCredentialStore. When nil (e.g. identity constructed
+	// directly in tests), credentialStore() falls back to the default store.
+	credStore types.CredentialStore
 }
 
 // NewUserIdentity creates a new AWS user identity.
@@ -67,6 +71,25 @@ func (i *userIdentity) Kind() string {
 // SetRealm sets the credential isolation realm for this identity.
 func (i *userIdentity) SetRealm(realm string) {
 	i.realm = realm
+}
+
+// SetCredentialStore injects the auth manager's config-aware credential store.
+// Implements the manager's optional credentialStoreReceiver interface so that
+// keyring I/O performed by this identity honors auth.keyring.type (issue #2544).
+func (i *userIdentity) SetCredentialStore(store types.CredentialStore) {
+	i.credStore = store
+}
+
+// credentialStore returns the injected config-aware store, falling back to the
+// default store when none was injected (e.g. identity constructed directly in
+// tests).
+func (i *userIdentity) credentialStore() types.CredentialStore {
+	if i.credStore != nil {
+		return i.credStore
+	}
+	// No config available in this construction path; nil selects the default
+	// keyring backend (same behavior as the deprecated no-arg constructor).
+	return atmosCredentials.NewCredentialStoreWithConfig(nil)
 }
 
 // GetProviderName returns the provider name for this identity.
@@ -282,7 +305,7 @@ func (i *userIdentity) credentialsFromConfig() (*types.AWSCredentials, error) {
 // through to webflow would mask the real problem.
 func (i *userIdentity) credentialsFromStore() (*types.AWSCredentials, error) {
 	// Use realm for credential isolation between different repositories.
-	credStore := atmosCredentials.NewCredentialStore()
+	credStore := i.credentialStore()
 	retrieved, err := credStore.Retrieve(i.name, i.realm)
 	if err != nil {
 		// Only "not found" maps to "not configured" — every other keyring error
@@ -486,7 +509,7 @@ func (i *userIdentity) handleInvalidClientTokenId(ctx context.Context, apiErr sm
 // clearStaleCredentials removes stale credentials from the keyring.
 func (i *userIdentity) clearStaleCredentials() {
 	// Use realm for credential isolation between different repositories.
-	credStore := atmosCredentials.NewCredentialStore()
+	credStore := i.credentialStore()
 	if delErr := credStore.Delete(i.name, i.realm); delErr != nil {
 		log.Debug("Failed to clear stale credentials from keyring", logKeyIdentity, i.name, "error", delErr)
 	} else {

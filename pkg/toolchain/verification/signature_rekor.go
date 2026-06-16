@@ -37,22 +37,45 @@ var rekorFlakeMarkers = []string{
 	"Invalid IEEE_P1363 encoded bytes",
 }
 
+// transportFlakeMarkers are substrings that indicate the network transport
+// itself failed before any verification verdict was rendered. A broken
+// connection can never represent a signature verdict (tampering, identity
+// mismatch, expired cert), so retrying these can never mask a real failure.
+var transportFlakeMarkers = []string{
+	// Go net/http2 stream errors, e.g.
+	// "stream error: stream ID 1; INTERNAL_ERROR; received from peer".
+	// Matches all HTTP/2 error codes and both send/recv variants.
+	"stream error: stream ID",
+	"connection reset by peer",
+	"TLS handshake timeout",
+	"i/o timeout",
+	"unexpected EOF",
+}
+
 // rekorTlogEndpointMarker plus a 5xx status code is also treated as
 // transient. We do not match arbitrary 5xx anywhere in the cosign output —
 // only those scoped to Rekor's transparency-log retrieve endpoint, which is
 // the endpoint historically prone to short-window outages.
 const rekorTlogEndpointMarker = "/api/v1/log/entries/retrieve]["
 
+const (
+	rekorSearchLogQueryMarker     = "searching log query"
+	rekorStreamInternalErrMarker  = "INTERNAL_ERROR"
+	rekorStreamReceivedPeerMarker = "received from peer"
+)
+
 var rekorTlog5xxStatuses = []string{"500", "502", "503", "504"}
 
 // classifyCosignError joins ErrSignatureRetryable into err when the cosign
-// output contains a known transient Sigstore Rekor failure marker.
+// output contains a known transient failure marker. Two classes qualify:
+// Sigstore Rekor API flakes (rekorFlakeMarkers, tlog 5xx) and
+// transport-level network errors (transportFlakeMarkers).
 // Otherwise returns err unchanged.
 //
 // Never broaden what counts as retryable beyond known upstream-service
-// flakes — real signature failures (tampering, expired cert, identity
-// mismatch, missing signature) must surface immediately on the first
-// attempt.
+// flakes and transport failures — real signature failures (tampering,
+// expired cert, identity mismatch, missing signature) must surface
+// immediately on the first attempt.
 func classifyCosignError(err error) error {
 	defer perf.Track(nil, "verification.classifyCosignError")()
 
@@ -65,6 +88,11 @@ func classifyCosignError(err error) error {
 			return errors.Join(errUtils.ErrSignatureRetryable, err)
 		}
 	}
+	for _, marker := range transportFlakeMarkers {
+		if strings.Contains(msg, marker) {
+			return errors.Join(errUtils.ErrSignatureRetryable, err)
+		}
+	}
 	if strings.Contains(msg, rekorTlogEndpointMarker) {
 		for _, status := range rekorTlog5xxStatuses {
 			if strings.Contains(msg, rekorTlogEndpointMarker+status+"]") {
@@ -72,7 +100,16 @@ func classifyCosignError(err error) error {
 			}
 		}
 	}
+	if isRekorStreamInternalError(msg) {
+		return errors.Join(errUtils.ErrSignatureRetryable, err)
+	}
 	return err
+}
+
+func isRekorStreamInternalError(msg string) bool {
+	return strings.Contains(msg, rekorSearchLogQueryMarker) &&
+		strings.Contains(msg, rekorStreamInternalErrMarker) &&
+		strings.Contains(msg, rekorStreamReceivedPeerMarker)
 }
 
 // isRetryableCosignError is the predicate handed to retry.WithPredicate.

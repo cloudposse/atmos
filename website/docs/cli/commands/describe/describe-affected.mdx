@@ -82,6 +82,50 @@ The command performs the following:
 Since Atmos first checks the component folders for changes, if it finds any affected files, it will mark all related
 components and stacks as affected. Atmos will then skip evaluating the stacks for differences since it already
 knows that they are affected.
+
+## Evaluated sections
+
+When comparing the deep-merged configuration of each component between the two refs, Atmos evaluates the following
+top-level component sections. A change in any of them marks the component as affected (with the corresponding
+[`affected`](#output) reason):
+
+`vars`, `env`, `settings`, `metadata`, `providers`, `required_providers`, `required_version`, `generate`,
+`backend`, `backend_type`, `remote_state_backend`, `remote_state_backend_type`, `auth`, `command`, `dependencies`,
+`source`, `provision`.
+
+In addition, changes to a component's Terraform/OpenTofu files (and any local modules they reference) are detected by
+scanning the component folder — reported as `component` and `component.module`.
+
+The following sections are **intentionally not** evaluated:
+
+<dl>
+  <dt>`locals`</dt>
+  <dd>Used only to render templates, so any effective change already shows up in the rendered `vars`/`env`/etc.</dd>
+
+  <dt>`overrides`</dt>
+  <dd>Folded into the merged `vars`/`env`/`settings`/etc., so it would double-report.</dd>
+
+  <dt>`inheritance`</dt>
+  <dd>A derived (computed) inheritance chain; any real effect already appears in the other sections.</dd>
+
+  <dt>`retry`</dt>
+  <dd>Operational/execution-time behavior (how a run is retried), not provisioned infrastructure configuration.</dd>
+
+  <dt>`hooks`</dt>
+  <dd>
+    Operational/execution-time behavior (commands that run before/after an operation, e.g. policy or cost checks),
+    not provisioned infrastructure — so a hook change does not mark a component as affected by default. If you want
+    hook changes to count, add `hooks` to [`describe.affected.sections`](/cli/configuration/describe); it then reports
+    as `stack.hooks`.
+  </dd>
+</dl>
+
+:::tip Customize the evaluated sections
+Use [`describe.affected.sections`](/cli/configuration/describe) in `atmos.yaml` to define your own list of evaluated
+sections — for example to add a custom section or to narrow the set. When set, it fully replaces the defaults above
+(`metadata` and `settings` are always evaluated regardless).
+:::
+
 :::tip Use in GitHub Actions
 Run `atmos describe affected --format=matrix` directly in your workflow to fan out across affected components. When `ci.enabled` is `true` in `atmos.yaml`, the matrix is automatically written to `$GITHUB_OUTPUT`. See the [Deploy Affected workflow](/ci#deploy-affected) for the full pattern.
 :::
@@ -566,6 +610,78 @@ where:
             <dt>`stack.metadata`</dt>
             <dd>
                 The `metadata` component section in the stack config has been modified.
+            </dd>
+
+            <dt>`stack.providers`</dt>
+            <dd>
+                The `providers` component section in the stack config has been modified.
+            </dd>
+
+            <dt>`stack.required_providers`</dt>
+            <dd>
+                The `required_providers` component section (provider versions) in the stack config has been modified.
+            </dd>
+
+            <dt>`stack.required_version`</dt>
+            <dd>
+                The `required_version` component section (the required Terraform/OpenTofu version) in the stack config has been modified.
+            </dd>
+
+            <dt>`stack.hooks`</dt>
+            <dd>
+                The `hooks` component section in the stack config has been modified. Only reported when `hooks` is
+                added to [`describe.affected.sections`](/cli/configuration/describe) — it is not evaluated by default.
+            </dd>
+
+            <dt>`stack.generate`</dt>
+            <dd>
+                The `generate` component section in the stack config has been modified.
+            </dd>
+
+            <dt>`stack.backend`</dt>
+            <dd>
+                The `backend` component section in the stack config has been modified.
+            </dd>
+
+            <dt>`stack.backend_type`</dt>
+            <dd>
+                The `backend_type` component section in the stack config has been modified.
+            </dd>
+
+            <dt>`stack.remote_state_backend`</dt>
+            <dd>
+                The `remote_state_backend` component section in the stack config has been modified.
+            </dd>
+
+            <dt>`stack.remote_state_backend_type`</dt>
+            <dd>
+                The `remote_state_backend_type` component section in the stack config has been modified.
+            </dd>
+
+            <dt>`stack.auth`</dt>
+            <dd>
+                The `auth` component section in the stack config has been modified.
+            </dd>
+
+            <dt>`stack.command`</dt>
+            <dd>
+                The `command` component section (the binary used to provision the component) in the stack config has been modified.
+            </dd>
+
+            <dt>`stack.dependencies`</dt>
+            <dd>
+                The `dependencies` component section in the stack config has been modified (for example, a component dependency was added or removed).
+                This is complementary to the `file` and `folder` reasons, which fire when a _referenced_ file or folder changes.
+            </dd>
+
+            <dt>`stack.source`</dt>
+            <dd>
+                The `source` component section (vendoring configuration) in the stack config has been modified.
+            </dd>
+
+            <dt>`stack.provision`</dt>
+            <dd>
+                The `provision` component section (working directory configuration) in the stack config has been modified.
             </dd>
 
             <dt>`component`</dt>

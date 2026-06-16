@@ -555,6 +555,74 @@ func TestParseGlobalFlags_SkillFlag(t *testing.T) {
 	})
 }
 
+// TestParseGlobalFlags_SettingsListMergeStrategyFlag verifies that the
+// --settings-list-merge-strategy global flag is registered (so Cobra accepts it)
+// and that its value flows through Viper, env var, and the default empty state.
+// Regression test for cloudposse/atmos#2398.
+func TestParseGlobalFlags_SettingsListMergeStrategyFlag(t *testing.T) {
+	t.Run("flag is registered on RootCmd as persistent", func(t *testing.T) {
+		rootCmd := &cobra.Command{Use: "atmos"}
+		parser := NewGlobalOptionsBuilder().Build()
+		parser.RegisterPersistentFlags(rootCmd)
+
+		flag := rootCmd.PersistentFlags().Lookup("settings-list-merge-strategy")
+		require.NotNil(t, flag, "settings-list-merge-strategy must be registered as a persistent flag on RootCmd")
+		assert.Equal(t, "string", flag.Value.Type(), "settings-list-merge-strategy should be a string flag")
+	})
+
+	t.Run("defaults to empty string", func(t *testing.T) {
+		cmd := &cobra.Command{Use: "test"}
+		v := viper.New()
+		parser := NewGlobalOptionsBuilder().Build()
+		parser.RegisterFlags(cmd)
+		_ = parser.BindToViper(v)
+
+		flags := ParseGlobalFlags(cmd, v)
+		assert.Equal(t, "", flags.SettingsListMergeStrategy, "should default to empty string when not set")
+	})
+
+	t.Run("CLI flag value flows through Viper", func(t *testing.T) {
+		cmd := &cobra.Command{Use: "test"}
+		v := viper.New()
+		parser := NewGlobalOptionsBuilder().Build()
+		parser.RegisterFlags(cmd)
+		_ = parser.BindToViper(v)
+
+		v.Set("settings-list-merge-strategy", "append")
+
+		flags := ParseGlobalFlags(cmd, v)
+		assert.Equal(t, "append", flags.SettingsListMergeStrategy)
+	})
+
+	t.Run("ATMOS_SETTINGS_LIST_MERGE_STRATEGY env var flows through Viper", func(t *testing.T) {
+		cmd := &cobra.Command{Use: "test"}
+		v := viper.New()
+		parser := NewGlobalOptionsBuilder().Build()
+		parser.RegisterFlags(cmd)
+		_ = parser.BindToViper(v)
+
+		t.Setenv("ATMOS_SETTINGS_LIST_MERGE_STRATEGY", "merge")
+		_ = v.BindEnv("settings-list-merge-strategy", "ATMOS_SETTINGS_LIST_MERGE_STRATEGY")
+
+		flags := ParseGlobalFlags(cmd, v)
+		assert.Equal(t, "merge", flags.SettingsListMergeStrategy)
+	})
+
+	t.Run("subcommand inherits the persistent flag", func(t *testing.T) {
+		rootCmd := &cobra.Command{Use: "atmos"}
+		parser := NewGlobalOptionsBuilder().Build()
+		parser.RegisterPersistentFlags(rootCmd)
+
+		subCmd := &cobra.Command{Use: "terraform"}
+		rootCmd.AddCommand(subCmd)
+		leafCmd := &cobra.Command{Use: "plan"}
+		subCmd.AddCommand(leafCmd)
+
+		inherited := leafCmd.InheritedFlags().Lookup("settings-list-merge-strategy")
+		require.NotNil(t, inherited, "subcommands must inherit settings-list-merge-strategy from RootCmd")
+	})
+}
+
 // TestParsePagerFlag_NoFlagRegistered tests behavior when pager flag is not registered.
 func TestParsePagerFlag_NoFlagRegistered(t *testing.T) {
 	// Create command WITHOUT pager flag.

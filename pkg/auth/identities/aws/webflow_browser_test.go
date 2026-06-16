@@ -4,6 +4,7 @@ package aws
 
 import (
 	"context"
+	"crypto/ecdsa"
 	"encoding/json"
 	"fmt"
 	"net"
@@ -117,19 +118,20 @@ func TestRefreshWebflowCredentials_Success(t *testing.T) {
 		RefreshToken: "valid-refresh-token",
 		Region:       "us-east-2",
 		ExpiresAt:    time.Now().Add(11 * time.Hour),
+		DPoPKey:      testEncodedDPoPKey(t),
 	})
 
 	// Mock the token endpoint.
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]interface{}{
-			"accessToken": map[string]string{
-				"accessKeyId":     "REFRESHED_AKID",
-				"secretAccessKey": "REFRESHED_SECRET",
-				"sessionToken":    "REFRESHED_TOKEN",
+			"access_token": map[string]string{
+				"access_key_id":     "REFRESHED_AKID",
+				"secret_access_key": "REFRESHED_SECRET",
+				"session_token":     "REFRESHED_TOKEN",
 			},
-			"expiresIn":    900,
-			"refreshToken": "new-refresh-token",
+			"expires_in":    900,
+			"refresh_token": "new-refresh-token",
 		})
 	}))
 	defer server.Close()
@@ -192,6 +194,42 @@ func TestRefreshWebflowCredentials_NoCache(t *testing.T) {
 	assert.ErrorIs(t, err, errUtils.ErrWebflowRefreshFailed)
 }
 
+// TestRefreshWebflowCredentials_NoDPoPKey verifies that a cache written before
+// DPoP support (no DPoPKey) cannot be used for refresh and reports the
+// refresh-failed sentinel so the caller falls back to the browser flow
+// (issue #2542). It must NOT contact the token endpoint.
+func TestRefreshWebflowCredentials_NoDPoPKey(t *testing.T) {
+	tmpDir := t.TempDir()
+	t.Setenv("ATMOS_XDG_CACHE_HOME", tmpDir)
+
+	identity := &userIdentity{
+		name:   "test",
+		realm:  "realm",
+		config: &schema.Identity{Kind: "aws/user"},
+	}
+
+	// Valid, non-expired cache but with no DPoP key (legacy cache).
+	identity.saveRefreshCache(&webflowRefreshCache{
+		RefreshToken: "legacy-token",
+		Region:       "us-east-2",
+		ExpiresAt:    time.Now().Add(10 * time.Hour),
+	})
+
+	// Fail loudly if the token endpoint is contacted despite the missing key.
+	origClient := defaultHTTPClient
+	defaultHTTPClient = &mockHTTPClient{
+		doFunc: func(_ *http.Request) (*http.Response, error) {
+			t.Fatal("token endpoint must not be contacted without a DPoP key")
+			return nil, nil
+		},
+	}
+	defer func() { defaultHTTPClient = origClient }()
+
+	creds, err := identity.refreshWebflowCredentials(context.Background(), "us-east-2")
+	assert.Nil(t, creds)
+	assert.ErrorIs(t, err, errUtils.ErrWebflowRefreshFailed)
+}
+
 func TestWebflowIntegration_AuthenticateFallback(t *testing.T) {
 	// Test that Authenticate() tries webflow when no long-lived credentials exist.
 	// We can't easily test the full browser flow, but we can verify the webflow path
@@ -244,7 +282,7 @@ func TestProcessTokenResponse_WithRefreshToken(t *testing.T) {
 		RefreshToken: "my-refresh-token",
 	}
 
-	creds := identity.processTokenResponse(tokenResp, "us-west-2")
+	creds := identity.processTokenResponse(tokenResp, "us-west-2", mustGenerateDPoPKey(t))
 	require.NotNil(t, creds)
 	assert.Equal(t, "AKID", creds.AccessKeyID)
 	assert.Equal(t, "SECRET", creds.SecretAccessKey)
@@ -281,7 +319,7 @@ func TestProcessTokenResponse_WithoutRefreshToken(t *testing.T) {
 		// No RefreshToken.
 	}
 
-	creds := identity.processTokenResponse(tokenResp, "eu-west-1")
+	creds := identity.processTokenResponse(tokenResp, "eu-west-1", mustGenerateDPoPKey(t))
 	require.NotNil(t, creds)
 	assert.Equal(t, "AKID", creds.AccessKeyID)
 	assert.Equal(t, "eu-west-1", creds.Region)
@@ -311,19 +349,20 @@ func TestResolveCredentialsViaWebflow_RefreshSuccess(t *testing.T) {
 		RefreshToken: "valid-token",
 		Region:       "us-east-2",
 		ExpiresAt:    time.Now().Add(10 * time.Hour),
+		DPoPKey:      testEncodedDPoPKey(t),
 	})
 
 	// Mock token endpoint.
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]interface{}{
-			"accessToken": map[string]string{
-				"accessKeyId":     "REFRESHED_AKID",
-				"secretAccessKey": "REFRESHED_SECRET",
-				"sessionToken":    "REFRESHED_TOKEN",
+			"access_token": map[string]string{
+				"access_key_id":     "REFRESHED_AKID",
+				"secret_access_key": "REFRESHED_SECRET",
+				"session_token":     "REFRESHED_TOKEN",
 			},
-			"expiresIn":    900,
-			"refreshToken": "new-refresh-token",
+			"expires_in":    900,
+			"refresh_token": "new-refresh-token",
 		})
 	}))
 	defer server.Close()
@@ -375,13 +414,13 @@ func TestWaitForCallbackSimple_Success(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]interface{}{
-			"accessToken": map[string]string{
-				"accessKeyId":     "AKID_SIMPLE",
-				"secretAccessKey": "SECRET_SIMPLE",
-				"sessionToken":    "TOKEN_SIMPLE",
+			"access_token": map[string]string{
+				"access_key_id":     "AKID_SIMPLE",
+				"secret_access_key": "SECRET_SIMPLE",
+				"session_token":     "TOKEN_SIMPLE",
 			},
-			"expiresIn":    900,
-			"refreshToken": "refresh",
+			"expires_in":    900,
+			"refresh_token": "refresh",
 		})
 	}))
 	defer server.Close()
@@ -398,7 +437,7 @@ func TestWaitForCallbackSimple_Success(t *testing.T) {
 	resultCh := make(chan webflowResult, 1)
 	resultCh <- webflowResult{code: "auth-code", state: "state-123"}
 
-	resp, err := identity.waitForCallbackSimple(context.Background(), resultCh, "us-east-2", "verifier", "http://127.0.0.1:8080/oauth/callback")
+	resp, err := identity.waitForCallbackSimple(context.Background(), resultCh, webflowExchange{region: "us-east-2", verifier: "verifier", redirectURI: "http://127.0.0.1:8080/oauth/callback", dpopKey: mustGenerateDPoPKey(t)})
 	require.NoError(t, err)
 	require.NotNil(t, resp)
 	assert.Equal(t, "AKID_SIMPLE", resp.AccessToken.AccessKeyID)
@@ -415,7 +454,7 @@ func TestWaitForCallbackSimple_Error(t *testing.T) {
 	resultCh := make(chan webflowResult, 1)
 	resultCh <- webflowResult{err: fmt.Errorf("callback failed")}
 
-	resp, err := identity.waitForCallbackSimple(context.Background(), resultCh, "us-east-2", "verifier", "http://127.0.0.1:8080/oauth/callback")
+	resp, err := identity.waitForCallbackSimple(context.Background(), resultCh, webflowExchange{region: "us-east-2", verifier: "verifier", redirectURI: "http://127.0.0.1:8080/oauth/callback", dpopKey: mustGenerateDPoPKey(t)})
 	assert.Nil(t, resp)
 	assert.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrWebflowAuthFailed)
@@ -434,7 +473,7 @@ func TestWaitForCallbackSimple_ContextCancelled(t *testing.T) {
 
 	resultCh := make(chan webflowResult) // Unbuffered, will never receive.
 
-	resp, err := identity.waitForCallbackSimple(ctx, resultCh, "us-east-2", "verifier", "http://127.0.0.1:8080/oauth/callback")
+	resp, err := identity.waitForCallbackSimple(ctx, resultCh, webflowExchange{region: "us-east-2", verifier: "verifier", redirectURI: "http://127.0.0.1:8080/oauth/callback", dpopKey: mustGenerateDPoPKey(t)})
 	assert.Nil(t, resp)
 	assert.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrWebflowTimeout)
@@ -457,6 +496,7 @@ func TestRefreshWebflowCredentials_ExchangeFailureClearsCache(t *testing.T) {
 		RefreshToken: "valid-but-rejected-token",
 		Region:       "us-east-2",
 		ExpiresAt:    time.Now().Add(10 * time.Hour),
+		DPoPKey:      testEncodedDPoPKey(t),
 	})
 
 	// Mock endpoint that rejects the refresh token.
@@ -505,23 +545,25 @@ func TestRefreshWebflowCredentials_UpdatesRefreshToken(t *testing.T) {
 	originalExpiresAt := time.Now().Add(10 * time.Hour).Truncate(time.Second)
 
 	// Save initial refresh cache.
+	seededDPoPKey := testEncodedDPoPKey(t)
 	identity.saveRefreshCache(&webflowRefreshCache{
 		RefreshToken: "old-token",
 		Region:       "us-east-2",
 		ExpiresAt:    originalExpiresAt,
+		DPoPKey:      seededDPoPKey,
 	})
 
 	// Mock endpoint returns new refresh token.
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]interface{}{
-			"accessToken": map[string]string{
-				"accessKeyId":     "AKID",
-				"secretAccessKey": "SECRET",
-				"sessionToken":    "TOKEN",
+			"access_token": map[string]string{
+				"access_key_id":     "AKID",
+				"secret_access_key": "SECRET",
+				"session_token":     "TOKEN",
 			},
-			"expiresIn":    900,
-			"refreshToken": "rotated-token",
+			"expires_in":    900,
+			"refresh_token": "rotated-token",
 		})
 	}))
 	defer server.Close()
@@ -545,6 +587,99 @@ func TestRefreshWebflowCredentials_UpdatesRefreshToken(t *testing.T) {
 	assert.Equal(t, "rotated-token", cache.RefreshToken)
 	// ExpiresAt should not change (session end time is fixed).
 	assert.WithinDuration(t, originalExpiresAt, cache.ExpiresAt, time.Second)
+	// The DPoP key the rotated refresh token is bound to must be preserved.
+	assert.Equal(t, seededDPoPKey, cache.DPoPKey)
+}
+
+// TestRefreshWebflowCredentials_UnusableDPoPKey verifies that a non-expired
+// refresh cache whose bound DPoP key is missing (pre-DPoP cache shape) or
+// unparseable fails with ErrWebflowRefreshFailed *before* any network call, so
+// the caller cleanly falls back to the browser flow (RFC 9449, issue #2542).
+func TestRefreshWebflowCredentials_UnusableDPoPKey(t *testing.T) {
+	tests := []struct {
+		name    string
+		dpopKey string
+	}{
+		{name: "missing key (legacy cache)", dpopKey: ""},
+		{name: "unparseable key", dpopKey: "not-base64!!"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tmpDir := t.TempDir()
+			t.Setenv("ATMOS_XDG_CACHE_HOME", tmpDir)
+
+			identity := &userIdentity{
+				name:  "test",
+				realm: "realm",
+				config: &schema.Identity{
+					Kind: "aws/user",
+				},
+			}
+
+			// Non-expired cache so the expiry guard is passed and the DPoP-key
+			// guards are the branch under test.
+			identity.saveRefreshCache(&webflowRefreshCache{
+				RefreshToken: "token",
+				Region:       "us-east-2",
+				ExpiresAt:    time.Now().Add(10 * time.Hour),
+				DPoPKey:      tt.dpopKey,
+			})
+
+			// Fail loudly if the refresh path reaches the network despite the
+			// unusable key.
+			origClient := defaultHTTPClient
+			defaultHTTPClient = &mockHTTPClient{
+				doFunc: func(_ *http.Request) (*http.Response, error) {
+					t.Fatal("refresh must not contact the token endpoint with an unusable DPoP key")
+					return nil, nil
+				},
+			}
+			defer func() { defaultHTTPClient = origClient }()
+
+			creds, err := identity.refreshWebflowCredentials(context.Background(), "us-east-2")
+			assert.Nil(t, creds)
+			require.ErrorIs(t, err, errUtils.ErrWebflowRefreshFailed)
+		})
+	}
+}
+
+// TestProcessTokenResponse_MarshalKeyError verifies that when the per-session
+// DPoP key cannot be serialized, processTokenResponse still returns usable
+// credentials but skips caching the refresh token (so the next run cleanly falls
+// back to the browser flow rather than caching an unusable, key-less refresh
+// token). A nil-curve key makes marshalDPoPKey fail without panicking.
+func TestProcessTokenResponse_MarshalKeyError(t *testing.T) {
+	tmpDir := t.TempDir()
+	t.Setenv("ATMOS_XDG_CACHE_HOME", tmpDir)
+
+	identity := &userIdentity{
+		name:  "test",
+		realm: "realm",
+		config: &schema.Identity{
+			Kind: "aws/user",
+		},
+	}
+
+	tokenResp := &webflowTokenResponse{
+		AccessToken: webflowAccessToken{
+			AccessKeyID:     "AKID",
+			SecretAccessKey: "SECRET",
+			SessionToken:    "TOKEN",
+		},
+		ExpiresIn:    900,
+		RefreshToken: "refresh-token-value",
+	}
+
+	// A zero-value key has a nil curve, so x509.MarshalPKCS8PrivateKey fails.
+	creds := identity.processTokenResponse(tokenResp, "us-east-2", &ecdsa.PrivateKey{})
+	require.NotNil(t, creds)
+	assert.Equal(t, "AKID", creds.AccessKeyID)
+
+	// No refresh cache should have been written.
+	cache, cacheErr := identity.loadRefreshCache()
+	assert.Nil(t, cache)
+	assert.Error(t, cacheErr)
 }
 
 func TestBrowserWebflowInteractive_EndToEnd(t *testing.T) {
@@ -566,13 +701,13 @@ func TestBrowserWebflowInteractive_EndToEnd(t *testing.T) {
 	tokenServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]interface{}{
-			"accessToken": map[string]string{
-				"accessKeyId":     "AKID_INTERACTIVE",
-				"secretAccessKey": "SECRET_INTERACTIVE",
-				"sessionToken":    "TOKEN_INTERACTIVE",
+			"access_token": map[string]string{
+				"access_key_id":     "AKID_INTERACTIVE",
+				"secret_access_key": "SECRET_INTERACTIVE",
+				"session_token":     "TOKEN_INTERACTIVE",
 			},
-			"expiresIn":    900,
-			"refreshToken": "refresh-interactive",
+			"expires_in":    900,
+			"refresh_token": "refresh-interactive",
 		})
 	}))
 	defer tokenServer.Close()
@@ -631,12 +766,12 @@ func TestWaitForCallbackWithSpinner_NonTTY(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]interface{}{
-			"accessToken": map[string]string{
-				"accessKeyId":     "AKID_SPINNER",
-				"secretAccessKey": "SECRET_SPINNER",
-				"sessionToken":    "TOKEN_SPINNER",
+			"access_token": map[string]string{
+				"access_key_id":     "AKID_SPINNER",
+				"secret_access_key": "SECRET_SPINNER",
+				"session_token":     "TOKEN_SPINNER",
 			},
-			"expiresIn": 900,
+			"expires_in": 900,
 		})
 	}))
 	defer server.Close()
@@ -658,7 +793,7 @@ func TestWaitForCallbackWithSpinner_NonTTY(t *testing.T) {
 	resultCh := make(chan webflowResult, 1)
 	resultCh <- webflowResult{code: "callback-code", state: "state"}
 
-	resp, err := identity.waitForCallbackWithSpinner(context.Background(), resultCh, "us-east-2", "verifier", "http://127.0.0.1:8080/oauth/callback")
+	resp, err := identity.waitForCallbackWithSpinner(context.Background(), resultCh, webflowExchange{region: "us-east-2", verifier: "verifier", redirectURI: "http://127.0.0.1:8080/oauth/callback", dpopKey: mustGenerateDPoPKey(t)})
 	require.NoError(t, err)
 	assert.Equal(t, "AKID_SPINNER", resp.AccessToken.AccessKeyID)
 }
@@ -682,13 +817,13 @@ func TestBrowserWebflow_Interactive(t *testing.T) {
 	tokenServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]interface{}{
-			"accessToken": map[string]string{
-				"accessKeyId":     "AKID_BW",
-				"secretAccessKey": "SECRET_BW",
-				"sessionToken":    "TOKEN_BW",
+			"access_token": map[string]string{
+				"access_key_id":     "AKID_BW",
+				"secret_access_key": "SECRET_BW",
+				"session_token":     "TOKEN_BW",
 			},
-			"expiresIn":    900,
-			"refreshToken": "refresh-bw",
+			"expires_in":    900,
+			"refresh_token": "refresh-bw",
 		})
 	}))
 	defer tokenServer.Close()
@@ -821,6 +956,7 @@ func TestRefreshWebflowCredentials_TransientFailuresPreserveCache(t *testing.T) 
 				RefreshToken: "should-survive",
 				Region:       "us-east-2",
 				ExpiresAt:    time.Now().Add(10 * time.Hour),
+				DPoPKey:      testEncodedDPoPKey(t),
 			})
 
 			origClient := defaultHTTPClient
@@ -873,6 +1009,7 @@ func TestRefreshWebflowCredentials_ContextCancellationPreservesCache(t *testing.
 		RefreshToken: "should-survive-cancel",
 		Region:       "us-east-2",
 		ExpiresAt:    time.Now().Add(10 * time.Hour),
+		DPoPKey:      testEncodedDPoPKey(t),
 	})
 
 	origClient := defaultHTTPClient
@@ -927,6 +1064,7 @@ func TestRefreshWebflowCredentials_InvalidGrantDeletesCache(t *testing.T) {
 				RefreshToken: "revoked-token",
 				Region:       "us-east-2",
 				ExpiresAt:    time.Now().Add(10 * time.Hour),
+				DPoPKey:      testEncodedDPoPKey(t),
 			})
 
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -988,13 +1126,13 @@ func TestBrowserWebflowNonInteractive_CallbackSuccess(t *testing.T) {
 	tokenServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]interface{}{
-			"accessToken": map[string]string{
-				"accessKeyId":     "AKID_NI",
-				"secretAccessKey": "SECRET_NI",
-				"sessionToken":    "TOKEN_NI",
+			"access_token": map[string]string{
+				"access_key_id":     "AKID_NI",
+				"secret_access_key": "SECRET_NI",
+				"session_token":     "TOKEN_NI",
 			},
-			"expiresIn":    900,
-			"refreshToken": "refresh-ni",
+			"expires_in":    900,
+			"refresh_token": "refresh-ni",
 		})
 	}))
 	defer tokenServer.Close()
@@ -1174,12 +1312,12 @@ func TestBrowserWebflow_DispatchesToNonInteractive(t *testing.T) {
 	tokenServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]interface{}{
-			"accessToken": map[string]string{
-				"accessKeyId":     "AKID_DISPATCH",
-				"secretAccessKey": "SECRET_DISPATCH",
-				"sessionToken":    "TOKEN_DISPATCH",
+			"access_token": map[string]string{
+				"access_key_id":     "AKID_DISPATCH",
+				"secret_access_key": "SECRET_DISPATCH",
+				"session_token":     "TOKEN_DISPATCH",
 			},
-			"expiresIn": 900,
+			"expires_in": 900,
 		})
 	}))
 	defer tokenServer.Close()
@@ -1240,12 +1378,12 @@ func TestResolveCredentialsViaWebflow_FallsThroughToBrowser(t *testing.T) {
 	tokenServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]interface{}{
-			"accessToken": map[string]string{
-				"accessKeyId":     "AKID_FT",
-				"secretAccessKey": "SECRET_FT",
-				"sessionToken":    "TOKEN_FT",
+			"access_token": map[string]string{
+				"access_key_id":     "AKID_FT",
+				"secret_access_key": "SECRET_FT",
+				"session_token":     "TOKEN_FT",
 			},
-			"expiresIn": 900,
+			"expires_in": 900,
 		})
 	}))
 	defer tokenServer.Close()
@@ -1311,12 +1449,12 @@ func TestBrowserWebflowNonInteractive_StdinCodeEntry(t *testing.T) {
 		assert.Equal(t, "stdin-entered-code", req.FormValue("code"))
 		rw.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(rw).Encode(map[string]interface{}{
-			"accessToken": map[string]string{
-				"accessKeyId":     "AKID_STDIN",
-				"secretAccessKey": "SECRET_STDIN",
-				"sessionToken":    "TOKEN_STDIN",
+			"access_token": map[string]string{
+				"access_key_id":     "AKID_STDIN",
+				"secret_access_key": "SECRET_STDIN",
+				"session_token":     "TOKEN_STDIN",
 			},
-			"expiresIn": 900,
+			"expires_in": 900,
 		})
 	}))
 	defer tokenServer.Close()
@@ -1481,7 +1619,7 @@ func TestWaitForCallbackWithSpinner_ForceTTYOutsideCI(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	resp, err := identity.waitForCallbackWithSpinner(ctx, resultCh, "us-east-2", "verifier", "http://127.0.0.1:8080/oauth/callback")
+	resp, err := identity.waitForCallbackWithSpinner(ctx, resultCh, webflowExchange{region: "us-east-2", verifier: "verifier", redirectURI: "http://127.0.0.1:8080/oauth/callback", dpopKey: mustGenerateDPoPKey(t)})
 	require.NoError(t, err)
 	require.NotNil(t, resp)
 	assert.Equal(t, "AKID_FT_SP", resp.AccessToken.AccessKeyID)
@@ -1517,10 +1655,10 @@ func TestWaitForCallbackWithSpinner_ForceTTYInsideCISuppressesSpinner(t *testing
 	tokenServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]interface{}{
-			"accessToken": map[string]string{
-				"accessKeyId": "AKID_CI_SIMPLE", "secretAccessKey": "S", "sessionToken": "T",
+			"access_token": map[string]string{
+				"access_key_id": "AKID_CI_SIMPLE", "secret_access_key": "S", "session_token": "T",
 			},
-			"expiresIn": 900,
+			"expires_in": 900,
 		})
 	}))
 	defer tokenServer.Close()
@@ -1546,7 +1684,7 @@ func TestWaitForCallbackWithSpinner_ForceTTYInsideCISuppressesSpinner(t *testing
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	resp, err := identity.waitForCallbackWithSpinner(ctx, resultCh, "us-east-2", "verifier", "http://127.0.0.1:8080/oauth/callback")
+	resp, err := identity.waitForCallbackWithSpinner(ctx, resultCh, webflowExchange{region: "us-east-2", verifier: "verifier", redirectURI: "http://127.0.0.1:8080/oauth/callback", dpopKey: mustGenerateDPoPKey(t)})
 	require.NoError(t, err)
 	require.NotNil(t, resp)
 	assert.Equal(t, "AKID_CI_SIMPLE", resp.AccessToken.AccessKeyID)
@@ -1616,7 +1754,7 @@ func TestWaitForCallbackWithSpinner_SpinnerSuccess(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	resp, err := identity.waitForCallbackWithSpinner(ctx, resultCh, "us-east-2", "verifier", "http://127.0.0.1:8080/oauth/callback")
+	resp, err := identity.waitForCallbackWithSpinner(ctx, resultCh, webflowExchange{region: "us-east-2", verifier: "verifier", redirectURI: "http://127.0.0.1:8080/oauth/callback", dpopKey: mustGenerateDPoPKey(t)})
 	require.NoError(t, err)
 	require.NotNil(t, resp)
 	assert.Equal(t, "AKID_SPINNER_OK", resp.AccessToken.AccessKeyID)
@@ -1652,7 +1790,7 @@ func TestWaitForCallbackWithSpinner_SpinnerNilResult(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	resp, err := identity.waitForCallbackWithSpinner(ctx, resultCh, "us-east-2", "verifier", "http://127.0.0.1:8080/oauth/callback")
+	resp, err := identity.waitForCallbackWithSpinner(ctx, resultCh, webflowExchange{region: "us-east-2", verifier: "verifier", redirectURI: "http://127.0.0.1:8080/oauth/callback", dpopKey: mustGenerateDPoPKey(t)})
 	assert.Nil(t, resp)
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrWebflowAuthFailed)
@@ -1689,12 +1827,12 @@ func TestWaitForCallbackWithSpinner_SpinnerFallback(t *testing.T) {
 		}
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]interface{}{
-			"accessToken": map[string]string{
-				"accessKeyId":     "AKID_FB",
-				"secretAccessKey": "SECRET_FB",
-				"sessionToken":    "TOKEN_FB",
+			"access_token": map[string]string{
+				"access_key_id":     "AKID_FB",
+				"secret_access_key": "SECRET_FB",
+				"session_token":     "TOKEN_FB",
 			},
-			"expiresIn": 900,
+			"expires_in": 900,
 		})
 		select {
 		case exchangeDone <- struct{}{}:
@@ -1745,7 +1883,7 @@ func TestWaitForCallbackWithSpinner_SpinnerFallback(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	resp, err := identity.waitForCallbackWithSpinner(ctx, resultCh, "us-east-2", "verifier", "http://127.0.0.1:8080/oauth/callback")
+	resp, err := identity.waitForCallbackWithSpinner(ctx, resultCh, webflowExchange{region: "us-east-2", verifier: "verifier", redirectURI: "http://127.0.0.1:8080/oauth/callback", dpopKey: mustGenerateDPoPKey(t)})
 	// Ensure the token server was actually hit.
 	select {
 	case <-exchangeStarted:
@@ -1767,7 +1905,7 @@ func TestStartSpinnerExchangeGoroutine_CallbackError(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
 
-	tokenCh := startSpinnerExchangeGoroutine(ctx, resultCh, "us-east-2", "verifier", "http://127.0.0.1:0/oauth/callback")
+	tokenCh := startSpinnerExchangeGoroutine(ctx, resultCh, webflowExchange{region: "us-east-2", verifier: "verifier", redirectURI: "http://127.0.0.1:0/oauth/callback", dpopKey: mustGenerateDPoPKey(t)})
 	res := <-tokenCh
 	require.Error(t, res.err)
 	assert.Nil(t, res.resp)
@@ -1783,7 +1921,7 @@ func TestStartSpinnerExchangeGoroutine_ContextCancelled(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
-	tokenCh := startSpinnerExchangeGoroutine(ctx, resultCh, "us-east-2", "verifier", "http://127.0.0.1:0/oauth/callback")
+	tokenCh := startSpinnerExchangeGoroutine(ctx, resultCh, webflowExchange{region: "us-east-2", verifier: "verifier", redirectURI: "http://127.0.0.1:0/oauth/callback", dpopKey: mustGenerateDPoPKey(t)})
 	res := <-tokenCh
 	require.Error(t, res.err)
 	assert.Nil(t, res.resp)
@@ -1820,10 +1958,10 @@ func TestBrowserWebflowInteractive_OpenURLFailure(t *testing.T) {
 	tokenServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]interface{}{
-			"accessToken": map[string]string{
-				"accessKeyId": "AKID_OPEN_FAIL", "secretAccessKey": "SECRET_OPEN_FAIL", "sessionToken": "TOKEN_OPEN_FAIL",
+			"access_token": map[string]string{
+				"access_key_id": "AKID_OPEN_FAIL", "secret_access_key": "SECRET_OPEN_FAIL", "session_token": "TOKEN_OPEN_FAIL",
 			},
-			"expiresIn": 900,
+			"expires_in": 900,
 		})
 	}))
 	defer tokenServer.Close()
@@ -1905,12 +2043,12 @@ func TestBrowserWebflowNonInteractive_ClosedStdinAllowsCallback(t *testing.T) {
 	tokenServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]interface{}{
-			"accessToken": map[string]string{
-				"accessKeyId":     "AKID_CLOSED_STDIN",
-				"secretAccessKey": "SECRET_CLOSED_STDIN",
-				"sessionToken":    "TOKEN_CLOSED_STDIN",
+			"access_token": map[string]string{
+				"access_key_id":     "AKID_CLOSED_STDIN",
+				"secret_access_key": "SECRET_CLOSED_STDIN",
+				"session_token":     "TOKEN_CLOSED_STDIN",
 			},
-			"expiresIn": 900,
+			"expires_in": 900,
 		})
 	}))
 	defer tokenServer.Close()

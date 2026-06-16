@@ -13,6 +13,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/auth"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/data"
+	iolib "github.com/cloudposse/atmos/pkg/io"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	m "github.com/cloudposse/atmos/pkg/merge"
 	"github.com/cloudposse/atmos/pkg/pager"
@@ -215,6 +216,7 @@ type ExecuteDescribeComponentParams struct {
 	AtmosConfig          *schema.AtmosConfiguration // Optional: Use provided config instead of initializing new one.
 	Component            string
 	Stack                string
+	ComponentType        string // Optional: if set, only try this component type.
 	ProcessTemplates     bool
 	ProcessYamlFunctions bool
 	Skip                 []string
@@ -230,6 +232,7 @@ func ExecuteDescribeComponent(params *ExecuteDescribeComponentParams) (map[strin
 		AtmosConfig:          params.AtmosConfig,
 		Component:            params.Component,
 		Stack:                params.Stack,
+		ComponentType:        params.ComponentType,
 		ProcessTemplates:     params.ProcessTemplates,
 		ProcessYamlFunctions: params.ProcessYamlFunctions,
 		Skip:                 params.Skip,
@@ -389,10 +392,11 @@ type DescribeComponentContextParams struct {
 	AtmosConfig          *schema.AtmosConfiguration
 	Component            string
 	Stack                string
+	ComponentType        string // Optional: if set, only try this component type.
 	ProcessTemplates     bool
 	ProcessYamlFunctions bool
 	Skip                 []string
-	AuthManager          auth.AuthManager // Optional: Auth manager for credential management
+	AuthManager          auth.AuthManager // Optional: Auth manager for credential management.
 	AuthDisabled         bool
 }
 
@@ -410,12 +414,16 @@ type componentTypeProcessParams struct {
 // tryProcessWithComponentType attempts to process stacks with a specific component type.
 func tryProcessWithComponentType(params *componentTypeProcessParams) (schema.ConfigAndStacksInfo, error) {
 	params.configAndStacksInfo.ComponentType = params.componentType
+	// `describe component` is an inspection command: when masking is enabled (the default),
+	// resolve `!secret` to the mask replacement WITHOUT retrieving from the backend, so the
+	// command needs no credentials for the secret provider.
+	params.configAndStacksInfo.SecretsMaskOnly = iolib.MaskingEnabled()
 	result, err := ProcessStacks(params.atmosConfig, params.configAndStacksInfo, true, params.processTemplates, params.processYamlFunctions, params.skip, params.authManager)
 	result.ComponentSection[cfg.ComponentTypeSectionName] = params.componentType
 	return result, err
 }
 
-// detectComponentType tries to detect component type (Terraform, Helmfile, Packer, or Ansible).
+// detectComponentType tries to detect component type (Terraform, Helmfile, Packer, Ansible, or custom).
 func detectComponentType(
 	atmosConfig *schema.AtmosConfiguration,
 	configAndStacksInfo *schema.ConfigAndStacksInfo,
@@ -428,6 +436,12 @@ func detectComponentType(
 		processYamlFunctions: params.ProcessYamlFunctions,
 		skip:                 params.Skip,
 		authManager:          params.AuthManager,
+	}
+
+	// If a specific component type is provided, use it directly.
+	if params.ComponentType != "" {
+		baseParams.componentType = params.ComponentType
+		return tryProcessWithComponentType(&baseParams)
 	}
 
 	// Try Terraform.

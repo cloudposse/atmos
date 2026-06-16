@@ -591,10 +591,14 @@ tests:
   - name: atmos terraform -version passthrough
     enabled: true
     snapshot: true
+    # Parity test: exercises the real terraform binary (not the suite-default
+    # OpenTofu) to verify atmos passes args straight through to terraform.
+    preconditions: ["terraform"]
     description: "'atmos terraform -version' should pass -version to terraform directly"
     workdir: "./"
     env:
       ATMOS_VERSION_CHECK_ENABLED: "false"
+      ATMOS_COMPONENTS_TERRAFORM_COMMAND: "terraform"
     command: atmos
     args:
       - "terraform"
@@ -618,10 +622,14 @@ tests:
   - name: atmos terraform -help passthrough
     enabled: true
     snapshot: true
+    # Parity test: exercises the real terraform binary (not the suite-default
+    # OpenTofu) to verify atmos passes args straight through to terraform.
+    preconditions: ["terraform"]
     description: "'atmos terraform -help' should pass -help to terraform directly"
     workdir: "./"
     env:
       ATMOS_VERSION_CHECK_ENABLED: "false"
+      ATMOS_COMPONENTS_TERRAFORM_COMMAND: "terraform"
     command: atmos
     args:
       - "terraform"

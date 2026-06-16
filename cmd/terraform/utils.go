@@ -1,11 +1,14 @@
 package terraform
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"sort"
+	"syscall"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -16,6 +19,7 @@ import (
 	e "github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/ansi"
 	"github.com/cloudposse/atmos/pkg/auth"
+	"github.com/cloudposse/atmos/pkg/ci"
 	"github.com/cloudposse/atmos/pkg/ci/plugins/terraform/planfile"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/flags/compat"
@@ -27,6 +31,15 @@ import (
 
 // errWrapFormat is the format string for wrapping errors with a cause.
 const errWrapFormat = "%w: %w"
+
+// ciHookFailedMsg is the log message emitted when a CI hook fails to execute.
+const ciHookFailedMsg = "CI hook execution failed"
+
+// logKeyComponent is the structured-log key for a component name.
+const logKeyComponent = "component"
+
+// ciHookConfigInitFailedMsg is the log message emitted when CI-hook config init fails.
+const ciHookConfigInitFailedMsg = "CI hook config init failed"
 
 // wasMultiComponentExecution records whether the most recent terraformRunWithOptions call
 // was routed to ExecuteTerraformQuery. Read in plan.go and deploy.go PostRunE to suppress
@@ -77,7 +90,7 @@ var runHooksOnErrorWithOutput = func(event h.HookEvent, cmd_ *cobra.Command, arg
 		CommandError: cmdErr,
 		ExitCode:     errUtils.GetExitCode(cmdErr),
 	}); err != nil {
-		log.Warn("CI hook execution failed", "error", err)
+		log.Warn(ciHookFailedMsg, "error", err)
 	}
 }
 
@@ -165,7 +178,7 @@ func runHooksWithOutput(event h.HookEvent, cmd_ *cobra.Command, args []string, o
 		Output:      output,
 		ForceCIMode: forceCIMode,
 	}); err != nil {
-		log.Warn("CI hook execution failed", "error", err)
+		log.Warn(ciHookFailedMsg, "error", err)
 		// Don't fail the command on CI hook errors.
 	}
 
@@ -179,7 +192,7 @@ func runHooksWithOutput(event h.HookEvent, cmd_ *cobra.Command, args []string, o
 func runCIHooksForDeploy(event h.HookEvent, cmd_ *cobra.Command, _ []string, info *schema.ConfigAndStacksInfo, output string) {
 	atmosConfig, err := cfg.InitCliConfig(*info, true)
 	if err != nil {
-		log.Warn("CI hook config init failed", "error", err)
+		log.Warn(ciHookConfigInitFailedMsg, "error", err)
 		return
 	}
 
@@ -197,7 +210,7 @@ func runCIHooksForDeploy(event h.HookEvent, cmd_ *cobra.Command, _ []string, inf
 		Output:      output,
 		ForceCIMode: forceCIMode,
 	}); err != nil {
-		log.Warn("CI hook execution failed", "error", err)
+		log.Warn(ciHookFailedMsg, "error", err)
 	}
 }
 
@@ -206,7 +219,7 @@ func runCIHooksForDeploy(event h.HookEvent, cmd_ *cobra.Command, _ []string, inf
 func runCIHooksForDeployComponent(actualCmd *cobra.Command, info *schema.ConfigAndStacksInfo, rawOutput string, execErr error) {
 	atmosConfig, err := cfg.InitCliConfig(*info, true)
 	if err != nil {
-		log.Warn("CI hook config init failed", "component", info.Component, "error", err)
+		log.Warn(ciHookConfigInitFailedMsg, logKeyComponent, info.Component, "error", err)
 		return
 	}
 
@@ -224,18 +237,28 @@ func runCIHooksForDeployComponent(actualCmd *cobra.Command, info *schema.ConfigA
 		CommandError: execErr,
 		ExitCode:     errUtils.GetExitCode(execErr),
 	}); err != nil {
-		log.Warn("CI hook execution failed", "component", info.Component, "error", err)
+		log.Warn(ciHookFailedMsg, logKeyComponent, info.Component, "error", err)
 	}
 }
 
-// runCIHooksForPlanComponent fires CI hooks for a single component after it completes
-// in multi-component mode. Uses already-resolved info to avoid a second
+// runCIHooksForPlanComponent fires CI hooks for a single component after it completes.
+// It runs in multi-component mode. Uses already-resolved info to avoid a second
 // ProcessCommandLineArgs call (same pattern as runCIHooksForDeploy).
 // rawOutput is the combined stdout+stderr from that component; ANSI codes are stripped here.
 func runCIHooksForPlanComponent(actualCmd *cobra.Command, info *schema.ConfigAndStacksInfo, rawOutput string, execErr error) {
+	runCIHooksForTerraformComponent(actualCmd, h.AfterTerraformPlan, info, rawOutput, execErr)
+}
+
+// runCIHooksForApplyComponent fires CI hooks for a single apply component after it completes.
+// It runs in multi-component mode.
+func runCIHooksForApplyComponent(actualCmd *cobra.Command, info *schema.ConfigAndStacksInfo, rawOutput string, execErr error) {
+	runCIHooksForTerraformComponent(actualCmd, h.AfterTerraformApply, info, rawOutput, execErr)
+}
+
+func runCIHooksForTerraformComponent(actualCmd *cobra.Command, event h.HookEvent, info *schema.ConfigAndStacksInfo, rawOutput string, execErr error) {
 	atmosConfig, err := cfg.InitCliConfig(*info, true)
 	if err != nil {
-		log.Warn("CI hook config init failed", "component", info.Component, "error", err)
+		log.Warn(ciHookConfigInitFailedMsg, logKeyComponent, info.Component, "error", err)
 		return
 	}
 
@@ -245,7 +268,7 @@ func runCIHooksForPlanComponent(actualCmd *cobra.Command, info *schema.ConfigAnd
 	}
 
 	if err := h.RunCIHooks(&h.RunCIHooksOptions{
-		Event:        h.AfterTerraformPlan,
+		Event:        event,
 		AtmosConfig:  &atmosConfig,
 		Info:         info,
 		Output:       ansi.Strip(rawOutput),
@@ -253,35 +276,74 @@ func runCIHooksForPlanComponent(actualCmd *cobra.Command, info *schema.ConfigAnd
 		CommandError: execErr,
 		ExitCode:     errUtils.GetExitCode(execErr),
 	}); err != nil {
-		log.Warn("CI hook execution failed", "component", info.Component, "error", err)
+		log.Warn(ciHookFailedMsg, logKeyComponent, info.Component, "error", err)
 	}
 }
 
-// runCIHooksForApplyComponent fires CI hooks for a single component after it completes
-// in multi-component apply mode. Mirrors runCIHooksForPlanComponent using AfterTerraformApply.
-func runCIHooksForApplyComponent(actualCmd *cobra.Command, info *schema.ConfigAndStacksInfo, rawOutput string, execErr error) {
-	atmosConfig, err := cfg.InitCliConfig(*info, true)
-	if err != nil {
-		log.Warn("CI hook config init failed", "component", info.Component, "error", err)
-		return
+// terraformPlanCIResultHandler forwards scheduler results into the aggregate CI hook.
+type terraformPlanCIResultHandler struct {
+	cmd     *cobra.Command
+	info    *schema.ConfigAndStacksInfo
+	command string
+}
+
+// HandleTerraformPlanCIResults initializes config and runs the aggregate CI hook.
+func (handler *terraformPlanCIResultHandler) HandleTerraformPlanCIResults(resultSet schema.TerraformPlanCIResultSet) error {
+	if handler == nil || handler.cmd == nil || handler.info == nil {
+		return nil
 	}
 
-	forceCIMode, _ := actualCmd.Flags().GetBool("ci")
-	if !forceCIMode {
-		forceCIMode = viper.GetBool("ci")
+	command := handler.command
+	if command == "" {
+		command = resultSet.Command
+	}
+	if command == "" {
+		command = handler.info.SubCommand
+	}
+	resultSet.Command = command
+
+	atmosConfig, err := cfg.InitCliConfig(*handler.info, true)
+	if err != nil {
+		return fmt.Errorf(errWrapFormat, errUtils.ErrInitializeCLIConfig, err)
 	}
 
 	if err := h.RunCIHooks(&h.RunCIHooksOptions{
-		Event:        h.AfterTerraformApply,
-		AtmosConfig:  &atmosConfig,
-		Info:         info,
-		Output:       ansi.Strip(rawOutput),
-		ForceCIMode:  forceCIMode,
-		CommandError: execErr,
-		ExitCode:     errUtils.GetExitCode(execErr),
+		Event:       terraformAggregateEvent(command),
+		AtmosConfig: &atmosConfig,
+		Info:        handler.info,
+		ForceCIMode: terraformCIModeEnabled(handler.cmd),
+		Aggregate:   resultSet,
 	}); err != nil {
-		log.Warn("CI hook execution failed", "component", info.Component, "error", err)
+		return err
 	}
+	return nil
+}
+
+// terraformAggregateEvent returns the aggregate CI hook event for a Terraform command.
+func terraformAggregateEvent(command string) h.HookEvent {
+	switch command {
+	case "apply":
+		return h.AfterTerraformApplyAggregate
+	case "destroy":
+		return h.AfterTerraformDestroyAggregate
+	default:
+		return h.AfterTerraformPlanAggregate
+	}
+}
+
+// terraformCIModeEnabled returns true when CLI, config, or native provider detection enables CI mode.
+func terraformCIModeEnabled(cmd *cobra.Command) bool {
+	forceCIMode := false
+	if cmd != nil {
+		forceCIMode, _ = cmd.Flags().GetBool("ci")
+	}
+	if forceCIMode {
+		return true
+	}
+	if viper.GetBool("ci") {
+		return true
+	}
+	return ci.IsCI()
 }
 
 // wirePerComponentHook installs the per-component CI hook on info so each
@@ -291,6 +353,18 @@ func runCIHooksForApplyComponent(actualCmd *cobra.Command, info *schema.ConfigAn
 // ExecuteTerraformQuery dispatch paths; keep it in one place so a new
 // subcommand only needs to be added once.
 func wirePerComponentHook(info *schema.ConfigAndStacksInfo, subCommand string, actualCmd *cobra.Command) {
+	if terraformCIModeEnabled(actualCmd) {
+		switch subCommand {
+		case "plan", "apply", "destroy":
+			info.TerraformPlanCIResultHandler = &terraformPlanCIResultHandler{
+				cmd:     actualCmd,
+				info:    info,
+				command: subCommand,
+			}
+			return
+		}
+	}
+
 	switch subCommand {
 	case "plan":
 		info.PerComponentHook = func(compInfo *schema.ConfigAndStacksInfo, output string, execErr error) {
@@ -363,7 +437,7 @@ func handlePathResolutionError(err error) error {
 }
 
 // executeAffectedCommand handles the --affected flag execution flow.
-func executeAffectedCommand(parentCmd *cobra.Command, args []string, info *schema.ConfigAndStacksInfo) error {
+func executeAffectedCommand(ctx context.Context, parentCmd *cobra.Command, args []string, info *schema.ConfigAndStacksInfo) error {
 	// Add these flags because `atmos describe affected` needs them, but `atmos terraform --affected` does not define them.
 	parentCmd.PersistentFlags().String("file", "", "")
 	parentCmd.PersistentFlags().String("format", "yaml", "")
@@ -382,10 +456,11 @@ func executeAffectedCommand(parentCmd *cobra.Command, args []string, info *schem
 	a.Upload = false
 	a.OutputFile = ""
 
-	return e.ExecuteTerraformAffected(&a, info)
+	return e.ExecuteTerraformAffectedWithContext(ctx, &a, info)
 }
 
 // isMultiComponentExecution checks if the command should be routed to multi-component execution.
+// isMultiComponentExecution reports whether the parsed command targets more than one component.
 func isMultiComponentExecution(info *schema.ConfigAndStacksInfo) bool {
 	return info.All || len(info.Components) > 0 || info.Query != "" || (info.Stack != "" && info.ComponentFromArg == "")
 }
@@ -426,13 +501,16 @@ func newTerraformPassthroughSubcommand(parent *cobra.Command, name, short string
 
 // terraformRun is for simple subcommands without their own parsers.
 // It binds terraformParser and delegates to terraformRunWithOptions.
-func terraformRun(parentCmd *cobra.Command, actualCmd *cobra.Command, args []string) error {
+func terraformRun(parentCmd, actualCmd *cobra.Command, args []string) error {
 	v := viper.GetViper()
 	if err := terraformParser.BindFlagsToViper(actualCmd, v); err != nil {
 		return err
 	}
 
-	opts := ParseTerraformRunOptions(v)
+	opts, err := ParseTerraformRunOptions(v)
+	if err != nil {
+		return err
+	}
 	return terraformRunWithOptions(parentCmd, actualCmd, args, opts)
 }
 
@@ -448,6 +526,14 @@ func applyOptionsToInfo(info *schema.ConfigAndStacksInfo, opts *TerraformRunOpti
 	info.All = opts.All
 	info.Affected = opts.Affected
 	info.Query = opts.Query
+	info.MaxConcurrency = opts.MaxConcurrency
+	info.TerraformFailureMode = opts.FailureMode
+	info.FailFast = opts.FailureMode == terraformFailureModeFailFast
+	info.KeepGoing = opts.FailureMode == terraformFailureModeKeepGoing
+	info.TerraformPlanLogOrder = opts.PlanLogOrder
+	info.TerraformPlanHide = opts.PlanHide
+	info.TerraformPlanHideNoChanges = opts.PlanHideNoChanges
+	info.TerraformPlanSummaryFile = opts.PlanSummaryFile
 
 	// Backend execution flags (only apply if set via CLI).
 	if opts.AutoGenerateBackendFile != "" {
@@ -530,8 +616,11 @@ func terraformRunWithOptions(parentCmd, actualCmd *cobra.Command, args []string,
 
 	// Route to appropriate execution path.
 	if info.Affected {
-		wasMultiComponentExecution = false
-		return executeAffectedCommand(parentCmd, args, &info)
+		wasMultiComponentExecution = true
+		wirePerComponentHook(&info, subCommand, actualCmd)
+		ctx, stop := terraformSignalContext(actualCmd)
+		defer stop()
+		return executeAffectedCommand(ctx, parentCmd, args, &info)
 	}
 	// --all routes to ExecuteTerraformAll for dependency-ordered execution.
 	// --components / --query / bare `-s stack` continue to route to ExecuteTerraformQuery.
@@ -539,13 +628,17 @@ func terraformRunWithOptions(parentCmd, actualCmd *cobra.Command, args []string,
 		wasMultiComponentExecution = true
 		log.Debug("Routing to ExecuteTerraformAll (dependency-ordered)")
 		wirePerComponentHook(&info, subCommand, actualCmd)
-		return e.ExecuteTerraformAll(&info)
+		ctx, stop := terraformSignalContext(actualCmd)
+		defer stop()
+		return e.ExecuteTerraformAllWithContext(ctx, &info)
 	}
 	if isMultiComponentExecution(&info) {
 		wasMultiComponentExecution = true
 		log.Debug("Routing to ExecuteTerraformQuery (multi-component)")
 		wirePerComponentHook(&info, subCommand, actualCmd)
-		return e.ExecuteTerraformQuery(&info)
+		ctx, stop := terraformSignalContext(actualCmd)
+		defer stop()
+		return e.ExecuteTerraformQueryWithContext(ctx, &info)
 	}
 	wasMultiComponentExecution = false
 
@@ -566,6 +659,14 @@ func terraformRunWithOptions(parentCmd, actualCmd *cobra.Command, args []string,
 	}
 
 	return executeSingleComponent(&info, shellOpts...)
+}
+
+func terraformSignalContext(actualCmd *cobra.Command) (context.Context, context.CancelFunc) {
+	ctx := actualCmd.Context()
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	return signal.NotifyContext(ctx, syscall.SIGINT, syscall.SIGTERM)
 }
 
 // hasMultiComponentFlags checks if any multi-component flags are set.
