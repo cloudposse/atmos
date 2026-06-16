@@ -238,6 +238,7 @@ jobs:
           PACKER_GITHUB_API_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           ATMOS_TEST_SKIP_PRECONDITION_CHECKS: true
           ATMOS_TEST_TERRAFORM_REGISTRY_CACHE: 1
+          CGO_ENABLED: 0
         run: go test ./tests -run '^TestTerraformRegistryCache$' -count=1 -timeout 10m -v
 
       # Enable this after merging test-cases
