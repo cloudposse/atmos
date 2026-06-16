@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 
@@ -237,7 +238,7 @@ func needProcessTemplatesAndYamlFunctions(command string) bool {
 		"state rm",
 		"state show",
 	}
-	return u.SliceContainsString(commandsThatNeedFuncProcessing, command)
+	return slices.Contains(commandsThatNeedFuncProcessing, command)
 }
 
 // isWorkspacesEnabled checks if Terraform workspaces are enabled for a component.
@@ -543,7 +544,7 @@ func parseUploadStatusFlag(args []string, flagName string) bool {
 	flagPrefix := "--" + flagName + "="
 
 	// Check for --flag (without value, defaults to true).
-	if u.SliceContainsString(args, "--"+flagName) {
+	if slices.Contains(args, "--"+flagName) {
 		return true
 	}
 

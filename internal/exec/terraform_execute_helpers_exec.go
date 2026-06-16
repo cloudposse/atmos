@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"os"
 	osexec "os/exec"
+	"slices"
 	"strings"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -24,7 +25,6 @@ import (
 	"github.com/cloudposse/atmos/pkg/pro"
 	"github.com/cloudposse/atmos/pkg/retry"
 	"github.com/cloudposse/atmos/pkg/schema"
-	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 // componentExecContext holds the per-execution state assembled by prepareComponentExecution.
@@ -291,7 +291,7 @@ func checkTTYRequirement(info *schema.ConfigAndStacksInfo) error {
 	if os.Stdin != nil {
 		return nil
 	}
-	if info.SubCommand == subcommandApply && !u.SliceContainsString(info.AdditionalArgsAndFlags, autoApproveFlag) {
+	if info.SubCommand == subcommandApply && !slices.Contains(info.AdditionalArgsAndFlags, autoApproveFlag) {
 		return fmt.Errorf(
 			"%w: 'terraform apply' requires a user interaction, but no TTY is attached. "+
 				"Use 'terraform apply -auto-approve' or 'terraform deploy' instead",

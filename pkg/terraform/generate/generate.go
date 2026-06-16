@@ -8,13 +8,13 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 
 	"github.com/cloudposse/atmos/pkg/auth"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
-	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 // Section key constants for component configuration.
@@ -210,7 +210,7 @@ func processStackForGenerate(
 	}
 
 	for componentName, compSection := range terraformSection {
-		if len(components) > 0 && !u.SliceContainsString(components, componentName) {
+		if len(components) > 0 && !slices.Contains(components, componentName) {
 			continue
 		}
 

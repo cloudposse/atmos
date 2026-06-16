@@ -3,13 +3,13 @@ package exec
 import (
 	"fmt"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
-	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 // BuildTerraformWorkspace builds Terraform workspace.
@@ -131,28 +131,24 @@ func BuildDependentStackNameFromDependsOnLegacy(
 ) (string, error) {
 	defer perf.Track(nil, "exec.BuildDependentStackNameFromDependsOnLegacy")()
 
-	var dependentStackName string
-
 	dep := strings.Replace(dependsOn, "/", "-", -1)
 
-	if u.SliceContainsString(allStackNames, dep) {
-		dependentStackName = dep
-	} else if u.SliceContainsString(componentNamesInCurrentStack, dep) {
-		dependentStackName = fmt.Sprintf("%s-%s", currentStackName, dep)
-	} else {
-		return "", fmt.Errorf(
-			"%w: the component '%s' in the stack '%s' specifies 'depends_on' dependency '%s', "+
-				"but '%s' is not a stack and not a component in the '%s' stack",
-			errUtils.ErrInvalidDependsOn,
-			currentComponentName,
-			currentStackName,
-			dependsOn,
-			dependsOn,
-			currentStackName,
-		)
+	if slices.Contains(allStackNames, dep) {
+		return dep, nil
 	}
 
-	return dependentStackName, nil
+	if slices.Contains(componentNamesInCurrentStack, dep) {
+		return fmt.Sprintf("%s-%s", currentStackName, dep), nil
+	}
+
+	return "", fmt.Errorf(
+		"%w: the component '%[2]s' in the stack '%[3]s' specifies 'depends_on' dependency '%[4]s', "+
+			"but '%[4]s' is not a stack and not a component in the '%[3]s' stack",
+		errUtils.ErrInvalidDependsOn,
+		currentComponentName,
+		currentStackName,
+		dependsOn,
+	)
 }
 
 // BuildDependentStackNameFromDependsOn builds the dependent stack name from "settings.depends_on" config.
@@ -167,7 +163,7 @@ func BuildDependentStackNameFromDependsOn(
 
 	dep := strings.Replace(fmt.Sprintf("%s-%s", dependsOnStackName, dependsOnComponentName), "/", "-", -1)
 
-	if u.SliceContainsString(allStackNames, dep) {
+	if slices.Contains(allStackNames, dep) {
 		return dep, nil
 	}
 
@@ -256,16 +252,4 @@ func IsComponentAbstract(metadataSection map[string]any) bool {
 		}
 	}
 	return false
-}
-
-// IsComponentEnabled returns 'true' if the component is enabled.
-func IsComponentEnabled(varsSection map[string]any) bool {
-	defer perf.Track(nil, "exec.IsComponentEnabled")()
-
-	if enabled, ok := varsSection["enabled"].(bool); ok {
-		if enabled == false {
-			return false
-		}
-	}
-	return true
 }
