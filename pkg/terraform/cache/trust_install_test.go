@@ -52,6 +52,17 @@ func forceWindowsTrustFuncs(t *testing.T, install func(string) error, remove fun
 	})
 }
 
+func forceGitHubActions(t *testing.T, enabled bool) {
+	t.Helper()
+	prev := isGitHubActionsFunc
+	isGitHubActionsFunc = func() bool {
+		return enabled
+	}
+	t.Cleanup(func() {
+		isGitHubActionsFunc = prev
+	})
+}
+
 // TestMain gates the test binary so tests can use it as a cross-platform subprocess:
 // with _ATMOS_TEST_EXIT_ONE the process exits 1 (a failing trust command), with
 // _ATMOS_TEST_EXIT_ZERO it exits 0 (a succeeding one), and with _ATMOS_TEST_HTTPS_PROBE_URL
@@ -105,6 +116,32 @@ func TestTrustInstructions(t *testing.T) {
 	}
 }
 
+func TestWindowsTrustStoreScopeForInstall(t *testing.T) {
+	forceGitHubActions(t, false)
+	assert.Equal(t, windowsTrustStoreCurrentUser, windowsTrustStoreScopeForInstall())
+
+	forceGitHubActions(t, true)
+	assert.Equal(t, windowsTrustStoreLocalMachine, windowsTrustStoreScopeForInstall())
+}
+
+func TestIsGitHubActions(t *testing.T) {
+	t.Setenv("GITHUB_ACTIONS", "")
+	t.Setenv("ACTIONS_ORCHESTRATION_ID", "")
+	t.Setenv("ACTIONS_RUNNER_RETURN_JOB_RESULT_FOR_HOSTED", "")
+	assert.False(t, isGitHubActions())
+
+	t.Setenv("ACTIONS_ORCHESTRATION_ID", "test.windows-latest_windows")
+	assert.True(t, isGitHubActions())
+
+	t.Setenv("ACTIONS_ORCHESTRATION_ID", "")
+	t.Setenv("ACTIONS_RUNNER_RETURN_JOB_RESULT_FOR_HOSTED", "1")
+	assert.True(t, isGitHubActions())
+
+	t.Setenv("ACTIONS_RUNNER_RETURN_JOB_RESULT_FOR_HOSTED", "")
+	t.Setenv("GITHUB_ACTIONS", "true")
+	assert.True(t, isGitHubActions())
+}
+
 func TestInstallTrust_CertNotFound(t *testing.T) {
 	// Missing cert is rejected before any OS trust-store call, on every platform.
 	err := InstallTrust(filepath.Join(t.TempDir(), "missing.pem"))
@@ -122,6 +159,7 @@ func TestInstallTrust_NoopWhenTrustNotRequired(t *testing.T) {
 
 func TestInstallTrust_WindowsUsesCurrentUserRootStore(t *testing.T) {
 	forceTrustPlatform(t, "windows", nil)
+	forceGitHubActions(t, false)
 	cert := filepath.Join(t.TempDir(), "cert.pem")
 	require.NoError(t, os.WriteFile(cert, []byte("placeholder"), tlsCertPerm))
 	var gotPath string
@@ -134,6 +172,43 @@ func TestInstallTrust_WindowsUsesCurrentUserRootStore(t *testing.T) {
 	assert.Equal(t, cert, gotPath)
 }
 
+func TestInstallTrust_WindowsGitHubActionsUsesCertutilEnterpriseRoot(t *testing.T) {
+	commands := forceTrustPlatform(t, "windows", nil)
+	forceGitHubActions(t, true)
+	cert := filepath.Join(t.TempDir(), "cert.pem")
+	require.NoError(t, os.WriteFile(cert, []byte("placeholder"), tlsCertPerm))
+	forceWindowsTrustFuncs(t, func(_ string) error {
+		t.Fatal("native Windows trust install must not be called in GitHub Actions")
+		return nil
+	}, nil)
+
+	require.NoError(t, InstallTrust(cert))
+	require.Len(t, *commands, 1)
+	assert.Equal(t, "certutil", (*commands)[0].name)
+	assert.Equal(t, []string{"-addstore", "-enterprise", "-f", "Root", cert}, (*commands)[0].args)
+}
+
+func TestInstallTrust_WindowsTimeoutsBlockingTrustStore(t *testing.T) {
+	forceTrustPlatform(t, "windows", nil)
+	forceGitHubActions(t, false)
+	cert := filepath.Join(t.TempDir(), "cert.pem")
+	require.NoError(t, os.WriteFile(cert, []byte("placeholder"), tlsCertPerm))
+	forceWindowsTrustFuncs(t, func(_ string) error {
+		time.Sleep(10 * time.Second)
+		return nil
+	}, nil)
+
+	prevTimeout := trustCommandTimeout
+	trustCommandTimeout = 50 * time.Millisecond
+	t.Cleanup(func() {
+		trustCommandTimeout = prevTimeout
+	})
+
+	err := InstallTrust(cert)
+	require.ErrorIs(t, err, errUtils.ErrInvalidConfig)
+	assert.Contains(t, err.Error(), "timed out after")
+}
+
 func TestRemoveTrust_NoopWhenTrustNotRequired(t *testing.T) {
 	if required, _ := TrustInstructions(); required {
 		t.Skip("platform performs a real (potentially prompting) OS trust-store removal")
@@ -143,15 +218,31 @@ func TestRemoveTrust_NoopWhenTrustNotRequired(t *testing.T) {
 
 func TestRemoveTrust_WindowsUsesCurrentUserRootStore(t *testing.T) {
 	forceTrustPlatform(t, "windows", nil)
+	forceGitHubActions(t, false)
 	cert := filepath.Join(t.TempDir(), "cert.pem")
-	var gotCommonName string
-	forceWindowsTrustFuncs(t, nil, func(commonName string) error {
-		gotCommonName = commonName
+	var gotPath string
+	forceWindowsTrustFuncs(t, nil, func(path string) error {
+		gotPath = path
 		return nil
 	})
 
 	require.NoError(t, RemoveTrust(cert))
-	assert.Equal(t, certCommonName, gotCommonName)
+	assert.Equal(t, cert, gotPath)
+}
+
+func TestRemoveTrust_WindowsGitHubActionsUsesCertutilEnterpriseRoot(t *testing.T) {
+	commands := forceTrustPlatform(t, "windows", nil)
+	forceGitHubActions(t, true)
+	cert := filepath.Join(t.TempDir(), "cert.pem")
+	forceWindowsTrustFuncs(t, nil, func(_ string) error {
+		t.Fatal("native Windows trust removal must not be called in GitHub Actions")
+		return nil
+	})
+
+	require.NoError(t, RemoveTrust(cert))
+	require.Len(t, *commands, 1)
+	assert.Equal(t, "certutil", (*commands)[0].name)
+	assert.Equal(t, []string{"-delstore", "-enterprise", "Root", certCommonName}, (*commands)[0].args)
 }
 
 func TestRunTrustCommand(t *testing.T) {

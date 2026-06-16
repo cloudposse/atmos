@@ -32,7 +32,8 @@ func installWindowsTrust(certPath string) error {
 		_ = windows.CertFreeCertificateContext(certCtx)
 	}()
 
-	store, err := openCurrentUserRootStore()
+	storeScope := windowsTrustStoreScopeForInstall()
+	store, err := openWindowsRootStore(storeScope)
 	if err != nil {
 		return err
 	}
@@ -42,7 +43,7 @@ func installWindowsTrust(certPath string) error {
 
 	var added *windows.CertContext
 	if err := windows.CertAddCertificateContextToStore(store, certCtx, windows.CERT_STORE_ADD_REPLACE_EXISTING, &added); err != nil {
-		return fmt.Errorf("%w: adding certificate to Windows CurrentUser Root store: %w", errUtils.ErrInvalidConfig, err)
+		return fmt.Errorf("%w: adding certificate to Windows %s Root store: %w", errUtils.ErrInvalidConfig, storeScope, err)
 	}
 	if added != nil {
 		_ = windows.CertFreeCertificateContext(added)
@@ -51,7 +52,8 @@ func installWindowsTrust(certPath string) error {
 }
 
 func removeWindowsTrust(certPath string) error {
-	store, err := openCurrentUserRootStore()
+	storeScope := windowsTrustStoreScopeForInstall()
+	store, err := openWindowsRootStore(storeScope)
 	if err != nil {
 		return err
 	}
@@ -64,12 +66,12 @@ func removeWindowsTrust(certPath string) error {
 		return err
 	}
 	if len(der) > 0 {
-		return removeWindowsTrustByDER(store, der)
+		return removeWindowsTrustByDER(store, storeScope, der)
 	}
-	return removeWindowsTrustBySubject(store, certCommonName)
+	return removeWindowsTrustBySubject(store, storeScope, certCommonName)
 }
 
-func removeWindowsTrustBySubject(store windows.Handle, commonName string) error {
+func removeWindowsTrustBySubject(store windows.Handle, storeScope windowsTrustStoreScope, commonName string) error {
 	subject, err := windows.UTF16PtrFromString(commonName)
 	if err != nil {
 		return fmt.Errorf("%w: encoding certificate subject: %w", errUtils.ErrInvalidConfig, err)
@@ -88,18 +90,18 @@ func removeWindowsTrustBySubject(store windows.Handle, commonName string) error 
 			if errors.Is(err, cryptENotFound) {
 				return nil
 			}
-			return fmt.Errorf("%w: finding certificate in Windows CurrentUser Root store: %w", errUtils.ErrInvalidConfig, err)
+			return fmt.Errorf("%w: finding certificate in Windows %s Root store: %w", errUtils.ErrInvalidConfig, storeScope, err)
 		}
 		if certCtx == nil {
 			return nil
 		}
 		if err := windows.CertDeleteCertificateFromStore(certCtx); err != nil {
-			return fmt.Errorf("%w: removing certificate from Windows CurrentUser Root store: %w", errUtils.ErrInvalidConfig, err)
+			return fmt.Errorf("%w: removing certificate from Windows %s Root store: %w", errUtils.ErrInvalidConfig, storeScope, err)
 		}
 	}
 }
 
-func removeWindowsTrustByDER(store windows.Handle, der []byte) error {
+func removeWindowsTrustByDER(store windows.Handle, storeScope windowsTrustStoreScope, der []byte) error {
 	targetHash := sha1.Sum(der)
 
 	var prev *windows.CertContext
@@ -108,7 +110,7 @@ func removeWindowsTrustByDER(store windows.Handle, der []byte) error {
 		prev = certCtx
 		if certCtx == nil {
 			if err != nil && !errors.Is(err, cryptENotFound) {
-				return fmt.Errorf("%w: enumerating Windows CurrentUser Root store: %w", errUtils.ErrInvalidConfig, err)
+				return fmt.Errorf("%w: enumerating Windows %s Root store: %w", errUtils.ErrInvalidConfig, storeScope, err)
 			}
 			return nil
 		}
@@ -124,7 +126,7 @@ func removeWindowsTrustByDER(store windows.Handle, der []byte) error {
 			continue
 		}
 		if err := windows.CertDeleteCertificateFromStore(dup); err != nil {
-			return fmt.Errorf("%w: removing certificate from Windows CurrentUser Root store: %w", errUtils.ErrInvalidConfig, err)
+			return fmt.Errorf("%w: removing certificate from Windows %s Root store: %w", errUtils.ErrInvalidConfig, storeScope, err)
 		}
 	}
 }
@@ -146,7 +148,7 @@ func readCertificateDER(certPath string) ([]byte, error) {
 	return data, nil
 }
 
-func openCurrentUserRootStore() (windows.Handle, error) {
+func openWindowsRootStore(storeScope windowsTrustStoreScope) (windows.Handle, error) {
 	storeName, err := windows.UTF16PtrFromString("Root")
 	if err != nil {
 		return 0, fmt.Errorf("%w: encoding Windows certificate store name: %w", errUtils.ErrInvalidConfig, err)
@@ -155,11 +157,19 @@ func openCurrentUserRootStore() (windows.Handle, error) {
 		windows.CERT_STORE_PROV_SYSTEM,
 		0,
 		0,
-		windows.CERT_SYSTEM_STORE_CURRENT_USER|windows.CERT_STORE_OPEN_EXISTING_FLAG,
+		windowsTrustStoreFlags(storeScope),
 		uintptr(unsafe.Pointer(storeName)),
 	)
 	if err != nil {
-		return 0, fmt.Errorf("%w: opening Windows CurrentUser Root store: %w", errUtils.ErrInvalidConfig, err)
+		return 0, fmt.Errorf("%w: opening Windows %s Root store: %w", errUtils.ErrInvalidConfig, storeScope, err)
 	}
 	return store, nil
+}
+
+func windowsTrustStoreFlags(storeScope windowsTrustStoreScope) uint32 {
+	location := uint32(windows.CERT_SYSTEM_STORE_CURRENT_USER)
+	if storeScope == windowsTrustStoreLocalMachine {
+		location = windows.CERT_SYSTEM_STORE_LOCAL_MACHINE
+	}
+	return location | windows.CERT_STORE_OPEN_EXISTING_FLAG
 }

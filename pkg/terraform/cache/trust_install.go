@@ -18,12 +18,20 @@ import (
 // certCommonName is the subject CN used to locate the certificate for removal.
 const certCommonName = "Atmos Terraform Registry Cache"
 
+type windowsTrustStoreScope string
+
+const (
+	windowsTrustStoreCurrentUser  windowsTrustStoreScope = "CurrentUser"
+	windowsTrustStoreLocalMachine windowsTrustStoreScope = "LocalMachine"
+)
+
 var (
 	trustRuntimeGOOS        = runtime.GOOS
 	runTrustCommandFunc     = runTrustCommand
 	installWindowsTrustFunc = installWindowsTrust
 	removeWindowsTrustFunc  = removeWindowsTrust
 	trustCommandTimeout     = 30 * time.Second
+	isGitHubActionsFunc     = isGitHubActions
 )
 
 // TrustInstructions returns whether OS trust-store installation is required on this
@@ -36,7 +44,7 @@ func TrustInstructions() (required bool, note string) {
 	case "darwin":
 		return true, "Installs the certificate into your login keychain (you may be prompted for your password)."
 	case "windows":
-		return true, "Installs the certificate into your user Root certificate store."
+		return true, fmt.Sprintf("Installs the certificate into the Windows %s Root certificate store.", windowsTrustStoreScopeForInstall())
 	default:
 		return false, "Not required on this platform: Atmos trusts the cache certificate via SSL_CERT_FILE automatically."
 	}
@@ -60,7 +68,12 @@ func InstallTrust(certPath string) error {
 		}
 		return runTrustCommandFunc("security", "add-trusted-cert", "-r", "trustRoot", "-k", keychain, certPath)
 	case "windows":
-		return installWindowsTrustFunc(certPath)
+		if windowsUsesCertutilTrustCommand() {
+			return runTrustCommandFunc("certutil", "-addstore", "-enterprise", "-f", "Root", certPath)
+		}
+		return runTrustOperation("Windows trust store install", func() error {
+			return installWindowsTrustFunc(certPath)
+		})
 	default:
 		return nil
 	}
@@ -75,7 +88,12 @@ func RemoveTrust(certPath string) error {
 	case "darwin":
 		return runTrustCommandFunc("security", "remove-trusted-cert", certPath)
 	case "windows":
-		return removeWindowsTrustFunc(certCommonName)
+		if windowsUsesCertutilTrustCommand() {
+			return runTrustCommandFunc("certutil", "-delstore", "-enterprise", "Root", certCommonName)
+		}
+		return runTrustOperation("Windows trust store removal", func() error {
+			return removeWindowsTrustFunc(certPath)
+		})
 	default:
 		return nil
 	}
@@ -105,4 +123,38 @@ func runTrustCommand(name string, args ...string) error {
 		return fmt.Errorf("%w: %s failed: %w: %s", errUtils.ErrInvalidConfig, name, err, string(out))
 	}
 	return nil
+}
+
+func runTrustOperation(name string, fn func() error) error {
+	done := make(chan error, 1)
+	go func() {
+		done <- fn()
+	}()
+
+	timer := time.NewTimer(trustCommandTimeout)
+	defer timer.Stop()
+
+	select {
+	case err := <-done:
+		return err
+	case <-timer.C:
+		return fmt.Errorf("%w: %s timed out after %s", errUtils.ErrInvalidConfig, name, trustCommandTimeout)
+	}
+}
+
+func windowsTrustStoreScopeForInstall() windowsTrustStoreScope {
+	if isGitHubActionsFunc() {
+		return windowsTrustStoreLocalMachine
+	}
+	return windowsTrustStoreCurrentUser
+}
+
+func windowsUsesCertutilTrustCommand() bool {
+	return isGitHubActionsFunc()
+}
+
+func isGitHubActions() bool {
+	return os.Getenv("GITHUB_ACTIONS") == "true" ||
+		os.Getenv("ACTIONS_ORCHESTRATION_ID") != "" ||
+		os.Getenv("ACTIONS_RUNNER_RETURN_JOB_RESULT_FOR_HOSTED") != ""
 }
