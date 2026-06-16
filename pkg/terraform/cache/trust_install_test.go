@@ -124,6 +124,14 @@ func TestWindowsTrustStoreScopeForInstall(t *testing.T) {
 	assert.Equal(t, windowsTrustStoreLocalMachine, windowsTrustStoreScopeForInstall())
 }
 
+func TestMacOSTrustStoreScopeForInstall(t *testing.T) {
+	forceGitHubActions(t, false)
+	assert.False(t, macOSUsesSystemTrustStore())
+
+	forceGitHubActions(t, true)
+	assert.True(t, macOSUsesSystemTrustStore())
+}
+
 func TestIsGitHubActions(t *testing.T) {
 	t.Setenv("GITHUB_ACTIONS", "")
 	t.Setenv("ACTIONS_ORCHESTRATION_ID", "")
@@ -155,6 +163,35 @@ func TestInstallTrust_NoopWhenTrustNotRequired(t *testing.T) {
 	cert := filepath.Join(t.TempDir(), "cert.pem")
 	require.NoError(t, os.WriteFile(cert, []byte("placeholder"), tlsCertPerm))
 	assert.NoError(t, InstallTrust(cert))
+}
+
+func TestInstallTrust_DarwinUsesLoginKeychain(t *testing.T) {
+	commands := forceTrustPlatform(t, "darwin", nil)
+	forceGitHubActions(t, false)
+	cert := filepath.Join(t.TempDir(), "cert.pem")
+	require.NoError(t, os.WriteFile(cert, []byte("placeholder"), tlsCertPerm))
+
+	require.NoError(t, InstallTrust(cert))
+	require.Len(t, *commands, 1)
+	assert.Equal(t, "security", (*commands)[0].name)
+	assert.Equal(t, "add-trusted-cert", (*commands)[0].args[0])
+	assert.Contains(t, (*commands)[0].args, "-r")
+	assert.Contains(t, (*commands)[0].args, "trustRoot")
+	assert.Contains(t, (*commands)[0].args, "-k")
+	assert.Contains(t, (*commands)[0].args, cert)
+	assert.NotContains(t, (*commands)[0].args, macosSystemKeychainPath)
+}
+
+func TestInstallTrust_DarwinGitHubActionsUsesSystemKeychain(t *testing.T) {
+	commands := forceTrustPlatform(t, "darwin", nil)
+	forceGitHubActions(t, true)
+	cert := filepath.Join(t.TempDir(), "cert.pem")
+	require.NoError(t, os.WriteFile(cert, []byte("placeholder"), tlsCertPerm))
+
+	require.NoError(t, InstallTrust(cert))
+	require.Len(t, *commands, 1)
+	assert.Equal(t, "sudo", (*commands)[0].name)
+	assert.Equal(t, []string{"security", "add-trusted-cert", "-d", "-r", "trustRoot", "-p", "ssl", "-k", macosSystemKeychainPath, cert}, (*commands)[0].args)
 }
 
 func TestInstallTrust_WindowsUsesCurrentUserRootStore(t *testing.T) {
@@ -214,6 +251,28 @@ func TestRemoveTrust_NoopWhenTrustNotRequired(t *testing.T) {
 		t.Skip("platform performs a real (potentially prompting) OS trust-store removal")
 	}
 	assert.NoError(t, RemoveTrust(filepath.Join(t.TempDir(), "missing.pem")))
+}
+
+func TestRemoveTrust_DarwinUsesLoginKeychain(t *testing.T) {
+	commands := forceTrustPlatform(t, "darwin", nil)
+	forceGitHubActions(t, false)
+	cert := filepath.Join(t.TempDir(), "cert.pem")
+
+	require.NoError(t, RemoveTrust(cert))
+	require.Len(t, *commands, 1)
+	assert.Equal(t, "security", (*commands)[0].name)
+	assert.Equal(t, []string{"remove-trusted-cert", cert}, (*commands)[0].args)
+}
+
+func TestRemoveTrust_DarwinGitHubActionsUsesSystemKeychain(t *testing.T) {
+	commands := forceTrustPlatform(t, "darwin", nil)
+	forceGitHubActions(t, true)
+	cert := filepath.Join(t.TempDir(), "cert.pem")
+
+	require.NoError(t, RemoveTrust(cert))
+	require.Len(t, *commands, 1)
+	assert.Equal(t, "sudo", (*commands)[0].name)
+	assert.Equal(t, []string{"security", "delete-certificate", "-c", certCommonName, macosSystemKeychainPath}, (*commands)[0].args)
 }
 
 func TestRemoveTrust_WindowsUsesCurrentUserRootStore(t *testing.T) {

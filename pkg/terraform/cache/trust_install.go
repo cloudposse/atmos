@@ -18,6 +18,8 @@ import (
 // certCommonName is the subject CN used to locate the certificate for removal.
 const certCommonName = "Atmos Terraform Registry Cache"
 
+const macosSystemKeychainPath = "/Library/Keychains/System.keychain"
+
 type windowsTrustStoreScope string
 
 const (
@@ -42,6 +44,9 @@ func TrustInstructions() (required bool, note string) {
 
 	switch trustRuntimeGOOS {
 	case "darwin":
+		if macOSUsesSystemTrustStore() {
+			return true, "Installs the certificate into the macOS System keychain."
+		}
 		return true, "Installs the certificate into your login keychain (you may be prompted for your password)."
 	case "windows":
 		return true, fmt.Sprintf("Installs the certificate into the Windows %s Root certificate store.", windowsTrustStoreScopeForInstall())
@@ -62,6 +67,9 @@ func InstallTrust(certPath string) error {
 
 	switch trustRuntimeGOOS {
 	case "darwin":
+		if macOSUsesSystemTrustStore() {
+			return runTrustCommandFunc("sudo", "security", "add-trusted-cert", "-d", "-r", "trustRoot", "-p", "ssl", "-k", macosSystemKeychainPath, certPath)
+		}
 		keychain, err := loginKeychainPath()
 		if err != nil {
 			return err
@@ -86,6 +94,9 @@ func RemoveTrust(certPath string) error {
 
 	switch trustRuntimeGOOS {
 	case "darwin":
+		if macOSUsesSystemTrustStore() {
+			return runTrustCommandFunc("sudo", "security", "delete-certificate", "-c", certCommonName, macosSystemKeychainPath)
+		}
 		return runTrustCommandFunc("security", "remove-trusted-cert", certPath)
 	case "windows":
 		if windowsUsesCertutilTrustCommand() {
@@ -150,6 +161,10 @@ func windowsTrustStoreScopeForInstall() windowsTrustStoreScope {
 }
 
 func windowsUsesCertutilTrustCommand() bool {
+	return isGitHubActionsFunc()
+}
+
+func macOSUsesSystemTrustStore() bool {
 	return isGitHubActionsFunc()
 }
 

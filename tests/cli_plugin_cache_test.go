@@ -89,11 +89,8 @@ func TestTerraformPluginCache(t *testing.T) {
 // be enabled through environment variables and writes provider registry artifacts
 // into an explicit, stable cache location.
 func TestTerraformRegistryCache(t *testing.T) {
-	if runtime.GOOS == "darwin" {
-		t.Skip("registry cache trust requires mutating the macOS login keychain")
-	}
-	if runtime.GOOS == "windows" && os.Getenv("ATMOS_TEST_TERRAFORM_REGISTRY_CACHE") != "1" {
-		t.Skip("set ATMOS_TEST_TERRAFORM_REGISTRY_CACHE=1 to run the Windows registry cache trust test")
+	if (runtime.GOOS == "darwin" || runtime.GOOS == "windows") && os.Getenv("ATMOS_TEST_TERRAFORM_REGISTRY_CACHE") != "1" {
+		t.Skip("set ATMOS_TEST_TERRAFORM_REGISTRY_CACHE=1 to run the registry cache trust test on macOS/Windows")
 	}
 
 	ensureAtmosRunner(t)
@@ -126,11 +123,11 @@ func TestTerraformRegistryCache(t *testing.T) {
 		"TF_PLUGIN_CACHE_DIR":                       "",
 	}
 
-	if runtime.GOOS == "windows" {
-		t.Log("Generating registry cache certificate on Windows...")
+	if runtime.GOOS == "darwin" || runtime.GOOS == "windows" {
+		t.Logf("Generating registry cache certificate on %s...", runtime.GOOS)
 		stdout, stderr, err := runTerraformInitCommandWithEnv(t, "component-a", envVars)
 		if err != nil {
-			t.Logf("Initial Windows cache-enabled init failed as expected before trust: %v", err)
+			t.Logf("Initial %s cache-enabled init failed as expected before trust: %v", runtime.GOOS, err)
 			assert.Contains(t, stdout+stderr, "terraform cache trust")
 		}
 
