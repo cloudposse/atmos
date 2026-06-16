@@ -52,6 +52,30 @@ func shellInfoFromOptions(opts *ShellOptions) schema.ConfigAndStacksInfo {
 	}
 }
 
+// applyShellSecretEnv exports secret-bearing variables into the interactive shell as
+// TF_VAR_<name> environment variables when withSecrets is true. When false, the secrets
+// are withheld (they were already kept out of the on-disk varfile) and a warning explains
+// how to opt in. Requires computeTerraformSecretVarKeys to have run first.
+func applyShellSecretEnv(info *schema.ConfigAndStacksInfo, withSecrets bool) error {
+	if !withSecrets {
+		if len(info.TerraformSecretVarKeys) > 0 {
+			log.Warn("Secret-bearing variables are not exported into the shell; pass --with-secrets to export them as TF_VAR_* environment variables",
+				"count", len(info.TerraformSecretVarKeys))
+		}
+		return nil
+	}
+
+	secretEnv, err := secretVarEnv(info)
+	if err != nil {
+		return err
+	}
+	if len(secretEnv) > 0 {
+		info.ComponentEnvList = append(info.ComponentEnvList, secretEnv...)
+		log.Debug("Exporting secret variables into the shell as TF_VAR_* environment variables", "count", len(secretEnv))
+	}
+	return nil
+}
+
 // resolveWorkdirPath returns the workdir path from componentSection if set by a workdir provisioner,
 // otherwise returns the original componentPath unchanged.
 func resolveWorkdirPath(componentSection map[string]any, componentPath string) string {
@@ -141,8 +165,17 @@ func ExecuteTerraformShell(opts *ShellOptions, atmosConfig *schema.AtmosConfigur
 		return nil
 	}
 
+	// Keep resolved secrets out of the on-disk varfile. With --with-secrets, export them
+	// into the interactive shell as TF_VAR_* env vars; otherwise they are not available
+	// (terraform commands in the shell that need them will prompt or fail).
+	computeTerraformSecretVarKeys(&info)
+
 	varFilePath := constructTerraformComponentVarfilePath(atmosConfig, &info)
-	if err := u.WriteToFileAsJSON(varFilePath, info.ComponentVarsSection, filePermissions); err != nil {
+	if err := u.WriteToFileAsJSON(varFilePath, diskSafeVars(&info), filePermissions); err != nil {
+		return err
+	}
+
+	if err := applyShellSecretEnv(&info, opts.WithSecrets); err != nil {
 		return err
 	}
 

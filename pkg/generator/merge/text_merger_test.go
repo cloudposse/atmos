@@ -175,7 +175,7 @@ line 5`,
 				return
 			}
 
-			if result.HasConflicts && tt.name != "empty base, both add content" {
+			if result.HasConflicts {
 				t.Errorf("Unexpected conflicts in clean merge: %d conflicts", result.ConflictCount)
 				t.Logf("Result:\n%s", result.Content)
 				return

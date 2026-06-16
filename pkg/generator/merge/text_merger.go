@@ -12,7 +12,7 @@ import (
 
 // TextMerger handles 3-way merging of text files using the diff3 algorithm.
 type TextMerger struct {
-	thresholdPercent int // Percentage threshold (0-100) for change detection
+	thresholdPercent int // Percentage threshold (0-100) for change detection.
 }
 
 // NewTextMerger creates a new text merger with the specified percentage threshold.
@@ -41,13 +41,13 @@ type MergeResult struct {
 func (m *TextMerger) Merge(base, ours, theirs string) (*MergeResult, error) {
 	defer perf.Track(nil, "merge.TextMerger.Merge")()
 
-	// Perform the 3-way merge using diff3
-	// Parameter order: (mine/ours, original/base, yours/theirs)
+	// Perform the 3-way merge using diff3.
+	// Parameter order: (mine/ours, original/base, yours/theirs).
 	mergeResult, err := diff3.Merge(
 		strings.NewReader(ours),
 		strings.NewReader(base),
 		strings.NewReader(theirs),
-		false, // Don't show base in conflict markers
+		false, // Don't show base in conflict markers.
 		"Ours",
 		"Theirs",
 	)
@@ -58,7 +58,7 @@ func (m *TextMerger) Merge(base, ours, theirs string) (*MergeResult, error) {
 			Err()
 	}
 
-	// Read the merged content from the Result reader
+	// Read the merged content from the Result reader.
 	var buf bytes.Buffer
 	_, err = buf.ReadFrom(mergeResult.Result)
 	if err != nil {
@@ -70,13 +70,13 @@ func (m *TextMerger) Merge(base, ours, theirs string) (*MergeResult, error) {
 
 	mergedContent := buf.String()
 
-	// Check for conflicts - diff3 provides this info directly
+	// Check for conflicts - diff3 provides this info directly.
 	hasConflicts := mergeResult.Conflicts
 	conflictCount := strings.Count(mergedContent, "<<<<<<<")
 
-	// If there are conflicts, check if they exceed threshold
+	// If there are conflicts, check if they exceed threshold.
 	if hasConflicts && m.thresholdPercent > 0 {
-		// Calculate change percentage based on conflict size vs total size
+		// Calculate change percentage based on conflict size vs total size.
 		changePercentage := m.calculateChangePercentage(base, ours, theirs)
 
 		if changePercentage > m.thresholdPercent {
@@ -97,22 +97,22 @@ func (m *TextMerger) Merge(base, ours, theirs string) (*MergeResult, error) {
 // calculateChangePercentage calculates the percentage of content that has changed.
 // This compares how much base, ours, and theirs differ from each other, relative to base size.
 func (m *TextMerger) calculateChangePercentage(base, ours, theirs string) int {
-	// Calculate how many lines changed in ours vs base
+	// Calculate how many lines changed in ours vs base.
 	baseLines := strings.Split(base, "\n")
 	oursLines := strings.Split(ours, "\n")
 	theirsLines := strings.Split(theirs, "\n")
 
-	// Count lines that differ from base
+	// Count lines that differ from base.
 	oursChanged := countDifferentLines(baseLines, oursLines)
 	theirsChanged := countDifferentLines(baseLines, theirsLines)
 
-	// Total changed lines (may overlap in conflicts)
+	// Total changed lines (may overlap in conflicts).
 	totalChanged := oursChanged + theirsChanged
 
-	// Calculate percentage based on base size
+	// Calculate percentage based on base size.
 	baseSize := len(baseLines)
 	if baseSize == 0 {
-		baseSize = 1 // Avoid division by zero
+		baseSize = 1 // Avoid division by zero.
 	}
 
 	return int(float64(totalChanged) / float64(baseSize) * 100.0)
@@ -120,7 +120,7 @@ func (m *TextMerger) calculateChangePercentage(base, ours, theirs string) int {
 
 // countDifferentLines counts how many lines differ between two sets of lines.
 func countDifferentLines(base, changed []string) int {
-	// Simple line-by-line comparison
+	// Simple line-by-line comparison.
 	maxLen := len(base)
 	if len(changed) > maxLen {
 		maxLen = len(changed)

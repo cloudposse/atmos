@@ -58,8 +58,6 @@ func bindFlagToViper(v *viper.Viper, viperKey string, flag Flag) error {
 //
 // Key validation: Keys must be non-empty after trimming whitespace.
 // Malformed pairs (missing "=" or empty key) are silently skipped.
-//
-//nolint:gocognit,revive // complex parsing logic handling multiple input formats
 func ParseStringMap(v *viper.Viper, key string) map[string]string {
 	defer perf.Track(nil, "flags.ParseStringMap")()
 
@@ -77,40 +75,61 @@ func ParseStringMap(v *viper.Viper, key string) map[string]string {
 
 	switch val := value.(type) {
 	case []string:
-		// From CLI flags: ["key1=val1", "key2=val2"]
-		for _, pair := range val {
-			k, v := parseKeyValuePair(pair)
-			if k != "" {
-				result[k] = v
-			}
-		}
+		// From CLI flags: ["key1=val1", "key2=val2"].
+		addStringSlicePairs(result, val)
 	case string:
-		// From env var: "key1=val1,key2=val2"
-		pairs := strings.Split(val, ",")
-		for _, pair := range pairs {
-			k, v := parseKeyValuePair(strings.TrimSpace(pair))
-			if k != "" {
-				result[k] = v
-			}
+		// From env var: "key1=val1,key2=val2".
+		addCommaSeparatedPairs(result, val)
+	case map[string]string:
+		// From defaults set via viper.SetDefault: {foo: bar, baz: qux}.
+		for k, v := range val {
+			result[k] = v
 		}
 	case map[string]interface{}:
-		// From config file: {foo: bar, baz: qux}
+		// From config file: {foo: bar, baz: qux}.
 		for k, v := range val {
 			result[k] = fmt.Sprintf("%v", v)
 		}
 	case []interface{}:
-		// From config file as array: ["foo=bar", "baz=qux"]
-		for _, item := range val {
-			if str, ok := item.(string); ok {
-				k, v := parseKeyValuePair(str)
-				if k != "" {
-					result[k] = v
-				}
-			}
-		}
+		// From config file as array: ["foo=bar", "baz=qux"].
+		addAnySlicePairs(result, val)
 	}
 
 	return result
+}
+
+// addStringSlicePairs parses CLI-flag entries ("key=val") into result, skipping malformed pairs.
+func addStringSlicePairs(result map[string]string, pairs []string) {
+	for _, pair := range pairs {
+		k, v := parseKeyValuePair(pair)
+		if k != "" {
+			result[k] = v
+		}
+	}
+}
+
+// addCommaSeparatedPairs parses a comma-separated env-var string ("key=val,key2=val2") into result.
+func addCommaSeparatedPairs(result map[string]string, s string) {
+	for _, pair := range strings.Split(s, ",") {
+		k, v := parseKeyValuePair(strings.TrimSpace(pair))
+		if k != "" {
+			result[k] = v
+		}
+	}
+}
+
+// addAnySlicePairs parses config-file array entries ("key=val") into result, skipping non-strings.
+func addAnySlicePairs(result map[string]string, items []interface{}) {
+	for _, item := range items {
+		str, ok := item.(string)
+		if !ok {
+			continue
+		}
+		k, v := parseKeyValuePair(str)
+		if k != "" {
+			result[k] = v
+		}
+	}
 }
 
 // parseKeyValuePair splits "key=value" into (key, value).

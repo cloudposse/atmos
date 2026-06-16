@@ -342,7 +342,7 @@ go tool cover -html=coverage.out -o coverage.html
 
 ### File Structure
 
-```
+```text
 pkg/generator/ui/
 ├── ui.go                  # Source code
 ├── ui_test.go             # Helper: createTestUI()
@@ -627,4 +627,4 @@ This agent actively monitors and updates itself when dependencies change.
 
 ---
 
-**Remember:** Charmbracelet testing is simple - no mocking, just direct calls to Update/View with ANSI stripping. Focus on pure functions and state verification.
+**Remember:** For Bubble Tea models, use direct Update/View calls with ANSI stripping; mock external boundaries via DI + mockgen as needed. Focus on observable behavior and state verification.

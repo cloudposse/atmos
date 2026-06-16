@@ -6,6 +6,7 @@ Valid subcommands are:
 
   • apply
   • backend
+  • cache
   • clean
   • console
   • deploy
@@ -41,6 +42,11 @@ Valid subcommands are:
   • workdir
   • workspace
   • write
+
+## Usage
+
+ atmos terraform [flags]
+ atmos terraform [sub-command] [flags]
 
 ## Usage Examples:
 

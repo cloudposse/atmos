@@ -74,7 +74,7 @@ func TestProcessTemplateExecutionErrors(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			_, err := processor.ProcessTemplate(tt.template, "/tmp/test", nil, tt.values)
+			_, err := processor.ProcessTemplate(tt.template, filepath.Join(t.TempDir(), "test"), nil, tt.values)
 			if tt.expectError {
 				assert.Error(t, err, "Expected template execution error")
 			} else {
@@ -559,7 +559,7 @@ func TestProcessTemplateWithDelimitersErrors(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			values := map[string]interface{}{"name": "test"}
-			_, err := processor.ProcessTemplateWithDelimiters(tt.template, "/tmp", nil, values, tt.delimiters)
+			_, err := processor.ProcessTemplateWithDelimiters(tt.template, t.TempDir(), nil, values, tt.delimiters)
 			if tt.expectError {
 				assert.Error(t, err)
 			} else {

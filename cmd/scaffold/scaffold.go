@@ -18,6 +18,7 @@ import (
 	"github.com/cloudposse/atmos/internal/tui/templates/term"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/flags/compat"
+	"github.com/cloudposse/atmos/pkg/generator/engine"
 	"github.com/cloudposse/atmos/pkg/generator/setup"
 	"github.com/cloudposse/atmos/pkg/generator/templates"
 	generatorUI "github.com/cloudposse/atmos/pkg/generator/ui"
@@ -583,13 +584,18 @@ func findScaffoldConfigFile(files []templates.File) *templates.File {
 func renderDryRunFileList(selectedConfig *templates.Configuration, targetDir string, mergedValues map[string]interface{}) {
 	atmosui.Write("Files that would be generated:\n\n")
 
+	// Reuse the same template processor that real generation uses so dry-run
+	// previews render nested fields (e.g. `{{ .Config.project_name }}`) and
+	// template functions exactly as the generated paths will.
+	processor := engine.NewProcessor()
+
 	fileCount := 0
 	for _, file := range selectedConfig.Files {
 		if file.Path == config.ScaffoldConfigFileName {
 			continue
 		}
 
-		renderedPath := renderFilePath(file.Path, mergedValues)
+		renderedPath := renderFilePath(processor, file.Path, mergedValues)
 		printFilePath(targetDir, renderedPath)
 		fileCount++
 	}
@@ -597,16 +603,15 @@ func renderDryRunFileList(selectedConfig *templates.Configuration, targetDir str
 	atmosui.Writef("\nTotal: %d files would be generated\n", fileCount)
 }
 
-// renderFilePath applies simple variable substitution to a file path.
-func renderFilePath(path string, values map[string]interface{}) string {
-	renderedPath := path
-	for key, val := range values {
-		placeholder := fmt.Sprintf("{{.%s}}", key)
-		if valStr, ok := val.(string); ok {
-			renderedPath = strings.ReplaceAll(renderedPath, placeholder, valStr)
-		}
+// renderFilePath renders a file path template using the generation engine so the
+// dry-run preview matches the paths produced during real generation. On any
+// templating error it falls back to the raw path, since a preview must not fail.
+func renderFilePath(processor *engine.Processor, path string, values map[string]interface{}) string {
+	rendered, err := processor.ProcessTemplate(path, path, nil, values)
+	if err != nil {
+		return path
 	}
-	return renderedPath
+	return rendered
 }
 
 // printFilePath prints a file path with proper formatting.

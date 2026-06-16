@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/generator/engine"
 	"github.com/cloudposse/atmos/pkg/generator/templates"
 	"github.com/cloudposse/atmos/pkg/project/config"
 )
@@ -141,14 +142,14 @@ func TestRenderFilePath(t *testing.T) {
 			expected: "path/to/file.txt",
 		},
 		{
-			name:     "path with single variable",
-			path:     "{{.project_name}}/file.txt",
+			name:     "path with single Config variable",
+			path:     "{{ .Config.project_name }}/file.txt",
 			values:   map[string]interface{}{"project_name": "my-project"},
 			expected: "my-project/file.txt",
 		},
 		{
-			name: "path with multiple variables",
-			path: "{{.namespace}}/{{.environment}}/{{.app}}.yaml",
+			name: "path with multiple Config variables",
+			path: "{{ .Config.namespace }}/{{ .Config.environment }}/{{ .Config.app }}.yaml",
 			values: map[string]interface{}{
 				"namespace":   "prod",
 				"environment": "staging",
@@ -157,22 +158,23 @@ func TestRenderFilePath(t *testing.T) {
 			expected: "prod/staging/api.yaml",
 		},
 		{
-			name:     "path with non-string variable",
-			path:     "{{.count}}/file.txt",
+			name:     "path with numeric Config variable",
+			path:     "{{ .Config.count }}/file.txt",
 			values:   map[string]interface{}{"count": 42},
-			expected: "{{.count}}/file.txt", // Non-string values not replaced
+			expected: "42/file.txt", // The engine renders non-string values too.
 		},
 		{
-			name:     "empty values",
-			path:     "{{.var}}/file.txt",
+			name:     "invalid template falls back to raw path",
+			path:     "{{ .Config.unterminated /file.txt",
 			values:   map[string]interface{}{},
-			expected: "{{.var}}/file.txt", // Variable not in values
+			expected: "{{ .Config.unterminated /file.txt", // Parse error -> raw path returned.
 		},
 	}
 
+	processor := engine.NewProcessor()
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := renderFilePath(tt.path, tt.values)
+			result := renderFilePath(processor, tt.path, tt.values)
 			assert.Equal(t, tt.expected, result)
 		})
 	}

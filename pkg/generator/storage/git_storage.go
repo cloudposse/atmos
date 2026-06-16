@@ -56,13 +56,13 @@ func (s *GitBaseStorage) LoadBase(filePath string) (string, bool, error) {
 	// Get the commit object
 	commit, err := s.repo.CommitObject(*hash)
 	if err != nil {
-		return "", false, fmt.Errorf("failed to get commit for ref %q: %w", s.baseRef, err)
+		return "", false, fmt.Errorf("%w: failed to get commit for ref %q: %w", errUtils.ErrGitRefNotFound, s.baseRef, err)
 	}
 
 	// Get the tree (file structure) at this commit
 	tree, err := commit.Tree()
 	if err != nil {
-		return "", false, fmt.Errorf("failed to get tree for commit %s: %w", hash.String(), err)
+		return "", false, fmt.Errorf("%w: failed to get tree for commit %s: %w", errUtils.ErrGitRefNotFound, hash.String(), err)
 	}
 
 	// Clean the file path (remove leading ./ if present)
@@ -79,19 +79,19 @@ func (s *GitBaseStorage) LoadBase(filePath string) (string, bool, error) {
 		if errors.Is(err, object.ErrFileNotFound) {
 			return "", false, nil
 		}
-		return "", false, fmt.Errorf("failed to read file %q at ref %q: %w", filePath, s.baseRef, err)
+		return "", false, fmt.Errorf("%w: failed to read file %q at ref %q: %w", errUtils.ErrGitFileNotFound, filePath, s.baseRef, err)
 	}
 
 	// Read the file content
 	reader, err := file.Reader()
 	if err != nil {
-		return "", false, fmt.Errorf("failed to open file %q: %w", filePath, err)
+		return "", false, fmt.Errorf("%w: failed to open file %q: %w", errUtils.ErrGitFileNotFound, filePath, err)
 	}
 	defer reader.Close()
 
 	content, err := io.ReadAll(reader)
 	if err != nil {
-		return "", false, fmt.Errorf("failed to read file %q: %w", filePath, err)
+		return "", false, fmt.Errorf("%w: failed to read file %q: %w", errUtils.ErrGitFileNotFound, filePath, err)
 	}
 
 	return string(content), true, nil
@@ -132,29 +132,29 @@ func (s *GitBaseStorage) GetMergeBase(ref1, ref2 string) (string, error) {
 	// Resolve both refs to commit hashes
 	hash1, err := s.repo.ResolveRevision(plumbing.Revision(ref1))
 	if err != nil {
-		return "", fmt.Errorf("failed to resolve ref %q: %w", ref1, err)
+		return "", fmt.Errorf("%w: failed to resolve ref %q: %w", errUtils.ErrGitRefNotFound, ref1, err)
 	}
 
 	hash2, err := s.repo.ResolveRevision(plumbing.Revision(ref2))
 	if err != nil {
-		return "", fmt.Errorf("failed to resolve ref %q: %w", ref2, err)
+		return "", fmt.Errorf("%w: failed to resolve ref %q: %w", errUtils.ErrGitRefNotFound, ref2, err)
 	}
 
 	// Get commit objects
 	commit1, err := s.repo.CommitObject(*hash1)
 	if err != nil {
-		return "", fmt.Errorf("failed to get commit for %q: %w", ref1, err)
+		return "", fmt.Errorf("%w: failed to get commit for %q: %w", errUtils.ErrGitRefNotFound, ref1, err)
 	}
 
 	commit2, err := s.repo.CommitObject(*hash2)
 	if err != nil {
-		return "", fmt.Errorf("failed to get commit for %q: %w", ref2, err)
+		return "", fmt.Errorf("%w: failed to get commit for %q: %w", errUtils.ErrGitRefNotFound, ref2, err)
 	}
 
 	// Find common ancestors
 	ancestors, err := commit1.MergeBase(commit2)
 	if err != nil {
-		return "", fmt.Errorf("failed to find merge base: %w", err)
+		return "", fmt.Errorf("%w: failed to find merge base: %w", errUtils.ErrNoCommonAncestor, err)
 	}
 
 	if len(ancestors) == 0 {

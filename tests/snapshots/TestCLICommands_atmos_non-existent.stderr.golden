@@ -16,6 +16,7 @@ Valid subcommands are:
   • devcontainer
   • docs
   • env
+  • git
   • helmfile
   • help
   • init
@@ -26,6 +27,7 @@ Valid subcommands are:
   • pro
   • profile
   • scaffold
+  • secret
   • show
   • support
   • terraform
@@ -37,6 +39,11 @@ Valid subcommands are:
   • vendor
   • version
   • workflow
+
+## Usage
+
+ atmos [flags]
+ atmos [sub-command] [flags]
 
 ## Hints
 

@@ -13,6 +13,8 @@ package exec
 //   - assembleComponentEnvVars
 
 import (
+	"os"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -484,6 +486,63 @@ func TestAssembleComponentEnvVars_AppendUserAgentFromOSEnvOverridesConfig(t *tes
 
 	envMap := envListToMap(info.ComponentEnvList)
 	assert.Equal(t, "os-agent/2.0", envMap["TF_APPEND_USER_AGENT"])
+}
+
+func TestAssembleComponentEnvVars_RCEnabledSetsCLIConfigAndCleanup(t *testing.T) {
+	t.Setenv("TF_CLI_CONFIG_FILE", "") // Ensure no user override leaks in.
+	tmpDir := t.TempDir()
+	atmosConfig := schema.AtmosConfiguration{}
+	atmosConfig.BasePath = tmpDir
+	atmosConfig.Components.Terraform.RC = &schema.TerraformRCConfig{
+		Enabled: true,
+		Config: map[string]any{
+			"provider_installation": []any{
+				map[string]any{"network_mirror": map[string]any{"url": "http://127.0.0.1:5000/"}},
+			},
+		},
+	}
+
+	info := schema.ConfigAndStacksInfo{}
+	err := assembleComponentEnvVars(&atmosConfig, &info, nil)
+	require.NoError(t, err)
+
+	envMap := envListToMap(info.ComponentEnvList)
+	cliConfig, ok := envMap["TF_CLI_CONFIG_FILE"]
+	require.True(t, ok, "TF_CLI_CONFIG_FILE should be set when RC is enabled")
+	require.NotEmpty(t, cliConfig)
+
+	content, readErr := os.ReadFile(cliConfig)
+	require.NoError(t, readErr)
+	assert.Contains(t, string(content), "network_mirror {")
+
+	require.NotNil(t, info.RCCleanup)
+	require.NoError(t, info.RCCleanup())
+	_, statErr := os.Stat(cliConfig)
+	assert.True(t, os.IsNotExist(statErr), "cleanup should remove the temp CLI config")
+}
+
+func TestAssembleComponentEnvVars_RCDefersToUserCLIConfig(t *testing.T) {
+	t.Setenv("TF_CLI_CONFIG_FILE", "/user/managed.tfrc")
+	tmpDir := t.TempDir()
+	atmosConfig := schema.AtmosConfiguration{}
+	atmosConfig.BasePath = tmpDir
+	atmosConfig.Components.Terraform.RC = &schema.TerraformRCConfig{
+		Enabled: true,
+		Config:  map[string]any{"plugin_cache_dir": "/cache"},
+	}
+
+	info := schema.ConfigAndStacksInfo{}
+	err := assembleComponentEnvVars(&atmosConfig, &info, nil)
+	require.NoError(t, err)
+
+	// Atmos must not add its own TF_CLI_CONFIG_FILE when the user already set one.
+	count := 0
+	for _, e := range info.ComponentEnvList {
+		if strings.HasPrefix(e, "TF_CLI_CONFIG_FILE=") {
+			count++
+		}
+	}
+	assert.Zero(t, count, "Atmos must defer to the user-set TF_CLI_CONFIG_FILE")
 }
 
 // ──────────────────────────────────────────────────────────────────────────────

@@ -43,7 +43,7 @@ components:
     # Path to Helmfile components (relative to `base_path`)
     base_path: "components/helmfile"
     # Kubeconfig path
-    kubeconfig_path: "/dev/shm"
+    kubeconfig_path: '{{ env "HOME" }}/.kube/config'
 
 # Stack configuration
 stacks:

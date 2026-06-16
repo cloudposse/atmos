@@ -203,10 +203,10 @@ func TestMetadataStorage_Save(t *testing.T) {
 			},
 			expectError: false,
 			validate: func(t *testing.T, path string) {
-				// Verify file was created
+				// Verify file was created.
 				assert.FileExists(t, path)
 
-				// Verify content can be loaded back
+				// Verify content can be loaded back.
 				storage := NewMetadataStorage(path)
 				metadata, err := storage.Load()
 				require.NoError(t, err)
@@ -486,13 +486,13 @@ func TestDetermineStorageType(t *testing.T) {
 }
 
 func TestMetadataStorage_RoundTrip(t *testing.T) {
-	// Test complete save and load cycle
+	// Test complete save and load cycle.
 	tmpDir := t.TempDir()
 	metadataPath := filepath.Join(tmpDir, ".atmos", "init", "metadata.yaml")
 
 	storage := NewMetadataStorage(metadataPath)
 
-	// Create metadata
+	// Create metadata.
 	original := NewInitMetadata(
 		"simple",
 		"1.0.0",
@@ -504,23 +504,23 @@ func TestMetadataStorage_RoundTrip(t *testing.T) {
 		},
 	)
 
-	// Add files
+	// Add files.
 	original.AddFile("atmos.yaml", "templates/atmos.yaml", "abc123")
 	original.AddFile("stacks/prod.yaml", "templates/stack.yaml", "def456")
 
-	// Save
+	// Save.
 	err := storage.Save(original)
 	require.NoError(t, err)
 
-	// Verify file exists
+	// Verify file exists.
 	assert.True(t, storage.Exists())
 
-	// Load
+	// Load.
 	loaded, err := storage.Load()
 	require.NoError(t, err)
 	require.NotNil(t, loaded)
 
-	// Verify all fields match
+	// Verify all fields match.
 	assert.Equal(t, original.Version, loaded.Version)
 	assert.Equal(t, original.Command, loaded.Command)
 	assert.Equal(t, original.Template.Name, loaded.Template.Name)
@@ -531,7 +531,7 @@ func TestMetadataStorage_RoundTrip(t *testing.T) {
 	assert.Equal(t, original.StorageType, loaded.StorageType)
 	assert.Len(t, loaded.Files, 2)
 
-	// Verify files
+	// Verify files.
 	file1, found := loaded.GetFile("atmos.yaml")
 	assert.True(t, found)
 	assert.Equal(t, "abc123", file1.Checksum)

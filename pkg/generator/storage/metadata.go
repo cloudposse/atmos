@@ -8,6 +8,7 @@ import (
 
 	"gopkg.in/yaml.v3"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
@@ -76,12 +77,12 @@ func (s *MetadataStorage) Load() (*GenerationMetadata, error) {
 
 	data, err := os.ReadFile(s.metadataPath)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read metadata file %s: %w", s.metadataPath, err)
+		return nil, fmt.Errorf("%w: failed to read metadata file %s: %w", errUtils.ErrMetadataLoad, s.metadataPath, err)
 	}
 
 	var metadata GenerationMetadata
 	if err := yaml.Unmarshal(data, &metadata); err != nil {
-		return nil, fmt.Errorf("failed to parse metadata file %s: %w", s.metadataPath, err)
+		return nil, fmt.Errorf("%w: failed to parse metadata file %s: %w", errUtils.ErrMetadataLoad, s.metadataPath, err)
 	}
 
 	return &metadata, nil
@@ -95,18 +96,18 @@ func (s *MetadataStorage) Save(metadata *GenerationMetadata) error {
 	// Ensure parent directory exists
 	dir := filepath.Dir(s.metadataPath)
 	if err := os.MkdirAll(dir, dirPermissions); err != nil {
-		return fmt.Errorf("failed to create metadata directory %s: %w", dir, err)
+		return fmt.Errorf("%w: failed to create metadata directory %s: %w", errUtils.ErrMetadataSave, dir, err)
 	}
 
 	// Marshal to YAML
 	data, err := yaml.Marshal(metadata)
 	if err != nil {
-		return fmt.Errorf("failed to marshal metadata: %w", err)
+		return fmt.Errorf("%w: failed to marshal metadata: %w", errUtils.ErrMetadataSave, err)
 	}
 
 	// Write to file with restricted permissions for security (metadata contains template info).
 	if err := os.WriteFile(s.metadataPath, data, filePermissions); err != nil {
-		return fmt.Errorf("failed to write metadata file %s: %w", s.metadataPath, err)
+		return fmt.Errorf("%w: failed to write metadata file %s: %w", errUtils.ErrMetadataSave, s.metadataPath, err)
 	}
 
 	return nil

@@ -6,6 +6,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"sort"
+	"strings"
 	"testing"
 
 	"github.com/spf13/cobra"
@@ -14,6 +15,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
+	envpkg "github.com/cloudposse/atmos/pkg/env"
 	"github.com/cloudposse/atmos/pkg/reexec"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -101,6 +103,39 @@ func TestContains(t *testing.T) {
 	}
 }
 
+func TestCommandUsageLines(t *testing.T) {
+	rootCmd := &cobra.Command{Use: "atmos"}
+	gitCmd := &cobra.Command{Use: "git"}
+	pushCmd := &cobra.Command{
+		Use: "push <name-or-path>",
+		Run: func(cmd *cobra.Command, args []string) {},
+	}
+	pushCmd.Flags().Bool("dry-run", false, "preview the push")
+	gitCmd.AddCommand(pushCmd)
+	rootCmd.AddCommand(gitCmd)
+
+	assert.Equal(t, "atmos git push <name-or-path> [flags]", commandUsageLines(pushCmd))
+	assert.Equal(t, "atmos git [sub-command] [flags]", commandUsageLines(gitCmd))
+	assert.Empty(t, commandUsageLines(nil))
+}
+
+func TestAppendUsageSection(t *testing.T) {
+	cmd := &cobra.Command{
+		Use: "push <name-or-path>",
+		Run: func(cmd *cobra.Command, args []string) {},
+	}
+	cmd.Flags().Bool("dry-run", false, "preview the push")
+	rootCmd := &cobra.Command{Use: "atmos"}
+	gitCmd := &cobra.Command{Use: "git"}
+	gitCmd.AddCommand(cmd)
+	rootCmd.AddCommand(gitCmd)
+
+	got := appendUsageSection("You invoked `atmos git push` incorrectly.\n", cmd)
+
+	assert.Contains(t, got, "## Usage")
+	assert.Contains(t, got, "```shell\natmos git push <name-or-path> [flags]\n```")
+}
+
 func TestIsVersionCommand(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -123,8 +158,23 @@ func TestIsVersionCommand(t *testing.T) {
 			expected: true,
 		},
 		{
+			name:     "global flag before version subcommand",
+			args:     []string{"--verbose", "version"},
+			expected: true,
+		},
+		{
+			name:     "global flag before --version flag",
+			args:     []string{"--verbose", "--version"},
+			expected: true,
+		},
+		{
 			name:     "not version command",
 			args:     []string{"help"},
+			expected: false,
+		},
+		{
+			name:     "subcommand with flags but no version token",
+			args:     []string{"terraform", "plan", "--stack", "dev"},
 			expected: false,
 		},
 		{
@@ -2209,4 +2259,99 @@ func TestResolveCustomComponentConfig(t *testing.T) {
 			assert.True(t, gotParams.ProcessYamlFunctions)
 		})
 	}
+}
+
+func TestAppendComponentEnvVars(t *testing.T) {
+	tests := []struct {
+		name            string
+		env             []string
+		componentConfig map[string]any
+		wantContains    []string
+		wantNotContains []string
+	}{
+		{
+			name: "exports component env section as KEY=VALUE",
+			env:  []string{"PATH=/usr/bin"},
+			componentConfig: map[string]any{
+				"env": map[string]any{
+					"DB_PASSWORD": "s3cr3t",
+					"REGION":      "us-east-1",
+				},
+			},
+			wantContains: []string{"PATH=/usr/bin", "DB_PASSWORD=s3cr3t", "REGION=us-east-1"},
+		},
+		{
+			name: "skips nil and \"null\" values",
+			env:  []string{},
+			componentConfig: map[string]any{
+				"env": map[string]any{
+					"KEEP":     "yes",
+					"DROP_NIL": nil,
+					"DROP_STR": "null",
+				},
+			},
+			wantContains:    []string{"KEEP=yes"},
+			wantNotContains: []string{"DROP_NIL=", "DROP_STR="},
+		},
+		{
+			name: "stringifies non-string values",
+			env:  []string{},
+			componentConfig: map[string]any{
+				"env": map[string]any{
+					"COUNT":   3,
+					"ENABLED": true,
+				},
+			},
+			wantContains: []string{"COUNT=3", "ENABLED=true"},
+		},
+		{
+			name: "missing env key is a no-op",
+			env:  []string{"PATH=/usr/bin"},
+			componentConfig: map[string]any{
+				"vars": map[string]any{"foo": "bar"},
+			},
+			wantContains: []string{"PATH=/usr/bin"},
+		},
+		{
+			name: "wrong-typed env key is a no-op",
+			env:  []string{"PATH=/usr/bin"},
+			componentConfig: map[string]any{
+				"env": "not-a-map",
+			},
+			wantContains: []string{"PATH=/usr/bin"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := appendComponentEnvVars(tt.env, tt.componentConfig)
+			for _, want := range tt.wantContains {
+				assert.Contains(t, got, want)
+			}
+			for _, notWant := range tt.wantNotContains {
+				for _, e := range got {
+					assert.False(t, strings.HasPrefix(e, notWant), "did not expect env entry %q", e)
+				}
+			}
+		})
+	}
+}
+
+// TestAppendComponentEnvVars_CommandEnvOverrides verifies the documented precedence: a value set by
+// the component `env` section can be overridden by a later command-level `env:` entry, since both
+// use UpdateEnvVar semantics (last write wins on key collision).
+func TestAppendComponentEnvVars_CommandEnvOverrides(t *testing.T) {
+	env := []string{}
+	componentConfig := map[string]any{
+		"env": map[string]any{"SHARED": "from-component"},
+	}
+
+	env = appendComponentEnvVars(env, componentConfig)
+	require.Contains(t, env, "SHARED=from-component")
+
+	// Simulate the command-level env loop overriding the same key.
+	env = envpkg.UpdateEnvVar(env, "SHARED", "from-command")
+
+	assert.Contains(t, env, "SHARED=from-command")
+	assert.NotContains(t, env, "SHARED=from-component")
 }

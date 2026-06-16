@@ -835,7 +835,7 @@ func (f *formatter) Errorf(format string, a ...interface{}) string {
 }
 
 func (f *formatter) Info(text string) string {
-	result, _ := f.toastMarkdown("ℹ", &f.styles.Info, text)
+	result, _ := f.toastMarkdown(theme.IconInfo, &f.styles.Info, text)
 	return result
 }
 

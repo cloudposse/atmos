@@ -31,6 +31,7 @@ import (
 	l "github.com/cloudposse/atmos/pkg/list"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/process"
 	"github.com/cloudposse/atmos/pkg/reexec"
 	stepPkg "github.com/cloudposse/atmos/pkg/runner/step"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -729,6 +730,13 @@ func executeCustomCommand(
 		log.Debug("Using working directory for custom command", "command", commandConfig.Name, "working_directory", workDir)
 	}
 
+	// Validate exec steps before executing anything: an exec step replaces
+	// the Atmos process, so it must be the final step and must not set
+	// supervisor-only fields (tty, interactive, retry, timeout, output).
+	if err := schema.ValidateExecTasks(commandConfig.Steps); err != nil {
+		errUtils.CheckErrorPrintAndExit(err, "", "https://atmos.tools/cli/configuration/commands#interactive-and-tty-steps")
+	}
+
 	// Initialize step executor once before loop - reused across steps to preserve outputs.
 	executor := stepPkg.NewStepExecutor()
 
@@ -806,6 +814,30 @@ func executeCustomCommand(
 		// ENV var values support Go templates and have access to {{ .ComponentConfig.xxx.yyy.zzz }} Go template variables
 		// Start with current environment + global env from atmos.yaml to inherit PATH and other variables.
 		env := envpkg.MergeGlobalEnv(os.Environ(), atmosConfig.Env)
+
+		// Expose the absolute path of the running atmos binary so custom command steps can
+		// re-invoke the SAME binary (e.g. `"${ATMOS_CLI_PATH:-atmos}" describe ...`) instead of
+		// relying on a possibly-stale or absent `atmos` on PATH.
+		if execPath, execErr := os.Executable(); execErr == nil {
+			env = envpkg.UpdateEnvVar(env, "ATMOS_CLI_PATH", execPath)
+			// Also prepend the running binary's directory to PATH so custom command steps can
+			// invoke a bare `atmos` and resolve to the SAME binary — even when atmos isn't on
+			// the caller's PATH (e.g. `./build/atmos <cmd>`). Keeps example steps readable.
+			env = envpkg.EnsureBinaryInPath(env, execPath)
+		}
+
+		// Export the custom component's resolved `env` section into the step subprocess
+		// environment, mirroring the built-in terraform/helmfile/packer providers. Without this,
+		// a custom component's `env` section (including resolved `!secret` values) would only be
+		// available as `{{ .Component.env.* }}` template data and never reach the step subprocess.
+		// This runs before the command-level `env:` loop below so command-defined vars take
+		// precedence on key collisions.
+		if commandConfig.Component != nil && commandConfig.Component.Type != "" {
+			if componentConfig, ok := data["Component"].(map[string]any); ok {
+				env = appendComponentEnvVars(env, componentConfig)
+			}
+		}
+
 		for _, v := range commandConfig.Env {
 			key := strings.TrimSpace(v.Key)
 			value := v.Value
@@ -868,12 +900,36 @@ func executeCustomCommand(
 		switch stepType {
 		case "shell":
 			// Execute shell command (backward compatible).
+			// Steps with tty/interactive attach the user's terminal so commands
+			// like `aws ssm start-session` get a real TTY and own Ctrl-C.
 			commandName := fmt.Sprintf("%s-step-%d", commandConfig.Name, i)
-			err = e.ExecuteShell(commandToRun, commandName, workDir, env, false)
+			err = process.RunShellStep(context.Background(), &process.ShellSessionSpec{
+				Command:     commandToRun,
+				Name:        commandName,
+				Dir:         workDir,
+				Env:         env,
+				TTY:         step.Tty,
+				Interactive: step.Interactive,
+			}, func() error {
+				return e.ExecuteShell(commandToRun, commandName, workDir, env, false)
+			})
+		case schema.TaskTypeExec:
+			// Replace the Atmos process with the command (shell exec semantics).
+			err = process.ReplaceShellSession(&process.ExecSpec{
+				Command: commandToRun,
+				Name:    fmt.Sprintf("%s-step-%d", commandConfig.Name, i),
+				Dir:     workDir,
+				Env:     env,
+			})
 		case "atmos":
 			// Execute atmos command.
 			args := strings.Fields(commandToRun)
-			err = e.ExecuteShellCommand(atmosConfig, "atmos", args, workDir, env, false, "")
+			execPath, execErr := os.Executable()
+			if execErr != nil {
+				err = execErr
+				break
+			}
+			err = e.ExecuteShellCommand(atmosConfig, execPath, args, workDir, env, false, "")
 		default:
 			// Check if this is an extended step type (input, confirm, choose, etc.).
 			if stepPkg.IsExtendedStepType(stepType) {
@@ -1127,8 +1183,18 @@ func isVersionCommand() bool {
 
 // isVersionCommandWithArgs checks if the given args represent a version command.
 // This is a testable version of isVersionCommand that accepts args as a parameter.
+// It scans the entire args slice (skipping the program name) so that global flags
+// preceding the subcommand, e.g. `atmos --verbose version`, are still recognized.
 func isVersionCommandWithArgs(args []string) bool {
-	return len(args) > 1 && (args[1] == "version" || args[1] == "--version")
+	if len(args) < 2 {
+		return false
+	}
+	for _, arg := range args[1:] {
+		if arg == "version" || arg == "--version" {
+			return true
+		}
+	}
+	return false
 }
 
 // isVersionManagementCommand checks if the current command is a version management command.
@@ -1333,11 +1399,11 @@ func verifyInsideGitRepoE() error {
 func showErrorExampleFromMarkdown(cmd *cobra.Command, arg string) {
 	commandPath := cmd.CommandPath()
 	suggestions := []string{}
-	details := fmt.Sprintf("The command `%s` is not valid usage\n", commandPath)
+	details := fmt.Sprintf("You invoked `%s` incorrectly.\n", commandPath)
 	if len(arg) > 0 {
 		details = fmt.Sprintf("Unknown command `%s` for `%s`\n", arg, commandPath)
 	} else if len(cmd.Commands()) != 0 && arg == "" {
-		details = fmt.Sprintf("The command `%s` requires a subcommand\n", commandPath)
+		details = fmt.Sprintf("`%s` requires a subcommand.\n", commandPath)
 	}
 	if len(arg) > 0 {
 		suggestions = cmd.SuggestionsFor(arg)
@@ -1362,11 +1428,44 @@ func showErrorExampleFromMarkdown(cmd *cobra.Command, arg string) {
 func showUsageExample(cmd *cobra.Command, details string) {
 	contentName := strings.ReplaceAll(strings.ReplaceAll(cmd.CommandPath(), " ", "_"), "-", "_")
 	suggestion := fmt.Sprintf("\n\nRun `%s --help` for usage", cmd.CommandPath())
+	details = appendUsageSection(details, cmd)
 	if exampleContent, ok := examples[contentName]; ok {
 		suggestion = exampleContent.Suggestion
 		details += "\n## Usage Examples:\n" + exampleContent.Content
 	}
 	errUtils.CheckErrorPrintAndExit(errors.New(details), "Incorrect Usage", suggestion)
+}
+
+// appendUsageSection appends a generated "Usage" Markdown section (a fenced
+// shell block containing the command's usage lines) to the details string.
+// When the command yields no usage lines, details is returned unchanged.
+func appendUsageSection(details string, cmd *cobra.Command) string {
+	usage := commandUsageLines(cmd)
+	if usage == "" {
+		return details
+	}
+
+	return details + "\n## Usage\n\n```shell\n" + usage + "\n```\n"
+}
+
+// commandUsageLines generates the usage line(s) for a cobra command: the
+// UseLine when the command is runnable, plus a "<path> [sub-command] [flags]"
+// line when it has available subcommands. Returns an empty string for a nil
+// command.
+func commandUsageLines(cmd *cobra.Command) string {
+	if cmd == nil {
+		return ""
+	}
+
+	lines := []string{}
+	if cmd.Runnable() {
+		lines = append(lines, cmd.UseLine())
+	}
+	if cmd.HasAvailableSubCommands() {
+		lines = append(lines, fmt.Sprintf("%s [sub-command] [flags]", cmd.CommandPath()))
+	}
+
+	return strings.Join(lines, "\n")
 }
 
 // StackFlagCompletion provides shell completion for the --stack flag.
@@ -1637,6 +1736,39 @@ func processCustomComponentType(
 	)
 	errUtils.CheckErrorPrintAndExit(err, "", "")
 	data["Component"] = componentConfig
+}
+
+// appendComponentEnvVars exports a custom component's resolved `env` section (from the
+// describe-component result) into the step subprocess environment, mirroring how the built-in
+// terraform/helmfile/packer/ansible providers export `ComponentEnvSection`. Without this, a custom
+// component's `env` section (including resolved `!secret` values) would only be available as
+// `{{ .Component.env.* }}` template data and never reach the step subprocess. Null and "null"
+// values are skipped (same convention as pkg/env.ConvertEnvVars). Existing entries are overwritten,
+// so callers can layer the command-level `env:` on top for higher precedence. Keys are applied in
+// sorted order for deterministic output.
+func appendComponentEnvVars(env []string, componentConfig map[string]any) []string {
+	defer perf.Track(nil, "cmd.appendComponentEnvVars")()
+
+	envSection, ok := componentConfig[cfg.EnvSectionName].(map[string]any)
+	if !ok {
+		return env
+	}
+
+	keys := make([]string, 0, len(envSection))
+	for k := range envSection {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+
+	for _, k := range keys {
+		v := envSection[k]
+		if v == nil || v == "null" {
+			continue
+		}
+		env = envpkg.UpdateEnvVar(env, k, fmt.Sprint(v))
+	}
+
+	return env
 }
 
 // resolveCustomComponentConfig finds the component/stack, registers the custom type,

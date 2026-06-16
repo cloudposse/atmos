@@ -383,6 +383,14 @@ func RequireTerraform(t *testing.T) {
 	RequireExecutable(t, "terraform", "terraform operations")
 }
 
+// RequireTofu checks if tofu (OpenTofu) is installed and available in PATH.
+// The CLI test suite standardizes on OpenTofu (see ATMOS_COMPONENTS_TERRAFORM_COMMAND
+// in cli_test.go), so terraform-invoking tests gate on this rather than terraform.
+func RequireTofu(t *testing.T) {
+	t.Helper()
+	RequireExecutable(t, "tofu", "OpenTofu operations")
+}
+
 // RequireTerraformOrTofu checks if terraform or tofu is installed and available in PATH.
 // Use this for tests whose fixture atmos.yaml sets command: tofu, or that work with either binary.
 func RequireTerraformOrTofu(t *testing.T) {

@@ -12,7 +12,7 @@ This project includes a fully configured `atmos.yaml` with:
 
 ## Directory Structure
 
-```
+```text
 {{.Config.project_name}}/
 ├── atmos.yaml              # Main configuration
 ├── components/             # Component definitions

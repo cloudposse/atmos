@@ -1,6 +1,7 @@
 package flags
 
 import (
+	"sync"
 	"testing"
 
 	"github.com/spf13/cobra"
@@ -404,19 +405,26 @@ func TestStringMapFlag_ConcurrentAccess(t *testing.T) {
 		v := viper.New()
 		v.Set("set", []string{"foo=bar", "baz=qux"})
 
-		// Spawn multiple goroutines parsing the same Viper instance
-		done := make(chan bool)
-		for i := 0; i < 10; i++ {
+		// Spawn multiple goroutines parsing the same Viper instance.
+		// testing.T is not safe for concurrent use, so goroutines only send their
+		// results back; assertions happen on the main goroutine after they finish.
+		const goroutines = 10
+		var wg sync.WaitGroup
+		results := make(chan map[string]string, goroutines)
+		for i := 0; i < goroutines; i++ {
+			wg.Add(1)
 			go func() {
-				result := ParseStringMap(v, "set")
-				assert.Equal(t, map[string]string{"foo": "bar", "baz": "qux"}, result)
-				done <- true
+				defer wg.Done()
+				results <- ParseStringMap(v, "set")
 			}()
 		}
 
-		// Wait for all goroutines
-		for i := 0; i < 10; i++ {
-			<-done
+		wg.Wait()
+		close(results)
+
+		expected := map[string]string{"foo": "bar", "baz": "qux"}
+		for result := range results {
+			assert.Equal(t, expected, result)
 		}
 	})
 }

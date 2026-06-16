@@ -4,7 +4,7 @@ components:
       vars:
         cidr: "10.0.0.0/16"
         region: "us-east-1"
-    
+
     eks:
       vars:
         cluster_name: "main"
@@ -17,7 +17,7 @@ components:
         depends_on:
           - vpc
           - iam-role
-    
+
     rds:
       vars:
         engine: "postgres"

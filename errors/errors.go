@@ -205,9 +205,21 @@ var (
 	ErrFailedToGetRepoInfo         = errors.New("failed to get repository info")
 	ErrLocalRepoFetch              = errors.New("local repo unavailable")
 	ErrGitRefNotFound              = errors.New("git reference not found on local filesystem")
+	ErrGitFileNotFound             = errors.New("file not found in git reference")
 	ErrGitWorktreeAdd              = errors.New("failed to create git worktree")
 	ErrFetchOrigin                 = errors.New("failed to fetch from origin")
 	ErrDeepenOrigin                = errors.New("failed to deepen fetch from origin")
+	ErrGitRepositoryNotFound       = errors.New("git repository not configured")
+	ErrGitAuthFailed               = errors.New("git authentication failed")
+	ErrGitPushRejected             = errors.New("git push rejected: non-fast-forward")
+	ErrGitDirtyUnmanagedFiles      = errors.New("unmanaged dirty files detected outside commit paths")
+	ErrGitPathEscapesWorktree      = errors.New("path resolves outside git worktree")
+	ErrGitHookNotConfigured        = errors.New("git hook not configured")
+	ErrGitRepositoryRequired       = errors.New("git repository name or URI is required")
+	ErrGitProviderNotFound         = errors.New("git provider not registered")
+	ErrGitWorkdirExists            = errors.New("git workdir already exists")
+	ErrGitNoTrackingBranch         = errors.New("no branch to pull: the current branch has no upstream")
+	ErrGitWorkdirNotInitialized    = errors.New("git repository not cloned or initialized")
 
 	// I/O and output errors.
 	ErrBuildIOConfig  = errors.New("failed to build I/O config")
@@ -373,6 +385,8 @@ var (
 	ErrInvalidComponentRequiredProviders          = errors.New("invalid component required_providers section")
 	ErrInvalidComponentRequiredVersion            = errors.New("invalid component required_version attribute")
 	ErrInvalidComponentHooks                      = errors.New("invalid component hooks section")
+	ErrInvalidComponentSecrets                    = errors.New("invalid component secrets section")
+	ErrStoreIsSecret                              = errors.New("store is a secret store; use !secret instead of !store")
 	ErrInvalidComponentGenerate                   = errors.New("invalid component generate section")
 	ErrInvalidComponentAuth                       = errors.New("invalid component auth section")
 	ErrInvalidComponentProvision                  = errors.New("invalid component provision section")
@@ -666,6 +680,14 @@ var (
 
 	// Terraform --all flag errors.
 	ErrComponentWithAllFlagConflict = errors.New("component argument can't be used with --all flag")
+
+	// ErrCacheCertUntrusted is returned when the OS trust store does not trust the
+	// registry cache proxy's certificate (macOS/Windows require a one-time trust step).
+	ErrCacheCertUntrusted = errors.New("registry cache certificate is not trusted")
+
+	// ErrTrustStore is returned when installing or removing the registry cache proxy's
+	// certificate in the OS trust store fails.
+	ErrTrustStore = errors.New("registry cache trust store operation failed")
 
 	// Terraform execution errors.
 	ErrTerraformExecFailed          = errors.New("terraform execution failed")
@@ -1001,6 +1023,8 @@ var (
 	ErrInitializationPartialFailure  = errors.New("initialization partially failed")
 	ErrInvalidScaffoldSection        = errors.New("invalid scaffold section")
 	ErrPathTraversal                 = errors.New("path traversal not allowed")
+	ErrMetadataLoad                  = errors.New("failed to load init metadata")
+	ErrMetadataSave                  = errors.New("failed to save init metadata")
 
 	// Source provisioner errors.
 	ErrSourceProvision       = errors.New("source provisioning failed")
@@ -1115,6 +1139,22 @@ var (
 	ErrArtifactStoreInvalidArgs = errors.New("invalid artifact store arguments")
 	ErrArtifactMetadataFailed   = errors.New("failed to load artifact metadata")
 	ErrArtifactIntegrityFailed  = errors.New("artifact integrity check failed")
+
+	// CI cache errors.
+	ErrCacheUnavailable     = errors.New("CI cache is not available in this environment")
+	ErrCacheNotFound        = errors.New("cache entry not found")
+	ErrCacheAlreadyExists   = errors.New("cache entry already exists")
+	ErrCacheSaveFailed      = errors.New("failed to save cache entry")
+	ErrCacheRestoreFailed   = errors.New("failed to restore cache entry")
+	ErrCacheDeleteFailed    = errors.New("failed to delete cache entry")
+	ErrCacheListFailed      = errors.New("failed to list cache entries")
+	ErrCacheBackendNotFound = errors.New("cache backend not found")
+	ErrCacheInvalidArgs     = errors.New("invalid cache arguments")
+	ErrCacheKeyRequired     = errors.New("cache key is required")
+	ErrCacheArchiveFailed   = errors.New("failed to build cache archive")
+	ErrCacheExtractFailed   = errors.New("failed to extract cache archive")
+	ErrCacheBackendRequest  = errors.New("cache backend request failed")
+
 	// AI-related errors.
 	ErrAINotEnabled                 = errors.New("AI features are not enabled")
 	ErrAIDisabledInConfiguration    = errors.New("AI features are disabled in configuration")
@@ -1247,12 +1287,28 @@ var (
 	ErrLSPNoContentLengthHeader = errors.New("no Content-Length header found")
 )
 
+// Stack dependency (`depends_on`) resolution errors.
+var (
+	// ErrInvalidDependsOn indicates a legacy `settings.spacelift.depends_on` value
+	// does not resolve to a known stack or to a component in the current stack.
+	ErrInvalidDependsOn = errors.New("invalid 'depends_on' dependency")
+	// ErrInvalidSettingsDependsOn indicates a `settings.depends_on` value does not
+	// resolve to a known component in a known stack.
+	ErrInvalidSettingsDependsOn = errors.New("invalid 'settings.depends_on' dependency")
+)
+
 // ExitCodeError is a typed error that preserves subcommand exit codes.
 // This allows the root command to exit with the same code as the subcommand.
 // When Code is 0, it indicates successful completion that should exit cleanly without printing errors.
 // This avoids deep exits (os.Exit) which are untestable.
 type ExitCodeError struct {
 	Code int
+	// Silent suppresses themed error rendering: the process exits with Code
+	// without printing an error box. Used for terminal-handoff steps (tty,
+	// interactive, exec) where, like a shell, a non-zero exit from the child
+	// program should propagate the code without Atmos rendering its own error
+	// (which would query the terminal and can hang when stdin is contended).
+	Silent bool
 }
 
 func (e ExitCodeError) Error() string {

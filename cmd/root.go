@@ -72,8 +72,10 @@ import (
 	_ "github.com/cloudposse/atmos/cmd/auth"
 	_ "github.com/cloudposse/atmos/cmd/aws"
 	_ "github.com/cloudposse/atmos/cmd/ci"
+	cicache "github.com/cloudposse/atmos/cmd/ci/cache"
 	"github.com/cloudposse/atmos/cmd/devcontainer"
 	_ "github.com/cloudposse/atmos/cmd/env"
+	gitcmd "github.com/cloudposse/atmos/cmd/git"
 	_ "github.com/cloudposse/atmos/cmd/helmfile"
 	_ "github.com/cloudposse/atmos/cmd/init"
 	_ "github.com/cloudposse/atmos/cmd/list"
@@ -81,8 +83,10 @@ import (
 	_ "github.com/cloudposse/atmos/cmd/mcp"
 	_ "github.com/cloudposse/atmos/cmd/profile"
 	_ "github.com/cloudposse/atmos/cmd/scaffold"
+	_ "github.com/cloudposse/atmos/cmd/secret"
 	_ "github.com/cloudposse/atmos/cmd/terraform"
 	"github.com/cloudposse/atmos/cmd/terraform/backend"
+	terraformcache "github.com/cloudposse/atmos/cmd/terraform/cache"
 	"github.com/cloudposse/atmos/cmd/terraform/workdir"
 	themeCmd "github.com/cloudposse/atmos/cmd/theme"
 	toolchainCmd "github.com/cloudposse/atmos/cmd/toolchain"
@@ -540,6 +544,10 @@ var RootCmd = &cobra.Command{
 		if ioErr := iolib.Initialize(); ioErr != nil {
 			errUtils.CheckErrorPrintAndExit(fmt.Errorf("failed to initialize I/O context: %w", ioErr), "", "")
 		}
+		// The global masker may have been created before CLI flags were parsed (e.g. by early
+		// output), so its enabled state reflects the `--mask` default, not the parsed flag.
+		// Reconcile it now that flags are available so `--mask=false` reliably disables masking.
+		iolib.ReconcileMasking()
 		ioCtx := iolib.GetContext()
 		ui.InitFormatter(ioCtx)
 		data.InitWriter(ioCtx)
@@ -586,6 +594,12 @@ var RootCmd = &cobra.Command{
 		// This ensures tables and styled output degrade gracefully when piped or in non-TTY environments.
 		term := terminal.New()
 		lipgloss.SetColorProfile(convertToTermenvProfile(term.ColorProfile()))
+
+		// Automatic CI cache restore-on-start (and register save-on-exit) when
+		// enabled. No-op outside a supported CI provider or for help commands.
+		if !isHelpRequested && !isCompletionCommand(cmd) {
+			cicache.AutoRestore(cmd, &tmpConfig)
+		}
 	},
 	PersistentPostRun: func(cmd *cobra.Command, args []string) {
 		// Stop profiler after command execution.
@@ -825,6 +839,9 @@ func cleanupLogFile() {
 // Cleanup performs cleanup operations before the program exits.
 // This should be called by main when the program is terminating.
 func Cleanup() {
+	// Run the automatic CI cache save-on-exit (if registered during PreRun)
+	// before closing the log file, so it runs on normal exit and on signals.
+	cicache.RunPendingSave()
 	cleanupLogFile()
 }
 
@@ -1485,12 +1502,14 @@ func Execute() error {
 
 	// Set atmosConfig for commands that need access to config.
 	version.SetAtmosConfig(&atmosConfig)
+	gitcmd.SetAtmosConfig(&atmosConfig)
 	devcontainer.SetAtmosConfig(&atmosConfig)
 	themeCmd.SetAtmosConfig(&atmosConfig)
 	backend.SetAtmosConfig(&atmosConfig)
 	toolchainCmd.SetAtmosConfig(&atmosConfig)
 	toolchain.SetAtmosConfig(&atmosConfig)
 	workdir.SetAtmosConfig(&atmosConfig)
+	terraformcache.SetAtmosConfig(&atmosConfig)
 
 	if initErr != nil {
 		// Handle config initialization errors based on command context.

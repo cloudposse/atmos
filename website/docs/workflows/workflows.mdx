@@ -324,13 +324,19 @@ Each workflow definition must confirm to the following schema:
   <dd>Step name (optional). It's used to find the first step from which to start executing the workflow when the command-line flag `--from-step` is specified. If the `name` is omitted, a friendly name will be generated for you consisting of a prefix of `step` and followed by the index of the step (the index starts with 1, so the first generated step name would be `step1`).</dd>
 
   <dt>`type`</dt>
-  <dd>The type of the step. Can be `atmos`, `shell`, or any of the [interactive step types](#step-types) like `input`, `confirm`, `choose`, `filter`, `markdown`, `spin`, and more. Type `atmos` is implicit for command steps. Type `shell` is required for shell scripts. See the [Step Types](#step-types) section for all available types</dd>
+  <dd>The type of the step. Can be `atmos`, `shell`, `exec`, or any of the [interactive step types](#step-types) like `input`, `confirm`, `choose`, `filter`, `markdown`, `spin`, and more. Type `atmos` is implicit for command steps. Type `shell` is required for shell scripts. Type `exec` replaces the Atmos process entirely (shell `exec` semantics) and must be the final step — see [Replacing the Atmos Process](/cli/configuration/commands#replacing-the-atmos-process-type-exec). See the [Step Types](#step-types) section for all available types</dd>
 
   <dt>`stack`</dt>
   <dd>Step-level Atmos stack (optional). If specified, the `command` will be executed for this Atmos stack. It overrides the workflow-level `stack` attribute, and can itself be overridden on the command line by using the `--stack` flag (`-s` for shorthand)</dd>
 
   <dt>`identity`</dt>
   <dd>Step-level identity for authentication (optional). If specified, Atmos will authenticate using this identity before executing the step. The subprocess will receive environment variables pointing to temporary credential files (e.g., `AWS_SHARED_CREDENTIALS_FILE`, `AWS_CONFIG_FILE`, `AWS_PROFILE`). See [Authentication](/cli/commands/auth/usage) for more details</dd>
+
+  <dt>`interactive`</dt>
+  <dd>Attach host stdin to a `shell` step and let the step handle Ctrl-C, like `docker -i` (optional). While the step runs, Atmos suspends its own interrupt handling so pressing Ctrl-C interrupts the step's process, not Atmos</dd>
+
+  <dt>`tty`</dt>
+  <dd>Allocate a pseudo-terminal for a `shell` step, like `docker -t` (optional). Use for commands that take over the terminal (SSM sessions, SSH, database consoles, `vim`). Secret masking is still applied; the step's `output` mode does not apply, and the step produces no capturable output. Combine with `interactive: true` for full terminal sessions. See [Interactive and TTY Steps](/cli/configuration/commands#interactive-and-tty-steps) for details</dd>
 </dl>
 
 :::note

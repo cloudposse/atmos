@@ -10,7 +10,7 @@
         "init_run_reconfigure": true,
         "auto_generate_backend_file": false,
         "auto_generate_files": false,
-        "command": "",
+        "command": "tofu",
         "shell": {
           "prompt": ""
         },
@@ -88,7 +88,7 @@
     "describe",
     "component"
   ],
-  "command": "terraform",
+  "command": "tofu",
   "component": "mock",
   "component_info": {
     "component_path": "/absolute/path/to/repo/examples/stack-names/components/terraform/mock",
@@ -153,8 +153,8 @@
   "env": {},
   "generate": {},
   "hooks": {},
-  "imports": null,
-  "inheritance": null,
+  "imports": [],
+  "inheritance": [],
   "metadata": {},
   "overrides": {},
   "providers": {},

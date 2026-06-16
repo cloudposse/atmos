@@ -8,6 +8,7 @@ import (
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/secrets"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -116,7 +117,11 @@ func processNodesWithContext(
 			return newNestedMap
 
 		case []any:
-			var newSlice []any
+			// Pre-allocate a non-nil slice so an empty input list (or a list whose items are
+			// all removed by !unset) stays an empty list rather than collapsing to nil. A nil
+			// slice marshals to JSON `null` in generated tfvars, which breaks consumers such as
+			// Terraform's concat() that reject null where a list is expected.
+			newSlice := make([]any, 0, len(v))
 			for _, val := range v {
 				// Check if the value is a string with !unset tag and it's not skipped.
 				if strVal, ok := val.(string); ok && strings.HasPrefix(strVal, u.AtmosYamlFuncUnset) && !skipFunc(skip, u.AtmosYamlFuncUnset) {
@@ -214,6 +219,13 @@ func processSimpleTags(
 	}
 	if matchesPrefix(input, u.AtmosYamlFuncExec, skip) {
 		res, err := u.ProcessTagExec(input)
+		if err != nil {
+			return nil, true, err
+		}
+		return res, true, nil
+	}
+	if matchesPrefix(input, u.AtmosYamlFuncSecret, skip) {
+		res, err := secrets.Resolve(atmosConfig, input, currentStack, stackInfo)
 		if err != nil {
 			return nil, true, err
 		}

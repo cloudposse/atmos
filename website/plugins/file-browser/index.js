@@ -46,13 +46,14 @@ const TAGS_MAP = {
   toolchain: ['DX'],
   devcontainer: ['DX'],
   'devcontainer-build': ['DX'],
-  'demo-localstack': ['DX'],
+  'demo-floci': ['DX'],
   'demo-helmfile': ['DX'],
   scaffolding: ['Scaffold', 'Init'],
   'stack-names': ['Stacks'],
   'demo-ansible': ['Automation'],
   'mcp-with-aws': ['DX', 'Automation'],
   'aws-ami-packer-github-actions': ['Automation'],
+  'sops-secrets': ['Stacks'],
 };
 
 // Documentation pages mapping for examples.

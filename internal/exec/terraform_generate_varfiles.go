@@ -10,9 +10,11 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	atmosio "github.com/cloudposse/atmos/pkg/io"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/terraform/tfvars"
 	u "github.com/cloudposse/atmos/pkg/utils"
 	atmosYaml "github.com/cloudposse/atmos/pkg/yaml"
 )
@@ -168,7 +170,7 @@ func ExecuteTerraformGenerateVarfiles(
 				// Stack name
 				var stackName string
 				if atmosConfig.Stacks.NameTemplate != "" {
-					stackName, err = ProcessTmpl(atmosConfig, "terraform-generate-varfiles-template", atmosConfig.Stacks.NameTemplate, configAndStacksInfo.ComponentSection, false)
+					stackName, err = ProcessTmpl(atmosConfig, "terraform-generate-varfiles-template", atmosConfig.Stacks.NameTemplate, configAndStacksInfo.ComponentSection, atmosConfig.Templates.Settings.IgnoreMissingTemplateValues)
 					if err != nil {
 						return err
 					}
@@ -273,19 +275,29 @@ func ExecuteTerraformGenerateVarfiles(
 						return err
 					}
 
+					// Keep resolved secrets out of generated varfiles so plaintext secrets
+					// never hit disk. Batch generation has no env-injection target, so
+					// secret-bearing variables are omitted (use the singular
+					// `generate varfile --with-secrets` to export them deliberately).
+					varsToWrite, secretVars := tfvars.Partition(varsSection, atmosio.ContainsSecret)
+					if len(secretVars) > 0 {
+						log.Warn("Omitting secret-bearing variables from the generated varfile",
+							"file", fileName, "count", len(secretVars))
+					}
+
 					// Write the varfile
 					if format == "yaml" {
-						err = u.WriteToFileAsYAML(fileAbsolutePath, varsSection, 0o644)
+						err = u.WriteToFileAsYAML(fileAbsolutePath, varsToWrite, filePermissions)
 						if err != nil {
 							return err
 						}
 					} else if format == "json" {
-						err = u.WriteToFileAsJSON(fileAbsolutePath, varsSection, 0o644)
+						err = u.WriteToFileAsJSON(fileAbsolutePath, varsToWrite, filePermissions)
 						if err != nil {
 							return err
 						}
 					} else if format == "hcl" {
-						err = u.WriteToFileAsHcl(fileAbsolutePath, varsSection, 0o644)
+						err = u.WriteToFileAsHcl(fileAbsolutePath, varsToWrite, filePermissions)
 						if err != nil {
 							return err
 						}

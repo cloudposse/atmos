@@ -34,6 +34,27 @@ type Hook struct {
 	// Store-kind specific (existing, unchanged semantics).
 	Name    string            `yaml:"name,omitempty"`
 	Outputs map[string]string `yaml:"outputs,omitempty"`
+
+	// Git-kind specific (kind: git; see pkg/hooks/kinds/git).
+	//
+	// Repository names a managed repository under the top-level
+	// git.repositories config. Empty targets the current repository.
+	Repository string `yaml:"repository,omitempty"`
+	// Commit configures the commit the git kind creates.
+	Commit *GitCommitSpec `yaml:"commit,omitempty"`
+	// Push pushes the created commit to the remote when true.
+	Push bool `yaml:"push,omitempty"`
+}
+
+// GitCommitSpec is the `commit` block of a git-kind hook. Message supports
+// the same template rendering as every other hook string (rendered by
+// resolveHookForExecution before the engine runs).
+type GitCommitSpec struct {
+	// Message is the commit message; empty selects the engine default
+	// ("Update artifacts for <component> in <stack>").
+	Message string `yaml:"message,omitempty"`
+	// Paths are repo-relative paths staged for the commit.
+	Paths []string `yaml:"paths,omitempty"`
 }
 
 // UnmarshalYAML decodes a Hook, accepting the legacy `command:` key as an
