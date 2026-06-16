@@ -16,6 +16,7 @@ SUBCOMMAND ALIASES
       an               Alias of atmos ansible command
       hf               Alias of atmos helmfile command
       pk               Alias of atmos packer command
+      rn               Alias of atmos rain command
       tf               Alias of atmos terraform command
 
 AVAILABLE COMMANDS
@@ -41,6 +42,7 @@ AVAILABLE COMMANDS
       packer [command]                       Manage packer-based machine images for multiple platforms
       pro [command]                          Access premium features integrated with atmos-pro.com
       profile [command]                      Manage configuration profiles
+      rain [command]                         Manage AWS CloudFormation stacks with Rain
       secret [command] [EXPERIMENTAL]        Manage declarative secrets across stacks and components.
       support                                Show Atmos support options
       terraform [command]                    Execute Terraform commands using Atmos stack configurations

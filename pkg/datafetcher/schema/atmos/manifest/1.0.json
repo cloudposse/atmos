@@ -20,6 +20,9 @@
     "packer": {
       "$ref": "#/definitions/packer"
     },
+    "rain": {
+      "$ref": "#/definitions/rain"
+    },
     "vars": {
       "$ref": "#/definitions/vars"
     },
@@ -83,6 +86,11 @@
         {
           "required": [
             "packer"
+          ]
+        },
+        {
+          "required": [
+            "rain"
           ]
         },
         {
@@ -195,6 +203,9 @@
             },
             "packer": {
               "$ref": "#/definitions/packer_components"
+            },
+            "rain": {
+              "$ref": "#/definitions/rain_components"
             }
           },
           "required": []
@@ -484,6 +495,121 @@
             }
           },
           "additionalProperties": false
+        }
+      ]
+    },
+    "rain": {
+      "title": "rain",
+      "description": "Rain section",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "vars": {
+              "$ref": "#/definitions/vars"
+            },
+            "env": {
+              "$ref": "#/definitions/env"
+            },
+            "settings": {
+              "$ref": "#/definitions/settings"
+            },
+            "command": {
+              "$ref": "#/definitions/command"
+            },
+            "dependencies": {
+              "$ref": "#/definitions/dependencies"
+            },
+            "auth": {
+              "$ref": "#/definitions/component_auth"
+            }
+          },
+          "required": []
+        }
+      ]
+    },
+    "rain_components": {
+      "title": "rain_components",
+      "description": "Rain components section",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "object",
+          "patternProperties": {
+            "^[/a-zA-Z0-9-_{}. ]+$": {
+              "$ref": "#/definitions/rain_component_manifest"
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "rain_component_manifest": {
+      "title": "rain_component_manifest",
+      "description": "Rain component manifest",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "metadata": {
+              "$ref": "#/definitions/metadata"
+            },
+            "component": {
+              "$ref": "#/definitions/component"
+            },
+            "template": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            },
+            "params": {
+              "type": "object",
+              "additionalProperties": true
+            },
+            "tags": {
+              "type": "object",
+              "additionalProperties": true
+            },
+            "vars": {
+              "$ref": "#/definitions/vars"
+            },
+            "env": {
+              "$ref": "#/definitions/env"
+            },
+            "settings": {
+              "$ref": "#/definitions/settings"
+            },
+            "locals": {
+              "$ref": "#/definitions/locals"
+            },
+            "command": {
+              "$ref": "#/definitions/command"
+            },
+            "dependencies": {
+              "$ref": "#/definitions/dependencies"
+            },
+            "auth": {
+              "$ref": "#/definitions/component_auth"
+            },
+            "secrets": {
+              "$ref": "#/definitions/component_secrets"
+            }
+          },
+          "required": []
         }
       ]
     },
