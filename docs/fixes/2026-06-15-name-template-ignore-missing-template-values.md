@@ -3,11 +3,6 @@
 **Issue:** [#2345](https://github.com/cloudposse/atmos/issues/2345)
 **Date:** 2026-06-15
 **Status:** Fixed
-**Scope:** This is **PR 1 of 3** in the split of the rejected omnibus PR
-[#2387](https://github.com/cloudposse/atmos/pull/2387). It is intentionally small and
-self-contained (a flag-routing fix) so it can be reviewed and merged independently of the
-larger `locals` / stack-name-derivation work. See
-[`locals-current-state.md`](./locals-current-state.md) §12–§13 for the full split plan.
 
 ---
 
@@ -59,19 +54,19 @@ the user has explicitly set `ignore_missing_template_values: true`.
 
 ### Affected call sites (11)
 
-| File | Template name |
-|---|---|
-| `internal/exec/atlantis_generate_repo_config.go` | `atlantis-stack-name-template` |
-| `internal/exec/aws_eks_update_kubeconfig.go` | `cluster_name_template` |
-| `internal/exec/describe_affected_utils_2.go` | `spacelift-admin-stack-name-template` |
-| `internal/exec/describe_affected_utils_2.go` | `spacelift-stack-name-template` |
-| `internal/exec/describe_locals.go` | `describe-locals-name-template` |
-| `internal/exec/spacelift_utils.go` | `name-template` |
-| `internal/exec/stack_utils.go` | `terraform-workspace-stacks-name-template` |
-| `internal/exec/terraform_generate_backends.go` | `terraform-generate-backends-template` |
-| `internal/exec/terraform_generate_varfiles.go` | `terraform-generate-varfiles-template` |
-| `internal/exec/utils.go` | `name-template` |
-| `internal/exec/validate_stacks.go` | `validate-stacks-name-template` |
+| File                                             | Template name                              |
+|--------------------------------------------------|--------------------------------------------|
+| `internal/exec/atlantis_generate_repo_config.go` | `atlantis-stack-name-template`             |
+| `internal/exec/aws_eks_update_kubeconfig.go`     | `cluster_name_template`                    |
+| `internal/exec/describe_affected_utils_2.go`     | `spacelift-admin-stack-name-template`      |
+| `internal/exec/describe_affected_utils_2.go`     | `spacelift-stack-name-template`            |
+| `internal/exec/describe_locals.go`               | `describe-locals-name-template`            |
+| `internal/exec/spacelift_utils.go`               | `name-template`                            |
+| `internal/exec/stack_utils.go`                   | `terraform-workspace-stacks-name-template` |
+| `internal/exec/terraform_generate_backends.go`   | `terraform-generate-backends-template`     |
+| `internal/exec/terraform_generate_varfiles.go`   | `terraform-generate-varfiles-template`     |
+| `internal/exec/utils.go`                         | `name-template`                            |
+| `internal/exec/validate_stacks.go`               | `validate-stacks-name-template`            |
 
 > Note: the `describe-locals-name-template` site lives inside `deriveStackNameFromTemplate`,
 > which PR 2 of the split will rework further (to also read `settings`/`env` and to walk imports).
@@ -110,10 +105,3 @@ static-wrapped-error pattern: two new sentinels in `errors/errors.go`
 otherwise unchanged. New tests `TestBuildDependentStackNameFromDependsOnLegacy` and
 `TestBuildDependentStackNameFromDependsOn` cover both the resolution branches and the
 `errors.Is` sentinel behavior on the unresolved path.
-
-## Out of scope (handled by later PRs in the split)
-
-- #2374 / #2343 — stack-name derivation reading imported `vars`/`settings`/`env` and walking
-  imports (PR 2).
-- #2343 deeper bug — the import-recursion vars clobber gated by `localsContextResult`, and the
-  #2344 perf validation (PR 3).
