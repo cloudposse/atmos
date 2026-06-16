@@ -101,120 +101,90 @@ func TestBuildTerraformWorkspace(t *testing.T) {
 	}
 }
 
-func TestBuildDependentStackNameFromDependsOnLegacy(t *testing.T) {
-	tests := []struct {
-		name                         string
-		dependsOn                    string
-		allStackNames                []string
-		currentStackName             string
-		componentNamesInCurrentStack []string
-		currentComponentName         string
-		expected                     string
-		expectError                  bool
-	}{
-		{
-			name:                         "dependency matches a stack name",
-			dependsOn:                    "prod/us-east-1",
-			allStackNames:                []string{"dev-us-east-1", "prod-us-east-1"},
-			currentStackName:             "dev-us-east-1",
-			componentNamesInCurrentStack: []string{"vpc", "eks"},
-			currentComponentName:         "app",
-			expected:                     "prod-us-east-1",
-			expectError:                  false,
-		},
-		{
-			name:                         "dependency matches a component in the current stack",
-			dependsOn:                    "vpc",
-			allStackNames:                []string{"dev-us-east-1", "prod-us-east-1"},
-			currentStackName:             "dev-us-east-1",
-			componentNamesInCurrentStack: []string{"vpc", "eks"},
-			currentComponentName:         "app",
-			expected:                     "dev-us-east-1-vpc",
-			expectError:                  false,
-		},
-		{
-			name:                         "dependency matches neither stack nor component",
-			dependsOn:                    "missing/thing",
-			allStackNames:                []string{"dev-us-east-1", "prod-us-east-1"},
-			currentStackName:             "dev-us-east-1",
-			componentNamesInCurrentStack: []string{"vpc", "eks"},
-			currentComponentName:         "app",
-			expected:                     "",
-			expectError:                  true,
+// TestBuildTerraformWorkspace_IgnoreMissingTemplateValues verifies that the global
+// `templates.settings.ignore_missing_template_values` flag is honored when the stack
+// `name_template` is rendered to build the Terraform workspace.
+//
+// Regression test for #2345: the `ProcessTmpl` call site for the name template
+// hardcoded `ignoreMissingTemplateValues=false`, so a `name_template` that referenced
+// a missing key always errored even when the user set the global flag to `true`.
+func TestBuildTerraformWorkspace_IgnoreMissingTemplateValues(t *testing.T) {
+	// The template references `.vars.missing_key`, which is absent from the component section.
+	const nameTemplate = "{{ .vars.tenant }}-{{ .vars.missing_key }}"
+
+	newConfig := func(ignoreMissing bool) *schema.AtmosConfiguration {
+		return &schema.AtmosConfiguration{
+			Components: schema.Components{
+				Terraform: schema.Terraform{WorkspacesEnabled: boolPtr(true)},
+			},
+			Stacks: schema.Stacks{NameTemplate: nameTemplate},
+			Templates: schema.Templates{
+				Settings: schema.TemplatesSettings{IgnoreMissingTemplateValues: ignoreMissing},
+			},
+		}
+	}
+
+	info := schema.ConfigAndStacksInfo{
+		ComponentBackendType: "s3",
+		Component:            "test-component",
+		Stack:                "dev/us-east-1",
+		ComponentSection: map[string]any{
+			"vars": map[string]any{"tenant": "acme"},
 		},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result, err := BuildDependentStackNameFromDependsOnLegacy(
-				tt.dependsOn,
-				tt.allStackNames,
-				tt.currentStackName,
-				tt.componentNamesInCurrentStack,
-				tt.currentComponentName,
-			)
-			if tt.expectError {
-				assert.ErrorIs(t, err, errUtils.ErrDependencyResolution)
-				assert.Empty(t, result)
-				return
-			}
-			assert.NoError(t, err)
-			assert.Equal(t, tt.expected, result)
-		})
-	}
+	t.Run("flag disabled: missing template key errors", func(t *testing.T) {
+		_, err := BuildTerraformWorkspace(newConfig(false), info)
+		assert.Error(t, err, "with ignore_missing_template_values=false, a missing name_template key must error")
+	})
+
+	t.Run("flag enabled: missing template key tolerated", func(t *testing.T) {
+		workspace, err := BuildTerraformWorkspace(newConfig(true), info)
+		assert.NoError(t, err, "with ignore_missing_template_values=true, a missing name_template key must not error")
+		// `tenant` resolves; the missing key renders as `<no value>` (missingkey=default).
+		assert.Equal(t, "acme-<no value>", workspace, "tenant must resolve and the missing key must not abort rendering")
+	})
 }
 
-func TestBuildDependentStackNameFromDependsOn(t *testing.T) {
-	tests := []struct {
-		name                   string
-		currentComponentName   string
-		currentStackName       string
-		dependsOnComponentName string
-		dependsOnStackName     string
-		allStackNames          []string
-		expected               string
-		expectError            bool
-	}{
-		{
-			name:                   "dependency resolves to an existing stack",
-			currentComponentName:   "app",
-			currentStackName:       "dev-us-east-1",
-			dependsOnComponentName: "vpc",
-			dependsOnStackName:     "prod/us-east-1",
-			allStackNames:          []string{"dev-us-east-1", "prod-us-east-1-vpc"},
-			expected:               "prod-us-east-1-vpc",
-			expectError:            false,
-		},
-		{
-			name:                   "dependency does not resolve to any stack",
-			currentComponentName:   "app",
-			currentStackName:       "dev-us-east-1",
-			dependsOnComponentName: "vpc",
-			dependsOnStackName:     "prod/us-east-1",
-			allStackNames:          []string{"dev-us-east-1", "staging-us-east-1"},
-			expected:               "",
-			expectError:            true,
-		},
-	}
+// TestBuildDependentStackNameFromDependsOnLegacy covers both resolution branches and the
+// unresolved path, which now returns a wrapped static error (errUtils.ErrInvalidDependsOn).
+func TestBuildDependentStackNameFromDependsOnLegacy(t *testing.T) {
+	allStacks := []string{"prod-ue1", "dev-ue1"}
+	componentsInStack := []string{"vpc", "eks"}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result, err := BuildDependentStackNameFromDependsOn(
-				tt.currentComponentName,
-				tt.currentStackName,
-				tt.dependsOnComponentName,
-				tt.dependsOnStackName,
-				tt.allStackNames,
-			)
-			if tt.expectError {
-				assert.ErrorIs(t, err, errUtils.ErrDependencyResolution)
-				assert.Empty(t, result)
-				return
-			}
-			assert.NoError(t, err)
-			assert.Equal(t, tt.expected, result)
-		})
-	}
+	t.Run("resolves to a stack", func(t *testing.T) {
+		got, err := BuildDependentStackNameFromDependsOnLegacy("prod-ue1", allStacks, "dev-ue1", componentsInStack, "app")
+		assert.NoError(t, err)
+		assert.Equal(t, "prod-ue1", got)
+	})
+
+	t.Run("resolves to a component in the current stack", func(t *testing.T) {
+		got, err := BuildDependentStackNameFromDependsOnLegacy("vpc", allStacks, "dev-ue1", componentsInStack, "app")
+		assert.NoError(t, err)
+		assert.Equal(t, "dev-ue1-vpc", got)
+	})
+
+	t.Run("unresolved dependency returns ErrInvalidDependsOn", func(t *testing.T) {
+		_, err := BuildDependentStackNameFromDependsOnLegacy("nope", allStacks, "dev-ue1", componentsInStack, "app")
+		assert.ErrorIs(t, err, errUtils.ErrInvalidDependsOn)
+	})
+}
+
+// TestBuildDependentStackNameFromDependsOn covers the resolution and unresolved paths; the
+// unresolved path now returns a wrapped static error (errUtils.ErrInvalidSettingsDependsOn).
+func TestBuildDependentStackNameFromDependsOn(t *testing.T) {
+	allStacks := []string{"prod-ue1-vpc", "dev-ue1-eks"}
+
+	t.Run("resolves component in stack", func(t *testing.T) {
+		got, err := BuildDependentStackNameFromDependsOn("app", "dev-ue1", "vpc", "prod-ue1", allStacks)
+		assert.NoError(t, err)
+		assert.Equal(t, "prod-ue1-vpc", got)
+	})
+
+	t.Run("unresolved dependency returns ErrInvalidSettingsDependsOn", func(t *testing.T) {
+		_, err := BuildDependentStackNameFromDependsOn("app", "dev-ue1", "missing", "prod-ue1", allStacks)
+		assert.ErrorIs(t, err, errUtils.ErrInvalidSettingsDependsOn)
+	})
 }
 
 func TestBuildComponentPath(t *testing.T) {

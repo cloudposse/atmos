@@ -394,3 +394,79 @@ func TestShellHandlerExecuteWithWorkflowErrorCases(t *testing.T) {
 		assert.Contains(t, result.Metadata["stderr"], "stderr")
 	})
 }
+
+func TestShellHandlerTtyStep(t *testing.T) {
+	initShellTestIO(t)
+	handler := &ShellHandler{BaseHandler: NewBaseHandler("shell", CategoryCommand, false)}
+
+	step := &schema.WorkflowStep{
+		Name:    "tty-step",
+		Type:    "shell",
+		Command: "exit 7",
+		Tty:     true,
+		Output:  "viewport", // Must be ignored for tty steps.
+	}
+
+	result, err := handler.Execute(context.Background(), step, NewVariables())
+	require.Error(t, err)
+	require.NotNil(t, result)
+	// TTY steps produce no capturable output; only the exit code is recorded.
+	assert.Empty(t, result.Value)
+	assert.Equal(t, 7, result.Metadata[exitCodeMetadata])
+}
+
+func TestShellHandlerTtyStepSuccess(t *testing.T) {
+	initShellTestIO(t)
+	handler := &ShellHandler{BaseHandler: NewBaseHandler("shell", CategoryCommand, false)}
+
+	step := &schema.WorkflowStep{
+		Name:    "tty-step",
+		Type:    "shell",
+		Command: "exit 0",
+		Tty:     true,
+	}
+
+	result, err := handler.Execute(context.Background(), step, NewVariables())
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	assert.Empty(t, result.Value)
+	assert.Equal(t, 0, result.Metadata[exitCodeMetadata])
+}
+
+func TestShellHandlerInteractiveStepUsesShellSession(t *testing.T) {
+	initShellTestIO(t)
+	handler := &ShellHandler{BaseHandler: NewBaseHandler("shell", CategoryCommand, false)}
+
+	step := &schema.WorkflowStep{
+		Name:        "interactive-step",
+		Type:        "shell",
+		Command:     "exit 0",
+		Interactive: true,
+		Output:      "capture",
+	}
+
+	result, err := handler.Execute(context.Background(), step, NewVariables())
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	assert.Empty(t, result.Value)
+	assert.Equal(t, 0, result.Metadata[exitCodeMetadata])
+}
+
+func TestShellHandlerInteractiveStepWithWorkflowUsesShellSession(t *testing.T) {
+	initShellTestIO(t)
+	handler := &ShellHandler{BaseHandler: NewBaseHandler("shell", CategoryCommand, false)}
+
+	step := &schema.WorkflowStep{
+		Name:        "interactive-step",
+		Type:        "shell",
+		Command:     "exit 0",
+		Interactive: true,
+	}
+	workflow := &schema.WorkflowDefinition{Output: "capture"}
+
+	result, err := handler.ExecuteWithWorkflow(context.Background(), step, NewVariables(), workflow)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	assert.Empty(t, result.Value)
+	assert.Equal(t, 0, result.Metadata[exitCodeMetadata])
+}

@@ -32,7 +32,7 @@ func BuildTerraformWorkspace(atmosConfig *schema.AtmosConfiguration, configAndSt
 	case configAndStacksInfo.StackManifestName != "":
 		contextPrefix = configAndStacksInfo.StackManifestName
 	case atmosConfig.Stacks.NameTemplate != "":
-		tmpl, err = ProcessTmpl(atmosConfig, "terraform-workspace-stacks-name-template", atmosConfig.Stacks.NameTemplate, configAndStacksInfo.ComponentSection, false)
+		tmpl, err = ProcessTmpl(atmosConfig, "terraform-workspace-stacks-name-template", atmosConfig.Stacks.NameTemplate, configAndStacksInfo.ComponentSection, atmosConfig.Templates.Settings.IgnoreMissingTemplateValues)
 		if err != nil {
 			return "", err
 		}
@@ -144,7 +144,7 @@ func BuildDependentStackNameFromDependsOnLegacy(
 	return "", fmt.Errorf(
 		"%w: the component '%[2]s' in the stack '%[3]s' specifies 'depends_on' dependency '%[4]s', "+
 			"but '%[4]s' is not a stack and not a component in the '%[3]s' stack",
-		errUtils.ErrDependencyResolution,
+		errUtils.ErrInvalidDependsOn,
 		currentComponentName,
 		currentStackName,
 		dependsOn,
@@ -168,11 +168,13 @@ func BuildDependentStackNameFromDependsOn(
 	}
 
 	return "", fmt.Errorf(
-		"%w: the component '%[2]s' in the stack '%[3]s' specifies 'settings.depends_on' dependency "+
-			"on the component '%[4]s' in the stack '%[5]s', but '%[4]s' is not defined in the '%[5]s' stack, or the component and stack names are not correct",
-		errUtils.ErrDependencyResolution,
+		"%w: the component '%s' in the stack '%s' specifies 'settings.depends_on' dependency "+
+			"on the component '%s' in the stack '%s', but '%s' is not defined in the '%s' stack, or the component and stack names are not correct",
+		errUtils.ErrInvalidSettingsDependsOn,
 		currentComponentName,
 		currentStackName,
+		dependsOnComponentName,
+		dependsOnStackName,
 		dependsOnComponentName,
 		dependsOnStackName,
 	)
