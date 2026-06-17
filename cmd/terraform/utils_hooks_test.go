@@ -33,6 +33,7 @@ import (
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/hooks"
 	"github.com/cloudposse/atmos/pkg/schema"
+	storepkg "github.com/cloudposse/atmos/pkg/store"
 )
 
 // Compile-time sentinel: tests below depend on these schema.ConfigAndStacksInfo
@@ -767,43 +768,51 @@ func TestRunHooksWithOutput_InjectsLastAuthContext(t *testing.T) {
 	assert.Equal(t, "mock-auth-manager", gotMgr)
 }
 
-func TestHookStoreDefaultIdentity(t *testing.T) {
-	t.Run("explicit identity wins", func(t *testing.T) {
-		ctrl := gomock.NewController(t)
-		authManager := authtypes.NewMockAuthManager(ctrl)
+func TestInjectHookStoreAuthResolver_ResolverOnly(t *testing.T) {
+	tests := []struct {
+		name     string
+		identity string
+	}{
+		{
+			name:     "empty command identity does not inject default identity",
+			identity: "",
+		},
+		{
+			name:     "explicit command identity does not override store identity",
+			identity: "cli-admin",
+		},
+		{
+			name:     "disabled identity does not fall back to default identity",
+			identity: cfg.IdentityFlagDisabledValue,
+		},
+	}
 
-		got := hookStoreDefaultIdentity(&schema.ConfigAndStacksInfo{Identity: "cli-admin"}, authManager)
-		assert.Equal(t, "cli-admin", got)
-	})
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			authManager := authtypes.NewMockAuthManager(ctrl)
+			mockStore := storepkg.NewMockIdentityAwareStore(ctrl)
 
-	t.Run("manager default fills empty identity", func(t *testing.T) {
-		ctrl := gomock.NewController(t)
-		authManager := authtypes.NewMockAuthManager(ctrl)
-		authManager.EXPECT().GetDefaultIdentity(false).Return("component-admin", nil)
+			mockStore.EXPECT().
+				SetAuthContext(gomock.Not(nil), "").
+				Do(func(resolver storepkg.AuthContextResolver, identityName string) {
+					assert.NotNil(t, resolver)
+					assert.Empty(t, identityName)
+				})
 
-		got := hookStoreDefaultIdentity(&schema.ConfigAndStacksInfo{}, authManager)
-		assert.Equal(t, "component-admin", got)
-	})
+			atmosConfig := &schema.AtmosConfiguration{
+				Stores: storepkg.StoreRegistry{
+					"explicit-identity-store": mockStore,
+				},
+			}
+			info := &schema.ConfigAndStacksInfo{
+				Identity:    tc.identity,
+				AuthManager: authManager,
+			}
 
-	t.Run("falls back to auth chain", func(t *testing.T) {
-		ctrl := gomock.NewController(t)
-		authManager := authtypes.NewMockAuthManager(ctrl)
-		authManager.EXPECT().GetDefaultIdentity(false).Return("", errors.New("no default"))
-		authManager.EXPECT().GetChain().Return([]string{"provider", "chain-admin"})
-
-		got := hookStoreDefaultIdentity(&schema.ConfigAndStacksInfo{}, authManager)
-		assert.Equal(t, "chain-admin", got)
-	})
-
-	t.Run("disabled sentinel falls back to auth chain", func(t *testing.T) {
-		ctrl := gomock.NewController(t)
-		authManager := authtypes.NewMockAuthManager(ctrl)
-		authManager.EXPECT().GetDefaultIdentity(false).Return("", errors.New("no default"))
-		authManager.EXPECT().GetChain().Return([]string{"provider", "chain-admin"})
-
-		got := hookStoreDefaultIdentity(&schema.ConfigAndStacksInfo{Identity: cfg.IdentityFlagDisabledValue}, authManager)
-		assert.Equal(t, "chain-admin", got)
-	})
+			injectHookStoreAuthResolver(atmosConfig, info)
+		})
+	}
 }
 
 // TestInteractiveStackSelection_PromptError verifies that when the

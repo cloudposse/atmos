@@ -272,9 +272,9 @@ Configures external key-value store backends.
 stores:
   ssm/dev:
     kind: aws/ssm
+    identity: dev-admin
     options:
       region: us-east-1
-      identity: dev-admin
 
   secrets:
     kind: azure/keyvault

@@ -95,10 +95,7 @@ func (d *DescribeComponentExec) ExecuteDescribeComponentCmd(describeComponentPar
 	if provenance {
 		atmosConfig.TrackProvenance = true
 	}
-	if describeComponentParams.AuthManager != nil {
-		resolver := authbridge.NewResolver(describeComponentParams.AuthManager, describeComponentParams.AuthManager.GetStackInfo())
-		atmosConfig.Stores.SetAuthContextResolverWithDefaultIdentity(resolver, describeStoreDefaultIdentity(describeComponentParams.AuthManager))
-	}
+	injectDescribeComponentStoreAuthResolver(&atmosConfig, describeComponentParams.AuthManager)
 
 	var componentSection map[string]any
 	var mergeContext *m.MergeContext
@@ -182,17 +179,13 @@ func (d *DescribeComponentExec) ExecuteDescribeComponentCmd(describeComponentPar
 	return nil
 }
 
-func describeStoreDefaultIdentity(authManager auth.AuthManager) string {
-	if authManager == nil {
-		return ""
+func injectDescribeComponentStoreAuthResolver(atmosConfig *schema.AtmosConfiguration, authManager auth.AuthManager) {
+	if atmosConfig == nil || authManager == nil {
+		return
 	}
-	if identity, err := authManager.GetDefaultIdentity(false); err == nil && identity != "" {
-		return identity
-	}
-	if chain := authManager.GetChain(); len(chain) > 0 {
-		return chain[len(chain)-1]
-	}
-	return ""
+
+	resolver := authbridge.NewResolver(authManager, authManager.GetStackInfo())
+	atmosConfig.Stores.SetAuthContextResolver(resolver)
 }
 
 func (d *DescribeComponentExec) viewConfig(atmosConfig *schema.AtmosConfiguration, displayName string, format string, data any) error {

@@ -24,6 +24,7 @@ stores:
 
   secrets/asm:
     kind: aws/asm
+    identity: floci-superuser
     secret: true
     options:
       region: us-east-1

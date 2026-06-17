@@ -1,7 +1,6 @@
 package exec
 
 import (
-	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -15,48 +14,30 @@ import (
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/pager"
 	"github.com/cloudposse/atmos/pkg/schema"
+	storepkg "github.com/cloudposse/atmos/pkg/store"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
-func TestDescribeStoreDefaultIdentity(t *testing.T) {
-	t.Run("configured default wins over chain fallback", func(t *testing.T) {
-		ctrl := gomock.NewController(t)
-		authManager := authtypes.NewMockAuthManager(ctrl)
-		authManager.EXPECT().GetDefaultIdentity(false).Return("default-admin", nil)
+func TestInjectDescribeComponentStoreAuthResolver_ResolverOnly(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	authManager := authtypes.NewMockAuthManager(ctrl)
+	mockStore := storepkg.NewMockIdentityAwareStore(ctrl)
 
-		got := describeStoreDefaultIdentity(authManager)
-		assert.Equal(t, "default-admin", got)
-	})
+	authManager.EXPECT().GetStackInfo().Return(&schema.ConfigAndStacksInfo{})
+	mockStore.EXPECT().
+		SetAuthContext(gomock.Not(nil), "").
+		Do(func(resolver storepkg.AuthContextResolver, identityName string) {
+			assert.NotNil(t, resolver)
+			assert.Empty(t, identityName)
+		})
 
-	t.Run("falls back to auth chain", func(t *testing.T) {
-		ctrl := gomock.NewController(t)
-		authManager := authtypes.NewMockAuthManager(ctrl)
-		authManager.EXPECT().GetDefaultIdentity(false).Return("", errors.New("no default"))
-		authManager.EXPECT().GetChain().Return([]string{"provider", "chain-admin"})
+	atmosConfig := &schema.AtmosConfiguration{
+		Stores: storepkg.StoreRegistry{
+			"explicit-identity-store": mockStore,
+		},
+	}
 
-		got := describeStoreDefaultIdentity(authManager)
-		assert.Equal(t, "chain-admin", got)
-	})
-
-	t.Run("empty default falls back to auth chain", func(t *testing.T) {
-		ctrl := gomock.NewController(t)
-		authManager := authtypes.NewMockAuthManager(ctrl)
-		authManager.EXPECT().GetDefaultIdentity(false).Return("", nil)
-		authManager.EXPECT().GetChain().Return([]string{"provider", "chain-admin"})
-
-		got := describeStoreDefaultIdentity(authManager)
-		assert.Equal(t, "chain-admin", got)
-	})
-
-	t.Run("missing identity returns empty", func(t *testing.T) {
-		ctrl := gomock.NewController(t)
-		authManager := authtypes.NewMockAuthManager(ctrl)
-		authManager.EXPECT().GetDefaultIdentity(false).Return("", errors.New("no default"))
-		authManager.EXPECT().GetChain().Return(nil)
-
-		got := describeStoreDefaultIdentity(authManager)
-		assert.Empty(t, got)
-	})
+	injectDescribeComponentStoreAuthResolver(atmosConfig, authManager)
 }
 
 func TestExecuteDescribeComponentCmd_Success_YAMLWithPager(t *testing.T) {

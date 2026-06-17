@@ -1,4 +1,4 @@
-//nolint:forbidigo // This opt-in integration test is configured through environment variables.
+//nolint:depguard // This opt-in AWS integration test verifies AWS-compatible Floci stores.
 package tests
 
 import (

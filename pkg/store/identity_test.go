@@ -97,7 +97,7 @@ func TestSetAuthContextResolverWithDefaultIdentity_DefaultsOnlyEmptyStores(t *te
 	assert.Equal(t, "aws-secrets", explicitASM.identityName)
 
 	assert.NotNil(t, defaultASM.authResolver)
-	assert.Equal(t, "terraform-ci", defaultASM.identityName)
+	assert.Empty(t, defaultASM.identityName)
 
 	assert.NotNil(t, defaultAzure.authResolver)
 	assert.Equal(t, "terraform-ci", defaultAzure.identityName)

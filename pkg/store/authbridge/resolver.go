@@ -83,15 +83,15 @@ func (r *Resolver) awsIdentityEndpointURL(identityName string) string {
 		return ""
 	}
 
-	awsConfig := awsConfigForIdentity(identity)
+	awsConfig := awsConfigForIdentity(&identity)
 	if awsConfig == nil || awsConfig.Resolver == nil {
 		return ""
 	}
 	return awsConfig.Resolver.URL
 }
 
-func awsConfigForIdentity(identity schema.Identity) *awsconfig.AWSConfig {
-	if identity.Credentials == nil {
+func awsConfigForIdentity(identity *schema.Identity) *awsconfig.AWSConfig {
+	if identity == nil || identity.Credentials == nil {
 		return nil
 	}
 	awsRaw, ok := identity.Credentials["aws"]

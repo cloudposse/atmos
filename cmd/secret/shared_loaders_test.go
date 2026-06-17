@@ -1,7 +1,6 @@
 package secret
 
 import (
-	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -12,7 +11,8 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	authtypes "github.com/cloudposse/atmos/pkg/auth/types"
-	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/schema"
+	storepkg "github.com/cloudposse/atmos/pkg/store"
 )
 
 // writeMinimalAtmosProject writes a self-contained Atmos project (config + one stack + one
@@ -83,43 +83,26 @@ func TestLoadService_InitConfigError(t *testing.T) {
 	assert.ErrorIs(t, err, errUtils.ErrFailedToInitConfig)
 }
 
-func TestSecretStoreDefaultIdentity(t *testing.T) {
-	t.Run("explicit identity wins", func(t *testing.T) {
-		ctrl := gomock.NewController(t)
-		authManager := authtypes.NewMockAuthManager(ctrl)
+func TestInjectSecretStoreAuthResolver_ResolverOnly(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	authManager := authtypes.NewMockAuthManager(ctrl)
+	mockStore := storepkg.NewMockIdentityAwareStore(ctrl)
 
-		got := secretStoreDefaultIdentity(secretScope{Identity: "cli-admin"}, authManager)
-		assert.Equal(t, "cli-admin", got)
-	})
+	authManager.EXPECT().GetStackInfo().Return(&schema.ConfigAndStacksInfo{})
+	mockStore.EXPECT().
+		SetAuthContext(gomock.Not(nil), "").
+		Do(func(resolver storepkg.AuthContextResolver, identityName string) {
+			assert.NotNil(t, resolver)
+			assert.Empty(t, identityName)
+		})
 
-	t.Run("manager default fills empty identity", func(t *testing.T) {
-		ctrl := gomock.NewController(t)
-		authManager := authtypes.NewMockAuthManager(ctrl)
-		authManager.EXPECT().GetDefaultIdentity(false).Return("default-admin", nil)
+	atmosConfig := &schema.AtmosConfiguration{
+		Stores: storepkg.StoreRegistry{
+			"explicit-identity-store": mockStore,
+		},
+	}
 
-		got := secretStoreDefaultIdentity(secretScope{}, authManager)
-		assert.Equal(t, "default-admin", got)
-	})
-
-	t.Run("select sentinel falls back to auth chain", func(t *testing.T) {
-		ctrl := gomock.NewController(t)
-		authManager := authtypes.NewMockAuthManager(ctrl)
-		authManager.EXPECT().GetDefaultIdentity(false).Return("", errors.New("no default"))
-		authManager.EXPECT().GetChain().Return([]string{"provider", "chain-admin"})
-
-		got := secretStoreDefaultIdentity(secretScope{Identity: cfg.IdentityFlagSelectValue}, authManager)
-		assert.Equal(t, "chain-admin", got)
-	})
-
-	t.Run("disabled sentinel falls back to auth chain", func(t *testing.T) {
-		ctrl := gomock.NewController(t)
-		authManager := authtypes.NewMockAuthManager(ctrl)
-		authManager.EXPECT().GetDefaultIdentity(false).Return("", errors.New("no default"))
-		authManager.EXPECT().GetChain().Return([]string{"provider", "chain-admin"})
-
-		got := secretStoreDefaultIdentity(secretScope{Identity: cfg.IdentityFlagDisabledValue}, authManager)
-		assert.Equal(t, "chain-admin", got)
-	})
+	injectSecretStoreAuthResolver(atmosConfig, authManager)
 }
 
 func TestLoadServiceAndConfig_ComponentNotFound(t *testing.T) {

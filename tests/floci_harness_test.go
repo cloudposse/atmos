@@ -1,3 +1,4 @@
+//nolint:depguard // The Floci harness creates AWS clients for opt-in AWS-compatible integration tests.
 package tests
 
 import (

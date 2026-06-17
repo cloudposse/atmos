@@ -28,7 +28,8 @@ At the same time, the store configuration UX was inconsistent:
 
 - AWS stores still used the legacy hyphenated `type` form in docs and examples,
   while auth uses slash-style `kind` notation.
-- SSM worked better than AWS Secrets Manager in default identity inheritance.
+- AWS Secrets Manager lacked parity with SSM for explicit store identity and
+  custom endpoint handling.
 - Stores marked `secret: true` could still be read through cleartext store
   paths in some code paths.
 - There were no runnable full-circle AWS examples proving hook writes, store
@@ -40,17 +41,13 @@ Terraform command execution creates and authenticates an auth manager for the
 component, then persists it in `ConfigAndStacksInfo`. Hook execution loaded a
 fresh Atmos configuration for the hook context, but did not inject an auth
 resolver into `atmosConfig.Stores` before running store hooks. Stores with an
-explicit identity therefore had no resolver, and stores without an explicit
-identity fell back to ambient AWS SDK credential resolution instead of
-inheriting the active Terraform identity.
+explicit identity therefore had no resolver. Stores without an explicit
+identity continued using ambient AWS SDK credential resolution; changing that
+inheritance behavior is a separate compatibility decision.
 
 SSM and Secrets Manager clients were also initialized too early for the
-identity-inheritance path. A store created without `identity` could construct
-its default AWS client before the hook or component context had a chance to
-inject the active identity.
-
-AWS Secrets Manager was missing from the default identity inheritance switch,
-so even after resolver injection it did not behave like SSM.
+explicit-identity path. A store could construct its default AWS client before
+the hook or component context had a chance to inject the auth resolver.
 
 Finally, the secret-store access rule was enforced by convention and
 documentation more than by every read path. `!store`, `!store.get`, and
@@ -64,19 +61,18 @@ Floci validation also exposed two adjacent auth-path regressions:
   YAML function processing.
 - `describe component` created an auth manager for YAML functions but then
   resolved component config through a fresh store registry without the auth
-  resolver, so `!store` reads against an inherited-identity ASM store still
-  fell back to ambient AWS credentials.
+  resolver, so `!store` reads against an explicit-identity ASM store still
+  failed resolver setup.
 
 ## Fix
 
 - Hook execution now injects an auth resolver into `atmosConfig.Stores` using
   the persisted Terraform auth manager before `hooks.RunAll`.
-- Hook stores without an explicit identity inherit the effective Terraform
-  identity where possible, then fall back only if no default identity is
-  available.
+- Hook stores with an explicit `identity` can resolve that identity through
+  Atmos auth. Stores without `identity` keep the existing ambient/default SDK
+  credential behavior in this PR.
 - SSM and AWS Secrets Manager stores now defer AWS client creation until first
-  use, leaving time for auth resolver and default identity injection.
-- AWS Secrets Manager participates in inherited default identity handling.
+  use, leaving time for auth resolver injection.
 - AWS identity resolver endpoints are carried into SSM and Secrets Manager
   store SDK clients, so Floci or custom AWS-compatible endpoints are used for
   the actual store API calls, not only during authentication.
@@ -94,9 +90,9 @@ Floci validation also exposed two adjacent auth-path regressions:
   credentials.
 - Raw-YAML auth identity parsing now evaluates Atmos YAML functions such as
   `!env`, preserving dotted identity names without losing dynamic values.
-- `describe component` and `atmos secret` now inject store auth resolvers with
-  the authenticated/default identity before resolving `!store` or `!secret`
-  values.
+- `describe component` and `atmos secret` now inject store auth resolvers
+  before resolving `!store` or `!secret` values, without assigning a default
+  identity to stores that omitted `identity`.
 - `kind: aws/ssm` and `kind: aws/asm` are the canonical store selectors.
   Legacy `type: aws-ssm-parameter-store` and `type: aws-secrets-manager`
   remain supported as aliases.
@@ -137,12 +133,14 @@ Atmos command execution, and AWS-compatible verification clients. The harness
 clears ambient AWS credentials from the Atmos subprocess environment for these
 store tests so the Atmos `aws/user` identity is the only auth path.
 
-The fixtures deliberately cover both auth paths:
+The fixtures deliberately cover explicit store identity and ambient-credential
+isolation:
 
 - SSM stores get an explicit `identity: floci-superuser`, which would fail in
   the old hook path with `auth resolver is not set`.
-- Secrets Manager stores omit `identity`, so they must inherit the default
-  Terraform identity before falling back to ambient AWS credentials.
+- Secrets Manager stores use explicit identity where Atmos auth is the intended
+  credential source; stores that omit `identity` are left to ambient/default SDK
+  credentials by design in this PR.
 - Store and secret fixtures use `!env` for the Floci endpoint and prefixes, so
   auth identity YAML function processing is covered end to end.
 
@@ -218,9 +216,10 @@ go test ./tests -run Floci
 ## Expected Behavior
 
 - A Terraform component hook can write outputs to AWS SSM or AWS Secrets
-  Manager using the component's active Terraform identity.
-- A store can omit `identity` and still inherit the active Terraform identity
-  before falling back to ambient AWS credentials.
+  Manager when the store declares an Atmos auth `identity`.
+- A store that omits `identity` keeps the existing ambient/default SDK
+  credential behavior. Component-identity inheritance for identity-less stores
+  is intentionally left for a follow-up design decision.
 - `kind: aws/ssm` and `kind: aws/asm` are the examples users see first.
 - Legacy hyphenated store `type` values continue to work for backward
   compatibility.

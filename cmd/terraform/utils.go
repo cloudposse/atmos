@@ -199,27 +199,7 @@ func injectHookStoreAuthResolver(atmosConfig *schema.AtmosConfiguration, info *s
 	}
 
 	resolver := authbridge.NewResolver(authManager, info)
-	atmosConfig.Stores.SetAuthContextResolverWithDefaultIdentity(resolver, hookStoreDefaultIdentity(info, authManager))
-}
-
-func hookStoreDefaultIdentity(info *schema.ConfigAndStacksInfo, authManager authtypes.AuthManager) string {
-	switch info.Identity {
-	case "", cfg.IdentityFlagSelectValue, cfg.IdentityFlagDisabledValue:
-	default:
-		return info.Identity
-	}
-
-	if authManager == nil {
-		return ""
-	}
-	if identity, err := authManager.GetDefaultIdentity(false); err == nil {
-		return identity
-	}
-	chain := authManager.GetChain()
-	if len(chain) == 0 {
-		return ""
-	}
-	return chain[len(chain)-1]
+	atmosConfig.Stores.SetAuthContextResolver(resolver)
 }
 
 // runCIHooksForDeploy fires CI hooks using already-resolved info.

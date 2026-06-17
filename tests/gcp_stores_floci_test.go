@@ -1,4 +1,3 @@
-//nolint:forbidigo // This opt-in integration test is configured through environment variables.
 package tests
 
 import (

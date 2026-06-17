@@ -1,3 +1,4 @@
+//nolint:revive // Legacy config loading file exceeds the standard file length limit.
 package config
 
 import (
@@ -1906,9 +1907,10 @@ func findYAMLMappingPath(node *goyaml.Node, path ...string) *goyaml.Node {
 	if node.Kind != goyaml.MappingNode {
 		return nil
 	}
-	for i := 0; i < len(node.Content); i += 2 {
-		if node.Content[i].Value == path[0] {
-			return findYAMLMappingPath(node.Content[i+1], path[1:]...)
+	head, tail := path[0], path[1:]
+	for i := 0; i+1 < len(node.Content); i += 2 {
+		if node.Content[i].Value == head {
+			return findYAMLMappingPath(node.Content[i+1], tail...)
 		}
 	}
 	return nil

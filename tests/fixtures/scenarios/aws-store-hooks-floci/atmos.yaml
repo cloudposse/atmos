@@ -30,6 +30,7 @@ stores:
 
   outputs/asm:
     kind: aws/asm
+    identity: floci-superuser
     options:
       region: us-east-1
       prefix: !env FLOCI_STORE_HOOKS_ASM_PREFIX

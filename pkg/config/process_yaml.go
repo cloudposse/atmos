@@ -479,6 +479,8 @@ func processScalarNodeValue(node *yaml.Node) (any, error) {
 // decodeNodeWithYamlFunctions decodes a YAML node into plain Go values while
 // evaluating Atmos YAML functions on scalar nodes. It is used by config paths
 // that must read raw YAML directly instead of Viper's normalized settings.
+//
+//nolint:gocognit,revive // YAML AST decoding is necessarily branch-heavy by node kind.
 func decodeNodeWithYamlFunctions(node *yaml.Node) (any, error) {
 	if node == nil {
 		return nil, nil
