@@ -17,8 +17,10 @@ Valid subcommands are:
   • docs
   • env
   • git
+  • helm
   • helmfile
   • help
+  • kubernetes
   • list
   • lsp
   • mcp

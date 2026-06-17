@@ -1,0 +1,21 @@
+# Atmos configuration for the native Helm component demo.
+# See https://atmos.tools for documentation.
+
+base_path: "."
+
+components:
+  helm:
+    # Base path for native Helm components (local charts live here).
+    base_path: "components/helm"
+
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "deploy/**/*"
+  excluded_paths:
+    - "**/_defaults.yaml"
+  name_pattern: "{stage}"
+
+logs:
+  file: "/dev/stderr"
+  level: Info

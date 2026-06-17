@@ -511,6 +511,43 @@ func mergeComponentConfigurations(atmosConfig *schema.AtmosConfiguration, opts *
 		comp[cfg.GenerateSectionName] = finalComponentGenerate
 	}
 
+	if opts.ComponentType == cfg.HelmComponentType {
+		finalComponentHelm, err := m.Merge(
+			mergeConfig,
+			[]map[string]any{
+				result.BaseComponentHelm,
+				result.ComponentHelm,
+			},
+		)
+		if err != nil {
+			return nil, err
+		}
+		for key, value := range finalComponentHelm {
+			comp[key] = value
+		}
+		comp[cfg.HooksSectionName] = finalComponentHooks
+		comp[cfg.GenerateSectionName] = finalComponentGenerate
+	}
+
+	// Merge the Helm CLI plugins list (helm and helmfile components).
+	// Base-component plugins (e.g. from an abstract/catalog component) are merged
+	// with the concrete component's plugins; the configured list_merge_strategy
+	// (default: replace) governs how the lists combine.
+	if supportsPlugins(opts.ComponentType) {
+		finalComponentPlugins, err := mergeComponentAnySection(
+			mergeConfig,
+			cfg.PluginsSectionName,
+			result.BaseComponentPlugins,
+			result.ComponentPlugins,
+		)
+		if err != nil {
+			return nil, err
+		}
+		if finalComponentPlugins != nil {
+			comp[cfg.PluginsSectionName] = finalComponentPlugins
+		}
+	}
+
 	// Process source and provision configuration.
 	if supportsSourceProvision(opts.ComponentType) {
 		finalComponentSource, err := m.Merge(

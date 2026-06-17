@@ -37,6 +37,7 @@ function Home() {
                       'Kubernetes',
                       'Kustomize',
                       'Packer',
+                      'Helm',
                       'Helmfile',
                       'Ansible',
                       'Devcontainers',
@@ -44,8 +45,8 @@ function Home() {
                   />
                 </span>
                 <span className="visually-hidden">
-                  Terraform, OpenTofu, Kubernetes, Kustomize, Packer, Helmfile,
-                  Ansible, and Devcontainers
+                  Terraform, OpenTofu, Kubernetes, Kustomize, Packer, Helm,
+                  Helmfile, Ansible, and Devcontainers
                 </span>
               </h1>
             <p className="hero__description">Treat environments as configuration and eliminate code duplication, custom bash scripts, and complicated tooling with one tool to rule them all</p>

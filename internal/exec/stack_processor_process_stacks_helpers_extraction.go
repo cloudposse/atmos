@@ -267,20 +267,72 @@ func extractComponentSections(opts *ComponentProcessorOptions, result *Component
 		}
 	}
 
+	// Native Helm component fields are captured as a single bag and deep-merged
+	// with base-component inheritance in mergeComponentConfigurations.
+	if opts.ComponentType == cfg.HelmComponentType {
+		result.ComponentHelm = extractHelmComponentSection(opts.ComponentMap)
+	}
+
+	// Extract the Helm CLI plugins list (helm and helmfile components). The value
+	// is kept as a raw list (any) so it deep-merges/replaces correctly with
+	// base-component inheritance in mergeComponentConfigurations.
+	if supportsPlugins(opts.ComponentType) {
+		if i, ok := opts.ComponentMap[cfg.PluginsSectionName]; ok {
+			result.ComponentPlugins = i
+		}
+	}
+
 	return nil
 }
 
+// helmComponentSectionKeys are the native Helm component fields that participate
+// in base-component inheritance and flow through to the final component config.
+var helmComponentSectionKeys = []string{
+	cfg.ChartSectionName,
+	cfg.ValuesSectionName,
+	cfg.ValuesFilesSectionName,
+	cfg.RepositoriesSectionName,
+	cfg.RenderSectionName,
+	"version",
+	"repository",
+	"namespace",
+	"name",
+}
+
+// extractHelmComponentSection copies the recognized Helm fields out of a
+// component map into a standalone bag (nil-safe; only present keys are copied).
+func extractHelmComponentSection(componentMap map[string]any) map[string]any {
+	bag := make(map[string]any)
+	for _, key := range helmComponentSectionKeys {
+		if value, ok := componentMap[key]; ok {
+			bag[key] = value
+		}
+	}
+	return bag
+}
+
 func supportsComponentHooks(componentType string) bool {
-	return componentType == cfg.TerraformComponentType || componentType == cfg.KubernetesComponentType
+	return componentType == cfg.TerraformComponentType ||
+		componentType == cfg.KubernetesComponentType ||
+		componentType == cfg.HelmComponentType
 }
 
 func supportsGenerate(componentType string) bool {
-	return componentType == cfg.TerraformComponentType || componentType == cfg.KubernetesComponentType
+	return componentType == cfg.TerraformComponentType ||
+		componentType == cfg.KubernetesComponentType ||
+		componentType == cfg.HelmComponentType
+}
+
+// supportsPlugins reports whether a component type honors the `plugins` section
+// (Helm CLI plugins). Both helm and helmfile components support it: helmfile
+// requires plugins like helm-diff; helm honors them for helm-binary passthrough.
+func supportsPlugins(componentType string) bool {
+	return componentType == cfg.HelmComponentType || componentType == cfg.HelmfileComponentType
 }
 
 func supportsSourceProvision(componentType string) bool {
 	switch componentType {
-	case cfg.TerraformComponentType, cfg.HelmfileComponentType, cfg.PackerComponentType, cfg.KubernetesComponentType:
+	case cfg.TerraformComponentType, cfg.HelmfileComponentType, cfg.PackerComponentType, cfg.KubernetesComponentType, cfg.HelmComponentType:
 		return true
 	default:
 		return false

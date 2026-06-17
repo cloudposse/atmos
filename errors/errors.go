@@ -258,6 +258,11 @@ var (
 	ErrDependencyResolution = errors.New("dependency resolution failed")
 	ErrToolInstall          = errors.New("tool installation failed")
 
+	// Helm plugin errors.
+	ErrInvalidHelmPluginSpec = errors.New("invalid helm plugin specification")
+	ErrHelmPluginInstall     = errors.New("helm plugin installation failed")
+	ErrHelmBinaryNotFound    = errors.New("helm binary not found")
+
 	// Toolchain errors.
 	ErrToolNotFound                 = errors.New("tool not found")
 	ErrInvalidToolSpec              = errors.New("invalid tool specification")
@@ -1227,6 +1232,17 @@ var (
 	ErrKubernetesOutputDirMutuallyExclusive = errors.New("--output and --output-dir are mutually exclusive")
 	ErrKubernetesSplitRequiresOutputDir     = errors.New("--split requires --output-dir and cannot be used with --output")
 	ErrKubernetesSplitNeedsOutputDir        = errors.New("--split requires --output-dir")
+
+	// Helm-native component errors.
+	ErrHelmFlagsMutuallyExclusive    = errors.New("--all and --affected are mutually exclusive")
+	ErrHelmComponentArgWithSelection = errors.New("component argument cannot be used with --all or --affected")
+	ErrHelmOutputSingleComponentOnly = errors.New("--output and --output-dir are only supported when rendering one component")
+	ErrHelmComponentArgRequired      = errors.New("requires exactly one component argument unless --all or --affected is set")
+	ErrHelmUnsupportedOperation      = errors.New("unsupported helm operation")
+	ErrHelmUnsupportedSubcommand     = errors.New("unsupported helm subcommand")
+	ErrHelmChartNotConfigured        = errors.New("helm component is missing a 'chart' reference")
+	ErrHelmRenderFailed              = errors.New("failed to render helm chart")
+	ErrHelmReleaseNameRequired       = errors.New("helm component is missing a release name")
 )
 
 // ExitCodeError is a typed error that preserves subcommand exit codes.

@@ -1,0 +1,104 @@
+---
+slug: native-helm-components
+title: "Native Helm Components and `atmos helmfile template`"
+authors: [osterman]
+tags: [feature]
+---
+
+Atmos now treats Helm as a first-class component type. Define a Helm release —
+local chart, remote repository chart, or OCI chart — in your stack configuration,
+then `template`, `diff`, `apply`, and `delete` it through the Helm Go SDK. No
+`helm` or `helmfile` binary required. And because Atmos owns rendering, values,
+lifecycle events, and credentials, an `apply` can publish the rendered manifests
+to a Git deployment repository instead of a cluster — the producer side of a
+GitOps workflow.
+
+For existing Helmfile users, we also added `atmos helmfile template`, which
+renders a Helmfile component to manifests and can deliver them to the same
+provision targets — closing the long-standing request in
+[#2069](https://github.com/cloudposse/atmos/issues/2069).
+
+<!--truncate-->
+
+## What Changed
+
+`components.helm.<name>` is a native component type with the same stack semantics
+as Terraform and Kubernetes — `vars`, `env`, `auth`, `metadata`, `settings`,
+`dependencies`, `hooks`, inheritance, and overrides — plus Helm-specific `chart`,
+`version`, `repositories`, `values`, `values_files`, and `namespace`:
+
+```yaml
+components:
+  helm:
+    monitoring:
+      chart: prometheus-community/kube-prometheus-stack
+      version: "65.1.1"
+      repositories:
+        - name: prometheus-community
+          url: https://prometheus-community.github.io/helm-charts
+      namespace: monitoring
+      values:
+        grafana:
+          adminPassword: !secret grafana_admin_password
+      dependencies:
+        components:
+          - cert-manager
+```
+
+The component `values:` map **is** the chart's values, merged through Atmos
+inheritance. Charts can be local (`chart: .`), from a repository, or OCI
+(`chart: oci://...`). The Helm Go SDK renders everything in-process, so
+`atmos helm template` works with no cluster and no credentials.
+
+## Why This Matters
+
+Helm has no native secrets concept — the ecosystem reaches for the `helm-secrets`
+plugin and SOPS. Atmos provides it directly: secret values flow in through the `!secret` YAML
+function and are masked automatically. Helm has no
+native dependency ordering across releases — Atmos provides it through the
+component DAG (`dependencies.components`), so `atmos helm apply --all` and
+`--affected` deploy in the right order.
+
+## How to Use It
+
+Render, preview, and deploy:
+
+```shell
+atmos helm template monitoring -s plat-ue2-dev
+atmos helm diff monitoring -s plat-ue2-dev
+atmos helm apply monitoring -s plat-ue2-dev
+```
+
+Publish to a GitOps repo instead of a cluster:
+
+```yaml
+components:
+  helm:
+    monitoring:
+      provision:
+        default: cluster
+        targets:
+          cluster:
+            kind: kubernetes
+          deployment-repo:
+            kind: git
+            repository: deployments
+            path: "clusters/{{ .vars.stage }}/monitoring"
+```
+
+```shell
+atmos helm deploy monitoring -s plat-ue2-dev --target deployment-repo
+```
+
+Already on Helmfile? Render and publish without migrating:
+
+```shell
+atmos helmfile template echo-server -s tenant1-ue2-dev --target deployment-repo
+```
+
+## Get Involved
+
+See the [`atmos helm`](/cli/commands/helm/usage) and
+[`atmos helmfile template`](/cli/commands/helmfile/template) docs to get started,
+and the [`examples/helm`](https://github.com/cloudposse/atmos/tree/main/examples/helm)
+example for a runnable local-chart project.

@@ -9,6 +9,19 @@ import Intro from '@site/src/components/Intro'
 Atmos natively supports opinionated workflows for [Helmfile](https://github.com/helmfile/helmfile). Helmfile provides a declarative specification for deploying helm charts.
 </Intro>
 
+:::tip Native Helm is the simpler default for most Atmos projects
+Helmfile has been an important part of the Kubernetes ecosystem, and Atmos has
+long supported it because it solves real orchestration problems well. Native
+Helm components build on that same workflow, but bring the common case directly
+into Atmos: stack-based values, inheritance, secrets, dependencies, hooks,
+provisioning targets, and CI summaries without an additional orchestration layer.
+
+For most new chart deployments, prefer [`atmos helm`](/cli/commands/helm/usage).
+Keep using Helmfile when you rely on Helmfile-specific capabilities such as
+advanced multi-release state files, selectors, `needs`, Helmfile environments,
+hooks, or Kustomize integration.
+:::
+
 For a complete list of supported commands, please see the Atmos [helmfile](/cli/commands/helmfile/usage) documentation.
 
 ## Stack Configuration

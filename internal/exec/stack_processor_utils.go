@@ -2050,7 +2050,9 @@ func processBaseComponentConfigInternal(
 	var baseComponentProvider string
 	var baseComponentPaths any
 	var baseComponentManifests any
+	var baseComponentPlugins any
 	var baseComponentRender map[string]any
+	var baseComponentHelm map[string]any
 	var baseComponentBackendType string
 	var baseComponentBackendSection map[string]any
 	var baseComponentRemoteStateBackendType string
@@ -2255,12 +2257,19 @@ func processBaseComponentConfigInternal(
 			baseComponentManifests = baseComponentManifestsSection
 		}
 
+		if baseComponentPluginsSection, baseComponentPluginsSectionExist := baseComponentMap[cfg.PluginsSectionName]; baseComponentPluginsSectionExist {
+			baseComponentPlugins = baseComponentPluginsSection
+		}
+
 		if baseComponentRenderSection, baseComponentRenderSectionExist := baseComponentMap[cfg.RenderSectionName]; baseComponentRenderSectionExist {
 			baseComponentRender, ok = baseComponentRenderSection.(map[string]any)
 			if !ok {
 				return fmt.Errorf("%w '%s.render' in the stack '%s'", errUtils.ErrInvalidConfig, baseComponent, stack)
 			}
 		}
+
+		// Base component native Helm fields (chart, values, etc.).
+		baseComponentHelm = extractHelmComponentSection(baseComponentMap)
 
 		// Base component backend
 		if i, ok2 := baseComponentMap[cfg.BackendTypeSectionName]; ok2 {
@@ -2462,12 +2471,26 @@ func processBaseComponentConfigInternal(
 		}
 		baseComponentConfig.BaseComponentManifests = mergedAny
 
+		// Base component `plugins` (Helm CLI plugins list).
+		mergedAny, err = mergeComponentAnySection(levelMergeConfig, cfg.PluginsSectionName, baseComponentConfig.BaseComponentPlugins, baseComponentPlugins)
+		if err != nil {
+			return err
+		}
+		baseComponentConfig.BaseComponentPlugins = mergedAny
+
 		// Base component `render`
 		merged, err = m.Merge(levelMergeConfig, []map[string]any{baseComponentConfig.BaseComponentRender, baseComponentRender})
 		if err != nil {
 			return err
 		}
 		baseComponentConfig.BaseComponentRender = merged
+
+		// Base component native Helm fields.
+		merged, err = m.Merge(levelMergeConfig, []map[string]any{baseComponentConfig.BaseComponentHelm, baseComponentHelm})
+		if err != nil {
+			return err
+		}
+		baseComponentConfig.BaseComponentHelm = merged
 
 		// Base component `command`
 		baseComponentConfig.BaseComponentCommand = baseComponentCommand

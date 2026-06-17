@@ -1,7 +1,7 @@
 ---
 title: Job Summaries
 sidebar_label: Job Summaries
-description: Rich Markdown job summaries for Terraform plan and apply operations
+description: Rich Markdown job summaries for Terraform, Helm, and Helmfile operations
 id: job-summaries
 slug: /ci/job-summaries
 ---
@@ -11,7 +11,7 @@ import Experimental from '@site/src/components/Experimental'
 
 <Intro>
 When CI mode is enabled, Atmos writes rich Markdown summaries to `$GITHUB_STEP_SUMMARY` with
-resource badges, collapsible diffs, and clear warnings about destructive changes.
+resource badges, collapsible diffs, command output, and clear warnings about destructive changes.
 </Intro>
 
 <Experimental />
@@ -73,6 +73,38 @@ when every component completed with no changes.
 Apply summaries show the result of the apply operation, including resource counts and any
 terraform outputs that were produced.
 
+## Helm Summaries
+
+Native Helm components write summaries for these operations when `ci.enabled: true` and CI mode is
+detected or forced with `--ci`/`ATMOS_CI`:
+
+| Command | Summary template |
+|---------|------------------|
+| `template`, `render` | `helm.template` |
+| `diff`, `plan` | `helm.diff` |
+| `apply`, `deploy` | `helm.apply` |
+| `delete`, `destroy` | `helm.delete` |
+
+Helm summaries are summaries-only. They do not write `$GITHUB_OUTPUT` values, commit statuses, PR
+comments, or artifacts. The summary includes component, stack, command status, a local reproduction
+command, and Helm metadata such as release name, namespace, chart, target, object counts, object
+kinds, and rendered manifest size when available.
+
+## Helmfile Summaries
+
+Helmfile components write summaries for these operations when `ci.enabled: true` and CI mode is
+detected or forced with `--ci`/`ATMOS_CI`:
+
+| Command | Summary template |
+|---------|------------------|
+| `template` | `helmfile.template` |
+| `diff` | `helmfile.diff` |
+| `apply`, `sync`, `deploy` | `helmfile.apply` |
+| `destroy` | `helmfile.destroy` |
+
+Helmfile summaries are summaries-only. The summary includes component, stack, command status, a
+local reproduction command, and captured masked stdout/stderr in a collapsible section.
+
 ## Configuration
 
 <dl>
@@ -104,6 +136,16 @@ ci:
     terraform:
       plan: "plan.md"
       apply: "apply.md"
+    helm:
+      template: "helm-template.md"
+      diff: "helm-diff.md"
+      apply: "helm-apply.md"
+      delete: "helm-delete.md"
+    helmfile:
+      template: "helmfile-template.md"
+      diff: "helmfile-diff.md"
+      apply: "helmfile-apply.md"
+      destroy: "helmfile-destroy.md"
 ```
 </File>
 
@@ -128,12 +170,22 @@ ci:
 
     **Default:** `apply.md` (built-in)
   </dd>
+
+  <dt>`ci.templates.helm.*`</dt>
+  <dd>
+    Filenames of custom native Helm summary templates for `template`, `diff`, `apply`, and `delete`.
+  </dd>
+
+  <dt>`ci.templates.helmfile.*`</dt>
+  <dd>
+    Filenames of custom Helmfile summary templates for `template`, `diff`, `apply`, and `destroy`.
+  </dd>
 </dl>
 
 ### Template Context
 
-Templates receive a context object with plan/apply data. The built-in templates are located at
-`pkg/ci/plugins/terraform/templates/` in the Atmos source.
+Templates receive a context object for the operation being summarized. The built-in templates are
+located under `pkg/ci/plugins/*/templates/` in the Atmos source.
 
 #### Plan Template Variables
 

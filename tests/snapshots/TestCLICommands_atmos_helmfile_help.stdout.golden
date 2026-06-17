@@ -23,6 +23,7 @@ AVAILABLE COMMANDS
       source [command]    Manage Helmfile component sources (JIT vendoring)
       sync                Synchronize the state of Helm releases by reconciling the actual state with the desired state
                           (applies changes as needed).
+      template            Render Helm releases defined in a helmfile to Kubernetes manifests.
       version             Get Helmfile version
 
 FLAGS

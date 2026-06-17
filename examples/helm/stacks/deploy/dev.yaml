@@ -1,0 +1,19 @@
+vars:
+  stage: dev
+
+components:
+  helm:
+    demo:
+      metadata:
+        component: demo
+      # The chart reference. "." is the component directory itself
+      # (components/helm/demo), which contains Chart.yaml.
+      chart: "."
+      namespace: demo
+      # Atmos `values:` are the Helm chart values, merged via Atmos inheritance.
+      values:
+        replicaCount: 2
+        image:
+          tag: "1.27"
+        service:
+          port: 8080

@@ -15,6 +15,7 @@ SUBCOMMAND ALIASES
 
       an               Alias of atmos ansible command
       hf               Alias of atmos helmfile command
+      k8s              Alias of atmos kubernetes command
       pk               Alias of atmos packer command
       tf               Alias of atmos terraform command
 
@@ -33,8 +34,10 @@ AVAILABLE COMMANDS
       docs [command]                         Open Atmos documentation or display component-specific docs
       env                                    Output environment variables configured in atmos.yaml
       git [command] [EXPERIMENTAL]           GitOps enablement: automate Git commits locally and in CI
+      helm [command]                         Manage native Helm components
       helmfile [command]                     Manage Helmfile-based Kubernetes deployments
       help                                   Help about any command
+      kubernetes [command]                   Manage Kubernetes-native components
       list [command]                         List available stacks and components
       lsp [command] [EXPERIMENTAL]           Language Server Protocol commands
       mcp [command] [EXPERIMENTAL]           Manage MCP servers and external server connections

@@ -26,6 +26,10 @@ const (
 	affectedReasonStackPaths      = "stack.paths"
 	affectedReasonStackManifests  = "stack.manifests"
 	affectedReasonStackRender     = "stack.render"
+	affectedReasonStackValues     = "stack.values"
+	affectedReasonStackValuesFile = "stack.values_files"
+	affectedReasonStackChart      = "stack.chart"
+	affectedReasonStackRepos      = "stack.repositories"
 	affectedReasonDeleted         = "deleted"
 	affectedReasonDeletedStack    = "deleted.stack"
 
@@ -62,6 +66,10 @@ const (
 	sectionNamePaths     = "paths"
 	sectionNameManifests = "manifests"
 	sectionNameRender    = "render"
+	sectionNameValues    = "values"
+	sectionNameValuesF   = "values_files"
+	sectionNameChart     = "chart"
+	sectionNameRepos     = "repositories"
 )
 
 // shouldSkipComponent determines if a component should be skipped based on metadata.
@@ -586,6 +594,122 @@ func addKubernetesSectionAffected(
 			continue
 		}
 		err := addAffectedComponent(affected, atmosConfig, componentName, stackName, cfg.KubernetesComponentType,
+			componentSection, section.reason, includeSpaceliftAdminStacks, currentStacks, includeSettings)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// processHelmComponentsIndexed processes native Helm components using the files index.
+//
+//nolint:funlen,dupl // Similar structure to Kubernetes with Helm-specific sections.
+func processHelmComponentsIndexed(
+	stackName string,
+	helmSection map[string]any,
+	remoteStacks *map[string]any,
+	currentStacks *map[string]any,
+	atmosConfig *schema.AtmosConfiguration,
+	filesIndex *changedFilesIndex,
+	patternCache *componentPathPatternCache,
+	includeSpaceliftAdminStacks bool,
+	includeSettings bool,
+	excludeLocked bool,
+) ([]schema.Affected, error) {
+	var affected []schema.Affected
+
+	for componentName, compSection := range helmSection {
+		componentSection, ok := compSection.(map[string]any)
+		if !ok {
+			continue
+		}
+
+		metadataSection, hasMetadata := componentSection[sectionNameMetadata].(map[string]any)
+		if hasMetadata {
+			if shouldSkipComponent(metadataSection, componentName, excludeLocked) {
+				continue
+			}
+
+			if !isEqual(remoteStacks, stackName, cfg.HelmComponentType, componentName, metadataSection, sectionNameMetadata) {
+				err := addAffectedComponent(&affected, atmosConfig, componentName, stackName, cfg.HelmComponentType,
+					&componentSection, affectedReasonStackMetadata, includeSpaceliftAdminStacks, currentStacks, includeSettings)
+				if err != nil {
+					return nil, err
+				}
+			}
+		}
+
+		component := GetComponentFolder(&componentSection, componentName)
+
+		changed, err := isComponentFolderChangedIndexed(component, cfg.HelmComponentType, atmosConfig, filesIndex, patternCache)
+		if err != nil {
+			return nil, err
+		}
+		if changed {
+			err := addAffectedComponent(&affected, atmosConfig, componentName, stackName, cfg.HelmComponentType,
+				&componentSection, affectedReasonComponent, includeSpaceliftAdminStacks, currentStacks, includeSettings)
+			if err != nil {
+				return nil, err
+			}
+		}
+
+		if err := addHelmSectionAffected(&affected, atmosConfig, componentName, stackName, &componentSection, remoteStacks, currentStacks, includeSpaceliftAdminStacks, includeSettings); err != nil {
+			return nil, err
+		}
+
+		if settingsSection, ok := componentSection[cfg.SettingsSectionName].(map[string]any); ok {
+			err := checkSettingsAndDependenciesIndexed(
+				&affected, atmosConfig, componentName, stackName, cfg.HelmComponentType,
+				&componentSection, settingsSection, remoteStacks, currentStacks, filesIndex,
+				includeSpaceliftAdminStacks, includeSettings,
+			)
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+
+	return affected, nil
+}
+
+func addHelmSectionAffected(
+	affected *[]schema.Affected,
+	atmosConfig *schema.AtmosConfiguration,
+	componentName string,
+	stackName string,
+	componentSection *map[string]any,
+	remoteStacks *map[string]any,
+	currentStacks *map[string]any,
+	includeSpaceliftAdminStacks bool,
+	includeSettings bool,
+) error {
+	sections := []struct {
+		name   string
+		reason string
+	}{
+		{sectionNameVars, affectedReasonStackVars},
+		{sectionNameEnv, affectedReasonStackEnv},
+		{sectionNameSource, affectedReasonStackSource},
+		{sectionNameProvision, affectedReasonStackProvision},
+		{sectionNameGenerate, affectedReasonStackGenerate},
+		{sectionNameRender, affectedReasonStackRender},
+		{sectionNameValues, affectedReasonStackValues},
+		{sectionNameValuesF, affectedReasonStackValuesFile},
+		{sectionNameChart, affectedReasonStackChart},
+		{sectionNameRepos, affectedReasonStackRepos},
+	}
+
+	for _, section := range sections {
+		value, ok := (*componentSection)[section.name]
+		if !ok {
+			continue
+		}
+		if isComponentSectionEqual(remoteStacks, stackName, cfg.HelmComponentType, componentName, value, section.name) {
+			continue
+		}
+		err := addAffectedComponent(affected, atmosConfig, componentName, stackName, cfg.HelmComponentType,
 			componentSection, section.reason, includeSpaceliftAdminStacks, currentStacks, includeSettings)
 		if err != nil {
 			return err

@@ -1,0 +1,45 @@
+---
+title: Helm Configuration
+sidebar_position: 7
+sidebar_label: helm
+sidebar_class_name: command
+id: helm
+description: Configure native Helm component behavior in atmos.yaml.
+---
+
+import File from "@site/src/components/File";
+import Intro from "@site/src/components/Intro";
+
+<Intro>
+  Tell Atmos where native Helm component files live. These project-wide settings
+  keep stack files focused on what to deploy, while `atmos.yaml` defines how Helm
+  components are found. Charts are rendered and deployed through the Helm Go SDK,
+  so no `helm` or `helmfile` binary is required.
+</Intro>
+
+## Configuration
+
+<File title="atmos.yaml">
+```yaml
+components:
+  helm:
+    # Base path to native Helm component directories (where local charts live).
+    base_path: components/helm
+
+    # Generate files from the component `generate` section before operations.
+    auto_generate_files: false
+```
+</File>
+
+## Configuration Reference
+
+<dl>
+  <dt>`base_path`</dt>
+  <dd>Base directory for native Helm components. Local charts referenced with a relative <code>chart</code> path resolve under each component directory. Defaults to <code>components/helm</code>.</dd>
+
+  <dt>`auto_generate_files`</dt>
+  <dd>When <code>true</code>, Atmos renders the component <code>generate</code> section into the component directory before Helm operations. Defaults to <code>false</code>.</dd>
+</dl>
+
+See the [`atmos helm`](/cli/commands/helm/usage) command and the
+[Helm stack configuration](/stacks/components/helm) for component-level fields.

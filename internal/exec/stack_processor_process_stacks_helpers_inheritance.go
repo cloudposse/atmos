@@ -232,6 +232,7 @@ func applyBaseComponentConfig(opts *ComponentProcessorOptions, result *Component
 	result.BaseComponentPaths = baseComponentConfig.BaseComponentPaths
 	result.BaseComponentManifests = baseComponentConfig.BaseComponentManifests
 	result.BaseComponentRender = baseComponentConfig.BaseComponentRender
+	result.BaseComponentHelm = baseComponentConfig.BaseComponentHelm
 	// BaseComponentRetry flows from the inheritance chain through to merge — see
 	// mergeComponentConfigurations for the final deep-merge with concrete + overrides.
 	result.BaseComponentRetry = baseComponentConfig.BaseComponentRetry
@@ -252,6 +253,9 @@ func applyBaseComponentConfig(opts *ComponentProcessorOptions, result *Component
 	}
 	if supportsGenerate(opts.ComponentType) {
 		result.BaseComponentGenerate = baseComponentConfig.BaseComponentGenerate
+	}
+	if supportsPlugins(opts.ComponentType) {
+		result.BaseComponentPlugins = baseComponentConfig.BaseComponentPlugins
 	}
 	if supportsSourceProvision(opts.ComponentType) {
 		result.BaseComponentSourceSection = baseComponentConfig.BaseComponentSourceSection

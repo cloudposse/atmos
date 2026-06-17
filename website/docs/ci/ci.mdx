@@ -378,9 +378,10 @@ For deeper auth reference: [Profiles](/cli/configuration/profiles), [Auth concep
 
 ### [Job Summaries](/ci/job-summaries)
 
-Rich Markdown summaries with resource counts, inline badges, and collapsible diffs written
-to `$GITHUB_STEP_SUMMARY`. Includes separate templates for plan and apply results. Templates
-are fully customizable with Go template syntax.
+Rich Markdown summaries with resource counts, inline badges, collapsible diffs, and captured
+command output written to `$GITHUB_STEP_SUMMARY`. Terraform includes plan/apply summaries plus
+the broader native CI features below. Helm and Helmfile currently write summaries only.
+Templates are fully customizable with Go template syntax.
 
 ### [Outputs](/cli/configuration/ci/output)
 
@@ -407,7 +408,7 @@ subcommands.
 
 ## Commands
 
-CI features are activated with the `--ci` flag on existing Terraform commands or automatically when running in a CI environment (e.g. GitHub Actions):
+CI features are activated with the `--ci` flag on supported commands or automatically when running in a CI environment (e.g. GitHub Actions):
 
 <dl>
   <dt>[`atmos terraform plan [--ci]`](/cli/commands/terraform/plan)</dt>
@@ -418,6 +419,12 @@ CI features are activated with the `--ci` flag on existing Terraform commands or
 
   <dt>[`atmos terraform deploy [--ci]`](/cli/commands/terraform/deploy)</dt>
   <dd>Deploy with stored planfile verification, drift detection, and full CI reporting.</dd>
+
+  <dt>[`atmos helm template|diff|apply|deploy|delete [--ci]`](/cli/commands/helm/usage)</dt>
+  <dd>Run native Helm components with job summaries for rendered/applied object metadata.</dd>
+
+  <dt>[`atmos helmfile template|diff|apply|sync|deploy|destroy [--ci]`](/cli/commands/helmfile/usage)</dt>
+  <dd>Run Helmfile components with job summaries that include captured masked command output.</dd>
 
   <dt>[`atmos terraform planfile`](/cli/commands/terraform/planfile)</dt>
   <dd>Manage stored planfiles: upload, download, list, delete, and show.</dd>

@@ -1,0 +1,36 @@
+---
+title: atmos helm diff
+sidebar_label: diff
+sidebar_class_name: command
+id: diff
+---
+
+import Intro from "@site/src/components/Intro";
+
+<Intro>
+  Preview the manifests a Helm apply would send to the cluster. `diff` performs a
+  server-side dry run of the install/upgrade and prints the rendered manifests,
+  so you can review changes before applying. Requires cluster access.
+</Intro>
+
+## Usage
+
+```shell
+atmos helm diff <component> --stack <stack> [options]
+atmos helm diff monitoring -s plat-ue2-dev
+```
+
+## Flags
+
+<dl>
+  <dt>`--stack`, `-s` <em>(required)</em></dt>
+  <dd>Atmos stack.</dd>
+
+  <dt>`--all` / `--affected` / `--include-dependents` <em>(optional)</em></dt>
+  <dd>Process multiple Helm components in dependency order.</dd>
+</dl>
+
+:::note
+To preview without cluster access, use [`atmos helm template`](/cli/commands/helm/template),
+which renders the chart client-side.
+:::

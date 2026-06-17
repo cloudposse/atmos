@@ -34,6 +34,7 @@ import (
 	// Import component providers to register them with the component registry.
 	// The init() function in each package registers the provider.
 	_ "github.com/cloudposse/atmos/pkg/component/ansible"
+	_ "github.com/cloudposse/atmos/pkg/component/helm"
 	_ "github.com/cloudposse/atmos/pkg/component/kubernetes"
 	_ "github.com/cloudposse/atmos/pkg/component/mock"
 
@@ -76,6 +77,7 @@ import (
 	"github.com/cloudposse/atmos/cmd/devcontainer"
 	_ "github.com/cloudposse/atmos/cmd/env"
 	gitcmd "github.com/cloudposse/atmos/cmd/git"
+	_ "github.com/cloudposse/atmos/cmd/helm"
 	_ "github.com/cloudposse/atmos/cmd/helmfile"
 	"github.com/cloudposse/atmos/cmd/internal"
 	_ "github.com/cloudposse/atmos/cmd/kubernetes"

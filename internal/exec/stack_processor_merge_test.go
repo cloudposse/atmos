@@ -408,6 +408,69 @@ func minimalComponentResult() *ComponentProcessorResult {
 	}
 }
 
+// TestMergeComponentConfigurations_Plugins covers the Helm CLI plugins list merge:
+// it is omitted when unset, flows through from base-only and component-only, and the
+// concrete component's list replaces the inherited one under the default strategy.
+func TestMergeComponentConfigurations_Plugins(t *testing.T) {
+	atmosCfg := &schema.AtmosConfiguration{}
+
+	t.Run("absent-omits-section", func(t *testing.T) {
+		opts := ComponentProcessorOptions{ComponentType: cfg.HelmfileComponentType, Component: "app", AtmosConfig: atmosCfg}
+		comp, err := mergeComponentConfigurations(atmosCfg, &opts, minimalComponentResult())
+		require.NoError(t, err)
+		_, present := comp[cfg.PluginsSectionName]
+		assert.False(t, present, "plugins must be absent when neither base nor component set it")
+	})
+
+	t.Run("component-only-flows-through", func(t *testing.T) {
+		opts := ComponentProcessorOptions{ComponentType: cfg.HelmfileComponentType, Component: "app", AtmosConfig: atmosCfg}
+		res := minimalComponentResult()
+		res.ComponentPlugins = []any{"diff@v3.9.4", "secrets"}
+		comp, err := mergeComponentConfigurations(atmosCfg, &opts, res)
+		require.NoError(t, err)
+		got, ok := comp[cfg.PluginsSectionName].([]any)
+		require.True(t, ok, "plugins must be present and a list")
+		require.Len(t, got, 2)
+		assert.Equal(t, "diff@v3.9.4", got[0])
+		assert.Equal(t, "secrets", got[1])
+	})
+
+	t.Run("base-only-flows-through", func(t *testing.T) {
+		opts := ComponentProcessorOptions{ComponentType: cfg.HelmComponentType, Component: "app", AtmosConfig: atmosCfg}
+		res := minimalComponentResult()
+		res.BaseComponentPlugins = []any{"diff@v3.9.4"}
+		comp, err := mergeComponentConfigurations(atmosCfg, &opts, res)
+		require.NoError(t, err)
+		got, ok := comp[cfg.PluginsSectionName].([]any)
+		require.True(t, ok)
+		require.Len(t, got, 1)
+		assert.Equal(t, "diff@v3.9.4", got[0])
+	})
+
+	t.Run("component-replaces-base-by-default", func(t *testing.T) {
+		opts := ComponentProcessorOptions{ComponentType: cfg.HelmfileComponentType, Component: "app", AtmosConfig: atmosCfg}
+		res := minimalComponentResult()
+		res.BaseComponentPlugins = []any{"diff@v3.8.0"}
+		res.ComponentPlugins = []any{"diff@v3.9.4", "secrets"}
+		comp, err := mergeComponentConfigurations(atmosCfg, &opts, res)
+		require.NoError(t, err)
+		got := comp[cfg.PluginsSectionName].([]any)
+		require.Len(t, got, 2, "default replace strategy keeps the concrete component's list")
+		assert.Equal(t, "diff@v3.9.4", got[0])
+		assert.Equal(t, "secrets", got[1])
+	})
+
+	t.Run("terraform-ignores-plugins", func(t *testing.T) {
+		opts := ComponentProcessorOptions{ComponentType: cfg.TerraformComponentType, Component: "vpc", AtmosConfig: atmosCfg}
+		res := minimalComponentResult()
+		res.ComponentPlugins = []any{"diff@v3.9.4"}
+		comp, err := mergeComponentConfigurations(atmosCfg, &opts, res)
+		require.NoError(t, err)
+		_, present := comp[cfg.PluginsSectionName]
+		assert.False(t, present, "terraform components must not emit a plugins section")
+	})
+}
+
 // TestMergeComponentConfigurations_Retry covers the per-component retry merge added by
 // the component-retry feature: base → component → overrides precedence on scalars, and
 // list-append on the `conditions:` slice (the existing deep-merge semantic). It also

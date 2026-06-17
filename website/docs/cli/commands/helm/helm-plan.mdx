@@ -1,0 +1,31 @@
+---
+title: atmos helm plan
+sidebar_label: plan
+sidebar_class_name: command
+id: plan
+---
+
+import Intro from "@site/src/components/Intro";
+
+<Intro>
+  Preview the changes a Helm apply would make. `plan` is an alias for
+  [`diff`](/cli/commands/helm/diff): it performs a server-side dry run and prints
+  the rendered manifests. Requires cluster access.
+</Intro>
+
+## Usage
+
+```shell
+atmos helm plan <component> --stack <stack> [options]
+atmos helm plan monitoring -s plat-ue2-dev
+```
+
+## Flags
+
+<dl>
+  <dt>`--stack`, `-s` <em>(required)</em></dt>
+  <dd>Atmos stack.</dd>
+
+  <dt>`--all` / `--affected` / `--include-dependents` <em>(optional)</em></dt>
+  <dd>Process multiple Helm components in dependency order.</dd>
+</dl>

@@ -217,5 +217,25 @@ func processStackAffected(
 		affected = append(affected, kubernetesAffected...)
 	}
 
+	// Process Helm components.
+	if helmSection, ok := componentsSection[cfg.HelmComponentType].(map[string]any); ok {
+		helmAffected, err := processHelmComponentsIndexed(
+			stackName,
+			helmSection,
+			remoteStacks,
+			currentStacks,
+			atmosConfig,
+			filesIndex,
+			patternCache,
+			includeSpaceliftAdminStacks,
+			includeSettings,
+			excludeLocked,
+		)
+		if err != nil {
+			return nil, err
+		}
+		affected = append(affected, helmAffected...)
+	}
+
 	return affected, nil
 }
