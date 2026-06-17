@@ -207,9 +207,7 @@ func requireFlociEndpoint(t *testing.T, endpointEnvVar, defaultEndpoint string) 
 	}
 
 	conn, err := net.DialTimeout("tcp", address, 2*time.Second)
-	if err != nil {
-		t.Skipf("Floci is not reachable at %s: %v", endpoint, err)
-	}
+	require.NoErrorf(t, err, "Floci is not reachable at %s", endpoint)
 	require.NoError(t, conn.Close())
 
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
@@ -218,9 +216,7 @@ func requireFlociEndpoint(t *testing.T, endpointEnvVar, defaultEndpoint string) 
 	require.NoError(t, err)
 	// #nosec G107 -- endpoint is an opt-in local Floci test target.
 	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Skipf("Floci HTTP endpoint is not reachable at %s: %v", endpoint, err)
-	}
+	require.NoErrorf(t, err, "Floci HTTP endpoint is not reachable at %s", endpoint)
 	require.NoError(t, resp.Body.Close())
 
 	return endpoint

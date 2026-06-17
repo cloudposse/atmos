@@ -19,30 +19,40 @@ import (
 )
 
 func TestDescribeStoreDefaultIdentity(t *testing.T) {
-	t.Run("authenticated chain wins", func(t *testing.T) {
+	t.Run("configured default wins over chain fallback", func(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		authManager := authtypes.NewMockAuthManager(ctrl)
-		authManager.EXPECT().GetChain().Return([]string{"provider", "explicit-admin"})
-
-		got := describeStoreDefaultIdentity(authManager)
-		assert.Equal(t, "explicit-admin", got)
-	})
-
-	t.Run("configured default fills empty chain", func(t *testing.T) {
-		ctrl := gomock.NewController(t)
-		authManager := authtypes.NewMockAuthManager(ctrl)
-		authManager.EXPECT().GetChain().Return(nil)
 		authManager.EXPECT().GetDefaultIdentity(false).Return("default-admin", nil)
 
 		got := describeStoreDefaultIdentity(authManager)
 		assert.Equal(t, "default-admin", got)
 	})
 
+	t.Run("falls back to auth chain", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		authManager := authtypes.NewMockAuthManager(ctrl)
+		authManager.EXPECT().GetDefaultIdentity(false).Return("", errors.New("no default"))
+		authManager.EXPECT().GetChain().Return([]string{"provider", "chain-admin"})
+
+		got := describeStoreDefaultIdentity(authManager)
+		assert.Equal(t, "chain-admin", got)
+	})
+
+	t.Run("empty default falls back to auth chain", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		authManager := authtypes.NewMockAuthManager(ctrl)
+		authManager.EXPECT().GetDefaultIdentity(false).Return("", nil)
+		authManager.EXPECT().GetChain().Return([]string{"provider", "chain-admin"})
+
+		got := describeStoreDefaultIdentity(authManager)
+		assert.Equal(t, "chain-admin", got)
+	})
+
 	t.Run("missing identity returns empty", func(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		authManager := authtypes.NewMockAuthManager(ctrl)
-		authManager.EXPECT().GetChain().Return(nil)
 		authManager.EXPECT().GetDefaultIdentity(false).Return("", errors.New("no default"))
+		authManager.EXPECT().GetChain().Return(nil)
 
 		got := describeStoreDefaultIdentity(authManager)
 		assert.Empty(t, got)

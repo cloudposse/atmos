@@ -186,11 +186,11 @@ func describeStoreDefaultIdentity(authManager auth.AuthManager) string {
 	if authManager == nil {
 		return ""
 	}
+	if identity, err := authManager.GetDefaultIdentity(false); err == nil && identity != "" {
+		return identity
+	}
 	if chain := authManager.GetChain(); len(chain) > 0 {
 		return chain[len(chain)-1]
-	}
-	if identity, err := authManager.GetDefaultIdentity(false); err == nil {
-		return identity
 	}
 	return ""
 }

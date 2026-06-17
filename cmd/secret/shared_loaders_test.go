@@ -110,6 +110,16 @@ func TestSecretStoreDefaultIdentity(t *testing.T) {
 		got := secretStoreDefaultIdentity(secretScope{Identity: cfg.IdentityFlagSelectValue}, authManager)
 		assert.Equal(t, "chain-admin", got)
 	})
+
+	t.Run("disabled sentinel falls back to auth chain", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		authManager := authtypes.NewMockAuthManager(ctrl)
+		authManager.EXPECT().GetDefaultIdentity(false).Return("", errors.New("no default"))
+		authManager.EXPECT().GetChain().Return([]string{"provider", "chain-admin"})
+
+		got := secretStoreDefaultIdentity(secretScope{Identity: cfg.IdentityFlagDisabledValue}, authManager)
+		assert.Equal(t, "chain-admin", got)
+	})
 }
 
 func TestLoadServiceAndConfig_ComponentNotFound(t *testing.T) {

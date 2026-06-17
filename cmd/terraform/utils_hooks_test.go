@@ -30,6 +30,7 @@ import (
 	authtypes "github.com/cloudposse/atmos/pkg/auth/types"
 	"github.com/cloudposse/atmos/pkg/ci"
 	githubCI "github.com/cloudposse/atmos/pkg/ci/providers/github"
+	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/hooks"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -791,6 +792,16 @@ func TestHookStoreDefaultIdentity(t *testing.T) {
 		authManager.EXPECT().GetChain().Return([]string{"provider", "chain-admin"})
 
 		got := hookStoreDefaultIdentity(&schema.ConfigAndStacksInfo{}, authManager)
+		assert.Equal(t, "chain-admin", got)
+	})
+
+	t.Run("disabled sentinel falls back to auth chain", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		authManager := authtypes.NewMockAuthManager(ctrl)
+		authManager.EXPECT().GetDefaultIdentity(false).Return("", errors.New("no default"))
+		authManager.EXPECT().GetChain().Return([]string{"provider", "chain-admin"})
+
+		got := hookStoreDefaultIdentity(&schema.ConfigAndStacksInfo{Identity: cfg.IdentityFlagDisabledValue}, authManager)
 		assert.Equal(t, "chain-admin", got)
 	})
 }

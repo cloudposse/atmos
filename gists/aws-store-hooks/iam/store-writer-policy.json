@@ -7,10 +7,17 @@
       "Action": [
         "ssm:PutParameter",
         "ssm:GetParameter",
-        "ssm:DeleteParameter",
-        "ssm:DescribeParameters"
+        "ssm:DeleteParameter"
       ],
       "Resource": "arn:aws:ssm:REGION:ACCOUNT_ID:parameter/atmos-gist/store-hooks/*"
+    },
+    {
+      "Sid": "AtmosGistSSMDescribe",
+      "Effect": "Allow",
+      "Action": [
+        "ssm:DescribeParameters"
+      ],
+      "Resource": "*"
     },
     {
       "Sid": "AtmosGistASMStoreHooks",

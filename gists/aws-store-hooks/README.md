@@ -58,6 +58,7 @@ harness. This gist is the manual runnable example; tests should not depend on
 `gists/`.
 
 ```bash
+cd ../..
 ATMOS_TEST_FLOCI=true FLOCI_ENDPOINT_URL=http://localhost:4566 go test ./tests -run Floci
 ```
 
