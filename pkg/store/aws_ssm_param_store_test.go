@@ -667,7 +667,7 @@ func TestNewSSMStore(t *testing.T) {
 					assert.Equal(t, "-", *ssmStore.stackDelimiter)
 				}
 
-				assert.Equal(t, tt.options.Region, ssmStore.awsConfig.Region)
+				assert.Equal(t, tt.options.Region, ssmStore.region)
 				assert.Equal(t, tt.options.ReadRoleArn, ssmStore.readRoleArn)
 				assert.Equal(t, tt.options.WriteRoleArn, ssmStore.writeRoleArn)
 			}
