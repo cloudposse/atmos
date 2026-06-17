@@ -38,7 +38,11 @@ var (
 	provisionAndResolveComponentPath = component.ProvisionAndResolveComponentPath
 	dependenciesForComponent         = dependencies.ForComponent
 	getHooks                         = hooks.GetHooks
-	newKubernetesSDKClient           = newSDKClient
+	runAllHooks                      = func(hookSet *hooks.Hooks, event hooks.HookEvent, atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) error {
+		return hookSet.RunAll(event, atmosConfig, info, nil, nil)
+	}
+	runKubernetesCIHookFunc = runKubernetesCIHook
+	newKubernetesSDKClient  = newSDKClient
 )
 
 func Execute(ctx *component.ExecutionContext, operation Operation) error {
@@ -109,26 +113,28 @@ func runWithHooks(
 		return err
 	}
 	before, after := eventsForCommand(info.SubCommand, operation)
-	if err := hookSet.RunAll(before, atmosConfig, info, nil, nil); err != nil {
+	if err := runAllHooks(hookSet, before, atmosConfig, info); err != nil {
+		runKubernetesCIHookFunc(after, atmosConfig, info, nil, err)
 		return err
 	}
 
 	objects, err := loadManifestObjects(source, info)
 	if err != nil {
-		runKubernetesCIHook(after, atmosConfig, info, nil, err)
+		runKubernetesCIHookFunc(after, atmosConfig, info, nil, err)
 		return err
 	}
 
 	result, err := runOperation(ctx, atmosConfig, info, operation, objects)
 	if err != nil {
-		runKubernetesCIHook(after, atmosConfig, info, result, err)
+		runKubernetesCIHookFunc(after, atmosConfig, info, result, err)
 		return err
 	}
 
-	if err := hookSet.RunAll(after, atmosConfig, info, nil, nil); err != nil {
+	if err := runAllHooks(hookSet, after, atmosConfig, info); err != nil {
+		runKubernetesCIHookFunc(after, atmosConfig, info, result, err)
 		return err
 	}
-	runKubernetesCIHook(after, atmosConfig, info, result, nil)
+	runKubernetesCIHookFunc(after, atmosConfig, info, result, nil)
 	return nil
 }
 

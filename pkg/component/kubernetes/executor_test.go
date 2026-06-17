@@ -481,6 +481,133 @@ func TestExecuteRenderWithStubbedExternalDependencies(t *testing.T) {
 	assert.Contains(t, string(data), "kind: ConfigMap")
 }
 
+type kubernetesCIHookCall struct {
+	event  hooks.HookEvent
+	result *schema.KubernetesCIResult
+	err    error
+}
+
+func TestRunWithHooksEmitsCISummaryWhenBeforeHookFails(t *testing.T) {
+	originalGetHooks := getHooks
+	originalRunAllHooks := runAllHooks
+	originalRunKubernetesCIHook := runKubernetesCIHookFunc
+	t.Cleanup(func() {
+		getHooks = originalGetHooks
+		runAllHooks = originalRunAllHooks
+		runKubernetesCIHookFunc = originalRunKubernetesCIHook
+	})
+
+	beforeErr := errors.New("before hook failed")
+	var events []hooks.HookEvent
+	var ciCalls []kubernetesCIHookCall
+
+	getHooks = func(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) (*hooks.Hooks, error) {
+		return &hooks.Hooks{}, nil
+	}
+	runAllHooks = func(hookSet *hooks.Hooks, event hooks.HookEvent, atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) error {
+		events = append(events, event)
+		if event == hooks.BeforeKubernetesPlan {
+			return beforeErr
+		}
+		return nil
+	}
+	runKubernetesCIHookFunc = func(
+		event hooks.HookEvent,
+		atmosConfig *schema.AtmosConfiguration,
+		info *schema.ConfigAndStacksInfo,
+		result *schema.KubernetesCIResult,
+		commandErr error,
+	) {
+		ciCalls = append(ciCalls, kubernetesCIHookCall{event: event, result: result, err: commandErr})
+	}
+
+	err := runWithHooks(
+		&component.ExecutionContext{},
+		&schema.AtmosConfiguration{},
+		&schema.ConfigAndStacksInfo{
+			ComponentFromArg: "api",
+			Stack:            "dev",
+			SubCommand:       "plan",
+		},
+		OperationDiff,
+		manifestSource{},
+	)
+
+	require.ErrorIs(t, err, beforeErr)
+	assert.Equal(t, []hooks.HookEvent{hooks.BeforeKubernetesPlan}, events)
+	require.Len(t, ciCalls, 1)
+	assert.Equal(t, hooks.AfterKubernetesPlan, ciCalls[0].event)
+	assert.Nil(t, ciCalls[0].result)
+	assert.ErrorIs(t, ciCalls[0].err, beforeErr)
+}
+
+func TestRunWithHooksEmitsCISummaryWhenAfterHookFails(t *testing.T) {
+	originalGetHooks := getHooks
+	originalRunAllHooks := runAllHooks
+	originalRunKubernetesCIHook := runKubernetesCIHookFunc
+	t.Cleanup(func() {
+		getHooks = originalGetHooks
+		runAllHooks = originalRunAllHooks
+		runKubernetesCIHookFunc = originalRunKubernetesCIHook
+	})
+
+	afterErr := errors.New("after hook failed")
+	var events []hooks.HookEvent
+	var ciCalls []kubernetesCIHookCall
+
+	getHooks = func(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) (*hooks.Hooks, error) {
+		return &hooks.Hooks{}, nil
+	}
+	runAllHooks = func(hookSet *hooks.Hooks, event hooks.HookEvent, atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) error {
+		events = append(events, event)
+		if event == hooks.AfterKubernetesRender {
+			return afterErr
+		}
+		return nil
+	}
+	runKubernetesCIHookFunc = func(
+		event hooks.HookEvent,
+		atmosConfig *schema.AtmosConfiguration,
+		info *schema.ConfigAndStacksInfo,
+		result *schema.KubernetesCIResult,
+		commandErr error,
+	) {
+		ciCalls = append(ciCalls, kubernetesCIHookCall{event: event, result: result, err: commandErr})
+	}
+
+	output := filepath.Join(t.TempDir(), "rendered.yaml")
+	info := &schema.ConfigAndStacksInfo{
+		ComponentFromArg: "api",
+		Stack:            "dev",
+		SubCommand:       "render",
+		ComponentSection: map[string]any{
+			"manifests": []any{map[string]any{
+				"apiVersion": "v1",
+				"kind":       "ConfigMap",
+				"metadata": map[string]any{
+					"name": "settings",
+				},
+			}},
+		},
+	}
+
+	err := runWithHooks(
+		&component.ExecutionContext{Flags: map[string]any{"output": output}},
+		&schema.AtmosConfiguration{},
+		info,
+		OperationRender,
+		manifestSource{provider: ProviderKubectl},
+	)
+
+	require.ErrorIs(t, err, afterErr)
+	assert.Equal(t, []hooks.HookEvent{hooks.BeforeKubernetesRender, hooks.AfterKubernetesRender}, events)
+	require.Len(t, ciCalls, 1)
+	assert.Equal(t, hooks.AfterKubernetesRender, ciCalls[0].event)
+	require.NotNil(t, ciCalls[0].result)
+	assert.Equal(t, map[string]int{"rendered": 1}, ciCalls[0].result.ActionCounts)
+	assert.ErrorIs(t, ciCalls[0].err, afterErr)
+}
+
 func TestRunOperationApplyGateRejectsInvalidManifest(t *testing.T) {
 	original := newKubernetesSDKClient
 	t.Cleanup(func() { newKubernetesSDKClient = original })

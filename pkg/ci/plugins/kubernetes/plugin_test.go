@@ -21,9 +21,11 @@ func TestPluginHookBindings(t *testing.T) {
 	}
 
 	assert.Contains(t, events, "after.kubernetes.plan")
+	assert.Contains(t, events, "after.kubernetes.diff")
 	assert.Contains(t, events, "after.kubernetes.apply")
 	assert.Contains(t, events, "after.kubernetes.deploy")
 	assert.Contains(t, events, "after.kubernetes.delete")
+	assert.Contains(t, events, "after.kubernetes.render")
 	assert.Contains(t, events, "after.kubernetes.validate")
 }
 
