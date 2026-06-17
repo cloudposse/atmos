@@ -1,0 +1,20 @@
+# Leaf stack: defines `vars.stage` locally and inherits `vars.namespace`
+# from `_defaults.yaml`. The presence of any `locals:` block triggers
+# the buggy code path in `deriveStackNameForLocals`.
+import:
+  - ./_defaults
+
+vars:
+  stage: prod
+
+locals:
+  # Any non-empty locals block is enough to trigger the bug.
+  app: vpc
+
+components:
+  terraform:
+    vpc:
+      metadata:
+        component: mock
+      vars:
+        name: "{{ .locals.app }}"
