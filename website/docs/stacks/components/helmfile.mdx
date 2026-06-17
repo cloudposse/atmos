@@ -112,7 +112,7 @@ releases:
             type: {{ .Values.service_type }}
           metrics:
             enabled: {{ .Values.metrics_enabled | default false }}
-````
+```
 </File>
 
 ## Component-Type Defaults
@@ -136,7 +136,7 @@ components:
     nginx-ingress:
       vars:
         chart_version: "4.7.1"
-````
+```
 
 ## Complete Example
 
@@ -193,7 +193,7 @@ components:
         depends_on:
           - component: nginx-ingress
 
-````
+```
 </File>
 
 ## Running Helmfile Commands
@@ -215,7 +215,7 @@ atmos helmfile destroy nginx-ingress -s plat-ue1-prod
 
 # Run any helmfile subcommand
 atmos helmfile <subcommand> <component> -s <stack>
-````
+```
 
 ## Environment Variables
 

@@ -32,10 +32,10 @@ const (
 	AfterKubernetesValidate        HookEvent = "after.kubernetes.validate"
 )
 
-// Normalize returns the canonical form of a HookEvent, collapsing deploy aliases
-// to their apply equivalents. deploy and apply are semantically equivalent —
-// deploy is apply with -auto-approve — so hooks configured for either should
-// fire regardless of which command the user runs.
+// Normalize returns the canonical form of a HookEvent, collapsing command
+// aliases to canonical events. Kubernetes plan maps to diff, and deploy maps to
+// apply, so hooks configured for either alias fire regardless of which command
+// the user runs.
 func (e HookEvent) Normalize() HookEvent {
 	switch e {
 	case AfterTerraformDeploy:

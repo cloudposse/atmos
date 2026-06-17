@@ -45,47 +45,77 @@ func TestValidateObjectsStructuralReportsAllFailures(t *testing.T) {
 	assert.ErrorContains(t, err, "missing group/version/kind")
 }
 
-func TestRunValidateOfflinePasses(t *testing.T) {
+func TestRunValidate(t *testing.T) {
 	original := newKubernetesSDKClient
 	t.Cleanup(func() { newKubernetesSDKClient = original })
 
-	// Offline validation must never construct a cluster client.
-	newKubernetesSDKClient = func() (*sdkClient, error) {
-		t.Fatal("offline validate must not contact the cluster")
-		return nil, nil
+	tests := []struct {
+		name       string
+		options    validateOptions
+		objects    []*unstructured.Unstructured
+		clientFunc func(t *testing.T) func() (*sdkClient, error)
+		assertErr  func(t *testing.T, err error)
+		assertOK   func(t *testing.T, results []objectResult)
+	}{
+		{
+			name: "offline passes",
+			objects: []*unstructured.Unstructured{
+				kubernetesObject("v1", "ConfigMap", "settings", ""),
+			},
+			clientFunc: func(t *testing.T) func() (*sdkClient, error) {
+				return func() (*sdkClient, error) {
+					t.Fatal("offline validate must not contact the cluster")
+					return nil, nil
+				}
+			},
+			assertErr: func(t *testing.T, err error) {
+				require.NoError(t, err)
+			},
+			assertOK: func(t *testing.T, results []objectResult) {
+				require.Len(t, results, 1)
+				assert.Equal(t, "valid", results[0].Action)
+			},
+		},
+		{
+			name: "offline fails",
+			objects: []*unstructured.Unstructured{
+				kubernetesObject("v1", "ConfigMap", "", ""),
+			},
+			assertErr: func(t *testing.T, err error) {
+				require.ErrorIs(t, err, errUtils.ErrKubernetesValidationFailed)
+			},
+		},
+		{
+			name:    "server returns client init error",
+			options: validateOptions{Server: true},
+			objects: []*unstructured.Unstructured{
+				kubernetesObject("v1", "ConfigMap", "settings", ""),
+			},
+			clientFunc: func(t *testing.T) func() (*sdkClient, error) {
+				return func() (*sdkClient, error) {
+					return nil, errors.New("client failed")
+				}
+			},
+			assertErr: func(t *testing.T, err error) {
+				require.ErrorContains(t, err, "client failed")
+			},
+		},
 	}
 
-	objects := []*unstructured.Unstructured{
-		kubernetesObject("v1", "ConfigMap", "settings", ""),
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			newKubernetesSDKClient = original
+			if tt.clientFunc != nil {
+				newKubernetesSDKClient = tt.clientFunc(t)
+			}
+
+			results, err := runValidate(tt.objects, tt.options)
+			tt.assertErr(t, err)
+			if tt.assertOK != nil {
+				tt.assertOK(t, results)
+			}
+		})
 	}
-	results, err := runValidate(objects, validateOptions{})
-	require.NoError(t, err)
-	require.Len(t, results, 1)
-	assert.Equal(t, "valid", results[0].Action)
-}
-
-func TestRunValidateOfflineFails(t *testing.T) {
-	objects := []*unstructured.Unstructured{
-		kubernetesObject("v1", "ConfigMap", "", ""),
-	}
-
-	_, err := runValidate(objects, validateOptions{})
-	require.ErrorIs(t, err, errUtils.ErrKubernetesValidationFailed)
-}
-
-func TestRunValidateServerReturnsClientInitError(t *testing.T) {
-	original := newKubernetesSDKClient
-	t.Cleanup(func() { newKubernetesSDKClient = original })
-
-	newKubernetesSDKClient = func() (*sdkClient, error) {
-		return nil, errors.New("client failed")
-	}
-
-	objects := []*unstructured.Unstructured{
-		kubernetesObject("v1", "ConfigMap", "settings", ""),
-	}
-	_, err := runValidate(objects, validateOptions{Server: true})
-	require.ErrorContains(t, err, "client failed")
 }
 
 func TestRunValidateServerAggregatesDryRunErrors(t *testing.T) {

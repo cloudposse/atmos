@@ -249,7 +249,7 @@ components:
         name: isolated
         enable_internet_gateway: false
 
-````
+```
 </File>
 
 Both `vpc-main` and `vpc-isolated` use the same `components/terraform/vpc` root module but with different configurations.
@@ -269,7 +269,7 @@ components:
         enable_dns_support: true
         enable_nat_gateway: true
         single_nat_gateway: false
-````
+```
 
 </File>
 
@@ -290,7 +290,7 @@ components:
           - us-east-1a
           - us-east-1b
           - us-east-1c
-````
+```
 </File>
 
 ### Environment-Specific Component Control
@@ -304,7 +304,7 @@ components:
         enabled: false  # Disabled in dev to save costs
       vars:
         # ...
-````
+```
 
 </File>
 

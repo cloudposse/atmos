@@ -19,6 +19,7 @@ func processComponentOverrides(opts *ComponentProcessorOptions, result *Componen
 	result.ComponentOverridesSettings = make(map[string]any, componentOverridesCapacity)
 	result.ComponentOverridesEnv = make(map[string]any, componentOverridesCapacity)
 	result.ComponentOverridesAuth = make(map[string]any, componentOverridesCapacity)
+	result.ComponentOverridesSecrets = make(map[string]any, componentOverridesCapacity)
 	if opts.ComponentType == cfg.TerraformComponentType {
 		result.ComponentOverridesProviders = make(map[string]any, componentOverridesCapacity)
 		result.ComponentOverridesRequiredProviders = make(map[string]any, componentOverridesCapacity)

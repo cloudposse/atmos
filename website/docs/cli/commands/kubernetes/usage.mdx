@@ -2,6 +2,8 @@
 title: atmos kubernetes
 sidebar_label: kubernetes
 sidebar_class_name: command
+id: kubernetes-usage
+description: Render, validate, diff, plan, apply, deploy, and delete Kubernetes components in Atmos stacks.
 ---
 
 import Intro from "@site/src/components/Intro";
@@ -42,6 +44,33 @@ atmos kubernetes delete <component> --stack <stack>
 
 atmos kubernetes plan --affected --base origin/main
 atmos kubernetes apply --all --stack <stack>
+```
+
+## Examples
+
+Render manifests to a file, then validate them offline:
+
+```shell
+atmos kubernetes render argocd -s plat-ue2-dev --output /tmp/argocd.yaml
+atmos kubernetes validate argocd -s plat-ue2-dev
+```
+
+Apply every component in a stack in dependency order:
+
+```shell
+atmos kubernetes apply --all -s plat-ue2-dev --include-dependents
+```
+
+Plan only components affected by changes against `origin/main`:
+
+```shell
+atmos kubernetes plan --affected --base origin/main
+```
+
+Deploy to an EKS cluster after Atmos Auth writes kubeconfig:
+
+```shell
+ATMOS_COMPONENT=argocd atmos kubernetes deploy argocd -s plat-ue2-prod
 ```
 
 ## Native CI

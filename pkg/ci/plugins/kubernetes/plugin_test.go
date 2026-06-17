@@ -13,6 +13,20 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
+var (
+	_ = schema.KubernetesCIResult{
+		Command:   "",
+		Stack:     "",
+		Component: "",
+		ExitCode:  0,
+		Error:     "",
+	}
+	_ = schema.ConfigAndStacksInfo{
+		Stack:            "",
+		ComponentFromArg: "",
+	}
+)
+
 func TestPluginHookBindings(t *testing.T) {
 	p := &Plugin{}
 	var events []string

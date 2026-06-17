@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"os/exec"
+	"os/user"
 	"path/filepath"
 	"runtime"
 	"testing"
@@ -164,7 +165,7 @@ func TestWriteArtifactWriteFailure(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("file-mode permissions behave differently on Windows")
 	}
-	if os.Geteuid() == 0 {
+	if currentUser, userErr := user.Current(); userErr == nil && (currentUser.Uid == "0" || currentUser.Username == "root") {
 		t.Skip("running as root ignores filesystem permissions")
 	}
 

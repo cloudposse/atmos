@@ -726,7 +726,7 @@ jobs:
             }
 
   release:
-    needs: [test, lint, mock, k3s, floci, docker, validate]
+    needs: [test, kubernetes-e2e, lint, mock, k3s, floci, docker, validate]
     if: github.event_name == 'push'
     uses: cloudposse/.github/.github/workflows/shared-go-auto-release.yml@8244c7c9142e92281e7841f655fa48e9ceb9b454 # main
     with:

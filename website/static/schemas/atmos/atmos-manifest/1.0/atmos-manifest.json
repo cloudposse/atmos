@@ -176,7 +176,7 @@
     },
     "components": {
       "title": "components",
-      "description": "Components section. Supports built-in types (terraform, helmfile, packer) and custom component types defined in custom commands.",
+      "description": "Components section. Supports built-in types (terraform, helmfile, kubernetes, packer) and custom component types defined in custom commands.",
       "oneOf": [
         {
           "type": "string",
