@@ -3,6 +3,7 @@ package exec
 import (
 	"errors"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -624,7 +625,13 @@ func deriveStackNameSections(
 	}
 
 	visited := make(map[string]bool)
-	return deriveStackNameSectionsInto(atmosConfig, rawConfig, stackFileName, visited)
+
+	// stackFileName is a logical name relative to the stacks base (no extension).
+	// Resolve it to a path under the stacks base so cfg.ResolveStackImportFiles can
+	// resolve `./`-relative imports against the correct directory. Recursive calls
+	// already pass real imported file paths.
+	originatingFile := filepath.Join(atmosConfig.BasePath, atmosConfig.Stacks.BasePath, stackFileName)
+	return deriveStackNameSectionsInto(atmosConfig, rawConfig, originatingFile, visited)
 }
 
 // deriveStackNameSectionsInto is the recursive helper for deriveStackNameSections.
@@ -649,13 +656,13 @@ func deriveStackNameSectionsInto(
 
 	// Apply current file's sections last so they override imports.
 	if v, ok := rawConfig[cfg.VarsSectionName].(map[string]any); ok {
-		mergeMapShallow(vars, v)
+		maps.Copy(vars, v)
 	}
 	if s, ok := rawConfig[cfg.SettingsSectionName].(map[string]any); ok {
-		mergeMapShallow(settings, s)
+		maps.Copy(settings, s)
 	}
 	if e, ok := rawConfig[cfg.EnvSectionName].(map[string]any); ok {
-		mergeMapShallow(env, e)
+		maps.Copy(env, e)
 	}
 	return vars, settings, env
 }
@@ -675,6 +682,10 @@ type stackNameSectionMaps struct {
 // per top-level call (cycle break via visited). Failures (unresolvable path,
 // bad YAML) are silently skipped; this is a best-effort overlay used solely
 // for stack-name derivation.
+//
+// Import-path resolution is delegated to cfg.ResolveStackImportFiles, the same
+// lite YAML-only resolver used by the auth-defaults pre-pass, so both pre-passes
+// resolve imports identically.
 func mergeImportedStackNameSections(
 	atmosConfig *schema.AtmosConfiguration,
 	rawConfig map[string]any,
@@ -682,16 +693,14 @@ func mergeImportedStackNameSections(
 	visited map[string]bool,
 	dest stackNameSectionMaps,
 ) {
-	importStructs, err := ProcessImportSection(rawConfig, originatingFilePath)
-	if err != nil {
-		log.Debug("deriveStackNameSections: failed to parse imports; continuing with leaf file only",
-			"file", originatingFilePath, "error", err)
+	imports, ok := rawConfig[cfg.ImportSectionName].([]any)
+	if !ok {
 		return
 	}
 
 	stacksBasePath := filepath.Join(atmosConfig.BasePath, atmosConfig.Stacks.BasePath)
-	for _, imp := range importStructs {
-		for _, p := range resolveImportFilePathsForStackName(stacksBasePath, imp.Path) {
+	for _, imp := range imports {
+		for _, p := range cfg.ResolveStackImportFiles(imp, originatingFilePath, stacksBasePath) {
 			loadAndMergeStackNameImport(atmosConfig, p, visited, dest)
 		}
 	}
@@ -725,88 +734,9 @@ func loadAndMergeStackNameImport(
 		return
 	}
 	iv, is, ie := deriveStackNameSectionsInto(atmosConfig, importedConfig, importedFilePath, visited)
-	mergeMapShallow(dest.vars, iv)
-	mergeMapShallow(dest.settings, is)
-	mergeMapShallow(dest.env, ie)
-}
-
-// stackNameImportYAMLExts is the ordered list of file extensions tried when
-// resolving an import path during stack-name derivation. Order matters:
-// .yaml wins over .yml when both exist.
-var stackNameImportYAMLExts = []string{
-	u.YamlFileExtension,
-	u.YmlFileExtension,
-}
-
-// resolveImportFilePathsForStackName resolves an import path to existing file
-// paths under the stacks base. The path may be either absolute (when the
-// original was `./xxx` and was already resolved by ResolveRelativePath in
-// ProcessImportSection) or relative-to-stacks-base. Returns existing matches;
-// silently returns nil for unresolvable paths since this is best-effort.
-func resolveImportFilePathsForStackName(stacksBasePath, importPath string) []string {
-	if importPath == "" {
-		return nil
-	}
-
-	// Determine the search base.
-	searchPath := importPath
-	if !filepath.IsAbs(importPath) {
-		searchPath = filepath.Join(stacksBasePath, importPath)
-	}
-
-	// If the path already has a recognized YAML extension and the file
-	// exists, use it directly.
-	if hasYAMLExt(searchPath) {
-		if _, err := os.Stat(searchPath); err == nil {
-			return []string{searchPath}
-		}
-	}
-
-	// Otherwise try common extensions; first match wins.
-	if found := findFirstExistingWithExt(searchPath, stackNameImportYAMLExts); found != "" {
-		return []string{found}
-	}
-
-	// Glob fallback (handles `mixins/region/*` style imports).
-	return globMatchesWithExt(searchPath, stackNameImportYAMLExts)
-}
-
-// hasYAMLExt reports whether path ends in `.yaml` or `.yml`.
-func hasYAMLExt(path string) bool {
-	ext := filepath.Ext(path)
-	return ext == u.YamlFileExtension || ext == u.YmlFileExtension
-}
-
-// findFirstExistingWithExt returns the first `searchPath+ext` that exists on
-// disk, or an empty string if none of them do.
-func findFirstExistingWithExt(searchPath string, exts []string) string {
-	for _, e := range exts {
-		candidate := searchPath + e
-		if _, err := os.Stat(candidate); err == nil {
-			return candidate
-		}
-	}
-	return ""
-}
-
-// globMatchesWithExt returns the first non-empty glob match for
-// `searchPath+ext` across the supplied extensions.
-func globMatchesWithExt(searchPath string, exts []string) []string {
-	for _, e := range exts {
-		matches, err := u.GetGlobMatches(searchPath + e)
-		if err == nil && len(matches) > 0 {
-			return matches
-		}
-	}
-	return nil
-}
-
-// mergeMapShallow merges src into dst at the top level (last wins). Nil src
-// is a no-op.
-func mergeMapShallow(dst, src map[string]any) {
-	for k, v := range src {
-		dst[k] = v
-	}
+	maps.Copy(dest.vars, iv)
+	maps.Copy(dest.settings, is)
+	maps.Copy(dest.env, ie)
 }
 
 // deriveStackNameFromPattern derives a stack name using the configured name pattern.

@@ -1742,9 +1742,6 @@ func TestDeriveStackNameSections(t *testing.T) {
 		// Parent _defaults.yaml provides namespace + a shared tenant.
 		require.NoError(t, os.WriteFile(filepath.Join(orgs, "_defaults.yaml"),
 			[]byte("vars:\n  namespace: acme\nsettings:\n  tenant: base\n"), 0o600))
-		leafPath := filepath.Join(orgs, "prod.yaml")
-		require.NoError(t, os.WriteFile(leafPath,
-			[]byte("import:\n  - ./_defaults\nvars:\n  stage: prod\nsettings:\n  tenant: leaf\n"), 0o600))
 
 		atmosConfig := &schema.AtmosConfiguration{BasePath: dir, Stacks: schema.Stacks{BasePath: "stacks"}}
 		raw := map[string]any{
@@ -1752,44 +1749,11 @@ func TestDeriveStackNameSections(t *testing.T) {
 			"vars":     map[string]any{"stage": "prod"},
 			"settings": map[string]any{"tenant": "leaf"},
 		}
-		v, s, _ := deriveStackNameSections(atmosConfig, raw, leafPath)
+		// stackFileName is the logical name (relative to the stacks base, no extension).
+		v, s, _ := deriveStackNameSections(atmosConfig, raw, filepath.Join("orgs", "prod"))
 		assert.Equal(t, "acme", v["namespace"], "namespace comes from the import")
 		assert.Equal(t, "prod", v["stage"], "stage comes from the leaf")
 		assert.Equal(t, "leaf", s["tenant"], "leaf settings override the import")
-	})
-}
-
-// TestStackNameImportHelpers covers the small import-resolution helpers.
-func TestStackNameImportHelpers(t *testing.T) {
-	t.Run("mergeMapShallow last wins; nil src is a no-op", func(t *testing.T) {
-		dst := map[string]any{"a": 1, "b": 2}
-		mergeMapShallow(dst, map[string]any{"b": 3, "c": 4})
-		assert.Equal(t, map[string]any{"a": 1, "b": 3, "c": 4}, dst)
-		mergeMapShallow(dst, nil) // must not panic
-	})
-
-	t.Run("hasYAMLExt", func(t *testing.T) {
-		assert.True(t, hasYAMLExt("x.yaml"))
-		assert.True(t, hasYAMLExt("x.yml"))
-		assert.False(t, hasYAMLExt("x.json"))
-		assert.False(t, hasYAMLExt("x"))
-	})
-
-	t.Run("findFirstExistingWithExt", func(t *testing.T) {
-		dir := t.TempDir()
-		base := filepath.Join(dir, "defaults")
-		require.NoError(t, os.WriteFile(base+".yaml", []byte("vars: {}\n"), 0o600))
-		assert.Equal(t, base+".yaml", findFirstExistingWithExt(base, stackNameImportYAMLExts))
-		assert.Empty(t, findFirstExistingWithExt(filepath.Join(dir, "missing"), stackNameImportYAMLExts))
-	})
-
-	t.Run("resolveImportFilePathsForStackName resolves relative path + extension", func(t *testing.T) {
-		dir := t.TempDir()
-		require.NoError(t, os.WriteFile(filepath.Join(dir, "_defaults.yaml"), []byte("vars: {}\n"), 0o600))
-		got := resolveImportFilePathsForStackName(dir, "_defaults")
-		require.Len(t, got, 1)
-		assert.Equal(t, filepath.Join(dir, "_defaults.yaml"), got[0])
-		assert.Nil(t, resolveImportFilePathsForStackName(dir, ""), "empty import path resolves to nil")
 	})
 }
 
@@ -1800,19 +1764,6 @@ func TestDeriveStackNameFromTemplate_RejectsUnresolvedMarkers(t *testing.T) {
 	got := deriveStackNameFromTemplate(atmosConfig, "orgs/prod",
 		map[string]any{"app": "{{ .locals.x }}"}, nil, nil)
 	assert.Empty(t, got, "a rendered name containing raw template markers must be rejected")
-}
-
-// TestResolveImportFilePathsForStackName_Glob covers the glob fallback (globMatchesWithExt) for
-// `mixins/*`-style imports.
-func TestResolveImportFilePathsForStackName_Glob(t *testing.T) {
-	dir := t.TempDir()
-	regionDir := filepath.Join(dir, "mixins", "region")
-	require.NoError(t, os.MkdirAll(regionDir, 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(regionDir, "ue1.yaml"), []byte("vars: {}\n"), 0o600))
-
-	got := resolveImportFilePathsForStackName(dir, filepath.Join("mixins", "region", "*"))
-	require.NotEmpty(t, got, "glob import must resolve to existing files")
-	assert.Contains(t, filepath.ToSlash(got[0]), "ue1.yaml")
 }
 
 // TestDeriveStackNameSections_ImportCycle verifies the visited set breaks an import cycle without
@@ -1830,7 +1781,8 @@ func TestDeriveStackNameSections_ImportCycle(t *testing.T) {
 	atmosConfig := &schema.AtmosConfiguration{BasePath: dir, Stacks: schema.Stacks{BasePath: "stacks"}}
 	raw := map[string]any{"import": []any{"./b"}, "vars": map[string]any{"fromA": "yes"}}
 
-	v, _, _ := deriveStackNameSections(atmosConfig, raw, filepath.Join(orgs, "a.yaml"))
+	// stackFileName is the logical name (relative to the stacks base, no extension).
+	v, _, _ := deriveStackNameSections(atmosConfig, raw, filepath.Join("orgs", "a"))
 	assert.Equal(t, "yes", v["fromA"])
 	assert.Equal(t, "yes", v["fromB"], "the cycle must be traversed once, merging b's vars")
 }
@@ -1843,11 +1795,11 @@ func TestDeriveStackNameFromTemplate_MalformedTemplate(t *testing.T) {
 	assert.Empty(t, got, "an unparseable template must fall back to the filename")
 }
 
-// TestDeriveStackNameSections_InvalidImportSection covers the error branch where the import
-// section can't be parsed; the leaf file's own sections are still returned.
+// TestDeriveStackNameSections_InvalidImportSection covers the branch where the import section is
+// not a list; imports are skipped and the leaf file's own sections are still returned.
 func TestDeriveStackNameSections_InvalidImportSection(t *testing.T) {
 	atmosConfig := &schema.AtmosConfiguration{BasePath: t.TempDir(), Stacks: schema.Stacks{BasePath: "stacks"}}
-	// `import` is not a valid list/string -> ProcessImportSection errors -> imports skipped.
+	// `import` is not a list -> the type assertion fails -> imports skipped.
 	raw := map[string]any{"import": 123, "vars": map[string]any{"a": "b"}}
 	v, _, _ := deriveStackNameSections(atmosConfig, raw, "orgs/prod.yaml")
 	assert.Equal(t, "b", v["a"], "leaf vars must still merge when the import section is invalid")
