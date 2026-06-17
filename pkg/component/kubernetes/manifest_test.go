@@ -7,6 +7,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	errUtils "github.com/cloudposse/atmos/errors"
 )
 
 func TestManifestLoaderLoadsInlineAndPathManifests(t *testing.T) {
@@ -141,6 +143,49 @@ metadata:
 	require.ErrorContains(t, err, "failed to decode Kubernetes manifest")
 }
 
+func TestLoadManifestValueDecodesMapAndString(t *testing.T) {
+	loader := manifestLoader{}
+
+	// Map input is marshalled to YAML and decoded into objects.
+	objects, err := loader.loadManifestValue(map[string]any{
+		"apiVersion": "v1",
+		"kind":       "ConfigMap",
+		"metadata":   map[string]any{"name": "settings"},
+	})
+	require.NoError(t, err)
+	require.Len(t, objects, 1)
+	require.Equal(t, "ConfigMap", objects[0].GetKind())
+	require.Equal(t, "settings", objects[0].GetName())
+
+	// String input is decoded directly.
+	objects, err = loader.loadManifestValue("apiVersion: v1\nkind: Namespace\nmetadata:\n  name: demo\n")
+	require.NoError(t, err)
+	require.Len(t, objects, 1)
+	require.Equal(t, "Namespace", objects[0].GetKind())
+}
+
+func TestLoadManifestValueRejectsUnsupportedType(t *testing.T) {
+	_, err := manifestLoader{}.loadManifestValue(42)
+	require.ErrorIs(t, err, errUtils.ErrManifestEntryInvalidType)
+}
+
+func TestLoadManifestFileReturnsReadError(t *testing.T) {
+	_, err := loadManifestFile(filepath.Join(t.TempDir(), "does-not-exist.yaml"))
+	require.ErrorContains(t, err, "failed to read Kubernetes manifest")
+}
+
+func TestRenderKustomizeReturnsErrorForInvalidKustomization(t *testing.T) {
+	dir := t.TempDir()
+	// A kustomization referencing a missing resource fails the kustomize build.
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "kustomization.yaml"), []byte(`
+resources:
+  - missing.yaml
+`), 0o644))
+
+	_, err := renderKustomize(dir)
+	require.ErrorContains(t, err, "failed to render kustomize path")
+}
+
 func TestDecodeObjectsHandlesEmptyDocumentsAndLists(t *testing.T) {
 	objects, err := decodeObjects([]byte(`
 ---
@@ -171,10 +216,34 @@ func TestManifestPathHelpers(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "Kustomization"), []byte("resources: []"), 0o644))
 	assert.True(t, hasKustomizationFile(dir))
 
-	assert.Equal(t, filepath.Clean(filepath.Join(dir, "relative.yaml")), resolvePath(dir, "relative.yaml"))
-	assert.Equal(t, filepath.Clean("/tmp/absolute.yaml"), resolvePath(dir, "/tmp/absolute.yaml"))
-	assert.Equal(t, []any{"one", "two"}, asAnySlice([]string{"one", "two"}))
-	assert.Equal(t, []any{"one"}, asAnySlice("one"))
-	assert.Nil(t, asAnySlice(42))
-	assert.Equal(t, []string{"one"}, asStringSlice([]any{"one", "", 2}))
+	relative, err := resolvePath(dir, "relative.yaml")
+	require.NoError(t, err)
+	assert.Equal(t, filepath.Clean(filepath.Join(dir, "relative.yaml")), relative)
+
+	// Use a platform-native absolute path: "/tmp/..." is not absolute on Windows
+	// (it lacks a drive letter), but t.TempDir() is absolute on every OS.
+	absInput := filepath.Join(t.TempDir(), "absolute.yaml")
+	absolute, err := resolvePath(dir, absInput)
+	require.NoError(t, err)
+	assert.Equal(t, filepath.Clean(absInput), absolute)
+
+	// Relative traversal that escapes the component directory is rejected.
+	_, err = resolvePath(dir, filepath.Join("..", "..", "etc", "passwd"))
+	require.ErrorIs(t, err, errUtils.ErrManifestPathTraversal)
+
+	anySlice, err := asAnySlice([]string{"one", "two"})
+	require.NoError(t, err)
+	assert.Equal(t, []any{"one", "two"}, anySlice)
+
+	single, err := asAnySlice("one")
+	require.NoError(t, err)
+	assert.Equal(t, []any{"one"}, single)
+
+	// Unsupported types fail loudly instead of being silently dropped.
+	_, err = asAnySlice(42)
+	require.ErrorIs(t, err, errUtils.ErrManifestEntryInvalidType)
+
+	strSlice, err := asStringSlice([]any{"one", "", 2})
+	require.NoError(t, err)
+	assert.Equal(t, []string{"one"}, strSlice)
 }

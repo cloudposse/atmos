@@ -56,22 +56,21 @@ components:
     command: terraform
     # ... terraform-specific settings
 
-helmfile:
-base_path: components/helmfile
-command: helmfile # ... helmfile-specific settings
+  helmfile:
+    base_path: components/helmfile
+    command: helmfile # ... helmfile-specific settings
 
-kubernetes:
-base_path: components/kubernetes
-provider: kubectl # ... kubernetes-specific settings
+  kubernetes:
+    base_path: components/kubernetes
+    provider: kubectl # ... kubernetes-specific settings
 
-packer:
-base_path: components/packer
-command: packer # ... packer-specific settings
+  packer:
+    base_path: components/packer
+    command: packer # ... packer-specific settings
 
-ansible:
-base_path: components/ansible
-command: ansible # ... ansible-specific settings
-
+  ansible:
+    base_path: components/ansible
+    command: ansible # ... ansible-specific settings
 ```
 </File>
 

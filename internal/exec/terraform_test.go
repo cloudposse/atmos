@@ -103,6 +103,9 @@ func TestExecuteTerraform_ExportEnvVar(t *testing.T) {
 	<-done
 
 	if err != nil {
+		// A transient provider-registry failure (e.g. HTTP 429) is environmental, not a
+		// regression, so skip rather than fail the test.
+		tests.SkipIfTerraformRegistryError(t, buf.String())
 		t.Fatalf("Failed to execute 'ExecuteTerraform': %v", err)
 	}
 
@@ -195,6 +198,9 @@ func TestExecuteTerraform_TerraformPlanWithProcessingTemplates(t *testing.T) {
 	<-done
 
 	if err != nil {
+		// A transient provider-registry failure (e.g. HTTP 429) is environmental, not a
+		// regression, so skip rather than fail the test.
+		tests.SkipIfTerraformRegistryError(t, buf.String())
 		t.Fatalf("Failed to execute 'ExecuteTerraform': %v", err)
 	}
 
@@ -259,6 +265,9 @@ func TestExecuteTerraform_TerraformPlanWithoutProcessingTemplates(t *testing.T) 
 	<-done
 
 	if err != nil {
+		// A transient provider-registry failure (e.g. HTTP 429) is environmental, not a
+		// regression, so skip rather than fail the test.
+		tests.SkipIfTerraformRegistryError(t, buf.String())
 		t.Fatalf("Failed to execute 'ExecuteTerraform': %v", err)
 	}
 
@@ -366,7 +375,8 @@ func TestExecuteTerraform_TerraformPlanWithInvalidTemplates(t *testing.T) {
 	// was brittle and only passed when Linux/Windows happened to hit a file
 	// whose error contained "invalid".
 	errMsg := strings.ToLower(err.Error())
-	assert.True(t,
+	assert.True(
+		t,
 		strings.Contains(errMsg, "invalid") ||
 			strings.Contains(errMsg, "unclosed") ||
 			strings.Contains(errMsg, "no matches found") ||
@@ -424,12 +434,15 @@ func TestExecuteTerraform_TerraformInitWithVarfile(t *testing.T) {
 	w.Close()
 	os.Stderr = oldStderr
 
+	// Wait for the reader goroutine to finish before inspecting the captured output.
+	<-done
+
 	if err != nil {
+		// A transient provider-registry failure (e.g. HTTP 429) is environmental, not a
+		// regression, so skip rather than fail the test.
+		tests.SkipIfTerraformRegistryError(t, buf.String())
 		t.Fatalf("Failed to execute 'ExecuteTerraform': %v", err)
 	}
-
-	// Wait for the reader goroutine to finish.
-	<-done
 
 	output := buf.String()
 

@@ -1,7 +1,7 @@
 ---
 title: Job Summaries
 sidebar_label: Job Summaries
-description: Rich Markdown job summaries for Terraform, Helm, and Helmfile operations
+description: Rich Markdown job summaries for Terraform, Kubernetes, Helm, and Helmfile operations
 id: job-summaries
 slug: /ci/job-summaries
 ---
@@ -12,6 +12,7 @@ import Experimental from '@site/src/components/Experimental'
 <Intro>
 When CI mode is enabled, Atmos writes rich Markdown summaries to `$GITHUB_STEP_SUMMARY` with
 resource badges, collapsible diffs, command output, and clear warnings about destructive changes.
+Kubernetes, Helm, and Helmfile components write compact summaries for their native operations.
 </Intro>
 
 <Experimental />
@@ -72,6 +73,23 @@ when every component completed with no changes.
 
 Apply summaries show the result of the apply operation, including resource counts and any
 terraform outputs that were produced.
+
+## Kubernetes Summary
+
+Kubernetes summaries are intentionally smaller than Terraform summaries. They are designed for
+humans reading the CI run, not for downstream workflow conditionals.
+
+For Kubernetes commands, Atmos writes:
+
+- `render`: rendered object count and object list
+- `plan` / `diff`: created, changed, and no-change object counts
+- `apply` / `deploy`: applied or delivered object counts
+- `delete`: deleted and not-found object counts
+- `validate`: valid and invalid object counts
+- failures: an error section with the command failure
+
+Kubernetes CI summaries do not emit `$GITHUB_OUTPUT` variables, commit statuses, PR comments, or
+stored artifacts in v1.
 
 ## Helm Summaries
 

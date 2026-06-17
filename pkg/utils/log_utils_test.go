@@ -4,10 +4,8 @@ import (
 	"bytes"
 	"io"
 	"os"
-	"strings"
 	"testing"
 
-	"github.com/fatih/color"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -75,57 +73,6 @@ func TestPrintMessage(t *testing.T) {
 			})
 			// trim the captured output to handle the newline added by fmt.Println
 			assert.Equal(t, tt.message+"\n", output)
-		})
-	}
-}
-
-func TestPrintMessageInColor(t *testing.T) {
-	// Enable colors for testing
-	color.NoColor = false
-
-	tests := []struct {
-		name         string
-		message      string
-		messageColor *color.Color
-		wantContains string
-	}{
-		{
-			name:         "red message",
-			message:      "Error message",
-			messageColor: color.New(color.FgRed),
-			wantContains: "Error message",
-		},
-		{
-			name:         "green message",
-			message:      "Success message",
-			messageColor: color.New(color.FgGreen),
-			wantContains: "Success message",
-		},
-		{
-			name:         "blue bold message",
-			message:      "Info message",
-			messageColor: color.New(color.FgBlue, color.Bold),
-			wantContains: "Info message",
-		},
-		{
-			name:         "empty message",
-			message:      "",
-			messageColor: color.New(color.FgYellow),
-			wantContains: "",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			output := captureOutput(func() {
-				PrintMessageInColor(tt.message, tt.messageColor)
-			})
-			assert.Contains(t, output, tt.wantContains)
-			// Color output depends on terminal/environment detection. When ANSI
-			// escapes are emitted, verify the wrapper added bytes around the message.
-			if tt.message != "" && strings.Contains(output, "\x1b[") {
-				assert.True(t, len(output) > len(tt.message))
-			}
 		})
 	}
 }

@@ -270,7 +270,7 @@ and reuses it in the next two calls to the function. The caching makes the stack
 
 ## Considerations
 
-- Using `atmos.Store` with secrets can expose sensitive data to standard output (stdout) in any commands that describe stacks or components.
+- `atmos.Store` reads values in cleartext, so using it with secrets can expose sensitive data to standard output (stdout) in any commands that describe stacks or components. For secrets, mark the store [`secret: true`](/cli/configuration/secrets) and read it with [`!secret`](/functions/yaml/secret), which masks values and gates access through the declarative secret registry.
 - When using `atmos.Store` with [`atmos describe affected`](/cli/commands/describe/affected), Atmos requires access to all referenced stores.
 If you operate with limited permissions (e.g., scoped to `dev`) and reference production stacks, the command will fail.
 - Be mindful of disaster recovery (DR) implications when using it across regions.

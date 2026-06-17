@@ -3,17 +3,21 @@ title: atmos kubernetes diff
 sidebar_label: diff
 sidebar_class_name: command
 id: diff
+description: Show what would change in the cluster for a stack-configured Kubernetes component using a server-side dry run.
 ---
 
 import Intro from "@site/src/components/Intro";
 import ActionCard from "@site/src/components/ActionCard";
 import PrimaryCTA from "@site/src/components/PrimaryCTA";
+import Screengrab from "@site/src/components/Screengrab";
 
 <Intro>
   Check what would change in the cluster before you deploy. `diff` renders the
   component, asks Kubernetes to validate the update with server-side dry run,
   and reports which objects would be created, changed, or left alone.
 </Intro>
+
+<Screengrab title="atmos kubernetes diff --help" slug="atmos-kubernetes-diff--help" />
 
 <ActionCard title="Configure Kubernetes Components">
   `diff` uses the same stack inputs as deployment: `provider`, `paths`,

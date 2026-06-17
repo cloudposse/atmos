@@ -9,7 +9,9 @@ import (
 	"path/filepath"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/provisioner"
 	"github.com/cloudposse/atmos/pkg/provisioner/workdir"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui"
@@ -69,6 +71,7 @@ func Provision(ctx context.Context, params *ProvisionParams) error {
 	// Check if vendoring is needed.
 	if !params.Force && !needsVendoring(targetDir) {
 		ui.Info(fmt.Sprintf("Component already exists at `%s` (use --force to re-vendor)", targetDir))
+		restoreInstanceLock(targetDir, params.ComponentConfig)
 		return nil
 	}
 
@@ -96,7 +99,18 @@ func Provision(ctx context.Context, params *ProvisionParams) error {
 			Err()
 	}
 
+	restoreInstanceLock(targetDir, params.ComponentConfig)
 	return nil
+}
+
+// restoreInstanceLock seeds the vendored component dir's canonical .terraform.lock.hcl from a
+// committed per-instance lock (.<stack>-<component>.terraform.lock.hcl), if present, so init
+// honors the instance's pinned providers; the after.terraform.init hook completes and
+// re-persists it. Best-effort: a restore failure is logged, not fatal.
+func restoreInstanceLock(targetDir string, componentConfig map[string]any) {
+	if err := provisioner.RestorePerInstanceLock(targetDir, targetDir, componentConfig); err != nil {
+		log.Debug("Failed to restore per-instance provider lock", "error", err)
+	}
 }
 
 // needsVendoring checks if the target directory needs vendoring.

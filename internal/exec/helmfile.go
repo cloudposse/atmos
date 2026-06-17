@@ -11,8 +11,6 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/spf13/cobra"
-
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/auth"
 	"github.com/cloudposse/atmos/pkg/component"
@@ -35,16 +33,6 @@ const (
 	// Log key constants.
 	logKeyCluster = "cluster"
 )
-
-// ExecuteHelmfileCmd parses the provided arguments and flags and executes helmfile commands.
-func ExecuteHelmfileCmd(cmd *cobra.Command, args []string, additionalArgsAndFlags []string) error {
-	info, err := ProcessCommandLineArgs(componentTypeHelmfile, cmd, args, additionalArgsAndFlags)
-	if err != nil {
-		return err
-	}
-
-	return ExecuteHelmfile(info)
-}
 
 // ExecuteHelmfile executes helmfile commands.
 func ExecuteHelmfile(info schema.ConfigAndStacksInfo) error {

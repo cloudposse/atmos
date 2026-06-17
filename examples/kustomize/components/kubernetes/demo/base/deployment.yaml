@@ -13,9 +13,21 @@ spec:
       labels:
         app.kubernetes.io/name: demo
     spec:
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
       containers:
         - name: nginx
           image: nginx:1.27-alpine
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              # Drop all capabilities, keeping only NET_BIND_SERVICE so nginx can
+              # still bind the privileged port 80 without running fully privileged.
+              drop:
+                - ALL
+              add:
+                - NET_BIND_SERVICE
           ports:
             - name: http
               containerPort: 80

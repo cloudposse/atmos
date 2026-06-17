@@ -10,6 +10,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	iolib "github.com/cloudposse/atmos/pkg/io"
 	provWorkdir "github.com/cloudposse/atmos/pkg/provisioner/workdir"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -354,4 +355,33 @@ func TestExecuteGenerateBackend_Integration(t *testing.T) {
 	content, err := os.ReadFile(backendFile)
 	require.NoError(t, err)
 	assert.Contains(t, string(content), "nonprod-tfstate")
+}
+
+func TestVarfileVarsToWrite(t *testing.T) {
+	const secret = "genvarfile-secret-aa11bb22"
+	iolib.RegisterSecret(secret)
+
+	newInfo := func() *schema.ConfigAndStacksInfo {
+		return &schema.ConfigAndStacksInfo{
+			ComponentVarsSection: map[string]any{
+				"db_password": secret,
+				"region":      "us-east-1-genvarfile",
+			},
+		}
+	}
+
+	t.Run("default omits secrets", func(t *testing.T) {
+		info := newInfo()
+		got := varfileVarsToWrite(info, false, "test.tfvars.json")
+		_, hasSecret := got["db_password"]
+		assert.False(t, hasSecret, "secret var must be omitted from the varfile by default")
+		assert.Equal(t, "us-east-1-genvarfile", got["region"], "non-secret var must remain")
+	})
+
+	t.Run("with-secrets includes secrets", func(t *testing.T) {
+		info := newInfo()
+		got := varfileVarsToWrite(info, true, "test.tfvars.json")
+		assert.Equal(t, secret, got["db_password"], "secret var must be written with --with-secrets")
+		assert.Equal(t, "us-east-1-genvarfile", got["region"])
+	})
 }

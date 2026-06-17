@@ -272,66 +272,6 @@ func TestTrimMatchingQuotes(t *testing.T) {
 	}
 }
 
-// TestSplitStringAtFirstOccurrence tests the SplitStringAtFirstOccurrence function.
-func TestSplitStringAtFirstOccurrence(t *testing.T) {
-	tests := []struct {
-		name      string
-		input     string
-		separator string
-		expected  [2]string
-	}{
-		{
-			name:      "Split with separator present",
-			input:     "key=value",
-			separator: "=",
-			expected:  [2]string{"key", "value"},
-		},
-		{
-			name:      "Split with multiple separators",
-			input:     "key=value=extra",
-			separator: "=",
-			expected:  [2]string{"key", "value=extra"},
-		},
-		{
-			name:      "No separator present",
-			input:     "keyvalue",
-			separator: "=",
-			expected:  [2]string{"keyvalue", ""},
-		},
-		{
-			name:      "Empty string",
-			input:     "",
-			separator: "=",
-			expected:  [2]string{"", ""},
-		},
-		{
-			name:      "Separator at start",
-			input:     "=value",
-			separator: "=",
-			expected:  [2]string{"", "value"},
-		},
-		{
-			name:      "Separator at end",
-			input:     "key=",
-			separator: "=",
-			expected:  [2]string{"key", ""},
-		},
-		{
-			name:      "Multi-character separator",
-			input:     "key::value::extra",
-			separator: "::",
-			expected:  [2]string{"key", "value::extra"},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := SplitStringAtFirstOccurrence(tt.input, tt.separator)
-			assert.Equal(t, tt.expected, result)
-		})
-	}
-}
-
 // TestIntern_BasicFunctionality tests basic string interning behavior.
 func TestIntern_BasicFunctionality(t *testing.T) {
 	ClearInternPool()
@@ -464,63 +404,6 @@ func TestIntern_ConcurrentAccess(t *testing.T) {
 
 	// We should have saved some memory from deduplication.
 	assert.Greater(t, stats.SavedBytes, int64(0), "Should have saved some memory")
-}
-
-// TestInternSlice_BasicFunctionality tests string slice interning.
-func TestInternSlice_BasicFunctionality(t *testing.T) {
-	ClearInternPool()
-	defer ClearInternPool()
-
-	atmosConfig := &schema.AtmosConfiguration{}
-
-	input := []string{"vars", "settings", "vars", "metadata", "vars"}
-	result := InternSlice(atmosConfig, input)
-
-	// Result should have same values.
-	assert.Equal(t, input, result)
-
-	// After interning, the strings should be deduplicated in the pool.
-	stats := GetInternStats()
-	assert.Equal(t, int64(5), stats.Requests, "Should have 5 intern requests")
-}
-
-// TestInternSlice_EmptySlice tests that empty slices are handled correctly.
-func TestInternSlice_EmptySlice(t *testing.T) {
-	ClearInternPool()
-	defer ClearInternPool()
-
-	atmosConfig := &schema.AtmosConfiguration{}
-
-	result := InternSlice(atmosConfig, []string{})
-	assert.Empty(t, result)
-
-	stats := GetInternStats()
-	assert.Equal(t, int64(0), stats.Requests, "Empty slice should not generate requests")
-}
-
-// TestInternMapKeys_BasicFunctionality tests map key interning.
-func TestInternMapKeys_BasicFunctionality(t *testing.T) {
-	ClearInternPool()
-	defer ClearInternPool()
-
-	atmosConfig := &schema.AtmosConfiguration{}
-
-	input := map[string]any{
-		"vars":     123,
-		"settings": "value",
-		"metadata": true,
-	}
-
-	result := InternMapKeys(atmosConfig, input)
-
-	// Result should have same keys and values.
-	assert.Equal(t, input["vars"], result["vars"])
-	assert.Equal(t, input["settings"], result["settings"])
-	assert.Equal(t, input["metadata"], result["metadata"])
-
-	// Should have interned 3 keys.
-	stats := GetInternStats()
-	assert.Equal(t, int64(3), stats.Requests, "Should have 3 intern requests for keys")
 }
 
 // TestInternStringsInMap_NestedStructure tests recursive string interning in nested maps.

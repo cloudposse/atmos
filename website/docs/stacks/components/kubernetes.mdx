@@ -259,6 +259,24 @@ components:
 
 For EKS, use an Atmos Auth identity with an `aws/eks` integration to write kubeconfig, then run the Kubernetes command with that identity.
 
+## Native CI Summaries
+
+When `ci.enabled: true` and Atmos runs in a supported CI provider such as GitHub Actions,
+Kubernetes commands write a compact Markdown job summary to the provider summary file
+(`$GITHUB_STEP_SUMMARY` on GitHub Actions).
+
+The summary includes the stack, component, command status, per-action object counts, object rows,
+and an error section when the command fails:
+
+- `render`: rendered objects
+- `plan` / `diff`: created, changed, and no-change objects
+- `apply` / `deploy`: applied or delivered objects
+- `delete`: deleted and not-found objects
+- `validate`: valid and invalid objects
+
+Kubernetes CI support is intentionally summary-only in v1. It does not emit `$GITHUB_OUTPUT`
+variables, commit statuses, PR comments, or stored artifacts.
+
 ## Hooks
 
 Kubernetes components support dotted lifecycle events:
@@ -278,14 +296,21 @@ Supported events:
 
 - `before.kubernetes.render`
 - `after.kubernetes.render`
+- `before.kubernetes.plan`
+- `after.kubernetes.plan`
 - `before.kubernetes.diff`
 - `after.kubernetes.diff`
 - `before.kubernetes.apply`
 - `after.kubernetes.apply`
+- `before.kubernetes.deploy`
+- `after.kubernetes.deploy`
 - `before.kubernetes.delete`
 - `after.kubernetes.delete`
+- `before.kubernetes.validate`
+- `after.kubernetes.validate`
 
-`deploy` uses the apply lifecycle events.
+`plan` normalizes to the diff lifecycle for hook matching, and `deploy` normalizes to the apply
+lifecycle for hook matching, so hooks written for either spelling match the equivalent operation.
 
 ## Bulk And Affected Runs
 

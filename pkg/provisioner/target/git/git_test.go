@@ -2,9 +2,11 @@ package git
 
 import (
 	"context"
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -15,6 +17,16 @@ import (
 	"github.com/cloudposse/atmos/pkg/provisioner/target"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
+
+// errEnvProvider is a stub IdentityEnvironmentProvider that always fails, used
+// to drive Deliver's ComposeEnvironment error branch.
+type errEnvProvider struct {
+	err error
+}
+
+func (e *errEnvProvider) EnsureIdentityEnvironment(_ context.Context, _ string) (map[string]string, error) {
+	return nil, e.err
+}
 
 func TestParseConfig(t *testing.T) {
 	block := map[string]any{
@@ -96,6 +108,132 @@ func TestWriteArtifactRejectsPathEscape(t *testing.T) {
 	assert.ErrorIs(t, err, errUtils.ErrGitPathEscapesWorktree)
 }
 
+func TestWriteArtifactRejectsRootPath(t *testing.T) {
+	for _, path := range []string{"", ".", "  ", " . ", "./", "a/..", "./a/.."} {
+		workdir := t.TempDir()
+		// A sentinel file at the worktree root must survive: a root path must be
+		// rejected before os.RemoveAll could wipe the repository (including .git).
+		sentinel := filepath.Join(workdir, ".git")
+		require.NoError(t, os.WriteFile(sentinel, []byte("gitdir"), 0o600))
+
+		err := writeArtifact(workdir, path, &target.ProvisionArtifact{Files: map[string][]byte{"x.yaml": []byte("x")}})
+		require.ErrorIs(t, err, errUtils.ErrGitTargetPathInvalid)
+		assert.FileExists(t, sentinel)
+	}
+}
+
+func TestIdentityFor(t *testing.T) {
+	resolved := &atmosgit.ResolvedRepository{Identity: "repo-default"}
+
+	// Target override wins over the repository default.
+	override := identityFor(&config{Identity: "target-override"}, resolved)
+	assert.Equal(t, "target-override", override)
+
+	// Empty target identity falls back to the repository default.
+	fallback := identityFor(&config{}, resolved)
+	assert.Equal(t, "repo-default", fallback)
+}
+
+func TestSigningMode(t *testing.T) {
+	resolved := &atmosgit.ResolvedRepository{Signing: atmosgit.SigningMode("auto")}
+
+	// Non-empty target signing overrides the repository default.
+	override := signingMode(&config{Signing: "always"}, resolved)
+	assert.Equal(t, atmosgit.SigningMode("always"), override)
+
+	never := signingMode(&config{Signing: "never"}, resolved)
+	assert.Equal(t, atmosgit.SigningMode("never"), never)
+
+	// Empty target signing falls back to the repository default.
+	fallback := signingMode(&config{}, resolved)
+	assert.Equal(t, atmosgit.SigningMode("auto"), fallback)
+}
+
+func TestWriteArtifactRejectsFilePathEscape(t *testing.T) {
+	workdir := t.TempDir()
+	// A managed path is valid, but an artifact file key escapes the worktree:
+	// the per-file ValidateRepoRelativePath must reject it.
+	err := writeArtifact(workdir, "clusters/dev", &target.ProvisionArtifact{Files: map[string][]byte{
+		"../../../escape.yaml": []byte("x"),
+	}})
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrGitPathEscapesWorktree)
+}
+
+func TestWriteArtifactWriteFailure(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("file-mode permissions behave differently on Windows")
+	}
+	if os.Geteuid() == 0 {
+		t.Skip("running as root ignores filesystem permissions")
+	}
+
+	workdir := t.TempDir()
+	// Make a read-only managed-path parent so MkdirAll/WriteFile under it fail.
+	managed := filepath.Join(workdir, "clusters")
+	require.NoError(t, os.Mkdir(managed, 0o555))
+	t.Cleanup(func() {
+		// Restore write perms so t.TempDir cleanup can remove the tree.
+		_ = os.Chmod(managed, 0o755)
+	})
+
+	err := writeArtifact(workdir, filepath.Join("clusters", "dev"), &target.ProvisionArtifact{Files: map[string][]byte{
+		"namespace.yaml": []byte("kind: Namespace\n"),
+	}})
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrGitArtifactWrite)
+}
+
+func TestDeliverProviderNotFound(t *testing.T) {
+	g := &gitProvisioner{}
+	atmosConfig := &schema.AtmosConfiguration{
+		Git: schema.GitConfig{
+			Repositories: map[string]schema.GitRepository{
+				"deployments": {
+					URI:      "https://example.invalid/repo.git",
+					Branch:   "main",
+					Provider: "bogus", // Unregistered provider drives NewProvider's error path.
+				},
+			},
+		},
+	}
+	err := g.Deliver(context.Background(), &target.DeliverInput{
+		AtmosConfig:  atmosConfig,
+		TargetName:   "deployment-repo",
+		TargetConfig: map[string]any{"repository": "deployments", "path": "clusters/dev"},
+	})
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrGitProviderNotFound)
+}
+
+func TestDeliverComposeEnvironmentError(t *testing.T) {
+	g := &gitProvisioner{}
+	atmosConfig := &schema.AtmosConfiguration{
+		Git: schema.GitConfig{
+			Repositories: map[string]schema.GitRepository{
+				"deployments": {
+					URI:    "https://example.invalid/repo.git",
+					Branch: "main",
+				},
+			},
+		},
+	}
+	sentinel := errors.New("identity environment failed")
+	err := g.Deliver(context.Background(), &target.DeliverInput{
+		AtmosConfig: atmosConfig,
+		TargetName:  "deployment-repo",
+		// auth.identity is non-empty, so ComposeEnvironment invokes EnvProvider.
+		TargetConfig: map[string]any{
+			"repository": "deployments",
+			"path":       "clusters/dev",
+			"auth":       map[string]any{"identity": "platform-admin"},
+		},
+		EnvProvider: &errEnvProvider{err: sentinel},
+	})
+	require.Error(t, err)
+	assert.ErrorIs(t, err, sentinel)
+}
+
 // isolatedGitEnv configures the process env so the developer's gitconfig cannot
 // leak in and "main" is the deterministic default branch.
 func isolatedGitEnv(t *testing.T) {
@@ -130,6 +268,54 @@ func seedBareRepo(t *testing.T, root string) string {
 	gitCmd(t, seed, "commit", "-m", "init")
 	gitCmd(t, seed, "push", "origin", "main")
 	return bare
+}
+
+func TestDeliverIntegrationCommitError(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git binary not available")
+	}
+	isolatedGitEnv(t)
+
+	root := t.TempDir()
+	bare := seedBareRepo(t, root)
+
+	// Pre-clone into the workdir and leave a dirty file OUTSIDE the managed path.
+	// reconcile fast-forwards the existing clone, writeArtifact writes the managed
+	// path, and Commit's path-scoped safety rule then rejects the unmanaged change.
+	workdir := filepath.Join(root, "workdir")
+	gitCmd(t, "", "clone", bare, workdir)
+	require.NoError(t, os.WriteFile(filepath.Join(workdir, "README.md"), []byte("# tampered\n"), 0o600))
+
+	atmosConfig := &schema.AtmosConfiguration{
+		Git: schema.GitConfig{
+			Repositories: map[string]schema.GitRepository{
+				"deployments": {
+					URI:     bare,
+					Branch:  "main",
+					Workdir: workdir,
+				},
+			},
+		},
+	}
+	in := &target.DeliverInput{
+		AtmosConfig: atmosConfig,
+		TargetName:  "deployment-repo",
+		TargetConfig: map[string]any{
+			"repository": "deployments",
+			"path":       "clusters/dev/argocd",
+			"commit":     map[string]any{"message": "Render argocd", "signing": "never"},
+		},
+		Artifact: target.ProvisionArtifact{
+			Kind:   target.ArtifactKindKubernetesManifests,
+			Format: target.FormatYAML,
+			Files:  map[string][]byte{"namespace.yaml": []byte("apiVersion: v1\nkind: Namespace\n")},
+		},
+	}
+
+	g := &gitProvisioner{}
+	err := g.Deliver(context.Background(), in)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrGitDirtyUnmanagedFiles)
 }
 
 func TestDeliverIntegrationPublishesToRepo(t *testing.T) {

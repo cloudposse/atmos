@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/auth"
 	"github.com/cloudposse/atmos/pkg/component"
 	cfg "github.com/cloudposse/atmos/pkg/config"
@@ -40,6 +41,16 @@ func TestNormalizeGlobalConfig(t *testing.T) {
 func TestAuthManagerForBulkSkipsEmptyIdentity(t *testing.T) {
 	manager, err := authManagerForBulk(&schema.AtmosConfiguration{}, &schema.ConfigAndStacksInfo{})
 	require.NoError(t, err)
+	assert.Nil(t, manager)
+}
+
+func TestAuthManagerForBulkReturnsErrorForUnconfiguredAuth(t *testing.T) {
+	// An identity is requested but the auth config has no identities, so manager
+	// creation must fail rather than silently returning a nil manager.
+	info := &schema.ConfigAndStacksInfo{Identity: "aws-admin"}
+	manager, err := authManagerForBulk(&schema.AtmosConfiguration{}, info)
+
+	require.Error(t, err)
 	assert.Nil(t, manager)
 }
 
@@ -470,6 +481,273 @@ func TestExecuteRenderWithStubbedExternalDependencies(t *testing.T) {
 	assert.Contains(t, string(data), "kind: ConfigMap")
 }
 
+func TestRunOperationApplyGateRejectsInvalidManifest(t *testing.T) {
+	original := newKubernetesSDKClient
+	t.Cleanup(func() { newKubernetesSDKClient = original })
+	newKubernetesSDKClient = func() (*sdkClient, error) {
+		t.Fatal("apply gate must reject invalid manifests before contacting the cluster")
+		return nil, nil
+	}
+
+	objects := []*unstructured.Unstructured{kubernetesObject("v1", "ConfigMap", "", "")}
+	result, err := runOperation(
+		&component.ExecutionContext{},
+		&schema.AtmosConfiguration{},
+		&schema.ConfigAndStacksInfo{},
+		OperationApply,
+		objects,
+	)
+	require.ErrorIs(t, err, errUtils.ErrKubernetesValidationFailed)
+	assert.Equal(t, 1, result.ObjectsTotal)
+}
+
+func TestRunOperationValidateDispatches(t *testing.T) {
+	original := newKubernetesSDKClient
+	t.Cleanup(func() { newKubernetesSDKClient = original })
+	newKubernetesSDKClient = func() (*sdkClient, error) {
+		t.Fatal("offline validate must not contact the cluster")
+		return nil, nil
+	}
+
+	objects := []*unstructured.Unstructured{kubernetesObject("v1", "ConfigMap", "settings", "")}
+	result, err := runOperation(
+		&component.ExecutionContext{},
+		&schema.AtmosConfiguration{},
+		&schema.ConfigAndStacksInfo{},
+		OperationValidate,
+		objects,
+	)
+	require.NoError(t, err)
+	assert.Equal(t, map[string]int{"valid": 1}, result.ActionCounts)
+}
+
+func TestRunOperationValidateReportsInvalidCount(t *testing.T) {
+	objects := []*unstructured.Unstructured{kubernetesObject("v1", "ConfigMap", "", "")}
+
+	result, err := runOperation(
+		&component.ExecutionContext{},
+		&schema.AtmosConfiguration{},
+		&schema.ConfigAndStacksInfo{},
+		OperationValidate,
+		objects,
+	)
+
+	require.ErrorIs(t, err, errUtils.ErrKubernetesValidationFailed)
+	assert.Equal(t, map[string]int{"invalid": 1}, result.ActionCounts)
+}
+
+func TestRunOperationRenderDispatches(t *testing.T) {
+	original := newKubernetesSDKClient
+	t.Cleanup(func() { newKubernetesSDKClient = original })
+	newKubernetesSDKClient = func() (*sdkClient, error) {
+		t.Fatal("render must not contact the cluster")
+		return nil, nil
+	}
+
+	objects := []*unstructured.Unstructured{kubernetesObject("v1", "ConfigMap", "settings", "")}
+	output := captureKubernetesStdout(t, func() {
+		result, err := runOperation(
+			&component.ExecutionContext{},
+			&schema.AtmosConfiguration{},
+			&schema.ConfigAndStacksInfo{ComponentSection: map[string]any{}},
+			OperationRender,
+			objects,
+		)
+		require.NoError(t, err)
+		assert.Equal(t, map[string]int{"rendered": 1}, result.ActionCounts)
+	})
+	assert.Contains(t, output, "kind: ConfigMap")
+}
+
+func TestRunOperationDiffDispatchesToClient(t *testing.T) {
+	original := newKubernetesSDKClient
+	t.Cleanup(func() { newKubernetesSDKClient = original })
+	newKubernetesSDKClient = func() (*sdkClient, error) {
+		return nil, errors.New("diff client failed")
+	}
+
+	_, err := runOperation(
+		&component.ExecutionContext{},
+		&schema.AtmosConfiguration{},
+		&schema.ConfigAndStacksInfo{},
+		OperationDiff,
+		[]*unstructured.Unstructured{kubernetesObject("v1", "ConfigMap", "settings", "")},
+	)
+	require.ErrorContains(t, err, "diff client failed")
+}
+
+func TestRunOperationDeleteDispatchesToClient(t *testing.T) {
+	original := newKubernetesSDKClient
+	t.Cleanup(func() { newKubernetesSDKClient = original })
+
+	object := kubernetesObject("v1", "ConfigMap", "settings", "default")
+	newKubernetesSDKClient = func() (*sdkClient, error) {
+		return newFakeSDKClient(object.DeepCopy()), nil
+	}
+
+	output := captureKubernetesStdout(t, func() {
+		result, err := runOperation(
+			&component.ExecutionContext{},
+			&schema.AtmosConfiguration{},
+			&schema.ConfigAndStacksInfo{},
+			OperationDelete,
+			[]*unstructured.Unstructured{kubernetesObject("v1", "ConfigMap", "settings", "")},
+		)
+		require.NoError(t, err)
+		assert.Equal(t, map[string]int{"deleted": 1}, result.ActionCounts)
+	})
+	assert.Contains(t, output, "deleted v1/ConfigMap default/settings")
+}
+
+func TestRunOperationRejectsUnsupportedOperation(t *testing.T) {
+	_, err := runOperation(
+		&component.ExecutionContext{},
+		&schema.AtmosConfiguration{},
+		&schema.ConfigAndStacksInfo{},
+		Operation("frobnicate"),
+		nil,
+	)
+	require.ErrorIs(t, err, errUtils.ErrKubernetesUnsupportedOperation)
+}
+
+func TestValidateAndResolveComponentRejectsInvalidProviderType(t *testing.T) {
+	// A non-string provider fails ValidateComponent before any path resolution.
+	info := &schema.ConfigAndStacksInfo{ComponentSection: map[string]any{"provider": 42}}
+	_, err := validateAndResolveComponent(&schema.AtmosConfiguration{}, info)
+	require.ErrorIs(t, err, errUtils.ErrComponentValidationFailed)
+}
+
+func TestValidateAndResolveComponentRejectsUnknownProvider(t *testing.T) {
+	// ValidateComponent passes (no component-level provider), but the global
+	// provider resolves to an unsupported value.
+	atmosConfig := &schema.AtmosConfiguration{}
+	atmosConfig.Components.Kubernetes.Provider = "helm"
+	info := &schema.ConfigAndStacksInfo{ComponentSection: map[string]any{}}
+
+	_, err := validateAndResolveComponent(atmosConfig, info)
+	require.ErrorIs(t, err, errUtils.ErrComponentValidationFailed)
+	require.ErrorContains(t, err, "provider must be")
+}
+
+func TestValidateAndResolveComponentResolvesValidComponent(t *testing.T) {
+	original := provisionAndResolveComponentPath
+	t.Cleanup(func() { provisionAndResolveComponentPath = original })
+
+	componentDir := t.TempDir()
+	provisionAndResolveComponentPath = func(context.Context, *schema.AtmosConfiguration, *schema.ConfigAndStacksInfo, string, string) (string, bool, error) {
+		return componentDir, true, nil
+	}
+
+	atmosConfig := &schema.AtmosConfiguration{BasePath: t.TempDir()}
+	atmosConfig.Components.Kubernetes.BasePath = filepath.Join("components", "kubernetes")
+	info := &schema.ConfigAndStacksInfo{
+		FinalComponent:   "api",
+		ComponentSection: map[string]any{"provider": ProviderKubectl},
+	}
+
+	source, err := validateAndResolveComponent(atmosConfig, info)
+	require.NoError(t, err)
+	assert.Equal(t, ProviderKubectl, source.provider)
+	assert.Equal(t, componentDir, source.componentPath)
+}
+
+func TestValidateAndResolveComponentReturnsResolvePathError(t *testing.T) {
+	original := provisionAndResolveComponentPath
+	t.Cleanup(func() { provisionAndResolveComponentPath = original })
+	provisionAndResolveComponentPath = func(context.Context, *schema.AtmosConfiguration, *schema.ConfigAndStacksInfo, string, string) (string, bool, error) {
+		return "", false, errors.New("provision failed")
+	}
+
+	atmosConfig := &schema.AtmosConfiguration{BasePath: t.TempDir()}
+	atmosConfig.Components.Kubernetes.BasePath = filepath.Join("components", "kubernetes")
+	info := &schema.ConfigAndStacksInfo{
+		FinalComponent:   "api",
+		ComponentSection: map[string]any{"provider": ProviderKubectl},
+	}
+
+	_, err := validateAndResolveComponent(atmosConfig, info)
+	require.ErrorContains(t, err, "provision failed")
+}
+
+func TestValidateAndResolveComponentRequiresInputSource(t *testing.T) {
+	original := provisionAndResolveComponentPath
+	t.Cleanup(func() { provisionAndResolveComponentPath = original })
+	// The resolved path does not exist and no manifests/paths are configured, so
+	// ensureComponentInputExists must reject the component as missing input.
+	missingPath := filepath.Join(t.TempDir(), "missing")
+	provisionAndResolveComponentPath = func(context.Context, *schema.AtmosConfiguration, *schema.ConfigAndStacksInfo, string, string) (string, bool, error) {
+		return missingPath, false, nil
+	}
+
+	atmosConfig := &schema.AtmosConfiguration{BasePath: t.TempDir()}
+	atmosConfig.Components.Kubernetes.BasePath = filepath.Join("components", "kubernetes")
+	info := &schema.ConfigAndStacksInfo{
+		FinalComponent:   "api",
+		ComponentFromArg: "api",
+		ComponentSection: map[string]any{"provider": ProviderKubectl},
+	}
+
+	_, err := validateAndResolveComponent(atmosConfig, info)
+	require.ErrorIs(t, err, errUtils.ErrInvalidComponent)
+}
+
+func TestMaybeAutoGenerateFilesGeneratesConfiguredFiles(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{}
+	atmosConfig.Components.Kubernetes.AutoGenerateFiles = true
+
+	componentPath := filepath.Join(t.TempDir(), "generated")
+	info := &schema.ConfigAndStacksInfo{
+		ComponentSection: map[string]any{
+			"generate": map[string]any{
+				// String content is rendered as a Go template and written verbatim.
+				"manifest.yaml": "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: settings\n",
+			},
+		},
+	}
+
+	require.NoError(t, maybeAutoGenerateFiles(atmosConfig, info, componentPath))
+
+	written, err := os.ReadFile(filepath.Join(componentPath, "manifest.yaml"))
+	require.NoError(t, err)
+	assert.Contains(t, string(written), "kind: ConfigMap")
+}
+
+func TestLoadManifestObjectsErrorsWhenNoManifestsFound(t *testing.T) {
+	// An empty component directory yields no objects, which must be reported as
+	// an invalid component rather than succeeding with an empty set.
+	source := manifestSource{provider: ProviderKubectl, componentPath: t.TempDir()}
+	info := &schema.ConfigAndStacksInfo{ComponentFromArg: "api", ComponentSection: map[string]any{}}
+
+	_, err := loadManifestObjects(source, info)
+	require.ErrorIs(t, err, errUtils.ErrInvalidComponent)
+	require.ErrorContains(t, err, "no Kubernetes manifests found")
+}
+
+func TestRunApplyAndDiffPrintResultsOnSuccess(t *testing.T) {
+	original := newKubernetesSDKClient
+	t.Cleanup(func() { newKubernetesSDKClient = original })
+
+	object := kubernetesObject("v1", "ConfigMap", "settings", "default")
+	object.Object["data"] = map[string]any{"key": "value"}
+	newKubernetesSDKClient = func() (*sdkClient, error) {
+		client, fakeClient := newFakeSDKClientWithFake(object.DeepCopy())
+		prependApplyDryRunReactor(fakeClient, object.DeepCopy())
+		return client, nil
+	}
+
+	applyOut := captureKubernetesStdout(t, func() {
+		_, err := runApply([]*unstructured.Unstructured{kubernetesObject("v1", "ConfigMap", "settings", "")})
+		require.NoError(t, err)
+	})
+	assert.Contains(t, applyOut, "applied v1/ConfigMap default/settings")
+
+	diffOut := captureKubernetesStdout(t, func() {
+		_, err := runDiff([]*unstructured.Unstructured{kubernetesObject("v1", "ConfigMap", "settings", "")})
+		require.NoError(t, err)
+	})
+	assert.Contains(t, diffOut, "v1/ConfigMap default/settings")
+}
+
 func TestEventsFor(t *testing.T) {
 	tests := []struct {
 		operation Operation
@@ -480,6 +758,7 @@ func TestEventsFor(t *testing.T) {
 		{OperationDiff, hooks.BeforeKubernetesDiff, hooks.AfterKubernetesDiff},
 		{OperationApply, hooks.BeforeKubernetesApply, hooks.AfterKubernetesApply},
 		{OperationDelete, hooks.BeforeKubernetesDelete, hooks.AfterKubernetesDelete},
+		{OperationValidate, hooks.BeforeKubernetesValidate, hooks.AfterKubernetesValidate},
 		{Operation("unknown"), hooks.HookEvent(""), hooks.HookEvent("")},
 	}
 
@@ -488,6 +767,16 @@ func TestEventsFor(t *testing.T) {
 		assert.Equal(t, tt.before, before)
 		assert.Equal(t, tt.after, after)
 	}
+}
+
+func TestEventsForCommandPreservesPlanAndDeploy(t *testing.T) {
+	before, after := eventsForCommand("plan", OperationDiff)
+	assert.Equal(t, hooks.BeforeKubernetesPlan, before)
+	assert.Equal(t, hooks.AfterKubernetesPlan, after)
+
+	before, after = eventsForCommand("deploy", OperationApply)
+	assert.Equal(t, hooks.BeforeKubernetesDeploy, before)
+	assert.Equal(t, hooks.AfterKubernetesDeploy, after)
 }
 
 func TestApplyEnvironmentSetsAndRestoresValues(t *testing.T) {
@@ -529,17 +818,23 @@ func TestRunOperationsUseSDKClientFactory(t *testing.T) {
 	newKubernetesSDKClient = func() (*sdkClient, error) {
 		return nil, errors.New("client failed")
 	}
-	require.ErrorContains(t, runApply(nil), "client failed")
-	require.ErrorContains(t, runDelete(nil), "client failed")
-	require.ErrorContains(t, runDiff(nil), "client failed")
+	_, err := runApply(nil)
+	require.ErrorContains(t, err, "client failed")
+	_, err = runDelete(nil)
+	require.ErrorContains(t, err, "client failed")
+	_, err = runDiff(nil)
+	require.ErrorContains(t, err, "client failed")
 
 	object := kubernetesObject("v1", "ConfigMap", "settings", "default")
 	newKubernetesSDKClient = func() (*sdkClient, error) {
 		return newFakeSDKClient(object.DeepCopy()), nil
 	}
-	require.NoError(t, runDelete([]*unstructured.Unstructured{kubernetesObject("v1", "ConfigMap", "settings", "")}))
-	require.ErrorContains(t, runApply([]*unstructured.Unstructured{object}), "failed to apply")
-	require.ErrorContains(t, runDiff([]*unstructured.Unstructured{object}), "failed to server dry-run apply")
+	_, err = runDelete([]*unstructured.Unstructured{kubernetesObject("v1", "ConfigMap", "settings", "")})
+	require.NoError(t, err)
+	_, err = runApply([]*unstructured.Unstructured{object})
+	require.ErrorContains(t, err, "failed to apply")
+	_, err = runDiff([]*unstructured.Unstructured{object})
+	require.ErrorContains(t, err, "server dry-run apply")
 }
 
 func captureKubernetesStdout(t *testing.T, fn func()) string {

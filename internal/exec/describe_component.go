@@ -13,6 +13,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/auth"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/data"
+	iolib "github.com/cloudposse/atmos/pkg/io"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	m "github.com/cloudposse/atmos/pkg/merge"
 	"github.com/cloudposse/atmos/pkg/pager"
@@ -413,6 +414,10 @@ type componentTypeProcessParams struct {
 // tryProcessWithComponentType attempts to process stacks with a specific component type.
 func tryProcessWithComponentType(params *componentTypeProcessParams) (schema.ConfigAndStacksInfo, error) {
 	params.configAndStacksInfo.ComponentType = params.componentType
+	// `describe component` is an inspection command: when masking is enabled (the default),
+	// resolve `!secret` to the mask replacement WITHOUT retrieving from the backend, so the
+	// command needs no credentials for the secret provider.
+	params.configAndStacksInfo.SecretsMaskOnly = iolib.MaskingEnabled()
 	result, err := ProcessStacks(params.atmosConfig, params.configAndStacksInfo, true, params.processTemplates, params.processYamlFunctions, params.skip, params.authManager)
 	result.ComponentSection[cfg.ComponentTypeSectionName] = params.componentType
 	return result, err

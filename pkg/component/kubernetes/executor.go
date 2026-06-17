@@ -13,6 +13,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/auth"
 	"github.com/cloudposse/atmos/pkg/component"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/data"
 	"github.com/cloudposse/atmos/pkg/dependencies"
 	"github.com/cloudposse/atmos/pkg/hooks"
 	log "github.com/cloudposse/atmos/pkg/logger"
@@ -20,6 +21,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 	tfgenerate "github.com/cloudposse/atmos/pkg/terraform/generate"
 	u "github.com/cloudposse/atmos/pkg/utils"
+	"github.com/spf13/viper"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 
@@ -43,9 +45,13 @@ func Execute(ctx *component.ExecutionContext, operation Operation) error {
 	defer perf.Track(ctx.AtmosConfig, "kubernetes.ExecuteOperation")()
 
 	info := ctx.ConfigAndStacksInfo
+	command := ctx.SubCommand
+	if command == "" {
+		command = string(operation)
+	}
 	info.ComponentType = cfg.KubernetesComponentType
-	info.SubCommand = string(operation)
-	info.CliArgs = []string{cfg.KubernetesComponentType, string(operation)}
+	info.SubCommand = command
+	info.CliArgs = []string{cfg.KubernetesComponentType, command}
 
 	atmosConfig, err := initCliConfig(info, true)
 	if err != nil {
@@ -102,21 +108,28 @@ func runWithHooks(
 	if err != nil {
 		return err
 	}
-	before, after := eventsFor(operation)
+	before, after := eventsForCommand(info.SubCommand, operation)
 	if err := hookSet.RunAll(before, atmosConfig, info, nil, nil); err != nil {
 		return err
 	}
 
 	objects, err := loadManifestObjects(source, info)
 	if err != nil {
+		runKubernetesCIHook(after, atmosConfig, info, nil, err)
 		return err
 	}
 
-	if err := runOperation(ctx, atmosConfig, info, operation, objects); err != nil {
+	result, err := runOperation(ctx, atmosConfig, info, operation, objects)
+	if err != nil {
+		runKubernetesCIHook(after, atmosConfig, info, result, err)
 		return err
 	}
 
-	return hookSet.RunAll(after, atmosConfig, info, nil, nil)
+	if err := hookSet.RunAll(after, atmosConfig, info, nil, nil); err != nil {
+		return err
+	}
+	runKubernetesCIHook(after, atmosConfig, info, result, nil)
+	return nil
 }
 
 // validateAndResolveComponent validates the component and resolves its on-disk path,
@@ -161,8 +174,15 @@ func ensureComponentInputExists(
 		}
 	}
 
-	hasConfiguredInput := len(asAnySlice(info.ComponentSection["manifests"])) > 0 || len(asStringSlice(info.ComponentSection["paths"])) > 0
-	if componentPathExists || hasConfiguredInput {
+	manifestsInput, err := asAnySlice(info.ComponentSection["manifests"])
+	if err != nil {
+		return err
+	}
+	pathsInput, err := asStringSlice(info.ComponentSection["paths"])
+	if err != nil {
+		return err
+	}
+	if componentPathExists || len(manifestsInput) > 0 || len(pathsInput) > 0 {
 		return nil
 	}
 
@@ -196,18 +216,40 @@ func loadManifestObjects(source manifestSource, info *schema.ConfigAndStacksInfo
 // runOperation dispatches the rendered objects to the requested Kubernetes operation.
 // Apply/deploy resolves the configured provision target (cluster by default, or a
 // delivery destination such as git); render/diff/delete remain cluster-local.
-func runOperation(ctx *component.ExecutionContext, atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, operation Operation, objects []*unstructured.Unstructured) error {
+func runOperation(ctx *component.ExecutionContext, atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, operation Operation, objects []*unstructured.Unstructured) (*schema.KubernetesCIResult, error) {
+	result := newKubernetesCIResult(info, objects)
+	results, err := executeKubernetesOperation(ctx, atmosConfig, info, operation, objects)
+	if operation == OperationValidate && err != nil && len(results) == 0 && errors.Is(err, errUtils.ErrKubernetesValidationFailed) {
+		results = objectsToResults("invalid", objects)
+	}
+	result.Actions = objectCIResults(results)
+	result.ActionCounts = countKubernetesActions(result.Actions)
+	return result, err
+}
+
+func executeKubernetesOperation(ctx *component.ExecutionContext, atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, operation Operation, objects []*unstructured.Unstructured) ([]objectResult, error) {
 	switch operation {
 	case OperationRender:
-		return renderObjects(objects, resolveRenderOptions(ctx.Flags, info.ComponentSection))
+		err := renderObjects(objects, resolveRenderOptions(ctx.Flags, info.ComponentSection))
+		if err == nil {
+			return objectsToResults("rendered", objects), nil
+		}
+		return nil, err
 	case OperationDiff:
 		return runDiff(objects)
 	case OperationApply:
+		// Auto-gate apply/deploy: fail fast on structurally invalid manifests
+		// before contacting the cluster or delivering to a provision target.
+		if err := validateObjectsStructural(objects); err != nil {
+			return nil, err
+		}
 		return deliverApply(atmosConfig, info, ctx.Flags, objects)
 	case OperationDelete:
 		return runDelete(objects)
+	case OperationValidate:
+		return runValidate(objects, resolveValidateOptions(ctx.Flags))
 	default:
-		return fmt.Errorf("%w: %q", errUtils.ErrKubernetesUnsupportedOperation, operation)
+		return nil, fmt.Errorf("%w: %q", errUtils.ErrKubernetesUnsupportedOperation, operation)
 	}
 }
 
@@ -271,7 +313,7 @@ func maybeAutoGenerateFiles(atmosConfig *schema.AtmosConfiguration, info *schema
 	}
 
 	if err := os.MkdirAll(componentPath, dirPerm); err != nil {
-		return fmt.Errorf("failed to create Kubernetes component directory: %w", err)
+		return fmt.Errorf("%w: %q: %w", errUtils.ErrKubernetesComponentDir, componentPath, err)
 	}
 
 	templateContext := tfgenerate.BuildTemplateContext(info)
@@ -279,56 +321,66 @@ func maybeAutoGenerateFiles(atmosConfig *schema.AtmosConfiguration, info *schema
 	return err
 }
 
-func runApply(objects []*unstructured.Unstructured) error {
+func runApply(objects []*unstructured.Unstructured) ([]objectResult, error) {
 	client, err := newKubernetesSDKClient()
 	if err != nil {
-		return err
+		return nil, err
 	}
 	results, err := client.Apply(context.Background(), objects)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	printResults(results)
-	return nil
+	return results, nil
 }
 
-func runDelete(objects []*unstructured.Unstructured) error {
+func runDelete(objects []*unstructured.Unstructured) ([]objectResult, error) {
 	client, err := newKubernetesSDKClient()
 	if err != nil {
-		return err
+		return nil, err
 	}
 	results, err := client.Delete(context.Background(), objects)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	printResults(results)
-	return nil
+	return results, nil
 }
 
-func runDiff(objects []*unstructured.Unstructured) error {
+func runDiff(objects []*unstructured.Unstructured) ([]objectResult, error) {
 	client, err := newKubernetesSDKClient()
 	if err != nil {
-		return err
+		return nil, err
 	}
 	results, err := client.Diff(context.Background(), objects)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	printResults(results)
-	return nil
+	return results, nil
 }
 
 func printResults(results []objectResult) {
 	for _, result := range results {
 		if result.Namespace == "" {
-			fmt.Fprintf(os.Stdout, "%s %s %s\n", result.Action, result.Resource, result.Name)
+			_ = data.Writef("%s %s %s\n", result.Action, result.Resource, result.Name)
 			continue
 		}
-		fmt.Fprintf(os.Stdout, "%s %s %s/%s\n", result.Action, result.Resource, result.Namespace, result.Name)
+		_ = data.Writef("%s %s %s/%s\n", result.Action, result.Resource, result.Namespace, result.Name)
 	}
 }
 
 func eventsFor(operation Operation) (hooks.HookEvent, hooks.HookEvent) {
+	return eventsForCommand(string(operation), operation)
+}
+
+func eventsForCommand(command string, operation Operation) (hooks.HookEvent, hooks.HookEvent) {
+	switch command {
+	case "plan":
+		return hooks.BeforeKubernetesPlan, hooks.AfterKubernetesPlan
+	case "deploy":
+		return hooks.BeforeKubernetesDeploy, hooks.AfterKubernetesDeploy
+	}
 	switch operation {
 	case OperationRender:
 		return hooks.BeforeKubernetesRender, hooks.AfterKubernetesRender
@@ -338,8 +390,84 @@ func eventsFor(operation Operation) (hooks.HookEvent, hooks.HookEvent) {
 		return hooks.BeforeKubernetesApply, hooks.AfterKubernetesApply
 	case OperationDelete:
 		return hooks.BeforeKubernetesDelete, hooks.AfterKubernetesDelete
+	case OperationValidate:
+		return hooks.BeforeKubernetesValidate, hooks.AfterKubernetesValidate
 	default:
 		return hooks.HookEvent(""), hooks.HookEvent("")
+	}
+}
+
+func newKubernetesCIResult(info *schema.ConfigAndStacksInfo, objects []*unstructured.Unstructured) *schema.KubernetesCIResult {
+	result := &schema.KubernetesCIResult{
+		ObjectsTotal: len(objects),
+		ActionCounts: map[string]int{},
+	}
+	if info != nil {
+		result.Stack = info.Stack
+		result.Component = info.ComponentFromArg
+		result.Command = info.SubCommand
+	}
+	return result
+}
+
+func objectCIResults(results []objectResult) []schema.KubernetesObjectCIResult {
+	out := make([]schema.KubernetesObjectCIResult, 0, len(results))
+	for _, result := range results {
+		out = append(out, schema.KubernetesObjectCIResult{
+			Action:    result.Action,
+			Resource:  result.Resource,
+			Namespace: result.Namespace,
+			Name:      result.Name,
+		})
+	}
+	return out
+}
+
+func countKubernetesActions(results []schema.KubernetesObjectCIResult) map[string]int {
+	counts := make(map[string]int)
+	for _, result := range results {
+		counts[result.Action]++
+	}
+	return counts
+}
+
+func objectsToResults(action string, objects []*unstructured.Unstructured) []objectResult {
+	results := make([]objectResult, 0, len(objects))
+	for _, obj := range objects {
+		results = append(results, objectResult{
+			Action:    action,
+			Resource:  resourceID(obj),
+			Namespace: obj.GetNamespace(),
+			Name:      obj.GetName(),
+		})
+	}
+	return results
+}
+
+func runKubernetesCIHook(
+	event hooks.HookEvent,
+	atmosConfig *schema.AtmosConfiguration,
+	info *schema.ConfigAndStacksInfo,
+	result *schema.KubernetesCIResult,
+	commandErr error,
+) {
+	if result == nil {
+		result = newKubernetesCIResult(info, nil)
+	}
+	result.ExitCode = errUtils.GetExitCode(commandErr)
+	if commandErr != nil {
+		result.Error = commandErr.Error()
+	}
+	if err := hooks.RunCIHooks(&hooks.RunCIHooksOptions{
+		Event:        event,
+		AtmosConfig:  atmosConfig,
+		Info:         info,
+		ForceCIMode:  viper.GetBool("ci"),
+		CommandError: commandErr,
+		ExitCode:     result.ExitCode,
+		Aggregate:    result,
+	}); err != nil {
+		log.Warn("Kubernetes CI summary skipped", "event", event, "error", err)
 	}
 }
 

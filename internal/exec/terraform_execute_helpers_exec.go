@@ -13,6 +13,8 @@ import (
 	"fmt"
 	"os"
 	osexec "os/exec"
+	"slices"
+	"strings"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	auth "github.com/cloudposse/atmos/pkg/auth"
@@ -23,7 +25,6 @@ import (
 	"github.com/cloudposse/atmos/pkg/pro"
 	"github.com/cloudposse/atmos/pkg/retry"
 	"github.com/cloudposse/atmos/pkg/schema"
-	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 // componentExecContext holds the per-execution state assembled by prepareComponentExecution.
@@ -93,6 +94,11 @@ func runPreExecutionSteps(
 	workingDir string,
 	tenv *dependencies.ToolchainEnvironment,
 ) error {
+	// Partition variables into disk-safe vs. secret-bearing BEFORE writing the varfile or
+	// assembling env vars (and before the auth pre-hook registers credentials with the
+	// masker), so secrets are kept off disk and injected as TF_VAR_* env vars instead.
+	computeTerraformSecretVarKeys(info)
+
 	if err := printAndWriteVarFiles(atmosConfig, info); err != nil {
 		return err
 	}
@@ -172,6 +178,12 @@ func executeCommandPipeline(
 // shouldSkipWorkspaceSetup returns true when workspace setup should be skipped.
 func shouldSkipWorkspaceSetup(info *schema.ConfigAndStacksInfo) bool {
 	if info.SubCommand == subcommandInit || (info.SubCommand == subcommandWorkspace && info.SubCommand2 != "") {
+		return true
+	}
+	// `providers` subcommands (mirror, lock, schema) operate on configuration, not
+	// state, so they need no workspace — and selecting one fails on never-applied
+	// components.
+	if strings.HasPrefix(info.SubCommand, "providers") {
 		return true
 	}
 	if info.ComponentBackendType == "http" {
@@ -279,7 +291,7 @@ func checkTTYRequirement(info *schema.ConfigAndStacksInfo) error {
 	if os.Stdin != nil {
 		return nil
 	}
-	if info.SubCommand == subcommandApply && !u.SliceContainsString(info.AdditionalArgsAndFlags, autoApproveFlag) {
+	if info.SubCommand == subcommandApply && !slices.Contains(info.AdditionalArgsAndFlags, autoApproveFlag) {
 		return fmt.Errorf(
 			"%w: 'terraform apply' requires a user interaction, but no TTY is attached. "+
 				"Use 'terraform apply -auto-approve' or 'terraform deploy' instead",

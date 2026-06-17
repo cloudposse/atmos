@@ -15,7 +15,10 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-const graphNodeIDFormat = "%s-%s"
+// graphNodeIDFormat builds an unambiguous node ID from a component and stack name.
+// Each field is length-prefixed (%d:%s) so that names containing the delimiter cannot
+// collide: ("api-prod","dev") and ("api","prod-dev") produce distinct IDs.
+const graphNodeIDFormat = "%d:%s|%d:%s"
 
 type GraphSelection struct {
 	NodeIDs             []string
@@ -35,7 +38,14 @@ type GraphExecutionOptions struct {
 }
 
 func ExecuteGraph(ctx context.Context, opts *GraphExecutionOptions) error {
-	defer perf.Track(opts.AtmosConfig, "component.ExecuteGraph")()
+	defer perf.Track(nil, "component.ExecuteGraph")()
+
+	if opts == nil {
+		return fmt.Errorf("%w: graph execution options are nil", errUtils.ErrGraphExecutionOptions)
+	}
+	if ctx == nil {
+		return fmt.Errorf("%w: context is nil", errUtils.ErrGraphExecutionOptions)
+	}
 
 	order, err := prepareExecutionOrder(opts)
 	if err != nil {
@@ -49,7 +59,7 @@ func ExecuteGraph(ctx context.Context, opts *GraphExecutionOptions) error {
 	for i := range order {
 		select {
 		case <-ctx.Done():
-			return ctx.Err()
+			return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrGraphExecutionCanceled, ctx.Err())
 		default:
 		}
 
@@ -114,7 +124,7 @@ func executeGraphNode(opts *GraphExecutionOptions, node *dependency.Node) error 
 		ConfigAndStacksInfo: nodeInfo,
 		Flags:               opts.Flags,
 	}); err != nil {
-		return fmt.Errorf("component=%s stack=%s: %w", node.Component, node.Stack, err)
+		return fmt.Errorf("%w: component=%s stack=%s: %w", errUtils.ErrComponentExecutionFailed, node.Component, node.Stack, err)
 	}
 	return nil
 }
@@ -181,7 +191,10 @@ func FilterGraph(graph *dependency.Graph, info *schema.ConfigAndStacksInfo, sele
 // filterGraphBySelection filters the graph to the explicitly selected node IDs.
 func filterGraphBySelection(graph *dependency.Graph, selection *GraphSelection) *dependency.Graph {
 	nodeIDs := sortedUniqueStrings(selection.NodeIDs)
-	if len(nodeIDs) == graph.Size() && !selection.IncludeDependencies && !selection.IncludeDependents {
+	// Fast-path: the selection already covers every node and pulls in no extra
+	// dependencies/dependents. Validate set equality (not just count) so a
+	// same-sized but different selection does not return the full graph.
+	if !selection.IncludeDependencies && !selection.IncludeDependents && len(nodeIDs) == graph.Size() && allNodesPresent(graph, nodeIDs) {
 		return graph
 	}
 	return graph.Filter(dependency.Filter{
@@ -189,6 +202,16 @@ func filterGraphBySelection(graph *dependency.Graph, selection *GraphSelection) 
 		IncludeDependencies: selection.IncludeDependencies,
 		IncludeDependents:   selection.IncludeDependents,
 	})
+}
+
+// allNodesPresent reports whether every ID in nodeIDs exists in the graph.
+func allNodesPresent(graph *dependency.Graph, nodeIDs []string) bool {
+	for _, id := range nodeIDs {
+		if _, ok := graph.Nodes[id]; !ok {
+			return false
+		}
+	}
+	return true
 }
 
 // filterGraphByStack filters the graph to the nodes belonging to the given stack.
@@ -205,7 +228,7 @@ func filterGraphByStack(graph *dependency.Graph, stack string) *dependency.Graph
 func GraphNodeID(componentName, stackName string) string {
 	defer perf.Track(nil, "component.GraphNodeID")()
 
-	return fmt.Sprintf(graphNodeIDFormat, componentName, stackName)
+	return fmt.Sprintf(graphNodeIDFormat, len(componentName), componentName, len(stackName), stackName)
 }
 
 func walkComponents(stacks map[string]any, componentType string, fn func(stackName, componentName string, componentSection map[string]any) error) error {

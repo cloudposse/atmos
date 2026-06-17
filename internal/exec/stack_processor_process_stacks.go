@@ -72,6 +72,7 @@ func ProcessStackConfig(
 	globalHelmSection := map[string]any{}
 	globalComponentsSection := map[string]any{}
 	globalAuthSection := map[string]any{}
+	globalSecretsSection := map[string]any{}
 
 	terraformVars := map[string]any{}
 	terraformSettings := map[string]any{}
@@ -114,6 +115,10 @@ func ProcessStackConfig(
 	kubernetesGenerate := map[string]any{}
 	kubernetesSource := map[string]any{}
 	kubernetesProvision := map[string]any{}
+	kubernetesProvider := ""
+	var kubernetesPaths any
+	var kubernetesManifests any
+	kubernetesRender := map[string]any{}
 
 	helmVars := map[string]any{}
 	helmSettings := map[string]any{}
@@ -223,6 +228,15 @@ func ProcessStackConfig(
 		globalAuthSection, ok = i.(map[string]any)
 		if !ok {
 			return nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidAuthSection, stackName)
+		}
+	}
+
+	// Stack-level (global) secrets declarations/providers; merged into every component's
+	// secrets section so providers and declarations can be defined once per stack.
+	if i, ok := config[cfg.SecretsSectionName]; ok {
+		globalSecretsSection, ok = i.(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidComponentSecrets, stackName)
 		}
 	}
 
@@ -710,6 +724,30 @@ func ProcessStackConfig(
 		}
 	}
 
+	// Stack-global Kubernetes provider/paths/manifests/render defaults. These form
+	// the lowest-precedence layer (below base and component) in the final merge.
+	if i, ok := globalKubernetesSection[cfg.ProviderSectionName]; ok {
+		kubernetesProvider, ok = i.(string)
+		if !ok {
+			return nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidConfig, stackName)
+		}
+	}
+
+	if i, ok := globalKubernetesSection[cfg.PathsSectionName]; ok {
+		kubernetesPaths = i
+	}
+
+	if i, ok := globalKubernetesSection[cfg.ManifestsSectionName]; ok {
+		kubernetesManifests = i
+	}
+
+	if i, ok := globalKubernetesSection[cfg.RenderSectionName]; ok {
+		kubernetesRender, ok = i.(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidConfig, stackName)
+		}
+	}
+
 	// Helm section.
 	if i, ok := globalHelmSection[cfg.CommandSectionName]; ok {
 		helmCommand, ok = i.(string)
@@ -855,6 +893,7 @@ func ProcessStackConfig(
 					GlobalSettings:                  globalAndTerraformSettings,
 					GlobalEnv:                       globalAndTerraformEnv,
 					GlobalAuth:                      globalAndTerraformAuth,
+					GlobalSecrets:                   globalSecretsSection,
 					GlobalDependencies:              globalAndTerraformDependencies,
 					GlobalCommand:                   terraformCommand,
 					AtmosGlobalAuthMap:              atmosAuthConfig,
@@ -902,6 +941,7 @@ func ProcessStackConfig(
 					GlobalSettings:           globalAndHelmfileSettings,
 					GlobalEnv:                globalAndHelmfileEnv,
 					GlobalAuth:               globalAndHelmfileAuth,
+					GlobalSecrets:            globalSecretsSection,
 					GlobalDependencies:       globalAndHelmfileDependencies,
 					GlobalCommand:            helmfileCommand,
 					AtmosGlobalAuthMap:       atmosAuthConfig,
@@ -940,6 +980,7 @@ func ProcessStackConfig(
 					GlobalSettings:           globalAndPackerSettings,
 					GlobalEnv:                globalAndPackerEnv,
 					GlobalAuth:               globalAndPackerAuth,
+					GlobalSecrets:            globalSecretsSection,
 					GlobalDependencies:       globalAndPackerDependencies,
 					GlobalCommand:            packerCommand,
 					AtmosGlobalAuthMap:       atmosAuthConfig,
@@ -978,6 +1019,7 @@ func ProcessStackConfig(
 					GlobalSettings:           globalAndAnsibleSettings,
 					GlobalEnv:                globalAndAnsibleEnv,
 					GlobalAuth:               globalAndAnsibleAuth,
+					GlobalSecrets:            globalSecretsSection,
 					GlobalDependencies:       globalAndAnsibleDependencies,
 					GlobalCommand:            ansibleCommand,
 					AtmosGlobalAuthMap:       atmosAuthConfig,
@@ -1031,6 +1073,10 @@ func ProcessStackConfig(
 					GlobalAndTerraformGenerate: globalAndKubernetesGenerate,
 					GlobalSourceSection:        kubernetesSource,
 					GlobalProvisionSection:     kubernetesProvision,
+					GlobalKubernetesProvider:   kubernetesProvider,
+					GlobalKubernetesPaths:      kubernetesPaths,
+					GlobalKubernetesManifests:  kubernetesManifests,
+					GlobalKubernetesRender:     kubernetesRender,
 					AtmosConfig:                atmosConfig,
 				}, nil
 			}

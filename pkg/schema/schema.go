@@ -84,6 +84,7 @@ type AtmosConfiguration struct {
 	Settings                      AtmosSettings      `yaml:"settings,omitempty" json:"settings,omitempty" mapstructure:"settings"`
 	Describe                      Describe           `yaml:"describe,omitempty" json:"describe,omitempty" mapstructure:"describe"`
 	StoresConfig                  store.StoresConfig `yaml:"stores,omitempty" json:"stores,omitempty" mapstructure:"stores"`
+	Secrets                       SecretsConfig      `yaml:"secrets,omitempty" json:"secrets,omitempty" mapstructure:"secrets"`
 	Vendor                        Vendor             `yaml:"vendor,omitempty" json:"vendor,omitempty" mapstructure:"vendor"`
 	Initialized                   bool               `yaml:"initialized" json:"initialized" mapstructure:"initialized"`
 	BasePathAbsolute              string             `yaml:"basePathAbsolute,omitempty" json:"basePathAbsolute,omitempty" mapstructure:"basePathAbsolute"`
@@ -561,6 +562,73 @@ type Terraform struct {
 	CI TerraformCI `yaml:"ci,omitempty" json:"ci,omitempty" mapstructure:"ci"`
 	// Workspace holds workspace-related configuration for backend key generation.
 	Workspace WorkspaceConfig `yaml:"workspace,omitempty" json:"workspace,omitempty" mapstructure:"workspace"`
+	// RC holds Terraform CLI configuration (.terraformrc) that Atmos renders and
+	// exposes to the terraform/tofu subprocess via TF_CLI_CONFIG_FILE. Disabled by default.
+	RC *TerraformRCConfig `yaml:"rc,omitempty" json:"rc,omitempty" mapstructure:"rc"`
+	// Cache holds the Terraform registry cache configuration (provider + module
+	// caching via an ephemeral network-mirror proxy). Disabled by default.
+	Cache *TerraformCacheConfig `yaml:"cache,omitempty" json:"cache,omitempty" mapstructure:"cache"`
+	// Platforms lists the target platforms a project builds for, as <os>_<arch>
+	// (e.g. linux_amd64, darwin_arm64). It is consumed by `atmos terraform cache
+	// mirror` (eager multi-platform pre-seeding) and by the automatic post-init
+	// `providers lock` that keeps .terraform.lock.hcl complete across platforms.
+	// Empty defaults to the current host platform.
+	Platforms []string `yaml:"platforms,omitempty" json:"platforms,omitempty" mapstructure:"platforms"`
+}
+
+// TerraformRCConfig is a near-opaque passthrough rendered into Terraform's native
+// CLI configuration (HCL). Only `enabled` is typed; all remaining keys are captured
+// verbatim in Config and rendered as CLI-config directives (provider_installation,
+// host, credentials, plugin_cache_dir, ...), so new directives require no Atmos
+// schema change.
+type TerraformRCConfig struct {
+	// Enabled turns on rendering of the CLI configuration. Defaults to false.
+	Enabled bool `yaml:"enabled,omitempty" json:"enabled,omitempty" mapstructure:"enabled"`
+	// Config captures all remaining keys verbatim (provider_installation, host, ...).
+	Config map[string]any `yaml:",inline" json:",inline" mapstructure:",remain"`
+}
+
+// TerraformCacheConfig configures the Terraform registry cache. The cache is
+// execution-environment (runner) configuration — where/how a machine caches
+// registry content — not stack data.
+type TerraformCacheConfig struct {
+	// Enabled turns on the registry cache. Defaults to false.
+	Enabled bool `yaml:"enabled,omitempty" json:"enabled,omitempty" mapstructure:"enabled"`
+	// Location is the cache root. Defaults to the XDG cache directory
+	// (~/.cache/atmos or $XDG_CACHE_HOME/atmos) under terraform/registry.
+	Location string `yaml:"location,omitempty" json:"location,omitempty" mapstructure:"location"`
+	// Backend selects the storage backend. filesystem (default) in V1.
+	Backend TerraformCacheBackend `yaml:"backend,omitempty" json:"backend,omitempty" mapstructure:"backend"`
+	// MetadataTTL is the time-to-live for registry metadata. Defaults to 24h.
+	MetadataTTL string `yaml:"metadata_ttl,omitempty" json:"metadata_ttl,omitempty" mapstructure:"metadata_ttl"`
+	// StaleWhileRevalidate is the window during which stale metadata may be served
+	// while revalidating in the background. Defaults to 168h.
+	StaleWhileRevalidate string `yaml:"stale_while_revalidate,omitempty" json:"stale_while_revalidate,omitempty" mapstructure:"stale_while_revalidate"`
+	// Mirror configures eager multi-platform pre-seeding via `atmos terraform cache
+	// mirror` (which wraps `terraform/tofu providers mirror`). When omitted, mirror
+	// defaults to the current host platform.
+	Mirror *TerraformCacheMirror `yaml:"mirror,omitempty" json:"mirror,omitempty" mapstructure:"mirror"`
+}
+
+// TerraformCacheBackend selects and configures the cache storage backend.
+type TerraformCacheBackend struct {
+	// Type is the storage backend: filesystem (default, maps to artifact local/dir).
+	Type string `yaml:"type,omitempty" json:"type,omitempty" mapstructure:"type"`
+	// Options carries backend-specific configuration.
+	Options map[string]any `yaml:"options,omitempty" json:"options,omitempty" mapstructure:"options"`
+}
+
+// TerraformCacheMirror configures eager, multi-platform pre-seeding of the cache
+// using `terraform/tofu providers mirror`. The mirror writes the canonical
+// filesystem_mirror layout the lazy proxy already serves, so the same cache
+// directory works lazily (proxy), eagerly (mirror), and offline (filesystem_mirror).
+//
+// The target platforms live at components.terraform.platforms (a project-level
+// property shared with the automatic post-init `providers lock`), not here.
+type TerraformCacheMirror struct {
+	// Enabled expresses fleet pre-seeding policy; the `cache mirror` command runs
+	// regardless of this value. Defaults to false.
+	Enabled bool `yaml:"enabled,omitempty" json:"enabled,omitempty" mapstructure:"enabled"`
 }
 
 // WorkspaceConfig holds workspace-related configuration.
@@ -638,6 +706,27 @@ type TerraformPlanCIResult struct {
 	FinishedAt time.Time
 	DurationMS int64
 	Error      string
+}
+
+// KubernetesCIResult contains the compact result data rendered into native CI
+// job summaries for one Kubernetes component command.
+type KubernetesCIResult struct {
+	Stack        string
+	Component    string
+	Command      string
+	ExitCode     int
+	Error        string
+	ObjectsTotal int
+	Actions      []KubernetesObjectCIResult
+	ActionCounts map[string]int
+}
+
+// KubernetesObjectCIResult contains one Kubernetes object action row.
+type KubernetesObjectCIResult struct {
+	Action    string
+	Resource  string
+	Namespace string
+	Name      string
 }
 
 // CIConfig contains CI/CD integration configuration.
@@ -1179,6 +1268,14 @@ type ConfigAndStacksInfo struct {
 	ComponentEnvSection           AtmosSectionMapType
 	ComponentAuthSection          AtmosSectionMapType
 	ComponentEnvList              []string
+	// TerraformSecretVarKeys holds the set of top-level keys in ComponentVarsSection
+	// whose value contains a resolved secret (detected via the masker). These variables
+	// are excluded from the on-disk Terraform varfile and injected at runtime as
+	// TF_VAR_<name> environment variables instead, so plaintext secrets never hit disk.
+	// Computed once early in the execution pipeline (right after secret resolution,
+	// before auth credentials are registered) to keep the varfile-write and env-assembly
+	// steps consistent.
+	TerraformSecretVarKeys map[string]bool
 	// SanitizedEnv holds the sanitized process environment from auth.
 	// When set, subprocess execution uses this instead of re-reading os.Environ(),
 	// which would reintroduce problematic vars (e.g., IRSA credentials on EKS pods).
@@ -1202,8 +1299,13 @@ type ConfigAndStacksInfo struct {
 	//   - pkg/auth already imports pkg/schema (for ConfigAndStacksInfo)
 	//   - This would create: schema → auth → schema (circular dependency error)
 	//   - Type assertions are used at usage sites to recover type safety
-	AuthManager          any
-	AuthDisabled         bool
+	AuthManager  any
+	AuthDisabled bool
+	// SecretsMaskOnly indicates an inspection command (describe/list) is resolving YAML
+	// functions with masking enabled. When true, the `!secret` resolver returns the mask
+	// replacement WITHOUT retrieving from the backend (no credentials required). Value-
+	// producing commands (secret get/pull/push, terraform plan/apply/output) leave this false.
+	SecretsMaskOnly      bool
 	ComponentBackendType string
 	// RequiredVersion is the Terraform version constraint (e.g., ">= 1.10.1").
 	// This is extracted from terraform.required_version or components.terraform.<name>.required_version.
@@ -1294,6 +1396,25 @@ type ConfigAndStacksInfo struct {
 	// centralizes CI output writes for concurrent execution so GitHub
 	// summary/output files are not written by worker goroutines.
 	TerraformPlanCIResultHandler TerraformPlanCIResultHandler
+
+	// RCCleanup, when non-nil, removes the temporary Terraform CLI config file
+	// (TF_CLI_CONFIG_FILE) generated for this run. It is registered during env
+	// assembly and invoked (deferred) after the whole terraform pipeline completes,
+	// so the temp file survives init, workspace, and plan/apply subprocesses.
+	// Transient runtime state — not serialized.
+	RCCleanup func() error `yaml:"-" json:"-" mapstructure:"-"`
+
+	// TerraformCache holds the started registry cache (*pkg/terraform/cache.Setup),
+	// typed as any to avoid a schema→cache import cycle. When non-nil, env assembly
+	// merges its CLI-config contribution (network_mirror + module host overrides)
+	// into the generated RC. Transient runtime state — not serialized.
+	TerraformCache any `yaml:"-" json:"-" mapstructure:"-"`
+
+	// TerraformCacheExternal indicates the caller owns the registry cache lifecycle
+	// (started it and will close it). When true, ExecuteTerraform reuses the
+	// pre-set TerraformCache and does not start, verify, or close its own. Used by
+	// `atmos terraform cache mirror` to share one proxy across components.
+	TerraformCacheExternal bool `yaml:"-" json:"-" mapstructure:"-"`
 }
 
 // GetComponentEnvSection returns the component's env section map.
@@ -1413,6 +1534,7 @@ type BaseComponentConfig struct {
 	BaseComponentSettings          AtmosSectionMapType
 	BaseComponentEnv               AtmosSectionMapType
 	BaseComponentAuth              AtmosSectionMapType
+	BaseComponentSecrets           AtmosSectionMapType
 	BaseComponentDependencies      AtmosSectionMapType
 	BaseComponentLocals            AtmosSectionMapType // Component-level locals for template processing.
 	BaseComponentMetadata          AtmosSectionMapType

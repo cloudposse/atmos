@@ -14,7 +14,8 @@ import DocCardList from '@theme/DocCardList'
 
 <Intro>
 The `ci` section of `atmos.yaml` configures native CI/CD integration, including output variables,
-job summaries, status checks, PR comments, and template overrides.
+job summaries, status checks, PR comments, and template overrides. Terraform supports the full
+feature set; Kubernetes v1 CI support writes job summaries only.
 </Intro>
 
 <Experimental />
@@ -57,6 +58,16 @@ ci:
 ## Sections
 
 <DocCardList />
+
+## Component Support
+
+| Component type | Job summaries | Output variables | Status checks | PR comments | Artifacts |
+| --- | --- | --- | --- | --- | --- |
+| Terraform | Yes | Yes | Yes | Yes | Planfiles |
+| Kubernetes | Yes | No | No | No | No |
+
+Kubernetes summaries cover render, plan/diff, apply/deploy, delete, validate, and command failures.
+They intentionally do not create a machine-readable output contract in v1.
 
 ## Full Example
 

@@ -3,17 +3,21 @@ title: atmos kubernetes delete
 sidebar_label: delete
 sidebar_class_name: command
 id: delete
+description: Delete the Kubernetes objects managed by a stack-configured component from the target cluster.
 ---
 
 import Intro from "@site/src/components/Intro";
 import ActionCard from "@site/src/components/ActionCard";
 import PrimaryCTA from "@site/src/components/PrimaryCTA";
+import Screengrab from "@site/src/components/Screengrab";
 
 <Intro>
   Remove the Kubernetes objects managed by a stack-configured component. Atmos
   renders the same manifests used for deployment, resolves each object, and
   deletes it from the target cluster by name and namespace.
 </Intro>
+
+<Screengrab title="atmos kubernetes delete --help" slug="atmos-kubernetes-delete--help" />
 
 <ActionCard title="Configure Kubernetes Components">
   Keep the desired objects in stack configuration, then use `delete` when a

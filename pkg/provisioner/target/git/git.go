@@ -12,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	atmosgit "github.com/cloudposse/atmos/pkg/git"
@@ -142,12 +143,20 @@ func commitAndPush(ctx context.Context, s *repoSession, cfg *config, artifact *t
 // writeArtifact replaces the managed subtree under <workdir>/<path> with the
 // artifact files, so removals propagate deterministically.
 func writeArtifact(workdir, path string, artifact *target.ProvisionArtifact) error {
+	// Guard against deleting the worktree root: ValidateRepoRelativePath resolves
+	// root-equivalent paths ("", ".", "./", "a/..") to the worktree root, and a
+	// subsequent os.RemoveAll there would destroy the entire repository (including
+	// .git). filepath.Clean normalizes all such variants to "." before the check.
+	if trimmed := strings.TrimSpace(path); filepath.Clean(trimmed) == "." {
+		return fmt.Errorf("%w: %q", errUtils.ErrGitTargetPathInvalid, path)
+	}
+
 	absPath, err := atmosgit.ValidateRepoRelativePath(workdir, path)
 	if err != nil {
 		return err
 	}
 	if err := os.RemoveAll(absPath); err != nil {
-		return fmt.Errorf("clearing managed path %q: %w", path, err)
+		return fmt.Errorf("%w: clearing managed path %q: %w", errUtils.ErrGitArtifactWrite, path, err)
 	}
 
 	for _, rel := range sortedFileKeys(artifact.Files) {
@@ -157,10 +166,10 @@ func writeArtifact(workdir, path string, artifact *target.ProvisionArtifact) err
 			return err
 		}
 		if err := os.MkdirAll(filepath.Dir(abs), dirPerm); err != nil {
-			return fmt.Errorf("creating directory for %q: %w", repoRel, err)
+			return fmt.Errorf("%w: creating directory for %q: %w", errUtils.ErrGitArtifactWrite, repoRel, err)
 		}
 		if err := os.WriteFile(abs, artifact.Files[rel], filePerm); err != nil {
-			return fmt.Errorf("writing %q: %w", repoRel, err)
+			return fmt.Errorf("%w: writing %q: %w", errUtils.ErrGitArtifactWrite, repoRel, err)
 		}
 	}
 	return nil

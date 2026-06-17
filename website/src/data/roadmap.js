@@ -87,15 +87,17 @@ export const roadmapConfig = {
       prd: 'native-ci-integration',
     },
     {
-      id: 'pro-commit',
-      icon: 'RiGitCommitLine',
-      title: 'Server-Side Commits via GitHub App',
-      tagline: 'Commits that trigger CI, without write tokens',
-      description: 'New `atmos pro commit` command sends changes to Atmos Pro, which creates the commit server-side using its GitHub App. Commits trigger CI workflows unlike GITHUB_TOKEN commits.',
-      benefits: 'Replaces autofix.ci for autocommit workflows. The workflow never receives a write token — Atmos Pro controls exactly what gets committed.',
+      id: 'secrets-management',
+      icon: 'RiShieldKeyholeLine',
+      title: 'Secrets Management',
+      tagline: 'Declared per environment, masked everywhere',
+      description: 'Declare the secrets each component depends on and provision their values per environment across backends like 1Password, GitHub Actions, AWS Secrets Manager, and SOPS. Resolve them at runtime with the `!secret` YAML function.',
+      benefits: 'Every environment\'s secrets are declared in git, so nothing is forgotten. Values are masked everywhere automatically, and you can review any stack—production included—without credentials.',
       status: 'shipped',
       quarter: 'q2-2026',
-      changelog: 'pro-commit',
+      docs: '/cli/configuration/secrets',
+      changelog: 'secrets-management',
+      experimental: true,
     },
     {
       id: 'source-provisioning',
@@ -270,7 +272,7 @@ export const roadmapConfig = {
       tagline: 'Bootstrap systems and create reusable patterns',
       description:
         'Bootstrapping new environments and repeating complex multi-step operations manually is error-prone and time-consuming. Workflows encode these patterns once and execute them reliably across teams and environments.',
-      progress: 86,
+      progress: 88,
       status: 'in-progress',
       milestones: [
         { label: 'New workflow step types (toast, alert, title, clear, env, exit, sleep, stage, show, linebreak, markdown, style, table, format, join, pager, spin)', status: 'shipped', quarter: 'q4-2025', docs: '/cli/configuration/workflows', pr: 1899, changelog: 'custom-commands-step-types', description: 'Rich step types for output formatting (toast, alert, markdown, style, table), flow control (sleep, stage, exit, clear), and data manipulation (format, join, env).', category: 'featured', priority: 'high', benefits: 'Build interactive deployment workflows with rich TUI output, user confirmations, and status updates.' },
@@ -280,6 +282,7 @@ export const roadmapConfig = {
         { label: 'Integration with `atmos auth` identities for per-step authentication', status: 'shipped', quarter: 'q3-2025', docs: '/cli/configuration/auth/identities', changelog: 'authentication-for-workflows-and-custom-commands', version: 'v1.197.0', description: 'Each workflow step can use different credentials for cross-account deployments.', category: 'featured', priority: 'high', benefits: 'Deploy to multiple accounts in sequence without credential juggling.' },
         { label: 'Unified task execution (`pkg/runner`)', status: 'shipped', quarter: 'q4-2025', pr: 1901, changelog: 'unified-task-runner', description: 'A single execution engine for all task types—Terraform, Helmfile, shell, and custom commands.', benefits: 'Consistent behavior across all command types. Same output handling, error reporting, and logging.' },
         { label: 'Workflow environment variables', status: 'shipped', quarter: 'q1-2026', pr: 2050, changelog: 'workflow-environment-variables', description: 'Set environment variables once per workflow and override only what matters at each step.', benefits: 'Parameterize workflow steps using simple environment variables.' },
+        { label: 'Terminal steps: tty/interactive fields and exec step type', status: 'shipped', quarter: 'q2-2026', pr: 2602, changelog: 'tty-interactive-steps', description: 'Shell steps in custom commands and workflows can set `tty: true` to allocate a PTY for the child process and `interactive: true` to hand the terminal directly to tools like `aws ssm start-session`, `ssh`, or `psql`. A new `type: exec` step type replaces the Atmos process via execve so the target program owns the terminal directly; it must be the final step in its command or workflow, and on Windows the exec is emulated with exit-code propagation. Secret masking is preserved, Ctrl-C is forwarded to the child instead of killing Atmos, and exit codes propagate correctly across all three modes.', benefits: 'Interactive CLI tools, terminal sessions, database clients, and SSH tunnels launch directly from atmos.yaml without wrapper scripts. Use `type: exec` when you want the target program to fully replace Atmos as the process (e.g. drop into a shell or hand off to a long-running daemon).' },
       ],
       issues: [],
       prs: [
@@ -347,7 +350,7 @@ export const roadmapConfig = {
       tagline: 'Purpose-built engine with retry and resilience',
       description:
         'Terraform users expect to declare module sources inline. The source provisioner brings this pattern to stack configuration—declare where components come from and let vendoring handle the rest with retries, concurrency, and graceful failure recovery.',
-      progress: 91,
+      progress: 92,
       status: 'in-progress',
       milestones: [
         { label: 'Retry with exponential backoff', status: 'shipped', quarter: 'q3-2025', docs: '/cli/commands/vendor/vendor-pull', description: 'Automatic retries with increasing delays for transient network failures and rate limits.', category: 'featured', priority: 'high', benefits: 'Vendoring succeeds despite flaky networks or GitHub rate limits. CI doesn\'t fail on transient errors.' },
@@ -361,6 +364,8 @@ export const roadmapConfig = {
         { label: 'Automatic component refresh on version changes', status: 'shipped', quarter: 'q1-2026', pr: 2010, changelog: 'version-aware-jit-provisioning', description: 'Workdirs automatically refresh when component version or source URI changes. Includes TTL-based cleanup for stale workdirs.', benefits: 'Change a component version and Atmos automatically re-provisions. Clean up old workdirs with --ttl=7d. No manual cleanup required.' },
         { label: 'Source cache TTL for JIT-vendored components', status: 'shipped', quarter: 'q1-2026', pr: 2138, changelog: 'source-cache-ttl', prd: 'source-cache-ttl', docs: '/cli/commands/terraform/source', description: 'TTL-based cache expiration for JIT-vendored sources. Set ttl on source config to control how long cached sources are reused before re-pulling from the remote.', benefits: 'Floating refs like branch names automatically refresh. Set ttl: 0s for active development or ttl: 1h for team collaboration. No manual cleanup required.' },
         { label: 'Per-target version overrides', status: 'shipped', quarter: 'q1-2026', pr: 2141, changelog: 'vendor-target-version-overrides', docs: '/design-patterns/version-management/vendoring-components', description: 'Vendor targets now accept both strings and maps with optional version overrides, enabling multiple versions of the same component from a single source entry.', benefits: 'Vendor multiple component versions without duplicating source entries. Cleaner, more maintainable vendor manifests.' },
+        { label: 'Terraform CLI config management', status: 'shipped', quarter: 'q2-2026', pr: 2582, changelog: 'terraform-rc-management', prd: 'terraform-rc-management', description: 'Declare Terraform/OpenTofu CLI configuration (.terraformrc / .tofurc) under components.terraform.rc. Atmos renders it and exposes it via TF_CLI_CONFIG_FILE and TOFU_CLI_CONFIG_FILE.', benefits: 'No hand-managed .terraformrc or manual env exports. A near-opaque passthrough, so new CLI-config directives work without an Atmos release.', experimental: true },
+        { label: 'Terraform registry cache', status: 'shipped', quarter: 'q2-2026', pr: 2582, changelog: 'terraform-registry-cache', prd: 'terraform-registry-cache', description: 'Transparently cache Terraform/OpenTofu providers and modules behind one flag (components.terraform.cache.enabled) via an ephemeral local network-mirror proxy. Includes atmos terraform cache list/stats/prune/delete.', benefits: 'Faster repeated and CI runs, resilience to registry outages, and reproducibility — dependencies become artifacts Atmos owns, stores, and reproduces. No changes to Terraform code, providers, or module sources.', experimental: true },
       ],
       issues: [],
       prs: [
@@ -564,6 +569,8 @@ export const roadmapConfig = {
         { label: 'Configurable replacement string', status: 'shipped', quarter: 'q1-2026', pr: 1972, changelog: 'custom-secrets-masking', description: 'Customize the masked output replacement string from the default <MASKED> to any value.', benefits: 'Use [REDACTED], <secret>, or any string that fits your logging and compliance requirements.' },
         { label: '`!store` YAML function for secrets', status: 'shipped', quarter: 'q3-2025', docs: '/functions/yaml/store', description: 'Access secrets from configured stores (SSM, Secrets Manager, etc.) directly in stack configuration.', codeExample: 'api_key: !store ssm:/myapp/api-key', benefits: 'Reference secrets at deploy time. No hardcoded values or environment variables needed.' },
         { label: 'Output masking across all channels', status: 'shipped', quarter: 'q1-2026', pr: 1972, changelog: 'custom-secrets-masking', description: 'Provably complete masking—all output channels route through the masking layer including terraform output, shell commands, logs, auth commands, documentation display, and error messages.', benefits: 'Provably safe output with no bypass paths. Secrets cannot leak through any channel.' },
+        { label: 'Declarative secrets + `atmos secret` CRUD CLI', status: 'shipped', quarter: 'q2-2026', docs: '/cli/commands/secret/usage', changelog: 'secrets-management', prd: 'secrets-management', description: 'GitOps-friendly secret declarations under secrets.vars resolved with the !secret YAML function, plus a full CRUD CLI (init/set/get/delete/list/pull/push/import/validate) over AWS SSM, AWS Secrets Manager, HashiCorp Vault, Azure Key Vault, GCP Secret Manager, and SOPS.', benefits: 'Declare secrets in git and manage their values with a Vercel-like CLI. Inspection commands resolve !secret to <MASKED> without credentials.' },
+        { label: '`!secret` YAML function with no-credential inspection', status: 'shipped', quarter: 'q2-2026', docs: '/functions/yaml/secret', changelog: 'secrets-management', prd: 'secrets-management', description: 'The !secret function resolves declared secrets and auto-registers them with the masker. On describe/list with masking enabled, it resolves to <MASKED> without contacting the backend.', benefits: 'Diff or review a stack in CI or on a laptop with no cloud access. Sensitive Terraform outputs are masked automatically.' },
 
       ],
       issues: [],

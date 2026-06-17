@@ -18,6 +18,8 @@ const (
 	AfterTerraformDestroyAggregate HookEvent = "after.terraform.destroy.aggregate"
 	BeforeKubernetesRender         HookEvent = "before.kubernetes.render"
 	AfterKubernetesRender          HookEvent = "after.kubernetes.render"
+	BeforeKubernetesPlan           HookEvent = "before.kubernetes.plan"
+	AfterKubernetesPlan            HookEvent = "after.kubernetes.plan"
 	BeforeKubernetesDiff           HookEvent = "before.kubernetes.diff"
 	AfterKubernetesDiff            HookEvent = "after.kubernetes.diff"
 	BeforeKubernetesApply          HookEvent = "before.kubernetes.apply"
@@ -26,6 +28,8 @@ const (
 	AfterKubernetesDeploy          HookEvent = "after.kubernetes.deploy"
 	BeforeKubernetesDelete         HookEvent = "before.kubernetes.delete"
 	AfterKubernetesDelete          HookEvent = "after.kubernetes.delete"
+	BeforeKubernetesValidate       HookEvent = "before.kubernetes.validate"
+	AfterKubernetesValidate        HookEvent = "after.kubernetes.validate"
 	BeforeHelmTemplate             HookEvent = "before.helm.template"
 	AfterHelmTemplate              HookEvent = "after.helm.template"
 	BeforeHelmDiff                 HookEvent = "before.helm.diff"
@@ -60,6 +64,10 @@ func (e HookEvent) Normalize() HookEvent {
 		return AfterTerraformApply
 	case BeforeTerraformDeploy:
 		return BeforeTerraformApply
+	case AfterKubernetesPlan:
+		return AfterKubernetesDiff
+	case BeforeKubernetesPlan:
+		return BeforeKubernetesDiff
 	case AfterKubernetesDeploy:
 		return AfterKubernetesApply
 	case BeforeKubernetesDeploy:
@@ -77,11 +85,12 @@ func (e HookEvent) Normalize() HookEvent {
 	}
 }
 
-// IsPostExecution reports whether the event fires after terraform has already run
-// (and therefore after terraform init has already completed).
-// Store hooks use this to decide whether to skip terraform init when reading outputs:
-// after-events can safely skip init because the workdir is already initialized;
-// before-events must run init because the workdir may not be initialized yet.
+// IsPostExecution reports whether the event fires after a component command has
+// already run, i.e. any "after.*" event (Terraform, Kubernetes, etc.).
+// For Terraform specifically, store hooks use this to decide whether to skip
+// terraform init when reading outputs: after-events can safely skip init because
+// the workdir is already initialized, while before-events must run init because
+// the workdir may not be initialized yet.
 func (e HookEvent) IsPostExecution() bool {
 	return strings.HasPrefix(string(e), "after.")
 }

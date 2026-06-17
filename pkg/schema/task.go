@@ -16,6 +16,9 @@ const (
 	TaskTypeShell = "shell"
 	// TaskTypeAtmos is the task type for atmos commands.
 	TaskTypeAtmos = "atmos"
+	// TaskTypeExec is the task type for commands that replace the Atmos
+	// process entirely (shell exec semantics). Must be the final step.
+	TaskTypeExec = "exec"
 )
 
 // Sentinel errors for task validation.
@@ -34,7 +37,7 @@ type Task struct {
 	Name string `yaml:"name,omitempty" json:"name,omitempty" mapstructure:"name"`
 	// Command is the command to execute.
 	Command string `yaml:"command,omitempty" json:"command,omitempty" mapstructure:"command"`
-	// Type specifies the command type: TaskTypeShell or TaskTypeAtmos. Defaults to TaskTypeShell.
+	// Type specifies the command type: TaskTypeShell, TaskTypeAtmos, or TaskTypeExec. Defaults to TaskTypeShell.
 	Type string `yaml:"type,omitempty" json:"type,omitempty" mapstructure:"type"`
 	// Timeout specifies the maximum duration for the task. Zero means no timeout.
 	Timeout time.Duration `yaml:"timeout,omitempty" json:"timeout,omitempty" mapstructure:"timeout"`
@@ -46,6 +49,10 @@ type Task struct {
 	Retry *RetryConfig `yaml:"retry,omitempty" json:"retry,omitempty" mapstructure:"retry"`
 	// Identity specifies the authentication identity to use.
 	Identity string `yaml:"identity,omitempty" json:"identity,omitempty" mapstructure:"identity"`
+	// Interactive attaches host stdin to the step and lets the step handle Ctrl-C (like docker -i).
+	Interactive bool `yaml:"interactive,omitempty" json:"interactive,omitempty" mapstructure:"interactive"`
+	// Tty allocates a pseudo-terminal for the step (like docker -t). Combine with interactive for full terminal sessions.
+	Tty bool `yaml:"tty,omitempty" json:"tty,omitempty" mapstructure:"tty"`
 
 	// Interactive step fields.
 	Prompt      string   `yaml:"prompt,omitempty" json:"prompt,omitempty" mapstructure:"prompt"`                // Prompt text for interactive types.
@@ -182,6 +189,8 @@ func (task *Task) ToWorkflowStep() WorkflowStep {
 		WorkingDirectory: task.WorkingDirectory,
 		Retry:            task.Retry,
 		Identity:         task.Identity,
+		Interactive:      task.Interactive,
+		Tty:              task.Tty,
 
 		// Interactive step fields.
 		Prompt:      task.Prompt,
@@ -264,6 +273,8 @@ func TaskFromWorkflowStep(step *WorkflowStep) Task {
 		WorkingDirectory: step.WorkingDirectory,
 		Retry:            step.Retry,
 		Identity:         step.Identity,
+		Interactive:      step.Interactive,
+		Tty:              step.Tty,
 		Timeout:          timeout,
 
 		// Interactive step fields.

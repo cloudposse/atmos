@@ -12,6 +12,8 @@ import (
 	sigsyaml "sigs.k8s.io/yaml"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/data"
+	"github.com/cloudposse/atmos/pkg/ui"
 )
 
 // fileNameSep separates the parts of a generated manifest file name.
@@ -29,6 +31,9 @@ func resolveRenderOptions(flags map[string]any, componentSection map[string]any)
 	if value, ok := flags["output"].(string); ok && value != "" {
 		options.Output = value
 		options.OutputDir = ""
+		// --output is single-file mode; clear any component-configured split so it
+		// does not fail validation ("--split requires --output-dir").
+		options.Split = false
 	}
 	if value, ok := flags["output_dir"].(string); ok && value != "" {
 		options.OutputDir = value
@@ -97,47 +102,46 @@ func dispatchRender(objects []*unstructured.Unstructured, options renderOptions)
 	case options.OutputDir != "":
 		return writeSingleManifestFile(filepath.Join(options.OutputDir, "manifest.yaml"), objects)
 	default:
-		data, renderErr := multiDocumentYAML(objects)
+		manifests, renderErr := multiDocumentYAML(objects)
 		if renderErr != nil {
 			return renderErr
 		}
-		_, err := os.Stdout.Write(data)
-		return err
+		return data.Write(string(manifests))
 	}
 }
 
 func writeSingleManifestFile(path string, objects []*unstructured.Unstructured) error {
 	if err := os.MkdirAll(filepath.Dir(path), dirPerm); err != nil {
-		return fmt.Errorf("failed to create render output directory for %q: %w", path, err)
+		return fmt.Errorf("%w: creating output directory for %q: %w", errUtils.ErrKubernetesRenderOutput, path, err)
 	}
-	data, err := multiDocumentYAML(objects)
+	manifests, err := multiDocumentYAML(objects)
 	if err != nil {
 		return err
 	}
-	if err := os.WriteFile(path, data, filePerm); err != nil {
-		return fmt.Errorf("failed to write rendered manifests to %q: %w", path, err)
+	if err := os.WriteFile(path, manifests, filePerm); err != nil {
+		return fmt.Errorf("%w: writing to %q: %w", errUtils.ErrKubernetesRenderOutput, path, err)
 	}
-	fmt.Fprintf(os.Stdout, "rendered %d Kubernetes object(s) to %s\n", len(objects), path)
+	ui.Infof("rendered %d Kubernetes object(s) to %s", len(objects), path)
 	return nil
 }
 
 func writeSplitManifestFiles(outputDir string, objects []*unstructured.Unstructured) error {
 	if err := os.MkdirAll(outputDir, dirPerm); err != nil {
-		return fmt.Errorf("failed to create render output directory %q: %w", outputDir, err)
+		return fmt.Errorf("%w: creating output directory %q: %w", errUtils.ErrKubernetesRenderOutput, outputDir, err)
 	}
 
 	for i, obj := range objects {
 		path := filepath.Join(outputDir, objectManifestFileName(i, obj))
-		data, err := objectYAML(obj)
+		manifest, err := objectYAML(obj)
 		if err != nil {
 			return err
 		}
-		if err := os.WriteFile(path, data, filePerm); err != nil {
-			return fmt.Errorf("failed to write rendered manifest %q: %w", path, err)
+		if err := os.WriteFile(path, manifest, filePerm); err != nil {
+			return fmt.Errorf("%w: writing manifest %q: %w", errUtils.ErrKubernetesRenderOutput, path, err)
 		}
 	}
 
-	fmt.Fprintf(os.Stdout, "rendered %d Kubernetes object(s) to %s\n", len(objects), outputDir)
+	ui.Infof("rendered %d Kubernetes object(s) to %s", len(objects), outputDir)
 	return nil
 }
 
@@ -147,12 +151,12 @@ func multiDocumentYAML(objects []*unstructured.Unstructured) ([]byte, error) {
 		if i > 0 {
 			buffer.WriteString("---\n")
 		}
-		data, err := objectYAML(obj)
+		manifest, err := objectYAML(obj)
 		if err != nil {
 			return nil, err
 		}
-		buffer.Write(data)
-		if !bytes.HasSuffix(data, []byte("\n")) {
+		buffer.Write(manifest)
+		if !bytes.HasSuffix(manifest, []byte("\n")) {
 			buffer.WriteByte('\n')
 		}
 	}
@@ -162,7 +166,7 @@ func multiDocumentYAML(objects []*unstructured.Unstructured) ([]byte, error) {
 func objectYAML(obj *unstructured.Unstructured) ([]byte, error) {
 	data, err := sigsyaml.Marshal(obj.Object)
 	if err != nil {
-		return nil, fmt.Errorf("failed to render %s/%s: %w", obj.GetKind(), obj.GetName(), err)
+		return nil, fmt.Errorf("%w: %s/%s: %w", errUtils.ErrKubernetesRender, obj.GetKind(), obj.GetName(), err)
 	}
 	return data, nil
 }

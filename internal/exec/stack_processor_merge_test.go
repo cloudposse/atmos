@@ -471,6 +471,157 @@ func TestMergeComponentConfigurations_Plugins(t *testing.T) {
 	})
 }
 
+// TestMergeComponentConfigurations_GlobalKubernetesDefaults verifies stack-global
+// Kubernetes provider/paths/manifests/render defaults are the lowest-precedence layer:
+// they flow through when the component sets nothing, and the component overrides them.
+func TestMergeComponentConfigurations_GlobalKubernetesDefaults(t *testing.T) {
+	atmosCfg := &schema.AtmosConfiguration{}
+
+	t.Run("global-defaults-flow-through", func(t *testing.T) {
+		opts := ComponentProcessorOptions{
+			ComponentType:             cfg.KubernetesComponentType,
+			Component:                 "api",
+			AtmosConfig:               atmosCfg,
+			GlobalKubernetesProvider:  "kustomize",
+			GlobalKubernetesPaths:     []any{"base"},
+			GlobalKubernetesManifests: []any{"global.yaml"},
+			GlobalKubernetesRender:    map[string]any{"output": map[string]any{"split": true}},
+		}
+		comp, err := mergeComponentConfigurations(atmosCfg, &opts, minimalComponentResult())
+		require.NoError(t, err)
+		assert.Equal(t, "kustomize", comp[cfg.ProviderSectionName])
+		assert.Equal(t, []any{"base"}, comp[cfg.PathsSectionName])
+		assert.Equal(t, []any{"global.yaml"}, comp[cfg.ManifestsSectionName])
+		render, ok := comp[cfg.RenderSectionName].(map[string]any)
+		require.True(t, ok, "render section must be present")
+		out := render["output"].(map[string]any)
+		assert.Equal(t, true, out["split"])
+	})
+
+	t.Run("component-overrides-global", func(t *testing.T) {
+		opts := ComponentProcessorOptions{
+			ComponentType:            cfg.KubernetesComponentType,
+			Component:                "api",
+			AtmosConfig:              atmosCfg,
+			GlobalKubernetesProvider: "kustomize",
+		}
+		res := minimalComponentResult()
+		res.ComponentProvider = "kubectl"
+		comp, err := mergeComponentConfigurations(atmosCfg, &opts, res)
+		require.NoError(t, err)
+		assert.Equal(t, "kubectl", comp[cfg.ProviderSectionName], "component provider must override the global default")
+	})
+}
+
+// TestMergeComponentConfigurations_Kubernetes verifies the full three-level precedence
+// for kubernetes-native sections and supported lifecycle sections.
+func TestMergeComponentConfigurations_Kubernetes(t *testing.T) {
+	atmosCfg := &schema.AtmosConfiguration{}
+
+	t.Run("three-level-precedence-provider-component-wins", func(t *testing.T) {
+		opts := ComponentProcessorOptions{
+			ComponentType:            cfg.KubernetesComponentType,
+			Component:                "api",
+			AtmosConfig:              atmosCfg,
+			GlobalKubernetesProvider: "kustomize",
+		}
+		res := minimalComponentResult()
+		res.BaseComponentProvider = "kubectl"
+		res.ComponentProvider = "kustomize-component"
+		comp, err := mergeComponentConfigurations(atmosCfg, &opts, res)
+		require.NoError(t, err)
+		assert.Equal(t, "kustomize-component", comp[cfg.ProviderSectionName])
+	})
+
+	t.Run("provider-base-wins-over-global", func(t *testing.T) {
+		opts := ComponentProcessorOptions{
+			ComponentType:            cfg.KubernetesComponentType,
+			Component:                "api",
+			AtmosConfig:              atmosCfg,
+			GlobalKubernetesProvider: "kustomize",
+		}
+		res := minimalComponentResult()
+		res.BaseComponentProvider = "kubectl"
+		comp, err := mergeComponentConfigurations(atmosCfg, &opts, res)
+		require.NoError(t, err)
+		assert.Equal(t, "kubectl", comp[cfg.ProviderSectionName])
+	})
+
+	t.Run("paths-and-manifests-merge-across-three-levels", func(t *testing.T) {
+		opts := ComponentProcessorOptions{
+			ComponentType:             cfg.KubernetesComponentType,
+			Component:                 "api",
+			AtmosConfig:               atmosCfg,
+			GlobalKubernetesPaths:     map[string]any{"global": "g.yaml"},
+			GlobalKubernetesManifests: map[string]any{"global": "gm.yaml"},
+		}
+		res := minimalComponentResult()
+		res.BaseComponentPaths = map[string]any{"base": "b.yaml"}
+		res.ComponentPaths = map[string]any{"component": "c.yaml"}
+		res.BaseComponentManifests = map[string]any{"base": "bm.yaml"}
+		res.ComponentManifests = map[string]any{"component": "cm.yaml"}
+		comp, err := mergeComponentConfigurations(atmosCfg, &opts, res)
+		require.NoError(t, err)
+
+		paths, ok := comp[cfg.PathsSectionName].(map[string]any)
+		require.True(t, ok)
+		assert.Equal(t, "g.yaml", paths["global"])
+		assert.Equal(t, "b.yaml", paths["base"])
+		assert.Equal(t, "c.yaml", paths["component"])
+
+		manifests, ok := comp[cfg.ManifestsSectionName].(map[string]any)
+		require.True(t, ok)
+		assert.Equal(t, "gm.yaml", manifests["global"])
+		assert.Equal(t, "bm.yaml", manifests["base"])
+		assert.Equal(t, "cm.yaml", manifests["component"])
+	})
+
+	t.Run("render-merges-with-component-winning-on-conflict", func(t *testing.T) {
+		opts := ComponentProcessorOptions{
+			ComponentType:          cfg.KubernetesComponentType,
+			Component:              "api",
+			AtmosConfig:            atmosCfg,
+			GlobalKubernetesRender: map[string]any{"engine": "global", "from_global": true},
+		}
+		res := minimalComponentResult()
+		res.BaseComponentRender = map[string]any{"engine": "base", "from_base": true}
+		res.ComponentRender = map[string]any{"engine": "component", "from_component": true}
+		comp, err := mergeComponentConfigurations(atmosCfg, &opts, res)
+		require.NoError(t, err)
+
+		render, ok := comp[cfg.RenderSectionName].(map[string]any)
+		require.True(t, ok)
+		assert.Equal(t, "component", render["engine"])
+		assert.Equal(t, true, render["from_global"])
+		assert.Equal(t, true, render["from_base"])
+		assert.Equal(t, true, render["from_component"])
+	})
+
+	t.Run("hooks-generate-source-provision-flow-through", func(t *testing.T) {
+		opts := ComponentProcessorOptions{
+			ComponentType:              cfg.KubernetesComponentType,
+			Component:                  "api",
+			AtmosConfig:                atmosCfg,
+			GlobalAndTerraformHooks:    map[string]any{"before": map[string]any{"a": "global-hook"}},
+			GlobalAndTerraformGenerate: map[string]any{"file.yaml": map[string]any{"from": "global"}},
+			GlobalSourceSection:        map[string]any{"uri": "global-uri"},
+			GlobalProvisionSection:     map[string]any{"workdir": "global-wd"},
+		}
+		res := minimalComponentResult()
+		res.ComponentHooks = map[string]any{"after": map[string]any{"b": "component-hook"}}
+		res.ComponentGenerate = map[string]any{"comp.yaml": map[string]any{"from": "component"}}
+		res.ComponentSourceSection = map[string]any{"version": "1.2.3"}
+		res.ComponentProvision = map[string]any{"timeout": "5m"}
+		comp, err := mergeComponentConfigurations(atmosCfg, &opts, res)
+		require.NoError(t, err)
+
+		assert.Contains(t, comp[cfg.HooksSectionName], "before")
+		assert.Contains(t, comp[cfg.GenerateSectionName], "file.yaml")
+		assert.Equal(t, "global-uri", comp[cfg.SourceSectionName].(map[string]any)["uri"])
+		assert.Equal(t, "5m", comp[cfg.ProvisionSectionName].(map[string]any)["timeout"])
+	})
+}
+
 // TestMergeComponentConfigurations_Retry covers the per-component retry merge added by
 // the component-retry feature: base → component → overrides precedence on scalars, and
 // list-append on the `conditions:` slice (the existing deep-merge semantic). It also

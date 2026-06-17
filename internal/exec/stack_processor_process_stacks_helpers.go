@@ -29,6 +29,7 @@ type ComponentProcessorOptions struct {
 	GlobalSettings     map[string]any
 	GlobalEnv          map[string]any
 	GlobalAuth         map[string]any
+	GlobalSecrets      map[string]any
 	GlobalDependencies map[string]any
 	GlobalCommand      string
 	AtmosGlobalAuthMap map[string]any // Pre-converted atmosConfig.Auth to prevent race conditions
@@ -45,6 +46,12 @@ type ComponentProcessorOptions struct {
 	GlobalRemoteStateBackendSection map[string]any
 	GlobalSourceSection             map[string]any
 	GlobalProvisionSection          map[string]any
+
+	// Kubernetes-specific global defaults (lowest precedence in the final merge).
+	GlobalKubernetesProvider  string
+	GlobalKubernetesPaths     any
+	GlobalKubernetesManifests any
+	GlobalKubernetesRender    map[string]any
 
 	// Atmos configuration.
 	AtmosConfig *schema.AtmosConfiguration
@@ -99,8 +106,12 @@ type ComponentProcessorResult struct {
 	ComponentRequiredProviders map[string]any
 	ComponentRequiredVersion   string
 	ComponentHooks             map[string]any
-	ComponentGenerate          map[string]any
-	ComponentAuth              map[string]any
+	// ComponentSecrets holds the component-level `secrets:` declaration section.
+	ComponentSecrets          map[string]any
+	ComponentOverridesSecrets map[string]any
+	BaseComponentSecrets      map[string]any
+	ComponentGenerate         map[string]any
+	ComponentAuth             map[string]any
 	// ComponentProvision holds provisioning configuration for the component (e.g., workdir settings).
 	ComponentProvision                     map[string]any
 	ComponentBackendType                   string

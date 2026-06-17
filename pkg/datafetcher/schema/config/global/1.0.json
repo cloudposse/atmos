@@ -1136,6 +1136,14 @@
                       },
                       "type": {
                         "type": "string"
+                      },
+                      "interactive": {
+                        "type": "boolean",
+                        "description": "Attach host stdin to the step and let the step handle Ctrl-C (like docker -i)"
+                      },
+                      "tty": {
+                        "type": "boolean",
+                        "description": "Allocate a pseudo-terminal for the step (like docker -t); combine with interactive for full terminal sessions"
                       }
                     },
                     "required": [

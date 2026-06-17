@@ -10,6 +10,7 @@ import (
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/secrets"
 )
 
 // Affected reason constants.
@@ -32,6 +33,11 @@ const (
 	affectedReasonStackRepos      = "stack.repositories"
 	affectedReasonDeleted         = "deleted"
 	affectedReasonDeletedStack    = "deleted.stack"
+
+	// Secret-file dependency: a component is affected because a SOPS secret file it consumes
+	// changed. SOPS secret files are implicit file dependencies derived from the component's
+	// declared secrets (store-backed secrets are not files and contribute nothing).
+	affectedReasonSecretFile = "secret.file"
 
 	// Affected reasons for the remaining top-level component sections written by the
 	// stack processor. Keep these (and componentSectionChecks below) in sync with the
@@ -571,10 +577,10 @@ func addKubernetesSectionAffected(
 	includeSpaceliftAdminStacks bool,
 	includeSettings bool,
 ) error {
-	sections := []struct {
-		name   string
-		reason string
-	}{
+	// These sections include the Kubernetes-specific paths/manifests/render, which are
+	// not part of the shared componentSectionChecks table; comparison reuses the shared
+	// isSectionValueEqual primitive via remoteComponentLocator.
+	sections := []sectionCheck{
 		{sectionNameVars, affectedReasonStackVars},
 		{sectionNameEnv, affectedReasonStackEnv},
 		{sectionNameSource, affectedReasonStackSource},
@@ -585,12 +591,19 @@ func addKubernetesSectionAffected(
 		{sectionNameRender, affectedReasonStackRender},
 	}
 
+	locator := remoteComponentLocator{
+		remoteStacks:  remoteStacks,
+		stackName:     stackName,
+		componentType: cfg.KubernetesComponentType,
+		componentName: componentName,
+	}
+
 	for _, section := range sections {
-		value, ok := (*componentSection)[section.name]
+		value, ok := (*componentSection)[section.section]
 		if !ok {
 			continue
 		}
-		if isComponentSectionEqual(remoteStacks, stackName, cfg.KubernetesComponentType, componentName, value, section.name) {
+		if isSectionValueEqual(locator, value, section.section) {
 			continue
 		}
 		err := addAffectedComponent(affected, atmosConfig, componentName, stackName, cfg.KubernetesComponentType,
@@ -792,27 +805,80 @@ func checkDependencyChangesIndexed(
 ) error {
 	// Get file/folder dependencies from dependencies.components or settings.depends_on.
 	deps := getFileFolderDependencies(*componentSection, settingsSection)
-	if len(deps) == 0 {
+	if len(deps) > 0 {
+		isFolderOrFileChanged, changedType, changedFileOrFolder, err := isComponentDependentFolderOrFileChangedIndexed(
+			filesIndex,
+			deps,
+		)
+		if err != nil {
+			return err
+		}
+		if isFolderOrFileChanged {
+			return addDependencyAffectedItem(
+				affected, atmosConfig, componentName, stackName, componentType,
+				componentSection, changedType, changedFileOrFolder,
+				includeSpaceliftAdminStacks, currentStacks, includeSettings,
+			)
+		}
+	}
+
+	// SOPS secret files the component consumes are implicit file dependencies: a changed secret
+	// file marks every component that reads it affected (store-backed secrets are not files).
+	return checkSecretFileChangesIndexed(
+		affected, atmosConfig, componentName, stackName, componentType,
+		componentSection, filesIndex, includeSpaceliftAdminStacks, currentStacks, includeSettings,
+	)
+}
+
+// checkSecretFileChangesIndexed marks the component affected (reason secret.file) when any SOPS
+// secret file it consumes has changed. The backing files are derived from the component's resolved
+// `secrets:` section via the same path logic the SOPS provider uses, so detection and storage can
+// never drift.
+func checkSecretFileChangesIndexed(
+	affected *[]schema.Affected,
+	atmosConfig *schema.AtmosConfiguration,
+	componentName string,
+	stackName string,
+	componentType string,
+	componentSection *map[string]any,
+	filesIndex *changedFilesIndex,
+	includeSpaceliftAdminStacks bool,
+	currentStacks *map[string]any,
+	includeSettings bool,
+) error {
+	secretDeps := getSecretFileDependencies(atmosConfig, stackName, componentName, *componentSection)
+	if len(secretDeps) == 0 {
 		return nil
 	}
 
-	isFolderOrFileChanged, changedType, changedFileOrFolder, err := isComponentDependentFolderOrFileChangedIndexed(
-		filesIndex,
-		deps,
-	)
+	changed, _, changedFile, err := isComponentDependentFolderOrFileChangedIndexed(filesIndex, secretDeps)
 	if err != nil {
 		return err
 	}
-
-	if !isFolderOrFileChanged {
+	if !changed {
 		return nil
 	}
 
 	return addDependencyAffectedItem(
 		affected, atmosConfig, componentName, stackName, componentType,
-		componentSection, changedType, changedFileOrFolder,
+		componentSection, affectedReasonSecretFile, changedFile,
 		includeSpaceliftAdminStacks, currentStacks, includeSettings,
 	)
+}
+
+// getSecretFileDependencies returns the SOPS files the component's declared secrets resolve to,
+// as file dependencies. Store-backed secrets contribute nothing (they are not files). It is
+// best-effort: declarations whose provider/path cannot be resolved are skipped.
+func getSecretFileDependencies(atmosConfig *schema.AtmosConfiguration, stackName, componentName string, componentSection map[string]any) []schema.ComponentDependency {
+	files := secrets.NewService(atmosConfig, stackName, componentName, componentSection).FileDependencies()
+	if len(files) == 0 {
+		return nil
+	}
+	deps := make([]schema.ComponentDependency, 0, len(files))
+	for _, f := range files {
+		deps = append(deps, schema.ComponentDependency{Kind: "file", Path: f})
+	}
+	return deps
 }
 
 // getFileFolderDependencies extracts file/folder dependencies from dependencies.components or settings.depends_on.
@@ -924,7 +990,7 @@ func addDependencyAffectedItem(
 	includeSettings bool,
 ) error {
 	changedFile := ""
-	if changedType == "file" {
+	if changedType == "file" || changedType == affectedReasonSecretFile {
 		changedFile = changedFileOrFolder
 	}
 

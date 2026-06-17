@@ -107,21 +107,19 @@ repositories:
     url: https://kubernetes.github.io/ingress-nginx
 
 releases:
-
-- name: nginx-ingress
-  namespace: ingress-nginx
-  createNamespace: true
-  chart: ingress-nginx/ingress-nginx
-  version: {{ .Values.chart_version | quote }}
-  wait: true
-  values:
-  - controller:
-    replicaCount: {{ .Values.replica_count }}
-    service:
-    type: {{ .Values.service_type }}
-    metrics:
-    enabled: {{ .Values.metrics_enabled | default false }}
-
+  - name: nginx-ingress
+    namespace: ingress-nginx
+    createNamespace: true
+    chart: ingress-nginx/ingress-nginx
+    version: {{ .Values.chart_version | quote }}
+    wait: true
+    values:
+      - controller:
+          replicaCount: {{ .Values.replica_count }}
+          service:
+            type: {{ .Values.service_type }}
+          metrics:
+            enabled: {{ .Values.metrics_enabled | default false }}
 ````
 </File>
 
@@ -157,26 +155,26 @@ import:
   - orgs/acme/plat/prod/_defaults
 
 vars:
-region: us-east-1
-stage: prod
-eks_cluster_name: acme-prod-eks
+  region: us-east-1
+  stage: prod
+  eks_cluster_name: acme-prod-eks
 
 helmfile:
-vars:
-timeout: 900
-atomic: true
-env:
-AWS_PROFILE: acme-prod
-KUBECONFIG: "/tmp/kubeconfig-acme-prod"
+  vars:
+    timeout: 900
+    atomic: true
+  env:
+    AWS_PROFILE: acme-prod
+    KUBECONFIG: "/tmp/kubeconfig-acme-prod"
 
 components:
-helmfile:
-cert-manager:
-metadata:
-component: cert-manager
-vars:
-chart_version: "v1.13.0"
-install_crds: true
+  helmfile:
+    cert-manager:
+      metadata:
+        component: cert-manager
+      vars:
+        chart_version: "v1.13.0"
+        install_crds: true
 
     nginx-ingress:
       metadata:
@@ -251,6 +249,59 @@ Common environment variables for Helmfile components:
   <dd>Enable OCI registry support.</dd>
 </dl>
 
+## Passing Secrets Securely
+
+Helmfile writes the `vars` section to a [varfile **on disk** in plaintext](/cli/configuration/secrets)
+(world‑readable, `0644`) so Helmfile can read it. Unlike Terraform — which keeps secret‑bearing
+`vars` off disk — Helmfile performs **no** off‑disk partitioning. **Never put secrets in a Helmfile
+component's `vars` section.**
+
+:::warning Secrets belong in `env`, not `vars`
+Values in the `env` section are injected only into the Helmfile subprocess environment and are
+**never written to disk**. Declare secrets under [`secrets.vars`](/cli/configuration/secrets#declaring-secrets),
+reference them with [`!secret`](/functions/yaml/secret) in `env`, and read them inside `helmfile.yaml`
+with Helmfile's `requiredEnv` function.
+:::
+
+A simple, self‑contained example:
+
+<File title="stacks/deploy/prod.yaml">
+```yaml
+components:
+  helmfile:
+    my-app:
+      secrets:
+        vars:
+          DB_PASSWORD:
+            description: "Application database password"
+            store: ssm-secrets        # a `secret: true` store; or use `sops: <provider>`
+            required: true
+      env:
+        # Resolved at runtime and injected ONLY into the Helmfile subprocess
+        # environment — never written to the varfile on disk.
+        DB_PASSWORD: !secret DB_PASSWORD
+      vars:
+        chart_version: "1.2.3"         # non-secret values only
+```
+</File>
+
+Read the secret from the environment in `helmfile.yaml` — not from `.Values` (which comes from the
+on‑disk varfile):
+
+<File title="components/helmfile/my-app/helmfile.yaml">
+```yaml
+releases:
+  - name: my-app
+    chart: my-repo/my-app
+    version: {{ .Values.chart_version | quote }}
+    values:
+      - database:
+          # `requiredEnv` reads the secret from the environment and fails fast if it is unset.
+          # Use `env "DB_PASSWORD"` instead if the variable is optional.
+          password: {{ requiredEnv "DB_PASSWORD" | quote }}
+```
+</File>
+
 ## Integration with Terraform
 
 Helmfile components often depend on infrastructure created by Terraform:
@@ -299,12 +350,12 @@ releases:
   - name: my-app
     values:
       - image:
-          tag: { { .Values.image_tag | quote } }
-        replicaCount: { { .Values.replicas } }
+          tag: {{ .Values.image_tag | quote }}
+        replicaCount: {{ .Values.replicas }}
         resources:
           requests:
-            cpu: { { .Values.resources.requests.cpu | quote } }
-            memory: { { .Values.resources.requests.memory | quote } }
+            cpu: {{ .Values.resources.requests.cpu | quote }}
+            memory: {{ .Values.resources.requests.memory | quote }}
 ```
 
 ## Best Practices
@@ -327,4 +378,6 @@ releases:
 - [Terraform Components](/stacks/components/terraform)
 - [Configure Variables](/stacks/vars)
 - [Configure Environment](/stacks/env)
+- [Passing Secrets](/cli/configuration/secrets)
+- [`!secret` function](/functions/yaml/secret)
 - [depends_on](/stacks/settings/depends_on)

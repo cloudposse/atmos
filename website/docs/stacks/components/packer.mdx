@@ -210,28 +210,28 @@ import:
   - orgs/acme/plat/prod/_defaults
 
 vars:
-region: us-east-1
-stage: prod
+  region: us-east-1
+  stage: prod
 
 packer:
-vars:
-tags:
-Environment: prod
-ManagedBy: Atmos
-env:
-AWS_PROFILE: acme-prod
+  vars:
+    tags:
+      Environment: prod
+      ManagedBy: Atmos
+  env:
+    AWS_PROFILE: acme-prod
 
 components:
-packer:
-ami-ubuntu-base:
-metadata:
-component: ami-ubuntu
-vars:
-instance_type: t3.medium
-ami_name_prefix: "acme-prod"
-source_ami_filter:
-name: "ubuntu/images/hvm-ssd/ubuntu-jammy-22.04-amd64-server-\*"
-owner: "099720109477"
+  packer:
+    ami-ubuntu-base:
+      metadata:
+        component: ami-ubuntu
+      vars:
+        instance_type: t3.medium
+        ami_name_prefix: "acme-prod"
+        source_ami_filter:
+          name: "ubuntu/images/hvm-ssd/ubuntu-jammy-22.04-amd64-server-*"
+          owner: "099720109477"
 
     ami-eks-node:
       metadata:
@@ -377,6 +377,53 @@ Atmos generates a variables file that Packer uses during builds:
 }
 ```
 
+## Passing Secrets Securely
+
+The generated variables file is written to **disk in plaintext** (world‑readable, `0644`) so Packer
+can read it. Unlike Terraform — which keeps secret‑bearing `vars` off disk — Packer performs **no**
+off‑disk partitioning. **Never put secrets in a Packer component's `vars` section.**
+
+:::warning Secrets belong in `env`, not `vars`
+Values in the `env` section are injected only into the Packer subprocess environment and are
+**never written to the variables file**. Declare secrets under
+[`secrets.vars`](/cli/configuration/secrets#declaring-secrets), reference them with
+[`!secret`](/functions/yaml/secret) in `env`, and read them in the Packer template with the
+[`env` function](https://developer.hashicorp.com/packer/docs/templates/hcl_templates/functions/contextual/env).
+:::
+
+<File title="stacks/deploy/prod.yaml">
+```yaml
+components:
+  packer:
+    bastion:
+      secrets:
+        vars:
+          GITHUB_TOKEN:
+            description: "Token for provisioners that clone private repos"
+            store: ssm-secrets        # a `secret: true` store; or use `sops: <provider>`
+            required: true
+      env:
+        # Injected ONLY into the Packer subprocess environment — never written to the
+        # variables file on disk.
+        GITHUB_TOKEN: !secret GITHUB_TOKEN
+      vars:
+        region: us-east-1             # non-secret values only
+```
+</File>
+
+Read the secret from the environment in the Packer template (Packer's `env` function is allowed in
+variable defaults and `locals`):
+
+<File title="components/packer/bastion/build.pkr.hcl">
+```hcl
+variable "github_token" {
+  type      = string
+  sensitive = true
+  default   = env("GITHUB_TOKEN")   # read from the environment, not the variables file
+}
+```
+</File>
+
 ## Multi-Cloud Support
 
 Packer components can build images for multiple cloud providers:
@@ -459,4 +506,6 @@ components:
 - [Terraform Components](/stacks/components/terraform)
 - [Configure Variables](/stacks/vars)
 - [Configure Environment](/stacks/env)
+- [Passing Secrets](/cli/configuration/secrets)
+- [`!secret` function](/functions/yaml/secret)
 - [depends_on](/stacks/settings/depends_on)

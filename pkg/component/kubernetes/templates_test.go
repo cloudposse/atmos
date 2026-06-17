@@ -51,6 +51,77 @@ spec:
 	require.Equal(t, "demo", metadata["name"])
 }
 
+func TestRenderManifestTemplateValueByType(t *testing.T) {
+	data := map[string]any{"vars": map[string]any{"name": "app", "ns": "demo"}}
+
+	tests := []struct {
+		name  string
+		value any
+		want  any
+	}{
+		{
+			name:  "string template is rendered",
+			value: "{{ .vars.name }}",
+			want:  "app",
+		},
+		{
+			name:  "plain string passes through",
+			value: "no-template",
+			want:  "no-template",
+		},
+		{
+			name:  "slice of any renders each element",
+			value: []any{"{{ .vars.name }}", "literal"},
+			want:  []any{"app", "literal"},
+		},
+		{
+			name:  "slice of string renders each element",
+			value: []string{"{{ .vars.ns }}", "literal"},
+			want:  []any{"demo", "literal"},
+		},
+		{
+			name:  "map renders each value",
+			value: map[string]any{"key": "{{ .vars.name }}"},
+			want:  map[string]any{"key": "app"},
+		},
+		{
+			name:  "non-templatable type passes through unchanged",
+			value: 42,
+			want:  42,
+		},
+		{
+			name:  "boolean passes through unchanged",
+			value: true,
+			want:  true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := renderManifestTemplateValue(&schema.AtmosConfiguration{}, "field", tt.value, data)
+			require.NoError(t, err)
+			require.Equal(t, tt.want, got)
+		})
+	}
+}
+
+func TestRenderManifestTemplateValuePropagatesNestedError(t *testing.T) {
+	data := map[string]any{"vars": map[string]any{}}
+
+	// A malformed template nested inside a slice inside a map must surface the
+	// render error from the deepest element rather than being silently dropped.
+	value := map[string]any{
+		"items": []any{
+			"ok",
+			"{{ .vars.missing | invalidFunc }}",
+		},
+	}
+
+	_, err := renderManifestTemplateValue(&schema.AtmosConfiguration{}, "field", value, data)
+	require.Error(t, err)
+	require.ErrorContains(t, err, "failed to render Kubernetes")
+}
+
 func TestRenderManifestInputTemplatesProvisionTargets(t *testing.T) {
 	componentSection := map[string]any{
 		config.VarsSectionName: map[string]any{

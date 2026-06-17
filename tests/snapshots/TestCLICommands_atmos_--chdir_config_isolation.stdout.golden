@@ -8,7 +8,7 @@ components:
     init_run_reconfigure: false
     auto_generate_backend_file: false
     auto_generate_files: false
-    command: terraform
+    command: tofu
     shell:
       prompt: ""
     init:

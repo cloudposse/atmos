@@ -279,14 +279,17 @@ import:
   - catalog/vpc/_defaults
 
 components:
-terraform:
-vpc:
-metadata:
-inherits: - vpc/defaults
-vars:
-vpc_cidr: "10.0.0.0/16"
-availability_zones: - us-east-1a - us-east-1b - us-east-1c
-
+  terraform:
+    vpc:
+      metadata:
+        inherits:
+          - vpc/defaults
+      vars:
+        vpc_cidr: "10.0.0.0/16"
+        availability_zones:
+          - us-east-1a
+          - us-east-1b
+          - us-east-1c
 ````
 </File>
 
@@ -306,8 +309,15 @@ components:
 </File>
 
 <File title="stacks/orgs/acme/plat/prod/us-east-1.yaml">
-  ```yaml components: terraform: expensive-feature: metadata: enabled: true #
-  Enabled in production vars: # ... ```
+```yaml
+components:
+  terraform:
+    expensive-feature:
+      metadata:
+        enabled: true # Enabled in production
+      vars:
+        # ...
+```
 </File>
 
 ### Multi-Level Inheritance

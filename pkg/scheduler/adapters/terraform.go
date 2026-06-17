@@ -146,10 +146,12 @@ func ExecuteTerraform(ctx context.Context, opts TerraformOptions) error {
 	if graph, err = prepareTerraformGraphForCommand(opts.Info, graph); err != nil {
 		return err
 	}
+	// Debug, not Info: the user-facing "Processing components..." line is emitted once
+	// by the caller (e.g. ExecuteTerraformAll); this duplicate carries only the count.
 	if opts.Info.SubCommand == "destroy" {
-		log.Info("Processing components in reverse dependency order for destroy", "count", graph.Size())
+		log.Debug("Processing components in reverse dependency order for destroy", "count", graph.Size())
 	} else {
-		log.Info("Processing components in dependency order", "count", graph.Size())
+		log.Debug("Processing components in dependency order", "count", graph.Size())
 	}
 
 	if err := validateTerraformFailureMode(opts.Info); err != nil {

@@ -83,41 +83,6 @@ func ExecuteTerraformAllWithContext(ctx context.Context, info *schema.ConfigAndS
 	})
 }
 
-// executeInDependencyOrder executes terraform commands in dependency order.
-//
-// Deprecated: production Terraform bulk execution uses the scheduler adapter.
-// Keep this helper only while legacy dependency-order tests still cover it.
-func executeInDependencyOrder(graph *dependency.Graph, info *schema.ConfigAndStacksInfo) error {
-	// Get execution order.
-	executionOrder, err := graph.TopologicalSort()
-	if err != nil {
-		return fmt.Errorf(errWrapFmt, errUtils.ErrTopologicalOrder, err)
-	}
-
-	// For destroy command, reverse the execution order to destroy dependents before dependencies.
-	if info.SubCommand == "destroy" {
-		for i, j := 0, len(executionOrder)-1; i < j; i, j = i+1, j-1 {
-			executionOrder[i], executionOrder[j] = executionOrder[j], executionOrder[i]
-		}
-		log.Info("Processing components in reverse dependency order for destroy", "count", len(executionOrder))
-	} else {
-		log.Info("Processing components in dependency order", "count", len(executionOrder))
-	}
-
-	// Execute components in order.
-	for i := range executionOrder {
-		node := &executionOrder[i]
-		log.Info("Processing component", "index", i+1, "total", len(executionOrder), "component", node.Component, "stack", node.Stack)
-
-		if err := executeTerraformForNode(node, info); err != nil {
-			return fmt.Errorf("%w: component=%s stack=%s: %w", errUtils.ErrTerraformExecFailed, node.Component, node.Stack, err)
-		}
-	}
-
-	log.Info("Successfully processed all components", "count", len(executionOrder))
-	return nil
-}
-
 // buildTerraformDependencyGraph builds the complete dependency graph from stacks.
 func buildTerraformDependencyGraph(
 	_ *schema.AtmosConfiguration,

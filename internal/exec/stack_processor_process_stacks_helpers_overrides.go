@@ -69,6 +69,15 @@ func processComponentOverrides(opts *ComponentProcessorOptions, result *Componen
 		result.ComponentOverridesEnv = componentOverridesEnv
 	}
 
+	// Extract secrets overrides (instance-scoped, like the rest of the component-level layers).
+	if i, ok := componentOverrides[cfg.SecretsSectionName]; ok {
+		componentOverridesSecrets, ok := i.(map[string]any)
+		if !ok {
+			return fmt.Errorf("%w: 'components.%s.%s.overrides.secrets' in the manifest '%s'", errUtils.ErrInvalidComponentSecrets, opts.ComponentType, opts.Component, opts.StackName)
+		}
+		result.ComponentOverridesSecrets = componentOverridesSecrets
+	}
+
 	// Extract auth overrides.
 	if i, ok := componentOverrides[cfg.AuthSectionName]; ok {
 		componentOverridesAuth, ok := i.(map[string]any)
