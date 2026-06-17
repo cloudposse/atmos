@@ -23,9 +23,11 @@ import (
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
+	authtypes "github.com/cloudposse/atmos/pkg/auth/types"
 	"github.com/cloudposse/atmos/pkg/ci"
 	githubCI "github.com/cloudposse/atmos/pkg/ci/providers/github"
 	"github.com/cloudposse/atmos/pkg/hooks"
@@ -762,6 +764,35 @@ func TestRunHooksWithOutput_InjectsLastAuthContext(t *testing.T) {
 	assert.NotNil(t, gotCtx, "auth context must survive through runHooksWithOutput")
 	assert.Equal(t, "test-profile", gotCtx.AWS.Profile)
 	assert.Equal(t, "mock-auth-manager", gotMgr)
+}
+
+func TestHookStoreDefaultIdentity(t *testing.T) {
+	t.Run("explicit identity wins", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		authManager := authtypes.NewMockAuthManager(ctrl)
+
+		got := hookStoreDefaultIdentity(&schema.ConfigAndStacksInfo{Identity: "cli-admin"}, authManager)
+		assert.Equal(t, "cli-admin", got)
+	})
+
+	t.Run("manager default fills empty identity", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		authManager := authtypes.NewMockAuthManager(ctrl)
+		authManager.EXPECT().GetDefaultIdentity(false).Return("component-admin", nil)
+
+		got := hookStoreDefaultIdentity(&schema.ConfigAndStacksInfo{}, authManager)
+		assert.Equal(t, "component-admin", got)
+	})
+
+	t.Run("falls back to auth chain", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		authManager := authtypes.NewMockAuthManager(ctrl)
+		authManager.EXPECT().GetDefaultIdentity(false).Return("", errors.New("no default"))
+		authManager.EXPECT().GetChain().Return([]string{"provider", "chain-admin"})
+
+		got := hookStoreDefaultIdentity(&schema.ConfigAndStacksInfo{}, authManager)
+		assert.Equal(t, "chain-admin", got)
+	})
 }
 
 // TestInteractiveStackSelection_PromptError verifies that when the

@@ -1,0 +1,36 @@
+vars:
+  stage: prod
+
+secrets:
+  vars:
+    SSM_STACK_TOKEN:
+      description: Stack-scoped token shared by components in this stack.
+      store: secrets/ssm
+      required: true
+
+components:
+  terraform:
+    secret-consumer:
+      dependencies:
+        tools:
+          opentofu: "1.9.1"
+      secrets:
+        vars:
+          SSM_INSTANCE_TOKEN:
+            description: Instance-scoped token stored in SSM SecureString.
+            store: secrets/ssm
+            required: true
+          ASM_DATABASE_CONFIG:
+            description: Structured database config stored in AWS Secrets Manager.
+            store: secrets/asm
+            required: true
+          GLOBAL_SHARED_TOKEN:
+            description: Global token shared by every stack using this store and declaration.
+            store: secrets/ssm
+            scope: global
+            required: true
+      env:
+        TF_VAR_ssm_instance_token: !secret SSM_INSTANCE_TOKEN
+        TF_VAR_ssm_stack_token: !secret SSM_STACK_TOKEN
+        TF_VAR_asm_database_password: !secret ASM_DATABASE_CONFIG | path ".password"
+        TF_VAR_global_shared_token: !secret GLOBAL_SHARED_TOKEN

@@ -7,12 +7,15 @@ package authbridge
 import (
 	"context"
 	"fmt"
+	"strings"
 
+	awsconfig "github.com/cloudposse/atmos/pkg/auth/cloud/aws"
 	"github.com/cloudposse/atmos/pkg/auth/types"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/store"
+	"github.com/go-viper/mapstructure/v2"
 )
 
 // Resolver implements store.AuthContextResolver by delegating to an AuthManager.
@@ -55,13 +58,51 @@ func (r *Resolver) ResolveAWSAuthContext(ctx context.Context, identityName strin
 	}
 
 	aws := managerStackInfo.AuthContext.AWS
+	endpointURL := r.awsIdentityEndpointURL(identityName)
 
 	return &store.AWSAuthConfig{
 		CredentialsFile: aws.CredentialsFile,
 		ConfigFile:      aws.ConfigFile,
 		Profile:         aws.Profile,
 		Region:          aws.Region,
+		EndpointURL:     endpointURL,
 	}, nil
+}
+
+func (r *Resolver) awsIdentityEndpointURL(identityName string) string {
+	identities := r.authManager.GetIdentities()
+	if len(identities) == 0 {
+		return ""
+	}
+
+	identity, ok := identities[identityName]
+	if !ok {
+		identity, ok = identities[strings.ToLower(identityName)]
+	}
+	if !ok {
+		return ""
+	}
+
+	awsConfig := awsConfigForIdentity(identity)
+	if awsConfig == nil || awsConfig.Resolver == nil {
+		return ""
+	}
+	return awsConfig.Resolver.URL
+}
+
+func awsConfigForIdentity(identity schema.Identity) *awsconfig.AWSConfig {
+	if identity.Credentials == nil {
+		return nil
+	}
+	awsRaw, ok := identity.Credentials["aws"]
+	if !ok {
+		return nil
+	}
+	var cfg awsconfig.AWSConfig
+	if err := mapstructure.Decode(awsRaw, &cfg); err != nil {
+		return nil
+	}
+	return &cfg
 }
 
 // ResolveAzureAuthContext authenticates the named identity and returns Azure credentials.

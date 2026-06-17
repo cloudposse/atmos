@@ -62,6 +62,37 @@ go test ./pkg/auth/providers/aws
 
 These tests validate that SAML browser automation actually downloads and installs the Chromium browser correctly.
 
+### Floci Cloud Emulator Tests
+
+Floci-backed E2E tests are opt-in and should use fixtures under
+`tests/fixtures/scenarios`, not `gists/`. The gists are manual examples; the
+test fixtures are allowed to be parameterized for isolation and CI.
+
+Use `newFlociHarness` from `tests/floci_harness_test.go` for new Floci tests.
+It centralizes endpoint discovery, the `ATMOS_TEST_FLOCI=true` opt-in gate,
+temporary fixture copies, command env, local Atmos binary execution, and common
+AWS verification clients.
+
+```bash
+ATMOS_TEST_FLOCI=true \
+FLOCI_ENDPOINT_URL=http://localhost:4566 \
+FLOCI_GCP_ENDPOINT=http://localhost:4588 \
+FLOCI_AZURE_ENDPOINT=http://localhost:4577 \
+go test ./tests -run Floci
+```
+
+GitHub Actions runs the AWS, GCP, and Azure store/secrets Floci coverage in the dedicated
+`[floci] go e2e` job from `.github/workflows/test.yml`. The general acceptance
+test matrix does not set `ATMOS_TEST_FLOCI`, so these tests continue to skip
+outside the Floci job.
+
+The shared harness supports separate Floci endpoints for AWS-compatible
+services, GCP Secret Manager, and Azure Key Vault. AWS uses
+`FLOCI_ENDPOINT_URL`, GCP uses `FLOCI_GCP_ENDPOINT`, and Azure uses
+`FLOCI_AZURE_ENDPOINT`.
+
+Do not use LocalStack for these tests.
+
 ## Understanding Test Skips
 
 When you run tests, you may see output like:

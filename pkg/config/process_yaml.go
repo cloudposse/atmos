@@ -476,6 +476,60 @@ func processScalarNodeValue(node *yaml.Node) (any, error) {
 	}
 }
 
+// decodeNodeWithYamlFunctions decodes a YAML node into plain Go values while
+// evaluating Atmos YAML functions on scalar nodes. It is used by config paths
+// that must read raw YAML directly instead of Viper's normalized settings.
+func decodeNodeWithYamlFunctions(node *yaml.Node) (any, error) {
+	if node == nil {
+		return nil, nil
+	}
+
+	switch node.Kind {
+	case yaml.DocumentNode:
+		if len(node.Content) == 0 {
+			return nil, nil
+		}
+		return decodeNodeWithYamlFunctions(node.Content[0])
+	case yaml.MappingNode:
+		result := make(map[string]interface{}, len(node.Content)/2)
+		for i := 0; i < len(node.Content); i += 2 {
+			keyNode := node.Content[i]
+			valueNode := node.Content[i+1]
+			value, err := decodeNodeWithYamlFunctions(valueNode)
+			if err != nil {
+				return nil, err
+			}
+			result[keyNode.Value] = value
+		}
+		return result, nil
+	case yaml.SequenceNode:
+		result := make([]interface{}, 0, len(node.Content))
+		for _, child := range node.Content {
+			value, err := decodeNodeWithYamlFunctions(child)
+			if err != nil {
+				return nil, err
+			}
+			result = append(result, value)
+		}
+		return result, nil
+	case yaml.ScalarNode:
+		if hasCustomTag(node.Tag) {
+			return processScalarNodeValue(node)
+		}
+		var value any
+		if err := node.Decode(&value); err != nil {
+			return nil, err
+		}
+		return value, nil
+	default:
+		var value any
+		if err := node.Decode(&value); err != nil {
+			return nil, err
+		}
+		return value, nil
+	}
+}
+
 // processScalarNode processes a YAML scalar node tagged with an Atmos custom function and stores the resolved value in v.
 // It dispatches handling for !env, !exec, !include, !repo-root, !cwd, and !random tags to their respective handlers.
 // If the node has no tag or the tag is not one of the recognized Atmos functions, the function is a no-op.

@@ -37,9 +37,11 @@ type StoreConfig struct {
 
 ## AWS SSM Parameter Store
 
-### Type
+### Kind
 
-`aws-ssm-parameter-store`
+`aws/ssm`
+
+Legacy `type` alias: `aws-ssm-parameter-store`
 
 ### Options
 
@@ -86,7 +88,7 @@ SSM parameters are stored as `String` type with `Overwrite: true`. Values are JS
 stores:
   # Production read-write store
   prod/ssm:
-    type: aws-ssm-parameter-store
+    kind: aws/ssm
     options:
       region: us-east-1
       prefix: atmos
@@ -95,17 +97,47 @@ stores:
 
   # Development store (same account, no role assumption needed)
   dev/ssm:
-    type: aws-ssm-parameter-store
+    kind: aws/ssm
     options:
       region: us-west-2
       prefix: atmos
 
   # Identity-based store
   shared/ssm:
-    type: aws-ssm-parameter-store
+    kind: aws/ssm
     identity: shared-aws
     options:
       region: us-east-1
+```
+
+---
+
+## AWS Secrets Manager
+
+### Kind
+
+`aws/asm`
+
+Legacy `type` alias: `aws-secrets-manager`
+
+### Options
+
+| Option | Type | Required | Default | Description |
+|--------|------|----------|---------|-------------|
+| `region` | string | Yes | -- | AWS region for Secrets Manager |
+| `prefix` | string | No | `""` | Prefix prepended to all secret IDs |
+| `stack_delimiter` | string | No | `"/"` | Character used to split stack names into secret ID segments |
+
+Use `secret: true` for declared secrets that are managed through `atmos secret` and resolved with `!secret`.
+
+```yaml
+stores:
+  prod/asm:
+    kind: aws/asm
+    secret: true
+    options:
+      region: us-east-1
+      prefix: atmos/secrets
 ```
 
 ---
@@ -475,7 +507,7 @@ Atmos deep-merges all levels into the final hook configuration.
 ### Common Errors
 
 **`store type not found: <type>`**
-The `type` field does not match any registered provider. Valid types: `aws-ssm-parameter-store`, `azure-key-vault`, `google-secret-manager`, `gsm`, `redis`, `artifactory`.
+The `kind` or legacy `type` field does not match any registered provider. Valid kinds include: `aws/ssm`, `aws/asm`, `azure-key-vault`, `google-secret-manager`, `gsm`, `redis`, `artifactory`.
 
 **`region is required in ssm store configuration`**
 The `region` option is missing from an AWS SSM store. This is a required field.

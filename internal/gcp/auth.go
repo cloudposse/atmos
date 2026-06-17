@@ -7,6 +7,8 @@ import (
 
 	"golang.org/x/oauth2"
 	"google.golang.org/api/option"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 )
 
 // AuthOptions contains configuration for Google Cloud authentication.
@@ -22,6 +24,17 @@ type AuthOptions struct {
 	// files do not contain refresh tokens.
 	AccessToken string //nolint:gosec // Intentional credential field passed directly to Google client options.
 	TokenExpiry time.Time
+
+	// Endpoint overrides the default Google API endpoint. This is primarily used
+	// by local emulators and integration tests.
+	Endpoint string
+
+	// EndpointInsecure allows plaintext gRPC for local endpoints.
+	EndpointInsecure bool
+
+	// WithoutAuthentication disables Google authentication for local endpoints
+	// that do not validate credentials.
+	WithoutAuthentication bool
 
 	// TODO: Add support for service account impersonation
 	// ImpersonateServiceAccount string
@@ -41,6 +54,17 @@ type AuthOptions struct {
 //   - Workload Identity (in GKE)
 func GetClientOptions(opts AuthOptions) []option.ClientOption {
 	var clientOpts []option.ClientOption
+
+	if opts.Endpoint != "" {
+		clientOpts = append(clientOpts, option.WithEndpoint(normalizeEndpoint(opts.Endpoint)))
+	}
+	if opts.EndpointInsecure {
+		clientOpts = append(clientOpts, option.WithGRPCDialOption(grpc.WithTransportCredentials(insecure.NewCredentials())))
+	}
+	if opts.WithoutAuthentication {
+		clientOpts = append(clientOpts, option.WithoutAuthentication())
+		return clientOpts
+	}
 
 	if opts.Credentials != "" {
 		// Determine if credentials are JSON content or file path
@@ -78,6 +102,13 @@ func GetClientOptions(opts AuthOptions) []option.ClientOption {
 	// If no explicit credentials or access token, Google Cloud client libraries
 	// will automatically use ADC (Application Default Credentials).
 	return clientOpts
+}
+
+func normalizeEndpoint(endpoint string) string {
+	endpoint = strings.TrimSpace(endpoint)
+	endpoint = strings.TrimPrefix(endpoint, "http://")
+	endpoint = strings.TrimPrefix(endpoint, "https://")
+	return endpoint
 }
 
 // GetCredentialsFromBackend extracts credentials from a Terraform backend configuration.

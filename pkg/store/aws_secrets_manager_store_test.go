@@ -149,6 +149,19 @@ func TestNewSecretsManagerStore_DefersClientForIdentity(t *testing.T) {
 	assert.Nil(t, asm.client, "identity-based store must defer client creation")
 }
 
+func TestNewSecretsManagerStore_DefersClientWithoutIdentity(t *testing.T) {
+	s, err := NewSecretsManagerStore(SecretsManagerStoreOptions{
+		Region: "us-west-2",
+	}, "")
+	require.NoError(t, err)
+
+	asm, ok := s.(*SecretsManagerStore)
+	require.True(t, ok)
+	assert.Equal(t, "us-west-2", asm.region)
+	assert.Empty(t, asm.identityName)
+	assert.Nil(t, asm.client, "default-credential store must defer client creation")
+}
+
 func TestNewSecretsManagerStore_DefaultStackDelimiter(t *testing.T) {
 	// No explicit delimiter and an identity (to avoid touching real AWS) yields the "-" default.
 	s, err := NewSecretsManagerStore(SecretsManagerStoreOptions{Region: "us-east-1"}, "aws/admin")

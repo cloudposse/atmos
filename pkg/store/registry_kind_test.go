@@ -80,6 +80,27 @@ func TestNewStoreRegistry_SecretSetsSecureWrite(t *testing.T) {
 	assert.True(t, ssm.secret)
 }
 
+func TestNewStoreRegistry_AWSKinds(t *testing.T) {
+	cfg := StoresConfig{
+		"ssm": StoreConfig{
+			Kind:    "aws/ssm",
+			Options: map[string]any{"region": "us-east-1"},
+		},
+		"asm": StoreConfig{
+			Kind:    "aws/asm",
+			Options: map[string]any{"region": "us-east-1"},
+		},
+	}
+	registry, err := NewStoreRegistry(&cfg)
+	require.NoError(t, err)
+
+	_, ok := registry["ssm"].(*SSMStore)
+	assert.True(t, ok)
+
+	_, ok = registry["asm"].(*SecretsManagerStore)
+	assert.True(t, ok)
+}
+
 // redisSecretOpts and artifactorySecretOpts hold the minimum options for each backend to
 // construct successfully (lazily, without a live connection) so the secret-capability guard,
 // which runs after the store is built, is the thing under test.

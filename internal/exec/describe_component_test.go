@@ -1,6 +1,7 @@
 package exec
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -9,12 +10,44 @@ import (
 	"github.com/stretchr/testify/assert"
 	"go.uber.org/mock/gomock"
 
+	authtypes "github.com/cloudposse/atmos/pkg/auth/types"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/pager"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
+
+func TestDescribeStoreDefaultIdentity(t *testing.T) {
+	t.Run("authenticated chain wins", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		authManager := authtypes.NewMockAuthManager(ctrl)
+		authManager.EXPECT().GetChain().Return([]string{"provider", "explicit-admin"})
+
+		got := describeStoreDefaultIdentity(authManager)
+		assert.Equal(t, "explicit-admin", got)
+	})
+
+	t.Run("configured default fills empty chain", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		authManager := authtypes.NewMockAuthManager(ctrl)
+		authManager.EXPECT().GetChain().Return(nil)
+		authManager.EXPECT().GetDefaultIdentity(false).Return("default-admin", nil)
+
+		got := describeStoreDefaultIdentity(authManager)
+		assert.Equal(t, "default-admin", got)
+	})
+
+	t.Run("missing identity returns empty", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		authManager := authtypes.NewMockAuthManager(ctrl)
+		authManager.EXPECT().GetChain().Return(nil)
+		authManager.EXPECT().GetDefaultIdentity(false).Return("", errors.New("no default"))
+
+		got := describeStoreDefaultIdentity(authManager)
+		assert.Empty(t, got)
+	})
+}
 
 func TestExecuteDescribeComponentCmd_Success_YAMLWithPager(t *testing.T) {
 	// Set up gomock controller

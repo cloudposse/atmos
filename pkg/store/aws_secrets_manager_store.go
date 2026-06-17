@@ -21,6 +21,7 @@ type SecretsManagerStore struct {
 	prefix         string
 	stackDelimiter *string
 	region         string
+	endpoint       string
 
 	// Identity-based authentication fields.
 	identityName string
@@ -34,6 +35,8 @@ type SecretsManagerStoreOptions struct {
 	Prefix         *string `mapstructure:"prefix"`
 	Region         string  `mapstructure:"region"`
 	StackDelimiter *string `mapstructure:"stack_delimiter"`
+	Endpoint       *string `mapstructure:"endpoint"`
+	EndpointURL    *string `mapstructure:"endpoint_url"`
 }
 
 // SecretsManagerClient is the subset of the AWS Secrets Manager API used by the store.
@@ -52,8 +55,9 @@ var (
 	_ StatusStore        = (*SecretsManagerStore)(nil)
 )
 
-// NewSecretsManagerStore initializes a new SecretsManagerStore. If identityName is non-empty,
-// client initialization is deferred until first use (lazy init).
+// NewSecretsManagerStore initializes a new SecretsManagerStore.
+// Client initialization is deferred until first use so callers can inject an auth resolver
+// after config load and before the first backend operation.
 func NewSecretsManagerStore(options SecretsManagerStoreOptions, identityName string) (Store, error) {
 	if options.Region == "" {
 		return nil, ErrRegionRequired
@@ -61,6 +65,7 @@ func NewSecretsManagerStore(options SecretsManagerStoreOptions, identityName str
 
 	s := &SecretsManagerStore{
 		region:       options.Region,
+		endpoint:     firstNonEmptyStringPtr(options.Endpoint, options.EndpointURL),
 		identityName: identityName,
 	}
 
@@ -74,30 +79,30 @@ func NewSecretsManagerStore(options SecretsManagerStoreOptions, identityName str
 		s.stackDelimiter = aws.String("-")
 	}
 
-	if identityName == "" {
-		if err := s.initDefaultClient(); err != nil {
-			return nil, err
-		}
-	}
-
 	return s, nil
 }
 
 // SetAuthContext implements IdentityAwareStore.
 func (s *SecretsManagerStore) SetAuthContext(resolver AuthContextResolver, identityName string) {
 	s.authResolver = resolver
-	if identityName != "" {
+	if identityName != "" && s.identityName != identityName {
 		s.identityName = identityName
+		s.client = nil
+		s.initOnce = sync.Once{}
+		s.initErr = nil
 	}
 }
 
 func (s *SecretsManagerStore) initDefaultClient() error {
 	ctx := context.TODO()
-	awsConfig, err := config.LoadDefaultConfig(ctx)
+	cfgOpts := []func(*config.LoadOptions) error{config.WithRegion(s.region)}
+	if s.endpoint != "" {
+		cfgOpts = append(cfgOpts, config.WithBaseEndpoint(s.endpoint))
+	}
+	awsConfig, err := config.LoadDefaultConfig(ctx, cfgOpts...)
 	if err != nil {
 		return fmt.Errorf(errWrapFormat, ErrLoadAWSConfig, err)
 	}
-	awsConfig.Region = s.region
 	s.client = secretsmanager.NewFromConfig(awsConfig)
 	return nil
 }
@@ -129,6 +134,13 @@ func (s *SecretsManagerStore) initIdentityClient() error {
 	}
 	if region != "" {
 		cfgOpts = append(cfgOpts, config.WithRegion(region))
+	}
+	endpoint := s.endpoint
+	if endpoint == "" {
+		endpoint = authContext.EndpointURL
+	}
+	if endpoint != "" {
+		cfgOpts = append(cfgOpts, config.WithBaseEndpoint(endpoint))
 	}
 
 	awsConfig, err := config.LoadDefaultConfig(ctx, cfgOpts...)

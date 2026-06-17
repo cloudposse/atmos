@@ -5,11 +5,14 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
 	"regexp"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
 	"github.com/Azure/azure-sdk-for-go/sdk/azidentity"
 	"github.com/Azure/azure-sdk-for-go/sdk/security/keyvault/azsecrets"
 )
@@ -37,6 +40,8 @@ type AzureKeyVaultStore struct {
 	vaultURL       string
 	prefix         string
 	stackDelimiter *string
+	clientOptions  *azsecrets.ClientOptions
+	withoutAuth    bool
 
 	// Identity-based authentication fields.
 	identityName string
@@ -46,9 +51,14 @@ type AzureKeyVaultStore struct {
 }
 
 type AzureKeyVaultStoreOptions struct {
-	VaultURL       string  `mapstructure:"vault_url"`
-	Prefix         *string `mapstructure:"prefix"`
-	StackDelimiter *string `mapstructure:"stack_delimiter"`
+	VaultURL                             string  `mapstructure:"vault_url"`
+	Endpoint                             *string `mapstructure:"endpoint"`
+	Prefix                               *string `mapstructure:"prefix"`
+	StackDelimiter                       *string `mapstructure:"stack_delimiter"`
+	DisableChallengeResourceVerification bool    `mapstructure:"disable_challenge_resource_verification"`
+	WithoutAuthentication                bool    `mapstructure:"without_authentication"`
+	InsecureAllowCredentialWithHTTP      bool    `mapstructure:"insecure_allow_credential_with_http"`
+	EndpointInsecure                     bool    `mapstructure:"endpoint_insecure"`
 }
 
 // Ensure AzureKeyVaultStore implements the store.Store, IdentityAwareStore, DeletableStore,
@@ -63,8 +73,22 @@ var (
 // NewAzureKeyVaultStore creates a new Azure Key Vault store.
 // If identityName is non-empty, client initialization is deferred until first use (lazy init).
 func NewAzureKeyVaultStore(options AzureKeyVaultStoreOptions, identityName string) (Store, error) {
-	if options.VaultURL == "" {
+	vaultURL := options.VaultURL
+	if vaultURL == "" {
+		vaultURL = firstNonEmptyStringPtr(options.Endpoint)
+	}
+	if vaultURL == "" {
 		return nil, ErrVaultURLRequired
+	}
+	clientOptions := &azsecrets.ClientOptions{
+		DisableChallengeResourceVerification: options.DisableChallengeResourceVerification,
+		ClientOptions: azcore.ClientOptions{
+			InsecureAllowCredentialWithHTTP: options.InsecureAllowCredentialWithHTTP || options.WithoutAuthentication,
+		},
+	}
+	if options.EndpointInsecure && strings.HasPrefix(vaultURL, "http://") {
+		vaultURL = "https://" + strings.TrimPrefix(vaultURL, "http://")
+		clientOptions.Transport = azureInsecureEndpointTransport{base: http.DefaultClient}
 	}
 
 	stackDelimiter := AzureKeyVaultHyphen
@@ -78,9 +102,11 @@ func NewAzureKeyVaultStore(options AzureKeyVaultStoreOptions, identityName strin
 	}
 
 	store := &AzureKeyVaultStore{
-		vaultURL:       options.VaultURL,
+		vaultURL:       vaultURL,
 		prefix:         prefix,
 		stackDelimiter: &stackDelimiter,
+		clientOptions:  clientOptions,
+		withoutAuth:    options.WithoutAuthentication,
 		identityName:   identityName,
 	}
 
@@ -108,12 +134,12 @@ func (s *AzureKeyVaultStore) SetAuthContext(resolver AuthContextResolver, identi
 
 // initDefaultClient initializes the Azure client using the default credential chain.
 func (s *AzureKeyVaultStore) initDefaultClient() error {
-	cred, err := azidentity.NewDefaultAzureCredential(nil)
+	cred, err := s.defaultCredential(nil)
 	if err != nil {
 		return fmt.Errorf(errWrapFormat, ErrCreateClient, err)
 	}
 
-	client, err := azsecrets.NewClient(s.vaultURL, cred, nil)
+	client, err := azsecrets.NewClient(s.vaultURL, cred, s.clientOptions)
 	if err != nil {
 		return fmt.Errorf(errWrapFormat, ErrCreateClient, err)
 	}
@@ -141,12 +167,12 @@ func (s *AzureKeyVaultStore) initIdentityClient() error {
 		options.TenantID = authContext.TenantID
 	}
 
-	cred, err := azidentity.NewDefaultAzureCredential(options)
+	cred, err := s.defaultCredential(options)
 	if err != nil {
 		return fmt.Errorf(errWrapFormat, ErrCreateClient, err)
 	}
 
-	client, err := azsecrets.NewClient(s.vaultURL, cred, nil)
+	client, err := azsecrets.NewClient(s.vaultURL, cred, s.clientOptions)
 	if err != nil {
 		return fmt.Errorf(errWrapFormat, ErrCreateClient, err)
 	}
@@ -154,6 +180,36 @@ func (s *AzureKeyVaultStore) initIdentityClient() error {
 	s.client = client
 
 	return nil
+}
+
+func (s *AzureKeyVaultStore) defaultCredential(options *azidentity.DefaultAzureCredentialOptions) (azcore.TokenCredential, error) {
+	if s.withoutAuth {
+		return localAzureTokenCredential{}, nil
+	}
+	return azidentity.NewDefaultAzureCredential(options)
+}
+
+type localAzureTokenCredential struct{}
+
+func (localAzureTokenCredential) GetToken(context.Context, policy.TokenRequestOptions) (azcore.AccessToken, error) {
+	return azcore.AccessToken{
+		Token:     "floci-local-token",
+		ExpiresOn: time.Now().Add(time.Hour),
+	}, nil
+}
+
+type azureInsecureEndpointTransport struct {
+	base policy.Transporter
+}
+
+func (t azureInsecureEndpointTransport) Do(req *http.Request) (*http.Response, error) {
+	clone := req.Clone(req.Context())
+	clone.URL.Scheme = "http"
+	base := t.base
+	if base == nil {
+		base = http.DefaultClient
+	}
+	return base.Do(clone)
 }
 
 // ensureClient lazily initializes the Azure client if it hasn't been initialized yet.

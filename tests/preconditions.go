@@ -8,7 +8,9 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"runtime"
+	"sync"
 	"testing"
 	"time"
 
@@ -30,6 +32,22 @@ const (
 	// EnvAWSProfile is the environment variable for AWS profile.
 	envAWSProfile = "AWS_PROFILE"
 )
+
+var testToolProvisionLocks sync.Map
+
+type testTool struct {
+	Repo    string
+	Version string
+	Binary  string
+}
+
+var knownTestTools = []testTool{
+	{Repo: "opentofu/opentofu", Version: "1.9.1", Binary: "tofu"},
+	{Repo: "hashicorp/terraform", Version: "1.9.7", Binary: "terraform"},
+	{Repo: "hashicorp/packer", Version: "1.14.2", Binary: "packer"},
+	{Repo: "helmfile/helmfile", Version: "v1.1.0", Binary: "helmfile"},
+	{Repo: "helm/helm", Version: "v3.19.2", Binary: "helm"},
+}
 
 // ShouldCheckPreconditions returns true if precondition checks should be performed.
 // Set ATMOS_TEST_SKIP_PRECONDITION_CHECKS=true to bypass all precondition checks.
@@ -328,9 +346,81 @@ func RequireExecutable(t *testing.T, name string, purpose string) {
 
 	_, err := exec.LookPath(name)
 	if err != nil {
+		provisionKnownTestTool(name)
+	}
+
+	_, err = exec.LookPath(name)
+	if err != nil {
 		t.Skipf("'%s' not found in PATH: required for %s. Install the tool or set ATMOS_TEST_SKIP_PRECONDITION_CHECKS=true",
 			name, purpose)
 	}
+}
+
+func provisionKnownTestTool(binary string) {
+	tool, ok := knownTestTool(binary)
+	if !ok {
+		return
+	}
+
+	lockValue, _ := testToolProvisionLocks.LoadOrStore(binary, &sync.Once{})
+	lockValue.(*sync.Once).Do(func() {
+		installPath, err := testToolchainInstallPath()
+		if err != nil {
+			return
+		}
+		repoRoot, err := testRepoRoot()
+		if err != nil {
+			return
+		}
+
+		spec := tool.Repo + "@" + tool.Version
+		toolVersionsPath := filepath.Join(installPath, "test-tool-versions")
+		cmd := exec.Command( //nolint:gosec // Test helper installs pinned known tools.
+			"go", "run", ".",
+			"toolchain",
+			"--toolchain-path", installPath,
+			"--tool-versions", toolVersionsPath,
+			"install", spec,
+		)
+		cmd.Dir = repoRoot
+		cmd.Env = os.Environ()
+		if err := cmd.Run(); err != nil {
+			return
+		}
+
+		binDir := filepath.Join(installPath, "bin", filepath.FromSlash(tool.Repo), tool.Version)
+		path := os.Getenv("PATH")
+		if path == "" {
+			os.Setenv("PATH", binDir)
+			return
+		}
+		os.Setenv("PATH", binDir+string(os.PathListSeparator)+path)
+	})
+}
+
+func knownTestTool(binary string) (testTool, bool) {
+	for _, tool := range knownTestTools {
+		if tool.Binary == binary {
+			return tool, true
+		}
+	}
+	return testTool{}, false
+}
+
+func testToolchainInstallPath() (string, error) {
+	cacheDir, err := os.UserCacheDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(cacheDir, "atmos", "test-toolchain"), nil
+}
+
+func testRepoRoot() (string, error) {
+	_, file, _, ok := runtime.Caller(0)
+	if !ok {
+		return "", os.ErrNotExist
+	}
+	return filepath.Dir(filepath.Dir(file)), nil
 }
 
 // RequireEnvVar checks if an environment variable is set.

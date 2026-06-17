@@ -690,8 +690,9 @@ func TestSSMStore_BuildAuthConfigOpts(t *testing.T) {
 				ConfigFile:      "/path/to/config",
 				Profile:         "prod",
 				Region:          "eu-west-1",
+				EndpointURL:     "http://localhost:4566",
 			},
-			wantLen: 4, // creds + config + profile + store region
+			wantLen: 5, // creds + config + profile + store region + endpoint
 		},
 		{
 			name:   "empty credentials file",

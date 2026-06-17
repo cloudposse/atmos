@@ -408,6 +408,57 @@ jobs:
             exit "${status}"
           }
 
+  # Run Go E2E tests against Floci. These cover store/secrets workflows that are
+  # easier to assert directly from Go than through the demo `atmos test` runner.
+  floci-go:
+    name: "[floci] go e2e"
+    needs: build
+    runs-on: ubuntu-latest
+
+    services:
+      floci:
+        # Pin by immutable digest for reproducibility/supply-chain safety (matches our SHA-pinned actions). Comment tracks the human-readable tag.
+        image: floci/floci@sha256:c88ec20bf221630dd195d38a14eeb0ac52ddfa72c37ebb3c8aa17f63ae27c5f2 # 1.5.23
+        ports:
+          - 4566:4566
+      floci-gcp:
+        # Pin by immutable digest for reproducibility/supply-chain safety. Comment tracks the human-readable tag.
+        image: floci/floci-gcp@sha256:01e6f320cf904bd85788041a42d08a8072f9c2eb9a5abfc440895c6a6ea6e12a # latest
+        ports:
+          - 4588:4588
+      floci-az:
+        # Pin by immutable digest for reproducibility/supply-chain safety. Comment tracks the human-readable tag.
+        image: floci/floci-az@sha256:1e514c57db14dc41938f7925bbc1aca0293aa4da272c7014d98f1fba378cedb2 # latest
+        ports:
+          - 4577:4577
+
+    timeout-minutes: 30
+    steps:
+      - name: Check out code into the Go module directory
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Set up Go
+        # setup-go v6 requires runner v2.327.1+ and can affect toolchain handling.
+        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
+        with:
+          go-version-file: "go.mod"
+
+      - name: Install OpenTofu
+        uses: opentofu/setup-opentofu@847eaa4afeb791b06daa46e8eafa8b1b68d7cfb4 # v2
+        with:
+          tofu_version: ${{ env.OPEN_TOFU_VERSION }}
+          tofu_wrapper: false
+
+      - name: Run Floci Go E2E tests
+        env:
+          ATMOS_TEST_FLOCI: "true"
+          FLOCI_ENDPOINT_URL: "http://localhost:4566"
+          FLOCI_GCP_ENDPOINT: "http://localhost:4588"
+          FLOCI_AZURE_ENDPOINT: "http://localhost:4577"
+        run: go test ./tests -run 'Test(AWS(StoreHooks|Secrets)|GCPSecrets|AzureSecrets)FlociE2E' -count=1 -timeout 15m -v
+
   # run k3s demo tests
   k3s:
     name: "[k3s] ${{ matrix.demo-folder }}"
@@ -681,7 +732,7 @@ jobs:
             }
 
   release:
-    needs: [test, lint, mock, k3s, floci, docker, validate]
+    needs: [test, lint, mock, k3s, floci, floci-go, docker, validate]
     if: github.event_name == 'push'
     uses: cloudposse/.github/.github/workflows/shared-go-auto-release.yml@8244c7c9142e92281e7841f655fa48e9ceb9b454 # main
     with:

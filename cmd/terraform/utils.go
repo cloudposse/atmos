@@ -19,6 +19,7 @@ import (
 	e "github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/ansi"
 	"github.com/cloudposse/atmos/pkg/auth"
+	authtypes "github.com/cloudposse/atmos/pkg/auth/types"
 	"github.com/cloudposse/atmos/pkg/ci"
 	"github.com/cloudposse/atmos/pkg/ci/plugins/terraform/planfile"
 	cfg "github.com/cloudposse/atmos/pkg/config"
@@ -27,6 +28,7 @@ import (
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/store/authbridge"
 )
 
 // errWrapFormat is the format string for wrapping errors with a cause.
@@ -126,6 +128,7 @@ func runHooksWithOutput(event h.HookEvent, cmd_ *cobra.Command, args []string, o
 	if err != nil {
 		return errors.Join(errUtils.ErrInitializeCLIConfig, err)
 	}
+	injectHookStoreAuthResolver(&atmosConfig, &info)
 
 	// Resolve path-based component arguments before getting hooks.
 	// Path resolution must happen before GetHooks because GetHooks calls
@@ -183,6 +186,40 @@ func runHooksWithOutput(event h.HookEvent, cmd_ *cobra.Command, args []string, o
 	}
 
 	return nil
+}
+
+func injectHookStoreAuthResolver(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) {
+	if atmosConfig == nil || info == nil || info.AuthManager == nil {
+		return
+	}
+
+	authManager, ok := info.AuthManager.(authtypes.AuthManager)
+	if !ok {
+		return
+	}
+
+	resolver := authbridge.NewResolver(authManager, info)
+	atmosConfig.Stores.SetAuthContextResolverWithDefaultIdentity(resolver, hookStoreDefaultIdentity(info, authManager))
+}
+
+func hookStoreDefaultIdentity(info *schema.ConfigAndStacksInfo, authManager authtypes.AuthManager) string {
+	switch info.Identity {
+	case "", cfg.IdentityFlagSelectValue, cfg.IdentityFlagDisabledValue:
+	default:
+		return info.Identity
+	}
+
+	if authManager == nil {
+		return ""
+	}
+	if identity, err := authManager.GetDefaultIdentity(false); err == nil {
+		return identity
+	}
+	chain := authManager.GetChain()
+	if len(chain) == 0 {
+		return ""
+	}
+	return chain[len(chain)-1]
 }
 
 // runCIHooksForDeploy fires CI hooks using already-resolved info.

@@ -78,6 +78,7 @@ func ProvisionToolchain(logger *log.AtmosLogger, tools []Tool) {
 
 	atmosConfig := &schema.AtmosConfiguration{}
 	atmosConfig.Toolchain.InstallPath = installPath
+	atmosConfig.Toolchain.VersionsFile = filepath.Join(installPath, "test-tool-versions")
 
 	// NewEnvironmentFromDeps installs the missing tools (idempotent) and returns
 	// an environment that knows the toolchain bin directories.

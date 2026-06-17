@@ -277,6 +277,10 @@ func defaultIdentityForStore(s Store, defaultIdentity string) string {
 		if typed.identityName == "" {
 			return defaultIdentity
 		}
+	case *SecretsManagerStore:
+		if typed.identityName == "" {
+			return defaultIdentity
+		}
 	case *AzureKeyVaultStore:
 		if typed.identityName == "" {
 			return defaultIdentity

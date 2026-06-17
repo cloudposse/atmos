@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/store"
@@ -48,6 +49,9 @@ func (f *StoreFunction) Execute(ctx context.Context, args string, execCtx *Execu
 	// Parse parameters.
 	params, err := parseStoreParams(args, execCtx.Stack)
 	if err != nil {
+		return nil, err
+	}
+	if err := ensureStoreFunctionCanRead(execCtx, params.storeName); err != nil {
 		return nil, err
 	}
 
@@ -133,6 +137,9 @@ func (f *StoreGetFunction) Execute(ctx context.Context, args string, execCtx *Ex
 	if err != nil {
 		return nil, err
 	}
+	if err := ensureStoreFunctionCanRead(execCtx, params.storeName); err != nil {
+		return nil, err
+	}
 
 	// Retrieve the store from atmosConfig.
 	store := execCtx.AtmosConfig.Stores[params.storeName]
@@ -152,6 +159,13 @@ func (f *StoreGetFunction) Execute(ctx context.Context, args string, execCtx *Ex
 	}
 
 	return value, nil
+}
+
+func ensureStoreFunctionCanRead(execCtx *ExecutionContext, storeName string) error {
+	if cfg, ok := execCtx.AtmosConfig.StoresConfig[storeName]; ok && cfg.Secret {
+		return fmt.Errorf("%w: store %q", errUtils.ErrStoreIsSecret, storeName)
+	}
+	return nil
 }
 
 // storeParams holds parsed parameters for the store function.

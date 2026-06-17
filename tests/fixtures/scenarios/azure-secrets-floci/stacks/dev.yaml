@@ -1,0 +1,14 @@
+vars:
+  stage: dev
+
+components:
+  terraform:
+    secret-consumer:
+      secrets:
+        vars:
+          AZURE_INSTANCE_TOKEN:
+            description: Instance-scoped token stored in Azure Key Vault.
+            store: secrets/azure
+            required: true
+      env:
+        TF_VAR_azure_instance_token: !secret AZURE_INSTANCE_TOKEN

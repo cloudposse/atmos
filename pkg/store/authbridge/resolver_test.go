@@ -57,6 +57,19 @@ func TestResolveAWSAuthContext_Success(t *testing.T) {
 	mockManager.EXPECT().
 		GetStackInfo().
 		Return(managerStackInfo)
+	mockManager.EXPECT().
+		GetIdentities().
+		Return(map[string]schema.Identity{
+			"prod-admin": {
+				Credentials: map[string]interface{}{
+					"aws": map[string]interface{}{
+						"resolver": map[string]interface{}{
+							"url": "http://localhost:4566",
+						},
+					},
+				},
+			},
+		})
 
 	resolver := NewResolver(mockManager, &schema.ConfigAndStacksInfo{})
 
@@ -67,6 +80,7 @@ func TestResolveAWSAuthContext_Success(t *testing.T) {
 	assert.Equal(t, expectedConfigFile, authConfig.ConfigFile)
 	assert.Equal(t, "prod", authConfig.Profile)
 	assert.Equal(t, "us-east-1", authConfig.Region)
+	assert.Equal(t, "http://localhost:4566", authConfig.EndpointURL)
 }
 
 func TestResolveAWSAuthContext_RealmScopedPaths(t *testing.T) {
@@ -96,6 +110,9 @@ func TestResolveAWSAuthContext_RealmScopedPaths(t *testing.T) {
 	mockManager.EXPECT().
 		GetStackInfo().
 		Return(managerStackInfo)
+	mockManager.EXPECT().
+		GetIdentities().
+		Return(nil)
 
 	resolver := NewResolver(mockManager, &schema.ConfigAndStacksInfo{})
 
@@ -147,6 +164,9 @@ func TestResolveAWSAuthContext_PointerMismatch(t *testing.T) {
 	mockManager.EXPECT().
 		GetStackInfo().
 		Return(managerStackInfo)
+	mockManager.EXPECT().
+		GetIdentities().
+		Return(nil)
 
 	resolver := NewResolver(mockManager, resolverStackInfo)
 

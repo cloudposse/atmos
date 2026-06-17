@@ -20,6 +20,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 	p "github.com/cloudposse/atmos/pkg/provenance"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/store/authbridge"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -94,6 +95,10 @@ func (d *DescribeComponentExec) ExecuteDescribeComponentCmd(describeComponentPar
 	if provenance {
 		atmosConfig.TrackProvenance = true
 	}
+	if describeComponentParams.AuthManager != nil {
+		resolver := authbridge.NewResolver(describeComponentParams.AuthManager, describeComponentParams.AuthManager.GetStackInfo())
+		atmosConfig.Stores.SetAuthContextResolverWithDefaultIdentity(resolver, describeStoreDefaultIdentity(describeComponentParams.AuthManager))
+	}
 
 	var componentSection map[string]any
 	var mergeContext *m.MergeContext
@@ -123,6 +128,7 @@ func (d *DescribeComponentExec) ExecuteDescribeComponentCmd(describeComponentPar
 	} else {
 		// Use the standard version
 		componentSection, err = d.executeDescribeComponent(&ExecuteDescribeComponentParams{
+			AtmosConfig:          &atmosConfig,
 			Component:            component,
 			Stack:                stack,
 			ProcessTemplates:     processTemplates,
@@ -174,6 +180,19 @@ func (d *DescribeComponentExec) ExecuteDescribeComponentCmd(describeComponentPar
 	}
 
 	return nil
+}
+
+func describeStoreDefaultIdentity(authManager auth.AuthManager) string {
+	if authManager == nil {
+		return ""
+	}
+	if chain := authManager.GetChain(); len(chain) > 0 {
+		return chain[len(chain)-1]
+	}
+	if identity, err := authManager.GetDefaultIdentity(false); err == nil {
+		return identity
+	}
+	return ""
 }
 
 func (d *DescribeComponentExec) viewConfig(atmosConfig *schema.AtmosConfiguration, displayName string, format string, data any) error {

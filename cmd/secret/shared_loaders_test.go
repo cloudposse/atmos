@@ -1,14 +1,18 @@
 package secret
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	authtypes "github.com/cloudposse/atmos/pkg/auth/types"
+	cfg "github.com/cloudposse/atmos/pkg/config"
 )
 
 // writeMinimalAtmosProject writes a self-contained Atmos project (config + one stack + one
@@ -77,6 +81,35 @@ func TestLoadService_InitConfigError(t *testing.T) {
 	_, err := loadService(secretScope{Stack: "dev", Component: "vpc"})
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrFailedToInitConfig)
+}
+
+func TestSecretStoreDefaultIdentity(t *testing.T) {
+	t.Run("explicit identity wins", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		authManager := authtypes.NewMockAuthManager(ctrl)
+
+		got := secretStoreDefaultIdentity(secretScope{Identity: "cli-admin"}, authManager)
+		assert.Equal(t, "cli-admin", got)
+	})
+
+	t.Run("manager default fills empty identity", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		authManager := authtypes.NewMockAuthManager(ctrl)
+		authManager.EXPECT().GetDefaultIdentity(false).Return("default-admin", nil)
+
+		got := secretStoreDefaultIdentity(secretScope{}, authManager)
+		assert.Equal(t, "default-admin", got)
+	})
+
+	t.Run("select sentinel falls back to auth chain", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		authManager := authtypes.NewMockAuthManager(ctrl)
+		authManager.EXPECT().GetDefaultIdentity(false).Return("", errors.New("no default"))
+		authManager.EXPECT().GetChain().Return([]string{"provider", "chain-admin"})
+
+		got := secretStoreDefaultIdentity(secretScope{Identity: cfg.IdentityFlagSelectValue}, authManager)
+		assert.Equal(t, "chain-admin", got)
+	})
 }
 
 func TestLoadServiceAndConfig_ComponentNotFound(t *testing.T) {
