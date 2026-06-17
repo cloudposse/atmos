@@ -327,7 +327,7 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: hadolint/hadolint-action@54c9adbab1582c2ef04b2016b760714a4bfde3cf # v3.1.0
+      - uses: hadolint/hadolint-action@2332a7b74a6de0dda2e2221d575162eba76ba5e5 # v3.3.0
         id: hadolint
         with:
           dockerfile: Dockerfile
@@ -339,7 +339,7 @@ jobs:
           ignore: DL3008
 
       - name: Upload SARIF file
-        uses: github/codeql-action/upload-sarif@8aad20d150bbac5944a9f9d289da16a4b0d87c1e # v4
+        uses: github/codeql-action/upload-sarif@87557b9c84dde89fdd9b10e88954ac2f4248e463 # v4.36.1
         if: always()
         with:
           # Path to SARIF file relative to the root of the repository
@@ -669,7 +669,7 @@ jobs:
           persist-credentials: false
 
       - name: Validate YAML Schema for Stacks
-        uses: InoUno/yaml-ls-check@2c229b85b877b2853b40bd0fbdcfccff5ff735c7 # v1.4.0
+        uses: InoUno/yaml-ls-check@65e68de258b4c36c7e57bd715584229e1b61a876 # v1.5.1
         with:
           root: "examples/${{ matrix.demo-folder }}/stacks"
           schemaMapping: |
