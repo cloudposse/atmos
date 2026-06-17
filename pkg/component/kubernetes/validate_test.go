@@ -58,7 +58,10 @@ func TestRunValidateOfflinePasses(t *testing.T) {
 	objects := []*unstructured.Unstructured{
 		kubernetesObject("v1", "ConfigMap", "settings", ""),
 	}
-	require.NoError(t, runValidate(objects, validateOptions{}))
+	results, err := runValidate(objects, validateOptions{})
+	require.NoError(t, err)
+	require.Len(t, results, 1)
+	assert.Equal(t, "valid", results[0].Action)
 }
 
 func TestRunValidateOfflineFails(t *testing.T) {
@@ -66,7 +69,7 @@ func TestRunValidateOfflineFails(t *testing.T) {
 		kubernetesObject("v1", "ConfigMap", "", ""),
 	}
 
-	err := runValidate(objects, validateOptions{})
+	_, err := runValidate(objects, validateOptions{})
 	require.ErrorIs(t, err, errUtils.ErrKubernetesValidationFailed)
 }
 
@@ -81,7 +84,8 @@ func TestRunValidateServerReturnsClientInitError(t *testing.T) {
 	objects := []*unstructured.Unstructured{
 		kubernetesObject("v1", "ConfigMap", "settings", ""),
 	}
-	require.ErrorContains(t, runValidate(objects, validateOptions{Server: true}), "client failed")
+	_, err := runValidate(objects, validateOptions{Server: true})
+	require.ErrorContains(t, err, "client failed")
 }
 
 func TestRunValidateServerAggregatesDryRunErrors(t *testing.T) {
@@ -97,7 +101,7 @@ func TestRunValidateServerAggregatesDryRunErrors(t *testing.T) {
 	objects := []*unstructured.Unstructured{
 		kubernetesObject("v1", "ConfigMap", "settings", "default"),
 	}
-	err := runValidate(objects, validateOptions{Server: true})
+	_, err := runValidate(objects, validateOptions{Server: true})
 	require.ErrorIs(t, err, errUtils.ErrKubernetesValidationFailed)
 }
 

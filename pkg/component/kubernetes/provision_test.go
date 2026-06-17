@@ -76,8 +76,10 @@ func TestDeliverApplyRoutesToExternalTarget(t *testing.T) {
 		newObject("Service", "demo"),
 	}
 
-	err := deliverApply(&schema.AtmosConfiguration{}, info, flags, objects)
+	results, err := deliverApply(&schema.AtmosConfiguration{}, info, flags, objects)
 	require.NoError(t, err)
+	require.Len(t, results, 2)
+	assert.Equal(t, "delivered", results[0].Action)
 	require.NotNil(t, capture.last, "external target must receive a delivery")
 
 	got := capture.last
@@ -105,7 +107,7 @@ func TestDeliverApplyUnknownTargetErrors(t *testing.T) {
 	}
 	flags := map[string]any{"target": "does-not-exist"}
 
-	err := deliverApply(&schema.AtmosConfiguration{}, info, flags, nil)
+	_, err := deliverApply(&schema.AtmosConfiguration{}, info, flags, nil)
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrProvisionTargetNotFound)
 }

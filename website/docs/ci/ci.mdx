@@ -16,7 +16,8 @@ import Experimental from '@site/src/components/Experimental'
 <Intro>
 Atmos brings first-class CI/CD support directly into the CLI. Run Atmos commands in
 GitHub Actions and get rich job summaries, status checks, output variables, and stored planfile
-verification — no extra actions required.
+verification for Terraform — no extra actions required. Kubernetes components also write native
+job summaries, with a deliberately smaller v1 surface.
 </Intro>
 
 <Experimental />
@@ -65,6 +66,10 @@ ci:
 ## GitHub Actions Workflows
 
 Running Atmos in GitHub Actions reduces to two steps: **check out the repository, then run an `atmos` command.** Atmos detects the CI environment automatically and produces job summaries, output variables, status checks, and stored planfiles without any wrapper actions.
+
+Terraform commands use the full native CI feature set. Kubernetes commands currently emit
+human-readable job summaries only; they do not write `$GITHUB_OUTPUT` values, commit statuses,
+PR comments, or stored artifacts.
 
 The examples below pin the Atmos version via a [repository variable](https://docs.github.com/en/actions/learn-github-actions/variables) named `ATMOS_VERSION` (e.g. set to `1.200.0`). We don't publish a `latest` tag, so always pin to a specific release.
 
@@ -382,10 +387,15 @@ Rich Markdown summaries with resource counts, inline badges, and collapsible dif
 to `$GITHUB_STEP_SUMMARY`. Includes separate templates for plan and apply results. Templates
 are fully customizable with Go template syntax.
 
+Kubernetes summaries are intentionally compact: `plan`/`diff` show created, changed, and
+no-change objects; `apply`/`deploy` show applied or delivered objects; `delete` shows deleted
+and not-found objects; `validate` shows valid and invalid objects plus errors.
+
 ### [Outputs](/cli/configuration/ci/output)
 
 Terraform plan and apply results exported as CI output variables for use in downstream jobs.
-On GitHub Actions, these are written to `$GITHUB_OUTPUT`.
+On GitHub Actions, these are written to `$GITHUB_OUTPUT`. Kubernetes commands do not emit
+output variables in v1.
 
 ### [Checks](/cli/configuration/ci/checks)
 
@@ -424,6 +434,9 @@ CI features are activated with the `--ci` flag on existing Terraform commands or
 
   <dt>[`atmos describe affected --format=matrix`](/cli/commands/describe/affected)</dt>
   <dd>Generate GitHub Actions matrix strategy from affected components.</dd>
+
+  <dt>[`atmos kubernetes plan|apply|deploy|delete|validate [--ci]`](/cli/commands/kubernetes/usage)</dt>
+  <dd>Run Kubernetes operations with a native job summary only. No output variables, status checks, comments, or artifacts are emitted.</dd>
 </dl>
 
 ## Providers

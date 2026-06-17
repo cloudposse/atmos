@@ -34,21 +34,19 @@ func resolveValidateOptions(flags map[string]any) validateOptions {
 // runValidate validates the rendered objects. Offline structural checks always
 // run; the cluster dry-run only runs when --server is set. All failures are
 // collected and reported together rather than stopping at the first.
-func runValidate(objects []*unstructured.Unstructured, options validateOptions) error {
+func runValidate(objects []*unstructured.Unstructured, options validateOptions) ([]objectResult, error) {
 	defer perf.Track(nil, "kubernetes.runValidate")()
 
 	if err := validateObjectsStructural(objects); err != nil {
-		return err
+		return nil, err
 	}
 
 	if options.Server {
-		if err := runServerValidate(objects); err != nil {
-			return err
-		}
+		return runServerValidate(objects)
 	}
 
 	ui.Successf("validated %d Kubernetes object(s)", len(objects))
-	return nil
+	return objectsToResults("valid", objects), nil
 }
 
 // validateObjectsStructural runs offline structural validation over every object
@@ -101,10 +99,10 @@ func objectRef(index int, obj *unstructured.Unstructured) string {
 
 // runServerValidate validates the objects against the live cluster using a
 // server-side dry-run apply.
-func runServerValidate(objects []*unstructured.Unstructured) error {
+func runServerValidate(objects []*unstructured.Unstructured) ([]objectResult, error) {
 	client, err := newKubernetesSDKClient()
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
@@ -112,9 +110,9 @@ func runServerValidate(objects []*unstructured.Unstructured) error {
 
 	results, err := client.Validate(ctx, objects)
 	if err != nil {
-		return fmt.Errorf("%w: %w", errUtils.ErrKubernetesValidationFailed, err)
+		return results, fmt.Errorf("%w: %w", errUtils.ErrKubernetesValidationFailed, err)
 	}
 
 	printResults(results)
-	return nil
+	return results, nil
 }

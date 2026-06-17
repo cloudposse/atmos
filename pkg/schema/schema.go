@@ -707,6 +707,27 @@ type TerraformPlanCIResult struct {
 	Error      string
 }
 
+// KubernetesCIResult contains the compact result data rendered into native CI
+// job summaries for one Kubernetes component command.
+type KubernetesCIResult struct {
+	Stack        string
+	Component    string
+	Command      string
+	ExitCode     int
+	Error        string
+	ObjectsTotal int
+	Actions      []KubernetesObjectCIResult
+	ActionCounts map[string]int
+}
+
+// KubernetesObjectCIResult contains one Kubernetes object action row.
+type KubernetesObjectCIResult struct {
+	Action    string
+	Resource  string
+	Namespace string
+	Name      string
+}
+
 // CIConfig contains CI/CD integration configuration.
 // Uses provider-agnostic naming to support GitHub Actions, GitLab CI, and other providers.
 type CIConfig struct {

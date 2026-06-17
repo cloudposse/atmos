@@ -29,7 +29,7 @@ func deliverApply(
 	info *schema.ConfigAndStacksInfo,
 	flags map[string]any,
 	objects []*unstructured.Unstructured,
-) error {
+) ([]objectResult, error) {
 	defer perf.Track(atmosConfig, "kubernetes.deliverApply")()
 
 	provisionSection, _ := info.ComponentSection["provision"].(map[string]any)
@@ -37,7 +37,7 @@ func deliverApply(
 
 	selected, err := target.SelectTarget(provisionSection, flagTarget)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	// Cluster delivery keeps the existing SDK apply path with the in-memory objects.
@@ -47,19 +47,22 @@ func deliverApply(
 
 	artifact, err := buildKubernetesArtifact(objects, info, selected.Name)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), deliveryTimeout)
 	defer cancel()
 
-	return target.Deliver(ctx, selected.Kind, &target.DeliverInput{
+	if err := target.Deliver(ctx, selected.Kind, &target.DeliverInput{
 		AtmosConfig:  atmosConfig,
 		TargetName:   selected.Name,
 		TargetConfig: selected.Config,
 		Artifact:     artifact,
 		EnvProvider:  authManagerFor(info),
-	})
+	}); err != nil {
+		return nil, err
+	}
+	return objectsToResults("delivered", objects), nil
 }
 
 // buildKubernetesArtifact serializes the rendered objects into a deterministic

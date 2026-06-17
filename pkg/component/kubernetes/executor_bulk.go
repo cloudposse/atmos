@@ -44,13 +44,18 @@ func executeBulk(
 		return err
 	}
 
+	subCommand := info.SubCommand
+	if subCommand == "" {
+		subCommand = string(operation)
+	}
+
 	return executeGraph(context.Background(), &component.GraphExecutionOptions{
 		Provider:      &ComponentProvider{},
 		AtmosConfig:   atmosConfig,
 		Info:          info,
 		Stacks:        stacks,
 		ComponentType: cfg.KubernetesComponentType,
-		SubCommand:    string(operation),
+		SubCommand:    subCommand,
 		Flags:         ctx.Flags,
 		Selection:     selection,
 	})

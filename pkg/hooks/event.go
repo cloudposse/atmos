@@ -18,6 +18,8 @@ const (
 	AfterTerraformDestroyAggregate HookEvent = "after.terraform.destroy.aggregate"
 	BeforeKubernetesRender         HookEvent = "before.kubernetes.render"
 	AfterKubernetesRender          HookEvent = "after.kubernetes.render"
+	BeforeKubernetesPlan           HookEvent = "before.kubernetes.plan"
+	AfterKubernetesPlan            HookEvent = "after.kubernetes.plan"
 	BeforeKubernetesDiff           HookEvent = "before.kubernetes.diff"
 	AfterKubernetesDiff            HookEvent = "after.kubernetes.diff"
 	BeforeKubernetesApply          HookEvent = "before.kubernetes.apply"
@@ -40,6 +42,10 @@ func (e HookEvent) Normalize() HookEvent {
 		return AfterTerraformApply
 	case BeforeTerraformDeploy:
 		return BeforeTerraformApply
+	case AfterKubernetesPlan:
+		return AfterKubernetesDiff
+	case BeforeKubernetesPlan:
+		return BeforeKubernetesDiff
 	case AfterKubernetesDeploy:
 		return AfterKubernetesApply
 	case BeforeKubernetesDeploy:

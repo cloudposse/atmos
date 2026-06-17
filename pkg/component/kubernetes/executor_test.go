@@ -490,7 +490,7 @@ func TestRunOperationApplyGateRejectsInvalidManifest(t *testing.T) {
 	}
 
 	objects := []*unstructured.Unstructured{kubernetesObject("v1", "ConfigMap", "", "")}
-	err := runOperation(
+	result, err := runOperation(
 		&component.ExecutionContext{},
 		&schema.AtmosConfiguration{},
 		&schema.ConfigAndStacksInfo{},
@@ -498,6 +498,7 @@ func TestRunOperationApplyGateRejectsInvalidManifest(t *testing.T) {
 		objects,
 	)
 	require.ErrorIs(t, err, errUtils.ErrKubernetesValidationFailed)
+	assert.Equal(t, 1, result.ObjectsTotal)
 }
 
 func TestRunOperationValidateDispatches(t *testing.T) {
@@ -509,7 +510,7 @@ func TestRunOperationValidateDispatches(t *testing.T) {
 	}
 
 	objects := []*unstructured.Unstructured{kubernetesObject("v1", "ConfigMap", "settings", "")}
-	err := runOperation(
+	result, err := runOperation(
 		&component.ExecutionContext{},
 		&schema.AtmosConfiguration{},
 		&schema.ConfigAndStacksInfo{},
@@ -517,6 +518,22 @@ func TestRunOperationValidateDispatches(t *testing.T) {
 		objects,
 	)
 	require.NoError(t, err)
+	assert.Equal(t, map[string]int{"valid": 1}, result.ActionCounts)
+}
+
+func TestRunOperationValidateReportsInvalidCount(t *testing.T) {
+	objects := []*unstructured.Unstructured{kubernetesObject("v1", "ConfigMap", "", "")}
+
+	result, err := runOperation(
+		&component.ExecutionContext{},
+		&schema.AtmosConfiguration{},
+		&schema.ConfigAndStacksInfo{},
+		OperationValidate,
+		objects,
+	)
+
+	require.ErrorIs(t, err, errUtils.ErrKubernetesValidationFailed)
+	assert.Equal(t, map[string]int{"invalid": 1}, result.ActionCounts)
 }
 
 func TestRunOperationRenderDispatches(t *testing.T) {
@@ -529,7 +546,7 @@ func TestRunOperationRenderDispatches(t *testing.T) {
 
 	objects := []*unstructured.Unstructured{kubernetesObject("v1", "ConfigMap", "settings", "")}
 	output := captureKubernetesStdout(t, func() {
-		err := runOperation(
+		result, err := runOperation(
 			&component.ExecutionContext{},
 			&schema.AtmosConfiguration{},
 			&schema.ConfigAndStacksInfo{ComponentSection: map[string]any{}},
@@ -537,6 +554,7 @@ func TestRunOperationRenderDispatches(t *testing.T) {
 			objects,
 		)
 		require.NoError(t, err)
+		assert.Equal(t, map[string]int{"rendered": 1}, result.ActionCounts)
 	})
 	assert.Contains(t, output, "kind: ConfigMap")
 }
@@ -548,7 +566,7 @@ func TestRunOperationDiffDispatchesToClient(t *testing.T) {
 		return nil, errors.New("diff client failed")
 	}
 
-	err := runOperation(
+	_, err := runOperation(
 		&component.ExecutionContext{},
 		&schema.AtmosConfiguration{},
 		&schema.ConfigAndStacksInfo{},
@@ -568,7 +586,7 @@ func TestRunOperationDeleteDispatchesToClient(t *testing.T) {
 	}
 
 	output := captureKubernetesStdout(t, func() {
-		err := runOperation(
+		result, err := runOperation(
 			&component.ExecutionContext{},
 			&schema.AtmosConfiguration{},
 			&schema.ConfigAndStacksInfo{},
@@ -576,12 +594,13 @@ func TestRunOperationDeleteDispatchesToClient(t *testing.T) {
 			[]*unstructured.Unstructured{kubernetesObject("v1", "ConfigMap", "settings", "")},
 		)
 		require.NoError(t, err)
+		assert.Equal(t, map[string]int{"deleted": 1}, result.ActionCounts)
 	})
 	assert.Contains(t, output, "deleted v1/ConfigMap default/settings")
 }
 
 func TestRunOperationRejectsUnsupportedOperation(t *testing.T) {
-	err := runOperation(
+	_, err := runOperation(
 		&component.ExecutionContext{},
 		&schema.AtmosConfiguration{},
 		&schema.ConfigAndStacksInfo{},
@@ -717,12 +736,14 @@ func TestRunApplyAndDiffPrintResultsOnSuccess(t *testing.T) {
 	}
 
 	applyOut := captureKubernetesStdout(t, func() {
-		require.NoError(t, runApply([]*unstructured.Unstructured{kubernetesObject("v1", "ConfigMap", "settings", "")}))
+		_, err := runApply([]*unstructured.Unstructured{kubernetesObject("v1", "ConfigMap", "settings", "")})
+		require.NoError(t, err)
 	})
 	assert.Contains(t, applyOut, "applied v1/ConfigMap default/settings")
 
 	diffOut := captureKubernetesStdout(t, func() {
-		require.NoError(t, runDiff([]*unstructured.Unstructured{kubernetesObject("v1", "ConfigMap", "settings", "")}))
+		_, err := runDiff([]*unstructured.Unstructured{kubernetesObject("v1", "ConfigMap", "settings", "")})
+		require.NoError(t, err)
 	})
 	assert.Contains(t, diffOut, "v1/ConfigMap default/settings")
 }
@@ -746,6 +767,16 @@ func TestEventsFor(t *testing.T) {
 		assert.Equal(t, tt.before, before)
 		assert.Equal(t, tt.after, after)
 	}
+}
+
+func TestEventsForCommandPreservesPlanAndDeploy(t *testing.T) {
+	before, after := eventsForCommand("plan", OperationDiff)
+	assert.Equal(t, hooks.BeforeKubernetesPlan, before)
+	assert.Equal(t, hooks.AfterKubernetesPlan, after)
+
+	before, after = eventsForCommand("deploy", OperationApply)
+	assert.Equal(t, hooks.BeforeKubernetesDeploy, before)
+	assert.Equal(t, hooks.AfterKubernetesDeploy, after)
 }
 
 func TestApplyEnvironmentSetsAndRestoresValues(t *testing.T) {
@@ -787,17 +818,23 @@ func TestRunOperationsUseSDKClientFactory(t *testing.T) {
 	newKubernetesSDKClient = func() (*sdkClient, error) {
 		return nil, errors.New("client failed")
 	}
-	require.ErrorContains(t, runApply(nil), "client failed")
-	require.ErrorContains(t, runDelete(nil), "client failed")
-	require.ErrorContains(t, runDiff(nil), "client failed")
+	_, err := runApply(nil)
+	require.ErrorContains(t, err, "client failed")
+	_, err = runDelete(nil)
+	require.ErrorContains(t, err, "client failed")
+	_, err = runDiff(nil)
+	require.ErrorContains(t, err, "client failed")
 
 	object := kubernetesObject("v1", "ConfigMap", "settings", "default")
 	newKubernetesSDKClient = func() (*sdkClient, error) {
 		return newFakeSDKClient(object.DeepCopy()), nil
 	}
-	require.NoError(t, runDelete([]*unstructured.Unstructured{kubernetesObject("v1", "ConfigMap", "settings", "")}))
-	require.ErrorContains(t, runApply([]*unstructured.Unstructured{object}), "failed to apply")
-	require.ErrorContains(t, runDiff([]*unstructured.Unstructured{object}), "server dry-run apply")
+	_, err = runDelete([]*unstructured.Unstructured{kubernetesObject("v1", "ConfigMap", "settings", "")})
+	require.NoError(t, err)
+	_, err = runApply([]*unstructured.Unstructured{object})
+	require.ErrorContains(t, err, "failed to apply")
+	_, err = runDiff([]*unstructured.Unstructured{object})
+	require.ErrorContains(t, err, "server dry-run apply")
 }
 
 func captureKubernetesStdout(t *testing.T, fn func()) string {
