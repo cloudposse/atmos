@@ -120,25 +120,6 @@ func extractIdentityFromArgs(args []string) string {
 	return ""
 }
 
-// CreateAuthManagerFromIdentity creates and authenticates an AuthManager from an identity name.
-// Returns nil if identityName is empty (no authentication requested).
-// Returns error if identityName is provided but auth is not configured in atmos.yaml.
-// This helper reduces nested complexity in describe commands.
-//
-// This function delegates to auth.CreateAndAuthenticateManager to ensure consistent
-// authentication behavior across CLI commands and internal execution logic.
-//
-// Note: This function does not load stack configs for default identities.
-// Use CreateAuthManagerFromIdentityWithAtmosConfig if you need stack-level default identity resolution.
-func CreateAuthManagerFromIdentity(
-	identityName string,
-	authConfig *schema.AuthConfig,
-) (auth.AuthManager, error) {
-	defer perf.Track(nil, "cmd.CreateAuthManagerFromIdentity")()
-
-	return auth.CreateAndAuthenticateManager(identityName, authConfig, cfg.IdentityFlagSelectValue)
-}
-
 // CreateAuthManagerFromIdentityWithAtmosConfig creates and authenticates an AuthManager from an
 // identity name using a pre-merged auth config.
 //

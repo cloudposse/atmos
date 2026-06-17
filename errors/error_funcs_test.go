@@ -123,6 +123,32 @@ func TestCheckErrorPrintAndExit_ExitCodeError(t *testing.T) {
 	}
 }
 
+func TestCheckErrorPrintAndExit_SilentExitCodeError(t *testing.T) {
+	if os.Getenv("TEST_SILENT_EXIT") == "1" {
+		err := ExitCodeError{Code: 7, Silent: true}
+		CheckErrorPrintAndExit(err, "Should Not Print", "")
+		return
+	}
+
+	execPath, err := exec.LookPath(os.Args[0])
+	assert.Nil(t, err)
+	cmd := exec.Command(execPath, "-test.run=TestCheckErrorPrintAndExit_SilentExitCodeError")
+	cmd.Env = append(os.Environ(), "TEST_SILENT_EXIT=1")
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	runErr := cmd.Run()
+
+	var exitError *exec.ExitError
+	if errors.As(runErr, &exitError) {
+		assert.Equal(t, 7, exitError.ExitCode(), "silent error must still propagate the exit code")
+	} else {
+		assert.Fail(t, "Expected an exit error with code 7")
+	}
+	// Silent errors must not render a themed error box (which would query the terminal).
+	assert.NotContains(t, stderr.String(), "subcommand exited")
+	assert.NotContains(t, stderr.String(), "# Error")
+}
+
 func TestCheckErrorPrintAndExit_ExecExitError(t *testing.T) {
 	if os.Getenv("TEST_EXEC_EXIT") == "1" {
 		// Create an exec.ExitError using platform-appropriate command.

@@ -408,19 +408,19 @@ docs:
         indent_level: 2
 
 # CI build cache (dogfooded in .github/workflows/test.yml). The cache archives
-# the Atmos XDG cache root (~/.cache/atmos), where `atmos toolchain install`
-# places helm/helmfile, so CI restores them instead of re-downloading. The key
-# is defined here (once) rather than in the workflow because Atmos supplies
-# {{.OS}}/{{.Arch}}, avoiding any GitHub Actions context juggling.
+# the Atmos XDG cache root (~/.cache/atmos), where CI keeps toolchain installs,
+# and Terraform's provider plugin cache. The key is defined here (once) rather
+# than in the workflow because Atmos supplies {{.OS}}/{{.Arch}}, avoiding any
+# GitHub Actions context juggling.
 #
 # The cache is purely an accelerator: the workflow always installs exact pinned
 # versions, so it stays correct no matter what the cache already holds. The
-# trailing token (v1) is a manual cache-bust — bump it to start from a clean
+# trailing version token is a manual cache-bust — bump it to start from a clean
 # cache. restore_keys lets a bumped token still seed from the previous blob.
 ci:
   cache:
     enabled: true
-    key: 'atmos-toolchain-{{.OS}}-{{.Arch}}-v1'
+    key: 'atmos-toolchain-{{.OS}}-{{.Arch}}-v2'
     restore_keys:
       - 'atmos-toolchain-{{.OS}}-{{.Arch}}-'
 

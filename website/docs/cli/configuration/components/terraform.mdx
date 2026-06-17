@@ -60,6 +60,11 @@ components:
     plugin_cache: true
     plugin_cache_dir: ""  # Uses ~/.cache/atmos/terraform/plugins by default
 
+    # Registry cache proxy (disabled by default)
+    cache:
+      enabled: false
+      location: ""  # Uses ~/.cache/atmos/terraform/registry by default
+
     # Interactive shell configuration
     shell:
       prompt: "Terraform Shell"
@@ -263,9 +268,17 @@ This is **not** the same as Terraform's [`plugin_cache`](#configuration-referenc
 
 <dl>
   <dt><code>enabled</code></dt>
-  <dd>Enable the registry cache. Defaults to <code>false</code>.</dd>
+  <dd>
+    Enable the registry cache. Defaults to <code>false</code>.
+
+    <strong>Environment variable:</strong> <code>ATMOS_COMPONENTS_TERRAFORM_CACHE_ENABLED</code>
+  </dd>
   <dt><code>location</code></dt>
-  <dd>Cache root. Defaults to the XDG cache directory under <code>terraform/registry</code>.</dd>
+  <dd>
+    Cache root. Defaults to the XDG cache directory under <code>terraform/registry</code>.
+
+    <strong>Environment variable:</strong> <code>ATMOS_COMPONENTS_TERRAFORM_CACHE_LOCATION</code>
+  </dd>
   <dt><code>backend.type</code></dt>
   <dd>Storage backend. <code>filesystem</code> (default).</dd>
   <dt><code>metadata_ttl</code></dt>

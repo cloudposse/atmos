@@ -27,6 +27,7 @@ import (
 	envpkg "github.com/cloudposse/atmos/pkg/env"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/process"
 	"github.com/cloudposse/atmos/pkg/retry"
 	stepPkg "github.com/cloudposse/atmos/pkg/runner/step"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -279,6 +280,18 @@ func ExecuteWorkflow(
 	// Check if the workflow steps have the `name` attribute
 	checkAndGenerateWorkflowStepNames(workflowDefinition)
 
+	// Validate exec steps before executing anything: an exec step replaces
+	// the Atmos process, so it must be the final step and must not set
+	// supervisor-only fields (tty, interactive, retry, timeout, output).
+	if err := schema.ValidateExecWorkflowSteps(workflowDefinition.Steps); err != nil {
+		return errUtils.Build(err).
+			WithTitle(WorkflowErrTitle).
+			WithHint("Steps of type `exec` replace the Atmos process; move the exec step to the end of the workflow and remove unsupported fields").
+			WithContext("workflow", workflow).
+			WithExitCode(1).
+			Err()
+	}
+
 	log.Debug("Executing workflow", "workflow", workflow, "path", workflowPath)
 
 	if atmosConfig.Logs.Level == u.LogLevelTrace || atmosConfig.Logs.Level == u.LogLevelDebug {
@@ -402,10 +415,34 @@ func ExecuteWorkflow(
 		switch commandType {
 		case "shell":
 			// Render command before execution if show.command is enabled.
+			// Steps with tty/interactive attach the user's terminal; plain
+			// steps keep the existing masked shell-interpreter behavior.
 			stepPkg.RenderCommand(&step, workflowDefinition, command)
 			commandName := fmt.Sprintf("%s-step-%d", workflow, stepIdx)
 			err = retry.Do(context.Background(), step.Retry, func() error {
-				return ExecuteShell(command, commandName, ".", stepEnv, dryRun)
+				return process.RunShellStep(context.Background(), &process.ShellSessionSpec{
+					Command:     command,
+					Name:        commandName,
+					Dir:         ".",
+					Env:         stepEnv,
+					TTY:         step.Tty,
+					Interactive: step.Interactive,
+					DryRun:      dryRun,
+				}, func() error {
+					return ExecuteShell(command, commandName, ".", stepEnv, dryRun)
+				})
+			})
+		case schema.TaskTypeExec:
+			// Replace the Atmos process with the command (shell exec semantics).
+			// Validated earlier to be the final step; no retry wrapper (the
+			// process is replaced, so a retry could never run).
+			stepPkg.RenderCommand(&step, workflowDefinition, command)
+			err = process.ReplaceShellSession(&process.ExecSpec{
+				Command: command,
+				Name:    fmt.Sprintf("%s-step-%d", workflow, stepIdx),
+				Dir:     ".",
+				Env:     stepEnv,
+				DryRun:  dryRun,
 			})
 		case "atmos":
 			// Parse command using shell.Fields for proper quote handling.
@@ -464,7 +501,7 @@ func ExecuteWorkflow(
 				return errUtils.Build(errUtils.ErrInvalidWorkflowStepType).
 					WithTitle(WorkflowErrTitle).
 					WithHintf("Step type '%s' is not supported", commandType).
-					WithHint("Each step must specify a valid type: 'atmos', 'shell', or an interactive type like 'input', 'confirm', 'choose'").
+					WithHint("Each step must specify a valid type: 'atmos', 'shell', 'exec', or an interactive type like 'input', 'confirm', 'choose'").
 					WithExitCode(1).
 					Err()
 			}
@@ -475,6 +512,13 @@ func ExecuteWorkflow(
 			// Clean up progress on error.
 			if progressRenderer.IsEnabled() {
 				progressRenderer.Done()
+			}
+			// Terminal-handoff steps (tty/interactive/exec) that exit non-zero
+			// propagate the code silently, like a shell - don't wrap them in a
+			// themed workflow error (which would query the terminal post-session).
+			var silentExit errUtils.ExitCodeError
+			if errors.As(err, &silentExit) && silentExit.Silent {
+				return err
 			}
 			return buildWorkflowStepError(err, &workflowStepErrorContext{
 				WorkflowPath:     workflowPath,

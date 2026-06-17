@@ -3,7 +3,6 @@ package provenance
 import (
 	"fmt"
 	"os"
-	"sort"
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
@@ -40,19 +39,6 @@ const (
 	importsKey    = "imports"
 )
 
-// FileTreeNode represents provenance items grouped by file.
-type FileTreeNode struct {
-	File  string
-	Items []ProvenanceItem
-}
-
-// ProvenanceItem represents a single provenance entry for rendering.
-type ProvenanceItem struct {
-	Symbol string // ● ○ ∴
-	Line   int    // Line number in source file
-	Path   string // vars.name
-}
-
 // YAMLLineInfo contains information about a YAML line for provenance tracking.
 type YAMLLineInfo struct {
 	Path           string // JSONPath for this line (e.g., "vars.enabled")
@@ -74,211 +60,6 @@ func isProvenanceColorEnabled(atmosConfig *schema.AtmosConfiguration) bool {
 		return true
 	}
 	return termUtils.IsTTYSupportForStdout()
-}
-
-// RenderTree renders provenance information as a tree structure.
-func RenderTree(ctx *m.MergeContext, atmosConfig *schema.AtmosConfiguration, allowedPaths map[string]bool) string {
-	defer perf.Track(atmosConfig, "provenance.RenderTree")()
-
-	if ctx == nil || !ctx.IsProvenanceEnabled() {
-		return ""
-	}
-
-	useColor := isProvenanceColorEnabled(atmosConfig)
-
-	var buf strings.Builder
-
-	// Build file tree from provenance data
-	fileTree := buildFileTree(ctx, allowedPaths)
-
-	// Header
-	buf.WriteString("Provenance" + newlineChar)
-	buf.WriteString(strings.Repeat("─", defaultSeparatorWidth))
-	buf.WriteString(newlineChar)
-
-	// Render tree structure
-	renderFileTree(&buf, fileTree, useColor)
-
-	return buf.String()
-}
-
-// buildFileTree groups provenance entries by file.
-func buildFileTree(ctx *m.MergeContext, allowedPaths map[string]bool) []FileTreeNode {
-	defer perf.Track(nil, "provenance.buildFileTree")()
-
-	// Group provenance entries by file
-	byFile := make(map[string][]ProvenanceItem)
-
-	for _, path := range ctx.GetProvenancePaths() {
-		// Skip if we have an allowedPaths filter and this path is not in it
-		if allowedPaths != nil && !allowedPaths[path] {
-			continue
-		}
-
-		entries := ctx.GetProvenance(path)
-		if len(entries) == 0 {
-			continue
-		}
-
-		// Take FIRST entry (most recent/final value)
-		entry := entries[0]
-
-		file := entry.File
-		if entry.Type == m.ProvenanceTypeComputed {
-			file = "<computed>"
-		}
-
-		symbol := getSymbolForEntry(entry)
-
-		byFile[file] = append(byFile[file], ProvenanceItem{
-			Symbol: symbol,
-			Line:   entry.Line,
-			Path:   path,
-		})
-	}
-
-	// Convert to sorted tree
-	var tree []FileTreeNode
-	for file, items := range byFile {
-		tree = append(tree, FileTreeNode{
-			File:  file,
-			Items: items,
-		})
-	}
-
-	sort.Slice(tree, func(i, j int) bool {
-		return tree[i].File < tree[j].File
-	})
-
-	return tree
-}
-
-// renderFileTree renders the file tree with box drawing characters.
-func renderFileTree(buf *strings.Builder, tree []FileTreeNode, useColor bool) {
-	if len(tree) == 0 {
-		buf.WriteString("No provenance data available.\n")
-		return
-	}
-
-	buf.WriteString("stacks/\n")
-
-	for i, node := range tree {
-		isLast := i == len(tree)-1
-		connector := "├──"
-		prefix := "│  "
-		if isLast {
-			connector = "└──"
-			prefix = "   "
-		}
-
-		// File path (colored).
-		buf.WriteString(connector)
-		buf.WriteString(" ")
-		buf.WriteString(colorize(node.File, lipgloss.Color(theme.ColorSelectedItem), useColor))
-		buf.WriteString(newlineChar)
-
-		// Items.
-		for j, item := range node.Items {
-			itemLast := j == len(node.Items)-1
-			itemConn := "├─"
-			if itemLast {
-				itemConn = "└─"
-			}
-
-			buf.WriteString(prefix)
-			buf.WriteString(itemConn)
-			buf.WriteString(" ")
-
-			// Symbol (colored).
-			symbol := colorize(item.Symbol, getSymbolColor(item.Symbol), useColor)
-			buf.WriteString(symbol)
-			buf.WriteString(" ")
-
-			// Line number.
-			if item.Line > 0 {
-				lineNum := fmt.Sprintf(":%d", item.Line)
-				buf.WriteString(colorize(lineNum, lipgloss.Color(theme.ColorCyan), useColor))
-				buf.WriteString("   ")
-			}
-
-			// Path.
-			buf.WriteString(item.Path)
-			buf.WriteString(newlineChar)
-		}
-	}
-}
-
-// getSymbolForEntry determines which symbol to use based on provenance type.
-func getSymbolForEntry(entry m.ProvenanceEntry) string {
-	switch entry.Type {
-	case m.ProvenanceTypeComputed:
-		return SymbolComputed // ∴
-	case m.ProvenanceTypeInline, m.ProvenanceTypeOverride:
-		return SymbolDefined // ● (defined at this level)
-	case m.ProvenanceTypeImport, m.ProvenanceTypeDefault:
-		return SymbolInherited // ○ (inherited/imported)
-	default:
-		return SymbolInherited // ○
-	}
-}
-
-// getSymbolColor returns the color for a given symbol.
-func getSymbolColor(symbol string) lipgloss.Color {
-	switch symbol {
-	case SymbolDefined:
-		return lipgloss.Color(theme.ColorGreen)
-	case SymbolInherited:
-		return lipgloss.Color(theme.ColorCyan)
-	case SymbolComputed:
-		return lipgloss.Color(theme.ColorOrange)
-	default:
-		return lipgloss.Color(theme.ColorDarkGray)
-	}
-}
-
-// colorize applies a color to text using lipgloss.
-// When useColor is false, it returns the text unchanged.
-func colorize(text string, color lipgloss.Color, useColor bool) string {
-	if !useColor {
-		return text
-	}
-	style := lipgloss.NewStyle().Foreground(color)
-	return style.Render(text)
-}
-
-// RenderSideBySide renders YAML on the left and provenance tree on the right.
-func RenderSideBySide(yamlData any, ctx *m.MergeContext, atmosConfig *schema.AtmosConfiguration, leftWidth int) (result string) {
-	defer perf.Track(atmosConfig, "provenance.RenderSideBySide")()
-
-	// Recover from panics in YAML marshalling (e.g., channels, funcs).
-	defer func() {
-		if r := recover(); r != nil {
-			log.Debug("Panic during YAML marshalling", "error", r)
-			result = fmt.Sprintf("Error rendering YAML: %v\n", r)
-		}
-	}()
-
-	// Generate left side (YAML)
-	yamlBytes, err := u.ConvertToYAML(yamlData)
-	if err != nil {
-		return fmt.Sprintf("Error rendering YAML: %v\n", err)
-	}
-	leftYAML := yamlBytes
-
-	// Apply syntax highlighting to YAML
-	highlighted, err := u.HighlightCodeWithConfig(atmosConfig, leftYAML, "yaml")
-	if err != nil {
-		// If highlighting fails, use plain YAML
-		highlighted = leftYAML
-	}
-
-	// Don't filter provenance - show all available provenance data
-	// The user wants to see where values came from, even if some values
-	// don't have provenance (computed or from component defaults)
-	rightTree := RenderTree(ctx, atmosConfig, nil)
-
-	// Combine side-by-side
-	return combineSideBySide(highlighted, rightTree, leftWidth)
 }
 
 // findProvenance looks up provenance for a normalized path.
@@ -347,7 +128,8 @@ func formatProvenanceCommentWithStackFile(entry *m.ProvenanceEntry, useColor boo
 	depthStyle := lipgloss.NewStyle().Foreground(depthColor)
 
 	// Build: "# symbol [depth] file:line" with colored depth.
-	comment := fmt.Sprintf("%s %s %s %s:%d",
+	comment := fmt.Sprintf(
+		"%s %s %s %s:%d",
 		grayStyle.Render("#"),
 		grayStyle.Render(symbol),
 		depthStyle.Render(fmt.Sprintf("[%d]", entry.Depth)),
@@ -391,14 +173,6 @@ func getCommentColumn() int {
 	}
 
 	return commentColumn
-}
-
-// RenderInlineProvenance renders YAML with provenance as inline comments.
-// Deprecated: Use RenderInlineProvenanceWithStackFile instead.
-func RenderInlineProvenance(yamlData any, ctx *m.MergeContext, atmosConfig *schema.AtmosConfiguration) string {
-	defer perf.Track(atmosConfig, "provenance.RenderInlineProvenance")()
-
-	return RenderInlineProvenanceWithStackFile(yamlData, ctx, atmosConfig, "")
 }
 
 // PrepareYAMLForProvenance prepares YAML data for provenance rendering.

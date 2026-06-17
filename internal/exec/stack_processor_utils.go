@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -2573,7 +2574,7 @@ func FindComponentsDerivedFromBaseComponents(
 				return nil, fmt.Errorf("%w 'component' of the component '%s' in the file '%s'", errUtils.ErrInvalidComponentAttribute, component, stack)
 			}
 
-			if baseComponent != "" && u.SliceContainsString(baseComponents, baseComponent) {
+			if baseComponent != "" && slices.Contains(baseComponents, baseComponent) {
 				res = append(res, component)
 			}
 		}
