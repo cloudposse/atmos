@@ -13,7 +13,7 @@ components:
     secret-consumer:
       dependencies:
         tools:
-          opentofu: "1.9.1"
+          opentofu: "1.12.2"
       secrets:
         vars:
           SSM_INSTANCE_TOKEN:
@@ -29,8 +29,8 @@ components:
             store: secrets/ssm
             scope: global
             required: true
-      env:
-        TF_VAR_ssm_instance_token: !secret SSM_INSTANCE_TOKEN
-        TF_VAR_ssm_stack_token: !secret SSM_STACK_TOKEN
-        TF_VAR_asm_database_password: !secret ASM_DATABASE_CONFIG | path ".password"
-        TF_VAR_global_shared_token: !secret GLOBAL_SHARED_TOKEN
+      vars:
+        ssm_instance_token: !secret SSM_INSTANCE_TOKEN
+        ssm_stack_token: !secret SSM_STACK_TOKEN
+        asm_database_password: !secret ASM_DATABASE_CONFIG | path ".password"
+        global_shared_token: !secret GLOBAL_SHARED_TOKEN

@@ -69,6 +69,7 @@ var legacyTypeToKind = map[string]string{
 	"azure-key-vault":         KindAzureKeyVault,
 	"aws-ssm-parameter-store": KindAWSSSM,
 	"aws-secrets-manager":     KindAWSASM,
+	"google/secretmanager":    KindGCPSecret,
 	"google-secret-manager":   KindGCPSecret,
 	"gsm":                     KindGCPSecret,
 	"hashicorp-vault":         KindHashicorpVault,

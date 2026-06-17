@@ -31,8 +31,8 @@ permissions:
   pull-requests: read
 
 env:
-  TERRAFORM_VERSION: "1.9.7"
-  OPEN_TOFU_VERSION: "1.9.1"
+  TERRAFORM_VERSION: "1.15.6"
+  OPEN_TOFU_VERSION: "1.12.2"
   HELM_VERSION: "v3.19.2"
   HELMFILE_VERSION: "v1.1.0"
   PACKER_VERSION: "1.14.2"
@@ -423,7 +423,7 @@ jobs:
           - 4566:4566
       floci-gcp:
         # Pin by immutable digest for reproducibility/supply-chain safety. Comment tracks the human-readable tag.
-        image: floci/floci-gcp@sha256:01e6f320cf904bd85788041a42d08a8072f9c2eb9a5abfc440895c6a6ea6e12a # latest
+        image: floci/floci-gcp@sha256:a6420f308ad721fa4a203b70658563eab9c8fbc8d091feca2d95016239f5854a # latest
         ports:
           - 4588:4588
       floci-az:

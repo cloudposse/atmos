@@ -25,8 +25,8 @@ type Tool struct {
 // DefaultTools lists the external binaries the CLI suite depends on. The pinned
 // versions must match .github/workflows/test.yml so local and CI runs agree.
 var DefaultTools = []Tool{
-	{Repo: "opentofu/opentofu", Version: "1.9.1", Binary: "tofu"},
-	{Repo: "hashicorp/terraform", Version: "1.9.7", Binary: "terraform"},
+	{Repo: "opentofu/opentofu", Version: "1.12.2", Binary: "tofu"},
+	{Repo: "hashicorp/terraform", Version: "1.15.6", Binary: "terraform"},
 	{Repo: "hashicorp/packer", Version: "1.14.2", Binary: "packer"},
 	{Repo: "helmfile/helmfile", Version: "v1.1.0", Binary: "helmfile"},
 	{Repo: "helm/helm", Version: "v3.19.2", Binary: "helm"},

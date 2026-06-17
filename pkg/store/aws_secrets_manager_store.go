@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -190,7 +191,7 @@ func (s *SecretsManagerStore) Set(stack string, component string, key string, va
 
 	ctx := context.TODO()
 
-	jsonValue, err := json.Marshal(value)
+	jsonValue, err := marshalSecretsManagerValue(value)
 	if err != nil {
 		return fmt.Errorf(errWrapFormat, ErrSerializeJSON, err)
 	}
@@ -202,6 +203,16 @@ func (s *SecretsManagerStore) Set(stack string, component string, key string, va
 	}
 
 	return s.putOrCreate(ctx, secretID, strValue)
+}
+
+func marshalSecretsManagerValue(value any) ([]byte, error) {
+	if str, ok := value.(string); ok {
+		trimmed := strings.TrimSpace(str)
+		if len(trimmed) > 0 && (trimmed[0] == '{' || trimmed[0] == '[') && json.Valid([]byte(trimmed)) {
+			return []byte(trimmed), nil
+		}
+	}
+	return json.Marshal(value)
 }
 
 // putOrCreate updates an existing secret value, creating the secret if it does not yet exist.

@@ -99,6 +99,17 @@ func TestSecretsManagerStore_SetCreatesThenUpdates(t *testing.T) {
 	assert.Equal(t, "v2", got)
 }
 
+func TestSecretsManagerStore_SetPreservesStructuredJSONString(t *testing.T) {
+	fake := newFakeSecretsManager()
+	s := newTestASMStore(fake)
+
+	require.NoError(t, s.Set("prod", "api", "DB_CONFIG", `{"username":"demo","password":"secret"}`))
+
+	got, err := s.Get("prod", "api", "DB_CONFIG")
+	require.NoError(t, err)
+	assert.Equal(t, map[string]any{"username": "demo", "password": "secret"}, got)
+}
+
 func TestSecretsManagerStore_DeleteAndHas(t *testing.T) {
 	fake := newFakeSecretsManager()
 	s := newTestASMStore(fake)

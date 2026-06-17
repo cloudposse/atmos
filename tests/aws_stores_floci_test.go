@@ -110,9 +110,9 @@ func TestAWSSecretsFlociE2E(t *testing.T) {
 		require.NoError(t, setErr, "secret set %s failed:\n%s", target, setStderr)
 	}
 	setSecret("SSM_INSTANCE_TOKEN=dev-instance-token", "-c", "secret-consumer")
+	setSecret("SSM_STACK_TOKEN=dev-stack-token", "-c", "secret-consumer")
+	setSecret(`ASM_DATABASE_CONFIG={"username":"demo","password":"dev-db-password","host":"db.dev.local"}`, "-c", "secret-consumer")
 	setSecret("GLOBAL_SHARED_TOKEN=shared-token", "-c", "secret-consumer")
-	putFlociSSMParameter(t, ssmClient, ssmPrefix+"/dev/SSM_STACK_TOKEN", "dev-stack-token")
-	putFlociSecret(t, asmClient, asmPrefix+"/dev/secret-consumer/ASM_DATABASE_CONFIG", `{"username":"demo","password":"dev-db-password","host":"db.dev.local"}`)
 
 	requireFlociParameterValueContains(t, ssmClient, ssmPrefix+"/dev/secret-consumer/SSM_INSTANCE_TOKEN", "dev-instance-token")
 	requireFlociParameterValueContains(t, ssmClient, ssmPrefix+"/dev/SSM_STACK_TOKEN", "dev-stack-token")
@@ -185,45 +185,6 @@ func requireFlociSecretValueContains(t *testing.T, client *secretsmanager.Client
 		}
 		return out.SecretString != nil && strings.Contains(*out.SecretString, expected)
 	}, 10*time.Second, 200*time.Millisecond, "expected Floci secret %s to contain %q", secretID, expected)
-}
-
-func putFlociSSMParameter(t *testing.T, client *ssm.Client, name, value string) {
-	t.Helper()
-
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-
-	_, err := client.PutParameter(ctx, &ssm.PutParameterInput{
-		Name:      aws.String(name),
-		Value:     aws.String(value),
-		Type:      ssmtypes.ParameterTypeSecureString,
-		Overwrite: aws.Bool(true),
-	})
-	require.NoError(t, err)
-}
-
-func putFlociSecret(t *testing.T, client *secretsmanager.Client, secretID, value string) {
-	t.Helper()
-
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-
-	_, err := client.CreateSecret(ctx, &secretsmanager.CreateSecretInput{
-		Name:         aws.String(secretID),
-		SecretString: aws.String(value),
-	})
-	if err == nil {
-		return
-	}
-	var exists *secretsmanagertypes.ResourceExistsException
-	if !errors.As(err, &exists) {
-		require.NoError(t, err)
-	}
-	_, err = client.PutSecretValue(ctx, &secretsmanager.PutSecretValueInput{
-		SecretId:     aws.String(secretID),
-		SecretString: aws.String(value),
-	})
-	require.NoError(t, err)
 }
 
 func cleanupFlociSSMParameters(t *testing.T, client *ssm.Client, names []string) {

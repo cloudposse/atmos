@@ -8,7 +8,7 @@ components:
         component: output-demo
       dependencies:
         tools:
-          opentofu: "1.9.1"
+          opentofu: "1.12.2"
       vars:
         cross_stack_ssm: !store outputs/ssm producer output-demo demo_id
         cross_stack_asm: !store outputs/asm producer output-demo demo_id

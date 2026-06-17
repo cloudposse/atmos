@@ -144,9 +144,11 @@ stores:
 
 ## Azure Key Vault
 
-### Type
+### Kind
 
-`azure-key-vault`
+`azure/keyvault`
+
+Legacy type: `azure-key-vault`
 
 ### Options
 
@@ -187,14 +189,14 @@ For `GetKey`, the same normalization is applied to the raw key.
 ```yaml
 stores:
   prod/azure:
-    type: azure-key-vault
+    kind: azure/keyvault
     options:
       vault_url: "https://prod-infra-vault.vault.azure.net/"
       prefix: atmos
 
   # With identity-based auth
   shared/azure:
-    type: azure-key-vault
+    kind: azure/keyvault
     identity: azure-shared
     options:
       vault_url: "https://shared-vault.vault.azure.net/"
@@ -204,9 +206,11 @@ stores:
 
 ## Google Secret Manager
 
-### Type
+### Kind
 
-`google-secret-manager` or `gsm`
+`gcp/secretmanager`
+
+Legacy types: `google-secret-manager`, `google/secretmanager`, `gsm`
 
 ### Options
 
@@ -259,7 +263,7 @@ All GCP operations have a 30-second context timeout.
 ```yaml
 stores:
   prod/gcp:
-    type: google-secret-manager
+    kind: gcp/secretmanager
     options:
       project_id: my-prod-project
       prefix: atmos
@@ -267,7 +271,7 @@ stores:
         - us-east1
         - us-west1
 
-  # Using short alias
+  # Legacy alias
   dev/gcp:
     type: gsm
     options:
@@ -507,7 +511,7 @@ Atmos deep-merges all levels into the final hook configuration.
 ### Common Errors
 
 **`store type not found: <type>`**
-The `kind` or legacy `type` field does not match any registered provider. Valid kinds include: `aws/ssm`, `aws/asm`, `azure-key-vault`, `google-secret-manager`, `gsm`, `redis`, `artifactory`.
+The `kind` or legacy `type` field does not match any registered provider. Valid kinds include: `aws/ssm`, `aws/asm`, `azure/keyvault`, `gcp/secretmanager`, `redis`, `artifactory`.
 
 **`region is required in ssm store configuration`**
 The `region` option is missing from an AWS SSM store. This is a required field.

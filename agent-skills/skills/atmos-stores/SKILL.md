@@ -39,12 +39,12 @@ stores:
       region: us-east-1
 
   prod/azure:
-    type: azure-key-vault
+    kind: azure/keyvault
     options:
       vault_url: "https://my-keyvault.vault.azure.net/"
 
   prod/gcp:
-    type: google-secret-manager
+    kind: gcp/secretmanager
     options:
       project_id: my-project
 
@@ -129,7 +129,7 @@ Use `secret: true` with `kind: aws/asm` for declared secrets managed through `at
 ```yaml
 stores:
   prod/azure:
-    type: azure-key-vault
+    kind: azure/keyvault
     options:
       vault_url: "https://my-keyvault.vault.azure.net/"  # Required
       prefix: myapp               # Optional
@@ -145,7 +145,7 @@ Key format: `<prefix>-<stack-parts>-<component-parts>-<key>` (segments joined by
 ```yaml
 stores:
   prod/gcp:
-    type: google-secret-manager  # Also accepts "gsm"
+    kind: gcp/secretmanager
     options:
       project_id: my-project     # Required
       prefix: myapp              # Optional
@@ -411,7 +411,7 @@ components:
 
 | Problem | Cause | Solution |
 |---------|-------|----------|
-| `store type not found` | Invalid `kind`/`type` in store config | Use one of: `aws/ssm`, `aws/asm`, `azure-key-vault`, `google-secret-manager`, `gsm`, `redis`, `artifactory` |
+| `store type not found` | Invalid `kind`/`type` in store config | Use one of: `aws/ssm`, `aws/asm`, `azure/keyvault`, `gcp/secretmanager`, `redis`, `artifactory` |
 | `region is required` | Missing `region` for SSM store | Add `region` to store options |
 | `vault_url is required` | Missing `vault_url` for Azure | Add `vault_url` to store options |
 | `project_id is required` | Missing `project_id` for GCP | Add `project_id` to store options |

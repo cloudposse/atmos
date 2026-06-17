@@ -33,17 +33,17 @@ const (
 	envAWSProfile = "AWS_PROFILE"
 )
 
-var testToolProvisionLocks sync.Map
+var testToolPathLocks sync.Map
 
-type testTool struct {
+type cachedTestTool struct {
 	Repo    string
 	Version string
 	Binary  string
 }
 
-var knownTestTools = []testTool{
-	{Repo: "opentofu/opentofu", Version: "1.9.1", Binary: "tofu"},
-	{Repo: "hashicorp/terraform", Version: "1.9.7", Binary: "terraform"},
+var cachedTestTools = []cachedTestTool{
+	{Repo: "opentofu/opentofu", Version: "1.12.2", Binary: "tofu"},
+	{Repo: "hashicorp/terraform", Version: "1.15.6", Binary: "terraform"},
 	{Repo: "hashicorp/packer", Version: "1.14.2", Binary: "packer"},
 	{Repo: "helmfile/helmfile", Version: "v1.1.0", Binary: "helmfile"},
 	{Repo: "helm/helm", Version: "v3.19.2", Binary: "helm"},
@@ -346,7 +346,7 @@ func RequireExecutable(t *testing.T, name string, purpose string) {
 
 	_, err := exec.LookPath(name)
 	if err != nil {
-		provisionKnownTestTool(name)
+		prependCachedTestTool(name)
 	}
 
 	_, err = exec.LookPath(name)
@@ -356,39 +356,24 @@ func RequireExecutable(t *testing.T, name string, purpose string) {
 	}
 }
 
-func provisionKnownTestTool(binary string) {
-	tool, ok := knownTestTool(binary)
+func prependCachedTestTool(binary string) {
+	tool, ok := cachedTestToolForBinary(binary)
 	if !ok {
 		return
 	}
 
-	lockValue, _ := testToolProvisionLocks.LoadOrStore(binary, &sync.Once{})
+	lockValue, _ := testToolPathLocks.LoadOrStore(binary, &sync.Once{})
 	lockValue.(*sync.Once).Do(func() {
-		installPath, err := testToolchainInstallPath()
+		cacheDir, err := os.UserCacheDir()
 		if err != nil {
 			return
 		}
-		repoRoot, err := testRepoRoot()
-		if err != nil {
+		binDir := filepath.Join(cacheDir, "atmos", "test-toolchain", "bin", filepath.FromSlash(tool.Repo), tool.Version)
+		binaryPath := filepath.Join(binDir, tool.Binary)
+		if _, err := os.Stat(binaryPath); err != nil {
 			return
 		}
 
-		spec := tool.Repo + "@" + tool.Version
-		toolVersionsPath := filepath.Join(installPath, "test-tool-versions")
-		cmd := exec.Command( //nolint:gosec // Test helper installs pinned known tools.
-			"go", "run", ".",
-			"toolchain",
-			"--toolchain-path", installPath,
-			"--tool-versions", toolVersionsPath,
-			"install", spec,
-		)
-		cmd.Dir = repoRoot
-		cmd.Env = os.Environ()
-		if err := cmd.Run(); err != nil {
-			return
-		}
-
-		binDir := filepath.Join(installPath, "bin", filepath.FromSlash(tool.Repo), tool.Version)
 		path := os.Getenv("PATH")
 		if path == "" {
 			os.Setenv("PATH", binDir)
@@ -398,29 +383,13 @@ func provisionKnownTestTool(binary string) {
 	})
 }
 
-func knownTestTool(binary string) (testTool, bool) {
-	for _, tool := range knownTestTools {
+func cachedTestToolForBinary(binary string) (cachedTestTool, bool) {
+	for _, tool := range cachedTestTools {
 		if tool.Binary == binary {
 			return tool, true
 		}
 	}
-	return testTool{}, false
-}
-
-func testToolchainInstallPath() (string, error) {
-	cacheDir, err := os.UserCacheDir()
-	if err != nil {
-		return "", err
-	}
-	return filepath.Join(cacheDir, "atmos", "test-toolchain"), nil
-}
-
-func testRepoRoot() (string, error) {
-	_, file, _, ok := runtime.Caller(0)
-	if !ok {
-		return "", os.ErrNotExist
-	}
-	return filepath.Dir(filepath.Dir(file)), nil
+	return cachedTestTool{}, false
 }
 
 // RequireEnvVar checks if an environment variable is set.

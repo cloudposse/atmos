@@ -6,7 +6,7 @@ components:
     output-demo:
       dependencies:
         tools:
-          opentofu: "1.9.1"
+          opentofu: "1.12.2"
       hooks:
         store-to-ssm:
           events:
@@ -32,7 +32,7 @@ components:
         component: output-demo
       dependencies:
         tools:
-          opentofu: "1.9.1"
+          opentofu: "1.12.2"
       vars:
         same_stack_ssm: !store outputs/ssm output-demo demo_id
         same_stack_asm: !store outputs/asm output-demo demo_id

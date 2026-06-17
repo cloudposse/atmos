@@ -13,6 +13,7 @@ func TestMapLegacyType(t *testing.T) {
 		"aws-secrets-manager":     KindAWSASM,
 		"hashicorp-vault":         KindHashicorpVault,
 		"azure-key-vault":         KindAzureKeyVault,
+		"google/secretmanager":    KindGCPSecret,
 		"google-secret-manager":   KindGCPSecret,
 		"gsm":                     KindGCPSecret,
 		"redis":                   KindRedis,
@@ -98,6 +99,35 @@ func TestNewStoreRegistry_AWSKinds(t *testing.T) {
 	assert.True(t, ok)
 
 	_, ok = registry["asm"].(*SecretsManagerStore)
+	assert.True(t, ok)
+}
+
+func TestNewStoreRegistry_AzureAndGCPKinds(t *testing.T) {
+	cfg := StoresConfig{
+		"azure": StoreConfig{
+			Identity: "azure/test",
+			Kind:     "azure/keyvault",
+			Options:  map[string]any{"vault_url": "https://test.vault.azure.net"},
+		},
+		"gcp": StoreConfig{
+			Kind:    "gcp/secretmanager",
+			Options: map[string]any{"project_id": "test-project"},
+		},
+		"google": StoreConfig{
+			Kind:    "google/secretmanager",
+			Options: map[string]any{"project_id": "test-project"},
+		},
+	}
+	registry, err := NewStoreRegistry(&cfg)
+	require.NoError(t, err)
+
+	_, ok := registry["azure"].(*AzureKeyVaultStore)
+	assert.True(t, ok)
+
+	_, ok = registry["gcp"].(*GSMStore)
+	assert.True(t, ok)
+
+	_, ok = registry["google"].(*GSMStore)
 	assert.True(t, ok)
 }
 

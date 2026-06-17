@@ -271,19 +271,19 @@ Configures external key-value store backends.
 ```yaml
 stores:
   ssm/dev:
-    type: aws-ssm-parameter-store
+    kind: aws/ssm
     options:
       region: us-east-1
       identity: dev-admin
 
   secrets:
-    type: azure-key-vault
+    kind: azure/keyvault
     options:
       vault_url: https://my-vault.vault.azure.net/
 ```
 
-Supported types: `aws-ssm-parameter-store`, `azure-key-vault`, `google-secret-manager` (alias: `gsm`),
-`redis`, `artifactory`.
+Supported kinds: `aws/ssm`, `aws/asm`, `azure/keyvault`, `gcp/secretmanager`, `redis`, `artifactory`.
+Legacy `type` aliases are still supported for backward compatibility.
 
 For complete store configuration, see the `atmos-stores` skill.
 
