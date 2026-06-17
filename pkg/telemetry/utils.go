@@ -20,16 +20,6 @@ const CommandEventName = "command"
 //go:embed markdown/telemetry_notice.md
 var telemetryNoticeMarkdown string
 
-// CaptureCmdString is the public API for capturing command string telemetry.
-// It accepts an optional error parameter and handles the case where no error is provided.
-func CaptureCmdString(cmdString string, err ...error) {
-	var inErr error
-	if len(err) > 0 {
-		inErr = err[0]
-	}
-	captureCmdString(cmdString, inErr)
-}
-
 // CaptureCmd is the public API for capturing cobra command telemetry.
 // It accepts an optional error parameter and handles the case where no error is provided.
 func CaptureCmd(cmd *cobra.Command, err ...error) {

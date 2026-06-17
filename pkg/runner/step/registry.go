@@ -93,12 +93,3 @@ func Count() int {
 	defer registry.mu.RUnlock()
 	return len(registry.handlers)
 }
-
-// Reset clears the registry. For testing only.
-func Reset() {
-	defer perf.Track(nil, "step.Reset")()
-
-	registry.mu.Lock()
-	defer registry.mu.Unlock()
-	registry.handlers = make(map[string]StepHandler)
-}
