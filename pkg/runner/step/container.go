@@ -20,6 +20,7 @@ const (
 	containerActionBuild       = "build"
 	containerActionPush        = "push"
 	containerActionRun         = "run"
+	containerActionInspect     = "inspect"
 	containerBuildEngineBuildx = "buildx"
 	defaultContainerShell      = "/bin/sh"
 	defaultContainerWorkdir    = "/workspace"
@@ -48,8 +49,10 @@ func (h *ContainerHandler) Validate(step *schema.WorkflowStep) error {
 		return h.validatePushAction(step)
 	case containerActionRun:
 		return h.validateRunAction(step)
+	case containerActionInspect:
+		return h.validateInspectAction(step)
 	default:
-		return invalidContainerField(step, "action", action, "Action must be `build`, `push`, `run`, or empty for `run`")
+		return invalidContainerField(step, "action", action, "Action must be `build`, `push`, `run`, `inspect`, or empty for `run`")
 	}
 }
 
@@ -69,6 +72,8 @@ func (h *ContainerHandler) ExecuteWithWorkflow(ctx context.Context, step *schema
 		return h.executeBuild(ctx, step, vars)
 	case containerActionPush:
 		return h.executePush(ctx, step, vars)
+	case containerActionInspect:
+		return h.executeInspect(ctx, step, vars)
 	default:
 		return h.executeRun(ctx, step, vars, workflow)
 	}

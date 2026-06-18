@@ -7,11 +7,12 @@ Build, push, and run containers from Atmos workflows and custom commands.
 ```shell
 cd examples/container-step
 
-# Custom command using a container step
-atmos container hello
+# Custom command using a container step. `example` is a user-defined custom
+# command (not a built-in `atmos` subcommand) — the name makes that obvious.
+atmos example hello
 
-# Build a local image and run it in a later step
-atmos container build-run
+# Build a local image, render its metadata (inspect step), then run it
+atmos example build-run
 atmos workflow build-run -f container-step
 
 # Build with Docker Buildx Bake and run the result. Requires Docker Buildx.

@@ -89,6 +89,14 @@ type ContainerPushStep struct {
 	Tags             []string `yaml:"tags,omitempty" json:"tags,omitempty" mapstructure:"tags"`
 }
 
+// ContainerInspectStep configures a container image inspect action that renders
+// curated image metadata.
+type ContainerInspectStep struct {
+	Runtime          string `yaml:"runtime,omitempty" json:"runtime,omitempty" mapstructure:"runtime"`
+	RuntimeAutoStart bool   `yaml:"runtime_auto_start,omitempty" json:"runtime_auto_start,omitempty" mapstructure:"runtime_auto_start"`
+	Image            string `yaml:"image,omitempty" json:"image,omitempty" mapstructure:"image"`
+}
+
 // ContainerRunStep configures a one-shot container run action.
 type ContainerRunStep struct {
 	Image             string           `yaml:"image,omitempty" json:"image,omitempty" mapstructure:"image"`
@@ -226,23 +234,24 @@ type WorkflowStep struct {
 	Code int `yaml:"code,omitempty" json:"code,omitempty" mapstructure:"code"` // Exit code for exit step type.
 
 	// Container step fields.
-	Action            string              `yaml:"action,omitempty" json:"action,omitempty" mapstructure:"action"` // build, push, run.
-	Build             *ContainerBuildStep `yaml:"build,omitempty" json:"build,omitempty" mapstructure:"build"`
-	Push              *ContainerPushStep  `yaml:"push,omitempty" json:"push,omitempty" mapstructure:"push"`
-	Run               *ContainerRunStep   `yaml:"run,omitempty" json:"run,omitempty" mapstructure:"run"`
-	RuntimeAutoStart  bool                `yaml:"runtime_auto_start,omitempty" json:"runtime_auto_start,omitempty" mapstructure:"runtime_auto_start"`
-	Image             string              `yaml:"image,omitempty" json:"image,omitempty" mapstructure:"image"`                                           // Container image to run.
-	Shell             string              `yaml:"shell,omitempty" json:"shell,omitempty" mapstructure:"shell"`                                           // Shell used to execute command in container.
-	Runtime           string              `yaml:"runtime,omitempty" json:"runtime,omitempty" mapstructure:"runtime"`                                     // docker, podman, or empty for auto-detect.
-	Pull              string              `yaml:"pull,omitempty" json:"pull,omitempty" mapstructure:"pull"`                                              // missing, always, never.
-	Workspace         string              `yaml:"workspace,omitempty" json:"workspace,omitempty" mapstructure:"workspace"`                               // Container workspace path.
-	WorkspaceReadOnly bool                `yaml:"workspace_read_only,omitempty" json:"workspace_read_only,omitempty" mapstructure:"workspace_read_only"` // Mount workspace read-only.
-	Cleanup           string              `yaml:"cleanup,omitempty" json:"cleanup,omitempty" mapstructure:"cleanup"`                                     // always, on_success, never.
-	User              string              `yaml:"user,omitempty" json:"user,omitempty" mapstructure:"user"`                                              // Container user.
-	RunArgs           []string            `yaml:"run_args,omitempty" json:"run_args,omitempty" mapstructure:"run_args"`                                  // Runtime-specific create args.
-	Mounts            []ContainerMount    `yaml:"mounts,omitempty" json:"mounts,omitempty" mapstructure:"mounts"`                                        // Extra container mounts.
-	Ports             []ContainerPort     `yaml:"ports,omitempty" json:"ports,omitempty" mapstructure:"ports"`                                           // Port mappings.
-	Container         *WorkflowContainer  `yaml:"container,omitempty" json:"container,omitempty" mapstructure:"container"`                               // Workflow container override or false to run on host.
+	Action            string                `yaml:"action,omitempty" json:"action,omitempty" mapstructure:"action"` // build, push, run, inspect.
+	Build             *ContainerBuildStep   `yaml:"build,omitempty" json:"build,omitempty" mapstructure:"build"`
+	Push              *ContainerPushStep    `yaml:"push,omitempty" json:"push,omitempty" mapstructure:"push"`
+	Run               *ContainerRunStep     `yaml:"run,omitempty" json:"run,omitempty" mapstructure:"run"`
+	Inspect           *ContainerInspectStep `yaml:"inspect,omitempty" json:"inspect,omitempty" mapstructure:"inspect"`
+	RuntimeAutoStart  bool                  `yaml:"runtime_auto_start,omitempty" json:"runtime_auto_start,omitempty" mapstructure:"runtime_auto_start"`
+	Image             string                `yaml:"image,omitempty" json:"image,omitempty" mapstructure:"image"`                                           // Container image to run.
+	Shell             string                `yaml:"shell,omitempty" json:"shell,omitempty" mapstructure:"shell"`                                           // Shell used to execute command in container.
+	Runtime           string                `yaml:"runtime,omitempty" json:"runtime,omitempty" mapstructure:"runtime"`                                     // docker, podman, or empty for auto-detect.
+	Pull              string                `yaml:"pull,omitempty" json:"pull,omitempty" mapstructure:"pull"`                                              // missing, always, never.
+	Workspace         string                `yaml:"workspace,omitempty" json:"workspace,omitempty" mapstructure:"workspace"`                               // Container workspace path.
+	WorkspaceReadOnly bool                  `yaml:"workspace_read_only,omitempty" json:"workspace_read_only,omitempty" mapstructure:"workspace_read_only"` // Mount workspace read-only.
+	Cleanup           string                `yaml:"cleanup,omitempty" json:"cleanup,omitempty" mapstructure:"cleanup"`                                     // always, on_success, never.
+	User              string                `yaml:"user,omitempty" json:"user,omitempty" mapstructure:"user"`                                              // Container user.
+	RunArgs           []string              `yaml:"run_args,omitempty" json:"run_args,omitempty" mapstructure:"run_args"`                                  // Runtime-specific create args.
+	Mounts            []ContainerMount      `yaml:"mounts,omitempty" json:"mounts,omitempty" mapstructure:"mounts"`                                        // Extra container mounts.
+	Ports             []ContainerPort       `yaml:"ports,omitempty" json:"ports,omitempty" mapstructure:"ports"`                                           // Port mappings.
+	Container         *WorkflowContainer    `yaml:"container,omitempty" json:"container,omitempty" mapstructure:"container"`                               // Workflow container override or false to run on host.
 
 	// Outputs declares named outputs derived from the step result.
 	Outputs map[string]string `yaml:"outputs,omitempty" json:"outputs,omitempty" mapstructure:"outputs"`

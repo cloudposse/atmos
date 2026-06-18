@@ -56,6 +56,30 @@ func TestParseImageInspectOutput(t *testing.T) {
 	assert.Equal(t, []string{"app@sha256:abc123"}, info.RepoDigests)
 }
 
+func TestParseImageInspectOutput_RichMetadata(t *testing.T) {
+	info, err := parseImageInspectOutput([]byte(`{
+		"Id": "sha256:image-id",
+		"RepoTags": ["app:latest"],
+		"RepoDigests": ["app@sha256:abc123"],
+		"Size": 8912896,
+		"Created": "2026-06-18T23:06:08Z",
+		"Architecture": "arm64",
+		"Os": "linux",
+		"Author": "Cloud Posse",
+		"Config": {"Labels": {"org.opencontainers.image.title": "App", "extra": "x"}},
+		"RootFS": {"Type": "layers", "Layers": ["sha256:l1", "sha256:l2", "sha256:l3"]}
+	}`))
+
+	require.NoError(t, err)
+	assert.Equal(t, int64(8912896), info.Size)
+	assert.Equal(t, "2026-06-18T23:06:08Z", info.Created)
+	assert.Equal(t, "arm64", info.Architecture)
+	assert.Equal(t, "linux", info.Os)
+	assert.Equal(t, "Cloud Posse", info.Author)
+	assert.Equal(t, "App", info.Labels["org.opencontainers.image.title"])
+	assert.Equal(t, 3, info.Layers)
+}
+
 func TestParseImageInspectOutput_InvalidJSON(t *testing.T) {
 	info, err := parseImageInspectOutput([]byte(`not-json`))
 

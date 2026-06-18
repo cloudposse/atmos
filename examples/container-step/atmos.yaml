@@ -32,7 +32,9 @@ auth:
           region: us-east-2
 
 commands:
-  - name: container
+  # Named `example` (not `container`) so it is obvious these are user-defined
+  # custom commands, not a built-in `atmos container` subcommand.
+  - name: example
     description: Run container action examples
     commands:
       - name: hello
@@ -46,7 +48,7 @@ commands:
               command: echo "hello from a custom command container"
 
       - name: build-run
-        description: Build a local image and run it
+        description: Build a local image, show its metadata, and run it
         steps:
           - name: build
             type: container
@@ -58,6 +60,12 @@ commands:
                 - atmos-container-step:local
             outputs:
               image: "{{ .metadata.image }}"
+
+          - name: inspect
+            type: container
+            action: inspect
+            inspect:
+              image: "{{ .steps.build.outputs.image }}"
 
           - name: run
             type: container
