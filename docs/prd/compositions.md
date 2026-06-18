@@ -7,10 +7,10 @@ so they can be operated together. A composition declares the **authoritative sup
 system can be made of; each stack fulfills whatever **subset** it actually provides.
 
 A composition is membership + identity only. It does not own environment variation (that is
-[stacks](/core-concepts/stacks)), build/deploy/run mechanics (that is
-[components](/core-concepts/components) such as [container](container-components.md),
-[compose](compose-components.md), terraform, helmfile, kubernetes, ecs), or sequencing (that is
-[workflows](/core-concepts/workflows) and steps). It is the cross-section that ties them together.
+**stacks**), build/deploy/run mechanics (that is **components** such as
+[container](container-components.md), [compose](compose-components.md), terraform, helmfile,
+kubernetes, ecs), or sequencing (that is **workflows** and steps). It is the cross-section that ties
+them together.
 
 ## Goals
 
