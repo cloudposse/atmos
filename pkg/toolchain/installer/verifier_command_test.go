@@ -90,7 +90,7 @@ func TestVerifierCommandRunnerAutoInstallUsesResolvedVersion(t *testing.T) {
 	defer ts.Close()
 
 	reg := &verifierBootstrapRegistry{
-		latest: "v3.0.6",
+		latestErr: errors.New("latest version lookup should not be called for pinned cosign"),
 		tool: &registry.Tool{
 			Type:       "http",
 			RepoOwner:  "sigstore",
@@ -120,6 +120,7 @@ func TestVerifierCommandRunnerAutoInstallUsesResolvedVersion(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.Equal(t, "v3.0.6", reg.requestedVersion)
+	assert.Zero(t, reg.latestCalls, "pinned cosign bootstrap must not call latest version lookup")
 }
 
 func TestVerifierCommandRunnerAutoInstallFailsBeforeInstallingLatest(t *testing.T) {
@@ -127,11 +128,11 @@ func TestVerifierCommandRunnerAutoInstallFailsBeforeInstallingLatest(t *testing.
 		latest: "",
 		tool: &registry.Tool{
 			Type:       "http",
-			RepoOwner:  "sigstore",
-			RepoName:   "cosign",
-			Asset:      "https://example.com/{{.Version}}/cosign",
+			RepoOwner:  "slsa-framework",
+			RepoName:   "slsa-verifier",
+			Asset:      "https://example.com/{{.Version}}/slsa-verifier",
 			Format:     "raw",
-			BinaryName: "cosign",
+			BinaryName: "slsa-verifier",
 		},
 	}
 	inst := &Installer{
@@ -149,7 +150,7 @@ func TestVerifierCommandRunnerAutoInstallFailsBeforeInstallingLatest(t *testing.
 		policy: verification.Policy{
 			VerifierInstall: verification.VerifierInstallAuto,
 		},
-	}.Run(context.Background(), "cosign", "-test.run=TestVerifierCommandHelperProcess", "--", "success")
+	}.Run(context.Background(), "slsa-verifier", "-test.run=TestVerifierCommandHelperProcess", "--", "success")
 
 	require.ErrorIs(t, err, verification.ErrVerifierCommandRequired)
 	assert.Empty(t, reg.requestedVersion, "bootstrap install must not be called with literal latest")
@@ -164,7 +165,7 @@ func TestResolveVerifierInstallVersionPreservesLookupErrors(t *testing.T) {
 		registryFactory:  verifierBootstrapFactory{registry: aquaReg},
 	}
 
-	version, err := inst.resolveVerifierInstallVersion("sigstore", "cosign")
+	version, err := inst.resolveVerifierInstallVersion("slsa-framework", "slsa-verifier")
 
 	require.Empty(t, version)
 	require.ErrorIs(t, err, ErrVerifierVersionUnavailable)
@@ -206,6 +207,7 @@ type verifierBootstrapRegistry struct {
 	mu               sync.Mutex
 	latest           string
 	latestErr        error
+	latestCalls      int
 	tool             *registry.Tool
 	requestedVersion string
 }
@@ -222,6 +224,10 @@ func (r *verifierBootstrapRegistry) GetToolWithVersion(_, _, version string) (*r
 }
 
 func (r *verifierBootstrapRegistry) GetLatestVersion(_, _ string) (string, error) {
+	r.mu.Lock()
+	r.latestCalls++
+	r.mu.Unlock()
+
 	if r.latestErr != nil {
 		return "", r.latestErr
 	}

@@ -44,6 +44,10 @@ const (
 
 	// Windows constants.
 	windowsExeExt = ".exe"
+
+	// Pin cosign verifier bootstrap so verification does not depend on live
+	// GitHub latest-release lookup before cosign is available.
+	defaultCosignVerifierVersion = "v3.0.6"
 )
 
 // EnsureWindowsExeExtension appends .exe to the binary name on Windows if not already present.
@@ -399,6 +403,10 @@ func (r verifierCommandRunner) Run(ctx context.Context, name string, args ...str
 }
 
 func (i *Installer) resolveVerifierInstallVersion(owner, repo string) (string, error) {
+	if version, ok := pinnedVerifierInstallVersion(owner, repo); ok {
+		return version, nil
+	}
+
 	var lookupErrs []error
 
 	if i.useConfiguredReg {
@@ -420,6 +428,13 @@ func (i *Installer) resolveVerifierInstallVersion(owner, repo string) (string, e
 	}
 
 	return "", verifierVersionUnavailableError(owner, repo, lookupErrs)
+}
+
+func pinnedVerifierInstallVersion(owner, repo string) (string, bool) {
+	if owner == "sigstore" && repo == "cosign" {
+		return defaultCosignVerifierVersion, true
+	}
+	return "", false
 }
 
 func (i *Installer) aquaVerifierRegistry() registry.ToolRegistry {
