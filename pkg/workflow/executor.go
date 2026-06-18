@@ -105,36 +105,8 @@ func (e *Executor) Execute(params *WorkflowParams) (result *ExecutionResult, err
 		}
 	}()
 
-	steps := params.WorkflowDefinition.Steps
-
-	// Validate workflow has steps.
-	if len(steps) == 0 {
-		err := errUtils.Build(errUtils.ErrWorkflowNoSteps).
-			WithExplanationf("Workflow `%s` is empty and requires at least one step to execute.", params.Workflow).
-			Err()
-		e.printError(err)
-		result.Success = false
-		result.Error = err
-		return result, err
-	}
-
-	// Generate step names if not provided.
-	CheckAndGenerateWorkflowStepNames(params.WorkflowDefinition)
-	e.stepVars = stepPkg.NewVariables()
-
-	log.Debug("Executing workflow", "workflow", params.Workflow, "path", params.WorkflowPath)
-
-	// Handle --from-step flag.
-	steps, err = e.handleFromStep(steps, params.WorkflowDefinition, params.Workflow, params.Opts.FromStep, result)
+	steps, err := e.prepareSteps(params, result)
 	if err != nil {
-		return result, err
-	}
-
-	// Ensure toolchain dependencies are installed and PATH is updated.
-	if err := e.ensureToolchainDependencies(params); err != nil {
-		e.printError(err)
-		result.Success = false
-		result.Error = err
 		return result, err
 	}
 
@@ -145,22 +117,70 @@ func (e *Executor) Execute(params *WorkflowParams) (result *ExecutionResult, err
 	flags := e.buildFlagsMap(params)
 
 	// Initialize progress renderer if enabled.
-	totalSteps := len(steps)
-	progressRenderer := NewProgressRenderer(params.WorkflowDefinition, totalSteps)
+	progressRenderer := NewProgressRenderer(params.WorkflowDefinition, len(steps))
 
 	// Render header before first step (if enabled).
 	showRenderer.RenderHeaderIfNeeded(params.WorkflowDefinition, params.Workflow, flags)
 
 	// Execute each step.
-	for stepIdx, step := range steps {
+	if stepErr := e.runSteps(params, steps, progressRenderer, result); stepErr != nil {
+		return result, stepErr
+	}
 
+	return result, nil
+}
+
+// prepareSteps validates the workflow, generates step names, applies --from-step,
+// and ensures toolchain dependencies are installed before execution.
+func (e *Executor) prepareSteps(params *WorkflowParams, result *ExecutionResult) ([]schema.WorkflowStep, error) {
+	steps := params.WorkflowDefinition.Steps
+
+	// Validate workflow has steps.
+	if len(steps) == 0 {
+		err := errUtils.Build(errUtils.ErrWorkflowNoSteps).
+			WithExplanationf("Workflow `%s` is empty and requires at least one step to execute.", params.Workflow).
+			Err()
+		e.printError(err)
+		result.Success = false
+		result.Error = err
+		return nil, err
+	}
+
+	// Generate step names if not provided.
+	CheckAndGenerateWorkflowStepNames(params.WorkflowDefinition)
+	e.stepVars = stepPkg.NewVariables()
+
+	log.Debug("Executing workflow", "workflow", params.Workflow, "path", params.WorkflowPath)
+
+	// Handle --from-step flag.
+	steps, err := e.handleFromStep(steps, params.WorkflowDefinition, params.Workflow, params.Opts.FromStep, result)
+	if err != nil {
+		return nil, err
+	}
+
+	// Ensure toolchain dependencies are installed and PATH is updated.
+	if err := e.ensureToolchainDependencies(params); err != nil {
+		e.printError(err)
+		result.Success = false
+		result.Error = err
+		return nil, err
+	}
+
+	return steps, nil
+}
+
+// runSteps executes each workflow step in order, updating result. It returns the
+// first failing step's error (if any) and marks progress as done.
+func (e *Executor) runSteps(params *WorkflowParams, steps []schema.WorkflowStep, progressRenderer *ProgressRenderer, result *ExecutionResult) error {
+	for stepIdx := range steps {
+		step := &steps[stepIdx]
 		// Update and render progress (if enabled).
 		if progressRenderer.IsEnabled() {
 			progressRenderer.Update(stepIdx+1, step.Name)
 			progressRenderer.Render()
 		}
 
-		stepResult := e.executeStep(params, &step, stepIdx)
+		stepResult := e.executeStep(params, step, stepIdx)
 		result.Steps = append(result.Steps, stepResult.StepResult)
 
 		if !stepResult.Success {
@@ -170,7 +190,7 @@ func (e *Executor) Execute(params *WorkflowParams) (result *ExecutionResult, err
 			if progressRenderer.IsEnabled() {
 				progressRenderer.Done()
 			}
-			return result, stepResult.Error
+			return stepResult.Error
 		}
 	}
 
@@ -179,7 +199,7 @@ func (e *Executor) Execute(params *WorkflowParams) (result *ExecutionResult, err
 		progressRenderer.Done()
 	}
 
-	return result, nil
+	return nil
 }
 
 // buildFlagsMap builds a map of flags for display in the header.
@@ -551,30 +571,7 @@ func (e *Executor) runCommand(params *WorkflowParams, step *schema.WorkflowStep,
 
 	switch cmdParams.commandType {
 	case "shell":
-		if StepContainerOverride(step) {
-			return RunStepContainerOverride(
-				params.Ctx,
-				params.Workflow,
-				params.WorkflowPath,
-				params.AtmosConfig.BasePath,
-				params.WorkflowDefinition,
-				step,
-				cmdParams.workingDirectory,
-				cmdParams.command,
-				cmdParams.stepEnv,
-				append(os.Environ(), cmdParams.stepEnv...),
-				params.Opts.DryRun,
-			)
-		}
-		if params.WorkflowDefinition.Container != nil && params.WorkflowDefinition.Container.IsEnabled() && !StepContainerDisabled(step) {
-			sandbox, err := e.ensureWorkflowSandbox(params, cmdParams.stepEnv)
-			if err != nil {
-				return err
-			}
-			return sandbox.ExecShell(params.Ctx, step, params.WorkflowDefinition, cmdParams.workingDirectory, cmdParams.command, cmdParams.stepEnv)
-		}
-		commandName := fmt.Sprintf("%s-step-%d", params.Workflow, cmdParams.stepIdx)
-		return e.runner.RunShell(cmdParams.command, commandName, workDir, cmdParams.stepEnv, params.Opts.DryRun)
+		return e.runShellStep(params, step, cmdParams, workDir)
 	case "atmos":
 		if StepContainerOverride(step) {
 			return errUtils.Build(errUtils.ErrInvalidWorkflowStepType).
@@ -591,19 +588,52 @@ func (e *Executor) runCommand(params *WorkflowParams, step *schema.WorkflowStep,
 	}
 }
 
+// runShellStep executes a shell-type step, dispatching to a step-level container
+// override, the workflow-level sandbox, or the host shell runner.
+func (e *Executor) runShellStep(params *WorkflowParams, step *schema.WorkflowStep, cmdParams *runCommandParams, workDir string) error {
+	if StepContainerOverride(step) {
+		return RunStepContainerOverride(params.Ctx, &SandboxParams{
+			Workflow:     params.Workflow,
+			WorkflowPath: params.WorkflowPath,
+			BasePath:     params.AtmosConfig.BasePath,
+			WorkflowDef:  params.WorkflowDefinition,
+			Step:         step,
+			HostWorkDir:  cmdParams.workingDirectory,
+			Command:      cmdParams.command,
+			StepEnv:      cmdParams.stepEnv,
+			RuntimeEnv:   append(os.Environ(), cmdParams.stepEnv...),
+			DryRun:       params.Opts.DryRun,
+		})
+	}
+	if params.WorkflowDefinition.Container != nil && params.WorkflowDefinition.Container.IsEnabled() && !StepContainerDisabled(step) {
+		sandbox, err := e.ensureWorkflowSandbox(params, cmdParams.stepEnv)
+		if err != nil {
+			return err
+		}
+		return sandbox.ExecShell(params.Ctx, &SandboxParams{
+			Step:        step,
+			WorkflowDef: params.WorkflowDefinition,
+			HostWorkDir: cmdParams.workingDirectory,
+			Command:     cmdParams.command,
+			StepEnv:     cmdParams.stepEnv,
+		})
+	}
+	commandName := fmt.Sprintf("%s-step-%d", params.Workflow, cmdParams.stepIdx)
+	return e.runner.RunShell(cmdParams.command, commandName, workDir, cmdParams.stepEnv, params.Opts.DryRun)
+}
+
 func (e *Executor) ensureWorkflowSandbox(params *WorkflowParams, runtimeEnv []string) (*WorkflowSandbox, error) {
 	if e.sandbox != nil {
 		return e.sandbox, nil
 	}
-	sandbox, err := StartWorkflowSandbox(
-		params.Ctx,
-		params.Workflow,
-		params.WorkflowPath,
-		params.AtmosConfig.BasePath,
-		params.WorkflowDefinition,
-		append(os.Environ(), runtimeEnv...),
-		params.Opts.DryRun,
-	)
+	sandbox, err := StartWorkflowSandbox(params.Ctx, &SandboxParams{
+		Workflow:     params.Workflow,
+		WorkflowPath: params.WorkflowPath,
+		BasePath:     params.AtmosConfig.BasePath,
+		WorkflowDef:  params.WorkflowDefinition,
+		RuntimeEnv:   append(os.Environ(), runtimeEnv...),
+		DryRun:       params.Opts.DryRun,
+	})
 	if err != nil {
 		return nil, err
 	}

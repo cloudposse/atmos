@@ -21,6 +21,9 @@ const (
 	SandboxTypeWorkflow      = "workflow-sandbox"
 )
 
+// maxSandboxNameLength bounds the sanitized container name length.
+const maxSandboxNameLength = 48
+
 var sandboxNamePattern = regexp.MustCompile(`[^a-zA-Z0-9_.-]+`)
 
 // SandboxConfig describes a long-lived workflow sandbox container.
@@ -84,15 +87,18 @@ func NewWorkflowSandboxConfig(workflow, workflowPath, workspaceHostPath string) 
 
 // StartSandbox detects the runtime, cleans up stopped stale sandboxes, creates,
 // and starts the workflow sandbox.
-func StartSandbox(ctx context.Context, config SandboxConfig) (*Sandbox, error) {
+func StartSandbox(ctx context.Context, config *SandboxConfig) (*Sandbox, error) {
 	defer perf.Track(nil, "container.StartSandbox")()
 
-	normalizeSandboxConfig(&config)
+	if config == nil {
+		return nil, errUtils.ErrNilParam
+	}
+	normalizeSandboxConfig(config)
 	if config.Image == "" {
 		return nil, fmt.Errorf("%w: workflow container image is required", errUtils.ErrContainerRuntimeOperation)
 	}
 	if config.DryRun {
-		return &Sandbox{config: config}, nil
+		return &Sandbox{config: *config}, nil
 	}
 
 	runtime, err := DetectRuntimeWithPreferenceAndRecovery(ctx, config.RuntimeName, config.RuntimeAutoStart)
@@ -106,9 +112,9 @@ func StartSandbox(ctx context.Context, config SandboxConfig) (*Sandbox, error) {
 	return startSandboxWithRuntime(ctx, runtime, config)
 }
 
-func startSandboxWithRuntime(ctx context.Context, runtime Runtime, config SandboxConfig) (*Sandbox, error) {
-	normalizeSandboxConfig(&config)
-	cleanupStaleWorkflowSandboxes(ctx, runtime, &config)
+func startSandboxWithRuntime(ctx context.Context, runtime Runtime, config *SandboxConfig) (*Sandbox, error) {
+	normalizeSandboxConfig(config)
+	cleanupStaleWorkflowSandboxes(ctx, runtime, config)
 
 	if config.PullPolicy == PullAlways {
 		if err := runtime.Pull(ctx, config.Image); err != nil {
@@ -116,7 +122,7 @@ func startSandboxWithRuntime(ctx context.Context, runtime Runtime, config Sandbo
 		}
 	}
 
-	containerID, err := createSandboxContainer(ctx, runtime, &config)
+	containerID, err := createSandboxContainer(ctx, runtime, config)
 	if err != nil {
 		return nil, err
 	}
@@ -125,7 +131,7 @@ func startSandboxWithRuntime(ctx context.Context, runtime Runtime, config Sandbo
 		return nil, fmt.Errorf("%w: start workflow sandbox %q: %w", errUtils.ErrContainerRuntimeOperation, containerID, err)
 	}
 
-	return &Sandbox{config: config, runtime: runtime, containerID: containerID}, nil
+	return &Sandbox{config: *config, runtime: runtime, containerID: containerID}, nil
 }
 
 func normalizeSandboxConfig(config *SandboxConfig) {
@@ -247,14 +253,16 @@ func sanitizeSandboxName(value string) string {
 	if value == "" {
 		return "workflow"
 	}
-	if len(value) > 48 {
-		return value[:48]
+	if len(value) > maxSandboxNameLength {
+		return value[:maxSandboxNameLength]
 	}
 	return value
 }
 
 // ID returns the runtime container ID. In dry run it returns the generated name.
 func (s *Sandbox) ID() string {
+	defer perf.Track(nil, "container.Sandbox.ID")()
+
 	if s == nil {
 		return ""
 	}
@@ -266,6 +274,8 @@ func (s *Sandbox) ID() string {
 
 // Name returns the generated sandbox container name.
 func (s *Sandbox) Name() string {
+	defer perf.Track(nil, "container.Sandbox.Name")()
+
 	if s == nil {
 		return ""
 	}

@@ -10,13 +10,34 @@ import (
 	"strings"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/config/homedir"
 	"github.com/cloudposse/atmos/pkg/container"
 	stepPkg "github.com/cloudposse/atmos/pkg/runner/step"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui"
 )
 
-const workflowContainerDefaultShell = "/bin/sh"
+const (
+	workflowContainerDefaultShell = "/bin/sh"
+	// Relative path token referring to the current working directory.
+	currentDir = "."
+)
+
+// SandboxParams carries workflow and step execution inputs for the workflow
+// container sandbox entry points. It keeps the public functions within the
+// argument limit and groups related values together.
+type SandboxParams struct {
+	Workflow     string
+	WorkflowPath string
+	BasePath     string
+	WorkflowDef  *schema.WorkflowDefinition
+	Step         *schema.WorkflowStep
+	HostWorkDir  string
+	Command      string
+	StepEnv      []string
+	RuntimeEnv   []string
+	DryRun       bool
+}
 
 // WorkflowSandbox owns the long-lived container-backed sandbox for a workflow run.
 type WorkflowSandbox struct {
@@ -46,7 +67,7 @@ func CalculateWorkingDirectory(workflowDef *schema.WorkflowDefinition, step *sch
 	if !filepath.IsAbs(workDir) {
 		resolvedBasePath := basePath
 		if strings.TrimSpace(resolvedBasePath) == "" {
-			resolvedBasePath = "."
+			resolvedBasePath = currentDir
 		}
 		workDir = filepath.Join(resolvedBasePath, workDir)
 	}
@@ -64,24 +85,28 @@ func StepContainerOverride(step *schema.WorkflowStep) bool {
 }
 
 // StartWorkflowSandbox starts the workflow-level sandbox if configured.
-func StartWorkflowSandbox(ctx context.Context, workflow, workflowPath, basePath string, workflowDef *schema.WorkflowDefinition, runtimeEnv []string, dryRun bool) (*WorkflowSandbox, error) {
+func StartWorkflowSandbox(ctx context.Context, params *SandboxParams) (*WorkflowSandbox, error) {
+	if params == nil {
+		return nil, errUtils.ErrNilParam
+	}
+	workflowDef := params.WorkflowDef
 	if workflowDef == nil || workflowDef.Container == nil || !workflowDef.Container.IsEnabled() {
 		return nil, nil
 	}
 
-	hostWorkspace, err := workflowSandboxHostWorkspace(workflowDef, basePath)
+	hostWorkspace, err := workflowSandboxHostWorkspace(workflowDef, params.BasePath)
 	if err != nil {
 		return nil, err
 	}
-	cfg, err := buildSandboxConfig(workflowDef.Container, workflow, workflowPath, hostWorkspace, runtimeEnv, dryRun)
+	cfg, err := buildSandboxConfig(params, workflowDef.Container, hostWorkspace)
 	if err != nil {
 		return nil, err
 	}
-	sandbox, err := container.StartSandbox(ctx, cfg)
+	sandbox, err := container.StartSandbox(ctx, &cfg)
 	if err != nil {
 		return nil, err
 	}
-	if dryRun {
+	if params.DryRun {
 		ui.Writef("%s create %s %s\n", runtimePreviewName(cfg.RuntimeName), cfg.Name, cfg.Image)
 	}
 	return &WorkflowSandbox{sandbox: sandbox, config: workflowDef.Container, hostWorkspace: hostWorkspace}, nil
@@ -97,14 +122,14 @@ func workflowSandboxHostWorkspace(workflowDef *schema.WorkflowDefinition, basePa
 		}
 	} else if !filepath.IsAbs(workDir) {
 		if strings.TrimSpace(basePath) == "" {
-			basePath = "."
+			basePath = currentDir
 		}
 		workDir = filepath.Join(basePath, workDir)
 	}
 	return filepath.Abs(workDir)
 }
 
-func buildSandboxConfig(cfg *schema.WorkflowContainer, workflow, workflowPath, hostWorkspace string, runtimeEnv []string, dryRun bool) (container.SandboxConfig, error) {
+func buildSandboxConfig(params *SandboxParams, cfg *schema.WorkflowContainer, hostWorkspace string) (container.SandboxConfig, error) {
 	if strings.TrimSpace(cfg.Image) == "" {
 		return container.SandboxConfig{}, fmt.Errorf("%w: workflow container image is required", errUtils.ErrContainerRuntimeOperation)
 	}
@@ -118,7 +143,7 @@ func buildSandboxConfig(cfg *schema.WorkflowContainer, workflow, workflowPath, h
 		return container.SandboxConfig{}, fmt.Errorf("%w: workflow container cleanup must be always, on_success, never, or empty", errUtils.ErrContainerRuntimeOperation)
 	}
 
-	sandboxCfg := container.NewWorkflowSandboxConfig(workflow, workflowPath, hostWorkspace)
+	sandboxCfg := container.NewWorkflowSandboxConfig(params.Workflow, params.WorkflowPath, hostWorkspace)
 	sandboxCfg.RuntimeName = cfg.Runtime
 	sandboxCfg.RuntimeAutoStart = cfg.RuntimeAutoStart
 	sandboxCfg.Image = cfg.Image
@@ -127,27 +152,28 @@ func buildSandboxConfig(cfg *schema.WorkflowContainer, workflow, workflowPath, h
 	sandboxCfg.Mounts = convertWorkflowMounts(cfg.Mounts)
 	sandboxCfg.Ports = convertWorkflowPorts(cfg.Ports)
 	sandboxCfg.Env = envMapToSlice(cfg.Env)
-	sandboxCfg.RuntimeEnv = runtimeEnv
+	sandboxCfg.RuntimeEnv = params.RuntimeEnv
 	sandboxCfg.User = cfg.User
 	sandboxCfg.RunArgs = cfg.RunArgs
 	sandboxCfg.PullPolicy = cfg.Pull
 	sandboxCfg.CleanupPolicy = cfg.Cleanup
-	sandboxCfg.DryRun = dryRun
+	sandboxCfg.DryRun = params.DryRun
 	return sandboxCfg, nil
 }
 
 // ExecShell runs a shell command inside the workflow sandbox.
-func (s *WorkflowSandbox) ExecShell(ctx context.Context, step *schema.WorkflowStep, workflowDef *schema.WorkflowDefinition, hostWorkDir, command string, stepEnv []string) error {
-	if s == nil || s.sandbox == nil {
+func (s *WorkflowSandbox) ExecShell(ctx context.Context, params *SandboxParams) error {
+	if s == nil || s.sandbox == nil || params == nil {
 		return errUtils.ErrNilParam
 	}
-	containerWorkDir, err := mapHostWorkDirToContainer(hostWorkDir, s.hostWorkspace, defaultString(s.config.Workspace, "/workspace"))
+	step := params.Step
+	containerWorkDir, err := mapHostWorkDirToContainer(params.HostWorkDir, s.hostWorkspace, defaultString(s.config.Workspace, "/workspace"))
 	if err != nil {
 		return err
 	}
 	shell := defaultString(s.config.Shell, workflowContainerDefaultShell)
-	env := mergeEnvSlices(envMapToSlice(s.config.Env), stepEnv)
-	cmd := []string{shell, "-lc", command}
+	env := mergeEnvSlices(envMapToSlice(s.config.Env), params.StepEnv)
+	cmd := []string{shell, "-lc", params.Command}
 	if s.sandbox.ID() == s.sandbox.Name() {
 		ui.Writef("%s exec %s %s\n", runtimePreviewName(s.config.Runtime), s.sandbox.Name(), strings.Join(cmd, " "))
 		return nil
@@ -166,7 +192,7 @@ func (s *WorkflowSandbox) ExecShell(ctx context.Context, step *schema.WorkflowSt
 		})
 	}
 
-	writer := stepPkg.NewOutputModeWriter(stepPkg.GetOutputMode(step, workflowDef), step.Name, stepPkg.GetViewportConfig(step, workflowDef))
+	writer := stepPkg.NewOutputModeWriter(stepPkg.GetOutputMode(step, params.WorkflowDef), step.Name, stepPkg.GetViewportConfig(step, params.WorkflowDef))
 	_, _, err = writer.ExecuteWithIO(func(stdout, stderr io.Writer) error {
 		return s.sandbox.Exec(ctx, cmd, &container.ExecOptions{
 			User:         s.config.User,
@@ -182,7 +208,12 @@ func (s *WorkflowSandbox) ExecShell(ctx context.Context, step *schema.WorkflowSt
 }
 
 // RunStepContainerOverride runs a shell step in a one-shot step-level sandbox.
-func RunStepContainerOverride(ctx context.Context, workflow, workflowPath, basePath string, workflowDef *schema.WorkflowDefinition, step *schema.WorkflowStep, hostWorkDir, command string, stepEnv []string, runtimeEnv []string, dryRun bool) error {
+func RunStepContainerOverride(ctx context.Context, params *SandboxParams) error {
+	if params == nil {
+		return errUtils.ErrNilParam
+	}
+	workflowDef := params.WorkflowDef
+	step := params.Step
 	cfg := mergeWorkflowContainer(workflowDef.Container, step.Container)
 	if !cfg.IsEnabled() {
 		return nil
@@ -190,11 +221,10 @@ func RunStepContainerOverride(ctx context.Context, workflow, workflowPath, baseP
 	if strings.TrimSpace(cfg.Image) == "" {
 		return fmt.Errorf("%w: step container image is required", errUtils.ErrContainerRuntimeOperation)
 	}
-	containerWorkDir := defaultString(cfg.Workspace, "/workspace")
-	hostWorkspace := hostWorkDir
+	hostWorkspace := params.HostWorkDir
 	if hostWorkspace == "" {
 		var err error
-		hostWorkspace, err = workflowSandboxHostWorkspace(workflowDef, basePath)
+		hostWorkspace, err = workflowSandboxHostWorkspace(workflowDef, params.BasePath)
 		if err != nil {
 			return err
 		}
@@ -203,31 +233,8 @@ func RunStepContainerOverride(ctx context.Context, workflow, workflowPath, baseP
 	if err != nil {
 		return err
 	}
-	env := mergeEnvSlices(envMapToSlice(cfg.Env), stepEnv)
-	shell := defaultString(cfg.Shell, workflowContainerDefaultShell)
-	ephemeral := &container.EphemeralConfig{
-		Name:              fmt.Sprintf("atmos-step-%s", step.Name),
-		Image:             cfg.Image,
-		Command:           []string{shell, "-lc", command},
-		WorkspaceHostPath: absHostWorkspace,
-		WorkspaceFolder:   containerWorkDir,
-		WorkspaceReadOnly: cfg.WorkspaceReadOnly,
-		Mounts:            convertWorkflowMounts(cfg.Mounts),
-		Ports:             convertWorkflowPorts(cfg.Ports),
-		Env:               env,
-		User:              cfg.User,
-		RunArgs:           cfg.RunArgs,
-		PullPolicy:        cfg.Pull,
-		CleanupPolicy:     cfg.Cleanup,
-		TTY:               step.Tty,
-		Interactive:       step.Interactive,
-		Labels: map[string]string{
-			container.SandboxLabelType:         container.SandboxTypeWorkflow,
-			container.SandboxLabelWorkflow:     workflow,
-			container.SandboxLabelWorkflowPath: workflowPath,
-		},
-	}
-	if dryRun {
+	ephemeral := buildEphemeralStepConfig(params, cfg, absHostWorkspace)
+	if params.DryRun {
 		ui.Writeln(container.BuildEphemeralPreview(runtimePreviewName(cfg.Runtime), ephemeral))
 		return nil
 	}
@@ -236,22 +243,57 @@ func RunStepContainerOverride(ctx context.Context, workflow, workflowPath, baseP
 		return err
 	}
 	if setter, ok := runtime.(container.EnvSetter); ok {
-		setter.SetEnv(runtimeEnv)
+		setter.SetEnv(params.RuntimeEnv)
 	}
 	result, err := container.RunEphemeralContainer(ctx, runtime, ephemeral)
-	if result != nil && !step.Tty && !step.Interactive {
-		writer := stepPkg.NewOutputModeWriter(stepPkg.GetOutputMode(step, workflowDef), step.Name, stepPkg.GetViewportConfig(step, workflowDef))
-		_, _, _ = writer.ExecuteWithIO(func(stdout, stderr io.Writer) error {
-			if result.Stdout != "" {
-				_, _ = stdout.Write([]byte(result.Stdout))
-			}
-			if result.Stderr != "" {
-				_, _ = stderr.Write([]byte(result.Stderr))
-			}
-			return err
-		})
-	}
+	writeEphemeralResult(params, result, err)
 	return err
+}
+
+// buildEphemeralStepConfig assembles the one-shot container config for a step override.
+func buildEphemeralStepConfig(params *SandboxParams, cfg *schema.WorkflowContainer, absHostWorkspace string) *container.EphemeralConfig {
+	step := params.Step
+	shell := defaultString(cfg.Shell, workflowContainerDefaultShell)
+	return &container.EphemeralConfig{
+		Name:              fmt.Sprintf("atmos-step-%s", step.Name),
+		Image:             cfg.Image,
+		Command:           []string{shell, "-lc", params.Command},
+		WorkspaceHostPath: absHostWorkspace,
+		WorkspaceFolder:   defaultString(cfg.Workspace, "/workspace"),
+		WorkspaceReadOnly: cfg.WorkspaceReadOnly,
+		Mounts:            convertWorkflowMounts(cfg.Mounts),
+		Ports:             convertWorkflowPorts(cfg.Ports),
+		Env:               mergeEnvSlices(envMapToSlice(cfg.Env), params.StepEnv),
+		User:              cfg.User,
+		RunArgs:           cfg.RunArgs,
+		PullPolicy:        cfg.Pull,
+		CleanupPolicy:     cfg.Cleanup,
+		TTY:               step.Tty,
+		Interactive:       step.Interactive,
+		Labels: map[string]string{
+			container.SandboxLabelType:         container.SandboxTypeWorkflow,
+			container.SandboxLabelWorkflow:     params.Workflow,
+			container.SandboxLabelWorkflowPath: params.WorkflowPath,
+		},
+	}
+}
+
+// writeEphemeralResult renders captured stdout/stderr from a one-shot step container.
+func writeEphemeralResult(params *SandboxParams, result *container.EphemeralResult, runErr error) {
+	step := params.Step
+	if result == nil || step.Tty || step.Interactive {
+		return
+	}
+	writer := stepPkg.NewOutputModeWriter(stepPkg.GetOutputMode(step, params.WorkflowDef), step.Name, stepPkg.GetViewportConfig(step, params.WorkflowDef))
+	_, _, _ = writer.ExecuteWithIO(func(stdout, stderr io.Writer) error {
+		if result.Stdout != "" {
+			_, _ = stdout.Write([]byte(result.Stdout))
+		}
+		if result.Stderr != "" {
+			_, _ = stderr.Write([]byte(result.Stderr))
+		}
+		return runErr
+	})
 }
 
 func mergeWorkflowContainer(base, override *schema.WorkflowContainer) *schema.WorkflowContainer {
@@ -262,6 +304,15 @@ func mergeWorkflowContainer(base, override *schema.WorkflowContainer) *schema.Wo
 		return override
 	}
 	merged := *base
+	mergeContainerScalars(&merged, override)
+	merged.RuntimeAutoStart = merged.RuntimeAutoStart || override.RuntimeAutoStart
+	merged.WorkspaceReadOnly = merged.WorkspaceReadOnly || override.WorkspaceReadOnly
+	mergeContainerCollections(&merged, override)
+	return &merged
+}
+
+// mergeContainerScalars overlays non-empty scalar fields from override onto merged.
+func mergeContainerScalars(merged, override *schema.WorkflowContainer) {
 	if override.Enabled != nil {
 		merged.Enabled = override.Enabled
 	}
@@ -274,20 +325,22 @@ func mergeWorkflowContainer(base, override *schema.WorkflowContainer) *schema.Wo
 	if override.Runtime != "" {
 		merged.Runtime = override.Runtime
 	}
-	merged.RuntimeAutoStart = merged.RuntimeAutoStart || override.RuntimeAutoStart
 	if override.Pull != "" {
 		merged.Pull = override.Pull
 	}
 	if override.Workspace != "" {
 		merged.Workspace = override.Workspace
 	}
-	merged.WorkspaceReadOnly = merged.WorkspaceReadOnly || override.WorkspaceReadOnly
 	if override.Cleanup != "" {
 		merged.Cleanup = override.Cleanup
 	}
 	if override.User != "" {
 		merged.User = override.User
 	}
+}
+
+// mergeContainerCollections overlays non-empty slice/map fields from override onto merged.
+func mergeContainerCollections(merged, override *schema.WorkflowContainer) {
 	if len(override.RunArgs) > 0 {
 		merged.RunArgs = override.RunArgs
 	}
@@ -300,11 +353,10 @@ func mergeWorkflowContainer(base, override *schema.WorkflowContainer) *schema.Wo
 	if len(override.Env) > 0 {
 		merged.Env = override.Env
 	}
-	return &merged
 }
 
 func mapHostWorkDirToContainer(hostWorkDir, hostWorkspace, containerWorkspace string) (string, error) {
-	if hostWorkDir == "" || hostWorkDir == "." {
+	if hostWorkDir == "" || hostWorkDir == currentDir {
 		return containerWorkspace, nil
 	}
 	absWorkDir, err := filepath.Abs(hostWorkDir)
@@ -319,7 +371,10 @@ func mapHostWorkDirToContainer(hostWorkDir, hostWorkspace, containerWorkspace st
 	if err != nil {
 		return "", err
 	}
-	if rel == "." {
+	// filepath.Rel returns OS-native separators; normalize to forward slashes so the
+	// workspace-escape guard below is separator-agnostic (it would miss "..\\" on Windows).
+	rel = filepath.ToSlash(rel)
+	if rel == currentDir {
 		return containerWorkspace, nil
 	}
 	if rel == ".." || strings.HasPrefix(rel, "../") {
@@ -413,7 +468,7 @@ func expandHome(path string) string {
 	if path == "" || path[0] != '~' {
 		return path
 	}
-	home, err := os.UserHomeDir()
+	home, err := homedir.Dir()
 	if err != nil {
 		return path
 	}

@@ -71,7 +71,13 @@ func TestWorkflowSandboxExecShellPassesStepEnvAndMappedWorkingDirectory(t *testi
 	}
 	stepEnv := []string{"SHARED=step", "STEP=1"}
 
-	err := sandbox.ExecShell(context.Background(), step, workflowDef, "/repo/services/api", "env", stepEnv)
+	err := sandbox.ExecShell(context.Background(), &SandboxParams{
+		Step:        step,
+		WorkflowDef: workflowDef,
+		HostWorkDir: "/repo/services/api",
+		Command:     "env",
+		StepEnv:     stepEnv,
+	})
 
 	require.NoError(t, err)
 	assert.Equal(t, []string{"/bin/bash", "-lc", "env"}, fake.command)
@@ -92,7 +98,12 @@ func TestWorkflowSandboxExecShellRejectsWorkingDirectoryOutsideWorkspace(t *test
 	step := &schema.WorkflowStep{Name: "test", Type: "shell", Command: "pwd"}
 	workflowDef := &schema.WorkflowDefinition{Output: "none"}
 
-	err := sandbox.ExecShell(context.Background(), step, workflowDef, "/tmp/outside", "pwd", nil)
+	err := sandbox.ExecShell(context.Background(), &SandboxParams{
+		Step:        step,
+		WorkflowDef: workflowDef,
+		HostWorkDir: "/tmp/outside",
+		Command:     "pwd",
+	})
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "outside workflow container workspace")

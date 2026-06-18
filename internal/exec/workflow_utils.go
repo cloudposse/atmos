@@ -432,41 +432,46 @@ func ExecuteWorkflow(
 			// steps keep the existing masked shell-interpreter behavior.
 			stepPkg.RenderCommand(&step, workflowDefinition, command)
 			commandName := fmt.Sprintf("%s-step-%d", workflow, stepIdx)
-			if workflowPkg.StepContainerOverride(&step) {
+			switch {
+			case workflowPkg.StepContainerOverride(&step):
 				err = retry.Do(context.Background(), step.Retry, func() error {
-					return workflowPkg.RunStepContainerOverride(
-						context.Background(),
-						workflow,
-						workflowPath,
-						atmosConfig.BasePath,
-						workflowDefinition,
-						&step,
-						workDir,
-						command,
-						stepEnv,
-						stepEnv,
-						dryRun,
-					)
+					return workflowPkg.RunStepContainerOverride(context.Background(), &workflowPkg.SandboxParams{
+						Workflow:     workflow,
+						WorkflowPath: workflowPath,
+						BasePath:     atmosConfig.BasePath,
+						WorkflowDef:  workflowDefinition,
+						Step:         &step,
+						HostWorkDir:  workDir,
+						Command:      command,
+						StepEnv:      stepEnv,
+						RuntimeEnv:   stepEnv,
+						DryRun:       dryRun,
+					})
 				})
-			} else if workflowDefinition.Container != nil && workflowDefinition.Container.IsEnabled() && !workflowPkg.StepContainerDisabled(&step) {
+			case workflowDefinition.Container != nil && workflowDefinition.Container.IsEnabled() && !workflowPkg.StepContainerDisabled(&step):
 				if activeSandbox == nil {
-					activeSandbox, err = workflowPkg.StartWorkflowSandbox(
-						context.Background(),
-						workflow,
-						workflowPath,
-						atmosConfig.BasePath,
-						workflowDefinition,
-						stepEnv,
-						dryRun,
-					)
+					activeSandbox, err = workflowPkg.StartWorkflowSandbox(context.Background(), &workflowPkg.SandboxParams{
+						Workflow:     workflow,
+						WorkflowPath: workflowPath,
+						BasePath:     atmosConfig.BasePath,
+						WorkflowDef:  workflowDefinition,
+						RuntimeEnv:   stepEnv,
+						DryRun:       dryRun,
+					})
 					if err != nil {
 						break
 					}
 				}
 				err = retry.Do(context.Background(), step.Retry, func() error {
-					return activeSandbox.ExecShell(context.Background(), &step, workflowDefinition, workDir, command, stepEnv)
+					return activeSandbox.ExecShell(context.Background(), &workflowPkg.SandboxParams{
+						Step:        &step,
+						WorkflowDef: workflowDefinition,
+						HostWorkDir: workDir,
+						Command:     command,
+						StepEnv:     stepEnv,
+					})
 				})
-			} else {
+			default:
 				err = retry.Do(context.Background(), step.Retry, func() error {
 					return process.RunShellStep(context.Background(), &process.ShellSessionSpec{
 						Command:     command,

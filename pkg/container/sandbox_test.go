@@ -65,7 +65,7 @@ func TestStartSandbox_RemovesStoppedMatchingOrphansAndUsesUniqueName(t *testing.
 		runtime.EXPECT().Start(ctx, "new-container").Return(nil),
 	)
 
-	sandbox, err := startSandboxWithRuntime(ctx, runtime, config)
+	sandbox, err := startSandboxWithRuntime(ctx, runtime, &config)
 	require.NoError(t, err)
 	assert.Equal(t, "new-container", sandbox.ID())
 }

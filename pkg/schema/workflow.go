@@ -1,10 +1,14 @@
 package schema
 
 import (
+	"errors"
 	"fmt"
 
 	"gopkg.in/yaml.v3"
 )
+
+// ErrInvalidWorkflowContainer is returned when a workflow `container` value cannot be decoded.
+var ErrInvalidWorkflowContainer = errors.New("invalid workflow container configuration")
 
 // DescribeWorkflowsItem represents a workflow item in the describe workflows output.
 type DescribeWorkflowsItem struct {
@@ -127,7 +131,7 @@ func (c *WorkflowContainer) UnmarshalYAML(value *yaml.Node) error {
 	case yaml.ScalarNode:
 		var enabled bool
 		if err := value.Decode(&enabled); err != nil {
-			return fmt.Errorf("container must be a mapping or boolean: %w", err)
+			return fmt.Errorf("%w: container must be a mapping or boolean: %w", ErrInvalidWorkflowContainer, err)
 		}
 		c.Enabled = &enabled
 		return nil
@@ -140,7 +144,7 @@ func (c *WorkflowContainer) UnmarshalYAML(value *yaml.Node) error {
 		*c = WorkflowContainer(decoded)
 		return nil
 	default:
-		return fmt.Errorf("container must be a mapping or boolean, got YAML node kind %d", value.Kind)
+		return fmt.Errorf("%w: container must be a mapping or boolean, got YAML node kind %d", ErrInvalidWorkflowContainer, value.Kind)
 	}
 }
 
