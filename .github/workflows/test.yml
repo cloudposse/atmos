@@ -456,6 +456,8 @@ jobs:
           cache: false
 
       - name: Install OpenTofu with Atmos toolchain
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           atmos toolchain install --default opentofu/opentofu@${{ env.OPEN_TOFU_VERSION }}
           atmos toolchain env --format=github
@@ -474,6 +476,7 @@ jobs:
           FLOCI_ENDPOINT_URL: "http://localhost:4566"
           FLOCI_GCP_ENDPOINT: "http://localhost:4588"
           FLOCI_AZURE_ENDPOINT: "http://localhost:4577"
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: go test ./tests -run 'Test(AWS(StoreHooks|Secrets)|GCPSecrets|AzureSecrets)FlociE2E' -count=1 -timeout 15m -v
 
   # run k3s demo tests
