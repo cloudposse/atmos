@@ -90,7 +90,7 @@ func TestVerifierCommandRunnerAutoInstallUsesResolvedVersion(t *testing.T) {
 	defer ts.Close()
 
 	reg := &verifierBootstrapRegistry{
-		latest: "v3.0.6",
+		latest: "v3.1.1",
 		tool: &registry.Tool{
 			Type:       "http",
 			RepoOwner:  "sigstore",
@@ -119,19 +119,70 @@ func TestVerifierCommandRunnerAutoInstallUsesResolvedVersion(t *testing.T) {
 	}.Run(context.Background(), "cosign", "-test.run=TestVerifierCommandHelperProcess", "--", "success")
 
 	require.NoError(t, err)
-	assert.Equal(t, "v3.0.6", reg.requestedVersion)
+	assert.Equal(t, "v3.1.1", reg.requestedVersion)
+	assert.Equal(t, 1, reg.latestCalls, "cosign bootstrap should prefer latest when lookup succeeds")
 }
 
-func TestVerifierCommandRunnerAutoInstallFailsBeforeInstallingLatest(t *testing.T) {
-	reg := &verifierBootstrapRegistry{
-		latest: "",
+func TestVerifierCommandRunnerAutoInstallFallsBackToPinnedCosignWhenLatestLookupFails(t *testing.T) {
+	testBinary, err := os.ReadFile(os.Args[0])
+	require.NoError(t, err)
+
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write(testBinary)
+	}))
+	defer ts.Close()
+
+	configuredReg := &verifierBootstrapRegistry{
+		latestErr: errConfiguredLatest,
 		tool: &registry.Tool{
 			Type:       "http",
 			RepoOwner:  "sigstore",
 			RepoName:   "cosign",
-			Asset:      "https://example.com/{{.Version}}/cosign",
+			Asset:      ts.URL + "/{{.Version}}/cosign",
 			Format:     "raw",
 			BinaryName: "cosign",
+		},
+	}
+	aquaReg := &verifierBootstrapRegistry{latestErr: errAquaLatest}
+	inst := &Installer{
+		cacheDir:         t.TempDir(),
+		binDir:           t.TempDir(),
+		configuredReg:    configuredReg,
+		useConfiguredReg: true,
+		registryFactory:  verifierBootstrapFactory{registry: aquaReg},
+	}
+
+	t.Setenv("PATH", t.TempDir())
+	t.Setenv("ATMOS_VERIFIER_HELPER_PROCESS", "1")
+
+	err = verifierCommandRunner{
+		installer: inst,
+		policy: verification.Policy{
+			VerifierInstall: verification.VerifierInstallAuto,
+		},
+	}.Run(context.Background(), "cosign", "-test.run=TestVerifierCommandHelperProcess", "--", "success")
+
+	require.NoError(t, err)
+	assert.Equal(t, "v3.0.6", configuredReg.requestedVersion)
+	assert.Equal(t, 1, configuredReg.latestCalls)
+	assert.Equal(t, 1, aquaReg.latestCalls)
+}
+
+func TestVerifierCommandRunnerAutoInstallFailsBeforeInstallingLatest(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		http.Error(w, "unexpected verifier install", http.StatusInternalServerError)
+	}))
+	defer ts.Close()
+
+	reg := &verifierBootstrapRegistry{
+		latest: "",
+		tool: &registry.Tool{
+			Type:       "http",
+			RepoOwner:  "slsa-framework",
+			RepoName:   "slsa-verifier",
+			Asset:      ts.URL + "/{{.Version}}/slsa-verifier",
+			Format:     "raw",
+			BinaryName: "slsa-verifier",
 		},
 	}
 	inst := &Installer{
@@ -149,7 +200,7 @@ func TestVerifierCommandRunnerAutoInstallFailsBeforeInstallingLatest(t *testing.
 		policy: verification.Policy{
 			VerifierInstall: verification.VerifierInstallAuto,
 		},
-	}.Run(context.Background(), "cosign", "-test.run=TestVerifierCommandHelperProcess", "--", "success")
+	}.Run(context.Background(), "slsa-verifier", "-test.run=TestVerifierCommandHelperProcess", "--", "success")
 
 	require.ErrorIs(t, err, verification.ErrVerifierCommandRequired)
 	assert.Empty(t, reg.requestedVersion, "bootstrap install must not be called with literal latest")
@@ -164,7 +215,7 @@ func TestResolveVerifierInstallVersionPreservesLookupErrors(t *testing.T) {
 		registryFactory:  verifierBootstrapFactory{registry: aquaReg},
 	}
 
-	version, err := inst.resolveVerifierInstallVersion("sigstore", "cosign")
+	version, err := inst.resolveVerifierInstallVersion("slsa-framework", "slsa-verifier")
 
 	require.Empty(t, version)
 	require.ErrorIs(t, err, ErrVerifierVersionUnavailable)
@@ -206,6 +257,7 @@ type verifierBootstrapRegistry struct {
 	mu               sync.Mutex
 	latest           string
 	latestErr        error
+	latestCalls      int
 	tool             *registry.Tool
 	requestedVersion string
 }
@@ -222,6 +274,10 @@ func (r *verifierBootstrapRegistry) GetToolWithVersion(_, _, version string) (*r
 }
 
 func (r *verifierBootstrapRegistry) GetLatestVersion(_, _ string) (string, error) {
+	r.mu.Lock()
+	r.latestCalls++
+	r.mu.Unlock()
+
 	if r.latestErr != nil {
 		return "", r.latestErr
 	}
