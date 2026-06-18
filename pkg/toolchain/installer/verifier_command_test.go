@@ -90,7 +90,7 @@ func TestVerifierCommandRunnerAutoInstallUsesResolvedVersion(t *testing.T) {
 	defer ts.Close()
 
 	reg := &verifierBootstrapRegistry{
-		latestErr: errors.New("latest version lookup should not be called for pinned cosign"),
+		latest: "v3.1.1",
 		tool: &registry.Tool{
 			Type:       "http",
 			RepoOwner:  "sigstore",
@@ -119,8 +119,53 @@ func TestVerifierCommandRunnerAutoInstallUsesResolvedVersion(t *testing.T) {
 	}.Run(context.Background(), "cosign", "-test.run=TestVerifierCommandHelperProcess", "--", "success")
 
 	require.NoError(t, err)
-	assert.Equal(t, "v3.0.6", reg.requestedVersion)
-	assert.Zero(t, reg.latestCalls, "pinned cosign bootstrap must not call latest version lookup")
+	assert.Equal(t, "v3.1.1", reg.requestedVersion)
+	assert.Equal(t, 1, reg.latestCalls, "cosign bootstrap should prefer latest when lookup succeeds")
+}
+
+func TestVerifierCommandRunnerAutoInstallFallsBackToPinnedCosignWhenLatestLookupFails(t *testing.T) {
+	testBinary, err := os.ReadFile(os.Args[0])
+	require.NoError(t, err)
+
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write(testBinary)
+	}))
+	defer ts.Close()
+
+	configuredReg := &verifierBootstrapRegistry{
+		latestErr: errConfiguredLatest,
+		tool: &registry.Tool{
+			Type:       "http",
+			RepoOwner:  "sigstore",
+			RepoName:   "cosign",
+			Asset:      ts.URL + "/{{.Version}}/cosign",
+			Format:     "raw",
+			BinaryName: "cosign",
+		},
+	}
+	aquaReg := &verifierBootstrapRegistry{latestErr: errAquaLatest}
+	inst := &Installer{
+		cacheDir:         t.TempDir(),
+		binDir:           t.TempDir(),
+		configuredReg:    configuredReg,
+		useConfiguredReg: true,
+		registryFactory:  verifierBootstrapFactory{registry: aquaReg},
+	}
+
+	t.Setenv("PATH", t.TempDir())
+	t.Setenv("ATMOS_VERIFIER_HELPER_PROCESS", "1")
+
+	err = verifierCommandRunner{
+		installer: inst,
+		policy: verification.Policy{
+			VerifierInstall: verification.VerifierInstallAuto,
+		},
+	}.Run(context.Background(), "cosign", "-test.run=TestVerifierCommandHelperProcess", "--", "success")
+
+	require.NoError(t, err)
+	assert.Equal(t, "v3.0.6", configuredReg.requestedVersion)
+	assert.Equal(t, 1, configuredReg.latestCalls)
+	assert.Equal(t, 1, aquaReg.latestCalls)
 }
 
 func TestVerifierCommandRunnerAutoInstallFailsBeforeInstallingLatest(t *testing.T) {

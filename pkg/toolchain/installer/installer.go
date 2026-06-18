@@ -45,8 +45,8 @@ const (
 	// Windows constants.
 	windowsExeExt = ".exe"
 
-	// Pin cosign verifier bootstrap so verification does not depend on live
-	// GitHub latest-release lookup before cosign is available.
+	// Fallback cosign verifier bootstrap version for transient GitHub latest-release lookup failures.
+	// renovate: datasource=github-releases depName=sigstore/cosign
 	defaultCosignVerifierVersion = "v3.0.6"
 )
 
@@ -403,10 +403,6 @@ func (r verifierCommandRunner) Run(ctx context.Context, name string, args ...str
 }
 
 func (i *Installer) resolveVerifierInstallVersion(owner, repo string) (string, error) {
-	if version, ok := pinnedVerifierInstallVersion(owner, repo); ok {
-		return version, nil
-	}
-
 	var lookupErrs []error
 
 	if i.useConfiguredReg {
@@ -427,10 +423,21 @@ func (i *Installer) resolveVerifierInstallVersion(owner, repo string) (string, e
 		lookupErrs = append(lookupErrs, err)
 	}
 
+	if version, ok := fallbackVerifierInstallVersion(owner, repo); ok && len(lookupErrs) > 0 {
+		log.Debug(
+			"Using fallback verifier bootstrap version after latest lookup failure",
+			logFieldOwner, owner,
+			logFieldRepo, repo,
+			logFieldVersion, version,
+			"lookup_errors", errors.Join(lookupErrs...),
+		)
+		return version, nil
+	}
+
 	return "", verifierVersionUnavailableError(owner, repo, lookupErrs)
 }
 
-func pinnedVerifierInstallVersion(owner, repo string) (string, bool) {
+func fallbackVerifierInstallVersion(owner, repo string) (string, bool) {
 	if owner == "sigstore" && repo == "cosign" {
 		return defaultCosignVerifierVersion, true
 	}
