@@ -155,7 +155,13 @@ func createEphemeralContainer(ctx context.Context, runtime Runtime, config *Ephe
 	}
 
 	if pullErr := runtime.Pull(ctx, config.Image); pullErr != nil {
-		return "", fmt.Errorf("failed to create container and pull image: create: %w; pull: %w", err, pullErr)
+		return "", fmt.Errorf(
+			"failed to create container and pull image: %w",
+			errors.Join(
+				fmt.Errorf("create: %w", err),
+				fmt.Errorf("pull: %w", pullErr),
+			),
+		)
 	}
 	return runtime.Create(ctx, createConfig)
 }
