@@ -12,6 +12,7 @@ import (
 	iolib "github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/pkg/pager"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/process"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/terminal"
 	"github.com/cloudposse/atmos/pkg/ui"
@@ -61,7 +62,7 @@ func (w *OutputModeWriter) executeViewport(cmd *exec.Cmd) (string, string, error
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 
-	err := cmd.Run()
+	err := process.RunManaged(cmd)
 	if err != nil {
 		// Fall back to log mode on error to ensure output is visible.
 		return w.fallbackToLog(stdout.String(), stderr.String(), err)
@@ -90,7 +91,7 @@ func (w *OutputModeWriter) executeViewport(cmd *exec.Cmd) (string, string, error
 	p := pager.NewWithViewport(true, height, width)
 	if pagerErr := p.Run(w.stepName, content); pagerErr != nil {
 		// Pager failed, fall back to raw output.
-		if writeErr := data.Write(content); writeErr != nil {
+		if writeErr := writeData(content); writeErr != nil {
 			return stdout.String(), stderr.String(), writeErr
 		}
 	}
@@ -111,7 +112,7 @@ func (w *OutputModeWriter) executeRaw(cmd *exec.Cmd) (string, string, error) {
 	cmd.Stdout = io.MultiWriter(&stdout, ioCtx.Data())
 	cmd.Stderr = io.MultiWriter(&stderr, ioCtx.UI())
 
-	err := cmd.Run()
+	err := process.RunManaged(cmd)
 	return stdout.String(), stderr.String(), err
 }
 
@@ -131,7 +132,7 @@ func (w *OutputModeWriter) executeLog(cmd *exec.Cmd) (string, string, error) {
 	}
 	ui.Writeln(stepLabel)
 
-	err := cmd.Run()
+	err := process.RunManaged(cmd)
 
 	return w.fallbackToLog(stdout.String(), stderr.String(), err)
 }
@@ -140,7 +141,7 @@ func (w *OutputModeWriter) executeLog(cmd *exec.Cmd) (string, string, error) {
 func (w *OutputModeWriter) fallbackToLog(stdout, stderr string, runErr error) (string, string, error) {
 	// Print captured output.
 	if stdout != "" {
-		_ = data.Write(stdout)
+		_ = writeData(stdout)
 	}
 	if stderr != "" {
 		ui.Write(stderr)
@@ -151,6 +152,15 @@ func (w *OutputModeWriter) fallbackToLog(stdout, stderr string, runErr error) (s
 	ui.Writeln(footer)
 
 	return stdout, stderr, runErr
+}
+
+func writeData(content string) (err error) {
+	defer func() {
+		if recover() != nil {
+			_, err = iolib.GetContext().Data().Write([]byte(content))
+		}
+	}()
+	return data.Write(content)
 }
 
 // formatStepFooter creates the footer string based on step status.
@@ -184,7 +194,7 @@ func (w *OutputModeWriter) executeNone(cmd *exec.Cmd) (string, string, error) {
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 
-	err := cmd.Run()
+	err := process.RunManaged(cmd)
 	return stdout.String(), stderr.String(), err
 }
 

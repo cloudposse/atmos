@@ -7,6 +7,8 @@ import (
 	"os/exec"
 	"strings"
 
+	"mvdan.cc/sh/v3/shell"
+
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -110,25 +112,41 @@ func (h *AtmosHandler) resolveWorkDir(step *schema.WorkflowStep, vars *Variables
 
 // resolveEnvVars resolves environment variables.
 func (h *AtmosHandler) resolveEnvVars(step *schema.WorkflowStep, vars *Variables) ([]string, error) {
-	if len(step.Env) == 0 {
-		return nil, nil
+	envMap := make(map[string]string, len(vars.Env)+len(step.Env))
+	for k, v := range vars.Env {
+		envMap[k] = v
 	}
-	resolvedEnv, err := vars.ResolveEnvMap(step.Env)
-	if err != nil {
-		return nil, fmt.Errorf("step '%s': %w", step.Name, err)
+	if len(step.Env) > 0 {
+		resolvedEnv, err := vars.ResolveEnvMap(step.Env)
+		if err != nil {
+			return nil, fmt.Errorf("step '%s': %w", step.Name, err)
+		}
+		for k, v := range resolvedEnv {
+			envMap[k] = v
+		}
 	}
-	var envVars []string
-	for k, v := range resolvedEnv {
-		envVars = append(envVars, k+"="+v)
-	}
-	return envVars, nil
+	return envMapToSlice(envMap), nil
 }
 
 // runAtmosCommand executes the prepared atmos command.
 func (h *AtmosHandler) runAtmosCommand(ctx context.Context, stepName string, opts *atmosExecOptions, mode OutputMode, viewport *schema.ViewportConfig) (*StepResult, error) {
-	args := strings.Fields(opts.command)
-	if opts.stack != "" && !containsStackFlag(args) {
-		args = append(args, "-s", opts.stack)
+	args, parseErr := shell.Fields(opts.command, nil)
+	if parseErr != nil {
+		args = strings.Fields(opts.command)
+	}
+
+	execOpts := executionOptionsFromContext(ctx)
+	stack := opts.stack
+	forceStack := execOpts.AtmosStackOverride != ""
+	if forceStack {
+		stack = execOpts.AtmosStackOverride
+	}
+	if stack != "" && (forceStack || !containsStackFlag(args)) {
+		args = appendAtmosStackArg(args, stack)
+	}
+
+	if execOpts.DryRun {
+		return h.buildAtmosResult("", "", nil), nil
 	}
 
 	// Use os.Executable() to get the absolute path to the currently running binary.
@@ -143,7 +161,7 @@ func (h *AtmosHandler) runAtmosCommand(ctx context.Context, stepName string, opt
 	if opts.workDir != "" {
 		cmd.Dir = opts.workDir
 	}
-	cmd.Env = append(os.Environ(), opts.envVars...)
+	cmd.Env = opts.envVars
 
 	writer := NewOutputModeWriter(mode, stepName, viewport)
 	stdout, stderr, err := writer.Execute(cmd)
@@ -194,4 +212,18 @@ func containsStackFlag(args []string) bool {
 		}
 	}
 	return false
+}
+
+func appendAtmosStackArg(args []string, stack string) []string {
+	for i, arg := range args {
+		if arg != "--" {
+			continue
+		}
+		result := make([]string, 0, len(args)+2)
+		result = append(result, args[:i]...)
+		result = append(result, "-s", stack)
+		result = append(result, args[i:]...)
+		return result
+	}
+	return append(args, "-s", stack)
 }

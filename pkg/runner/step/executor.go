@@ -147,18 +147,11 @@ func (e *StepExecutor) SetEnv(key, value string) {
 	e.vars.SetEnv(key, value)
 }
 
-// IsExtendedStepType checks if a step type is an extended type (not atmos or shell).
+// IsExtendedStepType checks if a step type is registered in the step handler registry.
 func IsExtendedStepType(stepType string) bool {
 	defer perf.Track(nil, "step.IsExtendedStepType")()
 
-	// Legacy types that should be handled by existing executor.
-	legacyTypes := map[string]bool{
-		"atmos": true,
-		"shell": true,
-		"":      true, // Empty defaults to shell in legacy.
-	}
-
-	if legacyTypes[stepType] {
+	if stepType == "" {
 		return false
 	}
 

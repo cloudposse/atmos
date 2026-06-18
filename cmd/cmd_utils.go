@@ -896,23 +896,23 @@ func executeCustomCommand(
 			stepType = "shell"
 		}
 
+		for _, envVar := range env {
+			parts := strings.SplitN(envVar, "=", 2)
+			if len(parts) == 2 {
+				executor.SetEnv(parts[0], parts[1])
+			}
+		}
+
 		// Execute the step based on type.
 		switch stepType {
 		case "shell":
-			// Execute shell command (backward compatible).
-			// Steps with tty/interactive attach the user's terminal so commands
-			// like `aws ssm start-session` get a real TTY and own Ctrl-C.
-			commandName := fmt.Sprintf("%s-step-%d", commandConfig.Name, i)
-			err = process.RunShellStep(context.Background(), &process.ShellSessionSpec{
-				Command:     commandToRun,
-				Name:        commandName,
-				Dir:         workDir,
-				Env:         env,
-				TTY:         step.Tty,
-				Interactive: step.Interactive,
-			}, func() error {
-				return e.ExecuteShell(commandToRun, commandName, workDir, env, false)
-			})
+			workflowStep := step.ToWorkflowStep()
+			workflowStep.Command = commandToRun
+			workflowStep.Type = "shell"
+			if workflowStep.WorkingDirectory == "" {
+				workflowStep.WorkingDirectory = workDir
+			}
+			_, err = executor.Execute(context.Background(), &workflowStep)
 		case schema.TaskTypeExec:
 			// Replace the Atmos process with the command (shell exec semantics).
 			err = process.ReplaceShellSession(&process.ExecSpec{
@@ -922,14 +922,13 @@ func executeCustomCommand(
 				Env:     env,
 			})
 		case "atmos":
-			// Execute atmos command.
-			args := strings.Fields(commandToRun)
-			execPath, execErr := os.Executable()
-			if execErr != nil {
-				err = execErr
-				break
+			workflowStep := step.ToWorkflowStep()
+			workflowStep.Command = commandToRun
+			workflowStep.Type = "atmos"
+			if workflowStep.WorkingDirectory == "" {
+				workflowStep.WorkingDirectory = workDir
 			}
-			err = e.ExecuteShellCommand(atmosConfig, execPath, args, workDir, env, false, "")
+			_, err = executor.Execute(context.Background(), &workflowStep)
 		default:
 			// Check if this is an extended step type (input, confirm, choose, etc.).
 			if stepPkg.IsExtendedStepType(stepType) {
@@ -940,14 +939,6 @@ func executeCustomCommand(
 				// Propagate working directory to extended step if not already set.
 				if workflowStep.WorkingDirectory == "" {
 					workflowStep.WorkingDirectory = workDir
-				}
-
-				// Update environment variables for this step (reuse executor to preserve step outputs).
-				for _, envVar := range env {
-					parts := strings.SplitN(envVar, "=", 2)
-					if len(parts) == 2 {
-						executor.SetEnv(parts[0], parts[1])
-					}
 				}
 
 				// Execute the extended step.
