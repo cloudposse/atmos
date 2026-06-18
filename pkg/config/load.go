@@ -1562,7 +1562,26 @@ func mergeCaseMapsFromFile(configFile string, mergedCaseMaps *casemap.CaseMaps) 
 		mergedCaseMaps.Set(path, existingMap)
 	}
 
+	mergeRecursiveEnvCaseKeys(rawYAML, mergedCaseMaps)
 	mergeDotenvIncludeCaseMaps(configFile, rawYAML, mergedCaseMaps)
+}
+
+// mergeRecursiveEnvCaseKeys folds env-var key casing from nested `env:` blocks
+// (custom-command and step-level) into the shared "env" case map, so they restore
+// the same way the top-level `env:` section does.
+func mergeRecursiveEnvCaseKeys(rawYAML []byte, mergedCaseMaps *casemap.CaseMaps) {
+	envKeys, err := casemap.CollectEnvKeysRecursive(rawYAML)
+	if err != nil || len(envKeys) == 0 {
+		return
+	}
+	existingMap := mergedCaseMaps.Get(envKey)
+	if existingMap == nil {
+		existingMap = make(casemap.CaseMap)
+	}
+	for k, v := range envKeys {
+		existingMap[k] = v
+	}
+	mergedCaseMaps.Set(envKey, existingMap)
 }
 
 // populateLegacyIdentityCaseMap copies auth.identities case mappings to the legacy IdentityCaseMap field.

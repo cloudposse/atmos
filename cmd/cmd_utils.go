@@ -945,9 +945,20 @@ func executeCustomCommand(
 				workflowStep := step.ToWorkflowStep()
 				// Update command with template-resolved value.
 				workflowStep.Command = commandToRun
-				// Carry the resolved env onto the step so handlers that read
-				// step.Env (e.g. the container handler's in-container env) see it.
-				workflowStep.Env = envSliceToMap(env)
+				// Carry env onto the step so handlers that read step.Env (e.g. the
+				// container handler's in-container env) see it. The step's own
+				// declared `env:` had its map keys lowercased by Viper, so restore
+				// the original case from the shared env case map, then merge it over
+				// the resolved command/process env (step vars win on collisions).
+				stepOwnEnv := workflowStep.Env
+				if atmosConfig.CaseMaps != nil {
+					stepOwnEnv = atmosConfig.CaseMaps.ApplyCase("env", stepOwnEnv)
+				}
+				mergedStepEnv := envSliceToMap(env)
+				for key, value := range stepOwnEnv {
+					mergedStepEnv[key] = value
+				}
+				workflowStep.Env = mergedStepEnv
 				// Propagate working directory to extended step if not already set.
 				if workflowStep.WorkingDirectory == "" {
 					workflowStep.WorkingDirectory = workDir
