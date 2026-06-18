@@ -896,6 +896,13 @@ func executeCustomCommand(
 			stepType = "shell"
 		}
 
+		// Registered (non-exec) step handlers take precedence; exec is handled inline below.
+		if _, ok := stepPkg.Get(stepType); ok && stepType != schema.TaskTypeExec {
+			err = runRegisteredStepHandler(executor, &step, commandToRun, workDir, env)
+			errUtils.CheckErrorPrintAndExit(err, "", "")
+			continue
+		}
+
 		// Execute the step based on type.
 		switch stepType {
 		case "shell":
@@ -973,6 +980,44 @@ func cloneCommand(orig *schema.Command) (*schema.Command, error) {
 	}
 
 	return &clone, nil
+}
+
+// runRegisteredStepHandler converts a custom command task into a workflow step
+// and executes it through a registered step handler, preserving step outputs.
+func runRegisteredStepHandler(executor *stepPkg.StepExecutor, step *schema.Task, commandToRun, workDir string, env []string) error {
+	// Convert Task to WorkflowStep for handler compatibility.
+	workflowStep := step.ToWorkflowStep()
+	workflowStep.Command = commandToRun
+	workflowStep.Env = envSliceToMap(env)
+	if workflowStep.WorkingDirectory == "" {
+		workflowStep.WorkingDirectory = workDir
+	}
+
+	// Update environment variables for template resolution (reuse executor to preserve step outputs).
+	for _, envVar := range env {
+		parts := strings.SplitN(envVar, "=", 2)
+		if len(parts) == 2 {
+			executor.SetEnv(parts[0], parts[1])
+		}
+	}
+
+	_, err := executor.Execute(context.Background(), &workflowStep)
+	return err
+}
+
+func envSliceToMap(env []string) map[string]string {
+	if len(env) == 0 {
+		return nil
+	}
+	result := make(map[string]string, len(env))
+	for _, entry := range env {
+		key, value, ok := strings.Cut(entry, "=")
+		if !ok {
+			continue
+		}
+		result[key] = value
+	}
+	return result
 }
 
 // findTypedValue finds the value of an argument or flag with the specified semantic type.

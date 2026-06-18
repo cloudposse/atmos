@@ -1,0 +1,152 @@
+name: Container Step
+description: Workflows demonstrating container build, push, and run steps.
+
+workflows:
+  hello:
+    description: Run a simple command in a container
+    steps:
+      - name: hello
+        type: container
+        action: run
+        run:
+          image: alpine:latest
+          command: echo "hello from a workflow container"
+
+  build-run:
+    description: Build a local image and run it in a later step
+    steps:
+      - name: build
+        type: container
+        action: build
+        build:
+          context: .
+          dockerfile: Dockerfile
+          tags:
+            - atmos-container-step:local
+        outputs:
+          image: "{{ .metadata.image }}"
+
+      - name: run
+        type: container
+        action: run
+        run:
+          image: "{{ .steps.build.outputs.image }}"
+          command: |
+            /usr/local/bin/example
+            uname -a
+
+  bake-build-run:
+    description: Build a local image with Docker Buildx Bake and run it in a later step
+    steps:
+      - name: build
+        type: container
+        action: build
+        build:
+          runtime: docker
+          engine: buildx
+          tags:
+            - atmos-container-step:bake
+          bake:
+            file: docker-bake.hcl
+            target: app
+            vars:
+              TAG: atmos-container-step:bake
+            load: true
+        outputs:
+          image: "{{ .metadata.image }}"
+
+      - name: run
+        type: container
+        action: run
+        run:
+          image: "{{ .steps.build.outputs.image }}"
+          command: /usr/local/bin/example
+
+  push-local-registry:
+    description: Build, push to localhost:5000, then run the pushed reference
+    steps:
+      - name: build
+        type: container
+        action: build
+        build:
+          context: .
+          dockerfile: Dockerfile
+          tags:
+            - atmos-container-step:local
+        outputs:
+          image: "{{ .metadata.image }}"
+
+      - name: push
+        type: container
+        action: push
+        push:
+          image: "{{ .steps.build.outputs.image }}"
+          tags:
+            - localhost:5000/atmos-container-step:local
+        outputs:
+          image: "{{ .metadata.image }}"
+          digest: "{{ .metadata.digest }}"
+
+      - name: run
+        type: container
+        action: run
+        run:
+          image: "{{ .steps.push.outputs.image }}"
+          command: |
+            /usr/local/bin/example
+            uname -a
+
+  workspace:
+    description: Show the default workspace mount
+    steps:
+      - name: workspace
+        type: container
+        action: run
+        run:
+          image: alpine:latest
+          command: |
+            uname -a
+            echo "container workspace:"
+            pwd
+            echo "workspace files:"
+            ls -la
+
+  env:
+    description: Pass workflow and step env into the container
+    env:
+      WORKFLOW_MESSAGE: "hello from workflow env"
+    steps:
+      - name: env
+        type: container
+        env:
+          STEP_MESSAGE: "hello from step env"
+        action: run
+        run:
+          image: alpine:latest
+          command: |
+            echo "$WORKFLOW_MESSAGE"
+            echo "$STEP_MESSAGE"
+
+  failing-check:
+    description: Simulate a scanner or linter failure
+    steps:
+      - name: check
+        type: container
+        action: run
+        run:
+          image: alpine:latest
+          command: |
+            echo "simulated check failed" >&2
+            exit 1
+
+  shell:
+    description: Open an optional interactive container shell
+    steps:
+      - name: shell
+        type: container
+        tty: true
+        interactive: true
+        action: run
+        run:
+          image: alpine:latest
+          command: /bin/sh

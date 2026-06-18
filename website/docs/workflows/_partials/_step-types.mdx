@@ -4,7 +4,7 @@ Atmos supports 25+ step types across five categories: Command, Interactive, UI M
 
 | Category | Step Types | Description |
 |----------|------------|-------------|
-| **Command** | `atmos`, `shell` | Execute Atmos or shell commands |
+| **Command** | `atmos`, `shell`, `container` | Execute Atmos, shell, or container operations |
 | **Interactive** | `input`, `confirm`, `choose`, `filter`, `file`, `write` | Collect user input |
 | **UI Messages** | `success`, `info`, `warn`, `error`, `markdown` | Display formatted messages |
 | **Output** | `spin`, `table`, `pager`, `format`, `join`, `style` | Format and display output |
@@ -13,6 +13,90 @@ Atmos supports 25+ step types across five categories: Command, Interactive, UI M
 ### Interactive Step Types
 
 Interactive steps require a TTY (terminal) to run. In CI environments, use `--dry-run` to preview workflows or set default values.
+
+### Container Step Type
+
+#### container
+
+Builds, pushes, or runs containers with Docker or Podman. `action: run` mounts the resolved step `working_directory` at `/workspace` by default, runs the command from that directory, and removes the container after the step unless configured otherwise.
+
+```yaml
+steps:
+  - name: build
+    type: container
+    action: build
+    build:
+      context: .
+      dockerfile: Dockerfile
+      tags:
+        - app:local
+    outputs:
+      image: "{{ .metadata.image }}"
+
+  - name: smoke
+    type: container
+    action: run
+    run:
+      image: "{{ .steps.build.outputs.image }}"
+      command: uname -a
+
+  - name: bake
+    type: container
+    action: build
+    build:
+      runtime: docker
+      engine: buildx
+      tags:
+        - app:bake
+      bake:
+        file: docker-bake.hcl
+        target: app
+        load: true
+```
+
+<dl>
+  <dt>`action`</dt>
+  <dd>Container action: `build`, `push`, or `run`. When omitted, flat container fields are treated as backward-compatible `run` shorthand.</dd>
+
+  <dt>`build`</dt>
+  <dd>Build action block. Supports `runtime`, `runtime_auto_start`, `engine`, `context`, `dockerfile`, `tags`, `build_args`, `target`, `no_cache`, `pull`, and optional Docker Buildx Bake configuration under `bake`.</dd>
+
+  <dt>`build.engine`</dt>
+  <dd>Optional build engine. `buildx` enables Docker Buildx commands and requires `runtime: docker` in V1.</dd>
+
+  <dt>`build.bake`</dt>
+  <dd>Docker Buildx Bake configuration. Supports `file`, `files`, `target`, `targets`, `set`, `vars`, `load`, `push`, and `print`. Bake requires Docker Buildx in V1; `runtime: podman` is rejected for Bake builds.</dd>
+
+  <dt>`push`</dt>
+  <dd>Push action block. Supports `runtime`, `runtime_auto_start`, `image`, and optional `tags` to tag before pushing.</dd>
+
+  <dt>`run`</dt>
+  <dd>Run action block. Supports `runtime`, `runtime_auto_start`, `image`, `command`, `shell`, `pull`, `workspace`, `workspace_read_only`, `cleanup`, `user`, `run_args`, `mounts`, and `ports`.</dd>
+
+  <dt>`outputs`</dt>
+  <dd>Declared outputs evaluated after the step succeeds. Use `{{ .steps.NAME.outputs.KEY }}` in later steps.</dd>
+
+  <dt>`runtime`</dt>
+  <dd>Optional runtime override: `docker` or `podman`. When omitted, Atmos auto-detects the runtime.</dd>
+
+  <dt>`pull`</dt>
+  <dd>Image pull policy: `missing` (default), `always`, or `never`.</dd>
+
+  <dt>`workspace`</dt>
+  <dd>Container workspace path. Defaults to `/workspace`.</dd>
+
+  <dt>`workspace_read_only`</dt>
+  <dd>Mount the workspace read-only when set to `true`.</dd>
+
+  <dt>`cleanup`</dt>
+  <dd>Container cleanup policy: `always` (default), `on_success`, or `never`.</dd>
+
+  <dt>`mounts`</dt>
+  <dd>Additional mounts using `type`, `source`, `target`, and optional `read_only` fields.</dd>
+
+  <dt>`ports`</dt>
+  <dd>Port mappings using `host`, `container`, and optional `protocol` fields.</dd>
+</dl>
 
 #### input
 

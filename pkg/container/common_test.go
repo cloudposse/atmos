@@ -840,6 +840,48 @@ func TestBuildBuildArgs(t *testing.T) {
 				"-f", "Dockerfile.dev", "/path/to/context",
 			},
 		},
+		{
+			name: "buildx build",
+			config: &BuildConfig{
+				Engine:     "buildx",
+				Dockerfile: "Dockerfile",
+				Context:    ".",
+				Tags:       []string{"myapp:latest"},
+			},
+			expected: []string{"buildx", "build", "-t", "myapp:latest", "-f", "Dockerfile", "."},
+		},
+		{
+			name: "buildx bake",
+			config: &BuildConfig{
+				NoCache: true,
+				Pull:    true,
+				Bake: &BakeConfig{
+					File:    "docker-bake.hcl",
+					Files:   []string{"docker-bake.override.hcl"},
+					Target:  "app",
+					Targets: []string{"worker"},
+					Set:     []string{"*.platform=linux/amd64"},
+					Vars:    map[string]string{"VERSION": "1.0.0"},
+					Load:    true,
+					Push:    true,
+					Print:   true,
+				},
+			},
+			expected: []string{
+				"buildx", "bake",
+				"--file", "docker-bake.hcl",
+				"--file", "docker-bake.override.hcl",
+				"--no-cache",
+				"--pull",
+				"--load",
+				"--push",
+				"--print",
+				"--var", "VERSION=1.0.0",
+				"--set", "*.platform=linux/amd64",
+				"app",
+				"worker",
+			},
+		},
 	}
 
 	for _, tt := range tests {

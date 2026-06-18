@@ -28,6 +28,74 @@ type ShowConfig struct {
 	Progress *bool `yaml:"progress,omitempty" json:"progress,omitempty" mapstructure:"progress"`
 }
 
+// ContainerMount represents a volume mount for container steps.
+type ContainerMount struct {
+	Type     string `yaml:"type,omitempty" json:"type,omitempty" mapstructure:"type"` // bind, volume, tmpfs.
+	Source   string `yaml:"source,omitempty" json:"source,omitempty" mapstructure:"source"`
+	Target   string `yaml:"target,omitempty" json:"target,omitempty" mapstructure:"target"`
+	ReadOnly bool   `yaml:"read_only,omitempty" json:"read_only,omitempty" mapstructure:"read_only"`
+}
+
+// ContainerPort represents a port mapping for container steps.
+type ContainerPort struct {
+	Host      int    `yaml:"host,omitempty" json:"host,omitempty" mapstructure:"host"`
+	Container int    `yaml:"container,omitempty" json:"container,omitempty" mapstructure:"container"`
+	Protocol  string `yaml:"protocol,omitempty" json:"protocol,omitempty" mapstructure:"protocol"`
+}
+
+// ContainerBuildBakeStep configures a Docker Buildx Bake build action.
+type ContainerBuildBakeStep struct {
+	File    string            `yaml:"file,omitempty" json:"file,omitempty" mapstructure:"file"`
+	Files   []string          `yaml:"files,omitempty" json:"files,omitempty" mapstructure:"files"`
+	Target  string            `yaml:"target,omitempty" json:"target,omitempty" mapstructure:"target"`
+	Targets []string          `yaml:"targets,omitempty" json:"targets,omitempty" mapstructure:"targets"`
+	Set     []string          `yaml:"set,omitempty" json:"set,omitempty" mapstructure:"set"`
+	Vars    map[string]string `yaml:"vars,omitempty" json:"vars,omitempty" mapstructure:"vars"`
+	Load    bool              `yaml:"load,omitempty" json:"load,omitempty" mapstructure:"load"`
+	Push    bool              `yaml:"push,omitempty" json:"push,omitempty" mapstructure:"push"`
+	Print   bool              `yaml:"print,omitempty" json:"print,omitempty" mapstructure:"print"`
+}
+
+// ContainerBuildStep configures a container image build action.
+type ContainerBuildStep struct {
+	Runtime          string                  `yaml:"runtime,omitempty" json:"runtime,omitempty" mapstructure:"runtime"`
+	RuntimeAutoStart bool                    `yaml:"runtime_auto_start,omitempty" json:"runtime_auto_start,omitempty" mapstructure:"runtime_auto_start"`
+	Engine           string                  `yaml:"engine,omitempty" json:"engine,omitempty" mapstructure:"engine"`
+	Context          string                  `yaml:"context,omitempty" json:"context,omitempty" mapstructure:"context"`
+	Dockerfile       string                  `yaml:"dockerfile,omitempty" json:"dockerfile,omitempty" mapstructure:"dockerfile"`
+	Tags             []string                `yaml:"tags,omitempty" json:"tags,omitempty" mapstructure:"tags"`
+	BuildArgs        map[string]string       `yaml:"build_args,omitempty" json:"build_args,omitempty" mapstructure:"build_args"`
+	Target           string                  `yaml:"target,omitempty" json:"target,omitempty" mapstructure:"target"`
+	NoCache          bool                    `yaml:"no_cache,omitempty" json:"no_cache,omitempty" mapstructure:"no_cache"`
+	Pull             bool                    `yaml:"pull,omitempty" json:"pull,omitempty" mapstructure:"pull"`
+	Bake             *ContainerBuildBakeStep `yaml:"bake,omitempty" json:"bake,omitempty" mapstructure:"bake"`
+}
+
+// ContainerPushStep configures a container image push action.
+type ContainerPushStep struct {
+	Runtime          string   `yaml:"runtime,omitempty" json:"runtime,omitempty" mapstructure:"runtime"`
+	RuntimeAutoStart bool     `yaml:"runtime_auto_start,omitempty" json:"runtime_auto_start,omitempty" mapstructure:"runtime_auto_start"`
+	Image            string   `yaml:"image,omitempty" json:"image,omitempty" mapstructure:"image"`
+	Tags             []string `yaml:"tags,omitempty" json:"tags,omitempty" mapstructure:"tags"`
+}
+
+// ContainerRunStep configures a one-shot container run action.
+type ContainerRunStep struct {
+	Image             string           `yaml:"image,omitempty" json:"image,omitempty" mapstructure:"image"`
+	Command           string           `yaml:"command,omitempty" json:"command,omitempty" mapstructure:"command"`
+	Shell             string           `yaml:"shell,omitempty" json:"shell,omitempty" mapstructure:"shell"`
+	Runtime           string           `yaml:"runtime,omitempty" json:"runtime,omitempty" mapstructure:"runtime"`
+	RuntimeAutoStart  bool             `yaml:"runtime_auto_start,omitempty" json:"runtime_auto_start,omitempty" mapstructure:"runtime_auto_start"`
+	Pull              string           `yaml:"pull,omitempty" json:"pull,omitempty" mapstructure:"pull"`
+	Workspace         string           `yaml:"workspace,omitempty" json:"workspace,omitempty" mapstructure:"workspace"`
+	WorkspaceReadOnly bool             `yaml:"workspace_read_only,omitempty" json:"workspace_read_only,omitempty" mapstructure:"workspace_read_only"`
+	Cleanup           string           `yaml:"cleanup,omitempty" json:"cleanup,omitempty" mapstructure:"cleanup"`
+	User              string           `yaml:"user,omitempty" json:"user,omitempty" mapstructure:"user"`
+	RunArgs           []string         `yaml:"run_args,omitempty" json:"run_args,omitempty" mapstructure:"run_args"`
+	Mounts            []ContainerMount `yaml:"mounts,omitempty" json:"mounts,omitempty" mapstructure:"mounts"`
+	Ports             []ContainerPort  `yaml:"ports,omitempty" json:"ports,omitempty" mapstructure:"ports"`
+}
+
 // WorkflowStep represents a single step in a workflow.
 type WorkflowStep struct {
 	// Existing fields.
@@ -100,8 +168,32 @@ type WorkflowStep struct {
 	// Exit step type fields.
 	Code int `yaml:"code,omitempty" json:"code,omitempty" mapstructure:"code"` // Exit code for exit step type.
 
+	// Container step fields.
+	Action            string              `yaml:"action,omitempty" json:"action,omitempty" mapstructure:"action"` // build, push, run.
+	Build             *ContainerBuildStep `yaml:"build,omitempty" json:"build,omitempty" mapstructure:"build"`
+	Push              *ContainerPushStep  `yaml:"push,omitempty" json:"push,omitempty" mapstructure:"push"`
+	Run               *ContainerRunStep   `yaml:"run,omitempty" json:"run,omitempty" mapstructure:"run"`
+	RuntimeAutoStart  bool                `yaml:"runtime_auto_start,omitempty" json:"runtime_auto_start,omitempty" mapstructure:"runtime_auto_start"`
+	Image             string              `yaml:"image,omitempty" json:"image,omitempty" mapstructure:"image"`                                           // Container image to run.
+	Shell             string              `yaml:"shell,omitempty" json:"shell,omitempty" mapstructure:"shell"`                                           // Shell used to execute command in container.
+	Runtime           string              `yaml:"runtime,omitempty" json:"runtime,omitempty" mapstructure:"runtime"`                                     // docker, podman, or empty for auto-detect.
+	Pull              string              `yaml:"pull,omitempty" json:"pull,omitempty" mapstructure:"pull"`                                              // missing, always, never.
+	Workspace         string              `yaml:"workspace,omitempty" json:"workspace,omitempty" mapstructure:"workspace"`                               // Container workspace path.
+	WorkspaceReadOnly bool                `yaml:"workspace_read_only,omitempty" json:"workspace_read_only,omitempty" mapstructure:"workspace_read_only"` // Mount workspace read-only.
+	Cleanup           string              `yaml:"cleanup,omitempty" json:"cleanup,omitempty" mapstructure:"cleanup"`                                     // always, on_success, never.
+	User              string              `yaml:"user,omitempty" json:"user,omitempty" mapstructure:"user"`                                              // Container user.
+	RunArgs           []string            `yaml:"run_args,omitempty" json:"run_args,omitempty" mapstructure:"run_args"`                                  // Runtime-specific create args.
+	Mounts            []ContainerMount    `yaml:"mounts,omitempty" json:"mounts,omitempty" mapstructure:"mounts"`                                        // Extra container mounts.
+	Ports             []ContainerPort     `yaml:"ports,omitempty" json:"ports,omitempty" mapstructure:"ports"`                                           // Port mappings.
+
+	// Outputs declares named outputs derived from the step result.
+	Outputs map[string]string `yaml:"outputs,omitempty" json:"outputs,omitempty" mapstructure:"outputs"`
+
 	// Show configuration for this step (overrides workflow-level show settings).
 	Show *ShowConfig `yaml:"show,omitempty" json:"show,omitempty" mapstructure:"show"`
+
+	// DryRun is set by executors and is not read from user configuration.
+	DryRun bool `yaml:"-" json:"-" mapstructure:"-"`
 }
 
 // WorkflowDefinition represents a complete workflow with steps.

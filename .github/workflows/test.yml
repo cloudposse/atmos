@@ -680,8 +680,60 @@ jobs:
               ]
             }
 
+  # run container step tests against a local registry (build -> push -> run)
+  # Docker is available directly on the runner (see the k3s job), and a
+  # registry:2 service container provides a hermetic push/pull target on
+  # localhost:5000 so the full build -> push -> run cycle is exercised without
+  # GitHub Container Registry, leftover packages, or fork-PR token limits.
+  container-step:
+    name: "[container-step] example"
+    needs: build
+    runs-on: ubuntu-latest
+
+    services:
+      registry:
+        image: registry:2
+        ports:
+          - 5000:5000
+
+    timeout-minutes: 15
+    steps:
+      - name: Download build artifacts
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: build-artifacts-linux
+          path: /usr/local/bin
+
+      - name: Set execute permissions on atmos
+        run: chmod +x /usr/local/bin/atmos
+
+      - name: Check out code into the Go module directory
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Run container steps (run, build, bake, push, workspace, env)
+        working-directory: examples/container-step
+        run: |
+          set -euo pipefail
+          atmos workflow hello -f container-step
+          atmos workflow build-run -f container-step
+          atmos workflow bake-build-run -f container-step
+          atmos workflow push-local-registry -f container-step
+          atmos workflow workspace -f container-step
+          atmos workflow env -f container-step
+
+      - name: Verify a failing container step propagates a non-zero exit code
+        working-directory: examples/container-step
+        run: |
+          if atmos workflow failing-check -f container-step; then
+            echo "expected the 'failing-check' workflow to fail, but it succeeded"
+            exit 1
+          fi
+          echo "failing-check correctly returned a non-zero exit code"
+
   release:
-    needs: [test, lint, mock, k3s, floci, docker, validate]
+    needs: [test, lint, mock, k3s, floci, docker, validate, container-step]
     if: github.event_name == 'push'
     uses: cloudposse/.github/.github/workflows/shared-go-auto-release.yml@8244c7c9142e92281e7841f655fa48e9ceb9b454 # main
     with:

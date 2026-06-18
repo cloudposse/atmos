@@ -1,0 +1,108 @@
+base_path: "."
+
+workflows:
+  base_path: "workflows"
+
+commands:
+  - name: container
+    description: Run container action examples
+    commands:
+      - name: hello
+        description: Run a simple command in Alpine
+        steps:
+          - name: hello
+            type: container
+            action: run
+            run:
+              image: alpine:latest
+              command: echo "hello from a custom command container"
+
+      - name: build-run
+        description: Build a local image and run it
+        steps:
+          - name: build
+            type: container
+            action: build
+            build:
+              context: .
+              dockerfile: Dockerfile
+              tags:
+                - atmos-container-step:local
+            outputs:
+              image: "{{ .metadata.image }}"
+
+          - name: run
+            type: container
+            action: run
+            run:
+              image: "{{ .steps.build.outputs.image }}"
+              command: |
+                /usr/local/bin/example
+                uname -a
+
+      - name: push
+        description: Push the local example image to a local registry
+        steps:
+          - name: build
+            type: container
+            action: build
+            build:
+              context: .
+              dockerfile: Dockerfile
+              tags:
+                - atmos-container-step:local
+            outputs:
+              image: "{{ .metadata.image }}"
+
+          - name: push
+            type: container
+            action: push
+            push:
+              image: "{{ .steps.build.outputs.image }}"
+              tags:
+                - localhost:5000/atmos-container-step:local
+            outputs:
+              image: "{{ .metadata.image }}"
+              digest: "{{ .metadata.digest }}"
+
+          - name: run
+            type: container
+            action: run
+            run:
+              image: "{{ .steps.push.outputs.image }}"
+              command: |
+                /usr/local/bin/example
+                uname -a
+
+      - name: flat-run
+        description: Run using the backward-compatible flat run shorthand
+        steps:
+          - name: hello
+            type: container
+            image: alpine:latest
+            command: echo "hello from flat run shorthand"
+
+      - name: workspace
+        description: Show the mounted workspace from a container
+        steps:
+          - name: workspace
+            type: container
+            action: run
+            run:
+              image: alpine:latest
+              command: |
+                uname -a
+                pwd
+                ls -la
+
+      - name: env
+        description: Pass an Atmos step environment variable into a container
+        steps:
+          - name: env
+            type: container
+            env:
+              EXAMPLE_MESSAGE: "hello from env"
+            action: run
+            run:
+              image: alpine:latest
+              command: echo "$EXAMPLE_MESSAGE"

@@ -18,6 +18,7 @@ func TestCommandHandlersRegistration(t *testing.T) {
 	}{
 		{"atmos", CategoryCommand, false},
 		{"shell", CategoryCommand, false},
+		{"container", CategoryCommand, false},
 	}
 
 	for _, tt := range tests {
@@ -148,6 +149,90 @@ func TestShellHandlerValidation(t *testing.T) {
 				Output:  "none",
 			},
 			expectErr: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := handler.Validate(tt.step)
+			if tt.expectErr {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}
+
+func TestContainerHandlerValidation(t *testing.T) {
+	handler, ok := Get("container")
+	require.True(t, ok)
+
+	tests := []struct {
+		name      string
+		step      *schema.WorkflowStep
+		expectErr bool
+	}{
+		{
+			name: "valid minimal container step",
+			step: &schema.WorkflowStep{
+				Name:    "test",
+				Type:    "container",
+				Image:   "alpine:latest",
+				Command: "echo hello",
+			},
+			expectErr: false,
+		},
+		{
+			name: "missing image",
+			step: &schema.WorkflowStep{
+				Name:    "test",
+				Type:    "container",
+				Command: "echo hello",
+			},
+			expectErr: true,
+		},
+		{
+			name: "missing command",
+			step: &schema.WorkflowStep{
+				Name:  "test",
+				Type:  "container",
+				Image: "alpine:latest",
+			},
+			expectErr: true,
+		},
+		{
+			name: "invalid runtime",
+			step: &schema.WorkflowStep{
+				Name:    "test",
+				Type:    "container",
+				Image:   "alpine:latest",
+				Command: "echo hello",
+				Runtime: "containerd",
+			},
+			expectErr: true,
+		},
+		{
+			name: "invalid pull policy",
+			step: &schema.WorkflowStep{
+				Name:    "test",
+				Type:    "container",
+				Image:   "alpine:latest",
+				Command: "echo hello",
+				Pull:    "sometimes",
+			},
+			expectErr: true,
+		},
+		{
+			name: "invalid cleanup policy",
+			step: &schema.WorkflowStep{
+				Name:    "test",
+				Type:    "container",
+				Image:   "alpine:latest",
+				Command: "echo hello",
+				Cleanup: "later",
+			},
+			expectErr: true,
 		},
 	}
 

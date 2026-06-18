@@ -1,0 +1,306 @@
+package container
+
+import (
+	"bytes"
+	"context"
+	"errors"
+	"fmt"
+	"os"
+	"os/exec"
+	"strings"
+
+	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/perf"
+)
+
+const (
+	// PullMissing pulls only after initial container creation fails.
+	PullMissing = "missing"
+	// PullAlways pulls the image before creating the container.
+	PullAlways = "always"
+	// PullNever never pulls the image.
+	PullNever = "never"
+
+	// CleanupAlways removes the container after execution, even on failure.
+	CleanupAlways = "always"
+	// CleanupOnSuccess removes the container only after successful execution.
+	CleanupOnSuccess = "on_success"
+	// CleanupNever leaves the container behind.
+	CleanupNever = "never"
+
+	// KeyValueFormat formats a key/value pair as `key=value`.
+	keyValueFormat = "%s=%s"
+	// RuntimePlaceholder is shown in command previews when no runtime is selected.
+	runtimePlaceholder = "docker|podman"
+	// SpaceSeparator joins command arguments in human-readable previews.
+	spaceSeparator = " "
+)
+
+// EphemeralConfig describes a one-shot container execution.
+type EphemeralConfig struct {
+	Name              string
+	Image             string
+	Command           []string
+	WorkspaceHostPath string
+	WorkspaceFolder   string
+	WorkspaceReadOnly bool
+	Mounts            []Mount
+	Ports             []PortBinding
+	Env               []string
+	User              string
+	Labels            map[string]string
+	RunArgs           []string
+	PullPolicy        string
+	CleanupPolicy     string
+	TTY               bool
+	Interactive       bool
+}
+
+// EphemeralResult is the result of a one-shot container execution.
+type EphemeralResult struct {
+	ContainerID string
+	Stdout      string
+	Stderr      string
+	ExitCode    int
+}
+
+// RunEphemeralContainer creates, starts, execs, and optionally removes a container.
+func RunEphemeralContainer(ctx context.Context, runtime Runtime, config *EphemeralConfig) (*EphemeralResult, error) {
+	defer perf.Track(nil, "container.RunEphemeralContainer")()
+
+	if runtime == nil || config == nil {
+		return nil, errUtils.ErrNilParam
+	}
+
+	normalizeEphemeralConfig(config)
+
+	if config.PullPolicy == PullAlways {
+		if err := runtime.Pull(ctx, config.Image); err != nil {
+			return nil, err
+		}
+	}
+
+	containerID, err := createEphemeralContainer(ctx, runtime, config)
+	if err != nil {
+		return nil, err
+	}
+
+	result := &EphemeralResult{ContainerID: containerID}
+	shouldRemove := false
+	defer func() {
+		if shouldRemove {
+			_ = runtime.Remove(ctx, containerID, true)
+		}
+	}()
+
+	if err := runtime.Start(ctx, containerID); err != nil {
+		if config.CleanupPolicy == CleanupAlways {
+			shouldRemove = true
+		}
+		return result, err
+	}
+
+	execErr := execEphemeralCommand(ctx, runtime, containerID, config, result)
+	result.ExitCode = ExitCode(execErr)
+
+	if shouldCleanup(config.CleanupPolicy, execErr) {
+		shouldRemove = true
+	}
+
+	return result, execErr
+}
+
+func normalizeEphemeralConfig(config *EphemeralConfig) {
+	if config.WorkspaceFolder == "" {
+		config.WorkspaceFolder = "/workspace"
+	}
+	if config.PullPolicy == "" {
+		config.PullPolicy = PullMissing
+	}
+	if config.CleanupPolicy == "" {
+		config.CleanupPolicy = CleanupAlways
+	}
+}
+
+func createEphemeralContainer(ctx context.Context, runtime Runtime, config *EphemeralConfig) (string, error) {
+	createConfig := buildEphemeralCreateConfig(config)
+	containerID, err := runtime.Create(ctx, createConfig)
+	if err == nil || config.PullPolicy != PullMissing {
+		return containerID, err
+	}
+
+	if pullErr := runtime.Pull(ctx, config.Image); pullErr != nil {
+		return "", fmt.Errorf("%w: failed to create container and pull image: create: %w; pull: %w", errUtils.ErrContainerRuntimeOperation, err, pullErr)
+	}
+	return runtime.Create(ctx, createConfig)
+}
+
+func buildEphemeralCreateConfig(config *EphemeralConfig) *CreateConfig {
+	mounts := append([]Mount{}, config.Mounts...)
+	if config.WorkspaceHostPath != "" {
+		mounts = append(mounts, Mount{
+			Type:     "bind",
+			Source:   config.WorkspaceHostPath,
+			Target:   config.WorkspaceFolder,
+			ReadOnly: config.WorkspaceReadOnly,
+		})
+	}
+
+	return &CreateConfig{
+		Name:            config.Name,
+		Image:           config.Image,
+		WorkspaceFolder: config.WorkspaceFolder,
+		Mounts:          mounts,
+		Ports:           config.Ports,
+		User:            config.User,
+		Labels:          config.Labels,
+		RunArgs:         config.RunArgs,
+		OverrideCommand: true,
+	}
+}
+
+func execEphemeralCommand(ctx context.Context, runtime Runtime, containerID string, config *EphemeralConfig, result *EphemeralResult) error {
+	opts := &ExecOptions{
+		User:         config.User,
+		WorkingDir:   config.WorkspaceFolder,
+		Env:          config.Env,
+		AttachStdin:  config.Interactive,
+		AttachStdout: true,
+		AttachStderr: true,
+		Tty:          config.TTY,
+	}
+
+	if config.Interactive {
+		opts.Stdin = os.Stdin
+	}
+
+	if config.TTY || config.Interactive {
+		return runtime.Exec(ctx, containerID, config.Command, opts)
+	}
+
+	var stdout, stderr bytes.Buffer
+	opts.Stdout = &stdout
+	opts.Stderr = &stderr
+
+	err := runtime.Exec(ctx, containerID, config.Command, opts)
+	result.Stdout = stdout.String()
+	result.Stderr = stderr.String()
+	return err
+}
+
+func shouldCleanup(policy string, execErr error) bool {
+	switch policy {
+	case CleanupNever:
+		return false
+	case CleanupOnSuccess:
+		return execErr == nil
+	default:
+		return true
+	}
+}
+
+// ExitCode extracts a process exit code from an error.
+func ExitCode(err error) int {
+	defer perf.Track(nil, "container.ExitCode")()
+
+	if err == nil {
+		return 0
+	}
+	var exitErr *exec.ExitError
+	if errors.As(err, &exitErr) {
+		return exitErr.ExitCode()
+	}
+	return 1
+}
+
+// BuildEphemeralPreview builds a human-readable equivalent runtime command.
+func BuildEphemeralPreview(runtimeName string, config *EphemeralConfig) string {
+	defer perf.Track(nil, "container.BuildEphemeralPreview")()
+
+	normalizeEphemeralConfig(config)
+	if runtimeName == "" {
+		runtimeName = runtimePlaceholder
+	}
+
+	args := []string{runtimeName, "run"}
+	args = appendEphemeralPreviewFlags(args, config)
+	args = appendEphemeralPreviewMounts(args, config)
+	for _, port := range config.Ports {
+		args = append(args, "-p", fmt.Sprintf("%d:%d/%s", port.HostPort, port.ContainerPort, port.Protocol))
+	}
+	args = append(args, config.RunArgs...)
+	args = append(args, config.Image)
+	args = append(args, config.Command...)
+	return strings.Join(args, spaceSeparator)
+}
+
+// appendEphemeralPreviewFlags appends the scalar run flags for the preview command.
+func appendEphemeralPreviewFlags(args []string, config *EphemeralConfig) []string {
+	if config.CleanupPolicy == CleanupAlways {
+		args = append(args, "--rm")
+	}
+	if config.TTY {
+		args = append(args, "-t")
+	}
+	if config.Interactive {
+		args = append(args, "-i")
+	}
+	if config.User != "" {
+		args = append(args, "--user", config.User)
+	}
+	if config.WorkspaceFolder != "" {
+		args = append(args, "-w", config.WorkspaceFolder)
+	}
+	for _, env := range config.Env {
+		args = append(args, "-e", env)
+	}
+	return args
+}
+
+// appendEphemeralPreviewMounts appends the resolved mount flags for the preview command.
+func appendEphemeralPreviewMounts(args []string, config *EphemeralConfig) []string {
+	for _, mount := range buildEphemeralCreateConfig(config).Mounts {
+		mountStr := fmt.Sprintf("type=%s,source=%s,target=%s", mount.Type, mount.Source, mount.Target)
+		if mount.ReadOnly {
+			mountStr += ",readonly"
+		}
+		args = append(args, "--mount", mountStr)
+	}
+	return args
+}
+
+// BuildImageBuildPreview builds a human-readable equivalent image build command.
+func BuildImageBuildPreview(runtimeName string, config *BuildConfig) string {
+	defer perf.Track(nil, "container.BuildImageBuildPreview")()
+
+	if runtimeName == "" {
+		runtimeName = runtimePlaceholder
+		if config.Engine == "buildx" || config.Bake != nil {
+			runtimeName = "docker"
+		}
+	}
+	args := append([]string{runtimeName}, buildBuildArgs(config)...)
+	return strings.Join(args, spaceSeparator)
+}
+
+// BuildImageTagPreview builds a human-readable equivalent image tag command.
+func BuildImageTagPreview(runtimeName, source, target string) string {
+	defer perf.Track(nil, "container.BuildImageTagPreview")()
+
+	if runtimeName == "" {
+		runtimeName = runtimePlaceholder
+	}
+	args := append([]string{runtimeName}, buildTagArgs(source, target)...)
+	return strings.Join(args, spaceSeparator)
+}
+
+// BuildImagePushPreview builds a human-readable equivalent image push command.
+func BuildImagePushPreview(runtimeName, image string) string {
+	defer perf.Track(nil, "container.BuildImagePushPreview")()
+
+	if runtimeName == "" {
+		runtimeName = runtimePlaceholder
+	}
+	args := append([]string{runtimeName}, buildPushArgs(image)...)
+	return strings.Join(args, spaceSeparator)
+}

@@ -48,11 +48,11 @@ func addRuntimeFlags(args []string, config *CreateConfig) []string {
 
 func addMetadata(args []string, config *CreateConfig) []string {
 	for key, value := range config.Labels {
-		args = append(args, "--label", fmt.Sprintf("%s=%s", key, value))
+		args = append(args, "--label", fmt.Sprintf(keyValueFormat, key, value))
 	}
 
 	for key, value := range config.Env {
-		args = append(args, "-e", fmt.Sprintf("%s=%s", key, value))
+		args = append(args, "-e", fmt.Sprintf(keyValueFormat, key, value))
 	}
 
 	return args
@@ -136,11 +136,30 @@ func addExecOptions(args []string, opts *ExecOptions) []string {
 // This function is shared between Docker and Podman runtimes to avoid duplication.
 // Extracted to allow testing the argument building logic without executing commands.
 func buildBuildArgs(config *BuildConfig) []string {
+	if config.Bake != nil {
+		return buildBakeArgs(config)
+	}
+
 	args := []string{"build"}
+	if config.Engine == "buildx" {
+		args = []string{"buildx", "build"}
+	}
+
+	if config.NoCache {
+		args = append(args, "--no-cache")
+	}
+
+	if config.Pull {
+		args = append(args, "--pull")
+	}
+
+	if config.Target != "" {
+		args = append(args, "--target", config.Target)
+	}
 
 	// Add build args.
 	for key, value := range config.Args {
-		args = append(args, "--build-arg", fmt.Sprintf("%s=%s", key, value))
+		args = append(args, "--build-arg", fmt.Sprintf(keyValueFormat, key, value))
 	}
 
 	// Add tags.
@@ -152,6 +171,60 @@ func buildBuildArgs(config *BuildConfig) []string {
 	args = append(args, "-f", config.Dockerfile, config.Context)
 
 	return args
+}
+
+func buildBakeArgs(config *BuildConfig) []string {
+	args := []string{"buildx", "bake"}
+
+	for _, file := range appendFile(config.Bake.File, config.Bake.Files) {
+		args = append(args, "--file", file)
+	}
+
+	if config.NoCache {
+		args = append(args, "--no-cache")
+	}
+	if config.Pull {
+		args = append(args, "--pull")
+	}
+	if config.Bake.Load {
+		args = append(args, "--load")
+	}
+	if config.Bake.Push {
+		args = append(args, "--push")
+	}
+	if config.Bake.Print {
+		args = append(args, "--print")
+	}
+	for key, value := range config.Bake.Vars {
+		args = append(args, "--var", fmt.Sprintf(keyValueFormat, key, value))
+	}
+	for _, value := range config.Bake.Set {
+		args = append(args, "--set", value)
+	}
+
+	args = append(args, appendFile(config.Bake.Target, config.Bake.Targets)...)
+	return args
+}
+
+func appendFile(first string, rest []string) []string {
+	values := make([]string, 0, len(rest)+1)
+	if first != "" {
+		values = append(values, first)
+	}
+	values = append(values, rest...)
+	return values
+}
+
+func buildTagArgs(source, target string) []string {
+	return []string{"tag", source, target}
+}
+
+func buildPushArgs(image string) []string {
+	return []string{"push", image}
+}
+
+func buildImageInspectArgs(image string) []string {
+	return []string{"image", "inspect", "--format", "{{json .}}", image}
 }
 
 // buildRemoveArgs builds the arguments for a container remove operation.

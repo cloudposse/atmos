@@ -43,6 +43,10 @@ func NewPodmanRuntime() *PodmanRuntime {
 func (p *PodmanRuntime) Build(ctx context.Context, config *BuildConfig) error {
 	defer perf.Track(nil, "container.PodmanRuntime.Build")()
 
+	if config.Engine == "buildx" || config.Bake != nil {
+		return fmt.Errorf("%w: Docker Buildx requires Docker in V1; Podman uses the native `podman build` path", errUtils.ErrContainerRuntimeOperation)
+	}
+
 	args := buildBuildArgs(config)
 
 	cmd := exec.CommandContext(ctx, podmanCmd, args...)
@@ -276,6 +280,51 @@ func (p *PodmanRuntime) Pull(ctx context.Context, image string) error {
 	}
 
 	return nil
+}
+
+// Tag tags a container image.
+func (p *PodmanRuntime) Tag(ctx context.Context, source, target string) error {
+	defer perf.Track(nil, "container.PodmanRuntime.Tag")()
+
+	cmd := exec.CommandContext(ctx, podmanCmd, buildTagArgs(source, target)...) //nolint:gosec // podman CLI invoked with controlled, non-user-shell arguments.
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("%w: podman tag failed: %w: %s", errUtils.ErrContainerRuntimeOperation, err, cleanPodmanOutput(output))
+	}
+
+	return nil
+}
+
+// Push pushes a container image.
+func (p *PodmanRuntime) Push(ctx context.Context, image string) (*PushResult, error) {
+	defer perf.Track(nil, "container.PodmanRuntime.Push")()
+
+	cmd := exec.CommandContext(ctx, podmanCmd, buildPushArgs(image)...) //nolint:gosec // podman CLI invoked with controlled, non-user-shell arguments.
+	output, err := cmd.CombinedOutput()
+	cleanOutput := cleanPodmanOutput(output)
+	result := &PushResult{
+		Image:  image,
+		Digest: parsePushDigest(cleanOutput),
+		Output: cleanOutput,
+	}
+	if err != nil {
+		return result, fmt.Errorf("%w: podman push failed: %w: %s", errUtils.ErrContainerRuntimeOperation, err, cleanOutput)
+	}
+
+	return result, nil
+}
+
+// ImageInspect returns metadata for a local container image.
+func (p *PodmanRuntime) ImageInspect(ctx context.Context, image string) (*ImageInfo, error) {
+	defer perf.Track(nil, "container.PodmanRuntime.ImageInspect")()
+
+	cmd := exec.CommandContext(ctx, podmanCmd, buildImageInspectArgs(image)...) //nolint:gosec // podman CLI invoked with controlled, non-user-shell arguments.
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return nil, fmt.Errorf("%w: podman image inspect failed: %w: %s", errUtils.ErrContainerRuntimeOperation, err, cleanPodmanOutput(output))
+	}
+
+	return parseImageInspectOutput(output)
 }
 
 // Logs shows logs from a container.

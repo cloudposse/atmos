@@ -30,6 +30,9 @@ type Runtime interface {
 
 	// Image operations
 	Pull(ctx context.Context, image string) error
+	Tag(ctx context.Context, source, target string) error
+	Push(ctx context.Context, image string) (*PushResult, error)
+	ImageInspect(ctx context.Context, image string) (*ImageInfo, error)
 
 	// Logs - methods that produce user-facing output accept io.Writer
 	Logs(ctx context.Context, containerID string, follow bool, tail string, stdout, stderr io.Writer) error
@@ -42,8 +45,40 @@ type Runtime interface {
 type BuildConfig struct {
 	Dockerfile string
 	Context    string
+	Engine     string
 	Args       map[string]string
 	Tags       []string
+	Target     string
+	NoCache    bool
+	Pull       bool
+	Bake       *BakeConfig
+}
+
+// BakeConfig represents Docker Buildx Bake configuration.
+type BakeConfig struct {
+	File    string
+	Files   []string
+	Target  string
+	Targets []string
+	Set     []string
+	Vars    map[string]string
+	Load    bool
+	Push    bool
+	Print   bool
+}
+
+// ImageInfo contains metadata about a local container image.
+type ImageInfo struct {
+	ID          string
+	RepoTags    []string
+	RepoDigests []string
+}
+
+// PushResult contains metadata returned by a container image push.
+type PushResult struct {
+	Image  string
+	Digest string
+	Output string
 }
 
 // CreateConfig represents container creation configuration.

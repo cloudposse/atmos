@@ -306,6 +306,50 @@ func (d *DockerRuntime) Pull(ctx context.Context, image string) error {
 	return nil
 }
 
+// Tag tags a container image.
+func (d *DockerRuntime) Tag(ctx context.Context, source, target string) error {
+	defer perf.Track(nil, "container.DockerRuntime.Tag")()
+
+	cmd := exec.CommandContext(ctx, dockerCmd, buildTagArgs(source, target)...) //nolint:gosec // docker CLI invoked with controlled, non-user-shell arguments.
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("%w: docker tag failed: %w: %s", errUtils.ErrContainerRuntimeOperation, err, string(output))
+	}
+
+	return nil
+}
+
+// Push pushes a container image.
+func (d *DockerRuntime) Push(ctx context.Context, image string) (*PushResult, error) {
+	defer perf.Track(nil, "container.DockerRuntime.Push")()
+
+	cmd := exec.CommandContext(ctx, dockerCmd, buildPushArgs(image)...) //nolint:gosec // docker CLI invoked with controlled, non-user-shell arguments.
+	output, err := cmd.CombinedOutput()
+	result := &PushResult{
+		Image:  image,
+		Digest: parsePushDigest(string(output)),
+		Output: string(output),
+	}
+	if err != nil {
+		return result, fmt.Errorf("%w: docker push failed: %w: %s", errUtils.ErrContainerRuntimeOperation, err, string(output))
+	}
+
+	return result, nil
+}
+
+// ImageInspect returns metadata for a local container image.
+func (d *DockerRuntime) ImageInspect(ctx context.Context, image string) (*ImageInfo, error) {
+	defer perf.Track(nil, "container.DockerRuntime.ImageInspect")()
+
+	cmd := exec.CommandContext(ctx, dockerCmd, buildImageInspectArgs(image)...) //nolint:gosec // docker CLI invoked with controlled, non-user-shell arguments.
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return nil, fmt.Errorf("%w: docker image inspect failed: %w: %s", errUtils.ErrContainerRuntimeOperation, err, string(output))
+	}
+
+	return parseImageInspectOutput(output)
+}
+
 // Logs shows logs from a container.
 //
 //nolint:revive // argument-limit: Logs keeps separate IO parameters for simplicity

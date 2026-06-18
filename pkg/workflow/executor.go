@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/samber/lo"
 	"mvdan.cc/sh/v3/shell"
@@ -16,6 +17,7 @@ import (
 	envpkg "github.com/cloudposse/atmos/pkg/env"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/retry"
 	stepPkg "github.com/cloudposse/atmos/pkg/runner/step"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -49,6 +51,7 @@ type Executor struct {
 	authProvider AuthProvider
 	ui           UIProvider
 	depProvider  DependencyProvider
+	stepVars     *stepPkg.Variables
 }
 
 // NewExecutor creates a new Executor with the given dependencies.
@@ -99,6 +102,7 @@ func (e *Executor) Execute(params *WorkflowParams) (*ExecutionResult, error) {
 
 	// Generate step names if not provided.
 	CheckAndGenerateWorkflowStepNames(params.WorkflowDefinition)
+	e.stepVars = stepPkg.NewVariables()
 
 	log.Debug("Executing workflow", "workflow", params.Workflow, "path", params.WorkflowPath)
 
@@ -279,9 +283,15 @@ func (e *Executor) executeStep(params *WorkflowParams, step *schema.WorkflowStep
 		stepEnv:          stepEnv,
 		workingDirectory: workDir,
 	}
+	if stepPkg.IsExtendedStepType(commandType) {
+		return e.executeRegisteredStep(params, step, cmdParams)
+	}
 	err = e.runCommand(params, cmdParams)
 	if err != nil {
 		return e.handleStepError(params, step.Name, cmdParams, err)
+	}
+	if e.stepVars != nil {
+		_ = e.stepVars.SetWithOutputs(step.Name, stepPkg.NewStepResult("").WithMetadata("exit_code", 0), step.Outputs)
 	}
 
 	return stepResultInternal{
@@ -292,6 +302,122 @@ func (e *Executor) executeStep(params *WorkflowParams, step *schema.WorkflowStep
 		},
 		finalStack: finalStack,
 	}
+}
+
+// executeRegisteredStep executes non-legacy workflow step types via the shared step registry.
+func (e *Executor) executeRegisteredStep(params *WorkflowParams, step *schema.WorkflowStep, cmdParams *runCommandParams) stepResultInternal {
+	handler, ok := stepPkg.Get(cmdParams.commandType)
+	if !ok {
+		err := errUtils.Build(errUtils.ErrUnknownStepType).
+			WithContext("step", step.Name).
+			WithContext("type", cmdParams.commandType).
+			Err()
+		return e.handleStepError(params, step.Name, cmdParams, err)
+	}
+
+	stepCopy := *step
+	stepCopy.WorkingDirectory = cmdParams.workingDirectory
+	stepCopy.Env = envSliceToMap(cmdParams.stepEnv)
+	stepCopy.DryRun = params.Opts.DryRun
+	stepCopy.Stack = cmdParams.finalStack
+
+	if err := handler.Validate(&stepCopy); err != nil {
+		return e.handleStepError(params, step.Name, cmdParams, err)
+	}
+
+	if e.stepVars == nil {
+		e.stepVars = stepPkg.NewVariables()
+	}
+
+	stepCtx, cancel, err := resolveStepContext(params.Ctx, stepCopy.Timeout)
+	if err != nil {
+		return e.handleStepError(params, step.Name, cmdParams, err)
+	}
+	if cancel != nil {
+		defer cancel()
+	}
+
+	if _, err := e.runStepWithRetry(stepCtx, handler, &stepCopy, params.WorkflowDefinition); err != nil {
+		return e.handleStepError(params, step.Name, cmdParams, err)
+	}
+
+	return stepResultInternal{
+		StepResult: StepResult{
+			StepName: step.Name,
+			Command:  cmdParams.command,
+			Success:  true,
+		},
+		finalStack: cmdParams.finalStack,
+	}
+}
+
+// resolveStepContext derives the execution context for a step, applying an
+// optional timeout. The returned cancel func is nil when no timeout applies.
+func resolveStepContext(ctx context.Context, timeoutSpec string) (context.Context, context.CancelFunc, error) {
+	if timeoutSpec == "" {
+		return ctx, nil, nil
+	}
+	timeout, parseErr := time.ParseDuration(timeoutSpec)
+	if parseErr != nil {
+		return nil, nil, parseErr
+	}
+	stepCtx, cancel := context.WithTimeout(ctx, timeout)
+	return stepCtx, cancel, nil
+}
+
+// runStepWithRetry executes a step handler, honoring its retry policy, and
+// records the step outputs into the executor's variable scope.
+func (e *Executor) runStepWithRetry(stepCtx context.Context, handler stepPkg.StepHandler, stepCopy *schema.WorkflowStep, workflow *schema.WorkflowDefinition) (*stepPkg.StepResult, error) {
+	var result *stepPkg.StepResult
+	execute := func() error {
+		var execErr error
+		result, execErr = executeStepHandlerWithWorkflow(stepCtx, handler, stepCopy, e.stepVars, workflow)
+		return execErr
+	}
+
+	var err error
+	if stepCopy.Retry != nil {
+		err = retry.Do(stepCtx, stepCopy.Retry, execute)
+	} else {
+		err = execute()
+	}
+	if result != nil {
+		if outputErr := e.stepVars.SetWithOutputs(stepCopy.Name, result, stepCopy.Outputs); outputErr != nil && err == nil {
+			err = outputErr
+		}
+	}
+	return result, err
+}
+
+func executeStepHandlerWithWorkflow(
+	ctx context.Context,
+	handler stepPkg.StepHandler,
+	step *schema.WorkflowStep,
+	vars *stepPkg.Variables,
+	workflow *schema.WorkflowDefinition,
+) (*stepPkg.StepResult, error) {
+	type workflowAwareHandler interface {
+		ExecuteWithWorkflow(context.Context, *schema.WorkflowStep, *stepPkg.Variables, *schema.WorkflowDefinition) (*stepPkg.StepResult, error)
+	}
+	if wah, ok := handler.(workflowAwareHandler); ok {
+		return wah.ExecuteWithWorkflow(ctx, step, vars, workflow)
+	}
+	return handler.Execute(ctx, step, vars)
+}
+
+func envSliceToMap(env []string) map[string]string {
+	if len(env) == 0 {
+		return nil
+	}
+	result := make(map[string]string, len(env))
+	for _, entry := range env {
+		key, value, ok := strings.Cut(entry, "=")
+		if !ok {
+			continue
+		}
+		result[key] = value
+	}
+	return result
 }
 
 // renderStepCommand renders the command before execution if show.command is enabled.

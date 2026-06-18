@@ -505,7 +505,7 @@ func ExecuteWorkflow(
 					WithExitCode(1).
 					Err()
 			}
-			err = executeExtendedStep(context.Background(), &steps[stepIdx], workflowDefinition, stepEnv)
+			err = executeExtendedStep(context.Background(), &steps[stepIdx], workflowDefinition, stepEnv, dryRun)
 		}
 
 		if err != nil {
@@ -545,7 +545,7 @@ func ExecuteWorkflow(
 var stepExecutorState *stepPkg.StepExecutor
 
 // executeExtendedStep runs an extended step type (input, confirm, choose, etc.).
-func executeExtendedStep(ctx context.Context, workflowStep *schema.WorkflowStep, workflow *schema.WorkflowDefinition, envVars []string) error {
+func executeExtendedStep(ctx context.Context, workflowStep *schema.WorkflowStep, workflow *schema.WorkflowDefinition, envVars []string, dryRun bool) error {
 	// Initialize or reuse step executor.
 	if stepExecutorState == nil {
 		stepExecutorState = stepPkg.NewStepExecutor()
@@ -563,7 +563,9 @@ func executeExtendedStep(ctx context.Context, workflowStep *schema.WorkflowStep,
 	}
 
 	// Execute the step.
-	_, err := stepExecutorState.Execute(ctx, workflowStep)
+	stepCopy := *workflowStep
+	stepCopy.DryRun = dryRun
+	_, err := stepExecutorState.Execute(ctx, &stepCopy)
 	return err
 }
 

@@ -80,6 +80,42 @@ func DetectRuntime(ctx context.Context) (Runtime, error) {
 	return nil, fmt.Errorf("%w: neither docker nor podman is available", errUtils.ErrRuntimeNotAvailable)
 }
 
+// DetectRuntimeWithPreference detects a runtime, optionally requiring a specific runtime.
+func DetectRuntimeWithPreference(ctx context.Context, preferred string) (Runtime, error) {
+	defer perf.Track(nil, "container.DetectRuntimeWithPreference")()
+
+	switch preferred {
+	case "":
+		return DetectRuntime(ctx)
+	case string(TypeDocker):
+		if isAvailable(ctx, TypeDocker) {
+			return NewDockerRuntime(), nil
+		}
+		return nil, fmt.Errorf("%w: docker is not available or not running", errUtils.ErrRuntimeNotAvailable)
+	case string(TypePodman):
+		if isAvailable(ctx, TypePodman) {
+			return NewPodmanRuntime(), nil
+		}
+		return nil, fmt.Errorf("%w: podman is not available or not running", errUtils.ErrRuntimeNotAvailable)
+	default:
+		return nil, fmt.Errorf("%w: unknown runtime type '%s'", errUtils.ErrRuntimeNotAvailable, preferred)
+	}
+}
+
+// DetectRuntimeWithPreferenceAndRecovery detects a runtime and optionally
+// initializes/starts Podman when Podman is the selected runtime.
+func DetectRuntimeWithPreferenceAndRecovery(ctx context.Context, preferred string, autoStart bool) (Runtime, error) {
+	defer perf.Track(nil, "container.DetectRuntimeWithPreferenceAndRecovery")()
+
+	if autoStart && (preferred == "" || preferred == string(TypePodman)) {
+		if !isAvailable(ctx, TypeDocker) || preferred == string(TypePodman) {
+			_ = TryRecoverPodmanRuntime(ctx)
+		}
+	}
+
+	return DetectRuntimeWithPreference(ctx, preferred)
+}
+
 // isAvailable checks if a container runtime is available and running.
 // This does NOT auto-start Podman machines - use checkRuntimeStatus for detailed status.
 func isAvailable(ctx context.Context, runtimeType Type) bool {
@@ -227,7 +263,8 @@ func initializePodmanMachine(ctx context.Context) error {
 				return fmt.Errorf("failed to initialize: %w: %s", err, string(output))
 			}
 			return nil
-		})
+		},
+	)
 }
 
 // startPodmanMachine starts the Podman machine with spinner UI.
@@ -244,7 +281,8 @@ func startPodmanMachine(ctx context.Context) error {
 				return fmt.Errorf("failed to start: %w: %s", err, string(output))
 			}
 			return nil
-		})
+		},
+	)
 }
 
 // GetRuntimeType returns the type of a runtime instance.

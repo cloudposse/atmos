@@ -292,6 +292,29 @@ export const roadmapConfig = {
       ],
     },
     {
+      id: 'container-composition',
+      icon: 'RiBox3Line',
+      title: 'Container Composition & Local Development',
+      tagline: 'Build, run, and compose app systems from the same Atmos config',
+      description:
+        'Application delivery increasingly spans container builds, local dependencies, Kubernetes workloads, secrets, and target-specific operations. Atmos is adding container actions, container components, and compositions so teams can build and operate the same system locally, in CI, and against real environments from declarative configuration.',
+      progress: 29,
+      status: 'in-progress',
+      milestones: [
+        { label: 'Container action steps for workflows and custom commands', status: 'shipped', quarter: 'q2-2026', prd: 'container-actions-and-step-outputs', changelog: 'native-container-steps', description: 'Add `type: container` steps with namespaced `build`, `push`, and `run` actions using Docker or Podman through the shared step library.', codeExample: 'type: container\naction: build\nbuild:\n  context: app\n  tags:\n    - "localhost:5001/app:{{ .git.sha }}"', benefits: 'Run containerized tools, build images, push to registries, and smoke-test images from the same workflows and custom commands used locally and in CI.' },
+        { label: 'Step outputs for reusable workflow wiring', status: 'shipped', quarter: 'q2-2026', prd: 'container-actions-and-step-outputs', changelog: 'native-container-steps', description: 'Every named step exposes conventional result data including value, metadata, outputs, skipped, and error. Declared outputs let a build step publish an image reference consumed by push, run, or deployment steps.', codeExample: '{{ .steps.build.outputs.image }}', benefits: 'Build, push, test, and deploy pipelines can pass structured values without shell parsing or ad hoc environment files.' },
+        { label: 'Container components with component-instance lifecycle', status: 'planned', quarter: 'q2-2026', prd: 'container-components', description: 'Introduce `components.container` as the stack-scoped home for image artifacts, build-time secrets, runtime settings, and long-running container lifecycle commands like up, ps, logs, exec, restart, and down.', codeExample: 'dev/container/api', benefits: 'Container services get the same component instance identity, secrets, env, dependencies, and discoverability as other Atmos component kinds.' },
+        { label: 'Compose components wrapping native Compose projects', status: 'planned', quarter: 'q2-2026', prd: 'compose-components', description: 'Introduce `components.compose` to operate an existing native compose.yaml project as a stack component, with Atmos config, env, and secrets layered on top.', codeExample: 'components:\n  compose:\n    local-infra:\n      files: [compose.local.yaml]', benefits: 'Bring an existing Compose project under the same component model, membership, and lifecycle as other Atmos kinds.' },
+        { label: 'Atmos compositions as system boundaries', status: 'planned', quarter: 'q2-2026', prd: 'compositions', description: 'Add top-level `compositions:` that declare the services making up a system; components join via a first-class `composition` field, fulfilled per stack across kinds such as Kubernetes, Terraform, Helmfile, container, and compose.', codeExample: 'atmos composition deploy storefront -s dev', benefits: 'Define a system once and operate it across local, CI, dev, and production stacks without per-environment duplication.' },
+        { label: 'Local Kubernetes composition example', status: 'planned', quarter: 'q2-2026', pr: 2607, prd: 'compositions', description: 'Ship an example that brings up local k3s with Compose, builds and pushes an app image, then deploys the same app through Atmos-native Kubernetes components.', benefits: 'Develop and test the Kubernetes deployment path locally, then use the same composition model against real clusters.' },
+        { label: 'Native Kubernetes components for deployment workflows', status: 'in-progress', quarter: 'q2-2026', pr: 2607, description: 'Add a first-class Kubernetes component type with render, diff, plan, apply, deploy, delete, stack semantics, identities, and GitOps provisioning targets.', benefits: 'Kubernetes workloads become Atmos components, so compositions and workflows can operate them alongside Terraform, Helmfile, and container components.' },
+      ],
+      issues: [],
+      prs: [
+        { number: 2607, title: 'feat: native Kubernetes components with GitOps deployment-repo delivery' },
+      ],
+    },
+    {
       id: 'extensibility',
       icon: 'RiPlugLine',
       title: 'Extensibility & Custom Components',

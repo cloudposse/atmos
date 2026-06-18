@@ -104,6 +104,62 @@ func TestExecutor_Execute_BasicAtmosWorkflow(t *testing.T) {
 	assert.True(t, result.Steps[0].Success)
 }
 
+func TestExecutor_Execute_DefaultTypeRemainsAtmos(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockRunner := NewMockCommandRunner(ctrl)
+	mockUI := NewMockUIProvider(ctrl)
+
+	mockUI.EXPECT().PrintMessage(gomock.Any(), gomock.Any()).AnyTimes()
+	mockRunner.EXPECT().
+		RunAtmos(gomock.Any()).
+		DoAndReturn(func(params *AtmosExecParams) error {
+			assert.Equal(t, []string{"terraform", "plan", "vpc"}, params.Args)
+			return nil
+		})
+
+	executor := NewExecutor(mockRunner, nil, mockUI)
+	workflowDef := &schema.WorkflowDefinition{
+		Steps: []schema.WorkflowStep{
+			{Name: "plan-vpc", Command: "terraform plan vpc"},
+		},
+	}
+
+	result, err := executor.Execute(newTestParams(workflowDef, ExecuteOptions{}))
+
+	require.NoError(t, err)
+	assert.True(t, result.Success)
+}
+
+func TestExecutor_Execute_ContainerStepUsesRegistry(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockRunner := NewMockCommandRunner(ctrl)
+	mockUI := NewMockUIProvider(ctrl)
+	executor := NewExecutor(mockRunner, nil, mockUI)
+
+	workflowDef := &schema.WorkflowDefinition{
+		Steps: []schema.WorkflowStep{
+			{
+				Name:    "container-step",
+				Type:    "container",
+				Image:   "alpine:latest",
+				Command: "echo hello",
+				Runtime: "docker",
+			},
+		},
+	}
+
+	result, err := executor.Execute(newTestParams(workflowDef, ExecuteOptions{DryRun: true}))
+
+	require.NoError(t, err)
+	assert.True(t, result.Success)
+	assert.Len(t, result.Steps, 1)
+	assert.Equal(t, "container-step", result.Steps[0].StepName)
+}
+
 // TestExecutor_Execute_MultipleSteps tests executing a workflow with multiple steps.
 func TestExecutor_Execute_MultipleSteps(t *testing.T) {
 	ctrl := gomock.NewController(t)
