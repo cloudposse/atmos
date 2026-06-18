@@ -7,11 +7,25 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"strings"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	iolib "github.com/cloudposse/atmos/pkg/io"
 	log "github.com/cloudposse/atmos/pkg/logger"
 )
+
+// extractContainerID returns the last non-empty line of `create` output.
+// Both `docker create` and `podman create` print image-pull progress before the
+// container ID when the image is missing locally, so the ID is the final non-empty line.
+func extractContainerID(output []byte) string {
+	lines := strings.Split(string(output), "\n")
+	for i := len(lines) - 1; i >= 0; i-- {
+		if line := strings.TrimSpace(lines[i]); line != "" {
+			return line
+		}
+	}
+	return ""
+}
 
 // buildCreateArgs builds the common arguments for container creation.
 // This function is shared between Docker and Podman runtimes to avoid duplication.

@@ -74,22 +74,20 @@ func RunEphemeralContainer(ctx context.Context, runtime Runtime, config *Ephemer
 
 	normalizeEphemeralConfig(config)
 
-	if config.PullPolicy == PullAlways {
-		if err := runtime.Pull(ctx, config.Image); err != nil {
-			return nil, err
-		}
+	if err := pullImageIfAlways(ctx, runtime, config); err != nil {
+		return nil, err
 	}
 
 	containerID, err := createEphemeralContainer(ctx, runtime, config)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("%w: create ephemeral container: %w", errUtils.ErrContainerRuntimeOperation, err)
 	}
 
 	result := &EphemeralResult{ContainerID: containerID}
 	shouldRemove := false
 	defer func() {
 		if shouldRemove {
-			_ = runtime.Remove(ctx, containerID, true)
+			removeEphemeralContainer(ctx, runtime, containerID)
 		}
 	}()
 
@@ -97,17 +95,42 @@ func RunEphemeralContainer(ctx context.Context, runtime Runtime, config *Ephemer
 		if config.CleanupPolicy == CleanupAlways {
 			shouldRemove = true
 		}
-		return result, err
+		return result, fmt.Errorf("%w: start container %q: %w", errUtils.ErrContainerRuntimeOperation, containerID, err)
 	}
 
 	execErr := execEphemeralCommand(ctx, runtime, containerID, config, result)
+	// Compute the exit code from the raw exec error before wrapping it.
 	result.ExitCode = ExitCode(execErr)
 
 	if shouldCleanup(config.CleanupPolicy, execErr) {
 		shouldRemove = true
 	}
 
-	return result, execErr
+	if execErr != nil {
+		return result, fmt.Errorf("%w: exec in container %q: %w", errUtils.ErrContainerRuntimeOperation, containerID, execErr)
+	}
+	return result, nil
+}
+
+// pullImageIfAlways pulls the image up front when the pull policy is PullAlways.
+func pullImageIfAlways(ctx context.Context, runtime Runtime, config *EphemeralConfig) error {
+	if config.PullPolicy != PullAlways {
+		return nil
+	}
+	if err := runtime.Pull(ctx, config.Image); err != nil {
+		return fmt.Errorf("%w: pull image %q: %w", errUtils.ErrContainerRuntimeOperation, config.Image, err)
+	}
+	return nil
+}
+
+// removeEphemeralContainer removes the container, using a non-cancelled context
+// so cleanup still runs when the original ctx was cancelled or deadlined.
+func removeEphemeralContainer(ctx context.Context, runtime Runtime, containerID string) {
+	cleanupCtx := ctx
+	if cleanupCtx.Err() != nil {
+		cleanupCtx = context.Background()
+	}
+	_ = runtime.Remove(cleanupCtx, containerID, true)
 }
 
 func normalizeEphemeralConfig(config *EphemeralConfig) {
@@ -123,6 +146,8 @@ func normalizeEphemeralConfig(config *EphemeralConfig) {
 }
 
 func createEphemeralContainer(ctx context.Context, runtime Runtime, config *EphemeralConfig) (string, error) {
+	// Errors returned here are wrapped with the container sentinel by the caller
+	// (RunEphemeralContainer), so they stay plain to avoid a doubled sentinel.
 	createConfig := buildEphemeralCreateConfig(config)
 	containerID, err := runtime.Create(ctx, createConfig)
 	if err == nil || config.PullPolicy != PullMissing {
@@ -130,7 +155,7 @@ func createEphemeralContainer(ctx context.Context, runtime Runtime, config *Ephe
 	}
 
 	if pullErr := runtime.Pull(ctx, config.Image); pullErr != nil {
-		return "", fmt.Errorf("%w: failed to create container and pull image: create: %w; pull: %w", errUtils.ErrContainerRuntimeOperation, err, pullErr)
+		return "", fmt.Errorf("failed to create container and pull image: create: %w; pull: %w", err, pullErr)
 	}
 	return runtime.Create(ctx, createConfig)
 }

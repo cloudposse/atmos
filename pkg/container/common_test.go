@@ -6,6 +6,61 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+func TestExtractContainerID(t *testing.T) {
+	// The "real docker create with inline pull" case reproduces the CI failure where
+	// `docker create alpine:latest` pulls the image first and the whole blob was previously
+	// returned as the container ID, breaking the subsequent `docker start`.
+	tests := []struct {
+		name     string
+		output   string
+		expected string
+	}{
+		{
+			name:     "container ID only",
+			output:   "78cd31fb92191347df7b4cb8b0e7a6fcf2633080720af5f81a0c2f2def2b5550",
+			expected: "78cd31fb92191347df7b4cb8b0e7a6fcf2633080720af5f81a0c2f2def2b5550",
+		},
+		{
+			name: "container ID with inline pull output (real docker behavior)",
+			output: "Unable to find image 'alpine:latest' locally\n" +
+				"latest: Pulling from library/alpine\n" +
+				"55afa1ecc21d: Pulling fs layer\n" +
+				"55afa1ecc21d: Download complete\n" +
+				"55afa1ecc21d: Pull complete\n" +
+				"Digest: sha256:28bd5fe8b56d1bd048e5babf5b10710ebe0bae67db86916198a6eec434943f8b\n" +
+				"Status: Downloaded newer image for alpine:latest\n" +
+				"78cd31fb92191347df7b4cb8b0e7a6fcf2633080720af5f81a0c2f2def2b5550\n",
+			expected: "78cd31fb92191347df7b4cb8b0e7a6fcf2633080720af5f81a0c2f2def2b5550",
+		},
+		{
+			name:     "container ID with trailing newline",
+			output:   "abc123\n",
+			expected: "abc123",
+		},
+		{
+			name:     "container ID with multiple trailing newlines",
+			output:   "abc123\n\n\n",
+			expected: "abc123",
+		},
+		{
+			name:     "empty output",
+			output:   "",
+			expected: "",
+		},
+		{
+			name:     "whitespace-only output",
+			output:   "  \n\t\n  ",
+			expected: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.expected, extractContainerID([]byte(tt.output)))
+		})
+	}
+}
+
 func TestBuildCreateArgs(t *testing.T) {
 	tests := []struct {
 		name     string

@@ -60,7 +60,13 @@ func (d *DockerRuntime) Create(ctx context.Context, config *CreateConfig) (strin
 		return "", fmt.Errorf("%w: docker create failed: %w: %s", errUtils.ErrContainerRuntimeOperation, err, string(output))
 	}
 
-	containerID := strings.TrimSpace(string(output))
+	// `docker create` pulls the image inline when it is missing locally, printing pull
+	// progress before the container ID, so the ID is the final non-empty line of output.
+	containerID := extractContainerID(output)
+	if containerID == "" {
+		return "", fmt.Errorf("%w: docker create returned no container ID", errUtils.ErrContainerRuntimeOperation)
+	}
+
 	log.Debug("Created docker container", logKeyID, containerID, "name", config.Name)
 
 	return containerID, nil

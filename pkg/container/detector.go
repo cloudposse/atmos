@@ -15,6 +15,9 @@ import (
 
 const (
 	logKeyRuntime = "runtime"
+
+	// Env var that selects the container runtime (docker|podman).
+	envContainerRuntime = "ATMOS_CONTAINER_RUNTIME"
 )
 
 // RuntimeStatus represents the availability status of a container runtime.
@@ -43,8 +46,8 @@ func DetectRuntime(ctx context.Context) (Runtime, error) {
 	defer perf.Track(nil, "container.DetectRuntime")()
 
 	// Check environment variable first.
-	_ = viper.BindEnv("ATMOS_CONTAINER_RUNTIME", "ATMOS_CONTAINER_RUNTIME")
-	if envRuntime := viper.GetString("ATMOS_CONTAINER_RUNTIME"); envRuntime != "" {
+	_ = viper.BindEnv(envContainerRuntime, envContainerRuntime)
+	if envRuntime := viper.GetString(envContainerRuntime); envRuntime != "" {
 		log.Debug("Using container runtime from ATMOS_CONTAINER_RUNTIME", logKeyRuntime, envRuntime)
 
 		switch envRuntime {
@@ -107,10 +110,19 @@ func DetectRuntimeWithPreference(ctx context.Context, preferred string) (Runtime
 func DetectRuntimeWithPreferenceAndRecovery(ctx context.Context, preferred string, autoStart bool) (Runtime, error) {
 	defer perf.Track(nil, "container.DetectRuntimeWithPreferenceAndRecovery")()
 
-	if autoStart && (preferred == "" || preferred == string(TypePodman)) {
-		if !isAvailable(ctx, TypeDocker) || preferred == string(TypePodman) {
-			_ = TryRecoverPodmanRuntime(ctx)
-		}
+	// Resolve the runtime that DetectRuntime will actually select so recovery
+	// matches the resolution order (preferred flag, then ATMOS_CONTAINER_RUNTIME,
+	// then Docker, then Podman). Reading the env here mirrors DetectRuntime above.
+	selected := preferred
+	if selected == "" {
+		_ = viper.BindEnv(envContainerRuntime, envContainerRuntime)
+		selected = strings.TrimSpace(viper.GetString(envContainerRuntime))
+	}
+
+	// Recover Podman when it is the selected runtime, or when nothing is selected
+	// and Docker is unavailable (so detection falls through to Podman).
+	if autoStart && (selected == string(TypePodman) || (selected == "" && !isAvailable(ctx, TypeDocker))) {
+		_ = TryRecoverPodmanRuntime(ctx)
 	}
 
 	return DetectRuntimeWithPreference(ctx, preferred)

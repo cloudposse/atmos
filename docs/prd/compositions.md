@@ -218,7 +218,7 @@ atmos composition deploy storefront -s staging
 
 The same command operates the system in every environment. Membership is asymmetric by construction —
 `local` provides 4 services, `dev` 5, `staging`/`prod` 3 — with no override syntax. This walkthrough is
-mirrored by the runnable `examples/containers/storefront`.
+mirrored by the runnable `examples/container-step`.
 
 ### Deferred
 

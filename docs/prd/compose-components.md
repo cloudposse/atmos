@@ -163,7 +163,7 @@ component as separate, complementary surfaces.
 ## Implementation Notes
 
 - Register `compose` in `schema.Components` and `Components.GetComponentConfig` (sibling of
-  terraform/helmfile/packer/ansible/container; may begin via the `Plugins` `",remain"` map).
+  terraform/helmfile/packer/ansible/container).
 - Back the kind with a `pkg/compose` package; re-home the existing `composeArgs()` and
   `DetectRuntimeWithPreferenceAndRecovery` from `pkg/composition/service.go`.
 - Resolve `vars`/`env` (incl. secrets) into Compose interpolation env and `--env-file`.

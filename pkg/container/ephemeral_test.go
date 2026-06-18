@@ -9,6 +9,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
+
+	errUtils "github.com/cloudposse/atmos/errors"
 )
 
 func TestRunEphemeralContainer_SuccessCleanupAlways(t *testing.T) {
@@ -78,6 +80,31 @@ func TestRunEphemeralContainer_PullMissingRetriesCreate(t *testing.T) {
 	})
 
 	require.NoError(t, err)
+}
+
+// TestRunEphemeralContainer_PullNeverDoesNotRetryCreate is the negative-path
+// counterpart to TestRunEphemeralContainer_PullMissingRetriesCreate: with
+// PullNever, a create failure must surface immediately without a pull/retry.
+func TestRunEphemeralContainer_PullNeverDoesNotRetryCreate(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	ctx := context.Background()
+	runtime := NewMockRuntime(ctrl)
+	createErr := errors.New("create failed")
+
+	// Exactly one Create and no Pull: the test fails if recovery runs unexpectedly.
+	runtime.EXPECT().Create(ctx, gomock.Any()).Return("", createErr)
+
+	_, err := RunEphemeralContainer(ctx, runtime, &EphemeralConfig{
+		Name:       "test",
+		Image:      "alpine:latest",
+		Command:    []string{"echo", "ok"},
+		PullPolicy: PullNever,
+	})
+
+	require.ErrorIs(t, err, createErr)
+	require.ErrorIs(t, err, errUtils.ErrContainerRuntimeOperation)
 }
 
 func TestRunEphemeralContainer_CleanupOnSuccessLeavesFailedContainer(t *testing.T) {

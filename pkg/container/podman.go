@@ -73,16 +73,7 @@ func (p *PodmanRuntime) Create(ctx context.Context, config *CreateConfig) (strin
 
 	// When podman pulls an image, it outputs pull progress followed by container ID on last line.
 	// Extract the last non-empty line as the container ID.
-	lines := strings.Split(string(output), "\n")
-	var containerID string
-	for i := len(lines) - 1; i >= 0; i-- {
-		line := strings.TrimSpace(lines[i])
-		if line != "" {
-			containerID = line
-			break
-		}
-	}
-
+	containerID := extractContainerID(output)
 	if containerID == "" {
 		return "", fmt.Errorf("%w: podman create returned no container ID", errUtils.ErrContainerRuntimeOperation)
 	}
