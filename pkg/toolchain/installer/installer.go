@@ -46,7 +46,7 @@ const (
 	windowsExeExt = ".exe"
 
 	// Fallback cosign verifier bootstrap version for transient GitHub latest-release lookup failures.
-	// renovate: datasource=github-releases depName=sigstore/cosign
+	// renovate: datasource=github-releases depName=sigstore/cosign.
 	defaultCosignVerifierVersion = "v3.0.6"
 )
 

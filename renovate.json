@@ -11,7 +11,7 @@
         "/^pkg/toolchain/installer/installer\\.go$/"
       ],
       "matchStrings": [
-        "// renovate: datasource=(?<datasource>[a-z-]+) depName=(?<depName>[^\\s]+)\\s+defaultCosignVerifierVersion\\s*=\\s*\"(?<currentValue>[^\"]+)\""
+        "// renovate: datasource=(?<datasource>[a-z-]+) depName=(?<depName>[^\\s.]+)\\.?\\s+defaultCosignVerifierVersion\\s*=\\s*\"(?<currentValue>[^\"]+)\""
       ],
       "versioningTemplate": "semver-coerced"
     }
