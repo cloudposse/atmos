@@ -169,6 +169,7 @@ func TestBuildCreateArgs(t *testing.T) {
 			},
 			expected: []string{
 				"create", "--name", "test-container", "-it",
+				"--stop-signal", "SIGKILL",
 				"--entrypoint", "/bin/sh",
 				"ubuntu:22.04",
 				"-c", "sleep infinity",
@@ -217,6 +218,7 @@ func TestBuildCreateArgs(t *testing.T) {
 				"--user", "node",
 				"-w", "/workspace",
 				"--network=bridge",
+				"--stop-signal", "SIGKILL",
 				"--entrypoint", "/bin/sh",
 				"node:18",
 				"-c", "sleep infinity",
@@ -520,6 +522,7 @@ func TestAddImageAndCommand(t *testing.T) {
 				OverrideCommand: true,
 			},
 			expected: []string{
+				"--stop-signal", "SIGKILL",
 				"--entrypoint", "/bin/sh",
 				"ubuntu:22.04",
 				"-c", "sleep infinity",
@@ -534,6 +537,7 @@ func TestAddImageAndCommand(t *testing.T) {
 			},
 			expected: []string{
 				"--rm",
+				"--stop-signal", "SIGKILL",
 				"--entrypoint", "/bin/sh",
 				"ubuntu:22.04",
 				"-c", "sleep infinity",

@@ -98,7 +98,8 @@ func TestSandboxCleanupPolicies(t *testing.T) {
 				containerID: "container-id",
 			}
 			if tt.expectCleanup {
-				runtime.EXPECT().Stop(gomock.Any(), "container-id", gomock.Any()).Return(nil)
+				// Cleanup force-removes directly (no graceful Stop) to avoid the
+				// PID-1-ignores-SIGTERM grace-period stall.
 				runtime.EXPECT().Remove(gomock.Any(), "container-id", true).Return(nil)
 			}
 

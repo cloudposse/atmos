@@ -310,7 +310,12 @@ func (s *Sandbox) Cleanup(success bool) error {
 			return nil
 		}
 	}
+	// Force-remove directly (docker/podman rm -f) instead of a graceful Stop first.
+	// The sandbox's PID 1 is `/bin/sh -c "sleep infinity"`, and the kernel does not
+	// apply default signal dispositions to PID 1, so a graceful Stop's SIGTERM is
+	// ignored and `docker stop` blocks for the full grace period before SIGKILL.
+	// A throwaway sandbox has nothing to shut down gracefully, so skip Stop and let
+	// force-remove SIGKILL immediately — turning a ~10s teardown into a near-instant one.
 	cleanupCtx := context.Background()
-	_ = s.runtime.Stop(cleanupCtx, s.containerID, 10*time.Second)
 	return s.runtime.Remove(cleanupCtx, s.containerID, true)
 }

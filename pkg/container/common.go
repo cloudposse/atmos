@@ -99,7 +99,11 @@ func addImageAndCommand(args []string, config *CreateConfig) []string {
 	args = append(args, config.RunArgs...)
 
 	if config.OverrideCommand {
-		args = append(args, "--entrypoint", "/bin/sh")
+		// Keep-alive containers run `/bin/sh -c "sleep infinity"` as PID 1, which
+		// ignores SIGTERM (the kernel applies no default signal disposition to PID 1).
+		// Force the stop signal to SIGKILL so teardown (stop / rm -f) is immediate
+		// instead of blocking for the runtime's full stop grace period.
+		args = append(args, "--stop-signal", "SIGKILL", "--entrypoint", "/bin/sh")
 	}
 
 	args = append(args, config.Image)
