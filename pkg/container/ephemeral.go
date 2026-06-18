@@ -150,7 +150,10 @@ func createEphemeralContainer(ctx context.Context, runtime Runtime, config *Ephe
 	// (RunEphemeralContainer), so they stay plain to avoid a doubled sentinel.
 	createConfig := buildEphemeralCreateConfig(config)
 	containerID, err := runtime.Create(ctx, createConfig)
-	if err == nil || config.PullPolicy != PullMissing {
+	// Only the missing-image case is recoverable by pulling. Any other create
+	// failure (bad mount, invalid arg, daemon error) must surface as-is — pulling
+	// then would mask the real cause behind a misleading registry/pull error.
+	if err == nil || config.PullPolicy != PullMissing || !isImageMissingError(err) {
 		return containerID, err
 	}
 
@@ -164,6 +167,30 @@ func createEphemeralContainer(ctx context.Context, runtime Runtime, config *Ephe
 		)
 	}
 	return runtime.Create(ctx, createConfig)
+}
+
+// isImageMissingError reports whether a create error indicates the image is not
+// present locally (and is therefore recoverable by pulling), as opposed to an
+// unrelated create failure that pulling cannot fix.
+func isImageMissingError(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := strings.ToLower(err.Error())
+	for _, marker := range []string{
+		"no such image",
+		"image not known",
+		"manifest unknown",
+		"unable to find image",
+		"image not found",
+		"pull access denied",
+		"repository does not exist",
+	} {
+		if strings.Contains(msg, marker) {
+			return true
+		}
+	}
+	return false
 }
 
 func buildEphemeralCreateConfig(config *EphemeralConfig) *CreateConfig {

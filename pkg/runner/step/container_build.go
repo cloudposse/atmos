@@ -2,11 +2,13 @@ package step
 
 import (
 	"context"
+	"fmt"
 	"strings"
 
 	"github.com/cloudposse/atmos/pkg/container"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui"
+	"github.com/cloudposse/atmos/pkg/ui/spinner"
 )
 
 // validateBuildAction checks the configuration of a `build` container step.
@@ -46,14 +48,21 @@ func (h *ContainerHandler) executeBuild(ctx context.Context, step *schema.Workfl
 	}
 	applyRuntimeEnv(runtime, vars)
 
-	if err := runtime.Build(ctx, buildConfig); err != nil {
-		return NewStepResult(firstString(buildConfig.Tags)).
+	image := firstString(buildConfig.Tags)
+	// Show a spinner while the runtime builds the image (it streams nothing on
+	// success), mirroring the devcontainer build UX. Degrades to a ✓ line off-TTY.
+	buildErr := spinner.ExecWithSpinner(
+		buildSpinnerMessage("Building image", image),
+		buildSpinnerMessage("Built image", image),
+		func() error { return runtime.Build(ctx, buildConfig) },
+	)
+	if buildErr != nil {
+		return NewStepResult(image).
 			WithMetadata(exitCodeMetadata, 1).
-			WithMetadata("image", firstString(buildConfig.Tags)).
-			WithError(err.Error()), err
+			WithMetadata("image", image).
+			WithError(buildErr.Error()), buildErr
 	}
 
-	image := firstString(buildConfig.Tags)
 	stepResult := NewStepResult(image).
 		WithMetadata("image", image).
 		WithMetadata(exitCodeMetadata, 0)
@@ -65,6 +74,15 @@ func (h *ContainerHandler) executeBuild(ctx context.Context, step *schema.Workfl
 		}
 	}
 	return stepResult, nil
+}
+
+// buildSpinnerMessage renders a spinner status line, omitting the image when a
+// build (e.g. Bake without tags) has no resolvable image reference.
+func buildSpinnerMessage(verb, image string) string {
+	if image == "" {
+		return verb
+	}
+	return fmt.Sprintf("%s %s", verb, image)
 }
 
 func (h *ContainerHandler) buildBuildConfig(step *schema.WorkflowStep, vars *Variables) (*container.BuildConfig, error) {

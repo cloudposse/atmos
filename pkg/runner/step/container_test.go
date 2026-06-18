@@ -60,6 +60,51 @@ func TestContainerHandlerBuildConfig(t *testing.T) {
 	assert.Equal(t, "tcp", cfg.Ports[0].Protocol)
 }
 
+// TestCredentialFileMounts pins the allowlist behavior that the original code
+// lacked: the in-container env is the full host environment, so only credential
+// files referenced by allowlisted variables may be bind-mounted. Path-valued
+// non-credential variables (SHELL, SSH_AUTH_SOCK, …) and non-regular files
+// (directories, sockets) must never be mounted — mounting SHELL=/bin/zsh or a
+// 1Password agent socket broke `podman create` with "statfs … operation not
+// supported".
+func TestCredentialFileMounts(t *testing.T) {
+	dir := t.TempDir()
+
+	credFile := filepath.Join(dir, "credentials")
+	require.NoError(t, os.WriteFile(credFile, []byte("creds"), 0o600))
+
+	// A real regular file referenced by a NON-allowlisted var (mimics SHELL=/bin/zsh).
+	shellFile := filepath.Join(dir, "zsh")
+	require.NoError(t, os.WriteFile(shellFile, []byte("bin"), 0o600))
+
+	// An allowlisted var pointing at a directory: non-regular, must be skipped
+	// (the same MODE check that skips a unix socket like SSH_AUTH_SOCK).
+	credDir := filepath.Join(dir, "config-dir")
+	require.NoError(t, os.Mkdir(credDir, 0o700))
+
+	env := []string{
+		"AWS_SHARED_CREDENTIALS_FILE=" + credFile,           // allowlisted regular file → mounted
+		"SHELL=" + shellFile,                                // non-allowlisted regular file → skipped
+		"KUBECONFIG=" + credDir,                             // allowlisted but a directory → skipped
+		"AWS_CONFIG_FILE=" + filepath.Join(dir, "absent"),   // allowlisted but missing → skipped
+		"NOT_A_PATH=hello",                                  // not a path → skipped
+		"SSH_AUTH_SOCK=" + filepath.Join(dir, "agent.sock"), // non-allowlisted, missing socket → skipped
+	}
+
+	mounts := credentialFileMounts(env)
+
+	require.Len(t, mounts, 1)
+	assert.Equal(t, credFile, mounts[0].Source)
+	assert.Equal(t, credFile, mounts[0].Target)
+	assert.Equal(t, "bind", mounts[0].Type)
+	assert.True(t, mounts[0].ReadOnly)
+
+	for _, m := range mounts {
+		assert.NotEqual(t, shellFile, m.Source, "non-allowlisted SHELL file must not be mounted")
+		assert.NotEqual(t, credDir, m.Source, "directory must not be mounted")
+	}
+}
+
 func TestContainerHandlerActionBlocks(t *testing.T) {
 	handler := &ContainerHandler{}
 	vars := NewVariables()

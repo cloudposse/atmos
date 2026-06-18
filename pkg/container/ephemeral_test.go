@@ -134,7 +134,9 @@ func TestRunEphemeralContainer_PullMissingCreateAndPullErrors(t *testing.T) {
 
 	ctx := context.Background()
 	runtime := NewMockRuntime(ctrl)
-	createErr := errors.New("create failed")
+	// Image-missing create error so the pull fallback is exercised (a generic
+	// create error must NOT trigger a pull — see the negative test below).
+	createErr := errors.New("no such image: alpine:latest")
 	pullErr := errors.New("pull failed")
 
 	gomock.InOrder(
@@ -150,6 +152,54 @@ func TestRunEphemeralContainer_PullMissingCreateAndPullErrors(t *testing.T) {
 
 	require.ErrorIs(t, err, createErr)
 	require.ErrorIs(t, err, pullErr)
+	require.ErrorIs(t, err, errUtils.ErrContainerRuntimeOperation)
+}
+
+// TestRunEphemeralContainer_PullMissingNonImageErrorDoesNotPull asserts that a
+// create failure that is NOT about a missing image (e.g. a bad mount) surfaces
+// as-is without a pull/retry. Pulling there would mask the real cause behind a
+// misleading registry error — the regression that made a bad bind-mount look
+// like "unable to pull localhost/<image>".
+func TestIsImageMissingError(t *testing.T) {
+	cases := []struct {
+		name string
+		err  error
+		want bool
+	}{
+		{"nil", nil, false},
+		{"no such image", errors.New("Error: no such image: alpine:latest"), true},
+		{"image not known", errors.New("image not known"), true},
+		{"manifest unknown", errors.New("manifest unknown"), true},
+		{"case insensitive", errors.New("Unable To Find Image 'x' locally"), true},
+		{"bad mount statfs", errors.New("statfs /run/agent.sock: operation not supported"), false},
+		{"generic create", errors.New("create failed"), false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			assert.Equal(t, tc.want, isImageMissingError(tc.err))
+		})
+	}
+}
+
+func TestRunEphemeralContainer_PullMissingNonImageErrorDoesNotPull(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	ctx := context.Background()
+	runtime := NewMockRuntime(ctrl)
+	createErr := errors.New("statfs /run/agent.sock: operation not supported")
+
+	// Exactly one Create and no Pull: with PullMissing (the default) the recovery
+	// pull must not run for a non-image-missing error.
+	runtime.EXPECT().Create(ctx, gomock.Any()).Return("", createErr)
+
+	_, err := RunEphemeralContainer(ctx, runtime, &EphemeralConfig{
+		Name:    "test",
+		Image:   "alpine:latest",
+		Command: []string{"true"},
+	})
+
+	require.ErrorIs(t, err, createErr)
 	require.ErrorIs(t, err, errUtils.ErrContainerRuntimeOperation)
 }
 

@@ -321,16 +321,39 @@ func expandHostPath(path string) string {
 	return os.ExpandEnv(path)
 }
 
+// credentialEnvFileKeys is the allowlist of environment variables whose value is
+// a path to a credential file that should be bind-mounted into the container, so a
+// containerized step can authenticate with host-materialized credentials (e.g. the
+// files written by Atmos auth integrations). The list is intentionally narrow:
+// step env carries the entire host environment, and blindly mounting every
+// path-valued variable bind-mounts unrelated entries like SHELL (/bin/zsh, absent
+// in the runtime VM) or SSH_AUTH_SOCK (a unix socket podman cannot statfs).
+var credentialEnvFileKeys = map[string]struct{}{
+	"AWS_SHARED_CREDENTIALS_FILE":    {},
+	"AWS_CONFIG_FILE":                {},
+	"AWS_WEB_IDENTITY_TOKEN_FILE":    {},
+	"GOOGLE_APPLICATION_CREDENTIALS": {},
+	"AZURE_AUTH_LOCATION":            {},
+	"KUBECONFIG":                     {},
+}
+
+// credentialFileMounts returns read-only bind mounts for credential files referenced
+// by allowlisted environment variables. Only existing regular files are mounted —
+// directories, sockets, and device nodes are skipped so cleanup and create never
+// fail on a non-mountable path.
 func credentialFileMounts(env []string) []container.Mount {
 	mounts := make([]container.Mount, 0)
 	seen := make(map[string]struct{})
 	for _, entry := range env {
-		_, value, ok := strings.Cut(entry, "=")
+		key, value, ok := strings.Cut(entry, "=")
 		if !ok || value == "" || !filepath.IsAbs(value) {
 			continue
 		}
+		if _, allowed := credentialEnvFileKeys[key]; !allowed {
+			continue
+		}
 		info, err := os.Stat(value)
-		if err != nil || info.IsDir() {
+		if err != nil || !info.Mode().IsRegular() {
 			continue
 		}
 		if _, ok := seen[value]; ok {
