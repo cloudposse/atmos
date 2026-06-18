@@ -298,6 +298,18 @@ func TestAddAffectedSpaceliftAdminStack_IgnoresMissingTemplateValues(t *testing.
 
 	require.NoError(t, err)
 	require.NotNil(t, result)
+	require.Len(t, *result, 2)
+
+	found := false
+	for _, affected := range *result {
+		if affected.Component == adminComponentName &&
+			affected.Stack == "ue2-admin-<no value>" &&
+			affected.ComponentType == "terraform" {
+			found = true
+			break
+		}
+	}
+	assert.True(t, found, "expected spacelift admin stack to be added even with ignored missing template values")
 }
 
 func TestIsComponentFolderChanged(t *testing.T) {
